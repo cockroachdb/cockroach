@@ -22,7 +22,7 @@ const seriesPalette = [
 ];
 
 // Chart margins to match design.
-const CHART_MARGINS: nvd3.Margin = {top: 30, right: 20, bottom: 20, left: 55};
+export const CHART_MARGINS: nvd3.Margin = {top: 30, right: 20, bottom: 20, left: 55};
 
 // Maximum number of series we will show in the legend. If there are more we hide the legend.
 const MAX_LEGEND_SERIES: number = 4;
@@ -454,14 +454,17 @@ export function ConfigureLineChart(
   data: TSResponse,
   timeInfo: QueryTimeInfo,
   stacked = false,
+  hoverTime?: moment.Moment,
 ) {
   chart.showLegend(metrics.length > 1 && metrics.length <= MAX_LEGEND_SERIES);
   let formattedData: formattedDatum[];
+  let xAxisDomain, yAxisDomain: AxisDomain;
 
   if (data) {
     const processed = ProcessDataPoints(metrics, axis, data, timeInfo, stacked);
     formattedData = processed.formattedData;
-    const {yAxisDomain, xAxisDomain } = processed;
+    xAxisDomain = processed.xAxisDomain;
+    yAxisDomain = processed.yAxisDomain;
 
     chart.yDomain(yAxisDomain.domain());
     if (!axis.props.label) {
@@ -495,68 +498,60 @@ export function ConfigureLineChart(
   } catch (e) {
     console.log("Error rendering graph: ", e);
   }
+
+  const xScale = chart.xAxis.scale();
+  const yScale = chart.yAxis.scale();
+  const yExtent = data ? [yScale(yAxisDomain.min), yScale(yAxisDomain.max)] : [0, 1];
+  updateLinkedGuideline(svgEl, xScale, yExtent, hoverTime);
 }
 
-// updateLinkedGuidelines should be invoked whenever a user hovers over an NVD3
-// graph. When this occurs, NVD3 displays an "interactive guideline", which is a
-// vertical line that highlights the X-axis coordinate the mouse is currently
-// over.
-//
-// This function is responsible for maintaining "linked" guidelines on all other
-// graphs on the page; a "linked" guideline highlights the same X-axis
+// A tuple of numbers for the minimum and maximum values of an axis.
+type Extent = number[];
+
+// updateLinkedGuideline is responsible for maintaining "linked" guidelines on
+// all other graphs on the page; a "linked" guideline highlights the same X-axis
 // coordinate on different graphs currently visible on the same page. This
 // allows the user to visually correlate a single X-axis coordinate across
 // multiple visible graphs.
-export function updateLinkedGuidelines(hoverGraph: SVGElement) {
-  // Select the interactive guideline being displayed by NVD3 on the currently
-  // hovered graph, if it exists. Construct a data array for use by d3; this
-  // allows us to use d3's "enter()/exit()" functions to cleanly add and remove
-  // the guideline from other graphs.
-  const sourceGuideline = d3.select(hoverGraph).select("line.nv-guideline");
-  const data = !sourceGuideline.empty() ? [sourceGuideline] : [];
+function updateLinkedGuideline(svgEl: SVGElement, x: d3.scale.Linear<number, number>, yExtent: Extent, hoverTime?: moment.Moment) {
+  // Construct a data array for use by d3; this allows us to use d3's
+  // "enter()/exit()" functions to cleanly add and remove the guideline.
+  const data = !_.isNil(hoverTime) ? [x(hoverTime.valueOf())] : [];
 
-  // Select all other graphs on the page. A linked guideline will be applied
-  // to these.
-  const otherGraphs = d3.selectAll(".linked-guideline").filter(function () {
-    return this !== hoverGraph;
-  });
+  // Linked guideline will be inserted inside of the "nv-wrap" element of the
+  // nvd3 graph. This element has several translations applied to it by nvd3
+  // which allow us to easily display the linked guideline at the correct
+  // position.
+  const wrapper = d3.select(svgEl).select(".nv-wrap");
+  if (wrapper.empty()) {
+    // In cases where no data is available for a chart, it will not have
+    // an "nv-wrap" element and thus should not get a linked guideline.
+    return;
+  }
 
-  otherGraphs.each(function () {
-    // Linked guideline will be inserted inside of the "nv-wrap" element of the
-    // nvd3 graph. This element has several translations applied to it by nvd3
-    // which allow us to easily display the linked guideline at the correct
-    // position.
-    const wrapper = d3.select(this).select(".nv-wrap");
-    if (wrapper.empty()) {
-      // In cases where no data is available for a chart, it will not have
-      // an "nv-wrap" element and thus should not get a linked guideline.
-      return;
-    }
+  const container = wrapper.selectAll("g.linked-guideline__container")
+    .data(data);
 
-    const container = wrapper.selectAll("g.linked-guideline__container")
-      .data(data);
+  // If there is no guideline on the currently hovered graph, data is empty
+  // and this exit statement will remove the linked guideline from this graph
+  // if it is already present. This occurs, for example, when the user moves
+  // the mouse off of a graph.
+  container.exit().remove();
 
-    // If there is no guideline on the currently hovered graph, data is empty
-    // and this exit statement will remove the linked guideline from this graph
-    // if it is already present. This occurs, for example, when the user moves
-    // the mouse off of a graph.
-    container.exit().remove();
+  // If there is a guideline on the currently hovered graph, this enter
+  // statement will add a linked guideline element to the current graph (if it
+  // does not already exist).
+  container.enter()
+    .append("g")
+      .attr("class", "linked-guideline__container")
+      .append("line")
+        .attr("class", "linked-guideline__line");
 
-    // If there is a guideline on the currently hovered graph, this enter
-    // statement will add a linked guideline element to the current graph (if it
-    // does not already exist).
-    container.enter()
-      .append("g")
-        .attr("class", "linked-guideline__container")
-        .append("line")
-          .attr("class", "linked-guideline__line");
-
-    // Update linked guideline (if present) to match the necessary attributes of
-    // the current guideline.
-    container.select(".linked-guideline__line")
-      .attr("x1", (d) => d.attr("x1"))
-      .attr("x2", (d) => d.attr("x2"))
-      .attr("y1", (d) => d.attr("y1"))
-      .attr("y2", (d) => d.attr("y2"));
-  });
+  // Update linked guideline (if present) to match the necessary attributes of
+  // the current guideline.
+  container.select(".linked-guideline__line")
+    .attr("x1", (d) => d)
+    .attr("x2", (d) => d)
+    .attr("y1", () => yExtent[0])
+    .attr("y2", () => yExtent[1]);
 }
