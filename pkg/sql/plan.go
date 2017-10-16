@@ -396,6 +396,8 @@ func (p *planner) newPlan(
 		return p.SelectClause(ctx, n, nil, nil, desiredTypes, publicColumns)
 	case *parser.SetClusterSetting:
 		return p.SetClusterSetting(ctx, n)
+	case *parser.SetZoneConfig:
+		return p.SetZoneConfig(ctx, n)
 	case *parser.SetVar:
 		return p.SetVar(ctx, n)
 	case *parser.SetTransaction:
@@ -434,6 +436,8 @@ func (p *planner) newPlan(
 		return p.ShowTransactionStatus(ctx)
 	case *parser.ShowUsers:
 		return p.ShowUsers(ctx, n)
+	case *parser.ShowZoneConfig:
+		return p.ShowZoneConfig(ctx, n)
 	case *parser.ShowRanges:
 		return p.ShowRanges(ctx, n)
 	case *parser.ShowFingerprints:

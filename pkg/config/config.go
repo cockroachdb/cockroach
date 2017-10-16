@@ -28,9 +28,134 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
+
+// Several ranges outside of the SQL keyspace are given special names so they
+// can be targeted by zone configs.
+const (
+	DefaultZoneName    = "default"
+	MetaZoneName       = "meta"
+	SystemZoneName     = "system"
+	TimeseriesZoneName = "timeseries"
+)
+
+// NamedZones maps named zones to their pseudo-table ID that can be used to
+// install an entry into the system.zones table.
+var NamedZones = map[string]uint32{
+	DefaultZoneName:    keys.RootNamespaceID,
+	MetaZoneName:       keys.MetaRangesID,
+	SystemZoneName:     keys.SystemRangesID,
+	TimeseriesZoneName: keys.TimeseriesRangesID,
+}
+
+// NamedZonesByID is the inverse of NamedZones: it maps pseudo-table IDs to
+// their zone names.
+var NamedZonesByID = func() map[uint32]string {
+	out := map[uint32]string{}
+	for name, id := range NamedZones {
+		out[id] = name
+	}
+	return out
+}()
+
+// ZoneSpecifierFromID creates a parser.ZoneSpecifier for the zone with the
+// given ID.
+func ZoneSpecifierFromID(
+	id uint32, resolveID func(id uint32) (parentID uint32, name string, err error),
+) (parser.ZoneSpecifier, error) {
+	if name, ok := NamedZonesByID[id]; ok {
+		return parser.ZoneSpecifier{NamedZone: parser.Name(name)}, nil
+	}
+	parentID, name, err := resolveID(id)
+	if err != nil {
+		return parser.ZoneSpecifier{}, err
+	}
+	if parentID == keys.RootNamespaceID {
+		return parser.ZoneSpecifier{Database: parser.Name(name)}, nil
+	}
+	_, db, err := resolveID(parentID)
+	if err != nil {
+		return parser.ZoneSpecifier{}, err
+	}
+	tn := &parser.TableName{DatabaseName: parser.Name(db), TableName: parser.Name(name)}
+	return parser.ZoneSpecifier{
+		Table: parser.NormalizableTableName{TableNameReference: tn},
+	}, nil
+}
+
+// ParseCLIZoneSpecifier converts a single string s identifying a zone, as would
+// be used to name a zone on the command line, to a ZoneSpecifier. A valid CLI
+// zone specifier is either 1) a database or table reference of the form
+// DATABASE[.TABLE], or 2) a special named zone of the form [.NAME].
+func ParseCLIZoneSpecifier(s string) (parser.ZoneSpecifier, error) {
+	if len(s) > 0 && s[0] == '.' {
+		name := s[1:]
+		if name == "" {
+			return parser.ZoneSpecifier{}, errors.New("missing zone name")
+		}
+		return parser.ZoneSpecifier{NamedZone: parser.Name(name)}, nil
+	}
+	// ParseTableName is not vulnerable to SQL injection, so passing s directly
+	// is safe. See #8389 for details.
+	tn, err := parser.ParseTableName(s)
+	if err != nil {
+		return parser.ZoneSpecifier{}, fmt.Errorf("malformed name: %q", s)
+	}
+	db := tn.Database()
+	if db == "" {
+		// No database was specified, so interpret the table name as the database.
+		db = tn.Table()
+		return parser.ZoneSpecifier{Database: parser.Name(db)}, nil
+	}
+	return parser.ZoneSpecifier{
+		Table: parser.NormalizableTableName{TableNameReference: tn},
+	}, nil
+}
+
+// CLIZoneSpecifier converts a parser.ZoneSpecifier to a CLI zone specifier as
+// described in ParseCLIZoneSpecifier.
+func CLIZoneSpecifier(zs parser.ZoneSpecifier) string {
+	if zs.NamedZone != "" {
+		return "." + string(zs.NamedZone)
+	}
+	if zs.Database != "" {
+		return zs.Database.String()
+	}
+	return zs.Table.String()
+}
+
+// ResolveZoneSpecifier converts a zone specifier to the ID of most specific
+// zone whose config applies.
+func ResolveZoneSpecifier(
+	zs parser.ZoneSpecifier, resolveName func(parentID uint32, name string) (id uint32, err error),
+) (uint32, error) {
+	if zs.NamedZone != "" {
+		if zs.NamedZone == DefaultZoneName {
+			return keys.RootNamespaceID, nil
+		}
+		if id, ok := NamedZones[string(zs.NamedZone)]; ok {
+			return id, nil
+		}
+		return 0, fmt.Errorf("%q is not a built-in zone", string(zs.NamedZone))
+	}
+
+	if zs.Database != "" {
+		return resolveName(keys.RootNamespaceID, string(zs.Database))
+	}
+
+	tn, err := zs.Table.NormalizeTableName()
+	if err != nil {
+		return 0, err
+	}
+	databaseID, err := resolveName(keys.RootNamespaceID, tn.Database())
+	if err != nil {
+		return 0, err
+	}
+	return resolveName(databaseID, tn.Table())
+}
 
 const (
 	// minRangeMaxBytes is the minimum value for range max bytes.
