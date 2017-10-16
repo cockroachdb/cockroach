@@ -671,7 +671,7 @@ func DecodeTableIDIndexID(key []byte) ([]byte, ID, IndexID, error) {
 //
 // Don't use this function in the scan "hot path".
 func DecodeIndexKeyPrefix(
-	a *DatumAlloc, desc *TableDescriptor, key []byte,
+	desc *TableDescriptor, key []byte,
 ) (indexID IndexID, remaining []byte, err error) {
 	// TODO(dan): This whole operation is n^2 because of the interleaves
 	// bookkeeping. We could improve it to n with a prefix tree of components.
@@ -734,7 +734,6 @@ func DecodeIndexKeyPrefix(
 // or unique secondary indexes containing NULL or empty. If the given descriptor
 // does not match the key, false is returned with no error.
 func DecodeIndexKey(
-	a *DatumAlloc,
 	desc *TableDescriptor,
 	index *IndexDescriptor,
 	vals []EncDatum,
@@ -819,10 +818,8 @@ func DecodeKeyVals(vals []EncDatum, directions []encoding.Direction, key []byte)
 // key/value entry, including secondary indexes.
 //
 // Don't use this function in the scan "hot path".
-func ExtractIndexKey(
-	a *DatumAlloc, tableDesc *TableDescriptor, entry client.KeyValue,
-) (roachpb.Key, error) {
-	indexID, key, err := DecodeIndexKeyPrefix(a, tableDesc, entry.Key)
+func ExtractIndexKey(tableDesc *TableDescriptor, entry client.KeyValue) (roachpb.Key, error) {
+	indexID, key, err := DecodeIndexKeyPrefix(tableDesc, entry.Key)
 	if err != nil {
 		return nil, err
 	}
@@ -852,7 +849,7 @@ func ExtractIndexKey(
 		// find the index id so we can look up the descriptor, and once to extract
 		// the values. Only parse once.
 		var ok bool
-		_, ok, err = DecodeIndexKey(a, tableDesc, i, values, dirs, entry.Key)
+		_, ok, err = DecodeIndexKey(tableDesc, i, values, dirs, entry.Key)
 		if err != nil {
 			return nil, err
 		}
