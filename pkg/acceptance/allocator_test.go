@@ -175,49 +175,60 @@ func (at *allocatorTest) Run(ctx context.Context, t *testing.T) {
 		}
 	} else {
 		log.Info(ctx, "running schema changes while cluster is rebalancing")
-		// These schema changes are over a table that is not actively
-		// being updated.
-		log.Info(ctx, "running schema changes over tpch.customer")
-		schemaChanges := []string{
-			"ALTER TABLE tpch.customer ADD COLUMN newcol INT DEFAULT 23456",
-			"CREATE INDEX foo ON tpch.customer (c_name)",
+		{
+			// These schema changes are over a table that is not actively
+			// being updated.
+			log.Info(ctx, "running schema changes over tpch.customer")
+			schemaChanges := []string{
+				"ALTER TABLE tpch.customer ADD COLUMN newcol INT DEFAULT 23456",
+				"CREATE INDEX foo ON tpch.customer (c_name)",
+			}
+			if err := at.runSchemaChanges(ctx, t, schemaChanges); err != nil {
+				t.Fatal(err)
+			}
+
+			// All these return the same result.
+			validationQueries := []string{
+				"SELECT COUNT(*) FROM tpch.customer AS OF SYSTEM TIME %s",
+				"SELECT COUNT(newcol) FROM tpch.customer AS OF SYSTEM TIME %s",
+				"SELECT COUNT(c_name) FROM tpch.customer@foo AS OF SYSTEM TIME %s",
+			}
+			if err := at.runValidationQueries(ctx, t, validationQueries, nil); err != nil {
+				t.Error(err)
+			}
 		}
-		// All these return the same result.
-		validationQueries := []string{
-			"SELECT COUNT(*) FROM tpch.customer AS OF SYSTEM TIME %s",
-			"SELECT COUNT(newcol) FROM tpch.customer AS OF SYSTEM TIME %s",
-			"SELECT COUNT(c_name) FROM tpch.customer@foo AS OF SYSTEM TIME %s",
-		}
-		if err := at.runSchemaChanges(
-			ctx, t, schemaChanges, validationQueries, nil,
-		); err != nil {
-			t.Fatal(err)
-		}
-		// These schema changes are run later because the above schema
-		// changes run for a decent amount of time giving datablocks.blocks
-		// an opportunity to get populate through the load generator. These
-		// schema changes are acting upon a decent sized table that is also
-		// being updated.
-		log.Info(ctx, "running schema changes over datablocks.blocks")
-		schemaChanges = []string{
-			"ALTER TABLE datablocks.blocks ADD COLUMN created_at TIMESTAMP DEFAULT now()",
-			"CREATE INDEX foo ON datablocks.blocks (block_id)",
-		}
-		// All these return the same result.
-		validationQueries = []string{
-			"SELECT COUNT(*) FROM datablocks.blocks AS OF SYSTEM TIME %s",
-			"SELECT COUNT(created_at) FROM datablocks.blocks AS OF SYSTEM TIME %s",
-			"SELECT COUNT(block_id) FROM datablocks.blocks@foo AS OF SYSTEM TIME %s",
-		}
-		// Queries to hone in on index validation problems.
-		indexValidationQueries := []string{
-			"SELECT COUNT(created_at) FROM datablocks.blocks@primary AS OF SYSTEM TIME %s WHERE created_at > $1 AND created_at < $2",
-			"SELECT COUNT(block_id) FROM datablocks.blocks@foo AS OF SYSTEM TIME %s WHERE created_at > $1 AND created_at < $2",
-		}
-		if err := at.runSchemaChanges(
-			ctx, t, schemaChanges, validationQueries, indexValidationQueries,
-		); err != nil {
-			t.Fatal(err)
+
+		{
+			// These schema changes are run later because the above schema
+			// changes run for a decent amount of time giving datablocks.blocks
+			// an opportunity to get populate through the load generator. These
+			// schema changes are acting upon a decent sized table that is also
+			// being updated.
+			log.Info(ctx, "running schema changes over datablocks.blocks")
+			schemaChanges := []string{
+				"ALTER TABLE datablocks.blocks ADD COLUMN created_at TIMESTAMP DEFAULT now()",
+				"CREATE INDEX foo ON datablocks.blocks (block_id, created_at)",
+			}
+			if err := at.runSchemaChanges(ctx, t, schemaChanges); err != nil {
+				t.Fatal(err)
+			}
+
+			// All these return the same result.
+			validationQueries := []string{
+				"SELECT COUNT(*) FROM datablocks.blocks AS OF SYSTEM TIME %s",
+				"SELECT COUNT(created_at) FROM datablocks.blocks AS OF SYSTEM TIME %s",
+				"SELECT COUNT(block_id) FROM datablocks.blocks@foo AS OF SYSTEM TIME %s",
+			}
+			// Queries to hone in on index validation problems.
+			indexValidationQueries := []string{
+				"SELECT COUNT(created_at) FROM datablocks.blocks@primary AS OF SYSTEM TIME %s WHERE created_at > $1 AND created_at <= $2",
+				"SELECT COUNT(block_id) FROM datablocks.blocks@foo AS OF SYSTEM TIME %s WHERE created_at > $1 AND created_at <= $2",
+			}
+			if err := at.runValidationQueries(
+				ctx, t, validationQueries, indexValidationQueries,
+			); err != nil {
+				t.Error(err)
+			}
 		}
 	}
 
@@ -233,11 +244,7 @@ func (at *allocatorTest) RunAndCleanup(ctx context.Context, t *testing.T) {
 }
 
 func (at *allocatorTest) runSchemaChanges(
-	ctx context.Context,
-	t *testing.T,
-	schemaChanges []string,
-	validationQueries []string,
-	indexValidationQueries []string,
+	ctx context.Context, t *testing.T, schemaChanges []string,
 ) error {
 	db, err := gosql.Open("postgres", at.f.PGUrl(ctx, 0))
 	if err != nil {
@@ -257,17 +264,11 @@ func (at *allocatorTest) runSchemaChanges(
 		// TODO(vivek): Monitor progress of schema changes and log progress.
 	}
 
-	log.Info(ctx, "validate applied schema changes")
-	if err := at.ValidateSchemaChanges(
-		ctx, t, validationQueries, indexValidationQueries,
-	); err != nil {
-		t.Fatal(err)
-	}
 	return nil
 }
 
 // The validationQueries all return the same result.
-func (at *allocatorTest) ValidateSchemaChanges(
+func (at *allocatorTest) runValidationQueries(
 	ctx context.Context, t *testing.T, validationQueries []string, indexValidationQueries []string,
 ) error {
 	// Sleep for a bit before validating the schema changes to
@@ -278,6 +279,7 @@ func (at *allocatorTest) ValidateSchemaChanges(
 	// but the reads being done here are at a specific timestamp through
 	// AS OF SYSTEM TIME.
 	time.Sleep(5 * time.Second)
+	log.Info(ctx, "run validation queries")
 
 	db, err := gosql.Open("postgres", at.f.PGUrl(ctx, 0))
 	if err != nil {
@@ -320,7 +322,7 @@ func (at *allocatorTest) ValidateSchemaChanges(
 				}
 			}
 		} else if count != eCount {
-			t.Fatalf("%s: %d rows found, expected %d rows", q, count, eCount)
+			t.Errorf("%s: %d rows found, expected %d rows", q, count, eCount)
 		}
 	}
 	return nil
