@@ -177,12 +177,12 @@ func TestTimestampCacheExpandRequests(t *testing.T) {
 		Timestamp: clock.Now(),
 	})
 
-	tc.ExpandRequests(start, bc)
+	tc.ExpandRequests(bc, start)
 	if tc.requests.Len() != 1 {
 		t.Fatalf("expected 1 cached request, but found %d", tc.requests.Len())
 	}
 
-	tc.ExpandRequests(start, ab)
+	tc.ExpandRequests(ab, start)
 	if tc.requests.Len() != 0 {
 		t.Fatalf("expected 0 cached requests, but found %d", tc.requests.Len())
 	}

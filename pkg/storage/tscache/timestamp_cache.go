@@ -553,7 +553,7 @@ func (tc *Cache) AddRequest(req Request) {
 
 // ExpandRequests expands any request that is newer than the specified
 // timestamp and which overlaps the specified span.
-func (tc *Cache) ExpandRequests(timestamp hlc.Timestamp, span roachpb.RSpan) {
+func (tc *Cache) ExpandRequests(span roachpb.RSpan, timestamp hlc.Timestamp) {
 	// Find all of the requests that have a timestamp greater than or equal to
 	// the specified timestamp. Note that we can't delete the requests during the
 	// btree iteration.
