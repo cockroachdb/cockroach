@@ -1395,6 +1395,54 @@ CockroachDB supports the following flags:
 		},
 	},
 
+	// https://www.postgresql.org/docs/10/static/functions-datetime.html#functions-datetime-trunc
+	"date_trunc": {
+		Builtin{
+			Types:      ArgTypes{{"element", TypeString}, {"input", TypeTimestamp}},
+			ReturnType: fixedReturnType(TypeTimestamp),
+			category:   categoryDateAndTime,
+			fn: func(ctx *EvalContext, args Datums) (Datum, error) {
+				// extract timeSpan fromTime.
+				fromTS := args[1].(*DTimestamp)
+				timeSpan := strings.ToLower(string(MustBeDString(args[0])))
+				return truncateTimestamp(ctx, fromTS.Time, timeSpan)
+			},
+			Info: "Truncates `input` to precision `element`.  Sets all fields that are less\n" +
+				"significant than `element` to zero (or one, for day and month)\n\n" +
+				"Compatible elements: year, quarter, month, week, hour, minute, second,\n" +
+				"millisecond, microsecond.",
+		},
+		Builtin{
+			Types:      ArgTypes{{"element", TypeString}, {"input", TypeDate}},
+			ReturnType: fixedReturnType(TypeDate),
+			category:   categoryDateAndTime,
+			fn: func(ctx *EvalContext, args Datums) (Datum, error) {
+				timeSpan := strings.ToLower(string(MustBeDString(args[0])))
+				date := args[1].(*DDate)
+				fromTSTZ := MakeDTimestampTZFromDate(ctx.GetLocation(), date)
+				return truncateTimestamp(ctx, fromTSTZ.Time, timeSpan)
+			},
+			Info: "Truncates `input` to precision `element`.  Sets all fields that are less\n" +
+				"significant than `element` to zero (or one, for day and month)\n\n" +
+				"Compatible elements: year, quarter, month, week, hour, minute, second,\n" +
+				"millisecond, microsecond.",
+		},
+		Builtin{
+			Types:      ArgTypes{{"element", TypeString}, {"input", TypeTimestampTZ}},
+			ReturnType: fixedReturnType(TypeTimestampTZ),
+			category:   categoryDateAndTime,
+			fn: func(ctx *EvalContext, args Datums) (Datum, error) {
+				fromTSTZ := args[1].(*DTimestampTZ)
+				timeSpan := strings.ToLower(string(MustBeDString(args[0])))
+				return truncateTimestamp(ctx, fromTSTZ.Time, timeSpan)
+			},
+			Info: "Truncates `input` to precision `element`.  Sets all fields that are less\n" +
+				"significant than `element` to zero (or one, for day and month)\n\n" +
+				"Compatible elements: year, quarter, month, week, hour, minute, second,\n" +
+				"millisecond, microsecond.",
+		},
+	},
+
 	// Math functions
 	"abs": {
 		floatBuiltin1(func(x float64) (Datum, error) {
@@ -3015,4 +3063,67 @@ func extractStringFromTimestamp(
 	default:
 		return nil, pgerror.NewErrorf(pgerror.CodeInvalidParameterValueError, "unsupported timespan: %s", timeSpan)
 	}
+}
+
+func truncateTimestamp(_ *EvalContext, fromTime time.Time, timeSpan string) (Datum, error) {
+	year := fromTime.Year()
+	month := fromTime.Month()
+	day := fromTime.Day()
+	hour := fromTime.Hour()
+	min := fromTime.Minute()
+	sec := fromTime.Second()
+	nsec := fromTime.Nanosecond()
+	loc := fromTime.Location()
+
+	monthTrunc := time.January
+	dayTrunc := 1
+	hourTrunc := 0
+	minTrunc := 0
+	secTrunc := 0
+	nsecTrunc := 0
+
+	switch timeSpan {
+	case "year", "years":
+		month, day, hour, min, sec, nsec = monthTrunc, dayTrunc, hourTrunc, minTrunc, secTrunc, nsecTrunc
+
+	case "quarter":
+		firstMonthInQuarter := ((month-1)/3)*3 + 1
+		month, day, hour, min, sec, nsec = firstMonthInQuarter, dayTrunc, hourTrunc, minTrunc, secTrunc, nsecTrunc
+
+	case "month", "months":
+		day, hour, min, sec, nsec = dayTrunc, hourTrunc, minTrunc, secTrunc, nsecTrunc
+
+	case "week", "weeks":
+		// Subtract (day of week * nanoseconds per day) to get date as of previous Sunday.
+		previousSunday := fromTime.Add(time.Duration(-1 * int64(fromTime.Weekday()) * int64(time.Hour) * 24))
+		year, month, day = previousSunday.Year(), previousSunday.Month(), previousSunday.Day()
+		hour, min, sec, nsec = hourTrunc, minTrunc, secTrunc, nsecTrunc
+
+	case "day", "days":
+		hour, min, sec, nsec = hourTrunc, minTrunc, secTrunc, nsecTrunc
+
+	case "hour", "hours":
+		min, sec, nsec = minTrunc, secTrunc, nsecTrunc
+
+	case "minute", "minutes":
+		sec, nsec = secTrunc, nsecTrunc
+
+	case "second", "seconds":
+		nsec = nsecTrunc
+
+	case "millisecond", "milliseconds":
+		// This a PG extension not supported in MySQL.
+		milliseconds := (nsec / int(time.Millisecond)) * int(time.Millisecond)
+		nsec = milliseconds
+
+	case "microsecond", "microseconds":
+		microseconds := (nsec / int(time.Microsecond)) * int(time.Microsecond)
+		nsec = microseconds
+
+	default:
+		return nil, pgerror.NewErrorf(pgerror.CodeInvalidParameterValueError, "unsupported timespan: %s", timeSpan)
+	}
+
+	toTime := time.Date(year, month, day, hour, min, sec, nsec, loc)
+	return MakeDTimestampTZ(toTime, time.Microsecond), nil
 }
