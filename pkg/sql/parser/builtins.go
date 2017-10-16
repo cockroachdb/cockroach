@@ -1395,6 +1395,53 @@ CockroachDB supports the following flags:
 		},
 	},
 
+	"date_trunc": {
+		Builtin{
+			Types:      ArgTypes{{"element", TypeString}, {"input", TypeTimestamp}},
+			ReturnType: fixedReturnType(TypeTimestamp),
+			category:   categoryDateAndTime,
+			fn: func(ctx *EvalContext, args Datums) (Datum, error) {
+				// extract timeSpan fromTime.
+				fromTS := args[1].(*DTimestamp)
+				timeSpan := strings.ToLower(string(MustBeDString(args[0])))
+				return truncateTimestamp(ctx, fromTS.Time, timeSpan)
+			},
+			Info: "Truncates `input` to precision `element`.  Sets all fields that are less\n" +
+				"significant than `element` to zero (or one, for day and month)\n\n" +
+				"Compatible elements: year, quarter, month, week, hour, minute, second,\n" +
+				"millisecond, microsecond",
+		},
+		Builtin{
+			Types:      ArgTypes{{"element", TypeString}, {"input", TypeDate}},
+			ReturnType: fixedReturnType(TypeDate),
+			category:   categoryDateAndTime,
+			fn: func(ctx *EvalContext, args Datums) (Datum, error) {
+				timeSpan := strings.ToLower(string(MustBeDString(args[0])))
+				date := args[1].(*DDate)
+				fromTSTZ := MakeDTimestampTZFromDate(ctx.GetLocation(), date)
+				return truncateTimestamp(ctx, fromTSTZ.Time, timeSpan)
+			},
+			Info: "Truncates `input` to precision `element`.  Sets all fields that are less\n" +
+				"significant than `element` to zero (or one, for day and month)\n\n" +
+				"Compatible elements: year, quarter, month, week, hour, minute, second,\n" +
+				"millisecond, microsecond",
+		},
+		Builtin{
+			Types:      ArgTypes{{"element", TypeString}, {"input", TypeTimestampTZ}},
+			ReturnType: fixedReturnType(TypeTimestampTZ),
+			category:   categoryDateAndTime,
+			fn: func(ctx *EvalContext, args Datums) (Datum, error) {
+				fromTSTZ := args[1].(*DTimestampTZ)
+				timeSpan := strings.ToLower(string(MustBeDString(args[0])))
+				return truncateTimestamp(ctx, fromTSTZ.Time, timeSpan)
+			},
+			Info: "Truncates `input` to precision `element`.  Sets all fields that are less\n" +
+				"significant than `element` to zero (or one, for day and month)\n\n" +
+				"Compatible elements: year, quarter, month, week, hour, minute, second,\n" +
+				"millisecond, microsecond",
+		},
+	},
+
 	// Math functions
 	"abs": {
 		floatBuiltin1(func(x float64) (Datum, error) {
@@ -3011,6 +3058,75 @@ func extractStringFromTimestamp(
 
 	case "epoch":
 		return NewDInt(DInt(fromTime.Unix())), nil
+
+	default:
+		return nil, pgerror.NewErrorf(pgerror.CodeInvalidParameterValueError, "unsupported timespan: %s", timeSpan)
+	}
+}
+
+func truncateTimestamp(_ *EvalContext, fromTime time.Time, timeSpan string) (Datum, error) {
+	year := fromTime.Year()
+	month := fromTime.Month()
+	day := fromTime.Day()
+	hour := fromTime.Hour()
+	min := fromTime.Minute()
+	sec := fromTime.Second()
+	nsec := fromTime.Nanosecond()
+	loc := fromTime.Location()
+
+	monthTrunc := time.January
+	dayTrunc := 1
+	hourTrunc := 0
+	minTrunc := 0
+	secTrunc := 0
+	nsecTrunc := 0
+
+	switch timeSpan {
+	case "year", "years":
+		toTime := time.Date(year, monthTrunc, dayTrunc, hourTrunc, minTrunc, secTrunc, nsecTrunc, loc)
+		return MakeDTimestampTZ(toTime, time.Microsecond), nil
+
+	case "quarter":
+		quarterTrunc := ((month-1)/3)*3 + 1 // first month in the quarter
+		toTime := time.Date(year, quarterTrunc, dayTrunc, hourTrunc, minTrunc, secTrunc, nsecTrunc, loc)
+		return MakeDTimestampTZ(toTime, time.Microsecond), nil
+
+	case "month", "months":
+		toTime := time.Date(year, month, dayTrunc, hourTrunc, minTrunc, secTrunc, nsecTrunc, loc)
+		return MakeDTimestampTZ(toTime, time.Microsecond), nil
+
+	case "week", "weeks":
+		// Subtract (day of week * nanoseconds per day) to get date as of previous Sunday.
+		toTime := fromTime.Add(time.Duration(-1 * int64(fromTime.Weekday()) * int64(time.Hour) * 24))
+		toTime = time.Date(toTime.Year(), toTime.Month(), toTime.Day(), hourTrunc, minTrunc, secTrunc, nsecTrunc, loc)
+		return MakeDTimestampTZ(toTime, time.Microsecond), nil
+
+	case "day", "days":
+		toTime := time.Date(year, month, day, hourTrunc, minTrunc, secTrunc, nsecTrunc, loc)
+		return MakeDTimestampTZ(toTime, time.Microsecond), nil
+
+	case "hour", "hours":
+		toTime := time.Date(year, month, day, hour, minTrunc, secTrunc, nsecTrunc, loc)
+		return MakeDTimestampTZ(toTime, time.Microsecond), nil
+
+	case "minute", "minutes":
+		toTime := time.Date(year, month, day, hour, min, secTrunc, nsecTrunc, loc)
+		return MakeDTimestampTZ(toTime, time.Microsecond), nil
+
+	case "second", "seconds":
+		toTime := time.Date(year, month, day, hour, min, sec, nsecTrunc, loc)
+		return MakeDTimestampTZ(toTime, time.Microsecond), nil
+
+	case "millisecond", "milliseconds":
+		// This a PG extension not supported in MySQL.
+		milliseconds := (nsec / int(time.Millisecond)) * int(time.Millisecond)
+		toTime := time.Date(year, month, day, hour, min, sec, milliseconds, loc)
+		return MakeDTimestampTZ(toTime, time.Microsecond), nil
+
+	case "microsecond", "microseconds":
+		microseconds := (nsec / int(time.Microsecond)) * int(time.Microsecond)
+		toTime := time.Date(year, month, day, hour, min, sec, microseconds, loc)
+		return MakeDTimestampTZ(toTime, time.Microsecond), nil
 
 	default:
 		return nil, pgerror.NewErrorf(pgerror.CodeInvalidParameterValueError, "unsupported timespan: %s", timeSpan)
