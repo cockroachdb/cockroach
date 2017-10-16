@@ -90,7 +90,7 @@ func makeTableDescForTest(test indexKeyTest) (TableDescriptor, map[ColumnID]int)
 }
 
 func decodeIndex(
-	tableDesc *TableDescriptor, index *IndexDescriptor, key []byte,
+	a *DatumAlloc, tableDesc *TableDescriptor, index *IndexDescriptor, key []byte,
 ) ([]parser.Datum, error) {
 	values, err := MakeEncodedKeyVals(tableDesc, index.ColumnIDs)
 	if err != nil {
@@ -103,7 +103,7 @@ func decodeIndex(
 			return nil, err
 		}
 	}
-	_, ok, err := DecodeIndexKey(tableDesc, index, values, colDirs, key)
+	_, ok, err := DecodeIndexKey(a, tableDesc, index, values, colDirs, key)
 	if err != nil {
 		return nil, err
 	}
@@ -126,6 +126,7 @@ func decodeIndex(
 
 func TestIndexKey(t *testing.T) {
 	rng, _ := randutil.NewPseudoRand()
+	var a DatumAlloc
 
 	tests := []indexKeyTest{
 		{nil, nil,
@@ -210,7 +211,7 @@ func TestIndexKey(t *testing.T) {
 		}
 
 		checkEntry := func(index *IndexDescriptor, entry client.KeyValue) {
-			values, err := decodeIndex(&tableDesc, index, entry.Key)
+			values, err := decodeIndex(&a, &tableDesc, index, entry.Key)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -222,7 +223,7 @@ func TestIndexKey(t *testing.T) {
 				}
 			}
 
-			indexID, _, err := DecodeIndexKeyPrefix(&tableDesc, entry.Key)
+			indexID, _, err := DecodeIndexKeyPrefix(&a, &tableDesc, entry.Key)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -230,7 +231,7 @@ func TestIndexKey(t *testing.T) {
 				t.Errorf("%d", i)
 			}
 
-			extracted, err := ExtractIndexKey(&tableDesc, entry)
+			extracted, err := ExtractIndexKey(&a, &tableDesc, entry)
 			if err != nil {
 				t.Fatal(err)
 			}
