@@ -1200,6 +1200,266 @@ SELECT extract(epoch FROM '1970-01-02 00:00:01.000001-04'::timestamptz)
 ----
 100801
 
+query T
+SELECT date_trunc('milliseconds', '2016-02-10 19:46:33.306157519'::timestamp)::string
+----
+2016-02-10 19:46:33.306+00:00
+
+query T
+SELECT date_trunc('millisecond', '2016-02-10 19:46:33.306157519'::timestamp)::string
+----
+2016-02-10 19:46:33.306+00:00
+
+query T
+SELECT date_trunc('microseconds', '2016-02-10 19:46:33.306157519'::timestamp)::string
+----
+2016-02-10 19:46:33.306158+00:00
+
+query T
+SELECT date_trunc('microsecond', '2016-02-10 19:46:33.306157519'::timestamp)::string
+----
+2016-02-10 19:46:33.306158+00:00
+
+query T
+SELECT date_trunc('second', '2016-02-10 19:46:33.306157519'::timestamp)::string
+----
+2016-02-10 19:46:33+00:00
+
+query T
+SELECT date_trunc('seconds', '2016-02-10 19:46:33.306157519'::timestamp)::string
+----
+2016-02-10 19:46:33+00:00
+
+query T
+SELECT date_trunc('minute', '2016-02-10 19:46:33.306157519'::timestamp)::string
+----
+2016-02-10 19:46:00+00:00
+
+query T
+SELECT date_trunc('minutes', '2016-02-10 19:46:33.306157519'::timestamp)::string
+----
+2016-02-10 19:46:00+00:00
+
+query T
+SELECT date_trunc('hour', '2016-02-10 19:46:33.306157519'::timestamp)::string
+----
+2016-02-10 19:00:00+00:00
+
+query T
+SELECT date_trunc('hours', '2016-02-10 19:46:33.306157519'::timestamp)::string
+----
+2016-02-10 19:00:00+00:00
+
+query T
+SELECT date_trunc('day', '2016-02-10 19:46:33.306157519'::timestamp)::string
+----
+2016-02-10 00:00:00+00:00
+
+query T
+SELECT date_trunc('days', '2016-02-10 19:46:33.306157519'::timestamp)::string
+----
+2016-02-10 00:00:00+00:00
+
+query T
+SELECT date_trunc('week', '2016-02-10 19:46:33.306157519'::timestamp)::string
+----
+2016-02-07 00:00:00+00:00
+
+query T
+SELECT date_trunc('weeks', '2016-02-10 19:46:33.306157519'::timestamp)::string
+----
+2016-02-07 00:00:00+00:00
+
+query T
+SELECT date_trunc('month', '2016-02-10 19:46:33.306157519'::timestamp)::string
+----
+2016-02-01 00:00:00+00:00
+
+query T
+SELECT date_trunc('months', '2016-02-10 19:46:33.306157519'::timestamp)::string
+----
+2016-02-01 00:00:00+00:00
+
+query T
+SELECT date_trunc('quarter', '2016-02-10 19:46:33.306157519'::timestamp)::string
+----
+2016-01-01 00:00:00+00:00
+
+query T
+SELECT date_trunc('quarter', '2016-11-10 19:46:33.306157519'::timestamp)::string
+----
+2016-10-01 00:00:00+00:00
+
+query T
+SELECT date_trunc('year', '2016-02-10 19:46:33.306157519'::timestamp)::string
+----
+2016-01-01 00:00:00+00:00
+
+query T
+SELECT date_trunc('years', '2016-02-10 19:46:33.306157519'::timestamp)::string
+----
+2016-01-01 00:00:00+00:00
+
+query T
+SELECT date_trunc('milliseconds', '2016-02-10 19:46:33.306157519'::timestamptz)::string
+----
+2016-02-10 19:46:33.306+00:00
+
+query T
+SELECT date_trunc('millisecond', '2016-02-10 19:46:33.306157519'::timestamptz)::string
+----
+2016-02-10 19:46:33.306+00:00
+
+query T
+SELECT date_trunc('microseconds', '2016-02-10 19:46:33.306157519'::timestamptz)::string
+----
+2016-02-10 19:46:33.306158+00:00
+
+query T
+SELECT date_trunc('microsecond', '2016-02-10 19:46:33.306157519'::timestamptz)::string
+----
+2016-02-10 19:46:33.306158+00:00
+
+query T
+SELECT date_trunc('second', '2016-02-10 19:46:33.306157519'::timestamptz)::string
+----
+2016-02-10 19:46:33+00:00
+
+query T
+SELECT date_trunc('seconds', '2016-02-10 19:46:33.306157519'::timestamptz)::string
+----
+2016-02-10 19:46:33+00:00
+
+query T
+SELECT date_trunc('minute', '2016-02-10 19:46:33.306157519'::timestamptz)::string
+----
+2016-02-10 19:46:00+00:00
+
+query T
+SELECT date_trunc('minutes', '2016-02-10 19:46:33.306157519'::timestamptz)::string
+----
+2016-02-10 19:46:00+00:00
+
+query T
+SELECT date_trunc('hour', '2016-02-10 19:46:33.306157519'::timestamptz)::string
+----
+2016-02-10 19:00:00+00:00
+
+query T
+SELECT date_trunc('hour', '2016-02-10 19:46:33.306157519-04'::timestamptz)::string
+----
+2016-02-10 19:00:00-04:00
+
+query T
+SELECT date_trunc('hours', '2016-02-10 19:46:33.306157519'::timestamptz)::string
+----
+2016-02-10 19:00:00+00:00
+
+query T
+SELECT date_trunc('hours', '2016-02-10 19:46:33.306157519-04'::timestamptz)::string
+----
+2016-02-10 19:00:00-04:00
+
+query T
+SELECT date_trunc('day', '2016-02-10 19:46:33.306157519'::timestamptz)::string
+----
+2016-02-10 00:00:00+00:00
+
+query T
+SELECT date_trunc('days', '2016-02-10 19:46:33.306157519'::timestamptz)::string
+----
+2016-02-10 00:00:00+00:00
+
+query T
+SELECT date_trunc('week', '2016-02-10 19:46:33.306157519'::timestamptz)::string
+----
+2016-02-07 00:00:00+00:00
+
+query T
+SELECT date_trunc('weeks', '2016-02-10 19:46:33.306157519'::timestamptz)::string
+----
+2016-02-07 00:00:00+00:00
+
+query T
+SELECT date_trunc('month', '2016-02-10 19:46:33.306157519'::timestamptz)::string
+----
+2016-02-01 00:00:00+00:00
+
+query T
+SELECT date_trunc('months', '2016-02-10 19:46:33.306157519'::timestamptz)::string
+----
+2016-02-01 00:00:00+00:00
+
+query T
+SELECT date_trunc('quarter', '2016-02-10 19:46:33.306157519'::timestamptz)::string
+----
+2016-01-01 00:00:00+00:00
+
+query T
+SELECT date_trunc('quarter', '2016-11-10 19:46:33.306157519'::timestamptz)::string
+----
+2016-10-01 00:00:00+00:00
+
+query T
+SELECT date_trunc('year', '2016-02-10 19:46:33.306157519'::timestamptz)::string
+----
+2016-01-01 00:00:00+00:00
+
+query T
+SELECT date_trunc('years', '2016-02-10 19:46:33.306157519'::timestamptz)::string
+----
+2016-01-01 00:00:00+00:00
+
+query T
+SELECT date_trunc('day', '2016-02-10'::date)::string
+----
+2016-02-10 00:00:00+00:00
+
+query T
+SELECT date_trunc('days', '2016-02-10'::date)::string
+----
+2016-02-10 00:00:00+00:00
+
+query T
+SELECT date_trunc('week', '2016-02-10'::date)::string
+----
+2016-02-07 00:00:00+00:00
+
+query T
+SELECT date_trunc('weeks', '2016-02-10'::date)::string
+----
+2016-02-07 00:00:00+00:00
+
+query T
+SELECT date_trunc('month', '2016-02-10'::date)::string
+----
+2016-02-01 00:00:00+00:00
+
+query T
+SELECT date_trunc('months', '2016-02-10'::date)::string
+----
+2016-02-01 00:00:00+00:00
+
+query T
+SELECT date_trunc('quarter', '2016-02-10'::date)::string
+----
+2016-01-01 00:00:00+00:00
+
+query T
+SELECT date_trunc('quarter', '2016-11-10'::date)::string
+----
+2016-10-01 00:00:00+00:00
+
+query T
+SELECT date_trunc('year', '2016-02-10'::date)::string
+----
+2016-01-01 00:00:00+00:00
+
+query T
+SELECT date_trunc('years', '2016-02-10'::date)::string
+----
+2016-01-01 00:00:00+00:00
+
 query B
 SELECT unique_rowid() < unique_rowid()
 ----
