@@ -446,8 +446,8 @@ func TestRangesResponse(t *testing.T) {
 		if ri.State.LastIndex == 0 {
 			t.Error("expected positive LastIndex")
 		}
-		if e, a := 1, len(ri.LeaseHistory); e != a {
-			t.Errorf("expected a lease history length of %d, actual %d\n%+v", e, a, ri)
+		if len(ri.LeaseHistory) == 0 {
+			t.Error("expected at least one lease history entry")
 		}
 	}
 }
@@ -707,7 +707,7 @@ func TestRangeResponse(t *testing.T) {
 		t.Error("expected positive LastIndex")
 	}
 
-	if e, a := 1, len(info.LeaseHistory); e != a {
-		t.Errorf("expected a lease history length of %d, actual %d\n%+v", e, a, info)
+	if len(info.LeaseHistory) == 0 {
+		t.Error("expected at least one lease history entry")
 	}
 }
