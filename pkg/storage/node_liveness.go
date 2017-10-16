@@ -125,7 +125,6 @@ type NodeLiveness struct {
 
 	mu struct {
 		syncutil.Mutex
-		self              Liveness
 		callbacks         []IsLiveCallback
 		nodes             map[roachpb.NodeID]Liveness
 		heartbeatCallback HeartbeatCallback
@@ -260,7 +259,7 @@ func (nl *NodeLiveness) setDrainingInternal(
 	}
 	newLiveness.Draining = drain
 	if err := nl.updateLiveness(ctx, &newLiveness, liveness, func(actual Liveness) error {
-		nl.setSelf(actual)
+		nl.maybeUpdate(actual)
 		if actual.Draining == newLiveness.Draining {
 			return errNodeDrainingSet
 		}
@@ -271,7 +270,7 @@ func (nl *NodeLiveness) setDrainingInternal(
 		}
 		return err
 	}
-	nl.setSelf(newLiveness)
+	nl.maybeUpdate(newLiveness)
 	return nil
 }
 
@@ -455,7 +454,7 @@ func (nl *NodeLiveness) heartbeatInternal(
 	}
 	if err := nl.updateLiveness(ctx, &newLiveness, liveness, func(actual Liveness) error {
 		// Update liveness to actual value on mismatch.
-		nl.setSelf(actual)
+		nl.maybeUpdate(actual)
 		// If the actual liveness is different than expected, but is
 		// considered live, treat the heartbeat as a success. This can
 		// happen when the periodic heartbeater races with a concurrent
@@ -475,7 +474,7 @@ func (nl *NodeLiveness) heartbeatInternal(
 	}
 
 	log.VEventf(ctx, 1, "heartbeat %+v", newLiveness.Expiration)
-	nl.setSelf(newLiveness)
+	nl.maybeUpdate(newLiveness)
 	nl.metrics.HeartbeatSuccesses.Inc(1)
 	return nil
 }
@@ -490,19 +489,6 @@ func (nl *NodeLiveness) Self() (*Liveness, error) {
 	return nl.getLivenessLocked(nl.gossip.NodeID.Get())
 }
 
-func (nl *NodeLiveness) setSelf(liveness Liveness) {
-	nl.mu.Lock()
-	// NB: shouldReplaceLiveness should always be true
-	// since setSelf is only ever called for non-overlapping
-	// liveness updated serialized through a single semaphore.
-	//
-	// We call it for symmetry with the nodes map.
-	if shouldReplaceLiveness(nl.mu.self, liveness) {
-		nl.mu.self = liveness
-	}
-	nl.mu.Unlock()
-}
-
 // GetIsLiveMap returns a map of nodeID to boolean liveness status of
 // each node.
 func (nl *NodeLiveness) GetIsLiveMap() map[roachpb.NodeID]bool {
@@ -512,11 +498,7 @@ func (nl *NodeLiveness) GetIsLiveMap() map[roachpb.NodeID]bool {
 	now := nl.clock.Now()
 	maxOffset := nl.clock.MaxOffset()
 	for nID, l := range nl.mu.nodes {
-		if nID == nl.mu.self.NodeID {
-			lMap[nID] = nl.mu.self.IsLive(now, maxOffset)
-		} else {
-			lMap[nID] = l.IsLive(now, maxOffset)
-		}
+		lMap[nID] = l.IsLive(now, maxOffset)
 	}
 	return lMap
 }
@@ -528,11 +510,7 @@ func (nl *NodeLiveness) GetLivenesses() []Liveness {
 	defer nl.mu.Unlock()
 	livenesses := make([]Liveness, 0, len(nl.mu.nodes))
 	for _, l := range nl.mu.nodes {
-		if l.NodeID == nl.mu.self.NodeID {
-			livenesses = append(livenesses, nl.mu.self)
-		} else {
-			livenesses = append(livenesses, l)
-		}
+		livenesses = append(livenesses, l)
 	}
 	return livenesses
 }
@@ -547,10 +525,6 @@ func (nl *NodeLiveness) GetLiveness(nodeID roachpb.NodeID) (*Liveness, error) {
 }
 
 func (nl *NodeLiveness) getLivenessLocked(nodeID roachpb.NodeID) (*Liveness, error) {
-	if nodeID != 0 && nodeID == nl.mu.self.NodeID {
-		copySelf := nl.mu.self
-		return &copySelf, nil
-	}
 	if l, ok := nl.mu.nodes[nodeID]; ok {
 		return &l, nil
 	}
@@ -583,22 +557,8 @@ func (nl *NodeLiveness) IncrementEpoch(ctx context.Context, liveness *Liveness) 
 	}
 	newLiveness := *liveness
 	newLiveness.Epoch++
-	maybeUpdate := func(l Liveness) {
-		nl.mu.Lock()
-		defer nl.mu.Unlock()
-
-		if nodeID := nl.gossip.NodeID.Get(); nodeID == l.NodeID {
-			if shouldReplaceLiveness(nl.mu.self, l) {
-				nl.mu.self = l
-			}
-		} else {
-			if shouldReplaceLiveness(nl.mu.nodes[l.NodeID], l) {
-				nl.mu.nodes[l.NodeID] = l
-			}
-		}
-	}
 	if err := nl.updateLiveness(ctx, &newLiveness, liveness, func(actual Liveness) error {
-		defer maybeUpdate(actual)
+		defer nl.maybeUpdate(actual)
 		if actual.Epoch > liveness.Epoch {
 			return errEpochAlreadyIncremented
 		} else if actual.Epoch < liveness.Epoch {
@@ -614,7 +574,7 @@ func (nl *NodeLiveness) IncrementEpoch(ctx context.Context, liveness *Liveness) 
 
 	log.VEventf(ctx, 1, "incremented node %d liveness epoch to %d",
 		newLiveness.NodeID, newLiveness.Epoch)
-	maybeUpdate(newLiveness)
+	nl.maybeUpdate(newLiveness)
 	nl.metrics.EpochIncrements.Inc(1)
 	return nil
 }
@@ -732,6 +692,15 @@ func (nl *NodeLiveness) updateLivenessAttempt(
 	return nil
 }
 
+func (nl *NodeLiveness) maybeUpdate(new Liveness) {
+	nl.mu.Lock()
+	old := nl.mu.nodes[new.NodeID]
+	if shouldReplaceLiveness(old, new) {
+		nl.mu.nodes[new.NodeID] = new
+	}
+	nl.mu.Unlock()
+}
+
 func shouldReplaceLiveness(old, new Liveness) bool {
 	if (old == Liveness{}) {
 		return true
@@ -795,22 +764,32 @@ func (nl *NodeLiveness) livenessGossipUpdate(key string, content roachpb.Value) 
 // nodes reporting the metric, so it's simplest to just have all live nodes
 // report it.
 func (nl *NodeLiveness) numLiveNodes() int64 {
+	ctx := nl.ambientCtx.AnnotateCtx(context.Background())
+
 	selfID := nl.gossip.NodeID.Get()
 	if selfID == 0 {
 		return 0
 	}
 
-	nl.mu.Lock()
-	defer nl.mu.Unlock()
+	self, err := nl.Self()
+	if err == ErrNoLivenessRecord {
+		return 0
+	}
+	if err != nil {
+		log.Warningf(ctx, "looking up own liveness: %s", err)
+	}
+
+	now := nl.clock.Now()
+	maxOffset := nl.clock.MaxOffset()
 
 	// If this node isn't live, we don't want to report its view of node liveness
 	// because it's more likely to be inaccurate than the view of a live node.
-	now := nl.clock.Now()
-	maxOffset := nl.clock.MaxOffset()
-	if !nl.mu.self.IsLive(now, maxOffset) {
+	if !self.IsLive(now, maxOffset) {
 		return 0
 	}
 
+	nl.mu.Lock()
+	defer nl.mu.Unlock()
 	var liveNodes int64
 	for _, l := range nl.mu.nodes {
 		if l.IsLive(now, maxOffset) {
