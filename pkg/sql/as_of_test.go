@@ -196,7 +196,7 @@ func TestAsOfRetry(t *testing.T) {
 
 	params, cmdFilters := createTestServerParams()
 	// Disable one phase commits because they cannot be restarted.
-	params.Knobs.Store.(*storage.StoreTestingKnobs).DisableOnePhaseCommits = true
+	params.Knobs.Store.(*storage.StoreTestingKnobs).DisableOptional1PC = true
 	s, sqlDB, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.TODO())
 
