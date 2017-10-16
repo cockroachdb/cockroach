@@ -703,6 +703,27 @@ func (nl *NodeLiveness) updateLivenessAttempt(
 	return nil
 }
 
+func shouldReplaceLiveness(old, new Liveness) bool {
+	if (old == Liveness{}) {
+		return true
+	}
+
+	if old.Expiration == new.Expiration && old.Epoch == new.Epoch {
+		// Assume that the update is newer when its draining or
+		// decommissioning field changed.
+		//
+		// This has false positives (in which case we're clobbering the
+		// liveness). A better way to handle liveness updates in general is
+		// to add a sequence number.
+		//
+		// See #18219.
+		return old.Draining != new.Draining || old.Decommissioning != new.Decommissioning
+	}
+
+	// Accept an update if it moves either expiration or epoch forward.
+	return old.Expiration.Less(new.Expiration) || old.Epoch < new.Epoch
+}
+
 // livenessGossipUpdate is the gossip callback used to keep the
 // in-memory liveness info up to date.
 func (nl *NodeLiveness) livenessGossipUpdate(key string, content roachpb.Value) {
@@ -717,11 +738,12 @@ func (nl *NodeLiveness) livenessGossipUpdate(key string, content roachpb.Value) 
 	// expiration or epoch was advanced, or the draining state changed.
 	var callbacks []IsLiveCallback
 	nl.mu.Lock()
-	exLiveness, ok := nl.mu.nodes[liveness.NodeID]
-	if !ok || exLiveness.Expiration.Less(liveness.Expiration) || exLiveness.Epoch < liveness.Epoch || exLiveness.Draining != liveness.Draining {
+	exLiveness := nl.mu.nodes[liveness.NodeID]
+	if shouldReplaceLiveness(exLiveness, liveness) {
 		nl.mu.nodes[liveness.NodeID] = liveness
 
 		// If isLive status is now true, but previously false, invoke any registered callbacks.
+		// Note that this works fine even if exLiveness is empty.
 		now, offset := nl.clock.Now(), nl.clock.MaxOffset()
 		if !exLiveness.IsLive(now, offset) && liveness.IsLive(now, offset) {
 			callbacks = append(callbacks, nl.mu.callbacks...)
