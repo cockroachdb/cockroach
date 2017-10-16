@@ -84,6 +84,28 @@ function testSendInvalidUTF8(client) {
   });
 }
 
+function testInsertArray(client) {
+  return new Promise(resolve => {
+    client.query({
+      text: 'CREATE DATABASE d',
+    }, (err) => {
+      if (err) throw err;
+      client.query({
+        text: 'CREATE TABLE d.x (y FLOAT[])',
+      }, (err) => {
+        if (err) throw err;
+        client.query({
+          text: 'INSERT INTO d.x VALUES ($1)',
+          values: [[1, 2, 3]],
+        }, (err) => {
+          if (err) throw err;
+          resolve();
+        });
+      });
+    });
+  });
+}
+
 function runTests(client, ...tests) {
   if (tests.length === 0) {
     return Promise.resolve();
@@ -97,12 +119,14 @@ client.connect(function (err) {
 
   runTests(client,
     testSendInvalidUTF8,
+    testInsertArray,
     testSelect
   ).then(result => {
     client.end(function (err) {
       if (err) throw err;
     });
   }).catch(err => {
+    client.end()
     throw err;
   });
 });

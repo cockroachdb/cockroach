@@ -1085,6 +1085,7 @@ var (
 	intervalCastTypes  = []Type{TypeNull, TypeString, TypeCollatedString, TypeInt, TypeInterval}
 	oidCastTypes       = []Type{TypeNull, TypeString, TypeCollatedString, TypeInt, TypeOid}
 	uuidCastTypes      = []Type{TypeNull, TypeString, TypeCollatedString, TypeBytes, TypeUUID}
+	arrayCastTypes     = []Type{TypeNull, TypeString}
 )
 
 // validCastTypes returns a set of types that can be cast into the provided type.
@@ -1118,7 +1119,7 @@ func validCastTypes(t Type) []Type {
 		if t.FamilyEqual(TypeCollatedString) {
 			return stringCastTypes
 		} else if t.FamilyEqual(TypeArray) {
-			return []Type{TypeNull}
+			return arrayCastTypes
 		}
 		return nil
 	}
