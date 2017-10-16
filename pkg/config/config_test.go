@@ -15,11 +15,14 @@
 package config_test
 
 import (
+	fmt "fmt"
 	"reflect"
 	"sort"
+	"strings"
 	"testing"
 
 	"github.com/gogo/protobuf/proto"
+	"github.com/kr/pretty"
 	"gopkg.in/yaml.v2"
 
 	"github.com/cockroachdb/cockroach/pkg/config"
@@ -528,5 +531,136 @@ constraints: [foo, +duck=foo, -duck=foo]
 	}
 	if !reflect.DeepEqual(unmarshaled, original) {
 		t.Errorf("yaml.Unmarshal(%q) = %+v; not %+v", body, unmarshaled, original)
+	}
+}
+
+func TestZoneSpecifiers(t *testing.T) {
+	// Simulate exactly two named zones: one named default and one named carl.
+	// N.B. config.DefaultZoneName must always exist in the mapping; it is treated
+	// specially so that it always appears first in the lookup path.
+	defer func(old map[string]uint32) { config.NamedZones = old }(config.NamedZones)
+	config.NamedZones = map[string]uint32{
+		config.DefaultZoneName: 0,
+		"carl":                 42,
+	}
+	defer func(old map[uint32]string) { config.NamedZonesByID = old }(config.NamedZonesByID)
+	config.NamedZonesByID = map[uint32]string{
+		0:  config.DefaultZoneName,
+		42: "carl",
+	}
+
+	// Simulate the following schema:
+	//   CREATE DATABASE db
+	//   CREATE TABLE db.table...
+	//   CREATE DATABASE "."
+	//   CREATE TABLE ".table."
+	//   CREATE DATABASE carl
+	type namespaceEntry struct {
+		parentID uint32
+		name     string
+	}
+	namespace := map[namespaceEntry]uint32{
+		{0, "db"}:               50,
+		{50, "tbl"}:             51,
+		{0, "user"}:             52,
+		{0, "."}:                53,
+		{53, ".table."}:         54,
+		{0, "carl"}:             55,
+		{55, "toys"}:            56,
+		{9000, "broken_parent"}: 57,
+	}
+	resolveName := func(parentID uint32, name string) (uint32, error) {
+		key := namespaceEntry{parentID, name}
+		if id, ok := namespace[key]; ok {
+			return id, nil
+		}
+		return 0, fmt.Errorf("%q not found", name)
+	}
+	resolveID := func(id uint32) (parentID uint32, name string, err error) {
+		for entry, entryID := range namespace {
+			if id == entryID {
+				return entry.parentID, entry.name, nil
+			}
+		}
+		return 0, "", fmt.Errorf("%d not found", id)
+	}
+
+	for i, tc := range []struct {
+		cliSpecifier string
+		path         []uint32
+		err          string
+	}{
+		{".default", []uint32{0}, ""},
+		{".carl", []uint32{0, 42}, ""},
+		{".foo", nil, `"foo" is not a built-in zone`},
+		{"db", []uint32{0, 50}, ""},
+		{".db", nil, `"db" is not a built-in zone`},
+		{"db.tbl", []uint32{0, 50, 51}, ""},
+		{"tbl", nil, `"tbl" not found`},
+		{"table", nil, `malformed name: table`}, // SQL keyword; requires quotes
+		{`"table"`, nil, `"table" not found`},
+		{"user", nil, "malformed name: user"}, // SQL keyword; requires quotes
+		{`"user"`, []uint32{0, 52}, ""},
+		{`"."`, []uint32{0, 53}, ""},
+		{`.`, nil, `missing zone name`},
+		{`".table."`, nil, `".table." not found`},
+		{`".".".table."`, []uint32{0, 53, 54}, ""},
+		{`.table.`, nil, `"table." is not a built-in zone`},
+		{"carl", []uint32{0, 55}, ""},
+		{"carl.toys", []uint32{0, 55, 56}, ""},
+		{"carl.love", nil, `"love" not found`},
+		{"; DROP DATABASE system", nil, `malformed name`},
+	} {
+		err := func() error {
+			zs, err := config.ParseCLIZoneSpecifier(tc.cliSpecifier)
+			if err != nil {
+				return err
+			}
+			path, err := zs.ResolvePath(resolveName)
+			if err != nil {
+				return err
+			}
+			if e, a := tc.path, path; !reflect.DeepEqual(e, a) {
+				t.Errorf("#%d: path did not match expected path: %s\n",
+					i, strings.Join(pretty.Diff(e, a), "\n"))
+			}
+			if e, a := tc.cliSpecifier, zs.CLISpecifier(); e != a {
+				t.Errorf("#%d: expected %q to roundtrip, but got %q", i, e, a)
+			}
+			return nil
+		}()
+		if !testutils.IsError(err, tc.err) {
+			t.Errorf("#%d: expected error matching %q, but got %v", i, tc.err, err)
+		}
+	}
+
+	for i, tc := range []struct {
+		id           uint32
+		cliSpecifier string
+		err          string
+	}{
+		{0, ".default", ""},
+		{41, "", "41 not found"},
+		{42, ".carl", ""},
+		{50, "db", ""},
+		{51, "db.tbl", ""},
+		{52, `"user"`, ""},
+		{53, `"."`, ""},
+		{54, `".".".table."`, ""},
+		{55, "carl", ""},
+		{56, "carl.toys", ""},
+		{57, "", "9000 not found"},
+		{58, "", "58 not found"},
+	} {
+		zs, err := config.ZoneSpecifierFromID(tc.id, resolveID)
+		if !testutils.IsError(err, tc.err) {
+			t.Errorf("#%d: unable to lookup ID %d: %s", i, tc.id, err)
+		}
+		if tc.err != "" {
+			continue
+		}
+		if e, a := tc.cliSpecifier, zs.CLISpecifier(); e != a {
+			t.Errorf("#%d: expected %q specifier for ID %d, but got %q", i, e, tc.id, a)
+		}
 	}
 }

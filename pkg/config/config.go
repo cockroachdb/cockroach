@@ -28,9 +28,148 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
+
+// Several ranges outside of the SQL keyspace are given special names so they
+// can be targeted by zone configs.
+const (
+	DefaultZoneName    = "default"
+	MetaZoneName       = "meta"
+	SystemZoneName     = "system"
+	TimeseriesZoneName = "timeseries"
+)
+
+// NamedZones maps named zones to their pseudo-table ID that can be used to
+// install an entry into the system.zones table.
+var NamedZones = map[string]uint32{
+	DefaultZoneName:    keys.RootNamespaceID,
+	MetaZoneName:       keys.MetaRangesID,
+	SystemZoneName:     keys.SystemRangesID,
+	TimeseriesZoneName: keys.TimeseriesRangesID,
+}
+
+// NamedZonesByID is the inverse of NamedZones: it maps pseudo-table IDs to
+// their zone names.
+var NamedZonesByID = func() map[uint32]string {
+	out := map[uint32]string{}
+	for name, id := range NamedZones {
+		out[id] = name
+	}
+	return out
+}()
+
+// ZoneSpecifier identifies either a special named zone or the zone associated
+// with a particular database or table. Either NamedZone or Database must be
+// non-empty.
+type ZoneSpecifier struct {
+	NamedZone string
+	Database  string
+	Table     string
+}
+
+// ZoneSpecifierFromID creates a zone specifier for the zone with the given ID.
+func ZoneSpecifierFromID(
+	id uint32,
+	resolveID func(id uint32) (parentID uint32, name string, err error),
+) (ZoneSpecifier, error) {
+	if name, ok := NamedZonesByID[id]; ok {
+		return ZoneSpecifier{NamedZone: name}, nil
+	}
+	parentID, name, err := resolveID(id)
+	if err != nil {
+		return ZoneSpecifier{}, err
+	}
+	if parentID == keys.RootNamespaceID {
+		return ZoneSpecifier{Database: name}, nil
+	}
+	_, db, err := resolveID(parentID)
+	if err != nil {
+		return ZoneSpecifier{}, err
+	}
+	return ZoneSpecifier{Database: db, Table: name}, nil
+}
+
+// ParseCLIZoneSpecifier converts a single string s identifying a zone, as would
+// be used to name a zone on the command line, to a ZoneSpecifier. A valid CLI
+// zone specifier is either 1) a database or table reference of the form
+// DATABASE[.TABLE], or 2) a special named zone of the form [.NAME].
+func ParseCLIZoneSpecifier(s string) (ZoneSpecifier, error) {
+	if len(s) > 0 && s[0] == '.' {
+		name := s[1:]
+		if name == "" {
+			return ZoneSpecifier{}, errors.New("missing zone name")
+		}
+		return ZoneSpecifier{NamedZone: name}, nil
+	}
+	// ParseTableName is not vulnerable to SQL injection, so passing s directly
+	// is safe. See #8389 for details.
+	tn, err := parser.ParseTableName(s)
+	if err != nil {
+		return ZoneSpecifier{}, fmt.Errorf("malformed name: %s", s)
+	}
+	db := tn.Database()
+	if db == "" {
+		// No database was specified, so interpret the table name as the database.
+		db = tn.Table()
+		return ZoneSpecifier{Database: db}, nil
+	}
+	table := tn.Table()
+	return ZoneSpecifier{Database: db, Table: table}, nil
+}
+
+// ResolvePath converts a zone specifier to a slice of zone config IDs that
+// might apply to the zone. The last zone config ID to actually exist in
+// system.zones is the zone config that applies.
+//
+// Note that GetZoneConfigForKey performs the same logic without explicitly
+// constructing a path. This function exists to support the CLI.
+func (zs *ZoneSpecifier) ResolvePath(
+	resolveName func(parentID uint32, name string) (id uint32, err error),
+) ([]uint32, error) {
+	path := []uint32{keys.RootNamespaceID}
+	if zs.NamedZone != "" {
+		if zs.NamedZone == DefaultZoneName {
+			return path, nil
+		}
+		if id, ok := NamedZones[zs.NamedZone]; ok {
+			return append(path, id), nil
+		}
+		return nil, fmt.Errorf("%q is not a built-in zone", zs.NamedZone)
+	}
+	if zs.Database != "" {
+		databaseID, err := resolveName(path[len(path)-1], zs.Database)
+		if err != nil {
+			return nil, err
+		}
+		path = append(path, databaseID)
+	}
+	if zs.Table != "" {
+		tableID, err := resolveName(path[len(path)-1], zs.Table)
+		if err != nil {
+			return nil, err
+		}
+		path = append(path, tableID)
+	}
+	return path, nil
+}
+
+// CLISpecifier converts a ZoneSpecifier to a CLI zone specifier as described in
+// ParseCLIZoneSpecifier.
+func (zs *ZoneSpecifier) CLISpecifier() string {
+	if zs.NamedZone != "" {
+		return "." + zs.NamedZone
+	}
+	if zs.Table != "" {
+		return (&parser.TableName{
+			DatabaseName: parser.Name(zs.Database),
+			TableName:    parser.Name(zs.Table),
+		}).String()
+	}
+	return parser.Name(zs.Database).String()
+}
 
 const (
 	// minRangeMaxBytes is the minimum value for range max bytes.
