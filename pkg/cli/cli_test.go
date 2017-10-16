@@ -502,8 +502,8 @@ func Example_zone() {
 	c.Run("zone ls")
 	c.Run("zone get .meta")
 	c.Run("zone get system.nonexistent")
-	c.Run("zone get system.lease")
-	c.Run("zone set system.lease --file=./testdata/zone_attrs.yaml")
+	c.Run("zone get system.descriptor")
+	c.Run("zone set system.descriptor --file=./testdata/zone_attrs.yaml")
 	c.Run("zone set system.namespace --file=./testdata/zone_attrs.yaml")
 	c.Run("zone set system.nonexistent --file=./testdata/zone_attrs.yaml")
 	c.Run("zone set system --file=./testdata/zone_range_max_bytes.yaml")
@@ -551,8 +551,8 @@ func Example_zone() {
 	// num_replicas: 1
 	// constraints: []
 	// zone get system.nonexistent
-	// system.nonexistent not found
-	// zone get system.lease
+	// pq: relation "system.nonexistent" does not exist
+	// zone get system.descriptor
 	// system
 	// range_min_bytes: 1048576
 	// range_max_bytes: 67108864
@@ -560,12 +560,12 @@ func Example_zone() {
 	//   ttlseconds: 90000
 	// num_replicas: 1
 	// constraints: [us-east-1a, ssd]
-	// zone set system.lease --file=./testdata/zone_attrs.yaml
-	// setting zone configs for individual system tables is not supported; try setting your config on the entire "system" database instead
+	// zone set system.descriptor --file=./testdata/zone_attrs.yaml
+	// pq: cannot set zone configs for system config tables; try setting your config on the entire "system" database instead
 	// zone set system.namespace --file=./testdata/zone_attrs.yaml
-	// setting zone configs for individual system tables is not supported; try setting your config on the entire "system" database instead
+	// pq: cannot set zone configs for system config tables; try setting your config on the entire "system" database instead
 	// zone set system.nonexistent --file=./testdata/zone_attrs.yaml
-	// system.nonexistent not found
+	// pq: relation "system.nonexistent" does not exist
 	// zone set system --file=./testdata/zone_range_max_bytes.yaml
 	// range_min_bytes: 1048576
 	// range_max_bytes: 134217728
@@ -582,11 +582,11 @@ func Example_zone() {
 	// num_replicas: 3
 	// constraints: [us-east-1a, ssd]
 	// zone rm system
-	// DELETE 1
+	// CONFIGURE ZONE 1
 	// zone ls
 	// .default
 	// zone rm .default
-	// unable to remove special zone .default
+	// pq: cannot remove default zone
 	// zone set .meta --file=./testdata/zone_range_max_bytes.yaml
 	// range_min_bytes: 1048576
 	// range_max_bytes: 134217728
@@ -652,22 +652,22 @@ func Example_zone() {
 	// num_replicas: 1
 	// constraints: []
 	// zone rm .meta
-	// DELETE 1
+	// CONFIGURE ZONE 1
 	// zone rm .system
-	// DELETE 1
+	// CONFIGURE ZONE 1
 	// zone ls
 	// .default
 	// .timeseries
 	// zone rm .timeseries
-	// DELETE 1
+	// CONFIGURE ZONE 1
 	// zone ls
 	// .default
 	// zone rm .meta
-	// DELETE 0
+	// CONFIGURE ZONE 0
 	// zone rm .system
-	// DELETE 0
+	// CONFIGURE ZONE 0
 	// zone rm .timeseries
-	// DELETE 0
+	// CONFIGURE ZONE 0
 }
 
 func Example_sql() {

@@ -158,6 +158,28 @@ SELECT * FROM crdb_internal.forward_dependencies WHERE descriptor_name = ''
 ----
 descriptor_id  descriptor_name  index_id  dependedonby_id  dependedonby_type  dependedonby_index_id  dependedonby_name  dependedonby_details
 
+query ITTT colnames
+SELECT * FROM crdb_internal.zones WHERE false
+----
+id  cli_specifier  config_yaml  config_proto
+
+statement ok
+INSERT INTO system.zones (id, config) VALUES
+  (16, ''),
+  (17, ''),
+  (18, ''),
+  (51, ''),
+  (52, '')
+
+query IT
+SELECT id, cli_specifier FROM crdb_internal.zones ORDER BY id
+----
+0   .default
+16  .meta
+17  .system
+18  .timeseries
+51  testdb
+52  testdb.foo
 
 query error pq: foo
 SELECT crdb_internal.force_error('', 'foo')

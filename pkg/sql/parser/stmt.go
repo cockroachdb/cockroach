@@ -416,6 +416,12 @@ func (*SetTransaction) StatementTag() string { return "SET TRANSACTION" }
 func (*SetTransaction) hiddenFromStats() {}
 
 // StatementType implements the Statement interface.
+func (*SetZoneConfig) StatementType() StatementType { return RowsAffected }
+
+// StatementTag returns a short string identifying the type of statement.
+func (*SetZoneConfig) StatementTag() string { return "CONFIGURE ZONE" }
+
+// StatementType implements the Statement interface.
 func (*SetDefaultIsolation) StatementType() StatementType { return Ack }
 
 // StatementTag returns a short string identifying the type of statement.
@@ -558,6 +564,12 @@ func (*ShowUsers) hiddenFromStats()                   {}
 func (*ShowUsers) independentFromParallelizedPriors() {}
 
 // StatementType implements the Statement interface.
+func (*ShowZoneConfig) StatementType() StatementType { return Rows }
+
+// StatementTag returns a short string identifying the type of statement.
+func (*ShowZoneConfig) StatementTag() string { return "SHOW ZONE CONFIGURATION" }
+
+// StatementType implements the Statement interface.
 func (*ShowRanges) StatementType() StatementType { return Rows }
 
 // StatementTag returns a short string identifying the type of statement.
@@ -671,6 +683,7 @@ func (n *Scatter) String() string                  { return AsString(n) }
 func (n *Select) String() string                   { return AsString(n) }
 func (n *SelectClause) String() string             { return AsString(n) }
 func (n *SetClusterSetting) String() string        { return AsString(n) }
+func (n *SetZoneConfig) String() string            { return AsString(n) }
 func (n *SetDefaultIsolation) String() string      { return AsString(n) }
 func (n *SetTransaction) String() string           { return AsString(n) }
 func (n *SetVar) String() string                   { return AsString(n) }
@@ -692,6 +705,7 @@ func (n *ShowTrace) String() string                { return AsString(n) }
 func (n *ShowTransactionStatus) String() string    { return AsString(n) }
 func (n *ShowUsers) String() string                { return AsString(n) }
 func (n *ShowVar) String() string                  { return AsString(n) }
+func (n *ShowZoneConfig) String() string           { return AsString(n) }
 func (n *ShowFingerprints) String() string         { return AsString(n) }
 func (n *Split) String() string                    { return AsString(n) }
 func (l StatementList) String() string             { return AsString(l) }
