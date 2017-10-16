@@ -7,7 +7,7 @@ set env(TERM) vt100
 if {[pwd] == "/"} {
   set ::env(HOME) "/logs"
 } else {
-  system "mkdir logs"
+  system "mkdir -p logs"
 }
 
 # Keep the history in a test location, so as to not override the

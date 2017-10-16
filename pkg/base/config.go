@@ -410,9 +410,6 @@ type TempStorageConfig struct {
 	// InMemory specifies whether the temporary storage will remain
 	// in-memory or occupy a temporary subdirectory on-disk.
 	InMemory bool
-	// ParentDir is the path to the parent directory where the temporary
-	// subdirectory (with filepath Path) for temp storage will be created.
-	ParentDir string
 	// Path is the filepath of the temporary subdirectory created for
 	// the temp storage.
 	Path string
@@ -431,7 +428,6 @@ type TempStorageConfig struct {
 func TempStorageConfigFromEnv(
 	ctx context.Context, firstStore StoreSpec, parentDir string, maxSizeBytes int64,
 ) TempStorageConfig {
-
 	inMem := parentDir == "" && firstStore.InMemory
 	var monitor mon.BytesMonitor
 	if inMem {
@@ -456,13 +452,8 @@ func TempStorageConfigFromEnv(
 		monitor.Start(ctx, nil /* pool */, mon.MakeStandaloneBudget(maxSizeBytes))
 	}
 
-	if parentDir == "" && !inMem {
-		parentDir = firstStore.Path
-	}
-
 	return TempStorageConfig{
-		InMemory:  inMem,
-		ParentDir: parentDir,
-		Mon:       &monitor,
+		InMemory: inMem,
+		Mon:      &monitor,
 	}
 }
