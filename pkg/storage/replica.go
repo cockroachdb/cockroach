@@ -1928,8 +1928,8 @@ func (ec *endCmds) done(br *roachpb.BatchResponse, pErr *roachpb.Error, retry pr
 
 func makeTSCacheRequest(
 	ba *roachpb.BatchRequest, br *roachpb.BatchResponse, span roachpb.RSpan,
-) tscache.CacheRequest {
-	cr := tscache.CacheRequest{
+) tscache.Request {
+	cr := tscache.Request{
 		Span:      span,
 		Timestamp: ba.Timestamp,
 	}

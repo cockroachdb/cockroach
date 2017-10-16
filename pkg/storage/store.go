@@ -521,7 +521,7 @@ type Store struct {
 		// Protects all fields in the tsCacheMu struct.
 		syncutil.Mutex
 		// Most recent timestamps for keys / key ranges.
-		cache *tscache.TimestampCache
+		cache *tscache.Cache
 	}
 
 	scheduler *raftScheduler
@@ -872,7 +872,7 @@ func NewStore(cfg StoreConfig, eng engine.Engine, nodeDesc *roachpb.NodeDescript
 	s.mu.Unlock()
 
 	s.tsCacheMu.Lock()
-	s.tsCacheMu.cache = tscache.NewTimestampCache(s.cfg.Clock)
+	s.tsCacheMu.cache = tscache.NewCache(s.cfg.Clock)
 	s.tsCacheMu.Unlock()
 
 	s.snapshotApplySem = make(chan struct{}, cfg.concurrentSnapshotApplyLimit)
