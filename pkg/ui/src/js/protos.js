@@ -26431,7 +26431,6 @@ export const cockroach = $root.cockroach = (() => {
              * Properties of a ZoneConfig.
              * @typedef cockroach.config.ZoneConfig$Properties
              * @type {Object}
-             * @property {Array.<cockroach.roachpb.Attributes$Properties>} [replica_attrs] ZoneConfig replica_attrs.
              * @property {Long} [range_min_bytes] ZoneConfig range_min_bytes.
              * @property {Long} [range_max_bytes] ZoneConfig range_max_bytes.
              * @property {cockroach.config.GCPolicy$Properties} [gc] ZoneConfig gc.
@@ -26446,18 +26445,11 @@ export const cockroach = $root.cockroach = (() => {
              * @param {cockroach.config.ZoneConfig$Properties=} [properties] Properties to set
              */
             function ZoneConfig(properties) {
-                this.replica_attrs = [];
                 if (properties)
                     for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
                         if (properties[keys[i]] != null)
                             this[keys[i]] = properties[keys[i]];
             }
-
-            /**
-             * ZoneConfig replica_attrs.
-             * @type {Array.<cockroach.roachpb.Attributes$Properties>}
-             */
-            ZoneConfig.prototype.replica_attrs = $util.emptyArray;
 
             /**
              * ZoneConfig range_min_bytes.
@@ -26507,9 +26499,6 @@ export const cockroach = $root.cockroach = (() => {
             ZoneConfig.encode = function encode(message, writer) {
                 if (!writer)
                     writer = $Writer.create();
-                if (message.replica_attrs != null && message.replica_attrs.length)
-                    for (let i = 0; i < message.replica_attrs.length; ++i)
-                        $root.cockroach.roachpb.Attributes.encode(message.replica_attrs[i], writer.uint32(/* id 1, wireType 2 =*/10).fork()).ldelim();
                 if (message.range_min_bytes != null && message.hasOwnProperty("range_min_bytes"))
                     writer.uint32(/* id 2, wireType 0 =*/16).int64(message.range_min_bytes);
                 if (message.range_max_bytes != null && message.hasOwnProperty("range_max_bytes"))
@@ -26548,11 +26537,6 @@ export const cockroach = $root.cockroach = (() => {
                 while (reader.pos < end) {
                     let tag = reader.uint32();
                     switch (tag >>> 3) {
-                    case 1:
-                        if (!(message.replica_attrs && message.replica_attrs.length))
-                            message.replica_attrs = [];
-                        message.replica_attrs.push($root.cockroach.roachpb.Attributes.decode(reader, reader.uint32()));
-                        break;
                     case 2:
                         message.range_min_bytes = reader.int64();
                         break;
@@ -26597,15 +26581,6 @@ export const cockroach = $root.cockroach = (() => {
             ZoneConfig.verify = function verify(message) {
                 if (typeof message !== "object" || message === null)
                     return "object expected";
-                if (message.replica_attrs != null && message.hasOwnProperty("replica_attrs")) {
-                    if (!Array.isArray(message.replica_attrs))
-                        return "replica_attrs: array expected";
-                    for (let i = 0; i < message.replica_attrs.length; ++i) {
-                        let error = $root.cockroach.roachpb.Attributes.verify(message.replica_attrs[i]);
-                        if (error)
-                            return "replica_attrs." + error;
-                    }
-                }
                 if (message.range_min_bytes != null && message.hasOwnProperty("range_min_bytes"))
                     if (!$util.isInteger(message.range_min_bytes) && !(message.range_min_bytes && $util.isInteger(message.range_min_bytes.low) && $util.isInteger(message.range_min_bytes.high)))
                         return "range_min_bytes: integer|Long expected";
@@ -26637,16 +26612,6 @@ export const cockroach = $root.cockroach = (() => {
                 if (object instanceof $root.cockroach.config.ZoneConfig)
                     return object;
                 let message = new $root.cockroach.config.ZoneConfig();
-                if (object.replica_attrs) {
-                    if (!Array.isArray(object.replica_attrs))
-                        throw TypeError(".cockroach.config.ZoneConfig.replica_attrs: array expected");
-                    message.replica_attrs = [];
-                    for (let i = 0; i < object.replica_attrs.length; ++i) {
-                        if (typeof object.replica_attrs[i] !== "object")
-                            throw TypeError(".cockroach.config.ZoneConfig.replica_attrs: object expected");
-                        message.replica_attrs[i] = $root.cockroach.roachpb.Attributes.fromObject(object.replica_attrs[i]);
-                    }
-                }
                 if (object.range_min_bytes != null)
                     if ($util.Long)
                         (message.range_min_bytes = $util.Long.fromValue(object.range_min_bytes)).unsigned = false;
@@ -26699,8 +26664,6 @@ export const cockroach = $root.cockroach = (() => {
                 if (!options)
                     options = {};
                 let object = {};
-                if (options.arrays || options.defaults)
-                    object.replica_attrs = [];
                 if (options.defaults) {
                     if ($util.Long) {
                         let long = new $util.Long(0, 0, false);
@@ -26715,11 +26678,6 @@ export const cockroach = $root.cockroach = (() => {
                     object.gc = null;
                     object.num_replicas = 0;
                     object.constraints = null;
-                }
-                if (message.replica_attrs && message.replica_attrs.length) {
-                    object.replica_attrs = [];
-                    for (let j = 0; j < message.replica_attrs.length; ++j)
-                        object.replica_attrs[j] = $root.cockroach.roachpb.Attributes.toObject(message.replica_attrs[j], options);
                 }
                 if (message.range_min_bytes != null && message.hasOwnProperty("range_min_bytes"))
                     if (typeof message.range_min_bytes === "number")
