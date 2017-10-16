@@ -475,7 +475,14 @@ func (nl *NodeLiveness) Self() (*Liveness, error) {
 
 func (nl *NodeLiveness) setSelf(liveness Liveness) {
 	nl.mu.Lock()
-	nl.mu.self = liveness
+	// NB: shouldReplaceLiveness should always be true
+	// since setSelf is only ever called for non-overlapping
+	// liveness updated serialized through a single semaphore.
+	//
+	// We call it for symmetry with the nodes map.
+	if shouldReplaceLiveness(nl.mu.self, liveness) {
+		nl.mu.self = liveness
+	}
 	nl.mu.Unlock()
 }
 
