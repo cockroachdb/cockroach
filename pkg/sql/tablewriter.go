@@ -532,7 +532,7 @@ func (tu *tableUpserter) upsertRowPKs(ctx context.Context, traceKV bool) ([]roac
 			if result.Rows[0].Value == nil {
 				upsertRowPKs[i] = nil
 			} else {
-				upsertRowPK, err := sqlbase.ExtractIndexKey(tableDesc, result.Rows[0])
+				upsertRowPK, err := sqlbase.ExtractIndexKey(tu.alloc, tableDesc, result.Rows[0])
 				if err != nil {
 					return nil, err
 				}
