@@ -108,12 +108,12 @@ type Cache struct {
 	maxBytes uint64
 }
 
-// LowWaterTxnIDMarker is a special txn ID that identifies a cache entry as a
+// lowWaterTxnIDMarker is a special txn ID that identifies a cache entry as a
 // low water mark. It is specified when a lease is acquired to clear the
 // timestamp cache for a range. Also see Cache.getMax where this txn
 // ID is checked in order to return whether the max read/write timestamp came
 // from a regular entry or one of these low water mark entries.
-var LowWaterTxnIDMarker = func() uuid.UUID {
+var lowWaterTxnIDMarker = func() uuid.UUID {
 	// The specific txn ID used here isn't important. We use something that is a)
 	// non-zero and b) obvious.
 	u, err := uuid.FromString("11111111-1111-1111-1111-111111111111")
@@ -130,7 +130,7 @@ func NewCache(clock *hlc.Clock) *Cache {
 		wCache:   cache.NewIntervalCache(cache.Config{Policy: cache.CacheFIFO}),
 		maxBytes: uint64(defaultCacheSize),
 	}
-	tc.Clear(clock.Now())
+	tc.clear(clock.Now())
 	tc.rCache.Config.ShouldEvict = tc.shouldEvict
 	tc.wCache.Config.ShouldEvict = tc.shouldEvict
 	tc.rCache.Config.OnEvicted = tc.onEvicted
@@ -138,8 +138,8 @@ func NewCache(clock *hlc.Clock) *Cache {
 	return tc
 }
 
-// Clear clears the cache and resets the low-water mark.
-func (tc *Cache) Clear(lowWater hlc.Timestamp) {
+// clear clears the cache and resets the low-water mark.
+func (tc *Cache) clear(lowWater hlc.Timestamp) {
 	tc.requests = btree.New(btreeDegree)
 	tc.rCache.Clear()
 	tc.wCache.Clear()
@@ -153,12 +153,12 @@ func (tc *Cache) len() int {
 	return tc.rCache.Len() + tc.wCache.Len() + tc.reqSpans
 }
 
-// Add the specified timestamp to the cache as covering the range of
+// add the specified timestamp to the cache as covering the range of
 // keys from start to end. If end is nil, the range covers the start
 // key only. txnID is nil for no transaction. readTSCache specifies
 // whether the command adding this timestamp should update the read
 // timestamp; false to update the write timestamp cache.
-func (tc *Cache) Add(
+func (tc *Cache) add(
 	start, end roachpb.Key, timestamp hlc.Timestamp, txnID uuid.UUID, readTSCache bool,
 ) {
 	// This gives us a memory-efficient end key if end is empty.
@@ -582,11 +582,11 @@ func (tc *Cache) ExpandRequests(timestamp hlc.Timestamp, span roachpb.RSpan) {
 		tc.bytes -= reqSize
 		for i := range req.Reads {
 			sp := &req.Reads[i]
-			tc.Add(sp.Key, sp.EndKey, req.Timestamp, req.TxnID, true /* readTSCache */)
+			tc.add(sp.Key, sp.EndKey, req.Timestamp, req.TxnID, true /* readTSCache */)
 		}
 		for i := range req.Writes {
 			sp := &req.Writes[i]
-			tc.Add(sp.Key, sp.EndKey, req.Timestamp, req.TxnID, false /* !readTSCache */)
+			tc.add(sp.Key, sp.EndKey, req.Timestamp, req.TxnID, false /* !readTSCache */)
 		}
 		if req.Txn.Key != nil {
 			// Make the transaction key from the request key. We're guaranteed
@@ -594,9 +594,21 @@ func (tc *Cache) ExpandRequests(timestamp hlc.Timestamp, span roachpb.RSpan) {
 			// EndTransactionRequests.
 			key := keys.TransactionKey(req.Txn.Key, req.TxnID)
 			// We set txnID=nil because we want hits for same txn ID.
-			tc.Add(key, nil, req.Timestamp, uuid.UUID{}, false /* !readTSCache */)
+			tc.add(key, nil, req.Timestamp, uuid.UUID{}, false /* !readTSCache */)
 		}
 	}
+}
+
+// SetLowWater sets the low water mark of the timestamp cache for the
+// specified span to the timestamp.
+func (tc *Cache) SetLowWater(start, end roachpb.Key, timestamp hlc.Timestamp) {
+	tc.add(start, end, timestamp, lowWaterTxnIDMarker, false)
+	tc.add(start, end, timestamp, lowWaterTxnIDMarker, true)
+}
+
+// GlobalLowWater returns the low water mark for the entire TimestampCache.
+func (tc *Cache) GlobalLowWater() hlc.Timestamp {
+	return tc.lowWater
 }
 
 // GetMaxRead returns the maximum read timestamp which overlaps the
@@ -646,7 +658,7 @@ func (tc *Cache) getMax(
 			maxTxnID = uuid.UUID{}
 		}
 	}
-	if maxTxnID == LowWaterTxnIDMarker {
+	if maxTxnID == lowWaterTxnIDMarker {
 		ok = false
 	}
 	return maxTS, maxTxnID, ok
@@ -684,9 +696,4 @@ func (tc *Cache) onEvicted(k, v interface{}) {
 		panic(fmt.Sprintf("bad reqSize: %d < %d", tc.bytes, reqSize))
 	}
 	tc.bytes -= reqSize
-}
-
-// GlobalLowWater returns the low water mark for the entire TimestampCache.
-func (tc *Cache) GlobalLowWater() hlc.Timestamp {
-	return tc.lowWater
 }
