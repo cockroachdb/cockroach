@@ -385,8 +385,8 @@ func TestIsOnePhaseCommit(t *testing.T) {
 				ba.Txn.Isolation = enginepb.SERIALIZABLE
 			}
 		}
-		if is1PC := isOnePhaseCommit(ba); is1PC != c.exp1PC {
-			t.Errorf("%d: expected 1pc=%t; got %t", i, c.exp1PC, is1PC)
+		if available1PC, _ := onePhaseCommitStatus(ba); available1PC != c.exp1PC {
+			t.Errorf("%d: expected 1pc=%t; got %t", i, c.exp1PC, available1PC)
 		}
 	}
 }

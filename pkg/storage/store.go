@@ -679,7 +679,10 @@ type StoreTestingKnobs struct {
 	// If non-nil, BadChecksumReportDiff is called by CheckConsistency() on a
 	// checksum mismatch to report the diff between snapshots.
 	BadChecksumReportDiff func(roachpb.StoreIdent, []ReplicaSnapshotDiff)
-	// Disables the use of one phase commits.
+	// Disables the use of one phase commits. Even when enabled, requests that set
+	// the Require1PC flag are permitted to use one phase commits. This prevents
+	// wedging node liveness, which requires one phase commits during liveness
+	// updates.
 	DisableOnePhaseCommits bool
 	// A hack to manipulate the clock before sending a batch request to a replica.
 	// TODO(kaneda): This hook is not encouraged to use. Get rid of it once

@@ -4830,7 +4830,8 @@ func (r *Replica) evaluateTxnWriteBatch(
 	ms := enginepb.MVCCStats{}
 	// If not transactional or there are indications that the batch's txn will
 	// require restart or retry, execute as normal.
-	if !r.store.TestingKnobs().DisableOnePhaseCommits && isOnePhaseCommit(ba) {
+	allowed1PC, required1PC := onePhaseCommitStatus(ba)
+	if (!r.store.TestingKnobs().DisableOnePhaseCommits || required1PC) && allowed1PC {
 		arg, _ := ba.GetArg(roachpb.EndTransaction)
 		etArg := arg.(*roachpb.EndTransactionRequest)
 
@@ -4903,28 +4904,30 @@ func (r *Replica) evaluateTxnWriteBatch(
 	return batch, ms, br, result, pErr
 }
 
-// isOnePhaseCommit returns true iff the BatchRequest contains all
-// commands in the transaction, starting with BeginTransaction and
-// ending with EndTransaction. One phase commits are disallowed if (1) the
-// transaction has already been flagged with a write too old error or
-// (2) if isolation is serializable and the commit timestamp has been
-// forwarded, or (3) the transaction exceeded its deadline.
-func isOnePhaseCommit(ba roachpb.BatchRequest) bool {
+// onePhaseCommitStatus returns whether the BatchRequest can use one phase
+// commit and, if so, whether the BatchRequest requires one phase commit. The
+// BatchRequest can use one phase commit iff the BatchRequest contains all
+// commands in the transaction, starting with BeginTransaction and ending with
+// EndTransaction. One phase commits are disallowed if (1) the transaction has
+// already been flagged with a write too old error or (2) if isolation is
+// serializable and the commit timestamp has been forwarded, or (3) the
+// transaction exceeded its deadline.
+func onePhaseCommitStatus(ba roachpb.BatchRequest) (allowed bool, required bool) {
 	if ba.Txn == nil {
-		return false
+		return false, false
 	}
 	if retry, _ := isEndTransactionTriggeringRetryError(ba.Txn, ba.Txn); retry {
-		return false
+		return false, false
 	}
 	if _, hasBegin := ba.GetArg(roachpb.BeginTransaction); !hasBegin {
-		return false
+		return false, false
 	}
 	arg, hasEnd := ba.GetArg(roachpb.EndTransaction)
 	if !hasEnd {
-		return false
+		return false, false
 	}
 	etArg := arg.(*roachpb.EndTransactionRequest)
-	return !isEndTransactionExceedingDeadline(ba.Header.Timestamp, *etArg)
+	return !isEndTransactionExceedingDeadline(ba.Header.Timestamp, *etArg), etArg.Require1PC
 }
 
 // optimizePuts searches for contiguous runs of Put & CPut commands in
