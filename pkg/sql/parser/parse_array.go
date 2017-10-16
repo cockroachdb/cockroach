@@ -47,8 +47,8 @@ var isElementChar = func(r rune) bool {
 func (p *parseState) gobbleString(isTerminatingChar func(ch byte) bool) (out string, err error) {
 	var result bytes.Buffer
 	start := 0
-	i := 0
-	for i < len(p.s) && !isTerminatingChar(p.s[i]) {
+	i := -1
+	for i < len(p.s) && (i < 0 || !isTerminatingChar(p.s[i])) {
 		i++
 		// In these strings, we just encode directly the character following a
 		// '\', even if it would normally be an escape sequence.
