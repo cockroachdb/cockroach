@@ -119,8 +119,6 @@ func (a *appStats) recordStatement(
 		// Use the cached anonymized string.
 		key.stmt = stmt.AnonymizedStr
 	} else {
-		var buf bytes.Buffer
-		parser.FormatNode(&buf, parser.FmtHideConstants, stmt.AST)
 		key.stmt = a.getStrForStmt(stmt)
 	}
 
