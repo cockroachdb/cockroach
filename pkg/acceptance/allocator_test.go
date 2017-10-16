@@ -207,7 +207,7 @@ func (at *allocatorTest) Run(ctx context.Context, t *testing.T) {
 			log.Info(ctx, "running schema changes over datablocks.blocks")
 			schemaChanges := []string{
 				"ALTER TABLE datablocks.blocks ADD COLUMN created_at TIMESTAMP DEFAULT now()",
-				"CREATE INDEX foo ON datablocks.blocks (block_id)",
+				"CREATE INDEX foo ON datablocks.blocks (block_id, created_at)",
 			}
 			if err := at.runSchemaChanges(ctx, t, schemaChanges); err != nil {
 				t.Fatal(err)
@@ -221,8 +221,8 @@ func (at *allocatorTest) Run(ctx context.Context, t *testing.T) {
 			}
 			// Queries to hone in on index validation problems.
 			indexValidationQueries := []string{
-				"SELECT COUNT(created_at) FROM datablocks.blocks@primary AS OF SYSTEM TIME %s WHERE created_at > $1 AND created_at < $2",
-				"SELECT COUNT(block_id) FROM datablocks.blocks@foo AS OF SYSTEM TIME %s WHERE created_at > $1 AND created_at < $2",
+				"SELECT COUNT(created_at) FROM datablocks.blocks@primary AS OF SYSTEM TIME %s WHERE created_at > $1 AND created_at <= $2",
+				"SELECT COUNT(block_id) FROM datablocks.blocks@foo AS OF SYSTEM TIME %s WHERE created_at > $1 AND created_at <= $2",
 			}
 			if err := at.runValidationQueries(
 				ctx, t, validationQueries, indexValidationQueries,
