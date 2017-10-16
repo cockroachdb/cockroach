@@ -4830,7 +4830,7 @@ func (r *Replica) evaluateTxnWriteBatch(
 	ms := enginepb.MVCCStats{}
 	// If not transactional or there are indications that the batch's txn will
 	// require restart or retry, execute as normal.
-	if !r.store.TestingKnobs().DisableOnePhaseCommits && isOnePhaseCommit(ba) {
+	if isOnePhaseCommit(ba, r.store.TestingKnobs()) {
 		arg, _ := ba.GetArg(roachpb.EndTransaction)
 		etArg := arg.(*roachpb.EndTransactionRequest)
 
@@ -4903,13 +4903,14 @@ func (r *Replica) evaluateTxnWriteBatch(
 	return batch, ms, br, result, pErr
 }
 
-// isOnePhaseCommit returns true iff the BatchRequest contains all
-// commands in the transaction, starting with BeginTransaction and
-// ending with EndTransaction. One phase commits are disallowed if (1) the
-// transaction has already been flagged with a write too old error or
-// (2) if isolation is serializable and the commit timestamp has been
-// forwarded, or (3) the transaction exceeded its deadline.
-func isOnePhaseCommit(ba roachpb.BatchRequest) bool {
+// isOnePhaseCommit returns true iff the BatchRequest contains all commands in
+// the transaction, starting with BeginTransaction and ending with
+// EndTransaction. One phase commits are disallowed if (1) the transaction has
+// already been flagged with a write too old error, or (2) if isolation is
+// serializable and the commit timestamp has been forwarded, or (3) the
+// transaction exceeded its deadline, or (4) the testing knobs disallow optional
+// one phase commits and the BatchRequest does not require one phase commit.
+func isOnePhaseCommit(ba roachpb.BatchRequest, knobs *StoreTestingKnobs) bool {
 	if ba.Txn == nil {
 		return false
 	}
@@ -4924,7 +4925,10 @@ func isOnePhaseCommit(ba roachpb.BatchRequest) bool {
 		return false
 	}
 	etArg := arg.(*roachpb.EndTransactionRequest)
-	return !isEndTransactionExceedingDeadline(ba.Header.Timestamp, *etArg)
+	if isEndTransactionExceedingDeadline(ba.Header.Timestamp, *etArg) {
+		return false
+	}
+	return !knobs.DisableOptional1PC || etArg.Require1PC
 }
 
 // optimizePuts searches for contiguous runs of Put & CPut commands in
