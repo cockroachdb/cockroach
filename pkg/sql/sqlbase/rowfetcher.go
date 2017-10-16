@@ -318,7 +318,7 @@ func prettyEncDatums(vals []EncDatum) string {
 
 // ReadIndexKey decodes an index key for the fetcher's table.
 func (rf *RowFetcher) ReadIndexKey(k roachpb.Key) (remaining []byte, ok bool, err error) {
-	return DecodeIndexKey(rf.alloc, rf.desc, rf.index, rf.keyVals,
+	return DecodeIndexKey(rf.desc, rf.index, rf.keyVals,
 		rf.indexColumnDirs, k)
 }
 
