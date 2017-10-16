@@ -6,6 +6,7 @@ import { InjectedRouter, RouterState } from "react-router";
 import { createSelector } from "reselect";
 
 import { refreshNodes, refreshLiveness } from "src/redux/apiReducers";
+import { hoverStateSelector, HoverState, hoverOn, hoverOff } from "src/redux/hover";
 import { nodesSummarySelector, NodesSummary } from "src/redux/nodes";
 import { AdminUIState } from "src/redux/state";
 import { nodeIDAttr } from "src/util/constants";
@@ -23,9 +24,12 @@ import messagesDashboard from "./messages";
 interface NodeGraphsOwnProps {
   refreshNodes: typeof refreshNodes;
   refreshLiveness: typeof refreshLiveness;
+  hoverOn: typeof hoverOn;
+  hoverOff: typeof hoverOff;
   nodesQueryValid: boolean;
   livenessQueryValid: boolean;
   nodesSummary: NodesSummary;
+  hoverState: HoverState;
 }
 
 type NodeGraphsProps = NodeGraphsOwnProps & RouterState;
@@ -94,7 +98,7 @@ class NodeGraphs extends React.Component<NodeGraphsProps, {}> {
   }
 
   render() {
-    const { params, nodesSummary } = this.props;
+    const { params, nodesSummary, hoverState, hoverOn, hoverOff } = this.props;
 
     const selectedNode = params[nodeIDAttr] || "";
     const nodeSources = (selectedNode !== "") ? [selectedNode] : null;
@@ -132,7 +136,7 @@ class NodeGraphs extends React.Component<NodeGraphsProps, {}> {
       const key = `nodes.raftMessages.${idx}`;
       return (
         <div key={key}>
-          <MetricsDataProvider id={key}>
+          <MetricsDataProvider id={key} hoverOn={hoverOn} hoverOff={hoverOff} hoverState={hoverState}>
             {graph}
           </MetricsDataProvider>
         </div>
@@ -169,10 +173,13 @@ function mapStateToProps(state: AdminUIState) {
     nodesSummary: nodesSummarySelector(state),
     nodesQueryValid: state.cachedData.nodes.valid,
     livenessQueryValid: state.cachedData.nodes.valid,
+    hoverState: hoverStateSelector(state),
   };
 }
 const actions = {
   refreshNodes,
   refreshLiveness,
+  hoverOn,
+  hoverOff,
 };
 export default connect(mapStateToProps, actions)(NodeGraphs);

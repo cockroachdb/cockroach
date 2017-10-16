@@ -1,16 +1,19 @@
+import d3 from "d3";
 import React from "react";
+import moment from "moment";
 import * as nvd3 from "nvd3";
 import { createSelector } from "reselect";
 
 import { findChildrenOfType } from "src/util/find";
 import {
-  ConfigureLineChart, InitLineChart, updateLinkedGuidelines,
+  ConfigureLineChart, InitLineChart, CHART_MARGINS,
 } from "src/views/cluster/util/graphs";
 import {
   Metric, MetricProps, Axis, AxisProps,
 } from "src/views/shared/components/metricQuery";
 import { MetricsDataComponentProps } from "src/views/shared/components/metricQuery";
 import Visualization from "src/views/cluster/components/visualization";
+import { NanoToMilli } from "src/util/convert";
 
 interface LineGraphProps extends MetricsDataComponentProps {
   title?: string;
@@ -67,8 +70,28 @@ export class LineGraph extends React.Component<LineGraphProps, {}> {
     }
   }
 
-  mouseMove = () => {
-    updateLinkedGuidelines(this.graphEl);
+  mouseMove = (e: any) => {
+    const timeScale = this.chart.xAxis.scale();
+    const x = e.clientX - this.graphEl.getBoundingClientRect().left - CHART_MARGINS.left;
+    const t = Math.floor(timeScale.invert(x));
+
+    const series: any = this.props.data.results[0].datapoints.map((d: any) => NanoToMilli(d.timestamp_nanos.toNumber()));
+
+    const index = d3.bisect(series, t);
+    const result = moment(new Date(series[index]));
+
+    // TODO(couchand): don't trust the bisect, check for which side of the split is closer
+
+    if (this.props.hoverState.hoverChart !== this.props.title || !result.isSame(this.props.hoverState.hoverTime)) {
+      this.props.hoverOn({
+        hoverChart: this.props.title,
+        hoverTime: result,
+      });
+    }
+  }
+
+  mouseLeave = () => {
+    this.props.hoverOff();
   }
 
   drawChart = () => {
@@ -88,8 +111,14 @@ export class LineGraph extends React.Component<LineGraphProps, {}> {
         return;
       }
 
+      const { currentlyHovering, hoverChart } = this.props.hoverState;
+      let { hoverTime } = this.props.hoverState;
+      if (!currentlyHovering || hoverChart === this.props.title) {
+        hoverTime = null;
+      }
+
       ConfigureLineChart(
-        this.chart, this.graphEl, metrics, axis, this.props.data, this.props.timeInfo, false,
+        this.chart, this.graphEl, metrics, axis, this.props.data, this.props.timeInfo, false, hoverTime,
       );
     }
   }
@@ -116,7 +145,7 @@ export class LineGraph extends React.Component<LineGraphProps, {}> {
 
     return <Visualization title={title} subtitle={subtitle} tooltip={tooltip} loading={!data} >
       <div className="linegraph">
-        <svg className="graph linked-guideline" ref={(svg) => this.graphEl = svg} onMouseMove={this.mouseMove} onMouseLeave={this.mouseMove} />
+        <svg className="graph linked-guideline" ref={(svg) => this.graphEl = svg} onMouseMove={this.mouseMove} onMouseLeave={this.mouseLeave} />
       </div>
     </Visualization>;
   }

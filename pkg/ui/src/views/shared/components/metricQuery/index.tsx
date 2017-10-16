@@ -21,6 +21,7 @@
 
 import React from "react";
 import * as protos from  "src/js/protos";
+import { HoverState, hoverOn, hoverOff } from "src/redux/hover";
 
 type TSResponse = protos.cockroach.ts.tspb.TimeSeriesQueryResponse;
 
@@ -133,4 +134,9 @@ export interface MetricsDataComponentProps {
   // convenient syntax for a common use case where all metrics on a graph are
   // are from the same source set.
   sources?: string[];
+
+  // Hover handling props for hoverable charts.
+  hoverState?: HoverState;
+  hoverOn?: typeof hoverOn;
+  hoverOff?: typeof hoverOff;
 }

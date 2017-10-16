@@ -6,6 +6,7 @@ import createSagaMiddleware from "redux-saga";
 import thunk from "redux-thunk";
 
 import { apiReducersReducer, APIReducersState } from "./apiReducers";
+import { hoverReducer, HoverState } from "./hover";
 import { localSettingsReducer, LocalSettingsState } from "./localsettings";
 import { metricsReducer, MetricsState, queryMetricsSaga } from "./metrics";
 import { queryManagerReducer, QueryManagerState } from "./queryManager/reducer";
@@ -14,6 +15,7 @@ import { uiDataReducer, UIDataState } from "./uiData";
 
 export interface AdminUIState {
     cachedData: APIReducersState;
+    hover: HoverState;
     localSettings: LocalSettingsState;
     metrics: MetricsState;
     queryManager: QueryManagerState;
@@ -30,6 +32,7 @@ export function createAdminUIStore() {
   const store = createStore(
     combineReducers<AdminUIState>({
       cachedData: apiReducersReducer,
+      hover: hoverReducer,
       localSettings: localSettingsReducer,
       metrics: metricsReducer,
       queryManager: queryManagerReducer,

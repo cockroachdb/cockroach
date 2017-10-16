@@ -16,6 +16,7 @@ import ClusterSummaryBar from "./summaryBar";
 
 import { AdminUIState } from "src/redux/state";
 import { refreshNodes, refreshLiveness } from "src/redux/apiReducers";
+import { hoverStateSelector, HoverState, hoverOn, hoverOff } from "src/redux/hover";
 import { nodesSummarySelector, NodesSummary } from "src/redux/nodes";
 import Alerts from "src/views/shared/containers/alerts";
 import { MetricsDataProvider } from "src/views/shared/containers/metricDataProvider";
@@ -62,9 +63,12 @@ const dashboardDropdownOptions = _.map(dashboards, (dashboard, key) => {
 interface NodeGraphsOwnProps {
   refreshNodes: typeof refreshNodes;
   refreshLiveness: typeof refreshLiveness;
+  hoverOn: typeof hoverOn;
+  hoverOff: typeof hoverOff;
   nodesQueryValid: boolean;
   livenessQueryValid: boolean;
   nodesSummary: NodesSummary;
+  hoverState: HoverState;
 }
 
 type NodeGraphsProps = NodeGraphsOwnProps & RouterState;
@@ -137,7 +141,7 @@ class NodeGraphs extends React.Component<NodeGraphsProps, {}> {
   }
 
   render() {
-    const { params, nodesSummary } = this.props;
+    const { params, nodesSummary, hoverState, hoverOn, hoverOff } = this.props;
     const selectedDashboard = params[dashboardNameAttr];
     const dashboard = _.has(dashboards, selectedDashboard)
       ? selectedDashboard
@@ -179,7 +183,7 @@ class NodeGraphs extends React.Component<NodeGraphsProps, {}> {
       const key = `nodes.${dashboard}.${idx}`;
       return (
         <div key={key}>
-          <MetricsDataProvider id={key}>
+          <MetricsDataProvider id={key} hoverOn={hoverOn} hoverOff={hoverOff} hoverState={hoverState}>
             {graph}
           </MetricsDataProvider>
         </div>
@@ -229,10 +233,13 @@ export default connect(
       nodesSummary: nodesSummarySelector(state),
       nodesQueryValid: state.cachedData.nodes.valid,
       livenessQueryValid: state.cachedData.nodes.valid,
+      hoverState: hoverStateSelector(state),
     };
   },
   {
     refreshNodes,
     refreshLiveness,
+    hoverOn,
+    hoverOff,
   },
 )(NodeGraphs);
