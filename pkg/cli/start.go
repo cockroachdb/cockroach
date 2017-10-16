@@ -49,6 +49,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -400,6 +401,86 @@ var cacheSizeValue = newBytesOrPercentageValue(&serverCfg.CacheSize, memoryPerce
 var sqlSizeValue = newBytesOrPercentageValue(&serverCfg.SQLMemoryPoolSize, memoryPercentResolver)
 var diskTempStorageSizeValue = newBytesOrPercentageValue(nil /* v */, nil /* percentResolver */)
 
+func initTempStorageConfig(ctx context.Context) error {
+	firstStore := serverCfg.Stores.Specs[0]
+	var recordPath string
+	if firstStore.Path != "" {
+		recordPath = filepath.Join(firstStore.Path, server.TempDirsRecordFilename)
+	}
+
+	var err error
+	// Need to first clean up any abandoned temporary directories from
+	// the temporary directory record file before creating any new
+	// temporary directories in case the disk is completely full.
+	if recordPath != "" {
+		if err = util.CleanupTempDirs(recordPath); err != nil {
+			return errors.Wrap(err, "could not cleanup temporary directories from record file")
+		}
+	}
+
+	// The temp store size can depend on the location of the first regular store
+	// (if it's expressed as a percentage), so we resolve that flag here.
+	var tempStorePercentageResolver percentResolverFunc
+	if !firstStore.InMemory {
+		dir := firstStore.Path
+		// Create the store dir, if it doesn't exist. The dir is required to exist
+		// by diskPercentResolverFactory.
+		if err = os.MkdirAll(dir, 0755); err != nil {
+			return errors.Wrapf(err, "failed to create dir for first store: %s", dir)
+		}
+		tempStorePercentageResolver, err = diskPercentResolverFactory(dir)
+		if err != nil {
+			return errors.Wrapf(err, "failed to create resolver for: %s", dir)
+		}
+	} else {
+		tempStorePercentageResolver = memoryPercentResolver
+	}
+	var tempStorageMaxSizeBytes int64
+	if err = diskTempStorageSizeValue.Resolve(
+		&tempStorageMaxSizeBytes, tempStorePercentageResolver,
+	); err != nil {
+		return err
+	}
+	if firstStore.InMemory && !diskTempStorageSizeValue.IsSet() {
+		// The default temp store size is different when the first
+		// store (and thus also the temp storage) is in memory.
+		tempStorageMaxSizeBytes = base.DefaultInMemTempStorageMaxSizeBytes
+	}
+
+	// Re-initialize TempStorageConfig based on cli flag-initialize values
+	// and the first store's spec.
+	serverCfg.TempStorageConfig = base.TempStorageConfigFromEnv(
+		ctx,
+		firstStore,
+		tempParentDir,
+		tempStorageMaxSizeBytes,
+	)
+
+	// Default temp parent directory to first store path if the temp
+	// storage is not in memory.
+	if tempParentDir == "" && !serverCfg.TempStorageConfig.InMemory {
+		tempParentDir = firstStore.Path
+	}
+	// Create the temporary subdirectory for the temp engine.
+	if serverCfg.TempStorageConfig.Path, err = util.CreateTempDir(tempParentDir, server.TempDirPrefix); err != nil {
+		return errors.Wrap(err, "could not create temporary directory for temp storage")
+	}
+
+	// We record the new temporary directory in the record file (if it
+	// exists) for cleanup in case the node crashes.
+	if recordPath != "" {
+		if err = util.RecordTempDir(recordPath, serverCfg.TempStorageConfig.Path); err != nil {
+			return errors.Wrapf(
+				err,
+				"could not record temporary directory path to record file: %s",
+				recordPath,
+			)
+		}
+	}
+
+	return nil
+}
+
 // runStart starts the cockroach node using --store as the list of
 // storage devices ("stores") on this machine and --join as the list
 // of other active nodes used to join this node to the cockroach
@@ -416,49 +497,13 @@ func runStart(cmd *cobra.Command, args []string) error {
 
 	// Deal with flags that may depend on other flags.
 
-	firstStore := serverCfg.Stores.Specs[0]
-	// The temp store size can depend on the location of the first regular store
-	// (if it's expressed as a percentage), so we resolve that flag here.
-	var tempStorePercentageResolver percentResolverFunc
-	var err error
-	if !firstStore.InMemory {
-		dir := firstStore.Path
-		// Create the store dir, if it doesn't exist. The dir is required to exist
-		// by diskPercentResolverFactory.
-		if err := os.MkdirAll(dir, 0755); err != nil {
-			return errors.Wrapf(err, "failed to create dir for first store: %s", dir)
-		}
-		tempStorePercentageResolver, err = diskPercentResolverFactory(dir)
-		if err != nil {
-			return errors.Wrapf(err, "failed to create resolver for: %s", dir)
-		}
-	} else {
-		tempStorePercentageResolver = memoryPercentResolver
-	}
-	var tempStorageMaxSizeBytes int64
-	if err := diskTempStorageSizeValue.Resolve(
-		&tempStorageMaxSizeBytes, tempStorePercentageResolver,
-	); err != nil {
-		return err
-	}
-	if firstStore.InMemory && !diskTempStorageSizeValue.IsSet() {
-		// The default temp store size is different when the first
-		// store (and thus also the temp storage) is in memory.
-		tempStorageMaxSizeBytes = base.DefaultInMemTempStorageMaxSizeBytes
-	}
-
 	tracer := serverCfg.Settings.Tracer
 	sp := tracer.StartSpan("server start")
 	ctx := opentracing.ContextWithSpan(context.Background(), sp)
 
-	// Re-initialize temp storage based on the current attributes
-	// (initialized from CLI flags and above) and the first store's spec.
-	serverCfg.TempStorageConfig = base.TempStorageConfigFromEnv(
-		ctx,
-		firstStore,
-		serverCfg.TempStorageConfig.ParentDir,
-		tempStorageMaxSizeBytes,
-	)
+	if err := initTempStorageConfig(ctx); err != nil {
+		return err
+	}
 
 	// Use the server-specific values for some flags and settings.
 	serverCfg.Insecure = startCtx.serverInsecure
@@ -501,7 +546,8 @@ func runStart(cmd *cobra.Command, args []string) error {
 		}()
 		defer sp.Finish()
 		if err := func() error {
-			if err := serverCfg.InitNode(); err != nil {
+			var err error
+			if err = serverCfg.InitNode(); err != nil {
 				return errors.Wrap(err, "failed to initialize node")
 			}
 
@@ -510,7 +556,6 @@ func runStart(cmd *cobra.Command, args []string) error {
 				log.Infof(ctx, "using local environment variables: %s", strings.Join(envVarsUsed, ", "))
 			}
 
-			var err error
 			s, err = server.NewServer(serverCfg, stopper)
 			if err != nil {
 				return errors.Wrap(err, "failed to start server")
@@ -563,6 +608,9 @@ func runStart(cmd *cobra.Command, args []string) error {
 			}
 			if len(serverCfg.Locality.Tiers) > 0 {
 				fmt.Fprintf(tw, "locality:\t%s\n", serverCfg.Locality)
+			}
+			if s.TempDir() != "" {
+				fmt.Fprintf(tw, "temp dir:\t%s\n", s.TempDir())
 			}
 			for i, spec := range serverCfg.Stores.Specs {
 				fmt.Fprintf(tw, "store[%d]:\t%s\n", i, spec)

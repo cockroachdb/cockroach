@@ -15,7 +15,6 @@
 package server
 
 import (
-	"bufio"
 	"compress/gzip"
 	"crypto/tls"
 	"fmt"
@@ -294,37 +293,6 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 
 	// Set up the DistSQL temp engine.
 
-	// We first clean up abandoned temporary directories from the temporary
-	// directory record file.
-	firstStore := s.cfg.Stores.Specs[0]
-	// Record file can only exist if the first store is on-disk.
-	if !firstStore.InMemory {
-		if err := cleanupTempDirs(firstStore.Path); err != nil {
-			return nil, errors.Wrap(err, "could not cleanup temporary directories from record file")
-		}
-	}
-	// Create the temporary subdirectory for the temp engine.
-	var err error
-	if s.cfg.TempStorageConfig.Path, err = createTempDir(s.cfg.TempStorageConfig.ParentDir); err != nil {
-		return nil, errors.Wrap(err, "could not create temporary directory for temp storage")
-	}
-
-	// We record the new temporary directory in the record file (if it
-	// exists) for cleanup in case the node crashes.
-	if !firstStore.InMemory {
-		// Create the store dir, if it doesn't exist. The dir is required to exist
-		// by recordTempDir.
-		if err := os.MkdirAll(firstStore.Path, 0755); err != nil {
-			return nil, errors.Wrapf(err, "failed to create dir for first store: %s", firstStore.Path)
-		}
-		if err = recordTempDir(firstStore.Path, s.cfg.TempStorageConfig.Path); err != nil {
-			return nil, errors.Wrapf(
-				err,
-				"could not record temporary directory path to record file: %s",
-				filepath.Join(firstStore.Path, tempStorageDirsRecordFilename),
-			)
-		}
-	}
 	tempEngine, err := engine.NewTempEngine(s.cfg.TempStorageConfig)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not create temp storage")
@@ -333,11 +301,16 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	// Remove temporary directory linked to tempEngine after closing
 	// tempEngine.
 	s.stopper.AddCloser(stop.CloserFn(func() {
+		firstStore := cfg.Stores.Specs[0]
 		var err error
-		if firstStore.InMemory {
+		if firstStore.Path == "" {
 			err = os.RemoveAll(s.cfg.TempStorageConfig.Path)
 		} else {
-			err = cleanupTempDirs(firstStore.Path)
+			// If record file exists, we invoke CleanupTempDirs to
+			// also remove the record after the temp directory is
+			// removed.
+			recordPath := filepath.Join(firstStore.Path, TempDirsRecordFilename)
+			err = util.CleanupTempDirs(recordPath)
 		}
 		if err != nil {
 			log.Errorf(context.TODO(), "could not remove temporary store directory: %v", err.Error())
@@ -1295,6 +1268,12 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	s.mux.ServeHTTP(w, r)
 }
 
+// TempDir returns the filepath of the temporary directory used for temp storage.
+// It is empty for an in-memory temp storage.
+func (s *Server) TempDir() string {
+	return s.cfg.TempStorageConfig.Path
+}
+
 type gzipResponseWriter struct {
 	gz gzip.Writer
 	http.ResponseWriter
@@ -1380,76 +1359,4 @@ func officialAddr(
 	}
 
 	return util.NewUnresolvedAddr(lnAddr.Network(), net.JoinHostPort(host, port)), nil
-}
-
-// cleanupTempDirs should be invoked on startup (before creating any new
-// temporary directories) to clean up abandoned temporary directories from
-// previous startups.
-// It should also be invoked on shutdown when the server is closed.
-// It reads the temporary paths from the record file named
-// tempStorageDirsRecordFilename in recordDir and removes each directory.
-func cleanupTempDirs(recordDir string) error {
-	// Reading the entire file into memory shouldn't be a problem since
-	// it is extremely rare for this record file to contain more than a few
-	// entries.
-	f, err := os.OpenFile(filepath.Join(recordDir, tempStorageDirsRecordFilename), os.O_RDWR, 0644)
-	// There is no existing record file and thus nothing to clean up.
-	if os.IsNotExist(err) {
-		return nil
-	}
-	if err != nil {
-		return err
-	}
-	defer f.Close()
-
-	scanner := bufio.NewScanner(f)
-	// Iterate through each temporary directory path and remove the
-	// directory.
-	for scanner.Scan() {
-		path := scanner.Text()
-		if path == "" {
-			continue
-		}
-		// If path/directory does not exist, error is nil.
-		if err := os.RemoveAll(path); err != nil {
-			return err
-		}
-	}
-
-	// Clear out the record file now that we're done.
-	if err = f.Truncate(0); err != nil {
-		return err
-	}
-	return f.Sync()
-}
-
-// createTempDir creates a temporary directory under the given parentDir and
-// returns the path of the temporary directory.  One should only create
-// temporary directories after calling cleanupTempDirs (see above).
-func createTempDir(parentDir string) (string, error) {
-	// We generate a unique temporary directory with the prefix defaultTempStorageDirPrefix.
-	tempPath, err := ioutil.TempDir(parentDir, defaultTempStorageDirPrefix)
-	if err != nil {
-		return "", err
-	}
-
-	return filepath.Abs(tempPath)
-}
-
-// recordTempDir records tempPath to a record file named
-// tempStorageDirsRecordFilename in recordDir to facilitate deletion of the
-// temporary directory in case the node crashes.
-func recordTempDir(recordDir, tempPath string) error {
-	// If the file does not exist, create it, or append to the file.
-	f, err := os.OpenFile(filepath.Join(recordDir, tempStorageDirsRecordFilename), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
-	if err != nil {
-		return err
-	}
-	defer f.Close()
-
-	// Record tempPath to the record file.
-	if _, err = f.Write(append([]byte(tempPath), '\n')); err != nil {
-		return err
-	}
-	return f.Sync()
 }

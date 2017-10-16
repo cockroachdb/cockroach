@@ -40,6 +40,7 @@ var sqlConnURL, sqlConnUser, sqlConnDBName string
 var serverConnHost, serverConnPort, serverAdvertiseHost, serverAdvertisePort string
 var serverHTTPHost, serverHTTPPort string
 var clientConnHost, clientConnPort string
+var tempParentDir string
 
 // InitCLIDefaults is used for testing.
 func InitCLIDefaults() {
@@ -253,7 +254,7 @@ func init() {
 		// the stores flag has been parsed and the storage device that a percentage
 		// refers to becomes known.
 		varFlag(f, diskTempStorageSizeValue, cliflags.SQLTempStorage)
-		stringFlag(f, &serverCfg.TempStorageConfig.ParentDir, cliflags.TempDir, "")
+		stringFlag(f, &tempParentDir, cliflags.TempDir, "")
 	}
 
 	for _, cmd := range certCmds {
