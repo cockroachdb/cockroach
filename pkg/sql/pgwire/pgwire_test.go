@@ -858,6 +858,18 @@ func TestPGPreparedQuery(t *testing.T) {
 		"SELECT $1::INET": {
 			baseTest.SetArgs("192.168.0.1/32").Results("192.168.0.1"),
 		},
+		"SELECT $1:::FLOAT[]": {
+			baseTest.SetArgs("{}").Results("{}"),
+			baseTest.SetArgs("{1.0,2.0,3.0}").Results("{1.0,2.0,3.0}"),
+		},
+		"SELECT $1:::DECIMAL[]": {
+			baseTest.SetArgs("{1.000}").Results("{1.000}"),
+		},
+		"SELECT $1:::STRING[]": {
+			baseTest.SetArgs(`{aaa}`).Results(`{"aaa"}`),
+			baseTest.SetArgs(`{"aaa"}`).Results(`{"aaa"}`),
+			baseTest.SetArgs(`{aaa,bbb,ccc}`).Results(`{"aaa","bbb","ccc"}`),
+		},
 
 		// TODO(jordan): blocked on #13651
 		//"SELECT $1::INT[]": {
