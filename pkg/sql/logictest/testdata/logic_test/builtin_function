@@ -1046,6 +1046,26 @@ SELECT extract(months FROM '2016-02-10 19:46:33.306157519'::timestamp)
 2
 
 query I
+SELECT extract(quarter FROM '2016-02-10 19:46:33.306157519'::timestamp)
+----
+1
+
+query I
+SELECT extract(quarter FROM '2016-05-10 19:46:33.306157519'::timestamp)
+----
+2
+
+query I
+SELECT extract(quarter FROM '2016-09-09 19:46:33.306157519'::timestamp)
+----
+3
+
+query I
+SELECT extract(quarter FROM '2016-10-10 19:46:33.306157519'::timestamp)
+----
+4
+
+query I
 SELECT extract(year FROM '2016-02-10 19:46:33.306157519'::timestamp)
 ----
 2016
@@ -1139,6 +1159,26 @@ query I
 SELECT extract(months FROM '2016-02-10 19:46:33.306157519'::timestamptz)
 ----
 2
+
+query I
+SELECT extract(quarter FROM '2016-02-10 19:46:33.306157519'::timestamptz)
+----
+1
+
+query I
+SELECT extract(quarter FROM '2016-05-10 19:46:33.306157519'::timestamptz)
+----
+2
+
+query I
+SELECT extract(quarter FROM '2016-09-09 19:46:33.306157519'::timestamptz)
+----
+3
+
+query I
+SELECT extract(quarter FROM '2016-10-10 19:46:33.306157519'::timestamptz)
+----
+4
 
 query I
 SELECT extract(year FROM '2016-02-10 19:46:33.306157519'::timestamptz)
