@@ -30,7 +30,7 @@ func TestTimestampCache(t *testing.T) {
 	const baseTS = 100
 	manual := hlc.NewManualClock(baseTS)
 	clock := hlc.NewClock(manual.UnixNano, time.Nanosecond)
-	tc := NewTimestampCache(clock)
+	tc := NewCache(clock)
 	defer tc.Clear(clock.Now())
 
 	tc.lowWater = hlc.Timestamp{WallTime: baseTS}
@@ -105,7 +105,7 @@ func TestTimestampCacheEviction(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	manual := hlc.NewManualClock(123)
 	clock := hlc.NewClock(manual.UnixNano, time.Nanosecond)
-	tc := NewTimestampCache(clock)
+	tc := NewCache(clock)
 	defer tc.Clear(clock.Now())
 
 	tc.maxBytes = 0
@@ -132,14 +132,14 @@ func TestTimestampCacheNoEviction(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	manual := hlc.NewManualClock(123)
 	clock := hlc.NewClock(manual.UnixNano, time.Nanosecond)
-	tc := NewTimestampCache(clock)
+	tc := NewCache(clock)
 	defer tc.Clear(clock.Now())
 
 	// Increment time to the low water mark + 1.
 	manual.Increment(1)
 	aTS := clock.Now()
 	tc.Add(roachpb.Key("a"), nil, aTS, uuid.UUID{}, true)
-	tc.AddRequest(CacheRequest{
+	tc.AddRequest(Request{
 		Reads:     []roachpb.Span{{Key: roachpb.Key("c")}},
 		Timestamp: aTS,
 	})
@@ -147,7 +147,7 @@ func TestTimestampCacheNoEviction(t *testing.T) {
 	// Increment time by the MinTSCacheWindow and add another key.
 	manual.Increment(MinTSCacheWindow.Nanoseconds())
 	tc.Add(roachpb.Key("b"), nil, clock.Now(), uuid.UUID{}, true)
-	tc.AddRequest(CacheRequest{
+	tc.AddRequest(Request{
 		Reads:     []roachpb.Span{{Key: roachpb.Key("d")}},
 		Timestamp: clock.Now(),
 	})
@@ -162,7 +162,7 @@ func TestTimestampCacheExpandRequests(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	manual := hlc.NewManualClock(123)
 	clock := hlc.NewClock(manual.UnixNano, time.Nanosecond)
-	tc := NewTimestampCache(clock)
+	tc := NewCache(clock)
 	defer tc.Clear(clock.Now())
 
 	ab := roachpb.RSpan{Key: roachpb.RKey("a"), EndKey: roachpb.RKey("b")}
@@ -171,7 +171,7 @@ func TestTimestampCacheExpandRequests(t *testing.T) {
 	// Increment time to the low water mark + 1.
 	start := clock.Now()
 	manual.Increment(1)
-	tc.AddRequest(CacheRequest{
+	tc.AddRequest(Request{
 		Span:      ab,
 		Reads:     []roachpb.Span{{Key: roachpb.Key("a")}},
 		Timestamp: clock.Now(),
@@ -195,7 +195,7 @@ type txnState struct {
 
 type layeredIntervalTestCase struct {
 	spans     []roachpb.Span
-	validator func(t *testing.T, tc *TimestampCache, txns []txnState)
+	validator func(t *testing.T, tc *Cache, txns []txnState)
 }
 
 // assertTS is a helper function for layeredIntervalTestCase
@@ -204,7 +204,7 @@ type layeredIntervalTestCase struct {
 // transaction ID.
 func assertTS(
 	t *testing.T,
-	tc *TimestampCache,
+	tc *Cache,
 	start, end roachpb.Key,
 	expectedTS hlc.Timestamp,
 	expectedTxnID uuid.UUID,
@@ -251,7 +251,7 @@ var layeredIntervalTestCase1 = layeredIntervalTestCase{
 		// No overlap backwards.
 		{Key: roachpb.Key("c")},
 	},
-	validator: func(t *testing.T, tc *TimestampCache, txns []txnState) {
+	validator: func(t *testing.T, tc *Cache, txns []txnState) {
 		abbTx, beTx, cTx := txns[0], txns[1], txns[2]
 
 		assertTS(t, tc, roachpb.Key("a"), nil, abbTx.ts, abbTx.id)
@@ -282,7 +282,7 @@ var layeredIntervalTestCase2 = layeredIntervalTestCase{
 		// No overlap backwards.
 		{Key: roachpb.Key("a"), EndKey: roachpb.Key("c")},
 	},
-	validator: func(t *testing.T, tc *TimestampCache, txns []txnState) {
+	validator: func(t *testing.T, tc *Cache, txns []txnState) {
 		_, bfTx, acTx := txns[0], txns[1], txns[2]
 
 		assertTS(t, tc, roachpb.Key("a"), nil, acTx.ts, acTx.id)
@@ -308,7 +308,7 @@ var layeredIntervalTestCase3 = layeredIntervalTestCase{
 		// No overlap backwards.
 		{Key: roachpb.Key("b"), EndKey: roachpb.Key("c")},
 	},
-	validator: func(t *testing.T, tc *TimestampCache, txns []txnState) {
+	validator: func(t *testing.T, tc *Cache, txns []txnState) {
 		acTx, bcTx := txns[0], txns[1]
 
 		assertTS(t, tc, roachpb.Key("a"), nil, acTx.ts, acTx.id)
@@ -332,7 +332,7 @@ var layeredIntervalTestCase4 = layeredIntervalTestCase{
 		// No overlap backwards.
 		{Key: roachpb.Key("a"), EndKey: roachpb.Key("b")},
 	},
-	validator: func(t *testing.T, tc *TimestampCache, txns []txnState) {
+	validator: func(t *testing.T, tc *Cache, txns []txnState) {
 		acTx, abTx := txns[0], txns[1]
 
 		assertTS(t, tc, roachpb.Key("a"), nil, abTx.ts, zeroIfSimul(txns, abTx.id))
@@ -350,7 +350,7 @@ var layeredIntervalTestCase5 = layeredIntervalTestCase{
 		{Key: roachpb.Key("a"), EndKey: roachpb.Key("b")},
 		{Key: roachpb.Key("a"), EndKey: roachpb.Key("b")},
 	},
-	validator: func(t *testing.T, tc *TimestampCache, txns []txnState) {
+	validator: func(t *testing.T, tc *Cache, txns []txnState) {
 		assertTS(t, tc, roachpb.Key("a"), nil, txns[1].ts, zeroIfSimul(txns, txns[1].id))
 	},
 }
@@ -393,7 +393,7 @@ func TestTimestampCacheLayeredIntervals(t *testing.T) {
 							// transaction; otherwise each is a separate transaction.
 							for _, sameTxn := range []bool{false, true} {
 								t.Run(fmt.Sprintf("sameTxn=%t", sameTxn), func(t *testing.T) {
-									tc := NewTimestampCache(clock)
+									tc := NewCache(clock)
 									defer func() {
 										tc.Clear(clock.Now())
 										if tc.bytes != 0 {
@@ -450,7 +450,7 @@ func TestTimestampCacheClear(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	manual := hlc.NewManualClock(123)
 	clock := hlc.NewClock(manual.UnixNano, time.Nanosecond)
-	tc := NewTimestampCache(clock)
+	tc := NewCache(clock)
 	defer tc.Clear(clock.Now())
 
 	key := roachpb.Key("a")
@@ -479,7 +479,7 @@ func TestTimestampCacheReadVsWrite(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	manual := hlc.NewManualClock(123)
 	clock := hlc.NewClock(manual.UnixNano, time.Nanosecond)
-	tc := NewTimestampCache(clock)
+	tc := NewCache(clock)
 	defer tc.Clear(clock.Now())
 
 	// Add read-only non-txn entry at current time.
@@ -508,7 +508,7 @@ func TestTimestampCacheEqualTimestamps(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	manual := hlc.NewManualClock(123)
 	clock := hlc.NewClock(manual.UnixNano, time.Nanosecond)
-	tc := NewTimestampCache(clock)
+	tc := NewCache(clock)
 	defer tc.Clear(clock.Now())
 
 	txn1 := uuid.MakeV4()
@@ -543,7 +543,7 @@ func TestTimestampCacheEqualTimestamps(t *testing.T) {
 func BenchmarkTimestampCacheInsertion(b *testing.B) {
 	manual := hlc.NewManualClock(123)
 	clock := hlc.NewClock(manual.UnixNano, time.Nanosecond)
-	tc := NewTimestampCache(clock)
+	tc := NewCache(clock)
 
 	for i := 0; i < b.N; i++ {
 		tc.Clear(clock.Now())

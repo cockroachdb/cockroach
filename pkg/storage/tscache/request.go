@@ -23,11 +23,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
-// CacheRequest holds the timestamp cache data from a single batch request. The
+// Request holds the timestamp cache data from a single batch request. The
 // requests are stored in a btree keyed by the timestamp and are "expanded" to
 // populate the read/write interval caches if a potential conflict is detected
 // due to an earlier request (based on timestamp) arriving.
-type CacheRequest struct {
+type Request struct {
 	Span      roachpb.RSpan
 	Reads     []roachpb.Span
 	Writes    []roachpb.Span
@@ -41,8 +41,8 @@ type CacheRequest struct {
 }
 
 // Less implements the btree.Item interface.
-func (cr *CacheRequest) Less(other btree.Item) bool {
-	otherReq := other.(*CacheRequest)
+func (cr *Request) Less(other btree.Item) bool {
+	otherReq := other.(*Request)
 	if cr.Timestamp.Less(otherReq.Timestamp) {
 		return true
 	}
@@ -55,7 +55,7 @@ func (cr *CacheRequest) Less(other btree.Item) bool {
 }
 
 // numSpans returns the number of spans the request will expand into.
-func (cr *CacheRequest) numSpans() int {
+func (cr *Request) numSpans() int {
 	n := len(cr.Reads) + len(cr.Writes)
 	if cr.Txn.Key != nil {
 		n++
@@ -63,7 +63,7 @@ func (cr *CacheRequest) numSpans() int {
 	return n
 }
 
-func (cr *CacheRequest) size() uint64 {
+func (cr *Request) size() uint64 {
 	var n uint64
 	for i := range cr.Reads {
 		s := &cr.Reads[i]
