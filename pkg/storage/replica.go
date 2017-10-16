@@ -2235,9 +2235,9 @@ func (r *Replica) applyTimestampCache(ba *roachpb.BatchRequest) (bool, *roachpb.
 	defer r.store.tsCacheMu.Unlock()
 
 	if ba.Txn != nil {
-		r.store.tsCacheMu.cache.ExpandRequests(ba.Txn.Timestamp, span)
+		r.store.tsCacheMu.cache.ExpandRequests(span, ba.Txn.Timestamp)
 	} else {
-		r.store.tsCacheMu.cache.ExpandRequests(ba.Timestamp, span)
+		r.store.tsCacheMu.cache.ExpandRequests(span, ba.Timestamp)
 	}
 
 	var bumped bool
