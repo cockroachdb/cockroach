@@ -21,7 +21,7 @@ BEGIN {
 
 {
   if (keyword && $NF != "") {
-    printf("\"%s\": %s,\n", $NF, $NF) | sort
+      printf("\"%s\": %s,\n", tolower($NF), $NF) | sort
   }
 }
 
