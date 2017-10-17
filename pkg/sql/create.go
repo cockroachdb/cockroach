@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/pkg/errors"
@@ -1115,6 +1116,108 @@ func (p *planner) finalizeInterleave(
 	return nil
 }
 
+func valueEncodeTuple(
+	evalCtx *parser.EvalContext, tuple *parser.Tuple, cols []sqlbase.ColumnDescriptor,
+) ([]byte, error) {
+	var scratch []byte
+	typedExpr, err := parser.TypeCheck(tuple, nil, parser.TypeTuple)
+	if err != nil {
+		return nil, errors.Wrap(err, tuple.String())
+	}
+	tupleDatum, err := tuple.Eval(evalCtx)
+	if err != nil {
+		return nil, errors.Wrap(err, typedExpr.String())
+	}
+	datums := tupleDatum.(*parser.DTuple)
+	if len(datums.D) != len(cols) {
+		return nil, errors.Errorf("partition has %d column(s) but %d value(s) were supplied",
+			len(cols), len(datums.D))
+	}
+	var value []byte
+	for i, datum := range datums.D {
+		if err := sqlbase.CheckColumnType(cols[i], datum.ResolvedType(), nil); err != nil {
+			return nil, err
+		}
+		value, err = sqlbase.EncodeTableValue(
+			value, sqlbase.ColumnID(encoding.NoColumnID), datum, scratch,
+		)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return value, nil
+}
+
+func addPartitionedBy(
+	ctx context.Context,
+	evalCtx *parser.EvalContext,
+	tableDesc *sqlbase.TableDescriptor,
+	indexDesc *sqlbase.IndexDescriptor,
+	partDesc *sqlbase.PartitioningDescriptor,
+	partBy *parser.PartitionBy,
+	colOffset int,
+) error {
+	partDesc.NumColumns = uint32(len(partBy.Fields))
+
+	var cols []sqlbase.ColumnDescriptor
+	for i := 0; i < len(partBy.Fields); i++ {
+		if colOffset+i >= len(indexDesc.ColumnIDs) {
+			return errors.New("declared columns must be a prefix of index being partitioned")
+		}
+		col, err := tableDesc.FindActiveColumnByID(indexDesc.ColumnIDs[colOffset+i])
+		if err != nil {
+			return err
+		}
+		cols = append(cols, *col)
+		if string(partBy.Fields[i]) != col.Name {
+			return errors.New("declared columns must be a prefix of index being partitioned")
+		}
+	}
+
+	for _, l := range partBy.List {
+		p := sqlbase.PartitioningDescriptor_List{
+			Name: l.Name.Normalize(),
+		}
+		for _, tuple := range l.Tuples {
+			encodedTuple, err := valueEncodeTuple(evalCtx, tuple, cols)
+			if err != nil {
+				return err
+			}
+			p.Values = append(p.Values, encodedTuple)
+		}
+		if l.Subpartition != nil {
+			newColOffset := colOffset + int(partDesc.NumColumns)
+			if err := addPartitionedBy(
+				ctx, evalCtx, tableDesc, indexDesc, &p.Subpartitioning, l.Subpartition, newColOffset,
+			); err != nil {
+				return err
+			}
+		}
+		partDesc.List = append(partDesc.List, p)
+	}
+	for _, r := range partBy.Range {
+		p := sqlbase.PartitioningDescriptor_Range{
+			Name: r.Name.Normalize(),
+		}
+		encodedTuple, err := valueEncodeTuple(evalCtx, r.Tuple, cols)
+		if err != nil {
+			return err
+		}
+		if r.Subpartition != nil {
+			newColOffset := colOffset + int(partDesc.NumColumns)
+			if err := addPartitionedBy(
+				ctx, evalCtx, tableDesc, indexDesc, &p.Subpartitioning, r.Subpartition, newColOffset,
+			); err != nil {
+				return err
+			}
+		}
+		p.ValuesLessThan = encodedTuple
+		partDesc.Range = append(partDesc.Range, p)
+	}
+
+	return nil
+}
+
 func initTableDescriptor(
 	id, parentID sqlbase.ID,
 	name string,
@@ -1338,6 +1441,15 @@ func MakeTableDesc(
 
 	if n.Interleave != nil {
 		if err := addInterleave(ctx, txn, vt, &desc, &desc.PrimaryIndex, n.Interleave, sessionDB); err != nil {
+			return desc, err
+		}
+	}
+
+	if n.PartitionBy != nil {
+		if err := addPartitionedBy(
+			ctx, evalCtx, &desc, &desc.PrimaryIndex, &desc.PrimaryIndex.Partitioning, n.PartitionBy,
+			0, /* colOffset */
+		); err != nil {
 			return desc, err
 		}
 	}
