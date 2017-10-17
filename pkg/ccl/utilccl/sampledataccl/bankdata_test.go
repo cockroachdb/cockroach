@@ -137,7 +137,7 @@ func TestToBackup(t *testing.T) {
 					sqlDB := sqlutils.MakeSQLRunner(t, db)
 					sqlDB.Exec(`DROP DATABASE IF EXISTS data CASCADE`)
 					sqlDB.Exec(`CREATE DATABASE data`)
-					sqlDB.Exec(`RESTORE data.* FROM $1`, `nodelocal://`+dir)
+					sqlDB.Exec(`RESTORE data.* FROM $1`, `network-file://`+dir)
 
 					var rowCount int
 					sqlDB.QueryRow(fmt.Sprintf(`SELECT COUNT(*) FROM %s`, data.Name())).Scan(&rowCount)
