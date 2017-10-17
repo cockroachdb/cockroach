@@ -244,7 +244,7 @@ func TestBackupRestoreLocalPathChecks(t *testing.T) {
 		defer cleanupFn()
 		dir = strings.TrimPrefix(dir, "nfs:/")
 
-		for _, scheme := range []string{"file:/", "nodelocal:/", "nfs:/"} {
+		for _, scheme := range []string{"", "file:/", "nodelocal:/", "nfs:/"} {
 			sqlDB.Exec("BACKUP DATABASE data TO $1", scheme+dir)
 			if err := os.RemoveAll(dir); err != nil {
 				t.Fatal(err)
@@ -257,7 +257,7 @@ func TestBackupRestoreLocalPathChecks(t *testing.T) {
 		defer cleanupFn()
 		dir = strings.TrimPrefix(dir, "nfs:/")
 
-		for _, scheme := range []string{"file:/", "nodelocal:/"} {
+		for _, scheme := range []string{"", "file:/", "nodelocal:/"} {
 			if _, err := sqlDB.DB.Exec("BACKUP DATABASE data TO $1", scheme+dir); !testutils.IsError(err,
 				"node-local storage paths do not work with multi-node clusters",
 			) {

@@ -121,6 +121,9 @@ func ExportStorageConfFromURI(path string) (roachpb.ExportStorage, error) {
 		conf.Provider = roachpb.ExportStorageProvider_LocalFile
 		conf.LocalFile.Path = uri.Path
 		conf.LocalFile.IsNFS = uri.Scheme == "nfs"
+	case "":
+		conf.Provider = roachpb.ExportStorageProvider_LocalFile
+		conf.LocalFile.Path = path
 	default:
 		return conf, errors.Errorf("unsupported storage scheme: %q", uri.Scheme)
 	}
