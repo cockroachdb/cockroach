@@ -55,12 +55,12 @@ var restoreOptionExpectValues = map[string]bool{
 }
 
 func loadBackupDescs(
-	ctx context.Context, uris []string, settings *cluster.Settings,
+	ctx context.Context, uris []string, settings *cluster.Settings, clusterSize int,
 ) ([]BackupDescriptor, error) {
 	backupDescs := make([]BackupDescriptor, len(uris))
 
 	for i, uri := range uris {
-		desc, err := ReadBackupDescriptorFromURI(ctx, uri, settings)
+		desc, err := ReadBackupDescriptorFromURI(ctx, uri, settings, clusterSize)
 		if err != nil {
 			return nil, errors.Wrap(err, "failed to read backup descriptor")
 		}
@@ -1070,7 +1070,8 @@ func doRestorePlan(
 	if err := restoreStmt.Targets.NormalizeTablesWithDatabase(p.EvalContext().Database); err != nil {
 		return err
 	}
-	backupDescs, err := loadBackupDescs(ctx, from, p.ExecCfg().Settings)
+	clusterSize := clusterNodeCount(p.ExecCfg().Gossip)
+	backupDescs, err := loadBackupDescs(ctx, from, p.ExecCfg().Settings, clusterSize)
 	if err != nil {
 		return err
 	}
@@ -1137,8 +1138,8 @@ func restoreResumeHook(
 
 	return func(ctx context.Context, job *jobs.Job) error {
 		details := job.Record.Details.(jobs.RestoreDetails)
-
-		backupDescs, err := loadBackupDescs(ctx, details.URIs, settings)
+		clusterSize := clusterNodeCount(job.Gossip())
+		backupDescs, err := loadBackupDescs(ctx, details.URIs, settings, clusterSize)
 		if err != nil {
 			return err
 		}

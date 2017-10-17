@@ -215,7 +215,7 @@ func MakeLocalStorageURI(path string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return fmt.Sprintf("nfs://%s", path), nil
+	return fmt.Sprintf("file://%s", path), nil
 }
 
 func makeLocalStorage(base string, nfs bool) (ExportStorage, error) {
