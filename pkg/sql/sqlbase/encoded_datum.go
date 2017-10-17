@@ -90,6 +90,9 @@ func EncDatumFromEncoded(typ *ColumnType, enc DatumEncoding, encoded []byte) Enc
 // except that this function figures out where the encoding stops and returns a
 // slice for the rest of the buffer.
 func EncDatumFromBuffer(typ *ColumnType, enc DatumEncoding, buf []byte) (EncDatum, []byte, error) {
+	if len(buf) == 0 {
+		return EncDatum{}, nil, errors.New("empty encoded value")
+	}
 	switch enc {
 	case DatumEncoding_ASCENDING_KEY, DatumEncoding_DESCENDING_KEY:
 		encLen, err := encoding.PeekLength(buf)
