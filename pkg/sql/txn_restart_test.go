@@ -1676,13 +1676,11 @@ CREATE TABLE t.test (k INT PRIMARY KEY);
 		t.Fatal(err)
 	}
 
-	// Two tests, one where the txn is pushed while the transaction can still be
-	// retried, one where it's pushed too late for auto-retries.
-	// moveOutOfAutoRetry dictates whether we move the transaction from state
-	// AutoRetry to Open before starting the batch of statements that will
-	// encounter the push. When moveOutOfAutoRetry is set, we expect to get a
-	// retriable error at commit time. When it's not, we expect to see no error
-	// because the transaction is retried automatically.
+	// Two tests, one where the txn is pushed while the transaction can still be retried,
+	// one where it's pushed too late for auto-retries. moveOutOfAutoRetry dictates whether
+	// we move the transaction from state AutoRetry to Open before starting the batch of statements
+	// that will encounter the push. When moveOutOfAutoRetry is set, we expect to get a retriable error.
+	// When it's not, we expect to see no error because the transaction is retried automatically.
 	for i, moveOutOfAutoRetry := range []bool{false, true} {
 		t.Run(fmt.Sprintf("%t", moveOutOfAutoRetry),
 			func(t *testing.T) {
@@ -1709,20 +1707,22 @@ CREATE TABLE t.test (k INT PRIMARY KEY);
 				//   - a marker statement recognized by the filter.
 				//   - a write that will conflict with the read done by the filter and
 				//     will cause the txn's timestamp to be pushed.
-				if _, err := tx.Exec(
+				_, err = tx.Exec(
 					fmt.Sprintf(
 						`SHOW DATABASES; SELECT '%s'; INSERT INTO t.test VALUES (%d)`,
-						marker, i)); err != nil {
-					t.Fatal(err)
-				}
-
-				err = tx.Commit()
+						marker, i))
 				if moveOutOfAutoRetry {
 					if !isRetryableErr(err) {
 						t.Fatalf("expected retryable error, got: %v", err)
 					}
+					if err := tx.Rollback(); err != nil {
+						t.Fatal(err)
+					}
 				} else {
 					if err != nil {
+						t.Fatal(err)
+					}
+					if err := tx.Commit(); err != nil {
 						t.Fatal(err)
 					}
 				}
