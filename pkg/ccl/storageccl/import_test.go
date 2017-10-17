@@ -255,7 +255,7 @@ func runTestImport(t *testing.T, init func(*cluster.Settings)) {
 
 	init(s.ClusterSettings())
 
-	storage, err := ExportStorageConfFromURI("nodelocal://" + dir)
+	storage, err := ExportStorageConfFromURI("nfs://" + dir)
 	if err != nil {
 		t.Fatalf("%+v", err)
 	}

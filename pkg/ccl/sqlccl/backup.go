@@ -635,6 +635,14 @@ func backupPlanHook(
 		}
 		defer exportStore.Close()
 
+		nodeCount := clusterNodeCount(p.ExecCfg().Gossip)
+
+		if conf := exportStore.Conf(); conf.Provider == roachpb.ExportStorageProvider_LocalFile {
+			if nodeCount > 1 && !conf.LocalFile.IsNFS {
+				return errors.New("node-local storage paths do not work with multi-node clusters (use nfs:// if the path is in fact backed by some form of network shared storage)")
+			}
+		}
+
 		// Ensure there isn't already a readable backup desc.
 		{
 			r, err := exportStore.ReadFile(ctx, BackupDescriptorName)

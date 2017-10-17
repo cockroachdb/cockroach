@@ -114,12 +114,13 @@ func ExportStorageConfFromURI(path string) (roachpb.ExportStorage, error) {
 	case "http", "https":
 		conf.Provider = roachpb.ExportStorageProvider_Http
 		conf.HttpPath.BaseUri = path
-	case "nodelocal":
+	case "nfs", "file", "nodelocal":
 		if uri.Host != "" {
-			return conf, errors.Errorf("nodelocal does not support hosts: %s", path)
+			return conf, errors.Errorf("%s storage does not support \"host\" params (%q)", uri.Scheme, uri.Host)
 		}
 		conf.Provider = roachpb.ExportStorageProvider_LocalFile
 		conf.LocalFile.Path = uri.Path
+		conf.LocalFile.IsNFS = uri.Scheme == "nfs"
 	default:
 		return conf, errors.Errorf("unsupported storage scheme: %q", uri.Scheme)
 	}
@@ -145,7 +146,7 @@ func MakeExportStorage(
 ) (ExportStorage, error) {
 	switch dest.Provider {
 	case roachpb.ExportStorageProvider_LocalFile:
-		return makeLocalStorage(dest.LocalFile.Path)
+		return makeLocalStorage(dest.LocalFile.Path, dest.LocalFile.IsNFS)
 	case roachpb.ExportStorageProvider_Http:
 		return makeHTTPStorage(dest.HttpPath.BaseUri)
 	case roachpb.ExportStorageProvider_S3:
@@ -198,33 +199,35 @@ var (
 )
 
 type localFileStorage struct {
-	base string
+	base  string
+	isNFS bool
 }
 
 var _ ExportStorage = &localFileStorage{}
 
 // MakeLocalStorageURI converts a local path (absolute or relative) to a
-// valid nodelocal URI.
+// valid nfs URI.
 func MakeLocalStorageURI(path string) (string, error) {
 	path, err := filepath.Abs(path)
 	if err != nil {
 		return "", err
 	}
-	return fmt.Sprintf("nodelocal://%s", path), nil
+	return fmt.Sprintf("nfs://%s", path), nil
 }
 
-func makeLocalStorage(base string) (ExportStorage, error) {
+func makeLocalStorage(base string, nfs bool) (ExportStorage, error) {
 	if base == "" {
 		return nil, errors.Errorf("Local storage requested but path not provided")
 	}
-	return &localFileStorage{base: base}, nil
+	return &localFileStorage{base: base, isNFS: nfs}, nil
 }
 
 func (l *localFileStorage) Conf() roachpb.ExportStorage {
 	return roachpb.ExportStorage{
 		Provider: roachpb.ExportStorageProvider_LocalFile,
 		LocalFile: roachpb.ExportStorage_LocalFilePath{
-			Path: l.base,
+			Path:  l.base,
+			IsNFS: l.isNFS,
 		},
 	}
 }

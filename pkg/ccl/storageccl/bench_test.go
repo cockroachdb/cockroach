@@ -147,7 +147,7 @@ func BenchmarkImport(b *testing.B) {
 			if err != nil {
 				b.Fatalf("%+v", err)
 			}
-			storage, err := storageccl.ExportStorageConfFromURI(`nodelocal://` + backupDir)
+			storage, err := storageccl.ExportStorageConfFromURI(`nfs://` + backupDir)
 			if err != nil {
 				b.Fatalf("%+v", err)
 			}
