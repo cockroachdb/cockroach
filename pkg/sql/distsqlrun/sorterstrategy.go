@@ -258,7 +258,8 @@ func (ss *sortChunksStrategy) Execute(ctx context.Context, s *sorter) error {
 	// first s.matchLen ordering columns with the given pivot.
 	pivoted := func(row, pivot sqlbase.EncDatumRow) (bool, error) {
 		for _, ord := range s.ordering[:s.matchLen] {
-			cmp, err := row[ord.ColIdx].Compare(&ss.alloc, ss.rows.evalCtx, &pivot[ord.ColIdx])
+			col := ord.ColIdx
+			cmp, err := row[col].Compare(&ss.rows.types[col], &ss.alloc, ss.rows.evalCtx, &pivot[col])
 			if err != nil || cmp != 0 {
 				return false, err
 			}
@@ -278,7 +279,7 @@ func (ss *sortChunksStrategy) Execute(ctx context.Context, s *sorter) error {
 		// for the first s.matchLen ordering columns.
 		for {
 			if log.V(3) {
-				log.Infof(ctx, "pushing row %s", nextRow)
+				log.Infof(ctx, "pushing row %s", nextRow.String(ss.rows.types))
 			}
 			if err := ss.rows.AddRow(ctx, nextRow); err != nil {
 				return err
@@ -301,10 +302,16 @@ func (ss *sortChunksStrategy) Execute(ctx context.Context, s *sorter) error {
 			}
 
 			// We verify if the nextRow here is infact 'greater' than pivot.
-			if cmp, err := nextRow.Compare(&ss.alloc, s.ordering, ss.rows.evalCtx, pivot); err != nil {
+			if cmp, err := nextRow.Compare(
+				ss.rows.types, &ss.alloc, s.ordering, ss.rows.evalCtx, pivot,
+			); err != nil {
 				return err
 			} else if cmp < 0 {
-				return errors.Errorf("incorrectly ordered row %s before %s", pivot, nextRow)
+				return errors.Errorf(
+					"incorrectly ordered row %s before %s",
+					pivot.String(ss.rows.types),
+					nextRow.String(ss.rows.types),
+				)
 			}
 			break
 		}

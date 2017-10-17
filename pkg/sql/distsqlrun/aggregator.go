@@ -92,6 +92,7 @@ type aggregator struct {
 
 	flowCtx     *FlowCtx
 	input       RowSource
+	inputTypes  []sqlbase.ColumnType
 	funcs       []*aggregateFuncHolder
 	outputTypes []sqlbase.ColumnType
 	datumAlloc  sqlbase.DatumAlloc
@@ -129,14 +130,14 @@ func newAggregator(
 	// (which just returns the last value added to them for a bucket) to provide
 	// grouped-by values for each bucket.  ag.funcs is updated to contain all
 	// the functions which need to be fed values.
-	inputTypes := input.Types()
+	ag.inputTypes = input.Types()
 	for i, aggInfo := range spec.Aggregations {
 		if aggInfo.FilterColIdx != nil {
 			col := *aggInfo.FilterColIdx
-			if col >= uint32(len(inputTypes)) {
+			if col >= uint32(len(ag.inputTypes)) {
 				return nil, errors.Errorf("FilterColIdx out of range (%d)", col)
 			}
-			t := inputTypes[col].SemanticType
+			t := ag.inputTypes[col].SemanticType
 			if t != sqlbase.ColumnType_BOOL && t != sqlbase.ColumnType_NULL {
 				return nil, errors.Errorf(
 					"filter column %d must be of boolean type, not %s", *aggInfo.FilterColIdx, t,
@@ -145,10 +146,10 @@ func newAggregator(
 		}
 		argTypes := make([]sqlbase.ColumnType, len(aggInfo.ColIdx))
 		for i, c := range aggInfo.ColIdx {
-			if c >= uint32(len(inputTypes)) {
+			if c >= uint32(len(ag.inputTypes)) {
 				return nil, errors.Errorf("ColIdx out of range (%d)", aggInfo.ColIdx)
 			}
-			argTypes[i] = inputTypes[c]
+			argTypes[i] = ag.inputTypes[c]
 		}
 		aggConstructor, retType, err := GetAggregateInfo(aggInfo.Func, argTypes...)
 		if err != nil {
@@ -290,7 +291,8 @@ func (ag *aggregator) accumulateRows(ctx context.Context) (err error) {
 		// Feed the func holders for this bucket the non-grouping datums.
 		for i, a := range ag.aggregations {
 			if a.FilterColIdx != nil {
-				if err := row[*a.FilterColIdx].EnsureDecoded(&ag.datumAlloc); err != nil {
+				col := *a.FilterColIdx
+				if err := row[col].EnsureDecoded(&ag.inputTypes[col], &ag.datumAlloc); err != nil {
 					return err
 				}
 				if row[*a.FilterColIdx].Datum != parser.DBoolTrue {
@@ -310,7 +312,7 @@ func (ag *aggregator) accumulateRows(ctx context.Context) (err error) {
 			}
 			isFirstArg := true
 			for j, c := range a.ColIdx {
-				if err := row[c].EnsureDecoded(&ag.datumAlloc); err != nil {
+				if err := row[c].EnsureDecoded(&ag.inputTypes[c], &ag.datumAlloc); err != nil {
 					return err
 				}
 				if isFirstArg {
@@ -409,7 +411,7 @@ func (ag *aggregator) encode(
 	appendTo []byte, row sqlbase.EncDatumRow,
 ) (encoding []byte, err error) {
 	for _, colIdx := range ag.groupCols {
-		appendTo, err = row[colIdx].Encode(&ag.datumAlloc, sqlbase.DatumEncoding_ASCENDING_KEY, appendTo)
+		appendTo, err = row[colIdx].Encode(&ag.inputTypes[colIdx], &ag.datumAlloc, sqlbase.DatumEncoding_ASCENDING_KEY, appendTo)
 		if err != nil {
 			return appendTo, err
 		}

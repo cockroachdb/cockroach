@@ -60,9 +60,10 @@ func TestJoinReader(t *testing.T) {
 	td := sqlbase.GetTableDescriptor(kvDB, "test", "t")
 
 	testCases := []struct {
-		post     PostProcessSpec
-		input    [][]parser.Datum
-		expected string
+		post        PostProcessSpec
+		input       [][]parser.Datum
+		outputTypes []sqlbase.ColumnType
+		expected    string
 	}{
 		{
 			post: PostProcessSpec{
@@ -75,7 +76,8 @@ func TestJoinReader(t *testing.T) {
 				{aFn(10), bFn(10)},
 				{aFn(15), bFn(15)},
 			},
-			expected: "[[0 2 2] [0 5 5] [1 0 1] [1 5 6]]",
+			outputTypes: threeIntCols,
+			expected:    "[[0 2 2] [0 5 5] [1 0 1] [1 5 6]]",
 		},
 		{
 			post: PostProcessSpec{
@@ -93,7 +95,8 @@ func TestJoinReader(t *testing.T) {
 				{aFn(51), bFn(51)},
 				{aFn(50), bFn(50)},
 			},
-			expected: "[['one'] ['five'] ['two-one'] ['one-three'] ['five-zero']]",
+			outputTypes: []sqlbase.ColumnType{strType},
+			expected:    "[['one'] ['five'] ['two-one'] ['one-three'] ['five-zero']]",
 		},
 	}
 	for _, c := range testCases {
@@ -107,16 +110,15 @@ func TestJoinReader(t *testing.T) {
 				txn: client.NewTxn(client.NewDB(s.DistSender(), s.Clock()), s.NodeID()),
 			}
 
-			in := &RowBuffer{}
-			for _, row := range c.input {
+			encRows := make(sqlbase.EncDatumRows, len(c.input))
+			for rowIdx, row := range c.input {
 				encRow := make(sqlbase.EncDatumRow, len(row))
 				for i, d := range row {
-					encRow[i] = sqlbase.DatumToEncDatum(sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_INT}, d)
+					encRow[i] = sqlbase.DatumToEncDatum(intType, d)
 				}
-				if status := in.Push(encRow, ProducerMetadata{}); status != NeedMoreRows {
-					t.Fatalf("unexpected response: %d", status)
-				}
+				encRows[rowIdx] = encRow
 			}
+			in := NewRowBuffer(twoIntCols, encRows, RowBufferArgs{})
 
 			out := &RowBuffer{}
 			jr, err := newJoinReader(&flowCtx, &JoinReaderSpec{Table: *td}, in, &c.post, out)
@@ -145,7 +147,7 @@ func TestJoinReader(t *testing.T) {
 				res = append(res, row)
 			}
 
-			if result := res.String(); result != c.expected {
+			if result := res.String(c.outputTypes); result != c.expected {
 				t.Errorf("invalid results: %s, expected %s'", result, c.expected)
 			}
 		})
@@ -180,20 +182,14 @@ func TestJoinReaderDrain(t *testing.T) {
 	}
 
 	encRow := make(sqlbase.EncDatumRow, 1)
-	encRow[0] = sqlbase.DatumToEncDatum(
-		sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_INT},
-		parser.NewDInt(1),
-	)
+	encRow[0] = sqlbase.DatumToEncDatum(intType, parser.NewDInt(1))
 
 	ctx := context.Background()
 
 	// ConsumerClosed verifies that when a joinReader's consumer is closed, the
 	// joinReader finishes gracefully.
 	t.Run("ConsumerClosed", func(t *testing.T) {
-		in := &RowBuffer{}
-		if status := in.Push(encRow, ProducerMetadata{}); status != NeedMoreRows {
-			t.Fatalf("unexpected response: %d", status)
-		}
+		in := NewRowBuffer(oneIntCol, sqlbase.EncDatumRows{encRow}, RowBufferArgs{})
 
 		out := &RowBuffer{}
 		out.ConsumerClosed()
@@ -209,7 +205,7 @@ func TestJoinReaderDrain(t *testing.T) {
 	// called on the consumer.
 	t.Run("ConsumerDone", func(t *testing.T) {
 		expectedMetaErr := errors.New("dummy")
-		in := &RowBuffer{}
+		in := NewRowBuffer(oneIntCol, nil /* rows */, RowBufferArgs{})
 		if status := in.Push(encRow, ProducerMetadata{Err: expectedMetaErr}); status != NeedMoreRows {
 			t.Fatalf("unexpected response: %d", status)
 		}
@@ -223,7 +219,7 @@ func TestJoinReaderDrain(t *testing.T) {
 		jr.Run(ctx, nil)
 		row, meta := out.Next()
 		if row != nil {
-			t.Fatalf("row was pushed unexpectedly: %s", row)
+			t.Fatalf("row was pushed unexpectedly: %s", row.String(oneIntCol))
 		}
 		if meta.Err != expectedMetaErr {
 			t.Fatalf("unexpected error in metadata: %v", meta.Err)

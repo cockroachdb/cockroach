@@ -52,9 +52,11 @@ func TestAggregator(t *testing.T) {
 	colPtr := func(idx uint32) *uint32 { return &idx }
 
 	testCases := []struct {
-		spec     AggregatorSpec
-		input    sqlbase.EncDatumRows
-		expected sqlbase.EncDatumRows
+		spec        AggregatorSpec
+		inputTypes  []sqlbase.ColumnType
+		input       sqlbase.EncDatumRows
+		outputTypes []sqlbase.ColumnType
+		expected    sqlbase.EncDatumRows
 	}{
 		{
 			// SELECT MIN(@0), MAX(@0), COUNT(@0), AVG(@0), SUM(@0), STDDEV(@0),
@@ -91,7 +93,17 @@ func TestAggregator(t *testing.T) {
 					},
 				},
 			},
-			input: sqlbase.EncDatumRows{},
+			inputTypes: oneIntCol,
+			input:      sqlbase.EncDatumRows{},
+			outputTypes: []sqlbase.ColumnType{
+				intType, // MIN
+				intType, // MAX
+				intType, // COUNT
+				decType, // AVG
+				decType, // SUM
+				decType, // STDDEV
+				decType, // VARIANCE
+			},
 			expected: sqlbase.EncDatumRows{
 				{null, null, v[0], null, null, null, null},
 			},
@@ -111,6 +123,7 @@ func TestAggregator(t *testing.T) {
 					},
 				},
 			},
+			inputTypes: twoIntCols,
 			input: sqlbase.EncDatumRows{
 				{v[1], v[2]},
 				{v[3], null},
@@ -118,6 +131,7 @@ func TestAggregator(t *testing.T) {
 				{v[7], v[2]},
 				{v[8], v[4]},
 			},
+			outputTypes: twoIntCols,
 			expected: sqlbase.EncDatumRows{
 				{null, v[1]},
 				{v[4], v[1]},
@@ -139,6 +153,7 @@ func TestAggregator(t *testing.T) {
 					},
 				},
 			},
+			inputTypes: twoIntCols,
 			input: sqlbase.EncDatumRows{
 				{v[1], v[2]},
 				{v[3], v[4]},
@@ -146,11 +161,13 @@ func TestAggregator(t *testing.T) {
 				{v[7], v[2]},
 				{v[8], v[4]},
 			},
+			outputTypes: twoIntCols,
 			expected: sqlbase.EncDatumRows{
 				{v[4], v[2]},
 				{v[2], v[3]},
 			},
-		}, {
+		},
+		{
 			// SELECT @2, SUM(@1), GROUP BY @2.
 			spec: AggregatorSpec{
 				GroupCols: []uint32{1},
@@ -165,6 +182,7 @@ func TestAggregator(t *testing.T) {
 					},
 				},
 			},
+			inputTypes: twoIntCols,
 			input: sqlbase.EncDatumRows{
 				{v[1], v[2]},
 				{v[3], v[4]},
@@ -172,11 +190,16 @@ func TestAggregator(t *testing.T) {
 				{v[7], v[2]},
 				{v[8], v[4]},
 			},
+			outputTypes: []sqlbase.ColumnType{
+				intType, // IDENT
+				decType, // SUM
+			},
 			expected: sqlbase.EncDatumRows{
 				{v[2], v[14]},
 				{v[4], v[11]},
 			},
-		}, {
+		},
+		{
 			// SELECT COUNT(@1), SUM(@1), GROUP BY [] (empty group key).
 			spec: AggregatorSpec{
 				Aggregations: []AggregatorSpec_Aggregation{
@@ -190,12 +213,17 @@ func TestAggregator(t *testing.T) {
 					},
 				},
 			},
+			inputTypes: twoIntCols,
 			input: sqlbase.EncDatumRows{
 				{v[1], v[2]},
 				{v[1], v[4]},
 				{v[3], v[2]},
 				{v[4], v[2]},
 				{v[5], v[4]},
+			},
+			outputTypes: []sqlbase.ColumnType{
+				intType, // COUNT
+				decType, // SUM
 			},
 			expected: sqlbase.EncDatumRows{
 				{v[5], v[14]},
@@ -212,6 +240,7 @@ func TestAggregator(t *testing.T) {
 					},
 				},
 			},
+			inputTypes: oneIntCol,
 			input: sqlbase.EncDatumRows{
 				{v[2]},
 				{v[4]},
@@ -219,6 +248,7 @@ func TestAggregator(t *testing.T) {
 				{v[2]},
 				{v[4]},
 			},
+			outputTypes: []sqlbase.ColumnType{decType},
 			expected: sqlbase.EncDatumRows{
 				{v[6]},
 			},
@@ -233,15 +263,18 @@ func TestAggregator(t *testing.T) {
 					},
 				},
 			},
+			inputTypes: oneIntCol,
 			input: sqlbase.EncDatumRows{
 				{v[1]},
 				{v[1]},
 				{v[1]},
 			},
+			outputTypes: oneIntCol,
 			expected: sqlbase.EncDatumRows{
 				{v[1]},
 			},
-		}, {
+		},
+		{
 			// SELECT MAX(@1), MIN(@2), COUNT(@2), COUNT DISTINCT (@2), GROUP BY [] (empty group key).
 			spec: AggregatorSpec{
 				Aggregations: []AggregatorSpec_Aggregation{
@@ -264,6 +297,7 @@ func TestAggregator(t *testing.T) {
 					},
 				},
 			},
+			inputTypes: twoIntCols,
 			input: sqlbase.EncDatumRows{
 				{v[2], v[2]},
 				{v[1], v[4]},
@@ -271,10 +305,12 @@ func TestAggregator(t *testing.T) {
 				{v[4], v[2]},
 				{v[5], v[4]},
 			},
+			outputTypes: []sqlbase.ColumnType{intType, intType, intType, intType},
 			expected: sqlbase.EncDatumRows{
 				{v[5], v[2], v[5], v[2]},
 			},
-		}, {
+		},
+		{
 			// SELECT MAX(@1) FILTER @2, COUNT(@3) FILTER @4, COUNT_ROWS FILTER @4
 			spec: AggregatorSpec{
 				Aggregations: []AggregatorSpec_Aggregation{
@@ -294,6 +330,7 @@ func TestAggregator(t *testing.T) {
 					},
 				},
 			},
+			inputTypes: []sqlbase.ColumnType{intType, boolType, intType, boolType},
 			input: sqlbase.EncDatumRows{
 				{v[1], boolTrue, v[1], boolTrue},
 				{v[5], boolFalse, v[1], boolFalse},
@@ -301,6 +338,7 @@ func TestAggregator(t *testing.T) {
 				{v[3], boolNULL, v[1], boolTrue},
 				{v[2], boolTrue, v[1], boolTrue},
 			},
+			outputTypes: threeIntCols,
 			expected: sqlbase.EncDatumRows{
 				{v[2], v[3], v[3]},
 			},
@@ -311,12 +349,8 @@ func TestAggregator(t *testing.T) {
 		t.Run("", func(t *testing.T) {
 			ags := c.spec
 
-			var types []sqlbase.ColumnType
-			if len(c.input) == 0 {
-				types = []sqlbase.ColumnType{columnTypeInt}
-			}
-			in := NewRowBuffer(types, c.input, RowBufferArgs{})
-			out := &RowBuffer{}
+			in := NewRowBuffer(c.inputTypes, c.input, RowBufferArgs{})
+			out := NewRowBuffer(c.outputTypes, nil /* rows */, RowBufferArgs{})
 			evalCtx := parser.MakeTestingEvalContext()
 			defer evalCtx.Stop(context.Background())
 			flowCtx := FlowCtx{
@@ -333,7 +367,7 @@ func TestAggregator(t *testing.T) {
 
 			var expected []string
 			for _, row := range c.expected {
-				expected = append(expected, row.String())
+				expected = append(expected, row.String(c.outputTypes))
 			}
 			sort.Strings(expected)
 			expStr := strings.Join(expected, "")
@@ -347,7 +381,7 @@ func TestAggregator(t *testing.T) {
 				if row == nil {
 					break
 				}
-				rets = append(rets, row.String())
+				rets = append(rets, row.String(c.outputTypes))
 			}
 			sort.Strings(rets)
 			retStr := strings.Join(rets, "")

@@ -47,7 +47,9 @@ func (sm *streamMerger) NextBatch() ([]sqlbase.EncDatumRow, []sqlbase.EncDatumRo
 		return nil, nil, nil
 	}
 
-	cmp, err := CompareEncDatumRowForMerge(lrow, rrow, sm.left.ordering, sm.right.ordering, &sm.datumAlloc)
+	cmp, err := CompareEncDatumRowForMerge(
+		sm.left.types, lrow, rrow, sm.left.ordering, sm.right.ordering, &sm.datumAlloc,
+	)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -78,6 +80,7 @@ func (sm *streamMerger) NextBatch() ([]sqlbase.EncDatumRow, []sqlbase.EncDatumRo
 // a DatumAlloc which is used for decoding if any underlying EncDatum is not
 // yet decoded.
 func CompareEncDatumRowForMerge(
+	lhsTypes []sqlbase.ColumnType,
 	lhs, rhs sqlbase.EncDatumRow,
 	leftOrdering, rightOrdering sqlbase.ColumnOrdering,
 	da *sqlbase.DatumAlloc,
@@ -103,7 +106,7 @@ func CompareEncDatumRowForMerge(
 	for i, ord := range leftOrdering {
 		lIdx := ord.ColIdx
 		rIdx := rightOrdering[i].ColIdx
-		cmp, err := lhs[lIdx].Compare(da, evalCtx, &rhs[rIdx])
+		cmp, err := lhs[lIdx].Compare(&lhsTypes[lIdx], da, evalCtx, &rhs[rIdx])
 		if err != nil {
 			return 0, err
 		}

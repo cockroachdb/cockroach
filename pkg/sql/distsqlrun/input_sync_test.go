@@ -110,7 +110,7 @@ func TestOrderedSync(t *testing.T) {
 	for testIdx, c := range testCases {
 		var sources []RowSource
 		for _, srcRows := range c.sources {
-			rowBuf := NewRowBuffer(nil /* types */, srcRows, RowBufferArgs{})
+			rowBuf := NewRowBuffer(threeIntCols, srcRows, RowBufferArgs{})
 			sources = append(sources, rowBuf)
 		}
 		evalCtx := parser.NewTestingEvalContext()
@@ -130,8 +130,8 @@ func TestOrderedSync(t *testing.T) {
 			}
 			retRows = append(retRows, row)
 		}
-		expStr := c.expected.String()
-		retStr := retRows.String()
+		expStr := c.expected.String(threeIntCols)
+		retStr := retRows.String(threeIntCols)
 		if expStr != retStr {
 			t.Errorf("invalid results for case %d; expected:\n   %s\ngot:\n   %s",
 				testIdx, expStr, retStr)
@@ -176,7 +176,7 @@ func TestUnorderedSync(t *testing.T) {
 		for _, row := range retRows {
 			if int(parser.MustBeDInt(row[0].Datum)) == i {
 				if int(parser.MustBeDInt(row[1].Datum)) != j {
-					t.Errorf("Expected [%d %d], got %s", i, j, row)
+					t.Errorf("Expected [%d %d], got %s", i, j, row.String(twoIntCols))
 				}
 				j++
 			}

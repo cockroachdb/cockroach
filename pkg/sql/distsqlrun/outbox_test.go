@@ -53,6 +53,7 @@ func TestOutbox(t *testing.T) {
 	flowID := FlowID{uuid.MakeV4()}
 	streamID := StreamID(42)
 	outbox := newOutbox(&flowCtx, addr.String(), flowID, streamID)
+	outbox.init(oneIntCol)
 	var outboxWG sync.WaitGroup
 	ctx, cancel := context.WithCancel(context.TODO())
 	defer cancel()
@@ -66,9 +67,7 @@ func TestOutbox(t *testing.T) {
 	go func() {
 		producerC <- func() error {
 			row := sqlbase.EncDatumRow{
-				sqlbase.DatumToEncDatum(
-					sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_INT},
-					parser.NewDInt(parser.DInt(0))),
+				sqlbase.DatumToEncDatum(intType, parser.NewDInt(parser.DInt(0))),
 			}
 			if consumerStatus := outbox.Push(row, ProducerMetadata{}); consumerStatus != NeedMoreRows {
 				return errors.Errorf("expected status: %d, got: %d", NeedMoreRows, consumerStatus)
@@ -77,9 +76,7 @@ func TestOutbox(t *testing.T) {
 			// Send rows until the drain request is observed.
 			for {
 				row = sqlbase.EncDatumRow{
-					sqlbase.DatumToEncDatum(
-						sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_INT},
-						parser.NewDInt(parser.DInt(-1))),
+					sqlbase.DatumToEncDatum(intType, parser.NewDInt(parser.DInt(-1))),
 				}
 				consumerStatus := outbox.Push(row, ProducerMetadata{})
 				if consumerStatus == DrainRequested {
@@ -91,11 +88,7 @@ func TestOutbox(t *testing.T) {
 			}
 
 			// Now send another row that the outbox will discard.
-			row = sqlbase.EncDatumRow{
-				sqlbase.DatumToEncDatum(
-					sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_INT},
-					parser.NewDInt(parser.DInt(2))),
-			}
+			row = sqlbase.EncDatumRow{sqlbase.DatumToEncDatum(intType, parser.NewDInt(parser.DInt(2)))}
 			if consumerStatus := outbox.Push(row, ProducerMetadata{}); consumerStatus != DrainRequested {
 				return errors.Errorf("expected status: %d, got: %d", NeedMoreRows, consumerStatus)
 			}
@@ -136,12 +129,12 @@ func TestOutbox(t *testing.T) {
 		// about the draining.
 		last := -1
 		for i := 0; i < len(rows); i++ {
-			if rows[i].String() != "[-1]" {
+			if rows[i].String(oneIntCol) != "[-1]" {
 				last = i
 				continue
 			}
 			for j := i; j < len(rows); j++ {
-				if rows[j].String() == "[-1]" {
+				if rows[j].String(oneIntCol) == "[-1]" {
 					continue
 				}
 				rows[i] = rows[j]
@@ -174,7 +167,7 @@ func TestOutbox(t *testing.T) {
 			t.Fatalf("expected: %q, got: %q", expectedStr, m.Err.Error())
 		}
 	}
-	str := rows.String()
+	str := rows.String(oneIntCol)
 	expected := "[[0]]"
 	if str != expected {
 		t.Errorf("invalid results: %s, expected %s'", str, expected)
@@ -214,6 +207,7 @@ func TestOutboxInitializesStreamBeforeRecevingAnyRows(t *testing.T) {
 	var outboxWG sync.WaitGroup
 	ctx, cancel := context.WithCancel(context.TODO())
 	defer cancel()
+	outbox.init(oneIntCol)
 	// Start the outbox. This should cause the stream to connect, even though
 	// we're not sending any rows.
 	outbox.start(ctx, &outboxWG, cancel)
@@ -284,6 +278,7 @@ func TestOutboxClosesWhenConsumerCloses(t *testing.T) {
 			defer cancel()
 			if tc.outboxIsClient {
 				outbox = newOutbox(&flowCtx, addr.String(), flowID, streamID)
+				outbox.init(oneIntCol)
 				outbox.start(ctx, &wg, cancel)
 
 				// Wait for the outbox to connect the stream.
@@ -344,6 +339,7 @@ func TestOutboxClosesWhenConsumerCloses(t *testing.T) {
 				call := <-mockServer.runSyncFlowCalls
 				outbox = newOutboxSyncFlowStream(call.stream)
 				outbox.setFlowCtx(&FlowCtx{Settings: cluster.MakeTestingClusterSettings(), stopper: stopper})
+				outbox.init(oneIntCol)
 				// In a RunSyncFlow call, the outbox runs under the call's context.
 				outbox.start(call.stream.Context(), &wg, cancel)
 				// Wait for the consumer to receive the header message that the outbox
@@ -412,6 +408,7 @@ func TestOutboxCancelsFlowOnError(t *testing.T) {
 	}
 
 	outbox = newOutbox(&flowCtx, addr.String(), flowID, streamID)
+	outbox.init(oneIntCol)
 	outbox.start(ctx, &wg, mockCancel)
 
 	// Wait for the outbox to connect the stream.

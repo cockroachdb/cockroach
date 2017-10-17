@@ -245,13 +245,12 @@ func ConvertBatchError(ctx context.Context, tableDesc *TableDescriptor, b *clien
 		panic(fmt.Sprintf("index %d outside of results: %+v", j, b.Results))
 	}
 	result := b.Results[j]
-	var alloc DatumAlloc
 	if cErr, ok := origPErr.GetDetail().(*roachpb.ConditionFailedError); ok && len(result.Rows) > 0 {
 		key := result.Rows[0].Key
 		// TODO(dan): There's too much internal knowledge of the sql table
 		// encoding here (and this callsite is the only reason
 		// DecodeIndexKeyPrefix is exported). Refactor this bit out.
-		indexID, _, err := DecodeIndexKeyPrefix(&alloc, tableDesc, key)
+		indexID, _, err := DecodeIndexKeyPrefix(tableDesc, key)
 		if err != nil {
 			return err
 		}

@@ -205,8 +205,7 @@ func emitHelper(
 	var consumerStatus ConsumerStatus
 	if !meta.Empty() {
 		if row != nil {
-			log.Fatalf(ctx, "both row data and metadata in the same emitHelper call. "+
-				"row: %s. meta: %+v", row, meta)
+			panic("both row data and metadata in the same emitHelper call")
 		}
 		// Bypass EmitRow() and send directly to output.output.
 		consumerStatus = output.output.Push(nil /* row */, meta)
@@ -264,7 +263,7 @@ func (h *ProcOutputHelper) EmitRow(
 		}
 		if !passes {
 			if log.V(3) {
-				log.Infof(ctx, "filtered out row %s", row)
+				log.Infof(ctx, "filtered out row %s", row.String(h.filter.types))
 			}
 			return NeedMoreRows, nil
 		}

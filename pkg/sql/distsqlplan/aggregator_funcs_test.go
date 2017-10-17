@@ -339,8 +339,8 @@ func checkDistAggregationInfo(
 			default:
 				// For all other types, a simple string
 				// representation comparison will suffice.
-				strDist = rowDist.String()
-				strNonDist = rowNonDist.String()
+				strDist = rowDist.Datum.String()
+				strNonDist = rowNonDist.Datum.String()
 				equiv = strDist == strNonDist
 			}
 			if !equiv {
