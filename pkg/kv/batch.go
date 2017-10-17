@@ -102,6 +102,10 @@ func truncate(ba roachpb.BatchRequest, rs roachpb.RSpan) (roachpb.BatchRequest, 
 	var positions []int
 	truncBA := ba
 	truncBA.Requests = nil
+	// Remove any ScanOptions, in case any were set. ScanOptions currently only
+	// affect multi-range scans and so we can remove it from the truncated batch
+	// so that we don't have to put them on the wire.
+	truncBA.Header.ScanOptions = nil
 	for pos, arg := range ba.Requests {
 		hasRequest, newHeader, err := truncateOne(arg.GetInner())
 		if hasRequest {

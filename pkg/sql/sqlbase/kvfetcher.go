@@ -253,8 +253,9 @@ func (f *txnKVFetcher) fetch(ctx context.Context) error {
 
 		if header.NumKeys > 0 && sawResumeSpan {
 			return errors.Errorf(
-				"span with results after resume span; new spans: %s",
-				PrettySpans(f.spans, 0))
+				"span with results after resume span; it shouldn't happen given that "+
+					"we're only scanning non-overlapping spans. New spans: %s",
+				PrettySpans(f.spans, 0 /* skip */))
 		}
 
 		if resumeSpan := header.ResumeSpan; resumeSpan != nil {

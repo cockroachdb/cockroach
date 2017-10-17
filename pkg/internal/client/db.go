@@ -125,7 +125,7 @@ type Result struct {
 	// returned varies by operation. For Get, Put, CPut, Inc and Del the number
 	// of rows returned is the number of keys operated on. For Scan the number of
 	// rows returned is the number or rows matching the scan capped by the
-	// maxRows parameter. For DelRange Rows is nil.
+	// maxRows parameter and other options. For DelRange Rows is nil.
 	Rows []KeyValue
 
 	// Keys is set by some operations instead of returning the rows themselves.
@@ -138,6 +138,9 @@ type Result struct {
 	// a new shorter span of keys. An empty span is returned when the
 	// operation has successfully completed running through the span.
 	ResumeSpan roachpb.Span
+	// When ResumeSpan is populated, this specifies the reason why the operation
+	// wasn't completed and needs to be resumed.
+	ResumeReason roachpb.ResponseHeader_ResumeReason
 
 	// RangeInfos contains information about the replicas that produced this
 	// result.
@@ -454,10 +457,10 @@ func sendAndFill(ctx context.Context, send SenderFunc, b *Batch) error {
 	b.response, b.pErr = send(ctx, ba)
 	if b.pErr != nil {
 		// Discard errors from fillResults.
-		_ = b.fillResults()
+		_ = b.fillResults(ctx)
 		return b.pErr.GoError()
 	}
-	if err := b.fillResults(); err != nil {
+	if err := b.fillResults(ctx); err != nil {
 		b.pErr = roachpb.NewError(err)
 		return err
 	}
