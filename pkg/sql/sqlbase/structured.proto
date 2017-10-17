@@ -176,6 +176,48 @@ message InterleaveDescriptor {
   repeated Ancestor ancestors = 1 [(gogoproto.nullable) = false];
 }
 
+// PartitioningDescriptor represents the partitioning of an index into spans
+// of keys addressable by a zone config. The key encoding is unchanged. Each
+// partition may optionally be itself divided into further partitions, called
+// subpartitions.
+message PartitioningDescriptor {
+  // List represents a list partitioning, which maps individual tuples to
+  // partitions.
+  message List {
+    // Name is the partition name.
+    optional string name = 1 [(gogoproto.nullable) = false];
+    // Values is an unordered set of the tuples included in this partition. Each
+    // tuple is encoded with the EncDatum value encoding.
+    repeated bytes values = 2;
+    // Subpartitioning represents a further partitioning of this list partition.
+    optional PartitioningDescriptor subpartitioning = 3 [(gogoproto.nullable) = false];
+  }
+
+  // Range represents a range partitioning, which maps ranges of tuples to
+  // partitions by specifying exclusive upper bounds. The range partitions in a
+  // PartitioningDescriptor are required be sorted by values_less_than.
+  message Range {
+    // Name is the partition name.
+    optional string name = 1 [(gogoproto.nullable) = false];
+    // ValuesLessThan is exclusive upper bound of this range partition. It is
+    // encoded with the EncDatum value encoding.
+    optional bytes values_less_than = 2;
+    // Subpartitioning represents a further partitioning of this range partition.
+    optional PartitioningDescriptor subpartitioning = 3 [(gogoproto.nullable) = false];
+  }
+
+  // NumColumns is how large of a prefix of the columns in an index are used in
+  // the function mapping column values to partitiong. If this is a
+  // subpartition, this is offset to start from the end of the parent
+  // partition's columns. If NumColumns is 0, then there is no partitioning.
+  optional uint32 num_columns = 1 [(gogoproto.nullable) = false];
+
+  // Exactly one of List or Range is required to be non-empty if NumColumns is
+  // non-zero.
+  repeated List list = 2 [(gogoproto.nullable) = false];
+  repeated Range range = 3 [(gogoproto.nullable) = false];
+}
+
 // IndexDescriptor describes an index (primary or secondary).
 //
 // Sample field values on the following table:
@@ -291,6 +333,10 @@ message IndexDescriptor {
   // InterleavedBy contains a reference to every table/index that is interleaved
   // into this one.
   repeated ForeignKeyReference interleaved_by = 12  [(gogoproto.nullable) = false];
+
+  // Partitioning, if it's not the zero value, describes how this index's data
+  // is partitioned into spans of keys each addressable by zone configs.
+  optional PartitioningDescriptor partitioning = 15 [(gogoproto.nullable) = false];
 }
 
 // A DescriptorMutation represents a column or an index that
