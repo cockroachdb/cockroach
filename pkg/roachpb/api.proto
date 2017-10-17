@@ -50,19 +50,37 @@ message RangeInfo {
   optional Lease lease = 2 [(gogoproto.nullable) = false];
 }
 
+message ResumeDetails {
+  enum ResumeReason {
+    option (gogoproto.goproto_enum_prefix) = false;
+    KEY_LIMIT = 0;
+    RANGE_BOUNDARY = 1;
+  }
+  optional ResumeReason reason = 1 [(gogoproto.nullable) = false];
+}
+
 // ResponseHeader is returned with every storage node response.
 message ResponseHeader {
   // txn is non-nil if the request specified a non-nil transaction.
   // The transaction timestamp and/or priority may have been updated,
   // depending on the outcome of the request.
   optional Transaction txn = 3;
-  // The next span to resume from when a bound on the
-  // keys is set through max_span_request_keys in the batch header.
+  // The next span to resume from when the response doesn't cover the full span
+  // requested. This can happen when a bound on the keys is set through
+  // max_span_request_keys in the batch header or when a scan has been stopped
+  // before covering the requested data because of scan_options.
+  //
   // ResumeSpan is unset when the entire span of keys have been
   // operated on. The span is set to the original span if the request
   // was ignored because max_span_request_keys was hit due to another
   // request in the batch. For a reverse scan the end_key is updated.
   optional Span resume_span = 4;
+  // When resume_span is populated, this contains details about why the
+  // operation wasn't completed and needs to be resumed.
+  // This field appeared in v1.2. Responses from storage coming from older
+  // servers will not contain it, but the DistSender always fills it in.
+  optional ResumeDetails resume_details = 7;
+
   // The number of keys operated on.
   optional int64 num_keys = 5 [(gogoproto.nullable) = false];
   // Range or list of ranges used to execute the request. Multiple
@@ -221,6 +239,49 @@ message DeleteRangeResponse {
   repeated bytes keys = 2 [(gogoproto.casttype) = "Key"];
 }
 
+// ScanOptions is a collection of options for a batch of scans. The options
+// apply to all the scans in the batch.
+//
+// If ScanOptions is present on a batch, the batch can only be made up of scan
+// requests (i.e.  {Reverse,}ScanReques), except for
+// {Begin,End}TransactionRequest which are still allowed. Moreover, the batch
+// cannot mix forward and reverse scans.
+// 
+// TODO(andrei): add option to stop scan(s) when an intent is encountered.
+message ScanOptions {
+  option (gogoproto.equal) = true;
+
+  // stop_at_range_boundary, if set, means that the scans will stop at the first
+  // range boundary after min_span_request_keys is specified (if it is
+  // specified). If the end of a range stops the scans, the resume_span returned
+  // (for all the scans whose spans weren't fully scanned) represents the
+  // beginning of the next range (as ranges were at the time of the read).
+  //
+  // This flag can be combined with header.max_span_request_keys but that means
+  // that the desired number of keys may not be scanned.
+  //
+  // stop_at_range_boundary implies that DistSender will no longer parallelize
+  // the execution of requests between ranges; instead, either we're only
+  // speaking about scanning one range (if min_span_request_keys is not set) or
+  // it executes the scan serially over different ranges. Note that this is
+  // also the case when max_span_request_keys is set (as the scan needs to
+  // return results in order), and SQL always sets max_span_request_keys.
+  optional bool stop_at_range_boundary = 1 [(gogoproto.nullable) = false];
+
+  // min_results, if != 0, prevents the stop_at_range_boundary option from
+  // terminating the scans before this many keys have been touched. The
+  // counting is done across all the scans in the batch.
+  //
+  // A common value is 1, used if either the client knows that one key will be
+  // sufficient for its purposes or if the client wants to skip a prefix of
+  // empty ranges and seek to the point where some data is present.
+  //
+  // This can only be set if stop_at_range_boundary is set. If
+  // header.max_span_request_keys is set, min_results needs to be <=
+  // header.max_span_request_keys.
+  optional int64 min_results = 2 [(gogoproto.nullable) = false];
+}
+
 // A ScanRequest is the argument to the Scan() method. It specifies the
 // start and end keys for an ascending scan of [start,end) and the maximum
 // number of results (unbounded if zero).
@@ -235,6 +296,8 @@ message ScanRequest {
   // scan should also be returned. An error will be thrown if this is set to
   // true for a consistent scan.
   optional bool return_intents = 3 [(gogoproto.nullable) = false];
+
+  optional ScanOptions opt = 4 [(gogoproto.nullable) = false];
 }
 
 // A ScanResponse is the return value from the Scan() method.
@@ -261,6 +324,8 @@ message ReverseScanRequest {
   // scan should also be returned. An error will be thrown if this is set to
   // true for a consistent scan.
   optional bool return_intents = 3 [(gogoproto.nullable) = false];
+
+  optional ScanOptions opt = 4 [(gogoproto.nullable) = false];
 }
 
 // A ReverseScanResponse is the return value from the ReverseScan() method.
@@ -1156,6 +1221,8 @@ message Header {
   // gateway_node_id is the ID of the gateway node where the request originated.
   optional int32 gateway_node_id = 11 [(gogoproto.nullable) = false,
       (gogoproto.customname) = "GatewayNodeID", (gogoproto.casttype) = "NodeID"];
+
+  optional ScanOptions scan_options = 12;
 }
 
 
