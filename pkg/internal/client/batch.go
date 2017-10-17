@@ -16,8 +16,10 @@ package client
 
 import (
 	"github.com/pkg/errors"
+	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 const (
@@ -132,7 +134,7 @@ func (b *Batch) initResult(calls, numRows int, raw bool, err error) {
 
 // fillResults walks through the results and updates them either with the
 // data or error which was the result of running the batch previously.
-func (b *Batch) fillResults() error {
+func (b *Batch) fillResults(ctx context.Context) error {
 	offset := 0
 	for i := range b.Results {
 		result := &b.Results[i]
@@ -264,6 +266,10 @@ func (b *Batch) fillResults() error {
 			// Fill up the resume span.
 			if result.Err == nil && reply != nil && reply.Header().ResumeSpan != nil {
 				result.ResumeSpan = *reply.Header().ResumeSpan
+				if reply.Header().ResumeReason == roachpb.RESUME_UNKNOWN {
+					log.Fatalf(ctx, "reply has ResumeSpan but no ResumeReason: %s", result)
+				}
+				result.ResumeReason = reply.Header().ResumeReason
 			}
 			// Fill up the RangeInfos, in case we got any.
 			if result.Err == nil && reply != nil {
