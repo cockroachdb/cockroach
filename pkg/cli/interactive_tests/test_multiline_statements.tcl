@@ -71,6 +71,19 @@ eexpect "1 row"
 eexpect "root@"
 end_test
 
+start_test "Test that BEGIN .. without COMMIT works properly with smart_prompt disabled."
+send "\\unset smart_prompt\r"
+send "begin; select 1;\r"
+eexpect " ->"
+send "commit;\r"
+eexpect root@
+send "begin; select 1;\r"
+eexpect " ->"
+eexpect "commit;\r"
+eexpect "root@"
+send "\\set smart_prompt\r"
+end_test
+
 start_test "Test that BEGIN .. without COMMIT does not begin a multi-line statement in open txns. #16833"
 
 # trigger the error state
