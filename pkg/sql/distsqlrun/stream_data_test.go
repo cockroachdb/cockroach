@@ -48,7 +48,7 @@ func testGetDecodedRows(
 	return decodedRows, metas
 }
 
-func testRowStream(tb testing.TB, rng *rand.Rand, records []rowOrMeta) {
+func testRowStream(tb testing.TB, rng *rand.Rand, types []sqlbase.ColumnType, records []rowOrMeta) {
 	var se StreamEncoder
 	var sd StreamDecoder
 
@@ -56,6 +56,8 @@ func testRowStream(tb testing.TB, rng *rand.Rand, records []rowOrMeta) {
 	var metas []ProducerMetadata
 	numRows := 0
 	numMeta := 0
+
+	se.init(types)
 
 	for rowIdx := 0; rowIdx <= len(records); rowIdx++ {
 		if rowIdx < len(records) {
@@ -102,9 +104,10 @@ func TestStreamEncodeDecode(t *testing.T) {
 	rng, _ := randutil.NewPseudoRand()
 	for test := 0; test < 100; test++ {
 		rowLen := rng.Intn(20)
+		types := sqlbase.RandColumnTypes(rng, rowLen)
 		info := make([]DatumInfo, rowLen)
 		for i := range info {
-			info[i].Type = sqlbase.RandColumnType(rng)
+			info[i].Type = types[i]
 			info[i].Encoding = sqlbase.RandDatumEncoding(rng)
 		}
 		numRows := rng.Intn(100)
@@ -120,7 +123,7 @@ func TestStreamEncodeDecode(t *testing.T) {
 				rows[i].meta.Err = fmt.Errorf("test error %d", i)
 			}
 		}
-		testRowStream(t, rng, rows)
+		testRowStream(t, rng, types, rows)
 	}
 }
 

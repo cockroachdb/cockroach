@@ -23,7 +23,9 @@ import (
 // streamGroupAccumulator groups input rows coming from src into groups dictated
 // by equality according to the ordering columns.
 type streamGroupAccumulator struct {
-	src NoMetadataRowSource
+	src   NoMetadataRowSource
+	types []sqlbase.ColumnType
+
 	// srcConsumed is set once src has been exhausted.
 	srcConsumed bool
 	ordering    sqlbase.ColumnOrdering
@@ -37,7 +39,11 @@ type streamGroupAccumulator struct {
 func makeStreamGroupAccumulator(
 	src NoMetadataRowSource, ordering sqlbase.ColumnOrdering,
 ) streamGroupAccumulator {
-	return streamGroupAccumulator{src: src, ordering: ordering}
+	return streamGroupAccumulator{
+		src:      src,
+		types:    src.Types(),
+		ordering: ordering,
+	}
 }
 
 // peekAtCurrentGroup returns the first row of the current group.
@@ -89,15 +95,17 @@ func (s *streamGroupAccumulator) advanceGroup() ([]sqlbase.EncDatumRow, error) {
 			continue
 		}
 
-		cmp, err := s.curGroup[0].Compare(&s.datumAlloc, s.ordering, evalCtx, row)
+		cmp, err := s.curGroup[0].Compare(s.types, &s.datumAlloc, s.ordering, evalCtx, row)
 		if err != nil {
 			return nil, err
 		}
 		if cmp == 0 {
 			s.curGroup = append(s.curGroup, row)
 		} else if cmp == 1 {
-			return nil, errors.Errorf("detected badly ordered input: %s > %s, but expected '<'",
-				s.curGroup[0], row)
+			return nil, errors.Errorf(
+				"detected badly ordered input: %s > %s, but expected '<'",
+				s.curGroup[0].String(s.types), row.String(s.types),
+			)
 		} else {
 			ret := s.curGroup
 			s.curGroup = []sqlbase.EncDatumRow{row}

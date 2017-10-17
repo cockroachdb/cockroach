@@ -104,7 +104,7 @@ func TestServer(t *testing.T) {
 	if len(metas) != 0 {
 		t.Errorf("unexpected metadata: %v", metas)
 	}
-	str := rows.String()
+	str := rows.String(twoIntCols)
 	expected := "[[1 10] [3 30]]"
 	if str != expected {
 		t.Errorf("invalid results: %s, expected %s'", str, expected)

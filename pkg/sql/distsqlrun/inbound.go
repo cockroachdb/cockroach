@@ -94,6 +94,7 @@ func processInboundStreamHelper(
 		if err != nil {
 			return errors.Wrap(err, log.MakeMessage(ctx, "decoding error", nil /* args */))
 		}
+		var types []sqlbase.ColumnType
 		for {
 			row, meta, err := sd.GetRow(nil /* rowBuf */)
 			if err != nil {
@@ -105,7 +106,10 @@ func processInboundStreamHelper(
 			}
 
 			if log.V(3) {
-				log.Infof(ctx, "inbound stream pushing row %s", row)
+				if types == nil {
+					types = sd.Types()
+				}
+				log.Infof(ctx, "inbound stream pushing row %s", row.String(types))
 			}
 			if draining && meta.Empty() {
 				// Don't forward data rows when we're draining.

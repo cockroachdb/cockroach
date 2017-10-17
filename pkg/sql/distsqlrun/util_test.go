@@ -27,6 +27,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -34,6 +35,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
+
+var intType = sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_INT}
+var boolType = sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_BOOL}
+var decType = sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_DECIMAL}
+var strType = sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_STRING}
+var oneIntCol = []sqlbase.ColumnType{intType}
+var twoIntCols = []sqlbase.ColumnType{intType, intType}
+var threeIntCols = []sqlbase.ColumnType{intType, intType, intType}
 
 // startMockDistSQLServer starts a MockDistSQLServer and returns the address on
 // which it's listening.

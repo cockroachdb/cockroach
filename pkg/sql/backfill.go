@@ -545,7 +545,7 @@ func (sc *SchemaChanger) distBackfill(
 			// them.
 			recv, err := makeDistSQLReceiver(
 				ctx,
-				nil, /* sink */
+				nil, /* resultWriter */
 				nil, /* rangeCache */
 				nil, /* leaseCache */
 				nil, /* txn - the flow does not run wholly in a txn */

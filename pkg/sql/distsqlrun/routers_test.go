@@ -70,7 +70,7 @@ func TestRouters(t *testing.T) {
 
 	// Generate tables of possible values for each column; we have fewer possible
 	// values than rows to guarantee many occurrences of each value.
-	vals := sqlbase.RandEncDatumSlices(rng, numCols, numRows/10)
+	vals, types := sqlbase.RandEncDatumSlices(rng, numCols, numRows/10)
 
 	testCases := []struct {
 		spec       OutputRouterSpec
@@ -127,10 +127,6 @@ func TestRouters(t *testing.T) {
 				recvs[i] = bufs[i]
 			}
 
-			types := make([]sqlbase.ColumnType, numCols)
-			for i := range types {
-				types[i] = vals[i][0].Type
-			}
 			r, wg := setupRouter(t, evalCtx, tc.spec, types, recvs)
 
 			for i := 0; i < numRows; i++ {
@@ -167,7 +163,7 @@ func TestRouters(t *testing.T) {
 							for _, row2 := range r2 {
 								equal := true
 								for _, c := range tc.spec.HashColumns {
-									cmp, err := row[c].Compare(alloc, evalCtx, &row2[c])
+									cmp, err := row[c].Compare(&types[c], alloc, evalCtx, &row2[c])
 									if err != nil {
 										t.Fatal(err)
 									}
@@ -177,7 +173,9 @@ func TestRouters(t *testing.T) {
 									}
 								}
 								if equal {
-									t.Errorf("rows %s and %s in different buckets", row, row2)
+									t.Errorf(
+										"rows %s and %s in different buckets", row.String(types), row2.String(types),
+									)
 								}
 							}
 						}
@@ -200,7 +198,7 @@ func TestRouters(t *testing.T) {
 
 						equal := true
 						for j, c := range row {
-							cmp, err := c.Compare(alloc, evalCtx, &row2[j])
+							cmp, err := c.Compare(&types[j], alloc, evalCtx, &row2[j])
 							if err != nil {
 								t.Fatal(err)
 							}
@@ -210,7 +208,10 @@ func TestRouters(t *testing.T) {
 							}
 						}
 						if !equal {
-							t.Errorf("rows %s and %s found in one bucket and not the other", row, row2)
+							t.Errorf(
+								"rows %s and %s found in one bucket and not the other",
+								row.String(types), row2.String(types),
+							)
 						}
 					}
 				}
@@ -221,7 +222,7 @@ func TestRouters(t *testing.T) {
 				var alloc sqlbase.DatumAlloc
 				for bIdx := range rows {
 					for _, row := range rows[bIdx] {
-						data, err := row[enc.Column].Encode(&alloc, enc.Encoding, nil)
+						data, err := row[enc.Column].Encode(&types[enc.Column], &alloc, enc.Encoding, nil)
 						if err != nil {
 							t.Fatal(err)
 						}
