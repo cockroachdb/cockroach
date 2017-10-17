@@ -1074,6 +1074,9 @@ func (desc *TableDescriptor) ValidateTable() error {
 		if err := desc.validateTableIndexes(columnNames, colIDToFamilyID); err != nil {
 			return err
 		}
+		if err := desc.validatePartitioning(); err != nil {
+			return err
+		}
 	}
 
 	// Validate the privilege descriptor.
@@ -1221,6 +1224,128 @@ func (desc *TableDescriptor) validateTableIndexes(
 	}
 
 	return nil
+}
+
+func (desc *TableDescriptor) validatePartitioning() error {
+	partitionNames := make(map[string]struct{})
+
+	a := &DatumAlloc{}
+	decodeColumns := func(buf []byte, colIDs []ColumnID) (EncDatumRow, error) {
+		datums := make(EncDatumRow, len(colIDs))
+		for i, colID := range colIDs {
+			col, err := desc.FindActiveColumnByID(colID)
+			if err != nil {
+				return nil, err
+			}
+			datums[i], buf, err = EncDatumFromBuffer(col.Type, DatumEncoding_VALUE, buf)
+			if err != nil {
+				return nil, err
+			}
+			if err := datums[i].EnsureDecoded(a); err != nil {
+				return nil, err
+			}
+			// TODO(dan): Verify here that the encoded column id is 0. Or, if we
+			// decide to be less strict for some reason, then adjust the
+			// bytes.Compare below that verifies the ValuesLessThan sortedness
+			// to use EncDatumRow.Compare instead.
+		}
+		if len(buf) > 0 {
+			return nil, fmt.Errorf("superfluous data in encoded value")
+		}
+		return datums, nil
+	}
+
+	var check func(idxDesc *IndexDescriptor, partDesc *PartitioningDescriptor, colOffset int) error
+	check = func(idxDesc *IndexDescriptor, partDesc *PartitioningDescriptor, colOffset int) error {
+		if partDesc.NumColumns == 0 {
+			return nil
+		}
+		if colOffset+int(partDesc.NumColumns) > len(idxDesc.ColumnIDs) {
+			return fmt.Errorf("not enough columns in index for this partitioning")
+		}
+		colIDs := idxDesc.ColumnIDs[colOffset : colOffset+int(partDesc.NumColumns)]
+
+		if len(partDesc.List) == 0 && len(partDesc.Range) == 0 {
+			return fmt.Errorf("at least one of LIST or RANGE partitioning must be used")
+		}
+		if len(partDesc.List) > 0 && len(partDesc.Range) > 0 {
+			return fmt.Errorf("only one LIST or RANGE partitioning may used")
+		}
+
+		if len(partDesc.List) > 0 {
+			listValues := make(map[string]struct{}, len(partDesc.List))
+			for _, p := range partDesc.List {
+				if len(p.Name) == 0 {
+					return fmt.Errorf("partition name must be non-empty")
+				}
+				if _, exists := partitionNames[p.Name]; exists {
+					return fmt.Errorf("partition name %s must be unique", p.Name)
+				}
+				partitionNames[p.Name] = struct{}{}
+
+				if len(p.Values) == 0 {
+					return fmt.Errorf("partition %s must contain values", p.Name)
+				}
+				for _, value := range p.Values {
+					datums, err := decodeColumns(value, colIDs)
+					if err != nil {
+						return fmt.Errorf("decoding %s: %v", p.Name, err)
+					}
+					if _, exists := listValues[string(value)]; exists {
+						return fmt.Errorf("%v cannot be present in more than one partition", datums)
+					}
+					listValues[string(value)] = struct{}{}
+				}
+
+				newColOffset := colOffset + int(partDesc.NumColumns)
+				if err := check(idxDesc, &p.Subpartitioning, newColOffset); err != nil {
+					return err
+				}
+			}
+		}
+
+		if len(partDesc.Range) > 0 {
+			var lastValue []byte
+			rangeValues := make(map[string]struct{}, len(partDesc.Range))
+			for _, p := range partDesc.Range {
+				if len(p.Name) == 0 {
+					return fmt.Errorf("partition name must be non-empty")
+				}
+				if _, exists := partitionNames[p.Name]; exists {
+					return fmt.Errorf("partition name %s must be unique", p.Name)
+				}
+				partitionNames[p.Name] = struct{}{}
+
+				datums, err := decodeColumns(p.ValuesLessThan, colIDs)
+				if err != nil {
+					return fmt.Errorf("decoding %s: %v", p.Name, err)
+				}
+				if _, exists := rangeValues[string(p.ValuesLessThan)]; exists {
+					return fmt.Errorf("%v cannot be present in more than one partition", datums)
+				}
+
+				rangeValues[string(p.ValuesLessThan)] = struct{}{}
+				if bytes.Compare(lastValue, p.ValuesLessThan) >= 0 {
+					return fmt.Errorf("values must be strictly increasing")
+				}
+				lastValue = p.ValuesLessThan
+
+				newColOffset := colOffset + int(partDesc.NumColumns)
+				if err := check(idxDesc, &p.Subpartitioning, newColOffset); err != nil {
+					return err
+				}
+			}
+		}
+
+		return nil
+	}
+
+	return desc.ForeachNonDropIndex(func(idxDesc *IndexDescriptor) error {
+		if idxDesc.Partitioning.NumColumns > 0 {
+			return check(idxDesc, &idxDesc.Partitioning, 0 /* colOffset */)
+		}
+		return nil
+	})
 }
 
 // FamilyHeuristicTargetBytes is the target total byte size of columns that the
