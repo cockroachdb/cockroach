@@ -65,13 +65,23 @@ var BackupImplicitSQLDescriptors = []sqlbase.Descriptor{
 	*sqlbase.WrapDescriptor(&sqlbase.UsersTable),
 }
 
+// NoCluster is passed to exportStorageFromURI when cluster size is irrelevant,
+// e.g. in non-server codepaths.
+var NoCluster *gossip.Gossip
+
 // exportStorageFromURI returns an ExportStorage for the given URI.
 func exportStorageFromURI(
-	ctx context.Context, uri string, settings *cluster.Settings,
+	ctx context.Context, uri string, settings *cluster.Settings, gossip *gossip.Gossip,
 ) (storageccl.ExportStorage, error) {
 	conf, err := storageccl.ExportStorageConfFromURI(uri)
+
 	if err != nil {
 		return nil, err
+	}
+	if conf.Provider == roachpb.ExportStorageProvider_LocalFile && !conf.LocalFile.IsSharedFS && gossip != nil {
+		if clusterNodeCount(gossip) > 1 {
+			return nil, errors.New("local storage paths do not work on multi-node clusters (see docs for other options)")
+		}
 	}
 	return storageccl.MakeExportStorage(ctx, conf, settings)
 }
@@ -80,9 +90,9 @@ func exportStorageFromURI(
 // reads and unmarshals a BackupDescriptor at the standard location in the
 // export storage.
 func ReadBackupDescriptorFromURI(
-	ctx context.Context, uri string, settings *cluster.Settings,
+	ctx context.Context, uri string, settings *cluster.Settings, gossip *gossip.Gossip,
 ) (BackupDescriptor, error) {
-	exportStore, err := exportStorageFromURI(ctx, uri, settings)
+	exportStore, err := exportStorageFromURI(ctx, uri, settings, gossip)
 	if err != nil {
 		return BackupDescriptor{}, err
 	}
@@ -121,7 +131,11 @@ func readBackupDescriptor(
 // ValidatePreviousBackups checks that the timestamps of previous backups are
 // consistent and covers `spans`. The most recently backed-up time is returned.
 func ValidatePreviousBackups(
-	ctx context.Context, uris []string, settings *cluster.Settings, spans []roachpb.Span,
+	ctx context.Context,
+	spans []roachpb.Span,
+	uris []string,
+	settings *cluster.Settings,
+	gossip *gossip.Gossip,
 ) (hlc.Timestamp, error) {
 	if len(uris) == 0 || len(uris) == 1 && uris[0] == "" {
 		// Full backup.
@@ -129,7 +143,7 @@ func ValidatePreviousBackups(
 	}
 	backups := make([]BackupDescriptor, len(uris))
 	for i, uri := range uris {
-		desc, err := ReadBackupDescriptorFromURI(ctx, uri, settings)
+		desc, err := ReadBackupDescriptorFromURI(ctx, uri, settings, gossip)
 		if err != nil {
 			return hlc.Timestamp{}, errors.Wrapf(err, "failed to read backup from %q", uri)
 		}
@@ -624,8 +638,7 @@ func backupPlanHook(
 				return err
 			}
 		}
-
-		exportStore, err := exportStorageFromURI(ctx, to, p.ExecCfg().Settings)
+		exportStore, err := exportStorageFromURI(ctx, to, p.ExecCfg().Settings, p.ExecCfg().Gossip)
 		if err != nil {
 			return err
 		}
@@ -668,7 +681,7 @@ func backupPlanHook(
 		var startTime hlc.Timestamp
 		if backupStmt.IncrementalFrom != nil {
 			var err error
-			startTime, err = ValidatePreviousBackups(ctx, incrementalFrom, p.ExecCfg().Settings, spans)
+			startTime, err = ValidatePreviousBackups(ctx, spans, incrementalFrom, p.ExecCfg().Settings, p.ExecCfg().Gossip)
 			if err != nil {
 				return err
 			}
@@ -782,13 +795,10 @@ func backupResumeHook(
 			NodeID:        job.NodeID(),
 			ClusterID:     job.ClusterID(),
 		}
-		conf, err := storageccl.ExportStorageConfFromURI(details.URI)
+
+		exportStore, err := exportStorageFromURI(ctx, details.URI, settings, job.Gossip())
 		if err != nil {
 			return err
-		}
-		exportStore, err := storageccl.MakeExportStorage(ctx, conf, settings)
-		if err != nil {
-			return nil
 		}
 		var checkpointDesc *BackupDescriptor
 		if desc, err := readBackupDescriptor(ctx, exportStore, BackupDescriptorCheckpointName); err == nil {
@@ -844,7 +854,7 @@ func showBackupPlanHook(
 		if err != nil {
 			return err
 		}
-		desc, err := ReadBackupDescriptorFromURI(ctx, str, p.ExecCfg().Settings)
+		desc, err := ReadBackupDescriptorFromURI(ctx, str, p.ExecCfg().Settings, p.ExecCfg().Gossip)
 		if err != nil {
 			return err
 		}

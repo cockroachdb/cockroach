@@ -21,6 +21,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/gossip"
+
 	"golang.org/x/net/context"
 	"golang.org/x/sync/errgroup"
 
@@ -95,7 +97,7 @@ func LoadCSV(
 	if len(dataFiles) == 0 {
 		dataFiles = []string{fmt.Sprintf("%s.dat", table)}
 	}
-	createTable, err := readCreateTableFromStore(ctx, table, cluster.NoSettings)
+	createTable, err := readCreateTableFromStore(ctx, table, cluster.NoSettings, NoCluster)
 	if err != nil {
 		return 0, 0, 0, err
 	}
@@ -177,15 +179,13 @@ func doLocalCSVTransform(
 	kvCh := make(chan []roachpb.KeyValue, chanSize)
 	contentCh := make(chan sstContent)
 	var backupDesc *BackupDescriptor
-	conf, err := storageccl.ExportStorageConfFromURI(dest)
-	if err != nil {
-		return 0, 0, 0, err
-	}
 	var st *cluster.Settings
+	var gossip *gossip.Gossip
 	if execCfg != nil {
 		st = execCfg.Settings
+		gossip = execCfg.Gossip
 	}
-	es, err := storageccl.MakeExportStorage(ctx, conf, st)
+	es, err := exportStorageFromURI(ctx, dest, st, gossip)
 	if err != nil {
 		return 0, 0, 0, err
 	}
@@ -220,7 +220,7 @@ func doLocalCSVTransform(
 	group.Go(func() error {
 		defer close(recordCh)
 		var err error
-		csvCount, err = readCSV(gCtx, comma, comment, len(tableDesc.VisibleColumns()), dataFiles, recordCh, readProgressFn, st)
+		csvCount, err = readCSV(gCtx, comma, comment, len(tableDesc.VisibleColumns()), dataFiles, recordCh, readProgressFn, st, gossip)
 		return err
 	})
 	group.Go(func() error {
@@ -273,9 +273,9 @@ const (
 )
 
 func readCreateTableFromStore(
-	ctx context.Context, filename string, settings *cluster.Settings,
+	ctx context.Context, filename string, settings *cluster.Settings, gossip *gossip.Gossip,
 ) (*parser.CreateTable, error) {
-	store, err := exportStorageFromURI(ctx, filename, settings)
+	store, err := exportStorageFromURI(ctx, filename, settings, gossip)
 	if err != nil {
 		return nil, err
 	}
@@ -379,6 +379,7 @@ func readCSV(
 	recordCh chan<- csvRecord,
 	progressFn func(float32),
 	settings *cluster.Settings,
+	gossip *gossip.Gossip,
 ) (int64, error) {
 	const batchSize = 500
 	expectedColsExtra := expectedCols + 1
@@ -391,11 +392,7 @@ func readCSV(
 	var totalBytes, readBytes int64
 	// Attempt to fetch total number of bytes for all files.
 	for _, dataFile := range dataFiles {
-		conf, err := storageccl.ExportStorageConfFromURI(dataFile)
-		if err != nil {
-			return 0, err
-		}
-		es, err := storageccl.MakeExportStorage(ctx, conf, settings)
+		es, err := exportStorageFromURI(ctx, dataFile, settings, gossip)
 		if err != nil {
 			return 0, err
 		}
@@ -420,11 +417,7 @@ func readCSV(
 		}
 
 		err := func() error {
-			conf, err := storageccl.ExportStorageConfFromURI(dataFile)
-			if err != nil {
-				return err
-			}
-			es, err := storageccl.MakeExportStorage(ctx, conf, settings)
+			es, err := exportStorageFromURI(ctx, dataFile, settings, gossip)
 			if err != nil {
 				return err
 			}
@@ -993,7 +986,7 @@ func importPlanHook(
 			if err != nil {
 				return err
 			}
-			create, err = readCreateTableFromStore(ctx, filename, p.ExecCfg().Settings)
+			create, err = readCreateTableFromStore(ctx, filename, p.ExecCfg().Settings, p.ExecCfg().Gossip)
 			if err != nil {
 				return err
 			}
@@ -1236,7 +1229,7 @@ func (cp *readCSVProcessor) Run(ctx context.Context, wg *sync.WaitGroup) {
 		defer tracing.FinishSpan(span)
 		defer close(recordCh)
 		_, err := readCSV(sCtx, cp.csvOptions.Comma, cp.csvOptions.Comment,
-			len(cp.tableDesc.VisibleColumns()), []string{cp.uri}, recordCh, nil, cp.settings)
+			len(cp.tableDesc.VisibleColumns()), []string{cp.uri}, recordCh, nil, cp.settings, NoCluster)
 		return err
 	})
 	// Convert CSV records to KVs

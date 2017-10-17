@@ -98,7 +98,7 @@ func TestLoadCSV(t *testing.T) {
 	if _, err := db.Exec("CREATE DATABASE csv"); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := db.Exec(`RESTORE csv.* FROM $1`, fmt.Sprintf("nodelocal://%s", tmp)); err != nil {
+	if _, err := db.Exec(`RESTORE csv.* FROM $1`, fmt.Sprintf("network-file://%s", tmp)); err != nil {
 		t.Fatal(err)
 	}
 
@@ -416,9 +416,9 @@ func makeCSVData(
 		if err := fWithOpts.Close(); err != nil {
 			t.Fatal(err)
 		}
-		files = append(files, fmt.Sprintf(`'nodelocal://%s'`, path))
-		filesWithOpts = append(filesWithOpts, fmt.Sprintf(`'nodelocal://%s'`, pathWithOpts))
-		filesWithDups = append(filesWithDups, fmt.Sprintf(`'nodelocal://%s'`, pathDup))
+		files = append(files, fmt.Sprintf(`'network-file://%s'`, path))
+		filesWithOpts = append(filesWithOpts, fmt.Sprintf(`'network-file://%s'`, pathWithOpts))
+		filesWithDups = append(filesWithDups, fmt.Sprintf(`'network-file://%s'`, pathDup))
 	}
 	return files, filesWithOpts, filesWithDups
 }
@@ -468,7 +468,7 @@ func TestImportStmt(t *testing.T) {
 		{
 			"schema-in-file",
 			`IMPORT TABLE t CREATE USING $1 CSV DATA (%s) WITH temp = $2`,
-			[]interface{}{fmt.Sprintf("nodelocal://%s", tablePath)},
+			[]interface{}{fmt.Sprintf("network-file://%s", tablePath)},
 			files,
 			`WITH temp = %s, transform_only`,
 			"",
@@ -476,7 +476,7 @@ func TestImportStmt(t *testing.T) {
 		{
 			"schema-in-file-intodb",
 			`IMPORT TABLE t CREATE USING $1 CSV DATA (%s) WITH temp = $2, into_db = 'csv1'`,
-			[]interface{}{fmt.Sprintf("nodelocal://%s", tablePath)},
+			[]interface{}{fmt.Sprintf("network-file://%s", tablePath)},
 			files,
 			`WITH temp = %s, transform_only`,
 			"",
@@ -500,7 +500,7 @@ func TestImportStmt(t *testing.T) {
 		{
 			"schema-in-file-dist",
 			`IMPORT TABLE t CREATE USING $1 CSV DATA (%s) WITH temp = $2, distributed`,
-			[]interface{}{fmt.Sprintf("nodelocal://%s", tablePath)},
+			[]interface{}{fmt.Sprintf("network-file://%s", tablePath)},
 			files,
 			`WITH distributed, temp = %s, transform_only`,
 			"",
@@ -565,7 +565,7 @@ func TestImportStmt(t *testing.T) {
 		{
 			"primary-key-dup",
 			`IMPORT TABLE t CREATE USING $1 CSV DATA (%s) WITH temp = $2, distributed`,
-			[]interface{}{fmt.Sprintf("nodelocal://%s", tablePath)},
+			[]interface{}{fmt.Sprintf("network-file://%s", tablePath)},
 			dups,
 			``,
 			"primary or unique index has duplicate keys",
@@ -573,7 +573,7 @@ func TestImportStmt(t *testing.T) {
 		{
 			"no-database",
 			`IMPORT TABLE t CREATE USING $1 CSV DATA (%s) WITH temp = $2, into_db = 'nonexistent'`,
-			[]interface{}{fmt.Sprintf("nodelocal://%s", tablePath)},
+			[]interface{}{fmt.Sprintf("network-file://%s", tablePath)},
 			files,
 			``,
 			`database does not exist: "nonexistent"`,
@@ -589,7 +589,7 @@ func TestImportStmt(t *testing.T) {
 				rows, idx, sys, bytes int
 			}
 
-			backupPath := fmt.Sprintf("nodelocal://%s", filepath.Join(dir, t.Name()))
+			backupPath := fmt.Sprintf("network-file://%s", filepath.Join(dir, t.Name()))
 			if strings.Contains(tc.query, "temp = $") {
 				tc.args = append(tc.args, backupPath)
 			}
@@ -670,7 +670,7 @@ func BenchmarkImport(b *testing.B) {
 	dir, cleanup := testutils.TempDir(b)
 	defer cleanup()
 	files, _, _ := makeCSVData(b, dir, numFiles, b.N*100)
-	tmp := fmt.Sprintf("nodelocal://%s", filepath.Join(dir, b.Name()))
+	tmp := fmt.Sprintf("network-file://%s", filepath.Join(dir, b.Name()))
 
 	b.ResetTimer()
 

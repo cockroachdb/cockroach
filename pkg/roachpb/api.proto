@@ -825,6 +825,7 @@ message ExportStorage {
     option (gogoproto.equal) = true;
 
     optional string path  = 1 [(gogoproto.nullable) = false];
+    optional bool isSharedFS = 2 [(gogoproto.nullable) = false];
   }
   message Http {
     option (gogoproto.equal) = true;
