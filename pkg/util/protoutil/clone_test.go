@@ -53,6 +53,7 @@ func TestCloneProto(t *testing.T) {
 		{&roachpb.Value{}, false},
 		{&storagebase.ReplicaState{}, false},
 		{&roachpb.RangeDescriptor{}, false},
+		{&sqlbase.PartitioningDescriptor{}, false},
 	}
 	for _, tc := range testCases {
 		var clone protoutil.Message
