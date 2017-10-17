@@ -861,3 +861,43 @@ CREATE VIEW bar ("1") AS SELECT 1;
 		t.Fatalf("expected: %s\ngot: %s", expect, out)
 	}
 }
+
+// TestDumpPrimaryKeyConstraint tests that a primary key with a non-default
+// name works.
+func TestDumpPrimaryKeyConstraint(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	c := newCLITest(cliTestParams{t: t})
+	defer c.cleanup()
+
+	const create = `
+	CREATE DATABASE d;
+	CREATE TABLE d.t (
+		i int,
+		CONSTRAINT pk_name PRIMARY KEY (i)
+	);
+	INSERT INTO d.t VALUES (1);
+`
+
+	c.RunWithArgs([]string{"sql", "-e", create})
+
+	out, err := c.RunWithCapture("dump d t")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	const expect = `dump d t
+CREATE TABLE t (
+	i INT NOT NULL,
+	CONSTRAINT pk_name PRIMARY KEY (i ASC),
+	FAMILY "primary" (i)
+);
+
+INSERT INTO t (i) VALUES
+	(1);
+`
+
+	if string(out) != expect {
+		t.Fatalf("expected: %s\ngot: %s", expect, out)
+	}
+}
