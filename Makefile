@@ -342,11 +342,11 @@ $(ARCHIVE): $(ARCHIVE).tmp
 	gzip -c $< > $@
 
 # TODO(benesch): Make this recipe use `git ls-files --recurse-submodules`
-# instead of scripts/ls-files.sh once Git v2.11 is widely deployed.
+# instead of build/ls-files.sh once Git v2.11 is widely deployed.
 .INTERMEDIATE: $(ARCHIVE).tmp
 $(ARCHIVE).tmp: ARCHIVE_BASE = cockroach-$(shell cat .buildinfo/tag)
 $(ARCHIVE).tmp: .buildinfo/tag .buildinfo/rev .buildinfo/basebranch
-	scripts/ls-files.sh | $(TAR) -cf $@ -T - $(TAR_XFORM_FLAG),^,$(ARCHIVE_BASE)/src/github.com/cockroachdb/cockroach/, $^
+	build/ls-files.sh | $(TAR) -cf $@ -T - $(TAR_XFORM_FLAG),^,$(ARCHIVE_BASE)/src/github.com/cockroachdb/cockroach/, $^
 	(cd build/archive/contents && $(TAR) -rf ../../../$@ $(TAR_XFORM_FLAG),^,$(ARCHIVE_BASE)/, *)
 
 .buildinfo:
