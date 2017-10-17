@@ -82,11 +82,6 @@ var _ VarName = &ColumnItem{}
 // NormalizeVarName is a no-op for UnqualifiedStar (already normalized)
 func (u UnqualifiedStar) NormalizeVarName() (VarName, error) { return u, nil }
 
-var singletonStarName VarName = UnqualifiedStar{}
-
-// StarExpr is a convenience function that represents an unqualified "*".
-func StarExpr() VarName { return singletonStarName }
-
 // ResolvedType implements the TypedExpr interface.
 func (UnqualifiedStar) ResolvedType() Type {
 	panic("unqualified stars ought to be replaced before this point")

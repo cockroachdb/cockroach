@@ -5373,7 +5373,7 @@ func_application:
   }
 | func_name '(' '*' ')'
   {
-    $$.val = &FuncExpr{Func: $1.resolvableFunctionReference(), Exprs: Exprs{StarExpr()}}
+    $$.val = &FuncExpr{Func: $1.resolvableFunctionReference(), Exprs: Exprs{UnqualifiedStarInstance}}
   }
 | func_name '(' error { return helpWithFunction(sqllex, $1.resolvableFunctionReference()) }
 
@@ -5966,7 +5966,7 @@ name_indirection:
 glob_indirection:
   '.' '*'
   {
-    $$.val = UnqualifiedStar{}
+    $$.val = UnqualifiedStarInstance
   }
 
 name_indirection_elem:
@@ -6137,7 +6137,7 @@ table_pattern:
   }
 | '*'
   {
-    $$.val = UnresolvedName{UnqualifiedStar{}}
+    $$.val = UnresolvedName{UnqualifiedStarInstance}
   }
 | name name_indirection
   {

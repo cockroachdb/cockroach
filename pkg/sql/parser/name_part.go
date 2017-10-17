@@ -109,6 +109,9 @@ func (l NameList) Format(buf *bytes.Buffer, f FmtFlags) {
 // a '*' as name part of an UnresolvedName.
 type UnqualifiedStar struct{}
 
+// UnqualifiedStarInstance is the singleton instance of UnqualifiedStar.
+var UnqualifiedStarInstance = UnqualifiedStar{}
+
 // Format implements the NodeFormatter interface.
 func (UnqualifiedStar) Format(buf *bytes.Buffer, _ FmtFlags) { buf.WriteByte('*') }
 func (u UnqualifiedStar) String() string                     { return AsString(u) }

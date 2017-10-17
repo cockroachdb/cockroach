@@ -130,7 +130,7 @@ func (node *SelectExpr) NormalizeTopLevelVarName() error {
 // starSelectExpr is a convenience function that represents an unqualified "*"
 // in a select expression.
 func starSelectExpr() SelectExpr {
-	return SelectExpr{Expr: StarExpr()}
+	return SelectExpr{Expr: UnqualifiedStarInstance}
 }
 
 // Format implements the NodeFormatter interface.
