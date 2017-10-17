@@ -2975,7 +2975,7 @@ func extractStringFromTimestamp(
 		return NewDInt(DInt(fromTime.Year())), nil
 
 	case "quarter":
-		return NewDInt(DInt(fromTime.Month()/4 + 1)), nil
+		return NewDInt(DInt((fromTime.Month()-1)/3 + 1)), nil
 
 	case "month", "months":
 		return NewDInt(DInt(fromTime.Month())), nil
