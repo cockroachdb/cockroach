@@ -222,6 +222,9 @@ func makeLocalStorage(base string, nfs bool) (ExportStorage, error) {
 	if base == "" {
 		return nil, errors.Errorf("Local storage requested but path not provided")
 	}
+	if !filepath.IsAbs(base) {
+		return nil, errors.Errorf("relative paths are not allowed")
+	}
 	return &localFileStorage{base: base, isNFS: nfs}, nil
 }
 

@@ -239,6 +239,14 @@ func TestBackupRestoreLocalPathChecks(t *testing.T) {
 
 	const numAccounts = 1
 
+	t.Run("rel", func(t *testing.T) {
+		_, _, _, sqlDB, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, initNone)
+		defer cleanupFn()
+		if _, err := sqlDB.DB.Exec("BACKUP DATABASE data TO foo"); !testutils.IsError(err, "relative paths are not allowed") {
+			t.Fatal(err)
+		}
+	})
+
 	t.Run("single-node", func(t *testing.T) {
 		_, dir, _, sqlDB, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, initNone)
 		defer cleanupFn()
