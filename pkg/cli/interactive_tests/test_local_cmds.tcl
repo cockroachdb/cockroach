@@ -171,6 +171,16 @@ eexpect "with no argument"
 eexpect root@
 end_test
 
+start_test "Check that commands are also recognized with a final semicolon."
+send "\\set;\r"
+eexpect "display_format"
+eexpect root@
+send "\\h select;\r"
+eexpect SELECT
+eexpect Description
+eexpect root@
+end_test
+
 # Finally terminate with Ctrl+C.
 interrupt
 eexpect eof

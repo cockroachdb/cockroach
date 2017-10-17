@@ -783,7 +783,11 @@ func (c *cliState) doHandleCliCmd(loopState, nextState cliStateEnum) cliStateEnu
 	// to handle it as a statement, so save the history.
 	c.addHistory(c.lastInputLine)
 
-	cmd := strings.Fields(c.lastInputLine)
+	// As a convenience to the user, we strip the final semicolon, if
+	// any, in all cases.
+	line := strings.TrimRight(c.lastInputLine, "; ")
+
+	cmd := strings.Fields(line)
 	switch cmd[0] {
 	case `\q`, `\quit`, `\exit`:
 		return cliStop
