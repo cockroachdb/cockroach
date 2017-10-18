@@ -196,6 +196,7 @@ type ColumnTableDef struct {
 		Table          NormalizableTableName
 		Col            Name
 		ConstraintName Name
+		Actions        ReferenceActions
 	}
 	Family struct {
 		Name        Name
@@ -292,6 +293,7 @@ func newColumnTableDef(
 			d.References.Table = t.Table
 			d.References.Col = t.Col
 			d.References.ConstraintName = c.Name
+			d.References.Actions = t.Actions
 		case *ColumnFamilyConstraint:
 			if d.HasColumnFamily() {
 				return nil, pgerror.NewErrorf(pgerror.CodeInvalidTableDefinitionError,
@@ -375,6 +377,7 @@ func (node *ColumnTableDef) Format(buf *bytes.Buffer, f FmtFlags) {
 			FormatNode(buf, f, node.References.Col)
 			buf.WriteByte(')')
 		}
+		FormatNode(buf, f, node.References.Actions)
 	}
 	if node.HasColumnFamily() {
 		if node.Family.Create {
@@ -439,8 +442,9 @@ type ColumnCheckConstraint struct {
 
 // ColumnFKConstraint represents a FK-constaint on a column.
 type ColumnFKConstraint struct {
-	Table NormalizableTableName
-	Col   Name // empty-string means use PK
+	Table   NormalizableTableName
+	Col     Name // empty-string means use PK
+	Actions ReferenceActions
 }
 
 // ColumnFamilyConstraint represents FAMILY on a column.
@@ -526,12 +530,57 @@ func (node *UniqueConstraintTableDef) Format(buf *bytes.Buffer, f FmtFlags) {
 	}
 }
 
+// ReferenceAction is the method used to maintain referential integrity through
+// foreign keys.
+type ReferenceAction int
+
+// The values for ReferenceAction.
+const (
+	NoAction ReferenceAction = iota
+	Restrict
+	SetNull
+	SetDefault
+	Cascade
+)
+
+var referenceActionName = [...]string{
+	NoAction:   "NO ACTION",
+	Restrict:   "RESTRICT",
+	SetNull:    "SET NULL",
+	SetDefault: "SET DEFAULT",
+	Cascade:    "CASCADE",
+}
+
+func (ra ReferenceAction) String() string {
+	return referenceActionName[ra]
+}
+
+// ReferenceActions contains the actions specified to maintain referential
+// integrity through foreign keys for different operations.
+type ReferenceActions struct {
+	Delete ReferenceAction
+	Update ReferenceAction
+}
+
+// Format implements the NodeFormatter interface.
+func (node ReferenceActions) Format(buf *bytes.Buffer, f FmtFlags) {
+	if node.Delete != NoAction {
+		buf.WriteString(" ON DELETE ")
+		buf.WriteString(node.Delete.String())
+	}
+	if node.Update != NoAction {
+		buf.WriteString(" ON UPDATE ")
+		buf.WriteString(node.Update.String())
+	}
+}
+
 // ForeignKeyConstraintTableDef represents a FOREIGN KEY constraint in the AST.
 type ForeignKeyConstraintTableDef struct {
 	Name     Name
 	Table    NormalizableTableName
 	FromCols NameList
 	ToCols   NameList
+	Actions  ReferenceActions
 }
 
 // Format implements the NodeFormatter interface.
@@ -552,6 +601,8 @@ func (node *ForeignKeyConstraintTableDef) Format(buf *bytes.Buffer, f FmtFlags) 
 		FormatNode(buf, f, node.ToCols)
 		buf.WriteByte(')')
 	}
+
+	FormatNode(buf, f, node.Actions)
 }
 
 func (node *ForeignKeyConstraintTableDef) setName(name Name) {
