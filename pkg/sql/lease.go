@@ -22,6 +22,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
@@ -40,10 +41,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil/singleflight"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
-
-// TODO(pmattis): Periodically renew leases for tables that were used recently and
-// for which the lease will expire soon.
 
 // tableVersionState holds the state for a table version. This includes
 // the lease information for a table version.
@@ -122,6 +121,9 @@ type LeaseStore struct {
 	// range of the actual lease duration will be
 	// [(1-leaseJitterFraction) * leaseDuration, (1+leaseJitterFraction) * leaseDuration]
 	leaseJitterFraction float64
+	// leaseRenewalTimeout is the time before a lease expires when
+	// acquisition to renew the lease begins.
+	leaseRenewalTimeout time.Duration
 
 	testingKnobs LeaseStoreTestingKnobs
 	memMetrics   *MemoryMetrics
@@ -564,6 +566,11 @@ type tableState struct {
 	tableNameCache *tableNameCache
 	stopper        *stop.Stopper
 
+	// renewalInProgress is an atomic indicator for when a renewal for a
+	// lease has begun. This is atomic to prevent multiple routines from
+	// entering renewal initialization.
+	renewalInProgress int32
+
 	mu struct {
 		syncutil.Mutex
 
@@ -614,6 +621,7 @@ func (t *tableState) acquire(
 			return nil, result.Err
 		}
 	}
+
 	return t.findForTimestamp(ctx, timestamp, m)
 }
 
@@ -970,6 +978,38 @@ func (t *tableState) purgeOldVersions(
 	return err
 }
 
+// renewalFn returns a closure used for renewing a lease.
+// t.renewalInProgress must be set to 1 before calling.
+func (t *tableState) renewalFn(
+	m *LeaseManager, tableVersion *tableVersionState,
+) func(context.Context) {
+	return func(ctx context.Context) {
+		resultChan, _ := t.mu.group.DoChan(acquireGroupKey, func() (interface{}, error) {
+			var span opentracing.Span
+			ctx, span = tracing.ForkCtxSpan(ctx, "[async] lease renewal")
+			ctx = t.stopper.WithCancel(ctx)
+			defer tracing.FinishSpan(span)
+			log.VEventf(ctx, 1,
+				"lease acquisition beginning for tableID=%d tableName=%q",
+				t.id, tableVersion.TableDescriptor.Name)
+			token, err := t.acquireNodeLease(ctx, m, hlc.Timestamp{})
+			if err != nil {
+				log.Errorf(ctx,
+					"lease acquisition for tableID=%d tableName=%q failed: %s",
+					t.id, tableVersion.TableDescriptor.Name, err)
+			} else {
+				log.VEventf(ctx, 1,
+					"lease acquisition finished for tableID=%d tableName=%q",
+					t.id, tableVersion.TableDescriptor.Name)
+			}
+			return token, err
+
+		})
+		<-resultChan
+		atomic.StoreInt32(&t.renewalInProgress, 0)
+	}
+}
+
 // LeaseAcquireBlockType is the type of blocking result event when
 // calling LeaseAcquireResultBlockEvent.
 type LeaseAcquireBlockType int
@@ -1166,6 +1206,7 @@ func NewLeaseManager(
 			nodeID:              nodeID,
 			leaseDuration:       cfg.TableDescriptorLeaseDuration,
 			leaseJitterFraction: cfg.TableDescriptorLeaseJitterFraction,
+			leaseRenewalTimeout: cfg.TableDescriptorLeaseRenewalTimeout,
 			testingKnobs:        testingKnobs.LeaseStoreTestingKnobs,
 			memMetrics:          memMetrics,
 		},
@@ -1192,7 +1233,9 @@ func nameMatchesTable(table *sqlbase.TableDescriptor, dbID sqlbase.ID, tableName
 // the timestamp. It returns the table descriptor and a expiration time.
 // A transaction using this descriptor must ensure that its
 // commit-timestamp < expiration-time. Care must be taken to not modify
-// the returned descriptor.
+// the returned descriptor. Renewal of a lease may begin in the
+// background. Renewal is done in order to prevent blocking on future
+// acquisitions.
 func (m *LeaseManager) AcquireByName(
 	ctx context.Context, timestamp hlc.Timestamp, dbID sqlbase.ID, tableName string,
 ) (*sqlbase.TableDescriptor, hlc.Timestamp, error) {
@@ -1200,6 +1243,17 @@ func (m *LeaseManager) AcquireByName(
 	tableVersion := m.tableNames.get(dbID, tableName, timestamp)
 	if tableVersion != nil {
 		if !timestamp.Less(tableVersion.ModificationTime) {
+
+			// Atomically check and begin a renewal if one has not already
+			// been set.
+			durationUntilExpiration := time.Duration(tableVersion.expiration.WallTime - hlc.UnixNano())
+			durationUntilRenewal := durationUntilExpiration - m.LeaseStore.leaseRenewalTimeout
+			if t := m.findTableState(tableVersion.ID, false /* create */); t != nil &&
+				durationUntilRenewal < 0 && atomic.CompareAndSwapInt32(&t.renewalInProgress, 0, 1) {
+				// Start the renewal. When it finishes, it will reset t.renewalInProgress.
+				t.stopper.RunWorker(context.Background(), t.renewalFn(m, tableVersion))
+			}
+
 			return &tableVersion.TableDescriptor, tableVersion.expiration, nil
 		}
 		if err := m.Release(&tableVersion.TableDescriptor); err != nil {
