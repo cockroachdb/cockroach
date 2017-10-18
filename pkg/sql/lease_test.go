@@ -50,9 +50,13 @@ type leaseTest struct {
 	kvDB                     *client.DB
 	nodes                    map[uint32]*sql.LeaseManager
 	leaseManagerTestingKnobs sql.LeaseManagerTestingKnobs
+	cfg                      *base.LeaseManagerConfig
 }
 
 func newLeaseTest(t *testing.T, params base.TestServerArgs) *leaseTest {
+	if params.LeaseManagerConfig == nil {
+		params.LeaseManagerConfig = base.NewLeaseManagerConfig()
+	}
 	s, db, kvDB := serverutils.StartServer(t, params)
 	leaseTest := &leaseTest{
 		T:      t,
@@ -60,6 +64,7 @@ func newLeaseTest(t *testing.T, params base.TestServerArgs) *leaseTest {
 		db:     db,
 		kvDB:   kvDB,
 		nodes:  map[uint32]*sql.LeaseManager{},
+		cfg:    params.LeaseManagerConfig,
 	}
 	if params.Knobs.SQLLeaseManager != nil {
 		leaseTest.leaseManagerTestingKnobs =
@@ -191,6 +196,7 @@ func (t *leaseTest) node(nodeID uint32) *sql.LeaseManager {
 			t.leaseManagerTestingKnobs,
 			t.server.Stopper(),
 			&sql.MemoryMetrics{},
+			t.cfg,
 		)
 		t.nodes[nodeID] = mgr
 	}
@@ -223,8 +229,10 @@ func TestLeaseManager(testingT *testing.T) {
 	// table and expiration.
 	l1, e1 := t.mustAcquire(1, descID)
 	l2, e2 := t.mustAcquire(1, descID)
-	if l1.ID != l2.ID || e1 != e2 {
+	if l1.ID != l2.ID {
 		t.Fatalf("expected same lease, but found %v != %v", l1, l2)
+	} else if e1 != e2 {
+		t.Fatalf("expected same lease timestamps, but found %v != %v", e1, e2)
 	}
 	t.expectLeases(descID, "/1/1")
 	// Node 2 never acquired a lease on descID, so we should expect an error.
@@ -303,6 +311,12 @@ func TestLeaseManager(testingT *testing.T) {
 func TestLeaseManagerReacquire(testingT *testing.T) {
 	defer leaktest.AfterTest(testingT)()
 	params, _ := createTestServerParams()
+
+	params.LeaseManagerConfig = base.NewLeaseManagerConfig()
+	// Set the lease duration such that the next lease acquisition will
+	// require the lease to be reacquired.
+	params.LeaseManagerConfig.TableDescriptorLeaseDuration = 0
+
 	removalTracker := sql.NewLeaseRemovalTracker()
 	params.Knobs = base.TestingKnobs{
 		SQLLeaseManager: &sql.LeaseManagerTestingKnobs{
@@ -315,17 +329,6 @@ func TestLeaseManagerReacquire(testingT *testing.T) {
 	defer t.cleanup()
 
 	const descID = keys.LeaseTableID
-
-	// Set the lease duration such that the next lease acquisition will
-	// require the lease to be reacquired.
-	savedLeaseDuration := sql.LeaseDuration
-	defer func() {
-		sql.LeaseDuration = savedLeaseDuration
-	}()
-
-	sql.LeaseDuration = 5 * time.Nanosecond
-
-	time.Sleep(5 * sql.LeaseDuration)
 
 	l1, e1 := t.mustAcquire(1, descID)
 	t.expectLeases(descID, "/1/1")
