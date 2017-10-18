@@ -21,6 +21,9 @@ import (
 	"regexp"
 	"testing"
 	"time"
+
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/petermattis/goid"
 )
 
 func TestShouldPrint(t *testing.T) {
@@ -78,9 +81,12 @@ func TestShouldPrint(t *testing.T) {
 						}
 					}
 
-					// Should print after sleep.
 					if !alwaysPrint {
-						time.Sleep(duration)
+						// Force printing by pretending the previous output was well in the
+						// past.
+						spamMu.Lock()
+						spamMu.gids[goid.Get()] = timeutil.Now().Add(-time.Hour)
+						spamMu.Unlock()
 					}
 					if !curriedShouldPrint() {
 						t.Error("expected third call to print")
