@@ -706,20 +706,23 @@ func shouldReplaceLiveness(old, new Liveness) bool {
 		return true
 	}
 
-	if old.Expiration == new.Expiration && old.Epoch == new.Epoch {
-		// Assume that the update is newer when its draining or
-		// decommissioning field changed.
-		//
-		// This has false positives (in which case we're clobbering the
-		// liveness). A better way to handle liveness updates in general is
-		// to add a sequence number.
-		//
-		// See #18219.
-		return old.Draining != new.Draining || old.Decommissioning != new.Decommissioning
+	// Compare first Epoch, and no change there, Expiration.
+	if old.Epoch != new.Epoch {
+		return old.Epoch < new.Epoch
+	}
+	if old.Expiration != new.Expiration {
+		return old.Expiration.Less(new.Expiration)
 	}
 
-	// Accept an update if it moves either expiration or epoch forward.
-	return old.Expiration.Less(new.Expiration) || old.Epoch < new.Epoch
+	// If Epoch and Expiration are unchanged, assume that the update is newer
+	// when its draining or decommissioning field changed.
+	//
+	// This has false positives (in which case we're clobbering the liveness). A
+	// better way to handle liveness updates in general is to add a sequence
+	// number.
+	//
+	// See #18219.
+	return old.Draining != new.Draining || old.Decommissioning != new.Decommissioning
 }
 
 // livenessGossipUpdate is the gossip callback used to keep the
@@ -771,25 +774,25 @@ func (nl *NodeLiveness) numLiveNodes() int64 {
 		return 0
 	}
 
-	self, err := nl.Self()
-	if err == ErrNoLivenessRecord {
-		return 0
-	}
-	if err != nil {
-		log.Warningf(ctx, "looking up own liveness: %s", err)
-	}
-
 	now := nl.clock.Now()
 	maxOffset := nl.clock.MaxOffset()
 
+	nl.mu.Lock()
+	defer nl.mu.Unlock()
+
+	self, err := nl.getLivenessLocked(selfID)
+	if err == ErrNoLivenessRecord {
+		return 0
+	}
 	// If this node isn't live, we don't want to report its view of node liveness
 	// because it's more likely to be inaccurate than the view of a live node.
 	if !self.IsLive(now, maxOffset) {
 		return 0
 	}
-
-	nl.mu.Lock()
-	defer nl.mu.Unlock()
+	if err != nil {
+		log.Warningf(ctx, "looking up own liveness: %s", err)
+		return 0
+	}
 	var liveNodes int64
 	for _, l := range nl.mu.nodes {
 		if l.IsLive(now, maxOffset) {
