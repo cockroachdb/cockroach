@@ -232,6 +232,21 @@
 </span></td></tr>
 <tr><td><code>current_timestamp() &rarr; <a href="timestamp.html">timestamptz</a></code></td><td><span class="funcdesc"><p>Returns the current transaction’s timestamp.</p>
 </span></td></tr>
+<tr><td><code>date_trunc(element: <a href="string.html">string</a>, input: <a href="date.html">date</a>) &rarr; <a href="date.html">date</a></code></td><td><span class="funcdesc"><p>Truncates <code>input</code> to precision <code>element</code>.  Sets all fields that are less
+significant than <code>element</code> to zero (or one, for day and month)</p>
+<p>Compatible elements: year, quarter, month, week, hour, minute, second,
+millisecond, microsecond.</p>
+</span></td></tr>
+<tr><td><code>date_trunc(element: <a href="string.html">string</a>, input: <a href="timestamp.html">timestamp</a>) &rarr; <a href="timestamp.html">timestamp</a></code></td><td><span class="funcdesc"><p>Truncates <code>input</code> to precision <code>element</code>.  Sets all fields that are less
+significant than <code>element</code> to zero (or one, for day and month)</p>
+<p>Compatible elements: year, quarter, month, week, hour, minute, second,
+millisecond, microsecond.</p>
+</span></td></tr>
+<tr><td><code>date_trunc(element: <a href="string.html">string</a>, input: <a href="timestamp.html">timestamptz</a>) &rarr; <a href="timestamp.html">timestamptz</a></code></td><td><span class="funcdesc"><p>Truncates <code>input</code> to precision <code>element</code>.  Sets all fields that are less
+significant than <code>element</code> to zero (or one, for day and month)</p>
+<p>Compatible elements: year, quarter, month, week, hour, minute, second,
+millisecond, microsecond.</p>
+</span></td></tr>
 <tr><td><code>experimental_strftime(input: <a href="date.html">date</a>, extract_format: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>From <code>input</code>, extracts and formats the time as identified in <code>extract_format</code> using standard <code>strftime</code> notation (though not all formatting is supported).</p>
 </span></td></tr>
 <tr><td><code>experimental_strftime(input: <a href="timestamp.html">timestamp</a>, extract_format: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>From <code>input</code>, extracts and formats the time as identified in <code>extract_format</code> using standard <code>strftime</code> notation (though not all formatting is supported).</p>
