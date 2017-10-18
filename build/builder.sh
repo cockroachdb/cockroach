@@ -174,6 +174,7 @@ done
 # a pager, so we override $PAGER to disable.
 
 # shellcheck disable=SC2086
+set -x
 docker run --privileged -i ${tty-} --rm \
   -u "${uid_gid}" \
   ${vols} \
