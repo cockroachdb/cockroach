@@ -2420,12 +2420,13 @@ bool MVCCIsValidSplitKey(DBSlice key, bool allow_meta2_splits) {
   return IsValidSplitKey(ToSlice(key), allow_meta2_splits);
 }
 
-DBStatus MVCCFindSplitKey(DBIterator* iter, DBKey start, DBKey end, 
+DBStatus MVCCFindSplitKey(DBIterator* iter, DBKey start, DBKey end, DBKey min_split,
                           int64_t target_size, bool allow_meta2_splits, DBString* split_key) {
   auto iter_rep = iter->rep.get();
   const std::string start_key = EncodeKey(start);
   iter_rep->Seek(start_key);
   const std::string end_key = EncodeKey(end);
+  const std::string min_split_key = ToString(min_split.key);
 
   int64_t size_so_far = 0;
   std::string best_split_key = start_key;
@@ -2453,8 +2454,19 @@ DBStatus MVCCFindSplitKey(DBIterator* iter, DBKey start, DBKey end,
       best_split_key = decoded_key.ToString();
       best_split_diff = diff;
     }
+    // If diff is increasing, that means we've passed the ideal split point and
+    // should return the first key that we can.
     if (diff > best_split_diff) {
-      break;
+      // Make sure the key being returned is valid. If it's smaller than the
+      // minimum split key, keep going until we find the first key at
+      // least as large as min_split_key.
+      if (best_split_key.compare(min_split_key) >= 0) {
+        break;
+      }
+      if (valid && decoded_key.compare(min_split_key) >= 0) {
+        best_split_key = decoded_key.ToString();
+        break;
+      }
     }
 
     const bool is_value = (wall_time != 0 || logical != 0);

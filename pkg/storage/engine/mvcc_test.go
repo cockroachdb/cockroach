@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/zerofields"
 	"github.com/cockroachdb/cockroach/pkg/util/caller"
+	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -3129,11 +3130,30 @@ func TestFindSplitKey(t *testing.T) {
 // they avoid splits through invalid key ranges.
 func TestFindValidSplitKeys(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+
+	// Manually creates rows corresponding to the schema:
+	// CREATE TABLE t (id STRING PRIMARY KEY, col INT)
+	encodeTableKey := func(rowVal string, colFam uint32) roachpb.Key {
+		tableKey := keys.MakeTablePrefix(keys.MaxReservedDescID + 1)
+		rowKey := roachpb.Key(encoding.EncodeVarintAscending(append([]byte(nil), tableKey...), 1))
+		rowKey = encoding.EncodeStringAscending(encoding.EncodeVarintAscending(rowKey, 1), rowVal)
+		colKey := keys.MakeFamilyKey(append([]byte(nil), rowKey...), colFam)
+		return colKey
+	}
+	splitKeyFromTableKey := func(tableKey roachpb.Key) roachpb.Key {
+		splitKey, err := keys.EnsureSafeSplitKey(tableKey)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return splitKey
+	}
+
 	rangeID := roachpb.RangeID(1)
 	testCases := []struct {
-		keys     []roachpb.Key
-		expSplit roachpb.Key
-		expError bool
+		keys       []roachpb.Key
+		rangeStart roachpb.Key
+		expSplit   roachpb.Key
+		expError   bool
 	}{
 		// All m1 cannot be split.
 		{
@@ -3212,6 +3232,51 @@ func TestFindValidSplitKeys(t *testing.T) {
 			expSplit: nil,
 			expError: false,
 		},
+		// Some example table data. Don't split in the middle of a row.
+		{
+			keys: []roachpb.Key{
+				encodeTableKey("a", 1),
+				encodeTableKey("a", 2),
+				encodeTableKey("a", 3),
+				encodeTableKey("a", 4),
+				encodeTableKey("a", 5),
+				encodeTableKey("b", 1),
+				encodeTableKey("c", 1),
+			},
+			rangeStart: splitKeyFromTableKey(encodeTableKey("a", 1)),
+			expSplit:   splitKeyFromTableKey(encodeTableKey("b", 1)),
+			expError:   false,
+		},
+		// More example table data. Make sure ranges at the start of a table can
+		// be split properly.
+		{
+			keys: []roachpb.Key{
+				encodeTableKey("a", 1),
+				encodeTableKey("b", 1),
+				encodeTableKey("c", 1),
+				encodeTableKey("d", 1),
+			},
+			rangeStart: keys.MakeTablePrefix(keys.MaxReservedDescID + 1),
+			expSplit:   splitKeyFromTableKey(encodeTableKey("c", 1)),
+			expError:   false,
+		},
+		// More example table data. Make sure ranges at the start of a table can
+		// be split properly (even if "properly" means creating an empty LHS,
+		// splitting here will at least allow the resulting RHS to split again).
+		{
+			keys: []roachpb.Key{
+				encodeTableKey("a", 1),
+				encodeTableKey("a", 2),
+				encodeTableKey("a", 3),
+				encodeTableKey("a", 4),
+				encodeTableKey("a", 5),
+				encodeTableKey("b", 1),
+				encodeTableKey("c", 1),
+			},
+			rangeStart: keys.MakeTablePrefix(keys.MaxReservedDescID + 1),
+			expSplit:   splitKeyFromTableKey(encodeTableKey("a", 1)),
+			expError:   false,
+		},
 	}
 
 	for i, test := range testCases {
@@ -3231,6 +3296,9 @@ func TestFindValidSplitKeys(t *testing.T) {
 				t.Fatal(err)
 			}
 			rangeStart := test.keys[0]
+			if len(test.rangeStart) > 0 {
+				rangeStart = test.rangeStart
+			}
 			rangeEnd := test.keys[len(test.keys)-1].Next()
 			rangeStartAddr, err := keys.Addr(rangeStart)
 			if err != nil {
