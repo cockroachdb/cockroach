@@ -92,14 +92,15 @@ func newReplicaGCQueue(store *Store, db *client.DB, gossip *gossip.Gossip) *repl
 	rgcq.baseQueue = newBaseQueue(
 		"replicaGC", rgcq, store, gossip,
 		queueConfig{
-			maxSize:              defaultQueueMaxSize,
-			needsLease:           false,
-			needsSystemConfig:    false,
-			acceptsUnsplitRanges: true,
-			successes:            store.metrics.ReplicaGCQueueSuccesses,
-			failures:             store.metrics.ReplicaGCQueueFailures,
-			pending:              store.metrics.ReplicaGCQueuePending,
-			processingNanos:      store.metrics.ReplicaGCQueueProcessingNanos,
+			maxSize:                  defaultQueueMaxSize,
+			needsLease:               false,
+			needsSystemConfig:        false,
+			acceptsUnsplitRanges:     true,
+			successes:                store.metrics.ReplicaGCQueueSuccesses,
+			failures:                 store.metrics.ReplicaGCQueueFailures,
+			pending:                  store.metrics.ReplicaGCQueuePending,
+			processingNanos:          store.metrics.ReplicaGCQueueProcessingNanos,
+			processDestroyedReplicas: true,
 		},
 	)
 	return rgcq
