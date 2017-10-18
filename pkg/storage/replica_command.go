@@ -3989,7 +3989,7 @@ func TestingRelocateRange(
 	rangeDesc roachpb.RangeDescriptor,
 	targets []roachpb.ReplicationTarget,
 ) error {
-	// Step 1: Add any stores that don't already have a replica in of the range.
+	// Step 1: Add any stores that don't already have a replica of the range.
 	//
 	// TODO(radu): we can't have multiple replicas on different stores on the same
 	// node, which can lead to some odd corner cases where we would have to first

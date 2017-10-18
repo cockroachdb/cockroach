@@ -948,7 +948,7 @@ func simulateFilterUnremovableReplicas(
 }
 
 // filterUnremovableReplicas removes any unremovable replicas from the supplied
-// slice. An unremovable replicas is one which is a necessary part of the
+// slice. An unremovable replica is one which is a necessary part of the
 // quorum that will result from removing 1 replica. We forgive brandNewReplicaID
 // for being behind, since a new range can take a little while to catch up.
 // This is important when we've just added a replica in order to rebalance to

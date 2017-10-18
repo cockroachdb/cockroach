@@ -475,7 +475,7 @@ func (s replicationStats) String() string {
 		s.EventType, s.RangeID, s.StoreID, s.ElapsedSinceLastEvent)
 }
 
-// checkAllocatorStable returns the duration of stability (i.e. no replication
+// allocatorStats returns the duration of stability (i.e. no replication
 // changes) and the standard deviation in replica counts. Only unrecoverable
 // errors are returned.
 func (at *allocatorTest) allocatorStats(db *gosql.DB) (s replicationStats, err error) {
