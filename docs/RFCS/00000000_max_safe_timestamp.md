@@ -230,6 +230,45 @@ timeliness of close notifications with the cost of all the iteration.
 
 TODO: rationale and alternatives mostly included inline in the detailed design.
 
+### Replicate the TimestampCache through Raft
+
+This alternative is only half serious, but it serves as a nice generalization of
+"max safe timestamp" that provides more insight into the concept. Instead of
+proposing dummy write commands to update the `max_write_timestamp` through Raft,
+the leaseholder could instead periodically bump its `TimestampCache` low water
+mark and send the entire structure through Raft. Followers could then maintain a
+copy of this cache themselves and serve any read requests that they observe
+where the timestamp is equal to or less than the minimum timestamp for all spans
+in the request within the `TimestampCache`.
+
+The benefit of this approach over replicating `max_write_timestamp` is that
+follower reads would not always need to trail the current time by more than
+`max_write_age`. If the `TimestampCache` is already updated for a read over a
+certain span on the leaseholder, it is guaranteed that no writes will take place
+under this timestamp within this span. This means that for certain spans of keys
+that already have an updated timestamp cache value on the leaseholder, followers
+could read locally at that updated time once the update is replicated through
+Raft. This would allow them to read locally for timestamps much closer to the
+present time.
+
+We can equate "max safe timestamp" to the low water mark of the `TimestampCache`
+in this alternative. The two ideas are analogous if we imagine that the low
+water mark of the cache is set to `max_write_timestamp-max_write_age` and that
+the cache maintains no timestamp intervals other than this low water mark.
+
+This has an interesting extension, where followers could proactively request
+`TimestampCache` updates, on-demand. They could then wait for the replicated
+cache update so they could field reads for certain spans locally. While this
+would still incur a round-trip, it could be used to read up-to-date information
+from followers when it's apparent that the read will create a very large result
+set and shipping this result over the network will be much more expensive than
+shipping the bookkeeping required to allow a follower read. The origins of this
+idea came from benefit 4 in the original comment of [this forum
+post](https://forum.cockroachlabs.com/t/why-do-we-keep-read-commands-in-the-command-queue/360).
+
+Or course, shipping the `TimestampCache` through Raft would probably be too
+expensive to be feasible.
+
 ## Unresolved questions
 
 - We could use some eyes on the proposal/re-proposal question. Re-proposals got
