@@ -120,6 +120,12 @@ func (t *leaseTest) acquire(
 	return t.node(nodeID).Acquire(context.TODO(), t.server.Clock().Now(), descID)
 }
 
+func (t *leaseTest) acquireByName(
+	nodeID uint32, dbID sqlbase.ID, name string,
+) (*sqlbase.TableDescriptor, hlc.Timestamp, error) {
+	return t.node(nodeID).AcquireByName(context.TODO(), t.server.Clock().Now(), dbID, name)
+}
+
 func (t *leaseTest) acquireMinVersion(
 	nodeID uint32, descID sqlbase.ID, minVersion sqlbase.DescriptorVersion,
 ) (*sqlbase.TableDescriptor, hlc.Timestamp, error) {
@@ -935,4 +941,183 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 		}
 	})
 
+}
+
+// This test makes sure the lease gets renewed automatically in the background
+// if the lease is about to expire, without blocking.
+func TestLeaseRefreshedAutomatically(testingT *testing.T) {
+	defer leaktest.AfterTest(testingT)()
+
+	var testAcquiredCount int32
+	var testAcquisitionBlockCount int32
+
+	params, _ := createTestServerParams()
+	params.Knobs = base.TestingKnobs{
+		SQLLeaseManager: &sql.LeaseManagerTestingKnobs{
+			LeaseStoreTestingKnobs: sql.LeaseStoreTestingKnobs{
+				// We want to track when leases get acquired and when they are renewed.
+				// We also want to know when acquiring blocks to test lease renewal.
+				LeaseAcquiredEvent: func(_ sqlbase.TableDescriptor, _ error) {
+
+					atomic.AddInt32(&testAcquiredCount, 1)
+				},
+				LeaseAcquireResultBlockEvent: func(_ sql.LeaseAcquireBlockType) {
+					atomic.AddInt32(&testAcquisitionBlockCount, 1)
+				},
+			},
+		},
+	}
+	params.LeaseManagerConfig = base.NewLeaseManagerConfig()
+	// The lease jitter is set to ensure newer leases have higher
+	// expiration timestamps.
+	params.LeaseManagerConfig.TableDescriptorLeaseJitterFraction = 0.0
+	// The renewal timeout is set to be the duration, so background
+	// renewal should begin immediately after accessing a lease.
+	params.LeaseManagerConfig.TableDescriptorLeaseRenewalTimeout =
+		params.LeaseManagerConfig.TableDescriptorLeaseDuration
+
+	t := newLeaseTest(testingT, params)
+	defer t.cleanup()
+
+	if _, err := t.db.Exec(`
+CREATE DATABASE t;
+CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
+`); err != nil {
+		t.Fatal(err)
+	}
+
+	tableDesc := sqlbase.GetTableDescriptor(t.kvDB, "t", "test")
+	dbID := tableDesc.ParentID
+	tableName := tableDesc.Name
+
+	// Acquire the first lease.
+	ts, e1, err := t.acquireByName(1, dbID, tableName)
+	if err != nil {
+		t.Fatal(err)
+	} else if err := t.release(1, ts); err != nil {
+		t.Fatal(err)
+	} else if count := atomic.LoadInt32(&testAcquiredCount); count != 1 {
+		t.Fatalf("expected 1 lease to be acquired, but acquired %d times",
+			count)
+	}
+
+	// Reset testAcquisitionBlockCount as the first acqusition will always block.
+	atomic.StoreInt32(&testAcquisitionBlockCount, 0)
+
+	testutils.SucceedsSoon(t, func() error {
+		// Acquire another lease. At first this will be the same lease, but
+		// eventually we will asynchronously renew a lease and our acquire will get
+		// a newer lease.
+		ts, e2, err := t.acquireByName(1, dbID, tableName)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer func() {
+			if err := t.release(1, ts); err != nil {
+				t.Fatal(err)
+			}
+		}()
+
+		// We check for the new expiry time because if our past acquire triggered
+		// the background refresh, the next lease we get will be the result of the
+		// background refresh.
+		if e2.WallTime <= e1.WallTime {
+			return errors.Errorf("expected new lease expiration (%s) to be after old lease expiration (%s)",
+				e2, e1)
+		} else if count := atomic.LoadInt32(&testAcquiredCount); count < 2 {
+			return errors.Errorf("expected at least 2 leases to be acquired, but acquired %d times",
+				count)
+		} else if blockCount := atomic.LoadInt32(&testAcquisitionBlockCount); blockCount > 0 {
+			t.Fatalf("expected repeated lease acquisition to not block, but blockCount is: %d", blockCount)
+		}
+		return nil
+	})
+}
+
+// This test makes sure that async lease refreshing doesn't block any routines
+func TestLeaseRefreshDoesntBlock(testingT *testing.T) {
+	defer leaktest.AfterTest(testingT)()
+	var testAcquiredCount int32
+	var testAcquisitionBlockCount int32
+	params, _ := createTestServerParams()
+	params.Knobs = base.TestingKnobs{
+		SQLLeaseManager: &sql.LeaseManagerTestingKnobs{
+			LeaseStoreTestingKnobs: sql.LeaseStoreTestingKnobs{
+				// We want to track when leases get acquired and when they are renewed.
+				// We also want to know when acquiring blocks to test lease renewal.
+				LeaseAcquiredEvent: func(_ sqlbase.TableDescriptor, _ error) {
+					atomic.AddInt32(&testAcquiredCount, 1)
+				},
+				LeaseAcquireResultBlockEvent: func(_ sql.LeaseAcquireBlockType) {
+					atomic.AddInt32(&testAcquisitionBlockCount, 1)
+				},
+			},
+		},
+	}
+
+	params.LeaseManagerConfig = base.NewLeaseManagerConfig()
+	// We set lease duration to be longer than the expected test run time.
+	// This means acquiring a lease should not happen because no leases
+	// were available, but only by the background refreshing.
+	params.LeaseManagerConfig.TableDescriptorLeaseDuration = 100 * time.Millisecond
+	// The lease jitter is set to ensure newer leases have higher
+	// expiration timestamps.
+	params.LeaseManagerConfig.TableDescriptorLeaseJitterFraction = 0.0
+	// The renewal timeout is set to be 20ms less then the duration, so a
+	// background renewal will occur at least once during the test.
+	params.LeaseManagerConfig.TableDescriptorLeaseRenewalTimeout = 100*time.Millisecond - 20*time.Millisecond
+
+	t := newLeaseTest(testingT, params)
+	defer t.cleanup()
+
+	if _, err := t.db.Exec(`
+CREATE DATABASE t;
+CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
+`); err != nil {
+		t.Fatal(err)
+	}
+
+	tableDesc := sqlbase.GetTableDescriptor(t.kvDB, "t", "test")
+	dbID := tableDesc.ParentID
+	tableName := tableDesc.Name
+
+	// Acquire the first lease.
+	ts, _, err := t.acquireByName(1, dbID, tableName)
+	if err != nil {
+		t.Fatal(err)
+	} else if err := t.release(1, ts); err != nil {
+		t.Fatal(err)
+	} else if count := atomic.LoadInt32(&testAcquiredCount); count != 1 {
+		t.Fatalf("expected 1 lease to be acquired, but acquired %d times",
+			count)
+	}
+
+	// Reset testAcquisitionBlockCount as the first acqusition will always block.
+	atomic.StoreInt32(&testAcquisitionBlockCount, 0)
+
+	var wg sync.WaitGroup
+	numRoutines := 40
+	wg.Add(numRoutines)
+	for i := 0; i < numRoutines; i++ {
+		time.Sleep(1 * time.Millisecond)
+		go func() {
+			defer wg.Done()
+			ts, _, err := t.acquireByName(1, dbID, tableName)
+			if err != nil {
+				t.Error(err)
+				return
+			} else if err := t.release(1, ts); err != nil {
+				t.Error(err)
+				return
+			}
+		}()
+	}
+	wg.Wait()
+
+	if acquiredCount := atomic.LoadInt32(&testAcquiredCount); acquiredCount < 2 {
+		t.Fatalf("expected to acquire at least 2 leases, but instead acquired: %d leases", acquiredCount)
+	}
+	if blockCount := atomic.LoadInt32(&testAcquisitionBlockCount); blockCount > 0 {
+		t.Fatalf("expected repeated lease acquisition to not block, but blockCount is: %d", blockCount)
+	}
 }
