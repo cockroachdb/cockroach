@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"math"
 	"os"
+	"reflect"
 	"sort"
 	"strconv"
 	"time"
@@ -340,18 +341,27 @@ func runDecommissionNodeImpl(
 		Multiplier:     2,
 		MaxBackoff:     20 * time.Second,
 	}
+
+	prevResponse := serverpb.DecommissionStatusResponse{}
 	for r := retry.StartWithCtx(ctx, opts); r.Next(); {
 		req := &serverpb.DecommissionRequest{
 			NodeIDs:         nodeIDs,
 			Decommissioning: true,
 		}
 		resp, err := c.Decommission(ctx, req)
-
 		if err != nil {
+			fmt.Fprintln(stderr)
 			return errors.Wrap(err, "while trying to mark as decommissioning")
 		}
-		if err := printDecommissionStatus(*resp); err != nil {
-			return err
+
+		if !reflect.DeepEqual(&prevResponse, resp) {
+			fmt.Fprintln(stderr)
+			if err := printDecommissionStatus(*resp); err != nil {
+				return err
+			}
+			prevResponse = *resp
+		} else {
+			fmt.Fprintf(stderr, ".")
 		}
 		var replicaCount int64
 		allDecommissioning := true
@@ -363,10 +373,10 @@ func runDecommissionNodeImpl(
 		}
 		if replicaCount == 0 && allDecommissioning {
 			if wait == nodeDecommissionWaitAll {
-				fmt.Fprintln(os.Stdout, "All target nodes report that they hold no more data. "+
+				fmt.Fprintln(os.Stdout, "\nAll target nodes report that they hold no more data. "+
 					"Please verify cluster health before removing the nodes.")
 			} else {
-				fmt.Fprintln(os.Stdout, "Decommissioning finished. Please verify cluster health "+
+				fmt.Fprintln(os.Stdout, "\nDecommissioning finished. Please verify cluster health "+
 					"before removing the nodes.")
 			}
 			return nil
