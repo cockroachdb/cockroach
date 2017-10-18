@@ -40,10 +40,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil/singleflight"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
-
-// TODO(pmattis): Periodically renew leases for tables that were used recently and
-// for which the lease will expire soon.
 
 // tableVersionState holds the state for a table version. This includes
 // the lease information for a table version.
@@ -122,6 +120,9 @@ type LeaseStore struct {
 	// range of the actual lease duration will be
 	// [(1-leaseJitterFraction) * leaseDuration, (1+leaseJitterFraction) * leaseDuration]
 	leaseJitterFraction float64
+	// leaseRenewalTimeout is the time before a lease expires when
+	// acquisition to renew the lease begins.
+	leaseRenewalTimeout time.Duration
 
 	testingKnobs LeaseStoreTestingKnobs
 	memMetrics   *MemoryMetrics
@@ -583,6 +584,14 @@ type tableState struct {
 		// If set, leases are released from the store as soon as their
 		// refcount drops to 0, as opposed to waiting until they expire.
 		dropped bool
+		// preemptiveRenewalTimer calls a renewal function when the timer
+		// fires. When set, this timer will fire exactly leaseRenewalTimeout
+		// before the newest lease for this tableState will expire.
+		preemptiveRenewalTimer *time.Timer
+		// isRenewalTimerSet indicates when a renewal timer is set. It is
+		// atomically updated to prevent multiple routines from entering
+		// the renewal timer initialization.
+		renewalTimerSet int32
 	}
 }
 
@@ -614,6 +623,7 @@ func (t *tableState) acquire(
 			return nil, result.Err
 		}
 	}
+
 	return t.findForTimestamp(ctx, timestamp, m)
 }
 
@@ -1166,6 +1176,7 @@ func NewLeaseManager(
 			nodeID:              nodeID,
 			leaseDuration:       cfg.TableDescriptorLeaseDuration,
 			leaseJitterFraction: cfg.TableDescriptorLeaseJitterFraction,
+			leaseRenewalTimeout: cfg.TableDescriptorLeaseRenewalTimeout,
 			testingKnobs:        testingKnobs.LeaseStoreTestingKnobs,
 			memMetrics:          memMetrics,
 		},
@@ -1192,7 +1203,8 @@ func nameMatchesTable(table *sqlbase.TableDescriptor, dbID sqlbase.ID, tableName
 // the timestamp. It returns the table descriptor and a expiration time.
 // A transaction using this descriptor must ensure that its
 // commit-timestamp < expiration-time. Care must be taken to not modify
-// the returned descriptor.
+// the returned descriptor. A timer may be set to renew a lease in the
+// background in order to prevent blocking on future acquisitions.
 func (m *LeaseManager) AcquireByName(
 	ctx context.Context, timestamp hlc.Timestamp, dbID sqlbase.ID, tableName string,
 ) (*sqlbase.TableDescriptor, hlc.Timestamp, error) {
@@ -1200,6 +1212,31 @@ func (m *LeaseManager) AcquireByName(
 	tableVersion := m.tableNames.get(dbID, tableName, timestamp)
 	if tableVersion != nil {
 		if !timestamp.Less(tableVersion.ModificationTime) {
+
+			// Atomically check and set a renewal timer if one has not already
+			// been set. The new timer is set to fire leaseRenewalTimeout
+			// before the lease expires to execute a lease renewal function.
+			if t := m.findTableState(tableVersion.ID, true); atomic.CompareAndSwapInt32(&t.mu.renewalTimerSet, 0, 1) {
+				durationUntilRenewal := time.Duration(tableVersion.expiration.WallTime-hlc.UnixNano()) - m.LeaseStore.leaseRenewalTimeout
+				t.mu.preemptiveRenewalTimer = time.AfterFunc(durationUntilRenewal, func() {
+					resultChan, _ := t.mu.group.DoChan(acquireGroupKey, func() (interface{}, error) {
+						innerCtx, span := tracing.ForkCtxSpan(context.Background(), "[async] lease refresh")
+						innerCtx = t.stopper.WithCancel(innerCtx)
+						defer tracing.FinishSpan(span)
+						log.Infof(innerCtx, "lease acquisition beginning")
+						token, err := t.acquireNodeLease(innerCtx, m, hlc.Timestamp{})
+						if err != nil {
+							log.Errorf(innerCtx, "lease acquisition failed: %s", err)
+						} else {
+							log.Infof(innerCtx, "lease acquisition finished")
+						}
+						return token, err
+					})
+					<-resultChan
+					atomic.StoreInt32(&t.mu.renewalTimerSet, 0)
+				})
+			}
+
 			return &tableVersion.TableDescriptor, tableVersion.expiration, nil
 		}
 		if err := m.Release(&tableVersion.TableDescriptor); err != nil {
@@ -1398,6 +1435,7 @@ func (m *LeaseManager) findTableState(tableID sqlbase.ID, create bool) *tableSta
 
 // RefreshLeases starts a goroutine that refreshes the lease manager
 // leases for tables received in the latest system configuration via gossip.
+// During server quiescing, all active lease renewal timers will be stopped.
 func (m *LeaseManager) RefreshLeases(s *stop.Stopper, db *client.DB, gossip *gossip.Gossip) {
 	ctx := context.TODO()
 	s.RunWorker(ctx, func(ctx context.Context) {
@@ -1453,7 +1491,14 @@ func (m *LeaseManager) RefreshLeases(s *stop.Stopper, db *client.DB, gossip *gos
 				if m.testingKnobs.TestingLeasesRefreshedEvent != nil {
 					m.testingKnobs.TestingLeasesRefreshedEvent(cfg)
 				}
-
+			case <-s.ShouldQuiesce():
+				m.mu.Lock()
+				for _, t := range m.mu.tables {
+					if atomic.LoadInt32(&t.mu.renewalTimerSet) == 1 {
+						t.mu.preemptiveRenewalTimer.Stop()
+					}
+				}
+				m.mu.Unlock()
 			case <-s.ShouldStop():
 				return
 			}
