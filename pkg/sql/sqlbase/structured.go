@@ -2271,3 +2271,13 @@ func (desc *ColumnDescriptor) SQLString() string {
 	}
 	return buf.String()
 }
+
+// ForeignKeyReferenceActionValue allows the conversion between a
+// parser.ReferenceAction and a ForeignKeyReference_Action.
+var ForeignKeyReferenceActionValue = [...]ForeignKeyReference_Action{
+	parser.NoAction:   ForeignKeyReference_NO_ACTION,
+	parser.Restrict:   ForeignKeyReference_RESTRICT,
+	parser.SetDefault: ForeignKeyReference_SET_DEFAULT,
+	parser.SetNull:    ForeignKeyReference_SET_NULL,
+	parser.Cascade:    ForeignKeyReference_CASCADE,
+}
