@@ -398,8 +398,8 @@ func removeCandidates(
 	return candidates
 }
 
-// rebalanceCandidates creates two candidate list. The first contains all
-// existing replica's stores, order from least qualified for rebalancing to
+// rebalanceCandidates creates two candidate lists. The first contains all
+// existing replica's stores, ordered from least qualified for rebalancing to
 // most qualified. The second list is of all potential stores that could be
 // used as rebalancing receivers, ordered from best to worst.
 func rebalanceCandidates(
