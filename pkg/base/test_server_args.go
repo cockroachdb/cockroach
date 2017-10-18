@@ -37,6 +37,9 @@ type TestServerArgs struct {
 	*cluster.Settings
 	RaftConfig
 
+	// LeaseManagerConfig holds configuration values specific to the LeaseManager.
+	LeaseManagerConfig *LeaseManagerConfig
+
 	// PartOfCluster must be set if the TestServer is joining others in a cluster.
 	// If not set (and hence the server is the only one in the cluster), the
 	// default zone config will be overridden to disable all replication - so that

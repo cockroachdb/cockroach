@@ -73,6 +73,18 @@ const (
 	// with a value of 0.2 and a liveness duration of 10 seconds, each node's
 	// liveness record would be eagerly renewed after 2 seconds.
 	livenessRenewalFraction = 0.5
+
+	// DefaultTableDescriptorLeaseDuration is the default mean duration a
+	// lease will be acquired for. The actual duration is jittered using
+	// the jitter fraction. Jittering is done to prevent multiple leases
+	// from being renewed simultaneously if they were all acquired
+	// simultaneously.
+	DefaultTableDescriptorLeaseDuration = 5 * time.Minute
+
+	// DefaultTableDescriptorLeaseJitterFraction is the default factor
+	// that we use to randomly jitter the lease duration when acquiring a
+	// new lease and the lease renewal timeout.
+	DefaultTableDescriptorLeaseJitterFraction = 0.25
 )
 
 var defaultRaftElectionTimeoutTicks = envutil.EnvOrDefaultInt(
@@ -464,5 +476,25 @@ func TempStorageConfigFromEnv(
 		InMemory:  inMem,
 		ParentDir: parentDir,
 		Mon:       &monitor,
+	}
+}
+
+// LeaseManagerConfig holds table lease manager parameters.
+type LeaseManagerConfig struct {
+	// TableDescriptorLeaseDuration is the mean duration a lease will be
+	// acquired for.
+	TableDescriptorLeaseDuration time.Duration
+
+	// TableDescriptorLeaseJitterFraction is the factor that we use to
+	// randomly jitter the lease duration when acquiring a new lease and
+	// the lease renewal timeout.
+	TableDescriptorLeaseJitterFraction float64
+}
+
+// NewLeaseManagerConfig initializes a LeaseManagerConfig with default values.
+func NewLeaseManagerConfig() *LeaseManagerConfig {
+	return &LeaseManagerConfig{
+		TableDescriptorLeaseDuration:       DefaultTableDescriptorLeaseDuration,
+		TableDescriptorLeaseJitterFraction: DefaultTableDescriptorLeaseJitterFraction,
 	}
 }
