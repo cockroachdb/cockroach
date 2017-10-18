@@ -294,6 +294,10 @@ func TestClusterVersionMixedVersionTooNew(t *testing.T) {
 
 	exits := make(chan int, 100)
 
+	// Prevent node crashes from generating several megabytes of stacks when
+	// GOTRACEBACK=all, as it is on CI.
+	defer log.DisableTracebacks()()
+
 	log.SetExitFunc(func(i int) { exits <- i })
 	defer log.SetExitFunc(os.Exit)
 
