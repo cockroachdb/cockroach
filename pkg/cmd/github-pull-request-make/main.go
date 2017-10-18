@@ -221,7 +221,7 @@ func main() {
 			for _, dir := range []string{crdb.Dir, filepath.Join(crdb.Dir, "vendor")} {
 				cmd := exec.Command("git", "diff")
 				cmd.Dir = dir
-				log.Println(cmd.Args)
+				log.Println(cmd.Dir, cmd.Args)
 				if output, err := cmd.Output(); err != nil {
 					log.Fatal(err)
 				} else if len(output) > 0 {
