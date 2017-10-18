@@ -216,6 +216,40 @@ func (d *atomicDescString) String() string {
 	return *(*string)(atomic.LoadPointer(&d.strPtr))
 }
 
+// DestroyReason indicates if a replica is alive, destroyed, corrupted or pending destruction.
+type DestroyReason int
+
+const (
+	// The replica is alive.
+	destroyReasonAlive DestroyReason = iota
+	// The replica has been corrupted.
+	destroyReasonCorrupted
+	// The replica has been marked for GC, but hasn't been GCed yet.
+	destroyReasonRemovalPending
+	// The replica has been GCed.
+	destroyReasonRemoved
+)
+
+type destroyStatus struct {
+	reason DestroyReason
+	err    error
+}
+
+// IsAlive returns true when a replica is alive.
+func (s destroyStatus) IsAlive() bool {
+	return s.reason == destroyReasonAlive
+}
+
+// RemovedOrCorrupt returns true if a replica has either been removed or is corrupted.
+func (s destroyStatus) RemovedOrCorrupt() bool {
+	return (s.reason == destroyReasonCorrupted) || (s.reason == destroyReasonRemoved)
+}
+
+func (s *destroyStatus) Set(err error, reason DestroyReason) {
+	s.err = err
+	s.reason = reason
+}
+
 // A Replica is a contiguous keyspace with writes managed via an
 // instance of the Raft consensus algorithm. Many ranges may exist
 // in a store and they are unlikely to be contiguous. Ranges are
@@ -288,13 +322,9 @@ type Replica struct {
 	mu struct {
 		// Protects all fields in the mu struct.
 		syncutil.RWMutex
-		// Has the replica been destroyed.
-		destroyed error
-		// Corrupted persistently (across process restarts) indicates whether the
-		// replica has been corrupted.
-		//
-		// TODO(tschottdorf): remove/refactor this field.
-		corrupted bool
+		// The destroyed status of a replica indicating if it's alive, corrupt,
+		// scheduled for destruction or has been GCed.
+		destroyStatus
 		// Is the range quiescent? Quiescent ranges are not Tick()'d and unquiesce
 		// whenever a Raft operation is performed.
 		quiescent bool
@@ -484,7 +514,7 @@ var _ KeyRange = &Replica{}
 func (r *Replica) withRaftGroupLocked(
 	shouldCampaignOnCreation bool, f func(r *raft.RawNode) (unquiesceAndWakeLeader bool, _ error),
 ) error {
-	if r.mu.destroyed != nil {
+	if r.mu.destroyStatus.RemovedOrCorrupt() {
 		// Silently ignore all operations on destroyed replicas. We can't return an
 		// error here as all errors returned from this method are considered fatal.
 		return nil
@@ -688,8 +718,11 @@ func (r *Replica) initRaftMuLockedReplicaMuLocked(
 	if err != nil {
 		return err
 	}
-	r.mu.destroyed = pErr.GetDetail()
-	r.mu.corrupted = r.mu.destroyed != nil
+	if r.mu.destroyStatus.RemovedOrCorrupt() {
+		if err := pErr.GetDetail(); err != nil {
+			r.mu.destroyStatus.Set(err, destroyReasonRemoved)
+		}
+	}
 
 	if replicaID == 0 {
 		repDesc, ok := desc.GetReplicaDescriptor(r.store.StoreID())
@@ -851,6 +884,14 @@ func (r *Replica) setReplicaIDRaftMuLockedMuLocked(replicaID roachpb.ReplicaID) 
 	if r.mu.replicaID > replicaID {
 		return errors.Errorf("replicaID cannot move backwards from %d to %d", r.mu.replicaID, replicaID)
 	}
+
+	if r.mu.destroyStatus.reason == destroyReasonRemovalPending {
+		// An earlier incarnation of this replica was removed, but apparently it has been re-added
+		// now, so reset the status.
+		r.mu.destroyStatus.err = nil
+		r.mu.destroyStatus.reason = destroyReasonAlive
+	}
+
 	// if r.mu.replicaID != 0 {
 	// 	// TODO(bdarnell): clean up previous raftGroup (update peers)
 	// }
@@ -968,7 +1009,7 @@ func (r *Replica) updateProposalQuotaRaftMuLocked(
 	// replica can get destroyed is an option, alternatively we can clear
 	// our leader status and close the proposalQuota whenever the replica is
 	// destroyed.
-	if r.mu.destroyed != nil {
+	if r.mu.destroyStatus.RemovedOrCorrupt() {
 		if r.mu.proposalQuota != nil {
 			r.mu.proposalQuota.close()
 		}
@@ -1098,8 +1139,9 @@ func (r *Replica) updateProposalQuotaRaftMuLocked(
 // getEstimatedBehindCountRLocked returns an estimate of how far this replica is
 // behind. A return value of 0 indicates that the replica is up to date.
 func (r *Replica) getEstimatedBehindCountRLocked(raftStatus *raft.Status) int64 {
-	if !r.isInitializedRLocked() || r.mu.replicaID == 0 || r.mu.destroyed != nil {
-		// The range is either not fully initialized or has been destroyed.
+	if !r.isInitializedRLocked() || r.mu.replicaID == 0 || !r.mu.destroyStatus.IsAlive() {
+		// The range is either not fully initialized, has been destroyed, or is slated for removal
+		// (and thus likely ignored by its former Raft peers).
 		return 0
 	}
 	if r.mu.quiescent {
@@ -1151,11 +1193,12 @@ func (r *Replica) IsFirstRange() bool {
 	return r.RangeID == 1
 }
 
-// IsDestroyed returns a non-nil error if the replica has been destroyed.
-func (r *Replica) IsDestroyed() error {
+// IsDestroyed returns a non-nil error if the replica has been destroyed
+// and the reason if it has.
+func (r *Replica) IsDestroyed() (DestroyReason, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	return r.mu.destroyed
+	return r.mu.destroyStatus.reason, r.mu.destroyStatus.err
 }
 
 // GetLease returns the lease and, if available, the proposed next lease.
@@ -1769,7 +1812,6 @@ func (r *Replica) Send(
 	ctx context.Context, ba roachpb.BatchRequest,
 ) (*roachpb.BatchResponse, *roachpb.Error) {
 	var br *roachpb.BatchResponse
-
 	if r.leaseholderStats != nil && ba.Header.GatewayNodeID != 0 {
 		r.leaseholderStats.record(ba.Header.GatewayNodeID)
 	}
@@ -2501,7 +2543,7 @@ func (r *Replica) executeReadOnlyBatch(
 		endCmds.done(br, pErr, proposalNoRetry)
 	}()
 
-	if err := r.IsDestroyed(); err != nil {
+	if _, err := r.IsDestroyed(); err != nil {
 		return nil, roachpb.NewError(err)
 	}
 
@@ -2937,9 +2979,13 @@ func (r *Replica) propose(
 	spans *SpanSet,
 ) (chan proposalResult, func() bool, func(), *roachpb.Error) {
 	noop := func() {}
-	if err := r.IsDestroyed(); err != nil {
-		return nil, nil, noop, roachpb.NewError(err)
+
+	r.mu.Lock()
+	if !r.mu.destroyStatus.IsAlive() {
+		r.mu.Unlock()
+		return nil, nil, noop, roachpb.NewError(r.mu.destroyStatus.err)
 	}
+	r.mu.Unlock()
 
 	rSpan, err := keys.Range(ba)
 	if err != nil {
@@ -3034,12 +3080,12 @@ func (r *Replica) propose(
 		r.mu.Unlock()
 	}
 
-	// NB: We need to check Replica.mu.destroyed again in case the Replica has
+	// NB: We need to check Replica.mu.destroyStatus again in case the Replica has
 	// been destroyed between the initial check at the beginning of this method
 	// and the acquisition of Replica.mu. Failure to do so will leave pending
 	// proposals that never get cleared.
-	if err := r.mu.destroyed; err != nil {
-		return nil, nil, undoQuotaAcquisition, roachpb.NewError(err)
+	if !r.mu.destroyStatus.IsAlive() {
+		return nil, nil, undoQuotaAcquisition, roachpb.NewError(r.mu.destroyStatus.err)
 	}
 
 	repDesc, err := r.getReplicaDescriptorRLocked()
@@ -4693,7 +4739,7 @@ func (r *Replica) acquireSplitLock(
 			// then presumably it was alive for some reason other than a concurrent
 			// split and shouldn't be destroyed.
 			rightRng.mu.Lock()
-			rightRng.mu.destroyed = errors.Errorf("%s: failed to initialize", rightRng)
+			rightRng.mu.destroyStatus.Set(errors.Errorf("%s: failed to initialize", rightRng), destroyReasonRemoved)
 			rightRng.mu.Unlock()
 			r.store.mu.Lock()
 			r.store.mu.replicas.Delete(int64(rightRng.RangeID))
@@ -5547,8 +5593,7 @@ func (r *Replica) maybeSetCorrupt(ctx context.Context, pErr *roachpb.Error) *roa
 
 		log.Errorf(ctx, "stalling replica due to: %s", cErr.ErrorMsg)
 		cErr.Processed = true
-		r.mu.destroyed = cErr
-		r.mu.corrupted = true
+		r.mu.destroyStatus.Set(cErr, destroyReasonCorrupted)
 		pErr = roachpb.NewError(cErr)
 
 		// Try to persist the destroyed error message. If the underlying store is
