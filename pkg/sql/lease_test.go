@@ -44,7 +44,7 @@ import (
 )
 
 type leaseTest struct {
-	*testing.T
+	testing.TB
 	server                   serverutils.TestServerInterface
 	db                       *gosql.DB
 	kvDB                     *client.DB
@@ -53,13 +53,13 @@ type leaseTest struct {
 	cfg                      *base.LeaseManagerConfig
 }
 
-func newLeaseTest(t *testing.T, params base.TestServerArgs) *leaseTest {
+func newLeaseTest(tb testing.TB, params base.TestServerArgs) *leaseTest {
 	if params.LeaseManagerConfig == nil {
 		params.LeaseManagerConfig = base.NewLeaseManagerConfig()
 	}
-	s, db, kvDB := serverutils.StartServer(t, params)
+	s, db, kvDB := serverutils.StartServer(tb, params)
 	leaseTest := &leaseTest{
-		T:      t,
+		TB:     tb,
 		server: s,
 		db:     db,
 		kvDB:   kvDB,
@@ -893,4 +893,46 @@ INSERT INTO t.timestamp VALUES ('a', 'b');
 	if err := <-errChan; err != nil {
 		t.Fatal(err)
 	}
+}
+
+// BenchmarkLeaseAcquireByNameCached benchmarks the AcquireByName
+// acquisition code path if a valid lease exists and is contained in
+// tableNameCache. In particular this benchmark is done with
+// parallelism, which is important to also benchmark locking.
+func BenchmarkLeaseAcquireByNameCached(b *testing.B) {
+	defer leaktest.AfterTest(b)()
+	params, _ := createTestServerParams()
+
+	t := newLeaseTest(b, params)
+	defer t.cleanup()
+
+	if _, err := t.db.Exec(`
+CREATE DATABASE t;
+CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
+`); err != nil {
+		t.Fatal(err)
+	}
+
+	tableDesc := sqlbase.GetTableDescriptor(t.kvDB, "t", "test")
+	dbID := tableDesc.ParentID
+	tableName := tableDesc.Name
+	leaseManager := t.node(1)
+
+	// Acquire the lease so it is put into the tableNameCache.
+	_, _, err := leaseManager.AcquireByName(context.TODO(), t.server.Clock().Now(), dbID, tableName)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	b.ResetTimer()
+
+	b.RunParallel(func(pb *testing.PB) {
+		for pb.Next() {
+			_, _, err := leaseManager.AcquireByName(context.TODO(), t.server.Clock().Now(), dbID, tableName)
+			if err != nil {
+				b.Fatal(err)
+			}
+		}
+	})
+
 }
