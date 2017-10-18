@@ -458,6 +458,8 @@ func (c *cliState) doRefreshPrompts(nextState cliStateEnum) cliStateEnum {
 		}
 
 		c.fullPrompt += dbStr + c.lastKnownTxnStatus
+	} else {
+		c.lastKnownTxnStatus = ""
 	}
 
 	c.continuePrompt = strings.Repeat(" ", len(c.fullPrompt)-1) + "-> "
