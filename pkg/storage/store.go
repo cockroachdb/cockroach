@@ -313,7 +313,7 @@ func (rs *storeReplicaVisitor) Visit(visitor func(*Replica) bool) {
 		destroyed := repl.mu.destroyed
 		initialized := repl.isInitializedRLocked()
 		repl.mu.RUnlock()
-		if initialized && destroyed == nil && !visitor(repl) {
+		if initialized && (destroyed.destroyedErr == nil || destroyed.pending) && !visitor(repl) {
 			break
 		}
 	}
@@ -2145,16 +2145,17 @@ func (s *Store) RemoveReplica(
 		// operations with applying non-empty snapshots.
 		select {
 		case s.snapshotApplySem <- struct{}{}:
+			log.Infof(ctx, "SEMAPHORE AQUIRED")
 		case <-ctx.Done():
 			return ctx.Err()
 		case <-s.stopper.ShouldStop():
 			return errors.Errorf("stopped")
 		}
 		defer func() {
+			log.Infof(ctx, "SEMAPHORE RELEASED")
 			<-s.snapshotApplySem
 		}()
 	}
-
 	rep.raftMu.Lock()
 	defer rep.raftMu.Unlock()
 	return s.removeReplicaImpl(ctx, rep, consistentDesc, destroy)
@@ -2214,7 +2215,7 @@ func (s *Store) removeReplicaImpl(
 	rep.mu.Lock()
 	rep.cancelPendingCommandsLocked()
 	rep.mu.internalRaftGroup = nil
-	rep.mu.destroyed = roachpb.NewRangeNotFoundError(rep.RangeID)
+	rep.mu.destroyed.destroyedErr = roachpb.NewRangeNotFoundError(rep.RangeID)
 	rep.mu.Unlock()
 	rep.readOnlyCmdMu.Unlock()
 
@@ -2238,6 +2239,7 @@ func (s *Store) removeReplicaImpl(
 	// TODO(peter): Could release s.mu.Lock() here.
 	s.maybeGossipOnCapacityChange(ctx, rangeChangeEvent)
 	s.scanner.RemoveReplica(rep)
+	log.Infof(ctx, "removing replica done")
 	return nil
 }
 
@@ -2570,7 +2572,6 @@ func (s *Store) Send(
 		if br, pErr = s.maybeWaitInPushTxnQueue(ctx, &ba, repl); br != nil || pErr != nil {
 			return br, pErr
 		}
-
 		br, pErr = repl.Send(ctx, ba)
 		if pErr == nil {
 			return br, nil
@@ -2715,6 +2716,7 @@ func (s *Store) reserveSnapshot(
 		}
 		select {
 		case s.snapshotApplySem <- struct{}{}:
+			log.Infof(ctx, "SEMAPHORE AQUIRED")
 		case <-ctx.Done():
 			return nil, "", ctx.Err()
 		case <-s.stopper.ShouldStop():
@@ -2725,6 +2727,7 @@ func (s *Store) reserveSnapshot(
 	} else {
 		select {
 		case s.snapshotApplySem <- struct{}{}:
+			log.Infof(ctx, "SEMAPHORE AQUIRED")
 		case <-ctx.Done():
 			return nil, "", ctx.Err()
 		case <-s.stopper.ShouldStop():
@@ -2738,6 +2741,7 @@ func (s *Store) reserveSnapshot(
 		s.metrics.ReservedReplicaCount.Dec(1)
 		s.metrics.Reserved.Dec(header.RangeSize)
 		if header.RangeSize != 0 {
+			log.Infof(ctx, "SEMAPHORE RELEASED")
 			<-s.snapshotApplySem
 		}
 	}, "", nil
@@ -2828,7 +2832,6 @@ func (s *Store) HandleSnapshot(
 			if header.RaftMessageRequest.ToReplica.ReplicaID == 0 {
 				inSnap.snapType = snapTypePreemptive
 			}
-
 			if err := s.processRaftSnapshotRequest(ctx, &header.RaftMessageRequest, inSnap); err != nil {
 				return sendSnapError(errors.Wrap(err.GoError(), "failed to apply snapshot"))
 			}
@@ -3282,6 +3285,8 @@ func (s *Store) HandleRaftResponse(ctx context.Context, resp *RaftMessageRespons
 			if err != nil {
 				log.Errorf(ctx, "unable to add to replica GC queue: %s", err)
 			} else if added {
+				repl.mu.destroyed.destroyedErr = roachpb.NewRangeNotFoundError(repl.RangeID)
+				repl.mu.destroyed.pending = true
 				log.Infof(ctx, "added to replica GC queue (peer suggestion)")
 			}
 		case *roachpb.StoreNotFoundError:
@@ -3910,10 +3915,10 @@ func (s *Store) tryGetOrCreateReplica(
 		repl.mu.RLock()
 		destroyed, corrupted := repl.mu.destroyed, repl.mu.corrupted
 		repl.mu.RUnlock()
-		if destroyed != nil {
+		if destroyed.destroyedErr != nil && !destroyed.pending {
 			repl.raftMu.Unlock()
 			if corrupted {
-				return nil, false, destroyed
+				return nil, false, destroyed.destroyedErr
 			}
 			return nil, false, errRetry
 		}
@@ -3977,7 +3982,7 @@ func (s *Store) tryGetOrCreateReplica(
 	if err := repl.initRaftMuLockedReplicaMuLocked(desc, s.Clock(), replicaID); err != nil {
 		// Mark the replica as destroyed and remove it from the replicas maps to
 		// ensure nobody tries to use it
-		repl.mu.destroyed = errors.Wrapf(err, "%s: failed to initialize", repl)
+		repl.mu.destroyed.destroyedErr = errors.Wrapf(err, "%s: failed to initialize", repl)
 		repl.mu.Unlock()
 		s.mu.Lock()
 		s.mu.replicas.Delete(int64(rangeID))

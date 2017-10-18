@@ -599,7 +599,7 @@ func (bq *baseQueue) processReplica(
 		return errors.New("cannot process uninitialized replica")
 	}
 
-	if err := repl.IsDestroyed(); err != nil {
+	if err, pending := repl.IsDestroyed(); err != nil && !pending {
 		if log.V(3) {
 			log.Infof(queueCtx, "replica destroyed (%s); skipping", err)
 		}

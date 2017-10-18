@@ -470,7 +470,7 @@ func TestStoreRemoveReplicaDestroy(t *testing.T) {
 	}
 
 	repl1.mu.Lock()
-	expErr := roachpb.NewError(repl1.mu.destroyed)
+	expErr := roachpb.NewError(repl1.mu.destroyed.destroyedErr)
 	lease := *repl1.mu.state.Lease
 	repl1.mu.Unlock()
 

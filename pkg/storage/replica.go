@@ -285,8 +285,12 @@ type Replica struct {
 	mu struct {
 		// Protects all fields in the mu struct.
 		syncutil.RWMutex
-		// Has the replica been destroyed.
-		destroyed error
+		// Has the replica been destroyed. Pending will be set when a replica is
+		// added to the GC queue, but hasn't been GCed yet.
+		destroyed struct {
+			destroyedErr error
+			pending      bool
+		}
 		// Corrupted persistently (across process restarts) indicates whether the
 		// replica has been corrupted.
 		//
@@ -479,7 +483,7 @@ var _ KeyRange = &Replica{}
 func (r *Replica) withRaftGroupLocked(
 	shouldCampaignOnCreation bool, f func(r *raft.RawNode) (unquiesceAndWakeLeader bool, _ error),
 ) error {
-	if r.mu.destroyed != nil {
+	if r.mu.destroyed.destroyedErr != nil && !r.mu.destroyed.pending {
 		// Silently ignore all operations on destroyed replicas. We can't return an
 		// error here as all errors returned from this method are considered fatal.
 		return nil
@@ -683,8 +687,10 @@ func (r *Replica) initRaftMuLockedReplicaMuLocked(
 	if err != nil {
 		return err
 	}
-	r.mu.destroyed = pErr.GetDetail()
-	r.mu.corrupted = r.mu.destroyed != nil
+	if !r.mu.destroyed.pending {
+		r.mu.destroyed.destroyedErr = pErr.GetDetail()
+	}
+	r.mu.corrupted = r.mu.destroyed.destroyedErr != nil && !r.mu.destroyed.pending
 
 	if replicaID == 0 {
 		repDesc, ok := desc.GetReplicaDescriptor(r.store.StoreID())
@@ -963,7 +969,7 @@ func (r *Replica) updateProposalQuotaRaftMuLocked(
 	// replica can get destroyed is an option, alternatively we can clear
 	// our leader status and close the proposalQuota whenever the replica is
 	// destroyed.
-	if r.mu.destroyed != nil {
+	if r.mu.destroyed.destroyedErr != nil && !r.mu.destroyed.pending {
 		if r.mu.proposalQuota != nil {
 			r.mu.proposalQuota.close()
 		}
@@ -1142,11 +1148,13 @@ func (r *Replica) IsFirstRange() bool {
 	return r.RangeID == 1
 }
 
-// IsDestroyed returns a non-nil error if the replica has been destroyed.
-func (r *Replica) IsDestroyed() error {
+// IsDestroyed returns a non-nil error if the replica has been destroyed
+// and the value of pending. If pending is true the replica has been added
+// to the GC queue but hasn't been removed.
+func (r *Replica) IsDestroyed() (error, bool) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	return r.mu.destroyed
+	return r.mu.destroyed.destroyedErr, r.mu.destroyed.pending
 }
 
 // getLease returns the current lease, and the tentative next one, if a lease
@@ -1276,7 +1284,7 @@ func (r *Replica) redirectOnOrAcquireLease(ctx context.Context) (LeaseStatus, *r
 			switch status.State {
 			case LeaseState_ERROR:
 				// Lease state couldn't be determined.
-				log.VEventf(ctx, 2, "lease state couldn't be determined")
+				log.Infof(ctx, "lease state couldn't be determined")
 				return nil, roachpb.NewError(
 					newNotLeaseHolderError(nil, r.store.StoreID(), r.mu.state.Desc))
 
@@ -1761,7 +1769,6 @@ func (r *Replica) Send(
 	ctx context.Context, ba roachpb.BatchRequest,
 ) (*roachpb.BatchResponse, *roachpb.Error) {
 	var br *roachpb.BatchResponse
-
 	if r.leaseholderStats != nil && ba.Header.GatewayNodeID != 0 {
 		r.leaseholderStats.record(ba.Header.GatewayNodeID)
 	}
@@ -2436,7 +2443,7 @@ func (r *Replica) executeReadOnlyBatch(
 		endCmds.done(br, pErr, proposalNoRetry)
 	}()
 
-	if err := r.IsDestroyed(); err != nil {
+	if err, pending := r.IsDestroyed(); err != nil && !pending {
 		return nil, roachpb.NewError(err)
 	}
 
@@ -2872,7 +2879,7 @@ func (r *Replica) propose(
 	spans *SpanSet,
 ) (chan proposalResult, func() bool, func(), *roachpb.Error) {
 	noop := func() {}
-	if err := r.IsDestroyed(); err != nil {
+	if err, pending := r.IsDestroyed(); err != nil && !pending {
 		return nil, nil, noop, roachpb.NewError(err)
 	}
 
@@ -2973,7 +2980,7 @@ func (r *Replica) propose(
 	// been destroyed between the initial check at the beginning of this method
 	// and the acquisition of Replica.mu. Failure to do so will leave pending
 	// proposals that never get cleared.
-	if err := r.mu.destroyed; err != nil {
+	if err := r.mu.destroyed.destroyedErr; err != nil && !r.mu.destroyed.pending {
 		return nil, nil, undoQuotaAcquisition, roachpb.NewError(err)
 	}
 
@@ -4560,7 +4567,7 @@ func (r *Replica) acquireSplitLock(
 			// then presumably it was alive for some reason other than a concurrent
 			// split and shouldn't be destroyed.
 			rightRng.mu.Lock()
-			rightRng.mu.destroyed = errors.Errorf("%s: failed to initialize", rightRng)
+			rightRng.mu.destroyed.destroyedErr = errors.Errorf("%s: failed to initialize", rightRng)
 			rightRng.mu.Unlock()
 			r.store.mu.Lock()
 			r.store.mu.replicas.Delete(int64(rightRng.RangeID))
@@ -5420,7 +5427,7 @@ func (r *Replica) maybeSetCorrupt(ctx context.Context, pErr *roachpb.Error) *roa
 
 		log.Errorf(ctx, "stalling replica due to: %s", cErr.ErrorMsg)
 		cErr.Processed = true
-		r.mu.destroyed = cErr
+		r.mu.destroyed.destroyedErr = cErr
 		r.mu.corrupted = true
 		pErr = roachpb.NewError(cErr)
 
