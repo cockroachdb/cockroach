@@ -40,11 +40,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
 
 // asyncSchemaChangerDisabled can be used to disable asynchronous processing
@@ -175,6 +177,7 @@ func TestSchemaChangeProcess(t *testing.T) {
 	stopper := stop.NewStopper()
 	cfg := base.NewLeaseManagerConfig()
 	leaseMgr := sql.NewLeaseManager(
+		log.AmbientContext{Tracer: tracing.NewTracer()},
 		&base.NodeIDContainer{},
 		*kvDB,
 		hlc.NewClock(hlc.UnixNano, time.Nanosecond),
