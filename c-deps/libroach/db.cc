@@ -2420,12 +2420,13 @@ bool MVCCIsValidSplitKey(DBSlice key, bool allow_meta2_splits) {
   return IsValidSplitKey(ToSlice(key), allow_meta2_splits);
 }
 
-DBStatus MVCCFindSplitKey(DBIterator* iter, DBKey start, DBKey end, 
+DBStatus MVCCFindSplitKey(DBIterator* iter, DBKey start, DBKey end, DBKey min_split,
                           int64_t target_size, bool allow_meta2_splits, DBString* split_key) {
   auto iter_rep = iter->rep.get();
   const std::string start_key = EncodeKey(start);
   iter_rep->Seek(start_key);
   const std::string end_key = EncodeKey(end);
+  const rocksdb::Slice min_split_key = ToSlice(min_split.key);
 
   int64_t size_so_far = 0;
   std::string best_split_key = start_key;
@@ -2444,7 +2445,7 @@ DBStatus MVCCFindSplitKey(DBIterator* iter, DBKey start, DBKey end,
     }
 
     ++n;
-    const bool valid = n > 1 && IsValidSplitKey(decoded_key, allow_meta2_splits);
+    const bool valid = n > 1 && IsValidSplitKey(decoded_key, allow_meta2_splits) && decoded_key.compare(min_split_key) >= 0;
     int64_t diff = target_size - size_so_far;
     if (diff < 0) {
       diff = -diff;
@@ -2453,7 +2454,10 @@ DBStatus MVCCFindSplitKey(DBIterator* iter, DBKey start, DBKey end,
       best_split_key = decoded_key.ToString();
       best_split_diff = diff;
     }
-    if (diff > best_split_diff) {
+    // If diff is increasing, that means we've passed the ideal split point and
+    // should return the first key that we can. Note that best_split_key may
+    // still be empty if we haven't reached min_split_key yet.
+    if (diff > best_split_diff && !best_split_key.empty()) {
       break;
     }
 
