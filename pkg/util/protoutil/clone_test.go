@@ -41,6 +41,7 @@ func TestCloneProto(t *testing.T) {
 		{&enginepb.TxnMeta{}, true},
 		{&roachpb.Transaction{}, true},
 		{&roachpb.Error{}, true},
+		{&protoutil.RecursiveAndUncloneable{}, true},
 
 		// Cloneable types. This includes all types for which a
 		// protoutil.Clone call exists in the codebase as of 2016-11-21.
