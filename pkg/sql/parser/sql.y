@@ -358,6 +358,12 @@ func (u *sqlSymUnion) kvOptions() []KVOption {
 func (u *sqlSymUnion) transactionModes() TransactionModes {
     return u.val.(TransactionModes)
 }
+func (u *sqlSymUnion) referenceAction() ReferenceAction {
+    return u.val.(ReferenceAction)
+}
+func (u *sqlSymUnion) referenceActions() *ReferenceActions {
+    return u.val.(*ReferenceActions)
+}
 
 %}
 
@@ -791,7 +797,9 @@ func (u *sqlSymUnion) transactionModes() TransactionModes {
 %type <[]NamedColumnQualification> col_qual_list
 %type <NamedColumnQualification> col_qualification
 %type <ColumnQualification> col_qualification_elem
-%type <empty> key_actions key_delete key_match key_update key_action
+%type <empty> key_match
+%type <*ReferenceActions> reference_actions
+%type <ReferenceAction> reference_action reference_on_delete reference_on_update
 
 %type <Expr>  func_application func_expr_common_subexpr
 %type <Expr>  func_expr func_expr_windowless
@@ -2825,11 +2833,12 @@ col_qualification_elem:
   {
     $$.val = &ColumnDefault{Expr: $2.expr()}
   }
-| REFERENCES qualified_name opt_name_parens key_match key_actions
+| REFERENCES qualified_name opt_name_parens key_match reference_actions
  {
     $$.val = &ColumnFKConstraint{
       Table: $2.normalizableTableName(),
       Col: Name($3),
+      Actions: *$5.referenceActions(),
     }
  }
 
@@ -2905,12 +2914,13 @@ constraint_elem:
     }
   }
 | FOREIGN KEY '(' name_list ')' REFERENCES qualified_name
-    opt_column_list key_match key_actions
+    opt_column_list key_match reference_actions
   {
     $$.val = &ForeignKeyConstraintTableDef{
       Table: $7.normalizableTableName(),
       FromCols: $4.nameList(),
       ToCols: $8.nameList(),
+      Actions: *$10.referenceActions(),
     }
   }
 
@@ -2956,24 +2966,51 @@ key_match:
 // We combine the update and delete actions into one value temporarily for
 // simplicity of parsing, and then break them down again in the calling
 // production.
-key_actions:
-  key_update {}
-| key_delete {}
-| key_update key_delete {}
-| key_delete key_update {}
-| /* EMPTY */ {}
+reference_actions:
+  reference_on_update
+  {
+     $$.val = &ReferenceActions{Update: $1.referenceAction()}
+  }
+| reference_on_delete
+  {
+     $$.val = &ReferenceActions{Delete: $1.referenceAction()}
+  }
+| reference_on_update reference_on_delete
+  {
+    $$.val = &ReferenceActions{Update: $1.referenceAction(), Delete: $2.referenceAction()}
+  }
+| reference_on_delete reference_on_update
+  {
+    $$.val = &ReferenceActions{Delete: $1.referenceAction(), Update: $2.referenceAction()}
+  }
+| /* EMPTY */
+  {
+    $$.val = &ReferenceActions{}
+  }
 
-key_update:
-  ON UPDATE key_action {}
+reference_on_update:
+  ON UPDATE reference_action
+  {
+    $$.val = $3.referenceAction()
+  }
 
-key_delete:
-  ON DELETE key_action {}
+reference_on_delete:
+  ON DELETE reference_action
+  {
+    $$.val = $3.referenceAction()
+  }
 
-key_action:
-  NO ACTION { return unimplemented(sqllex, "no action") }
+reference_action:
+  NO ACTION
+  {
+    $$.val = NoAction
+  }
 // RESTRICT is currently the default and only supported ON DELETE/UPDATE
 // behavior and thus needs no special handling.
-| RESTRICT {}
+| RESTRICT
+  {
+    $$.val = Restrict
+  }
 | CASCADE { return unimplemented(sqllex, "action cascade") }
 | SET NULL { return unimplemented(sqllex, "action set null") }
 | SET DEFAULT { return unimplemented(sqllex, "action set default") }
@@ -3674,7 +3711,7 @@ select_with_parens:
 // duplicative productions are annoying, but hard to get rid of without
 // creating shift/reduce conflicts.
 //
-//      The locking clause (FOR UPDATE etc) may be before or after
+//      The locking clause (FOR UPDATE etc) may be be` or after
 //      LIMIT/OFFSET. In <=7.2.X, LIMIT/OFFSET had to be after FOR UPDATE We
 //      now support both orderings, but prefer LIMIT/OFFSET before the locking
 //      clause.

@@ -22958,6 +22958,8 @@ export namespace cockroach {
                 name?: string;
                 validity?: cockroach.sql.sqlbase.ConstraintValidity;
                 shared_prefix_len?: number;
+                on_delete?: cockroach.sql.sqlbase.ForeignKeyReference.Action;
+                on_update?: cockroach.sql.sqlbase.ForeignKeyReference.Action;
             };
 
             /**
@@ -23005,6 +23007,18 @@ export namespace cockroach {
                  * @type {number}
                  */
                 public shared_prefix_len: number;
+
+                /**
+                 * ForeignKeyReference on_delete.
+                 * @type {cockroach.sql.sqlbase.ForeignKeyReference.Action}
+                 */
+                public on_delete: cockroach.sql.sqlbase.ForeignKeyReference.Action;
+
+                /**
+                 * ForeignKeyReference on_update.
+                 * @type {cockroach.sql.sqlbase.ForeignKeyReference.Action}
+                 */
+                public on_update: cockroach.sql.sqlbase.ForeignKeyReference.Action;
 
                 /**
                  * Creates a new ForeignKeyReference instance using the specified properties.
@@ -23091,6 +23105,28 @@ export namespace cockroach {
                  * @returns {Object.<string,*>} JSON object
                  */
                 public toJSON(): { [k: string]: any };
+            }
+
+            namespace ForeignKeyReference {
+
+                /**
+                 * Action enum.
+                 * @name Action
+                 * @memberof cockroach.sql.sqlbase.ForeignKeyReference
+                 * @enum {number}
+                 * @property {number} NO_ACTION=0 NO_ACTION value
+                 * @property {number} RESTRICT=1 RESTRICT value
+                 * @property {number} SET_NULL=2 SET_NULL value
+                 * @property {number} SET_DEFAULT=3 SET_DEFAULT value
+                 * @property {number} CASCADE=4 CASCADE value
+                 */
+                enum Action {
+                    NO_ACTION = 0,
+                    RESTRICT = 1,
+                    SET_NULL = 2,
+                    SET_DEFAULT = 3,
+                    CASCADE = 4
+                }
             }
 
             type ColumnDescriptor$Properties = {

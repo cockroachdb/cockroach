@@ -43113,6 +43113,8 @@ export const cockroach = $root.cockroach = (() => {
                  * @property {string} [name] ForeignKeyReference name.
                  * @property {cockroach.sql.sqlbase.ConstraintValidity} [validity] ForeignKeyReference validity.
                  * @property {number} [shared_prefix_len] ForeignKeyReference shared_prefix_len.
+                 * @property {cockroach.sql.sqlbase.ForeignKeyReference.Action} [on_delete] ForeignKeyReference on_delete.
+                 * @property {cockroach.sql.sqlbase.ForeignKeyReference.Action} [on_update] ForeignKeyReference on_update.
                  */
 
                 /**
@@ -43159,6 +43161,18 @@ export const cockroach = $root.cockroach = (() => {
                 ForeignKeyReference.prototype.shared_prefix_len = 0;
 
                 /**
+                 * ForeignKeyReference on_delete.
+                 * @type {cockroach.sql.sqlbase.ForeignKeyReference.Action}
+                 */
+                ForeignKeyReference.prototype.on_delete = 0;
+
+                /**
+                 * ForeignKeyReference on_update.
+                 * @type {cockroach.sql.sqlbase.ForeignKeyReference.Action}
+                 */
+                ForeignKeyReference.prototype.on_update = 0;
+
+                /**
                  * Creates a new ForeignKeyReference instance using the specified properties.
                  * @param {cockroach.sql.sqlbase.ForeignKeyReference$Properties=} [properties] Properties to set
                  * @returns {cockroach.sql.sqlbase.ForeignKeyReference} ForeignKeyReference instance
@@ -43186,6 +43200,10 @@ export const cockroach = $root.cockroach = (() => {
                         writer.uint32(/* id 4, wireType 0 =*/32).uint32(message.validity);
                     if (message.shared_prefix_len != null && message.hasOwnProperty("shared_prefix_len"))
                         writer.uint32(/* id 5, wireType 0 =*/40).int32(message.shared_prefix_len);
+                    if (message.on_delete != null && message.hasOwnProperty("on_delete"))
+                        writer.uint32(/* id 6, wireType 0 =*/48).uint32(message.on_delete);
+                    if (message.on_update != null && message.hasOwnProperty("on_update"))
+                        writer.uint32(/* id 7, wireType 0 =*/56).uint32(message.on_update);
                     return writer;
                 };
 
@@ -43228,6 +43246,12 @@ export const cockroach = $root.cockroach = (() => {
                             break;
                         case 5:
                             message.shared_prefix_len = reader.int32();
+                            break;
+                        case 6:
+                            message.on_delete = reader.uint32();
+                            break;
+                        case 7:
+                            message.on_update = reader.uint32();
                             break;
                         default:
                             reader.skipType(tag & 7);
@@ -43278,6 +43302,28 @@ export const cockroach = $root.cockroach = (() => {
                     if (message.shared_prefix_len != null && message.hasOwnProperty("shared_prefix_len"))
                         if (!$util.isInteger(message.shared_prefix_len))
                             return "shared_prefix_len: integer expected";
+                    if (message.on_delete != null && message.hasOwnProperty("on_delete"))
+                        switch (message.on_delete) {
+                        default:
+                            return "on_delete: enum value expected";
+                        case 0:
+                        case 1:
+                        case 2:
+                        case 3:
+                        case 4:
+                            break;
+                        }
+                    if (message.on_update != null && message.hasOwnProperty("on_update"))
+                        switch (message.on_update) {
+                        default:
+                            return "on_update: enum value expected";
+                        case 0:
+                        case 1:
+                        case 2:
+                        case 3:
+                        case 4:
+                            break;
+                        }
                     return null;
                 };
 
@@ -43308,6 +43354,50 @@ export const cockroach = $root.cockroach = (() => {
                     }
                     if (object.shared_prefix_len != null)
                         message.shared_prefix_len = object.shared_prefix_len | 0;
+                    switch (object.on_delete) {
+                    case "NO_ACTION":
+                    case 0:
+                        message.on_delete = 0;
+                        break;
+                    case "RESTRICT":
+                    case 1:
+                        message.on_delete = 1;
+                        break;
+                    case "SET_NULL":
+                    case 2:
+                        message.on_delete = 2;
+                        break;
+                    case "SET_DEFAULT":
+                    case 3:
+                        message.on_delete = 3;
+                        break;
+                    case "CASCADE":
+                    case 4:
+                        message.on_delete = 4;
+                        break;
+                    }
+                    switch (object.on_update) {
+                    case "NO_ACTION":
+                    case 0:
+                        message.on_update = 0;
+                        break;
+                    case "RESTRICT":
+                    case 1:
+                        message.on_update = 1;
+                        break;
+                    case "SET_NULL":
+                    case 2:
+                        message.on_update = 2;
+                        break;
+                    case "SET_DEFAULT":
+                    case 3:
+                        message.on_update = 3;
+                        break;
+                    case "CASCADE":
+                    case 4:
+                        message.on_update = 4;
+                        break;
+                    }
                     return message;
                 };
 
@@ -43336,6 +43426,8 @@ export const cockroach = $root.cockroach = (() => {
                         object.name = "";
                         object.validity = options.enums === String ? "Validated" : 0;
                         object.shared_prefix_len = 0;
+                        object.on_delete = options.enums === String ? "NO_ACTION" : 0;
+                        object.on_update = options.enums === String ? "NO_ACTION" : 0;
                     }
                     if (message.table != null && message.hasOwnProperty("table"))
                         object.table = message.table;
@@ -43347,6 +43439,10 @@ export const cockroach = $root.cockroach = (() => {
                         object.validity = options.enums === String ? $root.cockroach.sql.sqlbase.ConstraintValidity[message.validity] : message.validity;
                     if (message.shared_prefix_len != null && message.hasOwnProperty("shared_prefix_len"))
                         object.shared_prefix_len = message.shared_prefix_len;
+                    if (message.on_delete != null && message.hasOwnProperty("on_delete"))
+                        object.on_delete = options.enums === String ? $root.cockroach.sql.sqlbase.ForeignKeyReference.Action[message.on_delete] : message.on_delete;
+                    if (message.on_update != null && message.hasOwnProperty("on_update"))
+                        object.on_update = options.enums === String ? $root.cockroach.sql.sqlbase.ForeignKeyReference.Action[message.on_update] : message.on_update;
                     return object;
                 };
 
@@ -43366,6 +43462,27 @@ export const cockroach = $root.cockroach = (() => {
                 ForeignKeyReference.prototype.toJSON = function toJSON() {
                     return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
                 };
+
+                /**
+                 * Action enum.
+                 * @name Action
+                 * @memberof cockroach.sql.sqlbase.ForeignKeyReference
+                 * @enum {number}
+                 * @property {number} NO_ACTION=0 NO_ACTION value
+                 * @property {number} RESTRICT=1 RESTRICT value
+                 * @property {number} SET_NULL=2 SET_NULL value
+                 * @property {number} SET_DEFAULT=3 SET_DEFAULT value
+                 * @property {number} CASCADE=4 CASCADE value
+                 */
+                ForeignKeyReference.Action = (function() {
+                    const valuesById = {}, values = Object.create(valuesById);
+                    values[valuesById[0] = "NO_ACTION"] = 0;
+                    values[valuesById[1] = "RESTRICT"] = 1;
+                    values[valuesById[2] = "SET_NULL"] = 2;
+                    values[valuesById[3] = "SET_DEFAULT"] = 3;
+                    values[valuesById[4] = "CASCADE"] = 4;
+                    return values;
+                })();
 
                 return ForeignKeyReference;
             })();

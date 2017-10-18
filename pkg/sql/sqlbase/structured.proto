@@ -92,6 +92,16 @@ enum ConstraintValidity {
 }
 
 message ForeignKeyReference {
+  enum Action {
+    // Note that this enum must exactly match sql/parser/create.go's
+    // ReferenceAction.
+    NO_ACTION = 0;
+    RESTRICT = 1;
+    SET_NULL = 2;
+    SET_DEFAULT = 3;
+    CASCADE = 4;
+  }
+
   optional uint32 table = 1 [(gogoproto.nullable) = false, (gogoproto.casttype) = "ID"];
   optional uint32 index = 2 [(gogoproto.nullable) = false, (gogoproto.casttype) = "IndexID"];
   optional string name = 3 [(gogoproto.nullable) = false];
@@ -99,6 +109,8 @@ message ForeignKeyReference {
   // If this FK only uses a prefix of the columns in its index, we record how
   // many to avoid spuriously counting the additional cols as used by this FK.
   optional int32 shared_prefix_len = 5 [(gogoproto.nullable) = false];
+  optional Action on_delete = 6 [(gogoproto.nullable) = false];
+  optional Action on_update = 7 [(gogoproto.nullable) = false];
 }
 
 message ColumnDescriptor {
