@@ -675,13 +675,30 @@ func (nl *NodeLiveness) updateLivenessAttempt(
 	return nil
 }
 
+// maybeUpdate replaces the liveness (if it appears newer) and invokes the
+// registered callbacks if the node became live in the process.
 func (nl *NodeLiveness) maybeUpdate(new Liveness) {
 	nl.mu.Lock()
+	// Note that this works fine even if `old` is empty.
 	old := nl.mu.nodes[new.NodeID]
-	if shouldReplaceLiveness(old, new) {
+	should := shouldReplaceLiveness(old, new)
+	var callbacks []IsLiveCallback
+	if should {
 		nl.mu.nodes[new.NodeID] = new
+		callbacks = append(callbacks, nl.mu.callbacks...)
 	}
 	nl.mu.Unlock()
+
+	if !should {
+		return
+	}
+
+	now, offset := nl.clock.Now(), nl.clock.MaxOffset()
+	if !old.IsLive(now, offset) && new.IsLive(now, offset) {
+		for _, fn := range callbacks {
+			fn(new.NodeID)
+		}
+	}
 }
 
 func shouldReplaceLiveness(old, new Liveness) bool {
@@ -717,28 +734,7 @@ func (nl *NodeLiveness) livenessGossipUpdate(key string, content roachpb.Value) 
 		return
 	}
 
-	// If there's an existing liveness record, only update the received
-	// timestamp if this is our first receipt of this node's liveness, the
-	// expiration or epoch was advanced, or the draining state changed.
-	var callbacks []IsLiveCallback
-	nl.mu.Lock()
-	exLiveness := nl.mu.nodes[liveness.NodeID]
-	if shouldReplaceLiveness(exLiveness, liveness) {
-		nl.mu.nodes[liveness.NodeID] = liveness
-
-		// If isLive status is now true, but previously false, invoke any registered callbacks.
-		// Note that this works fine even if exLiveness is empty.
-		now, offset := nl.clock.Now(), nl.clock.MaxOffset()
-		if !exLiveness.IsLive(now, offset) && liveness.IsLive(now, offset) {
-			callbacks = append(callbacks, nl.mu.callbacks...)
-		}
-	}
-	nl.mu.Unlock()
-
-	// Invoke any "is live" callbacks after releasing lock.
-	for _, cb := range callbacks {
-		cb(liveness.NodeID)
-	}
+	nl.maybeUpdate(liveness)
 }
 
 // numLiveNodes is used to populate a metric that tracks the number of live
