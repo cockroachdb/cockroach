@@ -2284,9 +2284,21 @@ func MVCCFindSplitKey(
 	it := engine.NewIterator(false /* prefix */)
 	defer it.Close()
 
+	minSplitKey := key
+	// If this is a table, we can only split at row boundaries.
+	if remainder, _, err := keys.DecodeTablePrefix(roachpb.Key(key)); err == nil {
+		// If this is the first range containing a table, its start key won't
+		// actually contain any row information, just the table ID. We don't want
+		// to restrict splits on such tables, since key.PrefixEnd will just be the
+		// end of the table span.
+		if len(remainder) > 0 {
+			minSplitKey = roachpb.RKey(roachpb.Key(key).PrefixEnd())
+		}
+	}
 	splitKey, err := it.FindSplitKey(
 		MakeMVCCMetadataKey(key.AsRawKey()),
 		MakeMVCCMetadataKey(endKey.AsRawKey()),
+		MakeMVCCMetadataKey(minSplitKey.AsRawKey()),
 		targetSize,
 		allowMeta2Splits)
 	if err != nil {
