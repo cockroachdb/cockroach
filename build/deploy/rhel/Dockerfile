@@ -1,4 +1,4 @@
-FROM registry.access.redhat.com/rhel-atomic
+FROM registry.access.redhat.com/rhel-atomic:latest
 
 MAINTAINER Alex Robinson <alex@cockroachlabs.com>
 

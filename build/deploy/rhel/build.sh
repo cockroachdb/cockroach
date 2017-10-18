@@ -6,5 +6,5 @@ set -ux
 # them up afterwards) because docker build can't access resources
 # from parent directories.
 cp ../../../LICENSE ../../../APL.txt ../cockroach.sh ../cockroach ./
-docker build --no-cache -t cockroachdb:${VERSION} .
+docker build --no-cache --pull -t cockroachdb:${VERSION} .
 rm LICENSE APL.txt cockroach.sh cockroach
