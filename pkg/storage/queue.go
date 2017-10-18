@@ -192,6 +192,8 @@ type queueConfig struct {
 	processingNanos *metric.Counter
 	// purgatory is a gauge measuring current replica count in purgatory.
 	purgatory *metric.Gauge
+	// whether or not we want to process replicas that have been destroyed but not GCed.
+	processDestroyedReplicas bool
 }
 
 // baseQueue is the base implementation of the replicaQueue interface.
@@ -599,11 +601,13 @@ func (bq *baseQueue) processReplica(
 		return errors.New("cannot process uninitialized replica")
 	}
 
-	if err := repl.IsDestroyed(); err != nil {
-		if log.V(3) {
-			log.Infof(queueCtx, "replica destroyed (%s); skipping", err)
+	if reason, err := repl.IsDestroyed(); err != nil {
+		if !bq.queueConfig.processDestroyedReplicas || reason != destroyReasonRemovalPending {
+			if log.V(3) {
+				log.Infof(queueCtx, "replica destroyed (%s); skipping", err)
+			}
+			return nil
 		}
-		return nil
 	}
 
 	// If the queue requires a replica to have the range lease in
