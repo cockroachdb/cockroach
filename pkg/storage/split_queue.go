@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 const (
@@ -118,7 +119,9 @@ func (sq *splitQueue) process(ctx context.Context, r *Replica, sysCfg config.Sys
 			// If we couldn't find a split key, set the max-bytes for the range to
 			// double its current size to prevent future attempts to split the range
 			// until it grows again.
-			r.SetMaxBytes(size * 2)
+			newMaxBytes := size * 2
+			r.SetMaxBytes(newMaxBytes)
+			log.VEventf(ctx, 2, "couldn't find valid split key, growing max bytes to %d", newMaxBytes)
 		} else {
 			// We successfully split the range, reset max-bytes to the zone setting.
 			zone, err := sysCfg.GetZoneConfigForKey(desc.StartKey)
