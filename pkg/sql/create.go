@@ -583,6 +583,7 @@ func HoistConstraints(n *parser.CreateTable) {
 					FromCols: parser.NameList{col.Name},
 					ToCols:   targetCol,
 					Name:     col.References.ConstraintName,
+					Actions:  col.References.Actions,
 				})
 				col.References.Table = parser.NormalizableTableName{}
 			}
@@ -879,12 +880,25 @@ func resolveFK(
 		}
 	}
 
+	if d.Actions.Delete != parser.NoAction &&
+		d.Actions.Delete != parser.Restrict {
+		feature := fmt.Sprintf("unsupported: ON DELETE %s", d.Actions.Delete)
+		return pgerror.Unimplemented(feature, feature)
+	}
+	if d.Actions.Update != parser.NoAction &&
+		d.Actions.Update != parser.Restrict {
+		feature := fmt.Sprintf("unsupported: ON UPDATE %s", d.Actions.Update)
+		return pgerror.Unimplemented(feature, feature)
+	}
 	ref := sqlbase.ForeignKeyReference{
 		Table:           target.ID,
 		Index:           targetIdx.ID,
 		Name:            constraintName,
 		SharedPrefixLen: int32(len(srcCols)),
+		OnDelete:        sqlbase.ForeignKeyReferenceActionValue[d.Actions.Delete],
+		OnUpdate:        sqlbase.ForeignKeyReferenceActionValue[d.Actions.Update],
 	}
+
 	if mode == sqlbase.ConstraintValidity_Unvalidated {
 		ref.Validity = sqlbase.ConstraintValidity_Unvalidated
 	}
@@ -1069,7 +1083,7 @@ func addInterleave(
 	return nil
 }
 
-// finalizeInterleave creats backreferences from an interleaving parent to the
+// finalizeInterleave creates backreferences from an interleaving parent to the
 // child data being interleaved.
 func (p *planner) finalizeInterleave(
 	ctx context.Context, desc *sqlbase.TableDescriptor, index sqlbase.IndexDescriptor,
