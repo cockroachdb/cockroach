@@ -312,7 +312,7 @@ func (rs *storeReplicaVisitor) Visit(visitor func(*Replica) bool) {
 		destroyed := repl.mu.destroyed
 		initialized := repl.isInitializedRLocked()
 		repl.mu.RUnlock()
-		if initialized && destroyed == nil && !visitor(repl) {
+		if initialized && destroyed.destroyedErr == nil && !visitor(repl) {
 			break
 		}
 	}
@@ -2210,7 +2210,7 @@ func (s *Store) removeReplicaImpl(
 	rep.mu.Lock()
 	rep.cancelPendingCommandsLocked()
 	rep.mu.internalRaftGroup = nil
-	rep.mu.destroyed = roachpb.NewRangeNotFoundError(rep.RangeID)
+	rep.mu.destroyed.destroyedErr = roachpb.NewRangeNotFoundError(rep.RangeID)
 	rep.mu.Unlock()
 	rep.readOnlyCmdMu.Unlock()
 
@@ -3228,6 +3228,8 @@ func (s *Store) HandleRaftResponse(ctx context.Context, resp *RaftMessageRespons
 			// replica GC to succeed.
 			if tErr.ReplicaID == repl.mu.replicaID {
 				repl.cancelPendingCommandsLocked()
+				repl.mu.destroyed.destroyedErr = roachpb.NewRangeNotFoundError(repl.RangeID)
+				repl.mu.destroyed.pending = true
 			}
 			repl.mu.Unlock()
 			added, err := s.replicaGCQueue.Add(
@@ -3831,10 +3833,10 @@ func (s *Store) tryGetOrCreateReplica(
 		repl.mu.RLock()
 		destroyed, corrupted := repl.mu.destroyed, repl.mu.corrupted
 		repl.mu.RUnlock()
-		if destroyed != nil {
+		if destroyed.destroyedErr != nil {
 			repl.raftMu.Unlock()
 			if corrupted {
-				return nil, false, destroyed
+				return nil, false, destroyed.destroyedErr
 			}
 			return nil, false, errRetry
 		}
@@ -3898,7 +3900,7 @@ func (s *Store) tryGetOrCreateReplica(
 	if err := repl.initRaftMuLockedReplicaMuLocked(desc, s.Clock(), replicaID); err != nil {
 		// Mark the replica as destroyed and remove it from the replicas maps to
 		// ensure nobody tries to use it
-		repl.mu.destroyed = errors.Wrapf(err, "%s: failed to initialize", repl)
+		repl.mu.destroyed.destroyedErr = errors.Wrapf(err, "%s: failed to initialize", repl)
 		repl.mu.Unlock()
 		s.mu.Lock()
 		s.mu.replicas.Delete(int64(rangeID))

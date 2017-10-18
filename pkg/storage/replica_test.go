@@ -6059,7 +6059,7 @@ func TestReplicaCorruption(t *testing.T) {
 	r := tc.store.LookupReplica(rkey, rkey)
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	if r.mu.destroyed.Error() != pErr.GetDetail().Error() {
+	if r.mu.destroyed.destroyedErr.Error() != pErr.GetDetail().Error() {
 		t.Fatalf("expected r.mu.destroyed == pErr.GetDetail(), instead %q != %q", r.mu.destroyed, pErr.GetDetail())
 	}
 
@@ -6068,7 +6068,7 @@ func TestReplicaCorruption(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if r.mu.destroyed.Error() != pErr.GetDetail().Error() {
+	if r.mu.destroyed.destroyedErr.Error() != pErr.GetDetail().Error() {
 		t.Fatalf("expected r.mu.destroyed == pErr.GetDetail(), instead %q != %q", r.mu.destroyed, pErr.GetDetail())
 	}
 
