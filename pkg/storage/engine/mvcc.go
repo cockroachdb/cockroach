@@ -1417,6 +1417,7 @@ func MVCCMerge(
 // MVCCDeleteRange deletes the range of key/value pairs specified by start and
 // end keys. It returns the range of keys deleted when returnedKeys is set,
 // the next span to resume from, and the number of keys deleted.
+// The returned resume span is nil if max keys aren't processed.
 func MVCCDeleteRange(
 	ctx context.Context,
 	engine ReadWriter,
@@ -1534,7 +1535,7 @@ func getReverseScanMeta(
 	return metaKey, nil
 }
 
-// mvccScanInternal scans the key range [start,end) up to some maximum number
+// mvccScanInternal scans the key range [key,endKey) up to some maximum number
 // of results. Specify reverse=true to scan in descending instead of ascending
 // order.
 func mvccScanInternal(
@@ -1575,9 +1576,11 @@ func mvccScanInternal(
 	return res, resumeSpan, intents, nil
 }
 
-// MVCCScan scans the key range [start,end) key up to some maximum number of
+// MVCCScan scans the key range [key,endKey) key up to some maximum number of
 // results in ascending order. If it hits max, it returns a span to be used in
-// the next call to this function.
+// the next call to this function. Use MaxInt64 for not limit. If the limit is
+// not hit, the returned span will be nil. Otherwise, it will be the sub-span of
+// [key,endKey) that has not been scanned.
 func MVCCScan(
 	ctx context.Context,
 	engine Reader,
