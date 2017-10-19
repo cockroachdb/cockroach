@@ -457,8 +457,8 @@ The particular definition of the properties to be used in CockroachDB
 will grow incrementally over time in parallel with the query
 optimizer.
 
-A separate RFC will outline some properties already envisioned to be
-useful initially.
+[A separate RFC will outline some properties already envisioned to be
+useful initially.](https://github.com/cockroachdb/cockroach/pull/19366)
 
 ### Cost model
 
