@@ -1148,7 +1148,7 @@ func TestGetFirstRangeDescriptor(t *testing.T) {
 	if err := n.Nodes[1].Gossip.AddInfoProto(gossip.KeyFirstRangeDescriptor, expectedDesc, time.Hour); err != nil {
 		t.Fatal(err)
 	}
-	maxCycles := 10
+	const maxCycles = 25
 	n.SimulateNetwork(func(cycle int, network *simulation.Network) bool {
 		desc, err := ds.FirstRange()
 		if err != nil {
