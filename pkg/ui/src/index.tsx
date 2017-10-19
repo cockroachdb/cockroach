@@ -7,6 +7,8 @@ import "react-select/dist/react-select.css";
 import "styl/app.styl";
 import "src/js/sim/style.css";
 
+import "src/polyfills";
+
 import * as protobuf from "protobufjs/minimal";
 import Long from "long";
 
