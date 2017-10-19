@@ -134,10 +134,10 @@ output row: [9 3 3 '33']
 query ITTTTT
 EXPLAIN (VERBOSE) SELECT a FROM t WHERE b = 2 OR ((b BETWEEN 2 AND 1) AND ((s != 'a') OR (s = 'a')))
 ----
-0  render      ·         ·          (a)                                      ·
+0  render      ·         ·          (a)                                      a!=NULL
 0  ·           render 0  test.t.a   ·                                        ·
-1  index-join  ·         ·          (a, b[omitted], c[omitted], s[omitted])  b=CONST; key(a,c)
-2  scan        ·         ·          (a, b[omitted], c[omitted], s[omitted])  b=CONST; key(a,c)
+1  index-join  ·         ·          (a, b[omitted], c[omitted], s[omitted])  b=CONST; a!=NULL; weak-key(a,c)
+2  scan        ·         ·          (a, b[omitted], c[omitted], s[omitted])  b=CONST; a!=NULL; weak-key(a,c)
 2  ·           table     t@bc       ·                                        ·
 2  ·           spans     /2-/3      ·                                        ·
 2  scan        ·         ·          (a, b[omitted], c[omitted], s[omitted])  ·

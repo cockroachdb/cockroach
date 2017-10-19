@@ -200,15 +200,15 @@ SELECT COUNT(*) FROM (SELECT DISTINCT y FROM xyz)
 query ITTTTT
 EXPLAIN (METADATA) SELECT DISTINCT x FROM xyz
 ----
-0  render  ·      ·            (x)                          key(x)
-1  scan    ·      ·            (x, y[omitted], z[omitted])  key(x)
+0  render  ·      ·            (x)                          x!=NULL; key(x)
+1  scan    ·      ·            (x, y[omitted], z[omitted])  x!=NULL; key(x)
 1  ·       table  xyz@primary  ·                            ·
 1  ·       spans  ALL          ·                            ·
 
 query ITTTTT
 EXPLAIN (METADATA) SELECT DISTINCT x, y, z FROM xyz
 ----
-0  scan  ·      ·            (x, y, z)  key(x)
+0  scan  ·      ·            (x, y, z)  x!=NULL; key(x)
 0  ·     table  xyz@primary  ·          ·
 0  ·     spans  ALL          ·          ·
 
@@ -217,7 +217,7 @@ CREATE TABLE abcd (
   a INT,
   b INT,
   c INT,
-  d INT,
+  d INT NOT NULL,
   PRIMARY KEY (a, b, c),
   UNIQUE INDEX (d, b)
 )
@@ -225,32 +225,92 @@ CREATE TABLE abcd (
 query ITTTTT
 EXPLAIN (METADATA) SELECT DISTINCT 1, d, b FROM abcd ORDER BY d, b
 ----
-0  render  ·      ·                  ("1", d, b)                     "1"=CONST; key(d,b); +d,+b
-1  scan    ·      ·                  (a[omitted], b, c[omitted], d)  key(b,d); +d,+b
+0  render  ·      ·                  ("1", d, b)                     "1"=CONST; d!=NULL; b!=NULL; key(d,b); +d,+b
+1  scan    ·      ·                  (a[omitted], b, c[omitted], d)  b!=NULL; d!=NULL; key(b,d); +d,+b
 1  ·       table  abcd@abcd_d_b_key  ·                               ·
 1  ·       spans  ALL                ·                               ·
 
 query ITTTTT
 EXPLAIN (METADATA) SELECT DISTINCT a, b FROM abcd
 ----
-0  distinct  ·      ·             (a, b)                          +a,+b
+0  distinct  ·      ·             (a, b)                          a!=NULL; b!=NULL; +a,+b
 0  ·         key    a, b          ·                               ·
-1  render    ·      ·             (a, b)                          +a,+b
-2  scan      ·      ·             (a, b, c[omitted], d[omitted])  key(a,b,c); +a,+b
+1  render    ·      ·             (a, b)                          a!=NULL; b!=NULL; +a,+b
+2  scan      ·      ·             (a, b, c[omitted], d[omitted])  a!=NULL; b!=NULL; c!=NULL; key(a,b,c); +a,+b
 2  ·         table  abcd@primary  ·                               ·
 2  ·         spans  ALL           ·                               ·
 
 query ITTTTT
 EXPLAIN (METADATA) SELECT DISTINCT a, b, c FROM abcd
 ----
-0  render  ·      ·             (a, b, c)              key(a,b,c)
-1  scan    ·      ·             (a, b, c, d[omitted])  key(a,b,c)
+0  render  ·      ·             (a, b, c)              a!=NULL; b!=NULL; c!=NULL; key(a,b,c)
+1  scan    ·      ·             (a, b, c, d[omitted])  a!=NULL; b!=NULL; c!=NULL; key(a,b,c)
 1  ·       table  abcd@primary  ·                      ·
 1  ·       spans  ALL           ·                      ·
 
 query ITTTTT
 EXPLAIN (METADATA) SELECT DISTINCT a, b, c, d FROM abcd
 ----
-0  scan  ·      ·             (a, b, c, d)  key(a,b,c)
+0  scan  ·      ·             (a, b, c, d)  a!=NULL; b!=NULL; c!=NULL; key(a,b,c)
 0  ·     table  abcd@primary  ·             ·
 0  ·     spans  ALL           ·             ·
+
+statement ok
+CREATE TABLE kv (k INT PRIMARY KEY, v INT, UNIQUE INDEX idx(v))
+
+statement ok
+INSERT INTO kv VALUES (1, 1), (2, 2), (3, NULL), (4, NULL), (5, 5), (6, NULL)
+
+query ITTTTT colnames
+EXPLAIN (VERBOSE) SELECT DISTINCT v FROM kv
+----
+Level  Type      Field     Description  Columns          Ordering
+0      distinct  ·         ·            (v)              ·
+1      render    ·         ·            (v)              ·
+1      ·         render 0  test.kv.v    ·                ·
+2      scan      ·         ·            (k[omitted], v)  k!=NULL; key(k)
+2      ·         table     kv@primary   ·                ·
+2      ·         spans     ALL          ·                ·
+
+query I rowsort
+SELECT DISTINCT v FROM kv
+----
+NULL
+1
+2
+5
+
+# Verify we don't incorrectly elide the distinct node when we only have a weak key (#19343).
+query ITTTTT colnames
+EXPLAIN (VERBOSE) SELECT DISTINCT v FROM kv@idx
+----
+Level  Type      Field     Description  Columns          Ordering
+0      distinct  ·         ·            (v)              weak-key(v); +v
+0      ·         key       v            ·                ·
+1      render    ·         ·            (v)              weak-key(v); +v
+1      ·         render 0  test.kv.v    ·                ·
+2      scan      ·         ·            (k[omitted], v)  weak-key(v); +v
+2      ·         table     kv@idx       ·                ·
+2      ·         spans     ALL          ·                ·
+
+query I rowsort
+SELECT DISTINCT v FROM kv@idx
+----
+NULL
+1
+2
+5
+
+statement ok
+CREATE TABLE kv2 (k INT PRIMARY KEY, v INT NOT NULL, UNIQUE INDEX idx(v))
+
+# In this case it is correct to elide the distinct node.
+query ITTTTT colnames
+EXPLAIN (VERBOSE) SELECT DISTINCT v FROM kv2@idx
+----
+Level  Type    Field     Description  Columns          Ordering
+0      render  ·         ·            (v)              v!=NULL; key(v)
+0      ·       render 0  test.kv2.v   ·                ·
+1      scan    ·         ·            (k[omitted], v)  v!=NULL; key(v)
+1      ·       table     kv2@idx      ·                ·
+1      ·       spans     ALL          ·                ·

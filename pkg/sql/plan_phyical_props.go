@@ -72,26 +72,19 @@ func planPhysicalProps(plan planNode) physicalProps {
 
 func sortPhysicalProps(n *sortNode) physicalProps {
 	underlying := planPhysicalProps(n.plan)
+	props := underlying.copy()
 
-	var props physicalProps
+	// If we aren't sorting, the underlying plan's ordering can be more specific
+	// than the sortNode's ordering, so we want to use that. E.g:
+	//   CREATE INDEX foo ON t (a, b);
+	//   SELECT a, b, c FROM t@foo ORDER BY a;
+	// We want to use (a, b) instead of just (a).
 	if n.needSort {
 		// We will sort and can guarantee the desired ordering.
 		props.ordering = make(sqlbase.ColumnOrdering, 0, len(n.ordering))
 		for _, o := range n.ordering {
-			// Skip any constant columns (we preserve them below).
-			if !underlying.constantCols.Contains(o.ColIdx) {
-				props.addOrderColumn(o.ColIdx, o.Direction)
-			}
+			props.addOrderColumn(o.ColIdx, o.Direction)
 		}
-		// Preserve constant columns.
-		props.constantCols = underlying.constantCols.Copy()
-	} else {
-		// If we aren't sorting, the underlying plan's ordering can be more specific
-		// than the sortNode's ordering, so we want to use that. E.g:
-		//   CREATE INDEX foo ON t (a, b);
-		//   SELECT a, b, c FROM t@foo ORDER BY a;
-		// We want to use (a, b) instead of just (a).
-		props = underlying.copy()
 	}
 
 	if numPlanColumns := len(planColumns(n.plan)); len(n.columns) < numPlanColumns {
