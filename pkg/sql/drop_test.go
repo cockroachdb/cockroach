@@ -162,7 +162,7 @@ INSERT INTO t.kv VALUES ('c', 'e'), ('a', 'c'), ('b', 'd');
 		t.Fatalf("expected %d key value pairs, but got %d", l, len(kvs))
 	}
 
-	if _, err := sqlDB.Exec(`DROP DATABASE t`); !testutils.IsError(err,
+	if _, err := sqlDB.Exec(`DROP DATABASE t RESTRICT`); !testutils.IsError(err,
 		`database "t" is not empty`) {
 		t.Fatal(err)
 	}
@@ -286,7 +286,7 @@ INSERT INTO t.kv VALUES ('c', 'e'), ('a', 'c'), ('b', 'd');
 		t.Fatalf("expected %d key value pairs, but got %d", l, len(kvs))
 	}
 
-	if _, err := sqlDB.Exec(`DROP DATABASE t`); !testutils.IsError(err,
+	if _, err := sqlDB.Exec(`DROP DATABASE t RESTRICT`); !testutils.IsError(err,
 		`database "t" is not empty`) {
 		t.Fatal(err)
 	}
