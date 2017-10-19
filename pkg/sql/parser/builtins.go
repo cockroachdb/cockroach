@@ -365,6 +365,20 @@ var Builtins = map[string][]Builtin{
 		},
 	},
 
+	"gen_random_uuid": {
+		Builtin{
+			Types:      ArgTypes{},
+			ReturnType: fixedReturnType(TypeUUID),
+			category:   categoryIDGeneration,
+			impure:     true,
+			fn: func(_ *EvalContext, _ Datums) (Datum, error) {
+				uv := uuid.MakeV4()
+				return NewDUuid(DUuid{uv}), nil
+			},
+			Info: "Generates a random UUID and returns it as a value of UUID type.",
+		},
+	},
+
 	"to_uuid": {
 		Builtin{
 			Types:      ArgTypes{{"val", TypeString}},
