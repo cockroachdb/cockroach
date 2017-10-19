@@ -92,20 +92,14 @@ func TestRangeLookupWithOpenTransaction(t *testing.T) {
 // setupMultipleRanges creates a database client to the supplied test
 // server and splits the key range at the given keys. Returns the DB
 // client.
-func setupMultipleRanges(
-	t *testing.T, s serverutils.TestServerInterface, splitAt ...string,
-) *client.DB {
-	db := s.KVClient().(*client.DB)
-
+func setupMultipleRanges(ctx context.Context, db *client.DB, splitAt ...string) error {
 	// Split the keyspace at the given keys.
 	for _, key := range splitAt {
-		if err := db.AdminSplit(context.TODO(), key, key); err != nil {
-			// Don't leak server goroutines.
-			t.Fatal(err)
+		if err := db.AdminSplit(ctx, key /* spanKey */, key /* splitKey */); err != nil {
+			return err
 		}
 	}
-
-	return db
+	return nil
 }
 
 var errInfo = testutils.MakeCaller(3, 2)
@@ -232,7 +226,10 @@ func TestMultiRangeBoundedBatchScan(t *testing.T) {
 	defer s.Stopper().Stop(context.TODO())
 	ctx := context.TODO()
 
-	db := setupMultipleRanges(t, s, "a", "b", "c", "d", "e", "f")
+	db := s.KVClient().(*client.DB)
+	if err := setupMultipleRanges(ctx, db, "a", "b", "c", "d", "e", "f"); err != nil {
+		t.Fatal(err)
+	}
 	for _, key := range []string{"a1", "a2", "a3", "b1", "b2", "c1", "c2", "d1", "f1", "f2", "f3"} {
 		if err := db.Put(ctx, key, "value"); err != nil {
 			t.Fatal(err)
@@ -300,10 +297,14 @@ func TestMultiRangeBoundedBatchScan(t *testing.T) {
 func TestMultiRangeBoundedBatchReverseScan(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s, _ := startNoSplitServer(t)
-	defer s.Stopper().Stop(context.TODO())
 	ctx := context.TODO()
+	defer s.Stopper().Stop(ctx)
 
-	db := setupMultipleRanges(t, s, "a", "b", "c", "d", "e", "f")
+	db := s.KVClient().(*client.DB)
+	if err := setupMultipleRanges(ctx, db, "a", "b", "c", "d", "e", "f"); err != nil {
+		t.Fatal(err)
+	}
+
 	for _, key := range []string{"a1", "a2", "a3", "b1", "b2", "c1", "c2", "d1", "f1", "f2", "f3"} {
 		if err := db.Put(ctx, key, "value"); err != nil {
 			t.Fatal(err)
@@ -374,11 +375,16 @@ func TestMultiRangeBoundedBatchReverseScan(t *testing.T) {
 func TestMultiRangeBoundedBatchScanUnsortedOrder(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s, _ := startNoSplitServer(t)
-	defer s.Stopper().Stop(context.TODO())
+	ctx := context.TODO()
+	defer s.Stopper().Stop(ctx)
 
-	db := setupMultipleRanges(t, s, "a", "b", "c", "d", "e", "f")
+	db := s.KVClient().(*client.DB)
+	if err := setupMultipleRanges(ctx, db, "a", "b", "c", "d", "e", "f"); err != nil {
+		t.Fatal(err)
+	}
+
 	for _, key := range []string{"a1", "a2", "a3", "b1", "b2", "b3", "b4", "b5", "c1", "c2", "d1", "f1", "f2", "f3"} {
-		if err := db.Put(context.TODO(), key, "value"); err != nil {
+		if err := db.Put(ctx, key, "value"); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -391,7 +397,7 @@ func TestMultiRangeBoundedBatchScanUnsortedOrder(t *testing.T) {
 	for _, span := range spans {
 		b.Scan(span[0], span[1])
 	}
-	if err := db.Run(context.TODO(), b); err != nil {
+	if err := db.Run(ctx, b); err != nil {
 		t.Fatal(err)
 	}
 	// See incomplete results for the two requests.
@@ -408,11 +414,16 @@ func TestMultiRangeBoundedBatchScanUnsortedOrder(t *testing.T) {
 func TestMultiRangeBoundedBatchScanSortedOverlapping(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s, _ := startNoSplitServer(t)
-	defer s.Stopper().Stop(context.TODO())
+	ctx := context.TODO()
+	defer s.Stopper().Stop(ctx)
 
-	db := setupMultipleRanges(t, s, "a", "b", "c", "d", "e", "f")
+	db := s.KVClient().(*client.DB)
+	if err := setupMultipleRanges(ctx, db, "a", "b", "c", "d", "e", "f"); err != nil {
+		t.Fatal(err)
+	}
+
 	for _, key := range []string{"a1", "a2", "a3", "b1", "b2", "c1", "c2", "d1", "f1", "f2", "f3"} {
-		if err := db.Put(context.TODO(), key, "value"); err != nil {
+		if err := db.Put(ctx, key, "value"); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -425,7 +436,7 @@ func TestMultiRangeBoundedBatchScanSortedOverlapping(t *testing.T) {
 	for _, span := range spans {
 		b.Scan(span[0], span[1])
 	}
-	if err := db.Run(context.TODO(), b); err != nil {
+	if err := db.Run(ctx, b); err != nil {
 		t.Fatal(err)
 	}
 	// See incomplete results for the two requests.
@@ -472,9 +483,13 @@ func checkResumeSpanDelRangeResults(
 func TestMultiRangeBoundedBatchDelRange(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s, _ := startNoSplitServer(t)
-	defer s.Stopper().Stop(context.TODO())
+	ctx := context.TODO()
+	defer s.Stopper().Stop(ctx)
 
-	db := setupMultipleRanges(t, s, "a", "b", "c", "d", "e", "f", "g", "h")
+	db := s.KVClient().(*client.DB)
+	if err := setupMultipleRanges(ctx, db, "a", "b", "c", "d", "e", "f", "g", "h"); err != nil {
+		t.Fatal(err)
+	}
 
 	// These are the expected results if there is no bound.
 	expResults := [][]string{
@@ -490,7 +505,7 @@ func TestMultiRangeBoundedBatchDelRange(t *testing.T) {
 	for bound := 1; bound <= 20; bound++ {
 		// Initialize all keys.
 		for _, key := range []string{"a1", "a2", "a3", "b1", "b2", "c1", "c2", "d1", "f1", "f2", "f3", "g1", "g2", "h1"} {
-			if err := db.Put(context.TODO(), key, "value"); err != nil {
+			if err := db.Put(ctx, key, "value"); err != nil {
 				t.Fatal(err)
 			}
 		}
@@ -501,7 +516,7 @@ func TestMultiRangeBoundedBatchDelRange(t *testing.T) {
 		for _, span := range spans {
 			b.DelRange(span[0], span[1], true)
 		}
-		if err := db.Run(context.TODO(), b); err != nil {
+		if err := db.Run(ctx, b); err != nil {
 			t.Fatal(err)
 		}
 
@@ -536,12 +551,16 @@ func TestMultiRangeBoundedBatchDelRange(t *testing.T) {
 func TestMultiRangeBoundedBatchDelRangeBoundary(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s, _ := startNoSplitServer(t)
-	defer s.Stopper().Stop(context.TODO())
+	ctx := context.TODO()
+	defer s.Stopper().Stop(ctx)
 
-	db := setupMultipleRanges(t, s, "a", "b")
+	db := s.KVClient().(*client.DB)
+	if err := setupMultipleRanges(ctx, db, "a", "b"); err != nil {
+		t.Fatal(err)
+	}
 	// Check that a
 	for _, key := range []string{"a1", "a2", "a3", "b1", "b2"} {
-		if err := db.Put(context.TODO(), key, "value"); err != nil {
+		if err := db.Put(ctx, key, "value"); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -549,7 +568,7 @@ func TestMultiRangeBoundedBatchDelRangeBoundary(t *testing.T) {
 	b := &client.Batch{}
 	b.Header.MaxSpanRequestKeys = 3
 	b.DelRange("a", "c", true)
-	if err := db.Run(context.TODO(), b); err != nil {
+	if err := db.Run(ctx, b); err != nil {
 		t.Fatal(err)
 	}
 	if len(b.Results) != 1 {
@@ -562,7 +581,7 @@ func TestMultiRangeBoundedBatchDelRangeBoundary(t *testing.T) {
 	b = &client.Batch{}
 	b.Header.MaxSpanRequestKeys = 1
 	b.DelRange("b", "c", true)
-	if err := db.Run(context.TODO(), b); err != nil {
+	if err := db.Run(ctx, b); err != nil {
 		t.Fatal(err)
 	}
 	if len(b.Results) != 1 {
@@ -578,9 +597,13 @@ func TestMultiRangeBoundedBatchDelRangeBoundary(t *testing.T) {
 func TestMultiRangeBoundedBatchDelRangeOverlappingKeys(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s, _ := startNoSplitServer(t)
-	defer s.Stopper().Stop(context.TODO())
+	ctx := context.TODO()
+	defer s.Stopper().Stop(ctx)
 
-	db := setupMultipleRanges(t, s, "a", "b", "c", "d", "e", "f")
+	db := s.KVClient().(*client.DB)
+	if err := setupMultipleRanges(ctx, db, "a", "b", "c", "d", "e", "f"); err != nil {
+		t.Fatal(err)
+	}
 
 	expResults := [][]string{
 		{"a1", "a2", "a3", "b1", "b2"},
@@ -595,7 +618,7 @@ func TestMultiRangeBoundedBatchDelRangeOverlappingKeys(t *testing.T) {
 
 	for bound := 1; bound <= 20; bound++ {
 		for _, key := range []string{"a1", "a2", "a3", "b1", "b2", "b3", "c1", "c2", "d1", "f1", "f2", "f3"} {
-			if err := db.Put(context.TODO(), key, "value"); err != nil {
+			if err := db.Put(ctx, key, "value"); err != nil {
 				t.Fatal(err)
 			}
 		}
@@ -606,7 +629,7 @@ func TestMultiRangeBoundedBatchDelRangeOverlappingKeys(t *testing.T) {
 		for _, span := range spans {
 			b.DelRange(span[0], span[1], true)
 		}
-		if err := db.Run(context.TODO(), b); err != nil {
+		if err := db.Run(ctx, b); err != nil {
 			t.Fatal(err)
 		}
 
@@ -640,12 +663,16 @@ func TestMultiRangeBoundedBatchDelRangeOverlappingKeys(t *testing.T) {
 func TestMultiRangeEmptyAfterTruncate(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s, _ := startNoSplitServer(t)
-	defer s.Stopper().Stop(context.TODO())
-	db := setupMultipleRanges(t, s, "c", "d")
+	ctx := context.TODO()
+	defer s.Stopper().Stop(ctx)
+	db := s.KVClient().(*client.DB)
+	if err := setupMultipleRanges(ctx, db, "c", "d"); err != nil {
+		t.Fatal(err)
+	}
 
 	// Delete the keys within a transaction. The range [c,d) doesn't have
 	// any active requests.
-	if err := db.Txn(context.TODO(), func(ctx context.Context, txn *client.Txn) error {
+	if err := db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
 		b := txn.NewBatch()
 		b.DelRange("a", "b", false)
 		b.DelRange("e", "f", false)
@@ -659,13 +686,17 @@ func TestMultiRangeEmptyAfterTruncate(t *testing.T) {
 func TestMultiRequestBatchWithFwdAndReverseRequests(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s, _ := startNoSplitServer(t)
-	defer s.Stopper().Stop(context.TODO())
-	db := setupMultipleRanges(t, s, "a", "b")
+	ctx := context.TODO()
+	defer s.Stopper().Stop(ctx)
+	db := s.KVClient().(*client.DB)
+	if err := setupMultipleRanges(ctx, db, "a", "b"); err != nil {
+		t.Fatal(err)
+	}
 	b := &client.Batch{}
 	b.Header.MaxSpanRequestKeys = 100
 	b.Scan("a", "b")
 	b.ReverseScan("a", "b")
-	if err := db.Run(context.TODO(), b); !testutils.IsError(
+	if err := db.Run(ctx, b); !testutils.IsError(
 		err, "batch with limit contains both forward and reverse scans",
 	) {
 		t.Fatal(err)
@@ -677,24 +708,28 @@ func TestMultiRequestBatchWithFwdAndReverseRequests(t *testing.T) {
 func TestMultiRangeScanReverseScanDeleteResolve(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s, _ := startNoSplitServer(t)
-	defer s.Stopper().Stop(context.TODO())
-	db := setupMultipleRanges(t, s, "b")
+	ctx := context.TODO()
+	defer s.Stopper().Stop(ctx)
+	db := s.KVClient().(*client.DB)
+	if err := setupMultipleRanges(ctx, db, "b"); err != nil {
+		t.Fatal(err)
+	}
 
 	// Write keys before, at, and after the split key.
 	for _, key := range []string{"a", "b", "c"} {
-		if err := db.Put(context.TODO(), key, "value"); err != nil {
+		if err := db.Put(ctx, key, "value"); err != nil {
 			t.Fatal(err)
 		}
 	}
 	// Scan to retrieve the keys just written.
-	if rows, err := db.Scan(context.TODO(), "a", "q", 0); err != nil {
+	if rows, err := db.Scan(ctx, "a", "q", 0); err != nil {
 		t.Fatalf("unexpected error on Scan: %s", err)
 	} else if l := len(rows); l != 3 {
 		t.Errorf("expected 3 rows; got %d", l)
 	}
 
 	// Scan in reverse order to retrieve the keys just written.
-	if rows, err := db.ReverseScan(context.TODO(), "a", "q", 0); err != nil {
+	if rows, err := db.ReverseScan(ctx, "a", "q", 0); err != nil {
 		t.Fatalf("unexpected error on ReverseScan: %s", err)
 	} else if l := len(rows); l != 3 {
 		t.Errorf("expected 3 rows; got %d", l)
@@ -702,7 +737,7 @@ func TestMultiRangeScanReverseScanDeleteResolve(t *testing.T) {
 
 	// Delete the keys within a transaction. Implicitly, the intents are
 	// resolved via ResolveIntentRange upon completion.
-	if err := db.Txn(context.TODO(), func(ctx context.Context, txn *client.Txn) error {
+	if err := db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
 		b := txn.NewBatch()
 		b.DelRange("a", "d", false)
 		return txn.CommitInBatch(ctx, b)
@@ -711,14 +746,14 @@ func TestMultiRangeScanReverseScanDeleteResolve(t *testing.T) {
 	}
 
 	// Scan consistently to make sure the intents are gone.
-	if rows, err := db.Scan(context.TODO(), "a", "q", 0); err != nil {
+	if rows, err := db.Scan(ctx, "a", "q", 0); err != nil {
 		t.Fatalf("unexpected error on Scan: %s", err)
 	} else if l := len(rows); l != 0 {
 		t.Errorf("expected 0 rows; got %d", l)
 	}
 
 	// ReverseScan consistently to make sure the intents are gone.
-	if rows, err := db.ReverseScan(context.TODO(), "a", "q", 0); err != nil {
+	if rows, err := db.ReverseScan(ctx, "a", "q", 0); err != nil {
 		t.Fatalf("unexpected error on ReverseScan: %s", err)
 	} else if l := len(rows); l != 0 {
 		t.Errorf("expected 0 rows; got %d", l)
@@ -732,8 +767,12 @@ func TestMultiRangeScanReverseScanInconsistent(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	s, _ := startNoSplitServer(t)
-	defer s.Stopper().Stop(context.TODO())
-	db := setupMultipleRanges(t, s, "b")
+	ctx := context.TODO()
+	defer s.Stopper().Stop(ctx)
+	db := s.KVClient().(*client.DB)
+	if err := setupMultipleRanges(ctx, db, "b"); err != nil {
+		t.Fatal(err)
+	}
 
 	// Write keys "a" and "b", the latter of which is the first key in the
 	// second range.
@@ -742,11 +781,11 @@ func TestMultiRangeScanReverseScanInconsistent(t *testing.T) {
 	for i, key := range keys {
 		b := &client.Batch{}
 		b.Put(key, "value")
-		if err := db.Run(context.TODO(), b); err != nil {
+		if err := db.Run(ctx, b); err != nil {
 			t.Fatal(err)
 		}
 		ts[i] = s.Clock().Now()
-		log.Infof(context.TODO(), "%d: %s %d", i, key, ts[i])
+		log.Infof(ctx, "%d: %s %d", i, key, ts[i])
 		if i == 0 {
 			testutils.SucceedsSoon(t, func() error {
 				// Enforce that when we write the second key, it's written
@@ -1066,8 +1105,12 @@ func TestBadRequest(t *testing.T) {
 func TestNoSequenceCachePutOnRangeMismatchError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s, _ := startNoSplitServer(t)
-	defer s.Stopper().Stop(context.TODO())
-	db := setupMultipleRanges(t, s, "b", "c")
+	ctx := context.TODO()
+	defer s.Stopper().Stop(ctx)
+	db := s.KVClient().(*client.DB)
+	if err := setupMultipleRanges(ctx, db, "b", "c"); err != nil {
+		t.Fatal(err)
+	}
 
 	// The requests in the transaction below will be chunked and
 	// sent to replicas in the following way:
@@ -1082,7 +1125,7 @@ func TestNoSequenceCachePutOnRangeMismatchError(t *testing.T) {
 	//    same replica.
 	// 5) The command succeeds since the sequence cache has not yet been updated.
 	epoch := 0
-	if err := db.Txn(context.TODO(), func(ctx context.Context, txn *client.Txn) error {
+	if err := db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
 		epoch++
 		b := txn.NewBatch()
 		b.Put("a", "val")
@@ -1122,13 +1165,17 @@ func TestPropagateTxnOnError(t *testing.T) {
 		}
 	s, _, _ := serverutils.StartServer(t,
 		base.TestServerArgs{Knobs: base.TestingKnobs{Store: &storeKnobs}})
-	defer s.Stopper().Stop(context.TODO())
+	ctx := context.TODO()
+	defer s.Stopper().Stop(ctx)
 
-	db := setupMultipleRanges(t, s, "b")
+	db := s.KVClient().(*client.DB)
+	if err := setupMultipleRanges(ctx, db, "b"); err != nil {
+		t.Fatal(err)
+	}
 
 	// Set the initial value on the target key "b".
 	origVal := "val"
-	if err := db.Put(context.TODO(), targetKey, origVal); err != nil {
+	if err := db.Put(ctx, targetKey, origVal); err != nil {
 		t.Fatal(err)
 	}
 
@@ -1137,7 +1184,7 @@ func TestPropagateTxnOnError(t *testing.T) {
 	// get a ReadWithinUncertaintyIntervalError and the txn will be
 	// retried.
 	epoch := 0
-	if err := db.Txn(context.TODO(), func(ctx context.Context, txn *client.Txn) error {
+	if err := db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
 		epoch++
 		if epoch >= 2 {
 			// Writing must be true since we ran the BeginTransaction command.

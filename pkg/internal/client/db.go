@@ -376,7 +376,7 @@ func (db *DB) AdminMerge(ctx context.Context, key interface{}) error {
 // #16008 for details, and #16344 for the tracking issue to clean this mess up
 // properly.
 //
-// keys can be either a byte slice or a string.
+// The keys can be either byte slices or a strings.
 func (db *DB) AdminSplit(ctx context.Context, spanKey, splitKey interface{}) error {
 	b := &Batch{}
 	b.adminSplit(spanKey, splitKey)
