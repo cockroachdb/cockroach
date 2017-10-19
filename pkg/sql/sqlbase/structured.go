@@ -1074,6 +1074,9 @@ func (desc *TableDescriptor) ValidateTable() error {
 		if err := desc.validateTableIndexes(columnNames, colIDToFamilyID); err != nil {
 			return err
 		}
+		if err := desc.validatePartitioning(); err != nil {
+			return err
+		}
 	}
 
 	// Validate the privilege descriptor.
@@ -1221,6 +1224,159 @@ func (desc *TableDescriptor) validateTableIndexes(
 	}
 
 	return nil
+}
+
+// translateValueEncodingToKey parses columns encoded with the "value" encoding
+// and returns them reencoded using the "key ascending" encoding. The parsed
+// datums are also returned.
+func translateValueEncodingToKey(
+	a *DatumAlloc, desc *TableDescriptor, valueEncBuf []byte, colIDs []ColumnID,
+) (EncDatumRow, []byte, error) {
+	datums := make(EncDatumRow, len(colIDs))
+	var keyEncBuf []byte
+	for i, colID := range colIDs {
+		col, err := desc.FindActiveColumnByID(colID)
+		if err != nil {
+			return nil, nil, err
+		}
+		datums[i], valueEncBuf, err = EncDatumFromBuffer(
+			&col.Type, DatumEncoding_VALUE, valueEncBuf,
+		)
+		if err != nil {
+			return nil, nil, err
+		}
+		if err := datums[i].EnsureDecoded(&col.Type, a); err != nil {
+			return nil, nil, err
+		}
+		keyEncBuf, err = datums[i].Encode(&col.Type, a, DatumEncoding_ASCENDING_KEY, keyEncBuf)
+		if err != nil {
+			return nil, nil, err
+		}
+	}
+	if len(valueEncBuf) > 0 {
+		return nil, nil, fmt.Errorf("superfluous data in encoded value")
+	}
+	return datums, keyEncBuf, nil
+}
+
+// validatePartitioningDescriptor validates that a PartitioningDescriptor, which
+// may represent a subpartition, is well-formed. Checks include validating the
+// table-level uniqueness of all partition names, validating that the encoded
+// tuples match the corresponding column types, and that range partitions are
+// stored sorted by upper bound. colOffset is non-zero for subpartitions and
+// indicates how many index columns to skip over.
+func (desc *TableDescriptor) validatePartitioningDescriptor(
+	a *DatumAlloc,
+	idxDesc *IndexDescriptor,
+	partDesc *PartitioningDescriptor,
+	colOffset int,
+	partitionNames map[string]struct{},
+) error {
+	if partDesc.NumColumns == 0 {
+		return nil
+	}
+	if colOffset+int(partDesc.NumColumns) > len(idxDesc.ColumnIDs) {
+		return fmt.Errorf("not enough columns in index for this partitioning")
+	}
+	colIDs := idxDesc.ColumnIDs[colOffset : colOffset+int(partDesc.NumColumns)]
+
+	if len(partDesc.List) == 0 && len(partDesc.Range) == 0 {
+		return fmt.Errorf("at least one of LIST or RANGE partitioning must be used")
+	}
+	if len(partDesc.List) > 0 && len(partDesc.Range) > 0 {
+		return fmt.Errorf("only one LIST or RANGE partitioning may used")
+	}
+
+	if len(partDesc.List) > 0 {
+		listValues := make(map[string]struct{}, len(partDesc.List))
+		for _, p := range partDesc.List {
+			if len(p.Name) == 0 {
+				return fmt.Errorf("partition name must be non-empty")
+			}
+			if _, exists := partitionNames[p.Name]; exists {
+				return fmt.Errorf("partition name %s must be unique", p.Name)
+			}
+			partitionNames[p.Name] = struct{}{}
+
+			if len(p.Values) == 0 {
+				return fmt.Errorf("partition %s must contain values", p.Name)
+			}
+			// NB: key encoding is used to check uniqueness because it has
+			// to match the behavior of the value when indexed.
+			for _, valueEncBuf := range p.Values {
+				datums, keyEncBuf, err := translateValueEncodingToKey(
+					a, desc, valueEncBuf, colIDs,
+				)
+				if err != nil {
+					return fmt.Errorf("decoding %s: %v", p.Name, err)
+				}
+				if _, exists := listValues[string(keyEncBuf)]; exists {
+					return fmt.Errorf("%v cannot be present in more than one partition", datums)
+				}
+				listValues[string(keyEncBuf)] = struct{}{}
+			}
+
+			newColOffset := colOffset + int(partDesc.NumColumns)
+			if err := desc.validatePartitioningDescriptor(
+				a, idxDesc, &p.Subpartitioning, newColOffset, partitionNames,
+			); err != nil {
+				return err
+			}
+		}
+	}
+
+	if len(partDesc.Range) > 0 {
+		var lastValue []byte
+		rangeValues := make(map[string]struct{}, len(partDesc.Range))
+		for _, p := range partDesc.Range {
+			if len(p.Name) == 0 {
+				return fmt.Errorf("partition name must be non-empty")
+			}
+			if _, exists := partitionNames[p.Name]; exists {
+				return fmt.Errorf("partition name %s must be unique", p.Name)
+			}
+			partitionNames[p.Name] = struct{}{}
+
+			// NB: key encoding is used to check sortedness and uniqueness
+			// because it has to match the behavior of the value when
+			// indexed.
+			datums, keyEncBuf, err := translateValueEncodingToKey(a, desc, p.UpperBound, colIDs)
+			if err != nil {
+				return fmt.Errorf("decoding %s: %v", p.Name, err)
+			}
+			if _, exists := rangeValues[string(keyEncBuf)]; exists {
+				return fmt.Errorf("%v cannot be present in more than one partition", datums)
+			}
+
+			rangeValues[string(keyEncBuf)] = struct{}{}
+			if bytes.Compare(lastValue, keyEncBuf) >= 0 {
+				return fmt.Errorf("values must be strictly increasing")
+			}
+			lastValue = keyEncBuf
+
+			newColOffset := colOffset + int(partDesc.NumColumns)
+			if err := desc.validatePartitioningDescriptor(
+				a, idxDesc, &p.Subpartitioning, newColOffset, partitionNames,
+			); err != nil {
+				return err
+			}
+		}
+	}
+
+	return nil
+}
+
+// validatePartitioning validates that any PartitioningDescriptors contained in
+// table indexes are well-formed. See validatePartitioningDesc for details.
+func (desc *TableDescriptor) validatePartitioning() error {
+	partitionNames := make(map[string]struct{})
+
+	a := &DatumAlloc{}
+	return desc.ForeachNonDropIndex(func(idxDesc *IndexDescriptor) error {
+		return desc.validatePartitioningDescriptor(
+			a, idxDesc, &idxDesc.Partitioning, 0 /* colOffset */, partitionNames,
+		)
+	})
 }
 
 // FamilyHeuristicTargetBytes is the target total byte size of columns that the

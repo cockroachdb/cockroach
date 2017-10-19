@@ -80,6 +80,10 @@ func typeIsOrContainsVerbotenLocked(t reflect.Type, verboten reflect.Kind) refle
 	key := typeKey{t, verboten}
 	knownTypeIsOrContainsVerboten, ok := types.known[key]
 	if !ok {
+		// To prevent infinite recursion on recursive proto types, put a
+		// placeholder in here and immediately overwite it after
+		// typeIsOrContainsVerbotenImpl returns.
+		types.known[key] = nil
 		knownTypeIsOrContainsVerboten = typeIsOrContainsVerbotenImpl(t, verboten)
 		types.known[key] = knownTypeIsOrContainsVerboten
 	}
