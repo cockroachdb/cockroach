@@ -47,15 +47,27 @@ import (
 // TODO(radu): generalize this to Functional Dependencies as described in the
 // paper (referenced above).
 //
+// == Not-null columns ==
+//
+// We keep track of the columns for which we know there are no NULLs in the
+// result set.
+//
 // == Keys ==
 //
-// A set of columns S forms a "key" if no two rows are equal when projected
-// on S. Such a property arises when we are scanning a unique index.
+// A set of columns S forms a "key" if no two rows are equal when projected on
+// S. A requirement for a column set to be a key is for no columns in the set to
+// be NULL-able. This requirement stems from the property of NULL where NULL !=
+// NULL. The simplest example of a key is the primary key for a table (recall
+// that all of the columns of the primary key are defined to be NOT NULL).
 //
-// An empty key set is valid: it indicates the results have a single row.
+// A set of columns S forms a "weak key" if, after projection onto S, no two
+// rows are equal and no rows contain NULL values. A UNIQUE index on a table is
+// a candidate key and possibly a key if all of the columns are NOT NULL. A weak
+// key is a key if all the columns are not-null.
 //
-// We store a list of sets which form keys. In most cases there is at most one
-// key.
+// We store a list of sets which form weak keys. In most cases there is at most
+// one weak key. Some of these sets also form weak keys - namely, those which
+// are also a subset of the not-null column set.
 //
 // == Ordering information ==
 //
@@ -100,13 +112,24 @@ type physicalProps struct {
 	eqGroups util.UnionFind
 
 	// columns for which we know we have a single value. For groups of equivalent
-	// columns, only the group representative can be in the set.
+	// columns, only the group representative can be in this set.
 	constantCols util.FastIntSet
 
-	// List of column sets which are "keys"; a column set is a key if no two rows
-	// are equal after projection onto that set. Key sets cannot contain constant
-	// columns. An empty key set is valid (it implies there is a single row).
-	keySets []util.FastIntSet
+	// columns for which we know we have only non-NULL values. For groups of
+	// equivalent columns, only the group representative can be in this set.
+	// This set contains all the constant columns.
+	notNullCols util.FastIntSet
+
+	// List of column sets which are "weak keys" (see above). Key sets cannot
+	// contain constant columns. A weak key set cannot contain any other weak key
+	// set (it would be redundant).
+	//
+	// Some weak keys may in fact be keys, specifically those which are a subset
+	// of notNullCols.
+	//
+	// An empty key set is valid (an empty key it implies there is at most one
+	// row).
+	weakKeys []util.FastIntSet
 
 	// ordering of any other columns. This order is "reduced", meaning that there
 	// the columns in constantCols do not appear in this ordering and for groups of
@@ -122,8 +145,8 @@ func (pp physicalProps) check() {
 			panic(fmt.Sprintf("non-representative const column %d (representative: %d)", c, repr))
 		}
 	}
-	// Only equivalency group representatives show up in keySets.
-	for _, k := range pp.keySets {
+	// Only equivalency group representatives show up in weakKeys.
+	for _, k := range pp.weakKeys {
 		for c, ok := k.Next(0); ok; c, ok = k.Next(c + 1) {
 			if repr := pp.eqGroups.Find(c); repr != c {
 				panic(fmt.Sprintf("non-representative key set column %d (representative: %d)", c, repr))
@@ -133,9 +156,13 @@ func (pp physicalProps) check() {
 			}
 		}
 	}
+	// Constant columns are by definition not-null.
+	if !pp.constantCols.SubsetOf(pp.notNullCols) {
+		panic(fmt.Sprintf("const columns %s should be not-null %s", pp.constantCols, pp.notNullCols))
+	}
 	var seen util.FastIntSet
 	for _, o := range pp.ordering {
-		if pp.groupContainsKey(seen) {
+		if pp.isKey(seen) {
 			panic(fmt.Sprintf("ordering contains columns after forming a key"))
 		}
 		// Only equivalency group representatives show up in ordering.
@@ -153,11 +180,22 @@ func (pp physicalProps) check() {
 	}
 }
 
+// Returns true if the columns in the given set form a weak key.
+// Assumes cols contains only column group representatives.
+func (pp *physicalProps) isWeakKey(cols util.FastIntSet) bool {
+	for _, k := range pp.weakKeys {
+		if k.SubsetOf(cols) {
+			return true
+		}
+	}
+	return false
+}
+
 // Returns true if there is a keySet that is a subset of cols.
 // Assumes cols contains only column group representatives.
-func (pp *physicalProps) groupContainsKey(cols util.FastIntSet) bool {
-	for _, k := range pp.keySets {
-		if k.SubsetOf(cols) {
+func (pp *physicalProps) isKey(cols util.FastIntSet) bool {
+	for _, k := range pp.weakKeys {
+		if k.SubsetOf(cols) && k.SubsetOf(pp.notNullCols) {
 			return true
 		}
 	}
@@ -178,7 +216,7 @@ func (pp *physicalProps) reduce(order sqlbase.ColumnOrdering) sqlbase.ColumnOrde
 	var groupsSeen util.FastIntSet
 	for i, o := range order {
 		group := pp.eqGroups.Find(o.ColIdx)
-		if pp.groupContainsKey(groupsSeen) {
+		if pp.isKey(groupsSeen) {
 			// The group of columns we added so far contains a key; further columns
 			// are all redundant.
 			if result == nil {
@@ -217,6 +255,8 @@ func (pp *physicalProps) reduce(order sqlbase.ColumnOrdering) sqlbase.ColumnOrde
 //  - an equivalency group (e.g. a=b=c)
 //  - a constant column (e.g. a=CONST)
 //  - ordering (e.g. a+,b-)
+//  - key (e.g. key(a,b) or weak-key(a,b))
+//  - a not-null column (e.g. a!=NULL)
 //
 // Example:
 //   a=b=c; d=e=f; g=CONST; h=CONST; b+,d-
@@ -266,9 +306,23 @@ func (pp *physicalProps) Format(buf *bytes.Buffer, columns sqlbase.ResultColumns
 			buf.WriteString("=CONST")
 		}
 	}
+	// Print the non-null columns (except constant columns).
+	if !pp.notNullCols.Empty() {
+		for _, c := range pp.notNullCols.Ordered() {
+			if !pp.constantCols.Contains(c) {
+				semiColon()
+				printCol(buf, columns, c)
+				buf.WriteString("!=NULL")
+			}
+		}
+	}
 
-	for _, k := range pp.keySets {
+	for _, k := range pp.weakKeys {
 		semiColon()
+		if !k.SubsetOf(pp.notNullCols) {
+			buf.WriteString("weak-")
+		}
+
 		buf.WriteString("key(")
 		first := true
 		for c, ok := k.Next(0); ok; c, ok = k.Next(c + 1) {
@@ -314,10 +368,15 @@ func (pp *physicalProps) isEmpty() bool {
 func (pp *physicalProps) addConstantColumn(colIdx int) {
 	group := pp.eqGroups.Find(colIdx)
 	pp.constantCols.Add(group)
-	for i := range pp.keySets {
-		pp.keySets[i].Remove(group)
+	pp.notNullCols.Add(group)
+	for i := range pp.weakKeys {
+		pp.weakKeys[i].Remove(group)
 	}
 	pp.ordering = pp.reduce(pp.ordering)
+}
+
+func (pp *physicalProps) addNotNullColumn(colIdx int) {
+	pp.notNullCols.Add(pp.eqGroups.Find(colIdx))
 }
 
 func (pp *physicalProps) addEquivalency(colA, colB int) {
@@ -337,17 +396,22 @@ func (pp *physicalProps) addEquivalency(colA, colB int) {
 		pp.constantCols.Add(gA)
 	}
 
-	for i := range pp.keySets {
-		if pp.keySets[i].Contains(gB) {
-			pp.keySets[i].Remove(gB)
-			pp.keySets[i].Add(gA)
+	if pp.notNullCols.Contains(gB) {
+		pp.notNullCols.Remove(gB)
+		pp.notNullCols.Add(gA)
+	}
+
+	for i := range pp.weakKeys {
+		if pp.weakKeys[i].Contains(gB) {
+			pp.weakKeys[i].Remove(gB)
+			pp.weakKeys[i].Add(gA)
 		}
 	}
 
 	pp.ordering = pp.reduce(pp.ordering)
 }
 
-func (pp *physicalProps) addKeySet(cols util.FastIntSet) {
+func (pp *physicalProps) addWeakKey(cols util.FastIntSet) {
 	// Remap column indices to equivalency group representatives.
 	var k util.FastIntSet
 	for c, ok := cols.Next(0); ok; c, ok = cols.Next(c + 1) {
@@ -360,21 +424,21 @@ func (pp *physicalProps) addKeySet(cols util.FastIntSet) {
 
 	// Check if the key set is redundant, or if it makes some existing
 	// key sets redundant.
-	// Note: we don't use range because we are modifying keySets.
-	for i := 0; i < len(pp.keySets); i++ {
-		k := pp.keySets[i]
+	// Note: we don't use range because we are modifying weakKeys.
+	for i := 0; i < len(pp.weakKeys); i++ {
+		k := pp.weakKeys[i]
 		if k.SubsetOf(cols) {
 			// We already have a key with a subset of these columns.
 			return
 		}
 		if cols.SubsetOf(k) {
 			// The new key set makes this one redundant.
-			copy(pp.keySets[i:], pp.keySets[i+1:])
-			pp.keySets = pp.keySets[:len(pp.keySets)-1]
+			copy(pp.weakKeys[i:], pp.weakKeys[i+1:])
+			pp.weakKeys = pp.weakKeys[:len(pp.weakKeys)-1]
 			i--
 		}
 	}
-	pp.keySets = append(pp.keySets, cols)
+	pp.weakKeys = append(pp.weakKeys, cols)
 }
 
 func (pp *physicalProps) addOrderColumn(colIdx int, dir encoding.Direction) {
@@ -390,10 +454,11 @@ func (pp *physicalProps) copy() physicalProps {
 	result := physicalProps{
 		eqGroups:     pp.eqGroups.Copy(),
 		constantCols: pp.constantCols.Copy(),
-		keySets:      make([]util.FastIntSet, len(pp.keySets)),
+		notNullCols:  pp.notNullCols.Copy(),
+		weakKeys:     make([]util.FastIntSet, len(pp.weakKeys)),
 	}
-	for i := range pp.keySets {
-		result.keySets[i] = pp.keySets[i].Copy()
+	for i := range pp.weakKeys {
+		result.weakKeys[i] = pp.weakKeys[i].Copy()
 	}
 
 	if len(pp.ordering) > 0 {
@@ -434,7 +499,7 @@ func (pp *physicalProps) reverse() physicalProps {
 // colMap is {0, -1, 2}. Column 1 will not be part of the ordering or any
 // equivalency groups.
 func (pp *physicalProps) project(colMap []int) physicalProps {
-	var newOrd physicalProps
+	var newPP physicalProps
 
 	// For every equivalency group that has at least a column that is projected,
 	// pick one such column as a representative for that group.
@@ -456,7 +521,7 @@ func (pp *physicalProps) project(colMap []int) physicalProps {
 			group := pp.eqGroups.Find(c)
 			if r, ok := newRepr[group]; ok {
 				// This group shows up multiple times in the projection.
-				newOrd.eqGroups.Union(i, r)
+				newPP.eqGroups.Union(i, r)
 			} else {
 				// Pick i as a representative for this group.
 				newRepr[group] = i
@@ -469,13 +534,22 @@ func (pp *physicalProps) project(colMap []int) physicalProps {
 	for col, ok := pp.constantCols.Next(0); ok; col, ok = pp.constantCols.Next(col + 1) {
 		group := pp.eqGroups.Find(col)
 		if r, ok := newRepr[group]; ok {
-			newOrd.constantCols.Add(newOrd.eqGroups.Find(r))
+			newPP.constantCols.Add(newPP.eqGroups.Find(r))
+		}
+	}
+
+	// Remap not-null columns, ignoring column groups that have no projected
+	// columns.
+	for col, ok := pp.notNullCols.Next(0); ok; col, ok = pp.notNullCols.Next(col + 1) {
+		group := pp.eqGroups.Find(col)
+		if r, ok := newRepr[group]; ok {
+			newPP.notNullCols.Add(newPP.eqGroups.Find(r))
 		}
 	}
 
 	// Retain key sets that contain only projected columns.
 KeySetLoop:
-	for _, k := range pp.keySets {
+	for _, k := range pp.weakKeys {
 		var newK util.FastIntSet
 		for col, ok := k.Next(0); ok; col, ok = k.Next(col + 1) {
 			group := pp.eqGroups.Find(col)
@@ -485,10 +559,10 @@ KeySetLoop:
 			}
 			newK.Add(r)
 		}
-		newOrd.keySets = append(newOrd.keySets, newK)
+		newPP.weakKeys = append(newPP.weakKeys, newK)
 	}
 
-	newOrd.ordering = make(sqlbase.ColumnOrdering, 0, len(pp.ordering))
+	newPP.ordering = make(sqlbase.ColumnOrdering, 0, len(pp.ordering))
 
 	// Preserve the ordering, up to the first column that's not present in the
 	// projected columns.
@@ -507,11 +581,11 @@ KeySetLoop:
 			// 1 | 2 | 3          1 | 3
 			break
 		}
-		newOrd.ordering = append(newOrd.ordering, sqlbase.ColumnOrderInfo{
-			ColIdx: newOrd.eqGroups.Find(r), Direction: o.Direction,
+		newPP.ordering = append(newPP.ordering, sqlbase.ColumnOrderInfo{
+			ColIdx: newPP.eqGroups.Find(r), Direction: o.Direction,
 		})
 	}
-	return newOrd
+	return newPP
 }
 
 // computeMatch computes how long of a prefix of a desired ColumnOrdering is
@@ -535,7 +609,7 @@ func (pp physicalProps) computeMatchInternal(
 	var groupsSeen util.FastIntSet
 
 	for i, col := range desired {
-		if pp.groupContainsKey(groupsSeen) {
+		if pp.isKey(groupsSeen) {
 			// The columns accumulated so far form a key; any other columns with which
 			// we may want to "refine" the ordering don't make a difference.
 			return len(desired), pos
@@ -752,7 +826,7 @@ MainLoop:
 			groupA := a.eqGroups.Find(ordA[0].ColIdx)
 			for i := range colA {
 				if a.eqGroups.Find(colA[i]) == groupA &&
-					((doneB && b.groupContainsKey(seenGroupsB)) ||
+					((doneB && b.isKey(seenGroupsB)) ||
 						seenGroupsB.Contains(b.eqGroups.Find(colB[i]))) {
 					result = append(result, sqlbase.ColumnOrderInfo{ColIdx: i, Direction: ordA[0].Direction})
 					seenGroupsA.Add(groupA)
@@ -768,7 +842,7 @@ MainLoop:
 			groupB := b.eqGroups.Find(ordB[0].ColIdx)
 			for i := range colB {
 				if b.eqGroups.Find(colB[i]) == groupB &&
-					((doneA && a.groupContainsKey(seenGroupsA)) ||
+					((doneA && a.isKey(seenGroupsA)) ||
 						seenGroupsA.Contains(a.eqGroups.Find(colA[i]))) {
 					result = append(result, sqlbase.ColumnOrderInfo{ColIdx: i, Direction: ordB[0].Direction})
 					seenGroupsB.Add(groupB)

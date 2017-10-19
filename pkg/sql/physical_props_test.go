@@ -46,13 +46,15 @@ func makeColumnOrdering(args ...interface{}) sqlbase.ColumnOrdering {
 
 type equivGroups [][]int
 type constCols []int
-type keySets [][]int
+type notNullCols []int
+type weakKeys [][]int
 
 // makePhysProps creates a physicalProps. The parameters supported are:
 //  - ColumnOrdering: ordering
 //  - equivGroups: equivalency groups
 //  - constCols: constant columns
-//  - keySets: key sets
+//  - notNullCols: not-null columns (in addition to constant columns)
+//  - weakKeys: weak key sets
 //
 // The parameters can be passed in any order. Examples:
 //   makePhysProps(
@@ -87,13 +89,19 @@ func makePhysProps(args ...interface{}) physicalProps {
 		case constCols:
 			// Constant columns.
 			for _, i := range a {
-				props.constantCols.Add(props.eqGroups.Find(i))
+				group := props.eqGroups.Find(i)
+				props.constantCols.Add(group)
+				props.notNullCols.Add(group)
 			}
-		case keySets:
-			props.keySets = make([]util.FastIntSet, len(a))
+		case notNullCols:
+			for _, i := range a {
+				props.notNullCols.Add(props.eqGroups.Find(i))
+			}
+		case weakKeys:
+			props.weakKeys = make([]util.FastIntSet, len(a))
 			for i := range a {
 				for _, j := range a[i] {
-					props.keySets[i].Add(props.eqGroups.Find(j))
+					props.weakKeys[i].Add(props.eqGroups.Find(j))
 				}
 			}
 		case equivGroups:
@@ -111,13 +119,14 @@ func propsEqual(a, b physicalProps) bool {
 	b.check()
 	if !a.eqGroups.Equals(b.eqGroups) ||
 		!a.constantCols.Equals(b.constantCols) ||
-		len(a.keySets) != len(b.keySets) ||
+		!a.notNullCols.Equals(b.notNullCols) ||
+		len(a.weakKeys) != len(b.weakKeys) ||
 		len(a.ordering) != len(b.ordering) {
 		return false
 	}
 	// Verify the key sets match.
-	for i := range a.keySets {
-		if !a.keySets[i].Equals(b.keySets[i]) {
+	for i := range a.weakKeys {
+		if !a.weakKeys[i].Equals(b.weakKeys[i]) {
 			return false
 		}
 	}
@@ -195,7 +204,8 @@ func TestComputeOrderingMatch(t *testing.T) {
 			// Ordering with no constant columns but with key.
 			existing: makePhysProps(
 				makeColumnOrdering(1, desc, 2, asc),
-				keySets{{1, 2}},
+				weakKeys{{1, 2}},
+				notNullCols{1, 2},
 			),
 			cases: []desiredCase{
 				defTestCase(1, 0, makeColumnOrdering(1, desc, 5, asc)),
@@ -211,7 +221,8 @@ func TestComputeOrderingMatch(t *testing.T) {
 			existing: makePhysProps(
 				equivGroups{{1, 2, 3}},
 				makeColumnOrdering(1, desc, 4, asc),
-				keySets{{1, 4}},
+				weakKeys{{1, 4}},
+				notNullCols{1, 4},
 			),
 			cases: []desiredCase{
 				defTestCase(1, 0, makeColumnOrdering(1, desc, 5, asc)),
@@ -279,11 +290,31 @@ func TestComputeOrderingMatch(t *testing.T) {
 			},
 		},
 		{
+			// Ordering with constant columns and (useless) weak key.
+			existing: makePhysProps(
+				constCols{0, 5, 6},
+				makeColumnOrdering(1, desc, 2, asc),
+				weakKeys{{1, 2}},
+			),
+			cases: []desiredCase{
+				defTestCase(2, 0, makeColumnOrdering(1, desc, 5, asc)),
+				defTestCase(2, 1, makeColumnOrdering(5, asc, 1, desc)),
+				defTestCase(3, 0, makeColumnOrdering(1, desc, 5, asc, 2, asc, 7, desc)),
+				defTestCase(3, 1, makeColumnOrdering(5, asc, 1, desc, 2, asc, 7, desc)),
+				defTestCase(2, 2, makeColumnOrdering(0, desc, 5, asc)),
+				defTestCase(2, 1, makeColumnOrdering(5, asc, 1, desc, 2, desc)),
+				defTestCase(1, 0, makeColumnOrdering(1, desc, 2, desc)),
+				defTestCase(5, 2, makeColumnOrdering(0, asc, 6, desc, 1, desc, 5, desc, 2, asc, 9, asc)),
+				defTestCase(2, 2, makeColumnOrdering(0, asc, 6, desc, 2, asc, 5, desc, 1, desc)),
+			},
+		},
+		{
 			// Ordering with constant columns and key.
 			existing: makePhysProps(
 				constCols{0, 5, 6},
 				makeColumnOrdering(1, desc, 2, asc),
-				keySets{{1, 2}},
+				weakKeys{{1, 2}},
+				notNullCols{1, 2},
 			),
 			cases: []desiredCase{
 				defTestCase(2, 0, makeColumnOrdering(1, desc, 5, asc)),
@@ -303,7 +334,8 @@ func TestComputeOrderingMatch(t *testing.T) {
 				equivGroups{{1, 8}, {2, 9}},
 				constCols{0, 5, 6},
 				makeColumnOrdering(1, desc, 2, asc),
-				keySets{{1, 2}},
+				weakKeys{{1, 2}},
+				notNullCols{1, 2},
 			),
 			cases: []desiredCase{
 				defTestCase(2, 0, makeColumnOrdering(8, desc, 5, asc)),
@@ -393,7 +425,7 @@ func TestTrimOrderingGuarantee(t *testing.T) {
 								}
 							}
 							if isKey {
-								o.addKeySet(keySet)
+								o.addWeakKey(keySet)
 							}
 							o.check()
 							for _, desiredLen := range []int{0, 1, 2, 4, 5} {
@@ -437,12 +469,12 @@ func TestTrimOrdering(t *testing.T) {
 			name: "basic-prefix-1",
 			props: makePhysProps(
 				makeColumnOrdering(1, asc, 2, desc),
-				keySets{{1, 2}},
+				weakKeys{{1, 2}},
 			),
 			desired: makeColumnOrdering(1, asc),
 			expected: makePhysProps(
 				makeColumnOrdering(1, asc),
-				keySets{{1, 2}},
+				weakKeys{{1, 2}},
 			),
 		},
 		{
@@ -450,24 +482,24 @@ func TestTrimOrdering(t *testing.T) {
 			props: makePhysProps(
 				equivGroups{{1, 5}},
 				makeColumnOrdering(1, asc, 2, desc),
-				keySets{{1, 2}},
+				weakKeys{{1, 2}},
 			),
 			desired: makeColumnOrdering(1, asc, 5, asc),
 			expected: makePhysProps(
 				equivGroups{{1, 5}},
 				makeColumnOrdering(1, asc),
-				keySets{{1, 2}},
+				weakKeys{{1, 2}},
 			),
 		},
 		{
 			name: "direction-mismatch",
 			props: makePhysProps(
 				makeColumnOrdering(1, asc, 2, desc),
-				keySets{{1, 2}},
+				weakKeys{{1, 2}},
 			),
 			desired: makeColumnOrdering(1, desc),
 			expected: makePhysProps(
-				keySets{{1, 2}},
+				weakKeys{{1, 2}},
 			),
 		},
 		{
@@ -475,13 +507,13 @@ func TestTrimOrdering(t *testing.T) {
 			props: makePhysProps(
 				constCols{0, 5, 6},
 				makeColumnOrdering(1, desc, 2, desc),
-				keySets{{1, 2}},
+				weakKeys{{1, 2}},
 			),
 			desired: makeColumnOrdering(5, asc, 1, desc),
 			expected: makePhysProps(
 				constCols{0, 5, 6},
 				makeColumnOrdering(1, desc),
-				keySets{{1, 2}},
+				weakKeys{{1, 2}},
 			),
 		},
 
@@ -490,13 +522,13 @@ func TestTrimOrdering(t *testing.T) {
 			props: makePhysProps(
 				constCols{0, 5, 6},
 				makeColumnOrdering(1, desc, 2, desc, 3, asc),
-				keySets{{1, 2, 3}},
+				weakKeys{{1, 2, 3}},
 			),
 			desired: makeColumnOrdering(5, asc, 1, desc, 0, desc, 2, desc),
 			expected: makePhysProps(
 				constCols{0, 5, 6},
 				makeColumnOrdering(1, desc, 2, desc),
-				keySets{{1, 2, 3}},
+				weakKeys{{1, 2, 3}},
 			),
 		},
 
@@ -506,14 +538,14 @@ func TestTrimOrdering(t *testing.T) {
 				equivGroups{{1, 7}, {2, 9}},
 				constCols{0, 5, 6},
 				makeColumnOrdering(1, desc, 2, desc),
-				keySets{{1, 2}},
+				weakKeys{{1, 2}},
 			),
 			desired: makeColumnOrdering(5, asc, 1, desc, 6, desc, 7, asc),
 			expected: makePhysProps(
 				equivGroups{{1, 7}, {2, 9}},
 				constCols{0, 5, 6},
 				makeColumnOrdering(1, desc),
-				keySets{{1, 2}},
+				weakKeys{{1, 2}},
 			),
 		},
 		{
@@ -521,12 +553,12 @@ func TestTrimOrdering(t *testing.T) {
 			props: makePhysProps(
 				constCols{0, 5, 6},
 				makeColumnOrdering(1, desc, 2, desc, 3, asc),
-				keySets{{1, 2, 3}},
+				weakKeys{{1, 2, 3}},
 			),
 			desired: makeColumnOrdering(5, asc, 4, asc),
 			expected: makePhysProps(
 				constCols{0, 5, 6},
-				keySets{{1, 2, 3}},
+				weakKeys{{1, 2, 3}},
 			),
 		},
 	}
@@ -637,7 +669,8 @@ func TestComputeMergeJoinOrdering(t *testing.T) {
 			name: "key-a",
 			a: makePhysProps(
 				makeColumnOrdering(1, asc),
-				keySets{{1}},
+				weakKeys{{1}},
+				notNullCols{1},
 			),
 			b: makePhysProps(
 				makeColumnOrdering(3, asc, 4, desc),
@@ -654,7 +687,8 @@ func TestComputeMergeJoinOrdering(t *testing.T) {
 			),
 			b: makePhysProps(
 				makeColumnOrdering(3, asc),
-				keySets{{3}},
+				weakKeys{{3}},
+				notNullCols{3},
 			),
 			colA:     []int{1, 2},
 			colB:     []int{3, 4},
@@ -744,7 +778,7 @@ func TestProjectOrdering(t *testing.T) {
 	ord := makePhysProps(
 		equivGroups{{0, 1, 2}, {3, 4}, {5, 6, 7}},
 		constCols{3, 8, 9},
-		keySets{{0, 5}, {5, 10}, {0, 10, 11}},
+		weakKeys{{0, 5}, {5, 10}, {0, 10, 11}},
 		makeColumnOrdering(0, asc, 10, asc, 5, desc),
 	)
 	testCases := []struct {
@@ -775,7 +809,7 @@ func TestProjectOrdering(t *testing.T) {
 			columns: []int{4, 7, 1},
 			expected: makePhysProps(
 				constCols{0},
-				keySets{{1, 2}},
+				weakKeys{{1, 2}},
 				makeColumnOrdering(2, asc),
 			),
 		},
@@ -783,7 +817,7 @@ func TestProjectOrdering(t *testing.T) {
 			columns: []int{0, 3, 5, 10, 8},
 			expected: makePhysProps(
 				constCols{1, 4},
-				keySets{{0, 2}, {2, 3}},
+				weakKeys{{0, 2}, {2, 3}},
 				makeColumnOrdering(0, asc, 3, asc, 2, desc),
 			),
 		},
@@ -792,7 +826,7 @@ func TestProjectOrdering(t *testing.T) {
 			expected: makePhysProps(
 				equivGroups{{0, 1, 2}, {3, 4}, {5, 6}},
 				constCols{3, 8},
-				keySets{{0, 5}, {5, 7}},
+				weakKeys{{0, 5}, {5, 7}},
 				makeColumnOrdering(0, asc, 7, asc, 5, desc),
 			),
 		},

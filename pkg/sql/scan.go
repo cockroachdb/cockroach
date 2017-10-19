@@ -384,7 +384,7 @@ func (n *scanNode) initOrdering(exactPrefix int) {
 func (n *scanNode) computePhysicalProps(
 	index *sqlbase.IndexDescriptor, exactPrefix int, reverse bool,
 ) physicalProps {
-	var ordering physicalProps
+	var pp physicalProps
 
 	columnIDs, dirs := index.FullColumnIDs()
 
@@ -395,20 +395,24 @@ func (n *scanNode) computePhysicalProps(
 			panic(fmt.Sprintf("index refers to unknown column id %d", colID))
 		}
 		if i < exactPrefix {
-			ordering.addConstantColumn(idx)
+			pp.addConstantColumn(idx)
 		} else {
 			dir := dirs[i]
 			if reverse {
 				dir = dir.Reverse()
 			}
-			ordering.addOrderColumn(idx, dir)
+			pp.addOrderColumn(idx, dir)
+		}
+		if !n.cols[idx].Nullable {
+			pp.addNotNullColumn(idx)
 		}
 		keySet.Add(idx)
 	}
-	// We included any implicit columns, so the columns form a key.
-	ordering.addKeySet(keySet)
-	ordering.applyExpr(&n.p.evalCtx, n.filter)
-	return ordering
+	// We included any implicit columns, so the columns form a (possibly weak)
+	// key.
+	pp.addWeakKey(keySet)
+	pp.applyExpr(&n.p.evalCtx, n.filter)
+	return pp
 }
 
 // scanNode implements parser.IndexedVarContainer.
