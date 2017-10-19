@@ -21,6 +21,8 @@ import (
 	"sync"
 	"time"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -31,7 +33,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
-	"golang.org/x/net/context"
 )
 
 const (
@@ -284,12 +285,15 @@ func (ir *intentResolver) processIntentsAsync(
 
 	for _, item := range intents {
 		err := stopper.RunLimitedAsyncTask(
-			ctx, "storage.intentResolver: processing intents", ir.sem, false, /* wait */
-			func(_ context.Context) {
-				// If we've successfully launched a background task, dissociate
-				// this work from our caller's context and timeout.
-				ir.processIntents(context.Background(), r, item, now)
-			})
+			// If we've successfully launched a background task,
+			// dissociate this work from our caller's context and
+			// timeout.
+			context.Background(),
+			"storage.intentResolver: processing intents",
+			ir.sem, false /* wait */, func(ctx context.Context) {
+				ir.processIntents(ctx, r, item, now)
+			},
+		)
 		if err != nil {
 			if err == stop.ErrThrottled && allowSyncProcessing {
 				// A limited task was not available. Rather than waiting for one, we

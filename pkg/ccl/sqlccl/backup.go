@@ -327,11 +327,7 @@ func writeBackupDescriptor(
 		return err
 	}
 
-	if err := exportStore.WriteFile(ctx, filename, bytes.NewReader(descBuf)); err != nil {
-		return err
-	}
-
-	return nil
+	return exportStore.WriteFile(ctx, filename, bytes.NewReader(descBuf))
 }
 
 func resolveTargetsToDescriptors(

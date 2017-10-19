@@ -208,7 +208,7 @@ func main() {
 			}
 		}
 		if vendorChanged {
-			cmd := exec.Command("dep", "ensure")
+			cmd := exec.Command("dep", "ensure", "-v")
 			cmd.Dir = crdb.Dir
 			cmd.Stdout = os.Stdout
 			cmd.Stderr = os.Stderr
@@ -218,15 +218,20 @@ func main() {
 			}
 
 			// Check for diffs.
-			for _, dir := range []string{crdb.Dir, filepath.Join(crdb.Dir, "vendor")} {
+			var foundDiff bool
+			for _, dir := range []string{filepath.Join(crdb.Dir, "vendor"), crdb.Dir} {
 				cmd := exec.Command("git", "diff")
 				cmd.Dir = dir
-				log.Println(cmd.Args)
+				log.Println(cmd.Dir, cmd.Args)
 				if output, err := cmd.Output(); err != nil {
 					log.Fatal(err)
 				} else if len(output) > 0 {
-					log.Fatalf("unexpected diff:\n%s", output)
+					foundDiff = true
+					log.Printf("unexpected diff:\n%s", output)
 				}
+			}
+			if foundDiff {
+				os.Exit(1)
 			}
 		}
 	} else {

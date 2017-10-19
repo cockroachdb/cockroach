@@ -18,12 +18,12 @@ import (
 	"bytes"
 	"fmt"
 	"path/filepath"
-	"reflect"
 	"regexp"
 	"strconv"
 	"testing"
 	"time"
 
+	"github.com/gogo/protobuf/proto"
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
@@ -350,7 +350,7 @@ func TestNodeStatusResponse(t *testing.T) {
 	if len(nodeStatuses) != 1 {
 		t.Errorf("too many node statuses returned - expected:1 actual:%d", len(nodeStatuses))
 	}
-	if !reflect.DeepEqual(s.node.Descriptor, nodeStatuses[0].Desc) {
+	if !proto.Equal(&s.node.Descriptor, &nodeStatuses[0].Desc) {
 		t.Errorf("node status descriptors are not equal\nexpected:%+v\nactual:%+v\n", s.node.Descriptor, nodeStatuses[0].Desc)
 	}
 
@@ -361,7 +361,7 @@ func TestNodeStatusResponse(t *testing.T) {
 		if err := getStatusJSONProto(s, "nodes/"+oldNodeStatus.Desc.NodeID.String(), &nodeStatus); err != nil {
 			t.Fatal(err)
 		}
-		if !reflect.DeepEqual(s.node.Descriptor, nodeStatus.Desc) {
+		if !proto.Equal(&s.node.Descriptor, &nodeStatus.Desc) {
 			t.Errorf("node status descriptors are not equal\nexpected:%+v\nactual:%+v\n", s.node.Descriptor, nodeStatus.Desc)
 		}
 	}
@@ -371,25 +371,27 @@ func TestNodeStatusResponse(t *testing.T) {
 // as time series data.
 func TestMetricsRecording(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+
 	s, _, kvDB := serverutils.StartServer(t, base.TestServerArgs{
 		MetricsSampleInterval: 5 * time.Millisecond})
-	defer s.Stopper().Stop(context.TODO())
-
-	checkTimeSeriesKey := func(now int64, keyName string) error {
-		key := ts.MakeDataKey(keyName, "", ts.Resolution10s, now)
-		data := roachpb.InternalTimeSeriesData{}
-		return kvDB.GetProto(context.TODO(), key, &data)
-	}
+	defer s.Stopper().Stop(ctx)
 
 	// Verify that metrics for the current timestamp are recorded. This should
 	// be true very quickly.
 	testutils.SucceedsSoon(t, func() error {
 		now := s.Clock().PhysicalNow()
-		if err := checkTimeSeriesKey(now, "cr.store.livebytes.1"); err != nil {
-			return err
-		}
-		if err := checkTimeSeriesKey(now, "cr.node.sys.go.allocbytes.1"); err != nil {
-			return err
+
+		var data roachpb.InternalTimeSeriesData
+		for _, keyName := range []string{
+			"cr.store.livebytes.1",
+			"cr.node.sys.go.allocbytes.1",
+		} {
+			key := ts.MakeDataKey(keyName, "", ts.Resolution10s, now)
+			if err := kvDB.GetProto(ctx, key, &data); err != nil {
+				return err
+			}
 		}
 		return nil
 	})

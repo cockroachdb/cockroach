@@ -16,13 +16,10 @@ package config_test
 
 import (
 	"fmt"
-	"reflect"
 	"sort"
-	"strings"
 	"testing"
 
 	"github.com/gogo/protobuf/proto"
-	"github.com/kr/pretty"
 	"gopkg.in/yaml.v2"
 
 	"github.com/cockroachdb/cockroach/pkg/config"
@@ -526,11 +523,11 @@ constraints: [foo, +duck=foo, -duck=foo]
 	}
 
 	var unmarshaled config.ZoneConfig
-	if err := yaml.Unmarshal(body, &unmarshaled); err != nil {
+	if err := yaml.UnmarshalStrict(body, &unmarshaled); err != nil {
 		t.Fatal(err)
 	}
-	if !reflect.DeepEqual(unmarshaled, original) {
-		t.Errorf("yaml.Unmarshal(%q) = %+v; not %+v", body, unmarshaled, original)
+	if !proto.Equal(&unmarshaled, &original) {
+		t.Errorf("yaml.UnmarshalStrict(%q) = %+v; not %+v", body, unmarshaled, original)
 	}
 }
 
@@ -621,9 +618,8 @@ func TestZoneSpecifiers(t *testing.T) {
 				if err != nil {
 					return err
 				}
-				if e, a := tc.id, int(id); !reflect.DeepEqual(e, a) {
-					t.Errorf("path did not match expected path: %s\n",
-						strings.Join(pretty.Diff(e, a), "\n"))
+				if e, a := tc.id, int(id); a != e {
+					t.Errorf("path %d did not match expected path %d", a, e)
 				}
 				if e, a := tc.cliSpecifier, config.CLIZoneSpecifier(zs); e != a {
 					t.Errorf("expected %q to roundtrip, but got %q", e, a)

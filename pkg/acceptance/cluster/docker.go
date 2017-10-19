@@ -27,11 +27,11 @@ import (
 	"strings"
 	"time"
 
-	distreference "github.com/docker/distribution/reference"
+	"github.com/docker/distribution/reference"
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
+	"github.com/docker/docker/api/types/filters"
 	"github.com/docker/docker/api/types/network"
-	"github.com/docker/docker/api/types/reference"
 	"github.com/docker/docker/client"
 	"github.com/docker/docker/pkg/jsonmessage"
 	"github.com/docker/go-connections/nat"
@@ -76,24 +76,32 @@ func (c Container) Name() string {
 }
 
 func hasImage(ctx context.Context, l *DockerCluster, ref string) error {
-	distributionRef, err := distreference.ParseNamed(ref)
+	distributionRef, err := reference.ParseNamed(ref)
 	if err != nil {
 		return err
 	}
-	path := distreference.Path(distributionRef)
+	path := reference.Path(distributionRef)
 	// Correct for random docker stupidity:
 	//
 	// https://github.com/moby/moby/blob/7248742/registry/service.go#L207:L215
 	path = strings.TrimPrefix(path, "library/")
+
 	images, err := l.client.ImageList(ctx, types.ImageListOptions{
-		MatchName: path,
-		All:       true,
+		All: true,
+		Filters: filters.NewArgs(
+			filters.Arg("reference", path),
+		),
 	})
 	if err != nil {
 		return err
 	}
 
-	wanted := fmt.Sprintf("%s:%s", path, reference.GetTagFromNamedRef(distributionRef))
+	tagged, ok := distributionRef.(reference.Tagged)
+	if !ok {
+		return errors.Errorf("untagged reference %s not permitted", ref)
+	}
+
+	wanted := fmt.Sprintf("%s:%s", path, tagged.Tag())
 	for _, image := range images {
 		for _, repoTag := range image.RepoTags {
 			// The Image.RepoTags field contains strings of the form <path>:<tag>.
@@ -248,32 +256,32 @@ func (c *Container) Stop(ctx context.Context, timeout *time.Duration) error {
 var _ = (*Container).Stop
 
 // Wait waits for a running container to exit.
-func (c *Container) Wait(ctx context.Context) error {
-	exitCode, err := c.cluster.client.ContainerWait(ctx, c.id)
-	if err != nil {
+func (c *Container) Wait(ctx context.Context, condition container.WaitCondition) error {
+	waitOKBodyCh, errCh := c.cluster.client.ContainerWait(ctx, c.id, condition)
+	select {
+	case err := <-errCh:
+		return err
+	case waitOKBody := <-waitOKBodyCh:
+		outputLog := filepath.Join(c.cluster.logDir, "console-output.log")
+		cmdLog, err := os.Create(outputLog)
+		if err != nil {
+			return err
+		}
+		defer cmdLog.Close()
+
+		out := io.MultiWriter(cmdLog, os.Stderr)
+		if err := c.Logs(ctx, out); err != nil {
+			log.Warning(ctx, err)
+		}
+
+		if exitCode := waitOKBody.StatusCode; exitCode != 0 {
+			err = errors.Errorf("non-zero exit code: %d", exitCode)
+			fmt.Fprintln(out, err.Error())
+			log.Shout(ctx, log.Severity_INFO, "command left-over files in ", c.cluster.logDir)
+		}
+
 		return err
 	}
-
-	outputLog := filepath.Join(c.cluster.logDir, "console-output.log")
-	cmdLog, err := os.Create(outputLog)
-	if err != nil {
-		return err
-	}
-	defer cmdLog.Close()
-
-	out := io.MultiWriter(cmdLog, os.Stderr)
-	if err := c.Logs(ctx, out); err != nil {
-		log.Warning(ctx, err)
-	}
-
-	var resultErr error
-	if exitCode != 0 {
-		resultErr = errors.Errorf("non-zero exit code: %d", exitCode)
-		fmt.Fprintln(out, resultErr.Error())
-		log.Shout(ctx, log.Severity_INFO, "command left-over files in ", c.cluster.logDir)
-	}
-
-	return resultErr
 }
 
 // Logs outputs the containers logs to the given io.Writer.
