@@ -81,19 +81,161 @@ type RangeGroupIterator interface {
 	Next() (Range, bool)
 }
 
-// rangeList is an implementation of a RangeGroup using a linked
-// list to sequentially order non-overlapping ranges.
+const rangeListNodeBucketSize = 8
+
+type rangeListNode struct {
+	slots [rangeListNodeBucketSize]Range // ordered, non-overlapping
+	len   int
+}
+
+func newRangeListNodeWithRange(r Range) *rangeListNode {
+	var n rangeListNode
+	n.push(r)
+	return &n
+}
+
+func (n *rangeListNode) push(r Range) {
+	n.slots[n.len] = r
+	n.len++
+}
+
+func (n *rangeListNode) full() bool {
+	return n.len == len(n.slots)
+}
+
+func (n *rangeListNode) min() Comparable {
+	return n.slots[0].Start
+}
+
+func (n *rangeListNode) max() Comparable {
+	return n.slots[n.len-1].End
+}
+
+// findIdx finds the upper-bound slot index that the provided range should fit
+// in the rangeListNode. It also returns whether the slot is currently occupied
+// by an overlapping range.
+func (n *rangeListNode) findIdx(r Range, inclusive bool) (int, bool) {
+	overlapFn := overlapsExclusive
+	passedCmp := 0
+	if inclusive {
+		overlapFn = overlapsInclusive
+		passedCmp = -1
+	}
+	for i, nr := range n.slots[:n.len] {
+		switch {
+		case overlapFn(nr, r):
+			return i, true
+		case r.End.Compare(nr.Start) <= passedCmp:
+			// Past where overlapping ranges would be.
+			return i, false
+		}
+	}
+	return n.len, false
+}
+
+// rangeList is an implementation of a RangeGroup using a bucketted linked list
+// to sequentially order non-overlapping ranges.
 //
 // rangeList is not safe for concurrent use by multiple goroutines.
 type rangeList struct {
-	ll list.List
+	ll  list.List
+	len int
 }
 
 // NewRangeList constructs a linked-list backed RangeGroup.
 func NewRangeList() RangeGroup {
 	var rl rangeList
 	rl.ll.Init()
+	rl.ll.PushFront(&rangeListNode{})
 	return &rl
+}
+
+// findNode returns the upper-bound node that the range would be bucketted in,
+// along with that node's previous element. It also returns whether the range
+// overlaps with the bounds of the node.
+func (rl *rangeList) findNode(r Range, inclusive bool) (prev, cur *list.Element, inCur bool) {
+	if err := rangeError(r); err != nil {
+		panic(err)
+	}
+	reachedCmp := 1
+	passedCmp := 0
+	if inclusive {
+		reachedCmp = 0
+		passedCmp = -1
+	}
+	for e := rl.ll.Front(); e != nil; e = e.Next() {
+		n := e.Value.(*rangeListNode)
+		if n.len == 0 {
+			// The node is empty. This must be the last node in the list.
+			return prev, e, false
+		}
+		// Check if the range starts at a value less than (or equal to, for
+		// inclusive) the maximum value in this node. This is what we want.
+		if n.max().Compare(r.Start) >= reachedCmp {
+			// Determine whether the range overlap the node's bounds.
+			inCur := n.min().Compare(r.End) <= passedCmp
+			return prev, e, inCur
+		}
+		prev = e
+	}
+	return prev, nil, false
+}
+
+// insertAtIdx inserts the provided range at the specified index in the node.
+// It performs any necessary slot movement to keep the ranges ordered.
+//
+// Note: e.Value is expected to be n, but we want to avoid repeated type
+// assertions so both are taken as arguments.
+func (rl *rangeList) insertAtIdx(e *list.Element, n *rangeListNode, r Range, i int) {
+	if n.full() {
+		// If the current node is full, we're going to need to shift off a range
+		// from one of the slots into a different node. If i is not pointing
+		// past the end of the range, we need to shift off the range currently
+		// in the last slot in this node. If i is pointing past the end of the
+		// range, we can just shift the new range to a different node without
+		// making any changes to this node.
+		toShift := n.slots[n.len-1]
+		noLocalChanges := false
+		if i == n.len {
+			toShift = r
+
+			// We're going to add range r to a different node, so there will be
+			// no local changes to this node.
+			noLocalChanges = true
+		}
+
+		// Check if the next node has room. Note that we only call insertAtIdx
+		// recursively on the next node if it is not full. We don't want to
+		// shift recursively all the way down the list. Instead, we'll just pay
+		// the constant cost below of inserting a fresh node in-between the
+		// current and next node.
+		next := e.Next()
+		insertedInNext := false
+		if next != nil {
+			nextN := next.Value.(*rangeListNode)
+			if !nextN.full() {
+				rl.insertAtIdx(next, nextN, toShift, 0)
+				insertedInNext = true
+			}
+		}
+		if !insertedInNext {
+			newN := newRangeListNodeWithRange(toShift)
+			rl.ll.InsertAfter(newN, e)
+			rl.len++
+		}
+
+		if noLocalChanges {
+			return
+		}
+	} else {
+		n.len++
+		rl.len++
+	}
+	// Shift all others over and copy the new range in. Because of
+	// the n.full check, we know that we'll have at least one free
+	// slot open at the end.
+	copy(n.slots[i+1:n.len], n.slots[i:n.len-1])
+	n.slots[i] = r
 }
 
 // Add implements RangeGroup. It iterates over the current ranges in the
@@ -105,42 +247,111 @@ func NewRangeList() RangeGroup {
 // case it won't be added. If the range is added, the function will also attempt
 // to merge any ranges within the list that now overlap.
 func (rl *rangeList) Add(r Range) bool {
-	if err := rangeError(r); err != nil {
-		panic(err)
+	prev, cur, inCur := rl.findNode(r, true /* inclusive */)
+
+	var prevN *rangeListNode
+	if prev != nil {
+		prevN = prev.Value.(*rangeListNode)
 	}
-	for e := rl.ll.Front(); e != nil; e = e.Next() {
-		er := e.Value.(Range)
-		switch {
-		case InclusiveOverlapper.Overlap(er, r):
-			// If a current range fully contains the new range, no
-			// need to add it.
-			if contains(er, r) {
-				return false
-			}
+	if !inCur && prevN != nil && !prevN.full() {
+		// There is a previous node. Add the range to the end of that node.
+		prevN.push(r)
+		rl.len++
+		return true
+	}
 
-			// Merge as many ranges as possible, and replace old range.
-			newR := merge(er, r)
-			for p := e.Next(); p != nil; {
-				pr := p.Value.(Range)
-				if InclusiveOverlapper.Overlap(newR, pr) {
-					newR = merge(newR, pr)
-
-					nextP := p.Next()
-					rl.ll.Remove(p)
-					p = nextP
-				} else {
-					break
-				}
-			}
-			e.Value = newR
-			return true
-		case r.End.Compare(er.Start) < 0:
-			// Past where inclusive overlapping ranges would be.
-			rl.ll.InsertBefore(r, e)
+	if cur != nil {
+		n := cur.Value.(*rangeListNode)
+		i, ok := n.findIdx(r, true /* inclusive */)
+		if !ok {
+			// The range can't be merged with any existing ranges, but should
+			// instead be inserted at slot i. This may force us to shift over
+			// other slots.
+			rl.insertAtIdx(cur, n, r, i)
 			return true
 		}
+
+		// If a current range fully contains the new range, no need to add it.
+		nr := n.slots[i]
+		if contains(nr, r) {
+			return false
+		}
+
+		// Merge as many ranges as possible and replace old range. All merges
+		// will be made into n.slots[i] because adding a range to the RangeGroup
+		// can result in only at most one group of ranges being merged.
+		//
+		// For example:
+		//  existing ranges :  ---- -----    ----  ----  ----
+		//  new range       :          --------------
+		//  resulting ranges:  ---- -------------------  ----
+		//
+		// In this example, n.slots[i] is the first existing range that overlaps
+		// with the new range.
+		newR := merge(nr, r)
+		n.slots[i] = newR
+
+		// Each iteration attempts to merge all of the ranges in a rangeListNode.
+		mergeElem := cur
+		origNode := true
+		for {
+			mergeN := mergeElem.Value.(*rangeListNode)
+			origLen := mergeN.len
+
+			// mergeState is the slot index to begin merging from
+			mergeStart := 0
+			if origNode {
+				mergeStart = i + 1
+			}
+
+			// Each iteration attempts to merge a single range into the current
+			// merge batch.
+			j := mergeStart
+			for ; j < origLen; j++ {
+				mergeR := mergeN.slots[j]
+
+				if overlapsInclusive(newR, mergeR) {
+					newR = merge(newR, mergeR)
+					n.slots[i] = newR
+					mergeN.len--
+					rl.len--
+				} else {
+					// If the ranges don't overlap, that means index j and up
+					// are still needed in the current node. Shift these over.
+					copy(mergeN.slots[mergeStart:mergeStart+origLen-j], mergeN.slots[j:origLen])
+					return true
+				}
+			}
+
+			// If we didn't break, that means that all of the slots including
+			// and after mergeStart in the current node were merged. Continue
+			// onto the next node.
+			nextE := mergeElem.Next()
+			if !origNode {
+				// If this is not the current node, we can delete it
+				// completely.
+				rl.ll.Remove(mergeElem)
+			}
+			if nextE == nil {
+				return true
+			}
+			mergeElem = nextE
+			origNode = false
+		}
 	}
-	rl.ll.PushBack(r)
+
+	// The new range couldn't be added to the previous or the current node.
+	// We'll have to create a new node for the range.
+	n := newRangeListNodeWithRange(r)
+	if prevN != nil {
+		// There is a previous node and it is full.
+		rl.ll.InsertAfter(n, prev)
+	} else {
+		// There is no previous node. Add the range to a new node in the front
+		// of the list.
+		rl.ll.PushFront(n)
+	}
+	rl.len++
 	return true
 }
 
@@ -152,82 +363,110 @@ func (rl *rangeList) Add(r Range) bool {
 // returns whether the subtraction resulted in any decrease to the size
 // of the RangeGroup.
 func (rl *rangeList) Sub(r Range) bool {
-	if err := rangeError(r); err != nil {
-		panic(err)
+	_, cur, inCur := rl.findNode(r, false /* inclusive */)
+	if !inCur {
+		// The range does not overlap any nodes. Nothing to do.
+		return false
 	}
-	dec := false
-	for e := rl.ll.Front(); e != nil; {
-		er := e.Value.(Range)
+
+	n := cur.Value.(*rangeListNode)
+	i, ok := n.findIdx(r, false /* inclusive */)
+	if !ok {
+		// The range does not overlap any ranges in the node. Nothing to do.
+		return false
+	}
+
+	for {
+		nr := n.slots[i]
+		if !overlapsExclusive(nr, r) {
+			// The range does not overlap nr so stop trying to subtract. The
+			// findIdx check above guarantees that this will never be the case
+			// for the first iteration of this loop.
+			return true
+		}
+
+		sCmp := nr.Start.Compare(r.Start)
+		eCmp := nr.End.Compare(r.End)
+		delStart := sCmp >= 0
+		delEnd := eCmp <= 0
+
 		switch {
-		case ExclusiveOverlapper.Overlap(er, r):
-			sCmp := er.Start.Compare(r.Start)
-			eCmp := er.End.Compare(r.End)
-
-			delStart := sCmp >= 0
-			delEnd := eCmp <= 0
-			cont := eCmp < 0
-
-			switch {
-			case delStart && delEnd:
-				// Remove the entire range.
-				nextE := e.Next()
-				rl.ll.Remove(e)
-				e = nextE
-			case delStart:
-				// Remove the start of the range by truncating.
-				er.Start = r.End
-				e.Value = er
-				e = e.Next()
-			case delEnd:
-				// Remove the end of the range by truncating.
-				er.End = r.Start
-				e.Value = er
-				e = e.Next()
-			default:
-				// Remove the middle of the range by splitting and truncating.
-				oldEnd := er.End
-				er.End = r.Start
-				e.Value = er
-
-				rSplit := Range{Start: r.End, End: oldEnd}
-				newE := rl.ll.InsertAfter(rSplit, e)
-				e = newE.Next()
+		case delStart && delEnd:
+			// Remove the entire range.
+			n.len--
+			rl.len--
+			if n.len == 0 {
+				// Move to the next node, removing the current node as long as
+				// it's not the only one in the list.
+				i = 0
+				next := cur.Next()
+				if rl.len > 0 {
+					rl.ll.Remove(cur)
+				}
+				if next == nil {
+					return true
+				}
+				cur = next
+				n = cur.Value.(*rangeListNode)
+				continue
+			} else {
+				// Replace the current Range.
+				copy(n.slots[i:n.len], n.slots[i+1:n.len+1])
 			}
-
-			dec = true
-			if !cont {
-				return dec
-			}
-		case r.End.Compare(er.Start) <= 0:
-			// Past where exclusive overlapping ranges would be.
-			return dec
+			// Don't increment i.
+		case delStart:
+			// Remove the start of the range by truncating. Can return after.
+			n.slots[i].Start = r.End
+			return true
+		case delEnd:
+			// Remove the end of the range by truncating.
+			n.slots[i].End = r.Start
+			i++
 		default:
-			e = e.Next()
+			// Remove the middle of the range by splitting and truncating.
+			oldEnd := nr.End
+			n.slots[i].End = r.Start
+
+			// Create right side of split. Can return after.
+			rSplit := Range{Start: r.End, End: oldEnd}
+			rl.insertAtIdx(cur, n, rSplit, i+1)
+			return true
+		}
+
+		// Move to the next node, if necessary.
+		if i >= n.len {
+			i = 0
+			cur = cur.Next()
+			if cur == nil {
+				return true
+			}
+			n = cur.Value.(*rangeListNode)
 		}
 	}
-	return dec
 }
 
 // Clear implements RangeGroup. It clears all ranges from the
 // rangeList.
 func (rl *rangeList) Clear() {
-	rl.ll.Init()
+	// Empty the first node, but keep it in the list.
+	f := rl.ll.Front().Value.(*rangeListNode)
+	*f = rangeListNode{}
+
+	// If the list has more than one node in it, remove all but the first.
+	if rl.ll.Len() > 1 {
+		rl.ll.Init()
+		rl.ll.PushBack(f)
+	}
+	rl.len = 0
 }
 
 // Overlaps implements RangeGroup. It returns whether the provided
 // Range is partially contained within the group of Ranges in the rangeList.
 func (rl *rangeList) Overlaps(r Range) bool {
-	if err := rangeError(r); err != nil {
-		panic(err)
-	}
-	for e := rl.ll.Front(); e != nil; e = e.Next() {
-		er := e.Value.(Range)
-		switch {
-		case ExclusiveOverlapper.Overlap(er, r):
+	if _, cur, inCur := rl.findNode(r, false /* inclusive */); inCur {
+		n := cur.Value.(*rangeListNode)
+		if _, ok := n.findIdx(r, false /* inclusive */); ok {
 			return true
-		case r.End.Compare(er.Start) <= 0:
-			// Past where exclusive overlapping ranges would be.
-			return false
 		}
 	}
 	return false
@@ -236,17 +475,10 @@ func (rl *rangeList) Overlaps(r Range) bool {
 // Encloses implements RangeGroup. It returns whether the provided
 // Range is fully contained within the group of Ranges in the rangeList.
 func (rl *rangeList) Encloses(r Range) bool {
-	if err := rangeError(r); err != nil {
-		panic(err)
-	}
-	for e := rl.ll.Front(); e != nil; e = e.Next() {
-		er := e.Value.(Range)
-		switch {
-		case contains(er, r):
-			return true
-		case r.End.Compare(er.Start) <= 0:
-			// Past where exclusive overlapping ranges would be.
-			return false
+	if _, cur, inCur := rl.findNode(r, false /* inclusive */); inCur {
+		n := cur.Value.(*rangeListNode)
+		if i, ok := n.findIdx(r, false /* inclusive */); ok {
+			return contains(n.slots[i], r)
 		}
 	}
 	return false
@@ -266,18 +498,32 @@ func (rl *rangeList) ForEach(f func(Range) error) error {
 
 // rangeListIterator is an in-order iterator operating over a rangeList.
 type rangeListIterator struct {
-	e *list.Element
+	e   *list.Element
+	idx int // next slot index
 }
 
 // Next implements RangeGroupIterator. It returns the next Range in the
 // rangeList, or false.
 func (rli *rangeListIterator) Next() (r Range, ok bool) {
 	if rli.e != nil {
-		r = rli.e.Value.(Range)
-		ok = true
-		rli.e = rli.e.Next()
+		n := rli.e.Value.(*rangeListNode)
+
+		// Get current index, return if invalid.
+		curIdx := rli.idx
+		if curIdx >= n.len {
+			return Range{}, false
+		}
+
+		// Move index and Element pointer forwards.
+		rli.idx = curIdx + 1
+		if rli.idx >= n.len {
+			rli.idx = 0
+			rli.e = rli.e.Next()
+		}
+
+		return n.slots[curIdx], true
 	}
-	return r, ok
+	return Range{}, false
 }
 
 // Iterator implements RangeGroup. It returns an iterator to iterate over
@@ -289,7 +535,7 @@ func (rl *rangeList) Iterator() RangeGroupIterator {
 // Len implements RangeGroup. It returns the number of ranges in
 // the rangeList.
 func (rl *rangeList) Len() int {
-	return rl.ll.Len()
+	return rl.len
 }
 
 func (rl *rangeList) String() string {
@@ -559,7 +805,7 @@ func RangeGroupsOverlap(rg1, rg2 RangeGroup) bool {
 	}
 	for {
 		// Check if the current pair of Ranges overlap.
-		if ExclusiveOverlapper.Overlap(r1, r2) {
+		if overlapsExclusive(r1, r2) {
 			return true
 		}
 
