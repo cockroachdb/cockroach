@@ -227,9 +227,12 @@ func TestNodeHeartbeatCallback(t *testing.T) {
 		return nil
 	}
 
-	if err := verifyUptimes(); err != nil {
-		t.Fatal(err)
-	}
+	// We have to retry here since the node could have become live via its own
+	// Gossip update but not yet fired the heartbeat callback (which writes the
+	// last uptime timestamp).
+	testutils.SucceedsSoon(t, func() error {
+		return verifyUptimes()
+	})
 
 	// Advance clock past the liveness threshold and force a manual heartbeat on
 	// all node liveness objects, which should update the last up time for each
@@ -244,6 +247,9 @@ func TestNodeHeartbeatCallback(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
+	// NB: since the heartbeat callback is invoked synchronously in
+	// `Heartbeat()` which this goroutine invoked, we don't need to wrap this in
+	// a retry.
 	if err := verifyUptimes(); err != nil {
 		t.Fatal(err)
 	}
