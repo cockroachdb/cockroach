@@ -163,6 +163,13 @@ eexpect "round"
 eexpect root@
 end_test
 
+start_test "Check that \\hf with a valid function name prints that functions help."
+send "\\hf version\r"
+eexpect "Category:"
+eexpect "Signature"
+eexpect root@
+end_test
+
 start_test "Check that \\hf with an invalid function name prints an error."
 send "\\hf invalid\r"
 eexpect "no help available"
