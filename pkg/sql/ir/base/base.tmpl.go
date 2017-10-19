@@ -14,18 +14,27 @@
 
 package base
 
-import "fmt"
+import (
+	"fmt"
+)
 
 // node is a generic ADT node type, with slots for references to other nodes and
 // enumeration values. Values that don't fit and values of other types go in the
 // extra field.
 type node struct {
-	refs  ['r']*node
-	enums ['e']enum
+	refs [ºnumRefsPerNode]*node
+	nums [ºnumNumsPerNode]numvalslot
+	strs [ºnumStrsPerNode]string
 	extra
 }
 
-type enum int32
+// enum is the type to define the tag part for working copies of IR
+// node with sum and enum types.
+type enum uint32
+
+// numvalslot is the type used to store integer values in persistent IR nodes.
+// must be larger than or as large as enum.
+type numvalslot ºnumValSlotType
 
 type extra interface {
 	extraRefs() []*node
@@ -34,49 +43,55 @@ type extra interface {
 // Allocator allocates nodes in batches. Construct Allocators with NewAllocator
 // and pass them by value.
 type Allocator struct {
-	nodes *[]node
+	nodes []node
 }
 
-// NewAllocator constructs a new Allocator.
-func NewAllocator() Allocator {
+// MakeAllocator constructs a new Allocator.
+func MakeAllocator() Allocator {
 	nodes := make([]node, 16)
-	return Allocator{&nodes}
+	return Allocator{nodes}
+}
+
+// NewAllocator allocates a new Allocator.
+func NewAllocator() *Allocator {
+	a := MakeAllocator()
+	return &a
 }
 
 // new allocates a new node. Users of this package should use the appropriate
 // R() method, which is type safe.
-func (a Allocator) new() *node {
-	nodes := *a.nodes
+func (a *Allocator) new() *node {
+	nodes := a.nodes
 	if len(nodes) == 0 {
 		nodes = make([]node, 256)
 	}
 	x := &nodes[0]
-	*a.nodes = nodes[1:]
+	a.nodes = nodes[1:]
 	return x
 }
 
 // @for enum
 
-// ---- Enum ---- //
+// ---- ºEnum ---- //
 
-// Enum is an enumeration type.
-type Enum enum
+// ºEnum is an enumeration type.
+type ºEnum enum
 
-// Enum constants.
+// ºEnum constants.
 const (
 	// @for item
-	EnumName Enum = 't'
+	ºEnumºItem ºEnum = ºtag
 	// @done item
 )
 
-func (x Enum) String() string {
+func (x ºEnum) String() string {
 	switch x {
 	// @for item
-	case EnumName:
-		return "Name"
+	case ºEnumºItem:
+		return "ºhitem"
 	// @done item
 	default:
-		return fmt.Sprintf("<unknown Enum %d>", x)
+		return fmt.Sprintf("ºhenum(%d)", x)
 	}
 }
 
@@ -84,67 +99,79 @@ func (x Enum) String() string {
 
 // @for struct
 
-// ---- Struct ---- //
+// ---- ºStruct ---- //
 
-// Struct is the type of a reference to an immutable record.
-type Struct struct{ ref *node }
+// ºStruct is the type of a reference to an immutable record.
+type ºStruct struct{ ref *node }
 
-// StructValue is the logical type of a record. Immutable records are stored in
+// @for slot
+
+const ºStruct_Slot_ºslotName_Type = ºslotType
+const ºStruct_Slot_ºslotName_Num = ºslotNum
+const ºStruct_Slot_ºslotName_BitSize = ºslotBitSize
+const ºStruct_Slot_ºslotName_BitOffset = ºslotBitOffset
+const ºStruct_Slot_ºslotName_ByteSize = ºslotByteSize
+const ºStruct_Slot_ºslotName_ByteOffset = ºslotByteOffset
+const ºStruct_Slot_ºslotName_ValueMask = ºslotValueMask
+
+// @done slot
+
+// ºStructValue is the logical type of a record. Immutable records are stored in
 // nodes.
-type StructValue struct {
+type ºStructValue struct {
 	// @for item
-	Name Type // 't'
+	ºItem ºtype // ºtag
 	// @done item
 }
 
 // @if extraField
 
-type extraStruct struct {
+type extraºStruct struct {
 	// @for extraField
-	Name Type
+	ºItem ºtype
 	// @done extraField
 }
 
-func (x extraStruct) extraRefs() []*node { return macroGetExtraRefs(x) }
+func (x extraºStruct) extraRefs() []*node { return ºgetExtraRefs(x) }
 
 // @fi extraField
 
 // R constructs a reference to an immutable record.
-func (x StructValue) R(a Allocator) Struct {
+func (x ºStructValue) R(a *Allocator) ºStruct {
 	ref := a.new()
 	// @if extraField
-	extra := &extraStruct{}
+	extra := &extraºStruct{}
 	ref.extra = extra
 	// @fi extraField
 
 	// @for item
-	macroSetName(ref, extra, x.Name)
+	ºsetField(ref, extra, x.ºItem)
 	// @done item
-	return Struct{ref}
+	return ºStruct{ref}
 }
 
 // @for item
 
-// Name returns the Name field.
-func (x Struct) Name() Type { return macroGetName(x.ref) }
+// ºItem returns the ºItem field.
+func (x ºStruct) ºItem() ºtype { return ºgetField(x.ref) }
 
 // @done item
 
 // V unpacks a reference into a value.
-func (x Struct) V() StructValue {
-	return StructValue{
+func (x ºStruct) V() ºStructValue {
+	return ºStructValue{
 		// @for item
-		macroGetName(x.ref),
+		ºItem: ºgetField(x.ref),
 		// @done item
 	}
 }
 
 // @for item
 
-// WithName constructs a new value where the value of Name has been replaced by
+// WithºItem constructs a new value where the value of ºItem has been replaced by
 // the argument.
-func (x StructValue) WithName(y Type) StructValue {
-	x.Name = y
+func (x ºStructValue) WithºItem(y ºtype) ºStructValue {
+	x.ºItem = y
 	return x
 }
 
@@ -154,57 +181,57 @@ func (x StructValue) WithName(y Type) StructValue {
 
 // @for sum
 
-// ---- Sum ---- //
+// ---- ºSum ---- //
 
-// Sum is the type of a tagged union of records.
-type Sum struct {
-	tag SumTag
+// ºSum is the type of a tagged union of records.
+type ºSum struct {
+	tag ºSumTag
 	ref *node
 }
 
-// SumTag is the tag type.
-type SumTag enum
+// ºSumTag is the tag type.
+type ºSumTag enum
 
-// SumTag constants.
+// ºSumTag constants.
 const (
 	// @for item
-	SumType SumTag = 't'
+	ºSumºtype ºSumTag = ºtag
 	// @done item
 )
 
-func (x SumTag) String() string {
+func (x ºSumTag) String() string {
 	switch x {
 	// @for item
-	case SumType:
-		return "Type"
+	case ºSumºtype:
+		return "ºtype"
 	// @done item
 	default:
-		return fmt.Sprintf("<unknown SumTag %d>", x)
+		return fmt.Sprintf("<unknown ºSumTag %d>", x)
 	}
 }
 
 // Tag returns the tag.
-func (x Sum) Tag() SumTag { return x.tag }
+func (x ºSum) Tag() ºSumTag { return x.tag }
 
 // @for item
 
-// Sum performs an upcast.
-func (x Type) Sum() Sum { return Sum{SumType, x.ref} }
+// ºSum performs an upcast.
+func (x ºtype) ºSum() ºSum { return ºSum{ºSumºtype, x.ref} }
 
-// Type performs a downcast. If the downcast fails, return false.
-func (x Sum) Type() (Type, bool) {
-	if x.tag != SumType {
-		return Type{}, false
+// ºtype performs a downcast. If the downcast fails, return false.
+func (x ºSum) ºtype() (ºtype, bool) {
+	if x.tag != ºSumºtype {
+		return ºtype{}, false
 	}
-	return Type{x.ref}, true
+	return ºtype{x.ref}, true
 }
 
-// MustBeType performs a downcast. If the downcast fails, panic.
-func (x Sum) MustBeType() Type {
-	if x.tag != SumType {
-		panic(fmt.Sprintf("type assertion failed: expected Type but got %s", x.tag))
+// MustBeºtype performs a downcast. If the downcast fails, panic.
+func (x ºSum) MustBeºtype() ºtype {
+	if x.tag != ºSumºtype {
+		panic(fmt.Sprintf("type assertion failed: expected ºtype but got %s", x.tag))
 	}
-	return Type{x.ref}
+	return ºtype{x.ref}
 }
 
 // @done item
