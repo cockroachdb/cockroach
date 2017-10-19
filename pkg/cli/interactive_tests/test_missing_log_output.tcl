@@ -91,7 +91,7 @@ start_test "Test that quit does not show INFO by defaults with --logtostderr"
 # Since quit is likely to actually emit warnings, but we are just
 # interested in the absence of INFO messages, remove the warnings from
 # the output.
-send "echo marker; $argv quit --logtostderr | grep -v '^W'\r"
+send "echo marker; $argv quit --logtostderr 2>&1 | grep -v '^W'\r"
 eexpect "marker\r\nError"
 eexpect ":/# "
 end_test
