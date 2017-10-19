@@ -178,11 +178,14 @@ The Prep phase also starts computing *logical properties*, such as the
 input and output variables of each (sub-)expression and various
 functional dependencies.
 
-The *functional dependencies* of an expression in this context is the
-set of input variables that are necessary and sufficient to compute
-the expression's result. This will be later used to derive more
-properties (e.g. ordering) by using the edges of the functional
-dependency graph.
+The functional dependencies for an expression are constraints over one
+or more sets of columns. Specific examples of functional dependencies
+are the projections, where 1 or more input variables determine an
+output variable, and "keys" which are a set of columns where no two
+rows output by the expression are equal after projection on to that
+set (e.g. a unique index for a table where all of the columns are NOT
+NULL). Conceptually, the functional dependencies form a graph, though
+they are not represented as such in code.
 
 The Prep phase also determines a list of filters and projections
 applied at relational nodes.
