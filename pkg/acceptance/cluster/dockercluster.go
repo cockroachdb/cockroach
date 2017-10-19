@@ -173,6 +173,8 @@ func CreateDocker(
 	cli, err := client.NewEnvClient()
 	maybePanic(err)
 
+	cli.NegotiateAPIVersion(ctx)
+
 	clusterID := uuid.MakeV4()
 	clusterIDS := clusterID.Short()
 	// Only pass a nonzero logDir down to DockerCluster when instructed to keep
@@ -236,11 +238,11 @@ func (l *DockerCluster) OneShot(
 		return err
 	}
 	hostConfig.VolumesFrom = []string{l.vols.id}
-	container, err := createContainer(ctx, l, containerConfig, hostConfig, name)
+	c, err := createContainer(ctx, l, containerConfig, hostConfig, name)
 	if err != nil {
 		return err
 	}
-	l.oneshot = container
+	l.oneshot = c
 	defer func() {
 		if err := l.oneshot.Remove(ctx); err != nil {
 			log.Errorf(ctx, "ContainerRemove: %s", err)
@@ -251,10 +253,7 @@ func (l *DockerCluster) OneShot(
 	if err := l.oneshot.Start(ctx); err != nil {
 		return err
 	}
-	if err := l.oneshot.Wait(ctx); err != nil {
-		return err
-	}
-	return nil
+	return l.oneshot.Wait(ctx, container.WaitConditionNotRunning)
 }
 
 // stopOnPanic is invoked as a deferred function in Start in order to attempt
@@ -293,7 +292,7 @@ func (l *DockerCluster) createNetwork(ctx context.Context) {
 
 	l.networkName = fmt.Sprintf("%s-%s", networkPrefix, l.clusterID)
 	log.Infof(ctx, "creating docker network with name: %s", l.networkName)
-	net, err := l.client.NetworkInspect(ctx, l.networkName)
+	net, err := l.client.NetworkInspect(ctx, l.networkName, types.NetworkInspectOptions{})
 	if err == nil {
 		// We need to destroy the network and any running containers inside of it.
 		for containerID := range net.Containers {
@@ -396,7 +395,7 @@ func (l *DockerCluster) initCluster(ctx context.Context) {
 	// and it'll get in the way of future runs.
 	l.vols = c
 	maybePanic(c.Start(ctx))
-	maybePanic(c.Wait(ctx))
+	maybePanic(c.Wait(ctx, container.WaitConditionNotRunning))
 }
 
 // cockroachEntryPoint returns the value to be used as
@@ -617,12 +616,10 @@ func (l *DockerCluster) monitor(ctx context.Context) {
 			return false
 		}
 
-		args, err := filters.ParseFlag(
-			fmt.Sprintf("label=Acceptance-cluster-id=%s", l.clusterID), filters.NewArgs())
-		maybePanic(err)
-
 		eventq, errq := l.client.Events(l.monitorCtx, types.EventsOptions{
-			Filters: args,
+			Filters: filters.NewArgs(
+				filters.Arg("label", "Acceptance-cluster-id="+l.clusterID),
+			),
 		})
 		for {
 			select {
@@ -888,7 +885,7 @@ func (l *DockerCluster) ExecCLI(ctx context.Context, i int, cmd []string) (strin
 	}
 	var outputStream, errorStream bytes.Buffer
 	{
-		resp, err := l.client.ContainerExecAttach(ctx, createResp.ID, cfg)
+		resp, err := l.client.ContainerExecAttach(ctx, createResp.ID, types.ExecStartCheck{})
 		if err != nil {
 			return "", "", err
 		}

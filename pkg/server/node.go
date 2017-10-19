@@ -689,10 +689,7 @@ func (n *Node) gossipStores(ctx context.Context) {
 		if err := s.GossipStore(ctx); err != nil {
 			return err
 		}
-		if err := s.GossipDeadReplicas(ctx); err != nil {
-			return err
-		}
-		return nil
+		return s.GossipDeadReplicas(ctx)
 	}); err != nil {
 		log.Warning(ctx, err)
 	}

@@ -17,58 +17,50 @@
 namespace cockroach {
 namespace util {
 namespace hlc {
-class LegacyTimestampDefaultTypeInternal : public ::google::protobuf::internal::ExplicitlyConstructed<LegacyTimestamp> {
+class LegacyTimestampDefaultTypeInternal {
+public:
+ ::google::protobuf::internal::ExplicitlyConstructed<LegacyTimestamp>
+     _instance;
 } _LegacyTimestamp_default_instance_;
 
 namespace protobuf_cockroach_2fpkg_2futil_2fhlc_2flegacy_5ftimestamp_2eproto {
 
 PROTOBUF_CONSTEXPR_VAR ::google::protobuf::internal::ParseTableField
-    const TableStruct::entries[] = {
+    const TableStruct::entries[] GOOGLE_ATTRIBUTE_SECTION_VARIABLE(protodesc_cold) = {
   {0, 0, 0, ::google::protobuf::internal::kInvalidMask, 0, 0},
 };
 
 PROTOBUF_CONSTEXPR_VAR ::google::protobuf::internal::AuxillaryParseTableField
-    const TableStruct::aux[] = {
+    const TableStruct::aux[] GOOGLE_ATTRIBUTE_SECTION_VARIABLE(protodesc_cold) = {
   ::google::protobuf::internal::AuxillaryParseTableField(),
 };
 PROTOBUF_CONSTEXPR_VAR ::google::protobuf::internal::ParseTable const
-    TableStruct::schema[] = {
-  { NULL, NULL, 0, -1, -1, false },
+    TableStruct::schema[] GOOGLE_ATTRIBUTE_SECTION_VARIABLE(protodesc_cold) = {
+  { NULL, NULL, 0, -1, -1, -1, -1, NULL, false },
 };
-
-
-void TableStruct::Shutdown() {
-  _LegacyTimestamp_default_instance_.Shutdown();
-}
 
 void TableStruct::InitDefaultsImpl() {
   GOOGLE_PROTOBUF_VERIFY_VERSION;
 
   ::google::protobuf::internal::InitProtobufDefaults();
-  _LegacyTimestamp_default_instance_.DefaultConstruct();
-}
+  _LegacyTimestamp_default_instance_._instance.DefaultConstruct();
+  ::google::protobuf::internal::OnShutdownDestroyMessage(
+      &_LegacyTimestamp_default_instance_);}
 
 void InitDefaults() {
   static GOOGLE_PROTOBUF_DECLARE_ONCE(once);
   ::google::protobuf::GoogleOnceInit(&once, &TableStruct::InitDefaultsImpl);
 }
+namespace {
 void AddDescriptorsImpl() {
   InitDefaults();
-  ::google::protobuf::internal::OnShutdown(&TableStruct::Shutdown);
 }
+} // anonymous namespace
 
 void AddDescriptors() {
   static GOOGLE_PROTOBUF_DECLARE_ONCE(once);
   ::google::protobuf::GoogleOnceInit(&once, &AddDescriptorsImpl);
 }
-#ifdef GOOGLE_PROTOBUF_NO_STATIC_INITIALIZER
-// Force AddDescriptors() to be called at static initialization time.
-struct StaticDescriptorInitializer {
-  StaticDescriptorInitializer() {
-    AddDescriptors();
-  }
-} static_descriptor_initializer;
-#endif  // GOOGLE_PROTOBUF_NO_STATIC_INITIALIZER
 
 }  // namespace protobuf_cockroach_2fpkg_2futil_2fhlc_2flegacy_5ftimestamp_2eproto
 
@@ -95,15 +87,16 @@ LegacyTimestamp::LegacyTimestamp(const LegacyTimestamp& from)
       _cached_size_(0) {
   _internal_metadata_.MergeFrom(from._internal_metadata_);
   ::memcpy(&wall_time_, &from.wall_time_,
-    reinterpret_cast<char*>(&logical_) -
-    reinterpret_cast<char*>(&wall_time_) + sizeof(logical_));
+    static_cast<size_t>(reinterpret_cast<char*>(&logical_) -
+    reinterpret_cast<char*>(&wall_time_)) + sizeof(logical_));
   // @@protoc_insertion_point(copy_constructor:cockroach.util.hlc.LegacyTimestamp)
 }
 
 void LegacyTimestamp::SharedCtor() {
   _cached_size_ = 0;
-  ::memset(&wall_time_, 0, reinterpret_cast<char*>(&logical_) -
-    reinterpret_cast<char*>(&wall_time_) + sizeof(logical_));
+  ::memset(&wall_time_, 0, static_cast<size_t>(
+      reinterpret_cast<char*>(&logical_) -
+      reinterpret_cast<char*>(&wall_time_)) + sizeof(logical_));
 }
 
 LegacyTimestamp::~LegacyTimestamp() {
@@ -134,9 +127,15 @@ LegacyTimestamp* LegacyTimestamp::New(::google::protobuf::Arena* arena) const {
 
 void LegacyTimestamp::Clear() {
 // @@protoc_insertion_point(message_clear_start:cockroach.util.hlc.LegacyTimestamp)
-  if (_has_bits_[0 / 32] & 3u) {
-    ::memset(&wall_time_, 0, reinterpret_cast<char*>(&logical_) -
-      reinterpret_cast<char*>(&wall_time_) + sizeof(logical_));
+  ::google::protobuf::uint32 cached_has_bits = 0;
+  // Prevent compiler warnings about cached_has_bits being unused
+  (void) cached_has_bits;
+
+  cached_has_bits = _has_bits_[0];
+  if (cached_has_bits & 3u) {
+    ::memset(&wall_time_, 0, static_cast<size_t>(
+        reinterpret_cast<char*>(&logical_) -
+        reinterpret_cast<char*>(&wall_time_)) + sizeof(logical_));
   }
   _has_bits_.Clear();
   _internal_metadata_.Clear();
@@ -160,7 +159,7 @@ bool LegacyTimestamp::MergePartialFromCodedStream(
     switch (::google::protobuf::internal::WireFormatLite::GetTagFieldNumber(tag)) {
       case 1: {
         if (static_cast< ::google::protobuf::uint8>(tag) ==
-            static_cast< ::google::protobuf::uint8>(8u)) {
+            static_cast< ::google::protobuf::uint8>(8u /* 8 & 0xFF */)) {
           set_has_wall_time();
           DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
                    ::google::protobuf::int64, ::google::protobuf::internal::WireFormatLite::TYPE_INT64>(
@@ -173,7 +172,7 @@ bool LegacyTimestamp::MergePartialFromCodedStream(
 
       case 2: {
         if (static_cast< ::google::protobuf::uint8>(tag) ==
-            static_cast< ::google::protobuf::uint8>(16u)) {
+            static_cast< ::google::protobuf::uint8>(16u /* 16 & 0xFF */)) {
           set_has_logical();
           DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
                    ::google::protobuf::int32, ::google::protobuf::internal::WireFormatLite::TYPE_INT32>(
@@ -186,9 +185,7 @@ bool LegacyTimestamp::MergePartialFromCodedStream(
 
       default: {
       handle_unusual:
-        if (tag == 0 ||
-            ::google::protobuf::internal::WireFormatLite::GetTagWireType(tag) ==
-            ::google::protobuf::internal::WireFormatLite::WIRETYPE_END_GROUP) {
+        if (tag == 0) {
           goto success;
         }
         DO_(::google::protobuf::internal::WireFormatLite::SkipField(
@@ -221,8 +218,8 @@ void LegacyTimestamp::SerializeWithCachedSizes(
     ::google::protobuf::internal::WireFormatLite::WriteInt32(2, this->logical(), output);
   }
 
-  output->WriteRaw(unknown_fields().data(),
-                   static_cast<int>(unknown_fields().size()));
+  output->WriteRaw(_internal_metadata_.unknown_fields().data(),
+                   static_cast<int>(_internal_metadata_.unknown_fields().size()));
   // @@protoc_insertion_point(serialize_end:cockroach.util.hlc.LegacyTimestamp)
 }
 
@@ -230,7 +227,7 @@ size_t LegacyTimestamp::ByteSizeLong() const {
 // @@protoc_insertion_point(message_byte_size_start:cockroach.util.hlc.LegacyTimestamp)
   size_t total_size = 0;
 
-  total_size += unknown_fields().size();
+  total_size += _internal_metadata_.unknown_fields().size();
 
   if (_has_bits_[0 / 32] & 3u) {
     if (has_wall_time()) {
@@ -293,11 +290,12 @@ void LegacyTimestamp::Swap(LegacyTimestamp* other) {
   InternalSwap(other);
 }
 void LegacyTimestamp::InternalSwap(LegacyTimestamp* other) {
-  std::swap(wall_time_, other->wall_time_);
-  std::swap(logical_, other->logical_);
-  std::swap(_has_bits_[0], other->_has_bits_[0]);
+  using std::swap;
+  swap(wall_time_, other->wall_time_);
+  swap(logical_, other->logical_);
+  swap(_has_bits_[0], other->_has_bits_[0]);
   _internal_metadata_.Swap(&other->_internal_metadata_);
-  std::swap(_cached_size_, other->_cached_size_);
+  swap(_cached_size_, other->_cached_size_);
 }
 
 ::std::string LegacyTimestamp::GetTypeName() const {

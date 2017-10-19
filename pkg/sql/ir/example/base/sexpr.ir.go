@@ -21,18 +21,23 @@ import (
 	"strconv"
 )
 
+// SexprFormatter is implemented by any type that can write its own string
+// representation into the provided buffer.
 type SexprFormatter interface {
-	FormatSExpr(buf *bytes.Buffer)
+	FormatSExpr(*bytes.Buffer)
 }
 
+// FormatSExprInt64 writes the base 10 string representation of x into buf.
 func FormatSExprInt64(buf *bytes.Buffer, x int64) {
 	buf.WriteString(strconv.FormatInt(x, 10))
 }
 
+// FormatSExpr implements the SexprFormatter interface.
 func (x BinOp) FormatSExpr(buf *bytes.Buffer) {
 	buf.WriteString(x.String())
 }
 
+// FormatSExpr implements the SexprFormatter interface.
 func (x ConstExpr) FormatSExpr(buf *bytes.Buffer) {
 	buf.WriteString("(ConstExpr")
 
@@ -42,6 +47,7 @@ func (x ConstExpr) FormatSExpr(buf *bytes.Buffer) {
 	buf.WriteByte(')')
 }
 
+// FormatSExpr implements the SexprFormatter interface.
 func (x BinExpr) FormatSExpr(buf *bytes.Buffer) {
 	buf.WriteString("(BinExpr")
 
@@ -57,6 +63,7 @@ func (x BinExpr) FormatSExpr(buf *bytes.Buffer) {
 	buf.WriteByte(')')
 }
 
+// FormatSExpr implements the SexprFormatter interface.
 func (x All) FormatSExpr(buf *bytes.Buffer) {
 	buf.WriteString("(All")
 
@@ -78,6 +85,7 @@ func (x All) FormatSExpr(buf *bytes.Buffer) {
 	buf.WriteByte(')')
 }
 
+// FormatSExpr implements the SexprFormatter interface.
 func (x Expr) FormatSExpr(buf *bytes.Buffer) {
 	switch x.Tag() {
 	case ExprConstExpr:
@@ -87,6 +95,7 @@ func (x Expr) FormatSExpr(buf *bytes.Buffer) {
 	}
 }
 
+// FormatSExpr implements the SexprFormatter interface.
 func (x AllOrExpr) FormatSExpr(buf *bytes.Buffer) {
 	switch x.Tag() {
 	case AllOrExprAll:

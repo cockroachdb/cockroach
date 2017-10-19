@@ -15,9 +15,10 @@
 package engine
 
 import (
+	"sort"
+
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
-	"sort"
 )
 
 // GarbageCollector GCs MVCC key/values using a zone-specific GC
