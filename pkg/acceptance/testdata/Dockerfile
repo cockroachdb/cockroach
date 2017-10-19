@@ -71,6 +71,9 @@ RUN curl -fsSL https://dl.yarnpkg.com/debian/pubkey.gpg > /etc/apt/trusted.gpg.d
     xmlstarlet \
     yarn
 
+RUN curl -fsSL https://github.com/benesch/autouseradd/releases/download/1.0.0/autouseradd-1.0.0-amd64.tar.gz \
+    | tar xz -C /usr --strip-components 1
+
 # When system packages are not available for a language's PostgreSQL driver,
 # fall back to using that language's package manager. The high-level process
 # looks like this:
@@ -117,4 +120,4 @@ RUN (cd /testdata/node && yarn install && mv node_modules /usr/lib/node) \
 RUN apt-get purge --yes \
     curl \
     xmlstarlet \
- && rm -rf /var/lib/apt/lists/* /testdata
+ && rm -rf /tmp/* /var/lib/apt/lists/* /testdata

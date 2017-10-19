@@ -37,7 +37,7 @@ end_test
 start_test "Check implicit external I/O dir under store dir"
 
 send "$argv start --insecure --store=$storedir\r"
-eexpect "external I/O path:   /mystore/extern"
+eexpect "external I/O path:   $env(HOME)/$storedir/extern"
 interrupt
 eexpect "shutdown completed"
 
