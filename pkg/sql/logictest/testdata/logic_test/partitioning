@@ -12,6 +12,11 @@ CREATE TABLE t (a INT, b INT, c INT, PRIMARY KEY (a, b)) PARTITION BY LIST (a) (
 )
 
 statement error declared partition columns must match index being partitioned
+CREATE TABLE t (a INT, b INT, c INT) PARTITION BY LIST (a) (
+    PARTITION p1 VALUES (0)
+)
+
+statement error declared partition columns must match index being partitioned
 CREATE TABLE t (a INT, b INT, c INT, PRIMARY KEY (a, b)) PARTITION BY LIST (a, b, c) (
     PARTITION p1 VALUES (0)
 )
@@ -76,14 +81,38 @@ CREATE TABLE t (a INT, b INT, c INT, PRIMARY KEY (a, b)) PARTITION BY LIST (a) (
 )
 
 statement error cannot be present in more than one partition
+CREATE TABLE t (a INT, b INT, c INT, PRIMARY KEY (a, b)) PARTITION BY LIST (a) (
+    PARTITION p1 VALUES (DEFAULT),
+    PARTITION p2 VALUES (DEFAULT)
+)
+
+statement error cannot be present in more than one partition
+CREATE TABLE t (a INT, b INT, c INT, PRIMARY KEY (a, b)) PARTITION BY LIST (a, b) (
+    PARTITION p1 VALUES (1, DEFAULT),
+    PARTITION p2 VALUES (1, DEFAULT)
+)
+
+statement error cannot be present in more than one partition
 CREATE TABLE t (a DECIMAL PRIMARY KEY) PARTITION BY LIST (a) (
     PARTITION p1 VALUES (1.0:::decimal),
     PARTITION p2 VALUES (1.000:::decimal)
 )
 
+# TODO(dan): DEFAULT not DEFAULT/MAXVALUE
+statement error not allowed after DEFAULT/MAXVALUE
+CREATE TABLE t (a INT, b INT, PRIMARY KEY (a, b)) PARTITION BY LIST (a, b) (
+    PARTITION pd VALUES (DEFAULT, 1)
+)
+
 statement error values must be strictly increasing
 CREATE TABLE t (a INT, b INT, c INT, PRIMARY KEY (a, b)) PARTITION BY RANGE (a) (
     PARTITION p1 VALUES LESS THAN (2),
+    PARTITION p2 VALUES LESS THAN (1)
+)
+
+statement error values must be strictly increasing
+CREATE TABLE t (a INT, b INT, c INT, PRIMARY KEY (a, b)) PARTITION BY RANGE (a) (
+    PARTITION p1 VALUES LESS THAN (MAXVALUE),
     PARTITION p2 VALUES LESS THAN (1)
 )
 
@@ -97,6 +126,12 @@ statement error cannot be present in more than one partition
 CREATE TABLE t (a DECIMAL PRIMARY KEY) PARTITION BY RANGE (a) (
     PARTITION p1 VALUES LESS THAN (1.0:::decimal),
     PARTITION p2 VALUES LESS THAN (1.000:::decimal)
+)
+
+# TODO(dan): MAXVALUE not DEFAULT/MAXVALUE
+statement error not allowed after DEFAULT/MAXVALUE
+CREATE TABLE t (a INT, b INT, PRIMARY KEY (a, b)) PARTITION BY RANGE (a, b) (
+    PARTITION pd VALUES LESS THAN (MAXVALUE, 1)
 )
 
 statement error values must be strictly increasing
@@ -124,39 +159,89 @@ CREATE TABLE collate_de (a STRING COLLATE de PRIMARY KEY) PARTITION BY RANGE (a)
 )
 
 statement error value type decimal doesn't match type INT of column "a"
-CREATE TABLE t (a INT, b INT, c INT, PRIMARY KEY (a, b)) PARTITION BY LIST (a) (
-    PARTITION p1 VALUES (1.0)
+CREATE TABLE foo (a INT, b INT, c INT, PRIMARY KEY (a, b)) PARTITION BY LIST (a) (
+    PARTITION p1 VALUES (1.2)
 )
 
-statement error value type int doesn't match type STRING of column "b"
-CREATE TABLE t (a INT, b STRING, c INT, PRIMARY KEY (a, b)) PARTITION BY LIST (a) (
+statement error value type decimal doesn't match type INT of column "b"
+CREATE TABLE t (a INT, b INT, c INT, PRIMARY KEY (a, b)) PARTITION BY LIST (a) (
     PARTITION p1 VALUES (0) PARTITION BY LIST (b) (
-        PARTITION p1_1 VALUES (1)
+        PARTITION p1_1 VALUES (1.2)
     )
 )
 
+# TODO(dan): this should error
+# statement error TODO
+# CREATE TABLE t (a INT, b INT, c INT, PRIMARY KEY (a, b)) PARTITION BY LIST (a) (
+#     PARTITION p1 VALUES (MAXVALUE)
+# )
+
+# TODO(dan): this should error
+# statement error TODO
+# CREATE TABLE t (a INT, b INT, c INT, PRIMARY KEY (a, b)) PARTITION BY RANGE (a) (
+#     PARTITION p1 VALUES LESS THAN (DEFAULT)
+# )
+
 # TODO(dan): Support placeholders.
-statement error could not determine data type of placeholder \$1
+statement error placeholders are not supported in PARTITION BY
 CREATE TABLE t (a INT, b INT, c INT, PRIMARY KEY (a, b)) PARTITION BY LIST (a) (
     PARTITION p1 VALUES ($1)
 )
 
-# TODO(dan): this is intended to match the one in ParseTest, but DEFAULT is not
-# yet supported
 statement ok
-CREATE TABLE ok1 (a INT PRIMARY KEY) PARTITION BY LIST (a) (
+CREATE TABLE ok1 (a INT, b INT, c INT, PRIMARY KEY (a, b)) PARTITION BY LIST (a) (
     PARTITION p1 VALUES (1),
     PARTITION p2 VALUES (2)
 )
 
 statement ok
-CREATE TABLE ok2 (a INT PRIMARY KEY) PARTITION BY RANGE (a) (
+CREATE TABLE ok2 (a INT, b INT, c INT, PRIMARY KEY (a, b)) PARTITION BY LIST (a) (
+    PARTITION p1 VALUES (1),
+    PARTITION p2 VALUES (DEFAULT)
+)
+
+statement ok
+CREATE TABLE ok3 (a INT, b INT, c INT, PRIMARY KEY (a, b)) PARTITION BY LIST (a, b) (
+    PARTITION p1 VALUES (1, 1),
+    PARTITION p2 VALUES (1, DEFAULT),
+    PARTITION p3 VALUES (2, 3),
+    PARTITION p4 VALUES (DEFAULT, DEFAULT)
+)
+
+statement ok
+CREATE TABLE ok4 (a INT, b INT, c INT, PRIMARY KEY (a, b)) PARTITION BY LIST (a) (
+    PARTITION p1 VALUES (1) PARTITION BY LIST (b) (
+        PARTITION p1_1 VALUES (1),
+        PARTITION p1_2 VALUES (DEFAULT)
+    ),
+    PARTITION p2 VALUES (2) PARTITION BY LIST (b) (
+        PARTITION p2_1 VALUES (3)
+    ),
+    PARTITION p3 VALUES (DEFAULT)
+)
+
+statement ok
+CREATE TABLE ok5 (a INT, b INT, c INT, PRIMARY KEY (a, b)) PARTITION BY RANGE (a) (
     PARTITION p1 VALUES LESS THAN (1),
     PARTITION p2 VALUES LESS THAN (2)
 )
 
 statement ok
-CREATE TABLE ok3 (a INT, b INT, c INT, PRIMARY KEY (a, b, c)) PARTITION BY LIST (a) (
+CREATE TABLE ok6 (a INT, b INT, c INT, PRIMARY KEY (a, b)) PARTITION BY RANGE (a) (
+    PARTITION p1 VALUES LESS THAN (1),
+    PARTITION p2 VALUES LESS THAN (MAXVALUE)
+)
+
+statement ok
+CREATE TABLE ok7 (a INT, b INT, c INT, PRIMARY KEY (a, b)) PARTITION BY RANGE (a, b) (
+    PARTITION p1 VALUES LESS THAN (1, 1),
+    PARTITION p2 VALUES LESS THAN (1, MAXVALUE),
+    PARTITION p3 VALUES LESS THAN (2, 3),
+    PARTITION p4 VALUES LESS THAN (MAXVALUE, MAXVALUE)
+)
+
+statement ok
+CREATE TABLE ok8 (a INT, b INT, c INT, PRIMARY KEY (a, b, c)) PARTITION BY LIST (a) (
     PARTITION p1 VALUES (1) PARTITION BY LIST (b) (
         PARTITION p1_1 VALUES (3),
         PARTITION p1_2 VALUES (4)

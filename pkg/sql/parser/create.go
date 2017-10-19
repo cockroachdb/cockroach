@@ -710,6 +710,28 @@ func (node RangePartition) Format(buf *bytes.Buffer, f FmtFlags) {
 	}
 }
 
+// PartitionDefault represents the DEFAULT expression.
+type PartitionDefault struct{}
+
+// Format implements the NodeFormatter interface.
+func (node PartitionDefault) Format(buf *bytes.Buffer, f FmtFlags) {
+	buf.WriteString("DEFAULT")
+}
+
+// ResolvedType implements the TypedExpr interface.
+func (PartitionDefault) ResolvedType() Type { return TypeAny }
+
+// PartitionMaxValue represents the MAXVALUE expression.
+type PartitionMaxValue struct{}
+
+// Format implements the NodeFormatter interface.
+func (node PartitionMaxValue) Format(buf *bytes.Buffer, f FmtFlags) {
+	buf.WriteString("MAXVALUE")
+}
+
+// ResolvedType implements the TypedExpr interface.
+func (PartitionMaxValue) ResolvedType() Type { return TypeAny }
+
 // CreateTable represents a CREATE TABLE statement.
 type CreateTable struct {
 	IfNotExists   bool

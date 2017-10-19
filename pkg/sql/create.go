@@ -1120,22 +1120,31 @@ func (p *planner) finalizeInterleave(
 func valueEncodeTuple(
 	evalCtx *parser.EvalContext, tuple *parser.Tuple, cols []sqlbase.ColumnDescriptor,
 ) ([]byte, error) {
-	var scratch []byte
-	typedExpr, err := parser.TypeCheck(tuple, &parser.SemaContext{}, parser.TypeTuple)
-	if err != nil {
-		return nil, errors.Wrap(err, tuple.String())
-	}
-	tupleDatum, err := tuple.Eval(evalCtx)
-	if err != nil {
-		return nil, errors.Wrap(err, typedExpr.String())
-	}
-	datums := tupleDatum.(*parser.DTuple)
-	if len(datums.D) != len(cols) {
+	if len(tuple.Exprs) != len(cols) {
 		return nil, errors.Errorf("partition has %d column(s) but %d value(s) were supplied",
-			len(cols), len(datums.D))
+			len(cols), len(tuple.Exprs))
 	}
-	var value []byte
-	for i, datum := range datums.D {
+	var value, scratch []byte
+	for i, expr := range tuple.Exprs {
+		switch expr.(type) {
+		case parser.PartitionDefault, parser.PartitionMaxValue:
+			value = encoding.EncodeNullValue(value, encoding.NoColumnID)
+			continue
+		case *parser.Placeholder:
+			// TODO(dan): unimplemented error and point to issue
+			return nil, errors.New("placeholders are not supported in PARTITION BY")
+		default:
+			// Fall-through.
+		}
+
+		typedExpr, err := parser.TypeCheck(expr, nil, cols[i].Type.ToDatumType())
+		if err != nil {
+			return nil, errors.Wrap(err, expr.String())
+		}
+		datum, err := typedExpr.Eval(evalCtx)
+		if err != nil {
+			return nil, errors.Wrap(err, typedExpr.String())
+		}
 		if err := sqlbase.CheckColumnType(cols[i], datum.ResolvedType(), nil); err != nil {
 			return nil, err
 		}

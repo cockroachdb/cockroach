@@ -914,6 +914,16 @@ func (d *DOidWrapper) TypeCheck(_ *SemaContext, _ Type) (TypedExpr, error) { ret
 // identity function for Datum.
 func (d dNull) TypeCheck(_ *SemaContext, desired Type) (TypedExpr, error) { return d, nil }
 
+// TypeCheck implements the Expr interface.
+func (expr PartitionDefault) TypeCheck(_ *SemaContext, desired Type) (TypedExpr, error) {
+	return expr, nil
+}
+
+// TypeCheck implements the Expr interface.
+func (expr PartitionMaxValue) TypeCheck(_ *SemaContext, desired Type) (TypedExpr, error) {
+	return expr, nil
+}
+
 // typeCheckAndRequireTupleElems asserts that all elements in the Tuple
 // can be typed as required and are equivalent to required. Note that one would invoke
 // with the required element type and NOT TTuple (as opposed to how Tuple.TypeCheck operates).
