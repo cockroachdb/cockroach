@@ -12,8 +12,8 @@ query planning including a full-featured optimizer.
 
 # Motivation
 
-SQL query planning is concerned with transforming the AST of a SQL query
-into a physical query plan for execution. Naive execution of a
+SQL query planning is concerned with transforming the AST of a SQL
+query into a physical query plan for execution. Naive execution of a
 SQL query can be prohibitively expensive, because SQL specifies the
 desired results and not how to achieve them. A given SQL query can
 have thousands of alternate query plans with vastly different
@@ -38,12 +38,12 @@ SQL query planning is often described in terms of 7 modules:
 6. [Search](#search-aka-enumeration-or-transformation)
 7. [Properties](#properties)
 
-Note that Stats, Cost Model, Memo and Properties could be considered modules,
-while Prep, Rewrite and Search could be considered phases, though
-we'll refer to all 7 uniformly as modules in this document. Memo is a
-technique for compactly representing the forest of trees generated
-during Search. Stats, Properties and Cost Model are modules that power Prep,
-Rewrite and Search.
+Note that Stats, Cost Model, Memo and Properties could be considered
+modules, while Prep, Rewrite and Search could be considered phases,
+though we'll refer to all 7 uniformly as modules in this
+document. Memo is a technique for compactly representing the forest of
+trees generated during Search. Stats, Properties and Cost Model are
+modules that power Prep, Rewrite and Search.
 
 ```
   SQL query text
@@ -64,7 +64,7 @@ Rewrite and Search.
        |
        v
    .---------. - done every EXECUTE to capture placeholder values / timestamps
-   | Rewrite | - includes always-good simplifications, eg. predicate push-down
+   | Rewrite | - includes cost-agnostic transformations, eg. predicate push-down
    '---+-----' - computes more properties
        |
        |                .----------.
@@ -107,7 +107,7 @@ The following terms are introduced/defined in this RFC:
 - [**algebraic equivalence**](#properties)
 - [**cardinality**](#stats)
 - [**condition** in transformations](#search)
-- [**decorrelating**](#rewrite)
+- [**decorrelating**](#rewrite), syn. "unnesting"
 - [**derived** vs **required** properties](#properties)
 - [**enforcer** operator for properties](#properties)
 - [**equivalency class**](#memo)
@@ -130,7 +130,7 @@ The following terms are introduced/defined in this RFC:
 - [**selectivity**](#stats)
 - [**top-down** and **bottom-up** search strategies](#search)
 - [**transformation** of expressions](#rewrite)
-- [**unnesting**](#rewrite)
+- [**unnesting**](#rewrite), syn. "decorrelating"
 - [**utility** of a transformation](#search)
 
 ## Modules
@@ -151,13 +151,12 @@ CockroachDB.
 During prep, the AST is transformed from the raw output of the parser
 into an expression "tree".
 
-The term *"expression"* here is based on usage
-from literature, though it is mildly confusing as the current SQL code
-uses "expression" to refer to scalar expressions. In this document,
-"expression" refers to either a relational or a scalar
-expression. Using a uniform node type for expressions facilitates
-transforms used during the Rewrite and Search phases of
-optimization.
+The term *"expression"* here is based on usage from literature, though
+it is mildly confusing as the current SQL code uses "expression" to
+refer to scalar expressions. In this document, "expression" refers to
+either a relational or a scalar expression. Using a uniform node type
+for expressions facilitates transforms used during the Rewrite and
+Search phases of optimization.
 
 Each expression has an *operator* and zero or more operands. Operators
 can be *relational* (e.g. `join`) or *scalar* (e.g. `<`). Relational
@@ -166,28 +165,27 @@ operators can be *logical* (only specifies results) or *physical*
 
 During Prep all the variables are given a unique index (number).
 Variable numbering involves assigning every base column and
-non-trivial projection in a query with a unique
-index.
+non-trivial projection in a query with a unique index.
 
 Giving each variable a unique index allows the expression nodes
-mentioned above to track input and output variables, or really
-any set of variables during Prep and later phases, using a
-bitmap. The bitmap representation allows fast determination of
-compatibility between expression nodes and is utilized during rewrites
-and transformations to determine the legality of such
-operations.
+mentioned above to track input and output variables, or really any set
+of variables during Prep and later phases, using a bitmap. The bitmap
+representation allows fast determination of compatibility between
+expression nodes and is utilized during rewrites and transformations
+to determine the legality of such operations.
 
 The Prep phase also starts computing *logical properties*, such as the
-input and output variables of each (sub-)expression and its functional
-dependencies.
+input and output variables of each (sub-)expression and various
+functional dependencies.
 
-The *functional dependencies* of an expression in this context is the set of input
-variables that are necessary and sufficient to compute the
-expression's result. This will be later used to derive more properties
-(e.g. ordering) by using the edges of the functional dependency graph.
+The *functional dependencies* of an expression in this context is the
+set of input variables that are necessary and sufficient to compute
+the expression's result. This will be later used to derive more
+properties (e.g. ordering) by using the edges of the functional
+dependency graph.
 
-The Prep phase also determines
-a list of filters and projections applied at relational nodes.
+The Prep phase also determines a list of filters and projections
+applied at relational nodes.
 
 The output of Prep may be another tree data structure (separate from
 the AST and the memo), although perhaps Prep can already populate the
@@ -216,10 +214,10 @@ transformations performed by Rewrite need not be performed again by
 Search (decorrelation is the prime example). The vast majority of
 transforms performed by Search are not used by Rewrite.
 
-Rewrite is the phase where correlated subqueries are *decorrelated*,
-*unnesting* and *predicate push down* occurs,
+Rewrite is the phase where e.g. correlated subqueries are *decorrelated*
+(synonym: *unnesting*) and *predicate push down* occurs,
 and various other simplifications to the
-relational algebra tree (e.g. projection elimination). As an example
+relational algebra tree (e.g. projection & join elimination). As an example
 of predicate push down, consider the query:
 
   `SELECT * FROM a, b USING (x) WHERE a.x < 10`
@@ -295,14 +293,15 @@ The different nodes in a single equivalency class are called
 **m-expressions** (memo(ized) expressions).
 
 By definition, all the m-expressions in a class share the same
-*logical properties*, a concept explored more in depth in
-the [section below](#properties).
+*logical properties*, a concept explored more in depth in the [section
+below](#properties).
 
-During Search, m-expressions might get enumerated in order to
-determine in which order to execute. The memo structure
-avoids the combinatorial explosion of trees be naively enumerating the
-variants by having each m-expressions in the tree point to child
-equivalency classes rather than directly to child m-expressions.
+During search, m-expressions in the memo are walked over and
+progressively transformed creating new m-expressions in order to
+generate alternative plans. The memo structure avoids the
+combinatorial explosion of trees be naively enumerating the variants
+by having each m-expressions in the tree point to child equivalency
+classes rather than directly to child m-expressions.
 
 For example, consider the query:
 
@@ -364,14 +363,14 @@ The above query is considering join order, but such logically
 equivalent m-expressions also occur for index selection.
 
 Note that the numbering of the equivalency classes in the memo is
-arbitrary, but the depth-first traversal during the construction
-of the memo usually results in the
-highest number becoming the root of the query.
+arbitrary, but the depth-first traversal during the construction of
+the memo usually results in the highest number becoming the root of
+the query.
 
-The memo is principally used by Search. To avoid creating
-an additional intermediate data structure, it may be beneficial
-to have Prep populate the memo as well. This will be determined
-in a later iteration.
+The memo is principally used by Search. To avoid creating an
+additional intermediate data structure, it may be beneficial to have
+Prep populate the memo as well. This will be determined in a later
+iteration.
 
 [The memo structure is discussed further in a separate
 RFC](https://github.com/cockroachdb/cockroach/pull/19220).
@@ -420,13 +419,13 @@ known from kv's descriptor, the same ordering property can be derived
 for `k+1`.
 
 During optimization, for each node with required properties the
-optimizer will look at the children node to check whether
-their actual properties (which can be derived) match the requirement.
-If they don't the optimizer must introduce an *enforcer* operator in the plan
+optimizer will look at the children node to check whether their actual
+properties (which can be derived) match the requirement. If they
+don't the optimizer must introduce an *enforcer* operator in the plan
 that creates the required property.
 
-For example, an ORDER BY clause that creates a required property
-can cause the optimizer to add a sort node as enforcement.
+For example, an ORDER BY clause that creates a required property can
+cause the optimizer to add a sort node as enforcement.
 
 #### Relational vs scalar properties
 
@@ -454,9 +453,9 @@ is a key aspect of the design of an optimizer. This set must
 efficiently support the manipulation we want to apply to the original
 query without incurring too much planning overheads.
 
-The particular definition of the properties to be used in
-CockroachDB will grow incrementally over time in parallel
-with the query optimizer.
+The particular definition of the properties to be used in CockroachDB
+will grow incrementally over time in parallel with the query
+optimizer.
 
 A separate RFC will outline some properties already envisioned to be
 useful initially.
@@ -499,61 +498,59 @@ expression tree that represents the current logical plan for
 the query. If Prep and Rewrite use the memo already, there would
 be just one m-expression per class at this point.
 
-Search is the phase of optimization where many alternative
-logical and physical query plans are explored in order to find the
-best physical query plan. The output of Search is a physical query
-plan to execute. Note that in this context, a physical query plan
-refers to a query plan for which the leaves of the tree are table
-scans or index scans. DistSQL planning may be an additional step
-(i.e. DistSQL physical planning would schedule processors on nodes).
+Search is the phase of optimization where many alternative logical and
+physical query plans are explored in order to find the best physical
+query plan. The output of Search is a physical query plan to
+execute. Note that in this context, a physical query plan refers to a
+query plan for which the leaves of the tree are table scans or index
+scans. DistSQL planning may be an additional step (i.e. DistSQL
+physical planning would schedule processors on nodes).
 
 In order to avoid a combinatorial explosion in the number of
 expression trees, Search utilizes the Memo structure. Due to the large
 number of possible plans for some queries, Search cannot explore all
-of them and thus requires *pruning* heuristics. For example, Search can
-cost query plans early and stop exploring a branch of plans if the
+of them and thus requires *pruning* heuristics. For example, Search
+can cost query plans early and stop exploring a branch of plans if the
 cost is greater than the current best cost so far.
 
 Search begins with an empty Memo and the expression provided by
-Rewrite. It begins
-enumerating alternatives, costing them and pruning branches that are
-deemed not worthwhile to explore based on their cost.
+Rewrite. It begins enumerating alternatives, costing them and pruning
+branches that are deemed not worthwhile to explore based on their
+cost.
 
-At its core, Search is iterating over m-expressions
-and creating new equivalent m-expressions through transformation. The most
-basic logical transformation is join order enumeration (e.g. `a JOIN
-b` -> `b JOIN a`).
-The transformations that enumerate alternate plans that are *algebraically
-equivalent* without making implementation decisions are commonly
-called *exploration* transformations.
+At its core, Search is iterating over m-expressions and creating new
+equivalent m-expressions through transformation. The most basic
+logical transformation is join order enumeration (e.g. `a JOIN b` ->
+`b JOIN a`).  The transformations that enumerate alternate plans that
+are *algebraically equivalent* without making implementation decisions
+are commonly called *exploration* transformations.
 
-Logical to physical transformations include
-enumerating the possibilities for retrieving the necessary columns
-from a table, either by a secondary index or the primary index. The
-logical to physical transformation may generate glue m-expressions such as
-sorting or distinct filtering.
-These are called *implementation* transformations.
+Logical to physical transformations include enumerating the
+possibilities for retrieving the necessary columns from a table,
+either by a secondary index or the primary index. The logical to
+physical transformation may generate glue m-expressions such as
+sorting or distinct filtering.  These are called *implementation*
+transformations.
 
 The expression nodes maintained by search extend the Rewrite
 expression nodes with the addition of *physical properties* such as
-provided ordering. CockroachDB already does much of this
-physical property maintenance (see `physicalProps`), though it might
-need to be rewritten to operate on top of the Search expression nodes.
+provided ordering. CockroachDB already does much of this physical
+property maintenance (see `physicalProps`), though it might need to be
+rewritten to operate on top of the Search expression nodes.
 
 Full featured optimizers can include hundreds of
 transformations. Checking whether each transformation is applicable at
 each node would be prohibitevely expensive, so the transformations are
 indexed in various ways. The most basic indexing is by expression
 operator (e.g. `inner join`, `group by`, etc). A transformation is
-composed of a `match` function (*pattern* and/or *condition*),
-and an `apply` function. The `match`
-function provides a quick yes/no answer as to whether the
-transformation can be applied to an expression and returns an estimate
-of the expected benefit (called a "promise" in some of the
-literature, or *utility*). Search then applies the transformations in order of their
-expected benefit, generating new expressions that are added to the
-memo. Note that `match` does not need to guarantee the transformation
-can apply.
+composed of a `match` function (*pattern* and/or *condition*), and an
+`apply` function. The `match` function provides a quick yes/no answer
+as to whether the transformation can be applied to an expression and
+returns an estimate of the expected benefit (called a "promise" in
+some of the literature, or *utility*). Search then applies the
+transformations in order of their expected benefit, generating new
+expressions that are added to the memo. Note that `match` does not
+need to guarantee the transformation can apply.
 
 The basic form of Search iteration is open to debate. In a
 Cascades-style optimizer, Search maintains a stack of tasks to perform
