@@ -24,7 +24,7 @@ class RemoveBrokenDependenciesPlugin {
 
 // tslint:disable:object-literal-sort-keys
 module.exports = {
-  entry: ["babel-polyfill", "./src/index.tsx"],
+  entry: ["./src/index.tsx"],
   output: {
     filename: "bundle.js",
     path: __dirname + "/dist",

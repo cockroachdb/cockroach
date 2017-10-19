@@ -7,7 +7,6 @@
   "dependencies": {
     "@types/dagre-layout": "^0.8.0",
     "analytics-node": "^3.0.0",
-    "babel-polyfill": "^6.26.0",
     "classnames": "^2.2.5",
     "codemirror": "^5.25.2",
     "combokeys": "^2.4.6",
@@ -29,6 +28,7 @@
     "redux": "^3.6.0",
     "redux-saga": "^0.15.6",
     "redux-thunk": "^2.2.0",
+    "regenerator-runtime": "^0.11.0",
     "reselect": "^3.0.0",
     "webcola": "3.3.5",
     "whatwg-fetch": "^2.0.3"
