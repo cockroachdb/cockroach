@@ -99,6 +99,7 @@ var reservedKeywords = map[string]struct{}{
 	"limit":             {},
 	"localtime":         {},
 	"localtimestamp":    {},
+	"maxvalue":          {},
 	"name":              {},
 	"natural":           {},
 	"not":               {},

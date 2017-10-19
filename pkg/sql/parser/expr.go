@@ -1294,3 +1294,5 @@ func (node DefaultVal) String() string        { return AsString(node) }
 func (node *Placeholder) String() string      { return AsString(node) }
 func (node dNull) String() string             { return AsString(node) }
 func (list NameList) String() string          { return AsString(list) }
+func (node PartitionDefault) String() string  { return AsString(node) }
+func (node PartitionMaxValue) String() string { return AsString(node) }

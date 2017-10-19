@@ -180,7 +180,7 @@ func TestParse(t *testing.T) {
 		{`CREATE TABLE IF NOT EXISTS a (b INT)`},
 
 		{`CREATE TABLE a (b INT) PARTITION BY LIST (b) (PARTITION p1 VALUES (1, DEFAULT), PARTITION p2 VALUES (2), (3))`},
-		{`CREATE TABLE a (b INT) PARTITION BY RANGE (b) (PARTITION p1 VALUES LESS THAN (1), PARTITION p2 VALUES LESS THAN (2, 3))`},
+		{`CREATE TABLE a (b INT) PARTITION BY RANGE (b) (PARTITION p1 VALUES LESS THAN (1), PARTITION p2 VALUES LESS THAN (2, 3), PARTITION p3 VALUES LESS THAN (MAXVALUE))`},
 		// This montrosity was added on the assumption that it's more readable
 		// than all on one line. Feel free to rip it out if you come across it
 		// and disagree.
