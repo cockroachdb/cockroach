@@ -38,5 +38,6 @@ cd /testdata/java
 # See: https://basildoncoder.com/blog/postgresql-jdbc-client-certificates.html
 openssl pkcs8 -topk8 -inform PEM -outform DER -in /certs/node.key -out key.pk8 -nocrypt
 
-mvn %v
+mvn %v -o
+rm -rf target
 `
