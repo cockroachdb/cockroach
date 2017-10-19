@@ -38,16 +38,28 @@ var errNoZoneConfigApplies = errors.New("no zone config applies")
 //
 // This function must be kept in sync with ascendZoneSpecifier.
 func getZoneConfig(
-	id uint32, get func(roachpb.Key) (*roachpb.Value, error),
+	id uint32, keySuffix []byte, get func(roachpb.Key) (*roachpb.Value, error),
 ) (config.ZoneConfig, uint32, error) {
 	// Look in the zones table.
 	if zoneVal, err := get(sqlbase.MakeZoneKey(sqlbase.ID(id))); err != nil {
 		return config.ZoneConfig{}, 0, err
 	} else if zoneVal != nil {
-		// We're done.
+		// We found a matching entry.
 		var zone config.ZoneConfig
-		err := zoneVal.GetProto(&zone)
-		return zone, id, err
+		if err := zoneVal.GetProto(&zone); err != nil {
+			return config.ZoneConfig{}, 0, err
+		}
+		if subzone, found := zone.GetSubzoneForKeySuffix(keySuffix); found {
+			// The ZoneConfig has a more-specific index or partition subzone; use
+			// that.
+			return subzone, id, nil
+		}
+		// No subzone matched. If the parent zone specifies zero replicas, it
+		// existed only as a home for subzones, and we should keep recursing up the
+		// hierarchy. Otherwise, return the parent zone.
+		if zone.NumReplicas != 0 {
+			return zone, id, nil
+		}
 	}
 
 	// No zone config for this ID. We need to figure out if it's a table, so we
@@ -61,14 +73,15 @@ func getZoneConfig(
 		}
 		if tableDesc := desc.GetTable(); tableDesc != nil {
 			// This is a table descriptor. Look up its parent database zone config.
-			return getZoneConfig(uint32(tableDesc.ParentID), get)
+			// Don't forward keySuffix, because only tables can have subzones.
+			return getZoneConfig(uint32(tableDesc.ParentID), nil, get)
 		}
 	}
 
 	// Retrieve the default zone config, but only as long as that wasn't the ID
 	// we were trying to retrieve (avoid infinite recursion).
 	if id != keys.RootNamespaceID {
-		return getZoneConfig(keys.RootNamespaceID, get)
+		return getZoneConfig(keys.RootNamespaceID, nil, get)
 	}
 
 	// No descriptor or not a table.
@@ -77,8 +90,10 @@ func getZoneConfig(
 
 // GetZoneConfig returns the zone config for the object with 'id' using the
 // cached system config.
-func GetZoneConfig(cfg config.SystemConfig, id uint32) (config.ZoneConfig, bool, error) {
-	zone, _, err := getZoneConfig(id, func(key roachpb.Key) (*roachpb.Value, error) {
+func GetZoneConfig(
+	cfg config.SystemConfig, id uint32, keySuffix []byte,
+) (config.ZoneConfig, bool, error) {
+	zone, _, err := getZoneConfig(id, keySuffix, func(key roachpb.Key) (*roachpb.Value, error) {
 		return cfg.GetValue(key), nil
 	})
 	if err == errNoZoneConfigApplies {
@@ -91,9 +106,9 @@ func GetZoneConfig(cfg config.SystemConfig, id uint32) (config.ZoneConfig, bool,
 // GetZoneConfigInTxn is like GetZoneConfig, but uses the provided transaction
 // to perform lookups instead of the cached system config.
 func GetZoneConfigInTxn(
-	ctx context.Context, txn *client.Txn, id uint32,
+	ctx context.Context, txn *client.Txn, id uint32, keySuffix []byte,
 ) (config.ZoneConfig, uint32, error) {
-	return getZoneConfig(id, func(key roachpb.Key) (*roachpb.Value, error) {
+	return getZoneConfig(id, keySuffix, func(key roachpb.Key) (*roachpb.Value, error) {
 		kv, err := txn.Get(ctx, key)
 		if err != nil {
 			return nil, err

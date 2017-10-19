@@ -159,7 +159,10 @@ func (n *setZoneConfigNode) Start(params runParams) error {
 		return err
 	}
 
-	proto, _, err := GetZoneConfigInTxn(params.ctx, params.p.txn, uint32(targetID))
+	// TODO(benesch): pass in a proper key suffix to support index/partition
+	// zone configs.
+	var keySuffix []byte
+	proto, _, err := GetZoneConfigInTxn(params.ctx, params.p.txn, uint32(targetID), keySuffix)
 	if err == errNoZoneConfigApplies {
 		// TODO(benesch): This shouldn't be the caller's responsibility;
 		// GetZoneConfigInTxn should just return the default zone config if no zone
@@ -234,7 +237,10 @@ func (n *showZoneConfigNode) Start(params runParams) error {
 	if err != nil {
 		return err
 	}
-	proto, zoneID, err := GetZoneConfigInTxn(params.ctx, params.p.txn, uint32(targetID))
+	// TODO(benesch): pass in a proper key suffix to support index/partition
+	// zone configs.
+	var keySuffix []byte
+	proto, zoneID, err := GetZoneConfigInTxn(params.ctx, params.p.txn, uint32(targetID), keySuffix)
 	if err == errNoZoneConfigApplies {
 		// TODO(benesch): This shouldn't be the caller's responsibility;
 		// GetZoneConfigInTxn should just return the default zone config if no zone
