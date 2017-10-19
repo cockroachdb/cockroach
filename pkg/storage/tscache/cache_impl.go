@@ -1,4 +1,4 @@
-// Copyright 2014 The Cockroach Authors.
+// Copyright 2017 The Cockroach Authors.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,7 +12,7 @@
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
-package storage
+package tscache
 
 import (
 	"fmt"
@@ -36,128 +36,16 @@ const (
 	// will necessarily have to advance their commit timestamp.
 	MinTSCacheWindow = 10 * time.Second
 
-	// defaultTimestampCacheSize is the default size in bytes for a store's
-	// timestamp cache. Note that the timestamp cache can use more memory than
-	// this because it holds on to all entries that are younger than
+	// defaultCacheSize is the default size in bytes for a store's timestamp
+	// cache. Note that the timestamp cache can use more memory than this
+	// because it holds on to all entries that are younger than
 	// MinTSCacheWindow.
-	defaultTimestampCacheSize = 64 << 20 // 64 MB
+	defaultCacheSize = 64 << 20 // 64 MB
 
 	// Max entries in each btree node.
 	// TODO(peter): Not yet tuned.
 	btreeDegree = 64
 )
-
-// cacheRequest holds the timestamp cache data from a single batch request. The
-// requests are stored in a btree keyed by the timestamp and are "expanded" to
-// populate the read/write interval caches if a potential conflict is detected
-// due to an earlier request (based on timestamp) arriving.
-type cacheRequest struct {
-	span      roachpb.RSpan
-	reads     []roachpb.Span
-	writes    []roachpb.Span
-	txn       roachpb.Span
-	txnID     uuid.UUID
-	timestamp hlc.Timestamp
-	// Used to distinguish requests with identical timestamps. For actual
-	// requests, the uniqueID value is >0. When probing the btree for requests
-	// later than a particular timestamp a value of 0 is used.
-	uniqueID int64
-}
-
-// Less implements the btree.Item interface.
-func (cr *cacheRequest) Less(other btree.Item) bool {
-	otherReq := other.(*cacheRequest)
-	if cr.timestamp.Less(otherReq.timestamp) {
-		return true
-	}
-	if otherReq.timestamp.Less(cr.timestamp) {
-		return false
-	}
-	// Fallback to comparison of the uniqueID as a tie-breaker. This allows
-	// multiple requests with the same timestamp to exist in the requests btree.
-	return cr.uniqueID < otherReq.uniqueID
-}
-
-// numSpans returns the number of spans the request will expand into.
-func (cr *cacheRequest) numSpans() int {
-	n := len(cr.reads) + len(cr.writes)
-	if cr.txn.Key != nil {
-		n++
-	}
-	return n
-}
-
-func (cr *cacheRequest) size() uint64 {
-	var n uint64
-	for i := range cr.reads {
-		s := &cr.reads[i]
-		n += cacheEntrySize(interval.Comparable(s.Key), interval.Comparable(s.EndKey))
-	}
-	for i := range cr.writes {
-		s := &cr.writes[i]
-		n += cacheEntrySize(interval.Comparable(s.Key), interval.Comparable(s.EndKey))
-	}
-	if cr.txn.Key != nil {
-		n += cacheEntrySize(interval.Comparable(cr.txn.Key), nil)
-	}
-	return n
-}
-
-var cacheEntryOverhead = uint64(unsafe.Sizeof(cache.IntervalKey{}) +
-	unsafe.Sizeof(cacheValue{}) + unsafe.Sizeof(cache.Entry{}))
-
-func cacheEntrySize(start, end interval.Comparable) uint64 {
-	n := uint64(cap(start))
-	if end != nil && len(start) > 0 && len(end) > 0 && &end[0] != &start[0] {
-		// If the end key exists and is not sharing memory with the start key,
-		// account for its memory usage.
-		n += uint64(cap(end))
-	}
-	n += cacheEntryOverhead
-	return n
-}
-
-// A TimestampCache maintains an interval tree FIFO cache of keys or
-// key ranges and the timestamps at which they were most recently read
-// or written. If a timestamp was read or written by a transaction,
-// the txn ID is stored with the timestamp to avoid advancing
-// timestamps on successive requests from the same transaction.
-//
-// The cache also maintains a low-water mark which is the most
-// recently evicted entry's timestamp. This value always ratchets
-// with monotonic increases. The low water mark is initialized to
-// the current system time plus the maximum clock offset.
-type timestampCache struct {
-	rCache, wCache   *cache.IntervalCache
-	lowWater, latest hlc.Timestamp
-
-	// The requests tree contains cacheRequest entries keyed by timestamp. A
-	// request is "expanded" (i.e. the read/write spans are added to the
-	// read/write interval caches) when the timestamp cache is accessed on behalf
-	// of an earlier request.
-	requests   *btree.BTree
-	tmpReq     cacheRequest
-	reqIDAlloc int64
-	reqSpans   int
-
-	bytes    uint64
-	maxBytes uint64
-}
-
-// lowWaterTxnIDMarker is a special txn ID that identifies a cache entry as a
-// low water mark. It is specified when a lease is acquired to clear the
-// timestamp cache for a range. Also see timestampCache.getMax where this txn
-// ID is checked in order to return whether the max read/write timestamp came
-// from a regular entry or one of these low water mark entries.
-var lowWaterTxnIDMarker = func() uuid.UUID {
-	// The specific txn ID used here isn't important. We use something that is a)
-	// non-zero and b) obvious.
-	u, err := uuid.FromString("11111111-1111-1111-1111-111111111111")
-	if err != nil {
-		panic(err)
-	}
-	return u
-}()
 
 // A cacheValue combines the timestamp with an optional txn ID.
 type cacheValue struct {
@@ -179,33 +67,76 @@ func makeCacheEntry(key cache.IntervalKey, value cacheValue) *cache.Entry {
 	return &alloc.entry
 }
 
-// newTimestampCache returns a new timestamp cache with supplied
-// hybrid clock.
-func newTimestampCache(clock *hlc.Clock) *timestampCache {
-	tc := &timestampCache{
+var cacheEntryOverhead = uint64(unsafe.Sizeof(cache.IntervalKey{}) +
+	unsafe.Sizeof(cacheValue{}) + unsafe.Sizeof(cache.Entry{}))
+
+func cacheEntrySize(start, end interval.Comparable) uint64 {
+	n := uint64(cap(start))
+	if end != nil && len(start) > 0 && len(end) > 0 && &end[0] != &start[0] {
+		// If the end key exists and is not sharing memory with the start key,
+		// account for its memory usage.
+		n += uint64(cap(end))
+	}
+	n += cacheEntryOverhead
+	return n
+}
+
+// cacheImpl implements the Cache interface. It maintains an interval tree FIFO
+// cache of keys or key ranges and the timestamps at which they were most
+// recently read or written. If a timestamp was read or written by a
+// transaction, the txn ID is stored with the timestamp to avoid advancing
+// timestamps on successive requests from the same transaction.
+type cacheImpl struct {
+	rCache, wCache   *cache.IntervalCache
+	lowWater, latest hlc.Timestamp
+
+	// The requests tree contains Request entries keyed by timestamp. A
+	// request is "expanded" (i.e. the read/write spans are added to the
+	// read/write interval caches) when the timestamp cache is accessed
+	// on behalf of an earlier request.
+	requests   *btree.BTree
+	tmpReq     Request
+	reqIDAlloc int64
+	reqSpans   int
+
+	bytes    uint64
+	maxBytes uint64
+}
+
+var _ Cache = &cacheImpl{}
+
+// lowWaterTxnIDMarker is a special txn ID that identifies a cache entry as a
+// low water mark. It is specified when a lease is acquired to clear the
+// timestamp cache for a range. Also see Cache.getMax where this txn
+// ID is checked in order to return whether the max read/write timestamp came
+// from a regular entry or one of these low water mark entries.
+var lowWaterTxnIDMarker = func() uuid.UUID {
+	// The specific txn ID used here isn't important. We use something that is a)
+	// non-zero and b) obvious.
+	u, err := uuid.FromString("11111111-1111-1111-1111-111111111111")
+	if err != nil {
+		panic(err)
+	}
+	return u
+}()
+
+// newCacheImpl returns a new cacheImpl with the supplied hybrid clock.
+func newCacheImpl(clock *hlc.Clock) *cacheImpl {
+	tc := &cacheImpl{
 		rCache:   cache.NewIntervalCache(cache.Config{Policy: cache.CacheFIFO}),
 		wCache:   cache.NewIntervalCache(cache.Config{Policy: cache.CacheFIFO}),
-		maxBytes: uint64(defaultTimestampCacheSize),
+		maxBytes: uint64(defaultCacheSize),
 	}
-	tc.Clear(clock.Now())
+	tc.clear(clock.Now())
 	tc.rCache.Config.ShouldEvict = tc.shouldEvict
 	tc.wCache.Config.ShouldEvict = tc.shouldEvict
-
-	onEvicted := func(k, v interface{}) {
-		ck := k.(*cache.IntervalKey)
-		reqSize := cacheEntrySize(ck.Start, ck.End)
-		if tc.bytes < reqSize {
-			panic(fmt.Sprintf("bad reqSize: %d < %d", tc.bytes, reqSize))
-		}
-		tc.bytes -= reqSize
-	}
-	tc.rCache.Config.OnEvicted = onEvicted
-	tc.wCache.Config.OnEvicted = onEvicted
+	tc.rCache.Config.OnEvicted = tc.onEvicted
+	tc.wCache.Config.OnEvicted = tc.onEvicted
 	return tc
 }
 
-// Clear clears the cache and resets the low-water mark.
-func (tc *timestampCache) Clear(lowWater hlc.Timestamp) {
+// clear clears the cache and resets the low-water mark.
+func (tc *cacheImpl) clear(lowWater hlc.Timestamp) {
 	tc.requests = btree.New(btreeDegree)
 	tc.rCache.Clear()
 	tc.wCache.Clear()
@@ -213,18 +144,22 @@ func (tc *timestampCache) Clear(lowWater hlc.Timestamp) {
 	tc.latest = tc.lowWater
 }
 
-// len returns the total number of read and write intervals in the
-// TimestampCache.
-func (tc *timestampCache) len() int {
+// len returns the total number of read and write intervals in the cache.
+func (tc *cacheImpl) len() int {
 	return tc.rCache.Len() + tc.wCache.Len() + tc.reqSpans
 }
 
-// add the specified timestamp to the cache as covering the range of
+// byteCount returns the total memory usage of the cache.
+func (tc *cacheImpl) byteCount() uint64 {
+	return tc.bytes
+}
+
+// add the specified timestamp to the cache covering the range of
 // keys from start to end. If end is nil, the range covers the start
 // key only. txnID is nil for no transaction. readTSCache specifies
 // whether the command adding this timestamp should update the read
 // timestamp; false to update the write timestamp cache.
-func (tc *timestampCache) add(
+func (tc *cacheImpl) add(
 	start, end roachpb.Key, timestamp hlc.Timestamp, txnID uuid.UUID, readTSCache bool,
 ) {
 	// This gives us a memory-efficient end key if end is empty.
@@ -271,7 +206,7 @@ func (tc *timestampCache) add(
 			// maintains the IntervalCache invariants). These in-place modifications
 			// change the size of the entry. To capture all of these modifications we
 			// compute the current size of the entry and then use the new size at the
-			// end of this iteration to update TimestampCache.bytes.
+			// end of this iteration to update Cache.bytes.
 			oldSize := cacheEntrySize(key.Start, key.End)
 			if cv.timestamp.Less(timestamp) {
 				// The existing interval has a timestamp less than the new
@@ -566,14 +501,14 @@ func (tc *timestampCache) add(
 	}
 }
 
-// AddRequest adds the specified request to the cache in an unexpanded state.
-func (tc *timestampCache) AddRequest(req cacheRequest) {
-	if len(req.reads) == 0 && len(req.writes) == 0 && req.txn.Key == nil {
+// AddRequest implements the Cache interface.
+func (tc *cacheImpl) AddRequest(req Request) {
+	if len(req.Reads) == 0 && len(req.Writes) == 0 && req.Txn.Key == nil {
 		// The request didn't contain any spans for the timestamp cache.
 		return
 	}
 
-	if !tc.lowWater.Less(req.timestamp) {
+	if !tc.lowWater.Less(req.Timestamp) {
 		// Request too old to be added.
 		return
 	}
@@ -585,7 +520,7 @@ func (tc *timestampCache) AddRequest(req cacheRequest) {
 	tc.bytes += req.size()
 
 	// Bump the latest timestamp and evict any requests that are now too old.
-	tc.latest.Forward(req.timestamp)
+	tc.latest.Forward(req.Timestamp)
 	edge := tc.latest
 	edge.WallTime -= MinTSCacheWindow.Nanoseconds()
 
@@ -599,11 +534,11 @@ func (tc *timestampCache) AddRequest(req cacheRequest) {
 		if minItem == nil {
 			break
 		}
-		minReq := minItem.(*cacheRequest)
-		if edge.Less(minReq.timestamp) {
+		minReq := minItem.(*Request)
+		if edge.Less(minReq.Timestamp) {
 			break
 		}
-		tc.lowWater = minReq.timestamp
+		tc.lowWater = minReq.Timestamp
 		tc.requests.DeleteMin()
 		if tc.reqSpans < minReq.numSpans() {
 			panic(fmt.Sprintf("bad reqSpans: %d < %d", tc.reqSpans, minReq.numSpans()))
@@ -617,17 +552,16 @@ func (tc *timestampCache) AddRequest(req cacheRequest) {
 	}
 }
 
-// ExpandRequests expands any request that is newer than the specified
-// timestamp and which overlaps the specified span.
-func (tc *timestampCache) ExpandRequests(timestamp hlc.Timestamp, span roachpb.RSpan) {
+// ExpandRequests implements the Cache interface.
+func (tc *cacheImpl) ExpandRequests(span roachpb.RSpan, timestamp hlc.Timestamp) {
 	// Find all of the requests that have a timestamp greater than or equal to
 	// the specified timestamp. Note that we can't delete the requests during the
 	// btree iteration.
-	var reqs []*cacheRequest
-	tc.tmpReq.timestamp = timestamp
+	var reqs []*Request
+	tc.tmpReq.Timestamp = timestamp
 	tc.requests.AscendGreaterOrEqual(&tc.tmpReq, func(i btree.Item) bool {
-		cr := i.(*cacheRequest)
-		if cr.span.Overlaps(span) {
+		cr := i.(*Request)
+		if cr.Span.Overlaps(span) {
 			reqs = append(reqs, cr)
 		}
 		return true
@@ -646,50 +580,47 @@ func (tc *timestampCache) ExpandRequests(timestamp hlc.Timestamp, span roachpb.R
 			panic(fmt.Sprintf("bad reqSize: %d < %d", tc.bytes, reqSize))
 		}
 		tc.bytes -= reqSize
-		for i := range req.reads {
-			sp := &req.reads[i]
-			tc.add(sp.Key, sp.EndKey, req.timestamp, req.txnID, true /* readTSCache */)
+		for i := range req.Reads {
+			sp := &req.Reads[i]
+			tc.add(sp.Key, sp.EndKey, req.Timestamp, req.TxnID, true /* readTSCache */)
 		}
-		for i := range req.writes {
-			sp := &req.writes[i]
-			tc.add(sp.Key, sp.EndKey, req.timestamp, req.txnID, false /* !readTSCache */)
+		for i := range req.Writes {
+			sp := &req.Writes[i]
+			tc.add(sp.Key, sp.EndKey, req.Timestamp, req.TxnID, false /* !readTSCache */)
 		}
-		if req.txn.Key != nil {
+		if req.Txn.Key != nil {
 			// Make the transaction key from the request key. We're guaranteed
-			// req.txnID != nil because we only hit this code path for
+			// req.TxnID != nil because we only hit this code path for
 			// EndTransactionRequests.
-			key := keys.TransactionKey(req.txn.Key, req.txnID)
+			key := keys.TransactionKey(req.Txn.Key, req.TxnID)
 			// We set txnID=nil because we want hits for same txn ID.
-			tc.add(key, nil, req.timestamp, uuid.UUID{}, false /* !readTSCache */)
+			tc.add(key, nil, req.Timestamp, uuid.UUID{}, false /* !readTSCache */)
 		}
 	}
 }
 
-// GetMaxRead returns the maximum read timestamp which overlaps the
-// interval spanning from start to end. If that timestamp belongs to a
-// single transaction, that transaction's ID is returned. If no part
-// of the specified range is overlapped by timestamps from different
-// transactions in the cache, the low water timestamp is returned for
-// the read timestamps. Also returns an "ok" bool, indicating whether
-// an explicit match of the interval was found in the cache (as
-// opposed to using the low-water mark).
-func (tc *timestampCache) GetMaxRead(start, end roachpb.Key) (hlc.Timestamp, uuid.UUID, bool) {
+// SetLowWater implements the Cache interface.
+func (tc *cacheImpl) SetLowWater(start, end roachpb.Key, timestamp hlc.Timestamp) {
+	tc.add(start, end, timestamp, lowWaterTxnIDMarker, false)
+	tc.add(start, end, timestamp, lowWaterTxnIDMarker, true)
+}
+
+// GlobalLowWater implements the Cache interface.
+func (tc *cacheImpl) GlobalLowWater() hlc.Timestamp {
+	return tc.lowWater
+}
+
+// GetMaxRead implements the Cache interface.
+func (tc *cacheImpl) GetMaxRead(start, end roachpb.Key) (hlc.Timestamp, uuid.UUID, bool) {
 	return tc.getMax(start, end, true)
 }
 
-// GetMaxWrite returns the maximum write timestamp which overlaps the
-// interval spanning from start to end. If that timestamp belongs to a
-// single transaction, that transaction's ID is returned. If no part
-// of the specified range is overlapped by timestamps from different
-// transactions in the cache, the low water timestamp is returned for
-// the write timestamps. Also returns an "ok" bool, indicating whether
-// an explicit match of the interval was found in the cache (as
-// opposed to using the low-water mark).
-func (tc *timestampCache) GetMaxWrite(start, end roachpb.Key) (hlc.Timestamp, uuid.UUID, bool) {
+// GetMaxWrite implements the Cache interface.
+func (tc *cacheImpl) GetMaxWrite(start, end roachpb.Key) (hlc.Timestamp, uuid.UUID, bool) {
 	return tc.getMax(start, end, false)
 }
 
-func (tc *timestampCache) getMax(
+func (tc *cacheImpl) getMax(
 	start, end roachpb.Key, readTSCache bool,
 ) (hlc.Timestamp, uuid.UUID, bool) {
 	if len(end) == 0 {
@@ -720,7 +651,7 @@ func (tc *timestampCache) getMax(
 
 // shouldEvict returns true if the cache entry's timestamp is no
 // longer within the MinTSCacheWindow.
-func (tc *timestampCache) shouldEvict(size int, key, value interface{}) bool {
+func (tc *cacheImpl) shouldEvict(size int, key, value interface{}) bool {
 	if tc.bytes <= tc.maxBytes {
 		return false
 	}
@@ -740,4 +671,14 @@ func (tc *timestampCache) shouldEvict(size int, key, value interface{}) bool {
 		return true
 	}
 	return false
+}
+
+// onEvicted is called when an entry is evicted from the cache.
+func (tc *cacheImpl) onEvicted(k, v interface{}) {
+	ck := k.(*cache.IntervalKey)
+	reqSize := cacheEntrySize(ck.Start, ck.End)
+	if tc.bytes < reqSize {
+		panic(fmt.Sprintf("bad reqSize: %d < %d", tc.bytes, reqSize))
+	}
+	tc.bytes -= reqSize
 }

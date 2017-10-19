@@ -45,6 +45,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
+	"github.com/cockroachdb/cockroach/pkg/storage/tscache"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -1953,7 +1954,7 @@ func TestReplicaUpdateTSCache(t *testing.T) {
 	if rOK || wOK {
 		t.Errorf("expected rOK=false and wOK=false; rOK=%t, wOK=%t", rOK, wOK)
 	}
-	tc.repl.store.tsCacheMu.cache.ExpandRequests(hlc.Timestamp{}, tc.repl.Desc().RSpan())
+	tc.repl.store.tsCacheMu.cache.ExpandRequests(tc.repl.Desc().RSpan(), hlc.Timestamp{})
 	rTS, _, rOK := tc.repl.store.tsCacheMu.cache.GetMaxRead(roachpb.Key("a"), nil)
 	wTS, _, wOK := tc.repl.store.tsCacheMu.cache.GetMaxWrite(roachpb.Key("a"), nil)
 	if rTS.WallTime != t0.Nanoseconds() || wTS.WallTime != startNanos || !rOK || wOK {
@@ -8620,67 +8621,67 @@ func TestMakeTimestampCacheRequest(t *testing.T) {
 		maxKeys  int64
 		req      roachpb.Request
 		resp     roachpb.Response
-		expected cacheRequest
+		expected tscache.Request
 	}{
 		{
 			0,
 			&roachpb.ScanRequest{Span: ac},
 			&roachpb.ScanResponse{},
-			cacheRequest{reads: []roachpb.Span{ac}},
+			tscache.Request{Reads: []roachpb.Span{ac}},
 		},
 		{
 			0,
 			&roachpb.ScanRequest{Span: ac},
 			&roachpb.ScanResponse{Rows: []roachpb.KeyValue{{Key: a}}},
-			cacheRequest{reads: []roachpb.Span{ac}},
+			tscache.Request{Reads: []roachpb.Span{ac}},
 		},
 		{
 			2,
 			&roachpb.ScanRequest{Span: ac},
 			&roachpb.ScanResponse{},
-			cacheRequest{reads: []roachpb.Span{ac}},
+			tscache.Request{Reads: []roachpb.Span{ac}},
 		},
 		{
 			2,
 			&roachpb.ScanRequest{Span: ac},
 			&roachpb.ScanResponse{Rows: []roachpb.KeyValue{{Key: a}}},
-			cacheRequest{reads: []roachpb.Span{ac}},
+			tscache.Request{Reads: []roachpb.Span{ac}},
 		},
 		{
 			2,
 			&roachpb.ScanRequest{Span: ac},
 			&roachpb.ScanResponse{Rows: []roachpb.KeyValue{{Key: a}, {Key: b}}},
-			cacheRequest{reads: []roachpb.Span{{Key: a, EndKey: b.Next()}}},
+			tscache.Request{Reads: []roachpb.Span{{Key: a, EndKey: b.Next()}}},
 		},
 		{
 			0,
 			&roachpb.ReverseScanRequest{Span: ac},
 			&roachpb.ReverseScanResponse{},
-			cacheRequest{reads: []roachpb.Span{ac}},
+			tscache.Request{Reads: []roachpb.Span{ac}},
 		},
 		{
 			0,
 			&roachpb.ReverseScanRequest{Span: ac},
 			&roachpb.ReverseScanResponse{Rows: []roachpb.KeyValue{{Key: a}}},
-			cacheRequest{reads: []roachpb.Span{ac}},
+			tscache.Request{Reads: []roachpb.Span{ac}},
 		},
 		{
 			2,
 			&roachpb.ReverseScanRequest{Span: ac},
 			&roachpb.ReverseScanResponse{},
-			cacheRequest{reads: []roachpb.Span{ac}},
+			tscache.Request{Reads: []roachpb.Span{ac}},
 		},
 		{
 			2,
 			&roachpb.ReverseScanRequest{Span: ac},
 			&roachpb.ReverseScanResponse{Rows: []roachpb.KeyValue{{Key: a}}},
-			cacheRequest{reads: []roachpb.Span{ac}},
+			tscache.Request{Reads: []roachpb.Span{ac}},
 		},
 		{
 			2,
 			&roachpb.ReverseScanRequest{Span: ac},
 			&roachpb.ReverseScanResponse{Rows: []roachpb.KeyValue{{Key: c}, {Key: b}}},
-			cacheRequest{reads: []roachpb.Span{{Key: b, EndKey: c}}},
+			tscache.Request{Reads: []roachpb.Span{{Key: b, EndKey: c}}},
 		},
 	}
 	for _, c := range testCases {
@@ -8690,7 +8691,7 @@ func TestMakeTimestampCacheRequest(t *testing.T) {
 			ba.Header.MaxSpanRequestKeys = c.maxKeys
 			ba.Add(c.req)
 			br.Add(c.resp)
-			cr := makeCacheRequest(&ba, &br, roachpb.RSpan{})
+			cr := makeTSCacheRequest(&ba, &br, roachpb.RSpan{})
 			if !reflect.DeepEqual(c.expected, cr) {
 				t.Fatalf("%s", pretty.Diff(c.expected, cr))
 			}
