@@ -4,7 +4,7 @@ MAINTAINER Alex Robinson <alex@cockroachlabs.com>
 
 LABEL name="cockroachdb/cockroach" \
       vendor="Cockroach Labs" \
-      version="1.1.0" \
+      version="1.1.1" \
       release="1" \
       summary="CockroachDB is a cloud-native SQL database for building global, scalable cloud services that survive disasters." \
       description="CockroachDB is a distributed SQL database that uses the PostgreSQL wire protocol, so there are a huge variety of client drivers and ORMs that you can use to talk to it. To get started, see https://www.cockroachlabs.com/docs/stable/build-an-app-with-cockroachdb.html" \
