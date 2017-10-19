@@ -26,9 +26,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/tscache"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/localtestcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -588,7 +588,7 @@ func TestTxnLongDelayBetweenWritesWithConcurrentRead(t *testing.T) {
 	// Wait till txnA finish put(a).
 	<-ch
 	// Delay for longer than the cache window.
-	s.Manual.Increment((storage.MinTSCacheWindow + time.Second).Nanoseconds())
+	s.Manual.Increment((tscache.MinTSCacheWindow + time.Second).Nanoseconds())
 	if err := s.DB.Txn(context.TODO(), func(ctx context.Context, txn *client.Txn) error {
 		// Use snapshot isolation.
 		if err := txn.SetIsolation(enginepb.SNAPSHOT); err != nil {

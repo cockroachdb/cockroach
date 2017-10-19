@@ -491,11 +491,7 @@ func (r *Replica) leasePostApply(ctx context.Context, newLease roachpb.Lease) {
 		desc := r.Desc()
 		r.store.tsCacheMu.Lock()
 		for _, keyRange := range makeReplicatedKeyRanges(desc) {
-			for _, readOnly := range []bool{true, false} {
-				r.store.tsCacheMu.cache.add(
-					keyRange.start.Key, keyRange.end.Key,
-					newLease.Start, lowWaterTxnIDMarker, readOnly)
-			}
+			r.store.tsCacheMu.cache.SetLowWater(keyRange.start.Key, keyRange.end.Key, newLease.Start)
 		}
 		r.store.tsCacheMu.Unlock()
 
