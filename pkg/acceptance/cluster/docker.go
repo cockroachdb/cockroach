@@ -22,6 +22,7 @@ import (
 	"net"
 	"net/url"
 	"os"
+	"os/user"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -159,6 +160,15 @@ func createContainer(
 	// Disable DNS search under the host machine's domain. This can
 	// catch upstream wildcard DNS matching and result in odd behavior.
 	hostConfig.DNSSearch = []string{"."}
+
+	// Run the container as the current user to avoid creating root-owned files
+	// and directories.
+	user, err := user.Current()
+	if err != nil {
+		return nil, errors.Wrap(err, "unable to get host user")
+	}
+	containerConfig.User = fmt.Sprintf("%s:%s", user.Uid, user.Gid)
+
 	resp, err := l.client.ContainerCreate(ctx, &containerConfig, &hostConfig, nil, containerName)
 	if err != nil {
 		return nil, err
