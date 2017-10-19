@@ -168,6 +168,7 @@ var keywords = map[string]struct {
 	"localtimestamp":            {LOCALTIMESTAMP, "R"},
 	"low":                       {LOW, "U"},
 	"match":                     {MATCH, "U"},
+	"maxvalue":                  {MAXVALUE, "U"},
 	"minute":                    {MINUTE, "U"},
 	"month":                     {MONTH, "U"},
 	"name":                      {NAME, "C"},

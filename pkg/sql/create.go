@@ -1113,29 +1113,54 @@ func (p *planner) finalizeInterleave(
 }
 
 // valueEncodeTuple typechecks the datums in tuple, returns the concatenation of
-// these datums each encoded using the table "value" encoding.
+// these datums each encoded using the table "value" encoding. The special
+// values of DEFAULT (for list) and MAXVALUE (for range) are encoded as NOT
+// NULL.
 //
 // TODO(dan): The typechecking here should be run during plan construction, so
 // we can support placeholders.
 func valueEncodeTuple(
-	evalCtx *parser.EvalContext, tuple *parser.Tuple, cols []sqlbase.ColumnDescriptor,
+	typ parser.PartitionByType,
+	evalCtx *parser.EvalContext,
+	tuple *parser.Tuple,
+	cols []sqlbase.ColumnDescriptor,
 ) ([]byte, error) {
-	var scratch []byte
-	typedExpr, err := parser.TypeCheck(tuple, &parser.SemaContext{}, parser.TypeTuple)
-	if err != nil {
-		return nil, errors.Wrap(err, tuple.String())
-	}
-	tupleDatum, err := tuple.Eval(evalCtx)
-	if err != nil {
-		return nil, errors.Wrap(err, typedExpr.String())
-	}
-	datums := tupleDatum.(*parser.DTuple)
-	if len(datums.D) != len(cols) {
+	if len(tuple.Exprs) != len(cols) {
 		return nil, errors.Errorf("partition has %d column(s) but %d value(s) were supplied",
-			len(cols), len(datums.D))
+			len(cols), len(tuple.Exprs))
 	}
-	var value []byte
-	for i, datum := range datums.D {
+	var value, scratch []byte
+	for i, expr := range tuple.Exprs {
+		switch expr.(type) {
+		case parser.PartitionDefault:
+			if typ != parser.PartitionByList {
+				return nil, errors.Errorf("%s cannot be used with PARTITION BY %s", expr, typ)
+			}
+			// NOT NULL is used to signal DEFAULT.
+			value = encoding.EncodeNotNullValue(value, encoding.NoColumnID)
+			continue
+		case parser.PartitionMaxValue:
+			if typ != parser.PartitionByRange {
+				return nil, errors.Errorf("%s cannot be used with PARTITION BY %s", expr, typ)
+			}
+			// NOT NULL is used to signal MAXVALUE.
+			value = encoding.EncodeNotNullValue(value, encoding.NoColumnID)
+			continue
+		case *parser.Placeholder:
+			return nil, pgerror.UnimplementedWithIssueErrorf(
+				19464, "placeholders are not supported in PARTITION BY")
+		default:
+			// Fall-through.
+		}
+
+		typedExpr, err := parser.TypeCheck(expr, nil, cols[i].Type.ToDatumType())
+		if err != nil {
+			return nil, errors.Wrap(err, expr.String())
+		}
+		datum, err := typedExpr.Eval(evalCtx)
+		if err != nil {
+			return nil, errors.Wrap(err, typedExpr.String())
+		}
 		if err := sqlbase.CheckColumnType(cols[i], datum.ResolvedType(), nil); err != nil {
 			return nil, err
 		}
@@ -1182,7 +1207,7 @@ func addPartitionedBy(
 			Name: l.Name.Normalize(),
 		}
 		for _, tuple := range l.Tuples {
-			encodedTuple, err := valueEncodeTuple(evalCtx, tuple, cols)
+			encodedTuple, err := valueEncodeTuple(parser.PartitionByList, evalCtx, tuple, cols)
 			if err != nil {
 				return err
 			}
@@ -1202,7 +1227,7 @@ func addPartitionedBy(
 		p := sqlbase.PartitioningDescriptor_Range{
 			Name: r.Name.Normalize(),
 		}
-		encodedTuple, err := valueEncodeTuple(evalCtx, r.Tuple, cols)
+		encodedTuple, err := valueEncodeTuple(parser.PartitionByRange, evalCtx, r.Tuple, cols)
 		if err != nil {
 			return err
 		}

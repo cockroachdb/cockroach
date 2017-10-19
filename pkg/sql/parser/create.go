@@ -636,6 +636,16 @@ func (node *InterleaveDef) Format(buf *bytes.Buffer, f FmtFlags) {
 	}
 }
 
+// PartitionByType is an enum of each type of partitioning (LIST/RANGE).
+type PartitionByType string
+
+const (
+	// PartitionByList indicates a PARTITION BY LIST clause.
+	PartitionByList PartitionByType = "LIST"
+	// PartitionByRange indicates a PARTITION BY LIST clause.
+	PartitionByRange PartitionByType = "RANGE"
+)
+
 // PartitionBy represents an PARTITION BY definition within a CREATE/ALTER
 // TABLE/INDEX statement.
 type PartitionBy struct {
@@ -709,6 +719,29 @@ func (node RangePartition) Format(buf *bytes.Buffer, f FmtFlags) {
 		FormatNode(buf, f, node.Subpartition)
 	}
 }
+
+// PartitionDefault represents the DEFAULT expression in a PARTITION BY clause.
+type PartitionDefault struct{}
+
+// Format implements the NodeFormatter interface.
+func (node PartitionDefault) Format(buf *bytes.Buffer, f FmtFlags) {
+	buf.WriteString("DEFAULT")
+}
+
+// ResolvedType implements the TypedExpr interface.
+func (PartitionDefault) ResolvedType() Type { return TypeAny }
+
+// PartitionMaxValue represents the MAXVALUE expression expression in a
+// PARTITION BY clause.
+type PartitionMaxValue struct{}
+
+// Format implements the NodeFormatter interface.
+func (node PartitionMaxValue) Format(buf *bytes.Buffer, f FmtFlags) {
+	buf.WriteString("MAXVALUE")
+}
+
+// ResolvedType implements the TypedExpr interface.
+func (PartitionMaxValue) ResolvedType() Type { return TypeAny }
 
 // CreateTable represents a CREATE TABLE statement.
 type CreateTable struct {

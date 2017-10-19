@@ -1228,33 +1228,59 @@ func (desc *TableDescriptor) validateTableIndexes(
 
 // translateValueEncodingToKey parses columns encoded with the "value" encoding
 // and returns them reencoded using the "key ascending" encoding. The parsed
-// datums are also returned.
+// datums are also returned. If DEFAULT or MAXVALUE is encountered, the returned
+// row (both reencoded and parsed datums) will be shorter then len(colIDs);
+// specifically it will contain all the values up to but not including the
+// special one.
 func translateValueEncodingToKey(
-	a *DatumAlloc, desc *TableDescriptor, valueEncBuf []byte, colIDs []ColumnID,
-) (EncDatumRow, []byte, error) {
-	datums := make(EncDatumRow, len(colIDs))
+	typ parser.PartitionByType,
+	a *DatumAlloc,
+	desc *TableDescriptor,
+	valueEncBuf []byte,
+	colIDs []ColumnID,
+) (parser.Datums, []byte, error) {
+	datums := make(parser.Datums, len(colIDs))
 	var keyEncBuf []byte
+	specialIdx := -1
 	for i, colID := range colIDs {
 		col, err := desc.FindActiveColumnByID(colID)
 		if err != nil {
 			return nil, nil, err
 		}
-		datums[i], valueEncBuf, err = EncDatumFromBuffer(
-			&col.Type, DatumEncoding_VALUE, valueEncBuf,
-		)
+		if _, dataOffset, _, typ, err := encoding.DecodeValueTag(valueEncBuf); err != nil {
+			return nil, nil, err
+		} else if typ == encoding.NotNull {
+			specialIdx = i
+			valueEncBuf = valueEncBuf[dataOffset:]
+			continue
+		}
+		datums[i], valueEncBuf, err = DecodeTableValue(a, col.Type.ToDatumType(), valueEncBuf)
 		if err != nil {
 			return nil, nil, err
 		}
-		if err := datums[i].EnsureDecoded(&col.Type, a); err != nil {
-			return nil, nil, err
+		if specialIdx != -1 {
+			switch typ {
+			case parser.PartitionByList:
+				return nil, nil, errors.Errorf("%s not allowed after DEFAULT", datums[i])
+			case parser.PartitionByRange:
+				return nil, nil, errors.Errorf("%s not allowed after MAXVALUE", datums[i])
+			default:
+				return nil, nil, errors.Errorf("unknown partition type: %s", typ)
+			}
 		}
-		keyEncBuf, err = datums[i].Encode(&col.Type, a, DatumEncoding_ASCENDING_KEY, keyEncBuf)
+		// TODO(dan): One we start using this method to fill in zone configs,
+		// this encoding has to match the index direction (instead of always
+		// being ascending).
+		keyEncBuf, err = EncodeTableKey(keyEncBuf, datums[i], encoding.Ascending)
 		if err != nil {
 			return nil, nil, err
 		}
 	}
 	if len(valueEncBuf) > 0 {
 		return nil, nil, fmt.Errorf("superfluous data in encoded value")
+	}
+	if specialIdx != -1 {
+		datums = datums[:specialIdx]
 	}
 	return datums, keyEncBuf, nil
 }
@@ -1305,13 +1331,16 @@ func (desc *TableDescriptor) validatePartitioningDescriptor(
 			// to match the behavior of the value when indexed.
 			for _, valueEncBuf := range p.Values {
 				datums, keyEncBuf, err := translateValueEncodingToKey(
-					a, desc, valueEncBuf, colIDs,
+					parser.PartitionByList, a, desc, valueEncBuf, colIDs,
 				)
 				if err != nil {
-					return fmt.Errorf("decoding %s: %v", p.Name, err)
+					return fmt.Errorf("decoding PARTITION %s: %v", p.Name, err)
 				}
 				if _, exists := listValues[string(keyEncBuf)]; exists {
-					return fmt.Errorf("%v cannot be present in more than one partition", datums)
+					if len(datums) != len(colIDs) {
+						return fmt.Errorf("%s, DEFAULT cannot be present in more than one partition", datums)
+					}
+					return fmt.Errorf("%s cannot be present in more than one partition", datums)
 				}
 				listValues[string(keyEncBuf)] = struct{}{}
 			}
@@ -1340,12 +1369,19 @@ func (desc *TableDescriptor) validatePartitioningDescriptor(
 			// NB: key encoding is used to check sortedness and uniqueness
 			// because it has to match the behavior of the value when
 			// indexed.
-			datums, keyEncBuf, err := translateValueEncodingToKey(a, desc, p.UpperBound, colIDs)
+			datums, keyEncBuf, err := translateValueEncodingToKey(
+				parser.PartitionByRange, a, desc, p.UpperBound, colIDs,
+			)
 			if err != nil {
-				return fmt.Errorf("decoding %s: %v", p.Name, err)
+				return fmt.Errorf("decoding PARTITION %s: %v", p.Name, err)
+			}
+			if len(datums) < len(colIDs) {
+				// MAXVALUE, so encode something that always sorts higher than
+				// any possible value for this column.
+				keyEncBuf = roachpb.Key(keyEncBuf).PrefixEnd()
 			}
 			if _, exists := rangeValues[string(keyEncBuf)]; exists {
-				return fmt.Errorf("%v cannot be present in more than one partition", datums)
+				return fmt.Errorf("%s cannot be present in more than one partition", datums)
 			}
 
 			rangeValues[string(keyEncBuf)] = struct{}{}
