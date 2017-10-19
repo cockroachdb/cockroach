@@ -13,6 +13,7 @@ namespace CockroachDrivers
             var connStringBuilder = new NpgsqlConnectionStringBuilder();
             connStringBuilder.Port = int.Parse(Environment.GetEnvironmentVariable("PGPORT"));
             connStringBuilder.Host = Environment.GetEnvironmentVariable("PGHOST");
+            connStringBuilder.Username = Environment.GetEnvironmentVariable("PGUSER");
             connStringBuilder.SslMode = SslMode.Require;
             connStringBuilder.TrustServerCertificate = true;
             Simple(connStringBuilder.ConnectionString);
