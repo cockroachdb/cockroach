@@ -240,8 +240,8 @@ func NewCommandQueue(coveringOptimization bool) *CommandQueue {
 		readsBuffer:          make(map[*cmd]struct{}),
 		reads:                interval.NewTree(interval.ExclusiveOverlapper),
 		writes:               interval.NewTree(interval.ExclusiveOverlapper),
-		wRg:                  interval.NewRangeTree(),
-		rwRg:                 interval.NewRangeTree(),
+		wRg:                  interval.NewRangeList(),
+		rwRg:                 interval.NewRangeList(),
 		coveringOptimization: coveringOptimization,
 	}
 	return cq
