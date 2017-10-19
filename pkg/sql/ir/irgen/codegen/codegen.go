@@ -29,8 +29,8 @@ func Generate(
 	w io.Writer, tmpl *template.Template, numRefs, numEnums int, namedTypeses ...[]ir.NamedType,
 ) error {
 	root := template.NewRoot()
-	root.AddReplacementf("'r'", "%d", numRefs)
-	root.AddReplacementf("'e'", "%d", numEnums)
+	root.AddReplacementf("numRefsPerNode", "%d", numRefs)
+	root.AddReplacementf("numEnumsPerNode", "%d", numEnums)
 	for _, namedTypes := range namedTypeses {
 		for _, namedType := range namedTypes {
 			switch t := namedType.Type.(type) {
@@ -63,7 +63,7 @@ func Generate(
 					}
 					child.AddReplacement(paramName, i.Name)
 					child.AddReplacement(paramType, i.Type)
-					child.AddReplacement(paramTypeName, strings.Title(i.Type.String()))
+					child.AddReplacement(paramTypeTitle, strings.Title(i.Type.String()))
 					child.AddReplacement(paramTag, i.Tag)
 					getName, setName := a.allocateSlots(i)
 					child.AddReplacement(macroGetName, getName)
@@ -93,13 +93,13 @@ func Generate(
 // is exhausted, we allocate an extra slot instead.
 
 const (
-	paramName         = "Name"
-	paramType         = "Type"
-	paramTypeName     = "TypName"
-	paramTag          = "'t'"
-	macroGetName      = `macroGetName\(([.\w]+)\)`
-	macroSetName      = `macroSetName\(([.\w]+), ([.\w]+), ([.\w]+)\)`
-	macroGetExtraRefs = `macroGetExtraRefs\(([.\w]+)\)`
+	paramName         = "Item"
+	paramType         = "type"
+	paramTypeTitle    = "Type"
+	paramTag          = "tag"
+	macroGetName      = `getField\(([.º\w]+)\)`
+	macroSetName      = `setField\(([.º\w]+), ([.º\w]+), ([.º\w]+)\)`
+	macroGetExtraRefs = `getExtraRefs\(([.º\w]+)\)`
 )
 
 type slotAllocator struct {
@@ -133,7 +133,7 @@ func (a *slotAllocator) allocatePrimSlot(
 	extra := a.structNode.NewChild("extraField")
 	extra.AddReplacement(paramName, name)
 	extra.AddReplacement(paramType, typ)
-	return fmt.Sprintf("$1.extra.(*extraStruct).%s", name),
+	return fmt.Sprintf("$1.extra.(*extraºStruct).%s", name),
 		fmt.Sprintf("$2.%s = $3", name)
 }
 
@@ -146,7 +146,7 @@ func (a *slotAllocator) allocateRefSlot() (getName, setName string) {
 	}
 	j := a.numExtraRefs
 	a.numExtraRefs++
-	return fmt.Sprintf("$1.extra.(*extraStruct).refs[%d]", j),
+	return fmt.Sprintf("$1.extra.(*extraºStruct).refs[%d]", j),
 		fmt.Sprintf("$2.refs[%d] = $3.ref", j)
 }
 

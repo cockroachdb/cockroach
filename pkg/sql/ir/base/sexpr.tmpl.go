@@ -29,7 +29,7 @@ func FormatSExprInt64(buf *bytes.Buffer, x int64) {
 
 // @for enum
 
-func (x Enum) FormatSExpr(buf *bytes.Buffer) {
+func (x ºEnum) FormatSExpr(buf *bytes.Buffer) {
 	buf.WriteString(x.String())
 }
 
@@ -37,17 +37,17 @@ func (x Enum) FormatSExpr(buf *bytes.Buffer) {
 
 // @for struct
 
-func (x Struct) FormatSExpr(buf *bytes.Buffer) {
-	buf.WriteString("(Struct")
+func (x ºStruct) FormatSExpr(buf *bytes.Buffer) {
+	buf.WriteString("(ºStruct")
 
 	// @for item
 
-	buf.WriteString(" Name: ")
+	buf.WriteString(" ºItem: ")
 	// @if isNotPrimitive
-	x.Name().FormatSExpr(buf)
+	x.ºItem().FormatSExpr(buf)
 	// @fi isNotPrimitive
 	// @if isPrimitive
-	FormatSExprTypName(buf, x.Name())
+	FormatSExprºType(buf, x.ºItem())
 	// @fi isPrimitive
 
 	// @done item
@@ -59,11 +59,11 @@ func (x Struct) FormatSExpr(buf *bytes.Buffer) {
 
 // @for sum
 
-func (x Sum) FormatSExpr(buf *bytes.Buffer) {
+func (x ºSum) FormatSExpr(buf *bytes.Buffer) {
 	switch x.Tag() {
 	// @for item
-	case SumType:
-		x.MustBeType().FormatSExpr(buf)
+	case ºSumºtype:
+		x.MustBeºtype().FormatSExpr(buf)
 		// @done item
 	}
 }
