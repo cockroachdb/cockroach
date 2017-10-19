@@ -15,6 +15,7 @@
 package config_test
 
 import (
+	"bytes"
 	"fmt"
 	"reflect"
 	"sort"
@@ -57,34 +58,38 @@ func kv(k, v []byte) roachpb.KeyValue {
 	}
 }
 
-func TestObjectIDForKey(t *testing.T) {
+func TestDecodeObjectID(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	testCases := []struct {
-		key     roachpb.RKey
-		success bool
-		id      uint32
+		key       roachpb.RKey
+		keySuffix []byte
+		success   bool
+		id        uint32
 	}{
 		// Before the structured span.
-		{roachpb.RKeyMin, false, 0},
+		{roachpb.RKeyMin, nil, false, 0},
 
 		// Boundaries of structured span.
-		{roachpb.RKeyMax, false, 0},
+		{roachpb.RKeyMax, nil, false, 0},
 
 		// Valid, even if there are things after the ID.
-		{testutils.MakeKey(keys.MakeTablePrefix(42), roachpb.RKey("\xff")), true, 42},
-		{keys.MakeTablePrefix(0), true, 0},
-		{keys.MakeTablePrefix(999), true, 999},
+		{testutils.MakeKey(keys.MakeTablePrefix(42), roachpb.RKey("\xff")), []byte{'\xff'}, true, 42},
+		{keys.MakeTablePrefix(0), []byte{}, true, 0},
+		{keys.MakeTablePrefix(999), []byte{}, true, 999},
 	}
 
 	for tcNum, tc := range testCases {
-		id, success := config.ObjectIDForKey(tc.key)
+		id, keySuffix, success := config.DecodeObjectID(tc.key)
 		if success != tc.success {
 			t.Errorf("#%d: expected success=%t", tcNum, tc.success)
 			continue
 		}
 		if id != tc.id {
 			t.Errorf("#%d: expected id=%d, got %d", tcNum, tc.id, id)
+		}
+		if !bytes.Equal(keySuffix, tc.keySuffix) {
+			t.Errorf("#%d: expected suffix=%q, got %q", tcNum, tc.keySuffix, keySuffix)
 		}
 	}
 }
@@ -416,7 +421,7 @@ func TestGetZoneConfigForKey(t *testing.T) {
 	}
 	for tcNum, tc := range testCases {
 		var objectID uint32
-		config.ZoneConfigHook = func(_ config.SystemConfig, id uint32) (config.ZoneConfig, bool, error) {
+		config.ZoneConfigHook = func(_ config.SystemConfig, id uint32, _ []byte) (config.ZoneConfig, bool, error) {
 			objectID = id
 			return config.ZoneConfig{}, false, nil
 		}
