@@ -147,5 +147,5 @@ func (o *ordinalityNode) optimizeOrdering() {
 	// The ordinality column forms a key.
 	var k util.FastIntSet
 	k.Add(len(o.columns) - 1)
-	o.props.keySets = append(o.props.keySets, k)
+	o.props.weakKeys = append(o.props.weakKeys, k)
 }

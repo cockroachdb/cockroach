@@ -67,7 +67,7 @@ query ITTTTT
 EXPLAIN (METADATA) SELECT 1 FROM (SELECT 1 AS s) WITH ORDINALITY
 ----
 0  render      ·  ·  ("1")                       "1"=CONST
-1  ordinality  ·  ·  (s[omitted], "ordinality")  key("ordinality")
+1  ordinality  ·  ·  (s[omitted], "ordinality")  weak-key("ordinality")
 2  render      ·  ·  (s[omitted])                ·
 3  emptyrow    ·  ·  ()                          ·
 
@@ -109,7 +109,7 @@ query ITTTTT
 EXPLAIN (METADATA) SELECT 1 FROM kv
 ----
 0  render  ·      ·           ("1")                     "1"=CONST
-1  scan    ·      ·           (k[omitted], v[omitted])  key(k)
+1  scan    ·      ·           (k[omitted], v[omitted])  k!=NULL; key(k)
 1  ·       table  kv@primary  ·                         ·
 1  ·       spans  ALL         ·                         ·
 
@@ -119,7 +119,7 @@ EXPLAIN (METADATA) SELECT DISTINCT v FROM kv
 ----
 0  distinct  ·      ·           (v)              ·
 1  render    ·      ·           (v)              ·
-2  scan      ·      ·           (k[omitted], v)  key(k)
+2  scan      ·      ·           (k[omitted], v)  k!=NULL; key(k)
 2  ·         table  kv@primary  ·                ·
 2  ·         spans  ALL         ·                ·
 
@@ -163,7 +163,7 @@ EXPLAIN (VERBOSE) SELECT 1 FROM (SELECT k+1 AS x, v-2 AS y FROM kv)
 ----
 0  render  ·         ·           ("1")                     "1"=CONST
 0  ·       render 0  1           ·                         ·
-1  scan    ·         ·           (k[omitted], v[omitted])  key(k)
+1  scan    ·         ·           (k[omitted], v[omitted])  k!=NULL; key(k)
 1  ·       table     kv@primary  ·                         ·
 1  ·       spans     ALL         ·                         ·
 
@@ -179,7 +179,7 @@ EXPLAIN (VERBOSE) SELECT count(*) FROM (SELECT "name", age FROM a);
 2  render  ·            ·             ("name"[omitted], age[omitted])                         ·
 2  ·       render 0     NULL          ·                                                       ·
 2  ·       render 1     NULL          ·                                                       ·
-3  scan    ·            ·             ("name"[omitted], age[omitted], rowid[hidden,omitted])  key(rowid)
+3  scan    ·            ·             ("name"[omitted], age[omitted], rowid[hidden,omitted])  rowid!=NULL; key(rowid)
 3  ·       table        a@primary     ·                                                       ·
 3  ·       spans        ALL           ·                                                       ·
 
@@ -195,6 +195,6 @@ EXPLAIN (VERBOSE) SELECT count(*) FROM ab WHERE a=1
 0  group   ·            ·             ("count(*)")              ·
 0  ·       aggregate 0  count_rows()  ·                         ·
 1  render  ·            ·             ()                        ·
-2  scan    ·            ·             (a[omitted], b[omitted])  a=CONST; key(b)
+2  scan    ·            ·             (a[omitted], b[omitted])  a=CONST; b!=NULL; key(b)
 2  ·       table        ab@primary    ·                         ·
 2  ·       spans        /1-/2         ·                         ·
