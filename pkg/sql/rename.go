@@ -252,7 +252,7 @@ func (p *planner) RenameTable(ctx context.Context, n *parser.RenameTable) (planN
 //   notes: postgres requires CREATE on the table.
 //          mysql requires ALTER, CREATE, INSERT on the table.
 func (p *planner) RenameIndex(ctx context.Context, n *parser.RenameIndex) (planNode, error) {
-	tn, err := p.expandIndexName(ctx, n.Index)
+	tn, err := p.expandIndexName(ctx, n.Index, true /* requireTable */)
 	if err != nil {
 		return nil, err
 	}
