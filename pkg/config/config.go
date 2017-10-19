@@ -162,7 +162,9 @@ const (
 	minRangeMaxBytes = 64 << 10 // 64 KB
 )
 
-type zoneConfigHook func(SystemConfig, uint32) (ZoneConfig, bool, error)
+type zoneConfigHook func(
+	sysCfg SystemConfig, objectID uint32, keySuffix []byte,
+) (zoneCfg ZoneConfig, found bool, err error)
 
 var (
 	// defaultZoneConfig is the default zone configuration used when no custom
@@ -184,8 +186,9 @@ var (
 		},
 	}
 
-	// ZoneConfigHook is a function used to lookup a zone config given a table
-	// or database ID.
+	// ZoneConfigHook is a function used to lookup a zone config given a table or
+	// database ID and the post-ID suffix of a key within that table or database.
+	//
 	// This is also used by testing to simplify fake configs.
 	ZoneConfigHook zoneConfigHook
 
@@ -304,19 +307,37 @@ func (z ZoneConfig) Validate() error {
 	return nil
 }
 
-// ObjectIDForKey returns the object ID (table or database) for 'key',
-// or (_, false) if not within the structured key space.
-func ObjectIDForKey(key roachpb.RKey) (uint32, bool) {
+// GetSubzoneForKeySuffix returns the ZoneConfig for the subzone that contains
+// keySuffix, if it exists.
+func (z ZoneConfig) GetSubzoneForKeySuffix(keySuffix []byte) (ZoneConfig, bool) {
+	// TODO(benesch): Use binary search instead.
+	for _, s := range z.SubzoneSpans {
+		// The span's Key is stored with the prefix removed, so we can compare
+		// directly to keySuffix.
+		startKeyMatches := s.Key.Compare(keySuffix) <= 0
+		// An unset EndKey implies Key.PrefixEnd().
+		endKeyMatches := (s.EndKey == nil && bytes.HasPrefix(keySuffix, s.Key)) || s.EndKey.Compare(keySuffix) > 0
+		if startKeyMatches && endKeyMatches {
+			return z.Subzones[s.SubzoneIndex].Config, true
+		}
+	}
+	return ZoneConfig{}, false
+}
+
+// DecodeObjectID decodes the object ID from the front of key. It returns the
+// decoded object ID, the remainder of the key, and whether the result is valid
+// (i.e., whether the key was within the structured key space).
+func DecodeObjectID(key roachpb.RKey) (uint32, []byte, bool) {
 	if key.Equal(roachpb.RKeyMax) {
-		return 0, false
+		return 0, nil, false
 	}
 	if encoding.PeekType(key) != encoding.Int {
 		// TODO(marc): this should eventually return SystemDatabaseID.
-		return 0, false
+		return 0, nil, false
 	}
 	// Consume first encoded int.
-	_, id64, err := encoding.DecodeUvarintAscending(key)
-	return uint32(id64), err == nil
+	rem, id64, err := encoding.DecodeUvarintAscending(key)
+	return uint32(id64), rem, err == nil
 }
 
 // Equal checks for equality.
@@ -477,7 +498,7 @@ func (s SystemConfig) GetLargestObjectID(maxID uint32) (uint32, error) {
 // GetZoneConfigForKey looks up the zone config for the range containing 'key'.
 // It is the caller's responsibility to ensure that the range does not need to be split.
 func (s SystemConfig) GetZoneConfigForKey(key roachpb.RKey) (ZoneConfig, error) {
-	objectID, ok := ObjectIDForKey(key)
+	objectID, keySuffix, ok := DecodeObjectID(key)
 	if !ok {
 		// Not in the structured data namespace.
 		objectID = keys.RootNamespaceID
@@ -498,16 +519,16 @@ func (s SystemConfig) GetZoneConfigForKey(key roachpb.RKey) (ZoneConfig, error) 
 		objectID = keys.SystemRangesID
 	}
 
-	return s.getZoneConfigForID(objectID)
+	return s.getZoneConfigForID(objectID, keySuffix)
 }
 
 // getZoneConfigForID looks up the zone config for the object (table or database)
 // with 'id'.
-func (s SystemConfig) getZoneConfigForID(id uint32) (ZoneConfig, error) {
+func (s SystemConfig) getZoneConfigForID(id uint32, keySuffix []byte) (ZoneConfig, error) {
 	testingLock.Lock()
 	hook := ZoneConfigHook
 	testingLock.Unlock()
-	if cfg, found, err := hook(s, id); err != nil || found {
+	if cfg, found, err := hook(s, id, keySuffix); err != nil || found {
 		return cfg, err
 	}
 	return DefaultZoneConfig(), nil
@@ -581,7 +602,7 @@ func (s SystemConfig) ComputeSplitKey(startKey, endKey roachpb.RKey) roachpb.RKe
 
 	// If the above iteration over the static split points didn't decide anything,
 	// the key range must be somewhere in the SQL table part of the keyspace.
-	startID, ok := ObjectIDForKey(startKey)
+	startID, _, ok := DecodeObjectID(startKey)
 	if !ok || startID <= keys.MaxSystemConfigDescID {
 		// The start key is either:
 		// - not part of the structured data span

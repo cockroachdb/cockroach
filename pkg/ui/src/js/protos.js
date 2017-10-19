@@ -26436,6 +26436,8 @@ export const cockroach = $root.cockroach = (() => {
              * @property {cockroach.config.GCPolicy$Properties} [gc] ZoneConfig gc.
              * @property {number} [num_replicas] ZoneConfig num_replicas.
              * @property {cockroach.config.Constraints$Properties} [constraints] ZoneConfig constraints.
+             * @property {Array.<cockroach.config.Subzone$Properties>} [subzones] ZoneConfig subzones.
+             * @property {Array.<cockroach.config.SubzoneSpan$Properties>} [subzone_spans] ZoneConfig subzone_spans.
              */
 
             /**
@@ -26445,6 +26447,8 @@ export const cockroach = $root.cockroach = (() => {
              * @param {cockroach.config.ZoneConfig$Properties=} [properties] Properties to set
              */
             function ZoneConfig(properties) {
+                this.subzones = [];
+                this.subzone_spans = [];
                 if (properties)
                     for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
                         if (properties[keys[i]] != null)
@@ -26482,6 +26486,18 @@ export const cockroach = $root.cockroach = (() => {
             ZoneConfig.prototype.constraints = null;
 
             /**
+             * ZoneConfig subzones.
+             * @type {Array.<cockroach.config.Subzone$Properties>}
+             */
+            ZoneConfig.prototype.subzones = $util.emptyArray;
+
+            /**
+             * ZoneConfig subzone_spans.
+             * @type {Array.<cockroach.config.SubzoneSpan$Properties>}
+             */
+            ZoneConfig.prototype.subzone_spans = $util.emptyArray;
+
+            /**
              * Creates a new ZoneConfig instance using the specified properties.
              * @param {cockroach.config.ZoneConfig$Properties=} [properties] Properties to set
              * @returns {cockroach.config.ZoneConfig} ZoneConfig instance
@@ -26509,6 +26525,12 @@ export const cockroach = $root.cockroach = (() => {
                     writer.uint32(/* id 5, wireType 0 =*/40).int32(message.num_replicas);
                 if (message.constraints != null && message.hasOwnProperty("constraints"))
                     $root.cockroach.config.Constraints.encode(message.constraints, writer.uint32(/* id 6, wireType 2 =*/50).fork()).ldelim();
+                if (message.subzone_spans != null && message.subzone_spans.length)
+                    for (let i = 0; i < message.subzone_spans.length; ++i)
+                        $root.cockroach.config.SubzoneSpan.encode(message.subzone_spans[i], writer.uint32(/* id 7, wireType 2 =*/58).fork()).ldelim();
+                if (message.subzones != null && message.subzones.length)
+                    for (let i = 0; i < message.subzones.length; ++i)
+                        $root.cockroach.config.Subzone.encode(message.subzones[i], writer.uint32(/* id 8, wireType 2 =*/66).fork()).ldelim();
                 return writer;
             };
 
@@ -26551,6 +26573,16 @@ export const cockroach = $root.cockroach = (() => {
                         break;
                     case 6:
                         message.constraints = $root.cockroach.config.Constraints.decode(reader, reader.uint32());
+                        break;
+                    case 8:
+                        if (!(message.subzones && message.subzones.length))
+                            message.subzones = [];
+                        message.subzones.push($root.cockroach.config.Subzone.decode(reader, reader.uint32()));
+                        break;
+                    case 7:
+                        if (!(message.subzone_spans && message.subzone_spans.length))
+                            message.subzone_spans = [];
+                        message.subzone_spans.push($root.cockroach.config.SubzoneSpan.decode(reader, reader.uint32()));
                         break;
                     default:
                         reader.skipType(tag & 7);
@@ -26600,6 +26632,24 @@ export const cockroach = $root.cockroach = (() => {
                     if (error)
                         return "constraints." + error;
                 }
+                if (message.subzones != null && message.hasOwnProperty("subzones")) {
+                    if (!Array.isArray(message.subzones))
+                        return "subzones: array expected";
+                    for (let i = 0; i < message.subzones.length; ++i) {
+                        let error = $root.cockroach.config.Subzone.verify(message.subzones[i]);
+                        if (error)
+                            return "subzones." + error;
+                    }
+                }
+                if (message.subzone_spans != null && message.hasOwnProperty("subzone_spans")) {
+                    if (!Array.isArray(message.subzone_spans))
+                        return "subzone_spans: array expected";
+                    for (let i = 0; i < message.subzone_spans.length; ++i) {
+                        let error = $root.cockroach.config.SubzoneSpan.verify(message.subzone_spans[i]);
+                        if (error)
+                            return "subzone_spans." + error;
+                    }
+                }
                 return null;
             };
 
@@ -26642,6 +26692,26 @@ export const cockroach = $root.cockroach = (() => {
                         throw TypeError(".cockroach.config.ZoneConfig.constraints: object expected");
                     message.constraints = $root.cockroach.config.Constraints.fromObject(object.constraints);
                 }
+                if (object.subzones) {
+                    if (!Array.isArray(object.subzones))
+                        throw TypeError(".cockroach.config.ZoneConfig.subzones: array expected");
+                    message.subzones = [];
+                    for (let i = 0; i < object.subzones.length; ++i) {
+                        if (typeof object.subzones[i] !== "object")
+                            throw TypeError(".cockroach.config.ZoneConfig.subzones: object expected");
+                        message.subzones[i] = $root.cockroach.config.Subzone.fromObject(object.subzones[i]);
+                    }
+                }
+                if (object.subzone_spans) {
+                    if (!Array.isArray(object.subzone_spans))
+                        throw TypeError(".cockroach.config.ZoneConfig.subzone_spans: array expected");
+                    message.subzone_spans = [];
+                    for (let i = 0; i < object.subzone_spans.length; ++i) {
+                        if (typeof object.subzone_spans[i] !== "object")
+                            throw TypeError(".cockroach.config.ZoneConfig.subzone_spans: object expected");
+                        message.subzone_spans[i] = $root.cockroach.config.SubzoneSpan.fromObject(object.subzone_spans[i]);
+                    }
+                }
                 return message;
             };
 
@@ -26664,6 +26734,10 @@ export const cockroach = $root.cockroach = (() => {
                 if (!options)
                     options = {};
                 let object = {};
+                if (options.arrays || options.defaults) {
+                    object.subzone_spans = [];
+                    object.subzones = [];
+                }
                 if (options.defaults) {
                     if ($util.Long) {
                         let long = new $util.Long(0, 0, false);
@@ -26695,6 +26769,16 @@ export const cockroach = $root.cockroach = (() => {
                     object.num_replicas = message.num_replicas;
                 if (message.constraints != null && message.hasOwnProperty("constraints"))
                     object.constraints = $root.cockroach.config.Constraints.toObject(message.constraints, options);
+                if (message.subzone_spans && message.subzone_spans.length) {
+                    object.subzone_spans = [];
+                    for (let j = 0; j < message.subzone_spans.length; ++j)
+                        object.subzone_spans[j] = $root.cockroach.config.SubzoneSpan.toObject(message.subzone_spans[j], options);
+                }
+                if (message.subzones && message.subzones.length) {
+                    object.subzones = [];
+                    for (let j = 0; j < message.subzones.length; ++j)
+                        object.subzones[j] = $root.cockroach.config.Subzone.toObject(message.subzones[j], options);
+                }
                 return object;
             };
 
@@ -26716,6 +26800,426 @@ export const cockroach = $root.cockroach = (() => {
             };
 
             return ZoneConfig;
+        })();
+
+        config.Subzone = (function() {
+
+            /**
+             * Properties of a Subzone.
+             * @typedef cockroach.config.Subzone$Properties
+             * @type {Object}
+             * @property {number} [index_id] Subzone index_id.
+             * @property {string} [partition_name] Subzone partition_name.
+             * @property {cockroach.config.ZoneConfig$Properties} [config] Subzone config.
+             */
+
+            /**
+             * Constructs a new Subzone.
+             * @exports cockroach.config.Subzone
+             * @constructor
+             * @param {cockroach.config.Subzone$Properties=} [properties] Properties to set
+             */
+            function Subzone(properties) {
+                if (properties)
+                    for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                        if (properties[keys[i]] != null)
+                            this[keys[i]] = properties[keys[i]];
+            }
+
+            /**
+             * Subzone index_id.
+             * @type {number}
+             */
+            Subzone.prototype.index_id = 0;
+
+            /**
+             * Subzone partition_name.
+             * @type {string}
+             */
+            Subzone.prototype.partition_name = "";
+
+            /**
+             * Subzone config.
+             * @type {(cockroach.config.ZoneConfig$Properties|null)}
+             */
+            Subzone.prototype.config = null;
+
+            /**
+             * Creates a new Subzone instance using the specified properties.
+             * @param {cockroach.config.Subzone$Properties=} [properties] Properties to set
+             * @returns {cockroach.config.Subzone} Subzone instance
+             */
+            Subzone.create = function create(properties) {
+                return new Subzone(properties);
+            };
+
+            /**
+             * Encodes the specified Subzone message. Does not implicitly {@link cockroach.config.Subzone.verify|verify} messages.
+             * @param {cockroach.config.Subzone$Properties} message Subzone message or plain object to encode
+             * @param {$protobuf.Writer} [writer] Writer to encode to
+             * @returns {$protobuf.Writer} Writer
+             */
+            Subzone.encode = function encode(message, writer) {
+                if (!writer)
+                    writer = $Writer.create();
+                if (message.index_id != null && message.hasOwnProperty("index_id"))
+                    writer.uint32(/* id 1, wireType 0 =*/8).uint32(message.index_id);
+                if (message.partition_name != null && message.hasOwnProperty("partition_name"))
+                    writer.uint32(/* id 2, wireType 2 =*/18).string(message.partition_name);
+                if (message.config != null && message.hasOwnProperty("config"))
+                    $root.cockroach.config.ZoneConfig.encode(message.config, writer.uint32(/* id 3, wireType 2 =*/26).fork()).ldelim();
+                return writer;
+            };
+
+            /**
+             * Encodes the specified Subzone message, length delimited. Does not implicitly {@link cockroach.config.Subzone.verify|verify} messages.
+             * @param {cockroach.config.Subzone$Properties} message Subzone message or plain object to encode
+             * @param {$protobuf.Writer} [writer] Writer to encode to
+             * @returns {$protobuf.Writer} Writer
+             */
+            Subzone.encodeDelimited = function encodeDelimited(message, writer) {
+                return this.encode(message, writer).ldelim();
+            };
+
+            /**
+             * Decodes a Subzone message from the specified reader or buffer.
+             * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+             * @param {number} [length] Message length if known beforehand
+             * @returns {cockroach.config.Subzone} Subzone
+             * @throws {Error} If the payload is not a reader or valid buffer
+             * @throws {$protobuf.util.ProtocolError} If required fields are missing
+             */
+            Subzone.decode = function decode(reader, length) {
+                if (!(reader instanceof $Reader))
+                    reader = $Reader.create(reader);
+                let end = length === undefined ? reader.len : reader.pos + length, message = new $root.cockroach.config.Subzone();
+                while (reader.pos < end) {
+                    let tag = reader.uint32();
+                    switch (tag >>> 3) {
+                    case 1:
+                        message.index_id = reader.uint32();
+                        break;
+                    case 2:
+                        message.partition_name = reader.string();
+                        break;
+                    case 3:
+                        message.config = $root.cockroach.config.ZoneConfig.decode(reader, reader.uint32());
+                        break;
+                    default:
+                        reader.skipType(tag & 7);
+                        break;
+                    }
+                }
+                return message;
+            };
+
+            /**
+             * Decodes a Subzone message from the specified reader or buffer, length delimited.
+             * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+             * @returns {cockroach.config.Subzone} Subzone
+             * @throws {Error} If the payload is not a reader or valid buffer
+             * @throws {$protobuf.util.ProtocolError} If required fields are missing
+             */
+            Subzone.decodeDelimited = function decodeDelimited(reader) {
+                if (!(reader instanceof $Reader))
+                    reader = $Reader(reader);
+                return this.decode(reader, reader.uint32());
+            };
+
+            /**
+             * Verifies a Subzone message.
+             * @param {Object.<string,*>} message Plain object to verify
+             * @returns {?string} `null` if valid, otherwise the reason why it is not
+             */
+            Subzone.verify = function verify(message) {
+                if (typeof message !== "object" || message === null)
+                    return "object expected";
+                if (message.index_id != null && message.hasOwnProperty("index_id"))
+                    if (!$util.isInteger(message.index_id))
+                        return "index_id: integer expected";
+                if (message.partition_name != null && message.hasOwnProperty("partition_name"))
+                    if (!$util.isString(message.partition_name))
+                        return "partition_name: string expected";
+                if (message.config != null && message.hasOwnProperty("config")) {
+                    let error = $root.cockroach.config.ZoneConfig.verify(message.config);
+                    if (error)
+                        return "config." + error;
+                }
+                return null;
+            };
+
+            /**
+             * Creates a Subzone message from a plain object. Also converts values to their respective internal types.
+             * @param {Object.<string,*>} object Plain object
+             * @returns {cockroach.config.Subzone} Subzone
+             */
+            Subzone.fromObject = function fromObject(object) {
+                if (object instanceof $root.cockroach.config.Subzone)
+                    return object;
+                let message = new $root.cockroach.config.Subzone();
+                if (object.index_id != null)
+                    message.index_id = object.index_id >>> 0;
+                if (object.partition_name != null)
+                    message.partition_name = String(object.partition_name);
+                if (object.config != null) {
+                    if (typeof object.config !== "object")
+                        throw TypeError(".cockroach.config.Subzone.config: object expected");
+                    message.config = $root.cockroach.config.ZoneConfig.fromObject(object.config);
+                }
+                return message;
+            };
+
+            /**
+             * Creates a Subzone message from a plain object. Also converts values to their respective internal types.
+             * This is an alias of {@link cockroach.config.Subzone.fromObject}.
+             * @function
+             * @param {Object.<string,*>} object Plain object
+             * @returns {cockroach.config.Subzone} Subzone
+             */
+            Subzone.from = Subzone.fromObject;
+
+            /**
+             * Creates a plain object from a Subzone message. Also converts values to other types if specified.
+             * @param {cockroach.config.Subzone} message Subzone
+             * @param {$protobuf.ConversionOptions} [options] Conversion options
+             * @returns {Object.<string,*>} Plain object
+             */
+            Subzone.toObject = function toObject(message, options) {
+                if (!options)
+                    options = {};
+                let object = {};
+                if (options.defaults) {
+                    object.index_id = 0;
+                    object.partition_name = "";
+                    object.config = null;
+                }
+                if (message.index_id != null && message.hasOwnProperty("index_id"))
+                    object.index_id = message.index_id;
+                if (message.partition_name != null && message.hasOwnProperty("partition_name"))
+                    object.partition_name = message.partition_name;
+                if (message.config != null && message.hasOwnProperty("config"))
+                    object.config = $root.cockroach.config.ZoneConfig.toObject(message.config, options);
+                return object;
+            };
+
+            /**
+             * Creates a plain object from this Subzone message. Also converts values to other types if specified.
+             * @param {$protobuf.ConversionOptions} [options] Conversion options
+             * @returns {Object.<string,*>} Plain object
+             */
+            Subzone.prototype.toObject = function toObject(options) {
+                return this.constructor.toObject(this, options);
+            };
+
+            /**
+             * Converts this Subzone to JSON.
+             * @returns {Object.<string,*>} JSON object
+             */
+            Subzone.prototype.toJSON = function toJSON() {
+                return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+            };
+
+            return Subzone;
+        })();
+
+        config.SubzoneSpan = (function() {
+
+            /**
+             * Properties of a SubzoneSpan.
+             * @typedef cockroach.config.SubzoneSpan$Properties
+             * @type {Object}
+             * @property {cockroach.roachpb.Span$Properties} [span] SubzoneSpan span.
+             * @property {number} [subzone_index] SubzoneSpan subzone_index.
+             */
+
+            /**
+             * Constructs a new SubzoneSpan.
+             * @exports cockroach.config.SubzoneSpan
+             * @constructor
+             * @param {cockroach.config.SubzoneSpan$Properties=} [properties] Properties to set
+             */
+            function SubzoneSpan(properties) {
+                if (properties)
+                    for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                        if (properties[keys[i]] != null)
+                            this[keys[i]] = properties[keys[i]];
+            }
+
+            /**
+             * SubzoneSpan span.
+             * @type {(cockroach.roachpb.Span$Properties|null)}
+             */
+            SubzoneSpan.prototype.span = null;
+
+            /**
+             * SubzoneSpan subzone_index.
+             * @type {number}
+             */
+            SubzoneSpan.prototype.subzone_index = 0;
+
+            /**
+             * Creates a new SubzoneSpan instance using the specified properties.
+             * @param {cockroach.config.SubzoneSpan$Properties=} [properties] Properties to set
+             * @returns {cockroach.config.SubzoneSpan} SubzoneSpan instance
+             */
+            SubzoneSpan.create = function create(properties) {
+                return new SubzoneSpan(properties);
+            };
+
+            /**
+             * Encodes the specified SubzoneSpan message. Does not implicitly {@link cockroach.config.SubzoneSpan.verify|verify} messages.
+             * @param {cockroach.config.SubzoneSpan$Properties} message SubzoneSpan message or plain object to encode
+             * @param {$protobuf.Writer} [writer] Writer to encode to
+             * @returns {$protobuf.Writer} Writer
+             */
+            SubzoneSpan.encode = function encode(message, writer) {
+                if (!writer)
+                    writer = $Writer.create();
+                if (message.span != null && message.hasOwnProperty("span"))
+                    $root.cockroach.roachpb.Span.encode(message.span, writer.uint32(/* id 1, wireType 2 =*/10).fork()).ldelim();
+                if (message.subzone_index != null && message.hasOwnProperty("subzone_index"))
+                    writer.uint32(/* id 2, wireType 0 =*/16).int32(message.subzone_index);
+                return writer;
+            };
+
+            /**
+             * Encodes the specified SubzoneSpan message, length delimited. Does not implicitly {@link cockroach.config.SubzoneSpan.verify|verify} messages.
+             * @param {cockroach.config.SubzoneSpan$Properties} message SubzoneSpan message or plain object to encode
+             * @param {$protobuf.Writer} [writer] Writer to encode to
+             * @returns {$protobuf.Writer} Writer
+             */
+            SubzoneSpan.encodeDelimited = function encodeDelimited(message, writer) {
+                return this.encode(message, writer).ldelim();
+            };
+
+            /**
+             * Decodes a SubzoneSpan message from the specified reader or buffer.
+             * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+             * @param {number} [length] Message length if known beforehand
+             * @returns {cockroach.config.SubzoneSpan} SubzoneSpan
+             * @throws {Error} If the payload is not a reader or valid buffer
+             * @throws {$protobuf.util.ProtocolError} If required fields are missing
+             */
+            SubzoneSpan.decode = function decode(reader, length) {
+                if (!(reader instanceof $Reader))
+                    reader = $Reader.create(reader);
+                let end = length === undefined ? reader.len : reader.pos + length, message = new $root.cockroach.config.SubzoneSpan();
+                while (reader.pos < end) {
+                    let tag = reader.uint32();
+                    switch (tag >>> 3) {
+                    case 1:
+                        message.span = $root.cockroach.roachpb.Span.decode(reader, reader.uint32());
+                        break;
+                    case 2:
+                        message.subzone_index = reader.int32();
+                        break;
+                    default:
+                        reader.skipType(tag & 7);
+                        break;
+                    }
+                }
+                return message;
+            };
+
+            /**
+             * Decodes a SubzoneSpan message from the specified reader or buffer, length delimited.
+             * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+             * @returns {cockroach.config.SubzoneSpan} SubzoneSpan
+             * @throws {Error} If the payload is not a reader or valid buffer
+             * @throws {$protobuf.util.ProtocolError} If required fields are missing
+             */
+            SubzoneSpan.decodeDelimited = function decodeDelimited(reader) {
+                if (!(reader instanceof $Reader))
+                    reader = $Reader(reader);
+                return this.decode(reader, reader.uint32());
+            };
+
+            /**
+             * Verifies a SubzoneSpan message.
+             * @param {Object.<string,*>} message Plain object to verify
+             * @returns {?string} `null` if valid, otherwise the reason why it is not
+             */
+            SubzoneSpan.verify = function verify(message) {
+                if (typeof message !== "object" || message === null)
+                    return "object expected";
+                if (message.span != null && message.hasOwnProperty("span")) {
+                    let error = $root.cockroach.roachpb.Span.verify(message.span);
+                    if (error)
+                        return "span." + error;
+                }
+                if (message.subzone_index != null && message.hasOwnProperty("subzone_index"))
+                    if (!$util.isInteger(message.subzone_index))
+                        return "subzone_index: integer expected";
+                return null;
+            };
+
+            /**
+             * Creates a SubzoneSpan message from a plain object. Also converts values to their respective internal types.
+             * @param {Object.<string,*>} object Plain object
+             * @returns {cockroach.config.SubzoneSpan} SubzoneSpan
+             */
+            SubzoneSpan.fromObject = function fromObject(object) {
+                if (object instanceof $root.cockroach.config.SubzoneSpan)
+                    return object;
+                let message = new $root.cockroach.config.SubzoneSpan();
+                if (object.span != null) {
+                    if (typeof object.span !== "object")
+                        throw TypeError(".cockroach.config.SubzoneSpan.span: object expected");
+                    message.span = $root.cockroach.roachpb.Span.fromObject(object.span);
+                }
+                if (object.subzone_index != null)
+                    message.subzone_index = object.subzone_index | 0;
+                return message;
+            };
+
+            /**
+             * Creates a SubzoneSpan message from a plain object. Also converts values to their respective internal types.
+             * This is an alias of {@link cockroach.config.SubzoneSpan.fromObject}.
+             * @function
+             * @param {Object.<string,*>} object Plain object
+             * @returns {cockroach.config.SubzoneSpan} SubzoneSpan
+             */
+            SubzoneSpan.from = SubzoneSpan.fromObject;
+
+            /**
+             * Creates a plain object from a SubzoneSpan message. Also converts values to other types if specified.
+             * @param {cockroach.config.SubzoneSpan} message SubzoneSpan
+             * @param {$protobuf.ConversionOptions} [options] Conversion options
+             * @returns {Object.<string,*>} Plain object
+             */
+            SubzoneSpan.toObject = function toObject(message, options) {
+                if (!options)
+                    options = {};
+                let object = {};
+                if (options.defaults) {
+                    object.span = null;
+                    object.subzone_index = 0;
+                }
+                if (message.span != null && message.hasOwnProperty("span"))
+                    object.span = $root.cockroach.roachpb.Span.toObject(message.span, options);
+                if (message.subzone_index != null && message.hasOwnProperty("subzone_index"))
+                    object.subzone_index = message.subzone_index;
+                return object;
+            };
+
+            /**
+             * Creates a plain object from this SubzoneSpan message. Also converts values to other types if specified.
+             * @param {$protobuf.ConversionOptions} [options] Conversion options
+             * @returns {Object.<string,*>} Plain object
+             */
+            SubzoneSpan.prototype.toObject = function toObject(options) {
+                return this.constructor.toObject(this, options);
+            };
+
+            /**
+             * Converts this SubzoneSpan to JSON.
+             * @returns {Object.<string,*>} JSON object
+             */
+            SubzoneSpan.prototype.toJSON = function toJSON() {
+                return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+            };
+
+            return SubzoneSpan;
         })();
 
         config.SystemConfig = (function() {

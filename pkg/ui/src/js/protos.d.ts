@@ -14448,6 +14448,8 @@ export namespace cockroach {
             gc?: cockroach.config.GCPolicy$Properties;
             num_replicas?: number;
             constraints?: cockroach.config.Constraints$Properties;
+            subzones?: cockroach.config.Subzone$Properties[];
+            subzone_spans?: cockroach.config.SubzoneSpan$Properties[];
         };
 
         /**
@@ -14495,6 +14497,18 @@ export namespace cockroach {
              * @type {(cockroach.config.Constraints$Properties|null)}
              */
             public constraints: (cockroach.config.Constraints$Properties|null);
+
+            /**
+             * ZoneConfig subzones.
+             * @type {Array.<cockroach.config.Subzone$Properties>}
+             */
+            public subzones: cockroach.config.Subzone$Properties[];
+
+            /**
+             * ZoneConfig subzone_spans.
+             * @type {Array.<cockroach.config.SubzoneSpan$Properties>}
+             */
+            public subzone_spans: cockroach.config.SubzoneSpan$Properties[];
 
             /**
              * Creates a new ZoneConfig instance using the specified properties.
@@ -14578,6 +14592,253 @@ export namespace cockroach {
 
             /**
              * Converts this ZoneConfig to JSON.
+             * @returns {Object.<string,*>} JSON object
+             */
+            public toJSON(): { [k: string]: any };
+        }
+
+        type Subzone$Properties = {
+            index_id?: number;
+            partition_name?: string;
+            config?: cockroach.config.ZoneConfig$Properties;
+        };
+
+        /**
+         * Constructs a new Subzone.
+         * @exports cockroach.config.Subzone
+         * @constructor
+         * @param {cockroach.config.Subzone$Properties=} [properties] Properties to set
+         */
+        class Subzone {
+
+            /**
+             * Constructs a new Subzone.
+             * @exports cockroach.config.Subzone
+             * @constructor
+             * @param {cockroach.config.Subzone$Properties=} [properties] Properties to set
+             */
+            constructor(properties?: cockroach.config.Subzone$Properties);
+
+            /**
+             * Subzone index_id.
+             * @type {number}
+             */
+            public index_id: number;
+
+            /**
+             * Subzone partition_name.
+             * @type {string}
+             */
+            public partition_name: string;
+
+            /**
+             * Subzone config.
+             * @type {(cockroach.config.ZoneConfig$Properties|null)}
+             */
+            public config: (cockroach.config.ZoneConfig$Properties|null);
+
+            /**
+             * Creates a new Subzone instance using the specified properties.
+             * @param {cockroach.config.Subzone$Properties=} [properties] Properties to set
+             * @returns {cockroach.config.Subzone} Subzone instance
+             */
+            public static create(properties?: cockroach.config.Subzone$Properties): cockroach.config.Subzone;
+
+            /**
+             * Encodes the specified Subzone message. Does not implicitly {@link cockroach.config.Subzone.verify|verify} messages.
+             * @param {cockroach.config.Subzone$Properties} message Subzone message or plain object to encode
+             * @param {$protobuf.Writer} [writer] Writer to encode to
+             * @returns {$protobuf.Writer} Writer
+             */
+            public static encode(message: cockroach.config.Subzone$Properties, writer?: $protobuf.Writer): $protobuf.Writer;
+
+            /**
+             * Encodes the specified Subzone message, length delimited. Does not implicitly {@link cockroach.config.Subzone.verify|verify} messages.
+             * @param {cockroach.config.Subzone$Properties} message Subzone message or plain object to encode
+             * @param {$protobuf.Writer} [writer] Writer to encode to
+             * @returns {$protobuf.Writer} Writer
+             */
+            public static encodeDelimited(message: cockroach.config.Subzone$Properties, writer?: $protobuf.Writer): $protobuf.Writer;
+
+            /**
+             * Decodes a Subzone message from the specified reader or buffer.
+             * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+             * @param {number} [length] Message length if known beforehand
+             * @returns {cockroach.config.Subzone} Subzone
+             * @throws {Error} If the payload is not a reader or valid buffer
+             * @throws {$protobuf.util.ProtocolError} If required fields are missing
+             */
+            public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): cockroach.config.Subzone;
+
+            /**
+             * Decodes a Subzone message from the specified reader or buffer, length delimited.
+             * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+             * @returns {cockroach.config.Subzone} Subzone
+             * @throws {Error} If the payload is not a reader or valid buffer
+             * @throws {$protobuf.util.ProtocolError} If required fields are missing
+             */
+            public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): cockroach.config.Subzone;
+
+            /**
+             * Verifies a Subzone message.
+             * @param {Object.<string,*>} message Plain object to verify
+             * @returns {?string} `null` if valid, otherwise the reason why it is not
+             */
+            public static verify(message: { [k: string]: any }): string;
+
+            /**
+             * Creates a Subzone message from a plain object. Also converts values to their respective internal types.
+             * @param {Object.<string,*>} object Plain object
+             * @returns {cockroach.config.Subzone} Subzone
+             */
+            public static fromObject(object: { [k: string]: any }): cockroach.config.Subzone;
+
+            /**
+             * Creates a Subzone message from a plain object. Also converts values to their respective internal types.
+             * This is an alias of {@link cockroach.config.Subzone.fromObject}.
+             * @function
+             * @param {Object.<string,*>} object Plain object
+             * @returns {cockroach.config.Subzone} Subzone
+             */
+            public static from(object: { [k: string]: any }): cockroach.config.Subzone;
+
+            /**
+             * Creates a plain object from a Subzone message. Also converts values to other types if specified.
+             * @param {cockroach.config.Subzone} message Subzone
+             * @param {$protobuf.ConversionOptions} [options] Conversion options
+             * @returns {Object.<string,*>} Plain object
+             */
+            public static toObject(message: cockroach.config.Subzone, options?: $protobuf.ConversionOptions): { [k: string]: any };
+
+            /**
+             * Creates a plain object from this Subzone message. Also converts values to other types if specified.
+             * @param {$protobuf.ConversionOptions} [options] Conversion options
+             * @returns {Object.<string,*>} Plain object
+             */
+            public toObject(options?: $protobuf.ConversionOptions): { [k: string]: any };
+
+            /**
+             * Converts this Subzone to JSON.
+             * @returns {Object.<string,*>} JSON object
+             */
+            public toJSON(): { [k: string]: any };
+        }
+
+        type SubzoneSpan$Properties = {
+            span?: cockroach.roachpb.Span$Properties;
+            subzone_index?: number;
+        };
+
+        /**
+         * Constructs a new SubzoneSpan.
+         * @exports cockroach.config.SubzoneSpan
+         * @constructor
+         * @param {cockroach.config.SubzoneSpan$Properties=} [properties] Properties to set
+         */
+        class SubzoneSpan {
+
+            /**
+             * Constructs a new SubzoneSpan.
+             * @exports cockroach.config.SubzoneSpan
+             * @constructor
+             * @param {cockroach.config.SubzoneSpan$Properties=} [properties] Properties to set
+             */
+            constructor(properties?: cockroach.config.SubzoneSpan$Properties);
+
+            /**
+             * SubzoneSpan span.
+             * @type {(cockroach.roachpb.Span$Properties|null)}
+             */
+            public span: (cockroach.roachpb.Span$Properties|null);
+
+            /**
+             * SubzoneSpan subzone_index.
+             * @type {number}
+             */
+            public subzone_index: number;
+
+            /**
+             * Creates a new SubzoneSpan instance using the specified properties.
+             * @param {cockroach.config.SubzoneSpan$Properties=} [properties] Properties to set
+             * @returns {cockroach.config.SubzoneSpan} SubzoneSpan instance
+             */
+            public static create(properties?: cockroach.config.SubzoneSpan$Properties): cockroach.config.SubzoneSpan;
+
+            /**
+             * Encodes the specified SubzoneSpan message. Does not implicitly {@link cockroach.config.SubzoneSpan.verify|verify} messages.
+             * @param {cockroach.config.SubzoneSpan$Properties} message SubzoneSpan message or plain object to encode
+             * @param {$protobuf.Writer} [writer] Writer to encode to
+             * @returns {$protobuf.Writer} Writer
+             */
+            public static encode(message: cockroach.config.SubzoneSpan$Properties, writer?: $protobuf.Writer): $protobuf.Writer;
+
+            /**
+             * Encodes the specified SubzoneSpan message, length delimited. Does not implicitly {@link cockroach.config.SubzoneSpan.verify|verify} messages.
+             * @param {cockroach.config.SubzoneSpan$Properties} message SubzoneSpan message or plain object to encode
+             * @param {$protobuf.Writer} [writer] Writer to encode to
+             * @returns {$protobuf.Writer} Writer
+             */
+            public static encodeDelimited(message: cockroach.config.SubzoneSpan$Properties, writer?: $protobuf.Writer): $protobuf.Writer;
+
+            /**
+             * Decodes a SubzoneSpan message from the specified reader or buffer.
+             * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+             * @param {number} [length] Message length if known beforehand
+             * @returns {cockroach.config.SubzoneSpan} SubzoneSpan
+             * @throws {Error} If the payload is not a reader or valid buffer
+             * @throws {$protobuf.util.ProtocolError} If required fields are missing
+             */
+            public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): cockroach.config.SubzoneSpan;
+
+            /**
+             * Decodes a SubzoneSpan message from the specified reader or buffer, length delimited.
+             * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+             * @returns {cockroach.config.SubzoneSpan} SubzoneSpan
+             * @throws {Error} If the payload is not a reader or valid buffer
+             * @throws {$protobuf.util.ProtocolError} If required fields are missing
+             */
+            public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): cockroach.config.SubzoneSpan;
+
+            /**
+             * Verifies a SubzoneSpan message.
+             * @param {Object.<string,*>} message Plain object to verify
+             * @returns {?string} `null` if valid, otherwise the reason why it is not
+             */
+            public static verify(message: { [k: string]: any }): string;
+
+            /**
+             * Creates a SubzoneSpan message from a plain object. Also converts values to their respective internal types.
+             * @param {Object.<string,*>} object Plain object
+             * @returns {cockroach.config.SubzoneSpan} SubzoneSpan
+             */
+            public static fromObject(object: { [k: string]: any }): cockroach.config.SubzoneSpan;
+
+            /**
+             * Creates a SubzoneSpan message from a plain object. Also converts values to their respective internal types.
+             * This is an alias of {@link cockroach.config.SubzoneSpan.fromObject}.
+             * @function
+             * @param {Object.<string,*>} object Plain object
+             * @returns {cockroach.config.SubzoneSpan} SubzoneSpan
+             */
+            public static from(object: { [k: string]: any }): cockroach.config.SubzoneSpan;
+
+            /**
+             * Creates a plain object from a SubzoneSpan message. Also converts values to other types if specified.
+             * @param {cockroach.config.SubzoneSpan} message SubzoneSpan
+             * @param {$protobuf.ConversionOptions} [options] Conversion options
+             * @returns {Object.<string,*>} Plain object
+             */
+            public static toObject(message: cockroach.config.SubzoneSpan, options?: $protobuf.ConversionOptions): { [k: string]: any };
+
+            /**
+             * Creates a plain object from this SubzoneSpan message. Also converts values to other types if specified.
+             * @param {$protobuf.ConversionOptions} [options] Conversion options
+             * @returns {Object.<string,*>} Plain object
+             */
+            public toObject(options?: $protobuf.ConversionOptions): { [k: string]: any };
+
+            /**
+             * Converts this SubzoneSpan to JSON.
              * @returns {Object.<string,*>} JSON object
              */
             public toJSON(): { [k: string]: any };
