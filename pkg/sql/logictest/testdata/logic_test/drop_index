@@ -19,6 +19,9 @@ CREATE TABLE othertable (
 statement error index name "baw" is ambiguous
 DROP INDEX baw
 
+statement error index name "baw" is ambiguous
+DROP INDEX IF EXISTS baw
+
 statement ok
 DROP TABLE othertable
 
@@ -38,11 +41,11 @@ users  foo      false   2    id      ASC        false    true
 users  bar      true    1    id      ASC        false    false
 users  bar      true    2    name    ASC        false    false
 
-statement error index "ffo" does not exist
-DROP INDEX users@ffo
+statement error index "zap" does not exist
+DROP INDEX users@zap
 
 statement ok
-DROP INDEX IF EXISTS users@ffo
+DROP INDEX IF EXISTS users@zap
 
 query TTBITTBB colnames
 SHOW INDEXES FROM users
@@ -169,3 +172,22 @@ query T
 SHOW TABLES
 ----
 users
+
+# Test the syntax without a '@'
+
+statement ok
+CREATE INDEX baz ON users (name)
+
+statement ok
+DROP INDEX IF EXISTS baz
+
+query TTBITTBB colnames
+SHOW INDEXES FROM users
+----
+Table  Name     Unique  Seq  Column  Direction  Storing  Implicit
+users  primary  true    1    id      ASC        false    false
+
+# Test that it still succeeds without an index.
+
+statement ok
+DROP INDEX IF EXISTS baz
