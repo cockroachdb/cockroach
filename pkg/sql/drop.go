@@ -249,6 +249,13 @@ func (p *planner) DropIndex(ctx context.Context, n *parser.DropIndex) (planNode,
 	for i, index := range n.IndexList {
 		tn, err := p.expandIndexName(ctx, index)
 		if err != nil {
+			// Only index names of the form "idx" throw an error here if they
+			// don't exist.
+			if n.IfExists {
+				// Noop.
+				return &zeroNode{}, nil
+			}
+			// Index does not exist, but we want it to: error out.
 			return nil, err
 		}
 
@@ -302,6 +309,8 @@ func (p *planner) dropIndexByName(
 ) error {
 	idx, dropped, err := tableDesc.FindIndexByName(string(idxName))
 	if err != nil {
+		// Only index names of the form "table@idx" throw an error here if they
+		// don't exist.
 		if ifExists {
 			// Noop.
 			return nil
