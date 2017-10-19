@@ -2880,6 +2880,14 @@ func (r *Replica) propose(
 		return nil, nil, noop, roachpb.NewError(err)
 	}
 
+	// Checking the context just before proposing can help avoid ambiguous errors.
+	if err := ctx.Err(); err != nil {
+		errStr := fmt.Sprintf("%s before proposing: %s", err, ba.Summary())
+		log.Warning(ctx, errStr)
+		log.ErrEvent(ctx, errStr)
+		return nil, nil, noop, roachpb.NewError(err)
+	}
+
 	// Must check that the request is in bounds at proposal time in
 	// addition to application time because some evaluation functions
 	// (especially EndTransaction with SplitTrigger) fail (with a
