@@ -99,8 +99,8 @@ func nodeStr(l *DockerCluster, i int) string {
 	return fmt.Sprintf("roach-%s-%d", l.clusterID, i)
 }
 
-func dataStr(node, store int) string {
-	return fmt.Sprintf("/data%d.%d", node, store)
+func storeStr(node, store int) string {
+	return fmt.Sprintf("data%d.%d", node, store)
 }
 
 // The various event types.
@@ -116,9 +116,9 @@ type Event struct {
 }
 
 type testStore struct {
-	index   int
-	dataStr string
-	config  StoreConfig
+	index  int
+	dir    string
+	config StoreConfig
 }
 
 type testNode struct {
@@ -148,16 +148,16 @@ type DockerCluster struct {
 	clusterID            string
 	networkID            string
 	networkName          string
-	logDir               string // no logging if empty
-	logDirRemovable      bool   // if true, the log directory can be removed after use
+	volumesDir           string
 }
 
 // CreateDocker creates a Docker-based cockroach cluster. The stopper is used to
 // gracefully shutdown the channel (e.g. when a signal arrives). The cluster
-// must be started before being used and keeps logs in the specified logDir, if
-// supplied.
+// must be started before being used and keeps container volumes in the
+// specified volumeDir, including logs and cockroach stores. If no volumeDir is
+// specified, a temporary directory is created.
 func CreateDocker(
-	ctx context.Context, cfg TestConfig, logDir string, stopper *stop.Stopper,
+	ctx context.Context, cfg TestConfig, volumeDir string, stopper *stop.Stopper,
 ) *DockerCluster {
 	select {
 	case <-stopper.ShouldStop():
@@ -177,32 +177,30 @@ func CreateDocker(
 
 	clusterID := uuid.MakeV4()
 	clusterIDS := clusterID.Short()
-	// Only pass a nonzero logDir down to DockerCluster when instructed to keep
-	// logs.
-	var uniqueLogDir string
-	logDirRemovable := false
-	if logDir != "" {
+
+	if volumeDir == "" {
+		volumeDir, err = ioutil.TempDir("", fmt.Sprintf("cockroach-acceptance-%s", clusterIDS))
+		maybePanic(err)
+	} else {
+		volumeDir = fmt.Sprintf("%s-%s", volumeDir, clusterIDS)
+	}
+	if !filepath.IsAbs(volumeDir) {
 		pwd, err := os.Getwd()
 		maybePanic(err)
-
-		uniqueLogDir = fmt.Sprintf("%s-%s", logDir, clusterIDS)
-		if !filepath.IsAbs(uniqueLogDir) {
-			uniqueLogDir = filepath.Join(pwd, uniqueLogDir)
-		}
-		ensureLogDirExists(uniqueLogDir)
-		logDirRemovable = true
-		log.Infof(ctx, "local cluster log directory: %s", uniqueLogDir)
+		volumeDir = filepath.Join(pwd, volumeDir)
 	}
+	maybePanic(os.MkdirAll(volumeDir, 0755))
+	log.Infof(ctx, "cluster volume directory: %s", volumeDir)
+
 	return &DockerCluster{
 		clusterID: clusterIDS,
 		client:    resilientDockerClient{APIClient: cli},
 		config:    cfg,
 		stopper:   stopper,
 		// TODO(tschottdorf): deadlocks will occur if these channels fill up.
-		events:          make(chan Event, 1000),
-		expectedEvents:  make(chan Event, 1000),
-		logDir:          uniqueLogDir,
-		logDirRemovable: logDirRemovable,
+		events:         make(chan Event, 1000),
+		expectedEvents: make(chan Event, 1000),
+		volumesDir:     volumeDir,
 	}
 }
 
@@ -237,6 +235,7 @@ func (l *DockerCluster) OneShot(
 	if err := pullImage(ctx, l, ref, ipo); err != nil {
 		return err
 	}
+	containerConfig.WorkingDir = "/scratch"
 	hostConfig.VolumesFrom = []string{l.vols.id}
 	c, err := createContainer(ctx, l, containerConfig, hostConfig, name)
 	if err != nil {
@@ -341,11 +340,10 @@ func (l *DockerCluster) initCluster(ctx context.Context) {
 	binds := []string{
 		l.CertsDir + ":/certs",
 		filepath.Join(pwd, "..") + ":/go/src/github.com/cockroachdb/cockroach",
+		filepath.Join(l.volumesDir, "logs") + ":/logs",
+		filepath.Join(l.volumesDir, "scratch") + ":/scratch",
 	}
 
-	if l.logDir != "" {
-		binds = append(binds, l.logDir+":/logs")
-	}
 	if *cockroachImage == defaultImage {
 		path, err := filepath.Abs(*CockroachBinary)
 		maybePanic(err)
@@ -353,7 +351,6 @@ func (l *DockerCluster) initCluster(ctx context.Context) {
 	}
 
 	l.Nodes = []*testNode{}
-	vols := map[string]struct{}{}
 	// Expand the cluster configuration into nodes and stores per node.
 	for i, nc := range l.config.Nodes {
 		newTestNode := &testNode{
@@ -362,12 +359,14 @@ func (l *DockerCluster) initCluster(ctx context.Context) {
 			nodeStr: nodeStr(l, i),
 		}
 		for j, sc := range nc.Stores {
-			vols[dataStr(i, j)] = struct{}{}
+			hostDir := filepath.Join(l.volumesDir, storeStr(i, j))
+			containerDir := "/" + storeStr(i, j)
+			binds = append(binds, hostDir+":"+containerDir)
 			newTestNode.stores = append(newTestNode.stores,
 				testStore{
-					config:  sc,
-					index:   j,
-					dataStr: dataStr(i, j),
+					config: sc,
+					index:  j,
+					dir:    containerDir,
 				})
 		}
 		l.Nodes = append(l.Nodes, newTestNode)
@@ -381,7 +380,6 @@ func (l *DockerCluster) initCluster(ctx context.Context) {
 		l,
 		container.Config{
 			Image:      *cockroachImage,
-			Volumes:    vols,
 			Entrypoint: []string{"/bin/true"},
 		}, container.HostConfig{
 			Binds:           binds,
@@ -495,7 +493,7 @@ func (l *DockerCluster) startNode(ctx context.Context, node *testNode) {
 
 	for _, store := range node.stores {
 		storeSpec := base.StoreSpec{
-			Path:        store.dataStr,
+			Path:        store.dir,
 			SizeInBytes: int64(store.config.MaxRanges) * maxRangeBytes,
 		}
 		cmd = append(cmd, fmt.Sprintf("--store=%s", storeSpec))
@@ -505,18 +503,12 @@ func (l *DockerCluster) startNode(ctx context.Context, node *testNode) {
 		cmd = append(cmd, "--join="+net.JoinHostPort(l.Nodes[0].nodeStr, base.DefaultPort))
 	}
 
-	var localLogDir string
-	if len(l.logDir) > 0 {
-		dockerLogDir := "/logs/" + node.nodeStr
-		localLogDir = filepath.Join(l.logDir, node.nodeStr)
-		ensureLogDirExists(localLogDir)
-		cmd = append(
-			cmd,
-			"--logtostderr=ERROR",
-			"--log-dir="+dockerLogDir)
-	} else {
-		cmd = append(cmd, "--logtostderr=INFO")
-	}
+	dockerLogDir := "/logs/" + node.nodeStr
+	localLogDir := filepath.Join(l.volumesDir, "logs", node.nodeStr)
+	cmd = append(
+		cmd,
+		"--logtostderr=ERROR",
+		"--log-dir="+dockerLogDir)
 	env := []string{
 		"COCKROACH_SCAN_MAX_IDLE_TIME=200ms",
 		"COCKROACH_CONSISTENCY_CHECK_PANIC_ON_FAILURE=true",
@@ -747,7 +739,6 @@ func (l *DockerCluster) stop(ctx context.Context) {
 		_ = os.RemoveAll(l.CertsDir)
 		l.CertsDir = ""
 	}
-	outputLogDir := l.logDir
 	for i, n := range l.Nodes {
 		if n.Container == nil {
 			continue
@@ -755,28 +746,19 @@ func (l *DockerCluster) stop(ctx context.Context) {
 		ci, err := n.Inspect(ctx)
 		crashed := err != nil || (!ci.State.Running && ci.State.ExitCode != 0)
 		maybePanic(n.Kill(ctx))
-		if crashed && outputLogDir == "" {
-			outputLogDir, err = ioutil.TempDir("", "crashed_nodes")
-			if err != nil {
-				panic(err)
-			}
-		}
-		if crashed || l.logDir != "" {
-			// TODO(bdarnell): make these filenames more consistent with
-			// structured logs?
-			file := filepath.Join(outputLogDir, nodeStr(l, i),
-				fmt.Sprintf("stderr.%s.log", strings.Replace(
-					timeutil.Now().Format(time.RFC3339), ":", "_", -1)))
-
-			maybePanic(os.MkdirAll(filepath.Dir(file), 0777))
-			w, err := os.Create(file)
-			maybePanic(err)
-			defer w.Close()
-			maybePanic(n.Logs(ctx, w))
-			log.Infof(ctx, "node %d: stderr at %s", i, file)
-			if crashed {
-				log.Infof(ctx, "~~~ node %d CRASHED ~~~~", i)
-			}
+		// TODO(bdarnell): make these filenames more consistent with structured
+		// logs?
+		file := filepath.Join(l.volumesDir, "logs", nodeStr(l, i),
+			fmt.Sprintf("stderr.%s.log", strings.Replace(
+				timeutil.Now().Format(time.RFC3339), ":", "_", -1)))
+		maybePanic(os.MkdirAll(filepath.Dir(file), 0755))
+		w, err := os.Create(file)
+		maybePanic(err)
+		defer w.Close()
+		maybePanic(n.Logs(ctx, w))
+		log.Infof(ctx, "node %d: stderr at %s", i, file)
+		if crashed {
+			log.Infof(ctx, "~~~ node %d CRASHED ~~~~", i)
 		}
 		maybePanic(n.Remove(ctx))
 	}
@@ -873,8 +855,6 @@ func (l *DockerCluster) ExecCLI(ctx context.Context, i int, cmd []string) (strin
 	cmd = append([]string{CockroachBinaryInContainer}, cmd...)
 	cmd = append(cmd, "--host", l.Hostname(i), "--certs-dir=/certs")
 	cfg := types.ExecConfig{
-		User:         "root",
-		Privileged:   true,
 		Cmd:          cmd,
 		AttachStderr: true,
 		AttachStdout: true,
@@ -916,23 +896,19 @@ func (l *DockerCluster) ExecCLI(ctx context.Context, i int, cmd []string) (strin
 	return outputStream.String(), errorStream.String(), nil
 }
 
-func ensureLogDirExists(logDir string) {
-	// Ensure that the path exists, with all its parents.
-	// If we don't make sure the directory exists, Docker will and then we
-	// may run into ownership issues (think Docker running as root, but us
-	// running as a regular Joe as it happens on CircleCI).
-	maybePanic(os.MkdirAll(logDir, 0755))
-	// Now make the last component, and just the last one, writable by
-	// anyone, and set the gid and uid bit so that the owner is
-	// propagated to sub-directories.
-	maybePanic(os.Chmod(logDir, 0777|os.ModeSetuid|os.ModeSetgid))
-}
-
-// Cleanup removes the log directory if it was initially created
-// by this DockerCluster.
-func (l *DockerCluster) Cleanup(ctx context.Context) {
-	if l.logDir != "" && l.logDirRemovable {
-		if err := os.RemoveAll(l.logDir); err != nil {
+// Cleanup removes the cluster's volumes directory, optionally preserving the
+// logs directory.
+func (l *DockerCluster) Cleanup(ctx context.Context, preserveLogs bool) {
+	volumes, err := ioutil.ReadDir(l.volumesDir)
+	if err != nil {
+		log.Warning(ctx, err)
+		return
+	}
+	for _, v := range volumes {
+		if preserveLogs && v.Name() == "logs" {
+			continue
+		}
+		if err := os.RemoveAll(filepath.Join(l.volumesDir, v.Name())); err != nil {
 			log.Warning(ctx, err)
 		}
 	}

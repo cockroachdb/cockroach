@@ -24,6 +24,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/acceptance/cluster"
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
 )
@@ -32,6 +33,7 @@ func defaultContainerConfig() container.Config {
 	return container.Config{
 		Image: postgresTestImage,
 		Env: []string{
+			fmt.Sprintf("PGUSER=%s", security.RootUser),
 			fmt.Sprintf("PGPORT=%s", base.DefaultPort),
 			"PGSSLCERT=/certs/node.crt",
 			"PGSSLKEY=/certs/node.key",
@@ -93,10 +95,8 @@ func testDocker(
 		err = l.OneShot(
 			ctx, postgresTestImage, types.ImagePullOptions{}, containerConfig, hostConfig, "docker-"+name,
 		)
-		if err == nil {
-			// Clean up the log files if the run was successful.
-			l.Cleanup(ctx)
-		}
+		preserveLogs := err != nil
+		l.Cleanup(ctx, preserveLogs)
 	})
 	return err
 }
