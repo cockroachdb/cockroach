@@ -24,6 +24,6 @@
     </dependencies>
 
     <build>
-        <testSourceDirectory>src/main</testSourceDirectory>
+      <testSourceDirectory>src/main</testSourceDirectory>
     </build>
 </project>

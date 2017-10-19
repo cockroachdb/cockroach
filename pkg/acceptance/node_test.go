@@ -34,7 +34,8 @@ func TestDockerNodeJS(t *testing.T) {
 
 const nodeJS = `
 const fs     = require('fs');
-const pg     = require('pg');
+// Gross, will be removed in follow-up.
+const pg     = require('/usr/lib/node_modules/pg');
 const assert = require('assert');
 
 const config = {
