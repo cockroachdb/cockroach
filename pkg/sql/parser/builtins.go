@@ -366,6 +366,18 @@ var Builtins = map[string][]Builtin{
 		},
 	},
 
+	"gen_random_uuid": {
+		Builtin{
+			Types:      ArgTypes{},
+			ReturnType: fixedReturnType(TypeBytes),
+			fn: func(_ *EvalContext, _ Datums) (Datum, error) {
+				uv := uuid.MakeV4()
+				return NewDBytes(DBytes(uv.GetBytes())), nil
+			},
+			Info: "Generates a random UUID and returns its byte string representation.",
+		},
+	},
+
 	"to_uuid": {
 		Builtin{
 			Types:      ArgTypes{{"val", TypeString}},
