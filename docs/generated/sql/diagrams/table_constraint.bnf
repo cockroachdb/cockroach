@@ -1,0 +1,13 @@
+table_constraint ::=
+	'CONSTRAINT' name 'CHECK' '(' a_expr ')'
+	| 'CONSTRAINT' name 'UNIQUE' '(' index_params ')' 'COVERING' '(' name_list ')' opt_interleave
+	| 'CONSTRAINT' name 'UNIQUE' '(' index_params ')' 'STORING' '(' name_list ')' opt_interleave
+	| 'CONSTRAINT' name 'UNIQUE' '(' index_params ')'  opt_interleave
+	| 'CONSTRAINT' name 'PRIMARY' 'KEY' '(' index_params ')'
+	| 'CONSTRAINT' name 'FOREIGN' 'KEY' '(' name_list ')' 'REFERENCES' qualified_name opt_column_list key_actions
+	| 'CHECK' '(' a_expr ')'
+	| 'UNIQUE' '(' index_params ')' 'COVERING' '(' name_list ')' opt_interleave
+	| 'UNIQUE' '(' index_params ')' 'STORING' '(' name_list ')' opt_interleave
+	| 'UNIQUE' '(' index_params ')'  opt_interleave
+	| 'PRIMARY' 'KEY' '(' index_params ')'
+	| 'FOREIGN' 'KEY' '(' name_list ')' 'REFERENCES' qualified_name opt_column_list key_actions

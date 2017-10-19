@@ -1,0 +1,5 @@
+alter_rename_index_stmt ::=
+	'ALTER' 'INDEX' table_name '@' unrestricted_name 'RENAME' 'TO' name
+	| 'ALTER' 'INDEX' table_name 'RENAME' 'TO' name
+	| 'ALTER' 'INDEX' 'IF' 'EXISTS' table_name '@' unrestricted_name 'RENAME' 'TO' name
+	| 'ALTER' 'INDEX' 'IF' 'EXISTS' table_name 'RENAME' 'TO' name

@@ -1,0 +1,3 @@
+import_stmt ::=
+	'IMPORT' 'TABLE' any_name 'CREATE' 'USING' string_or_placeholder import_data_format 'DATA' '(' string_or_placeholder_list ')' opt_with_options
+	| 'IMPORT' 'TABLE' any_name '(' table_elem_list ')' import_data_format 'DATA' '(' string_or_placeholder_list ')' opt_with_options

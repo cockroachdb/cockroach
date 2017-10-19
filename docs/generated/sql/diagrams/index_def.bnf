@@ -1,0 +1,13 @@
+index_def ::=
+	'INDEX' name '(' index_elem ( ( ',' index_elem ) )* ')' 'COVERING' '(' name_list ')' opt_interleave
+	| 'INDEX' name '(' index_elem ( ( ',' index_elem ) )* ')' 'STORING' '(' name_list ')' opt_interleave
+	| 'INDEX' name '(' index_elem ( ( ',' index_elem ) )* ')'  opt_interleave
+	| 'INDEX'  '(' index_elem ( ( ',' index_elem ) )* ')' 'COVERING' '(' name_list ')' opt_interleave
+	| 'INDEX'  '(' index_elem ( ( ',' index_elem ) )* ')' 'STORING' '(' name_list ')' opt_interleave
+	| 'INDEX'  '(' index_elem ( ( ',' index_elem ) )* ')'  opt_interleave
+	| 'UNIQUE' 'INDEX' name '(' index_elem ( ( ',' index_elem ) )* ')' 'COVERING' '(' name_list ')' opt_interleave
+	| 'UNIQUE' 'INDEX' name '(' index_elem ( ( ',' index_elem ) )* ')' 'STORING' '(' name_list ')' opt_interleave
+	| 'UNIQUE' 'INDEX' name '(' index_elem ( ( ',' index_elem ) )* ')'  opt_interleave
+	| 'UNIQUE' 'INDEX'  '(' index_elem ( ( ',' index_elem ) )* ')' 'COVERING' '(' name_list ')' opt_interleave
+	| 'UNIQUE' 'INDEX'  '(' index_elem ( ( ',' index_elem ) )* ')' 'STORING' '(' name_list ')' opt_interleave
+	| 'UNIQUE' 'INDEX'  '(' index_elem ( ( ',' index_elem ) )* ')'  opt_interleave

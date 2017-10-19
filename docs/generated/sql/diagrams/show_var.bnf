@@ -1,0 +1,17 @@
+show_stmt ::=
+	show_backup_stmt
+	| show_columns_stmt
+	| show_constraints_stmt
+	| show_create_table_stmt
+	| show_create_view_stmt
+	| show_csettings_stmt
+	| show_databases_stmt
+	| show_grants_stmt
+	| show_indexes_stmt
+	| show_jobs_stmt
+	| show_queries_stmt
+	| show_session_stmt
+	| show_sessions_stmt
+	| show_tables_stmt
+	| show_trace_stmt
+	| show_users_stmt
