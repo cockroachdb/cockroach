@@ -526,7 +526,7 @@ func (ds *DistSender) initAndVerifyBatch(
 			switch inner.(type) {
 			case *roachpb.ScanRequest, *roachpb.DeleteRangeRequest:
 				// Accepted range requests. All other range requests are still
-				// not supported.
+				// not supported. Note that ReverseScanRequest is _not_ handled here.
 				// TODO(vivek): don't enumerate all range requests.
 				if isReverse {
 					return roachpb.NewErrorf("batch with limit contains both forward and reverse scans")
@@ -538,6 +538,27 @@ func (ds *DistSender) initAndVerifyBatch(
 			default:
 				return roachpb.NewErrorf("batch with limit contains %T request", inner)
 			}
+		}
+	}
+
+	// If ScanOptions is set the batch is only allowed to contain scans.
+	if ba.ScanOptions != nil {
+		for _, req := range ba.Requests {
+			switch req.GetInner().(type) {
+			case *roachpb.ScanRequest, *roachpb.ReverseScanRequest:
+				// Scans are supported.
+			case *roachpb.BeginTransactionRequest, *roachpb.EndTransactionRequest:
+				// These requests are ignored.
+			default:
+				return roachpb.NewErrorf("batch with scan option has non-scans: %s", ba)
+			}
+		}
+		// If both MaxSpanRequestKeys and MinResults are set, then they can't be
+		// contradictory.
+		if ba.Header.MaxSpanRequestKeys != 0 &&
+			ba.Header.MaxSpanRequestKeys < ba.Header.ScanOptions.MinResults {
+			return roachpb.NewErrorf("MaxSpanRequestKeys (%d) < MinResults (%d): %s",
+				ba.Header.MaxSpanRequestKeys, ba.Header.ScanOptions.MinResults, ba)
 		}
 	}
 
@@ -678,7 +699,12 @@ func (ds *DistSender) divideAndSendBatchToRanges(
 	// implicated in the span (rs) and combines them into a single
 	// BatchResponse when finished.
 	var responseChs []chan response
+	// couldHaveSkippedResponses is set if a ResumeSpan needs to be sent back.
 	var couldHaveSkippedResponses bool
+	// If couldHaveSkippedResponses is set, resumeReason indicates the reason why
+	// the ResumeSpan is necessary. This reason is common to all individual
+	// response that carry a ResumeSpan.
+	var resumeReason roachpb.ResponseHeader_ResumeReason
 	defer func() {
 		if r := recover(); r != nil {
 			// If we're in the middle of a panic, don't wait on responseChs.
@@ -714,9 +740,15 @@ func (ds *DistSender) divideAndSendBatchToRanges(
 				pErr.UpdateTxn(br.Txn)
 			}
 		} else if couldHaveSkippedResponses {
-			fillSkippedResponses(ba, br, seekKey)
+			fillSkippedResponses(ba, br, seekKey, resumeReason)
 		}
 	}()
+
+	stopAtRangeBoundary := ba.Header.ScanOptions != nil && ba.Header.ScanOptions.StopAtRangeBoundary
+	// If min_results is set, num_results will count how many results scans have
+	// accumulated so far.
+	var numResults int64
+	canParallelize := (ba.Header.MaxSpanRequestKeys == 0) && !stopAtRangeBoundary
 
 	for ; ri.Valid(); ri.Seek(ctx, seekKey, scanDir) {
 		// Increase the sequence counter only once before sending RPCs to
@@ -789,11 +821,11 @@ func (ds *DistSender) divideAndSendBatchToRanges(
 			return
 		}
 
+		lastRange := !ri.NeedAnother(rs)
 		// Send the next partial batch to the first range in the "rs" span.
-		// If we're not handling a request which limits responses and we
-		// can reserve one of the limited goroutines available for parallel
+		// If we can reserve one of the limited goroutines available for parallel
 		// batch RPCs, send asynchronously.
-		if ba.MaxSpanRequestKeys == 0 && ri.NeedAnother(rs) && ds.rpcContext != nil &&
+		if canParallelize && !lastRange && ds.rpcContext != nil &&
 			ds.sendPartialBatchAsync(ctx, ba, rs, ri.Desc(), ri.Token(), batchIdx, responseCh) {
 			// Note that we pass the batch request by value to the parallel
 			// goroutine to avoid using the cloned txn.
@@ -804,8 +836,6 @@ func (ds *DistSender) divideAndSendBatchToRanges(
 				ba.Txn = &txnClone
 			}
 		} else {
-			// Send synchronously if there is no parallel capacity left, there's a
-			// max results limit, or this is the final request in the span.
 			resp := ds.sendPartialBatch(ctx, ba, rs, ri.Desc(), ri.Token(), batchIdx, true /* needsTruncate */)
 			responseCh <- resp
 			if resp.pErr != nil {
@@ -816,19 +846,51 @@ func (ds *DistSender) divideAndSendBatchToRanges(
 			// use it.
 			ba.UpdateTxn(resp.reply.Txn)
 
+			mightStopEarly := ba.MaxSpanRequestKeys > 0 || stopAtRangeBoundary
 			// Check whether we've received enough responses to exit query loop.
-			if ba.MaxSpanRequestKeys > 0 {
-				var numResults int64
+			if mightStopEarly {
+				var replyResults int64
 				for _, r := range resp.reply.Responses {
-					numResults += r.GetInner().Header().NumKeys
+					replyResults += r.GetInner().Header().NumKeys
 				}
-				if numResults > ba.MaxSpanRequestKeys {
-					panic(fmt.Sprintf("received %d results, limit was %d", numResults, ba.MaxSpanRequestKeys))
+				// Do accounting for results. It's important that we update
+				// MaxSpanRequestKeys and ScanOptions.MinResults, as ba might be
+				// passed recursively to further divideAndSendBatchToRanges() calls.
+				numResults += replyResults
+				if ba.MaxSpanRequestKeys > 0 {
+					if replyResults > ba.MaxSpanRequestKeys {
+						log.Fatalf(ctx, "received %d results, limit was %d",
+							replyResults, ba.MaxSpanRequestKeys)
+					}
+					ba.MaxSpanRequestKeys -= replyResults
+					// Exiting; any missing responses will be filled in via defer().
+					if ba.MaxSpanRequestKeys == 0 {
+						couldHaveSkippedResponses = true
+						resumeReason = roachpb.RESUME_KEY_LIMIT
+						return
+					}
 				}
-				ba.MaxSpanRequestKeys -= numResults
-				// Exiting; any missing responses will be filled in via defer().
-				if ba.MaxSpanRequestKeys == 0 {
+				var minResultsSatisfied bool
+				if !stopAtRangeBoundary {
+					minResultsSatisfied = true
+				} else {
+					if ba.Header.ScanOptions.MinResults == 0 {
+						minResultsSatisfied = true
+					} else {
+						// We need to change ba.Header.ScanOptions, so we have to make a
+						// copy so as to not mutate the one that we have already passed to
+						// gRPC.
+						scanOptsCopy := *ba.Header.ScanOptions
+						scanOptsCopy.MinResults -= numResults
+						minResultsSatisfied = scanOptsCopy.MinResults <= 0
+						ba.Header.ScanOptions = &scanOptsCopy
+					}
+				}
+				// If stopAtRangeBoundary is set, we stop unless MinResults is not
+				// satisfied.
+				if stopAtRangeBoundary && minResultsSatisfied {
 					couldHaveSkippedResponses = true
+					resumeReason = roachpb.RESUME_RANGE_BOUNDARY
 					return
 				}
 			}
@@ -841,7 +903,7 @@ func (ds *DistSender) divideAndSendBatchToRanges(
 		// the batch request has all the original requests but the span is
 		// a sub-span of the original, causing next() and prev() methods
 		// to potentially return values which invert the span.
-		if !ri.NeedAnother(rs) || !nextRS.Key.Less(nextRS.EndKey) {
+		if lastRange || !nextRS.Key.Less(nextRS.EndKey) {
 			return
 		}
 		batchIdx++
@@ -1045,10 +1107,19 @@ func includesFrontOfCurSpan(isReverse bool, rd *roachpb.RangeDescriptor, rs roac
 	return rd.ContainsKey(rs.Key)
 }
 
-// fillSkippedResponses after meeting the batch key max limit for range
-// requests.
+// fillSkippedResponses fills in responses and ResumeSpans for requests
+// when a batch finished without fully processing the requested key spans for
+// (some of) the requests in the batch. This can happen when processing has met
+// the batch key max limit for range requests, or some other stop condition
+// based on ScanOptions.
+//
+// nextKey is the first key that was not processed. This will be used when
+// filling up the ResumeSpan's.
 func fillSkippedResponses(
-	ba roachpb.BatchRequest, br *roachpb.BatchResponse, nextKey roachpb.RKey,
+	ba roachpb.BatchRequest,
+	br *roachpb.BatchResponse,
+	nextKey roachpb.RKey,
+	resumeReason roachpb.ResponseHeader_ResumeReason,
 ) {
 	// Some requests might have no response at all if we used a batch-wide
 	// limit; simply create trivial responses for those. Note that any type
@@ -1081,6 +1152,7 @@ func fillSkippedResponses(
 			continue
 		}
 		hdr := resp.GetInner().Header()
+		hdr.ResumeReason = resumeReason
 		origSpan := req.Header()
 		if isReverse {
 			if hdr.ResumeSpan != nil {
@@ -1097,16 +1169,23 @@ func fillSkippedResponses(
 			}
 		} else {
 			if hdr.ResumeSpan != nil {
-				// The ResumeSpan.EndKey might be set to the EndKey of a
-				// range; correctly set it to the EndKey of the original
-				// request span.
+				// The ResumeSpan.EndKey might be set to the EndKey of a range because
+				// that's what a store will set it to when the limit is reached; it
+				// doesn't know any better). In that case, we correct it to the EndKey
+				// of the original request span. Note that this doesn't touch
+				// ResumeSpan.Key, which is really the important part of the ResumeSpan.
 				hdr.ResumeSpan.EndKey = origSpan.EndKey
-			} else if nextKey.Less(roachpb.RKey(origSpan.EndKey)) {
-				// Some keys have yet to be processed.
-				hdr.ResumeSpan = &origSpan
-				if roachpb.RKey(origSpan.Key).Less(nextKey) {
-					// The original span has been partially processed.
-					hdr.ResumeSpan.Key = nextKey.AsRawKey()
+			} else {
+				// The request might have been fully satisfied, in which case it doesn't
+				// need a ResumeSpan, or it might not have. Figure out if we're in the
+				// latter case.
+				if nextKey.Less(roachpb.RKey(origSpan.EndKey)) {
+					// Some keys have yet to be processed.
+					hdr.ResumeSpan = &origSpan
+					if roachpb.RKey(origSpan.Key).Less(nextKey) {
+						// The original span has been partially processed.
+						hdr.ResumeSpan.Key = nextKey.AsRawKey()
+					}
 				}
 			}
 		}
