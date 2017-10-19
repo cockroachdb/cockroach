@@ -290,11 +290,6 @@ func (sc *SchemaChanger) truncateIndexes(
 					defer sc.testingKnobs.RunAfterBackfillChunk()
 				}
 
-				// TODO(vivek): See comment in backfillIndexesChunk.
-				if err := txn.SetSystemConfigTrigger(); err != nil {
-					return err
-				}
-
 				tc := &TableCollection{leaseMgr: sc.leaseMgr}
 				defer tc.releaseTables(ctx)
 				tableDesc, err := sc.getTableVersion(ctx, txn, tc, version)
