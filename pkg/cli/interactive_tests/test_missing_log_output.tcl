@@ -87,7 +87,11 @@ start_test "Test that quit does not show INFO by defaults with --logtostderr"
 # that the default logging level is WARNING, so that no INFO messages
 # are printed between the marker and the (first line) error message
 # from quit. Quit will error out because the server is already stopped.
-send "echo marker; $argv quit --logtostderr\r"
+#
+# Since quit is likely to actually emit warnings, but we are just
+# interested in the absence of INFO messages, remove the warnings from
+# the output.
+send "echo marker; $argv quit --logtostderr | grep -v '^W'\r"
 eexpect "marker\r\nError"
 eexpect ":/# "
 end_test
