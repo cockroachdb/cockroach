@@ -567,6 +567,12 @@ func (expr *DOid) Walk(_ Visitor) Expr { return expr }
 // Walk implements the Expr interface.
 func (expr *DOidWrapper) Walk(_ Visitor) Expr { return expr }
 
+// Walk implements the Expr interface.
+func (expr PartitionDefault) Walk(_ Visitor) Expr { return expr }
+
+// Walk implements the Expr interface.
+func (expr PartitionMaxValue) Walk(_ Visitor) Expr { return expr }
+
 // WalkExpr traverses the nodes in an expression.
 //
 // NOTE: Do not count on the WalkStmt/WalkExpr machinery to visit all

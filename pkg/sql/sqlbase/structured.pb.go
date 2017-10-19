@@ -580,7 +580,8 @@ type PartitioningDescriptor_List struct {
 	// Name is the partition name.
 	Name string `protobuf:"bytes,1,opt,name=name" json:"name"`
 	// Values is an unordered set of the tuples included in this partition. Each
-	// tuple is encoded with the EncDatum value encoding.
+	// tuple is encoded with the EncDatum value encoding. DEFAULT is encoded as
+	// NOT NULL.
 	Values [][]byte `protobuf:"bytes,2,rep,name=values" json:"values,omitempty"`
 	// Subpartitioning represents a further partitioning of this list partition.
 	Subpartitioning PartitioningDescriptor `protobuf:"bytes,3,opt,name=subpartitioning" json:"subpartitioning"`
@@ -600,7 +601,7 @@ type PartitioningDescriptor_Range struct {
 	// Name is the partition name.
 	Name string `protobuf:"bytes,1,opt,name=name" json:"name"`
 	// UpperBound is exclusive upper bound of this range partition. It is
-	// encoded with the EncDatum value encoding.
+	// encoded with the EncDatum value encoding. MAXVALUE is encoded as NOT NULL.
 	UpperBound []byte `protobuf:"bytes,2,opt,name=upper_bound,json=upperBound" json:"upper_bound,omitempty"`
 	// Subpartitioning represents a further partitioning of this range partition.
 	Subpartitioning PartitioningDescriptor `protobuf:"bytes,3,opt,name=subpartitioning" json:"subpartitioning"`
