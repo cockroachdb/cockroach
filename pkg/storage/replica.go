@@ -1892,6 +1892,10 @@ type endCmds struct {
 	repl *Replica
 	cmds batchCmdSet
 	ba   roachpb.BatchRequest
+
+	// The following fields are used to batch ts cache allocations.
+	cr    cacheRequest
+	spans [1]roachpb.Span
 }
 
 // done removes pending commands from the command queue and updates
@@ -1908,8 +1912,8 @@ func (ec *endCmds) done(br *roachpb.BatchResponse, pErr *roachpb.Error, retry pr
 			// evaluating the request.
 			log.Fatal(context.Background(), err)
 		}
-		creq := makeCacheRequest(&ec.ba, br, span)
 
+		creq := ec.makeCacheRequest(br, span)
 		if ec.repl.store.Clock().MaxOffset() == timeutil.ClocklessMaxOffset {
 			// Clockless mode: all reads count as writes.
 			creq.writes, creq.reads = append(creq.writes, creq.reads...), nil
@@ -1925,13 +1929,13 @@ func (ec *endCmds) done(br *roachpb.BatchResponse, pErr *roachpb.Error, retry pr
 	ec.repl.removeCmdsFromCommandQueue(ec.cmds)
 }
 
-func makeCacheRequest(
-	ba *roachpb.BatchRequest, br *roachpb.BatchResponse, span roachpb.RSpan,
-) cacheRequest {
-	cr := cacheRequest{
-		span:      span,
-		timestamp: ba.Timestamp,
-	}
+func (ec *endCmds) makeCacheRequest(br *roachpb.BatchResponse, span roachpb.RSpan) *cacheRequest {
+	cr := &ec.cr
+	cr.reads = ec.spans[:0]
+	cr.span = span
+
+	ba := ec.ba
+	cr.timestamp = ba.Timestamp
 	if ba.Txn != nil {
 		cr.txnID = ba.Txn.ID
 	}

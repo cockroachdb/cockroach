@@ -8620,67 +8620,67 @@ func TestMakeTimestampCacheRequest(t *testing.T) {
 		maxKeys  int64
 		req      roachpb.Request
 		resp     roachpb.Response
-		expected cacheRequest
+		expected *cacheRequest
 	}{
 		{
 			0,
 			&roachpb.ScanRequest{Span: ac},
 			&roachpb.ScanResponse{},
-			cacheRequest{reads: []roachpb.Span{ac}},
+			&cacheRequest{reads: []roachpb.Span{ac}},
 		},
 		{
 			0,
 			&roachpb.ScanRequest{Span: ac},
 			&roachpb.ScanResponse{Rows: []roachpb.KeyValue{{Key: a}}},
-			cacheRequest{reads: []roachpb.Span{ac}},
+			&cacheRequest{reads: []roachpb.Span{ac}},
 		},
 		{
 			2,
 			&roachpb.ScanRequest{Span: ac},
 			&roachpb.ScanResponse{},
-			cacheRequest{reads: []roachpb.Span{ac}},
+			&cacheRequest{reads: []roachpb.Span{ac}},
 		},
 		{
 			2,
 			&roachpb.ScanRequest{Span: ac},
 			&roachpb.ScanResponse{Rows: []roachpb.KeyValue{{Key: a}}},
-			cacheRequest{reads: []roachpb.Span{ac}},
+			&cacheRequest{reads: []roachpb.Span{ac}},
 		},
 		{
 			2,
 			&roachpb.ScanRequest{Span: ac},
 			&roachpb.ScanResponse{Rows: []roachpb.KeyValue{{Key: a}, {Key: b}}},
-			cacheRequest{reads: []roachpb.Span{{Key: a, EndKey: b.Next()}}},
+			&cacheRequest{reads: []roachpb.Span{{Key: a, EndKey: b.Next()}}},
 		},
 		{
 			0,
 			&roachpb.ReverseScanRequest{Span: ac},
 			&roachpb.ReverseScanResponse{},
-			cacheRequest{reads: []roachpb.Span{ac}},
+			&cacheRequest{reads: []roachpb.Span{ac}},
 		},
 		{
 			0,
 			&roachpb.ReverseScanRequest{Span: ac},
 			&roachpb.ReverseScanResponse{Rows: []roachpb.KeyValue{{Key: a}}},
-			cacheRequest{reads: []roachpb.Span{ac}},
+			&cacheRequest{reads: []roachpb.Span{ac}},
 		},
 		{
 			2,
 			&roachpb.ReverseScanRequest{Span: ac},
 			&roachpb.ReverseScanResponse{},
-			cacheRequest{reads: []roachpb.Span{ac}},
+			&cacheRequest{reads: []roachpb.Span{ac}},
 		},
 		{
 			2,
 			&roachpb.ReverseScanRequest{Span: ac},
 			&roachpb.ReverseScanResponse{Rows: []roachpb.KeyValue{{Key: a}}},
-			cacheRequest{reads: []roachpb.Span{ac}},
+			&cacheRequest{reads: []roachpb.Span{ac}},
 		},
 		{
 			2,
 			&roachpb.ReverseScanRequest{Span: ac},
 			&roachpb.ReverseScanResponse{Rows: []roachpb.KeyValue{{Key: c}, {Key: b}}},
-			cacheRequest{reads: []roachpb.Span{{Key: b, EndKey: c}}},
+			&cacheRequest{reads: []roachpb.Span{{Key: b, EndKey: c}}},
 		},
 	}
 	for _, c := range testCases {
@@ -8690,7 +8690,8 @@ func TestMakeTimestampCacheRequest(t *testing.T) {
 			ba.Header.MaxSpanRequestKeys = c.maxKeys
 			ba.Add(c.req)
 			br.Add(c.resp)
-			cr := makeCacheRequest(&ba, &br, roachpb.RSpan{})
+			ec := endCmds{ba: ba}
+			cr := ec.makeCacheRequest(&br, roachpb.RSpan{})
 			if !reflect.DeepEqual(c.expected, cr) {
 				t.Fatalf("%s", pretty.Diff(c.expected, cr))
 			}

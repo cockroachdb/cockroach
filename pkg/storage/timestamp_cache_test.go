@@ -139,7 +139,7 @@ func TestTimestampCacheNoEviction(t *testing.T) {
 	manual.Increment(1)
 	aTS := clock.Now()
 	tc.add(roachpb.Key("a"), nil, aTS, uuid.UUID{}, true)
-	tc.AddRequest(cacheRequest{
+	tc.AddRequest(&cacheRequest{
 		reads:     []roachpb.Span{{Key: roachpb.Key("c")}},
 		timestamp: aTS,
 	})
@@ -147,7 +147,7 @@ func TestTimestampCacheNoEviction(t *testing.T) {
 	// Increment time by the MinTSCacheWindow and add another key.
 	manual.Increment(MinTSCacheWindow.Nanoseconds())
 	tc.add(roachpb.Key("b"), nil, clock.Now(), uuid.UUID{}, true)
-	tc.AddRequest(cacheRequest{
+	tc.AddRequest(&cacheRequest{
 		reads:     []roachpb.Span{{Key: roachpb.Key("d")}},
 		timestamp: clock.Now(),
 	})
@@ -171,7 +171,7 @@ func TestTimestampCacheExpandRequests(t *testing.T) {
 	// Increment time to the low water mark + 1.
 	start := clock.Now()
 	manual.Increment(1)
-	tc.AddRequest(cacheRequest{
+	tc.AddRequest(&cacheRequest{
 		span:      ab,
 		reads:     []roachpb.Span{{Key: roachpb.Key("a")}},
 		timestamp: clock.Now(),

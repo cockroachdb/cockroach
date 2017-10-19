@@ -567,7 +567,7 @@ func (tc *timestampCache) add(
 }
 
 // AddRequest adds the specified request to the cache in an unexpanded state.
-func (tc *timestampCache) AddRequest(req cacheRequest) {
+func (tc *timestampCache) AddRequest(req *cacheRequest) {
 	if len(req.reads) == 0 && len(req.writes) == 0 && req.txn.Key == nil {
 		// The request didn't contain any spans for the timestamp cache.
 		return
@@ -580,7 +580,7 @@ func (tc *timestampCache) AddRequest(req cacheRequest) {
 
 	tc.reqIDAlloc++
 	req.uniqueID = tc.reqIDAlloc
-	tc.requests.ReplaceOrInsert(&req)
+	tc.requests.ReplaceOrInsert(req)
 	tc.reqSpans += req.numSpans()
 	tc.bytes += req.size()
 
