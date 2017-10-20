@@ -48,6 +48,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/storage/tscache"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
@@ -1931,29 +1932,34 @@ func makeTSCacheRequest(
 	ba *roachpb.BatchRequest, br *roachpb.BatchResponse, span roachpb.RSpan,
 ) tscache.Request {
 	cr := tscache.Request{
-		Span:      span,
 		Timestamp: ba.Timestamp,
 	}
 	if ba.Txn != nil {
 		cr.TxnID = ba.Txn.ID
 	}
 
+	var alloc bufalloc.ByteAllocator
+	alloc, cr.Span = alloc.CopyRSpan(span)
+
 	for i, union := range ba.Requests {
 		args := union.GetInner()
 		if roachpb.UpdatesTimestampCache(args) {
 			header := args.Header()
+			var headerCopy roachpb.Span
 			switch args.(type) {
 			case *roachpb.DeleteRangeRequest:
 				// DeleteRange adds to the write timestamp cache to prevent
 				// subsequent writes from rewriting history.
-				cr.Writes = append(cr.Writes, header)
+				alloc, headerCopy = alloc.CopySpan(header)
+				cr.Writes = append(cr.Writes, headerCopy)
 			case *roachpb.EndTransactionRequest:
 				// EndTransaction adds to the write timestamp cache to ensure replays
 				// create a transaction record with WriteTooOld set.
 				//
 				// Note that TimestampCache.ExpandRequests lazily creates the
 				// transaction key from the request key.
-				cr.Txn = roachpb.Span{Key: header.Key}
+				alloc, headerCopy = alloc.CopySpan(header)
+				cr.Txn = headerCopy
 			case *roachpb.ScanRequest:
 				resp := br.Responses[i].GetInner().(*roachpb.ScanResponse)
 				if ba.Header.MaxSpanRequestKeys != 0 &&
@@ -1967,17 +1973,10 @@ func makeTSCacheRequest(
 					// to prevent phantom read anomalies. That means we can only
 					// perform this truncate if the scan requested a limited number of
 					// results and we hit that limit.
-
-					// Make a copy of the key to avoid holding on to the large buffer the
-					// key was allocated from for the response.
-					src := resp.Rows[len(resp.Rows)-1].Key
-					// Size the new key to be exactly what we need for key.Next() to not
-					// allocate.
-					key := make(roachpb.Key, len(src), len(src)+1)
-					copy(key, src)
-					header.EndKey = key.Next()
+					header.EndKey = resp.Rows[len(resp.Rows)-1].Key.Next()
 				}
-				cr.Reads = append(cr.Reads, header)
+				alloc, headerCopy = alloc.CopySpan(header)
+				cr.Reads = append(cr.Reads, headerCopy)
 			case *roachpb.ReverseScanRequest:
 				resp := br.Responses[i].GetInner().(*roachpb.ReverseScanResponse)
 				if ba.Header.MaxSpanRequestKeys != 0 &&
@@ -1985,17 +1984,13 @@ func makeTSCacheRequest(
 					// See comment in the ScanRequest case. For revert scans, results
 					// are returned in reverse order and we truncate the start key of
 					// the span.
-
-					// Make a copy of the key to avoid holding on to the large buffer the
-					// key was allocated from for the response.
-					src := resp.Rows[len(resp.Rows)-1].Key
-					key := make(roachpb.Key, len(src))
-					copy(key, src)
-					header.Key = key
+					header.Key = resp.Rows[len(resp.Rows)-1].Key
 				}
-				cr.Reads = append(cr.Reads, header)
+				alloc, headerCopy = alloc.CopySpan(header)
+				cr.Reads = append(cr.Reads, headerCopy)
 			default:
-				cr.Reads = append(cr.Reads, header)
+				alloc, headerCopy = alloc.CopySpan(header)
+				cr.Reads = append(cr.Reads, headerCopy)
 			}
 		}
 	}

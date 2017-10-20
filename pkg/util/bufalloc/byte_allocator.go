@@ -14,6 +14,10 @@
 
 package bufalloc
 
+import (
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
+)
+
 // ByteAllocator provides chunk allocation of []byte, amortizing the overhead
 // of each allocation. Because the underlying storage for the slices is shared,
 // they should share a similar lifetime in order to avoid pinning large amounts
@@ -60,4 +64,27 @@ func (a ByteAllocator) Copy(src []byte, extraCap int) (ByteAllocator, []byte) {
 	a, alloc = a.Alloc(len(src), extraCap)
 	copy(alloc, src)
 	return a, alloc
+}
+
+// CopySpan performs a deep copy of the provided Span.
+func (a ByteAllocator) CopySpan(src roachpb.Span) (ByteAllocator, roachpb.Span) {
+	var dst roachpb.Span
+	extraCap := 0
+	if len(src.EndKey) > 0 {
+		a, dst.EndKey = a.Copy(src.EndKey, 0)
+	} else {
+		extraCap = 1
+	}
+	a, dst.Key = a.Copy(src.Key, extraCap)
+	return a, dst
+}
+
+// CopyRSpan performs a deep copy of the provided RSpan.
+func (a ByteAllocator) CopyRSpan(src roachpb.RSpan) (ByteAllocator, roachpb.RSpan) {
+	var dst roachpb.Span
+	a, dst = a.CopySpan(src.AsRawSpanWithNoLocals())
+	return a, roachpb.RSpan{
+		Key:    roachpb.RKey(dst.Key),
+		EndKey: roachpb.RKey(dst.EndKey),
+	}
 }
