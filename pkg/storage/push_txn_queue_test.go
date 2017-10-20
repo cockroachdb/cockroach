@@ -259,6 +259,11 @@ func TestPushTxnQueueCancel(t *testing.T) {
 	}()
 
 	testutils.SucceedsSoon(t, func() error {
+		select {
+		case rwe := <-retCh:
+			t.Fatalf("MaybeWaitForPush terminated prematurely: %+v", rwe)
+		default:
+		}
 		expDeps := []uuid.UUID{pusher.ID}
 		if deps := ptq.GetDependents(txn.ID); !reflect.DeepEqual(deps, expDeps) {
 			return errors.Errorf("expected GetDependents %+v; got %+v", expDeps, deps)
