@@ -386,12 +386,14 @@ func (n *scanNode) computeOrdering(
 	var ordering orderingInfo
 
 	columnIDs, dirs := index.FullColumnIDs()
+	nullableCols := false
 
 	for i, colID := range columnIDs {
 		idx, ok := n.colIdxMap[colID]
 		if !ok {
 			panic(fmt.Sprintf("index refers to unknown column id %d", colID))
 		}
+		nullableCols = nullableCols || n.cols[idx].Nullable
 		if i < exactPrefix {
 			ordering.addConstantColumn(idx)
 		} else {
@@ -402,8 +404,11 @@ func (n *scanNode) computeOrdering(
 			ordering.addColumn(idx, dir)
 		}
 	}
-	// We included any implicit columns, so the results are unique.
-	ordering.isKey = true
+	// We included any implicit columns, so the results are unique (as long as no
+	// columns contain NULLs).
+	if !nullableCols {
+		ordering.isKey = true
+	}
 	return ordering
 }
 

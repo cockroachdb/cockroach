@@ -627,15 +627,13 @@ INSERT INTO bar VALUES (0, NULL), (1, NULL)
 query ITTTTT
 EXPLAIN (METADATA) SELECT * FROM bar ORDER BY baz, id
 ----
-0  scan  ·      ·          (id, baz)  +baz,key
-0  ·     table  bar@i_bar  ·          ·
-0  ·     spans  ALL        ·          ·
+0  sort  ·      ·          (id, baz)  +baz,+id
+0  ·     order  +baz,+id   ·          ·
+1  scan  ·      ·          (id, baz)  +baz
+1  ·     table  bar@i_bar  ·          ·
+1  ·     spans  ALL        ·          ·
 
-# Here rowsort is needed because the ORDER BY clause does not guarantee any
-# relative ordering between rows where baz is NULL. As we see above, because
-# this is a unique index, the ordering `+baz,+id` is deemed equivalent to just
-# `+baz`.
-query IT rowsort
+query IT
 SELECT * FROM bar ORDER BY baz, id
 ----
 0 NULL
