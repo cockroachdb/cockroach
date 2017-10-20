@@ -20,6 +20,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/util"
 )
 
 // varConvertFunc is a callback that is used when splitting filtering expressions (see splitFilter).
@@ -257,4 +258,102 @@ func splitFilter(
 		remainder = nil
 	}
 	return restricted, remainder
+}
+
+// extractNotNullConstraintsFromNotNullExpr deduces which IndexedVars must be
+// not NULL for expr to be not NULL. It is best-effort so there may be false
+// negatives (but no false positives).
+func extractNotNullConstraintsFromNotNullExpr(expr parser.TypedExpr) util.FastIntSet {
+	switch t := expr.(type) {
+	case *parser.IndexedVar:
+		var result util.FastIntSet
+		result.Add(t.Idx)
+		return result
+
+	case *parser.Tuple:
+		var result util.FastIntSet
+		for _, e := range t.Exprs {
+			result.UnionWith(extractNotNullConstraintsFromNotNullExpr(e.(parser.TypedExpr)))
+		}
+		return result
+
+	case *parser.BinaryExpr:
+		// For all binary operations, both operands must be not NULL.
+		left := extractNotNullConstraintsFromNotNullExpr(t.TypedLeft())
+		right := extractNotNullConstraintsFromNotNullExpr(t.TypedRight())
+		left.UnionWith(right)
+		return left
+
+	case *parser.ComparisonExpr:
+		if (t.Operator == parser.Is || t.Operator == parser.IsNot) && t.Right == parser.DNull {
+			return util.FastIntSet{}
+		}
+		if t.Operator == parser.In || t.Operator == parser.NotIn {
+			return extractNotNullConstraintsFromNotNullExpr(t.TypedLeft())
+		}
+		// For all other comparison operations, both operands must be not NULL.
+		left := extractNotNullConstraintsFromNotNullExpr(t.TypedLeft())
+		right := extractNotNullConstraintsFromNotNullExpr(t.TypedRight())
+		left.UnionWith(right)
+		return left
+
+	case *parser.ParenExpr:
+		return extractNotNullConstraintsFromNotNullExpr(t.TypedInnerExpr())
+
+	// TODO(radu): handle other expressions.
+
+	default:
+		return util.FastIntSet{}
+	}
+}
+
+// extractNotNullConstraints deduces which IndexedVars must be not-NULL for a
+// filter condition to pass. For example a filter "x > 5" implies that x is not
+// NULL; a filter "x > y" implies that both x and y are not NULL. It is
+// best-effort so there may be false negatives (but no false positives).
+func extractNotNullConstraints(filter parser.TypedExpr) util.FastIntSet {
+	if typ := filter.ResolvedType(); typ == parser.TypeNull {
+		return util.FastIntSet{}
+	} else if typ != parser.TypeBool {
+		panic(fmt.Sprintf("non-bool filter expression: %s (type: %s)", filter, filter.ResolvedType()))
+	}
+	switch t := filter.(type) {
+	case *parser.AndExpr:
+		left := extractNotNullConstraints(t.TypedLeft())
+		right := extractNotNullConstraints(t.TypedRight())
+		left.UnionWith(right)
+		return left
+
+	case *parser.OrExpr:
+		left := extractNotNullConstraints(t.TypedLeft())
+		right := extractNotNullConstraints(t.TypedRight())
+		left.IntersectionWith(right)
+		return left
+
+	case *parser.ParenExpr:
+		return extractNotNullConstraints(t.TypedInnerExpr())
+
+	case *parser.NotExpr:
+		// For the inner expression to be FALSE, it must not be NULL.
+		return extractNotNullConstraintsFromNotNullExpr(t.TypedInnerExpr())
+
+	case *parser.ComparisonExpr:
+		if t.Operator == parser.Is && t.Right == parser.DNull {
+			return util.FastIntSet{}
+		}
+
+		if (t.Operator == parser.IsNot && t.Right == parser.DNull) ||
+			t.Operator == parser.In || t.Operator == parser.NotIn {
+			return extractNotNullConstraintsFromNotNullExpr(t.TypedLeft())
+		}
+		// For all other comparison operations, both operands must be not NULL.
+		left := extractNotNullConstraintsFromNotNullExpr(t.TypedLeft())
+		right := extractNotNullConstraintsFromNotNullExpr(t.TypedRight())
+		left.UnionWith(right)
+		return left
+
+	default:
+		// For any expression to be TRUE, it must not be NULL.
+		return extractNotNullConstraintsFromNotNullExpr(filter)
+	}
 }
