@@ -61,10 +61,10 @@ query ITTTTT colnames
 EXPLAIN (VERBOSE) SELECT * FROM t WHERE v > 4 AND w > 30 ORDER BY v LIMIT 2
 ----
 Level  Type        Field   Description  Columns                      Ordering
-0      limit       ·       ·            (k, v, w)                    k!=NULL; weak-key(k,v); +v
+0      limit       ·       ·            (k, v, w)                    k!=NULL; v!=NULL; w!=NULL; key(k,v); +v
 0      ·           count   2            ·                            ·
-1      index-join  ·       ·            (k, v, w)                    k!=NULL; weak-key(k,v); +v
-2      scan        ·       ·            (k, v[omitted], w[omitted])  k!=NULL; weak-key(k,v); +v
+1      index-join  ·       ·            (k, v, w)                    k!=NULL; v!=NULL; w!=NULL; key(k,v); +v
+2      scan        ·       ·            (k, v[omitted], w[omitted])  k!=NULL; v!=NULL; w!=NULL; key(k,v); +v
 2      ·           table   t@t_v_idx    ·                            ·
 2      ·           spans   /5-          ·                            ·
 2      scan        ·       ·            (k, v, w)                    ·
