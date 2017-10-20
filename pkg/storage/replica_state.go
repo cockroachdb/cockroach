@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/storage/abortspan"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
@@ -655,12 +656,12 @@ func (rec ReplicaEvalContext) Engine() engine.Engine {
 	return rec.repl.store.Engine()
 }
 
-// AbortCache returns the Replica's AbortCache.
-func (rec ReplicaEvalContext) AbortCache() *AbortCache {
-	// Despite its name, the abort cache doesn't hold on-disk data in
+// AbortSpan returns the Replica's AbortSpan.
+func (rec ReplicaEvalContext) AbortSpan() *abortspan.AbortSpan {
+	// Despite its name, the AbortSpan doesn't hold on-disk data in
 	// memory. It just provides methods that take a Batch, so SpanSet
 	// declarations are enforced there.
-	return rec.repl.abortCache
+	return rec.repl.abortSpan
 }
 
 // pushTxnQueue returns the Replica's pushTxnQueue.

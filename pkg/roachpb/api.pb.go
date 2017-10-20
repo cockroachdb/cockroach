@@ -111,7 +111,7 @@
 		Transaction
 		Intent
 		Lease
-		AbortCacheEntry
+		AbortSpanEntry
 		CSVOptions
 		NotLeaseHolderError
 		NodeUnavailableError
