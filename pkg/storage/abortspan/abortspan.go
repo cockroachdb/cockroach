@@ -36,14 +36,6 @@ import (
 // is cleared from a range, and is consulted before read commands are processed
 // on a range.
 //
-// The AbortSpan stores responses in the underlying engine, using keys derived
-// from Range ID and txn ID. Note that the epoch number is not used to query the
-// cache: once aborted, even higher epochs are prohibited from reading data.
-// That's because, for better or worse, the intent resolution process clears
-// intents even from epochs higher than the txn meta used for clearing (see
-// engine.MVCCResolveWriteIntent), and this clearing can race with the new epoch
-// laying intents.
-//
 // An AbortSpan is not thread safe.
 type AbortSpan struct {
 	rangeID roachpb.RangeID
