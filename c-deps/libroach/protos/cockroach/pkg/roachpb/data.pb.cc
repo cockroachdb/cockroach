@@ -81,11 +81,11 @@ public:
  ::google::protobuf::internal::ExplicitlyConstructed<Lease>
      _instance;
 } _Lease_default_instance_;
-class AbortCacheEntryDefaultTypeInternal {
+class AbortSpanEntryDefaultTypeInternal {
 public:
- ::google::protobuf::internal::ExplicitlyConstructed<AbortCacheEntry>
+ ::google::protobuf::internal::ExplicitlyConstructed<AbortSpanEntry>
      _instance;
-} _AbortCacheEntry_default_instance_;
+} _AbortSpanEntry_default_instance_;
 class CSVOptionsDefaultTypeInternal {
 public:
  ::google::protobuf::internal::ExplicitlyConstructed<CSVOptions>
@@ -155,9 +155,9 @@ void TableStruct::InitDefaultsImpl() {
   ::google::protobuf::internal::OnShutdownDestroyMessage(
       &_Intent_default_instance_);_Lease_default_instance_._instance.DefaultConstruct();
   ::google::protobuf::internal::OnShutdownDestroyMessage(
-      &_Lease_default_instance_);_AbortCacheEntry_default_instance_._instance.DefaultConstruct();
+      &_Lease_default_instance_);_AbortSpanEntry_default_instance_._instance.DefaultConstruct();
   ::google::protobuf::internal::OnShutdownDestroyMessage(
-      &_AbortCacheEntry_default_instance_);_CSVOptions_default_instance_._instance.DefaultConstruct();
+      &_AbortSpanEntry_default_instance_);_CSVOptions_default_instance_._instance.DefaultConstruct();
   ::google::protobuf::internal::OnShutdownDestroyMessage(
       &_CSVOptions_default_instance_);_Value_default_instance_._instance.get_mutable()->timestamp_ = const_cast< ::cockroach::util::hlc::Timestamp*>(
       ::cockroach::util::hlc::Timestamp::internal_default_instance());
@@ -207,7 +207,7 @@ void TableStruct::InitDefaultsImpl() {
       ::cockroach::util::hlc::Timestamp::internal_default_instance());
   _Lease_default_instance_._instance.get_mutable()->proposed_ts_ = const_cast< ::cockroach::util::hlc::Timestamp*>(
       ::cockroach::util::hlc::Timestamp::internal_default_instance());
-  _AbortCacheEntry_default_instance_._instance.get_mutable()->timestamp_ = const_cast< ::cockroach::util::hlc::Timestamp*>(
+  _AbortSpanEntry_default_instance_._instance.get_mutable()->timestamp_ = const_cast< ::cockroach::util::hlc::Timestamp*>(
       ::cockroach::util::hlc::Timestamp::internal_default_instance());
 }
 
@@ -6029,20 +6029,20 @@ void Lease::set_epoch(::google::protobuf::int64 value) {
 // ===================================================================
 
 #if !defined(_MSC_VER) || _MSC_VER >= 1900
-const int AbortCacheEntry::kKeyFieldNumber;
-const int AbortCacheEntry::kTimestampFieldNumber;
-const int AbortCacheEntry::kPriorityFieldNumber;
+const int AbortSpanEntry::kKeyFieldNumber;
+const int AbortSpanEntry::kTimestampFieldNumber;
+const int AbortSpanEntry::kPriorityFieldNumber;
 #endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
-AbortCacheEntry::AbortCacheEntry()
+AbortSpanEntry::AbortSpanEntry()
   : ::google::protobuf::MessageLite(), _internal_metadata_(NULL) {
   if (GOOGLE_PREDICT_TRUE(this != internal_default_instance())) {
     protobuf_cockroach_2fpkg_2froachpb_2fdata_2eproto::InitDefaults();
   }
   SharedCtor();
-  // @@protoc_insertion_point(constructor:cockroach.roachpb.AbortCacheEntry)
+  // @@protoc_insertion_point(constructor:cockroach.roachpb.AbortSpanEntry)
 }
-AbortCacheEntry::AbortCacheEntry(const AbortCacheEntry& from)
+AbortSpanEntry::AbortSpanEntry(const AbortSpanEntry& from)
   : ::google::protobuf::MessageLite(),
       _internal_metadata_(NULL),
       _has_bits_(from._has_bits_),
@@ -6058,10 +6058,10 @@ AbortCacheEntry::AbortCacheEntry(const AbortCacheEntry& from)
     timestamp_ = NULL;
   }
   priority_ = from.priority_;
-  // @@protoc_insertion_point(copy_constructor:cockroach.roachpb.AbortCacheEntry)
+  // @@protoc_insertion_point(copy_constructor:cockroach.roachpb.AbortSpanEntry)
 }
 
-void AbortCacheEntry::SharedCtor() {
+void AbortSpanEntry::SharedCtor() {
   _cached_size_ = 0;
   key_.UnsafeSetDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
   ::memset(&timestamp_, 0, static_cast<size_t>(
@@ -6069,36 +6069,36 @@ void AbortCacheEntry::SharedCtor() {
       reinterpret_cast<char*>(&timestamp_)) + sizeof(priority_));
 }
 
-AbortCacheEntry::~AbortCacheEntry() {
-  // @@protoc_insertion_point(destructor:cockroach.roachpb.AbortCacheEntry)
+AbortSpanEntry::~AbortSpanEntry() {
+  // @@protoc_insertion_point(destructor:cockroach.roachpb.AbortSpanEntry)
   SharedDtor();
 }
 
-void AbortCacheEntry::SharedDtor() {
+void AbortSpanEntry::SharedDtor() {
   key_.DestroyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
   if (this != internal_default_instance()) delete timestamp_;
 }
 
-void AbortCacheEntry::SetCachedSize(int size) const {
+void AbortSpanEntry::SetCachedSize(int size) const {
   GOOGLE_SAFE_CONCURRENT_WRITES_BEGIN();
   _cached_size_ = size;
   GOOGLE_SAFE_CONCURRENT_WRITES_END();
 }
-const AbortCacheEntry& AbortCacheEntry::default_instance() {
+const AbortSpanEntry& AbortSpanEntry::default_instance() {
   protobuf_cockroach_2fpkg_2froachpb_2fdata_2eproto::InitDefaults();
   return *internal_default_instance();
 }
 
-AbortCacheEntry* AbortCacheEntry::New(::google::protobuf::Arena* arena) const {
-  AbortCacheEntry* n = new AbortCacheEntry;
+AbortSpanEntry* AbortSpanEntry::New(::google::protobuf::Arena* arena) const {
+  AbortSpanEntry* n = new AbortSpanEntry;
   if (arena != NULL) {
     arena->Own(n);
   }
   return n;
 }
 
-void AbortCacheEntry::Clear() {
-// @@protoc_insertion_point(message_clear_start:cockroach.roachpb.AbortCacheEntry)
+void AbortSpanEntry::Clear() {
+// @@protoc_insertion_point(message_clear_start:cockroach.roachpb.AbortSpanEntry)
   ::google::protobuf::uint32 cached_has_bits = 0;
   // Prevent compiler warnings about cached_has_bits being unused
   (void) cached_has_bits;
@@ -6119,7 +6119,7 @@ void AbortCacheEntry::Clear() {
   _internal_metadata_.Clear();
 }
 
-bool AbortCacheEntry::MergePartialFromCodedStream(
+bool AbortSpanEntry::MergePartialFromCodedStream(
     ::google::protobuf::io::CodedInputStream* input) {
 #define DO_(EXPRESSION) if (!GOOGLE_PREDICT_TRUE(EXPRESSION)) goto failure
   ::google::protobuf::uint32 tag;
@@ -6129,7 +6129,7 @@ bool AbortCacheEntry::MergePartialFromCodedStream(
               mutable_unknown_fields));
   ::google::protobuf::io::CodedOutputStream unknown_fields_stream(
       &unknown_fields_string, false);
-  // @@protoc_insertion_point(parse_start:cockroach.roachpb.AbortCacheEntry)
+  // @@protoc_insertion_point(parse_start:cockroach.roachpb.AbortSpanEntry)
   for (;;) {
     ::std::pair< ::google::protobuf::uint32, bool> p = input->ReadTagWithCutoffNoLastTag(127u);
     tag = p.first;
@@ -6182,17 +6182,17 @@ bool AbortCacheEntry::MergePartialFromCodedStream(
     }
   }
 success:
-  // @@protoc_insertion_point(parse_success:cockroach.roachpb.AbortCacheEntry)
+  // @@protoc_insertion_point(parse_success:cockroach.roachpb.AbortSpanEntry)
   return true;
 failure:
-  // @@protoc_insertion_point(parse_failure:cockroach.roachpb.AbortCacheEntry)
+  // @@protoc_insertion_point(parse_failure:cockroach.roachpb.AbortSpanEntry)
   return false;
 #undef DO_
 }
 
-void AbortCacheEntry::SerializeWithCachedSizes(
+void AbortSpanEntry::SerializeWithCachedSizes(
     ::google::protobuf::io::CodedOutputStream* output) const {
-  // @@protoc_insertion_point(serialize_start:cockroach.roachpb.AbortCacheEntry)
+  // @@protoc_insertion_point(serialize_start:cockroach.roachpb.AbortSpanEntry)
   ::google::protobuf::uint32 cached_has_bits = 0;
   (void) cached_has_bits;
 
@@ -6213,11 +6213,11 @@ void AbortCacheEntry::SerializeWithCachedSizes(
 
   output->WriteRaw(_internal_metadata_.unknown_fields().data(),
                    static_cast<int>(_internal_metadata_.unknown_fields().size()));
-  // @@protoc_insertion_point(serialize_end:cockroach.roachpb.AbortCacheEntry)
+  // @@protoc_insertion_point(serialize_end:cockroach.roachpb.AbortSpanEntry)
 }
 
-size_t AbortCacheEntry::ByteSizeLong() const {
-// @@protoc_insertion_point(message_byte_size_start:cockroach.roachpb.AbortCacheEntry)
+size_t AbortSpanEntry::ByteSizeLong() const {
+// @@protoc_insertion_point(message_byte_size_start:cockroach.roachpb.AbortSpanEntry)
   size_t total_size = 0;
 
   total_size += _internal_metadata_.unknown_fields().size();
@@ -6249,13 +6249,13 @@ size_t AbortCacheEntry::ByteSizeLong() const {
   return total_size;
 }
 
-void AbortCacheEntry::CheckTypeAndMergeFrom(
+void AbortSpanEntry::CheckTypeAndMergeFrom(
     const ::google::protobuf::MessageLite& from) {
-  MergeFrom(*::google::protobuf::down_cast<const AbortCacheEntry*>(&from));
+  MergeFrom(*::google::protobuf::down_cast<const AbortSpanEntry*>(&from));
 }
 
-void AbortCacheEntry::MergeFrom(const AbortCacheEntry& from) {
-// @@protoc_insertion_point(class_specific_merge_from_start:cockroach.roachpb.AbortCacheEntry)
+void AbortSpanEntry::MergeFrom(const AbortSpanEntry& from) {
+// @@protoc_insertion_point(class_specific_merge_from_start:cockroach.roachpb.AbortSpanEntry)
   GOOGLE_DCHECK_NE(&from, this);
   _internal_metadata_.MergeFrom(from._internal_metadata_);
   ::google::protobuf::uint32 cached_has_bits = 0;
@@ -6277,22 +6277,22 @@ void AbortCacheEntry::MergeFrom(const AbortCacheEntry& from) {
   }
 }
 
-void AbortCacheEntry::CopyFrom(const AbortCacheEntry& from) {
-// @@protoc_insertion_point(class_specific_copy_from_start:cockroach.roachpb.AbortCacheEntry)
+void AbortSpanEntry::CopyFrom(const AbortSpanEntry& from) {
+// @@protoc_insertion_point(class_specific_copy_from_start:cockroach.roachpb.AbortSpanEntry)
   if (&from == this) return;
   Clear();
   MergeFrom(from);
 }
 
-bool AbortCacheEntry::IsInitialized() const {
+bool AbortSpanEntry::IsInitialized() const {
   return true;
 }
 
-void AbortCacheEntry::Swap(AbortCacheEntry* other) {
+void AbortSpanEntry::Swap(AbortSpanEntry* other) {
   if (other == this) return;
   InternalSwap(other);
 }
-void AbortCacheEntry::InternalSwap(AbortCacheEntry* other) {
+void AbortSpanEntry::InternalSwap(AbortSpanEntry* other) {
   using std::swap;
   key_.Swap(&other->key_);
   swap(timestamp_, other->timestamp_);
@@ -6302,110 +6302,110 @@ void AbortCacheEntry::InternalSwap(AbortCacheEntry* other) {
   swap(_cached_size_, other->_cached_size_);
 }
 
-::std::string AbortCacheEntry::GetTypeName() const {
-  return "cockroach.roachpb.AbortCacheEntry";
+::std::string AbortSpanEntry::GetTypeName() const {
+  return "cockroach.roachpb.AbortSpanEntry";
 }
 
 #if PROTOBUF_INLINE_NOT_IN_HEADERS
-// AbortCacheEntry
+// AbortSpanEntry
 
-bool AbortCacheEntry::has_key() const {
+bool AbortSpanEntry::has_key() const {
   return (_has_bits_[0] & 0x00000001u) != 0;
 }
-void AbortCacheEntry::set_has_key() {
+void AbortSpanEntry::set_has_key() {
   _has_bits_[0] |= 0x00000001u;
 }
-void AbortCacheEntry::clear_has_key() {
+void AbortSpanEntry::clear_has_key() {
   _has_bits_[0] &= ~0x00000001u;
 }
-void AbortCacheEntry::clear_key() {
+void AbortSpanEntry::clear_key() {
   key_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
   clear_has_key();
 }
-const ::std::string& AbortCacheEntry::key() const {
-  // @@protoc_insertion_point(field_get:cockroach.roachpb.AbortCacheEntry.key)
+const ::std::string& AbortSpanEntry::key() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.AbortSpanEntry.key)
   return key_.GetNoArena();
 }
-void AbortCacheEntry::set_key(const ::std::string& value) {
+void AbortSpanEntry::set_key(const ::std::string& value) {
   set_has_key();
   key_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), value);
-  // @@protoc_insertion_point(field_set:cockroach.roachpb.AbortCacheEntry.key)
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.AbortSpanEntry.key)
 }
 #if LANG_CXX11
-void AbortCacheEntry::set_key(::std::string&& value) {
+void AbortSpanEntry::set_key(::std::string&& value) {
   set_has_key();
   key_.SetNoArena(
     &::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::move(value));
-  // @@protoc_insertion_point(field_set_rvalue:cockroach.roachpb.AbortCacheEntry.key)
+  // @@protoc_insertion_point(field_set_rvalue:cockroach.roachpb.AbortSpanEntry.key)
 }
 #endif
-void AbortCacheEntry::set_key(const char* value) {
+void AbortSpanEntry::set_key(const char* value) {
   GOOGLE_DCHECK(value != NULL);
   set_has_key();
   key_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::string(value));
-  // @@protoc_insertion_point(field_set_char:cockroach.roachpb.AbortCacheEntry.key)
+  // @@protoc_insertion_point(field_set_char:cockroach.roachpb.AbortSpanEntry.key)
 }
-void AbortCacheEntry::set_key(const void* value, size_t size) {
+void AbortSpanEntry::set_key(const void* value, size_t size) {
   set_has_key();
   key_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(),
       ::std::string(reinterpret_cast<const char*>(value), size));
-  // @@protoc_insertion_point(field_set_pointer:cockroach.roachpb.AbortCacheEntry.key)
+  // @@protoc_insertion_point(field_set_pointer:cockroach.roachpb.AbortSpanEntry.key)
 }
-::std::string* AbortCacheEntry::mutable_key() {
+::std::string* AbortSpanEntry::mutable_key() {
   set_has_key();
-  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.AbortCacheEntry.key)
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.AbortSpanEntry.key)
   return key_.MutableNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
-::std::string* AbortCacheEntry::release_key() {
-  // @@protoc_insertion_point(field_release:cockroach.roachpb.AbortCacheEntry.key)
+::std::string* AbortSpanEntry::release_key() {
+  // @@protoc_insertion_point(field_release:cockroach.roachpb.AbortSpanEntry.key)
   clear_has_key();
   return key_.ReleaseNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
-void AbortCacheEntry::set_allocated_key(::std::string* key) {
+void AbortSpanEntry::set_allocated_key(::std::string* key) {
   if (key != NULL) {
     set_has_key();
   } else {
     clear_has_key();
   }
   key_.SetAllocatedNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), key);
-  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.AbortCacheEntry.key)
+  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.AbortSpanEntry.key)
 }
 
-bool AbortCacheEntry::has_timestamp() const {
+bool AbortSpanEntry::has_timestamp() const {
   return (_has_bits_[0] & 0x00000002u) != 0;
 }
-void AbortCacheEntry::set_has_timestamp() {
+void AbortSpanEntry::set_has_timestamp() {
   _has_bits_[0] |= 0x00000002u;
 }
-void AbortCacheEntry::clear_has_timestamp() {
+void AbortSpanEntry::clear_has_timestamp() {
   _has_bits_[0] &= ~0x00000002u;
 }
-void AbortCacheEntry::clear_timestamp() {
+void AbortSpanEntry::clear_timestamp() {
   if (timestamp_ != NULL) timestamp_->::cockroach::util::hlc::Timestamp::Clear();
   clear_has_timestamp();
 }
-const ::cockroach::util::hlc::Timestamp& AbortCacheEntry::timestamp() const {
+const ::cockroach::util::hlc::Timestamp& AbortSpanEntry::timestamp() const {
   const ::cockroach::util::hlc::Timestamp* p = timestamp_;
-  // @@protoc_insertion_point(field_get:cockroach.roachpb.AbortCacheEntry.timestamp)
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.AbortSpanEntry.timestamp)
   return p != NULL ? *p : *reinterpret_cast<const ::cockroach::util::hlc::Timestamp*>(
       &::cockroach::util::hlc::_Timestamp_default_instance_);
 }
-::cockroach::util::hlc::Timestamp* AbortCacheEntry::mutable_timestamp() {
+::cockroach::util::hlc::Timestamp* AbortSpanEntry::mutable_timestamp() {
   set_has_timestamp();
   if (timestamp_ == NULL) {
     timestamp_ = new ::cockroach::util::hlc::Timestamp;
   }
-  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.AbortCacheEntry.timestamp)
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.AbortSpanEntry.timestamp)
   return timestamp_;
 }
-::cockroach::util::hlc::Timestamp* AbortCacheEntry::release_timestamp() {
-  // @@protoc_insertion_point(field_release:cockroach.roachpb.AbortCacheEntry.timestamp)
+::cockroach::util::hlc::Timestamp* AbortSpanEntry::release_timestamp() {
+  // @@protoc_insertion_point(field_release:cockroach.roachpb.AbortSpanEntry.timestamp)
   clear_has_timestamp();
   ::cockroach::util::hlc::Timestamp* temp = timestamp_;
   timestamp_ = NULL;
   return temp;
 }
-void AbortCacheEntry::set_allocated_timestamp(::cockroach::util::hlc::Timestamp* timestamp) {
+void AbortSpanEntry::set_allocated_timestamp(::cockroach::util::hlc::Timestamp* timestamp) {
   delete timestamp_;
   timestamp_ = timestamp;
   if (timestamp) {
@@ -6413,30 +6413,30 @@ void AbortCacheEntry::set_allocated_timestamp(::cockroach::util::hlc::Timestamp*
   } else {
     clear_has_timestamp();
   }
-  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.AbortCacheEntry.timestamp)
+  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.AbortSpanEntry.timestamp)
 }
 
-bool AbortCacheEntry::has_priority() const {
+bool AbortSpanEntry::has_priority() const {
   return (_has_bits_[0] & 0x00000004u) != 0;
 }
-void AbortCacheEntry::set_has_priority() {
+void AbortSpanEntry::set_has_priority() {
   _has_bits_[0] |= 0x00000004u;
 }
-void AbortCacheEntry::clear_has_priority() {
+void AbortSpanEntry::clear_has_priority() {
   _has_bits_[0] &= ~0x00000004u;
 }
-void AbortCacheEntry::clear_priority() {
+void AbortSpanEntry::clear_priority() {
   priority_ = 0;
   clear_has_priority();
 }
-::google::protobuf::int32 AbortCacheEntry::priority() const {
-  // @@protoc_insertion_point(field_get:cockroach.roachpb.AbortCacheEntry.priority)
+::google::protobuf::int32 AbortSpanEntry::priority() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.AbortSpanEntry.priority)
   return priority_;
 }
-void AbortCacheEntry::set_priority(::google::protobuf::int32 value) {
+void AbortSpanEntry::set_priority(::google::protobuf::int32 value) {
   set_has_priority();
   priority_ = value;
-  // @@protoc_insertion_point(field_set:cockroach.roachpb.AbortCacheEntry.priority)
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.AbortSpanEntry.priority)
 }
 
 #endif  // PROTOBUF_INLINE_NOT_IN_HEADERS

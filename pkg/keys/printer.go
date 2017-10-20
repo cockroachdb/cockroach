@@ -142,7 +142,7 @@ var (
 		ppFunc func(key roachpb.Key) string
 		psFunc func(rangeID roachpb.RangeID, input string) (string, roachpb.Key)
 	}{
-		{name: "AbortCache", suffix: LocalAbortCacheSuffix, ppFunc: abortCacheKeyPrint, psFunc: abortCacheKeyParse},
+		{name: "AbortSpan", suffix: LocalAbortSpanSuffix, ppFunc: abortSpanKeyPrint, psFunc: abortSpanKeyParse},
 		{name: "RaftTombstone", suffix: LocalRaftTombstoneSuffix},
 		{name: "RaftHardState", suffix: LocalRaftHardStateSuffix},
 		{name: "RaftAppliedIndex", suffix: LocalRaftAppliedIndexSuffix},
@@ -412,7 +412,7 @@ func (euu *errUglifyUnsupported) Error() string {
 	return fmt.Sprintf("unsupported pretty key: %s", euu.wrapped)
 }
 
-func abortCacheKeyParse(rangeID roachpb.RangeID, input string) (string, roachpb.Key) {
+func abortSpanKeyParse(rangeID roachpb.RangeID, input string) (string, roachpb.Key) {
 	var err error
 	input = mustShiftSlash(input)
 	_, input = mustShift(input[:len(input)-1])
@@ -423,10 +423,10 @@ func abortCacheKeyParse(rangeID roachpb.RangeID, input string) (string, roachpb.
 	if err != nil {
 		panic(&errUglifyUnsupported{err})
 	}
-	return "", AbortCacheKey(rangeID, id)
+	return "", AbortSpanKey(rangeID, id)
 }
 
-func abortCacheKeyPrint(key roachpb.Key) string {
+func abortSpanKeyPrint(key roachpb.Key) string {
 	_, id, err := encoding.DecodeBytesAscending([]byte(key), nil)
 	if err != nil {
 		return fmt.Sprintf("/%q/err:%v", key, err)
@@ -523,7 +523,7 @@ func prettyPrintInternal(key roachpb.Key, quoteRawKeys bool) string {
 // /Local/...                                        "\x01"+...
 // 		/Store/...                                     "\x01s"+...
 //		/RangeID/...                                   "\x01s"+[rangeid]
-//			/[rangeid]/AbortCache/[id]                   "\x01s"+[rangeid]+"abc-"+[id]
+//			/[rangeid]/AbortSpan/[id]                   "\x01s"+[rangeid]+"abc-"+[id]
 //			/[rangeid]/Lease						                 "\x01s"+[rangeid]+"rfll"
 //			/[rangeid]/RaftTombstone                     "\x01s"+[rangeid]+"rftb"
 //			/[rangeid]/RaftHardState						         "\x01s"+[rangeid]+"rfth"

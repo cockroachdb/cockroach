@@ -22,6 +22,7 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage/abortspan"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -40,7 +41,7 @@ func TestDeclareKeysResolveIntent(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	abortCacheKey := fmt.Sprintf(`1 1: /{Local/RangeID/99/r/AbortCache/"%s"-Min}`, id)
+	abortSpanKey := fmt.Sprintf(`1 1: /{Local/RangeID/99/r/AbortSpan/"%s"-Min}`, id)
 	desc := roachpb.RangeDescriptor{
 		RangeID:  99,
 		StartKey: roachpb.RKey("a"),
@@ -88,7 +89,7 @@ func TestDeclareKeysResolveIntent(t *testing.T) {
 					rir := roachpb.ResolveIntentRangeRequest(ri)
 					rir.EndKey = roachpb.Key("c")
 
-					ac := NewAbortCache(desc.RangeID)
+					ac := abortspan.New(desc.RangeID)
 
 					var spans SpanSet
 					batch := engine.NewBatch()
@@ -99,7 +100,7 @@ func TestDeclareKeysResolveIntent(t *testing.T) {
 					h.RangeID = desc.RangeID
 
 					cArgs := CommandArgs{Header: h}
-					cArgs.EvalCtx.repl = &Replica{abortCache: ac}
+					cArgs.EvalCtx.repl = &Replica{abortSpan: ac}
 
 					if !ranged {
 						cArgs.Args = &ri
@@ -115,8 +116,8 @@ func TestDeclareKeysResolveIntent(t *testing.T) {
 						}
 					}
 
-					if s := spans.String(); strings.Contains(s, abortCacheKey) != test.expDeclares {
-						t.Errorf("expected abort cache declared: %t, but got spans\n%s", test.expDeclares, s)
+					if s := spans.String(); strings.Contains(s, abortSpanKey) != test.expDeclares {
+						t.Errorf("expected AbortSpan declared: %t, but got spans\n%s", test.expDeclares, s)
 					}
 				})
 			}

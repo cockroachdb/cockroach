@@ -135,23 +135,23 @@ func DecodeRangeIDKey(
 	return roachpb.RangeID(rangeInt), infix, suffix, b, nil
 }
 
-// AbortCacheKey returns a range-local key by Range ID for an
-// abort cache entry, with detail specified by encoding the
+// AbortSpanKey returns a range-local key by Range ID for an
+// AbortSpan entry, with detail specified by encoding the
 // supplied transaction ID.
-func AbortCacheKey(rangeID roachpb.RangeID, txnID uuid.UUID) roachpb.Key {
-	return MakeRangeIDPrefixBuf(rangeID).AbortCacheKey(txnID)
+func AbortSpanKey(rangeID roachpb.RangeID, txnID uuid.UUID) roachpb.Key {
+	return MakeRangeIDPrefixBuf(rangeID).AbortSpanKey(txnID)
 }
 
-// DecodeAbortCacheKey decodes the provided abort cache entry,
+// DecodeAbortSpanKey decodes the provided AbortSpan entry,
 // returning the transaction ID.
-func DecodeAbortCacheKey(key roachpb.Key, dest []byte) (uuid.UUID, error) {
+func DecodeAbortSpanKey(key roachpb.Key, dest []byte) (uuid.UUID, error) {
 	_, _, suffix, detail, err := DecodeRangeIDKey(key)
 	if err != nil {
 		return uuid.UUID{}, err
 	}
-	if !bytes.Equal(suffix, LocalAbortCacheSuffix) {
-		return uuid.UUID{}, errors.Errorf("key %s does not contain the abort cache suffix %s",
-			key, LocalAbortCacheSuffix)
+	if !bytes.Equal(suffix, LocalAbortSpanSuffix) {
+		return uuid.UUID{}, errors.Errorf("key %s does not contain the AbortSpan suffix %s",
+			key, LocalAbortSpanSuffix)
 	}
 	// Decode the id.
 	detail, idBytes, err := encoding.DecodeBytesAscending(detail, dest)
@@ -367,7 +367,7 @@ func IsLocal(k roachpb.Key) bool {
 // However, not all local keys are addressable in the global map. Only range
 // local keys incorporating a range key (start key or transaction key) are
 // addressable (e.g. range metadata and txn records). Range local keys
-// incorporating the Range ID are not (e.g. abort cache entries, and range
+// incorporating the Range ID are not (e.g. AbortSpan entries, and range
 // stats).
 //
 // See AddrUpperBound which is to be used when `k` is the EndKey of an interval.
@@ -739,10 +739,10 @@ func (b RangeIDPrefixBuf) unreplicatedPrefix() roachpb.Key {
 	return append(roachpb.Key(b), localRangeIDUnreplicatedInfix...)
 }
 
-// AbortCacheKey returns a range-local key by Range ID for an abort cache
+// AbortSpanKey returns a range-local key by Range ID for an AbortSpan
 // entry, with detail specified by encoding the supplied transaction ID.
-func (b RangeIDPrefixBuf) AbortCacheKey(txnID uuid.UUID) roachpb.Key {
-	key := append(b.replicatedPrefix(), LocalAbortCacheSuffix...)
+func (b RangeIDPrefixBuf) AbortSpanKey(txnID uuid.UUID) roachpb.Key {
+	key := append(b.replicatedPrefix(), LocalAbortSpanSuffix...)
 	return encoding.EncodeBytesAscending(key, txnID.GetBytes())
 }
 
