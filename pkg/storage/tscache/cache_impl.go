@@ -502,7 +502,7 @@ func (tc *cacheImpl) add(
 }
 
 // AddRequest implements the Cache interface.
-func (tc *cacheImpl) AddRequest(req Request) {
+func (tc *cacheImpl) AddRequest(req *Request) {
 	if len(req.Reads) == 0 && len(req.Writes) == 0 && req.Txn.Key == nil {
 		// The request didn't contain any spans for the timestamp cache.
 		return
@@ -515,7 +515,7 @@ func (tc *cacheImpl) AddRequest(req Request) {
 
 	tc.reqIDAlloc++
 	req.uniqueID = tc.reqIDAlloc
-	tc.requests.ReplaceOrInsert(&req)
+	tc.requests.ReplaceOrInsert(req)
 	tc.reqSpans += req.numSpans()
 	tc.bytes += req.size()
 
@@ -549,6 +549,7 @@ func (tc *cacheImpl) AddRequest(req Request) {
 			panic(fmt.Sprintf("bad reqSize: %d < %d", tc.bytes, minReqSize))
 		}
 		tc.bytes -= minReqSize
+		minReq.release()
 	}
 }
 
@@ -596,6 +597,7 @@ func (tc *cacheImpl) ExpandRequests(span roachpb.RSpan, timestamp hlc.Timestamp)
 			// We set txnID=nil because we want hits for same txn ID.
 			tc.add(key, nil, req.Timestamp, uuid.UUID{}, false /* !readTSCache */)
 		}
+		req.release()
 	}
 }
 
