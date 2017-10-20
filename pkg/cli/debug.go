@@ -285,8 +285,8 @@ func tryRangeIDKey(kv engine.MVCCKeyValue) (string, error) {
 		}
 		return strconv.FormatBool(b), nil
 
-	case bytes.Equal(suffix, keys.LocalAbortCacheSuffix):
-		msg = &roachpb.AbortCacheEntry{}
+	case bytes.Equal(suffix, keys.LocalAbortSpanSuffix):
+		msg = &roachpb.AbortSpanEntry{}
 
 	case bytes.Equal(suffix, keys.LocalRangeLastGCSuffix):
 		msg = &hlc.Timestamp{}

@@ -12,7 +12,7 @@
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
-package storage
+package abortspan
 
 import (
 	"reflect"
@@ -38,38 +38,37 @@ func uuidFromString(input string) uuid.UUID {
 
 var (
 	testTxnID        = uuidFromString("0ce61c17-5eb4-4587-8c36-dcf4062ada4c")
-	testTxnID2       = uuidFromString("9855a1ef-8eb9-4c06-a106-cab1dda78a2b")
 	testTxnKey       = []byte("a")
 	testTxnTimestamp = hlc.Timestamp{WallTime: 123, Logical: 456}
 	testTxnPriority  = int32(123)
 )
 
-// createTestAbortCache creates an in-memory engine and
-// returns a abort cache using the supplied Range ID.
-func createTestAbortCache(
+// createTestAbortSpan creates an in-memory engine and
+// returns a AbortSpan using the supplied Range ID.
+func createTestAbortSpan(
 	t *testing.T, rangeID roachpb.RangeID, stopper *stop.Stopper,
-) (*AbortCache, engine.Engine) {
+) (*AbortSpan, engine.Engine) {
 	eng := engine.NewInMem(roachpb.Attributes{}, 1<<20)
 	stopper.AddCloser(eng)
-	return NewAbortCache(rangeID), eng
+	return New(rangeID), eng
 }
 
-// TestAbortCachePutGetClearData tests basic get & put functionality as well as
+// TestAbortSpanPutGetClearData tests basic get & put functionality as well as
 // clearing the cache.
-func TestAbortCachePutGetClearData(t *testing.T) {
+func TestAbortSpanPutGetClearData(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.Background())
-	sc, e := createTestAbortCache(t, 1, stopper)
+	sc, e := createTestAbortSpan(t, 1, stopper)
 	// Start with a get for an uncached id.
-	entry := roachpb.AbortCacheEntry{}
+	entry := roachpb.AbortSpanEntry{}
 	if aborted, readErr := sc.Get(context.Background(), e, testTxnID, &entry); aborted {
 		t.Errorf("expected not aborted for id %s", testTxnID)
 	} else if readErr != nil {
 		t.Fatalf("unexpected read error: %s", readErr)
 	}
 
-	entry = roachpb.AbortCacheEntry{
+	entry = roachpb.AbortSpanEntry{
 		Key:       testTxnKey,
 		Timestamp: testTxnTimestamp,
 		Priority:  testTxnPriority,
@@ -78,8 +77,8 @@ func TestAbortCachePutGetClearData(t *testing.T) {
 		t.Errorf("unexpected error putting response: %s", err)
 	}
 
-	tryHit := func(expAbort bool, expEntry roachpb.AbortCacheEntry) {
-		var actual roachpb.AbortCacheEntry
+	tryHit := func(expAbort bool, expEntry roachpb.AbortSpanEntry) {
+		var actual roachpb.AbortSpanEntry
 		if aborted, readErr := sc.Get(context.Background(), e, testTxnID, &actual); readErr != nil {
 			t.Errorf("unexpected failure getting response: %s", readErr)
 		} else if expAbort != aborted {
@@ -93,17 +92,17 @@ func TestAbortCachePutGetClearData(t *testing.T) {
 	if err := sc.ClearData(e); err != nil {
 		t.Error(err)
 	}
-	tryHit(false, roachpb.AbortCacheEntry{})
+	tryHit(false, roachpb.AbortSpanEntry{})
 }
 
-// TestAbortCacheEmptyParams tests operation with empty parameters.
-func TestAbortCacheEmptyParams(t *testing.T) {
+// TestAbortSpanEmptyParams tests operation with empty parameters.
+func TestAbortSpanEmptyParams(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.Background())
-	sc, e := createTestAbortCache(t, 1, stopper)
+	sc, e := createTestAbortSpan(t, 1, stopper)
 
-	entry := roachpb.AbortCacheEntry{
+	entry := roachpb.AbortSpanEntry{
 		Key:       testTxnKey,
 		Timestamp: testTxnTimestamp,
 		Priority:  testTxnPriority,
@@ -114,16 +113,16 @@ func TestAbortCacheEmptyParams(t *testing.T) {
 	}
 }
 
-// TestAbortCacheCopyInto tests that entries in one cache get
+// TestAbortSpanCopyInto tests that entries in one cache get
 // transferred correctly to another cache using CopyInto().
-func TestAbortCacheCopyInto(t *testing.T) {
+func TestAbortSpanCopyInto(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.Background())
-	rc1, e := createTestAbortCache(t, 1, stopper)
-	rc2, _ := createTestAbortCache(t, 2, stopper)
+	rc1, e := createTestAbortSpan(t, 1, stopper)
+	rc2, _ := createTestAbortSpan(t, 2, stopper)
 
-	entry := roachpb.AbortCacheEntry{
+	entry := roachpb.AbortSpanEntry{
 		Key:       testTxnKey,
 		Timestamp: testTxnTimestamp,
 		Priority:  testTxnPriority,
@@ -137,8 +136,8 @@ func TestAbortCacheCopyInto(t *testing.T) {
 	} else if expCount := 1; count != expCount {
 		t.Errorf("unexpected number of copied entries: %d", count)
 	}
-	for _, cache := range []*AbortCache{rc1, rc2} {
-		var actual roachpb.AbortCacheEntry
+	for _, cache := range []*AbortSpan{rc1, rc2} {
+		var actual roachpb.AbortSpanEntry
 		// Get should return 1 for both caches.
 		if aborted, readErr := cache.Get(context.Background(), e, testTxnID, &actual); !aborted || readErr != nil {
 			t.Errorf("unexpected failure getting response from source: %t, %s", aborted, readErr)
@@ -148,16 +147,16 @@ func TestAbortCacheCopyInto(t *testing.T) {
 	}
 }
 
-// TestAbortCacheCopyFrom tests that entries in one cache get
+// TestAbortSpanCopyFrom tests that entries in one cache get
 // transferred correctly to another cache using CopyFrom().
-func TestAbortCacheCopyFrom(t *testing.T) {
+func TestAbortSpanCopyFrom(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.Background())
-	rc1, e := createTestAbortCache(t, 1, stopper)
-	rc2, _ := createTestAbortCache(t, 2, stopper)
+	rc1, e := createTestAbortSpan(t, 1, stopper)
+	rc2, _ := createTestAbortSpan(t, 2, stopper)
 
-	entry := roachpb.AbortCacheEntry{
+	entry := roachpb.AbortSpanEntry{
 		Key:       testTxnKey,
 		Timestamp: testTxnTimestamp,
 		Priority:  testTxnPriority,
@@ -174,8 +173,8 @@ func TestAbortCacheCopyFrom(t *testing.T) {
 	}
 
 	// Get should hit both caches.
-	for i, cache := range []*AbortCache{rc1, rc2} {
-		var actual roachpb.AbortCacheEntry
+	for i, cache := range []*AbortSpan{rc1, rc2} {
+		var actual roachpb.AbortSpanEntry
 		if aborted, readErr := cache.Get(context.Background(), e, testTxnID, &actual); !aborted || readErr != nil {
 			t.Fatalf("%d: unexpected read error: %t, %s", i, aborted, readErr)
 		} else if !reflect.DeepEqual(entry, actual) {

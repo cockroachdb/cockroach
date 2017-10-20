@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage/abortspan"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -56,13 +57,13 @@ const (
 	// larger than the heartbeat interval used by the coordinator.
 	txnCleanupThreshold = time.Hour
 
-	// abortCacheAgeThreshold is the duration after which abort cache entries
+	// abortSpanAgeThreshold is the duration after which AbortSpan entries
 	// of transactions are garbage collected.
 	// It's important that this is kept aligned with the (maximum) heartbeat
 	// interval used by transaction coordinators throughout the cluster to make
 	// sure that no coordinator can run with a transaction which has been
-	// aborted and whose abort cache entry is being deleted.
-	abortCacheAgeThreshold = 5 * base.DefaultHeartbeatInterval
+	// aborted and whose AbortSpan entry is being deleted.
+	abortSpanAgeThreshold = 5 * base.DefaultHeartbeatInterval
 
 	// Thresholds used to decide whether to queue for GC based
 	// on keys and intents.
@@ -84,7 +85,7 @@ const (
 //  - GC of version data via TTL expiration (and more complex schemes
 //    as implemented going forward).
 //  - Resolve extant write intents (pushing their transactions).
-//  - GC of old transaction and abort cache entries. This should include
+//  - GC of old transaction and AbortSpan entries. This should include
 //    most committed entries almost immediately and, after a threshold on
 //    inactivity, all others.
 //
@@ -481,7 +482,7 @@ func processLocalKeyRange(
 	return gcKeys, err
 }
 
-// processAbortCache iterates through the local abort cache entries
+// processAbortSpan iterates through the local AbortSpan entries
 // and collects entries which indicate that a client which was running
 // this transaction must have realized that it has been aborted (due to
 // heartbeating having failed). The parameter minAge is typically a
@@ -490,7 +491,7 @@ func processLocalKeyRange(
 // TODO(tschottdorf): this could be done in Replica.GC itself, but it's
 // handy to have it here for stats (though less performant due to sending
 // all of the keys over the wire).
-func processAbortCache(
+func processAbortSpan(
 	ctx context.Context,
 	snap engine.Reader,
 	rangeID roachpb.RangeID,
@@ -499,10 +500,10 @@ func processAbortCache(
 	pushTxn pushFunc,
 ) []roachpb.GCRequest_GCKey {
 	var gcKeys []roachpb.GCRequest_GCKey
-	abortCache := NewAbortCache(rangeID)
+	abortSpan := abortspan.New(rangeID)
 	infoMu.Lock()
 	defer infoMu.Unlock()
-	abortCache.Iterate(ctx, snap, func(key []byte, v roachpb.AbortCacheEntry) {
+	abortSpan.Iterate(ctx, snap, func(key []byte, v roachpb.AbortSpanEntry) {
 		infoMu.AbortSpanTotal++
 		if v.Timestamp.Less(threshold) {
 			infoMu.AbortSpanGCNum++
@@ -515,15 +516,15 @@ func processAbortCache(
 // process iterates through all keys in a replica's range, calling the garbage
 // collector for each key and associated set of values. GC'd keys are batched
 // into GC calls. Extant intents are resolved if intents are older than
-// intentAgeThreshold. The transaction and abort cache records are also
+// intentAgeThreshold. The transaction and AbortSpan records are also
 // scanned and old entries evicted. During normal operation, both of these
 // records are cleaned up when their respective transaction finishes, so the
 // amount of work done here is expected to be small.
 //
 // Some care needs to be taken to avoid cyclic recreation of entries during GC:
 // * a Push initiated due to an intent may recreate a transaction entry
-// * resolving an intent may write a new abort cache entry
-// * obtaining the transaction for a abort cache entry requires a Push
+// * resolving an intent may write a new AbortSpan entry
+// * obtaining the transaction for a AbortSpan entry requires a Push
 //
 // The following order is taken below:
 // 1) collect all intents with sufficiently old txn record
@@ -531,8 +532,8 @@ func processAbortCache(
 // 3) scan the transaction table, collecting abandoned or completed txns
 // 4) push all of these transactions (possibly recreating entries)
 // 5) resolve all intents (unless the txn is still PENDING), which will recreate
-//    abort cache entries (but with the txn timestamp; i.e. likely gc'able)
-// 6) scan the abort cache table for old entries
+//    AbortSpan entries (but with the txn timestamp; i.e. likely gc'able)
+// 6) scan the AbortSpan table for old entries
 // 7) push these transactions (again, recreating txn entries).
 // 8) send a GCRequest.
 func (gcq *gcQueue) process(ctx context.Context, repl *Replica, sysCfg config.SystemConfig) error {
@@ -657,13 +658,13 @@ type GCInfo struct {
 	// TxnSpanGCThreshold is the cutoff for transaction span GC. Transactions
 	// with a smaller LastActive() were considered for GC.
 	TxnSpanGCThreshold hlc.Timestamp
-	// AbortSpanTotal is the total number of transactions present in the abort cache.
+	// AbortSpanTotal is the total number of transactions present in the AbortSpan.
 	AbortSpanTotal int
-	// AbortSpanConsidered is the number of abort cache entries old enough to be
+	// AbortSpanConsidered is the number of AbortSpan entries old enough to be
 	// considered for removal. An "entry" corresponds to one transaction;
 	// more than one key-value pair may be associated with it.
 	AbortSpanConsidered int
-	// AbortSpanGCNum is the number of abort cache entries fit for removal (due
+	// AbortSpanGCNum is the number of AbortSpan entries fit for removal (due
 	// to their transactions having terminated).
 	AbortSpanGCNum int
 	// PushTxn is the total number of pushes attempted in this cycle.
@@ -747,7 +748,7 @@ func RunGC(
 	intentExp.WallTime -= intentAgeThreshold.Nanoseconds()
 	txnExp := now
 	txnExp.WallTime -= txnCleanupThreshold.Nanoseconds()
-	abortSpanGCThreshold := now.Add(-int64(abortCacheAgeThreshold), 0)
+	abortSpanGCThreshold := now.Add(-int64(abortSpanAgeThreshold), 0)
 
 	gc := engine.MakeGarbageCollector(now, policy)
 	infoMu.Threshold = gc.Threshold
@@ -902,9 +903,9 @@ func RunGC(
 		return nil, GCInfo{}, err
 	}
 
-	// Clean up the abort cache.
-	log.Event(ctx, "processing abort cache")
-	gcKeys = append(gcKeys, processAbortCache(
+	// Clean up the AbortSpan.
+	log.Event(ctx, "processing AbortSpan")
+	gcKeys = append(gcKeys, processAbortSpan(
 		ctx, snap, desc.RangeID, abortSpanGCThreshold, &infoMu, pushTxnFn)...)
 	return gcKeys, infoMu.GCInfo, nil
 }
