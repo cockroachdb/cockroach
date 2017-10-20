@@ -816,21 +816,24 @@ func (m *multiTestContext) addStore(idx int) {
 	}
 	store.WaitForInit()
 
+	ran := struct {
+		sync.Once
+		ch chan struct{}
+	}{
+		ch: make(chan struct{}),
+	}
 	m.nodeLivenesses[idx].StartHeartbeat(ctx, stopper, func(ctx context.Context) {
 		now := m.clock.Now()
 		if err := store.WriteLastUpTimestamp(ctx, now); err != nil {
 			log.Warning(ctx, err)
 		}
+		ran.Do(func() {
+			close(ran.ch)
+		})
 	})
-	// Wait until we see the first heartbeat.
-	testutils.SucceedsSoon(m.t, func() error {
-		if live, err := m.nodeLivenesses[idx].IsLive(nodeID); err != nil {
-			return err
-		} else if !live {
-			return errors.Errorf("node %d not yet live", nodeID)
-		}
-		return nil
-	})
+	// Wait until we see the first heartbeat by waiting for the callback (which
+	// fires *after* the node becomes live).
+	<-ran.ch
 }
 
 func (m *multiTestContext) nodeDesc(nodeID roachpb.NodeID) *roachpb.NodeDescriptor {
