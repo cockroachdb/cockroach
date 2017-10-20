@@ -8623,67 +8623,67 @@ func TestMakeTimestampCacheRequest(t *testing.T) {
 		maxKeys  int64
 		req      roachpb.Request
 		resp     roachpb.Response
-		expected tscache.Request
+		expected *tscache.Request
 	}{
 		{
 			0,
 			&roachpb.ScanRequest{Span: ac},
 			&roachpb.ScanResponse{},
-			tscache.Request{Reads: []roachpb.Span{ac}},
+			&tscache.Request{Reads: []roachpb.Span{ac}},
 		},
 		{
 			0,
 			&roachpb.ScanRequest{Span: ac},
 			&roachpb.ScanResponse{Rows: []roachpb.KeyValue{{Key: a}}},
-			tscache.Request{Reads: []roachpb.Span{ac}},
+			&tscache.Request{Reads: []roachpb.Span{ac}},
 		},
 		{
 			2,
 			&roachpb.ScanRequest{Span: ac},
 			&roachpb.ScanResponse{},
-			tscache.Request{Reads: []roachpb.Span{ac}},
+			&tscache.Request{Reads: []roachpb.Span{ac}},
 		},
 		{
 			2,
 			&roachpb.ScanRequest{Span: ac},
 			&roachpb.ScanResponse{Rows: []roachpb.KeyValue{{Key: a}}},
-			tscache.Request{Reads: []roachpb.Span{ac}},
+			&tscache.Request{Reads: []roachpb.Span{ac}},
 		},
 		{
 			2,
 			&roachpb.ScanRequest{Span: ac},
 			&roachpb.ScanResponse{Rows: []roachpb.KeyValue{{Key: a}, {Key: b}}},
-			tscache.Request{Reads: []roachpb.Span{{Key: a, EndKey: b.Next()}}},
+			&tscache.Request{Reads: []roachpb.Span{{Key: a, EndKey: b.Next()}}},
 		},
 		{
 			0,
 			&roachpb.ReverseScanRequest{Span: ac},
 			&roachpb.ReverseScanResponse{},
-			tscache.Request{Reads: []roachpb.Span{ac}},
+			&tscache.Request{Reads: []roachpb.Span{ac}},
 		},
 		{
 			0,
 			&roachpb.ReverseScanRequest{Span: ac},
 			&roachpb.ReverseScanResponse{Rows: []roachpb.KeyValue{{Key: a}}},
-			tscache.Request{Reads: []roachpb.Span{ac}},
+			&tscache.Request{Reads: []roachpb.Span{ac}},
 		},
 		{
 			2,
 			&roachpb.ReverseScanRequest{Span: ac},
 			&roachpb.ReverseScanResponse{},
-			tscache.Request{Reads: []roachpb.Span{ac}},
+			&tscache.Request{Reads: []roachpb.Span{ac}},
 		},
 		{
 			2,
 			&roachpb.ReverseScanRequest{Span: ac},
 			&roachpb.ReverseScanResponse{Rows: []roachpb.KeyValue{{Key: a}}},
-			tscache.Request{Reads: []roachpb.Span{ac}},
+			&tscache.Request{Reads: []roachpb.Span{ac}},
 		},
 		{
 			2,
 			&roachpb.ReverseScanRequest{Span: ac},
 			&roachpb.ReverseScanResponse{Rows: []roachpb.KeyValue{{Key: c}, {Key: b}}},
-			tscache.Request{Reads: []roachpb.Span{{Key: b, EndKey: c}}},
+			&tscache.Request{Reads: []roachpb.Span{{Key: b, EndKey: c}}},
 		},
 	}
 	for _, c := range testCases {

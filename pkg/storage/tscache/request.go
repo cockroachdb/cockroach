@@ -15,6 +15,8 @@
 package tscache
 
 import (
+	"sync"
+
 	"github.com/google/btree"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -77,4 +79,33 @@ func (cr *Request) size() uint64 {
 		n += cacheEntrySize(interval.Comparable(cr.Txn.Key), nil)
 	}
 	return n
+}
+
+func (cr *Request) release() {
+	for i := range cr.Reads {
+		cr.Reads[i] = roachpb.Span{}
+	}
+	*cr = Request{
+		Reads: cr.Reads[:0],
+	}
+	requestPool.Put(cr)
+}
+
+type requestAlloc struct {
+	cr    Request
+	spans [2]roachpb.Span
+}
+
+var requestPool = sync.Pool{
+	New: func() interface{} {
+		crAlloc := new(requestAlloc)
+		cr := &crAlloc.cr
+		cr.Reads = crAlloc.spans[:0]
+		return cr
+	},
+}
+
+// NewRequest returns a new Request object.
+func NewRequest() *Request {
+	return requestPool.Get().(*Request)
 }

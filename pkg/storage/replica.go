@@ -1930,10 +1930,9 @@ func (ec *endCmds) done(br *roachpb.BatchResponse, pErr *roachpb.Error, retry pr
 
 func makeTSCacheRequest(
 	ba *roachpb.BatchRequest, br *roachpb.BatchResponse, span roachpb.RSpan,
-) tscache.Request {
-	cr := tscache.Request{
-		Timestamp: ba.Timestamp,
-	}
+) *tscache.Request {
+	cr := tscache.NewRequest()
+	cr.Timestamp = ba.Timestamp
 	if ba.Txn != nil {
 		cr.TxnID = ba.Txn.ID
 	}
