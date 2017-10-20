@@ -190,10 +190,11 @@ func TestIsEndOfStatement(t *testing.T) {
 	}
 
 	for _, test := range tests {
-		isEmpty, isEnd := isEndOfStatement(test.in)
+		isEmpty, lastTok := checkTokens(test.in)
 		if isEmpty != test.isEmpty {
 			t.Errorf("%q: isEmpty expected %v, got %v", test.in, test.isEmpty, isEmpty)
 		}
+		isEnd := isEndOfStatement(lastTok)
 		if isEnd != test.isEnd {
 			t.Errorf("%q: isEnd expected %v, got %v", test.in, test.isEnd, isEnd)
 		}
