@@ -33,6 +33,8 @@ import (
 const (
 	// PgServerVersion is the latest version of postgres that we claim to support.
 	PgServerVersion = "9.5.0"
+	// PgServerVersionNum is the latest version of postgres that we claim to support in the numeric format of "server_version_num".
+	PgServerVersionNum = "90500"
 )
 
 // sessionVar provides a unified interface for performing operations on
@@ -265,6 +267,11 @@ var varGen = map[string]sessionVar{
 	`server_version`: {
 		Get: func(*Session) string { return PgServerVersion },
 	},
+
+	`server_version_num`: {
+		Get: func(*Session) string { return PgServerVersionNum },
+	},
+
 	`session_user`: {
 		Get: func(session *Session) string { return session.User },
 	},

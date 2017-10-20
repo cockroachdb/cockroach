@@ -22,6 +22,9 @@ SHOW SEARCH_PATH
 statement error variable "server_version" cannot be reset
 RESET SERVER_VERSION
 
+statement error variable "server_version_num" cannot be reset
+RESET SERVER_VERSION_NUM
+
 # Lower case
 
 statement ok
