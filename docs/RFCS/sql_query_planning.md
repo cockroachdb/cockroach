@@ -376,7 +376,7 @@ Prep populate the memo as well. This will be determined in a later
 iteration.
 
 [The memo structure is discussed further in a separate
-RFC](https://github.com/cockroachdb/cockroach/pull/19220).
+RFC](data_structures_for_logical_planning.md)
 
 ### Properties
 
@@ -461,7 +461,7 @@ will grow incrementally over time in parallel with the query
 optimizer.
 
 [A separate RFC will outline some properties already envisioned to be
-useful initially.](https://github.com/cockroachdb/cockroach/pull/19366)
+useful initially.](sql_plan_properties.md)
 
 ### Cost model
 
@@ -639,7 +639,7 @@ becomes.
   to be performed incrementally, the existing AST-based planning code
   will be left in place and a parallel world if IR-based planning will
   be erected. This is discussed separately in the [data structures
-  RFC](https://github.com/cockroachdb/cockroach/pull/19220) which
+  RFC](data_structures_for_logical_planning.md) which
   discusses this initial implementation plan further.
 
 * Rewrite. Predicate push down and predicate propagation across joins.

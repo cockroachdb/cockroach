@@ -15,8 +15,8 @@ optimization.
 
 As such, this RFC is complementary to:
 
-- [RFC: SQL Logical planning](https://github.com/cockroachdb/cockroach/pull/19135)
-- [RFC: Data structures for logical planning](https://github.com/cockroachdb/cockroach/pull/19220)
+- [RFC: SQL Logical planning](sql_query_planning.md)
+- [RFC: Data structures for logical planning](data_structures_for_logical_planning.md)
 
 and focuses on the definition of "properties", with the other RFCs
 providing context on how they are to be used / integrated.
