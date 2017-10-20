@@ -225,8 +225,8 @@ func main() {
 				cmd := exec.Command("git", "diff")
 				cmd.Dir = dir
 				log.Println(cmd.Dir, cmd.Args)
-				if output, err := cmd.Output(); err != nil {
-					log.Fatal(err)
+				if output, err := cmd.CombinedOutput(); err != nil {
+					log.Fatal(err, output)
 				} else if len(output) > 0 {
 					foundDiff = true
 					log.Printf("unexpected diff:\n%s", output)
