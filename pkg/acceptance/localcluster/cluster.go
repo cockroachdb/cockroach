@@ -293,6 +293,10 @@ func (c *Cluster) makeNode(ctx context.Context, nodeIdx int, cfg NodeConfig) (*N
 		fmt.Sprintf("--cache=256MiB"),
 	}
 
+	if n.Cfg.LogDir != "" {
+		args = append(args, fmt.Sprintf("--log-dir=%s", n.Cfg.LogDir))
+	}
+
 	n.Cfg.ExtraArgs = append(args, cfg.ExtraArgs...)
 
 	if err := os.MkdirAll(n.logDir(), 0755); err != nil {
