@@ -197,12 +197,14 @@ func doExpandPlan(
 			return plan, err
 		}
 
-		ordering := planPhysicalProps(n.plan)
-		if !ordering.isEmpty() {
+		pp := planPhysicalProps(n.plan)
+		if !pp.isEmpty() {
 			// If any of the columns form a key, we already know that all rows are
 			// unique. Elide the distinctNode.
-			if len(ordering.keySets) > 0 {
-				return n.plan, nil
+			for _, k := range pp.weakKeys {
+				if k.SubsetOf(pp.notNullCols) {
+					return n.plan, nil
+				}
 			}
 
 			// The distinctNode can take advantage of any ordering. It only needs to
@@ -211,12 +213,12 @@ func doExpandPlan(
 			// on S).
 			n.columnsInOrder = make([]bool, len(planColumns(n.plan)))
 			for i := range n.columnsInOrder {
-				group := ordering.eqGroups.Find(i)
-				if ordering.constantCols.Contains(group) {
+				group := pp.eqGroups.Find(i)
+				if pp.constantCols.Contains(group) {
 					n.columnsInOrder[i] = true
 					continue
 				}
-				for _, g := range ordering.ordering {
+				for _, g := range pp.ordering {
 					if g.ColIdx == group {
 						n.columnsInOrder[i] = true
 						break

@@ -611,29 +611,35 @@ func (n *joinNode) joinOrdering() physicalProps {
 	// remain valid and can be propagated.
 
 	var leftEqSet, rightEqSet util.FastIntSet
-	for _, leftIdx := range n.pred.leftEqualityIndices {
+	for i, leftIdx := range n.pred.leftEqualityIndices {
 		leftEqSet.Add(leftIdx)
-	}
-	for _, rightIdx := range n.pred.rightEqualityIndices {
+		info.addNotNullColumn(leftCol(leftIdx))
+
+		rightIdx := n.pred.rightEqualityIndices[i]
 		rightEqSet.Add(rightIdx)
+		info.addNotNullColumn(rightCol(rightIdx))
+
+		if i < n.pred.numMergedEqualityColumns {
+			info.addNotNullColumn(i)
+		}
 	}
 
-	if leftOrd.groupContainsKey(leftEqSet) && rightOrd.groupContainsKey(rightEqSet) {
-		for _, k := range leftOrd.keySets {
+	if leftOrd.isKey(leftEqSet) && rightOrd.isKey(rightEqSet) {
+		for _, k := range leftOrd.weakKeys {
 			// Translate column indices.
 			var s util.FastIntSet
 			for c, ok := k.Next(0); ok; c, ok = k.Next(c + 1) {
 				s.Add(leftCol(c))
 			}
-			info.addKeySet(s)
+			info.addWeakKey(s)
 		}
-		for _, k := range rightOrd.keySets {
+		for _, k := range rightOrd.weakKeys {
 			// Translate column indices.
 			var s util.FastIntSet
 			for c, ok := k.Next(0); ok; c, ok = k.Next(c + 1) {
 				s.Add(rightCol(c))
 			}
-			info.addKeySet(s)
+			info.addWeakKey(s)
 		}
 	}
 
