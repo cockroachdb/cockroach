@@ -51,15 +51,15 @@ func TestMakeKey(t *testing.T) {
 	}
 }
 
-func TestAbortCacheEncodeDecode(t *testing.T) {
+func TestAbortSpanEncodeDecode(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	const rangeID = 123
 	testTxnID, err := uuid.FromString("0ce61c17-5eb4-4587-8c36-dcf4062ada4c")
 	if err != nil {
 		t.Fatal(err)
 	}
-	key := AbortCacheKey(rangeID, testTxnID)
-	txnID, err := DecodeAbortCacheKey(key, nil)
+	key := AbortSpanKey(rangeID, testTxnID)
+	txnID, err := DecodeAbortSpanKey(key, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -97,7 +97,7 @@ func TestKeyAddressError(t *testing.T) {
 			StoreGossipKey(),
 		},
 		"local range ID key .* is not addressable": {
-			AbortCacheKey(0, uuid.MakeV4()),
+			AbortSpanKey(0, uuid.MakeV4()),
 			RaftTombstoneKey(0),
 			RaftAppliedIndexKey(0),
 			RaftTruncatedStateKey(0),

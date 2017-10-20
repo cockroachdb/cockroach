@@ -546,7 +546,7 @@ func TestGCQueueTransactionTable(t *testing.T) {
 	now := manual.UnixNano()
 
 	gcTxnAndAC := now - txnCleanupThreshold.Nanoseconds()
-	gcACOnly := now - abortCacheAgeThreshold.Nanoseconds()
+	gcACOnly := now - abortSpanAgeThreshold.Nanoseconds()
 	if gcTxnAndAC >= gcACOnly {
 		t.Fatalf("test assumption violated due to changing constants; needs adjustment")
 	}
@@ -558,10 +558,10 @@ func TestGCQueueTransactionTable(t *testing.T) {
 		newStatus   roachpb.TransactionStatus // -1 for GCed
 		failResolve bool                      // do we want to fail resolves in this trial?
 		expResolve  bool                      // expect attempt at removing txn-persisted intents?
-		expAbortGC  bool                      // expect abort cache entries removed?
+		expAbortGC  bool                      // expect AbortSpan entries removed?
 	}
 	// Describes the state of the Txn table before the test.
-	// Many of the abort cache entries deleted wouldn't even be there, so don't
+	// Many of the AbortSpan entries deleted wouldn't even be there, so don't
 	// be confused by that.
 	testCases := map[string]spec{
 		// Too young, should not touch.
@@ -570,7 +570,7 @@ func TestGCQueueTransactionTable(t *testing.T) {
 			orig:      gcACOnly + 1,
 			newStatus: roachpb.PENDING,
 		},
-		// A little older, so the AbortCache gets cleaned up.
+		// A little older, so the AbortSpan gets cleaned up.
 		"ab": {
 			status:     roachpb.PENDING,
 			orig:       gcTxnAndAC + 1,
@@ -578,7 +578,7 @@ func TestGCQueueTransactionTable(t *testing.T) {
 			expAbortGC: true,
 		},
 		// Old and pending, but still heartbeat (so no Push attempted; it would succeed).
-		// It's old enough to delete the abort cache entry though.
+		// It's old enough to delete the AbortSpan entry though.
 		"ba": {
 			status:     roachpb.PENDING,
 			orig:       1, // immaterial
@@ -586,7 +586,7 @@ func TestGCQueueTransactionTable(t *testing.T) {
 			newStatus:  roachpb.PENDING,
 			expAbortGC: true,
 		},
-		// Not old enough for Txn GC, but old enough to remove the abort cache entry.
+		// Not old enough for Txn GC, but old enough to remove the AbortSpan entry.
 		"bb": {
 			status:     roachpb.ABORTED,
 			orig:       gcACOnly - 1,
@@ -595,7 +595,7 @@ func TestGCQueueTransactionTable(t *testing.T) {
 		},
 		// Old, pending and abandoned. Should push and abort it successfully,
 		// but not GC it just yet (this is an artifact of the implementation).
-		// The abort cache gets cleaned up though.
+		// The AbortSpan gets cleaned up though.
 		"c": {
 			status:     roachpb.PENDING,
 			orig:       gcTxnAndAC - 1,
@@ -610,7 +610,7 @@ func TestGCQueueTransactionTable(t *testing.T) {
 			expResolve: true,
 			expAbortGC: true,
 		},
-		// Committed and fresh, so no action. But the abort cache entry is old
+		// Committed and fresh, so no action. But the AbortSpan entry is old
 		// enough to be discarded.
 		"e": {
 			status:     roachpb.COMMITTED,
@@ -685,8 +685,8 @@ func TestGCQueueTransactionTable(t *testing.T) {
 				t.Fatal(err)
 			}
 		}
-		entry := roachpb.AbortCacheEntry{Key: txn.Key, Timestamp: txn.LastActive()}
-		if err := tc.repl.abortCache.Put(context.Background(), tc.engine, nil, txn.ID, &entry); err != nil {
+		entry := roachpb.AbortSpanEntry{Key: txn.Key, Timestamp: txn.LastActive()}
+		if err := tc.repl.abortSpan.Put(context.Background(), tc.engine, nil, txn.ID, &entry); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -725,13 +725,13 @@ func TestGCQueueTransactionTable(t *testing.T) {
 				return fmt.Errorf("%s: unexpected intent resolutions:\nexpected: %s\nobserved: %s",
 					strKey, expIntents, resolved[strKey])
 			}
-			entry := &roachpb.AbortCacheEntry{}
-			abortExists, err := tc.repl.abortCache.Get(context.Background(), tc.store.Engine(), txns[strKey].ID, entry)
+			entry := &roachpb.AbortSpanEntry{}
+			abortExists, err := tc.repl.abortSpan.Get(context.Background(), tc.store.Engine(), txns[strKey].ID, entry)
 			if err != nil {
 				t.Fatal(err)
 			}
 			if abortExists == sp.expAbortGC {
-				return fmt.Errorf("%s: expected abort cache gc: %t, found %+v", strKey, sp.expAbortGC, entry)
+				return fmt.Errorf("%s: expected AbortSpan gc: %t, found %+v", strKey, sp.expAbortGC, entry)
 			}
 		}
 		return nil

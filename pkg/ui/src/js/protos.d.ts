@@ -16458,128 +16458,128 @@ export namespace cockroach {
             public toJSON(): { [k: string]: any };
         }
 
-        type AbortCacheEntry$Properties = {
+        type AbortSpanEntry$Properties = {
             key?: Uint8Array;
             timestamp?: cockroach.util.hlc.Timestamp$Properties;
             priority?: number;
         };
 
         /**
-         * Constructs a new AbortCacheEntry.
-         * @exports cockroach.roachpb.AbortCacheEntry
+         * Constructs a new AbortSpanEntry.
+         * @exports cockroach.roachpb.AbortSpanEntry
          * @constructor
-         * @param {cockroach.roachpb.AbortCacheEntry$Properties=} [properties] Properties to set
+         * @param {cockroach.roachpb.AbortSpanEntry$Properties=} [properties] Properties to set
          */
-        class AbortCacheEntry {
+        class AbortSpanEntry {
 
             /**
-             * Constructs a new AbortCacheEntry.
-             * @exports cockroach.roachpb.AbortCacheEntry
+             * Constructs a new AbortSpanEntry.
+             * @exports cockroach.roachpb.AbortSpanEntry
              * @constructor
-             * @param {cockroach.roachpb.AbortCacheEntry$Properties=} [properties] Properties to set
+             * @param {cockroach.roachpb.AbortSpanEntry$Properties=} [properties] Properties to set
              */
-            constructor(properties?: cockroach.roachpb.AbortCacheEntry$Properties);
+            constructor(properties?: cockroach.roachpb.AbortSpanEntry$Properties);
 
             /**
-             * AbortCacheEntry key.
+             * AbortSpanEntry key.
              * @type {Uint8Array}
              */
             public key: Uint8Array;
 
             /**
-             * AbortCacheEntry timestamp.
+             * AbortSpanEntry timestamp.
              * @type {(cockroach.util.hlc.Timestamp$Properties|null)}
              */
             public timestamp: (cockroach.util.hlc.Timestamp$Properties|null);
 
             /**
-             * AbortCacheEntry priority.
+             * AbortSpanEntry priority.
              * @type {number}
              */
             public priority: number;
 
             /**
-             * Creates a new AbortCacheEntry instance using the specified properties.
-             * @param {cockroach.roachpb.AbortCacheEntry$Properties=} [properties] Properties to set
-             * @returns {cockroach.roachpb.AbortCacheEntry} AbortCacheEntry instance
+             * Creates a new AbortSpanEntry instance using the specified properties.
+             * @param {cockroach.roachpb.AbortSpanEntry$Properties=} [properties] Properties to set
+             * @returns {cockroach.roachpb.AbortSpanEntry} AbortSpanEntry instance
              */
-            public static create(properties?: cockroach.roachpb.AbortCacheEntry$Properties): cockroach.roachpb.AbortCacheEntry;
+            public static create(properties?: cockroach.roachpb.AbortSpanEntry$Properties): cockroach.roachpb.AbortSpanEntry;
 
             /**
-             * Encodes the specified AbortCacheEntry message. Does not implicitly {@link cockroach.roachpb.AbortCacheEntry.verify|verify} messages.
-             * @param {cockroach.roachpb.AbortCacheEntry$Properties} message AbortCacheEntry message or plain object to encode
+             * Encodes the specified AbortSpanEntry message. Does not implicitly {@link cockroach.roachpb.AbortSpanEntry.verify|verify} messages.
+             * @param {cockroach.roachpb.AbortSpanEntry$Properties} message AbortSpanEntry message or plain object to encode
              * @param {$protobuf.Writer} [writer] Writer to encode to
              * @returns {$protobuf.Writer} Writer
              */
-            public static encode(message: cockroach.roachpb.AbortCacheEntry$Properties, writer?: $protobuf.Writer): $protobuf.Writer;
+            public static encode(message: cockroach.roachpb.AbortSpanEntry$Properties, writer?: $protobuf.Writer): $protobuf.Writer;
 
             /**
-             * Encodes the specified AbortCacheEntry message, length delimited. Does not implicitly {@link cockroach.roachpb.AbortCacheEntry.verify|verify} messages.
-             * @param {cockroach.roachpb.AbortCacheEntry$Properties} message AbortCacheEntry message or plain object to encode
+             * Encodes the specified AbortSpanEntry message, length delimited. Does not implicitly {@link cockroach.roachpb.AbortSpanEntry.verify|verify} messages.
+             * @param {cockroach.roachpb.AbortSpanEntry$Properties} message AbortSpanEntry message or plain object to encode
              * @param {$protobuf.Writer} [writer] Writer to encode to
              * @returns {$protobuf.Writer} Writer
              */
-            public static encodeDelimited(message: cockroach.roachpb.AbortCacheEntry$Properties, writer?: $protobuf.Writer): $protobuf.Writer;
+            public static encodeDelimited(message: cockroach.roachpb.AbortSpanEntry$Properties, writer?: $protobuf.Writer): $protobuf.Writer;
 
             /**
-             * Decodes an AbortCacheEntry message from the specified reader or buffer.
+             * Decodes an AbortSpanEntry message from the specified reader or buffer.
              * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
              * @param {number} [length] Message length if known beforehand
-             * @returns {cockroach.roachpb.AbortCacheEntry} AbortCacheEntry
+             * @returns {cockroach.roachpb.AbortSpanEntry} AbortSpanEntry
              * @throws {Error} If the payload is not a reader or valid buffer
              * @throws {$protobuf.util.ProtocolError} If required fields are missing
              */
-            public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): cockroach.roachpb.AbortCacheEntry;
+            public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): cockroach.roachpb.AbortSpanEntry;
 
             /**
-             * Decodes an AbortCacheEntry message from the specified reader or buffer, length delimited.
+             * Decodes an AbortSpanEntry message from the specified reader or buffer, length delimited.
              * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
-             * @returns {cockroach.roachpb.AbortCacheEntry} AbortCacheEntry
+             * @returns {cockroach.roachpb.AbortSpanEntry} AbortSpanEntry
              * @throws {Error} If the payload is not a reader or valid buffer
              * @throws {$protobuf.util.ProtocolError} If required fields are missing
              */
-            public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): cockroach.roachpb.AbortCacheEntry;
+            public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): cockroach.roachpb.AbortSpanEntry;
 
             /**
-             * Verifies an AbortCacheEntry message.
+             * Verifies an AbortSpanEntry message.
              * @param {Object.<string,*>} message Plain object to verify
              * @returns {?string} `null` if valid, otherwise the reason why it is not
              */
             public static verify(message: { [k: string]: any }): string;
 
             /**
-             * Creates an AbortCacheEntry message from a plain object. Also converts values to their respective internal types.
+             * Creates an AbortSpanEntry message from a plain object. Also converts values to their respective internal types.
              * @param {Object.<string,*>} object Plain object
-             * @returns {cockroach.roachpb.AbortCacheEntry} AbortCacheEntry
+             * @returns {cockroach.roachpb.AbortSpanEntry} AbortSpanEntry
              */
-            public static fromObject(object: { [k: string]: any }): cockroach.roachpb.AbortCacheEntry;
+            public static fromObject(object: { [k: string]: any }): cockroach.roachpb.AbortSpanEntry;
 
             /**
-             * Creates an AbortCacheEntry message from a plain object. Also converts values to their respective internal types.
-             * This is an alias of {@link cockroach.roachpb.AbortCacheEntry.fromObject}.
+             * Creates an AbortSpanEntry message from a plain object. Also converts values to their respective internal types.
+             * This is an alias of {@link cockroach.roachpb.AbortSpanEntry.fromObject}.
              * @function
              * @param {Object.<string,*>} object Plain object
-             * @returns {cockroach.roachpb.AbortCacheEntry} AbortCacheEntry
+             * @returns {cockroach.roachpb.AbortSpanEntry} AbortSpanEntry
              */
-            public static from(object: { [k: string]: any }): cockroach.roachpb.AbortCacheEntry;
+            public static from(object: { [k: string]: any }): cockroach.roachpb.AbortSpanEntry;
 
             /**
-             * Creates a plain object from an AbortCacheEntry message. Also converts values to other types if specified.
-             * @param {cockroach.roachpb.AbortCacheEntry} message AbortCacheEntry
+             * Creates a plain object from an AbortSpanEntry message. Also converts values to other types if specified.
+             * @param {cockroach.roachpb.AbortSpanEntry} message AbortSpanEntry
              * @param {$protobuf.ConversionOptions} [options] Conversion options
              * @returns {Object.<string,*>} Plain object
              */
-            public static toObject(message: cockroach.roachpb.AbortCacheEntry, options?: $protobuf.ConversionOptions): { [k: string]: any };
+            public static toObject(message: cockroach.roachpb.AbortSpanEntry, options?: $protobuf.ConversionOptions): { [k: string]: any };
 
             /**
-             * Creates a plain object from this AbortCacheEntry message. Also converts values to other types if specified.
+             * Creates a plain object from this AbortSpanEntry message. Also converts values to other types if specified.
              * @param {$protobuf.ConversionOptions} [options] Conversion options
              * @returns {Object.<string,*>} Plain object
              */
             public toObject(options?: $protobuf.ConversionOptions): { [k: string]: any };
 
             /**
-             * Converts this AbortCacheEntry to JSON.
+             * Converts this AbortSpanEntry to JSON.
              * @returns {Object.<string,*>} JSON object
              */
             public toJSON(): { [k: string]: any };

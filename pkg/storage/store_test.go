@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/storage/abortspan"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
@@ -637,9 +638,9 @@ func TestProcessRangeDescriptorUpdate(t *testing.T) {
 	}
 
 	r := &Replica{
-		RangeID:    desc.RangeID,
-		store:      store,
-		abortCache: NewAbortCache(desc.RangeID),
+		RangeID:   desc.RangeID,
+		store:     store,
+		abortSpan: abortspan.New(desc.RangeID),
 	}
 	r.raftMu.timedMutex = makeTimedMutex(nil)
 	if err := r.init(desc, store.Clock(), 0); err != nil {

@@ -2515,7 +2515,7 @@ func TestReplicaCommandQueueCancellationLocal(t *testing.T) {
 		// cache key to be declared here, and this is no more the case due to an
 		// optimization. Use an ABORTED resolve instead...
 		Status: roachpb.ABORTED,
-		// ... but with Poison=false which accesses the abort cache by *clearing*
+		// ... but with Poison=false which accesses the AbortSpan by *clearing*
 		// it. Poison=true would fail the test since the transaction would not be
 		// able to issue further commands.
 		Poison: false,
@@ -3332,10 +3332,10 @@ func TestReplicaNoTimestampIncrementWithinTxn(t *testing.T) {
 	}
 }
 
-// TestReplicaAbortCacheReadError verifies that an error is returned
-// to the client in the event that a abort cache entry is found but is
+// TestReplicaAbortSpanReadError verifies that an error is returned
+// to the client in the event that a AbortSpan entry is found but is
 // not decodable.
-func TestReplicaAbortCacheReadError(t *testing.T) {
+func TestReplicaAbortSpanReadError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	tc := testContext{}
 	stopper := stop.NewStopper()
@@ -3354,7 +3354,7 @@ func TestReplicaAbortCacheReadError(t *testing.T) {
 	}
 
 	// Overwrite Abort cache entry with garbage for the last op.
-	key := keys.AbortCacheKey(tc.repl.RangeID, txn.ID)
+	key := keys.AbortSpanKey(tc.repl.RangeID, txn.ID)
 	err := engine.MVCCPut(context.Background(), tc.engine, nil, key, hlc.Timestamp{}, roachpb.MakeValueFromString("never read in this test"), nil)
 	if err != nil {
 		t.Fatal(err)
@@ -3369,9 +3369,9 @@ func TestReplicaAbortCacheReadError(t *testing.T) {
 	}
 }
 
-// TestReplicaAbortCacheStoredTxnRetryError verifies that if a cached
+// TestReplicaAbortSpanStoredTxnRetryError verifies that if a cached
 // entry is present, a transaction restart error is returned.
-func TestReplicaAbortCacheStoredTxnRetryError(t *testing.T) {
+func TestReplicaAbortSpanStoredTxnRetryError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	tc := testContext{}
 	stopper := stop.NewStopper()
@@ -3382,12 +3382,12 @@ func TestReplicaAbortCacheStoredTxnRetryError(t *testing.T) {
 	{
 		txn := newTransaction("test", key, 10, enginepb.SERIALIZABLE, tc.Clock())
 		txn.Sequence = int32(1)
-		entry := roachpb.AbortCacheEntry{
+		entry := roachpb.AbortSpanEntry{
 			Key:       txn.Key,
 			Timestamp: txn.Timestamp,
 			Priority:  0,
 		}
-		if err := tc.repl.abortCache.Put(context.Background(), tc.engine, nil, txn.ID, &entry); err != nil {
+		if err := tc.repl.abortSpan.Put(context.Background(), tc.engine, nil, txn.ID, &entry); err != nil {
 			t.Fatal(err)
 		}
 
@@ -3481,10 +3481,10 @@ func TestTransactionRetryLeavesIntents(t *testing.T) {
 	}
 }
 
-// TestReplicaAbortCacheOnlyWithIntent verifies that a transactional command
+// TestReplicaAbortSpanOnlyWithIntent verifies that a transactional command
 // which goes through Raft but is not a transactional write (i.e. does not
-// leave intents) passes the abort cache unhindered.
-func TestReplicaAbortCacheOnlyWithIntent(t *testing.T) {
+// leave intents) passes the AbortSpan unhindered.
+func TestReplicaAbortSpanOnlyWithIntent(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	tc := testContext{}
 	stopper := stop.NewStopper()
@@ -3493,17 +3493,17 @@ func TestReplicaAbortCacheOnlyWithIntent(t *testing.T) {
 
 	txn := newTransaction("test", []byte("test"), 10, enginepb.SERIALIZABLE, tc.Clock())
 	txn.Sequence = 100
-	entry := roachpb.AbortCacheEntry{
+	entry := roachpb.AbortSpanEntry{
 		Key:       txn.Key,
 		Timestamp: txn.Timestamp,
 		Priority:  0,
 	}
-	if err := tc.repl.abortCache.Put(context.Background(), tc.engine, nil, txn.ID, &entry); err != nil {
+	if err := tc.repl.abortSpan.Put(context.Background(), tc.engine, nil, txn.ID, &entry); err != nil {
 		t.Fatal(err)
 	}
 
 	args, h := heartbeatArgs(txn, tc.Clock().Now())
-	// If the abort cache were active for this request, we'd catch a txn retry.
+	// If the AbortSpan were active for this request, we'd catch a txn retry.
 	// Instead, we expect the error from heartbeating a nonexistent txn.
 	if _, pErr := tc.SendWrappedWith(h, &args); !testutils.IsPError(pErr, "record not present") {
 		t.Fatal(pErr)
@@ -4167,8 +4167,8 @@ func TestEndTransactionWithErrors(t *testing.T) {
 func TestEndTransactionRollbackAbortedTransaction(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	for _, populateAbortCache := range []bool{false, true} {
-		t.Run(fmt.Sprintf("populateAbortCache=%t", populateAbortCache),
+	for _, populateAbortSpan := range []bool{false, true} {
+		t.Run(fmt.Sprintf("populateAbortSpan=%t", populateAbortSpan),
 			func(t *testing.T) {
 				tc := testContext{}
 				stopper := stop.NewStopper()
@@ -4208,7 +4208,7 @@ func TestEndTransactionRollbackAbortedTransaction(t *testing.T) {
 					t.Errorf("expected write intent error, but got %s", pErr)
 				}
 
-				if populateAbortCache {
+				if populateAbortSpan {
 					var txnRecord roachpb.Transaction
 					txnKey := keys.TransactionKey(txn.Key, txn.ID)
 					ok, err := engine.MVCCGetProto(
@@ -4644,7 +4644,7 @@ func TestEndTransactionResolveOnlyLocalIntents(t *testing.T) {
 
 // TestEndTransactionDirectGC verifies that after successfully resolving the
 // external intents of a transaction after EndTransaction, the transaction and
-// abort cache records are purged on both the local range and non-local range.
+// AbortSpan records are purged on both the local range and non-local range.
 func TestEndTransactionDirectGC(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	a := roachpb.Key("a")
@@ -4663,7 +4663,7 @@ func TestEndTransactionDirectGC(t *testing.T) {
 
 			ctx := log.WithLogTag(context.Background(), "testcase", i)
 
-			rightRepl, txn := setupResolutionTest(t, tc, testKey, splitKey, false /* generate abort cache entry */)
+			rightRepl, txn := setupResolutionTest(t, tc, testKey, splitKey, false /* generate AbortSpan entry */)
 
 			testutils.SucceedsSoon(t, func() error {
 				var gr roachpb.GetResponse
@@ -4680,16 +4680,16 @@ func TestEndTransactionDirectGC(t *testing.T) {
 					return errors.Errorf("%d: txn entry still there: %+v", i, gr)
 				}
 
-				var entry roachpb.AbortCacheEntry
-				if aborted, err := tc.repl.abortCache.Get(ctx, tc.engine, txn.ID, &entry); err != nil {
+				var entry roachpb.AbortSpanEntry
+				if aborted, err := tc.repl.abortSpan.Get(ctx, tc.engine, txn.ID, &entry); err != nil {
 					t.Fatal(err)
 				} else if aborted {
-					return errors.Errorf("%d: abort cache still populated: %v", i, entry)
+					return errors.Errorf("%d: AbortSpan still populated: %v", i, entry)
 				}
-				if aborted, err := rightRepl.abortCache.Get(ctx, tc.engine, txn.ID, &entry); err != nil {
+				if aborted, err := rightRepl.abortSpan.Get(ctx, tc.engine, txn.ID, &entry); err != nil {
 					t.Fatal(err)
 				} else if aborted {
-					t.Fatalf("%d: right-hand side abort cache still populated: %v", i, entry)
+					t.Fatalf("%d: right-hand side AbortSpan still populated: %v", i, entry)
 				}
 
 				return nil
@@ -4770,11 +4770,11 @@ func TestEndTransactionDirectGC_1PC(t *testing.T) {
 				t.Errorf("commit=%t: expected one phase commit", commit)
 			}
 
-			var entry roachpb.AbortCacheEntry
-			if aborted, err := tc.repl.abortCache.Get(context.Background(), tc.engine, txn.ID, &entry); err != nil {
+			var entry roachpb.AbortSpanEntry
+			if aborted, err := tc.repl.abortSpan.Get(context.Background(), tc.engine, txn.ID, &entry); err != nil {
 				t.Fatal(err)
 			} else if aborted {
-				t.Fatalf("commit=%t: abort cache still populated: %v", commit, entry)
+				t.Fatalf("commit=%t: AbortSpan still populated: %v", commit, entry)
 			}
 		}()
 	}
@@ -4931,11 +4931,11 @@ func TestReplicaResolveIntentNoWait(t *testing.T) {
 	})
 }
 
-// TestAbortCachePoisonOnResolve verifies that when an intent is
-// aborted, the abort cache on the respective Range is poisoned and
+// TestAbortSpanPoisonOnResolve verifies that when an intent is
+// aborted, the AbortSpan on the respective Range is poisoned and
 // the pushee is presented with a txn abort on its next contact with
 // the Range in the same epoch.
-func TestAbortCachePoisonOnResolve(t *testing.T) {
+func TestAbortSpanPoisonOnResolve(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	key := roachpb.Key("a")
 
@@ -4982,7 +4982,7 @@ func TestAbortCachePoisonOnResolve(t *testing.T) {
 		}
 
 		// Have the pusher run into the intent. That pushes our pushee and
-		// resolves the intent, which in turn should poison the abort cache.
+		// resolves the intent, which in turn should poison the AbortSpan.
 		var assert func(*roachpb.Error) error
 		if abort {
 			// Write/Write conflict will abort pushee.
@@ -5048,9 +5048,9 @@ func TestAbortCachePoisonOnResolve(t *testing.T) {
 	}
 }
 
-// TestAbortCacheError verifies that roachpb.Errors returned by checkIfTxnAborted
+// TestAbortSpanError verifies that roachpb.Errors returned by checkIfTxnAborted
 // have txns that are identical to txns stored in Transaction{Retry,Aborted}Error.
-func TestAbortCacheError(t *testing.T) {
+func TestAbortSpanError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	tc := testContext{}
 	stopper := stop.NewStopper()
@@ -5066,12 +5066,12 @@ func TestAbortCacheError(t *testing.T) {
 	key := roachpb.Key("k")
 	ts := txn.Timestamp.Next()
 	priority := int32(10)
-	entry := roachpb.AbortCacheEntry{
+	entry := roachpb.AbortSpanEntry{
 		Key:       key,
 		Timestamp: ts,
 		Priority:  priority,
 	}
-	if err := tc.repl.abortCache.Put(context.Background(), tc.engine, nil, txn.ID, &entry); err != nil {
+	if err := tc.repl.abortSpan.Put(context.Background(), tc.engine, nil, txn.ID, &entry); err != nil {
 		t.Fatal(err)
 	}
 
