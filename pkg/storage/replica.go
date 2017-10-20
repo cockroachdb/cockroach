@@ -1930,10 +1930,9 @@ func (ec *endCmds) done(br *roachpb.BatchResponse, pErr *roachpb.Error, retry pr
 
 func makeTSCacheRequest(
 	ba *roachpb.BatchRequest, br *roachpb.BatchResponse, span roachpb.RSpan,
-) tscache.Request {
-	cr := tscache.Request{
-		Timestamp: ba.Timestamp,
-	}
+) *tscache.Request {
+	cr := tscache.NewRequest()
+	cr.Timestamp = ba.Timestamp
 	if ba.Txn != nil {
 		cr.TxnID = ba.Txn.ID
 	}
@@ -1988,10 +1987,15 @@ func makeTSCacheRequest(
 		}
 	}
 
-	if readCount > 0 {
+	// Allocate slices for the read and write spans. NewRequest will return a
+	// Read slice with some space already allocated, so we try to use this
+	// wherever possible.
+	if cap(cr.Reads) < readCount {
+		// Maybe we can use the pre-allocated span slice for Writes?
+		cr.Writes = cr.Reads
 		cr.Reads = make([]roachpb.Span, 0, readCount)
 	}
-	if writeCount > 0 {
+	if cap(cr.Writes) < writeCount {
 		cr.Writes = make([]roachpb.Span, 0, writeCount)
 	}
 
