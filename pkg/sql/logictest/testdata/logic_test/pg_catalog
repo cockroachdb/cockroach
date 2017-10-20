@@ -1043,6 +1043,7 @@ max_index_keys                 32            NULL      NULL        NULL        s
 node_id                        1             NULL      NULL        NULL        string
 search_path                    ·             NULL      NULL        NULL        string
 server_version                 9.5.0         NULL      NULL        NULL        string
+server_version_num             90500         NULL      NULL        NULL        string
 session_user                   root          NULL      NULL        NULL        string
 sql_safe_updates               false         NULL      NULL        NULL        string
 standard_conforming_strings    on            NULL      NULL        NULL        string
@@ -1068,6 +1069,7 @@ max_index_keys                 32            NULL  user     NULL      32        
 node_id                        1             NULL  user     NULL      1             1
 search_path                    ·             NULL  user     NULL      ·             ·
 server_version                 9.5.0         NULL  user     NULL      9.5.0         9.5.0
+server_version_num             90500         NULL  user     NULL      90500         90500
 session_user                   root          NULL  user     NULL      root          root
 sql_safe_updates               false         NULL  user     NULL      false         false
 standard_conforming_strings    on            NULL  user     NULL      on            on
@@ -1093,6 +1095,7 @@ max_index_keys                 NULL    NULL     NULL     NULL        NULL
 node_id                        NULL    NULL     NULL     NULL        NULL
 search_path                    NULL    NULL     NULL     NULL        NULL
 server_version                 NULL    NULL     NULL     NULL        NULL
+server_version_num             NULL    NULL     NULL     NULL        NULL
 session_user                   NULL    NULL     NULL     NULL        NULL
 sql_safe_updates               NULL    NULL     NULL     NULL        NULL
 standard_conforming_strings    NULL    NULL     NULL     NULL        NULL
