@@ -244,6 +244,9 @@ func TestNodeHeartbeatCallback(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
+	// NB: since the heartbeat callback is invoked synchronously in
+	// `Heartbeat()` which this goroutine invoked, we don't need to wrap this in
+	// a retry.
 	if err := verifyUptimes(); err != nil {
 		t.Fatal(err)
 	}
