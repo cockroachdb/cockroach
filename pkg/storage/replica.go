@@ -42,6 +42,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/storage/abortspan"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
@@ -226,8 +227,8 @@ type Replica struct {
 	RangeID roachpb.RangeID // Should only be set by the constructor.
 
 	store        *Store
-	abortCache   *AbortCache   // Avoids anomalous reads after abort
-	pushTxnQueue *pushTxnQueue // Queues push txn attempts by txn ID
+	abortSpan   *abortspan.AbortSpan // Avoids anomalous reads after abort
+	pushTxnQueue *pushTxnQueue         // Queues push txn attempts by txn ID
 
 	// leaseholderStats tracks all incoming BatchRequests to the replica and which
 	// localities they come from in order to aid in lease rebalancing decisions.
@@ -581,7 +582,7 @@ func newReplica(rangeID roachpb.RangeID, store *Store) *Replica {
 		AmbientContext: store.cfg.AmbientCtx,
 		RangeID:        rangeID,
 		store:          store,
-		abortCache:     NewAbortCache(rangeID),
+		abortSpan:     abortspan.New(rangeID),
 		pushTxnQueue:   newPushTxnQueue(store),
 	}
 	r.mu.stateLoader = makeReplicaStateLoader(r.store.cfg.Settings, rangeID)
@@ -4791,21 +4792,21 @@ func (r *Replica) evaluateProposalInner(
 	return result
 }
 
-// checkIfTxnAborted checks the txn abort cache for the given
+// checkIfTxnAborted checks the txn AbortSpan for the given
 // transaction. In case the transaction has been aborted, return a
 // transaction abort error.
 func checkIfTxnAborted(
 	ctx context.Context, rec ReplicaEvalContext, b engine.Reader, txn roachpb.Transaction,
 ) *roachpb.Error {
-	var entry roachpb.AbortCacheEntry
-	aborted, err := rec.AbortCache().Get(ctx, b, txn.ID, &entry)
+	var entry roachpb.AbortSpanEntry
+	aborted, err := rec.AbortSpan().Get(ctx, b, txn.ID, &entry)
 	if err != nil {
-		return roachpb.NewError(NewReplicaCorruptionError(errors.Wrap(err, "could not read from abort cache")))
+		return roachpb.NewError(NewReplicaCorruptionError(errors.Wrap(err, "could not read from AbortSpan")))
 	}
 	if aborted {
 		// We hit the cache, so let the transaction restart.
 		if log.V(1) {
-			log.Infof(ctx, "found abort cache entry for %s with priority %d",
+			log.Infof(ctx, "found AbortSpan entry for %s with priority %d",
 				txn.ID.Short(), entry.Priority)
 		}
 		newTxn := txn.Clone()
@@ -5084,7 +5085,7 @@ func evaluateBatch(
 		// this check in that case.
 		if ba.IsTransactionWrite() || ba.Txn.Writing {
 			// If the request is asking to abort the transaction, then don't check the
-			// AbortCache; we don't want the request to be rejected if the transaction
+			// AbortSpan; we don't want the request to be rejected if the transaction
 			// has already been aborted.
 			singleAbort := ba.IsSingleEndTransactionRequest() &&
 				!ba.Requests[0].GetInner().(*roachpb.EndTransactionRequest).Commit

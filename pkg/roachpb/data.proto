@@ -367,13 +367,13 @@ message Lease {
   optional int64 epoch = 6 [(gogoproto.nullable) = true];
 }
 
-// AbortCacheEntry contains information about a transaction which has
-// been aborted. It's written to a range's abort cache if the range
+// AbortSpanEntry contains information about a transaction which has
+// been aborted. It's written to a range's AbortSpan if the range
 // may have contained intents of the aborted txn. In the event that
 // the same transaction attempts to read keys it may have written
 // previously, this entry informs the transaction that it has aborted
 // and must start fresh with an updated priority.
-message AbortCacheEntry {
+message AbortSpanEntry {
   option (gogoproto.populate) = true;
 
   // The key of the associated transaction.

@@ -52,7 +52,7 @@ var (
 	// via the meta range addressing indexes.
 	//
 	// Some local data are not replicated, such as the store's 'ident'
-	// record. Most local data are replicated, such as abort cache
+	// record. Most local data are replicated, such as AbortSpan
 	// entries and transaction rows, but are not addressable as normal
 	// MVCC values as part of transactions. Finally, some local data are
 	// stored as MVCC values and are addressable as part of distributed
@@ -94,7 +94,7 @@ var (
 	// encoded using EncodeUvarint. The specific sort of per-range
 	// metadata is identified by one of the suffixes listed below, along
 	// with potentially additional encoded key info, for instance in the
-	// case of abort cache entry.
+	// case of AbortSpan entry.
 	//
 	// NOTE: LocalRangeIDPrefix must be kept in sync with the value
 	// in storage/engine/rocksdb/db.cc.
@@ -106,10 +106,10 @@ var (
 	// same Range ID, so they can be manipulated either together or individually
 	// in a single scan.
 	localRangeIDReplicatedInfix = []byte("r")
-	// LocalAbortCacheSuffix is the suffix for abort cache entries. The
-	// abort cache protects a transaction from re-reading its own intents
+	// LocalAbortSpanSuffix is the suffix for AbortSpan entries. The
+	// AbortSpan protects a transaction from re-reading its own intents
 	// after it's been aborted.
-	LocalAbortCacheSuffix = []byte("abc-")
+	LocalAbortSpanSuffix = []byte("abc-")
 	// LocalRangeFrozenStatusSuffix is the suffix for a frozen status.
 	// No longer used; exists only to reserve the key so we don't use it.
 	LocalRangeFrozenStatusSuffix = []byte("fzn-")

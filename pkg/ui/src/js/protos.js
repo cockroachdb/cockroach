@@ -30171,24 +30171,24 @@ export const cockroach = $root.cockroach = (() => {
             return Lease;
         })();
 
-        roachpb.AbortCacheEntry = (function() {
+        roachpb.AbortSpanEntry = (function() {
 
             /**
-             * Properties of an AbortCacheEntry.
-             * @typedef cockroach.roachpb.AbortCacheEntry$Properties
+             * Properties of an AbortSpanEntry.
+             * @typedef cockroach.roachpb.AbortSpanEntry$Properties
              * @type {Object}
-             * @property {Uint8Array} [key] AbortCacheEntry key.
-             * @property {cockroach.util.hlc.Timestamp$Properties} [timestamp] AbortCacheEntry timestamp.
-             * @property {number} [priority] AbortCacheEntry priority.
+             * @property {Uint8Array} [key] AbortSpanEntry key.
+             * @property {cockroach.util.hlc.Timestamp$Properties} [timestamp] AbortSpanEntry timestamp.
+             * @property {number} [priority] AbortSpanEntry priority.
              */
 
             /**
-             * Constructs a new AbortCacheEntry.
-             * @exports cockroach.roachpb.AbortCacheEntry
+             * Constructs a new AbortSpanEntry.
+             * @exports cockroach.roachpb.AbortSpanEntry
              * @constructor
-             * @param {cockroach.roachpb.AbortCacheEntry$Properties=} [properties] Properties to set
+             * @param {cockroach.roachpb.AbortSpanEntry$Properties=} [properties] Properties to set
              */
-            function AbortCacheEntry(properties) {
+            function AbortSpanEntry(properties) {
                 if (properties)
                     for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
                         if (properties[keys[i]] != null)
@@ -30196,39 +30196,39 @@ export const cockroach = $root.cockroach = (() => {
             }
 
             /**
-             * AbortCacheEntry key.
+             * AbortSpanEntry key.
              * @type {Uint8Array}
              */
-            AbortCacheEntry.prototype.key = $util.newBuffer([]);
+            AbortSpanEntry.prototype.key = $util.newBuffer([]);
 
             /**
-             * AbortCacheEntry timestamp.
+             * AbortSpanEntry timestamp.
              * @type {(cockroach.util.hlc.Timestamp$Properties|null)}
              */
-            AbortCacheEntry.prototype.timestamp = null;
+            AbortSpanEntry.prototype.timestamp = null;
 
             /**
-             * AbortCacheEntry priority.
+             * AbortSpanEntry priority.
              * @type {number}
              */
-            AbortCacheEntry.prototype.priority = 0;
+            AbortSpanEntry.prototype.priority = 0;
 
             /**
-             * Creates a new AbortCacheEntry instance using the specified properties.
-             * @param {cockroach.roachpb.AbortCacheEntry$Properties=} [properties] Properties to set
-             * @returns {cockroach.roachpb.AbortCacheEntry} AbortCacheEntry instance
+             * Creates a new AbortSpanEntry instance using the specified properties.
+             * @param {cockroach.roachpb.AbortSpanEntry$Properties=} [properties] Properties to set
+             * @returns {cockroach.roachpb.AbortSpanEntry} AbortSpanEntry instance
              */
-            AbortCacheEntry.create = function create(properties) {
-                return new AbortCacheEntry(properties);
+            AbortSpanEntry.create = function create(properties) {
+                return new AbortSpanEntry(properties);
             };
 
             /**
-             * Encodes the specified AbortCacheEntry message. Does not implicitly {@link cockroach.roachpb.AbortCacheEntry.verify|verify} messages.
-             * @param {cockroach.roachpb.AbortCacheEntry$Properties} message AbortCacheEntry message or plain object to encode
+             * Encodes the specified AbortSpanEntry message. Does not implicitly {@link cockroach.roachpb.AbortSpanEntry.verify|verify} messages.
+             * @param {cockroach.roachpb.AbortSpanEntry$Properties} message AbortSpanEntry message or plain object to encode
              * @param {$protobuf.Writer} [writer] Writer to encode to
              * @returns {$protobuf.Writer} Writer
              */
-            AbortCacheEntry.encode = function encode(message, writer) {
+            AbortSpanEntry.encode = function encode(message, writer) {
                 if (!writer)
                     writer = $Writer.create();
                 if (message.key != null && message.hasOwnProperty("key"))
@@ -30241,27 +30241,27 @@ export const cockroach = $root.cockroach = (() => {
             };
 
             /**
-             * Encodes the specified AbortCacheEntry message, length delimited. Does not implicitly {@link cockroach.roachpb.AbortCacheEntry.verify|verify} messages.
-             * @param {cockroach.roachpb.AbortCacheEntry$Properties} message AbortCacheEntry message or plain object to encode
+             * Encodes the specified AbortSpanEntry message, length delimited. Does not implicitly {@link cockroach.roachpb.AbortSpanEntry.verify|verify} messages.
+             * @param {cockroach.roachpb.AbortSpanEntry$Properties} message AbortSpanEntry message or plain object to encode
              * @param {$protobuf.Writer} [writer] Writer to encode to
              * @returns {$protobuf.Writer} Writer
              */
-            AbortCacheEntry.encodeDelimited = function encodeDelimited(message, writer) {
+            AbortSpanEntry.encodeDelimited = function encodeDelimited(message, writer) {
                 return this.encode(message, writer).ldelim();
             };
 
             /**
-             * Decodes an AbortCacheEntry message from the specified reader or buffer.
+             * Decodes an AbortSpanEntry message from the specified reader or buffer.
              * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
              * @param {number} [length] Message length if known beforehand
-             * @returns {cockroach.roachpb.AbortCacheEntry} AbortCacheEntry
+             * @returns {cockroach.roachpb.AbortSpanEntry} AbortSpanEntry
              * @throws {Error} If the payload is not a reader or valid buffer
              * @throws {$protobuf.util.ProtocolError} If required fields are missing
              */
-            AbortCacheEntry.decode = function decode(reader, length) {
+            AbortSpanEntry.decode = function decode(reader, length) {
                 if (!(reader instanceof $Reader))
                     reader = $Reader.create(reader);
-                let end = length === undefined ? reader.len : reader.pos + length, message = new $root.cockroach.roachpb.AbortCacheEntry();
+                let end = length === undefined ? reader.len : reader.pos + length, message = new $root.cockroach.roachpb.AbortSpanEntry();
                 while (reader.pos < end) {
                     let tag = reader.uint32();
                     switch (tag >>> 3) {
@@ -30283,24 +30283,24 @@ export const cockroach = $root.cockroach = (() => {
             };
 
             /**
-             * Decodes an AbortCacheEntry message from the specified reader or buffer, length delimited.
+             * Decodes an AbortSpanEntry message from the specified reader or buffer, length delimited.
              * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
-             * @returns {cockroach.roachpb.AbortCacheEntry} AbortCacheEntry
+             * @returns {cockroach.roachpb.AbortSpanEntry} AbortSpanEntry
              * @throws {Error} If the payload is not a reader or valid buffer
              * @throws {$protobuf.util.ProtocolError} If required fields are missing
              */
-            AbortCacheEntry.decodeDelimited = function decodeDelimited(reader) {
+            AbortSpanEntry.decodeDelimited = function decodeDelimited(reader) {
                 if (!(reader instanceof $Reader))
                     reader = $Reader(reader);
                 return this.decode(reader, reader.uint32());
             };
 
             /**
-             * Verifies an AbortCacheEntry message.
+             * Verifies an AbortSpanEntry message.
              * @param {Object.<string,*>} message Plain object to verify
              * @returns {?string} `null` if valid, otherwise the reason why it is not
              */
-            AbortCacheEntry.verify = function verify(message) {
+            AbortSpanEntry.verify = function verify(message) {
                 if (typeof message !== "object" || message === null)
                     return "object expected";
                 if (message.key != null && message.hasOwnProperty("key"))
@@ -30318,14 +30318,14 @@ export const cockroach = $root.cockroach = (() => {
             };
 
             /**
-             * Creates an AbortCacheEntry message from a plain object. Also converts values to their respective internal types.
+             * Creates an AbortSpanEntry message from a plain object. Also converts values to their respective internal types.
              * @param {Object.<string,*>} object Plain object
-             * @returns {cockroach.roachpb.AbortCacheEntry} AbortCacheEntry
+             * @returns {cockroach.roachpb.AbortSpanEntry} AbortSpanEntry
              */
-            AbortCacheEntry.fromObject = function fromObject(object) {
-                if (object instanceof $root.cockroach.roachpb.AbortCacheEntry)
+            AbortSpanEntry.fromObject = function fromObject(object) {
+                if (object instanceof $root.cockroach.roachpb.AbortSpanEntry)
                     return object;
-                let message = new $root.cockroach.roachpb.AbortCacheEntry();
+                let message = new $root.cockroach.roachpb.AbortSpanEntry();
                 if (object.key != null)
                     if (typeof object.key === "string")
                         $util.base64.decode(object.key, message.key = $util.newBuffer($util.base64.length(object.key)), 0);
@@ -30333,7 +30333,7 @@ export const cockroach = $root.cockroach = (() => {
                         message.key = object.key;
                 if (object.timestamp != null) {
                     if (typeof object.timestamp !== "object")
-                        throw TypeError(".cockroach.roachpb.AbortCacheEntry.timestamp: object expected");
+                        throw TypeError(".cockroach.roachpb.AbortSpanEntry.timestamp: object expected");
                     message.timestamp = $root.cockroach.util.hlc.Timestamp.fromObject(object.timestamp);
                 }
                 if (object.priority != null)
@@ -30342,21 +30342,21 @@ export const cockroach = $root.cockroach = (() => {
             };
 
             /**
-             * Creates an AbortCacheEntry message from a plain object. Also converts values to their respective internal types.
-             * This is an alias of {@link cockroach.roachpb.AbortCacheEntry.fromObject}.
+             * Creates an AbortSpanEntry message from a plain object. Also converts values to their respective internal types.
+             * This is an alias of {@link cockroach.roachpb.AbortSpanEntry.fromObject}.
              * @function
              * @param {Object.<string,*>} object Plain object
-             * @returns {cockroach.roachpb.AbortCacheEntry} AbortCacheEntry
+             * @returns {cockroach.roachpb.AbortSpanEntry} AbortSpanEntry
              */
-            AbortCacheEntry.from = AbortCacheEntry.fromObject;
+            AbortSpanEntry.from = AbortSpanEntry.fromObject;
 
             /**
-             * Creates a plain object from an AbortCacheEntry message. Also converts values to other types if specified.
-             * @param {cockroach.roachpb.AbortCacheEntry} message AbortCacheEntry
+             * Creates a plain object from an AbortSpanEntry message. Also converts values to other types if specified.
+             * @param {cockroach.roachpb.AbortSpanEntry} message AbortSpanEntry
              * @param {$protobuf.ConversionOptions} [options] Conversion options
              * @returns {Object.<string,*>} Plain object
              */
-            AbortCacheEntry.toObject = function toObject(message, options) {
+            AbortSpanEntry.toObject = function toObject(message, options) {
                 if (!options)
                     options = {};
                 let object = {};
@@ -30375,23 +30375,23 @@ export const cockroach = $root.cockroach = (() => {
             };
 
             /**
-             * Creates a plain object from this AbortCacheEntry message. Also converts values to other types if specified.
+             * Creates a plain object from this AbortSpanEntry message. Also converts values to other types if specified.
              * @param {$protobuf.ConversionOptions} [options] Conversion options
              * @returns {Object.<string,*>} Plain object
              */
-            AbortCacheEntry.prototype.toObject = function toObject(options) {
+            AbortSpanEntry.prototype.toObject = function toObject(options) {
                 return this.constructor.toObject(this, options);
             };
 
             /**
-             * Converts this AbortCacheEntry to JSON.
+             * Converts this AbortSpanEntry to JSON.
              * @returns {Object.<string,*>} JSON object
              */
-            AbortCacheEntry.prototype.toJSON = function toJSON() {
+            AbortSpanEntry.prototype.toJSON = function toJSON() {
                 return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
             };
 
-            return AbortCacheEntry;
+            return AbortSpanEntry;
         })();
 
         roachpb.CSVOptions = (function() {

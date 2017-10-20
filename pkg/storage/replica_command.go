@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/storage/abortspan"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
@@ -106,7 +107,7 @@ func DefaultDeclareKeys(
 	if header.Txn != nil {
 		header.Txn.AssertInitialized(context.TODO())
 		spans.Add(SpanReadOnly, roachpb.Span{
-			Key: keys.AbortCacheKey(header.RangeID, header.Txn.ID),
+			Key: keys.AbortSpanKey(header.RangeID, header.Txn.ID),
 		})
 	}
 	if header.ReturnRangeInfo {
@@ -620,7 +621,7 @@ func declareKeysEndTransaction(
 	}
 	if header.Txn != nil {
 		header.Txn.AssertInitialized(context.TODO())
-		spans.Add(SpanReadWrite, roachpb.Span{Key: keys.AbortCacheKey(header.RangeID, header.Txn.ID)})
+		spans.Add(SpanReadWrite, roachpb.Span{Key: keys.AbortSpanKey(header.RangeID, header.Txn.ID)})
 	}
 
 	// All transactions depend on the range descriptor because they need
@@ -671,8 +672,8 @@ func declareKeysEndTransaction(
 			})
 
 			spans.Add(SpanReadOnly, roachpb.Span{
-				Key:    abortCacheMinKey(header.RangeID),
-				EndKey: abortCacheMaxKey(header.RangeID)})
+				Key:    abortspan.MinKey(header.RangeID),
+				EndKey: abortspan.MaxKey(header.RangeID)})
 		}
 		if mt := et.InternalCommitTrigger.MergeTrigger; mt != nil {
 			// Merges write to the left side and delete and read from the right.
@@ -863,7 +864,7 @@ func evalEndTransaction(
 		}
 	}
 
-	// Note: there's no need to clear the abort cache state if we've
+	// Note: there's no need to clear the AbortSpan state if we've
 	// successfully finalized a transaction, as there's no way in which an abort
 	// cache entry could have been written (the txn would already have been in
 	// state=ABORTED).
@@ -1443,7 +1444,7 @@ func declareKeysHeartbeatTransaction(
 	if header.Txn != nil {
 		header.Txn.AssertInitialized(context.TODO())
 		spans.Add(SpanReadOnly, roachpb.Span{
-			Key: keys.AbortCacheKey(header.RangeID, header.Txn.ID),
+			Key: keys.AbortSpanKey(header.RangeID, header.Txn.ID),
 		})
 	}
 }
@@ -1600,7 +1601,7 @@ func declareKeysPushTransaction(
 ) {
 	pr := req.(*roachpb.PushTxnRequest)
 	spans.Add(SpanReadWrite, roachpb.Span{Key: keys.TransactionKey(pr.PusheeTxn.Key, pr.PusheeTxn.ID)})
-	spans.Add(SpanReadWrite, roachpb.Span{Key: keys.AbortCacheKey(header.RangeID, pr.PusheeTxn.ID)})
+	spans.Add(SpanReadWrite, roachpb.Span{Key: keys.AbortSpanKey(header.RangeID, pr.PusheeTxn.ID)})
 }
 
 // evalPushTxn resolves conflicts between concurrent txns (or
@@ -1643,7 +1644,7 @@ func declareKeysPushTransaction(
 //
 // If the pushee is aborted, its timestamp will be forwarded to match its last
 // client activity timestamp (i.e. last heartbeat), if available. This is done
-// so that the updated timestamp populates the abort cache, allowing the GC
+// so that the updated timestamp populates the AbortSpan, allowing the GC
 // queue to purge entries for which the transaction coordinator must have found
 // out via its heartbeats that the transaction has failed.
 func evalPushTxn(
@@ -1785,7 +1786,7 @@ func evalPushTxn(
 	// If aborting transaction, set new status and return success.
 	if args.PushType == roachpb.PUSH_ABORT {
 		reply.PusheeTxn.Status = roachpb.ABORTED
-		// Forward the timestamp to accommodate abort cache GC. See method
+		// Forward the timestamp to accommodate AbortSpan GC. See method
 		// comment for details.
 		reply.PusheeTxn.Timestamp.Forward(reply.PusheeTxn.LastActive())
 	} else if args.PushType == roachpb.PUSH_TIMESTAMP {
@@ -1840,11 +1841,11 @@ func evalQueryTxn(
 	return EvalResult{}, nil
 }
 
-// setAbortCache clears any abort cache entry if poison is false.
+// setAbortSpan clears any AbortSpan entry if poison is false.
 // Otherwise, if poison is true, creates an entry for this transaction
-// in the abort cache to prevent future reads or writes from
+// in the AbortSpan to prevent future reads or writes from
 // spuriously succeeding on this range.
-func setAbortCache(
+func setAbortSpan(
 	ctx context.Context,
 	rec ReplicaEvalContext,
 	batch engine.ReadWriter,
@@ -1853,17 +1854,17 @@ func setAbortCache(
 	poison bool,
 ) error {
 	if !poison {
-		return rec.AbortCache().Del(ctx, batch, ms, txn.ID)
+		return rec.AbortSpan().Del(ctx, batch, ms, txn.ID)
 	}
-	entry := roachpb.AbortCacheEntry{
+	entry := roachpb.AbortSpanEntry{
 		Key:       txn.Key,
 		Timestamp: txn.Timestamp,
 		Priority:  txn.Priority,
 	}
-	return rec.AbortCache().Put(ctx, batch, ms, txn.ID, &entry)
+	return rec.AbortSpan().Put(ctx, batch, ms, txn.ID, &entry)
 }
 
-func writeAbortCacheOnResolve(status roachpb.TransactionStatus) bool {
+func writeAbortSpanOnResolve(status roachpb.TransactionStatus) bool {
 	return status == roachpb.ABORTED
 }
 
@@ -1880,8 +1881,8 @@ func declareKeysResolveIntentCombined(
 		// is used, so we can convert them.
 		args = (*roachpb.ResolveIntentRequest)(t)
 	}
-	if writeAbortCacheOnResolve(args.Status) {
-		spans.Add(SpanReadWrite, roachpb.Span{Key: keys.AbortCacheKey(header.RangeID, args.IntentTxn.ID)})
+	if writeAbortSpanOnResolve(args.Status) {
+		spans.Add(SpanReadWrite, roachpb.Span{Key: keys.AbortSpanKey(header.RangeID, args.IntentTxn.ID)})
 	}
 }
 
@@ -1912,8 +1913,8 @@ func evalResolveIntent(
 	if err := engine.MVCCResolveWriteIntent(ctx, batch, ms, intent); err != nil {
 		return EvalResult{}, err
 	}
-	if writeAbortCacheOnResolve(args.Status) {
-		return EvalResult{}, setAbortCache(ctx, cArgs.EvalCtx, batch, ms, args.IntentTxn, args.Poison)
+	if writeAbortSpanOnResolve(args.Status) {
+		return EvalResult{}, setAbortSpan(ctx, cArgs.EvalCtx, batch, ms, args.IntentTxn, args.Poison)
 	}
 	return EvalResult{}, nil
 }
@@ -1946,8 +1947,8 @@ func evalResolveIntentRange(
 	if _, err := engine.MVCCResolveWriteIntentRange(ctx, batch, ms, intent, math.MaxInt64); err != nil {
 		return EvalResult{}, err
 	}
-	if writeAbortCacheOnResolve(args.Status) {
-		return EvalResult{}, setAbortCache(ctx, cArgs.EvalCtx, batch, ms, args.IntentTxn, args.Poison)
+	if writeAbortSpanOnResolve(args.Status) {
+		return EvalResult{}, setAbortSpan(ctx, cArgs.EvalCtx, batch, ms, args.IntentTxn, args.Poison)
 	}
 	return EvalResult{}, nil
 }
@@ -2897,7 +2898,7 @@ func (r *Replica) adminSplitWithDescriptor(
 }
 
 // splitTrigger is called on a successful commit of a transaction
-// containing an AdminSplit operation. It copies the abort cache for
+// containing an AdminSplit operation. It copies the AbortSpan for
 // the new range and recomputes stats for both the existing, left hand
 // side (LHS) range and the right hand side (RHS) range. For
 // performance it only computes the stats for the original range (the
@@ -3100,13 +3101,13 @@ func splitTrigger(
 		return enginepb.MVCCStats{}, EvalResult{}, errors.Wrap(err, "unable to copy last replica GC timestamp")
 	}
 
-	// Initialize the RHS range's abort cache by copying the LHS's.
-	seqCount, err := rec.AbortCache().CopyInto(batch, &bothDeltaMS, split.RightDesc.RangeID)
+	// Initialize the RHS range's AbortSpan by copying the LHS's.
+	seqCount, err := rec.AbortSpan().CopyInto(batch, &bothDeltaMS, split.RightDesc.RangeID)
 	if err != nil {
 		// TODO(tschottdorf): ReplicaCorruptionError.
-		return enginepb.MVCCStats{}, EvalResult{}, errors.Wrap(err, "unable to copy abort cache to RHS split range")
+		return enginepb.MVCCStats{}, EvalResult{}, errors.Wrap(err, "unable to copy AbortSpan to RHS split range")
 	}
-	log.Eventf(ctx, "copied abort cache (%d entries)", seqCount)
+	log.Eventf(ctx, "copied AbortSpan (%d entries)", seqCount)
 
 	// Compute (absolute) stats for RHS range.
 	var rightMS enginepb.MVCCStats
@@ -3452,9 +3453,9 @@ func mergeTrigger(
 	rightMS.SysBytes, rightMS.SysCount = 0, 0
 	mergedMS.Add(rightMS)
 
-	// Copy the RHS range's abort cache to the new LHS one.
-	if _, err := rec.AbortCache().CopyFrom(ctx, batch, &mergedMS, rightRangeID); err != nil {
-		return EvalResult{}, errors.Errorf("unable to copy abort cache to new split range: %s", err)
+	// Copy the RHS range's AbortSpan to the new LHS one.
+	if _, err := rec.AbortSpan().CopyFrom(ctx, batch, &mergedMS, rightRangeID); err != nil {
+		return EvalResult{}, errors.Errorf("unable to copy AbortSpan to new split range: %s", err)
 	}
 
 	// Remove the RHS range's metadata. Note that we don't need to

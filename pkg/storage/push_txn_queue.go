@@ -728,7 +728,7 @@ func (ptq *pushTxnQueue) queryTxnStatus(
 	})
 	if err := ptq.store.db.Run(ctx, b); err != nil {
 		// TODO(tschottdorf):
-		// We shouldn't catch an error here (unless it's from the abort cache, in
+		// We shouldn't catch an error here (unless it's from the AbortSpan, in
 		// which case we would not get the crucial information that we've been
 		// aborted; instead we'll go around thinking we're still PENDING,
 		// potentially caught in an infinite loop).  Same issue: we must not use
@@ -742,7 +742,7 @@ func (ptq *pushTxnQueue) queryTxnStatus(
 		// - we try to update our transaction (right here, and if we don't we might
 		// be stuck in a race, that's why we do this - the txn proto we're using
 		// might be outdated)
-		// - query fails because our home range has the abort cache populated we catch
+		// - query fails because our home range has the AbortSpan populated we catch
 		// a TransactionAbortedError, but with a pending transaction (since we lose
 		// the original txn, and you just use the txn we had...)
 		//

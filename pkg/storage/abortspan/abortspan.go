@@ -12,7 +12,7 @@
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
-package storage
+package abortspan
 
 import (
 	"golang.org/x/net/context"
@@ -28,36 +28,31 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
-// The AbortCache sets markers for aborted transactions to provide
-// protection against an aborted but active transaction not reading
-// values it wrote (due to its intents having been removed).
+// An AbortSpan sets markers for aborted transactions to provide protection
+// against an aborted but active transaction not reading values it wrote (due to
+// its intents having been removed).
 //
-// The cache is range-specific. It is updated when an intent for an aborted txn
+// The span is range-specific. It is updated when an intent for an aborted txn
 // is cleared from a range, and is consulted before read commands are processed
 // on a range.
 //
-// The AbortCache stores responses in the underlying engine, using keys derived
-// from Range ID and txn ID.
-// Note that the epoch number is not used to query the cache: once aborted, even
-// higher epochs are prohibited from reading data. That's because, for better or
-// worse, the intent resolution process clears intents even from epochs higher
-// than the txn meta used for clearing (see engine.MVCCResolveWriteIntent), and
-// this clearing can race with the new epoch laying intents.
+// The AbortSpan stores responses in the underlying engine, using keys derived
+// from Range ID and txn ID. Note that the epoch number is not used to query the
+// cache: once aborted, even higher epochs are prohibited from reading data.
+// That's because, for better or worse, the intent resolution process clears
+// intents even from epochs higher than the txn meta used for clearing (see
+// engine.MVCCResolveWriteIntent), and this clearing can race with the new epoch
+// laying intents.
 //
-// A AbortCache is not thread safe. Access to it is serialized
-// through Raft.
-//
-// TODO(tschottdorf): we seem to have made a half-hearted attempt at naming
-// this the "AbortSpan" instead, but large parts of the code still call this
-// "AbortCache". We should settle for one and rename everything post-yellow.
-type AbortCache struct {
+// An AbortSpan is not thread safe.
+type AbortSpan struct {
 	rangeID roachpb.RangeID
 }
 
-// NewAbortCache returns a new abort cache. Every range replica
-// maintains an abort cache, not just the lease holder.
-func NewAbortCache(rangeID roachpb.RangeID) *AbortCache {
-	return &AbortCache{
+// New returns a new AbortSpan. Every range replica
+// maintains an AbortSpan, not just the lease holder.
+func New(rangeID roachpb.RangeID) *AbortSpan {
+	return &AbortSpan{
 		rangeID: rangeID,
 	}
 }
@@ -73,24 +68,26 @@ func fillUUID(b byte) uuid.UUID {
 var txnIDMin = fillUUID('\x00')
 var txnIDMax = fillUUID('\xff')
 
-func abortCacheMinKey(rangeID roachpb.RangeID) roachpb.Key {
-	return keys.AbortCacheKey(rangeID, txnIDMin)
+// MinKey returns the lower bound of the key span associated to an instance for the given RangeID.
+func MinKey(rangeID roachpb.RangeID) roachpb.Key {
+	return keys.AbortSpanKey(rangeID, txnIDMin)
 }
 
-func (sc *AbortCache) min() roachpb.Key {
-	return abortCacheMinKey(sc.rangeID)
+func (sc *AbortSpan) min() roachpb.Key {
+	return MinKey(sc.rangeID)
 }
 
-func abortCacheMaxKey(rangeID roachpb.RangeID) roachpb.Key {
-	return keys.AbortCacheKey(rangeID, txnIDMax)
+// MaxKey returns the upper bound of the key span associated to an instance for the given RangeID.
+func MaxKey(rangeID roachpb.RangeID) roachpb.Key {
+	return keys.AbortSpanKey(rangeID, txnIDMax)
 }
 
-func (sc *AbortCache) max() roachpb.Key {
-	return abortCacheMaxKey(sc.rangeID)
+func (sc *AbortSpan) max() roachpb.Key {
+	return MaxKey(sc.rangeID)
 }
 
 // ClearData removes all persisted items stored in the cache.
-func (sc *AbortCache) ClearData(e engine.Engine) error {
+func (sc *AbortSpan) ClearData(e engine.Engine) error {
 	iter := e.NewIterator(false)
 	defer iter.Close()
 	b := e.NewWriteOnlyBatch()
@@ -103,30 +100,30 @@ func (sc *AbortCache) ClearData(e engine.Engine) error {
 	return b.Commit(false /* !sync */)
 }
 
-// Get looks up an abort cache entry recorded for this transaction ID.
+// Get looks up an AbortSpan entry recorded for this transaction ID.
 // Returns whether an abort record was found and any error.
-func (sc *AbortCache) Get(
-	ctx context.Context, e engine.Reader, txnID uuid.UUID, entry *roachpb.AbortCacheEntry,
+func (sc *AbortSpan) Get(
+	ctx context.Context, e engine.Reader, txnID uuid.UUID, entry *roachpb.AbortSpanEntry,
 ) (bool, error) {
 
 	// Pull response from disk and read into reply if available.
-	key := keys.AbortCacheKey(sc.rangeID, txnID)
+	key := keys.AbortSpanKey(sc.rangeID, txnID)
 	ok, err := engine.MVCCGetProto(ctx, e, key, hlc.Timestamp{}, true /* consistent */, nil /* txn */, entry)
 	return ok, err
 }
 
-// Iterate walks through the abort cache, invoking the given callback for
+// Iterate walks through the AbortSpan, invoking the given callback for
 // each unmarshaled entry with the key, the transaction ID and the decoded
 // entry.
 // TODO(tschottdorf): should not use a pointer to UUID.
-func (sc *AbortCache) Iterate(
-	ctx context.Context, e engine.Reader, f func([]byte, roachpb.AbortCacheEntry),
+func (sc *AbortSpan) Iterate(
+	ctx context.Context, e engine.Reader, f func([]byte, roachpb.AbortSpanEntry),
 ) {
 	_, _ = engine.MVCCIterate(ctx, e, sc.min(), sc.max(), hlc.Timestamp{},
 		true /* consistent */, nil /* txn */, false, /* !reverse */
 		func(kv roachpb.KeyValue) (bool, error) {
-			var entry roachpb.AbortCacheEntry
-			if _, err := keys.DecodeAbortCacheKey(kv.Key, nil); err != nil {
+			var entry roachpb.AbortSpanEntry
+			if _, err := keys.DecodeAbortSpanKey(kv.Key, nil); err != nil {
 				panic(err) // TODO(tschottdorf): ReplicaCorruptionError
 			}
 			if err := kv.Value.GetProto(&entry); err != nil {
@@ -153,11 +150,11 @@ func copySeqCache(
 		func(kv engine.MVCCKeyValue) (bool, error) {
 			// Decode the key, skipping on error. Otherwise, write it to the
 			// corresponding key in the new cache.
-			txnID, err := decodeAbortCacheMVCCKey(kv.Key, scratch[:0])
+			txnID, err := decodeAbortSpanMVCCKey(kv.Key, scratch[:0])
 			if err != nil {
-				return false, errors.Errorf("could not decode an abort cache key %s: %s", kv.Key, err)
+				return false, errors.Errorf("could not decode an AbortSpan key %s: %s", kv.Key, err)
 			}
-			key := keys.AbortCacheKey(dstID, txnID)
+			key := keys.AbortSpanKey(dstID, txnID)
 			encKey := engine.MakeMVCCMetadataKey(key)
 			// Decode the MVCCMetadata value.
 			if err := protoutil.Unmarshal(kv.Value, &meta); err != nil {
@@ -182,10 +179,10 @@ func copySeqCache(
 	return count, err
 }
 
-// CopyInto copies all the results from this abort cache into the destRangeID
-// abort cache. Failures decoding individual cache entries return an error.
+// CopyInto copies all the results from this AbortSpan into the destRangeID
+// AbortSpan. Failures decoding individual cache entries return an error.
 // On success, returns the number of entries (key-value pairs) copied.
-func (sc *AbortCache) CopyInto(
+func (sc *AbortSpan) CopyInto(
 	e engine.ReadWriter, ms *enginepb.MVCCStats, destRangeID roachpb.RangeID,
 ) (int, error) {
 	return copySeqCache(e, ms, sc.rangeID, destRangeID,
@@ -193,42 +190,42 @@ func (sc *AbortCache) CopyInto(
 }
 
 // CopyFrom copies all the persisted results from the originRangeID
-// abort cache into this one. Note that the cache will not be
+// AbortSpan into this one. Note that the cache will not be
 // locked while copying is in progress. Failures decoding individual
 // entries return an error. The copy is done directly using the engine
 // instead of interpreting values through MVCC for efficiency.
 // On success, returns the number of entries (key-value pairs) copied.
-func (sc *AbortCache) CopyFrom(
+func (sc *AbortSpan) CopyFrom(
 	ctx context.Context, e engine.ReadWriter, ms *enginepb.MVCCStats, originRangeID roachpb.RangeID,
 ) (int, error) {
-	originMin := engine.MakeMVCCMetadataKey(keys.AbortCacheKey(originRangeID, txnIDMin))
-	originMax := engine.MakeMVCCMetadataKey(keys.AbortCacheKey(originRangeID, txnIDMax))
+	originMin := engine.MakeMVCCMetadataKey(keys.AbortSpanKey(originRangeID, txnIDMin))
+	originMax := engine.MakeMVCCMetadataKey(keys.AbortSpanKey(originRangeID, txnIDMax))
 	return copySeqCache(e, ms, originRangeID, sc.rangeID, originMin, originMax)
 }
 
-// Del removes all abort cache entries for the given transaction.
-func (sc *AbortCache) Del(
+// Del removes all AbortSpan entries for the given transaction.
+func (sc *AbortSpan) Del(
 	ctx context.Context, e engine.ReadWriter, ms *enginepb.MVCCStats, txnID uuid.UUID,
 ) error {
-	key := keys.AbortCacheKey(sc.rangeID, txnID)
+	key := keys.AbortSpanKey(sc.rangeID, txnID)
 	return engine.MVCCDelete(ctx, e, ms, key, hlc.Timestamp{}, nil /* txn */)
 }
 
 // Put writes an entry for the specified transaction ID.
-func (sc *AbortCache) Put(
+func (sc *AbortSpan) Put(
 	ctx context.Context,
 	e engine.ReadWriter,
 	ms *enginepb.MVCCStats,
 	txnID uuid.UUID,
-	entry *roachpb.AbortCacheEntry,
+	entry *roachpb.AbortSpanEntry,
 ) error {
-	key := keys.AbortCacheKey(sc.rangeID, txnID)
+	key := keys.AbortSpanKey(sc.rangeID, txnID)
 	return engine.MVCCPutProto(ctx, e, ms, key, hlc.Timestamp{}, nil /* txn */, entry)
 }
 
-func decodeAbortCacheMVCCKey(encKey engine.MVCCKey, dest []byte) (uuid.UUID, error) {
+func decodeAbortSpanMVCCKey(encKey engine.MVCCKey, dest []byte) (uuid.UUID, error) {
 	if encKey.IsValue() {
 		return uuid.UUID{}, errors.Errorf("key %s is not a raw MVCC value", encKey)
 	}
-	return keys.DecodeAbortCacheKey(encKey.Key, dest)
+	return keys.DecodeAbortSpanKey(encKey.Key, dest)
 }

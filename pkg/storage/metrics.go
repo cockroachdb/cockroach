@@ -429,13 +429,13 @@ var (
 		Help: "Number of GC'able entries corresponding to pending txns"}
 	metaGCAbortSpanScanned = metric.Metadata{
 		Name: "queue.gc.info.abortspanscanned",
-		Help: "Number of transactions present in the abort cache scanned from the engine"}
+		Help: "Number of transactions present in the AbortSpan scanned from the engine"}
 	metaGCAbortSpanConsidered = metric.Metadata{
 		Name: "queue.gc.info.abortspanconsidered",
-		Help: "Number of abort cache entries old enough to be considered for removal"}
+		Help: "Number of AbortSpan entries old enough to be considered for removal"}
 	metaGCAbortSpanGCNum = metric.Metadata{
 		Name: "queue.gc.info.abortspangcnum",
-		Help: "Number of abort cache entries fit for removal"}
+		Help: "Number of AbortSpan entries fit for removal"}
 	metaGCPushTxn = metric.Metadata{
 		Name: "queue.gc.info.pushtxn",
 		Help: "Number of attempted pushes"}
