@@ -76,7 +76,10 @@ start_test "Test that quit does not emit unwanted logging output"
 # Unwanted: between the point the command starts until it
 # either prints the final ok message or fails with some error
 # (e.g. due to no definite answer from the server).
-send "echo marker; $argv quit 2>&1 | grep '^\\(\[IWEF\]\[0-9\]\\)' \r"
+# Note that grpc sends WARNING messages which we accept in this
+# test for now.
+# See, for example, https://github.com/cockroachdb/cockroach/issues/19397.
+send "echo marker; $argv quit 2>&1 | grep '^\\(\[IEF\]\[0-9\]\\)' \r"
 set timeout 20
 eexpect "marker\r\n:/# "
 set timeout 5
