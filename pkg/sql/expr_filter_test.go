@@ -22,6 +22,7 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
@@ -159,6 +160,58 @@ func TestSplitFilter(t *testing.T) {
 			if exprStr != expr.String() {
 				t.Errorf("Expression changed after splitFilter; before: `%s` after: `%s`",
 					exprStr, expr.String())
+			}
+		})
+	}
+}
+
+func TestExtractNotNullConstraints(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	// Note: see testTableDesc for the variable schema.
+	testCases := []struct {
+		expr        string
+		notNullVars []int
+	}{
+		{`a`, []int{0}},
+		{`a = 1`, []int{0}},
+		{`a IS NULL`, []int{}},
+		{`a IS NOT NULL`, []int{0}},
+		{`NOT (a = 1)`, []int{0}},
+		{`NOT (a IS NULL)`, []int{}}, // We could do better here.
+		{`NOT (a IS NOT NULL)`, []int{}},
+		{`(a IS NOT NULL) AND (b IS NOT NULL)`, []int{0, 1}},
+		{`(a IS NOT NULL) OR (b IS NOT NULL)`, []int{}},
+		{`(a IS NOT NULL) OR (a IS NULL)`, []int{}},
+		{`a > b`, []int{0, 1}},
+		{`a = b`, []int{0, 1}},
+		{`a + b`, []int{0, 1}},
+		{`a = 1 AND b = 2`, []int{0, 1}},
+		{`a = 1 OR b = 2`, []int{}},
+		{`(a = 1 AND b = 2) OR (b = 3 AND j = 4)`, []int{1}},
+		{`(a, b) = (1, 2)`, []int{0, 1}},
+		{`(a, b) > (1, 2)`, []int{0, 1}},
+		{`a IN (b,j)`, []int{0}},
+		{`(a, b) IN ((1,j))`, []int{0, 1}},
+		{`a NOT IN (b,j)`, []int{0}},
+		{`(a, b) NOT IN ((1,j))`, []int{0, 1}},
+		{`(a + b, 1 + j) IN ((1, 2), (3, 4))`, []int{0, 1, 9}},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.expr, func(t *testing.T) {
+			evalCtx := parser.NewTestingEvalContext()
+			defer evalCtx.Stop(context.Background())
+
+			sel := makeSelectNode(t)
+			expr := parseAndNormalizeExpr(t, evalCtx, tc.expr, sel)
+			result := extractNotNullConstraints(expr)
+			var expected util.FastIntSet
+			for _, v := range tc.notNullVars {
+				expected.Add(v)
+			}
+			if !result.Equals(expected) {
+				t.Errorf("expected %s, got %s", &expected, result)
 			}
 		})
 	}
