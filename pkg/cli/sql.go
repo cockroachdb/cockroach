@@ -327,7 +327,7 @@ func (c *cliState) handleUnset(args []string, nextState, errState cliStateEnum) 
 	return nextState
 }
 
-func isEndOfStatement(fullStmt string) (isEmpty, isEnd bool) {
+func checkTokens(fullStmt string) (isEmpty bool, lastTok int) {
 	sc := parser.MakeScanner(fullStmt)
 	isEmpty = true
 	var last int
@@ -335,7 +335,11 @@ func isEndOfStatement(fullStmt string) (isEmpty, isEnd bool) {
 		isEmpty = false
 		last = t
 	})
-	return isEmpty, last == ';' || last == parser.HELPTOKEN
+	return isEmpty, last
+}
+
+func isEndOfStatement(lastTok int) bool {
+	return lastTok == ';' || lastTok == parser.HELPTOKEN
 }
 
 // handleHelp prints SQL help.
@@ -849,7 +853,8 @@ func (c *cliState) doPrepareStatementLine(
 		return startState
 	}
 
-	isEmpty, endsWithSemi := isEndOfStatement(c.concatLines)
+	isEmpty, lastTok := checkTokens(c.concatLines)
+	endOfStmt := isEndOfStatement(lastTok)
 	if c.partialStmtsLen == 0 && isEmpty {
 		// More whitespace, or comments. Still nothing to do. However
 		// if the syntax was non-trivial to arrive here,
@@ -861,14 +866,18 @@ func (c *cliState) doPrepareStatementLine(
 	}
 	if c.atEOF {
 		// Definitely no more input expected.
-		if !endsWithSemi {
+		if !endOfStmt {
 			fmt.Fprintf(stderr, "missing semicolon at end of statement: %s\n", c.concatLines)
 			c.exitErr = fmt.Errorf("last statement was not executed: %s", c.concatLines)
 			return cliStop
 		}
 	}
 
-	if !endsWithSemi {
+	if !endOfStmt {
+		if lastTok == '?' {
+			fmt.Fprintf(c.ins.Stdout(),
+				"Note: a single '?' is a JSON operator. If you want contextual help, use '??'.\n")
+		}
 		return contState
 	}
 

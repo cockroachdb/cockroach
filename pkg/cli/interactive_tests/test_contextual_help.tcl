@@ -62,6 +62,18 @@ eexpect "See also"
 eexpect root@
 end_test
 
+start_test "Check that a useful reminder is given if the user mistakenly uses a single ?."
+send "select ?\r"
+eexpect "Note:"
+eexpect JSON
+eexpect "use '??'"
+eexpect " ->"
+# restore the normal state
+send ";\r"
+eexpect HINT
+eexpect root@
+end_test
+
 
 start_test "Check that ??-tab works."
 send "select ??\t"
