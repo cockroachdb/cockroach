@@ -136,15 +136,25 @@ See our separate [style guide](STYLE.md) document.
   When you're ready to commit, be sure to write a Good Commit Message™. Consult
   https://github.com/erlang/otp/wiki/Writing-good-commit-messages if you're
   not sure what constitutes a Good Commit Message™.
-  In addition to the general rules referenced above, please also prefix your
-  commit subject line with the affected package, if one can easily be chosen.
-  For example, the subject line of a commit mostly affecting the
-  `server/serverpb` package might read: "server/serverpb: made great again".
-  Commits which affect many packages as a result of a shared dependency change
-  should probably begin their subjects with the name of the shared dependency.
-  Finally, some commits may need to affect many packages in a way which does
-  not point to a specific package; those commits may begin with "*:" or "all:"
-  to indicate their reach.
+  In addition to the general rules referenced above, please also observe the
+  following guidelines:
+  - Prefix your commit subject line with the affected package, if one can easily
+    be chosen. For example, the subject line of a commit mostly affecting the
+    `server` package might read: "server: use net.Pipe instead of TCP HTTP/gRPC connections".
+    Commits which affect many packages as a result of a shared dependency change
+    should probably begin their subjects with the name of the shared dependency.
+    Finally, some commits may need to affect many packages in a way which does
+    not point to a specific package; those commits may begin with "*:" or "all:"
+    to indicate their reach.
+  - We publish detailed [release notes](https://www.cockroachlabs.com/docs/releases/)
+    describing most non-test changes. To facilitate this, at least one commit in every
+    PR (possibly the PR message/merge commit) should contain a brief description of
+    the change in terms that a user would recognize. This description should be prefixed
+    with "Release note:". For example, a commit like ["distsql: pre-reserve memory needed
+    to mark rows in HashJoiner build phase"](https://github.com/cockroachdb/cockroach/pull/18975)
+    might say "Release note: Fixed a panic in queries with `JOIN` using the
+    distributed SQL engine."
+
 
 - Run the linters, code generators, and unit test suites locally:
 
