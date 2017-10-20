@@ -114,9 +114,11 @@ func pkgsFromDiff(r io.Reader) (map[string]pkg, error) {
 		case bytes.HasPrefix(line, []byte{'-'}) && bytes.Contains(line, []byte(".Skip")):
 			switch {
 			case len(curTestName) > 0:
-				curPkg := pkgs[curPkgName]
-				curPkg.tests = append(curPkg.tests, curTestName)
-				pkgs[curPkgName] = curPkg
+				if !(curPkgName == "build" && curTestName == "TestStyle") {
+					curPkg := pkgs[curPkgName]
+					curPkg.tests = append(curPkg.tests, curTestName)
+					pkgs[curPkgName] = curPkg
+				}
 			case len(curBenchmarkName) > 0:
 				curPkg := pkgs[curPkgName]
 				curPkg.benchmarks = append(curPkg.benchmarks, curBenchmarkName)
