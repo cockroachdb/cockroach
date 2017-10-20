@@ -76,7 +76,7 @@ start_test "Test that quit does not emit unwanted logging output"
 # Unwanted: between the point the command starts until it
 # either prints the final ok message or fails with some error
 # (e.g. due to no definite answer from the server).
-send "echo marker; $argv quit 2>&1 | grep '^\\(\[IWEF\]\[0-9\]\\)' \r"
+send "echo marker; $argv quit 2>&1 | grep -vE '^\[IWEF\]\[0-9\]+ grpc: '\r"
 set timeout 20
 eexpect "marker\r\n:/# "
 set timeout 5
@@ -91,7 +91,7 @@ start_test "Test that quit does not show INFO by defaults with --logtostderr"
 # Since quit is likely to actually emit warnings, but we are just
 # interested in the absence of INFO messages, remove the warnings from
 # the output.
-send "echo marker; $argv quit --logtostderr 2>&1 | grep -v '^W'\r"
+send "echo marker; $argv quit --logtostderr 2>&1 | grep -vE '^\[IWEF\]\[0-9\]+ grpc: '\r"
 eexpect "marker\r\nError"
 eexpect ":/# "
 end_test
