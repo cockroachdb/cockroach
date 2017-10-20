@@ -945,12 +945,12 @@ SELECT * FROM pairs, square WHERE pairs.a + pairs.b = square.sq
 query ITTTTT
 EXPLAIN (VERBOSE) SELECT a, b, n, sq FROM (SELECT a, b, a + b AS sum, n, sq FROM pairs, square) WHERE sum = sq
 ----
-0  render  ·         ·                            (a, b, n, sq)                         ·
+0  render  ·         ·                            (a, b, n, sq)                         sq!=NULL
 0  ·       render 0  a                            ·                                     ·
 0  ·       render 1  b                            ·                                     ·
 0  ·       render 2  n                            ·                                     ·
 0  ·       render 3  sq                           ·                                     ·
-1  filter  ·         ·                            (a, b, sum, n, sq)                    sum=sq
+1  filter  ·         ·                            (a, b, sum, n, sq)                    sum=sq; sum!=NULL; sq!=NULL
 1  ·       filter    sum = sq                     ·                                     ·
 2  render  ·         ·                            (a, b, sum, n, sq)                    ·
 2  ·       render 0  test.pairs.a                 ·                                     ·
@@ -1019,12 +1019,12 @@ NULL  NULL  6     36
 query ITTTTT
 EXPLAIN (VERBOSE) SELECT * FROM pairs FULL OUTER JOIN square ON pairs.a + pairs.b = square.sq WHERE pairs.b%2 <> square.sq%2
 ----
-0  render  ·         ·                                               (a, b, n, sq)                         ·
+0  render  ·         ·                                               (a, b, n, sq)                         b!=NULL; sq!=NULL
 0  ·       render 0  test.pairs.a                                    ·                                     ·
 0  ·       render 1  test.pairs.b                                    ·                                     ·
 0  ·       render 2  test.square.n                                   ·                                     ·
 0  ·       render 3  test.square.sq                                  ·                                     ·
-1  filter  ·         ·                                               (a, b, rowid[hidden,omitted], n, sq)  ·
+1  filter  ·         ·                                               (a, b, rowid[hidden,omitted], n, sq)  b!=NULL; sq!=NULL
 1  ·       filter    (test.pairs.b % 2) != (test.square.sq % 2)      ·                                     ·
 2  join    ·         ·                                               (a, b, rowid[hidden,omitted], n, sq)  ·
 2  ·       type      full outer                                      ·                                     ·
