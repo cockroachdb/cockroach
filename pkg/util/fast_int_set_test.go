@@ -144,6 +144,45 @@ func TestFastIntSetTwoSetOps(t *testing.T) {
 							if eq != s1.Equals(s2) || eq != s2.Equals(s1) {
 								t.Errorf("Equals result incorrect: %s, %s", &s1, &s2)
 							}
+
+							// Test union.
+
+							u := s1.Copy()
+							u.UnionWith(s2)
+							// Verify all elements from m1 and m2 are in u.
+							for _, m := range []map[int]bool{m1, m2} {
+								for x := range m {
+									if !u.Contains(x) {
+										t.Errorf("incorrect union result %s union %s = %s", &s1, &s2, &u)
+										break
+									}
+								}
+							}
+							// Verify all elements from u are in m2 or m1.
+							for x, ok := u.Next(minVal); ok; x, ok = u.Next(x + 1) {
+								if !(m1[x] || m2[x]) {
+									t.Errorf("incorrect union result %s union %s = %s", &s1, &s2, &u)
+									break
+								}
+							}
+
+							// Test intersection.
+							u = s1.Copy()
+							u.IntersectionWith(s2)
+							// Verify all elements from m1 and m2 are in u.
+							for x := range m1 {
+								if m2[x] && !u.Contains(x) {
+									t.Errorf("incorrect intersection result %s union %s = %s  x=%d", &s1, &s2, &u, x)
+									break
+								}
+							}
+							// Verify all elements from u are in m2 and m1.
+							for x, ok := u.Next(minVal); ok; x, ok = u.Next(x + 1) {
+								if !(m1[x] && m2[x]) {
+									t.Errorf("incorrect intersection result %s intersect %s = %s", &s1, &s2, &u)
+									break
+								}
+							}
 						}
 					}
 				}
