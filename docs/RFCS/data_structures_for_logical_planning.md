@@ -14,7 +14,7 @@ on SQL optimizations. It also proposes a *path to the introduction* of
 these data structures in the current CockroachDB source base.
 
 It is complementary to the separate [RFC: SQL Logical
-planning](https://github.com/cockroachdb/cockroach/pull/19135) which
+planning](sql_query_planning.md) which
 provides both context, additional motivations and an overarching
 story. The reader is invited to look at that other RFC (as well as
 other documents listed in the Context section below) for the
@@ -56,7 +56,7 @@ This RFC is based on the following prior work:
 - [Tech note: The SQL layer in CockroachDB](../tech-notes.md)
 - [Tech note: Guiding principles for the SQL middle-end and back-end in CockroachDB](../tech-nodes/sql-principles.md)
 - [Tech note / meta-RFC: Upcoming SQL changes / Evolving the SQL layer in CockroachDB](https://github.com/cockroachdb/cockroach/pull/18977)
-- [RFC: SQL Logical planning](https://github.com/cockroachdb/cockroach/pull/19135) in particular the terminology
+- [RFC: SQL Logical planning](sql_query_planning.md) in particular the terminology
   set forth there, for example the "prep", "rewrite" and "search" phases.
 - [RFC: Algebraic Data Types in Go](20170517_algebraic_data_types.md) because we're going to reuse the mechanisms there.
 
@@ -242,7 +242,7 @@ needed for a full SQL language.
 from the AST directly to a memo-like structure, or whether there will
 be an intermediate tree in-between. As of this writing [this
 discussion is still open in the overarching
-RFC](https://github.com/cockroachdb/cockroach/pull/19135). Peter
+RFC](sql_query_planning.md). Peter
 suggests we may want to do this, whereas I (knz) think we don't, to
 save time and memory. There is no clear evidence in favor of either at
 this time.
@@ -577,7 +577,7 @@ we will not want to add properties arbitrarily unless/until they are
 actually needed.
 
 [A separate RFC draws an inventory of the properties being
-considered.](https://github.com/cockroachdb/cockroach/pull/19366)
+considered.](sql_plan_properties.md)
 
 ### Result columns as properties are just a cache
 
