@@ -1090,6 +1090,14 @@ func TestRefreshPendingCommands(t *testing.T) {
 				for i := 0; i < 2; i++ {
 					draining = draining && mtc.stores[i].IsDraining()
 				}
+				// If this goroutine can't be preempted, and we don't have other threads
+				// available (for example since you only have four and the other three
+				// are in GC, or you even only have one to begin with!), it can end up
+				// spinning forever. In the case that prompted adding this, there are
+				// four cores and "gc assist" got us stuck.
+				//
+				// See #18554.
+				time.Sleep(time.Nanosecond)
 			}
 			mtc.advanceClock(context.Background())
 
