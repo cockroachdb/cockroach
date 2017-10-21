@@ -100,7 +100,7 @@ type Iterator interface {
 	// allowMeta2Splits is false.
 	//
 	// TODO: remove allowMeta2Splits in version 1.3.
-	FindSplitKey(start, end MVCCKey, targetSize int64, allowMeta2Splits bool) (MVCCKey, error)
+	FindSplitKey(start, end, minSplitKey MVCCKey, targetSize int64, allowMeta2Splits bool) (MVCCKey, error)
 }
 
 // Reader is the read interface to an engine's data.
