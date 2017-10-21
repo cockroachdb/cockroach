@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"math/rand"
 	"reflect"
+	"runtime"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -1090,14 +1091,16 @@ func TestRefreshPendingCommands(t *testing.T) {
 				for i := 0; i < 2; i++ {
 					draining = draining && mtc.stores[i].IsDraining()
 				}
-				// If this goroutine can't be preempted, and we don't have other threads
-				// available (for example since you only have four and the other three
-				// are in GC, or you even only have one to begin with!), it can end up
-				// spinning forever. In the case that prompted adding this, there are
-				// four cores and "gc assist" got us stuck.
+				// Allow this loop to be preempted. Failure to do so can cause a
+				// deadlock because a non-preemptible loop will prevent GC from
+				// starting which in turn will cause all other goroutines to be stuck
+				// as soon as they are called on to assist the GC (this shows up as
+				// goroutines stuck in "GC assist wait"). With all of the other
+				// goroutines stuck, nothing will be able to set mtc.stores[i].draining
+				// to true.
 				//
 				// See #18554.
-				time.Sleep(time.Nanosecond)
+				runtime.Gosched()
 			}
 			mtc.advanceClock(context.Background())
 
