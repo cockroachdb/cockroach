@@ -50,7 +50,7 @@ func TestRocksDBMap(t *testing.T) {
 		}
 	}()
 
-	rng := rand.New(rand.NewSource(int64(timeutil.Now().UnixNano())))
+	rng := rand.New(rand.NewSource(timeutil.Now().UnixNano()))
 
 	numKeysToWrite := 1 << 12
 	keys := make([]string, numKeysToWrite)
@@ -319,7 +319,7 @@ func BenchmarkRocksDBMapWrite(b *testing.B) {
 	}
 	defer tempEngine.Close()
 
-	rng := rand.New(rand.NewSource(int64(timeutil.Now().UnixNano())))
+	rng := rand.New(rand.NewSource(timeutil.Now().UnixNano()))
 
 	for _, inputSize := range []int{1 << 12, 1 << 14, 1 << 16, 1 << 18, 1 << 20} {
 		b.Run(fmt.Sprintf("InputSize%d", inputSize), func(b *testing.B) {
@@ -366,7 +366,7 @@ func BenchmarkRocksDBMapIteration(b *testing.B) {
 	diskMap := NewRocksDBMap(tempEngine)
 	defer diskMap.Close(context.Background())
 
-	rng := rand.New(rand.NewSource(int64(timeutil.Now().UnixNano())))
+	rng := rand.New(rand.NewSource(timeutil.Now().UnixNano()))
 
 	for _, inputSize := range []int{1 << 12, 1 << 14, 1 << 16, 1 << 18, 1 << 20} {
 		for i := 0; i < inputSize; i++ {
