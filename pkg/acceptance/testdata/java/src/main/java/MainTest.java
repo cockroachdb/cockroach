@@ -12,6 +12,14 @@ import java.util.UUID;
 
 public class MainTest extends CockroachDBTest {
     @Test
+    public void testNoOp() throws Exception {
+      // This is a test we can target when building the Docker image to ensure
+      // Maven downloads all packages necessary for testing before we enter
+      // offline mode. (Maven dependency:go-offline is not bulletproof, and
+      // leaves out surefire-junit.)
+    }
+
+    @Test
     public void testSimpleTable() throws Exception {
         PreparedStatement stmt = conn.prepareStatement("CREATE TABLE f (x INT, ts TIMESTAMP)");
         int res = stmt.executeUpdate();

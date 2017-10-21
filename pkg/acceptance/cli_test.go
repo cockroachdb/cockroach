@@ -41,7 +41,7 @@ func TestDockerCLI(t *testing.T) {
 	defer s.Close(t)
 
 	containerConfig := container.Config{
-		Image: postgresTestImage,
+		Image: acceptanceImage,
 		Cmd:   []string{"stat", cluster.CockroachBinaryInContainer},
 	}
 	ctx := context.Background()
@@ -95,7 +95,7 @@ func TestDockerStartFlags(t *testing.T) {
 	defer s.Close(t)
 
 	containerConfig := container.Config{
-		Image: postgresTestImage,
+		Image: acceptanceImage,
 		Cmd:   []string{"stat", cluster.CockroachBinaryInContainer},
 	}
 	ctx := context.Background()
