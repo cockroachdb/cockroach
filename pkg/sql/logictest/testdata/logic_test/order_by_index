@@ -75,7 +75,7 @@ EXPLAIN (METADATA) SELECT k FROM kv ORDER BY INDEX kv@foo, k
 ----
 0  nosort  ·      ·       (k)     ·
 0  ·       order  -v,+k   ·       ·
-1  scan    ·      ·       (k, v)  -v,+k,key
+1  scan    ·      ·       (k, v)  -v,+k
 1  ·       table  kv@foo  ·       ·
 1  ·       spans  ALL     ·       ·
 
@@ -128,10 +128,10 @@ EXPLAIN(METADATA) SELECT k FROM kv@foo a NATURAL JOIN kv@foo ORDER BY INDEX kv@f
 2  ·       type            inner              ·                                                                                    ·
 2  ·       equality        (k, v) = (k, v)    ·                                                                                    ·
 2  ·       mergeJoinOrder  -"(v=v)",+"(k=k)"  ·                                                                                    ·
-3  scan    ·               ·                  (k, v)                                                                               -v,+k,key
+3  scan    ·               ·                  (k, v)                                                                               -v,+k
 3  ·       table           kv@foo             ·                                                                                    ·
 3  ·       spans           ALL                ·                                                                                    ·
-3  scan    ·               ·                  (k, v)                                                                               -v,+k,key
+3  scan    ·               ·                  (k, v)                                                                               -v,+k
 3  ·       table           kv@foo             ·                                                                                    ·
 3  ·       spans           ALL                ·                                                                                    ·
 
@@ -154,3 +154,40 @@ PREPARE a AS (TABLE kv) ORDER BY PRIMARY KEY kv
 
 statement error ORDER BY INDEX in window definition is not supported
 SELECT avg(k) OVER (ORDER BY PRIMARY KEY kv) FROM kv
+
+statement ok
+CREATE TABLE abcd (a INT PRIMARY KEY, b INT, c INT, d INT, UNIQUE INDEX (b, c) STORING (d))
+
+statement ok
+INSERT INTO abcd VALUES (1, 1, NULL, 4), (2, 1, NULL, 3), (3, NULL, 3, 2), (4, NULL, 3, 1)
+
+# Verify we don't incorrectly elide the sort node (#19343).
+query ITTTTT colnames
+EXPLAIN (VERBOSE) SELECT * FROM abcd ORDER BY b, c, d
+----
+Level  Type  Field  Description        Columns       Ordering
+0      sort  ·      ·                  (a, b, c, d)  +b,+c,+d
+0      ·     order  +b,+c,+d           ·             ·
+1      scan  ·      ·                  (a, b, c, d)  +b,+c
+1      ·     table  abcd@abcd_b_c_key  ·             ·
+1      ·     spans  ALL                ·             ·
+
+query IIII
+SELECT * FROM abcd ORDER BY b, c, d
+----
+4  NULL  3     1
+3  NULL  3     2
+2  1     NULL  3
+1  1     NULL  4
+
+statement ok
+CREATE TABLE abcd2 (a INT PRIMARY KEY, b INT NOT NULL, c INT NOT NULL, d INT, UNIQUE INDEX (b, c) STORING (d))
+
+# In this case it is correct to elide the sort node.
+query ITTTTT colnames
+EXPLAIN (VERBOSE) SELECT * FROM abcd2 ORDER BY b, c, d
+----
+Level  Type  Field  Description          Columns       Ordering
+0      scan  ·      ·                    (a, b, c, d)  +b,+c,key
+0      ·     table  abcd2@abcd2_b_c_key  ·             ·
+0      ·     spans  ALL                  ·             ·
