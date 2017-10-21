@@ -665,21 +665,27 @@ Relational operators:
 TBD: do we introduce a `distinct` operator for DISTINCT, or do we
 represent it as a required weak key *property* on the class?
 
-Scalar expression operators:
+Scalar expression operators, summary:
 
 - `variable` for column variables
-
 - `const` or `literal` for literal values
-
-- boolean: `and`, `or`, `not`
-
 - scalar comparisons, listed below.
+- boolean: `and`, `or`, `not`
+- aggregate operators, listed below. These can only appear at the top
+  level of an expression listed by a `groupBy` node.
+- `funap` - function application for non-aggregate functions.
+- other arithmetic and value manipulation, listed below.
 
-- arithmetic and value manipulation, listed below.
+Aggregate expression operators:
 
-- `funap` - function application.
+| Operator                                                     | Description                                          |
+|--------------------------------------------------------------|------------------------------------------------------|
+| `count(*)`                                                   | special case for SQL's COUNT(*). Includes NULL rows. |
+| `count`, `sum`, `min`, `max`, `stddev`, `variance`, `sqdiff` | aggregation over rows. Exclude NULL rows.            |
+| `bool_and`, `bool_or`                                        | boolean aggregations                                 |
+| `gen_agg`                                                    | generalized aggregation using a function opaque to optimizations. Will be used for `concat`, `xor`. |
 
-Comparisons:
+Scalar comparison operators:
 
 | Short name         | Alphanumeric name    | Null-tolerant? | Example SQL      |
 |--------------------|----------------------|----------------|------------------|
@@ -698,7 +704,7 @@ NULL OR b IS NULL) AND NOT (a IS NULL AND b IS NULL))`.
 
 TBD: how to represent any, all, some?
 
-Scalar operators:
+Other scalar operators:
 
 | Short name         | Alphanumeric name    | Null-tolerant? | Example SQL   |
 |--------------------|----------------------|----------------|---------------|
@@ -710,6 +716,12 @@ Scalar operators:
 | `~`      (unary)   | `bitCompl`                      | no  | `~a`          |
 | `<<`, `>>`         | `lShift`, `rShift`              | no  | `a << b`      |
 | `||`               | `concat`                        | no  | `a || b`      |
+
+Note that all these "other" scalar operators could be replaced by uses
+of the `funap` operator. We may or may not consider this in the
+future. However, every operator visible to the optimizer gives a
+chance to the optimizer to propagate properties across it. In
+CockroachDB this is already true of arithmetic operators.
 
 ## Properties
 
