@@ -152,6 +152,8 @@ $(YARN_INSTALLED_TARGET): $(BOOTSTRAP_TARGET) $(UI_ROOT)/package.json $(UI_ROOT)
 	rm -rf $(UI_ROOT)/node_modules/@types/node
 	touch $@
 
+LOCAL_INSTALLABLES := $(addprefix $(PKG_ROOT)/cmd/,commitcheck metacheck returncheck)
+
 # We store the bootstrap marker file in the bin directory so that remapping bin,
 # like we do in the builder container to allow for different host and guest
 # systems, will trigger bootstrapping in the container as necessary. This is
@@ -160,11 +162,11 @@ BOOTSTRAP_TARGET := $(LOCAL_BIN)/.bootstrap
 
 # Update the git hooks and install commands from dependencies whenever they
 # change.
-$(BOOTSTRAP_TARGET): $(GITHOOKS) $(REPO_ROOT)/Gopkg.lock
+$(BOOTSTRAP_TARGET): $(GITHOOKS) $(REPO_ROOT)/Gopkg.lock $(shell find $(LOCAL_INSTALLABLES))
 ifneq ($(GIT_DIR),)
 	git submodule update --init
 endif
-	@$(GO_INSTALL) -v $(PKG_ROOT)/cmd/{metacheck,returncheck} \
+	@$(GO_INSTALL) -v $(LOCAL_INSTALLABLES) \
 		$(REPO_ROOT)/vendor/github.com/golang/dep/cmd/dep \
 		$(REPO_ROOT)/vendor/github.com/client9/misspell/cmd/misspell \
 		$(REPO_ROOT)/vendor/github.com/cockroachdb/crlfmt \
