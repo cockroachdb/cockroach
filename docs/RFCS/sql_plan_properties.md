@@ -749,7 +749,7 @@ root: 3
 ```
 
 (The notation `|enforced` in the operator indicates that the
-m-expression cannot be eliminated during simplifications / search.)
+memo-expression cannot be eliminated during simplifications / search.)
 
 ## Required scan index
 
@@ -859,13 +859,13 @@ PROPERTIES(
 ## Actual algorithm
 
 - Type: enum (dependent on relational operator)
-- Category: physical, extra-functional
+- Category: attribute, extra-functional
 - Origin: derived
 - Kind: relational
 - Level:  mandatory
 
-This property determines which algorithm to use for a given
-m-expression node. This is annotated during search and physical
+This attribute determines which algorithm to use for a given
+memo-expression node. This is annotated during search and physical
 planning.
 
 Must be set and remain equal to the required algorithm, if any specified.
@@ -876,12 +876,12 @@ relational expression in the plan.
 ## Scan index
 
 - Type: string
-- Category: physical, extra-functional
+- Category: attribute, extra-functional
 - Origin: derived
 - Kind: relational
 - Level:  mandatory
 
-This property determines which index to use during a table scan.
+This attribute determines which index to use during a table scan.
 This is annotated during search and physical planning.
 
 Must be set and remain equal to the required index scans, if any specified.
@@ -892,12 +892,12 @@ query plan.
 ## Spans for scans
 
 - Type: list of key spans
-- Category: physical, semantic
+- Category: attribute, semantic
 - Origin: derived
 - Kind: relational
 - Level:  mandatory
 
-This property determines which spans to scan from KV.
+This attribute determines which spans to scan from KV.
 The list can be empty.
 
 The final physical plan must have this annotated for every scan in the
@@ -927,9 +927,9 @@ query plan.
 | required scan index     | cf. below | L, x-func | opt req.  | relational | opt   | physical planning, search |                        |
 | apparent presentation   | []int     | P, x-func | derived   | relational | mand. | physical planning         | `PRESENTING(...)`      |
 | apparent orderings      | cf. below | P, sem    | derived   | relational | opt   | TBD                       | `ORDERED BY(...)`      |
-| algorithm               | enum      | P, x-func | derived.  | relational | mand. | physical planning         |                        |
-| scan index              | string    | P, x-func | derived   | relational | mand. | physical planning         |                        |
-| spans for scans         | []span    | P, sem    | derived   | relational | opt   | TBD                       |                        |
+| algorithm               | enum      | A, x-func | derived.  | relational | mand. | physical planning         |                        |
+| scan index              | string    | A, x-func | derived   | relational | mand. | physical planning         |                        |
+| spans for scans         | []span    | A, sem    | derived   | relational | opt   | TBD                       |                        |
 
 Note: in the literature "functional dependencies" is the group formed
 by variable dependencies, equivalency groups and value constraints.
@@ -940,10 +940,10 @@ We distinguish the *category*:
   relational algebra. For example, NULL-ability of columns and keys,
   weak keys and foreign keys.
 - *physical* (P) properties that can be derived from the specific
-  implementation of relational algebra expressions. The sole physical
-  property is ordering which is not a consideration in the extended
-  relational algebra. (ORDER BY sits outside of the extended
-  relational algebra).
+  implementation of relational algebra expressions.
+- *attributes* (A) of memo-expressions which determine
+  its meaning further; attributes are only valid for specific
+  expression operators.
 
 We distinguish two *sub-categories*:
 

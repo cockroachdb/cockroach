@@ -321,8 +321,9 @@ code, in memory) by:
   - a member data structure that contains the *logical properties* of the class.
   - a (dynamically allocated) unordered multiset of one or more
     concrete expression representations, called "memo-expressions".
-    You can think about an memo-expression as a particular strategy
-    to compute the results.
+    You can think about an memo-expression as a particular strategy to
+    compute the results. Each of them stores the *physical properties
+    and attributes* for that expression.
 
 The data structure has a principal invariant: *all the
 memo-expressions inside a class have the same semantics* with
@@ -331,16 +332,20 @@ query, where sameness is defined by what is allowable for the SQL
 query text initially provided (e.g. two results are the "same" if they
 differ only by their ordering and no ORDER BY clause was provided).
 
-We attach *logical properties* to entire classes, *physical
-properties* to individual memo-expressions. [Properties are defined
+We attach *logical properties* to entire classes,
+*physical properties and attributes* to individual
+memo-expressions. The difference between property and attribute is
+defined in the [logical planning
+RFC](sql_query_planning.md#properties-vs-attributes). The concrete
+properties and attributes we're going to implement [are defined
 further in a separate RFC](sql_plan_properties.md).
 
 The top-level array together with its item nodes is called a *memo*.
 
 The new thing in this RFC is that the representation of an expression
 is split (in code, in memory) into two places: one at the head of the class
-node where its properties are encoded, and one in the representation
-set where its structure (and, later, physical properties) is encoded.
+node where its properties/attrs are encoded, and one in the representation
+set where its structure (and, later, physical properties/attrs) is encoded.
 
 ## Expression representations
 
@@ -723,16 +728,16 @@ future. However, every operator visible to the optimizer gives a
 chance to the optimizer to propagate properties across it. In
 CockroachDB this is already true of arithmetic operators.
 
-## Properties
+## Properties and attributes
 
-This RFC does not propose to fix the set of logical properties that
-need to be maintained. This set will likely evolve over time: the
+This RFC does not propose to fix the set of properties and attributes
+that need to be maintained. This set will likely evolve over time: the
 properties that need to be defined are exactly those necessary to
 support SQL optimizations and the preparation of an execution plan --
-we will not want to add properties arbitrarily unless/until they are
-actually needed.
+we will not want to compute and store information arbitrarily
+unless/until they are actually needed.
 
-[A separate RFC draws an inventory of the properties being
+[A separate RFC draws an inventory of the properties / attributes being
 considered.](sql_plan_properties.md)
 
 ### Result columns as properties are just a cache
