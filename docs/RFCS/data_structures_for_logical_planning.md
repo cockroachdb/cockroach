@@ -595,6 +595,122 @@ IndexedVar* as currently done in CockroachDB, and this thus eliminates
 the associated renumbering cost whenever an expression is migrated
 from one level to another.
 
+## Operators for memo-expressions
+
+Relational operators:
+
+- `filter` or `select` - relational selection.
+
+  Two operands: the source relation and the selection predicate (a
+  scalar expression).
+
+  Semantics: rows in the source for which the selection predicate
+  evaluates to true.
+
+- `project` - relational projection.
+
+  Two operands: the source relation and the set of (indexes to)
+  projections, which are scalar expressions.
+
+  Semantics: results of evaluating the projection expressions for each
+  row in the source.
+
+- `scan` - the results of scanning a table.
+
+  Two operands: the table name, and the list of (indexes to) variables
+  that are populated by this scan.
+
+  Semantics: rows in the table.
+
+- `groupBy` - the results of aggregating over a table.
+
+  Two operands: the source relation and the set of (indexes to)
+  aggregation expressions.
+
+  Semantics: results of the aggregation over the source relation.
+
+- `orderBy` - the result of sorting a table.
+
+  Two operands: the source relation and the list of (indexes to)
+  sorting columns.
+
+- `innerJoin`, `leftJoin` (left outer join), `rightJoin` (right outer
+  join), `fullJoin` (full outer join), `semiJoin`, `antiJoin` -
+  the various join operators.
+
+  Three operands: the join predicate and the list (set?) of join operands.
+
+  (The join operands can be represented as a set, at least initially,
+  because the *presentation order*, a logical property, can serve to
+  disambiguate `a join b` from `b join a`. During search, where the
+  physical join order needs to be decided, one can either substitute a
+  list for the set, or use a separate "join order" physical property.)
+
+- `union`, `intersect`, `except` for the corresponding SQL operators
+
+  Two operands: the left and right source relations.
+
+  Semantics: the results of the corresponding SQL operator (resp. set
+  union, set intersection, set difference).
+
+- `apply` for correlated subqueries
+
+  Two operands: an input relation R, a parameterized relational expression E.
+
+  It also has an attribute ⊗ that indicates the join variant, which
+  can be either cross, left outer join, left semijoin or antijoin.
+
+  Semantics: set union, for r ∈ R, of ({r} ⊗ E(r))
+
+TBD: do we introduce a `distinct` operator for DISTINCT, or do we
+represent it as a required weak key *property* on the class?
+
+Scalar expression operators:
+
+- `variable` for column variables
+
+- `const` or `literal` for literal values
+
+- boolean: `and`, `or`, `not`
+
+- scalar comparisons, listed below.
+
+- arithmetic and value manipulation, listed below.
+
+- `funap` - function application.
+
+Comparisons:
+
+| Short name         | Alphanumeric name    | Null-tolerant? | Example SQL      |
+|--------------------|----------------------|----------------|------------------|
+| `=`, `!=`, `<`, `>`, `<=`, `>=` | `eq`, `ne`, `lt`, `gt`, `le`, `ge` | no | `a = b`, `a < b`, etc. |
+| `is`, `!is`        | `is`, isNot`                    | yes | `a IS NOT NULL`  |
+| `is!`, `!is!       | `isDistinct`, `isNotDistinct`   | yes | `a IS DISTINCT FROM b` [*] |
+| `in`, `!in`        | `in`, `notIn`                   | no  | `a IN (b, c, d)` |
+| `like`, `!like`    | `like`, `notLike`               | no  | `a LIKE b`       |
+| `like*`, `!like*`  | `iLike`, `notILike`             | no  | `a ILIKE b`      |
+| `sim`, `!sim`      | `similar`, `notSimilar`         | no  | `a SIMILAR TO b` |
+| `r~`, `!r~`        | `regMatch, `notRegMatch`        | no  | `a ~ b`          |
+| `r~*`, `!r~*`      | `regIMatch, `notRegIMatch`      | no  | `a ~* b`         |
+
+[*] reminder: `a IS DISTINCT FROM b` is equivalent to `((a <> b OR a IS
+NULL OR b IS NULL) AND NOT (a IS NULL AND b IS NULL))`.
+
+TBD: how to represent any, all, some?
+
+Scalar operators:
+
+| Short name         | Alphanumeric name    | Null-tolerant? | Example SQL   |
+|--------------------|----------------------|----------------|---------------|
+| `-`      (unary)   | `neg`                           | no  | `-a`          |
+| `+`, `-`, `*`, `/` | `add`, `sub`, `mul`, `div`      | no  | `a + b` etc.  |
+| '%', `//`, `^`     | `mod`, `floorDiv`, `pow`        | no  | `a % b`, `a // b`, `a ^ b`  |
+| `//`               | `floorDiv`                      | no  | `a // b`      |
+| `&`, `|`, `#`      | `bitAnd`, `bitOr`, `bitXor`     | no  | `a | b`       |
+| `~`      (unary)   | `bitCompl`                      | no  | `~a`          |
+| `<<`, `>>`         | `lShift`, `rShift`              | no  | `a << b`      |
+| `||`               | `concat`                        | no  | `a || b`      |
+
 ## Properties
 
 This RFC does not propose to fix the set of logical properties that
