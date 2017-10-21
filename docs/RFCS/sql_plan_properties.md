@@ -70,7 +70,7 @@ code is indeed matching the intent.
 | unique sets             | intsetset | L, sem    | derived   | relational | opt   | TBD                       | `UNIQUE {...}`         |
 | key sets                | intsetset | L, sem    | derived   | relational | opt   | TBD                       | `KEY {...}`            |
 | equivalency groups      | intsetset | L, sem    | derived   | relational | opt   | TBD                       | `EQ {...}`             |
-| range constraints       | cf. below | L, sem    | derived   | rel(comm?) | opt   | TBD                       | `CHECK ...`            |
+| value constraints       | cf. below | L, sem    | derived   | rel(comm?) | opt   | TBD                       | `CHECK ...`            |
 | req. presentation order | []int     | L, x-func | opt req.  | relational | opt   | physical planning         | `REQUIRE PRESENT(...)` |
 | required ordering       | cf. below | L, sem    | opt req.  | relational | opt   | ordering transformations  | `REQUIRE ORDER BY(...)` |
 | required algorithm      | enum      | L, x-func | opt req.  | relational | opt   | physical planning, search |                        |
@@ -82,14 +82,18 @@ code is indeed matching the intent.
 | spans for scans         | []span    | P, sem    | derived   | relational | opt   | TBD                       |                        |
 
 Note: in the literature "functional dependencies" is the group formed
-by variable dependencies, equivalency groups and range constraints.
+by variable dependencies, equivalency groups and value constraints.
 
 We distinguish the *category*:
 
-- *logical* (L) properties which define equivalency classes, and are
-  shared among all m-expressions in the class.
-- *physical* (P) properties which can be different per m-expression in a
-  class.
+- *logical* (L) properties that can be derived from the extended
+  relational algebra. For example, NULL-ability of columns and keys,
+  weak keys and foreign keys.
+- *physical* (P) properties that can be derived from the specific
+  implementation of relational algebra expressions. The sole physical
+  property is ordering which is not a consideration in the extended
+  relational algebra. (ORDER BY sits outside of the extended
+  relational algebra).
 
 We distinguish two *sub-categories*:
 
@@ -353,6 +357,15 @@ Example with memo:
 ```sql
 > select v, k from (select k, v from kv where k > 3) where v < 4
 
+Expression tree:
+
+root:
+   8: filter (v < 4)
+      5: filter (k > 3)
+	     2: scan kv -> k,v
+
+Memo:
+
                     Result columns
 0: (var k)          n/a
 1: (var v)          n/a
@@ -361,7 +374,7 @@ Example with memo:
 4: (> 0 3)          n/a
 5: (filter 2 4)     {0,1}
 6: (literal "4")    n/a
-7: (< 1 7)          n/a
+7: (< 1 6)          n/a
 8: (filter 5 7)     {0,1}
 root: 8
 ```
@@ -403,6 +416,17 @@ Example with memo:
 ```
 > select * from kv where exists (select * from ab where ab.a = kv.v)
 
+Expression tree:
+
+root:
+   9: filter exists(@7)
+       2: scan kv -> k, v
+
+   7: filter a = v
+      5: scan ab -> a,b
+
+Memo:
+
    M-expression        Results columns Variable dependencies
 0: (var k)             n/a             {0}
 1: (var v)             n/a             {1}
@@ -438,6 +462,16 @@ Example with memo:
 ```
 > select a+k, v from ab, kv
 
+Expression tree:
+
+root:
+   8: project a+k, v
+      6: cross
+	     2: scan kv -> k,v
+		 5: scan ab -> a,b
+
+Memo:
+
    M-expression        Results columns Variable dependencies Used columns
 0: (var k)             n/a             {0}                   n/a
 1: (var v)             n/a             {1}                   n/a
@@ -447,8 +481,8 @@ Example with memo:
 5: (scan ab [3 4])     {3,4}           {}                    {}
 6: (cross [2 5])       {0,1,3,4}       {}                    {}
 7: (+ 3 0)             n/a             {0,3}                 n/a
-6: (project 6 [7 1])   {7,1}           {0,1,3}               {0,3} = inter({0,1,3,4}, {0,3})
-root: 6
+8: (project 6 [7 1])   {7,1}           {0,1,3}               {0,3} = inter({0,1,3,4}, {0,3})
+root: 8
 ```
 
 ## Required columns
@@ -473,6 +507,16 @@ Example with memo:
 ```
 > select a+k, v from ab, kv
 
+Expression tree:
+
+root:
+   8: project a+k, v
+      6: cross
+	     2: scan kv -> k,v
+		 5: scan ab -> a,b
+
+Memo:
+
    M-expression        Results   Vardeps  Used     Required columns
 0: (var k)             n/a       {0}      n/a      n.a
 1: (var v)             n/a       {1}      n/a      n/a
@@ -482,8 +526,8 @@ Example with memo:
 5: (scan ab [3 4])     {3,4}     {}       {}       {3}
 6: (cross [2 5])       {0,1,3,4} {}       {}       {0,3}
 7: (+ 3 0)             n/a       {0,3}    n/a      n/a
-6: (project 6 [7 1])   {7,1}     {0,1,3}  {0,3}    {0,3}
-root: 6
+8: (project 6 [7 1])   {7,1}     {0,1,3}  {0,3}    {0,3}
+root: 8
 ```
 
 ## Unique sets
@@ -587,7 +631,7 @@ PROPERTIES(
 )
 ```
 
-## Range constraints
+## Value constraints
 
 - Type: TBD (?)
 - Category: logical, semantic
@@ -719,6 +763,15 @@ Example with memo:
 ```
 > select * from ab cross join @{hash} kv
 
+Expression tree:
+
+root:
+    6: cross|enforced -> [a b k v]   req-alg: 'hash'
+	      2: scan ab -> a,b
+		  5: scan kv -> k,v
+
+Memo:
+
                                      Logical property
 0: (var a)
 1: (var b)
@@ -730,6 +783,14 @@ Example with memo:
 root: 6
 
 > select * from kv order @{iterative} by v
+
+Expression tree:
+
+root:
+    3:sort|enforced, req-alg: 'iterative'
+	    2:scan kv -> k, v
+
+Memo:
 
                             Logical property
 0: (var k)
@@ -763,6 +824,13 @@ Example with memo:
 
 ```
 > select * from ab@b_idx
+
+Expression tree:
+
+root
+    scan ab@b_idx -> a,b
+
+Memo:
 
                                      Logical property
 0: (var a)
@@ -895,6 +963,10 @@ stored in the memo as properties.
 - column labels. Labels disappear from the expressions during
   the prep phase, and only remains at the top level, as
   an attribute of the results for the entire query.
+
+  Note: we might still store the labels and try somewhat to preserve
+  them during transformations, so as to aid debuggability.
+
 
 ## Rationale and Alternatives
 
