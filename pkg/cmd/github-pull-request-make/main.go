@@ -114,9 +114,11 @@ func pkgsFromDiff(r io.Reader) (map[string]pkg, error) {
 		case bytes.HasPrefix(line, []byte{'-'}) && bytes.Contains(line, []byte(".Skip")):
 			switch {
 			case len(curTestName) > 0:
-				curPkg := pkgs[curPkgName]
-				curPkg.tests = append(curPkg.tests, curTestName)
-				pkgs[curPkgName] = curPkg
+				if !(curPkgName == "build" && curTestName == "TestStyle") {
+					curPkg := pkgs[curPkgName]
+					curPkg.tests = append(curPkg.tests, curTestName)
+					pkgs[curPkgName] = curPkg
+				}
 			case len(curBenchmarkName) > 0:
 				curPkg := pkgs[curPkgName]
 				curPkg.benchmarks = append(curPkg.benchmarks, curBenchmarkName)
@@ -223,8 +225,8 @@ func main() {
 				cmd := exec.Command("git", "diff")
 				cmd.Dir = dir
 				log.Println(cmd.Dir, cmd.Args)
-				if output, err := cmd.Output(); err != nil {
-					log.Fatal(err)
+				if output, err := cmd.CombinedOutput(); err != nil {
+					log.Fatal(err, output)
 				} else if len(output) > 0 {
 					foundDiff = true
 					log.Printf("unexpected diff:\n%s", output)

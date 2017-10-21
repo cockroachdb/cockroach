@@ -466,7 +466,7 @@ func TestMakeFamilyKey(t *testing.T) {
 	const maxFamID = math.MaxUint32
 	key := MakeFamilyKey(nil, maxFamID)
 	if expected, n := 6, len(key); expected != n {
-		t.Errorf("expected %d bytes, but got %d: [% x]", expected, n, []byte(key))
+		t.Errorf("expected %d bytes, but got %d: [% x]", expected, n, key)
 	}
 }
 

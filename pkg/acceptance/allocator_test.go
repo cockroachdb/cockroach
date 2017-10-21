@@ -406,7 +406,7 @@ func (at *allocatorTest) stdDev() (float64, error) {
 	var replicaCounts stats.Float64Data
 	for _, node := range nodesResp.Nodes {
 		for _, ss := range node.StoreStatuses {
-			replicaCounts = append(replicaCounts, float64(ss.Metrics["replicas"]))
+			replicaCounts = append(replicaCounts, ss.Metrics["replicas"])
 		}
 	}
 	stdDev, err := stats.StdDevP(replicaCounts)

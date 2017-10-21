@@ -273,7 +273,7 @@ func BenchmarkSortAll(b *testing.B) {
 	// One column integer rows.
 	columnTypeInt := sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_INT}
 	types := []sqlbase.ColumnType{columnTypeInt}
-	rng := rand.New(rand.NewSource(int64(timeutil.Now().UnixNano())))
+	rng := rand.New(rand.NewSource(timeutil.Now().UnixNano()))
 
 	spec := SorterSpec{
 		OutputOrdering: convertToSpecOrdering(sqlbase.ColumnOrdering{{ColIdx: 0, Direction: encoding.Ascending}}),
@@ -316,7 +316,7 @@ func BenchmarkSortLimit(b *testing.B) {
 	// One column integer rows.
 	columnTypeInt := sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_INT}
 	types := []sqlbase.ColumnType{columnTypeInt}
-	rng := rand.New(rand.NewSource(int64(timeutil.Now().UnixNano())))
+	rng := rand.New(rand.NewSource(timeutil.Now().UnixNano()))
 
 	spec := SorterSpec{
 		OutputOrdering: convertToSpecOrdering(sqlbase.ColumnOrdering{{ColIdx: 0, Direction: encoding.Ascending}}),

@@ -6374,7 +6374,7 @@ func TestReplicaLookupUseReverseScan(t *testing.T) {
 					if err != nil {
 						t.Fatal(err)
 					}
-					pArgs := putArgs(keys.RangeMetaKey(roachpb.RKey(r.EndKey)).AsRawKey(), data)
+					pArgs := putArgs(keys.RangeMetaKey(r.EndKey).AsRawKey(), data)
 
 					txn.Sequence++
 					if _, pErr := tc.SendWrappedWith(roachpb.Header{Txn: txn}, &pArgs); pErr != nil {
@@ -6416,7 +6416,7 @@ func TestReplicaLookupUseReverseScan(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				pArgs := putArgs(keys.RangeMetaKey(roachpb.RKey(r.EndKey)).AsRawKey(), data)
+				pArgs := putArgs(keys.RangeMetaKey(r.EndKey).AsRawKey(), data)
 
 				txn.Sequence++
 				if _, pErr := tc.SendWrappedWith(roachpb.Header{Txn: txn}, &pArgs); pErr != nil {

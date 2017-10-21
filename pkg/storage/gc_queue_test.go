@@ -97,7 +97,7 @@ func TestGCQueueMakeGCScoreInvariantQuick(t *testing.T) {
 	if err := quick.Check(func(
 		seed uint16, uTTLSec uint32, uTimePassed time.Duration, uGCBytes uint32, uGCByteAge uint32,
 	) bool {
-		ttlSec, timePassed := int32(uTTLSec), time.Duration(uTimePassed)
+		ttlSec, timePassed := int32(uTTLSec), uTimePassed
 		gcBytes, gcByteAge := int64(uGCBytes), int64(uGCByteAge)
 
 		ms := enginepb.MVCCStats{
@@ -765,7 +765,7 @@ func TestGCQueueTransactionTable(t *testing.T) {
 	tc.repl.mu.Unlock()
 
 	// Verify that the new TxnSpanGCThreshold has reached the Replica.
-	if expWT := int64(gcTxnAndAC); txnSpanThreshold.WallTime != expWT {
+	if expWT := gcTxnAndAC; txnSpanThreshold.WallTime != expWT {
 		t.Fatalf("expected TxnSpanGCThreshold.Walltime %d, got timestamp %s",
 			expWT, txnSpanThreshold)
 	}
