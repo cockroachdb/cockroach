@@ -27,7 +27,7 @@ import (
 
 func runReferenceTestWithScript(ctx context.Context, t *testing.T, script string) {
 	containerConfig := container.Config{
-		Image: postgresTestImage,
+		Image: acceptanceImage,
 		Cmd:   []string{"stat", cluster.CockroachBinaryInContainer},
 	}
 	if err := testDockerOneShot(ctx, t, "reference", containerConfig); err != nil {
@@ -59,7 +59,7 @@ export PGPORT=""
 export COCKROACH_SKIP_UPDATE_CHECK=1
 export COCKROACH_CERTS_DIR=/certs/
 
-bin=/%s/cockroach
+bin=/opt/%s/cockroach
 echo "TODO(marc): specify --certs-dir=/certs/ once the binary is upgraded"
 $bin start --background --logtostderr &> oldout
 
@@ -91,7 +91,7 @@ $bin quit
 sleep 1
 
 echo "Read the modified data using the reference binary again."
-bin=/%s/cockroach
+bin=/opt/%s/cockroach
 %s
 `, referenceBinPath, referenceBinPath, backwardReferenceTest)
 	runReferenceTestWithScript(ctx, t, referenceTestScript)

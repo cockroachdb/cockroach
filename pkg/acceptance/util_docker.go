@@ -30,7 +30,7 @@ import (
 
 func defaultContainerConfig() container.Config {
 	return container.Config{
-		Image: postgresTestImage,
+		Image: acceptanceImage,
 		Env: []string{
 			fmt.Sprintf("PGPORT=%s", base.DefaultPort),
 			"PGSSLCERT=/certs/node.crt",
@@ -59,8 +59,8 @@ func testDockerSuccess(ctx context.Context, t *testing.T, name string, cmd []str
 
 const (
 	// Iterating against a locally built version of the docker image can be done
-	// by changing postgresTestImage to the hash of the container.
-	postgresTestImage = "docker.io/cockroachdb/postgres-test:20171019-1337"
+	// by changing acceptanceImage to the hash of the container.
+	acceptanceImage = "docker.io/cockroachdb/acceptance:20171108-172143"
 )
 
 func testDocker(
@@ -91,7 +91,7 @@ func testDocker(
 			Binds:       []string{filepath.Join(pwd, "testdata") + ":/testdata"},
 		}
 		err = l.OneShot(
-			ctx, postgresTestImage, types.ImagePullOptions{}, containerConfig, hostConfig, "docker-"+name,
+			ctx, acceptanceImage, types.ImagePullOptions{}, containerConfig, hostConfig, "docker-"+name,
 		)
 		if err == nil {
 			// Clean up the log files if the run was successful.

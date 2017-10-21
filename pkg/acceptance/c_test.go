@@ -153,7 +153,7 @@ int timestampEqual(PGtimestamp left, PGtimestamp right) {
 }
 
 void timestampPrint(PGtimestamp ts) {
-	fprintf(stderr, "epoch=%d\n", ts.epoch);
+	fprintf(stderr, "epoch=%lld\n", ts.epoch);
 	fprintf(stderr, "date:\n");
 	datePrint(ts.date);
 	fprintf(stderr, "time:\n");
@@ -480,7 +480,7 @@ int main(int argc, char const *argv[]) {
 				for (int i = 0; i < arrLen; i++) {
 					PQgetf(recvarr.res, i, "%int8", 0, &val);
 					if (val != expectedArr[i]) {
-						fprintf(stderr, "resultFormat=%d expected %d at pos %d; got %d\n", resultFormat, expectedArr[i], i, val);
+						fprintf(stderr, "resultFormat=%d expected %lld at pos %d; got %lld\n", resultFormat, expectedArr[i], i, val);
 						return 1;
 					}
 				}
@@ -490,7 +490,7 @@ int main(int argc, char const *argv[]) {
 	return 0;
 }
 EOF
-gcc -std=c99 -I/usr/include/postgresql -lpq -lpqtypes main.c
+gcc -std=c99 -I/usr/include/postgresql main.c -lpq -lpqtypes
 ./a.out
 `
 
@@ -537,6 +537,6 @@ int main(int argc, char const *argv[]) {
 	return 0;
 }
 EOF
-gcc -std=c99 -I/usr/include/postgresql -lpq -lpqtypes main.c
+gcc -std=c99 -I/usr/include/postgresql main.c -lpq -lpqtypes
 ./a.out
 `
