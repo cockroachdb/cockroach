@@ -31,7 +31,10 @@ The new data structures are:
   "memo" is used because it memoizes the results of analyzing/generating
   alternative plans for a single query.
 
-The proposed path is to make this new code co-exist with the current code.
+The proposed path is to make this new code co-exist with the current
+code initially, with a plan to replace the current code completely in
+the longer term.
+
 In comparison with the current code in CockroachDB, the main change is
 the introduction of expression classes, so that expressions do not
 form a "textbook" tree in memory any more.
@@ -53,7 +56,7 @@ logical and physical properties of a class of expressions.
 
 This RFC is based on the following prior work:
 
-- [Tech note: The SQL layer in CockroachDB](../tech-notes.md)
+- [Tech note: The SQL layer in CockroachDB](../tech-notes/sql.md)
 - [Tech note: Guiding principles for the SQL middle-end and back-end in CockroachDB](../tech-nodes/sql-principles.md)
 - [Tech note / meta-RFC: Upcoming SQL changes / Evolving the SQL layer in CockroachDB](https://github.com/cockroachdb/cockroach/pull/18977)
 - [RFC: SQL Logical planning](sql_query_planning.md) in particular the terminology
@@ -81,7 +84,7 @@ corresponds to the items:
 - Make plans stateless / context-free
 
 i.e. acting on this RFC will move forward on all these 5 items at
-once, and complete several of them.
+once, and complete all of them except the first.
 
 Finally, this RFC is not *based* on the [IR
 RFC](https://github.com/cockroachdb/cockroach/pull/10055) but will
@@ -94,18 +97,19 @@ will be later updated to reflect the choices made here.
 This RFC is motivated by:
 
 1) a need for new data structures to reduce various overheads of the
-   current technology, in particular the following should be eliminated:
-   
+   current technology, in particular the following should be
+   eliminated, in decreasing order of importance:
+
+   - the preparation of execution-related data structures in
+     `planNodes` that are only useful for local execution,
+     when the query will end up being distributed anyway.
+   - 2-3 different tree traversals to properly
+     handle name resolution and scalar subquery analysis.
    - the renumbering of IndexedVar nodes when transforming plans
    - linear/quadratic loops over the list of columns on both
      sides of a join or union to "match up" the columns
-   - 2-3 different tree traversals to properly
-     handle name resolution and scalar subquery analysis.
    - the use of the Go heap allocator to handle intermediate
      new nodes in a plan during transformations.
-   - the preparation of execution-related data structures in
-     `planNodes` that are only useful for local execution,
-	 when the query will end up being distributed anyway.
 
 2) a desire to align the architecture of CockroachDB with the state-of-the-art,
    which will ease the adoption of algorithms and ideas from the literature.
@@ -121,7 +125,7 @@ This RFC is motivated by:
 |--------------------|------------------------------------------------------|
 | Value expression   | Value or scalar expression                           |
 | planNode tree      | relational expression                                |
-| planNode           | m-expression or just "expression"                    |
+| planNode           | memo-expression or just "expression"                 |
 | render             | project                                              |
 | expression ref     | memo index                                           |
 | "front-end" = parsing + name resolution + type checking + normalization | "front-end" = parsing + preparation |
@@ -216,15 +220,28 @@ independent data structure [*]:
 ```
 
 This data structure is an array of *classes*: each line contains one
-or more structural representations, called m-expressions, that all
+or more structural representations, called memo-expressions, that all
 compute the same result. Initially (during the "prep" phase), there
-is just one m-expression, as demonstrated in the example above.
+is just one memo-expression, as demonstrated in the example above.
 
-Then the optimizations/rewrites would then simplify the memo,
-in-place for rewrites, and adding more classes during search.
+Then the optimizations/rewrites would then simplify the memo, in-place
+for rewrites, and adding more classes and memo-expressions per class
+during search.
 
 ```
-0: (project 7 [4 3]) -- the variant (project 1 [4 3]) was eliminated
+After rewrite (with predicate push-down):
+
+0: (project 2 [4 3])
+1: -- unreferenced
+2: (scan "kv" [3 4])     prop: filter k < 3
+3: (var "kv.k")
+4: (var "kv.v")
+5: -- unreferenced
+6: -- unreferenced
+
+After search:
+
+0: (project 7 [4 3]) -- the variant (project 2 [4 3]) was eliminated
 1: -- unreferenced
 2: -- unreferenced
 3: (var "kv.k")
@@ -240,7 +257,7 @@ needed for a full SQL language.
 
 [*] Caveat: there's a discussion still open about whether we convert
 from the AST directly to a memo-like structure, or whether there will
-be an intermediate tree in-between. As of this writing [this
+be an intermediate relational algebra tree in-between. As of this writing [this
 discussion is still open in the overarching
 RFC](sql_query_planning.md). Peter
 suggests we may want to do this, whereas I (knz) think we don't, to
@@ -272,10 +289,14 @@ This RFC proposes instead to operate as follows, at a high level:
 
 - a simple recursion would traverse the AST and create a new *fully
   independent* data structure akin to a tree conceptually, but which
-  unlike planNodes and AST nodes does not from a tree in memory.
+  unlike planNodes and AST nodes does not form a tree in memory.
 
 The innovation in this RFC is the second part, where we replace the
 planNode hierarchy by something different, a memo.
+
+(As outlined in the strategy section below, initially this code
+would exist side-by-side with the planNode hierarchy, but would
+*eventually* replace it.)
 
 ## Representation of logical plans
 
@@ -287,8 +308,8 @@ expressions and scalar expressions are grouped together in the same
 henceforth.
 
 The *semantics* of a logical plan (i.e. the meaning of its
-interpretation during query execution) remains, as before, the result
-of evaluating the top-level expression.
+interpretation during query execution)
+remains, as before, the result of evaluating the top-level expression.
 
 A logical plan (or, more precisely, the set of all equivalent plans
 that will be considered during optimizations) is *represented* (in
@@ -299,13 +320,20 @@ code, in memory) by:
 - a class is itself a data structure comprised of:
   - a member data structure that contains the *logical properties* of the class.
   - a (dynamically allocated) unordered multiset of one or more
-    concrete expression representations, called "m-expressions".
-    You can think about an m-expression as a particular strategy
+    concrete expression representations, called "memo-expressions".
+    You can think about an memo-expression as a particular strategy
     to compute the results.
 
-The data structure has a principal invariant: *all the m-expressions
-inside a class have the same semantics.* In particular, they share the
-same logical properties.
+The data structure has a principal invariant: *all the
+memo-expressions inside a class have the same semantics* with
+"semantics" defined above: they compute the "same results" for the
+query, where sameness is defined by what is allowable for the SQL
+query text initially provided (e.g. two results are the "same" if they
+differ only by their ordering and no ORDER BY clause was provided).
+
+We attach *logical properties* to entire classes, *physical
+properties* to individual memo-expressions. [Properties are defined
+further in a separate RFC](sql_plan_properties.md).
 
 The top-level array together with its item nodes is called a *memo*.
 
@@ -316,7 +344,7 @@ set where its structure (and, later, physical properties) is encoded.
 
 ## Expression representations
 
-Before we look at examples we can enumerate the possible m-expression
+Before we look at examples we can enumerate the possible memo-expression
 types we'll need for them:
 
 - `(literal "N")` to represent the literal value N.
@@ -444,7 +472,7 @@ Memo:
 4: (and {7,5})
 5: (< 2 6)
 6: (literal "10")
-7: (= 2 8)
+7: (!= 2 8)
 8: (literal "0")
 ```
 
@@ -453,10 +481,10 @@ always apply the rule:
 
 ```
 SQL:       (a AND b) AND c    = a AND (b AND c)    = a AND b AND c
-algebraic: (and {(and x), y}) = (and {x, (and y)}) = (and (union x y))
+algebraic: (and {(and {a,b}), c}) = (and {a, (and {b,c})}) = (and (union {a} {b,c}))
 ```
 
-x y))`. With the integer sets represented as bitmaps, we just need to
+With the integer sets represented as bitmaps, we just need to
 compute a bitwise OR of the bitmaps. There is no memory traffic. And
 then the two `(and)` representations in the example collapse to:
 
@@ -464,7 +492,7 @@ then the two `(and)` representations in the example collapse to:
 0: (project 1 3)
 1: (scan "foo" 2)
 2: (var "x")
-3: (and {7,5}) (and {7,4}) -- the two m-expressions are equivalent
+3: (and {7,5}) (and {7,4}) -- the two memo-expressions are equivalent
 4: (and {7,5})
 5: (< 2 6)
 6: (literal "10")
@@ -746,7 +774,7 @@ The transformation steps would thus be:
 +-----------------+    +-----------+
 ```
 
-The phase "decide what to do" would be initially simply a test on a
+The phase "decide what to do" would be initially a test on a
 session variable, with a default taken from a cluster setting
 `experimental.sql.memo.enabled`. This is to be eliminated in the
 future when the new structure is proven to be as general and more
@@ -801,7 +829,7 @@ In particular, this RFC proposes to commit to the following:
   an extended index space.)
 
 - using the integer index of a class in the memo as a reference to
-  an expression from other classes and m-expressions, as opposed to a
+  an expression from other classes and memo-expressions, as opposed to a
   reference in memory like in the current CockroachDB code.
 
 - not changing the semantics of a class after it has been attributed
@@ -870,9 +898,9 @@ type relprops struct {
 type mexpr .... // (see below)
 ```
 
-### M-expressions
+### Memo-expressions
 
-The `mexpr` type is really a sum types. Further experiments
+The `mexpr` type is really a sum type. Further experiments
 are needed to determine the particular definition that will
 enable the least churn in Go's runtime.
 
@@ -903,10 +931,10 @@ scene" and can be allocated in slices to store in the memo's classes.
 memory references to another node, and instead uses `int` fields to
 refer (implicitly) to positions in the memo.)
 
-The full definition of the m-expression type is out of scope for this
+The full definition of the memo-expression type is out of scope for this
 RFC. This RFC merely assumes that the implementation(s) that will come
 in accordance to the plans presented here will propose their own set
-of m-expression types and document them thorougly.
+of memo-expression types and document them thorougly.
 
 ### Algorithms for the "prep" phase
 
