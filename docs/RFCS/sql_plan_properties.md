@@ -53,93 +53,39 @@ code is indeed matching the intent.
 
 # Guide-level explanation
 
-## Summary
+## Overview
 
-| Name                    | Type      | Category  | Origin    | Kind       | Level | Used by (example)         | Synthetic notation     |
-|-------------------------|-----------|-----------|-----------|------------|-------|---------------------------|------------------------|
-| injectivity             | intset    | L, sem    | derived   | scalar     | opt   | TBD                       | `x INJECTIVE{...}`     |
-| monotonicity            | cf. below | L, sem    | derived   | scalar     | opt   | TBD                       | `x MONOTONIC(...)`     |
-| constness               | bool      | L, sem    | derived   | scalar     | opt   | TBD                       |                        |
-| known value             | int       | L, sem    | derived   | scalar     | opt   | predicate push-down       | `x = v`                |
-| nullability             | intset    | L, sem    | derived   | common     | opt   | TBD                       | `x NULL` / `NOT NULL`  |
-| constant columns        | intset    | L, sem    | derived   | common     | opt   | TBD                       | `x CONST`              |
-| variable dependencies   | intset    | L, x-func | derived   | common     | mand. | decorrelation             |                        |
-| result columns          | intset    | L, sem    | opt req.  | relational | mand. | equivalence comparisons   |                        |
-| used columns            | intset    | L, x-func | derived   | relational | opt   | physical planning         |                        |
-| required columns        | intset    | L, x-func | derived   | relational | opt   | join transformations      |                        |
-| unique sets             | intsetset | L, sem    | derived   | relational | opt   | TBD                       | `UNIQUE {...}`         |
-| key sets                | intsetset | L, sem    | derived   | relational | opt   | TBD                       | `KEY {...}`            |
-| equivalency groups      | intsetset | L, sem    | derived   | relational | opt   | TBD                       | `EQ {...}`             |
-| value constraints       | cf. below | L, sem    | derived   | rel(comm?) | opt   | TBD                       | `CHECK ...`            |
-| req. presentation order | []int     | L, x-func | opt req.  | relational | opt   | physical planning         | `REQUIRE PRESENT(...)` |
-| required ordering       | cf. below | L, sem    | opt req.  | relational | opt   | ordering transformations  | `REQUIRE ORDER BY(...)` |
-| required algorithm      | enum      | L, x-func | opt req.  | relational | opt   | physical planning, search |                        |
-| required scan index     | cf. below | L, x-func | opt req.  | relational | opt   | physical planning, search |                        |
-| apparent presentation   | []int     | P, x-func | derived   | relational | mand. | physical planning         | `PRESENTING(...)`      |
-| apparent orderings      | cf. below | P, sem    | derived   | relational | opt   | TBD                       | `ORDERED BY(...)`      |
-| algorithm               | enum      | P, x-func | derived.  | relational | mand. | physical planning         |                        |
-| scan index              | string    | P, x-func | derived   | relational | mand. | physical planning         |                        |
-| spans for scans         | []span    | P, sem    | derived   | relational | opt   | TBD                       |                        |
+Logical properties:
 
-Note: in the literature "functional dependencies" is the group formed
-by variable dependencies, equivalency groups and value constraints.
+- [injectivity](#injectivity)
+- [monotonicity](#monotonicity)
+- [constness](#constness-for-scalars)
+- [known value](#known-value)
+- [nullability](#nullability)
+- [constant columns](#constant-columns)
+- [result columns](#result-columns)
+- [variable dependencies](#variable-dependencies)
+- [used columns](#used-columns)
+- [required columns](#required-columns)
+- [unique sets](#unique-sets) a.k.a. "weak keys"
+- [key sets](#key-sets)
+- [equivalency groups](#column-equivalency-groups)
+- [value constraints](#value-constraints)
+- [req. presentation order](#required-presentation-order)
+- [required ordering](#required-ordering)
+- [required algorithm](#required-algorithm)
+- [required scan index](#required-scan-index)
 
-We distinguish the *category*:
+Physical properties:
 
-- *logical* (L) properties that can be derived from the extended
-  relational algebra. For example, NULL-ability of columns and keys,
-  weak keys and foreign keys.
-- *physical* (P) properties that can be derived from the specific
-  implementation of relational algebra expressions. The sole physical
-  property is ordering which is not a consideration in the extended
-  relational algebra. (ORDER BY sits outside of the extended
-  relational algebra).
+- [apparent presentation order](#apparent-presentation-order)
+- [apparent orderings](#apparent-orderings)
+- [actual algorithm](#actual-algorithm)
+- [scan index](#scan-index)
+- [spans for scans](#spans-for-scans)
 
-We distinguish two *sub-categories*:
-
-- *semantic* (sem) properties which describe the relationships between input
-  and output values of (sub-)queries.
-- *extra-functional* (x-func) properties that do not carry information about
-  the input/output values.
-
-We distinguish the *origin*:
-
-- *optionally required* properties which can be specified in the
-  query.  For example, presentation order. Optionally required
-  properties are necessarily logical -- when specified, they must not
-  disappear or be replaced in alternatives within an equivalency
-  class. We use **verbs** in their synthetic notation, if any,
-  e.g. ORDER BY / PRESENT.
-
-- purely *derived* properties that are computed during query analysis
-  and never specified explicitly, for example needed columns.  Can be
-  either logical or physical.  All physical properties are necessarily
-  derived (possibly from optionally required logical properties).  We
-  use **adjectives** / **gerunds** in their synthetic notation, if
-  any, e.g. ORDERED BY / PRESENTING.
-
-(Mismatches between required and derived properties cause the
-introduction of "enforcer nodes". See the planning RFC for more information.)
-
-We distinguish the *level* (term to be refined!):
-
-- *mandatory* properties must be present in the expression. A
-  mandatory property that is not also specified explicitly in the
-  query (if it's optionally requried) must be derived for every
-  expression in the final plan.
-
-- *optional* properties can be omitted. The absence of the property is
-  not equivalent to the presence of any value for the property, however,
-  i.e. an expression where the property is omitted is in a different
-  class than all the expressions that have the property.
-
-We distinguish the *kind*:
-
-- *relational* properties that are useful for relational expressions.
-- *scalar* properties that are useful for scalar expressions.
-
-Properties can be both relational and scalar; we'll call them *common*
-in contexts where a separate word is needed.
+Each property is classified further according to a
+[nomenclature](#nomenclature) defined below.
 
 ## Injectivity
 
@@ -538,6 +484,8 @@ root: 8
 - Kind: relational
 - Level:  optional
 
+Also called **weak keys**.
+
 This property indicates which groups of columns form a unique
 index, that is, no two rows are equal when projected on that group.
 The rows may contain NULL values though.
@@ -597,7 +545,7 @@ PROPERTIES(
 )
 ```
 
-## (Column) equivalency groups
+## Column equivalency groups
 
 - Type: set of intsets
 - Category: logical, semantic
@@ -908,7 +856,7 @@ PROPERTIES(
 )
 ```
 
-## (Actual) algorithm
+## Actual algorithm
 
 - Type: enum (dependent on relational operator)
 - Category: physical, extra-functional
@@ -954,6 +902,94 @@ The list can be empty.
 
 The final physical plan must have this annotated for every scan in the
 query plan.
+
+## Nomenclature
+
+| Name                    | Type      | Category  | Origin    | Kind       | Level | Used by (example)         | Synthetic notation     |
+|-------------------------|-----------|-----------|-----------|------------|-------|---------------------------|------------------------|
+| injectivity             | intset    | L, sem    | derived   | scalar     | opt   | TBD                       | `x INJECTIVE{...}`     |
+| monotonicity            | cf. below | L, sem    | derived   | scalar     | opt   | TBD                       | `x MONOTONIC(...)`     |
+| constness               | bool      | L, sem    | derived   | scalar     | opt   | TBD                       |                        |
+| known value             | int       | L, sem    | derived   | scalar     | opt   | predicate push-down       | `x = v`                |
+| nullability             | intset    | L, sem    | derived   | common     | opt   | TBD                       | `x NULL` / `NOT NULL`  |
+| constant columns        | intset    | L, sem    | derived   | common     | opt   | TBD                       | `x CONST`              |
+| variable dependencies   | intset    | L, x-func | derived   | common     | mand. | decorrelation             |                        |
+| result columns          | intset    | L, sem    | opt req.  | relational | mand. | equivalence comparisons   |                        |
+| used columns            | intset    | L, x-func | derived   | relational | opt   | physical planning         |                        |
+| required columns        | intset    | L, x-func | derived   | relational | opt   | join transformations      |                        |
+| unique sets             | intsetset | L, sem    | derived   | relational | opt   | TBD                       | `UNIQUE {...}`         |
+| key sets                | intsetset | L, sem    | derived   | relational | opt   | TBD                       | `KEY {...}`            |
+| equivalency groups      | intsetset | L, sem    | derived   | relational | opt   | TBD                       | `EQ {...}`             |
+| value constraints       | cf. below | L, sem    | derived   | rel(comm?) | opt   | TBD                       | `CHECK ...`            |
+| req. presentation order | []int     | L, x-func | opt req.  | relational | opt   | physical planning         | `REQUIRE PRESENT(...)` |
+| required ordering       | cf. below | L, sem    | opt req.  | relational | opt   | ordering transformations  | `REQUIRE ORDER BY(...)` |
+| required algorithm      | enum      | L, x-func | opt req.  | relational | opt   | physical planning, search |                        |
+| required scan index     | cf. below | L, x-func | opt req.  | relational | opt   | physical planning, search |                        |
+| apparent presentation   | []int     | P, x-func | derived   | relational | mand. | physical planning         | `PRESENTING(...)`      |
+| apparent orderings      | cf. below | P, sem    | derived   | relational | opt   | TBD                       | `ORDERED BY(...)`      |
+| algorithm               | enum      | P, x-func | derived.  | relational | mand. | physical planning         |                        |
+| scan index              | string    | P, x-func | derived   | relational | mand. | physical planning         |                        |
+| spans for scans         | []span    | P, sem    | derived   | relational | opt   | TBD                       |                        |
+
+Note: in the literature "functional dependencies" is the group formed
+by variable dependencies, equivalency groups and value constraints.
+
+We distinguish the *category*:
+
+- *logical* (L) properties that can be derived from the extended
+  relational algebra. For example, NULL-ability of columns and keys,
+  weak keys and foreign keys.
+- *physical* (P) properties that can be derived from the specific
+  implementation of relational algebra expressions. The sole physical
+  property is ordering which is not a consideration in the extended
+  relational algebra. (ORDER BY sits outside of the extended
+  relational algebra).
+
+We distinguish two *sub-categories*:
+
+- *semantic* (sem) properties which describe the relationships between input
+  and output values of (sub-)queries.
+- *extra-functional* (x-func) properties that do not carry information about
+  the input/output values.
+
+We distinguish the *origin*:
+
+- *optionally required* properties which can be specified in the
+  query.  For example, presentation order. Optionally required
+  properties are necessarily logical -- when specified, they must not
+  disappear or be replaced in alternatives within an equivalency
+  class. We use **verbs** in their synthetic notation, if any,
+  e.g. ORDER BY / PRESENT.
+
+- purely *derived* properties that are computed during query analysis
+  and never specified explicitly, for example needed columns.  Can be
+  either logical or physical.  All physical properties are necessarily
+  derived (possibly from optionally required logical properties).  We
+  use **adjectives** / **gerunds** in their synthetic notation, if
+  any, e.g. ORDERED BY / PRESENTING.
+
+(Mismatches between required and derived properties cause the
+introduction of "enforcer nodes". See the planning RFC for more information.)
+
+We distinguish the *level* (term to be refined!):
+
+- *mandatory* properties must be present in the expression. A
+  mandatory property that is not also specified explicitly in the
+  query (if it's optionally requried) must be derived for every
+  expression in the final plan.
+
+- *optional* properties can be omitted. The absence of the property is
+  not equivalent to the presence of any value for the property, however,
+  i.e. an expression where the property is omitted is in a different
+  class than all the expressions that have the property.
+
+We distinguish the *kind*:
+
+- *relational* properties that are useful for relational expressions.
+- *scalar* properties that are useful for scalar expressions.
+
+Properties can be both relational and scalar; we'll call them *common*
+in contexts where a separate word is needed.
 
 ## Non-properties
 
