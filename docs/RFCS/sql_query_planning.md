@@ -105,6 +105,7 @@ this work over the next several releases.
 The following terms are introduced/defined in this RFC:
 
 - [**algebraic equivalence**](#properties)
+- [**attributes** of memo-expressions](#properties-vs-attributes)
 - [**cardinality**](#stats)
 - [**condition** in transformations](#search)
 - [**decorrelating**](#rewrite), syn. "unnesting"
@@ -116,7 +117,7 @@ The following terms are introduced/defined in this RFC:
 - [**functional dependencies**](#prep)
 - [**logical** vs **physical** properties](#memo)
 - [**logical** vs **physical** vs **scalar** operators](#prep)
-- [**m-expression**](#memo)
+- [**memo-expression**](#memo)
 - [**operator** in query expressions](#prep)
 - [**pattern** in transformations](#search)
 - [**predicate push-down**](#rewrite)
@@ -293,18 +294,18 @@ contain both "a = b + 1" and "b = a - 1" which are logically
 equivalent in relational algebra.
 
 The different nodes in a single equivalency class are called
-**m-expressions** (memo(ized) expressions).
+**memo-expressions** (memo(ized) expressions).
 
-By definition, all the m-expressions in a class share the same
+By definition, all the memo-expressions in a class share the same
 *logical properties*, a concept explored more in depth in the [section
 below](#properties).
 
-During search, m-expressions in the memo are walked over and
-progressively transformed creating new m-expressions in order to
+During search, memo-expressions in the memo are walked over and
+progressively transformed creating new memo-expressions in order to
 generate alternative plans. The memo structure avoids the
 combinatorial explosion of trees be naively enumerating the variants
-by having each m-expressions in the tree point to child equivalency
-classes rather than directly to child m-expressions.
+by having each memo-expressions in the tree point to child equivalency
+classes rather than directly to child memo-expressions.
 
 For example, consider the query:
 
@@ -335,7 +336,7 @@ ordering using commutativity and associativity:
 (JOIN (JOIN c a) b)
 ```
 
-With memo, these variants share m-expressions. This is done by grouping
+With memo, these variants share memo-expressions. This is done by grouping
 logically equivalent nodes. A representation of the above query before
 enumeration might look like:
 
@@ -348,8 +349,8 @@ enumeration might look like:
 ```
 
 The root of the query is `4`. During enumeration, transformation rules
-create logically equivalent m-expressions in each equivalency group, but doing
-so does not require creating new parent m-expressions. In the above example,
+create logically equivalent memo-expressions in each equivalency group, but doing
+so does not require creating new parent memo-expressions. In the above example,
 the expanded memo would look like:
 
 ```
@@ -363,7 +364,7 @@ the expanded memo would look like:
 ```
 
 The above query is considering join order, but such logically
-equivalent m-expressions also occur for index selection.
+equivalent memo-expressions also occur for index selection.
 
 Note that the numbering of the equivalency classes in the memo is
 arbitrary, but the depth-first traversal during the construction of
@@ -395,15 +396,52 @@ sub-expression. We use properties in two ways.
 2) as a means to store information that can be useful during
    optimization.
 
-Note that two m-expressions might be logically equivalent but have
+Note that two memo-expressions might be logically equivalent but have
 different *physical properties*. For example, a table scan and an
 index scan can both output the same set of columns, but provide
 different orderings.
 
-Physical properties are annotations on m-expressions; i.e.
-m-expressions in the same (logical) equivalency class can have
-different physical properties. We expect that only m-expressions that
+Physical properties are annotations on memo-expressions; i.e.
+memo-expressions in the same (logical) equivalency class can have
+different physical properties. We expect that only memo-expressions that
 correspond to physical operators carry physical properties.
+
+#### Relational vs scalar properties
+
+The memo contains memo-expressions with either scalar (e.g. `+`, `<`,
+etc.) or relational (e.g. `join`, `project`, etc.) operators,
+distinguished as scalar expressions vs relational expressions.
+
+The sets of useful properties for scalar vs relational expression are
+only partially overlapping.
+
+Some properties are useful to both, for example variable dependencies
+(the set of variables from the context necessary to compute the
+result) are useful for computing (de)correlation.
+
+Some properties are only relational, for example unicity of a column
+group across all rows.
+
+Some properties are only scalar, for example that a variable can never
+be NULL.
+
+## Properties vs attributes
+
+The term "property" extends to information that is well-defined over
+any expression in its group: given scalar property is well-defined for
+all scalar operators; a relational property is well-defined for all
+relatial operators, and a common property is well-defined for all
+expressions.
+
+For example, "nullability" is a property that is properly defined (and
+says something meaningful for) any any scalar expression.
+
+In contrast, some bits of information are only relevant for specific operators.
+
+For example, the "join algorithm" is only relevant for join operators;
+the "index name" is only relevant for table scan operators, etc.
+
+We'll call this type of information *attributes* on memo-expressions.
 
 #### Derived vs required properties
 
@@ -430,24 +468,6 @@ that creates the required property.
 For example, an ORDER BY clause that creates a required property can
 cause the optimizer to add a sort node as enforcement.
 
-#### Relational vs scalar properties
-
-The memo contains m-expressions with either scalar (e.g. `+`, `<`,
-etc.) or relational (e.g. `join`, `project`, etc.) operators,
-distinguished as scalar expressions vs relational expressions.
-
-The sets of useful properties for scalar vs relational expression are
-only partially overlapping.
-
-Some properties are useful to both, for example variable dependencies
-(the set of variables from the context necessary to compute the
-result) are useful for computing (de)correlation.
-
-Some properties are only relational, for example unicity of a column
-group across all rows.
-
-Some properties are only scalar, for example that a variable can never
-be NULL.
 
 #### Which properties will be used
 
@@ -499,7 +519,7 @@ activity.
 Search is the final phase of optimization. The output of Rewrite is a
 expression tree that represents the current logical plan for
 the query. If Prep and Rewrite use the memo already, there would
-be just one m-expression per class at this point.
+be just one memo-expression per class at this point.
 
 Search is the phase of optimization where many alternative logical and
 physical query plans are explored in order to find the best physical
@@ -521,8 +541,8 @@ Rewrite. It begins enumerating alternatives, costing them and pruning
 branches that are deemed not worthwhile to explore based on their
 cost.
 
-At its core, Search is iterating over m-expressions and creating new
-equivalent m-expressions through transformation. The most basic
+At its core, Search is iterating over memo-expressions and creating new
+equivalent memo-expressions through transformation. The most basic
 logical transformation is join order enumeration (e.g. `a JOIN b` ->
 `b JOIN a`).  The transformations that enumerate alternate plans that
 are *algebraically equivalent* without making implementation decisions
@@ -531,7 +551,7 @@ are commonly called *exploration* transformations.
 Logical to physical transformations include enumerating the
 possibilities for retrieving the necessary columns from a table,
 either by a secondary index or the primary index. The logical to
-physical transformation may generate glue m-expressions such as
+physical transformation may generate glue memo-expressions such as
 sorting or distinct filtering.  These are called *implementation*
 transformations.
 
