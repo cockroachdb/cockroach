@@ -1094,7 +1094,7 @@ If problems persist, please see ` + base.DocsURL("cluster-setup-troubleshooting.
 	}
 
 	// Setup HTTP<->gRPC handlers.
-	conn, err := s.rpcContext.GRPCDial(s.cfg.Addr)
+	conn, err := s.rpcContext.GRPCDial(s.cfg.AdvertiseAddr)
 	if err != nil {
 		return errors.Errorf("error constructing grpc-gateway: %s; are your certificates valid?", err)
 	}
