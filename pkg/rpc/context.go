@@ -262,6 +262,56 @@ func (ctx *Context) removeConn(key string, meta *connMeta) {
 	}
 }
 
+// GRPCDialOptions returns the minimal `grpc.DialOption`s necessary to connect
+// to a server created with `NewServer`.
+//
+// At the time of writing, this is being used for making net.Pipe-based
+// connections, so only those options that affect semantics are included. In
+// particular, performance tuning options are omitted. Decompression is
+// necessarily included to support compression-enabled servers, and compression
+// is included for symmetry. These choices are admittedly subjective.
+func (ctx *Context) GRPCDialOptions() ([]grpc.DialOption, error) {
+	var dialOpts []grpc.DialOption
+	if ctx.Insecure {
+		dialOpts = append(dialOpts, grpc.WithInsecure())
+	} else {
+		tlsConfig, err := ctx.GetClientTLSConfig()
+		if err != nil {
+			return nil, err
+		}
+		dialOpts = append(dialOpts, grpc.WithTransportCredentials(credentials.NewTLS(tlsConfig)))
+	}
+
+	// The limiting factor for lowering the max message size is the fact
+	// that a single large kv can be sent over the network in one message.
+	// Our maximum kv size is unlimited, so we need this to be very large.
+	//
+	// TODO(peter,tamird): need tests before lowering.
+	dialOpts = append(dialOpts, grpc.WithDefaultCallOptions(
+		grpc.MaxCallRecvMsgSize(math.MaxInt32),
+		grpc.MaxCallSendMsgSize(math.MaxInt32),
+	))
+
+	dialOpts = append(dialOpts, grpc.WithDecompressor(snappyDecompressor{}))
+	// Compression is enabled separately from decompression to allow staged
+	// rollout.
+	if ctx.rpcCompression {
+		dialOpts = append(dialOpts, grpc.WithCompressor(snappyCompressor{}))
+	}
+
+	if tracer := ctx.AmbientCtx.Tracer; tracer != nil {
+		// We use a SpanInclusionFunc to circumvent the interceptor's work when
+		// tracing is disabled. Otherwise, the interceptor causes an increase in
+		// the number of packets (even with an empty context!). See #17177.
+		interceptor := otgrpc.OpenTracingClientInterceptor(
+			tracer,
+			otgrpc.IncludingSpans(otgrpc.SpanInclusionFunc(spanInclusionFunc)),
+		)
+		dialOpts = append(dialOpts, grpc.WithUnaryInterceptor(interceptor))
+	}
+	return dialOpts, nil
+}
+
 // GRPCDial calls grpc.Dial with the options appropriate for the context.
 func (ctx *Context) GRPCDial(target string, opts ...grpc.DialOption) (*grpc.ClientConn, error) {
 	value, ok := ctx.conns.Load(target)
@@ -273,36 +323,13 @@ func (ctx *Context) GRPCDial(target string, opts ...grpc.DialOption) (*grpc.Clie
 
 	meta := value.(*connMeta)
 	meta.Do(func() {
-		var dialOpt grpc.DialOption
-		if ctx.Insecure {
-			dialOpt = grpc.WithInsecure()
-		} else {
-			tlsConfig, err := ctx.GetClientTLSConfig()
-			if err != nil {
-				meta.dialErr = err
-				return
-			}
-			dialOpt = grpc.WithTransportCredentials(credentials.NewTLS(tlsConfig))
+		dialOpts, err := ctx.GRPCDialOptions()
+		if err != nil {
+			meta.dialErr = err
+			return
 		}
 
-		var dialOpts []grpc.DialOption
-		dialOpts = append(dialOpts, dialOpt)
-		// The limiting factor for lowering the max message size is the fact
-		// that a single large kv can be sent over the network in one message.
-		// Our maximum kv size is unlimited, so we need this to be very large.
-		//
-		// TODO(peter,tamird): need tests before lowering.
-		dialOpts = append(dialOpts, grpc.WithDefaultCallOptions(
-			grpc.MaxCallRecvMsgSize(math.MaxInt32),
-			grpc.MaxCallSendMsgSize(math.MaxInt32),
-		))
 		dialOpts = append(dialOpts, grpc.WithBackoffMaxDelay(maxBackoff))
-		dialOpts = append(dialOpts, grpc.WithDecompressor(snappyDecompressor{}))
-		// Compression is enabled separately from decompression to allow staged
-		// rollout.
-		if ctx.rpcCompression {
-			dialOpts = append(dialOpts, grpc.WithCompressor(snappyCompressor{}))
-		}
 		dialOpts = append(dialOpts, grpc.WithKeepaliveParams(keepalive.ClientParameters{
 			// Send periodic pings on the connection.
 			Time: base.NetworkTimeout,
@@ -329,17 +356,6 @@ func (ctx *Context) GRPCDial(target string, opts ...grpc.DialOption) (*grpc.Clie
 					return dialer.Dial("tcp", addr)
 				},
 			))
-		}
-
-		if tracer := ctx.AmbientCtx.Tracer; tracer != nil {
-			// We use a SpanInclusionFunc to circumvent the interceptor's work when
-			// tracing is disabled. Otherwise, the interceptor causes an increase in
-			// the number of packets (even with an empty context!). See #17177.
-			interceptor := otgrpc.OpenTracingClientInterceptor(
-				tracer,
-				otgrpc.IncludingSpans(otgrpc.SpanInclusionFunc(spanInclusionFunc)),
-			)
-			dialOpts = append(dialOpts, grpc.WithUnaryInterceptor(interceptor))
 		}
 
 		if log.V(1) {
