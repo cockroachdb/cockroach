@@ -1130,11 +1130,18 @@ If problems persist, please see ` + base.DocsURL("cluster-setup-troubleshooting.
 		}))
 	})
 
-	conn, err := s.rpcContext.GRPCDial(
-		s.cfg.AdvertiseAddr,
-		grpc.WithDialer(func(string, time.Duration) (net.Conn, error) { return c2, nil }),
+	dialOpts, err := s.rpcContext.GRPCDialOptions()
+	if err != nil {
+		return err
+	}
+
+	conn, err := grpc.DialContext(ctx, s.cfg.AdvertiseAddr, append(
+		dialOpts,
 		grpc.WithBlock(),
-	)
+		grpc.WithDialer(func(string, time.Duration) (net.Conn, error) {
+			return c2, nil
+		}),
+	)...)
 	if err != nil {
 		return err
 	}
