@@ -56,6 +56,10 @@ const (
 	// KeyNodeLivenessPrefix is the key prefix for gossiping node liveness info.
 	KeyNodeLivenessPrefix = "liveness"
 
+	// KeyNodeLivenessSelfReportedPrefix is the key prefix for nodes
+	// optimistically gossiping their expected node liveness info.
+	KeyNodeLivenessSelfReportedPrefix = "self-liveness"
+
 	// KeySentinel is a key for gossip which must not expire or
 	// else the node considers itself partitioned and will retry with
 	// bootstrap hosts.  The sentinel is gossiped by the node that holds
@@ -121,6 +125,12 @@ func NodeIDFromKey(key string) (roachpb.NodeID, error) {
 // MakeNodeLivenessKey returns the gossip key for node liveness info.
 func MakeNodeLivenessKey(nodeID roachpb.NodeID) string {
 	return MakeKey(KeyNodeLivenessPrefix, nodeID.String())
+}
+
+// MakeNodeLivenessSelfReportedKey returns the gossip key for
+// self-reported node liveness info.
+func MakeNodeLivenessSelfReportedKey(nodeID roachpb.NodeID) string {
+	return MakeKey(KeyNodeLivenessSelfReportedPrefix, nodeID.String())
 }
 
 // MakeStoreKey returns the gossip key for the given store.
