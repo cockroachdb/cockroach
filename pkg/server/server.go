@@ -593,6 +593,26 @@ func (li listenerInfo) Iter() map[string]string {
 	}
 }
 
+type singleListener struct {
+	conn net.Conn
+}
+
+func (s *singleListener) Accept() (net.Conn, error) {
+	if c := s.conn; c != nil {
+		s.conn = nil
+		return c, nil
+	}
+	return nil, io.EOF
+}
+
+func (s *singleListener) Close() error {
+	return nil
+}
+
+func (s *singleListener) Addr() net.Addr {
+	return s.conn.LocalAddr()
+}
+
 // Start starts the server on the specified port, starts gossip and initializes
 // the node using the engines from the server's context.
 //
@@ -1092,9 +1112,31 @@ If problems persist, please see ` + base.DocsURL("cluster-setup-troubleshooting.
 	}
 
 	// Setup HTTP<->gRPC handlers.
-	conn, err := s.rpcContext.GRPCDial(s.cfg.Addr)
+
+	c1, c2 := net.Pipe()
+
+	s.stopper.RunWorker(workersCtx, func(workersCtx context.Context) {
+		<-s.stopper.ShouldQuiesce()
+		for _, c := range []net.Conn{c1, c2} {
+			if err := c.Close(); err != nil {
+				log.Fatal(workersCtx, err)
+			}
+		}
+	})
+
+	s.stopper.RunWorker(workersCtx, func(context.Context) {
+		netutil.FatalIfUnexpected(s.grpc.Serve(&singleListener{
+			conn: c1,
+		}))
+	})
+
+	conn, err := s.rpcContext.GRPCDial(
+		s.cfg.AdvertiseAddr,
+		grpc.WithDialer(func(string, time.Duration) (net.Conn, error) { return c2, nil }),
+		grpc.WithBlock(),
+	)
 	if err != nil {
-		return errors.Errorf("error constructing grpc-gateway: %s; are your certificates valid?", err)
+		return err
 	}
 
 	for _, gw := range []grpcGatewayServer{s.admin, s.status, s.authentication, &s.tsServer} {
