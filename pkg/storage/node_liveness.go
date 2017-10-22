@@ -164,6 +164,9 @@ func NewNodeLiveness(
 	livenessRegex := gossip.MakePrefixPattern(gossip.KeyNodeLivenessPrefix)
 	nl.gossip.RegisterCallback(livenessRegex, nl.livenessGossipUpdate)
 
+	livenessSelfReportedRegex := gossip.MakePrefixPattern(gossip.KeyNodeLivenessSelfReportedPrefix)
+	nl.gossip.RegisterCallback(livenessSelfReportedRegex, nl.livenessSelfReportedGossipUpdate)
+
 	return nl
 }
 
@@ -334,7 +337,7 @@ func (nl *NodeLiveness) StartHeartbeat(
 		ambient.AddLogTag("hb", nil)
 		ticker := time.NewTicker(nl.heartbeatInterval)
 		defer ticker.Stop()
-		incrementEpoch := true
+		firstHeartbeat := true
 		for {
 			if !nl.pauseHeartbeat.Load().(bool) {
 				func() {
@@ -349,14 +352,23 @@ func (nl *NodeLiveness) StartHeartbeat(
 						if err != nil && err != ErrNoLivenessRecord {
 							log.Errorf(ctx, "unexpected error getting liveness: %v", err)
 						}
-						if err := nl.heartbeatInternal(ctx, liveness, incrementEpoch); err != nil {
+						// Self-report this liveness via gossip optimistically. This prevents
+						// other nodes from incrementing our epoch in the event that the
+						// heartbeat is too slow due to excessive load on the liveness range.
+						if err == nil && !firstHeartbeat {
+							key := gossip.MakeNodeLivenessSelfReportedKey(liveness.NodeID)
+							if err := nl.gossip.AddInfoProto(key, liveness, 0); err != nil {
+								log.Warningf(ctx, "failed to gossip self-reported node liveness (%+v): %v", liveness, err)
+							}
+						}
+						if err := nl.heartbeatInternal(ctx, liveness, firstHeartbeat /* incrementEpoch */); err != nil {
 							if err == ErrEpochIncremented {
 								log.Infof(ctx, "%s; retrying", err)
 								continue
 							}
 							log.Warningf(ctx, "failed node liveness heartbeat: %v", err)
 						} else {
-							incrementEpoch = false // don't increment epoch after first heartbeat
+							firstHeartbeat = false // don't increment epoch after first heartbeat
 						}
 						break
 					}
@@ -752,6 +764,28 @@ func (nl *NodeLiveness) livenessGossipUpdate(key string, content roachpb.Value) 
 	}
 
 	nl.maybeUpdate(liveness)
+}
+
+// livenessSelfReportedGossipUpdate is the gossip callback for
+// liveness information self-reported optimistically by nodes in
+// advance of sending a liveness heartbeat. The liveness of any nodes
+// other than self is updated, giving other nodes the benefit of the
+// doubt when considering whether they're not live and should have
+// their epochs incremented.
+func (nl *NodeLiveness) livenessSelfReportedGossipUpdate(key string, content roachpb.Value) {
+	var liveness Liveness
+	if err := content.GetProto(&liveness); err != nil {
+		log.Error(context.TODO(), err)
+		return
+	}
+
+	// Only update other nodes' liveness records to give them the
+	// benefit of the doubt. We must never do so with our own, which we
+	// use as a guarantee of our ability to act based on epoch range
+	// leases.
+	if liveness.NodeID != nl.gossip.NodeID.Get() {
+		nl.maybeUpdate(liveness)
+	}
 }
 
 // numLiveNodes is used to populate a metric that tracks the number of live
