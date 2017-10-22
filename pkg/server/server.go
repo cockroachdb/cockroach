@@ -317,7 +317,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		if err := os.MkdirAll(firstStore.Path, 0755); err != nil {
 			return nil, errors.Wrapf(err, "failed to create dir for first store: %s", firstStore.Path)
 		}
-		if err = recordTempDir(firstStore.Path, s.cfg.TempStorageConfig.Path); err != nil {
+		if err := recordTempDir(firstStore.Path, s.cfg.TempStorageConfig.Path); err != nil {
 			return nil, errors.Wrapf(
 				err,
 				"could not record temporary directory path to record file: %s",
@@ -591,6 +591,26 @@ func (li listenerInfo) Iter() map[string]string {
 		"cockroach.http-addr":      li.http,
 		"cockroach.listen-addr":    li.listen,
 	}
+}
+
+type singleListener struct {
+	conn net.Conn
+}
+
+func (s *singleListener) Accept() (net.Conn, error) {
+	if c := s.conn; c != nil {
+		s.conn = nil
+		return c, nil
+	}
+	return nil, io.EOF
+}
+
+func (s *singleListener) Close() error {
+	return nil
+}
+
+func (s *singleListener) Addr() net.Addr {
+	return s.conn.LocalAddr()
 }
 
 // Start starts the server on the specified port, starts gossip and initializes
@@ -876,7 +896,7 @@ func (s *Server) Start(ctx context.Context) error {
 				bootstrapVersion = *storeKnobs.BootstrapVersion
 			}
 		}
-		if err = s.node.bootstrap(ctx, s.engines, bootstrapVersion); err != nil {
+		if err := s.node.bootstrap(ctx, s.engines, bootstrapVersion); err != nil {
 			return err
 		}
 		log.Infof(ctx, "**** add additional nodes by specifying --join=%s", s.cfg.AdvertiseAddr)
@@ -893,8 +913,8 @@ func (s *Server) Start(ctx context.Context) error {
 			})
 		})
 
-		if err = initServer.awaitBootstrap(); err != nil {
-			return nil
+		if err := initServer.awaitBootstrap(); err != nil {
+			return err
 		}
 
 		atomic.StoreInt32(&initLActive, 0)
@@ -923,16 +943,14 @@ If problems persist, please see ` + base.DocsURL("cluster-setup-troubleshooting.
 	// Now that we have a monotonic HLC wrt previous incarnations of the process,
 	// init all the replicas. At this point *some* store has been bootstrapped or
 	// we're joining an existing cluster for the first time.
-	err = s.node.start(
+	if err := s.node.start(
 		ctx,
 		unresolvedAdvertAddr,
 		bootstrappedEngines, emptyEngines,
 		s.cfg.NodeAttributes,
 		s.cfg.Locality,
 		cv,
-	)
-
-	if err != nil {
+	); err != nil {
 		return err
 	}
 	log.Event(ctx, "started node")
@@ -1094,10 +1112,45 @@ If problems persist, please see ` + base.DocsURL("cluster-setup-troubleshooting.
 	}
 
 	// Setup HTTP<->gRPC handlers.
-	conn, err := s.rpcContext.GRPCDial(s.cfg.Addr)
+
+	c1, c2 := net.Pipe()
+
+	s.stopper.RunWorker(workersCtx, func(workersCtx context.Context) {
+		<-s.stopper.ShouldQuiesce()
+		for _, c := range []net.Conn{c1, c2} {
+			if err := c.Close(); err != nil {
+				log.Fatal(workersCtx, err)
+			}
+		}
+	})
+
+	s.stopper.RunWorker(workersCtx, func(context.Context) {
+		netutil.FatalIfUnexpected(s.grpc.Serve(&singleListener{
+			conn: c1,
+		}))
+	})
+
+	// Eschew `(*rpc.Context).GRPCDial` to avoid unnecessary moving parts on the
+	// uniquely in-process connection.
+	dialOpts, err := s.rpcContext.GRPCDialOptions()
 	if err != nil {
-		return errors.Errorf("error constructing grpc-gateway: %s; are your certificates valid?", err)
+		return err
 	}
+	conn, err := grpc.DialContext(ctx, s.cfg.AdvertiseAddr, append(
+		dialOpts,
+		grpc.WithDialer(func(string, time.Duration) (net.Conn, error) {
+			return c2, nil
+		}),
+	)...)
+	if err != nil {
+		return err
+	}
+	s.stopper.RunWorker(workersCtx, func(workersCtx context.Context) {
+		<-s.stopper.ShouldQuiesce()
+		if err := conn.Close(); err != nil {
+			log.Fatal(workersCtx, err)
+		}
+	})
 
 	for _, gw := range []grpcGatewayServer{s.admin, s.status, s.authentication, &s.tsServer} {
 		if err := gw.RegisterGateway(gwCtx, gwMux, conn); err != nil {
@@ -1417,7 +1470,7 @@ func cleanupTempDirs(recordDir string) error {
 	}
 
 	// Clear out the record file now that we're done.
-	if err = f.Truncate(0); err != nil {
+	if err := f.Truncate(0); err != nil {
 		return err
 	}
 	return f.Sync()
@@ -1448,7 +1501,7 @@ func recordTempDir(recordDir, tempPath string) error {
 	defer f.Close()
 
 	// Record tempPath to the record file.
-	if _, err = f.Write(append([]byte(tempPath), '\n')); err != nil {
+	if _, err := f.Write(append([]byte(tempPath), '\n')); err != nil {
 		return err
 	}
 	return f.Sync()
