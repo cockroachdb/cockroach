@@ -317,7 +317,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		if err := os.MkdirAll(firstStore.Path, 0755); err != nil {
 			return nil, errors.Wrapf(err, "failed to create dir for first store: %s", firstStore.Path)
 		}
-		if err = recordTempDir(firstStore.Path, s.cfg.TempStorageConfig.Path); err != nil {
+		if err := recordTempDir(firstStore.Path, s.cfg.TempStorageConfig.Path); err != nil {
 			return nil, errors.Wrapf(
 				err,
 				"could not record temporary directory path to record file: %s",
@@ -876,7 +876,7 @@ func (s *Server) Start(ctx context.Context) error {
 				bootstrapVersion = *storeKnobs.BootstrapVersion
 			}
 		}
-		if err = s.node.bootstrap(ctx, s.engines, bootstrapVersion); err != nil {
+		if err := s.node.bootstrap(ctx, s.engines, bootstrapVersion); err != nil {
 			return err
 		}
 		log.Infof(ctx, "**** add additional nodes by specifying --join=%s", s.cfg.AdvertiseAddr)
@@ -893,8 +893,8 @@ func (s *Server) Start(ctx context.Context) error {
 			})
 		})
 
-		if err = initServer.awaitBootstrap(); err != nil {
-			return nil
+		if err := initServer.awaitBootstrap(); err != nil {
+			return err
 		}
 
 		atomic.StoreInt32(&initLActive, 0)
@@ -923,16 +923,14 @@ If problems persist, please see ` + base.DocsURL("cluster-setup-troubleshooting.
 	// Now that we have a monotonic HLC wrt previous incarnations of the process,
 	// init all the replicas. At this point *some* store has been bootstrapped or
 	// we're joining an existing cluster for the first time.
-	err = s.node.start(
+	if err := s.node.start(
 		ctx,
 		unresolvedAdvertAddr,
 		bootstrappedEngines, emptyEngines,
 		s.cfg.NodeAttributes,
 		s.cfg.Locality,
 		cv,
-	)
-
-	if err != nil {
+	); err != nil {
 		return err
 	}
 	log.Event(ctx, "started node")
@@ -1417,7 +1415,7 @@ func cleanupTempDirs(recordDir string) error {
 	}
 
 	// Clear out the record file now that we're done.
-	if err = f.Truncate(0); err != nil {
+	if err := f.Truncate(0); err != nil {
 		return err
 	}
 	return f.Sync()
@@ -1448,7 +1446,7 @@ func recordTempDir(recordDir, tempPath string) error {
 	defer f.Close()
 
 	// Record tempPath to the record file.
-	if _, err = f.Write(append([]byte(tempPath), '\n')); err != nil {
+	if _, err := f.Write(append([]byte(tempPath), '\n')); err != nil {
 		return err
 	}
 	return f.Sync()
