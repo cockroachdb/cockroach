@@ -1138,7 +1138,6 @@ If problems persist, please see ` + base.DocsURL("cluster-setup-troubleshooting.
 	}
 	conn, err := grpc.DialContext(ctx, s.cfg.AdvertiseAddr, append(
 		dialOpts,
-		grpc.WithBlock(),
 		grpc.WithDialer(func(string, time.Duration) (net.Conn, error) {
 			return c2, nil
 		}),
