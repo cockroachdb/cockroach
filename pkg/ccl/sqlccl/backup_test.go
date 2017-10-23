@@ -109,7 +109,7 @@ func backupRestoreTestSetupWithParams(
 			}
 		}
 		tc.Stopper().Stop(context.TODO()) // cleans up in memory storage's auxiliary dirs
-		dirCleanupFn()                    // cleans up dir, which is the nodelocal:// storage
+		dirCleanupFn()                    // cleans up dir, which is the network-file:// storage
 
 		for _, temp := range tempDirs {
 			testutils.SucceedsSoon(t, func() error {
@@ -125,7 +125,7 @@ func backupRestoreTestSetupWithParams(
 		}
 	}
 
-	return ctx, "nodelocal://" + dir, tc, sqlDB, cleanupFn
+	return ctx, "network-file://" + dir, tc, sqlDB, cleanupFn
 }
 
 func backupRestoreTestSetup(
@@ -232,6 +232,40 @@ func TestBackupRestoreEmpty(t *testing.T) {
 	defer cleanupFn()
 
 	backupAndRestore(ctx, t, sqlDB, dir, numAccounts)
+}
+
+func TestBackupRestoreLocalPathChecks(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	const numAccounts = 1
+
+	t.Run("single-node", func(t *testing.T) {
+		_, dir, _, sqlDB, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, initNone)
+		defer cleanupFn()
+		dir = strings.TrimPrefix(dir, "network-file://")
+
+		for _, scheme := range []string{"file://", "nodelocal://", "network-file://"} {
+			sqlDB.Exec("BACKUP DATABASE data TO $1", scheme+dir)
+			if err := os.RemoveAll(dir); err != nil {
+				t.Fatal(err)
+			}
+		}
+	})
+
+	t.Run("multi-node", func(t *testing.T) {
+		_, dir, _, sqlDB, cleanupFn := backupRestoreTestSetup(t, multiNode, numAccounts, initNone)
+		defer cleanupFn()
+		dir = strings.TrimPrefix(dir, "network-file://")
+
+		for _, scheme := range []string{"file://", "nodelocal://"} {
+			if _, err := sqlDB.DB.Exec("BACKUP DATABASE data TO $1", scheme+dir); !testutils.IsError(err,
+				"local storage paths do not work on multi-node clusters",
+			) {
+				t.Fatal(err)
+			}
+		}
+		sqlDB.Exec("BACKUP DATABASE data TO $1", "network-file://"+dir)
+	})
 }
 
 // Regression test for #16008. In short, the way RESTORE constructed split keys
@@ -504,7 +538,7 @@ func checkInProgressBackupRestore(
 			return check(ctx, inProgressState{
 				DB:            sqlDB.DB,
 				backupTableID: backupTableID,
-				backupDir:     strings.TrimPrefix(dir, "nodelocal:"),
+				backupDir:     strings.TrimPrefix(dir, "network-file:"),
 			})
 		})
 
@@ -696,7 +730,7 @@ func TestBackupRestoreResume(t *testing.T) {
 		}
 		backupDir := filepath.Join(dir, "backup")
 		// TODO(benesch): avoid duplicating this TrimPrefix in several tests.
-		backupDirRaw := strings.TrimPrefix(backupDir, "nodelocal:")
+		backupDirRaw := strings.TrimPrefix(backupDir, "network-file:")
 		if err := os.MkdirAll(backupDirRaw, 0755); err != nil {
 			t.Fatal(err)
 		}
@@ -1549,7 +1583,7 @@ func TestAsOfSystemTimeOnRestoredData(t *testing.T) {
 	defer cleanupFn()
 	sqlDB.Exec(`DROP TABLE data.bank`)
 
-	// backupRestoreTestSetup sets nodelocal:// on dir, so strip it off.
+	// backupRestoreTestSetup sets network-file:// on dir, so strip it off.
 	url, err := url.Parse(dir)
 	if err != nil {
 		t.Fatal(err)
@@ -1565,7 +1599,7 @@ func TestAsOfSystemTimeOnRestoredData(t *testing.T) {
 
 	var beforeTs string
 	sqlDB.QueryRow(`SELECT cluster_logical_timestamp()`).Scan(&beforeTs)
-	sqlDB.Exec(`RESTORE data.* FROM $1`, fmt.Sprintf("nodelocal://%s", backup.BaseDir))
+	sqlDB.Exec(`RESTORE data.* FROM $1`, fmt.Sprintf("network-file://%s", backup.BaseDir))
 	var afterTs string
 	sqlDB.QueryRow(`SELECT cluster_logical_timestamp()`).Scan(&afterTs)
 
@@ -1591,7 +1625,7 @@ func TestBackupRestoreChecksum(t *testing.T) {
 	defer cleanupFn()
 
 	// The helper helpfully prefixes it, but we're going to do direct file IO.
-	rawDir := strings.TrimPrefix(dir, "nodelocal://")
+	rawDir := strings.TrimPrefix(dir, "network-file://")
 
 	sqlDB.Exec(`BACKUP DATABASE data TO $1`, dir)
 
@@ -1724,7 +1758,7 @@ func TestBackupLevelDB(t *testing.T) {
 	defer cleanupFn()
 
 	_ = sqlDB.Exec(`BACKUP DATABASE data TO $1`, dir)
-	rawDir := strings.TrimPrefix(dir, "nodelocal://")
+	rawDir := strings.TrimPrefix(dir, "network-file://")
 	// Verify that the sstables are in LevelDB format by checking the trailer
 	// magic.
 	var magic = []byte("\x57\xfb\x80\x8b\x24\x75\x47\xdb")
