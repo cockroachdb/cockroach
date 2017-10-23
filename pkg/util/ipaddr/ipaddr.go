@@ -23,6 +23,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/util/uint128"
 	"github.com/pkg/errors"
 )
@@ -179,7 +180,7 @@ func ParseINet(s string, dest *IPAddr) error {
 		}
 		ip := net.ParseIP(addr)
 		if ip == nil {
-			return errors.Errorf("could not parse %q as inet. invalid IP", s)
+			return pgerror.NewErrorf(pgerror.CodeInvalidTextRepresentationError, "could not parse %q as inet. invalid IP", s)
 		}
 
 		*dest = IPAddr{Family: family,
@@ -196,16 +197,16 @@ func ParseINet(s string, dest *IPAddr) error {
 	}
 	maskOnes, err := strconv.Atoi(maskStr)
 	if err != nil {
-		return errors.Errorf("could not parse %q as inet. invalid mask", s)
+		return pgerror.NewErrorf(pgerror.CodeInvalidTextRepresentationError, "could not parse %q as inet. invalid mask", s)
 	} else if maskOnes < 0 || (family == IPv4family && maskOnes > 32) || (family == IPv6family && maskOnes > 128) {
-		return errors.Errorf("could not parse %q as inet. invalid mask", s)
+		return pgerror.NewErrorf(pgerror.CodeInvalidTextRepresentationError, "could not parse %q as inet. invalid mask", s)
 	}
 
 	if family == IPv4family {
 		// If the mask is outside the defined octets, postgres will raise an error.
 		octetCount := strings.Count(addr, ".") + 1
 		if (octetCount+1)*8-1 < maskOnes {
-			return errors.Errorf("could not parse %q as inet. mask is larger than provided octets", s)
+			return pgerror.NewErrorf(pgerror.CodeInvalidTextRepresentationError, "could not parse %q as inet. mask is larger than provided octets", s)
 		}
 
 		// Append extra ".0" to ensure there are a total of 4 octets.
@@ -220,7 +221,7 @@ func ParseINet(s string, dest *IPAddr) error {
 
 	ip := net.ParseIP(addr)
 	if ip == nil {
-		return errors.Errorf("could not parse %q as inet. invalid IP", s)
+		return pgerror.NewErrorf(pgerror.CodeInvalidTextRepresentationError, "could not parse %q as inet. invalid IP", s)
 	}
 
 	*dest = IPAddr{Family: family,
