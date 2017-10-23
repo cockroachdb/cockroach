@@ -43,9 +43,9 @@ type traceNode struct {
 	// around the interaction of SQL with KV. Some of the messages are per-row.
 	kvTracingEnabled bool
 
-	// recordingStarted is set if this node started tracing on the session. If it
-	// did, then Close() needs to stop the recording.
-	recordingStarted bool
+	// recording is set if this node started tracing on the session. If it did,
+	// then Close() needs to stop the recording.
+	recording bool
 }
 
 var sessionTraceTableName = parser.TableName{
@@ -86,7 +86,7 @@ func (n *traceNode) Start(params runParams) error {
 	); err != nil {
 		return err
 	}
-	n.recordingStarted = true
+	n.recording = true
 
 	startCtx, sp := tracing.ChildSpan(params.ctx, "starting plan")
 	defer sp.Finish()
@@ -99,7 +99,7 @@ func (n *traceNode) Close(ctx context.Context) {
 		n.plan.Close(ctx)
 	}
 	n.traceRows = nil
-	if n.recordingStarted {
+	if n.recording {
 		if err := stopTracing(n.p.session); err != nil {
 			log.Errorf(ctx, "error stopping tracing at end of SHOW TRACE FOR: %v", err)
 		}
@@ -148,6 +148,7 @@ func (n *traceNode) Next(params runParams) (bool, error) {
 			log.VEventf(consumeCtx, 2, "resources released, stopping trace")
 		}()
 
+		n.recording = false
 		if err := stopTracing(n.p.session); err != nil {
 			return false, err
 		}
