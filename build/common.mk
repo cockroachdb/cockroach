@@ -64,6 +64,12 @@ endif
 
 GIT_DIR := $(shell git rev-parse --git-dir 2> /dev/null)
 
+# Invocation of any NodeJS script should be prefixed by NODE_RUN. See the
+# comments within node-run.sh for rationale.
+NODE_RUN := $(REPO_ROOT)/build/node-run.sh
+
+YARN := $(NODE_RUN) yarn
+
 # make-lazy converts a recursive variable, which is evaluated every time it's
 # referenced, to a lazy variable, which is evaluated only the first time it's
 # used. See: http://blog.jgc.org/2016/07/lazy-gnu-make-variables.html
@@ -141,12 +147,14 @@ endif
 YARN_INSTALLED_TARGET := $(UI_ROOT)/yarn.installed
 
 $(YARN_INSTALLED_TARGET): $(BOOTSTRAP_TARGET) $(UI_ROOT)/package.json $(UI_ROOT)/yarn.lock
-	cd $(UI_ROOT) && yarn install
+	$(YARN) install --cwd $(UI_ROOT)
 	# Prevent ProtobufJS from trying to install its own packages because a) the
 	# the feature is buggy, and b) it introduces an unnecessary dependency on NPM.
 	# Additionally pin a known-good version of jsdoc.
 	# See: https://github.com/dcodeIO/protobuf.js/issues/716.
-	(cd $(UI_ROOT)/node_modules/protobufjs/cli && cp package.standalone.json package.json && yarn add jsdoc@3.4.3 && yarn install)
+	cp $(UI_ROOT)/node_modules/protobufjs/cli/{package.standalone.json,package.json}
+	$(YARN) add jsdoc@3.4.3 --cwd $(UI_ROOT)/node_modules/protobufjs/cli
+	$(YARN) install --cwd $(UI_ROOT)/node_modules/protobufjs/cli
 	@# We remove this broken dependency again in pkg/ui/webpack.config.js.
 	@# See the comment there for details.
 	rm -rf $(UI_ROOT)/node_modules/@types/node
