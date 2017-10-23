@@ -171,6 +171,13 @@ func (p *planner) truncateTable(ctx context.Context, id sqlbase.ID, traceKV bool
 		p.notifySchemaChange(table, sqlbase.InvalidMutationID)
 	}
 
+	// Reassign all self references.
+	if err := reassignReferencedTables(
+		[]*sqlbase.TableDescriptor{&newTableDesc}, tableDesc.ID, newID,
+	); err != nil {
+		return err
+	}
+
 	// Add new descriptor.
 	newTableDesc.State = sqlbase.TableDescriptor_ADD
 	if err := newTableDesc.SetUpVersion(); err != nil {
