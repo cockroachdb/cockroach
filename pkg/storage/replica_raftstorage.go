@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -95,7 +96,7 @@ func (r *Replica) raftEntriesLocked(lo, hi, maxBytes uint64) ([]raftpb.Entry, er
 // loaded entries, and maxBytes will not be applied to the payloads.
 func entries(
 	ctx context.Context,
-	rsl StateLoader,
+	rsl stateloader.StateLoader,
 	e engine.Reader,
 	rangeID roachpb.RangeID,
 	eCache *raftEntryCache,
@@ -263,7 +264,7 @@ func (r *Replica) raftTermRLocked(i uint64) (uint64, error) {
 
 func term(
 	ctx context.Context,
-	rsl StateLoader,
+	rsl stateloader.StateLoader,
 	eng engine.Reader,
 	rangeID roachpb.RangeID,
 	eCache *raftEntryCache,
@@ -417,7 +418,7 @@ func (r *Replica) GetSnapshot(
 	// to use Replica.mu.stateLoader. This call is not performance sensitive, so
 	// create a new state loader.
 	snapData, err := snapshot(
-		ctx, MakeStateLoader(r.store.cfg.Settings, rangeID), snapType,
+		ctx, stateloader.Make(r.store.cfg.Settings, rangeID), snapType,
 		snap, rangeID, r.store.raftEntryCache, withSideloaded, startKey,
 	)
 	if err != nil {
@@ -470,7 +471,7 @@ type IncomingSnapshot struct {
 // given range. Note that snapshot() is called without Replica.raftMu held.
 func snapshot(
 	ctx context.Context,
-	rsl StateLoader,
+	rsl stateloader.StateLoader,
 	snapType string,
 	snap engine.Reader,
 	rangeID roachpb.RangeID,
