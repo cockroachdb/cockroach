@@ -59,6 +59,9 @@ const (
 	// EventLogFinishSchemaChange is recorded when a previously initiated schema
 	// change has completed.
 	EventLogFinishSchemaChange EventLogType = "finish_schema_change"
+	// EventLogFinishSchemaRollback is recorded when a previously
+	// initiated schema change rollback has completed.
+	EventLogFinishSchemaRollback EventLogType = "finish_schema_change_rollback"
 
 	// EventLogNodeJoin is recorded when a node joins the cluster.
 	EventLogNodeJoin EventLogType = "node_join"
