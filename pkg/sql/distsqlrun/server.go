@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
+	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -336,7 +337,7 @@ func (ds *ServerImpl) RunSyncFlow(stream DistSQL_RunSyncFlowServer) error {
 	mbox.setFlowCtx(&f.FlowCtx)
 
 	if err := ds.Stopper.RunTask(ctx, "distsqlrun.ServerImpl: sync flow", func(ctx context.Context) {
-		ctx, ctxCancel := context.WithCancel(ctx)
+		ctx, ctxCancel := contextutil.WithCancel(ctx)
 		defer ctxCancel()
 		mbox.start(ctx, &f.waitGroup, ctxCancel)
 		if err := f.Start(ctx, func() {}); err != nil {

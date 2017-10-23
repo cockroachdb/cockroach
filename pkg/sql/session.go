@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -491,7 +492,7 @@ func NewSession(
 	if traceSessionEventLogEnabled.Get(&e.cfg.Settings.SV) {
 		s.eventLog = trace.NewEventLog(fmt.Sprintf("sql [%s]", args.User), remoteStr)
 	}
-	s.context, s.cancel = context.WithCancel(ctx)
+	s.context, s.cancel = contextutil.WithCancel(ctx)
 
 	e.cfg.SessionRegistry.register(s)
 
@@ -1096,7 +1097,7 @@ func (ts *txnState) resetForNewSQLTxn(
 	}
 
 	ts.sp = sp
-	ts.Ctx, ts.cancel = context.WithCancel(ctx)
+	ts.Ctx, ts.cancel = contextutil.WithCancel(ctx)
 	ts.SetState(AutoRetry)
 	s.Tracing.onNewSQLTxn(ts.sp)
 
