@@ -45,7 +45,7 @@ func TrackRaftProtos() func() []reflect.Type {
 		funcName((*gossip.Gossip).AddInfoProto),
 		// Replica destroyed errors are written to disk, but they are
 		// deliberately per-replica values.
-		funcName((replicaStateLoader).setReplicaDestroyedError),
+		funcName((StateLoader).SetReplicaDestroyedError),
 	}
 
 	belowRaftProtos := struct {
