@@ -59,7 +59,7 @@ var _ raft.Storage = (*replicaRaftStorage)(nil)
 // InitialState requires that r.mu is held.
 func (r *replicaRaftStorage) InitialState() (raftpb.HardState, raftpb.ConfState, error) {
 	ctx := r.AnnotateCtx(context.TODO())
-	hs, err := r.mu.stateLoader.loadHardState(ctx, r.store.Engine())
+	hs, err := r.mu.stateLoader.LoadHardState(ctx, r.store.Engine())
 	// For uninitialized ranges, membership is unknown at this point.
 	if raft.IsEmptyHardState(hs) || err != nil {
 		return raftpb.HardState{}, raftpb.ConfState{}, err
@@ -95,7 +95,7 @@ func (r *Replica) raftEntriesLocked(lo, hi, maxBytes uint64) ([]raftpb.Entry, er
 // loaded entries, and maxBytes will not be applied to the payloads.
 func entries(
 	ctx context.Context,
-	rsl replicaStateLoader,
+	rsl StateLoader,
 	e engine.Reader,
 	rangeID roachpb.RangeID,
 	eCache *raftEntryCache,
@@ -188,7 +188,7 @@ func entries(
 		}
 
 		// Was the missing index after the last index?
-		lastIndex, err := rsl.loadLastIndex(ctx, e)
+		lastIndex, err := rsl.LoadLastIndex(ctx, e)
 		if err != nil {
 			return nil, err
 		}
@@ -201,7 +201,7 @@ func entries(
 	}
 
 	// No results, was it due to unavailability or truncation?
-	ts, err := rsl.loadTruncatedState(ctx, e)
+	ts, err := rsl.LoadTruncatedState(ctx, e)
 	if err != nil {
 		return nil, err
 	}
@@ -263,7 +263,7 @@ func (r *Replica) raftTermRLocked(i uint64) (uint64, error) {
 
 func term(
 	ctx context.Context,
-	rsl replicaStateLoader,
+	rsl StateLoader,
 	eng engine.Reader,
 	rangeID roachpb.RangeID,
 	eCache *raftEntryCache,
@@ -273,7 +273,7 @@ func term(
 	// sideloaded entries. We only need the term, so this is what we do.
 	ents, err := entries(ctx, rsl, eng, rangeID, eCache, nil /* sideloaded */, i, i+1, 0)
 	if err == raft.ErrCompacted {
-		ts, err := rsl.loadTruncatedState(ctx, eng)
+		ts, err := rsl.LoadTruncatedState(ctx, eng)
 		if err != nil {
 			return 0, err
 		}
@@ -310,7 +310,7 @@ func (r *Replica) raftTruncatedStateLocked(
 	if r.mu.state.TruncatedState != nil {
 		return *r.mu.state.TruncatedState, nil
 	}
-	ts, err := r.mu.stateLoader.loadTruncatedState(ctx, r.store.Engine())
+	ts, err := r.mu.stateLoader.LoadTruncatedState(ctx, r.store.Engine())
 	if err != nil {
 		return ts, err
 	}
@@ -417,7 +417,7 @@ func (r *Replica) GetSnapshot(
 	// to use Replica.mu.stateLoader. This call is not performance sensitive, so
 	// create a new state loader.
 	snapData, err := snapshot(
-		ctx, makeReplicaStateLoader(r.store.cfg.Settings, rangeID), snapType,
+		ctx, MakeStateLoader(r.store.cfg.Settings, rangeID), snapType,
 		snap, rangeID, r.store.raftEntryCache, withSideloaded, startKey,
 	)
 	if err != nil {
@@ -470,7 +470,7 @@ type IncomingSnapshot struct {
 // given range. Note that snapshot() is called without Replica.raftMu held.
 func snapshot(
 	ctx context.Context,
-	rsl replicaStateLoader,
+	rsl StateLoader,
 	snapType string,
 	snap engine.Reader,
 	rangeID roachpb.RangeID,
@@ -497,7 +497,7 @@ func snapshot(
 
 	// Read the range metadata from the snapshot instead of the members
 	// of the Range struct because they might be changed concurrently.
-	appliedIndex, _, err := rsl.loadAppliedIndex(ctx, snap)
+	appliedIndex, _, err := rsl.LoadAppliedIndex(ctx, snap)
 	if err != nil {
 		return OutgoingSnapshot{}, err
 	}
@@ -513,7 +513,7 @@ func snapshot(
 		return OutgoingSnapshot{}, errors.Errorf("failed to fetch term of %d: %s", appliedIndex, err)
 	}
 
-	state, err := rsl.load(ctx, snap, &desc)
+	state, err := rsl.Load(ctx, snap, &desc)
 	if err != nil {
 		return OutgoingSnapshot{}, err
 	}
@@ -597,7 +597,7 @@ func (r *Replica) append(
 		}
 	}
 
-	if err := r.raftMu.stateLoader.setLastIndex(ctx, batch, lastIndex); err != nil {
+	if err := r.raftMu.stateLoader.SetLastIndex(ctx, batch, lastIndex); err != nil {
 		return 0, 0, 0, err
 	}
 
@@ -810,7 +810,7 @@ func (r *Replica) applySnapshot(
 	// the HardState -- Raft wouldn't ask us to update the HardState in incorrect
 	// ways.
 	if !raft.IsEmptyHardState(hs) {
-		if err := r.raftMu.stateLoader.setHardState(ctx, distinctBatch, hs); err != nil {
+		if err := r.raftMu.stateLoader.SetHardState(ctx, distinctBatch, hs); err != nil {
 			return errors.Wrapf(err, "unable to persist HardState %+v", &hs)
 		}
 	}
