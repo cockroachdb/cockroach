@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
+	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -369,7 +370,7 @@ func (f *Flow) Start(ctx context.Context, doneFn func()) error {
 	)
 	f.status = FlowRunning
 
-	f.ctx, f.ctxCancel = context.WithCancel(ctx)
+	f.ctx, f.ctxCancel = contextutil.WithCancel(ctx)
 
 	// Once we call RegisterFlow, the inbound streams become accessible; we must
 	// set up the WaitGroup counter before.
