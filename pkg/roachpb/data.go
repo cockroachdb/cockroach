@@ -938,6 +938,17 @@ func (t *Transaction) ResetObservedTimestamps() {
 // operations in the transaction. When multiple calls are made for a single
 // nodeID, the lowest timestamp prevails.
 func (t *Transaction) UpdateObservedTimestamp(nodeID NodeID, maxTS hlc.Timestamp) {
+	// Fast path optimization for either no observed timestamps or
+	// exactly one, for the same nodeID as we're updating.
+	if l := len(t.ObservedTimestamps); l == 0 {
+		t.ObservedTimestamps = []ObservedTimestamp{{NodeID: nodeID, Timestamp: maxTS}}
+		return
+	} else if l == 1 && t.ObservedTimestamps[0].NodeID == nodeID {
+		if maxTS.Less(t.ObservedTimestamps[0].Timestamp) {
+			t.ObservedTimestamps = []ObservedTimestamp{{NodeID: nodeID, Timestamp: maxTS}}
+		}
+		return
+	}
 	s := observedTimestampSlice(t.ObservedTimestamps)
 	t.ObservedTimestamps = s.update(nodeID, maxTS)
 }

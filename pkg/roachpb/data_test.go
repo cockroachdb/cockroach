@@ -357,6 +357,24 @@ func TestTransactionObservedTimestamp(t *testing.T) {
 	}
 }
 
+func TestFastPathObservedTimestamp(t *testing.T) {
+	var txn Transaction
+	nodeID := NodeID(1);
+	if _, ok := txn.GetObservedTimestamp(nodeID); ok {
+		t.Errorf("fetched observed timestamp where none should exist")
+	}
+	expTS := hlc.Timestamp{WallTime: 10}
+	txn.UpdateObservedTimestamp(nodeID, expTS)
+	if ts, ok := txn.GetObservedTimestamp(nodeID); !ok || !ts.Equal(expTS) {
+		t.Errorf("expected %s; got %s", expTS, ts)
+	}
+	expTS = hlc.Timestamp{WallTime: 9}
+	txn.UpdateObservedTimestamp(nodeID, expTS)
+	if ts, ok := txn.GetObservedTimestamp(nodeID); !ok || !ts.Equal(expTS) {
+		t.Errorf("expected %s; got %s", expTS, ts)
+	}
+}
+
 var nonZeroTxn = Transaction{
 	TxnMeta: enginepb.TxnMeta{
 		Isolation:  enginepb.SNAPSHOT,
