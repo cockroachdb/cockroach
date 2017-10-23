@@ -301,6 +301,24 @@ NULL
 2
 5
 
+# Here we can infer that v is not-NULL so eliding the node is correct.
+query ITTTTT colnames
+EXPLAIN (VERBOSE) SELECT DISTINCT v FROM kv@idx WHERE v > 0
+----
+Level  Type    Field     Description  Columns          Ordering
+0      render  ·         ·            (v)              v!=NULL; key(v)
+0      ·       render 0  test.kv.v    ·                ·
+1      scan    ·         ·            (k[omitted], v)  v!=NULL; key(v)
+1      ·       table     kv@idx       ·                ·
+1      ·       spans     /1-          ·                ·
+
+query I rowsort
+SELECT DISTINCT v FROM kv@idx WHERE v > 0
+----
+1
+2
+5
+
 statement ok
 CREATE TABLE kv2 (k INT PRIMARY KEY, v INT NOT NULL, UNIQUE INDEX idx(v))
 

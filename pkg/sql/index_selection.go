@@ -224,6 +224,7 @@ func (p *planner) selectIndex(
 		return &zeroNode{}, nil
 	}
 
+	s.origFilter = s.filter
 	s.filter = applyIndexConstraints(&p.evalCtx, s.filter, c.constraints)
 	if s.filter != nil {
 		// Constraint propagation may have produced new constant sub-expressions.

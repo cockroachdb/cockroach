@@ -669,6 +669,8 @@ func (pp *physicalProps) applyExpr(evalCtx *parser.EvalContext, expr parser.Type
 		}
 		// TODO(radu): look for tuple equalities like (a, b) = (c, d)
 	}
+	// Infer not-null columns.
+	pp.notNullCols.UnionWith(extractNotNullConstraints(expr))
 }
 
 // computeMergeJoinOrdering determines if merge-join can be used to perform a join.
