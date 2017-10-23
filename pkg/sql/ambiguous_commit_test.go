@@ -92,7 +92,7 @@ func TestAmbiguousCommit(t *testing.T) {
 						sendNext: func(ctx context.Context, done chan<- kv.BatchCall) {
 							if ambiguousSuccess {
 								interceptDone := make(chan kv.BatchCall)
-								transport.SendNext(ctx, interceptDone)
+								go transport.SendNext(ctx, interceptDone)
 								call := <-interceptDone
 								// During shutdown, we may get responses that
 								// have call.Err set and all we have to do is
