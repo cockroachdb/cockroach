@@ -31,6 +31,9 @@ new engineers.
      - A C++ compiler that supports C++11. Note that GCC prior to 6.0 doesn't
        work due to https://gcc.gnu.org/bugzilla/show_bug.cgi?id=48891
      - The standard C/C++ development headers on your system.
+     - On GNU/Linux, the terminfo development libraries, which may be
+       part of a ncurses development package (e.g. `libtinfo-dev` on
+       Debian/Ubuntu, but `ncurses-devel` on CentOS).
      - A Go environment with a recent 64-bit version of the toolchain. Note that
        the Makefile enforces the specific version required, as it is updated
        frequently.
