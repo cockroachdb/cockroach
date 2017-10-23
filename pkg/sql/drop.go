@@ -242,8 +242,11 @@ type fullIndexName struct {
 //   Notes: postgres allows only the index owner to DROP an index.
 //          mysql requires the INDEX privilege on the table.
 func (p *planner) DropIndex(ctx context.Context, n *parser.DropIndex) (planNode, error) {
-	idxNames := make([]fullIndexName, len(n.IndexList))
-	for i, index := range n.IndexList {
+	// Keep a track of the indexes that exist to check. When the IF EXISTS
+	// options are provided, we will simply not include any indexes that
+	// don't exist and continue execution.
+	idxNames := make([]fullIndexName, 0, len(n.IndexList))
+	for _, index := range n.IndexList {
 		tn, err := p.expandIndexName(ctx, index, false /* requireTable */)
 		if err != nil {
 			return nil, err
@@ -251,8 +254,8 @@ func (p *planner) DropIndex(ctx context.Context, n *parser.DropIndex) (planNode,
 			// Only index names of the form "idx" throw an error here if they
 			// don't exist.
 			if n.IfExists {
-				// Noop.
-				return &zeroNode{}, nil
+				// Skip this index and don't return an error.
+				continue
 			}
 			// Index does not exist, but we want it to error out.
 			return nil, fmt.Errorf("index %q not found", index.Index)
@@ -267,8 +270,7 @@ func (p *planner) DropIndex(ctx context.Context, n *parser.DropIndex) (planNode,
 			return nil, err
 		}
 
-		idxNames[i].tn = tn
-		idxNames[i].idxName = index.Index
+		idxNames = append(idxNames, fullIndexName{tn: tn, idxName: index.Index})
 	}
 	return &dropIndexNode{n: n, idxNames: idxNames}, nil
 }
