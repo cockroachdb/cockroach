@@ -22,6 +22,7 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
@@ -214,7 +215,7 @@ func (m *outbox) mainLoop(ctx context.Context) error {
 	// producer to drain). Perhaps what we want is a way to tell when all the rows
 	// corresponding to the first KV batch have been sent and only start the
 	// goroutine if more batches are needed to satisfy the query.
-	listenToConsumerCtx, cancel := context.WithCancel(ctx)
+	listenToConsumerCtx, cancel := contextutil.WithCancel(ctx)
 	drainCh, err := m.listenForDrainSignalFromConsumer(listenToConsumerCtx)
 	defer cancel()
 	if err != nil {
