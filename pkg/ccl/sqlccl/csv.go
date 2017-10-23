@@ -1075,9 +1075,10 @@ func importPlanHook(
 			From: parser.Exprs{parser.NewDString(temp)},
 		}
 		from := []string{temp}
+		endTime := hlc.Timestamp{}
 		opts = map[string]string{restoreOptIntoDB: targetDB}
 
-		return doRestorePlan(ctx, restore, p, from, opts, resultsCh)
+		return doRestorePlan(ctx, restore, p, from, endTime, opts, resultsCh)
 	}
 	return fn, restoreHeader, nil
 }
