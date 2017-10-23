@@ -3871,6 +3871,11 @@ func (s *Store) getOrCreateReplica(
 			creatingReplica,
 		)
 		if err == errRetry {
+			// Likely the surrounding for loop is preemptible anyway,
+			// but there's no harm in making that explicit.
+			//
+			// Inspired by https://github.com/cockroachdb/cockroach/pull/19404.
+			runtime.Gosched()
 			continue
 		}
 		if err != nil {
