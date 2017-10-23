@@ -329,7 +329,7 @@ func TestStyle(t *testing.T) {
 	t.Run("TestPGErrors", func(t *testing.T) {
 		t.Parallel()
 		// TODO(justin): we should expand the packages this applies to as possible.
-		cmd, stderr, filter, err := dirCmd(pkg.Dir, "git", "grep", "-nE", `((fmt|errors).Errorf|errors.New)`, "--", "sql/parser/*.go")
+		cmd, stderr, filter, err := dirCmd(pkg.Dir, "git", "grep", "-nE", `((fmt|errors).Errorf|errors.New)`, "--", "sql/parser/*.go", "util/ipaddr/*.go")
 		if err != nil {
 			t.Fatal(err)
 		}
