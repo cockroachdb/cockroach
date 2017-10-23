@@ -10,11 +10,13 @@ import { localSettingsReducer, LocalSettingsState } from "./localsettings";
 import { metricsReducer, MetricsState, queryMetricsSaga } from "./metrics";
 import { timeWindowReducer, TimeWindowState } from "./timewindow";
 import { uiDataReducer, UIDataState } from "./uiData";
+import { queryManagerReducer, QueryManagerState } from "./queryManager/reducer";
 
 export interface AdminUIState {
     cachedData: APIReducersState;
     localSettings: LocalSettingsState;
     metrics: MetricsState;
+    queryManager: QueryManagerState;
     routing: RouterState;
     timewindow: TimeWindowState;
     uiData: UIDataState;
@@ -30,6 +32,7 @@ export function createAdminUIStore() {
       cachedData: apiReducersReducer,
       localSettings: localSettingsReducer,
       metrics: metricsReducer,
+      queryManager: queryManagerReducer,
       routing: routerReducer,
       timewindow: timeWindowReducer,
       uiData: uiDataReducer,
