@@ -10,7 +10,7 @@ SET tracing = on; BEGIN; SELECT 1; COMMIT; SELECT 2; SET tracing = off;
 # This also checks that the span column properly reports separate
 # SQL transactions.
 query TTT
-SELECT span, message, operation FROM [SHOW TRACE FOR SESSION] WHERE message NOT LIKE e'%\n%'
+SELECT span, message, operation FROM [SHOW TRACE FOR SESSION] WHERE message NOT LIKE e'%\n%' AND message NOT LIKE '%canceling context'
 ----
 (0,0)  === SPAN START: sql txn implicit ===  sql txn implicit
 (1,0)  === SPAN START: sql txn ===           sql txn implicit
