@@ -105,13 +105,13 @@ func (s Status) Terminal() bool {
 // InvalidStatusError is the error returned when the desired operation is
 // invalid given the job's current status.
 type InvalidStatusError struct {
-	id     int64
-	status Status
+	ID     int64
+	Status Status
 	op     string
 }
 
 func (e *InvalidStatusError) Error() string {
-	return fmt.Sprintf("cannot %s %s job (id %d)", e.op, e.status, e.id)
+	return fmt.Sprintf("cannot %s %s job (id %d)", e.op, e.Status, e.ID)
 }
 
 // ID returns the ID of the job that this Job is currently tracking. This will
@@ -204,8 +204,6 @@ func (j *Job) Progressed(
 func isControllable(p *Payload, op string) error {
 	switch typ := p.Type(); typ {
 	case TypeSchemaChange:
-		return pgerror.UnimplementedWithIssueErrorf(
-			16018, "schema change jobs do not support %s", op)
 	case TypeImport:
 		return pgerror.UnimplementedWithIssueErrorf(
 			18139, "import jobs do not support %s", op)
@@ -358,7 +356,7 @@ func (j *Job) FinishedWith(ctx context.Context, err error) error {
 		return roachpb.NewAmbiguousResultError("job lease expired")
 	}
 	if err, ok := errors.Cause(err).(*InvalidStatusError); ok &&
-		(err.status == StatusPaused || err.status == StatusCanceled) {
+		(err.Status == StatusPaused || err.Status == StatusCanceled) {
 		// If we couldn't operate on the job because it was paused or canceled, send
 		// the more understandable "job paused" or "job canceled" error message to
 		// the user.
@@ -366,7 +364,7 @@ func (j *Job) FinishedWith(ctx context.Context, err error) error {
 		// NB: Since we're not calling Succeeded or Failed, we need to manually
 		// unregister the job.
 		j.registry.unregister(*j.id)
-		return fmt.Errorf("job %s", err.status)
+		return fmt.Errorf("job %s", err.Status)
 	}
 	if err != nil {
 		j.Failed(ctx, err)

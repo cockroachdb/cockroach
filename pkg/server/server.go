@@ -985,7 +985,7 @@ If problems persist, please see ` + base.DocsURL("cluster-setup-troubleshooting.
 	} else {
 		testingKnobs = new(sql.SchemaChangerTestingKnobs)
 	}
-	sql.NewSchemaChangeManager(
+	sql.SetupSchemaChangeJobResume(
 		s.st,
 		testingKnobs,
 		*s.db,
@@ -997,7 +997,7 @@ If problems persist, please see ` + base.DocsURL("cluster-setup-troubleshooting.
 		s.leaseMgr,
 		s.clock,
 		s.jobRegistry,
-	).Start(s.stopper)
+	)
 
 	s.sqlExecutor.Start(ctx, &s.adminMemMetrics, s.node.Descriptor)
 	s.distSQLServer.Start()

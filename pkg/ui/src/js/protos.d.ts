@@ -22365,6 +22365,8 @@ export namespace cockroach {
             type SchemaChangeDetails$Properties = {
                 read_as_of?: cockroach.util.hlc.Timestamp$Properties;
                 resume_span_list?: cockroach.sql.jobs.ResumeSpanList$Properties[];
+                mutation_id?: number;
+                table_id?: number;
             };
 
             /**
@@ -22394,6 +22396,18 @@ export namespace cockroach {
                  * @type {Array.<cockroach.sql.jobs.ResumeSpanList$Properties>}
                  */
                 public resume_span_list: cockroach.sql.jobs.ResumeSpanList$Properties[];
+
+                /**
+                 * SchemaChangeDetails mutation_id.
+                 * @type {number}
+                 */
+                public mutation_id: number;
+
+                /**
+                 * SchemaChangeDetails table_id.
+                 * @type {number}
+                 */
+                public table_id: number;
 
                 /**
                  * Creates a new SchemaChangeDetails instance using the specified properties.

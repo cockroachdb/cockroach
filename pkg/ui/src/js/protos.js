@@ -41689,6 +41689,8 @@ export const cockroach = $root.cockroach = (() => {
                  * @type {Object}
                  * @property {cockroach.util.hlc.Timestamp$Properties} [read_as_of] SchemaChangeDetails read_as_of.
                  * @property {Array.<cockroach.sql.jobs.ResumeSpanList$Properties>} [resume_span_list] SchemaChangeDetails resume_span_list.
+                 * @property {number} [mutation_id] SchemaChangeDetails mutation_id.
+                 * @property {number} [table_id] SchemaChangeDetails table_id.
                  */
 
                 /**
@@ -41718,6 +41720,18 @@ export const cockroach = $root.cockroach = (() => {
                 SchemaChangeDetails.prototype.resume_span_list = $util.emptyArray;
 
                 /**
+                 * SchemaChangeDetails mutation_id.
+                 * @type {number}
+                 */
+                SchemaChangeDetails.prototype.mutation_id = 0;
+
+                /**
+                 * SchemaChangeDetails table_id.
+                 * @type {number}
+                 */
+                SchemaChangeDetails.prototype.table_id = 0;
+
+                /**
                  * Creates a new SchemaChangeDetails instance using the specified properties.
                  * @param {cockroach.sql.jobs.SchemaChangeDetails$Properties=} [properties] Properties to set
                  * @returns {cockroach.sql.jobs.SchemaChangeDetails} SchemaChangeDetails instance
@@ -41740,6 +41754,10 @@ export const cockroach = $root.cockroach = (() => {
                     if (message.resume_span_list != null && message.resume_span_list.length)
                         for (let i = 0; i < message.resume_span_list.length; ++i)
                             $root.cockroach.sql.jobs.ResumeSpanList.encode(message.resume_span_list[i], writer.uint32(/* id 2, wireType 2 =*/18).fork()).ldelim();
+                    if (message.mutation_id != null && message.hasOwnProperty("mutation_id"))
+                        writer.uint32(/* id 3, wireType 0 =*/24).uint32(message.mutation_id);
+                    if (message.table_id != null && message.hasOwnProperty("table_id"))
+                        writer.uint32(/* id 4, wireType 0 =*/32).uint32(message.table_id);
                     return writer;
                 };
 
@@ -41775,6 +41793,12 @@ export const cockroach = $root.cockroach = (() => {
                             if (!(message.resume_span_list && message.resume_span_list.length))
                                 message.resume_span_list = [];
                             message.resume_span_list.push($root.cockroach.sql.jobs.ResumeSpanList.decode(reader, reader.uint32()));
+                            break;
+                        case 3:
+                            message.mutation_id = reader.uint32();
+                            break;
+                        case 4:
+                            message.table_id = reader.uint32();
                             break;
                         default:
                             reader.skipType(tag & 7);
@@ -41819,6 +41843,12 @@ export const cockroach = $root.cockroach = (() => {
                                 return "resume_span_list." + error;
                         }
                     }
+                    if (message.mutation_id != null && message.hasOwnProperty("mutation_id"))
+                        if (!$util.isInteger(message.mutation_id))
+                            return "mutation_id: integer expected";
+                    if (message.table_id != null && message.hasOwnProperty("table_id"))
+                        if (!$util.isInteger(message.table_id))
+                            return "table_id: integer expected";
                     return null;
                 };
 
@@ -41846,6 +41876,10 @@ export const cockroach = $root.cockroach = (() => {
                             message.resume_span_list[i] = $root.cockroach.sql.jobs.ResumeSpanList.fromObject(object.resume_span_list[i]);
                         }
                     }
+                    if (object.mutation_id != null)
+                        message.mutation_id = object.mutation_id >>> 0;
+                    if (object.table_id != null)
+                        message.table_id = object.table_id >>> 0;
                     return message;
                 };
 
@@ -41870,8 +41904,11 @@ export const cockroach = $root.cockroach = (() => {
                     let object = {};
                     if (options.arrays || options.defaults)
                         object.resume_span_list = [];
-                    if (options.defaults)
+                    if (options.defaults) {
                         object.read_as_of = null;
+                        object.mutation_id = 0;
+                        object.table_id = 0;
+                    }
                     if (message.read_as_of != null && message.hasOwnProperty("read_as_of"))
                         object.read_as_of = $root.cockroach.util.hlc.Timestamp.toObject(message.read_as_of, options);
                     if (message.resume_span_list && message.resume_span_list.length) {
@@ -41879,6 +41916,10 @@ export const cockroach = $root.cockroach = (() => {
                         for (let j = 0; j < message.resume_span_list.length; ++j)
                             object.resume_span_list[j] = $root.cockroach.sql.jobs.ResumeSpanList.toObject(message.resume_span_list[j], options);
                     }
+                    if (message.mutation_id != null && message.hasOwnProperty("mutation_id"))
+                        object.mutation_id = message.mutation_id;
+                    if (message.table_id != null && message.hasOwnProperty("table_id"))
+                        object.table_id = message.table_id;
                     return object;
                 };
 

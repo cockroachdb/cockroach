@@ -294,4 +294,7 @@ const (
 	CodeInternalError       = "XX000"
 	CodeDataCorruptedError  = "XX001"
 	CodeIndexCorruptedError = "XX002"
+
+	CodeSchemaChangeJobPaused   = "Y0000"
+	CodeSchemaChangeJobCanceled = "Y0001"
 )

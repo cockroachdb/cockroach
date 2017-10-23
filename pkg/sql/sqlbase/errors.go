@@ -104,7 +104,9 @@ func NewInvalidSchemaDefinitionError(err error) error {
 func IsPermanentSchemaChangeError(err error) bool {
 	return errHasCode(err, pgerror.CodeNotNullViolationError) ||
 		errHasCode(err, pgerror.CodeUniqueViolationError) ||
-		errHasCode(err, pgerror.CodeInvalidSchemaDefinitionError)
+		errHasCode(err, pgerror.CodeInvalidSchemaDefinitionError) ||
+		errHasCode(err, pgerror.CodeSchemaChangeJobPaused) ||
+		errHasCode(err, pgerror.CodeSchemaChangeJobCanceled)
 }
 
 // NewUndefinedDatabaseError creates an error that represents a missing database.

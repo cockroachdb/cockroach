@@ -96,17 +96,13 @@ func (sc *SchemaChanger) getChunkSize(chunkSize int64) int64 {
 
 // runBackfill runs the backfill for the schema changer.
 func (sc *SchemaChanger) runBackfill(
-	ctx context.Context, lease *sqlbase.TableDescriptor_SchemaChangeLease, evalCtx parser.EvalContext,
+	ctx context.Context, evalCtx parser.EvalContext,
 ) error {
 	if sc.testingKnobs.RunBeforeBackfill != nil {
 		if err := sc.testingKnobs.RunBeforeBackfill(); err != nil {
 			return err
 		}
 	}
-	if err := sc.ExtendLease(ctx, lease); err != nil {
-		return err
-	}
-
 	// Mutations are applied in a FIFO order. Only apply the first set of
 	// mutations. Collect the elements that are part of the mutation.
 	var droppedIndexDescs []sqlbase.IndexDescriptor
@@ -170,21 +166,21 @@ func (sc *SchemaChanger) runBackfill(
 
 	// Drop indexes.
 	if err := sc.truncateIndexes(
-		ctx, lease, version, droppedIndexDescs, droppedIndexMutationIdx,
+		ctx, version, droppedIndexDescs, droppedIndexMutationIdx,
 	); err != nil {
 		return err
 	}
 
 	// Add and drop columns.
 	if needColumnBackfill {
-		if err := sc.truncateAndBackfillColumns(ctx, evalCtx, lease, version); err != nil {
+		if err := sc.truncateAndBackfillColumns(ctx, evalCtx, version); err != nil {
 			return err
 		}
 	}
 
 	// Add new indexes.
 	if len(addedIndexDescs) > 0 {
-		if err := sc.backfillIndexes(ctx, evalCtx, lease, version); err != nil {
+		if err := sc.backfillIndexes(ctx, evalCtx, version); err != nil {
 			return err
 		}
 	}
@@ -256,7 +252,6 @@ func (sc *SchemaChanger) getTableVersion(
 
 func (sc *SchemaChanger) truncateIndexes(
 	ctx context.Context,
-	lease *sqlbase.TableDescriptor_SchemaChangeLease,
 	version sqlbase.DescriptorVersion,
 	dropped []sqlbase.IndexDescriptor,
 	mutationIdx int,
@@ -270,11 +265,6 @@ func (sc *SchemaChanger) truncateIndexes(
 		var resume roachpb.Span
 		lastCheckpoint := timeutil.Now()
 		for row, done := int64(0), false; !done; row += chunkSize {
-			// First extend the schema change lease.
-			if err := sc.ExtendLease(ctx, lease); err != nil {
-				return err
-			}
-
 			resumeAt := resume
 			if log.V(2) {
 				log.Infof(ctx, "drop index (%d, %d) at row: %d, span: %s",
@@ -452,7 +442,6 @@ func (sc *SchemaChanger) nRanges(
 func (sc *SchemaChanger) distBackfill(
 	ctx context.Context,
 	evalCtx parser.EvalContext,
-	lease *sqlbase.TableDescriptor_SchemaChangeLease,
 	version sqlbase.DescriptorVersion,
 	backfillType backfillType,
 	backfillChunkSize int64,
@@ -463,6 +452,8 @@ func (sc *SchemaChanger) distBackfill(
 		duration = sc.testingKnobs.WriteCheckpointInterval
 	}
 	chunkSize := sc.getChunkSize(backfillChunkSize)
+
+	time.Sleep(30 * time.Second)
 
 	origNRanges := -1
 	origFractionCompleted := sc.job.Payload().FractionCompleted
@@ -493,9 +484,6 @@ func (sc *SchemaChanger) distBackfill(
 			break
 		}
 
-		if err := sc.ExtendLease(ctx, lease); err != nil {
-			return err
-		}
 		log.VEventf(ctx, 2, "backfill: process %+v spans", spans)
 		if err := sc.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
 			// Report schema change progress. We define progress at this point
@@ -517,7 +505,8 @@ func (sc *SchemaChanger) distBackfill(
 				fractionRangesFinished := float32(origNRanges-nRanges) / float32(origNRanges)
 				fractionCompleted := origFractionCompleted + fractionLeft*fractionRangesFinished
 				if err := sc.job.Progressed(ctx, fractionCompleted, jobs.Noop); err != nil {
-					log.Infof(ctx, "Ignoring error reporting progress %f for job %d: %v", fractionCompleted, *sc.job.ID(), err)
+					log.Errorf(ctx, "distBackfill Schema change backfill error time \\o/ got: %s", err)
+					return err
 				}
 			}
 
@@ -579,7 +568,6 @@ func (sc *SchemaChanger) distBackfill(
 func (sc *SchemaChanger) backfillIndexes(
 	ctx context.Context,
 	evalCtx parser.EvalContext,
-	lease *sqlbase.TableDescriptor_SchemaChangeLease,
 	version sqlbase.DescriptorVersion,
 ) error {
 	// Pick a read timestamp for our index backfill, or reuse the previously
@@ -604,18 +592,17 @@ func (sc *SchemaChanger) backfillIndexes(
 	}
 
 	return sc.distBackfill(
-		ctx, evalCtx, lease, version, indexBackfill, indexBackfillChunkSize,
+		ctx, evalCtx, version, indexBackfill, indexBackfillChunkSize,
 		distsqlrun.IndexMutationFilter)
 }
 
 func (sc *SchemaChanger) truncateAndBackfillColumns(
 	ctx context.Context,
 	evalCtx parser.EvalContext,
-	lease *sqlbase.TableDescriptor_SchemaChangeLease,
 	version sqlbase.DescriptorVersion,
 ) error {
 	return sc.distBackfill(
 		ctx, evalCtx,
-		lease, version, columnBackfill, columnTruncateAndBackfillChunkSize,
+		version, columnBackfill, columnTruncateAndBackfillChunkSize,
 		distsqlrun.ColumnMutationFilter)
 }

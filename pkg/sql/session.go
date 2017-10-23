@@ -1331,6 +1331,8 @@ func (scc *schemaChangerCollection) execSchemaChanges(
 			if err := sc.exec(ctx, true /* inSession */, evalCtx); err != nil {
 				if shouldLogSchemaChangeError(err) {
 					log.Warningf(ctx, "error executing schema change: %s", err)
+				} else {
+					log.Warningf(ctx, "error (NOTE: WOULDNT NORMALLY LOG) executing schema change: %s", err)
 				}
 				if err == sqlbase.ErrDescriptorNotFound {
 				} else if sqlbase.IsPermanentSchemaChangeError(err) {

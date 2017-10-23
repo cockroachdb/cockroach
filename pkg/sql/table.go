@@ -598,10 +598,13 @@ func (p *planner) createSchemaChangeJob(
 		Description:   stmt,
 		Username:      p.User(),
 		DescriptorIDs: sqlbase.IDs{tableDesc.GetID()},
-		Details:       jobs.SchemaChangeDetails{ResumeSpanList: spanList},
+		Details: jobs.SchemaChangeDetails{ResumeSpanList: spanList,
+			MutationID: mutationID,
+			TableID:    tableDesc.GetID(),
+		},
 	}
 	job := p.ExecCfg().JobRegistry.NewJob(jobRecord)
-	if err := job.WithTxn(p.txn).Created(ctx, jobs.WithoutCancel); err != nil {
+	if err := job.WithTxn(p.txn).Created(ctx, func() {}); err != nil {
 		return sqlbase.InvalidMutationID, nil
 	}
 	tableDesc.MutationJobs = append(tableDesc.MutationJobs, sqlbase.TableDescriptor_MutationJob{
