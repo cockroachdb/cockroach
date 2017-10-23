@@ -45,6 +45,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/storage/tscache"
 	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
@@ -1838,7 +1839,7 @@ func splitPostApply(
 		// committed the split Batch (which included the initialization of the
 		// ReplicaState). This will synthesize and persist the correct lastIndex and
 		// HardState.
-		rsl := MakeStateLoader(r.store.cfg.Settings, split.RightDesc.RangeID)
+		rsl := stateloader.Make(r.store.cfg.Settings, split.RightDesc.RangeID)
 		if err := rsl.SynthesizeRaftState(ctx, r.store.Engine()); err != nil {
 			log.Fatal(ctx, err)
 		}

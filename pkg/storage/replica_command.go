@@ -39,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/abortspan"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -3255,7 +3256,7 @@ func splitTrigger(
 			// clobber downstream simply because that's what 1.0 does and if we
 			// don't write it here, then a 1.0 version applying it as a follower
 			// won't write a HardState at all and is guaranteed to crash.
-			rsl := MakeStateLoader(rec.repl.store.cfg.Settings, split.RightDesc.RangeID)
+			rsl := stateloader.Make(rec.repl.store.cfg.Settings, split.RightDesc.RangeID)
 			if err := rsl.SynthesizeRaftState(ctx, batch); err != nil {
 				return enginepb.MVCCStats{}, EvalResult{}, errors.Wrap(err, "unable to synthesize initial Raft state")
 			}
