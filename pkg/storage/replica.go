@@ -4533,7 +4533,7 @@ func (r *Replica) acquireSplitLock(
 ) func(storagebase.ReplicatedEvalResult) {
 	rightRng, created, err := r.store.getOrCreateReplica(ctx, split.RightDesc.RangeID, 0, nil)
 	if err != nil {
-		return nil
+		log.Fatalf(ctx, "while acquiring split lock: %s", err)
 	}
 
 	// It would be nice to assert that rightRng is not initialized
