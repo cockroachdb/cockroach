@@ -179,7 +179,7 @@ func makeConstraints(
 		index:    index,
 		covering: true,
 	}
-	c.analyzeExprs(exprs)
+	c.analyzeExprs(evalCtx, exprs)
 	if equiv && len(exprs) == 1 {
 		expr = joinAndExprs(exprs[0])
 	}
@@ -542,7 +542,7 @@ func TestMakeSpans(t *testing.T) {
 				}
 				desc, index := makeTestIndex(t, columns, dirs)
 				constraints, _ := makeConstraints(t, evalCtx, d.expr, desc, index, sel)
-				spans, err := makeSpans(constraints, desc, index)
+				spans, err := makeSpans(evalCtx, constraints, desc, index)
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -586,7 +586,7 @@ func TestMakeSpans(t *testing.T) {
 			sel := makeSelectNode(t)
 			desc, index := makeTestIndexFromStr(t, d.columns)
 			constraints, _ := makeConstraints(t, evalCtx, d.expr, desc, index, sel)
-			spans, err := makeSpans(constraints, desc, index)
+			spans, err := makeSpans(evalCtx, constraints, desc, index)
 			if err != nil {
 				t.Fatal(err)
 			}

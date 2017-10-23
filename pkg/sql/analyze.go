@@ -1454,13 +1454,13 @@ func simplifyComparisonExpr(
 			// useful. However, for types like BOOL, this is important because
 			// it means we can use an index constraint for queries like
 			// `SELECT * FROM t WHERE b != true`.
-			if right.(parser.Datum).IsMax() {
+			if right.(parser.Datum).IsMax(evalCtx) {
 				return parser.NewTypedComparisonExpr(
 					parser.LT,
 					left,
 					right,
 				), true
-			} else if right.(parser.Datum).IsMin() {
+			} else if right.(parser.Datum).IsMin(evalCtx) {
 				return parser.NewTypedComparisonExpr(
 					parser.GT,
 					left,
@@ -1476,14 +1476,14 @@ func simplifyComparisonExpr(
 			// next value exists. Note that if the variable (n.Left) is NULL, this
 			// comparison would evaluate to NULL which is equivalent to false for a
 			// boolean expression.
-			if right.(parser.Datum).IsMax() {
+			if right.(parser.Datum).IsMax(evalCtx) {
 				return parser.MakeDBool(false), true
 			}
 			return n, true
 		case parser.LT:
 			// Note that if the variable is NULL, this would evaluate to NULL which
 			// would equivalent to false for a boolean expression.
-			if right.(parser.Datum).IsMin() {
+			if right.(parser.Datum).IsMin(evalCtx) {
 				return parser.MakeDBool(false), true
 			}
 			return n, true

@@ -209,15 +209,16 @@ func TestDatumOrdering(t *testing.T) {
 		{`row(row(false), ARRAY[true])`, noPrev, `((false), ARRAY[true,NULL])`,
 			`((false), ARRAY[])`, noMax},
 	}
+	ctx := NewTestingEvalContext()
 	for _, td := range testData {
 		expr := prepareExpr(t, td.datumExpr)
 
 		d := expr.(Datum)
-		prevVal, hasPrev := d.Prev()
-		nextVal, hasNext := d.Next()
+		prevVal, hasPrev := d.Prev(ctx)
+		nextVal, hasNext := d.Next(ctx)
 		if td.prev == noPrev {
 			if hasPrev {
-				if !d.IsMin() {
+				if !d.IsMin(ctx) {
 					t.Errorf("%s: value should not have a prev, yet hasPrev true and IsMin() false (expected (!hasPrev || IsMin()))", td.datumExpr)
 				}
 			}
@@ -226,7 +227,7 @@ func TestDatumOrdering(t *testing.T) {
 				t.Errorf("%s: hasPrev: got false, expected true", td.datumExpr)
 				continue
 			}
-			isMin := d.IsMin()
+			isMin := d.IsMin(ctx)
 			if isMin != (td.prev == valIsMin) {
 				t.Errorf("%s: IsMin() %v, expected %v", td.datumExpr, isMin, (td.prev == valIsMin))
 				continue
@@ -240,7 +241,7 @@ func TestDatumOrdering(t *testing.T) {
 		}
 		if td.next == noNext {
 			if hasNext {
-				if !d.IsMax() {
+				if !d.IsMax(ctx) {
 					t.Errorf("%s: value should not have a next, yet hasNext true and IsMax() false (expected (!hasNext || IsMax()))", td.datumExpr)
 				}
 			}
@@ -249,7 +250,7 @@ func TestDatumOrdering(t *testing.T) {
 				t.Errorf("%s: HasNext(): got false, expected true", td.datumExpr)
 				continue
 			}
-			isMax := d.IsMax()
+			isMax := d.IsMax(ctx)
 			if isMax != (td.next == valIsMax) {
 				t.Errorf("%s: IsMax() %v, expected %v", td.datumExpr, isMax, (td.next == valIsMax))
 				continue
@@ -262,8 +263,8 @@ func TestDatumOrdering(t *testing.T) {
 			}
 		}
 
-		minVal, hasMin := d.min()
-		maxVal, hasMax := d.max()
+		minVal, hasMin := d.min(ctx)
+		maxVal, hasMax := d.max(ctx)
 
 		if td.min == noMin {
 			if hasMin {
