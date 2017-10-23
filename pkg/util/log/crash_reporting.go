@@ -118,7 +118,7 @@ func Safe(v interface{}) SafeType {
 func ReportPanic(ctx context.Context, sv *settings.Values, r interface{}, depth int) {
 	Shout(ctx, Severity_ERROR, "a panic has occurred!")
 
-	sendCrashReport(ctx, sv, depth+1, "", []interface{}{r})
+	SendCrashReport(ctx, sv, depth+1, "", []interface{}{r})
 
 	// Ensure that the logs are flushed before letting a panic
 	// terminate the server.
@@ -312,7 +312,7 @@ func reportablesToSafeError(depth int, format string, reportables []interface{})
 	return err
 }
 
-// sendCrashReport posts to sentry. The `reportables` is essentially the `args...` in
+// SendCrashReport posts to sentry. The `reportables` is essentially the `args...` in
 // `log.Fatalf(format, args...)` (similarly for `log.Fatal`) or `[]interface{}{arg}` in
 // `panic(arg)`.
 //
@@ -325,7 +325,7 @@ func reportablesToSafeError(depth int, format string, reportables []interface{})
 // should be at least somewhat helpful in telling us where crashes are coming from. We capture the
 // full stacktrace below, so we only need the short file and line here help uniquely identify the
 // error. Some exceptions, like a runtime.Error, are assumed to be fine as-is.
-func sendCrashReport(
+func SendCrashReport(
 	ctx context.Context, sv *settings.Values, depth int, format string, reportables []interface{},
 ) {
 	if !DiagnosticsReportingEnabled.Get(sv) || !CrashReports.Get(sv) {

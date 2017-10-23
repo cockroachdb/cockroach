@@ -4383,7 +4383,22 @@ func (r *Replica) processRaftCommand(
 	} else {
 		log.Event(ctx, "applying command")
 
-		if splitMergeUnlock := r.maybeAcquireSplitMergeLock(ctx, raftCmd); splitMergeUnlock != nil {
+		if splitMergeUnlock, err := r.maybeAcquireSplitMergeLock(ctx, raftCmd); err != nil {
+			log.Eventf(ctx, "unable to acquire split lock: %s", err)
+			// Send a crash report because a former bug in the error handling might have
+			// been the root cause of #19172.
+			_ = r.store.stopper.RunAsyncTask(ctx, "crash report", func(ctx context.Context) {
+				log.SendCrashReport(
+					ctx,
+					&r.store.cfg.Settings.SV,
+					0, // depth
+					"while acquiring split lock: %s",
+					[]interface{}{err},
+				)
+			})
+
+			forcedErr = roachpb.NewError(err)
+		} else if splitMergeUnlock != nil {
 			// Close over raftCmd to capture its value at execution time; we clear
 			// ReplicatedEvalResult on certain errors.
 			defer func() {
@@ -4519,21 +4534,21 @@ func (r *Replica) processRaftCommand(
 // applying the command to perform any necessary cleanup.
 func (r *Replica) maybeAcquireSplitMergeLock(
 	ctx context.Context, raftCmd storagebase.RaftCommand,
-) func(storagebase.ReplicatedEvalResult) {
+) (func(storagebase.ReplicatedEvalResult), error) {
 	if split := raftCmd.ReplicatedEvalResult.Split; split != nil {
 		return r.acquireSplitLock(ctx, &split.SplitTrigger)
 	} else if merge := raftCmd.ReplicatedEvalResult.Merge; merge != nil {
 		return r.acquireMergeLock(&merge.MergeTrigger)
 	}
-	return nil
+	return nil, nil
 }
 
 func (r *Replica) acquireSplitLock(
 	ctx context.Context, split *roachpb.SplitTrigger,
-) func(storagebase.ReplicatedEvalResult) {
+) (func(storagebase.ReplicatedEvalResult), error) {
 	rightRng, created, err := r.store.getOrCreateReplica(ctx, split.RightDesc.RangeID, 0, nil)
 	if err != nil {
-		return nil
+		return nil, err
 	}
 
 	// It would be nice to assert that rightRng is not initialized
@@ -4570,16 +4585,15 @@ func (r *Replica) acquireSplitLock(
 			r.store.mu.Unlock()
 		}
 		rightRng.raftMu.Unlock()
-	}
+	}, nil
 }
 
 func (r *Replica) acquireMergeLock(
 	merge *roachpb.MergeTrigger,
-) func(storagebase.ReplicatedEvalResult) {
+) (func(storagebase.ReplicatedEvalResult), error) {
 	rightRng, err := r.store.GetReplica(merge.RightDesc.RangeID)
 	if err != nil {
-		ctx := r.AnnotateCtx(context.TODO())
-		log.Fatalf(ctx, "unable to find merge RHS replica: %s", err)
+		return nil, err
 	}
 
 	// TODO(peter,tschottdorf): This is necessary but likely not sufficient. The
@@ -4587,7 +4601,7 @@ func (r *Replica) acquireMergeLock(
 	rightRng.raftMu.Lock()
 	return func(storagebase.ReplicatedEvalResult) {
 		rightRng.raftMu.Unlock()
-	}
+	}, nil
 }
 
 // applyRaftCommand applies a raft command from the replicated log to the
