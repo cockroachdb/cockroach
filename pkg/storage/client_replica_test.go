@@ -135,7 +135,7 @@ func TestRejectFutureCommand(t *testing.T) {
 
 	// Once the accumulated offset reaches MaxOffset, commands will be rejected.
 	_, pErr := client.SendWrappedWith(context.Background(), rg1(mtc.stores[0]), roachpb.Header{Timestamp: ts1.Add(clock.MaxOffset().Nanoseconds()+1, 0)}, incArgs)
-	if !testutils.IsPError(pErr, "rejecting command with timestamp in the future") {
+	if !testutils.IsPError(pErr, "remote wall time is too far ahead") {
 		t.Fatalf("unexpected error %v", pErr)
 	}
 
