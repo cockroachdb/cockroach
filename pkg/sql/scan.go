@@ -81,6 +81,12 @@ type scanNode struct {
 	filter     parser.TypedExpr
 	filterVars parser.IndexedVarHelper
 
+	// origFilter is the original filtering expression, which might have gotten
+	// simplified during index selection. For example "k > 0" is converted to a
+	// span and the filter is nil. But we still want to deduce not-null columns
+	// from the original filter.
+	origFilter parser.TypedExpr
+
 	scanInitialized bool
 	fetcher         sqlbase.RowFetcher
 
@@ -411,7 +417,7 @@ func (n *scanNode) computePhysicalProps(
 	// We included any implicit columns, so the columns form a (possibly weak)
 	// key.
 	pp.addWeakKey(keySet)
-	pp.applyExpr(&n.p.evalCtx, n.filter)
+	pp.applyExpr(&n.p.evalCtx, n.origFilter)
 	return pp
 }
 

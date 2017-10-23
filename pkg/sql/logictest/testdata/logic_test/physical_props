@@ -7,7 +7,7 @@ query ITTTTT colnames
 EXPLAIN (VERBOSE) SELECT * FROM abcd WHERE b = c
 ----
 Level  Type  Field   Description   Columns       Ordering
-0      scan  ·       ·             (a, b, c, d)  b=c; a!=NULL; key(a)
+0      scan  ·       ·             (a, b, c, d)  b=c; a!=NULL; b!=NULL; c!=NULL; key(a)
 0      ·     table   abcd@primary  ·             ·
 0      ·     spans   ALL           ·             ·
 0      ·     filter  b = c         ·             ·
@@ -42,7 +42,7 @@ query ITTTTT colnames
 EXPLAIN (VERBOSE) SELECT * FROM abcd WHERE a = 1 AND b = d
 ----
 Level  Type  Field   Description   Columns       Ordering
-0      scan  ·       ·             (a, b, c, d)  b=d; a=CONST; key()
+0      scan  ·       ·             (a, b, c, d)  b=d; a=CONST; b!=NULL; d!=NULL; key()
 0      ·     table   abcd@primary  ·             ·
 0      ·     spans   /1-/2         ·             ·
 0      ·     filter  b = d         ·             ·
@@ -51,7 +51,7 @@ query ITTTTT colnames
 EXPLAIN (VERBOSE) SELECT * FROM abcd WHERE a = b AND b = c
 ----
 Level  Type  Field   Description          Columns       Ordering
-0      scan  ·       ·                    (a, b, c, d)  a=b=c; a!=NULL; key(a)
+0      scan  ·       ·                    (a, b, c, d)  a=b=c; a!=NULL; b!=NULL; c!=NULL; key(a)
 0      ·     table   abcd@primary         ·             ·
 0      ·     spans   ALL                  ·             ·
 0      ·     filter  (a = b) AND (b = c)  ·             ·
@@ -60,7 +60,7 @@ query ITTTTT colnames
 EXPLAIN (VERBOSE) SELECT * FROM abcd WHERE a = b AND b = c AND c = 1
 ----
 Level  Type  Field   Description                        Columns       Ordering
-0      scan  ·       ·                                  (a, b, c, d)  a=b=c; a=CONST; key()
+0      scan  ·       ·                                  (a, b, c, d)  a=b=c; a=CONST; b!=NULL; c!=NULL; key()
 0      ·     table   abcd@primary                       ·             ·
 0      ·     spans   ALL                                ·             ·
 0      ·     filter  ((a = b) AND (b = c)) AND (c = 1)  ·             ·
@@ -84,7 +84,7 @@ query ITTTTT colnames
 EXPLAIN (VERBOSE) SELECT * FROM (VALUES (1, 2, 3), (4, 5, 6)) AS x(a,b,c) WHERE a = b
 ----
 Level  Type    Field          Description        Columns    Ordering
-0      filter  ·              ·                  (a, b, c)  a=b
+0      filter  ·              ·                  (a, b, c)  a=b; a!=NULL; b!=NULL
 0      ·       filter         x.a = x.b          ·          ·
 1      values  ·              ·                  (a, b, c)  ·
 1      ·       size           3 columns, 2 rows  ·          ·
@@ -99,7 +99,7 @@ query ITTTTT colnames
 EXPLAIN (VERBOSE) SELECT * FROM (VALUES (1, 2, 3), (4, 5, 6)) AS x(a,b,c) WHERE a = b AND b = 1
 ----
 Level  Type    Field          Description                Columns    Ordering
-0      filter  ·              ·                          (a, b, c)  a=b; a=CONST
+0      filter  ·              ·                          (a, b, c)  a=b; a=CONST; b!=NULL
 0      ·       filter         (x.a = x.b) AND (x.b = 1)  ·          ·
 1      values  ·              ·                          (a, b, c)  ·
 1      ·       size           3 columns, 2 rows          ·          ·
@@ -125,7 +125,7 @@ Level  Type  Field           Description   Columns                Ordering
 1      scan  ·               ·             (a, b, c, d)           a=CONST; key()
 1      ·     table           abcd@primary  ·                      ·
 1      ·     spans           /1-/2         ·                      ·
-1      scan  ·               ·             (e, f, g)              f=g; e!=NULL; key(e); +e
+1      scan  ·               ·             (e, f, g)              f=g; e!=NULL; f!=NULL; g!=NULL; key(e); +e
 1      ·     table           efg@primary   ·                      ·
 1      ·     spans           ALL           ·                      ·
 1      ·     filter          f = g         ·                      ·
@@ -142,7 +142,7 @@ Level  Type  Field           Description   Columns                Ordering
 1      ·     table           abcd@primary  ·                      ·
 1      ·     spans           ALL           ·                      ·
 1      ·     filter          b = 1         ·                      ·
-1      scan  ·               ·             (e, f, g)              f=g; e!=NULL; key(e); +e
+1      scan  ·               ·             (e, f, g)              f=g; e!=NULL; f!=NULL; g!=NULL; key(e); +e
 1      ·     table           efg@primary   ·                      ·
 1      ·     spans           ALL           ·                      ·
 1      ·     filter          f = g         ·                      ·

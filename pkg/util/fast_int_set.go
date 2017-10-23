@@ -35,9 +35,9 @@ type FastIntSet struct {
 // We store bits for values smaller than this cutoff.
 const smallCutoff = 64
 
-func (s *FastIntSet) smallToLarge() *intsets.Sparse {
+func (s *FastIntSet) toLarge() *intsets.Sparse {
 	if s.large != nil {
-		panic("set already large")
+		return s.large
 	}
 	large := new(intsets.Sparse)
 	for i, ok := s.Next(0); ok; i, ok = s.Next(i + 1) {
@@ -66,7 +66,7 @@ func (s *FastIntSet) Add(i int) {
 		return
 	}
 	if s.large == nil {
-		s.large = s.smallToLarge()
+		s.large = s.toLarge()
 		s.small = 0
 	}
 	s.large.Insert(i)
@@ -160,6 +160,38 @@ func (s *FastIntSet) Copy() FastIntSet {
 		c.small = s.small
 	}
 	return c
+}
+
+// UnionWith adds all the elements from rhs to this set.
+func (s *FastIntSet) UnionWith(rhs FastIntSet) {
+	if s.large == nil && rhs.large == nil {
+		// Fast path.
+		s.small |= rhs.small
+		return
+	}
+
+	if s.large == nil {
+		s.large = s.toLarge()
+		s.small = 0
+	}
+	s.large.UnionWith(rhs.toLarge())
+}
+
+// IntersectionWith removes any elements not in rhs from this set.
+func (s *FastIntSet) IntersectionWith(rhs FastIntSet) {
+	if s.large == nil {
+		// Fast path.
+		other := rhs.small
+		if rhs.large != nil {
+			// If the other set is large, we can ignore any values outside of the
+			// small range.
+			other, _ = rhs.largeToSmall()
+		}
+		s.small &= other
+		return
+	}
+
+	s.large.IntersectionWith(rhs.toLarge())
 }
 
 // Equals returns true if the two sets are identical.
