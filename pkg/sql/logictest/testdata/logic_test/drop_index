@@ -57,8 +57,10 @@ users  foo      false   2    id      ASC        false    true
 users  bar      true    1    id      ASC        false    false
 users  bar      true    2    name    ASC        false    false
 
+# Also test that dropping with a non-existing index still drops 'foo'.
+
 statement ok
-DROP INDEX IF EXISTS users@foo
+DROP INDEX IF EXISTS users@foo, users@zap
 
 query TTBITTBB colnames
 SHOW INDEXES FROM users
@@ -178,8 +180,10 @@ users
 statement ok
 CREATE INDEX baz ON users (name)
 
+# Also test that dropping with a non-existing index still drops 'baz'.
+
 statement ok
-DROP INDEX IF EXISTS baz
+DROP INDEX IF EXISTS baz, zap
 
 query TTBITTBB colnames
 SHOW INDEXES FROM users
@@ -187,7 +191,7 @@ SHOW INDEXES FROM users
 Table  Name     Unique  Seq  Column  Direction  Storing  Implicit
 users  primary  true    1    id      ASC        false    false
 
-# Test that it still succeeds without an index.
+# Test that it still succeeds when an index does not exist.
 
 statement ok
 DROP INDEX IF EXISTS baz
