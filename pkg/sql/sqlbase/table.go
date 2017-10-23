@@ -2026,6 +2026,12 @@ type ConstraintDetail struct {
 	Details     string
 	Unvalidated bool
 
+	// This fields just a stubs for deferrable constraints logic.
+	// Looks like AlterTableAddConstraint command (as well as CreateTable) should
+	// store somewhere ValidationBehavior for further use in this structure.
+	IsDeferrable      bool
+	InitiallyDeferred bool
+
 	// Only populated for FK, PK, and Unique Constraints.
 	Index *IndexDescriptor
 
