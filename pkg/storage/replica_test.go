@@ -6107,7 +6107,7 @@ func TestReplicaCorruption(t *testing.T) {
 	}
 
 	// Verify destroyed error was persisted.
-	pErr, err = r.mu.stateLoader.loadReplicaDestroyedError(context.Background(), r.store.Engine())
+	pErr, err = r.mu.stateLoader.LoadReplicaDestroyedError(context.Background(), r.store.Engine())
 	if err != nil {
 		t.Fatal(err)
 	}

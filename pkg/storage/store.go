@@ -1838,8 +1838,8 @@ func splitPostApply(
 		// committed the split Batch (which included the initialization of the
 		// ReplicaState). This will synthesize and persist the correct lastIndex and
 		// HardState.
-		rsl := makeReplicaStateLoader(r.store.cfg.Settings, split.RightDesc.RangeID)
-		if err := rsl.synthesizeRaftState(ctx, r.store.Engine()); err != nil {
+		rsl := MakeStateLoader(r.store.cfg.Settings, split.RightDesc.RangeID)
+		if err := rsl.SynthesizeRaftState(ctx, r.store.Engine()); err != nil {
 			log.Fatal(ctx, err)
 		}
 	}
@@ -3173,7 +3173,7 @@ func (s *Store) processRaftSnapshotRequest(
 			needTombstone := r.mu.state.Desc.NextReplicaID != 0
 			r.mu.Unlock()
 
-			appliedIndex, _, err := r.raftMu.stateLoader.loadAppliedIndex(ctx, r.store.Engine())
+			appliedIndex, _, err := r.raftMu.stateLoader.LoadAppliedIndex(ctx, r.store.Engine())
 			if err != nil {
 				return roachpb.NewError(err)
 			}
