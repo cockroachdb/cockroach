@@ -49,3 +49,19 @@ SELECT * FROM kv
 query II
 SELECT * FROM kview
 ----
+
+# Ensure that TRUNCATE works with a self referential FK.
+statement ok
+CREATE TABLE selfref (
+  y INT PRIMARY KEY,
+  Z INT REFERENCES selfref (y)
+)
+
+statement ok
+TRUNCATE table selfref
+
+statement ok
+INSERT INTO selfref VALUES (1, NULL);
+
+statement ok
+DROP TABLE selfref
