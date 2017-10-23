@@ -2447,23 +2447,22 @@ func (s *Store) Send(
 		s.cfg.TestingKnobs.ClockBeforeSend(s.cfg.Clock, ba)
 	}
 
-	if maxOffset := s.Clock().MaxOffset(); maxOffset > 0 && maxOffset != timeutil.ClocklessMaxOffset {
-		// Once a command is submitted to raft, all replicas' logical
-		// clocks will be ratcheted forward to match. If the command
-		// appears to come from a node with a bad clock, reject it now
-		// before we reach that point.
-		offset := time.Duration(ba.Timestamp.WallTime - s.Clock().PhysicalNow())
-		if offset > maxOffset && !s.cfg.TestingKnobs.DisableMaxOffsetCheck {
-			return nil, roachpb.NewErrorf("rejecting command with timestamp in the future: %d (%s ahead)",
-				ba.Timestamp.WallTime, offset)
-		}
-	}
 	// Update our clock with the incoming request timestamp. This advances the
 	// local node's clock to a high water mark from all nodes with which it has
 	// interacted. We hold on to the resulting timestamp - we know that any
 	// write with a higher timestamp we run into later must have started after
 	// this point in (absolute) time.
-	now := s.cfg.Clock.Update(ba.Timestamp)
+	var now hlc.Timestamp
+	if s.cfg.TestingKnobs.DisableMaxOffsetCheck {
+		now = s.cfg.Clock.Update(ba.Timestamp)
+	} else {
+		// If the command appears to come from a node with a bad clock,
+		// reject it now before we reach that point.
+		var err error
+		if now, err = s.cfg.Clock.UpdateAndCheckMaxOffset(ba.Timestamp); err != nil {
+			return nil, roachpb.NewError(err)
+		}
+	}
 
 	defer func() {
 		if r := recover(); r != nil {
@@ -2490,13 +2489,19 @@ func (s *Store) Send(
 					br.Txn = ba.Txn
 				}
 				br.Txn.UpdateObservedTimestamp(ba.Replica.NodeID, now)
-				// Update our clock with the outgoing response txn timestamp.
-				s.cfg.Clock.Update(br.Txn.Timestamp)
+				// Update our clock with the outgoing response txn timestamp
+				// (if timestamp has been forwarded).
+				if ba.Timestamp.Less(br.Txn.Timestamp) {
+					s.cfg.Clock.Update(br.Txn.Timestamp)
+				}
 			}
 		} else {
 			if pErr == nil {
 				// Update our clock with the outgoing response timestamp.
-				s.cfg.Clock.Update(br.Timestamp)
+				// (if timestamp has been forwarded).
+				if ba.Timestamp.Less(br.Timestamp) {
+					s.cfg.Clock.Update(br.Timestamp)
+				}
 			}
 		}
 
