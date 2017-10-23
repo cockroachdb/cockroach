@@ -1768,9 +1768,6 @@ func (r *Replica) Send(
 		r.leaseholderStats.record(ba.Header.GatewayNodeID)
 	}
 
-	if err := r.checkBatchRequest(ba); err != nil {
-		return nil, roachpb.NewError(err)
-	}
 	// Add the range log tag.
 	ctx = r.AnnotateCtx(ctx)
 	ctx, cleanup := tracing.EnsureContext(ctx, r.AmbientContext.Tracer, "replica send")
@@ -1779,12 +1776,16 @@ func (r *Replica) Send(
 	// If the internal Raft group is not initialized, create it and wake the leader.
 	r.maybeInitializeRaftGroup(ctx)
 
-	useRaft := ba.IsWrite()
 	isReadOnly := ba.IsReadOnly()
+	useRaft := !isReadOnly && ba.IsWrite()
 
 	if isReadOnly && r.store.Clock().MaxOffset() == timeutil.ClocklessMaxOffset {
 		// Clockless reads mode: reads go through Raft.
 		useRaft = true
+	}
+
+	if err := r.checkBatchRequest(ba, isReadOnly); err != nil {
+		return nil, roachpb.NewError(err)
 	}
 
 	// Differentiate between admin, read-only and write.
@@ -1806,12 +1807,12 @@ func (r *Replica) Send(
 	} else {
 		log.Fatalf(ctx, "don't know how to handle command %s", ba)
 	}
-	if _, ok := pErr.GetDetail().(*roachpb.RaftGroupDeletedError); ok {
-		// This error needs to be converted appropriately so that
-		// clients will retry.
-		pErr = roachpb.NewError(roachpb.NewRangeNotFoundError(r.RangeID))
-	}
 	if pErr != nil {
+		if _, ok := pErr.GetDetail().(*roachpb.RaftGroupDeletedError); ok {
+			// This error needs to be converted appropriately so that
+			// clients will retry.
+			pErr = roachpb.NewError(roachpb.NewRangeNotFoundError(r.RangeID))
+		}
 		log.Eventf(ctx, "replica.Send got error: %s", pErr)
 	} else {
 		if filter := r.store.cfg.TestingKnobs.TestingResponseFilter; filter != nil {
@@ -1867,8 +1868,8 @@ func (r *Replica) requestCanProceed(rspan roachpb.RSpan, ts hlc.Timestamp) error
 // read-only, or none.
 // TODO(tschottdorf): should check that request is contained in range
 // and that EndTransaction only occurs at the very end.
-func (r *Replica) checkBatchRequest(ba roachpb.BatchRequest) error {
-	if ba.IsReadOnly() {
+func (r *Replica) checkBatchRequest(ba roachpb.BatchRequest, isReadOnly bool) error {
+	if isReadOnly {
 		if ba.ReadConsistency == roachpb.INCONSISTENT && ba.Txn != nil {
 			// Disallow any inconsistent reads within txns.
 			return errors.Errorf("cannot allow inconsistent reads within a transaction")
