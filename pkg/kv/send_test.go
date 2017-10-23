@@ -46,20 +46,6 @@ func (n Node) Batch(
 	return &roachpb.BatchResponse{}, nil
 }
 
-func TestInvalidAddrLength(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-
-	// The provided replicas is nil, so its length will be always less than the
-	// specified response number
-	ds := &DistSender{}
-	ret, err := ds.sendToReplicas(context.Background(), SendOptions{}, 0, nil, roachpb.BatchRequest{}, nil)
-
-	// the expected return is nil and SendError
-	if _, ok := err.(*roachpb.SendError); !ok || ret != nil {
-		t.Fatalf("Shorter replicas should return nil and SendError.")
-	}
-}
-
 // TestSendToOneClient verifies that Send correctly sends a request
 // to one server using the heartbeat RPC.
 func TestSendToOneClient(t *testing.T) {
