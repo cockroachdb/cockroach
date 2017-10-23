@@ -4450,9 +4450,21 @@ func (r *Replica) processRaftCommand(
 		}
 
 		var delta enginepb.MVCCStats
-		delta, pErr = r.applyRaftCommand(
-			ctx, idKey, raftCmd.ReplicatedEvalResult, raftIndex, leaseIndex, writeBatch)
-		raftCmd.ReplicatedEvalResult.Delta = delta.ToNetworkStats()
+		{
+			var err error
+			delta, err = r.applyRaftCommand(
+				ctx, idKey, raftCmd.ReplicatedEvalResult, raftIndex, leaseIndex, writeBatch)
+			raftCmd.ReplicatedEvalResult.Delta = delta.ToNetworkStats()
+
+			// applyRaftCommand returned an error, which usually indicates
+			// either a serious logic bug in CockroachDB or a disk
+			// corruption/out-of-space issue. Make sure that these fail with
+			// descriptive message so that we can differentiate the root causes.
+			if err != nil {
+				log.Errorf(ctx, "unable to update the state machine: %s", err)
+				log.Fatal(ctx, err)
+			}
+		}
 
 		if filter := r.store.cfg.TestingKnobs.TestingPostApplyFilter; pErr == nil && filter != nil {
 			pErr = filter(storagebase.ApplyFilterArgs{
@@ -4463,6 +4475,9 @@ func (r *Replica) processRaftCommand(
 			})
 		}
 
+		// calling maybeSetCorrupt here is mostly for tests and looks. The
+		// interesting errors originate in applyRaftCommand, and they are
+		// already handled above.
 		pErr = r.maybeSetCorrupt(ctx, pErr)
 		if pErr == nil {
 			pErr = forcedErr
@@ -4592,17 +4607,17 @@ func (r *Replica) acquireMergeLock(
 
 // applyRaftCommand applies a raft command from the replicated log to the
 // underlying state machine (i.e. the engine). When the state machine can not be
-// updated, an error (which is likely a ReplicaCorruptionError) is returned and
-// must be handled by the caller.
+// updated, an error (which is likely fatal!) is returned and must be handled by
+// the caller.
 func (r *Replica) applyRaftCommand(
 	ctx context.Context,
 	idKey storagebase.CmdIDKey,
 	rResult storagebase.ReplicatedEvalResult,
 	raftAppliedIndex, leaseAppliedIndex uint64,
 	writeBatch *storagebase.WriteBatch,
-) (enginepb.MVCCStats, *roachpb.Error) {
+) (enginepb.MVCCStats, error) {
 	if raftAppliedIndex <= 0 {
-		log.Fatalf(ctx, "raft command index is <= 0")
+		return enginepb.MVCCStats{}, errors.New("raft command index is <= 0")
 	}
 	if writeBatch != nil && len(writeBatch.Data) > 0 {
 		// Record the write activity, passing a 0 nodeID because replica.writeStats
@@ -4625,9 +4640,8 @@ func (r *Replica) applyRaftCommand(
 		// If we have an out of order index, there's corruption. No sense in
 		// trying to update anything or running the command. Simply return
 		// a corruption error.
-		return enginepb.MVCCStats{}, roachpb.NewError(NewReplicaCorruptionError(
-			errors.Errorf("applied index jumped from %d to %d",
-				oldRaftAppliedIndex, raftAppliedIndex)))
+		return enginepb.MVCCStats{}, errors.Errorf("applied index jumped from %d to %d",
+			oldRaftAppliedIndex, raftAppliedIndex)
 	}
 
 	batch := r.store.Engine().NewWriteOnlyBatch()
@@ -4635,8 +4649,7 @@ func (r *Replica) applyRaftCommand(
 
 	if writeBatch != nil {
 		if err := batch.ApplyBatchRepr(writeBatch.Data, false); err != nil {
-			return enginepb.MVCCStats{}, roachpb.NewError(NewReplicaCorruptionError(
-				errors.Wrap(err, "unable to apply WriteBatch")))
+			return enginepb.MVCCStats{}, errors.Wrap(err, "unable to apply WriteBatch")
 		}
 	}
 
@@ -4651,8 +4664,7 @@ func (r *Replica) applyRaftCommand(
 	var appliedIndexNewMS enginepb.MVCCStats
 	if err := r.raftMu.stateLoader.setAppliedIndexBlind(ctx, writer, &appliedIndexNewMS,
 		raftAppliedIndex, leaseAppliedIndex); err != nil {
-		return enginepb.MVCCStats{}, roachpb.NewError(NewReplicaCorruptionError(
-			errors.Wrap(err, "unable to set applied index")))
+		return enginepb.MVCCStats{}, errors.Wrap(err, "unable to set applied index")
 	}
 	rResult.Delta.SysBytes += appliedIndexNewMS.SysBytes -
 		r.raftMu.stateLoader.calcAppliedIndexSysBytes(oldRaftAppliedIndex, oldLeaseAppliedIndex)
@@ -4663,8 +4675,7 @@ func (r *Replica) applyRaftCommand(
 	deltaStats := rResult.Delta.ToStats()
 	ms.Add(deltaStats)
 	if err := r.raftMu.stateLoader.setMVCCStats(ctx, writer, &ms); err != nil {
-		return enginepb.MVCCStats{}, roachpb.NewError(NewReplicaCorruptionError(
-			errors.Wrap(err, "unable to update MVCCStats")))
+		return enginepb.MVCCStats{}, errors.Wrap(err, "unable to update MVCCStats")
 	}
 
 	// TODO(peter): We did not close the writer in an earlier version of
@@ -4680,13 +4691,12 @@ func (r *Replica) applyRaftCommand(
 		rsl := makeReplicaStateLoader(r.store.cfg.Settings, rResult.Split.RightDesc.RangeID)
 		oldHS, err := rsl.loadHardState(ctx, r.store.Engine())
 		if err != nil {
-			log.Fatalf(ctx, "unable to load HardState: %s", err)
+			return enginepb.MVCCStats{}, errors.Wrap(err, "unable to load HardState")
 		}
 		assertHS = &oldHS
 	}
 	if err := batch.Commit(false); err != nil {
-		return enginepb.MVCCStats{}, roachpb.NewError(NewReplicaCorruptionError(
-			errors.Wrap(err, "could not commit batch")))
+		return enginepb.MVCCStats{}, errors.Wrap(err, "could not commit batch")
 	}
 
 	if assertHS != nil {
@@ -4694,7 +4704,7 @@ func (r *Replica) applyRaftCommand(
 		rsl := makeReplicaStateLoader(r.store.cfg.Settings, rResult.Split.RightDesc.RangeID)
 		newHS, err := rsl.loadHardState(ctx, r.store.Engine())
 		if err != nil {
-			log.Fatalf(ctx, "unable to load HardState: %s", err)
+			return enginepb.MVCCStats{}, errors.Wrap(err, "unable to load HardState")
 		}
 		// Assert that nothing moved "backwards".
 		if newHS.Term < assertHS.Term || (newHS.Term == assertHS.Term && newHS.Commit < assertHS.Commit) {
