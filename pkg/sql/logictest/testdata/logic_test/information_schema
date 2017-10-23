@@ -478,23 +478,23 @@ SET DATABASE = test
 
 ## information_schema.table_constraints
 
-query TTTTTT colnames
+query TTTTTTTTT colnames
 SELECT *
 FROM information_schema.table_constraints
 ORDER BY TABLE_NAME, CONSTRAINT_TYPE, CONSTRAINT_NAME
 ----
-constraint_catalog  constraint_schema  constraint_name  table_schema  table_name    constraint_type
-def                 system             primary          system        descriptor    PRIMARY KEY
-def                 system             primary          system        eventlog      PRIMARY KEY
-def                 system             primary          system        jobs          PRIMARY KEY
-def                 system             primary          system        lease         PRIMARY KEY
-def                 system             primary          system        namespace     PRIMARY KEY
-def                 system             primary          system        rangelog      PRIMARY KEY
-def                 system             primary          system        settings      PRIMARY KEY
-def                 system             primary          system        ui            PRIMARY KEY
-def                 system             primary          system        users         PRIMARY KEY
-def                 system             primary          system        web_sessions  PRIMARY KEY
-def                 system             primary          system        zones         PRIMARY KEY
+constraint_catalog  constraint_schema  constraint_name  table_catalog  table_schema  table_name    constraint_type  is_deferrable  initially_deferred
+def                 system             primary          def            system        descriptor    PRIMARY KEY      NO             NO
+def                 system             primary          def            system        eventlog      PRIMARY KEY      NO             NO
+def                 system             primary          def            system        jobs          PRIMARY KEY      NO             NO
+def                 system             primary          def            system        lease         PRIMARY KEY      NO             NO
+def                 system             primary          def            system        namespace     PRIMARY KEY      NO             NO
+def                 system             primary          def            system        rangelog      PRIMARY KEY      NO             NO
+def                 system             primary          def            system        settings      PRIMARY KEY      NO             NO
+def                 system             primary          def            system        ui            PRIMARY KEY      NO             NO
+def                 system             primary          def            system        users         PRIMARY KEY      NO             NO
+def                 system             primary          def            system        web_sessions  PRIMARY KEY      NO             NO
+def                 system             primary          def            system        zones         PRIMARY KEY      NO             NO
 
 statement ok
 CREATE DATABASE constraint_db
@@ -516,18 +516,18 @@ CREATE TABLE constraint_db.t2 (
 statement ok
 SET DATABASE = constraint_db
 
-query TTTTTT colnames
+query TTTTTTTTT colnames
 SELECT *
 FROM information_schema.table_constraints
 WHERE constraint_schema = 'constraint_db'
 ORDER BY TABLE_NAME, CONSTRAINT_TYPE, CONSTRAINT_NAME
 ----
-constraint_catalog  constraint_schema  constraint_name  table_schema   table_name  constraint_type
-def                 constraint_db      c2               constraint_db  t1          CHECK
-def                 constraint_db      check_a          constraint_db  t1          CHECK
-def                 constraint_db      primary          constraint_db  t1          PRIMARY KEY
-def                 constraint_db      t1_a_key         constraint_db  t1          UNIQUE
-def                 constraint_db      fk               constraint_db  t2          FOREIGN KEY
+constraint_catalog  constraint_schema  constraint_name  table_catalog  table_schema   table_name  constraint_type  is_deferrable  initially_deferred
+def                 constraint_db      c2               def            constraint_db  t1          CHECK            NO             NO
+def                 constraint_db      check_a          def            constraint_db  t1          CHECK            NO             NO
+def                 constraint_db      primary          def            constraint_db  t1          PRIMARY KEY      NO             NO
+def                 constraint_db      t1_a_key         def            constraint_db  t1          UNIQUE           NO             NO
+def                 constraint_db      fk               def            constraint_db  t2          FOREIGN KEY      NO             NO
 
 statement ok
 DROP DATABASE constraint_db CASCADE

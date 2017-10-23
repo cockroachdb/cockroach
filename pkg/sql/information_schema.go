@@ -410,9 +410,13 @@ CREATE TABLE information_schema.table_constraints (
 	CONSTRAINT_CATALOG STRING NOT NULL DEFAULT '',
 	CONSTRAINT_SCHEMA STRING NOT NULL DEFAULT '',
 	CONSTRAINT_NAME STRING NOT NULL DEFAULT '',
+	TABLE_CATALOG STRING NOT NULL DEFAULT '',
 	TABLE_SCHEMA STRING NOT NULL DEFAULT '',
 	TABLE_NAME STRING NOT NULL DEFAULT '',
-	CONSTRAINT_TYPE STRING NOT NULL DEFAULT ''
+	CONSTRAINT_TYPE STRING NOT NULL DEFAULT '',
+	IS_DEFERRABLE STRING NOT NULL DEFAULT '',
+	INITIALLY_DEFERRED STRING NOT NULL DEFAULT ''
+
 );`,
 	populate: func(ctx context.Context, p *planner, prefix string, addRow func(...parser.Datum) error) error {
 		return forEachTableDescWithTableLookup(ctx, p, prefix, func(
@@ -430,9 +434,12 @@ CREATE TABLE information_schema.table_constraints (
 					defString,                         // constraint_catalog
 					parser.NewDString(db.Name),        // constraint_schema
 					dStringOrNull(name),               // constraint_name
+					defString,                         // table_catalog
 					parser.NewDString(db.Name),        // table_schema
 					parser.NewDString(table.Name),     // table_name
 					parser.NewDString(string(c.Kind)), // constraint_type
+					yesOrNoDatum(false),               // is_deferrable
+					yesOrNoDatum(false),               // initially_deferred
 				); err != nil {
 					return err
 				}
