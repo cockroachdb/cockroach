@@ -147,7 +147,7 @@ func (r *sstIterator) NextKey() {
 		return
 	}
 	r.nextKeyStart = append(r.nextKeyStart[:0], r.mvccKey.Key...)
-	for r.Next(); r.valid && r.err != nil && bytes.Equal(r.nextKeyStart, r.mvccKey.Key); r.Next() {
+	for r.Next(); r.valid && r.err == nil && bytes.Equal(r.nextKeyStart, r.mvccKey.Key); r.Next() {
 	}
 }
 

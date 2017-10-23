@@ -17,6 +17,11 @@ import "cockroach/pkg/sql/sqlbase/structured.proto";
 import "cockroach/pkg/util/hlc/timestamp.proto";
 import "gogoproto/gogo.proto";
 
+enum MVCCFilter {
+  Latest = 0;
+  All = 1;
+}
+
 // BackupDescriptor represents a consistent snapshot of ranges.
 //
 // Each range snapshot includes a path to data that is a diff of the data in
@@ -37,6 +42,8 @@ message BackupDescriptor {
 
   util.hlc.Timestamp start_time = 1 [(gogoproto.nullable) = false];
   util.hlc.Timestamp end_time = 2 [(gogoproto.nullable) = false];
+  MVCCFilter mvcc_filter = 13 [(gogoproto.customname) = "MVCCFilter"];
+
   // Spans contains the spans requested for backup. The keyranges covered by
   // `files` may be a subset of this if there were ranges with no changes since
   // the last backup. For all tables in the backup descriptor, these spans must

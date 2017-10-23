@@ -21751,6 +21751,7 @@ export namespace cockroach {
 
             type RestoreDetails$Properties = {
                 low_water_mark?: Uint8Array;
+                end_time?: cockroach.util.hlc.Timestamp$Properties;
                 table_rewrites?: { [k: string]: cockroach.sql.jobs.RestoreDetails.TableRewrite$Properties };
                 uris?: string[];
             };
@@ -21776,6 +21777,12 @@ export namespace cockroach {
                  * @type {Uint8Array}
                  */
                 public low_water_mark: Uint8Array;
+
+                /**
+                 * RestoreDetails end_time.
+                 * @type {(cockroach.util.hlc.Timestamp$Properties|null)}
+                 */
+                public end_time: (cockroach.util.hlc.Timestamp$Properties|null);
 
                 /**
                  * RestoreDetails table_rewrites.

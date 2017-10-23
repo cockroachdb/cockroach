@@ -53,6 +53,14 @@ const (
 	BackupFormatInitialVersion uint32 = 0
 )
 
+const (
+	backupOptRevisionHistory = "revision_history"
+)
+
+var backupOptionExpectValues = map[string]bool{
+	backupOptRevisionHistory: false,
+}
+
 // BackupCheckpointInterval is the interval at which backup progress is saved
 // to durable storage.
 var BackupCheckpointInterval = time.Minute
@@ -492,9 +500,10 @@ func backup(
 			defer func() { <-exportsSem }()
 
 			req := &roachpb.ExportRequest{
-				Span:      span,
-				Storage:   exportStore.Conf(),
-				StartTime: backupDesc.StartTime,
+				Span:       span,
+				Storage:    exportStore.Conf(),
+				StartTime:  backupDesc.StartTime,
+				MVCCFilter: roachpb.MVCCFilter(backupDesc.MVCCFilter),
 			}
 			res, pErr := client.SendWrappedWith(gCtx, db.GetSender(), header, req)
 			if pErr != nil {
@@ -588,6 +597,10 @@ func backupPlanHook(
 	if err != nil {
 		return nil, nil, err
 	}
+	optsFn, err := p.TypeAsStringOpts(backupStmt.Options, backupOptionExpectValues)
+	if err != nil {
+		return nil, nil, err
+	}
 
 	header := sqlbase.ResultColumns{
 		{Name: "job_id", Typ: parser.TypeInt},
@@ -643,6 +656,11 @@ func backupPlanHook(
 			}
 		}
 
+		opts, err := optsFn()
+		if err != nil {
+			return err
+		}
+
 		targetDescs, err := resolveTargetsToDescriptors(ctx, p, endTime, backupStmt.Targets)
 		if err != nil {
 			return err
@@ -674,9 +692,15 @@ func backupPlanHook(
 			}
 		}
 
+		mvccFilter := MVCCFilter_Latest
+		if _, ok := opts[backupOptRevisionHistory]; ok {
+			mvccFilter = MVCCFilter_All
+		}
+
 		backupDesc := BackupDescriptor{
 			StartTime:     startTime,
 			EndTime:       endTime,
+			MVCCFilter:    mvccFilter,
 			Descriptors:   targetDescs,
 			Spans:         spans,
 			FormatVersion: BackupFormatInitialVersion,

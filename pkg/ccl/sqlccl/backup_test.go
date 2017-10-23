@@ -1542,6 +1542,89 @@ func TestBackupAsOfSystemTime(t *testing.T) {
 	}
 }
 
+func TestRestoreAsOfSystemTime(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	const numAccounts = 10
+	_, dir, _, sqlDB, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, initNone)
+	defer cleanupFn()
+
+	ts := make([]string, 7)
+
+	sqlDB.QueryRow(`SELECT cluster_logical_timestamp()`).Scan(&ts[0])
+
+	sqlDB.Exec(`UPDATE data.bank SET balance = 1`)
+	sqlDB.QueryRow(`SELECT cluster_logical_timestamp()`).Scan(&ts[1])
+
+	sqlDB.Exec(`BEGIN`)
+	sqlDB.Exec(`UPDATE data.bank SET balance = 2`)
+	sqlDB.QueryRow(`SELECT cluster_logical_timestamp()`).Scan(&ts[2])
+	sqlDB.Exec(`COMMIT`)
+
+	fullBackup, latestBackup := filepath.Join(dir, "full"), filepath.Join(dir, "latest")
+	sqlDB.Exec(
+		fmt.Sprintf(`BACKUP DATABASE data TO $1 AS OF SYSTEM TIME %s WITH revision_history`, ts[2]),
+		fullBackup,
+	)
+	sqlDB.Exec(
+		fmt.Sprintf(`BACKUP DATABASE data TO $1 AS OF SYSTEM TIME %s`, ts[2]),
+		latestBackup,
+	)
+
+	sqlDB.Exec(`UPDATE data.bank SET balance = 3`)
+	sqlDB.QueryRow(`SELECT cluster_logical_timestamp()`).Scan(&ts[3])
+
+	sqlDB.Exec(`DELETE FROM data.bank WHERE id >= $1 / 2`, numAccounts)
+	sqlDB.QueryRow(`SELECT cluster_logical_timestamp()`).Scan(&ts[4])
+
+	sqlDB.Exec(`UPDATE data.bank SET balance = 5`)
+	sqlDB.QueryRow(`SELECT cluster_logical_timestamp()`).Scan(&ts[5])
+
+	sqlDB.Exec(`UPSERT INTO data.bank (id, balance)
+	           SELECT i, 4 FROM GENERATE_SERIES(0, $1 - 1) AS g(i)`, numAccounts)
+	sqlDB.QueryRow(`SELECT cluster_logical_timestamp()`).Scan(&ts[6])
+
+	incBackup := filepath.Join(dir, "inc")
+	sqlDB.Exec(
+		`BACKUP DATABASE data TO $1 INCREMENTAL FROM $2 WITH revision_history`,
+		incBackup, fullBackup,
+	)
+
+	for i, timestamp := range ts {
+		name := fmt.Sprintf("ts%d", i)
+		t.Run(name, func(t *testing.T) {
+			sqlDB = sqlutils.MakeSQLRunner(t, sqlDB.DB)
+			sqlDB.Exec(fmt.Sprintf(`CREATE DATABASE %s`, name))
+			rowCount := sqlDB.QueryStr(
+				fmt.Sprintf(
+					`SELECT rows FROM [RESTORE data.* FROM $1, $2 AS OF SYSTEM TIME %s WITH into_db='%s']`,
+					timestamp, name,
+				),
+				fullBackup, incBackup,
+			)
+			sqlDB.CheckQueryResults(fmt.Sprintf(`SELECT COUNT(*) FROM %s.bank`, name), rowCount)
+			sqlDB.CheckQueryResults(
+				fmt.Sprintf(`SELECT * FROM %s.bank ORDER BY id`, name),
+				sqlDB.QueryStr(fmt.Sprintf(`SELECT * FROM data.bank AS OF SYSTEM TIME %s`, timestamp)),
+			)
+		})
+	}
+
+	t.Run("latest", func(t *testing.T) {
+		sqlDB = sqlutils.MakeSQLRunner(t, sqlDB.DB)
+		// The "latest" backup didn't specify ALL mvcc values, so we can't restore
+		// to times in the middle.
+		sqlDB.Exec(`CREATE DATABASE err`)
+		_, err := sqlDB.DB.Exec(
+			fmt.Sprintf(`RESTORE data.* FROM $1 AS OF SYSTEM TIME %s WITH into_db='err'`, ts[1]),
+			latestBackup,
+		)
+		if !testutils.IsError(err, "incompatible RESTORE timestamp") {
+			t.Errorf("expected 'incompatible RESTORE timestamp' error got %+v", err)
+		}
+	})
+}
+
 func TestAsOfSystemTimeOnRestoredData(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
