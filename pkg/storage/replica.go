@@ -45,6 +45,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/abortspan"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/storage/tscache"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -259,9 +260,9 @@ type Replica struct {
 	raftMu struct {
 		timedMutex
 
-		// Note that there are two replicaStateLoaders, in raftMu and mu,
+		// Note that there are two StateLoaders, in raftMu and mu,
 		// depending on which lock is being held.
-		stateLoader StateLoader
+		stateLoader stateloader.StateLoader
 		// on-disk storage for sideloaded SSTables. nil when there's no ReplicaID.
 		sideloaded sideloadStorage
 	}
@@ -448,7 +449,7 @@ type Replica struct {
 
 		// Note that there are two replicaStateLoaders, in raftMu and mu,
 		// depending on which lock is being held.
-		stateLoader StateLoader
+		stateLoader stateloader.StateLoader
 	}
 
 	unreachablesMu struct {
@@ -585,7 +586,7 @@ func newReplica(rangeID roachpb.RangeID, store *Store) *Replica {
 		abortSpan:      abortspan.New(rangeID),
 		pushTxnQueue:   newPushTxnQueue(store),
 	}
-	r.mu.stateLoader = MakeStateLoader(r.store.cfg.Settings, rangeID)
+	r.mu.stateLoader = stateloader.Make(r.store.cfg.Settings, rangeID)
 	if leaseHistoryMaxEntries > 0 {
 		r.leaseHistory = newLeaseHistory()
 	}
@@ -612,7 +613,7 @@ func newReplica(rangeID roachpb.RangeID, store *Store) *Replica {
 		},
 	)
 	r.raftMu.timedMutex = makeTimedMutex(raftMuLogger)
-	r.raftMu.stateLoader = MakeStateLoader(r.store.cfg.Settings, rangeID)
+	r.raftMu.stateLoader = stateloader.Make(r.store.cfg.Settings, rangeID)
 	return r
 }
 
@@ -4706,7 +4707,7 @@ func (r *Replica) applyRaftCommand(
 
 	var assertHS *raftpb.HardState
 	if util.RaceEnabled && rResult.Split != nil && r.store.cfg.Settings.Version.IsActive(cluster.VersionSplitHardStateBelowRaft) {
-		rsl := MakeStateLoader(r.store.cfg.Settings, rResult.Split.RightDesc.RangeID)
+		rsl := stateloader.Make(r.store.cfg.Settings, rResult.Split.RightDesc.RangeID)
 		oldHS, err := rsl.LoadHardState(ctx, r.store.Engine())
 		if err != nil {
 			return enginepb.MVCCStats{}, errors.Wrap(err, "unable to load HardState")
@@ -4719,7 +4720,7 @@ func (r *Replica) applyRaftCommand(
 
 	if assertHS != nil {
 		// Load the HardState that was just committed (if any).
-		rsl := MakeStateLoader(r.store.cfg.Settings, rResult.Split.RightDesc.RangeID)
+		rsl := stateloader.Make(r.store.cfg.Settings, rResult.Split.RightDesc.RangeID)
 		newHS, err := rsl.LoadHardState(ctx, r.store.Engine())
 		if err != nil {
 			return enginepb.MVCCStats{}, errors.Wrap(err, "unable to load HardState")
