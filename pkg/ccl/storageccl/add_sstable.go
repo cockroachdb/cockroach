@@ -41,7 +41,7 @@ func evalAddSSTable(
 	// TODO(tschottdorf): restore the below in some form (gets in the way of testing).
 	// _, span := tracing.ChildSpan(ctx, fmt.Sprintf("AddSSTable [%s,%s)", args.Key, args.EndKey))
 	// defer tracing.FinishSpan(span)
-	log.Eventf(ctx, "evaluating AddSSTable")
+	log.Eventf(ctx, "evaluating AddSSTable [%s,%s)", mvccStartKey.Key, mvccEndKey.Key)
 
 	// Compute the stats for any existing data in the affected span. The sstable
 	// being ingested can overwrite all, some, or none of the existing kvs.
@@ -103,7 +103,7 @@ func verifySSTable(
 		return enginepb.MVCCStats{}, err
 	} else if ok {
 		if unsafeKey := dataIter.UnsafeKey(); unsafeKey.Less(start) {
-			return enginepb.MVCCStats{}, errors.Errorf("key %s not in request range [%s,%s)",
+			return enginepb.MVCCStats{}, errors.Errorf("first key %s not in request range [%s,%s)",
 				unsafeKey.Key, start.Key, end.Key)
 		}
 	}
@@ -127,7 +127,7 @@ func verifySSTable(
 		return enginepb.MVCCStats{}, err
 	} else if ok {
 		if unsafeKey := dataIter.UnsafeKey(); !unsafeKey.Less(end) {
-			return enginepb.MVCCStats{}, errors.Errorf("key %s not in request range [%s,%s)",
+			return enginepb.MVCCStats{}, errors.Errorf("last key %s not in request range [%s,%s)",
 				unsafeKey.Key, start.Key, end.Key)
 		}
 	}

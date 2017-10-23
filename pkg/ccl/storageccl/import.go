@@ -290,7 +290,7 @@ func evalImport(ctx context.Context, cArgs storage.CommandArgs) (*roachpb.Import
 			g.Go(func() error {
 				defer log.Event(ctx, "finished batch")
 				defer finishBatcher.Close()
-				return finishBatcher.Finish(gCtx, db)
+				return errors.Wrapf(finishBatcher.Finish(gCtx, db), "import [%s, %s)", startKeyMVCC.Key, endKeyMVCC.Key)
 			})
 			if err := makeBatcher(); err != nil {
 				return nil, err
