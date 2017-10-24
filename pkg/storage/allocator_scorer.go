@@ -609,7 +609,7 @@ func shouldRebalanceNoStats(
 ) bool {
 	overfullThreshold := int32(math.Ceil(overfullRangeThreshold(st, sl.candidateRanges.mean)))
 	if store.Capacity.RangeCount > overfullThreshold {
-		log.Infof(ctx,
+		log.VEventf(ctx, 2,
 			"s%d: should-rebalance(ranges-overfull): rangeCount=%d, mean=%.2f, overfull-threshold=%d",
 			store.StoreID, store.Capacity.RangeCount, sl.candidateRanges.mean, overfullThreshold)
 		return true
@@ -619,7 +619,7 @@ func shouldRebalanceNoStats(
 		underfullThreshold := int32(math.Floor(underfullRangeThreshold(st, sl.candidateRanges.mean)))
 		for _, desc := range sl.stores {
 			if desc.Capacity.RangeCount < underfullThreshold {
-				log.Infof(ctx,
+				log.VEventf(ctx, 2,
 					"s%d: should-rebalance(better-fit-ranges=s%d): rangeCount=%d, otherRangeCount=%d, "+
 						"mean=%.2f, underfull-threshold=%d",
 					store.StoreID, desc.StoreID, store.Capacity.RangeCount, desc.Capacity.RangeCount,
