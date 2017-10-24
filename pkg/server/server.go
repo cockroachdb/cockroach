@@ -41,6 +41,8 @@ import (
 	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	grpcstatus "google.golang.org/grpc/status"
 
 	"github.com/cockroachdb/cmux"
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -133,6 +135,8 @@ type Server struct {
 	engines            Engines
 	internalMemMetrics sql.MemoryMetrics
 	adminMemMetrics    sql.MemoryMetrics
+
+	serveNonGossip int32 // atomically updated
 }
 
 // NewServer creates a Server from a server.Context.
@@ -191,7 +195,24 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 			log.Fatal(ctx, err)
 		}
 	}
-	s.grpc = rpc.NewServer(s.rpcContext)
+
+	{
+		var earlyRPCWhiteList = map[string]struct{}{
+			"/cockroach.rpc.Heartbeat/Ping":   {},
+			"/cockroach.gossip.Gossip/Gossip": {},
+		}
+		s.grpc = rpc.NewServerWithInterceptor(s.rpcContext, func(fullName string) error {
+			if atomic.LoadInt32(&s.serveNonGossip) != 0 {
+				return nil
+			}
+			if _, allowed := earlyRPCWhiteList[fullName]; !allowed {
+				return grpcstatus.Errorf(
+					codes.Unavailable, "node waiting for gossip network; %s not available", fullName,
+				)
+			}
+			return nil
+		})
+	}
 
 	s.gossip = gossip.New(
 		s.cfg.AmbientCtx,
@@ -614,7 +635,20 @@ func (s *singleListener) Addr() net.Addr {
 }
 
 // Start starts the server on the specified port, starts gossip and initializes
-// the node using the engines from the server's context.
+// the node using the engines from the server's context. This is complex since
+// it sets up the listeners and the associated port muxing, but especially since
+// it has to solve the "bootstrapping problem": nodes need to connect to Gossip
+// fairly early, but what drives Gossip connectivity are the first range
+// replicas in the kv store. This in turn suggests opening the Gossip server
+// early. However, naively doing so also serves most other services prematurely,
+// which exposes a large surface of potentially underinitialized services. This
+// is avoided with some additional complexity that can be summarized as follows:
+//
+// - before blocking trying to connect to the Gossip network, we already open
+//   the admin UI (so that its diagnostics are available)
+// - we also allow our Gossip and our connection health Ping service
+// - everything else returns Unavailable errors (which are retryable)
+// - once the node has started, unlock all RPCs.
 //
 // The passed context can be used to trace the server startup. The context
 // should represent the general startup operation.
@@ -801,31 +835,11 @@ func (s *Server) Start(ctx context.Context) error {
 		}
 	}
 
-	pgCtx := s.pgServer.AmbientCtx.AnnotateCtx(context.Background())
-	s.stopper.RunWorker(pgCtx, func(pgCtx context.Context) {
-		select {
-		case <-serveSQL:
-		case <-s.stopper.ShouldQuiesce():
-			return
-		}
-		netutil.FatalIfUnexpected(httpServer.ServeWith(pgCtx, s.stopper, pgL, func(conn net.Conn) {
-			connCtx := log.WithLogTagStr(pgCtx, "client", conn.RemoteAddr().String())
-			setTCPKeepAlive(connCtx, conn)
-
-			if err := s.pgServer.ServeConn(connCtx, conn); err != nil && !netutil.IsClosedConnection(err) {
-				// Report the error on this connection's context, so that we
-				// know which remote client caused the error when looking at
-				// the logs.
-				log.Error(connCtx, err)
-			}
-		}))
-	})
-
-	// Enable the debug endpoints first to provide an earlier window
-	// into what's going on with the node in advance of exporting node
-	// functionality.
-	// TODO(marc): when cookie-based authentication exists,
-	// apply it for all web endpoints.
+	// Enable the debug endpoints first to provide an earlier window into what's
+	// going on with the node in advance of exporting node functionality.
+	//
+	// TODO(marc): when cookie-based authentication exists, apply it to all web
+	// endpoints.
 	s.mux.Handle(debugEndpoint, authorizedHandler(http.HandlerFunc(handleDebug)))
 
 	// Filter the gossip bootstrap resolvers based on the listen and
@@ -920,6 +934,13 @@ func (s *Server) Start(ctx context.Context) error {
 		atomic.StoreInt32(&initLActive, 0)
 	}
 
+	// This opens the main listener.
+	s.stopper.RunWorker(workersCtx, func(context.Context) {
+		serveOnMux.Do(func() {
+			netutil.FatalIfUnexpected(m.Serve())
+		})
+	})
+
 	// We ran this before, but might've bootstrapped in the meantime. This time
 	// we'll get the actual list of bootstrapped and empty engines.
 	bootstrappedEngines, emptyEngines, cv, err := inspectEngines(ctx, s.engines, s.cfg.Settings.Version.MinSupportedVersion, s.cfg.Settings.Version.ServerVersion)
@@ -939,154 +960,6 @@ If problems persist, please see ` + base.DocsURL("cluster-setup-troubleshooting.
 		log.Shout(context.Background(), log.Severity_WARNING,
 			msg)
 	}).Stop()
-
-	// Now that we have a monotonic HLC wrt previous incarnations of the process,
-	// init all the replicas. At this point *some* store has been bootstrapped or
-	// we're joining an existing cluster for the first time.
-	if err := s.node.start(
-		ctx,
-		unresolvedAdvertAddr,
-		bootstrappedEngines, emptyEngines,
-		s.cfg.NodeAttributes,
-		s.cfg.Locality,
-		cv,
-	); err != nil {
-		return err
-	}
-	log.Event(ctx, "started node")
-
-	s.refreshSettings()
-
-	raven.SetTagsContext(map[string]string{
-		"cluster":   s.ClusterID().String(),
-		"node":      s.NodeID().String(),
-		"server_id": fmt.Sprintf("%s-%s", s.ClusterID().Short(), s.NodeID()),
-	})
-
-	// We can now add the node registry.
-	s.recorder.AddNode(s.registry, s.node.Descriptor, s.node.startedAt, s.cfg.AdvertiseAddr, s.cfg.HTTPAddr)
-
-	// Begin recording runtime statistics.
-	s.startSampleEnvironment(s.cfg.MetricsSampleInterval)
-
-	// Begin recording time series data collected by the status monitor.
-	s.tsDB.PollSource(
-		s.cfg.AmbientCtx, s.recorder, s.cfg.MetricsSampleInterval, ts.Resolution10s, s.stopper,
-	)
-
-	// Begin recording status summaries.
-	s.node.startWriteSummaries(s.cfg.MetricsSampleInterval)
-
-	// Create and start the schema change manager only after a NodeID
-	// has been assigned.
-	var testingKnobs *sql.SchemaChangerTestingKnobs
-	if s.cfg.TestingKnobs.SQLSchemaChanger != nil {
-		testingKnobs = s.cfg.TestingKnobs.SQLSchemaChanger.(*sql.SchemaChangerTestingKnobs)
-	} else {
-		testingKnobs = new(sql.SchemaChangerTestingKnobs)
-	}
-	sql.NewSchemaChangeManager(
-		s.st,
-		testingKnobs,
-		*s.db,
-		s.node.Descriptor,
-		s.rpcContext,
-		s.distSQLServer,
-		s.distSender,
-		s.gossip,
-		s.leaseMgr,
-		s.clock,
-		s.jobRegistry,
-	).Start(s.stopper)
-
-	s.sqlExecutor.Start(ctx, &s.adminMemMetrics, s.node.Descriptor)
-	s.distSQLServer.Start()
-
-	log.Infof(ctx, "starting %s server at %s", s.cfg.HTTPRequestScheme(), unresolvedHTTPAddr)
-	log.Infof(ctx, "starting grpc/postgres server at %s", unresolvedListenAddr)
-	log.Infof(ctx, "advertising CockroachDB node at %s", unresolvedAdvertAddr)
-	s.stopper.RunWorker(workersCtx, func(context.Context) {
-		serveOnMux.Do(func() {
-			netutil.FatalIfUnexpected(m.Serve())
-		})
-	})
-
-	if len(s.cfg.SocketFile) != 0 {
-		log.Infof(ctx, "starting postgres server at unix:%s", s.cfg.SocketFile)
-
-		// Unix socket enabled: postgres protocol only.
-		unixLn, err := net.Listen("unix", s.cfg.SocketFile)
-		if err != nil {
-			return err
-		}
-
-		s.stopper.RunWorker(workersCtx, func(workersCtx context.Context) {
-			<-s.stopper.ShouldQuiesce()
-			if err := unixLn.Close(); err != nil {
-				log.Fatal(workersCtx, err)
-			}
-		})
-
-		pgCtx := s.pgServer.AmbientCtx.AnnotateCtx(context.Background())
-		s.stopper.RunWorker(pgCtx, func(pgCtx context.Context) {
-			select {
-			case <-serveSQL:
-			case <-s.stopper.ShouldQuiesce():
-				return
-			}
-			netutil.FatalIfUnexpected(httpServer.ServeWith(pgCtx, s.stopper, unixLn, func(conn net.Conn) {
-				connCtx := log.WithLogTagStr(pgCtx, "client", conn.RemoteAddr().String())
-				if err := s.pgServer.ServeConn(connCtx, conn); err != nil &&
-					!netutil.IsClosedConnection(err) {
-					// Report the error on this connection's context, so that we
-					// know which remote client caused the error when looking at
-					// the logs.
-					log.Error(connCtx, err)
-				}
-			}))
-		})
-	}
-
-	log.Event(ctx, "accepting connections")
-
-	// Begin the node liveness heartbeat. Add a callback which
-	// 1. records the local store "last up" timestamp for every store whenever the
-	//    liveness record is updated.
-	// 2. sets Draining if Decommissioning is set in the liveness record
-	decommissionSem := make(chan struct{}, 1)
-	s.nodeLiveness.StartHeartbeat(ctx, s.stopper, func(ctx context.Context) {
-		now := s.clock.Now()
-		if err := s.node.stores.VisitStores(func(s *storage.Store) error {
-			return s.WriteLastUpTimestamp(ctx, now)
-		}); err != nil {
-			log.Warning(ctx, errors.Wrap(err, "writing last up timestamp"))
-		}
-
-		if liveness, err := s.nodeLiveness.Self(); err != nil && err != storage.ErrNoLivenessRecord {
-			log.Warning(ctx, errors.Wrap(err, "retrieving own liveness record"))
-		} else if liveness != nil && liveness.Decommissioning && !liveness.Draining {
-			select {
-			case decommissionSem <- struct{}{}:
-				s.stopper.RunWorker(ctx, func(context.Context) {
-					defer func() {
-						<-decommissionSem
-					}()
-					if _, err := s.Drain(GracefulDrainModes); err != nil {
-						log.Warningf(ctx, "failed to set Draining when Decommissioning: %v", err)
-					}
-				})
-			default:
-				// Already have an active goroutine trying to drain; don't add a
-				// second one.
-			}
-		}
-	})
-
-	if err := s.jobRegistry.Start(
-		ctx, s.stopper, s.nodeLiveness, jobs.DefaultCancelInterval, jobs.DefaultAdoptInterval,
-	); err != nil {
-		return err
-	}
 
 	// Initialize grpc-gateway mux and context.
 	jsonpb := &protoutil.JSONPb{
@@ -1172,6 +1045,116 @@ If problems persist, please see ` + base.DocsURL("cluster-setup-troubleshooting.
 	s.mux.Handle(statusVars, http.HandlerFunc(s.status.handleVars))
 	log.Event(ctx, "added http endpoints")
 
+	// Now that we have a monotonic HLC wrt previous incarnations of the process,
+	// init all the replicas. At this point *some* store has been bootstrapped or
+	// we're joining an existing cluster for the first time.
+	if err := s.node.start(
+		ctx,
+		unresolvedAdvertAddr,
+		bootstrappedEngines, emptyEngines,
+		s.cfg.NodeAttributes,
+		s.cfg.Locality,
+		cv,
+	); err != nil {
+		return err
+	}
+	log.Event(ctx, "started node")
+
+	s.refreshSettings()
+
+	raven.SetTagsContext(map[string]string{
+		"cluster":   s.ClusterID().String(),
+		"node":      s.NodeID().String(),
+		"server_id": fmt.Sprintf("%s-%s", s.ClusterID().Short(), s.NodeID()),
+	})
+
+	// We can now add the node registry.
+	s.recorder.AddNode(s.registry, s.node.Descriptor, s.node.startedAt, s.cfg.AdvertiseAddr, s.cfg.HTTPAddr)
+
+	// Begin recording runtime statistics.
+	s.startSampleEnvironment(s.cfg.MetricsSampleInterval)
+
+	// Begin recording time series data collected by the status monitor.
+	s.tsDB.PollSource(
+		s.cfg.AmbientCtx, s.recorder, s.cfg.MetricsSampleInterval, ts.Resolution10s, s.stopper,
+	)
+
+	// Begin recording status summaries.
+	s.node.startWriteSummaries(s.cfg.MetricsSampleInterval)
+
+	// Create and start the schema change manager only after a NodeID
+	// has been assigned.
+	var testingKnobs *sql.SchemaChangerTestingKnobs
+	if s.cfg.TestingKnobs.SQLSchemaChanger != nil {
+		testingKnobs = s.cfg.TestingKnobs.SQLSchemaChanger.(*sql.SchemaChangerTestingKnobs)
+	} else {
+		testingKnobs = new(sql.SchemaChangerTestingKnobs)
+	}
+
+	sql.NewSchemaChangeManager(
+		s.st,
+		testingKnobs,
+		*s.db,
+		s.node.Descriptor,
+		s.rpcContext,
+		s.distSQLServer,
+		s.distSender,
+		s.gossip,
+		s.leaseMgr,
+		s.clock,
+		s.jobRegistry,
+	).Start(s.stopper)
+
+	s.sqlExecutor.Start(ctx, &s.adminMemMetrics, s.node.Descriptor)
+	s.distSQLServer.Start()
+
+	atomic.StoreInt32(&s.serveNonGossip, 1)
+
+	log.Infof(ctx, "starting %s server at %s", s.cfg.HTTPRequestScheme(), unresolvedHTTPAddr)
+	log.Infof(ctx, "starting grpc/postgres server at %s", unresolvedListenAddr)
+	log.Infof(ctx, "advertising CockroachDB node at %s", unresolvedAdvertAddr)
+
+	log.Event(ctx, "accepting connections")
+
+	// Begin the node liveness heartbeat. Add a callback which
+	// 1. records the local store "last up" timestamp for every store whenever the
+	//    liveness record is updated.
+	// 2. sets Draining if Decommissioning is set in the liveness record
+	decommissionSem := make(chan struct{}, 1)
+	s.nodeLiveness.StartHeartbeat(ctx, s.stopper, func(ctx context.Context) {
+		now := s.clock.Now()
+		if err := s.node.stores.VisitStores(func(s *storage.Store) error {
+			return s.WriteLastUpTimestamp(ctx, now)
+		}); err != nil {
+			log.Warning(ctx, errors.Wrap(err, "writing last up timestamp"))
+		}
+
+		if liveness, err := s.nodeLiveness.Self(); err != nil && err != storage.ErrNoLivenessRecord {
+			log.Warning(ctx, errors.Wrap(err, "retrieving own liveness record"))
+		} else if liveness != nil && liveness.Decommissioning && !liveness.Draining {
+			select {
+			case decommissionSem <- struct{}{}:
+				s.stopper.RunWorker(ctx, func(context.Context) {
+					defer func() {
+						<-decommissionSem
+					}()
+					if _, err := s.Drain(GracefulDrainModes); err != nil {
+						log.Warningf(ctx, "failed to set Draining when Decommissioning: %v", err)
+					}
+				})
+			default:
+				// Already have an active goroutine trying to drain; don't add a
+				// second one.
+			}
+		}
+	})
+
+	if err := s.jobRegistry.Start(
+		ctx, s.stopper, s.nodeLiveness, jobs.DefaultCancelInterval, jobs.DefaultAdoptInterval,
+	); err != nil {
+		return err
+	}
+
 	// Before serving SQL requests, we have to make sure the database is
 	// in an acceptable form for this version of the software.
 	// We have to do this after actually starting up the server to be able to
@@ -1183,7 +1166,63 @@ If problems persist, please see ` + base.DocsURL("cluster-setup-troubleshooting.
 	}
 	log.Infof(ctx, "done ensuring all necessary migrations have run")
 	close(serveSQL)
+
 	log.Info(ctx, "serving sql connections")
+	// Start servicing SQL connections.
+
+	pgCtx := s.pgServer.AmbientCtx.AnnotateCtx(context.Background())
+	s.stopper.RunWorker(pgCtx, func(pgCtx context.Context) {
+		select {
+		case <-serveSQL:
+		case <-s.stopper.ShouldQuiesce():
+			return
+		}
+		netutil.FatalIfUnexpected(httpServer.ServeWith(pgCtx, s.stopper, pgL, func(conn net.Conn) {
+			connCtx := log.WithLogTagStr(pgCtx, "client", conn.RemoteAddr().String())
+			setTCPKeepAlive(connCtx, conn)
+
+			if err := s.pgServer.ServeConn(connCtx, conn); err != nil && !netutil.IsClosedConnection(err) {
+				// Report the error on this connection's context, so that we
+				// know which remote client caused the error when looking at
+				// the logs.
+				log.Error(connCtx, err)
+			}
+		}))
+	})
+	if len(s.cfg.SocketFile) != 0 {
+		log.Infof(ctx, "starting postgres server at unix:%s", s.cfg.SocketFile)
+
+		// Unix socket enabled: postgres protocol only.
+		unixLn, err := net.Listen("unix", s.cfg.SocketFile)
+		if err != nil {
+			return err
+		}
+
+		s.stopper.RunWorker(workersCtx, func(workersCtx context.Context) {
+			<-s.stopper.ShouldQuiesce()
+			if err := unixLn.Close(); err != nil {
+				log.Fatal(workersCtx, err)
+			}
+		})
+
+		s.stopper.RunWorker(pgCtx, func(pgCtx context.Context) {
+			select {
+			case <-serveSQL:
+			case <-s.stopper.ShouldQuiesce():
+				return
+			}
+			netutil.FatalIfUnexpected(httpServer.ServeWith(pgCtx, s.stopper, unixLn, func(conn net.Conn) {
+				connCtx := log.WithLogTagStr(pgCtx, "client", conn.RemoteAddr().String())
+				if err := s.pgServer.ServeConn(connCtx, conn); err != nil &&
+					!netutil.IsClosedConnection(err) {
+					// Report the error on this connection's context, so that we
+					// know which remote client caused the error when looking at
+					// the logs.
+					log.Error(connCtx, err)
+				}
+			}))
+		})
+	}
 
 	// Record that this node joined the cluster in the event log. Since this
 	// executes a SQL query, this must be done after the SQL layer is ready.
