@@ -88,7 +88,7 @@ func makeDatabaseDesc(p *parser.CreateDatabase) sqlbase.DatabaseDescriptor {
 func getKeysForDatabaseDescriptor(
 	dbDesc *sqlbase.DatabaseDescriptor,
 ) (zoneKey roachpb.Key, nameKey roachpb.Key, descKey roachpb.Key) {
-	zoneKey = sqlbase.MakeZoneKey(dbDesc.ID)
+	zoneKey = config.MakeZoneKey(uint32(dbDesc.ID))
 	nameKey = sqlbase.MakeNameMetadataKey(keys.RootNamespaceID, dbDesc.GetName())
 	descKey = sqlbase.MakeDescMetadataKey(dbDesc.ID)
 	return
