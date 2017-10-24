@@ -4332,7 +4332,22 @@ func (r *Replica) processRaftCommand(
 	} else {
 		log.Event(ctx, "applying command")
 
-		if splitMergeUnlock := r.maybeAcquireSplitMergeLock(ctx, raftCmd); splitMergeUnlock != nil {
+		if splitMergeUnlock, err := r.maybeAcquireSplitMergeLock(ctx, raftCmd); err != nil {
+			log.Eventf(ctx, "unable to acquire split lock: %s", err)
+			// Send a crash report because a former bug in the error handling might have
+			// been the root cause of #19172.
+			_ = r.store.stopper.RunAsyncTask(ctx, "crash report", func(ctx context.Context) {
+				log.SendCrashReport(
+					ctx,
+					&r.store.cfg.Settings.SV,
+					0, // depth
+					"while acquiring split lock: %s",
+					[]interface{}{err},
+				)
+			})
+
+			forcedErr = roachpb.NewError(err)
+		} else if splitMergeUnlock != nil {
 			// Close over raftCmd to capture its value at execution time; we clear
 			// ReplicatedEvalResult on certain errors.
 			defer func() {
@@ -4395,8 +4410,24 @@ func (r *Replica) processRaftCommand(
 			raftCmd.ReplicatedEvalResult.AddSSTable = nil
 		}
 
-		raftCmd.ReplicatedEvalResult.Delta, pErr = r.applyRaftCommand(
-			ctx, idKey, raftCmd.ReplicatedEvalResult, writeBatch)
+		{
+			var err error
+			raftCmd.ReplicatedEvalResult.Delta, err = r.applyRaftCommand(
+				ctx, idKey, raftCmd.ReplicatedEvalResult, writeBatch)
+
+			// applyRaftCommand returned an error, which usually indicates
+			// either a serious logic bug in CockroachDB or a disk
+			// corruption/out-of-space issue. Make sure that these fail with
+			// descriptive message so that we can differentiate the root causes.
+			if err != nil {
+				log.Errorf(ctx, "unable to update the state machine: %s", err)
+				// Report the fatal error separately and only with the error, as that
+				// triggers an optimization for which we directly report the error to
+				// sentry (which in turn allows sentry to distinguish different error
+				// types).
+				log.Fatal(ctx, err)
+			}
+		}
 
 		if filter := r.store.cfg.TestingKnobs.TestingPostApplyFilter; pErr == nil && filter != nil {
 			pErr = filter(storagebase.ApplyFilterArgs{
@@ -4407,6 +4438,9 @@ func (r *Replica) processRaftCommand(
 			})
 		}
 
+		// calling maybeSetCorrupt here is mostly for tests and looks. The
+		// interesting errors originate in applyRaftCommand, and they are
+		// already handled above.
 		pErr = r.maybeSetCorrupt(ctx, pErr)
 		if pErr == nil {
 			pErr = forcedErr
@@ -4462,21 +4496,21 @@ func (r *Replica) processRaftCommand(
 // applying the command to perform any necessary cleanup.
 func (r *Replica) maybeAcquireSplitMergeLock(
 	ctx context.Context, raftCmd storagebase.RaftCommand,
-) func(storagebase.ReplicatedEvalResult) {
+) (func(storagebase.ReplicatedEvalResult), error) {
 	if split := raftCmd.ReplicatedEvalResult.Split; split != nil {
 		return r.acquireSplitLock(ctx, &split.SplitTrigger)
 	} else if merge := raftCmd.ReplicatedEvalResult.Merge; merge != nil {
 		return r.acquireMergeLock(&merge.MergeTrigger)
 	}
-	return nil
+	return nil, nil
 }
 
 func (r *Replica) acquireSplitLock(
 	ctx context.Context, split *roachpb.SplitTrigger,
-) func(storagebase.ReplicatedEvalResult) {
+) (func(storagebase.ReplicatedEvalResult), error) {
 	rightRng, created, err := r.store.getOrCreateReplica(ctx, split.RightDesc.RangeID, 0, nil)
 	if err != nil {
-		return nil
+		return nil, err
 	}
 
 	// It would be nice to assert that rightRng is not initialized
@@ -4513,16 +4547,15 @@ func (r *Replica) acquireSplitLock(
 			r.store.mu.Unlock()
 		}
 		rightRng.raftMu.Unlock()
-	}
+	}, nil
 }
 
 func (r *Replica) acquireMergeLock(
 	merge *roachpb.MergeTrigger,
-) func(storagebase.ReplicatedEvalResult) {
+) (func(storagebase.ReplicatedEvalResult), error) {
 	rightRng, err := r.store.GetReplica(merge.RightDesc.RangeID)
 	if err != nil {
-		ctx := r.AnnotateCtx(context.TODO())
-		log.Fatalf(ctx, "unable to find merge RHS replica: %s", err)
+		return nil, err
 	}
 
 	// TODO(peter,tschottdorf): This is necessary but likely not sufficient. The
@@ -4530,21 +4563,21 @@ func (r *Replica) acquireMergeLock(
 	rightRng.raftMu.Lock()
 	return func(storagebase.ReplicatedEvalResult) {
 		rightRng.raftMu.Unlock()
-	}
+	}, nil
 }
 
 // applyRaftCommand applies a raft command from the replicated log to the
 // underlying state machine (i.e. the engine). When the state machine can not be
-// updated, an error (which is likely a ReplicaCorruptionError) is returned and
-// must be handled by the caller.
+// updated, an error (which is likely fatal!) is returned and must be handled by
+// the caller.
 func (r *Replica) applyRaftCommand(
 	ctx context.Context,
 	idKey storagebase.CmdIDKey,
 	rResult storagebase.ReplicatedEvalResult,
 	writeBatch *storagebase.WriteBatch,
-) (enginepb.MVCCStats, *roachpb.Error) {
+) (enginepb.MVCCStats, error) {
 	if rResult.State.RaftAppliedIndex <= 0 {
-		log.Fatalf(ctx, "raft command index is <= 0")
+		return enginepb.MVCCStats{}, errors.New("raft command index is <= 0")
 	}
 	if writeBatch != nil && len(writeBatch.Data) > 0 {
 		// Record the write activity, passing a 0 nodeID because replica.writeStats
@@ -4567,9 +4600,8 @@ func (r *Replica) applyRaftCommand(
 		// If we have an out of order index, there's corruption. No sense in
 		// trying to update anything or running the command. Simply return
 		// a corruption error.
-		return enginepb.MVCCStats{}, roachpb.NewError(NewReplicaCorruptionError(
-			errors.Errorf("applied index jumped from %d to %d",
-				oldRaftAppliedIndex, rResult.State.RaftAppliedIndex)))
+		return enginepb.MVCCStats{}, errors.Errorf("applied index jumped from %d to %d",
+			oldRaftAppliedIndex, rResult.State.RaftAppliedIndex)
 	}
 
 	batch := r.store.Engine().NewWriteOnlyBatch()
@@ -4577,8 +4609,7 @@ func (r *Replica) applyRaftCommand(
 
 	if writeBatch != nil {
 		if err := batch.ApplyBatchRepr(writeBatch.Data, false); err != nil {
-			return enginepb.MVCCStats{}, roachpb.NewError(NewReplicaCorruptionError(
-				errors.Wrap(err, "unable to apply WriteBatch")))
+			return enginepb.MVCCStats{}, errors.Wrap(err, "unable to apply WriteBatch")
 		}
 	}
 
@@ -4593,8 +4624,7 @@ func (r *Replica) applyRaftCommand(
 	var appliedIndexNewMS enginepb.MVCCStats
 	if err := r.raftMu.stateLoader.setAppliedIndexBlind(ctx, writer, &appliedIndexNewMS,
 		rResult.State.RaftAppliedIndex, rResult.State.LeaseAppliedIndex); err != nil {
-		return enginepb.MVCCStats{}, roachpb.NewError(NewReplicaCorruptionError(
-			errors.Wrap(err, "unable to set applied index")))
+		return enginepb.MVCCStats{}, errors.Wrap(err, "unable to set applied index")
 	}
 	rResult.Delta.SysBytes += appliedIndexNewMS.SysBytes -
 		r.raftMu.stateLoader.calcAppliedIndexSysBytes(oldRaftAppliedIndex, oldLeaseAppliedIndex)
@@ -4604,8 +4634,7 @@ func (r *Replica) applyRaftCommand(
 	// have to serialize on the stats key.
 	ms.Add(rResult.Delta)
 	if err := r.raftMu.stateLoader.setMVCCStats(ctx, writer, &ms); err != nil {
-		return enginepb.MVCCStats{}, roachpb.NewError(NewReplicaCorruptionError(
-			errors.Wrap(err, "unable to update MVCCStats")))
+		return enginepb.MVCCStats{}, errors.Wrap(err, "unable to update MVCCStats")
 	}
 
 	// TODO(peter): We did not close the writer in an earlier version of
@@ -4620,20 +4649,19 @@ func (r *Replica) applyRaftCommand(
 	if util.RaceEnabled && rResult.Split != nil && r.store.cfg.Settings.Version.IsActive(cluster.VersionSplitHardStateBelowRaft) {
 		oldHS, err := loadHardState(ctx, r.store.Engine(), rResult.Split.RightDesc.RangeID)
 		if err != nil {
-			log.Fatalf(ctx, "unable to load HardState: %s", err)
+			return enginepb.MVCCStats{}, errors.Wrap(err, "unable to load HardState")
 		}
 		assertHS = &oldHS
 	}
 	if err := batch.Commit(false); err != nil {
-		return enginepb.MVCCStats{}, roachpb.NewError(NewReplicaCorruptionError(
-			errors.Wrap(err, "could not commit batch")))
+		return enginepb.MVCCStats{}, errors.Wrap(err, "could not commit batch")
 	}
 
 	if assertHS != nil {
 		// Load the HardState that was just committed (if any).
 		newHS, err := loadHardState(ctx, r.store.Engine(), rResult.Split.RightDesc.RangeID)
 		if err != nil {
-			log.Fatalf(ctx, "unable to load HardState: %s", err)
+			return enginepb.MVCCStats{}, errors.Wrap(err, "unable to load HardState")
 		}
 		// Assert that nothing moved "backwards".
 		if newHS.Term < assertHS.Term || (newHS.Term == assertHS.Term && newHS.Commit < assertHS.Commit) {
