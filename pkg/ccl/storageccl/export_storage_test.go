@@ -23,7 +23,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/rlmcpherson/s3gof3r"
+	"github.com/aws/aws-sdk-go/aws/credentials"
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -277,12 +277,9 @@ func TestPutHttp(t *testing.T) {
 func TestPutS3(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	s3Keys, err := s3gof3r.EnvKeys()
+	creds, err := credentials.NewEnvCredentials().Get()
 	if err != nil {
-		s3Keys, err = s3gof3r.InstanceKeys()
-		if err != nil {
-			t.Skip("No AWS keys instance or env keys")
-		}
+		t.Skip("No AWS credentials")
 	}
 	bucket := os.Getenv("AWS_S3_BUCKET")
 	if bucket == "" {
@@ -296,8 +293,8 @@ func TestPutS3(t *testing.T) {
 		fmt.Sprintf(
 			"s3://%s/%s?%s=%s&%s=%s",
 			bucket, "backup-test",
-			S3AccessKeyParam, url.QueryEscape(s3Keys.AccessKey),
-			S3SecretParam, url.QueryEscape(s3Keys.SecretKey),
+			S3AccessKeyParam, url.QueryEscape(creds.AccessKeyID),
+			S3SecretParam, url.QueryEscape(creds.SecretAccessKey),
 		),
 		false,
 	)

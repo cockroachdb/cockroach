@@ -23,13 +23,19 @@ import (
 
 	gcs "cloud.google.com/go/storage"
 	azr "github.com/Azure/azure-sdk-for-go/storage"
+	"github.com/aws/aws-sdk-go/aws"
+	"github.com/aws/aws-sdk-go/aws/session"
+	"github.com/aws/aws-sdk-go/service/s3"
+	"github.com/aws/aws-sdk-go/service/s3/s3manager"
 	"github.com/pkg/errors"
-	"github.com/rlmcpherson/s3gof3r"
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
+
+	// Import this in the 1.1 branch so the vendor directory does not change.
+	_ "github.com/rlmcpherson/s3gof3r"
 )
 
 const (
@@ -125,7 +131,7 @@ func MakeExportStorage(ctx context.Context, dest roachpb.ExportStorage) (ExportS
 	case roachpb.ExportStorageProvider_Http:
 		return makeHTTPStorage(dest.HttpPath.BaseUri)
 	case roachpb.ExportStorageProvider_S3:
-		return makeS3Storage(dest.S3Config)
+		return makeS3Storage(ctx, dest.S3Config)
 	case roachpb.ExportStorageProvider_GoogleCloud:
 		return makeGCSStorage(ctx, dest.GoogleCloudConfig)
 	case roachpb.ExportStorageProvider_Azure:
@@ -304,22 +310,31 @@ func (h *httpStorage) req(method, file string, body io.Reader) (io.ReadCloser, e
 
 type s3Storage struct {
 	conf   *roachpb.ExportStorage_S3
-	bucket *s3gof3r.Bucket
 	prefix string
+	bucket *string
+	s3     *s3.S3
 }
 
 var _ ExportStorage = &s3Storage{}
 
-func makeS3Storage(conf *roachpb.ExportStorage_S3) (ExportStorage, error) {
+func makeS3Storage(ctx context.Context, conf *roachpb.ExportStorage_S3) (ExportStorage, error) {
 	if conf == nil {
 		return nil, errors.Errorf("s3 upload requested but info missing")
 	}
-	s3 := s3gof3r.New("", conf.Keys())
-	b := s3.Bucket(conf.Bucket)
+	sess, err := session.NewSession(conf.Keys())
+	if err != nil {
+		return nil, errors.Wrap(err, "new aws session")
+	}
+	region, err := s3manager.GetBucketRegion(ctx, sess, conf.Bucket, "us-east-1")
+	if err != nil {
+		return nil, errors.Wrap(err, "could not find s3 bucket's region")
+	}
+	sess.Config.Region = aws.String(region)
 	return &s3Storage{
 		conf:   conf,
-		bucket: b,
 		prefix: conf.Prefix,
+		bucket: aws.String(conf.Bucket),
+		s3:     s3.New(sess),
 	}, nil
 }
 
@@ -331,22 +346,31 @@ func (s *s3Storage) Conf() roachpb.ExportStorage {
 }
 
 func (s *s3Storage) WriteFile(_ context.Context, basename string, content io.ReadSeeker) error {
-	w, err := s.bucket.PutWriter(path.Join(s.prefix, basename), nil, nil)
-	if err != nil {
-		return errors.Wrap(err, "creating s3 writer")
-	}
-	defer w.Close()
-	_, err = io.Copy(w, content)
-	return errors.Wrap(err, "failed to copy to s3")
+	_, err := s.s3.PutObject(&s3.PutObjectInput{
+		Bucket: s.bucket,
+		Key:    aws.String(path.Join(s.prefix, basename)),
+		Body:   content,
+	})
+	return errors.Wrap(err, "failed to put s3 object")
 }
 
 func (s *s3Storage) ReadFile(_ context.Context, basename string) (io.ReadCloser, error) {
-	r, _, err := s.bucket.GetReader(path.Join(s.prefix, basename), nil)
-	return r, errors.Wrap(err, "failed to create s3 reader")
+	out, err := s.s3.GetObject(&s3.GetObjectInput{
+		Bucket: s.bucket,
+		Key:    aws.String(path.Join(s.prefix, basename)),
+	})
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to get s3 object")
+	}
+	return out.Body, nil
 }
 
 func (s *s3Storage) Delete(_ context.Context, basename string) error {
-	return s.bucket.Delete(path.Join(s.prefix, basename))
+	_, err := s.s3.DeleteObject(&s3.DeleteObjectInput{
+		Bucket: s.bucket,
+		Key:    aws.String(path.Join(s.prefix, basename)),
+	})
+	return err
 }
 
 func (s *s3Storage) Close() error {
