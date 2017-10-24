@@ -293,6 +293,11 @@ const (
 	ZonesTableID      = 5
 	SettingsTableID   = 6
 
+	// IDs for the important columns and indexes in the zones table live here to
+	// avoid introducing a dependency on sql/sqlbase throughout the codebase.
+	ZonesTablePrimaryIndexID = 1
+	ZonesTableConfigColumnID = 2
+
 	// Reserved IDs for other system tables. Note that some of these IDs refer
 	// to "Ranges" instead of a Table - these IDs are needed to store custom
 	// configuration for non-table ranges (e.g. Zone Configs).

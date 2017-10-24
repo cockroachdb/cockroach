@@ -21,6 +21,7 @@ import (
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
+	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/jobs"
@@ -82,7 +83,7 @@ func (tk tableKey) Name() string {
 func GetKeysForTableDescriptor(
 	tableDesc *sqlbase.TableDescriptor,
 ) (zoneKey roachpb.Key, nameKey roachpb.Key, descKey roachpb.Key) {
-	zoneKey = sqlbase.MakeZoneKey(tableDesc.ID)
+	zoneKey = config.MakeZoneKey(uint32(tableDesc.ID))
 	nameKey = sqlbase.MakeNameMetadataKey(tableDesc.ParentID, tableDesc.GetName())
 	descKey = sqlbase.MakeDescMetadataKey(tableDesc.ID)
 	return
