@@ -30,7 +30,7 @@ PROTOC_PLUGIN   := $(LOCAL_BIN)/protoc-gen-$(PLUGIN_SUFFIX)
 GOGOPROTO_PROTO := $(GOGO_PROTOBUF_PATH)/gogoproto/gogo.proto
 
 COREOS_PATH := $(GITHUB_ROOT)/coreos
-COREOS_RAFT_PROTOS := $(addprefix $(COREOS_PATH)/etcd/raft/, $(sort $(shell git -C $(COREOS_PATH)/etcd/raft ls-files --exclude-standard --cached --others -- '*.proto')))
+COREOS_RAFT_PROTOS := $(sort $(shell find $(COREOS_PATH)/etcd/raft -type f -name '*.proto'))
 
 GRPC_GATEWAY_PACKAGE := github.com/grpc-ecosystem/grpc-gateway
 GRPC_GATEWAY_PLUGIN  := $(LOCAL_BIN)/protoc-gen-grpc-gateway
@@ -48,7 +48,7 @@ GW_TS_PROTOS := $(PKG_ROOT)/ts/tspb/timeseries.proto
 GW_PROTOS  := $(GW_SERVER_PROTOS) $(GW_TS_PROTOS)
 GW_SOURCES := $(GW_PROTOS:%.proto=%.pb.gw.go)
 
-GO_PROTOS := $(addprefix $(REPO_ROOT)/, $(sort $(shell git -C $(REPO_ROOT) ls-files --exclude-standard --cached --others -- '*.proto')))
+GO_PROTOS := $(shell $(FIND_RELEVANT) -type f -name '*.proto')
 GO_SOURCES := $(GO_PROTOS:%.proto=%.pb.go)
 
 PBJS := $(NODE_RUN) $(UI_ROOT)/node_modules/.bin/pbjs
@@ -73,7 +73,7 @@ IMPORT_PREFIX := github.com/$(ORG_NAME)/
 
 GO_SOURCES_TARGET := $(LOCAL_BIN)/.go_protobuf_sources
 $(GO_SOURCES_TARGET): $(PROTOC) $(PROTOC_PLUGIN) $(GO_PROTOS) $(GOGOPROTO_PROTO)
-	(cd $(REPO_ROOT) && git ls-files --exclude-standard --cached --others -- '*.pb.go' | xargs rm -f)
+	$(FIND_RELEVANT) -type f -name '*.pb.go' -delete
 	for dir in $(sort $(dir $(GO_PROTOS))); do \
 	  $(PROTOC) -I.:$(GOGO_PROTOBUF_PATH):$(PROTOBUF_PATH):$(COREOS_PATH):$(GRPC_GATEWAY_GOOGLEAPIS_PATH) --plugin=$(PROTOC_PLUGIN) --$(PLUGIN_SUFFIX)_out=$(MAPPINGS),plugins=grpc,import_prefix=$(IMPORT_PREFIX):$(ORG_ROOT) $$dir/*.proto; \
 	done
@@ -86,14 +86,14 @@ $(GO_SOURCES_TARGET): $(PROTOC) $(PROTOC_PLUGIN) $(GO_PROTOS) $(GOGOPROTO_PROTO)
 
 GW_SOURCES_TARGET := $(LOCAL_BIN)/.gw_protobuf_sources
 $(GW_SOURCES_TARGET): $(PROTOC) $(GRPC_GATEWAY_PLUGIN) $(GW_SERVER_PROTOS) $(GW_TS_PROTOS) $(GO_PROTOS) $(GOGOPROTO_PROTO)
-	(cd $(REPO_ROOT) && git ls-files --exclude-standard --cached --others -- '*.pb.gw.go' | xargs rm -f)
+	$(FIND_RELEVANT) -type f -name '*.pb.gw.go' -delete
 	$(PROTOC) -I.:$(GOGO_PROTOBUF_PATH):$(PROTOBUF_PATH):$(COREOS_PATH):$(GRPC_GATEWAY_GOOGLEAPIS_PATH) --grpc-gateway_out=logtostderr=true,request_context=true:. $(GW_SERVER_PROTOS)
 	$(PROTOC) -I.:$(GOGO_PROTOBUF_PATH):$(PROTOBUF_PATH):$(COREOS_PATH):$(GRPC_GATEWAY_GOOGLEAPIS_PATH) --grpc-gateway_out=logtostderr=true,request_context=true:. $(GW_TS_PROTOS)
 	touch $@
 
 CPP_SOURCES_TARGET := $(LOCAL_BIN)/.cpp_protobuf_sources
 $(CPP_SOURCES_TARGET): $(PROTOC) $(CPP_PROTOS)
-	(cd $(REPO_ROOT) && git ls-files --exclude-standard --cached --others -- '*.pb.h' '*.pb.cc' | xargs rm -f)
+	$(FIND_RELEVANT) -type f \( -name '*.pb.h' -o -name '*.pb.cc' \) -delete
 	mkdir -p $(NATIVE_ROOT)
 	$(PROTOC) -I.:$(GOGO_PROTOBUF_PATH):$(PROTOBUF_PATH) --cpp_out=lite:$(NATIVE_ROOT) $(CPP_PROTOS)
 	$(SED_INPLACE) -E '/gogoproto/d' $(CPP_HEADERS) $(CPP_SOURCES)

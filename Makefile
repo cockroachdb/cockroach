@@ -220,11 +220,6 @@ testrace: override GOFLAGS += -race
 testrace: export GORACE := halt_on_error=1
 testrace: TESTTIMEOUT := $(RACETIMEOUT)
 
-# Directory scans in the builder image are excruciatingly slow when running
-# Docker for Mac, so we filter out the 20k+ UI dependencies that are
-# guaranteed to be irrelevant to save nearly 10s on every Make invocation.
-FIND_RELEVANT := find pkg -name node_modules -prune -o
-
 bin/logictest.test: PKG := ./pkg/sql/logictest
 bin/logictest.test: main.go $(shell $(FIND_RELEVANT) ! -name 'zcgo_flags.go' -name '*.go')
 	$(MAKE) gotestdashi GOFLAGS='$(GOFLAGS)' TAGS='$(TAGS)' LINKFLAGS='$(LINKFLAGS)' PKG='$(PKG)'
@@ -356,13 +351,17 @@ archive: $(ARCHIVE)
 $(ARCHIVE): $(ARCHIVE).tmp
 	gzip -c $< > $@
 
+# ARCHIVE_EXTRAS are hard-to-generate files and their prerequisites that are
+# pre-generated and distributed in source archives to minimize the number of
+# dependencies required for end-users to build from source.
+ARCHIVE_EXTRAS := pkg/ui/embedded.go pkg/ui/*-manifest.json pkg/ui/dist/*.dll.js pkg/ui/src/js/protos.*
+
 # TODO(benesch): Make this recipe use `git ls-files --recurse-submodules`
 # instead of scripts/ls-files.sh once Git v2.11 is widely deployed.
 .INTERMEDIATE: $(ARCHIVE).tmp
 $(ARCHIVE).tmp: ARCHIVE_BASE = cockroach-$(shell cat .buildinfo/tag)
-$(ARCHIVE).tmp: .buildinfo/tag .buildinfo/rev .buildinfo/basebranch
-	scripts/ls-files.sh | $(TAR) -cf $@ -T - $(TAR_XFORM_FLAG),^,$(ARCHIVE_BASE)/src/github.com/cockroachdb/cockroach/, $^
-	$(TAR) -rf $@ pkg/ui/embedded.go
+$(ARCHIVE).tmp: .buildinfo/tag .buildinfo/rev .buildinfo/basebranch | ui
+	scripts/ls-files.sh | $(TAR) -cf $@ -T - $(TAR_XFORM_FLAG),^,$(ARCHIVE_BASE)/src/github.com/cockroachdb/cockroach/, $^ $(ARCHIVE_EXTRAS)
 	(cd build/archive/contents && $(TAR) -rf ../../../$@ $(TAR_XFORM_FLAG),^,$(ARCHIVE_BASE)/, *)
 
 .buildinfo:
