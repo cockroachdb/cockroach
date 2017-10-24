@@ -672,13 +672,24 @@ func EnsureSafeSplitKey(key roachpb.Key) (roachpb.Key, error) {
 	return key[:idx], nil
 }
 
-// Range returns a key range encompassing all the keys in the Batch.
+// Range returns a key range encompassing the key ranges of all requests in the
+// Batch.
 func Range(ba roachpb.BatchRequest) (roachpb.RSpan, error) {
+	return RangeMatchingPred(ba, nil)
+}
+
+// RangeMatchingPred returns a key range encompassing the key ranges of all
+// requests in the Batch that match the provided predicate. If no predicate
+// is provided, no filtering will be performed on the requests in the Batch.
+func RangeMatchingPred(
+	ba roachpb.BatchRequest, pred func(roachpb.Request) bool,
+) (roachpb.RSpan, error) {
 	from := roachpb.RKeyMax
 	to := roachpb.RKeyMin
 	for _, arg := range ba.Requests {
 		req := arg.GetInner()
-		if _, ok := req.(*roachpb.NoopRequest); ok {
+		_, noop := req.(*roachpb.NoopRequest)
+		if noop || (pred != nil && !pred(req)) {
 			continue
 		}
 		h := req.Header()
