@@ -433,7 +433,18 @@ func dumpTableData(w io.Writer, conn *sqlConn, clusterTS string, md tableMetadat
 					default:
 						// STRING and DECIMAL types can have optional length
 						// suffixes, so only examine the prefix of the type.
-						if strings.HasPrefix(md.columnTypes[cols[si]], "STRING") {
+						// In addition, we can only observe ARRAY types by their [] suffix.
+						if strings.HasSuffix(md.columnTypes[cols[si]], "[]") {
+							typ := strings.TrimRight(md.columnTypes[cols[si]], "[]")
+							elemType, err := parser.StringToColType(typ)
+							if err != nil {
+								return err
+							}
+							d, err = parser.ParseDArrayFromString(parser.NewTestingEvalContext(), string(t), elemType)
+							if err != nil {
+								return err
+							}
+						} else if strings.HasPrefix(md.columnTypes[cols[si]], "STRING") {
 							d = parser.NewDString(string(t))
 						} else if strings.HasPrefix(md.columnTypes[cols[si]], "DECIMAL") {
 							d, err = parser.ParseDDecimal(string(t))

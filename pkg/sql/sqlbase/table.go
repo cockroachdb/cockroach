@@ -1780,9 +1780,7 @@ func parserTypeToEncodingType(t parser.Type) (encoding.Type, error) {
 		return encoding.Float, nil
 	case parser.TypeDecimal:
 		return encoding.Decimal, nil
-	case parser.TypeBytes:
-		return encoding.Bytes, nil
-	case parser.TypeString:
+	case parser.TypeBytes, parser.TypeString, parser.TypeName:
 		return encoding.Bytes, nil
 	case parser.TypeBytes:
 		return encoding.Bytes, nil

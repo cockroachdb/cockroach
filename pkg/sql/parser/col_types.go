@@ -603,3 +603,21 @@ func CastTargetToDatumType(t CastTargetType) Type {
 		panic(fmt.Sprintf("unexpected CastTarget %T", t))
 	}
 }
+
+// EachColType iterates over all column types.
+// This is not exhaustive yet, due to #19237.
+func EachColType(f func(ColumnType)) {
+	f(boolColTypeBool)
+	f(intColTypeInt)
+	f(floatColTypeFloat)
+	f(decimalColTypeDecimal)
+	f(timestampColTypeTimestamp)
+	f(timestampTzColTypeTimestampWithTZ)
+	f(intervalColTypeInterval)
+	f(uuidColTypeUUID)
+	f(ipnetColTypeINet)
+	f(dateColTypeDate)
+	f(stringColTypeString)
+	f(nameColTypeName)
+	f(bytesColTypeBytes)
+}
