@@ -89,6 +89,11 @@ $(call make-lazy,TAR_XFORM_FLAG)
 SED_INPLACE = sed $(shell sed --version 2>&1 | grep -q GNU && echo -i || echo "-i ''")
 $(call make-lazy,SED_INPLACE)
 
+# Directory scans in the builder image are excruciatingly slow when running
+# Docker for Mac, so we filter out the 20k+ UI dependencies that are
+# guaranteed to be irrelevant to save nearly 10s on every Make invocation.
+FIND_RELEVANT := find $(PKG_ROOT) -name node_modules -prune -o
+
 # This is how you get a literal space into a Makefile.
 space := $(eval) $(eval)
 
