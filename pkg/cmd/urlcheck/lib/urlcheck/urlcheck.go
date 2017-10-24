@@ -78,6 +78,7 @@ var ignored = []string{
 	"http://www.bohemiancoding.com/sketch/ns",
 	"http://www.w3.org/",
 	"https://www.w3.org/",
+	"http://maven.apache.org/POM/4.0.0",
 	// These report 404 for non-API GETs.
 	"http://ignored:ignored@errors.cockroachdb.com/",
 	"https://cockroachdb.github.io/distsqlplan/",
