@@ -27,6 +27,8 @@ import "gogoproto/gogo.proto";
 //   as well as whether there's an intersection between max values
 //   and TTL or a union.
 message GCPolicy {
+  option (gogoproto.equal) = true;
+
   // TTLSeconds specifies the maximum age of a value before it's
   // garbage collected. Only older versions of values are garbage
   // collected. Specifying <=0 mean older versions are never GC'd.
@@ -35,6 +37,7 @@ message GCPolicy {
 
 // Constraint constrains the stores a replica can be stored on.
 message Constraint {
+  option (gogoproto.equal) = true;
   option (gogoproto.goproto_stringer) = false;
 
   enum Type {
@@ -55,11 +58,15 @@ message Constraint {
 
 // Constraints is a collection of constraints.
 message Constraints {
+  option (gogoproto.equal) = true;
+
   repeated Constraint constraints = 6 [(gogoproto.nullable) = false];
 }
 
 // ZoneConfig holds configuration that applies to one or more ranges.
 message ZoneConfig {
+  option (gogoproto.equal) = true;
+
   reserved 1;
   optional int64 range_min_bytes = 2 [(gogoproto.nullable) = false, (gogoproto.moretags) = "yaml:\"range_min_bytes\""];
   optional int64 range_max_bytes = 3 [(gogoproto.nullable) = false, (gogoproto.moretags) = "yaml:\"range_max_bytes\""];
@@ -72,6 +79,56 @@ message ZoneConfig {
   // order in which the constraints are stored is arbitrary and may change.
   // https://github.com/cockroachdb/cockroach/blob/master/docs/RFCS/20160706_expressive_zone_config.md#constraint-system
   optional Constraints constraints = 6 [(gogoproto.nullable) = false, (gogoproto.moretags) = "yaml:\"constraints,flow\""];
+
+  // Subzones stores config overrides for "subzones", each of which represents
+  // either a SQL table index or a partition of a SQL table index. Subzones are
+  // not applicable when the zone does not represent a SQL table (i.e., when the
+  // zone represents a database, a special system range, or is itself a
+  // subzone.)
+  repeated Subzone subzones = 8 [(gogoproto.nullable) = false, (gogoproto.moretags) = "yaml:\"-\""];
+
+  // SubzoneSpans maps each key span in a subzone to the slice index of an entry
+  // in SubzoneConfig. Spans are non-overlapping and sorted by start key to
+  // allow binary searching. SubzoneSpans can be easily derived from a
+  // TableDescriptor, but are denormalized here to make GetZoneConfigForKey
+  // lookups efficient.
+  repeated SubzoneSpan subzone_spans = 7 [(gogoproto.nullable) = false, (gogoproto.moretags) = "yaml:\"-\""];
+}
+
+message Subzone {
+  option (gogoproto.equal) = true;
+
+  // IndexID is the ID of the SQL table index that the subzone represents.
+  optional uint32 index_id = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "IndexID"];
+
+  // PartitionName is the partition of the SQL table index that the subzone
+  // represents. It is empty when the subzone represents the entire index.
+  optional string partition_name = 2 [(gogoproto.nullable) = false];
+
+  // Config stores the ZoneConfig that applies to this Subzone. It never
+  // contains nested subzones.
+  optional ZoneConfig config = 3 [(gogoproto.nullable) = false];
+}
+
+message SubzoneSpan {
+  option (gogoproto.equal) = true;
+
+  // Key stores a key suffix that represents the inclusive lower bound for this
+  // span. The SQL table prefix, like /Table/51/, is omitted.
+  //
+  // Both Key and EndKey, below, are cast to roachpb.Key for convenience, but
+  // there's no technical restriction that prevents switching them to []byte or
+  // another type that communicates their missing prefix.
+  optional bytes key = 1 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.Key"];
+
+  // EndKey stores a key suffix that represents the exclusive upper bound for
+  // this span. Like with Key, the SQL table prefix is omitted. If EndKey is
+  // empty, it is assumed to be Key.PrefixEnd().
+  optional bytes end_key = 2 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.Key"];
+
+  // SubzoneIndex is the slice index of the Subzone this span belongs to in the
+  // parent ZoneConfig's Subzones field.
+  optional int32 subzone_index = 3 [(gogoproto.nullable) = false];
 }
 
 message SystemConfig {
