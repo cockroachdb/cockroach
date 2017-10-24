@@ -275,8 +275,16 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	if leaseManagerTestingKnobs := cfg.TestingKnobs.SQLLeaseManager; leaseManagerTestingKnobs != nil {
 		lmKnobs = *leaseManagerTestingKnobs.(*sql.LeaseManagerTestingKnobs)
 	}
-	s.leaseMgr = sql.NewLeaseManager(&s.nodeIDContainer, *s.db, s.clock, lmKnobs,
-		s.stopper, &s.internalMemMetrics, s.cfg.LeaseManagerConfig)
+	s.leaseMgr = sql.NewLeaseManager(
+		s.cfg.AmbientCtx,
+		&s.nodeIDContainer,
+		*s.db,
+		s.clock,
+		lmKnobs,
+		s.stopper,
+		&s.internalMemMetrics,
+		s.cfg.LeaseManagerConfig,
+	)
 	s.leaseMgr.RefreshLeases(s.stopper, s.db, s.gossip)
 
 	// We do not set memory monitors or a noteworthy limit because the children of

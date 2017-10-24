@@ -85,6 +85,10 @@ const (
 	// that we use to randomly jitter the lease duration when acquiring a
 	// new lease and the lease renewal timeout.
 	DefaultTableDescriptorLeaseJitterFraction = 0.25
+
+	// DefaultTableDescriptorLeaseRenewalTimeout is the default time
+	// before a lease expires when acquisition to renew the lease begins.
+	DefaultTableDescriptorLeaseRenewalTimeout = time.Minute
 )
 
 var defaultRaftElectionTimeoutTicks = envutil.EnvOrDefaultInt(
@@ -478,6 +482,10 @@ type LeaseManagerConfig struct {
 	// randomly jitter the lease duration when acquiring a new lease and
 	// the lease renewal timeout.
 	TableDescriptorLeaseJitterFraction float64
+
+	// DefaultTableDescriptorLeaseRenewalTimeout is the default time
+	// before a lease expires when acquisition to renew the lease begins.
+	TableDescriptorLeaseRenewalTimeout time.Duration
 }
 
 // NewLeaseManagerConfig initializes a LeaseManagerConfig with default values.
@@ -485,5 +493,6 @@ func NewLeaseManagerConfig() *LeaseManagerConfig {
 	return &LeaseManagerConfig{
 		TableDescriptorLeaseDuration:       DefaultTableDescriptorLeaseDuration,
 		TableDescriptorLeaseJitterFraction: DefaultTableDescriptorLeaseJitterFraction,
+		TableDescriptorLeaseRenewalTimeout: DefaultTableDescriptorLeaseRenewalTimeout,
 	}
 }
