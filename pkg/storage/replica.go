@@ -1904,13 +1904,7 @@ func (ec *endCmds) done(br *roachpb.BatchResponse, pErr *roachpb.Error, retry pr
 	// marked as affecting the cache are processed. Inconsistent reads
 	// are excluded.
 	if pErr == nil && retry == proposalNoRetry && ec.ba.ReadConsistency != roachpb.INCONSISTENT {
-		span, err := keys.Range(ec.ba)
-		if err != nil {
-			// This can't happen because we've already called keys.Range before
-			// evaluating the request.
-			log.Fatal(context.Background(), err)
-		}
-		creq := makeTSCacheRequest(&ec.ba, br, span)
+		creq := makeTSCacheRequest(&ec.ba, br)
 
 		if ec.repl.store.Clock().MaxOffset() == timeutil.ClocklessMaxOffset {
 			// Clockless mode: all reads count as writes.
@@ -1928,14 +1922,20 @@ func (ec *endCmds) done(br *roachpb.BatchResponse, pErr *roachpb.Error, retry pr
 }
 
 func makeTSCacheRequest(
-	ba *roachpb.BatchRequest, br *roachpb.BatchResponse, span roachpb.RSpan,
+	ba *roachpb.BatchRequest, br *roachpb.BatchResponse,
 ) tscache.Request {
 	cr := tscache.Request{
-		Span:      span,
 		Timestamp: ba.Timestamp,
 	}
 	if ba.Txn != nil {
 		cr.TxnID = ba.Txn.ID
+	}
+
+	var err error
+	if cr.Span, err = keys.RangeMatchingPred(*ba, roachpb.UpdatesTimestampCache); err != nil {
+		// This can't happen because we've already called keys.Range before
+		// evaluating the request.
+		log.Fatal(context.Background(), err)
 	}
 
 	for i, union := range ba.Requests {
@@ -2225,7 +2225,7 @@ func (r *Replica) removeCmdsFromCommandQueue(cmds batchCmdSet) {
 // will inform the batch response timestamp or batch response txn
 // timestamp.
 func (r *Replica) applyTimestampCache(ba *roachpb.BatchRequest) (bool, *roachpb.Error) {
-	span, err := keys.Range(*ba)
+	span, err := keys.RangeMatchingPred(*ba, roachpb.ConsultsTimestampCache)
 	if err != nil {
 		return false, roachpb.NewError(err)
 	}
