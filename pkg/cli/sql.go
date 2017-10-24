@@ -595,11 +595,6 @@ func (c *cliState) GetCompletions(_ string) []string {
 	return nil
 }
 
-// GetLeftPrompt implements the readline.LeftPromptGenerator interface.
-func (c *cliState) GetLeftPrompt() string {
-	return c.currentPrompt
-}
-
 func (c *cliState) doStart(nextState cliStateEnum) cliStateEnum {
 	// Common initialization.
 	c.partialLines = []string{}
@@ -610,7 +605,6 @@ func (c *cliState) doStart(nextState cliStateEnum) cliStateEnum {
 		c.smartPrompt = true
 		c.promptPrefix, c.fullPrompt, c.continuePrompt = preparePrompts(c.conn.url)
 
-		c.ins.SetLeftPrompt(c)
 		c.ins.SetCompleter(c)
 		if err := c.ins.UseHistory(-1 /*maxEntries*/, true /*dedup*/); err != nil {
 			log.Warningf(context.TODO(), "cannot enable history: %v", err)
@@ -653,6 +647,7 @@ func (c *cliState) doStartLine(nextState cliStateEnum) cliStateEnum {
 
 	if isInteractive {
 		c.currentPrompt = c.fullPrompt
+		c.ins.SetLeftPrompt(c.currentPrompt)
 	}
 
 	return nextState
@@ -663,6 +658,7 @@ func (c *cliState) doContinueLine(nextState cliStateEnum) cliStateEnum {
 
 	if isInteractive {
 		c.currentPrompt = c.continuePrompt
+		c.ins.SetLeftPrompt(c.currentPrompt)
 	}
 
 	return nextState
