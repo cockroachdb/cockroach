@@ -17,6 +17,7 @@ package storage
 import (
 	"bytes"
 	"fmt"
+	"math"
 	"math/rand"
 	"reflect"
 	"sort"
@@ -693,7 +694,7 @@ func TestRebalanceToDiversityScore(t *testing.T) {
 	}
 }
 
-func TestDiversityRemovalScore(t *testing.T) {
+func TestDiversityRemovalAverageScore(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	testCases := []struct {
@@ -703,51 +704,51 @@ func TestDiversityRemovalScore(t *testing.T) {
 		{
 			name: "four existing replicas",
 			expected: map[roachpb.StoreID]float64{
-				testStoreUSa15:  1.0 / 4.0,
-				testStoreUSa1:   1.0 / 4.0,
-				testStoreUSb:    1.0 / 2.0,
-				testStoreEurope: 1,
+				testStoreUSa15:  1.0 / (1.0 + (2.0*(0.5+1.0+1.0))/6.0),
+				testStoreUSa1:   1.0 / (1.0 + (2.0*(0.5+1.0+1.0))/6.0),
+				testStoreUSb:    1.0 / (1.0 + (2.0*(1.0+1.0+0.25))/6.0),
+				testStoreEurope: 1.0 / (1.0 + (2.0*(0.25+0.5+0.5))/6.0),
 			},
 		},
 		{
 			name: "four existing replicas with duplicate",
 			expected: map[roachpb.StoreID]float64{
-				testStoreUSa15:     0,
-				testStoreUSa15Dupe: 0,
-				testStoreUSb:       1.0 / 2.0,
-				testStoreEurope:    1,
+				testStoreUSa15:     1.0 / (1.0 + (2.0*(0.5+1.0+1.0))/6.0),
+				testStoreUSa15Dupe: 1.0 / (1.0 + (2.0*(0.5+1.0+1.0))/6.0),
+				testStoreUSb:       1.0 / (1.0 + (2.0*(0.0+1.0+1.0))/6.0),
+				testStoreEurope:    1.0 / (1.0 + (2.0*(0.0+0.5+0.5))/6.0),
 			},
 		},
 		{
 			name: "three existing replicas - excluding testStoreUSa15",
 			expected: map[roachpb.StoreID]float64{
-				testStoreUSa1:   1.0 / 2.0,
-				testStoreUSb:    1.0 / 2.0,
-				testStoreEurope: 1,
+				testStoreUSa1:   1.0 / (1.0 + (2.0*1.0)/2.0),
+				testStoreUSb:    1.0 / (1.0 + (2.0*1.0)/2.0),
+				testStoreEurope: 1.0 / (1.0 + (2.0*0.5)/2.0),
 			},
 		},
 		{
 			name: "three existing replicas - excluding testStoreUSa1",
 			expected: map[roachpb.StoreID]float64{
-				testStoreUSa15:  1.0 / 2.0,
-				testStoreUSb:    1.0 / 2.0,
-				testStoreEurope: 1,
+				testStoreUSa15:  1.0 / (1.0 + (2.0*1.0)/2.0),
+				testStoreUSb:    1.0 / (1.0 + (2.0*1.0)/2.0),
+				testStoreEurope: 1.0 / (1.0 + (2.0*0.5)/2.0),
 			},
 		},
 		{
 			name: "three existing replicas - excluding testStoreUSb",
 			expected: map[roachpb.StoreID]float64{
-				testStoreUSa15:  1.0 / 4.0,
-				testStoreUSa1:   1.0 / 4.0,
-				testStoreEurope: 1.0,
+				testStoreUSa15:  1.0 / (1.0 + (2.0*1.0)/2.0),
+				testStoreUSa1:   1.0 / (1.0 + (2.0*1.0)/2.0),
+				testStoreEurope: 1.0 / (1.0 + (2.0*0.25)/2.0),
 			},
 		},
 		{
 			name: "three existing replicas - excluding testStoreEurope",
 			expected: map[roachpb.StoreID]float64{
-				testStoreUSa15: 1.0 / 4.0,
-				testStoreUSa1:  1.0 / 4.0,
-				testStoreUSb:   1.0 / 2.0,
+				testStoreUSa15: 1.0 / (1.0 + (2.0*0.5)/2.0),
+				testStoreUSa1:  1.0 / (1.0 + (2.0*0.5)/2.0),
+				testStoreUSb:   1.0 / (1.0 + (2.0*0.25)/2.0),
 			},
 		},
 	}
@@ -764,13 +765,13 @@ func TestDiversityRemovalScore(t *testing.T) {
 				if _, ok := tc.expected[s.StoreID]; !ok {
 					continue
 				}
-				actualScore := diversityRemovalScore(s.Node.NodeID, existingNodeLocalities)
+				actualScore := diversityRemovalAverageScore(s.Node.NodeID, existingNodeLocalities)
 				expectedScore, ok := tc.expected[s.StoreID]
 				if !ok {
 					t.Fatalf("no expected score found for storeID %d", s.StoreID)
 				}
-				if actualScore != expectedScore {
-					t.Errorf("store %d expected diversity removal score: %.2f, actual %.2f", s.StoreID, expectedScore, actualScore)
+				if math.Dim(actualScore, expectedScore) >= 0.000001 {
+					t.Errorf("store %d expected diversity removal score: %.10f, actual %.10f", s.StoreID, expectedScore, actualScore)
 				}
 			}
 		})

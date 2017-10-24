@@ -369,7 +369,7 @@ func removeCandidates(
 			})
 			continue
 		}
-		diversityScore := diversityRemovalScore(s.Node.NodeID, existingNodeLocalities)
+		diversityScore := diversityRemovalAverageScore(s.Node.NodeID, existingNodeLocalities)
 		balanceScore := balanceScore(st, sl, s.Capacity, rangeInfo)
 		var convergesScore int
 		if !rebalanceFromConvergesOnMean(st, sl, s.Capacity, rangeInfo) {
@@ -731,6 +731,34 @@ func diversityRemovalScore(
 		}
 	}
 	return minScore
+}
+
+// diversityRemovalAverageScore is the same as diversityScore, but for a node that's
+// already present in existingNodeLocalities. It works by calculating the
+// average diversityScore for nodeID as if nodeID didn't already have a replica.
+// As with diversityScore, a higher score indicates that the node is a better
+// fit for the range (i.e. keeping it around is good for diversity).
+func diversityRemovalAverageScore(
+	nodeID roachpb.NodeID, existingNodeLocalities map[roachpb.NodeID]roachpb.Locality,
+) float64 {
+	var sumScore float64
+	for otherNodeID, otherLocality := range existingNodeLocalities {
+		if otherNodeID == nodeID {
+			continue
+		}
+		for anotherNodeID, anotherLocality := range existingNodeLocalities {
+			if anotherNodeID == nodeID || anotherNodeID == otherNodeID {
+				continue
+			}
+			newScore := anotherLocality.DiversityScore(otherLocality)
+			sumScore += newScore
+		}
+	}
+	if len(existingNodeLocalities) < 3 {
+		return 1.0 / (1.0 + sumScore)
+	}
+	num := len(existingNodeLocalities) - 1
+	return 1.0 / (1.0 + sumScore/float64(num*(num-1)))
 }
 
 // rebalanceToDiversityScore is like diversityScore, but it returns what
