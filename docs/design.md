@@ -1073,7 +1073,7 @@ the datacenters from which replicas for ranges which fall under
 the zone must be chosen.
 
 Please see
-[pkg/config/config.proto](https://github.com/cockroachdb/cockroach/blob/master/pkg/config/config.proto)
+[pkg/config/zone.proto](https://github.com/cockroachdb/cockroach/blob/master/pkg/config/zone.proto)
 for up-to-date data structures used, the best entry point being
 `message ZoneConfig`.
 

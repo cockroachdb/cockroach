@@ -16,7 +16,7 @@ syntax = "proto3";
 package cockroach.server.serverpb;
 option go_package = "serverpb";
 
-import "cockroach/pkg/config/config.proto";
+import "cockroach/pkg/config/zone.proto";
 import "cockroach/pkg/sql/jobs/jobs.proto";
 import "cockroach/pkg/storage/engine/enginepb/mvcc.proto";
 import "cockroach/pkg/storage/liveness.proto";
