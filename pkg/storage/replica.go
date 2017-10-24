@@ -2001,7 +2001,7 @@ func makeTSCacheRequest(
 
 	// Create a ByteAllocator with exactly the number of bytes we'll need for
 	// all keys in the CacheRequest. It should never need to re-alloc.
-	alloc := bufalloc.ByteAllocator(make([]byte, keysSize))
+	alloc := bufalloc.ByteAllocator(nil)
 	alloc, cr.Span = alloc.CopyRSpan(span)
 
 	for i, union := range ba.Requests {

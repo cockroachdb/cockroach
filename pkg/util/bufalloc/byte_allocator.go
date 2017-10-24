@@ -75,7 +75,8 @@ func (a ByteAllocator) CopySpan(src roachpb.Span) (ByteAllocator, roachpb.Span) 
 	var dst roachpb.Span
 	extraCap := 0
 	if len(src.EndKey) > 0 {
-		a, dst.EndKey = a.Copy(src.EndKey, 0)
+		dst.EndKey = make([]byte, len(src.EndKey))
+		copy(dst.EndKey, src.EndKey)
 	} else {
 		// In a few places including in the TimestampCache we translate
 		// [Key, nil) -> [Key, Key.Next()). If the start key has enough
@@ -83,7 +84,8 @@ func (a ByteAllocator) CopySpan(src roachpb.Span) (ByteAllocator, roachpb.Span) 
 		// can instead share the same memory with the start key.
 		extraCap = 1
 	}
-	a, dst.Key = a.Copy(src.Key, extraCap)
+	dst.Key = make([]byte, len(src.Key), len(src.Key)+extraCap)
+	copy(dst.Key, src.Key)
 	return a, dst
 }
 
