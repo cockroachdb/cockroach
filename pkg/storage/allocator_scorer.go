@@ -321,7 +321,7 @@ func allocateCandidates(
 		if !maxCapacityCheck(s) {
 			continue
 		}
-		diversityScore := diversityScore(s, existingNodeLocalities)
+		diversityScore := diversityAllocateScore(s, existingNodeLocalities)
 		balanceScore := balanceScore(sl, s.Capacity, rangeInfo, options)
 		candidates = append(candidates, candidate{
 			store:           s,
@@ -501,7 +501,17 @@ func rebalanceCandidates(
 				rangeCount:      int(s.Capacity.RangeCount),
 				details:         fmt.Sprintf("diversity=%.2f, preferred=%d", diversityScore, storeInfo.matched),
 			})
-		} else {
+		}
+	}
+	if options.deterministic {
+		sort.Sort(sort.Reverse(byScoreAndID(existingCandidates)))
+	} else {
+		sort.Sort(sort.Reverse(byScore(existingCandidates)))
+	}
+	for _, s := range sl.stores {
+		storeInfo := storeInfos[s.StoreID]
+		maxCapacityOK := maxCapacityCheck(s)
+		if _, ok := existingStoreIDs[s.StoreID]; !ok {
 			if !storeInfo.ok || !maxCapacityOK {
 				continue
 			}
@@ -519,7 +529,7 @@ func rebalanceCandidates(
 					s, rangeInfo, balanceScore, sl)
 				continue
 			}
-			diversityScore := rebalanceToDiversityScore(s, existingNodeLocalities)
+			diversityScore := diversityRebalanceScore(existingCandidates[len(existingCandidates)-1].store, s, existingNodeLocalities)
 			candidates = append(candidates, candidate{
 				store:           s,
 				valid:           true,
@@ -533,10 +543,8 @@ func rebalanceCandidates(
 	}
 
 	if options.deterministic {
-		sort.Sort(sort.Reverse(byScoreAndID(existingCandidates)))
 		sort.Sort(sort.Reverse(byScoreAndID(candidates)))
 	} else {
-		sort.Sort(sort.Reverse(byScore(existingCandidates)))
 		sort.Sort(sort.Reverse(byScore(candidates)))
 	}
 
@@ -697,63 +705,74 @@ func constraintCheck(store roachpb.StoreDescriptor, constraints config.Constrain
 	return true, positive
 }
 
-// diversityScore returns a score between 1 and 0 where higher scores are stores
-// with the fewest locality tiers in common with already existing replicas.
-func diversityScore(
+// diversityAllocateScore returns a score between 1 and 0. It is only used for allocateCandidates.
+// A much higher score just means the store may be a better fit for allocate taget.
+func diversityAllocateScore(
 	store roachpb.StoreDescriptor, existingNodeLocalities map[roachpb.NodeID]roachpb.Locality,
 ) float64 {
-	minScore := roachpb.MaxDiversityScore
+	var sumScore float64
+	var numSamples int
+	// We didn't calculate the overall diversityScore for the range, because the original overall diversityScore
+	// of this range is always the same.
 	for _, locality := range existingNodeLocalities {
-		if newScore := store.Node.Locality.DiversityScore(locality); newScore < minScore {
-			minScore = newScore
-		}
+		newScore := store.Node.Locality.DiversityScore(locality)
+		sumScore += newScore
+		numSamples++
 	}
-	return minScore
+	// When this range has no replica, it means any node will be a perfect fit for this range.
+	if numSamples == 0 {
+		return 1.0
+	}
+	return sumScore / float64(numSamples)
 }
 
-// diversityRemovalScore is the same as diversityScore, but for a node that's
-// already present in existingNodeLocalities. It works by calculating the
-// diversityScore for nodeID as if nodeID didn't already have a replica.
-// As with diversityScore, a higher score indicates that the node is a better
-// fit for the range (i.e. keeping it around is good for diversity).
+// diversityRemovalScore calculates the average diversityScore if we try to remove the replica from this node.
+// A higher score indicates that the node is a better fit for the range (i.e. keeping it around is good for diversity).
 func diversityRemovalScore(
 	nodeID roachpb.NodeID, existingNodeLocalities map[roachpb.NodeID]roachpb.Locality,
 ) float64 {
-	minScore := roachpb.MaxDiversityScore
+	var sumScore float64
+	var numSamples int
 	locality := existingNodeLocalities[nodeID]
+	// We didn't calculate the overall diversityScore for the range, because the original overall diversityScor
+	// of this range is always the same.
 	for otherNodeID, otherLocality := range existingNodeLocalities {
 		if otherNodeID == nodeID {
 			continue
 		}
-		if newScore := otherLocality.DiversityScore(locality); newScore < minScore {
-			minScore = newScore
-		}
+		newScore := locality.DiversityScore(otherLocality)
+		sumScore += newScore
+		numSamples++
 	}
-	return minScore
+	if numSamples == 0 {
+		return 0
+	}
+	return sumScore / float64(numSamples)
 }
 
-// rebalanceToDiversityScore is like diversityScore, but it returns what
-// the diversity score would be if the given store was added and one of the
-// existing stores was removed. This is equivalent to the second lowest score.
-//
-// This is useful for considering rebalancing a range that already has enough
-// replicas - it's perfectly fine to add a replica in the same locality as an
-// existing replica in such cases.
-func rebalanceToDiversityScore(
-	store roachpb.StoreDescriptor, existingNodeLocalities map[roachpb.NodeID]roachpb.Locality,
+// diversityRebalanceScore is a little complicated, we should coalesce the upcoming removing
+// replica together. A much higher score means the rebalance target store is a better fit for the range.
+func diversityRebalanceScore(
+	removeStore roachpb.StoreDescriptor,
+	rebalanceStore roachpb.StoreDescriptor,
+	existingNodeLocalities map[roachpb.NodeID]roachpb.Locality,
 ) float64 {
-	minScore := roachpb.MaxDiversityScore
-	nextMinScore := roachpb.MaxDiversityScore
-	for _, locality := range existingNodeLocalities {
-		newScore := store.Node.Locality.DiversityScore(locality)
-		if newScore < minScore {
-			nextMinScore = minScore
-			minScore = newScore
-		} else if newScore < nextMinScore {
-			nextMinScore = newScore
+	var sumScore float64
+	var numSamples int
+	for nodeID, locality := range existingNodeLocalities {
+		if nodeID == removeStore.Node.NodeID {
+			continue
 		}
+		newScore := rebalanceStore.Node.Locality.DiversityScore(locality)
+		sumScore += newScore
+		numSamples++
 	}
-	return nextMinScore
+	// When this range has no replica, it means any node will be a perfect fit for this range.
+	// (it will never happen in the normal case).
+	if numSamples == 0 {
+		return 1.0
+	}
+	return sumScore / float64(numSamples)
 }
 
 type rangeCountStatus int
