@@ -17,7 +17,6 @@ package sql_test
 import (
 	"testing"
 
-	"github.com/gogo/protobuf/proto"
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
@@ -100,8 +99,9 @@ func TestGetZoneConfig(t *testing.T) {
 	defaultZoneConfig.GC.TTLSeconds = 60
 
 	type testCase struct {
-		objectID uint32
-		zoneCfg  config.ZoneConfig
+		objectID  uint32
+		keySuffix []byte
+		zoneCfg   config.ZoneConfig
 	}
 	verifyZoneConfigs := func(testCases []testCase) {
 		cfg := forceNewConfig(t, s)
@@ -109,22 +109,23 @@ func TestGetZoneConfig(t *testing.T) {
 		for tcNum, tc := range testCases {
 			// Verify SystemConfig.GetZoneConfigForKey.
 			{
-				zoneCfg, err := cfg.GetZoneConfigForKey(keys.MakeTablePrefix(tc.objectID))
+				key := append(keys.MakeTablePrefix(tc.objectID), tc.keySuffix...)
+				zoneCfg, err := cfg.GetZoneConfigForKey(key)
 				if err != nil {
 					t.Fatalf("#%d: err=%s", tcNum, err)
 				}
 
-				if !proto.Equal(&zoneCfg, &tc.zoneCfg) {
-					t.Errorf("#%d: bad zone config.\nexpected: %+v\ngot: %+v", tcNum, &tc.zoneCfg, zoneCfg)
+				if !tc.zoneCfg.Equal(zoneCfg) {
+					t.Errorf("#%d: bad zone config.\nexpected: %+v\ngot: %+v", tcNum, tc.zoneCfg, zoneCfg)
 				}
 			}
 
 			// Verify sql.GetZoneConfigInTxn.
 			if err := s.DB().Txn(context.Background(), func(ctx context.Context, txn *client.Txn) error {
-				if zoneCfg, _, err := sql.GetZoneConfigInTxn(ctx, txn, tc.objectID); err != nil {
+				if zoneCfg, _, err := sql.GetZoneConfigInTxn(ctx, txn, tc.objectID, tc.keySuffix); err != nil {
 					return err
-				} else if !proto.Equal(&zoneCfg, &tc.zoneCfg) {
-					t.Errorf("#%d: bad zone config.\nexpected: %+v\ngot: %+v", tcNum, &tc.zoneCfg, zoneCfg)
+				} else if !tc.zoneCfg.Equal(zoneCfg) {
+					t.Errorf("#%d: bad zone config.\nexpected: %+v\ngot: %+v", tcNum, tc.zoneCfg, zoneCfg)
 				}
 				return nil
 			}); err != nil {
@@ -191,26 +192,32 @@ func TestGetZoneConfig(t *testing.T) {
 
 	// We have no custom zone configs.
 	verifyZoneConfigs([]testCase{
-		{0, defaultZoneConfig},
-		{1, defaultZoneConfig},
-		{keys.MaxReservedDescID, defaultZoneConfig},
-		{db1, defaultZoneConfig},
-		{db2, defaultZoneConfig},
-		{tb11, defaultZoneConfig},
-		{tb12, defaultZoneConfig},
-		{tb21, defaultZoneConfig},
-		{tb22, defaultZoneConfig},
+		{0, nil, defaultZoneConfig},
+		{1, nil, defaultZoneConfig},
+		{keys.MaxReservedDescID, nil, defaultZoneConfig},
+		{db1, nil, defaultZoneConfig},
+		{db2, nil, defaultZoneConfig},
+		{tb11, nil, defaultZoneConfig},
+		{tb11, []byte{42}, defaultZoneConfig},
+		{tb12, nil, defaultZoneConfig},
+		{tb12, []byte{42}, defaultZoneConfig},
+		{tb21, nil, defaultZoneConfig},
+		{tb22, nil, defaultZoneConfig},
 	})
 
 	// Now set some zone configs. We don't have a nice way of using table
 	// names for this, so we do raw puts.
-	// Here is the list of dbs/tables and whether they have a custom zone config:
+	// Here is the list of dbs/tables/partitions and whether they have a custom
+	// zone config:
 	// db1: true
 	//   tb1: true
 	//   tb2: false
-	// db1: false
+	// db2: false
 	//   tb1: true
+	//     p1: true [1, 2), [6, 7)
+	//     p2: true [3, 5)
 	//   tb2: false
+	//     p1: true  [1, 255)
 	db1Cfg := config.ZoneConfig{
 		NumReplicas: 1,
 		Constraints: config.Constraints{Constraints: []config.Constraint{{Value: "db1"}}},
@@ -219,14 +226,40 @@ func TestGetZoneConfig(t *testing.T) {
 		NumReplicas: 1,
 		Constraints: config.Constraints{Constraints: []config.Constraint{{Value: "db1.tb1"}}},
 	}
+	p211Cfg := config.ZoneConfig{
+		NumReplicas: 1,
+		Constraints: config.Constraints{Constraints: []config.Constraint{{Value: "db2.tb1.p1"}}},
+	}
+	p212Cfg := config.ZoneConfig{
+		NumReplicas: 1,
+		Constraints: config.Constraints{Constraints: []config.Constraint{{Value: "db2.tb1.p2"}}},
+	}
 	tb21Cfg := config.ZoneConfig{
 		NumReplicas: 1,
 		Constraints: config.Constraints{Constraints: []config.Constraint{{Value: "db2.tb1"}}},
+		Subzones:    []config.Subzone{{Config: p211Cfg}, {Config: p212Cfg}},
+		SubzoneSpans: []config.SubzoneSpan{
+			{SubzoneIndex: 0, Key: []byte{1}},
+			{SubzoneIndex: 1, Key: []byte{3}, EndKey: []byte{5}},
+			{SubzoneIndex: 0, Key: []byte{6}},
+		},
+	}
+	p221Cfg := config.ZoneConfig{
+		NumReplicas: 1,
+		Constraints: config.Constraints{Constraints: []config.Constraint{{Value: "db2.tb2.p1"}}},
+	}
+	tb22Cfg := config.ZoneConfig{
+		NumReplicas: 0,
+		Subzones:    []config.Subzone{{Config: p221Cfg}},
+		SubzoneSpans: []config.SubzoneSpan{
+			{SubzoneIndex: 0, Key: []byte{1}, EndKey: []byte{255}},
+		},
 	}
 	for objID, objZone := range map[uint32]config.ZoneConfig{
 		db1:  db1Cfg,
 		tb11: tb11Cfg,
 		tb21: tb21Cfg,
+		tb22: tb22Cfg,
 	} {
 		buf, err := protoutil.Marshal(&objZone)
 		if err != nil {
@@ -238,15 +271,29 @@ func TestGetZoneConfig(t *testing.T) {
 	}
 
 	verifyZoneConfigs([]testCase{
-		{0, defaultZoneConfig},
-		{1, defaultZoneConfig},
-		{keys.MaxReservedDescID, defaultZoneConfig},
-		{db1, db1Cfg},
-		{db2, defaultZoneConfig},
-		{tb11, tb11Cfg},
-		{tb12, db1Cfg},
-		{tb21, tb21Cfg},
-		{tb22, defaultZoneConfig},
+		{0, nil, defaultZoneConfig},
+		{1, nil, defaultZoneConfig},
+		{keys.MaxReservedDescID, nil, defaultZoneConfig},
+		{db1, nil, db1Cfg},
+		{db2, nil, defaultZoneConfig},
+		{tb11, nil, tb11Cfg},
+		{tb11, []byte{42}, tb11Cfg},
+		{tb12, nil, db1Cfg},
+		{tb12, []byte{42}, db1Cfg},
+		{tb21, nil, tb21Cfg},
+		{tb21, []byte{}, tb21Cfg},
+		{tb21, []byte{0}, tb21Cfg},
+		{tb21, []byte{1}, p211Cfg},
+		{tb21, []byte{1, 255}, p211Cfg},
+		{tb21, []byte{2}, tb21Cfg},
+		{tb21, []byte{3}, p212Cfg},
+		{tb21, []byte{4}, p212Cfg},
+		{tb21, []byte{5}, tb21Cfg},
+		{tb21, []byte{6}, p211Cfg},
+		{tb22, nil, defaultZoneConfig},
+		{tb22, []byte{0}, defaultZoneConfig},
+		{tb22, []byte{1}, p221Cfg},
+		{tb22, []byte{255}, defaultZoneConfig},
 	})
 }
 

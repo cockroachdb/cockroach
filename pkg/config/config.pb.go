@@ -12,6 +12,8 @@
 		Constraint
 		Constraints
 		ZoneConfig
+		Subzone
+		SubzoneSpan
 		SystemConfig
 */
 package config
@@ -20,6 +22,10 @@ import proto "github.com/gogo/protobuf/proto"
 import fmt "fmt"
 import math "math"
 import cockroach_roachpb1 "github.com/cockroachdb/cockroach/pkg/roachpb"
+
+import github_com_cockroachdb_cockroach_pkg_roachpb "github.com/cockroachdb/cockroach/pkg/roachpb"
+
+import bytes "bytes"
 
 import io "io"
 
@@ -129,12 +135,62 @@ type ZoneConfig struct {
 	// order in which the constraints are stored is arbitrary and may change.
 	// https://github.com/cockroachdb/cockroach/blob/master/docs/RFCS/20160706_expressive_zone_config.md#constraint-system
 	Constraints Constraints `protobuf:"bytes,6,opt,name=constraints" json:"constraints" yaml:"constraints,flow"`
+	// Subzones stores config overrides for "subzones", each of which represents
+	// either a SQL table index or a partition of a SQL table index. Subzones are
+	// not applicable when the zone does not represent a SQL table (i.e., when the
+	// zone represents a database, a special system range, or is itself a
+	// subzone.)
+	Subzones []Subzone `protobuf:"bytes,8,rep,name=subzones" json:"subzones" yaml:"-"`
+	// SubzoneSpans maps each key span in a subzone to the slice index of an entry
+	// in SubzoneConfig. Spans are non-overlapping and sorted by start key to
+	// allow binary searching. SubzoneSpans can be easily derived from a
+	// TableDescriptor, but are denormalized here to make GetZoneConfigForKey
+	// lookups efficient.
+	SubzoneSpans []SubzoneSpan `protobuf:"bytes,7,rep,name=subzone_spans,json=subzoneSpans" json:"subzone_spans" yaml:"-"`
 }
 
 func (m *ZoneConfig) Reset()                    { *m = ZoneConfig{} }
 func (m *ZoneConfig) String() string            { return proto.CompactTextString(m) }
 func (*ZoneConfig) ProtoMessage()               {}
 func (*ZoneConfig) Descriptor() ([]byte, []int) { return fileDescriptorConfig, []int{3} }
+
+type Subzone struct {
+	// IndexID is the ID of the SQL table index that the subzone represents.
+	IndexID uint32 `protobuf:"varint,1,opt,name=index_id,json=indexId" json:"index_id"`
+	// PartitionName is the partition of the SQL table index that the subzone
+	// represents. It is empty when the subzone represents the entire index.
+	PartitionName string `protobuf:"bytes,2,opt,name=partition_name,json=partitionName" json:"partition_name"`
+	// Config stores the ZoneConfig that applies to this Subzone. It never
+	// contains nested subzones.
+	Config ZoneConfig `protobuf:"bytes,3,opt,name=config" json:"config"`
+}
+
+func (m *Subzone) Reset()                    { *m = Subzone{} }
+func (m *Subzone) String() string            { return proto.CompactTextString(m) }
+func (*Subzone) ProtoMessage()               {}
+func (*Subzone) Descriptor() ([]byte, []int) { return fileDescriptorConfig, []int{4} }
+
+type SubzoneSpan struct {
+	// Key stores a key suffix that represents the inclusive lower bound for this
+	// span. The SQL table prefix, like /Table/51/, is omitted.
+	//
+	// Both Key and EndKey, below, are cast to roachpb.Key for convenience, but
+	// there's no technical restriction that prevents switching them to []byte or
+	// another type that communicates their missing prefix.
+	Key github_com_cockroachdb_cockroach_pkg_roachpb.Key `protobuf:"bytes,1,opt,name=key,casttype=github.com/cockroachdb/cockroach/pkg/roachpb.Key" json:"key,omitempty"`
+	// EndKey stores a key suffix that represents the exclusive upper bound for
+	// this span. Like with Key, the SQL table prefix is omitted. If EndKey is
+	// empty, it is assumed to be Key.PrefixEnd().
+	EndKey github_com_cockroachdb_cockroach_pkg_roachpb.Key `protobuf:"bytes,2,opt,name=end_key,json=endKey,casttype=github.com/cockroachdb/cockroach/pkg/roachpb.Key" json:"end_key,omitempty"`
+	// SubzoneIndex is the slice index of the Subzone this span belongs to in the
+	// parent ZoneConfig's Subzones field.
+	SubzoneIndex int32 `protobuf:"varint,3,opt,name=subzone_index,json=subzoneIndex" json:"subzone_index"`
+}
+
+func (m *SubzoneSpan) Reset()                    { *m = SubzoneSpan{} }
+func (m *SubzoneSpan) String() string            { return proto.CompactTextString(m) }
+func (*SubzoneSpan) ProtoMessage()               {}
+func (*SubzoneSpan) Descriptor() ([]byte, []int) { return fileDescriptorConfig, []int{5} }
 
 type SystemConfig struct {
 	Values []cockroach_roachpb1.KeyValue `protobuf:"bytes,1,rep,name=values" json:"values"`
@@ -143,15 +199,248 @@ type SystemConfig struct {
 func (m *SystemConfig) Reset()                    { *m = SystemConfig{} }
 func (m *SystemConfig) String() string            { return proto.CompactTextString(m) }
 func (*SystemConfig) ProtoMessage()               {}
-func (*SystemConfig) Descriptor() ([]byte, []int) { return fileDescriptorConfig, []int{4} }
+func (*SystemConfig) Descriptor() ([]byte, []int) { return fileDescriptorConfig, []int{6} }
 
 func init() {
 	proto.RegisterType((*GCPolicy)(nil), "cockroach.config.GCPolicy")
 	proto.RegisterType((*Constraint)(nil), "cockroach.config.Constraint")
 	proto.RegisterType((*Constraints)(nil), "cockroach.config.Constraints")
 	proto.RegisterType((*ZoneConfig)(nil), "cockroach.config.ZoneConfig")
+	proto.RegisterType((*Subzone)(nil), "cockroach.config.Subzone")
+	proto.RegisterType((*SubzoneSpan)(nil), "cockroach.config.SubzoneSpan")
 	proto.RegisterType((*SystemConfig)(nil), "cockroach.config.SystemConfig")
 	proto.RegisterEnum("cockroach.config.Constraint_Type", Constraint_Type_name, Constraint_Type_value)
+}
+func (this *GCPolicy) Equal(that interface{}) bool {
+	if that == nil {
+		if this == nil {
+			return true
+		}
+		return false
+	}
+
+	that1, ok := that.(*GCPolicy)
+	if !ok {
+		that2, ok := that.(GCPolicy)
+		if ok {
+			that1 = &that2
+		} else {
+			return false
+		}
+	}
+	if that1 == nil {
+		if this == nil {
+			return true
+		}
+		return false
+	} else if this == nil {
+		return false
+	}
+	if this.TTLSeconds != that1.TTLSeconds {
+		return false
+	}
+	return true
+}
+func (this *Constraint) Equal(that interface{}) bool {
+	if that == nil {
+		if this == nil {
+			return true
+		}
+		return false
+	}
+
+	that1, ok := that.(*Constraint)
+	if !ok {
+		that2, ok := that.(Constraint)
+		if ok {
+			that1 = &that2
+		} else {
+			return false
+		}
+	}
+	if that1 == nil {
+		if this == nil {
+			return true
+		}
+		return false
+	} else if this == nil {
+		return false
+	}
+	if this.Type != that1.Type {
+		return false
+	}
+	if this.Key != that1.Key {
+		return false
+	}
+	if this.Value != that1.Value {
+		return false
+	}
+	return true
+}
+func (this *Constraints) Equal(that interface{}) bool {
+	if that == nil {
+		if this == nil {
+			return true
+		}
+		return false
+	}
+
+	that1, ok := that.(*Constraints)
+	if !ok {
+		that2, ok := that.(Constraints)
+		if ok {
+			that1 = &that2
+		} else {
+			return false
+		}
+	}
+	if that1 == nil {
+		if this == nil {
+			return true
+		}
+		return false
+	} else if this == nil {
+		return false
+	}
+	if len(this.Constraints) != len(that1.Constraints) {
+		return false
+	}
+	for i := range this.Constraints {
+		if !this.Constraints[i].Equal(&that1.Constraints[i]) {
+			return false
+		}
+	}
+	return true
+}
+func (this *ZoneConfig) Equal(that interface{}) bool {
+	if that == nil {
+		if this == nil {
+			return true
+		}
+		return false
+	}
+
+	that1, ok := that.(*ZoneConfig)
+	if !ok {
+		that2, ok := that.(ZoneConfig)
+		if ok {
+			that1 = &that2
+		} else {
+			return false
+		}
+	}
+	if that1 == nil {
+		if this == nil {
+			return true
+		}
+		return false
+	} else if this == nil {
+		return false
+	}
+	if this.RangeMinBytes != that1.RangeMinBytes {
+		return false
+	}
+	if this.RangeMaxBytes != that1.RangeMaxBytes {
+		return false
+	}
+	if !this.GC.Equal(&that1.GC) {
+		return false
+	}
+	if this.NumReplicas != that1.NumReplicas {
+		return false
+	}
+	if !this.Constraints.Equal(&that1.Constraints) {
+		return false
+	}
+	if len(this.Subzones) != len(that1.Subzones) {
+		return false
+	}
+	for i := range this.Subzones {
+		if !this.Subzones[i].Equal(&that1.Subzones[i]) {
+			return false
+		}
+	}
+	if len(this.SubzoneSpans) != len(that1.SubzoneSpans) {
+		return false
+	}
+	for i := range this.SubzoneSpans {
+		if !this.SubzoneSpans[i].Equal(&that1.SubzoneSpans[i]) {
+			return false
+		}
+	}
+	return true
+}
+func (this *Subzone) Equal(that interface{}) bool {
+	if that == nil {
+		if this == nil {
+			return true
+		}
+		return false
+	}
+
+	that1, ok := that.(*Subzone)
+	if !ok {
+		that2, ok := that.(Subzone)
+		if ok {
+			that1 = &that2
+		} else {
+			return false
+		}
+	}
+	if that1 == nil {
+		if this == nil {
+			return true
+		}
+		return false
+	} else if this == nil {
+		return false
+	}
+	if this.IndexID != that1.IndexID {
+		return false
+	}
+	if this.PartitionName != that1.PartitionName {
+		return false
+	}
+	if !this.Config.Equal(&that1.Config) {
+		return false
+	}
+	return true
+}
+func (this *SubzoneSpan) Equal(that interface{}) bool {
+	if that == nil {
+		if this == nil {
+			return true
+		}
+		return false
+	}
+
+	that1, ok := that.(*SubzoneSpan)
+	if !ok {
+		that2, ok := that.(SubzoneSpan)
+		if ok {
+			that1 = &that2
+		} else {
+			return false
+		}
+	}
+	if that1 == nil {
+		if this == nil {
+			return true
+		}
+		return false
+	} else if this == nil {
+		return false
+	}
+	if !bytes.Equal(this.Key, that1.Key) {
+		return false
+	}
+	if !bytes.Equal(this.EndKey, that1.EndKey) {
+		return false
+	}
+	if this.SubzoneIndex != that1.SubzoneIndex {
+		return false
+	}
+	return true
 }
 func (m *GCPolicy) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
@@ -273,6 +562,96 @@ func (m *ZoneConfig) MarshalTo(dAtA []byte) (int, error) {
 		return 0, err
 	}
 	i += n2
+	if len(m.SubzoneSpans) > 0 {
+		for _, msg := range m.SubzoneSpans {
+			dAtA[i] = 0x3a
+			i++
+			i = encodeVarintConfig(dAtA, i, uint64(msg.Size()))
+			n, err := msg.MarshalTo(dAtA[i:])
+			if err != nil {
+				return 0, err
+			}
+			i += n
+		}
+	}
+	if len(m.Subzones) > 0 {
+		for _, msg := range m.Subzones {
+			dAtA[i] = 0x42
+			i++
+			i = encodeVarintConfig(dAtA, i, uint64(msg.Size()))
+			n, err := msg.MarshalTo(dAtA[i:])
+			if err != nil {
+				return 0, err
+			}
+			i += n
+		}
+	}
+	return i, nil
+}
+
+func (m *Subzone) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *Subzone) MarshalTo(dAtA []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	dAtA[i] = 0x8
+	i++
+	i = encodeVarintConfig(dAtA, i, uint64(m.IndexID))
+	dAtA[i] = 0x12
+	i++
+	i = encodeVarintConfig(dAtA, i, uint64(len(m.PartitionName)))
+	i += copy(dAtA[i:], m.PartitionName)
+	dAtA[i] = 0x1a
+	i++
+	i = encodeVarintConfig(dAtA, i, uint64(m.Config.Size()))
+	n3, err := m.Config.MarshalTo(dAtA[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n3
+	return i, nil
+}
+
+func (m *SubzoneSpan) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *SubzoneSpan) MarshalTo(dAtA []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	if m.Key != nil {
+		dAtA[i] = 0xa
+		i++
+		i = encodeVarintConfig(dAtA, i, uint64(len(m.Key)))
+		i += copy(dAtA[i:], m.Key)
+	}
+	if m.EndKey != nil {
+		dAtA[i] = 0x12
+		i++
+		i = encodeVarintConfig(dAtA, i, uint64(len(m.EndKey)))
+		i += copy(dAtA[i:], m.EndKey)
+	}
+	dAtA[i] = 0x18
+	i++
+	i = encodeVarintConfig(dAtA, i, uint64(m.SubzoneIndex))
 	return i, nil
 }
 
@@ -355,6 +734,44 @@ func (m *ZoneConfig) Size() (n int) {
 	n += 1 + sovConfig(uint64(m.NumReplicas))
 	l = m.Constraints.Size()
 	n += 1 + l + sovConfig(uint64(l))
+	if len(m.SubzoneSpans) > 0 {
+		for _, e := range m.SubzoneSpans {
+			l = e.Size()
+			n += 1 + l + sovConfig(uint64(l))
+		}
+	}
+	if len(m.Subzones) > 0 {
+		for _, e := range m.Subzones {
+			l = e.Size()
+			n += 1 + l + sovConfig(uint64(l))
+		}
+	}
+	return n
+}
+
+func (m *Subzone) Size() (n int) {
+	var l int
+	_ = l
+	n += 1 + sovConfig(uint64(m.IndexID))
+	l = len(m.PartitionName)
+	n += 1 + l + sovConfig(uint64(l))
+	l = m.Config.Size()
+	n += 1 + l + sovConfig(uint64(l))
+	return n
+}
+
+func (m *SubzoneSpan) Size() (n int) {
+	var l int
+	_ = l
+	if m.Key != nil {
+		l = len(m.Key)
+		n += 1 + l + sovConfig(uint64(l))
+	}
+	if m.EndKey != nil {
+		l = len(m.EndKey)
+		n += 1 + l + sovConfig(uint64(l))
+	}
+	n += 1 + sovConfig(uint64(m.SubzoneIndex))
 	return n
 }
 
@@ -806,6 +1223,327 @@ func (m *ZoneConfig) Unmarshal(dAtA []byte) error {
 				return err
 			}
 			iNdEx = postIndex
+		case 7:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field SubzoneSpans", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowConfig
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthConfig
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.SubzoneSpans = append(m.SubzoneSpans, SubzoneSpan{})
+			if err := m.SubzoneSpans[len(m.SubzoneSpans)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 8:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Subzones", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowConfig
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthConfig
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Subzones = append(m.Subzones, Subzone{})
+			if err := m.Subzones[len(m.Subzones)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipConfig(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthConfig
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *Subzone) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowConfig
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: Subzone: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: Subzone: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field IndexID", wireType)
+			}
+			m.IndexID = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowConfig
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.IndexID |= (uint32(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field PartitionName", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowConfig
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= (uint64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthConfig
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.PartitionName = string(dAtA[iNdEx:postIndex])
+			iNdEx = postIndex
+		case 3:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Config", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowConfig
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthConfig
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if err := m.Config.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipConfig(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthConfig
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *SubzoneSpan) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowConfig
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: SubzoneSpan: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: SubzoneSpan: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Key", wireType)
+			}
+			var byteLen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowConfig
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				byteLen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if byteLen < 0 {
+				return ErrInvalidLengthConfig
+			}
+			postIndex := iNdEx + byteLen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Key = append(m.Key[:0], dAtA[iNdEx:postIndex]...)
+			if m.Key == nil {
+				m.Key = []byte{}
+			}
+			iNdEx = postIndex
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field EndKey", wireType)
+			}
+			var byteLen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowConfig
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				byteLen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if byteLen < 0 {
+				return ErrInvalidLengthConfig
+			}
+			postIndex := iNdEx + byteLen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.EndKey = append(m.EndKey[:0], dAtA[iNdEx:postIndex]...)
+			if m.EndKey == nil {
+				m.EndKey = []byte{}
+			}
+			iNdEx = postIndex
+		case 3:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field SubzoneIndex", wireType)
+			}
+			m.SubzoneIndex = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowConfig
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.SubzoneIndex |= (int32(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
 		default:
 			iNdEx = preIndex
 			skippy, err := skipConfig(dAtA[iNdEx:])
@@ -1016,40 +1754,53 @@ var (
 func init() { proto.RegisterFile("cockroach/pkg/config/config.proto", fileDescriptorConfig) }
 
 var fileDescriptorConfig = []byte{
-	// 546 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x7c, 0x53, 0xbd, 0x6e, 0xd3, 0x50,
-	0x14, 0x8e, 0x1d, 0xb7, 0x0a, 0xc7, 0xa1, 0x44, 0x17, 0x54, 0xac, 0x14, 0x1c, 0xd7, 0x62, 0xc8,
-	0x80, 0x1c, 0x29, 0x48, 0x48, 0x14, 0x09, 0x24, 0x27, 0xa1, 0x98, 0x1f, 0x35, 0x38, 0xa1, 0x43,
-	0x97, 0xe0, 0xba, 0xb7, 0xc6, 0x8a, 0xed, 0x6b, 0xc5, 0x37, 0x50, 0xbf, 0x05, 0x23, 0x23, 0x6f,
-	0xc1, 0x2b, 0x64, 0x64, 0x64, 0x8a, 0x20, 0xbc, 0x01, 0x33, 0x03, 0xba, 0xf6, 0x4d, 0xe3, 0x06,
-	0x94, 0xc9, 0xe7, 0x9c, 0xfb, 0x7d, 0xdf, 0xf9, 0x35, 0xec, 0xbb, 0xc4, 0x1d, 0x4f, 0x88, 0xe3,
-	0xbe, 0x6f, 0xc5, 0x63, 0xaf, 0xe5, 0x92, 0xe8, 0xdc, 0x5f, 0x7e, 0x8c, 0x78, 0x42, 0x28, 0x41,
-	0xb5, 0x4b, 0x88, 0x91, 0xc7, 0xeb, 0xda, 0x55, 0x52, 0x66, 0xc5, 0xa7, 0xad, 0x33, 0x87, 0x3a,
-	0x39, 0xa7, 0x7e, 0xef, 0xff, 0x88, 0x10, 0x53, 0xa7, 0x80, 0xba, 0xe5, 0x11, 0x8f, 0x64, 0x66,
-	0x8b, 0x59, 0x79, 0x54, 0x7f, 0x0a, 0x95, 0xc3, 0x4e, 0x9f, 0x04, 0xbe, 0x9b, 0xa2, 0x07, 0x20,
-	0x53, 0x1a, 0x8c, 0x12, 0xec, 0x92, 0xe8, 0x2c, 0x51, 0x04, 0x4d, 0x68, 0x6e, 0x99, 0x68, 0x36,
-	0x6f, 0x94, 0x16, 0xf3, 0x06, 0x0c, 0x87, 0xaf, 0x06, 0xf9, 0x8b, 0x0d, 0x94, 0x06, 0xdc, 0xd6,
-	0xbf, 0x0a, 0x00, 0x1d, 0x12, 0x25, 0x74, 0xe2, 0xf8, 0x11, 0x45, 0x8f, 0x41, 0xa2, 0x69, 0x8c,
-	0x33, 0xf2, 0x4e, 0x7b, 0xdf, 0x58, 0x6f, 0xc7, 0x58, 0x61, 0x8d, 0x61, 0x1a, 0x63, 0x53, 0x62,
-	0xfa, 0x76, 0x46, 0x42, 0xbb, 0x50, 0x1e, 0xe3, 0x54, 0x11, 0x35, 0xa1, 0x79, 0x8d, 0x3f, 0xb0,
-	0x00, 0xaa, 0xc3, 0xd6, 0x07, 0x27, 0x98, 0x62, 0xa5, 0x5c, 0x78, 0xc9, 0x43, 0x7a, 0x1b, 0x24,
-	0xa6, 0x83, 0xaa, 0x50, 0xe9, 0x1f, 0x0d, 0xac, 0xa1, 0x75, 0xdc, 0xab, 0x95, 0x98, 0x67, 0xf7,
-	0xde, 0xbc, 0xb5, 0xec, 0x5e, 0xb7, 0x26, 0xa0, 0x1d, 0x80, 0xbe, 0x7d, 0xf4, 0xdc, 0x32, 0xad,
-	0x61, 0xaf, 0x5b, 0x13, 0x0f, 0xa4, 0xcf, 0x5f, 0x1a, 0x25, 0x7d, 0x00, 0xf2, 0xaa, 0x98, 0x04,
-	0x75, 0x41, 0x76, 0x57, 0xae, 0xb2, 0xad, 0x95, 0x9b, 0x72, 0xfb, 0xce, 0xa6, 0x06, 0x78, 0x21,
-	0x45, 0x9a, 0xfe, 0x47, 0x04, 0x38, 0x21, 0x11, 0xee, 0x64, 0x60, 0xf4, 0x0c, 0x6e, 0x4c, 0x9c,
-	0xc8, 0xc3, 0xa3, 0xd0, 0x8f, 0x46, 0xa7, 0x29, 0xc5, 0x49, 0xd6, 0x5d, 0xd9, 0x54, 0x19, 0xf5,
-	0xf7, 0xbc, 0xb1, 0x9b, 0x3a, 0x61, 0x70, 0xa0, 0xaf, 0x81, 0x74, 0xfb, 0x7a, 0x16, 0x79, 0xed,
-	0x47, 0x26, 0xf3, 0x0b, 0x3a, 0xce, 0x05, 0xd7, 0x29, 0x6f, 0xd0, 0x59, 0x82, 0x2e, 0x75, 0x9c,
-	0x8b, 0x5c, 0xe7, 0x21, 0x88, 0x9e, 0xab, 0x48, 0x9a, 0xd0, 0x94, 0xdb, 0xf5, 0x7f, 0x7b, 0x5b,
-	0x9e, 0x82, 0x09, 0x7c, 0xeb, 0xe2, 0x61, 0xc7, 0x16, 0x3d, 0x17, 0x3d, 0x81, 0x6a, 0x34, 0x0d,
-	0x47, 0x13, 0x1c, 0x07, 0xbe, 0xeb, 0x24, 0xca, 0x56, 0x76, 0x1b, 0x7b, 0x3c, 0xf9, 0xcd, 0x3c,
-	0x79, 0x11, 0xa1, 0xdb, 0x72, 0x34, 0x0d, 0x6d, 0xee, 0xa1, 0x77, 0xeb, 0xc3, 0x65, 0x05, 0xdc,
-	0xdd, 0x34, 0xdc, 0xc4, 0x6c, 0x70, 0xf5, 0xdb, 0xb9, 0x7a, 0x81, 0x7f, 0xff, 0x3c, 0x20, 0x1f,
-	0xf5, 0x2b, 0x83, 0x7f, 0x21, 0x55, 0x84, 0x9a, 0xa8, 0x5b, 0x50, 0x1d, 0xa4, 0x09, 0xc5, 0x21,
-	0x9f, 0xff, 0x23, 0xd8, 0xce, 0xce, 0x84, 0x5d, 0x33, 0xdb, 0xe7, 0x5e, 0x21, 0x25, 0xff, 0x4f,
-	0x8c, 0x97, 0x38, 0x3d, 0x66, 0x18, 0xbe, 0x4e, 0x4e, 0x30, 0xb5, 0xd9, 0x4f, 0xb5, 0x34, 0x5b,
-	0xa8, 0xc2, 0xb7, 0x85, 0x2a, 0x7c, 0x5f, 0xa8, 0xc2, 0x8f, 0x85, 0x2a, 0x7c, 0xfa, 0xa5, 0x96,
-	0x4e, 0xb6, 0xf3, 0x62, 0xff, 0x06, 0x00, 0x00, 0xff, 0xff, 0x07, 0xca, 0x73, 0xcb, 0xcf, 0x03,
-	0x00, 0x00,
+	// 767 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x9c, 0x54, 0xcd, 0x6e, 0xdb, 0x46,
+	0x10, 0x16, 0xf5, 0xcb, 0x8e, 0x24, 0x5b, 0xd8, 0x16, 0x2e, 0x2b, 0xb7, 0x92, 0x4c, 0xf4, 0xa0,
+	0xfe, 0x49, 0x85, 0x5a, 0x14, 0xa8, 0x0a, 0xf4, 0x40, 0x49, 0x76, 0x59, 0xd7, 0xb5, 0x4b, 0xa9,
+	0x06, 0xe2, 0x0b, 0xb3, 0x22, 0xd7, 0x32, 0x61, 0x71, 0x49, 0x88, 0x54, 0x62, 0xe6, 0x29, 0x72,
+	0xcc, 0xd1, 0x01, 0xf2, 0x16, 0x79, 0x01, 0x1f, 0x73, 0x09, 0x90, 0x93, 0x90, 0x28, 0x97, 0x9c,
+	0x73, 0xcc, 0x29, 0xe0, 0x72, 0x25, 0xd1, 0x8e, 0xe2, 0x43, 0x4e, 0xdc, 0x9d, 0x99, 0xef, 0x9b,
+	0x99, 0x6f, 0x67, 0x08, 0x3b, 0x86, 0x63, 0x9c, 0x4f, 0x1c, 0x6c, 0x9c, 0x35, 0xdd, 0xf3, 0x51,
+	0xd3, 0x70, 0xe8, 0xa9, 0xb5, 0xf8, 0x34, 0xdc, 0x89, 0xe3, 0x3b, 0xa8, 0xb4, 0x0c, 0x69, 0x44,
+	0xf6, 0x72, 0xed, 0x3a, 0x88, 0x9d, 0xdc, 0x61, 0xd3, 0xc4, 0x3e, 0x8e, 0x30, 0xe5, 0x6f, 0xd7,
+	0x47, 0xd8, 0xc4, 0xc7, 0xb1, 0xa8, 0x2f, 0x46, 0xce, 0xc8, 0x61, 0xc7, 0x66, 0x78, 0x8a, 0xac,
+	0x72, 0x0f, 0xc4, 0xbd, 0xce, 0x91, 0x33, 0xb6, 0x8c, 0x00, 0xfd, 0x02, 0x79, 0xdf, 0x1f, 0xeb,
+	0x1e, 0x31, 0x1c, 0x6a, 0x7a, 0x92, 0x50, 0x13, 0xea, 0x19, 0x05, 0x5d, 0xcd, 0xaa, 0x89, 0xf9,
+	0xac, 0x0a, 0x83, 0xc1, 0x3f, 0xfd, 0xc8, 0xa3, 0x81, 0xef, 0x8f, 0xf9, 0xb9, 0x9d, 0x7e, 0x73,
+	0x59, 0x15, 0xe4, 0xa7, 0x02, 0x40, 0xc7, 0xa1, 0x9e, 0x3f, 0xc1, 0x16, 0xf5, 0xd1, 0x1f, 0x90,
+	0xf6, 0x03, 0x97, 0x30, 0x8a, 0x8d, 0xd6, 0x4e, 0xe3, 0x66, 0x53, 0x8d, 0x55, 0x6c, 0x63, 0x10,
+	0xb8, 0x44, 0x49, 0x87, 0x59, 0x34, 0x06, 0x42, 0x5b, 0x90, 0x3a, 0x27, 0x81, 0x94, 0xac, 0x09,
+	0xf5, 0xcf, 0xb8, 0x23, 0x34, 0xa0, 0x32, 0x64, 0xee, 0xe1, 0xf1, 0x94, 0x48, 0xa9, 0x98, 0x27,
+	0x32, 0xc9, 0x2d, 0x48, 0x87, 0x3c, 0xa8, 0x00, 0xe2, 0xd1, 0x61, 0x5f, 0x1d, 0xa8, 0xc7, 0xbd,
+	0x52, 0x22, 0xbc, 0x69, 0xbd, 0xff, 0xfe, 0x57, 0xb5, 0x5e, 0xb7, 0x24, 0xa0, 0x0d, 0x80, 0x23,
+	0xed, 0xf0, 0x2f, 0x55, 0x51, 0x07, 0xbd, 0x6e, 0x29, 0xd9, 0x16, 0x1f, 0x5d, 0x56, 0x13, 0xac,
+	0xfa, 0x3b, 0x90, 0x5f, 0x15, 0xe4, 0xa1, 0x2e, 0xe4, 0x8d, 0xd5, 0x55, 0xca, 0xd6, 0x52, 0xf5,
+	0x7c, 0xeb, 0xeb, 0xdb, 0x9a, 0xe0, 0xc5, 0xc4, 0x61, 0x5c, 0x98, 0xc7, 0x69, 0x80, 0x13, 0x87,
+	0x92, 0x0e, 0x83, 0xa0, 0x5d, 0xd8, 0x9c, 0x60, 0x3a, 0x22, 0xba, 0x6d, 0x51, 0x7d, 0x18, 0xf8,
+	0xc4, 0x63, 0x7d, 0xa6, 0x94, 0x4a, 0x48, 0xf0, 0x76, 0x56, 0xdd, 0x0a, 0xb0, 0x3d, 0x6e, 0xcb,
+	0x37, 0x82, 0x64, 0xad, 0xc8, 0x2c, 0x07, 0x16, 0x55, 0xc2, 0x7b, 0x8c, 0x07, 0x5f, 0x70, 0x9e,
+	0xd4, 0x2d, 0x3c, 0x8b, 0xa0, 0x25, 0x0f, 0xbe, 0x88, 0x78, 0x7e, 0x83, 0xe4, 0xc8, 0x90, 0xd2,
+	0x35, 0xa1, 0x9e, 0x6f, 0x95, 0x3f, 0xec, 0x70, 0x31, 0x1a, 0x0a, 0xf0, 0x29, 0x48, 0xee, 0x75,
+	0xb4, 0xe4, 0xc8, 0x40, 0x7f, 0x42, 0x81, 0x4e, 0x6d, 0x7d, 0x42, 0xdc, 0xb1, 0x65, 0x60, 0x4f,
+	0xca, 0xb0, 0x59, 0xd9, 0xe6, 0xc9, 0x3f, 0x8f, 0x92, 0xc7, 0x23, 0x64, 0x2d, 0x4f, 0xa7, 0xb6,
+	0xc6, 0x6f, 0xe8, 0xee, 0x4d, 0x89, 0xc3, 0x02, 0xbe, 0xb9, 0x4d, 0x62, 0x4f, 0xa9, 0x72, 0xf6,
+	0x2f, 0x23, 0xf6, 0x18, 0xfe, 0xc7, 0xd3, 0xb1, 0x73, 0x5f, 0xbe, 0x26, 0x3f, 0x1a, 0x40, 0xd1,
+	0x9b, 0x0e, 0x1f, 0x38, 0x94, 0xe8, 0x9e, 0x8b, 0xa9, 0x27, 0xe5, 0xd8, 0x33, 0xae, 0xc9, 0xd1,
+	0x8f, 0xc2, 0xfa, 0x2e, 0xa6, 0x4a, 0x89, 0xe7, 0x10, 0xa3, 0x1c, 0x3f, 0xc9, 0x5a, 0xc1, 0x5b,
+	0xb9, 0x3d, 0xb4, 0x07, 0x22, 0xbf, 0x7b, 0x92, 0xc8, 0x08, 0xbf, 0xfa, 0x28, 0xe1, 0x1a, 0xb2,
+	0x25, 0x38, 0x9a, 0x8e, 0xbf, 0xd3, 0xa2, 0x50, 0x4a, 0xca, 0x4f, 0x04, 0xc8, 0x71, 0x0c, 0xfa,
+	0x1e, 0x44, 0x8b, 0x9a, 0xe4, 0x42, 0xb7, 0x4c, 0xb6, 0x3d, 0x45, 0x65, 0x93, 0x4b, 0x9f, 0x53,
+	0x43, 0xbb, 0xda, 0xd5, 0x72, 0x2c, 0x40, 0x35, 0xd1, 0x0f, 0xb0, 0xe1, 0xe2, 0x89, 0x6f, 0xf9,
+	0x96, 0x43, 0x75, 0x8a, 0x6d, 0x72, 0x6d, 0x67, 0x8a, 0x4b, 0xdf, 0xbf, 0xd8, 0x26, 0xa8, 0x0d,
+	0xd9, 0xa8, 0x3c, 0x36, 0x28, 0x6b, 0xe7, 0x79, 0x35, 0xa7, 0x9c, 0x82, 0x23, 0xf8, 0x28, 0x3f,
+	0x17, 0x20, 0x1f, 0xd3, 0x0a, 0xed, 0x46, 0x7b, 0x1a, 0x56, 0x59, 0x50, 0x7e, 0x7d, 0x37, 0xab,
+	0xfe, 0x3c, 0xb2, 0xfc, 0xb3, 0xe9, 0xb0, 0x61, 0x38, 0x76, 0x73, 0x49, 0x6e, 0x0e, 0x9b, 0x6b,
+	0x7f, 0x4f, 0x8d, 0x7d, 0x12, 0x44, 0x7b, 0x7d, 0x00, 0x39, 0x42, 0x4d, 0x7d, 0xb1, 0xf3, 0x9f,
+	0xca, 0x95, 0x25, 0xd4, 0xdc, 0x27, 0x01, 0xfa, 0x6e, 0xf5, 0xf0, 0x4c, 0x28, 0xd6, 0x6f, 0x86,
+	0x77, 0xb4, 0x78, 0x4d, 0xa6, 0x25, 0xef, 0x4b, 0x85, 0x42, 0x3f, 0xf0, 0x7c, 0x62, 0xf3, 0x1d,
+	0xfd, 0x1d, 0xb2, 0xec, 0xa7, 0x12, 0xfe, 0x01, 0xc3, 0x17, 0xde, 0x8e, 0x29, 0x15, 0x4b, 0x78,
+	0x1c, 0xc6, 0x2c, 0x84, 0x8a, 0x00, 0x4a, 0xed, 0xea, 0x55, 0x25, 0x71, 0x35, 0xaf, 0x08, 0xcf,
+	0xe6, 0x15, 0xe1, 0xc5, 0xbc, 0x22, 0xbc, 0x9c, 0x57, 0x84, 0x87, 0xaf, 0x2b, 0x89, 0x13, 0x2e,
+	0xe5, 0xfb, 0x00, 0x00, 0x00, 0xff, 0xff, 0xf2, 0x75, 0x2d, 0x61, 0x03, 0x06, 0x00, 0x00,
 }
