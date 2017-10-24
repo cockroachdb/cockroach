@@ -101,7 +101,10 @@ export function getEventInfo(e: Event$Properties): SimplifiedEvent {
       content = <span>Schema Change Reversed: Schema change with ID {info.MutationID} was reversed.</span>;
       break;
     case eventTypes.FINISH_SCHEMA_CHANGE:
-      content = <span>Schema Change Finished: Schema Change Completed: Schema change with ID {info.MutationID} was completed.</span>;
+      content = <span>Schema Change Completed: Schema change with ID {info.MutationID} was completed.</span>;
+      break;
+    case eventTypes.FINISH_SCHEMA_CHANGE_ROLLBACK:
+      content = <span>Schema Change Rollback Completed: Rollback of schema change with ID {info.MutationID} was completed.</span>;
       break;
     case eventTypes.NODE_JOIN:
       content = <span>Node Joined: Node {targetId} joined the cluster</span>;

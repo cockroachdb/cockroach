@@ -122,11 +122,17 @@ SELECT "targetID", "reportingID" FROM system.eventlog
 WHERE "eventType" = 'finish_schema_change'
 ----
 51 1
-51 1
 
 query II rowsort
 SELECT "targetID", "reportingID" FROM system.eventlog
 WHERE "eventType" = 'reverse_schema_change'
+----
+51 1
+
+
+query II rowsort
+SELECT "targetID", "reportingID" FROM system.eventlog
+WHERE "eventType" = 'finish_schema_change_rollback'
 ----
 51 1
 
@@ -149,7 +155,6 @@ WHERE "eventType" = 'finish_schema_change'
 ----
 51 1
 51 1
-51 1
 
 # Drop the index
 #################
@@ -168,7 +173,6 @@ query II rowsort
 SELECT "targetID", "reportingID" FROM system.eventlog
 WHERE "eventType" = 'finish_schema_change'
 ----
-51 1
 51 1
 51 1
 51 1
