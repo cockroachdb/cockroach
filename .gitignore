@@ -24,4 +24,7 @@ customenv.mk
 
 # Generated files containing include paths.
 zcgo_flags*.go
+*.pb.go
+
+# Non-distributable railroad diagram generator.
 build/Railroad.jar
