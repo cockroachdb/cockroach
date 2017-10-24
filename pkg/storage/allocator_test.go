@@ -180,6 +180,97 @@ var multiDCStores = []*roachpb.StoreDescriptor{
 	},
 }
 
+var multiDiversityDCStores = []*roachpb.StoreDescriptor{
+	{
+		StoreID: 1,
+		Node: roachpb.NodeDescriptor{
+			NodeID: 1,
+			Locality: roachpb.Locality{
+				Tiers: []roachpb.Tier{
+					{Key: "datacenter", Value: "a"},
+				},
+			},
+		},
+	},
+	{
+		StoreID: 2,
+		Node: roachpb.NodeDescriptor{
+			NodeID: 2,
+			Locality: roachpb.Locality{
+				Tiers: []roachpb.Tier{
+					{Key: "datacenter", Value: "a"},
+				},
+			},
+		},
+	},
+	{
+		StoreID: 3,
+		Node: roachpb.NodeDescriptor{
+			NodeID: 3,
+			Locality: roachpb.Locality{
+				Tiers: []roachpb.Tier{
+					{Key: "datacenter", Value: "b"},
+				},
+			},
+		},
+	},
+	{
+		StoreID: 4,
+		Node: roachpb.NodeDescriptor{
+			NodeID: 4,
+			Locality: roachpb.Locality{
+				Tiers: []roachpb.Tier{
+					{Key: "datacenter", Value: "b"},
+				},
+			},
+		},
+	},
+	{
+		StoreID: 5,
+		Node: roachpb.NodeDescriptor{
+			NodeID: 5,
+			Locality: roachpb.Locality{
+				Tiers: []roachpb.Tier{
+					{Key: "datacenter", Value: "c"},
+				},
+			},
+		},
+	},
+	{
+		StoreID: 6,
+		Node: roachpb.NodeDescriptor{
+			NodeID: 6,
+			Locality: roachpb.Locality{
+				Tiers: []roachpb.Tier{
+					{Key: "datacenter", Value: "c"},
+				},
+			},
+		},
+	},
+	{
+		StoreID: 7,
+		Node: roachpb.NodeDescriptor{
+			NodeID: 7,
+			Locality: roachpb.Locality{
+				Tiers: []roachpb.Tier{
+					{Key: "datacenter", Value: "d"},
+				},
+			},
+		},
+	},
+	{
+		StoreID: 8,
+		Node: roachpb.NodeDescriptor{
+			NodeID: 8,
+			Locality: roachpb.Locality{
+				Tiers: []roachpb.Tier{
+					{Key: "datacenter", Value: "d"},
+				},
+			},
+		},
+	},
+}
+
 func testRangeInfo(replicas []roachpb.ReplicaDescriptor, rangeID roachpb.RangeID) RangeInfo {
 	return RangeInfo{
 		Desc: &roachpb.RangeDescriptor{
@@ -1289,6 +1380,416 @@ func TestAllocatorShouldTransferLease(t *testing.T) {
 				t.Fatalf("expected %v, but found %v", c.expected, result)
 			}
 		})
+	}
+}
+
+func TestAllocatorRemoveTargetLocality(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	stopper, g, _, a, _ := createTestAllocator( /* deterministic */ false)
+	defer stopper.Stop(context.Background())
+	sg := gossiputil.NewStoreGossiper(g)
+	sg.GossipStores(multiDiversityDCStores, t)
+
+	testCases := []struct {
+		existing []roachpb.ReplicaDescriptor
+		expected []roachpb.StoreID
+	}{
+		{
+			[]roachpb.ReplicaDescriptor{
+				{NodeID: 1, StoreID: 1},
+				{NodeID: 2, StoreID: 2},
+				{NodeID: 3, StoreID: 3},
+				{NodeID: 5, StoreID: 5},
+			},
+			[]roachpb.StoreID{1, 2},
+		},
+		{
+			[]roachpb.ReplicaDescriptor{
+				{NodeID: 1, StoreID: 1},
+				{NodeID: 2, StoreID: 2},
+				{NodeID: 3, StoreID: 3},
+			},
+			[]roachpb.StoreID{1, 2},
+		},
+		{
+			[]roachpb.ReplicaDescriptor{
+				{NodeID: 1, StoreID: 1},
+				{NodeID: 3, StoreID: 3},
+				{NodeID: 4, StoreID: 4},
+				{NodeID: 5, StoreID: 5},
+			},
+			[]roachpb.StoreID{3, 4},
+		},
+		{
+			[]roachpb.ReplicaDescriptor{
+				{NodeID: 1, StoreID: 1},
+				{NodeID: 3, StoreID: 3},
+				{NodeID: 5, StoreID: 5},
+				{NodeID: 6, StoreID: 6},
+			},
+			[]roachpb.StoreID{5, 6},
+		},
+		{
+			[]roachpb.ReplicaDescriptor{
+				{NodeID: 1, StoreID: 1},
+				{NodeID: 3, StoreID: 3},
+				{NodeID: 5, StoreID: 5},
+			},
+			[]roachpb.StoreID{1, 3, 5},
+		},
+		{
+			[]roachpb.ReplicaDescriptor{
+				{NodeID: 1, StoreID: 1},
+				{NodeID: 3, StoreID: 3},
+				{NodeID: 4, StoreID: 4},
+				{NodeID: 6, StoreID: 6},
+				{NodeID: 7, StoreID: 7},
+				{NodeID: 8, StoreID: 8},
+			},
+			[]roachpb.StoreID{3, 4, 7, 8},
+		},
+	}
+	for _, c := range testCases {
+		targetRepl, _, err := a.RemoveTarget(
+			context.Background(),
+			config.Constraints{},
+			c.existing,
+			testRangeInfo(c.existing, firstRange),
+			false,
+		)
+		if err != nil {
+			t.Fatal(err)
+		}
+		i, length := 0, len(c.expected)
+		for i < length {
+			if targetRepl.StoreID != c.expected[i] {
+				i++
+			} else {
+				break
+			}
+		}
+		if i == length {
+			t.Errorf("expected remove target %v, but got %d.", c.expected, targetRepl.StoreID)
+		}
+	}
+}
+
+func TestAllocatorAllocateTargetLocality(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	stopper, g, _, a, _ := createTestAllocator( /* deterministic */ false)
+	defer stopper.Stop(context.Background())
+	sg := gossiputil.NewStoreGossiper(g)
+	sg.GossipStores(multiDiversityDCStores, t)
+
+	testCases := []struct {
+		existing []roachpb.ReplicaDescriptor
+		expected []roachpb.StoreID
+	}{
+		{
+			[]roachpb.ReplicaDescriptor{
+				{NodeID: 1, StoreID: 1},
+				{NodeID: 2, StoreID: 2},
+				{NodeID: 3, StoreID: 3},
+			},
+			[]roachpb.StoreID{5, 6, 7, 8},
+		},
+		{
+			[]roachpb.ReplicaDescriptor{
+				{NodeID: 1, StoreID: 1},
+				{NodeID: 3, StoreID: 3},
+				{NodeID: 4, StoreID: 4},
+			},
+			[]roachpb.StoreID{5, 6, 7, 8},
+		},
+		{
+			[]roachpb.ReplicaDescriptor{
+				{NodeID: 3, StoreID: 3},
+				{NodeID: 4, StoreID: 4},
+				{NodeID: 5, StoreID: 5},
+			},
+			[]roachpb.StoreID{1, 2, 7, 8},
+		},
+		{
+			[]roachpb.ReplicaDescriptor{
+				{NodeID: 1, StoreID: 1},
+				{NodeID: 7, StoreID: 1},
+				{NodeID: 8, StoreID: 8},
+			},
+			[]roachpb.StoreID{3, 4, 5, 6},
+		},
+		{
+			[]roachpb.ReplicaDescriptor{
+				{NodeID: 5, StoreID: 5},
+				{NodeID: 7, StoreID: 7},
+				{NodeID: 8, StoreID: 8},
+			},
+			[]roachpb.StoreID{1, 2, 3, 4},
+		},
+		{
+			[]roachpb.ReplicaDescriptor{
+				{NodeID: 1, StoreID: 1},
+				{NodeID: 3, StoreID: 3},
+				{NodeID: 5, StoreID: 5},
+			},
+			[]roachpb.StoreID{7, 8},
+		},
+		{
+			[]roachpb.ReplicaDescriptor{
+				{NodeID: 1, StoreID: 1},
+				{NodeID: 3, StoreID: 3},
+				{NodeID: 7, StoreID: 7},
+			},
+			[]roachpb.StoreID{5, 6},
+		},
+		{
+			[]roachpb.ReplicaDescriptor{
+				{NodeID: 1, StoreID: 1},
+				{NodeID: 5, StoreID: 5},
+				{NodeID: 7, StoreID: 7},
+			},
+			[]roachpb.StoreID{3, 4},
+		},
+		{
+			[]roachpb.ReplicaDescriptor{
+				{NodeID: 3, StoreID: 3},
+				{NodeID: 5, StoreID: 5},
+				{NodeID: 7, StoreID: 7},
+			},
+			[]roachpb.StoreID{1, 2},
+		},
+	}
+	for _, c := range testCases {
+		targetStore, _, err := a.AllocateTarget(
+			context.Background(),
+			config.Constraints{},
+			c.existing,
+			testRangeInfo(c.existing, firstRange),
+			false,
+			false,
+		)
+		if err != nil {
+			t.Fatal(err)
+		}
+		i, length := 0, len(c.expected)
+		for i < length {
+			if targetStore.StoreID != c.expected[i] {
+				i++
+			} else {
+				break
+			}
+		}
+		if i == length {
+			t.Errorf("expected remove target %v, but got %d.", c.expected, targetStore.StoreID)
+		}
+	}
+}
+
+func TestAllocatorRebalanceTargetLocality(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	stopper, g, _, a, _ := createTestAllocator( /* deterministic */ false)
+	defer stopper.Stop(context.Background())
+
+	stores := []*roachpb.StoreDescriptor{
+		{
+			StoreID: 1,
+			Node: roachpb.NodeDescriptor{
+				NodeID: 1,
+				Locality: roachpb.Locality{
+					Tiers: []roachpb.Tier{
+						{Key: "datacenter", Value: "a"},
+					},
+				},
+			},
+			Capacity: roachpb.StoreCapacity{RangeCount: 10},
+		},
+		{
+			StoreID: 2,
+			Node: roachpb.NodeDescriptor{
+				NodeID: 2,
+				Locality: roachpb.Locality{
+					Tiers: []roachpb.Tier{
+						{Key: "datacenter", Value: "a"},
+					},
+				},
+			},
+			Capacity: roachpb.StoreCapacity{RangeCount: 20},
+		},
+		{
+			StoreID: 3,
+			Node: roachpb.NodeDescriptor{
+				NodeID: 3,
+				Locality: roachpb.Locality{
+					Tiers: []roachpb.Tier{
+						{Key: "datacenter", Value: "b"},
+					},
+				},
+			},
+			Capacity: roachpb.StoreCapacity{RangeCount: 10},
+		},
+		{
+			StoreID: 4,
+			Node: roachpb.NodeDescriptor{
+				NodeID: 4,
+				Locality: roachpb.Locality{
+					Tiers: []roachpb.Tier{
+						{Key: "datacenter", Value: "b"},
+					},
+				},
+			},
+			Capacity: roachpb.StoreCapacity{RangeCount: 20},
+		},
+		{
+			StoreID: 5,
+			Node: roachpb.NodeDescriptor{
+				NodeID: 5,
+				Locality: roachpb.Locality{
+					Tiers: []roachpb.Tier{
+						{Key: "datacenter", Value: "c"},
+					},
+				},
+			},
+			Capacity: roachpb.StoreCapacity{RangeCount: 10},
+		},
+		{
+			StoreID: 6,
+			Node: roachpb.NodeDescriptor{
+				NodeID: 6,
+				Locality: roachpb.Locality{
+					Tiers: []roachpb.Tier{
+						{Key: "datacenter", Value: "c"},
+					},
+				},
+			},
+			Capacity: roachpb.StoreCapacity{RangeCount: 20},
+		},
+	}
+	sg := gossiputil.NewStoreGossiper(g)
+	sg.GossipStores(stores, t)
+
+	testCases := []struct {
+		existing []roachpb.ReplicaDescriptor
+		expected []roachpb.StoreID
+	}{
+		{
+			[]roachpb.ReplicaDescriptor{
+				{NodeID: 1, StoreID: 1},
+				{NodeID: 2, StoreID: 2},
+				{NodeID: 3, StoreID: 3},
+			},
+			[]roachpb.StoreID{5},
+		},
+		{
+			[]roachpb.ReplicaDescriptor{
+				{NodeID: 1, StoreID: 1},
+				{NodeID: 3, StoreID: 3},
+				{NodeID: 4, StoreID: 4},
+			},
+			[]roachpb.StoreID{5},
+		},
+		{
+			[]roachpb.ReplicaDescriptor{
+				{NodeID: 1, StoreID: 1},
+				{NodeID: 3, StoreID: 3},
+				{NodeID: 6, StoreID: 6},
+			},
+			[]roachpb.StoreID{5},
+		},
+		{
+			[]roachpb.ReplicaDescriptor{
+				{NodeID: 1, StoreID: 1},
+				{NodeID: 2, StoreID: 2},
+				{NodeID: 5, StoreID: 5},
+			},
+			[]roachpb.StoreID{3},
+		},
+		{
+			[]roachpb.ReplicaDescriptor{
+				{NodeID: 1, StoreID: 1},
+				{NodeID: 2, StoreID: 2},
+				{NodeID: 6, StoreID: 6},
+			},
+			[]roachpb.StoreID{3},
+		},
+		{
+			[]roachpb.ReplicaDescriptor{
+				{NodeID: 1, StoreID: 1},
+				{NodeID: 4, StoreID: 4},
+				{NodeID: 5, StoreID: 5},
+			},
+			[]roachpb.StoreID{3},
+		},
+		{
+			[]roachpb.ReplicaDescriptor{
+				{NodeID: 1, StoreID: 1},
+				{NodeID: 4, StoreID: 4},
+				{NodeID: 6, StoreID: 6},
+			},
+			[]roachpb.StoreID{3, 5},
+		},
+		{
+			[]roachpb.ReplicaDescriptor{
+				{NodeID: 3, StoreID: 3},
+				{NodeID: 4, StoreID: 4},
+				{NodeID: 5, StoreID: 5},
+			},
+			[]roachpb.StoreID{1},
+		},
+		{
+			[]roachpb.ReplicaDescriptor{
+				{NodeID: 3, StoreID: 3},
+				{NodeID: 4, StoreID: 4},
+				{NodeID: 5, StoreID: 5},
+			},
+			[]roachpb.StoreID{1},
+		},
+		{
+			[]roachpb.ReplicaDescriptor{
+				{NodeID: 3, StoreID: 3},
+				{NodeID: 4, StoreID: 4},
+				{NodeID: 6, StoreID: 6},
+			},
+			[]roachpb.StoreID{1},
+		},
+		{
+			[]roachpb.ReplicaDescriptor{
+				{NodeID: 4, StoreID: 4},
+				{NodeID: 5, StoreID: 5},
+				{NodeID: 6, StoreID: 6},
+			},
+			[]roachpb.StoreID{1},
+		},
+		{
+			[]roachpb.ReplicaDescriptor{
+				{NodeID: 2, StoreID: 2},
+				{NodeID: 4, StoreID: 4},
+				{NodeID: 6, StoreID: 6},
+			},
+			[]roachpb.StoreID{1, 3, 5},
+		},
+	}
+	for _, c := range testCases {
+		targetStore, _ := a.RebalanceTarget(
+			context.Background(),
+			config.Constraints{},
+			nil,
+			testRangeInfo(c.existing, firstRange),
+			storeFilterThrottled,
+			false,
+		)
+		i, length := 0, len(c.expected)
+		for i < length {
+			if targetStore.StoreID != c.expected[i] {
+				i++
+			} else {
+				break
+			}
+		}
+		if i == length {
+			t.Errorf("expected remove target %v, but got %d.", c.expected, targetStore.StoreID)
+		}
 	}
 }
 
