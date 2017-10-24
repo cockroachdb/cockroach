@@ -184,10 +184,12 @@ func (c *Clock) PhysicalTime() time.Time {
 
 // Update takes a hybrid timestamp, usually originating from an event
 // received from another member of a distributed system. The clock is
-// updated and the hybrid timestamp associated to the receipt of the
-// event returned. If the remote timestamp exceeds the wall clock
-// time by more than the maximum clock offset, the update is rejected
-// and a warning is logged.
+// updated and the clock's updated hybrid timestamp is returned. If
+// the remote timestamp exceeds the wall clock time by more than the
+// maximum clock offset, the update is still processed, but a warning
+// is logged. To receive an error response instead of forcing the
+// update in case the remote timestamp is too far into the future, use
+// UpdateAndCheckMaxOffset() instead.
 func (c *Clock) Update(rt Timestamp) Timestamp {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -242,8 +244,9 @@ func (c *Clock) updateLocked(rt Timestamp, updateIfMaxOffsetExceeded bool) (Time
 }
 
 // UpdateAndCheckMaxOffset is similar to Update, except it returns an
-// error instead of logging a warning if the supplied remote timestamp
-// exceeds the wall clock time by more than the maximum clock offset.
+// error instead of logging a warning and updating the clock's
+// timestamp, in the event that the supplied remote timestamp exceeds
+// the wall clock time by more than the maximum clock offset.
 func (c *Clock) UpdateAndCheckMaxOffset(rt Timestamp) (Timestamp, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
