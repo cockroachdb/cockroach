@@ -39,27 +39,58 @@ We've created a simple NodeJS proxy to accomplish this. This server serves all
 requests for web resources (JavaScript, HTML, CSS) out of the code in this
 directory, while proxying all API requests to the specified CockroachDB node.
 
-To use this proxy, run `./proxy.js <target-cluster-http-uri>` and navigate to
-`http://localhost:3000` to access the UI.
+To use this proxy, run
 
-When you're ready to submit your changes, be sure to run `make` in this
-directory to regenerate the on-disk assets so that your commit includes the
-updated `embedded.go`. This is enforced by our build system, but forgetting to
-do this will result in wasted time waiting for CI. We commit this generated file
-so that CockroachDB can be compiled with minimal [non-go
-dependencies](#dependencies).
+```shell
+$ make watch TARGET=<target-cluster-http-uri>
+```
 
-If you get cryptic TypeScript compile/lint failures upon running `make` that seem
-completely unrelated to your changes, try removing `yarn.installed` and
+then navigate to `http://localhost:3000` to access the UI.
+
+While the proxy is running, any changes you make in the `src` directory will
+trigger an automatic recompilation of the UI. This recompilation should be much
+faster than a cold compile—usually less than one second—as Webpack can reuse
+in-memory compilation artifacts from the last compile.
+
+If you get cryptic TypeScript compile/lint failures upon running `make` that
+seem completely unrelated to your changes, try removing `yarn.installed` and
 `node_modules` before re-running `make` (do NOT run `yarn install` directly).
 
 Be sure to also commit modifications resulting from dependency changes, like
 updates to `package.json` and `yarn.lock`.
 
+### DLLs for speedy builds
+
+To improve Webpack compile times, we split the compile output into three
+bundles, each of which can be compiled independently. The feature that enables
+this is [Webpack's DLLPlugin](https://webpack.js.org/plugins/dll-plugin/), named
+after the Windows term for shared libraries ("**d**ynamic-**l**ink
+**l**ibraries").
+
+Third-party dependencies, which change infrequently, are contained in the
+[vendor DLL]. Generated protobuf definitions, which change more frequently, are
+contained in the [protos DLL]. First-party JavaScript and TypeScript are
+compiled in the [main app bundle], which is then "linked" against the two DLLs.
+This means that updating a dependency or protobuf only requires rebuilding the
+appropriate DLL and the main app bundle, and updating a UI source file doesn't
+require rebuilding the DLLs at all. When DLLs were introduced, the time required
+to start the proxy was reduced from over a minute to under five seconds.
+
+DLLs are not without costs. Notably, the development proxy cannot determine when
+a DLL is out-of-date, so the proxy must be manually restarted when dependencies
+or protobufs change. (The Make build system, however, tracks the DLLs'
+dependencies properly, so a top-level `make build` will rebuild exactly the
+necessary DLLs.) DLLs also make the Webpack configuration rather complicated.
+Still, the tradeoff seems well worth it.
+
 ## Running tests
 
-If you'd like to run the tests directly you can run `make test`. If you're
-having trouble debugging tests, we recommend using `make test-debug` which
-prettifies the test output and runs the tests in Chrome. When a webpage opens,
-you can press the debug button in the top right-hand corner to run tests and set
-breakpoints directly in the browser.
+To run the tests outside of CI:
+
+```shell
+$ make test
+```
+
+[main app bundle]: ./webpack.app.js
+[protos DLL]: ./webpack.protos.js
+[vendor DLL]: ./webpack.vendor.js
