@@ -106,3 +106,9 @@ ignored = [
 [[override]]
   name = "github.com/docker/distribution"
   branch = "master"
+
+# go-ole has not made a release in over two years, but go-sigar requires
+# features introduced in the last two years.
+[[override]]
+ name = "github.com/go-ole/go-ole"
+ branch = "master"
