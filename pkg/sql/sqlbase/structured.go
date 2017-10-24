@@ -1752,9 +1752,8 @@ func ColumnsSelectors(cols []ColumnDescriptor) parser.SelectExprs {
 	return exprs
 }
 
-// SQLString returns the SQL string corresponding to the type.
-func (c *ColumnType) SQLString() string {
-	switch c.SemanticType {
+func colTypeSQLString(c *ColumnType, semType ColumnType_SemanticType) string {
+	switch semType {
 	case ColumnType_INT:
 		if c.Width > 0 && c.VisibleType == ColumnType_BIT {
 			// A non-zero width indicates a bit array. The syntax "INT(N)"
@@ -1763,11 +1762,11 @@ func (c *ColumnType) SQLString() string {
 		}
 	case ColumnType_STRING:
 		if c.Width > 0 {
-			return fmt.Sprintf("%s(%d)", c.SemanticType.String(), c.Width)
+			return fmt.Sprintf("%s(%d)", semType.String(), c.Width)
 		}
 	case ColumnType_FLOAT:
 		if c.Precision > 0 {
-			return fmt.Sprintf("%s(%d)", c.SemanticType.String(), c.Precision)
+			return fmt.Sprintf("%s(%d)", semType.String(), c.Precision)
 		}
 		if c.VisibleType == ColumnType_DOUBLE_PRECISON {
 			return "DOUBLE PRECISION"
@@ -1775,9 +1774,9 @@ func (c *ColumnType) SQLString() string {
 	case ColumnType_DECIMAL:
 		if c.Precision > 0 {
 			if c.Width > 0 {
-				return fmt.Sprintf("%s(%d,%d)", c.SemanticType.String(), c.Precision, c.Width)
+				return fmt.Sprintf("%s(%d,%d)", semType.String(), c.Precision, c.Width)
 			}
-			return fmt.Sprintf("%s(%d)", c.SemanticType.String(), c.Precision)
+			return fmt.Sprintf("%s(%d)", semType.String(), c.Precision)
 		}
 	case ColumnType_TIMESTAMPTZ:
 		return "TIMESTAMP WITH TIME ZONE"
@@ -1790,12 +1789,17 @@ func (c *ColumnType) SQLString() string {
 		}
 		return fmt.Sprintf("%s COLLATE %s", ColumnType_STRING.String(), *c.Locale)
 	case ColumnType_ARRAY:
-		return c.ArrayContents.String() + "[]"
+		return colTypeSQLString(c, *c.ArrayContents) + "[]"
 	}
 	if c.VisibleType != ColumnType_NONE {
 		return c.VisibleType.String()
 	}
-	return c.SemanticType.String()
+	return semType.String()
+}
+
+// SQLString returns the SQL string corresponding to the type.
+func (c *ColumnType) SQLString() string {
+	return colTypeSQLString(c, c.SemanticType)
 }
 
 // MaxCharacterLength returns the declared maximum length of characters if the
