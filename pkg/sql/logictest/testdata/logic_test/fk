@@ -62,32 +62,44 @@ CREATE TABLE orders (
 statement ok
 ALTER TABLE orders DROP CONSTRAINT fk_product_ref_products
 
-statement error unimplemented at or near "action"
+statement ok
 ALTER TABLE orders ADD FOREIGN KEY (product) REFERENCES products ON DELETE NO ACTION
 
-statement error unimplemented at or near "action"
+statement error pq: columns cannot be used by multiple foreign key constraints
 ALTER TABLE orders ADD FOREIGN KEY (product) REFERENCES products ON UPDATE NO ACTION
 
-statement error unimplemented at or near "cascade"
+statement ok
+ALTER TABLE orders DROP CONSTRAINT fk_product_ref_products
+
+statement ok
+ALTER TABLE orders ADD FOREIGN KEY (product) REFERENCES products ON UPDATE NO ACTION
+
+statement ok
+ALTER TABLE orders DROP CONSTRAINT fk_product_ref_products
+
+statement error pq: unsupported: ON DELETE CASCADE
 ALTER TABLE orders ADD FOREIGN KEY (product) REFERENCES products ON DELETE CASCADE
 
-statement error unimplemented at or near "cascade"
+statement error pq: unsupported: ON UPDATE CASCADE
 ALTER TABLE orders ADD FOREIGN KEY (product) REFERENCES products ON UPDATE CASCADE
 
-statement error unimplemented at or near "null"
+statement error pq: unsupported: ON DELETE SET NULL
 ALTER TABLE orders ADD FOREIGN KEY (product) REFERENCES products ON DELETE SET NULL
 
-statement error unimplemented at or near "null"
+statement error pq: unsupported: ON UPDATE SET NULL
 ALTER TABLE orders ADD FOREIGN KEY (product) REFERENCES products ON UPDATE SET NULL
 
-statement error unimplemented at or near "default"
+statement error pq: unsupported: ON DELETE SET DEFAULT
 ALTER TABLE orders ADD FOREIGN KEY (product) REFERENCES products ON DELETE SET DEFAULT
 
-statement error unimplemented at or near "default"
+statement error pq: unsupported: ON UPDATE SET DEFAULT
 ALTER TABLE orders ADD FOREIGN KEY (product) REFERENCES products ON UPDATE SET DEFAULT
 
-statement error unimplemented at or near "action"
+statement ok
 ALTER TABLE orders ADD FOREIGN KEY (product) REFERENCES products ON DELETE RESTRICT ON UPDATE NO ACTION
+
+statement ok
+ALTER TABLE orders DROP CONSTRAINT fk_product_ref_products
 
 statement ok
 ALTER TABLE orders ADD FOREIGN KEY (product) REFERENCES products ON DELETE RESTRICT ON UPDATE RESTRICT
@@ -493,7 +505,12 @@ CREATE TABLE refpairs (a INT, b STRING, CONSTRAINT fk FOREIGN KEY (a, b) REFEREN
 
 # TODO(dt): remove ordering constraint on matching index
 statement ok
-CREATE TABLE refpairs_wrong_order (a INT, b STRING, FOREIGN KEY (a, b) REFERENCES pairs (src, dest), INDEX (b, a))
+CREATE TABLE refpairs_wrong_order (
+  a INT,
+  b STRING,
+  FOREIGN KEY (a, b) REFERENCES pairs (src, dest),
+  INDEX (b, a)
+)
 
 query TTBITTBB colnames
 SHOW INDEXES FROM refpairs_wrong_order
@@ -524,7 +541,13 @@ refpairs_c_between  refpairs_c_between_auto_index_fk_a_ref_pairs  false   2    b
 refpairs_c_between  refpairs_c_between_auto_index_fk_a_ref_pairs  false   3    rowid   ASC        false    true
 
 statement ok
-CREATE TABLE refpairs (a INT, b STRING, c INT, FOREIGN KEY (a, b) REFERENCES pairs (src, dest), INDEX (a, b, c))
+CREATE TABLE refpairs (
+  a INT,
+  b STRING,
+  c INT,
+  FOREIGN KEY (a, b) REFERENCES pairs (src, dest) ON UPDATE RESTRICT,
+  INDEX (a, b, c)
+)
 
 query TTBITTBB colnames
 SHOW INDEXES FROM refpairs
@@ -543,7 +566,7 @@ refpairs  CREATE TABLE refpairs (
     a INT NULL,
     b STRING NULL,
     c INT NULL,
-    CONSTRAINT fk_a_ref_pairs FOREIGN KEY (a, b) REFERENCES pairs (src, dest),
+    CONSTRAINT fk_a_ref_pairs FOREIGN KEY (a, b) REFERENCES pairs (src, dest) ON UPDATE RESTRICT,
     INDEX refpairs_a_b_c_idx (a ASC, b ASC, c ASC),
     FAMILY "primary" (a, b, c, rowid)
 )
@@ -827,7 +850,7 @@ statement ok
 CREATE TABLE pkref_a (a INT PRIMARY KEY)
 
 statement ok
-CREATE TABLE pkref_b (b INT PRIMARY KEY REFERENCES pkref_a)
+CREATE TABLE pkref_b (b INT PRIMARY KEY REFERENCES pkref_a ON UPDATE NO ACTION ON DELETE RESTRICT)
 
 query TT
 SHOW CREATE TABLE pkref_b
@@ -835,6 +858,6 @@ SHOW CREATE TABLE pkref_b
 pkref_b  CREATE TABLE pkref_b (
         b INT NOT NULL,
         CONSTRAINT "primary" PRIMARY KEY (b ASC),
-        CONSTRAINT fk_b_ref_pkref_a FOREIGN KEY (b) REFERENCES pkref_a (a),
+        CONSTRAINT fk_b_ref_pkref_a FOREIGN KEY (b) REFERENCES pkref_a (a) ON DELETE RESTRICT,
         FAMILY "primary" (b)
 )
