@@ -97,6 +97,12 @@ func (p *planner) showCreateTable(
 				&fkTableName,
 				quoteNames(fkIdx.ColumnNames...),
 			)
+			if fk.OnDelete != sqlbase.ForeignKeyReference_NO_ACTION {
+				fmt.Fprintf(&buf, " ON DELETE %s", fk.OnDelete.String())
+			}
+			if fk.OnUpdate != sqlbase.ForeignKeyReference_NO_ACTION {
+				fmt.Fprintf(&buf, " ON UPDATE %s", fk.OnUpdate.String())
+			}
 		}
 		if idx.ID != desc.PrimaryIndex.ID {
 			// Showing the primary index is handled above.
