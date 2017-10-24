@@ -51,8 +51,8 @@ GW_SOURCES := $(GW_PROTOS:%.proto=%.pb.gw.go)
 GO_PROTOS := $(addprefix $(REPO_ROOT)/, $(sort $(shell git -C $(REPO_ROOT) ls-files --exclude-standard --cached --others -- '*.proto')))
 GO_SOURCES := $(GO_PROTOS:%.proto=%.pb.go)
 
-PBJS := $(UI_ROOT)/node_modules/.bin/pbjs
-PBTS := $(UI_ROOT)/node_modules/.bin/pbts
+PBJS := $(NODE_RUN) $(UI_ROOT)/node_modules/.bin/pbjs
+PBTS := $(NODE_RUN) $(UI_ROOT)/node_modules/.bin/pbts
 
 UI_JS := $(UI_ROOT)/src/js/protos.js
 UI_TS := $(UI_ROOT)/src/js/protos.d.ts

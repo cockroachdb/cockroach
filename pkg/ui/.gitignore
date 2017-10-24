@@ -8,3 +8,5 @@ yarn.installed
 # Generated intermediates
 .cache-loader
 dist
+embedded.go
+*-manifest.json
