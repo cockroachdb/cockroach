@@ -446,7 +446,7 @@ func rebalanceCandidates(
 	if !rebalanceConstraintsCheck {
 		for _, store := range sl.stores {
 			if _, ok := existingStoreIDs[store.StoreID]; ok {
-				if shouldRebalance(ctx, st, store, constraintsOkStoreList, rangeInfo) {
+				if shouldRebalance(ctx, st, store, constraintsOkStoreList, rangeInfo, existingNodeLocalities) {
 					shouldRebalanceCheck = true
 					break
 				}
@@ -552,11 +552,28 @@ func shouldRebalance(
 	store roachpb.StoreDescriptor,
 	sl StoreList,
 	rangeInfo RangeInfo,
+	existingNodeLocalities map[roachpb.NodeID]roachpb.Locality,
 ) bool {
+	// Rebalance if this store is too full.
 	if store.Capacity.FractionUsed() >= maxFractionUsedThreshold {
 		log.VEventf(ctx, 2, "s%d: should-rebalance(disk-full): fraction-used=%.2f, capacity=(%v)",
 			store.StoreID, store.Capacity.FractionUsed(), store.Capacity)
 		return true
+	}
+
+	// Rebalance if we could achieve better locality diversity by doing so.
+	diversityScore := diversityRemovalScore(store.Node.NodeID, existingNodeLocalities)
+	for _, desc := range sl.stores {
+		if !preexistingReplicaCheck(desc.Node.NodeID, rangeInfo.Desc.Replicas) {
+			continue
+		}
+		otherScore := rebalanceToDiversityScore(desc, existingNodeLocalities)
+		if otherScore > diversityScore {
+			log.VEventf(ctx, 2,
+				"s%d: should-rebalance(better-diversity=s%d): diversityScore=%.5f, otherScore=%.5f",
+				store.StoreID, desc.StoreID, diversityScore, otherScore)
+			return true
+		}
 	}
 
 	if !statsBasedRebalancingEnabled(st) {

@@ -23,6 +23,7 @@ import (
 	"testing"
 
 	"github.com/kr/pretty"
+	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -486,6 +487,147 @@ func TestConstraintCheck(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestShouldRebalanceDiversity(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	st := cluster.MakeTestingClusterSettings()
+	const storeID = 1
+
+	newStore := func(id int, locality roachpb.Locality) roachpb.StoreDescriptor {
+		return roachpb.StoreDescriptor{
+			StoreID: roachpb.StoreID(id),
+			Node: roachpb.NodeDescriptor{
+				NodeID:   roachpb.NodeID(id),
+				Locality: locality,
+			},
+		}
+	}
+	localityForNodeID := func(sl StoreList, id roachpb.NodeID) roachpb.Locality {
+		for _, store := range sl.stores {
+			if store.Node.NodeID == id {
+				return store.Node.Locality
+			}
+		}
+		t.Fatalf("no locality for n%d in StoreList %+v", id, sl)
+		return roachpb.Locality{}
+	}
+	locUS := roachpb.Locality{
+		Tiers: testStoreTierSetup("us", "", "", ""),
+	}
+	locEU := roachpb.Locality{
+		Tiers: testStoreTierSetup("eu", "", "", ""),
+	}
+	locAS := roachpb.Locality{
+		Tiers: testStoreTierSetup("as", "", "", ""),
+	}
+	locAU := roachpb.Locality{
+		Tiers: testStoreTierSetup("au", "", "", ""),
+	}
+	sl3by3 := StoreList{
+		stores: []roachpb.StoreDescriptor{
+			newStore(1, locUS), newStore(2, locUS), newStore(3, locUS),
+			newStore(4, locEU), newStore(5, locEU), newStore(6, locEU),
+			newStore(7, locAS), newStore(8, locAS), newStore(9, locAS),
+		},
+	}
+	sl4by3 := StoreList{
+		stores: []roachpb.StoreDescriptor{
+			newStore(1, locUS), newStore(2, locUS), newStore(3, locUS),
+			newStore(4, locEU), newStore(5, locEU), newStore(6, locEU),
+			newStore(7, locAS), newStore(8, locAS), newStore(9, locAS),
+			newStore(10, locAU), newStore(11, locAU), newStore(12, locAU),
+		},
+	}
+
+	testCases := []struct {
+		s               roachpb.StoreDescriptor
+		sl              StoreList
+		existingNodeIDs []roachpb.NodeID
+		expected        bool
+	}{
+		{
+			s:               newStore(1, locUS),
+			sl:              sl3by3,
+			existingNodeIDs: []roachpb.NodeID{1, 2, 3},
+			expected:        true,
+		},
+		{
+			s:               newStore(1, locUS),
+			sl:              sl3by3,
+			existingNodeIDs: []roachpb.NodeID{1, 4, 7},
+			expected:        false,
+		},
+		{
+			s:               newStore(1, locUS),
+			sl:              sl3by3,
+			existingNodeIDs: []roachpb.NodeID{1, 4, 5},
+			expected:        false,
+		},
+		{
+			s:               newStore(4, locEU),
+			sl:              sl3by3,
+			existingNodeIDs: []roachpb.NodeID{1, 4, 5},
+			expected:        true,
+		},
+		{
+			s:               newStore(1, locUS),
+			sl:              sl4by3,
+			existingNodeIDs: []roachpb.NodeID{1, 2, 3},
+			expected:        true,
+		},
+		{
+			s:               newStore(1, locUS),
+			sl:              sl4by3,
+			existingNodeIDs: []roachpb.NodeID{1, 4, 7},
+			expected:        false,
+		},
+		{
+			s:               newStore(1, locUS),
+			sl:              sl4by3,
+			existingNodeIDs: []roachpb.NodeID{1, 4, 7, 10},
+			expected:        false,
+		},
+		{
+			// TODO(a-robinson/#17603): This is clearly not good. Rebalancing
+			// shouldn't be desired in this case, it'll just lead to thrashing.
+			s:               newStore(1, locUS),
+			sl:              sl4by3,
+			existingNodeIDs: []roachpb.NodeID{1, 2, 4, 7, 10},
+			expected:        true,
+		},
+		{
+			s:               newStore(1, locUS),
+			sl:              sl4by3,
+			existingNodeIDs: []roachpb.NodeID{1, 4, 5, 7, 10},
+			expected:        false,
+		},
+	}
+	for i, tc := range testCases {
+		rangeInfo := RangeInfo{
+			Desc: &roachpb.RangeDescriptor{},
+		}
+		existingNodeLocalities := make(map[roachpb.NodeID]roachpb.Locality)
+		for _, nodeID := range tc.existingNodeIDs {
+			rangeInfo.Desc.Replicas = append(rangeInfo.Desc.Replicas, roachpb.ReplicaDescriptor{
+				NodeID: nodeID,
+			})
+			existingNodeLocalities[nodeID] = localityForNodeID(tc.sl, nodeID)
+		}
+		actual := shouldRebalance(
+			context.Background(),
+			st,
+			tc.s,
+			tc.sl,
+			rangeInfo,
+			existingNodeLocalities,
+		)
+		if actual != tc.expected {
+			t.Errorf("%d: shouldRebalance on s%d with replicas on %v got %t, expected %t",
+				i, tc.s.StoreID, tc.existingNodeIDs, actual, tc.expected)
+		}
 	}
 }
 
