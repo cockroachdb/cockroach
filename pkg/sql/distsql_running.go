@@ -439,7 +439,7 @@ func (dsp *DistSQLPlanner) PlanAndRun(
 	recv *distSQLReceiver,
 	evalCtx parser.EvalContext,
 ) error {
-	planCtx := dsp.newPlanningCtx(ctx, txn)
+	planCtx := dsp.newPlanningCtx(ctx, &evalCtx, txn)
 
 	log.VEvent(ctx, 1, "creating DistSQL plan")
 
