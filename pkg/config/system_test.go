@@ -176,17 +176,11 @@ func TestGetLargestID(t *testing.T) {
 func TestStaticSplits(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	for i := range config.StaticSplits {
-		if config.StaticSplits[i].SplitKey.Less(config.StaticSplits[i].SplitPoint) {
-			t.Errorf("SplitKey %q should not be less than SplitPoint %q",
-				config.StaticSplits[i].SplitKey, config.StaticSplits[i].SplitPoint)
-		}
-		if i == 0 {
-			continue
-		}
-		if !config.StaticSplits[i-1].SplitKey.Less(config.StaticSplits[i].SplitPoint) {
+	splits := config.StaticSplits()
+	for i := 1; i < len(splits); i++ {
+		if !splits[i-1].Less(splits[i]) {
 			t.Errorf("previous SplitKey %q should be less than next SplitPoint %q",
-				config.StaticSplits[i-1].SplitKey, config.StaticSplits[i].SplitPoint)
+				splits[i-1], splits[i])
 		}
 	}
 }
