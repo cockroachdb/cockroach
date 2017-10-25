@@ -15,7 +15,6 @@
 package rpc
 
 import (
-	"errors"
 	"fmt"
 	"math"
 	"net"
@@ -25,6 +24,7 @@ import (
 
 	"github.com/grpc-ecosystem/grpc-opentracing/go/otgrpc"
 	opentracing "github.com/opentracing/opentracing-go"
+	"github.com/pkg/errors"
 	"github.com/rubyist/circuitbreaker"
 	"golang.org/x/net/context"
 	"golang.org/x/sync/syncmap"
@@ -92,6 +92,15 @@ func spanInclusionFunc(
 // NewServer is a thin wrapper around grpc.NewServer that registers a heartbeat
 // service.
 func NewServer(ctx *Context) *grpc.Server {
+	return NewServerWithInterceptor(ctx, nil)
+}
+
+// NewServerWithInterceptor is like NewServer, but accepts an additional
+// interceptor which is called before streaming and unary RPCs and may inject an
+// error.
+func NewServerWithInterceptor(
+	ctx *Context, interceptor func(fullMethod string) error,
+) *grpc.Server {
 	opts := []grpc.ServerOption{
 		// The limiting factor for lowering the max message size is the fact
 		// that a single large kv can be sent over the network in one message.
@@ -131,15 +140,64 @@ func NewServer(ctx *Context) *grpc.Server {
 		}
 		opts = append(opts, grpc.Creds(credentials.NewTLS(tlsConfig)))
 	}
+
+	var unaryInterceptor grpc.UnaryServerInterceptor
+	var streamInterceptor grpc.StreamServerInterceptor
+
 	if tracer := ctx.AmbientCtx.Tracer; tracer != nil {
 		// We use a SpanInclusionFunc to save a bit of unnecessary work when
 		// tracing is disabled.
-		interceptor := otgrpc.OpenTracingServerInterceptor(
+		unaryInterceptor = otgrpc.OpenTracingServerInterceptor(
 			tracer,
 			otgrpc.IncludingSpans(otgrpc.SpanInclusionFunc(spanInclusionFunc)),
 		)
-		opts = append(opts, grpc.UnaryInterceptor(interceptor))
+		// TODO(tschottdorf): should set up tracing for stream-based RPCs as
+		// well. The otgrpc package has no such facility, but there's also this:
+		//
+		// https://github.com/grpc-ecosystem/go-grpc-middleware/tree/master/tracing/opentracing
 	}
+
+	// TODO(tschottdorf): when setting up the interceptors below, could make the
+	// functions a wee bit more performant by hoisting some of the nil checks
+	// out. Doubt measurements can tell the difference though.
+
+	if interceptor != nil {
+		prevUnaryInterceptor := unaryInterceptor
+		unaryInterceptor = func(
+			ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler,
+		) (interface{}, error) {
+			if err := interceptor(info.FullMethod); err != nil {
+				return nil, err
+			}
+			if prevUnaryInterceptor != nil {
+				return prevUnaryInterceptor(ctx, req, info, handler)
+			}
+			return handler(ctx, req)
+		}
+	}
+
+	if interceptor != nil {
+		prevStreamInterceptor := streamInterceptor
+		streamInterceptor = func(
+			srv interface{}, stream grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler,
+		) error {
+			if err := interceptor(info.FullMethod); err != nil {
+				return err
+			}
+			if prevStreamInterceptor != nil {
+				return prevStreamInterceptor(srv, stream, info, handler)
+			}
+			return handler(srv, stream)
+		}
+	}
+
+	if unaryInterceptor != nil {
+		opts = append(opts, grpc.UnaryInterceptor(unaryInterceptor))
+	}
+	if streamInterceptor != nil {
+		opts = append(opts, grpc.StreamInterceptor(streamInterceptor))
+	}
+
 	s := grpc.NewServer(opts...)
 	RegisterHeartbeatServer(s, &HeartbeatService{
 		clock:              ctx.LocalClock,
