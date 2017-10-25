@@ -31,6 +31,7 @@ func forEachCacheImpl(
 ) {
 	for _, constr := range []func(*hlc.Clock) Cache{
 		func(clock *hlc.Clock) Cache { return newCacheImpl(clock) },
+		func(clock *hlc.Clock) Cache { return newSkiplistImpl(clock) },
 	} {
 		const baseTS = 100
 		manual := hlc.NewManualClock(baseTS)
