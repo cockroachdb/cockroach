@@ -1177,6 +1177,12 @@ func EncodeNullValue(appendTo []byte, colID uint32) []byte {
 	return EncodeValueTag(appendTo, colID, Null)
 }
 
+// EncodeNotNullValue encodes a not null value, appends it to the supplied
+// buffer, and returns the final buffer.
+func EncodeNotNullValue(appendTo []byte, colID uint32) []byte {
+	return EncodeValueTag(appendTo, colID, NotNull)
+}
+
 // EncodeBoolValue encodes a bool value, appends it to the supplied buffer, and
 // returns the final buffer.
 func EncodeBoolValue(appendTo []byte, colID uint32, b bool) []byte {
