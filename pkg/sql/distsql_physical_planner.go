@@ -836,10 +836,10 @@ func initBackfillerSpec(
 	return ret, nil
 }
 
-// CreateBackfiller generates a plan consisting of index/column backfiller
+// createBackfiller generates a plan consisting of index/column backfiller
 // processors, one for each node that has spans that we are reading. The plan is
 // finalized.
-func (dsp *DistSQLPlanner) CreateBackfiller(
+func (dsp *DistSQLPlanner) createBackfiller(
 	planCtx *planningCtx,
 	backfillType backfillType,
 	desc sqlbase.TableDescriptor,
@@ -1012,7 +1012,7 @@ func (l *DistLoader) LoadCSV(
 	rowContainer := sqlbase.NewRowContainer(*evalCtx.ActiveMemAcc, ci, 0)
 	rowResultWriter := NewRowResultWriter(parser.Rows, rowContainer)
 
-	planCtx := l.distSQLPlanner.NewPlanningCtx(ctx, nil)
+	planCtx := l.distSQLPlanner.newPlanningCtx(ctx, nil)
 	// Because we're not going through the normal pathways, we have to set up
 	// the nodeID -> nodeAddress map ourselves.
 	for _, node := range nodes {
@@ -2376,7 +2376,7 @@ func (dsp *DistSQLPlanner) createPlanForDistinct(
 	return plan, nil
 }
 
-func (dsp *DistSQLPlanner) NewPlanningCtx(ctx context.Context, txn *client.Txn) planningCtx {
+func (dsp *DistSQLPlanner) newPlanningCtx(ctx context.Context, txn *client.Txn) planningCtx {
 	planCtx := planningCtx{
 		ctx:           ctx,
 		spanIter:      dsp.spanResolver.NewSpanResolverIterator(txn),

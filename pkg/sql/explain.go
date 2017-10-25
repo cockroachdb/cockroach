@@ -187,7 +187,7 @@ func (n *explainDistSQLNode) Start(params runParams) error {
 		return err
 	}
 
-	planCtx := n.distSQLPlanner.NewPlanningCtx(params.ctx, n.txn)
+	planCtx := n.distSQLPlanner.newPlanningCtx(params.ctx, n.txn)
 	plan, err := n.distSQLPlanner.createPlanForNode(&planCtx, n.plan)
 	if err != nil {
 		return err
