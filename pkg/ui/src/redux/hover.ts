@@ -2,7 +2,6 @@
  * Monitors the currently hovered chart and point in time.
  */
 
-import _ from "lodash";
 import moment from "moment";
 import { Action } from "redux";
 
@@ -22,26 +21,22 @@ export interface HoverInfo {
 
 export class HoverState {
   // Are we currently hovering over a chart?
-  currentlyHovering: boolean;
+  currentlyHovering = false;
   // Which chart are we hovering over?
   hoverChart: string;
   // What point in time are we hovering over?
   hoverTime: moment.Moment;
-
-  constructor() {
-    this.currentlyHovering = false;
-  }
 }
 
 export function hoverReducer(state = new HoverState(), action: Action): HoverState {
   switch (action.type) {
     case HOVER_ON:
       const { payload: hi } = action as PayloadAction<HoverInfo>;
-      state = _.clone(state);
-      state.currentlyHovering = true;
-      state.hoverChart = hi.hoverChart;
-      state.hoverTime = hi.hoverTime;
-      return state;
+      return {
+        currentlyHovering: true,
+        hoverChart: hi.hoverChart,
+        hoverTime: hi.hoverTime,
+      };
     case HOVER_OFF:
       return new HoverState();
     default:
