@@ -309,8 +309,8 @@ func makeEqualityPredicate(
 	// anonymous data source.
 	for i := 0; i < numMergedEqualityColumns; i++ {
 		anonymousAlias.columnRange = append(anonymousAlias.columnRange, i)
-		hiddenLeftNames = append(hiddenLeftNames, left.sourceColumns[i].Name)
-		hiddenRightNames = append(hiddenRightNames, right.sourceColumns[i].Name)
+		hiddenLeftNames = append(hiddenLeftNames, left.sourceColumns[leftEqualityIndices[i]].Name)
+		hiddenRightNames = append(hiddenRightNames, right.sourceColumns[rightEqualityIndices[i]].Name)
 	}
 
 	// Now collect the other table-less columns into the anonymous data
