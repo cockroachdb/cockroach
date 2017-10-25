@@ -619,6 +619,35 @@ func (s *Session) Ctx() context.Context {
 	return s.context
 }
 
+type evalPlanner struct {
+	p *planner
+}
+
+// QueryRow implements parser.EvalPlanner. Its special function is to preserve
+// the placeholder map of the outer planner, which would otherwise be
+// overwritten by planner.QueryRow.
+func (ep *evalPlanner) QueryRow(
+	ctx context.Context, sql string, args ...interface{},
+) (parser.Datums, error) {
+	placeholders := ep.p.semaCtx.Placeholders
+	defer func() {
+		ep.p.semaCtx.Placeholders = placeholders
+		ep.p.evalCtx.Placeholders = &ep.p.semaCtx.Placeholders
+	}()
+	ep.p.semaCtx.Placeholders = parser.PlaceholderInfo{}
+	ep.p.evalCtx.Placeholders = &ep.p.semaCtx.Placeholders
+	return ep.p.QueryRow(ctx, sql, args...)
+}
+
+// QualifyWithDatabase implements parser.EvalPlanner.
+func (ep *evalPlanner) QualifyWithDatabase(
+	ctx context.Context, t *parser.NormalizableTableName,
+) (*parser.TableName, error) {
+	return ep.p.QualifyWithDatabase(ctx, t)
+}
+
+var _ parser.EvalPlanner = &evalPlanner{}
+
 func (s *Session) resetPlanner(p *planner, e *Executor, txn *client.Txn) {
 	p.session = s
 	// phaseTimes is an array, not a slice, so this performs a copy-by-value.
@@ -631,7 +660,7 @@ func (s *Session) resetPlanner(p *planner, e *Executor, txn *client.Txn) {
 	p.semaCtx.SearchPath = s.SearchPath
 
 	p.evalCtx = s.evalCtx()
-	p.evalCtx.Planner = p
+	p.evalCtx.Planner = &evalPlanner{p: p}
 	if e != nil {
 		p.evalCtx.ClusterID = e.cfg.ClusterID()
 		p.evalCtx.NodeID = e.cfg.NodeID.Get()
