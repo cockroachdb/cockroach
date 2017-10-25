@@ -229,13 +229,14 @@ $(REPO_ROOT)/build/variables.mk: $(REPO_ROOT)/.go-version $(VARIABLES_MAKEFILES)
 # common because both the root Makefile and protobuf.mk have C dependencies.
 
 C_DEPS_DIR := $(abspath $(REPO_ROOT)/c-deps)
+CRYPTOPP_SRC_DIR := $(C_DEPS_DIR)/cryptopp
 JEMALLOC_SRC_DIR := $(C_DEPS_DIR)/jemalloc
 PROTOBUF_SRC_DIR := $(C_DEPS_DIR)/protobuf
 ROCKSDB_SRC_DIR  := $(C_DEPS_DIR)/rocksdb
 SNAPPY_SRC_DIR   := $(C_DEPS_DIR)/snappy
 LIBROACH_SRC_DIR := $(C_DEPS_DIR)/libroach
 
-C_LIBS_SRCS := $(JEMALLOC_SRC_DIR) $(PROTOBUF_SRC_DIR) $(ROCKSDB_SRC_DIR) $(SNAPPY_SRC_DIR) $(LIBROACH_SRC_DIR)
+C_LIBS_SRCS := $(CRYPTOPP_SRC_DIR) $(JEMALLOC_SRC_DIR) $(PROTOBUF_SRC_DIR) $(ROCKSDB_SRC_DIR) $(SNAPPY_SRC_DIR) $(LIBROACH_SRC_DIR)
 
 HOST_TRIPLE := $(shell $$($(GO) env CC) -dumpmachine)
 
@@ -296,6 +297,7 @@ ifdef MINGW
 BUILD_DIR := $(shell cygpath -m $(BUILD_DIR))
 endif
 
+CRYPTOPP_DIR := $(BUILD_DIR)/cryptopp
 JEMALLOC_DIR := $(BUILD_DIR)/jemalloc
 PROTOBUF_DIR := $(BUILD_DIR)/protobuf
 ROCKSDB_DIR  := $(BUILD_DIR)/rocksdb$(STDMALLOC_SUFFIX)$(if $(ENABLE_ROCKSDB_ASSERTIONS),_assert)
@@ -305,7 +307,7 @@ LIBROACH_DIR := $(BUILD_DIR)/libroach
 PROTOC_DIR := $(GOPATH)/native/$(HOST_TRIPLE)/protobuf
 PROTOC 		 := $(PROTOC_DIR)/protoc
 
-C_LIBS_OSS = $(if $(USE_STDMALLOC),,libjemalloc) libprotobuf libsnappy librocksdb libroach
+C_LIBS_OSS = $(if $(USE_STDMALLOC),,libjemalloc) libcryptopp libprotobuf libsnappy librocksdb libroach
 C_LIBS_CCL = $(C_LIBS_OSS) libroachccl
 
 # Go does not permit dashes in build tags. This is undocumented. Fun!
@@ -347,7 +349,7 @@ $(CGO_FLAGS_FILES): $(REPO_ROOT)/build/common.mk
 	@echo 'package $(notdir $(@D))' >> $@
 	@echo >> $@
 	@echo '// #cgo CPPFLAGS: -I$(JEMALLOC_DIR)/include' >> $@
-	@echo '// #cgo LDFLAGS: $(addprefix -L,$(PROTOBUF_DIR) $(JEMALLOC_DIR)/lib $(SNAPPY_DIR) $(ROCKSDB_DIR) $(LIBROACH_DIR))' >> $@
+	@echo '// #cgo LDFLAGS: $(addprefix -L,$(CRYPTOPP_DIR) $(PROTOBUF_DIR) $(JEMALLOC_DIR)/lib $(SNAPPY_DIR) $(ROCKSDB_DIR) $(LIBROACH_DIR))' >> $@
 	@echo 'import "C"' >> $@
 
 # BUILD ARTIFACT CACHING
@@ -369,6 +371,12 @@ $(CGO_FLAGS_FILES): $(REPO_ROOT)/build/common.mk
 # only rebuild the affected objects, but in practice dependencies on configure
 # flags are not tracked correctly, and these stale artifacts can cause
 # particularly hard-to-debug errors.
+$(CRYPTOPP_DIR)/Makefile: $(C_DEPS_DIR)/cryptopp-rebuild $(BOOTSTRAP_TARGET)
+	rm -rf $(CRYPTOPP_DIR)
+	mkdir -p $(CRYPTOPP_DIR)
+	@# NOTE: If you change the CMake flags below, bump the version in
+	@# $(C_DEPS_DIR)/cryptopp-rebuild. See above for rationale.
+	cd $(CRYPTOPP_DIR) && cmake $(CMAKE_FLAGS) $(CRYPTOPP_SRC_DIR)
 
 $(JEMALLOC_SRC_DIR)/configure.ac: $(BOOTSTRAP_TARGET)
 
@@ -437,6 +445,10 @@ $(LIBROACH_DIR)/Makefile: $(C_DEPS_DIR)/libroach-rebuild $(BOOTSTRAP_TARGET)
 $(PROTOC): $(PROTOC_DIR)/Makefile .ALWAYS_REBUILD
 	@$(MAKE) --no-print-directory -C $(PROTOC_DIR) protoc
 
+.PHONY: libcryptopp
+libcryptopp: $(CRYPTOPP_DIR)/Makefile
+	@$(MAKE) --no-print-directory -C $(CRYPTOPP_DIR) static
+
 .PHONY: libjemalloc
 libjemalloc: $(JEMALLOC_DIR)/Makefile
 	@$(MAKE) --no-print-directory -C $(JEMALLOC_DIR) build_lib_static
@@ -468,17 +480,21 @@ libroachccl: $(LIBROACH_DIR)/Makefile libroach
 
 .PHONY: clean-c-deps
 clean-c-deps:
+	rm -rf $(CRYPTOPP_DIR)
 	rm -rf $(JEMALLOC_DIR)
 	rm -rf $(PROTOBUF_DIR)
 	rm -rf $(ROCKSDB_DIR)
 	rm -rf $(SNAPPY_DIR)
+	rm -rf $(LIBROACH_DIR)
 
 .PHONY: unsafe-clean-c-deps
 unsafe-clean-c-deps:
+	git -C $(CRYPTOPP_SRC_DIR) clean -dxf
 	git -C $(JEMALLOC_SRC_DIR) clean -dxf
 	git -C $(PROTOBUF_SRC_DIR) clean -dxf
 	git -C $(ROCKSDB_SRC_DIR)  clean -dxf
 	git -C $(SNAPPY_SRC_DIR)   clean -dxf
+	git -C $(LIBROACH_SRC_DIR)   clean -dxf
 
 .SECONDEXPANSION:
 $(LOCAL_BIN)/%: $$(shell find $(PKG_ROOT)/cmd/$$*) | submodules
