@@ -108,7 +108,9 @@ var planMergeJoins = settings.RegisterBoolSetting(
 	true,
 )
 
-func newDistSQLPlanner(
+// NewDistSQLPlanner initializes a DistSQLPlanner
+func NewDistSQLPlanner(
+	ctx context.Context,
 	planVersion distsqlrun.DistSQLVersion,
 	st *cluster.Settings,
 	nodeDesc roachpb.NodeDescriptor,
@@ -119,6 +121,7 @@ func newDistSQLPlanner(
 	stopper *stop.Stopper,
 	testingKnobs DistSQLPlannerTestingKnobs,
 ) *DistSQLPlanner {
+	log.Infof(ctx, "creating DistSQLPlanner with address %s", nodeDesc.Address)
 	dsp := &DistSQLPlanner{
 		planVersion:  planVersion,
 		st:           st,
