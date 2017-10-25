@@ -75,17 +75,43 @@ export class LineGraph extends React.Component<LineGraphProps, {}> {
   }
 
   mouseMove = (e: any) => {
+    const datapoints = this.props.data.results[0].datapoints;
     const timeScale = this.chart.xAxis.scale();
+
+    // To get the x-coordinate within the chart we subtract the left side of the SVG
+    // element and the left side margin.
     const x = e.clientX - this.graphEl.getBoundingClientRect().left - CHART_MARGINS.left;
+    // Find the time value of the coordinate by asking the scale to invert the value.
     const t = Math.floor(timeScale.invert(x));
 
-    const series: any = this.props.data.results[0].datapoints.map((d: any) => NanoToMilli(d.timestamp_nanos.toNumber()));
+    // Find which data point is closest to the x-coordinate.
+    let result: moment.Moment;
+    if (datapoints.length) {
+      const series: any = datapoints.map((d: any) => NanoToMilli(d.timestamp_nanos.toNumber()));
 
-    const index = d3.bisect(series, t);
-    const result = moment(new Date(series[index]));
+      const right = d3.bisectRight(series, t);
+      const left = right - 1;
 
-    // TODO(couchand): don't trust the bisect, check for which side of the split is closer
+      let index = 0;
 
+      if (right >= series.length) {
+        // We're hovering over the rightmost point.
+        index = left;
+      } else if (left < 0) {
+        // We're hovering over the leftmost point.
+        index = right;
+      } else {
+        // The general case: we're hovering somewhere over the middle.
+        const leftDistance = t - series[left];
+        const rightDistance = series[right] - t;
+
+        index = leftDistance < rightDistance ? left : right;
+      }
+
+      result = moment(new Date(series[index]));
+    }
+
+    // Only dispatch if we have something to change to avoid action spamming.
     if (this.props.hoverState.hoverChart !== this.props.title || !result.isSame(this.props.hoverState.hoverTime)) {
       this.props.hoverOn({
         hoverChart: this.props.title,
