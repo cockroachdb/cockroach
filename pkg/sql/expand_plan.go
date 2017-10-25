@@ -341,6 +341,8 @@ func expandRenderNode(
 		// the number of source columns doesn't change between
 		// instantiation and Start() (e.g. groupNode).
 		// TODO(knz): investigate this further and enable the optimization fully.
+		// TODO(radu): once this is investigated, we should look into coalescing
+		// renderNodes (at least if the parent node is just a projection).
 
 		needRename := false
 		foundNonTrivialRender := false

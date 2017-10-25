@@ -593,6 +593,13 @@ func HasCompositeKeyEncoding(semanticType ColumnType_SemanticType) bool {
 	return false
 }
 
+// DatumTypeHasCompositeKeyEncoding is a version of HasCompositeKeyEncoding
+// which works on datum types.
+func DatumTypeHasCompositeKeyEncoding(typ parser.Type) bool {
+	colType, err := DatumTypeToColumnSemanticType(typ)
+	return err == nil && HasCompositeKeyEncoding(colType)
+}
+
 // MustBeValueEncoded returns true if columns of the given kind can only be value
 // encoded.
 func MustBeValueEncoded(semanticType ColumnType_SemanticType) bool {

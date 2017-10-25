@@ -27,6 +27,8 @@ import (
 
 // joinPredicate implements the predicate logic for joins.
 type joinPredicate struct {
+	joinType joinType
+
 	// numLeft/RightCols are the number of columns in the left and right
 	// operands.
 	numLeftCols, numRightCols int
@@ -48,11 +50,6 @@ type joinPredicate struct {
 	// Used mainly for pretty-printing.
 	rightColNames parser.NameList
 
-	// numMergedEqualityColumns specifies how many of the equality
-	// columns must be merged at the beginning of each result row. This
-	// is the desired behavior for USING and NATURAL JOIN.
-	numMergedEqualityColumns int
-
 	// For ON predicates or joins with an added filter expression,
 	// we need an IndexedVarHelper, the dataSourceInfo, a row buffer
 	// and the expression itself.
@@ -70,8 +67,10 @@ type joinPredicate struct {
 }
 
 // makeCrossPredicate constructs a joinPredicate object for joins with a ON clause.
-func makeCrossPredicate(left, right *dataSourceInfo) (*joinPredicate, *dataSourceInfo, error) {
-	return makeEqualityPredicate(left, right, nil, nil, 0, nil)
+func makeCrossPredicate(
+	typ joinType, left, right *dataSourceInfo,
+) (*joinPredicate, *dataSourceInfo, error) {
+	return makeEqualityPredicate(typ, left, right, nil /*leftColNames*/, nil /*rightColNames */)
 }
 
 // tryAddEqualityFilter attempts to turn the given filter expression into
@@ -90,7 +89,7 @@ func (p *joinPredicate) tryAddEqualityFilter(filter parser.Expr, left, right *da
 		return false
 	}
 
-	sourceBoundary := p.numMergedEqualityColumns + len(left.sourceColumns)
+	sourceBoundary := len(left.sourceColumns)
 	if (lhs.Idx >= sourceBoundary && rhs.Idx >= sourceBoundary) ||
 		(lhs.Idx < sourceBoundary && rhs.Idx < sourceBoundary) {
 		// Both variables are on the same side of the join (e.g. `a JOIN b ON a.x = a.y`).
@@ -108,8 +107,8 @@ func (p *joinPredicate) tryAddEqualityFilter(filter parser.Expr, left, right *da
 	// IndexedVars, and the column indices at this point will refer to
 	// the full column set of the joinPredicate, including the
 	// merged columns.
-	leftColIdx := lhs.Idx - p.numMergedEqualityColumns
-	rightColIdx := rhs.Idx - len(left.sourceColumns) - p.numMergedEqualityColumns
+	leftColIdx := lhs.Idx
+	rightColIdx := rhs.Idx - len(left.sourceColumns)
 
 	// Also, we will want to avoid redundant equality checks.
 	for i := range p.leftEqualityIndices {
@@ -143,9 +142,9 @@ func (p *joinPredicate) tryAddEqualityFilter(filter parser.Expr, left, right *da
 
 // makeOnPredicate constructs a joinPredicate object for joins with a ON clause.
 func (p *planner) makeOnPredicate(
-	ctx context.Context, left, right *dataSourceInfo, expr parser.Expr,
+	ctx context.Context, typ joinType, left, right *dataSourceInfo, expr parser.Expr,
 ) (*joinPredicate, *dataSourceInfo, error) {
-	pred, info, err := makeEqualityPredicate(left, right, nil, nil, 0, nil)
+	pred, info, err := makeEqualityPredicate(typ, left, right, nil /*leftColNames*/, nil /*rightColNames*/)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -162,11 +161,11 @@ func (p *planner) makeOnPredicate(
 // makeUsingPredicate constructs a joinPredicate object for joins with
 // a USING clause.
 func makeUsingPredicate(
-	left, right *dataSourceInfo, colNames parser.NameList,
+	typ joinType, left, right *dataSourceInfo, usingCols parser.NameList,
 ) (*joinPredicate, *dataSourceInfo, error) {
 	seenNames := make(map[string]struct{})
 
-	for _, syntaxColName := range colNames {
+	for _, syntaxColName := range usingCols {
 		colName := string(syntaxColName)
 		// Check for USING(x,x)
 		if _, ok := seenNames[colName]; ok {
@@ -175,49 +174,24 @@ func makeUsingPredicate(
 		seenNames[colName] = struct{}{}
 	}
 
-	return makeEqualityPredicate(left, right, colNames, colNames, len(colNames), nil)
+	return makeEqualityPredicate(typ, left, right, usingCols, usingCols)
 }
 
 // makeEqualityPredicate constructs a joinPredicate object for joins. The join
-// condition includes equality between numMergedEqualityColumns columns,
-// specified by leftColNames and rightColNames.
+// condition includes equality between the columns specified by leftColNames and
+// rightColNames.
 func makeEqualityPredicate(
-	left, right *dataSourceInfo,
-	leftColNames, rightColNames parser.NameList,
-	numMergedEqualityColumns int,
-	concatInfos *dataSourceInfo,
+	typ joinType, left, right *dataSourceInfo, leftColNames, rightColNames parser.NameList,
 ) (resPred *joinPredicate, info *dataSourceInfo, err error) {
 	if len(leftColNames) != len(rightColNames) {
 		panic(fmt.Errorf("left columns' length %q doesn't match right columns' length %q in EqualityPredicate",
 			len(leftColNames), len(rightColNames)))
-	}
-	if len(leftColNames) < numMergedEqualityColumns {
-		panic(fmt.Errorf("cannot merge %d columns, only %d columns to compare", numMergedEqualityColumns, len(leftColNames)))
 	}
 
 	// Prepare the arrays populated below.
 	cmpOps := make([]func(*parser.EvalContext, parser.Datum, parser.Datum) (parser.Datum, error), len(leftColNames))
 	leftEqualityIndices := make([]int, len(leftColNames))
 	rightEqualityIndices := make([]int, len(rightColNames))
-
-	// usedLeft represents the list of indices that participate in the
-	// equality predicate. They are collected in order to determine
-	// below which columns remain after the equality; this is used
-	// only when merging result columns.
-	var usedLeft, usedRight []int
-	var columns sqlbase.ResultColumns
-	if numMergedEqualityColumns > 0 {
-		usedLeft = make([]int, len(left.sourceColumns))
-		for i := range usedLeft {
-			usedLeft[i] = invalidColIdx
-		}
-		usedRight = make([]int, len(right.sourceColumns))
-		for i := range usedRight {
-			usedRight[i] = invalidColIdx
-		}
-		nResultColumns := len(left.sourceColumns) + len(right.sourceColumns) - numMergedEqualityColumns
-		columns = make(sqlbase.ResultColumns, 0, nResultColumns)
-	}
 
 	// Find out which columns are involved in EqualityPredicate.
 	for i := range leftColNames {
@@ -247,14 +221,6 @@ func makeEqualityPredicate(
 				leftType, leftColName, rightType, rightColName)
 		}
 		cmpOps[i] = fn
-
-		if i < numMergedEqualityColumns {
-			usedLeft[leftIdx] = i
-			usedRight[rightIdx] = i
-
-			// Merged columns come first in the results.
-			columns = append(columns, left.sourceColumns[leftIdx])
-		}
 	}
 
 	// Now, prepare/complete the metadata for the result columns.
@@ -266,20 +232,9 @@ func makeEqualityPredicate(
 	// are hidden so that they are invisible to star expansion, but
 	// not omitted so that they can still be selected separately.
 
-	// Finish collecting the column definitions from the left and
-	// right data sources.
-	for i, c := range left.sourceColumns {
-		if usedLeft != nil && usedLeft[i] != invalidColIdx {
-			c.Hidden = true
-		}
-		columns = append(columns, c)
-	}
-	for i, c := range right.sourceColumns {
-		if usedRight != nil && usedRight[i] != invalidColIdx {
-			c.Hidden = true
-		}
-		columns = append(columns, c)
-	}
+	columns := make(sqlbase.ResultColumns, 0, len(left.sourceColumns)+len(right.sourceColumns))
+	columns = append(columns, left.sourceColumns...)
+	columns = append(columns, right.sourceColumns...)
 
 	// Compute the mappings from table aliases to column sets from
 	// both sides into a new alias-columnset mapping for the result
@@ -287,62 +242,22 @@ func makeEqualityPredicate(
 	// for the anonymous table, which needs to be merged.
 	aliases := make(sourceAliases, 0, len(left.sourceAliases)+len(right.sourceAliases))
 
+	var anonymousCols util.FastIntSet
+
 	collectAliases := func(sourceAliases sourceAliases, offset int) {
 		for _, alias := range sourceAliases {
+			newSet := alias.columnSet.Shift(offset)
 			if alias.name == anonymousTable {
-				continue
-			}
-			var newSet util.FastIntSet
-			for colIdx, ok := alias.columnSet.Next(0); ok; colIdx, ok = alias.columnSet.Next(colIdx + 1) {
-				newSet.Add(colIdx + offset)
-			}
-			aliases = append(aliases, sourceAlias{name: alias.name, columnSet: newSet})
-		}
-	}
-	collectAliases(left.sourceAliases, numMergedEqualityColumns)
-	collectAliases(right.sourceAliases, numMergedEqualityColumns+len(left.sourceColumns))
-
-	anonymousAlias := sourceAlias{name: anonymousTable}
-	var hiddenLeftNames, hiddenRightNames []string
-
-	// All the merged columns at the beginning belong to the
-	// anonymous data source.
-	for i := 0; i < numMergedEqualityColumns; i++ {
-		anonymousAlias.columnSet.Add(i)
-		hiddenLeftNames = append(hiddenLeftNames, left.sourceColumns[leftEqualityIndices[i]].Name)
-		hiddenRightNames = append(hiddenRightNames, right.sourceColumns[rightEqualityIndices[i]].Name)
-	}
-
-	// Now collect the other table-less columns into the anonymous data
-	// source, but hide (skip) those that are already merged.
-	collectAnonymousAliases := func(
-		sourceAliases sourceAliases, hiddenNames []string, cols sqlbase.ResultColumns, offset int,
-	) {
-		for _, alias := range sourceAliases {
-			if alias.name != anonymousTable {
-				continue
-			}
-			for colIdx, ok := alias.columnSet.Next(0); ok; colIdx, ok = alias.columnSet.Next(colIdx + 1) {
-				isHidden := false
-				for _, hiddenName := range hiddenNames {
-					if cols[colIdx].Name == hiddenName {
-						isHidden = true
-						break
-					}
-				}
-				if !isHidden {
-					anonymousAlias.columnSet.Add(colIdx + offset)
-				}
+				anonymousCols.UnionWith(newSet)
+			} else {
+				aliases = append(aliases, sourceAlias{name: alias.name, columnSet: newSet})
 			}
 		}
 	}
-	collectAnonymousAliases(left.sourceAliases, hiddenLeftNames, left.sourceColumns,
-		numMergedEqualityColumns)
-	collectAnonymousAliases(right.sourceAliases, hiddenRightNames, right.sourceColumns,
-		numMergedEqualityColumns+len(left.sourceColumns))
-
-	if !anonymousAlias.columnSet.Empty() {
-		aliases = append(aliases, anonymousAlias)
+	collectAliases(left.sourceAliases, 0)
+	collectAliases(right.sourceAliases, len(left.sourceColumns))
+	if !anonymousCols.Empty() {
+		aliases = append(aliases, sourceAlias{name: anonymousTable, columnSet: anonymousCols})
 	}
 
 	info = &dataSourceInfo{
@@ -351,15 +266,15 @@ func makeEqualityPredicate(
 	}
 
 	pred := &joinPredicate{
-		numLeftCols:              len(left.sourceColumns),
-		numRightCols:             len(right.sourceColumns),
-		leftColNames:             leftColNames,
-		rightColNames:            rightColNames,
-		numMergedEqualityColumns: numMergedEqualityColumns,
-		cmpFunctions:             cmpOps,
-		leftEqualityIndices:      leftEqualityIndices,
-		rightEqualityIndices:     rightEqualityIndices,
-		info:                     info,
+		joinType:             typ,
+		numLeftCols:          len(left.sourceColumns),
+		numRightCols:         len(right.sourceColumns),
+		leftColNames:         leftColNames,
+		rightColNames:        rightColNames,
+		cmpFunctions:         cmpOps,
+		leftEqualityIndices:  leftEqualityIndices,
+		rightEqualityIndices: rightEqualityIndices,
+		info:                 info,
 	}
 	// We must initialize the indexed var helper in all cases, even when
 	// there is no on condition, so that getNeededColumns() does not get
@@ -393,8 +308,8 @@ func (p *joinPredicate) eval(
 ) (bool, error) {
 	if p.onCond != nil {
 		p.curRow = result
-		copy(p.curRow[p.numMergedEqualityColumns:p.numMergedEqualityColumns+len(leftRow)], leftRow)
-		copy(p.curRow[p.numMergedEqualityColumns+len(leftRow):], rightRow)
+		copy(p.curRow[:len(leftRow)], leftRow)
+		copy(p.curRow[len(leftRow):], rightRow)
 		return sqlbase.RunFilter(p.onCond, ctx)
 	}
 	return true, nil
@@ -415,8 +330,8 @@ func (p *joinPredicate) getNeededColumns(neededJoined []bool) ([]bool, []bool) {
 			neededJoined[i] = true
 		}
 	}
-	leftNeeded := neededJoined[p.numMergedEqualityColumns : p.numMergedEqualityColumns+p.numLeftCols]
-	rightNeeded := neededJoined[p.numMergedEqualityColumns+p.numLeftCols:]
+	leftNeeded := neededJoined[:p.numLeftCols]
+	rightNeeded := neededJoined[p.numLeftCols:]
 
 	// The equality columns are always needed.
 	for i := range p.leftEqualityIndices {
@@ -429,18 +344,8 @@ func (p *joinPredicate) getNeededColumns(neededJoined []bool) ([]bool, []bool) {
 // prepareRow prepares the output row by combining values from the
 // input data sources.
 func (p *joinPredicate) prepareRow(result, leftRow, rightRow parser.Datums) {
-	var offset int
-	for offset = 0; offset < p.numMergedEqualityColumns; offset++ {
-		// The result for merged columns must be computed as per COALESCE().
-		leftIdx := p.leftEqualityIndices[offset]
-		if leftRow[leftIdx] != parser.DNull {
-			result[offset] = leftRow[leftIdx]
-		} else {
-			result[offset] = rightRow[p.rightEqualityIndices[offset]]
-		}
-	}
-	copy(result[offset:offset+len(leftRow)], leftRow)
-	copy(result[offset+len(leftRow):], rightRow)
+	copy(result[:len(leftRow)], leftRow)
+	copy(result[len(leftRow):], rightRow)
 }
 
 // encode returns the encoding of a row from a given side (left or right),
