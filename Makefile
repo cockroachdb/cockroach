@@ -310,8 +310,10 @@ clean: ## Remove build artifacts.
 clean: clean-c-deps
 	$(MAKE) -C $(ORG_ROOT) -f cockroach/build/protobuf.mk clean
 	$(GO) clean $(GOFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' -i github.com/cockroachdb/...
-	$(FIND_RELEVANT) -type f \( -name 'zcgo_flags*.go' -o -name '*.test' \) -delete
-	$(FIND_RELEVANT) -type f -depth 1 -name 'cockroach*' -delete
+	@# -delete and -prune are incompatible.
+	@# See: https://unix.stackexchange.com/a/87260/212232
+	$(FIND_RELEVANT) -type f \( -name 'zcgo_flags*.go' -o -name '*.test' \) -exec rm {} +
+	$(FIND_RELEVANT) -type f -depth 1 -name 'cockroach*' -exec rm {} +
 	rm -rf artifacts $(LOCAL_BIN) $(ARCHIVE)
 
 .PHONY: maintainer-clean
@@ -354,7 +356,7 @@ $(ARCHIVE): $(ARCHIVE).tmp
 # ARCHIVE_EXTRAS are hard-to-generate files and their prerequisites that are
 # pre-generated and distributed in source archives to minimize the number of
 # dependencies required for end-users to build from source.
-ARCHIVE_EXTRAS := pkg/ui/embedded.go pkg/ui/*-manifest.json pkg/ui/dist/*.dll.js pkg/ui/src/js/protos.*
+ARCHIVE_EXTRAS := pkg/ui/embedded.go pkg/ui/*-manifest.json pkg/ui/dist/*.dll.js pkg/ui/src/js/protos.* $(YARN_INSTALLED_TARGET)
 
 # TODO(benesch): Make this recipe use `git ls-files --recurse-submodules`
 # instead of scripts/ls-files.sh once Git v2.11 is widely deployed.
