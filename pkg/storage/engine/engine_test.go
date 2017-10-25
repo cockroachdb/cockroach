@@ -112,7 +112,7 @@ func TestEngineBatchCommit(t *testing.T) {
 				t.Fatal(err)
 			}
 		}
-		if err := batch.Commit(false /* !sync */); err != nil {
+		if err := batch.Commit(false /* sync */); err != nil {
 			t.Fatal(err)
 		}
 		close(writesDone)
@@ -319,7 +319,7 @@ func TestEngineBatch(t *testing.T) {
 			}
 			iter.Close()
 			// Commit the batch and try getting the value from the engine.
-			if err := b.Commit(false /* !sync */); err != nil {
+			if err := b.Commit(false /* sync */); err != nil {
 				t.Errorf("%d: %v", i, err)
 				continue
 			}

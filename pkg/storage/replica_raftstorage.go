@@ -229,7 +229,7 @@ func iterateEntries(
 		hlc.Timestamp{},
 		true,  /* consistent */
 		nil,   /* txn */
-		false, /* !reverse */
+		false, /* reverse */
 		scanFunc,
 	)
 	return err
@@ -484,7 +484,7 @@ func snapshot(
 	// know they cannot be committed yet; operations that modify range
 	// descriptors resolve their own intents when they commit.
 	ok, err := engine.MVCCGetProto(ctx, snap, keys.RangeDescriptorKey(startKey),
-		hlc.MaxTimestamp, false /* !consistent */, nil, &desc)
+		hlc.MaxTimestamp, false /* consistent */, nil, &desc)
 	if err != nil {
 		return OutgoingSnapshot{}, errors.Errorf("failed to get desc: %s", err)
 	}

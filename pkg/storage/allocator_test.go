@@ -1158,7 +1158,7 @@ func TestAllocatorTransferLeaseTarget(t *testing.T) {
 				nil, /* replicaStats */
 				c.check,
 				true,  /* checkCandidateFullness */
-				false, /* !alwaysAllowDecisionWithoutStats */
+				false, /* alwaysAllowDecisionWithoutStats */
 			)
 			if c.expected != target.StoreID {
 				t.Fatalf("expected %d, but found %d", c.expected, target.StoreID)
@@ -1212,7 +1212,7 @@ func TestAllocatorTransferLeaseTargetMultiStore(t *testing.T) {
 				nil, /* replicaStats */
 				c.check,
 				true,  /* checkCandidateFullness */
-				false, /* !alwaysAllowDecisionWithoutStats */
+				false, /* alwaysAllowDecisionWithoutStats */
 			)
 			if c.expected != target.StoreID {
 				t.Fatalf("expected %d, but found %d", c.expected, target.StoreID)
@@ -1441,7 +1441,7 @@ func TestAllocatorTransferLeaseTargetLoadBased(t *testing.T) {
 				c.stats,
 				c.check,
 				true,  /* checkCandidateFullness */
-				false, /* !alwaysAllowDecisionWithoutStats */
+				false, /* alwaysAllowDecisionWithoutStats */
 			)
 			if c.expected != target.StoreID {
 				t.Errorf("expected %d, got %d", c.expected, target.StoreID)

@@ -587,7 +587,7 @@ func (tc *cacheImpl) ExpandRequests(span roachpb.RSpan, timestamp hlc.Timestamp)
 		}
 		for i := range req.Writes {
 			sp := &req.Writes[i]
-			tc.add(sp.Key, sp.EndKey, req.Timestamp, req.TxnID, false /* !readTSCache */)
+			tc.add(sp.Key, sp.EndKey, req.Timestamp, req.TxnID, false /* readTSCache */)
 		}
 		if req.Txn.Key != nil {
 			// Make the transaction key from the request key. We're guaranteed
@@ -595,7 +595,7 @@ func (tc *cacheImpl) ExpandRequests(span roachpb.RSpan, timestamp hlc.Timestamp)
 			// EndTransactionRequests.
 			key := keys.TransactionKey(req.Txn.Key, req.TxnID)
 			// We set txnID=nil because we want hits for same txn ID.
-			tc.add(key, nil, req.Timestamp, uuid.UUID{}, false /* !readTSCache */)
+			tc.add(key, nil, req.Timestamp, uuid.UUID{}, false /* readTSCache */)
 		}
 		req.release()
 	}

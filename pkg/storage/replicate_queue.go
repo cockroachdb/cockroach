@@ -542,7 +542,7 @@ func (rq *replicateQueue) transferLease(
 		repl.leaseholderStats,
 		opts.checkTransferLeaseSource,
 		opts.checkCandidateFullness,
-		false, /* !alwaysAllowDecisionWithoutStats */
+		false, /* alwaysAllowDecisionWithoutStats */
 	); target != (roachpb.ReplicaDescriptor{}) {
 		rq.metrics.TransferLeaseCount.Inc(1)
 		log.VEventf(ctx, 1, "transferring lease to s%d", target.StoreID)

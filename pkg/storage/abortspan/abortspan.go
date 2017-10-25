@@ -89,7 +89,7 @@ func (sc *AbortSpan) ClearData(e engine.Engine) error {
 	if err != nil {
 		return err
 	}
-	return b.Commit(false /* !sync */)
+	return b.Commit(false /* sync */)
 }
 
 // Get looks up an AbortSpan entry recorded for this transaction ID.
@@ -112,7 +112,7 @@ func (sc *AbortSpan) Iterate(
 	ctx context.Context, e engine.Reader, f func([]byte, roachpb.AbortSpanEntry),
 ) {
 	_, _ = engine.MVCCIterate(ctx, e, sc.min(), sc.max(), hlc.Timestamp{},
-		true /* consistent */, nil /* txn */, false, /* !reverse */
+		true /* consistent */, nil /* txn */, false, /* reverse */
 		func(kv roachpb.KeyValue) (bool, error) {
 			var entry roachpb.AbortSpanEntry
 			if _, err := keys.DecodeAbortSpanKey(kv.Key, nil); err != nil {
