@@ -456,7 +456,14 @@ libroachccl: $(LIBROACH_DIR)/Makefile libroach
 
 .PHONY: clean-c-deps
 clean-c-deps:
-	rm -rf $(JEMALLOC_DIR) && git -C $(JEMALLOC_SRC_DIR) clean -dxf
-	rm -rf $(PROTOBUF_DIR) && git -C $(PROTOBUF_SRC_DIR) clean -dxf
-	rm -rf $(ROCKSDB_DIR)  && git -C $(ROCKSDB_SRC_DIR)  clean -dxf
-	rm -rf $(SNAPPY_DIR)   && git -C $(SNAPPY_SRC_DIR)   clean -dxf
+	rm -rf $(JEMALLOC_DIR)
+	rm -rf $(PROTOBUF_DIR)
+	rm -rf $(ROCKSDB_DIR)
+	rm -rf $(SNAPPY_DIR)
+
+.PHONY: unsafe-clean-c-deps
+unsafe-clean-c-deps:
+	git -C $(JEMALLOC_SRC_DIR) clean -dxf
+	git -C $(PROTOBUF_SRC_DIR) clean -dxf
+	git -C $(ROCKSDB_SRC_DIR)  clean -dxf
+	git -C $(SNAPPY_SRC_DIR)   clean -dxf
