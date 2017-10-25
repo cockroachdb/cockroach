@@ -41,20 +41,6 @@ func TestVersionUpgrade(t *testing.T) {
 }
 
 func testVersionUpgrade(ctx context.Context, t *testing.T, cfg cluster.TestConfig) {
-	// TODO(tschottdorf): this test is flaky when run with four (or more) nodes.
-	// I'm not 100% sure why, but the node started first may sometimes not be
-	// able to connect to Gossip. That node is special in that it gets started
-	// without join flags, but even though it is passed as a peer to all of the
-	// other nodes, either none of them bothers to actually use it, or the node
-	// does not profit from incoming connections sufficiently. For some reason,
-	// it works with three nodes (I've done dozens of iterations; with four nodes
-	// it usually craps out after only a handful).
-	//
-	// See https://github.com/cockroachdb/cockroach/issues/18027.
-	if len(cfg.Nodes) > 3 {
-		cfg.Nodes = cfg.Nodes[:3]
-	}
-
 	for i := range cfg.Nodes {
 		// Leave the field blank for all but the first node so that they use the
 		// version we're testing in this run.

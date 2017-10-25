@@ -222,7 +222,7 @@ func (c *Cluster) joins() []string {
 
 	var joins []addrAndSeq
 	for _, node := range c.Nodes {
-		advertAddr := node.advertiseAddr()
+		advertAddr := node.AdvertiseAddr()
 		if advertAddr != "" {
 			joins = append(joins, addrAndSeq{
 				addr: advertAddr,
@@ -242,13 +242,6 @@ func (c *Cluster) joins() []string {
 	// started first. This is the node that might have no --join flag set, and
 	// we must point the other nodes at it, and *only* at it (or the other nodes
 	// may connect sufficiently and never bother to talk to this node).
-	//
-	// See https://github.com/cockroachdb/cockroach/issues/18027 and note that this
-	// code is just an unsubstantiated claim. We have observed similar problems with
-	// this code. Likely what's described above is only a theoretical problem, but
-	// it's good to avoid those problems too.
-	//
-	// TODO(tschottdorf): revisit after #18027 above closes.
 	return []string{joins[0].addr}
 }
 
@@ -675,7 +668,7 @@ func (n *Node) StartAsync(ctx context.Context, joins ...string) <-chan error {
 	// written (i.e. isServing closes) makes restarts work with 1.0 servers for
 	// the most part.
 	for {
-		if gossipAddr := n.advertiseAddr(); gossipAddr != "" {
+		if gossipAddr := n.AdvertiseAddr(); gossipAddr != "" {
 			_, port, err := net.SplitHostPort(gossipAddr)
 			if err != nil {
 				ch = make(chan error, 1)
@@ -721,7 +714,8 @@ func (n *Node) advertiseAddrFile() string {
 	return filepath.Join(n.Cfg.DataDir, "cockroach.advertise-addr")
 }
 
-func (n *Node) advertiseAddr() (s string) {
+// AdvertiseAddr returns the Node's AdvertiseAddr or empty if none is available.
+func (n *Node) AdvertiseAddr() (s string) {
 	c, err := ioutil.ReadFile(n.advertiseAddrFile())
 	if err != nil {
 		if !os.IsNotExist(err) {
