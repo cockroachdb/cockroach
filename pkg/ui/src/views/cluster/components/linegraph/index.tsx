@@ -4,6 +4,7 @@ import moment from "moment";
 import * as nvd3 from "nvd3";
 import { createSelector } from "reselect";
 
+import { HoverState, hoverOn, hoverOff } from "src/redux/hover";
 import { findChildrenOfType } from "src/util/find";
 import {
   ConfigureLineChart, InitLineChart, CHART_MARGINS,
@@ -21,6 +22,9 @@ interface LineGraphProps extends MetricsDataComponentProps {
   legend?: boolean;
   xAxis?: boolean;
   tooltip?: React.ReactNode;
+  hoverOn?: typeof hoverOn;
+  hoverOff?: typeof hoverOff;
+  hoverState?: HoverState;
 }
 
 /**

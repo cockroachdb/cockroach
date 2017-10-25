@@ -8,7 +8,6 @@ import moment from "moment";
 import * as protos from  "src/js/protos";
 import { AdminUIState } from "src/redux/state";
 import { requestMetrics, MetricsQuery } from "src/redux/metrics";
-import { HoverState, hoverOn, hoverOff } from "src/redux/hover";
 import {
   Metric, MetricProps, MetricsDataComponentProps, QueryTimeInfo,
 } from "src/views/shared/components/metricQuery";
@@ -75,11 +74,6 @@ interface MetricsDataProviderExplicitProps {
   id: string;
   // If current is true, uses the current time instead of the global timewindow.
   current?: boolean;
-
-  // Hover handling props for hoverable charts.
-  hoverState?: HoverState;
-  hoverOn?: typeof hoverOn;
-  hoverOff?: typeof hoverOff;
 }
 
 /**
@@ -182,9 +176,6 @@ class MetricsDataProvider extends React.Component<MetricsDataProviderProps, {}> 
     const dataProps: MetricsDataComponentProps = {
       data: this.getData(),
       timeInfo: this.props.timeInfo,
-      hoverState: this.props.hoverState,
-      hoverOn: this.props.hoverOn,
-      hoverOff: this.props.hoverOff,
     };
     return React.cloneElement(child as React.ReactElement<MetricsDataComponentProps>, dataProps);
   }

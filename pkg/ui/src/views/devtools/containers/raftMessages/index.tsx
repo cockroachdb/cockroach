@@ -136,8 +136,8 @@ class NodeGraphs extends React.Component<NodeGraphsProps, {}> {
       const key = `nodes.raftMessages.${idx}`;
       return (
         <div key={key}>
-          <MetricsDataProvider id={key} hoverOn={hoverOn} hoverOff={hoverOff} hoverState={hoverState}>
-            {graph}
+          <MetricsDataProvider id={key}>
+            { React.cloneElement(graph, { hoverOn, hoverOff, hoverState }) }
           </MetricsDataProvider>
         </div>
       );
