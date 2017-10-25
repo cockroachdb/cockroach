@@ -794,6 +794,9 @@ func TestParse(t *testing.T) {
 		{`ALTER TABLE t EXPERIMENTAL CONFIGURE ZONE b'foo'`},
 		{`ALTER TABLE t EXPERIMENTAL CONFIGURE ZONE NULL`},
 
+		{`EXPERIMENTAL SCRUB TABLE x`},
+		{`EXPERIMENTAL SCRUB TABLE x WITH OPTIONS INDEX ALL`},
+
 		{`BACKUP foo TO 'bar'`},
 		{`BACKUP foo.foo, baz.baz TO 'bar'`},
 		{`SHOW BACKUP 'bar'`},
@@ -1136,8 +1139,6 @@ func TestParse2(t *testing.T) {
 		{`SHOW QUERIES`, `SHOW CLUSTER QUERIES`},
 
 		{`USE foo`, `SET database = foo`},
-
-		{`EXPERIMENTAL SCRUB TABLE x`, `EXPERIMENTAL SCRUB TABLE 'x'`},
 
 		{`SET NAMES foo`, `SET client_encoding = foo`},
 		{`SET NAMES 'foo'`, `SET client_encoding = 'foo'`},
