@@ -645,6 +645,10 @@ func (*Placeholder) Variable() {}
 
 // Format implements the NodeFormatter interface.
 func (node *Placeholder) Format(buf *bytes.Buffer, f FmtFlags) {
+	if f.placeholderFormat != nil {
+		f.placeholderFormat(buf, f, node)
+		return
+	}
 	buf.WriteByte('$')
 	buf.WriteString(node.Name)
 }
