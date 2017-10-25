@@ -59,6 +59,10 @@ type inclusiveOverlapper struct{}
 
 // Overlap checks where a and b overlap in the inclusive way.
 func (overlapper inclusiveOverlapper) Overlap(a Range, b Range) bool {
+	return overlapsInclusive(a, b)
+}
+
+func overlapsInclusive(a Range, b Range) bool {
 	return a.Start.Compare(b.End) <= 0 && b.Start.Compare(a.End) <= 0
 }
 
@@ -70,6 +74,10 @@ type exclusiveOverlapper struct{}
 
 // Overlap checks where a and b overlap in the exclusive way.
 func (overlapper exclusiveOverlapper) Overlap(a Range, b Range) bool {
+	return overlapsExclusive(a, b)
+}
+
+func overlapsExclusive(a Range, b Range) bool {
 	return a.Start.Compare(b.End) < 0 && b.Start.Compare(a.End) < 0
 }
 
