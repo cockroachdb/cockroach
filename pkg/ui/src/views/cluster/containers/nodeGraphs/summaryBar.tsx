@@ -48,6 +48,12 @@ function ClusterNodeTotals (props: ClusterSummaryProps) {
   );
 }
 
+const formatOnePlace = d3.format(".1f");
+const formatPercentage = d3.format(".2%");
+function formatNanosAsMillis (n: number) {
+  return formatOnePlace(NanoToMilli(n)) + " ms";
+}
+
 /**
  * Component which displays the cluster summary bar on the graphs page.
  */
@@ -55,26 +61,25 @@ export default function(props: ClusterSummaryProps) {
   // Capacity math used in the summary status section.
   const { capacityAvailable, capacityUsed } = props.nodesSummary.nodeSums;
   const usableCapacity = capacityAvailable + capacityUsed;
-  const capacityPercent = usableCapacity !== 0 ? ((capacityUsed / usableCapacity) * 100) : 100;
+  const capacityPercent = usableCapacity !== 0 ? (capacityUsed / usableCapacity) : 1;
 
   return (
     <div>
       <SummaryBar>
         <SummaryLabel>Summary</SummaryLabel>
         <ClusterNodeTotals {...props}/>
-        <SummaryStat title="Capacity Used" value={capacityPercent}
-                      format={(v) => `${d3.format(".2f")(v)}%`}>
+        <SummaryStat title="Capacity Used" value={capacityPercent} format={formatPercentage}>
           <SummaryStatMessage message={`You are using ${Bytes(capacityUsed)} of ${Bytes(usableCapacity)}
                                         usable storage capacity across all nodes.`} />
         </SummaryStat>
         <SummaryStat title="Unavailable ranges" value={props.nodesSummary.nodeSums.unavailableRanges} />
-        <SummaryMetricStat id="qps" title="Queries per second" format={d3.format(".1f")} >
+        <SummaryMetricStat id="qps" title="Queries per second" format={formatOnePlace} >
           <Metric sources={props.nodeSources} name="cr.node.sql.query.count" title="Queries/Sec" nonNegativeRate />
         </SummaryMetricStat>
-        <SummaryMetricStat id="p50" title="P50 latency" format={(n) => d3.format(".1f")(NanoToMilli(n)) + " ms"} >
+        <SummaryMetricStat id="p50" title="P50 latency" format={formatNanosAsMillis} >
           <Metric sources={props.nodeSources} name="cr.node.exec.latency-p50" aggregateMax downsampleMax />
         </SummaryMetricStat>
-        <SummaryMetricStat id="p99" title="P99 latency" format={(n) => d3.format(".1f")(NanoToMilli(n)) + " ms"} >
+        <SummaryMetricStat id="p99" title="P99 latency" format={formatNanosAsMillis} >
           <Metric sources={props.nodeSources} name="cr.node.exec.latency-p99" aggregateMax downsampleMax />
         </SummaryMetricStat>
       </SummaryBar>
