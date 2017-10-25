@@ -359,7 +359,10 @@ func exprColumn(expr parser.TypedExpr, indexVarMap []int) (int, bool) {
 //
 // See MakeExpression for a description of indexVarMap.
 func (p *PhysicalPlan) AddRendering(
-	exprs []parser.TypedExpr, indexVarMap []int, outTypes []sqlbase.ColumnType,
+	exprs []parser.TypedExpr,
+	evalCtx *parser.EvalContext,
+	indexVarMap []int,
+	outTypes []sqlbase.ColumnType,
 ) {
 	// First check if we need an Evaluator, or we are just shuffling values. We
 	// also check if the rendering is a no-op ("identity").
@@ -414,7 +417,7 @@ func (p *PhysicalPlan) AddRendering(
 	}
 	post.RenderExprs = make([]distsqlrun.Expression, len(exprs))
 	for i, e := range exprs {
-		post.RenderExprs[i] = MakeExpression(e, compositeMap)
+		post.RenderExprs[i] = MakeExpression(e, evalCtx, compositeMap)
 	}
 
 	if len(p.MergeOrdering.Columns) > 0 {
@@ -438,7 +441,7 @@ func (p *PhysicalPlan) AddRendering(
 				if post.Projection {
 					internalColIdx = post.OutputColumns[internalColIdx]
 				}
-				newExpr := MakeExpression(&parser.IndexedVar{Idx: int(internalColIdx)}, nil)
+				newExpr := MakeExpression(&parser.IndexedVar{Idx: int(internalColIdx)}, evalCtx, nil)
 
 				found = len(post.RenderExprs)
 				post.RenderExprs = append(post.RenderExprs, newExpr)
@@ -517,7 +520,9 @@ func reverseProjection(outputColumns []uint32, indexVarMap []int) []int {
 // necessary.
 //
 // See MakeExpression for a description of indexVarMap.
-func (p *PhysicalPlan) AddFilter(expr parser.TypedExpr, indexVarMap []int) {
+func (p *PhysicalPlan) AddFilter(
+	expr parser.TypedExpr, evalCtx *parser.EvalContext, indexVarMap []int,
+) {
 	post := p.GetLastStagePost()
 	if len(post.RenderExprs) > 0 || post.Offset != 0 || post.Limit != 0 {
 		// The last stage contains render expressions or a limit. The filter refers
@@ -540,7 +545,7 @@ func (p *PhysicalPlan) AddFilter(expr parser.TypedExpr, indexVarMap []int) {
 	if post.Projection {
 		compositeMap = reverseProjection(post.OutputColumns, indexVarMap)
 	}
-	filter := MakeExpression(expr, compositeMap)
+	filter := MakeExpression(expr, evalCtx, compositeMap)
 	if post.Filter.Expr != "" {
 		filter.Expr = fmt.Sprintf("(%s) AND (%s)", post.Filter.Expr, filter.Expr)
 	}
