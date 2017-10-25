@@ -142,8 +142,8 @@ func (p *planner) Explain(ctx context.Context, n *parser.Explain) (planNode, err
 	case explainPlan:
 		// We may want to show placeholder types, so ensure no values
 		// are missing.
-		p.semaCtx.Placeholders.FillUnassigned()
-		return p.makeExplainPlanNode(explainer, expanded, optimized, plan), nil
+		p.semaCtx.Placeholders.PermitUnassigned()
+		return p.makeExplainPlanNode(explainer, expanded, optimized, n.Statement, plan), nil
 
 	default:
 		return nil, fmt.Errorf("unsupported EXPLAIN mode: %d", mode)

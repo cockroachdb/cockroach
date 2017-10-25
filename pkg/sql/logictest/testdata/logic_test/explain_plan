@@ -114,6 +114,18 @@ EXPLAIN (EXPRS) EXECUTE x(3)
 3  ·         table     t@primary
 3  ·         spans     ALL
 
+query ITTT
+EXPLAIN (EXPRS) SELECT * FROM [EXECUTE x(3)]
+----
+0  limit     ·         ·
+0  ·         count     3
+1  distinct  ·         ·
+2  render    ·         ·
+2  ·         render 0  v
+3  scan      ·         ·
+3  ·         table     t@primary
+3  ·         spans     ALL
+
 statement ok
 CREATE TABLE tc (a INT, b INT, INDEX c(a))
 
