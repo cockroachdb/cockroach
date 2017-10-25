@@ -1918,9 +1918,9 @@ func (ec *endCmds) done(br *roachpb.BatchResponse, pErr *roachpb.Error, retry pr
 			// Clockless mode: all reads count as writes.
 			creq.Writes, creq.Reads = append(creq.Writes, creq.Reads...), nil
 		}
-		ec.repl.store.tsCacheMu.Lock()
+		// ec.repl.store.tsCacheMu.Lock()
 		ec.repl.store.tsCacheMu.cache.AddRequest(creq)
-		ec.repl.store.tsCacheMu.Unlock()
+		// ec.repl.store.tsCacheMu.Unlock()
 	}
 
 	if fn := ec.repl.store.cfg.TestingKnobs.OnCommandQueueAction; fn != nil {
@@ -2234,8 +2234,8 @@ func (r *Replica) applyTimestampCache(ba *roachpb.BatchRequest) (bool, *roachpb.
 
 	// TODO(peter): We only need to hold a write lock during the ExpandRequests
 	// calls. Investigate whether using a RWMutex here reduces lock contention.
-	r.store.tsCacheMu.Lock()
-	defer r.store.tsCacheMu.Unlock()
+	// r.store.tsCacheMu.Lock()
+	// defer r.store.tsCacheMu.Unlock()
 
 	if ba.Txn != nil {
 		r.store.tsCacheMu.cache.ExpandRequests(span, ba.Txn.Timestamp)

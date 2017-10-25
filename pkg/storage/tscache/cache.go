@@ -77,5 +77,6 @@ type Cache interface {
 
 // New returns a new timestamp cache with the supplied hybrid clock.
 func New(clock *hlc.Clock) Cache {
-	return newCacheImpl(clock)
+	// return newCacheImpl(clock)
+	return newSkiplistImpl(clock)
 }

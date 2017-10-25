@@ -872,9 +872,9 @@ func NewStore(cfg StoreConfig, eng engine.Engine, nodeDesc *roachpb.NodeDescript
 	s.mu.uninitReplicas = map[roachpb.RangeID]*Replica{}
 	s.mu.Unlock()
 
-	s.tsCacheMu.Lock()
+	// s.tsCacheMu.Lock()
 	s.tsCacheMu.cache = tscache.New(s.cfg.Clock)
-	s.tsCacheMu.Unlock()
+	// s.tsCacheMu.Unlock()
 
 	s.snapshotApplySem = make(chan struct{}, cfg.concurrentSnapshotApplyLimit)
 

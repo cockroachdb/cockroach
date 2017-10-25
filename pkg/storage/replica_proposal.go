@@ -489,11 +489,11 @@ func (r *Replica) leasePostApply(ctx context.Context, newLease roachpb.Lease) {
 		// lease's expiration but instead use the new lease's start to initialize
 		// the timestamp cache low water.
 		desc := r.Desc()
-		r.store.tsCacheMu.Lock()
+		// r.store.tsCacheMu.Lock()
 		for _, keyRange := range makeReplicatedKeyRanges(desc) {
 			r.store.tsCacheMu.cache.SetLowWater(keyRange.start.Key, keyRange.end.Key, newLease.Start)
 		}
-		r.store.tsCacheMu.Unlock()
+		// r.store.tsCacheMu.Unlock()
 
 		// Reset the request counts used to make lease placement decisions whenever
 		// starting a new lease.

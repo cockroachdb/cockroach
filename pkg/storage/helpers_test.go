@@ -332,8 +332,8 @@ func (r *Replica) CommandSizesLen() int {
 
 // GetTimestampCacheLowWater returns the timestamp cache low water mark.
 func (r *Replica) GetTimestampCacheLowWater() hlc.Timestamp {
-	r.store.tsCacheMu.Lock()
-	defer r.store.tsCacheMu.Unlock()
+	// r.store.tsCacheMu.Lock()
+	// defer r.store.tsCacheMu.Unlock()
 	t := r.store.tsCacheMu.cache.GlobalLowWater()
 	// Bump the per-Store low-water mark using the per-range read and write info.
 	start := roachpb.Key(r.Desc().StartKey)
