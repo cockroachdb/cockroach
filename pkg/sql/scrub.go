@@ -47,7 +47,21 @@ var scrubColumns = sqlbase.ResultColumns{
 	{Name: "details", Typ: parser.TypeString},
 }
 
-func (*scrubNode) Start(params runParams) error        { return nil }
-func (*scrubNode) Next(params runParams) (bool, error) { return false, nil }
-func (*scrubNode) Close(context.Context)               {}
-func (*scrubNode) Values() parser.Datums               { return nil }
+func (n *scrubNode) Start(params runParams) error {
+	tn, err := n.n.Table.NormalizeWithDatabaseName(params.p.session.Database)
+	if err != nil {
+		return err
+	}
+
+	tableDesc, err := getTableDesc(params.ctx, params.p.txn, params.p.getVirtualTabler(), tn)
+	if err != nil {
+		return err
+	} else if tableDesc == nil {
+		return sqlbase.NewUndefinedRelationError(tn)
+	}
+
+	return nil
+}
+func (n *scrubNode) Next(params runParams) (bool, error) { return false, nil }
+func (n *scrubNode) Close(context.Context)               {}
+func (n *scrubNode) Values() parser.Datums               { return nil }
