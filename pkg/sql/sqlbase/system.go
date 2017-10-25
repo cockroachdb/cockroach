@@ -313,14 +313,21 @@ var (
 		Version:  1,
 		Columns: []ColumnDescriptor{
 			{Name: "id", ID: 1, Type: colTypeInt},
-			{Name: "config", ID: 2, Type: colTypeBytes, Nullable: true},
+			{Name: "config", ID: keys.ZonesTableConfigColumnID, Type: colTypeBytes, Nullable: true},
 		},
 		NextColumnID: 3,
 		Families: []ColumnFamilyDescriptor{
 			{Name: "primary", ID: 0, ColumnNames: []string{"id"}, ColumnIDs: singleID1},
 			{Name: "fam_2_config", ID: 2, ColumnNames: []string{"config"}, ColumnIDs: []ColumnID{2}, DefaultColumnID: 2},
 		},
-		PrimaryIndex:   pk("id"),
+		PrimaryIndex: IndexDescriptor{
+			Name:             "primary",
+			ID:               keys.ZonesTablePrimaryIndexID,
+			Unique:           true,
+			ColumnNames:      []string{"id"},
+			ColumnDirections: singleASC,
+			ColumnIDs:        []ColumnID{keys.ZonesTablePrimaryIndexID},
+		},
 		NextFamilyID:   3,
 		NextIndexID:    2,
 		Privileges:     NewPrivilegeDescriptor(security.RootUser, SystemDesiredPrivileges(keys.ZonesTableID)),
@@ -616,7 +623,7 @@ func createDefaultZoneConfig() roachpb.KeyValue {
 		panic(fmt.Sprintf("could not marshal DefaultZoneConfig: %s", err))
 	}
 	return roachpb.KeyValue{
-		Key:   MakeZoneKey(keys.RootNamespaceID),
+		Key:   config.MakeZoneKey(uint32(keys.RootNamespaceID)),
 		Value: value,
 	}
 }

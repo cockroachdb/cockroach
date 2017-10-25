@@ -16,8 +16,6 @@ syntax = "proto2";
 package cockroach.config;
 option go_package = "config";
 
-import "cockroach/pkg/roachpb/data.proto";
-import "cockroach/pkg/roachpb/metadata.proto";
 import "gogoproto/gogo.proto";
 
 // GCPolicy defines garbage collection policies which apply to MVCC
@@ -129,8 +127,4 @@ message SubzoneSpan {
   // SubzoneIndex is the slice index of the Subzone this span belongs to in the
   // parent ZoneConfig's Subzones field.
   optional int32 subzone_index = 3 [(gogoproto.nullable) = false];
-}
-
-message SystemConfig {
-  repeated roachpb.KeyValue values = 1 [(gogoproto.nullable) = false];
 }

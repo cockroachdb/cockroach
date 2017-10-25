@@ -23,6 +23,7 @@ import (
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
+	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -234,7 +235,7 @@ func DropTableDesc(
 	ctx context.Context, tableDesc *sqlbase.TableDescriptor, db *client.DB, traceKV bool,
 ) error {
 	descKey := sqlbase.MakeDescMetadataKey(tableDesc.ID)
-	zoneKeyPrefix := sqlbase.MakeZoneKeyPrefix(tableDesc.ID)
+	zoneKeyPrefix := config.MakeZoneKeyPrefix(uint32(tableDesc.ID))
 
 	// Finished deleting all the table data, now delete the table meta data.
 	return db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {

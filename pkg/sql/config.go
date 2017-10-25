@@ -41,7 +41,7 @@ func getZoneConfig(
 	id uint32, keySuffix []byte, get func(roachpb.Key) (*roachpb.Value, error),
 ) (config.ZoneConfig, uint32, error) {
 	// Look in the zones table.
-	if zoneVal, err := get(sqlbase.MakeZoneKey(sqlbase.ID(id))); err != nil {
+	if zoneVal, err := get(config.MakeZoneKey(id)); err != nil {
 		return config.ZoneConfig{}, 0, err
 	} else if zoneVal != nil {
 		// We found a matching entry.
