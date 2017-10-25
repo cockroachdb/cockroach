@@ -196,3 +196,7 @@ query T
 SHOW "time zone"
 ----
 UTC
+
+# Regression test for #19727 - invalid EvalContext used to evaluate arguments to set.
+statement ok
+SET APPLICATION_NAME = current_timestamp()::string
