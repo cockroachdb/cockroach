@@ -59,11 +59,12 @@ func TestDumpRow(t *testing.T) {
 		e decimal,
 		u uuid,
 		ip inet,
+		ary string[],
 		tz timestamptz,
 		e1 decimal(2),
 		e2 decimal(2, 1),
 		s1 string(1),
-		FAMILY "primary" (i, f, d, t, n, o, u, ip, tz, e1, e2, s1, rowid),
+		FAMILY "primary" (i, f, d, t, n, o, u, ip, ary, tz, e1, e2, s1, rowid),
 		FAMILY fam_1_s (s),
 		FAMILY fam_2_b (b),
 		FAMILY fam_3_e (e)
@@ -78,6 +79,7 @@ func TestDumpRow(t *testing.T) {
 		1.2345,
 		'e9716c74-2638-443d-90ed-ffde7bea7d1d',
 		'192.168.0.1',
+		ARRAY['hello','world'],
 		'2016-01-25 10:10:10',
 		3.4,
 		4.5,
@@ -113,22 +115,23 @@ CREATE TABLE t (
 	e DECIMAL NULL,
 	u UUID NULL,
 	ip INET NULL,
+	ary STRING[] NULL,
 	tz TIMESTAMP WITH TIME ZONE NULL,
 	e1 DECIMAL(2) NULL,
 	e2 DECIMAL(2,1) NULL,
 	s1 STRING(1) NULL,
-	FAMILY "primary" (i, f, d, t, n, o, u, ip, tz, e1, e2, s1, rowid),
+	FAMILY "primary" (i, f, d, t, n, o, u, ip, ary, tz, e1, e2, s1, rowid),
 	FAMILY fam_1_s (s),
 	FAMILY fam_2_b (b),
 	FAMILY fam_3_e (e)
 );
 
-INSERT INTO t (i, f, s, b, d, t, n, o, e, u, ip, tz, e1, e2, s1) VALUES
-	(1, 2.3, 'striiing', '\x613162326333', '2016-03-26', '2016-01-25 10:10:10+00:00', '2h30m30s', true, 1.2345, 'e9716c74-2638-443d-90ed-ffde7bea7d1d', '192.168.0.1', '2016-01-25 10:10:10+00:00', 3, 4.5, 's'),
-	(NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL),
-	(NULL, '+Inf', NULL, NULL, NULL, NULL, NULL, NULL, 'Infinity', NULL, NULL, NULL, NULL, NULL, NULL),
-	(NULL, '-Inf', NULL, NULL, NULL, NULL, NULL, NULL, '-Infinity', NULL, NULL, NULL, NULL, NULL, NULL),
-	(NULL, 'NaN', NULL, NULL, NULL, NULL, NULL, NULL, 'NaN', NULL, NULL, NULL, NULL, NULL, NULL);
+INSERT INTO t (i, f, s, b, d, t, n, o, e, u, ip, ary, tz, e1, e2, s1) VALUES
+	(1, 2.3, 'striiing', '\x613162326333', '2016-03-26', '2016-01-25 10:10:10+00:00', '2h30m30s', true, 1.2345, 'e9716c74-2638-443d-90ed-ffde7bea7d1d', '192.168.0.1', ARRAY['hello':::STRING,'world':::STRING], '2016-01-25 10:10:10+00:00', 3, 4.5, 's'),
+	(NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL),
+	(NULL, '+Inf', NULL, NULL, NULL, NULL, NULL, NULL, 'Infinity', NULL, NULL, NULL, NULL, NULL, NULL, NULL),
+	(NULL, '-Inf', NULL, NULL, NULL, NULL, NULL, NULL, '-Infinity', NULL, NULL, NULL, NULL, NULL, NULL, NULL),
+	(NULL, 'NaN', NULL, NULL, NULL, NULL, NULL, NULL, 'NaN', NULL, NULL, NULL, NULL, NULL, NULL, NULL);
 `
 
 	if out != expect {
