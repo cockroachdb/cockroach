@@ -19298,126 +19298,6 @@ export namespace cockroach {
          */
         namespace hlc {
 
-            type LegacyTimestamp$Properties = {
-                wall_time?: Long;
-                logical?: number;
-            };
-
-            /**
-             * Constructs a new LegacyTimestamp.
-             * @exports cockroach.util.hlc.LegacyTimestamp
-             * @constructor
-             * @param {cockroach.util.hlc.LegacyTimestamp$Properties=} [properties] Properties to set
-             */
-            class LegacyTimestamp {
-
-                /**
-                 * Constructs a new LegacyTimestamp.
-                 * @exports cockroach.util.hlc.LegacyTimestamp
-                 * @constructor
-                 * @param {cockroach.util.hlc.LegacyTimestamp$Properties=} [properties] Properties to set
-                 */
-                constructor(properties?: cockroach.util.hlc.LegacyTimestamp$Properties);
-
-                /**
-                 * LegacyTimestamp wall_time.
-                 * @type {Long}
-                 */
-                public wall_time: Long;
-
-                /**
-                 * LegacyTimestamp logical.
-                 * @type {number}
-                 */
-                public logical: number;
-
-                /**
-                 * Creates a new LegacyTimestamp instance using the specified properties.
-                 * @param {cockroach.util.hlc.LegacyTimestamp$Properties=} [properties] Properties to set
-                 * @returns {cockroach.util.hlc.LegacyTimestamp} LegacyTimestamp instance
-                 */
-                public static create(properties?: cockroach.util.hlc.LegacyTimestamp$Properties): cockroach.util.hlc.LegacyTimestamp;
-
-                /**
-                 * Encodes the specified LegacyTimestamp message. Does not implicitly {@link cockroach.util.hlc.LegacyTimestamp.verify|verify} messages.
-                 * @param {cockroach.util.hlc.LegacyTimestamp$Properties} message LegacyTimestamp message or plain object to encode
-                 * @param {$protobuf.Writer} [writer] Writer to encode to
-                 * @returns {$protobuf.Writer} Writer
-                 */
-                public static encode(message: cockroach.util.hlc.LegacyTimestamp$Properties, writer?: $protobuf.Writer): $protobuf.Writer;
-
-                /**
-                 * Encodes the specified LegacyTimestamp message, length delimited. Does not implicitly {@link cockroach.util.hlc.LegacyTimestamp.verify|verify} messages.
-                 * @param {cockroach.util.hlc.LegacyTimestamp$Properties} message LegacyTimestamp message or plain object to encode
-                 * @param {$protobuf.Writer} [writer] Writer to encode to
-                 * @returns {$protobuf.Writer} Writer
-                 */
-                public static encodeDelimited(message: cockroach.util.hlc.LegacyTimestamp$Properties, writer?: $protobuf.Writer): $protobuf.Writer;
-
-                /**
-                 * Decodes a LegacyTimestamp message from the specified reader or buffer.
-                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
-                 * @param {number} [length] Message length if known beforehand
-                 * @returns {cockroach.util.hlc.LegacyTimestamp} LegacyTimestamp
-                 * @throws {Error} If the payload is not a reader or valid buffer
-                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
-                 */
-                public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): cockroach.util.hlc.LegacyTimestamp;
-
-                /**
-                 * Decodes a LegacyTimestamp message from the specified reader or buffer, length delimited.
-                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
-                 * @returns {cockroach.util.hlc.LegacyTimestamp} LegacyTimestamp
-                 * @throws {Error} If the payload is not a reader or valid buffer
-                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
-                 */
-                public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): cockroach.util.hlc.LegacyTimestamp;
-
-                /**
-                 * Verifies a LegacyTimestamp message.
-                 * @param {Object.<string,*>} message Plain object to verify
-                 * @returns {?string} `null` if valid, otherwise the reason why it is not
-                 */
-                public static verify(message: { [k: string]: any }): string;
-
-                /**
-                 * Creates a LegacyTimestamp message from a plain object. Also converts values to their respective internal types.
-                 * @param {Object.<string,*>} object Plain object
-                 * @returns {cockroach.util.hlc.LegacyTimestamp} LegacyTimestamp
-                 */
-                public static fromObject(object: { [k: string]: any }): cockroach.util.hlc.LegacyTimestamp;
-
-                /**
-                 * Creates a LegacyTimestamp message from a plain object. Also converts values to their respective internal types.
-                 * This is an alias of {@link cockroach.util.hlc.LegacyTimestamp.fromObject}.
-                 * @function
-                 * @param {Object.<string,*>} object Plain object
-                 * @returns {cockroach.util.hlc.LegacyTimestamp} LegacyTimestamp
-                 */
-                public static from(object: { [k: string]: any }): cockroach.util.hlc.LegacyTimestamp;
-
-                /**
-                 * Creates a plain object from a LegacyTimestamp message. Also converts values to other types if specified.
-                 * @param {cockroach.util.hlc.LegacyTimestamp} message LegacyTimestamp
-                 * @param {$protobuf.ConversionOptions} [options] Conversion options
-                 * @returns {Object.<string,*>} Plain object
-                 */
-                public static toObject(message: cockroach.util.hlc.LegacyTimestamp, options?: $protobuf.ConversionOptions): { [k: string]: any };
-
-                /**
-                 * Creates a plain object from this LegacyTimestamp message. Also converts values to other types if specified.
-                 * @param {$protobuf.ConversionOptions} [options] Conversion options
-                 * @returns {Object.<string,*>} Plain object
-                 */
-                public toObject(options?: $protobuf.ConversionOptions): { [k: string]: any };
-
-                /**
-                 * Converts this LegacyTimestamp to JSON.
-                 * @returns {Object.<string,*>} JSON object
-                 */
-                public toJSON(): { [k: string]: any };
-            }
-
             type Timestamp$Properties = {
                 wall_time?: Long;
                 logical?: number;
@@ -19533,6 +19413,126 @@ export namespace cockroach {
 
                 /**
                  * Converts this Timestamp to JSON.
+                 * @returns {Object.<string,*>} JSON object
+                 */
+                public toJSON(): { [k: string]: any };
+            }
+
+            type LegacyTimestamp$Properties = {
+                wall_time?: Long;
+                logical?: number;
+            };
+
+            /**
+             * Constructs a new LegacyTimestamp.
+             * @exports cockroach.util.hlc.LegacyTimestamp
+             * @constructor
+             * @param {cockroach.util.hlc.LegacyTimestamp$Properties=} [properties] Properties to set
+             */
+            class LegacyTimestamp {
+
+                /**
+                 * Constructs a new LegacyTimestamp.
+                 * @exports cockroach.util.hlc.LegacyTimestamp
+                 * @constructor
+                 * @param {cockroach.util.hlc.LegacyTimestamp$Properties=} [properties] Properties to set
+                 */
+                constructor(properties?: cockroach.util.hlc.LegacyTimestamp$Properties);
+
+                /**
+                 * LegacyTimestamp wall_time.
+                 * @type {Long}
+                 */
+                public wall_time: Long;
+
+                /**
+                 * LegacyTimestamp logical.
+                 * @type {number}
+                 */
+                public logical: number;
+
+                /**
+                 * Creates a new LegacyTimestamp instance using the specified properties.
+                 * @param {cockroach.util.hlc.LegacyTimestamp$Properties=} [properties] Properties to set
+                 * @returns {cockroach.util.hlc.LegacyTimestamp} LegacyTimestamp instance
+                 */
+                public static create(properties?: cockroach.util.hlc.LegacyTimestamp$Properties): cockroach.util.hlc.LegacyTimestamp;
+
+                /**
+                 * Encodes the specified LegacyTimestamp message. Does not implicitly {@link cockroach.util.hlc.LegacyTimestamp.verify|verify} messages.
+                 * @param {cockroach.util.hlc.LegacyTimestamp$Properties} message LegacyTimestamp message or plain object to encode
+                 * @param {$protobuf.Writer} [writer] Writer to encode to
+                 * @returns {$protobuf.Writer} Writer
+                 */
+                public static encode(message: cockroach.util.hlc.LegacyTimestamp$Properties, writer?: $protobuf.Writer): $protobuf.Writer;
+
+                /**
+                 * Encodes the specified LegacyTimestamp message, length delimited. Does not implicitly {@link cockroach.util.hlc.LegacyTimestamp.verify|verify} messages.
+                 * @param {cockroach.util.hlc.LegacyTimestamp$Properties} message LegacyTimestamp message or plain object to encode
+                 * @param {$protobuf.Writer} [writer] Writer to encode to
+                 * @returns {$protobuf.Writer} Writer
+                 */
+                public static encodeDelimited(message: cockroach.util.hlc.LegacyTimestamp$Properties, writer?: $protobuf.Writer): $protobuf.Writer;
+
+                /**
+                 * Decodes a LegacyTimestamp message from the specified reader or buffer.
+                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                 * @param {number} [length] Message length if known beforehand
+                 * @returns {cockroach.util.hlc.LegacyTimestamp} LegacyTimestamp
+                 * @throws {Error} If the payload is not a reader or valid buffer
+                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                 */
+                public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): cockroach.util.hlc.LegacyTimestamp;
+
+                /**
+                 * Decodes a LegacyTimestamp message from the specified reader or buffer, length delimited.
+                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                 * @returns {cockroach.util.hlc.LegacyTimestamp} LegacyTimestamp
+                 * @throws {Error} If the payload is not a reader or valid buffer
+                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                 */
+                public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): cockroach.util.hlc.LegacyTimestamp;
+
+                /**
+                 * Verifies a LegacyTimestamp message.
+                 * @param {Object.<string,*>} message Plain object to verify
+                 * @returns {?string} `null` if valid, otherwise the reason why it is not
+                 */
+                public static verify(message: { [k: string]: any }): string;
+
+                /**
+                 * Creates a LegacyTimestamp message from a plain object. Also converts values to their respective internal types.
+                 * @param {Object.<string,*>} object Plain object
+                 * @returns {cockroach.util.hlc.LegacyTimestamp} LegacyTimestamp
+                 */
+                public static fromObject(object: { [k: string]: any }): cockroach.util.hlc.LegacyTimestamp;
+
+                /**
+                 * Creates a LegacyTimestamp message from a plain object. Also converts values to their respective internal types.
+                 * This is an alias of {@link cockroach.util.hlc.LegacyTimestamp.fromObject}.
+                 * @function
+                 * @param {Object.<string,*>} object Plain object
+                 * @returns {cockroach.util.hlc.LegacyTimestamp} LegacyTimestamp
+                 */
+                public static from(object: { [k: string]: any }): cockroach.util.hlc.LegacyTimestamp;
+
+                /**
+                 * Creates a plain object from a LegacyTimestamp message. Also converts values to other types if specified.
+                 * @param {cockroach.util.hlc.LegacyTimestamp} message LegacyTimestamp
+                 * @param {$protobuf.ConversionOptions} [options] Conversion options
+                 * @returns {Object.<string,*>} Plain object
+                 */
+                public static toObject(message: cockroach.util.hlc.LegacyTimestamp, options?: $protobuf.ConversionOptions): { [k: string]: any };
+
+                /**
+                 * Creates a plain object from this LegacyTimestamp message. Also converts values to other types if specified.
+                 * @param {$protobuf.ConversionOptions} [options] Conversion options
+                 * @returns {Object.<string,*>} Plain object
+                 */
+                public toObject(options?: $protobuf.ConversionOptions): { [k: string]: any };
+
+                /**
+                 * Converts this LegacyTimestamp to JSON.
                  * @returns {Object.<string,*>} JSON object
                  */
                 public toJSON(): { [k: string]: any };
@@ -20185,6 +20185,210 @@ export namespace cockroach {
 
                     /**
                      * Converts this TxnMeta to JSON.
+                     * @returns {Object.<string,*>} JSON object
+                     */
+                    public toJSON(): { [k: string]: any };
+                }
+
+                type MVCCNetworkStats$Properties = {
+                    contains_estimates?: boolean;
+                    last_update_nanos?: Long;
+                    intent_age?: Long;
+                    gc_bytes_age?: Long;
+                    live_bytes?: Long;
+                    live_count?: Long;
+                    key_bytes?: Long;
+                    key_count?: Long;
+                    val_bytes?: Long;
+                    val_count?: Long;
+                    intent_bytes?: Long;
+                    intent_count?: Long;
+                    sys_bytes?: Long;
+                    sys_count?: Long;
+                };
+
+                /**
+                 * Constructs a new MVCCNetworkStats.
+                 * @exports cockroach.storage.engine.enginepb.MVCCNetworkStats
+                 * @constructor
+                 * @param {cockroach.storage.engine.enginepb.MVCCNetworkStats$Properties=} [properties] Properties to set
+                 */
+                class MVCCNetworkStats {
+
+                    /**
+                     * Constructs a new MVCCNetworkStats.
+                     * @exports cockroach.storage.engine.enginepb.MVCCNetworkStats
+                     * @constructor
+                     * @param {cockroach.storage.engine.enginepb.MVCCNetworkStats$Properties=} [properties] Properties to set
+                     */
+                    constructor(properties?: cockroach.storage.engine.enginepb.MVCCNetworkStats$Properties);
+
+                    /**
+                     * MVCCNetworkStats contains_estimates.
+                     * @type {boolean}
+                     */
+                    public contains_estimates: boolean;
+
+                    /**
+                     * MVCCNetworkStats last_update_nanos.
+                     * @type {Long}
+                     */
+                    public last_update_nanos: Long;
+
+                    /**
+                     * MVCCNetworkStats intent_age.
+                     * @type {Long}
+                     */
+                    public intent_age: Long;
+
+                    /**
+                     * MVCCNetworkStats gc_bytes_age.
+                     * @type {Long}
+                     */
+                    public gc_bytes_age: Long;
+
+                    /**
+                     * MVCCNetworkStats live_bytes.
+                     * @type {Long}
+                     */
+                    public live_bytes: Long;
+
+                    /**
+                     * MVCCNetworkStats live_count.
+                     * @type {Long}
+                     */
+                    public live_count: Long;
+
+                    /**
+                     * MVCCNetworkStats key_bytes.
+                     * @type {Long}
+                     */
+                    public key_bytes: Long;
+
+                    /**
+                     * MVCCNetworkStats key_count.
+                     * @type {Long}
+                     */
+                    public key_count: Long;
+
+                    /**
+                     * MVCCNetworkStats val_bytes.
+                     * @type {Long}
+                     */
+                    public val_bytes: Long;
+
+                    /**
+                     * MVCCNetworkStats val_count.
+                     * @type {Long}
+                     */
+                    public val_count: Long;
+
+                    /**
+                     * MVCCNetworkStats intent_bytes.
+                     * @type {Long}
+                     */
+                    public intent_bytes: Long;
+
+                    /**
+                     * MVCCNetworkStats intent_count.
+                     * @type {Long}
+                     */
+                    public intent_count: Long;
+
+                    /**
+                     * MVCCNetworkStats sys_bytes.
+                     * @type {Long}
+                     */
+                    public sys_bytes: Long;
+
+                    /**
+                     * MVCCNetworkStats sys_count.
+                     * @type {Long}
+                     */
+                    public sys_count: Long;
+
+                    /**
+                     * Creates a new MVCCNetworkStats instance using the specified properties.
+                     * @param {cockroach.storage.engine.enginepb.MVCCNetworkStats$Properties=} [properties] Properties to set
+                     * @returns {cockroach.storage.engine.enginepb.MVCCNetworkStats} MVCCNetworkStats instance
+                     */
+                    public static create(properties?: cockroach.storage.engine.enginepb.MVCCNetworkStats$Properties): cockroach.storage.engine.enginepb.MVCCNetworkStats;
+
+                    /**
+                     * Encodes the specified MVCCNetworkStats message. Does not implicitly {@link cockroach.storage.engine.enginepb.MVCCNetworkStats.verify|verify} messages.
+                     * @param {cockroach.storage.engine.enginepb.MVCCNetworkStats$Properties} message MVCCNetworkStats message or plain object to encode
+                     * @param {$protobuf.Writer} [writer] Writer to encode to
+                     * @returns {$protobuf.Writer} Writer
+                     */
+                    public static encode(message: cockroach.storage.engine.enginepb.MVCCNetworkStats$Properties, writer?: $protobuf.Writer): $protobuf.Writer;
+
+                    /**
+                     * Encodes the specified MVCCNetworkStats message, length delimited. Does not implicitly {@link cockroach.storage.engine.enginepb.MVCCNetworkStats.verify|verify} messages.
+                     * @param {cockroach.storage.engine.enginepb.MVCCNetworkStats$Properties} message MVCCNetworkStats message or plain object to encode
+                     * @param {$protobuf.Writer} [writer] Writer to encode to
+                     * @returns {$protobuf.Writer} Writer
+                     */
+                    public static encodeDelimited(message: cockroach.storage.engine.enginepb.MVCCNetworkStats$Properties, writer?: $protobuf.Writer): $protobuf.Writer;
+
+                    /**
+                     * Decodes a MVCCNetworkStats message from the specified reader or buffer.
+                     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                     * @param {number} [length] Message length if known beforehand
+                     * @returns {cockroach.storage.engine.enginepb.MVCCNetworkStats} MVCCNetworkStats
+                     * @throws {Error} If the payload is not a reader or valid buffer
+                     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                     */
+                    public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): cockroach.storage.engine.enginepb.MVCCNetworkStats;
+
+                    /**
+                     * Decodes a MVCCNetworkStats message from the specified reader or buffer, length delimited.
+                     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                     * @returns {cockroach.storage.engine.enginepb.MVCCNetworkStats} MVCCNetworkStats
+                     * @throws {Error} If the payload is not a reader or valid buffer
+                     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                     */
+                    public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): cockroach.storage.engine.enginepb.MVCCNetworkStats;
+
+                    /**
+                     * Verifies a MVCCNetworkStats message.
+                     * @param {Object.<string,*>} message Plain object to verify
+                     * @returns {?string} `null` if valid, otherwise the reason why it is not
+                     */
+                    public static verify(message: { [k: string]: any }): string;
+
+                    /**
+                     * Creates a MVCCNetworkStats message from a plain object. Also converts values to their respective internal types.
+                     * @param {Object.<string,*>} object Plain object
+                     * @returns {cockroach.storage.engine.enginepb.MVCCNetworkStats} MVCCNetworkStats
+                     */
+                    public static fromObject(object: { [k: string]: any }): cockroach.storage.engine.enginepb.MVCCNetworkStats;
+
+                    /**
+                     * Creates a MVCCNetworkStats message from a plain object. Also converts values to their respective internal types.
+                     * This is an alias of {@link cockroach.storage.engine.enginepb.MVCCNetworkStats.fromObject}.
+                     * @function
+                     * @param {Object.<string,*>} object Plain object
+                     * @returns {cockroach.storage.engine.enginepb.MVCCNetworkStats} MVCCNetworkStats
+                     */
+                    public static from(object: { [k: string]: any }): cockroach.storage.engine.enginepb.MVCCNetworkStats;
+
+                    /**
+                     * Creates a plain object from a MVCCNetworkStats message. Also converts values to other types if specified.
+                     * @param {cockroach.storage.engine.enginepb.MVCCNetworkStats} message MVCCNetworkStats
+                     * @param {$protobuf.ConversionOptions} [options] Conversion options
+                     * @returns {Object.<string,*>} Plain object
+                     */
+                    public static toObject(message: cockroach.storage.engine.enginepb.MVCCNetworkStats, options?: $protobuf.ConversionOptions): { [k: string]: any };
+
+                    /**
+                     * Creates a plain object from this MVCCNetworkStats message. Also converts values to other types if specified.
+                     * @param {$protobuf.ConversionOptions} [options] Conversion options
+                     * @returns {Object.<string,*>} Plain object
+                     */
+                    public toObject(options?: $protobuf.ConversionOptions): { [k: string]: any };
+
+                    /**
+                     * Converts this MVCCNetworkStats to JSON.
                      * @returns {Object.<string,*>} JSON object
                      */
                     public toJSON(): { [k: string]: any };

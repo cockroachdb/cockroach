@@ -30,7 +30,7 @@
 #include <google/protobuf/extension_set.h>  // IWYU pragma: export
 #include <google/protobuf/generated_enum_util.h>
 #include "cockroach/pkg/roachpb/metadata.pb.h"
-#include "cockroach/pkg/storage/engine/enginepb/mvcc.pb.h"
+#include "cockroach/pkg/storage/engine/enginepb/mvcc3.pb.h"
 #include "cockroach/pkg/util/hlc/timestamp.pb.h"
 // @@protoc_insertion_point(includes)
 namespace cockroach {

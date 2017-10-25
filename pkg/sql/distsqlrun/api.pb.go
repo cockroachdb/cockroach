@@ -53,7 +53,7 @@ import proto "github.com/gogo/protobuf/proto"
 import fmt "fmt"
 import math "math"
 import cockroach_roachpb1 "github.com/cockroachdb/cockroach/pkg/roachpb"
-import cockroach_util_hlc1 "github.com/cockroachdb/cockroach/pkg/util/hlc"
+import cockroach_util_hlc "github.com/cockroachdb/cockroach/pkg/util/hlc"
 
 import time "time"
 
@@ -94,9 +94,9 @@ func (*SetupFlowRequest) Descriptor() ([]byte, []int) { return fileDescriptorApi
 
 // EvalContext is used to marshall some planner.EvalContext members.
 type EvalContext struct {
-	StmtTimestampNanos int64                         `protobuf:"varint,1,opt,name=stmtTimestampNanos" json:"stmtTimestampNanos"`
-	TxnTimestampNanos  int64                         `protobuf:"varint,2,opt,name=txnTimestampNanos" json:"txnTimestampNanos"`
-	ClusterTimestamp   cockroach_util_hlc1.Timestamp `protobuf:"bytes,3,opt,name=clusterTimestamp" json:"clusterTimestamp"`
+	StmtTimestampNanos int64                        `protobuf:"varint,1,opt,name=stmtTimestampNanos" json:"stmtTimestampNanos"`
+	TxnTimestampNanos  int64                        `protobuf:"varint,2,opt,name=txnTimestampNanos" json:"txnTimestampNanos"`
+	ClusterTimestamp   cockroach_util_hlc.Timestamp `protobuf:"bytes,3,opt,name=clusterTimestamp" json:"clusterTimestamp"`
 	// The name of the location according to whose current timezone we're going to
 	// parse timestamps. Used to init EvalContext.Location.
 	Location   string   `protobuf:"bytes,4,opt,name=location" json:"location"`

@@ -20,7 +20,7 @@ import proto "github.com/gogo/protobuf/proto"
 import fmt "fmt"
 import math "math"
 import cockroach_roachpb1 "github.com/cockroachdb/cockroach/pkg/roachpb"
-import cockroach_util_hlc1 "github.com/cockroachdb/cockroach/pkg/util/hlc"
+import cockroach_util_hlc "github.com/cockroachdb/cockroach/pkg/util/hlc"
 import cockroach_util "github.com/cockroachdb/cockroach/pkg/util"
 
 import github_com_cockroachdb_cockroach_pkg_roachpb "github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -52,7 +52,7 @@ type BootstrapInfo struct {
 	// Addresses of other nodes in the cluster.
 	Addresses []cockroach_util.UnresolvedAddr `protobuf:"bytes,1,rep,name=addresses" json:"addresses"`
 	// Timestamp at which the bootstrap info was written.
-	Timestamp cockroach_util_hlc1.Timestamp `protobuf:"bytes,2,opt,name=timestamp" json:"timestamp"`
+	Timestamp cockroach_util_hlc.Timestamp `protobuf:"bytes,2,opt,name=timestamp" json:"timestamp"`
 }
 
 func (m *BootstrapInfo) Reset()                    { *m = BootstrapInfo{} }

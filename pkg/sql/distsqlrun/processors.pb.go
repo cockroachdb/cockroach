@@ -9,7 +9,7 @@ import math "math"
 import cockroach_roachpb4 "github.com/cockroachdb/cockroach/pkg/roachpb"
 import cockroach_roachpb1 "github.com/cockroachdb/cockroach/pkg/roachpb"
 import cockroach_sql_sqlbase1 "github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
-import cockroach_util_hlc1 "github.com/cockroachdb/cockroach/pkg/util/hlc"
+import cockroach_util_hlc "github.com/cockroachdb/cockroach/pkg/util/hlc"
 
 import time "time"
 import github_com_cockroachdb_cockroach_pkg_roachpb "github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -596,7 +596,7 @@ type BackfillerSpec struct {
 	// relationships to the table being modified.
 	OtherTables []cockroach_sql_sqlbase1.TableDescriptor `protobuf:"bytes,6,rep,name=other_tables,json=otherTables" json:"other_tables"`
 	// The timestamp to perform index backfill historical scans at.
-	ReadAsOf cockroach_util_hlc1.Timestamp `protobuf:"bytes,7,opt,name=readAsOf" json:"readAsOf"`
+	ReadAsOf cockroach_util_hlc.Timestamp `protobuf:"bytes,7,opt,name=readAsOf" json:"readAsOf"`
 }
 
 func (m *BackfillerSpec) Reset()                    { *m = BackfillerSpec{} }

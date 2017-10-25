@@ -6,13 +6,13 @@
 
 	It is generated from these files:
 		cockroach/pkg/storage/engine/enginepb/mvcc.proto
-		cockroach/pkg/storage/engine/enginepb/mvcc_network_stats.proto
+		cockroach/pkg/storage/engine/enginepb/mvcc3.proto
 		cockroach/pkg/storage/engine/enginepb/rocksdb.proto
 
 	It has these top-level messages:
-		TxnMeta
 		MVCCMetadata
 		MVCCStats
+		TxnMeta
 		MVCCNetworkStats
 		SSTUserProperties
 		SSTUserPropertiesCollection
@@ -22,12 +22,7 @@ package enginepb
 import proto "github.com/gogo/protobuf/proto"
 import fmt "fmt"
 import math "math"
-import cockroach_util_hlc "github.com/cockroachdb/cockroach/pkg/util/hlc"
 import cockroach_util_hlc1 "github.com/cockroachdb/cockroach/pkg/util/hlc"
-
-import github_com_cockroachdb_cockroach_pkg_util_uuid "github.com/cockroachdb/cockroach/pkg/util/uuid"
-
-import bytes "bytes"
 
 import encoding_binary "encoding/binary"
 
@@ -44,81 +39,6 @@ var _ = math.Inf
 // proto package needs to be updated.
 const _ = proto.GoGoProtoPackageIsVersion2 // please upgrade the proto package
 
-// TODO(tschottdorf): Should not live in enginepb (but can't live in roachpb
-// either).
-type IsolationType int32
-
-const (
-	SERIALIZABLE IsolationType = 0
-	SNAPSHOT     IsolationType = 1
-)
-
-var IsolationType_name = map[int32]string{
-	0: "SERIALIZABLE",
-	1: "SNAPSHOT",
-}
-var IsolationType_value = map[string]int32{
-	"SERIALIZABLE": 0,
-	"SNAPSHOT":     1,
-}
-
-func (x IsolationType) Enum() *IsolationType {
-	p := new(IsolationType)
-	*p = x
-	return p
-}
-func (x IsolationType) String() string {
-	return proto.EnumName(IsolationType_name, int32(x))
-}
-func (x *IsolationType) UnmarshalJSON(data []byte) error {
-	value, err := proto.UnmarshalJSONEnum(IsolationType_value, data, "IsolationType")
-	if err != nil {
-		return err
-	}
-	*x = IsolationType(value)
-	return nil
-}
-func (IsolationType) EnumDescriptor() ([]byte, []int) { return fileDescriptorMvcc, []int{0} }
-
-// TxnMeta is the metadata of a Transaction record.
-type TxnMeta struct {
-	// id is a unique UUID value which identifies the transaction.
-	// This field is always filled in.
-	ID        github_com_cockroachdb_cockroach_pkg_util_uuid.UUID `protobuf:"bytes,1,opt,name=id,customtype=github.com/cockroachdb/cockroach/pkg/util/uuid.UUID" json:"id"`
-	Isolation IsolationType                                       `protobuf:"varint,2,opt,name=isolation,enum=cockroach.storage.engine.enginepb.IsolationType" json:"isolation"`
-	// key is the key which anchors the transaction. This is typically
-	// the first key read or written during the transaction and determines which
-	// range in the cluster will hold the transaction record.
-	Key []byte `protobuf:"bytes,3,opt,name=key" json:"key,omitempty"`
-	// Incremented on txn retry.
-	Epoch uint32 `protobuf:"varint,4,opt,name=epoch" json:"epoch"`
-	// The proposed timestamp for the transaction. This starts as
-	// the current wall time on the txn coordinator.
-	// This is the timestamp at which all of the transaction's writes are
-	// performed: even if intents have been laid down at different timestamps,
-	// the process of resolving them (e.g. when the txn commits) will bump them to
-	// this timestamp. SERIALIZABLE transactions only commit when timestamp ==
-	// orig_timestamp. SNAPSHOT transactions can commit even when they've
-	// performed their reads (at orig_timestamp) at a different timestamp than
-	// their writes (at timestamp).
-	Timestamp cockroach_util_hlc1.Timestamp `protobuf:"bytes,5,opt,name=timestamp" json:"timestamp"`
-	Priority  int32                         `protobuf:"varint,6,opt,name=priority" json:"priority"`
-	// A one-indexed sequence number which is increased on each batch
-	// sent as part of the transaction. Used to prevent replay and
-	// out-of-order application protection (by means of a transaction
-	// retry).
-	Sequence int32 `protobuf:"varint,7,opt,name=sequence" json:"sequence"`
-	// A zero-indexed sequence number indicating the index of a
-	// command within a batch. This disambiguate Raft replays of a batch
-	// from multiple commands in a batch which modify the same key.
-	BatchIndex int32 `protobuf:"varint,8,opt,name=batch_index,json=batchIndex" json:"batch_index"`
-}
-
-func (m *TxnMeta) Reset()                    { *m = TxnMeta{} }
-func (m *TxnMeta) String() string            { return proto.CompactTextString(m) }
-func (*TxnMeta) ProtoMessage()               {}
-func (*TxnMeta) Descriptor() ([]byte, []int) { return fileDescriptorMvcc, []int{0} }
-
 // MVCCMetadata holds MVCC metadata for a key. Used by storage/engine/mvcc.go.
 type MVCCMetadata struct {
 	Txn *TxnMeta `protobuf:"bytes,1,opt,name=txn" json:"txn,omitempty"`
@@ -126,7 +46,7 @@ type MVCCMetadata struct {
 	// value that may have multiple versions. For values which may have
 	// only one version, the data is stored inline (via raw_bytes), and
 	// timestamp is set to zero.
-	Timestamp cockroach_util_hlc.LegacyTimestamp `protobuf:"bytes,2,opt,name=timestamp" json:"timestamp"`
+	Timestamp cockroach_util_hlc1.LegacyTimestamp `protobuf:"bytes,2,opt,name=timestamp" json:"timestamp"`
 	// Is the most recent value a deletion tombstone?
 	Deleted bool `protobuf:"varint,3,opt,name=deleted" json:"deleted"`
 	// The size in bytes of the most recent encoded key.
@@ -142,13 +62,13 @@ type MVCCMetadata struct {
 	RawBytes []byte `protobuf:"bytes,6,opt,name=raw_bytes,json=rawBytes" json:"raw_bytes,omitempty"`
 	// This provides a measure of protection against replays caused by
 	// Raft duplicating merge commands.
-	MergeTimestamp *cockroach_util_hlc.LegacyTimestamp `protobuf:"bytes,7,opt,name=merge_timestamp,json=mergeTimestamp" json:"merge_timestamp,omitempty"`
+	MergeTimestamp *cockroach_util_hlc1.LegacyTimestamp `protobuf:"bytes,7,opt,name=merge_timestamp,json=mergeTimestamp" json:"merge_timestamp,omitempty"`
 }
 
 func (m *MVCCMetadata) Reset()                    { *m = MVCCMetadata{} }
 func (m *MVCCMetadata) String() string            { return proto.CompactTextString(m) }
 func (*MVCCMetadata) ProtoMessage()               {}
-func (*MVCCMetadata) Descriptor() ([]byte, []int) { return fileDescriptorMvcc, []int{1} }
+func (*MVCCMetadata) Descriptor() ([]byte, []int) { return fileDescriptorMvcc, []int{0} }
 
 // MVCCStats tracks byte and instance counts for various groups of keys,
 // values, or key-value pairs; see the field comments for details.
@@ -230,64 +150,11 @@ type MVCCStats struct {
 func (m *MVCCStats) Reset()                    { *m = MVCCStats{} }
 func (m *MVCCStats) String() string            { return proto.CompactTextString(m) }
 func (*MVCCStats) ProtoMessage()               {}
-func (*MVCCStats) Descriptor() ([]byte, []int) { return fileDescriptorMvcc, []int{2} }
+func (*MVCCStats) Descriptor() ([]byte, []int) { return fileDescriptorMvcc, []int{1} }
 
 func init() {
-	proto.RegisterType((*TxnMeta)(nil), "cockroach.storage.engine.enginepb.TxnMeta")
 	proto.RegisterType((*MVCCMetadata)(nil), "cockroach.storage.engine.enginepb.MVCCMetadata")
 	proto.RegisterType((*MVCCStats)(nil), "cockroach.storage.engine.enginepb.MVCCStats")
-	proto.RegisterEnum("cockroach.storage.engine.enginepb.IsolationType", IsolationType_name, IsolationType_value)
-}
-func (this *TxnMeta) Equal(that interface{}) bool {
-	if that == nil {
-		if this == nil {
-			return true
-		}
-		return false
-	}
-
-	that1, ok := that.(*TxnMeta)
-	if !ok {
-		that2, ok := that.(TxnMeta)
-		if ok {
-			that1 = &that2
-		} else {
-			return false
-		}
-	}
-	if that1 == nil {
-		if this == nil {
-			return true
-		}
-		return false
-	} else if this == nil {
-		return false
-	}
-	if !this.ID.Equal(that1.ID) {
-		return false
-	}
-	if this.Isolation != that1.Isolation {
-		return false
-	}
-	if !bytes.Equal(this.Key, that1.Key) {
-		return false
-	}
-	if this.Epoch != that1.Epoch {
-		return false
-	}
-	if !this.Timestamp.Equal(&that1.Timestamp) {
-		return false
-	}
-	if this.Priority != that1.Priority {
-		return false
-	}
-	if this.Sequence != that1.Sequence {
-		return false
-	}
-	if this.BatchIndex != that1.BatchIndex {
-		return false
-	}
-	return true
 }
 func (this *MVCCStats) Equal(that interface{}) bool {
 	if that == nil {
@@ -358,61 +225,6 @@ func (this *MVCCStats) Equal(that interface{}) bool {
 	}
 	return true
 }
-func (m *TxnMeta) Marshal() (dAtA []byte, err error) {
-	size := m.Size()
-	dAtA = make([]byte, size)
-	n, err := m.MarshalTo(dAtA)
-	if err != nil {
-		return nil, err
-	}
-	return dAtA[:n], nil
-}
-
-func (m *TxnMeta) MarshalTo(dAtA []byte) (int, error) {
-	var i int
-	_ = i
-	var l int
-	_ = l
-	dAtA[i] = 0xa
-	i++
-	i = encodeVarintMvcc(dAtA, i, uint64(m.ID.Size()))
-	n1, err := m.ID.MarshalTo(dAtA[i:])
-	if err != nil {
-		return 0, err
-	}
-	i += n1
-	dAtA[i] = 0x10
-	i++
-	i = encodeVarintMvcc(dAtA, i, uint64(m.Isolation))
-	if m.Key != nil {
-		dAtA[i] = 0x1a
-		i++
-		i = encodeVarintMvcc(dAtA, i, uint64(len(m.Key)))
-		i += copy(dAtA[i:], m.Key)
-	}
-	dAtA[i] = 0x20
-	i++
-	i = encodeVarintMvcc(dAtA, i, uint64(m.Epoch))
-	dAtA[i] = 0x2a
-	i++
-	i = encodeVarintMvcc(dAtA, i, uint64(m.Timestamp.Size()))
-	n2, err := m.Timestamp.MarshalTo(dAtA[i:])
-	if err != nil {
-		return 0, err
-	}
-	i += n2
-	dAtA[i] = 0x30
-	i++
-	i = encodeVarintMvcc(dAtA, i, uint64(m.Priority))
-	dAtA[i] = 0x38
-	i++
-	i = encodeVarintMvcc(dAtA, i, uint64(m.Sequence))
-	dAtA[i] = 0x40
-	i++
-	i = encodeVarintMvcc(dAtA, i, uint64(m.BatchIndex))
-	return i, nil
-}
-
 func (m *MVCCMetadata) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
@@ -432,20 +244,20 @@ func (m *MVCCMetadata) MarshalTo(dAtA []byte) (int, error) {
 		dAtA[i] = 0xa
 		i++
 		i = encodeVarintMvcc(dAtA, i, uint64(m.Txn.Size()))
-		n3, err := m.Txn.MarshalTo(dAtA[i:])
+		n1, err := m.Txn.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n3
+		i += n1
 	}
 	dAtA[i] = 0x12
 	i++
 	i = encodeVarintMvcc(dAtA, i, uint64(m.Timestamp.Size()))
-	n4, err := m.Timestamp.MarshalTo(dAtA[i:])
+	n2, err := m.Timestamp.MarshalTo(dAtA[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n4
+	i += n2
 	dAtA[i] = 0x18
 	i++
 	if m.Deleted {
@@ -470,11 +282,11 @@ func (m *MVCCMetadata) MarshalTo(dAtA []byte) (int, error) {
 		dAtA[i] = 0x3a
 		i++
 		i = encodeVarintMvcc(dAtA, i, uint64(m.MergeTimestamp.Size()))
-		n5, err := m.MergeTimestamp.MarshalTo(dAtA[i:])
+		n3, err := m.MergeTimestamp.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n5
+		i += n3
 	}
 	return i, nil
 }
@@ -566,45 +378,13 @@ func encodeVarintMvcc(dAtA []byte, offset int, v uint64) int {
 	dAtA[offset] = uint8(v)
 	return offset + 1
 }
-func NewPopulatedTxnMeta(r randyMvcc, easy bool) *TxnMeta {
-	this := &TxnMeta{}
-	v1 := github_com_cockroachdb_cockroach_pkg_util_uuid.NewPopulatedUUID(r)
-	this.ID = *v1
-	this.Isolation = IsolationType([]int32{0, 1}[r.Intn(2)])
-	if r.Intn(10) != 0 {
-		v2 := r.Intn(100)
-		this.Key = make([]byte, v2)
-		for i := 0; i < v2; i++ {
-			this.Key[i] = byte(r.Intn(256))
-		}
-	}
-	this.Epoch = uint32(r.Uint32())
-	v3 := cockroach_util_hlc1.NewPopulatedTimestamp(r, easy)
-	this.Timestamp = *v3
-	this.Priority = int32(r.Int31())
-	if r.Intn(2) == 0 {
-		this.Priority *= -1
-	}
-	this.Sequence = int32(r.Int31())
-	if r.Intn(2) == 0 {
-		this.Sequence *= -1
-	}
-	this.BatchIndex = int32(r.Int31())
-	if r.Intn(2) == 0 {
-		this.BatchIndex *= -1
-	}
-	if !easy && r.Intn(10) != 0 {
-	}
-	return this
-}
-
 func NewPopulatedMVCCMetadata(r randyMvcc, easy bool) *MVCCMetadata {
 	this := &MVCCMetadata{}
 	if r.Intn(10) != 0 {
 		this.Txn = NewPopulatedTxnMeta(r, easy)
 	}
-	v4 := cockroach_util_hlc.NewPopulatedLegacyTimestamp(r, easy)
-	this.Timestamp = *v4
+	v1 := cockroach_util_hlc1.NewPopulatedLegacyTimestamp(r, easy)
+	this.Timestamp = *v1
 	this.Deleted = bool(bool(r.Intn(2) == 0))
 	this.KeyBytes = int64(r.Int63())
 	if r.Intn(2) == 0 {
@@ -615,14 +395,14 @@ func NewPopulatedMVCCMetadata(r randyMvcc, easy bool) *MVCCMetadata {
 		this.ValBytes *= -1
 	}
 	if r.Intn(10) != 0 {
-		v5 := r.Intn(100)
-		this.RawBytes = make([]byte, v5)
-		for i := 0; i < v5; i++ {
+		v2 := r.Intn(100)
+		this.RawBytes = make([]byte, v2)
+		for i := 0; i < v2; i++ {
 			this.RawBytes[i] = byte(r.Intn(256))
 		}
 	}
 	if r.Intn(10) != 0 {
-		this.MergeTimestamp = cockroach_util_hlc.NewPopulatedLegacyTimestamp(r, easy)
+		this.MergeTimestamp = cockroach_util_hlc1.NewPopulatedLegacyTimestamp(r, easy)
 	}
 	if !easy && r.Intn(10) != 0 {
 	}
@@ -708,9 +488,9 @@ func randUTF8RuneMvcc(r randyMvcc) rune {
 	return rune(ru + 61)
 }
 func randStringMvcc(r randyMvcc) string {
-	v6 := r.Intn(100)
-	tmps := make([]rune, v6)
-	for i := 0; i < v6; i++ {
+	v3 := r.Intn(100)
+	tmps := make([]rune, v3)
+	for i := 0; i < v3; i++ {
 		tmps[i] = randUTF8RuneMvcc(r)
 	}
 	return string(tmps)
@@ -732,11 +512,11 @@ func randFieldMvcc(dAtA []byte, r randyMvcc, fieldNumber int, wire int) []byte {
 	switch wire {
 	case 0:
 		dAtA = encodeVarintPopulateMvcc(dAtA, uint64(key))
-		v7 := r.Int63()
+		v4 := r.Int63()
 		if r.Intn(2) == 0 {
-			v7 *= -1
+			v4 *= -1
 		}
-		dAtA = encodeVarintPopulateMvcc(dAtA, uint64(v7))
+		dAtA = encodeVarintPopulateMvcc(dAtA, uint64(v4))
 	case 1:
 		dAtA = encodeVarintPopulateMvcc(dAtA, uint64(key))
 		dAtA = append(dAtA, byte(r.Intn(256)), byte(r.Intn(256)), byte(r.Intn(256)), byte(r.Intn(256)), byte(r.Intn(256)), byte(r.Intn(256)), byte(r.Intn(256)), byte(r.Intn(256)))
@@ -761,25 +541,6 @@ func encodeVarintPopulateMvcc(dAtA []byte, v uint64) []byte {
 	dAtA = append(dAtA, uint8(v))
 	return dAtA
 }
-func (m *TxnMeta) Size() (n int) {
-	var l int
-	_ = l
-	l = m.ID.Size()
-	n += 1 + l + sovMvcc(uint64(l))
-	n += 1 + sovMvcc(uint64(m.Isolation))
-	if m.Key != nil {
-		l = len(m.Key)
-		n += 1 + l + sovMvcc(uint64(l))
-	}
-	n += 1 + sovMvcc(uint64(m.Epoch))
-	l = m.Timestamp.Size()
-	n += 1 + l + sovMvcc(uint64(l))
-	n += 1 + sovMvcc(uint64(m.Priority))
-	n += 1 + sovMvcc(uint64(m.Sequence))
-	n += 1 + sovMvcc(uint64(m.BatchIndex))
-	return n
-}
-
 func (m *MVCCMetadata) Size() (n int) {
 	var l int
 	_ = l
@@ -835,242 +596,6 @@ func sovMvcc(x uint64) (n int) {
 }
 func sozMvcc(x uint64) (n int) {
 	return sovMvcc(uint64((x << 1) ^ uint64((int64(x) >> 63))))
-}
-func (m *TxnMeta) Unmarshal(dAtA []byte) error {
-	l := len(dAtA)
-	iNdEx := 0
-	for iNdEx < l {
-		preIndex := iNdEx
-		var wire uint64
-		for shift := uint(0); ; shift += 7 {
-			if shift >= 64 {
-				return ErrIntOverflowMvcc
-			}
-			if iNdEx >= l {
-				return io.ErrUnexpectedEOF
-			}
-			b := dAtA[iNdEx]
-			iNdEx++
-			wire |= (uint64(b) & 0x7F) << shift
-			if b < 0x80 {
-				break
-			}
-		}
-		fieldNum := int32(wire >> 3)
-		wireType := int(wire & 0x7)
-		if wireType == 4 {
-			return fmt.Errorf("proto: TxnMeta: wiretype end group for non-group")
-		}
-		if fieldNum <= 0 {
-			return fmt.Errorf("proto: TxnMeta: illegal tag %d (wire type %d)", fieldNum, wire)
-		}
-		switch fieldNum {
-		case 1:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field ID", wireType)
-			}
-			var byteLen int
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowMvcc
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := dAtA[iNdEx]
-				iNdEx++
-				byteLen |= (int(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			if byteLen < 0 {
-				return ErrInvalidLengthMvcc
-			}
-			postIndex := iNdEx + byteLen
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			if err := m.ID.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
-				return err
-			}
-			iNdEx = postIndex
-		case 2:
-			if wireType != 0 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Isolation", wireType)
-			}
-			m.Isolation = 0
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowMvcc
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := dAtA[iNdEx]
-				iNdEx++
-				m.Isolation |= (IsolationType(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-		case 3:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Key", wireType)
-			}
-			var byteLen int
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowMvcc
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := dAtA[iNdEx]
-				iNdEx++
-				byteLen |= (int(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			if byteLen < 0 {
-				return ErrInvalidLengthMvcc
-			}
-			postIndex := iNdEx + byteLen
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			m.Key = append(m.Key[:0], dAtA[iNdEx:postIndex]...)
-			if m.Key == nil {
-				m.Key = []byte{}
-			}
-			iNdEx = postIndex
-		case 4:
-			if wireType != 0 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Epoch", wireType)
-			}
-			m.Epoch = 0
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowMvcc
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := dAtA[iNdEx]
-				iNdEx++
-				m.Epoch |= (uint32(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-		case 5:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Timestamp", wireType)
-			}
-			var msglen int
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowMvcc
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := dAtA[iNdEx]
-				iNdEx++
-				msglen |= (int(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			if msglen < 0 {
-				return ErrInvalidLengthMvcc
-			}
-			postIndex := iNdEx + msglen
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			if err := m.Timestamp.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
-				return err
-			}
-			iNdEx = postIndex
-		case 6:
-			if wireType != 0 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Priority", wireType)
-			}
-			m.Priority = 0
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowMvcc
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := dAtA[iNdEx]
-				iNdEx++
-				m.Priority |= (int32(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-		case 7:
-			if wireType != 0 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Sequence", wireType)
-			}
-			m.Sequence = 0
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowMvcc
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := dAtA[iNdEx]
-				iNdEx++
-				m.Sequence |= (int32(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-		case 8:
-			if wireType != 0 {
-				return fmt.Errorf("proto: wrong wireType = %d for field BatchIndex", wireType)
-			}
-			m.BatchIndex = 0
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowMvcc
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := dAtA[iNdEx]
-				iNdEx++
-				m.BatchIndex |= (int32(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-		default:
-			iNdEx = preIndex
-			skippy, err := skipMvcc(dAtA[iNdEx:])
-			if err != nil {
-				return err
-			}
-			if skippy < 0 {
-				return ErrInvalidLengthMvcc
-			}
-			if (iNdEx + skippy) > l {
-				return io.ErrUnexpectedEOF
-			}
-			iNdEx += skippy
-		}
-	}
-
-	if iNdEx > l {
-		return io.ErrUnexpectedEOF
-	}
-	return nil
 }
 func (m *MVCCMetadata) Unmarshal(dAtA []byte) error {
 	l := len(dAtA)
@@ -1280,7 +805,7 @@ func (m *MVCCMetadata) Unmarshal(dAtA []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			if m.MergeTimestamp == nil {
-				m.MergeTimestamp = &cockroach_util_hlc.LegacyTimestamp{}
+				m.MergeTimestamp = &cockroach_util_hlc1.LegacyTimestamp{}
 			}
 			if err := m.MergeTimestamp.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
@@ -1617,55 +1142,42 @@ func init() {
 }
 
 var fileDescriptorMvcc = []byte{
-	// 796 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x8c, 0x94, 0x4f, 0x6f, 0xe3, 0x44,
-	0x18, 0xc6, 0xe3, 0xfc, 0x69, 0x9c, 0x49, 0xda, 0xcd, 0x8e, 0x38, 0x58, 0x41, 0x38, 0xd9, 0xac,
-	0x80, 0x68, 0x25, 0xec, 0xaa, 0x0b, 0x97, 0x15, 0x97, 0x24, 0x5b, 0x95, 0x48, 0x69, 0x81, 0x24,
-	0xe5, 0xd0, 0x4b, 0x34, 0x19, 0x8f, 0x9c, 0x51, 0x1c, 0xdb, 0xd8, 0x93, 0xb4, 0xfe, 0x06, 0x1c,
-	0x39, 0x72, 0xac, 0xc4, 0x97, 0xe0, 0x0b, 0x20, 0xf5, 0xc8, 0x11, 0x71, 0x88, 0x20, 0x5c, 0x38,
-	0xf0, 0x21, 0xd0, 0xcc, 0xd8, 0x8e, 0x13, 0x0a, 0xdb, 0x53, 0x26, 0xef, 0xfb, 0x7b, 0x9f, 0x79,
-	0xe7, 0x79, 0x67, 0x0c, 0x4e, 0xb1, 0x87, 0x17, 0x81, 0x87, 0xf0, 0xdc, 0xf4, 0x17, 0xb6, 0x19,
-	0x32, 0x2f, 0x40, 0x36, 0x31, 0x89, 0x6b, 0x53, 0x37, 0xf9, 0xf1, 0x67, 0xe6, 0x72, 0x8d, 0xb1,
-	0xe1, 0x07, 0x1e, 0xf3, 0xe0, 0x8b, 0xb4, 0xc2, 0x88, 0x69, 0x43, 0x62, 0x46, 0x42, 0x37, 0x3e,
-	0xd9, 0x17, 0x5d, 0x31, 0xea, 0x98, 0x73, 0x07, 0x9b, 0x0e, 0xb1, 0x11, 0x8e, 0xa6, 0x8c, 0x2e,
-	0x49, 0xc8, 0xd0, 0xd2, 0x97, 0x8a, 0x8d, 0x8f, 0xfe, 0x03, 0x3f, 0xe4, 0xde, 0xb3, 0x3d, 0xdb,
-	0x13, 0x4b, 0x93, 0xaf, 0x64, 0xb4, 0xfd, 0x43, 0x01, 0x94, 0x27, 0x77, 0xee, 0x25, 0x61, 0x08,
-	0x7e, 0x0d, 0xf2, 0xd4, 0xd2, 0x94, 0x96, 0xd2, 0xa9, 0xf5, 0xba, 0x0f, 0x9b, 0x66, 0xee, 0xb7,
-	0x4d, 0xf3, 0xb5, 0x4d, 0xd9, 0x7c, 0x35, 0x33, 0xb0, 0xb7, 0x34, 0xd3, 0x8d, 0xac, 0x99, 0xf9,
-	0xc8, 0xa6, 0xab, 0x15, 0xb5, 0x8c, 0xeb, 0xeb, 0xc1, 0xdb, 0xed, 0xa6, 0x99, 0x1f, 0xbc, 0x1d,
-	0xe5, 0xa9, 0x05, 0x27, 0xa0, 0x42, 0x43, 0xcf, 0x41, 0x8c, 0x7a, 0xae, 0x96, 0x6f, 0x29, 0x9d,
-	0x93, 0xb3, 0x53, 0xe3, 0x9d, 0x16, 0x18, 0x83, 0xa4, 0x66, 0x12, 0xf9, 0xa4, 0x57, 0xe4, 0xbd,
-	0x8c, 0x76, 0x42, 0xb0, 0x0e, 0x0a, 0x0b, 0x12, 0x69, 0x05, 0xde, 0xe9, 0x88, 0x2f, 0x61, 0x03,
-	0x94, 0x88, 0xef, 0xe1, 0xb9, 0x56, 0x6c, 0x29, 0x9d, 0xe3, 0xb8, 0x42, 0x86, 0x60, 0x17, 0x54,
-	0x52, 0x2f, 0xb4, 0x52, 0x4b, 0xe9, 0x54, 0xcf, 0x3e, 0xc8, 0xf4, 0xc0, 0x7b, 0x37, 0xe6, 0x0e,
-	0x36, 0x26, 0x09, 0x94, 0x6c, 0x98, 0x56, 0xc1, 0x16, 0x50, 0xfd, 0x80, 0x7a, 0x01, 0x65, 0x91,
-	0x76, 0xd4, 0x52, 0x3a, 0xa5, 0x18, 0x49, 0xa3, 0x9c, 0x08, 0xc9, 0xb7, 0x2b, 0xe2, 0x62, 0xa2,
-	0x95, 0xb3, 0x44, 0x12, 0x85, 0x1f, 0x82, 0xea, 0x0c, 0x31, 0x3c, 0x9f, 0x52, 0xd7, 0x22, 0x77,
-	0x9a, 0x9a, 0x81, 0x80, 0x48, 0x0c, 0x78, 0xfc, 0x8d, 0xfa, 0xd3, 0x7d, 0x53, 0xf9, 0xeb, 0xbe,
-	0xa9, 0xb4, 0xff, 0xce, 0x83, 0xda, 0xe5, 0x37, 0xfd, 0x3e, 0x9f, 0x8d, 0x85, 0x18, 0x82, 0x9f,
-	0x83, 0x02, 0xbb, 0x73, 0xc5, 0x80, 0xaa, 0x67, 0xaf, 0x9e, 0x60, 0x63, 0x3c, 0xd8, 0x11, 0x2f,
-	0x83, 0x17, 0x59, 0x1b, 0xf2, 0x42, 0xe3, 0xe5, 0x63, 0x36, 0x0c, 0xc5, 0x35, 0xfb, 0x1f, 0x33,
-	0x74, 0x50, 0xb6, 0x88, 0x43, 0x18, 0xb1, 0xc4, 0x04, 0xd4, 0x98, 0x48, 0x82, 0xf0, 0x05, 0xa8,
-	0x2c, 0x48, 0x34, 0x9d, 0x45, 0x8c, 0x84, 0x62, 0x1e, 0x85, 0xc4, 0x8b, 0x05, 0x89, 0x7a, 0x3c,
-	0xca, 0x91, 0x35, 0x72, 0x62, 0xa4, 0x94, 0x45, 0xd6, 0xc8, 0x91, 0xc8, 0xfb, 0xa0, 0x12, 0xa0,
-	0xdb, 0x18, 0x39, 0x12, 0x93, 0x56, 0x03, 0x74, 0x2b, 0x93, 0x43, 0xf0, 0x6c, 0x49, 0x02, 0x9b,
-	0xec, 0x1e, 0x83, 0x30, 0xfd, 0x69, 0x27, 0x1a, 0x9d, 0x88, 0xda, 0xf4, 0xff, 0x9b, 0x22, 0xb7,
-	0xbc, 0xfd, 0x73, 0x11, 0x54, 0xb8, 0xdd, 0x63, 0x86, 0x58, 0x08, 0x4f, 0xc1, 0x73, 0x07, 0x85,
-	0x6c, 0xba, 0xf2, 0x2d, 0xc4, 0xc8, 0xd4, 0x45, 0xae, 0x17, 0x0a, 0xe7, 0xeb, 0x71, 0xa7, 0xcf,
-	0x78, 0xfa, 0x5a, 0x64, 0xaf, 0x78, 0x12, 0xbe, 0x04, 0x80, 0xba, 0x8c, 0xb8, 0x6c, 0x8a, 0x6c,
-	0x22, 0x0c, 0xae, 0xa7, 0x37, 0x57, 0xc4, 0xbb, 0x36, 0x81, 0x9f, 0x82, 0x9a, 0x8d, 0xe5, 0xa1,
-	0x04, 0x56, 0x10, 0x18, 0xe4, 0xd8, 0x76, 0xd3, 0x04, 0x17, 0x7d, 0x71, 0xbe, 0xae, 0x4d, 0x46,
-	0xc0, 0xc6, 0xc9, 0x9a, 0x4b, 0x3b, 0x74, 0x4d, 0x32, 0x96, 0xa6, 0xd2, 0x3c, 0x2e, 0x3d, 0x49,
-	0x20, 0xec, 0xad, 0x5c, 0x26, 0x4c, 0xdd, 0x83, 0xfa, 0x3c, 0xbc, 0x3f, 0x9b, 0xa3, 0x0c, 0xb3,
-	0x37, 0x1b, 0x8e, 0x48, 0x99, 0xf2, 0x01, 0x92, 0xaa, 0xec, 0xc6, 0xa7, 0x66, 0x91, 0x74, 0x7c,
-	0x31, 0x22, 0x55, 0x2a, 0x07, 0x88, 0x54, 0xf9, 0x18, 0xd4, 0x62, 0xc3, 0xa4, 0x10, 0xc8, 0x50,
-	0x55, 0x99, 0x91, 0x5a, 0x3b, 0x50, 0xca, 0x55, 0xff, 0x0d, 0xa6, 0x7d, 0x85, 0x51, 0x18, 0xcb,
-	0xd5, 0xb2, 0x9b, 0x86, 0x51, 0x98, 0xf6, 0xc5, 0x11, 0x29, 0x74, 0x7c, 0x80, 0x48, 0x95, 0xd7,
-	0x00, 0x62, 0xcf, 0x65, 0x88, 0xba, 0xe1, 0x94, 0x84, 0x8c, 0x2e, 0x11, 0x97, 0x3b, 0xc9, 0x5c,
-	0xf5, 0xe7, 0x49, 0xfe, 0x3c, 0x49, 0xef, 0x9e, 0xed, 0xab, 0xcf, 0xc0, 0xf1, 0xde, 0xe7, 0x0b,
-	0xd6, 0x41, 0x6d, 0x7c, 0x3e, 0x1a, 0x74, 0x87, 0x83, 0x9b, 0x6e, 0x6f, 0x78, 0x5e, 0xcf, 0xc1,
-	0x1a, 0x50, 0xc7, 0x57, 0xdd, 0xaf, 0xc6, 0x5f, 0x7c, 0x39, 0xa9, 0x2b, 0x8d, 0xe2, 0x77, 0x3f,
-	0xea, 0xb9, 0x5e, 0xfb, 0xe1, 0x0f, 0x3d, 0xf7, 0xb0, 0xd5, 0x95, 0x5f, 0xb6, 0xba, 0xf2, 0xeb,
-	0x56, 0x57, 0x7e, 0xdf, 0xea, 0xca, 0xf7, 0x7f, 0xea, 0xb9, 0x1b, 0x35, 0x79, 0xcf, 0xff, 0x04,
-	0x00, 0x00, 0xff, 0xff, 0x9c, 0x88, 0x83, 0x8a, 0x6f, 0x06, 0x00, 0x00,
+	// 578 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x8c, 0x93, 0x41, 0x6f, 0xd3, 0x3e,
+	0x14, 0xc0, 0xeb, 0xb5, 0xff, 0x35, 0x71, 0xfb, 0xdf, 0x58, 0xc4, 0xa1, 0x1a, 0x52, 0xda, 0x75,
+	0x12, 0x54, 0x48, 0x24, 0x83, 0x71, 0x9a, 0xb8, 0xac, 0x15, 0xda, 0x65, 0xe3, 0x50, 0x06, 0x07,
+	0x2e, 0x91, 0xe7, 0x5a, 0x6e, 0xd4, 0xd4, 0xa9, 0x62, 0xb7, 0x5b, 0xbe, 0x05, 0x1f, 0x61, 0x1f,
+	0x83, 0x2f, 0x80, 0xd4, 0x23, 0x47, 0x4e, 0x13, 0x84, 0x0b, 0x07, 0x3e, 0x04, 0xb2, 0x1d, 0xa7,
+	0x69, 0x11, 0x62, 0xa7, 0xba, 0xef, 0xfd, 0xde, 0x2f, 0x7e, 0xef, 0x25, 0xf0, 0x08, 0xc7, 0x78,
+	0x92, 0xc4, 0x08, 0x8f, 0xfd, 0xd9, 0x84, 0xfa, 0x5c, 0xc4, 0x09, 0xa2, 0xc4, 0x27, 0x8c, 0x86,
+	0xcc, 0xfc, 0xcc, 0xae, 0xfc, 0xe9, 0x02, 0x63, 0x6f, 0x96, 0xc4, 0x22, 0x76, 0x0e, 0x8a, 0x0a,
+	0x2f, 0xa7, 0x3d, 0x8d, 0x79, 0x86, 0xde, 0x7f, 0x7e, 0x7f, 0xe9, 0xb1, 0xb6, 0xee, 0x3f, 0x5b,
+	0x2f, 0x99, 0x8b, 0x30, 0xf2, 0xc7, 0x11, 0xf6, 0x23, 0x42, 0x11, 0x4e, 0x03, 0x11, 0x4e, 0x09,
+	0x17, 0x68, 0x3a, 0xcb, 0xf1, 0xc7, 0x7f, 0xc1, 0x37, 0xb9, 0x87, 0x34, 0xa6, 0xb1, 0x3a, 0xfa,
+	0xf2, 0xa4, 0xa3, 0xdd, 0x5f, 0x5b, 0xb0, 0x79, 0xf1, 0x7e, 0x30, 0xb8, 0x20, 0x02, 0x8d, 0x90,
+	0x40, 0xce, 0x2b, 0x58, 0x15, 0x37, 0xac, 0x05, 0x3a, 0xa0, 0xd7, 0x78, 0xf1, 0xd4, 0xfb, 0x67,
+	0x87, 0xde, 0xe5, 0x0d, 0x93, 0xc5, 0x43, 0x59, 0xe6, 0x9c, 0x41, 0xbb, 0x78, 0x6e, 0x6b, 0x4b,
+	0x39, 0x0e, 0x4b, 0x0e, 0x79, 0x39, 0x6f, 0x1c, 0x61, 0xef, 0x5c, 0xf5, 0x72, 0x69, 0xd0, 0x7e,
+	0x6d, 0x79, 0xd7, 0xae, 0x0c, 0x57, 0xb5, 0x8e, 0x0b, 0xeb, 0x23, 0x12, 0x11, 0x41, 0x46, 0xad,
+	0x6a, 0x07, 0xf4, 0xac, 0x9c, 0x30, 0x41, 0xe7, 0x00, 0xda, 0x13, 0x92, 0x06, 0x57, 0xa9, 0x20,
+	0xbc, 0x55, 0xeb, 0x80, 0x5e, 0x35, 0x27, 0xac, 0x09, 0x49, 0xfb, 0x32, 0x2a, 0x91, 0x05, 0x8a,
+	0x72, 0xe4, 0xbf, 0x32, 0xb2, 0x40, 0x91, 0x46, 0x1e, 0x41, 0x3b, 0x41, 0xd7, 0x39, 0xb2, 0xdd,
+	0x01, 0xbd, 0xe6, 0xd0, 0x4a, 0xd0, 0xb5, 0x4e, 0x9e, 0xc3, 0xdd, 0x29, 0x49, 0x28, 0x59, 0x4d,
+	0xbc, 0x55, 0xbf, 0x77, 0x47, 0xc3, 0x1d, 0x55, 0x5b, 0xfc, 0x3f, 0xa9, 0x7d, 0xba, 0x6d, 0x83,
+	0xee, 0xe7, 0x1a, 0xb4, 0xe5, 0xb8, 0xdf, 0x0a, 0x24, 0xb8, 0x73, 0x04, 0xf7, 0x22, 0xc4, 0x45,
+	0x30, 0x9f, 0x8d, 0x90, 0x20, 0x01, 0x43, 0x2c, 0xe6, 0x6a, 0xf2, 0x0f, 0xf2, 0x9b, 0xee, 0xca,
+	0xf4, 0x3b, 0x95, 0x7d, 0x23, 0x93, 0xce, 0x21, 0x84, 0x21, 0x13, 0x84, 0x89, 0x00, 0x51, 0xa2,
+	0x06, 0x6c, 0x50, 0x5b, 0xc7, 0x4f, 0x29, 0x71, 0x5e, 0xc2, 0x26, 0xc5, 0xba, 0x29, 0x85, 0x55,
+	0x15, 0xe6, 0x48, 0x2c, 0xbb, 0x6b, 0xc3, 0xb3, 0x81, 0xea, 0xef, 0x94, 0x92, 0x21, 0xa4, 0xd8,
+	0x9c, 0xa5, 0x3a, 0x0a, 0x17, 0xa4, 0x34, 0xd2, 0x42, 0x2d, 0xe3, 0x7a, 0x26, 0x06, 0xc2, 0xf1,
+	0x9c, 0x09, 0x35, 0xd4, 0x35, 0x68, 0x20, 0xc3, 0xeb, 0xbb, 0xd9, 0x2e, 0x31, 0x6b, 0xbb, 0x91,
+	0x88, 0xd6, 0xd4, 0x37, 0x90, 0xc2, 0xb2, 0x5a, 0x9f, 0x55, 0x46, 0x8a, 0xf5, 0xe5, 0x88, 0xb6,
+	0xd8, 0x1b, 0x88, 0xb6, 0x3c, 0x81, 0xcd, 0x7c, 0x60, 0x5a, 0x04, 0x4b, 0x54, 0x43, 0x67, 0xb4,
+	0x6b, 0x05, 0x6a, 0x5d, 0xe3, 0x4f, 0xb0, 0xb8, 0x17, 0x4f, 0x79, 0xae, 0x6b, 0x96, 0x1f, 0xca,
+	0x53, 0x5e, 0xdc, 0x4b, 0x22, 0x5a, 0xf4, 0xff, 0x06, 0xa2, 0x2d, 0xc7, 0xd0, 0xc1, 0x31, 0x13,
+	0x28, 0x64, 0x3c, 0x20, 0x5c, 0x84, 0x53, 0x24, 0x75, 0x3b, 0xa5, 0x57, 0x7d, 0xcf, 0xe4, 0x5f,
+	0x9b, 0xf4, 0x89, 0x25, 0xdf, 0xa1, 0x9f, 0xb7, 0x6d, 0xd0, 0xef, 0x2e, 0xbf, 0xbb, 0x95, 0x65,
+	0xe6, 0x82, 0x2f, 0x99, 0x0b, 0xbe, 0x66, 0x2e, 0xf8, 0x96, 0xb9, 0xe0, 0xe3, 0x0f, 0xb7, 0xf2,
+	0xc1, 0x32, 0x1f, 0xe6, 0xef, 0x00, 0x00, 0x00, 0xff, 0xff, 0x28, 0x69, 0x46, 0xba, 0xd0, 0x04,
+	0x00, 0x00,
 }

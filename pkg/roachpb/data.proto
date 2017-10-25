@@ -17,7 +17,7 @@ package cockroach.roachpb;
 option go_package = "roachpb";
 
 import "cockroach/pkg/roachpb/metadata.proto";
-import "cockroach/pkg/storage/engine/enginepb/mvcc.proto";
+import "cockroach/pkg/storage/engine/enginepb/mvcc3.proto";
 import "cockroach/pkg/util/hlc/timestamp.proto";
 import "gogoproto/gogo.proto";
 

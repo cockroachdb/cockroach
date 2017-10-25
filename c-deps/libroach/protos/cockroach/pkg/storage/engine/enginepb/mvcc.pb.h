@@ -28,7 +28,7 @@
 #include <google/protobuf/message_lite.h>
 #include <google/protobuf/repeated_field.h>  // IWYU pragma: export
 #include <google/protobuf/extension_set.h>  // IWYU pragma: export
-#include <google/protobuf/generated_enum_util.h>
+#include "cockroach/pkg/storage/engine/enginepb/mvcc3.pb.h"
 #include "cockroach/pkg/util/hlc/legacy_timestamp.pb.h"
 #include "cockroach/pkg/util/hlc/timestamp.pb.h"
 // @@protoc_insertion_point(includes)
@@ -42,9 +42,6 @@ extern MVCCMetadataDefaultTypeInternal _MVCCMetadata_default_instance_;
 class MVCCStats;
 class MVCCStatsDefaultTypeInternal;
 extern MVCCStatsDefaultTypeInternal _MVCCStats_default_instance_;
-class TxnMeta;
-class TxnMetaDefaultTypeInternal;
-extern TxnMetaDefaultTypeInternal _TxnMeta_default_instance_;
 }  // namespace enginepb
 }  // namespace engine
 }  // namespace storage
@@ -70,203 +67,7 @@ void AddDescriptors();
 void InitDefaults();
 }  // namespace protobuf_cockroach_2fpkg_2fstorage_2fengine_2fenginepb_2fmvcc_2eproto
 
-enum IsolationType {
-  SERIALIZABLE = 0,
-  SNAPSHOT = 1
-};
-bool IsolationType_IsValid(int value);
-const IsolationType IsolationType_MIN = SERIALIZABLE;
-const IsolationType IsolationType_MAX = SNAPSHOT;
-const int IsolationType_ARRAYSIZE = IsolationType_MAX + 1;
-
 // ===================================================================
-
-class TxnMeta : public ::google::protobuf::MessageLite /* @@protoc_insertion_point(class_definition:cockroach.storage.engine.enginepb.TxnMeta) */ {
- public:
-  TxnMeta();
-  virtual ~TxnMeta();
-
-  TxnMeta(const TxnMeta& from);
-
-  inline TxnMeta& operator=(const TxnMeta& from) {
-    CopyFrom(from);
-    return *this;
-  }
-  #if LANG_CXX11
-  TxnMeta(TxnMeta&& from) noexcept
-    : TxnMeta() {
-    *this = ::std::move(from);
-  }
-
-  inline TxnMeta& operator=(TxnMeta&& from) noexcept {
-    if (GetArenaNoVirtual() == from.GetArenaNoVirtual()) {
-      if (this != &from) InternalSwap(&from);
-    } else {
-      CopyFrom(from);
-    }
-    return *this;
-  }
-  #endif
-  inline const ::std::string& unknown_fields() const {
-    return _internal_metadata_.unknown_fields();
-  }
-  inline ::std::string* mutable_unknown_fields() {
-    return _internal_metadata_.mutable_unknown_fields();
-  }
-
-  static const TxnMeta& default_instance();
-
-  static inline const TxnMeta* internal_default_instance() {
-    return reinterpret_cast<const TxnMeta*>(
-               &_TxnMeta_default_instance_);
-  }
-  static PROTOBUF_CONSTEXPR int const kIndexInFileMessages =
-    0;
-
-  void Swap(TxnMeta* other);
-  friend void swap(TxnMeta& a, TxnMeta& b) {
-    a.Swap(&b);
-  }
-
-  // implements Message ----------------------------------------------
-
-  inline TxnMeta* New() const PROTOBUF_FINAL { return New(NULL); }
-
-  TxnMeta* New(::google::protobuf::Arena* arena) const PROTOBUF_FINAL;
-  void CheckTypeAndMergeFrom(const ::google::protobuf::MessageLite& from)
-    PROTOBUF_FINAL;
-  void CopyFrom(const TxnMeta& from);
-  void MergeFrom(const TxnMeta& from);
-  void Clear() PROTOBUF_FINAL;
-  bool IsInitialized() const PROTOBUF_FINAL;
-
-  size_t ByteSizeLong() const PROTOBUF_FINAL;
-  bool MergePartialFromCodedStream(
-      ::google::protobuf::io::CodedInputStream* input) PROTOBUF_FINAL;
-  void SerializeWithCachedSizes(
-      ::google::protobuf::io::CodedOutputStream* output) const PROTOBUF_FINAL;
-  void DiscardUnknownFields();
-  int GetCachedSize() const PROTOBUF_FINAL { return _cached_size_; }
-  private:
-  void SharedCtor();
-  void SharedDtor();
-  void SetCachedSize(int size) const;
-  void InternalSwap(TxnMeta* other);
-  private:
-  inline ::google::protobuf::Arena* GetArenaNoVirtual() const {
-    return NULL;
-  }
-  inline void* MaybeArenaPtr() const {
-    return NULL;
-  }
-  public:
-
-  ::std::string GetTypeName() const PROTOBUF_FINAL;
-
-  // nested types ----------------------------------------------------
-
-  // accessors -------------------------------------------------------
-
-  bool has_id() const;
-  void clear_id();
-  static const int kIdFieldNumber = 1;
-  const ::std::string& id() const;
-  void set_id(const ::std::string& value);
-  #if LANG_CXX11
-  void set_id(::std::string&& value);
-  #endif
-  void set_id(const char* value);
-  void set_id(const void* value, size_t size);
-  ::std::string* mutable_id();
-  ::std::string* release_id();
-  void set_allocated_id(::std::string* id);
-
-  // optional bytes key = 3;
-  bool has_key() const;
-  void clear_key();
-  static const int kKeyFieldNumber = 3;
-  const ::std::string& key() const;
-  void set_key(const ::std::string& value);
-  #if LANG_CXX11
-  void set_key(::std::string&& value);
-  #endif
-  void set_key(const char* value);
-  void set_key(const void* value, size_t size);
-  ::std::string* mutable_key();
-  ::std::string* release_key();
-  void set_allocated_key(::std::string* key);
-
-  bool has_timestamp() const;
-  void clear_timestamp();
-  static const int kTimestampFieldNumber = 5;
-  const ::cockroach::util::hlc::Timestamp& timestamp() const;
-  ::cockroach::util::hlc::Timestamp* mutable_timestamp();
-  ::cockroach::util::hlc::Timestamp* release_timestamp();
-  void set_allocated_timestamp(::cockroach::util::hlc::Timestamp* timestamp);
-
-  bool has_isolation() const;
-  void clear_isolation();
-  static const int kIsolationFieldNumber = 2;
-  ::cockroach::storage::engine::enginepb::IsolationType isolation() const;
-  void set_isolation(::cockroach::storage::engine::enginepb::IsolationType value);
-
-  bool has_epoch() const;
-  void clear_epoch();
-  static const int kEpochFieldNumber = 4;
-  ::google::protobuf::uint32 epoch() const;
-  void set_epoch(::google::protobuf::uint32 value);
-
-  bool has_priority() const;
-  void clear_priority();
-  static const int kPriorityFieldNumber = 6;
-  ::google::protobuf::int32 priority() const;
-  void set_priority(::google::protobuf::int32 value);
-
-  bool has_sequence() const;
-  void clear_sequence();
-  static const int kSequenceFieldNumber = 7;
-  ::google::protobuf::int32 sequence() const;
-  void set_sequence(::google::protobuf::int32 value);
-
-  bool has_batch_index() const;
-  void clear_batch_index();
-  static const int kBatchIndexFieldNumber = 8;
-  ::google::protobuf::int32 batch_index() const;
-  void set_batch_index(::google::protobuf::int32 value);
-
-  // @@protoc_insertion_point(class_scope:cockroach.storage.engine.enginepb.TxnMeta)
- private:
-  void set_has_id();
-  void clear_has_id();
-  void set_has_isolation();
-  void clear_has_isolation();
-  void set_has_key();
-  void clear_has_key();
-  void set_has_epoch();
-  void clear_has_epoch();
-  void set_has_timestamp();
-  void clear_has_timestamp();
-  void set_has_priority();
-  void clear_has_priority();
-  void set_has_sequence();
-  void clear_has_sequence();
-  void set_has_batch_index();
-  void clear_has_batch_index();
-
-  ::google::protobuf::internal::InternalMetadataWithArenaLite _internal_metadata_;
-  ::google::protobuf::internal::HasBits<1> _has_bits_;
-  mutable int _cached_size_;
-  ::google::protobuf::internal::ArenaStringPtr id_;
-  ::google::protobuf::internal::ArenaStringPtr key_;
-  ::cockroach::util::hlc::Timestamp* timestamp_;
-  int isolation_;
-  ::google::protobuf::uint32 epoch_;
-  ::google::protobuf::int32 priority_;
-  ::google::protobuf::int32 sequence_;
-  ::google::protobuf::int32 batch_index_;
-  friend struct protobuf_cockroach_2fpkg_2fstorage_2fengine_2fenginepb_2fmvcc_2eproto::TableStruct;
-};
-// -------------------------------------------------------------------
 
 class MVCCMetadata : public ::google::protobuf::MessageLite /* @@protoc_insertion_point(class_definition:cockroach.storage.engine.enginepb.MVCCMetadata) */ {
  public:
@@ -308,7 +109,7 @@ class MVCCMetadata : public ::google::protobuf::MessageLite /* @@protoc_insertio
                &_MVCCMetadata_default_instance_);
   }
   static PROTOBUF_CONSTEXPR int const kIndexInFileMessages =
-    1;
+    0;
 
   void Swap(MVCCMetadata* other);
   friend void swap(MVCCMetadata& a, MVCCMetadata& b) {
@@ -484,7 +285,7 @@ class MVCCStats : public ::google::protobuf::MessageLite /* @@protoc_insertion_p
                &_MVCCStats_default_instance_);
   }
   static PROTOBUF_CONSTEXPR int const kIndexInFileMessages =
-    2;
+    1;
 
   void Swap(MVCCStats* other);
   friend void swap(MVCCStats& a, MVCCStats& b) {
@@ -674,296 +475,6 @@ class MVCCStats : public ::google::protobuf::MessageLite /* @@protoc_insertion_p
   #pragma GCC diagnostic push
   #pragma GCC diagnostic ignored "-Wstrict-aliasing"
 #endif  // __GNUC__
-// TxnMeta
-
-inline bool TxnMeta::has_id() const {
-  return (_has_bits_[0] & 0x00000001u) != 0;
-}
-inline void TxnMeta::set_has_id() {
-  _has_bits_[0] |= 0x00000001u;
-}
-inline void TxnMeta::clear_has_id() {
-  _has_bits_[0] &= ~0x00000001u;
-}
-inline void TxnMeta::clear_id() {
-  id_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
-  clear_has_id();
-}
-inline const ::std::string& TxnMeta::id() const {
-  // @@protoc_insertion_point(field_get:cockroach.storage.engine.enginepb.TxnMeta.id)
-  return id_.GetNoArena();
-}
-inline void TxnMeta::set_id(const ::std::string& value) {
-  set_has_id();
-  id_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), value);
-  // @@protoc_insertion_point(field_set:cockroach.storage.engine.enginepb.TxnMeta.id)
-}
-#if LANG_CXX11
-inline void TxnMeta::set_id(::std::string&& value) {
-  set_has_id();
-  id_.SetNoArena(
-    &::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::move(value));
-  // @@protoc_insertion_point(field_set_rvalue:cockroach.storage.engine.enginepb.TxnMeta.id)
-}
-#endif
-inline void TxnMeta::set_id(const char* value) {
-  GOOGLE_DCHECK(value != NULL);
-  set_has_id();
-  id_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::string(value));
-  // @@protoc_insertion_point(field_set_char:cockroach.storage.engine.enginepb.TxnMeta.id)
-}
-inline void TxnMeta::set_id(const void* value, size_t size) {
-  set_has_id();
-  id_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(),
-      ::std::string(reinterpret_cast<const char*>(value), size));
-  // @@protoc_insertion_point(field_set_pointer:cockroach.storage.engine.enginepb.TxnMeta.id)
-}
-inline ::std::string* TxnMeta::mutable_id() {
-  set_has_id();
-  // @@protoc_insertion_point(field_mutable:cockroach.storage.engine.enginepb.TxnMeta.id)
-  return id_.MutableNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
-}
-inline ::std::string* TxnMeta::release_id() {
-  // @@protoc_insertion_point(field_release:cockroach.storage.engine.enginepb.TxnMeta.id)
-  clear_has_id();
-  return id_.ReleaseNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
-}
-inline void TxnMeta::set_allocated_id(::std::string* id) {
-  if (id != NULL) {
-    set_has_id();
-  } else {
-    clear_has_id();
-  }
-  id_.SetAllocatedNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), id);
-  // @@protoc_insertion_point(field_set_allocated:cockroach.storage.engine.enginepb.TxnMeta.id)
-}
-
-inline bool TxnMeta::has_isolation() const {
-  return (_has_bits_[0] & 0x00000008u) != 0;
-}
-inline void TxnMeta::set_has_isolation() {
-  _has_bits_[0] |= 0x00000008u;
-}
-inline void TxnMeta::clear_has_isolation() {
-  _has_bits_[0] &= ~0x00000008u;
-}
-inline void TxnMeta::clear_isolation() {
-  isolation_ = 0;
-  clear_has_isolation();
-}
-inline ::cockroach::storage::engine::enginepb::IsolationType TxnMeta::isolation() const {
-  // @@protoc_insertion_point(field_get:cockroach.storage.engine.enginepb.TxnMeta.isolation)
-  return static_cast< ::cockroach::storage::engine::enginepb::IsolationType >(isolation_);
-}
-inline void TxnMeta::set_isolation(::cockroach::storage::engine::enginepb::IsolationType value) {
-  assert(::cockroach::storage::engine::enginepb::IsolationType_IsValid(value));
-  set_has_isolation();
-  isolation_ = value;
-  // @@protoc_insertion_point(field_set:cockroach.storage.engine.enginepb.TxnMeta.isolation)
-}
-
-// optional bytes key = 3;
-inline bool TxnMeta::has_key() const {
-  return (_has_bits_[0] & 0x00000002u) != 0;
-}
-inline void TxnMeta::set_has_key() {
-  _has_bits_[0] |= 0x00000002u;
-}
-inline void TxnMeta::clear_has_key() {
-  _has_bits_[0] &= ~0x00000002u;
-}
-inline void TxnMeta::clear_key() {
-  key_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
-  clear_has_key();
-}
-inline const ::std::string& TxnMeta::key() const {
-  // @@protoc_insertion_point(field_get:cockroach.storage.engine.enginepb.TxnMeta.key)
-  return key_.GetNoArena();
-}
-inline void TxnMeta::set_key(const ::std::string& value) {
-  set_has_key();
-  key_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), value);
-  // @@protoc_insertion_point(field_set:cockroach.storage.engine.enginepb.TxnMeta.key)
-}
-#if LANG_CXX11
-inline void TxnMeta::set_key(::std::string&& value) {
-  set_has_key();
-  key_.SetNoArena(
-    &::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::move(value));
-  // @@protoc_insertion_point(field_set_rvalue:cockroach.storage.engine.enginepb.TxnMeta.key)
-}
-#endif
-inline void TxnMeta::set_key(const char* value) {
-  GOOGLE_DCHECK(value != NULL);
-  set_has_key();
-  key_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::string(value));
-  // @@protoc_insertion_point(field_set_char:cockroach.storage.engine.enginepb.TxnMeta.key)
-}
-inline void TxnMeta::set_key(const void* value, size_t size) {
-  set_has_key();
-  key_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(),
-      ::std::string(reinterpret_cast<const char*>(value), size));
-  // @@protoc_insertion_point(field_set_pointer:cockroach.storage.engine.enginepb.TxnMeta.key)
-}
-inline ::std::string* TxnMeta::mutable_key() {
-  set_has_key();
-  // @@protoc_insertion_point(field_mutable:cockroach.storage.engine.enginepb.TxnMeta.key)
-  return key_.MutableNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
-}
-inline ::std::string* TxnMeta::release_key() {
-  // @@protoc_insertion_point(field_release:cockroach.storage.engine.enginepb.TxnMeta.key)
-  clear_has_key();
-  return key_.ReleaseNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
-}
-inline void TxnMeta::set_allocated_key(::std::string* key) {
-  if (key != NULL) {
-    set_has_key();
-  } else {
-    clear_has_key();
-  }
-  key_.SetAllocatedNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), key);
-  // @@protoc_insertion_point(field_set_allocated:cockroach.storage.engine.enginepb.TxnMeta.key)
-}
-
-inline bool TxnMeta::has_epoch() const {
-  return (_has_bits_[0] & 0x00000010u) != 0;
-}
-inline void TxnMeta::set_has_epoch() {
-  _has_bits_[0] |= 0x00000010u;
-}
-inline void TxnMeta::clear_has_epoch() {
-  _has_bits_[0] &= ~0x00000010u;
-}
-inline void TxnMeta::clear_epoch() {
-  epoch_ = 0u;
-  clear_has_epoch();
-}
-inline ::google::protobuf::uint32 TxnMeta::epoch() const {
-  // @@protoc_insertion_point(field_get:cockroach.storage.engine.enginepb.TxnMeta.epoch)
-  return epoch_;
-}
-inline void TxnMeta::set_epoch(::google::protobuf::uint32 value) {
-  set_has_epoch();
-  epoch_ = value;
-  // @@protoc_insertion_point(field_set:cockroach.storage.engine.enginepb.TxnMeta.epoch)
-}
-
-inline bool TxnMeta::has_timestamp() const {
-  return (_has_bits_[0] & 0x00000004u) != 0;
-}
-inline void TxnMeta::set_has_timestamp() {
-  _has_bits_[0] |= 0x00000004u;
-}
-inline void TxnMeta::clear_has_timestamp() {
-  _has_bits_[0] &= ~0x00000004u;
-}
-inline void TxnMeta::clear_timestamp() {
-  if (timestamp_ != NULL) timestamp_->::cockroach::util::hlc::Timestamp::Clear();
-  clear_has_timestamp();
-}
-inline const ::cockroach::util::hlc::Timestamp& TxnMeta::timestamp() const {
-  const ::cockroach::util::hlc::Timestamp* p = timestamp_;
-  // @@protoc_insertion_point(field_get:cockroach.storage.engine.enginepb.TxnMeta.timestamp)
-  return p != NULL ? *p : *reinterpret_cast<const ::cockroach::util::hlc::Timestamp*>(
-      &::cockroach::util::hlc::_Timestamp_default_instance_);
-}
-inline ::cockroach::util::hlc::Timestamp* TxnMeta::mutable_timestamp() {
-  set_has_timestamp();
-  if (timestamp_ == NULL) {
-    timestamp_ = new ::cockroach::util::hlc::Timestamp;
-  }
-  // @@protoc_insertion_point(field_mutable:cockroach.storage.engine.enginepb.TxnMeta.timestamp)
-  return timestamp_;
-}
-inline ::cockroach::util::hlc::Timestamp* TxnMeta::release_timestamp() {
-  // @@protoc_insertion_point(field_release:cockroach.storage.engine.enginepb.TxnMeta.timestamp)
-  clear_has_timestamp();
-  ::cockroach::util::hlc::Timestamp* temp = timestamp_;
-  timestamp_ = NULL;
-  return temp;
-}
-inline void TxnMeta::set_allocated_timestamp(::cockroach::util::hlc::Timestamp* timestamp) {
-  delete timestamp_;
-  timestamp_ = timestamp;
-  if (timestamp) {
-    set_has_timestamp();
-  } else {
-    clear_has_timestamp();
-  }
-  // @@protoc_insertion_point(field_set_allocated:cockroach.storage.engine.enginepb.TxnMeta.timestamp)
-}
-
-inline bool TxnMeta::has_priority() const {
-  return (_has_bits_[0] & 0x00000020u) != 0;
-}
-inline void TxnMeta::set_has_priority() {
-  _has_bits_[0] |= 0x00000020u;
-}
-inline void TxnMeta::clear_has_priority() {
-  _has_bits_[0] &= ~0x00000020u;
-}
-inline void TxnMeta::clear_priority() {
-  priority_ = 0;
-  clear_has_priority();
-}
-inline ::google::protobuf::int32 TxnMeta::priority() const {
-  // @@protoc_insertion_point(field_get:cockroach.storage.engine.enginepb.TxnMeta.priority)
-  return priority_;
-}
-inline void TxnMeta::set_priority(::google::protobuf::int32 value) {
-  set_has_priority();
-  priority_ = value;
-  // @@protoc_insertion_point(field_set:cockroach.storage.engine.enginepb.TxnMeta.priority)
-}
-
-inline bool TxnMeta::has_sequence() const {
-  return (_has_bits_[0] & 0x00000040u) != 0;
-}
-inline void TxnMeta::set_has_sequence() {
-  _has_bits_[0] |= 0x00000040u;
-}
-inline void TxnMeta::clear_has_sequence() {
-  _has_bits_[0] &= ~0x00000040u;
-}
-inline void TxnMeta::clear_sequence() {
-  sequence_ = 0;
-  clear_has_sequence();
-}
-inline ::google::protobuf::int32 TxnMeta::sequence() const {
-  // @@protoc_insertion_point(field_get:cockroach.storage.engine.enginepb.TxnMeta.sequence)
-  return sequence_;
-}
-inline void TxnMeta::set_sequence(::google::protobuf::int32 value) {
-  set_has_sequence();
-  sequence_ = value;
-  // @@protoc_insertion_point(field_set:cockroach.storage.engine.enginepb.TxnMeta.sequence)
-}
-
-inline bool TxnMeta::has_batch_index() const {
-  return (_has_bits_[0] & 0x00000080u) != 0;
-}
-inline void TxnMeta::set_has_batch_index() {
-  _has_bits_[0] |= 0x00000080u;
-}
-inline void TxnMeta::clear_has_batch_index() {
-  _has_bits_[0] &= ~0x00000080u;
-}
-inline void TxnMeta::clear_batch_index() {
-  batch_index_ = 0;
-  clear_has_batch_index();
-}
-inline ::google::protobuf::int32 TxnMeta::batch_index() const {
-  // @@protoc_insertion_point(field_get:cockroach.storage.engine.enginepb.TxnMeta.batch_index)
-  return batch_index_;
-}
-inline void TxnMeta::set_batch_index(::google::protobuf::int32 value) {
-  set_has_batch_index();
-  batch_index_ = value;
-  // @@protoc_insertion_point(field_set:cockroach.storage.engine.enginepb.TxnMeta.batch_index)
-}
-
-// -------------------------------------------------------------------
-
 // MVCCMetadata
 
 // optional .cockroach.storage.engine.enginepb.TxnMeta txn = 1;
@@ -1567,8 +1078,6 @@ inline void MVCCStats::set_sys_count(::google::protobuf::int64 value) {
 #endif  // !PROTOBUF_INLINE_NOT_IN_HEADERS
 // -------------------------------------------------------------------
 
-// -------------------------------------------------------------------
-
 
 // @@protoc_insertion_point(namespace_scope)
 
@@ -1577,14 +1086,6 @@ inline void MVCCStats::set_sys_count(::google::protobuf::int64 value) {
 }  // namespace engine
 }  // namespace storage
 }  // namespace cockroach
-
-namespace google {
-namespace protobuf {
-
-template <> struct is_proto_enum< ::cockroach::storage::engine::enginepb::IsolationType> : ::google::protobuf::internal::true_type {};
-
-}  // namespace protobuf
-}  // namespace google
 
 // @@protoc_insertion_point(global_scope)
 
