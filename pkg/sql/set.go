@@ -103,6 +103,13 @@ func (p *planner) SetVar(ctx context.Context, n *parser.SetVar) (planNode, error
 
 func (n *setNode) Start(params runParams) error {
 	if n.typedValues != nil {
+		for i, v := range n.typedValues {
+			d, err := v.Eval(&params.p.evalCtx)
+			if err != nil {
+				return err
+			}
+			n.typedValues[i] = d
+		}
 		return n.v.Set(params.ctx, params.p.session, n.typedValues)
 	}
 	return n.v.Reset(params.p.session)
