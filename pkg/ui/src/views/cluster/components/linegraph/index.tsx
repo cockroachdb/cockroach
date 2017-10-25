@@ -116,9 +116,10 @@ export class LineGraph extends React.Component<LineGraphProps, {}> {
       }
 
       const { currentlyHovering, hoverChart } = this.props.hoverState;
-      let { hoverTime } = this.props.hoverState;
-      if (!currentlyHovering || hoverChart === this.props.title) {
-        hoverTime = null;
+      let hoverTime: moment.Moment;
+      // Don't draw the linked guideline on the hovered chart, NVD3 does that for us.
+      if (currentlyHovering && hoverChart !== this.props.title) {
+        hoverTime = this.props.hoverState.hoverTime;
       }
 
       ConfigureLineChart(
