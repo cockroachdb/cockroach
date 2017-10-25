@@ -215,7 +215,7 @@ $(REPO_ROOT)/build/variables.mk: $(REPO_ROOT)/.go-version $(VARIABLES_MAKEFILES)
 	@echo 'define VALID_VARS' >> $@
 	@sed -nE -e '/^	/d' -e 's/([^#]*)#.*/\1/' \
 	  -e 's/(^|^[^:]+:)[ ]*(export)?[ ]*([^ ]+)[ ]*[:?+]?=.*/  \3/p' $^ \
-	  | LC_COLLATE=C sort -u >> $@
+	  | sort -u >> $@
 	@echo 'endef' >> $@
 
 # The following section handles building our C/C++ dependencies. These are

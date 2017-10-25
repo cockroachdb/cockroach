@@ -158,6 +158,10 @@ ifdef MACOS
 export MACOSX_DEPLOYMENT_TARGET ?= $(shell sw_vers -productVersion | grep -oE '[0-9]+\.[0-9]+')
 endif
 
+# Some targets (protobuf) produce different results depending on the sort order;
+# set LC_COLLATE so this is consistent across systems.
+export LC_COLLATE=C
+
 XGO := $(strip $(if $(XGOOS),GOOS=$(XGOOS)) $(if $(XGOARCH),GOARCH=$(XGOARCH)) $(if $(XHOST_TRIPLE),CC=$(CC_PATH) CXX=$(CXX_PATH)) $(GO))
 
 COCKROACH := ./cockroach$(SUFFIX)$(shell $(XGO) env GOEXE)
