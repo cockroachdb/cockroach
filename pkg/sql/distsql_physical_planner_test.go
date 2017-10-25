@@ -721,7 +721,7 @@ func TestPartitionSpans(t *testing.T) {
 	}
 
 	// We need a mock Gossip to contain addresses for the nodes. Otherwise the
-	// distSQLPlanner will not plan flows on them.
+	// DistSQLPlanner will not plan flows on them.
 	testStopper := stop.NewStopper()
 	defer testStopper.Stop(context.TODO())
 	mockGossip := gossip.NewTest(roachpb.NodeID(1), nil /* rpcContext */, nil, /* grpcServer */
@@ -760,7 +760,7 @@ func TestPartitionSpans(t *testing.T) {
 				ranges: tc.ranges,
 			}
 
-			dsp := distSQLPlanner{
+			dsp := DistSQLPlanner{
 				planVersion:  distsqlrun.Version,
 				st:           cluster.MakeTestingClusterSettings(),
 				nodeDesc:     *tsp.nodes[tc.gatewayNode-1],
@@ -779,7 +779,7 @@ func TestPartitionSpans(t *testing.T) {
 				},
 			}
 
-			planCtx := dsp.NewPlanningCtx(context.Background(), nil /* txn */)
+			planCtx := dsp.newPlanningCtx(context.Background(), nil /* txn */)
 			var spans []roachpb.Span
 			for _, s := range tc.spans {
 				spans = append(spans, roachpb.Span{Key: roachpb.Key(s[0]), EndKey: roachpb.Key(s[1])})
@@ -906,7 +906,7 @@ func TestPartitionSpansSkipsIncompatibleNodes(t *testing.T) {
 			defer stopper.Stop(context.TODO())
 
 			// We need a mock Gossip to contain addresses for the nodes. Otherwise the
-			// distSQLPlanner will not plan flows on them. This Gossip will also
+			// DistSQLPlanner will not plan flows on them. This Gossip will also
 			// reflect tc.nodesNotAdvertisingDistSQLVersion.
 			testStopper := stop.NewStopper()
 			defer testStopper.Stop(context.TODO())
@@ -940,7 +940,7 @@ func TestPartitionSpansSkipsIncompatibleNodes(t *testing.T) {
 				ranges: ranges,
 			}
 
-			dsp := distSQLPlanner{
+			dsp := DistSQLPlanner{
 				planVersion:  tc.planVersion,
 				st:           cluster.MakeTestingClusterSettings(),
 				nodeDesc:     *tsp.nodes[gatewayNode-1],
@@ -955,7 +955,7 @@ func TestPartitionSpansSkipsIncompatibleNodes(t *testing.T) {
 				},
 			}
 
-			planCtx := dsp.NewPlanningCtx(context.Background(), nil /* txn */)
+			planCtx := dsp.newPlanningCtx(context.Background(), nil /* txn */)
 			partitions, err := dsp.partitionSpans(&planCtx, roachpb.Spans{span})
 			if err != nil {
 				t.Fatal(err)
@@ -1031,7 +1031,7 @@ func TestPartitionSpansSkipsNodesNotInGossip(t *testing.T) {
 		ranges: ranges,
 	}
 
-	dsp := distSQLPlanner{
+	dsp := DistSQLPlanner{
 		planVersion:  distsqlrun.Version,
 		st:           cluster.MakeTestingClusterSettings(),
 		nodeDesc:     *tsp.nodes[gatewayNode-1],
@@ -1046,7 +1046,7 @@ func TestPartitionSpansSkipsNodesNotInGossip(t *testing.T) {
 		},
 	}
 
-	planCtx := dsp.NewPlanningCtx(context.Background(), nil /* txn */)
+	planCtx := dsp.newPlanningCtx(context.Background(), nil /* txn */)
 	partitions, err := dsp.partitionSpans(&planCtx, roachpb.Spans{span})
 	if err != nil {
 		t.Fatal(err)

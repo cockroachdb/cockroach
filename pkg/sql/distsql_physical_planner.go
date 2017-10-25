@@ -44,8 +44,8 @@ import (
 	"golang.org/x/net/context"
 )
 
-//
-// A rough overview of the process:
+// DistSQLPlanner is used to generate distributed plans from logical
+// plans. A rough overview of the process:
 //
 //  - the plan is based on a planNode tree (in the future it will be based on an
 //    intermediate representation tree). Only a subset of the possible trees is
@@ -63,7 +63,7 @@ import (
 //  - for each an internal planNode we start with the plan of the child node(s)
 //    and add processing stages (connected to the result routers of the children
 //    node).
-type distSQLPlanner struct {
+type DistSQLPlanner struct {
 	// planVersion is the version of DistSQL targeted by the plan we're building.
 	// This is currently only assigned to the node's current DistSQL version and
 	// is used to skip incompatible nodes when mapping spans.
@@ -108,7 +108,9 @@ var planMergeJoins = settings.RegisterBoolSetting(
 	true,
 )
 
-func newDistSQLPlanner(
+// NewDistSQLPlanner initializes a DistSQLPlanner
+func NewDistSQLPlanner(
+	ctx context.Context,
 	planVersion distsqlrun.DistSQLVersion,
 	st *cluster.Settings,
 	nodeDesc roachpb.NodeDescriptor,
@@ -118,8 +120,9 @@ func newDistSQLPlanner(
 	gossip *gossip.Gossip,
 	stopper *stop.Stopper,
 	testingKnobs DistSQLPlannerTestingKnobs,
-) *distSQLPlanner {
-	dsp := &distSQLPlanner{
+) *DistSQLPlanner {
+	log.Infof(ctx, "creating DistSQLPlanner with address %s", nodeDesc.Address)
+	dsp := &DistSQLPlanner{
 		planVersion:  planVersion,
 		st:           st,
 		nodeDesc:     nodeDesc,
@@ -135,8 +138,8 @@ func newDistSQLPlanner(
 }
 
 // setSpanResolver switches to a different SpanResolver. It is the caller's
-// responsibility to make sure the distSQLPlanner is not in use.
-func (dsp *distSQLPlanner) setSpanResolver(spanResolver distsqlplan.SpanResolver) {
+// responsibility to make sure the DistSQLPlanner is not in use.
+func (dsp *DistSQLPlanner) setSpanResolver(spanResolver distsqlplan.SpanResolver) {
 	dsp.spanResolver = spanResolver
 }
 
@@ -170,7 +173,7 @@ func (v *distSQLExprCheckVisitor) VisitPost(expr parser.Expr) parser.Expr { retu
 
 // checkExpr verifies that an expression doesn't contain things that are not yet
 // supported by distSQL, like subqueries.
-func (dsp *distSQLPlanner) checkExpr(expr parser.Expr) error {
+func (dsp *DistSQLPlanner) checkExpr(expr parser.Expr) error {
 	if expr == nil {
 		return nil
 	}
@@ -183,7 +186,7 @@ func (dsp *distSQLPlanner) checkExpr(expr parser.Expr) error {
 //  - whether DistSQL is equipped to handle the query (if not, an error is
 //    returned).
 //  - whether it is recommended that the query be run with DistSQL.
-func (dsp *distSQLPlanner) CheckSupport(node planNode) (bool, error) {
+func (dsp *DistSQLPlanner) CheckSupport(node planNode) (bool, error) {
 	rec, err := dsp.checkSupportForNode(node)
 	if err != nil {
 		return false, err
@@ -251,7 +254,7 @@ func leafType(t parser.Type) parser.Type {
 // checkSupportForNode returns a distRecommendation (as described above) or an
 // error if the plan subtree is not supported by DistSQL.
 // TODO(radu): add tests for this.
-func (dsp *distSQLPlanner) checkSupportForNode(node planNode) (distRecommendation, error) {
+func (dsp *DistSQLPlanner) checkSupportForNode(node planNode) (distRecommendation, error) {
 	switch n := node.(type) {
 	case *filterNode:
 		if err := dsp.checkExpr(n.filter); err != nil {
@@ -485,7 +488,7 @@ type spanPartition struct {
 // partitionSpans does its best to not assign ranges on nodes that are known to
 // either be unhealthy or running an incompatible version. The ranges owned by
 // such nodes are assigned to the gateway.
-func (dsp *distSQLPlanner) partitionSpans(
+func (dsp *DistSQLPlanner) partitionSpans(
 	planCtx *planningCtx, spans roachpb.Spans,
 ) ([]spanPartition, error) {
 	if len(spans) == 0 {
@@ -634,7 +637,7 @@ func (dsp *distSQLPlanner) partitionSpans(
 // nodeVersionIsCompatible decides whether a particular node's DistSQL version
 // is compatible with planVer. It uses gossip to find out the node's version
 // range.
-func (dsp *distSQLPlanner) nodeVersionIsCompatible(
+func (dsp *DistSQLPlanner) nodeVersionIsCompatible(
 	nodeID roachpb.NodeID, planVer distsqlrun.DistSQLVersion,
 ) bool {
 	var v distsqlrun.DistSQLVersionGossipInfo
@@ -704,7 +707,7 @@ func getOutputColumnsFromScanNode(n *scanNode) []uint32 {
 
 // convertOrdering maps the columns in ord.ordering to the output columns of a
 // processor.
-func (dsp *distSQLPlanner) convertOrdering(
+func (dsp *DistSQLPlanner) convertOrdering(
 	props physicalProps, planToStreamColMap []int,
 ) distsqlrun.Ordering {
 	if len(props.ordering) == 0 {
@@ -742,7 +745,7 @@ func (dsp *distSQLPlanner) convertOrdering(
 // createTableReaders generates a plan consisting of table reader processors,
 // one for each node that has spans that we are reading.
 // overridesResultColumns is optional.
-func (dsp *distSQLPlanner) createTableReaders(
+func (dsp *DistSQLPlanner) createTableReaders(
 	planCtx *planningCtx, n *scanNode, overrideResultColumns []uint32,
 ) (physicalPlan, error) {
 	spec, post, err := initTableReaderSpec(n)
@@ -836,10 +839,10 @@ func initBackfillerSpec(
 	return ret, nil
 }
 
-// CreateBackfiller generates a plan consisting of index/column backfiller
+// createBackfiller generates a plan consisting of index/column backfiller
 // processors, one for each node that has spans that we are reading. The plan is
 // finalized.
-func (dsp *distSQLPlanner) CreateBackfiller(
+func (dsp *DistSQLPlanner) createBackfiller(
 	planCtx *planningCtx,
 	backfillType backfillType,
 	desc sqlbase.TableDescriptor,
@@ -887,7 +890,7 @@ func (dsp *distSQLPlanner) CreateBackfiller(
 // DistLoader uses DistSQL to convert external data formats (csv, etc) into
 // sstables of our mvcc-format key values.
 type DistLoader struct {
-	distSQLPlanner *distSQLPlanner
+	distSQLPlanner *DistSQLPlanner
 }
 
 // RowResultWriter is a thin wrapper around a RowContainer.
@@ -1012,7 +1015,7 @@ func (l *DistLoader) LoadCSV(
 	rowContainer := sqlbase.NewRowContainer(*evalCtx.ActiveMemAcc, ci, 0)
 	rowResultWriter := NewRowResultWriter(parser.Rows, rowContainer)
 
-	planCtx := l.distSQLPlanner.NewPlanningCtx(ctx, nil)
+	planCtx := l.distSQLPlanner.newPlanningCtx(ctx, nil)
 	// Because we're not going through the normal pathways, we have to set up
 	// the nodeID -> nodeAddress map ourselves.
 	for _, node := range nodes {
@@ -1198,7 +1201,7 @@ func (l *DistLoader) LoadCSV(
 // the select data source (a n.source) and updates it to produce results
 // corresponding to the render node itself. An evaluator stage is added if the
 // render node has any expressions which are not just simple column references.
-func (dsp *distSQLPlanner) selectRenders(p *physicalPlan, n *renderNode) {
+func (dsp *DistSQLPlanner) selectRenders(p *physicalPlan, n *renderNode) {
 	p.AddRendering(n.render, p.planToStreamColMap, getTypesForPlanResult(n, nil))
 
 	// Update p.planToStreamColMap; we will have a simple 1-to-1 mapping of
@@ -1209,7 +1212,7 @@ func (dsp *distSQLPlanner) selectRenders(p *physicalPlan, n *renderNode) {
 
 // addSorters adds sorters corresponding to a sortNode and updates the plan to
 // reflect the sort node.
-func (dsp *distSQLPlanner) addSorters(p *physicalPlan, n *sortNode) {
+func (dsp *DistSQLPlanner) addSorters(p *physicalPlan, n *sortNode) {
 
 	matchLen := planPhysicalProps(n.plan).computeMatch(n.ordering)
 
@@ -1278,7 +1281,7 @@ func (dsp *distSQLPlanner) addSorters(p *physicalPlan, n *sortNode) {
 //        therefore k just passes through unchanged.
 //    All other expressions simply pass through unchanged, for e.g. '1' in
 //    'SELECT 1 GROUP BY k'.
-func (dsp *distSQLPlanner) addAggregators(
+func (dsp *DistSQLPlanner) addAggregators(
 	planCtx *planningCtx, p *physicalPlan, n *groupNode,
 ) error {
 	aggregations := make([]distsqlrun.AggregatorSpec_Aggregation, len(n.funcs))
@@ -1760,7 +1763,7 @@ func (dsp *distSQLPlanner) addAggregators(
 	return nil
 }
 
-func (dsp *distSQLPlanner) createPlanForIndexJoin(
+func (dsp *DistSQLPlanner) createPlanForIndexJoin(
 	planCtx *planningCtx, n *indexJoinNode,
 ) (physicalPlan, error) {
 	priCols := make([]uint32, len(n.index.desc.PrimaryIndex.ColumnIDs))
@@ -1864,7 +1867,7 @@ func getTypesForPlanResult(node planNode, planToStreamColMap []int) []sqlbase.Co
 	return types
 }
 
-func (dsp *distSQLPlanner) createPlanForJoin(
+func (dsp *DistSQLPlanner) createPlanForJoin(
 	planCtx *planningCtx, n *joinNode,
 ) (physicalPlan, error) {
 
@@ -2187,7 +2190,7 @@ func (dsp *distSQLPlanner) createPlanForJoin(
 	return p, nil
 }
 
-func (dsp *distSQLPlanner) createPlanForNode(
+func (dsp *DistSQLPlanner) createPlanForNode(
 	planCtx *planningCtx, node planNode,
 ) (physicalPlan, error) {
 	switch n := node.(type) {
@@ -2264,7 +2267,7 @@ func (dsp *distSQLPlanner) createPlanForNode(
 	}
 }
 
-func (dsp *distSQLPlanner) createPlanForValues(
+func (dsp *DistSQLPlanner) createPlanForValues(
 	planCtx *planningCtx, n *valuesNode,
 ) (physicalPlan, error) {
 	columns := len(n.columns)
@@ -2332,7 +2335,7 @@ func (dsp *distSQLPlanner) createPlanForValues(
 	}, nil
 }
 
-func (dsp *distSQLPlanner) createPlanForDistinct(
+func (dsp *DistSQLPlanner) createPlanForDistinct(
 	planCtx *planningCtx, n *distinctNode,
 ) (physicalPlan, error) {
 	plan, err := dsp.createPlanForNode(planCtx, n.plan)
@@ -2376,7 +2379,7 @@ func (dsp *distSQLPlanner) createPlanForDistinct(
 	return plan, nil
 }
 
-func (dsp *distSQLPlanner) NewPlanningCtx(ctx context.Context, txn *client.Txn) planningCtx {
+func (dsp *DistSQLPlanner) newPlanningCtx(ctx context.Context, txn *client.Txn) planningCtx {
 	planCtx := planningCtx{
 		ctx:           ctx,
 		spanIter:      dsp.spanResolver.NewSpanResolverIterator(txn),
@@ -2388,7 +2391,7 @@ func (dsp *distSQLPlanner) NewPlanningCtx(ctx context.Context, txn *client.Txn) 
 
 // FinalizePlan adds a final "result" stage if necessary and populates the
 // endpoints of the plan.
-func (dsp *distSQLPlanner) FinalizePlan(planCtx *planningCtx, plan *physicalPlan) {
+func (dsp *DistSQLPlanner) FinalizePlan(planCtx *planningCtx, plan *physicalPlan) {
 	thisNodeID := dsp.nodeDesc.NodeID
 	// If we don't already have a single result router on this node, add a final
 	// stage.

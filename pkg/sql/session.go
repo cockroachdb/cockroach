@@ -256,7 +256,7 @@ type Session struct {
 	execCfg *ExecutorConfig
 	// distSQLPlanner is in charge of distSQL physical planning and running
 	// logic.
-	distSQLPlanner *distSQLPlanner
+	distSQLPlanner *DistSQLPlanner
 	// context is the Session's base context, to be used for all
 	// SQL-related logging. See Ctx().
 	context context.Context

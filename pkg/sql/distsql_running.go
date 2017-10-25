@@ -74,7 +74,7 @@ func (req runnerRequest) run() {
 	req.resultChan <- res
 }
 
-func (dsp *distSQLPlanner) initRunners() {
+func (dsp *DistSQLPlanner) initRunners() {
 	// This channel has to be unbuffered because we want to only be able to send
 	// requests if a worker is actually there to receive them.
 	dsp.runnerChan = make(chan runnerRequest)
@@ -104,7 +104,7 @@ func (dsp *distSQLPlanner) initRunners() {
 // reported to recv instead of being returned (see the flow.Start() call for the
 // local flow). Perhaps we should push all errors to recv and have this function
 // not return anything.
-func (dsp *distSQLPlanner) Run(
+func (dsp *DistSQLPlanner) Run(
 	planCtx *planningCtx,
 	txn *client.Txn,
 	plan *physicalPlan,
@@ -432,14 +432,14 @@ func (r *distSQLReceiver) updateCaches(ctx context.Context, ranges []roachpb.Ran
 //
 // Note that errors that happen while actually running the flow are reported to
 // recv, not returned by this function.
-func (dsp *distSQLPlanner) PlanAndRun(
+func (dsp *DistSQLPlanner) PlanAndRun(
 	ctx context.Context,
 	txn *client.Txn,
 	tree planNode,
 	recv *distSQLReceiver,
 	evalCtx parser.EvalContext,
 ) error {
-	planCtx := dsp.NewPlanningCtx(ctx, txn)
+	planCtx := dsp.newPlanningCtx(ctx, txn)
 
 	log.VEvent(ctx, 1, "creating DistSQL plan")
 

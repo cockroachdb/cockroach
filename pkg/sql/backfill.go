@@ -552,8 +552,8 @@ func (sc *SchemaChanger) distBackfill(
 			if err != nil {
 				return err
 			}
-			planCtx := sc.distSQLPlanner.NewPlanningCtx(ctx, txn)
-			plan, err := sc.distSQLPlanner.CreateBackfiller(
+			planCtx := sc.distSQLPlanner.newPlanningCtx(ctx, txn)
+			plan, err := sc.distSQLPlanner.createBackfiller(
 				&planCtx, backfillType, *tableDesc, duration, chunkSize, spans, otherTableDescs, sc.readAsOf,
 			)
 			if err != nil {
