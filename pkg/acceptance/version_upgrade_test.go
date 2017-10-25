@@ -41,6 +41,18 @@ func TestVersionUpgrade(t *testing.T) {
 }
 
 func testVersionUpgrade(ctx context.Context, t *testing.T, cfg cluster.TestConfig) {
+
+	// Version 1.0.5 does not contain
+	// https://github.com/cockroachdb/cockroach/pull/19493 and the test will be
+	// flaky.
+	//
+	// TODO(tschottdorf): The first version containing that PR will (likely) be
+	// included in 1.1.2. Check and remove once that's passed and this test has
+	// v1.0.5 bumped to a higher version that includes #19493.
+	if len(cfg.Nodes) > 3 {
+		cfg.Nodes = cfg.Nodes[:3]
+	}
+
 	for i := range cfg.Nodes {
 		// Leave the field blank for all but the first node so that they use the
 		// version we're testing in this run.
