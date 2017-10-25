@@ -42,7 +42,7 @@ import (
 // to the current system time plus the maximum clock offset.
 type Cache interface {
 	// AddRequest adds the specified request to the cache in an unexpanded state.
-	AddRequest(req Request)
+	AddRequest(req *Request)
 	// ExpandRequests expands any request that overlaps the specified span and
 	// which is newer than the specified timestamp.
 	ExpandRequests(span roachpb.RSpan, timestamp hlc.Timestamp)

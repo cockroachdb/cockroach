@@ -15,6 +15,8 @@
 package tscache
 
 import (
+	"sync"
+
 	"github.com/google/btree"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -77,4 +79,47 @@ func (cr *Request) size() uint64 {
 		n += cacheEntrySize(interval.Comparable(cr.Txn.Key), nil)
 	}
 	return n
+}
+
+func (cr *Request) release() {
+	// We want to keep the Request.Reads backing array co-located with the
+	// Request (see requestAlloc). If they have split because cr needed more
+	// than requestAllocSpans read spans, throw out the entire Request instead
+	// of putting it back in the pool. Before doing so though, make sure we
+	// didn't assign the backing array to the Writes slice.
+	if cap(cr.Reads) > requestAllocSpans {
+		if cap(cr.Writes) > requestAllocSpans {
+			// Throw away.
+			return
+		}
+		cr.Reads = cr.Writes
+	}
+	for i := range cr.Reads {
+		cr.Reads[i] = roachpb.Span{}
+	}
+	*cr = Request{
+		Reads: cr.Reads[:0],
+	}
+	requestPool.Put(cr)
+}
+
+const requestAllocSpans = 2
+
+type requestAlloc struct {
+	cr    Request
+	spans [requestAllocSpans]roachpb.Span
+}
+
+var requestPool = sync.Pool{
+	New: func() interface{} {
+		crAlloc := new(requestAlloc)
+		cr := &crAlloc.cr
+		cr.Reads = crAlloc.spans[:0]
+		return cr
+	},
+}
+
+// NewRequest returns a new Request object.
+func NewRequest() *Request {
+	return requestPool.Get().(*Request)
 }
