@@ -50,6 +50,11 @@ func TestCrashReportingSafeError(t *testing.T) {
 			expType: "*runtime.TypeAssertionError", expErr: "interface conversion: interface is nil, not ",
 		},
 		{
+			// Same as last, but skipping through to the cause: panic(errors.Wrap(safeErr, "gibberish")).
+			format: "", rs: []interface{}{errors.Wrap(runtimeErr, "unseen")},
+			expType: "*runtime.TypeAssertionError", expErr: "interface conversion: interface is nil, not ",
+		},
+		{
 			// Special-casing switched off when format string present.
 			format: "%s", rs: []interface{}{runtimeErr},
 			expType: "*log.safeError", expErr: "?:0: %s | <*runtime.TypeAssertionError>: interface conversion: interface is nil, not ",

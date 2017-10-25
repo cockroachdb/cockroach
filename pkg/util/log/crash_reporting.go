@@ -278,10 +278,16 @@ func reportablesToSafeError(depth int, format string, reportables []interface{})
 		file, line, _ = caller.Lookup(depth)
 	}
 
-	if e, ok := reportables[0].(error); ok && format == "" && len(reportables) == 1 && redact(e) == e.Error() {
+	if e, ok := reportables[0].(error); ok {
 		// Special case so that `panic(err)` for a safe `err` returns `err` (and
-		// doesn't wrap it in a `safeError`).
-		return e
+		// doesn't wrap it in a `safeError`). In fact, we go further and also try
+		// the errors.Cause() similarly. The effect is that something like
+		// `errors.Wrap(someSafeErr, "gibberish")` can report `someSafeErr` verbatim.
+		for _, err := range []error{e, errors.Cause(e)} {
+			if format == "" && len(reportables) == 1 && redact(err) == err.Error() {
+				return err
+			}
+		}
 	}
 
 	redacted := make([]string, 0, len(reportables))
