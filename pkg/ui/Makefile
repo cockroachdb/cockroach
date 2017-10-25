@@ -76,3 +76,7 @@ watch: export TARGET := http://localhost:8080
 watch: PORT := 3000
 watch: $(DLLS)
 	$(WEBPACK_DEV_SERVER) --config webpack.app.js --port $(PORT)
+
+.PHONY: maintainer-clean
+maintainer-clean:
+	rm -rf dist node_modules $(DLLS) $(GOBINDATA_TARGET) $(YARN_INSTALLED_TARGET)
