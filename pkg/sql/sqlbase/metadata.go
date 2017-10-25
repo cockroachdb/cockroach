@@ -20,6 +20,7 @@ import (
 
 	"golang.org/x/net/context"
 
+	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -182,10 +183,9 @@ func (ms MetadataSchema) GetInitialValues() []roachpb.KeyValue {
 // needed. See server.ExpectedInitialRangeCount() for a count that includes
 // migrations.
 func (ms MetadataSchema) InitialRangeCount() int {
-	// The number of fixed ranges is determined by the pre-defined split points
-	// in SystemConfig.ComputeSplitKey. The early keyspace is split up in order
-	// to support separate zone configs for different parts of the system ranges.
-	// When there are `n` StaticSplit points, there will be `n+1` ranges.
-	const fixedRanges = 7
-	return len(ms.descs) - ms.configs + fixedRanges
+	// The number of initial ranges is determined by the number of static splits,
+	// plus the number of non-config system tables. (System config tables all
+	// share a range, while each non-config table is split into its own range.)
+	// Note that `n` static splits create `n+1` ranges.
+	return len(config.StaticSplits()) + 1 + len(ms.descs) - ms.configs
 }

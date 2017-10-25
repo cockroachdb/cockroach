@@ -238,44 +238,25 @@ func (s SystemConfig) getZoneConfigForID(id uint32, keySuffix []byte) (ZoneConfi
 	return DefaultZoneConfig(), nil
 }
 
-// StaticSplits is the list of pre-defined split points in the beginning of
-// the keyspace that are there to support separate zone configs for different
-// parts of the system / system config ranges.
-// Exposed publicly so that its ordering can be tested.
-var StaticSplits = []struct {
-	SplitPoint roachpb.RKey
-	SplitKey   roachpb.RKey
-}{
-	// End of meta records / start of system ranges
-	{
-		SplitPoint: roachpb.RKey(keys.SystemPrefix),
-		SplitKey:   roachpb.RKey(keys.SystemPrefix),
-	},
-	// Start of node liveness span.
-	{
-		SplitPoint: roachpb.RKey(keys.NodeLivenessPrefix),
-		SplitKey:   roachpb.RKey(keys.NodeLivenessPrefix),
-	},
-	// End of node liveness span.
-	{
-		SplitPoint: roachpb.RKey(keys.NodeLivenessKeyMax),
-		SplitKey:   roachpb.RKey(keys.NodeLivenessKeyMax),
-	},
-	// Start of timeseries ranges (within system ranges)
-	{
-		SplitPoint: roachpb.RKey(keys.TimeseriesPrefix),
-		SplitKey:   roachpb.RKey(keys.TimeseriesPrefix),
-	},
-	// End of timeseries ranges (continuation of system ranges)
-	{
-		SplitPoint: roachpb.RKey(keys.TimeseriesPrefix.PrefixEnd()),
-		SplitKey:   roachpb.RKey(keys.TimeseriesPrefix.PrefixEnd()),
-	},
-	// System config tables (end of system ranges)
-	{
-		SplitPoint: roachpb.RKey(keys.TableDataMin),
-		SplitKey:   keys.SystemConfigSplitKey,
-	},
+var staticSplits = []roachpb.RKey{
+	roachpb.RKey(keys.SystemPrefix),                 // end of meta records / start of system ranges
+	roachpb.RKey(keys.NodeLivenessPrefix),           // start of node liveness span
+	roachpb.RKey(keys.NodeLivenessKeyMax),           // end of node liveness span
+	roachpb.RKey(keys.TimeseriesPrefix),             // start of timeseries span
+	roachpb.RKey(keys.TimeseriesPrefix.PrefixEnd()), // end of timeseries span
+	roachpb.RKey(keys.TableDataMin),                 // end of system ranges / start of system config tables
+}
+
+// StaticSplits are predefined split points in the system keyspace.
+//
+// There are two reasons for a static split. First, spans that are critical to
+// cluster stability, like the node liveness span, are split into their own
+// ranges to ease debugging (see #17297). Second, spans in the system keyspace
+// that can be targeted by zone configs, like the meta span and the timeseries
+// span, are split off into their own ranges because zone configs cannot apply
+// to fractions of a range.
+func StaticSplits() []roachpb.RKey {
+	return staticSplits
 }
 
 // ComputeSplitKey takes a start and end key and returns the first key at which
@@ -290,12 +271,12 @@ func (s SystemConfig) ComputeSplitKey(startKey, endKey roachpb.RKey) roachpb.RKe
 	// Before dealing with splits necessitated by SQL tables, handle all of the
 	// static splits earlier in the keyspace. Note that this list must be kept in
 	// the proper order (ascending in the keyspace) for the logic below to work.
-	for _, split := range StaticSplits {
-		if startKey.Less(split.SplitPoint) {
-			if split.SplitPoint.Less(endKey) {
+	for _, split := range staticSplits {
+		if startKey.Less(split) {
+			if split.Less(endKey) {
 				// The split point is contained within [startKey, endKey), so we need to
 				// create the split.
-				return split.SplitKey
+				return split
 			}
 			// [startKey, endKey) is contained between the previous split point and
 			// this split point.
