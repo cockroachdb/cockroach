@@ -5732,9 +5732,9 @@ func TestRangeStatsComputation(t *testing.T) {
 	}
 	expMS = baseStats
 	expMS.Add(enginepb.MVCCStats{
-		LiveBytes:   101,
+		LiveBytes:   95,
 		KeyBytes:    28,
-		ValBytes:    73,
+		ValBytes:    67,
 		IntentBytes: 23,
 		LiveCount:   2,
 		KeyCount:    2,

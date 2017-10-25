@@ -35367,215 +35367,6 @@ export const cockroach = $root.cockroach = (() => {
              */
             const hlc = {};
 
-            hlc.LegacyTimestamp = (function() {
-
-                /**
-                 * Properties of a LegacyTimestamp.
-                 * @typedef cockroach.util.hlc.LegacyTimestamp$Properties
-                 * @type {Object}
-                 * @property {Long} [wall_time] LegacyTimestamp wall_time.
-                 * @property {number} [logical] LegacyTimestamp logical.
-                 */
-
-                /**
-                 * Constructs a new LegacyTimestamp.
-                 * @exports cockroach.util.hlc.LegacyTimestamp
-                 * @constructor
-                 * @param {cockroach.util.hlc.LegacyTimestamp$Properties=} [properties] Properties to set
-                 */
-                function LegacyTimestamp(properties) {
-                    if (properties)
-                        for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
-                            if (properties[keys[i]] != null)
-                                this[keys[i]] = properties[keys[i]];
-                }
-
-                /**
-                 * LegacyTimestamp wall_time.
-                 * @type {Long}
-                 */
-                LegacyTimestamp.prototype.wall_time = $util.Long ? $util.Long.fromBits(0,0,false) : 0;
-
-                /**
-                 * LegacyTimestamp logical.
-                 * @type {number}
-                 */
-                LegacyTimestamp.prototype.logical = 0;
-
-                /**
-                 * Creates a new LegacyTimestamp instance using the specified properties.
-                 * @param {cockroach.util.hlc.LegacyTimestamp$Properties=} [properties] Properties to set
-                 * @returns {cockroach.util.hlc.LegacyTimestamp} LegacyTimestamp instance
-                 */
-                LegacyTimestamp.create = function create(properties) {
-                    return new LegacyTimestamp(properties);
-                };
-
-                /**
-                 * Encodes the specified LegacyTimestamp message. Does not implicitly {@link cockroach.util.hlc.LegacyTimestamp.verify|verify} messages.
-                 * @param {cockroach.util.hlc.LegacyTimestamp$Properties} message LegacyTimestamp message or plain object to encode
-                 * @param {$protobuf.Writer} [writer] Writer to encode to
-                 * @returns {$protobuf.Writer} Writer
-                 */
-                LegacyTimestamp.encode = function encode(message, writer) {
-                    if (!writer)
-                        writer = $Writer.create();
-                    if (message.wall_time != null && message.hasOwnProperty("wall_time"))
-                        writer.uint32(/* id 1, wireType 0 =*/8).int64(message.wall_time);
-                    if (message.logical != null && message.hasOwnProperty("logical"))
-                        writer.uint32(/* id 2, wireType 0 =*/16).int32(message.logical);
-                    return writer;
-                };
-
-                /**
-                 * Encodes the specified LegacyTimestamp message, length delimited. Does not implicitly {@link cockroach.util.hlc.LegacyTimestamp.verify|verify} messages.
-                 * @param {cockroach.util.hlc.LegacyTimestamp$Properties} message LegacyTimestamp message or plain object to encode
-                 * @param {$protobuf.Writer} [writer] Writer to encode to
-                 * @returns {$protobuf.Writer} Writer
-                 */
-                LegacyTimestamp.encodeDelimited = function encodeDelimited(message, writer) {
-                    return this.encode(message, writer).ldelim();
-                };
-
-                /**
-                 * Decodes a LegacyTimestamp message from the specified reader or buffer.
-                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
-                 * @param {number} [length] Message length if known beforehand
-                 * @returns {cockroach.util.hlc.LegacyTimestamp} LegacyTimestamp
-                 * @throws {Error} If the payload is not a reader or valid buffer
-                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
-                 */
-                LegacyTimestamp.decode = function decode(reader, length) {
-                    if (!(reader instanceof $Reader))
-                        reader = $Reader.create(reader);
-                    let end = length === undefined ? reader.len : reader.pos + length, message = new $root.cockroach.util.hlc.LegacyTimestamp();
-                    while (reader.pos < end) {
-                        let tag = reader.uint32();
-                        switch (tag >>> 3) {
-                        case 1:
-                            message.wall_time = reader.int64();
-                            break;
-                        case 2:
-                            message.logical = reader.int32();
-                            break;
-                        default:
-                            reader.skipType(tag & 7);
-                            break;
-                        }
-                    }
-                    return message;
-                };
-
-                /**
-                 * Decodes a LegacyTimestamp message from the specified reader or buffer, length delimited.
-                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
-                 * @returns {cockroach.util.hlc.LegacyTimestamp} LegacyTimestamp
-                 * @throws {Error} If the payload is not a reader or valid buffer
-                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
-                 */
-                LegacyTimestamp.decodeDelimited = function decodeDelimited(reader) {
-                    if (!(reader instanceof $Reader))
-                        reader = $Reader(reader);
-                    return this.decode(reader, reader.uint32());
-                };
-
-                /**
-                 * Verifies a LegacyTimestamp message.
-                 * @param {Object.<string,*>} message Plain object to verify
-                 * @returns {?string} `null` if valid, otherwise the reason why it is not
-                 */
-                LegacyTimestamp.verify = function verify(message) {
-                    if (typeof message !== "object" || message === null)
-                        return "object expected";
-                    if (message.wall_time != null && message.hasOwnProperty("wall_time"))
-                        if (!$util.isInteger(message.wall_time) && !(message.wall_time && $util.isInteger(message.wall_time.low) && $util.isInteger(message.wall_time.high)))
-                            return "wall_time: integer|Long expected";
-                    if (message.logical != null && message.hasOwnProperty("logical"))
-                        if (!$util.isInteger(message.logical))
-                            return "logical: integer expected";
-                    return null;
-                };
-
-                /**
-                 * Creates a LegacyTimestamp message from a plain object. Also converts values to their respective internal types.
-                 * @param {Object.<string,*>} object Plain object
-                 * @returns {cockroach.util.hlc.LegacyTimestamp} LegacyTimestamp
-                 */
-                LegacyTimestamp.fromObject = function fromObject(object) {
-                    if (object instanceof $root.cockroach.util.hlc.LegacyTimestamp)
-                        return object;
-                    let message = new $root.cockroach.util.hlc.LegacyTimestamp();
-                    if (object.wall_time != null)
-                        if ($util.Long)
-                            (message.wall_time = $util.Long.fromValue(object.wall_time)).unsigned = false;
-                        else if (typeof object.wall_time === "string")
-                            message.wall_time = parseInt(object.wall_time, 10);
-                        else if (typeof object.wall_time === "number")
-                            message.wall_time = object.wall_time;
-                        else if (typeof object.wall_time === "object")
-                            message.wall_time = new $util.LongBits(object.wall_time.low >>> 0, object.wall_time.high >>> 0).toNumber();
-                    if (object.logical != null)
-                        message.logical = object.logical | 0;
-                    return message;
-                };
-
-                /**
-                 * Creates a LegacyTimestamp message from a plain object. Also converts values to their respective internal types.
-                 * This is an alias of {@link cockroach.util.hlc.LegacyTimestamp.fromObject}.
-                 * @function
-                 * @param {Object.<string,*>} object Plain object
-                 * @returns {cockroach.util.hlc.LegacyTimestamp} LegacyTimestamp
-                 */
-                LegacyTimestamp.from = LegacyTimestamp.fromObject;
-
-                /**
-                 * Creates a plain object from a LegacyTimestamp message. Also converts values to other types if specified.
-                 * @param {cockroach.util.hlc.LegacyTimestamp} message LegacyTimestamp
-                 * @param {$protobuf.ConversionOptions} [options] Conversion options
-                 * @returns {Object.<string,*>} Plain object
-                 */
-                LegacyTimestamp.toObject = function toObject(message, options) {
-                    if (!options)
-                        options = {};
-                    let object = {};
-                    if (options.defaults) {
-                        if ($util.Long) {
-                            let long = new $util.Long(0, 0, false);
-                            object.wall_time = options.longs === String ? long.toString() : options.longs === Number ? long.toNumber() : long;
-                        } else
-                            object.wall_time = options.longs === String ? "0" : 0;
-                        object.logical = 0;
-                    }
-                    if (message.wall_time != null && message.hasOwnProperty("wall_time"))
-                        if (typeof message.wall_time === "number")
-                            object.wall_time = options.longs === String ? String(message.wall_time) : message.wall_time;
-                        else
-                            object.wall_time = options.longs === String ? $util.Long.prototype.toString.call(message.wall_time) : options.longs === Number ? new $util.LongBits(message.wall_time.low >>> 0, message.wall_time.high >>> 0).toNumber() : message.wall_time;
-                    if (message.logical != null && message.hasOwnProperty("logical"))
-                        object.logical = message.logical;
-                    return object;
-                };
-
-                /**
-                 * Creates a plain object from this LegacyTimestamp message. Also converts values to other types if specified.
-                 * @param {$protobuf.ConversionOptions} [options] Conversion options
-                 * @returns {Object.<string,*>} Plain object
-                 */
-                LegacyTimestamp.prototype.toObject = function toObject(options) {
-                    return this.constructor.toObject(this, options);
-                };
-
-                /**
-                 * Converts this LegacyTimestamp to JSON.
-                 * @returns {Object.<string,*>} JSON object
-                 */
-                LegacyTimestamp.prototype.toJSON = function toJSON() {
-                    return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
-                };
-
-                return LegacyTimestamp;
-            })();
-
             hlc.Timestamp = (function() {
 
                 /**
@@ -35783,6 +35574,215 @@ export const cockroach = $root.cockroach = (() => {
                 };
 
                 return Timestamp;
+            })();
+
+            hlc.LegacyTimestamp = (function() {
+
+                /**
+                 * Properties of a LegacyTimestamp.
+                 * @typedef cockroach.util.hlc.LegacyTimestamp$Properties
+                 * @type {Object}
+                 * @property {Long} [wall_time] LegacyTimestamp wall_time.
+                 * @property {number} [logical] LegacyTimestamp logical.
+                 */
+
+                /**
+                 * Constructs a new LegacyTimestamp.
+                 * @exports cockroach.util.hlc.LegacyTimestamp
+                 * @constructor
+                 * @param {cockroach.util.hlc.LegacyTimestamp$Properties=} [properties] Properties to set
+                 */
+                function LegacyTimestamp(properties) {
+                    if (properties)
+                        for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                            if (properties[keys[i]] != null)
+                                this[keys[i]] = properties[keys[i]];
+                }
+
+                /**
+                 * LegacyTimestamp wall_time.
+                 * @type {Long}
+                 */
+                LegacyTimestamp.prototype.wall_time = $util.Long ? $util.Long.fromBits(0,0,false) : 0;
+
+                /**
+                 * LegacyTimestamp logical.
+                 * @type {number}
+                 */
+                LegacyTimestamp.prototype.logical = 0;
+
+                /**
+                 * Creates a new LegacyTimestamp instance using the specified properties.
+                 * @param {cockroach.util.hlc.LegacyTimestamp$Properties=} [properties] Properties to set
+                 * @returns {cockroach.util.hlc.LegacyTimestamp} LegacyTimestamp instance
+                 */
+                LegacyTimestamp.create = function create(properties) {
+                    return new LegacyTimestamp(properties);
+                };
+
+                /**
+                 * Encodes the specified LegacyTimestamp message. Does not implicitly {@link cockroach.util.hlc.LegacyTimestamp.verify|verify} messages.
+                 * @param {cockroach.util.hlc.LegacyTimestamp$Properties} message LegacyTimestamp message or plain object to encode
+                 * @param {$protobuf.Writer} [writer] Writer to encode to
+                 * @returns {$protobuf.Writer} Writer
+                 */
+                LegacyTimestamp.encode = function encode(message, writer) {
+                    if (!writer)
+                        writer = $Writer.create();
+                    if (message.wall_time != null && message.hasOwnProperty("wall_time"))
+                        writer.uint32(/* id 1, wireType 0 =*/8).int64(message.wall_time);
+                    if (message.logical != null && message.hasOwnProperty("logical"))
+                        writer.uint32(/* id 2, wireType 0 =*/16).int32(message.logical);
+                    return writer;
+                };
+
+                /**
+                 * Encodes the specified LegacyTimestamp message, length delimited. Does not implicitly {@link cockroach.util.hlc.LegacyTimestamp.verify|verify} messages.
+                 * @param {cockroach.util.hlc.LegacyTimestamp$Properties} message LegacyTimestamp message or plain object to encode
+                 * @param {$protobuf.Writer} [writer] Writer to encode to
+                 * @returns {$protobuf.Writer} Writer
+                 */
+                LegacyTimestamp.encodeDelimited = function encodeDelimited(message, writer) {
+                    return this.encode(message, writer).ldelim();
+                };
+
+                /**
+                 * Decodes a LegacyTimestamp message from the specified reader or buffer.
+                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                 * @param {number} [length] Message length if known beforehand
+                 * @returns {cockroach.util.hlc.LegacyTimestamp} LegacyTimestamp
+                 * @throws {Error} If the payload is not a reader or valid buffer
+                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                 */
+                LegacyTimestamp.decode = function decode(reader, length) {
+                    if (!(reader instanceof $Reader))
+                        reader = $Reader.create(reader);
+                    let end = length === undefined ? reader.len : reader.pos + length, message = new $root.cockroach.util.hlc.LegacyTimestamp();
+                    while (reader.pos < end) {
+                        let tag = reader.uint32();
+                        switch (tag >>> 3) {
+                        case 1:
+                            message.wall_time = reader.int64();
+                            break;
+                        case 2:
+                            message.logical = reader.int32();
+                            break;
+                        default:
+                            reader.skipType(tag & 7);
+                            break;
+                        }
+                    }
+                    return message;
+                };
+
+                /**
+                 * Decodes a LegacyTimestamp message from the specified reader or buffer, length delimited.
+                 * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                 * @returns {cockroach.util.hlc.LegacyTimestamp} LegacyTimestamp
+                 * @throws {Error} If the payload is not a reader or valid buffer
+                 * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                 */
+                LegacyTimestamp.decodeDelimited = function decodeDelimited(reader) {
+                    if (!(reader instanceof $Reader))
+                        reader = $Reader(reader);
+                    return this.decode(reader, reader.uint32());
+                };
+
+                /**
+                 * Verifies a LegacyTimestamp message.
+                 * @param {Object.<string,*>} message Plain object to verify
+                 * @returns {?string} `null` if valid, otherwise the reason why it is not
+                 */
+                LegacyTimestamp.verify = function verify(message) {
+                    if (typeof message !== "object" || message === null)
+                        return "object expected";
+                    if (message.wall_time != null && message.hasOwnProperty("wall_time"))
+                        if (!$util.isInteger(message.wall_time) && !(message.wall_time && $util.isInteger(message.wall_time.low) && $util.isInteger(message.wall_time.high)))
+                            return "wall_time: integer|Long expected";
+                    if (message.logical != null && message.hasOwnProperty("logical"))
+                        if (!$util.isInteger(message.logical))
+                            return "logical: integer expected";
+                    return null;
+                };
+
+                /**
+                 * Creates a LegacyTimestamp message from a plain object. Also converts values to their respective internal types.
+                 * @param {Object.<string,*>} object Plain object
+                 * @returns {cockroach.util.hlc.LegacyTimestamp} LegacyTimestamp
+                 */
+                LegacyTimestamp.fromObject = function fromObject(object) {
+                    if (object instanceof $root.cockroach.util.hlc.LegacyTimestamp)
+                        return object;
+                    let message = new $root.cockroach.util.hlc.LegacyTimestamp();
+                    if (object.wall_time != null)
+                        if ($util.Long)
+                            (message.wall_time = $util.Long.fromValue(object.wall_time)).unsigned = false;
+                        else if (typeof object.wall_time === "string")
+                            message.wall_time = parseInt(object.wall_time, 10);
+                        else if (typeof object.wall_time === "number")
+                            message.wall_time = object.wall_time;
+                        else if (typeof object.wall_time === "object")
+                            message.wall_time = new $util.LongBits(object.wall_time.low >>> 0, object.wall_time.high >>> 0).toNumber();
+                    if (object.logical != null)
+                        message.logical = object.logical | 0;
+                    return message;
+                };
+
+                /**
+                 * Creates a LegacyTimestamp message from a plain object. Also converts values to their respective internal types.
+                 * This is an alias of {@link cockroach.util.hlc.LegacyTimestamp.fromObject}.
+                 * @function
+                 * @param {Object.<string,*>} object Plain object
+                 * @returns {cockroach.util.hlc.LegacyTimestamp} LegacyTimestamp
+                 */
+                LegacyTimestamp.from = LegacyTimestamp.fromObject;
+
+                /**
+                 * Creates a plain object from a LegacyTimestamp message. Also converts values to other types if specified.
+                 * @param {cockroach.util.hlc.LegacyTimestamp} message LegacyTimestamp
+                 * @param {$protobuf.ConversionOptions} [options] Conversion options
+                 * @returns {Object.<string,*>} Plain object
+                 */
+                LegacyTimestamp.toObject = function toObject(message, options) {
+                    if (!options)
+                        options = {};
+                    let object = {};
+                    if (options.defaults) {
+                        if ($util.Long) {
+                            let long = new $util.Long(0, 0, false);
+                            object.wall_time = options.longs === String ? long.toString() : options.longs === Number ? long.toNumber() : long;
+                        } else
+                            object.wall_time = options.longs === String ? "0" : 0;
+                        object.logical = 0;
+                    }
+                    if (message.wall_time != null && message.hasOwnProperty("wall_time"))
+                        if (typeof message.wall_time === "number")
+                            object.wall_time = options.longs === String ? String(message.wall_time) : message.wall_time;
+                        else
+                            object.wall_time = options.longs === String ? $util.Long.prototype.toString.call(message.wall_time) : options.longs === Number ? new $util.LongBits(message.wall_time.low >>> 0, message.wall_time.high >>> 0).toNumber() : message.wall_time;
+                    if (message.logical != null && message.hasOwnProperty("logical"))
+                        object.logical = message.logical;
+                    return object;
+                };
+
+                /**
+                 * Creates a plain object from this LegacyTimestamp message. Also converts values to other types if specified.
+                 * @param {$protobuf.ConversionOptions} [options] Conversion options
+                 * @returns {Object.<string,*>} Plain object
+                 */
+                LegacyTimestamp.prototype.toObject = function toObject(options) {
+                    return this.constructor.toObject(this, options);
+                };
+
+                /**
+                 * Converts this LegacyTimestamp to JSON.
+                 * @returns {Object.<string,*>} JSON object
+                 */
+                LegacyTimestamp.prototype.toJSON = function toJSON() {
+                    return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+                };
+
+                return LegacyTimestamp;
             })();
 
             return hlc;
@@ -37113,6 +37113,623 @@ export const cockroach = $root.cockroach = (() => {
                     };
 
                     return TxnMeta;
+                })();
+
+                enginepb.MVCCNetworkStats = (function() {
+
+                    /**
+                     * Properties of a MVCCNetworkStats.
+                     * @typedef cockroach.storage.engine.enginepb.MVCCNetworkStats$Properties
+                     * @type {Object}
+                     * @property {boolean} [contains_estimates] MVCCNetworkStats contains_estimates.
+                     * @property {Long} [last_update_nanos] MVCCNetworkStats last_update_nanos.
+                     * @property {Long} [intent_age] MVCCNetworkStats intent_age.
+                     * @property {Long} [gc_bytes_age] MVCCNetworkStats gc_bytes_age.
+                     * @property {Long} [live_bytes] MVCCNetworkStats live_bytes.
+                     * @property {Long} [live_count] MVCCNetworkStats live_count.
+                     * @property {Long} [key_bytes] MVCCNetworkStats key_bytes.
+                     * @property {Long} [key_count] MVCCNetworkStats key_count.
+                     * @property {Long} [val_bytes] MVCCNetworkStats val_bytes.
+                     * @property {Long} [val_count] MVCCNetworkStats val_count.
+                     * @property {Long} [intent_bytes] MVCCNetworkStats intent_bytes.
+                     * @property {Long} [intent_count] MVCCNetworkStats intent_count.
+                     * @property {Long} [sys_bytes] MVCCNetworkStats sys_bytes.
+                     * @property {Long} [sys_count] MVCCNetworkStats sys_count.
+                     */
+
+                    /**
+                     * Constructs a new MVCCNetworkStats.
+                     * @exports cockroach.storage.engine.enginepb.MVCCNetworkStats
+                     * @constructor
+                     * @param {cockroach.storage.engine.enginepb.MVCCNetworkStats$Properties=} [properties] Properties to set
+                     */
+                    function MVCCNetworkStats(properties) {
+                        if (properties)
+                            for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                                if (properties[keys[i]] != null)
+                                    this[keys[i]] = properties[keys[i]];
+                    }
+
+                    /**
+                     * MVCCNetworkStats contains_estimates.
+                     * @type {boolean}
+                     */
+                    MVCCNetworkStats.prototype.contains_estimates = false;
+
+                    /**
+                     * MVCCNetworkStats last_update_nanos.
+                     * @type {Long}
+                     */
+                    MVCCNetworkStats.prototype.last_update_nanos = $util.Long ? $util.Long.fromBits(0,0,false) : 0;
+
+                    /**
+                     * MVCCNetworkStats intent_age.
+                     * @type {Long}
+                     */
+                    MVCCNetworkStats.prototype.intent_age = $util.Long ? $util.Long.fromBits(0,0,false) : 0;
+
+                    /**
+                     * MVCCNetworkStats gc_bytes_age.
+                     * @type {Long}
+                     */
+                    MVCCNetworkStats.prototype.gc_bytes_age = $util.Long ? $util.Long.fromBits(0,0,false) : 0;
+
+                    /**
+                     * MVCCNetworkStats live_bytes.
+                     * @type {Long}
+                     */
+                    MVCCNetworkStats.prototype.live_bytes = $util.Long ? $util.Long.fromBits(0,0,false) : 0;
+
+                    /**
+                     * MVCCNetworkStats live_count.
+                     * @type {Long}
+                     */
+                    MVCCNetworkStats.prototype.live_count = $util.Long ? $util.Long.fromBits(0,0,false) : 0;
+
+                    /**
+                     * MVCCNetworkStats key_bytes.
+                     * @type {Long}
+                     */
+                    MVCCNetworkStats.prototype.key_bytes = $util.Long ? $util.Long.fromBits(0,0,false) : 0;
+
+                    /**
+                     * MVCCNetworkStats key_count.
+                     * @type {Long}
+                     */
+                    MVCCNetworkStats.prototype.key_count = $util.Long ? $util.Long.fromBits(0,0,false) : 0;
+
+                    /**
+                     * MVCCNetworkStats val_bytes.
+                     * @type {Long}
+                     */
+                    MVCCNetworkStats.prototype.val_bytes = $util.Long ? $util.Long.fromBits(0,0,false) : 0;
+
+                    /**
+                     * MVCCNetworkStats val_count.
+                     * @type {Long}
+                     */
+                    MVCCNetworkStats.prototype.val_count = $util.Long ? $util.Long.fromBits(0,0,false) : 0;
+
+                    /**
+                     * MVCCNetworkStats intent_bytes.
+                     * @type {Long}
+                     */
+                    MVCCNetworkStats.prototype.intent_bytes = $util.Long ? $util.Long.fromBits(0,0,false) : 0;
+
+                    /**
+                     * MVCCNetworkStats intent_count.
+                     * @type {Long}
+                     */
+                    MVCCNetworkStats.prototype.intent_count = $util.Long ? $util.Long.fromBits(0,0,false) : 0;
+
+                    /**
+                     * MVCCNetworkStats sys_bytes.
+                     * @type {Long}
+                     */
+                    MVCCNetworkStats.prototype.sys_bytes = $util.Long ? $util.Long.fromBits(0,0,false) : 0;
+
+                    /**
+                     * MVCCNetworkStats sys_count.
+                     * @type {Long}
+                     */
+                    MVCCNetworkStats.prototype.sys_count = $util.Long ? $util.Long.fromBits(0,0,false) : 0;
+
+                    /**
+                     * Creates a new MVCCNetworkStats instance using the specified properties.
+                     * @param {cockroach.storage.engine.enginepb.MVCCNetworkStats$Properties=} [properties] Properties to set
+                     * @returns {cockroach.storage.engine.enginepb.MVCCNetworkStats} MVCCNetworkStats instance
+                     */
+                    MVCCNetworkStats.create = function create(properties) {
+                        return new MVCCNetworkStats(properties);
+                    };
+
+                    /**
+                     * Encodes the specified MVCCNetworkStats message. Does not implicitly {@link cockroach.storage.engine.enginepb.MVCCNetworkStats.verify|verify} messages.
+                     * @param {cockroach.storage.engine.enginepb.MVCCNetworkStats$Properties} message MVCCNetworkStats message or plain object to encode
+                     * @param {$protobuf.Writer} [writer] Writer to encode to
+                     * @returns {$protobuf.Writer} Writer
+                     */
+                    MVCCNetworkStats.encode = function encode(message, writer) {
+                        if (!writer)
+                            writer = $Writer.create();
+                        if (message.last_update_nanos != null && message.hasOwnProperty("last_update_nanos"))
+                            writer.uint32(/* id 1, wireType 1 =*/9).sfixed64(message.last_update_nanos);
+                        if (message.intent_age != null && message.hasOwnProperty("intent_age"))
+                            writer.uint32(/* id 2, wireType 1 =*/17).sfixed64(message.intent_age);
+                        if (message.gc_bytes_age != null && message.hasOwnProperty("gc_bytes_age"))
+                            writer.uint32(/* id 3, wireType 1 =*/25).sfixed64(message.gc_bytes_age);
+                        if (message.live_bytes != null && message.hasOwnProperty("live_bytes"))
+                            writer.uint32(/* id 4, wireType 0 =*/32).sint64(message.live_bytes);
+                        if (message.live_count != null && message.hasOwnProperty("live_count"))
+                            writer.uint32(/* id 5, wireType 0 =*/40).sint64(message.live_count);
+                        if (message.key_bytes != null && message.hasOwnProperty("key_bytes"))
+                            writer.uint32(/* id 6, wireType 0 =*/48).sint64(message.key_bytes);
+                        if (message.key_count != null && message.hasOwnProperty("key_count"))
+                            writer.uint32(/* id 7, wireType 0 =*/56).sint64(message.key_count);
+                        if (message.val_bytes != null && message.hasOwnProperty("val_bytes"))
+                            writer.uint32(/* id 8, wireType 0 =*/64).sint64(message.val_bytes);
+                        if (message.val_count != null && message.hasOwnProperty("val_count"))
+                            writer.uint32(/* id 9, wireType 0 =*/72).sint64(message.val_count);
+                        if (message.intent_bytes != null && message.hasOwnProperty("intent_bytes"))
+                            writer.uint32(/* id 10, wireType 0 =*/80).sint64(message.intent_bytes);
+                        if (message.intent_count != null && message.hasOwnProperty("intent_count"))
+                            writer.uint32(/* id 11, wireType 0 =*/88).sint64(message.intent_count);
+                        if (message.sys_bytes != null && message.hasOwnProperty("sys_bytes"))
+                            writer.uint32(/* id 12, wireType 0 =*/96).sint64(message.sys_bytes);
+                        if (message.sys_count != null && message.hasOwnProperty("sys_count"))
+                            writer.uint32(/* id 13, wireType 0 =*/104).sint64(message.sys_count);
+                        if (message.contains_estimates != null && message.hasOwnProperty("contains_estimates"))
+                            writer.uint32(/* id 14, wireType 0 =*/112).bool(message.contains_estimates);
+                        return writer;
+                    };
+
+                    /**
+                     * Encodes the specified MVCCNetworkStats message, length delimited. Does not implicitly {@link cockroach.storage.engine.enginepb.MVCCNetworkStats.verify|verify} messages.
+                     * @param {cockroach.storage.engine.enginepb.MVCCNetworkStats$Properties} message MVCCNetworkStats message or plain object to encode
+                     * @param {$protobuf.Writer} [writer] Writer to encode to
+                     * @returns {$protobuf.Writer} Writer
+                     */
+                    MVCCNetworkStats.encodeDelimited = function encodeDelimited(message, writer) {
+                        return this.encode(message, writer).ldelim();
+                    };
+
+                    /**
+                     * Decodes a MVCCNetworkStats message from the specified reader or buffer.
+                     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                     * @param {number} [length] Message length if known beforehand
+                     * @returns {cockroach.storage.engine.enginepb.MVCCNetworkStats} MVCCNetworkStats
+                     * @throws {Error} If the payload is not a reader or valid buffer
+                     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                     */
+                    MVCCNetworkStats.decode = function decode(reader, length) {
+                        if (!(reader instanceof $Reader))
+                            reader = $Reader.create(reader);
+                        let end = length === undefined ? reader.len : reader.pos + length, message = new $root.cockroach.storage.engine.enginepb.MVCCNetworkStats();
+                        while (reader.pos < end) {
+                            let tag = reader.uint32();
+                            switch (tag >>> 3) {
+                            case 14:
+                                message.contains_estimates = reader.bool();
+                                break;
+                            case 1:
+                                message.last_update_nanos = reader.sfixed64();
+                                break;
+                            case 2:
+                                message.intent_age = reader.sfixed64();
+                                break;
+                            case 3:
+                                message.gc_bytes_age = reader.sfixed64();
+                                break;
+                            case 4:
+                                message.live_bytes = reader.sint64();
+                                break;
+                            case 5:
+                                message.live_count = reader.sint64();
+                                break;
+                            case 6:
+                                message.key_bytes = reader.sint64();
+                                break;
+                            case 7:
+                                message.key_count = reader.sint64();
+                                break;
+                            case 8:
+                                message.val_bytes = reader.sint64();
+                                break;
+                            case 9:
+                                message.val_count = reader.sint64();
+                                break;
+                            case 10:
+                                message.intent_bytes = reader.sint64();
+                                break;
+                            case 11:
+                                message.intent_count = reader.sint64();
+                                break;
+                            case 12:
+                                message.sys_bytes = reader.sint64();
+                                break;
+                            case 13:
+                                message.sys_count = reader.sint64();
+                                break;
+                            default:
+                                reader.skipType(tag & 7);
+                                break;
+                            }
+                        }
+                        return message;
+                    };
+
+                    /**
+                     * Decodes a MVCCNetworkStats message from the specified reader or buffer, length delimited.
+                     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                     * @returns {cockroach.storage.engine.enginepb.MVCCNetworkStats} MVCCNetworkStats
+                     * @throws {Error} If the payload is not a reader or valid buffer
+                     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                     */
+                    MVCCNetworkStats.decodeDelimited = function decodeDelimited(reader) {
+                        if (!(reader instanceof $Reader))
+                            reader = $Reader(reader);
+                        return this.decode(reader, reader.uint32());
+                    };
+
+                    /**
+                     * Verifies a MVCCNetworkStats message.
+                     * @param {Object.<string,*>} message Plain object to verify
+                     * @returns {?string} `null` if valid, otherwise the reason why it is not
+                     */
+                    MVCCNetworkStats.verify = function verify(message) {
+                        if (typeof message !== "object" || message === null)
+                            return "object expected";
+                        if (message.contains_estimates != null && message.hasOwnProperty("contains_estimates"))
+                            if (typeof message.contains_estimates !== "boolean")
+                                return "contains_estimates: boolean expected";
+                        if (message.last_update_nanos != null && message.hasOwnProperty("last_update_nanos"))
+                            if (!$util.isInteger(message.last_update_nanos) && !(message.last_update_nanos && $util.isInteger(message.last_update_nanos.low) && $util.isInteger(message.last_update_nanos.high)))
+                                return "last_update_nanos: integer|Long expected";
+                        if (message.intent_age != null && message.hasOwnProperty("intent_age"))
+                            if (!$util.isInteger(message.intent_age) && !(message.intent_age && $util.isInteger(message.intent_age.low) && $util.isInteger(message.intent_age.high)))
+                                return "intent_age: integer|Long expected";
+                        if (message.gc_bytes_age != null && message.hasOwnProperty("gc_bytes_age"))
+                            if (!$util.isInteger(message.gc_bytes_age) && !(message.gc_bytes_age && $util.isInteger(message.gc_bytes_age.low) && $util.isInteger(message.gc_bytes_age.high)))
+                                return "gc_bytes_age: integer|Long expected";
+                        if (message.live_bytes != null && message.hasOwnProperty("live_bytes"))
+                            if (!$util.isInteger(message.live_bytes) && !(message.live_bytes && $util.isInteger(message.live_bytes.low) && $util.isInteger(message.live_bytes.high)))
+                                return "live_bytes: integer|Long expected";
+                        if (message.live_count != null && message.hasOwnProperty("live_count"))
+                            if (!$util.isInteger(message.live_count) && !(message.live_count && $util.isInteger(message.live_count.low) && $util.isInteger(message.live_count.high)))
+                                return "live_count: integer|Long expected";
+                        if (message.key_bytes != null && message.hasOwnProperty("key_bytes"))
+                            if (!$util.isInteger(message.key_bytes) && !(message.key_bytes && $util.isInteger(message.key_bytes.low) && $util.isInteger(message.key_bytes.high)))
+                                return "key_bytes: integer|Long expected";
+                        if (message.key_count != null && message.hasOwnProperty("key_count"))
+                            if (!$util.isInteger(message.key_count) && !(message.key_count && $util.isInteger(message.key_count.low) && $util.isInteger(message.key_count.high)))
+                                return "key_count: integer|Long expected";
+                        if (message.val_bytes != null && message.hasOwnProperty("val_bytes"))
+                            if (!$util.isInteger(message.val_bytes) && !(message.val_bytes && $util.isInteger(message.val_bytes.low) && $util.isInteger(message.val_bytes.high)))
+                                return "val_bytes: integer|Long expected";
+                        if (message.val_count != null && message.hasOwnProperty("val_count"))
+                            if (!$util.isInteger(message.val_count) && !(message.val_count && $util.isInteger(message.val_count.low) && $util.isInteger(message.val_count.high)))
+                                return "val_count: integer|Long expected";
+                        if (message.intent_bytes != null && message.hasOwnProperty("intent_bytes"))
+                            if (!$util.isInteger(message.intent_bytes) && !(message.intent_bytes && $util.isInteger(message.intent_bytes.low) && $util.isInteger(message.intent_bytes.high)))
+                                return "intent_bytes: integer|Long expected";
+                        if (message.intent_count != null && message.hasOwnProperty("intent_count"))
+                            if (!$util.isInteger(message.intent_count) && !(message.intent_count && $util.isInteger(message.intent_count.low) && $util.isInteger(message.intent_count.high)))
+                                return "intent_count: integer|Long expected";
+                        if (message.sys_bytes != null && message.hasOwnProperty("sys_bytes"))
+                            if (!$util.isInteger(message.sys_bytes) && !(message.sys_bytes && $util.isInteger(message.sys_bytes.low) && $util.isInteger(message.sys_bytes.high)))
+                                return "sys_bytes: integer|Long expected";
+                        if (message.sys_count != null && message.hasOwnProperty("sys_count"))
+                            if (!$util.isInteger(message.sys_count) && !(message.sys_count && $util.isInteger(message.sys_count.low) && $util.isInteger(message.sys_count.high)))
+                                return "sys_count: integer|Long expected";
+                        return null;
+                    };
+
+                    /**
+                     * Creates a MVCCNetworkStats message from a plain object. Also converts values to their respective internal types.
+                     * @param {Object.<string,*>} object Plain object
+                     * @returns {cockroach.storage.engine.enginepb.MVCCNetworkStats} MVCCNetworkStats
+                     */
+                    MVCCNetworkStats.fromObject = function fromObject(object) {
+                        if (object instanceof $root.cockroach.storage.engine.enginepb.MVCCNetworkStats)
+                            return object;
+                        let message = new $root.cockroach.storage.engine.enginepb.MVCCNetworkStats();
+                        if (object.contains_estimates != null)
+                            message.contains_estimates = Boolean(object.contains_estimates);
+                        if (object.last_update_nanos != null)
+                            if ($util.Long)
+                                (message.last_update_nanos = $util.Long.fromValue(object.last_update_nanos)).unsigned = false;
+                            else if (typeof object.last_update_nanos === "string")
+                                message.last_update_nanos = parseInt(object.last_update_nanos, 10);
+                            else if (typeof object.last_update_nanos === "number")
+                                message.last_update_nanos = object.last_update_nanos;
+                            else if (typeof object.last_update_nanos === "object")
+                                message.last_update_nanos = new $util.LongBits(object.last_update_nanos.low >>> 0, object.last_update_nanos.high >>> 0).toNumber();
+                        if (object.intent_age != null)
+                            if ($util.Long)
+                                (message.intent_age = $util.Long.fromValue(object.intent_age)).unsigned = false;
+                            else if (typeof object.intent_age === "string")
+                                message.intent_age = parseInt(object.intent_age, 10);
+                            else if (typeof object.intent_age === "number")
+                                message.intent_age = object.intent_age;
+                            else if (typeof object.intent_age === "object")
+                                message.intent_age = new $util.LongBits(object.intent_age.low >>> 0, object.intent_age.high >>> 0).toNumber();
+                        if (object.gc_bytes_age != null)
+                            if ($util.Long)
+                                (message.gc_bytes_age = $util.Long.fromValue(object.gc_bytes_age)).unsigned = false;
+                            else if (typeof object.gc_bytes_age === "string")
+                                message.gc_bytes_age = parseInt(object.gc_bytes_age, 10);
+                            else if (typeof object.gc_bytes_age === "number")
+                                message.gc_bytes_age = object.gc_bytes_age;
+                            else if (typeof object.gc_bytes_age === "object")
+                                message.gc_bytes_age = new $util.LongBits(object.gc_bytes_age.low >>> 0, object.gc_bytes_age.high >>> 0).toNumber();
+                        if (object.live_bytes != null)
+                            if ($util.Long)
+                                (message.live_bytes = $util.Long.fromValue(object.live_bytes)).unsigned = false;
+                            else if (typeof object.live_bytes === "string")
+                                message.live_bytes = parseInt(object.live_bytes, 10);
+                            else if (typeof object.live_bytes === "number")
+                                message.live_bytes = object.live_bytes;
+                            else if (typeof object.live_bytes === "object")
+                                message.live_bytes = new $util.LongBits(object.live_bytes.low >>> 0, object.live_bytes.high >>> 0).toNumber();
+                        if (object.live_count != null)
+                            if ($util.Long)
+                                (message.live_count = $util.Long.fromValue(object.live_count)).unsigned = false;
+                            else if (typeof object.live_count === "string")
+                                message.live_count = parseInt(object.live_count, 10);
+                            else if (typeof object.live_count === "number")
+                                message.live_count = object.live_count;
+                            else if (typeof object.live_count === "object")
+                                message.live_count = new $util.LongBits(object.live_count.low >>> 0, object.live_count.high >>> 0).toNumber();
+                        if (object.key_bytes != null)
+                            if ($util.Long)
+                                (message.key_bytes = $util.Long.fromValue(object.key_bytes)).unsigned = false;
+                            else if (typeof object.key_bytes === "string")
+                                message.key_bytes = parseInt(object.key_bytes, 10);
+                            else if (typeof object.key_bytes === "number")
+                                message.key_bytes = object.key_bytes;
+                            else if (typeof object.key_bytes === "object")
+                                message.key_bytes = new $util.LongBits(object.key_bytes.low >>> 0, object.key_bytes.high >>> 0).toNumber();
+                        if (object.key_count != null)
+                            if ($util.Long)
+                                (message.key_count = $util.Long.fromValue(object.key_count)).unsigned = false;
+                            else if (typeof object.key_count === "string")
+                                message.key_count = parseInt(object.key_count, 10);
+                            else if (typeof object.key_count === "number")
+                                message.key_count = object.key_count;
+                            else if (typeof object.key_count === "object")
+                                message.key_count = new $util.LongBits(object.key_count.low >>> 0, object.key_count.high >>> 0).toNumber();
+                        if (object.val_bytes != null)
+                            if ($util.Long)
+                                (message.val_bytes = $util.Long.fromValue(object.val_bytes)).unsigned = false;
+                            else if (typeof object.val_bytes === "string")
+                                message.val_bytes = parseInt(object.val_bytes, 10);
+                            else if (typeof object.val_bytes === "number")
+                                message.val_bytes = object.val_bytes;
+                            else if (typeof object.val_bytes === "object")
+                                message.val_bytes = new $util.LongBits(object.val_bytes.low >>> 0, object.val_bytes.high >>> 0).toNumber();
+                        if (object.val_count != null)
+                            if ($util.Long)
+                                (message.val_count = $util.Long.fromValue(object.val_count)).unsigned = false;
+                            else if (typeof object.val_count === "string")
+                                message.val_count = parseInt(object.val_count, 10);
+                            else if (typeof object.val_count === "number")
+                                message.val_count = object.val_count;
+                            else if (typeof object.val_count === "object")
+                                message.val_count = new $util.LongBits(object.val_count.low >>> 0, object.val_count.high >>> 0).toNumber();
+                        if (object.intent_bytes != null)
+                            if ($util.Long)
+                                (message.intent_bytes = $util.Long.fromValue(object.intent_bytes)).unsigned = false;
+                            else if (typeof object.intent_bytes === "string")
+                                message.intent_bytes = parseInt(object.intent_bytes, 10);
+                            else if (typeof object.intent_bytes === "number")
+                                message.intent_bytes = object.intent_bytes;
+                            else if (typeof object.intent_bytes === "object")
+                                message.intent_bytes = new $util.LongBits(object.intent_bytes.low >>> 0, object.intent_bytes.high >>> 0).toNumber();
+                        if (object.intent_count != null)
+                            if ($util.Long)
+                                (message.intent_count = $util.Long.fromValue(object.intent_count)).unsigned = false;
+                            else if (typeof object.intent_count === "string")
+                                message.intent_count = parseInt(object.intent_count, 10);
+                            else if (typeof object.intent_count === "number")
+                                message.intent_count = object.intent_count;
+                            else if (typeof object.intent_count === "object")
+                                message.intent_count = new $util.LongBits(object.intent_count.low >>> 0, object.intent_count.high >>> 0).toNumber();
+                        if (object.sys_bytes != null)
+                            if ($util.Long)
+                                (message.sys_bytes = $util.Long.fromValue(object.sys_bytes)).unsigned = false;
+                            else if (typeof object.sys_bytes === "string")
+                                message.sys_bytes = parseInt(object.sys_bytes, 10);
+                            else if (typeof object.sys_bytes === "number")
+                                message.sys_bytes = object.sys_bytes;
+                            else if (typeof object.sys_bytes === "object")
+                                message.sys_bytes = new $util.LongBits(object.sys_bytes.low >>> 0, object.sys_bytes.high >>> 0).toNumber();
+                        if (object.sys_count != null)
+                            if ($util.Long)
+                                (message.sys_count = $util.Long.fromValue(object.sys_count)).unsigned = false;
+                            else if (typeof object.sys_count === "string")
+                                message.sys_count = parseInt(object.sys_count, 10);
+                            else if (typeof object.sys_count === "number")
+                                message.sys_count = object.sys_count;
+                            else if (typeof object.sys_count === "object")
+                                message.sys_count = new $util.LongBits(object.sys_count.low >>> 0, object.sys_count.high >>> 0).toNumber();
+                        return message;
+                    };
+
+                    /**
+                     * Creates a MVCCNetworkStats message from a plain object. Also converts values to their respective internal types.
+                     * This is an alias of {@link cockroach.storage.engine.enginepb.MVCCNetworkStats.fromObject}.
+                     * @function
+                     * @param {Object.<string,*>} object Plain object
+                     * @returns {cockroach.storage.engine.enginepb.MVCCNetworkStats} MVCCNetworkStats
+                     */
+                    MVCCNetworkStats.from = MVCCNetworkStats.fromObject;
+
+                    /**
+                     * Creates a plain object from a MVCCNetworkStats message. Also converts values to other types if specified.
+                     * @param {cockroach.storage.engine.enginepb.MVCCNetworkStats} message MVCCNetworkStats
+                     * @param {$protobuf.ConversionOptions} [options] Conversion options
+                     * @returns {Object.<string,*>} Plain object
+                     */
+                    MVCCNetworkStats.toObject = function toObject(message, options) {
+                        if (!options)
+                            options = {};
+                        let object = {};
+                        if (options.defaults) {
+                            if ($util.Long) {
+                                let long = new $util.Long(0, 0, false);
+                                object.last_update_nanos = options.longs === String ? long.toString() : options.longs === Number ? long.toNumber() : long;
+                            } else
+                                object.last_update_nanos = options.longs === String ? "0" : 0;
+                            if ($util.Long) {
+                                let long = new $util.Long(0, 0, false);
+                                object.intent_age = options.longs === String ? long.toString() : options.longs === Number ? long.toNumber() : long;
+                            } else
+                                object.intent_age = options.longs === String ? "0" : 0;
+                            if ($util.Long) {
+                                let long = new $util.Long(0, 0, false);
+                                object.gc_bytes_age = options.longs === String ? long.toString() : options.longs === Number ? long.toNumber() : long;
+                            } else
+                                object.gc_bytes_age = options.longs === String ? "0" : 0;
+                            if ($util.Long) {
+                                let long = new $util.Long(0, 0, false);
+                                object.live_bytes = options.longs === String ? long.toString() : options.longs === Number ? long.toNumber() : long;
+                            } else
+                                object.live_bytes = options.longs === String ? "0" : 0;
+                            if ($util.Long) {
+                                let long = new $util.Long(0, 0, false);
+                                object.live_count = options.longs === String ? long.toString() : options.longs === Number ? long.toNumber() : long;
+                            } else
+                                object.live_count = options.longs === String ? "0" : 0;
+                            if ($util.Long) {
+                                let long = new $util.Long(0, 0, false);
+                                object.key_bytes = options.longs === String ? long.toString() : options.longs === Number ? long.toNumber() : long;
+                            } else
+                                object.key_bytes = options.longs === String ? "0" : 0;
+                            if ($util.Long) {
+                                let long = new $util.Long(0, 0, false);
+                                object.key_count = options.longs === String ? long.toString() : options.longs === Number ? long.toNumber() : long;
+                            } else
+                                object.key_count = options.longs === String ? "0" : 0;
+                            if ($util.Long) {
+                                let long = new $util.Long(0, 0, false);
+                                object.val_bytes = options.longs === String ? long.toString() : options.longs === Number ? long.toNumber() : long;
+                            } else
+                                object.val_bytes = options.longs === String ? "0" : 0;
+                            if ($util.Long) {
+                                let long = new $util.Long(0, 0, false);
+                                object.val_count = options.longs === String ? long.toString() : options.longs === Number ? long.toNumber() : long;
+                            } else
+                                object.val_count = options.longs === String ? "0" : 0;
+                            if ($util.Long) {
+                                let long = new $util.Long(0, 0, false);
+                                object.intent_bytes = options.longs === String ? long.toString() : options.longs === Number ? long.toNumber() : long;
+                            } else
+                                object.intent_bytes = options.longs === String ? "0" : 0;
+                            if ($util.Long) {
+                                let long = new $util.Long(0, 0, false);
+                                object.intent_count = options.longs === String ? long.toString() : options.longs === Number ? long.toNumber() : long;
+                            } else
+                                object.intent_count = options.longs === String ? "0" : 0;
+                            if ($util.Long) {
+                                let long = new $util.Long(0, 0, false);
+                                object.sys_bytes = options.longs === String ? long.toString() : options.longs === Number ? long.toNumber() : long;
+                            } else
+                                object.sys_bytes = options.longs === String ? "0" : 0;
+                            if ($util.Long) {
+                                let long = new $util.Long(0, 0, false);
+                                object.sys_count = options.longs === String ? long.toString() : options.longs === Number ? long.toNumber() : long;
+                            } else
+                                object.sys_count = options.longs === String ? "0" : 0;
+                            object.contains_estimates = false;
+                        }
+                        if (message.last_update_nanos != null && message.hasOwnProperty("last_update_nanos"))
+                            if (typeof message.last_update_nanos === "number")
+                                object.last_update_nanos = options.longs === String ? String(message.last_update_nanos) : message.last_update_nanos;
+                            else
+                                object.last_update_nanos = options.longs === String ? $util.Long.prototype.toString.call(message.last_update_nanos) : options.longs === Number ? new $util.LongBits(message.last_update_nanos.low >>> 0, message.last_update_nanos.high >>> 0).toNumber() : message.last_update_nanos;
+                        if (message.intent_age != null && message.hasOwnProperty("intent_age"))
+                            if (typeof message.intent_age === "number")
+                                object.intent_age = options.longs === String ? String(message.intent_age) : message.intent_age;
+                            else
+                                object.intent_age = options.longs === String ? $util.Long.prototype.toString.call(message.intent_age) : options.longs === Number ? new $util.LongBits(message.intent_age.low >>> 0, message.intent_age.high >>> 0).toNumber() : message.intent_age;
+                        if (message.gc_bytes_age != null && message.hasOwnProperty("gc_bytes_age"))
+                            if (typeof message.gc_bytes_age === "number")
+                                object.gc_bytes_age = options.longs === String ? String(message.gc_bytes_age) : message.gc_bytes_age;
+                            else
+                                object.gc_bytes_age = options.longs === String ? $util.Long.prototype.toString.call(message.gc_bytes_age) : options.longs === Number ? new $util.LongBits(message.gc_bytes_age.low >>> 0, message.gc_bytes_age.high >>> 0).toNumber() : message.gc_bytes_age;
+                        if (message.live_bytes != null && message.hasOwnProperty("live_bytes"))
+                            if (typeof message.live_bytes === "number")
+                                object.live_bytes = options.longs === String ? String(message.live_bytes) : message.live_bytes;
+                            else
+                                object.live_bytes = options.longs === String ? $util.Long.prototype.toString.call(message.live_bytes) : options.longs === Number ? new $util.LongBits(message.live_bytes.low >>> 0, message.live_bytes.high >>> 0).toNumber() : message.live_bytes;
+                        if (message.live_count != null && message.hasOwnProperty("live_count"))
+                            if (typeof message.live_count === "number")
+                                object.live_count = options.longs === String ? String(message.live_count) : message.live_count;
+                            else
+                                object.live_count = options.longs === String ? $util.Long.prototype.toString.call(message.live_count) : options.longs === Number ? new $util.LongBits(message.live_count.low >>> 0, message.live_count.high >>> 0).toNumber() : message.live_count;
+                        if (message.key_bytes != null && message.hasOwnProperty("key_bytes"))
+                            if (typeof message.key_bytes === "number")
+                                object.key_bytes = options.longs === String ? String(message.key_bytes) : message.key_bytes;
+                            else
+                                object.key_bytes = options.longs === String ? $util.Long.prototype.toString.call(message.key_bytes) : options.longs === Number ? new $util.LongBits(message.key_bytes.low >>> 0, message.key_bytes.high >>> 0).toNumber() : message.key_bytes;
+                        if (message.key_count != null && message.hasOwnProperty("key_count"))
+                            if (typeof message.key_count === "number")
+                                object.key_count = options.longs === String ? String(message.key_count) : message.key_count;
+                            else
+                                object.key_count = options.longs === String ? $util.Long.prototype.toString.call(message.key_count) : options.longs === Number ? new $util.LongBits(message.key_count.low >>> 0, message.key_count.high >>> 0).toNumber() : message.key_count;
+                        if (message.val_bytes != null && message.hasOwnProperty("val_bytes"))
+                            if (typeof message.val_bytes === "number")
+                                object.val_bytes = options.longs === String ? String(message.val_bytes) : message.val_bytes;
+                            else
+                                object.val_bytes = options.longs === String ? $util.Long.prototype.toString.call(message.val_bytes) : options.longs === Number ? new $util.LongBits(message.val_bytes.low >>> 0, message.val_bytes.high >>> 0).toNumber() : message.val_bytes;
+                        if (message.val_count != null && message.hasOwnProperty("val_count"))
+                            if (typeof message.val_count === "number")
+                                object.val_count = options.longs === String ? String(message.val_count) : message.val_count;
+                            else
+                                object.val_count = options.longs === String ? $util.Long.prototype.toString.call(message.val_count) : options.longs === Number ? new $util.LongBits(message.val_count.low >>> 0, message.val_count.high >>> 0).toNumber() : message.val_count;
+                        if (message.intent_bytes != null && message.hasOwnProperty("intent_bytes"))
+                            if (typeof message.intent_bytes === "number")
+                                object.intent_bytes = options.longs === String ? String(message.intent_bytes) : message.intent_bytes;
+                            else
+                                object.intent_bytes = options.longs === String ? $util.Long.prototype.toString.call(message.intent_bytes) : options.longs === Number ? new $util.LongBits(message.intent_bytes.low >>> 0, message.intent_bytes.high >>> 0).toNumber() : message.intent_bytes;
+                        if (message.intent_count != null && message.hasOwnProperty("intent_count"))
+                            if (typeof message.intent_count === "number")
+                                object.intent_count = options.longs === String ? String(message.intent_count) : message.intent_count;
+                            else
+                                object.intent_count = options.longs === String ? $util.Long.prototype.toString.call(message.intent_count) : options.longs === Number ? new $util.LongBits(message.intent_count.low >>> 0, message.intent_count.high >>> 0).toNumber() : message.intent_count;
+                        if (message.sys_bytes != null && message.hasOwnProperty("sys_bytes"))
+                            if (typeof message.sys_bytes === "number")
+                                object.sys_bytes = options.longs === String ? String(message.sys_bytes) : message.sys_bytes;
+                            else
+                                object.sys_bytes = options.longs === String ? $util.Long.prototype.toString.call(message.sys_bytes) : options.longs === Number ? new $util.LongBits(message.sys_bytes.low >>> 0, message.sys_bytes.high >>> 0).toNumber() : message.sys_bytes;
+                        if (message.sys_count != null && message.hasOwnProperty("sys_count"))
+                            if (typeof message.sys_count === "number")
+                                object.sys_count = options.longs === String ? String(message.sys_count) : message.sys_count;
+                            else
+                                object.sys_count = options.longs === String ? $util.Long.prototype.toString.call(message.sys_count) : options.longs === Number ? new $util.LongBits(message.sys_count.low >>> 0, message.sys_count.high >>> 0).toNumber() : message.sys_count;
+                        if (message.contains_estimates != null && message.hasOwnProperty("contains_estimates"))
+                            object.contains_estimates = message.contains_estimates;
+                        return object;
+                    };
+
+                    /**
+                     * Creates a plain object from this MVCCNetworkStats message. Also converts values to other types if specified.
+                     * @param {$protobuf.ConversionOptions} [options] Conversion options
+                     * @returns {Object.<string,*>} Plain object
+                     */
+                    MVCCNetworkStats.prototype.toObject = function toObject(options) {
+                        return this.constructor.toObject(this, options);
+                    };
+
+                    /**
+                     * Converts this MVCCNetworkStats to JSON.
+                     * @returns {Object.<string,*>} JSON object
+                     */
+                    MVCCNetworkStats.prototype.toJSON = function toJSON() {
+                        return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+                    };
+
+                    return MVCCNetworkStats;
                 })();
 
                 enginepb.MVCCMetadata = (function() {

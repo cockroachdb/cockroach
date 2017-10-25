@@ -121,7 +121,7 @@ void TableStruct::InitDefaultsImpl() {
 
   ::google::protobuf::internal::InitProtobufDefaults();
   ::cockroach::roachpb::protobuf_cockroach_2fpkg_2froachpb_2fmetadata_2eproto::InitDefaults();
-  ::cockroach::storage::engine::enginepb::protobuf_cockroach_2fpkg_2fstorage_2fengine_2fenginepb_2fmvcc_2eproto::InitDefaults();
+  ::cockroach::storage::engine::enginepb::protobuf_cockroach_2fpkg_2fstorage_2fengine_2fenginepb_2fmvcc3_2eproto::InitDefaults();
   ::cockroach::util::hlc::protobuf_cockroach_2fpkg_2futil_2fhlc_2ftimestamp_2eproto::InitDefaults();
   _Span_default_instance_._instance.DefaultConstruct();
   ::google::protobuf::internal::OnShutdownDestroyMessage(
@@ -211,7 +211,7 @@ namespace {
 void AddDescriptorsImpl() {
   InitDefaults();
   ::cockroach::roachpb::protobuf_cockroach_2fpkg_2froachpb_2fmetadata_2eproto::AddDescriptors();
-  ::cockroach::storage::engine::enginepb::protobuf_cockroach_2fpkg_2fstorage_2fengine_2fenginepb_2fmvcc_2eproto::AddDescriptors();
+  ::cockroach::storage::engine::enginepb::protobuf_cockroach_2fpkg_2fstorage_2fengine_2fenginepb_2fmvcc3_2eproto::AddDescriptors();
   ::cockroach::util::hlc::protobuf_cockroach_2fpkg_2futil_2fhlc_2ftimestamp_2eproto::AddDescriptors();
 }
 } // anonymous namespace

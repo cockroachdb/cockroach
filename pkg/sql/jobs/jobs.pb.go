@@ -24,7 +24,7 @@ import math "math"
 import cockroach_roachpb "github.com/cockroachdb/cockroach/pkg/roachpb"
 import cockroach_roachpb2 "github.com/cockroachdb/cockroach/pkg/roachpb"
 import cockroach_sql_sqlbase1 "github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
-import cockroach_util_hlc1 "github.com/cockroachdb/cockroach/pkg/util/hlc"
+import cockroach_util_hlc "github.com/cockroachdb/cockroach/pkg/util/hlc"
 
 import github_com_cockroachdb_cockroach_pkg_roachpb "github.com/cockroachdb/cockroach/pkg/roachpb"
 import github_com_cockroachdb_cockroach_pkg_sql_sqlbase "github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -85,9 +85,9 @@ func (*Lease) ProtoMessage()               {}
 func (*Lease) Descriptor() ([]byte, []int) { return fileDescriptorJobs, []int{0} }
 
 type BackupDetails struct {
-	StartTime cockroach_util_hlc1.Timestamp `protobuf:"bytes,1,opt,name=start_time,json=startTime" json:"start_time"`
-	EndTime   cockroach_util_hlc1.Timestamp `protobuf:"bytes,2,opt,name=end_time,json=endTime" json:"end_time"`
-	URI       string                        `protobuf:"bytes,3,opt,name=uri,proto3" json:"uri,omitempty"`
+	StartTime cockroach_util_hlc.Timestamp `protobuf:"bytes,1,opt,name=start_time,json=startTime" json:"start_time"`
+	EndTime   cockroach_util_hlc.Timestamp `protobuf:"bytes,2,opt,name=end_time,json=endTime" json:"end_time"`
+	URI       string                       `protobuf:"bytes,3,opt,name=uri,proto3" json:"uri,omitempty"`
 }
 
 func (m *BackupDetails) Reset()                    { *m = BackupDetails{} }
@@ -97,7 +97,7 @@ func (*BackupDetails) Descriptor() ([]byte, []int) { return fileDescriptorJobs, 
 
 type RestoreDetails struct {
 	LowWaterMark  []byte                                                                               `protobuf:"bytes,1,opt,name=low_water_mark,json=lowWaterMark,proto3" json:"low_water_mark,omitempty"`
-	EndTime       cockroach_util_hlc1.Timestamp                                                        `protobuf:"bytes,4,opt,name=end_time,json=endTime" json:"end_time"`
+	EndTime       cockroach_util_hlc.Timestamp                                                         `protobuf:"bytes,4,opt,name=end_time,json=endTime" json:"end_time"`
 	TableRewrites map[github_com_cockroachdb_cockroach_pkg_sql_sqlbase.ID]*RestoreDetails_TableRewrite `protobuf:"bytes,2,rep,name=table_rewrites,json=tableRewrites,castkey=github.com/cockroachdb/cockroach/pkg/sql/sqlbase.ID" json:"table_rewrites,omitempty" protobuf_key:"varint,1,opt,name=key,proto3" protobuf_val:"bytes,2,opt,name=value"`
 	URIs          []string                                                                             `protobuf:"bytes,3,rep,name=uris" json:"uris,omitempty"`
 }
@@ -150,7 +150,7 @@ func (*ResumeSpanList) ProtoMessage()               {}
 func (*ResumeSpanList) Descriptor() ([]byte, []int) { return fileDescriptorJobs, []int{4} }
 
 type SchemaChangeDetails struct {
-	ReadAsOf cockroach_util_hlc1.Timestamp `protobuf:"bytes,1,opt,name=read_as_of,json=readAsOf" json:"read_as_of"`
+	ReadAsOf cockroach_util_hlc.Timestamp `protobuf:"bytes,1,opt,name=read_as_of,json=readAsOf" json:"read_as_of"`
 	// A schema change can involve running multiple processors backfilling
 	// or deleting data. They occasionally checkpoint Spans so that the
 	// processing can resume in the event of a node failure. The spans are
