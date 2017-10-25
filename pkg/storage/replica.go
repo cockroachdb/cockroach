@@ -3496,9 +3496,11 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 	}
 	r.mu.Unlock()
 
+	var lastAppResp raftpb.Message
 	for _, message := range rd.Messages {
 		drop := false
-		if message.Type == raftpb.MsgApp {
+		switch message.Type {
+		case raftpb.MsgApp:
 			// Iterate over the entries to inline sideloaded commands.
 			for j := range message.Entries {
 				cow := false
@@ -3530,10 +3532,36 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 					message.Entries[j] = *newEnt
 				}
 			}
+
+		case raftpb.MsgAppResp:
+			// A successful (non-reject) MsgAppResp contains one piece of
+			// information: the highest log index. Raft currently queues up
+			// one MsgAppResp per incoming MsgApp, and we may process
+			// multiple messages in one handleRaftReady call (because
+			// multiple messages may arrive while we're blocked syncing to
+			// disk). If we get redundant MsgAppResps, drop all but the
+			// last (we've seen that too many MsgAppResps can overflow
+			// message queues on the receiving side).
+			//
+			// Note that this reorders the chosen MsgAppResp relative to
+			// other messages (including any MsgAppResps with the Reject flag),
+			// but raft is fine with this reordering.
+			//
+			// TODO(bdarnell): Consider pushing this optimization into etcd/raft.
+			// Similar optimizations may be possible for other message types,
+			// although MsgAppResp is the only one that has been seen as a
+			// problem in practice.
+			if !message.Reject && message.Index > lastAppResp.Index {
+				lastAppResp = message
+				drop = true
+			}
 		}
 		if !drop {
 			r.sendRaftMessage(ctx, message)
 		}
+	}
+	if lastAppResp.Index > 0 {
+		r.sendRaftMessage(ctx, lastAppResp)
 	}
 
 	for _, e := range rd.CommittedEntries {
