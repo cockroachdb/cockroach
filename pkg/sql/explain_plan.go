@@ -66,7 +66,7 @@ type explainer struct {
 
 // newExplainPlanNode instantiates a planNode that runs an EXPLAIN query.
 func (p *planner) makeExplainPlanNode(
-	explainer explainer, expanded, optimized bool, plan planNode,
+	explainer explainer, expanded, optimized bool, origStmt parser.Statement, plan planNode,
 ) planNode {
 	columns := sqlbase.ResultColumns{
 		// Level is the depth of the node in the tree.
@@ -88,6 +88,19 @@ func (p *planner) makeExplainPlanNode(
 	explainer.fmtFlags = parser.FmtExpr(
 		parser.FmtSimple, explainer.showTypes, explainer.symbolicVars, explainer.qualifyNames,
 	)
+	if _, ok := origStmt.(*parser.Execute); ok {
+		// Special case: if we're running an EXPLAIN EXECUTE, we need to output
+		// the actual placeholder values instead of just their marker symbols.
+		// Instruct the formatter to evaluate all placeholders.
+		explainer.fmtFlags = parser.FmtPlaceholderFormat(explainer.fmtFlags,
+			func(buf *bytes.Buffer, f parser.FmtFlags, placeholder *parser.Placeholder) {
+				d, err := placeholder.Eval(&p.evalCtx)
+				if err != nil {
+					panic(fmt.Sprintf("failed to evaluate placeholder during explain execute %v", err))
+				}
+				d.Format(buf, f)
+			})
+	}
 
 	node := &explainPlanNode{
 		explainer: explainer,
