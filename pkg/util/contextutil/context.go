@@ -28,10 +28,13 @@ func WithCancel(parent context.Context) (context.Context, context.CancelFunc) {
 }
 
 func wrap(ctx context.Context, cancel context.CancelFunc) (context.Context, context.CancelFunc) {
+	if !log.V(1) {
+		return ctx, cancel
+	}
 	return ctx, func() {
-		if log.V(1) {
+		if log.V(2) {
 			log.InfofDepth(ctx, 1, "canceling context:\n%s", debug.Stack())
-		} else {
+		} else if log.V(1) {
 			log.InfofDepth(ctx, 1, "canceling context")
 		}
 		cancel()
