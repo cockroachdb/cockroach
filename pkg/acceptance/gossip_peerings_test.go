@@ -15,7 +15,9 @@
 package acceptance
 
 import (
+	"io/ioutil"
 	"math/rand"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -24,12 +26,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/acceptance/cluster"
 	"github.com/cockroachdb/cockroach/pkg/acceptance/localcluster"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/pkg/errors"
 )
 
-const longWaitTime = 2 * time.Minute
-const shortWaitTime = 20 * time.Second
+const waitTime = 2 * time.Minute
 
 func TestGossipPeerings(t *testing.T) {
 	s := log.Scope(t)
@@ -46,11 +49,6 @@ func testGossipPeeringsInner(
 	num := c.NumNodes()
 
 	deadline := timeutil.Now().Add(cfg.Duration)
-
-	waitTime := longWaitTime
-	if cfg.Duration < waitTime {
-		waitTime = shortWaitTime
-	}
 
 	for timeutil.Now().Before(deadline) {
 		if err := CheckGossip(ctx, c, waitTime, HasPeers(num)); err != nil {
@@ -91,11 +89,6 @@ func TestGossipRestart(t *testing.T) {
 	ctx := context.Background()
 	cfg := readConfigFromFlags()
 	RunLocal(t, func(t *testing.T) {
-		// TODO(tschottdorf): https://github.com/cockroachdb/cockroach/issues/18027.
-		// When that is addressed, use the standard runner again.
-		if len(cfg.Nodes) > 3 {
-			cfg.Nodes = cfg.Nodes[:3]
-		}
 		c := StartCluster(ctx, t, cfg)
 		defer c.AssertAndStop(ctx, t)
 
@@ -115,11 +108,6 @@ func testGossipRestartInner(
 	num := c.NumNodes()
 
 	deadline := timeutil.Now().Add(cfg.Duration)
-
-	waitTime := longWaitTime
-	if cfg.Duration < waitTime {
-		waitTime = shortWaitTime
-	}
 
 	for timeutil.Now().Before(deadline) {
 		log.Infof(ctx, "waiting for initial gossip connections")
@@ -156,37 +144,146 @@ func testGossipRestartInner(
 			t.FailNow()
 		}
 
-		log.Infof(ctx, "waiting for gossip to be connected")
-		if err := CheckGossip(ctx, c, waitTime, HasPeers(num)); err != nil {
-			t.Fatal(err)
-		}
-		if err := CheckGossip(ctx, c, waitTime, hasClusterID); err != nil {
-			t.Fatal(err)
-		}
-		if err := CheckGossip(ctx, c, waitTime, hasSentinel); err != nil {
-			t.Fatal(err)
-		}
+		testClusterConnectedAndFunctional(ctx, t, c)
+	}
+}
 
-		for i := 0; i < num; i++ {
-			db, err := c.NewClient(ctx, i)
-			if err != nil {
+func testClusterConnectedAndFunctional(ctx context.Context, t *testing.T, c cluster.Cluster) {
+	num := c.NumNodes()
+
+	log.Infof(ctx, "waiting for gossip to be connected")
+	if err := CheckGossip(ctx, c, waitTime, HasPeers(num)); err != nil {
+		t.Fatal(err)
+	}
+	if err := CheckGossip(ctx, c, waitTime, hasClusterID); err != nil {
+		t.Fatal(err)
+	}
+	if err := CheckGossip(ctx, c, waitTime, hasSentinel); err != nil {
+		t.Fatal(err)
+	}
+
+	for i := 0; i < num; i++ {
+		db, err := c.NewClient(ctx, i)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if i == 0 {
+			if err := db.Del(ctx, "count"); err != nil {
 				t.Fatal(err)
 			}
-			if i == 0 {
-				if err := db.Del(ctx, "count"); err != nil {
-					t.Fatal(err)
-				}
-			}
-			var kv client.KeyValue
-			if err := db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
-				var err error
-				kv, err = txn.Inc(ctx, "count", 1)
-				return err
-			}); err != nil {
-				t.Fatal(err)
-			} else if v := kv.ValueInt(); v != int64(i+1) {
-				t.Fatalf("unexpected value %d for write #%d (expected %d)", v, i, i+1)
-			}
+		}
+		var kv client.KeyValue
+		if err := db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+			var err error
+			kv, err = txn.Inc(ctx, "count", 1)
+			return err
+		}); err != nil {
+			t.Fatal(err)
+		} else if v := kv.ValueInt(); v != int64(i+1) {
+			t.Fatalf("unexpected value %d for write #%d (expected %d)", v, i, i+1)
 		}
 	}
+}
+
+// This test verifies that when the first node is restarted and has no valid
+// join flags or persisted Gossip bootstrap records, it will still be able to
+// accept incoming Gossip connections and manages to bootstrap that way.
+//
+// See https://github.com/cockroachdb/cockroach/issues/18027.
+func TestGossipRestartFirstNodeNeedsIncoming(t *testing.T) {
+	s := log.Scope(t)
+	defer s.Close(t)
+
+	ctx := context.Background()
+	cfg := readConfigFromFlags()
+	RunLocal(t, func(t *testing.T) {
+		c := StartCluster(ctx, t, cfg)
+		defer c.AssertAndStop(ctx, t)
+
+		testGossipRestartFirstNodeNeedsIncomingInner(ctx, t, c, cfg)
+	})
+}
+
+func testGossipRestartFirstNodeNeedsIncomingInner(
+	ctx context.Context, t *testing.T, c cluster.Cluster, cfg cluster.TestConfig,
+) {
+	// This already replicates the first range (in the local setup).
+	// The replication of the first range is important: as long as the
+	// first range only exists on one node, that node can trivially
+	// acquire the range lease. Once the range is replicated, however,
+	// nodes must be able to discover each other over gossip before the
+	// lease can be acquired.
+	num := c.NumNodes()
+
+	if err := c.Kill(ctx, 0); err != nil {
+		t.Fatal(err)
+	}
+
+	lc := c.(*localcluster.LocalCluster)
+	// Upgrade the first node's binary to match the other nodes (i.e. the testing binary).
+	lc.Nodes[0].Cfg.ExtraArgs = append(lc.Nodes[0].Cfg.ExtraArgs, "--attrs", "empty")
+
+	if err := c.Restart(ctx, 0); err != nil {
+		t.Fatal(err)
+	}
+
+	const zoneCfg = "constraints: [-empty]"
+	zoneFile := filepath.Join(lc.Nodes[0].Cfg.DataDir, ".customzone")
+
+	if err := ioutil.WriteFile(zoneFile, []byte(zoneCfg), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, _, err := c.ExecCLI(ctx, 0, []string{"zone", "set", ".default", "-f", zoneFile}); err != nil {
+		t.Fatal(err)
+	}
+
+	db := makePGClient(t, c.PGUrl(ctx, 0))
+	defer db.Close()
+
+	testutils.SucceedsSoon(t, func() error {
+		const query = "SELECT COUNT(replicas) FROM crdb_internal.ranges WHERE ARRAY_POSITION(replicas, 1) IS NOT NULL"
+		var count int
+		if err := db.QueryRow(query).Scan(&count); err != nil {
+			t.Fatal(err)
+		}
+		if count > 0 {
+			err := errors.Errorf("first node still has %d replicas", count)
+			log.Info(ctx, err)
+			return err
+		}
+		return nil
+	})
+
+	log.Infof(ctx, "killing all nodes")
+	for i := 0; i < num; i++ {
+		if err := c.Kill(ctx, i); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	log.Infof(ctx, "restarting only first node so that it writes its advertised address")
+
+	chs := []<-chan error{lc.RestartAsync(ctx, 0)}
+
+	testutils.SucceedsSoon(t, func() error {
+		if lc.Nodes[0].AdvertiseAddr() != "" {
+			return nil
+		}
+		return errors.New("no advertised addr yet")
+	})
+
+	log.Infof(ctx, "restarting the other nodes")
+	for i := 1; i < num; i++ {
+		chs = append(chs, lc.RestartAsync(ctx, i))
+	}
+
+	log.Infof(ctx, "waiting for healthy cluster")
+	for i, ch := range chs {
+		if err := <-ch; err != nil {
+			t.Errorf("error restarting node %d: %s", i, err)
+		}
+	}
+
+	testClusterConnectedAndFunctional(ctx, t, c)
 }
