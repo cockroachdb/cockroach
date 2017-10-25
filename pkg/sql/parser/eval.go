@@ -3149,6 +3149,16 @@ func (node *Placeholder) Eval(_ *EvalContext) (Datum, error) {
 		pgerror.CodeUndefinedParameterError, "no value provided for placeholder: $%s", node.Name)
 }
 
+// Eval implements the TypedExpr interface.
+func (expr PartitionDefault) Eval(ctx *EvalContext) (Datum, error) {
+	return nil, pgerror.NewErrorf(pgerror.CodeInternalError, "unhandled type %T", expr)
+}
+
+// Eval implements the TypedExpr interface.
+func (expr PartitionMaxValue) Eval(ctx *EvalContext) (Datum, error) {
+	return nil, pgerror.NewErrorf(pgerror.CodeInternalError, "unhandled type %T", expr)
+}
+
 func evalComparison(ctx *EvalContext, op ComparisonOperator, left, right Datum) (Datum, error) {
 	if left == DNull || right == DNull {
 		return DNull, nil

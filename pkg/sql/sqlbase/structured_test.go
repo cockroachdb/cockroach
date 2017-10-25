@@ -948,7 +948,7 @@ func TestValidatePartitioning(t *testing.T) {
 				},
 			},
 		},
-		{"decoding p1: empty encoded value",
+		{"PARTITION p1: decoding: empty array",
 			TableDescriptor{
 				Columns: []ColumnDescriptor{{ID: 1, Type: ColumnType{SemanticType: ColumnType_INT}}},
 				PrimaryIndex: IndexDescriptor{
@@ -962,7 +962,7 @@ func TestValidatePartitioning(t *testing.T) {
 				},
 			},
 		},
-		{"decoding p1: int64 varint decoding failed",
+		{"PARTITION p1: decoding: int64 varint decoding failed: 0",
 			TableDescriptor{
 				Columns: []ColumnDescriptor{{ID: 1, Type: ColumnType{SemanticType: ColumnType_INT}}},
 				PrimaryIndex: IndexDescriptor{
@@ -976,7 +976,7 @@ func TestValidatePartitioning(t *testing.T) {
 				},
 			},
 		},
-		{"decoding p1: superfluous data in encoded value",
+		{"PARTITION p1: superfluous data in encoded value",
 			TableDescriptor{
 				Columns: []ColumnDescriptor{{ID: 1, Type: ColumnType{SemanticType: ColumnType_INT}}},
 				PrimaryIndex: IndexDescriptor{

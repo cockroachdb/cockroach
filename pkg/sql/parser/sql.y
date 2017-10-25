@@ -428,7 +428,7 @@ func (u *sqlSymUnion) referenceActions() ReferenceActions {
 %token <str>   LEADING LEAST LEFT LESS LEVEL LIKE LIMIT LIST LOCAL
 %token <str>   LOCALTIME LOCALTIMESTAMP LOW LSHIFT
 
-%token <str>   MATCH MINUTE MONTH
+%token <str>   MATCH MAXVALUE MINUTE MONTH
 
 %token <str>   NAN NAME NAMES NATURAL NEXT NO NO_INDEX_JOIN NORMAL
 %token <str>   NOT NOTHING NULL NULLIF
@@ -664,6 +664,8 @@ func (u *sqlSymUnion) referenceActions() ReferenceActions {
 %type <[]ListPartition> list_partitions
 %type <[]RangePartition> range_partitions
 %type <[]*Tuple> list_partition_values
+%type <Exprs> partition_exprs
+%type <Expr> partition_expr
 %type <empty> opt_all_clause
 %type <bool> distinct_clause
 %type <NameList> opt_column_list
@@ -2715,37 +2717,58 @@ list_partitions:
   }
 
 list_partition_values:
-  ctext_row
+  '(' partition_exprs ')'
   {
-    $$.val = []*Tuple{{Exprs: $1.exprs()}}
+    $$.val = []*Tuple{{Exprs: $2.exprs()}}
   }
-| list_partition_values ',' ctext_row
+| list_partition_values ',' '(' partition_exprs ')'
   {
-    $$.val = append($1.tuples(), &Tuple{Exprs: $3.exprs()})
+    $$.val = append($1.tuples(), &Tuple{Exprs: $4.exprs()})
+  }
+
+partition_exprs:
+  partition_expr
+  {
+    $$.val = Exprs{$1.expr()}
+  }
+| partition_exprs ',' partition_expr
+  {
+    $$.val = append($1.exprs(), $3.expr())
+  }
+
+partition_expr:
+  a_expr
+| DEFAULT
+  {
+    $$.val = PartitionDefault{}
+  }
+| MAXVALUE
+  {
+    $$.val = PartitionMaxValue{}
   }
 
 range_partitions:
-  PARTITION unrestricted_name VALUES LESS THAN ctext_row ',' range_partitions
+  PARTITION unrestricted_name VALUES LESS THAN '(' partition_exprs ')' ',' range_partitions
   {
     $$.val = append([]RangePartition{{
       Name: Name($2),
-      Tuple: &Tuple{Exprs: $6.exprs()},
-    }}, $8.rangePartitions()...)
+      Tuple: &Tuple{Exprs: $7.exprs()},
+    }}, $10.rangePartitions()...)
   }
-| PARTITION unrestricted_name VALUES LESS THAN ctext_row partition_by ',' range_partitions
+| PARTITION unrestricted_name VALUES LESS THAN '(' partition_exprs ')' partition_by ',' range_partitions
   {
     $$.val = append([]RangePartition{{
       Name: Name($2),
-      Tuple: &Tuple{Exprs: $6.exprs()},
-      Subpartition: $7.partitionBy(),
-    }}, $9.rangePartitions()...)
+      Tuple: &Tuple{Exprs: $7.exprs()},
+      Subpartition: $9.partitionBy(),
+    }}, $11.rangePartitions()...)
   }
-| PARTITION unrestricted_name VALUES LESS THAN ctext_row opt_partition_by
+| PARTITION unrestricted_name VALUES LESS THAN '(' partition_exprs ')' opt_partition_by
   {
     $$.val = []RangePartition{{
       Name: Name($2),
-      Tuple: &Tuple{Exprs: $6.exprs()},
-      Subpartition: $7.partitionBy(),
+      Tuple: &Tuple{Exprs: $7.exprs()},
+      Subpartition: $9.partitionBy(),
     }}
   }
 
@@ -6724,6 +6747,8 @@ col_name_keyword:
 // Do not include POSITION, SUBSTRING, etc here since they have explicit
 // productions in a_expr to support the goofy SQL9x argument syntax.
 // - thomas 2000-11-28
+//
+// TODO(dan): see if we can move MAXVALUE to a less restricted list
 type_func_name_keyword:
   COLLATION
 | CROSS
@@ -6735,6 +6760,7 @@ type_func_name_keyword:
 | JOIN
 | LEFT
 | LIKE
+| MAXVALUE
 | NATURAL
 | OUTER
 | OVERLAPS
