@@ -310,8 +310,8 @@ clean: ## Remove build artifacts.
 clean: clean-c-deps
 	$(MAKE) -C $(ORG_ROOT) -f cockroach/build/protobuf.mk clean
 	$(GO) clean $(GOFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' -i github.com/cockroachdb/...
-	$(FIND_RELEVANT) -type f \( -name 'zcgo_flags*.go' -o -name '*.test' \) -delete
-	$(FIND_RELEVANT) -type f -name 'cockroach*' -maxdepth 1 -delete
+	$(FIND_RELEVANT) -type f \( -name 'zcgo_flags*.go' -o -name '*.test' \) -exec rm {} +
+	$(FIND_RELEVANT) -type f -name 'cockroach*' -maxdepth 1 -exec rm {} +
 	rm -rf artifacts $(LOCAL_BIN) $(ARCHIVE)
 
 .PHONY: maintainer-clean
