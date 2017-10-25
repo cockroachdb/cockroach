@@ -294,14 +294,14 @@ func TestTimestampCacheLayeredIntervals(t *testing.T) {
 
 	forEachCacheImpl(t, func(t *testing.T, tc Cache, clock *hlc.Clock, manual *hlc.ManualClock) {
 		// Run each test case in several configurations.
-		for _, testCase := range []layeredIntervalTestCase{
+		for i, testCase := range []layeredIntervalTestCase{
 			layeredIntervalTestCase1,
 			layeredIntervalTestCase2,
 			layeredIntervalTestCase3,
 			layeredIntervalTestCase4,
 			layeredIntervalTestCase5,
 		} {
-			t.Run("", func(t *testing.T) {
+			t.Run(fmt.Sprintf("#%d", i+1), func(t *testing.T) {
 				// In simultaneous runs, each span in the test case is given the same
 				// time. Otherwise each gets a distinct timestamp (in the order of
 				// definition).
@@ -317,9 +317,6 @@ func TestTimestampCacheLayeredIntervals(t *testing.T) {
 						forTrueAndFalse(t, "sameTxn", func(t *testing.T, sameTxn bool) {
 							defer func() {
 								tc.clear(clock.Now())
-								if bc := tc.byteCount(); bc != 0 {
-									t.Fatalf("expected 0, but found %d", bc)
-								}
 							}()
 
 							txns := make([]txnState, len(testCase.spans))

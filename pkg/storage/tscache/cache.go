@@ -73,10 +73,6 @@ type Cache interface {
 	add(start, end roachpb.Key, timestamp hlc.Timestamp, txnID uuid.UUID, readTSCache bool)
 	// clear clears the cache and resets the low-water mark.
 	clear(lowWater hlc.Timestamp)
-	// len returns the total number of read and write intervals in the cache.
-	len() int
-	// byteCount returns the total memory usage of the cache.
-	byteCount() uint64
 }
 
 // New returns a new timestamp cache with the supplied hybrid clock.
