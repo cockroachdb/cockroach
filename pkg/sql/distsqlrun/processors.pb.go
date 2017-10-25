@@ -512,10 +512,15 @@ type HashJoinerSpec struct {
 	// Having "ON" expression implies no merged columns.
 	OnExpr Expression `protobuf:"bytes,5,opt,name=on_expr,json=onExpr" json:"on_expr"`
 	Type   JoinType   `protobuf:"varint,6,opt,name=type,enum=cockroach.sql.distsqlrun.JoinType" json:"type"`
+	// DEPRECATED
+	//
 	// Extra merged columns that are added in case of OUTER JOINS. These
 	// columns occupy first positions in a row amd it's the left value if it's not
 	// NULL, otherwise it's the right value. In INNER JOIN case no merged columns are
 	// needed since left stream values are guaranteed to be not NULL.
+	//
+	// This has been deprecated; the distsqlrun layer still supports it for
+	// backward compatibility during upgrade.
 	MergedColumns bool `protobuf:"varint,7,opt,name=merged_columns,json=mergedColumns" json:"merged_columns"`
 }
 

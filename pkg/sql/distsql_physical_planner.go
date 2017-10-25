@@ -1927,7 +1927,6 @@ func (dsp *DistSQLPlanner) createPlanForJoin(
 	var onExpr distsqlrun.Expression
 	var leftEqCols, rightEqCols []uint32
 	var leftMergeOrd, rightMergeOrd distsqlrun.Ordering
-	var mergedColumns bool
 
 	switch n.joinType {
 	case joinTypeInner:
@@ -2024,56 +2023,24 @@ func (dsp *DistSQLPlanner) createPlanForJoin(
 		return idx
 	}
 
-	// The join columns are in three groups:
-	//  - numMergedEqualityColumns "merged" columns (corresponding to the equality columns)
+	// The join columns are in two groups:
 	//  - the columns on the left side (numLeftCols)
 	//  - the columns on the right side (numRightCols)
 	joinCol := 0
 
-	// In case of INNER joins there is no need there is no need for merged columns;
-	// the left equality columns are used instead.
-	// In case of OUTER joins we add extra `mergedColNum` columns and they
-	// occupy first positions in a row. Remaining left and right columns will
-	// have a corresponding "offset"
-	var mergedColNum int
-	if n.joinType == joinTypeInner {
-		mergedColNum = 0
-	} else {
-		mergedColNum = n.pred.numMergedEqualityColumns
-	}
-	for i := 0; i < n.pred.numMergedEqualityColumns; i++ {
-		if !n.columns[joinCol].Omitted {
-			if mergedColNum != 0 {
-				// Reserve place for new merged columns
-				joinToStreamColMap[joinCol] = addOutCol(uint32(i))
-			} else {
-				// For inner joins, merged columns are always equivalent to the left columns)
-				joinToStreamColMap[joinCol] = addOutCol(leftEqCols[i])
-			}
-		}
-		joinCol++
-	}
-
 	for i := 0; i < n.pred.numLeftCols; i++ {
 		if !n.columns[joinCol].Omitted {
-			joinToStreamColMap[joinCol] = addOutCol(
-				uint32(mergedColNum + leftPlan.planToStreamColMap[i]))
+			joinToStreamColMap[joinCol] = addOutCol(uint32(leftPlan.planToStreamColMap[i]))
 		}
 		joinCol++
 	}
 	for i := 0; i < n.pred.numRightCols; i++ {
 		if !n.columns[joinCol].Omitted {
 			joinToStreamColMap[joinCol] = addOutCol(
-				uint32(mergedColNum + rightPlan.planToStreamColMap[i] + len(leftTypes)),
+				uint32(rightPlan.planToStreamColMap[i] + len(leftTypes)),
 			)
 		}
 		joinCol++
-	}
-	if mergedColNum != 0 {
-		if mergedColNum != len(leftEqCols) {
-			panic("merged columns number is different from equality columns")
-		}
-		mergedColumns = true
 	}
 
 	if n.pred.onCond != nil {
@@ -2082,17 +2049,13 @@ func (dsp *DistSQLPlanner) createPlanForJoin(
 		// joiner (0 to N-1 for the left input columns, N to N+M-1 for the right
 		// input columns).
 		joinColMap := make([]int, len(n.columns))
-		// There should be no merged columns when ON clause is present
-		if n.pred.numMergedEqualityColumns != 0 {
-			panic("merged columns with ON condition")
-		}
 		idx := 0
 		for i := 0; i < n.pred.numLeftCols; i++ {
-			joinColMap[idx] = mergedColNum + leftPlan.planToStreamColMap[i]
+			joinColMap[idx] = leftPlan.planToStreamColMap[i]
 			idx++
 		}
 		for i := 0; i < n.pred.numRightCols; i++ {
-			joinColMap[idx] = mergedColNum + rightPlan.planToStreamColMap[i] + len(leftTypes)
+			joinColMap[idx] = rightPlan.planToStreamColMap[i] + len(leftTypes)
 			idx++
 		}
 		onExpr = distsqlplan.MakeExpression(n.pred.onCond, joinColMap)
@@ -2106,12 +2069,8 @@ func (dsp *DistSQLPlanner) createPlanForJoin(
 			RightEqColumns: rightEqCols,
 			OnExpr:         onExpr,
 			Type:           joinType,
-			MergedColumns:  mergedColumns,
 		}
 	} else {
-		if mergedColumns {
-			panic("merged columns not supported by merge join")
-		}
 		core.MergeJoiner = &distsqlrun.MergeJoinerSpec{
 			LeftOrdering:  leftMergeOrd,
 			RightOrdering: rightMergeOrd,
