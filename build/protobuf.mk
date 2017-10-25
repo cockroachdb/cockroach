@@ -62,12 +62,6 @@ CPP_PROTOS := $(filter %/roachpb/metadata.proto %/roachpb/data.proto %/roachpb/i
 CPP_HEADERS := $(subst ./,$(NATIVE_ROOT)/,$(CPP_PROTOS:%.proto=%.pb.h))
 CPP_SOURCES := $(subst ./,$(NATIVE_ROOT)/,$(CPP_PROTOS:%.proto=%.pb.cc))
 
-$(PROTOC_PLUGIN):
-	$(GO_INSTALL) $(REPO_ROOT)/pkg/cmd/protoc-gen-gogoroach
-
-$(GRPC_GATEWAY_PLUGIN):
-	$(GO_INSTALL) $(REPO_ROOT)/vendor/github.com/grpc-ecosystem/grpc-gateway/protoc-gen-grpc-gateway
-
 ORG_NAME := cockroachdb
 IMPORT_PREFIX := github.com/$(ORG_NAME)/
 
@@ -85,7 +79,7 @@ $(GO_SOURCES_TARGET): $(PROTOC) $(PROTOC_PLUGIN) $(GO_PROTOS) $(GOGOPROTO_PROTO)
 	touch $@
 
 GW_SOURCES_TARGET := $(LOCAL_BIN)/.gw_protobuf_sources
-$(GW_SOURCES_TARGET): $(PROTOC) $(GRPC_GATEWAY_PLUGIN) $(GW_SERVER_PROTOS) $(GW_TS_PROTOS) $(GO_PROTOS) $(GOGOPROTO_PROTO)
+$(GW_SOURCES_TARGET): $(PROTOC) $(GW_SERVER_PROTOS) $(GW_TS_PROTOS) $(GO_PROTOS) $(GOGOPROTO_PROTO)
 	(cd $(REPO_ROOT) && git ls-files --exclude-standard --cached --others -- '*.pb.gw.go' | xargs rm -f)
 	$(PROTOC) -I.:$(GOGO_PROTOBUF_PATH):$(PROTOBUF_PATH):$(COREOS_PATH):$(GRPC_GATEWAY_GOOGLEAPIS_PATH) --grpc-gateway_out=logtostderr=true,request_context=true:. $(GW_SERVER_PROTOS)
 	$(PROTOC) -I.:$(GOGO_PROTOBUF_PATH):$(PROTOBUF_PATH):$(COREOS_PATH):$(GRPC_GATEWAY_GOOGLEAPIS_PATH) --grpc-gateway_out=logtostderr=true,request_context=true:. $(GW_TS_PROTOS)

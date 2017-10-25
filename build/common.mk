@@ -168,11 +168,11 @@ BOOTSTRAP_TARGET := $(LOCAL_BIN)/.bootstrap
 
 # Update the git hooks and install commands from dependencies whenever they
 # change.
-$(BOOTSTRAP_TARGET): $(GITHOOKS) $(REPO_ROOT)/Gopkg.lock
+$(BOOTSTRAP_TARGET): $(GITHOOKS) $(REPO_ROOT)/Gopkg.lock $(LOCAL_BIN)/returncheck
 ifneq ($(GIT_DIR),)
 	git submodule update --init
 endif
-	@$(GO_INSTALL) -v $(PKG_ROOT)/cmd/returncheck \
+	@$(GO_INSTALL) -v \
 		$(REPO_ROOT)/vendor/github.com/golang/dep/cmd/dep \
 		$(REPO_ROOT)/vendor/github.com/client9/misspell/cmd/misspell \
 		$(REPO_ROOT)/vendor/github.com/cockroachdb/crlfmt \
@@ -467,3 +467,7 @@ unsafe-clean-c-deps:
 	git -C $(PROTOBUF_SRC_DIR) clean -dxf
 	git -C $(ROCKSDB_SRC_DIR)  clean -dxf
 	git -C $(SNAPPY_SRC_DIR)   clean -dxf
+
+.SECONDEXPANSION:
+$(LOCAL_BIN)/%: $$(shell find $(PKG_ROOT)/cmd/$$*)
+	@$(GO_INSTALL) -v $(PKG_ROOT)/cmd/$*
