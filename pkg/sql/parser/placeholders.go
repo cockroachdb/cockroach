@@ -41,6 +41,9 @@ type PlaceholderInfo struct {
 	// Types contains the final types set for each placeholder after type
 	// checking.
 	Types PlaceholderTypes
+	// permitUnassigned controls whether AssertAllAssigned returns an error when
+	// there are unassigned placeholders. See PermitUnassigned().
+	permitUnassigned bool
 }
 
 // MakePlaceholderInfo constructs an empty PlaceholderInfo.
@@ -55,6 +58,7 @@ func (p *PlaceholderInfo) Clear() {
 	p.TypeHints = PlaceholderTypes{}
 	p.Types = PlaceholderTypes{}
 	p.Values = QueryArguments{}
+	p.permitUnassigned = false
 }
 
 // Assign resets the PlaceholderInfo to the contents of src.
@@ -67,18 +71,18 @@ func (p *PlaceholderInfo) Assign(src *PlaceholderInfo) {
 	}
 }
 
-// FillUnassigned sets all unsassigned placeholders to NULL.
-func (p *PlaceholderInfo) FillUnassigned() {
-	for pn := range p.Types {
-		if _, ok := p.Values[pn]; !ok {
-			p.Values[pn] = DNull
-		}
-	}
+// PermitUnassigned permits unassigned placeholders during plan construction,
+// so that EXPLAIN can work on statements with placeholders.
+func (p *PlaceholderInfo) PermitUnassigned() {
+	p.permitUnassigned = true
 }
 
-// AssertAllAssigned ensures that all placeholders that are used also
-// have a value assigned.
+// AssertAllAssigned ensures that all placeholders that are used also have a
+// value assigned, or that PermitUnassigned was called.
 func (p *PlaceholderInfo) AssertAllAssigned() error {
+	if p.permitUnassigned {
+		return nil
+	}
 	var missing []string
 	for pn := range p.Types {
 		if _, ok := p.Values[pn]; !ok {
