@@ -3496,73 +3496,7 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 	}
 	r.mu.Unlock()
 
-	var lastAppResp raftpb.Message
-	for _, message := range rd.Messages {
-		drop := false
-		switch message.Type {
-		case raftpb.MsgApp:
-			// Iterate over the entries to inline sideloaded commands.
-			for j := range message.Entries {
-				cow := false
-				newEnt, err := maybeInlineSideloadedRaftCommand(
-					ctx,
-					r.RangeID,
-					message.Entries[j],
-					r.raftMu.sideloaded,
-					r.store.raftEntryCache,
-				)
-				if err != nil {
-					// We can simply drop the message since it could always get lost
-					// in transit anyway.
-					log.Errorf(ctx, "while inlining sideloaded commands: %s", err)
-					drop = true
-					continue
-				}
-				if newEnt != nil {
-					if !cow {
-						cow = true
-						// Copy the whole slice to avoid data races. Entries are
-						// usually shared between multiple outgoing messages,
-						// and while it would be possible to only modify them
-						// only the first time around, that isn't easy to
-						// implement (since you have to do nontrivial work to
-						// decide whether inlining needs to happen).
-						message.Entries = append([]raftpb.Entry(nil), message.Entries...)
-					}
-					message.Entries[j] = *newEnt
-				}
-			}
-
-		case raftpb.MsgAppResp:
-			// A successful (non-reject) MsgAppResp contains one piece of
-			// information: the highest log index. Raft currently queues up
-			// one MsgAppResp per incoming MsgApp, and we may process
-			// multiple messages in one handleRaftReady call (because
-			// multiple messages may arrive while we're blocked syncing to
-			// disk). If we get redundant MsgAppResps, drop all but the
-			// last (we've seen that too many MsgAppResps can overflow
-			// message queues on the receiving side).
-			//
-			// Note that this reorders the chosen MsgAppResp relative to
-			// other messages (including any MsgAppResps with the Reject flag),
-			// but raft is fine with this reordering.
-			//
-			// TODO(bdarnell): Consider pushing this optimization into etcd/raft.
-			// Similar optimizations may be possible for other message types,
-			// although MsgAppResp is the only one that has been seen as a
-			// problem in practice.
-			if !message.Reject && message.Index > lastAppResp.Index {
-				lastAppResp = message
-				drop = true
-			}
-		}
-		if !drop {
-			r.sendRaftMessage(ctx, message)
-		}
-	}
-	if lastAppResp.Index > 0 {
-		r.sendRaftMessage(ctx, lastAppResp)
-	}
+	r.sendRaftMessages(ctx, rd.Messages)
 
 	for _, e := range rd.CommittedEntries {
 		switch e.Type {
@@ -4213,6 +4147,76 @@ func (r *Replica) maybeCoalesceHeartbeat(
 	hbMap[toStore] = append(hbMap[toStore], beat)
 	r.store.coalescedMu.Unlock()
 	return true
+}
+
+func (r *Replica) sendRaftMessages(ctx context.Context, messages []raftpb.Message) {
+	var lastAppResp raftpb.Message
+	for _, message := range messages {
+		drop := false
+		switch message.Type {
+		case raftpb.MsgApp:
+			// Iterate over the entries to inline sideloaded commands.
+			for j := range message.Entries {
+				cow := false
+				newEnt, err := maybeInlineSideloadedRaftCommand(
+					ctx,
+					r.RangeID,
+					message.Entries[j],
+					r.raftMu.sideloaded,
+					r.store.raftEntryCache,
+				)
+				if err != nil {
+					// We can simply drop the message since it could always get lost
+					// in transit anyway.
+					log.Errorf(ctx, "while inlining sideloaded commands: %s", err)
+					drop = true
+					continue
+				}
+				if newEnt != nil {
+					if !cow {
+						cow = true
+						// Copy the whole slice to avoid data races. Entries are
+						// usually shared between multiple outgoing messages,
+						// and while it would be possible to only modify them
+						// only the first time around, that isn't easy to
+						// implement (since you have to do nontrivial work to
+						// decide whether inlining needs to happen).
+						message.Entries = append([]raftpb.Entry(nil), message.Entries...)
+					}
+					message.Entries[j] = *newEnt
+				}
+			}
+
+		case raftpb.MsgAppResp:
+			// A successful (non-reject) MsgAppResp contains one piece of
+			// information: the highest log index. Raft currently queues up
+			// one MsgAppResp per incoming MsgApp, and we may process
+			// multiple messages in one handleRaftReady call (because
+			// multiple messages may arrive while we're blocked syncing to
+			// disk). If we get redundant MsgAppResps, drop all but the
+			// last (we've seen that too many MsgAppResps can overflow
+			// message queues on the receiving side).
+			//
+			// Note that this reorders the chosen MsgAppResp relative to
+			// other messages (including any MsgAppResps with the Reject flag),
+			// but raft is fine with this reordering.
+			//
+			// TODO(bdarnell): Consider pushing this optimization into etcd/raft.
+			// Similar optimizations may be possible for other message types,
+			// although MsgAppResp is the only one that has been seen as a
+			// problem in practice.
+			if !message.Reject && message.Index > lastAppResp.Index {
+				lastAppResp = message
+				drop = true
+			}
+		}
+		if !drop {
+			r.sendRaftMessage(ctx, message)
+		}
+	}
+	if lastAppResp.Index > 0 {
+		r.sendRaftMessage(ctx, lastAppResp)
+	}
 }
 
 // sendRaftMessage sends a Raft message.
