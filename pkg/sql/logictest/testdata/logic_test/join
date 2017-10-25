@@ -1218,6 +1218,32 @@ NULL       3      3
  201    NULL    201
  401    NULL    401
 
+# Test for #19536.
+query I
+SELECT x FROM t1 NATURAL JOIN (SELECT * FROM t2)
+----
+1
+
+query ITTTTT
+EXPLAIN (VERBOSE) SELECT x FROM t1 NATURAL JOIN (SELECT * FROM t2)
+----
+0  render  ·         ·                (x)                                                                                                                                                                             ·
+0  ·       render 0  x                ·                                                                                                                                                                               ·
+1  join    ·         ·                (x, y[omitted], col1[omitted], x[hidden,omitted], col2[omitted], y[hidden,omitted], rowid[hidden,omitted], col3[omitted], y[hidden,omitted], x[hidden,omitted], col4[omitted])  ·
+1  ·       type      inner            ·                                                                                                                                                                               ·
+1  ·       equality  (x, y) = (x, y)  ·                                                                                                                                                                               ·
+2  scan    ·         ·                (col1[omitted], x, col2[omitted], y, rowid[hidden,omitted])                                                                                                                     rowid!=NULL; key(rowid)
+2  ·       table     t1@primary       ·                                                                                                                                                                               ·
+2  ·       spans     ALL              ·                                                                                                                                                                               ·
+2  render  ·         ·                (col3[omitted], y, x, col4[omitted])                                                                                                                                            ·
+2  ·       render 0  NULL             ·                                                                                                                                                                               ·
+2  ·       render 1  test.t2.y        ·                                                                                                                                                                               ·
+2  ·       render 2  test.t2.x        ·                                                                                                                                                                               ·
+2  ·       render 3  NULL             ·                                                                                                                                                                               ·
+3  scan    ·         ·                (col3[omitted], y, x, col4[omitted], rowid[hidden,omitted])                                                                                                                     rowid!=NULL; key(rowid)
+3  ·       table     t2@primary       ·                                                                                                                                                                               ·
+3  ·       spans     ALL              ·                                                                                                                                                                               ·
+
 # Tests for merge join ordering information.
 statement ok
 CREATE TABLE pkBA (a INT, b INT, c INT, d INT, PRIMARY KEY(b,a))
