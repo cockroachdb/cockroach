@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/util"
 )
 
 // To understand dataSourceInfo below it is crucial to understand the
@@ -142,16 +143,14 @@ type planDataSource struct {
 	plan planNode
 }
 
-// columnRange identifies a non-empty set of columns in a
-// selection. This is used by dataSourceInfo.sourceAliases to map
-// table names to column ranges.
-type columnRange []int
-
 // sourceAlias associates a table name (alias) to a set of columns in the result
 // row of a data source.
 type sourceAlias struct {
-	name        parser.TableName
-	columnRange columnRange
+	name parser.TableName
+	// columnSet identifies a non-empty set of columns in a
+	// selection. This is used by dataSourceInfo.sourceAliases to map
+	// table names to column ranges.
+	columnSet util.FastIntSet
 }
 
 func (src *dataSourceInfo) String() string {
@@ -178,11 +177,8 @@ func (src *dataSourceInfo) String() string {
 			if i > 0 {
 				buf.WriteByte('\t')
 			}
-			for _, j := range a.columnRange {
-				if i == j {
-					buf.WriteString("x")
-					break
-				}
+			if a.columnSet.Contains(i) {
+				buf.WriteString("x")
 			}
 		}
 		if a.name == anonymousTable {
@@ -190,7 +186,7 @@ func (src *dataSourceInfo) String() string {
 		} else {
 			fmt.Fprintf(&buf, "\t'%s'", a.name.String())
 		}
-		fmt.Fprintf(&buf, " - %q\n", a.columnRange)
+		fmt.Fprintf(&buf, " - %s\n", a.columnSet)
 	}
 	return buf.String()
 }
@@ -208,14 +204,14 @@ func (s sourceAliases) srcIdx(name parser.TableName) (srcIdx int, found bool) {
 	return -1, false
 }
 
-// columnRange looks up a source by name and returns the column range (and
+// columnSet looks up a source by name and returns the column set (and
 // whether we found the name).
-func (s sourceAliases) columnRange(name parser.TableName) (colRange columnRange, found bool) {
+func (s sourceAliases) columnSet(name parser.TableName) (_ util.FastIntSet, found bool) {
 	idx, ok := s.srcIdx(name)
 	if !ok {
-		return nil, false
+		return util.FastIntSet{}, false
 	}
-	return s[idx].columnRange, true
+	return s[idx].columnSet, true
 }
 
 // anonymousTable is the empty table name, used when a data source
@@ -224,10 +220,10 @@ var anonymousTable = parser.TableName{}
 
 // fillColumnRange creates a single range that refers to all the
 // columns between firstIdx and lastIdx, inclusive.
-func fillColumnRange(firstIdx, lastIdx int) columnRange {
-	res := make(columnRange, lastIdx-firstIdx+1)
-	for i := range res {
-		res[i] = i + firstIdx
+func fillColumnRange(firstIdx, lastIdx int) util.FastIntSet {
+	var res util.FastIntSet
+	for i := firstIdx; i <= lastIdx; i++ {
+		res.Add(i)
 	}
 	return res
 }
@@ -239,7 +235,7 @@ func newSourceInfoForSingleTable(
 ) *dataSourceInfo {
 	return &dataSourceInfo{
 		sourceColumns: columns,
-		sourceAliases: sourceAliases{{name: tn, columnRange: fillColumnRange(0, len(columns)-1)}},
+		sourceAliases: sourceAliases{{name: tn, columnSet: fillColumnRange(0, len(columns)-1)}},
 	}
 }
 
@@ -535,8 +531,8 @@ func renameSource(
 		// If an alias was specified, use that.
 		tableAlias.TableName = as.Alias
 		src.info.sourceAliases = sourceAliases{{
-			name:        tableAlias,
-			columnRange: fillColumnRange(0, len(src.info.sourceColumns)-1),
+			name:      tableAlias,
+			columnSet: fillColumnRange(0, len(src.info.sourceColumns)-1),
 		}}
 	}
 
@@ -751,11 +747,11 @@ func (src *dataSourceInfo) expandStar(
 			return nil, nil, err
 		}
 
-		colRange, ok := src.sourceAliases.columnRange(qualifiedTn)
+		colSet, ok := src.sourceAliases.columnSet(qualifiedTn)
 		if !ok {
 			return nil, nil, sqlbase.NewUndefinedRelationError(&tableName)
 		}
-		for _, i := range colRange {
+		for i, ok := colSet.Next(0); ok; i, ok = colSet.Next(i + 1) {
 			colSel(i)
 		}
 	}
@@ -891,13 +887,13 @@ func (sources multiSourceInfo) findColumn(
 
 	colIdx = invalidColIdx
 	for iSrc, src := range sources {
-		colRange, ok := src.sourceAliases.columnRange(tableName)
+		colSet, ok := src.sourceAliases.columnSet(tableName)
 		if !ok {
 			// The data source "src" has no column for table tableName.
 			// Try again with the net one.
 			continue
 		}
-		for _, idx := range colRange {
+		for idx, ok := colSet.Next(0); ok; idx, ok = colSet.Next(idx + 1) {
 			srcIdx, colIdx, err = findColHelper(src, c, colName, iSrc, srcIdx, colIdx, idx)
 			if err != nil {
 				return srcIdx, colIdx, err
@@ -931,10 +927,8 @@ func (sources multiSourceInfo) findColumn(
 // index given as argument. The index must be valid.
 func (src *dataSourceInfo) findTableAlias(colIdx int) (parser.TableName, bool) {
 	for _, alias := range src.sourceAliases {
-		for _, idx := range alias.columnRange {
-			if colIdx == idx {
-				return alias.name, true
-			}
+		if alias.columnSet.Contains(colIdx) {
+			return alias.name, true
 		}
 	}
 	return anonymousTable, false
