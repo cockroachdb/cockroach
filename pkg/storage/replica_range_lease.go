@@ -26,7 +26,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/gogo/protobuf/proto"
 	"github.com/pkg/errors"
 )
 
@@ -129,7 +128,7 @@ func (p *pendingLeaseRequest) InitOrJoinRequest(
 			})
 			return llChan
 		}
-		reqLease.Epoch = proto.Int64(liveness.Epoch)
+		reqLease.Epoch = liveness.Epoch
 	}
 
 	if transfer {
@@ -192,7 +191,7 @@ func (p *pendingLeaseRequest) requestLeaseAsync(
 					if err = repl.store.cfg.NodeLiveness.Heartbeat(ctx, status.Liveness); err != nil {
 						log.Error(ctx, err)
 					}
-				} else if status.Liveness.Epoch == *status.Lease.Epoch {
+				} else if status.Liveness.Epoch == status.Lease.Epoch {
 					// If not owner, increment epoch if necessary to invalidate lease.
 					if err = repl.store.cfg.NodeLiveness.IncrementEpoch(ctx, status.Liveness); err != nil {
 						log.Error(ctx, err)
@@ -324,7 +323,7 @@ func (r *Replica) leaseStatus(
 	} else {
 		var err error
 		status.Liveness, err = r.store.cfg.NodeLiveness.GetLiveness(lease.Replica.NodeID)
-		if err != nil || status.Liveness.Epoch < *lease.Epoch {
+		if err != nil || status.Liveness.Epoch < lease.Epoch {
 			// If lease validity can't be determined (e.g. gossip is down
 			// and liveness info isn't available for owner), we can neither
 			// use the lease nor do we want to attempt to acquire it.
@@ -336,7 +335,7 @@ func (r *Replica) leaseStatus(
 			status.State = LeaseState_ERROR
 			return status
 		}
-		if status.Liveness.Epoch > *lease.Epoch {
+		if status.Liveness.Epoch > lease.Epoch {
 			status.State = LeaseState_EXPIRED
 			return status
 		}

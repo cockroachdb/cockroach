@@ -111,7 +111,7 @@ import fmt "fmt"
 import math "math"
 import cockroach_config "github.com/cockroachdb/cockroach/pkg/config"
 import cockroach_sql_jobs "github.com/cockroachdb/cockroach/pkg/sql/jobs"
-import cockroach_storage_engine_enginepb "github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
+import cockroach_storage_engine_enginepb1 "github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 import cockroach_storage "github.com/cockroachdb/cockroach/pkg/storage"
 import cockroach_storage1 "github.com/cockroachdb/cockroach/pkg/storage"
 
@@ -402,7 +402,7 @@ type TableStatsResponse struct {
 	NodeCount int64 `protobuf:"varint,3,opt,name=node_count,json=nodeCount,proto3" json:"node_count,omitempty"`
 	// stats is the summation of MVCCStats for all replicas of this table
 	// across the cluster.
-	Stats cockroach_storage_engine_enginepb.MVCCStats `protobuf:"bytes,4,opt,name=stats" json:"stats"`
+	Stats cockroach_storage_engine_enginepb1.MVCCStats `protobuf:"bytes,4,opt,name=stats" json:"stats"`
 	// A list of nodes which should contain data for this table (according to
 	// cluster metadata), but could not be contacted during this request.
 	MissingNodes []TableStatsResponse_MissingNode `protobuf:"bytes,5,rep,name=missing_nodes,json=missingNodes" json:"missing_nodes"`

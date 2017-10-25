@@ -10,7 +10,7 @@ import cockroach_build "github.com/cockroachdb/cockroach/pkg/build"
 import cockroach_gossip "github.com/cockroachdb/cockroach/pkg/gossip"
 import cockroach_roachpb1 "github.com/cockroachdb/cockroach/pkg/roachpb"
 import cockroach_server_status "github.com/cockroachdb/cockroach/pkg/server/status"
-import cockroach_storage_engine_enginepb "github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
+import cockroach_storage_engine_enginepb1 "github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 import cockroach_storage2 "github.com/cockroachdb/cockroach/pkg/storage"
 import cockroach_storage_storagebase "github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 import cockroach_util_log "github.com/cockroachdb/cockroach/pkg/util/log"
@@ -680,8 +680,8 @@ func (*SpanStatsRequest) ProtoMessage()               {}
 func (*SpanStatsRequest) Descriptor() ([]byte, []int) { return fileDescriptorStatus, []int{42} }
 
 type SpanStatsResponse struct {
-	RangeCount int32                                       `protobuf:"varint,2,opt,name=range_count,json=rangeCount,proto3" json:"range_count,omitempty"`
-	TotalStats cockroach_storage_engine_enginepb.MVCCStats `protobuf:"bytes,1,opt,name=total_stats,json=totalStats" json:"total_stats"`
+	RangeCount int32                                        `protobuf:"varint,2,opt,name=range_count,json=rangeCount,proto3" json:"range_count,omitempty"`
+	TotalStats cockroach_storage_engine_enginepb1.MVCCStats `protobuf:"bytes,1,opt,name=total_stats,json=totalStats" json:"total_stats"`
 }
 
 func (m *SpanStatsResponse) Reset()                    { *m = SpanStatsResponse{} }

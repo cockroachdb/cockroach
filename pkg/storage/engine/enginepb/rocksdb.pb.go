@@ -6,7 +6,7 @@ package enginepb
 import proto "github.com/gogo/protobuf/proto"
 import fmt "fmt"
 import math "math"
-import cockroach_util_hlc1 "github.com/cockroachdb/cockroach/pkg/util/hlc"
+import cockroach_util_hlc "github.com/cockroachdb/cockroach/pkg/util/hlc"
 
 import io "io"
 
@@ -19,9 +19,9 @@ var _ = math.Inf
 type SSTUserProperties struct {
 	Path string `protobuf:"bytes,1,opt,name=path,proto3" json:"path,omitempty"`
 	// ts_min is the minimum mvcc timestamp present in this sstable.
-	TsMin *cockroach_util_hlc1.Timestamp `protobuf:"bytes,2,opt,name=ts_min,json=tsMin" json:"ts_min,omitempty"`
+	TsMin *cockroach_util_hlc.Timestamp `protobuf:"bytes,2,opt,name=ts_min,json=tsMin" json:"ts_min,omitempty"`
 	// ts_max is the maximum mvcc timestamp present in this sstable.
-	TsMax *cockroach_util_hlc1.Timestamp `protobuf:"bytes,3,opt,name=ts_max,json=tsMax" json:"ts_max,omitempty"`
+	TsMax *cockroach_util_hlc.Timestamp `protobuf:"bytes,3,opt,name=ts_max,json=tsMax" json:"ts_max,omitempty"`
 }
 
 func (m *SSTUserProperties) Reset()                    { *m = SSTUserProperties{} }
@@ -268,7 +268,7 @@ func (m *SSTUserProperties) Unmarshal(dAtA []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			if m.TsMin == nil {
-				m.TsMin = &cockroach_util_hlc1.Timestamp{}
+				m.TsMin = &cockroach_util_hlc.Timestamp{}
 			}
 			if err := m.TsMin.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
@@ -301,7 +301,7 @@ func (m *SSTUserProperties) Unmarshal(dAtA []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			if m.TsMax == nil {
-				m.TsMax = &cockroach_util_hlc1.Timestamp{}
+				m.TsMax = &cockroach_util_hlc.Timestamp{}
 			}
 			if err := m.TsMax.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
