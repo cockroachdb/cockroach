@@ -1,0 +1,16 @@
+# LogicTest: default parallel-stmts distsql
+
+statement error relation "t" does not exist
+EXPERIMENTAL SCRUB TABLE t
+-----
+
+statement ok
+CREATE TABLE t (id int PRIMARY KEY, name string)
+
+query TTTTTTTT
+EXPERIMENTAL SCRUB TABLE t
+-----
+
+query TTTTTTTT
+EXPERIMENTAL SCRUB TABLE t WITH OPTIONS INDEX
+-----
