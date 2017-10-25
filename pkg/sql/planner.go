@@ -191,7 +191,7 @@ func (p *planner) EvalContext() parser.EvalContext {
 }
 
 // TODO(dan): This is here to implement PlanHookState, but it's not clear that
-// this is the right abstraction. We could also export distSQLPlanner, for
+// this is the right abstraction. We could also export DistSQLPlanner, for
 // example. Revisit.
 func (p *planner) DistLoader() *DistLoader {
 	return &DistLoader{distSQLPlanner: p.session.distSQLPlanner}

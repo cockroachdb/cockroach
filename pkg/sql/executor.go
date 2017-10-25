@@ -238,7 +238,7 @@ type Executor struct {
 	systemConfigMu   syncutil.Mutex
 	systemConfigCond *sync.Cond
 
-	distSQLPlanner *distSQLPlanner
+	distSQLPlanner *DistSQLPlanner
 
 	// Application-level SQL statistics
 	sqlStats sqlStats
@@ -342,7 +342,7 @@ type ExecutorTestingKnobs struct {
 	// execution so there'll be nothing left to abort by the time the filter runs.
 	DisableAutoCommit bool
 
-	// DistSQLPlannerKnobs are testing knobs for distSQLPlanner.
+	// DistSQLPlannerKnobs are testing knobs for DistSQLPlanner.
 	DistSQLPlannerKnobs DistSQLPlannerTestingKnobs
 
 	// BeforeAutoCommit is called when the Executor is about to commit the KV
@@ -359,7 +359,7 @@ type ExecutorTestingKnobs struct {
 	BeforeAutoCommit func(ctx context.Context, stmt string) error
 }
 
-// DistSQLPlannerTestingKnobs is used to control internals of the distSQLPlanner
+// DistSQLPlannerTestingKnobs is used to control internals of the DistSQLPlanner
 // for testing purposes.
 type DistSQLPlannerTestingKnobs struct {
 	// If OverrideSQLHealthCheck is set, we use this callback to get the health of
@@ -400,23 +400,12 @@ func NewExecutor(cfg ExecutorConfig, stopper *stop.Stopper) *Executor {
 	}
 }
 
-// Start starts workers for the executor and initializes the distSQLPlanner.
+// Start starts workers for the executor.
 func (e *Executor) Start(
-	ctx context.Context, startupMemMetrics *MemoryMetrics, nodeDesc roachpb.NodeDescriptor,
+	ctx context.Context, startupMemMetrics *MemoryMetrics, dsp *DistSQLPlanner,
 ) {
 	ctx = e.AnnotateCtx(ctx)
-	log.Infof(ctx, "creating distSQLPlanner with address %s", nodeDesc.Address)
-	e.distSQLPlanner = newDistSQLPlanner(
-		distsqlrun.Version,
-		e.cfg.Settings,
-		nodeDesc,
-		e.cfg.RPCContext,
-		e.cfg.DistSQLSrv,
-		e.cfg.DistSender,
-		e.cfg.Gossip,
-		e.stopper,
-		e.cfg.TestingKnobs.DistSQLPlannerKnobs,
-	)
+	e.distSQLPlanner = dsp
 
 	e.databaseCache.Store(newDatabaseCache(e.systemConfig))
 	e.systemConfigCond = sync.NewCond(&e.systemConfigMu)

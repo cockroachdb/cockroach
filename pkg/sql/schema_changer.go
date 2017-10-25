@@ -63,7 +63,7 @@ type SchemaChanger struct {
 	execAfter      time.Time
 	readAsOf       hlc.Timestamp
 	testingKnobs   *SchemaChangerTestingKnobs
-	distSQLPlanner *distSQLPlanner
+	distSQLPlanner *DistSQLPlanner
 	jobRegistry    *jobs.Registry
 	job            *jobs.Job
 }
@@ -901,7 +901,7 @@ type SchemaChangeManager struct {
 	testingKnobs *SchemaChangerTestingKnobs
 	// Create a schema changer for every outstanding schema change seen.
 	schemaChangers map[sqlbase.ID]SchemaChanger
-	distSQLPlanner *distSQLPlanner
+	distSQLPlanner *DistSQLPlanner
 	clock          *hlc.Clock
 	jobRegistry    *jobs.Registry
 }
@@ -919,6 +919,7 @@ func NewSchemaChangeManager(
 	leaseMgr *LeaseManager,
 	clock *hlc.Clock,
 	jobRegistry *jobs.Registry,
+	dsp *DistSQLPlanner,
 ) *SchemaChangeManager {
 	return &SchemaChangeManager{
 		db:             db,
@@ -926,21 +927,9 @@ func NewSchemaChangeManager(
 		leaseMgr:       leaseMgr,
 		testingKnobs:   testingKnobs,
 		schemaChangers: make(map[sqlbase.ID]SchemaChanger),
-		// TODO(radu): investigate using the same distSQLPlanner from the executor.
-		distSQLPlanner: newDistSQLPlanner(
-			distsqlrun.Version,
-			st,
-			nodeDesc,
-			rpcContext,
-			distSQLServ,
-			distSender,
-			gossip,
-			leaseMgr.stopper,
-			// TODO(radu): pass these knobs
-			DistSQLPlannerTestingKnobs{},
-		),
-		jobRegistry: jobRegistry,
-		clock:       clock,
+		distSQLPlanner: dsp,
+		jobRegistry:    jobRegistry,
+		clock:          clock,
 	}
 }
 
