@@ -74,7 +74,7 @@ func evalWriteBatch(
 	}
 	ms.Subtract(existingStats)
 
-	if err := batch.ApplyBatchRepr(args.Data, false /* !sync */); err != nil {
+	if err := batch.ApplyBatchRepr(args.Data, false /* sync */); err != nil {
 		return storage.EvalResult{}, err
 	}
 	return storage.EvalResult{}, nil

@@ -94,7 +94,7 @@ func applyLimit(plan planNode, numRows int64, soft bool) {
 		if n.needOnlyOneRow {
 			// We have a single MIN/MAX function and the underlying plan's
 			// ordering matches the function. We only need to retrieve one row.
-			applyLimit(n.plan, 1, false /* !soft */)
+			applyLimit(n.plan, 1, false /* soft */)
 		} else {
 			setUnlimited(n.plan)
 		}

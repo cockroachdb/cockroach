@@ -80,7 +80,7 @@ func TestBatchIterReadOwnWrite(t *testing.T) {
 		t.Fatal("uncommitted write seen by non-batch iter")
 	}
 
-	if err := b.Commit(false /* !sync */); err != nil {
+	if err := b.Commit(false /* sync */); err != nil {
 		t.Fatal(err)
 	}
 
@@ -420,7 +420,7 @@ func TestConcurrentBatch(t *testing.T) {
 	// Concurrently write all the batches.
 	for _, batch := range batches {
 		go func(batch Batch) {
-			errChan <- batch.Commit(false /* !sync */)
+			errChan <- batch.Commit(false /* sync */)
 		}(batch)
 	}
 

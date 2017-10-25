@@ -135,7 +135,7 @@ func TestReplicaDataIteratorEmptyRange(t *testing.T) {
 	newDesc := *tc.repl.Desc()
 	newDesc.RangeID = 125125125
 
-	iter := NewReplicaDataIterator(&newDesc, tc.repl.store.Engine(), false /* !replicatedOnly */)
+	iter := NewReplicaDataIterator(&newDesc, tc.repl.store.Engine(), false /* replicatedOnly */)
 	defer iter.Close()
 	for ; ; iter.Next() {
 		if ok, err := iter.Valid(); err != nil {
@@ -189,7 +189,7 @@ func TestReplicaDataIterator(t *testing.T) {
 	postKeys := createRangeData(t, postRng)
 
 	// Verify the contents of the "b"-"c" range.
-	iter := NewReplicaDataIterator(tc.repl.Desc(), tc.repl.store.Engine(), false /* !replicatedOnly */)
+	iter := NewReplicaDataIterator(tc.repl.Desc(), tc.repl.store.Engine(), false /* replicatedOnly */)
 	defer iter.Close()
 	i := 0
 	for ; ; iter.Next() {
@@ -231,7 +231,7 @@ func TestReplicaDataIterator(t *testing.T) {
 	if err := tc.store.removeReplicaImpl(context.Background(), tc.repl, *tc.repl.Desc(), true); err != nil {
 		t.Fatal(err)
 	}
-	iter = NewReplicaDataIterator(tc.repl.Desc(), tc.repl.store.Engine(), false /* !replicatedOnly */)
+	iter = NewReplicaDataIterator(tc.repl.Desc(), tc.repl.store.Engine(), false /* replicatedOnly */)
 	defer iter.Close()
 	if ok, err := iter.Valid(); err != nil {
 		t.Fatal(err)
@@ -260,7 +260,7 @@ func TestReplicaDataIterator(t *testing.T) {
 		{preRng, preKeys},
 		{postRng, postKeys},
 	} {
-		iter = NewReplicaDataIterator(test.r.Desc(), test.r.store.Engine(), false /* !replicatedOnly */)
+		iter = NewReplicaDataIterator(test.r.Desc(), test.r.store.Engine(), false /* replicatedOnly */)
 		defer iter.Close()
 		i = 0
 		for ; ; iter.Next() {

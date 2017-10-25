@@ -359,7 +359,7 @@ func (rt *rangeTree) Add(r Range) bool {
 	overlaps := rt.t.Get(r)
 	if len(overlaps) == 0 {
 		key := rt.makeKey(r)
-		if err := rt.t.Insert(&key, false /* !fast */); err != nil {
+		if err := rt.t.Insert(&key, false /* fast */); err != nil {
 			panic(err)
 		}
 		return true

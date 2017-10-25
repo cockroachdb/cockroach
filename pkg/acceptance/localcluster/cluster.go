@@ -420,7 +420,7 @@ func (c *Cluster) TransferLease(nodeIdx int, r *rand.Rand, key roachpb.Key) (boo
 func (c *Cluster) lookupRange(nodeIdx int, key roachpb.Key) (*roachpb.RangeDescriptor, error) {
 	sender := c.Client(nodeIdx).GetSender()
 	rs, _, err := client.RangeLookup(context.Background(), sender, key,
-		roachpb.CONSISTENT, 0 /* prefetchNum */, false /* !reverse */)
+		roachpb.CONSISTENT, 0 /* prefetchNum */, false /* prefetchReverse */)
 	if err != nil {
 		return nil, errors.Errorf("%s: lookup range: %s", key, err)
 	}

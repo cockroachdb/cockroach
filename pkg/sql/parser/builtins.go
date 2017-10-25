@@ -1159,7 +1159,7 @@ CockroachDB supports the following flags:
 			nullableArgs: true,
 			category:     categoryComparison,
 			fn: func(ctx *EvalContext, args Datums) (Datum, error) {
-				return pickFromTuple(ctx, false /* !greatest */, args)
+				return pickFromTuple(ctx, false /* greatest */, args)
 			},
 			Info: "Returns the element with the lowest value.",
 		},

@@ -110,7 +110,7 @@ func TestCommandQueueWriteWaitForNonAdjacentRead(t *testing.T) {
 
 	// A write should have to wait for **both** reads, not only the second
 	// one.
-	prereqs := getPrereqs(cq, key, nil, false /* !readOnly */)
+	prereqs := getPrereqs(cq, key, nil, false /* readOnly */)
 
 	// Certainly blocks now.
 	if !checkCmdDoesNotFinish(prereqs) {
@@ -285,7 +285,7 @@ func TestCommandQueueCoveringOptimization(t *testing.T) {
 
 func TestCommandQueueWithoutCoveringOptimization(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	cq := NewCommandQueue(false /* !coveringOptimization */)
+	cq := NewCommandQueue(false /* coveringOptimization */)
 
 	a := roachpb.Span{Key: roachpb.Key("a")}
 	b := roachpb.Span{Key: roachpb.Key("b")}

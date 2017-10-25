@@ -132,7 +132,7 @@ func createZipkinTracer(collectorAddr string) (shadowTracerManager, opentracing.
 	}
 
 	// Create our recorder.
-	recorder := zipkin.NewRecorder(collector, false /* !debug */, "0.0.0.0:0", "cockroach")
+	recorder := zipkin.NewRecorder(collector, false /* debug */, "0.0.0.0:0", "cockroach")
 
 	// Create our tracer.
 	zipkinTr, err := zipkin.NewTracer(recorder)

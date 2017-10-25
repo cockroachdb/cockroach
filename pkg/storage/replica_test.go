@@ -707,7 +707,7 @@ func TestLeaseReplicaNotInDesc(t *testing.T) {
 	}
 	tc.repl.mu.Lock()
 	_, _, pErr := tc.repl.checkForcedErrLocked(
-		context.Background(), makeIDKey(), raftCmd, nil /* proposal */, false, /* !proposedLocally */
+		context.Background(), makeIDKey(), raftCmd, nil /* proposal */, false, /* proposedLocally */
 	)
 	tc.repl.mu.Unlock()
 	if _, isErr := pErr.GetDetail().(*roachpb.LeaseRejectedError); !isErr {
