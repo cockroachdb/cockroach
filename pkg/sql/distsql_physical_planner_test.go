@@ -721,7 +721,7 @@ func TestPartitionSpans(t *testing.T) {
 	}
 
 	// We need a mock Gossip to contain addresses for the nodes. Otherwise the
-	// distSQLPlanner will not plan flows on them.
+	// DistSQLPlanner will not plan flows on them.
 	testStopper := stop.NewStopper()
 	defer testStopper.Stop(context.TODO())
 	mockGossip := gossip.NewTest(roachpb.NodeID(1), nil /* rpcContext */, nil, /* grpcServer */
@@ -760,7 +760,7 @@ func TestPartitionSpans(t *testing.T) {
 				ranges: tc.ranges,
 			}
 
-			dsp := distSQLPlanner{
+			dsp := DistSQLPlanner{
 				planVersion:  distsqlrun.Version,
 				st:           cluster.MakeTestingClusterSettings(),
 				nodeDesc:     *tsp.nodes[tc.gatewayNode-1],
@@ -906,7 +906,7 @@ func TestPartitionSpansSkipsIncompatibleNodes(t *testing.T) {
 			defer stopper.Stop(context.TODO())
 
 			// We need a mock Gossip to contain addresses for the nodes. Otherwise the
-			// distSQLPlanner will not plan flows on them. This Gossip will also
+			// DistSQLPlanner will not plan flows on them. This Gossip will also
 			// reflect tc.nodesNotAdvertisingDistSQLVersion.
 			testStopper := stop.NewStopper()
 			defer testStopper.Stop(context.TODO())
@@ -940,7 +940,7 @@ func TestPartitionSpansSkipsIncompatibleNodes(t *testing.T) {
 				ranges: ranges,
 			}
 
-			dsp := distSQLPlanner{
+			dsp := DistSQLPlanner{
 				planVersion:  tc.planVersion,
 				st:           cluster.MakeTestingClusterSettings(),
 				nodeDesc:     *tsp.nodes[gatewayNode-1],
@@ -1031,7 +1031,7 @@ func TestPartitionSpansSkipsNodesNotInGossip(t *testing.T) {
 		ranges: ranges,
 	}
 
-	dsp := distSQLPlanner{
+	dsp := DistSQLPlanner{
 		planVersion:  distsqlrun.Version,
 		st:           cluster.MakeTestingClusterSettings(),
 		nodeDesc:     *tsp.nodes[gatewayNode-1],

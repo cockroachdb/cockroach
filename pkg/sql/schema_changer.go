@@ -63,7 +63,7 @@ type SchemaChanger struct {
 	execAfter      time.Time
 	readAsOf       hlc.Timestamp
 	testingKnobs   *SchemaChangerTestingKnobs
-	distSQLPlanner *distSQLPlanner
+	distSQLPlanner *DistSQLPlanner
 	jobRegistry    *jobs.Registry
 	job            *jobs.Job
 }
@@ -901,7 +901,7 @@ type SchemaChangeManager struct {
 	testingKnobs *SchemaChangerTestingKnobs
 	// Create a schema changer for every outstanding schema change seen.
 	schemaChangers map[sqlbase.ID]SchemaChanger
-	distSQLPlanner *distSQLPlanner
+	distSQLPlanner *DistSQLPlanner
 	clock          *hlc.Clock
 	jobRegistry    *jobs.Registry
 }

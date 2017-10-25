@@ -156,7 +156,7 @@ type explainDistSQLNode struct {
 	optColumnsSlot
 
 	plan           planNode
-	distSQLPlanner *distSQLPlanner
+	distSQLPlanner *DistSQLPlanner
 
 	// txn is the current transaction (used for the fake span resolver).
 	txn *client.Txn
