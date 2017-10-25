@@ -16,6 +16,7 @@ package parser
 
 import (
 	"bytes"
+	"fmt"
 )
 
 // ScrubType describes the SCRUB statement operation.
@@ -28,8 +29,9 @@ const (
 
 // Scrub represents a SCRUB TABLE statement.
 type Scrub struct {
-	Typ   ScrubType
-	Table Expr
+	Typ     ScrubType
+	Table   NormalizableTableName
+	Options ScrubOptions
 }
 
 // Format implements the NodeFormatter interface.
@@ -42,4 +44,38 @@ func (n *Scrub) Format(buf *bytes.Buffer, f FmtFlags) {
 	default:
 		panic("Unhandled ScrubType")
 	}
+
+	if len(n.Options) > 0 {
+		buf.WriteString(" WITH ")
+		for i, option := range n.Options {
+			option.Format(buf, f)
+			if i != len(n.Options)-1 {
+				buf.WriteString(", ")
+			}
+		}
+	}
 }
+
+// ScrubOptions corresponds to a comma-delimited list of scrub options.
+type ScrubOptions []ScrubOption
+
+// ScrubOption representts a scrub option.
+type ScrubOption interface {
+	fmt.Stringer
+	NodeFormatter
+
+	scrubOptionType()
+}
+
+func (*ScrubOptionIndex) scrubOptionType() {}
+
+// ScrubOptionIndex represents an INDEX scrub check.
+type ScrubOptionIndex struct {
+}
+
+// Format implements the NodeFormatter interface.
+func (node *ScrubOptionIndex) Format(buf *bytes.Buffer, f FmtFlags) {
+	buf.WriteString("INDEX")
+}
+
+func (node *ScrubOptionIndex) String() string { return AsString(node) }
