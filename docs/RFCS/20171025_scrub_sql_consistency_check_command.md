@@ -119,8 +119,8 @@ checks are run.
 The syntax for the statements is as follows:
 
 ```sql
-SCRUB TABLE <table>... [WITH <option>...]
-SCRUB DATABASE <database>... [WITH <option>...]
+SCRUB TABLE <table>... [WITH OPTIONS <option>...]
+SCRUB DATABASE <database>... [WITH OPTIONS <option>...]
 ```
 
 Note that the options `INDEX` and `CONSTRAINT` are not permitted with
@@ -158,7 +158,7 @@ To run a physical check and an index check on only the indexes
 `name_idx` and `other_idx`:
 
 ```sql
-SCRUB DATABASE current_db WITH PHYSICAL, INDEX(name_idx, other_idx)
+SCRUB DATABASE current_db WITH OPTIONS PHYSICAL, INDEX(name_idx, other_idx)
 ```
 
 
@@ -179,7 +179,7 @@ before removal.
 table for any constraint violations or system errors:
 
 ```sql
-SCRUB TABLE mytable WITH CONSTRAINT, SYSTEM, REPAIR
+SCRUB TABLE mytable WITH OPTIONS CONSTRAINT, SYSTEM, REPAIR
 ```
 
 A list of `error_type` types can be provided to conditionally only
@@ -187,14 +187,14 @@ repair the specified types of failures. For example, to only repair
 encoding:
 
 ```sql
-SCRUB TABLE mytable WITH CONSTRAINT, PHYSICAL, REPAIR(allow_data_loss,encoding)
+SCRUB TABLE mytable WITH OPTIONS CONSTRAINT, PHYSICAL, REPAIR(allow_data_loss,encoding)
 ```
 
 If the `error_type` type provided is not being checked by the
 statement and error will be thrown.
 
 ```sql
-SCRUB TABLE mytable WITH PHYSICAL, REPAIR(constraint)
+SCRUB TABLE mytable WITH OPTIONS PHYSICAL, REPAIR(constraint)
 error: "attempting to repair error type that is not being checked: constraint"
 ```
 
@@ -202,7 +202,7 @@ Also, if the `error_type` type provided requires `allow_data_loss`
 when it hasn't been provided, an error will be thrown.
 
 ```sql
-SCRUB TABLE mytable WITH PHYSICAL, REPAIR(invalid_encoding)
+SCRUB TABLE mytable WITH OPTIONS PHYSICAL, REPAIR(invalid_encoding)
 error: "\'allow_data_loss' is required when attempting to repair error type that may cause data loss: invalid_encoding"
 ```
 

@@ -365,6 +365,14 @@ func (u *sqlSymUnion) referenceActions() ReferenceActions {
     return u.val.(ReferenceActions)
 }
 
+func (u *sqlSymUnion) scrubOptions() ScrubOptions {
+    return u.val.(ScrubOptions)
+}
+
+func (u *sqlSymUnion) scrubOption() ScrubOption {
+    return u.val.(ScrubOption)
+}
+
 %}
 
 // NB: the %token definitions must come before the %type definitions in this
@@ -529,8 +537,11 @@ func (u *sqlSymUnion) referenceActions() ReferenceActions {
 %type <Statement> cancel_job_stmt
 %type <Statement> cancel_query_stmt
 
+// SCRUB
 %type <Statement> scrub_stmt
 %type <Statement> scrub_table_stmt
+%type <ScrubOptions> scrub_option_list
+%type <ScrubOption> scrub_option
 
 %type <Statement> commit_stmt
 %type <Statement> copy_from_stmt
@@ -1969,15 +1980,48 @@ set_stmt:
 | use_stmt             { /* SKIP DOC */ }
 | SET LOCAL error { return unimplemented(sqllex, "set local") }
 
+// SCRUB
 scrub_stmt:
   scrub_table_stmt
 
+// %Help: SCRUB TABLE - run a scrub check on a table
+// %Category: Misc
+// %Text:
+// SCRUB TABLE <tablename> [WITH <option> [, ...]]
+//
+// Options:
+//   SCRUB TABLE ... WITH OPTIONS INDEX
+//   SCRUB TABLE ... WITH OPTIONS INDEX(<index>...)
+//
 scrub_table_stmt:
-  EXPERIMENTAL SCRUB TABLE string_or_placeholder
+  EXPERIMENTAL SCRUB TABLE qualified_name
   {
-    $$.val = &Scrub{Typ: ScrubTable, Table: $4.expr()}
+    $$.val = &Scrub{Typ: ScrubTable, Table: $4.normalizableTableName()}
+  }
+| EXPERIMENTAL SCRUB TABLE qualified_name WITH OPTIONS scrub_option_list
+  {
+    $$.val = &Scrub{Typ: ScrubTable, Table: $4.normalizableTableName(), Options: $7.scrubOptions()}
   }
 
+scrub_option_list:
+  scrub_option
+  {
+    $$.val = ScrubOptions{$1.scrubOption()}
+  }
+| scrub_option_list ',' scrub_option
+  {
+    $$.val = append($1.scrubOptions(), $3.scrubOption())
+  }
+
+scrub_option:
+  INDEX
+  {
+    $$.val = &ScrubOptionIndex{}
+  }
+| INDEX '(' name_list ')'
+  {
+    $$.val = &ScrubOptionIndex{IndexNames: $3.nameList()}
+  }
 
 // %Help: SET CLUSTER SETTING - change a cluster setting
 // %Category: Cfg
