@@ -557,7 +557,7 @@ func (rdc *RangeDescriptorCache) evictCachedRangeDescriptorLocked(
 			break
 		}
 
-		cachedDesc, entry, err = rdc.getCachedRangeDescriptorLocked(descKey, false /* !inverted */)
+		cachedDesc, entry, err = rdc.getCachedRangeDescriptorLocked(descKey, false /* inverted */)
 		if err != nil || cachedDesc == nil {
 			return err
 		}

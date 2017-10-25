@@ -885,7 +885,7 @@ func evalEndTransaction(
 	// We specify alwaysReturn==false because if the commit fails below Raft, we
 	// don't want the intents to be up for resolution. That should happen only
 	// if the commit actually happens; otherwise, we risk losing writes.
-	intentsResult := intentsToEvalResult(externalIntents, args, false /* !alwaysReturn */)
+	intentsResult := intentsToEvalResult(externalIntents, args, false /* alwaysReturn */)
 	intentsResult.Local.updatedTxn = reply.Txn
 	if err := pd.MergeAndDestroy(intentsResult); err != nil {
 		return EvalResult{}, err
@@ -2030,7 +2030,7 @@ func evalTruncateLog(
 		//
 		// Note that any sideloaded payloads that may be removed by this truncation
 		// don't matter; they're not tracked in the raft log delta.
-		iter := batch.NewIterator(false /* !prefix */)
+		iter := batch.NewIterator(false /* prefix */)
 		defer iter.Close()
 		// We can pass zero as nowNanos because we're only interested in SysBytes.
 		var err error

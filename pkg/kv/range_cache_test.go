@@ -98,7 +98,7 @@ func (db *testDescriptorDB) getDescriptors(
 }
 
 func (db *testDescriptorDB) FirstRange() (*roachpb.RangeDescriptor, error) {
-	rs, _, err := db.getDescriptors(roachpb.RKeyMin, false /* !useReverseScan */)
+	rs, _, err := db.getDescriptors(roachpb.RKeyMin, false /* useReverseScan */)
 	if err != nil {
 		return nil, err
 	}

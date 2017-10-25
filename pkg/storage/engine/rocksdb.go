@@ -1666,12 +1666,12 @@ func (r *rocksDBIterator) Valid() (bool, error) {
 
 func (r *rocksDBIterator) Next() {
 	r.checkEngineOpen()
-	r.setState(C.DBIterNext(r.iter, false /* !skip_current_key_versions */))
+	r.setState(C.DBIterNext(r.iter, false /* skip_current_key_versions */))
 }
 
 func (r *rocksDBIterator) Prev() {
 	r.checkEngineOpen()
-	r.setState(C.DBIterPrev(r.iter, false /* !skip_current_key_versions */))
+	r.setState(C.DBIterPrev(r.iter, false /* skip_current_key_versions */))
 }
 
 func (r *rocksDBIterator) NextKey() {

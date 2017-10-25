@@ -130,7 +130,7 @@ func testBatchBasics(t *testing.T, writeOnly bool, commit func(e Engine, b Batch
 func TestBatchBasics(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	testBatchBasics(t, false /* writeOnly */, func(e Engine, b Batch) error {
-		return b.Commit(false /* !sync */)
+		return b.Commit(false /* sync */)
 	})
 }
 
@@ -283,14 +283,14 @@ func TestBatchRepr(t *testing.T) {
 			t.Fatalf("expected %v, but found %v", expOps, ops)
 		}
 
-		return e.ApplyBatchRepr(repr, false /* !sync */)
+		return e.ApplyBatchRepr(repr, false /* sync */)
 	})
 }
 
 func TestWriteBatchBasics(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	testBatchBasics(t, true /* writeOnly */, func(e Engine, b Batch) error {
-		return b.Commit(false /* !sync */)
+		return b.Commit(false /* sync */)
 	})
 }
 
@@ -316,7 +316,7 @@ func TestApplyBatchRepr(t *testing.T) {
 
 		b2 := e.NewBatch()
 		defer b2.Close()
-		if err := b2.ApplyBatchRepr(repr1, false /* !sync */); err != nil {
+		if err := b2.ApplyBatchRepr(repr1, false /* sync */); err != nil {
 			t.Fatal(err)
 		}
 		repr2 := b2.Repr()
@@ -342,11 +342,11 @@ func TestApplyBatchRepr(t *testing.T) {
 
 		b4 := e.NewBatch()
 		defer b4.Close()
-		if err := b4.ApplyBatchRepr(repr, false /* !sync */); err != nil {
+		if err := b4.ApplyBatchRepr(repr, false /* sync */); err != nil {
 			t.Fatal(err)
 		}
 		// Intentionally don't call Repr() because the expected user wouldn't.
-		if err := b4.Commit(false /* !sync */); err != nil {
+		if err := b4.Commit(false /* sync */); err != nil {
 			t.Fatal(err)
 		}
 
@@ -508,7 +508,7 @@ func TestBatchProto(t *testing.T) {
 		t.Fatalf("expected GetProto to fail ok=%t: %s", ok, err)
 	}
 	// Commit and verify the proto can be read directly from the engine.
-	if err := b.Commit(false /* !sync */); err != nil {
+	if err := b.Commit(false /* sync */); err != nil {
 		t.Fatal(err)
 	}
 	if ok, _, _, err := e.GetProto(mvccKey("proto"), getVal); !ok || err != nil {
@@ -597,7 +597,7 @@ func TestBatchScan(t *testing.T) {
 	}
 
 	// Now, commit batch and re-scan using engine direct to compare results.
-	if err := b.Commit(false /* !sync */); err != nil {
+	if err := b.Commit(false /* sync */); err != nil {
 		t.Fatal(err)
 	}
 	for i, scan := range scans {

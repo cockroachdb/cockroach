@@ -3028,7 +3028,7 @@ func TestValidSplitKeys(t *testing.T) {
 		key   roachpb.Key
 		valid bool
 	}{
-		false /* !allowMeta2Splits */ : {
+		false /* allowMeta2Splits */ : {
 			{roachpb.Key("\x02"), false},
 			{roachpb.Key("\x02\x00"), false},
 			{roachpb.Key("\x02\xff"), false},

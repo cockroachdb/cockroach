@@ -297,13 +297,13 @@ func (cq *CommandQueue) expand(c *cmd, isInserted bool) bool {
 
 	tree := cq.tree(c)
 	if isInserted {
-		if err := tree.Delete(c, false /* !fast */); err != nil {
+		if err := tree.Delete(c, false /* fast */); err != nil {
 			panic(err)
 		}
 	}
 	for i := range c.children {
 		child := &c.children[i]
-		if err := tree.Insert(child, false /* !fast */); err != nil {
+		if err := tree.Insert(child, false /* fast */); err != nil {
 			panic(err)
 		}
 	}
@@ -705,11 +705,11 @@ func (cq *CommandQueue) add(
 func (cq *CommandQueue) insertIntoTree(cmd *cmd) {
 	if cq.coveringOptimization || len(cmd.children) == 0 {
 		tree := cq.tree(cmd)
-		if err := tree.Insert(cmd, false /* !fast */); err != nil {
+		if err := tree.Insert(cmd, false /* fast */); err != nil {
 			panic(err)
 		}
 	} else {
-		cq.expand(cmd, false /* !isInserted */)
+		cq.expand(cmd, false /* isInserted */)
 	}
 }
 
@@ -746,7 +746,7 @@ func (cq *CommandQueue) remove(cmd *cmd) {
 	tree := cq.tree(cmd)
 	if !cmd.expanded {
 		n := tree.Len()
-		if err := tree.Delete(cmd, false /* !fast */); err != nil {
+		if err := tree.Delete(cmd, false /* fast */); err != nil {
 			panic(err)
 		}
 		if d := n - tree.Len(); d != 1 {
@@ -759,7 +759,7 @@ func (cq *CommandQueue) remove(cmd *cmd) {
 		for i := range cmd.children {
 			child := &cmd.children[i]
 			n := tree.Len()
-			if err := tree.Delete(child, false /* !fast */); err != nil {
+			if err := tree.Delete(child, false /* fast */); err != nil {
 				panic(err)
 			}
 			if d := n - tree.Len(); d != 1 {

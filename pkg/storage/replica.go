@@ -652,7 +652,7 @@ func (r *Replica) initRaftMuLockedReplicaMuLocked(
 
 	r.cmdQMu.Lock()
 	r.cmdQMu.queues[spanGlobal] = NewCommandQueue(true /* optimizeOverlap */)
-	r.cmdQMu.queues[spanLocal] = NewCommandQueue(false /* !optimizeOverlap */)
+	r.cmdQMu.queues[spanLocal] = NewCommandQueue(false /* optimizeOverlap */)
 	r.cmdQMu.Unlock()
 
 	r.mu.proposals = map[storagebase.CmdIDKey]*ProposalData{}
@@ -3165,7 +3165,7 @@ func defaultSubmitProposalLocked(r *Replica, p *ProposalData) error {
 			// We're proposing a command here so there is no need to wake the
 			// leader if we were quiesced.
 			r.unquiesceLocked()
-			return false, /* !unquiesceAndWakeLeader */
+			return false, /* unquiesceAndWakeLeader */
 				raftGroup.ProposeConfChange(raftpb.ConfChange{
 					Type:    changeTypeInternalToRaft[crt.ChangeType],
 					NodeID:  uint64(crt.Replica.ReplicaID),
@@ -3191,7 +3191,7 @@ func defaultSubmitProposalLocked(r *Replica, p *ProposalData) error {
 		// We're proposing a command so there is no need to wake the leader if we
 		// were quiesced.
 		r.unquiesceLocked()
-		return false /* !unquiesceAndWakeLeader */, raftGroup.Propose(encode(p.idKey, data))
+		return false /* unquiesceAndWakeLeader */, raftGroup.Propose(encode(p.idKey, data))
 	})
 }
 
@@ -3253,7 +3253,7 @@ func (r *Replica) stepRaftGroup(req *RaftMessageRequest) error {
 		if req.Message.Type == raftpb.MsgApp {
 			r.setEstimatedCommitIndexLocked(req.Message.Commit)
 		}
-		return false, /* !unquiesceAndWakeLeader */
+		return false, /* unquiesceAndWakeLeader */
 			raftGroup.Step(req.Message)
 	})
 }
@@ -5540,7 +5540,7 @@ func (r *Replica) loadSystemConfig(ctx context.Context) (config.SystemConfig, er
 	if pErr != nil {
 		return config.SystemConfig{}, pErr.GoError()
 	}
-	if intents := result.Local.detachIntents(false /* !hasError */); len(intents) > 0 {
+	if intents := result.Local.detachIntents(false /* hasError */); len(intents) > 0 {
 		// There were intents, so what we read may not be consistent. Attempt
 		// to nudge the intents in case they're expired; next time around we'll
 		// hopefully have more luck.
