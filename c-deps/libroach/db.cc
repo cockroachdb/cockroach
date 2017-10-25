@@ -33,6 +33,7 @@
 #include "protos/cockroach/pkg/storage/engine/enginepb/mvcc.pb.h"
 #include "db.h"
 #include "encoding.h"
+#include "encryption.h"
 #include "eventlistener.h"
 #include "keys.h"
 
@@ -1695,7 +1696,9 @@ DBStatus DBOpen(DBEngine **db, DBSlice dir, DBOptions db_opts) {
   if (dir.len == 0) {
     memenv.reset(rocksdb::NewMemEnv(rocksdb::Env::Default()));
     options.env = memenv.get();
-  }
+  } else {
+		options.env = GetEncryptedEnv(options.env);
+	}
 
   rocksdb::DB *db_ptr;
   rocksdb::Status status = rocksdb::DB::Open(options, ToString(dir), &db_ptr);
@@ -2149,7 +2152,7 @@ DBIterator* DBNewTimeBoundIter(DBEngine* db, DBTimestamp min_ts, DBTimestamp max
   const std::string max = EncodeTimestamp(max_ts);
   rocksdb::ReadOptions opts;
   opts.total_order_seek = true;
-  opts.table_filter = [min, max](const rocksdb::TableProperties& props) {
+  /*opts.table_filter = [min, max](const rocksdb::TableProperties& props) {
     auto userprops = props.user_collected_properties;
     auto tbl_min = userprops.find("crdb.ts.min");
     if (tbl_min == userprops.end() || tbl_min->second.empty()) {
@@ -2165,6 +2168,7 @@ DBIterator* DBNewTimeBoundIter(DBEngine* db, DBTimestamp min_ts, DBTimestamp max
     // exclusive, but the max_ts bound is inclusive.
     return max.compare(tbl_min->second) >= 0 && min.compare(tbl_max->second) < 0;
   };
+	*/
   return db->NewIter(&opts);
 }
 
@@ -2573,7 +2577,7 @@ DBStatus DBSstFileWriterOpen(DBSstFileWriter* fw) {
 }
 
 DBStatus DBSstFileWriterAdd(DBSstFileWriter* fw, DBKey key, DBSlice val) {
-  rocksdb::Status status = fw->rep.Add(EncodeKey(key), ToSlice(val));
+  rocksdb::Status status = fw->rep.Put(EncodeKey(key), ToSlice(val));
   if (!status.ok()) {
     return ToDBStatus(status);
   }

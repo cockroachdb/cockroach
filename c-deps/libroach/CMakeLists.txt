@@ -23,6 +23,7 @@ project(roachlib)
 add_library(roach
   db.cc
   encoding.cc
+  encryption.cc
   eventlistener.cc
   protos/cockroach/pkg/roachpb/data.pb.cc
   protos/cockroach/pkg/roachpb/internal.pb.cc
@@ -35,7 +36,7 @@ add_library(roach
 )
 target_include_directories(roach
   PUBLIC  ./include
-  PRIVATE ../protobuf/src ../rocksdb/include protos
+  PRIVATE ../protobuf/src ../rocksdb/include ../cryptopp protos
 )
 
 add_library(roachccl

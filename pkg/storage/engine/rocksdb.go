@@ -51,6 +51,7 @@ import (
 
 // #cgo CPPFLAGS: -I../../../c-deps/libroach/include
 // #cgo LDFLAGS: -lroach
+// #cgo LDFLAGS: -lcryptopp
 // #cgo LDFLAGS: -lprotobuf
 // #cgo LDFLAGS: -lrocksdb
 // #cgo LDFLAGS: -lsnappy
