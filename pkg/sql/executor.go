@@ -400,23 +400,12 @@ func NewExecutor(cfg ExecutorConfig, stopper *stop.Stopper) *Executor {
 	}
 }
 
-// Start starts workers for the executor and initializes the DistSQLPlanner.
+// Start starts workers for the executor.
 func (e *Executor) Start(
-	ctx context.Context, startupMemMetrics *MemoryMetrics, nodeDesc roachpb.NodeDescriptor,
+	ctx context.Context, startupMemMetrics *MemoryMetrics, dsp *DistSQLPlanner,
 ) {
 	ctx = e.AnnotateCtx(ctx)
-	log.Infof(ctx, "creating DistSQLPlanner with address %s", nodeDesc.Address)
-	e.distSQLPlanner = newDistSQLPlanner(
-		distsqlrun.Version,
-		e.cfg.Settings,
-		nodeDesc,
-		e.cfg.RPCContext,
-		e.cfg.DistSQLSrv,
-		e.cfg.DistSender,
-		e.cfg.Gossip,
-		e.stopper,
-		e.cfg.TestingKnobs.DistSQLPlannerKnobs,
-	)
+	e.distSQLPlanner = dsp
 
 	e.databaseCache.Store(newDatabaseCache(e.systemConfig))
 	e.systemConfigCond = sync.NewCond(&e.systemConfigMu)

@@ -1074,6 +1074,24 @@ If problems persist, please see ` + base.DocsURL("cluster-setup-troubleshooting.
 		testingKnobs = new(sql.SchemaChangerTestingKnobs)
 	}
 
+	var distSQLPlannerKnobs sql.DistSQLPlannerTestingKnobs
+	if sqlExecutorTestingKnobs := s.cfg.TestingKnobs.SQLExecutor; sqlExecutorTestingKnobs != nil {
+		distSQLPlannerKnobs = sqlExecutorTestingKnobs.(*sql.ExecutorTestingKnobs).DistSQLPlannerKnobs
+	}
+
+	distSQLPlanner := sql.NewDistSQLPlanner(
+		ctx,
+		distsqlrun.Version,
+		s.st,
+		s.node.Descriptor,
+		s.rpcContext,
+		s.distSQLServer,
+		s.distSender,
+		s.gossip,
+		s.stopper,
+		distSQLPlannerKnobs,
+	)
+
 	sql.NewSchemaChangeManager(
 		s.st,
 		testingKnobs,
@@ -1086,9 +1104,10 @@ If problems persist, please see ` + base.DocsURL("cluster-setup-troubleshooting.
 		s.leaseMgr,
 		s.clock,
 		s.jobRegistry,
+		distSQLPlanner,
 	).Start(s.stopper)
 
-	s.sqlExecutor.Start(ctx, &s.adminMemMetrics, s.node.Descriptor)
+	s.sqlExecutor.Start(ctx, &s.adminMemMetrics, distSQLPlanner)
 	s.distSQLServer.Start()
 
 	atomic.StoreInt32(&s.serveNonGossip, 1)
