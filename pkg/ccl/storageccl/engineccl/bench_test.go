@@ -88,7 +88,7 @@ func loadTestData(
 		if scaled := len(keys) / numBatches; (i % scaled) == 0 {
 			if i > 0 {
 				log.Infof(ctx, "committing (%d/~%d)", i/scaled, numBatches)
-				if err := batch.Commit(false /* !sync */); err != nil {
+				if err := batch.Commit(false /* sync */); err != nil {
 					return nil, err
 				}
 				batch.Close()
@@ -106,7 +106,7 @@ func loadTestData(
 			return nil, err
 		}
 	}
-	if err := batch.Commit(false /* !sync */); err != nil {
+	if err := batch.Commit(false /* sync */); err != nil {
 		return nil, err
 	}
 	batch.Close()

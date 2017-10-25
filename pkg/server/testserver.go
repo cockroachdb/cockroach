@@ -651,7 +651,7 @@ func (ts *TestServer) SplitRange(
 			return desc, err
 		}
 
-		rightRangeDesc, err = scanMeta(splitRKey, false /* !reverse */)
+		rightRangeDesc, err = scanMeta(splitRKey, false /* reverse */)
 		if err != nil {
 			wrappedMsg = "could not look up right-hand side descriptor"
 			return err

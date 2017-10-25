@@ -89,7 +89,7 @@ func InitSenderForLocalTestCluster(
 		st,
 		distSender,
 		clock,
-		false, /* !linearizable */
+		false, /* linearizable */
 		stopper,
 		MakeTxnMetrics(metric.TestSampleInterval),
 	)

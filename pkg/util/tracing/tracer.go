@@ -589,7 +589,7 @@ func ChildSpan(ctx context.Context, opName string) (context.Context, opentracing
 		ns := &tr.(*Tracer).noopSpan
 		return opentracing.ContextWithSpan(ctx, ns), ns
 	}
-	newSpan := StartChildSpan(opName, span, false /* !separateRecording */)
+	newSpan := StartChildSpan(opName, span, false /* separateRecording */)
 	return opentracing.ContextWithSpan(ctx, newSpan), newSpan
 }
 

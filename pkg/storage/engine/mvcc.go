@@ -1589,7 +1589,7 @@ func MVCCScan(
 	txn *roachpb.Transaction,
 ) ([]roachpb.KeyValue, *roachpb.Span, []roachpb.Intent, error) {
 	return mvccScanInternal(ctx, engine, key, endKey, max, timestamp,
-		consistent, txn, false /* !reverse */)
+		consistent, txn, false /* reverse */)
 }
 
 // MVCCReverseScan scans the key range [start,end) key up to some maximum
