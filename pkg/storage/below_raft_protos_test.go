@@ -59,10 +59,12 @@ type fixture struct {
 var belowRaftGoldenProtos = map[reflect.Type]fixture{
 	reflect.TypeOf(&enginepb.MVCCMetadata{}): {
 		populatedConstructor: func(r *rand.Rand) protoutil.Message {
-			return enginepb.NewPopulatedMVCCMetadata(r, false)
+			m := enginepb.NewPopulatedMVCCMetadata(r, false)
+			m.Txn = nil // never populated below Raft
+			return m
 		},
 		emptySum:     7551962144604783939,
-		populatedSum: 8188088666885167358,
+		populatedSum: 3716674106872807900,
 	},
 	reflect.TypeOf(&enginepb.MVCCStats{}): {
 		populatedConstructor: func(r *rand.Rand) protoutil.Message {

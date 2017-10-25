@@ -6,11 +6,11 @@ package storagebase
 import proto "github.com/gogo/protobuf/proto"
 import fmt "fmt"
 import math "math"
-import cockroach_storage_engine_enginepb "github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
+import cockroach_storage_engine_enginepb1 "github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 import cockroach_roachpb4 "github.com/cockroachdb/cockroach/pkg/roachpb"
 import cockroach_roachpb "github.com/cockroachdb/cockroach/pkg/roachpb"
 import cockroach_roachpb1 "github.com/cockroachdb/cockroach/pkg/roachpb"
-import cockroach_util_hlc1 "github.com/cockroachdb/cockroach/pkg/util/hlc"
+import cockroach_util_hlc "github.com/cockroachdb/cockroach/pkg/util/hlc"
 
 import github_com_gogo_protobuf_sortkeys "github.com/gogo/protobuf/sortkeys"
 
@@ -56,13 +56,13 @@ type ReplicaState struct {
 	// gcThreshold is the GC threshold of the Range, typically updated when keys
 	// are garbage collected. Reads and writes at timestamps <= this time will
 	// not be served.
-	GCThreshold *cockroach_util_hlc1.Timestamp               `protobuf:"bytes,6,opt,name=gc_threshold,json=gcThreshold" json:"gc_threshold,omitempty" cockroachdb:"randnullable"`
-	Stats       *cockroach_storage_engine_enginepb.MVCCStats `protobuf:"bytes,7,opt,name=stats" json:"stats,omitempty"`
+	GCThreshold *cockroach_util_hlc.Timestamp                 `protobuf:"bytes,6,opt,name=gc_threshold,json=gcThreshold" json:"gc_threshold,omitempty" cockroachdb:"randnullable"`
+	Stats       *cockroach_storage_engine_enginepb1.MVCCStats `protobuf:"bytes,7,opt,name=stats" json:"stats,omitempty"`
 	// txn_span_gc_threshold is the (maximum) timestamp below which transaction
 	// records may have been garbage collected (as measured by txn.LastActive()).
 	// Transaction at lower timestamps must not be allowed to write their initial
 	// transaction entry.
-	TxnSpanGCThreshold *cockroach_util_hlc1.Timestamp `protobuf:"bytes,9,opt,name=txn_span_gc_threshold,json=txnSpanGcThreshold" json:"txn_span_gc_threshold,omitempty" cockroachdb:"randnullable"`
+	TxnSpanGCThreshold *cockroach_util_hlc.Timestamp `protobuf:"bytes,9,opt,name=txn_span_gc_threshold,json=txnSpanGcThreshold" json:"txn_span_gc_threshold,omitempty" cockroachdb:"randnullable"`
 }
 
 func (m *ReplicaState) Reset()                    { *m = ReplicaState{} }
@@ -93,7 +93,7 @@ func (*RangeInfo) Descriptor() ([]byte, []int) { return fileDescriptorState, []i
 // for fast mutation and lookups, all the UI needs is a simple map of commands.
 type CommandQueuesSnapshot struct {
 	// Timestamp in nanoseconds when this snapshot was taken.
-	Timestamp cockroach_util_hlc1.Timestamp `protobuf:"bytes,1,opt,name=timestamp" json:"timestamp"`
+	Timestamp cockroach_util_hlc.Timestamp `protobuf:"bytes,1,opt,name=timestamp" json:"timestamp"`
 	// localScope and globalScope are maps from command ids to commands.
 	LocalScope  map[int64]CommandQueuesSnapshot_Command `protobuf:"bytes,2,rep,name=localScope" json:"localScope" protobuf_key:"varint,1,opt,name=key,proto3" protobuf_val:"bytes,2,opt,name=value"`
 	GlobalScope map[int64]CommandQueuesSnapshot_Command `protobuf:"bytes,3,rep,name=globalScope" json:"globalScope" protobuf_key:"varint,1,opt,name=key,proto3" protobuf_val:"bytes,2,opt,name=value"`
@@ -105,12 +105,12 @@ func (*CommandQueuesSnapshot) ProtoMessage()               {}
 func (*CommandQueuesSnapshot) Descriptor() ([]byte, []int) { return fileDescriptorState, []int{2} }
 
 type CommandQueuesSnapshot_Command struct {
-	Id        int64                         `protobuf:"varint,1,opt,name=id,proto3" json:"id,omitempty"`
-	Key       string                        `protobuf:"bytes,2,opt,name=key,proto3" json:"key,omitempty"`
-	EndKey    string                        `protobuf:"bytes,3,opt,name=end_key,json=endKey,proto3" json:"end_key,omitempty"`
-	Readonly  bool                          `protobuf:"varint,4,opt,name=readonly,proto3" json:"readonly,omitempty"`
-	Timestamp cockroach_util_hlc1.Timestamp `protobuf:"bytes,5,opt,name=timestamp" json:"timestamp"`
-	Prereqs   []int64                       `protobuf:"varint,6,rep,packed,name=prereqs" json:"prereqs,omitempty"`
+	Id        int64                        `protobuf:"varint,1,opt,name=id,proto3" json:"id,omitempty"`
+	Key       string                       `protobuf:"bytes,2,opt,name=key,proto3" json:"key,omitempty"`
+	EndKey    string                       `protobuf:"bytes,3,opt,name=end_key,json=endKey,proto3" json:"end_key,omitempty"`
+	Readonly  bool                         `protobuf:"varint,4,opt,name=readonly,proto3" json:"readonly,omitempty"`
+	Timestamp cockroach_util_hlc.Timestamp `protobuf:"bytes,5,opt,name=timestamp" json:"timestamp"`
+	Prereqs   []int64                      `protobuf:"varint,6,rep,packed,name=prereqs" json:"prereqs,omitempty"`
 }
 
 func (m *CommandQueuesSnapshot_Command) Reset()         { *m = CommandQueuesSnapshot_Command{} }
@@ -847,7 +847,7 @@ func (m *ReplicaState) Unmarshal(dAtA []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			if m.GCThreshold == nil {
-				m.GCThreshold = &cockroach_util_hlc1.Timestamp{}
+				m.GCThreshold = &cockroach_util_hlc.Timestamp{}
 			}
 			if err := m.GCThreshold.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
@@ -880,7 +880,7 @@ func (m *ReplicaState) Unmarshal(dAtA []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			if m.Stats == nil {
-				m.Stats = &cockroach_storage_engine_enginepb.MVCCStats{}
+				m.Stats = &cockroach_storage_engine_enginepb1.MVCCStats{}
 			}
 			if err := m.Stats.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
@@ -913,7 +913,7 @@ func (m *ReplicaState) Unmarshal(dAtA []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			if m.TxnSpanGCThreshold == nil {
-				m.TxnSpanGCThreshold = &cockroach_util_hlc1.Timestamp{}
+				m.TxnSpanGCThreshold = &cockroach_util_hlc.Timestamp{}
 			}
 			if err := m.TxnSpanGCThreshold.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err

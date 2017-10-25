@@ -6,7 +6,7 @@ package roachpb
 import proto "github.com/gogo/protobuf/proto"
 import fmt "fmt"
 import math "math"
-import cockroach_util_hlc1 "github.com/cockroachdb/cockroach/pkg/util/hlc"
+import cockroach_util_hlc "github.com/cockroachdb/cockroach/pkg/util/hlc"
 
 import io "io"
 
@@ -57,9 +57,9 @@ func (*RaftSnapshotData) ProtoMessage()               {}
 func (*RaftSnapshotData) Descriptor() ([]byte, []int) { return fileDescriptorInternalRaft, []int{2} }
 
 type RaftSnapshotData_KeyValue struct {
-	Key       []byte                        `protobuf:"bytes,1,opt,name=key" json:"key,omitempty"`
-	Value     []byte                        `protobuf:"bytes,2,opt,name=value" json:"value,omitempty"`
-	Timestamp cockroach_util_hlc1.Timestamp `protobuf:"bytes,3,opt,name=timestamp" json:"timestamp"`
+	Key       []byte                       `protobuf:"bytes,1,opt,name=key" json:"key,omitempty"`
+	Value     []byte                       `protobuf:"bytes,2,opt,name=value" json:"value,omitempty"`
+	Timestamp cockroach_util_hlc.Timestamp `protobuf:"bytes,3,opt,name=timestamp" json:"timestamp"`
 }
 
 func (m *RaftSnapshotData_KeyValue) Reset()         { *m = RaftSnapshotData_KeyValue{} }

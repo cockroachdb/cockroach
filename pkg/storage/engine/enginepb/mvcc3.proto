@@ -1,0 +1,90 @@
+// Copyright 2017 The Cockroach Authors.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
+// implied. See the License for the specific language governing
+// permissions and limitations under the License.
+
+syntax = "proto3";
+package cockroach.storage.engine.enginepb;
+
+import "cockroach/pkg/util/hlc/timestamp.proto";
+import "gogoproto/gogo.proto";
+
+// TODO(tschottdorf): Should not live in enginepb (but can't live in roachpb
+// either).
+enum IsolationType {
+  option (gogoproto.goproto_enum_prefix) = false;
+
+  SERIALIZABLE = 0;
+  SNAPSHOT = 1;
+}
+
+// TxnMeta is the metadata of a Transaction record.
+message TxnMeta {
+  option (gogoproto.equal) = true;
+  option (gogoproto.populate) = true;
+
+  // id is a unique UUID value which identifies the transaction.
+  // This field is always filled in.
+  bytes id = 1 [(gogoproto.customname) = "ID",
+      (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID",
+      (gogoproto.nullable) = false];
+  IsolationType isolation = 2;
+  // key is the key which anchors the transaction. This is typically
+  // the first key read or written during the transaction and
+  // determines which range in the cluster will hold the transaction
+  // record.
+  bytes key = 3; // TODO(tschottdorf): [(gogoproto.casttype) = "Key"];
+  // Incremented on txn retry.
+  uint32 epoch = 4;
+  // The proposed timestamp for the transaction. This starts as the
+  // current wall time on the txn coordinator. This is the timestamp
+  // at which all of the transaction's writes are performed: even if
+  // intents have been laid down at different timestamps, the process
+  // of resolving them (e.g. when the txn commits) will bump them to
+  // this timestamp. SERIALIZABLE transactions only commit when
+  // timestamp == orig_timestamp. SNAPSHOT transactions can commit
+  // even when they've performed their reads (at orig_timestamp) at a
+  // different timestamp than their writes (at timestamp).
+  util.hlc.Timestamp timestamp = 5 [(gogoproto.nullable) = false];
+  int32 priority = 6;
+  // A one-indexed sequence number which is increased on each batch
+  // sent as part of the transaction. Used to prevent replay and
+  // out-of-order application protection (by means of a transaction
+  // retry).
+  int32 sequence = 7;
+  // A zero-indexed sequence number indicating the index of a command
+  // within a batch. This disambiguate Raft replays of a batch from
+  // multiple commands in a batch which modify the same key.
+  int32 batch_index = 8;
+}
+
+// MVCCNetworkStats is convertible to MVCCStats, but uses variable width
+// encodings for most fields. This makes the encodings incompatible. Note that
+// with proto3, zero-valued primitive types will not be encoded at all.
+message MVCCNetworkStats {
+  option (gogoproto.equal) = true;
+
+  bool contains_estimates = 14;
+  sfixed64 last_update_nanos = 1;
+  sfixed64 intent_age = 2;
+  sfixed64 gc_bytes_age = 3 [(gogoproto.customname) = "GCBytesAge"];
+  sint64 live_bytes = 4;
+  sint64 live_count = 5;
+  sint64 key_bytes = 6;
+  sint64 key_count = 7;
+  sint64 val_bytes = 8;
+  sint64 val_count = 9;
+  sint64 intent_bytes = 10;
+  sint64 intent_count = 11;
+  sint64 sys_bytes = 12;
+  sint64 sys_count = 13;
+}

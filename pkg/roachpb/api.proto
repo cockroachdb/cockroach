@@ -12,14 +12,14 @@
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
-syntax = "proto2";
+syntax = "proto3";
 package cockroach.roachpb;
 option go_package = "roachpb";
 
 import "cockroach/pkg/roachpb/data.proto";
 import "cockroach/pkg/roachpb/errors.proto";
 import "cockroach/pkg/roachpb/metadata.proto";
-import "cockroach/pkg/storage/engine/enginepb/mvcc.proto";
+import "cockroach/pkg/storage/engine/enginepb/mvcc3.proto";
 import "cockroach/pkg/util/hlc/timestamp.proto";
 import "cockroach/pkg/util/tracing/recorded_span.proto";
 import "gogoproto/gogo.proto";
@@ -46,8 +46,8 @@ enum ReadConsistencyType {
 // RangeInfo describes a range which executed a request. It contains
 // the range descriptor and lease information at the time of execution.
 message RangeInfo {
-  optional RangeDescriptor desc = 1 [(gogoproto.nullable) = false];
-  optional Lease lease = 2 [(gogoproto.nullable) = false];
+  RangeDescriptor desc = 1 [(gogoproto.nullable) = false];
+  Lease lease = 2 [(gogoproto.nullable) = false];
 }
 
 // ResponseHeader is returned with every storage node response.
@@ -55,16 +55,16 @@ message ResponseHeader {
   // txn is non-nil if the request specified a non-nil transaction.
   // The transaction timestamp and/or priority may have been updated,
   // depending on the outcome of the request.
-  optional Transaction txn = 3;
+  Transaction txn = 3;
   // The next span to resume from when a bound on the
   // keys is set through max_span_request_keys in the batch header.
   // ResumeSpan is unset when the entire span of keys have been
   // operated on. The span is set to the original span if the request
   // was ignored because max_span_request_keys was hit due to another
   // request in the batch. For a reverse scan the end_key is updated.
-  optional Span resume_span = 4;
+  Span resume_span = 4;
   // The number of keys operated on.
-  optional int64 num_keys = 5 [(gogoproto.nullable) = false];
+  int64 num_keys = 5;
   // Range or list of ranges used to execute the request. Multiple
   // ranges may be returned for Scan, ReverseScan or DeleteRange.
   repeated RangeInfo range_infos = 6 [(gogoproto.nullable) = false];
@@ -74,35 +74,35 @@ message ResponseHeader {
 message GetRequest {
   option (gogoproto.equal) = true;
 
-  optional Span header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  Span header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
 }
 
 // A GetResponse is the return value from the Get() method.
 // If the key doesn't exist, returns nil for Value.Bytes.
 message GetResponse {
-  optional ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
-  optional Value value = 2;
+  ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  Value value = 2;
 }
 
 // A PutRequest is the argument to the Put() method.
 message PutRequest {
   option (gogoproto.equal) = true;
 
-  optional Span header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
-  optional Value value = 2 [(gogoproto.nullable) = false];
+  Span header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  Value value = 2 [(gogoproto.nullable) = false];
   // Specify as true to put the value without a corresponding
   // timestamp. This option should be used with care as it precludes
   // the use of this value with transactions.
-  optional bool inline = 3 [(gogoproto.nullable) = false];
+  bool inline = 3;
   // NOTE: For internal use only! Set to indicate that the put is
   // writing to virgin keyspace and no reads are necessary to
   // rationalize MVCC.
-  optional bool blind = 4 [(gogoproto.nullable) = false];
+  bool blind = 4;
 }
 
 // A PutResponse is the return value from the Put() method.
 message PutResponse {
-  optional ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
 }
 
 // A ConditionalPutRequest is the argument to the ConditionalPut() method.
@@ -114,23 +114,23 @@ message PutResponse {
 message ConditionalPutRequest {
   option (gogoproto.equal) = true;
 
-  optional Span header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  Span header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   // The value to put.
-  optional Value value = 2 [(gogoproto.nullable) = false];
+  Value value = 2 [(gogoproto.nullable) = false];
   // Set exp_value.bytes empty to test for non-existence. Specify as nil
   // to indicate there should be no existing entry. This is different
   // from the expectation that the value exists but is empty.
-  optional Value exp_value = 3;
+  Value exp_value = 3;
   // NOTE: For internal use only! Set to indicate that the put is
   // writing to virgin keyspace and no reads are necessary to
   // rationalize MVCC.
-  optional bool blind = 4 [(gogoproto.nullable) = false];
+  bool blind = 4;
 }
 
 // A ConditionalPutResponse is the return value from the
 // ConditionalPut() method.
 message ConditionalPutResponse {
-  optional ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
 }
 
 // An InitPutRequest is the argument to the InitPut() method.
@@ -142,19 +142,19 @@ message ConditionalPutResponse {
 message InitPutRequest {
   option (gogoproto.equal) = true;
 
-  optional Span header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
-  optional Value value = 2 [(gogoproto.nullable) = false];
+  Span header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  Value value = 2 [(gogoproto.nullable) = false];
   // NOTE: For internal use only! Set to indicate that the put is
   // writing to virgin keyspace and no reads are necessary to
   // rationalize MVCC.
-  optional bool blind = 3 [(gogoproto.nullable) = false];
+  bool blind = 3;
   // If true, tombstones cause ConditionFailedErrors.
-  optional bool failOnTombstones = 4 [(gogoproto.nullable) = false];
+  bool failOnTombstones = 4;
 }
 
 // A InitPutResponse is the return value from the InitPut() method.
 message InitPutResponse {
-  optional ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
 }
 
 // An IncrementRequest is the argument to the Increment() method. It
@@ -166,28 +166,28 @@ message InitPutResponse {
 message IncrementRequest {
   option (gogoproto.equal) = true;
 
-  optional Span header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
-  optional int64 increment = 2 [(gogoproto.nullable) = false];
+  Span header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  int64 increment = 2;
 }
 
 // An IncrementResponse is the return value from the Increment
 // method. The new value after increment is specified in NewValue. If
 // the value could not be decoded as specified, Error will be set.
 message IncrementResponse {
-  optional ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
-  optional int64 new_value = 2 [(gogoproto.nullable) = false];
+  ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  int64 new_value = 2;
 }
 
 // A DeleteRequest is the argument to the Delete() method.
 message DeleteRequest {
   option (gogoproto.equal) = true;
 
-  optional Span header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  Span header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
 }
 
 // A DeleteResponse is the return value from the Delete() method.
 message DeleteResponse {
-  optional ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
 }
 
 // A DeleteRangeRequest is the argument to the DeleteRange() method. It
@@ -195,10 +195,10 @@ message DeleteResponse {
 message DeleteRangeRequest {
   option (gogoproto.equal) = true;
 
-  optional Span header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  Span header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   reserved 2;
   // return the keys that are deleted in the response.
-  optional bool return_keys = 3 [(gogoproto.nullable) = false];
+  bool return_keys = 3;
   // delete "inline" keys which are stored without MVCC timestamps. Note that
   // an "inline" DeleteRange will fail if it attempts to delete any keys which
   // contain timestamped (non-inline) values; this option should only be used on
@@ -210,13 +210,13 @@ message DeleteRangeRequest {
   //
   // Inline values cannot be deleted transactionally; a DeleteRange with
   // "inline" set to true will fail if it is executed within a transaction.
-  optional bool inline = 4 [(gogoproto.nullable) = false];
+  bool inline = 4;
 }
 
 // A DeleteRangeResponse is the return value from the DeleteRange()
 // method.
 message DeleteRangeResponse {
-  optional ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   // All the deleted keys if return_keys is set.
   repeated bytes keys = 2 [(gogoproto.casttype) = "Key"];
 }
@@ -229,17 +229,17 @@ message ScanRequest {
 
   reserved 2;
 
-  optional Span header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  Span header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
 
   // Set to true if the KeyValue pairs for all intents encountered during the
   // scan should also be returned. An error will be thrown if this is set to
   // true for a consistent scan.
-  optional bool return_intents = 3 [(gogoproto.nullable) = false];
+  bool return_intents = 3;
 }
 
 // A ScanResponse is the return value from the Scan() method.
 message ScanResponse {
-  optional ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   // Empty if no rows were scanned.
   repeated KeyValue rows = 2 [(gogoproto.nullable) = false];
   // Empty if return_intents was not set to true of if no intent rows were
@@ -255,17 +255,17 @@ message ReverseScanRequest {
 
   reserved 2;
 
-  optional Span header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  Span header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
 
   // Set to true if the KeyValue pairs for all intents encountered during the
   // scan should also be returned. An error will be thrown if this is set to
   // true for a consistent scan.
-  optional bool return_intents = 3 [(gogoproto.nullable) = false];
+  bool return_intents = 3;
 }
 
 // A ReverseScanResponse is the return value from the ReverseScan() method.
 message ReverseScanResponse {
-  optional ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   // Empty if no rows were scanned.
   repeated KeyValue rows = 2 [(gogoproto.nullable) = false];
   // Empty if return_intents was not set to true of if no intent rows were
@@ -280,27 +280,27 @@ message ReverseScanResponse {
 message CheckConsistencyRequest {
   option (gogoproto.equal) = true;
 
-  optional Span header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  Span header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   // log a diff of inconsistencies if such inconsistencies are found.
-  optional bool with_diff = 2 [(gogoproto.nullable) = false];
+  bool with_diff = 2;
 }
 
 // A CheckConsistencyResponse is the return value from the CheckConsistency() method.
 // If a replica finds itself to be inconsistent with its lease holder it will panic.
 message CheckConsistencyResponse {
-  optional ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
 }
 
 // A BeginTransactionRequest is the argument to the BeginTransaction() method.
 message BeginTransactionRequest {
   option (gogoproto.equal) = true;
 
-  optional Span header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  Span header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
 }
 
 // A BeginTransactionResponse is the return value from the BeginTransaction() method.
 message BeginTransactionResponse {
-  optional ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
 }
 
 // An EndTransactionRequest is the argument to the EndTransaction() method. It
@@ -308,9 +308,9 @@ message BeginTransactionResponse {
 message EndTransactionRequest {
   option (gogoproto.equal) = true;
 
-  optional Span header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  Span header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   // False to abort and rollback.
-  optional bool commit = 2 [(gogoproto.nullable) = false];
+  bool commit = 2;
   // If set, deadline represents the maximum timestamp at which the transaction
   // can commit (i.e. the maximum timestamp for the txn's writes). If
   // EndTransaction(Commit=true) finds that the txn's timestamp has been pushed
@@ -321,17 +321,17 @@ message EndTransactionRequest {
   // trouble with the deadline check. A Serializable txn that has had its
   // timestamp pushed has already lost before the deadline check: it will be
   // forced to restart.
-  optional util.hlc.Timestamp deadline = 3;
-  // Optional commit triggers. Note that commit triggers are for
+  util.hlc.Timestamp deadline = 3;
+  // commit triggers. Note that commit triggers are for
   // internal use only and will cause an error if requested through the
   // external-facing KV API.
-  optional InternalCommitTrigger internal_commit_trigger = 4;
+  InternalCommitTrigger internal_commit_trigger = 4;
   // List of intents written by the transaction.
   repeated Span intent_spans = 5 [(gogoproto.nullable) = false];
   // Requires that the transaction completes as a 1 phase commit. This
   // guarantees that all writes are to the same range and that no
   // intents are left in the event of an error.
-  optional bool require_1pc = 6 [(gogoproto.nullable) = false, (gogoproto.customname) = "Require1PC"];
+  bool require_1pc = 6 [(gogoproto.customname) = "Require1PC"];
 }
 
 // An EndTransactionResponse is the return value from the
@@ -342,13 +342,13 @@ message EndTransactionRequest {
 // final txn commit timestamp in order to preserve causal ordering
 // between subsequent transactions.
 message EndTransactionResponse {
-  optional ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   reserved 2;
   reserved 3;
   // True if the transaction committed on the one phase commit path.
   // This means that all writes which were part of the transaction
   // were written as a single, atomic write batch to just one range.
-  optional bool one_phase_commit = 4 [(gogoproto.nullable) = false];
+  bool one_phase_commit = 4;
 }
 
 // An AdminSplitRequest is the argument to the AdminSplit() method. The
@@ -374,14 +374,14 @@ message EndTransactionResponse {
 message AdminSplitRequest {
   option (gogoproto.equal) = true;
 
-  optional Span header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
-  optional bytes split_key = 2 [(gogoproto.casttype) = "Key"];
+  Span header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  bytes split_key = 2 [(gogoproto.casttype) = "Key"];
 }
 
 // An AdminSplitResponse is the return value from the AdminSplit()
 // method.
 message AdminSplitResponse {
-  optional ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
 }
 
 // An AdminMergeRequest is the argument to the AdminMerge() method. A
@@ -396,13 +396,13 @@ message AdminSplitResponse {
 message AdminMergeRequest {
   option (gogoproto.equal) = true;
 
-  optional Span header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  Span header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
 }
 
 // An AdminMergeResponse is the return value from the AdminMerge()
 // method.
 message AdminMergeResponse {
-  optional ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
 }
 
 // An AdminTransferLeaseRequest is the argument to the AdminTransferLease()
@@ -412,12 +412,12 @@ message AdminMergeResponse {
 message AdminTransferLeaseRequest {
   option (gogoproto.equal) = true;
 
-  optional Span header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
-  optional int32 target = 2 [(gogoproto.nullable) = false, (gogoproto.casttype) = "StoreID"];
+  Span header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  int32 target = 2 [(gogoproto.casttype) = "StoreID"];  
 }
 
 message AdminTransferLeaseResponse {
-  optional ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
 }
 
 // An AdminChangeReplicasRequest is the argument to the AdminChangeReplicas()
@@ -426,13 +426,13 @@ message AdminTransferLeaseResponse {
 message AdminChangeReplicasRequest {
   option (gogoproto.equal) = true;
 
-  optional Span header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
-  optional ReplicaChangeType change_type = 2 [(gogoproto.nullable) = false];
+  Span header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  ReplicaChangeType change_type = 2;
   repeated ReplicationTarget targets = 3 [(gogoproto.nullable) = false];
 }
 
 message AdminChangeReplicasResponse {
-  optional ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
 }
 
 // A RangeLookupRequest is arguments to the RangeLookup() method. A
@@ -449,12 +449,12 @@ message AdminChangeReplicasResponse {
 message RangeLookupRequest {
   option (gogoproto.equal) = true;
 
-  optional Span header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
-  optional int32 max_ranges = 2 [(gogoproto.nullable) = false];
+  Span header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  int32 max_ranges = 2;
   reserved 3;
   // Use a reverse scan to pre-fill the range descriptor cache instead
   // of an ascending scan.
-  optional bool reverse = 4 [(gogoproto.nullable) = false];
+  bool reverse = 4;
 }
 
 // A RangeLookupResponse is the return value from the RangeLookup()
@@ -463,7 +463,7 @@ message RangeLookupRequest {
 // ranges beyond the requested range to pre-fill the range descriptor
 // cache.
 message RangeLookupResponse {
-  optional ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   repeated RangeDescriptor ranges = 2 [(gogoproto.nullable) = false];
   repeated RangeDescriptor prefetched_ranges = 3 [(gogoproto.nullable) = false];
 }
@@ -476,8 +476,8 @@ message RangeLookupResponse {
 message HeartbeatTxnRequest {
   option (gogoproto.equal) = true;
 
-  optional Span header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
-  optional util.hlc.Timestamp now = 2 [(gogoproto.nullable) = false];
+  Span header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  util.hlc.Timestamp now = 2 [(gogoproto.nullable) = false];
 }
 
 // A HeartbeatTxnResponse is the return value from the HeartbeatTxn()
@@ -485,7 +485,7 @@ message HeartbeatTxnRequest {
 // returned transaction lets the coordinator know the disposition of
 // the transaction (i.e. aborted, committed, or pending).
 message HeartbeatTxnResponse {
-  optional ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
 }
 
 // A GCRequest is arguments to the GC() method. It's sent by range
@@ -493,26 +493,26 @@ message HeartbeatTxnResponse {
 message GCRequest {
   option (gogoproto.equal) = true;
 
-  optional Span header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  Span header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
 
   message GCKey {
     option (gogoproto.equal) = true;
 
-    optional bytes key = 1 [(gogoproto.casttype) = "Key"];
-    optional util.hlc.Timestamp timestamp = 2 [(gogoproto.nullable) = false];
+    bytes key = 1 [(gogoproto.casttype) = "Key"];
+    util.hlc.Timestamp timestamp = 2 [(gogoproto.nullable) = false];
   }
   repeated GCKey keys = 3 [(gogoproto.nullable) = false];
   // Threshold is the expiration timestamp.
-  optional util.hlc.Timestamp threshold = 4 [(gogoproto.nullable) = false];
+  util.hlc.Timestamp threshold = 4 [(gogoproto.nullable) = false];
   // TxnSpanGCThreshold is the timestamp below which inactive transactions were
   // considered for GC (and thus might have been removed).
-  optional util.hlc.Timestamp txn_span_gc_threshold = 5 [(gogoproto.nullable) = false,
+  util.hlc.Timestamp txn_span_gc_threshold = 5 [(gogoproto.nullable) = false,
       (gogoproto.customname) = "TxnSpanGCThreshold"];
 }
 
 // A GCResponse is the return value from the GC() method.
 message GCResponse {
-  optional ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
 }
 
 // TxnPushType determines what action to take when pushing a transaction.
@@ -546,35 +546,35 @@ enum PushTxnType {
 message PushTxnRequest {
   option (gogoproto.equal) = true;
 
-  optional Span header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  Span header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   // Transaction which encountered the intent, if applicable. For a
   // non-transactional pusher, pusher_txn will only have the priority set (in
   // particular, ID won't be set). Used to compare priorities and timestamps if
   // priorities are equal.
-  optional Transaction pusher_txn = 2 [(gogoproto.nullable) = false];
+  Transaction pusher_txn = 2 [(gogoproto.nullable) = false];
   // Transaction to be pushed, as specified at the intent which led to
   // the push transaction request. Note that this may not be the most
   // up-to-date value of the transaction record, but will be set or
   // merged as appropriate.
-  optional storage.engine.enginepb.TxnMeta pushee_txn = 3 [(gogoproto.nullable) = false];
+  storage.engine.enginepb.TxnMeta pushee_txn = 3 [(gogoproto.nullable) = false];
   // PushTo is the timestamp just after which PusheeTxn is attempted to be
   // pushed. During conflict resolution, it should be set to the timestamp
   // of the its conflicting write.
-  optional util.hlc.Timestamp push_to = 4 [(gogoproto.nullable) = false];
+  util.hlc.Timestamp push_to = 4 [(gogoproto.nullable) = false];
   // Now holds the timestamp used to compare the last heartbeat of the pushee
   // against. This is necessary since the request header's timestamp does not
   // necessarily advance with the node clock across retries and hence cannot
   // detect abandoned transactions.
-  optional util.hlc.Timestamp now = 5 [(gogoproto.nullable) = false];
+  util.hlc.Timestamp now = 5 [(gogoproto.nullable) = false];
   // Readers set this to PUSH_TIMESTAMP to move pushee_txn's provisional
   // commit timestamp forward. Writers set this to PUSH_ABORT to request
   // that pushee_txn be aborted if possible. Inconsistent readers set
   // this to PUSH_TOUCH to determine whether the pushee can be aborted
   // due to inactivity (based on the now field).
-  optional PushTxnType push_type = 6 [(gogoproto.nullable) = false];
+  PushTxnType push_type = 6;
   // Forces the push by overriding the normal checks in PushTxn to
   // either abort or push the timestamp.
-  optional bool force = 7 [(gogoproto.nullable) = false];
+  bool force = 7;
 
   reserved 8;
 }
@@ -585,12 +585,12 @@ message PushTxnRequest {
 // subsequently invoke ResolveIntent() on the conflicted key. It
 // returns an error otherwise.
 message PushTxnResponse {
-  optional ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   // pushee_txn is non-nil if the transaction was pushed and contains
   // the current value of the transaction.
   // TODO(tschottdorf): Maybe this can be a TxnMeta instead; probably requires
   // factoring out the new Priority.
-  optional Transaction pushee_txn = 2 [(gogoproto.nullable) = false];
+  Transaction pushee_txn = 2 [(gogoproto.nullable) = false];
 }
 
 // A QueryTxnResponse is arguments to the QueryTxn() method. It's sent
@@ -600,22 +600,22 @@ message PushTxnResponse {
 message QueryTxnRequest {
   option (gogoproto.equal) = true;
 
-  optional Span header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  Span header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   // Transaction record to query.
-  optional storage.engine.enginepb.TxnMeta txn = 2 [(gogoproto.nullable) = false];
+  storage.engine.enginepb.TxnMeta txn = 2 [(gogoproto.nullable) = false];
   // If true, the query will not return until there are changes to either the
   // transaction status or priority -OR- to the set of dependent transactions.
-  optional bool wait_for_update = 3 [(gogoproto.nullable) = false];
+  bool wait_for_update = 3;
   // Set of known dependent transactions.
   repeated bytes known_waiting_txns = 4 [(gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID"];
 }
 
 // A QueryTxnResponse is the return value from the QueryTxn() method.
 message QueryTxnResponse {
-  optional ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   // Contains the current state of the queried transaction. If the queried
   // transaction record does not exist, this will be empty.
-  optional Transaction queried_txn = 2 [(gogoproto.nullable) = false];
+  Transaction queried_txn = 2 [(gogoproto.nullable) = false];
   // Specifies a list of transaction IDs which are waiting on the txn.
   repeated bytes waiting_txns = 3 [(gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID"];
 }
@@ -627,20 +627,20 @@ message QueryTxnResponse {
 message ResolveIntentRequest {
   option (gogoproto.equal) = true;
 
-  optional Span header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  Span header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   // The transaction whose intent is being resolved.
-  optional storage.engine.enginepb.TxnMeta intent_txn = 2 [(gogoproto.nullable) = false];
+  storage.engine.enginepb.TxnMeta intent_txn = 2 [(gogoproto.nullable) = false];
   // The status of the transaction.
-  optional TransactionStatus status = 3 [(gogoproto.nullable) = false];
+  TransactionStatus status = 3;
   // Optionally poison the sequence cache for the transaction the intent's
   // range.
-  optional bool poison = 4 [(gogoproto.nullable) = false];
+  bool poison = 4;
 }
 
 // A ResolveIntentResponse is the return value from the
 // ResolveIntent() method.
 message ResolveIntentResponse {
-  optional ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
 }
 
 // A ResolveIntentRangeRequest is arguments to the ResolveIntentRange() method.
@@ -650,14 +650,14 @@ message ResolveIntentResponse {
 message ResolveIntentRangeRequest {
   option (gogoproto.equal) = true;
 
-  optional Span header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  Span header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   // The transaction whose intents are being resolved.
-  optional storage.engine.enginepb.TxnMeta intent_txn = 2 [(gogoproto.nullable) = false];
+  storage.engine.enginepb.TxnMeta intent_txn = 2 [(gogoproto.nullable) = false];
   // The status of the transaction.
-  optional TransactionStatus status = 3 [(gogoproto.nullable) = false];
+  TransactionStatus status = 3;
   // Optionally poison the sequence cache for the transaction on all ranges
   // on which the intents reside.
-  optional bool poison = 4 [(gogoproto.nullable) = false];
+  bool poison = 4;
 }
 
 // A NoopResponse is the return value from a no-op operation.
@@ -669,7 +669,7 @@ message NoopRequest {}
 // A ResolveIntentRangeResponse is the return value from the
 // ResolveIntent() method.
 message ResolveIntentRangeResponse {
-  optional ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
 }
 
 // A MergeRequest contains arguments to the Merge() method. It
@@ -678,13 +678,13 @@ message ResolveIntentRangeResponse {
 message MergeRequest {
   option (gogoproto.equal) = true;
 
-  optional Span header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
-  optional Value value = 2 [(gogoproto.nullable) = false];
+  Span header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  Value value = 2 [(gogoproto.nullable) = false];
 }
 
 // MergeResponse is the response to a Merge() operation.
 message MergeResponse {
-  optional ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
 }
 
 // TruncateLogRequest is used to remove a prefix of the raft log. While there
@@ -695,22 +695,21 @@ message MergeResponse {
 message TruncateLogRequest {
   option (gogoproto.equal) = true;
 
-  optional Span header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  Span header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
 
   // Log entries < this index are to be discarded.
-  optional uint64 index = 2 [(gogoproto.nullable) = false];
+  uint64 index = 2;
 
   // RangeID is used to double check that the correct range is being truncated.
   // The header specifies a span, start and end keys, but not the range id
   // itself. The range may have changed from the one specified in the header
   // in the case of a merge.
-  optional int64 range_id = 3 [(gogoproto.nullable) = false,
-      (gogoproto.customname) = "RangeID", (gogoproto.casttype) = "RangeID"];
+  int64 range_id = 3 [(gogoproto.customname) = "RangeID", (gogoproto.casttype) = "RangeID"];
 }
 
 // TruncateLogResponse is the response to a TruncateLog() operation.
 message TruncateLogResponse {
-  optional ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
 }
 
 // A RequestLeaseRequest is arguments to the RequestLease()
@@ -719,11 +718,11 @@ message TruncateLogResponse {
 message RequestLeaseRequest {
   option (gogoproto.equal) = true;
 
-  optional Span header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
-  optional Lease lease = 2 [(gogoproto.nullable) = false];
+  Span header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  Lease lease = 2 [(gogoproto.nullable) = false];
   // The previous lease is specified by the caller to verify
   // it has not changed when executing this command.
-  optional Lease prev_lease = 3 [(gogoproto.nullable) = false];
+  Lease prev_lease = 3 [(gogoproto.nullable) = false];
 }
 
 // A TransferLeaseRequest represents the arguments to the TransferLease()
@@ -741,11 +740,11 @@ message RequestLeaseRequest {
 message TransferLeaseRequest {
   option (gogoproto.equal) = true;
 
-  optional Span header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
-  optional Lease lease = 2 [(gogoproto.nullable) = false];
+  Span header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  Lease lease = 2 [(gogoproto.nullable) = false];
   // The previous lease is specified by the caller to verify
   // it has not changed when executing this command.
-  optional Lease prev_lease = 3 [(gogoproto.nullable) = false];
+  Lease prev_lease = 3 [(gogoproto.nullable) = false];
 }
 
 // LeaseInfoRequest is the argument to the LeaseInfo() method, for getting
@@ -755,20 +754,20 @@ message TransferLeaseRequest {
 message LeaseInfoRequest{
   option (gogoproto.equal) = true;
 
-  optional Span header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  Span header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
 }
 // LeaseInfoResponse is the response to a LeaseInfo() operation.
 message LeaseInfoResponse{
-  optional ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   // The last lease known by the replica serving the request. It can also be the
   // tentative future lease, if a lease transfer is in progress.
-  optional Lease lease = 2 [(gogoproto.nullable) = false];
+  Lease lease = 2 [(gogoproto.nullable) = false];
 }
 
 // A RequestLeaseResponse is the response to a RequestLease() or TransferLease()
 // operation.
 message RequestLeaseResponse{
-  optional ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
 }
 
 // A ComputeChecksumRequest is arguments to the ComputeChecksum() method, to
@@ -778,33 +777,33 @@ message RequestLeaseResponse{
 message ComputeChecksumRequest {
   option (gogoproto.equal) = true;
 
-  optional Span header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  Span header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   // The version used to pick the checksum method. It allows us to use a
   // consistent checksumming method across replicas.
-  optional uint32 version = 2 [(gogoproto.nullable) = false];
+  uint32 version = 2;
   // A unique identifier to match a future storage.CollectChecksumRequest with
   // this request.
-  optional bytes checksum_id = 3 [(gogoproto.nullable) = false,
+  bytes checksum_id = 3 [(gogoproto.nullable) = false,
       (gogoproto.customname) = "ChecksumID",
       (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID"];
   // Compute a checksum along with a snapshot of the entire range, that will be
   // used in logging a diff during checksum verification.
-  optional bool snapshot = 4 [(gogoproto.nullable) = false];
+  bool snapshot = 4;
 }
 
 // A ComputeChecksumResponse is the response to a ComputeChecksum() operation.
 message ComputeChecksumResponse {
-  optional ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
 }
 
 message DeprecatedVerifyChecksumRequest {
   option (gogoproto.equal) = true;
 
-  optional Span header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  Span header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
 }
 
 message DeprecatedVerifyChecksumResponse {
-  optional ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
 }
 
 enum ExportStorageProvider {
@@ -819,49 +818,49 @@ enum ExportStorageProvider {
 message ExportStorage {
   option (gogoproto.equal) = true;
 
-  optional ExportStorageProvider provider = 1 [(gogoproto.nullable) = false];
+  ExportStorageProvider provider = 1;
 
   message LocalFilePath {
     option (gogoproto.equal) = true;
 
-    optional string path  = 1 [(gogoproto.nullable) = false];
+    string path = 1;
   }
   message Http {
     option (gogoproto.equal) = true;
 
-     optional string baseUri = 1 [(gogoproto.nullable) = false];
+    string baseUri = 1;
   }
   message S3 {
     option (gogoproto.equal) = true;
 
-    optional string bucket = 1 [(gogoproto.nullable) = false];
-    optional string prefix = 2 [(gogoproto.nullable) = false];
+    string bucket = 1;
+    string prefix = 2;
 
-    optional string access_key = 3 [(gogoproto.nullable) = false];
-    optional string secret= 4 [(gogoproto.nullable) = false];
-    optional string temp_token = 5 [(gogoproto.nullable) = false];
+    string access_key = 3;
+    string secret = 4;
+    string temp_token = 5;
   }
   message GCS {
     option (gogoproto.equal) = true;
 
-    optional string bucket = 1 [(gogoproto.nullable) = false];
-    optional string prefix = 2 [(gogoproto.nullable) = false];
-    optional string auth = 3 [(gogoproto.nullable) = false];
+    string bucket = 1;
+    string prefix = 2;
+    string auth = 3;
   }
   message Azure {
     option (gogoproto.equal) = true;
 
-    optional string container = 1 [(gogoproto.nullable) = false];
-    optional string prefix = 2 [(gogoproto.nullable) = false];
+    string container = 1;
+    string prefix = 2;
 
-    optional string account_name = 3 [(gogoproto.nullable) = false];
-    optional string account_key = 4 [(gogoproto.nullable) = false];
+    string account_name = 3;
+    string account_key = 4;
   }
-  optional LocalFilePath LocalFile = 2 [(gogoproto.nullable) = false];
-  optional Http HttpPath = 3 [(gogoproto.nullable) = false];
-  optional GCS GoogleCloudConfig = 4;
-  optional S3 S3Config = 5;
-  optional Azure AzureConfig = 6;
+  LocalFilePath LocalFile = 2 [(gogoproto.nullable) = false];
+  Http HttpPath = 3 [(gogoproto.nullable) = false];
+  GCS GoogleCloudConfig = 4;
+  S3 S3Config = 5;
+  Azure AzureConfig = 6;
 }
 
 // WriteBatchRequest is arguments to the WriteBatch() method, to apply the
@@ -869,17 +868,17 @@ message ExportStorage {
 message WriteBatchRequest {
   option (gogoproto.equal) = true;
 
-  optional Span header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  Span header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   // The span of keys encoded in data, duplicated because the header span can
   // be modified by DistSender and we use this one to fail fast.
-  optional Span data_span = 2 [(gogoproto.nullable) = false];
+  Span data_span = 2 [(gogoproto.nullable) = false];
   // A BatchRepr, the serialized form of a RocksDB Batch.
-  optional bytes data = 3;
+  bytes data = 3;
 }
 
 // WriteBatchResponse is the response to a WriteBatch() operation.
 message WriteBatchResponse {
-  optional ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
 }
 
 enum MVCCFilter {
@@ -892,17 +891,17 @@ enum MVCCFilter {
 message ExportRequest {
   option (gogoproto.equal) = true;
 
-  optional Span header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
-  optional ExportStorage storage = 2 [(gogoproto.nullable) = false];
-  optional util.hlc.Timestamp start_time = 3 [(gogoproto.nullable) = false];
-  optional MVCCFilter mvcc_filter = 4 [(gogoproto.nullable) = false, (gogoproto.customname) = "MVCCFilter"];
+  Span header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  ExportStorage storage = 2 [(gogoproto.nullable) = false];
+  util.hlc.Timestamp start_time = 3 [(gogoproto.nullable) = false];
+  MVCCFilter mvcc_filter = 4 [(gogoproto.customname) = "MVCCFilter"];
 }
 
 message BulkOpSummary {
-    optional int64 data_size = 1 [(gogoproto.nullable) = false];
-    optional int64 rows = 2 [(gogoproto.nullable) = false];
-    optional int64 index_entries = 3 [(gogoproto.nullable) = false];
-    optional int64 system_records = 4 [(gogoproto.nullable) = false];
+  int64 data_size = 1;
+  int64 rows = 2;
+  int64 index_entries = 3;
+  int64 system_records = 4;
 }
 
 // ExportResponse is the response to an Export() operation.
@@ -910,16 +909,16 @@ message ExportResponse {
   // File describes a keyrange that has been dumped to a file at the given
   // path.
   message File {
-    optional Span span = 1 [(gogoproto.nullable) = false];
-    optional string path = 2 [(gogoproto.nullable) = false];
+    Span span = 1 [(gogoproto.nullable) = false];
+    string path = 2;
     reserved 3;
     reserved 4;
-    optional bytes sha512 = 5;
+    bytes sha512 = 5;
 
-    optional BulkOpSummary exported = 6 [(gogoproto.nullable) = false];
+    BulkOpSummary exported = 6 [(gogoproto.nullable) = false];
   }
 
-  optional ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   repeated File files = 2 [(gogoproto.nullable) = false];
 }
 
@@ -931,28 +930,28 @@ message ImportRequest {
   message File {
     option (gogoproto.equal) = true;
 
-    optional ExportStorage dir = 1 [(gogoproto.nullable) = false];
-    optional string path = 2 [(gogoproto.nullable) = false];
+    ExportStorage dir = 1 [(gogoproto.nullable) = false];
+    string path = 2;
     reserved 3;
-    optional bytes sha512 = 4;
+    bytes sha512 = 4;
   }
-  optional Span header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  Span header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   // Files contains an ordered list of files, each containing kv entries to
   // import. Entries in later files with the same key override earlier ones.
   repeated File files = 2 [(gogoproto.nullable) = false];
   // DataSpan is the pre-rewrite keyrange of the data in `Files`.
-  optional Span data_span = 3 [(gogoproto.nullable) = false];
+  Span data_span = 3 [(gogoproto.nullable) = false];
   // EndTime, if not the zero value, will cause only entries before it to be
   // imported.
-  optional util.hlc.Timestamp end_time = 6 [(gogoproto.nullable) = false];
+  util.hlc.Timestamp end_time = 6 [(gogoproto.nullable) = false];
   reserved 4;
   message TableRekey {
     option (gogoproto.equal) = true;
 
     // OldID is the previous ID of `new_desc`.
-    optional uint32 old_id = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "OldID"];
+    uint32 old_id = 1 [(gogoproto.customname) = "OldID"];
     // NewDesc is an encoded Descriptor message.
-    optional bytes new_desc = 2;
+    bytes new_desc = 2;
   }
   // Rekeys contains the descriptors for the data being Imported and the
   // previous ID for each (which is the ID used in the source data pointed to by
@@ -965,9 +964,9 @@ message ImportRequest {
 
 // ImportResponse is the response to a Import() operation.
 message ImportResponse {
-  optional ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   reserved 2;
-  optional BulkOpSummary imported = 3 [(gogoproto.nullable) = false];
+  BulkOpSummary imported = 3 [(gogoproto.nullable) = false];
 }
 
 // AdminScatterRequest is the argument to the AdminScatter() method, which moves
@@ -977,15 +976,15 @@ message ImportResponse {
 message AdminScatterRequest {
   option (gogoproto.equal) = true;
 
-  optional Span header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  Span header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
 }
 
 // ScatterResponse is the response to a Scatter() operation.
 message AdminScatterResponse {
-  optional ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
 
   message Range {
-    optional Span span = 1 [(gogoproto.nullable) = false];
+    Span span = 1 [(gogoproto.nullable) = false];
     reserved 2;
   }
   repeated Range ranges = 2 [(gogoproto.nullable) = false];
@@ -996,16 +995,16 @@ message AdminScatterResponse {
 message AddSSTableRequest {
   option (gogoproto.equal) = true;
 
-  optional Span header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
-  optional bytes data = 2;
+  Span header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  bytes data = 2;
 }
 
 // AddSSTableResponse is the response to a AddSSTable() operation.
 message AddSSTableResponse {
-  optional ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
 }
 
-// A RequestUnion contains exactly one of the optional requests.
+// A RequestUnion contains exactly one of the requests.
 // The values added here must match those in ResponseUnion.
 //
 // WARNING: Do not remove fields from RequestUnion. Instead, remove
@@ -1018,46 +1017,46 @@ message AddSSTableResponse {
 message RequestUnion {
   option (gogoproto.onlyone) = true;
 
-  optional GetRequest get = 1;
-  optional PutRequest put = 2;
-  optional ConditionalPutRequest conditional_put = 3;
-  optional IncrementRequest increment = 4;
-  optional DeleteRequest delete = 5;
-  optional DeleteRangeRequest delete_range = 6;
-  optional ScanRequest scan = 7;
-  optional BeginTransactionRequest begin_transaction = 8;
-  optional EndTransactionRequest end_transaction = 9;
-  optional AdminSplitRequest admin_split = 10;
-  optional AdminMergeRequest admin_merge = 11;
-  optional AdminTransferLeaseRequest admin_transfer_lease = 29;
-  optional AdminChangeReplicasRequest admin_change_replicas = 35;
-  optional HeartbeatTxnRequest heartbeat_txn = 12;
-  optional GCRequest gc = 13;
-  optional PushTxnRequest push_txn = 14;
-  optional RangeLookupRequest range_lookup = 15;
-  optional ResolveIntentRequest resolve_intent = 16;
-  optional ResolveIntentRangeRequest resolve_intent_range = 17;
-  optional MergeRequest merge = 18;
-  optional TruncateLogRequest truncate_log = 19;
-  optional RequestLeaseRequest request_lease = 20;
-  optional ReverseScanRequest reverse_scan = 21;
-  optional ComputeChecksumRequest compute_checksum = 22;
-  optional DeprecatedVerifyChecksumRequest deprecated_verify_checksum = 23;
-  optional CheckConsistencyRequest check_consistency = 24;
-  optional NoopRequest noop = 25;
-  optional InitPutRequest init_put = 26;
+  GetRequest get = 1;
+  PutRequest put = 2;
+  ConditionalPutRequest conditional_put = 3;
+  IncrementRequest increment = 4;
+  DeleteRequest delete = 5;
+  DeleteRangeRequest delete_range = 6;
+  ScanRequest scan = 7;
+  BeginTransactionRequest begin_transaction = 8;
+  EndTransactionRequest end_transaction = 9;
+  AdminSplitRequest admin_split = 10;
+  AdminMergeRequest admin_merge = 11;
+  AdminTransferLeaseRequest admin_transfer_lease = 29;
+  AdminChangeReplicasRequest admin_change_replicas = 35;
+  HeartbeatTxnRequest heartbeat_txn = 12;
+  GCRequest gc = 13;
+  PushTxnRequest push_txn = 14;
+  RangeLookupRequest range_lookup = 15;
+  ResolveIntentRequest resolve_intent = 16;
+  ResolveIntentRangeRequest resolve_intent_range = 17;
+  MergeRequest merge = 18;
+  TruncateLogRequest truncate_log = 19;
+  RequestLeaseRequest request_lease = 20;
+  ReverseScanRequest reverse_scan = 21;
+  ComputeChecksumRequest compute_checksum = 22;
+  DeprecatedVerifyChecksumRequest deprecated_verify_checksum = 23;
+  CheckConsistencyRequest check_consistency = 24;
+  NoopRequest noop = 25;
+  InitPutRequest init_put = 26;
   reserved 27;
-  optional TransferLeaseRequest transfer_lease = 28;
-  optional LeaseInfoRequest lease_info = 30;
-  optional WriteBatchRequest write_batch = 31;
-  optional ExportRequest export = 32;
-  optional ImportRequest import = 34;
-  optional QueryTxnRequest query_txn = 33;
-  optional AdminScatterRequest admin_scatter = 36;
-  optional AddSSTableRequest add_sstable = 37;
+  TransferLeaseRequest transfer_lease = 28;
+  LeaseInfoRequest lease_info = 30;
+  WriteBatchRequest write_batch = 31;
+  ExportRequest export = 32;
+  ImportRequest import = 34;
+  QueryTxnRequest query_txn = 33;
+  AdminScatterRequest admin_scatter = 36;
+  AddSSTableRequest add_sstable = 37;
 }
 
-// A ResponseUnion contains exactly one of the optional responses.
+// A ResponseUnion contains exactly one of the responses.
 // The values added here must match those in RequestUnion.
 //
 // WARNING: Do not remove fields from ResponseUnion. Instead, remove
@@ -1067,43 +1066,43 @@ message RequestUnion {
 message ResponseUnion {
   option (gogoproto.onlyone) = true;
 
-  optional GetResponse get = 1;
-  optional PutResponse put = 2;
-  optional ConditionalPutResponse conditional_put = 3;
-  optional IncrementResponse increment = 4;
-  optional DeleteResponse delete = 5;
-  optional DeleteRangeResponse delete_range = 6;
-  optional ScanResponse scan = 7;
-  optional BeginTransactionResponse begin_transaction = 8;
-  optional EndTransactionResponse end_transaction = 9;
-  optional AdminSplitResponse admin_split = 10;
-  optional AdminMergeResponse admin_merge = 11;
-  optional AdminTransferLeaseResponse admin_transfer_lease = 29;
-  optional AdminChangeReplicasResponse admin_change_replicas = 35;
-  optional HeartbeatTxnResponse heartbeat_txn = 12;
-  optional GCResponse gc = 13;
-  optional PushTxnResponse push_txn = 14;
-  optional RangeLookupResponse range_lookup = 15;
-  optional ResolveIntentResponse resolve_intent = 16;
-  optional ResolveIntentRangeResponse resolve_intent_range = 17;
-  optional MergeResponse merge = 18;
-  optional TruncateLogResponse truncate_log = 19;
-  optional RequestLeaseResponse request_lease = 20;
-  optional ReverseScanResponse reverse_scan = 21;
-  optional ComputeChecksumResponse compute_checksum = 22;
-  optional DeprecatedVerifyChecksumResponse deprecated_verify_checksum = 23;
-  optional CheckConsistencyResponse check_consistency = 24;
-  optional NoopResponse noop = 25;
-  optional InitPutResponse init_put = 26;
+  GetResponse get = 1;
+  PutResponse put = 2;
+  ConditionalPutResponse conditional_put = 3;
+  IncrementResponse increment = 4;
+  DeleteResponse delete = 5;
+  DeleteRangeResponse delete_range = 6;
+  ScanResponse scan = 7;
+  BeginTransactionResponse begin_transaction = 8;
+  EndTransactionResponse end_transaction = 9;
+  AdminSplitResponse admin_split = 10;
+  AdminMergeResponse admin_merge = 11;
+  AdminTransferLeaseResponse admin_transfer_lease = 29;
+  AdminChangeReplicasResponse admin_change_replicas = 35;
+  HeartbeatTxnResponse heartbeat_txn = 12;
+  GCResponse gc = 13;
+  PushTxnResponse push_txn = 14;
+  RangeLookupResponse range_lookup = 15;
+  ResolveIntentResponse resolve_intent = 16;
+  ResolveIntentRangeResponse resolve_intent_range = 17;
+  MergeResponse merge = 18;
+  TruncateLogResponse truncate_log = 19;
+  RequestLeaseResponse request_lease = 20;
+  ReverseScanResponse reverse_scan = 21;
+  ComputeChecksumResponse compute_checksum = 22;
+  DeprecatedVerifyChecksumResponse deprecated_verify_checksum = 23;
+  CheckConsistencyResponse check_consistency = 24;
+  NoopResponse noop = 25;
+  InitPutResponse init_put = 26;
   reserved 27;
   reserved 28; // TransferLease and RequestLease both use RequestLeaseResponse
-  optional LeaseInfoResponse lease_info = 30;
-  optional WriteBatchResponse write_batch = 31;
-  optional ExportResponse export = 32;
-  optional ImportResponse import = 34;
-  optional QueryTxnResponse query_txn = 33;
-  optional AdminScatterResponse admin_scatter = 36;
-  optional AddSSTableResponse add_sstable = 37;
+  LeaseInfoResponse lease_info = 30;
+  WriteBatchResponse write_batch = 31;
+  ExportResponse export = 32;
+  ImportResponse import = 34;
+  QueryTxnResponse query_txn = 33;
+  AdminScatterResponse admin_scatter = 36;
+  AddSSTableResponse add_sstable = 37;
 }
 
 // A Header is attached to a BatchRequest, encapsulating routing and auxiliary
@@ -1113,14 +1112,13 @@ message Header {
   // timestamp specifies time at which read or writes should be
   // performed. If the timestamp is set to zero value, its value
   // is initialized to the wall time of the receiving node.
-  optional util.hlc.Timestamp timestamp = 1 [(gogoproto.nullable) = false];
+  util.hlc.Timestamp timestamp = 1 [(gogoproto.nullable) = false];
   // replica specifies the destination of the request.
-  optional ReplicaDescriptor replica = 2 [(gogoproto.nullable) = false];
+  ReplicaDescriptor replica = 2 [(gogoproto.nullable) = false];
   // range_id specifies the ID of the Raft consensus group which the key
   // range belongs to. This is used by the receiving node to route the
   // request to the correct range.
-  optional int64 range_id = 3 [(gogoproto.nullable) = false,
-      (gogoproto.customname) = "RangeID", (gogoproto.casttype) = "RangeID"];
+  int64 range_id = 3 [(gogoproto.customname) = "RangeID", (gogoproto.casttype) = "RangeID"];
   // user_priority allows any command's priority to be biased from the
   // default random priority. It specifies a multiple. If set to 0.5,
   // the chosen priority will be 1/2x as likely to beat any default
@@ -1130,18 +1128,17 @@ message Header {
   // priority is treated the same as 1. This value is ignored if txn
   // is specified. The min and max user priorities are set via
   // MinUserPriority and MaxUserPriority in data.go.
-  optional double user_priority = 4 [(gogoproto.nullable) = false,
-      (gogoproto.casttype) = "UserPriority"];
+  double user_priority = 4 [(gogoproto.casttype) = "UserPriority"];
   // txn is set non-nil if a transaction is underway. To start a txn,
   // the first request should set this field to non-nil with name and
   // isolation level set as desired. The response will contain the
   // fully-initialized transaction with txn ID, priority, initial
   // timestamp, and maximum timestamp.
-  optional Transaction txn = 5;
+  Transaction txn = 5;
   // read_consistency specifies the consistency for read
   // operations. The default is CONSISTENT. This value is ignored for
   // write operations.
-  optional ReadConsistencyType read_consistency = 6 [(gogoproto.nullable) = false];
+  ReadConsistencyType read_consistency = 6;
   // If set to a non-zero value, it limits the total number of keys touched
   // by span requests in the batch. Span requests are requests like
   // Scan, ReverseScan, and DelRange. If two requests touch the
@@ -1152,19 +1149,18 @@ message Header {
   //
   // If a batch limit is used with ReverseScan requests, the spans for the
   // requests must be non-overlapping and in decreasing order.
-  optional int64 max_span_request_keys = 8 [(gogoproto.nullable) = false];
+  int64 max_span_request_keys = 8;
   // If set, all of the spans in the batch are distinct. Note that the
   // calculation of distinct spans does not include intents in an
   // EndTransactionRequest. Currently set conservatively: a request
   // might be composed of distinct spans yet have this field set to
   // false.
-  optional bool distinct_spans = 9 [(gogoproto.nullable) = false];
+  bool distinct_spans = 9;
   // If set, return_range_info causes RangeInfo details to be returned with
   // each ResponseHeader.
-  optional bool return_range_info = 10 [(gogoproto.nullable) = false];
+  bool return_range_info = 10;
   // gateway_node_id is the ID of the gateway node where the request originated.
-  optional int32 gateway_node_id = 11 [(gogoproto.nullable) = false,
-      (gogoproto.customname) = "GatewayNodeID", (gogoproto.casttype) = "NodeID"];
+  int32 gateway_node_id = 11 [(gogoproto.customname) = "GatewayNodeID", (gogoproto.casttype) = "NodeID"];
 }
 
 
@@ -1174,7 +1170,7 @@ message Header {
 message BatchRequest {
   option (gogoproto.goproto_stringer) = false;
 
-  optional Header header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  Header header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   repeated RequestUnion requests = 2 [(gogoproto.nullable) = false];
 }
 
@@ -1188,24 +1184,24 @@ message BatchResponse {
   message Header {
     reserved 4;
     // error is non-nil if an error occurred.
-    optional Error error = 1;
+    Error error = 1;
     // timestamp is set only for non-transactional responses and denotes the
     // highest timestamp at which a command from the batch executed. At the
     // time of writing, it is used solely for informational purposes and tests.
-    optional util.hlc.Timestamp Timestamp = 2 [(gogoproto.nullable) = false];
+    util.hlc.Timestamp Timestamp = 2 [(gogoproto.nullable) = false];
     // txn is non-nil if the request specified a non-nil
     // transaction. The transaction timestamp and/or priority may have
     // been updated, depending on the outcome of the request.
-    optional Transaction txn = 3;
+    Transaction txn = 3;
     // now is the highest current time from any node contacted during the request.
     // It can be used by the receiver to update its local HLC.
-    optional util.hlc.Timestamp now = 5 [(gogoproto.nullable) = false];
+    util.hlc.Timestamp now = 5 [(gogoproto.nullable) = false];
     // collected_spans stores trace spans recorded during the execution of this
     // request.
     repeated util.tracing.RecordedSpan collected_spans = 6 [(gogoproto.nullable) = false];
     // NB: if you add a field here, don't forget to update combine().
   }
-  optional Header header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  Header header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   repeated ResponseUnion responses = 2 [(gogoproto.nullable) = false];
 }
 

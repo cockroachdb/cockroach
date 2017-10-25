@@ -17,6 +17,7 @@ package cockroach.sql.jobs;
 option go_package = "jobs";
 
 import "gogoproto/gogo.proto";
+import "cockroach/pkg/roachpb/csv.proto";
 import "cockroach/pkg/roachpb/data.proto";
 import "cockroach/pkg/sql/sqlbase/structured.proto";
 import "cockroach/pkg/util/hlc/timestamp.proto";

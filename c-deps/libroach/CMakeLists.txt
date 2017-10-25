@@ -28,6 +28,7 @@ add_library(roach
   protos/cockroach/pkg/roachpb/internal.pb.cc
   protos/cockroach/pkg/roachpb/metadata.pb.cc
   protos/cockroach/pkg/storage/engine/enginepb/mvcc.pb.cc
+  protos/cockroach/pkg/storage/engine/enginepb/mvcc3.pb.cc
   protos/cockroach/pkg/storage/engine/enginepb/rocksdb.pb.cc
   protos/cockroach/pkg/util/hlc/legacy_timestamp.pb.cc
   protos/cockroach/pkg/util/hlc/timestamp.pb.cc
