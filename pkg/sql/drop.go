@@ -178,7 +178,7 @@ func (n *dropDatabaseNode) Start(params runParams) error {
 	}
 
 	zoneKey, nameKey, descKey := getKeysForDatabaseDescriptor(n.dbDesc)
-	zoneKeyPrefix := sqlbase.MakeZoneKeyPrefix(n.dbDesc.ID)
+	zoneKeyPrefix := config.MakeZoneKeyPrefix(uint32(n.dbDesc.ID))
 
 	b := &client.Batch{}
 	if p.session.Tracing.KVTracingEnabled() {
