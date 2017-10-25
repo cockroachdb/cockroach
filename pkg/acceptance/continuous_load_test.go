@@ -56,6 +56,8 @@ type continuousLoadTest struct {
 	Process string
 }
 
+const longWaitTime = 2 * time.Minute
+
 // queryCount returns the total SQL queries executed by the cluster.
 func (cl continuousLoadTest) queryCount(f *terrafarm.Farmer) (float64, error) {
 	var client http.Client
