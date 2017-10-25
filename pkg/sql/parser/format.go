@@ -31,9 +31,9 @@ type fmtFlags struct {
 	// IndexedVarContainer.IndexedVarFormat calls; it can be used to
 	// customize the formatting of IndexedVars.
 	indexedVarFormat func(buf *bytes.Buffer, f FmtFlags, c IndexedVarContainer, idx int)
-	// starDatumFormat is an optional interceptor for StarDatum.Format calls,
-	// can be used to customize the formatting of StarDatums.
-	starDatumFormat func(buf *bytes.Buffer, f FmtFlags)
+	// placeholderFormat is an optional interceptor for Placeholder.Format calls;
+	// it can be used to format placeholders differently than normal.
+	placeholderFormat func(buf *bytes.Buffer, f FmtFlags, p *Placeholder)
 	// If true, non-function names are replaced by underscores.
 	anonymize bool
 	// If true, strings will be rendered without wrapping quotes if they
@@ -146,11 +146,13 @@ func FmtIndexedVarFormat(
 	return &f
 }
 
-// FmtStarDatumFormat returns FmtFlags that customizes the printing of
+// FmtPlaceholderFormat returns FmtFlags that customizes the printing of
 // StarDatums using the provided function.
-func FmtStarDatumFormat(base FmtFlags, fn func(buf *bytes.Buffer, f FmtFlags)) FmtFlags {
+func FmtPlaceholderFormat(
+	base FmtFlags, placeholderFn func(buf *bytes.Buffer, f FmtFlags, p *Placeholder),
+) FmtFlags {
 	f := *base
-	f.starDatumFormat = fn
+	f.placeholderFormat = placeholderFn
 	return &f
 }
 

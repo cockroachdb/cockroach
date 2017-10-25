@@ -289,7 +289,7 @@ func checkDistAggregationInfo(
 		if err != nil {
 			t.Fatal(err)
 		}
-		finalProc.Post.RenderExprs = []distsqlrun.Expression{MakeExpression(expr, nil)}
+		finalProc.Post.RenderExprs = []distsqlrun.Expression{MakeExpression(expr, nil, nil)}
 	}
 
 	procs = append(procs, finalProc)

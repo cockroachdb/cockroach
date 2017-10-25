@@ -206,6 +206,7 @@ func TestProjectionAndRendering(t *testing.T) {
 						&parser.IndexedVar{Idx: 12},
 						&parser.IndexedVar{Idx: 13},
 					},
+					nil,
 					[]int{-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, 0, 1, 2, 3},
 					[]sqlbase.ColumnType{strToType("A"), strToType("B"), strToType("C"), strToType("D")},
 				)
@@ -227,6 +228,7 @@ func TestProjectionAndRendering(t *testing.T) {
 						&parser.IndexedVar{Idx: 13},
 						&parser.IndexedVar{Idx: 12},
 					},
+					nil,
 					[]int{-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, 0, 1, 2, 3},
 					[]sqlbase.ColumnType{strToType("B"), strToType("D"), strToType("C")},
 				)
@@ -254,6 +256,7 @@ func TestProjectionAndRendering(t *testing.T) {
 							Right:    &parser.IndexedVar{Idx: 2},
 						},
 					},
+					nil,
 					[]int{0, 1, 2},
 					[]sqlbase.ColumnType{strToType("X")},
 				)
@@ -285,6 +288,7 @@ func TestProjectionAndRendering(t *testing.T) {
 						},
 						&parser.IndexedVar{Idx: 10},
 					},
+					nil,
 					[]int{-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, 0, 1, 2},
 					[]sqlbase.ColumnType{strToType("X"), strToType("A")},
 				)
