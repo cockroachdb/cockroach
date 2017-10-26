@@ -295,10 +295,6 @@ func (s SystemConfig) ComputeSplitKey(startKey, endKey roachpb.RKey) roachpb.RKe
 		// In either case, start looking for splits at the first ID usable
 		// by the user data span.
 		startID = keys.MaxSystemConfigDescID + 1
-	} else {
-		// The start key is either already a split key, or after the split
-		// key for its ID. We can skip straight to the next one.
-		startID++
 	}
 
 	// Build key prefixes for sequential table IDs until we reach endKey. Note
@@ -311,16 +307,36 @@ func (s SystemConfig) ComputeSplitKey(startKey, endKey roachpb.RKey) roachpb.RKe
 	findSplitKey := func(startID, endID uint32) roachpb.RKey {
 		// endID could be smaller than startID if we don't have user tables.
 		for id := startID; id <= endID; id++ {
-			key := roachpb.RKey(keys.MakeTablePrefix(id))
-			// Skip if this ID matches the provided startKey.
-			if !startKey.Less(key) {
+			tableKey := roachpb.RKey(keys.MakeTablePrefix(id))
+			// This logic is analogous to the well-commented static split logic above.
+			if startKey.Less(tableKey) {
+				if tableKey.Less(endKey) {
+					return tableKey
+				}
+				return nil
+			}
+
+			zoneVal := s.GetValue(MakeZoneKey(id))
+			if zoneVal == nil {
 				continue
 			}
-			// Handle the case where EndKey is already a table prefix.
-			if !key.Less(endKey) {
-				break
+			var zone ZoneConfig
+			if err := zoneVal.GetProto(&zone); err != nil {
+				// An error while decoding the zone proto is unfortunate, but logging a
+				// message here would be excessively spammy. Just move on, which
+				// effectively assumes there are no subzones for this table.
+				continue
 			}
-			return key
+			// This logic is analogous to the well-commented static split logic above.
+			for _, s := range zone.subzoneSplits() {
+				subzoneKey := append(tableKey, s...)
+				if startKey.Less(subzoneKey) {
+					if subzoneKey.Less(endKey) {
+						return subzoneKey
+					}
+					return nil
+				}
+			}
 		}
 		return nil
 	}

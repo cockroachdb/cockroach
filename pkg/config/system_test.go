@@ -53,6 +53,20 @@ func descriptor(descriptorID uint64) roachpb.KeyValue {
 	return sqlKV(uint32(keys.DescriptorTableID), 1, descriptorID)
 }
 
+func zoneConfig(descriptorID uint32, spans ...config.SubzoneSpan) roachpb.KeyValue {
+	kv := roachpb.KeyValue{
+		Key: config.MakeZoneKey(descriptorID),
+	}
+	if err := kv.Value.SetProto(&config.ZoneConfig{SubzoneSpans: spans}); err != nil {
+		panic(err)
+	}
+	return kv
+}
+
+func subzone(start, end string) config.SubzoneSpan {
+	return config.SubzoneSpan{Key: []byte(start), EndKey: []byte(end)}
+}
+
 func kv(k, v []byte) roachpb.KeyValue {
 	return roachpb.KeyValue{
 		Key:   k,
@@ -187,8 +201,7 @@ func TestStaticSplits(t *testing.T) {
 	splits := config.StaticSplits()
 	for i := 1; i < len(splits); i++ {
 		if !splits[i-1].Less(splits[i]) {
-			t.Errorf("previous SplitKey %q should be less than next SplitPoint %q",
-				splits[i-1], splits[i])
+			t.Errorf("previous split %q should be less than next split %q", splits[i-1], splits[i])
 		}
 	}
 }
@@ -267,9 +280,15 @@ func TestComputeSplitKeyTableIDs(t *testing.T) {
 	// Real system tables only.
 	baseSql := schema.GetInitialValues()
 	// Real system tables plus some user stuff.
-	allSql := append(schema.GetInitialValues(),
+	userSQL := append(schema.GetInitialValues(),
 		descriptor(start), descriptor(start+1), descriptor(start+5))
-	sort.Sort(roachpb.KeyValueByKey(allSql))
+	// Real system tables and partitioned user tables.
+	subzoneSQL := append(userSQL,
+		zoneConfig(start+1, subzone("a", ""), subzone("c", "e")),
+		zoneConfig(start+5, subzone("b", ""), subzone("c", "d"), subzone("d", "")))
+
+	sort.Sort(roachpb.KeyValueByKey(userSQL))
+	sort.Sort(roachpb.KeyValueByKey(subzoneSQL))
 
 	testCases := []struct {
 		values     []roachpb.KeyValue
@@ -295,22 +314,41 @@ func TestComputeSplitKeyTableIDs(t *testing.T) {
 		{baseSql, tkey(reservedStart, "foo"), tkey(start+10, "foo"), tkey(reservedStart + 1)},
 
 		// Reserved + User descriptors.
-		{allSql, tkey(start - 1), roachpb.RKeyMax, tkey(start)},
-		{allSql, tkey(start), roachpb.RKeyMax, tkey(start + 1)},
-		{allSql, tkey(start), tkey(start + 10), tkey(start + 1)},
-		{allSql, tkey(start - 1), tkey(start + 10), tkey(start)},
-		{allSql, tkey(start + 4), tkey(start + 10), tkey(start + 5)},
-		{allSql, tkey(start + 5), tkey(start + 10), nil},
-		{allSql, tkey(start + 6), tkey(start + 10), nil},
-		{allSql, tkey(start, "foo"), tkey(start + 10), tkey(start + 1)},
-		{allSql, tkey(start, "foo"), tkey(start + 5), tkey(start + 1)},
-		{allSql, tkey(start, "foo"), tkey(start+5, "bar"), tkey(start + 1)},
-		{allSql, tkey(start, "foo"), tkey(start, "morefoo"), nil},
-		{allSql, minKey, roachpb.RKeyMax, tkey(0)},
-		{allSql, tkey(reservedStart + 1), roachpb.RKeyMax, tkey(reservedStart + 2)},
-		{allSql, tkey(reservedStart), tkey(start + 10), tkey(reservedStart + 1)},
-		{allSql, minKey, tkey(start + 2), tkey(0)},
-		{allSql, tkey(reservedStart, "foo"), tkey(start+5, "foo"), tkey(reservedStart + 1)},
+		{userSQL, tkey(start - 1), roachpb.RKeyMax, tkey(start)},
+		{userSQL, tkey(start), roachpb.RKeyMax, tkey(start + 1)},
+		{userSQL, tkey(start), tkey(start + 10), tkey(start + 1)},
+		{userSQL, tkey(start - 1), tkey(start + 10), tkey(start)},
+		{userSQL, tkey(start + 4), tkey(start + 10), tkey(start + 5)},
+		{userSQL, tkey(start + 5), tkey(start + 10), nil},
+		{userSQL, tkey(start + 6), tkey(start + 10), nil},
+		{userSQL, tkey(start, "foo"), tkey(start + 10), tkey(start + 1)},
+		{userSQL, tkey(start, "foo"), tkey(start + 5), tkey(start + 1)},
+		{userSQL, tkey(start, "foo"), tkey(start+5, "bar"), tkey(start + 1)},
+		{userSQL, tkey(start, "foo"), tkey(start, "morefoo"), nil},
+		{userSQL, minKey, roachpb.RKeyMax, tkey(0)},
+		{userSQL, tkey(reservedStart + 1), roachpb.RKeyMax, tkey(reservedStart + 2)},
+		{userSQL, tkey(reservedStart), tkey(start + 10), tkey(reservedStart + 1)},
+		{userSQL, minKey, tkey(start + 2), tkey(0)},
+		{userSQL, tkey(reservedStart, "foo"), tkey(start+5, "foo"), tkey(reservedStart + 1)},
+
+		// Partitioned user descriptors.
+		{subzoneSQL, tkey(start), roachpb.RKeyMax, tkey(start + 1)},
+		{subzoneSQL, tkey(start), tkey(start + 1), nil},
+		{subzoneSQL, tkey(start + 1), tkey(start + 2), tkey(start+1, "a")},
+		{subzoneSQL, tkey(start+1, "a"), tkey(start + 2), tkey(start+1, "b")},
+		{subzoneSQL, tkey(start+1, "b"), tkey(start + 2), tkey(start+1, "c")},
+		{subzoneSQL, tkey(start+1, "b"), tkey(start+1, "c"), nil},
+		{subzoneSQL, tkey(start+1, "ba"), tkey(start+1, "bb"), nil},
+		{subzoneSQL, tkey(start+1, "c"), tkey(start + 2), tkey(start+1, "e")},
+		{subzoneSQL, tkey(start+1, "e"), tkey(start + 2), nil},
+		{subzoneSQL, tkey(start + 4), tkey(start + 6), tkey(start + 5)},
+		{subzoneSQL, tkey(start + 5), tkey(start + 5), nil},
+		{subzoneSQL, tkey(start + 5), tkey(start + 6), tkey(start+5, "b")},
+		{subzoneSQL, tkey(start+5, "a"), tkey(start+5, "ae"), nil},
+		{subzoneSQL, tkey(start+5, "b"), tkey(start + 6), tkey(start+5, "c")},
+		{subzoneSQL, tkey(start+5, "c"), tkey(start + 6), tkey(start+5, "d")},
+		{subzoneSQL, tkey(start+5, "d"), tkey(start + 6), tkey(start+5, "e")},
+		{subzoneSQL, tkey(start+5, "e"), tkey(start + 6), nil},
 	}
 
 	cfg := config.SystemConfig{}
