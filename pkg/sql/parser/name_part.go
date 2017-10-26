@@ -59,6 +59,15 @@ func isASCII(s string) bool {
 }
 
 // A Name is an SQL identifier.
+//
+// In general, a Name is the result of parsing a name nonterminal, which is used
+// in the grammar where reserved keywords cannot be distinguished from
+// identifiers. A Name that matches a reserved keyword must thus be quoted when
+// formatted. (Names also need quoting for a variety of other reasons; see
+// isBareIdentifier.)
+//
+// For historical reasons, some Names are instead the result of parsing
+// `unrestricted_name` nonterminals. See UnrestrictedName for details.
 type Name string
 
 // Format implements the NodeFormatter interface.
@@ -66,7 +75,7 @@ func (n Name) Format(buf *bytes.Buffer, f FmtFlags) {
 	if f.anonymize {
 		buf.WriteByte('_')
 	} else {
-		encodeSQLIdent(buf, string(n), f)
+		encodeRestrictedSQLIdent(buf, string(n), f)
 	}
 }
 
@@ -78,6 +87,35 @@ func (n Name) Normalize() string {
 		return lower
 	}
 	return norm.NFC.String(lower)
+}
+
+// An UnrestrictedName is a Name that does not need to be escaped when it
+// matches a reserved keyword.
+//
+// In general, an UnrestrictedName is the result of parsing an unrestricted_name
+// nonterminal, which is used in the grammar where reserved keywords can be
+// unambiguously interpreted as identifiers. When formatted, an UnrestrictedName
+// that matches a reserved keyword thus does not need to be quoted.
+//
+// For historical reasons, some unrestricted_name nonterminals are instead
+// parsed as Names. The only user-visible impact of this is that we are too
+// aggressive about quoting names in certain positions. New grammar rules should
+// prefer to parse unrestricted_name nonterminals into UnrestrictedNames.
+type UnrestrictedName string
+
+// Format implements the NodeFormatter interface.
+func (u UnrestrictedName) Format(buf *bytes.Buffer, f FmtFlags) {
+	if f.anonymize {
+		buf.WriteByte('_')
+	} else {
+		encodeUnrestrictedSQLIdent(buf, string(u), f)
+	}
+}
+
+// Normalize normalizes to lowercase and Unicode Normalization Form C
+// (NFC).
+func (u UnrestrictedName) Normalize() string {
+	return Name(u).Normalize()
 }
 
 // ToStrings converts the name list to an array of regular strings.
@@ -143,10 +181,12 @@ type NamePart interface {
 }
 
 var _ NamePart = Name("")
+var _ NamePart = UnrestrictedName("")
 var _ NamePart = &ArraySubscript{}
 var _ NamePart = UnqualifiedStar{}
 
 func (Name) namePart()              {}
+func (UnrestrictedName) namePart()  {}
 func (a *ArraySubscript) namePart() {}
 func (UnqualifiedStar) namePart()   {}
 
