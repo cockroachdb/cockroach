@@ -336,3 +336,23 @@ SELECT '3'::JSONB - 'b'
 
 statement error pgcode 22023 cannot delete from object using integer index
 SELECT '{}'::JSONB - 1
+
+query B
+SELECT '[1, 2, 3]'::JSONB <@ '[1, 2]'::JSONB
+----
+false
+
+query B
+SELECT '[1, 2]'::JSONB <@ '[1, 2, 3]'::JSONB
+----
+true
+
+query B
+SELECT '[1, 2]'::JSONB @> '[1, 2, 3]'::JSONB
+----
+false
+
+query B
+SELECT '[1, 2, 3]'::JSONB @> '[1, 2]'::JSONB
+----
+true
