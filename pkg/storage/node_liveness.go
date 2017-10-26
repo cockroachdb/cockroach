@@ -338,7 +338,9 @@ func (nl *NodeLiveness) StartHeartbeat(
 		for {
 			if !nl.pauseHeartbeat.Load().(bool) {
 				func() {
-					ctx, cancel := context.WithTimeout(context.Background(), nl.heartbeatInterval/2)
+					// Give the context a timeout approximately as long as the time we
+					// have left before our liveness entry expires.
+					ctx, cancel := context.WithTimeout(context.Background(), nl.heartbeatInterval)
 					ctx, sp := ambient.AnnotateCtxWithSpan(ctx, "heartbeat")
 					defer cancel()
 					defer sp.Finish()
