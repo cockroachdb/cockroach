@@ -15,6 +15,10 @@
 package sql
 
 import (
+	"fmt"
+	"strings"
+
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"golang.org/x/net/context"
 
@@ -25,6 +29,8 @@ type scrubNode struct {
 	optColumnsSlot
 
 	n *parser.Scrub
+
+	indexesToCheck []*sqlbase.IndexDescriptor
 }
 
 // Scrub checks the database.
@@ -53,15 +59,77 @@ func (n *scrubNode) Start(params runParams) error {
 		return err
 	}
 
-	tableDesc, err := getTableDesc(params.ctx, params.p.txn, params.p.getVirtualTabler(), tn)
+	tableDesc, err := params.p.getTableDesc(params.ctx, tn)
 	if err != nil {
 		return err
-	} else if tableDesc == nil {
-		return sqlbase.NewUndefinedRelationError(tn)
+	}
+
+	if tableDesc.IsView() {
+		return pgerror.NewErrorf(pgerror.CodeSyntaxError, "cannot run SCRUB on views")
+	}
+
+	checkIndexes := false
+
+	for _, option := range n.n.Options {
+		switch v := option.(type) {
+		case *parser.ScrubOptionIndex:
+			if checkIndexes {
+				return pgerror.NewErrorf(pgerror.CodeSyntaxError,
+					"cannot specify INDEX option more than once")
+			}
+			checkIndexes = true
+			n.indexesToCheck, err = indexesToCheck(v.IndexNames, tableDesc)
+			if err != nil {
+				return err
+			}
+		default:
+			panic(fmt.Sprintf("Unhandled SCRUB option received: %s", v))
+		}
 	}
 
 	return nil
 }
+
+// indexesToCheck will return all of the indexes that are being checked.
+// If indexNames is nil, then all indexes are returned.
+func indexesToCheck(
+	indexNames parser.NameList, tableDesc *sqlbase.TableDescriptor,
+) (results []*sqlbase.IndexDescriptor, err error) {
+	if indexNames == nil {
+		// Populate results with all secondary indexes of the
+		// table.
+		for _, idx := range tableDesc.Indexes {
+			results = append(results, &idx)
+		}
+		return results, nil
+	}
+
+	// Find the indexes corresponding to the user input index names.
+	names := make(map[string]struct{})
+	for _, idxName := range indexNames {
+		names[idxName.String()] = struct{}{}
+	}
+	for _, idx := range tableDesc.Indexes {
+		if _, ok := names[idx.Name]; ok {
+			results = append(results, &idx)
+			delete(names, idx.Name)
+		}
+	}
+	if len(names) > 0 {
+		// Get a list of all the indexes that could not be found.
+		missingIndexNames := []string(nil)
+		for _, idxName := range indexNames {
+			if _, ok := names[idxName.String()]; ok {
+				missingIndexNames = append(missingIndexNames, idxName.String())
+			}
+		}
+		return nil, pgerror.NewErrorf(pgerror.CodeUndefinedObjectError,
+			"specified indexes to check that do not exist on table %q: %v",
+			tableDesc.Name, strings.Join(missingIndexNames, ", "))
+	}
+	return results, nil
+}
+
 func (n *scrubNode) Next(params runParams) (bool, error) { return false, nil }
 func (n *scrubNode) Close(context.Context)               {}
 func (n *scrubNode) Values() parser.Datums               { return nil }
