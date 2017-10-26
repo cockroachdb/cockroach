@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/netutil"
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -421,7 +422,7 @@ func TestGossipCullNetwork(t *testing.T) {
 
 	const slowGossipDuration = time.Minute
 
-	if err := util.RetryForDuration(slowGossipDuration, func() error {
+	if err := retry.ForDuration(slowGossipDuration, func() error {
 		if peers := len(local.Outgoing()); peers != minPeers {
 			return errors.Errorf("%d of %d peers connected", peers, minPeers)
 		}
@@ -432,7 +433,7 @@ func TestGossipCullNetwork(t *testing.T) {
 
 	local.manage()
 
-	if err := util.RetryForDuration(slowGossipDuration, func() error {
+	if err := retry.ForDuration(slowGossipDuration, func() error {
 		// Verify that a client is closed within the cull interval.
 		if peers := len(local.Outgoing()); peers != minPeers-1 {
 			return errors.Errorf("%d of %d peers connected", peers, minPeers-1)
