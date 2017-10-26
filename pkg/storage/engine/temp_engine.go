@@ -22,7 +22,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
@@ -47,13 +46,9 @@ func NewTempEngine(ctx context.Context, storeCfg base.StoreSpec) (Engine, error)
 		return nil, err
 	}
 
-	// FIXME(tschottdorf): should be passed in.
-	st := cluster.MakeClusterSettings(cluster.BinaryServerVersion, cluster.BinaryServerVersion)
-
 	rocksDBCfg := RocksDBConfig{
-		Settings: st,
-		Attrs:    roachpb.Attributes{},
-		Dir:      storeCfg.Path,
+		Attrs: roachpb.Attributes{},
+		Dir:   storeCfg.Path,
 		// MaxSizeBytes doesn't matter for temp stores - it's not enforced in any way.
 		MaxSizeBytes: 0,
 		MaxOpenFiles: 128, // TODO(arjun): Revisit this.

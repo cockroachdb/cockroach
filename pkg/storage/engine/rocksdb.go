@@ -343,9 +343,6 @@ func NewRocksDB(cfg RocksDBConfig, cache RocksDBCache) (*RocksDB, error) {
 	if cfg.Dir == "" {
 		return nil, errors.New("dir must be non-empty")
 	}
-	if cfg.Settings == nil {
-		panic("Settings must be set")
-	}
 
 	r := &RocksDB{
 		cfg:   cfg,
@@ -365,11 +362,8 @@ func NewRocksDB(cfg RocksDBConfig, cache RocksDBCache) (*RocksDB, error) {
 func newMemRocksDB(
 	attrs roachpb.Attributes, cache RocksDBCache, MaxSizeBytes int64,
 ) (*RocksDB, error) {
-	// FIXME(tschottdorf): should be passed in.
-	st := cluster.MakeClusterSettings(cluster.BinaryServerVersion, cluster.BinaryServerVersion)
 	r := &RocksDB{
 		cfg: RocksDBConfig{
-			Settings:     st,
 			Attrs:        attrs,
 			MaxSizeBytes: MaxSizeBytes,
 		},
@@ -481,7 +475,10 @@ func (r *RocksDB) syncLoop() {
 			return
 		}
 
-		min := minWALSyncInterval.Get(&r.cfg.Settings.SV)
+		var min time.Duration
+		if r.cfg.Settings != nil {
+			min = minWALSyncInterval.Get(&r.cfg.Settings.SV)
+		}
 		if delta := timeutil.Since(lastSync); delta < min {
 			s.Unlock()
 			time.Sleep(min - delta)
