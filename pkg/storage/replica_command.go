@@ -410,7 +410,10 @@ func evalDeleteRange(
 		}
 	}
 	reply.NumKeys = num
-	reply.ResumeSpan = resumeSpan
+	if resumeSpan != nil {
+		reply.ResumeSpan = resumeSpan
+		reply.ResumeReason = roachpb.RESUME_KEY_LIMIT
+	}
 	return EvalResult{}, err
 }
 
@@ -432,7 +435,10 @@ func evalScan(
 	}
 
 	reply.NumKeys = int64(len(rows))
-	reply.ResumeSpan = resumeSpan
+	if resumeSpan != nil {
+		reply.ResumeSpan = resumeSpan
+		reply.ResumeReason = roachpb.RESUME_KEY_LIMIT
+	}
 	reply.Rows = rows
 	if args.ReturnIntents {
 		reply.IntentRows, err = collectIntentRows(ctx, batch, cArgs, intents)
@@ -458,7 +464,10 @@ func evalReverseScan(
 	}
 
 	reply.NumKeys = int64(len(rows))
-	reply.ResumeSpan = resumeSpan
+	if resumeSpan != nil {
+		reply.ResumeSpan = resumeSpan
+		reply.ResumeReason = roachpb.RESUME_KEY_LIMIT
+	}
 	reply.Rows = rows
 	if args.ReturnIntents {
 		reply.IntentRows, err = collectIntentRows(ctx, batch, cArgs, intents)
