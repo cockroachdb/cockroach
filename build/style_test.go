@@ -514,7 +514,7 @@ func TestStyle(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		if err := stream.ForEach(filter,func(s string) {
+		if err := stream.ForEach(filter, func(s string) {
 			t.Errorf(`%s <- forbidden; use "yaml.UnmarshalStrict" instead`, s)
 		}); err != nil {
 			t.Error(err)
@@ -1117,8 +1117,8 @@ func (m *megaChecker) Init(program *lint.Program) {
 
 func (m *megaChecker) Funcs() map[string]lint.Func {
 	funcs := map[string]lint.Func{
-		"FloatToUnsigned":   checkConvertFloatToUnsigned,
-		"Unconvert":         checkUnconvert,
+		"FloatToUnsigned": checkConvertFloatToUnsigned,
+		"Unconvert":       checkUnconvert,
 	}
 	for _, checker := range m.checkers {
 		for k, v := range checker.Funcs() {
@@ -1303,7 +1303,7 @@ func (m *timerChecker) checkSetTimeutilTimerRead(j *lint.Job) {
 				if !ok {
 					return true
 				}
-				if !m.selectorIsTimer(selector,j.Program.Info) {
+				if !m.selectorIsTimer(selector, j.Program.Info) {
 					return true
 				}
 				selectorName := fmt.Sprint(selector.X)
@@ -1325,7 +1325,7 @@ func (m *timerChecker) checkSetTimeutilTimerRead(j *lint.Job) {
 						if !ok {
 							return true
 						}
-						if !m.selectorIsTimer(assignSelector,j.Program.Info) {
+						if !m.selectorIsTimer(assignSelector, j.Program.Info) {
 							return true
 						}
 						if fmt.Sprint(assignSelector.X) != selectorName {
