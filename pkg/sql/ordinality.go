@@ -71,12 +71,12 @@ func (p *planner) wrapOrdinality(ds planDataSource) planDataSource {
 	ds.info.sourceColumns = res.columns
 	if srcIdx, ok := ds.info.sourceAliases.srcIdx(anonymousTable); !ok {
 		ds.info.sourceAliases = append(ds.info.sourceAliases, sourceAlias{
-			name:        anonymousTable,
-			columnRange: []int{newColIdx},
+			name:      anonymousTable,
+			columnSet: util.MakeFastIntSet(newColIdx),
 		})
 	} else {
 		srcAlias := &ds.info.sourceAliases[srcIdx]
-		srcAlias.columnRange = append(srcAlias.columnRange, newColIdx)
+		srcAlias.columnSet.Add(newColIdx)
 	}
 
 	ds.plan = res

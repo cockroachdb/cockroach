@@ -292,23 +292,23 @@ func makeEqualityPredicate(
 			if alias.name == anonymousTable {
 				continue
 			}
-			newRange := make([]int, len(alias.columnRange))
-			for i, colIdx := range alias.columnRange {
-				newRange[i] = colIdx + offset
+			var newSet util.FastIntSet
+			for colIdx, ok := alias.columnSet.Next(0); ok; colIdx, ok = alias.columnSet.Next(colIdx + 1) {
+				newSet.Add(colIdx + offset)
 			}
-			aliases = append(aliases, sourceAlias{name: alias.name, columnRange: newRange})
+			aliases = append(aliases, sourceAlias{name: alias.name, columnSet: newSet})
 		}
 	}
 	collectAliases(left.sourceAliases, numMergedEqualityColumns)
 	collectAliases(right.sourceAliases, numMergedEqualityColumns+len(left.sourceColumns))
 
-	anonymousAlias := sourceAlias{name: anonymousTable, columnRange: nil}
+	anonymousAlias := sourceAlias{name: anonymousTable}
 	var hiddenLeftNames, hiddenRightNames []string
 
 	// All the merged columns at the beginning belong to the
 	// anonymous data source.
 	for i := 0; i < numMergedEqualityColumns; i++ {
-		anonymousAlias.columnRange = append(anonymousAlias.columnRange, i)
+		anonymousAlias.columnSet.Add(i)
 		hiddenLeftNames = append(hiddenLeftNames, left.sourceColumns[leftEqualityIndices[i]].Name)
 		hiddenRightNames = append(hiddenRightNames, right.sourceColumns[rightEqualityIndices[i]].Name)
 	}
@@ -322,7 +322,7 @@ func makeEqualityPredicate(
 			if alias.name != anonymousTable {
 				continue
 			}
-			for _, colIdx := range alias.columnRange {
+			for colIdx, ok := alias.columnSet.Next(0); ok; colIdx, ok = alias.columnSet.Next(colIdx + 1) {
 				isHidden := false
 				for _, hiddenName := range hiddenNames {
 					if cols[colIdx].Name == hiddenName {
@@ -331,7 +331,7 @@ func makeEqualityPredicate(
 					}
 				}
 				if !isHidden {
-					anonymousAlias.columnRange = append(anonymousAlias.columnRange, colIdx+offset)
+					anonymousAlias.columnSet.Add(colIdx + offset)
 				}
 			}
 		}
@@ -341,7 +341,7 @@ func makeEqualityPredicate(
 	collectAnonymousAliases(right.sourceAliases, hiddenRightNames, right.sourceColumns,
 		numMergedEqualityColumns+len(left.sourceColumns))
 
-	if anonymousAlias.columnRange != nil {
+	if !anonymousAlias.columnSet.Empty() {
 		aliases = append(aliases, anonymousAlias)
 	}
 
