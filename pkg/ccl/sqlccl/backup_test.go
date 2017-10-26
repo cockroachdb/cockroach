@@ -864,7 +864,51 @@ func TestBackupRestoreControlJob(t *testing.T) {
 			// work if the first backup or restore was not successfully canceled.
 			sqlDB.Exec(query, cancelDir)
 		}
+		// Verify the canceled RESTORE added some DROP tables.
+		sqlDB.CheckQueryResults(
+			`SELECT name FROM crdb_internal.tables WHERE database_name = 'cancel' AND state = 'DROP'`,
+			[][]string{{"bank"}},
+		)
 	})
+}
+
+// TestRestoreFailCleanup tests that a failed RESTORE is cleaned up.
+func TestRestoreFailCleanup(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	const numAccounts = 1000
+	_, nodelocalDir, _, sqlDB, cleanup := backupRestoreTestSetupWithParams(t, multiNode, numAccounts, initNone, base.TestClusterArgs{})
+	defer cleanup()
+
+	url, err := url.Parse(nodelocalDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := url.Path
+
+	sqlDB.Exec(`CREATE DATABASE restore`)
+	sqlDB.Exec(`BACKUP DATABASE data TO $1`, nodelocalDir)
+	// Bugger the backup by removing the SST files.
+	if err := filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			t.Fatal(err)
+		}
+		if info.Name() == sqlccl.BackupDescriptorName || !strings.HasSuffix(path, ".sst") {
+			return nil
+		}
+		return os.Remove(path)
+	}); err != nil {
+		t.Fatal(err)
+	}
+	_, err = sqlDB.DB.Exec(`RESTORE data.* FROM $1 WITH OPTIONS ('into_db'='restore')`, nodelocalDir)
+	if !testutils.IsError(err, "sst: no such file") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	// Verify the failed RESTORE added some DROP tables.
+	sqlDB.CheckQueryResults(
+		`SELECT name FROM crdb_internal.tables WHERE database_name = 'restore' AND state = 'DROP'`,
+		[][]string{{"bank"}},
+	)
 }
 
 func TestBackupRestoreInterleaved(t *testing.T) {

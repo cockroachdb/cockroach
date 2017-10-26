@@ -1153,6 +1153,52 @@ func doRestorePlan(
 	return nil
 }
 
+func loadBackupSQLDescs(ctx context.Context, details jobs.RestoreDetails, settings *cluster.Settings) ([]BackupDescriptor, []sqlbase.Descriptor, error) {
+	backupDescs, err := loadBackupDescs(ctx, details.URIs, settings)
+	if err != nil {
+		return nil, nil, err
+	}
+	lastBackupDesc := backupDescs[len(backupDescs)-1]
+
+	var sqlDescs []sqlbase.Descriptor
+	for _, desc := range lastBackupDesc.Descriptors {
+		if _, ok := details.TableRewrites[desc.GetID()]; ok {
+			sqlDescs = append(sqlDescs, desc)
+		}
+	}
+	return backupDescs, sqlDescs, nil
+}
+
+// restoreFailHook removes KV data that has been committed from a restore that
+// has failed or been canceled. It does this by adding the table descriptors
+// in DROP state, which causes the schema change stuff to delete the keys
+// in the background.
+func restoreFailHook(ctx context.Context, txn *client.Txn, settings *cluster.Settings, details *jobs.RestoreDetails) error {
+	// Needed to trigger the schema change manager.
+	if err := txn.SetSystemConfigTrigger(); err != nil {
+		return err
+	}
+	_, sqlDescs, err := loadBackupSQLDescs(ctx, *details, settings)
+	if err != nil {
+		return err
+	}
+	var tables []*sqlbase.TableDescriptor
+	for _, desc := range sqlDescs {
+		if tableDesc := desc.GetTable(); tableDesc != nil {
+			tableDesc.State = sqlbase.TableDescriptor_DROP
+			tables = append(tables, tableDesc)
+		}
+	}
+	if err := rewriteTableDescs(tables, details.TableRewrites); err != nil {
+		return err
+	}
+	b := txn.NewBatch()
+	for _, desc := range tables {
+		b.CPut(sqlbase.MakeDescMetadataKey(desc.ID), sqlbase.WrapDescriptor(desc), nil)
+	}
+	return txn.Run(ctx, b)
+}
+
 func restoreResumeHook(
 	typ jobs.Type, settings *cluster.Settings,
 ) func(ctx context.Context, job *jobs.Job) error {
@@ -1163,17 +1209,9 @@ func restoreResumeHook(
 	return func(ctx context.Context, job *jobs.Job) error {
 		details := job.Record.Details.(jobs.RestoreDetails)
 
-		backupDescs, err := loadBackupDescs(ctx, details.URIs, settings)
+		backupDescs, sqlDescs, err := loadBackupSQLDescs(ctx, details, settings)
 		if err != nil {
 			return err
-		}
-		lastBackupDesc := backupDescs[len(backupDescs)-1]
-
-		var sqlDescs []sqlbase.Descriptor
-		for _, desc := range lastBackupDesc.Descriptors {
-			if _, ok := details.TableRewrites[desc.GetID()]; ok {
-				sqlDescs = append(sqlDescs, desc)
-			}
 		}
 
 		_, err = restore(
@@ -1193,4 +1231,5 @@ func restoreResumeHook(
 func init() {
 	sql.AddPlanHook(restorePlanHook)
 	jobs.AddResumeHook(restoreResumeHook)
+	jobs.RestoreFailHook = restoreFailHook
 }
