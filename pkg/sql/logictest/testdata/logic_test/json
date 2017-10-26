@@ -119,3 +119,23 @@ query B
 SELECT 'false'::JSON IN ('"hello"'::JSON, '1'::JSON, '[]'::JSON)
 ----
 false
+
+query B
+SELECT '[1, 2, 3]'::JSONB @> '[1, 2]'::JSONB
+----
+true
+
+query B
+SELECT '[1, 2]'::JSONB @> '[1, 2, 3]'::JSONB
+----
+false
+
+query B
+SELECT '[1, 2, 3]'::JSONB <@ '[1, 2]'::JSONB
+----
+false
+
+query B
+SELECT '[1, 2]'::JSONB <@ '[1, 2, 3]'::JSONB
+----
+true

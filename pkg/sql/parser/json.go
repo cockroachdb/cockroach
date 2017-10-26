@@ -120,3 +120,144 @@ func interpretJSON(d interface{}) (DJSON, error) {
 	}
 	return DJSON{}, nil
 }
+
+func (obj DJSON) isScalar() bool {
+	return obj.typ != objectJSONType && obj.typ != arrayJSONType
+}
+
+func (obj DJSON) contains(ctx *EvalContext, other DJSON) bool {
+	if obj.isScalar() {
+		return obj.Compare(ctx, &other) == 0
+	}
+	if obj.typ == arrayJSONType && other.isScalar() {
+		for _, v := range obj.arrayVal {
+			if v.Compare(ctx, &other) == 0 {
+				return true
+			}
+		}
+	}
+	if obj.typ != other.typ {
+		return false
+	}
+	if obj.typ == arrayJSONType {
+		return jsonArrayContains(ctx, obj, other)
+	} else if obj.typ == objectJSONType {
+		return jsonObjContains(ctx, obj, other)
+	}
+	return false
+}
+
+func jsonArrayContains(ctx *EvalContext, container DJSON, other DJSON) bool {
+	if container.typ != arrayJSONType || other.typ != arrayJSONType {
+		panic("arguments to jsonArrayContains must be JSON arrays")
+	}
+
+	containerScalars, containerArrays, containerObjects := preprocessJSONArrayForContains(ctx, container.arrayVal)
+	otherScalars, otherArrays, otherObjects := preprocessJSONArrayForContains(ctx, other.arrayVal)
+
+	// Both slices of scalars are sorted now via the preprocessing, so we can
+	// step through them together.
+	i := 0
+	for _, val := range otherScalars {
+		for i < len(containerScalars) && containerScalars[i].Compare(ctx, &val) == -1 {
+			i++
+		}
+		if i >= len(containerScalars) || containerScalars[i].Compare(ctx, &val) != 0 {
+			return false
+		}
+	}
+
+	// TODO(justin): there's possibly(?) something fancier we can do with the
+	// objects and arrays, but for now just do the quadratic check.
+	if !quadraticJSONArrayContains(ctx, containerObjects, otherObjects) {
+		return false
+	}
+	if !quadraticJSONArrayContains(ctx, containerArrays, otherArrays) {
+		return false
+	}
+
+	return true
+}
+
+// quadraticJSONArrayContains does an O(n^2) check to see if every value in
+// `other` is contained within a value in `container`. `container` and `other`
+// cannot contain scalars.
+func quadraticJSONArrayContains(ctx *EvalContext, container, other []DJSON) bool {
+	for _, otherVal := range other {
+		found := false
+		for _, containerVal := range container {
+			if containerVal.contains(ctx, otherVal) {
+				found = true
+				break
+			}
+		}
+		if !found {
+			return false
+		}
+	}
+	return true
+}
+
+// preprocessJSONArrayForContains takes a slice of DJSONs and returns three slices containing
+// * the scalars in the given slice, sorted,
+// * the arrays in the input slice,
+// * and the objects in the input slice.
+// The input array is unmodified.
+// TODO(justin): this is slightly alloc-heavy - in theory we could re-use a
+// slice for each call to this function, or if we wanted to get crazy we could
+// permute the input array and then pass back up a way to permute it back to
+// the way it was once the caller was done with it.
+// TODO(justin): if a JSON document is given as a literal for the @> operator,
+// theoretically during planning we could do this preprocessing and avoid doing it
+// on every invocation of the operator.
+func preprocessJSONArrayForContains(
+	ctx *EvalContext, ary []DJSON,
+) (scalars, arrays, objects []DJSON) {
+	sorted := make([]DJSON, len(ary))
+	copy(sorted, ary)
+	// Note: we don't actually care about the ordering of arrays and
+	// objects.
+	sort.Slice(sorted, func(i, j int) bool {
+		return sorted[i].Compare(ctx, &sorted[j]) == -1
+	})
+
+	// Now that the slice is sorted, we just need to find the split points. This
+	// works because objects always sort after everything and arrays always sort
+	// after scalars.
+	firstArrayIdx := len(sorted)
+	firstObjIdx := len(sorted)
+	for i := 0; i < len(sorted); i++ {
+		if !sorted[i].isScalar() {
+			firstArrayIdx = i
+			break
+		}
+	}
+	for i := firstArrayIdx; i < len(sorted); i++ {
+		if sorted[i].typ == objectJSONType {
+			firstObjIdx = i
+			break
+		}
+	}
+	return sorted[:firstArrayIdx], sorted[firstArrayIdx:firstObjIdx], sorted[firstObjIdx:]
+}
+
+func jsonObjContains(ctx *EvalContext, container DJSON, other DJSON) bool {
+	if container.typ != objectJSONType || other.typ != objectJSONType {
+		panic("arguments to jsonObjContains must be JSON objects")
+	}
+	// We can iterate through the keys of `other` and scan through to find the
+	// corresponding keys in `container` since they're both sorted.
+	objIdx := 0
+	for _, rightEntry := range other.objectVal {
+		for objIdx < len(container.objectVal) && container.objectVal[objIdx].k < rightEntry.k {
+			objIdx++
+		}
+		if objIdx >= len(container.objectVal) ||
+			container.objectVal[objIdx].k != rightEntry.k ||
+			!container.objectVal[objIdx].v.contains(ctx, rightEntry.v) {
+			return false
+		}
+		objIdx++
+	}
+	return true
+}

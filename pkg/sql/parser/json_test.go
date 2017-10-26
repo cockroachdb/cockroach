@@ -15,6 +15,8 @@
 package parser
 
 import (
+	"bytes"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -196,6 +198,136 @@ func TestJSONSize(t *testing.T) {
 			if j.Size() != tc.size {
 				t.Fatalf("expected %v to have size %d, but had size %d", j, tc.size, j.Size())
 			}
+		})
+	}
+}
+
+func TestJSONContains(t *testing.T) {
+	cases := map[string][]struct {
+		other    string
+		expected bool
+	}{
+		`10`: {
+			{`10`, true},
+			{`9`, false},
+		},
+		`[1, 2, 3]`: {
+			{`{}`, false},
+			{`[]`, true},
+			{`[1]`, true},
+			{`[1.0]`, true},
+			{`[1.00]`, true},
+			{`[1, 2]`, true},
+			{`[1, 2, 2]`, true},
+			{`[2, 1]`, true},
+			{`[1, 4]`, false},
+			{`[4, 1]`, false},
+			{`[4]`, false},
+			// This is a unique, special case that only applies to arrays and
+			// scalars.
+			{`1`, true},
+			{`4`, false},
+		},
+		`[[1, 2], 3]`: {
+			{`[1, 2]`, false},
+			{`[[1, 2]]`, true},
+			{`[3, [1, 2]]`, true},
+			{`[[1, 2], 3]`, true},
+			{`[[1], 3]`, true},
+			{`[[2]]`, true},
+			{`[[3]]`, false},
+		},
+		`[[1, 2], [3, 4]]`: {
+			{`[[1, 2]]`, true},
+			{`[[3, 4]]`, true},
+			{`[[3, 4, 5]]`, false},
+			{`[[1, 3]]`, false},
+			{`[[2, 4]]`, false},
+			{`[1]`, false},
+			{`[1, 2]`, false},
+		},
+		`{"a": "b", "c": "d"}`: {
+			{`{}`, true},
+			{`{"a": "b"}`, true},
+			{`{"c": "d"}`, true},
+			{`{"a": "b", "c": "d"}`, true},
+			{`{"a": "x"}`, false},
+			{`{"c": "x"}`, false},
+			{`{"y": "x"}`, false},
+			{`{"a": "b", "c": "x"}`, false},
+			{`{"a": "x", "c": "y"}`, false},
+		},
+		`{"a": [1, 2, 3], "c": {"foo": "bar"}}`: {
+			{`{}`, true},
+			{`{"a": [1, 2, 3], "c": {"foo": "bar"}}`, true},
+			{`{"a": [1, 2]}`, true},
+			{`{"a": [2, 1]}`, true},
+			{`{"a": []}`, true},
+			{`{"a": [4]}`, false},
+			{`{"a": [3], "c": {}}`, true},
+			{`{"a": [4], "c": {}}`, false},
+			{`{"a": [3], "c": {"foo": "gup"}}`, false},
+		},
+		`[{"a": 1}, {"b": 2, "c": 3}]`: {
+			{`[]`, true},
+			{`{}`, false},
+			{`{"a": 1}`, false},
+			{`[{"a": 1}]`, true},
+			{`[{"b": 2}]`, true},
+			{`[{"b": 2, "d": 4}]`, false},
+			{`[{"b": 2, "c": 3}]`, true},
+			{`[{"a": 1}, {"b": 2}, {"c": 3}]`, true},
+			{`[{}]`, true},
+		},
+	}
+
+	for k, tests := range cases {
+		left, err := ParseDJSON(k)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		for _, tc := range tests {
+			t.Run(fmt.Sprintf("%s @> %s", k, tc.other), func(t *testing.T) {
+				other, err := ParseDJSON(tc.other)
+				if err != nil {
+					t.Fatal(err)
+				}
+				result := left.(*DJSON).contains(NewTestingEvalContext(), *other.(*DJSON))
+				if err != nil {
+					t.Fatal(err)
+				}
+				if tc.expected && !result {
+					t.Fatalf("expected %s @> %s", left.String(), other.String())
+				} else if !tc.expected && result {
+					t.Fatalf("expected %s to not @> %s", left.String(), other.String())
+				}
+			})
+		}
+	}
+}
+
+func BenchmarkJSONArrayContains(b *testing.B) {
+	ctx := NewTestingEvalContext()
+	for arySize := 0; arySize <= 20; arySize += 5 {
+		b.Run(fmt.Sprintf("JSON array of size %d", arySize), func(b *testing.B) {
+			var buf bytes.Buffer
+			buf.WriteByte('[')
+			for i := 0; i < arySize; i++ {
+				if i > 0 {
+					buf.WriteByte(',')
+				}
+				buf.WriteString(fmt.Sprintf("%d", i))
+			}
+			buf.WriteByte(']')
+			j, _ := ParseDJSON(buf.String())
+			ary := *j.(*DJSON)
+
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				jsonArrayContains(ctx, ary, ary)
+			}
+			b.StopTimer()
 		})
 	}
 }

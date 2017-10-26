@@ -159,6 +159,11 @@
 <tr><td><a href="uuid.html">uuid</a> <code><=</code> <a href="uuid.html">uuid</a></td><td><a href="bool.html">bool</a></td></tr>
 </tbody></table>
 <table><thead>
+<tr><td><code><@</code></td><td>Return</td></tr>
+</thead><tbody>
+<tr><td>jsonb <code><@</code> jsonb</td><td><a href="bool.html">bool</a></td></tr>
+</tbody></table>
+<table><thead>
 <tr><td><code>=</code></td><td>Return</td></tr>
 </thead><tbody>
 <tr><td><a href="bool.html">bool</a> <code>=</code> <a href="bool.html">bool</a></td><td><a href="bool.html">bool</a></td></tr>
@@ -208,6 +213,11 @@
 <tr><td><code>>></code></td><td>Return</td></tr>
 </thead><tbody>
 <tr><td><a href="int.html">int</a> <code>>></code> <a href="int.html">int</a></td><td><a href="int.html">int</a></td></tr>
+</tbody></table>
+<table><thead>
+<tr><td><code>@></code></td><td>Return</td></tr>
+</thead><tbody>
+<tr><td>jsonb <code>@></code> jsonb</td><td><a href="bool.html">bool</a></td></tr>
 </tbody></table>
 <table><thead>
 <tr><td><code>ILIKE</code></td><td>Return</td></tr>
