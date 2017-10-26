@@ -62,7 +62,7 @@ test-watch: $(DLLS)
 dist/%.dll.js %-manifest.json: webpack.%.js | protos
 	$(WEBPACK) -p --config $<
 
-$(GOBINDATA_TARGET): webpack.app.js $(DLLS) $(shell find src)
+$(GOBINDATA_TARGET): webpack.app.js $(DLLS) $(shell find src styl)
 	find dist -mindepth 1 -not -name '*.dll.js' -delete
 	$(WEBPACK) --config $<
 	go-bindata -nometadata -pkg ui -o $@ -prefix dist dist/...
