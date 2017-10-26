@@ -571,3 +571,179 @@ func TestJSONRandomRoundTrip(t *testing.T) {
 		}
 	}
 }
+
+func TestJSONContains(t *testing.T) {
+	cases := map[string][]struct {
+		other    string
+		expected bool
+	}{
+		`10`: {
+			{`10`, true},
+			{`9`, false},
+		},
+		`[1, 2, 3]`: {
+			{`{}`, false},
+			{`[]`, true},
+			{`[1]`, true},
+			{`[1.0]`, true},
+			{`[1.00]`, true},
+			{`[1, 2]`, true},
+			{`[1, 2, 2]`, true},
+			{`[2, 1]`, true},
+			{`[1, 4]`, false},
+			{`[4, 1]`, false},
+			{`[4]`, false},
+			// This is a unique, special case that only applies to arrays and
+			// scalars.
+			{`1`, true},
+			{`2`, true},
+			{`3`, true},
+			{`4`, false},
+		},
+		`[[1, 2], 3]`: {
+			{`[1, 2]`, false},
+			{`[[1, 2]]`, true},
+			{`[[2, 1]]`, true},
+			{`[3, [1, 2]]`, true},
+			{`[[1, 2], 3]`, true},
+			{`[[1], [2], 3]`, true},
+			{`[[1], 3]`, true},
+			{`[[2]]`, true},
+			{`[[3]]`, false},
+		},
+		`[]`: {
+			{`[]`, true},
+			{`[1]`, false},
+			{`1`, false},
+			{`{}`, false},
+		},
+		`{}`: {
+			{`{}`, true},
+			{`1`, false},
+			{`{"a":"b"}`, false},
+			{`{"":""}`, false},
+		},
+		`[[1, 2], [3, 4]]`: {
+			{`[[1, 2]]`, true},
+			{`[[3, 4]]`, true},
+			{`[[3, 4, 5]]`, false},
+			{`[[1, 3]]`, false},
+			{`[[2, 4]]`, false},
+			{`[1]`, false},
+			{`[1, 2]`, false},
+		},
+		`{"a": "b", "c": "d"}`: {
+			{`{}`, true},
+			{`{"a": "b"}`, true},
+			{`{"c": "d"}`, true},
+			{`{"a": "b", "c": "d"}`, true},
+			{`{"a": "x"}`, false},
+			{`{"c": "x"}`, false},
+			{`{"y": "x"}`, false},
+			{`{"a": "b", "c": "x"}`, false},
+			{`{"a": "x", "c": "y"}`, false},
+		},
+		`{"a": [1, 2, 3], "c": {"foo": "bar"}}`: {
+			{`{}`, true},
+			{`{"a": [1, 2, 3], "c": {"foo": "bar"}}`, true},
+			{`{"a": [1, 2]}`, true},
+			{`{"a": [2, 1]}`, true},
+			{`{"a": []}`, true},
+			{`{"a": [4]}`, false},
+			{`{"a": [3], "c": {}}`, true},
+			{`{"a": [4], "c": {}}`, false},
+			{`{"a": [3], "c": {"foo": "gup"}}`, false},
+		},
+		`[{"a": 1}, {"b": 2, "c": 3}, [1], true, false, null, "hello"]`: {
+			{`[]`, true},
+			{`{}`, false},
+			{`{"a": 1}`, false},
+			{`[{"a": 1}]`, true},
+			{`[{"b": 2}]`, true},
+			{`[{"b": 2, "d": 4}]`, false},
+			{`[{"b": 2, "c": 3}]`, true},
+			{`[{"a": 1}, {"b": 2}, {"c": 3}]`, true},
+			{`[{}]`, true},
+			{`[true]`, true},
+			{`[true, false]`, true},
+			{`[false, true]`, true},
+			{`[[1]]`, true},
+			{`[[]]`, true},
+			{`[null, "hello"]`, true},
+			{`["hello", "hello", []]`, true},
+			{`["hello", {"a": 1}, "hello", []]`, true},
+			{`["hello", {"a": 1, "b": 2}, "hello", []]`, false},
+		},
+	}
+
+	for k, tests := range cases {
+		left, err := ParseJSON(k)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		for _, tc := range tests {
+			t.Run(fmt.Sprintf("%s @> %s", k, tc.other), func(t *testing.T) {
+				other, err := ParseJSON(tc.other)
+				if err != nil {
+					t.Fatal(err)
+				}
+				result := Contains(left, other)
+
+				checkResult := left.(containsTester).slowContains(other)
+				if result != checkResult {
+					t.Fatal("mismatch between actual contains and slowContains")
+				}
+
+				if tc.expected && !result {
+					t.Fatalf("expected %s @> %s", left, other)
+				} else if !tc.expected && result {
+					t.Fatalf("expected %s to not @> %s", left, other)
+				}
+			})
+		}
+	}
+}
+
+// TestPositiveRandomJSONContains randomly generates a JSON document, generates
+// a subdocument of it, then verifies that it matches under contains.
+func TestPositiveRandomJSONContains(t *testing.T) {
+	rng := rand.New(rand.NewSource(timeutil.Now().Unix()))
+	for i := 0; i < 1000; i++ {
+		j, err := Random(20, rng)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		subdoc := j.(containsTester).subdocument(true /* isRoot */, rng)
+
+		if !Contains(j, subdoc) {
+			t.Fatal(fmt.Sprintf("%s should contain %s", j, subdoc))
+		}
+		if !j.(containsTester).slowContains(subdoc) {
+			t.Fatal(fmt.Sprintf("%s should slowContains %s", j, subdoc))
+		}
+	}
+}
+
+// We expect that this almost always results in a non-contained pair..
+func TestNegativeRandomJSONContains(t *testing.T) {
+	rng := rand.New(rand.NewSource(timeutil.Now().Unix()))
+	for i := 0; i < 1000; i++ {
+		j1, err := Random(20, rng)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		j2, err := Random(20, rng)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		realResult := Contains(j1, j2)
+		slowResult := j1.(containsTester).slowContains(j2)
+		if realResult != slowResult {
+			t.Fatal("mismatch for document " + j1.String() + " @> " + j2.String())
+		}
+	}
+}
