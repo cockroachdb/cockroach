@@ -17,7 +17,8 @@ case ${1-} in
            --image-family "ubuntu-1604-lts" \
            --boot-disk-size "100" \
            --boot-disk-type "pd-ssd" \
-           --boot-disk-device-name "${NAME}"
+           --boot-disk-device-name "${NAME}" \
+           --scopes "default,cloud-platform"
 
     # Retry while vm and sshd to start up.
     "$(dirname "${0}")/travis_retry.sh" gcloud compute ssh "${NAME}" --command=true
