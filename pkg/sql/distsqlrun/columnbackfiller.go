@@ -197,7 +197,7 @@ func (cb *columnBackfiller) runChunk(
 		b := txn.NewBatch()
 		rowLength := 0
 		for i := int64(0); i < chunkSize; i++ {
-			row, err := cb.fetcher.NextRowDecoded(ctx, false /* traceKV */)
+			row, err := cb.fetcher.NextRowDecoded(ctx)
 			if err != nil {
 				return err
 			}

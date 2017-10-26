@@ -604,7 +604,7 @@ func (rf *RowFetcher) NextRow(ctx context.Context) (EncDatumRow, error) {
 // NextRowDecoded calls NextRow and decodes the EncDatumRow into a Datums.
 // The Datums should not be modified and is only valid until the next call.
 // When there are no more rows, the Datums is nil.
-func (rf *RowFetcher) NextRowDecoded(ctx context.Context, traceKV bool) (parser.Datums, error) {
+func (rf *RowFetcher) NextRowDecoded(ctx context.Context) (parser.Datums, error) {
 	encRow, err := rf.NextRow(ctx)
 	if err != nil {
 		return nil, err
