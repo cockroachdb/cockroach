@@ -285,7 +285,7 @@ func ConvertBatchError(ctx context.Context, tableDesc *TableDescriptor, b *clien
 		if err := rf.StartScanFrom(ctx, &f); err != nil {
 			return err
 		}
-		decodedVals, err := rf.NextRowDecoded(ctx, false /* traceKV */)
+		decodedVals, err := rf.NextRowDecoded(ctx)
 		if err != nil {
 			return err
 		}
