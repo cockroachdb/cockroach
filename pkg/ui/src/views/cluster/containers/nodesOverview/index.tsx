@@ -342,9 +342,6 @@ class NodesMain extends React.Component<NodesMainProps, {}> {
 
   render() {
     return <div>
-      <section className="section parent-link">
-        <Link to="/cluster">&lt; Back to Cluster</Link>
-      </section>
       <LiveNodesConnected />
       <DeadNodesConnected />
       <DecommissionedNodesConnected />
@@ -353,9 +350,10 @@ class NodesMain extends React.Component<NodesMainProps, {}> {
 }
 
 /**
- * nodesMainConnected is a redux-connected HOC of NodesMain.
+ * NodesMainConnected is a redux-connected HOC of NodesMain.
  */
-const nodesMainConnected = connect(
+// tslint:disable-next-line:variable-name
+const NodesMainConnected = connect(
   (state: AdminUIState) => {
     return {
       statusesValid: nodeQueryValid(state),
@@ -367,4 +365,19 @@ const nodesMainConnected = connect(
   },
 )(NodesMain);
 
-export { nodesMainConnected as default };
+/**
+ * Renders the main content of the nodes page, which is primarily a data table
+ * of all nodes.
+ */
+function NodesPage() {
+  return (
+    <div>
+      <section className="section parent-link">
+        <Link to="/cluster">&lt; Back to Cluster</Link>
+      </section>
+      <NodesMainConnected />
+    </div>
+  );
+}
+
+export { NodesPage as default, NodesMainConnected as NodesOverview };
