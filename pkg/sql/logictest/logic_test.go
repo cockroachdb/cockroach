@@ -583,7 +583,6 @@ func (t *logicTest) close() {
 	t.cleanupFuncs = nil
 
 	if t.cluster != nil {
-		t.outf("stopping cluster")
 		t.cluster.Stopper().Stop(context.TODO())
 		t.cluster = nil
 	}
@@ -821,7 +820,7 @@ func (t *logicTest) processTestFile(path string, config testClusterConfig) error
 	if *showSQL {
 		t.outf("--- queries start here (file: %s)", path)
 	}
-	defer t.printCompletion(path)
+	defer t.printCompletion(path, config)
 
 	t.lastProgress = timeutil.Now()
 
@@ -1498,7 +1497,6 @@ func (t *logicTest) runFile(path string, config testClusterConfig) {
 	if err := t.processTestFile(path, config); err != nil {
 		t.Fatal(err)
 	}
-	t.outf("file %s done with config: %s", path, config.name)
 }
 
 var skipLogicTests = envutil.EnvOrDefaultBool("COCKROACH_LOGIC_TESTS_SKIP", false)
@@ -1830,11 +1828,11 @@ func (t *logicTest) finishOne(msg string) {
 
 // printCompletion reports on the completion of all tests in a given
 // input file.
-func (t *logicTest) printCompletion(path string) {
+func (t *logicTest) printCompletion(path string, config testClusterConfig) {
 	unsupportedMsg := ""
 	if t.unsupported > 0 {
 		unsupportedMsg = fmt.Sprintf(", ignored %d unsupported queries", t.unsupported)
 	}
-	t.outf("--- done: %s: %d tests, %d failures%s", path, t.progress, t.failures,
-		unsupportedMsg)
+	t.outf("--- done: %s with config %s: %d tests, %d failures%s", path, config.name,
+		t.progress, t.failures, unsupportedMsg)
 }
