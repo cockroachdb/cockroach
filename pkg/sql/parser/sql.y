@@ -1990,7 +1990,8 @@ scrub_stmt:
 // SCRUB TABLE <tablename> [WITH <option> [, ...]]
 //
 // Options:
-//   SCRUB TABLE ... WITH INDEX
+//   SCRUB TABLE ... WITH OPTIONS INDEX
+//   SCRUB TABLE ... WITH OPTIONS INDEX(<index>...)
 //
 scrub_table_stmt:
   EXPERIMENTAL SCRUB TABLE qualified_name
@@ -2016,6 +2017,10 @@ scrub_option:
   INDEX
   {
     $$.val = &ScrubOptionIndex{}
+  }
+| INDEX '(' name_list ')'
+  {
+    $$.val = &ScrubOptionIndex{IndexNames: $3.nameList()}
   }
 
 // %Help: SET CLUSTER SETTING - change a cluster setting

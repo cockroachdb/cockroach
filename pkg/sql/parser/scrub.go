@@ -40,26 +40,33 @@ func (n *Scrub) Format(buf *bytes.Buffer, f FmtFlags) {
 	switch n.Typ {
 	case ScrubTable:
 		buf.WriteString("TABLE ")
-		buf.WriteString(n.Table.String())
+		n.Table.Format(buf, f)
 	default:
 		panic("Unhandled ScrubType")
 	}
 
 	if len(n.Options) > 0 {
-		buf.WriteString(" WITH ")
-		for i, option := range n.Options {
-			option.Format(buf, f)
-			if i != len(n.Options)-1 {
-				buf.WriteString(", ")
-			}
-		}
+		buf.WriteString(" WITH OPTIONS ")
+		n.Options.Format(buf, f)
 	}
 }
 
 // ScrubOptions corresponds to a comma-delimited list of scrub options.
 type ScrubOptions []ScrubOption
 
-// ScrubOption representts a scrub option.
+// Format implements the NodeFormatter interface.
+func (n ScrubOptions) Format(buf *bytes.Buffer, f FmtFlags) {
+	for i, option := range n {
+		if i > 0 {
+			buf.WriteString(", ")
+		}
+		option.Format(buf, f)
+	}
+}
+
+func (n ScrubOptions) String() string { return AsString(n) }
+
+// ScrubOption represents a scrub option.
 type ScrubOption interface {
 	fmt.Stringer
 	NodeFormatter
@@ -71,11 +78,17 @@ func (*ScrubOptionIndex) scrubOptionType() {}
 
 // ScrubOptionIndex represents an INDEX scrub check.
 type ScrubOptionIndex struct {
+	IndexNames NameList
 }
 
 // Format implements the NodeFormatter interface.
-func (node *ScrubOptionIndex) Format(buf *bytes.Buffer, f FmtFlags) {
+func (n *ScrubOptionIndex) Format(buf *bytes.Buffer, f FmtFlags) {
 	buf.WriteString("INDEX")
+	if n.IndexNames != nil {
+		buf.WriteString("(")
+		n.IndexNames.Format(buf, f)
+		buf.WriteString(")")
+	}
 }
 
-func (node *ScrubOptionIndex) String() string { return AsString(node) }
+func (n *ScrubOptionIndex) String() string { return AsString(n) }
