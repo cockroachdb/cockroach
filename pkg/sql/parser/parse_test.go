@@ -796,6 +796,7 @@ func TestParse(t *testing.T) {
 
 		{`EXPERIMENTAL SCRUB TABLE x`},
 		{`EXPERIMENTAL SCRUB TABLE x WITH INDEX`},
+		{`EXPERIMENTAL SCRUB TABLE x WITH INDEX(index_name)`},
 
 		{`BACKUP foo TO 'bar'`},
 		{`BACKUP foo.foo, baz.baz TO 'bar'`},
