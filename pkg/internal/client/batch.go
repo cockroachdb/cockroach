@@ -18,6 +18,7 @@ import (
 	"github.com/pkg/errors"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
 )
 
 const (
@@ -209,6 +210,7 @@ func (b *Batch) fillResults() error {
 						dst.Key = src.Key
 						dst.Value = &src.Value
 					}
+					bufalloc.ReleaseKVSlice(t.Rows)
 				}
 			case *roachpb.ReverseScanRequest:
 				if result.Err == nil {
@@ -220,6 +222,7 @@ func (b *Batch) fillResults() error {
 						dst.Key = src.Key
 						dst.Value = &src.Value
 					}
+					bufalloc.ReleaseKVSlice(t.Rows)
 				}
 			case *roachpb.DeleteRequest:
 				row := &result.Rows[k]

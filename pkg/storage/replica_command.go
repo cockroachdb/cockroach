@@ -41,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
+	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -1329,7 +1330,12 @@ func evalRangeLookup(
 		}
 
 		// Merge the results, the total ranges may be bigger than rangeCount.
+		oldKVs := kvs
 		kvs = append(kvs, revKVs...)
+		bufalloc.ReleaseKVSlice(revKVs)
+		if cap(oldKVs) != cap(kvs) {
+			bufalloc.ReleaseKVSlice(oldKVs)
+		}
 		intents = append(intents, revIntents...)
 	}
 
@@ -1355,6 +1361,7 @@ func evalRangeLookup(
 			}
 		}
 	}
+	bufalloc.ReleaseKVSlice(kvs)
 
 	// NOTE (subtle): dangling intents on meta records are peculiar: It's not
 	// clear whether the intent or the previous value point to the correct
