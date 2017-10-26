@@ -17,12 +17,14 @@ package distsqlrun
 import (
 	"fmt"
 	"sync"
+	time "time"
 
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
@@ -190,6 +192,78 @@ func (tr *tableReader) Run(ctx context.Context, wg *sync.WaitGroup) {
 	log.VEventf(ctx, 1, "starting")
 	if log.V(1) {
 		defer log.Infof(ctx, "exiting")
+	}
+
+	sl := scanLayer.Get(&tr.flowCtx.Settings.SV)
+	if sl != "" {
+		// StartScan initializes the underlying kvfetcher.
+		if err := tr.fetcher.StartScan(
+			ctx, txn, tr.spans, true, tr.limitHint, false,
+		); err != nil {
+			log.Errorf(ctx, "scan error: %s", err)
+			tr.out.output.Push(nil, ProducerMetadata{Err: err})
+			tr.out.Close()
+			return
+		}
+		start := time.Now()
+		bytesRead := 0
+		switch sl {
+		case "rocksdb":
+			fmt.Println("running RocksDB")
+			i := tr.flowCtx.Engine.NewIterator(false)
+			startKey := engine.MakeMVCCMetadataKey(tr.spans[0].Key)
+			endKey := engine.MakeMVCCMetadataKey(tr.spans[len(tr.spans)-1].EndKey)
+			i.Seek(startKey)
+			for {
+				if ok, err := i.Valid(); err != nil {
+					panic("no err expected")
+				} else if !ok {
+					break
+				}
+
+				// Reached the end.
+				if !i.UnsafeKey().Less(endKey) {
+					break
+				}
+
+				// Key and Value result in the iterator not using a scratch
+				// buffer, which is less performant but realistic.
+				bytesRead += len(i.Key().Key) + len(i.Value())
+				i.NextKey()
+			}
+			i.Close()
+		case "kvfetcher":
+			fmt.Println("running KVFetcher")
+			kvf := tr.fetcher.KVFetcher()
+			for {
+				ok, kv, err := kvf.NextKV(ctx)
+				if err != nil {
+					panic("no err expected")
+				} else if !ok {
+					break
+				}
+				bytesRead += len(kv.Key) + len(kv.Value.RawBytes)
+			}
+		case "rowfetcher":
+			fmt.Println("running RowFetcher")
+			tr.fetcher.Debug = true
+			for {
+				fetcherRow, err := tr.fetcher.NextRow(ctx)
+				if err != nil {
+					panic("no err expected")
+				} else if fetcherRow == nil {
+					bytesRead = tr.fetcher.DebugBytesFetched
+					break
+				}
+			}
+		default:
+			panic("unsupported scanLayer")
+		}
+		elapsed := time.Since(start)
+
+		fmt.Printf("throughput of %s was %.2fMB/s\n", sl, float64(bytesRead/(1024*1024))/elapsed.Seconds())
+		tr.out.Close()
+		return
 	}
 
 	// TODO(radu,andrei,knz): set the traceKV flag when requested by the session.

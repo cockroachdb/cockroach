@@ -102,6 +102,9 @@ type RowFetcher struct {
 	keyRemainingBytes []byte
 	kvEnd             bool
 
+	Debug             bool
+	DebugBytesFetched int
+
 	// Buffered allocation of decoded datums.
 	alloc *DatumAlloc
 }
@@ -263,6 +266,10 @@ func (rf *RowFetcher) NextKey(ctx context.Context) (rowDone bool, err error) {
 		rf.kvEnd = !ok
 		if rf.kvEnd {
 			return true, nil
+		}
+
+		if rf.Debug {
+			rf.DebugBytesFetched += len(rf.kv.Key) + len(rf.kv.Value.RawBytes)
 		}
 
 		// See Init() for a detailed description of when we can get away with not
@@ -644,6 +651,10 @@ func (rf *RowFetcher) finalizeRow() {
 // Key returns nil when there are no more rows.
 func (rf *RowFetcher) Key() roachpb.Key {
 	return rf.kv.Key
+}
+
+func (rf *RowFetcher) KVFetcher() *txnKVFetcher {
+	return rf.kvFetcher.(*txnKVFetcher)
 }
 
 // GetRangeInfo returns information about the ranges where the rows came from.

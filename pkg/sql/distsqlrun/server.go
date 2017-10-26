@@ -97,6 +97,8 @@ var settingWorkMemBytes = settings.RegisterByteSizeSetting(
 
 var noteworthyMemoryUsageBytes = envutil.EnvOrDefaultInt64("COCKROACH_NOTEWORTHY_DISTSQL_MEMORY_USAGE", 1024*1024 /* 1MB */)
 
+var scanLayer = settings.RegisterStringSetting("scan_layer", "rocksdb, kvfetcher, or rowfetcher", "")
+
 // ServerConfig encompasses the configuration required to create a
 // DistSQLServer.
 type ServerConfig struct {
@@ -136,6 +138,8 @@ type ServerConfig struct {
 
 	// A handle to gossip used to broadcast the node's DistSQL version.
 	Gossip *gossip.Gossip
+
+	Engine engine.Engine
 }
 
 // ServerImpl implements the server for the distributed SQL APIs.
@@ -279,6 +283,7 @@ func (ds *ServerImpl) setupFlow(
 	// txnProto).
 	flowCtx := FlowCtx{
 		Settings:       ds.Settings,
+		Engine:         ds.ServerConfig.Engine,
 		AmbientContext: ds.AmbientContext,
 		stopper:        ds.Stopper,
 		id:             req.Flow.FlowID,
