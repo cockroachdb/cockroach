@@ -1,3 +1,4 @@
+// * All the arrays come after all the objects
 // Copyright 2016 The Cockroach Authors.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
