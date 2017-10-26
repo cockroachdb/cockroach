@@ -47,10 +47,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
@@ -500,7 +500,7 @@ func checkInProgressBackupRestore(
 			allowResponse <- struct{}{}
 		}
 
-		err := util.RetryForDuration(testutils.DefaultSucceedsSoonDuration, func() error {
+		err := retry.ForDuration(testutils.DefaultSucceedsSoonDuration, func() error {
 			return check(ctx, inProgressState{
 				DB:            sqlDB.DB,
 				backupTableID: backupTableID,
@@ -509,7 +509,7 @@ func checkInProgressBackupRestore(
 		})
 
 		// Close the channel to allow all remaining responses to proceed. We do this
-		// even if the above RetryForDuration failed, otherwise the test will hang
+		// even if the above retry.ForDuration failed, otherwise the test will hang
 		// forever.
 		close(allowResponse)
 
@@ -619,7 +619,7 @@ func TestBackupRestoreCheckpointing(t *testing.T) {
 }
 
 func waitForJob(db *gosql.DB, jobID int64) error {
-	return util.RetryForDuration(testutils.DefaultSucceedsSoonDuration, func() error {
+	return retry.ForDuration(testutils.DefaultSucceedsSoonDuration, func() error {
 		var status string
 		if err := db.QueryRow(
 			`SELECT status FROM system.jobs WHERE id = $1`, jobID,
@@ -1390,7 +1390,7 @@ func startBackgroundWrites(
 			}
 			return err
 		}
-		if err := util.RetryForDuration(testutils.DefaultSucceedsSoonDuration, updateFn); err != nil {
+		if err := retry.ForDuration(testutils.DefaultSucceedsSoonDuration, updateFn); err != nil {
 			return err
 		}
 		select {

@@ -22,8 +22,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/acceptance/cluster"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/pkg/errors"
 )
 
@@ -34,7 +34,7 @@ type CheckGossipFunc func(map[string]gossip.Info) error
 // function. The test passes if the function returns 0 for every node,
 // retrying for up to the given duration.
 func CheckGossip(ctx context.Context, c cluster.Cluster, d time.Duration, f CheckGossipFunc) error {
-	return errors.Wrapf(util.RetryForDuration(d, func() error {
+	return errors.Wrapf(retry.ForDuration(d, func() error {
 		var infoStatus gossip.InfoStatus
 		for i := 0; i < c.NumNodes(); i++ {
 			if err := httputil.GetJSON(cluster.HTTPClient, c.URL(ctx, i)+"/_status/gossip/local", &infoStatus); err != nil {

@@ -19,6 +19,7 @@ import (
 	"math/rand"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"golang.org/x/net/context"
 )
 
@@ -150,4 +151,24 @@ func WithMaxAttempts(ctx context.Context, opts Options, n int, fn func() error) 
 		}
 	}
 	return err
+}
+
+// ForDuration will retry the given function until it either returns
+// without error, or the given duration has elapsed. The function is invoked
+// immediately at first and then successively with an exponential backoff
+// starting at 1ns and ending at the specified duration.
+func ForDuration(duration time.Duration, fn func() error) error {
+	deadline := timeutil.Now().Add(duration)
+	var lastErr error
+	for wait := time.Duration(1); timeutil.Now().Before(deadline); wait *= 2 {
+		lastErr = fn()
+		if lastErr == nil {
+			return nil
+		}
+		if wait > time.Second {
+			wait = time.Second
+		}
+		time.Sleep(wait)
+	}
+	return lastErr
 }

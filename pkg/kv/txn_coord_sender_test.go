@@ -33,11 +33,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/localtestcluster"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -712,7 +712,7 @@ func TestTxnCoordSenderGCWithCancel(t *testing.T) {
 	// exceeded.
 	errStillActive := errors.New("transaction is still active")
 	// TODO(dan): Figure out how to run the heartbeat manually instead of this.
-	if err := util.RetryForDuration(1*time.Second, func() error {
+	if err := retry.ForDuration(1*time.Second, func() error {
 		// Locking the TxnCoordSender to prevent a data race.
 		sender.txnMu.Lock()
 		_, ok := sender.txnMu.txns[txnID]
