@@ -20,6 +20,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/pkg/errors"
 	yaml "gopkg.in/yaml.v2"
@@ -294,4 +295,24 @@ func (z ZoneConfig) GetSubzoneForKeySuffix(keySuffix []byte) (ZoneConfig, bool) 
 		}
 	}
 	return ZoneConfig{}, false
+}
+
+func (z ZoneConfig) subzoneSplits() []roachpb.RKey {
+	var out []roachpb.RKey
+	for _, span := range z.SubzoneSpans {
+		// TODO(benesch): avoid a split at the first partition's start key when it
+		// is the minimum possible value.
+		if len(out) == 0 || !out[len(out)-1].Equal(span.Key) {
+			// Only split at the start key when it differs from the last end key.
+			out = append(out, roachpb.RKey(span.Key))
+		}
+		endKey := span.EndKey
+		if len(endKey) == 0 {
+			endKey = span.Key.PrefixEnd()
+		}
+		out = append(out, roachpb.RKey(endKey))
+		// TODO(benesch): avoid a split at the last partition's end key when it is
+		// the maximum possible value.
+	}
+	return out
 }
