@@ -1790,6 +1790,26 @@ var CmpOps = map[ComparisonOperator]cmpOpOverload{
 			},
 		},
 	},
+
+	Contains: {
+		CmpOp{
+			LeftType:  TypeJSON,
+			RightType: TypeJSON,
+			fn: func(ctx *EvalContext, left Datum, right Datum) (Datum, error) {
+				return MakeDBool(DBool(left.(*DJSON).JSON.Contains(right.(*DJSON).JSON))), nil
+			},
+		},
+	},
+
+	ContainedBy: {
+		CmpOp{
+			LeftType:  TypeJSON,
+			RightType: TypeJSON,
+			fn: func(ctx *EvalContext, left Datum, right Datum) (Datum, error) {
+				return MakeDBool(DBool(right.(*DJSON).JSON.Contains(left.(*DJSON).JSON))), nil
+			},
+		},
+	},
 }
 
 func isNaN(d Datum) bool {

@@ -79,6 +79,12 @@ type JSON interface {
 
 	// Exists implements the `?` operator.
 	Exists(string) bool
+
+	// isScalar returns if the JSON document is null, true, false, a string, or a
+	// number.
+	isScalar() bool
+	// Contains implements the <@, @> operators.
+	Contains(JSON) bool
 }
 
 type jsonTrue struct{}
@@ -385,7 +391,7 @@ func MakeJSON(d interface{}) (JSON, error) {
 			}
 		}
 		return jsonObject(result), nil
-		// The below are not used by ParseDJSON, but are provided for ease-of-use when
+		// The below are not used by ParseJSON, but are provided for ease-of-use when
 		// constructing Datums.
 	case int:
 		dec := apd.Decimal{}
@@ -546,4 +552,147 @@ func (j jsonArray) Exists(s string) bool {
 }
 func (j jsonObject) Exists(s string) bool {
 	return j.FetchValKey(s) != nil
+}
+
+func (jsonNull) isScalar() bool   { return true }
+func (jsonFalse) isScalar() bool  { return true }
+func (jsonTrue) isScalar() bool   { return true }
+func (jsonNumber) isScalar() bool { return true }
+func (jsonString) isScalar() bool { return true }
+func (jsonArray) isScalar() bool  { return false }
+func (jsonObject) isScalar() bool { return false }
+
+func (j jsonNull) Contains(other JSON) bool   { return j.Compare(other) == 0 }
+func (j jsonFalse) Contains(other JSON) bool  { return j.Compare(other) == 0 }
+func (j jsonTrue) Contains(other JSON) bool   { return j.Compare(other) == 0 }
+func (j jsonNumber) Contains(other JSON) bool { return j.Compare(other) == 0 }
+func (j jsonString) Contains(other JSON) bool { return j.Compare(other) == 0 }
+
+func (j jsonArray) Contains(other JSON) bool {
+	if other.isScalar() {
+		for _, v := range j {
+			if v.Compare(other) == 0 {
+				return true
+			}
+		}
+		return false
+	}
+
+	if contained, ok := other.(jsonArray); ok {
+		// The naive approach to doing array containment would be to do an O(n^2)
+		// nested loop through the arrays to check if one is contained in the
+		// other.  We're out of luck when the arrays contain other arrays or
+		// objects (there might actually be something fancy we can do, but there's nothing
+		// obvious).
+		// When the arrays contain scalars however, we can optimize this by
+		// pre-sorting both arrays and iterating through them in lockstep.
+		// To this end, we preprocess the arrays to extract the scalars sorted, and
+		// then also the arrays and objects in separate arrays, so that we can do
+		// the fast thing for the subset of the arrays which are scalars.
+		containerScalars, containerArrays, containerObjects := preprocessJSONArrayForContains(j)
+		otherScalars, otherArrays, otherObjects := preprocessJSONArrayForContains(contained)
+
+		// Both slices of scalars are sorted now via the preprocessing, so we can
+		// step through them together.
+		i := 0
+		for _, val := range otherScalars {
+			for i < len(containerScalars) && containerScalars[i].Compare(val) == -1 {
+				i++
+			}
+			if i >= len(containerScalars) || containerScalars[i].Compare(val) != 0 {
+				return false
+			}
+		}
+
+		// TODO(justin): there's possibly(?) something fancier we can do with the
+		// objects and arrays, but for now just do the quadratic check.
+		if !quadraticJSONArrayContains(containerObjects, otherObjects) ||
+			!quadraticJSONArrayContains(containerArrays, otherArrays) {
+			return false
+		}
+
+		return true
+	}
+	return false
+}
+
+// quadraticJSONArrayContains does an O(n^2) check to see if every value in
+// `other` is contained within a value in `container`. `container` and `other`
+// cannot contain scalars.
+func quadraticJSONArrayContains(container, other jsonArray) bool {
+	for _, otherVal := range other {
+		found := false
+		for _, containerVal := range container {
+			if containerVal.Contains(otherVal) {
+				found = true
+				break
+			}
+		}
+		if !found {
+			return false
+		}
+	}
+	return true
+}
+
+// preprocessJSONArrayForContains takes a slice of JSONs and returns three slices containing
+// * the scalars in the given slice, sorted,
+// * the arrays in the input slice,
+// * and the objects in the input slice.
+// The input array is unmodified.
+// TODO(justin): this is slightly alloc-heavy - in theory we could re-use a
+// slice for each call to this function, or if we wanted to get crazy we could
+// permute the input array and then pass back up a way to permute it back to
+// the way it was once the caller was done with it.
+// TODO(justin): if a JSON document is given as a literal for the @> operator,
+// theoretically during planning we could do this preprocessing and avoid doing it
+// on every invocation of the operator.
+func preprocessJSONArrayForContains(ary []JSON) (scalars, arrays, objects []JSON) {
+	sorted := make([]JSON, len(ary))
+	copy(sorted, ary)
+	// Note: we don't actually care about the ordering of arrays and
+	// objects.
+	sort.Slice(sorted, func(i, j int) bool {
+		return sorted[i].Compare(sorted[j]) == -1
+	})
+
+	// Now that the slice is sorted, we just need to find the split points. This
+	// works because objects always sort after everything and arrays always sort
+	// after scalars.
+	firstArrayIdx := len(sorted)
+	firstObjIdx := len(sorted)
+	for i := 0; i < len(sorted); i++ {
+		if !sorted[i].isScalar() {
+			firstArrayIdx = i
+			break
+		}
+	}
+	for i := firstArrayIdx; i < len(sorted); i++ {
+		if _, ok := sorted[i].(jsonObject); ok {
+			firstObjIdx = i
+			break
+		}
+	}
+	return sorted[:firstArrayIdx], sorted[firstArrayIdx:firstObjIdx], sorted[firstObjIdx:]
+}
+
+func (j jsonObject) Contains(other JSON) bool {
+	if contained, ok := other.(jsonObject); ok {
+		// We can iterate through the keys of `other` and scan through to find the
+		// corresponding keys in `j` since they're both sorted.
+		objIdx := 0
+		for _, rightEntry := range contained {
+			for objIdx < len(j) && j[objIdx].k < rightEntry.k {
+				objIdx++
+			}
+			if objIdx >= len(j) ||
+				j[objIdx].k != rightEntry.k ||
+				!j[objIdx].v.Contains(rightEntry.v) {
+				return false
+			}
+			objIdx++
+		}
+		return true
+	}
+	return false
 }
