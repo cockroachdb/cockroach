@@ -175,9 +175,7 @@ func (s *Stopper) Recover(ctx context.Context) {
 			s.onPanic(r)
 			return
 		}
-		// FIXME(tschottdorf): should find a way to plumb ReportingSettings here.
-		// Certainly the Stopper could hold them.
-		if sv, ok := (log.ReportingSettingsSingleton.Load()).(*settings.Values); ok {
+		if sv := settings.TODO(); sv != nil {
 			log.ReportPanic(ctx, sv, r, 1)
 		}
 		panic(r)

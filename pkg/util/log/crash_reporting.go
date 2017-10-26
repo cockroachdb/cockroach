@@ -21,7 +21,6 @@ import (
 	"runtime"
 	"runtime/debug"
 	"strings"
-	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -68,23 +67,6 @@ var (
 	// include the server's uptime as an extra tag.
 	startTime = timeutil.Now()
 )
-
-// TODO(dt): this should be split from the report interval.
-// var statsResetFrequency = settings.RegisterDurationSetting(
-// 	"sql.metrics.statement_details.reset_interval",
-// 	"interval at which the collected statement statistics should be reset",
-// 	time.Hour,
-// )
-
-// ReportingSettingsSingleton is a global that holds a reference to the
-// setting.Values of an active instance of cluster.Settings. In a regular
-// running node, there is exactly one such instance. In multi-node testing,
-// there may be many, and so it is not clear which one will win out, but that is
-// acceptable.
-//
-// The global is a compromise to free callers of log.Fatal{,f} from having to
-// provide their cluster's settings on every call.
-var ReportingSettingsSingleton atomic.Value // stores *setting.Values
 
 // RecoverAndReportPanic can be invoked on goroutines that run with
 // stderr redirected to logs to ensure the user gets informed on the

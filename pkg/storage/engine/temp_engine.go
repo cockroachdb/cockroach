@@ -17,7 +17,6 @@ package engine
 import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 )
 
 // NewTempEngine creates a new engine for DistSQL processors to use when the
@@ -29,13 +28,9 @@ func NewTempEngine(tempStorage base.TempStorageConfig) (Engine, error) {
 		return NewInMem(roachpb.Attributes{} /* attrs */, 0 /* cacheSize */), nil
 	}
 
-	// FIXME(tschottdorf): should be passed in.
-	st := cluster.MakeClusterSettings(cluster.BinaryServerVersion, cluster.BinaryServerVersion)
-
 	rocksDBCfg := RocksDBConfig{
-		Settings: st,
-		Attrs:    roachpb.Attributes{},
-		Dir:      tempStorage.Path,
+		Attrs: roachpb.Attributes{},
+		Dir:   tempStorage.Path,
 		// MaxSizeBytes doesn't matter for temp storage - it's not
 		// enforced in any way.
 		MaxSizeBytes: 0,

@@ -34,6 +34,26 @@ type Values struct {
 	opaque interface{}
 }
 
+var (
+	canonicalValues atomic.Value
+)
+
+// TODO is usable at callsites that do not have *settings.Values available.
+// Please don't use this.
+func TODO() *Values {
+	if ptr := canonicalValues.Load(); ptr != nil {
+		return ptr.(*Values)
+	}
+	return nil
+}
+
+// SetCanonicalValuesContainer sets the Values container that will be refreshed
+// at runtime -- ideally we should have no other *Values containers floating
+// around, as they will be stale / lies.
+func SetCanonicalValuesContainer(v *Values) {
+	canonicalValues.Store(v)
+}
+
 type testOpaqueType struct{}
 
 // TestOpaque can be passed to Values.Init when we are testing the settings
