@@ -44,7 +44,8 @@ export default class extends React.Component<{}, {}> {
   render() {
     return <nav className="navigation-bar">
       <ul className="navigation-bar__list">
-        <IconLink to="/cluster" icon={Icons.clusterIcon} title="Cluster" />
+        <IconLink to="/overview" icon={Icons.clusterIcon} title="Overview" />
+        <IconLink to="/cluster" icon={Icons.nodesIcon} title="Cluster" />
         <IconLink to="/databases" icon={Icons.databaseIcon} title="Databases"/>
         <IconLink to="/jobs" icon={Icons.jobsIcon} title="Jobs"/>
       </ul>
