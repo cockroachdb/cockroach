@@ -442,7 +442,7 @@ func (sc *SchemaChanger) exec(
 	// but we're no longer responsible for taking care of that.
 
 	// Run through mutation state machine and backfill.
-	err = sc.runStateMachineAndBackfill(ctx, &lease, evalCtx)
+	err = sc.runStateMachineAndBackfill(ctx, &lease, evalCtx, false /* isRollback */)
 
 	// Purge the mutations if the application of the mutations failed due to
 	// a permanent error. All other errors are transient errors that are
@@ -474,7 +474,7 @@ func (sc *SchemaChanger) rollbackSchemaChange(
 
 	// After this point the schema change has been reversed and any retry
 	// of the schema change will act upon the reversed schema change.
-	if errPurge := sc.runStateMachineAndBackfill(ctx, lease, evalCtx); errPurge != nil {
+	if errPurge := sc.runStateMachineAndBackfill(ctx, lease, evalCtx, true /* isRollback */); errPurge != nil {
 		// Don't return this error because we do want the caller to know
 		// that an integrity constraint was violated with the original
 		// schema change. The reversed schema change will be
@@ -577,7 +577,7 @@ func (sc *SchemaChanger) waitToUpdateLeases(ctx context.Context, tableID sqlbase
 // It ensures that all nodes are on the current (pre-update) version of the
 // schema.
 // Returns the updated of the descriptor.
-func (sc *SchemaChanger) done(ctx context.Context) (*sqlbase.Descriptor, error) {
+func (sc *SchemaChanger) done(ctx context.Context, isRollback bool) (*sqlbase.Descriptor, error) {
 	return sc.leaseMgr.Publish(ctx, sc.tableID, func(desc *sqlbase.TableDescriptor) error {
 		i := 0
 		for _, mutation := range desc.Mutations {
@@ -608,15 +608,22 @@ func (sc *SchemaChanger) done(ctx context.Context) (*sqlbase.Descriptor, error) 
 	}, func(txn *client.Txn) error {
 		if err := sc.job.WithTxn(txn).Succeeded(ctx); err != nil {
 			log.Warningf(ctx, "schema change ignoring error while marking job %d as successful: %+v",
-				sc.job.ID(), err)
+				*sc.job.ID(), err)
 		}
-		// Log "Finish Schema Change" event. Only the table ID and mutation ID
-		// are logged; this can be correlated with the DDL statement that
-		// initiated the change using the mutation id.
+
+		schemaChangeEventType := EventLogFinishSchemaChange
+		if isRollback {
+			schemaChangeEventType = EventLogFinishSchemaRollback
+		}
+
+		// Log "Finish Schema Change" or "Finish Schema Change Rollback"
+		// event. Only the table ID and mutation ID are logged; this can
+		// be correlated with the DDL statement that initiated the change
+		// using the mutation id.
 		return MakeEventLogger(sc.leaseMgr).InsertEventRecord(
 			ctx,
 			txn,
-			EventLogFinishSchemaChange,
+			schemaChangeEventType,
 			int32(sc.tableID),
 			int32(sc.nodeID),
 			struct {
@@ -650,7 +657,10 @@ func (sc *SchemaChanger) notFirstInLine(ctx context.Context) (bool, error) {
 // runStateMachineAndBackfill runs the schema change state machine followed by
 // the backfill.
 func (sc *SchemaChanger) runStateMachineAndBackfill(
-	ctx context.Context, lease *sqlbase.TableDescriptor_SchemaChangeLease, evalCtx parser.EvalContext,
+	ctx context.Context,
+	lease *sqlbase.TableDescriptor_SchemaChangeLease,
+	evalCtx parser.EvalContext,
+	isRollback bool,
 ) error {
 	if fn := sc.testingKnobs.RunBeforePublishWriteAndDelete; fn != nil {
 		fn()
@@ -662,7 +672,7 @@ func (sc *SchemaChanger) runStateMachineAndBackfill(
 
 	if err := sc.job.Progressed(ctx, .1, jobs.Noop); err != nil {
 		log.Warningf(ctx, "failed to log progress on job %v after completing state machine: %v",
-			sc.job.ID(), err)
+			*sc.job.ID(), err)
 	}
 
 	// Run backfill(s).
@@ -671,7 +681,7 @@ func (sc *SchemaChanger) runStateMachineAndBackfill(
 	}
 
 	// Mark the mutations as completed.
-	_, err := sc.done(ctx)
+	_, err := sc.done(ctx, isRollback)
 	return err
 }
 

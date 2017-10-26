@@ -29,6 +29,8 @@ export const DROP_VIEW = "drop_view";
 export const REVERSE_SCHEMA_CHANGE = "reverse_schema_change";
 // Recorded when a previously initiated schema change has completed.
 export const FINISH_SCHEMA_CHANGE = "finish_schema_change";
+// Recorded when a schema change rollback has completed.
+export const FINISH_SCHEMA_CHANGE_ROLLBACK = "finish_schema_change_rollback";
 // Recorded when a node joins the cluster.
 export const NODE_JOIN = "node_join";
 // Recorded when an existing node rejoins the cluster after being offline.
@@ -43,8 +45,11 @@ export const SET_CLUSTER_SETTING = "set_cluster_setting";
 // Node Event Types
 export const nodeEvents = [NODE_JOIN, NODE_RESTART, NODE_DECOMMISSIONED, NODE_RECOMMISSIONED];
 export const databaseEvents = [CREATE_DATABASE, DROP_DATABASE];
-export const tableEvents = [CREATE_TABLE, DROP_TABLE, ALTER_TABLE, CREATE_INDEX,
-  DROP_INDEX, CREATE_VIEW, DROP_VIEW, REVERSE_SCHEMA_CHANGE, FINISH_SCHEMA_CHANGE];
+export const tableEvents = [
+  CREATE_TABLE, DROP_TABLE, ALTER_TABLE, CREATE_INDEX,
+  DROP_INDEX, CREATE_VIEW, DROP_VIEW, REVERSE_SCHEMA_CHANGE, FINISH_SCHEMA_CHANGE,
+  FINISH_SCHEMA_CHANGE_ROLLBACK,
+];
 export const settingsEvents = [SET_CLUSTER_SETTING];
 export const allEvents = [...nodeEvents, ...databaseEvents, ...tableEvents, ...settingsEvents];
 
