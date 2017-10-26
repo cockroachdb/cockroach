@@ -436,9 +436,9 @@ for example:
 <PRE>
 
   --store=path=/mnt/ssd01,size=10000000000     -> 10000000000 bytes
-  --store-path=/mnt/ssd01,size=20GB            -> 20000000000 bytes
-  --store-path=/mnt/ssd01,size=20GiB           -> 21474836480 bytes
-  --store-path=/mnt/ssd01,size=0.02TiB         -> 21474836480 bytes
+  --store=path=/mnt/ssd01,size=20GB            -> 20000000000 bytes
+  --store=path=/mnt/ssd01,size=20GiB           -> 21474836480 bytes
+  --store=path=/mnt/ssd01,size=0.02TiB         -> 21474836480 bytes
   --store=path=/mnt/ssd01,size=20%             -> 20% of available space
   --store=path=/mnt/ssd01,size=0.2             -> 20% of available space
   --store=path=/mnt/ssd01,size=.2              -> 20% of available space
