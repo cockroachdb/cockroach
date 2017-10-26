@@ -91,6 +91,8 @@ var reservedKeywords = map[string]struct{}{
 	"into":              {},
 	"is":                {},
 	"join":              {},
+	"json":              {},
+	"jsonb":             {},
 	"lateral":           {},
 	"leading":           {},
 	"least":             {},

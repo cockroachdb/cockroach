@@ -132,12 +132,21 @@ public class MainTest extends CockroachDBTest {
     @Test
     public void testArrays() throws Exception {
         PreparedStatement stmt = conn.prepareStatement("SELECT ?");
-        Array array = conn.createArrayOf("FLOAT", new Double[]{1.0,2.0,3.0});
+        Array array = conn.createArrayOf("FLOAT", new Double[]{1.0, 2.0, 3.0});
         stmt.setArray(1, array);
         ResultSet rs = stmt.executeQuery();
         rs.next();
         Array ar = rs.getArray(1);
-        Double[] fs = (Double[])ar.getArray();
+        Double[] fs = (Double[]) ar.getArray();
         Assert.assertArrayEquals(new Double[]{1.0, 2.0, 3.0}, fs);
+    }
+
+    @Test
+    public void testStringArray() throws Exception {
+        PreparedStatement stmt = conn.prepareStatement("SELECT '{123,\"hello\",\"\\\"hello\\\"\"}'::STRING[]");
+        ResultSet rs = stmt.executeQuery();
+        rs.next();
+        String[] result = (String[])rs.getArray(1).getArray();
+        Assert.assertArrayEquals(new String[]{"123", "hello", "\"hello\""}, result);
     }
 }
