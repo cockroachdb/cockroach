@@ -231,8 +231,6 @@ func MakeClusterSettings(minVersion, serverVersion roachpb.Version) *Settings {
 		s.Version.baseVersion.Store(&newV)
 	})
 
-	log.ReportingSettingsSingleton.Store(sv)
-
 	// TODO(dan): This limiting should be per-store and shared between any
 	// operations that need lots of disk throughput.
 	s.BulkIOWriteLimiter = rate.NewLimiter(rate.Limit(BulkIOWriteLimit.Get(sv)), BulkIOWriteLimiterBurst)
