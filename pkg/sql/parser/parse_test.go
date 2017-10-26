@@ -562,9 +562,9 @@ func TestParse(t *testing.T) {
 		{`SELECT a FROM t WHERE a IN (b, c)`},
 		{`SELECT a FROM t WHERE a IN (SELECT a FROM t)`},
 		{`SELECT a FROM t WHERE a NOT IN (b, c)`},
-		{`SELECT a FROM t WHERE a = ANY ARRAY[b, c]`},
-		{`SELECT a FROM t WHERE a != SOME ARRAY[b, c]`},
-		{`SELECT a FROM t WHERE a LIKE ALL ARRAY[b, c]`},
+		{`SELECT a FROM t WHERE a = ANY (ARRAY[b, c])`},
+		{`SELECT a FROM t WHERE a != SOME (ARRAY[b, c])`},
+		{`SELECT a FROM t WHERE a LIKE ALL (ARRAY[b, c])`},
 		{`SELECT a FROM t WHERE a LIKE b`},
 		{`SELECT a FROM t WHERE a NOT LIKE b`},
 		{`SELECT a FROM t WHERE a ILIKE b`},
@@ -1211,6 +1211,19 @@ func TestParse2(t *testing.T) {
 		{
 			`CREATE TABLE a (b INT, FOREIGN KEY (b) REFERENCES other ON UPDATE SET DEFAULT ON DELETE RESTRICT)`,
 			`CREATE TABLE a (b INT, FOREIGN KEY (b) REFERENCES other ON DELETE RESTRICT ON UPDATE SET DEFAULT)`,
+		},
+		// See #19555. This is actually invalid SQL, but we permit it anyway.
+		{
+			`SELECT a FROM t WHERE a = ANY ARRAY[b, c]`,
+			`SELECT a FROM t WHERE a = ANY (ARRAY[b, c])`,
+		},
+		{
+			`SELECT a FROM t WHERE a != SOME ARRAY[b, c]`,
+			`SELECT a FROM t WHERE a != SOME (ARRAY[b, c])`,
+		},
+		{
+			`SELECT a FROM t WHERE a LIKE ALL ARRAY[b, c]`,
+			`SELECT a FROM t WHERE a LIKE ALL (ARRAY[b, c])`,
 		},
 	}
 	for _, d := range testData {
