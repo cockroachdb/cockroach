@@ -325,6 +325,7 @@ clean: clean-c-deps
 
 .PHONY: maintainer-clean
 maintainer-clean: ## Like clean, but also remove some auto-generated source code.
+maintainer-clean: clean
 	$(MAKE) -C $(UI_ROOT) maintainer-clean
 
 .PHONY: unsafe-clean
