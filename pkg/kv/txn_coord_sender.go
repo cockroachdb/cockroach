@@ -28,7 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
@@ -297,9 +297,9 @@ func (tc *TxnCoordSender) printStatsLoop(ctx context.Context) {
 					"txn coordinator: %.2f txn/sec, %.2f/%.2f/%.2f/%.2f %%cmmt/cmmt1pc/abrt/abnd, "+
 						"%s/%s/%s avg/σ/max duration, %.1f/%.1f/%d avg/σ/max restarts (%d samples over %s)",
 					totalRate, pCommitted, pCommitted1PC, pAborted, pAbandoned,
-					util.TruncateDuration(time.Duration(dMean), res),
-					util.TruncateDuration(time.Duration(dDev), res),
-					util.TruncateDuration(time.Duration(dMax), res),
+					duration.Truncate(time.Duration(dMean), res),
+					duration.Truncate(time.Duration(dDev), res),
+					duration.Truncate(time.Duration(dMax), res),
 					rMean, rDev, rMax, num, restartsWindow,
 				)
 			}
@@ -479,7 +479,7 @@ func (tc *TxnCoordSender) Send(
 	if maxOffset != timeutil.ClocklessMaxOffset && tc.linearizable && sleepNS > 0 {
 		defer func() {
 			if log.V(1) {
-				log.Infof(ctx, "%v: waiting %s on EndTransaction for linearizability", br.Txn.Short(), util.TruncateDuration(sleepNS, time.Millisecond))
+				log.Infof(ctx, "%v: waiting %s on EndTransaction for linearizability", br.Txn.Short(), duration.Truncate(sleepNS, time.Millisecond))
 			}
 			time.Sleep(sleepNS)
 		}()
