@@ -532,9 +532,9 @@ func runStart(cmd *cobra.Command, args []string) error {
 		syncutil.Mutex
 		// Used to synchronize server startup with server shutdown if something
 		// interrupts the process during initialization (it isn't safe to try to
-		// drain a server that doesn't exist, or to start a server after draining
-		// has begun).
-		created, draining bool
+		// drain a server that doesn't exist or is in the middle of starting up,
+		// or to start a server after draining has begun).
+		started, draining bool
 	}
 	var s *server.Server
 	errChan := make(chan error, 1)
@@ -564,7 +564,6 @@ func runStart(cmd *cobra.Command, args []string) error {
 			}
 
 			serverStatusMu.Lock()
-			serverStatusMu.created = true
 			draining := serverStatusMu.draining
 			serverStatusMu.Unlock()
 			if draining {
@@ -583,6 +582,10 @@ func runStart(cmd *cobra.Command, args []string) error {
 
 				return errors.Wrap(err, "cockroach server exited with error")
 			}
+
+			serverStatusMu.Lock()
+			serverStatusMu.started = true
+			serverStatusMu.Unlock()
 
 			// We don't do this in (*server.Server).Start() because we don't want it
 			// in tests.
@@ -688,9 +691,9 @@ func runStart(cmd *cobra.Command, args []string) error {
 		go func() {
 			serverStatusMu.Lock()
 			serverStatusMu.draining = true
-			needToDrain := serverStatusMu.created
+			drainingIsSafe := serverStatusMu.started
 			serverStatusMu.Unlock()
-			if needToDrain {
+			if drainingIsSafe {
 				if _, err := s.Drain(server.GracefulDrainModes); err != nil {
 					// Don't use shutdownCtx because this is in a goroutine that may
 					// still be running after shutdownCtx's span has been finished.
