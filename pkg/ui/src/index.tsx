@@ -34,6 +34,7 @@ import TableDetails from "src/views/databases/containers/tableDetails";
 
 import JobsPage from "src/views/jobs";
 
+import ClusterOverview from "src/views/cluster/containers/clusterOverview";
 import NodesOverview from "src/views/cluster/containers/nodesOverview";
 import NodeOverview from "src/views/cluster/containers/nodeOverview";
 import NodeGraphs from "src/views/cluster/containers/nodeGraphs";
@@ -67,7 +68,7 @@ ReactDOM.render(
   <Provider store={store}>
     <Router history={history}>
       <Route path="/" component={Layout}>
-        <IndexRedirect to="cluster" />
+        <IndexRoute component={ClusterOverview} />
         <Route path="cluster">
           <IndexRedirect to="all/overview" />
           <Route path={`all/:${dashboardNameAttr}`} component={NodeGraphs} />
