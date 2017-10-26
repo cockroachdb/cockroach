@@ -1240,7 +1240,7 @@ type CollateExpr struct {
 func (node *CollateExpr) Format(buf *bytes.Buffer, f FmtFlags) {
 	exprFmtWithParen(buf, f, node.Expr)
 	buf.WriteString(" COLLATE ")
-	encodeSQLIdent(buf, node.Locale, FmtSimple)
+	encodeSQLIdent(buf, node.Locale, FmtSimple, true /* allowBareKeywords */)
 }
 
 func (node *AliasedTableExpr) String() string { return AsString(node) }
@@ -1283,6 +1283,7 @@ func (node *IndexedVar) String() string       { return AsString(node) }
 func (node *IndirectionExpr) String() string  { return AsString(node) }
 func (node *IsOfTypeExpr) String() string     { return AsString(node) }
 func (node Name) String() string              { return AsString(node) }
+func (node UnrestrictedName) String() string  { return AsString(node) }
 func (node *NotExpr) String() string          { return AsString(node) }
 func (node *NullIfExpr) String() string       { return AsString(node) }
 func (node *NumVal) String() string           { return AsString(node) }

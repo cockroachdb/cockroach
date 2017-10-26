@@ -41,6 +41,9 @@ type fmtFlags struct {
 	bareStrings bool
 	// If true, identifiers will be rendered without wrapping quotes.
 	bareIdentifiers bool
+	// If true, keywords used as identifiers will be rendered without wrapping
+	// quotes.
+	bareKeywords bool
 	// If true, strings will be formatted for being contents of ARRAYs.
 	withinArray bool
 	// If true, datums and placeholders will have type annotations (like

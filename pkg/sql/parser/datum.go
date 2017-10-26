@@ -895,7 +895,7 @@ func (d *DCollatedString) Format(buf *bytes.Buffer, f FmtFlags) {
 	} else {
 		encodeSQLString(buf, d.Contents)
 		buf.WriteString(" COLLATE ")
-		encodeSQLIdent(buf, d.Locale, FmtSimple)
+		encodeSQLIdent(buf, d.Locale, FmtSimple, true /* allowBareKeywords */)
 	}
 }
 

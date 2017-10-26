@@ -247,7 +247,7 @@ func (t TableNameReferences) Format(buf *bytes.Buffer, f FmtFlags) {
 // specifically refer to an index.
 type TableNameWithIndex struct {
 	Table NormalizableTableName
-	Index Name
+	Index UnrestrictedName
 
 	// SearchTable indicates that we have just an index (no table name); we will
 	// need to search for a table that has an index with the given name.
@@ -262,7 +262,9 @@ func (n *TableNameWithIndex) Format(buf *bytes.Buffer, f FmtFlags) {
 	FormatNode(buf, f, &n.Table)
 	if n.Index != "" {
 		buf.WriteByte('@')
-		FormatNode(buf, f, n.Index)
+		f2 := *f
+		f2.bareKeywords = true
+		FormatNode(buf, &f2, n.Index)
 	}
 }
 

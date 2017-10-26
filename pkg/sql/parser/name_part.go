@@ -66,7 +66,7 @@ func (n Name) Format(buf *bytes.Buffer, f FmtFlags) {
 	if f.anonymize {
 		buf.WriteByte('_')
 	} else {
-		encodeSQLIdent(buf, string(n), f)
+		encodeSQLIdent(buf, string(n), f, false /* allowBareKeywords */)
 	}
 }
 
@@ -78,6 +78,25 @@ func (n Name) Normalize() string {
 		return lower
 	}
 	return norm.NFC.String(lower)
+}
+
+// An UnrestrictedName is like Name, but it does not need to be wrapped in
+// quotes when it is a SQL keyword.
+type UnrestrictedName string
+
+// Format implements the NodeFormatter interface.
+func (u UnrestrictedName) Format(buf *bytes.Buffer, f FmtFlags) {
+	if f.anonymize {
+		buf.WriteByte('_')
+	} else {
+		encodeSQLIdent(buf, string(u), f, true /* allowBareKeywords */)
+	}
+}
+
+// Normalize normalizes to lowercase and Unicode Normalization Form C
+// (NFC).
+func (u UnrestrictedName) Normalize() string {
+	return Name(u).Normalize()
 }
 
 // ToStrings converts the name list to an array of regular strings.
@@ -143,10 +162,12 @@ type NamePart interface {
 }
 
 var _ NamePart = Name("")
+var _ NamePart = UnrestrictedName("")
 var _ NamePart = &ArraySubscript{}
 var _ NamePart = UnqualifiedStar{}
 
 func (Name) namePart()              {}
+func (UnrestrictedName) namePart()  {}
 func (a *ArraySubscript) namePart() {}
 func (UnqualifiedStar) namePart()   {}
 

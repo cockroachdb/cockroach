@@ -59,7 +59,7 @@ func ZoneSpecifierFromID(
 	id uint32, resolveID func(id uint32) (parentID uint32, name string, err error),
 ) (parser.ZoneSpecifier, error) {
 	if name, ok := NamedZonesByID[id]; ok {
-		return parser.ZoneSpecifier{NamedZone: parser.Name(name)}, nil
+		return parser.ZoneSpecifier{NamedZone: parser.UnrestrictedName(name)}, nil
 	}
 	parentID, name, err := resolveID(id)
 	if err != nil {
@@ -88,7 +88,7 @@ func ParseCLIZoneSpecifier(s string) (parser.ZoneSpecifier, error) {
 		if name == "" {
 			return parser.ZoneSpecifier{}, errors.New("missing zone name")
 		}
-		return parser.ZoneSpecifier{NamedZone: parser.Name(name)}, nil
+		return parser.ZoneSpecifier{NamedZone: parser.UnrestrictedName(name)}, nil
 	}
 	// ParseTableName is not vulnerable to SQL injection, so passing s directly
 	// is safe. See #8389 for details.

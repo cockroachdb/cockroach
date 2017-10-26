@@ -190,8 +190,8 @@ func encodeJSONString(buf *bytes.Buffer, in string, f FmtFlags) {
 	buf.WriteByte('"')
 }
 
-func encodeSQLIdent(buf *bytes.Buffer, s string, f FmtFlags) {
-	if isNonKeywordBareIdentifier(s) {
+func encodeSQLIdent(buf *bytes.Buffer, s string, f FmtFlags, allowBareKeywords bool) {
+	if isBareIdentifier(s, allowBareKeywords) {
 		buf.WriteString(s)
 		return
 	}
