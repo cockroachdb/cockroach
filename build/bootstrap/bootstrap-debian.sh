@@ -19,6 +19,6 @@ echo '. ~/.bashrc_go' >> ~/.bashrc
 
 mkdir -p "$GOPATH/src/github.com/cockroachdb"
 
-git clone https://github.com/cockroachdb/cockroach.git "$GOPATH/src/github.com/cockroachdb/cockroach"
+git clone --recursive https://github.com/cockroachdb/cockroach.git "$GOPATH/src/github.com/cockroachdb/cockroach"
 
 . bootstrap/bootstrap-go.sh
