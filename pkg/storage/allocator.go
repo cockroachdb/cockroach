@@ -529,9 +529,7 @@ func (a Allocator) RebalanceTarget(
 
 		// Deep-copy the Replicas slice since we'll mutate it.
 		desc := *rangeInfo.Desc
-		desc.Replicas = append([]roachpb.ReplicaDescriptor(nil), desc.Replicas...)
-
-		desc.Replicas = append(desc.Replicas, newReplica)
+		desc.Replicas = append(desc.Replicas[:len(desc.Replicas):len(desc.Replicas)], newReplica)
 		rangeInfo.Desc = &desc
 
 		replicaCandidates := simulateFilterUnremovableReplicas(raftStatus, desc.Replicas, newReplica.ReplicaID)
