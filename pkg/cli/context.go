@@ -23,9 +23,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 )
@@ -60,11 +60,7 @@ type cliContext struct {
 
 var serverCfg = func() server.Config {
 	st := cluster.MakeClusterSettings(cluster.BinaryMinimumSupportedVersion, cluster.BinaryServerVersion)
-	// The server package has its own reference to the singleton for use in the
-	// /debug/requests handler.
-	server.ClusterSettings = st
-	// A similar singleton reference exists in the log package. See comment there.
-	log.ReportingSettingsSingleton.Store(&st.SV)
+	settings.SetCanonicalValuesContainer(&st.SV)
 
 	return server.MakeConfig(context.Background(), st)
 }()
