@@ -109,9 +109,9 @@ func TestAdminDebugExpVar(t *testing.T) {
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.TODO())
 
-	// This test accesses the debug pages, which currently use this singleton
-	// that needs to be populated manually.
-	ClusterSettings = cluster.MakeTestingClusterSettings()
+	// This test accesses the debug pages, which currently use the TODO singleton.
+	st := cluster.MakeTestingClusterSettings()
+	settings.SetCanonicalValuesContainer(&st.SV)
 
 	jI, err := getJSON(s, debugURL(s)+"vars")
 	if err != nil {
