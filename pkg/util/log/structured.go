@@ -143,7 +143,7 @@ func addStructured(ctx context.Context, s Severity, depth int, format string, ar
 	if s == Severity_FATAL {
 		// We load the ReportingSettings from the a global singleton in this
 		// call path. See the singleton's comment for a rationale.
-		if sv, ok := (ReportingSettingsSingleton.Load()).(*settings.Values); ok {
+		if sv := settings.TODO(); sv != nil {
 			SendCrashReport(ctx, sv, depth+2, format, args)
 		}
 	}
