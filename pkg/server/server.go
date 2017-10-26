@@ -824,6 +824,14 @@ func (s *Server) Start(ctx context.Context) error {
 	// TODO(marc): when cookie-based authentication exists, apply it to all web
 	// endpoints.
 	s.mux.Handle(debugEndpoint, authorizedHandler(http.HandlerFunc(handleDebug)))
+	// Also throw the landing page in there. It won't work well, but it's better than a 404.
+	// The remaining endpoints will be opened late, when we're sure that the subsystems they
+	// talk to are functional.
+	s.mux.Handle("/", http.FileServer(&assetfs.AssetFS{
+		Asset:     ui.Asset,
+		AssetDir:  ui.AssetDir,
+		AssetInfo: ui.AssetInfo,
+	}))
 
 	// Filter the gossip bootstrap resolvers based on the listen and
 	// advertise addresses.
@@ -1014,20 +1022,6 @@ If problems persist, please see ` + base.DocsURL("cluster-setup-troubleshooting.
 		}
 	}
 
-	s.mux.Handle("/", http.FileServer(&assetfs.AssetFS{
-		Asset:     ui.Asset,
-		AssetDir:  ui.AssetDir,
-		AssetInfo: ui.AssetInfo,
-	}))
-
-	s.mux.Handle(adminPrefix, authHandler)
-	s.mux.Handle(ts.URLPrefix, authHandler)
-	s.mux.Handle(statusPrefix, authHandler)
-	s.mux.Handle(authPrefix, gwMux)
-	s.mux.Handle("/health", gwMux)
-	s.mux.Handle(statusVars, http.HandlerFunc(s.status.handleVars))
-	log.Event(ctx, "added http endpoints")
-
 	// Now that we have a monotonic HLC wrt previous incarnations of the process,
 	// init all the replicas. At this point *some* store has been bootstrapped or
 	// we're joining an existing cluster for the first time.
@@ -1111,6 +1105,14 @@ If problems persist, please see ` + base.DocsURL("cluster-setup-troubleshooting.
 	s.distSQLServer.Start()
 
 	atomic.StoreInt32(&s.serveNonGossip, 1)
+
+	s.mux.Handle(adminPrefix, authHandler)
+	s.mux.Handle(ts.URLPrefix, authHandler)
+	s.mux.Handle(statusPrefix, authHandler)
+	s.mux.Handle(authPrefix, gwMux)
+	s.mux.Handle("/health", gwMux)
+	s.mux.Handle(statusVars, http.HandlerFunc(s.status.handleVars))
+	log.Event(ctx, "added http endpoints")
 
 	log.Infof(ctx, "starting %s server at %s", s.cfg.HTTPRequestScheme(), unresolvedHTTPAddr)
 	log.Infof(ctx, "starting grpc/postgres server at %s", unresolvedListenAddr)
