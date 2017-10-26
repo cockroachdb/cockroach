@@ -24,7 +24,6 @@ import (
 	"golang.org/x/net/trace"
 
 	"github.com/cockroachdb/cockroach/pkg/settings"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/pkg/errors"
 	"github.com/rcrowley/go-metrics"
@@ -95,16 +94,10 @@ func handleDebug(w http.ResponseWriter, r *http.Request) {
 // traceAuthRequest is the original trace.AuthRequest, populated in init().
 var traceAuthRequest func(*http.Request) (bool, bool)
 
-// ClusterSettings is populated by pkg/cli at init time. It's only used as a
-// crutch for the auth handler for /debug/requests. Don't use this.
-//
-// FIXME(tschottdorf): remove this.
-var ClusterSettings *cluster.Settings
-
 // authRequest restricts access to /debug/*.
 func authRequest(r *http.Request) (allow, sensitive bool) {
 	allow, sensitive = traceAuthRequest(r)
-	switch DebugRemoteMode(strings.ToLower(debugRemote.Get(&ClusterSettings.SV))) {
+	switch DebugRemoteMode(strings.ToLower(debugRemote.Get(settings.TODO()))) {
 	case DebugRemoteAny:
 		allow = true
 	case DebugRemoteLocal:
