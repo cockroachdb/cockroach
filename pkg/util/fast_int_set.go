@@ -32,6 +32,15 @@ type FastIntSet struct {
 	large *intsets.Sparse
 }
 
+// MakeFastIntSet returns a set initialized with the given values.
+func MakeFastIntSet(vals ...int) FastIntSet {
+	var res FastIntSet
+	for _, v := range vals {
+		res.Add(v)
+	}
+	return res
+}
+
 // We store bits for values smaller than this cutoff.
 const smallCutoff = 64
 
