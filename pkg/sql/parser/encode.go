@@ -119,12 +119,23 @@ func encodeSQLStringInsideArray(buf *bytes.Buffer, in string) {
 	buf.WriteByte('"')
 }
 
-func encodeSQLIdent(buf *bytes.Buffer, s string, f FmtFlags) {
-	if isNonKeywordBareIdentifier(s) {
+func encodeUnrestrictedSQLIdent(buf *bytes.Buffer, s string, f FmtFlags) {
+	if isBareIdentifier(s) {
 		buf.WriteString(s)
 		return
 	}
+	encodeEscapedSQLIdent(buf, s, f)
+}
 
+func encodeRestrictedSQLIdent(buf *bytes.Buffer, s string, f FmtFlags) {
+	if !isReservedKeyword(s) && isBareIdentifier(s) {
+		buf.WriteString(s)
+		return
+	}
+	encodeEscapedSQLIdent(buf, s, f)
+}
+
+func encodeEscapedSQLIdent(buf *bytes.Buffer, s string, f FmtFlags) {
 	// The only character that requires escaping is a double quote.
 	if !f.bareIdentifiers {
 		buf.WriteString(`"`)

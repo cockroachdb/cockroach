@@ -113,7 +113,7 @@ func (node SelectExprs) Format(buf *bytes.Buffer, f FmtFlags) {
 // SelectExpr represents a SELECT expression.
 type SelectExpr struct {
 	Expr Expr
-	As   Name
+	As   UnrestrictedName
 }
 
 // NormalizeTopLevelVarName preemptively expands any UnresolvedName at
@@ -240,7 +240,7 @@ type IndexID uint32
 //  - NO_INDEX_JOIN
 // It is used optionally after a table name in SELECT statements.
 type IndexHints struct {
-	Index       Name
+	Index       UnrestrictedName
 	IndexID     IndexID
 	NoIndexJoin bool
 }
@@ -486,7 +486,7 @@ type Order struct {
 	// Table/Index replaces Expr when OrderType = OrderByIndex.
 	Table NormalizableTableName
 	// If Index is empty, then the order should use the primary key.
-	Index Name
+	Index UnrestrictedName
 }
 
 // Format implements the NodeFormatter interface.

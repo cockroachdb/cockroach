@@ -312,6 +312,7 @@ func TestParse(t *testing.T) {
 		{`SHOW TESTING_RANGES FROM INDEX i`},
 		{`SHOW EXPERIMENTAL_FINGERPRINTS FROM TABLE d.t`},
 		{`EXPERIMENTAL SHOW ZONE CONFIGURATIONS`},
+		{`EXPERIMENTAL SHOW ZONE CONFIGURATION FOR RANGE default`},
 		{`EXPERIMENTAL SHOW ZONE CONFIGURATION FOR RANGE meta`},
 		{`EXPERIMENTAL SHOW ZONE CONFIGURATION FOR DATABASE db`},
 		{`EXPERIMENTAL SHOW ZONE CONFIGURATION FOR TABLE db.t`},
@@ -487,6 +488,8 @@ func TestParse(t *testing.T) {
 		{`SELECT a.b[:][3] FROM t`},
 		{`SELECT 'a' FROM t`},
 		{`SELECT 'a' FROM t@bar`},
+		{`SELECT 'a' FROM t@primary`},
+		{`SELECT 'a' FROM t@like`},
 		{`SELECT 'a' FROM t@{NO_INDEX_JOIN}`},
 		{`SELECT 'a' FROM t@{FORCE_INDEX=bar,NO_INDEX_JOIN}`},
 		{`SELECT * FROM t AS "of" AS OF SYSTEM TIME '2016-01-01'`},
@@ -508,6 +511,8 @@ func TestParse(t *testing.T) {
 
 		{`SELECT 'a' AS "12345"`},
 		{`SELECT 'a' AS clnm`},
+		{`SELECT 'a' AS primary`},
+		{`SELECT 'a' AS like`},
 
 		{`SELECT 0xf0 FROM t`},
 		{`SELECT 0xF0 FROM t`},
@@ -617,6 +622,8 @@ func TestParse(t *testing.T) {
 		{`SELECT a FROM t ORDER BY INDEX t@foo`},
 		{`SELECT a FROM t ORDER BY INDEX t@foo ASC`},
 		{`SELECT a FROM t ORDER BY INDEX t@foo DESC`},
+		{`SELECT a FROM t ORDER BY INDEX t@primary`},
+		{`SELECT a FROM t ORDER BY INDEX t@like`},
 
 		{`SELECT 1 FROM t GROUP BY a`},
 		{`SELECT 1 FROM t GROUP BY a, b`},
@@ -730,7 +737,9 @@ func TestParse(t *testing.T) {
 		{`ALTER TABLE IF EXISTS a RENAME TO b`},
 		{`ALTER INDEX a@b RENAME TO b`},
 		{`ALTER INDEX b RENAME TO b`},
+		{`ALTER INDEX a@primary RENAME TO like`},
 		{`ALTER INDEX IF EXISTS a@b RENAME TO b`},
+		{`ALTER INDEX IF EXISTS a@primary RENAME TO like`},
 		{`ALTER TABLE a RENAME COLUMN c1 TO c2`},
 		{`ALTER TABLE IF EXISTS a RENAME COLUMN c1 TO c2`},
 
@@ -788,6 +797,7 @@ func TestParse(t *testing.T) {
 		{`ALTER TABLE d.a SCATTER`},
 		{`ALTER INDEX d.i SCATTER FROM (1) TO (2)`},
 
+		{`ALTER RANGE default EXPERIMENTAL CONFIGURE ZONE 'foo'`},
 		{`ALTER RANGE meta EXPERIMENTAL CONFIGURE ZONE 'foo'`},
 		{`ALTER DATABASE db EXPERIMENTAL CONFIGURE ZONE 'foo'`},
 		{`ALTER TABLE db.t EXPERIMENTAL CONFIGURE ZONE 'foo'`},
@@ -890,12 +900,6 @@ func TestParse2(t *testing.T) {
 		{`SELECT a FROM t WHERE a = + b`, `SELECT a FROM t WHERE a = (+b)`},
 		{`SELECT a FROM t WHERE a = - b`, `SELECT a FROM t WHERE a = (-b)`},
 		{`SELECT a FROM t WHERE a = ~ b`, `SELECT a FROM t WHERE a = (~b)`},
-
-		// Special keywords are supported for index names.
-		{`SELECT a FROM t@primary`,
-			`SELECT a FROM t@"primary"`},
-		{`SELECT a FROM t ORDER BY INDEX t@primary`,
-			`SELECT a FROM t ORDER BY INDEX t@"primary"`},
 
 		// Escaped string literals are not always escaped the same because
 		// '''' and e'\'' scan to the same token. It's more convenient to
