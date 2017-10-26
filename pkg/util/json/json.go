@@ -79,6 +79,19 @@ type JSON interface {
 
 	// Exists implements the `?` operator.
 	Exists(string) bool
+
+	// isScalar returns whether the JSON document is null, true, false, a string,
+	// or a number.
+	isScalar() bool
+
+	// preprocessForContains sorts all arrays in the JSON object. We could
+	// potentially use a different type to represent a JSON object that has been
+	// preprocessed in this way, but that seems a bit heavyweight for one operator.
+	preprocessForContains() JSON
+	// contains implements the <@, @> operators. It should only be called on a
+	// JSON document which has already been preprocessed by
+	// preprocessForContains.
+	contains(JSON) bool
 }
 
 type jsonTrue struct{}
@@ -385,7 +398,7 @@ func MakeJSON(d interface{}) (JSON, error) {
 			}
 		}
 		return jsonObject(result), nil
-		// The below are not used by ParseDJSON, but are provided for ease-of-use when
+		// The below are not used by ParseJSON, but are provided for ease-of-use when
 		// constructing Datums.
 	case int:
 		dec := apd.Decimal{}
@@ -547,3 +560,11 @@ func (j jsonArray) Exists(s string) bool {
 func (j jsonObject) Exists(s string) bool {
 	return j.FetchValKey(s) != nil
 }
+
+func (jsonNull) isScalar() bool   { return true }
+func (jsonFalse) isScalar() bool  { return true }
+func (jsonTrue) isScalar() bool   { return true }
+func (jsonNumber) isScalar() bool { return true }
+func (jsonString) isScalar() bool { return true }
+func (jsonArray) isScalar() bool  { return false }
+func (jsonObject) isScalar() bool { return false }
