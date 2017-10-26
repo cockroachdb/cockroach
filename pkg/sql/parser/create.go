@@ -732,7 +732,7 @@ func (node *PartitionBy) Format(buf *bytes.Buffer, f FmtFlags) {
 
 // ListPartition represents a PARTITION definition within a PARTITION BY LIST.
 type ListPartition struct {
-	Name         Name
+	Name         UnrestrictedName
 	Tuples       []*Tuple
 	Subpartition *PartitionBy
 }
@@ -755,7 +755,7 @@ func (node ListPartition) Format(buf *bytes.Buffer, f FmtFlags) {
 
 // RangePartition represents a PARTITION definition within a PARTITION BY LIST.
 type RangePartition struct {
-	Name         Name
+	Name         UnrestrictedName
 	Tuple        *Tuple
 	Subpartition *PartitionBy
 }

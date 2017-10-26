@@ -889,9 +889,19 @@ var lookaheadKeywords = map[string]struct{}{
 	"time":       {},
 }
 
-// isNonKeywordBareIdentifier returns true if the input string is a permissible
-// bare SQL identifier and is not a SQL keyword.
-func isNonKeywordBareIdentifier(s string) bool {
+func isReservedKeyword(s string) bool {
+	if _, ok := reservedKeywords[s]; ok {
+		return true
+	}
+	if _, ok := lookaheadKeywords[s]; ok {
+		return true
+	}
+	return false
+}
+
+// isBareIdentifier returns true if the input string is a permissible bare SQL
+// identifier.
+func isBareIdentifier(s string) bool {
 	if len(s) == 0 || !isIdentStart(int(s[0])) || (s[0] >= 'A' && s[0] <= 'Z') {
 		return false
 	}
@@ -910,13 +920,6 @@ func isNonKeywordBareIdentifier(s string) bool {
 		if s[i] >= utf8.RuneSelf {
 			isASCII = false
 		}
-	}
-
-	if _, ok := reservedKeywords[s]; ok {
-		return false
-	}
-	if _, ok := lookaheadKeywords[s]; ok {
-		return false
 	}
 	return isASCII || Name(s).Normalize() == s
 }

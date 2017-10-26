@@ -1121,7 +1121,7 @@ alter_zone_range_stmt:
   {
     /* SKIP DOC */
     $$.val = &SetZoneConfig{
-      ZoneSpecifier: ZoneSpecifier{NamedZone: Name($3)},
+      ZoneSpecifier: ZoneSpecifier{NamedZone: UnrestrictedName($3)},
       YAMLConfig: $7.expr(),
     }
   }
@@ -2554,7 +2554,7 @@ show_zone_stmt:
   EXPERIMENTAL SHOW ZONE CONFIGURATION FOR RANGE unrestricted_name
   {
     /* SKIP DOC */
-    $$.val = &ShowZoneConfig{ZoneSpecifier{NamedZone: Name($7)}}
+    $$.val = &ShowZoneConfig{ZoneSpecifier{NamedZone: UnrestrictedName($7)}}
   }
 | EXPERIMENTAL SHOW ZONE CONFIGURATION FOR DATABASE name
   {
@@ -2772,14 +2772,14 @@ list_partitions:
   PARTITION unrestricted_name VALUES list_partition_values ',' list_partitions
   {
     $$.val = append([]ListPartition{{
-      Name: Name($2),
+      Name: UnrestrictedName($2),
       Tuples: $4.tuples(),
     }}, $6.listPartitions()...)
   }
 | PARTITION unrestricted_name VALUES list_partition_values partition_by ',' list_partitions
   {
     $$.val = append([]ListPartition{{
-      Name: Name($2),
+      Name: UnrestrictedName($2),
       Tuples: $4.tuples(),
       Subpartition: $5.partitionBy(),
     }}, $7.listPartitions()...)
@@ -2787,7 +2787,7 @@ list_partitions:
 | PARTITION unrestricted_name VALUES list_partition_values opt_partition_by
   {
     $$.val = []ListPartition{{
-      Name: Name($2),
+      Name: UnrestrictedName($2),
       Tuples: $4.tuples(),
       Subpartition: $5.partitionBy(),
     }}
@@ -2824,14 +2824,14 @@ range_partitions:
   PARTITION unrestricted_name VALUES LESS THAN '(' partition_exprs ')' ',' range_partitions
   {
     $$.val = append([]RangePartition{{
-      Name: Name($2),
+      Name: UnrestrictedName($2),
       Tuple: &Tuple{Exprs: $7.exprs()},
     }}, $10.rangePartitions()...)
   }
 | PARTITION unrestricted_name VALUES LESS THAN '(' partition_exprs ')' partition_by ',' range_partitions
   {
     $$.val = append([]RangePartition{{
-      Name: Name($2),
+      Name: UnrestrictedName($2),
       Tuple: &Tuple{Exprs: $7.exprs()},
       Subpartition: $9.partitionBy(),
     }}, $11.rangePartitions()...)
@@ -2839,7 +2839,7 @@ range_partitions:
 | PARTITION unrestricted_name VALUES LESS THAN '(' partition_exprs ')' opt_partition_by
   {
     $$.val = []RangePartition{{
-      Name: Name($2),
+      Name: UnrestrictedName($2),
       Tuple: &Tuple{Exprs: $7.exprs()},
       Subpartition: $9.partitionBy(),
     }}
@@ -3324,13 +3324,13 @@ alter_rename_view_stmt:
   }
 
 alter_rename_index_stmt:
-  ALTER INDEX table_name_with_index RENAME TO name
+  ALTER INDEX table_name_with_index RENAME TO unrestricted_name
   {
-    $$.val = &RenameIndex{Index: $3.newTableWithIdx(), NewName: Name($6), IfExists: false}
+    $$.val = &RenameIndex{Index: $3.newTableWithIdx(), NewName: UnrestrictedName($6), IfExists: false}
   }
-| ALTER INDEX IF EXISTS table_name_with_index RENAME TO name
+| ALTER INDEX IF EXISTS table_name_with_index RENAME TO unrestricted_name
   {
-    $$.val = &RenameIndex{Index: $5.newTableWithIdx(), NewName: Name($8), IfExists: true}
+    $$.val = &RenameIndex{Index: $5.newTableWithIdx(), NewName: UnrestrictedName($8), IfExists: true}
   }
 
 opt_column:
@@ -4086,7 +4086,7 @@ sortby:
   }
 | INDEX qualified_name '@' unrestricted_name opt_asc_desc
   {
-    $$.val = &Order{OrderType: OrderByIndex, Direction: $5.dir(), Table: $2.normalizableTableName(), Index: Name($4) }
+    $$.val = &Order{OrderType: OrderByIndex, Direction: $5.dir(), Table: $2.normalizableTableName(), Index: UnrestrictedName($4) }
   }
 
 // TODO(pmattis): Support ordering using arbitrary math ops?
@@ -4289,7 +4289,7 @@ from_list:
 index_hints_param:
   FORCE_INDEX '=' unrestricted_name
   {
-     $$.val = &IndexHints{Index: Name($3)}
+     $$.val = &IndexHints{Index: UnrestrictedName($3)}
   }
 | FORCE_INDEX '=' '[' ICONST ']'
   {
@@ -4335,7 +4335,7 @@ index_hints_param_list:
 opt_index_hints:
   '@' unrestricted_name
   {
-    $$.val = &IndexHints{Index: Name($2)}
+    $$.val = &IndexHints{Index: UnrestrictedName($2)}
   }
 | '@' '[' ICONST ']'
   {
@@ -6325,7 +6325,7 @@ target_list:
 target_elem:
   a_expr AS unrestricted_name
   {
-    $$.val = SelectExpr{Expr: $1.expr(), As: Name($3)}
+    $$.val = SelectExpr{Expr: $1.expr(), As: UnrestrictedName($3)}
   }
   // We support omitting AS only for column labels that aren't any known
   // keyword. There is an ambiguity against postfix operators: is "a ! b" an
@@ -6334,7 +6334,7 @@ target_elem:
   // IDENT a precedence higher than POSTFIXOP.
 | a_expr IDENT
   {
-    $$.val = SelectExpr{Expr: $1.expr(), As: Name($2)}
+    $$.val = SelectExpr{Expr: $1.expr(), As: UnrestrictedName($2)}
   }
 | a_expr
   {
@@ -6395,7 +6395,7 @@ qualified_name:
 table_name_with_index:
   qualified_name '@' unrestricted_name
   {
-    $$.val = TableNameWithIndex{Table: $1.normalizableTableName(), Index: Name($3)}
+    $$.val = TableNameWithIndex{Table: $1.normalizableTableName(), Index: UnrestrictedName($3)}
   }
 | qualified_name
   {
@@ -6576,8 +6576,9 @@ non_reserved_word:
 | col_name_keyword
 | type_func_name_keyword
 
-// Unrestricted name --- allowed labels in "AS" clauses. This presently
-// includes *all* Postgres keywords.
+// Unrestricted name --- allowable names when there is no ambiguity with even
+// reserved keywords, like in "AS" clauses. This presently includes *all*
+// Postgres keywords.
 unrestricted_name:
   IDENT
 | unreserved_keyword
