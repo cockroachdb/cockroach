@@ -374,3 +374,14 @@ func AddMicros(t time.Time, d int64) time.Time {
 	}
 	return t.Add(negMult * time.Duration(d) * time.Microsecond)
 }
+
+// Truncate returns a new duration obtained from the first argument
+// by discarding the portions at finer resolution than that given by the
+// second argument.
+// Example: Truncate(time.Second+1, time.Second) == time.Second.
+func Truncate(d time.Duration, r time.Duration) time.Duration {
+	if r == 0 {
+		panic("zero passed as resolution")
+	}
+	return d - (d % r)
+}
