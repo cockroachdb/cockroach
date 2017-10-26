@@ -2017,6 +2017,10 @@ scrub_option:
   {
     $$.val = &ScrubOptionIndex{}
   }
+| INDEX '(' name_list ')'
+  {
+    $$.val = &ScrubOptionIndex{IndexNames: $3.nameList()}
+  }
 
 // %Help: SET CLUSTER SETTING - change a cluster setting
 // %Category: Cfg
