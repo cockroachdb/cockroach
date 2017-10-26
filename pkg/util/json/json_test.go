@@ -1759,3 +1759,86 @@ func BenchmarkFetchKey(b *testing.B) {
 		})
 	}
 }
+
+func TestJSONRemovePath(t *testing.T) {
+	queryTests := map[string][]struct {
+		path     []string
+		expected string
+		errMsg   string
+	}{
+		`{"foo": 1}`: {
+			{path: []string{"foo"}, expected: `{}`},
+			{path: []string{}, expected: `{"foo": 1}`},
+			{path: []string{"bar"}, expected: `{"foo": 1}`},
+		},
+		`{"foo": {"bar": 1, "baz": 2}}}`: {
+			{path: []string{}, expected: `{"foo": {"bar": 1, "baz": 2}}`},
+			{path: []string{"foo"}, expected: `{}`},
+			{path: []string{"foo", "bar"}, expected: `{"foo": {"baz": 2}}`},
+			{path: []string{"foo", "bar", "gup"}, expected: `{"foo": {"bar": 1, "baz": 2}}`},
+			{path: []string{"foo", "baz"}, expected: `{"foo": {"bar": 1}}`},
+		},
+		`{"foo": {"bar": 1, "baz": {"gup": 3}}}`: {
+			{path: []string{}, expected: `{"foo": {"bar": 1, "baz": {"gup": 3}}}`},
+			{path: []string{"foo"}, expected: `{}`},
+			{path: []string{"foo", "bar"}, expected: `{"foo": {"baz": {"gup": 3}}}`},
+			{path: []string{"foo", "baz"}, expected: `{"foo": {"bar": 1}}`},
+			{path: []string{"foo", "baz", "gup"}, expected: `{"foo": {"bar": 1, "baz": {}}}`},
+		},
+		`{"foo": [1, 2, {"bar": 3}]}`: {
+			{path: []string{}, expected: `{"foo": [1, 2, {"bar": 3}]}`},
+			{path: []string{`foo`}, expected: `{}`},
+			{path: []string{`foo`, `0`}, expected: `{"foo": [2, {"bar": 3}]}`},
+			{path: []string{`foo`, `1`}, expected: `{"foo": [1, {"bar": 3}]}`},
+			{path: []string{`foo`, `2`}, expected: `{"foo": [1, 2]}`},
+			{path: []string{`foo`, `2`, `bar`}, expected: `{"foo": [1, 2, {}]}`},
+			{path: []string{`foo`, `-3`}, expected: `{"foo": [2, {"bar": 3}]}`},
+			{path: []string{`foo`, `-2`}, expected: `{"foo": [1, {"bar": 3}]}`},
+			{path: []string{`foo`, `-1`}, expected: `{"foo": [1, 2]}`},
+			{path: []string{`foo`, `-1`, `bar`}, expected: `{"foo": [1, 2, {}]}`},
+		},
+		`[[1]]`: {
+			{path: []string{"0", "0"}, expected: `[[]]`},
+		},
+		`[1]`: {
+			{path: []string{"foo"}, expected: `[1]`},
+			{path: []string{""}, expected: `[1]`},
+			{path: []string{"0"}, expected: `[]`},
+			{path: []string{"0", "0"}, expected: `[1]`},
+		},
+		`1`: {
+			{path: []string{"foo"}, errMsg: "cannot delete path in scalar"},
+		},
+	}
+
+	for k, tests := range queryTests {
+		left, err := ParseJSON(k)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		for _, tc := range tests {
+			t.Run(fmt.Sprintf("%s #- %v", k, tc.path), func(t *testing.T) {
+				result, err := left.RemovePath(tc.path)
+				if tc.errMsg != "" {
+					if err == nil {
+						t.Fatal("expected error")
+					} else if !strings.Contains(err.Error(), tc.errMsg) {
+						t.Fatalf(`expected error message "%s" to contain "%s"`, err.Error(), tc.errMsg)
+					}
+					return
+				}
+				if err != nil {
+					t.Fatal(err)
+				}
+				cmp, err := result.Compare(jsonTestShorthand(tc.expected))
+				if err != nil {
+					t.Fatal(err)
+				}
+				if cmp != 0 {
+					t.Fatalf("expected %s, got %s", tc.expected, result.String())
+				}
+			})
+		}
+	}
+}
