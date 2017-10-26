@@ -892,6 +892,10 @@ func (d *DInterval) TypeCheck(_ *SemaContext, _ Type) (TypedExpr, error) { retur
 
 // TypeCheck implements the Expr interface. It is implemented as an idempotent
 // identity function for Datum.
+func (d *DJSON) TypeCheck(_ *SemaContext, _ Type) (TypedExpr, error) { return d, nil }
+
+// TypeCheck implements the Expr interface. It is implemented as an idempotent
+// identity function for Datum.
 func (d *DTuple) TypeCheck(_ *SemaContext, _ Type) (TypedExpr, error) { return d, nil }
 
 // TypeCheck implements the Expr interface. It is implemented as an idempotent

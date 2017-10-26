@@ -2417,9 +2417,11 @@ var powImpls = []Builtin{
 }
 
 func arrayBuiltin(impl func(Type) Builtin) []Builtin {
-	result := make([]Builtin, len(TypesAnyNonArray))
-	for i, typ := range TypesAnyNonArray {
-		result[i] = impl(typ)
+	result := make([]Builtin, 0, len(TypesAnyNonArray))
+	for _, typ := range TypesAnyNonArray {
+		if canBeInArray(typ) {
+			result = append(result, impl(typ))
+		}
 	}
 	return result
 }

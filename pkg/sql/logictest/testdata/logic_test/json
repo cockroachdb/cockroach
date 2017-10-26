@@ -1,0 +1,121 @@
+# LogicTest: default distsql parallel-stmts
+
+## Basic creation
+
+query TT
+SELECT '1'::JSONB, '2'::JSON
+----
+1 2
+
+query T
+SELECT '1.00'::JSON
+----
+1.00
+
+statement error unexpected EOF
+SELECT '{'::JSON
+
+query T
+SELECT '"hello"'::JSON
+----
+"hello"
+
+query T
+SELECT '"abc\n123"'::JSON
+----
+"abc\n123"
+
+query TTT
+SELECT 'true'::JSON, 'false'::JSON, 'null'::JSON
+----
+true false null
+
+query T
+SELECT '[]'::JSON
+----
+[]
+
+query T
+SELECT '[1, 2, 3]'::JSON
+----
+[1,2,3]
+
+query T
+SELECT '[1, "hello", [[[true, false]]]]'::JSON
+----
+[1,"hello",[[[true,false]]]]
+
+query T
+SELECT '[1, "hello", {"a": ["foo", {"b": 3}]}]'::JSON
+----
+[1,"hello",{"a":["foo",{"b":3}]}]
+
+query T
+SELECT '{}'::JSON
+----
+{}
+
+query T
+SELECT '{"a": "b", "c": "d"}'::JSON
+----
+{"a":"b","c":"d"}
+
+query T
+SELECT '{"a": 1, "c": {"foo": "bar"}}'::JSON
+----
+{"a":1,"c":{"foo":"bar"}}
+
+# Only the final occurrence of a key in an object is kept.
+query T
+SELECT '{"a": 1, "a": 2}'::JSON
+----
+{"a":2}
+
+query T
+SELECT NULL::JSON
+----
+NULL
+
+statement error arrays of jsonb not allowed
+SELECT ARRAY['"hello"'::JSON]
+
+statement error arrays of JSONB not allowed
+SELECT '{}'::JSONB[]
+
+# TODO(justin)
+statement error unsupported result type: json
+CREATE TABLE foo (bar JSON)
+
+## Comparisons
+
+# We opt to not expose <, >, <=, >= at this time, to avoid having to commit to
+# an ordering.
+query B
+SELECT '1'::JSON = '1'::JSON
+----
+true
+
+query B
+SELECT '1'::JSON = '2'::JSON
+----
+false
+
+query B
+SELECT '1.00'::JSON = '1'::JSON
+----
+true
+
+query BB
+SELECT '"hello"'::JSON = '"hello"'::JSON, '"hello"'::JSON = '"goodbye"'::JSON
+----
+true false
+
+query B
+SELECT '"hello"'::JSON IN ('"hello"'::JSON, '1'::JSON, '[]'::JSON)
+----
+true
+
+query B
+SELECT 'false'::JSON IN ('"hello"'::JSON, '1'::JSON, '[]'::JSON)
+----
+false

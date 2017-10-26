@@ -89,6 +89,8 @@ var (
 	TypeTimestampTZ Type = tTimestampTZ{}
 	// TypeInterval is the type of a DInterval. Can be compared with ==.
 	TypeInterval Type = tInterval{}
+	// TypeJSON is the type of a DJSON. Can be compared with ==.
+	TypeJSON Type = tJSON{}
 	// TypeUUID is the type of a DUuid. Can be compared with ==.
 	TypeUUID Type = tUUID{}
 	// TypeINet is the type of a DIPAddr. Can be compared with ==.
@@ -145,6 +147,7 @@ var (
 		TypeInterval,
 		TypeUUID,
 		TypeINet,
+		TypeJSON,
 		TypeOid,
 	}
 )
@@ -178,6 +181,7 @@ var OidToType = map[oid.Oid]Type{
 	oid.T_int2vector:   TypeIntVector,
 	oid.T_interval:     TypeInterval,
 	oid.T__interval:    TArray{TypeInterval},
+	oid.T_jsonb:        TypeJSON,
 	oid.T_name:         TypeName,
 	oid.T__name:        TArray{TypeName},
 	oid.T_numeric:      TypeDecimal,
@@ -415,6 +419,18 @@ func (tInterval) Size() (uintptr, bool)       { return unsafe.Sizeof(DInterval{}
 func (tInterval) Oid() oid.Oid                { return oid.T_interval }
 func (tInterval) SQLName() string             { return "interval" }
 func (tInterval) IsAmbiguous() bool           { return false }
+
+type tJSON struct{}
+
+func (tJSON) String() string { return "jsonb" }
+func (tJSON) Equivalent(other Type) bool {
+	return UnwrapType(other) == TypeJSON || other == TypeAny
+}
+func (tJSON) FamilyEqual(other Type) bool { return UnwrapType(other) == TypeJSON }
+func (tJSON) Size() (uintptr, bool)       { return unsafe.Sizeof(DJSON{}), variableSize }
+func (tJSON) Oid() oid.Oid                { return oid.T_jsonb }
+func (tJSON) SQLName() string             { return "json" }
+func (tJSON) IsAmbiguous() bool           { return false }
 
 type tUUID struct{}
 

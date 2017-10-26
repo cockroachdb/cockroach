@@ -149,6 +149,8 @@ var keywords = map[string]struct {
 	"job":                       {JOB, "U"},
 	"jobs":                      {JOBS, "U"},
 	"join":                      {JOIN, "T"},
+	"json":                      {JSON, "C"},
+	"jsonb":                     {JSONB, "C"},
 	"key":                       {KEY, "U"},
 	"keys":                      {KEYS, "U"},
 	"kv":                        {KV, "U"},

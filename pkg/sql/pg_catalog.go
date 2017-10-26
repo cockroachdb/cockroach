@@ -1553,6 +1553,7 @@ var datumToTypeCategory = map[reflect.Type]*parser.DString{
 	reflect.TypeOf(parser.TypeFloat):       typCategoryNumeric,
 	reflect.TypeOf(parser.TypeInt):         typCategoryNumeric,
 	reflect.TypeOf(parser.TypeInterval):    typCategoryTimespan,
+	reflect.TypeOf(parser.TypeJSON):        typCategoryUserDefined,
 	reflect.TypeOf(parser.TypeDecimal):     typCategoryNumeric,
 	reflect.TypeOf(parser.TypeString):      typCategoryString,
 	reflect.TypeOf(parser.TypeTimestamp):   typCategoryDateTime,
