@@ -1,6 +1,5 @@
 import React from "react";
-
-import { ListLink } from "src/views/shared/components/listLink";
+import { Link } from "react-router";
 
 /**
  * Renders the layout of the nodes page.
@@ -16,8 +15,12 @@ export default class Layout extends React.Component<{}, {}> {
     return <div>
       <div className="nav-container">
         <ul className="nav">
-          <ListLink to="/raft/ranges">Ranges</ListLink>
-          <ListLink to="/raft/messages/all">Messages</ListLink>
+          <li className="normal">
+            <Link to="/raft/ranges" activeClassName="active">Ranges</Link>
+          </li>
+          <li className="normal">
+            <Link to="/raft/messages/all" activeClassName="active">Messages</Link>
+          </li>
         </ul>
       </div>
       { this.props.children }

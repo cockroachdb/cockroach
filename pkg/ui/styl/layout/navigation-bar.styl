@@ -63,7 +63,7 @@ $subnav-underline-height = 3px
       polyline, rect
         stroke $body-color
 
-      &.active, &.active:hover, &:hover
+      a.active, a.active:hover, a:hover
         color $link-color
 
         path
@@ -132,13 +132,6 @@ $subnav-underline-height = 3px
         padding-right 0
         margin-right 3em
 
-      &.active, &.active:hover
-        color $subnav-active-color
-        font-weight 600
-        border-bottom $subnav-underline-height solid $subnav-active-color
-
-      &:hover
-        color $main-nav-hover
       a
         height 100%
         display block
@@ -151,6 +144,14 @@ $subnav-underline-height = 3px
 
         div
           display inline
+
+      a.active, a.active:hover
+        color $subnav-active-color
+        font-weight 600
+        border-bottom $subnav-underline-height solid $subnav-active-color
+
+      a:hover
+        color $main-nav-hover
 
       &.timescale-button
         align-self flex-start

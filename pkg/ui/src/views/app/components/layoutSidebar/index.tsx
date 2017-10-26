@@ -1,11 +1,14 @@
 import React from "react";
-import { ListLink, LinkProps } from "src/views/shared/components/listLink";
+import { Link } from "react-router";
 import * as Icons from "src/views/shared/components/icons";
 import { trustIcon } from "src/util/trust";
 
-interface IconLinkProps extends LinkProps {
+interface IconLinkProps {
   icon?: string;
   title?: string;
+  to: string;
+  onlyActiveOnIndex?: boolean;
+  className?: string;
 }
 
 /**
@@ -13,16 +16,22 @@ interface IconLinkProps extends LinkProps {
  * a string title.
  */
 class IconLink extends React.Component<IconLinkProps, {}> {
+  static defaultProps = {
+    className: "normal",
+    onlyActiveOnIndex: false,
+  };
+
   render() {
-    const passProps = {
-      to: this.props.to,
-      className: this.props.className,
-    };
-    return <ListLink {...passProps} >
-      <div className="image-container"
-           dangerouslySetInnerHTML={trustIcon(this.props.icon)}/>
-      <div>{this.props.title}</div>
-    </ListLink>;
+    const { icon, title, to, onlyActiveOnIndex, className } = this.props;
+    return (
+      <li className={className} >
+        <Link to={to} activeClassName="active" onlyActiveOnIndex={onlyActiveOnIndex}>
+          <div className="image-container"
+               dangerouslySetInnerHTML={trustIcon(icon)}/>
+          <div>{title}</div>
+        </Link>
+      </li>
+    );
   }
 }
 
