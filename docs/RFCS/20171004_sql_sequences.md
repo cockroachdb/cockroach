@@ -5,18 +5,16 @@
 - RFC PR: (PR # after acceptance of initial draft)
 - Cockroach Issue: [5811](https://github.com/cockroachdb/cockroach/issues/5811)
 
-**Remember, you can submit a PR with your RFC before the text is complete. Refer
-to the [README](README.md#rfc-process) for details.**
-
 # Summary
 
 This RFC proposes a design for implementing standard SQL sequences in Cockroach.
-Sequences allow users to have auto-incrementing primary keys for their tables,
-which some in the community prefer to our `serial` type. The syntax proposed
-matches the Postgres syntax, which is similar to what Oracle and SQL Server
-support and to the SQL standard. Sequence metadata is stored on a table
-descriptor, and the sequence value is stored in a special KV pair which is
-updated atomically but outside of a SQL transaction.
+Sequences allow users to have auto-incrementing integers in their tables
+(usually used as a primary key), which some in the community prefer to our
+`serial` type. The syntax proposed matches the Postgres syntax, which is
+similar to what Oracle and SQL Server support and to the SQL standard.
+Sequence metadata is stored on a table descriptor, and the sequence value
+is stored in a special KV pair which is updated atomically but outside of
+a SQL transaction.
 
 # Motivation
 
@@ -72,24 +70,37 @@ in the sequences table locks that row until its transaction has committed. Thus,
 any transactions which create records in the table for which the sequence is
 being used contend on that one row in the sequence table.
 
-The sequence implementations in [Postgres][postgres-create-seq],
+The sequence implementations in [Postgres][pg-create-seq], [MySQL][mysql-seq],
 [Oracle][oracle-create-seq], and [SQL Server][sql-server-create-seq] avoid this
 by taking place outside of a SQL transaction: updates to the sequence are
 atomic, but are never rolled back. As soon as a new sequence value is given out,
 the next transaction can access the sequence, regardless of whether the first
 transaction aborts or commits. This may create gaps in the table which is using
 the sequence, but the performance win seems worth it. (If not, customers can use
-the table strategy.) I propose that we follow in their footsteps and implement
+the table strategy.) We propose to follow in their footsteps and implement
 this atomic but non-transactional behavior.
+
+We propose leaving Cockroach's `SERIAL` type the way it is (using the
+`unique_rowid` function), since it offers better performance due to not
+requiring IO to the KV layer, and should work for most applications.
+Future work could increase the performance of sequences by implementing the
+`CACHE` setting, which pre-allocates batches of values to be handed out from
+memory; we could then switch `SERIAL` over to be backed by sequences. This work
+could be done later on top of the work proposed in this RFC, if we deem it
+necessary. (See "Rationale and Alternatives")
 
 Sequences are part of the SQL standard, and are implemented with nearly the same
 syntax in Postgres, MySQL, and Microsoft SQL Server. The `CREATE SEQUENCE`
 statement is nearly identical between them, but the syntax for getting the next
-value is different. This proposal mirrors the Postgres approach closely.
+value is different. This proposal mirrors the Postgres approach closely. There
+are a few aspects of the Postgres implementation which are awkward or difficult
+to implement but may be worth the effort for compatibility; they're enumerated
+in the "Design / Scope Issues" setting under "Unresolved Questions".
 
 Some users may not care that sequences exist and happily continue using `serial`
-(which would be faster since it doesn't create contention), but their existence
-may make migration to Cockroach easier for users who are used to them. 
+(which would be faster since it operates locally without contention or
+coordination over the network), but their existence may make migration to
+Cockroach easier for users who are used to them.
 
 The feature is relatively low-impact for Cockroach internals, since it adds a
 few new SQL statements and functions, adds sequence information to table
@@ -102,14 +113,15 @@ To support this feature, I propose the following changes:
 ### SQL interface additions
 
 - Introduce new DDL statements:
-  - `CREATE SEQUENCE <sequence name> <sequence settings>`
+  - `CREATE SEQUENCE <sequence name> <sequence settings>` (see section "Sequence
+    settings details")
   - `ALTER SEQUENCE <sequence name> <sequence settings>`
   - `DROP SEQUENCE <sequence name>`
 - Introduce functions which access, increment, and set the sequence value:
-  ([Postgres Docs][postgres-seq-functions]): 
+  ([Postgres Docs][postgres-seq-functions]):
   - `nextval(sequence_name)`
   - `currval(sequence_name)`
-  - `lastval()` (Not very useful; may be left out)
+  - `lastval()`
   - `setval(sequence_name, value, is_called)`
   - _Note:_ Oracle and SQL Server implement these differently.
     - In Oracle, you get the next value of a sequence with `SELECT
@@ -117,33 +129,50 @@ To support this feature, I propose the following changes:
       Oracle used when a table isn't needed).
     - In SQL Server, you use `NEXT VALUE FOR my_sequence` (This is what's
       specified in the SQL standard).
-- Make `information_schema.sequences` show the sequences (it's currently there
-  but empty)
+- Make `information_schema.sequences` and `pg_catalog.pg_class` show the
+  sequences (`information_schema.sequences` currently exists but is empty)
 - Record dependencies by columns on sequences (in the column and sequence
   descriptors), such that:
   - Deletion of a sequence is not allowed if a column depends on it.
-  - Dropping a column which depends on a sequence (either by removing the column
-    or dropping its table) results in the sequence being deleted if no other
-    columns depend on it.
+  - Dropping a column which depends on a sequence (either by dropping the
+    individual column or dropping its table) results in the sequence being
+    deleted if no other columns depend on it.
   - _Note:_ These dependencies will have to be recorded on `CREATE TABLE`,
     `ALTER TABLE`, `ALTER COLUMN`, and `ADD COLUMN`.
   - _Note:_ In Postgres, creating a table with a `serial` column automatically
     creates a sequence and records the dependency. Since our `serial` type
     is not based on sequences, our users will have to manually create sequences,
     with `CREATE SEQUENCE`, unless we add new syntax.
-- Add checks to disallow schema and data changes to sequences via `INSERT`/
-  `UPDATE`, `ALTER TABLE`, etc. They should be like information schema tables:
-  their contents can only be affected by other means.
+  - _Note:_ As with PG sequences and views, there are no `CASCADE` or `RESTRICT`
+    modifiers which apply to this dependency relationship. The `CASCADE` modifer
+    specifies that when a row in the referenced table is dropped, the
+    referencing row should be dropped as well. For tables and sequences, this
+    would need to be table-level: a table could specify that it should be
+    dropped when the sequence it references is dropped.
+
+    This a dangerous behavior, so like PG, we won't offer it; we'll only do the
+    default behavior specified above: a sequence gets dropped when the last
+    table referencing it gets dropped.
+- Add checks to disallow schema and data changes to sequences via `INSERT`,
+  `DELETE`, `UPDATE`, `ALTER TABLE`, etc. They should be like views or
+  virtual tables: their contents can only be affected by other means.
 - (Possibly, see open questions section): Add a new `planNode` which allows
   `SELECT * FROM my_sequence` to work. This allows users to introspect the
   sequence value and settings, and may be relied upon by PG tools.
+- Make `cockroach dump` and `cockroach load` work with sequences. I.e. `dump`
+  dumps the current sequence value, and `load` sets the value so that `nextval`
+  can pick up where it left off. Adding
+  `CREATE SEQUENCE my_seq START WITH <current value>` to the dump would
+  achieve this.
 
 ### Internal representation and operations
 
-I propose that sequences be represented internally as a type of
-`TableDescriptor`. Just as a `TableDescriptor` has fields which are populated
-only for views, it will have a field (`sequence_settings` or similar) which is
-only populated on table descriptors which describe sequences. The
+#### Sequence metadata
+
+I propose that sequence metadata (name and settings) be represented internally
+as a type of `TableDescriptor`. Just as a `TableDescriptor` has fields which are
+populated only for views, it will have a field (`sequence_settings` or similar)
+which is only populated on table descriptors which describe sequences. The
 `sequence_settings` field on the table descriptor will include sequence settings
 such as `increment`, `minvalue`, `maxvalue`, `start`, and `cycle`. `INSERT`s,
 `UPDATE`s, and schema changes to the sequence will be disallowed based on the
@@ -151,21 +180,38 @@ presence of the `sequence_settings` field.
 
 `CREATE SEQUENCE` will use the same machinery as table and view creation,
 including:
+
 - Allocating a descriptor ID by incrementing the descriptor ID allocation key.
 - Adding an entry to the `system.namespace` table or erroring if the name is
   already taken, since sequences exist in the same namespace as tables.
 - Writing table descriptor to the `system.descriptor` table.
-- Allocating a range for the table.
+- _Note:_ Creating a table or a view also allocates a range. This shouldn't be
+  done for views (this is a bug which, while fairly harmless, should be fixed)
+  or sequences.
 
-There will only be one key in the sequence's range: the key which holds the
-sequence's value. Reads and writes to the sequence value (via the functions
+Additionally, `ALTER SEQUENCE` will use machinery designed for table schema
+changes: all nodes will be notified of the change and read the new version of
+the descriptor using the lease-based descriptor caching system.
+
+See the "Sequence metadata" section under "Rationale and Alterantives" for a
+discussion of alternate approaches.
+
+#### Sequence values
+
+Values for all sequences in the cluster will be stored in a single range, which
+could later split due to load-based splitting (when we support that) or a large
+number of sequences. Reads and writes to the sequence value (via the functions
 `nextval`, `currval`, etc.), will be implemented by direct calls to the KV
 layer's `Get`, `Inc`, and `Set` functions.
 
-Since the sequence value is stored in its own range, it will always be in a
-different range than the other row in the transaction which is being written to
-using the value it gives out. However, since the sequence update takes place
-outside of the SQL transaction, this should not trigger the 2PC commit protocol.
+Storing sequence values in their own range means that inserts to tables which
+use sequences will always touch two ranges. However, since the sequence update
+takes place outside of the SQL transaction, this should not trigger the 2PC
+commit protocol. Savvy users might question this; we should note it in our
+documentation.
+
+See the "Sequence values" section under "Rationale and Alternatives" for a
+discussion of alternate approaches.
 
 ### Sequence settings details
 
@@ -184,11 +230,9 @@ docs][postgres-seq-functions]):
   - default for descending: -1
 - `START WITH start`: default 1 for ascending; -1 for descending.
 - `CACHE <cache>`: how many values to allocate in memory, for faster access. I
-  propose not implementing this until it becomes evident that it's a performance
-  problem, since allocating blocks of ids across different nodes would add
-  complexity, and if users really want to go fast, they should just use
-  `SERIAL` and `unique_rowid()`. It defaults to 1 in Postgres anyway, so most
-  users probably aren't even using it.
+  propose recognizing this syntax to avoid broken clients but implementing
+  the actual functionality later, if customers are using sequences and
+  demanding faster performance. See "Rationale and Alternatives".
 - `CYCLE | NO CYCLE`: whether or not to wrap around when the sequence value hits
   the max or min.
 - `OWNED BY <table_name.column_name> | OWNED BY NONE`: Records a dependency
@@ -225,7 +269,7 @@ give them this option, and direct everyone toward `serial`.
 
 ## Rationale and Alternatives
 
-### SQL Interface
+### SQL Syntax
 
 The `CREATE SEQUENCE` statement, other DDL statements, and sequence manipulation
 functions mirror Postgres. Oracle and SQL Server have different syntax for
@@ -236,13 +280,93 @@ is significantly different in that you can only mark a single column as
 `CREATE SEQUENCE`. Again this would likely be fine, but we should match
 Postgres, as we do elsewhere.
 
-However, there is the question of whether to add early-binding via a `regclass`
-type. (See the Unresolved questions section).
+### `CACHE` setting for performance
 
-### Internal Representation
+We propose that the additional engineering effort to support this be done in
+a later RFC, if multiple customers are using sequences and need better
+performance. It would involve nodes making requests to the KV layer to
+increment sequence values by the specified batch size, then keeping track of
+what values they have to hand out on a per-session or per-node basis.
 
-The sequence settings need to be in the table descriptor for fast in-memory
-access, and the sequence value needs to be in the KV store for atomicity.
+### Sequence metadata
+
+Requirements for sequence metadata storage are as follows:
+
+1. Must be available in-memory on all nodes, so that getting a new sequence
+   value doesn't require two KV roundtrips (one to look up how much to
+   increment by and another to do the increment).
+2. The in-memory copy should be kept up to date on each node when the sequence
+   is altered via `ALTER SEQUENCE`, just as tables and views are cached and kept
+   up to date.
+3. Must allow sequences to live in the same namespace as tables and views.
+
+Options are:
+
+- New `SequenceDescriptor` type, added to the `Descriptor` proto
+  - Advantages: Cleaner; i.e. doesn't add something that's not really a table to
+    the `TableDescriptor`.
+  - Disadvantages:
+    - Hard to see how to keep the in-memory copy up to date. Refactoring the
+      leasing system code to be generic for multiple types of descriptors which
+      satisfy a common interface necessitates a large interface, and many
+      changes to use it. After trying this ([branch here][new-desc-commit]),
+      the refactored code didn't seem much cleaner.
+- Create separate proto messages for information specific to views, tables, and
+  sequences, and put them on `TableDescriptor` as exclusive options in
+  a `oneof`. (and rename `TableDescriptor` to something more generic like
+  `DatabaseObjectDescriptor`)
+  - Advantages: Seems very DRY and unambiguous: the proto would describe a named
+    database object that could either be a table, view, or sequence (or more
+    things in the future).
+  - Disadvantages:
+    - Requires migration of table descriptor protos.
+    - For functions which should only ever be operating on table descriptors,
+      how can we provide a type system guarantee that the
+      `DatabaseObjectDescriptor` they're receiving is a table, not a view or
+      sequence?
+- Optional field on `TableDescriptor` proto (chosen)
+  - Advantages:
+    - Satisfies all requirements with minimal additional code
+  - Disadvantages:
+    - Clutters `TableDescriptor`
+    - Requires checks to be added so that sequences cannot be modified via
+      DML. Checks like these already exist for VIEWs, and shouldn't be hard
+      to add on to.
+
+### Sequence values
+
+- One range per sequence
+  - Advantages:
+    - Spreads load out; no performance bottleneck or single point of failure
+      for all sequences
+    - Already gets created when a `TableDescriptor` is created
+  - Disadvantages:
+    - A lot of overhead to store a single integer
+- Alongside tables
+  - Advantages: Would keep the KV operations for a sequence-using `INSERT`
+    local to one range (until the table splits)
+  - Sequences can be used by multiple tables; in this situation we wouldn't know
+    where to put it.
+- All sequences in one range (chosen)
+  - Advantages:
+    - Avoids overhead of one range per table.
+    - Allows a sequence to be used from multiple tables.
+  - Disadvantages:
+    - Without load-based or manual splitting, this range would be a single point
+      of failure and/or a performance bottleneck. However, with one range per
+      sequence, many applications will fail if the ranges used in a transaction
+      go down anyway.
+- A `system.sequences` table
+  - Advantages:
+    - All those of the "all sequences in one range" approach
+    - Allows easy introspection
+  - Disadvantages
+    - To use `Inc` KV operation (better than `Get` and then `Set` because it
+      requires only one round trip), we'd have to teach `Inc` about SQL's
+      integer encoding, which seems like a separation-of-concerns violation.
+      The introspectability could be achieved by creating a virtual table.
+      (The `information_schema.sequences` table, which we'll be implementing,
+      gets you some of this: all the metadata, just not the value.)
 
 ### Impact of not doing this
 
@@ -253,38 +377,45 @@ an obstacle in moving to Cockroach.
 
 ### Design / scope issues
 
-- Should we implement the `CACHE` setting? As I said above, it seems
-  unnecessary. I'm interested in other's thoughts.
-- Should we add a `regclass` type and use it as the argument to the sequence
-  functions? `regclass` is a Postgres type that is an OID, but with a input
-  converter which looks up a schema object by name (e.g. `'my_table'::regclass`)
-  becomes the OID for `my_table` when the expression is parsed.
-  
-  In Postgres, this allows for two useful things: (a) table
-  creation fails if the sequence in `DEFAULT nextval('sequence')` doesn't
-  exist (instead of failing at runtime) and (b) makes the `DEFAULT` expression
-  resilient to renaming of the sequence.
+- Should we change our `SERIAL` type to be backed by sequences? I don't think
+  we can do this until we make it faster by implementing `CACHE` (see below).
 
-  My preference is to stick with simple strings as sequence name arguments,
-  since sequence renames seem rare. We could make table creation fail if
-  a column references a nonexistent sequence, because we'll be looking at the
-  sequence name to record the dependency anyway.
-- Should we make `SELECT * FROM my_sequence` work? XXX
+  With the implementation in this RFC, to use sequences users will have to
+  explicitly type `CREATE SEQUENCE` and set their column to
+  `DEFAULT nextval('my_sequence')`.
+- Should we implement the `AS` clause, which enables users to specify which
+  type they want the sequence value to be? I think not, since it works to
+  create a `SMALLINT` column that uses `DEFAULT nextval(seq)` and get a value,
+  even though `nextval` returns `int64` and `SMALLINT` is `int32`. Silent
+  truncation should not occur here, since we [check the size of the value before
+  inserting it][value-size-check-gh].
+- Should we implement the `CACHE` setting? (pre-allocation on each node of
+  batches of values, which can then be handed out quickly from memory)
+  This would probably make sequences fast enough to be our default for the
+  `SERIAL` type, but I think we should build the simple version, benchmark,
+  and do `CACHE` in a later RFC/PR.
+- Should we make `SELECT * FROM my_sequence` work? In Postgres, it returns a
+  single row containing the sequence value and settings:
+
+  | sequence_name | last_value | start_value | increment_by |      max_value      | min_value | cache_value | log_cnt | is_cycled | is_called |
+  |---------------|------------|-------------|--------------|---------------------|-----------|-------------|---------|-----------|-----------|
+  | foo           |          2 |           1 |            1 | 9223372036854775807 |         1 |           1 |      31 | f         | t         |
+
+  This is easy to do, and may be helpful for compatibility. It can be saved for
+  the last PR of the change, but should probably be done.
 
 ### Implementation issues
 
-Currently, functions don't have access to the KV layer or the `Session`; the
-`EvalContext` they get only lets them run SQL (via its `EvalPlanner` member).
-This will have to be refactored to give the functions the capabilities they
-need.
+Currently, some functions are nondeterministic (e.g. `random`), but none write
+to the KV store. The `EvalContext` function implementations get only lets them
+run SQL (via its `EvalPlanner` member). This will have to be refactored to give
+the functions the capabilities they need.
 
-[postgres-dependencies]:
-https://www.postgresql.org/docs/9.0/static/catalog-pg-depend.html
-[postgres-seq-functions]:
-https://www.postgresql.org/docs/8.1/static/functions-sequence.html
-[postgres-create-seq]:
-https://www.postgresql.org/docs/9.5/static/sql-createsequence.html
-[oracle-create-seq]:
-https://docs.oracle.com/cd/B28359_01/server.111/b28286/statements_6015.htm#SQLRF01314
-[sql-server-create-seq]:
-https://docs.microsoft.com/en-us/sql/t-sql/statements/create-sequence-transact-sql
+[postgres-dependencies]: https://www.postgresql.org/docs/9.0/static/catalog-pg-depend.html
+[postgres-seq-functions]: https://www.postgresql.org/docs/8.1/static/functions-sequence.html
+[pg-create-seq]: https://www.postgresql.org/docs/9.5/static/sql-createsequence.html
+[mysql-seq]: https://dev.mysql.com/doc/refman/5.7/en/innodb-auto-increment-handling.html
+[oracle-create-seq]: https://docs.oracle.com/cd/B28359_01/server.111/b28286/statements_6015.htm#SQLRF01314
+[sql-server-create-seq]: https://docs.microsoft.com/en-us/sql/t-sql/statements/create-sequence-transact-sql
+[value-size-check-gh]: https://github.com/cockroachdb/cockroach/blob/1a71f80dbcccb51b908089ee42ee41f2598866fb/pkg/sql/insert.go#L464
+[new-desc-commit]: https://github.com/vilterp/cockroach/commit/4819328d6b80cab608ddfec891bf806d5ccb160c
