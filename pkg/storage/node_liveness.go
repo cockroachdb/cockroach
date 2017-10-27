@@ -574,8 +574,7 @@ func (nl *NodeLiveness) IncrementEpoch(ctx context.Context, liveness *Liveness) 
 		return err
 	}
 
-	log.VEventf(ctx, 1, "incremented node %d liveness epoch to %d",
-		newLiveness.NodeID, newLiveness.Epoch)
+	log.Infof(ctx, "incremented n%d liveness epoch to %d", newLiveness.NodeID, newLiveness.Epoch)
 	nl.maybeUpdate(newLiveness)
 	nl.metrics.EpochIncrements.Inc(1)
 	return nil
