@@ -249,6 +249,29 @@ func (s *FastIntSet) SubsetOf(rhs FastIntSet) bool {
 	return (s1 & s2) == s1
 }
 
+// Shift generates a new set which contains elements i+delta for elements i in
+// the original set.
+func (s *FastIntSet) Shift(delta int) FastIntSet {
+	if s.large == nil {
+		// Fast paths.
+		if delta > 0 {
+			if bits.LeadingZeros64(s.small) >= delta {
+				return FastIntSet{small: s.small << uint32(delta)}
+			}
+		} else {
+			if bits.TrailingZeros64(s.small) >= -delta {
+				return FastIntSet{small: s.small >> uint32(-delta)}
+			}
+		}
+	}
+	// Do the slow thing.
+	var result FastIntSet
+	s.ForEach(func(i int) {
+		result.Add(i + delta)
+	})
+	return result
+}
+
 func (s FastIntSet) String() string {
 	var buf bytes.Buffer
 	buf.WriteByte('(')
