@@ -300,10 +300,18 @@ func ParseJSON(s string) (JSON, error) {
 	if decoder.More() {
 		return nil, errTrailingCharacters
 	}
-	return interpretJSON(result)
+	return MakeJSON(result)
 }
 
-func interpretJSON(d interface{}) (JSON, error) {
+// MakeJSON returns a JSON value given a Go-style representation of JSON.
+// * JSON null is Go `nil`,
+// * JSON true is Go `true`,
+// * JSON false is Go `false`,
+// * JSON numbers are json.Number | int | int64 | float64,
+// * JSON string is a Go string,
+// * JSON array is a Go []interface{},
+// * JSON object is a Go map[string]interface{}.
+func MakeJSON(d interface{}) (JSON, error) {
 	switch v := d.(type) {
 	case json.Number:
 		// The JSON decoder has already verified that the string `v` represents a
@@ -325,7 +333,7 @@ func interpretJSON(d interface{}) (JSON, error) {
 		elems := make([]JSON, len(v))
 		for i := range v {
 			var err error
-			elems[i], err = interpretJSON(v[i])
+			elems[i], err = MakeJSON(v[i])
 			if err != nil {
 				return nil, err
 			}
@@ -341,7 +349,7 @@ func interpretJSON(d interface{}) (JSON, error) {
 		sort.Strings(keys)
 		result := make([]jsonKeyValuePair, len(v))
 		for i := range keys {
-			v, err := interpretJSON(v[keys[i]])
+			v, err := MakeJSON(v[keys[i]])
 			if err != nil {
 				return nil, err
 			}
@@ -351,6 +359,23 @@ func interpretJSON(d interface{}) (JSON, error) {
 			}
 		}
 		return jsonObject(result), nil
+		// The below are not used by ParseDJSON, but are provided for ease-of-use when
+		// constructing Datums.
+	case int:
+		dec := apd.Decimal{}
+		dec.SetCoefficient(int64(v))
+		return jsonNumber(dec), nil
+	case int64:
+		dec := apd.Decimal{}
+		dec.SetCoefficient(v)
+		return jsonNumber(dec), nil
+	case float64:
+		dec := apd.Decimal{}
+		_, err := dec.SetFloat64(v)
+		if err != nil {
+			return nil, err
+		}
+		return jsonNumber(dec), nil
 	}
-	return nil, nil
+	return nil, pgerror.NewError("invalid value %s passed to MakeJSON", d.(fmt.Stringer).String())
 }
