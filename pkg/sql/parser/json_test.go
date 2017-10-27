@@ -199,3 +199,16 @@ func TestJSONSize(t *testing.T) {
 		})
 	}
 }
+
+func TestJSONRandomRoundTrip(t *testing.T) {
+	for i := 0; i < 1000; i++ {
+		datum := randomDJSON(20)
+		j, err := ParseDJSON(datum.String())
+		if err != nil {
+			t.Fatal(err)
+		}
+		if datum.Compare(NewTestingEvalContext(), j) != 0 {
+			t.Fatalf("%s did not round-trip, got %s", datum.String(), j.String())
+		}
+	}
+}
