@@ -1792,9 +1792,9 @@ func TestTimestampMismatch(t *testing.T) {
 		}
 
 		// Missing data for one table in the most recent backup.
-		_, err = sqlDB.DB.Exec(`RESTORE data.* FROM $1, $2`,
+		_, err = sqlDB.DB.Exec(`RESTORE data.bank, data.t2 FROM $1, $2`,
 			fullBackup, incrementalT3FromT1OneTable)
-		if !testutils.IsError(err, "no backup covers time") {
+		if !testutils.IsError(err, "table \"t2\" does not exist") {
 			t.Errorf("expected 'no backup covers time' error got: %+v", err)
 		}
 	})
@@ -2231,22 +2231,74 @@ func TestBackupRestoreDropTable(t *testing.T) {
 	sqlDB.CheckQueryResults(`SELECT * FROM data2.bank`, expected)
 }
 
-func TestBackupRestoreIncrementalNewTable(t *testing.T) {
+func TestBackupRestoreIncrementalAddTable(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	const numAccounts = 1
 	_, dir, _, sqlDB, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, initNone)
 	defer cleanupFn()
-	sqlDB.Exec(`CREATE TABLE data.bank2 (i int)`)
+	sqlDB.Exec(`CREATE TABLE data.t (s string PRIMARY KEY)`)
+	full, inc := filepath.Join(dir, "full"), filepath.Join(dir, "inc")
 
-	full := filepath.Join(dir, "full")
-	inc := filepath.Join(dir, "inc")
-
+	sqlDB.Exec(`INSERT INTO data.t VALUES ('before')`)
 	sqlDB.Exec(`BACKUP DATABASE data TO $1`, full)
+	sqlDB.Exec(`UPDATE data.t SET s = 'after'`)
 
-	sqlDB.Exec(`CREATE TABLE data.bank3 (i int)`)
+	sqlDB.Exec(`CREATE TABLE data.t2 (i int)`)
 	_, err := sqlDB.DB.Exec("BACKUP DATABASE data TO $1 INCREMENTAL FROM $2", inc, full)
 	if !testutils.IsError(err, "a new full backup may be required") {
+		t.Fatal(err)
+	}
+}
+
+func TestBackupRestoreIncrementalTrucateTable(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	const numAccounts = 1
+	_, dir, _, sqlDB, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, initNone)
+	defer cleanupFn()
+	sqlDB.Exec(`CREATE TABLE data.t (s string PRIMARY KEY)`)
+	full, inc := filepath.Join(dir, "full"), filepath.Join(dir, "inc")
+
+	sqlDB.Exec(`INSERT INTO data.t VALUES ('before')`)
+	sqlDB.Exec(`BACKUP DATABASE data TO $1`, full)
+	sqlDB.Exec(`UPDATE data.t SET s = 'after'`)
+	sqlDB.Exec(`TRUNCATE data.t`)
+
+	if _, err := sqlDB.DB.Exec("BACKUP DATABASE data TO $1 INCREMENTAL FROM $2", inc, full); !testutils.IsError(
+		err, "a new full backup may be required",
+	) {
+		t.Fatal(err)
+	}
+}
+
+func TestBackupRestoreIncrementalDropTable(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	const numAccounts = 1
+	_, dir, _, sqlDB, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, initNone)
+	defer cleanupFn()
+	sqlDB.Exec(`CREATE TABLE data.t (s string PRIMARY KEY)`)
+	full, inc := filepath.Join(dir, "full"), filepath.Join(dir, "inc")
+
+	sqlDB.Exec(`INSERT INTO data.t VALUES ('before')`)
+	sqlDB.Exec(`BACKUP DATABASE data TO $1`, full)
+	sqlDB.Exec(`UPDATE data.t SET s = 'after'`)
+	sqlDB.Exec(`DROP TABLE data.t`)
+
+	sqlDB.Exec("BACKUP DATABASE data TO $1 INCREMENTAL FROM $2", inc, full)
+	sqlDB.Exec(`DROP DATABASE data`)
+
+	// Restoring to backup before DROP restores t.
+	sqlDB.Exec(`RESTORE DATABASE data FROM $1`, full)
+	sqlDB.Exec(`SELECT 1 FROM data.t LIMIT 0`)
+	sqlDB.Exec(`DROP DATABASE data`)
+
+	// Restoring to backup after DROP does not restore t.
+	sqlDB.Exec(`RESTORE DATABASE data FROM $1, $2`, full, inc)
+	if _, err := sqlDB.DB.Exec(`SELECT 1 FROM data.t LIMIT 0`); !testutils.IsError(
+		err, "relation \"data.t\" does not exist",
+	) {
 		t.Fatal(err)
 	}
 }
