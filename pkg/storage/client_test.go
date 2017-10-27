@@ -919,8 +919,8 @@ func (m *multiTestContext) restartStoreWithoutHeartbeat(i int) {
 
 	// Normally, the newly restarted store would not be able to accept rebalances
 	// until the election timeout passed. But we're using a manual clock which
-	// won't advance the time properly, so manually enable rebalances.
-	m.stores[i].SetRebalancesDisabled(false)
+	// won't advance the time properly, so manually enable incoming rebalances.
+	m.stores[i].SetIncomingRebalancesDisabled(false)
 }
 
 // restartStore restarts a store previously stopped with StopStore.

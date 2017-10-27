@@ -622,7 +622,7 @@ func (rq *replicateQueue) purgatoryChan() <-chan struct{} {
 // the replicas.
 func rangeRaftProgress(raftStatus *raft.Status, replicas []roachpb.ReplicaDescriptor) string {
 	if raftStatus == nil || len(raftStatus.Progress) == 0 {
-		return ""
+		return "[raft progress unknown]"
 	}
 	var buf bytes.Buffer
 	buf.WriteString("[")
