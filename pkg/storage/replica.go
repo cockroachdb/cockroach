@@ -1096,6 +1096,10 @@ func (r *Replica) updateProposalQuotaRaftMuLocked(
 // getEstimatedBehindCountRLocked returns an estimate of how far this replica is
 // behind. A return value of 0 indicates that the replica is up to date.
 func (r *Replica) getEstimatedBehindCountRLocked(raftStatus *raft.Status) int64 {
+	if !r.isInitializedRLocked() || r.mu.replicaID == 0 || r.mu.destroyed != nil {
+		// The range is either not fully initialized or has been destroyed.
+		return 0
+	}
 	if r.mu.quiescent {
 		// The range is quiescent, so it is up to date.
 		return 0
