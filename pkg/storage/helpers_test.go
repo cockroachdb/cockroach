@@ -186,12 +186,12 @@ func (s *Store) GetOrCreateReplica(
 	return s.getOrCreateReplica(ctx, rangeID, replicaID, creatingReplica)
 }
 
-func (s *Store) SetRebalancesDisabled(v bool) {
+func (s *Store) SetIncomingRebalancesDisabled(v bool) {
 	var i int32
 	if v {
 		i = 1
 	}
-	atomic.StoreInt32(&s.rebalancesDisabled, i)
+	atomic.StoreInt32(&s.incomingRebalancesDisabled, i)
 }
 
 // EnqueueRaftUpdateCheck enqueues the replica for a Raft update check, forcing
