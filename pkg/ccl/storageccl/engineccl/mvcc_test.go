@@ -12,6 +12,7 @@ import (
 	"bytes"
 	"fmt"
 	"math"
+	"os"
 	"path/filepath"
 	"testing"
 
@@ -26,6 +27,65 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
+
+func benchmarkMVCCIterationWithSuppliedEngine(b *testing.B, iter engine.SimpleIterator) {
+	b.ResetTimer()
+	var l int
+	var keyCount int
+	for i := 0; i < b.N; i++ {
+		iter.Seek(engine.NilKey)
+		l = 0
+		keyCount = 0
+		for ; ; iter.NextKey() {
+			if ok, err := iter.Valid(); err != nil {
+				panic(err)
+			} else if !ok {
+				break
+			}
+			mvccKey := iter.UnsafeKey()
+			mvccVal := iter.UnsafeValue()
+			l += len(mvccKey.Key) + len(mvccVal)
+			keyCount++
+		}
+	}
+	fmt.Printf("read %d bytes and %d keys", l, keyCount)
+	b.SetBytes(int64(l))
+}
+
+const rocksDBPath string = "testing"
+const sstPath string = "000078.sst"
+
+func BenchmarkMVCCIteration(b *testing.B) {
+	b.Run("Cgo", func(b *testing.B) {
+		os.RemoveAll(rocksDBPath)
+		rocksdb, err := engine.NewRocksDB(
+			engine.RocksDBConfig{
+				Dir: rocksDBPath,
+			},
+			engine.RocksDBCache{},
+		)
+		if err != nil {
+			panic(err)
+		}
+		defer rocksdb.Close()
+
+		err = rocksdb.IngestExternalFile(context.Background(), sstPath, false)
+		if err != nil {
+			panic(err)
+		}
+
+		iterator := rocksdb.NewIterator(false)
+		benchmarkMVCCIterationWithSuppliedEngine(b, iterator)
+	})
+	b.Run("Purego", func(b *testing.B) {
+		eng, err := NewSSTIterator(sstPath)
+		if err != nil {
+			panic(err)
+		}
+
+		benchmarkMVCCIterationWithSuppliedEngine(b, eng)
+	})
+}
 
 func iterateExpectErr(
 	e engine.Engine,
