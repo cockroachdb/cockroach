@@ -609,7 +609,12 @@ message TableDescriptor {
   repeated MutationJob mutationJobs = 27 [(gogoproto.nullable) = false];
 
   message SequenceSettings {
-    optional uint32 increment = 1 [(gogoproto.nullable) = false];
+    optional int64 increment = 1 [(gogoproto.nullable) = false];
+    optional int64 min_value = 2 [(gogoproto.nullable) = false];
+    optional int64 max_value = 3 [(gogoproto.nullable) = false];
+    optional int64 start = 4 [(gogoproto.nullable) = false];
+    optional int64 cache = 5 [(gogoproto.nullable) = false];
+    optional bool cycle = 6 [(gogoproto.nullable) = false];
   }
 
   // The presence of sequence_settings indicates that this descriptor is for a sequence
