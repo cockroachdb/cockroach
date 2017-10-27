@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/ipaddr"
+	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -256,6 +257,14 @@ func (r *RSG) GenerateRandomArg(typ types.T) string {
 		types.AnyArray,
 		types.Any:
 		v = "NULL"
+	case types.JSON:
+		r.lock.Lock()
+		j, err := json.Random(20, r.src)
+		r.lock.Unlock()
+		if err != nil {
+			panic(err)
+		}
+		v = parser.DJSON{JSON: j}
 	default:
 		// Check types that can't be compared using equality
 		switch types.UnwrapType(typ).(type) {
