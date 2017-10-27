@@ -26,7 +26,7 @@ existing `unique_rowid()` function.
 # Guide-level explanation
 
 A *sequence* is a named database object which exists in a schema alongside
-tables, views and other sequences, and is used to hold an integer value which
+tables, views and other sequences, and is used to hold a `BIGINT` value which
 can be read and incremented atomically, usually for the purpose of giving out
 unique ids as rows are inserted into a table. In additon to their values,
 sequences have settings such as start value, amount to increment by, and max
@@ -39,6 +39,7 @@ CREATE SEQUENCE blog_posts_id_seq;
 CREATE TABLE blog_posts (
   id INT PRIMARY KEY DEFAULT nextval('blog_posts_id_seq'),
   -- ^ in Postgres, `id SERIAL` expands to the above
+  --   except with int4 instead of our int, which is 8 bytes
   title text,
   body text
 );
@@ -137,22 +138,18 @@ To support this feature, I propose the following changes:
   - Dropping a column which depends on a sequence (either by dropping the
     individual column or dropping its table) results in the sequence being
     deleted if no other columns depend on it.
+  - `DROP SEQUENCE <sequence name> CASCADE` removes the `DEFAULT` expression
+    from any columns using the sequence. (The default on `DROP SEQUENCE` is
+    `RESTRICT`, which errors if there are any dependencies on the sequence.)
   - _Note:_ These dependencies will have to be recorded on `CREATE TABLE`,
-    `ALTER TABLE`, `ALTER COLUMN`, and `ADD COLUMN`.
+    `ALTER TABLE`, `ALTER COLUMN`, and `ADD COLUMN`. We already put dependency
+    tracking information for views on `TableDescriptor`s, but these dependencies
+    will be recorded on the column descriptors of the columns which use
+    sequences in their `DEFAULT` expressions.
   - _Note:_ In Postgres, creating a table with a `serial` column automatically
     creates a sequence and records the dependency. Since our `serial` type
     is not based on sequences, our users will have to manually create sequences,
     with `CREATE SEQUENCE`, unless we add new syntax.
-  - _Note:_ As with PG sequences and views, there are no `CASCADE` or `RESTRICT`
-    modifiers which apply to this dependency relationship. The `CASCADE` modifer
-    specifies that when a row in the referenced table is dropped, the
-    referencing row should be dropped as well. For tables and sequences, this
-    would need to be table-level: a table could specify that it should be
-    dropped when the sequence it references is dropped.
-
-    This a dangerous behavior, so like PG, we won't offer it; we'll only do the
-    default behavior specified above: a sequence gets dropped when the last
-    table referencing it gets dropped.
 - Add checks to disallow schema and data changes to sequences via `INSERT`,
   `DELETE`, `UPDATE`, `ALTER TABLE`, etc. They should be like views or
   virtual tables: their contents can only be affected by other means.
@@ -380,7 +377,13 @@ an obstacle in moving to Cockroach.
 - Should we change our `SERIAL` type to be backed by sequences? I don't think
   we can do this until we make it faster by implementing `CACHE` (see below).
 
-  With the implementation in this RFC, to use sequences users will have to
+  We would also have to decide whether to make `SERIAL` int32. While more
+  compatible with Postgres, this would be backwards-incompatible with Cockroach,
+  since our current `SERIAL` is int64.
+
+  Making `SERIAL` always sequence backed would also allow us to automatically
+  create a sequence when a `SERIAL` is used in a `CREATE TABLE`, as Postgres
+  does. With the implementation in this RFC, to use sequences users will have to
   explicitly type `CREATE SEQUENCE` and set their column to
   `DEFAULT nextval('my_sequence')`.
 - Should we implement the `AS` clause, which enables users to specify which
@@ -388,7 +391,7 @@ an obstacle in moving to Cockroach.
   create a `SMALLINT` column that uses `DEFAULT nextval(seq)` and get a value,
   even though `nextval` returns `int64` and `SMALLINT` is `int32`. Silent
   truncation should not occur here, since we [check the size of the value before
-  inserting it][value-size-check-gh].
+  inserting it][value-size-check-gh] and return an error.
 - Should we implement the `CACHE` setting? (pre-allocation on each node of
   batches of values, which can then be handed out quickly from memory)
   This would probably make sequences fast enough to be our default for the
@@ -403,6 +406,9 @@ an obstacle in moving to Cockroach.
 
   This is easy to do, and may be helpful for compatibility. It can be saved for
   the last PR of the change, but should probably be done.
+- Should the sequence values be exposed as a `system.sequences` table, for easy
+  introspectability? Ideally yes, if we can still use the KV-level `Inc`
+  operation. I will try this during implementation.
 
 ### Implementation issues
 
