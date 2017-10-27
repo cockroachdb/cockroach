@@ -1953,6 +1953,22 @@ func ParseDJSON(s string) (Datum, error) {
 	return &DJSON{j}, nil
 }
 
+// MakeDJSON returns a JSON value given a Go-style representation of JSON.
+// * JSON null is Go `nil`,
+// * JSON true is Go `true`,
+// * JSON false is Go `false`,
+// * JSON numbers are json.Number | int | int64 | float64,
+// * JSON string is a Go string,
+// * JSON array is a Go []interface{},
+// * JSON object is a Go map[string]interface{}.
+func MakeDJSON(d interface{}) (Datum, error) {
+	j, err := json.MakeJSON(d)
+	if err != nil {
+		return nil, err
+	}
+	return &DJSON{j}, nil
+}
+
 // ResolvedType implements the TypedExpr interface.
 func (*DJSON) ResolvedType() Type {
 	return TypeJSON

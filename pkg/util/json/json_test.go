@@ -15,6 +15,7 @@
 package json
 
 import (
+	"encoding/json"
 	"strings"
 	"testing"
 
@@ -195,6 +196,40 @@ func TestJSONSize(t *testing.T) {
 			}
 			if j.Size() != tc.size {
 				t.Fatalf("expected %v to have size %d, but had size %d", j, tc.size, j.Size())
+			}
+		})
+	}
+}
+
+func TestMakeJSON(t *testing.T) {
+	testCases := []struct {
+		input    interface{}
+		expected string
+	}{
+		// These tests are limited because they only really need to exercise the
+		// parts not exercised by the ParseJSON tests - that is, those involving
+		// int/int64/float64.
+		{json.Number("1.00"), "1.00"},
+		{1, "1"},
+		{int64(1), "1"},
+		{1.4, "1.4"},
+		{map[string]interface{}{"foo": 4}, `{"foo": 4}`},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.expected, func(t *testing.T) {
+			result, err := MakeJSON(tc.input)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			expectedResult, err := ParseJSON(tc.expected)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			if result.Compare(expectedResult) != 0 {
+				t.Fatalf("expected %v to equal %v", result, expectedResult)
 			}
 		})
 	}
