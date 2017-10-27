@@ -18744,7 +18744,12 @@ export namespace cockroach {
                 }
 
                 type SequenceSettings$Properties = {
-                    increment?: number;
+                    increment?: Long;
+                    min_value?: Long;
+                    max_value?: Long;
+                    start?: Long;
+                    cache?: Long;
+                    cycle?: boolean;
                 };
 
                 /**
@@ -18765,9 +18770,39 @@ export namespace cockroach {
 
                     /**
                      * SequenceSettings increment.
-                     * @type {number}
+                     * @type {Long}
                      */
-                    public increment: number;
+                    public increment: Long;
+
+                    /**
+                     * SequenceSettings min_value.
+                     * @type {Long}
+                     */
+                    public min_value: Long;
+
+                    /**
+                     * SequenceSettings max_value.
+                     * @type {Long}
+                     */
+                    public max_value: Long;
+
+                    /**
+                     * SequenceSettings start.
+                     * @type {Long}
+                     */
+                    public start: Long;
+
+                    /**
+                     * SequenceSettings cache.
+                     * @type {Long}
+                     */
+                    public cache: Long;
+
+                    /**
+                     * SequenceSettings cycle.
+                     * @type {boolean}
+                     */
+                    public cycle: boolean;
 
                     /**
                      * Creates a new SequenceSettings instance using the specified properties.

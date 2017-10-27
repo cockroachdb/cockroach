@@ -208,6 +208,15 @@ func (u *sqlSymUnion) castTargetType() CastTargetType {
 func (u *sqlSymUnion) colTypes() []ColumnType {
     return u.val.([]ColumnType)
 }
+func (u *sqlSymUnion) seqOpt() SequenceOption {
+	return u.val.(SequenceOption)
+}
+func (u *sqlSymUnion) intVal() *int64 {
+	return u.val.(*int64)
+}
+func (u *sqlSymUnion) seqOpts() []SequenceOption {
+    return u.val.([]SequenceOption)
+}
 func (u *sqlSymUnion) expr() Expr {
     if expr, ok := u.val.(Expr); ok {
         return expr
@@ -391,7 +400,7 @@ func (u *sqlSymUnion) referenceActions() ReferenceActions {
 %token <str>   BACKUP BEGIN BETWEEN BIGINT BIGSERIAL BIT
 %token <str>   BLOB BOOL BOOLEAN BOTH BY BYTEA BYTES
 
-%token <str>   CANCEL CASCADE CASE CAST CHAR
+%token <str>   CACHE CANCEL CASCADE CASE CAST CHAR
 %token <str>   CHARACTER CHARACTERISTICS CHECK
 %token <str>   CLUSTER COALESCE COLLATE COLLATION COLUMN COLUMNS COMMIT
 %token <str>   COMMITTED CONCAT CONFIGURATION CONFIGURATIONS CONFIGURE
@@ -415,7 +424,7 @@ func (u *sqlSymUnion) referenceActions() ReferenceActions {
 
 %token <str>   HAVING HELP HIGH HOUR HAS_SOME HAS_ALL
 
-%token <str>   IMPORT INCREMENTAL IF IFNULL ILIKE IN INET INTERLEAVE
+%token <str>   IMPORT INCREMENT INCREMENTAL IF IFNULL ILIKE IN INET INTERLEAVE
 %token <str>   INDEX INDEXES INITIALLY
 %token <str>   INNER INSERT INT INT2VECTOR INT2 INT4 INT8 INT64 INTEGER
 %token <str>   INTERSECT INTERVAL INTO IS ISOLATION
@@ -428,7 +437,7 @@ func (u *sqlSymUnion) referenceActions() ReferenceActions {
 %token <str>   LEADING LEAST LEFT LESS LEVEL LIKE LIMIT LIST LOCAL
 %token <str>   LOCALTIME LOCALTIMESTAMP LOW LSHIFT
 
-%token <str>   MATCH MAXVALUE MINUTE MONTH
+%token <str>   MATCH MINVALUE MAXVALUE MINUTE MONTH
 
 %token <str>   NAN NAME NAMES NATURAL NEXT NO NO_INDEX_JOIN NORMAL
 %token <str>   NOT NOTHING NULL NULLIF
@@ -540,9 +549,9 @@ func (u *sqlSymUnion) referenceActions() ReferenceActions {
 %type <Statement> create_index_stmt
 %type <Statement> create_table_stmt
 %type <Statement> create_table_as_stmt
-%type <Statement> create_sequence_stmt
 %type <Statement> create_user_stmt
 %type <Statement> create_view_stmt
+%type <Statement> create_sequence_stmt
 %type <Statement> delete_stmt
 %type <Statement> discard_stmt
 
@@ -694,6 +703,10 @@ func (u *sqlSymUnion) referenceActions() ReferenceActions {
 %type <*Limit> select_limit
 %type <TableNameReferences> relation_expr_list
 %type <ReturningClause> returning_clause
+
+%type <[]SequenceOption> sequence_option_list opt_sequence_option_list
+%type <SequenceOption> sequence_option_elem
+%type <*int64> just_an_int
 
 %type <bool> all_or_distinct
 %type <empty> join_outer
@@ -1485,17 +1498,17 @@ cancel_query_stmt:
 // %Category: Group
 // %Text:
 // CREATE DATABASE, CREATE TABLE, CREATE INDEX, CREATE TABLE AS,
-// CREATE USER, CREATE VIEW
+// CREATE USER, CREATE VIEW, CREATE SEQUENCE
 create_stmt:
   create_database_stmt // EXTEND WITH HELP: CREATE DATABASE
 | create_index_stmt    // EXTEND WITH HELP: CREATE INDEX
 | create_table_stmt    // EXTEND WITH HELP: CREATE TABLE
 | create_table_as_stmt // EXTEND WITH HELP: CREATE TABLE
-| create_sequence_stmt
 // Error case for both CREATE TABLE and CREATE TABLE ... AS in one
 | CREATE TABLE error   // SHOW HELP: CREATE TABLE
 | create_user_stmt     // EXTEND WITH HELP: CREATE USER
 | create_view_stmt     // EXTEND WITH HELP: CREATE VIEW
+| create_sequence_stmt // EXTEND WITH HELP: CREATE SEQUENCE
 | CREATE error         // SHOW HELP: CREATE
 
 // %Help: DELETE - delete rows from a table
@@ -3063,15 +3076,62 @@ numeric_only:
     $$.val = $1.numVal()
   }
 
+// %Help: CREATE SEQUENCE - create a new sequence
+// %Category: DDL
+// %Text:
+// CREATE [UNIQUE] INDEX [IF NOT EXISTS] [<idxname>]
+//        ON <tablename> ( <colname> [ASC | DESC] [, ...] )
+//        [STORING ( <colnames...> )] [<interleave>]
+//
+// CREATE SEQUENCE <seqname>
+//   [INCREMENT <increment>]
+//   [MINVALUE <minvalue> | NO MINVALUE]
+//   [MAXVALUE <maxvalue> | NO MAXVALUE]
+//   [START <start>]
+//   [CACHE <cache>]
+//   [[NO] CYCLE]
+//   [OWNED BY { <table_name.column_name> | NONE }]
+//
+// %SeeAlso: CREATE TABLE
+// WEBDOCS/create-sequence.html
 create_sequence_stmt:
-  CREATE SEQUENCE any_name
+  CREATE SEQUENCE any_name opt_sequence_option_list
   {
-    $$.val = &CreateSequence{Name: $3.normalizableTableName(), IfNotExists: false}
+    node := &CreateSequence{
+      Name: $3.normalizableTableName(),
+      Options: $4.seqOpts(),
+    }
+    $$.val = node
   }
-| CREATE SEQUENCE IF NOT EXISTS any_name
-  {
-    $$.val = &CreateSequence{Name: $6.normalizableTableName(), IfNotExists: true}
-  }
+
+opt_sequence_option_list:
+  sequence_option_list
+| /* EMPTY */ 					{ $$.val = []SequenceOption{} }
+
+sequence_option_list:
+  sequence_option_elem                       { $$.val = []SequenceOption{$1.seqOpt()} }
+| sequence_option_list sequence_option_elem  { $$.val = append($1.seqOpts(), $2.seqOpt()) }
+
+sequence_option_elem:
+  INCREMENT just_an_int   { $$.val = IncrementOption{Increment: $2.intVal()} }
+| MINVALUE just_an_int    { $$.val = MinValueOption{MinValue: $2.intVal()} }
+| NO MINVALUE 						{ $$.val = MinValueOption{MinValue: nil} }
+| MAXVALUE just_an_int    { $$.val = MaxValueOption{MaxValue: $2.intVal()} }
+| NO MAXVALUE 						{ $$.val = MaxValueOption{MaxValue: nil} }
+| START just_an_int       { $$.val = StartOption{Start: $2.intVal()} }
+| CACHE just_an_int       { $$.val = CacheOption{Cache: $2.intVal()} }
+| CYCLE                   { $$.val = CycleOption{Cycle: true} }
+| NO CYCLE								{ $$.val = CycleOption{Cycle: false} }
+
+just_an_int:
+	signed_iconst
+	{
+		val, err := $1.numVal().AsInt64()
+		if err != nil {
+			sqllex.Error(err.Error()); return 1
+		}
+		$$.val = &val
+	}
 
 // %Help: TRUNCATE - empty one or more tables
 // %Category: DML
@@ -6533,6 +6593,7 @@ unreserved_keyword:
 | BEGIN
 | BLOB
 | BY
+| CACHE
 | CANCEL
 | CASCADE
 | CLUSTER
@@ -6572,6 +6633,7 @@ unreserved_keyword:
 | HIGH
 | HOUR
 | IMPORT
+| INCREMENT
 | INCREMENTAL
 | INDEXES
 | INSERT
@@ -6592,6 +6654,7 @@ unreserved_keyword:
 | LOW
 | MATCH
 | MINUTE
+| MINVALUE
 | MONTH
 | NAMES
 | NAN

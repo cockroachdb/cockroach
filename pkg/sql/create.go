@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/pkg/errors"
+	"math"
 )
 
 type createDatabaseNode struct {
@@ -1326,9 +1327,63 @@ func (n *createSequenceNode) makeSequenceTableDesc(
 ) (sqlbase.TableDescriptor, error) {
 	desc := initTableDescriptor(id, parentID, sequenceName, n.p.txn.OrigTimestamp(), privileges)
 
-	desc.SequenceSettings = &sqlbase.TableDescriptor_SequenceSettings{
-		Increment: 1,
+	// Fill in settings, possibly with defaults.
+
+	settings := &sqlbase.TableDescriptor_SequenceSettings{}
+	settings.Cache = 1
+	settings.Cycle = false
+
+	// All other defaults are dependent on the value of increment,
+	// i.e. whether the sequence is ascending or descending.
+	settings.Increment = 1
+	for _, option := range n.n.Options {
+		switch opt := option.(type) {
+		case parser.IncrementOption:
+			settings.Increment = *opt.Increment
+		default:
+		}
 	}
+	if settings.Increment == 0 {
+		// TODO(vilterp) map to a PG error code
+		return desc, fmt.Errorf("INCREMENT must not be 0")
+	}
+	isAscending := settings.Increment > 0
+
+	// Set increment-dependent defaults.
+	if isAscending {
+		settings.MinValue = 1
+		settings.MaxValue = math.MaxInt64
+		settings.Start = settings.MinValue
+	} else {
+		settings.MinValue = math.MinInt64
+		settings.MaxValue = -1
+		settings.Start = settings.MaxValue
+	}
+
+	// Fill in all other settings.
+	for _, option := range n.n.Options {
+		switch opt := option.(type) {
+		case parser.IncrementOption:
+			// Do nothing; this has already been set.
+		case parser.MinValueOption:
+			// A value of nil represents the user explicitly saying `NO MINVALUE`.
+			if opt.MinValue != nil {
+				settings.MinValue = *opt.MinValue
+			}
+		case parser.MaxValueOption:
+			// A value of nil represents the user explicitly saying `NO MAXVALUE`.
+			if opt.MaxValue != nil {
+				settings.MaxValue = *opt.MaxValue
+			}
+		case parser.StartOption:
+			settings.Start = *opt.Start
+		case parser.CacheOption:
+			settings.Cache = *opt.Cache
+		case parser.CycleOption:
+			settings.Cycle = opt.Cycle
+		}
+	}
+	desc.SequenceSettings = settings
 
 	return desc, desc.AllocateIDs()
 }
