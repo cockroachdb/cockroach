@@ -19,6 +19,7 @@ var expectedHelpStrings = []string{
 	"COMMIT",
 	"CREATE DATABASE",
 	"CREATE INDEX",
+	"CREATE SEQUENCE",
 	"CREATE TABLE",
 	"CREATE USER",
 	"CREATE VIEW",
