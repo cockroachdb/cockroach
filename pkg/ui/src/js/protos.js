@@ -35392,7 +35392,12 @@ export const cockroach = $root.cockroach = (() => {
                      * Properties of a SequenceSettings.
                      * @typedef cockroach.sql.sqlbase.TableDescriptor.SequenceSettings$Properties
                      * @type {Object}
-                     * @property {number} [increment] SequenceSettings increment.
+                     * @property {Long} [increment] SequenceSettings increment.
+                     * @property {Long} [min_value] SequenceSettings min_value.
+                     * @property {Long} [max_value] SequenceSettings max_value.
+                     * @property {Long} [start] SequenceSettings start.
+                     * @property {Long} [cache] SequenceSettings cache.
+                     * @property {boolean} [cycle] SequenceSettings cycle.
                      */
 
                     /**
@@ -35410,9 +35415,39 @@ export const cockroach = $root.cockroach = (() => {
 
                     /**
                      * SequenceSettings increment.
-                     * @type {number}
+                     * @type {Long}
                      */
-                    SequenceSettings.prototype.increment = 0;
+                    SequenceSettings.prototype.increment = $util.Long ? $util.Long.fromBits(0,0,false) : 0;
+
+                    /**
+                     * SequenceSettings min_value.
+                     * @type {Long}
+                     */
+                    SequenceSettings.prototype.min_value = $util.Long ? $util.Long.fromBits(0,0,false) : 0;
+
+                    /**
+                     * SequenceSettings max_value.
+                     * @type {Long}
+                     */
+                    SequenceSettings.prototype.max_value = $util.Long ? $util.Long.fromBits(0,0,false) : 0;
+
+                    /**
+                     * SequenceSettings start.
+                     * @type {Long}
+                     */
+                    SequenceSettings.prototype.start = $util.Long ? $util.Long.fromBits(0,0,false) : 0;
+
+                    /**
+                     * SequenceSettings cache.
+                     * @type {Long}
+                     */
+                    SequenceSettings.prototype.cache = $util.Long ? $util.Long.fromBits(0,0,false) : 0;
+
+                    /**
+                     * SequenceSettings cycle.
+                     * @type {boolean}
+                     */
+                    SequenceSettings.prototype.cycle = false;
 
                     /**
                      * Creates a new SequenceSettings instance using the specified properties.
@@ -35433,7 +35468,17 @@ export const cockroach = $root.cockroach = (() => {
                         if (!writer)
                             writer = $Writer.create();
                         if (message.increment != null && message.hasOwnProperty("increment"))
-                            writer.uint32(/* id 1, wireType 0 =*/8).uint32(message.increment);
+                            writer.uint32(/* id 1, wireType 0 =*/8).int64(message.increment);
+                        if (message.min_value != null && message.hasOwnProperty("min_value"))
+                            writer.uint32(/* id 2, wireType 0 =*/16).int64(message.min_value);
+                        if (message.max_value != null && message.hasOwnProperty("max_value"))
+                            writer.uint32(/* id 3, wireType 0 =*/24).int64(message.max_value);
+                        if (message.start != null && message.hasOwnProperty("start"))
+                            writer.uint32(/* id 4, wireType 0 =*/32).int64(message.start);
+                        if (message.cache != null && message.hasOwnProperty("cache"))
+                            writer.uint32(/* id 5, wireType 0 =*/40).int64(message.cache);
+                        if (message.cycle != null && message.hasOwnProperty("cycle"))
+                            writer.uint32(/* id 6, wireType 0 =*/48).bool(message.cycle);
                         return writer;
                     };
 
@@ -35463,7 +35508,22 @@ export const cockroach = $root.cockroach = (() => {
                             let tag = reader.uint32();
                             switch (tag >>> 3) {
                             case 1:
-                                message.increment = reader.uint32();
+                                message.increment = reader.int64();
+                                break;
+                            case 2:
+                                message.min_value = reader.int64();
+                                break;
+                            case 3:
+                                message.max_value = reader.int64();
+                                break;
+                            case 4:
+                                message.start = reader.int64();
+                                break;
+                            case 5:
+                                message.cache = reader.int64();
+                                break;
+                            case 6:
+                                message.cycle = reader.bool();
                                 break;
                             default:
                                 reader.skipType(tag & 7);
@@ -35495,8 +35555,23 @@ export const cockroach = $root.cockroach = (() => {
                         if (typeof message !== "object" || message === null)
                             return "object expected";
                         if (message.increment != null && message.hasOwnProperty("increment"))
-                            if (!$util.isInteger(message.increment))
-                                return "increment: integer expected";
+                            if (!$util.isInteger(message.increment) && !(message.increment && $util.isInteger(message.increment.low) && $util.isInteger(message.increment.high)))
+                                return "increment: integer|Long expected";
+                        if (message.min_value != null && message.hasOwnProperty("min_value"))
+                            if (!$util.isInteger(message.min_value) && !(message.min_value && $util.isInteger(message.min_value.low) && $util.isInteger(message.min_value.high)))
+                                return "min_value: integer|Long expected";
+                        if (message.max_value != null && message.hasOwnProperty("max_value"))
+                            if (!$util.isInteger(message.max_value) && !(message.max_value && $util.isInteger(message.max_value.low) && $util.isInteger(message.max_value.high)))
+                                return "max_value: integer|Long expected";
+                        if (message.start != null && message.hasOwnProperty("start"))
+                            if (!$util.isInteger(message.start) && !(message.start && $util.isInteger(message.start.low) && $util.isInteger(message.start.high)))
+                                return "start: integer|Long expected";
+                        if (message.cache != null && message.hasOwnProperty("cache"))
+                            if (!$util.isInteger(message.cache) && !(message.cache && $util.isInteger(message.cache.low) && $util.isInteger(message.cache.high)))
+                                return "cache: integer|Long expected";
+                        if (message.cycle != null && message.hasOwnProperty("cycle"))
+                            if (typeof message.cycle !== "boolean")
+                                return "cycle: boolean expected";
                         return null;
                     };
 
@@ -35510,7 +35585,52 @@ export const cockroach = $root.cockroach = (() => {
                             return object;
                         let message = new $root.cockroach.sql.sqlbase.TableDescriptor.SequenceSettings();
                         if (object.increment != null)
-                            message.increment = object.increment >>> 0;
+                            if ($util.Long)
+                                (message.increment = $util.Long.fromValue(object.increment)).unsigned = false;
+                            else if (typeof object.increment === "string")
+                                message.increment = parseInt(object.increment, 10);
+                            else if (typeof object.increment === "number")
+                                message.increment = object.increment;
+                            else if (typeof object.increment === "object")
+                                message.increment = new $util.LongBits(object.increment.low >>> 0, object.increment.high >>> 0).toNumber();
+                        if (object.min_value != null)
+                            if ($util.Long)
+                                (message.min_value = $util.Long.fromValue(object.min_value)).unsigned = false;
+                            else if (typeof object.min_value === "string")
+                                message.min_value = parseInt(object.min_value, 10);
+                            else if (typeof object.min_value === "number")
+                                message.min_value = object.min_value;
+                            else if (typeof object.min_value === "object")
+                                message.min_value = new $util.LongBits(object.min_value.low >>> 0, object.min_value.high >>> 0).toNumber();
+                        if (object.max_value != null)
+                            if ($util.Long)
+                                (message.max_value = $util.Long.fromValue(object.max_value)).unsigned = false;
+                            else if (typeof object.max_value === "string")
+                                message.max_value = parseInt(object.max_value, 10);
+                            else if (typeof object.max_value === "number")
+                                message.max_value = object.max_value;
+                            else if (typeof object.max_value === "object")
+                                message.max_value = new $util.LongBits(object.max_value.low >>> 0, object.max_value.high >>> 0).toNumber();
+                        if (object.start != null)
+                            if ($util.Long)
+                                (message.start = $util.Long.fromValue(object.start)).unsigned = false;
+                            else if (typeof object.start === "string")
+                                message.start = parseInt(object.start, 10);
+                            else if (typeof object.start === "number")
+                                message.start = object.start;
+                            else if (typeof object.start === "object")
+                                message.start = new $util.LongBits(object.start.low >>> 0, object.start.high >>> 0).toNumber();
+                        if (object.cache != null)
+                            if ($util.Long)
+                                (message.cache = $util.Long.fromValue(object.cache)).unsigned = false;
+                            else if (typeof object.cache === "string")
+                                message.cache = parseInt(object.cache, 10);
+                            else if (typeof object.cache === "number")
+                                message.cache = object.cache;
+                            else if (typeof object.cache === "object")
+                                message.cache = new $util.LongBits(object.cache.low >>> 0, object.cache.high >>> 0).toNumber();
+                        if (object.cycle != null)
+                            message.cycle = Boolean(object.cycle);
                         return message;
                     };
 
@@ -35533,10 +35653,61 @@ export const cockroach = $root.cockroach = (() => {
                         if (!options)
                             options = {};
                         let object = {};
-                        if (options.defaults)
-                            object.increment = 0;
+                        if (options.defaults) {
+                            if ($util.Long) {
+                                let long = new $util.Long(0, 0, false);
+                                object.increment = options.longs === String ? long.toString() : options.longs === Number ? long.toNumber() : long;
+                            } else
+                                object.increment = options.longs === String ? "0" : 0;
+                            if ($util.Long) {
+                                let long = new $util.Long(0, 0, false);
+                                object.min_value = options.longs === String ? long.toString() : options.longs === Number ? long.toNumber() : long;
+                            } else
+                                object.min_value = options.longs === String ? "0" : 0;
+                            if ($util.Long) {
+                                let long = new $util.Long(0, 0, false);
+                                object.max_value = options.longs === String ? long.toString() : options.longs === Number ? long.toNumber() : long;
+                            } else
+                                object.max_value = options.longs === String ? "0" : 0;
+                            if ($util.Long) {
+                                let long = new $util.Long(0, 0, false);
+                                object.start = options.longs === String ? long.toString() : options.longs === Number ? long.toNumber() : long;
+                            } else
+                                object.start = options.longs === String ? "0" : 0;
+                            if ($util.Long) {
+                                let long = new $util.Long(0, 0, false);
+                                object.cache = options.longs === String ? long.toString() : options.longs === Number ? long.toNumber() : long;
+                            } else
+                                object.cache = options.longs === String ? "0" : 0;
+                            object.cycle = false;
+                        }
                         if (message.increment != null && message.hasOwnProperty("increment"))
-                            object.increment = message.increment;
+                            if (typeof message.increment === "number")
+                                object.increment = options.longs === String ? String(message.increment) : message.increment;
+                            else
+                                object.increment = options.longs === String ? $util.Long.prototype.toString.call(message.increment) : options.longs === Number ? new $util.LongBits(message.increment.low >>> 0, message.increment.high >>> 0).toNumber() : message.increment;
+                        if (message.min_value != null && message.hasOwnProperty("min_value"))
+                            if (typeof message.min_value === "number")
+                                object.min_value = options.longs === String ? String(message.min_value) : message.min_value;
+                            else
+                                object.min_value = options.longs === String ? $util.Long.prototype.toString.call(message.min_value) : options.longs === Number ? new $util.LongBits(message.min_value.low >>> 0, message.min_value.high >>> 0).toNumber() : message.min_value;
+                        if (message.max_value != null && message.hasOwnProperty("max_value"))
+                            if (typeof message.max_value === "number")
+                                object.max_value = options.longs === String ? String(message.max_value) : message.max_value;
+                            else
+                                object.max_value = options.longs === String ? $util.Long.prototype.toString.call(message.max_value) : options.longs === Number ? new $util.LongBits(message.max_value.low >>> 0, message.max_value.high >>> 0).toNumber() : message.max_value;
+                        if (message.start != null && message.hasOwnProperty("start"))
+                            if (typeof message.start === "number")
+                                object.start = options.longs === String ? String(message.start) : message.start;
+                            else
+                                object.start = options.longs === String ? $util.Long.prototype.toString.call(message.start) : options.longs === Number ? new $util.LongBits(message.start.low >>> 0, message.start.high >>> 0).toNumber() : message.start;
+                        if (message.cache != null && message.hasOwnProperty("cache"))
+                            if (typeof message.cache === "number")
+                                object.cache = options.longs === String ? String(message.cache) : message.cache;
+                            else
+                                object.cache = options.longs === String ? $util.Long.prototype.toString.call(message.cache) : options.longs === Number ? new $util.LongBits(message.cache.low >>> 0, message.cache.high >>> 0).toNumber() : message.cache;
+                        if (message.cycle != null && message.hasOwnProperty("cycle"))
+                            object.cycle = message.cycle;
                         return object;
                     };
 

@@ -269,7 +269,8 @@ func (p *planner) IncrementSequence(
 		return 0, fmt.Errorf("%s is not a sequence", seqName)
 	}
 	seqValueKey := keys.MakeSequenceKey(uint32(descriptor.ID))
-	res, err := client.IncrementValRetryable(ctx, p.txn.DB(), seqValueKey, 1)
+	res, err := client.IncrementValRetryable(
+		ctx, p.txn.DB(), seqValueKey, int64(descriptor.SequenceSettings.Increment))
 	return res, err
 }
 

@@ -842,6 +842,88 @@ func (node *CreateTable) Format(buf *bytes.Buffer, f FmtFlags) {
 type CreateSequence struct {
 	IfNotExists bool
 	Name        NormalizableTableName
+	Options 		[]SequenceOption
+}
+
+type SequenceOption interface {
+	NodeFormatter
+	// Placeholder function to ensure that only desired types (*SequenceOption) conform
+	// to the SequenceOption interface.
+	seqOpt()
+}
+
+func (IncrementOption) seqOpt() {}
+func (MaxValueOption) seqOpt() {}
+func (MinValueOption) seqOpt() {}
+func (StartOption) seqOpt() {}
+func (CacheOption) seqOpt() {}
+func (CycleOption) seqOpt() {}
+
+type IncrementOption struct {
+	Increment *int64
+}
+
+var _ SequenceOption = &IncrementOption{}
+
+func (inc IncrementOption) Format(buf *bytes.Buffer, f FmtFlags) {
+	buf.WriteString("INCREMENT ")
+	buf.WriteString(fmt.Sprintf("%d", *inc.Increment))
+}
+
+type MaxValueOption struct {
+	MaxValue *int64
+}
+
+func (mv MaxValueOption) Format(buf *bytes.Buffer, f FmtFlags) {
+	if mv.MaxValue == nil {
+		buf.WriteString("NO MAXVALUE")
+	} else {
+		buf.WriteString("MAXVALUE ")
+		buf.WriteString(fmt.Sprintf("%d", *mv.MaxValue))
+	}
+}
+
+type MinValueOption struct {
+	MinValue *int64
+}
+
+func (mv MinValueOption) Format(buf *bytes.Buffer, f FmtFlags) {
+	if mv.MinValue == nil {
+		buf.WriteString("NO MINVALUE")
+	} else {
+		buf.WriteString("MINVALUE ")
+		buf.WriteString(fmt.Sprintf("%d", *mv.MinValue))
+	}
+}
+
+type StartOption struct {
+	Start *int64
+}
+
+func (sv StartOption) Format(buf *bytes.Buffer, f FmtFlags) {
+	buf.WriteString("START ")
+	buf.WriteString(fmt.Sprintf("%d", *sv.Start))
+}
+
+type CacheOption struct {
+	Cache *int64
+}
+
+func (cv CacheOption) Format(buf *bytes.Buffer, f FmtFlags) {
+	buf.WriteString("CACHE ")
+	buf.WriteString(fmt.Sprintf("%d", *cv.Cache))
+}
+
+type CycleOption struct {
+	Cycle bool
+}
+
+func (cv CycleOption) Format(buf *bytes.Buffer, f FmtFlags) {
+	if cv.Cycle {
+		buf.WriteString("CYCLE")
+	} else {
+		buf.WriteString("NO CYCLE")
+	}
 }
 
 func (node *CreateSequence) Format(buf *bytes.Buffer, f FmtFlags) {
@@ -850,6 +932,10 @@ func (node *CreateSequence) Format(buf *bytes.Buffer, f FmtFlags) {
 		buf.WriteString("IF NOT EXISTS ")
 	}
 	FormatNode(buf, f, &node.Name)
+	for _, option := range node.Options {
+		buf.WriteRune(' ')
+		FormatNode(buf, f, option)
+	}
 }
 
 // CreateUser represents a CREATE USER statement.
