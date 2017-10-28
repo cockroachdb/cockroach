@@ -95,13 +95,14 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v TEXT);
 			if err != nil {
 				t.Fatal(err)
 			}
-			tx := txn.(driver.Execer)
-			if _, err := tx.Exec("SET TRANSACTION PRIORITY NORMAL", nil); err != nil {
+			tx := txn.(driver.ExecerContext)
+			ctx := context.TODO()
+			if _, err := tx.ExecContext(ctx, "SET TRANSACTION PRIORITY NORMAL", nil); err != nil {
 				t.Fatal(err)
 			}
 
 			if state == sql.RestartWait || state == sql.CommitWait {
-				if _, err := tx.Exec("SAVEPOINT cockroach_restart", nil); err != nil {
+				if _, err := tx.ExecContext(ctx, "SAVEPOINT cockroach_restart", nil); err != nil {
 					t.Fatal(err)
 				}
 			}
@@ -114,7 +115,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v TEXT);
 					t.Fatal(err)
 				}
 			}
-			if _, err := tx.Exec(insertStmt, nil); err != nil {
+			if _, err := tx.ExecContext(ctx, insertStmt, nil); err != nil {
 				t.Fatal(err)
 			}
 
@@ -123,7 +124,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v TEXT);
 			}
 
 			if state == sql.RestartWait || state == sql.CommitWait {
-				_, err := tx.Exec("RELEASE SAVEPOINT cockroach_restart", nil)
+				_, err := tx.ExecContext(ctx, "RELEASE SAVEPOINT cockroach_restart", nil)
 				if state == sql.CommitWait {
 					if err != nil {
 						t.Fatal(err)
@@ -263,7 +264,8 @@ func TestErrorOnRollback(t *testing.T) {
 		},
 	}
 	s, sqlDB, _ := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop(context.TODO())
+	ctx := context.TODO()
+	defer s.Stopper().Stop(ctx)
 
 	if _, err := sqlDB.Exec(`
 CREATE DATABASE t;
@@ -279,7 +281,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v TEXT);
 
 	// Perform a write so that the EndTransaction we're going to send doesn't get
 	// elided.
-	if _, err := tx.Exec("INSERT INTO t.test(k, v) VALUES (1, 'abc')"); err != nil {
+	if _, err := tx.ExecContext(ctx, "INSERT INTO t.test(k, v) VALUES (1, 'abc')"); err != nil {
 		t.Fatal(err)
 	}
 

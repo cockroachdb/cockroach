@@ -40,7 +40,9 @@ import (
 
 type sqlConnI interface {
 	driver.Conn
+	//lint:ignore SA1019 TODO(mjibson): clean this up to use go1.8 APIs
 	driver.Execer
+	//lint:ignore SA1019 TODO(mjibson): clean this up to use go1.8 APIs
 	driver.Queryer
 }
 

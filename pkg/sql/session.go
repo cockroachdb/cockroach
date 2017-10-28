@@ -361,6 +361,8 @@ type Session struct {
 
 	// noCopy is placed here to guarantee that Session objects are not
 	// copied.
+	//
+	//lint:ignore U1000 this marker prevents by-value copies.
 	noCopy util.NoCopy
 }
 
