@@ -260,8 +260,10 @@ func TestStreamingWireFailure(t *testing.T) {
 					},
 				},
 			},
-		})
-	defer ts.Stopper().Stop(context.TODO())
+		},
+	)
+	ctx := context.TODO()
+	defer ts.Stopper().Stop(ctx)
 
 	pgURL, cleanup := sqlutils.PGUrl(
 		t, ts.ServingAddr(), "StartServer", url.User(security.RootUser))
@@ -271,12 +273,12 @@ func TestStreamingWireFailure(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	execer := conn.(driver.Execer)
+	ex := conn.(driver.ExecerContext)
 
 	// The BeforeExecute filter will kill the connection (form the client side) in
 	// the middle of the query. Therefor, the client expects a ErrBadConn, and the
 	// server expects a WireFailureError.
-	if _, err := execer.Exec(query, nil); err != driver.ErrBadConn {
+	if _, err := ex.ExecContext(ctx, query, nil); err != driver.ErrBadConn {
 		t.Fatalf("expected ErrBadConn, got: %v", err)
 	}
 	serverErr := <-serverErrChan
