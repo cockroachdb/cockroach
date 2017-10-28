@@ -409,28 +409,24 @@ func (ir *intentResolver) processIntents(
 	}
 }
 
-// ResolveOptions is used during intent resolution. It specifies whether the caller wants the
-// call to block, and whether the ranges containing the intents are to be poisoned.
+// ResolveOptions is used during intent resolution. It specifies whether the
+// caller wants the call to block, and whether the ranges containing the intents
+// are to be poisoned.
 type ResolveOptions struct {
+	// Resolve intents synchronously. When set to `false`, requests a
+	// semi-synchronous operation, returning when all local commands have
+	// been *proposed* but not yet committed or executed. This ensures that
+	// if a waiting client retries immediately after calling this function,
+	// it will not hit the same intents again.
 	Wait   bool
 	Poison bool
 }
 
-// resolveIntents resolves the given intents. `wait` is currently a
-// no-op; all intents are resolved synchronously.
-//
-// TODO(bdarnell): Restore the wait=false optimization when/if #8360
-// is fixed. `wait=false` requests a semi-synchronous operation,
-// returning when all local commands have been *proposed* but not yet
-// committed or executed. This ensures that if a waiting client
-// retries immediately after calling this function, it will not hit
-// the same intents again (in the absence of #8360, we provide this
-// guarantee by resolving the intents synchronously regardless of the
-// `wait` argument).
 func (ir *intentResolver) resolveIntents(
 	ctx context.Context, intents []roachpb.Intent, opts ResolveOptions,
 ) error {
-	// Force synchronous operation; see above TODO.
+	// TODO(bdarnell): Restore the wait=false optimization when/if #8360 is
+	// fixed.
 	opts.Wait = true
 	if len(intents) == 0 {
 		return nil
