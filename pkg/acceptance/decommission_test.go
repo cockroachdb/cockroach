@@ -253,16 +253,19 @@ func testDecommissionInner(
 
 	log.Info(ctx, "decommissioning third node via `quit --decommission`")
 	{
-		o, err := func() (string, error) {
-			args := []string{"quit", "--decommission"}
-			o, _, err := c.ExecCLI(ctx, 2, args)
-			return o, err
-		}()
+		// This should not take longer than five minutes, and if it does, it's
+		// likely stuck forever and we want to see the output.
+		timeoutCtx, cancel := context.WithTimeout(ctx, 5*time.Minute)
+		defer cancel()
+		o, e, err := c.ExecCLI(timeoutCtx, 2, []string{"quit", "--decommission"})
 		if err != nil {
+			if timeoutCtx.Err() != nil {
+				t.Fatalf("quit --decommission failed: %s\nstdout:\n%s\nstderr:\n%s", err, o, e)
+			}
 			// TODO(tschottdorf): grep the process output for the string announcing success?
 			log.Warningf(ctx, "ignoring error on quit --decommission: %s", err)
 		} else {
-			log.Infof(ctx, o)
+			log.Infof(ctx, o, e)
 		}
 
 		// Kill the node to generate the expected event (Kill is idempotent, so this works).
