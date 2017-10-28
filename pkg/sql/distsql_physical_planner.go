@@ -1202,12 +1202,18 @@ func (l *DistLoader) LoadCSV(
 // corresponding to the render node itself. An evaluator stage is added if the
 // render node has any expressions which are not just simple column references.
 func (dsp *DistSQLPlanner) selectRenders(p *physicalPlan, n *renderNode) {
-	p.AddRendering(n.render, p.planToStreamColMap, getTypesForPlanResult(n, nil))
+	// We want to skip any unused renders.
+	planToStreamColMap := makePlanToStreamColMap(len(n.render))
+	renders := make([]parser.TypedExpr, 0, len(n.render))
+	for i, r := range n.render {
+		if !n.columns[i].Omitted {
+			planToStreamColMap[i] = len(renders)
+			renders = append(renders, r)
+		}
+	}
 
-	// Update p.planToStreamColMap; we will have a simple 1-to-1 mapping of
-	// planNode columns to stream columns because the evaluator has been
-	// programmed to produce the columns in renderNode.render order.
-	p.planToStreamColMap = identityMap(p.planToStreamColMap, len(n.render))
+	p.AddRendering(renders, p.planToStreamColMap, getTypesForPlanResult(n, planToStreamColMap))
+	p.planToStreamColMap = planToStreamColMap
 }
 
 // addSorters adds sorters corresponding to a sortNode and updates the plan to
