@@ -917,10 +917,6 @@ func TestStyle(t *testing.T) {
 			t.Skip("short flag")
 		}
 		t.Parallel()
-		noCopyRe, err := regexp.Compile(`^(field no|type No)Copy is unused \(U1000\)$`)
-		if err != nil {
-			t.Fatal(err)
-		}
 
 		ctx := gotool.DefaultContext
 		releaseTags := ctx.BuildContext.ReleaseTags
@@ -949,28 +945,16 @@ func TestStyle(t *testing.T) {
 		unusedChecker := unused.NewChecker(unused.CheckAll)
 		unusedChecker.WholeProgram = true
 
-		checker := megaChecker{
-			checkers: []lint.Checker{
-				&timerChecker{},
-				simple.NewChecker(),
-				staticcheck.NewChecker(),
-				unused.NewLintChecker(unusedChecker),
+		for checker, ignores := range map[lint.Checker][]lint.Ignore{
+			&miscChecker{}:  nil,
+			&timerChecker{}: nil,
+			simple.NewChecker(): {
+				&lint.GlobIgnore{Pattern: "github.com/cockroachdb/cockroach/pkg/security/securitytest/embedded.go", Checks: []string{"S1013"}},
+				&lint.GlobIgnore{Pattern: "github.com/cockroachdb/cockroach/pkg/ui/embedded.go", Checks: []string{"S1013"}},
 			},
-		}
-
-		linter := lint.Linter{
-			Checker: &checker,
-			Ignores: []lint.Ignore{
-				{Pattern: "github.com/cockroachdb/cockroach/pkg/security/securitytest/embedded.go", Checks: []string{"S1013"}},
-				{Pattern: "github.com/cockroachdb/cockroach/pkg/ui/embedded.go", Checks: []string{"S1013"}},
-
-				// Intentionally compare an unsigned integer <= 0 to avoid knowledge
-				// of the type at the caller and for consistency with convention.
-				{Pattern: "github.com/cockroachdb/cockroach/pkg/storage/replica.go", Checks: []string{"SA4003"}},
-				// Allow a comment to refer to an "unused" argument.
-				//
-				// TODO(bdarnell): remove when/if #8360 is fixed.
-				{Pattern: "github.com/cockroachdb/cockroach/pkg/storage/intent_resolver.go", Checks: []string{"SA4009"}},
+			staticcheck.NewChecker(): {
+				// sql/ir/irgen/parser/yaccpar:362:3: this value of irgenDollar is never used (SA4006)
+				&lint.GlobIgnore{Pattern: "github.com/cockroachdb/cockroach/pkg/sql/ir/irgen/parser/yaccpar", Checks: []string{"SA4006"}},
 				// The generated parser is full of `case` arms such as:
 				//
 				// case 1:
@@ -1031,34 +1015,31 @@ func TestStyle(t *testing.T) {
 				// which results in the unused warning:
 				//
 				// sql/parser/yaccpar:362:3: this value of sqlDollar is never used (SA4006)
-				{Pattern: "github.com/cockroachdb/cockroach/pkg/sql/parser/sql.go", Checks: []string{"SA4006"}},
-				// sql/ir/irgen/parser/yaccpar:362:3: this value of irgenDollar is never used (SA4006)
-				{Pattern: "github.com/cockroachdb/cockroach/pkg/sql/ir/irgen/parser/irgen.go", Checks: []string{"SA4006"}},
+				&lint.GlobIgnore{Pattern: "github.com/cockroachdb/cockroach/pkg/sql/parser/yaccpar", Checks: []string{"SA4006"}},
+			},
+			unused.NewLintChecker(unusedChecker): {
 				// sql/parser/yaccpar:14:6: type sqlParser is unused (U1000)
 				// sql/parser/yaccpar:15:2: func sqlParser.Parse is unused (U1000)
 				// sql/parser/yaccpar:16:2: func sqlParser.Lookahead is unused (U1000)
 				// sql/parser/yaccpar:29:6: func sqlNewParser is unused (U1000)
 				// sql/parser/yaccpar:152:6: func sqlParse is unused (U1000)
-				{Pattern: "github.com/cockroachdb/cockroach/pkg/sql/parser/sql.go", Checks: []string{"U1000"}},
-				{Pattern: "github.com/cockroachdb/cockroach/pkg/sql/irgen/parser/irgen.go", Checks: []string{"U1000"}},
+				&lint.GlobIgnore{Pattern: "github.com/cockroachdb/cockroach/pkg/sql/parser/yaccpar", Checks: []string{"U1000"}},
 				// Generated file containing many unused postgres error codes.
-				{Pattern: "github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror/codes.go", Checks: []string{"U1000"}},
-				// Deprecated database/sql/driver interfaces not compatible with 1.7.
-				{Pattern: "github.com/cockroachdb/cockroach/pkg/sql/*.go", Checks: []string{"SA1019"}},
-				{Pattern: "github.com/cockroachdb/cockroach/pkg/cli/sql_util.go", Checks: []string{"SA1019"}},
-
+				&lint.GlobIgnore{Pattern: "github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror/codes.go", Checks: []string{"U1000"}},
 				// IR templates.
-				{Pattern: "github.com/cockroachdb/cockroach/pkg/sql/ir/base/*.go", Checks: []string{"U1000"}},
+				&lint.GlobIgnore{Pattern: "github.com/cockroachdb/cockroach/pkg/sql/ir/base/*.go", Checks: []string{"U1000"}},
 			},
-			GoVersion: goVersion,
-		}
-
-		ps := linter.Lint(lprog)
-		for _, p := range ps {
-			if !noCopyRe.MatchString(p.Text) {
-				pos := lprog.Fset.Position(p.Position)
-				t.Errorf("%s: %s", pos, p.Text)
-			}
+		} {
+			t.Run(checker.Name(), func(t *testing.T) {
+				linter := lint.Linter{
+					Checker:   checker,
+					Ignores:   ignores,
+					GoVersion: goVersion,
+				}
+				for _, p := range linter.Lint(lprog) {
+					t.Errorf("%s: %s", p.Position, p)
+				}
+			})
 		}
 	})
 
@@ -1103,33 +1084,23 @@ func TestStyle(t *testing.T) {
 	})
 }
 
-// megaChecker implements lint.Checker by multiplexing its consitituent
-// checkers.
-type megaChecker struct {
-	checkers []lint.Checker
+type miscChecker struct{}
+
+func (*miscChecker) Name() string {
+	return "misccheck"
 }
 
-func (m *megaChecker) Init(program *lint.Program) {
-	for _, checker := range m.checkers {
-		checker.Init(program)
-	}
+func (*miscChecker) Prefix() string {
+	return "CR"
 }
 
-func (m *megaChecker) Funcs() map[string]lint.Func {
-	funcs := map[string]lint.Func{
+func (*miscChecker) Init(*lint.Program) {}
+
+func (*miscChecker) Funcs() map[string]lint.Func {
+	return map[string]lint.Func{
 		"FloatToUnsigned": checkConvertFloatToUnsigned,
 		"Unconvert":       checkUnconvert,
 	}
-	for _, checker := range m.checkers {
-		for k, v := range checker.Funcs() {
-			if _, ok := funcs[k]; ok {
-				log.Fatalf("duplicate lint function %s", k)
-			} else {
-				funcs[k] = v
-			}
-		}
-	}
-	return funcs
 }
 
 func forAllFiles(j *lint.Job, fn func(node ast.Node) bool) {
@@ -1233,6 +1204,14 @@ func walkStmts(stmts []ast.Stmt, fn func(ast.Stmt) bool) bool {
 //
 type timerChecker struct {
 	timerType types.Type
+}
+
+func (*timerChecker) Name() string {
+	return "timercheck"
+}
+
+func (*timerChecker) Prefix() string {
+	return "T"
 }
 
 const timerChanName = "C"
