@@ -98,6 +98,8 @@ func checkNode(
 		get(ctx, t, c.URL(ctx, i), fmt.Sprintf("/_status/logs/%s", urlID))
 		get(ctx, t, c.URL(ctx, i), fmt.Sprintf("/_status/stacks/%s", urlID))
 	}
+
+	get(ctx, t, c.URL(ctx, i), "/_status/vars")
 }
 
 // TestStatusServer starts up an N node cluster and tests the status server on

@@ -118,7 +118,7 @@ func MakePerNodeFixedPortsCfg(numNodes int) map[int]NodeConfig {
 // Cluster holds the state for a local cluster, providing methods for common
 // operations, access to the underlying nodes and per-node KV and SQL clients.
 type Cluster struct {
-	cfg     ClusterConfig
+	Cfg     ClusterConfig
 	seq     *seqGen
 	Nodes   []*Node
 	stopper *stop.Stopper
@@ -137,7 +137,7 @@ func New(cfg ClusterConfig) *Cluster {
 		cfg.Binary = filepath.Join(repoRoot(), "cockroach")
 	}
 	return &Cluster{
-		cfg:     cfg,
+		Cfg:     cfg,
 		seq:     new(seqGen),
 		stopper: stop.NewStopper(),
 	}
@@ -151,32 +151,32 @@ func New(cfg ClusterConfig) *Cluster {
 func (c *Cluster) Start(ctx context.Context) {
 	c.started = timeutil.Now()
 
-	chs := make([]<-chan error, c.cfg.NumNodes)
-	for i := 0; i < c.cfg.NumNodes; i++ {
-		cfg := c.cfg.PerNodeCfg[i] // zero value is ok
+	chs := make([]<-chan error, c.Cfg.NumNodes)
+	for i := 0; i < c.Cfg.NumNodes; i++ {
+		cfg := c.Cfg.PerNodeCfg[i] // zero value is ok
 		if cfg.Binary == "" {
-			cfg.Binary = c.cfg.Binary
+			cfg.Binary = c.Cfg.Binary
 		}
 		if cfg.DataDir == "" {
-			cfg.DataDir = filepath.Join(c.cfg.DataDir, fmt.Sprintf("%d", i+1))
+			cfg.DataDir = filepath.Join(c.Cfg.DataDir, fmt.Sprintf("%d", i+1))
 		}
-		if cfg.LogDir == "" && c.cfg.LogDir != "" {
-			cfg.LogDir = filepath.Join(c.cfg.LogDir, fmt.Sprintf("%d", i+1))
+		if cfg.LogDir == "" && c.Cfg.LogDir != "" {
+			cfg.LogDir = filepath.Join(c.Cfg.LogDir, fmt.Sprintf("%d", i+1))
 		}
 		if cfg.Addr == "" {
 			cfg.Addr = "127.0.0.1"
 		}
 		if cfg.DB == "" {
-			cfg.DB = c.cfg.DB
+			cfg.DB = c.Cfg.DB
 		}
 		if cfg.NumWorkers == 0 {
-			cfg.NumWorkers = c.cfg.NumWorkers
+			cfg.NumWorkers = c.Cfg.NumWorkers
 		}
-		cfg.ExtraArgs = append(append([]string(nil), c.cfg.AllNodeArgs...), cfg.ExtraArgs...)
+		cfg.ExtraArgs = append(append([]string(nil), c.Cfg.AllNodeArgs...), cfg.ExtraArgs...)
 		var node *Node
 		node, chs[i] = c.makeNode(ctx, i, cfg)
 		c.Nodes = append(c.Nodes, node)
-		if i == 0 && cfg.RPCPort == 0 {
+		if i == 0 && cfg.RPCPort == 0 && c.Cfg.NumNodes > 1 {
 			// The first node must know its RPCPort or we can't possibly tell
 			// the other nodes the correct one to go to.
 			//
@@ -193,14 +193,21 @@ func (c *Cluster) Start(ctx context.Context) {
 		}
 	}
 
-	for i := range chs {
-		if err := <-chs[i]; err != nil {
-			log.Fatalf(ctx, "node %d: %s", i+1, err)
+	if c.Cfg.NumNodes > 1 {
+		for i := range chs {
+			if err := <-chs[i]; err != nil {
+				log.Fatalf(ctx, "node %d: %s", i+1, err)
+			}
 		}
 	}
 
 	log.Infof(context.Background(), "started %.3fs", timeutil.Since(c.started).Seconds())
-	c.waitForFullReplication()
+
+	if c.Cfg.NumNodes > 1 {
+		c.waitForFullReplication()
+	} else {
+		log.Infof(ctx, "not waiting for initial replication")
+	}
 }
 
 // Close stops the cluster, killing all of the nodes.
@@ -209,8 +216,8 @@ func (c *Cluster) Close() {
 		n.Kill()
 	}
 	c.stopper.Stop(context.Background())
-	if c.cfg.Ephemeral {
-		_ = os.RemoveAll(c.cfg.DataDir)
+	if c.Cfg.Ephemeral {
+		_ = os.RemoveAll(c.Cfg.DataDir)
 	}
 }
 
@@ -253,11 +260,6 @@ func (c *Cluster) IPAddr(nodeIdx int) string {
 // RPCPort returns the RPC port of the specified node. Returns zero if unknown.
 func (c *Cluster) RPCPort(nodeIdx int) string {
 	return c.Nodes[nodeIdx].RPCPort()
-}
-
-// HTTPPort returns the HTTP port of the specified node. Returns zero if unknown.
-func (c *Cluster) HTTPPort(nodeIdx int) string {
-	return c.Nodes[nodeIdx].HTTPPort()
 }
 
 func (c *Cluster) makeNode(ctx context.Context, nodeIdx int, cfg NodeConfig) (*Node, <-chan error) {
@@ -437,21 +439,38 @@ type Node struct {
 	rpcCtx *rpc.Context
 	seq    *seqGen
 
-	startSeq int32 // updated atomically on start
+	startSeq int32        // updated atomically on start, nonzero while running
+	waitErr  atomic.Value // last `error`` returned from cmd.Wait()
 
 	syncutil.Mutex
-	cmd                      *exec.Cmd
-	rpcPort, httpPort, pgURL string
-	db                       *gosql.DB
-	client                   *client.DB
-	statusClient             serverpb.StatusClient
+	notRunning     chan struct{}
+	cmd            *exec.Cmd
+	rpcPort, pgURL string // legacy: remove once 1.0.x is no longer tested
+	db             *gosql.DB
+	client         *client.DB
+	statusClient   serverpb.StatusClient
 }
 
 // RPCPort returns the RPC + Postgres port.
 func (n *Node) RPCPort() string {
-	n.Lock()
-	defer n.Unlock()
-	return n.rpcPort
+	if s := func() string {
+		// Legacy case. To be removed.
+		n.Lock()
+		defer n.Unlock()
+		if n.rpcPort != "" && n.rpcPort != "0" {
+			return n.rpcPort
+		}
+		return ""
+	}(); s != "" {
+		return s
+	}
+
+	advAddr := readFileOrEmpty(n.advertiseAddrFile())
+	if advAddr == "" {
+		return ""
+	}
+	_, p, _ := net.SplitHostPort(advAddr)
+	return p
 }
 
 // RPCAddr returns the RPC + Postgres address, or an empty string if it is not known
@@ -464,11 +483,9 @@ func (n *Node) RPCAddr() string {
 	return net.JoinHostPort(n.IPAddr(), port)
 }
 
-// HTTPPort returns the ui port (may be empty until known).
-func (n *Node) HTTPPort() string {
-	n.Lock()
-	defer n.Unlock()
-	return n.httpPort
+// HTTPAddr returns the HTTP address (once known).
+func (n *Node) HTTPAddr() string {
+	return readFileOrEmpty(n.httpAddrFile())
 }
 
 // PGUrl returns the postgres connection string (may be empty until known).
@@ -538,20 +555,25 @@ func (n *Node) Start(ctx context.Context, joins ...string) {
 	}
 }
 
-func (n *Node) setNotRunningLocked() {
+func (n *Node) setNotRunningLocked(waitErr *exec.ExitError) {
 	_ = os.Remove(n.listeningURLFile())
 	_ = os.Remove(n.advertiseAddrFile())
+	_ = os.Remove(n.httpAddrFile())
+	if n.notRunning != nil {
+		close(n.notRunning)
+	}
+	n.notRunning = make(chan struct{})
 	n.db = nil
 	n.client = nil
 	n.statusClient = nil
 	n.cmd = nil
 	n.rpcPort = ""
-	n.httpPort = ""
+	n.waitErr.Store(waitErr)
 	atomic.StoreInt32(&n.startSeq, 0)
 }
 
 func (n *Node) startAsyncInnerLocked(ctx context.Context, joins ...string) error {
-	n.setNotRunningLocked()
+	n.setNotRunningLocked(nil)
 
 	args := append([]string(nil), n.Cfg.ExtraArgs[1:]...)
 	for _, join := range joins {
@@ -584,9 +606,6 @@ func (n *Node) startAsyncInnerLocked(ctx context.Context, joins ...string) error
 	if n.Cfg.RPCPort > 0 {
 		n.rpcPort = fmt.Sprintf("%d", n.Cfg.RPCPort)
 	}
-	if n.Cfg.HTTPPort > 0 {
-		n.httpPort = fmt.Sprintf("%d", n.Cfg.HTTPPort)
-	}
 
 	if err := n.cmd.Start(); err != nil {
 		if err := stdout.Close(); err != nil {
@@ -601,8 +620,9 @@ func (n *Node) startAsyncInnerLocked(ctx context.Context, joins ...string) error
 	log.Infof(ctx, "process %d starting: %s", n.cmd.Process.Pid, n.cmd.Args)
 
 	go func(cmd *exec.Cmd) {
-		if err := cmd.Wait(); err != nil {
-			log.Warning(ctx, err)
+		waitErr := cmd.Wait()
+		if waitErr != nil {
+			log.Warning(ctx, waitErr)
 		}
 		if err := stdout.Close(); err != nil {
 			log.Warning(ctx, err)
@@ -613,16 +633,18 @@ func (n *Node) startAsyncInnerLocked(ctx context.Context, joins ...string) error
 
 		log.Infof(ctx, "process %d: %s", cmd.Process.Pid, cmd.ProcessState)
 
+		execErr, _ := waitErr.(*exec.ExitError)
 		n.Lock()
-		n.setNotRunningLocked()
+		n.setNotRunningLocked(execErr)
 		n.Unlock()
 	}(n.cmd)
 
 	return nil
 }
 
-// StartAsync starts a node asynchronously. It returns a channel that receives either
-// an error, or, once the node has started up and is fully functional, `nil`.
+// StartAsync starts a node asynchronously. It returns a buffered channel that
+// receives either an error, or, once the node has started up and is fully
+// functional, `nil`.
 //
 // StartAsync is a no-op if the node is already running.
 func (n *Node) StartAsync(ctx context.Context, joins ...string) <-chan error {
@@ -647,44 +669,7 @@ func (n *Node) StartAsync(ctx context.Context, joins ...string) <-chan error {
 		ch <- nil
 	}()
 
-	// This blocking loop in the sync path is counter-intuitive but is essential
-	// in allowing restarts of whole clusters. Roughly the following happens:
-	//
-	// 1. The whole cluster gets killed.
-	// 2. A node restarts.
-	// 3. It will *block* here until it has written down the file which contains
-	//    enough information to link other nodes.
-	// 4. When restarting other nodes, and `.joins()` is passed in, these nodes
-	//    can connect (at least) to the first node.
-	// 5. the cluster can become healthy after restart.
-	//
-	// If we didn't block here, we'd start all nodes up with join addresses that
-	// don't make any sense, and the cluster would likely not become connected.
-	//
-	// An additional difficulty is that older versions (pre 1.1) don't write
-	// this file. That's why we let *every* node do this (you could try to make
-	// only the first one wait, but if that one is 1.0, bad luck).
-	// Short-circuiting the wait in the case that the listening URL file is
-	// written (i.e. isServing closes) makes restarts work with 1.0 servers for
-	// the most part.
-	for {
-		if gossipAddr := n.AdvertiseAddr(); gossipAddr != "" {
-			_, port, err := net.SplitHostPort(gossipAddr)
-			if err != nil {
-				ch = make(chan error, 1)
-				ch <- errors.Wrapf(err, "can't parse gossip address %s", gossipAddr)
-				return ch
-			}
-			n.rpcPort = port
-			return ch
-		}
-		select {
-		case <-isServing:
-			return ch
-		default:
-			time.Sleep(10 * time.Millisecond)
-		}
-	}
+	return ch
 }
 
 func portFromURL(rawURL string) (string, *url.URL, error) {
@@ -714,21 +699,33 @@ func (n *Node) advertiseAddrFile() string {
 	return filepath.Join(n.Cfg.DataDir, "cockroach.advertise-addr")
 }
 
-// AdvertiseAddr returns the Node's AdvertiseAddr or empty if none is available.
-func (n *Node) AdvertiseAddr() (s string) {
-	c, err := ioutil.ReadFile(n.advertiseAddrFile())
+func (n *Node) httpAddrFile() string {
+	return filepath.Join(n.Cfg.DataDir, "cockroach.http-addr")
+}
+
+func readFileOrEmpty(f string) string {
+	c, err := ioutil.ReadFile(f)
 	if err != nil {
 		if !os.IsNotExist(err) {
 			panic(err)
 		}
-		// The below is part of the workaround for nodes at v1.0 which don't
-		// write the file above, explained in more detail in StartAsync().
-		if port := n.RPCPort(); port != "" {
-			return net.JoinHostPort(n.IPAddr(), n.RPCPort())
-		}
 		return ""
 	}
 	return string(c)
+}
+
+// AdvertiseAddr returns the Node's AdvertiseAddr or empty if none is available.
+func (n *Node) AdvertiseAddr() (s string) {
+	addr := readFileOrEmpty(n.advertiseAddrFile())
+	if addr != "" {
+		return addr
+	}
+	// The below is part of the workaround for nodes at v1.0 which don't
+	// write the file above, explained in more detail in StartAsync().
+	if port := n.RPCPort(); port != "" {
+		return net.JoinHostPort(n.IPAddr(), n.RPCPort())
+	}
+	return addr
 }
 
 func (n *Node) waitUntilLive() {
@@ -739,6 +736,13 @@ func (n *Node) waitUntilLive() {
 		Multiplier:     2,
 	}
 	for r := retry.Start(opts); r.Next(); {
+		n.Lock()
+		exited := n.cmd == nil
+		n.Unlock()
+		if exited {
+			return
+		}
+
 		urlBytes, err := ioutil.ReadFile(n.listeningURLFile())
 		if err != nil {
 			continue
@@ -788,9 +792,7 @@ func (n *Node) waitUntilLive() {
 				break
 			}
 
-			n.Lock()
-			n.httpPort, uiURL, err = portFromURL(uiStr)
-			n.Unlock()
+			_, uiURL, err = portFromURL(uiStr)
 			if err != nil {
 				log.Info(ctx, err)
 				// TODO(tschottdorf): see above.
@@ -802,14 +804,7 @@ func (n *Node) waitUntilLive() {
 
 // Kill stops a node abruptly by sending it SIGKILL.
 func (n *Node) Kill() {
-	func() {
-		n.Lock()
-		defer n.Unlock()
-		if n.cmd == nil || n.cmd.Process == nil {
-			return
-		}
-		_ = n.cmd.Process.Kill()
-	}()
+	n.Signal(os.Kill)
 	// Wait for the process to have been cleaned up (or a call to Start() could
 	// turn into an unintended no-op).
 	for ok := false; !ok; {
@@ -830,4 +825,32 @@ func (n *Node) DB() *gosql.DB {
 	n.Lock()
 	defer n.Unlock()
 	return n.db
+}
+
+// Signal sends the given signal to the process. It is a no-op if the process is
+// not running.
+func (n *Node) Signal(s os.Signal) {
+	n.Lock()
+	defer n.Unlock()
+	if n.cmd == nil || n.cmd.Process == nil {
+		return
+	}
+	if err := n.cmd.Process.Signal(s); err != nil {
+		log.Warning(context.Background(), err)
+	}
+}
+
+// Wait waits for the process to terminate and returns its process' Wait(). This
+// is nil if the process terminated with a zero exit code.
+func (n *Node) Wait() *exec.ExitError {
+	n.Lock()
+	ch := n.notRunning
+	n.Unlock()
+	if ch == nil {
+		log.Warning(context.Background(), "(*Node).Wait called when node was not running")
+		return nil
+	}
+	<-ch
+	ee, _ := n.waitErr.Load().(*exec.ExitError)
+	return ee
 }

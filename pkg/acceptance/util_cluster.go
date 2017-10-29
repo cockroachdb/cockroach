@@ -187,7 +187,9 @@ func StartCluster(ctx context.Context, t *testing.T, cfg cluster.TestConfig) (c 
 		}
 	}
 
-	if cfg.InitMode != cluster.INIT_NONE {
+	// Don't bother waiting for a single-node cluster. This is useful for
+	// TestRapidRestarts which wants to kill the process early.
+	if len(cfg.Nodes) > 1 && cfg.InitMode != cluster.INIT_NONE {
 		wantedReplicas := 3
 		if numNodes := c.NumNodes(); numNodes < wantedReplicas {
 			wantedReplicas = numNodes
@@ -196,7 +198,6 @@ func StartCluster(ctx context.Context, t *testing.T, cfg cluster.TestConfig) (c 
 		// Looks silly, but we actually start zero-node clusters in the
 		// reference tests.
 		if wantedReplicas > 0 {
-
 			log.Infof(ctx, "waiting for first range to have %d replicas", wantedReplicas)
 
 			testutils.SucceedsSoon(t, func() error {
