@@ -14,7 +14,7 @@ import {
   saveUIData, VERSION_DISMISSED_KEY, loadUIData, isInFlight, UIDataSet,
 } from "./uiData";
 import { refreshCluster, refreshNodes, refreshVersion, refreshHealth } from "./apiReducers";
-import { nodeStatusesSelector } from "./nodes";
+import { nodeStatusesSelector, livenessByNodeIDSelector } from "./nodes";
 import { AdminUIState } from "./state";
 
 export enum AlertLevel {
@@ -51,11 +51,24 @@ export const staggeredVersionDismissedSetting = new LocalSetting(
 
 export const versionsSelector = createSelector(
   nodeStatusesSelector,
-  (nodeStatuses) => nodeStatuses && _.uniq(_.map(nodeStatuses, (status) => status.build_info && status.build_info.tag)),
+  livenessByNodeIDSelector,
+  (nodeStatuses, livenessStatusByNodeID) =>
+    _.chain(nodeStatuses)
+      // Ignore nodes for which we don't have any build info.
+      .filter((status) => !!status.build_info )
+      // Exclude this node if it's known to be decommissioning.
+      .filter((status) => !status.desc ||
+                          !livenessStatusByNodeID[status.desc.node_id] ||
+                          !livenessStatusByNodeID[status.desc.node_id].decommissioning)
+      // Collect the surviving nodes' build tags.
+      .map((status) => status.build_info.tag)
+      .uniq()
+      .value(),
 );
 
 /**
  * Warning when multiple versions of CockroachDB are detected on the cluster.
+ * This excludes decommissioned nodes.
  */
 export const staggeredVersionWarningSelector = createSelector(
   versionsSelector,
