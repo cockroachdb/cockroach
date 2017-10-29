@@ -230,7 +230,7 @@ type Replica struct {
 
 	store        *Store
 	abortSpan    *abortspan.AbortSpan // Avoids anomalous reads after abort
-	pushTxnQueue *pushTxnQueue        // Queues push txn attempts by txn ID
+	pushTxnQueue *PushTxnQueue        // Queues push txn attempts by txn ID
 
 	// leaseholderStats tracks all incoming BatchRequests to the replica and which
 	// localities they come from in order to aid in lease rebalancing decisions.
@@ -1156,9 +1156,8 @@ func (r *Replica) IsDestroyed() error {
 	return r.mu.destroyed
 }
 
-// getLease returns the current lease, and the tentative next one, if a lease
-// request initiated by this replica is in progress.
-func (r *Replica) getLease() (roachpb.Lease, *roachpb.Lease) {
+// GetLease returns the lease and, if available, the proposed next lease.
+func (r *Replica) GetLease() (roachpb.Lease, *roachpb.Lease) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	return r.getLeaseRLocked()
@@ -1435,7 +1434,7 @@ func (r *Replica) redirectOnOrAcquireLease(ctx context.Context) (LeaseStatus, *r
 							var err error
 							if _, descErr := r.GetReplicaDescriptor(); descErr != nil {
 								err = descErr
-							} else if lease, _ := r.getLease(); !r.IsLeaseValid(lease, r.store.Clock().Now()) {
+							} else if lease, _ := r.GetLease(); !r.IsLeaseValid(lease, r.store.Clock().Now()) {
 								err = newNotLeaseHolderError(nil, r.store.StoreID(), r.Desc())
 							} else {
 								err = newNotLeaseHolderError(&lease, r.store.StoreID(), r.Desc())
@@ -1631,9 +1630,9 @@ func containsKeyRange(desc roachpb.RangeDescriptor, start, end roachpb.Key) bool
 	return desc.ContainsKeyRange(startKeyAddr, endKeyAddr)
 }
 
-// getLastReplicaGCTimestamp reads the timestamp at which the replica was
+// GetLastReplicaGCTimestamp reads the timestamp at which the replica was
 // last checked for removal by the replica gc queue.
-func (r *Replica) getLastReplicaGCTimestamp(ctx context.Context) (hlc.Timestamp, error) {
+func (r *Replica) GetLastReplicaGCTimestamp(ctx context.Context) (hlc.Timestamp, error) {
 	key := keys.RangeLastReplicaGCTimestampKey(r.RangeID)
 	var timestamp hlc.Timestamp
 	_, err := engine.MVCCGetProto(ctx, r.store.Engine(), key, hlc.Timestamp{}, true, nil, &timestamp)
@@ -1858,7 +1857,7 @@ func (r *Replica) requestCanProceed(rspan roachpb.RSpan, ts hlc.Timestamp) error
 			// Only return the correct range descriptor as a hint
 			// if we know the current lease holder for that range, which
 			// indicates that our knowledge is not stale.
-			if lease, _ := repl.getLease(); repl.IsLeaseValid(lease, r.store.Clock().Now()) {
+			if lease, _ := repl.GetLease(); repl.IsLeaseValid(lease, r.store.Clock().Now()) {
 				mismatchErr.SuggestedRange = repl.Desc()
 			}
 		}

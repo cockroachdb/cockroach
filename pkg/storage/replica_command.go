@@ -598,7 +598,7 @@ func evalBeginTransaction(
 		}
 	}
 
-	threshold, err := cArgs.EvalCtx.TxnSpanGCThreshold()
+	threshold, err := cArgs.EvalCtx.GetTxnSpanGCThreshold()
 	if err != nil {
 		return EvalResult{}, err
 	}
@@ -1563,7 +1563,7 @@ func evalGC(
 
 	var newThreshold hlc.Timestamp
 	if args.Threshold != (hlc.Timestamp{}) {
-		oldThreshold, err := cArgs.EvalCtx.GCThreshold()
+		oldThreshold, err := cArgs.EvalCtx.GetGCThreshold()
 		if err != nil {
 			return EvalResult{}, err
 		}
@@ -1573,7 +1573,7 @@ func evalGC(
 
 	var newTxnSpanGCThreshold hlc.Timestamp
 	if args.TxnSpanGCThreshold != (hlc.Timestamp{}) {
-		oldTxnSpanGCThreshold, err := cArgs.EvalCtx.TxnSpanGCThreshold()
+		oldTxnSpanGCThreshold, err := cArgs.EvalCtx.GetTxnSpanGCThreshold()
 		if err != nil {
 			return EvalResult{}, err
 		}
@@ -1847,7 +1847,7 @@ func evalQueryTxn(
 		return EvalResult{}, err
 	}
 	// Get the list of txns waiting on this txn.
-	reply.WaitingTxns = cArgs.EvalCtx.pushTxnQueue().GetDependents(args.Txn.ID)
+	reply.WaitingTxns = cArgs.EvalCtx.GetPushTxnQueue().GetDependents(args.Txn.ID)
 	return EvalResult{}, nil
 }
 
@@ -1997,14 +1997,14 @@ func evalTruncateLog(
 	// After a merge, it's possible that this request was sent to the wrong
 	// range based on the start key. This will cancel the request if this is not
 	// the range specified in the request body.
-	if cArgs.EvalCtx.RangeID() != args.RangeID {
+	if cArgs.EvalCtx.GetRangeID() != args.RangeID {
 		log.Infof(ctx, "attempting to truncate raft logs for another range: r%d. Normally this is due to a merge and can be ignored.",
 			args.RangeID)
 		return EvalResult{}, nil
 	}
 
 	// Have we already truncated this log? If so, just return without an error.
-	firstIndex, err := cArgs.EvalCtx.FirstIndex()
+	firstIndex, err := cArgs.EvalCtx.GetFirstIndex()
 	if err != nil {
 		return EvalResult{}, err
 	}
@@ -2018,7 +2018,7 @@ func evalTruncateLog(
 	}
 
 	// args.Index is the first index to keep.
-	term, err := cArgs.EvalCtx.Term(args.Index - 1)
+	term, err := cArgs.EvalCtx.GetTerm(args.Index - 1)
 	if err != nil {
 		return EvalResult{}, err
 	}
@@ -2026,11 +2026,11 @@ func evalTruncateLog(
 	// We start at index zero because it's always possible that a previous
 	// truncation did not clean up entries made obsolete by the previous
 	// truncation.
-	start := engine.MakeMVCCMetadataKey(keys.RaftLogKey(cArgs.EvalCtx.RangeID(), 0))
-	end := engine.MakeMVCCMetadataKey(keys.RaftLogKey(cArgs.EvalCtx.RangeID(), args.Index))
+	start := engine.MakeMVCCMetadataKey(keys.RaftLogKey(cArgs.EvalCtx.GetRangeID(), 0))
+	end := engine.MakeMVCCMetadataKey(keys.RaftLogKey(cArgs.EvalCtx.GetRangeID(), args.Index))
 
 	var ms enginepb.MVCCStats
-	if cArgs.EvalCtx.repl.store.cfg.Settings.Version.IsActive(cluster.VersionRaftLogTruncationBelowRaft) {
+	if cArgs.EvalCtx.ClusterSettings().Version.IsActive(cluster.VersionRaftLogTruncationBelowRaft) {
 		// Compute the stats delta that were to occur should the log entries be
 		// purged. We do this as a side effect of seeing a new TruncatedState,
 		// downstream of Raft. A follower may not run the side effect in the event
@@ -3260,12 +3260,12 @@ func splitTrigger(
 			return enginepb.MVCCStats{}, EvalResult{}, errors.Wrap(err, "unable to write initial Replica state")
 		}
 
-		if !rec.repl.store.cfg.Settings.Version.IsActive(cluster.VersionSplitHardStateBelowRaft) {
+		if !rec.ClusterSettings().Version.IsActive(cluster.VersionSplitHardStateBelowRaft) {
 			// Write an initial state upstream of Raft even though it might
 			// clobber downstream simply because that's what 1.0 does and if we
 			// don't write it here, then a 1.0 version applying it as a follower
 			// won't write a HardState at all and is guaranteed to crash.
-			rsl := stateloader.Make(rec.repl.store.cfg.Settings, split.RightDesc.RangeID)
+			rsl := stateloader.Make(rec.ClusterSettings(), split.RightDesc.RangeID)
 			if err := rsl.SynthesizeRaftState(ctx, batch); err != nil {
 				return enginepb.MVCCStats{}, EvalResult{}, errors.Wrap(err, "unable to synthesize initial Raft state")
 			}

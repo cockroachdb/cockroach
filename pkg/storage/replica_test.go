@@ -103,7 +103,7 @@ const (
 // Replica may hold is expired. It is more precise than LeaseExpiration
 // in that it returns the minimal duration necessary.
 func leaseExpiry(repl *Replica) int64 {
-	l, _ := repl.getLease()
+	l, _ := repl.GetLease()
 	if l.Type() != roachpb.LeaseExpiration {
 		panic("leaseExpiry only valid for expiration-based leases")
 	}
@@ -429,7 +429,7 @@ func sendLeaseRequest(r *Replica, l *roachpb.Lease) error {
 	ba := roachpb.BatchRequest{}
 	ba.Timestamp = r.store.Clock().Now()
 	ba.Add(&roachpb.RequestLeaseRequest{Lease: *l})
-	exLease, _ := r.getLease()
+	exLease, _ := r.GetLease()
 	ch, _, _, pErr := r.propose(context.TODO(), exLease, ba, nil, nil)
 	if pErr == nil {
 		// Next if the command was committed, wait for the range to apply it.
@@ -1160,7 +1160,7 @@ func TestReplicaLeaseRejectUnknownRaftNodeID(t *testing.T) {
 			StoreID:   2,
 		},
 	}
-	exLease, _ := tc.repl.getLease()
+	exLease, _ := tc.repl.GetLease()
 	ba := roachpb.BatchRequest{}
 	ba.Timestamp = tc.repl.store.Clock().Now()
 	ba.Add(&roachpb.RequestLeaseRequest{Lease: *lease})
@@ -1351,7 +1351,7 @@ func TestReplicaNoGossipFromNonLeader(t *testing.T) {
 
 	// Increment the clock's timestamp to expire the range lease.
 	tc.manualClock.Set(leaseExpiry(tc.repl))
-	lease, _ := tc.repl.getLease()
+	lease, _ := tc.repl.GetLease()
 	if tc.repl.leaseStatus(lease, tc.Clock().Now(), hlc.Timestamp{}).State != LeaseState_EXPIRED {
 		t.Fatal("range lease should have been expired")
 	}
@@ -1774,7 +1774,7 @@ func TestAcquireLease(t *testing.T) {
 			// the start of a lease as far as possible, and since there is an auto-
 			// matic lease for us at the beginning, we'll basically create a lease from
 			// then on.
-			lease, _ := tc.repl.getLease()
+			lease, _ := tc.repl.GetLease()
 			expStart := lease.Start
 			tc.manualClock.Set(leaseExpiry(tc.repl))
 
@@ -1785,7 +1785,7 @@ func TestAcquireLease(t *testing.T) {
 			if held, expired := hasLease(tc.repl, ts); !held || expired {
 				t.Errorf("expected lease acquisition")
 			}
-			lease, _ = tc.repl.getLease()
+			lease, _ = tc.repl.GetLease()
 			if lease.Start != expStart {
 				t.Errorf("unexpected lease start: %s; expected %s", lease.Start, expStart)
 			}
@@ -1805,7 +1805,7 @@ func TestAcquireLease(t *testing.T) {
 			// Since the command we sent above does not get blocked on the lease
 			// extension, we need to wait for it to go through.
 			testutils.SucceedsSoon(t, func() error {
-				newLease, _ := tc.repl.getLease()
+				newLease, _ := tc.repl.GetLease()
 				if !lease.Expiration.Less(*newLease.Expiration) {
 					return errors.Errorf("lease did not get extended: %+v to %+v", lease, newLease)
 				}
@@ -4292,7 +4292,7 @@ func TestRaftRetryProtectionInTxn(t *testing.T) {
 		// Reach in and manually send to raft (to simulate Raft retry) and
 		// also avoid updating the timestamp cache.
 		ba.Timestamp = txn.OrigTimestamp
-		lease, _ := tc.repl.getLease()
+		lease, _ := tc.repl.GetLease()
 		ch, _, _, err := tc.repl.propose(context.Background(), lease, ba, nil, nil)
 		if err != nil {
 			t.Fatalf("%d: unexpected error: %s", i, err)
@@ -7651,7 +7651,7 @@ func TestReplicaCancelRaftCommandProgress(t *testing.T) {
 			ba.Timestamp = tc.Clock().Now()
 			ba.Add(&roachpb.PutRequest{Span: roachpb.Span{
 				Key: roachpb.Key(fmt.Sprintf("k%d", i))}})
-			lease, _ := repl.getLease()
+			lease, _ := repl.GetLease()
 			proposal, pErr := repl.requestToProposal(context.Background(), makeIDKey(), ba, nil, nil)
 			if pErr != nil {
 				t.Fatal(pErr)
@@ -7847,7 +7847,7 @@ func TestReplicaRefreshPendingCommandsTicks(t *testing.T) {
 		var ba roachpb.BatchRequest
 		ba.Timestamp = tc.Clock().Now()
 		ba.Add(&roachpb.PutRequest{Span: roachpb.Span{Key: roachpb.Key(id)}})
-		lease, _ := r.getLease()
+		lease, _ := r.GetLease()
 		cmd, pErr := r.requestToProposal(context.Background(), storagebase.CmdIDKey(id), ba, nil, nil)
 		if pErr != nil {
 			t.Fatal(pErr)
@@ -8126,8 +8126,8 @@ func TestGCWithoutThreshold(t *testing.T) {
 				if _, err := evalGC(ctx, rw, CommandArgs{
 					Args: &gc,
 					EvalCtx: ReplicaEvalContext{
-						repl: tc.repl,
-						ss:   &spans,
+						ReplicaI: tc.repl,
+						ss:       &spans,
 					},
 				}, &resp); err != nil {
 					t.Fatalf("at (%s,%s): %s", keyThresh, txnThresh, err)
@@ -8788,7 +8788,7 @@ func TestErrorInRaftApplicationClearsIntents(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	exLease, _ := repl.getLease()
+	exLease, _ := repl.GetLease()
 	ch, _, _, pErr := repl.propose(
 		context.Background(), exLease, ba, nil /* endCmds */, nil, /* spans */
 	)
