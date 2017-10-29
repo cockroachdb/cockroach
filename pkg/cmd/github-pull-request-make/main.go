@@ -226,7 +226,7 @@ func main() {
 				cmd.Dir = dir
 				log.Println(cmd.Dir, cmd.Args)
 				if output, err := cmd.CombinedOutput(); err != nil {
-					log.Fatal(err, output)
+					log.Fatalf("%s: %s", err, string(output))
 				} else if len(output) > 0 {
 					foundDiff = true
 					log.Printf("unexpected diff:\n%s", output)
