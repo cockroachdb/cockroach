@@ -653,6 +653,8 @@ func runStart(cmd *cobra.Command, args []string) error {
 
 	var returnErr error
 
+	noDrain := make(chan struct{}) // closed if interrupted very early
+
 	// Block until one of the signals above is received or the stopper
 	// is stopped externally (for example, via the quit endpoint).
 	select {
@@ -693,12 +695,14 @@ func runStart(cmd *cobra.Command, args []string) error {
 			serverStatusMu.draining = true
 			drainingIsSafe := serverStatusMu.started
 			serverStatusMu.Unlock()
-			if drainingIsSafe {
-				if _, err := s.Drain(server.GracefulDrainModes); err != nil {
-					// Don't use shutdownCtx because this is in a goroutine that may
-					// still be running after shutdownCtx's span has been finished.
-					log.Warning(context.Background(), err)
-				}
+			if !drainingIsSafe {
+				close(noDrain)
+				return
+			}
+			if _, err := s.Drain(server.GracefulDrainModes); err != nil {
+				// Don't use shutdownCtx because this is in a goroutine that may
+				// still be running after shutdownCtx's span has been finished.
+				log.Warning(context.Background(), err)
 			}
 			stopper.Stop(context.Background())
 		}()
@@ -716,6 +720,8 @@ func runStart(cmd *cobra.Command, args []string) error {
 			case <-ticker.C:
 				log.Infof(context.Background(), "%d running tasks", stopper.NumTasks())
 			case <-stopper.ShouldStop():
+				return
+			case <-noDrain:
 				return
 			}
 		}
@@ -741,6 +747,10 @@ func runStart(cmd *cobra.Command, args []string) error {
 		returnErr = errors.Errorf("time limit reached, initiating hard shutdown%s", hardShutdownHint)
 		// NB: we do not return here to go through log.Flush below.
 	case <-stopper.IsStopped():
+		const msgDone = "server drained and shutdown completed"
+		log.Infof(shutdownCtx, msgDone)
+		fmt.Fprintln(os.Stdout, msgDone)
+	case <-noDrain:
 		const msgDone = "server drained and shutdown completed"
 		log.Infof(shutdownCtx, msgDone)
 		fmt.Fprintln(os.Stdout, msgDone)
