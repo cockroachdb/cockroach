@@ -66,6 +66,7 @@ func testVersionUpgrade(ctx context.Context, t *testing.T, cfg cluster.TestConfi
 
 	// Verify that the nodes are *really* at the versions configured. This
 	// tests the CI harness.
+	log.Info(ctx, "verifying that configured versions are actual versions")
 	for i := 0; i < c.NumNodes(); i++ {
 		db, err := gosql.Open("postgres", c.PGUrl(ctx, i))
 		if err != nil {
@@ -110,11 +111,11 @@ func testVersionUpgrade(ctx context.Context, t *testing.T, cfg cluster.TestConfi
 	}
 
 	lc := c.(*localcluster.LocalCluster)
-	// Upgrade the first node's binary to match the other nodes (i.e. the testing binary).
+	log.Info(ctx, "upgrading the first node's binary to match the other nodes (i.e. the testing binary)")
 	lc.Nodes[0].Cfg.ExtraArgs[0] = lc.Nodes[1].Cfg.ExtraArgs[0]
 
 	var chs []<-chan error
-	// Restart the nodes asynchronously.
+	log.Info(ctx, "restarting the nodes asynchronously")
 	for i := 0; i < c.NumNodes(); i++ {
 		chs = append(chs, lc.RestartAsync(ctx, i))
 	}
