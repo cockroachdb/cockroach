@@ -65,7 +65,7 @@ export const refreshTableStats = tableStatsReducerObj.refresh;
 const logsReducerObj = new CachedDataReducer(api.getLogs, "logs", moment.duration(10, "s"));
 export const refreshLogs = logsReducerObj.refresh;
 
-const livenessReducerObj = new CachedDataReducer(api.getLiveness, "liveness", moment.duration(10, "s"));
+export const livenessReducerObj = new CachedDataReducer(api.getLiveness, "liveness", moment.duration(10, "s"));
 export const refreshLiveness = livenessReducerObj.refresh;
 
 export const jobsKey = (status: string, type: protos.cockroach.sql.jobs.Type, limit: number) =>

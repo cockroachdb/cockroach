@@ -9,13 +9,14 @@ import { AdminUIState, createAdminUIStore } from "./state";
 import {
   AlertLevel,
   alertDataSync,
+  versionsSelector,
   staggeredVersionWarningSelector, staggeredVersionDismissedSetting,
   newVersionNotificationSelector, newVersionDismissedLocalSetting,
   disconnectedAlertSelector, disconnectedDismissedLocalSetting,
 } from "./alerts";
 import { VERSION_DISMISSED_KEY, setUIDataKey, isInFlight } from "./uiData";
 import {
-  versionReducerObj, nodesReducerObj, clusterReducerObj, healthReducerObj,
+  livenessReducerObj, versionReducerObj, nodesReducerObj, clusterReducerObj, healthReducerObj,
 } from "./apiReducers";
 
 describe("alerts", function() {
@@ -34,6 +35,55 @@ describe("alerts", function() {
   });
 
   describe("selectors", function() {
+    describe("versions", function() {
+      it("tolerates missing liveness data", function () {
+        dispatch(nodesReducerObj.receiveData([
+          {
+            build_info: {
+              tag: "0.1",
+            },
+          },
+          {
+            build_info: {
+              tag: "0.2",
+            },
+          },
+        ]));
+        const versions = versionsSelector(state());
+        assert.deepEqual(versions, ["0.1", "0.2"]);
+      });
+
+      it("ignores decommissioned nodes", function () {
+        dispatch(nodesReducerObj.receiveData([
+          {
+            build_info: {
+              tag: "0.1",
+            },
+          },
+          {
+            desc: {
+              node_id: 2,
+            },
+            build_info: {
+              tag: "0.2",
+            },
+          },
+        ]));
+
+        dispatch(livenessReducerObj.receiveData(
+          new protos.cockroach.server.serverpb.LivenessResponse({
+            livenesses: [{
+              node_id: 2,
+              decommissioning: true,
+            }],
+          }),
+        ));
+
+        const versions = versionsSelector(state());
+        assert.deepEqual(versions, ["0.1"]);
+      });
+    });
+
     describe("version mismatch warning", function () {
       it("requires versions to be loaded before displaying", function () {
         const alert = staggeredVersionWarningSelector(state());
@@ -60,11 +110,15 @@ describe("alerts", function() {
       it("displays when mismatch detected and not dismissed", function () {
         dispatch(nodesReducerObj.receiveData([
           {
+            // `desc` intentionally omitted (must not affect outcome).
             build_info: {
               tag: "0.1",
             },
           },
           {
+            desc: {
+              node_id: 1,
+            },
             build_info: {
               tag: "0.2",
             },
