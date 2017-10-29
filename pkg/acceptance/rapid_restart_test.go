@@ -1,0 +1,151 @@
+// Copyright 2017 The Cockroach Authors.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
+// implied. See the License for the specific language governing
+// permissions and limitations under the License.
+
+package acceptance
+
+import (
+	"math/rand"
+	"net/http"
+	"os"
+	"os/exec"
+	"syscall"
+	"testing"
+	"time"
+
+	"golang.org/x/net/context"
+	"golang.org/x/sync/errgroup"
+
+	"github.com/cockroachdb/cockroach/pkg/acceptance/cluster"
+	"github.com/cockroachdb/cockroach/pkg/acceptance/localcluster"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/pkg/errors"
+)
+
+func TestRapidRestarts(t *testing.T) {
+	s := log.Scope(t)
+	defer s.Close(t)
+
+	ctx := context.Background()
+	cfg := readConfigFromFlags()
+	RunLocal(t, func(t *testing.T) {
+		deadline := timeutil.Now().Add(cfg.Duration)
+		// In a loop, bootstrap a new node and immediately kill it. This is more
+		// effective at finding problems that restarting an existing node since
+		// there are more moving parts the first time around. Since there could be
+		// future issues that only occur on a restart, each invocation of the test
+		// also restart-kills the existing node once.
+		for timeutil.Now().Before(deadline) {
+			testRapidRestartSingle(ctx, t, cfg)
+		}
+	})
+}
+
+func unexpectedExitCode(err *exec.ExitError) error {
+	if err == nil {
+		// Server shut down cleanly. Note that returning `err` here would create
+		// an error interface wrapping a nil *ExitError, which is *not* nil
+		// itself.
+		return nil
+	}
+	// NB: the docs suggest[1] that there are platform-independent types, but an
+	// inspection shows that at the time of writing, everything seems to return a
+	// syscall.WaitStatus.
+	//
+	// [1]: https://golang.org/pkg/os/#ProcessState.Sys
+	switch s := err.Sys().(type) {
+	case syscall.WaitStatus:
+		// -1 corresponds to "interrupted", i.e. receiving SIGINT before setting up
+		// our own handlers, and 1 corresponds to receiving SIGINT after.
+		if status := s.ExitStatus(); status != -1 && status != 1 {
+			return errors.Wrapf(err, "unexpected exit status %d", status)
+		}
+	default:
+		return errors.Wrapf(err, "unsupported architecture: %T", err.Sys())
+	}
+	return nil
+}
+
+func testRapidRestartSingle(ctx context.Context, t *testing.T, cfg cluster.TestConfig) {
+	// Make this a single-node cluster which unlocks optimizations in
+	// LocalCluster that skip all the waiting so that we get to kill the process
+	// early in its boot sequence.
+	cfg.Nodes = cfg.Nodes[:1]
+
+	c := StartCluster(ctx, t, cfg)
+	defer c.AssertAndStop(ctx, t)
+
+	lc := c.(*localcluster.LocalCluster)
+
+	interrupt := func() {
+		t.Helper()
+		time.Sleep(time.Duration(rand.Int63n(int64(time.Second))))
+		lc.Nodes[0].Signal(os.Interrupt)
+	}
+
+	check := func() {
+		t.Helper()
+		// We get "exit status 1" if the process is far enough to have
+		// registered the signal handler, and `interrupt` otherwise. Crashes
+		// would get exit code 255, typically.
+		//
+		// FIXINPR(tschottdorf): real signal handling (platform specific, the below is darwin).
+		if err := unexpectedExitCode(lc.Nodes[0].Wait()); err != nil {
+			lc.Cfg.Ephemeral = false // keep log dir
+			t.Fatalf("node did not terminate cleanly: %v", err)
+		}
+	}
+
+	const count = 2
+	// NB: the use of Group makes no sense with count=2, but this way you can
+	// bump it and the whole thing still works.
+	var g errgroup.Group
+
+	for i := 0; i < count; i++ {
+		if i > 0 {
+			ch := lc.RestartAsync(ctx, 0)
+			g.Go(func() error {
+				for {
+					base := c.URL(ctx, 0)
+					if base != "" {
+						// Torture the prometheus endpoint to prevent regression of #19559.
+						const varsEndpoint = "/_status/vars"
+						resp, err := cluster.HTTPClient.Get(base + varsEndpoint)
+						if err == nil {
+							if resp.StatusCode != http.StatusNotFound && resp.StatusCode != http.StatusOK {
+								return errors.Errorf("unexpected status code from %s: %d", varsEndpoint, resp.StatusCode)
+							}
+						}
+					}
+					select {
+					case err := <-ch:
+						return err
+					default:
+						time.Sleep(time.Millisecond)
+					}
+				}
+			})
+		}
+
+		log.Info(ctx, "interrupting node")
+		interrupt()
+
+		log.Info(ctx, "waiting for exit code")
+		check()
+	}
+
+	if err := g.Wait(); err != nil {
+		t.Fatal(err)
+	}
+}
