@@ -3924,7 +3924,9 @@ func (r *Replica) quiesceAndNotifyLocked(ctx context.Context, status *raft.Statu
 		return false
 	}
 
-	r.quiesceLocked()
+	if !r.quiesceLocked() {
+		return false
+	}
 	for id := range status.Progress {
 		if roachpb.ReplicaID(id) == r.mu.replicaID {
 			continue
