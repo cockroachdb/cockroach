@@ -53,6 +53,4 @@ message TestConfig {
   // tests such as TestPut that will run indefinitely.
   optional int64 duration = 3 [(gogoproto.nullable) = false, (gogoproto.casttype) = "time.Duration"];
   optional InitMode init_mode = 4 [(gogoproto.nullable) = false];
-
-  // TODO(bram): #4559 once defined, add in a collection of chaos agents here.
 }
