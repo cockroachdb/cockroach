@@ -22,31 +22,17 @@ package parser
 
 import (
 	"bytes"
-	"fmt"
-	"unicode"
 	"unicode/utf8"
+
+	"github.com/cockroachdb/cockroach/pkg/util/stringencoding"
 )
 
-var (
-	dontEscape = byte(255)
-	// encodeMap specifies how to escape binary data with '\'.
-	encodeMap [256]byte
-	// mustQuoteMap contains characters that require that their enclosing
-	// string be quoted, even when FmtFlags.bareStrings is true.
-	//
-	// This is used e.g. when stringifying expressions with array types
-	// for pgwire.
-	mustQuoteMap = map[byte]bool{
-		' ': true,
-		',': true,
-		'{': true,
-		'}': true,
-	}
-	// hexMap is a mapping from each byte to the `\x%%` hex form as a []byte.
-	hexMap [256][]byte
-	// rawHexMap is a mapping from each byte to the `%%` hex form as a []byte.
-	rawHexMap [256][]byte
-)
+var mustQuoteMap = map[byte]bool{
+	' ': true,
+	',': true,
+	'{': true,
+	'}': true,
+}
 
 // encodeSQLString writes a string literal to buf. All unicode and
 // non-printable characters are escaped.
@@ -65,45 +51,7 @@ func EscapeSQLString(in string) string {
 
 func hexEncodeString(buf *bytes.Buffer, in string) {
 	for i := 0; i < len(in); i++ {
-		buf.Write(rawHexMap[in[i]])
-	}
-}
-
-// encodeEscapedChar is used internally to write out a character from a larger
-// string that needs to be escaped to a buffer.
-func encodeEscapedChar(
-	buf *bytes.Buffer,
-	entireString string,
-	currentRune rune,
-	currentByte byte,
-	currentIdx int,
-	quoteChar byte,
-) {
-	ln := utf8.RuneLen(currentRune)
-	if currentRune == utf8.RuneError {
-		// Errors are due to invalid unicode points, so escape the bytes.
-		// Make sure this is run at least once in case ln == -1.
-		buf.Write(hexMap[entireString[currentIdx]])
-		for ri := 1; ri < ln; ri++ {
-			buf.Write(hexMap[entireString[currentIdx+ri]])
-		}
-	} else if ln == 1 {
-		// For single-byte runes, do the same as encodeSQLBytes.
-		if encodedChar := encodeMap[currentByte]; encodedChar != dontEscape {
-			buf.WriteByte('\\')
-			buf.WriteByte(encodedChar)
-		} else if currentByte == quoteChar {
-			buf.WriteByte('\\')
-			buf.WriteByte(quoteChar)
-		} else {
-			// Escape non-printable characters.
-			buf.Write(hexMap[currentByte])
-		}
-	} else if ln == 2 {
-		// For multi-byte runes, print them based on their width.
-		fmt.Fprintf(buf, `\u%04X`, currentRune)
-	} else {
-		fmt.Fprintf(buf, `\U%08X`, currentRune)
+		buf.Write(stringencoding.RawHexMap[in[i]])
 	}
 }
 
@@ -124,7 +72,7 @@ func encodeSQLStringWithFlags(buf *bytes.Buffer, in string, f FmtFlags) {
 				// We have to quote this string - ignore bareStrings setting
 				bareStrings = false
 			}
-			if encodeMap[ch] == dontEscape && ch != '\'' {
+			if !stringencoding.NeedEscape(ch) && ch != '\'' {
 				continue
 			}
 		}
@@ -140,7 +88,7 @@ func encodeSQLStringWithFlags(buf *bytes.Buffer, in string, f FmtFlags) {
 		} else {
 			start = i + ln
 		}
-		encodeEscapedChar(buf, in, r, ch, i, '\'')
+		stringencoding.EncodeEscapedChar(buf, in, r, ch, i, '\'')
 	}
 
 	quote := !escapedString && !bareStrings
@@ -160,30 +108,11 @@ func encodeSQLStringInsideArray(buf *bytes.Buffer, in string) {
 	// Loop through each unicode code point.
 	for i, r := range in {
 		ch := byte(r)
-		if r >= 0x20 && r < 0x7F && encodeMap[ch] == dontEscape && ch != '"' {
+		if r >= 0x20 && r < 0x7F && !stringencoding.NeedEscape(ch) && ch != '"' {
 			// Character is printable doesn't need escaping - just print it out.
 			buf.WriteByte(ch)
 		} else {
-			encodeEscapedChar(buf, in, r, ch, i, '"')
-		}
-	}
-
-	buf.WriteByte('"')
-}
-
-// encodeJSONString writes a string literal to buf as a JSON string.
-// Very similar to encodeSQLStringInsideArray. Primary difference is that it is
-// legal to directly print out unicode characters.
-func encodeJSONString(buf *bytes.Buffer, in string, f FmtFlags) {
-	buf.WriteByte('"')
-	// Loop through each unicode code point.
-	for i, r := range in {
-		ch := byte(r)
-		if unicode.IsPrint(r) && encodeMap[ch] == dontEscape && ch != '"' {
-			// Character is printable doesn't need escaping - just print it out.
-			buf.WriteRune(r)
-		} else {
-			encodeEscapedChar(buf, in, r, ch, i, '"')
+			stringencoding.EncodeEscapedChar(buf, in, r, ch, i, '"')
 		}
 	}
 
@@ -227,13 +156,13 @@ func encodeSQLBytes(buf *bytes.Buffer, in string) {
 	// code points).
 	for i, n := 0, len(in); i < n; i++ {
 		ch := in[i]
-		if encodedChar := encodeMap[ch]; encodedChar != dontEscape {
+		if encodedChar := stringencoding.EncodeMap[ch]; encodedChar != stringencoding.DontEscape {
 			buf.WriteString(in[start:i])
 			buf.WriteByte('\\')
 			buf.WriteByte(encodedChar)
 			start = i + 1
 		} else if ch == '\'' {
-			// We can't just fold this into encodeMap because encodeMap is also used for strings which aren't quoted with single-quotes
+			// We can't just fold this into stringencoding.EncodeMap because stringencoding.EncodeMap is also used for strings which aren't quoted with single-quotes
 			buf.WriteString(in[start:i])
 			buf.WriteByte('\\')
 			buf.WriteByte(ch)
@@ -241,56 +170,10 @@ func encodeSQLBytes(buf *bytes.Buffer, in string) {
 		} else if ch < 0x20 || ch >= 0x7F {
 			buf.WriteString(in[start:i])
 			// Escape non-printable characters.
-			buf.Write(hexMap[ch])
+			buf.Write(stringencoding.HexMap[ch])
 			start = i + 1
 		}
 	}
 	buf.WriteString(in[start:])
 	buf.WriteByte('\'')
-}
-
-func init() {
-	encodeRef := map[byte]byte{
-		'\b': 'b',
-		'\f': 'f',
-		'\n': 'n',
-		'\r': 'r',
-		'\t': 't',
-		'\\': '\\',
-	}
-
-	for i := range encodeMap {
-		encodeMap[i] = dontEscape
-	}
-	for i := range encodeMap {
-		if to, ok := encodeRef[byte(i)]; ok {
-			encodeMap[byte(i)] = to
-		}
-	}
-
-	// underlyingHexMap contains the string "\x00\x01\x02..." which hexMap and
-	// rawHexMap then index into.
-	var underlyingHexMap bytes.Buffer
-	underlyingHexMap.Grow(1024)
-
-	for i := 0; i < 256; i++ {
-		underlyingHexMap.WriteString("\\x")
-		writeHexDigit(&underlyingHexMap, i/16)
-		writeHexDigit(&underlyingHexMap, i%16)
-	}
-
-	underlyingHexBytes := underlyingHexMap.Bytes()
-
-	for i := 0; i < 256; i++ {
-		hexMap[i] = underlyingHexBytes[i*4 : i*4+4]
-		rawHexMap[i] = underlyingHexBytes[i*4+2 : i*4+4]
-	}
-}
-
-func writeHexDigit(buf *bytes.Buffer, v int) {
-	if v < 10 {
-		buf.WriteByte('0' + byte(v))
-	} else {
-		buf.WriteByte('a' + byte(v-10))
-	}
 }
