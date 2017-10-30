@@ -170,6 +170,7 @@ message TableReaderSpec {
   // Not used if there is a limit set in the PostProcessSpec of this processor
   // (that value will be used for sizing batches instead).
   optional int64 limit_hint = 5 [(gogoproto.nullable) = false];
+  optional bool lockForUpdate = 6 [(gogoproto.nullable) = false];
 }
 
 // JoinReaderSpec is the specification for a "join reader". A join reader
@@ -186,6 +187,7 @@ message JoinReaderSpec {
   // for each primary key.
   // TODO(radu): figure out the correct semantics when joining with an index.
   optional uint32 index_idx = 2 [(gogoproto.nullable) = false];
+  optional bool lockForUpdate = 3 [(gogoproto.nullable) = false];
 
   // TODO(radu): add field to describe the input columns and allow plumbing
   // through values that aren't used for the lookup.

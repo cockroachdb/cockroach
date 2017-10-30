@@ -38,9 +38,10 @@ func (*ValuesClause) selectStatement() {}
 
 // Select represents a SelectStatement with an ORDER and/or LIMIT.
 type Select struct {
-	Select  SelectStatement
-	OrderBy OrderBy
-	Limit   *Limit
+	Select        SelectStatement
+	OrderBy       OrderBy
+	Limit         *Limit
+	LockForUpdate bool
 }
 
 // Format implements the NodeFormatter interface.
@@ -48,6 +49,9 @@ func (node *Select) Format(buf *bytes.Buffer, f FmtFlags) {
 	FormatNode(buf, f, node.Select)
 	FormatNode(buf, f, node.OrderBy)
 	FormatNode(buf, f, node.Limit)
+	if node.LockForUpdate {
+		buf.WriteString(" FOR UPDATE")
+	}
 }
 
 // ParenSelect represents a parenthesized SELECT/UNION/VALUES statement.

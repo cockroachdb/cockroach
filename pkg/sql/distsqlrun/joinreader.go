@@ -79,7 +79,7 @@ func newJoinReader(
 	var err error
 	jr.index, _, err = initRowFetcher(
 		&jr.fetcher, &jr.desc, int(spec.IndexIdx), false, /* reverse */
-		jr.out.neededColumns(), &jr.alloc,
+		spec.LockForUpdate, jr.out.neededColumns(), &jr.alloc,
 	)
 	if err != nil {
 		return nil, err

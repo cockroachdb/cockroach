@@ -653,8 +653,9 @@ func initTableReaderSpec(
 	n *scanNode,
 ) (distsqlrun.TableReaderSpec, distsqlrun.PostProcessSpec, error) {
 	s := distsqlrun.TableReaderSpec{
-		Table:   *n.desc,
-		Reverse: n.reverse,
+		Table:         *n.desc,
+		Reverse:       n.reverse,
+		LockForUpdate: n.lockForUpdate,
 	}
 	if n.index != &n.desc.PrimaryIndex {
 		for i := range n.desc.Indexes {
@@ -1785,8 +1786,9 @@ ColLoop:
 	}
 
 	joinReaderSpec := distsqlrun.JoinReaderSpec{
-		Table:    *n.index.desc,
-		IndexIdx: 0,
+		Table:         *n.index.desc,
+		IndexIdx:      0,
+		LockForUpdate: n.index.lockForUpdate,
 	}
 
 	post := distsqlrun.PostProcessSpec{

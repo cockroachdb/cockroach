@@ -101,7 +101,7 @@ func newTableReader(
 
 	desc := spec.Table
 	if _, _, err := initRowFetcher(
-		&tr.fetcher, &desc, int(spec.IndexIdx), spec.Reverse, tr.out.neededColumns(), &tr.alloc,
+		&tr.fetcher, &desc, int(spec.IndexIdx), spec.Reverse, spec.LockForUpdate, tr.out.neededColumns(), &tr.alloc,
 	); err != nil {
 		return nil, err
 	}
@@ -119,6 +119,7 @@ func initRowFetcher(
 	desc *sqlbase.TableDescriptor,
 	indexIdx int,
 	reverseScan bool,
+	lockForUpdate bool,
 	valNeededForCol []bool,
 	alloc *sqlbase.DatumAlloc,
 ) (index *sqlbase.IndexDescriptor, isSecondaryIndex bool, err error) {
@@ -140,7 +141,7 @@ func initRowFetcher(
 		colIdxMap[c.ID] = i
 	}
 	if err := fetcher.Init(
-		desc, colIdxMap, index, reverseScan, isSecondaryIndex,
+		desc, colIdxMap, index, reverseScan, lockForUpdate, isSecondaryIndex,
 		desc.Columns, valNeededForCol, true /* returnRangeInfo */, alloc,
 	); err != nil {
 		return nil, false, err
