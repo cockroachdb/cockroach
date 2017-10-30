@@ -41,6 +41,10 @@ const (
 
 const rowChannelBufSize = 16
 
+// We ignore any limits that are higher than this value to avoid any
+// overflows.
+const readerOverflowProtection = 1000000000
+
 type columns []uint32
 
 // ConsumerStatus is the type returned by RowReceiver.Push(), informing a
