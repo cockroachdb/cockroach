@@ -4038,7 +4038,7 @@ func (s *Store) canApplySnapshotLocked(
 				if r.RaftStatus() == nil {
 					return true
 				}
-				lease, pendingLease := r.getLease()
+				lease, pendingLease := r.GetLease()
 				now := s.Clock().Now()
 				return !r.IsLeaseValid(lease, now) &&
 					(pendingLease == nil || !r.IsLeaseValid(*pendingLease, now))
