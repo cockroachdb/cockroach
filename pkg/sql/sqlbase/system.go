@@ -140,6 +140,15 @@ CREATE TABLE system.web_sessions (
 	INDEX("createdAt"),
 	FAMILY(id, "hashedSecret", username, "createdAt", "expiresAt", "revokedAt", "lastUsedAt", "auditInfo")
 );`
+
+	// locations are used to map a locality specified by a node to geographic
+	// latitude, longitude coordinates.
+	LocationsTableSchema = `
+CREATE TABLE system.locations (
+  locality  STRING PRIMARY KEY,
+  latitude  DECIMAL(18,15) NOT NULL,
+  longitude DECIMAL(18,15) NOT NULL
+);`
 )
 
 func pk(name string) IndexDescriptor {
@@ -193,6 +202,7 @@ var SystemAllowedPrivileges = map[ID]privilege.Lists{
 	// compatibility reasons only!
 	keys.JobsTableID:        {privilege.ReadWriteData},
 	keys.WebSessionsTableID: {privilege.ReadWriteData},
+	keys.LocationsTableID:   {privilege.ReadWriteData},
 }
 
 // SystemDesiredPrivileges returns the desired privilege list (i.e., the
@@ -612,6 +622,35 @@ var (
 		},
 		NextMutationID: 1,
 		FormatVersion:  3,
+	}
+
+	latLonDecimal = ColumnType{
+		SemanticType: ColumnType_DECIMAL,
+		Precision:    18,
+		Width:        15,
+	}
+
+	// LocationsTable is the descriptor for the locations table.
+	LocationsTable = TableDescriptor{
+		Name:     "locations",
+		ID:       keys.LocationsTableID,
+		ParentID: 1,
+		Version:  1,
+		Columns: []ColumnDescriptor{
+			{Name: "locality", ID: 1, Type: colTypeString},
+			{Name: "latitude", ID: 2, Type: latLonDecimal},
+			{Name: "longitude", ID: 3, Type: latLonDecimal},
+		},
+		NextColumnID: 4,
+		Families: []ColumnFamilyDescriptor{
+			{Name: "primary", ID: 0, ColumnNames: []string{"locality", "latitude", "longitude"}, ColumnIDs: []ColumnID{1, 2, 3}},
+		},
+		NextFamilyID:   1,
+		PrimaryIndex:   pk("locality"),
+		NextIndexID:    2,
+		Privileges:     NewPrivilegeDescriptor(security.RootUser, SystemDesiredPrivileges(keys.LocationsTableID)),
+		FormatVersion:  InterleavedFormatVersion,
+		NextMutationID: 1,
 	}
 )
 

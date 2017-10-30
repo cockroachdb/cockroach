@@ -365,6 +365,7 @@ func TestGetZoneConfigForKey(t *testing.T) {
 		{keys.MakeTablePrefix(keys.ZonesTableID), keys.SystemDatabaseID},
 		{keys.MakeTablePrefix(keys.LeaseTableID), keys.SystemDatabaseID},
 		{keys.MakeTablePrefix(keys.JobsTableID), keys.SystemDatabaseID},
+		{keys.MakeTablePrefix(keys.LocationsTableID), keys.SystemDatabaseID},
 		{keys.MakeTablePrefix(keys.MaxReservedDescID + 1), keys.MaxReservedDescID + 1},
 		{keys.MakeTablePrefix(keys.MaxReservedDescID + 23), keys.MaxReservedDescID + 23},
 		{roachpb.RKeyMax, keys.RootNamespaceID},

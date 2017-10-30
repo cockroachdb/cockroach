@@ -311,4 +311,5 @@ const (
 	SystemRangesID     = 17
 	TimeseriesRangesID = 18
 	WebSessionsTableID = 19
+	LocationsTableID   = 20
 )

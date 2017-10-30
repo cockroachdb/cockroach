@@ -433,6 +433,21 @@ message JobsResponse {
   repeated Job jobs = 1 [(gogoproto.nullable) = false];
 }
 
+// LocationsRequest requests system locality location information.
+message LocationsRequest {
+}
+
+// JobsResponse contains the job record for each matching job.
+message LocationsResponse {
+  message Location {
+    string locality = 1;
+    double latitude = 2;
+    double longitude = 3;
+  }
+
+  repeated Location locations = 1 [(gogoproto.nullable) = false];
+}
+
 // RangeLogRequest request the history of a range from the range log.
 message RangeLogRequest {
   // TODO(tamird): use [(gogoproto.customname) = "RangeID"] below. Need to
@@ -598,6 +613,13 @@ service Admin {
   rpc Jobs(JobsRequest) returns (JobsResponse) {
     option (google.api.http) = {
       get: "/_admin/v1/jobs"
+    };
+  }
+
+  // Locations returns the locality location records.
+  rpc Locations(LocationsRequest) returns (LocationsResponse) {
+    option (google.api.http) = {
+      get: "/_admin/v1/locations"
     };
   }
 

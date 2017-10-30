@@ -16,6 +16,7 @@ descriptor
 eventlog
 jobs
 lease
+locations
 namespace
 rangelog
 settings
@@ -40,6 +41,8 @@ fetched: /namespace/primary/1/'jobs'/id -> 15
 output row: [1 'jobs' 15]
 fetched: /namespace/primary/1/'lease'/id -> 11
 output row: [1 'lease' 11]
+fetched: /namespace/primary/1/'locations'/id -> 20
+output row: [1 'locations' 20]
 fetched: /namespace/primary/1/'namespace'/id -> 2
 output row: [1 'namespace' 2]
 fetched: /namespace/primary/1/'rangelog'/id -> 13
@@ -64,6 +67,7 @@ SELECT * FROM system.namespace
 1 eventlog      12
 1 jobs          15
 1 lease         11
+1 locations     20
 1 namespace     2
 1 rangelog      13
 1 settings      6
@@ -87,6 +91,7 @@ SELECT id FROM system.descriptor
 14
 15
 19
+20
 50
 
 # Verify we can read "protobuf" columns.
