@@ -40,12 +40,6 @@ const (
 	btreeDegree = 64
 )
 
-// A cacheValue combines the timestamp with an optional txn ID.
-type cacheValue struct {
-	timestamp hlc.Timestamp
-	txnID     uuid.UUID // zero for no transaction
-}
-
 func makeCacheEntry(key cache.IntervalKey, value cacheValue) *cache.Entry {
 	alloc := struct {
 		key   cache.IntervalKey
@@ -100,21 +94,6 @@ type treeImpl struct {
 
 var _ Cache = &treeImpl{}
 
-// lowWaterTxnIDMarker is a special txn ID that identifies a cache entry as a
-// low water mark. It is specified when a lease is acquired to clear the
-// timestamp cache for a range. Also see Cache.getMax where this txn
-// ID is checked in order to return whether the max read/write timestamp came
-// from a regular entry or one of these low water mark entries.
-var lowWaterTxnIDMarker = func() uuid.UUID {
-	// The specific txn ID used here isn't important. We use something that is a)
-	// non-zero and b) obvious.
-	u, err := uuid.FromString("11111111-1111-1111-1111-111111111111")
-	if err != nil {
-		panic(err)
-	}
-	return u
-}()
-
 // newTreeImpl returns a new treeImpl with the supplied hybrid clock.
 func newTreeImpl(clock *hlc.Clock) *treeImpl {
 	tc := &treeImpl{
@@ -167,7 +146,7 @@ func (tc *treeImpl) add(
 		}
 
 		addRange := func(r interval.Range) {
-			value := cacheValue{timestamp: timestamp, txnID: txnID}
+			value := cacheValue{ts: timestamp, txnID: txnID}
 			key := tcache.MakeKey(r.Start, r.End)
 			entry := makeCacheEntry(key, value)
 			tc.bytes += cacheEntrySize(r.Start, r.End)
@@ -198,7 +177,7 @@ func (tc *treeImpl) add(
 			// compute the current size of the entry and then use the new size at the
 			// end of this iteration to update Cache.bytes.
 			oldSize := cacheEntrySize(key.Start, key.End)
-			if cv.timestamp.Less(timestamp) {
+			if cv.ts.Less(timestamp) {
 				// The existing interval has a timestamp less than the new
 				// interval. Compare interval ranges to determine how to
 				// modify existing interval.
@@ -211,7 +190,7 @@ func (tc *treeImpl) add(
 					//
 					// New: ------------
 					// Old:
-					*cv = cacheValue{timestamp: timestamp, txnID: txnID}
+					*cv = cacheValue{ts: timestamp, txnID: txnID}
 					tcache.MoveToEnd(entry)
 					return
 				case sCmp <= 0 && eCmp >= 0:
@@ -259,7 +238,7 @@ func (tc *treeImpl) add(
 				default:
 					panic(fmt.Sprintf("no overlap between %v and %v", key.Range, r))
 				}
-			} else if timestamp.Less(cv.timestamp) {
+			} else if timestamp.Less(cv.ts) {
 				// The existing interval has a timestamp greater than the new interval.
 				// Compare interval ranges to determine how to modify new interval before
 				// adding it to the timestamp cache.
@@ -366,7 +345,7 @@ func (tc *treeImpl) add(
 					// New:
 					// Nil: ============
 					// Old:
-					cv.txnID = uuid.UUID{}
+					cv.txnID = noTxnID
 					tc.bytes += cacheEntrySize(key.Start, key.End) - oldSize
 					return
 				case sCmp == 0 && eCmp > 0:
@@ -379,7 +358,7 @@ func (tc *treeImpl) add(
 					// New:           --
 					// Nil: ==========
 					// Old:
-					cv.txnID = uuid.UUID{}
+					cv.txnID = noTxnID
 					r.Start = key.End
 				case sCmp < 0 && eCmp == 0:
 					// New contains old, right-aligned. Clear ownership of the
@@ -391,7 +370,7 @@ func (tc *treeImpl) add(
 					// New: --
 					// Nil:   ==========
 					// Old:
-					cv.txnID = uuid.UUID{}
+					cv.txnID = noTxnID
 					r.End = key.Start
 				case sCmp < 0 && eCmp > 0:
 					// New contains old; split into three segments with the
@@ -403,10 +382,10 @@ func (tc *treeImpl) add(
 					// New: --        --
 					// Nil:   ========
 					// Old:
-					cv.txnID = uuid.UUID{}
+					cv.txnID = noTxnID
 
 					newKey := tcache.MakeKey(r.Start, key.Start)
-					newEntry := makeCacheEntry(newKey, cacheValue{timestamp: timestamp, txnID: txnID})
+					newEntry := makeCacheEntry(newKey, cacheValue{ts: timestamp, txnID: txnID})
 					addEntryAfter(newEntry, entry)
 					r.Start = key.End
 				case sCmp > 0 && eCmp < 0:
@@ -419,7 +398,7 @@ func (tc *treeImpl) add(
 					// New:
 					// Nil:     ====
 					// Old: ----    ----
-					txnID = uuid.UUID{}
+					txnID = noTxnID
 					oldEnd := key.End
 					key.End = r.Start
 
@@ -436,7 +415,7 @@ func (tc *treeImpl) add(
 					// New:
 					// Nil:     ========
 					// Old: ----
-					txnID = uuid.UUID{}
+					txnID = noTxnID
 					key.End = r.Start
 				case sCmp == 0:
 					// Old contains new, left-aligned; truncate old start and
@@ -447,7 +426,7 @@ func (tc *treeImpl) add(
 					// New:
 					// Nil: ========
 					// Old:         ----
-					txnID = uuid.UUID{}
+					txnID = noTxnID
 					key.Start = r.End
 				case eCmp > 0:
 					// Left partial overlap; truncate old end and split new into
@@ -462,7 +441,7 @@ func (tc *treeImpl) add(
 					key.End, r.Start = r.Start, key.End
 
 					newKey := tcache.MakeKey(key.End, r.Start)
-					newCV := cacheValue{timestamp: cv.timestamp}
+					newCV := cacheValue{ts: cv.ts}
 					newEntry := makeCacheEntry(newKey, newCV)
 					addEntryAfter(newEntry, entry)
 				case sCmp < 0:
@@ -478,7 +457,7 @@ func (tc *treeImpl) add(
 					key.Start, r.End = r.End, key.Start
 
 					newKey := tcache.MakeKey(r.End, key.Start)
-					newCV := cacheValue{timestamp: cv.timestamp}
+					newCV := cacheValue{ts: cv.ts}
 					newEntry := makeCacheEntry(newKey, newCV)
 					addEntryAfter(newEntry, entry)
 				default:
@@ -585,7 +564,7 @@ func (tc *treeImpl) ExpandRequests(span roachpb.RSpan, timestamp hlc.Timestamp) 
 			// EndTransactionRequests.
 			key := keys.TransactionKey(req.Txn.Key, req.TxnID)
 			// We set txnID=nil because we want hits for same txn ID.
-			tc.add(key, nil, req.Timestamp, uuid.UUID{}, false /* readTSCache */)
+			tc.add(key, nil, req.Timestamp, noTxnID, false /* readTSCache */)
 		}
 		req.release()
 	}
@@ -627,12 +606,12 @@ func (tc *treeImpl) getMax(
 	}
 	for _, o := range cache.GetOverlaps(start, end) {
 		ce := o.Value.(*cacheValue)
-		if maxTS.Less(ce.timestamp) {
+		if maxTS.Less(ce.ts) {
 			ok = true
-			maxTS = ce.timestamp
+			maxTS = ce.ts
 			maxTxnID = ce.txnID
-		} else if maxTS == ce.timestamp && maxTxnID != ce.txnID {
-			maxTxnID = uuid.UUID{}
+		} else if maxTS == ce.ts && maxTxnID != ce.txnID {
+			maxTxnID = noTxnID
 		}
 	}
 	if maxTxnID == lowWaterTxnIDMarker {
@@ -650,7 +629,7 @@ func (tc *treeImpl) shouldEvict(size int, key, value interface{}) bool {
 	ce := value.(*cacheValue)
 	// In case low water mark was set higher, evict any entries
 	// which occurred before it.
-	if ce.timestamp.Less(tc.lowWater) {
+	if ce.ts.Less(tc.lowWater) {
 		return true
 	}
 	// Compute the edge of the cache window.
@@ -658,8 +637,8 @@ func (tc *treeImpl) shouldEvict(size int, key, value interface{}) bool {
 	edge.WallTime -= MinRetentionWindow.Nanoseconds()
 	// We evict and update the low water mark if the proposed evictee's
 	// timestamp is <= than the edge of the window.
-	if !edge.Less(ce.timestamp) {
-		tc.lowWater = ce.timestamp
+	if !edge.Less(ce.ts) {
+		tc.lowWater = ce.ts
 		return true
 	}
 	return false
