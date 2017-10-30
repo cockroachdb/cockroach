@@ -246,22 +246,6 @@ func (r *Replica) DescLocked() *roachpb.RangeDescriptor {
 	return r.mu.state.Desc
 }
 
-// GetGCThreshold returns the range's GCThreshold, acquiring a replica lock in
-// the process.
-func (r *Replica) GetGCThreshold() hlc.Timestamp {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-	return *r.mu.state.GCThreshold
-}
-
-// GetTxnSpanGCThreshold returns the range's TxnSpanGCThreshold, acquiring a replica lock in
-// the process.
-func (r *Replica) GetTxnSpanGCThreshold() hlc.Timestamp {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-	return *r.mu.state.TxnSpanGCThreshold
-}
-
 func (r *Replica) AssertState(ctx context.Context, reader engine.Reader) {
 	r.raftMu.Lock()
 	defer r.raftMu.Unlock()
@@ -284,13 +268,6 @@ func (r *Replica) GetLastIndex() (uint64, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	return r.raftLastIndexLocked()
-}
-
-// GetLease exposes replica.getLease for tests.
-// If you just need information about the lease holder, consider issuing a
-// LeaseInfoRequest instead of using this internal method.
-func (r *Replica) GetLease() (roachpb.Lease, *roachpb.Lease) {
-	return r.getLease()
 }
 
 // SetQuotaPool allows the caller to set a replica's quota pool initialized to
