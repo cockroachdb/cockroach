@@ -1226,29 +1226,55 @@ func (desc *TableDescriptor) validateTableIndexes(
 	return nil
 }
 
-// translateValueEncodingToKey parses columns encoded with the "value" encoding
-// and returns them reencoded using the "key ascending" encoding. The parsed
-// datums are also returned. If DEFAULT or MAXVALUE is encountered, the returned
-// row (both reencoded and parsed datums) will be shorter then len(colIDs);
-// specifically it will contain all the values up to but not including the
-// special one.
+// TranslateValueEncodingToSpan parses columns (which are a prefix of the
+// columns of `idxDesc`) encoded with the "value" encoding and returns the
+// parsed datums. It also reencodes them into a key as they would be for
+// `idxDesc` (accounting for index dirs, interleaves, subpartitioning, etc).
 //
-// TODO(dan): The upcoming PR that translates a TableDescriptor into spans for a
-// zone config will make this return the relevant key prefix (this is currently
-// implicit between this method and validatePartitioningDescriptor). At that
-// time, add documentation for how this logic works and lots of tests.
-func translateValueEncodingToKey(
-	typ parser.PartitionByType,
+// For a list partitioning, this returned key can be used as a prefix scan to
+// select all rows that have the given columns as a prefix (this is true even if
+// the list partitioning contains DEFAULT).
+//
+// Examples of the key returned for a list partitioning:
+// - (1, 2) -> /table/index/1/2
+// - (1, DEFAULT) -> /table/index/1
+// - (DEFAULT, DEFAULT) -> /table/index
+//
+// For a range partitioning, this returned key can be used as a exclusive end
+// key to select all rows strictly less than ones with the given columns as a
+// prefix (this is true even if the range partitioning contains MAXVALUE).
+//
+// Examples of the key returned for a range partitioning:
+// - (1, 2) -> /table/index/1/3
+// - (1, MAXVALUE) -> /table/index/2
+// - (DEFAULT, DEFAULT) -> (/table/index).PrefixEnd()
+//
+// If DEFAULT or MAXVALUE is encountered, the returned row (both reencoded and
+// parsed datums) will be shorter then len(colIDs); specifically it will contain
+// all the values up to but not including the special one.
+//
+// NB: It is required elsewhere and assumed here that if an entry for a list
+// partitioning contains DEFAULT, everything in that entry "after" also has to
+// be DEFAULT. So, (1, 2, DEFAULT) is valid but (1, DEFAULT, 2) is not.
+// Similarly for range partitioning and MAXVALUE.
+func TranslateValueEncodingToSpan(
 	a *DatumAlloc,
-	desc *TableDescriptor,
+	tableDesc *TableDescriptor,
+	idxDesc *IndexDescriptor,
+	partDesc *PartitioningDescriptor,
 	valueEncBuf []byte,
-	colIDs []ColumnID,
+	prefixDatums []parser.Datum,
 ) (parser.Datums, []byte, error) {
-	datums := make(parser.Datums, len(colIDs))
-	var keyEncBuf []byte
+	if len(prefixDatums)+int(partDesc.NumColumns) > len(idxDesc.ColumnIDs) {
+		return nil, nil, fmt.Errorf("not enough columns in index for this partitioning")
+	}
+
+	datums := make(parser.Datums, int(partDesc.NumColumns))
 	specialIdx := -1
+
+	colIDs := idxDesc.ColumnIDs[len(prefixDatums) : len(prefixDatums)+int(partDesc.NumColumns)]
 	for i, colID := range colIDs {
-		col, err := desc.FindActiveColumnByID(colID)
+		col, err := tableDesc.FindColumnByID(colID)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -1266,23 +1292,15 @@ func translateValueEncodingToKey(
 			return nil, nil, errors.Wrap(err, "decoding")
 		}
 		if specialIdx != -1 {
-			switch typ {
-			case parser.PartitionByList:
-				return nil, nil, errors.Errorf("non-DEFAULT value (%s) not allowed after DEFAULT",
-					datums[i])
-			case parser.PartitionByRange:
-				return nil, nil, errors.Errorf("non-MAXVALUE value (%s) not allowed after MAXVALUE",
-					datums[i])
-			default:
-				return nil, nil, errors.Errorf("unknown partition type: %s", typ)
+			if len(partDesc.List) > 0 && len(partDesc.Range) == 0 {
+				return nil, nil, errors.Errorf(
+					"non-DEFAULT value (%s) not allowed after DEFAULT", datums[i])
+			} else if len(partDesc.Range) > 0 && len(partDesc.List) == 0 {
+				return nil, nil, errors.Errorf(
+					"non-MAXVALUE value (%s) not allowed after MAXVALUE", datums[i])
+			} else {
+				return nil, nil, errors.Errorf("unknown partition type")
 			}
-		}
-		// TODO(dan): One we start using this method to fill in zone configs,
-		// this encoding has to match the index direction (instead of always
-		// being ascending).
-		keyEncBuf, err = EncodeTableKey(keyEncBuf, datums[i], encoding.Ascending)
-		if err != nil {
-			return nil, nil, err
 		}
 	}
 	if len(valueEncBuf) > 0 {
@@ -1291,7 +1309,42 @@ func translateValueEncodingToKey(
 	if specialIdx != -1 {
 		datums = datums[:specialIdx]
 	}
-	return datums, keyEncBuf, nil
+
+	allDatums := append(prefixDatums, datums...)
+	colMap := make(map[ColumnID]int, len(allDatums))
+	colTypes := make([]parser.Type, len(allDatums))
+	for i := 0; i < len(allDatums); i++ {
+		id := idxDesc.ColumnIDs[i]
+		colMap[id] = i
+		column, err := tableDesc.FindColumnByID(id)
+		if err != nil {
+			return nil, nil, err
+		}
+		colTypes[i] = column.Type.ToDatumType()
+	}
+
+	indexKeyPrefix := MakeIndexKeyPrefix(tableDesc, idxDesc.ID)
+	key, _, err := EncodePartialIndexKey(
+		tableDesc, idxDesc, len(allDatums), colMap, allDatums, indexKeyPrefix)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	// Currently, key looks something like `/table/index/1`. Given a range
+	// partitioning of (1), we're done. This can be used as the exclusive end
+	// key of a scan to fetch all rows strictly less than (1).
+	//
+	// If `specialIdx` is not the sentinel, then we're actually in a case like
+	// `(1, MAXVALUE, ..., MAXVALUE)`. Since this index could have a descending
+	// nullable column, we can't rely on `/table/index/1/0xff` to be _strictly_
+	// larger than everything it should match. Instead, we need `PrefixEnd()`.
+	// This also intuitively makes sense; we're essentially a key that is
+	// guaranteed to be less than `(2, MINVALUE, ..., MINVALUE)`.
+	if specialIdx != -1 && len(partDesc.Range) > 0 {
+		key = roachpb.Key(key).PrefixEnd()
+	}
+
+	return datums, key, nil
 }
 
 func printPartitioningPrefix(datums []parser.Datum, s string) string {
@@ -1319,16 +1372,12 @@ func (desc *TableDescriptor) validatePartitioningDescriptor(
 	a *DatumAlloc,
 	idxDesc *IndexDescriptor,
 	partDesc *PartitioningDescriptor,
-	colOffset int,
+	prefixDatums []parser.Datum,
 	partitionNames map[string]struct{},
 ) error {
 	if partDesc.NumColumns == 0 {
 		return nil
 	}
-	if colOffset+int(partDesc.NumColumns) > len(idxDesc.ColumnIDs) {
-		return fmt.Errorf("not enough columns in index for this partitioning")
-	}
-	colIDs := idxDesc.ColumnIDs[colOffset : colOffset+int(partDesc.NumColumns)]
 
 	if len(partDesc.List) == 0 && len(partDesc.Range) == 0 {
 		return fmt.Errorf("at least one of LIST or RANGE partitioning must be used")
@@ -1341,47 +1390,48 @@ func (desc *TableDescriptor) validatePartitioningDescriptor(
 		listValues := make(map[string]struct{}, len(partDesc.List))
 		for _, p := range partDesc.List {
 			if len(p.Name) == 0 {
-				return fmt.Errorf("partition name must be non-empty")
+				return fmt.Errorf("PARTITION name must be non-empty")
 			}
 			if _, exists := partitionNames[p.Name]; exists {
-				return fmt.Errorf("partition name %s must be unique", p.Name)
+				return fmt.Errorf("PARTITION %s: name must be unique", p.Name)
 			}
 			partitionNames[p.Name] = struct{}{}
 
 			if len(p.Values) == 0 {
-				return fmt.Errorf("partition %s must contain values", p.Name)
+				return fmt.Errorf("PARTITION %s: must contain values", p.Name)
 			}
 			// NB: key encoding is used to check uniqueness because it has
 			// to match the behavior of the value when indexed.
 			for _, valueEncBuf := range p.Values {
-				datums, keyEncBuf, err := translateValueEncodingToKey(
-					parser.PartitionByList, a, desc, valueEncBuf, colIDs,
-				)
+				datums, keyPrefix, err := TranslateValueEncodingToSpan(
+					a, desc, idxDesc, partDesc, valueEncBuf, prefixDatums)
 				if err != nil {
 					return fmt.Errorf("PARTITION %s: %v", p.Name, err)
 				}
-				if _, exists := listValues[string(keyEncBuf)]; exists {
-					if len(datums) != len(colIDs) {
+				if _, exists := listValues[string(keyPrefix)]; exists {
+					if len(datums) != int(partDesc.NumColumns) {
 						return fmt.Errorf("prefix (%s) cannot be present in more than one partition",
 							printPartitioningPrefix(datums, "DEFAULT"))
 					}
 					return fmt.Errorf("%s cannot be present in more than one partition",
 						parser.AsString(datums))
 				}
-				listValues[string(keyEncBuf)] = struct{}{}
-			}
+				listValues[string(keyPrefix)] = struct{}{}
 
-			newColOffset := colOffset + int(partDesc.NumColumns)
-			if err := desc.validatePartitioningDescriptor(
-				a, idxDesc, &p.Subpartitioning, newColOffset, partitionNames,
-			); err != nil {
-				return err
+				// TODO(dan): BEFORE MERGE oof, we're now doing this validation
+				// len(p.Values) times but we should only do it once.
+				newPrefixDatums := append(prefixDatums, datums...)
+				if err := desc.validatePartitioningDescriptor(
+					a, idxDesc, &p.Subpartitioning, newPrefixDatums, partitionNames,
+				); err != nil {
+					return err
+				}
 			}
 		}
 	}
 
 	if len(partDesc.Range) > 0 {
-		var lastValue []byte
+		var lastEndKey []byte
 		rangeValues := make(map[string]struct{}, len(partDesc.Range))
 		for _, p := range partDesc.Range {
 			if len(p.Name) == 0 {
@@ -1395,19 +1445,13 @@ func (desc *TableDescriptor) validatePartitioningDescriptor(
 			// NB: key encoding is used to check sortedness and uniqueness
 			// because it has to match the behavior of the value when
 			// indexed.
-			datums, keyEncBuf, err := translateValueEncodingToKey(
-				parser.PartitionByRange, a, desc, p.UpperBound, colIDs,
-			)
+			datums, endKey, err := TranslateValueEncodingToSpan(
+				a, desc, idxDesc, partDesc, p.UpperBound, prefixDatums)
 			if err != nil {
 				return fmt.Errorf("PARTITION %s: %v", p.Name, err)
 			}
-			if len(datums) < len(colIDs) {
-				// MAXVALUE, so encode something that always sorts higher than
-				// any possible value for this column.
-				keyEncBuf = roachpb.Key(keyEncBuf).PrefixEnd()
-			}
-			if _, exists := rangeValues[string(keyEncBuf)]; exists {
-				if len(datums) != len(colIDs) {
+			if _, exists := rangeValues[string(endKey)]; exists {
+				if len(datums) != int(partDesc.NumColumns) {
 					return fmt.Errorf("prefix (%s) cannot be present in more than one partition",
 						printPartitioningPrefix(datums, "MAXVALUE"))
 				}
@@ -1415,15 +1459,15 @@ func (desc *TableDescriptor) validatePartitioningDescriptor(
 					parser.AsString(datums))
 			}
 
-			rangeValues[string(keyEncBuf)] = struct{}{}
-			if bytes.Compare(lastValue, keyEncBuf) >= 0 {
-				return fmt.Errorf("values must be strictly increasing")
+			rangeValues[string(endKey)] = struct{}{}
+			if bytes.Compare(lastEndKey, endKey) >= 0 {
+				return fmt.Errorf("values must be strictly increasing: %s vs %s", roachpb.Key(lastEndKey), roachpb.Key(endKey))
 			}
-			lastValue = keyEncBuf
+			lastEndKey = endKey
 
-			newColOffset := colOffset + int(partDesc.NumColumns)
+			newPrefixDatums := append(prefixDatums, datums...)
 			if err := desc.validatePartitioningDescriptor(
-				a, idxDesc, &p.Subpartitioning, newColOffset, partitionNames,
+				a, idxDesc, &p.Subpartitioning, newPrefixDatums, partitionNames,
 			); err != nil {
 				return err
 			}
@@ -1441,7 +1485,7 @@ func (desc *TableDescriptor) validatePartitioning() error {
 	a := &DatumAlloc{}
 	return desc.ForeachNonDropIndex(func(idxDesc *IndexDescriptor) error {
 		return desc.validatePartitioningDescriptor(
-			a, idxDesc, &idxDesc.Partitioning, 0 /* colOffset */, partitionNames,
+			a, idxDesc, &idxDesc.Partitioning, nil /* prefixDatums */, partitionNames,
 		)
 	})
 }
@@ -1778,6 +1822,9 @@ func (desc *TableDescriptor) FindFamilyByID(id FamilyID) (*ColumnFamilyDescripto
 // FindIndexByName finds the index with the specified name in the active
 // list or the mutations list. It returns true if the index is being dropped.
 func (desc *TableDescriptor) FindIndexByName(name string) (IndexDescriptor, bool, error) {
+	if desc.IsPhysicalTable() && desc.PrimaryIndex.Name == name {
+		return desc.PrimaryIndex, false, nil
+	}
 	for i, idx := range desc.Indexes {
 		if idx.Name == name {
 			return desc.Indexes[i], false, nil
