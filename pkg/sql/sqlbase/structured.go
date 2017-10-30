@@ -2114,6 +2114,15 @@ func (desc *TableDescriptor) VisibleColumns() []ColumnDescriptor {
 	return cols
 }
 
+// ColumnTypes returns the types of all columns.
+func (desc *TableDescriptor) ColumnTypes() []ColumnType {
+	types := make([]ColumnType, len(desc.Columns))
+	for i, col := range desc.Columns {
+		types[i] = col.Type
+	}
+	return types
+}
+
 // ColumnsSelectors generates Select expressions for cols.
 func ColumnsSelectors(cols []ColumnDescriptor) tree.SelectExprs {
 	exprs := make(tree.SelectExprs, len(cols))
