@@ -16,7 +16,6 @@ package tscache
 
 import (
 	"fmt"
-	"time"
 	"unsafe"
 
 	"github.com/google/btree"
@@ -30,16 +29,10 @@ import (
 )
 
 const (
-	// MinTSCacheWindow specifies the minimum duration to hold entries in the
-	// cache before allowing eviction. After this window expires, transactions
-	// writing to this node with timestamps lagging by more than MinTSCacheWindow
-	// will necessarily have to advance their commit timestamp.
-	MinTSCacheWindow = 10 * time.Second
-
 	// defaultCacheSize is the default size in bytes for a store's timestamp
 	// cache. Note that the timestamp cache can use more memory than this
 	// because it holds on to all entries that are younger than
-	// MinTSCacheWindow.
+	// MinRetentionWindow.
 	defaultCacheSize = 64 << 20 // 64 MB
 
 	// Max entries in each btree node.
@@ -147,11 +140,6 @@ func (tc *cacheImpl) clear(lowWater hlc.Timestamp) {
 // len returns the total number of read and write intervals in the cache.
 func (tc *cacheImpl) len() int {
 	return tc.rCache.Len() + tc.wCache.Len() + tc.reqSpans
-}
-
-// byteCount returns the total memory usage of the cache.
-func (tc *cacheImpl) byteCount() uint64 {
-	return tc.bytes
 }
 
 // add the specified timestamp to the cache covering the range of
@@ -522,7 +510,7 @@ func (tc *cacheImpl) AddRequest(req *Request) {
 	// Bump the latest timestamp and evict any requests that are now too old.
 	tc.latest.Forward(req.Timestamp)
 	edge := tc.latest
-	edge.WallTime -= MinTSCacheWindow.Nanoseconds()
+	edge.WallTime -= MinRetentionWindow.Nanoseconds()
 
 	// Evict requests as long as the number of cached spans (both in the requests
 	// queue and the interval caches) is larger than the eviction threshold.
@@ -652,7 +640,7 @@ func (tc *cacheImpl) getMax(
 }
 
 // shouldEvict returns true if the cache entry's timestamp is no
-// longer within the MinTSCacheWindow.
+// longer within the MinRetentionWindow.
 func (tc *cacheImpl) shouldEvict(size int, key, value interface{}) bool {
 	if tc.bytes <= tc.maxBytes {
 		return false
@@ -665,7 +653,7 @@ func (tc *cacheImpl) shouldEvict(size int, key, value interface{}) bool {
 	}
 	// Compute the edge of the cache window.
 	edge := tc.latest
-	edge.WallTime -= MinTSCacheWindow.Nanoseconds()
+	edge.WallTime -= MinRetentionWindow.Nanoseconds()
 	// We evict and update the low water mark if the proposed evictee's
 	// timestamp is <= than the edge of the window.
 	if !edge.Less(ce.timestamp) {

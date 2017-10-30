@@ -25,7 +25,7 @@ import (
 )
 
 // TestTimestampCacheEviction verifies the eviction of
-// timestamp cache entries after MinTSCacheWindow interval.
+// timestamp cache entries after MinRetentionWindow interval.
 func TestTimestampCacheImplEviction(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	manual := hlc.NewManualClock(123)
@@ -40,8 +40,8 @@ func TestTimestampCacheImplEviction(t *testing.T) {
 	aTS := clock.Now()
 	tc.add(roachpb.Key("a"), nil, aTS, uuid.UUID{}, true)
 
-	// Increment time by the MinTSCacheWindow and add another key.
-	manual.Increment(MinTSCacheWindow.Nanoseconds())
+	// Increment time by the MinRetentionWindow and add another key.
+	manual.Increment(MinRetentionWindow.Nanoseconds())
 	tc.add(roachpb.Key("b"), nil, clock.Now(), uuid.UUID{}, true)
 
 	// Verify looking up key "c" returns the new low water mark ("a"'s timestamp).
@@ -51,7 +51,7 @@ func TestTimestampCacheImplEviction(t *testing.T) {
 }
 
 // TestTimestampCacheNoEviction verifies that even after
-// the MinTSCacheWindow interval, if the cache has not hit
+// the MinRetentionWindow interval, if the cache has not hit
 // its size threshold, it will not evict entries.
 func TestTimestampCacheImplNoEviction(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -69,8 +69,8 @@ func TestTimestampCacheImplNoEviction(t *testing.T) {
 		Timestamp: aTS,
 	})
 
-	// Increment time by the MinTSCacheWindow and add another key.
-	manual.Increment(MinTSCacheWindow.Nanoseconds())
+	// Increment time by the MinRetentionWindow and add another key.
+	manual.Increment(MinRetentionWindow.Nanoseconds())
 	tc.add(roachpb.Key("b"), nil, clock.Now(), uuid.UUID{}, true)
 	tc.AddRequest(&Request{
 		Reads:     []roachpb.Span{{Key: roachpb.Key("d")}},

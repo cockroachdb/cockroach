@@ -15,10 +15,18 @@
 package tscache
 
 import (
+	"time"
+
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
+
+// MinRetentionWindow specifies the minimum duration to hold entries in the
+// cache before allowing eviction. After this window expires, transactions
+// writing to this node with timestamps lagging by more than MinRetentionWindow
+// will necessarily have to advance their commit timestamp.
+const MinRetentionWindow = 10 * time.Second
 
 // Cache is a bounded in-memory cache that records key ranges and the
 // timestamps at which they were most recently read and written. The structure
@@ -73,10 +81,6 @@ type Cache interface {
 	add(start, end roachpb.Key, timestamp hlc.Timestamp, txnID uuid.UUID, readTSCache bool)
 	// clear clears the cache and resets the low-water mark.
 	clear(lowWater hlc.Timestamp)
-	// len returns the total number of read and write intervals in the cache.
-	len() int
-	// byteCount returns the total memory usage of the cache.
-	byteCount() uint64
 }
 
 // New returns a new timestamp cache with the supplied hybrid clock.
