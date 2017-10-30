@@ -122,7 +122,10 @@ func TestSplitFilter(t *testing.T) {
 		t.Run(fmt.Sprintf("%s~(%s, %s)", d.expr, d.expectedRes, d.expectedRem), func(t *testing.T) {
 			evalCtx := parser.NewTestingEvalContext()
 			defer evalCtx.Stop(context.Background())
-			sel := makeSelectNode(t)
+			sel, err := makeSelectNode()
+			if err != nil {
+				t.Fatal(err)
+			}
 			// A function that "converts" only vars in the list.
 			conv := func(expr parser.VariableExpr) (bool, parser.Expr) {
 				iv := expr.(*parser.IndexedVar)
@@ -136,7 +139,10 @@ func TestSplitFilter(t *testing.T) {
 				}
 				return false, nil
 			}
-			expr := parseAndNormalizeExpr(t, evalCtx, d.expr, sel)
+			expr, err := parseAndNormalizeExpr(evalCtx, d.expr, sel)
+			if err != nil {
+				t.Fatal(err)
+			}
 			exprStr := expr.String()
 			res, rem := splitFilter(expr, conv)
 			// We use Sprint to handle the 'nil' case correctly.
@@ -205,8 +211,14 @@ func TestExtractNotNullConstraints(t *testing.T) {
 			evalCtx := parser.NewTestingEvalContext()
 			defer evalCtx.Stop(context.Background())
 
-			sel := makeSelectNode(t)
-			expr := parseAndNormalizeExpr(t, evalCtx, tc.expr, sel)
+			sel, err := makeSelectNode()
+			if err != nil {
+				t.Fatal(err)
+			}
+			expr, err := parseAndNormalizeExpr(evalCtx, tc.expr, sel)
+			if err != nil {
+				t.Fatal(err)
+			}
 			result := extractNotNullConstraints(expr)
 			var expected util.FastIntSet
 			for _, v := range tc.notNullVars {

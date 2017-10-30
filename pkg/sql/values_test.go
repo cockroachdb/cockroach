@@ -25,17 +25,12 @@ import (
 
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
-
-func makeTestPlanner() *planner {
-	return makeInternalPlanner("test", nil /* txn */, security.RootUser, &MemoryMetrics{})
-}
 
 func TestValues(t *testing.T) {
 	defer leaktest.AfterTest(t)()

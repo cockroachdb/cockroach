@@ -21,77 +21,8 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
-
-func testTableDesc() *sqlbase.TableDescriptor {
-	return &sqlbase.TableDescriptor{
-		Name:     "test",
-		ID:       1001,
-		ParentID: 1000,
-		Columns: []sqlbase.ColumnDescriptor{
-			{Name: "a", Type: sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_INT}},
-			{Name: "b", Type: sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_INT}},
-			{Name: "c", Type: sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_BOOL}},
-			{Name: "d", Type: sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_BOOL}},
-			{Name: "e", Type: sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_BOOL}},
-			{Name: "f", Type: sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_BOOL}},
-			{Name: "g", Type: sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_BOOL}},
-			{Name: "h", Type: sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_FLOAT}},
-			{Name: "i", Type: sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_STRING}},
-			{Name: "j", Type: sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_INT}},
-			{Name: "k", Type: sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_BYTES}},
-			{Name: "l", Type: sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_DECIMAL}},
-			{Name: "m", Type: sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_DECIMAL}},
-			{Name: "n", Type: sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_DATE}},
-			{Name: "o", Type: sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_TIMESTAMP}},
-			{Name: "p", Type: sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_TIMESTAMPTZ}},
-		},
-		PrimaryIndex: sqlbase.IndexDescriptor{
-			Name: "primary", Unique: true, ColumnNames: []string{"a"},
-			ColumnDirections: []sqlbase.IndexDescriptor_Direction{sqlbase.IndexDescriptor_ASC},
-		},
-		Privileges:    sqlbase.NewDefaultPrivilegeDescriptor(),
-		FormatVersion: sqlbase.FamilyFormatVersion,
-	}
-}
-
-func makeSelectNode(t *testing.T) *renderNode {
-	desc := testTableDesc()
-	sel := testInitDummySelectNode(desc)
-	if err := desc.AllocateIDs(); err != nil {
-		t.Fatal(err)
-	}
-	numColumns := len(sel.sourceInfo[0].sourceColumns)
-	sel.ivarHelper = parser.MakeIndexedVarHelper(sel, numColumns)
-	sel.curSourceRow = make(parser.Datums, numColumns)
-	return sel
-}
-
-func parseAndNormalizeExpr(
-	t *testing.T, evalCtx *parser.EvalContext, sql string, sel *renderNode,
-) parser.TypedExpr {
-	expr, err := parser.ParseExpr(sql)
-	if err != nil {
-		t.Fatalf("%s: %v", sql, err)
-	}
-
-	// Perform name resolution because {analyze,simplify}Expr want
-	// expressions containing IndexedVars.
-	if expr, _, _, err = sel.resolveNames(expr); err != nil {
-		t.Fatalf("%s: %v", sql, err)
-	}
-	typedExpr, err := parser.TypeCheck(expr, nil, types.Any)
-	if err != nil {
-		t.Fatalf("%s: %v", sql, err)
-	}
-	if typedExpr, err = evalCtx.NormalizeExpr(typedExpr); err != nil {
-		t.Fatalf("%s: %v", sql, err)
-	}
-	return typedExpr
-}
 
 func checkEquivExpr(evalCtx *parser.EvalContext, a, b parser.TypedExpr, sel *renderNode) error {
 	// The expressions above only use the values 1 and 2. Verify that the
@@ -141,8 +72,14 @@ func TestSplitOrExpr(t *testing.T) {
 		t.Run(d.expr+"~"+d.expected, func(t *testing.T) {
 			evalCtx := parser.NewTestingEvalContext()
 			defer evalCtx.Stop(context.Background())
-			sel := makeSelectNode(t)
-			expr := parseAndNormalizeExpr(t, evalCtx, d.expr, sel)
+			sel, err := makeSelectNode()
+			if err != nil {
+				t.Fatal(err)
+			}
+			expr, err := parseAndNormalizeExpr(evalCtx, d.expr, sel)
+			if err != nil {
+				t.Fatal(err)
+			}
 			exprs := splitOrExpr(evalCtx, expr, nil)
 			if s := exprs.String(); d.expected != s {
 				t.Errorf("%s: expected %s, but found %s", d.expr, d.expected, s)
@@ -167,8 +104,14 @@ func TestSplitAndExpr(t *testing.T) {
 		t.Run(d.expr+"~"+d.expected, func(t *testing.T) {
 			evalCtx := parser.NewTestingEvalContext()
 			defer evalCtx.Stop(context.Background())
-			sel := makeSelectNode(t)
-			expr := parseAndNormalizeExpr(t, evalCtx, d.expr, sel)
+			sel, err := makeSelectNode()
+			if err != nil {
+				t.Fatal(err)
+			}
+			expr, err := parseAndNormalizeExpr(evalCtx, d.expr, sel)
+			if err != nil {
+				t.Fatal(err)
+			}
 			exprs := splitAndExpr(evalCtx, expr, nil)
 			if s := exprs.String(); d.expected != s {
 				t.Errorf("%s: expected %s, but found %s", d.expr, d.expected, s)
@@ -294,11 +237,17 @@ func TestSimplifyExpr(t *testing.T) {
 		t.Run(d.expr+"~"+d.expected, func(t *testing.T) {
 			evalCtx := parser.NewTestingEvalContext()
 			defer evalCtx.Stop(context.Background())
-			sel := makeSelectNode(t)
+			sel, err := makeSelectNode()
+			if err != nil {
+				t.Fatal(err)
+			}
 			// We need to manually close this memory account because we're doing the
 			// evals ourselves here.
 			defer evalCtx.ActiveMemAcc.Close(context.Background())
-			expr := parseAndNormalizeExpr(t, evalCtx, d.expr, sel)
+			expr, err := parseAndNormalizeExpr(evalCtx, d.expr, sel)
+			if err != nil {
+				t.Fatal(err)
+			}
 			expr, equiv := simplifyExpr(evalCtx, expr)
 			if s := expr.String(); d.expected != s {
 				t.Errorf("%s: structure: expected %s, but found %s", d.expr, d.expected, s)
@@ -350,8 +299,14 @@ func TestSimplifyNotExpr(t *testing.T) {
 		t.Run(d.expr+"~"+d.expected, func(t *testing.T) {
 			evalCtx := parser.NewTestingEvalContext()
 			defer evalCtx.Stop(context.Background())
-			sel := makeSelectNode(t)
-			expr1 := parseAndNormalizeExpr(t, evalCtx, d.expr, sel)
+			sel, err := makeSelectNode()
+			if err != nil {
+				t.Fatal(err)
+			}
+			expr1, err := parseAndNormalizeExpr(evalCtx, d.expr, sel)
+			if err != nil {
+				t.Fatal(err)
+			}
 			expr2, equiv := simplifyExpr(evalCtx, expr1)
 			if s := expr2.String(); d.expected != s {
 				t.Errorf("%s: expected %s, but found %s", d.expr, d.expected, s)
@@ -387,8 +342,14 @@ func TestSimplifyAndExpr(t *testing.T) {
 		t.Run(d.expr+"~"+d.expected, func(t *testing.T) {
 			evalCtx := parser.NewTestingEvalContext()
 			defer evalCtx.Stop(context.Background())
-			sel := makeSelectNode(t)
-			expr1 := parseAndNormalizeExpr(t, evalCtx, d.expr, sel)
+			sel, err := makeSelectNode()
+			if err != nil {
+				t.Fatal(err)
+			}
+			expr1, err := parseAndNormalizeExpr(evalCtx, d.expr, sel)
+			if err != nil {
+				t.Fatal(err)
+			}
 			expr2, equiv := simplifyExpr(evalCtx, expr1)
 			if s := expr2.String(); d.expected != s {
 				t.Errorf("%s: expected %s, but found %s", d.expr, d.expected, s)
@@ -592,8 +553,14 @@ func TestSimplifyAndExprCheck(t *testing.T) {
 		t.Run(d.expr+"~"+d.expected, func(t *testing.T) {
 			evalCtx := parser.NewTestingEvalContext()
 			defer evalCtx.Stop(context.Background())
-			sel := makeSelectNode(t)
-			expr1 := parseAndNormalizeExpr(t, evalCtx, d.expr, sel)
+			sel, err := makeSelectNode()
+			if err != nil {
+				t.Fatal(err)
+			}
+			expr1, err := parseAndNormalizeExpr(evalCtx, d.expr, sel)
+			if err != nil {
+				t.Fatal(err)
+			}
 			expr2, equiv := simplifyExpr(evalCtx, expr1)
 			if s := expr2.String(); d.expected != s {
 				t.Errorf("%s: expected %s, but found %s", d.expr, d.expected, s)
@@ -601,7 +568,7 @@ func TestSimplifyAndExprCheck(t *testing.T) {
 			if d.checkEquiv != equiv {
 				t.Errorf("%s: expected %v, but found %v", d.expr, d.checkEquiv, equiv)
 			}
-			err := checkEquivExpr(evalCtx, expr1, expr2, sel)
+			err = checkEquivExpr(evalCtx, expr1, expr2, sel)
 			if d.checkEquiv && err != nil {
 				t.Error(err)
 				return
@@ -613,7 +580,10 @@ func TestSimplifyAndExprCheck(t *testing.T) {
 			if _, ok := expr2.(*parser.AndExpr); !ok {
 				// The result was not an AND expression. Re-parse to re-resolve names
 				// and verify that the analysis is commutative.
-				expr1 = parseAndNormalizeExpr(t, evalCtx, d.expr, sel)
+				expr1, err = parseAndNormalizeExpr(evalCtx, d.expr, sel)
+				if err != nil {
+					t.Fatal(err)
+				}
 				andExpr := expr1.(*parser.AndExpr)
 				andExpr.Left, andExpr.Right = andExpr.Right, andExpr.Left
 				expr3, equiv := simplifyExpr(evalCtx, andExpr)
@@ -644,8 +614,14 @@ func TestSimplifyOrExpr(t *testing.T) {
 		t.Run(d.expr+"~"+d.expected, func(t *testing.T) {
 			evalCtx := parser.NewTestingEvalContext()
 			defer evalCtx.Stop(context.Background())
-			sel := makeSelectNode(t)
-			expr1 := parseAndNormalizeExpr(t, evalCtx, d.expr, sel)
+			sel, err := makeSelectNode()
+			if err != nil {
+				t.Fatal(err)
+			}
+			expr1, err := parseAndNormalizeExpr(evalCtx, d.expr, sel)
+			if err != nil {
+				t.Fatal(err)
+			}
 			expr2, _ := simplifyExpr(evalCtx, expr1)
 			if s := expr2.String(); d.expected != s {
 				t.Errorf("%s: expected %s, but found %s", d.expr, d.expected, s)
@@ -819,8 +795,14 @@ func TestSimplifyOrExprCheck(t *testing.T) {
 		t.Run(d.expr+"~"+d.expected, func(t *testing.T) {
 			evalCtx := parser.NewTestingEvalContext()
 			defer evalCtx.Stop(context.Background())
-			sel := makeSelectNode(t)
-			expr1 := parseAndNormalizeExpr(t, evalCtx, d.expr, sel)
+			sel, err := makeSelectNode()
+			if err != nil {
+				t.Fatal(err)
+			}
+			expr1, err := parseAndNormalizeExpr(evalCtx, d.expr, sel)
+			if err != nil {
+				t.Fatal(err)
+			}
 			expr2, equiv := simplifyExpr(evalCtx, expr1)
 			if s := expr2.String(); d.expected != s {
 				t.Errorf("%s: expected %s, but found %s", d.expr, d.expected, s)
@@ -837,7 +819,10 @@ func TestSimplifyOrExprCheck(t *testing.T) {
 			if _, ok := expr2.(*parser.OrExpr); !ok {
 				// The result was not an OR expression. Re-parse to re-resolve names
 				// and verify that the analysis is commutative.
-				expr1 = parseAndNormalizeExpr(t, evalCtx, d.expr, sel)
+				expr1, err = parseAndNormalizeExpr(evalCtx, d.expr, sel)
+				if err != nil {
+					t.Fatal(err)
+				}
 				orExpr := expr1.(*parser.OrExpr)
 				orExpr.Left, orExpr.Right = orExpr.Right, orExpr.Left
 				expr3, equiv := simplifyExpr(evalCtx, orExpr)

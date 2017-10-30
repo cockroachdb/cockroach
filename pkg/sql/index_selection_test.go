@@ -163,29 +163,6 @@ func makeTestIndexFromStr(
 	return makeTestIndex(t, columns, dirs)
 }
 
-func makeConstraints(
-	t *testing.T,
-	evalCtx *parser.EvalContext,
-	sql string,
-	desc *sqlbase.TableDescriptor,
-	index *sqlbase.IndexDescriptor,
-	sel *renderNode,
-) (orIndexConstraints, parser.TypedExpr) {
-	expr := parseAndNormalizeExpr(t, evalCtx, sql, sel)
-	exprs, equiv := analyzeExpr(evalCtx, expr)
-
-	c := &indexInfo{
-		desc:     desc,
-		index:    index,
-		covering: true,
-	}
-	c.analyzeExprs(evalCtx, exprs)
-	if equiv && len(exprs) == 1 {
-		expr = joinAndExprs(exprs[0])
-	}
-	return c.constraints, expr
-}
-
 func TestMakeConstraints(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
@@ -326,9 +303,15 @@ func TestMakeConstraints(t *testing.T) {
 		t.Run(d.expr+"~"+d.expected, func(t *testing.T) {
 			evalCtx := parser.NewTestingEvalContext()
 			defer evalCtx.Stop(context.Background())
-			sel := makeSelectNode(t)
+			sel, err := makeSelectNode()
+			if err != nil {
+				t.Fatal(err)
+			}
 			desc, index := makeTestIndexFromStr(t, d.columns)
-			constraints, _ := makeConstraints(t, evalCtx, d.expr, desc, index, sel)
+			constraints, _, err := makeConstraints(evalCtx, d.expr, desc, index, sel)
+			if err != nil {
+				t.Fatal(err)
+			}
 			if s := constraints.String(); d.expected != s {
 				t.Errorf("%s, columns: %s: expected %s, but found %s", d.expr, d.columns, d.expected, s)
 			}
@@ -532,17 +515,13 @@ func TestMakeSpans(t *testing.T) {
 				expected = d.expectedDesc
 			}
 			t.Run(d.expr+"~"+expected, func(t *testing.T) {
-				evalCtx := parser.NewTestingEvalContext()
-				defer evalCtx.Stop(context.Background())
-				sel := makeSelectNode(t)
 				columns := strings.Split(d.columns, ",")
 				dirs := make([]encoding.Direction, 0, len(columns))
 				for range columns {
 					dirs = append(dirs, dir)
 				}
 				desc, index := makeTestIndex(t, columns, dirs)
-				constraints, _ := makeConstraints(t, evalCtx, d.expr, desc, index, sel)
-				spans, err := makeSpans(evalCtx, constraints, desc, index)
+				spans, err := makeTestSpansWithConstraints(desc, index, d.expr)
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -581,12 +560,8 @@ func TestMakeSpans(t *testing.T) {
 	}
 	for _, d := range testData2 {
 		t.Run(d.expr+"~"+d.expected, func(t *testing.T) {
-			evalCtx := parser.NewTestingEvalContext()
-			defer evalCtx.Stop(context.Background())
-			sel := makeSelectNode(t)
 			desc, index := makeTestIndexFromStr(t, d.columns)
-			constraints, _ := makeConstraints(t, evalCtx, d.expr, desc, index, sel)
-			spans, err := makeSpans(evalCtx, constraints, desc, index)
+			spans, err := makeTestSpansWithConstraints(desc, index, d.expr)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -674,9 +649,15 @@ func TestExactPrefix(t *testing.T) {
 		t.Run(fmt.Sprintf("%s~%d", d.expr, d.expected), func(t *testing.T) {
 			evalCtx := parser.NewTestingEvalContext()
 			defer evalCtx.Stop(context.Background())
-			sel := makeSelectNode(t)
+			sel, err := makeSelectNode()
+			if err != nil {
+				t.Fatal(err)
+			}
 			desc, index := makeTestIndexFromStr(t, d.columns)
-			constraints, _ := makeConstraints(t, evalCtx, d.expr, desc, index, sel)
+			constraints, _, err := makeConstraints(evalCtx, d.expr, desc, index, sel)
+			if err != nil {
+				t.Fatal(err)
+			}
 			prefix := constraints.exactPrefix(evalCtx)
 			if d.expected != prefix {
 				t.Errorf("%s: expected %d, but found %d", d.expr, d.expected, prefix)
@@ -751,9 +732,15 @@ func TestApplyConstraints(t *testing.T) {
 		t.Run(d.expr+"~"+d.expected, func(t *testing.T) {
 			evalCtx := parser.NewTestingEvalContext()
 			defer evalCtx.Stop(context.Background())
-			sel := makeSelectNode(t)
+			sel, err := makeSelectNode()
+			if err != nil {
+				t.Fatal(err)
+			}
 			desc, index := makeTestIndexFromStr(t, d.columns)
-			constraints, expr := makeConstraints(t, evalCtx, d.expr, desc, index, sel)
+			constraints, expr, err := makeConstraints(evalCtx, d.expr, desc, index, sel)
+			if err != nil {
+				t.Fatal(err)
+			}
 			expr2 := applyIndexConstraints(evalCtx, expr, constraints)
 			if s := fmt.Sprint(expr2); d.expected != s {
 				t.Errorf("%s: expected %s, but found %s (constraints %s)", d.expr, d.expected, s, constraints)

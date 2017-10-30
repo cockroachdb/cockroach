@@ -14,7 +14,17 @@
 
 package distsqlrun
 
-import "github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+import (
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+)
+
+// MakeTestSpans creates a set of spans that have the SQL constraints/filters
+// specified by constraint string for testing.
+// For example, if there is a column "foo" then constraint might be "foo < 5".
+// To circumvent circular dependencies: this is initialized in
+// index_selection.go.
+var MakeTestSpans func(desc *sqlbase.TableDescriptor, index *sqlbase.IndexDescriptor, constraint string) (roachpb.Spans, error)
 
 // RepeatableRowSource is a RowSource used in benchmarks to avoid having to
 // reinitialize a new RowSource every time during multiple passes of the input.

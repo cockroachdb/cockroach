@@ -12,3 +12,9 @@
     by a server running older versions, hence the version bump. However, a
     server running v7 can still process all plans from servers running v6,
     thus the MinAcceptedVersion is kept at 6.
+- Version: 8 (MinAcceptedVersion: 6)
+  - An InterleaveReaderJoiner processor was introduced to enable more efficient
+    joins between interleaved tables. The new processor spec would be
+    unrecognized by a server running older versions, hence the version bump.
+    Servers running v7 can still execute regular joins between interleaved
+    tables from servers running v6, thus the MinAcceptedVersion is kept at 6.

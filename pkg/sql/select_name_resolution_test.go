@@ -18,27 +18,8 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
-
-func testInitDummySelectNode(desc *sqlbase.TableDescriptor) *renderNode {
-	p := makeTestPlanner()
-	scan := &scanNode{p: p}
-	scan.desc = desc
-	// Note: scan.initDescDefaults only returns an error if its 2nd argument is not nil.
-	_ = scan.initDescDefaults(publicColumns, nil)
-
-	sel := &renderNode{planner: p}
-	sel.source.plan = scan
-	testName := parser.TableName{TableName: parser.Name(desc.Name), DatabaseName: parser.Name("test")}
-	cols := planColumns(scan)
-	sel.source.info = newSourceInfoForSingleTable(testName, cols)
-	sel.sourceInfo = multiSourceInfo{sel.source.info}
-	sel.ivarHelper = parser.MakeIndexedVarHelper(sel, len(cols))
-
-	return sel
-}
 
 // Test that we can resolve the names in an expression that has already been
 // resolved.

@@ -44,8 +44,12 @@ type Processor interface {
 // the output of a processor.
 type ProcOutputHelper struct {
 	numInternalCols int
-	output          RowReceiver
-	rowAlloc        sqlbase.EncDatumRowAlloc
+	// output can be optionally passed in for use with EmitRow and
+	// emitHelper.
+	// If output is nil, one can invoke ProcessRow to obtain the
+	// post-processed row directly.
+	output   RowReceiver
+	rowAlloc sqlbase.EncDatumRowAlloc
 
 	filter *exprHelper
 	// renderExprs is set if we have a rendering. Only one of renderExprs and
@@ -202,6 +206,9 @@ func emitHelper(
 	meta ProducerMetadata,
 	inputs ...RowSource,
 ) bool {
+	if output.output == nil {
+		panic("output RowReceiver not initialized for emitting")
+	}
 	var consumerStatus ConsumerStatus
 	if !meta.Empty() {
 		if row != nil {
@@ -253,27 +260,67 @@ func emitHelper(
 func (h *ProcOutputHelper) EmitRow(
 	ctx context.Context, row sqlbase.EncDatumRow,
 ) (ConsumerStatus, error) {
-	if h.rowIdx >= h.maxRowIdx {
+	if h.output == nil {
+		panic("output RowReceiver not initialized for emitting rows")
+	}
+
+	outRow, status, err := h.ProcessRow(ctx, row)
+	// If outRow is nil, either a drain was requested or the row was filtered
+	// out.
+	// If an error occurred, we need to return that here.
+	if outRow == nil || err != nil {
+		return status, err
+	}
+
+	if log.V(3) {
+		log.InfofDepth(ctx, 1, "pushing row %s", outRow)
+	}
+	if r := h.output.Push(outRow, ProducerMetadata{}); r != NeedMoreRows {
+		log.VEventf(ctx, 1, "no more rows required. drain requested: %t",
+			r == DrainRequested)
+		return r, nil
+	}
+	if h.rowIdx == h.maxRowIdx {
+		log.VEventf(ctx, 1, "hit row limit; asking producer to drain")
 		return DrainRequested, nil
 	}
+	return NeedMoreRows, nil
+}
+
+// ProcessRow sends the invoked row through the post-processing stage and returns
+// the post-processed row.
+//
+// It returns the ConsumerStatus which is interpreted as if there was a consumer
+// consuming the row.
+//
+// ProcessRow is intended for post-processing a row without requiring an actual
+// output RowReceiver.
+func (h *ProcOutputHelper) ProcessRow(
+	ctx context.Context, row sqlbase.EncDatumRow,
+) (sqlbase.EncDatumRow, ConsumerStatus, error) {
+	if h.rowIdx >= h.maxRowIdx {
+		return nil, DrainRequested, nil
+	}
+
 	if h.filter != nil {
 		// Filtering.
 		passes, err := h.filter.evalFilter(row)
 		if err != nil {
-			return ConsumerClosed, err
+			return nil, ConsumerClosed, err
 		}
 		if !passes {
 			if log.V(3) {
 				log.Infof(ctx, "filtered out row %s", row.String(h.filter.types))
 			}
-			return NeedMoreRows, nil
+			return nil, NeedMoreRows, nil
 		}
 	}
 	h.rowIdx++
 	if h.rowIdx <= h.offset {
 		// Suppress row.
-		return NeedMoreRows, nil
+		return nil, NeedMoreRows, nil
 	}
+
 	var outRow sqlbase.EncDatumRow
 	if h.renderExprs != nil {
 		// Rendering.
@@ -281,7 +328,7 @@ func (h *ProcOutputHelper) EmitRow(
 		for i := range h.renderExprs {
 			datum, err := h.renderExprs[i].eval(row)
 			if err != nil {
-				return ConsumerClosed, err
+				return nil, ConsumerClosed, err
 			}
 			outRow[i] = sqlbase.DatumToEncDatum(h.outputTypes[i], datum)
 		}
@@ -296,19 +343,8 @@ func (h *ProcOutputHelper) EmitRow(
 		outRow = h.rowAlloc.AllocRow(len(row))
 		copy(outRow, row)
 	}
-	if log.V(3) {
-		log.InfofDepth(ctx, 1, "pushing row %s", outRow)
-	}
-	if r := h.output.Push(outRow, ProducerMetadata{}); r != NeedMoreRows {
-		log.VEventf(ctx, 1, "no more rows required. drain requested: %t",
-			r == DrainRequested)
-		return r, nil
-	}
-	if h.rowIdx == h.maxRowIdx {
-		log.VEventf(ctx, 1, "hit row limit; asking producer to drain")
-		return DrainRequested, nil
-	}
-	return NeedMoreRows, nil
+
+	return outRow, NeedMoreRows, nil
 }
 
 // Close signals to the output that there will be no more rows.
