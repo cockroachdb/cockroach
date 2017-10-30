@@ -61,7 +61,7 @@ const livenessCheckedAtSelector = (state: AdminUIState) => state.cachedData.live
  * livenessByNodeIDSelector returns a map from NodeID to the Liveness record for
  * that node.
  */
-const livenessByNodeIDSelector = createSelector(
+export const livenessByNodeIDSelector = createSelector(
   livenessesSelector,
   (livenesses) => {
     if (livenesses) {
