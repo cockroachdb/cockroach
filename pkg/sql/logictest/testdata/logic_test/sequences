@@ -1,0 +1,58 @@
+# sequence creation
+
+statement ok
+CREATE SEQUENCE foo
+
+# can't create again
+statement error relation "foo" already exists
+CREATE SEQUENCE foo
+
+# same namespace as tables
+statement error relation "foo" already exists
+CREATE TABLE foo (k BYTES PRIMARY KEY, v BYTES)
+
+# can't create with 0 increment
+statement error INCREMENT must not be zero
+CREATE SEQUENCE zero_test INCREMENT 0
+
+# using the nextval() function
+
+query I
+SELECT nextval('foo')
+----
+1
+
+query I
+SELECT nextval('foo')
+----
+2
+
+# sequence with different increment
+
+statement ok
+CREATE SEQUENCE bar INCREMENT 5
+
+query I
+SELECT nextval('bar')
+----
+1
+
+query I
+SELECT nextval('bar')
+----
+6
+
+# sequence with different start and increment
+
+statement ok
+CREATE SEQUENCE baz START 2 INCREMENT 5
+
+query I
+SELECT nextval('baz')
+----
+2
+
+query I
+SELECT nextval('baz')
+----
+7
