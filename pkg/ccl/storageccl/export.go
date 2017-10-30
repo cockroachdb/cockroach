@@ -112,7 +112,7 @@ func evalExport(
 	// threshold. If it's not, the mvcc tombstones could have been deleted and
 	// the resulting RocksDB tombstones compacted, which means we'd miss
 	// deletions in the incremental backup.
-	gcThreshold, err := cArgs.EvalCtx.GCThreshold()
+	gcThreshold, err := cArgs.EvalCtx.GetGCThreshold()
 	if err != nil {
 		return storage.EvalResult{}, err
 	}

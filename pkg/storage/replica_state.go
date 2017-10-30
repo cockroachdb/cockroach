@@ -120,107 +120,150 @@ func writeInitialState(
 // that corresponds to (mutable) on-disk data must be registered in
 // the SpanSet if one is given.
 type ReplicaEvalContext struct {
-	repl *Replica
-	ss   *SpanSet
+	i  ReplicaI
+	ss *SpanSet
+}
+
+// AbortSpan returns the abort span.
+func (rec *ReplicaEvalContext) AbortSpan() *abortspan.AbortSpan {
+	return rec.i.AbortSpan()
+}
+
+// StoreTestingKnobs returns the StoreTestingKnobs.
+func (rec *ReplicaEvalContext) StoreTestingKnobs() StoreTestingKnobs {
+	return rec.i.StoreTestingKnobs()
+}
+
+// StoreID returns the StoreID.
+func (rec *ReplicaEvalContext) StoreID() roachpb.StoreID {
+	return rec.i.StoreID()
+}
+
+// GetRangeID returns the RangeID.
+func (rec *ReplicaEvalContext) GetRangeID() roachpb.RangeID {
+	return rec.i.GetRangeID()
+}
+
+// ClusterSettings returns the cluster settings.
+func (rec *ReplicaEvalContext) ClusterSettings() *cluster.Settings {
+	return rec.i.ClusterSettings()
 }
 
 // ClusterSettings returns the node's ClusterSettings.
-func (rec ReplicaEvalContext) ClusterSettings() *cluster.Settings {
-	return rec.repl.store.cfg.Settings
+func (r *Replica) ClusterSettings() *cluster.Settings {
+	return r.store.cfg.Settings
 }
 
 func (rec *ReplicaEvalContext) makeReplicaStateLoader() stateloader.StateLoader {
-	return stateloader.Make(rec.ClusterSettings(), rec.RangeID())
+	return stateloader.Make(rec.ClusterSettings(), rec.GetRangeID())
 }
 
 // In-memory state, immutable fields, and debugging methods are accessed directly.
 
-// NodeID returns the Replica's NodeID.
-func (rec ReplicaEvalContext) NodeID() roachpb.NodeID {
-	return rec.repl.NodeID()
-}
-
 // StoreID returns the Replica's StoreID.
-func (rec ReplicaEvalContext) StoreID() roachpb.StoreID {
-	return rec.repl.store.StoreID()
-}
-
-// RangeID returns the Replica's RangeID.
-func (rec ReplicaEvalContext) RangeID() roachpb.RangeID {
-	return rec.repl.RangeID
-}
-
-// IsFirstRange returns true if this replica is the first range in the
-// system.
-func (rec ReplicaEvalContext) IsFirstRange() bool {
-	return rec.repl.IsFirstRange()
-}
-
-// String returns a string representation of the Replica.
-func (rec ReplicaEvalContext) String() string {
-	return rec.repl.String()
+func (r *Replica) StoreID() roachpb.StoreID {
+	return r.store.StoreID()
 }
 
 // StoreTestingKnobs returns the Replica's StoreTestingKnobs.
-func (rec ReplicaEvalContext) StoreTestingKnobs() StoreTestingKnobs {
-	return rec.repl.store.cfg.TestingKnobs
+func (r *Replica) StoreTestingKnobs() StoreTestingKnobs {
+	return r.store.cfg.TestingKnobs
 }
 
 // Tracer returns the Replica's Tracer.
-func (rec ReplicaEvalContext) Tracer() opentracing.Tracer {
-	return rec.repl.store.Tracer()
+func (r *Replica) Tracer() opentracing.Tracer {
+	return r.store.Tracer()
 }
 
 // DB returns the Replica's client DB.
-func (rec ReplicaEvalContext) DB() *client.DB {
-	return rec.repl.store.DB()
+func (rec *ReplicaEvalContext) DB() *client.DB {
+	return rec.i.DB()
+}
+
+// DB returns the Replica's client DB.
+func (r *Replica) DB() *client.DB {
+	return r.store.DB()
 }
 
 // Engine returns the Replica's underlying Engine. In most cases the
 // evaluation Batch should be used instead.
-func (rec ReplicaEvalContext) Engine() engine.Engine {
-	return rec.repl.store.Engine()
+func (r *Replica) Engine() engine.Engine {
+	return r.store.Engine()
 }
 
 // AbortSpan returns the Replica's AbortSpan.
-func (rec ReplicaEvalContext) AbortSpan() *abortspan.AbortSpan {
+func (r *Replica) AbortSpan() *abortspan.AbortSpan {
 	// Despite its name, the AbortSpan doesn't hold on-disk data in
 	// memory. It just provides methods that take a Batch, so SpanSet
 	// declarations are enforced there.
-	return rec.repl.abortSpan
+	return r.abortSpan
 }
 
-// pushTxnQueue returns the Replica's pushTxnQueue.
-func (rec ReplicaEvalContext) pushTxnQueue() *pushTxnQueue {
-	return rec.repl.pushTxnQueue
+// GetPushTxnQueue returns the PushTxnQueue.
+func (rec *ReplicaEvalContext) GetPushTxnQueue() *PushTxnQueue {
+	return rec.i.GetPushTxnQueue()
 }
 
-// FirstIndex returns the oldest index in the raft log.
-func (rec ReplicaEvalContext) FirstIndex() (uint64, error) {
-	return rec.repl.GetFirstIndex()
+// GetPushTxnQueue returns the Replica's pushTxnQueue.
+func (r *Replica) GetPushTxnQueue() *PushTxnQueue {
+	return r.pushTxnQueue
 }
 
-// Term returns the term of the given entry in the raft log.
-func (rec ReplicaEvalContext) Term(i uint64) (uint64, error) {
-	rec.repl.mu.RLock()
-	defer rec.repl.mu.RUnlock()
-	return rec.repl.raftTermRLocked(i)
+// GetTerm returns the term for the given index in the Raft log.
+func (rec *ReplicaEvalContext) GetTerm(i uint64) (uint64, error) {
+	return rec.i.GetTerm(i)
+}
+
+// GetTerm returns the term of the given index in the raft log.
+func (r *Replica) GetTerm(i uint64) (uint64, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.raftTermRLocked(i)
+}
+
+// NodeID returns the NodeID.
+func (rec *ReplicaEvalContext) NodeID() roachpb.NodeID {
+	return rec.i.NodeID()
+}
+
+// Tracer returns the tracer.
+func (rec *ReplicaEvalContext) Tracer() opentracing.Tracer {
+	return rec.i.Tracer()
+}
+
+// Engine returns the engine.
+func (rec *ReplicaEvalContext) Engine() engine.Engine {
+	return rec.i.Engine()
+}
+
+// GetFirstIndex returns the first index.
+func (rec *ReplicaEvalContext) GetFirstIndex() (uint64, error) {
+	return rec.i.GetFirstIndex()
+}
+
+// IsFirstRange returns true iff the replica belongs to the first range.
+func (rec *ReplicaEvalContext) IsFirstRange() bool {
+	return rec.i.IsFirstRange()
 }
 
 // Fields backed by on-disk data must be registered in the SpanSet.
 
 // Desc returns the Replica's RangeDescriptor.
 func (rec ReplicaEvalContext) Desc() (*roachpb.RangeDescriptor, error) {
-	rec.repl.mu.RLock()
-	defer rec.repl.mu.RUnlock()
+	desc := rec.i.Desc()
 	if rec.ss != nil {
 		if err := rec.ss.checkAllowed(SpanReadOnly,
-			roachpb.Span{Key: keys.RangeDescriptorKey(rec.repl.mu.state.Desc.StartKey)},
+			roachpb.Span{Key: keys.RangeDescriptorKey(desc.StartKey)},
 		); err != nil {
 			return nil, err
 		}
 	}
-	return rec.repl.mu.state.Desc, nil
+	return desc, nil
+}
+
+// GetRangeID returns the Range ID.
+func (r *Replica) GetRangeID() roachpb.RangeID {
+	return r.RangeID
 }
 
 // ContainsKey returns true if the given key is within the Replica's range.
@@ -228,59 +271,69 @@ func (rec ReplicaEvalContext) Desc() (*roachpb.RangeDescriptor, error) {
 // TODO(bdarnell): Replace this method with one on Desc(). See comment
 // on Replica.ContainsKey.
 func (rec ReplicaEvalContext) ContainsKey(key roachpb.Key) (bool, error) {
-	rec.repl.mu.RLock()
-	defer rec.repl.mu.RUnlock()
+	desc := rec.i.Desc()
 	if rec.ss != nil {
 		if err := rec.ss.checkAllowed(SpanReadOnly,
-			roachpb.Span{Key: keys.RangeDescriptorKey(rec.repl.mu.state.Desc.StartKey)},
+			roachpb.Span{Key: keys.RangeDescriptorKey(desc.StartKey)},
 		); err != nil {
 			return false, err
 		}
 	}
-	return containsKey(*rec.repl.mu.state.Desc, key), nil
+	return containsKey(*desc, key), nil
 }
 
 // GetMVCCStats returns the Replica's MVCCStats.
 func (rec ReplicaEvalContext) GetMVCCStats() (enginepb.MVCCStats, error) {
 	if rec.ss != nil {
 		if err := rec.ss.checkAllowed(SpanReadOnly,
-			roachpb.Span{Key: keys.RangeStatsKey(rec.RangeID())},
+			roachpb.Span{Key: keys.RangeStatsKey(rec.GetRangeID())},
 		); err != nil {
 			return enginepb.MVCCStats{}, err
 		}
 	}
-	return rec.repl.GetMVCCStats(), nil
+	return rec.i.GetMVCCStats(), nil
 }
 
-// GCThreshold returns the GC threshold of the Range, typically updated when
+// GetGCThreshold returns the GC threshold of the Range, typically updated when
 // keys are garbage collected. Reads and writes at timestamps <= this time will
 // not be served.
-func (rec ReplicaEvalContext) GCThreshold() (hlc.Timestamp, error) {
+func (rec ReplicaEvalContext) GetGCThreshold() (hlc.Timestamp, error) {
 	if rec.ss != nil {
 		if err := rec.ss.checkAllowed(SpanReadOnly,
-			roachpb.Span{Key: keys.RangeLastGCKey(rec.RangeID())},
+			roachpb.Span{Key: keys.RangeLastGCKey(rec.GetRangeID())},
 		); err != nil {
 			return hlc.Timestamp{}, err
 		}
 	}
-	rec.repl.mu.RLock()
-	defer rec.repl.mu.RUnlock()
-	return *rec.repl.mu.state.GCThreshold, nil
+	return rec.i.GetGCThreshold(), nil
 }
 
-// TxnSpanGCThreshold returns the time of the Replica's last
+// GetGCThreshold returns the GC threshold.
+func (r *Replica) GetGCThreshold() hlc.Timestamp {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return *r.mu.state.GCThreshold
+}
+
+// GetTxnSpanGCThreshold returns the time of the Replica's last
 // transaction span GC.
-func (rec ReplicaEvalContext) TxnSpanGCThreshold() (hlc.Timestamp, error) {
+func (rec ReplicaEvalContext) GetTxnSpanGCThreshold() (hlc.Timestamp, error) {
 	if rec.ss != nil {
 		if err := rec.ss.checkAllowed(SpanReadOnly,
-			roachpb.Span{Key: keys.RangeTxnSpanGCThresholdKey(rec.RangeID())},
+			roachpb.Span{Key: keys.RangeTxnSpanGCThresholdKey(rec.GetRangeID())},
 		); err != nil {
 			return hlc.Timestamp{}, err
 		}
 	}
-	rec.repl.mu.RLock()
-	defer rec.repl.mu.RUnlock()
-	return *rec.repl.mu.state.TxnSpanGCThreshold, nil
+	return rec.i.GetTxnSpanGCThreshold(), nil
+}
+
+// GetTxnSpanGCThreshold returns the time of the replica's last transaction span
+// GC.
+func (r *Replica) GetTxnSpanGCThreshold() hlc.Timestamp {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return *r.mu.state.TxnSpanGCThreshold
 }
 
 // GetLastReplicaGCTimestamp returns the last time the Replica was
@@ -290,23 +343,23 @@ func (rec ReplicaEvalContext) GetLastReplicaGCTimestamp(
 ) (hlc.Timestamp, error) {
 	if rec.ss != nil {
 		if err := rec.ss.checkAllowed(SpanReadOnly,
-			roachpb.Span{Key: keys.RangeLastReplicaGCTimestampKey(rec.RangeID())},
+			roachpb.Span{Key: keys.RangeLastReplicaGCTimestampKey(rec.GetRangeID())},
 		); err != nil {
 			return hlc.Timestamp{}, err
 		}
 	}
-	return rec.repl.getLastReplicaGCTimestamp(ctx)
+	return rec.i.GetLastReplicaGCTimestamp(ctx)
 }
 
 // GetLease returns the Replica's current and next lease (if any).
 func (rec ReplicaEvalContext) GetLease() (roachpb.Lease, *roachpb.Lease, error) {
 	if rec.ss != nil {
 		if err := rec.ss.checkAllowed(SpanReadOnly,
-			roachpb.Span{Key: keys.RangeLeaseKey(rec.RangeID())},
+			roachpb.Span{Key: keys.RangeLeaseKey(rec.GetRangeID())},
 		); err != nil {
 			return roachpb.Lease{}, nil, err
 		}
 	}
-	lease, nextLease := rec.repl.getLease()
+	lease, nextLease := rec.i.GetLease()
 	return lease, nextLease, nil
 }

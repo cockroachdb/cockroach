@@ -100,7 +100,7 @@ func TestDeclareKeysResolveIntent(t *testing.T) {
 					h.RangeID = desc.RangeID
 
 					cArgs := CommandArgs{Header: h}
-					cArgs.EvalCtx.repl = &Replica{abortSpan: ac}
+					cArgs.EvalCtx.i = &Replica{abortSpan: ac}
 
 					if !ranged {
 						cArgs.Args = &ri
