@@ -617,8 +617,7 @@ message TableDescriptor {
     optional bool cycle = 6 [(gogoproto.nullable) = false];
   }
 
-  // The presence of sequence_settings indicates that this descriptor is for a sequence
-  // (a pseudo-table with one row).
+  // The presence of sequence_settings indicates that this descriptor is for a sequence.
   optional SequenceSettings sequence_settings = 28;
 }
 

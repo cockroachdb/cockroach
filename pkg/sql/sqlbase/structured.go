@@ -321,6 +321,31 @@ func (desc *TableDescriptor) TypeName() string {
 	return "relation"
 }
 
+// TODO(vilterp): make up "Kind"; do we already have consistent terminology for "relation" vs
+// "table/view/sequence"?
+
+// KindName returns what kind of database object this descriptor describes.
+func (desc *TableDescriptor) KindName() string {
+	if desc.IsTable() {
+		return "table"
+	} else if desc.IsView() {
+		return "view"
+	} else {
+		return "sequence"
+	}
+}
+
+// KindNamePlural returns the plural form of the kind of database object this descriptor describes.
+func (desc *TableDescriptor) KindNamePlural() string {
+	if desc.IsTable() {
+		return "tables"
+	} else if desc.IsView() {
+		return "views"
+	} else {
+		return "sequences"
+	}
+}
+
 // SetName implements the DescriptorProto interface.
 func (desc *TableDescriptor) SetName(name string) {
 	desc.Name = name
@@ -335,13 +360,19 @@ func (desc *TableDescriptor) IsEmpty() bool {
 // IsTable returns true if the TableDescriptor actually describes a
 // Table resource, as opposed to a different resource (like a View).
 func (desc *TableDescriptor) IsTable() bool {
-	return !desc.IsView()
+	return !desc.IsView() && !desc.IsSequence()
 }
 
 // IsView returns true if the TableDescriptor actually describes a
 // View resource rather than a Table.
 func (desc *TableDescriptor) IsView() bool {
 	return desc.ViewQuery != ""
+}
+
+// IsSequence returns true if the TableDescriptor actually describes a
+// Sequence resource rather than a Table.
+func (desc *TableDescriptor) IsSequence() bool {
+	return desc.SequenceSettings != nil
 }
 
 // IsVirtualTable returns true if the TableDescriptor describes a
@@ -985,6 +1016,10 @@ func (desc *TableDescriptor) ValidateTable() error {
 
 	// TODO(dt, nathan): virtual descs don't validate (missing privs, PK, etc).
 	if desc.IsVirtualTable() {
+		return nil
+	}
+
+	if desc.IsSequence() {
 		return nil
 	}
 

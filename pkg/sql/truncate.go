@@ -58,7 +58,9 @@ func (p *planner) Truncate(ctx context.Context, n *parser.Truncate) (planNode, e
 		}
 		// We don't support truncation on views, only real tables.
 		if !tableDesc.IsTable() {
-			return nil, errors.Errorf("cannot run TRUNCATE on view %q - views are not updateable", tn)
+			return nil, errors.Errorf(
+				"cannot run TRUNCATE on %s %q - %s are not updateable",
+				tableDesc.KindName(), tn, tableDesc.KindNamePlural())
 		}
 
 		if err := p.CheckPrivilege(tableDesc, privilege.DROP); err != nil {
