@@ -206,11 +206,11 @@ message PartitioningDescriptor {
 
   // Range represents a range partitioning, which maps ranges of tuples to
   // partitions by specifying exclusive upper bounds. The range partitions in a
-  // PartitioningDescriptor are required be sorted by values_less_than.
+  // PartitioningDescriptor are required be sorted by UpperBound.
   message Range {
     // Name is the partition name.
     optional string name = 1 [(gogoproto.nullable) = false];
-    // UpperBound is exclusive upper bound of this range partition. It is
+    // UpperBound is the exclusive upper bound of this range partition. It is
     // encoded with the EncDatum value encoding. MAXVALUE is encoded as NOT NULL.
     optional bytes upper_bound = 2;
     // Subpartitioning represents a further partitioning of this range partition.
