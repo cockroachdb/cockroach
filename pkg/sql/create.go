@@ -1344,8 +1344,8 @@ func (n *createSequenceNode) makeSequenceTableDesc(
 		}
 	}
 	if settings.Increment == 0 {
-		// TODO(vilterp) map to a PG error code
-		return desc, fmt.Errorf("INCREMENT must not be 0")
+		return desc, pgerror.NewError(
+			pgerror.CodeInvalidParameterValueError, "INCREMENT must not be zero")
 	}
 	isAscending := settings.Increment > 0
 
@@ -1831,11 +1831,13 @@ func (n *createSequenceNode) Start(params runParams) error {
 	// initialize the sequence value
 	seqValueKey := keys.MakeSequenceKey(uint32(id))
 
-	// TODO(vilterp): base this on user-specified start value
 	seqStartValue := &roachpb.Value{}
-	seqStartValue.SetInt(int64(0))
+	seqStartValue.SetInt(desc.SequenceSettings.Start - desc.SequenceSettings.Increment)
 
 	b := &client.Batch{}
+	// TODO(vilterp): setting with Put then incrementing with Inc is not supposed to work, but does.
+	// the Inc doc comments say keys you Inc are supposed to have been created with Inc
+	// and never touched by anything else. But idk how it would know that.
 	b.Put(seqValueKey, seqStartValue)
 	n.p.txn.Run(params.ctx, b)
 
