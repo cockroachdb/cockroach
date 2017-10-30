@@ -36,6 +36,7 @@ type initFetcherArgs struct {
 	tableDesc       *TableDescriptor
 	indexIdx        int
 	valNeededForCol util.FastIntSet
+	spans           roachpb.Spans
 }
 
 func initFetcher(
@@ -62,6 +63,7 @@ func initFetcher(
 		}
 
 		fetcherArgs[i] = MultiRowFetcherTableArgs{
+			Spans:            entry.spans,
 			Desc:             entry.tableDesc,
 			Index:            index,
 			ColIdxMap:        colIdxMap,
@@ -664,15 +666,16 @@ func TestNextRowInterleave(t *testing.T) {
 				}
 				idLookups[idLookupKey(tableDesc.ID, indexID)] = entry
 
+				// We take every entry's index span (primary or
+				// secondary) and use it to start our scan.
+				lookupSpans[i] = tableDesc.IndexSpan(indexID)
+
 				args[i] = initFetcherArgs{
 					tableDesc:       tableDesc,
 					indexIdx:        entry.indexIdx,
 					valNeededForCol: entry.valNeededForCol,
+					spans:           roachpb.Spans{lookupSpans[i]},
 				}
-
-				// We take every entry's index span (primary or
-				// secondary) and use it to start our scan.
-				lookupSpans[i] = tableDesc.IndexSpan(indexID)
 			}
 
 			lookupSpans, _ = roachpb.MergeSpans(lookupSpans)
@@ -744,11 +747,17 @@ func TestNextRowInterleave(t *testing.T) {
 				}
 			}
 
-			for tableIdxName, actual := range count {
-				// tableIdxName is formatted as tableName@indexName.
-				tableName := strings.Split(tableIdxName, "@")[0]
-				if tableArgs[tableName].nRows != actual {
-					t.Fatalf("for table %s expected %d rows, got %d rows", tableName, tableArgs[tableName].nRows, actual)
+			for _, entry := range entries {
+				lookup := fmt.Sprintf("%s@%s", entry.tableName, entry.indexName)
+
+				actual, ok := count[lookup]
+				if !ok {
+					t.Errorf("no rows were retrieved for table %s, expected %d rows", entry.tableName, entry.nRows)
+					continue
+				}
+
+				if entry.nRows != actual {
+					t.Errorf("for table %s expected %d rows, got %d rows", entry.tableName, entry.nRows, actual)
 				}
 			}
 		})

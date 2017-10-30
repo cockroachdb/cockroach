@@ -47,6 +47,8 @@
 		ReadCSVSpec
 		SSTWriterSpec
 		SamplerSpec
+		InterleaveReaderJoinerTable
+		InterleaveReaderJoinerSpec
 */
 package distsqlrun
 

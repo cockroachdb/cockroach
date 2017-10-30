@@ -15,7 +15,6 @@
 package distsqlrun
 
 import (
-	"fmt"
 	"sync"
 
 	"github.com/pkg/errors"
@@ -59,38 +58,7 @@ func newTableReader(
 		tableID: spec.Table.ID,
 	}
 
-	// We ignore any limits that are higher than this value to avoid any
-	// overflows.
-	const overflowProtection = 1000000000
-	if post.Limit != 0 && post.Limit <= overflowProtection {
-		// In this case the ProcOutputHelper will tell us to stop once we emit
-		// enough rows.
-		tr.limitHint = int64(post.Limit)
-	} else if spec.LimitHint != 0 && spec.LimitHint <= overflowProtection {
-		// If it turns out that limiHint rows are sufficient for our consumer, we
-		// want to avoid asking for another batch. Currently, the only way for us to
-		// "stop" is if we block on sending rows and the consumer sets
-		// ConsumerDone() on the RowChannel while we block. So we want to block
-		// *after* sending all the rows in the limit hint; to do this, we request
-		// rowChannelBufSize + 1 more rows:
-		//  - rowChannelBufSize rows guarantee that we will fill the row channel
-		//    even after limitHint rows are consumed
-		//  - the extra row gives us chance to call Push again after we unblock,
-		//    which will notice that ConsumerDone() was called.
-		//
-		// This flimsy mechanism is only useful in the (optimistic) case that the
-		// processor that only needs this many rows is our direct, local consumer.
-		// If we have a chain of processors and RowChannels, or remote streams, this
-		// reasoning goes out the door.
-		//
-		// TODO(radu, andrei): work on a real mechanism for limits.
-		tr.limitHint = spec.LimitHint + rowChannelBufSize + 1
-	}
-
-	if post.Filter.Expr != "" {
-		// We have a filter so we will likely need to read more rows.
-		tr.limitHint *= 2
-	}
+	tr.limitHint = limitHint(spec.LimitHint, post)
 
 	types := make([]sqlbase.ColumnType, len(spec.Table.Columns))
 	for i := range types {
@@ -154,22 +122,9 @@ func initRowFetcher(
 // that were read by this tableReader. This should be called after the fetcher
 // was used to read everything this tableReader was supposed to read.
 func (tr *tableReader) sendMisplannedRangesMetadata(ctx context.Context) {
-	rangeInfos := tr.fetcher.GetRangeInfo()
-	var misplannedRanges []roachpb.RangeInfo
-	for _, ri := range rangeInfos {
-		if ri.Lease.Replica.NodeID != tr.flowCtx.nodeID {
-			misplannedRanges = append(misplannedRanges, ri)
-		}
-	}
+	misplannedRanges := misplannedRanges(ctx, tr.fetcher.GetRangeInfo(), tr.flowCtx.nodeID)
+
 	if len(misplannedRanges) != 0 {
-		var msg string
-		if len(misplannedRanges) < 3 {
-			msg = fmt.Sprintf("%+v", misplannedRanges[0].Desc)
-		} else {
-			msg = fmt.Sprintf("%+v...", misplannedRanges[:3])
-		}
-		log.VEventf(ctx, 2, "tableReader pushing metadata about misplanned ranges: %s",
-			msg)
 		tr.out.output.Push(nil /* row */, ProducerMetadata{Ranges: misplannedRanges})
 	}
 }
@@ -186,7 +141,7 @@ func (tr *tableReader) Run(ctx context.Context, wg *sync.WaitGroup) {
 
 	txn := tr.flowCtx.txn
 	if txn == nil {
-		log.Fatalf(ctx, "joinReader outside of txn")
+		log.Fatalf(ctx, "tableReader outside of txn")
 	}
 
 	log.VEventf(ctx, 1, "starting")
