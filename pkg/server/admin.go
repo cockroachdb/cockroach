@@ -31,6 +31,7 @@ import (
 
 	"encoding/json"
 
+	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
@@ -1088,6 +1089,43 @@ func (s *adminServer) Jobs(
 	return &resp, nil
 }
 
+func (s *adminServer) Locations(
+	ctx context.Context, req *serverpb.LocationsRequest,
+) (*serverpb.LocationsResponse, error) {
+	args := sql.SessionArgs{User: s.getUser(req)}
+	ctx, session := s.NewContextAndSessionForRPC(ctx, args)
+	defer session.Finish(s.server.sqlExecutor)
+
+	q := makeSQLQuery()
+	q.Append(`SELECT "localityKey", "localityValue", latitude, longitude FROM system.locations`)
+	r, err := s.server.sqlExecutor.ExecuteStatementsBuffered(session, q.String(), nil, 1)
+	if err != nil {
+		return nil, s.serverError(err)
+	}
+	defer r.Close(ctx)
+
+	scanner := makeResultScanner(r.ResultList[0].Columns)
+	resp := serverpb.LocationsResponse{
+		Locations: make([]serverpb.LocationsResponse_Location, r.ResultList[0].Rows.Len()),
+	}
+	for i := 0; i < len(resp.Locations); i++ {
+		loc := &resp.Locations[i]
+		lat, lon := new(apd.Decimal), new(apd.Decimal)
+		if err := scanner.ScanAll(
+			r.ResultList[0].Rows.At(i), &loc.LocalityKey, &loc.LocalityValue, lat, lon); err != nil {
+			return nil, s.serverError(err)
+		}
+		if loc.Latitude, err = lat.Float64(); err != nil {
+			return nil, s.serverError(err)
+		}
+		if loc.Longitude, err = lon.Float64(); err != nil {
+			return nil, s.serverError(err)
+		}
+	}
+
+	return &resp, nil
+}
+
 // QueryPlan returns a JSON representation of a distsql physical query
 // plan.
 func (s *adminServer) QueryPlan(
@@ -1439,6 +1477,13 @@ func (rs resultScanner) ScanIndex(row tree.Datums, index int, dst interface{}) e
 		}
 		// Yes, this copies, but this probably isn't in the critical path.
 		*d = []byte(*s)
+
+	case *apd.Decimal:
+		s, ok := src.(*tree.DDecimal)
+		if !ok {
+			return errors.Errorf("source type assertion failed")
+		}
+		*d = s.Decimal
 
 	default:
 		return errors.Errorf("unimplemented type for scanCol: %T", dst)

@@ -392,6 +392,7 @@ func TestGetZoneConfigForKey(t *testing.T) {
 		{tkey(keys.ZonesTableID), keys.SystemDatabaseID},
 		{tkey(keys.LeaseTableID), keys.SystemDatabaseID},
 		{tkey(keys.JobsTableID), keys.SystemDatabaseID},
+		{tkey(keys.LocationsTableID), keys.SystemDatabaseID},
 		{tkey(keys.MaxReservedDescID + 1), keys.MaxReservedDescID + 1},
 		{tkey(keys.MaxReservedDescID + 23), keys.MaxReservedDescID + 23},
 		{roachpb.RKeyMax, keys.RootNamespaceID},
