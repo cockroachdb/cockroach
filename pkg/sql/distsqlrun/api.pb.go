@@ -49,6 +49,7 @@
 		SketchSpec
 		SamplerSpec
 		SampleAggregatorSpec
+		InterleavedReaderJoinerSpec
 */
 package distsqlrun
 

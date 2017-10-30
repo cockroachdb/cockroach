@@ -32,6 +32,8 @@ import (
 type mergeJoiner struct {
 	joinerBase
 
+	leftSource, rightSource RowSource
+
 	streamMerger streamMerger
 }
 
@@ -51,9 +53,12 @@ func newMergeJoiner(
 		}
 	}
 
-	m := &mergeJoiner{}
+	m := &mergeJoiner{
+		leftSource:  leftSource,
+		rightSource: rightSource,
+	}
 	// TODO: Adapt MergeJoiner to new joinerBase constructor.
-	err := m.joinerBase.init(flowCtx, leftSource, rightSource, spec.Type, spec.OnExpr, nil, nil, 0, post, output)
+	err := m.joinerBase.init(flowCtx, leftSource.Types(), rightSource.Types(), spec.Type, spec.OnExpr, nil, nil, 0, post, output)
 	if err != nil {
 		return nil, err
 	}

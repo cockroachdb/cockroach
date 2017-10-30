@@ -51,12 +51,12 @@ func genValues(w io.Writer, firstRow, lastRow int, fn GenRowFn) {
 func CreateTable(
 	tb testing.TB, sqlDB *gosql.DB, tableName, schema string, numRows int, fn GenRowFn,
 ) {
-	CreateTableInterleave(tb, sqlDB, tableName, schema, "" /*interleaveSchema*/, numRows, fn)
+	CreateTableInterleaved(tb, sqlDB, tableName, schema, "" /*interleaveSchema*/, numRows, fn)
 }
 
-// CreateTableInterleave is identical to CreateTable with the added option
+// CreateTableInterleaved is identical to CreateTable with the added option
 // of specifying an interleave schema for interleaving the table.
-func CreateTableInterleave(
+func CreateTableInterleaved(
 	tb testing.TB,
 	sqlDB *gosql.DB,
 	tableName, schema, interleaveSchema string,
