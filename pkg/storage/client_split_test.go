@@ -1931,9 +1931,9 @@ func TestStoreRangeGossipOnSplits(t *testing.T) {
 	}
 }
 
-// TestStorePushTxnQueueEnabledOnSplit verifies that the PushTxnQueue for
+// TestStoreTxnWaitQueueEnabledOnSplit verifies that the TxnWaitQueue for
 // the right hand side of the split range is enabled after a split.
-func TestStorePushTxnQueueEnabledOnSplit(t *testing.T) {
+func TestStoreTxnWaitQueueEnabledOnSplit(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	storeCfg := storage.TestStoreConfig(nil)
 	storeCfg.TestingKnobs.DisableSplitQueue = true
@@ -1948,7 +1948,7 @@ func TestStorePushTxnQueueEnabledOnSplit(t *testing.T) {
 	}
 
 	rhsRepl := store.LookupReplica(roachpb.RKey(keys.UserTableDataMin), nil)
-	if !rhsRepl.IsPushTxnQueueEnabled() {
+	if !rhsRepl.IsTxnWaitQueueEnabled() {
 		t.Errorf("expected RHS replica's push txn queue to be enabled post-split")
 	}
 }
@@ -2116,11 +2116,11 @@ func TestUnsplittableRange(t *testing.T) {
 	})
 }
 
-// TestPushTxnQueueDependencyCycleWithRangeSplit verifies that a range
+// TestTxnWaitQueueDependencyCycleWithRangeSplit verifies that a range
 // split which occurs while a dependency cycle is partially underway
 // will cause the pending push txns to be retried such that they
 // relocate to the appropriate new range.
-func TestPushTxnQueueDependencyCycleWithRangeSplit(t *testing.T) {
+func TestTxnWaitQueueDependencyCycleWithRangeSplit(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	for _, read2ndPass := range []bool{false, true} {

@@ -48,6 +48,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/storage/tscache"
+	"github.com/cockroachdb/cockroach/pkg/storage/txnwait"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -230,7 +231,7 @@ type Replica struct {
 
 	store        *Store
 	abortSpan    *abortspan.AbortSpan // Avoids anomalous reads after abort
-	pushTxnQueue *PushTxnQueue        // Queues push txn attempts by txn ID
+	txnWaitQueue *txnwait.Queue       // Queues push txn attempts by txn ID
 
 	// leaseholderStats tracks all incoming BatchRequests to the replica and which
 	// localities they come from in order to aid in lease rebalancing decisions.
@@ -587,7 +588,7 @@ func newReplica(rangeID roachpb.RangeID, store *Store) *Replica {
 		RangeID:        rangeID,
 		store:          store,
 		abortSpan:      abortspan.New(rangeID),
-		pushTxnQueue:   newPushTxnQueue(store),
+		txnWaitQueue:   txnwait.NewQueue(store),
 	}
 	r.mu.stateLoader = stateloader.Make(r.store.cfg.Settings, rangeID)
 	if leaseHistoryMaxEntries > 0 {
