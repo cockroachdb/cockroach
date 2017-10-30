@@ -317,9 +317,6 @@ func TestTimestampCacheLayeredIntervals(t *testing.T) {
 						forTrueAndFalse(t, "sameTxn", func(t *testing.T, sameTxn bool) {
 							defer func() {
 								tc.clear(clock.Now())
-								if bc := tc.byteCount(); bc != 0 {
-									t.Fatalf("expected 0, but found %d", bc)
-								}
 							}()
 
 							txns := make([]txnState, len(testCase.spans))
