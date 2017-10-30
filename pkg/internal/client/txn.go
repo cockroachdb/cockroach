@@ -134,6 +134,7 @@ func NewTxnWithProto(db *DB, gatewayNodeID roachpb.NodeID, proto roachpb.Transac
 	return txn
 }
 
+// DB returns a reference to the transaction's DB.
 func (txn *Txn) DB() *DB {
 	return txn.db
 }
