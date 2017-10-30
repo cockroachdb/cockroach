@@ -270,6 +270,18 @@ query IIII
 SELECT * FROM (SELECT * FROM xyzw LIMIT 5) OFFSET 5
 ----
 
+query error pq: explicit locking with FOR UPDATE is not yet supported
+SELECT * FROM xyzw FOR UPDATE
+
+query error pq: explicit locking with FOR UPDATE is not yet supported
+SELECT * FROM xyzw LIMIT 1 FOR UPDATE
+
+query error pq: explicit locking with FOR UPDATE is not yet supported
+SELECT * FROM xyzw FOR UPDATE LIMIT 1 OFFSET 1
+
+query error pq: explicit locking with FOR UPDATE is not yet supported
+SELECT * FROM (SELECT x FROM xyzw FOR UPDATE) LIMIT 1 OFFSET 1
+
 query II rowsort
 SELECT z, y FROM xyzw@foo
 ----
