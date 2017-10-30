@@ -1951,45 +1951,8 @@ func (d *DInterval) Size() uintptr {
 	return unsafe.Sizeof(*d)
 }
 
-type jsonType int
-
-// The ordering in this enum is significant and used for JSON value ordering.
-const (
-	_ jsonType = iota
-	nullJSONType
-	stringJSONType
-	numberJSONType
-	falseJSONType
-	trueJSONType
-	arrayJSONType
-	objectJSONType
-)
-
-type jsonKeyValuePair struct {
-	k DString
-	v DJSON
-}
-
 // DJSON is the JSON Datum.
-// TODO(justin): stored as a struct rather than an interface with the belief
-// that this might help with method dispatch overhead and GC pressure, but this
-// assumption still needs to be tested with a benchmark.
-// It's very possibly a net lose, because in the common case we'll have objects
-// or arrays at the top level and thus have pointers anyway, and this bloats the
-// size of a DJSON considerably.
-// Not to mention it will largely be dealt with as a Datum anyway, so it's
-// already a pointer in that case.
-type DJSON struct {
-	typ      jsonType
-	numVal   DDecimal
-	strVal   DString
-	arrayVal []DJSON
-	// objectVal is a list of kv pairs sorted by key.
-	// TODO(justin): it might make more sense to store this as a map (or ALSO as a
-	// map) for lookups, but for the moment this simplifies comparisons and it will
-	// simplify encoding.
-	objectVal []jsonKeyValuePair
-}
+type DJSON struct{ jsonVal }
 
 // ResolvedType implements the TypedExpr interface.
 func (*DJSON) ResolvedType() Type {
@@ -2006,51 +1969,7 @@ func (d *DJSON) Compare(ctx *EvalContext, other Datum) int {
 	if !ok {
 		panic(makeUnsupportedComparisonMessage(d, other))
 	}
-	if v.typ > d.typ {
-		return -1
-	}
-	if v.typ < d.typ {
-		return 1
-	}
-	switch d.typ {
-	case numberJSONType:
-		return d.numVal.Compare(ctx, &v.numVal)
-	case stringJSONType:
-		return d.strVal.Compare(ctx, &v.strVal)
-	case arrayJSONType:
-		if len(v.arrayVal) > len(d.arrayVal) {
-			return -1
-		}
-		if len(v.arrayVal) < len(d.arrayVal) {
-			return 1
-		}
-		for i := 0; i < len(d.arrayVal); i++ {
-			cmp := d.arrayVal[i].Compare(ctx, &v.arrayVal[i])
-			if cmp != 0 {
-				return cmp
-			}
-		}
-		return 0
-	case objectJSONType:
-		if len(v.objectVal) > len(d.objectVal) {
-			return -1
-		}
-		if len(v.objectVal) < len(d.objectVal) {
-			return 1
-		}
-		for i := 0; i < len(d.objectVal); i++ {
-			cmpKey := d.objectVal[i].k.Compare(ctx, &v.objectVal[i].k)
-			if cmpKey != 0 {
-				return cmpKey
-			}
-			cmpVal := d.objectVal[i].v.Compare(ctx, &v.objectVal[i].v)
-			if cmpVal != 0 {
-				return cmpVal
-			}
-		}
-		return 0
-	}
-	return 0
+	return d.compare(ctx, v.jsonVal)
 }
 
 // Prev implements the Datum interface.
@@ -2070,7 +1989,8 @@ func (d *DJSON) IsMax(_ *EvalContext) bool {
 
 // IsMin implements the Datum interface.
 func (d *DJSON) IsMin(_ *EvalContext) bool {
-	return d.typ == nullJSONType
+	_, ok := d.jsonVal.(jsonNull)
+	return ok
 }
 
 // max implements the Datum interface.
@@ -2080,73 +2000,21 @@ func (d *DJSON) max(_ *EvalContext) (Datum, bool) {
 
 // min implements the Datum interface.
 func (d *DJSON) min(_ *EvalContext) (Datum, bool) {
-	return &DJSON{typ: nullJSONType}, true
+	return &DJSON{jsonNull{}}, true
 }
 
 // AmbiguousFormat implements the Datum interface.
 func (*DJSON) AmbiguousFormat() bool { return true }
 
 // Format implements the NodeFormatter interface.
-func (d *DJSON) Format(buf *bytes.Buffer, f FmtFlags) {
-	switch d.typ {
-	case numberJSONType:
-		d.numVal.Format(buf, f)
-	case stringJSONType:
-		encodeJSONString(buf, string(d.strVal), f)
-	case trueJSONType:
-		buf.WriteString("true")
-	case falseJSONType:
-		buf.WriteString("false")
-	case nullJSONType:
-		buf.WriteString("null")
-	case arrayJSONType:
-		buf.WriteByte('[')
-		for i := range d.arrayVal {
-			if i != 0 {
-				buf.WriteByte(',')
-			}
-			d.arrayVal[i].Format(buf, f)
-		}
-		buf.WriteByte(']')
-	case objectJSONType:
-		buf.WriteByte('{')
-		for i := range d.objectVal {
-			if i != 0 {
-				buf.WriteByte(',')
-			}
-			encodeJSONString(buf, string(d.objectVal[i].k), f)
-			buf.WriteByte(':')
-			d.objectVal[i].v.Format(buf, f)
-		}
-		buf.WriteByte('}')
-	}
+func (d *DJSON) Format(buf *bytes.Buffer, _ FmtFlags) {
+	d.format(buf)
 }
 
 // Size implements the Datum interface.
 // TODO(justin): is this a frequently-called method? Should we be caching the computed size?
 func (d *DJSON) Size() uintptr {
-	var valSize uintptr
-	switch d.typ {
-	// We can't defer to DDecimal or DString for number or string because those
-	// count the size of the containing pointer, which we already account for.
-	case numberJSONType:
-		valSize = d.numVal.rawSize()
-	case stringJSONType:
-		valSize = uintptr(len(d.strVal))
-	case arrayJSONType:
-		for i := range d.arrayVal {
-			valSize += d.arrayVal[i].Size()
-		}
-	case objectJSONType:
-		for i := range d.objectVal {
-			valSize += d.objectVal[i].k.Size()
-			valSize += d.objectVal[i].v.Size()
-		}
-	case trueJSONType: // 0
-	case falseJSONType: // 0
-	case nullJSONType: // 0
-	}
-	return unsafe.Sizeof(*d) + valSize
+	return unsafe.Sizeof(*d) + d.size()
 }
 
 // DTuple is the tuple Datum.

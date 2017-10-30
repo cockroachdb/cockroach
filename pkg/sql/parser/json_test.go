@@ -180,12 +180,12 @@ func TestJSONSize(t *testing.T) {
 	}{
 		// These numbers aren't set in stone, they're just here to make sure this
 		// function makes some amount of sense.
-		{`true`, 120},
-		{`false`, 120},
-		{`null`, 120},
-		{`"hello"`, 125},
-		{`["hello","goodbye"]`, 372},
-		{`{"a":"b"}`, 258},
+		{`true`, 16},
+		{`false`, 16},
+		{`null`, 16},
+		{`"hello"`, 37},
+		{`["hello","goodbye"]`, 92},
+		{`{"a":"b"}`, 82},
 	}
 	for _, tc := range testCases {
 		t.Run(tc.input, func(t *testing.T) {
