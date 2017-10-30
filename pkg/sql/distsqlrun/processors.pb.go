@@ -295,19 +295,20 @@ func (*PostProcessSpec) ProtoMessage()               {}
 func (*PostProcessSpec) Descriptor() ([]byte, []int) { return fileDescriptorProcessors, []int{1} }
 
 type ProcessorCoreUnion struct {
-	Noop        *NoopCoreSpec       `protobuf:"bytes,1,opt,name=noop" json:"noop,omitempty"`
-	TableReader *TableReaderSpec    `protobuf:"bytes,2,opt,name=tableReader" json:"tableReader,omitempty"`
-	JoinReader  *JoinReaderSpec     `protobuf:"bytes,3,opt,name=joinReader" json:"joinReader,omitempty"`
-	Sorter      *SorterSpec         `protobuf:"bytes,4,opt,name=sorter" json:"sorter,omitempty"`
-	Aggregator  *AggregatorSpec     `protobuf:"bytes,5,opt,name=aggregator" json:"aggregator,omitempty"`
-	Distinct    *DistinctSpec       `protobuf:"bytes,7,opt,name=distinct" json:"distinct,omitempty"`
-	MergeJoiner *MergeJoinerSpec    `protobuf:"bytes,8,opt,name=mergeJoiner" json:"mergeJoiner,omitempty"`
-	HashJoiner  *HashJoinerSpec     `protobuf:"bytes,9,opt,name=hashJoiner" json:"hashJoiner,omitempty"`
-	Values      *ValuesCoreSpec     `protobuf:"bytes,10,opt,name=values" json:"values,omitempty"`
-	Backfiller  *BackfillerSpec     `protobuf:"bytes,11,opt,name=backfiller" json:"backfiller,omitempty"`
-	SetOp       *AlgebraicSetOpSpec `protobuf:"bytes,12,opt,name=setOp" json:"setOp,omitempty"`
-	ReadCSV     *ReadCSVSpec        `protobuf:"bytes,13,opt,name=readCSV" json:"readCSV,omitempty"`
-	SSTWriter   *SSTWriterSpec      `protobuf:"bytes,14,opt,name=SSTWriter" json:"SSTWriter,omitempty"`
+	Noop                   *NoopCoreSpec               `protobuf:"bytes,1,opt,name=noop" json:"noop,omitempty"`
+	TableReader            *TableReaderSpec            `protobuf:"bytes,2,opt,name=tableReader" json:"tableReader,omitempty"`
+	JoinReader             *JoinReaderSpec             `protobuf:"bytes,3,opt,name=joinReader" json:"joinReader,omitempty"`
+	Sorter                 *SorterSpec                 `protobuf:"bytes,4,opt,name=sorter" json:"sorter,omitempty"`
+	Aggregator             *AggregatorSpec             `protobuf:"bytes,5,opt,name=aggregator" json:"aggregator,omitempty"`
+	Distinct               *DistinctSpec               `protobuf:"bytes,7,opt,name=distinct" json:"distinct,omitempty"`
+	MergeJoiner            *MergeJoinerSpec            `protobuf:"bytes,8,opt,name=mergeJoiner" json:"mergeJoiner,omitempty"`
+	HashJoiner             *HashJoinerSpec             `protobuf:"bytes,9,opt,name=hashJoiner" json:"hashJoiner,omitempty"`
+	Values                 *ValuesCoreSpec             `protobuf:"bytes,10,opt,name=values" json:"values,omitempty"`
+	Backfiller             *BackfillerSpec             `protobuf:"bytes,11,opt,name=backfiller" json:"backfiller,omitempty"`
+	SetOp                  *AlgebraicSetOpSpec         `protobuf:"bytes,12,opt,name=setOp" json:"setOp,omitempty"`
+	ReadCSV                *ReadCSVSpec                `protobuf:"bytes,13,opt,name=readCSV" json:"readCSV,omitempty"`
+	SSTWriter              *SSTWriterSpec              `protobuf:"bytes,14,opt,name=SSTWriter" json:"SSTWriter,omitempty"`
+	InterleaveReaderJoiner *InterleaveReaderJoinerSpec `protobuf:"bytes,15,opt,name=interleaveReaderJoiner" json:"interleaveReaderJoiner,omitempty"`
 }
 
 func (m *ProcessorCoreUnion) Reset()                    { *m = ProcessorCoreUnion{} }
@@ -683,6 +684,104 @@ func (m *SSTWriterSpec) String() string            { return proto.CompactTextStr
 func (*SSTWriterSpec) ProtoMessage()               {}
 func (*SSTWriterSpec) Descriptor() ([]byte, []int) { return fileDescriptorProcessors, []int{17} }
 
+type InterleaveReaderJoinerTable struct {
+	Desc cockroach_sql_sqlbase1.TableDescriptor `protobuf:"bytes,1,opt,name=desc" json:"desc"`
+	// If 0, we use the primary index. If non-zero, we use the index_idx-th index,
+	// i.e. desc.indexes[index_idx-1]
+	IndexIdx uint32 `protobuf:"varint,2,opt,name=index_idx,json=indexIdx" json:"index_idx"`
+	// The PostProcessSpecs of the corresponding TableReaderSpecs of each table
+	// are fed as arguments to InterleaveReaderJoiner.
+	//
+	// This is required to properly post-process the rows (i.e. filtering and
+	// projections) after reading from the table but before joining.
+	// It may be necessary to modify/introduce additional intermediate filters
+	// for correctness (see comment above 'spans' under
+	// InterleaveReaderJoinerSpec).
+	Post PostProcessSpec `protobuf:"bytes,3,opt,name=post" json:"post"`
+	// The tables must be ordered according to the columns that have equality
+	// constraints. The first column of the first table's ordering is constrained
+	// to be equal to the first column in the second table's ordering and so on
+	// for the other tables and their corresponding columns.
+	Ordering Ordering `protobuf:"bytes,4,opt,name=ordering" json:"ordering"`
+}
+
+func (m *InterleaveReaderJoinerTable) Reset()         { *m = InterleaveReaderJoinerTable{} }
+func (m *InterleaveReaderJoinerTable) String() string { return proto.CompactTextString(m) }
+func (*InterleaveReaderJoinerTable) ProtoMessage()    {}
+func (*InterleaveReaderJoinerTable) Descriptor() ([]byte, []int) {
+	return fileDescriptorProcessors, []int{18}
+}
+
+// InterleaveReaderJoinerSpec is the specification for a processor that performs
+// KV operations to retrieve rows from 2+ tables from an interleave hierarchy,
+// performs intermediate filtering on rows from each table, and performs a
+// join on the rows from the 2+ tables.
+//
+// Limitations: the InterleaveReaderJoiner currently supports only equality INNER joins
+// on the full interleave prefix.
+// See https://github.com/cockroachdb/cockroach/blob/master/docs/RFCS/20171025_interleaved_table_joins.md.
+//
+// The "internal columns" of an InterleaveReaderJoiner are the
+// concatenation of left input columns and right input columns. If the left
+// table has N columns and the right table has M columns, the first N columns
+// contain values from the left table and the following M columns contain values
+// from the right table.
+type InterleaveReaderJoinerSpec struct {
+	// For the common case of two tables, table at index 0 is the left/parent
+	// table and table at index 1 is the right/child table.
+	Tables  []InterleaveReaderJoinerTable `protobuf:"bytes,1,rep,name=tables" json:"tables"`
+	Reverse bool                          `protobuf:"varint,2,opt,name=reverse" json:"reverse"`
+	// All rows that belong to any of the specified tables in this set of spans
+	// are joined and emitted.
+	//
+	// During index selection, filters may have been converted to index spans and
+	// taking the union of these spans may nullify the effects of the original
+	// index span. It is imperative for correctness to also propagate origFilter
+	// (from scanNode) to the PostProcessSpec of the corresponding table (see
+	// InterleaveReaderJoinerTable).
+	//
+	// For example's sake, take the following query
+	//    SELECT * FROM (SELECT * FROM parent WHERE x > 5) LEFT JOIN
+	//      (SELECT * FROM child WHERE x > 10)
+	//    USING x
+	// where child is interleaved into parent.
+	//
+	// If we took the union of the spans and naively passed it here, it would
+	// cause child rows with 5 < x < 10 to be joined with parent rows. The span
+	// of the parent and child table is /parent/5- and /parent/10- (with filters
+	// removed), which results in the merged span /parent/5-. This includes child
+	// rows with 5 < x < 10 (and will subsequently join them incorrectly).
+	//
+	// We thus need to re-introduce origFilter: x > 10 to the child's
+	// PostProcessSpec to ensure it is filtered before joining.
+	//
+	// There are common cases (like equality inner joins) where we can take the
+	// intersection of the spans to avoid having to re-introduce filters.
+	Spans []TableReaderSpan `protobuf:"bytes,3,rep,name=spans" json:"spans"`
+	// A hint for how many joined rows from the tables the consumer of the
+	// interleave reader joiner might need. This is used to size the initial KV
+	// batches to try to avoid reading many more rows than needed by the
+	// processor receiving the output.
+	//
+	// Not used if there is a limit set in the PostProcessSpec of this processor
+	// (that value will be used for sizing batches instead).
+	LimitHint int64 `protobuf:"varint,4,opt,name=limit_hint,json=limitHint" json:"limit_hint"`
+	// "ON" expression (in addition to the equality constraints captured by the
+	// orderings). Assuming that the left table has N columns and the second
+	// table stream has M columns, in this expression ordinal references @1 to @N
+	// refer to columns of the left table and variables @(N+1) to @(N+M) refer to
+	// columns in the right table.
+	OnExpr Expression `protobuf:"bytes,5,opt,name=on_expr,json=onExpr" json:"on_expr"`
+	Type   JoinType   `protobuf:"varint,6,opt,name=type,enum=cockroach.sql.distsqlrun.JoinType" json:"type"`
+}
+
+func (m *InterleaveReaderJoinerSpec) Reset()         { *m = InterleaveReaderJoinerSpec{} }
+func (m *InterleaveReaderJoinerSpec) String() string { return proto.CompactTextString(m) }
+func (*InterleaveReaderJoinerSpec) ProtoMessage()    {}
+func (*InterleaveReaderJoinerSpec) Descriptor() ([]byte, []int) {
+	return fileDescriptorProcessors, []int{19}
+}
+
 func init() {
 	proto.RegisterType((*ProcessorSpec)(nil), "cockroach.sql.distsqlrun.ProcessorSpec")
 	proto.RegisterType((*PostProcessSpec)(nil), "cockroach.sql.distsqlrun.PostProcessSpec")
@@ -703,6 +802,8 @@ func init() {
 	proto.RegisterType((*AlgebraicSetOpSpec)(nil), "cockroach.sql.distsqlrun.AlgebraicSetOpSpec")
 	proto.RegisterType((*ReadCSVSpec)(nil), "cockroach.sql.distsqlrun.ReadCSVSpec")
 	proto.RegisterType((*SSTWriterSpec)(nil), "cockroach.sql.distsqlrun.SSTWriterSpec")
+	proto.RegisterType((*InterleaveReaderJoinerTable)(nil), "cockroach.sql.distsqlrun.InterleaveReaderJoinerTable")
+	proto.RegisterType((*InterleaveReaderJoinerSpec)(nil), "cockroach.sql.distsqlrun.InterleaveReaderJoinerSpec")
 	proto.RegisterEnum("cockroach.sql.distsqlrun.JoinType", JoinType_name, JoinType_value)
 	proto.RegisterEnum("cockroach.sql.distsqlrun.AggregatorSpec_Func", AggregatorSpec_Func_name, AggregatorSpec_Func_value)
 	proto.RegisterEnum("cockroach.sql.distsqlrun.BackfillerSpec_Type", BackfillerSpec_Type_name, BackfillerSpec_Type_value)
@@ -983,6 +1084,16 @@ func (m *ProcessorCoreUnion) MarshalTo(dAtA []byte) (int, error) {
 		}
 		i += n18
 	}
+	if m.InterleaveReaderJoiner != nil {
+		dAtA[i] = 0x7a
+		i++
+		i = encodeVarintProcessors(dAtA, i, uint64(m.InterleaveReaderJoiner.Size()))
+		n19, err := m.InterleaveReaderJoiner.MarshalTo(dAtA[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n19
+	}
 	return i, nil
 }
 
@@ -1060,11 +1171,11 @@ func (m *TableReaderSpan) MarshalTo(dAtA []byte) (int, error) {
 	dAtA[i] = 0xa
 	i++
 	i = encodeVarintProcessors(dAtA, i, uint64(m.Span.Size()))
-	n19, err := m.Span.MarshalTo(dAtA[i:])
+	n20, err := m.Span.MarshalTo(dAtA[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n19
+	i += n20
 	return i, nil
 }
 
@@ -1086,11 +1197,11 @@ func (m *TableReaderSpec) MarshalTo(dAtA []byte) (int, error) {
 	dAtA[i] = 0xa
 	i++
 	i = encodeVarintProcessors(dAtA, i, uint64(m.Table.Size()))
-	n20, err := m.Table.MarshalTo(dAtA[i:])
+	n21, err := m.Table.MarshalTo(dAtA[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n20
+	i += n21
 	dAtA[i] = 0x10
 	i++
 	i = encodeVarintProcessors(dAtA, i, uint64(m.IndexIdx))
@@ -1138,11 +1249,11 @@ func (m *JoinReaderSpec) MarshalTo(dAtA []byte) (int, error) {
 	dAtA[i] = 0xa
 	i++
 	i = encodeVarintProcessors(dAtA, i, uint64(m.Table.Size()))
-	n21, err := m.Table.MarshalTo(dAtA[i:])
+	n22, err := m.Table.MarshalTo(dAtA[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n21
+	i += n22
 	dAtA[i] = 0x10
 	i++
 	i = encodeVarintProcessors(dAtA, i, uint64(m.IndexIdx))
@@ -1167,11 +1278,11 @@ func (m *SorterSpec) MarshalTo(dAtA []byte) (int, error) {
 	dAtA[i] = 0xa
 	i++
 	i = encodeVarintProcessors(dAtA, i, uint64(m.OutputOrdering.Size()))
-	n22, err := m.OutputOrdering.MarshalTo(dAtA[i:])
+	n23, err := m.OutputOrdering.MarshalTo(dAtA[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n22
+	i += n23
 	dAtA[i] = 0x10
 	i++
 	i = encodeVarintProcessors(dAtA, i, uint64(m.OrderingMatchLen))
@@ -1228,27 +1339,27 @@ func (m *MergeJoinerSpec) MarshalTo(dAtA []byte) (int, error) {
 	dAtA[i] = 0xa
 	i++
 	i = encodeVarintProcessors(dAtA, i, uint64(m.LeftOrdering.Size()))
-	n23, err := m.LeftOrdering.MarshalTo(dAtA[i:])
-	if err != nil {
-		return 0, err
-	}
-	i += n23
-	dAtA[i] = 0x12
-	i++
-	i = encodeVarintProcessors(dAtA, i, uint64(m.RightOrdering.Size()))
-	n24, err := m.RightOrdering.MarshalTo(dAtA[i:])
+	n24, err := m.LeftOrdering.MarshalTo(dAtA[i:])
 	if err != nil {
 		return 0, err
 	}
 	i += n24
-	dAtA[i] = 0x2a
+	dAtA[i] = 0x12
 	i++
-	i = encodeVarintProcessors(dAtA, i, uint64(m.OnExpr.Size()))
-	n25, err := m.OnExpr.MarshalTo(dAtA[i:])
+	i = encodeVarintProcessors(dAtA, i, uint64(m.RightOrdering.Size()))
+	n25, err := m.RightOrdering.MarshalTo(dAtA[i:])
 	if err != nil {
 		return 0, err
 	}
 	i += n25
+	dAtA[i] = 0x2a
+	i++
+	i = encodeVarintProcessors(dAtA, i, uint64(m.OnExpr.Size()))
+	n26, err := m.OnExpr.MarshalTo(dAtA[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n26
 	dAtA[i] = 0x30
 	i++
 	i = encodeVarintProcessors(dAtA, i, uint64(m.Type))
@@ -1271,47 +1382,47 @@ func (m *HashJoinerSpec) MarshalTo(dAtA []byte) (int, error) {
 	var l int
 	_ = l
 	if len(m.LeftEqColumns) > 0 {
-		dAtA27 := make([]byte, len(m.LeftEqColumns)*10)
-		var j26 int
+		dAtA28 := make([]byte, len(m.LeftEqColumns)*10)
+		var j27 int
 		for _, num := range m.LeftEqColumns {
 			for num >= 1<<7 {
-				dAtA27[j26] = uint8(uint64(num)&0x7f | 0x80)
+				dAtA28[j27] = uint8(uint64(num)&0x7f | 0x80)
 				num >>= 7
-				j26++
+				j27++
 			}
-			dAtA27[j26] = uint8(num)
-			j26++
+			dAtA28[j27] = uint8(num)
+			j27++
 		}
 		dAtA[i] = 0xa
 		i++
-		i = encodeVarintProcessors(dAtA, i, uint64(j26))
-		i += copy(dAtA[i:], dAtA27[:j26])
+		i = encodeVarintProcessors(dAtA, i, uint64(j27))
+		i += copy(dAtA[i:], dAtA28[:j27])
 	}
 	if len(m.RightEqColumns) > 0 {
-		dAtA29 := make([]byte, len(m.RightEqColumns)*10)
-		var j28 int
+		dAtA30 := make([]byte, len(m.RightEqColumns)*10)
+		var j29 int
 		for _, num := range m.RightEqColumns {
 			for num >= 1<<7 {
-				dAtA29[j28] = uint8(uint64(num)&0x7f | 0x80)
+				dAtA30[j29] = uint8(uint64(num)&0x7f | 0x80)
 				num >>= 7
-				j28++
+				j29++
 			}
-			dAtA29[j28] = uint8(num)
-			j28++
+			dAtA30[j29] = uint8(num)
+			j29++
 		}
 		dAtA[i] = 0x12
 		i++
-		i = encodeVarintProcessors(dAtA, i, uint64(j28))
-		i += copy(dAtA[i:], dAtA29[:j28])
+		i = encodeVarintProcessors(dAtA, i, uint64(j29))
+		i += copy(dAtA[i:], dAtA30[:j29])
 	}
 	dAtA[i] = 0x2a
 	i++
 	i = encodeVarintProcessors(dAtA, i, uint64(m.OnExpr.Size()))
-	n30, err := m.OnExpr.MarshalTo(dAtA[i:])
+	n31, err := m.OnExpr.MarshalTo(dAtA[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n30
+	i += n31
 	dAtA[i] = 0x30
 	i++
 	i = encodeVarintProcessors(dAtA, i, uint64(m.Type))
@@ -1342,21 +1453,21 @@ func (m *AggregatorSpec) MarshalTo(dAtA []byte) (int, error) {
 	var l int
 	_ = l
 	if len(m.GroupCols) > 0 {
-		dAtA32 := make([]byte, len(m.GroupCols)*10)
-		var j31 int
+		dAtA33 := make([]byte, len(m.GroupCols)*10)
+		var j32 int
 		for _, num := range m.GroupCols {
 			for num >= 1<<7 {
-				dAtA32[j31] = uint8(uint64(num)&0x7f | 0x80)
+				dAtA33[j32] = uint8(uint64(num)&0x7f | 0x80)
 				num >>= 7
-				j31++
+				j32++
 			}
-			dAtA32[j31] = uint8(num)
-			j31++
+			dAtA33[j32] = uint8(num)
+			j32++
 		}
 		dAtA[i] = 0x12
 		i++
-		i = encodeVarintProcessors(dAtA, i, uint64(j31))
-		i += copy(dAtA[i:], dAtA32[:j31])
+		i = encodeVarintProcessors(dAtA, i, uint64(j32))
+		i += copy(dAtA[i:], dAtA33[:j32])
 	}
 	if len(m.Aggregations) > 0 {
 		for _, msg := range m.Aggregations {
@@ -1435,11 +1546,11 @@ func (m *BackfillerSpec) MarshalTo(dAtA []byte) (int, error) {
 	dAtA[i] = 0x12
 	i++
 	i = encodeVarintProcessors(dAtA, i, uint64(m.Table.Size()))
-	n33, err := m.Table.MarshalTo(dAtA[i:])
+	n34, err := m.Table.MarshalTo(dAtA[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n33
+	i += n34
 	if len(m.Spans) > 0 {
 		for _, msg := range m.Spans {
 			dAtA[i] = 0x1a
@@ -1473,11 +1584,11 @@ func (m *BackfillerSpec) MarshalTo(dAtA []byte) (int, error) {
 	dAtA[i] = 0x3a
 	i++
 	i = encodeVarintProcessors(dAtA, i, uint64(m.ReadAsOf.Size()))
-	n34, err := m.ReadAsOf.MarshalTo(dAtA[i:])
+	n35, err := m.ReadAsOf.MarshalTo(dAtA[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n34
+	i += n35
 	return i, nil
 }
 
@@ -1499,11 +1610,11 @@ func (m *FlowSpec) MarshalTo(dAtA []byte) (int, error) {
 	dAtA[i] = 0xa
 	i++
 	i = encodeVarintProcessors(dAtA, i, uint64(m.FlowID.Size()))
-	n35, err := m.FlowID.MarshalTo(dAtA[i:])
+	n36, err := m.FlowID.MarshalTo(dAtA[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n35
+	i += n36
 	if len(m.Processors) > 0 {
 		for _, msg := range m.Processors {
 			dAtA[i] = 0x12
@@ -1540,11 +1651,11 @@ func (m *AlgebraicSetOpSpec) MarshalTo(dAtA []byte) (int, error) {
 	dAtA[i] = 0xa
 	i++
 	i = encodeVarintProcessors(dAtA, i, uint64(m.Ordering.Size()))
-	n36, err := m.Ordering.MarshalTo(dAtA[i:])
+	n37, err := m.Ordering.MarshalTo(dAtA[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n36
+	i += n37
 	dAtA[i] = 0x10
 	i++
 	i = encodeVarintProcessors(dAtA, i, uint64(m.OpType))
@@ -1569,22 +1680,22 @@ func (m *ReadCSVSpec) MarshalTo(dAtA []byte) (int, error) {
 	dAtA[i] = 0xa
 	i++
 	i = encodeVarintProcessors(dAtA, i, uint64(m.Options.Size()))
-	n37, err := m.Options.MarshalTo(dAtA[i:])
+	n38, err := m.Options.MarshalTo(dAtA[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n37
+	i += n38
 	dAtA[i] = 0x10
 	i++
 	i = encodeVarintProcessors(dAtA, i, uint64(m.SampleSize))
 	dAtA[i] = 0x1a
 	i++
 	i = encodeVarintProcessors(dAtA, i, uint64(m.TableDesc.Size()))
-	n38, err := m.TableDesc.MarshalTo(dAtA[i:])
+	n39, err := m.TableDesc.MarshalTo(dAtA[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n38
+	i += n39
 	dAtA[i] = 0x22
 	i++
 	i = encodeVarintProcessors(dAtA, i, uint64(len(m.Uri)))
@@ -1618,6 +1729,115 @@ func (m *SSTWriterSpec) MarshalTo(dAtA []byte) (int, error) {
 	dAtA[i] = 0x18
 	i++
 	i = encodeVarintProcessors(dAtA, i, uint64(m.WalltimeNanos))
+	return i, nil
+}
+
+func (m *InterleaveReaderJoinerTable) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *InterleaveReaderJoinerTable) MarshalTo(dAtA []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	dAtA[i] = 0xa
+	i++
+	i = encodeVarintProcessors(dAtA, i, uint64(m.Desc.Size()))
+	n40, err := m.Desc.MarshalTo(dAtA[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n40
+	dAtA[i] = 0x10
+	i++
+	i = encodeVarintProcessors(dAtA, i, uint64(m.IndexIdx))
+	dAtA[i] = 0x1a
+	i++
+	i = encodeVarintProcessors(dAtA, i, uint64(m.Post.Size()))
+	n41, err := m.Post.MarshalTo(dAtA[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n41
+	dAtA[i] = 0x22
+	i++
+	i = encodeVarintProcessors(dAtA, i, uint64(m.Ordering.Size()))
+	n42, err := m.Ordering.MarshalTo(dAtA[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n42
+	return i, nil
+}
+
+func (m *InterleaveReaderJoinerSpec) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *InterleaveReaderJoinerSpec) MarshalTo(dAtA []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	if len(m.Tables) > 0 {
+		for _, msg := range m.Tables {
+			dAtA[i] = 0xa
+			i++
+			i = encodeVarintProcessors(dAtA, i, uint64(msg.Size()))
+			n, err := msg.MarshalTo(dAtA[i:])
+			if err != nil {
+				return 0, err
+			}
+			i += n
+		}
+	}
+	dAtA[i] = 0x10
+	i++
+	if m.Reverse {
+		dAtA[i] = 1
+	} else {
+		dAtA[i] = 0
+	}
+	i++
+	if len(m.Spans) > 0 {
+		for _, msg := range m.Spans {
+			dAtA[i] = 0x1a
+			i++
+			i = encodeVarintProcessors(dAtA, i, uint64(msg.Size()))
+			n, err := msg.MarshalTo(dAtA[i:])
+			if err != nil {
+				return 0, err
+			}
+			i += n
+		}
+	}
+	dAtA[i] = 0x20
+	i++
+	i = encodeVarintProcessors(dAtA, i, uint64(m.LimitHint))
+	dAtA[i] = 0x2a
+	i++
+	i = encodeVarintProcessors(dAtA, i, uint64(m.OnExpr.Size()))
+	n43, err := m.OnExpr.MarshalTo(dAtA[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n43
+	dAtA[i] = 0x30
+	i++
+	i = encodeVarintProcessors(dAtA, i, uint64(m.Type))
 	return i, nil
 }
 
@@ -1730,6 +1950,10 @@ func (m *ProcessorCoreUnion) Size() (n int) {
 	}
 	if m.SSTWriter != nil {
 		l = m.SSTWriter.Size()
+		n += 1 + l + sovProcessors(uint64(l))
+	}
+	if m.InterleaveReaderJoiner != nil {
+		l = m.InterleaveReaderJoiner.Size()
 		n += 1 + l + sovProcessors(uint64(l))
 	}
 	return n
@@ -1963,6 +2187,42 @@ func (m *SSTWriterSpec) Size() (n int) {
 	return n
 }
 
+func (m *InterleaveReaderJoinerTable) Size() (n int) {
+	var l int
+	_ = l
+	l = m.Desc.Size()
+	n += 1 + l + sovProcessors(uint64(l))
+	n += 1 + sovProcessors(uint64(m.IndexIdx))
+	l = m.Post.Size()
+	n += 1 + l + sovProcessors(uint64(l))
+	l = m.Ordering.Size()
+	n += 1 + l + sovProcessors(uint64(l))
+	return n
+}
+
+func (m *InterleaveReaderJoinerSpec) Size() (n int) {
+	var l int
+	_ = l
+	if len(m.Tables) > 0 {
+		for _, e := range m.Tables {
+			l = e.Size()
+			n += 1 + l + sovProcessors(uint64(l))
+		}
+	}
+	n += 2
+	if len(m.Spans) > 0 {
+		for _, e := range m.Spans {
+			l = e.Size()
+			n += 1 + l + sovProcessors(uint64(l))
+		}
+	}
+	n += 1 + sovProcessors(uint64(m.LimitHint))
+	l = m.OnExpr.Size()
+	n += 1 + l + sovProcessors(uint64(l))
+	n += 1 + sovProcessors(uint64(m.Type))
+	return n
+}
+
 func sovProcessors(x uint64) (n int) {
 	for {
 		n++
@@ -2016,6 +2276,9 @@ func (this *ProcessorCoreUnion) GetValue() interface{} {
 	if this.SSTWriter != nil {
 		return this.SSTWriter
 	}
+	if this.InterleaveReaderJoiner != nil {
+		return this.InterleaveReaderJoiner
+	}
 	return nil
 }
 
@@ -2047,6 +2310,8 @@ func (this *ProcessorCoreUnion) SetValue(value interface{}) bool {
 		this.ReadCSV = vt
 	case *SSTWriterSpec:
 		this.SSTWriter = vt
+	case *InterleaveReaderJoinerSpec:
+		this.InterleaveReaderJoiner = vt
 	default:
 		return false
 	}
@@ -2929,6 +3194,39 @@ func (m *ProcessorCoreUnion) Unmarshal(dAtA []byte) error {
 				m.SSTWriter = &SSTWriterSpec{}
 			}
 			if err := m.SSTWriter.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 15:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field InterleaveReaderJoiner", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowProcessors
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthProcessors
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.InterleaveReaderJoiner == nil {
+				m.InterleaveReaderJoiner = &InterleaveReaderJoinerSpec{}
+			}
+			if err := m.InterleaveReaderJoiner.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
@@ -5193,6 +5491,365 @@ func (m *SSTWriterSpec) Unmarshal(dAtA []byte) error {
 	}
 	return nil
 }
+func (m *InterleaveReaderJoinerTable) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowProcessors
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: InterleaveReaderJoinerTable: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: InterleaveReaderJoinerTable: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Desc", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowProcessors
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthProcessors
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if err := m.Desc.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 2:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field IndexIdx", wireType)
+			}
+			m.IndexIdx = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowProcessors
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.IndexIdx |= (uint32(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 3:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Post", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowProcessors
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthProcessors
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if err := m.Post.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 4:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Ordering", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowProcessors
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthProcessors
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if err := m.Ordering.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipProcessors(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthProcessors
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *InterleaveReaderJoinerSpec) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowProcessors
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: InterleaveReaderJoinerSpec: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: InterleaveReaderJoinerSpec: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Tables", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowProcessors
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthProcessors
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Tables = append(m.Tables, InterleaveReaderJoinerTable{})
+			if err := m.Tables[len(m.Tables)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 2:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Reverse", wireType)
+			}
+			var v int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowProcessors
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				v |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			m.Reverse = bool(v != 0)
+		case 3:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Spans", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowProcessors
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthProcessors
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Spans = append(m.Spans, TableReaderSpan{})
+			if err := m.Spans[len(m.Spans)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 4:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field LimitHint", wireType)
+			}
+			m.LimitHint = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowProcessors
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.LimitHint |= (int64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 5:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field OnExpr", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowProcessors
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthProcessors
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if err := m.OnExpr.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 6:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Type", wireType)
+			}
+			m.Type = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowProcessors
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.Type |= (JoinType(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		default:
+			iNdEx = preIndex
+			skippy, err := skipProcessors(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthProcessors
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
 func skipProcessors(dAtA []byte) (n int, err error) {
 	l := len(dAtA)
 	iNdEx := 0
@@ -5374,8 +6031,7 @@ var fileDescriptorProcessors = []byte{
 	0x5c, 0x78, 0xe9, 0x53, 0x1c, 0x01, 0xea, 0x37, 0xf9, 0x22, 0x02, 0x33, 0xbd, 0xf4, 0x69, 0x7c,
 	0x61, 0x05, 0x4b, 0xfb, 0x43, 0x06, 0xea, 0xeb, 0x75, 0x9f, 0x6c, 0x43, 0x03, 0xa3, 0x46, 0xcf,
 	0xd6, 0x4f, 0x27, 0x9a, 0x76, 0x84, 0x6a, 0x70, 0x16, 0x1f, 0xd0, 0x7b, 0xa0, 0x46, 0x21, 0x49,
-	0x81, 0x33, 0x09, 0x38, 0x0a, 0xd7, 0x0a, 0xfd, 0xff, 0xdf, 0x2f, 0xf9, 0x21, 0xd4, 0xb1, 0x43,
-	0xae, 0x32, 0xaf, 0x98, 0x2a, 0x16, 0xb5, 0x48, 0x17, 0xe7, 0xd4, 0x5f, 0x73, 0x50, 0x5f, 0xef,
+	0x81, 0x33, 0x09, 0x38, 0x0a, 0xd7, 0x0a, 0xfd, 0xff, 0xdf, 0x2f, 0xf9, 0x21, 0xd4, 0xb1, 0x43, 0xae, 0x32, 0xaf, 0x98, 0x2a, 0x16, 0xb5, 0x48, 0x17, 0xe7, 0xd4, 0x5f, 0x73, 0x50, 0x5f, 0xef,
 	0xf7, 0xe4, 0x0d, 0x80, 0x19, 0x67, 0x4b, 0x5f, 0xd0, 0xd3, 0x5b, 0x2d, 0xa3, 0xb4, 0xc7, 0xdc,
 	0x80, 0xfc, 0x1a, 0xaa, 0xf1, 0x50, 0xe0, 0x30, 0x39, 0x2a, 0x56, 0x76, 0x7e, 0xf2, 0xb2, 0x23,
 	0x45, 0xf2, 0x73, 0xb5, 0xf5, 0x35, 0x7b, 0xf7, 0xfe, 0xa6, 0x40, 0x25, 0x85, 0x21, 0x7b, 0x90,

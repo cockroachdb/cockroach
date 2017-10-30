@@ -122,6 +122,7 @@ message ProcessorCoreUnion {
   optional AlgebraicSetOpSpec setOp = 12;
   optional ReadCSVSpec readCSV = 13;
   optional SSTWriterSpec SSTWriter = 14;
+  optional InterleaveReaderJoinerSpec interleaveReaderJoiner = 15;
 }
 
 // NoopCoreSpec indicates a "no-op" processor core. This is used when we just
@@ -477,4 +478,97 @@ message SSTWriterSpec {
   optional string name = 2 [(gogoproto.nullable) = false];
   // walltimeNanos is the MVCC time at which the created KVs will be written.
   optional int64 walltimeNanos = 3 [(gogoproto.nullable) = false];
+}
+
+message InterleaveReaderJoinerTable {
+  optional sqlbase.TableDescriptor desc = 1 [(gogoproto.nullable) = false];
+  // If 0, we use the primary index. If non-zero, we use the index_idx-th index,
+  // i.e. desc.indexes[index_idx-1]
+  optional uint32 index_idx = 2 [(gogoproto.nullable) = false];
+  // The PostProcessSpecs of the corresponding TableReaderSpecs of each table
+  // are fed as arguments to InterleaveReaderJoiner.
+  //
+  // This is required to properly post-process the rows (i.e. filtering and
+  // projections) after reading from the table but before joining.
+  // It may be necessary to modify/introduce additional intermediate filters
+  // for correctness (see comment above 'spans' under
+  // InterleaveReaderJoinerSpec).
+  optional PostProcessSpec post = 3 [(gogoproto.nullable) = false];
+
+  // The tables must be ordered according to the columns that have equality
+  // constraints. The first column of the first table's ordering is constrained
+  // to be equal to the first column in the second table's ordering and so on
+  // for the other tables and their corresponding columns.
+  optional Ordering ordering = 4 [(gogoproto.nullable) = false];
+}
+
+// InterleaveReaderJoinerSpec is the specification for a processor that performs
+// KV operations to retrieve rows from 2+ tables from an interleave hierarchy,
+// performs intermediate filtering on rows from each table, and performs a
+// join on the rows from the 2+ tables.
+//
+// Limitations: the InterleaveReaderJoiner currently supports only equality INNER joins
+// on the full interleave prefix.
+// See https://github.com/cockroachdb/cockroach/blob/master/docs/RFCS/20171025_interleaved_table_joins.md.
+//
+// The "internal columns" of an InterleaveReaderJoiner are the
+// concatenation of left input columns and right input columns. If the left
+// table has N columns and the right table has M columns, the first N columns
+// contain values from the left table and the following M columns contain values
+// from the right table.
+message InterleaveReaderJoinerSpec {
+  // For the common case of two tables, table at index 0 is the left/parent
+  // table and table at index 1 is the right/child table.
+  repeated InterleaveReaderJoinerTable tables = 1 [(gogoproto.nullable) = false];
+
+  // Reader component
+
+  optional bool reverse = 2 [(gogoproto.nullable) = false];
+  // All rows that belong to any of the specified tables in this set of spans
+  // are joined and emitted.
+  //
+  // During index selection, filters may have been converted to index spans and
+  // taking the union of these spans may nullify the effects of the original
+  // index span. It is imperative for correctness to also propagate origFilter
+  // (from scanNode) to the PostProcessSpec of the corresponding table (see
+  // InterleaveReaderJoinerTable).
+  //
+  // For example's sake, take the following query
+  //    SELECT * FROM (SELECT * FROM parent WHERE x > 5) LEFT JOIN
+  //      (SELECT * FROM child WHERE x > 10)
+  //    USING x
+  // where child is interleaved into parent.
+  //
+  // If we took the union of the spans and naively passed it here, it would
+  // cause child rows with 5 < x < 10 to be joined with parent rows. The span
+  // of the parent and child table is /parent/5- and /parent/10- (with filters
+  // removed), which results in the merged span /parent/5-. This includes child
+  // rows with 5 < x < 10 (and will subsequently join them incorrectly).
+  //
+  // We thus need to re-introduce origFilter: x > 10 to the child's
+  // PostProcessSpec to ensure it is filtered before joining.
+  //
+  // There are common cases (like equality inner joins) where we can take the
+  // intersection of the spans to avoid having to re-introduce filters.
+  repeated TableReaderSpan spans = 3 [(gogoproto.nullable) = false];
+
+  // A hint for how many joined rows from the tables the consumer of the
+  // interleave reader joiner might need. This is used to size the initial KV
+  // batches to try to avoid reading many more rows than needed by the
+  // processor receiving the output.
+  //
+  // Not used if there is a limit set in the PostProcessSpec of this processor
+  // (that value will be used for sizing batches instead).
+  optional int64 limit_hint = 4 [(gogoproto.nullable) = false];
+
+  // Joiner component
+
+  // "ON" expression (in addition to the equality constraints captured by the
+  // orderings). Assuming that the left table has N columns and the second
+  // table stream has M columns, in this expression ordinal references @1 to @N
+  // refer to columns of the left table and variables @(N+1) to @(N+M) refer to
+  // columns in the right table.
+  optional Expression on_expr = 5 [(gogoproto.nullable) = false];
+
+  optional JoinType type = 6 [(gogoproto.nullable) = false];
 }

@@ -872,10 +872,9 @@ func (mrf *MultiRowFetcher) finalizeRow() {
 
 // GetRangeInfo returns information about the ranges where the rows came from.
 // The RangeInfo's are deduped and not ordered.
-// TODO(richardwu): uncomment this when RowFetcher refactored to MultiRowFetcher.
-// func (mrf *MultiRowFetcher) GetRangeInfo() []roachpb.RangeInfo {
-// 	return mrf.kvFetcher.getRangesInfo()
-// }
+func (mrf *MultiRowFetcher) GetRangeInfo() []roachpb.RangeInfo {
+	return mrf.kvFetcher.getRangesInfo()
+}
 
 // Only unique secondary indexes have extra columns to decode (namely the
 // primary index columns).
