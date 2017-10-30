@@ -866,8 +866,10 @@ func forEachColumnInIndex(
 	return nil
 }
 
-func forEachUser(ctx context.Context, p *planner, fn func(username string) error) error {
+func forEachUser(ctx context.Context, origPlanner *planner, fn func(username string) error) error {
 	query := `SELECT username FROM system.users`
+	p := makeInternalPlanner("for-each-user", origPlanner.txn, security.RootUser, origPlanner.session.memMetrics)
+	defer finishInternalPlanner(p)
 	plan, err := p.query(ctx, query)
 	if err != nil {
 		return nil
