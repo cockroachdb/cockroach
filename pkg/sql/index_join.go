@@ -122,6 +122,7 @@ func (p *planner) makeIndexJoin(
 	// Create a new scanNode that will be used with the primary index.
 	table := p.Scan()
 	table.desc = origScan.desc
+	table.lockForUpdate = origScan.lockForUpdate
 	// Note: initDescDefaults can only error out if its 2nd argument is not nil.
 	_ = table.initDescDefaults(origScan.scanVisibility, nil)
 	table.initOrdering(0)

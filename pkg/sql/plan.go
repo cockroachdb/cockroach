@@ -395,7 +395,8 @@ func (p *planner) newPlan(
 	case *parser.Select:
 		return p.Select(ctx, n, desiredTypes)
 	case *parser.SelectClause:
-		return p.SelectClause(ctx, n, nil, nil, desiredTypes, publicColumns)
+		return p.SelectClause(ctx, n, nil /* orderBy */, nil /* limit */, false, /* lockForUpdate */
+			desiredTypes, publicColumns)
 	case *parser.SetClusterSetting:
 		return p.SetClusterSetting(ctx, n)
 	case *parser.SetZoneConfig:
@@ -489,7 +490,8 @@ func (p *planner) prepare(ctx context.Context, stmt parser.Statement) (planNode,
 	case *parser.Select:
 		return p.Select(ctx, n, nil)
 	case *parser.SelectClause:
-		return p.SelectClause(ctx, n, nil, nil, nil, publicColumns)
+		return p.SelectClause(ctx, n, nil /* orderBy */, nil /* limit */, false, /* lockForUpdate */
+			nil /* desiredTypes */, publicColumns)
 	case *parser.SetClusterSetting:
 		return p.SetClusterSetting(ctx, n)
 	case *parser.SetVar:

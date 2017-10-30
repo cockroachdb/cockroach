@@ -241,7 +241,10 @@ func newSourceInfoForSingleTable(
 
 // getSources combines zero or more FROM sources into cross-joins.
 func (p *planner) getSources(
-	ctx context.Context, sources []parser.TableExpr, scanVisibility scanVisibility,
+	ctx context.Context,
+	sources []parser.TableExpr,
+	scanVisibility scanVisibility,
+	lockForUpdate bool,
 ) (planDataSource, error) {
 	switch len(sources) {
 	case 0:
@@ -252,14 +255,14 @@ func (p *planner) getSources(
 		}, nil
 
 	case 1:
-		return p.getDataSource(ctx, sources[0], nil, scanVisibility)
+		return p.getDataSource(ctx, sources[0], nil /* hints */, scanVisibility, lockForUpdate)
 
 	default:
-		left, err := p.getDataSource(ctx, sources[0], nil, scanVisibility)
+		left, err := p.getDataSource(ctx, sources[0], nil /* hints */, scanVisibility, lockForUpdate)
 		if err != nil {
 			return planDataSource{}, err
 		}
-		right, err := p.getSources(ctx, sources[1:], scanVisibility)
+		right, err := p.getSources(ctx, sources[1:], scanVisibility, lockForUpdate)
 		if err != nil {
 			return planDataSource{}, err
 		}
@@ -334,7 +337,7 @@ func (p *planner) getVirtualDataSource(
 func (p *planner) getDataSourceAsOneColumn(
 	ctx context.Context, src *parser.FuncExpr,
 ) (planDataSource, error) {
-	ds, err := p.getDataSource(ctx, src, nil, publicColumns)
+	ds, err := p.getDataSource(ctx, src, nil /* hints */, publicColumns, false /* lockForUpdate */)
 	if err != nil {
 		return ds, err
 	}
@@ -369,6 +372,7 @@ func (p *planner) getDataSource(
 	src parser.TableExpr,
 	hints *parser.IndexHints,
 	scanVisibility scanVisibility,
+	lockForUpdate bool,
 ) (planDataSource, error) {
 	switch t := src.(type) {
 	case *parser.NormalizableTableName:
@@ -386,7 +390,7 @@ func (p *planner) getDataSource(
 		if foundVirtual {
 			return ds, nil
 		}
-		return p.getTableScanOrViewPlan(ctx, tn, hints, scanVisibility)
+		return p.getTableScanOrViewPlan(ctx, tn, hints, scanVisibility, lockForUpdate)
 
 	case *parser.FuncExpr:
 		return p.getGeneratorPlan(ctx, t)
@@ -396,11 +400,11 @@ func (p *planner) getDataSource(
 
 	case *parser.JoinTableExpr:
 		// Joins: two sources.
-		left, err := p.getDataSource(ctx, t.Left, nil, scanVisibility)
+		left, err := p.getDataSource(ctx, t.Left, nil /* hints */, scanVisibility, lockForUpdate)
 		if err != nil {
 			return left, err
 		}
-		right, err := p.getDataSource(ctx, t.Right, nil, scanVisibility)
+		right, err := p.getDataSource(ctx, t.Right, nil /* hints */, scanVisibility, lockForUpdate)
 		if err != nil {
 			return right, err
 		}
@@ -417,10 +421,10 @@ func (p *planner) getDataSource(
 		}, nil
 
 	case *parser.ParenTableExpr:
-		return p.getDataSource(ctx, t.Expr, hints, scanVisibility)
+		return p.getDataSource(ctx, t.Expr, hints, scanVisibility, lockForUpdate)
 
 	case *parser.TableRef:
-		return p.getTableScanByRef(ctx, t, hints, scanVisibility)
+		return p.getTableScanByRef(ctx, t, hints, scanVisibility, lockForUpdate)
 
 	case *parser.AliasedTableExpr:
 		// Alias clause: source AS alias(cols...)
@@ -429,7 +433,7 @@ func (p *planner) getDataSource(
 			hints = t.Hints
 		}
 
-		src, err := p.getDataSource(ctx, t.Expr, hints, scanVisibility)
+		src, err := p.getDataSource(ctx, t.Expr, hints, scanVisibility, lockForUpdate)
 		if err != nil {
 			return src, err
 		}
@@ -479,6 +483,7 @@ func (p *planner) getTableScanByRef(
 	tref *parser.TableRef,
 	hints *parser.IndexHints,
 	scanVisibility scanVisibility,
+	lockForUpdate bool,
 ) (planDataSource, error) {
 	desc, err := p.getTableDescByID(ctx, sqlbase.ID(tref.TableID))
 	if err != nil {
@@ -498,7 +503,7 @@ func (p *planner) getTableScanByRef(
 		DBNameOriginallyOmitted: true,
 	}
 
-	src, err := p.getPlanForDesc(ctx, desc, &tn, hints, scanVisibility, tref.Columns)
+	src, err := p.getPlanForDesc(ctx, desc, &tn, hints, scanVisibility, lockForUpdate, tref.Columns)
 	if err != nil {
 		return src, err
 	}
@@ -572,6 +577,7 @@ func (p *planner) getTableScanOrViewPlan(
 	tn *parser.TableName,
 	hints *parser.IndexHints,
 	scanVisibility scanVisibility,
+	lockForUpdate bool,
 ) (planDataSource, error) {
 	if tn.PrefixOriginallySpecified {
 		// Prefixes are currently only supported for virtual tables.
@@ -584,7 +590,7 @@ func (p *planner) getTableScanOrViewPlan(
 		return planDataSource{}, err
 	}
 
-	return p.getPlanForDesc(ctx, desc, tn, hints, scanVisibility, nil)
+	return p.getPlanForDesc(ctx, desc, tn, hints, scanVisibility, lockForUpdate, nil /* wantedColumns */)
 }
 
 func (p *planner) getTableDesc(
@@ -607,6 +613,7 @@ func (p *planner) getPlanForDesc(
 	tn *parser.TableName,
 	hints *parser.IndexHints,
 	scanVisibility scanVisibility,
+	lockForUpdate bool,
 	wantedColumns []parser.ColumnID,
 ) (planDataSource, error) {
 	if desc.IsView() {
@@ -625,6 +632,7 @@ func (p *planner) getPlanForDesc(
 	if err := scan.initTable(p, desc, hints, scanVisibility, wantedColumns); err != nil {
 		return planDataSource{}, err
 	}
+	scan.lockForUpdate = lockForUpdate
 
 	return planDataSource{
 		info: newSourceInfoForSingleTable(*tn, planColumns(scan)),
