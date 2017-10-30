@@ -355,3 +355,8 @@ PREPARE sets(string) AS SET CLUSTER SETTING cluster.organization = $1
 
 statement
 EXECUTE sets('hello')
+
+# #19597
+
+statement error could not determine data type of placeholder
+PREPARE x19597 AS SELECT $1 IN ($2, null);

@@ -1265,11 +1265,7 @@ func typeCheckSameTypedExprs(
 			case len(constIdxs) > 0:
 				return typeCheckConstsAndPlaceholdersWithDesired(s, desired)
 			case len(placeholderIdxs) > 0:
-				err := typeCheckSameTypedPlaceholders(s, nil)
-				if err == nil {
-					panic("type checking parameters without a type should throw an error")
-				}
-				return nil, nil, err
+				return nil, nil, placeholderTypeAmbiguityError{s.exprs[placeholderIdxs[0]].(*Placeholder)}
 			default:
 				return typedExprs, TypeNull, nil
 			}
@@ -1299,8 +1295,7 @@ func typeCheckSameTypedExprs(
 	}
 }
 
-// Used to set placeholders to the desired typ. If the typ is not provided or is
-// nil, an error will be thrown.
+// Used to set placeholders to the desired typ.
 func typeCheckSameTypedPlaceholders(s typeCheckExprsState, typ Type) error {
 	for _, i := range s.placeholderIdxs {
 		typedExpr, err := typeCheckAndRequire(s.ctx, s.exprs[i], typ, "placeholder")
