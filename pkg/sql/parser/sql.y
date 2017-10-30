@@ -690,7 +690,7 @@ func (u *sqlSymUnion) referenceActions() ReferenceActions {
 %type <NamePart> name_indirection_elem
 %type <Exprs> ctext_expr_list ctext_row
 %type <GroupBy> group_clause
-%type <*Limit> select_limit
+%type <*Limit> select_limit opt_select_limit
 %type <TableNameReferences> relation_expr_list
 %type <ReturningClause> returning_clause
 
@@ -713,6 +713,7 @@ func (u *sqlSymUnion) referenceActions() ReferenceActions {
 %type <empty> opt_set_data
 
 %type <*Limit> limit_clause offset_clause opt_limit_clause
+%type <bool> for_locking_clause opt_for_locking_clause
 %type <Expr>  select_limit_value
 %type <Expr> opt_select_fetch_first_value
 %type <empty> row_or_rows
@@ -3757,9 +3758,13 @@ select_no_parens:
   {
     $$.val = &Select{Select: $1.selectStmt(), OrderBy: $2.orderBy()}
   }
-| select_clause opt_sort_clause select_limit
+| select_clause opt_sort_clause for_locking_clause opt_select_limit
   {
-    $$.val = &Select{Select: $1.selectStmt(), OrderBy: $2.orderBy(), Limit: $3.limit()}
+    $$.val = &Select{Select: $1.selectStmt(), OrderBy: $2.orderBy(), LockForUpdate: $3.bool(), Limit: $4.limit()}
+  }
+| select_clause opt_sort_clause select_limit opt_for_locking_clause
+  {
+    $$.val = &Select{Select: $1.selectStmt(), OrderBy: $2.orderBy(), Limit: $3.limit(), LockForUpdate: $4.bool()}
   }
 | with_clause select_clause
   {
@@ -3769,9 +3774,13 @@ select_no_parens:
   {
     $$.val = &Select{Select: $2.selectStmt(), OrderBy: $3.orderBy()}
   }
-| with_clause select_clause opt_sort_clause select_limit
+| with_clause select_clause opt_sort_clause for_locking_clause opt_select_limit
   {
-    $$.val = &Select{Select: $2.selectStmt(), OrderBy: $3.orderBy(), Limit: $4.limit()}
+    $$.val = &Select{Select: $2.selectStmt(), OrderBy: $3.orderBy(), LockForUpdate: $4.bool(), Limit: $5.limit()}
+  }
+| with_clause select_clause opt_sort_clause select_limit opt_for_locking_clause
+  {
+    $$.val = &Select{Select: $2.selectStmt(), OrderBy: $3.orderBy(), Limit: $4.limit(), LockForUpdate: $5.bool()}
   }
 
 select_clause:
@@ -3831,6 +3840,7 @@ simple_select:
 //        [ ORDER BY <expr> [ ASC | DESC ] [, ...] ]
 //        [ LIMIT { <expr> | ALL } ]
 //        [ OFFSET <expr> [ ROW | ROWS ] ]
+//        [ FOR UPDATE ]
 // %SeeAlso: WEBDOCS/select.html
 simple_select_clause:
   SELECT opt_all_clause target_list
@@ -4005,6 +4015,13 @@ sortby:
 // TODO(pmattis): Support ordering using arbitrary math ops?
 // | a_expr USING math_op {}
 
+opt_select_limit:
+  select_limit
+| /* EMPTY */
+  {
+    $$.val = (*Limit)(nil)
+  }
+
 select_limit:
   limit_clause offset_clause
   {
@@ -4126,6 +4143,19 @@ having_clause:
 | /* EMPTY */
   {
     $$.val = Expr(nil)
+  }
+
+opt_for_locking_clause:
+  for_locking_clause
+| /* EMPTY */
+  {
+    $$.val = false
+  }
+ 
+for_locking_clause:
+  FOR UPDATE
+  {
+    $$.val = true
   }
 
 // Given "VALUES (a, b)" in a table expression context, we have to

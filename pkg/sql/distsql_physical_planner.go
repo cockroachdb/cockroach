@@ -314,6 +314,9 @@ func (dsp *DistSQLPlanner) checkSupportForNode(node planNode) (distRecommendatio
 			// ranges at a time.
 			rec = shouldNotDistribute
 		}
+		if n.lockForUpdate {
+			return 0, newQueryNotSupportedError("explicit locking with FOR UPDATE is not yet supported")
+		}
 		// We recommend running scans distributed if we have a filtering
 		// expression or if we have a full table scan.
 		if n.filter != nil {

@@ -140,7 +140,7 @@ func initRowFetcher(
 		colIdxMap[c.ID] = i
 	}
 	if err := fetcher.Init(
-		desc, colIdxMap, index, reverseScan, isSecondaryIndex,
+		desc, colIdxMap, index, reverseScan, false /* lockForUpdate */, isSecondaryIndex,
 		desc.Columns, valNeededForCol, true /* returnRangeInfo */, alloc,
 	); err != nil {
 		return nil, false, err

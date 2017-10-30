@@ -88,6 +88,7 @@ type txnKVFetcher struct {
 	firstBatchLimit int64
 	useBatchLimit   bool
 	reverse         bool
+	lockForUpdate   bool
 	// returnRangeInfo, if set, causes the kvFetcher to populate rangeInfos.
 	// See also rowFetcher.returnRangeInfo.
 	returnRangeInfo bool
@@ -165,6 +166,7 @@ func makeKVFetcher(
 	txn *client.Txn,
 	spans roachpb.Spans,
 	reverse bool,
+	lockForUpdate bool,
 	useBatchLimit bool,
 	firstBatchLimit int64,
 	returnRangeInfo bool,
@@ -198,6 +200,7 @@ func makeKVFetcher(
 		txn:             txn,
 		spans:           copySpans,
 		reverse:         reverse,
+		lockForUpdate:   lockForUpdate,
 		useBatchLimit:   useBatchLimit,
 		firstBatchLimit: firstBatchLimit,
 		returnRangeInfo: returnRangeInfo,
@@ -210,6 +213,10 @@ func (f *txnKVFetcher) fetch(ctx context.Context) error {
 	ba.Header.MaxSpanRequestKeys = f.getBatchSize()
 	ba.Header.ReturnRangeInfo = f.returnRangeInfo
 	ba.Requests = make([]roachpb.RequestUnion, len(f.spans))
+	if f.lockForUpdate {
+		return errors.Errorf("explicit locking with FOR UPDATE is not yet supported")
+	}
+
 	if f.reverse {
 		scans := make([]roachpb.ReverseScanRequest, len(f.spans))
 		for i := range f.spans {
