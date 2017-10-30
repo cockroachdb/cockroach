@@ -24,4 +24,3 @@ EXPERIMENTAL SCRUB TABLE t WITH OPTIONS INDEX (name_idx)
 
 statement error specified indexes to check that do not exist on table "t": not_an_index, also_not
 EXPERIMENTAL SCRUB TABLE t WITH OPTIONS INDEX (not_an_index, also_not, name_idx)
------
