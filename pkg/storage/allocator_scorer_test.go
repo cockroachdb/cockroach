@@ -26,7 +26,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
@@ -780,8 +779,9 @@ func TestDiversityRemovalScore(t *testing.T) {
 func TestBalanceScore(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	st := cluster.MakeTestingClusterSettings()
-	EnableStatsBasedRebalancing.Override(&st.SV, true)
+	options := scorerOptions{
+		statsBasedRebalancingEnabled: true,
+	}
 
 	storeList := StoreList{
 		candidateRanges:          stat{mean: 1000},
@@ -933,7 +933,7 @@ func TestBalanceScore(t *testing.T) {
 		{sRangesUnderfullBytesUnderfullWritesOverfull, rLowWrites, 3},
 	}
 	for i, tc := range testCases {
-		if a, e := balanceScore(st, storeList, tc.sc, tc.ri, false), tc.expected; a.totalScore() != e {
+		if a, e := balanceScore(storeList, tc.sc, tc.ri, options), tc.expected; a.totalScore() != e {
 			t.Errorf("%d: balanceScore(storeList, %+v, %+v) got %s; want %.2f", i, tc.sc, tc.ri, a, e)
 		}
 	}
@@ -942,8 +942,9 @@ func TestBalanceScore(t *testing.T) {
 func TestRebalanceConvergesOnMean(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	st := cluster.MakeTestingClusterSettings()
-	EnableStatsBasedRebalancing.Override(&st.SV, true)
+	options := scorerOptions{
+		statsBasedRebalancingEnabled: true,
+	}
 
 	const diskCapacity = 2000
 	storeList := StoreList{
@@ -1007,10 +1008,10 @@ func TestRebalanceConvergesOnMean(t *testing.T) {
 			RangeCount:      tc.rangeCount,
 			WritesPerSecond: tc.writesPerSecond,
 		}
-		if a, e := rebalanceToConvergesOnMean(st, storeList, sc, tc.ri, false), tc.toConverges; a != e {
+		if a, e := rebalanceToConvergesOnMean(storeList, sc, tc.ri, options), tc.toConverges; a != e {
 			t.Errorf("%d: rebalanceToConvergesOnMean(storeList, %+v, %+v) got %t; want %t", i, sc, tc.ri, a, e)
 		}
-		if a, e := rebalanceFromConvergesOnMean(st, storeList, sc, tc.ri, false), tc.fromConverges; a != e {
+		if a, e := rebalanceFromConvergesOnMean(storeList, sc, tc.ri, options), tc.fromConverges; a != e {
 			t.Errorf("%d: rebalanceFromConvergesOnMean(storeList, %+v, %+v) got %t; want %t", i, sc, tc.ri, a, e)
 		}
 	}

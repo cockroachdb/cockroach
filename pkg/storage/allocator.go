@@ -90,6 +90,10 @@ var leaseRebalancingAggressiveness = settings.RegisterNonNegativeFloatSetting(
 	1.0,
 )
 
+func statsBasedRebalancingEnabled(st *cluster.Settings, disableStatsBasedRebalance bool) bool {
+	return EnableStatsBasedRebalancing.Get(&st.SV) && st.Version.IsActive(cluster.VersionStatsBasedRebalancing) && !disableStatsBasedRebalance
+}
+
 // AllocatorAction enumerates the various replication adjustments that may be
 // recommended by the allocator.
 type AllocatorAction int
@@ -226,7 +230,10 @@ func MakeAllocator(
 // supplied range, as governed by the supplied zone configuration. It
 // returns the required action that should be taken and a priority.
 func (a *Allocator) ComputeAction(
-	ctx context.Context, zone config.ZoneConfig, rangeInfo RangeInfo, disableStatsBasedRebalance bool,
+	ctx context.Context,
+	zone config.ZoneConfig,
+	rangeInfo RangeInfo,
+	disableStatsBasedRebalancing bool,
 ) (AllocatorAction, float64) {
 	if a.storePool == nil {
 		// Do nothing if storePool is nil for some unittests.
@@ -284,7 +291,7 @@ func (a *Allocator) ComputeAction(
 				liveReplicas,
 				rangeInfo,
 				true, /* relaxConstraints */
-				disableStatsBasedRebalance,
+				disableStatsBasedRebalancing,
 			); err == nil {
 				removeDead = true
 			}
@@ -341,19 +348,13 @@ func (a *Allocator) AllocateTarget(
 	existing []roachpb.ReplicaDescriptor,
 	rangeInfo RangeInfo,
 	relaxConstraints bool,
-	disableStatsBasedRebalance bool,
+	disableStatsBasedRebalancing bool,
 ) (*roachpb.StoreDescriptor, string, error) {
 	sl, _, throttledStoreCount := a.storePool.getStoreList(rangeInfo.Desc.RangeID, storeFilterThrottled)
 
+	options := a.scorerOptions(disableStatsBasedRebalancing)
 	candidates := allocateCandidates(
-		a.storePool.st,
-		sl,
-		constraints,
-		existing,
-		rangeInfo,
-		a.storePool.getLocalities(existing),
-		a.storePool.deterministic,
-		disableStatsBasedRebalance,
+		sl, constraints, existing, rangeInfo, a.storePool.getLocalities(existing), options,
 	)
 	log.VEventf(ctx, 3, "allocate candidates: %s", candidates)
 	if target := candidates.selectGood(a.randGen); target != nil {
@@ -385,7 +386,7 @@ func (a Allocator) simulateRemoveTarget(
 	constraints config.Constraints,
 	candidates []roachpb.ReplicaDescriptor,
 	rangeInfo RangeInfo,
-	disableStatsBasedRebalance bool,
+	disableStatsBasedRebalancing bool,
 ) (roachpb.ReplicaDescriptor, string, error) {
 	// Update statistics first
 	// TODO(a-robinson): This could theoretically interfere with decisions made by other goroutines,
@@ -396,7 +397,7 @@ func (a Allocator) simulateRemoveTarget(
 	defer func() {
 		a.storePool.updateLocalStoreAfterRebalance(targetStore, rangeInfo, roachpb.REMOVE_REPLICA)
 	}()
-	return a.RemoveTarget(ctx, constraints, candidates, rangeInfo, disableStatsBasedRebalance)
+	return a.RemoveTarget(ctx, constraints, candidates, rangeInfo, disableStatsBasedRebalancing)
 }
 
 // RemoveTarget returns a suitable replica to remove from the provided replica
@@ -409,7 +410,7 @@ func (a Allocator) RemoveTarget(
 	constraints config.Constraints,
 	candidates []roachpb.ReplicaDescriptor,
 	rangeInfo RangeInfo,
-	disableStatsBasedRebalance bool,
+	disableStatsBasedRebalancing bool,
 ) (roachpb.ReplicaDescriptor, string, error) {
 	if len(candidates) == 0 {
 		return roachpb.ReplicaDescriptor{}, "", errors.Errorf("must supply at least one candidate replica to allocator.RemoveTarget()")
@@ -422,14 +423,13 @@ func (a Allocator) RemoveTarget(
 	}
 	sl, _, _ := a.storePool.getStoreListFromIDs(existingStoreIDs, roachpb.RangeID(0), storeFilterNone)
 
+	options := a.scorerOptions(disableStatsBasedRebalancing)
 	rankedCandidates := removeCandidates(
-		a.storePool.st,
 		sl,
 		constraints,
 		rangeInfo,
 		a.storePool.getLocalities(rangeInfo.Desc.Replicas),
-		a.storePool.deterministic,
-		disableStatsBasedRebalance,
+		options,
 	)
 	log.VEventf(ctx, 3, "remove candidates: %s", rankedCandidates)
 	if bad := rankedCandidates.selectBad(a.randGen); bad != nil {
@@ -476,20 +476,19 @@ func (a Allocator) RebalanceTarget(
 	raftStatus *raft.Status,
 	rangeInfo RangeInfo,
 	filter storeFilter,
-	disableStatsBasedRebalance bool,
+	disableStatsBasedRebalancing bool,
 ) (*roachpb.StoreDescriptor, string) {
 	sl, _, _ := a.storePool.getStoreList(rangeInfo.Desc.RangeID, filter)
 
+	options := a.scorerOptions(disableStatsBasedRebalancing)
 	existingCandidates, candidates := rebalanceCandidates(
 		ctx,
-		a.storePool.st,
 		sl,
 		constraints,
 		rangeInfo.Desc.Replicas,
 		rangeInfo,
 		a.storePool.getLocalities(rangeInfo.Desc.Replicas),
-		a.storePool.deterministic,
-		disableStatsBasedRebalance,
+		options,
 	)
 
 	// We're going to add another replica to the range which will change the
@@ -542,9 +541,16 @@ func (a Allocator) RebalanceTarget(
 		desc.Replicas = append(desc.Replicas, newReplica)
 		rangeInfo.Desc = &desc
 
-		replicaCandidates := simulateFilterUnremovableReplicas(raftStatus, desc.Replicas, newReplica.ReplicaID)
+		replicaCandidates := simulateFilterUnremovableReplicas(
+			raftStatus, desc.Replicas, newReplica.ReplicaID)
 
-		removeReplica, _, err := a.simulateRemoveTarget(ctx, target.store.StoreID, constraints, replicaCandidates, rangeInfo, disableStatsBasedRebalance)
+		removeReplica, _, err := a.simulateRemoveTarget(
+			ctx,
+			target.store.StoreID,
+			constraints,
+			replicaCandidates,
+			rangeInfo,
+			disableStatsBasedRebalancing)
 		if err != nil {
 			log.Warningf(ctx, "simulating RemoveTarget failed: %s", err)
 			return nil, ""
@@ -569,6 +575,15 @@ func (a Allocator) RebalanceTarget(
 		log.Warningf(ctx, "failed to marshal details for choosing rebalance target: %s", err)
 	}
 	return &target.store, string(details)
+}
+
+func (a *Allocator) scorerOptions(disableStatsBasedRebalancing bool) scorerOptions {
+	return scorerOptions{
+		deterministic:                a.storePool.deterministic,
+		statsBasedRebalancingEnabled: statsBasedRebalancingEnabled(a.storePool.st, disableStatsBasedRebalancing),
+		rangeRebalanceThreshold:      rangeRebalanceThreshold.Get(&a.storePool.st.SV),
+		statRebalanceThreshold:       statRebalanceThreshold.Get(&a.storePool.st.SV),
+	}
 }
 
 // TransferLeaseTarget returns a suitable replica to transfer the range lease

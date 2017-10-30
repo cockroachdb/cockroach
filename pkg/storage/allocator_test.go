@@ -689,7 +689,7 @@ func TestAllocatorRebalance(t *testing.T) {
 			t.Fatalf("%d: unable to get store %d descriptor", i, store.StoreID)
 		}
 		sl, _, _ := a.storePool.getStoreList(firstRange, storeFilterThrottled)
-		result := shouldRebalance(ctx, st, desc, sl, firstRangeInfo, false)
+		result := shouldRebalance(ctx, desc, sl, firstRangeInfo, a.scorerOptions(false))
 		if expResult := (i >= 2); expResult != result {
 			t.Errorf("%d: expected rebalance %t; got %t; desc %+v; sl: %+v", i, expResult, result, desc, sl)
 		}
@@ -1039,7 +1039,7 @@ func TestAllocatorRebalanceThrashing(t *testing.T) {
 				if !ok {
 					t.Fatalf("[store %d]: unable to get store %d descriptor", j, store.StoreID)
 				}
-				if a, e := shouldRebalance(context.Background(), st, desc, sl, firstRangeInfo, false), cluster[j].shouldRebalanceFrom; a != e {
+				if a, e := shouldRebalance(context.Background(), desc, sl, firstRangeInfo, a.scorerOptions(false)), cluster[j].shouldRebalanceFrom; a != e {
 					t.Errorf("[store %d]: shouldRebalance %t != expected %t", store.StoreID, a, e)
 				}
 			}
@@ -1108,7 +1108,7 @@ func TestAllocatorRebalanceByCount(t *testing.T) {
 			t.Fatalf("%d: unable to get store %d descriptor", i, store.StoreID)
 		}
 		sl, _, _ := a.storePool.getStoreList(firstRange, storeFilterThrottled)
-		result := shouldRebalance(ctx, st, desc, sl, firstRangeInfo, false)
+		result := shouldRebalance(ctx, desc, sl, firstRangeInfo, a.scorerOptions(false))
 		if expResult := (i < 3); expResult != result {
 			t.Errorf("%d: expected rebalance %t; got %t", i, expResult, result)
 		}
@@ -2138,7 +2138,7 @@ func TestAllocatorRebalanceTargetDisableStatsRebalance(t *testing.T) {
 			nil,
 			testRangeInfo(desc.Replicas, desc.RangeID),
 			storeFilterThrottled,
-			false, /* disableStatsBasedRebalance */
+			false, /* disableStatsBasedRebalancing */
 		)
 		if target != nil {
 			t.Errorf("expected no balance, but got %d", target.StoreID)
@@ -2152,7 +2152,7 @@ func TestAllocatorRebalanceTargetDisableStatsRebalance(t *testing.T) {
 			nil,
 			testRangeInfo(desc.Replicas, desc.RangeID),
 			storeFilterThrottled,
-			true, /* disableStatsBasedRebalance */
+			true, /* disableStatsBasedRebalancing */
 		)
 		if expectedStore := roachpb.StoreID(4); target.StoreID != expectedStore {
 			t.Errorf("expected balance to %d, but got %d", expectedStore, target.StoreID)
