@@ -357,6 +357,174 @@ func TestIntervalSklRatchetTxnIDs(t *testing.T) {
 	require.Equal(t, val6, s.LookupTimestamp([]byte("raspberry")))
 }
 
+func TestIntervalSklLookupRange(t *testing.T) {
+	ts1 := makeTS(100, 100)
+	ts2 := makeTS(200, 201)
+	ts3 := makeTS(300, 201)
+	ts4 := makeTS(400, 0)
+
+	val1 := makeVal(ts1, "1")
+	val2 := makeVal(ts2, "2")
+	val3 := makeVal(ts2, "3")
+	val3WithoutID := makeValWithoutID(ts2)
+	val4 := makeVal(ts3, "4")
+	val5 := makeVal(ts3, "5")
+	val5WithoutID := makeValWithoutID(ts3)
+	val6 := makeVal(ts4, "6")
+
+	s := newIntervalSkl(arenaSize)
+
+	// Perform range lookups over a single key.
+	s.Add([]byte("apricot"), val1)
+	require.Equal(t, val1, s.LookupTimestampRange([]byte(""), []byte(nil), 0))
+	require.Equal(t, val1, s.LookupTimestampRange([]byte(""), []byte(nil), excludeFrom))
+	require.Equal(t, val1, s.LookupTimestampRange([]byte(""), []byte(nil), excludeTo))
+	require.Equal(t, val1, s.LookupTimestampRange([]byte(""), []byte(nil), (excludeFrom|excludeTo)))
+
+	require.Equal(t, emptyVal, s.LookupTimestampRange([]byte("apple"), []byte("apple"), 0))
+	require.Equal(t, val1, s.LookupTimestampRange([]byte("apple"), []byte("apricot"), 0))
+	require.Equal(t, val1, s.LookupTimestampRange([]byte("apple"), []byte("apricot"), excludeFrom))
+	require.Equal(t, emptyVal, s.LookupTimestampRange([]byte("apple"), []byte("apricot"), excludeTo))
+
+	require.Equal(t, val1, s.LookupTimestampRange([]byte("apricot"), []byte("apricot"), 0))
+	require.Equal(t, val1, s.LookupTimestampRange([]byte("apricot"), []byte("apricot"), excludeFrom))
+	require.Equal(t, val1, s.LookupTimestampRange([]byte("apricot"), []byte("apricot"), excludeTo))
+	require.Equal(t, emptyVal, s.LookupTimestampRange([]byte("apricot"), []byte("apricot"), (excludeFrom|excludeTo)))
+
+	// Perform range lookups over a series of keys.
+	s.Add([]byte("banana"), val2)
+	s.Add([]byte("cherry"), val3)
+	require.Equal(t, val2, s.LookupTimestampRange([]byte("apricot"), []byte("banana"), 0))
+	require.Equal(t, val2, s.LookupTimestampRange([]byte("apricot"), []byte("banana"), excludeFrom))
+	require.Equal(t, val1, s.LookupTimestampRange([]byte("apricot"), []byte("banana"), excludeTo))
+	require.Equal(t, emptyVal, s.LookupTimestampRange([]byte("apricot"), []byte("banana"), (excludeFrom|excludeTo)))
+
+	require.Equal(t, val3WithoutID, s.LookupTimestampRange([]byte("apricot"), []byte("cherry"), 0))
+	require.Equal(t, val3WithoutID, s.LookupTimestampRange([]byte("apricot"), []byte("cherry"), excludeFrom))
+	require.Equal(t, val2, s.LookupTimestampRange([]byte("apricot"), []byte("cherry"), excludeTo))
+	require.Equal(t, val2, s.LookupTimestampRange([]byte("apricot"), []byte("cherry"), (excludeFrom|excludeTo)))
+
+	require.Equal(t, val3WithoutID, s.LookupTimestampRange([]byte("banana"), []byte("cherry"), 0))
+	require.Equal(t, val3, s.LookupTimestampRange([]byte("banana"), []byte("cherry"), excludeFrom))
+	require.Equal(t, val2, s.LookupTimestampRange([]byte("banana"), []byte("cherry"), excludeTo))
+	require.Equal(t, emptyVal, s.LookupTimestampRange([]byte("banana"), []byte("cherry"), (excludeFrom|excludeTo)))
+
+	// Open ranges should scan until the last key.
+	require.Equal(t, val3WithoutID, s.LookupTimestampRange([]byte("apricot"), []byte(nil), 0))
+	require.Equal(t, val3WithoutID, s.LookupTimestampRange([]byte("banana"), []byte(nil), 0))
+	require.Equal(t, val3, s.LookupTimestampRange([]byte("cherry"), []byte(nil), 0))
+	require.Equal(t, emptyVal, s.LookupTimestampRange([]byte("tomato"), []byte(nil), 0))
+
+	// Range with multiple identical timestamps should return no txnID.
+	s.AddRange([]byte("apple"), []byte("kiwi"), excludeTo, val4)
+	s.AddRange([]byte("kiwi"), []byte("tomato"), excludeTo, val5)
+	require.Equal(t, val4, s.LookupTimestampRange([]byte("apple"), []byte("kiwi"), excludeTo))
+	require.Equal(t, val5, s.LookupTimestampRange([]byte("kiwi"), []byte("tomato"), excludeTo))
+	require.Equal(t, val5WithoutID, s.LookupTimestampRange([]byte("apple"), []byte("tomato"), excludeTo))
+
+	// Subset lookup range.
+	s.AddRange([]byte("apple"), []byte("cherry"), excludeTo, val6)
+	require.Equal(t, val6, s.LookupTimestampRange([]byte("apple"), []byte("berry"), 0))
+	require.Equal(t, val6, s.LookupTimestampRange([]byte("apple"), []byte("berry"), excludeFrom))
+	require.Equal(t, val6, s.LookupTimestampRange([]byte("berry"), []byte("blueberry"), 0))
+	require.Equal(t, val6, s.LookupTimestampRange([]byte("berry"), []byte("cherry"), 0))
+	require.Equal(t, val6, s.LookupTimestampRange([]byte("berry"), []byte("cherry"), excludeTo))
+}
+
+func TestIntervalSklLookupRangeSingleKeyRanges(t *testing.T) {
+	ts1 := makeTS(100, 100)
+	ts2 := makeTS(200, 201)
+
+	val1 := makeVal(ts1, "1")
+	val2 := makeVal(ts2, "2")
+	val3 := makeVal(ts2, "3")
+	val3WithoutID := makeValWithoutID(ts2)
+
+	key1 := []byte("a")
+	key2 := append(key1, 0x0)
+	key3 := append(key2, 0x0)
+	key4 := append(key3, 0x0)
+
+	// Perform range lookups over [key, key.Next()) ranges.
+	t.Run("[key, key.Next())", func(t *testing.T) {
+		s := newIntervalSkl(arenaSize)
+
+		s.AddRange(key1, key2, excludeTo, val1)
+		s.AddRange(key2, key3, excludeTo, val2)
+		s.AddRange(key3, key4, excludeTo, val3)
+
+		require.Equal(t, val1, s.LookupTimestampRange([]byte(""), key1, 0))
+		require.Equal(t, emptyVal, s.LookupTimestampRange([]byte(""), key1, excludeTo))
+		require.Equal(t, val2, s.LookupTimestampRange([]byte(""), key2, 0))
+		require.Equal(t, val1, s.LookupTimestampRange([]byte(""), key2, excludeTo))
+
+		require.Equal(t, val2, s.LookupTimestampRange(key1, key2, 0))
+		require.Equal(t, val2, s.LookupTimestampRange(key1, key2, excludeFrom))
+		require.Equal(t, val1, s.LookupTimestampRange(key1, key2, excludeTo))
+		// This may be surprising. We actually return the gapVal of the first range
+		// even though there isn't a discrete byte value between key1 and key2 (this
+		// is a feature, not a bug!). It demonstrates the difference between the
+		// first two options (which behave exactly the same) and the third:
+		// a) Add(key, val)
+		// b) AddRange(key, key, 0, val)
+		// c) AddRange(key, key.Next(), excludeTo, val)
+		//
+		// NB: If the behavior is not needed, it's better to use one of the
+		// first two options because they allow us to avoid storing a gap value.
+		require.Equal(t, val1, s.LookupTimestampRange(key1, key2, (excludeFrom|excludeTo)))
+
+		require.Equal(t, val3WithoutID, s.LookupTimestampRange(key1, key3, 0))
+		require.Equal(t, val3WithoutID, s.LookupTimestampRange(key1, key3, excludeFrom))
+		require.Equal(t, val2, s.LookupTimestampRange(key1, key3, excludeTo))
+		require.Equal(t, val2, s.LookupTimestampRange(key1, key3, (excludeFrom|excludeTo)))
+
+		require.Equal(t, val3WithoutID, s.LookupTimestampRange(key2, key3, 0))
+		// Again, this may be surprising. The logic is the same as above.
+		require.Equal(t, val3WithoutID, s.LookupTimestampRange(key2, key3, excludeFrom))
+		require.Equal(t, val2, s.LookupTimestampRange(key2, key3, excludeTo))
+		require.Equal(t, val2, s.LookupTimestampRange(key2, key3, (excludeFrom|excludeTo)))
+
+		require.Equal(t, val3, s.LookupTimestampRange(key3, []byte(nil), 0))
+		require.Equal(t, val3, s.LookupTimestampRange(key3, []byte(nil), excludeFrom))
+	})
+
+	// Perform the same lookups, but this time use single key ranges.
+	t.Run("[key, key]", func(t *testing.T) {
+		s := newIntervalSkl(arenaSize)
+
+		s.AddRange(key1, key1, 0, val1) // same as Add(key1, val1)
+		s.AddRange(key2, key2, 0, val2) //   ...   Add(key2, val2)
+		s.AddRange(key3, key3, 0, val3) //   ...   Add(key3, val3)
+
+		require.Equal(t, val1, s.LookupTimestampRange([]byte(""), key1, 0))
+		require.Equal(t, emptyVal, s.LookupTimestampRange([]byte(""), key1, excludeTo))
+		require.Equal(t, val2, s.LookupTimestampRange([]byte(""), key2, 0))
+		require.Equal(t, val1, s.LookupTimestampRange([]byte(""), key2, excludeTo))
+
+		require.Equal(t, val2, s.LookupTimestampRange(key1, key2, 0))
+		require.Equal(t, val2, s.LookupTimestampRange(key1, key2, excludeFrom))
+		require.Equal(t, val1, s.LookupTimestampRange(key1, key2, excludeTo))
+		// DIFFERENT!
+		require.Equal(t, emptyVal, s.LookupTimestampRange(key1, key2, (excludeFrom|excludeTo)))
+
+		require.Equal(t, val3WithoutID, s.LookupTimestampRange(key1, key3, 0))
+		require.Equal(t, val3WithoutID, s.LookupTimestampRange(key1, key3, excludeFrom))
+		require.Equal(t, val2, s.LookupTimestampRange(key1, key3, excludeTo))
+		require.Equal(t, val2, s.LookupTimestampRange(key1, key3, (excludeFrom|excludeTo)))
+
+		require.Equal(t, val3WithoutID, s.LookupTimestampRange(key2, key3, 0))
+		// DIFFERENT!
+		require.Equal(t, val3, s.LookupTimestampRange(key2, key3, excludeFrom))
+		require.Equal(t, val2, s.LookupTimestampRange(key2, key3, excludeTo))
+		// DIFFERENT!
+		require.Equal(t, emptyVal, s.LookupTimestampRange(key2, key3, (excludeFrom|excludeTo)))
+
+		require.Equal(t, val3, s.LookupTimestampRange(key3, []byte(nil), 0))
+		// DIFFERENT!
+		require.Equal(t, emptyVal, s.LookupTimestampRange(key3, []byte(nil), excludeFrom))
+	})
+}
+
 func TestIntervalSklFill(t *testing.T) {
 	const n = 200
 	const txnID = "123"
@@ -433,11 +601,8 @@ func TestIntervalSklConcurrency(t *testing.T) {
 					for j := 0; j < n; j++ {
 						fromNum := rng.Intn(slots)
 						toNum := rng.Intn(slots)
-
 						if fromNum > toNum {
 							fromNum, toNum = toNum, fromNum
-						} else if fromNum == toNum {
-							toNum++
 						}
 
 						from := []byte(fmt.Sprintf("%05d", fromNum))
@@ -451,6 +616,9 @@ func TestIntervalSklConcurrency(t *testing.T) {
 						require.False(t, val.ts.Less(now))
 
 						val = s.LookupTimestamp(to)
+						require.False(t, val.ts.Less(now))
+
+						val = s.LookupTimestampRange(from, to, 0)
 						require.False(t, val.ts.Less(now))
 
 						val = s.LookupTimestamp(key)
