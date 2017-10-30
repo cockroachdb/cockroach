@@ -58,14 +58,11 @@ func newTableReader(
 		tableID: spec.Table.ID,
 	}
 
-	// We ignore any limits that are higher than this value to avoid any
-	// overflows.
-	const overflowProtection = 1000000000
-	if post.Limit != 0 && post.Limit <= overflowProtection {
+	if post.Limit != 0 && post.Limit <= readerOverflowProtection {
 		// In this case the ProcOutputHelper will tell us to stop once we emit
 		// enough rows.
 		tr.limitHint = int64(post.Limit)
-	} else if spec.LimitHint != 0 && spec.LimitHint <= overflowProtection {
+	} else if spec.LimitHint != 0 && spec.LimitHint <= readerOverflowProtection {
 		// If it turns out that limiHint rows are sufficient for our consumer, we
 		// want to avoid asking for another batch. Currently, the only way for us to
 		// "stop" is if we block on sending rows and the consumer sets
@@ -184,7 +181,7 @@ func (tr *tableReader) Run(ctx context.Context, wg *sync.WaitGroup) {
 
 	txn := tr.flowCtx.txn
 	if txn == nil {
-		log.Fatalf(ctx, "joinReader outside of txn")
+		log.Fatalf(ctx, "tableReader outside of txn")
 	}
 
 	log.VEventf(ctx, 1, "starting")

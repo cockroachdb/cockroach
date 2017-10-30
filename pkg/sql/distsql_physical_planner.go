@@ -2019,8 +2019,8 @@ func (dsp *DistSQLPlanner) createPlanForJoin(
 	//  - the columns on the right side (numRightCols)
 	joinCol := 0
 
-	// In case of INNER joins there is no need there is no need for merged columns;
-	// the left equality columns are used instead.
+	// In case of INNER joins there is no need for merged columns; the left
+	// equality columns are used instead.
 	// In case of OUTER joins we add extra `mergedColNum` columns and they
 	// occupy first positions in a row. Remaining left and right columns will
 	// have a corresponding "offset"

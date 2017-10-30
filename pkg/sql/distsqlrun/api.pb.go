@@ -46,6 +46,8 @@
 		AlgebraicSetOpSpec
 		ReadCSVSpec
 		SSTWriterSpec
+		InterleaveReaderJoinerTable
+		InterleaveReaderJoinerSpec
 */
 package distsqlrun
 
