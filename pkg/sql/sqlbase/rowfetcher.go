@@ -52,6 +52,7 @@ type RowFetcher struct {
 	desc             *TableDescriptor
 	index            *IndexDescriptor
 	reverse          bool
+	lockForUpdate    bool
 	isSecondaryIndex bool
 	indexColumnDirs  []encoding.Direction
 
@@ -122,7 +123,7 @@ func (rf *RowFetcher) Init(
 	desc *TableDescriptor,
 	colIdxMap map[ColumnID]int,
 	index *IndexDescriptor,
-	reverse, isSecondaryIndex bool,
+	reverse, lockForUpdate, isSecondaryIndex bool,
 	cols []ColumnDescriptor,
 	valNeededForCol []bool,
 	returnRangeInfo bool,
@@ -132,6 +133,7 @@ func (rf *RowFetcher) Init(
 	rf.colIdxMap = colIdxMap
 	rf.index = index
 	rf.reverse = reverse
+	rf.lockForUpdate = lockForUpdate
 	rf.isSecondaryIndex = isSecondaryIndex
 	rf.cols = cols
 	rf.returnRangeInfo = returnRangeInfo
@@ -233,7 +235,7 @@ func (rf *RowFetcher) StartScan(
 		firstBatchLimit++
 	}
 
-	f, err := makeKVFetcher(txn, spans, rf.reverse, limitBatches, firstBatchLimit, rf.returnRangeInfo)
+	f, err := makeKVFetcher(txn, spans, rf.reverse, rf.lockForUpdate, limitBatches, firstBatchLimit, rf.returnRangeInfo)
 	if err != nil {
 		return err
 	}

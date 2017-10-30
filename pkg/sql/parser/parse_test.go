@@ -663,6 +663,8 @@ func TestParse(t *testing.T) {
 		{`SELECT a FROM t LIMIT a`},
 		{`SELECT a FROM t OFFSET b`},
 		{`SELECT a FROM t LIMIT a OFFSET b`},
+		{`SELECT a FROM t FOR UPDATE`},
+		{`SELECT a FROM t LIMIT a OFFSET b FOR UPDATE`},
 		{`SELECT DISTINCT * FROM t`},
 		{`SELECT DISTINCT a, b FROM t`},
 		{`SET a = 3`},
@@ -959,6 +961,9 @@ func TestParse2(t *testing.T) {
 		// We allow OFFSET before LIMIT, but always output LIMIT first.
 		{`SELECT a FROM t OFFSET a LIMIT b`,
 			`SELECT a FROM t LIMIT b OFFSET a`},
+		// We allow FOR UPDATE before LIMIT, but always output LIMIT first.
+		{`SELECT a FROM t FOR UPDATE LIMIT b`,
+			`SELECT a FROM t LIMIT b FOR UPDATE`},
 		// FETCH FIRST ... is alternative syntax for LIMIT.
 		{`SELECT a FROM t FETCH FIRST 3 ROWS ONLY`,
 			`SELECT a FROM t LIMIT 3`},

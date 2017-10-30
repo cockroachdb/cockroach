@@ -95,7 +95,8 @@ func (p *planner) Delete(
 		Exprs: sqlbase.ColumnsSelectors(rd.FetchCols),
 		From:  &parser.From{Tables: []parser.TableExpr{n.Table}},
 		Where: n.Where,
-	}, nil, n.Limit, nil, publicAndNonPublicColumns)
+	}, nil /* orderBy */, n.Limit, false, /* lockForUpdate */
+		nil /* desiredTypes */, publicAndNonPublicColumns)
 	if err != nil {
 		return nil, err
 	}

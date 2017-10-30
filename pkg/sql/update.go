@@ -273,7 +273,8 @@ func (p *planner) Update(
 		Exprs: sqlbase.ColumnsSelectors(ru.FetchCols),
 		From:  &parser.From{Tables: []parser.TableExpr{n.Table}},
 		Where: n.Where,
-	}, nil, nil, nil, publicAndNonPublicColumns)
+	}, nil /* orderBy */, nil /* limit */, false, /* lockForUpdate */
+		nil /* desiredTypes */, publicAndNonPublicColumns)
 	if err != nil {
 		return nil, err
 	}
