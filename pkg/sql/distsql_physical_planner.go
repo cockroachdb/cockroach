@@ -941,6 +941,8 @@ func (l *DistLoader) LoadCSV(
 	walltime int64,
 	splitSize int64,
 ) error {
+	ctx = log.WithLogTag(ctx, "import-distsql", nil)
+
 	// splitSize is the target number of bytes at which to create SST files. We
 	// attempt to do this by sampling, which is what the first DistSQL plan of this
 	// function does. CSV rows are converted into KVs. The total size of the KV is
@@ -1036,6 +1038,7 @@ func (l *DistLoader) LoadCSV(
 	if err != nil {
 		return err
 	}
+	log.VEventf(ctx, 1, "begin sampling phase of job %s", job.Record.Description)
 	// TODO(dan): We really don't need the txn for this flow, so remove it once
 	// Run works without one.
 	if err := db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
@@ -1083,6 +1086,7 @@ func (l *DistLoader) LoadCSV(
 		},
 	}
 
+	log.VEventf(ctx, 1, "generated %d splits; begin routing for job %s", len(spans), job.Record.Description)
 	if err := job.Progressed(ctx, 1.0/3.0, jobs.Noop); err != nil {
 		log.Warningf(ctx, "failed to update job progress: %s", err)
 	}
@@ -1183,6 +1187,7 @@ func (l *DistLoader) LoadCSV(
 		return err
 	}
 
+	defer log.VEventf(ctx, 1, "finished job %s", job.Record.Description)
 	// TODO(dan): We really don't need the txn for this flow, so remove it once
 	// Run works without one.
 	if err := db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
