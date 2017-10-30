@@ -271,3 +271,23 @@ SELECT y, str, REPEAT('test', y) FROM NumToStr ORDER BY str
 # Verify we use the "top K" strategy and thus don't hit OOM as above.
 statement ok
 SELECT y, str, REPEAT('test', y) FROM NumToStr ORDER BY str LIMIT 10
+
+query ITTTTT
+EXPLAIN (VERBOSE) SELECT x FROM (SELECT x, 2*x, x+1 FROM NumToSquare)
+----
+0  render  ·         ·                    (x)                                      x!=NULL; key(x)
+0  ·       render 0  x                    ·                                        ·
+1  render  ·         ·                    (x, "2 * x"[omitted], "x + 1"[omitted])  x!=NULL; key(x)
+1  ·       render 0  test.numtosquare.x   ·                                        ·
+1  ·       render 1  NULL                 ·                                        ·
+1  ·       render 2  NULL                 ·                                        ·
+2  scan    ·         ·                    (x, xsquared[omitted])                   x!=NULL; key(x)
+2  ·       table     numtosquare@primary  ·                                        ·
+2  ·       spans     ALL                  ·                                        ·
+
+# Verifies that unused renders don't cause us to do rendering instead of a
+# simple projection.
+query T
+SELECT "URL" FROM [EXPLAIN (DISTSQL) SELECT x FROM (SELECT x, 2*x, x+1 FROM NumToSquare)]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html?eJyMj7FqAzEQRPt8RZhaha9V5dZNHEy6cIVyGszBnfayu4IEo38PPhUhRcDlzEjvsTcUyXxJKw3xHQPGgE1lopnoveoPTvkL8RAwl636vR4DJlEi3uCzL0TEW_pYeGHKVARkepqXHbrpvCb9Ppa6uthnTUoEnKvH5-OAsQVI9V-ueboScWjhcfeFtkkx_hH_Rz60MYD5yn6fSdWJryrTrunxvP_bi0zzvg49nEqf2tiefgIAAP__QLRrHw==
