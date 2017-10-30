@@ -66,7 +66,7 @@ func testVersionUpgrade(ctx context.Context, t *testing.T, cfg cluster.TestConfi
 
 	// Verify that the nodes are *really* at the versions configured. This
 	// tests the CI harness.
-	log.Info(ctx, "verify that configured versions are actual versions")
+	log.Info(ctx, "verifying that configured versions are actual versions")
 	for i := 0; i < c.NumNodes(); i++ {
 		db, err := gosql.Open("postgres", c.PGUrl(ctx, i))
 		if err != nil {
