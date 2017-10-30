@@ -40,8 +40,6 @@ import (
 	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/codes"
-	grpcstatus "google.golang.org/grpc/status"
 
 	"github.com/cockroachdb/cmux"
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -123,6 +121,7 @@ type Server struct {
 	admin              *adminServer
 	status             *statusServer
 	authentication     *authenticationServer
+	initServer         *initServer
 	tsDB               *ts.DB
 	tsServer           ts.Server
 	raftTransport      *storage.RaftTransport
@@ -135,7 +134,7 @@ type Server struct {
 	internalMemMetrics sql.MemoryMetrics
 	adminMemMetrics    sql.MemoryMetrics
 
-	serveNonGossip int32 // atomically updated
+	grpcMode int32 // atomically updated
 }
 
 // NewServer creates a Server from a server.Context.
@@ -195,23 +194,9 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		}
 	}
 
-	{
-		var earlyRPCWhiteList = map[string]struct{}{
-			"/cockroach.rpc.Heartbeat/Ping":   {},
-			"/cockroach.gossip.Gossip/Gossip": {},
-		}
-		s.grpc = rpc.NewServerWithInterceptor(s.rpcContext, func(fullName string) error {
-			if atomic.LoadInt32(&s.serveNonGossip) != 0 {
-				return nil
-			}
-			if _, allowed := earlyRPCWhiteList[fullName]; !allowed {
-				return grpcstatus.Errorf(
-					codes.Unavailable, "node waiting for gossip network; %s not available", fullName,
-				)
-			}
-			return nil
-		})
-	}
+	s.grpc = rpc.NewServerWithInterceptor(s.rpcContext, newInterceptor(s))
+
+	turnOnGossipMode(s)
 
 	s.gossip = gossip.New(
 		s.cfg.AmbientCtx,
@@ -392,7 +377,6 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	s.node = NewNode(storeCfg, s.recorder, s.registry, s.stopper, txnMetrics, sql.MakeEventLogger(s.leaseMgr))
 	roachpb.RegisterInternalServer(s.grpc, s.node)
 	storage.RegisterConsistencyServer(s.grpc, s.node.storesServer)
-	serverpb.RegisterInitServer(s.grpc, &noopInitServer{clusterID: s.ClusterID})
 
 	s.sessionRegistry = sql.MakeSessionRegistry()
 	s.jobRegistry = jobs.MakeRegistry(
@@ -447,6 +431,9 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	for _, gw := range []grpcGatewayServer{s.admin, s.status, s.authentication, &s.tsServer} {
 		gw.RegisterService(s.grpc)
 	}
+
+	s.initServer = newInitServer(s)
+	serverpb.RegisterInitServer(s.grpc, s.initServer)
 
 	nodeInfo := sql.NodeInfo{
 		AdminURL:  cfg.AdminURL,
@@ -698,13 +685,6 @@ func (s *Server) Start(ctx context.Context) error {
 	var serveOnMux sync.Once
 	m := cmux.New(ln)
 
-	// Inject an initialization listener that will intercept all
-	// connections while the cluster is initializing.
-	initLActive := int32(0)
-	initL := m.Match(func(_ io.Reader) bool {
-		return atomic.LoadInt32(&initLActive) != 0
-	})
-
 	pgL := m.Match(pgwire.Match)
 	anyL := m.Match(cmux.Any())
 
@@ -908,9 +888,7 @@ func (s *Server) Start(ctx context.Context) error {
 	} else {
 		log.Info(ctx, "no stores bootstrapped and --join flag specified, awaiting init command.")
 
-		initServer := newInitServer(s)
-		initServer.serve(ctx, initL)
-		atomic.StoreInt32(&initLActive, 1)
+		turnOnInitMode(s)
 
 		s.stopper.RunWorker(workersCtx, func(context.Context) {
 			serveOnMux.Do(func() {
@@ -918,11 +896,11 @@ func (s *Server) Start(ctx context.Context) error {
 			})
 		})
 
-		if err := initServer.awaitBootstrap(); err != nil {
+		if err := s.initServer.awaitBootstrap(); err != nil {
 			return err
 		}
 
-		atomic.StoreInt32(&initLActive, 0)
+		turnOnGossipMode(s)
 	}
 
 	// This opens the main listener.
@@ -1104,7 +1082,7 @@ If problems persist, please see ` + base.DocsURL("cluster-setup-troubleshooting.
 	s.sqlExecutor.Start(ctx, &s.adminMemMetrics, distSQLPlanner)
 	s.distSQLServer.Start()
 
-	atomic.StoreInt32(&s.serveNonGossip, 1)
+	turnOnOperationMode(s)
 
 	s.mux.Handle(adminPrefix, authHandler)
 	s.mux.Handle(ts.URLPrefix, authHandler)

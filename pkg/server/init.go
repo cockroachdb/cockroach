@@ -15,53 +15,19 @@
 package server
 
 import (
-	"net"
-
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/codes"
-
-	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/netutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
-	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
 )
-
-// noopInitServer implements the Init server interface for a cluster that has
-// already been initialized. Its purpose is simply to provide better error
-// messages if someone tries to initialize a cluster that's already been
-// initialized.
-type noopInitServer struct {
-	clusterID func() uuid.UUID
-}
-
-func (s *noopInitServer) Bootstrap(
-	_ context.Context, _ *serverpb.BootstrapRequest,
-) (*serverpb.BootstrapResponse, error) {
-	return nil, grpc.Errorf(
-		codes.AlreadyExists, "cluster has already been initialized with ID %s", s.clusterID())
-}
-
-// initListener wraps a net.Listener and turns its Close() method into
-// a no-op. This is used so that the initServer's grpc.Server can be
-// stopped without closing the listener (which it shares with the main
-// grpc.Server).
-type initListener struct {
-	net.Listener
-}
-
-func (initListener) Close() error {
-	return nil
-}
 
 // initServer manages the temporary init server used during
 // bootstrapping.
 type initServer struct {
 	server       *Server
-	grpc         *grpc.Server
 	bootstrapped chan struct{}
 	mu           struct {
 		syncutil.Mutex
@@ -71,15 +37,6 @@ type initServer struct {
 
 func newInitServer(s *Server) *initServer {
 	return &initServer{server: s, bootstrapped: make(chan struct{})}
-}
-
-func (s *initServer) serve(ctx context.Context, ln net.Listener) {
-	s.grpc = rpc.NewServer(s.server.rpcContext)
-	serverpb.RegisterInitServer(s.grpc, s)
-
-	s.server.stopper.RunWorker(ctx, func(context.Context) {
-		netutil.FatalIfUnexpected(s.grpc.Serve(initListener{ln}))
-	})
 }
 
 func (s *initServer) awaitBootstrap() error {
@@ -92,7 +49,6 @@ func (s *initServer) awaitBootstrap() error {
 	s.mu.Lock()
 	s.mu.awaitDone = true
 	s.mu.Unlock()
-	s.grpc.GracefulStop()
 
 	return nil
 }
@@ -100,6 +56,11 @@ func (s *initServer) awaitBootstrap() error {
 func (s *initServer) Bootstrap(
 	ctx context.Context, request *serverpb.BootstrapRequest,
 ) (response *serverpb.BootstrapResponse, err error) {
+	if !isInitMode(s.server) {
+		return nil, grpc.Errorf(
+			codes.AlreadyExists, "cluster has already been initialized with ID %s", s.server.ClusterID())
+	}
+
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.mu.awaitDone {
