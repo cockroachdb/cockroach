@@ -1140,7 +1140,7 @@ func valueEncodeTuple(
 	cols []sqlbase.ColumnDescriptor,
 ) ([]byte, error) {
 	if len(tuple.Exprs) != len(cols) {
-		return nil, errors.Errorf("partition has %d column(s) but %d value(s) were supplied",
+		return nil, errors.Errorf("partition has %d columns but %d values were supplied",
 			len(cols), len(tuple.Exprs))
 	}
 	var value, scratch []byte
@@ -1223,7 +1223,7 @@ func addPartitionedBy(
 		for _, tuple := range l.Tuples {
 			encodedTuple, err := valueEncodeTuple(parser.PartitionByList, evalCtx, tuple, cols)
 			if err != nil {
-				return err
+				return errors.Wrapf(err, "PARTITION %s", p.Name)
 			}
 			p.Values = append(p.Values, encodedTuple)
 		}
@@ -1243,7 +1243,7 @@ func addPartitionedBy(
 		}
 		encodedTuple, err := valueEncodeTuple(parser.PartitionByRange, evalCtx, r.Tuple, cols)
 		if err != nil {
-			return err
+			return errors.Wrapf(err, "PARTITION %s", p.Name)
 		}
 		if r.Subpartition != nil {
 			newColOffset := colOffset + int(partDesc.NumColumns)
