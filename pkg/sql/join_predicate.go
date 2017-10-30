@@ -130,7 +130,10 @@ func (p *joinPredicate) tryAddEqualityFilter(filter parser.Expr, left, right *da
 		// invalid. We could simply avoid the optimization but this is
 		// really a bug in the built-in semantics so we want to complain
 		// loudly.
-		panic(fmt.Errorf("predicate %s is valid, but '%T = %T' cannot be type checked", c, lhs, rhs))
+		panic(fmt.Errorf(
+			"predicate %s is valid, but '%s = %s' cannot be type checked",
+			c, lhs.ResolvedType(), rhs.ResolvedType(),
+		))
 	}
 	p.cmpFunctions = append(p.cmpFunctions, fn)
 
