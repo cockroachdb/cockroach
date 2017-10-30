@@ -21,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
-	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
 // TestTreeImplEviction verifies the eviction of timestamp cache entries after
@@ -38,11 +37,11 @@ func TestTreeImplEviction(t *testing.T) {
 	// Increment time to the low water mark + 1.
 	manual.Increment(1)
 	aTS := clock.Now()
-	tc.add(roachpb.Key("a"), nil, aTS, uuid.UUID{}, true)
+	tc.add(roachpb.Key("a"), nil, aTS, noTxnID, true)
 
 	// Increment time by the MinRetentionWindow and add another key.
 	manual.Increment(MinRetentionWindow.Nanoseconds())
-	tc.add(roachpb.Key("b"), nil, clock.Now(), uuid.UUID{}, true)
+	tc.add(roachpb.Key("b"), nil, clock.Now(), noTxnID, true)
 
 	// Verify looking up key "c" returns the new low water mark ("a"'s timestamp).
 	if rTS, _, ok := tc.GetMaxRead(roachpb.Key("c"), nil); rTS != aTS || ok {
@@ -63,7 +62,7 @@ func TestTreeImplNoEviction(t *testing.T) {
 	// Increment time to the low water mark + 1.
 	manual.Increment(1)
 	aTS := clock.Now()
-	tc.add(roachpb.Key("a"), nil, aTS, uuid.UUID{}, true)
+	tc.add(roachpb.Key("a"), nil, aTS, noTxnID, true)
 	tc.AddRequest(&Request{
 		Reads:     []roachpb.Span{{Key: roachpb.Key("c")}},
 		Timestamp: aTS,
@@ -71,7 +70,7 @@ func TestTreeImplNoEviction(t *testing.T) {
 
 	// Increment time by the MinRetentionWindow and add another key.
 	manual.Increment(MinRetentionWindow.Nanoseconds())
-	tc.add(roachpb.Key("b"), nil, clock.Now(), uuid.UUID{}, true)
+	tc.add(roachpb.Key("b"), nil, clock.Now(), noTxnID, true)
 	tc.AddRequest(&Request{
 		Reads:     []roachpb.Span{{Key: roachpb.Key("d")}},
 		Timestamp: clock.Now(),
