@@ -30,7 +30,7 @@ func forEachCacheImpl(
 	t *testing.T, fn func(t *testing.T, tc Cache, clock *hlc.Clock, manual *hlc.ManualClock),
 ) {
 	for _, constr := range []func(*hlc.Clock) Cache{
-		func(clock *hlc.Clock) Cache { return newCacheImpl(clock) },
+		func(clock *hlc.Clock) Cache { return newTreeImpl(clock) },
 	} {
 		const baseTS = 100
 		manual := hlc.NewManualClock(baseTS)

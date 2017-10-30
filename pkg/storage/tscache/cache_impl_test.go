@@ -24,13 +24,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
-// TestTimestampCacheEviction verifies the eviction of
-// timestamp cache entries after MinRetentionWindow interval.
-func TestTimestampCacheImplEviction(t *testing.T) {
+// TestTreeImplEviction verifies the eviction of timestamp cache entries after
+// MinRetentionWindow interval.
+func TestTreeImplEviction(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	manual := hlc.NewManualClock(123)
 	clock := hlc.NewClock(manual.UnixNano, time.Nanosecond)
-	tc := newCacheImpl(clock)
+	tc := newTreeImpl(clock)
 	defer tc.clear(clock.Now())
 
 	tc.maxBytes = 0
@@ -50,14 +50,14 @@ func TestTimestampCacheImplEviction(t *testing.T) {
 	}
 }
 
-// TestTimestampCacheNoEviction verifies that even after
-// the MinRetentionWindow interval, if the cache has not hit
-// its size threshold, it will not evict entries.
-func TestTimestampCacheImplNoEviction(t *testing.T) {
+// TestTreeImplNoEviction verifies that even after the MinRetentionWindow
+// interval, if the cache has not hit its size threshold, it will not evict
+// entries.
+func TestTreeImplNoEviction(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	manual := hlc.NewManualClock(123)
 	clock := hlc.NewClock(manual.UnixNano, time.Nanosecond)
-	tc := newCacheImpl(clock)
+	tc := newTreeImpl(clock)
 	defer tc.clear(clock.Now())
 
 	// Increment time to the low water mark + 1.
@@ -83,11 +83,11 @@ func TestTimestampCacheImplNoEviction(t *testing.T) {
 	}
 }
 
-func TestTimestampCacheImplExpandRequests(t *testing.T) {
+func TestTreeImplExpandRequests(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	manual := hlc.NewManualClock(123)
 	clock := hlc.NewClock(manual.UnixNano, time.Nanosecond)
-	tc := newCacheImpl(clock)
+	tc := newTreeImpl(clock)
 	defer tc.clear(clock.Now())
 
 	ab := roachpb.RSpan{Key: roachpb.RKey("a"), EndKey: roachpb.RKey("b")}
