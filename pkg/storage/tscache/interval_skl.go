@@ -19,11 +19,13 @@ import (
 	"encoding/binary"
 	"fmt"
 	"sync/atomic"
+	"unsafe"
 
 	"github.com/andy-kimball/arenaskl"
 
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
 // rangeOptions are passed to AddRange to indicate the bounds of the range. By
@@ -53,7 +55,7 @@ const (
 //   ["kiwi", "raspberry"] = 100
 //
 //   "apple"    "orange"   "raspberry"
-//   keyts=200  keyts=100  keyts=100
+//  Val=200  keyts=100  keyts=100
 //   gapts=200  gapts=100  gapts=0
 //
 // That is, the range from apple (inclusive) to orange (exclusive) has a read
@@ -75,15 +77,17 @@ const (
 	// set, then the gap timestamp is assumed to be zero.
 	hasGap = 0x4
 
-	// UseMaxTs indicates that the intervalSkl's max value should be used in
+	// UseMaxVal indicates that the intervalSkl's max value should be used in
 	// place of the node's gap and key timestamps. This is used when the
 	// structure has filled up and the value can no longer be set (but meta
 	// can).
-	useMaxTs = 0x8
+	useMaxVal = 0x8
 )
 
 const (
-	encodedTsSize = 12
+	encodedTsSize    = int(unsafe.Sizeof(hlc.Timestamp{}))
+	encodedTxnIDSize = int(unsafe.Sizeof(uuid.UUID{}))
+	encodedValSize   = encodedTsSize + encodedTxnIDSize
 )
 
 // intervalSkl efficiently tracks the latest logical time at which any key or
@@ -147,8 +151,8 @@ func newIntervalSkl(size uint32) *intervalSkl {
 // Add marks the a single key as having been read at the given timestamp. Once
 // Add completes, future lookups of this key are guaranteed to return an equal
 // or greater timestamp.
-func (s *intervalSkl) Add(key []byte, ts hlc.Timestamp) {
-	s.AddRange(key, key, 0, ts)
+func (s *intervalSkl) Add(key []byte, val cacheValue) {
+	s.AddRange(key, key, 0, val)
 }
 
 // AddRange marks the given range of keys (from, to) as having been read at the
@@ -158,7 +162,7 @@ func (s *intervalSkl) Add(key []byte, ts hlc.Timestamp) {
 // of the range are inclusive by default, but can be excluded by passing the
 // applicable range options. Once AddRange completes, future lookups at any point
 // in the range are guaranteed to return an equal or greater timestamp.
-func (s *intervalSkl) AddRange(from, to []byte, opt rangeOptions, ts hlc.Timestamp) {
+func (s *intervalSkl) AddRange(from, to []byte, opt rangeOptions, val cacheValue) {
 	if from == nil {
 		panic("from key cannot be nil")
 	}
@@ -185,7 +189,7 @@ func (s *intervalSkl) AddRange(from, to []byte, opt rangeOptions, ts hlc.Timesta
 
 	for {
 		// Try to add the range to the later page.
-		filledPage := s.addRange(from, to, opt, ts)
+		filledPage := s.addRange(from, to, opt, val)
 		if filledPage == nil {
 			break
 		}
@@ -198,7 +202,7 @@ func (s *intervalSkl) AddRange(from, to []byte, opt rangeOptions, ts hlc.Timesta
 // addRange marks the given range of keys (from, to) as having been read at the
 // given timestamp. It returns nil if the operation was successful, or a pointer
 // to an sklPage if the operation failed because that page was full.
-func (s *intervalSkl) addRange(from, to []byte, opt rangeOptions, ts hlc.Timestamp) *sklPage {
+func (s *intervalSkl) addRange(from, to []byte, opt rangeOptions, val cacheValue) *sklPage {
 	// Acquire the rotation mutex read lock so that the page will not be rotated
 	// while add or lookup operations are in progress.
 	s.rotMutex.RLock()
@@ -206,7 +210,7 @@ func (s *intervalSkl) addRange(from, to []byte, opt rangeOptions, ts hlc.Timesta
 
 	// If floor ts is >= requested timestamp, then no need to perform a search
 	// or add any records.
-	if !s.floorTs.Less(ts) {
+	if !s.floorTs.Less(val.ts) {
 		return nil
 	}
 
@@ -220,9 +224,9 @@ func (s *intervalSkl) addRange(from, to []byte, opt rangeOptions, ts hlc.Timesta
 	var err error
 	if to != nil {
 		if (opt & excludeTo) == 0 {
-			err = s.later.addNode(&it, to, ts, hasKey)
+			err = s.later.addNode(&it, to, val, hasKey)
 		} else {
-			err = s.later.addNode(&it, to, ts, 0)
+			err = s.later.addNode(&it, to, val, 0)
 		}
 
 		if err == arenaskl.ErrArenaFull {
@@ -237,9 +241,9 @@ func (s *intervalSkl) addRange(from, to []byte, opt rangeOptions, ts hlc.Timesta
 
 	// Ensure that the starting node has been created.
 	if (opt & excludeFrom) == 0 {
-		err = s.later.addNode(&it, from, ts, hasKey|hasGap)
+		err = s.later.addNode(&it, from, val, hasKey|hasGap)
 	} else {
-		err = s.later.addNode(&it, from, ts, hasGap)
+		err = s.later.addNode(&it, from, val, hasGap)
 	}
 
 	if err == arenaskl.ErrArenaFull {
@@ -257,7 +261,7 @@ func (s *intervalSkl) addRange(from, to []byte, opt rangeOptions, ts hlc.Timesta
 
 	// Now iterate forwards and ensure that all nodes between the start and
 	// end (exclusive) have timestamps that are >= the range timestamp.
-	if !s.later.ensureFloorTs(&it, to, ts) {
+	if !s.later.ensureFloorValue(&it, to, val) {
 		// Page is filled up, so rotate pages and try again.
 		return s.later
 	}
@@ -292,37 +296,35 @@ func (s *intervalSkl) rotatePages(filledPage *sklPage) {
 	s.later = newSklPage(s.size / 2)
 }
 
-// LookupTimestamp returns the latest timestamp at which the given key was read.
-// If this operation is repeated with the same key, it will always result in an
-// equal or greater timestamp.
-func (s *intervalSkl) LookupTimestamp(key []byte) hlc.Timestamp {
+// LookupTimestamp returns the latest timestamp value at which the given key was
+// read. If this operation is repeated with the same key, it will always result
+// in an equal or greater timestamp.
+func (s *intervalSkl) LookupTimestamp(key []byte) cacheValue {
 	// Acquire the rotation mutex read lock so that the page will not be rotated
 	// while add or lookup operations are in progress.
 	s.rotMutex.RLock()
 	defer s.rotMutex.RUnlock()
 
 	// First perform lookup on the later page.
-	ts := s.later.lookupTimestamp(key)
+	val := s.later.lookupTimestamp(key)
 
 	// Now perform same lookup on the earlier page.
 	if s.earlier != nil {
 		// If later page timestamp is greater than the max timestamp in the
 		// earlier page, then no need to do lookup at all.
 		maxTs := hlc.Timestamp{WallTime: atomic.LoadInt64(&s.earlier.maxWallTime)}
-		if ts.Less(maxTs) {
-			ts2 := s.earlier.lookupTimestamp(key)
-			if ts.Less(ts2) {
-				ts = ts2
-			}
+		if val.ts.Less(maxTs) {
+			val2 := s.earlier.lookupTimestamp(key)
+			val, _ = ratchetValue(val, val2)
 		}
 	}
 
 	// Return the higher timestamp from the two lookups.
-	if ts.Less(s.floorTs) {
-		ts = s.floorTs
+	if val.ts.Less(s.floorTs) {
+		val = cacheValue{ts: s.floorTs, txnID: noTxnID}
 	}
 
-	return ts
+	return val
 }
 
 // sklPage maintains a skiplist based on a fixed-size arena. When the arena
@@ -338,7 +340,7 @@ func newSklPage(size uint32) *sklPage {
 	return &sklPage{list: arenaskl.NewSkiplist(arenaskl.NewArena(size))}
 }
 
-func (p *sklPage) lookupTimestamp(key []byte) hlc.Timestamp {
+func (p *sklPage) lookupTimestamp(key []byte) cacheValue {
 	var it arenaskl.Iterator
 	it.Init(p.list)
 
@@ -353,35 +355,36 @@ func (p *sklPage) lookupTimestamp(key []byte) hlc.Timestamp {
 		return p.scanForTimestamp(&it, key, true)
 	}
 
-	keyTs, _ := p.decodeTimestampSet(it.Value(), it.Meta())
-	return keyTs
+	keyVal, _ := p.decodeValueSet(it.Value(), it.Meta())
+	return keyVal
 }
 
 func (p *sklPage) addNode(
-	it *arenaskl.Iterator, key []byte, ts hlc.Timestamp, opt nodeOptions,
+	it *arenaskl.Iterator, key []byte, val cacheValue, opt nodeOptions,
 ) error {
-	var arr [encodedTsSize * 2]byte
-	var keyTs, gapTs hlc.Timestamp
+	var arr [encodedValSize * 2]byte
+	var keyVal, gapVal cacheValue
 
 	if (opt & hasKey) != 0 {
-		keyTs = ts
+		keyVal = val
 	}
 
 	if (opt & hasGap) != 0 {
-		gapTs = ts
+		gapVal = val
 	}
 
 	if !it.SeekForPrev(key) {
-		// If the previous node has a gap timestamp that is >= than the new
-		// timestamp, then there is no need to add another node, since its
-		// timestamp would be the same as the gap timestamp.
-		prevTs := p.scanForTimestamp(it, key, false)
-		if !prevTs.Less(ts) {
+		// If the previous node has a gap value that would not be updated with
+		// the new value, then there is no need to add another node, since its
+		// timestamp would be the same as the gap timestamp and its txnID would
+		// be the same as the gap txnID.
+		prevVal := p.scanForTimestamp(it, key, false)
+		if _, update := ratchetValue(prevVal, val); !update {
 			return nil
 		}
 
 		// Ratchet max timestamp before adding the node.
-		p.ratchetMaxTimestamp(ts)
+		p.ratchetMaxTimestamp(val.ts)
 
 		// Ensure that a new node is created. It needs to stay in the
 		// initializing state until the gap timestamp of its preceding node
@@ -390,7 +393,7 @@ func (p *sklPage) addNode(
 		// for other ongoing operations - when they see this node they're
 		// forced to stop and help complete its initialization before they
 		// can continue.
-		b, meta := p.encodeTimestampSet(arr[:0], keyTs, gapTs)
+		b, meta := p.encodeValueSet(arr[:0], keyVal, gapVal)
 		err := it.Add(key, b, meta|initializing)
 		if err == arenaskl.ErrArenaFull {
 			atomic.StoreInt32(&p.isFull, 1)
@@ -417,12 +420,12 @@ func (p *sklPage) addNode(
 	// initializing bit, since we don't have the gap timestamp from the previous
 	// node. Leave finishing initialization to the thread that added the node, or
 	// to a lookup thread that requires it.
-	p.ratchetTimestampSet(it, keyTs, gapTs, false)
+	p.ratchetValueSet(it, keyVal, gapVal, false)
 
 	return nil
 }
 
-func (p *sklPage) ensureFloorTs(it *arenaskl.Iterator, to []byte, ts hlc.Timestamp) bool {
+func (p *sklPage) ensureFloorValue(it *arenaskl.Iterator, to []byte, val cacheValue) bool {
 	for it.Valid() {
 		if to != nil && bytes.Compare(it.Key(), to) >= 0 {
 			break
@@ -440,7 +443,7 @@ func (p *sklPage) ensureFloorTs(it *arenaskl.Iterator, to []byte, ts hlc.Timesta
 		// Don't clear the initialization bit, since we don't have the gap
 		// timestamp from the previous node, and don't need an initialized node
 		// for this operation anyway.
-		p.ratchetTimestampSet(it, ts, ts, false)
+		p.ratchetValueSet(it, val, val, false)
 
 		it.Next()
 	}
@@ -468,31 +471,23 @@ func (p *sklPage) ratchetMaxTimestamp(ts hlc.Timestamp) {
 	}
 }
 
-// ratchetTimestampSet will update the current node's key and gap timestamps to
-// the maximum of their current values or the given values. If clearInit is true,
+// ratchetValueSet will update the current node's key and gap timestamps to the
+// maximum of their current values or the given values. If clearInit is true,
 // then the initializing bit will be cleared, indicating that the node is now
 // fully initialized and its timestamps can now be relied upon.
-func (p *sklPage) ratchetTimestampSet(
-	it *arenaskl.Iterator, keyTs, gapTs hlc.Timestamp, clearInit bool,
+func (p *sklPage) ratchetValueSet(
+	it *arenaskl.Iterator, keyVal, gapVal cacheValue, clearInit bool,
 ) {
-	var arr [encodedTsSize * 2]byte
+	var arr [encodedValSize * 2]byte
 
 	for {
 		meta := it.Meta()
-		oldKeyTs, oldGapTs := p.decodeTimestampSet(it.Value(), meta)
+		oldKeyVal, oldGapVal := p.decodeValueSet(it.Value(), meta)
 
-		greater := false
-		if oldKeyTs.Less(keyTs) {
-			greater = true
-		} else {
-			keyTs = oldKeyTs
-		}
-
-		if oldGapTs.Less(gapTs) {
-			greater = true
-		} else {
-			gapTs = oldGapTs
-		}
+		var keyValUpdate, gapValUpdate bool
+		keyVal, keyValUpdate = ratchetValue(oldKeyVal, keyVal)
+		gapVal, gapValUpdate = ratchetValue(oldGapVal, gapVal)
+		update := keyValUpdate || gapValUpdate
 
 		var initMeta uint16
 		if clearInit {
@@ -503,7 +498,7 @@ func (p *sklPage) ratchetTimestampSet(
 
 		// Check whether it's necessary to make an update.
 		var err error
-		if !greater {
+		if !update {
 			if !clearInit || (meta&initializing) == 0 {
 				// No update necessary because the init bit doesn't need to be
 				// cleared or it's already cleared.
@@ -514,6 +509,7 @@ func (p *sklPage) ratchetTimestampSet(
 			err = it.SetMeta(meta & ^uint16(initializing))
 		} else {
 			// Ratchet the max timestamp.
+			keyTs, gapTs := keyVal.ts, gapVal.ts
 			if gapTs.Less(keyTs) {
 				p.ratchetMaxTimestamp(keyTs)
 			} else {
@@ -521,7 +517,7 @@ func (p *sklPage) ratchetTimestampSet(
 			}
 
 			// Update the timestamps, possibly preserving the init bit.
-			b, newMeta := p.encodeTimestampSet(arr[:0], keyTs, gapTs)
+			b, newMeta := p.encodeValueSet(arr[:0], keyVal, gapVal)
 			err = it.Set(b, newMeta|initMeta)
 		}
 
@@ -533,7 +529,7 @@ func (p *sklPage) ratchetTimestampSet(
 			atomic.StoreInt32(&p.isFull, 1)
 
 			// Arena full, so ratchet the timestamps to the max timestamp.
-			err = it.SetMeta(uint16(useMaxTs) | initMeta)
+			err = it.SetMeta(uint16(useMaxVal) | initMeta)
 			if err == arenaskl.ErrRecordUpdated {
 				continue
 			}
@@ -587,7 +583,7 @@ func (p *sklPage) ratchetTimestampSet(
 // This means that no matter what gets inserted, or when it gets inserted, the
 // scanning goroutine is guaranteed to end up with a timestamp value that will
 // never decrease on future lookups, which is the critical invariant.
-func (p *sklPage) scanForTimestamp(it *arenaskl.Iterator, key []byte, onKey bool) hlc.Timestamp {
+func (p *sklPage) scanForTimestamp(it *arenaskl.Iterator, key []byte, onKey bool) cacheValue {
 	clone := *it
 
 	if onKey {
@@ -598,7 +594,7 @@ func (p *sklPage) scanForTimestamp(it *arenaskl.Iterator, key []byte, onKey bool
 
 	// First iterate backwards, looking for an already initialized node which
 	// will supply the initial candidate gap timestamp.
-	var gapTs hlc.Timestamp
+	var gapVal cacheValue
 	for {
 		if !clone.Valid() {
 			// No more previous nodes, so use the zero timestamp and begin
@@ -610,7 +606,7 @@ func (p *sklPage) scanForTimestamp(it *arenaskl.Iterator, key []byte, onKey bool
 		meta := clone.Meta()
 		if (meta & initializing) == 0 {
 			// Found the gap timestamp for an initialized node.
-			_, gapTs = p.decodeTimestampSet(clone.Value(), meta)
+			_, gapVal = p.decodeValueSet(clone.Value(), meta)
 			clone.Next()
 			break
 		}
@@ -622,26 +618,26 @@ func (p *sklPage) scanForTimestamp(it *arenaskl.Iterator, key []byte, onKey bool
 	// nodes along the way, and update the gap timestamp.
 	for {
 		if !clone.Valid() {
-			return gapTs
+			return gapVal
 		}
 
 		if (clone.Meta() & initializing) != 0 {
 			// Finish initializing the node with the gap timestamp.
-			p.ratchetTimestampSet(&clone, gapTs, gapTs, true)
+			p.ratchetValueSet(&clone, gapVal, gapVal, true)
 		}
 
 		cmp := bytes.Compare(clone.Key(), key)
 		if cmp > 0 {
 			// Past the lookup key, so use the gap timestamp.
-			return gapTs
+			return gapVal
 		}
 
-		var keyTs hlc.Timestamp
-		keyTs, gapTs = p.decodeTimestampSet(clone.Value(), clone.Meta())
+		var keyVal cacheValue
+		keyVal, gapVal = p.decodeValueSet(clone.Value(), clone.Meta())
 
 		if cmp == 0 {
 			// On the lookup key, so use the key timestamp.
-			return keyTs
+			return keyVal
 		}
 
 		// Haven't yet reached the lookup key, so keep iterating.
@@ -649,33 +645,32 @@ func (p *sklPage) scanForTimestamp(it *arenaskl.Iterator, key []byte, onKey bool
 	}
 }
 
-func (p *sklPage) decodeTimestampSet(b []byte, meta uint16) (keyTs, gapTs hlc.Timestamp) {
-	if (meta & useMaxTs) != 0 {
+func (p *sklPage) decodeValueSet(b []byte, meta uint16) (keyVal, gapVal cacheValue) {
+	if (meta & useMaxVal) != 0 {
 		ts := hlc.Timestamp{WallTime: atomic.LoadInt64(&p.maxWallTime)}
-		return ts, ts
+		maxVal := cacheValue{ts: ts, txnID: noTxnID}
+		return maxVal, maxVal
 	}
 
 	if (meta & hasKey) != 0 {
-		b, keyTs = decodeTimestamp(b)
+		b, keyVal = decodeValue(b)
 	}
 
 	if (meta & hasGap) != 0 {
-		_, gapTs = decodeTimestamp(b)
+		_, gapVal = decodeValue(b)
 	}
 
 	return
 }
 
-func (p *sklPage) encodeTimestampSet(
-	b []byte, keyTs, gapTs hlc.Timestamp,
-) (ret []byte, meta uint16) {
-	if keyTs.WallTime != 0 || keyTs.Logical != 0 {
-		b = encodeTimestamp(b, keyTs)
+func (p *sklPage) encodeValueSet(b []byte, keyVal, gapVal cacheValue) (ret []byte, meta uint16) {
+	if keyVal.ts.WallTime != 0 || keyVal.ts.Logical != 0 {
+		b = encodeValue(b, keyVal)
 		meta |= hasKey
 	}
 
-	if gapTs.WallTime != 0 || gapTs.Logical != 0 {
-		b = encodeTimestamp(b, gapTs)
+	if gapVal.ts.WallTime != 0 || gapVal.ts.Logical != 0 {
+		b = encodeValue(b, gapVal)
 		meta |= hasGap
 	}
 
@@ -683,18 +678,24 @@ func (p *sklPage) encodeTimestampSet(
 	return
 }
 
-func decodeTimestamp(b []byte) (ret []byte, ts hlc.Timestamp) {
-	wallTime := binary.BigEndian.Uint64(b)
-	logical := binary.BigEndian.Uint32(b[8:])
-	ts = hlc.Timestamp{WallTime: int64(wallTime), Logical: int32(logical)}
-	ret = b[encodedTsSize:]
+func decodeValue(b []byte) (ret []byte, val cacheValue) {
+	val.ts.WallTime = int64(binary.BigEndian.Uint64(b))
+	val.ts.Logical = int32(binary.BigEndian.Uint32(b[8:]))
+	var err error
+	if val.txnID, err = uuid.FromBytes(b[encodedTsSize:encodedValSize]); err != nil {
+		panic(err)
+	}
+	ret = b[encodedValSize:]
 	return
 }
 
-func encodeTimestamp(b []byte, ts hlc.Timestamp) []byte {
+func encodeValue(b []byte, val cacheValue) []byte {
 	l := len(b)
-	b = b[:l+encodedTsSize]
-	binary.BigEndian.PutUint64(b[l:], uint64(ts.WallTime))
-	binary.BigEndian.PutUint32(b[l+8:], uint32(ts.Logical))
+	b = b[:l+encodedValSize]
+	binary.BigEndian.PutUint64(b[l:], uint64(val.ts.WallTime))
+	binary.BigEndian.PutUint32(b[l+8:], uint32(val.ts.Logical))
+	if _, err := val.txnID.MarshalTo(b[l+encodedTsSize:]); err != nil {
+		panic(err)
+	}
 	return b
 }
