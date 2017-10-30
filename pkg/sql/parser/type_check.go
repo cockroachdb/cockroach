@@ -1303,6 +1303,9 @@ func typeCheckSameTypedExprs(
 // nil, an error will be thrown.
 func typeCheckSameTypedPlaceholders(s typeCheckExprsState, typ Type) error {
 	for _, i := range s.placeholderIdxs {
+		if typ == nil {
+			return placeholderTypeAmbiguityError{s.exprs[i].(*Placeholder)}
+		}
 		typedExpr, err := typeCheckAndRequire(s.ctx, s.exprs[i], typ, "placeholder")
 		if err != nil {
 			return err
