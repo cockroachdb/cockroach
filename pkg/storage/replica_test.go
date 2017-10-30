@@ -7788,7 +7788,7 @@ func TestReplicaBurstPendingCommandsAndRepropose(t *testing.T) {
 func TestReplicaRefreshPendingCommandsTicks(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	var tc testContext
-	cfg := TestStoreConfig(nil)
+	cfg := TestFastRaftStoreConfig(nil)
 	// Disable ticks which would interfere with the manual ticking in this test.
 	cfg.RaftTickInterval = math.MaxInt32
 	stopper := stop.NewStopper()

@@ -468,7 +468,7 @@ func TestRangeLookupUseReverse(t *testing.T) {
 
 func TestRangeTransferLease(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	cfg := storage.TestStoreConfig(nil)
+	cfg := storage.TestFastRaftStoreConfig(nil)
 	// Ensure the node liveness duration isn't too short. By default it is 900ms
 	// for TestStoreConfig().
 	cfg.RangeLeaseRaftElectionTimeoutMultiplier =
@@ -1171,7 +1171,9 @@ func TestErrorHandlingForNonKVCommand(t *testing.T) {
 
 func TestRangeInfo(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	mtc := &multiTestContext{}
+
+	sc := storage.TestFastRaftStoreConfig(nil)
+	mtc := &multiTestContext{storeConfig: &sc}
 	defer mtc.Stop()
 	mtc.Start(t, 2)
 

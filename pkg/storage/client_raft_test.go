@@ -302,7 +302,7 @@ func TestReplicateRange(t *testing.T) {
 func TestRestoreReplicas(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	sc := storage.TestStoreConfig(nil)
+	sc := storage.TestFastRaftStoreConfig(nil)
 	// Disable periodic gossip activities. The periodic gossiping of the first
 	// range can cause spurious lease transfers which cause this test to fail.
 	sc.TestingKnobs.DisablePeriodicGossips = true
@@ -411,7 +411,7 @@ func TestFailedReplicaChange(t *testing.T) {
 	var runFilter atomic.Value
 	runFilter.Store(true)
 
-	sc := storage.TestStoreConfig(nil)
+	sc := storage.TestFastRaftStoreConfig(nil)
 	sc.TestingKnobs.TestingEvalFilter = func(filterArgs storagebase.FilterArgs) *roachpb.Error {
 		if runFilter.Load().(bool) {
 			if et, ok := filterArgs.Req.(*roachpb.EndTransactionRequest); ok && et.Commit {
@@ -652,7 +652,8 @@ func TestSnapshotAfterTruncation(t *testing.T) {
 			name = "differentTerm"
 		}
 		t.Run(name, func(t *testing.T) {
-			mtc := &multiTestContext{}
+			sc := storage.TestFastRaftStoreConfig(nil)
+			mtc := &multiTestContext{storeConfig: &sc}
 			defer mtc.Stop()
 			mtc.Start(t, 3)
 			const stoppedStore = 1
@@ -852,7 +853,9 @@ func TestFailedSnapshotFillsReservation(t *testing.T) {
 // situation occurs when two replicas need snapshots at the same time.
 func TestConcurrentRaftSnapshots(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	mtc := &multiTestContext{}
+
+	sc := storage.TestFastRaftStoreConfig(nil)
+	mtc := &multiTestContext{storeConfig: &sc}
 	defer mtc.Stop()
 	mtc.Start(t, 5)
 	repl, err := mtc.stores[0].GetReplica(1)
@@ -912,7 +915,7 @@ func TestConcurrentRaftSnapshots(t *testing.T) {
 func TestReplicateAfterRemoveAndSplit(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	sc := storage.TestStoreConfig(nil)
+	sc := storage.TestFastRaftStoreConfig(nil)
 	// Disable the replica GC queue so that it doesn't accidentally pick up the
 	// removed replica and GC it. We'll explicitly enable it later in the test.
 	sc.TestingKnobs.DisableReplicaGCQueue = true
@@ -1009,7 +1012,7 @@ func TestRefreshPendingCommands(t *testing.T) {
 	}
 	for _, c := range testCases {
 		t.Run("", func(t *testing.T) {
-			sc := storage.TestStoreConfig(nil)
+			sc := storage.TestFastRaftStoreConfig(nil)
 			sc.TestingKnobs = c
 			// Disable periodic gossip tasks which can move the range 1 lease
 			// unexpectedly.
@@ -1130,7 +1133,7 @@ func TestRefreshPendingCommands(t *testing.T) {
 func TestStoreRangeUpReplicate(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer storage.SetMockAddSSTable()()
-	sc := storage.TestStoreConfig(nil)
+	sc := storage.TestFastRaftStoreConfig(nil)
 	// Prevent the split queue from creating additional ranges while we're
 	// waiting for replication.
 	sc.TestingKnobs.DisableSplitQueue = true
@@ -1224,7 +1227,7 @@ func TestStoreRangeCorruptionChangeReplicas(t *testing.T) {
 
 	ctx := context.Background()
 
-	sc := storage.TestStoreConfig(nil)
+	sc := storage.TestFastRaftStoreConfig(nil)
 	sc.TestingKnobs.DisableReplicaRebalancing = true
 	var corrupt struct {
 		syncutil.Mutex
@@ -1361,7 +1364,8 @@ func getRangeMetadata(
 func TestUnreplicateFirstRange(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	mtc := &multiTestContext{}
+	sc := storage.TestFastRaftStoreConfig(nil)
+	mtc := &multiTestContext{storeConfig: &sc}
 	defer mtc.Stop()
 	mtc.Start(t, 3)
 
@@ -1540,7 +1544,7 @@ func TestReplicateRestartAfterTruncation(t *testing.T) {
 }
 
 func runReplicateRestartAfterTruncation(t *testing.T, removeBeforeTruncateAndReAdd bool) {
-	sc := storage.TestStoreConfig(nil)
+	sc := storage.TestFastRaftStoreConfig(nil)
 	// Don't timeout raft leaders or range leases (see the relation between
 	// RaftElectionTimeoutTicks and rangeLeaseActiveDuration). This test expects
 	// mtc.stores[0] to hold the range lease for range 1.
@@ -1622,7 +1626,7 @@ func runReplicateRestartAfterTruncation(t *testing.T, removeBeforeTruncateAndReA
 }
 
 func testReplicaAddRemove(t *testing.T, addFirst bool) {
-	sc := storage.TestStoreConfig(nil)
+	sc := storage.TestFastRaftStoreConfig(nil)
 	// We're gonna want to validate the state of the store before and after the
 	// replica GC queue does its work, so we disable the replica gc queue here
 	// and run it manually when we're ready.
@@ -1899,7 +1903,8 @@ func TestQuotaPool(t *testing.T) {
 func TestRaftHeartbeats(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	mtc := &multiTestContext{}
+	sc := storage.TestFastRaftStoreConfig(nil)
+	mtc := &multiTestContext{storeConfig: &sc}
 	defer mtc.Stop()
 	mtc.Start(t, 3)
 
@@ -1937,7 +1942,8 @@ func TestRaftHeartbeats(t *testing.T) {
 func TestReportUnreachableHeartbeats(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	mtc := &multiTestContext{}
+	sc := storage.TestFastRaftStoreConfig(nil)
+	mtc := &multiTestContext{storeConfig: &sc}
 	defer mtc.Stop()
 	mtc.Start(t, 3)
 
@@ -1992,7 +1998,8 @@ func TestReportUnreachableHeartbeats(t *testing.T) {
 func TestReportUnreachableRemoveRace(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	mtc := &multiTestContext{}
+	sc := storage.TestFastRaftStoreConfig(nil)
+	mtc := &multiTestContext{storeConfig: &sc}
 	defer mtc.Stop()
 	mtc.Start(t, 3)
 
@@ -2110,7 +2117,8 @@ func TestReplicaRemovalCampaign(t *testing.T) {
 
 	for i, td := range testData {
 		func() {
-			mtc := &multiTestContext{}
+			sc := storage.TestFastRaftStoreConfig(nil)
+			mtc := &multiTestContext{storeConfig: &sc}
 			defer mtc.Stop()
 			mtc.Start(t, 2)
 
@@ -2247,7 +2255,8 @@ func TestRaftAfterRemoveRange(t *testing.T) {
 // reproduce a race (see #1911 and #9037).
 func TestRaftRemoveRace(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	mtc := &multiTestContext{}
+	sc := storage.TestFastRaftStoreConfig(nil)
+	mtc := &multiTestContext{storeConfig: &sc}
 	defer mtc.Stop()
 	mtc.Start(t, 10)
 
@@ -2281,7 +2290,9 @@ func TestRaftRemoveRace(t *testing.T) {
 // placeholders.
 func TestRemovePlaceholderRace(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	mtc := &multiTestContext{}
+
+	sc := storage.TestFastRaftStoreConfig(nil)
+	mtc := &multiTestContext{storeConfig: &sc}
 	defer mtc.Stop()
 	mtc.Start(t, 3)
 
@@ -2373,7 +2384,8 @@ func (ncc *noConfChangeTestHandler) HandleRaftResponse(
 func TestReplicaGCRace(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	mtc := &multiTestContext{}
+	sc := storage.TestFastRaftStoreConfig(nil)
+	mtc := &multiTestContext{storeConfig: &sc}
 	defer mtc.Stop()
 	mtc.Start(t, 3)
 
@@ -2814,7 +2826,8 @@ func (errorChannelTestHandler) HandleSnapshot(
 func TestReplicateRemovedNodeDisruptiveElection(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	mtc := &multiTestContext{}
+	sc := storage.TestFastRaftStoreConfig(nil)
+	mtc := &multiTestContext{storeConfig: &sc}
 	defer mtc.Stop()
 	mtc.Start(t, 4)
 
@@ -2938,7 +2951,7 @@ func TestReplicateRemovedNodeDisruptiveElection(t *testing.T) {
 func TestReplicaTooOldGC(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	sc := storage.TestStoreConfig(nil)
+	sc := storage.TestFastRaftStoreConfig(nil)
 	sc.TestingKnobs.DisableScanner = true
 	mtc := &multiTestContext{storeConfig: &sc}
 	defer mtc.Stop()
@@ -3048,7 +3061,8 @@ func TestReplicaLazyLoad(t *testing.T) {
 func TestReplicateReAddAfterDown(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	mtc := &multiTestContext{}
+	sc := storage.TestFastRaftStoreConfig(nil)
+	mtc := &multiTestContext{storeConfig: &sc}
 	defer mtc.Stop()
 	mtc.Start(t, 3)
 
@@ -3098,7 +3112,8 @@ func TestReplicateReAddAfterDown(t *testing.T) {
 func TestLeaseHolderRemoveSelf(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	mtc := &multiTestContext{}
+	sc := storage.TestFastRaftStoreConfig(nil)
+	mtc := &multiTestContext{storeConfig: &sc}
 	defer mtc.Stop()
 	mtc.Start(t, 2)
 
@@ -3127,7 +3142,8 @@ func TestLeaseHolderRemoveSelf(t *testing.T) {
 func TestRemovedReplicaError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	mtc := &multiTestContext{}
+	sc := storage.TestFastRaftStoreConfig(nil)
+	mtc := &multiTestContext{storeConfig: &sc}
 	defer mtc.Stop()
 	mtc.Start(t, 2)
 
@@ -3164,7 +3180,7 @@ func TestRemovedReplicaError(t *testing.T) {
 func TestRemoveRangeWithoutGC(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	sc := storage.TestStoreConfig(nil)
+	sc := storage.TestFastRaftStoreConfig(nil)
 	sc.TestingKnobs.DisableReplicaGCQueue = true
 	mtc := &multiTestContext{storeConfig: &sc}
 	defer mtc.Stop()
@@ -3272,7 +3288,7 @@ func TestCheckConsistencyMultiStore(t *testing.T) {
 func TestCheckInconsistent(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	sc := storage.TestStoreConfig(nil)
+	sc := storage.TestFastRaftStoreConfig(nil)
 	mtc := &multiTestContext{storeConfig: &sc}
 	// Store 0 will report a diff with inconsistent key "e".
 	diffKey := []byte("e")
@@ -3475,7 +3491,8 @@ func TestTransferRaftLeadership(t *testing.T) {
 func TestFailedPreemptiveSnapshot(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	mtc := &multiTestContext{}
+	sc := storage.TestFastRaftStoreConfig(nil)
+	mtc := &multiTestContext{storeConfig: &sc}
 	defer mtc.Stop()
 	mtc.Start(t, 2)
 
@@ -3510,7 +3527,7 @@ func TestFailedPreemptiveSnapshot(t *testing.T) {
 func TestRaftBlockedReplica(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	sc := storage.TestStoreConfig(nil)
+	sc := storage.TestFastRaftStoreConfig(nil)
 	sc.TestingKnobs.DisableScanner = true
 	mtc := &multiTestContext{storeConfig: &sc}
 	defer mtc.Stop()
@@ -3565,7 +3582,7 @@ func TestRaftBlockedReplica(t *testing.T) {
 func TestRangeQuiescence(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	sc := storage.TestStoreConfig(nil)
+	sc := storage.TestFastRaftStoreConfig(nil)
 	sc.TestingKnobs.DisableScanner = true
 	sc.TestingKnobs.DisablePeriodicGossips = true
 	mtc := &multiTestContext{storeConfig: &sc}
@@ -3697,7 +3714,7 @@ func TestFailedConfChange(t *testing.T) {
 	// Trigger errors at apply time so they happen on both leaders and
 	// followers.
 	var filterActive int32
-	sc := storage.TestStoreConfig(nil)
+	sc := storage.TestFastRaftStoreConfig(nil)
 	sc.TestingKnobs.TestingApplyFilter = func(filterArgs storagebase.ApplyFilterArgs) *roachpb.Error {
 		if atomic.LoadInt32(&filterActive) == 1 && filterArgs.ChangeReplicas != nil {
 			return roachpb.NewErrorf("boom")

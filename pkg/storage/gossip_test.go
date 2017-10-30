@@ -148,9 +148,12 @@ func TestGossipHandlesReplacedNode(t *testing.T) {
 			InitialBackoff: 10 * time.Millisecond,
 			MaxBackoff:     50 * time.Millisecond,
 		},
+		RaftConfig: base.RaftConfig{
+			RaftTickInterval:           50 * time.Millisecond,
+			RaftElectionTimeoutTicks:   10,
+			RaftHeartbeatIntervalTicks: 1,
+		},
 	}
-	serverArgs.RaftTickInterval = 50 * time.Millisecond
-	serverArgs.RaftElectionTimeoutTicks = 10
 
 	tc := testcluster.StartTestCluster(t, 3,
 		base.TestClusterArgs{

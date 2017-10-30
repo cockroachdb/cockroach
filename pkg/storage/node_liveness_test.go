@@ -746,7 +746,8 @@ func verifyNodeIsDecommissioning(t *testing.T, mtc *multiTestContext, nodeID roa
 }
 
 func testNodeLivenessSetDecommissioning(t *testing.T, decommissionNodeIdx int) {
-	mtc := &multiTestContext{}
+	sc := storage.TestFastRaftStoreConfig(nil)
+	mtc := &multiTestContext{storeConfig: &sc}
 	defer mtc.Stop()
 	mtc.Start(t, 3)
 	mtc.initGossipNetwork()

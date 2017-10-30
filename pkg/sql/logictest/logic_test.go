@@ -677,6 +677,7 @@ func (t *logicTest) setup(cfg testClusterConfig) {
 					BootstrapVersion: cfg.bootstrapVersion,
 				},
 			},
+			RaftConfig: base.TestFastRaftConfig,
 		},
 		// For distributed SQL tests, we use the fake span resolver; it doesn't
 		// matter where the data really is.

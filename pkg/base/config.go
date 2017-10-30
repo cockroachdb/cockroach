@@ -58,6 +58,10 @@ const (
 	// defaultRaftTickInterval is the default resolution of the Raft timer.
 	defaultRaftTickInterval = 200 * time.Millisecond
 
+	// defaultRaftHeartbeatIntervalTicks is the default number of ticks between
+	// Raft heartbeats.
+	defaultRaftHeartbeatIntervalTicks = 5
+
 	// defaultRangeLeaseRaftElectionTimeoutMultiplier specifies what multiple the
 	// leader lease active duration should be of the raft election timeout.
 	defaultRangeLeaseRaftElectionTimeoutMultiplier = 3
@@ -330,6 +334,14 @@ func (cfg *Config) GetHTTPClient() (http.Client, error) {
 	return cfg.httpClient.httpClient, cfg.httpClient.err
 }
 
+// TestFastRaftConfig are Raft config settings that speed up tests which
+// exercise Raft timeouts and failover.
+var TestFastRaftConfig = RaftConfig{
+	RaftElectionTimeoutTicks:   3,
+	RaftHeartbeatIntervalTicks: 1,
+	RaftTickInterval:           100 * time.Millisecond,
+}
+
 // RaftConfig holds raft tuning parameters.
 type RaftConfig struct {
 	// RaftTickInterval is the resolution of the Raft timer.
@@ -339,6 +351,10 @@ type RaftConfig struct {
 	// previous election expires. This value is inherited by individual stores
 	// unless overridden.
 	RaftElectionTimeoutTicks int
+
+	// RaftHeartbeatIntervalTicks is the number of ticks that pass between
+	// heartbeats.
+	RaftHeartbeatIntervalTicks int
 
 	// RangeLeaseRaftElectionTimeoutMultiplier specifies what multiple the leader
 	// lease active duration should be of the raft election timeout.
@@ -352,6 +368,9 @@ func (cfg *RaftConfig) SetDefaults() {
 	}
 	if cfg.RaftElectionTimeoutTicks == 0 {
 		cfg.RaftElectionTimeoutTicks = defaultRaftElectionTimeoutTicks
+	}
+	if cfg.RaftHeartbeatIntervalTicks == 0 {
+		cfg.RaftHeartbeatIntervalTicks = defaultRaftHeartbeatIntervalTicks
 	}
 	if cfg.RangeLeaseRaftElectionTimeoutMultiplier == 0 {
 		cfg.RangeLeaseRaftElectionTimeoutMultiplier = defaultRangeLeaseRaftElectionTimeoutMultiplier

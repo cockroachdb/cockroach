@@ -66,8 +66,7 @@ import (
 
 const (
 	// rangeIDAllocCount is the number of Range IDs to allocate per allocation.
-	rangeIDAllocCount             = 10
-	defaultHeartbeatIntervalTicks = 5
+	rangeIDAllocCount = 10
 	// ttlStoreGossip is time-to-live for store-related info.
 	ttlStoreGossip = 2 * time.Minute
 
@@ -120,8 +119,7 @@ var storeSchedulerConcurrency = envutil.EnvOrDefaultInt(
 var enablePreVote = envutil.EnvOrDefaultBool(
 	"COCKROACH_ENABLE_PREVOTE", false)
 
-// TestStoreConfig has some fields initialized with values relevant in tests.
-func TestStoreConfig(clock *hlc.Clock) StoreConfig {
+func testStoreConfig(clock *hlc.Clock, raftConfig base.RaftConfig) StoreConfig {
 	if clock == nil {
 		clock = hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 	}
@@ -129,21 +127,28 @@ func TestStoreConfig(clock *hlc.Clock) StoreConfig {
 	sc := StoreConfig{
 		Settings:   st,
 		AmbientCtx: log.AmbientContext{Tracer: st.Tracer},
+		RaftConfig: raftConfig,
 		Clock:      clock,
 		CoalescedHeartbeatsInterval: 50 * time.Millisecond,
-		RaftHeartbeatIntervalTicks:  1,
 		ScanInterval:                10 * time.Minute,
 		MetricsSampleInterval:       metric.TestSampleInterval,
 		HistogramWindowInterval:     metric.TestSampleInterval,
 		EnableEpochRangeLeases:      true,
 	}
-
-	// Use shorter Raft tick settings in order to minimize start up and failover
-	// time in tests.
-	sc.RaftElectionTimeoutTicks = 3
-	sc.RaftTickInterval = 100 * time.Millisecond
 	sc.SetDefaults()
 	return sc
+}
+
+// TestStoreConfig has some fields initialized with values relevant in tests.
+func TestStoreConfig(clock *hlc.Clock) StoreConfig {
+	return testStoreConfig(clock, base.RaftConfig{})
+}
+
+// TestFastRaftStoreConfig overlays the TestStoreConfig settings with faster
+// Raft settings that speed up tests which exercise Raft timeouts and failover.
+func TestFastRaftStoreConfig(clock *hlc.Clock) StoreConfig {
+	// return TestStoreConfig(clock)
+	return testStoreConfig(clock, base.TestFastRaftConfig)
 }
 
 var (
@@ -590,9 +595,6 @@ type StoreConfig struct {
 	// the quiesce cadence.
 	CoalescedHeartbeatsInterval time.Duration
 
-	// RaftHeartbeatIntervalTicks is the number of ticks that pass between heartbeats.
-	RaftHeartbeatIntervalTicks int
-
 	// ScanInterval is the default value for the scan interval
 	ScanInterval time.Duration
 
@@ -796,9 +798,6 @@ func (sc *StoreConfig) SetDefaults() {
 
 	if sc.CoalescedHeartbeatsInterval == 0 {
 		sc.CoalescedHeartbeatsInterval = sc.RaftTickInterval / 2
-	}
-	if sc.RaftHeartbeatIntervalTicks == 0 {
-		sc.RaftHeartbeatIntervalTicks = defaultHeartbeatIntervalTicks
 	}
 	if sc.RaftEntryCacheSize == 0 {
 		sc.RaftEntryCacheSize = defaultRaftEntryCacheSize
