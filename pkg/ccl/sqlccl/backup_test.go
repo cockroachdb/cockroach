@@ -783,6 +783,16 @@ func TestBackupRestoreControlJob(t *testing.T) {
 	}(jobs.DefaultAdoptInterval)
 	jobs.DefaultAdoptInterval = 100 * time.Millisecond
 
+	serverArgs := base.TestServerArgs{}
+	// Disable external processing of mutations so that the final check of
+	// crdb_internal.tables is guaranteed to not be cleaned up. Although this
+	// was never observed by a stress test, it is here for safety.
+	serverArgs.Knobs.SQLSchemaChanger = &sql.SchemaChangerTestingKnobs{
+		AsyncExecNotification: func() error {
+			return errors.New("async schema changer disabled")
+		},
+	}
+
 	// PAUSE JOB and CANCEL JOB are racy in that it's hard to guarantee that the
 	// job is still running when executing a PAUSE or CANCEL--or that the job has
 	// even started running. To synchronize, we install a store response filter
@@ -794,7 +804,7 @@ func TestBackupRestoreControlJob(t *testing.T) {
 	// responses until we close the channel, and our backup or restore is large
 	// enough that it will generate more than one export or import response.
 	var allowResponse chan struct{}
-	params := base.TestClusterArgs{}
+	params := base.TestClusterArgs{ServerArgs: serverArgs}
 	params.ServerArgs.Knobs.Store = &storage.StoreTestingKnobs{
 		TestingResponseFilter: func(ba roachpb.BatchRequest, br *roachpb.BatchResponse) *roachpb.Error {
 			for _, res := range br.Responses {
@@ -864,7 +874,61 @@ func TestBackupRestoreControlJob(t *testing.T) {
 			// work if the first backup or restore was not successfully canceled.
 			sqlDB.Exec(query, cancelDir)
 		}
+		// Verify the canceled RESTORE added some DROP tables.
+		sqlDB.CheckQueryResults(
+			`SELECT name FROM crdb_internal.tables WHERE database_name = 'cancel' AND state = 'DROP'`,
+			[][]string{{"bank"}},
+		)
 	})
+}
+
+// TestRestoreFailCleanup tests that a failed RESTORE is cleaned up.
+func TestRestoreFailCleanup(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	params := base.TestServerArgs{}
+	// Disable external processing of mutations so that the final check of
+	// crdb_internal.tables is guaranteed to not be cleaned up. Although this
+	// was never observed by a stress test, it is here for safety.
+	params.Knobs.SQLSchemaChanger = &sql.SchemaChangerTestingKnobs{
+		AsyncExecNotification: func() error {
+			return errors.New("async schema changer disabled")
+		},
+	}
+
+	const numAccounts = 1000
+	_, nodelocalDir, _, sqlDB, cleanup := backupRestoreTestSetupWithParams(t, multiNode, numAccounts, initNone, base.TestClusterArgs{ServerArgs: params})
+	defer cleanup()
+
+	url, err := url.Parse(nodelocalDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := url.Path
+
+	sqlDB.Exec(`CREATE DATABASE restore`)
+	sqlDB.Exec(`BACKUP DATABASE data TO $1`, nodelocalDir)
+	// Bugger the backup by removing the SST files.
+	if err := filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			t.Fatal(err)
+		}
+		if info.Name() == sqlccl.BackupDescriptorName || !strings.HasSuffix(path, ".sst") {
+			return nil
+		}
+		return os.Remove(path)
+	}); err != nil {
+		t.Fatal(err)
+	}
+	_, err = sqlDB.DB.Exec(`RESTORE data.* FROM $1 WITH OPTIONS ('into_db'='restore')`, nodelocalDir)
+	if !testutils.IsError(err, "sst: no such file") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	// Verify the failed RESTORE added some DROP tables.
+	sqlDB.CheckQueryResults(
+		`SELECT name FROM crdb_internal.tables WHERE database_name = 'restore' AND state = 'DROP'`,
+		[][]string{{"bank"}},
+	)
 }
 
 func TestBackupRestoreInterleaved(t *testing.T) {
