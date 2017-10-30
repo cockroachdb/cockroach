@@ -82,6 +82,12 @@
 
 [[projects]]
   branch = "master"
+  name = "github.com/andy-kimball/arenaskl"
+  packages = ["."]
+  revision = "1b13f9a73da39445e8106e6cdc1af59f06ea6c20"
+
+[[projects]]
+  branch = "master"
   name = "github.com/andybalholm/cascadia"
   packages = ["."]
   revision = "349dd0209470eabd9514242c688c403c0926d266"
@@ -640,6 +646,12 @@
   version = "1.0.0"
 
 [[projects]]
+  name = "github.com/pmezard/go-difflib"
+  packages = ["difflib"]
+  revision = "792786c7400a136282c1664665ae0a8db921c6c2"
+  version = "v1.0.0"
+
+[[projects]]
   branch = "master"
   name = "github.com/prometheus/client_model"
   packages = ["go"]
@@ -710,6 +722,12 @@
   packages = ["."]
   revision = "e57e3eeb33f795204c1ca35f56c44f83227c6e66"
   version = "v1.0.0"
+
+[[projects]]
+  name = "github.com/stretchr/testify"
+  packages = ["assert","require"]
+  revision = "69483b4bd14f5845b5a1e55bca19e954e827f1d0"
+  version = "v1.1.4"
 
 [[projects]]
   name = "github.com/tebeka/go2xunit"
@@ -815,6 +833,6 @@
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "107aefc02632222ca74fa3741b47c2e237af328f83854dc521a119664b361ce6"
+  inputs-digest = "36eccb7ec47b760d2085ed99aa6e1fa05883335b24d13dc639ea0b87ed66dfd9"
   solver-name = "gps-cdcl"
   solver-version = 1
