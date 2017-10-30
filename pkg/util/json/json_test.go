@@ -12,7 +12,7 @@
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
-package parser
+package json
 
 import (
 	"strings"
@@ -56,24 +56,23 @@ func TestJSONOrdering(t *testing.T) {
 		`{"a": 2, "c": 3}`,
 		`{"a": 3, "b": 3}`,
 	}
-	jsons := make([]Datum, len(sources))
+	jsons := make([]JSON, len(sources))
 	for i := range sources {
-		j, err := ParseDJSON(sources[i])
+		j, err := ParseJSON(sources[i])
 		if err != nil {
 			t.Fatal(err)
 		}
 		jsons[i] = j
 	}
-	ctx := NewTestingEvalContext()
 	for i := range jsons {
-		if jsons[i].Compare(ctx, jsons[i]) != 0 {
+		if jsons[i].Compare(jsons[i]) != 0 {
 			t.Errorf("%s not equal to itself", jsons[i])
 		}
 		for j := i + 1; j < len(jsons); j++ {
-			if jsons[i].Compare(ctx, jsons[j]) != -1 {
+			if jsons[i].Compare(jsons[j]) != -1 {
 				t.Errorf("expected %s < %s", jsons[i], jsons[j])
 			}
-			if jsons[j].Compare(ctx, jsons[i]) != 1 {
+			if jsons[j].Compare(jsons[i]) != 1 {
 				t.Errorf("expected %s > %s", jsons[j], jsons[i])
 			}
 		}
@@ -113,20 +112,19 @@ func TestJSONRoundTrip(t *testing.T) {
 		// should be checked higher up.
 		string([]byte{'"', 0xa7, '"'}),
 	}
-	ctx := NewTestingEvalContext()
 	for _, tc := range testCases {
 		t.Run(tc, func(t *testing.T) {
-			j, err := ParseDJSON(tc)
+			j, err := ParseJSON(tc)
 			if err != nil {
 				t.Fatal(err)
 			}
 			s := j.String()
 
-			j2, err := ParseDJSON(s)
+			j2, err := ParseJSON(s)
 			if err != nil {
 				t.Fatalf("error while parsing %v: %s", s, err)
 			}
-			if j.Compare(ctx, j2) != 0 {
+			if j.Compare(j2) != 0 {
 				t.Fatalf("%v should equal %v", tc, s)
 			}
 			s2 := j2.String()
@@ -159,7 +157,7 @@ func TestJSONErrors(t *testing.T) {
 	}
 	for _, tc := range testCases {
 		t.Run(tc.input, func(t *testing.T) {
-			j, err := ParseDJSON(tc.input)
+			j, err := ParseJSON(tc.input)
 			if err == nil {
 				t.Fatalf("expected parsing '%v' to error with '%s', but no error occurred and parsed as %s", tc.input, tc.msg, j.String())
 			}
@@ -180,16 +178,16 @@ func TestJSONSize(t *testing.T) {
 	}{
 		// These numbers aren't set in stone, they're just here to make sure this
 		// function makes some amount of sense.
-		{`true`, 120},
-		{`false`, 120},
-		{`null`, 120},
-		{`"hello"`, 125},
-		{`["hello","goodbye"]`, 372},
-		{`{"a":"b"}`, 258},
+		{`true`, 0},
+		{`false`, 0},
+		{`null`, 0},
+		{`"hello"`, 21},
+		{`["hello","goodbye"]`, 76},
+		{`{"a":"b"}`, 66},
 	}
 	for _, tc := range testCases {
 		t.Run(tc.input, func(t *testing.T) {
-			j, err := ParseDJSON(tc.input)
+			j, err := ParseJSON(tc.input)
 			if err != nil {
 				t.Fatal(err)
 			}
