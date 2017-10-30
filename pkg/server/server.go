@@ -1166,7 +1166,13 @@ If problems persist, please see ` + base.DocsURL("cluster-setup-troubleshooting.
 	migMgr := migrations.NewManager(
 		s.stopper, s.db, s.sqlExecutor, s.clock, &s.internalMemMetrics, s.NodeID().String())
 	if err := migMgr.EnsureMigrations(ctx); err != nil {
-		log.Fatal(ctx, err)
+		select {
+		case <-s.stopper.ShouldQuiesce():
+			// Avoid turning an early shutdown into a fatal error. See #19579.
+			return errors.New("server is shutting down")
+		default:
+			log.Fatal(ctx, err)
+		}
 	}
 	log.Infof(ctx, "done ensuring all necessary migrations have run")
 	close(serveSQL)
