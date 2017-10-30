@@ -1036,6 +1036,9 @@ func (l *DistLoader) LoadCSV(
 	if err != nil {
 		return err
 	}
+	if log.V(1) {
+		log.Infof(ctx, "import-distsql: begin sampling phase of job %s", job.Record.Description)
+	}
 	// TODO(dan): We really don't need the txn for this flow, so remove it once
 	// Run works without one.
 	if err := db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
@@ -1083,6 +1086,9 @@ func (l *DistLoader) LoadCSV(
 		},
 	}
 
+	if log.V(1) {
+		log.Infof(ctx, "import-distsql: generated %d splits; begin routing for job %s", len(spans), job.Record.Description)
+	}
 	if err := job.Progressed(ctx, 1.0/3.0, jobs.Noop); err != nil {
 		log.Warningf(ctx, "failed to update job progress: %s", err)
 	}
@@ -1192,6 +1198,9 @@ func (l *DistLoader) LoadCSV(
 	}
 	if recv.err != nil {
 		return recv.err
+	}
+	if log.V(1) {
+		log.Infof(ctx, "import-distsql: finished job %s", job.Record.Description)
 	}
 
 	return nil
