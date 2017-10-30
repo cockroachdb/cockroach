@@ -1013,7 +1013,7 @@ important part of servicing a request, is not something that
 CockroachDB devs generally deal with.
 
 For reads, the entry point into the `engine` package is
-[`MVCCScanInternal()`](https://github.com/cockroachdb/cockroach/blob/33c18ad1bcdb37ed6ed428b7527148977a8c566a/pkg/storage/engine/mvcc.go#L1480). This
+[`mvccScanInternal()`](https://github.com/cockroachdb/cockroach/blob/33c18ad1bcdb37ed6ed428b7527148977a8c566a/pkg/storage/engine/mvcc.go#L1480). This
 performs a scan over the KV database, dealing with the data
 representation we use for [MultiVersion Concurrency
 Control](https://en.wikipedia.org/wiki/Multiversion_concurrency_control)
