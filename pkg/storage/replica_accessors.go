@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/abortspan"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/pushtxnq"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
 
@@ -42,7 +43,7 @@ type ReplicaI interface {
 	Engine() engine.Engine
 	DB() *client.DB
 	AbortSpan() *abortspan.AbortSpan
-	GetPushTxnQueue() *PushTxnQueue
+	GetPushTxnQueue() *pushtxnq.PushTxnQueue
 
 	NodeID() roachpb.NodeID
 	StoreID() roachpb.StoreID

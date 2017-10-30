@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/pushtxnq"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -36,100 +37,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/pkg/errors"
 )
-
-func TestShouldPushImmediately(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	testCases := []struct {
-		typ        roachpb.PushTxnType
-		pusherPri  int32
-		pusheePri  int32
-		shouldPush bool
-	}{
-		{roachpb.PUSH_ABORT, roachpb.MinTxnPriority, roachpb.MinTxnPriority, false},
-		{roachpb.PUSH_ABORT, roachpb.MinTxnPriority, 1, false},
-		{roachpb.PUSH_ABORT, roachpb.MinTxnPriority, roachpb.MaxTxnPriority, false},
-		{roachpb.PUSH_ABORT, 1, roachpb.MinTxnPriority, true},
-		{roachpb.PUSH_ABORT, 1, 1, false},
-		{roachpb.PUSH_ABORT, 1, roachpb.MaxTxnPriority, false},
-		{roachpb.PUSH_ABORT, roachpb.MaxTxnPriority, roachpb.MinTxnPriority, true},
-		{roachpb.PUSH_ABORT, roachpb.MaxTxnPriority, 1, true},
-		{roachpb.PUSH_ABORT, roachpb.MaxTxnPriority, roachpb.MaxTxnPriority, false},
-		{roachpb.PUSH_TIMESTAMP, roachpb.MinTxnPriority, roachpb.MinTxnPriority, false},
-		{roachpb.PUSH_TIMESTAMP, roachpb.MinTxnPriority, 1, false},
-		{roachpb.PUSH_TIMESTAMP, roachpb.MinTxnPriority, roachpb.MaxTxnPriority, false},
-		{roachpb.PUSH_TIMESTAMP, 1, roachpb.MinTxnPriority, true},
-		{roachpb.PUSH_TIMESTAMP, 1, 1, false},
-		{roachpb.PUSH_TIMESTAMP, 1, roachpb.MaxTxnPriority, false},
-		{roachpb.PUSH_TIMESTAMP, roachpb.MaxTxnPriority, roachpb.MinTxnPriority, true},
-		{roachpb.PUSH_TIMESTAMP, roachpb.MaxTxnPriority, 1, true},
-		{roachpb.PUSH_TIMESTAMP, roachpb.MaxTxnPriority, roachpb.MaxTxnPriority, false},
-		{roachpb.PUSH_TOUCH, roachpb.MinTxnPriority, roachpb.MinTxnPriority, true},
-		{roachpb.PUSH_TOUCH, roachpb.MinTxnPriority, 1, true},
-		{roachpb.PUSH_TOUCH, roachpb.MinTxnPriority, roachpb.MaxTxnPriority, true},
-		{roachpb.PUSH_TOUCH, 1, roachpb.MinTxnPriority, true},
-		{roachpb.PUSH_TOUCH, 1, 1, true},
-		{roachpb.PUSH_TOUCH, 1, roachpb.MaxTxnPriority, true},
-		{roachpb.PUSH_TOUCH, roachpb.MaxTxnPriority, roachpb.MinTxnPriority, true},
-		{roachpb.PUSH_TOUCH, roachpb.MaxTxnPriority, 1, true},
-		{roachpb.PUSH_TOUCH, roachpb.MaxTxnPriority, roachpb.MaxTxnPriority, true},
-	}
-	for _, test := range testCases {
-		t.Run("", func(t *testing.T) {
-			req := roachpb.PushTxnRequest{
-				PushType: test.typ,
-				PusherTxn: roachpb.Transaction{
-					TxnMeta: enginepb.TxnMeta{
-						Priority: test.pusherPri,
-					},
-				},
-				PusheeTxn: enginepb.TxnMeta{
-					Priority: test.pusheePri,
-				},
-			}
-			if shouldPush := shouldPushImmediately(&req); shouldPush != test.shouldPush {
-				t.Errorf("expected %t; got %t", test.shouldPush, shouldPush)
-			}
-		})
-	}
-}
-
-func TestIsPushed(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	testCases := []struct {
-		typ          roachpb.PushTxnType
-		pushTo       hlc.Timestamp
-		txnStatus    roachpb.TransactionStatus
-		txnTimestamp hlc.Timestamp
-		isPushed     bool
-	}{
-		{roachpb.PUSH_ABORT, hlc.Timestamp{}, roachpb.PENDING, hlc.Timestamp{}, false},
-		{roachpb.PUSH_ABORT, hlc.Timestamp{}, roachpb.ABORTED, hlc.Timestamp{}, true},
-		{roachpb.PUSH_ABORT, hlc.Timestamp{}, roachpb.COMMITTED, hlc.Timestamp{}, true},
-		{roachpb.PUSH_TIMESTAMP, makeTS(10, 1), roachpb.PENDING, hlc.Timestamp{}, false},
-		{roachpb.PUSH_TIMESTAMP, makeTS(10, 1), roachpb.ABORTED, hlc.Timestamp{}, true},
-		{roachpb.PUSH_TIMESTAMP, makeTS(10, 1), roachpb.COMMITTED, hlc.Timestamp{}, true},
-		{roachpb.PUSH_TIMESTAMP, makeTS(10, 1), roachpb.PENDING, makeTS(10, 0), false},
-		{roachpb.PUSH_TIMESTAMP, makeTS(10, 1), roachpb.PENDING, makeTS(10, 1), false},
-		{roachpb.PUSH_TIMESTAMP, makeTS(10, 1), roachpb.PENDING, makeTS(10, 2), true},
-	}
-	for _, test := range testCases {
-		t.Run("", func(t *testing.T) {
-			req := roachpb.PushTxnRequest{
-				PushType: test.typ,
-				PushTo:   test.pushTo,
-			}
-			txn := roachpb.Transaction{
-				Status: test.txnStatus,
-				TxnMeta: enginepb.TxnMeta{
-					Timestamp: test.txnTimestamp,
-				},
-			}
-			if isPushed := isPushed(&req, &txn); isPushed != test.isPushed {
-				t.Errorf("expected %t; got %t", test.isPushed, isPushed)
-			}
-		})
-	}
-}
 
 func writeTxnRecord(ctx context.Context, tc *testContext, txn *roachpb.Transaction) error {
 	key := keys.TransactionKey(txn.Key, txn.ID)
@@ -162,16 +69,14 @@ func TestPushTxnQueueEnableDisable(t *testing.T) {
 
 	// Queue starts enabled.
 	ptq := tc.repl.pushTxnQueue
-	if !ptq.isEnabled() {
+	if !ptq.IsEnabled() {
 		t.Errorf("expected push txn queue is enabled")
 	}
 
 	ptq.Enqueue(txn)
-	ptq.mu.Lock()
-	if pt := ptq.mu.txns[txn.ID]; pt == nil {
-		t.Errorf("expected pendingTxn to be in txns map after enqueue")
+	if _, ok := ptq.TrackedTxns()[txn.ID]; !ok {
+		t.Fatalf("expected pendingTxn to be in txns map after enqueue")
 	}
-	ptq.mu.Unlock()
 
 	pusher := newTransaction("pusher", roachpb.Key("a"), 1, enginepb.SERIALIZABLE, tc.Clock())
 	req := roachpb.PushTxnRequest{
@@ -196,7 +101,7 @@ func TestPushTxnQueueEnableDisable(t *testing.T) {
 
 	// Now disable the queue and make sure the waiter is returned.
 	ptq.Clear(true /* disable */)
-	if ptq.isEnabled() {
+	if ptq.IsEnabled() {
 		t.Errorf("expected queue to be disabled")
 	}
 
@@ -213,16 +118,14 @@ func TestPushTxnQueueEnableDisable(t *testing.T) {
 	}
 
 	ptq.Enqueue(txn)
-	if ptq.isEnabled() {
+	if ptq.IsEnabled() {
 		t.Errorf("expected enqueue to silently fail since queue is disabled")
 	}
 
 	ptq.UpdateTxn(context.Background(), txn)
-	ptq.mu.Lock()
-	if ptq.mu.txns != nil {
-		t.Errorf("expected update to silently fail since queue is disabled")
+	if len(ptq.TrackedTxns()) != 0 {
+		t.Fatalf("expected update to silently fail since queue is disabled")
 	}
-	ptq.mu.Unlock()
 
 	if resp, pErr := ptq.MaybeWaitForPush(context.TODO(), tc.repl, &req); resp != nil || pErr != nil {
 		t.Errorf("expected nil resp and err as queue is disabled; got %+v, %s", resp, pErr)
@@ -408,7 +311,7 @@ func TestPushTxnQueuePusheeExpires(t *testing.T) {
 	txn := newTransaction("txn", roachpb.Key("a"), 1, enginepb.SERIALIZABLE, clock)
 	// Move the clock forward so that when the PushTxn is sent, the txn appears
 	// expired.
-	manual.Set(txnExpiration(txn).WallTime)
+	manual.Set(pushtxnq.TxnExpiration(txn).WallTime)
 
 	tc := testContext{}
 	tsc := TestStoreConfig(clock)
@@ -613,10 +516,10 @@ func TestPushTxnQueueDependencyCycle(t *testing.T) {
 	}
 
 	// Wait for first request to finish, which should break the
-	// dependency cycle by returning an errDeadlock error.
+	// dependency cycle by returning an ErrDeadlock error.
 	respWithErr := <-retCh
-	if respWithErr.pErr != errDeadlock {
-		t.Errorf("expected errDeadlock; got %v", respWithErr.pErr)
+	if respWithErr.pErr != pushtxnq.ErrDeadlock {
+		t.Errorf("expected ErrDeadlock; got %v", respWithErr.pErr)
 	}
 	if respWithErr.resp != nil {
 		t.Errorf("expected nil response; got %+v", respWithErr.resp)
@@ -689,13 +592,13 @@ func TestPushTxnQueueDependencyCycleWithPriorityInversion(t *testing.T) {
 	}
 
 	// Wait for first request to finish, which should break the
-	// dependency cycle by returning an errDeadlock error. The
+	// dependency cycle by returning an ErrDeadlock error. The
 	// returned request should be reqA.
 	reqWithErr := <-retCh
 	if !reflect.DeepEqual(reqA, reqWithErr.req) {
 		t.Errorf("expected request %+v; got %+v", reqA, reqWithErr.req)
 	}
-	if reqWithErr.pErr != errDeadlock {
+	if reqWithErr.pErr != pushtxnq.ErrDeadlock {
 		t.Errorf("expected errDeadlock; got %v", reqWithErr.pErr)
 	}
 	cancel()

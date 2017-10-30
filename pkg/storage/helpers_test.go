@@ -474,7 +474,7 @@ func (r *Replica) IsQuiescent() bool {
 }
 
 func (r *Replica) IsPushTxnQueueEnabled() bool {
-	return r.pushTxnQueue.isEnabled()
+	return r.pushTxnQueue.IsEnabled()
 }
 
 // GetQueueLastProcessed returns the last processed timestamp for the

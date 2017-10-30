@@ -45,6 +45,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/pushtxnq"
 	"github.com/cockroachdb/cockroach/pkg/storage/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/storage/tscache"
@@ -2592,7 +2593,7 @@ func (s *Store) Send(
 			dontRetry := s.cfg.DontRetryPushTxnFailures
 			if !dontRetry && ba.IsSinglePushTxnRequest() {
 				pushReq := ba.Requests[0].GetInner().(*roachpb.PushTxnRequest)
-				dontRetry = shouldPushImmediately(pushReq)
+				dontRetry = pushtxnq.ShouldPushImmediately(pushReq)
 			}
 			if dontRetry {
 				// If we're not retrying on push txn failures return a txn retry error
@@ -2674,7 +2675,7 @@ func (s *Store) maybeWaitInPushTxnQueue(
 		// Copy the request in anticipation of setting the force arg and
 		// updating the Now timestamp (see below).
 		pushReqCopy := *pushReq
-		if pErr == errDeadlock {
+		if pErr == pushtxnq.ErrDeadlock {
 			// We've experienced a deadlock; set Force=true on push request.
 			pushReqCopy.Force = true
 		} else if pErr != nil {

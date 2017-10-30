@@ -12,7 +12,7 @@
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
-package storage
+package pushtxnq
 
 import (
 	"bytes"
@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -35,11 +36,11 @@ import (
 
 const maxWaitForQueryTxn = 50 * time.Millisecond
 
-// shouldPushImmediately returns whether the PushTxn request should
+// ShouldPushImmediately returns whether the PushTxn request should
 // proceed without queueing. This is true for pushes which are neither
 // ABORT nor TIMESTAMP, but also for ABORT and TIMESTAMP pushes where
 // the pushee has min priority or pusher has max priority.
-func shouldPushImmediately(req *roachpb.PushTxnRequest) bool {
+func ShouldPushImmediately(req *roachpb.PushTxnRequest) bool {
 	if !(req.PushType == roachpb.PUSH_ABORT || req.PushType == roachpb.PUSH_TIMESTAMP) {
 		return true
 	}
@@ -58,12 +59,14 @@ func isPushed(req *roachpb.PushTxnRequest, txn *roachpb.Transaction) bool {
 		(req.PushType == roachpb.PUSH_TIMESTAMP && req.PushTo.Less(txn.Timestamp)))
 }
 
-func txnExpiration(txn *roachpb.Transaction) hlc.Timestamp {
+// TxnExpiration is the timestamp after which the transaction will be considered expired.
+func TxnExpiration(txn *roachpb.Transaction) hlc.Timestamp {
 	return txn.LastActive().Add(2*base.DefaultHeartbeatInterval.Nanoseconds(), 0)
 }
 
-func isExpired(now hlc.Timestamp, txn *roachpb.Transaction) bool {
-	return txnExpiration(txn).Less(now)
+// IsExpired is true if the given transaction is expired.
+func IsExpired(now hlc.Timestamp, txn *roachpb.Transaction) bool {
+	return TxnExpiration(txn).Less(now)
 }
 
 // createPushTxnResponse returns a PushTxnResponse struct with a
@@ -122,6 +125,18 @@ func (pt *pendingTxn) getDependentsSet() map[uuid.UUID]struct{} {
 	return set
 }
 
+// StoreInterface provides some parts of a Store without incurring a dependency.
+type StoreInterface interface {
+	Clock() *hlc.Clock
+	Stopper() *stop.Stopper
+	DB() *client.DB
+}
+
+// ReplicaInterface provides some parts of a Replica without incurring a dependency.
+type ReplicaInterface interface {
+	ContainsKey(roachpb.Key) bool
+}
+
 // A PushTxnQueue enqueues PushTxn requests which are waiting on extant txns
 // with conflicting intents to abort or commit.
 //
@@ -135,11 +150,8 @@ func (pt *pendingTxn) getDependentsSet() map[uuid.UUID]struct{} {
 // still pending, and cannot be otherwise aborted or pushed forward.
 //
 // PushTxnQueue is thread safe.
-//
-// TODO(tschottdorf): seems straightforward to factor this out and to depend on
-// *Store only through a narrow interface (Clock, DB, Stopper).
 type PushTxnQueue struct {
-	store *Store
+	store StoreInterface
 	mu    struct {
 		syncutil.Mutex
 		txns    map[uuid.UUID]*pendingTxn
@@ -147,7 +159,8 @@ type PushTxnQueue struct {
 	}
 }
 
-func newPushTxnQueue(store *Store) *PushTxnQueue {
+// NewPushTxnQueue instantiates a new PushTxnQueue.
+func NewPushTxnQueue(store StoreInterface) *PushTxnQueue {
 	return &PushTxnQueue{
 		store: store,
 	}
@@ -216,7 +229,8 @@ func (ptq *PushTxnQueue) Clear(disable bool) {
 	}
 }
 
-func (ptq *PushTxnQueue) isEnabled() bool {
+// IsEnabled is true if the queue is enabled.
+func (ptq *PushTxnQueue) IsEnabled() bool {
 	ptq.mu.Lock()
 	defer ptq.mu.Unlock()
 	return ptq.mu.txns != nil
@@ -344,7 +358,9 @@ func (ptq *PushTxnQueue) clearWaitingQueriesLocked(ctx context.Context, txnID uu
 	delete(ptq.mu.queries, txnID)
 }
 
-var errDeadlock = roachpb.NewErrorf("deadlock detected")
+// ErrDeadlock is a sentinel error returned when a cyclic dependency between
+// waiting transactions is detected.
+var ErrDeadlock = roachpb.NewErrorf("deadlock detected")
 
 // MaybeWaitForPush checks whether there is a queue already
 // established for pushing the transaction. If not, or if the PushTxn
@@ -356,11 +372,11 @@ var errDeadlock = roachpb.NewErrorf("deadlock detected")
 // the first return value is a non-nil PushTxnResponse object.
 //
 // In the event of a dependency cycle of pushers leading to deadlock,
-// this method will return an errDeadlock error.
+// this method will return an ErrDeadlock error.
 func (ptq *PushTxnQueue) MaybeWaitForPush(
-	ctx context.Context, repl *Replica, req *roachpb.PushTxnRequest,
+	ctx context.Context, repl ReplicaInterface, req *roachpb.PushTxnRequest,
 ) (*roachpb.PushTxnResponse, *roachpb.Error) {
-	if shouldPushImmediately(req) {
+	if ShouldPushImmediately(req) {
 		return nil, nil
 	}
 
@@ -442,7 +458,7 @@ func (ptq *PushTxnQueue) MaybeWaitForPush(
 	for {
 		// Set the timer to check for the pushee txn's expiration.
 		{
-			expiration := txnExpiration(pending.txn.Load().(*roachpb.Transaction)).GoTime()
+			expiration := TxnExpiration(pending.txn.Load().(*roachpb.Transaction)).GoTime()
 			now := ptq.store.Clock().Now().GoTime()
 			pusheeTxnTimer.Reset(expiration.Sub(now))
 		}
@@ -488,7 +504,7 @@ func (ptq *PushTxnQueue) MaybeWaitForPush(
 			}
 			pusheePriority = updatedPushee.Priority
 			pending.txn.Store(updatedPushee)
-			if isExpired(ptq.store.Clock().Now(), updatedPushee) {
+			if IsExpired(ptq.store.Clock().Now(), updatedPushee) {
 				log.VEventf(ctx, 1, "pushing expired txn %s", req.PusheeTxn.ID.Short())
 				return nil, nil
 			}
@@ -543,7 +559,7 @@ func (ptq *PushTxnQueue) MaybeWaitForPush(
 							dependents,
 						)
 					}
-					return nil, errDeadlock
+					return nil, ErrDeadlock
 
 				}
 			}
@@ -563,7 +579,7 @@ func (ptq *PushTxnQueue) MaybeWaitForPush(
 // there is a queue, enqueue this request as a waiter and enter a
 // select loop waiting for any updates to the target transaction.
 func (ptq *PushTxnQueue) MaybeWaitForQuery(
-	ctx context.Context, repl *Replica, req *roachpb.QueryTxnRequest,
+	ctx context.Context, repl ReplicaInterface, req *roachpb.QueryTxnRequest,
 ) *roachpb.Error {
 	if !req.WaitForUpdate {
 		return nil
@@ -728,7 +744,7 @@ func (ptq *PushTxnQueue) queryTxnStatus(
 		WaitForUpdate:    wait,
 		KnownWaitingTxns: dependents,
 	})
-	if err := ptq.store.db.Run(ctx, b); err != nil {
+	if err := ptq.store.DB().Run(ctx, b); err != nil {
 		// TODO(tschottdorf):
 		// We shouldn't catch an error here (unless it's from the AbortSpan, in
 		// which case we would not get the crucial information that we've been
@@ -759,4 +775,18 @@ func (ptq *PushTxnQueue) queryTxnStatus(
 		return updatedTxn, resp.WaitingTxns, nil
 	}
 	return nil, nil, nil
+}
+
+// TrackedTxns returns a (newly made) map containing a map with an entry for
+// every transaction which is being tracked (i.e. waited on).
+//
+// For testing purposes only.
+func (ptq *PushTxnQueue) TrackedTxns() map[uuid.UUID]struct{} {
+	m := make(map[uuid.UUID]struct{})
+	ptq.mu.Lock()
+	for k := range ptq.mu.txns {
+		m[k] = struct{}{}
+	}
+	ptq.mu.Unlock()
+	return m
 }

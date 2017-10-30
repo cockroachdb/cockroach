@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/abortspan"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/pushtxnq"
 	"github.com/cockroachdb/cockroach/pkg/storage/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -200,12 +201,12 @@ func (r *Replica) AbortSpan() *abortspan.AbortSpan {
 }
 
 // GetPushTxnQueue returns the PushTxnQueue.
-func (rec *ReplicaEvalContext) GetPushTxnQueue() *PushTxnQueue {
+func (rec *ReplicaEvalContext) GetPushTxnQueue() *pushtxnq.PushTxnQueue {
 	return rec.i.GetPushTxnQueue()
 }
 
 // GetPushTxnQueue returns the Replica's pushTxnQueue.
-func (r *Replica) GetPushTxnQueue() *PushTxnQueue {
+func (r *Replica) GetPushTxnQueue() *pushtxnq.PushTxnQueue {
 	return r.pushTxnQueue
 }
 
