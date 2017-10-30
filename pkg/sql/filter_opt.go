@@ -196,18 +196,7 @@ func (p *planner) propagateFilters(
 		return p.addRenderFilter(ctx, n, extraFilter)
 
 	case *joinNode:
-		switch n.joinType {
-		case joinTypeInner, joinTypeLeftOuter, joinTypeRightOuter:
-			return p.addJoinFilter(ctx, n, extraFilter)
-		default:
-			// There's nothing we can do for full outer joins; simply
-			// trigger filter optimization in the sub-nodes.
-			var err error
-			if n.left.plan, err = p.triggerFilterPropagation(ctx, n.left.plan); err == nil {
-				n.right.plan, err = p.triggerFilterPropagation(ctx, n.right.plan)
-			}
-			return n, extraFilter, err
-		}
+		return p.addJoinFilter(ctx, n, extraFilter)
 
 	case *indexJoinNode:
 		panic("filter optimization must occur before index selection")
@@ -526,80 +515,72 @@ func (p *planner) addRenderFilter(
 	return s, extraFilter, nil
 }
 
-// openJoinFilter changes a filter that may refer to merged columns
-// (results of USING/NATURAL) to a filter that uses only the left and right columns.
-// leftBegin is the logical index of the first column after
-// the merged columns.
-// rightBegin is the logical index of the first column in
-// the right data source.
-func openJoinFilter(
-	n *joinNode, leftBegin, rightBegin int, extraFilter parser.TypedExpr,
-) parser.TypedExpr {
-	if leftBegin == 0 || isFilterTrue(extraFilter) {
-		// No merged columns, or definitely no reference to them in the
-		// filter: nothing to do.
-		return extraFilter
+// expandOnCond infers constraints (on equality columns) for one side of the
+// join from constraints for the other side.
+//
+// For example:
+//   a INNER JOIN b ON a.x = b.x AND a.x > 10
+// we infer the condition b.x > 10, resulting in
+//   a INNER JOIN b ON a.x = b.x AND a.x > 10 AND b.x > 10
+//
+// The expanded expression can then be split as necessary.
+func expandOnCond(n *joinNode, cond parser.TypedExpr) parser.TypedExpr {
+	if isFilterTrue(cond) || len(n.pred.leftEqualityIndices) == 0 {
+		return cond
 	}
+	numLeft := len(n.left.info.sourceColumns)
 
-	// There are merged columns, and the incoming extra filter may be
-	// referring to them.
-	// To understand what's going on below consider the query:
-	//
-	// SELECT * FROM a JOIN b USING(x) WHERE f(a,b) AND g(a) AND g(b) AND h(x)
-	//
-	// What we want at the end (below) is this:
-	//    SELECT x, ... FROM
-	//          (SELECT * FROM a WHERE g(a) AND h(a.x))
-	//     JOIN (SELECT * FROM b WHERE g(b) AND h(b.x))
-	//       ON a.x = b.x AND f(a,b)
-	//
-	// So we need to replace h(x) which refers to the merged USING
-	// column by h(x) on the source tables. But we can't simply
-	// replace it by a single reference to *either* of the two source
-	// tables (say, via h(a.x) in the example), because if we did then
-	// the filter propagation would push it towards that source table
-	// only (a in the example) -- and we want it propagated on both
-	// sides!
-	//
-	// So what we do instead:
-	// - we first split the expression to extract those expressions that
-	//   refer to merged columns (notUsingMerged // perhapsUsingMerged):
-	//   "f(a,b) AND g(a) AND g(b)" // "h(x)"
-	// - we replace the part that refers to merged column by an AND
-	//   of its substitution by references to the left and righ sources:
-	//     "h(x)" -> "h(a.x) AND h(b.x)"
-	// - we recombine all of them:
-	//     f(a,b) AND g(a) AND g(b) AND h(a.x) AND h(b.x)
-	// Then the rest of the optimization below can go forward, and
-	// will take care of splitting the expressions among the left and
-	// right operands.
-	noMergedVars := func(expr parser.VariableExpr) (bool, parser.Expr) {
-		if iv, ok := expr.(*parser.IndexedVar); ok && iv.Idx >= leftBegin {
-			return true, expr
+	var result parser.TypedExpr = parser.DBoolTrue
+
+	andExprs := splitAndExpr(&n.planner.evalCtx, cond, nil)
+	for _, e := range andExprs {
+		convLeft := func(expr parser.VariableExpr) (bool, parser.Expr) {
+			iv, ok := expr.(*parser.IndexedVar)
+			if !ok {
+				return false, expr
+			}
+			if iv.Idx < numLeft {
+				// Variable from the left side.
+				return true, expr
+			}
+			// Variable from the right side; see if it is an equality column.
+			for i, c := range n.pred.rightEqualityIndices {
+				if c == iv.Idx-numLeft {
+					return true, n.pred.iVarHelper.IndexedVar(n.pred.leftEqualityIndices[i])
+				}
+			}
+			return false, expr
 		}
-		return false, expr
+		leftFilter, _ := splitFilter(e, convLeft)
+
+		convRight := func(expr parser.VariableExpr) (bool, parser.Expr) {
+			iv, ok := expr.(*parser.IndexedVar)
+			if !ok {
+				return false, expr
+			}
+			if iv.Idx >= numLeft {
+				// Variable from the right side.
+				return true, expr
+			}
+			// Variable from the left side; see if it is an equality column.
+			for i, c := range n.pred.leftEqualityIndices {
+				if c == iv.Idx {
+					return true, n.pred.iVarHelper.IndexedVar(numLeft + n.pred.rightEqualityIndices[i])
+				}
+			}
+			return false, expr
+		}
+		rightFilter, _ := splitFilter(e, convRight)
+
+		result = mergeConj(result, leftFilter)
+		result = mergeConj(result, rightFilter)
+		if leftFilter != e && rightFilter != e {
+			// Also retain the original expression, unless one of the "conversions"
+			// returned it unchanged (i.e. contained only variables from one side).
+			result = mergeConj(result, e)
+		}
 	}
-	// Note: we use a negative condition here because splitFilter()
-	// doesn't guarantee that its right return value doesn't contain
-	// sub-expressions where the conversion function returns true.
-	notUsingMerged, perhapsUsingMerged := splitFilter(extraFilter, noMergedVars)
-	leftFilter := exprConvertVars(perhapsUsingMerged,
-		func(expr parser.VariableExpr) (bool, parser.Expr) {
-			if iv, ok := expr.(*parser.IndexedVar); ok && iv.Idx < leftBegin {
-				newIv := n.pred.iVarHelper.IndexedVar(leftBegin + n.pred.leftEqualityIndices[iv.Idx])
-				return true, newIv
-			}
-			return true, expr
-		})
-	rightFilter := exprConvertVars(perhapsUsingMerged,
-		func(expr parser.VariableExpr) (bool, parser.Expr) {
-			if iv, ok := expr.(*parser.IndexedVar); ok && iv.Idx < leftBegin {
-				newIv := n.pred.iVarHelper.IndexedVar(rightBegin + n.pred.rightEqualityIndices[iv.Idx])
-				return true, newIv
-			}
-			return true, expr
-		})
-	return mergeConj(notUsingMerged, mergeConj(leftFilter, rightFilter))
+	return result
 }
 
 // splitJoinFilter splits a predicate over both sides of the join into
@@ -608,32 +589,30 @@ func openJoinFilter(
 // In this process we shift the IndexedVars in the left and right
 // filter expressions so that they are numbered starting from 0
 // relative to their respective operand.
-// leftBegin is the logical index of the first column after
-// the merged columns.
 // rightBegin is the logical index of the first column in
 // the right data source.
 func splitJoinFilter(
-	n *joinNode, leftBegin, rightBegin int, initialPred parser.TypedExpr,
+	n *joinNode, rightBegin int, initialPred parser.TypedExpr,
 ) (parser.TypedExpr, parser.TypedExpr, parser.TypedExpr) {
-	leftExpr, remainder := splitJoinFilterLeft(n, leftBegin, rightBegin, initialPred)
-	rightExpr, combinedExpr := splitJoinFilterRight(n, leftBegin, rightBegin, remainder)
+	leftExpr, remainder := splitJoinFilterLeft(n, rightBegin, initialPred)
+	rightExpr, combinedExpr := splitJoinFilterRight(n, rightBegin, remainder)
 	return leftExpr, rightExpr, combinedExpr
 }
 
 func splitJoinFilterLeft(
-	n *joinNode, leftBegin, rightBegin int, initialPred parser.TypedExpr,
+	n *joinNode, rightBegin int, initialPred parser.TypedExpr,
 ) (parser.TypedExpr, parser.TypedExpr) {
 	return splitFilter(initialPred,
 		func(expr parser.VariableExpr) (bool, parser.Expr) {
 			if iv, ok := expr.(*parser.IndexedVar); ok && iv.Idx < rightBegin {
-				return true, n.pred.iVarHelper.IndexedVar(iv.Idx - leftBegin)
+				return true, expr
 			}
 			return false, expr
 		})
 }
 
 func splitJoinFilterRight(
-	n *joinNode, leftBegin, rightBegin int, initialPred parser.TypedExpr,
+	n *joinNode, rightBegin int, initialPred parser.TypedExpr,
 ) (parser.TypedExpr, parser.TypedExpr) {
 	return splitFilter(initialPred,
 		func(expr parser.VariableExpr) (bool, parser.Expr) {
@@ -648,39 +627,34 @@ func splitJoinFilterRight(
 func (p *planner) addJoinFilter(
 	ctx context.Context, n *joinNode, extraFilter parser.TypedExpr,
 ) (planNode, parser.TypedExpr, error) {
-	// There are four steps to the transformation below:
-	//
-	// 1. if there are merged columns (i.e. USING/NATURAL), since the
-	//    incoming extra filter may refer to them, transform the
-	//    extra filter to only use the left and right columns.
-	// 2. split the predicate into the left, right and on parts.
-	// 3. propagate the left and right part to the left and right join operands.
-	// 4. compute the new ON predicate from the remaining part(s),
-	//    possibly detecting new equality columns.
+	numLeft := len(n.left.info.sourceColumns)
+	extraFilter = n.pred.iVarHelper.Rebind(extraFilter, true, false)
 
-	// Reminder: the layout of the virtual data values for a join is:
-	// [ merged columns ] [ columns from left ] [ columns from right]
-	//
-	// The merged columns result from USING or NATURAL; for example
-	//      SELECT * FROM a JOIN b USING(x)
-	// has columns: x (merged), a.*, b.*
+	onAndExprs := splitAndExpr(&p.evalCtx, n.pred.onCond, nil)
+	if n.joinType == joinTypeInner {
+		// Special case: for inner join, we can incorporate the filter into
+		// the ON condition.
+		onAndExprs = splitAndExpr(&p.evalCtx, extraFilter, onAndExprs)
+		extraFilter = nil
+	}
 
-	// leftBegin is the logical index of the first column in the left data source.
-	leftBegin := 0
-	// rightBegin is the logical index of the first column in
-	// the right data source.
-	rightBegin := leftBegin + len(n.left.info.sourceColumns)
+	// Harvest any equality columns. We want to do this before the expandOnCond
+	// call below, which uses the equality columns information.
+	onCond := parser.TypedExpr(parser.DBoolTrue)
+	for _, e := range onAndExprs {
+		if e != parser.DBoolTrue && !n.pred.tryAddEqualityFilter(e, n.left.info, n.right.info) {
+			onCond = mergeConj(onCond, e)
+		}
+	}
 
-	// Step 1: remove references to the merged columns.
-	// TODO(radu): we don't have merged columns at this level anymore; rewrite
-	// this function to "transfer" equalities for equality columns between sides
-	// (if the join type allows it).
-	extraFilter = openJoinFilter(n, leftBegin, rightBegin, extraFilter)
-	extraFilter = n.pred.iVarHelper.Rebind(extraFilter, false, false)
+	// Expand the ON condition, in the hope that new inferred constraints can be
+	// pushed down. This is not useful for FULL OUTER joins, where nothing can be
+	// pushed down.
+	if n.joinType != joinTypeFullOuter {
+		onCond = expandOnCond(n, onCond)
+	}
 
-	// Step 2: split the filters.
-	var propagateLeft, propagateRight, onRemainder, filterRemainder parser.TypedExpr
-
+	var propagateLeft, propagateRight, filterRemainder parser.TypedExpr
 	switch n.joinType {
 	case joinTypeInner:
 		// We transform:
@@ -693,28 +667,7 @@ func (p *planner) addJoinFilter(
 		//          JOIN
 		//          (SELECT * from r WHERE (onRight AND filterRight)
 		//          ON (onCombined AND filterCombined)
-
-		// First we merge the existing ON predicate with the extra filter.
-		// (onAll AND filterAll).
-		//
-		// We don't need to reset the helper here, as this will be done
-		// later for the final predicate below.
-		//
-		// Note: we assume here that neither extraFilter nor n.pred.onCond
-		// can refer to the merged columns any more. For extraFilter
-		// that's guaranteed by the code above. For n.pred.onCond, that's
-		// proven by induction on the following two observations:
-		// - initially, onCond cannot refer to merged columns because
-		//   in SQL the USING/NATURAL syntax is mutually exclusive with ON
-		// - at every subsequent round of filter optimization, changes to
-		//   n.pred.onCond have been processed by the code above.
-		initialPred := mergeConj(extraFilter, n.pred.onCond)
-
-		// Now split the combined predicate.
-		propagateLeft, propagateRight, onRemainder = splitJoinFilter(
-			n, leftBegin, rightBegin, initialPred,
-		)
-		// There is no remainder filter: everything has been absorbed.
+		propagateLeft, propagateRight, onCond = splitJoinFilter(n, numLeft, onCond)
 
 	case joinTypeLeftOuter:
 		// We transform:
@@ -731,10 +684,10 @@ func (p *planner) addJoinFilter(
 
 		// Extract filterLeft towards propagation on the left.
 		// filterRemainder = filterRight AND filterCombined.
-		propagateLeft, filterRemainder = splitJoinFilterLeft(n, leftBegin, rightBegin, extraFilter)
+		propagateLeft, filterRemainder = splitJoinFilterLeft(n, numLeft, extraFilter)
 		// Extract onRight towards propagation on the right.
-		// onRemainder = onLeft AND onCombined.
-		propagateRight, onRemainder = splitJoinFilterRight(n, leftBegin, rightBegin, n.pred.onCond)
+		// onCond = onLeft AND onCombined.
+		propagateRight, onCond = splitJoinFilterRight(n, numLeft, onCond)
 
 	case joinTypeRightOuter:
 		// We transform:
@@ -751,18 +704,20 @@ func (p *planner) addJoinFilter(
 
 		// Extract filterRight towards propagation on the right.
 		// filterRemainder = filterLeft AND filterCombined.
-		propagateRight, filterRemainder = splitJoinFilterRight(n, leftBegin, rightBegin, extraFilter)
+		propagateRight, filterRemainder = splitJoinFilterRight(n, numLeft, extraFilter)
 		// Extract onLeft towards propagation on the left.
-		// onRemainder = onRight AND onCombined.
-		propagateLeft, onRemainder = splitJoinFilterLeft(n, leftBegin, rightBegin, n.pred.onCond)
+		// onCond = onRight AND onCombined.
+		propagateLeft, onCond = splitJoinFilterLeft(n, numLeft, onCond)
 
-	default:
+	case joinTypeFullOuter:
+		// Not much we can do for full outer joins.
+		filterRemainder = extraFilter
 	}
 
-	// Step 3: propagate the left and right predicates to the left and
-	// right sides of the join. The predicates must first be "shifted"
-	// i.e. their IndexedVars which are relative to the join columns
-	// must be modified to become relative to the operand's columns.
+	// Propagate the left and right predicates to the left and right sides of the
+	// join. The predicates must first be "shifted" i.e. their IndexedVars which
+	// are relative to the join columns must be modified to become relative to the
+	// operand's columns.
 	propagate := func(ctx context.Context, pred parser.TypedExpr, side *planDataSource) error {
 		newPlan, err := p.propagateOrWrapFilters(ctx, side.plan, side.info, pred)
 		if err != nil {
@@ -777,19 +732,7 @@ func (p *planner) addJoinFilter(
 	if err := propagate(ctx, propagateRight, &n.right); err != nil {
 		return n, extraFilter, err
 	}
-
-	// Step 4: extract possibly new equality columns from the combined ON
-	// predicate, and use the rest as new ON condition.
-	var newCombinedExpr parser.TypedExpr = parser.DBoolTrue
-	for _, e := range splitAndExpr(&p.evalCtx, onRemainder, nil) {
-		if e == parser.DBoolTrue {
-			continue
-		}
-		if !n.pred.tryAddEqualityFilter(e, n.left.info, n.right.info) {
-			newCombinedExpr = mergeConj(newCombinedExpr, e)
-		}
-	}
-	n.pred.onCond = n.pred.iVarHelper.Rebind(newCombinedExpr, true, false)
+	n.pred.onCond = onCond
 
 	return n, filterRemainder, nil
 }

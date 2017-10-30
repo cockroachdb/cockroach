@@ -125,9 +125,9 @@ Level  Type  Field           Description   Columns                Ordering
 1      scan  ·               ·             (a, b, c, d)           a=CONST; key()
 1      ·     table           abcd@primary  ·                      ·
 1      ·     spans           /1-/2         ·                      ·
-1      scan  ·               ·             (e, f, g)              f=g; e!=NULL; f!=NULL; g!=NULL; key(e); +e
+1      scan  ·               ·             (e, f, g)              f=g; e=CONST; f!=NULL; g!=NULL; key()
 1      ·     table           efg@primary   ·                      ·
-1      ·     spans           ALL           ·                      ·
+1      ·     spans           /1-/2         ·                      ·
 1      ·     filter          f = g         ·                      ·
 
 query ITTTTT colnames
