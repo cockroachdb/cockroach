@@ -1839,7 +1839,9 @@ func (n *createSequenceNode) Start(params runParams) error {
 	// the Inc doc comments say keys you Inc are supposed to have been created with Inc
 	// and never touched by anything else. But idk how it would know that.
 	b.Put(seqValueKey, seqStartValue)
-	n.p.txn.Run(params.ctx, b)
+	if err := n.p.txn.Run(params.ctx, b); err != nil {
+		return err
+	}
 
 	if desc.Adding() {
 		n.p.notifySchemaChange(&desc, sqlbase.InvalidMutationID)
@@ -1850,7 +1852,7 @@ func (n *createSequenceNode) Start(params runParams) error {
 
 	// Log Create Sequence event. This is an auditable log event and is
 	// recorded in the same transaction as the table descriptor update.
-	if err := MakeEventLogger(n.p.LeaseMgr()).InsertEventRecord(
+	return MakeEventLogger(n.p.LeaseMgr()).InsertEventRecord(
 		params.ctx,
 		n.p.txn,
 		EventLogCreateSequence,
@@ -1861,11 +1863,7 @@ func (n *createSequenceNode) Start(params runParams) error {
 			Statement    string
 			User         string
 		}{n.n.Name.String(), n.n.String(), n.p.session.User},
-	); err != nil {
-		return err
-	}
-
-	return nil
+	)
 }
 
 func (*createSequenceNode) Next(runParams) (bool, error) { return false, nil }

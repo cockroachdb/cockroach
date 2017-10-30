@@ -52,10 +52,13 @@ func (p *planner) makeEditNode(
 	if err != nil {
 		return editNodeBase{}, err
 	}
-	// We don't support update on views, only real tables.
+	// We don't support update on views or sequences, only real tables.
+	tableDesc.TypeName()
 	if !tableDesc.IsTable() {
 		return editNodeBase{},
-			errors.Errorf("cannot run %s on view %q - views are not updateable", priv, tn)
+			errors.Errorf(
+				"cannot run %s on %s %q - %s are not updateable",
+				priv, tableDesc.KindName(), tn, tableDesc.KindNamePlural())
 	}
 
 	if err := p.CheckPrivilege(tableDesc, priv); err != nil {

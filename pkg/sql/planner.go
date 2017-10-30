@@ -15,13 +15,13 @@
 package sql
 
 import (
-	"fmt"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -252,9 +252,7 @@ func (p *planner) QueryRow(
 	}
 }
 
-func (p *planner) IncrementSequence(
-	ctx context.Context, seqName string,
-) (int64, error) {
+func (p *planner) IncrementSequence(ctx context.Context, seqName string) (int64, error) {
 	tableName, err := parser.ParseTableName(seqName)
 	if err != nil {
 		return 0, err
@@ -265,12 +263,11 @@ func (p *planner) IncrementSequence(
 		return 0, err
 	}
 	if descriptor.SequenceSettings == nil {
-		// TODO(vilterp): construct error somewhere else
-		return 0, fmt.Errorf("%s is not a sequence", seqName)
+		return 0, pgerror.NewErrorf(pgerror.CodeWrongObjectTypeError, `"%s" is not a sequence`, seqName)
 	}
 	seqValueKey := keys.MakeSequenceKey(uint32(descriptor.ID))
 	res, err := client.IncrementValRetryable(
-		ctx, p.txn.DB(), seqValueKey, int64(descriptor.SequenceSettings.Increment))
+		ctx, p.txn.DB(), seqValueKey, descriptor.SequenceSettings.Increment)
 	return res, err
 }
 

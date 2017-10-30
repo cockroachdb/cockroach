@@ -961,8 +961,7 @@ type TableDescriptor struct {
 	// Mutation jobs queued for execution in a FIFO order. Remains synchronized
 	// with the mutations list.
 	MutationJobs []TableDescriptor_MutationJob `protobuf:"bytes,27,rep,name=mutationJobs" json:"mutationJobs"`
-	// The presence of sequence_settings indicates that this descriptor is for a sequence
-	// (a pseudo-table with one row).
+	// The presence of sequence_settings indicates that this descriptor is for a sequence.
 	SequenceSettings *TableDescriptor_SequenceSettings `protobuf:"bytes,28,opt,name=sequence_settings,json=sequenceSettings" json:"sequence_settings,omitempty"`
 }
 

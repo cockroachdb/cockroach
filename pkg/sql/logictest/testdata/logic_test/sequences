@@ -1,4 +1,6 @@
-# sequence creation
+# LogicTest: default
+
+# SEQUENCE CREATION
 
 statement ok
 CREATE SEQUENCE foo
@@ -15,7 +17,29 @@ CREATE TABLE foo (k BYTES PRIMARY KEY, v BYTES)
 statement error INCREMENT must not be zero
 CREATE SEQUENCE zero_test INCREMENT 0
 
-# using the nextval() function
+# drop table doesn't work
+# HINT:  Use DROP SEQUENCE to remove a sequence.
+statement error "foo" is not a table
+DROP TABLE foo
+
+# DML ERRORS
+
+statement error cannot run INSERT on sequence "foo" - sequences are not updateable
+INSERT INTO foo VALUES (1, 2, 3)
+
+statement error cannot run UPDATE on sequence "foo" - sequences are not updateable
+UPDATE foo SET value = 5
+
+statement error cannot run DELETE on sequence "foo" - sequences are not updateable
+DELETE FROM foo
+
+statement error cannot run TRUNCATE on sequence "foo" - sequences are not updateable
+TRUNCATE foo
+
+# USING THE nextval() FUNCTION
+
+# `select * from foo` currently returns 0 columns & 0 rows
+# testing against that is a Test-Script syntax error
 
 query I
 SELECT nextval('foo')
