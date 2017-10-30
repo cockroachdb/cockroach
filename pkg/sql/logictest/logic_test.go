@@ -1175,7 +1175,7 @@ func (t *logicTest) verifyError(sql, pos, expectErr, expectErrCode string, err e
 		return t.unexpectedError(sql, pos, err)
 	}
 	if !testutils.IsError(err, expectErr) {
-		t.Errorf("%s: expected %q, but found %v", pos, expectErr, err)
+		t.Errorf("%s: %s\nexpected %q, but found %v", pos, sql, expectErr, err)
 		if err != nil && strings.Contains(err.Error(), expectErr) {
 			t.t.Logf("The output string contained the input regexp. Perhaps you meant to write:\n"+
 				"query error %s", regexp.QuoteMeta(err.Error()))
@@ -1186,18 +1186,18 @@ func (t *logicTest) verifyError(sql, pos, expectErr, expectErrCode string, err e
 		if err != nil {
 			pqErr, ok := err.(*pq.Error)
 			if !ok {
-				t.Errorf("%s: expected error code %q, but the error we found is not "+
-					"a libpq error: %s", pos, expectErrCode, err)
+				t.Errorf("%s %s\n: expected error code %q, but the error we found is not "+
+					"a libpq error: %s", pos, sql, expectErrCode, err)
 				return false
 			}
 			if pqErr.Code != pq.ErrorCode(expectErrCode) {
-				t.Errorf("%s: expected error code %q, but found code %q (%s)",
-					pos, expectErrCode, pqErr.Code, pqErr.Code.Name())
+				t.Errorf("%s: %s\nexpected error code %q, but found code %q (%s)",
+					pos, sql, expectErrCode, pqErr.Code, pqErr.Code.Name())
 				return false
 			}
 		} else {
-			t.Errorf("%s: expected error code %q, but found success",
-				pos, expectErrCode)
+			t.Errorf("%s: %s\nexpected error code %q, but found success",
+				pos, sql, expectErrCode)
 			return false
 		}
 	}
@@ -1223,10 +1223,10 @@ func (t *logicTest) unexpectedError(sql string, pos string, err error) bool {
 			return true
 		}
 		if err := stmt.Close(); err != nil {
-			t.Errorf("%s: error when closing prepared statement: %s", pos, err)
+			t.Errorf("%s: %s\nerror when closing prepared statement: %s", sql, pos, err)
 		}
 	}
-	t.Errorf("%s: expected success, but found\n%s", pos, err)
+	t.Errorf("%s: %s\nexpected success, but found\n%s", pos, sql, err)
 	return false
 }
 
