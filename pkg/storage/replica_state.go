@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
+	"github.com/cockroachdb/cockroach/pkg/storage/txnwait"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
@@ -199,14 +200,14 @@ func (r *Replica) AbortSpan() *abortspan.AbortSpan {
 	return r.abortSpan
 }
 
-// GetPushTxnQueue returns the PushTxnQueue.
-func (rec *ReplicaEvalContext) GetPushTxnQueue() *PushTxnQueue {
-	return rec.i.GetPushTxnQueue()
+// GetTxnWaitQueue returns the txnwait.Queue.
+func (rec *ReplicaEvalContext) GetTxnWaitQueue() *txnwait.Queue {
+	return rec.i.GetTxnWaitQueue()
 }
 
-// GetPushTxnQueue returns the Replica's pushTxnQueue.
-func (r *Replica) GetPushTxnQueue() *PushTxnQueue {
-	return r.pushTxnQueue
+// GetTxnWaitQueue returns the Replica's txnwait.Queue.
+func (r *Replica) GetTxnWaitQueue() *txnwait.Queue {
+	return r.txnWaitQueue
 }
 
 // GetTerm returns the term for the given index in the Raft log.

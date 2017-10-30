@@ -473,8 +473,8 @@ func (r *Replica) IsQuiescent() bool {
 	return r.mu.quiescent
 }
 
-func (r *Replica) IsPushTxnQueueEnabled() bool {
-	return r.pushTxnQueue.isEnabled()
+func (r *Replica) IsTxnWaitQueueEnabled() bool {
+	return r.txnWaitQueue.IsEnabled()
 }
 
 // GetQueueLastProcessed returns the last processed timestamp for the

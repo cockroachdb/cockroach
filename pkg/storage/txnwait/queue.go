@@ -12,7 +12,7 @@
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
-package storage
+package txnwait
 
 import (
 	"bytes"
@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -35,11 +36,11 @@ import (
 
 const maxWaitForQueryTxn = 50 * time.Millisecond
 
-// shouldPushImmediately returns whether the PushTxn request should
+// ShouldPushImmediately returns whether the PushTxn request should
 // proceed without queueing. This is true for pushes which are neither
 // ABORT nor TIMESTAMP, but also for ABORT and TIMESTAMP pushes where
 // the pushee has min priority or pusher has max priority.
-func shouldPushImmediately(req *roachpb.PushTxnRequest) bool {
+func ShouldPushImmediately(req *roachpb.PushTxnRequest) bool {
 	if !(req.PushType == roachpb.PUSH_ABORT || req.PushType == roachpb.PUSH_TIMESTAMP) {
 		return true
 	}
@@ -58,12 +59,14 @@ func isPushed(req *roachpb.PushTxnRequest, txn *roachpb.Transaction) bool {
 		(req.PushType == roachpb.PUSH_TIMESTAMP && req.PushTo.Less(txn.Timestamp)))
 }
 
-func txnExpiration(txn *roachpb.Transaction) hlc.Timestamp {
+// TxnExpiration is the timestamp after which the transaction will be considered expired.
+func TxnExpiration(txn *roachpb.Transaction) hlc.Timestamp {
 	return txn.LastActive().Add(2*base.DefaultHeartbeatInterval.Nanoseconds(), 0)
 }
 
-func isExpired(now hlc.Timestamp, txn *roachpb.Transaction) bool {
-	return txnExpiration(txn).Less(now)
+// IsExpired is true if the given transaction is expired.
+func IsExpired(now hlc.Timestamp, txn *roachpb.Transaction) bool {
+	return TxnExpiration(txn).Less(now)
 }
 
 // createPushTxnResponse returns a PushTxnResponse struct with a
@@ -122,7 +125,19 @@ func (pt *pendingTxn) getDependentsSet() map[uuid.UUID]struct{} {
 	return set
 }
 
-// A PushTxnQueue enqueues PushTxn requests which are waiting on extant txns
+// StoreInterface provides some parts of a Store without incurring a dependency.
+type StoreInterface interface {
+	Clock() *hlc.Clock
+	Stopper() *stop.Stopper
+	DB() *client.DB
+}
+
+// ReplicaInterface provides some parts of a Replica without incurring a dependency.
+type ReplicaInterface interface {
+	ContainsKey(roachpb.Key) bool
+}
+
+// Queue enqueues PushTxn requests which are waiting on extant txns
 // with conflicting intents to abort or commit.
 //
 // Internally, it maintains a map from extant txn IDs to queues of pending
@@ -134,12 +149,9 @@ func (pt *pendingTxn) getDependentsSet() map[uuid.UUID]struct{} {
 // PushTxn request will wait if it discovers that the pushee's transaction is
 // still pending, and cannot be otherwise aborted or pushed forward.
 //
-// PushTxnQueue is thread safe.
-//
-// TODO(tschottdorf): seems straightforward to factor this out and to depend on
-// *Store only through a narrow interface (Clock, DB, Stopper).
-type PushTxnQueue struct {
-	store *Store
+// Queue is thread safe.
+type Queue struct {
+	store StoreInterface
 	mu    struct {
 		syncutil.Mutex
 		txns    map[uuid.UUID]*pendingTxn
@@ -147,8 +159,9 @@ type PushTxnQueue struct {
 	}
 }
 
-func newPushTxnQueue(store *Store) *PushTxnQueue {
-	return &PushTxnQueue{
+// NewQueue instantiates a new Queue.
+func NewQueue(store StoreInterface) *Queue {
+	return &Queue{
 		store: store,
 	}
 }
@@ -156,14 +169,14 @@ func newPushTxnQueue(store *Store) *PushTxnQueue {
 // Enable allows transactions to be enqueued and waiting pushers
 // added. This method must be idempotent as it can be invoked multiple
 // times as range leases are updated for the same replica.
-func (ptq *PushTxnQueue) Enable() {
-	ptq.mu.Lock()
-	defer ptq.mu.Unlock()
-	if ptq.mu.txns == nil {
-		ptq.mu.txns = map[uuid.UUID]*pendingTxn{}
+func (q *Queue) Enable() {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	if q.mu.txns == nil {
+		q.mu.txns = map[uuid.UUID]*pendingTxn{}
 	}
-	if ptq.mu.queries == nil {
-		ptq.mu.queries = map[uuid.UUID][]*waitingQuery{}
+	if q.mu.queries == nil {
+		q.mu.queries = map[uuid.UUID][]*waitingQuery{}
 	}
 }
 
@@ -172,17 +185,17 @@ func (ptq *PushTxnQueue) Enable() {
 // `disable` is true, future transactions may not be enqueued or
 // waiting pushers added. Call Enable() once the lease is again
 // acquired by the replica.
-func (ptq *PushTxnQueue) Clear(disable bool) {
-	ptq.mu.Lock()
+func (q *Queue) Clear(disable bool) {
+	q.mu.Lock()
 	var pushWaiters []chan *roachpb.Transaction
-	for _, pt := range ptq.mu.txns {
+	for _, pt := range q.mu.txns {
 		for _, w := range pt.waitingPushes {
 			pushWaiters = append(pushWaiters, w.pending)
 		}
 		pt.waitingPushes = nil
 	}
 	var queryWaiters []chan struct{}
-	for _, waitingQueries := range ptq.mu.queries {
+	for _, waitingQueries := range q.mu.queries {
 		for _, w := range waitingQueries {
 			queryWaiters = append(queryWaiters, w.pending)
 		}
@@ -198,13 +211,13 @@ func (ptq *PushTxnQueue) Clear(disable bool) {
 	}
 
 	if disable {
-		ptq.mu.txns = nil
-		ptq.mu.queries = nil
+		q.mu.txns = nil
+		q.mu.queries = nil
 	} else {
-		ptq.mu.txns = map[uuid.UUID]*pendingTxn{}
-		ptq.mu.queries = map[uuid.UUID][]*waitingQuery{}
+		q.mu.txns = map[uuid.UUID]*pendingTxn{}
+		q.mu.queries = map[uuid.UUID][]*waitingQuery{}
 	}
-	ptq.mu.Unlock()
+	q.mu.Unlock()
 
 	// Send on the pending push waiter channels outside of the mutex lock.
 	for _, w := range pushWaiters {
@@ -216,65 +229,66 @@ func (ptq *PushTxnQueue) Clear(disable bool) {
 	}
 }
 
-func (ptq *PushTxnQueue) isEnabled() bool {
-	ptq.mu.Lock()
-	defer ptq.mu.Unlock()
-	return ptq.mu.txns != nil
+// IsEnabled is true if the queue is enabled.
+func (q *Queue) IsEnabled() bool {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	return q.mu.txns != nil
 }
 
 // Enqueue creates a new pendingTxn for the target txn of a failed
 // PushTxn command. Subsequent PushTxn requests for the same txn
 // will be enqueued behind the pendingTxn via MaybeWait().
-func (ptq *PushTxnQueue) Enqueue(txn *roachpb.Transaction) {
-	ptq.mu.Lock()
-	defer ptq.mu.Unlock()
-	if ptq.mu.txns == nil {
+func (q *Queue) Enqueue(txn *roachpb.Transaction) {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	if q.mu.txns == nil {
 		// Not enabled; do nothing.
 		return
 	}
 	// If the txn which failed to push is already pending, update the
 	// transaction status.
-	if pt, ok := ptq.mu.txns[txn.ID]; ok {
+	if pt, ok := q.mu.txns[txn.ID]; ok {
 		pt.txn.Store(txn)
 	} else {
 		pt = &pendingTxn{}
 		pt.txn.Store(txn)
-		ptq.mu.txns[txn.ID] = pt
+		q.mu.txns[txn.ID] = pt
 	}
 }
 
 // UpdateTxn is invoked to update a transaction's status after a
 // successful PushTxn or EndTransaction command. It unblocks all
 // pending waiters.
-func (ptq *PushTxnQueue) UpdateTxn(ctx context.Context, txn *roachpb.Transaction) {
+func (q *Queue) UpdateTxn(ctx context.Context, txn *roachpb.Transaction) {
 	txn.AssertInitialized(ctx)
-	ptq.mu.Lock()
+	q.mu.Lock()
 
 	if log.V(1) {
-		if count := len(ptq.mu.queries[txn.ID]); count > 0 {
+		if count := len(q.mu.queries[txn.ID]); count > 0 {
 			log.Infof(ctx, "returning %d waiting queries for %s", count, txn.ID.Short())
 		}
 	}
-	for _, w := range ptq.mu.queries[txn.ID] {
+	for _, w := range q.mu.queries[txn.ID] {
 		close(w.pending)
 	}
-	delete(ptq.mu.queries, txn.ID)
+	delete(q.mu.queries, txn.ID)
 
-	if ptq.mu.txns == nil {
+	if q.mu.txns == nil {
 		// Not enabled; do nothing.
-		ptq.mu.Unlock()
+		q.mu.Unlock()
 		return
 	}
-	pending, ok := ptq.mu.txns[txn.ID]
+	pending, ok := q.mu.txns[txn.ID]
 	if !ok {
-		ptq.mu.Unlock()
+		q.mu.Unlock()
 		return
 	}
 	waitingPushes := pending.waitingPushes
 	pending.waitingPushes = nil
-	delete(ptq.mu.txns, txn.ID)
+	delete(q.mu.txns, txn.ID)
 	pending.txn.Store(txn)
-	ptq.mu.Unlock()
+	q.mu.Unlock()
 
 	if log.V(1) && len(waitingPushes) > 0 {
 		log.Infof(context.Background(), "updating %d push waiters for %s", len(waitingPushes), txn.ID.Short())
@@ -287,14 +301,14 @@ func (ptq *PushTxnQueue) UpdateTxn(ctx context.Context, txn *roachpb.Transaction
 
 // GetDependents returns a slice of transactions waiting on the specified
 // txn either directly or indirectly.
-func (ptq *PushTxnQueue) GetDependents(txnID uuid.UUID) []uuid.UUID {
-	ptq.mu.Lock()
-	defer ptq.mu.Unlock()
-	if ptq.mu.txns == nil {
+func (q *Queue) GetDependents(txnID uuid.UUID) []uuid.UUID {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	if q.mu.txns == nil {
 		// Not enabled; do nothing.
 		return nil
 	}
-	if pending, ok := ptq.mu.txns[txnID]; ok {
+	if pending, ok := q.mu.txns[txnID]; ok {
 		set := pending.getDependentsSet()
 		dependents := make([]uuid.UUID, 0, len(set))
 		for txnID := range set {
@@ -309,7 +323,7 @@ func (ptq *PushTxnQueue) GetDependents(txnID uuid.UUID) []uuid.UUID {
 // the QueryTxnRequest has had its status or priority updated
 // or whether the known set of dependent transactions has
 // changed.
-func (ptq *PushTxnQueue) isTxnUpdated(pending *pendingTxn, req *roachpb.QueryTxnRequest) bool {
+func (q *Queue) isTxnUpdated(pending *pendingTxn, req *roachpb.QueryTxnRequest) bool {
 	// First check whether txn status or priority has changed.
 	txn := pending.getTxn()
 	if txn.Status != roachpb.PENDING || txn.Priority > req.Txn.Priority {
@@ -328,8 +342,8 @@ func (ptq *PushTxnQueue) isTxnUpdated(pending *pendingTxn, req *roachpb.QueryTxn
 	return false
 }
 
-func (ptq *PushTxnQueue) clearWaitingQueriesLocked(ctx context.Context, txnID uuid.UUID) {
-	waitingQueries := ptq.mu.queries[txnID]
+func (q *Queue) clearWaitingQueriesLocked(ctx context.Context, txnID uuid.UUID) {
+	waitingQueries := q.mu.queries[txnID]
 	if log.V(1) && len(waitingQueries) > 0 {
 		log.Infof(
 			ctx,
@@ -341,10 +355,12 @@ func (ptq *PushTxnQueue) clearWaitingQueriesLocked(ctx context.Context, txnID uu
 	for _, w := range waitingQueries {
 		close(w.pending)
 	}
-	delete(ptq.mu.queries, txnID)
+	delete(q.mu.queries, txnID)
 }
 
-var errDeadlock = roachpb.NewErrorf("deadlock detected")
+// ErrDeadlock is a sentinel error returned when a cyclic dependency between
+// waiting transactions is detected.
+var ErrDeadlock = roachpb.NewErrorf("deadlock detected")
 
 // MaybeWaitForPush checks whether there is a queue already
 // established for pushing the transaction. If not, or if the PushTxn
@@ -356,34 +372,34 @@ var errDeadlock = roachpb.NewErrorf("deadlock detected")
 // the first return value is a non-nil PushTxnResponse object.
 //
 // In the event of a dependency cycle of pushers leading to deadlock,
-// this method will return an errDeadlock error.
-func (ptq *PushTxnQueue) MaybeWaitForPush(
-	ctx context.Context, repl *Replica, req *roachpb.PushTxnRequest,
+// this method will return an ErrDeadlock error.
+func (q *Queue) MaybeWaitForPush(
+	ctx context.Context, repl ReplicaInterface, req *roachpb.PushTxnRequest,
 ) (*roachpb.PushTxnResponse, *roachpb.Error) {
-	if shouldPushImmediately(req) {
+	if ShouldPushImmediately(req) {
 		return nil, nil
 	}
 
-	ptq.mu.Lock()
-	// If the push txn queue is not enabled or if the request is not
+	q.mu.Lock()
+	// If the txn wait queue is not enabled or if the request is not
 	// contained within the replica, do nothing. The request can fall
 	// outside of the replica after a split or merge. Note that the
-	// ContainsKey check is done under the push txn queue's lock to
+	// ContainsKey check is done under the txn wait queue's lock to
 	// ensure that it's not cleared before an incorrect insertion happens.
-	if ptq.mu.txns == nil || !repl.ContainsKey(req.Key) {
-		ptq.mu.Unlock()
+	if q.mu.txns == nil || !repl.ContainsKey(req.Key) {
+		q.mu.Unlock()
 		return nil, nil
 	}
 
 	// If there's no pending queue for this txn, return not pushed. If
 	// already pushed, return push success.
-	pending, ok := ptq.mu.txns[req.PusheeTxn.ID]
+	pending, ok := q.mu.txns[req.PusheeTxn.ID]
 	if !ok {
-		ptq.mu.Unlock()
+		q.mu.Unlock()
 		return nil, nil
 	}
 	if txn := pending.getTxn(); isPushed(req, txn) {
-		ptq.mu.Unlock()
+		q.mu.Unlock()
 		return createPushTxnResponse(txn), nil
 	}
 
@@ -396,7 +412,7 @@ func (ptq *PushTxnQueue) MaybeWaitForPush(
 	// transaction, send on the waiting queries' channel to
 	// indicate there is a new dependent and they should proceed
 	// to execute the QueryTxn command.
-	ptq.clearWaitingQueriesLocked(ctx, req.PusheeTxn.ID)
+	q.clearWaitingQueriesLocked(ctx, req.PusheeTxn.ID)
 
 	if req.PusherTxn.ID != (uuid.UUID{}) {
 		log.VEventf(
@@ -410,7 +426,7 @@ func (ptq *PushTxnQueue) MaybeWaitForPush(
 	} else {
 		log.VEventf(ctx, 2, "pushing %s (%d pending)", req.PusheeTxn.ID.Short(), len(pending.waitingPushes))
 	}
-	ptq.mu.Unlock()
+	q.mu.Unlock()
 
 	// Wait for any updates to the pusher txn to be notified when
 	// status, priority, or dependents (for deadlock detection) have
@@ -425,7 +441,7 @@ func (ptq *PushTxnQueue) MaybeWaitForPush(
 		var cancel func()
 		ctx, cancel = context.WithCancel(ctx)
 		readyCh = make(chan struct{}, 1)
-		queryPusherCh, queryPusherErrCh = ptq.startQueryPusherTxn(ctx, push, readyCh)
+		queryPusherCh, queryPusherErrCh = q.startQueryPusherTxn(ctx, push, readyCh)
 		// Ensure that the pusher querying goroutine is complete at exit.
 		defer func() {
 			cancel()
@@ -442,8 +458,8 @@ func (ptq *PushTxnQueue) MaybeWaitForPush(
 	for {
 		// Set the timer to check for the pushee txn's expiration.
 		{
-			expiration := txnExpiration(pending.txn.Load().(*roachpb.Transaction)).GoTime()
-			now := ptq.store.Clock().Now().GoTime()
+			expiration := TxnExpiration(pending.txn.Load().(*roachpb.Transaction)).GoTime()
+			now := q.store.Clock().Now().GoTime()
 			pusheeTxnTimer.Reset(expiration.Sub(now))
 		}
 
@@ -476,8 +492,8 @@ func (ptq *PushTxnQueue) MaybeWaitForPush(
 			log.Event(ctx, "querying pushee")
 			pusheeTxnTimer.Read = true
 			// Periodically check whether the pushee txn has been abandoned.
-			updatedPushee, _, pErr := ptq.queryTxnStatus(
-				ctx, req.PusheeTxn, false, nil, ptq.store.Clock().Now(),
+			updatedPushee, _, pErr := q.queryTxnStatus(
+				ctx, req.PusheeTxn, false, nil, q.store.Clock().Now(),
 			)
 			if pErr != nil {
 				return nil, pErr
@@ -488,7 +504,7 @@ func (ptq *PushTxnQueue) MaybeWaitForPush(
 			}
 			pusheePriority = updatedPushee.Priority
 			pending.txn.Store(updatedPushee)
-			if isExpired(ptq.store.Clock().Now(), updatedPushee) {
+			if IsExpired(q.store.Clock().Now(), updatedPushee) {
 				log.VEventf(ctx, 1, "pushing expired txn %s", req.PusheeTxn.ID.Short())
 				return nil, nil
 			}
@@ -526,9 +542,9 @@ func (ptq *PushTxnQueue) MaybeWaitForPush(
 
 			// Since the pusher has been updated, clear any waiting queries
 			// so that they continue with a query of new dependents added here.
-			ptq.mu.Lock()
-			ptq.clearWaitingQueriesLocked(ctx, req.PusheeTxn.ID)
-			ptq.mu.Unlock()
+			q.mu.Lock()
+			q.clearWaitingQueriesLocked(ctx, req.PusheeTxn.ID)
+			q.mu.Unlock()
 
 			if haveDependency {
 				// Break the deadlock if the pusher has higher priority.
@@ -543,7 +559,7 @@ func (ptq *PushTxnQueue) MaybeWaitForPush(
 							dependents,
 						)
 					}
-					return nil, errDeadlock
+					return nil, ErrDeadlock
 
 				}
 			}
@@ -562,31 +578,31 @@ func (ptq *PushTxnQueue) MaybeWaitForPush(
 // request hasn't specified WaitForUpdate, return immediately. If
 // there is a queue, enqueue this request as a waiter and enter a
 // select loop waiting for any updates to the target transaction.
-func (ptq *PushTxnQueue) MaybeWaitForQuery(
-	ctx context.Context, repl *Replica, req *roachpb.QueryTxnRequest,
+func (q *Queue) MaybeWaitForQuery(
+	ctx context.Context, repl ReplicaInterface, req *roachpb.QueryTxnRequest,
 ) *roachpb.Error {
 	if !req.WaitForUpdate {
 		return nil
 	}
 
-	ptq.mu.Lock()
-	// If the push txn queue is not enabled or if the request is not
+	q.mu.Lock()
+	// If the txn wait queue is not enabled or if the request is not
 	// contained within the replica, do nothing. The request can fall
 	// outside of the replica after a split or merge. Note that the
-	// ContainsKey check is done under the push txn queue's lock to
+	// ContainsKey check is done under the txn wait queue's lock to
 	// ensure that it's not cleared before an incorrect insertion happens.
-	if ptq.mu.txns == nil || !repl.ContainsKey(req.Key) {
-		ptq.mu.Unlock()
+	if q.mu.txns == nil || !repl.ContainsKey(req.Key) {
+		q.mu.Unlock()
 		return nil
 	}
 
 	var maxWaitCh <-chan time.Time
-	pending, ok := ptq.mu.txns[req.Txn.ID]
+	pending, ok := q.mu.txns[req.Txn.ID]
 	// If the transaction we're waiting to query has a queue of txns
 	// in turn waiting on it, and is _already_ updated from what the
 	// caller is expecting, return to query the updates immediately.
-	if ok && ptq.isTxnUpdated(pending, req) {
-		ptq.mu.Unlock()
+	if ok && q.isTxnUpdated(pending, req) {
+		q.mu.Unlock()
 		return nil
 	} else if !ok {
 		// If the transaction we're querying has no queue established,
@@ -601,8 +617,8 @@ func (ptq *PushTxnQueue) MaybeWaitForQuery(
 		req:     req,
 		pending: make(chan struct{}),
 	}
-	ptq.mu.queries[req.Txn.ID] = append(ptq.mu.queries[req.Txn.ID], query)
-	ptq.mu.Unlock()
+	q.mu.queries[req.Txn.ID] = append(q.mu.queries[req.Txn.ID], query)
+	q.mu.Unlock()
 
 	if log.V(2) {
 		log.Infof(ctx, "waiting on query for %s", req.Txn.ID.Short())
@@ -632,7 +648,7 @@ func (ptq *PushTxnQueue) MaybeWaitForQuery(
 // priority and set of known waiting transactions (dependents) are
 // accumulated over iterations and supplied with each successive
 // invocation of QueryTxn in order to avoid busy querying.
-func (ptq *PushTxnQueue) startQueryPusherTxn(
+func (q *Queue) startQueryPusherTxn(
 	ctx context.Context, push *waitingPush, readyCh <-chan struct{},
 ) (<-chan *roachpb.Transaction, <-chan *roachpb.Error) {
 	ch := make(chan *roachpb.Transaction, 1)
@@ -648,16 +664,16 @@ func (ptq *PushTxnQueue) startQueryPusherTxn(
 	pusher := push.req.PusherTxn.Clone()
 	push.mu.Unlock()
 
-	if err := ptq.store.Stopper().RunAsyncTask(
-		ctx, "storage.pushTxnQueue: monitoring pusher txn",
+	if err := q.store.Stopper().RunAsyncTask(
+		ctx, "monitoring pusher txn",
 		func(ctx context.Context) {
 			// We use a backoff/retry here in case the pusher transaction
 			// doesn't yet exist.
 			for r := retry.StartWithCtx(ctx, base.DefaultRetryOptions()); r.Next(); {
 				var pErr *roachpb.Error
 				var updatedPusher *roachpb.Transaction
-				updatedPusher, waitingTxns, pErr = ptq.queryTxnStatus(
-					ctx, pusher.TxnMeta, true, waitingTxns, ptq.store.Clock().Now(),
+				updatedPusher, waitingTxns, pErr = q.queryTxnStatus(
+					ctx, pusher.TxnMeta, true, waitingTxns, q.store.Clock().Now(),
 				)
 				if pErr != nil {
 					errCh <- pErr
@@ -712,7 +728,7 @@ func (ptq *PushTxnQueue) startQueryPusherTxn(
 //
 // Returns the updated transaction (or nil if not updated) as well as
 // the list of transactions which are waiting on the updated txn.
-func (ptq *PushTxnQueue) queryTxnStatus(
+func (q *Queue) queryTxnStatus(
 	ctx context.Context,
 	txnMeta enginepb.TxnMeta,
 	wait bool,
@@ -728,7 +744,7 @@ func (ptq *PushTxnQueue) queryTxnStatus(
 		WaitForUpdate:    wait,
 		KnownWaitingTxns: dependents,
 	})
-	if err := ptq.store.db.Run(ctx, b); err != nil {
+	if err := q.store.DB().Run(ctx, b); err != nil {
 		// TODO(tschottdorf):
 		// We shouldn't catch an error here (unless it's from the AbortSpan, in
 		// which case we would not get the crucial information that we've been
@@ -759,4 +775,18 @@ func (ptq *PushTxnQueue) queryTxnStatus(
 		return updatedTxn, resp.WaitingTxns, nil
 	}
 	return nil, nil, nil
+}
+
+// TrackedTxns returns a (newly minted) set containing the transaction IDs which
+// are being tracked (i.e. waited on).
+//
+// For testing purposes only.
+func (q *Queue) TrackedTxns() map[uuid.UUID]struct{} {
+	m := make(map[uuid.UUID]struct{})
+	q.mu.Lock()
+	for k := range q.mu.txns {
+		m[k] = struct{}{}
+	}
+	q.mu.Unlock()
+	return m
 }

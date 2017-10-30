@@ -48,6 +48,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/storage/tscache"
+	"github.com/cockroachdb/cockroach/pkg/storage/txnwait"
 	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -566,7 +567,7 @@ type StoreConfig struct {
 	TimeSeriesDataStore TimeSeriesDataStore
 
 	// DontRetryPushTxnFailures will propagate a push txn failure immediately
-	// instead of utilizing the push txn queue to wait for the transaction to
+	// instead of utilizing the txn wait queue to wait for the transaction to
 	// finish or be pushed by a higher priority contender.
 	DontRetryPushTxnFailures bool
 
@@ -1858,7 +1859,7 @@ func splitPostApply(
 
 	// Invoke the leasePostApply method to ensure we properly initialize
 	// the replica according to whether it holds the lease. This enables
-	// the PushTxnQueue.
+	// the txnWaitQueue.
 	rightRng.leasePostApply(ctx, rightLease)
 
 	// Add the RHS replica to the store. This step atomically updates
@@ -1934,11 +1935,11 @@ func (s *Store) SplitRange(ctx context.Context, origRng, newRng *Replica) error 
 	copyDesc.EndKey = append([]byte(nil), newDesc.StartKey...)
 	origRng.setDescWithoutProcessUpdate(&copyDesc)
 
-	// Clear the LHS push txn queue, to redirect to the RHS if
+	// Clear the LHS txn wait queue, to redirect to the RHS if
 	// appropriate. We do this after setDescWithoutProcessUpdate
 	// to ensure that no pre-split commands are inserted into the
-	// pushTxnQueue after we clear it.
-	origRng.pushTxnQueue.Clear(false /* disable */)
+	// txnWaitQueue after we clear it.
+	origRng.txnWaitQueue.Clear(false /* disable */)
 
 	// Clear the original range's request stats, since they include requests for
 	// spans that are now owned by the new range.
@@ -2017,9 +2018,9 @@ func (s *Store) MergeRange(
 		return errors.Errorf("cannot remove range %s", err)
 	}
 
-	// Clear the RHS push txn queue, to redirect to the LHS if
+	// Clear the RHS txn wait queue, to redirect to the LHS if
 	// appropriate.
-	subsumedRng.pushTxnQueue.Clear(false /* disable */)
+	subsumedRng.txnWaitQueue.Clear(false /* disable */)
 
 	// Update the end key of the subsuming range.
 	copy := *subsumingDesc
@@ -2570,10 +2571,10 @@ func (s *Store) Send(
 			})
 		}
 
-		// If necessary, the request may need to wait in the push txn queue,
+		// If necessary, the request may need to wait in the txn wait queue,
 		// pending updates to the target transaction for either PushTxn or
 		// QueryTxn requests.
-		if br, pErr = s.maybeWaitInPushTxnQueue(ctx, &ba, repl); br != nil || pErr != nil {
+		if br, pErr = s.maybeWaitForPushee(ctx, &ba, repl); br != nil || pErr != nil {
 			return br, pErr
 		}
 
@@ -2587,12 +2588,12 @@ func (s *Store) Send(
 		switch pErr.GetDetail().(type) {
 		case *roachpb.TransactionPushError:
 			// On a transaction push error, retry immediately if doing so will
-			// enqueue into the pushTxnQueue in order to await further updates to the
+			// enqueue into the txnWaitQueue in order to await further updates to the
 			// unpushed txn's status.
 			dontRetry := s.cfg.DontRetryPushTxnFailures
 			if !dontRetry && ba.IsSinglePushTxnRequest() {
 				pushReq := ba.Requests[0].GetInner().(*roachpb.PushTxnRequest)
-				dontRetry = shouldPushImmediately(pushReq)
+				dontRetry = txnwait.ShouldPushImmediately(pushReq)
 			}
 			if dontRetry {
 				// If we're not retrying on push txn failures return a txn retry error
@@ -2659,10 +2660,10 @@ func (s *Store) Send(
 	}
 }
 
-// maybeWaitInPushTxnQueue potentially diverts the incoming request to
-// the push txn queue, where it will wait for updates to the target
+// maybeWaitForPushee potentially diverts the incoming request to
+// the txnwait.Queue, where it will wait for updates to the target
 // transaction.
-func (s *Store) maybeWaitInPushTxnQueue(
+func (s *Store) maybeWaitForPushee(
 	ctx context.Context, ba *roachpb.BatchRequest, repl *Replica,
 ) (*roachpb.BatchResponse, *roachpb.Error) {
 	// If this is a push txn request, check the push queue first, which
@@ -2670,11 +2671,11 @@ func (s *Store) maybeWaitInPushTxnQueue(
 	// txn response or else allow this request to proceed.
 	if ba.IsSinglePushTxnRequest() {
 		pushReq := ba.Requests[0].GetInner().(*roachpb.PushTxnRequest)
-		pushResp, pErr := repl.pushTxnQueue.MaybeWaitForPush(repl.AnnotateCtx(ctx), repl, pushReq)
+		pushResp, pErr := repl.txnWaitQueue.MaybeWaitForPush(repl.AnnotateCtx(ctx), repl, pushReq)
 		// Copy the request in anticipation of setting the force arg and
 		// updating the Now timestamp (see below).
 		pushReqCopy := *pushReq
-		if pErr == errDeadlock {
+		if pErr == txnwait.ErrDeadlock {
 			// We've experienced a deadlock; set Force=true on push request.
 			pushReqCopy.Force = true
 		} else if pErr != nil {
@@ -2692,10 +2693,10 @@ func (s *Store) maybeWaitInPushTxnQueue(
 		ba.Requests = nil
 		ba.Add(&pushReqCopy)
 	} else if ba.IsSingleQueryTxnRequest() {
-		// For query txn requests, wait in the push txn queue either for
+		// For query txn requests, wait in the txn wait queue either for
 		// transaction update or for dependent transactions to change.
 		queryReq := ba.Requests[0].GetInner().(*roachpb.QueryTxnRequest)
-		pErr := repl.pushTxnQueue.MaybeWaitForQuery(repl.AnnotateCtx(ctx), repl, queryReq)
+		pErr := repl.txnWaitQueue.MaybeWaitForQuery(repl.AnnotateCtx(ctx), repl, queryReq)
 		if pErr != nil {
 			return nil, pErr
 		}
