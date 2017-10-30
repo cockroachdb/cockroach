@@ -113,3 +113,27 @@ var lowWaterTxnIDMarker = func() uuid.UUID {
 	}
 	return u
 }()
+
+// ratchetValue returns the cacheValue that results from ratcheting the provided
+// old and new cacheValues. It also returns flags reflecting whether the value
+// was updated.
+//
+// This ratcheting policy is shared across all Cache implementations, even if
+// they do not use this function directly.
+func ratchetValue(old, new cacheValue) (cacheValue, bool) {
+	if old.ts.Less(new.ts) {
+		// Ratchet to new value.
+		return new, true
+	} else if new.ts.Less(old.ts) {
+		// Nothing to update.
+		return old, false
+	} else if new.txnID != old.txnID {
+		// old.ts == new.ts but the values have different txnIDs. Remove the
+		// transaction ID from the value so that it is no longer owned by any
+		// transaction.
+		new.txnID = noTxnID
+		return new, old.txnID != noTxnID
+	}
+	// old == new.
+	return old, false
+}
