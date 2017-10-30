@@ -153,6 +153,7 @@ descriptor
 eventlog
 jobs
 lease
+locations
 namespace
 rangelog
 settings

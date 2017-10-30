@@ -269,6 +269,7 @@ system              descriptor
 system              eventlog
 system              jobs
 system              lease
+system              locations
 system              namespace
 system              rangelog
 system              settings
@@ -432,6 +433,7 @@ def            system              descriptor                 BASE TABLE   1
 def            system              eventlog                   BASE TABLE   2
 def            system              jobs                       BASE TABLE   1
 def            system              lease                      BASE TABLE   1
+def            system              locations                  BASE TABLE   1
 def            system              namespace                  BASE TABLE   1
 def            system              rangelog                   BASE TABLE   1
 def            system              settings                   BASE TABLE   1
@@ -496,6 +498,7 @@ def                 system             primary          def            system   
 def                 system             primary          def            system        eventlog          PRIMARY KEY      NO             NO
 def                 system             primary          def            system        jobs              PRIMARY KEY      NO             NO
 def                 system             primary          def            system        lease             PRIMARY KEY      NO             NO
+def                 system             primary          def            system        locations         PRIMARY KEY      NO             NO
 def                 system             primary          def            system        namespace         PRIMARY KEY      NO             NO
 def                 system             primary          def            system        rangelog          PRIMARY KEY      NO             NO
 def                 system             primary          def            system        settings          PRIMARY KEY      NO             NO
@@ -565,6 +568,10 @@ def            system        lease             descID          1
 def            system        lease             version         2
 def            system        lease             nodeID          3
 def            system        lease             expiration      4
+def            system        locations         localityKey     1
+def            system        locations         localityValue   2
+def            system        locations         latitude        3
+def            system        locations         longitude       4
 def            system        namespace         parentID        1
 def            system        namespace         name            2
 def            system        namespace         id              3
@@ -798,6 +805,11 @@ NULL     root     def            system        lease             GRANT          
 NULL     root     def            system        lease             INSERT          NULL          NULL
 NULL     root     def            system        lease             SELECT          NULL          NULL
 NULL     root     def            system        lease             UPDATE          NULL          NULL
+NULL     root     def            system        locations         DELETE          NULL          NULL
+NULL     root     def            system        locations         GRANT           NULL          NULL
+NULL     root     def            system        locations         INSERT          NULL          NULL
+NULL     root     def            system        locations         SELECT          NULL          NULL
+NULL     root     def            system        locations         UPDATE          NULL          NULL
 NULL     root     def            system        namespace         GRANT           NULL          NULL
 NULL     root     def            system        namespace         SELECT          NULL          NULL
 NULL     root     def            system        rangelog          DELETE          NULL          NULL

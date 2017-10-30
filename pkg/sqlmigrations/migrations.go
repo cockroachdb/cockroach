@@ -99,6 +99,12 @@ var backwardCompatibleMigrations = []migrationDescriptor{
 		name:   "add root user",
 		workFn: addRootUser,
 	},
+	{
+		name:           "create system.locations table",
+		workFn:         createLocationsTable,
+		newDescriptors: 1,
+		newRanges:      1,
+	},
 }
 
 // migrationDescriptor describes a single migration hook that's used to modify
@@ -378,6 +384,10 @@ func createWebSessionsTable(ctx context.Context, r runner) error {
 
 func createTableStatisticsTable(ctx context.Context, r runner) error {
 	return createSystemTable(ctx, r, sqlbase.TableStatisticsTable)
+}
+
+func createLocationsTable(ctx context.Context, r runner) error {
+	return createSystemTable(ctx, r, sqlbase.LocationsTable)
 }
 
 func createSystemTable(ctx context.Context, r runner, desc sqlbase.TableDescriptor) error {
