@@ -312,13 +312,20 @@ func (s *intervalSkl) rotatePages(filledPage *sklPage) {
 // read. If this operation is repeated with the same key, it will always result
 // in an equal or greater timestamp.
 func (s *intervalSkl) LookupTimestamp(key []byte) cacheValue {
+	return s.LookupTimestampRange(key, key, 0)
+}
+
+// LookupTimestampRange returns the latest timestamp value of any key within the
+// specified range. If this operation is repeated with the same range, it will
+// always result in an equal or greater timestamp.
+func (s *intervalSkl) LookupTimestampRange(from, to []byte, opt rangeOptions) cacheValue {
 	// Acquire the rotation mutex read lock so that the page will not be rotated
 	// while add or lookup operations are in progress.
 	s.rotMutex.RLock()
 	defer s.rotMutex.RUnlock()
 
 	// First perform lookup on the later page.
-	val := s.later.lookupTimestamp(key)
+	val := s.later.lookupTimestampRange(from, to, opt)
 
 	// Now perform same lookup on the earlier page.
 	if s.earlier != nil {
@@ -326,7 +333,7 @@ func (s *intervalSkl) LookupTimestamp(key []byte) cacheValue {
 		// earlier page, then no need to do lookup at all.
 		maxTs := hlc.Timestamp{WallTime: atomic.LoadInt64(&s.earlier.maxWallTime)}
 		if val.ts.Less(maxTs) {
-			val2 := s.earlier.lookupTimestamp(key)
+			val2 := s.earlier.lookupTimestampRange(from, to, opt)
 			val, _ = ratchetValue(val, val2)
 		}
 	}
@@ -352,23 +359,28 @@ func newSklPage(size uint32) *sklPage {
 	return &sklPage{list: arenaskl.NewSkiplist(arenaskl.NewArena(size))}
 }
 
-func (p *sklPage) lookupTimestamp(key []byte) cacheValue {
+func (p *sklPage) lookupTimestampRange(from, to []byte, opt rangeOptions) cacheValue {
+	if to != nil {
+		cmp := bytes.Compare(from, to)
+		if cmp > 0 {
+			// Starting key is after ending key, so range is zero length.
+			return cacheValue{}
+		}
+		if cmp == 0 {
+			// Starting key is same as ending key.
+			if opt == (excludeFrom | excludeTo) {
+				// Both from and to keys are excluded, so range is zero length.
+				return cacheValue{}
+			}
+			opt = 0
+		}
+	}
+
 	var it arenaskl.Iterator
 	it.Init(p.list)
 
-	if !it.SeekForPrev(key) {
-		// Key not found, so scan previous nodes to find the gap timestamp.
-		return p.scanForTimestamp(&it, key, false)
-	}
-
-	if (it.Meta() & initializing) != 0 {
-		// Node is not yet initialized, so scan previous nodes to find the
-		// gap timestamp needed to initialize this node.
-		return p.scanForTimestamp(&it, key, true)
-	}
-
-	keyVal, _ := p.decodeValueSet(it.Value(), it.Meta())
-	return keyVal
+	onKey := it.SeekForPrev(from)
+	return p.scanForTimestamp(&it, from, to, opt, onKey)
 }
 
 func (p *sklPage) addNode(
@@ -391,7 +403,7 @@ func (p *sklPage) addNode(
 		// the new value, then there is no need to add another node, since its
 		// timestamp would be the same as the gap timestamp and its txnID would
 		// be the same as the gap txnID.
-		prevVal := p.scanForTimestamp(it, key, false)
+		prevVal := p.scanForTimestamp(it, key, key, 0, false)
 		if _, update := ratchetValue(prevVal, val); !update {
 			return nil
 		}
@@ -416,7 +428,7 @@ func (p *sklPage) addNode(
 		if err == nil {
 			// Add was successful, so finish initialization by scanning for
 			// gap timestamp and using it to ratchet the new nodes' timestamps.
-			p.scanForTimestamp(it, key, true)
+			p.scanForTimestamp(it, key, key, 0, true)
 			return nil
 		}
 
@@ -433,7 +445,7 @@ func (p *sklPage) addNode(
 	// initializing bit, since we don't have the gap timestamp from the previous
 	// node. Leave finishing initialization to the thread that added the node, or
 	// to a lookup thread that requires it.
-	p.ratchetValueSet(it, keyVal, gapVal, false)
+	p.ratchetValueSet(it, keyVal, gapVal, false /* clearInit */)
 
 	return nil
 }
@@ -456,7 +468,7 @@ func (p *sklPage) ensureFloorValue(it *arenaskl.Iterator, to []byte, val cacheVa
 		// Don't clear the initialization bit, since we don't have the gap
 		// timestamp from the previous node, and don't need an initialized node
 		// for this operation anyway.
-		p.ratchetValueSet(it, val, val, false)
+		p.ratchetValueSet(it, val, val, false /* clearInit */)
 
 		it.Next()
 	}
@@ -608,7 +620,9 @@ func (p *sklPage) ratchetValueSet(
 // This means that no matter what gets inserted, or when it gets inserted, the
 // scanning goroutine is guaranteed to end up with a timestamp value that will
 // never decrease on future lookups, which is the critical invariant.
-func (p *sklPage) scanForTimestamp(it *arenaskl.Iterator, key []byte, onKey bool) cacheValue {
+func (p *sklPage) scanForTimestamp(
+	it *arenaskl.Iterator, from, to []byte, opt rangeOptions, onKey bool,
+) cacheValue {
 	clone := *it
 
 	if onKey {
@@ -640,29 +654,59 @@ func (p *sklPage) scanForTimestamp(it *arenaskl.Iterator, key []byte, onKey bool
 	}
 
 	// Now iterate forwards until "key" is reached, update any uninitialized
-	// nodes along the way, and update the gap timestamp.
+	// nodes along the way, and update the gap timestamp. Keep track of the
+	// maximum value seen between from and to, respecting the rangeOptions.
+	var maxVal cacheValue
 	for {
 		if !clone.Valid() {
-			return gapVal
+			// No more nodes. Ratchet max with the current gapVal and return.
+			maxVal, _ = ratchetValue(maxVal, gapVal)
+			return maxVal
 		}
 
 		if (clone.Meta() & initializing) != 0 {
 			// Finish initializing the node with the gap timestamp.
-			p.ratchetValueSet(&clone, gapVal, gapVal, true)
+			p.ratchetValueSet(&clone, gapVal, gapVal, true /* clearInit */)
 		}
 
-		cmp := bytes.Compare(clone.Key(), key)
-		if cmp > 0 {
-			// Past the lookup key, so use the gap timestamp.
-			return gapVal
+		itKey := clone.Key()
+		fromCmp := bytes.Compare(itKey, from)
+		toCmp := bytes.Compare(itKey, to)
+		if to == nil {
+			// to == nil means open range, so toCmp will always be -1.
+			toCmp = -1
+		}
+
+		if fromCmp > 0 {
+			// Past the scan's start key so ratchet max with gapVal. Remember
+			// that we may have scanned backwards above to get the initial
+			// gapVal and we could be racing with other threads that are
+			// inserting nodes, so it's not guaranteed that we'll reach this
+			// case during the first few iterations.
+			maxVal, _ = ratchetValue(maxVal, gapVal)
+		}
+
+		if toCmp > 0 || (toCmp == 0 && (opt&excludeTo) != 0) {
+			// Past the scan's end key. Ratchet max with the current gapVal and
+			// return.
+			return maxVal
 		}
 
 		var keyVal cacheValue
 		keyVal, gapVal = p.decodeValueSet(clone.Value(), clone.Meta())
 
-		if cmp == 0 {
-			// On the lookup key, so use the key timestamp.
-			return keyVal
+		if fromCmp > 0 || (fromCmp == 0 && (opt&excludeFrom) == 0) {
+			// This key is part of the desired range so ratchet max with its
+			// value. Like the case above, we may not meet the condition for
+			// this case if we are not yet in the range. However, the check
+			// above guarantees that we'll never get here if we've already
+			// passed the end of the range.
+			maxVal, _ = ratchetValue(maxVal, keyVal)
+		}
+
+		if toCmp == 0 {
+			// On the lookup key, so return the max value seen.
+			return maxVal
 		}
 
 		// Haven't yet reached the lookup key, so keep iterating.
