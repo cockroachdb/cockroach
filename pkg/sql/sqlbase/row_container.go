@@ -73,6 +73,8 @@ type RowContainer struct {
 
 	// We should not copy this structure around; each copy would have a different
 	// memAcc (among other things like aliasing chunks).
+	//
+	//lint:ignore U1000 this marker prevents by-value copies.
 	noCopy util.NoCopy
 }
 

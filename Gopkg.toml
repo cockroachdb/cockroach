@@ -22,15 +22,15 @@ ignored = [
   "github.com/google/protobuf/examples/tutorial",
 ]
 
+# https://github.com/golang/sys/commit/52c393d#commitcomment-25259545
+[[constraint]]
+  name = "golang.org/x/sys"
+  revision = "833991df064f0ccd4f61120a093f36d74a4a7cb1"
+
 # The collation tables must never change.
 [[constraint]]
   name = "golang.org/x/text"
   revision = "470f45bf29f4147d6fbd7dfd0a02a848e49f5bf4"
-
-# https://github.com/grpc/grpc-go/pull/1506#issuecomment-337652759
-[[constraint]]
-  name = "google.golang.org/grpc"
-  version = "<1.7.0"
 
 # https://github.com/coreos/etcd/commit/f03ed33
 [[constraint]]
@@ -50,11 +50,6 @@ ignored = [
 # Used for benchmarks, should be recent.
 [[constraint]]
   name = "github.com/go-sql-driver/mysql"
-  branch = "master"
-
-# https://github.com/gogo/protobuf/commit/9aee220
-[[constraint]]
-  name = "github.com/gogo/protobuf"
   branch = "master"
 
 # https://github.com/grpc-ecosystem/grpc-gateway/commit/893772d
@@ -93,6 +88,11 @@ ignored = [
   name = "github.com/satori/go.uuid"
   branch = "master"
 
+# https://github.com/dominikh/go-tools/commit/7c098cc
+[[constraint]]
+  name = "honnef.co/go/tools"
+  branch = "master"
+
 # https://github.com/apache/thrift/commit/5b4c6bf
 [[override]]
   name = "github.com/apache/thrift"
@@ -109,6 +109,8 @@ ignored = [
 
 # go-ole has not made a release in over two years, but go-sigar requires
 # features introduced in the last two years.
+#
+# https://github.com/go-ole/go-ole/releases
 [[override]]
  name = "github.com/go-ole/go-ole"
  branch = "master"
