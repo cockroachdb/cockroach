@@ -854,7 +854,7 @@ func (node *CreateSequence) Format(buf *bytes.Buffer, f FmtFlags) {
 	}
 	FormatNode(buf, f, &node.Name)
 	for _, option := range node.Options {
-		buf.WriteRune(' ')
+		buf.WriteByte(' ')
 		FormatNode(buf, f, option)
 	}
 }
