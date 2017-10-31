@@ -543,12 +543,12 @@ rangeLoop:
 				}
 			}
 		}
-		if ts != maxEndTime {
-			return nil, hlc.Timestamp{}, errors.Errorf(
-				"no backup covers time [%s,%s) for range [%s,%s) (or backups out of order)",
-				ts, maxEndTime, roachpb.Key(importRange.Start), roachpb.Key(importRange.End))
-		}
 		if needed {
+			if ts != maxEndTime {
+				return nil, hlc.Timestamp{}, errors.Errorf(
+					"no backup covers time [%s,%s) for range [%s,%s) (or backups out of order)",
+					ts, maxEndTime, roachpb.Key(importRange.Start), roachpb.Key(importRange.End))
+			}
 			// If needed is false, we have data backed up that is not necessary
 			// for this restore. Skip it.
 			requestEntries = append(requestEntries, importEntry{
