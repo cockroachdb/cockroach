@@ -2,6 +2,7 @@ import d3 from "d3";
 import React from "react";
 import { connect } from "react-redux";
 
+import { AdminUIState } from "src/redux/state";
 import { NodesOverview } from "src/views/cluster/containers/nodesOverview";
 
 class ClusterTicker extends React.Component<{}, {}> {
@@ -45,13 +46,14 @@ class CapacityUsage extends React.Component<CapacityUsageProps, {}> {
   }
 }
 
-function mapStateToCapacityUsageProps(state) {
+function mapStateToCapacityUsageProps(_state: AdminUIState) {
   return {
     usedCapacity: 2500000000,
     usableCapacity: 500000000000,
   };
 }
 
+// tslint:disable-next-line:variable-name
 const CapacityUsageConnected = connect(mapStateToCapacityUsageProps)(CapacityUsage);
 
 interface NodeLivenessProps {
@@ -84,7 +86,7 @@ class NodeLiveness extends React.Component<NodeLivenessProps, {}> {
   }
 }
 
-function mapStateToNodeLivenessProps(state) {
+function mapStateToNodeLivenessProps(_state: AdminUIState) {
   return {
     liveNodes: 1,
     suspectNodes: 0,
@@ -92,6 +94,7 @@ function mapStateToNodeLivenessProps(state) {
   };
 }
 
+// tslint:disable-next-line:variable-name
 const NodeLivenessConnected = connect(mapStateToNodeLivenessProps)(NodeLiveness);
 
 interface ReplicationStatusProps {
@@ -124,7 +127,7 @@ class ReplicationStatus extends React.Component<ReplicationStatusProps, {}> {
   }
 }
 
-function mapStateToReplicationStatusProps(state) {
+function mapStateToReplicationStatusProps(_state: AdminUIState) {
   return {
     totalRanges: 2,
     underreplicatedRanges: 0,
@@ -132,6 +135,7 @@ function mapStateToReplicationStatusProps(state) {
   };
 }
 
+// tslint:disable-next-line:variable-name
 const ReplicationStatusConnected = connect(mapStateToReplicationStatusProps)(ReplicationStatus);
 
 class ClusterSummary extends React.Component<{}, {}> {
