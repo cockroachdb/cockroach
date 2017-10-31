@@ -249,7 +249,7 @@ func TestIntervalSklBoundaryRange(t *testing.T) {
 
 	s := newIntervalSkl(arenaSize)
 
-	// Don't allow nil from key.
+	// Don't allow nil from and to keys.
 	require.Panics(t, func() { s.AddRange([]byte(nil), []byte(nil), excludeFrom, val1) })
 
 	// If from key is greater than to key, then range is zero-length.
