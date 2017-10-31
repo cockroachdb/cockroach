@@ -59,22 +59,14 @@ const (
 // is essentially just returning a slice of IDs, but the empty map can be filled
 // in place and reused, avoiding a second allocation.
 func TablesNeededForFKs(table TableDescriptor, usage FKCheck) TableLookupsByID {
-	var ret TableLookupsByID
+	ret := make(TableLookupsByID)
 	for _, idx := range table.AllNonDropIndexes() {
 		if usage != CheckDeletes && idx.ForeignKey.IsSet() {
-			if ret == nil {
-				ret = make(TableLookupsByID)
-			}
 			ret[idx.ForeignKey.Table] = TableLookup{}
 		}
 		if usage != CheckInserts {
-			for _, idx := range table.AllNonDropIndexes() {
-				for _, ref := range idx.ReferencedBy {
-					if ret == nil {
-						ret = make(TableLookupsByID)
-					}
-					ret[ref.Table] = TableLookup{}
-				}
+			for _, ref := range idx.ReferencedBy {
+				ret[ref.Table] = TableLookup{}
 			}
 		}
 	}
