@@ -1,7 +1,9 @@
 import d3 from "d3";
 import React from "react";
 import { connect } from "react-redux";
+import { createSelector } from "reselect";
 
+import { nodesSummarySelector, NodesSummary } from "src/redux/nodes";
 import { AdminUIState } from "src/redux/state";
 import { Bytes as formatBytes } from "src/util/format";
 import { NodesOverview } from "src/views/cluster/containers/nodesOverview";
@@ -46,12 +48,17 @@ class CapacityUsage extends React.Component<CapacityUsageProps, {}> {
   }
 }
 
-function mapStateToCapacityUsageProps(_state: AdminUIState) {
-  return {
-    usedCapacity: 25000000000,
-    usableCapacity: 536870900000,
-  };
-}
+const mapStateToCapacityUsageProps = createSelector(
+  nodesSummarySelector,
+  function (nodesSummary: NodesSummary) {
+    const { capacityAvailable, capacityUsed } = nodesSummary.nodeSums;
+    const usableCapacity = capacityAvailable + capacityUsed;
+    return {
+      usedCapacity: capacityUsed,
+      usableCapacity: usableCapacity,
+    }
+  }
+);
 
 // tslint:disable-next-line:variable-name
 const CapacityUsageConnected = connect(mapStateToCapacityUsageProps)(CapacityUsage);
@@ -86,12 +93,16 @@ class NodeLiveness extends React.Component<NodeLivenessProps, {}> {
   }
 }
 
-function mapStateToNodeLivenessProps(_state: AdminUIState) {
-  return {
-    liveNodes: 1,
-    suspectNodes: 0,
-    deadNodes: 0,
-  };
+const mapStateToNodeLivenessProps = createSelector(
+  nodesSummarySelector,
+  function (nodesSummary: NodesSummary) {
+    const { nodeCounts } = nodesSummary.nodeSums;
+    return {
+      liveNodes: nodeCounts.healthy,
+      suspectNodes: nodeCounts.suspect,
+      deadNodes: nodeCounts.dead,
+    };
+  }
 }
 
 // tslint:disable-next-line:variable-name
@@ -99,7 +110,7 @@ const NodeLivenessConnected = connect(mapStateToNodeLivenessProps)(NodeLiveness)
 
 interface ReplicationStatusProps {
   totalRanges: number;
-  underreplicatedRanges: number;
+  underReplicatedRanges: number;
   unavailableRanges: number;
 }
 
@@ -115,7 +126,7 @@ class ReplicationStatus extends React.Component<ReplicationStatusProps, {}> {
           </div>
           <div className="cluster-summary__metric">
             <span className="label">Under-replicated<br />Ranges</span>
-            <span className="value">{ this.props.underreplicatedRanges }</span>
+            <span className="value">{ this.props.underReplicatedRanges }</span>
           </div>
           <div className="cluster-summary__metric">
             <span className="label">Unavailable<br />Ranges</span>
@@ -127,12 +138,16 @@ class ReplicationStatus extends React.Component<ReplicationStatusProps, {}> {
   }
 }
 
-function mapStateToReplicationStatusProps(_state: AdminUIState) {
-  return {
-    totalRanges: 2,
-    underreplicatedRanges: 0,
-    unavailableRanges: 0,
-  };
+const mapStateToReplicationStatusProps = createSelector(
+  nodesSummarySelector,
+  function (nodesSummary: NodesSummary) {
+    const { totalRanges, underReplicatedRanges, unavailableRanges } = nodesSummary.nodeSums;
+    return {
+      totalRanges: totalRanges,
+      underReplicatedRanges: underReplicatedRanges,
+      unavailableRanges: unavailableRanges,
+    };
+  }
 }
 
 // tslint:disable-next-line:variable-name
