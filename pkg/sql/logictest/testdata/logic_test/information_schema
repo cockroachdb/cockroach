@@ -931,20 +931,21 @@ root     def            INSERT          NULL
 root     def            SELECT          NULL
 root     def            UPDATE          NULL
 
-# Check existence of information_schema.sequences
-query TTBTT colnames
-SHOW COLUMNS FROM information_schema.sequences
+# information_schema.sequences
+
+statement ok
+SET DATABASE = test
+
+statement ok
+CREATE SEQUENCE test_seq
+
+statement ok
+CREATE SEQUENCE test_seq_2 INCREMENT -1 MINVALUE 5 MAXVALUE 1000 START WITH 15 CYCLE
+
+
+query TTTTIIITTTTT colnames
+SELECT * FROM information_schema.sequences
 ----
-Field                    Type    Null   Default        Indices
-sequence_catalog         STRING  false  '':::STRING    {}
-sequence_schema          STRING  false  '':::STRING    {}
-sequence_name            STRING  false  '':::STRING    {}
-data_type                STRING  false  '':::STRING    {}
-numeric_precision        INT     false  0:::INT        {}
-numeric_precision_radix  INT     false  0:::INT        {}
-numeric_scale            INT     false  0:::INT        {}
-start_value              STRING  false  '':::STRING    {}
-minimum_value            STRING  false  '':::STRING    {}
-maximum_value            STRING  false  '':::STRING    {}
-increment                STRING  false  '':::STRING    {}
-cycle_option             STRING  false  'NO':::STRING  {}
+sequence_catalog sequence_schema sequence_name data_type numeric_precision numeric_precision_radix numeric_scale start_value minimum_value    maximum_value    increment cycle_option
+def              test            test_seq      INT                      64                       2             0           1             1 9223372036854775807         1 NO
+def              test            test_seq_2    INT                      64                       2             0          15             5                1000        -1 YES

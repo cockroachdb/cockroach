@@ -20,6 +20,8 @@ import (
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
+	"fmt"
+
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -308,6 +310,26 @@ CREATE TABLE information_schema.sequences (
 		// Sequences are not yet supported: #5811
 		// However, we support an empty information_schema table to enable
 		// clients to observe that there are no sequences.
+		forEachTableDesc(ctx, p, prefix, func(dbDesc *sqlbase.DatabaseDescriptor, tableDesc *sqlbase.TableDescriptor) error {
+			if tableDesc.SequenceOpts == nil {
+				return nil
+			}
+			return addRow(
+				defString,                            // catalog
+				tree.NewDString(dbDesc.GetName()),    // schema
+				tree.NewDString(tableDesc.GetName()), // name
+				tree.NewDString("INT"),               // type
+				tree.NewDInt(64),                     // numeric precision
+				tree.NewDInt(2),                      // numeric precision radix
+				tree.NewDInt(0),                      // numeric scale
+				tree.NewDString(fmt.Sprintf("%d", tableDesc.SequenceOpts.Start)),     // start value
+				tree.NewDString(fmt.Sprintf("%d", tableDesc.SequenceOpts.MinValue)),  // min value
+				tree.NewDString(fmt.Sprintf("%d", tableDesc.SequenceOpts.MaxValue)),  // max value
+				tree.NewDString(fmt.Sprintf("%d", tableDesc.SequenceOpts.Increment)), // increment
+				yesOrNoDatum(tableDesc.SequenceOpts.Cycle),                           // cycle
+			)
+		})
+
 		return nil
 	},
 }
