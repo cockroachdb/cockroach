@@ -15,10 +15,18 @@
 package tscache
 
 import (
+	"time"
+
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
+
+// MinRetentionWindow specifies the minimum duration to hold entries in the
+// cache before allowing eviction. After this window expires, transactions
+// writing to this node with timestamps lagging by more than MinRetentionWindow
+// will necessarily have to advance their commit timestamp.
+const MinRetentionWindow = 10 * time.Second
 
 // Cache is a bounded in-memory cache that records key ranges and the
 // timestamps at which they were most recently read and written. The structure
@@ -73,13 +81,35 @@ type Cache interface {
 	add(start, end roachpb.Key, timestamp hlc.Timestamp, txnID uuid.UUID, readTSCache bool)
 	// clear clears the cache and resets the low-water mark.
 	clear(lowWater hlc.Timestamp)
-	// len returns the total number of read and write intervals in the cache.
-	len() int
-	// byteCount returns the total memory usage of the cache.
-	byteCount() uint64
 }
 
 // New returns a new timestamp cache with the supplied hybrid clock.
 func New(clock *hlc.Clock) Cache {
-	return newCacheImpl(clock)
+	return newTreeImpl(clock)
 }
+
+// cacheValue combines a timestamp with an optional txnID. It is shared between
+// multiple Cache implementations.
+type cacheValue struct {
+	ts    hlc.Timestamp
+	txnID uuid.UUID
+}
+
+// noTxnID is used when a cacheValue has no corresponding TxnID.
+var noTxnID uuid.UUID
+
+// lowWaterTxnIDMarker is a special txn ID that identifies a cache entry as a
+// low water mark. It is specified when a lease is acquired to clear the
+// timestamp cache for a range. Also see Cache.getMax where this txn ID is
+// checked in order to return whether the max read/write timestamp came from a
+// regular entry or one of these low water mark entries.
+var lowWaterTxnIDMarker = func() uuid.UUID {
+	// The specific txn ID used here isn't important. We use something that is:
+	// a) non-zero
+	// b) obvious
+	u, err := uuid.FromString("11111111-1111-1111-1111-111111111111")
+	if err != nil {
+		panic(err)
+	}
+	return u
+}()

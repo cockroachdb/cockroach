@@ -21,16 +21,15 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
-	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
-// TestTimestampCacheEviction verifies the eviction of
-// timestamp cache entries after MinTSCacheWindow interval.
-func TestTimestampCacheImplEviction(t *testing.T) {
+// TestTreeImplEviction verifies the eviction of timestamp cache entries after
+// MinRetentionWindow interval.
+func TestTreeImplEviction(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	manual := hlc.NewManualClock(123)
 	clock := hlc.NewClock(manual.UnixNano, time.Nanosecond)
-	tc := newCacheImpl(clock)
+	tc := newTreeImpl(clock)
 	defer tc.clear(clock.Now())
 
 	tc.maxBytes = 0
@@ -38,11 +37,11 @@ func TestTimestampCacheImplEviction(t *testing.T) {
 	// Increment time to the low water mark + 1.
 	manual.Increment(1)
 	aTS := clock.Now()
-	tc.add(roachpb.Key("a"), nil, aTS, uuid.UUID{}, true)
+	tc.add(roachpb.Key("a"), nil, aTS, noTxnID, true)
 
-	// Increment time by the MinTSCacheWindow and add another key.
-	manual.Increment(MinTSCacheWindow.Nanoseconds())
-	tc.add(roachpb.Key("b"), nil, clock.Now(), uuid.UUID{}, true)
+	// Increment time by the MinRetentionWindow and add another key.
+	manual.Increment(MinRetentionWindow.Nanoseconds())
+	tc.add(roachpb.Key("b"), nil, clock.Now(), noTxnID, true)
 
 	// Verify looking up key "c" returns the new low water mark ("a"'s timestamp).
 	if rTS, _, ok := tc.GetMaxRead(roachpb.Key("c"), nil); rTS != aTS || ok {
@@ -50,28 +49,28 @@ func TestTimestampCacheImplEviction(t *testing.T) {
 	}
 }
 
-// TestTimestampCacheNoEviction verifies that even after
-// the MinTSCacheWindow interval, if the cache has not hit
-// its size threshold, it will not evict entries.
-func TestTimestampCacheImplNoEviction(t *testing.T) {
+// TestTreeImplNoEviction verifies that even after the MinRetentionWindow
+// interval, if the cache has not hit its size threshold, it will not evict
+// entries.
+func TestTreeImplNoEviction(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	manual := hlc.NewManualClock(123)
 	clock := hlc.NewClock(manual.UnixNano, time.Nanosecond)
-	tc := newCacheImpl(clock)
+	tc := newTreeImpl(clock)
 	defer tc.clear(clock.Now())
 
 	// Increment time to the low water mark + 1.
 	manual.Increment(1)
 	aTS := clock.Now()
-	tc.add(roachpb.Key("a"), nil, aTS, uuid.UUID{}, true)
+	tc.add(roachpb.Key("a"), nil, aTS, noTxnID, true)
 	tc.AddRequest(&Request{
 		Reads:     []roachpb.Span{{Key: roachpb.Key("c")}},
 		Timestamp: aTS,
 	})
 
-	// Increment time by the MinTSCacheWindow and add another key.
-	manual.Increment(MinTSCacheWindow.Nanoseconds())
-	tc.add(roachpb.Key("b"), nil, clock.Now(), uuid.UUID{}, true)
+	// Increment time by the MinRetentionWindow and add another key.
+	manual.Increment(MinRetentionWindow.Nanoseconds())
+	tc.add(roachpb.Key("b"), nil, clock.Now(), noTxnID, true)
 	tc.AddRequest(&Request{
 		Reads:     []roachpb.Span{{Key: roachpb.Key("d")}},
 		Timestamp: clock.Now(),
@@ -83,11 +82,11 @@ func TestTimestampCacheImplNoEviction(t *testing.T) {
 	}
 }
 
-func TestTimestampCacheImplExpandRequests(t *testing.T) {
+func TestTreeImplExpandRequests(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	manual := hlc.NewManualClock(123)
 	clock := hlc.NewClock(manual.UnixNano, time.Nanosecond)
-	tc := newCacheImpl(clock)
+	tc := newTreeImpl(clock)
 	defer tc.clear(clock.Now())
 
 	ab := roachpb.RSpan{Key: roachpb.RKey("a"), EndKey: roachpb.RKey("b")}
