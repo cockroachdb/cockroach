@@ -39,26 +39,27 @@ import (
 func TestPGWireConnectionCloseReleasesLeases(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s, _, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(context.TODO())
+	ctx := context.TODO()
+	defer s.Stopper().Stop(ctx)
 	url, cleanupConn := sqlutils.PGUrl(t, s.ServingAddr(), "SetupServer", url.User(security.RootUser))
 	defer cleanupConn()
 	conn, err := pq.Open(url.String())
 	if err != nil {
 		t.Fatal(err)
 	}
-	ex := conn.(driver.Execer)
-	if _, err := ex.Exec("CREATE DATABASE test", nil); err != nil {
+	ex := conn.(driver.ExecerContext)
+	if _, err := ex.ExecContext(ctx, "CREATE DATABASE test", nil); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := ex.Exec("CREATE TABLE test.t (i INT PRIMARY KEY)", nil); err != nil {
+	if _, err := ex.ExecContext(ctx, "CREATE TABLE test.t (i INT PRIMARY KEY)", nil); err != nil {
 		t.Fatal(err)
 	}
 	// Start a txn so leases are accumulated by queries.
-	if _, err := ex.Exec("BEGIN", nil); err != nil {
+	if _, err := ex.ExecContext(ctx, "BEGIN", nil); err != nil {
 		t.Fatal(err)
 	}
 	// Get a table lease.
-	if _, err := ex.Exec("SELECT * FROM test.t", nil); err != nil {
+	if _, err := ex.ExecContext(ctx, "SELECT * FROM test.t", nil); err != nil {
 		t.Fatal(err)
 	}
 	// Abruptly close the connection.

@@ -78,6 +78,7 @@ func processExpression(exprSpec Expression, h *parser.IndexedVarHelper) (parser.
 // exprHelper implements the common logic around evaluating an expression that
 // depends on a set of values.
 type exprHelper struct {
+	//lint:ignore U1000 this marker prevents by-value copies.
 	noCopy util.NoCopy
 
 	expr parser.TypedExpr

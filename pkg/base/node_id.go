@@ -29,6 +29,7 @@ import (
 // multiple layers. It allows setting and getting the value. Once a value is
 // set, the value cannot change.
 type NodeIDContainer struct {
+	//lint:ignore U1000 this marker prevents by-value copies.
 	noCopy util.NoCopy
 
 	// nodeID is atomically updated under the mutex; it can be read atomically

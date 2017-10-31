@@ -19,6 +19,8 @@ package util
 //
 // See https://github.com/golang/go/issues/8005#issuecomment-190753527
 // for details.
+//
+//lint:ignore U1000 this marker type prevents by-value copies.
 type NoCopy struct{}
 
 // Lock is a no-op used by -copylocks checker from `go vet`.
