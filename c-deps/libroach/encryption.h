@@ -16,6 +16,8 @@
 #define ROACHLIB_ENCRYPTION_H
 
 #include <map>
+#include <aes.h>
+#include <modes.h>
 #include <rocksdb/env_encryption.h>
 
 const static size_t defaultPrefixLength = 4096;
@@ -25,24 +27,34 @@ rocksdb::Env* GetEncryptedEnv(rocksdb::Env* base_env);
 // Implements a BlockCipher using AES-128.
 class AESCipher : public rocksdb::BlockCipher {
     private:
-      char *key_;
       size_t blockSize_;
+      CryptoPP::AES::Encryption enc_;
+      CryptoPP::AES::Decryption dec_;
     public:
-      AESCipher(char *key) : key_(key) {}
+      AESCipher(char *key) :
+        enc_((byte*)key, CryptoPP::AES::DEFAULT_KEYLENGTH),
+        dec_((byte*)key, CryptoPP::AES::DEFAULT_KEYLENGTH) {
+      }
       virtual ~AESCipher() {}
 
-      char *Key() { return key_; }
-
       // BlockSize returns the size of each block supported by this cipher stream.
-      virtual size_t BlockSize() override;
+      virtual size_t BlockSize() override {
+        return CryptoPP::AES::BLOCKSIZE;
+      }
 
       // Encrypt a block of data.
       // Length of data is equal to BlockSize().
-      virtual rocksdb::Status Encrypt(char *data) override;
+      virtual rocksdb::Status Encrypt(char *data) override {
+        enc_.ProcessBlock((byte *)data);
+        return rocksdb::Status::OK();
+      }
 
       // Decrypt a block of data.
       // Length of data is equal to BlockSize().
-      virtual rocksdb::Status Decrypt(char *data) override;
+      virtual rocksdb::Status Decrypt(char *data) override {
+        dec_.ProcessBlock((byte *)data);
+        return rocksdb::Status::OK();
+      }
 };
 
 typedef std::map<uint64_t, rocksdb::BlockCipher*> CipherList;

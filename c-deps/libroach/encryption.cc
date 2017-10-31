@@ -22,30 +22,6 @@
 #include <sha.h>
 #include <hex.h>
 
-size_t AESCipher::BlockSize() {
-  return CryptoPP::AES::BLOCKSIZE;
-}
-
-rocksdb::Status AESCipher::Encrypt(char *data) {
-  CryptoPP::ECB_Mode<CryptoPP::AES>::Encryption enc((byte *)key_, CryptoPP::AES::DEFAULT_KEYLENGTH);
-  std::string output;
-  output.reserve(CryptoPP::AES::BLOCKSIZE);
-  enc.ProcessData((byte *)(output.data()), (const byte *)data, CryptoPP::AES::BLOCKSIZE);
-  memmove(data, output.data(), CryptoPP::AES::BLOCKSIZE);
-
-  return rocksdb::Status::OK();
-};
-
-rocksdb::Status AESCipher::Decrypt(char *data) {
-  CryptoPP::ECB_Mode<CryptoPP::AES>::Decryption dec((byte *)key_, CryptoPP::AES::DEFAULT_KEYLENGTH);
-  std::string output;
-  output.reserve(CryptoPP::AES::BLOCKSIZE);
-  dec.ProcessData((byte *)(output.data()), (const byte *)data, CryptoPP::AES::BLOCKSIZE);
-  memmove(data, output.data(), CryptoPP::AES::BLOCKSIZE);
-
-  return rocksdb::Status::OK();
-};
-
 CipherList ciphers;
 rocksdb::Env* GetEncryptedEnv(rocksdb::Env* base_env) {
   // Make a few hard-coded keys and corresponding ciphers.
