@@ -9,6 +9,9 @@ CREATE SEQUENCE foo
 statement error relation "foo" already exists
 CREATE SEQUENCE foo
 
+statement error conflicting or redundant options
+CREATE SEQUENCE bar INCREMENT 5 MAXVALUE 1000 INCREMENT 2
+
 # same namespace as tables
 statement error relation "foo" already exists
 CREATE TABLE foo (k BYTES PRIMARY KEY, v BYTES)

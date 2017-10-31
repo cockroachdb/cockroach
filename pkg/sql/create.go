@@ -17,6 +17,7 @@ package sql
 import (
 	"bytes"
 	"fmt"
+	"math"
 	"regexp"
 	"strings"
 
@@ -24,7 +25,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -35,7 +35,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/pkg/errors"
-	"math"
 )
 
 type createDatabaseNode struct {
@@ -1361,7 +1360,15 @@ func (n *createSequenceNode) makeSequenceTableDesc(
 	}
 
 	// Fill in all other settings.
+	settingsSeen := map[string]bool{}
 	for _, option := range n.n.Options {
+		// Error on duplicate settings.
+		_, seenBefore := settingsSeen[option.SeqOptName()]
+		if seenBefore {
+			return desc, pgerror.NewError(pgerror.CodeSyntaxError, "conflicting or redundant options")
+		}
+		settingsSeen[option.SeqOptName()] = true
+
 		switch opt := option.(type) {
 		case parser.IncrementOption:
 			// Do nothing; this has already been set.
@@ -1830,15 +1837,8 @@ func (n *createSequenceNode) Start(params runParams) error {
 
 	// initialize the sequence value
 	seqValueKey := keys.MakeSequenceKey(uint32(id))
-
-	seqStartValue := &roachpb.Value{}
-	seqStartValue.SetInt(desc.SequenceSettings.Start - desc.SequenceSettings.Increment)
-
 	b := &client.Batch{}
-	// TODO(vilterp): setting with Put then incrementing with Inc is not supposed to work, but does.
-	// the Inc doc comments say keys you Inc are supposed to have been created with Inc
-	// and never touched by anything else. But idk how it would know that.
-	b.Put(seqValueKey, seqStartValue)
+	b.Inc(seqValueKey, desc.SequenceSettings.Start-desc.SequenceSettings.Increment)
 	if err := n.p.txn.Run(params.ctx, b); err != nil {
 		return err
 	}
