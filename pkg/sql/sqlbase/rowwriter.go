@@ -669,7 +669,7 @@ func (ru *RowUpdater) UpdateRow(
 	// Add the new values.
 	// TODO(dan): This has gotten very similar to the loop in insertRow, see if
 	// they can be DRY'd. Ideally, this would also work for
-	// truncateAndBackfillColumnsChunk, which is currently abusing rowUdpdater.
+	// truncateAndBackfillColumnsChunk, which is currently abusing rowUpdater.
 	for i, family := range ru.Helper.TableDesc.Families {
 		update := false
 		for _, colID := range family.ColumnIDs {
@@ -814,6 +814,7 @@ type RowDeleter struct {
 	FetchCols            []ColumnDescriptor
 	FetchColIDtoRowIndex map[ColumnID]int
 	Fks                  fkDeleteHelper
+	cascader             *cascader
 	// For allocation avoidance.
 	startKey roachpb.Key
 	endKey   roachpb.Key
@@ -825,6 +826,26 @@ type RowDeleter struct {
 // expectation of which values are passed as values to DeleteRow. Any column
 // passed in requestedCols will be included in FetchCols.
 func MakeRowDeleter(
+	txn *client.Txn,
+	tableDesc *TableDescriptor,
+	fkTables TableLookupsByID,
+	requestedCols []ColumnDescriptor,
+	checkFKs bool,
+	alloc *DatumAlloc,
+) (RowDeleter, error) {
+	rowDeleter, err := makeRowDeleterWithoutCascader(
+		txn, tableDesc, fkTables, requestedCols, checkFKs, alloc,
+	)
+	if err != nil {
+		return RowDeleter{}, err
+	}
+	rowDeleter.cascader = makeCascader(txn, fkTables, alloc)
+	return rowDeleter, nil
+}
+
+// makeRowDeleterWithoutCascader creates a rowDeleter but does not create an
+// additional cascader.
+func makeRowDeleterWithoutCascader(
 	txn *client.Txn,
 	tableDesc *TableDescriptor,
 	fkTables TableLookupsByID,
@@ -889,19 +910,34 @@ func MakeRowDeleter(
 }
 
 // DeleteRow adds to the batch the kv operations necessary to delete a table row
-// with the given values.
+// with the given values. It also will cascade as required and check for
+// orphaned rows.
 func (rd *RowDeleter) DeleteRow(
 	ctx context.Context, b *client.Batch, values []tree.Datum, traceKV bool,
 ) error {
-	if err := rd.Fks.checkAll(ctx, values); err != nil {
+	if err := rd.deleteRowNoCascade(ctx, b, values, traceKV); err != nil {
 		return err
 	}
+	if err := rd.cascader.cascadeAll(
+		ctx, rd.Helper.TableDesc, tree.Datums(values), rd.FetchColIDtoRowIndex, traceKV,
+	); err != nil {
+		return err
+	}
+	return rd.Fks.checkAll(ctx, values)
+}
 
+// deleteRowNoCascade adds to the batch the kv operations necessary to delete a
+// table row but does not perform any cascading operations or foreign key
+// checks.
+func (rd *RowDeleter) deleteRowNoCascade(
+	ctx context.Context, b *client.Batch, values []tree.Datum, traceKV bool,
+) error {
 	primaryIndexKey, secondaryIndexEntries, err := rd.Helper.encodeIndexes(rd.FetchColIDtoRowIndex, values)
 	if err != nil {
 		return err
 	}
 
+	// Delete the row from any secondary indices.
 	for i, secondaryIndexEntry := range secondaryIndexEntries {
 		if traceKV {
 			log.VEventf(ctx, 2, "Del %s", keys.PrettyPrint(rd.Helper.secIndexValDirs[i], secondaryIndexEntry.Key))
