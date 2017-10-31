@@ -855,101 +855,47 @@ func (node *CreateSequence) Format(buf *bytes.Buffer, f FmtFlags) {
 	FormatNode(buf, f, &node.Name)
 	for _, option := range node.Options {
 		buf.WriteByte(' ')
-		FormatNode(buf, f, option)
+		switch option.Name {
+		case "MAXVALUE", "MINVALUE":
+			if option.IntVal == nil {
+				buf.WriteString("NO ")
+				buf.WriteString(option.Name)
+			} else {
+				buf.WriteString(option.Name)
+				buf.WriteByte(' ')
+				buf.WriteString(fmt.Sprintf("%d", *option.IntVal))
+			}
+		case "CYCLE":
+			if option.BoolVal {
+				buf.WriteString("CYCLE")
+			} else {
+				buf.WriteString("NO CYCLE")
+			}
+		default:
+			buf.WriteString(option.Name)
+			buf.WriteByte(' ')
+			buf.WriteString(fmt.Sprintf("%d", *option.IntVal))
+		}
 	}
 }
 
 // SequenceOption represents an option on a CREATE SEQUENCE statement.
-type SequenceOption interface {
-	NodeFormatter
+type SequenceOption struct {
+	Name string
 
-	// SeqOptName returns which setting this type represents.
-	SeqOptName() string
+	IntVal  *int64
+	BoolVal bool
 }
 
-func (IncrementOption) SeqOptName() string { return "INCREMENT" }
-func (MaxValueOption) SeqOptName() string  { return "MAXVALUE" }
-func (MinValueOption) SeqOptName() string  { return "MINVALUE" }
-func (StartOption) SeqOptName() string     { return "START" }
-func (CacheOption) SeqOptName() string     { return "CACHE" }
-func (CycleOption) SeqOptName() string     { return "CYCLE" }
-
-// IncrementOption is an option on the CREATE SEQUENCE statement.
-type IncrementOption struct {
-	Increment *int64
-}
-
-// Format implements the NodeFormatter interface.
-func (inc IncrementOption) Format(buf *bytes.Buffer, f FmtFlags) {
-	buf.WriteString("INCREMENT ")
-	buf.WriteString(fmt.Sprintf("%d", *inc.Increment))
-}
-
-// MaxValueOption is an option on the CREATE SEQUENCE statement.
-type MaxValueOption struct {
-	MaxValue *int64
-}
-
-// Format implements the NodeFormatter interface.
-func (mv MaxValueOption) Format(buf *bytes.Buffer, f FmtFlags) {
-	if mv.MaxValue == nil {
-		buf.WriteString("NO MAXVALUE")
-	} else {
-		buf.WriteString("MAXVALUE ")
-		buf.WriteString(fmt.Sprintf("%d", *mv.MaxValue))
-	}
-}
-
-// MinValueOption is an option on the CREATE SEQUENCE statement.
-type MinValueOption struct {
-	MinValue *int64
-}
-
-// Format implements the NodeFormatter interface.
-func (mv MinValueOption) Format(buf *bytes.Buffer, f FmtFlags) {
-	if mv.MinValue == nil {
-		buf.WriteString("NO MINVALUE")
-	} else {
-		buf.WriteString("MINVALUE ")
-		buf.WriteString(fmt.Sprintf("%d", *mv.MinValue))
-	}
-}
-
-// StartOption is an option on the CREATE SEQUENCE statement.
-type StartOption struct {
-	Start *int64
-}
-
-// Format implements the NodeFormatter interface.
-func (sv StartOption) Format(buf *bytes.Buffer, f FmtFlags) {
-	buf.WriteString("START ")
-	buf.WriteString(fmt.Sprintf("%d", *sv.Start))
-}
-
-// CacheOption is an option on the CREATE SEQUENCE statement.
-type CacheOption struct {
-	Cache *int64
-}
-
-// Format implements the NodeFormatter interface.
-func (cv CacheOption) Format(buf *bytes.Buffer, f FmtFlags) {
-	buf.WriteString("CACHE ")
-	buf.WriteString(fmt.Sprintf("%d", *cv.Cache))
-}
-
-// CycleOption is an option on the CREATE SEQUENCE statement.
-type CycleOption struct {
-	Cycle bool
-}
-
-// Format implements the NodeFormatter interface.
-func (cv CycleOption) Format(buf *bytes.Buffer, f FmtFlags) {
-	if cv.Cycle {
-		buf.WriteString("CYCLE")
-	} else {
-		buf.WriteString("NO CYCLE")
-	}
-}
+// Names of options on CREATE SEQUENCE.
+const (
+	SeqOptIncrement = "INCREMENT"
+	SeqOptMinValue  = "MINVALUE"
+	SeqOptMaxValue  = "MAXVALUE"
+	SeqOptStart     = "START"
+	SeqOptCycle     = "CYCLE"
+	SeqOptCache     = "CACHE"
+)
 
 // CreateUser represents a CREATE USER statement.
 type CreateUser struct {

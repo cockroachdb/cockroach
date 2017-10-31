@@ -11605,55 +11605,55 @@ sqldefault:
 		sqlDollar = sqlS[sqlpt-2 : sqlpt+1]
 		//line sql.y:3139
 		{
-			sqlVAL.union.val = IncrementOption{Increment: sqlDollar[2].union.intVal()}
+			sqlVAL.union.val = SequenceOption{Name: SeqOptIncrement, IntVal: sqlDollar[2].union.intVal()}
 		}
 	case 559:
 		sqlDollar = sqlS[sqlpt-2 : sqlpt+1]
 		//line sql.y:3140
 		{
-			sqlVAL.union.val = MinValueOption{MinValue: sqlDollar[2].union.intVal()}
+			sqlVAL.union.val = SequenceOption{Name: SeqOptMinValue, IntVal: sqlDollar[2].union.intVal()}
 		}
 	case 560:
 		sqlDollar = sqlS[sqlpt-2 : sqlpt+1]
 		//line sql.y:3141
 		{
-			sqlVAL.union.val = MinValueOption{MinValue: nil}
+			sqlVAL.union.val = SequenceOption{Name: SeqOptMinValue, IntVal: nil}
 		}
 	case 561:
 		sqlDollar = sqlS[sqlpt-2 : sqlpt+1]
 		//line sql.y:3142
 		{
-			sqlVAL.union.val = MaxValueOption{MaxValue: sqlDollar[2].union.intVal()}
+			sqlVAL.union.val = SequenceOption{Name: SeqOptMaxValue, IntVal: sqlDollar[2].union.intVal()}
 		}
 	case 562:
 		sqlDollar = sqlS[sqlpt-2 : sqlpt+1]
 		//line sql.y:3143
 		{
-			sqlVAL.union.val = MaxValueOption{MaxValue: nil}
+			sqlVAL.union.val = SequenceOption{Name: SeqOptMaxValue, IntVal: nil}
 		}
 	case 563:
 		sqlDollar = sqlS[sqlpt-2 : sqlpt+1]
 		//line sql.y:3144
 		{
-			sqlVAL.union.val = StartOption{Start: sqlDollar[2].union.intVal()}
+			sqlVAL.union.val = SequenceOption{Name: SeqOptStart, IntVal: sqlDollar[2].union.intVal()}
 		}
 	case 564:
 		sqlDollar = sqlS[sqlpt-2 : sqlpt+1]
 		//line sql.y:3145
 		{
-			sqlVAL.union.val = CacheOption{Cache: sqlDollar[2].union.intVal()}
+			sqlVAL.union.val = SequenceOption{Name: SeqOptCache, IntVal: sqlDollar[2].union.intVal()}
 		}
 	case 565:
 		sqlDollar = sqlS[sqlpt-1 : sqlpt+1]
 		//line sql.y:3146
 		{
-			sqlVAL.union.val = CycleOption{Cycle: true}
+			sqlVAL.union.val = SequenceOption{Name: SeqOptCycle, BoolVal: true}
 		}
 	case 566:
 		sqlDollar = sqlS[sqlpt-2 : sqlpt+1]
 		//line sql.y:3147
 		{
-			sqlVAL.union.val = CycleOption{Cycle: false}
+			sqlVAL.union.val = SequenceOption{Name: SeqOptCycle, BoolVal: false}
 		}
 	case 567:
 		sqlDollar = sqlS[sqlpt-1 : sqlpt+1]

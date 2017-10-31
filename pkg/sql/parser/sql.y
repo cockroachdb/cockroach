@@ -3158,15 +3158,15 @@ sequence_option_list:
 | sequence_option_list sequence_option_elem  { $$.val = append($1.seqOpts(), $2.seqOpt()) }
 
 sequence_option_elem:
-  INCREMENT just_an_int   { $$.val = IncrementOption{Increment: $2.intVal()} }
-| MINVALUE just_an_int    { $$.val = MinValueOption{MinValue: $2.intVal()} }
-| NO MINVALUE             { $$.val = MinValueOption{MinValue: nil} }
-| MAXVALUE just_an_int    { $$.val = MaxValueOption{MaxValue: $2.intVal()} }
-| NO MAXVALUE             { $$.val = MaxValueOption{MaxValue: nil} }
-| START just_an_int       { $$.val = StartOption{Start: $2.intVal()} }
-| CACHE just_an_int       { $$.val = CacheOption{Cache: $2.intVal()} }
-| CYCLE                   { $$.val = CycleOption{Cycle: true} }
-| NO CYCLE                { $$.val = CycleOption{Cycle: false} }
+  INCREMENT just_an_int   { $$.val = SequenceOption{Name: SeqOptIncrement, IntVal: $2.intVal()} }
+| MINVALUE just_an_int    { $$.val = SequenceOption{Name: SeqOptMinValue, IntVal: $2.intVal()} }
+| NO MINVALUE             { $$.val = SequenceOption{Name: SeqOptMinValue, IntVal: nil} }
+| MAXVALUE just_an_int    { $$.val = SequenceOption{Name: SeqOptMaxValue, IntVal: $2.intVal()} }
+| NO MAXVALUE             { $$.val = SequenceOption{Name: SeqOptMaxValue, IntVal: nil} }
+| START just_an_int       { $$.val = SequenceOption{Name: SeqOptStart, IntVal: $2.intVal()} }
+| CACHE just_an_int       { $$.val = SequenceOption{Name: SeqOptCache, IntVal: $2.intVal()} }
+| CYCLE                   { $$.val = SequenceOption{Name: SeqOptCycle, BoolVal: true} }
+| NO CYCLE                { $$.val = SequenceOption{Name: SeqOptCycle, BoolVal: false} }
 
 just_an_int:
   signed_iconst

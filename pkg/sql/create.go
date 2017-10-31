@@ -1337,10 +1337,8 @@ func (n *createSequenceNode) makeSequenceTableDesc(
 	// i.e. whether the sequence is ascending or descending.
 	settings.Increment = 1
 	for _, option := range n.n.Options {
-		switch opt := option.(type) {
-		case parser.IncrementOption:
-			settings.Increment = *opt.Increment
-		default:
+		if option.Name == parser.SeqOptIncrement {
+			settings.Increment = *option.IntVal
 		}
 	}
 	if settings.Increment == 0 {
@@ -1364,31 +1362,31 @@ func (n *createSequenceNode) makeSequenceTableDesc(
 	settingsSeen := map[string]bool{}
 	for _, option := range n.n.Options {
 		// Error on duplicate settings.
-		_, seenBefore := settingsSeen[option.SeqOptName()]
+		_, seenBefore := settingsSeen[option.Name]
 		if seenBefore {
 			return desc, pgerror.NewError(pgerror.CodeSyntaxError, "conflicting or redundant options")
 		}
-		settingsSeen[option.SeqOptName()] = true
+		settingsSeen[option.Name] = true
 
-		switch opt := option.(type) {
-		case parser.IncrementOption:
+		switch option.Name {
+		case parser.SeqOptIncrement:
 			// Do nothing; this has already been set.
-		case parser.MinValueOption:
+		case parser.SeqOptMinValue:
 			// A value of nil represents the user explicitly saying `NO MINVALUE`.
-			if opt.MinValue != nil {
-				settings.MinValue = *opt.MinValue
+			if option.IntVal != nil {
+				settings.MinValue = *option.IntVal
 			}
-		case parser.MaxValueOption:
+		case parser.SeqOptMaxValue:
 			// A value of nil represents the user explicitly saying `NO MAXVALUE`.
-			if opt.MaxValue != nil {
-				settings.MaxValue = *opt.MaxValue
+			if option.IntVal != nil {
+				settings.MaxValue = *option.IntVal
 			}
-		case parser.StartOption:
-			settings.Start = *opt.Start
-		case parser.CacheOption:
-			settings.Cache = *opt.Cache
-		case parser.CycleOption:
-			settings.Cycle = opt.Cycle
+		case parser.SeqOptStart:
+			settings.Start = *option.IntVal
+		case parser.SeqOptCache:
+			settings.Cache = *option.IntVal
+		case parser.SeqOptCycle:
+			settings.Cycle = option.BoolVal
 		}
 	}
 	desc.SequenceSettings = settings
