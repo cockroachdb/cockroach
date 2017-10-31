@@ -954,7 +954,7 @@ func TestStyle(t *testing.T) {
 			},
 			staticcheck.NewChecker(): {
 				// sql/ir/irgen/parser/yaccpar:362:3: this value of irgenDollar is never used (SA4006)
-				&lint.GlobIgnore{Pattern: "github.com/cockroachdb/cockroach/pkg/sql/ir/irgen/parser/yaccpar", Checks: []string{"SA4006"}},
+				&lint.GlobIgnore{Pattern: "github.com/cockroachdb/cockroach/pkg/sql/ir/irgen/parser/irgen.go", Checks: []string{"SA4006"}},
 				// The generated parser is full of `case` arms such as:
 				//
 				// case 1:
@@ -1015,7 +1015,7 @@ func TestStyle(t *testing.T) {
 				// which results in the unused warning:
 				//
 				// sql/parser/yaccpar:362:3: this value of sqlDollar is never used (SA4006)
-				&lint.GlobIgnore{Pattern: "github.com/cockroachdb/cockroach/pkg/sql/parser/yaccpar", Checks: []string{"SA4006"}},
+				&lint.GlobIgnore{Pattern: "github.com/cockroachdb/cockroach/pkg/sql/parser/sql.go", Checks: []string{"SA4006"}},
 			},
 			unused.NewLintChecker(unusedChecker): {
 				// sql/parser/yaccpar:14:6: type sqlParser is unused (U1000)
@@ -1023,7 +1023,7 @@ func TestStyle(t *testing.T) {
 				// sql/parser/yaccpar:16:2: func sqlParser.Lookahead is unused (U1000)
 				// sql/parser/yaccpar:29:6: func sqlNewParser is unused (U1000)
 				// sql/parser/yaccpar:152:6: func sqlParse is unused (U1000)
-				&lint.GlobIgnore{Pattern: "github.com/cockroachdb/cockroach/pkg/sql/parser/yaccpar", Checks: []string{"U1000"}},
+				&lint.GlobIgnore{Pattern: "github.com/cockroachdb/cockroach/pkg/sql/parser/sql.go", Checks: []string{"U1000"}},
 				// Generated file containing many unused postgres error codes.
 				&lint.GlobIgnore{Pattern: "github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror/codes.go", Checks: []string{"U1000"}},
 				// IR templates.
