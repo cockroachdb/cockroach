@@ -39,7 +39,7 @@ type joinReader struct {
 	desc  sqlbase.TableDescriptor
 	index *sqlbase.IndexDescriptor
 
-	fetcher sqlbase.RowFetcher
+	fetcher sqlbase.MultiRowFetcher
 	alloc   sqlbase.DatumAlloc
 
 	input      RowSource
@@ -175,17 +175,17 @@ func (jr *joinReader) mainLoop(ctx context.Context) error {
 		// the next batch. We could start the next batch early while we are
 		// outputting rows.
 		for {
-			fetcherRow, err := jr.fetcher.NextRow(ctx)
+			row, _, _, err := jr.fetcher.NextRow(ctx)
 			if err != nil {
 				return err
 			}
-			if fetcherRow == nil {
+			if row == nil {
 				// Done with this batch.
 				break
 			}
 
 			// Emit the row; stop if no more rows are needed.
-			if !emitHelper(ctx, &jr.out, fetcherRow, ProducerMetadata{}, jr.input) {
+			if !emitHelper(ctx, &jr.out, row, ProducerMetadata{}, jr.input) {
 				return nil
 			}
 		}

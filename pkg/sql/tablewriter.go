@@ -248,7 +248,7 @@ type tableUpserter struct {
 	updateColIDtoRowIndex map[sqlbase.ColumnID]int
 	fetchCols             []sqlbase.ColumnDescriptor
 	fetchColIDtoRowIndex  map[sqlbase.ColumnID]int
-	fetcher               sqlbase.RowFetcher
+	fetcher               sqlbase.MultiRowFetcher
 
 	// Used for the fast path.
 	fastPathBatch *client.Batch
@@ -341,10 +341,17 @@ func (tu *tableUpserter) init(txn *client.Txn) error {
 		}
 	}
 
+	tableArgs := sqlbase.MultiRowFetcherTableArgs{
+		Desc:            tableDesc,
+		Index:           &tableDesc.PrimaryIndex,
+		ColIdxMap:       tu.fetchColIDtoRowIndex,
+		Cols:            tu.fetchCols,
+		ValNeededForCol: valNeededForCol,
+	}
+
 	return tu.fetcher.Init(
-		tableDesc, tu.fetchColIDtoRowIndex, &tableDesc.PrimaryIndex,
-		false /* reverse */, false /* lockForUpdate */, false, /* isSecondaryIndex */
-		tu.fetchCols, valNeededForCol, false /*returnRangeInfo*/, tu.alloc)
+		false /* reverse */, false /* lockForUpdate */, false /*returnRangeInfo*/, tu.alloc, tableArgs,
+	)
 }
 
 func (tu *tableUpserter) row(
@@ -581,7 +588,7 @@ func (tu *tableUpserter) fetchExisting(ctx context.Context, traceKV bool) ([]tre
 
 	rows := make([]tree.Datums, len(primaryKeys))
 	for {
-		row, err := tu.fetcher.NextRowDecoded(ctx)
+		row, _, _, err := tu.fetcher.NextRowDecoded(ctx)
 		if err != nil {
 			return nil, err
 		}
@@ -809,12 +816,17 @@ func (td *tableDeleter) deleteAllRowsScan(
 		valNeededForCol[idx] = true
 	}
 
-	var rf sqlbase.RowFetcher
-	err := rf.Init(
-		td.rd.Helper.TableDesc, td.rd.FetchColIDtoRowIndex, &td.rd.Helper.TableDesc.PrimaryIndex,
-		false /* reverse */, false /* lockForUpdate */, false, /* isSecondaryIndex */
-		td.rd.FetchCols, valNeededForCol, false /* returnRangeInfo */, td.alloc)
-	if err != nil {
+	var rf sqlbase.MultiRowFetcher
+	tableArgs := sqlbase.MultiRowFetcherTableArgs{
+		Desc:            td.rd.Helper.TableDesc,
+		Index:           &td.rd.Helper.TableDesc.PrimaryIndex,
+		ColIdxMap:       td.rd.FetchColIDtoRowIndex,
+		Cols:            td.rd.FetchCols,
+		ValNeededForCol: valNeededForCol,
+	}
+	if err := rf.Init(
+		false /* reverse */, false /* lockForUpdate */, false /* returnRangeInfo */, td.alloc, tableArgs,
+	); err != nil {
 		return resume, err
 	}
 	if err := rf.StartScan(ctx, td.txn, roachpb.Spans{resume}, true /* limit batches */, 0, traceKV); err != nil {
@@ -822,16 +834,16 @@ func (td *tableDeleter) deleteAllRowsScan(
 	}
 
 	for i := int64(0); i < limit; i++ {
-		row, err := rf.NextRowDecoded(ctx)
+		datums, _, _, err := rf.NextRowDecoded(ctx)
 		if err != nil {
 			return resume, err
 		}
-		if row == nil {
+		if datums == nil {
 			// Done deleting all rows.
 			resume = roachpb.Span{}
 			break
 		}
-		_, err = td.row(ctx, row, traceKV)
+		_, err = td.row(ctx, datums, traceKV)
 		if err != nil {
 			return resume, err
 		}
@@ -840,7 +852,7 @@ func (td *tableDeleter) deleteAllRowsScan(
 		// Update the resume start key for the next iteration.
 		resume.Key = rf.Key()
 	}
-	_, err = td.finalize(ctx, traceKV)
+	_, err := td.finalize(ctx, traceKV)
 	return resume, err
 }
 
@@ -897,12 +909,17 @@ func (td *tableDeleter) deleteIndexScan(
 		valNeededForCol[idx] = true
 	}
 
-	var rf sqlbase.RowFetcher
-	err := rf.Init(
-		td.rd.Helper.TableDesc, td.rd.FetchColIDtoRowIndex, &td.rd.Helper.TableDesc.PrimaryIndex,
-		false /* reverse */, false /* lockForUpdate */, false, /* isSecondaryIndex */
-		td.rd.FetchCols, valNeededForCol, false /* returnRangeInfo */, td.alloc)
-	if err != nil {
+	var rf sqlbase.MultiRowFetcher
+	tableArgs := sqlbase.MultiRowFetcherTableArgs{
+		Desc:            td.rd.Helper.TableDesc,
+		Index:           &td.rd.Helper.TableDesc.PrimaryIndex,
+		ColIdxMap:       td.rd.FetchColIDtoRowIndex,
+		Cols:            td.rd.FetchCols,
+		ValNeededForCol: valNeededForCol,
+	}
+	if err := rf.Init(
+		false /* reverse */, false /* lockForUpdate */, false /* returnRangeInfo */, td.alloc, tableArgs,
+	); err != nil {
 		return resume, err
 	}
 	if err := rf.StartScan(ctx, td.txn, roachpb.Spans{resume}, true /* limit batches */, 0, traceKV); err != nil {
@@ -910,16 +927,16 @@ func (td *tableDeleter) deleteIndexScan(
 	}
 
 	for i := int64(0); i < limit; i++ {
-		row, err := rf.NextRowDecoded(ctx)
+		datums, _, _, err := rf.NextRowDecoded(ctx)
 		if err != nil {
 			return resume, err
 		}
-		if row == nil {
+		if datums == nil {
 			// Done deleting all rows.
 			resume = roachpb.Span{}
 			break
 		}
-		if err := td.rd.DeleteIndexRow(ctx, td.b, idx, row, traceKV); err != nil {
+		if err := td.rd.DeleteIndexRow(ctx, td.b, idx, datums, traceKV); err != nil {
 			return resume, err
 		}
 	}
@@ -927,7 +944,7 @@ func (td *tableDeleter) deleteIndexScan(
 		// Update the resume start key for the next iteration.
 		resume.Key = rf.Key()
 	}
-	_, err = td.finalize(ctx, traceKV)
+	_, err := td.finalize(ctx, traceKV)
 	return resume, err
 }
 

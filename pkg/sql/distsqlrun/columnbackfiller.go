@@ -119,9 +119,16 @@ func (cb *columnBackfiller) init() error {
 	for i, c := range desc.Columns {
 		colIdxMap[c.ID] = i
 	}
+
+	tableArgs := sqlbase.MultiRowFetcherTableArgs{
+		Desc:            &desc,
+		Index:           &desc.PrimaryIndex,
+		ColIdxMap:       colIdxMap,
+		Cols:            desc.Columns,
+		ValNeededForCol: valNeededForCol,
+	}
 	return cb.fetcher.Init(
-		&desc, colIdxMap, &desc.PrimaryIndex, false /* reverse */, false, /* lockForUpdate */
-		false /* isSecondaryIndex */, desc.Columns, valNeededForCol, false /* returnRangeInfo */, &cb.alloc,
+		false /* reverse */, false /* lockForUpdate */, false /* returnRangeInfo */, &cb.alloc, tableArgs,
 	)
 }
 
@@ -200,11 +207,11 @@ func (cb *columnBackfiller) runChunk(
 		b := txn.NewBatch()
 		rowLength := 0
 		for i := int64(0); i < chunkSize; i++ {
-			row, err := cb.fetcher.NextRowDecoded(ctx)
+			datums, _, _, err := cb.fetcher.NextRowDecoded(ctx)
 			if err != nil {
 				return err
 			}
-			if row == nil {
+			if datums == nil {
 				break
 			}
 			// Evaluate the new values. This must be done separately for
@@ -219,11 +226,11 @@ func (cb *columnBackfiller) runChunk(
 				}
 				updateValues[j] = val
 			}
-			copy(oldValues, row)
+			copy(oldValues, datums)
 			// Update oldValues with NULL values where values weren't found;
 			// only update when necessary.
-			if rowLength != len(row) {
-				rowLength = len(row)
+			if rowLength != len(datums) {
+				rowLength = len(datums)
 				for j := rowLength; j < len(oldValues); j++ {
 					oldValues[j] = tree.DNull
 				}
