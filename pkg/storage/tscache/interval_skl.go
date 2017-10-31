@@ -155,29 +155,37 @@ func newIntervalSkl(size uint32) *intervalSkl {
 // Add completes, future lookups of this key are guaranteed to return an equal
 // or greater timestamp.
 func (s *intervalSkl) Add(key []byte, val cacheValue) {
-	s.AddRange(key, key, 0, val)
+	s.AddRange(nil, key, 0, val)
 }
 
-// AddRange marks the given range of keys (from, to) as having been read at the
-// given timestamp. If some or all of the range was previously read at a higher
-// timestamp, then the range is split into sub-ranges that are each marked with
-// the maximum read timestamp for that sub-range. The starting and ending points
-// of the range are inclusive by default, but can be excluded by passing the
-// applicable range options. Once AddRange completes, future lookups at any point
-// in the range are guaranteed to return an equal or greater timestamp.
+// AddRange marks the given range of keys [from, to] as having been read at the
+// given timestamp. The starting and ending points of the range are inclusive by
+// default, but can be excluded by passing the applicable range options. nil can
+// be passed as the "from" key, in which case only the end key will be added.
+// nil can also be passed as the "to" key, in which case an open range will be
+// added spanning [from, infinity). However, it is illegal to pass nil for both
+// "from" and "to".
+//
+// If some or all of the range was previously read at a higher timestamp, then
+// the range is split into sub-ranges that are each marked with the maximum read
+// timestamp for that sub-range.  Once AddRange completes, future lookups at any
+// point in the range are guaranteed to return an equal or greater timestamp.
 func (s *intervalSkl) AddRange(from, to []byte, opt rangeOptions, val cacheValue) {
-	if from == nil {
-		panic("from key cannot be nil")
+	if from == nil && to == nil {
+		panic("from and to keys cannot be nil")
 	}
 
 	if to != nil {
-		cmp := bytes.Compare(from, to)
-		if cmp > 0 {
-			// Starting key is after ending key, so range is zero length.
-			return
+		cmp := 0
+		if from != nil {
+			cmp = bytes.Compare(from, to)
 		}
 
-		if cmp == 0 {
+		switch {
+		case cmp > 0:
+			// Starting key is after ending key, so range is zero length.
+			return
+		case cmp == 0:
 			// Starting key is same as ending key, so just add single node.
 			if opt == (excludeFrom | excludeTo) {
 				// Both from and to keys are excluded, so range is zero length.
@@ -202,9 +210,12 @@ func (s *intervalSkl) AddRange(from, to []byte, opt rangeOptions, val cacheValue
 	}
 }
 
-// addRange marks the given range of keys (from, to) as having been read at the
-// given timestamp. It returns nil if the operation was successful, or a pointer
-// to an sklPage if the operation failed because that page was full.
+// addRange marks the given range of keys [from, to] as having been read at the
+// given timestamp. The key range and the rangeOptions observe the same behavior
+// as is specified for AddRange above. Notably, addRange treats nil "from" and
+// "to" arguments in accordance with AddRange's contract. It returns nil if the
+// operation was successful, or a pointer to an sklPage if the operation failed
+// because that page was full.
 func (s *intervalSkl) addRange(from, to []byte, opt rangeOptions, val cacheValue) *sklPage {
 	// Acquire the rotation mutex read lock so that the page will not be rotated
 	// while add or lookup operations are in progress.
@@ -237,7 +248,8 @@ func (s *intervalSkl) addRange(from, to []byte, opt rangeOptions, val cacheValue
 		}
 	}
 
-	// If from is nil, then the "range" is just a single key.
+	// If from is nil, then the "range" is just a single key. We already
+	// asserted above that if from == nil then to != nil.
 	if from == nil {
 		return nil
 	}
@@ -308,7 +320,7 @@ func (s *intervalSkl) rotatePages(filledPage *sklPage) {
 // read. If this operation is repeated with the same key, it will always result
 // in an equal or greater timestamp.
 func (s *intervalSkl) LookupTimestamp(key []byte) cacheValue {
-	return s.LookupTimestampRange(key, key, 0)
+	return s.LookupTimestampRange(nil, key, 0)
 }
 
 // LookupTimestampRange returns the latest timestamp value of any key within the
@@ -357,7 +369,11 @@ func newSklPage(size uint32) *sklPage {
 
 func (p *sklPage) lookupTimestampRange(from, to []byte, opt rangeOptions) cacheValue {
 	if to != nil {
-		cmp := bytes.Compare(from, to)
+		cmp := 0
+		if from != nil {
+			cmp = bytes.Compare(from, to)
+		}
+
 		if cmp > 0 {
 			// Starting key is after ending key, so range is zero length.
 			return cacheValue{}
@@ -368,6 +384,9 @@ func (p *sklPage) lookupTimestampRange(from, to []byte, opt rangeOptions) cacheV
 				// Both from and to keys are excluded, so range is zero length.
 				return cacheValue{}
 			}
+
+			// Scan over a single key.
+			from = to
 			opt = 0
 		}
 	}
