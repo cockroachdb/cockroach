@@ -1,0 +1,467 @@
+# LogicTest: default parallel-stmts distsql
+
+### Basic Delete Cascade
+#     a
+#    / \
+#   b1 b2
+#  / \
+# c1  c2
+
+statement ok
+CREATE TABLE a (
+  id STRING PRIMARY KEY
+);
+
+statement ok
+CREATE TABLE b1 (
+  id STRING PRIMARY KEY
+ ,delete_cascade STRING NOT NULL REFERENCES a ON DELETE CASCADE
+);
+
+statement ok
+CREATE TABLE b2 (
+  id STRING PRIMARY KEY
+ ,delete_cascade STRING NOT NULL REFERENCES a ON DELETE CASCADE
+);
+
+statement ok
+CREATE TABLE c1 (
+  id STRING PRIMARY KEY
+ ,delete_cascade STRING NOT NULL REFERENCES b1 ON DELETE CASCADE
+);
+
+statement ok
+CREATE TABLE c2 (
+  id STRING PRIMARY KEY
+ ,delete_cascade STRING NOT NULL REFERENCES b1 ON DELETE CASCADE
+);
+
+statement ok
+INSERT INTO a VALUES ('a-pk1');
+
+statement ok
+INSERT INTO b1 VALUES ('b1-pk1', 'a-pk1');
+
+statement ok
+INSERT INTO b1 VALUES ('b1-pk2', 'a-pk1');
+
+statement ok
+INSERT INTO b2 VALUES ('b2-pk1', 'a-pk1');
+
+statement ok
+INSERT INTO b2 VALUES ('b2-pk2', 'a-pk1');
+
+statement ok
+INSERT INTO c1 VALUES ('c1-pk1-b1-pk1', 'b1-pk1');
+
+statement ok
+INSERT INTO c1 VALUES ('c1-pk2-b1-pk1', 'b1-pk1');
+
+statement ok
+INSERT INTO c1 VALUES ('c1-pk3-b1-pk2', 'b1-pk2');
+
+statement ok
+INSERT INTO c1 VALUES ('c1-pk4-b1-pk2', 'b1-pk2');
+
+statement ok
+INSERT INTO c2 VALUES ('c2-pk1-b1-pk1', 'b1-pk1');
+
+statement ok
+INSERT INTO c2 VALUES ('c2-pk2-b1-pk1', 'b1-pk1');
+
+statement ok
+INSERT INTO c2 VALUES ('c2-pk3-b1-pk2', 'b1-pk2');
+
+statement ok
+INSERT INTO c2 VALUES ('c2-pk4-b1-pk2', 'b1-pk2');
+
+# ON DELETE CASCADE
+statement ok
+DELETE FROM a WHERE id = 'a-pk1';
+
+# Clean up after the test.
+statement ok
+DROP TABLE c2;
+
+statement ok
+DROP TABLE c1;
+
+statement ok
+DROP TABLE b2;
+
+statement ok
+DROP TABLE b1;
+
+statement ok
+DROP TABLE a;
+
+### Basic Delete Cascade with Restrict
+#     a
+#    / \
+#   b1 b2
+#  / \
+# c1  c2
+#     |
+#     d
+
+statement ok
+CREATE TABLE a (
+  id STRING PRIMARY KEY
+);
+
+statement ok
+CREATE TABLE b1 (
+  id STRING PRIMARY KEY
+ ,delete_cascade STRING NOT NULL REFERENCES a ON DELETE CASCADE
+);
+
+statement ok
+CREATE TABLE b2 (
+  id STRING PRIMARY KEY
+ ,delete_cascade STRING NOT NULL REFERENCES a ON DELETE CASCADE
+);
+
+statement ok
+CREATE TABLE c1 (
+  id STRING PRIMARY KEY
+ ,delete_cascade STRING NOT NULL REFERENCES b1 ON DELETE CASCADE
+);
+
+statement ok
+CREATE TABLE c2 (
+  id STRING PRIMARY KEY
+ ,delete_cascade STRING NOT NULL REFERENCES b1 ON DELETE CASCADE
+);
+
+statement ok
+CREATE TABLE d (
+  id STRING PRIMARY KEY
+ ,delete_restrict STRING NOT NULL REFERENCES c2 ON DELETE RESTRICT
+);
+
+statement ok
+INSERT INTO a VALUES ('a-pk1');
+
+statement ok
+INSERT INTO b1 VALUES ('b1-pk1', 'a-pk1');
+
+statement ok
+INSERT INTO b1 VALUES ('b1-pk2', 'a-pk1');
+
+statement ok
+INSERT INTO b2 VALUES ('b2-pk1', 'a-pk1');
+
+statement ok
+INSERT INTO b2 VALUES ('b2-pk2', 'a-pk1');
+
+statement ok
+INSERT INTO c1 VALUES ('c1-pk1-b1-pk1', 'b1-pk1');
+
+statement ok
+INSERT INTO c1 VALUES ('c1-pk2-b1-pk1', 'b1-pk1');
+
+statement ok
+INSERT INTO c1 VALUES ('c1-pk3-b1-pk2', 'b1-pk2');
+
+statement ok
+INSERT INTO c1 VALUES ('c1-pk4-b1-pk2', 'b1-pk2');
+
+statement ok
+INSERT INTO c2 VALUES ('c2-pk1-b1-pk1', 'b1-pk1');
+
+statement ok
+INSERT INTO c2 VALUES ('c2-pk2-b1-pk1', 'b1-pk1');
+
+statement ok
+INSERT INTO c2 VALUES ('c2-pk3-b1-pk2', 'b1-pk2');
+
+statement ok
+INSERT INTO c2 VALUES ('c2-pk4-b1-pk2', 'b1-pk2');
+
+statement ok
+INSERT INTO d VALUES ('d-pk1-c2-pk4-b1-pk2', 'c2-pk4-b1-pk2');
+
+# ON DELETE CASCADE
+statement error pq: foreign key violation: values \['c2-pk4-b1-pk2'\] in columns \[id\] referenced in table "d"
+DELETE FROM a WHERE id = 'a-pk1';
+
+# Clean up after the test.
+statement ok
+DROP TABLE d;
+
+statement ok
+DROP TABLE c2;
+
+statement ok
+DROP TABLE c1;
+
+statement ok
+DROP TABLE b2;
+
+statement ok
+DROP TABLE b1;
+
+statement ok
+DROP TABLE a;
+
+### Self Reference Delete Cascade
+# self <- self
+
+statement ok
+CREATE TABLE self (
+  id INT PRIMARY KEY
+ ,other_id INT REFERENCES self ON DELETE CASCADE
+);
+
+statement ok
+INSERT INTO self VALUES (1, NULL);
+
+statement ok
+INSERT INTO self VALUES (2, 1);
+
+statement ok
+INSERT INTO self VALUES (3, 2);
+
+statement ok
+INSERT INTO self VALUES (4, 3);
+
+statement ok
+DELETE FROM self WHERE id = 1;
+
+# Clean up after the test.
+statement ok
+DROP TABLE self CASCADE;
+
+### Self Reference Delete Cascade Cycle
+# self <- self
+
+statement ok
+CREATE TABLE self (
+  id INT PRIMARY KEY
+ ,other_id INT REFERENCES self ON DELETE CASCADE
+);
+
+statement ok
+INSERT INTO self VALUES (1, NULL);
+
+statement ok
+INSERT INTO self VALUES (2, 1);
+
+statement ok
+INSERT INTO self VALUES (3, 2);
+
+statement ok
+INSERT INTO self VALUES (4, 3);
+
+statement ok
+UPDATE self SET other_id = 4 WHERE id = 1;
+
+statement ok
+DELETE FROM self WHERE id = 1;
+
+# Clean up after the test.
+statement ok
+DROP TABLE self CASCADE;
+
+### Delete cascade loop between two tables
+# loop_a <- loop_b
+# loop_b <- loop_a
+
+statement ok
+CREATE TABLE loop_a (
+  id STRING PRIMARY KEY
+ ,cascade_delete STRING
+ ,INDEX(cascade_delete)
+);
+
+statement ok
+CREATE TABLE loop_b (
+  id STRING PRIMARY KEY
+ ,cascade_delete STRING REFERENCES loop_a ON DELETE CASCADE
+);
+
+statement ok
+ALTER TABLE loop_a ADD CONSTRAINT cascade_delete_constraint
+  FOREIGN KEY (cascade_delete) REFERENCES loop_b (id)
+  ON DELETE CASCADE;
+
+statement ok
+INSERT INTO loop_a (id, cascade_delete) VALUES ('loop_a-pk1', NULL);
+
+statement ok
+INSERT INTO loop_b (id, cascade_delete) VALUES ('loop_b-pk1', 'loop_a-pk1');
+
+statement ok
+INSERT INTO loop_a (id, cascade_delete) VALUES ('loop_a-pk2', 'loop_b-pk1');
+
+statement ok
+INSERT INTO loop_b (id, cascade_delete) VALUES ('loop_b-pk2', 'loop_a-pk2');
+
+statement ok
+INSERT INTO loop_a (id, cascade_delete) VALUES ('loop_a-pk3', 'loop_b-pk2');
+
+statement ok
+INSERT INTO loop_b (id, cascade_delete) VALUES ('loop_b-pk3', 'loop_a-pk3');
+
+statement ok
+UPDATE loop_a SET cascade_delete = 'loop_b-pk3' WHERE id = 'loop_a-pk1';
+
+statement ok
+DELETE FROM loop_a WHERE id = 'loop_a-pk1';
+
+# Clean up after the test.
+statement ok
+DROP TABLE loop_a CASCADE;
+
+statement ok
+DROP TABLE loop_b;
+
+### Delete cascade loop between two tables with cycle
+# loop_a <- loop_b
+# loop_b <- loop_a
+
+statement ok
+CREATE TABLE loop_a (
+  id STRING PRIMARY KEY
+ ,cascade_delete STRING
+ ,INDEX(cascade_delete)
+);
+
+statement ok
+CREATE TABLE loop_b (
+  id STRING PRIMARY KEY
+ ,cascade_delete STRING REFERENCES loop_a ON DELETE CASCADE
+);
+
+statement ok
+ALTER TABLE loop_a ADD CONSTRAINT cascade_delete_constraint
+  FOREIGN KEY (cascade_delete) REFERENCES loop_b (id)
+  ON DELETE CASCADE;
+
+statement ok
+INSERT INTO loop_a (id, cascade_delete) VALUES ('loop_a-pk1', NULL);
+
+statement ok
+INSERT INTO loop_b (id, cascade_delete) VALUES ('loop_b-pk1', 'loop_a-pk1');
+
+statement ok
+INSERT INTO loop_a (id, cascade_delete) VALUES ('loop_a-pk2', 'loop_b-pk1');
+
+statement ok
+INSERT INTO loop_b (id, cascade_delete) VALUES ('loop_b-pk2', 'loop_a-pk2');
+
+statement ok
+INSERT INTO loop_a (id, cascade_delete) VALUES ('loop_a-pk3', 'loop_b-pk2');
+
+statement ok
+INSERT INTO loop_b (id, cascade_delete) VALUES ('loop_b-pk3', 'loop_a-pk3');
+
+statement ok
+DELETE FROM loop_a WHERE id = 'loop_a-pk1';
+
+# Clean up after the test.
+statement ok
+DROP TABLE loop_a CASCADE;
+
+statement ok
+DROP TABLE loop_b;
+
+### Delete cascade double self reference
+# self_x2 (x) <- (y)
+# self_x2 (y) <- (z)
+
+statement ok
+CREATE TABLE self_x2 (
+  x STRING PRIMARY KEY
+ ,y STRING UNIQUE REFERENCES self_x2(x) ON DELETE CASCADE
+ ,z STRING REFERENCES self_x2(y) ON DELETE CASCADE
+ ,INDEX(z)
+);
+
+statement ok
+INSERT INTO self_x2 (x, y, z) VALUES ('pk1', NULL, NULL);
+
+statement ok
+INSERT INTO self_x2 (x, y, z) VALUES ('pk2', 'pk1', NULL);
+
+statement ok
+INSERT INTO self_x2 (x, y, z) VALUES ('pk3', 'pk2', 'pk1');
+
+statement ok
+DELETE FROM self_x2 WHERE x = 'pk1';
+
+# Clean up after the test.
+statement ok
+DROP TABLE self_x2;
+
+## Delete cascade race
+#         a
+#        / \
+#       b   c
+#       |   |
+#       |   d
+#        \ /
+#         e
+statement ok
+CREATE TABLE a (
+  id STRING PRIMARY KEY
+);
+
+statement ok
+CREATE TABLE b (
+  id STRING PRIMARY KEY
+ ,a_id STRING REFERENCES a ON DELETE CASCADE
+);
+
+statement ok
+CREATE TABLE c (
+  id STRING PRIMARY KEY
+ ,a_id STRING REFERENCES a ON DELETE CASCADE
+);
+
+statement ok
+CREATE TABLE d (
+  id STRING PRIMARY KEY
+ ,c_id STRING REFERENCES c ON DELETE CASCADE
+);
+
+statement ok
+CREATE TABLE e (
+  id STRING PRIMARY KEY
+ ,b_id STRING REFERENCES b ON DELETE CASCADE
+ ,d_id STRING REFERENCES d ON DELETE CASCADE
+);
+
+statement ok
+INSERT INTO a (id) VALUES ('a1');
+
+statement ok
+INSERT INTO b (id, a_id) VALUES ('b1', 'a1');
+
+statement ok
+INSERT INTO c (id, a_id) VALUES ('c1', 'a1');
+
+statement ok
+INSERT INTO d (id, c_id) VALUES ('d1', 'c1');
+
+statement ok
+INSERT INTO e (id, b_id, d_id) VALUES ('e1', 'b1', 'd1');
+
+statement ok
+DELETE FROM a WHERE id = 'a1';
+
+# Clean up after the test.
+statement ok
+DROP TABLE e;
+
+statement ok
+DROP TABLE d;
+
+statement ok
+DROP TABLE c;
+
+statement ok
+DROP TABLE b;
+
+statement ok
+DROP TABLE a;

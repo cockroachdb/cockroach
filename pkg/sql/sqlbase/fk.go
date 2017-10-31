@@ -51,32 +51,90 @@ const (
 	CheckUpdates
 )
 
-// TablesNeededForFKs calculates the IDs of the additional TableDescriptors that
-// will be needed for FK checking delete and/or insert operations on `table`.
-//
-// NB: the returned map's values are *not* set -- higher level calling code, eg
-// in planner, should fill the map's values by acquiring leases. This function
-// is essentially just returning a slice of IDs, but the empty map can be filled
-// in place and reused, avoiding a second allocation.
-func TablesNeededForFKs(table TableDescriptor, usage FKCheck) TableLookupsByID {
-	var ret TableLookupsByID
-	for _, idx := range table.AllNonDropIndexes() {
-		if usage != CheckDeletes && idx.ForeignKey.IsSet() {
-			if ret == nil {
-				ret = make(TableLookupsByID)
-			}
-			ret[idx.ForeignKey.Table] = TableLookup{}
+// NoLookup can be used to not perform any lookups during a TablesNeededForFKs
+// function call.
+func NoLookup(ctx context.Context, tableID ID) (TableLookup, error) {
+	return TableLookup{}, nil
+}
+
+type tableLookupQueueElement struct {
+	ID    ID
+	usage FKCheck
+}
+
+type tableLookupQueue []tableLookupQueueElement
+
+func (q *tableLookupQueue) enqueue(tableID ID, usage FKCheck) {
+	*q = append((*q), tableLookupQueueElement{ID: tableID, usage: usage})
+}
+
+func (q *tableLookupQueue) dequeue() (ID, FKCheck, bool) {
+	if len(*q) == 0 {
+		return 0, 0, false
+	}
+	elem := (*q)[0]
+	*q = (*q)[1:]
+	return elem.ID, elem.usage, true
+}
+
+// TablesNeededForFKs populates a map of TableLookupsByID for all the
+// TableDescriptors that might be needed when performing FK checking for delete
+// and/or insert operations. It uses the passed in lookup function to perform
+// the actual lookup.
+// TODO(Bram): Right now this is performing a transitive closure over all
+// foreign keys that touch this table. This is overly broad and should match
+// the algorithm described the cascade rfc.
+func TablesNeededForFKs(
+	ctx context.Context,
+	table TableDescriptor,
+	usage FKCheck,
+	lookup func(ctx context.Context, tableID ID) (TableLookup, error),
+) (TableLookupsByID, error) {
+	tableLookups := make(TableLookupsByID)
+	tableLookups[table.ID] = TableLookup{&table, false}
+	var queue tableLookupQueue
+	queue.enqueue(table.ID, usage)
+	for {
+		tableID, curUsage, exists := queue.dequeue()
+		if !exists {
+			break
 		}
-		if usage != CheckInserts {
-			for _, ref := range idx.ReferencedBy {
-				if ret == nil {
-					ret = make(TableLookupsByID)
+		var curTable *TableDescriptor
+		if tableLookup, exists := tableLookups[tableID]; exists {
+			if tableLookup.IsAdding {
+				continue
+			}
+			curTable = tableLookup.Table
+		} else {
+			tableLookup, err := lookup(ctx, tableID)
+			if err != nil {
+				return nil, err
+			}
+			tableLookups[tableID] = tableLookup
+			if tableLookup.IsAdding {
+				continue
+			}
+			curTable = tableLookup.Table
+		}
+		if curTable == nil {
+			continue
+		}
+		for _, idx := range curTable.AllNonDropIndexes() {
+			if curUsage != CheckDeletes && idx.ForeignKey.IsSet() {
+				if _, exists := tableLookups[idx.ForeignKey.Table]; !exists {
+					queue.enqueue(idx.ForeignKey.Table, CheckDeletes)
 				}
-				ret[ref.Table] = TableLookup{}
+			}
+			if curUsage != CheckInserts {
+				for _, ref := range idx.ReferencedBy {
+					if _, exists := tableLookups[ref.Table]; !exists {
+						queue.enqueue(ref.Table, CheckDeletes)
+					}
+				}
 			}
 		}
 	}
-	return ret
+	return tableLookups, nil
 }
 
 // spanKVFetcher is an kvFetcher that returns a set slice of kvs.
@@ -151,7 +209,6 @@ func (f *fkBatchChecker) runCheck(
 	fetcher := spanKVFetcher{}
 	for i, resp := range br.Responses {
 		fk := f.batchIdxToFk[i]
-
 		fetcher.kvs = resp.GetInner().(*roachpb.ScanResponse).Rows
 		if err := fk.rf.StartScanFrom(ctx, &fetcher); err != nil {
 			return err
@@ -285,7 +342,9 @@ func checkIdx(
 }
 
 type fkDeleteHelper struct {
-	fks map[IndexID][]baseFKHelper
+	fks         map[IndexID][]baseFKHelper
+	otherTables TableLookupsByID
+	alloc       *DatumAlloc
 
 	checker *fkBatchChecker
 }
@@ -298,6 +357,8 @@ func makeFKDeleteHelper(
 	alloc *DatumAlloc,
 ) (fkDeleteHelper, error) {
 	h := fkDeleteHelper{
+		otherTables: otherTables,
+		alloc:       alloc,
 		checker: &fkBatchChecker{
 			txn: txn,
 		},
@@ -314,7 +375,7 @@ func makeFKDeleteHelper(
 				continue
 			}
 			if err != nil {
-				return h, err
+				return fkDeleteHelper{}, err
 			}
 			if h.fks == nil {
 				h.fks = make(map[IndexID][]baseFKHelper)
