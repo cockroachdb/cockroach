@@ -24,6 +24,7 @@ import (
 	"github.com/andy-kimball/arenaskl"
 
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/interval"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
@@ -177,8 +178,8 @@ func (s *intervalSkl) AddRange(from, to []byte, opt rangeOptions, val cacheValue
 
 		switch {
 		case cmp > 0:
-			// Starting key is after ending key, so range is zero length.
-			return
+			// Starting key is after ending key. This shouldn't happen.
+			panic(interval.ErrInvertedRange)
 		case cmp == 0:
 			// Starting key is same as ending key, so just add single node.
 			if opt == (excludeFrom | excludeTo) {

@@ -252,8 +252,8 @@ func TestIntervalSklBoundaryRange(t *testing.T) {
 	// Don't allow nil from and to keys.
 	require.Panics(t, func() { s.AddRange([]byte(nil), []byte(nil), excludeFrom, val1) })
 
-	// If from key is greater than to key, then range is zero-length.
-	s.AddRange([]byte("kiwi"), []byte("apple"), 0, val1)
+	// Don't allow inverted ranges.
+	require.Panics(t, func() { s.AddRange([]byte("kiwi"), []byte("apple"), 0, val1) })
 	require.Equal(t, emptyVal, s.LookupTimestamp([]byte("apple")))
 	require.Equal(t, emptyVal, s.LookupTimestamp([]byte("banana")))
 	require.Equal(t, emptyVal, s.LookupTimestamp([]byte("kiwi")))
