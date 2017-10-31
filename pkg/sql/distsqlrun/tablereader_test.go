@@ -244,3 +244,53 @@ ALTER TABLE t TESTING_RELOCATE VALUES (ARRAY[2], 1), (ARRAY[1], 2), (ARRAY[3], 3
 		t.Fatalf("expected misplanned ranges from nodes 2 and 3, got: %+v", metas[0])
 	}
 }
+
+func BenchmarkTableReader(b *testing.B) {
+	s, sqlDB, kvDB := serverutils.StartServer(b, base.TestServerArgs{})
+	defer s.Stopper().Stop(context.Background())
+
+	sqlutils.CreateTable(
+		b, sqlDB, "t",
+		"k INT PRIMARY KEY, v INT",
+		10000,
+		sqlutils.ToRowFn(sqlutils.RowIdxFn, sqlutils.RowModuloFn(42)),
+	)
+
+	tableDesc := sqlbase.GetTableDescriptor(kvDB, "test", "t")
+
+	evalCtx := tree.MakeTestingEvalContext()
+	defer evalCtx.Stop(context.Background())
+	flowCtx := FlowCtx{
+		EvalCtx:  evalCtx,
+		Settings: s.ClusterSettings(),
+		// Pass a DB without a TxnCoordSender.
+		txn:    client.NewTxn(client.NewDB(s.DistSender(), s.Clock()), s.NodeID()),
+		nodeID: s.NodeID(),
+	}
+	spec := TableReaderSpec{
+		Spans: []TableReaderSpan{{Span: tableDesc.PrimaryIndexSpan()}},
+	}
+	post := PostProcessSpec{}
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		out := &RowBuffer{}
+		tr, err := newTableReader(&flowCtx, &spec, &post, out)
+		if err != nil {
+			b.Fatal(err)
+		}
+		tr.Run(context.Background(), nil)
+		if !out.ProducerClosed {
+			b.Fatalf("output RowReceiver not closed")
+		}
+
+		for {
+			row, meta := out.Next()
+			if !meta.Empty() {
+				b.Fatalf("unexpected metadata: %+v", meta)
+			}
+			if row == nil {
+				break
+			}
+		}
+	}
+}

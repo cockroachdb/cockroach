@@ -70,7 +70,7 @@ func initFetcher(
 		}
 	}
 
-	if err := fetcher.Init(fetcherArgs, reverseScan, false /*reverse*/, alloc); err != nil {
+	if err := fetcher.Init(reverseScan, false /*reverse*/, alloc, fetcherArgs...); err != nil {
 		return nil, err
 	}
 
@@ -176,30 +176,30 @@ func TestNextRowSingle(t *testing.T) {
 
 			expectedVals := [2]int64{1, 1}
 			for {
-				resp, err := mrf.NextRowDecoded(context.TODO(), false /*traceKV*/)
+				datums, desc, index, err := mrf.NextRowDecoded(context.TODO())
 				if err != nil {
 					t.Fatal(err)
 				}
-				if resp.Datums == nil {
+				if datums == nil {
 					break
 				}
 
 				count++
 
-				if resp.Desc.ID != tableDesc.ID || resp.Index.ID != tableDesc.PrimaryIndex.ID {
+				if desc.ID != tableDesc.ID || index.ID != tableDesc.PrimaryIndex.ID {
 					t.Fatalf(
 						"unexpected row retrieved from fetcher.\nnexpected:  table %s - index %s\nactual: table %s - index %s",
 						tableDesc.Name, tableDesc.PrimaryIndex.Name,
-						resp.Desc.Name, resp.Index.Name,
+						desc.Name, index.Name,
 					)
 				}
 
-				if table.nCols != len(resp.Datums) {
-					t.Fatalf("expected %d columns, got %d columns", table.nCols, len(resp.Datums))
+				if table.nCols != len(datums) {
+					t.Fatalf("expected %d columns, got %d columns", table.nCols, len(datums))
 				}
 
 				for i, expected := range expectedVals {
-					actual := int64(*resp.Datums[i].(*tree.DInt))
+					actual := int64(*datums[i].(*tree.DInt))
 					if expected != actual {
 						t.Fatalf("unexpected value for row %d, col %d.\nexpected: %d\nactual: %d", count, i, expected, actual)
 					}
@@ -364,31 +364,31 @@ func TestNextRowSecondaryIndex(t *testing.T) {
 			nullCount := 0
 			var prevIdxVal int64
 			for {
-				resp, err := mrf.NextRowDecoded(context.TODO(), false /*traceKV*/)
+				datums, desc, index, err := mrf.NextRowDecoded(context.TODO())
 				if err != nil {
 					t.Fatal(err)
 				}
-				if resp.Datums == nil {
+				if datums == nil {
 					break
 				}
 
 				count++
 
-				if resp.Desc.ID != tableDesc.ID || resp.Index.ID != tableDesc.Indexes[0].ID {
+				if desc.ID != tableDesc.ID || index.ID != tableDesc.Indexes[0].ID {
 					t.Fatalf(
 						"unexpected row retrieved from fetcher.\nnexpected:  table %s - index %s\nactual: table %s - index %s",
 						tableDesc.Name, tableDesc.Indexes[0].Name,
-						resp.Desc.Name, resp.Index.Name,
+						desc.Name, index.Name,
 					)
 				}
 
-				if table.nCols != len(resp.Datums) {
-					t.Fatalf("expected %d columns, got %d columns", table.nCols, len(resp.Datums))
+				if table.nCols != len(datums) {
+					t.Fatalf("expected %d columns, got %d columns", table.nCols, len(datums))
 				}
 
 				// Verify that the correct # of values are returned.
 				numVals := 0
-				for _, datum := range resp.Datums {
+				for _, datum := range datums {
 					if datum != tree.DNull {
 						numVals++
 					}
@@ -396,7 +396,7 @@ func TestNextRowSecondaryIndex(t *testing.T) {
 
 				// Some secondary index values can be NULL. We keep track
 				// of how many we encounter.
-				idxNull := resp.Datums[1] == tree.DNull
+				idxNull := datums[1] == tree.DNull
 				if idxNull {
 					nullCount++
 					// It is okay to bump this up by one since we know
@@ -408,11 +408,11 @@ func TestNextRowSecondaryIndex(t *testing.T) {
 					t.Fatalf("expected %d non-NULL values, got %d", table.nVals, numVals)
 				}
 
-				id := int64(*resp.Datums[0].(*tree.DInt))
+				id := int64(*datums[0].(*tree.DInt))
 				// Verify the value in the value column is
 				// correct (if it is not NULL).
 				if !idxNull {
-					idx := int64(*resp.Datums[1].(*tree.DInt))
+					idx := int64(*datums[1].(*tree.DInt))
 					if id%int64(table.modFactor) != idx {
 						t.Fatalf("for row id %d, expected %d value, got %d", id, id%int64(table.modFactor), idx)
 					}
@@ -428,8 +428,8 @@ func TestNextRowSecondaryIndex(t *testing.T) {
 				// We verify that the storing values are
 				// decoded correctly.
 				if tableName == "nonuniquestoring" || tableName == "uniquestoring" {
-					s1 := int64(*resp.Datums[2].(*tree.DInt))
-					s2 := int64(*resp.Datums[3].(*tree.DInt))
+					s1 := int64(*datums[2].(*tree.DInt))
+					s2 := int64(*datums[3].(*tree.DInt))
 
 					if id%int64(storingMods[0]) != s1 {
 						t.Fatalf("for row id %d, expected %d for s1 value, got %d", id, id%int64(storingMods[0]), s1)
@@ -733,19 +733,19 @@ func TestNextRowInterleave(t *testing.T) {
 			count := make(map[string]int, len(entries))
 
 			for {
-				resp, err := mrf.NextRowDecoded(context.TODO(), false /*traceKV*/)
+				datums, desc, index, err := mrf.NextRowDecoded(context.TODO())
 				if err != nil {
 					t.Fatal(err)
 				}
-				if resp.Datums == nil {
+				if datums == nil {
 					break
 				}
 
-				entry, found := idLookups[idLookupKey(resp.Desc.ID, resp.Index.ID)]
+				entry, found := idLookups[idLookupKey(desc.ID, index.ID)]
 				if !found {
 					t.Fatalf(
 						"unexpected row from table %s - index %s",
-						resp.Desc.Name, resp.Index.Name,
+						desc.Name, index.Name,
 					)
 				}
 
@@ -753,13 +753,13 @@ func TestNextRowInterleave(t *testing.T) {
 				count[tableIdxName]++
 
 				// Check that the correct # of columns is returned.
-				if entry.nCols != len(resp.Datums) {
-					t.Fatalf("for table %s expected %d columns, got %d columns", tableIdxName, entry.nCols, len(resp.Datums))
+				if entry.nCols != len(datums) {
+					t.Fatalf("for table %s expected %d columns, got %d columns", tableIdxName, entry.nCols, len(datums))
 				}
 
 				// Verify that the correct # of values are returned.
 				numVals := 0
-				for _, datum := range resp.Datums {
+				for _, datum := range datums {
 					if datum != tree.DNull {
 						numVals++
 					}
@@ -771,8 +771,8 @@ func TestNextRowInterleave(t *testing.T) {
 				// Verify the value in the value column is
 				// correct if it is requested.
 				if entry.nVals == entry.nCols {
-					id := int64(*resp.Datums[entry.nCols-2].(*tree.DInt))
-					val := int64(*resp.Datums[entry.nCols-1].(*tree.DInt))
+					id := int64(*datums[entry.nCols-2].(*tree.DInt))
+					val := int64(*datums[entry.nCols-1].(*tree.DInt))
 
 					if id%int64(entry.modFactor) != val {
 						t.Fatalf("for table %s row id %d, expected %d value, got %d", tableIdxName, id, id%int64(entry.modFactor), val)
