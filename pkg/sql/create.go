@@ -1326,11 +1326,12 @@ func (n *createSequenceNode) makeSequenceTableDesc(
 ) (sqlbase.TableDescriptor, error) {
 	desc := initTableDescriptor(id, parentID, sequenceName, n.p.txn.OrigTimestamp(), privileges)
 
-	// Fill in settings, possibly with defaults.
+	// Fill in settings, starting with defaults then overriding.
 
-	settings := &sqlbase.TableDescriptor_SequenceSettings{}
-	settings.Cache = 1
-	settings.Cycle = false
+	settings := &sqlbase.TableDescriptor_SequenceSettings{
+		Cache: 1,
+		Cycle: false,
+	}
 
 	// All other defaults are dependent on the value of increment,
 	// i.e. whether the sequence is ascending or descending.
@@ -1835,7 +1836,7 @@ func (n *createSequenceNode) Start(params runParams) error {
 		return err
 	}
 
-	// initialize the sequence value
+	// Initialize the sequence value.
 	seqValueKey := keys.MakeSequenceKey(uint32(id))
 	b := &client.Batch{}
 	b.Inc(seqValueKey, desc.SequenceSettings.Start-desc.SequenceSettings.Increment)

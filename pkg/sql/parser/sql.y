@@ -209,10 +209,10 @@ func (u *sqlSymUnion) colTypes() []ColumnType {
     return u.val.([]ColumnType)
 }
 func (u *sqlSymUnion) seqOpt() SequenceOption {
-	return u.val.(SequenceOption)
+  return u.val.(SequenceOption)
 }
 func (u *sqlSymUnion) intVal() *int64 {
-	return u.val.(*int64)
+  return u.val.(*int64)
 }
 func (u *sqlSymUnion) seqOpts() []SequenceOption {
     return u.val.([]SequenceOption)
@@ -233,7 +233,7 @@ func (u *sqlSymUnion) selExprs() SelectExprs {
     return u.val.(SelectExprs)
 }
 func (u *sqlSymUnion) retClause() ReturningClause {
-	return u.val.(ReturningClause)
+  return u.val.(ReturningClause)
 }
 func (u *sqlSymUnion) aliasClause() AliasClause {
     return u.val.(AliasClause)
@@ -3151,7 +3151,7 @@ create_sequence_stmt:
 
 opt_sequence_option_list:
   sequence_option_list
-| /* EMPTY */ 					{ $$.val = []SequenceOption{} }
+| /* EMPTY */          { $$.val = []SequenceOption{} }
 
 sequence_option_list:
   sequence_option_elem                       { $$.val = []SequenceOption{$1.seqOpt()} }
@@ -3160,23 +3160,23 @@ sequence_option_list:
 sequence_option_elem:
   INCREMENT just_an_int   { $$.val = IncrementOption{Increment: $2.intVal()} }
 | MINVALUE just_an_int    { $$.val = MinValueOption{MinValue: $2.intVal()} }
-| NO MINVALUE 						{ $$.val = MinValueOption{MinValue: nil} }
+| NO MINVALUE             { $$.val = MinValueOption{MinValue: nil} }
 | MAXVALUE just_an_int    { $$.val = MaxValueOption{MaxValue: $2.intVal()} }
-| NO MAXVALUE 						{ $$.val = MaxValueOption{MaxValue: nil} }
+| NO MAXVALUE             { $$.val = MaxValueOption{MaxValue: nil} }
 | START just_an_int       { $$.val = StartOption{Start: $2.intVal()} }
 | CACHE just_an_int       { $$.val = CacheOption{Cache: $2.intVal()} }
 | CYCLE                   { $$.val = CycleOption{Cycle: true} }
-| NO CYCLE								{ $$.val = CycleOption{Cycle: false} }
+| NO CYCLE                { $$.val = CycleOption{Cycle: false} }
 
 just_an_int:
-	signed_iconst
-	{
-		val, err := $1.numVal().AsInt64()
-		if err != nil {
-			sqllex.Error(err.Error()); return 1
-		}
-		$$.val = &val
-	}
+  signed_iconst
+  {
+    val, err := $1.numVal().AsInt64()
+    if err != nil {
+      sqllex.Error(err.Error()); return 1
+    }
+    $$.val = &val
+  }
 
 // %Help: TRUNCATE - empty one or more tables
 // %Category: DML

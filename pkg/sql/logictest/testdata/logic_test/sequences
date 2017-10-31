@@ -5,44 +5,43 @@
 statement ok
 CREATE SEQUENCE foo
 
-# can't create again
-statement error relation "foo" already exists
+# A sequence with the same name can't be created again.
+statement error pgcode 42P07 relation "foo" already exists
 CREATE SEQUENCE foo
 
-statement error conflicting or redundant options
+statement error pgcode 42601 conflicting or redundant options
 CREATE SEQUENCE bar INCREMENT 5 MAXVALUE 1000 INCREMENT 2
 
-# same namespace as tables
-statement error relation "foo" already exists
+# Sequences are in the same namespace as tables.
+statement error pgcode 42P07 relation "foo" already exists
 CREATE TABLE foo (k BYTES PRIMARY KEY, v BYTES)
 
-# can't create with 0 increment
-statement error INCREMENT must not be zero
+# You can't create with 0 increment.
+statement error pgcode 22023 INCREMENT must not be zero
 CREATE SEQUENCE zero_test INCREMENT 0
 
-# drop table doesn't work
-# HINT:  Use DROP SEQUENCE to remove a sequence.
-statement error "foo" is not a table
+# Drop table on sequences doesn't work; you have to use DROP SEQUENCE.
+statement error pgcode 42809 "foo" is not a table
 DROP TABLE foo
 
 # DML ERRORS
 
-statement error cannot run INSERT on sequence "foo" - sequences are not updateable
+statement error pgcode XX000 cannot run INSERT on sequence "foo" - sequences are not updateable
 INSERT INTO foo VALUES (1, 2, 3)
 
-statement error cannot run UPDATE on sequence "foo" - sequences are not updateable
+statement error pgcode XX000 cannot run UPDATE on sequence "foo" - sequences are not updateable
 UPDATE foo SET value = 5
 
-statement error cannot run DELETE on sequence "foo" - sequences are not updateable
+statement error pgcode XX000 cannot run DELETE on sequence "foo" - sequences are not updateable
 DELETE FROM foo
 
-statement error cannot run TRUNCATE on sequence "foo" - sequences are not updateable
+statement error pgcode XX000 cannot run TRUNCATE on sequence "foo" - sequences are not updateable
 TRUNCATE foo
 
 # USING THE nextval() FUNCTION
 
-# `select * from foo` currently returns 0 columns & 0 rows
-# testing against that is a Test-Script syntax error
+# `select * from foo` currently returns 0 columns & 0 rows;
+# testing against that is a Test-Script syntax error.
 
 query I
 SELECT nextval('foo')
@@ -54,7 +53,7 @@ SELECT nextval('foo')
 ----
 2
 
-# sequence with different increment
+# You can create a sequence with different increment.
 
 statement ok
 CREATE SEQUENCE bar INCREMENT 5
@@ -69,7 +68,7 @@ SELECT nextval('bar')
 ----
 6
 
-# sequence with different start and increment
+# You can create a sequence with different start and increment.
 
 statement ok
 CREATE SEQUENCE baz START 2 INCREMENT 5
