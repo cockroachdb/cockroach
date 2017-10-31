@@ -141,7 +141,7 @@ func (d *diskRowContainer) AddRow(ctx context.Context, row sqlbase.EncDatumRow) 
 	// mess with key decoding.
 	d.scratchKey = encoding.EncodeUvarintAscending(d.scratchKey, d.rowID)
 	if err := d.diskAcc.Grow(ctx, int64(len(d.scratchKey)+len(d.scratchVal))); err != nil {
-		return err
+		return errors.Wrapf(err, "this query requires additional disk space")
 	}
 	if err := d.bufferedRows.Put(d.scratchKey, d.scratchVal); err != nil {
 		return err
