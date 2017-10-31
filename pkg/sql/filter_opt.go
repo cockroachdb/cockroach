@@ -665,14 +665,16 @@ func (p *planner) addJoinFilter(
 	//      SELECT * FROM a JOIN b USING(x)
 	// has columns: x (merged), a.*, b.*
 
-	// leftBegin is the logical index of the first column after
-	// the merged columns.
-	leftBegin := n.pred.numMergedEqualityColumns
+	// leftBegin is the logical index of the first column in the left data source.
+	leftBegin := 0
 	// rightBegin is the logical index of the first column in
 	// the right data source.
 	rightBegin := leftBegin + len(n.left.info.sourceColumns)
 
 	// Step 1: remove references to the merged columns.
+	// TODO(radu): we don't have merged columns at this level anymore; rewrite
+	// this function to "transfer" equalities for equality columns between sides
+	// (if the join type allows it).
 	extraFilter = openJoinFilter(n, leftBegin, rightBegin, extraFilter)
 	extraFilter = n.pred.iVarHelper.Rebind(extraFilter, false, false)
 
@@ -755,7 +757,6 @@ func (p *planner) addJoinFilter(
 		propagateLeft, onRemainder = splitJoinFilterLeft(n, leftBegin, rightBegin, n.pred.onCond)
 
 	default:
-		// Unreachable.
 	}
 
 	// Step 3: propagate the left and right predicates to the left and

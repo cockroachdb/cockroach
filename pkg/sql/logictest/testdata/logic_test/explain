@@ -188,17 +188,18 @@ EXPLAIN SHOW COLUMNS FROM foo
 2  group   ·         ·
 2  ·       group by  @1-@5
 3  render  ·         ·
-4  join    ·         ·
-4  ·       type      left outer
-4  ·       equality  (column_name) = (column_name)
-5  render  ·         ·
-6  filter  ·         ·
-7  values  ·         ·
-7  ·       size      13 columns, 598 rows
-5  render  ·         ·
-6  filter  ·         ·
-7  values  ·         ·
-7  ·       size      13 columns, 27 rows
+4  render  ·         ·
+5  join    ·         ·
+5  ·       type      left outer
+5  ·       equality  (column_name) = (column_name)
+6  render  ·         ·
+7  filter  ·         ·
+8  values  ·         ·
+8  ·       size      13 columns, 598 rows
+6  render  ·         ·
+7  filter  ·         ·
+8  values  ·         ·
+8  ·       size      13 columns, 27 rows
 
 query ITTT
 EXPLAIN SHOW GRANTS ON foo

@@ -191,9 +191,9 @@ func commonColumns(left, right *dataSourceInfo) parser.NameList {
 	return res
 }
 
-// makeJoin constructs a planDataSource for a JOIN node.
-// The tableInfo field from the left node is taken over (overwritten)
-// by the new node.
+// makeJoin constructs a planDataSource for a JOIN.
+// The source might be a joinNode, or it could be a renderNode on top of a
+// joinNode (in the case of outer natural joins).
 func (p *planner) makeJoin(
 	ctx context.Context,
 	astJoinType string,
@@ -234,22 +234,25 @@ func (p *planner) makeJoin(
 	}
 
 	var (
-		info *dataSourceInfo
-		pred *joinPredicate
-		err  error
+		info          *dataSourceInfo
+		pred          *joinPredicate
+		err           error
+		mergedColumns parser.NameList
 	)
 
 	if cond == nil {
-		pred, info, err = makeCrossPredicate(leftInfo, rightInfo)
+		pred, info, err = makeCrossPredicate(typ, leftInfo, rightInfo)
 	} else {
 		switch t := cond.(type) {
 		case *parser.OnJoinCond:
-			pred, info, err = p.makeOnPredicate(ctx, leftInfo, rightInfo, t.Expr)
+			pred, info, err = p.makeOnPredicate(ctx, typ, leftInfo, rightInfo, t.Expr)
 		case parser.NaturalJoinCond:
 			cols := commonColumns(leftInfo, rightInfo)
-			pred, info, err = makeUsingPredicate(leftInfo, rightInfo, cols)
+			mergedColumns = cols
+			pred, info, err = makeUsingPredicate(typ, leftInfo, rightInfo, mergedColumns)
 		case *parser.UsingJoinCond:
-			pred, info, err = makeUsingPredicate(leftInfo, rightInfo, t.Cols)
+			mergedColumns = t.Cols
+			pred, info, err = makeUsingPredicate(typ, leftInfo, rightInfo, mergedColumns)
 		}
 	}
 	if err != nil {
@@ -281,10 +284,159 @@ func (p *planner) makeJoin(
 		),
 	}
 
-	return planDataSource{
-		info: info,
-		plan: n,
-	}, nil
+	joinDataSource := planDataSource{info: info, plan: n}
+
+	if mergedColumns == nil {
+		// No merged columns, we are done.
+		return joinDataSource, nil
+	}
+
+	// -- Merged columns --
+	//
+	// With NATURAL JOIN or JOIN USING (a,b,c,...), SQL allows us to refer to the
+	// columns a,b,c directly; these columns have the following semantics:
+	//   a = IFNULL(left.a, right.a)
+	//   b = IFNULL(left.b, right.b)
+	//   c = IFNULL(left.c, right.c)
+	//   ...
+	//
+	// Furthermore, a star has to resolve the columns in the following order:
+	// merged columns, non-equality columns from the left table, non-equality
+	// columns from the right table. To perform this rearrangement, we use a
+	// renderNode on top of the joinNode. Note that the original columns must
+	// still be accessible via left.a, right.a (they will just be hidden).
+	//
+	// For inner or left outer joins, a is always the same with left.a.
+	//
+	// For right outer joins, a is always equal to right.a; but for some types
+	// (like collated strings), this doesn't mean it is the same with right.a. In
+	// this case we must still use the IFNULL construct.
+	//
+	// Example:
+	//
+	//  left has columns (a,b,x)
+	//  right has columns (a,b,y)
+	//
+	//  - SELECT * FROM left JOIN right ON(a,b)
+	//
+	//  joinNode has columns:
+	//    1: left.a
+	//    2: left.b
+	//    3: left.x
+	//    4: right.a
+	//    5: right.b
+	//    6: right.y
+	//
+	//  renderNode has columns and render expressions:
+	//    1: a                   @1
+	//    2: b                   @2
+	//    3: left.a (hidden)     @1
+	//    4: left.b (hidden)     @2
+	//    5: left.x              @3
+	//    6: right.a (hidden)    @4
+	//    7: right.b (hidden)    @5
+	//    8: right.y             @6
+	//
+	// TODO(radu): we could omit left.a, left.b here and just set up the aliases
+	// accordingly. We can't omit right.a, right.b.
+	//
+	// If the join was OUTER, the columns would be:
+	//    1: a                   IFNULL(@1,@4)
+	//    2: b                   IFNULL(@2,@5)
+	//    3: left.a (hidden)     @1
+	//    4: left.b (hidden)     @2
+	//    5: left.x              @3
+	//    6: right.a (hidden)    @4
+	//    7: right.b (hidden)    @5
+	//    8: right.y             @6
+
+	r := &renderNode{
+		planner:    p,
+		source:     joinDataSource,
+		sourceInfo: multiSourceInfo{info},
+	}
+	r.ivarHelper = parser.MakeIndexedVarHelper(r, len(info.sourceColumns))
+	numMerged := len(mergedColumns)
+	numLeft := len(leftInfo.sourceColumns)
+	rInfo := &dataSourceInfo{
+		sourceAliases: make(sourceAliases, 0, len(info.sourceAliases)),
+	}
+
+	var leftHidden, rightHidden util.FastIntSet
+
+	for i := range mergedColumns {
+		leftCol := n.pred.leftEqualityIndices[i]
+		rightCol := n.pred.rightEqualityIndices[i]
+		leftHidden.Add(leftCol)
+		rightHidden.Add(rightCol)
+		var expr parser.TypedExpr
+		if n.joinType == joinTypeInner || n.joinType == joinTypeLeftOuter {
+			// The merged column is the same with the corresponding column from the
+			// left side.
+			expr = r.ivarHelper.IndexedVar(leftCol)
+		} else if n.joinType == joinTypeRightOuter &&
+			!sqlbase.DatumTypeHasCompositeKeyEncoding(leftInfo.sourceColumns[leftCol].Typ) {
+			// The merged column is the same with the corresponding column from the
+			// right side.
+			expr = r.ivarHelper.IndexedVar(numLeft + rightCol)
+		} else {
+			c := &parser.CoalesceExpr{
+				Name: "IFNULL",
+				Exprs: []parser.Expr{
+					r.ivarHelper.IndexedVar(leftCol),
+					r.ivarHelper.IndexedVar(numLeft + rightCol),
+				},
+			}
+			var err error
+			expr, err = c.TypeCheck(&p.semaCtx, parser.TypeAny)
+			if err != nil {
+				return planDataSource{}, err
+			}
+		}
+		r.addRenderColumn(expr, symbolicExprStr(expr), leftInfo.sourceColumns[leftCol])
+	}
+	for i, c := range leftInfo.sourceColumns {
+		expr := r.ivarHelper.IndexedVar(i)
+		if leftHidden.Contains(i) {
+			c.Hidden = true
+		}
+		r.addRenderColumn(expr, symbolicExprStr(expr), c)
+	}
+	for i, c := range rightInfo.sourceColumns {
+		expr := r.ivarHelper.IndexedVar(numLeft + i)
+		if rightHidden.Contains(i) {
+			c.Hidden = true
+		}
+		r.addRenderColumn(expr, symbolicExprStr(expr), c)
+	}
+	rInfo.sourceColumns = r.columns
+
+	// Copy the aliases, shifting the columns as necessary. We extract any
+	// anonymous aliases for special handling.
+	anonymousAlias := sourceAlias{name: anonymousTable}
+	for _, a := range info.sourceAliases {
+		shifted := a
+		shifted.columnSet = a.columnSet.Shift(numMerged)
+		if a.name == anonymousTable {
+			anonymousAlias = shifted
+			continue
+		}
+		rInfo.sourceAliases = append(rInfo.sourceAliases, shifted)
+	}
+
+	for i := range mergedColumns {
+		anonymousAlias.columnSet.Add(i)
+	}
+
+	// Remove any anonymous aliases that refer to equality columns.
+	for _, col := range n.pred.leftEqualityIndices {
+		anonymousAlias.columnSet.Remove(numMerged + col)
+	}
+	for _, col := range n.pred.rightEqualityIndices {
+		anonymousAlias.columnSet.Remove(numMerged + numLeft + col)
+	}
+	rInfo.sourceAliases = append(rInfo.sourceAliases, anonymousAlias)
+	return planDataSource{info: rInfo, plan: r}, nil
 }
 
 // Start implements the planNode interface.
@@ -557,15 +709,15 @@ func (n *joinNode) joinOrdering() physicalProps {
 
 	// n.Columns has the following schema on equality JOINs:
 	//
-	// 0                     numMerged                 numMerged + numLeftCols
-	// |                     |                         |                          |
-	// --- Merged columns --- --- Columns from left --- --- Columns from right ---
+	// 0                         numLeftCols
+	// |                         |                          |
+	//  --- Columns from left --- --- Columns from right ---
 
 	leftCol := func(leftColIdx int) int {
-		return n.pred.numMergedEqualityColumns + leftColIdx
+		return leftColIdx
 	}
 	rightCol := func(rightColIdx int) int {
-		return n.pred.numMergedEqualityColumns + n.pred.numLeftCols + rightColIdx
+		return n.pred.numLeftCols + rightColIdx
 	}
 
 	leftOrd := planPhysicalProps(n.left.plan)
@@ -583,19 +735,17 @@ func (n *joinNode) joinOrdering() physicalProps {
 			info.eqGroups.Union(rightCol(group), rightCol(i))
 		}
 	}
+
+	// TODO(arjun): Support order propagation for other JOIN types.
+	if n.joinType != joinTypeInner {
+		return info
+	}
+
 	// Set equivalency between the equality column pairs (and merged column if
 	// appropriate).
 	for i, leftIdx := range n.pred.leftEqualityIndices {
 		rightIdx := n.pred.rightEqualityIndices[i]
 		info.eqGroups.Union(leftCol(leftIdx), rightCol(rightIdx))
-		if i < n.pred.numMergedEqualityColumns {
-			info.eqGroups.Union(i, leftCol(leftIdx))
-		}
-	}
-
-	// TODO(arjun): Support order propagation for other JOIN types.
-	if n.joinType != joinTypeInner {
-		return info
 	}
 
 	// Any constant columns stay constant after an inner join.
@@ -618,10 +768,6 @@ func (n *joinNode) joinOrdering() physicalProps {
 		rightIdx := n.pred.rightEqualityIndices[i]
 		rightEqSet.Add(rightIdx)
 		info.addNotNullColumn(rightCol(rightIdx))
-
-		if i < n.pred.numMergedEqualityColumns {
-			info.addNotNullColumn(i)
-		}
 	}
 
 	if leftOrd.isKey(leftEqSet) && rightOrd.isKey(rightEqSet) {
