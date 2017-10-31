@@ -262,12 +262,12 @@ func TestingSetDefaultZoneConfig(cfg ZoneConfig) func() {
 	}
 }
 
-// Validate verifies some ZoneConfig fields.
-// This should be used to validate user input when setting a new zone config.
-func (z ZoneConfig) Validate() error {
+// Validate returns an error if the ZoneConfig specifies a known-dangerous
+// configuration.
+func (z *ZoneConfig) Validate() error {
 	switch z.NumReplicas {
 	case 0:
-		return fmt.Errorf("attributes for at least one replica must be specified in zone config")
+		return fmt.Errorf("at least one replica is required")
 	case 2:
 		return fmt.Errorf("at least 3 replicas are required for multi-replica configurations")
 	}

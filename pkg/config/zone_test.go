@@ -34,7 +34,7 @@ func TestZoneConfigValidate(t *testing.T) {
 	}{
 		{
 			config.ZoneConfig{},
-			"attributes for at least one replica must be specified in zone config",
+			"at least one replica is required",
 		},
 		{
 			config.ZoneConfig{
