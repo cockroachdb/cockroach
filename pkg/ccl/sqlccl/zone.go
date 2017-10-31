@@ -11,14 +11,15 @@ package sqlccl
 import (
 	"bytes"
 
-	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/pkg/errors"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl/intervalccl"
 	"github.com/cockroachdb/cockroach/pkg/config"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
-	"github.com/pkg/errors"
 )
 
 // GenerateSubzoneSpans constructs from a TableDescriptor the entries mapping
@@ -262,4 +263,8 @@ func indexCoveringsForPartitioning(
 	// descendentCoverings are from subpartitions and so get precedence; append
 	// them to the front.
 	return append(descendentCoverings, coverings...), nil
+}
+
+func init() {
+	sql.GenerateSubzoneSpansHook = GenerateSubzoneSpans
 }
