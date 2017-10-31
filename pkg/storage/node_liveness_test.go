@@ -390,7 +390,10 @@ func TestNodeLivenessSelf(t *testing.T) {
 	// Verify liveness of all nodes for all nodes.
 	pauseNodeLivenessHeartbeats(mtc, true)
 	g := mtc.gossips[0]
-	liveness, _ := mtc.nodeLivenesses[0].GetLiveness(g.NodeID.Get())
+	liveness, err := mtc.nodeLivenesses[0].GetLiveness(g.NodeID.Get())
+	if err != nil {
+		t.Fatal(err)
+	}
 	if err := mtc.nodeLivenesses[0].Heartbeat(context.Background(), liveness); err != nil {
 		t.Fatal(err)
 	}
