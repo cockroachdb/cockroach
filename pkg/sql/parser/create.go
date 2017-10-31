@@ -862,17 +862,17 @@ func (node *CreateSequence) Format(buf *bytes.Buffer, f FmtFlags) {
 // SequenceOption represents an option on a CREATE SEQUENCE statement.
 type SequenceOption interface {
 	NodeFormatter
-	// Placeholder function to ensure that only desired types (*SequenceOption) conform
-	// to the SequenceOption interface.
-	seqOpt()
+
+	// SeqOptName returns which setting this type represents.
+	SeqOptName() string
 }
 
-func (IncrementOption) seqOpt() {}
-func (MaxValueOption) seqOpt()  {}
-func (MinValueOption) seqOpt()  {}
-func (StartOption) seqOpt()     {}
-func (CacheOption) seqOpt()     {}
-func (CycleOption) seqOpt()     {}
+func (IncrementOption) SeqOptName() string { return "INCREMENT" }
+func (MaxValueOption) SeqOptName() string  { return "MAXVALUE" }
+func (MinValueOption) SeqOptName() string  { return "MINVALUE" }
+func (StartOption) SeqOptName() string     { return "START" }
+func (CacheOption) SeqOptName() string     { return "CACHE" }
+func (CycleOption) SeqOptName() string     { return "CYCLE" }
 
 // IncrementOption is an option on the CREATE SEQUENCE statement.
 type IncrementOption struct {
