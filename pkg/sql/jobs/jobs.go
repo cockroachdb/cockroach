@@ -155,7 +155,7 @@ func (j *Job) Created(ctx context.Context, cancelFn func()) error {
 
 // Started marks the tracked job as started.
 func (j *Job) Started(ctx context.Context) error {
-	return j.update(ctx, func(status *Status, payload *Payload) (bool, error) {
+	return j.update(ctx, func(_ *client.Txn, status *Status, payload *Payload) (bool, error) {
 		if *status != StatusPending {
 			// Already started - do nothing.
 			return false, nil
@@ -188,7 +188,7 @@ func (j *Job) Progressed(
 			fractionCompleted, j.id,
 		)
 	}
-	return j.update(ctx, func(status *Status, payload *Payload) (bool, error) {
+	return j.update(ctx, func(_ *client.Txn, status *Status, payload *Payload) (bool, error) {
 		if *status != StatusRunning {
 			return false, &InvalidStatusError{*j.id, *status, "update progress on"}
 		}
@@ -225,7 +225,7 @@ func isControllable(p *Payload, op string) error {
 // pause the job; instead, it expects the job to call job.Progressed soon,
 // observe a "job is paused" error, and abort further work.
 func (j *Job) Paused(ctx context.Context) error {
-	return j.update(ctx, func(status *Status, payload *Payload) (bool, error) {
+	return j.update(ctx, func(_ *client.Txn, status *Status, payload *Payload) (bool, error) {
 		if err := isControllable(payload, "PAUSE"); err != nil {
 			return false, err
 		}
@@ -245,7 +245,7 @@ func (j *Job) Paused(ctx context.Context) error {
 // currently paused. It does not directly resume the job; rather, it expires the
 // job's lease so that a Registry adoption loop detects it and resumes it.
 func (j *Job) Resumed(ctx context.Context) error {
-	return j.update(ctx, func(status *Status, payload *Payload) (bool, error) {
+	return j.update(ctx, func(_ *client.Txn, status *Status, payload *Payload) (bool, error) {
 		if *status == StatusRunning {
 			// Already resumed - do nothing.
 			return false, nil
@@ -265,7 +265,7 @@ func (j *Job) Resumed(ctx context.Context) error {
 // cancel the job; like job.Paused, it expects the job to call job.Progressed
 // soon, observe a "job is canceled" error, and abort further work.
 func (j *Job) Canceled(ctx context.Context) error {
-	return j.update(ctx, func(status *Status, payload *Payload) (bool, error) {
+	return j.update(ctx, func(txn *client.Txn, status *Status, payload *Payload) (bool, error) {
 		if err := isControllable(payload, "CANCEL"); err != nil {
 			return false, err
 		}
@@ -277,6 +277,11 @@ func (j *Job) Canceled(ctx context.Context) error {
 			return false, fmt.Errorf("job with status %s cannot be canceled", *status)
 		}
 		*status = StatusCanceled
+		if onfail, ok := payload.Details.(onFailer); ok {
+			if err := onfail.onFail(ctx, txn, j); err != nil {
+				return false, err
+			}
+		}
 		payload.FinishedMicros = timeutil.ToUnixMicros(timeutil.Now())
 		return true, nil
 	})
@@ -292,12 +297,17 @@ func (j *Job) Failed(ctx context.Context, err error) {
 	if j.id == nil {
 		return
 	}
-	internalErr := j.update(ctx, func(status *Status, payload *Payload) (bool, error) {
+	internalErr := j.update(ctx, func(txn *client.Txn, status *Status, payload *Payload) (bool, error) {
 		if status.Terminal() {
 			// Already done - do nothing.
 			return false, nil
 		}
 		*status = StatusFailed
+		if onfail, ok := payload.Details.(onFailer); ok {
+			if err := onfail.onFail(ctx, txn, j); err != nil {
+				return false, err
+			}
+		}
 		payload.Error = err.Error()
 		payload.FinishedMicros = timeutil.ToUnixMicros(timeutil.Now())
 		return true, nil
@@ -309,11 +319,30 @@ func (j *Job) Failed(ctx context.Context, err error) {
 	j.registry.unregister(*j.id)
 }
 
+type onFailer interface {
+	onFail(context.Context, *client.Txn, *Job) error
+}
+
+var _ onFailer = &Payload_Restore{}
+
+// RestoreFailHook is the func that is run when a RESTORE job has failed.
+var RestoreFailHook func(context.Context, *client.Txn, *RestoreDetails) error
+
+func (r *Payload_Restore) onFail(ctx context.Context, txn *client.Txn, job *Job) error {
+	// This is set in the CCL package if RESTOREs are enabled, and so should
+	// always be non-nil. However the jobs tests exercise this without importing
+	// the CCL package, so we do need the test.
+	if RestoreFailHook != nil {
+		return RestoreFailHook(ctx, txn, r.Restore)
+	}
+	return nil
+}
+
 // Succeeded marks the tracked job as having succeeded and sets its fraction
 // completed to 1.0.
 func (j *Job) Succeeded(ctx context.Context) error {
 	defer j.registry.unregister(*j.id)
-	return j.update(ctx, func(status *Status, payload *Payload) (bool, error) {
+	return j.update(ctx, func(_ *client.Txn, status *Status, payload *Payload) (bool, error) {
 		if status.Terminal() {
 			// Already done - do nothing.
 			return false, nil
@@ -381,7 +410,7 @@ func (j *Job) FinishedWith(ctx context.Context, err error) error {
 
 // SetDetails sets the details field of the currently running tracked job.
 func (j *Job) SetDetails(ctx context.Context, details interface{}) error {
-	return j.update(ctx, func(_ *Status, payload *Payload) (bool, error) {
+	return j.update(ctx, func(_ *client.Txn, _ *Status, payload *Payload) (bool, error) {
 		payload.Details = WrapPayloadDetails(details)
 		return true, nil
 	})
@@ -495,7 +524,7 @@ func (j *Job) insert(ctx context.Context, payload *Payload) error {
 }
 
 func (j *Job) update(
-	ctx context.Context, updateFn func(*Status, *Payload) (doUpdate bool, err error),
+	ctx context.Context, updateFn func(*client.Txn, *Status, *Payload) (doUpdate bool, err error),
 ) error {
 	if j.id == nil {
 		return errors.New("Job: cannot update: job not created")
@@ -518,7 +547,7 @@ func (j *Job) update(
 			return err
 		}
 
-		doUpdate, err := updateFn(&status, payload)
+		doUpdate, err := updateFn(txn, &status, payload)
 		if err != nil {
 			return err
 		}
@@ -555,7 +584,7 @@ func (j *Job) update(
 }
 
 func (j *Job) adopt(ctx context.Context, oldLease *Lease) error {
-	return j.update(ctx, func(status *Status, payload *Payload) (bool, error) {
+	return j.update(ctx, func(_ *client.Txn, status *Status, payload *Payload) (bool, error) {
 		if *status != StatusRunning {
 			return false, errors.Errorf("job %d no longer running", *j.id)
 		}
