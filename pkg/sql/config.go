@@ -49,15 +49,15 @@ func getZoneConfig(
 		if err := zoneVal.GetProto(&zone); err != nil {
 			return config.ZoneConfig{}, 0, err
 		}
-		if subzone, found := zone.GetSubzoneForKeySuffix(keySuffix); found {
+		if subzone := zone.GetSubzoneForKeySuffix(keySuffix); subzone != nil {
 			// The ZoneConfig has a more-specific index or partition subzone; use
 			// that.
-			return subzone, id, nil
+			return subzone.Config, id, nil
 		}
-		// No subzone matched. If the parent zone specifies zero replicas, it
-		// existed only as a home for subzones, and we should keep recursing up the
-		// hierarchy. Otherwise, return the parent zone.
-		if zone.NumReplicas != 0 {
+		// No subzone matched. Return the parent zone, unless it was just a
+		// placeholder for subzones, in which case we need to keep recursing up the
+		// hierarchy.
+		if !zone.IsSubzonePlaceholder() {
 			return zone, id, nil
 		}
 	}
