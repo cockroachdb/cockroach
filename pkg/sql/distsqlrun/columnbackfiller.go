@@ -150,7 +150,9 @@ func (cb *columnBackfiller) runChunk(
 			defer cb.flowCtx.testingKnobs.RunAfterBackfillChunk()
 		}
 
-		fkTables := sqlbase.TablesNeededForFKs(tableDesc, sqlbase.CheckUpdates)
+		fkTables, _ := sqlbase.TablesNeededForFKs(
+			ctx, tableDesc, sqlbase.CheckUpdates, sqlbase.NoLookup, sqlbase.NoCheckPrivilege,
+		)
 		for _, fkTableDesc := range cb.spec.OtherTables {
 			found, ok := fkTables[fkTableDesc.ID]
 			if !ok {
