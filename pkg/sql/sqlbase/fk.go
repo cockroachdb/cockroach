@@ -68,13 +68,11 @@ func TablesNeededForFKs(table TableDescriptor, usage FKCheck) TableLookupsByID {
 			ret[idx.ForeignKey.Table] = TableLookup{}
 		}
 		if usage != CheckInserts {
-			for _, idx := range table.AllNonDropIndexes() {
-				for _, ref := range idx.ReferencedBy {
-					if ret == nil {
-						ret = make(TableLookupsByID)
-					}
-					ret[ref.Table] = TableLookup{}
+			for _, ref := range idx.ReferencedBy {
+				if ret == nil {
+					ret = make(TableLookupsByID)
 				}
+				ret[ref.Table] = TableLookup{}
 			}
 		}
 	}
