@@ -9,6 +9,8 @@ import { Bytes as formatBytes } from "src/util/format";
 import { NodesOverview } from "src/views/cluster/containers/nodesOverview";
 import { CapacityChart } from "./capacity";
 
+import "./cluster.styl";
+
 class ClusterTicker extends React.Component<{}, {}> {
   render() {
     return (
