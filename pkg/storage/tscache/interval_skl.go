@@ -24,6 +24,7 @@ import (
 	"github.com/andy-kimball/arenaskl"
 
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/interval"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
@@ -164,7 +165,8 @@ func (s *intervalSkl) Add(key []byte, val cacheValue) {
 // be passed as the "from" key, in which case only the end key will be added.
 // nil can also be passed as the "to" key, in which case an open range will be
 // added spanning [from, infinity). However, it is illegal to pass nil for both
-// "from" and "to".
+// "from" and "to". It is also illegal for "from" > "to", which would be an
+// inverted range.
 //
 // If some or all of the range was previously read at a higher timestamp, then
 // the range is split into sub-ranges that are each marked with the maximum read
@@ -183,8 +185,8 @@ func (s *intervalSkl) AddRange(from, to []byte, opt rangeOptions, val cacheValue
 
 		switch {
 		case cmp > 0:
-			// Starting key is after ending key, so range is zero length.
-			return
+			// Starting key is after ending key. This shouldn't happen.
+			panic(interval.ErrInvertedRange)
 		case cmp == 0:
 			// Starting key is same as ending key, so just add single node.
 			if opt == (excludeFrom | excludeTo) {
@@ -339,6 +341,8 @@ func (s *intervalSkl) LookupTimestampRange(from, to []byte, opt rangeOptions) ca
 	if s.earlier != nil {
 		// If later page timestamp is greater than the max timestamp in the
 		// earlier page, then no need to do lookup at all.
+		//
+		// TODO(nvanbenschoten): test this when val.ts == maxTs.
 		maxTs := hlc.Timestamp{WallTime: atomic.LoadInt64(&s.earlier.maxWallTime)}
 		if val.ts.Less(maxTs) {
 			val2 := s.earlier.lookupTimestampRange(from, to, opt)
