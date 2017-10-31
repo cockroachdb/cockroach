@@ -51,9 +51,25 @@ func genValues(w io.Writer, firstRow, lastRow int, fn GenRowFn) {
 func CreateTable(
 	t *testing.T, sqlDB *gosql.DB, tableName, schema string, numRows int, fn GenRowFn,
 ) {
+	CreateTableInterleave(t, sqlDB, tableName, schema, "" /*interleaveSchema*/, numRows, fn)
+}
+
+// CreateTableInterleave is identical to CreateTable with the added option
+// of specifying an interleave schema for interleaving the table.
+func CreateTableInterleave(
+	t *testing.T,
+	sqlDB *gosql.DB,
+	tableName, schema, interleaveSchema string,
+	numRows int,
+	fn GenRowFn,
+) {
+	if interleaveSchema != "" {
+		interleaveSchema = fmt.Sprintf(`INTERLEAVE IN PARENT %s`, interleaveSchema)
+	}
+
 	r := MakeSQLRunner(t, sqlDB)
 	stmt := `CREATE DATABASE IF NOT EXISTS test;`
-	stmt += fmt.Sprintf(`CREATE TABLE test.%s (%s);`, tableName, schema)
+	stmt += fmt.Sprintf(`CREATE TABLE test.%s (%s) %s;`, tableName, schema, interleaveSchema)
 	r.Exec(stmt)
 	for i := 1; i <= numRows; {
 		var buf bytes.Buffer
@@ -63,6 +79,7 @@ func CreateTable(
 			batchEnd = numRows
 		}
 		genValues(&buf, i, batchEnd, fn)
+
 		r.Exec(buf.String())
 		i = batchEnd + 1
 	}
@@ -83,6 +100,24 @@ func RowModuloFn(modulo int) GenValueFn {
 	return func(row int) parser.Datum {
 		return parser.NewDInt(parser.DInt(row % modulo))
 	}
+}
+
+// RowModuloShiftedFn creates a GenValueFn that uses the following recursive
+// function definition F(row, modulo), where modulo is []int
+//    F(row, [])      = row
+//    F(row, modulo)  = F((row - 1) % modulo[0] + 1, modulo[1:])
+// and returns the result as a DInt.
+func RowModuloShiftedFn(modulo ...int) GenValueFn {
+	return func(row int) parser.Datum {
+		return parser.NewDInt(parser.DInt(moduloShiftedRecursive(row, modulo)))
+	}
+}
+
+func moduloShiftedRecursive(row int, modulo []int) int {
+	if len(modulo) == 0 {
+		return row
+	}
+	return moduloShiftedRecursive(((row-1)%modulo[0])+1, modulo[1:])
 }
 
 // IntToEnglish returns an English (pilot style) string for the given integer,
