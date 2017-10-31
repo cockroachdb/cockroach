@@ -70,7 +70,7 @@ func initFetcher(
 		}
 	}
 
-	if err := fetcher.Init(fetcherArgs, reverseScan, false /*reverse*/, false /*lockForUpdate*/, alloc); err != nil {
+	if err := fetcher.Init(reverseScan, false /*reverse*/, false /*lockForUpdate*/, alloc, fetcherArgs...); err != nil {
 		return nil, err
 	}
 
@@ -176,7 +176,7 @@ func TestNextRowSingle(t *testing.T) {
 
 			expectedVals := [2]int64{1, 1}
 			for {
-				resp, err := mrf.NextRowDecoded(context.TODO(), false /*traceKV*/)
+				resp, err := mrf.NextRowDecoded(context.TODO())
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -364,7 +364,7 @@ func TestNextRowSecondaryIndex(t *testing.T) {
 			nullCount := 0
 			var prevIdxVal int64
 			for {
-				resp, err := mrf.NextRowDecoded(context.TODO(), false /*traceKV*/)
+				resp, err := mrf.NextRowDecoded(context.TODO())
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -733,7 +733,7 @@ func TestNextRowInterleave(t *testing.T) {
 			count := make(map[string]int, len(entries))
 
 			for {
-				resp, err := mrf.NextRowDecoded(context.TODO(), false /*traceKV*/)
+				resp, err := mrf.NextRowDecoded(context.TODO())
 				if err != nil {
 					t.Fatal(err)
 				}
