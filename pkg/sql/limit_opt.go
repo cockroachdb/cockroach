@@ -57,20 +57,20 @@ func applyLimit(plan planNode, numRows int64, soft bool) {
 
 	case *limitNode:
 		// A higher-level limitNode or EXPLAIN is pushing a limit down onto
-		// this node. Accept it unless the local limit is definitely
-		// smaller, in which case we propagate that as a hard limit instead.
+		// this node. Prefer the local "hard" limit, unless the limit pushed
+		// down is "hard" and smaller than the local limit.
+		//
 		// TODO(radu): we may get a smaller "soft" limit from the upper node
 		// and we may have a larger "hard" limit locally. In general, it's
 		// not clear which of those results in less work.
 		if !n.evaluated {
 			n.estimateLimit()
 		}
-		hintCount := numRows
-		if hintCount > n.count {
-			hintCount = n.count
-			soft = false
+		count := n.count
+		if !soft && numRows < count {
+			count = numRows
 		}
-		applyLimit(n.plan, getLimit(hintCount, n.offset), soft)
+		applyLimit(n.plan, getLimit(count, n.offset), false /* soft */)
 
 	case *sortNode:
 		if n.needSort && numRows != math.MaxInt64 {
