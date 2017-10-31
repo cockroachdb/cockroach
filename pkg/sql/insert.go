@@ -155,8 +155,10 @@ func (p *planner) Insert(
 		}
 	}
 
-	fkTables := sqlbase.TablesNeededForFKs(*en.tableDesc, sqlbase.CheckInserts)
-	if err := p.fillFKTableMap(ctx, fkTables); err != nil {
+	fkTables, err := sqlbase.TablesNeededForFKs(
+		ctx, *en.tableDesc, sqlbase.CheckInserts, p.lookupFKTable, p.CheckPrivilege,
+	)
+	if err != nil {
 		return nil, err
 	}
 	ri, err := sqlbase.MakeRowInserter(p.txn, en.tableDesc, fkTables, cols,
@@ -218,8 +220,10 @@ func (p *planner) Insert(
 				return nil, err
 			}
 
-			fkTables := sqlbase.TablesNeededForFKs(*en.tableDesc, sqlbase.CheckUpdates)
-			if err := p.fillFKTableMap(ctx, fkTables); err != nil {
+			fkTables, err := sqlbase.TablesNeededForFKs(
+				ctx, *en.tableDesc, sqlbase.CheckUpdates, p.lookupFKTable, p.CheckPrivilege,
+			)
+			if err != nil {
 				return nil, err
 			}
 			tu := tableUpserterPool.Get().(*tableUpserter)

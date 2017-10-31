@@ -104,8 +104,10 @@ func (p *planner) Update(
 		requestedCols = en.tableDesc.Columns
 	}
 
-	fkTables := sqlbase.TablesNeededForFKs(*en.tableDesc, sqlbase.CheckUpdates)
-	if err := p.fillFKTableMap(ctx, fkTables); err != nil {
+	fkTables, err := sqlbase.TablesNeededForFKs(
+		ctx, *en.tableDesc, sqlbase.CheckUpdates, p.lookupFKTable, p.CheckPrivilege,
+	)
+	if err != nil {
 		return nil, err
 	}
 	ru, err := sqlbase.MakeRowUpdater(p.txn, en.tableDesc, fkTables, updateCols,
