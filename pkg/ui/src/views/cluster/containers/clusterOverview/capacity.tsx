@@ -32,13 +32,14 @@ const axis = d3.svg.axis()
   .tickValues([0, 268435500000, 536870900000]) // TODO(couchand): Not this, obviously.
   .tickFormat(formatBytes);
 
-function chart(el) {
+function chart(el: d3.Selection<CapacityChartProps>) {
   el.style("shape-rendering", "crispEdges");
 
   const axisJoin = el.selectAll("g.axis")
-    .data((d) => [scale.domain([0, d.usable])]);
+    .data((d: CapacityChartProps) => [scale.domain([0, d.usable])]);
 
-  const axisEnter = axisJoin.enter()
+  // const axisEnter =
+  axisJoin.enter()
     .append("g")
     .attr("class", "axis")
     .attr("transform", `translate(0,${size.height + AXIS_MARGIN})`);
@@ -50,11 +51,12 @@ function chart(el) {
   axisGroup.selectAll("text").attr("y", AXIS_MARGIN + TICK_SIZE);
 
   const bgJoin = el.selectAll(".bg")
-    .data((d) => [d]);
+    .data((d: CapacityChartProps) => [d]);
 
-  const bgEnter = bgJoin.enter()
+  // const bgEnter =
+  bgJoin.enter()
     .append("rect")
-    .attr("class", "bg")
+    .attr("class", "bg");
 
 //  const bg = bgEnter.merge(bgJoin);
   bgJoin
@@ -63,29 +65,32 @@ function chart(el) {
     .attr("height", size.height);
 
   const barJoin = el.selectAll(".bar")
-    .data((d) => [d]);
+    .data((d: CapacityChartProps) => [d]);
 
-  const barEnter = barJoin.enter()
+  // const barEnter =
+  barJoin.enter()
     .append("rect")
     .attr("class", "bar")
     .attr("height", 10)
     .attr("y", 5);
 
-   // const bar = barEnter.merge(barJoin);
-   barJoin
-   // bar
-     .attr("width", (d) => scale(d.used));
+  // const bar = barEnter.merge(barJoin);
+  barJoin
+  // bar
+    .attr("width", (d: CapacityChartProps) => scale(d.used));
 
 }
 
 export class CapacityChart extends React.Component<CapacityChartProps, {}> {
+  svgEl: SVGElement;
+
   componentDidMount() {
     d3.select(this.svgEl)
       .datum(this.props)
-      .call(chart));
+      .call(chart);
   }
 
-  shouldComponentUpdate(props) {
+  shouldComponentUpdate(props: CapacityChartProps) {
     d3.select(this.svgEl)
       .datum(props)
       .call(chart);
