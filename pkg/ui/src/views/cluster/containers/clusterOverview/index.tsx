@@ -3,6 +3,7 @@ import React from "react";
 import { connect } from "react-redux";
 
 import { AdminUIState } from "src/redux/state";
+import { Bytes as formatBytes } from "src/util/format";
 import { NodesOverview } from "src/views/cluster/containers/nodesOverview";
 
 class ClusterTicker extends React.Component<{}, {}> {
@@ -21,8 +22,6 @@ interface CapacityUsageProps {
 }
 
 const formatPercentage = d3.format("0.1%");
-// TODO(couchand): Actual byte formatter.
-const formatBytes = d3.format("0.2f");
 
 class CapacityUsage extends React.Component<CapacityUsageProps, {}> {
   render() {
