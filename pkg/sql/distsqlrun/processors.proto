@@ -301,10 +301,15 @@ message HashJoinerSpec {
 
   optional JoinType type = 6 [(gogoproto.nullable) = false];
 
+  // DEPRECATED
+  //
   // Extra merged columns that are added in case of OUTER JOINS. These
   // columns occupy first positions in a row amd it's the left value if it's not
   // NULL, otherwise it's the right value. In INNER JOIN case no merged columns are
   // needed since left stream values are guaranteed to be not NULL.
+  //
+  // This has been deprecated; the distsqlrun layer still supports it for
+  // backward compatibility during upgrade.
   optional bool merged_columns = 7 [(gogoproto.nullable) = false];
 }
 

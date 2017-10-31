@@ -146,18 +146,19 @@ query ITTT
 EXPLAIN SELECT * FROM t x JOIN t y USING(b) WHERE x.b < '3'
 ----
 0  render      ·         ·
-1  join        ·         ·
-1  ·           type      inner
-1  ·           equality  (b) = (b)
-2  index-join  ·         ·
-3  scan        ·         ·
-3  ·           table     t@bc
-3  ·           spans     /#-/"3"
+1  render      ·         ·
+2  join        ·         ·
+2  ·           type      inner
+2  ·           equality  (b) = (b)
+3  index-join  ·         ·
+4  scan        ·         ·
+4  ·           table     t@bc
+4  ·           spans     /#-/"3"
+4  scan        ·         ·
+4  ·           table     t@primary
 3  scan        ·         ·
 3  ·           table     t@primary
-2  scan        ·         ·
-2  ·           table     t@primary
-2  ·           spans     ALL
+3  ·           spans     ALL
 
 statement ok
 TRUNCATE TABLE t
