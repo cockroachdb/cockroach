@@ -745,12 +745,18 @@ func (p *planner) getQualifiedTableName(
 	return tbName.String(), nil
 }
 
-// findTableContainingIndex returns the name of the table containing
-// an index of the given name. An error is returned if the index is
-// not found or if the index name is ambiguous (i.e. exists in
-// multiple tables).
+// findTableContainingIndex returns the name of the table containing an
+// index of the given name. An error is returned if the index name is
+// ambiguous (i.e. exists in multiple tables). If no table is found and
+// requireTable is true, an error will be returned, otherwise the
+// TableName returned will be nil.
 func (p *planner) findTableContainingIndex(
-	ctx context.Context, txn *client.Txn, vt VirtualTabler, dbName parser.Name, idxName parser.Name,
+	ctx context.Context,
+	txn *client.Txn,
+	vt VirtualTabler,
+	dbName parser.Name,
+	idxName parser.Name,
+	requireTable bool,
 ) (result *parser.TableName, err error) {
 	dbDesc, err := MustGetDatabaseDesc(ctx, txn, vt, string(dbName))
 	if err != nil {
@@ -781,17 +787,19 @@ func (p *planner) findTableContainingIndex(
 		}
 		result = tn
 	}
-	if result == nil {
+	if result == nil && requireTable {
 		return nil, fmt.Errorf("index %q not in any of the tables %v", idxName, tns)
 	}
 	return result, nil
 }
 
-// expandIndexName ensures that the index name is qualified with a
-// table name, and searches the table name if not yet specified. It returns
-// the TableName of the underlying table for convenience.
+// expandIndexName ensures that the index name is qualified with a table
+// name, and searches the table name if not yet specified. It returns
+// the TableName of the underlying table for convenience. If no table is
+// found and requireTable is true an error will be returned, otherwise
+// the TableName returned will be nil.
 func (p *planner) expandIndexName(
-	ctx context.Context, index *parser.TableNameWithIndex,
+	ctx context.Context, index *parser.TableNameWithIndex, requireTable bool,
 ) (*parser.TableName, error) {
 	tn, err := index.Table.NormalizeWithDatabaseName(p.session.Database)
 	if err != nil {
@@ -808,9 +816,19 @@ func (p *planner) expandIndexName(
 		if index.Index == "" {
 			index.Index = tn.TableName
 		}
-		realTableName, err := p.findTableContainingIndex(ctx, p.txn, p.getVirtualTabler(), tn.DatabaseName, index.Index)
+		realTableName, err := p.findTableContainingIndex(
+			ctx,
+			p.txn, p.getVirtualTabler(),
+			tn.DatabaseName,
+			index.Index,
+			requireTable,
+		)
 		if err != nil {
 			return nil, err
+		} else if realTableName == nil {
+			// NB: realTableName is nil here if and only if requireTable is
+			// false, otherwise err would be non-nil.
+			return nil, nil
 		}
 		index.Table.TableNameReference = realTableName
 		tn = realTableName
@@ -836,7 +854,7 @@ func (p *planner) getTableAndIndex(
 		tn, err = table.NormalizeWithDatabaseName(p.session.Database)
 	} else {
 		// Variant: ALTER INDEX
-		tn, err = p.expandIndexName(ctx, tableWithIndex)
+		tn, err = p.expandIndexName(ctx, tableWithIndex, true /* requireTable */)
 	}
 	if err != nil {
 		return nil, nil, err
