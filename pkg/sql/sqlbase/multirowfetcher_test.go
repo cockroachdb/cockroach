@@ -70,7 +70,7 @@ func initFetcher(
 		}
 	}
 
-	if err := fetcher.Init(fetcherArgs, reverseScan, false, alloc); err != nil {
+	if err := fetcher.Init(fetcherArgs, reverseScan, false /*reverse*/, false /*lockForUpdate*/, alloc); err != nil {
 		return nil, err
 	}
 
