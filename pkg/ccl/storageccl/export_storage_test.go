@@ -71,6 +71,7 @@ func testExportStore(t *testing.T, storeURI string, skipSingleFile bool) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	// Setup a sink for the given args.
 	s, err := MakeExportStorage(ctx, conf, testSettings)
 	if err != nil {
@@ -213,12 +214,35 @@ func TestPutLocal(t *testing.T) {
 	p, cleanupFn := testutils.TempDir(t)
 	defer cleanupFn()
 
+	testSettings.ExternalIODir = p
 	dest, err := MakeLocalStorageURI(p)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	testExportStore(t, dest, false)
+}
+func TestLocalIOLimits(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.TODO()
+	const allowed = "/allowed"
+	testSettings.ExternalIODir = allowed
+
+	for dest, expected := range map[string]string{allowed: "", "/blah": "not allowed"} {
+		u, err := MakeLocalStorageURI(dest)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		conf, err := ExportStorageConfFromURI(u)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := MakeExportStorage(ctx, conf, testSettings); !testutils.IsError(err, expected) {
+			t.Fatal(err)
+		}
+	}
 }
 
 func TestPutHttp(t *testing.T) {
