@@ -92,7 +92,7 @@ func (p *planner) selectIndex(
 		// No where-clause, no ordering, and no specified index.
 		s.initOrdering(0)
 		var err error
-		s.spans, err = makeSpans(nil, s.desc, s.index)
+		s.spans, err = makeSpans(&s.p.evalCtx, nil /* constraints */, s.desc, s.index)
 		if err != nil {
 			return nil, errors.Wrapf(err, "table ID = %d, index ID = %d", s.desc.ID, s.index.ID)
 		}
@@ -163,7 +163,7 @@ func (p *planner) selectIndex(
 		// use.
 
 		for _, c := range candidates {
-			c.analyzeExprs(exprs)
+			c.analyzeExprs(&s.p.evalCtx, exprs)
 		}
 	}
 
@@ -214,7 +214,7 @@ func (p *planner) selectIndex(
 	s.specifiedIndex = nil
 	s.isSecondaryIndex = (c.index != &s.desc.PrimaryIndex)
 	var err error
-	s.spans, err = makeSpans(c.constraints, c.desc, c.index)
+	s.spans, err = makeSpans(&s.p.evalCtx, c.constraints, c.desc, c.index)
 	if err != nil {
 		return nil, errors.Wrapf(err, "constraints = %v, table ID = %d, index ID = %d",
 			c.constraints, s.desc.ID, s.index.ID)
@@ -368,8 +368,8 @@ func (v *indexInfo) init(s *scanNode) {
 
 // analyzeExprs examines the range map to determine the cost of using the
 // index.
-func (v *indexInfo) analyzeExprs(exprs []parser.TypedExprs) {
-	if err := v.makeOrConstraints(exprs); err != nil {
+func (v *indexInfo) analyzeExprs(evalCtx *parser.EvalContext, exprs []parser.TypedExprs) {
+	if err := v.makeOrConstraints(evalCtx, exprs); err != nil {
 		panic(err)
 	}
 
@@ -464,11 +464,13 @@ func getColVarIdx(expr parser.Expr) (ok bool, colIdx int) {
 // makeOrConstraints populates the indexInfo.constraints field based on the
 // analyzed expressions. Each element of constraints corresponds to one
 // of the top-level disjunctions and is generated using makeIndexConstraint.
-func (v *indexInfo) makeOrConstraints(orExprs []parser.TypedExprs) error {
+func (v *indexInfo) makeOrConstraints(
+	evalCtx *parser.EvalContext, orExprs []parser.TypedExprs,
+) error {
 	constraints := make(orIndexConstraints, len(orExprs))
 	for i, e := range orExprs {
 		var err error
-		constraints[i], err = v.makeIndexConstraints(e)
+		constraints[i], err = v.makeIndexConstraints(evalCtx, e)
 		if err != nil {
 			return err
 		}
@@ -524,7 +526,9 @@ func (v *indexInfo) makeOrConstraints(orExprs []parser.TypedExprs) error {
 // 1", but if we performed this transform in simplifyComparisonExpr it would
 // simplify to "a < 1 OR a >= 2" which is also the same as "a != 1", but not so
 // obvious based on comparisons of the constants.
-func (v *indexInfo) makeIndexConstraints(andExprs parser.TypedExprs) (indexConstraints, error) {
+func (v *indexInfo) makeIndexConstraints(
+	evalCtx *parser.EvalContext, andExprs parser.TypedExprs,
+) (indexConstraints, error) {
 	var constraints indexConstraints
 
 	trueStartDone := false
@@ -680,13 +684,13 @@ func (v *indexInfo) makeIndexConstraints(andExprs parser.TypedExprs) (indexConst
 					if *startDone || (*startExpr != nil) {
 						continue
 					}
-					if c.Right.(parser.Datum).IsMax() {
+					if c.Right.(parser.Datum).IsMax(evalCtx) {
 						*startExpr = parser.NewTypedComparisonExpr(
 							parser.EQ,
 							c.TypedLeft(),
 							c.TypedRight(),
 						)
-					} else if nextRightVal, hasNext := c.Right.(parser.Datum).Next(); hasNext {
+					} else if nextRightVal, hasNext := c.Right.(parser.Datum).Next(evalCtx); hasNext {
 						*startExpr = parser.NewTypedComparisonExpr(
 							parser.GE,
 							c.TypedLeft(),
@@ -700,13 +704,13 @@ func (v *indexInfo) makeIndexConstraints(andExprs parser.TypedExprs) (indexConst
 						continue
 					}
 					// Transform "<" into "<=".
-					if c.Right.(parser.Datum).IsMin() {
+					if c.Right.(parser.Datum).IsMin(evalCtx) {
 						*endExpr = parser.NewTypedComparisonExpr(
 							parser.EQ,
 							c.TypedLeft(),
 							c.TypedRight(),
 						)
-					} else if prevRightVal, hasPrev := c.Right.(parser.Datum).Prev(); hasPrev {
+					} else if prevRightVal, hasPrev := c.Right.(parser.Datum).Prev(evalCtx); hasPrev {
 						*endExpr = parser.NewTypedComparisonExpr(
 							parser.LE,
 							c.TypedLeft(),
@@ -1020,6 +1024,7 @@ func (a spanEvents) Less(i, j int) bool {
 // merging the spans for the disjunctions (top-level OR branches). The resulting
 // spans are non-overlapping and ordered.
 func makeSpans(
+	evalCtx *parser.EvalContext,
 	constraints orIndexConstraints,
 	tableDesc *sqlbase.TableDescriptor,
 	index *sqlbase.IndexDescriptor,
@@ -1035,7 +1040,7 @@ func makeSpans(
 		}
 		allLogicalSpans = append(allLogicalSpans, s...)
 	}
-	allSpans, err := spansFromLogicalSpans(allLogicalSpans, tableDesc, index)
+	allSpans, err := spansFromLogicalSpans(evalCtx, allLogicalSpans, tableDesc, index)
 	if err != nil {
 		return nil, err
 	}
@@ -1057,7 +1062,10 @@ type logicalKeyPart struct {
 }
 
 func spansFromLogicalSpans(
-	logicalSpans []logicalSpan, tableDesc *sqlbase.TableDescriptor, index *sqlbase.IndexDescriptor,
+	evalCtx *parser.EvalContext,
+	logicalSpans []logicalSpan,
+	tableDesc *sqlbase.TableDescriptor,
+	index *sqlbase.IndexDescriptor,
 ) (roachpb.Spans, error) {
 	spans := make(roachpb.Spans, len(logicalSpans))
 	interstices := make([][]byte, len(index.ColumnDirections)+1)
@@ -1084,7 +1092,7 @@ func spansFromLogicalSpans(
 	for i, ls := range logicalSpans {
 		var s roachpb.Span
 		var err error
-		if s, err = spanFromLogicalSpan(ls, interstices); err != nil {
+		if s, err = spanFromLogicalSpan(evalCtx, ls, interstices); err != nil {
 			return nil, err
 		}
 		spans[i] = s
@@ -1094,7 +1102,9 @@ func spansFromLogicalSpans(
 
 // interstices[i] is inserted right before the ith key part. The last element of
 // interstices is inserted at the end (if all key parts are present).
-func spanFromLogicalSpan(ls logicalSpan, interstices [][]byte) (roachpb.Span, error) {
+func spanFromLogicalSpan(
+	evalCtx *parser.EvalContext, ls logicalSpan, interstices [][]byte,
+) (roachpb.Span, error) {
 	var s roachpb.Span
 	for i := 0; ; i++ {
 		s.Key = append(s.Key, interstices[i]...)
@@ -1126,7 +1136,7 @@ func spanFromLogicalSpan(ls logicalSpan, interstices [][]byte) (roachpb.Span, er
 	// be able to do the ±1.
 	if n := len(ls.end); n > 0 && ls.end[n-1].inclusive {
 		last := &ls.end[n-1]
-		nextVal, hasNext := nextInDirection(last.val, last.dir)
+		nextVal, hasNext := nextInDirection(evalCtx, last.val, last.dir)
 		if hasNext {
 			last.val = nextVal
 			last.inclusive = false
@@ -1164,17 +1174,19 @@ func encodeLogicalKeyPart(b []byte, part logicalKeyPart) ([]byte, error) {
 	return sqlbase.EncodeTableKey(b, part.val, part.dir)
 }
 
-func nextInDirection(val parser.Datum, dir encoding.Direction) (parser.Datum, bool) {
+func nextInDirection(
+	evalCtx *parser.EvalContext, val parser.Datum, dir encoding.Direction,
+) (parser.Datum, bool) {
 	if dir == encoding.Ascending {
-		if val.IsMax() {
+		if val.IsMax(evalCtx) {
 			return nil, false
 		}
-		return val.Next()
+		return val.Next(evalCtx)
 	}
-	if val.IsMin() {
+	if val.IsMin(evalCtx) {
 		return nil, false
 	}
-	return val.Prev()
+	return val.Prev(evalCtx)
 }
 
 // mergeAndSortSpans is used to merge a set of potentially overlapping spans
