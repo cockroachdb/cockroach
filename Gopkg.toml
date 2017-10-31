@@ -22,11 +22,6 @@ ignored = [
   "github.com/google/protobuf/examples/tutorial",
 ]
 
-# https://github.com/golang/sys/commit/52c393d#commitcomment-25259545
-[[constraint]]
-  name = "golang.org/x/sys"
-  revision = "833991df064f0ccd4f61120a093f36d74a4a7cb1"
-
 # The collation tables must never change.
 [[constraint]]
   name = "golang.org/x/text"

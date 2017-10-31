@@ -22,8 +22,8 @@
 [[projects]]
   name = "github.com/Azure/go-autorest"
   packages = ["autorest","autorest/adal","autorest/azure","autorest/date"]
-  revision = "7aa5b8a6f18b5c15910c767ab005fc4585221177"
-  version = "v9.1.1"
+  revision = "e90eb98af76c8cf5684aa79ecc8abce90afe484a"
+  version = "v9.2.0"
 
 [[projects]]
   branch = "parse-constraints-with-dash-in-pre"
@@ -90,7 +90,7 @@
   branch = "master"
   name = "github.com/apache/thrift"
   packages = ["lib/go/thrift"]
-  revision = "375bfee701d3caa74074f8afb3d6940e52c45c88"
+  revision = "a533ea1615e9df935e77b99440cf264c6b417e3e"
 
 [[projects]]
   branch = "master"
@@ -108,7 +108,7 @@
   branch = "master"
   name = "github.com/backtrace-labs/go-bcd"
   packages = ["."]
-  revision = "4ad9137a248599da4b00da0be6e71a75c9e1b8d9"
+  revision = "5d8e01b2f0438922289238fd3ba043761daf1102"
 
 [[projects]]
   branch = "master"
@@ -186,7 +186,7 @@
   branch = "master"
   name = "github.com/coreos/etcd"
   packages = ["raft","raft/raftpb"]
-  revision = "87ad10c1552f163f541e89786597db888af8e1a6"
+  revision = "63d0ac0fe62bc428c9c0120fdc837d83d898910c"
 
 [[projects]]
   name = "github.com/cpuguy83/go-md2man"
@@ -216,7 +216,7 @@
   branch = "master"
   name = "github.com/docker/docker"
   packages = ["api","api/types","api/types/blkiodev","api/types/container","api/types/events","api/types/filters","api/types/image","api/types/mount","api/types/network","api/types/registry","api/types/strslice","api/types/swarm","api/types/swarm/runtime","api/types/time","api/types/versions","api/types/volume","client","pkg/jsonmessage","pkg/namesgenerator","pkg/stdcopy","pkg/term","pkg/term/windows"]
-  revision = "e8730d052e625af3666176f7c1f596bb07fccbe2"
+  revision = "3ab20a87fa10360df891a67b8307399cdf1ab429"
 
 [[projects]]
   name = "github.com/docker/go-connections"
@@ -298,10 +298,10 @@
   version = "v0.3.0"
 
 [[projects]]
-  branch = "master"
   name = "github.com/go-ole/go-ole"
   packages = [".","oleutil"]
   revision = "2ecd927eaf828c4fc088fae349b28eed1480ff56"
+  version = "v0.0.1"
 
 [[projects]]
   branch = "master"
@@ -373,7 +373,7 @@
   branch = "master"
   name = "github.com/google/go-github"
   packages = ["github"]
-  revision = "35c06c17eff17d6ba18c6d8c5a84827f8ecf8679"
+  revision = "996760c56486beb81e91bb7bdb816f8c6f29284e"
 
 [[projects]]
   branch = "master"
@@ -385,7 +385,7 @@
   branch = "master"
   name = "github.com/google/pprof"
   packages = [".","driver","internal/binutils","internal/driver","internal/elfexec","internal/graph","internal/measurement","internal/plugin","internal/report","internal/symbolizer","internal/symbolz","profile","third_party/svg"]
-  revision = "4f5906cc8ae7060461a7bf1b350145ec2397104b"
+  revision = "2fb0552a69e2f33975f90698a2a1155e8c1a46f8"
 
 [[projects]]
   name = "github.com/googleapis/gax-go"
@@ -397,7 +397,7 @@
   branch = "master"
   name = "github.com/grpc-ecosystem/grpc-gateway"
   packages = ["protoc-gen-grpc-gateway","protoc-gen-grpc-gateway/descriptor","protoc-gen-grpc-gateway/generator","protoc-gen-grpc-gateway/gengateway","protoc-gen-grpc-gateway/httprule","runtime","runtime/internal","utilities"]
-  revision = "1fd8ba6a5cfc5857a56346a01501c517444d4b43"
+  revision = "b0be3cdef0ed27e3c420795e2efbfe9c27e839cc"
 
 [[projects]]
   branch = "master"
@@ -727,7 +727,7 @@
   branch = "master"
   name = "golang.org/x/crypto"
   packages = ["bcrypt","blowfish","curve25519","ed25519","ed25519/internal/edwards25519","ssh","ssh/terminal"]
-  revision = "2509b142fb2b797aa7587dad548f113b2c0f20ce"
+  revision = "bd6f299fb381e4c3393d1c4b1f0b94f5e77650c8"
 
 [[projects]]
   branch = "master"
@@ -754,9 +754,10 @@
   revision = "8e0aa688b654ef28caa72506fa5ec8dba9fc7690"
 
 [[projects]]
+  branch = "master"
   name = "golang.org/x/sys"
   packages = ["unix","windows"]
-  revision = "833991df064f0ccd4f61120a093f36d74a4a7cb1"
+  revision = "95c6576299259db960f6c5b9b69ea52422860fce"
 
 [[projects]]
   name = "golang.org/x/text"
@@ -779,7 +780,7 @@
   branch = "master"
   name = "google.golang.org/api"
   packages = ["gensupport","googleapi","googleapi/internal/uritemplates","googleapi/transport","internal","iterator","option","storage/v1","transport/http"]
-  revision = "672d215daf0631fcae4c08c2a4324a763aaaf789"
+  revision = "9ae0bf1fac9d6b6b388ab8811c3c85537b8adc10"
 
 [[projects]]
   name = "google.golang.org/appengine"
@@ -809,11 +810,11 @@
   branch = "master"
   name = "honnef.co/go/tools"
   packages = ["callgraph","callgraph/static","functions","internal/sharedcheck","lint","simple","ssa","ssa/ssautil","staticcheck","staticcheck/vrp","unused"]
-  revision = "4cd09d945fb3beeb0a478f1aa6522e1f03da362c"
+  revision = "80dfe5569e5c609daca40943b2385b4c6cc33b48"
 
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "7c57f84e8fea952f27c51cfe9665cb004d5cced2e9750cccce2bc16f934ef7fb"
+  inputs-digest = "107aefc02632222ca74fa3741b47c2e237af328f83854dc521a119664b361ce6"
   solver-name = "gps-cdcl"
   solver-version = 1
