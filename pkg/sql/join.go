@@ -328,17 +328,12 @@ func (p *planner) makeJoin(
 	//    6: right.y
 	//
 	//  renderNode has columns and render expressions:
-	//    1: a                   @1
-	//    2: b                   @2
-	//    3: left.a (hidden)     @1
-	//    4: left.b (hidden)     @2
-	//    5: left.x              @3
-	//    6: right.a (hidden)    @4
-	//    7: right.b (hidden)    @5
-	//    8: right.y             @6
-	//
-	// TODO(radu): we could omit left.a, left.b here and just set up the aliases
-	// accordingly. We can't omit right.a, right.b.
+	//    1: a aka left.a        @1
+	//    2: b aka left.b        @2
+	//    3: left.x              @3
+	//    4: right.a (hidden)    @4
+	//    5: right.b (hidden)    @5
+	//    6: right.y             @6
 	//
 	// If the join was OUTER, the columns would be:
 	//    1: a                   IFNULL(@1,@4)
@@ -356,14 +351,22 @@ func (p *planner) makeJoin(
 		sourceInfo: multiSourceInfo{info},
 	}
 	r.ivarHelper = parser.MakeIndexedVarHelper(r, len(info.sourceColumns))
-	numMerged := len(mergedColumns)
 	numLeft := len(leftInfo.sourceColumns)
+	numRight := len(rightInfo.sourceColumns)
 	rInfo := &dataSourceInfo{
 		sourceAliases: make(sourceAliases, 0, len(info.sourceAliases)),
 	}
 
 	var leftHidden, rightHidden util.FastIntSet
 
+	// In the example above, we "remapped" left.a to column 1 instead of including
+	// the column twice. We keep track of these columns so we can adjust the
+	// aliases accordingly: column i of the joinNode becomes column remapped[i] of
+	// the renderNode.
+	remapped := make([]int, numLeft+numRight)
+	for i := range remapped {
+		remapped[i] = -1
+	}
 	for i := range mergedColumns {
 		leftCol := n.pred.leftEqualityIndices[i]
 		rightCol := n.pred.rightEqualityIndices[i]
@@ -374,11 +377,13 @@ func (p *planner) makeJoin(
 			// The merged column is the same with the corresponding column from the
 			// left side.
 			expr = r.ivarHelper.IndexedVar(leftCol)
+			remapped[leftCol] = i
 		} else if n.joinType == joinTypeRightOuter &&
 			!sqlbase.DatumTypeHasCompositeKeyEncoding(leftInfo.sourceColumns[leftCol].Typ) {
 			// The merged column is the same with the corresponding column from the
 			// right side.
 			expr = r.ivarHelper.IndexedVar(numLeft + rightCol)
+			remapped[numLeft+rightCol] = i
 		} else {
 			c := &parser.CoalesceExpr{
 				Name: "IFNULL",
@@ -396,6 +401,11 @@ func (p *planner) makeJoin(
 		r.addRenderColumn(expr, symbolicExprStr(expr), leftInfo.sourceColumns[leftCol])
 	}
 	for i, c := range leftInfo.sourceColumns {
+		if remapped[i] != -1 {
+			// Column already included.
+			continue
+		}
+		remapped[i] = len(r.render)
 		expr := r.ivarHelper.IndexedVar(i)
 		if leftHidden.Contains(i) {
 			c.Hidden = true
@@ -403,6 +413,11 @@ func (p *planner) makeJoin(
 		r.addRenderColumn(expr, symbolicExprStr(expr), c)
 	}
 	for i, c := range rightInfo.sourceColumns {
+		if remapped[numLeft+i] != -1 {
+			// Column already included.
+			continue
+		}
+		remapped[numLeft+i] = len(r.render)
 		expr := r.ivarHelper.IndexedVar(numLeft + i)
 		if rightHidden.Contains(i) {
 			c.Hidden = true
@@ -411,29 +426,36 @@ func (p *planner) makeJoin(
 	}
 	rInfo.sourceColumns = r.columns
 
-	// Copy the aliases, shifting the columns as necessary. We extract any
+	// Copy the aliases, remapping the columns as necessary. We extract any
 	// anonymous aliases for special handling.
 	anonymousAlias := sourceAlias{name: anonymousTable}
 	for _, a := range info.sourceAliases {
-		shifted := a
-		shifted.columnSet = a.columnSet.Shift(numMerged)
+		var colSet util.FastIntSet
+		for col, ok := a.columnSet.Next(0); ok; col, ok = a.columnSet.Next(col + 1) {
+			colSet.Add(remapped[col])
+		}
 		if a.name == anonymousTable {
-			anonymousAlias = shifted
+			anonymousAlias.columnSet = colSet
 			continue
 		}
-		rInfo.sourceAliases = append(rInfo.sourceAliases, shifted)
+		rInfo.sourceAliases = append(rInfo.sourceAliases, sourceAlias{name: a.name, columnSet: colSet})
 	}
 
 	for i := range mergedColumns {
 		anonymousAlias.columnSet.Add(i)
 	}
 
-	// Remove any anonymous aliases that refer to equality columns.
-	for _, col := range n.pred.leftEqualityIndices {
-		anonymousAlias.columnSet.Remove(numMerged + col)
+	// Remove any anonymous aliases that refer to hidden equality columns (i.e.
+	// those that weren't equivalent to the merged column).
+	for i, col := range n.pred.leftEqualityIndices {
+		if target := remapped[col]; target != i {
+			anonymousAlias.columnSet.Remove(target)
+		}
 	}
-	for _, col := range n.pred.rightEqualityIndices {
-		anonymousAlias.columnSet.Remove(numMerged + numLeft + col)
+	for i, col := range n.pred.rightEqualityIndices {
+		if target := remapped[numLeft+col]; target != i {
+			anonymousAlias.columnSet.Remove(remapped[numLeft+col])
+		}
 	}
 	rInfo.sourceAliases = append(rInfo.sourceAliases, anonymousAlias)
 	return planDataSource{info: rInfo, plan: r}, nil
