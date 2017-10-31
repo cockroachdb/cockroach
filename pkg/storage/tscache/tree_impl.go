@@ -16,7 +16,6 @@ package tscache
 
 import (
 	"fmt"
-	"time"
 	"unsafe"
 
 	"github.com/google/btree"
@@ -30,28 +29,16 @@ import (
 )
 
 const (
-	// MinTSCacheWindow specifies the minimum duration to hold entries in the
-	// cache before allowing eviction. After this window expires, transactions
-	// writing to this node with timestamps lagging by more than MinTSCacheWindow
-	// will necessarily have to advance their commit timestamp.
-	MinTSCacheWindow = 10 * time.Second
-
 	// defaultCacheSize is the default size in bytes for a store's timestamp
 	// cache. Note that the timestamp cache can use more memory than this
 	// because it holds on to all entries that are younger than
-	// MinTSCacheWindow.
+	// MinRetentionWindow.
 	defaultCacheSize = 64 << 20 // 64 MB
 
 	// Max entries in each btree node.
 	// TODO(peter): Not yet tuned.
 	btreeDegree = 64
 )
-
-// A cacheValue combines the timestamp with an optional txn ID.
-type cacheValue struct {
-	timestamp hlc.Timestamp
-	txnID     uuid.UUID // zero for no transaction
-}
 
 func makeCacheEntry(key cache.IntervalKey, value cacheValue) *cache.Entry {
 	alloc := struct {
@@ -81,12 +68,14 @@ func cacheEntrySize(start, end interval.Comparable) uint64 {
 	return n
 }
 
-// cacheImpl implements the Cache interface. It maintains an interval tree FIFO
+// treeImpl implements the Cache interface. It maintains an interval tree FIFO
 // cache of keys or key ranges and the timestamps at which they were most
 // recently read or written. If a timestamp was read or written by a
 // transaction, the txn ID is stored with the timestamp to avoid advancing
 // timestamps on successive requests from the same transaction.
-type cacheImpl struct {
+//
+// treeImpl is NOT safe for concurrent use by multiple goroutines.
+type treeImpl struct {
 	rCache, wCache   *cache.IntervalCache
 	lowWater, latest hlc.Timestamp
 
@@ -103,26 +92,11 @@ type cacheImpl struct {
 	maxBytes uint64
 }
 
-var _ Cache = &cacheImpl{}
+var _ Cache = &treeImpl{}
 
-// lowWaterTxnIDMarker is a special txn ID that identifies a cache entry as a
-// low water mark. It is specified when a lease is acquired to clear the
-// timestamp cache for a range. Also see Cache.getMax where this txn
-// ID is checked in order to return whether the max read/write timestamp came
-// from a regular entry or one of these low water mark entries.
-var lowWaterTxnIDMarker = func() uuid.UUID {
-	// The specific txn ID used here isn't important. We use something that is a)
-	// non-zero and b) obvious.
-	u, err := uuid.FromString("11111111-1111-1111-1111-111111111111")
-	if err != nil {
-		panic(err)
-	}
-	return u
-}()
-
-// newCacheImpl returns a new cacheImpl with the supplied hybrid clock.
-func newCacheImpl(clock *hlc.Clock) *cacheImpl {
-	tc := &cacheImpl{
+// newTreeImpl returns a new treeImpl with the supplied hybrid clock.
+func newTreeImpl(clock *hlc.Clock) *treeImpl {
+	tc := &treeImpl{
 		rCache:   cache.NewIntervalCache(cache.Config{Policy: cache.CacheFIFO}),
 		wCache:   cache.NewIntervalCache(cache.Config{Policy: cache.CacheFIFO}),
 		maxBytes: uint64(defaultCacheSize),
@@ -136,7 +110,7 @@ func newCacheImpl(clock *hlc.Clock) *cacheImpl {
 }
 
 // clear clears the cache and resets the low-water mark.
-func (tc *cacheImpl) clear(lowWater hlc.Timestamp) {
+func (tc *treeImpl) clear(lowWater hlc.Timestamp) {
 	tc.requests = btree.New(btreeDegree)
 	tc.rCache.Clear()
 	tc.wCache.Clear()
@@ -145,21 +119,16 @@ func (tc *cacheImpl) clear(lowWater hlc.Timestamp) {
 }
 
 // len returns the total number of read and write intervals in the cache.
-func (tc *cacheImpl) len() int {
+func (tc *treeImpl) len() int {
 	return tc.rCache.Len() + tc.wCache.Len() + tc.reqSpans
 }
 
-// byteCount returns the total memory usage of the cache.
-func (tc *cacheImpl) byteCount() uint64 {
-	return tc.bytes
-}
-
-// add the specified timestamp to the cache covering the range of
-// keys from start to end. If end is nil, the range covers the start
-// key only. txnID is nil for no transaction. readTSCache specifies
-// whether the command adding this timestamp should update the read
-// timestamp; false to update the write timestamp cache.
-func (tc *cacheImpl) add(
+// add the specified timestamp to the cache covering the range of keys from
+// start to end. If end is nil, the range covers the start key only. txnID is
+// nil for no transaction. readTSCache specifies whether the command adding this
+// timestamp should update the read timestamp; false to update the write
+// timestamp cache.
+func (tc *treeImpl) add(
 	start, end roachpb.Key, timestamp hlc.Timestamp, txnID uuid.UUID, readTSCache bool,
 ) {
 	// This gives us a memory-efficient end key if end is empty.
@@ -177,7 +146,7 @@ func (tc *cacheImpl) add(
 		}
 
 		addRange := func(r interval.Range) {
-			value := cacheValue{timestamp: timestamp, txnID: txnID}
+			value := cacheValue{ts: timestamp, txnID: txnID}
 			key := tcache.MakeKey(r.Start, r.End)
 			entry := makeCacheEntry(key, value)
 			tc.bytes += cacheEntrySize(r.Start, r.End)
@@ -208,7 +177,7 @@ func (tc *cacheImpl) add(
 			// compute the current size of the entry and then use the new size at the
 			// end of this iteration to update Cache.bytes.
 			oldSize := cacheEntrySize(key.Start, key.End)
-			if cv.timestamp.Less(timestamp) {
+			if cv.ts.Less(timestamp) {
 				// The existing interval has a timestamp less than the new
 				// interval. Compare interval ranges to determine how to
 				// modify existing interval.
@@ -221,7 +190,7 @@ func (tc *cacheImpl) add(
 					//
 					// New: ------------
 					// Old:
-					*cv = cacheValue{timestamp: timestamp, txnID: txnID}
+					*cv = cacheValue{ts: timestamp, txnID: txnID}
 					tcache.MoveToEnd(entry)
 					return
 				case sCmp <= 0 && eCmp >= 0:
@@ -269,7 +238,7 @@ func (tc *cacheImpl) add(
 				default:
 					panic(fmt.Sprintf("no overlap between %v and %v", key.Range, r))
 				}
-			} else if timestamp.Less(cv.timestamp) {
+			} else if timestamp.Less(cv.ts) {
 				// The existing interval has a timestamp greater than the new interval.
 				// Compare interval ranges to determine how to modify new interval before
 				// adding it to the timestamp cache.
@@ -376,7 +345,7 @@ func (tc *cacheImpl) add(
 					// New:
 					// Nil: ============
 					// Old:
-					cv.txnID = uuid.UUID{}
+					cv.txnID = noTxnID
 					tc.bytes += cacheEntrySize(key.Start, key.End) - oldSize
 					return
 				case sCmp == 0 && eCmp > 0:
@@ -389,7 +358,7 @@ func (tc *cacheImpl) add(
 					// New:           --
 					// Nil: ==========
 					// Old:
-					cv.txnID = uuid.UUID{}
+					cv.txnID = noTxnID
 					r.Start = key.End
 				case sCmp < 0 && eCmp == 0:
 					// New contains old, right-aligned. Clear ownership of the
@@ -401,7 +370,7 @@ func (tc *cacheImpl) add(
 					// New: --
 					// Nil:   ==========
 					// Old:
-					cv.txnID = uuid.UUID{}
+					cv.txnID = noTxnID
 					r.End = key.Start
 				case sCmp < 0 && eCmp > 0:
 					// New contains old; split into three segments with the
@@ -413,10 +382,10 @@ func (tc *cacheImpl) add(
 					// New: --        --
 					// Nil:   ========
 					// Old:
-					cv.txnID = uuid.UUID{}
+					cv.txnID = noTxnID
 
 					newKey := tcache.MakeKey(r.Start, key.Start)
-					newEntry := makeCacheEntry(newKey, cacheValue{timestamp: timestamp, txnID: txnID})
+					newEntry := makeCacheEntry(newKey, cacheValue{ts: timestamp, txnID: txnID})
 					addEntryAfter(newEntry, entry)
 					r.Start = key.End
 				case sCmp > 0 && eCmp < 0:
@@ -429,7 +398,7 @@ func (tc *cacheImpl) add(
 					// New:
 					// Nil:     ====
 					// Old: ----    ----
-					txnID = uuid.UUID{}
+					txnID = noTxnID
 					oldEnd := key.End
 					key.End = r.Start
 
@@ -446,7 +415,7 @@ func (tc *cacheImpl) add(
 					// New:
 					// Nil:     ========
 					// Old: ----
-					txnID = uuid.UUID{}
+					txnID = noTxnID
 					key.End = r.Start
 				case sCmp == 0:
 					// Old contains new, left-aligned; truncate old start and
@@ -457,7 +426,7 @@ func (tc *cacheImpl) add(
 					// New:
 					// Nil: ========
 					// Old:         ----
-					txnID = uuid.UUID{}
+					txnID = noTxnID
 					key.Start = r.End
 				case eCmp > 0:
 					// Left partial overlap; truncate old end and split new into
@@ -472,7 +441,7 @@ func (tc *cacheImpl) add(
 					key.End, r.Start = r.Start, key.End
 
 					newKey := tcache.MakeKey(key.End, r.Start)
-					newCV := cacheValue{timestamp: cv.timestamp}
+					newCV := cacheValue{ts: cv.ts}
 					newEntry := makeCacheEntry(newKey, newCV)
 					addEntryAfter(newEntry, entry)
 				case sCmp < 0:
@@ -488,7 +457,7 @@ func (tc *cacheImpl) add(
 					key.Start, r.End = r.End, key.Start
 
 					newKey := tcache.MakeKey(r.End, key.Start)
-					newCV := cacheValue{timestamp: cv.timestamp}
+					newCV := cacheValue{ts: cv.ts}
 					newEntry := makeCacheEntry(newKey, newCV)
 					addEntryAfter(newEntry, entry)
 				default:
@@ -502,7 +471,7 @@ func (tc *cacheImpl) add(
 }
 
 // AddRequest implements the Cache interface.
-func (tc *cacheImpl) AddRequest(req *Request) {
+func (tc *treeImpl) AddRequest(req *Request) {
 	if len(req.Reads) == 0 && len(req.Writes) == 0 && req.Txn.Key == nil {
 		// The request didn't contain any spans for the timestamp cache.
 		return
@@ -522,7 +491,7 @@ func (tc *cacheImpl) AddRequest(req *Request) {
 	// Bump the latest timestamp and evict any requests that are now too old.
 	tc.latest.Forward(req.Timestamp)
 	edge := tc.latest
-	edge.WallTime -= MinTSCacheWindow.Nanoseconds()
+	edge.WallTime -= MinRetentionWindow.Nanoseconds()
 
 	// Evict requests as long as the number of cached spans (both in the requests
 	// queue and the interval caches) is larger than the eviction threshold.
@@ -554,7 +523,7 @@ func (tc *cacheImpl) AddRequest(req *Request) {
 }
 
 // ExpandRequests implements the Cache interface.
-func (tc *cacheImpl) ExpandRequests(span roachpb.RSpan, timestamp hlc.Timestamp) {
+func (tc *treeImpl) ExpandRequests(span roachpb.RSpan, timestamp hlc.Timestamp) {
 	// Find all of the requests that have a timestamp greater than or equal to
 	// the specified timestamp. Note that we can't delete the requests during the
 	// btree iteration.
@@ -595,34 +564,34 @@ func (tc *cacheImpl) ExpandRequests(span roachpb.RSpan, timestamp hlc.Timestamp)
 			// EndTransactionRequests.
 			key := keys.TransactionKey(req.Txn.Key, req.TxnID)
 			// We set txnID=nil because we want hits for same txn ID.
-			tc.add(key, nil, req.Timestamp, uuid.UUID{}, false /* readTSCache */)
+			tc.add(key, nil, req.Timestamp, noTxnID, false /* readTSCache */)
 		}
 		req.release()
 	}
 }
 
 // SetLowWater implements the Cache interface.
-func (tc *cacheImpl) SetLowWater(start, end roachpb.Key, timestamp hlc.Timestamp) {
+func (tc *treeImpl) SetLowWater(start, end roachpb.Key, timestamp hlc.Timestamp) {
 	tc.add(start, end, timestamp, lowWaterTxnIDMarker, false)
 	tc.add(start, end, timestamp, lowWaterTxnIDMarker, true)
 }
 
 // GlobalLowWater implements the Cache interface.
-func (tc *cacheImpl) GlobalLowWater() hlc.Timestamp {
+func (tc *treeImpl) GlobalLowWater() hlc.Timestamp {
 	return tc.lowWater
 }
 
 // GetMaxRead implements the Cache interface.
-func (tc *cacheImpl) GetMaxRead(start, end roachpb.Key) (hlc.Timestamp, uuid.UUID, bool) {
+func (tc *treeImpl) GetMaxRead(start, end roachpb.Key) (hlc.Timestamp, uuid.UUID, bool) {
 	return tc.getMax(start, end, true)
 }
 
 // GetMaxWrite implements the Cache interface.
-func (tc *cacheImpl) GetMaxWrite(start, end roachpb.Key) (hlc.Timestamp, uuid.UUID, bool) {
+func (tc *treeImpl) GetMaxWrite(start, end roachpb.Key) (hlc.Timestamp, uuid.UUID, bool) {
 	return tc.getMax(start, end, false)
 }
 
-func (tc *cacheImpl) getMax(
+func (tc *treeImpl) getMax(
 	start, end roachpb.Key, readTSCache bool,
 ) (hlc.Timestamp, uuid.UUID, bool) {
 	if len(end) == 0 {
@@ -637,12 +606,12 @@ func (tc *cacheImpl) getMax(
 	}
 	for _, o := range cache.GetOverlaps(start, end) {
 		ce := o.Value.(*cacheValue)
-		if maxTS.Less(ce.timestamp) {
+		if maxTS.Less(ce.ts) {
 			ok = true
-			maxTS = ce.timestamp
+			maxTS = ce.ts
 			maxTxnID = ce.txnID
-		} else if maxTS == ce.timestamp && maxTxnID != ce.txnID {
-			maxTxnID = uuid.UUID{}
+		} else if maxTS == ce.ts && maxTxnID != ce.txnID {
+			maxTxnID = noTxnID
 		}
 	}
 	if maxTxnID == lowWaterTxnIDMarker {
@@ -652,31 +621,31 @@ func (tc *cacheImpl) getMax(
 }
 
 // shouldEvict returns true if the cache entry's timestamp is no
-// longer within the MinTSCacheWindow.
-func (tc *cacheImpl) shouldEvict(size int, key, value interface{}) bool {
+// longer within the MinRetentionWindow.
+func (tc *treeImpl) shouldEvict(size int, key, value interface{}) bool {
 	if tc.bytes <= tc.maxBytes {
 		return false
 	}
 	ce := value.(*cacheValue)
 	// In case low water mark was set higher, evict any entries
 	// which occurred before it.
-	if ce.timestamp.Less(tc.lowWater) {
+	if ce.ts.Less(tc.lowWater) {
 		return true
 	}
 	// Compute the edge of the cache window.
 	edge := tc.latest
-	edge.WallTime -= MinTSCacheWindow.Nanoseconds()
+	edge.WallTime -= MinRetentionWindow.Nanoseconds()
 	// We evict and update the low water mark if the proposed evictee's
 	// timestamp is <= than the edge of the window.
-	if !edge.Less(ce.timestamp) {
-		tc.lowWater = ce.timestamp
+	if !edge.Less(ce.ts) {
+		tc.lowWater = ce.ts
 		return true
 	}
 	return false
 }
 
 // onEvicted is called when an entry is evicted from the cache.
-func (tc *cacheImpl) onEvicted(k, v interface{}) {
+func (tc *treeImpl) onEvicted(k, v interface{}) {
 	ck := k.(*cache.IntervalKey)
 	reqSize := cacheEntrySize(ck.Start, ck.End)
 	if tc.bytes < reqSize {
