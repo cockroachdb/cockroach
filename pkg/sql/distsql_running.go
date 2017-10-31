@@ -139,7 +139,8 @@ func (dsp *distSQLPlanner) Run(
 	thisNodeID := dsp.nodeDesc.NodeID
 
 	evalCtxProto := distsqlrun.MakeEvalContext(evalCtx)
-	for _, s := range evalCtx.SearchPath {
+	iter := evalCtx.SearchPath.Iter()
+	for s, ok := iter(); ok; s, ok = iter() {
 		evalCtxProto.SearchPath = append(evalCtxProto.SearchPath, s)
 	}
 

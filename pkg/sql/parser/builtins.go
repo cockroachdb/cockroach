@@ -1809,8 +1809,14 @@ CockroachDB supports the following flags:
 						return nil, err
 					}
 				}
-				for _, p := range ctx.SearchPath {
-					if !includePgCatalog && p == "pg_catalog" {
+				var iter func() (string, bool)
+				if includePgCatalog {
+					iter = ctx.SearchPath.Iter()
+				} else {
+					iter = ctx.SearchPath.IterWithoutImplicitPGCatalog()
+				}
+				for p, ok := iter(); ok; p, ok = iter() {
+					if p == ctx.Database {
 						continue
 					}
 					if err := schemas.Append(NewDString(p)); err != nil {

@@ -9,7 +9,7 @@ SET SEARCH_PATH = foo
 query T
 SHOW SEARCH_PATH
 ----
-pg_catalog, foo
+foo
 
 statement ok
 RESET SEARCH_PATH
@@ -17,7 +17,7 @@ RESET SEARCH_PATH
 query T
 SHOW SEARCH_PATH
 ----
-pg_catalog
+·
 
 statement error variable "server_version" cannot be reset
 RESET SERVER_VERSION
@@ -30,7 +30,7 @@ SET search_path = foo
 query T
 SHOW search_path
 ----
-pg_catalog, foo
+foo
 
 statement ok
 RESET search_path
@@ -38,7 +38,7 @@ RESET search_path
 query T
 SHOW search_path
 ----
-pg_catalog
+·
 
 statement ok
 RESET client_encoding; RESET NAMES

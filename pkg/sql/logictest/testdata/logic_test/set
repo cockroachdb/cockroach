@@ -87,7 +87,7 @@ distsql                        off
 extra_float_digits             ·
 max_index_keys                 32
 node_id                        1
-search_path                    pg_catalog
+search_path                    ·
 server_version                 9.5.0
 session_user                   root
 sql_safe_updates               false
