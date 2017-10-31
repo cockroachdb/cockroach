@@ -4,7 +4,6 @@ import { connect } from "react-redux";
 import { createSelector } from "reselect";
 
 import { nodesSummarySelector, NodesSummary } from "src/redux/nodes";
-import { AdminUIState } from "src/redux/state";
 import { Bytes as formatBytes } from "src/util/format";
 import { NodesOverview } from "src/views/cluster/containers/nodesOverview";
 import { CapacityChart } from "./capacity";
@@ -58,8 +57,8 @@ const mapStateToCapacityUsageProps = createSelector(
     return {
       usedCapacity: capacityUsed,
       usableCapacity: usableCapacity,
-    }
-  }
+    };
+  },
 );
 
 // tslint:disable-next-line:variable-name
@@ -104,8 +103,8 @@ const mapStateToNodeLivenessProps = createSelector(
       suspectNodes: nodeCounts.suspect,
       deadNodes: nodeCounts.dead,
     };
-  }
-}
+  },
+);
 
 // tslint:disable-next-line:variable-name
 const NodeLivenessConnected = connect(mapStateToNodeLivenessProps)(NodeLiveness);
@@ -149,8 +148,8 @@ const mapStateToReplicationStatusProps = createSelector(
       underReplicatedRanges: underReplicatedRanges,
       unavailableRanges: unavailableRanges,
     };
-  }
-}
+  },
+);
 
 // tslint:disable-next-line:variable-name
 const ReplicationStatusConnected = connect(mapStateToReplicationStatusProps)(ReplicationStatus);
