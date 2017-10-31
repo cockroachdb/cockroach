@@ -15,6 +15,8 @@
 package sql
 
 import (
+	"fmt"
+
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/config"
@@ -129,4 +131,10 @@ func GetTableDesc(cfg config.SystemConfig, id sqlbase.ID) (*sqlbase.TableDescrip
 		return desc.GetTable(), nil
 	}
 	return nil, nil
+}
+
+var GenerateSubzoneSpansHook = func(
+	*sqlbase.TableDescriptor, []config.Subzone,
+) ([]config.SubzoneSpan, error) {
+	return nil, fmt.Errorf("setting zone configs on indexes or partitions requires a CCL binary")
 }
