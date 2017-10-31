@@ -477,6 +477,14 @@ If this flag is unspecified, the temporary subdirectory will be located under
 the root of the first store.`,
 	}
 
+	ExternalIODir = FlagInfo{
+		Name: "external-io-dir",
+		Description: `
+The directory path under which operations like BACKUP/RESTORE/IMPORT are allowed to read and write files.
+If left empty, defaults to the "extern" subdirectory of the first store directory.
+`,
+	}
+
 	URL = FlagInfo{
 		Name:   "url",
 		EnvVar: "COCKROACH_URL",

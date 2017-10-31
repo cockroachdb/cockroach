@@ -71,6 +71,8 @@ func testExportStore(t *testing.T, storeURI string, skipSingleFile bool) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
+	testSettings.ExternalIODir = conf.LocalFile.Path
 	// Setup a sink for the given args.
 	s, err := MakeExportStorage(ctx, conf, testSettings)
 	if err != nil {

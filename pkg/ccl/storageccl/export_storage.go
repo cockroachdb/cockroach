@@ -146,7 +146,7 @@ func MakeExportStorage(
 ) (ExportStorage, error) {
 	switch dest.Provider {
 	case roachpb.ExportStorageProvider_LocalFile:
-		return makeLocalStorage(dest.LocalFile.Path)
+		return makeLocalStorage(dest.LocalFile.Path, settings)
 	case roachpb.ExportStorageProvider_Http:
 		return makeHTTPStorage(dest.HttpPath.BaseUri)
 	case roachpb.ExportStorageProvider_S3:
@@ -214,9 +214,19 @@ func MakeLocalStorageURI(path string) (string, error) {
 	return fmt.Sprintf("nodelocal://%s", path), nil
 }
 
-func makeLocalStorage(base string) (ExportStorage, error) {
+func makeLocalStorage(base string, settings *cluster.Settings) (ExportStorage, error) {
 	if base == "" {
 		return nil, errors.Errorf("Local storage requested but path not provided")
+	}
+	base = filepath.Clean(base)
+
+	if settings != nil {
+		if settings.ExternalIODir == "" {
+			return nil, errors.Errorf("local file access is disabled")
+		}
+		if !strings.HasPrefix(base, settings.ExternalIODir) {
+			return nil, errors.Errorf("local file access to paths outside of external-io-dir is not allowed")
+		}
 	}
 	return &localFileStorage{base: base}, nil
 }

@@ -401,6 +401,24 @@ var cacheSizeValue = newBytesOrPercentageValue(&serverCfg.CacheSize, memoryPerce
 var sqlSizeValue = newBytesOrPercentageValue(&serverCfg.SQLMemoryPoolSize, memoryPercentResolver)
 var diskTempStorageSizeValue = newBytesOrPercentageValue(nil /* v */, nil /* percentResolver */)
 
+func initExternalIODir(
+	ctx context.Context, firstStore base.StoreSpec,
+) (string, error) {
+	if externalIODir == "" && !firstStore.InMemory {
+		externalIODir = filepath.Join(firstStore.Path, "extern")
+	}
+	if externalIODir == "" || externalIODir == "disabled" {
+		panic(externalIODir)
+		log.Infof(ctx, "external IO disabled")
+		return "", nil
+	}
+	if !filepath.IsAbs(externalIODir) {
+		return "", errors.Errorf("%s path must be absolute", cliflags.ExternalIODir.Name)
+	}
+	log.Infof(ctx, "external IO dir: %q", externalIODir)
+	return externalIODir, nil
+}
+
 func initTempStorageConfig(
 	ctx context.Context, firstStore base.StoreSpec,
 ) (base.TempStorageConfig, error) {
@@ -509,6 +527,9 @@ func runStart(cmd *cobra.Command, args []string) error {
 
 	var err error
 	if serverCfg.TempStorageConfig, err = initTempStorageConfig(ctx, serverCfg.Stores.Specs[0]); err != nil {
+		return err
+	}
+	if serverCfg.Settings.ExternalIODir, err = initExternalIODir(ctx, serverCfg.Stores.Specs[0]); err != nil {
 		return err
 	}
 
