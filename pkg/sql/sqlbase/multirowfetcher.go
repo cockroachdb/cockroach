@@ -133,6 +133,8 @@ type MultiRowFetcher struct {
 	// or not when StartScan is invoked.
 	reverse bool
 
+	lockForUpdate bool
+
 	// maxKeysPerRow memoizes the maximum number of keys per row
 	// out of all the tables. This is used to calculate the kvFetcher's
 	// firstBatchLimit.
@@ -180,13 +182,16 @@ type MultiRowFetcher struct {
 // non-primary index, valNeededForCol can only be true for the columns in the
 // index.
 func (mrf *MultiRowFetcher) Init(
-	tables []MultiRowFetcherTableArgs, reverse bool, returnRangeInfo bool, alloc *DatumAlloc,
+	tables []MultiRowFetcherTableArgs,
+	reverse, lockForUpdate, returnRangeInfo bool,
+	alloc *DatumAlloc,
 ) error {
 	if len(tables) == 0 {
 		panic("no tables to fetch from")
 	}
 
 	mrf.reverse = reverse
+	mrf.lockForUpdate = lockForUpdate
 	mrf.returnRangeInfo = returnRangeInfo
 	mrf.alloc = alloc
 	mrf.allEquivSignatures = make(map[string]int, len(tables))
@@ -350,7 +355,7 @@ func (mrf *MultiRowFetcher) StartScan(
 		firstBatchLimit++
 	}
 
-	f, err := makeKVFetcher(txn, spans, mrf.reverse, limitBatches, firstBatchLimit, mrf.returnRangeInfo)
+	f, err := makeKVFetcher(txn, spans, mrf.reverse, mrf.lockForUpdate, limitBatches, firstBatchLimit, mrf.returnRangeInfo)
 	if err != nil {
 		return err
 	}
