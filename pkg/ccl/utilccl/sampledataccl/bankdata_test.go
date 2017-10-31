@@ -12,6 +12,7 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"path/filepath"
 	"testing"
 
 	"golang.org/x/net/context"
@@ -111,8 +112,11 @@ func TestSplit(t *testing.T) {
 func TestToBackup(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
+	outerDir, dirCleanupFn := testutils.TempDir(t)
+	defer dirCleanupFn()
+
 	ctx := context.Background()
-	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{ExternalIODir: outerDir})
 	defer s.Stopper().Stop(ctx)
 
 	const payloadBytes = 100
@@ -124,9 +128,7 @@ func TestToBackup(t *testing.T) {
 	for _, rows := range []int{1, 10} {
 		for _, chunkBytes := range chunkBytesSizes {
 			t.Run(fmt.Sprintf("rows=%d/chunk=%d", rows, chunkBytes), func(t *testing.T) {
-				dir, dirCleanupFn := testutils.TempDir(t)
-				defer dirCleanupFn()
-
+				dir := filepath.Join(outerDir, fmt.Sprintf("%d-%d", rows, chunkBytes))
 				data := Bank(rows, payloadBytes, bankConfigDefault)
 				backup, err := toBackup(t, data, dir, chunkBytes)
 				if err != nil {

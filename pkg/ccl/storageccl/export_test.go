@@ -34,12 +34,12 @@ func TestExportCmd(t *testing.T) {
 	ctx := context.Background()
 	dir, dirCleanupFn := testutils.TempDir(t)
 	defer dirCleanupFn()
-	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{})
+	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{ServerArgs: base.TestServerArgs{ExternalIODir: dir}})
 	defer tc.Stopper().Stop(ctx)
 	kvDB := tc.Server(0).KVClient().(*client.DB)
 
 	exportAndSlurpOne := func(
-		start hlc.Timestamp, mvccFilter roachpb.MVCCFilter,
+		t *testing.T, start hlc.Timestamp, mvccFilter roachpb.MVCCFilter,
 	) ([]string, []engine.MVCCKeyValue) {
 		req := &roachpb.ExportRequest{
 			Span:      roachpb.Span{Key: keys.UserTableDataMin, EndKey: keys.MaxKey},
@@ -89,11 +89,11 @@ func TestExportCmd(t *testing.T) {
 		mvccAllFiles    []string
 		mvccAllKVs      []engine.MVCCKeyValue
 	}
-	exportAndSlurp := func(start hlc.Timestamp) ExportAndSlurpResult {
+	exportAndSlurp := func(t *testing.T, start hlc.Timestamp) ExportAndSlurpResult {
 		var ret ExportAndSlurpResult
 		ret.end = hlc.NewClock(hlc.UnixNano, time.Nanosecond).Now()
-		ret.mvccLatestFiles, ret.mvccLatestKVs = exportAndSlurpOne(start, roachpb.MVCCFilter_Latest)
-		ret.mvccAllFiles, ret.mvccAllKVs = exportAndSlurpOne(start, roachpb.MVCCFilter_All)
+		ret.mvccLatestFiles, ret.mvccLatestKVs = exportAndSlurpOne(t, start, roachpb.MVCCFilter_Latest)
+		ret.mvccAllFiles, ret.mvccAllKVs = exportAndSlurpOne(t, start, roachpb.MVCCFilter_All)
 		return ret
 	}
 
@@ -127,14 +127,14 @@ func TestExportCmd(t *testing.T) {
 		sqlDB := sqlutils.MakeSQLRunner(t, tc.Conns[0])
 		sqlDB.Exec(`INSERT INTO mvcclatest.export VALUES (1, 1), (3, 3), (4, 4)`)
 		sqlDB.Exec(`DELETE from mvcclatest.export WHERE id = 4`)
-		res1 = exportAndSlurp(hlc.Timestamp{})
+		res1 = exportAndSlurp(t, hlc.Timestamp{})
 		expect(t, res1, 1, 2, 1, 4)
 	})
 
 	var res2 ExportAndSlurpResult
 	t.Run("ts2", func(t *testing.T) {
 		// If nothing has changed, nothing should be exported.
-		res2 = exportAndSlurp(res1.end)
+		res2 = exportAndSlurp(t, res1.end)
 		expect(t, res2, 0, 0, 0, 0)
 	})
 
@@ -144,7 +144,7 @@ func TestExportCmd(t *testing.T) {
 		sqlDB := sqlutils.MakeSQLRunner(t, tc.Conns[0])
 		sqlDB.Exec(`INSERT INTO mvcclatest.export VALUES (2, 2)`)
 		sqlDB.Exec(`UPSERT INTO mvcclatest.export VALUES (2, 8)`)
-		res3 = exportAndSlurp(res2.end)
+		res3 = exportAndSlurp(t, res2.end)
 		expect(t, res3, 1, 1, 1, 2)
 	})
 
@@ -152,7 +152,7 @@ func TestExportCmd(t *testing.T) {
 	t.Run("ts4", func(t *testing.T) {
 		sqlDB := sqlutils.MakeSQLRunner(t, tc.Conns[0])
 		sqlDB.Exec(`DELETE FROM mvcclatest.export WHERE id = 3`)
-		res4 = exportAndSlurp(res3.end)
+		res4 = exportAndSlurp(t, res3.end)
 		expect(t, res4, 1, 1, 1, 1)
 		if len(res4.mvccLatestKVs[0].Value) != 0 {
 			v := roachpb.Value{RawBytes: res4.mvccLatestKVs[0].Value}
@@ -168,7 +168,7 @@ func TestExportCmd(t *testing.T) {
 	t.Run("ts5", func(t *testing.T) {
 		sqlDB := sqlutils.MakeSQLRunner(t, tc.Conns[0])
 		sqlDB.Exec(`ALTER TABLE mvcclatest.export SPLIT AT VALUES (2)`)
-		res5 = exportAndSlurp(hlc.Timestamp{})
+		res5 = exportAndSlurp(t, hlc.Timestamp{})
 		expect(t, res5, 2, 2, 2, 7)
 	})
 }

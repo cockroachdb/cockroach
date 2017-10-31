@@ -244,7 +244,7 @@ func runTestImport(t *testing.T, init func(*cluster.Settings)) {
 	}}
 
 	ctx := context.Background()
-	args := base.TestServerArgs{Knobs: knobs}
+	args := base.TestServerArgs{Knobs: knobs, ExternalIODir: dir}
 	// TODO(dan): This currently doesn't work with AddSSTable on in-memory
 	// stores because RocksDB's InMemoryEnv doesn't support NewRandomRWFile
 	// (which breaks the global-seqno rewrite used when the added sstable

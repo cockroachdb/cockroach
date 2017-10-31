@@ -39,12 +39,12 @@ const testSSTMaxSize = 1024 * 1024 * 50
 func TestLoadCSV(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	ctx := context.Background()
-	defer s.Stopper().Stop(ctx)
-
 	tmp, tmpCleanup := testutils.TempDir(t)
 	defer tmpCleanup()
+
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{ExternalIODir: tmp})
+	ctx := context.Background()
+	defer s.Stopper().Stop(ctx)
 
 	const (
 		tableName   = "t"
@@ -432,7 +432,10 @@ func TestImportStmt(t *testing.T) {
 		rowsPerFile = 1000
 	)
 	ctx := context.Background()
-	tc := testcluster.StartTestCluster(t, nodes, base.TestClusterArgs{})
+	dir, cleanup := testutils.TempDir(t)
+	defer cleanup()
+
+	tc := testcluster.StartTestCluster(t, nodes, base.TestClusterArgs{ServerArgs: base.TestServerArgs{ExternalIODir: dir}})
 	defer tc.Stopper().Stop(ctx)
 	conn := tc.Conns[0]
 
@@ -440,8 +443,6 @@ func TestImportStmt(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	dir, cleanup := testutils.TempDir(t)
-	defer cleanup()
 	tablePath := filepath.Join(dir, "table")
 	if err := ioutil.WriteFile(tablePath, []byte(`
 		CREATE TABLE t (

@@ -102,6 +102,7 @@ func makeTestConfigFromParams(params base.TestServerArgs) Config {
 	if params.Settings == nil {
 		st = cluster.MakeClusterSettings(cluster.BinaryMinimumSupportedVersion, cluster.BinaryServerVersion)
 	}
+	st.ExternalIODir = params.ExternalIODir
 	cfg := makeTestConfig(st)
 	cfg.TestingKnobs = params.Knobs
 	cfg.RaftConfig = params.RaftConfig
