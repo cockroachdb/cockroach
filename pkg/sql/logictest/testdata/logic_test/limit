@@ -70,3 +70,25 @@ Level  Type        Field   Description  Columns                      Ordering
 2      scan        ·       ·            (k, v, w)                    ·
 2      ·           table   t@primary    ·                            ·
 2      ·           filter  w > 30       ·                            ·
+
+# This kind of query can be used to work around memory usage limits. We need to
+# choose the "hard" limit of 100 over the "soft" limit of 25 (with the hard
+# limit we will only store 100 rows in the sort node). See #19677.
+query ITTTTT colnames
+EXPLAIN (VERBOSE) SELECT DISTINCT w FROM (SELECT w FROM t ORDER BY w LIMIT 100) ORDER BY w LIMIT 25
+----
+Level  Type      Field     Description  Columns                      Ordering
+0      limit     ·         ·            (w)                          +w
+0      ·         count     25           ·                            ·
+1      distinct  ·         ·            (w)                          +w
+1      ·         key       w            ·                            ·
+2      limit     ·         ·            (w)                          +w
+2      ·         count     100          ·                            ·
+3      sort      ·         ·            (w)                          +w
+3      ·         order     +w           ·                            ·
+3      ·         strategy  top 100      ·                            ·
+4      render    ·         ·            (w)                          ·
+4      ·         render 0  test.t.w     ·                            ·
+5      scan      ·         ·            (k[omitted], v[omitted], w)  ·
+5      ·         table     t@primary    ·                            ·
+5      ·         spans     ALL          ·                            ·
