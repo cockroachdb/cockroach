@@ -32,7 +32,7 @@ CREATE SEQUENCE err_test AS INT2
 statement error pq: unimplemented at or near "EOF"
 CREATE SEQUENCE err_test OWNED BY someuser
 
-# DML & DDL ERRORS
+# DML ERRORS
 
 statement error pgcode 42809 cannot run INSERT on sequence "foo" - sequences are not updateable
 INSERT INTO foo VALUES (1, 2, 3)
