@@ -5,6 +5,7 @@ import { connect } from "react-redux";
 import { AdminUIState } from "src/redux/state";
 import { Bytes as formatBytes } from "src/util/format";
 import { NodesOverview } from "src/views/cluster/containers/nodesOverview";
+import { CapacityChart } from "./capacity";
 
 class ClusterTicker extends React.Component<{}, {}> {
   render() {
@@ -33,7 +34,7 @@ class CapacityUsage extends React.Component<CapacityUsageProps, {}> {
         <div className="cluster-summary__section--details">
           <div className="cluster-summary__chart">
             <span className="value">{ formatPercentage(usedPercentage) }</span>
-            <span>BAR CHART HERE</span>
+            <CapacityChart used={usedCapacity} usable={usableCapacity} />
           </div>
           <div className="cluster-summary__aside">
             <span className="label">Current Usage</span>
@@ -47,8 +48,8 @@ class CapacityUsage extends React.Component<CapacityUsageProps, {}> {
 
 function mapStateToCapacityUsageProps(_state: AdminUIState) {
   return {
-    usedCapacity: 2500000000,
-    usableCapacity: 500000000000,
+    usedCapacity: 25000000000,
+    usableCapacity: 536870900000,
   };
 }
 

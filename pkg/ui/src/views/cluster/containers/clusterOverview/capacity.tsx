@@ -1,0 +1,102 @@
+import d3 from "d3";
+import React from "react";
+
+import { Bytes as formatBytes } from "src/util/format";
+
+const size = {
+  width: 250,
+  height: 20,
+};
+
+const margin = {
+  top: 10,
+  right: 35,
+  bottom: 25,
+  left: 15,
+};
+
+const TICK_SIZE = 6;
+const AXIS_MARGIN = 4;
+
+interface CapacityChartProps {
+  used: number;
+  usable: number;
+}
+
+const scale = d3.scale.linear()
+  .range([0, size.width]);
+
+const axis = d3.svg.axis()
+  .scale(scale)
+  .tickSize(TICK_SIZE)
+  .tickValues([0, 268435500000, 536870900000]) // TODO(couchand): Not this, obviously.
+  .tickFormat(formatBytes);
+
+function chart(el) {
+  el.style("shape-rendering", "crispEdges");
+
+  const axisJoin = el.selectAll("g.axis")
+    .data((d) => [scale.domain([0, d.usable])]);
+
+  const axisEnter = axisJoin.enter()
+    .append("g")
+    .attr("class", "axis")
+    .attr("transform", `translate(0,${size.height + AXIS_MARGIN})`);
+
+  // const axisGroup = axisEnter.merge(axisJoin);
+  const axisGroup = axisJoin;
+
+  axisGroup.call(axis);
+  axisGroup.selectAll("text").attr("y", AXIS_MARGIN + TICK_SIZE);
+
+  const bgJoin = el.selectAll(".bg")
+    .data((d) => [d]);
+
+  const bgEnter = bgJoin.enter()
+    .append("rect")
+    .attr("class", "bg")
+
+//  const bg = bgEnter.merge(bgJoin);
+  bgJoin
+//  bg
+    .attr("width", size.width)
+    .attr("height", size.height);
+
+  const barJoin = el.selectAll(".bar")
+    .data((d) => [d]);
+
+  const barEnter = barJoin.enter()
+    .append("rect")
+    .attr("class", "bar")
+    .attr("height", 10)
+    .attr("y", 5);
+
+   // const bar = barEnter.merge(barJoin);
+   barJoin
+   // bar
+     .attr("width", (d) => scale(d.used));
+
+}
+
+export class CapacityChart extends React.Component<CapacityChartProps, {}> {
+  componentDidMount() {
+    d3.select(this.svgEl)
+      .datum(this.props)
+      .call(chart));
+  }
+
+  shouldComponentUpdate(props) {
+    d3.select(this.svgEl)
+      .datum(props)
+      .call(chart);
+  }
+
+  render() {
+    return (
+      <svg width={size.width + margin.left + margin.right} height={size.height + margin.top + margin.bottom}>
+        <g ref={(el) => this.svgEl = el} transform={`translate(${margin.left},${margin.top})`}>
+        </g>
+      </svg>
+    );
+  }
+}
