@@ -265,8 +265,18 @@ func TestingSetDefaultZoneConfig(cfg ZoneConfig) func() {
 // Validate returns an error if the ZoneConfig specifies a known-dangerous
 // configuration.
 func (z *ZoneConfig) Validate() error {
+	for _, s := range z.Subzones {
+		if err := s.Config.Validate(); err != nil {
+			return err
+		}
+	}
 	switch z.NumReplicas {
 	case 0:
+		if len(z.Subzones) > 0 {
+			// NumReplicas == 0 is allowed when this ZoneConfig is a subzone
+			// placeholder. See IsSubzonePlaceholder.
+			return nil
+		}
 		return fmt.Errorf("at least one replica is required")
 	case 2:
 		return fmt.Errorf("at least 3 replicas are required for multi-replica configurations")
@@ -282,19 +292,83 @@ func (z *ZoneConfig) Validate() error {
 	return nil
 }
 
+// DeleteTableConfig removes any configuration that applies to the table
+// targeted by this ZoneConfig, leaving only its subzone configs, if any. After
+// calling DeleteTableConfig, IsZubzonePlaceholder will return true.
+//
+// Only table zones can have subzones, so it does not make sense to call this
+// method on non-table ZoneConfigs.
+func (z *ZoneConfig) DeleteTableConfig() {
+	*z = ZoneConfig{
+		Subzones:     z.Subzones,
+		SubzoneSpans: z.SubzoneSpans,
+	}
+}
+
+// IsSubzonePlaceholder returns whether the ZoneConfig exists only to store
+// subzones. The configuration fields (e.g., RangeMinBytes) in a subzone
+// placeholder should be ignored; instead, the configuration from the parent
+// ZoneConfig applies.
+func (z *ZoneConfig) IsSubzonePlaceholder() bool {
+	// A ZoneConfig with zero replicas is otherwise invalid, so we repurpose it to
+	// indicate that a ZoneConfig is a placeholder for subzones rather than
+	// introducing a dedicated IsPlaceholder flag.
+	return z.NumReplicas == 0
+}
+
+// GetSubzone returns the most specific Subzone that applies to the specified
+// index ID and partition, if any exists. The partition can be left unspecified
+// to get the Subzone for an entire index, if it exists. indexID, however, must
+// always be provided, even when looking for a partition's Subzone.
+func (z *ZoneConfig) GetSubzone(indexID uint32, partition string) *Subzone {
+	for _, s := range z.Subzones {
+		if s.IndexID == indexID && s.PartitionName == partition {
+			return &s
+		}
+	}
+	if partition != "" {
+		return z.GetSubzone(indexID, "")
+	}
+	return nil
+}
+
 // GetSubzoneForKeySuffix returns the ZoneConfig for the subzone that contains
 // keySuffix, if it exists.
-func (z ZoneConfig) GetSubzoneForKeySuffix(keySuffix []byte) (ZoneConfig, bool) {
+func (z ZoneConfig) GetSubzoneForKeySuffix(keySuffix []byte) *Subzone {
 	// TODO(benesch): Use binary search instead.
 	for _, s := range z.SubzoneSpans {
 		// The span's Key is stored with the prefix removed, so we can compare
 		// directly to keySuffix. An unset EndKey implies Key.PrefixEnd().
 		if (s.Key.Compare(keySuffix) <= 0) &&
 			((s.EndKey == nil && bytes.HasPrefix(keySuffix, s.Key)) || s.EndKey.Compare(keySuffix) > 0) {
-			return z.Subzones[s.SubzoneIndex].Config, true
+			return &z.Subzones[s.SubzoneIndex]
 		}
 	}
-	return ZoneConfig{}, false
+	return nil
+}
+
+// SetSubzone installs subzone into the ZoneConfig, overwriting any existing
+// subzone with the same IndexID and PartitionName.
+func (z *ZoneConfig) SetSubzone(subzone Subzone) {
+	for i, s := range z.Subzones {
+		if s.IndexID == subzone.IndexID && s.PartitionName == subzone.PartitionName {
+			z.Subzones[i] = subzone
+			return
+		}
+	}
+	z.Subzones = append(z.Subzones, subzone)
+}
+
+// DeleteSubzone removes the subzone with the specified index ID and partition.
+// It returns whether it performed any work.
+func (z *ZoneConfig) DeleteSubzone(indexID uint32, partition string) bool {
+	for i, s := range z.Subzones {
+		if s.IndexID == indexID && s.PartitionName == partition {
+			z.Subzones = append(z.Subzones[:i], z.Subzones[i+1:]...)
+			return true
+		}
+	}
+	return false
 }
 
 func (z ZoneConfig) subzoneSplits() []roachpb.RKey {
