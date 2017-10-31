@@ -76,8 +76,8 @@ func (p *planner) Delete(
 		requestedCols = en.tableDesc.Columns
 	}
 
-	fkTables := sqlbase.TablesNeededForFKs(*en.tableDesc, sqlbase.CheckDeletes)
-	if err := p.fillFKTableMap(ctx, fkTables); err != nil {
+	fkTables, err := sqlbase.TablesNeededForFKs(ctx, *en.tableDesc, sqlbase.CheckDeletes, p.lookupFKTable)
+	if err != nil {
 		return nil, err
 	}
 	rd, err := sqlbase.MakeRowDeleter(p.txn, en.tableDesc, fkTables, requestedCols,

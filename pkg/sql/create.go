@@ -1001,7 +1001,8 @@ func resolveFK(
 	}
 
 	if d.Actions.Delete != tree.NoAction &&
-		d.Actions.Delete != tree.Restrict {
+		d.Actions.Delete != tree.Restrict &&
+		d.Actions.Delete != tree.Cascade {
 		feature := fmt.Sprintf("unsupported: ON DELETE %s", d.Actions.Delete)
 		return pgerror.Unimplemented(feature, feature)
 	}

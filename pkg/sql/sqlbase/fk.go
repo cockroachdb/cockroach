@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
@@ -51,32 +52,90 @@ const (
 	CheckUpdates
 )
 
-// TablesNeededForFKs calculates the IDs of the additional TableDescriptors that
-// will be needed for FK checking delete and/or insert operations on `table`.
-//
-// NB: the returned map's values are *not* set -- higher level calling code, eg
-// in planner, should fill the map's values by acquiring leases. This function
-// is essentially just returning a slice of IDs, but the empty map can be filled
-// in place and reused, avoiding a second allocation.
-func TablesNeededForFKs(table TableDescriptor, usage FKCheck) TableLookupsByID {
-	var ret TableLookupsByID
-	for _, idx := range table.AllNonDropIndexes() {
-		if usage != CheckDeletes && idx.ForeignKey.IsSet() {
-			if ret == nil {
-				ret = make(TableLookupsByID)
-			}
-			ret[idx.ForeignKey.Table] = TableLookup{}
+// NoLookup can be used to not perform any lookups during a TablesNeededForFKs
+// function call.
+func NoLookup(ctx context.Context, tableID ID) (TableLookup, error) {
+	return TableLookup{}, nil
+}
+
+type tableLookupQueueElement struct {
+	ID    ID
+	usage FKCheck
+}
+
+type tableLookupQueue []tableLookupQueueElement
+
+func (q *tableLookupQueue) enqueue(tableID ID, usage FKCheck) {
+	*q = append((*q), tableLookupQueueElement{ID: tableID, usage: usage})
+}
+
+func (q *tableLookupQueue) dequeue() (ID, FKCheck, bool) {
+	if len(*q) == 0 {
+		return 0, 0, false
+	}
+	elem := (*q)[0]
+	*q = (*q)[1:]
+	return elem.ID, elem.usage, true
+}
+
+// TablesNeededForFKs populates a map of TableLookupsByID for all the
+// TableDescriptors that might be needed when performing FK checking for delete
+// and/or insert operations. It uses the passed in lookup function to perform
+// the actual lookup.
+// TODO(Bram): Right now this is performing a transitive closure over all
+// foreign keys that touch this table. This is overly broad and should match
+// the algorithm described the cascade rfc.
+func TablesNeededForFKs(
+	ctx context.Context,
+	table TableDescriptor,
+	usage FKCheck,
+	lookup func(ctx context.Context, tableID ID) (TableLookup, error),
+) (TableLookupsByID, error) {
+	tableLookups := make(TableLookupsByID)
+	tableLookups[table.ID] = TableLookup{&table, false}
+	var queue tableLookupQueue
+	queue.enqueue(table.ID, usage)
+	for {
+		tableID, curUsage, exists := queue.dequeue()
+		if !exists {
+			break
 		}
-		if usage != CheckInserts {
-			for _, ref := range idx.ReferencedBy {
-				if ret == nil {
-					ret = make(TableLookupsByID)
+		var curTable *TableDescriptor
+		if tableLookup, exists := tableLookups[tableID]; exists {
+			if tableLookup.IsAdding {
+				continue
+			}
+			curTable = tableLookup.Table
+		} else {
+			tableLookup, err := lookup(ctx, tableID)
+			if err != nil {
+				return nil, err
+			}
+			tableLookups[tableID] = tableLookup
+			if tableLookup.IsAdding {
+				continue
+			}
+			curTable = tableLookup.Table
+		}
+		if curTable == nil {
+			continue
+		}
+		for _, idx := range curTable.AllNonDropIndexes() {
+			if curUsage != CheckDeletes && idx.ForeignKey.IsSet() {
+				if _, exists := tableLookups[idx.ForeignKey.Table]; !exists {
+					queue.enqueue(idx.ForeignKey.Table, CheckDeletes)
 				}
-				ret[ref.Table] = TableLookup{}
+			}
+			if curUsage != CheckInserts {
+				for _, ref := range idx.ReferencedBy {
+					if _, exists := tableLookups[ref.Table]; !exists {
+						queue.enqueue(ref.Table, CheckDeletes)
+					}
+				}
 			}
 		}
 	}
-	return ret
+	return tableLookups, nil
 }
 
 // spanKVFetcher is an kvFetcher that returns a set slice of kvs.
@@ -278,7 +337,10 @@ func (h fkInsertHelper) CollectSpansForValues(values tree.Datums) (roachpb.Spans
 }
 
 type fkDeleteHelper struct {
-	fks map[IndexID][]baseFKHelper
+	fks         map[IndexID][]baseFKHelper
+	cascadeFKs  []cascadeHelper
+	otherTables TableLookupsByID
+	alloc       *DatumAlloc
 
 	checker *fkBatchChecker
 }
@@ -291,6 +353,8 @@ func makeFKDeleteHelper(
 	alloc *DatumAlloc,
 ) (fkDeleteHelper, error) {
 	h := fkDeleteHelper{
+		otherTables: otherTables,
+		alloc:       alloc,
 		checker: &fkBatchChecker{
 			txn: txn,
 		},
@@ -309,13 +373,33 @@ func makeFKDeleteHelper(
 			if err != nil {
 				return h, err
 			}
+			ch, err := makeCascadeHelper(txn, ref, otherTables, alloc)
+			if err != nil {
+				return h, err
+			}
+			idxDesc, _ := otherTables[ref.Table].Table.FindIndexByID(ref.Index)
 			if h.fks == nil {
 				h.fks = make(map[IndexID][]baseFKHelper)
 			}
 			h.fks[idx.ID] = append(h.fks[idx.ID], fk)
+			if idxDesc.ForeignKey.OnDelete == ForeignKeyReference_CASCADE {
+				h.cascadeFKs = append(h.cascadeFKs, ch)
+			}
 		}
 	}
 	return h, nil
+}
+
+func (h fkDeleteHelper) cascadeAll(ctx context.Context, row tree.Datums, traceKV bool) error {
+	if len(h.cascadeFKs) == 0 {
+		return nil
+	}
+	for _, ch := range h.cascadeFKs {
+		if err := ch.delete(ctx, row, traceKV); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (h fkDeleteHelper) checkAll(ctx context.Context, row tree.Datums) error {
@@ -520,4 +604,253 @@ func collectSpansForValuesWithFKMap(
 		}
 	}
 	return reads, nil
+}
+
+type cascadeHelper struct {
+	txn          *client.Txn
+	table        *TableDescriptor // the table being searched for rows to cascade
+	index        *IndexDescriptor // the fk index that will contain the entires to cascade
+	referencedRF MultiRowFetcher  // row fetcher used to look up primary keys within index
+	alloc        *DatumAlloc
+	indexPrefix  []byte           // prefix of keys in index
+	indexColIDs  map[ColumnID]int // ColIDtoRowIndex for the index
+	tablesByID   TableLookupsByID
+
+	// The following are only populated when a delete is required.
+	rowDeleter         RowDeleter      // row deleter used to perform the actual deletes, note that this call is recursive
+	deleteRF           MultiRowFetcher // row fetcher used to lookup rows for deletion
+	primaryIndexPrefix []byte          // prefix of keys in the primary index
+}
+
+func makeCascadeHelper(
+	txn *client.Txn, ref ForeignKeyReference, tablesByID TableLookupsByID, alloc *DatumAlloc,
+) (cascadeHelper, error) {
+	table := tablesByID[ref.Table].Table
+	index, err := table.FindIndexByID(ref.Index)
+	if err != nil {
+		return cascadeHelper{}, err
+	}
+	helper := cascadeHelper{
+		txn:         txn,
+		table:       table,
+		index:       index,
+		alloc:       alloc,
+		indexPrefix: MakeIndexKeyPrefix(table, ref.Index),
+		tablesByID:  tablesByID,
+	}
+
+	// Create the indexColIDs by creating a map of the index columns. This is used
+	// when creating the index span.
+	helper.indexColIDs = make(map[ColumnID]int, len(index.ColumnIDs))
+	for i, colID := range index.ColumnIDs {
+		helper.indexColIDs[colID] = i
+	}
+
+	// To find out which rows need to be deleted, the primary keys for those rows
+	// need to be fetched from the foreign key referencing index.
+	var colDesc []ColumnDescriptor
+	for _, id := range table.PrimaryIndex.ColumnIDs {
+		cDesc, err := table.FindColumnByID(id)
+		if err != nil {
+			return cascadeHelper{}, err
+		}
+		colDesc = append(colDesc, *cDesc)
+	}
+	var valNeededForCol util.FastIntSet
+	valNeededForCol.AddRange(0, len(colDesc)-1)
+
+	isSecondary := table.PrimaryIndex.ID != index.ID
+	// TODO(bram): If this is a primary index, we can skip this step entirely and
+	// jump right to the fetcher using the values from oldRow as the primary key.
+	if err := helper.referencedRF.Init(
+		false, /* reverse */
+		false, /* returnRangeInfo */
+		alloc,
+		MultiRowFetcherTableArgs{
+			Desc:             table,
+			Index:            index,
+			ColIdxMap:        ColIDtoRowIndexFromCols(colDesc),
+			IsSecondaryIndex: isSecondary,
+			Cols:             colDesc,
+			ValNeededForCol:  valNeededForCol,
+		},
+	); err != nil {
+		return cascadeHelper{}, err
+	}
+
+	return helper, nil
+}
+
+// addRowDeleter creates the row deleter and primary index row fetcher. Sadly,
+// this cannot be done eagerly or we end up looping forever.
+// TODO(bram): Store and retrieve all of these values instead of regenerating
+// them.
+func (c *cascadeHelper) addRowDeleter() error {
+	c.primaryIndexPrefix = MakeIndexKeyPrefix(c.table, c.table.PrimaryIndex.ID)
+
+	// Create the row deleter. The row deleter is needed early to know which
+	// columns are required in the row fetcher.
+	var err error
+	c.rowDeleter, err = MakeRowDeleter(
+		c.txn,
+		c.table,
+		c.tablesByID,
+		nil,  /* requestedCol */
+		true, /* checkFKs */
+		c.alloc,
+	)
+	if err != nil {
+		return err
+	}
+
+	// Create the row fetcher that will retrive the rows
+	var valNeededForCol util.FastIntSet
+	valNeededForCol.AddRange(0, len(c.rowDeleter.FetchCols)-1)
+	tableArgs := MultiRowFetcherTableArgs{
+		Desc:             c.table,
+		Index:            &c.table.PrimaryIndex,
+		ColIdxMap:        c.rowDeleter.FetchColIDtoRowIndex,
+		IsSecondaryIndex: false,
+		Cols:             c.rowDeleter.FetchCols,
+		ValNeededForCol:  valNeededForCol,
+	}
+	return c.deleteRF.Init(
+		false, /* reverse */
+		false, /* returnRangeInfo */
+		c.alloc,
+		tableArgs,
+	)
+}
+
+// spanForIndexValues creates a span against an index to extra the primary keys
+// needed for cascading.
+func (c cascadeHelper) spanForIndexValues(values tree.Datums) (roachpb.Span, error) {
+	var key roachpb.Key
+	if values != nil {
+		keyBytes, _, err := EncodePartialIndexKey(
+			c.table, c.index, len(c.index.ColumnIDs), c.indexColIDs, values, c.indexPrefix)
+		if err != nil {
+			return roachpb.Span{}, err
+		}
+		key = roachpb.Key(keyBytes)
+	} else {
+		key = roachpb.Key(c.indexPrefix)
+	}
+	return roachpb.Span{Key: key, EndKey: key.PrefixEnd()}, nil
+}
+
+// spanForPKValues creates a span against the primary index of a table and is
+// used to fetch rows for cascading. This requires that the row deleter has
+// already been created.
+func (c cascadeHelper) spanForPKValues(values tree.Datums) (roachpb.Span, error) {
+	keyBytes, _, err := EncodePartialIndexKey(
+		c.table,
+		&c.table.PrimaryIndex,
+		len(c.table.PrimaryIndex.ColumnIDs),
+		c.rowDeleter.FetchColIDtoRowIndex,
+		values,
+		c.primaryIndexPrefix,
+	)
+	if err != nil {
+		return roachpb.Span{}, err
+	}
+	key := roachpb.Key(keyBytes)
+	return roachpb.Span{Key: key, EndKey: key.PrefixEnd()}, nil
+}
+
+func (c cascadeHelper) delete(ctx context.Context, oldRow tree.Datums, traceKV bool) error {
+	// Create the span to search for index values.
+	// TODO(bram): This initial index lookup can be skipped if the index is the
+	// primary index.
+	span, err := c.spanForIndexValues(oldRow)
+	if err != nil {
+		return err
+	}
+	req := roachpb.BatchRequest{}
+	req.Add(&roachpb.ScanRequest{Span: span})
+	br, roachErr := c.txn.Send(ctx, req)
+	if roachErr != nil {
+		return roachErr.GoError()
+	}
+
+	// Find all primary keys that need to be deleted.
+	var primaryKeysToDel []tree.Datums
+	for _, resp := range br.Responses {
+		fetcher := spanKVFetcher{
+			kvs: resp.GetInner().(*roachpb.ScanResponse).Rows,
+		}
+		if err := c.referencedRF.StartScanFrom(ctx, &fetcher); err != nil {
+			return err
+		}
+		for !c.referencedRF.kvEnd {
+			primaryKey, _, _, err := c.referencedRF.NextRowDecoded(ctx)
+			if err != nil {
+				return err
+			}
+			// Make a copy of the primary key because the datum struct is reused in
+			// the row fetcher.
+			primaryKey = append(tree.Datums(nil), primaryKey...)
+			primaryKeysToDel = append(primaryKeysToDel, primaryKey)
+			log.Warningf(ctx, "******** pks to delete: %+v", primaryKey)
+		}
+	}
+
+	// Early exit if no rows need to be deleted.
+	if len(primaryKeysToDel) == 0 {
+		return nil
+	}
+
+	if err := c.addRowDeleter(); err != nil {
+		return err
+	}
+
+	// Create a batch request to get all the spans of the primary keys that need
+	// to be deleted.
+	pkLookupReq := roachpb.BatchRequest{}
+	for _, primaryKey := range primaryKeysToDel {
+		pkSpan, err := c.spanForPKValues(primaryKey)
+		if err != nil {
+			return err
+		}
+		pkLookupReq.Add(&roachpb.ScanRequest{Span: pkSpan})
+	}
+	pkResp, roachErr := c.txn.Send(ctx, pkLookupReq)
+	if roachErr != nil {
+		return roachErr.GoError()
+	}
+
+	// Fetch the rows for deletion.
+	var rowsToDelete []tree.Datums
+	for _, resp := range pkResp.Responses {
+		fetcher := spanKVFetcher{
+			kvs: resp.GetInner().(*roachpb.ScanResponse).Rows,
+		}
+		if err := c.deleteRF.StartScanFrom(ctx, &fetcher); err != nil {
+			return err
+		}
+		for !c.deleteRF.kvEnd {
+			rowToDelete, _, _, err := c.deleteRF.NextRowDecoded(ctx)
+			if err != nil {
+				return err
+			}
+			// Make a copy of the rowToDelete because the datum struct is reused in
+			// the row fetcher.
+			rowToDelete = append(tree.Datums(nil), rowToDelete...)
+			rowsToDelete = append(rowsToDelete, rowToDelete)
+			log.Warningf(ctx, "******** row to delete: %+v", rowToDelete)
+		}
+	}
+
+	// Finally delete the rows.
+	// TODO(bram): If the row was already deleted, this should not be a failure.
+	// TODO(bram): Don't run the fk checks at the start of the delete, but gather
+	// the checks and add them back into the batch checker at the end.
+	// TODO(bram): Perhaps we should limit this depth to avoid panics.
+	deleteBatch := c.txn.NewBatch()
+	for _, row := range rowsToDelete {
+		if err := c.rowDeleter.DeleteRow(ctx, deleteBatch, row, traceKV); err != nil {
+			return err
+		}
+	}
+	return c.txn.Run(ctx, deleteBatch)
 }

@@ -324,19 +324,17 @@ func (p *planner) exec(ctx context.Context, sql string, args ...interface{}) (in
 	return countRowsAffected(params, plan)
 }
 
-func (p *planner) fillFKTableMap(ctx context.Context, m sqlbase.TableLookupsByID) error {
-	for tableID := range m {
-		table, err := p.session.tables.getTableVersionByID(ctx, p.txn, tableID)
+func (p *planner) lookupFKTable(
+	ctx context.Context, tableID sqlbase.ID,
+) (sqlbase.TableLookup, error) {
+	table, err := p.session.tables.getTableVersionByID(ctx, p.txn, tableID)
+	if err != nil {
 		if err == errTableAdding {
-			m[tableID] = sqlbase.TableLookup{IsAdding: true}
-			continue
+			return sqlbase.TableLookup{IsAdding: true}, nil
 		}
-		if err != nil {
-			return err
-		}
-		m[tableID] = sqlbase.TableLookup{Table: table}
+		return sqlbase.TableLookup{}, err
 	}
-	return nil
+	return sqlbase.TableLookup{Table: table}, nil
 }
 
 // isDatabaseVisible returns true if the given database is visible

@@ -873,16 +873,19 @@ func MakeRowDeleter(
 func (rd *RowDeleter) DeleteRow(
 	ctx context.Context, b *client.Batch, values []tree.Datum, traceKV bool,
 ) error {
+	if err := rd.Fks.cascadeAll(ctx, values, traceKV); err != nil {
+		return err
+	}
 	if err := rd.Fks.checkAll(ctx, values); err != nil {
 		return err
 	}
-
 	primaryIndexKey, secondaryIndexEntries, err := rd.Helper.encodeIndexes(rd.FetchColIDtoRowIndex, values)
 	if err != nil {
 		return err
 	}
 
 	for _, secondaryIndexEntry := range secondaryIndexEntries {
+		log.Warningf(ctx, "!!!!!!!!!! Del Index %s", secondaryIndexEntry.Key)
 		if traceKV {
 			log.VEventf(ctx, 2, "Del %s", secondaryIndexEntry.Key)
 		}
@@ -892,6 +895,7 @@ func (rd *RowDeleter) DeleteRow(
 	// Delete the row.
 	rd.startKey = roachpb.Key(primaryIndexKey)
 	rd.endKey = roachpb.Key(encoding.EncodeNotNullDescending(primaryIndexKey))
+	log.Warningf(ctx, "!!!!!!!!!! Del Range %s - %s", rd.startKey, rd.endKey)
 	if traceKV {
 		log.VEventf(ctx, 2, "DelRange %s - %s", rd.startKey, rd.endKey)
 	}
