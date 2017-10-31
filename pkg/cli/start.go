@@ -442,10 +442,15 @@ func initTempStorageConfig(
 	); err != nil {
 		return base.TempStorageConfig{}, err
 	}
-	if firstStore.InMemory && !diskTempStorageSizeValue.IsSet() {
-		// The default temp store size is different when the first
-		// store (and thus also the temp storage) is in memory.
-		tempStorageMaxSizeBytes = base.DefaultInMemTempStorageMaxSizeBytes
+	if !diskTempStorageSizeValue.IsSet() {
+		// The default temp storage size is different when the temp
+		// storage is in memory (which occurs when no temp directory
+		// is specified and the first store is in memory).
+		if tempDir == "" && firstStore.InMemory {
+			tempStorageMaxSizeBytes = base.DefaultInMemTempStorageMaxSizeBytes
+		} else {
+			tempStorageMaxSizeBytes = base.DefaultTempStorageMaxSizeBytes
+		}
 	}
 
 	// Initialize a base.TempStorageConfig based on first store's spec and
