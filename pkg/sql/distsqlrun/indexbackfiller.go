@@ -106,9 +106,15 @@ func (ib *indexBackfiller) init() error {
 		}
 	}
 
+	tableArgs := sqlbase.MultiRowFetcherTableArgs{
+		Desc:            &desc,
+		Index:           &desc.PrimaryIndex,
+		ColIdxMap:       ib.colIdxMap,
+		Cols:            cols,
+		ValNeededForCol: valNeededForCol,
+	}
 	return ib.fetcher.Init(
-		&desc, ib.colIdxMap, &desc.PrimaryIndex, false /* reverse */, false, /* lockForUpdate */
-		false /* isSecondaryIndex */, cols, valNeededForCol, false /* returnRangeInfo */, &ib.alloc,
+		false /* reverse */, false /* lockForUpdate */, false /* returnRangeInfo */, &ib.alloc, tableArgs,
 	)
 }
 
@@ -156,7 +162,7 @@ func (ib *indexBackfiller) runChunk(
 		}
 
 		for i := int64(0); i < chunkSize; i++ {
-			encRow, err := ib.fetcher.NextRow(ctx)
+			encRow, _, _, err := ib.fetcher.NextRow(ctx)
 			if err != nil {
 				return nil, err
 			}
