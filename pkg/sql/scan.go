@@ -89,7 +89,7 @@ type scanNode struct {
 	origFilter parser.TypedExpr
 
 	scanInitialized bool
-	fetcher         sqlbase.RowFetcher
+	fetcher         sqlbase.MultiRowFetcher
 
 	// if non-zero, hardLimit indicates that the scanNode only needs to provide
 	// this many rows (after applying any filter). It is a "hard" guarantee that
@@ -132,8 +132,15 @@ func (n *scanNode) disableBatchLimit() {
 }
 
 func (n *scanNode) Start(runParams) error {
-	return n.fetcher.Init(n.desc, n.colIdxMap, n.index, n.reverse, n.lockForUpdate, n.isSecondaryIndex,
-		n.cols, n.valNeededForCol, false /* returnRangeInfo */, &n.p.alloc)
+	tableArgs := sqlbase.MultiRowFetcherTableArgs{
+		Desc:             n.desc,
+		Index:            n.index,
+		ColIdxMap:        n.colIdxMap,
+		IsSecondaryIndex: n.isSecondaryIndex,
+		Cols:             n.cols,
+		ValNeededForCol:  n.valNeededForCol,
+	}
+	return n.fetcher.Init(n.reverse, n.lockForUpdate, false /* returnRangeInfo */, &n.p.alloc, tableArgs)
 }
 
 func (n *scanNode) Close(context.Context) {
@@ -179,8 +186,8 @@ func (n *scanNode) Next(params runParams) (bool, error) {
 
 	// We fetch one row at a time until we find one that passes the filter.
 	for n.hardLimit == 0 || n.rowIndex < n.hardLimit {
-		var err error
-		n.row, err = n.fetcher.NextRowDecoded(params.ctx)
+		resp, err := n.fetcher.NextRowDecoded(params.ctx)
+		n.row = resp.Datums
 		if err != nil || n.row == nil {
 			return false, err
 		}

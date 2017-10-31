@@ -258,7 +258,7 @@ func ConvertBatchError(ctx context.Context, tableDesc *TableDescriptor, b *clien
 		if err != nil {
 			return err
 		}
-		var rf RowFetcher
+		var rf MultiRowFetcher
 		colIdxMap := make(map[ColumnID]int, len(index.ColumnIDs))
 		cols := make([]ColumnDescriptor, len(index.ColumnIDs))
 		valNeededForCol := make([]bool, len(index.ColumnIDs))
@@ -271,9 +271,18 @@ func ConvertBatchError(ctx context.Context, tableDesc *TableDescriptor, b *clien
 			cols[i] = *col
 			valNeededForCol[i] = true
 		}
-		if err := rf.Init(tableDesc, colIdxMap, index, false /* reverse */, false, /* lockForUpdate */
-			indexID != tableDesc.PrimaryIndex.ID /* isSecondaryIndex */, cols, valNeededForCol,
-			false /* returnRangeInfo */, &DatumAlloc{}); err != nil {
+
+		tableArgs := MultiRowFetcherTableArgs{
+			Desc:             tableDesc,
+			Index:            index,
+			ColIdxMap:        colIdxMap,
+			IsSecondaryIndex: indexID != tableDesc.PrimaryIndex.ID,
+			Cols:             cols,
+			ValNeededForCol:  valNeededForCol,
+		}
+		if err := rf.Init(
+			false /* reverse */, false /* lockForUpdate */, false /* returnRangeInfo */, &DatumAlloc{}, tableArgs,
+		); err != nil {
 			return err
 		}
 		f := singleKVFetcher{kv: roachpb.KeyValue{Key: key}}
@@ -285,11 +294,11 @@ func ConvertBatchError(ctx context.Context, tableDesc *TableDescriptor, b *clien
 		if err := rf.StartScanFrom(ctx, &f); err != nil {
 			return err
 		}
-		decodedVals, err := rf.NextRowDecoded(ctx)
+		resp, err := rf.NextRowDecoded(ctx)
 		if err != nil {
 			return err
 		}
-		return NewUniquenessConstraintViolationError(index, decodedVals)
+		return NewUniquenessConstraintViolationError(index, resp.Datums)
 	}
 	return origPErr.GoError()
 }

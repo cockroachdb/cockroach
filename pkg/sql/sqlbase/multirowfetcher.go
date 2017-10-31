@@ -30,6 +30,15 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
+// debugRowFetch can be used to turn on some low-level debugging logs. We use
+// this to avoid using log.V in the hot path.
+const debugRowFetch = false
+
+type kvFetcher interface {
+	nextKV(ctx context.Context) (bool, roachpb.KeyValue, error)
+	getRangesInfo() []roachpb.RangeInfo
+}
+
 type tableInfo struct {
 	// -- Fields initialized once --
 
@@ -84,7 +93,7 @@ type DecodedRowResponse struct {
 }
 
 // MultiRowFetcherTableArgs are the arguments passed to MultiRowFetcher.Init
-// for a given table that includes descriptors and row information
+// for a given table that includes descriptors and row information.
 type MultiRowFetcherTableArgs struct {
 	Desc             *TableDescriptor
 	Index            *IndexDescriptor
@@ -96,9 +105,6 @@ type MultiRowFetcherTableArgs struct {
 
 // MultiRowFetcher handles fetching kvs and forming table rows for an
 // arbitrary number of tables.
-// MultiRowFetcher should be used in lieu of RowFetcher if for a given
-// set of spans, rows from multiple tables are interleaved (i.e. interleaved
-// tables).
 // Usage:
 //   var mrf MultiRowFetcher
 //   err := mrf.Init(..)
@@ -182,9 +188,9 @@ type MultiRowFetcher struct {
 // non-primary index, valNeededForCol can only be true for the columns in the
 // index.
 func (mrf *MultiRowFetcher) Init(
-	tables []MultiRowFetcherTableArgs,
 	reverse, lockForUpdate, returnRangeInfo bool,
 	alloc *DatumAlloc,
+	tables ...MultiRowFetcherTableArgs,
 ) error {
 	if len(tables) == 0 {
 		panic("no tables to fetch from")
@@ -818,9 +824,7 @@ func (mrf *MultiRowFetcher) NextRow(ctx context.Context) (RowResponse, error) {
 // NextRowDecoded calls NextRow and decodes the EncDatumRow into a Datums.
 // The Datums should not be modified and is only valid until the next call.
 // When there are no more rows, the Datums is nil.
-func (mrf *MultiRowFetcher) NextRowDecoded(
-	ctx context.Context, traceKV bool,
-) (DecodedRowResponse, error) {
+func (mrf *MultiRowFetcher) NextRowDecoded(ctx context.Context) (DecodedRowResponse, error) {
 	resp, err := mrf.NextRow(ctx)
 	if err != nil {
 		return DecodedRowResponse{}, err
@@ -865,17 +869,15 @@ func (mrf *MultiRowFetcher) finalizeRow() {
 
 // Key returns the next key (the key that follows the last returned row).
 // Key returns nil when there are no more rows.
-// TODO(richardwu): uncomment this when RowFetcher refactored to MultiRowFetcher.
-// func (mrf *MultiRowFetcher) Key() roachpb.Key {
-// 	return mrf.kv.Key
-// }
+func (mrf *MultiRowFetcher) Key() roachpb.Key {
+	return mrf.kv.Key
+}
 
 // GetRangeInfo returns information about the ranges where the rows came from.
 // The RangeInfo's are deduped and not ordered.
-// TODO(richardwu): uncomment this when RowFetcher refactored to MultiRowFetcher.
-// func (mrf *MultiRowFetcher) GetRangeInfo() []roachpb.RangeInfo {
-// 	return mrf.kvFetcher.getRangesInfo()
-// }
+func (mrf *MultiRowFetcher) GetRangeInfo() []roachpb.RangeInfo {
+	return mrf.kvFetcher.getRangesInfo()
+}
 
 // Only unique secondary indexes have extra columns to decode (namely the
 // primary index columns).
