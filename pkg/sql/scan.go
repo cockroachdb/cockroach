@@ -65,7 +65,7 @@ type scanNode struct {
 	// tables with wide rows) by reading only certain columns from KV
 	// using point lookups instead of a single range lookup for the
 	// entire row.
-	valNeededForCol []bool
+	valNeededForCol util.FastIntSet
 
 	// Map used to get the index for columns in cols.
 	colIdxMap map[sqlbase.ColumnID]int
@@ -139,7 +139,7 @@ func (n *scanNode) Start(runParams) error {
 		ColIdxMap:        n.colIdxMap,
 		IsSecondaryIndex: n.isSecondaryIndex,
 		Cols:             n.cols,
-		ValNeededForCol:  n.valNeededForCol,
+		ValNeededForCol:  n.valNeededForCol.Copy(),
 	}
 	return n.fetcher.Init(n.reverse, n.lockForUpdate, false /* returnRangeInfo */, &n.p.alloc, tableArgs)
 }
@@ -375,10 +375,8 @@ func (n *scanNode) initDescDefaults(
 	for i, c := range n.cols {
 		n.colIdxMap[c.ID] = i
 	}
-	n.valNeededForCol = make([]bool, len(n.cols))
-	for i := range n.cols {
-		n.valNeededForCol[i] = true
-	}
+	n.valNeededForCol = util.FastIntSet{}
+	n.valNeededForCol.AddRange(0, len(n.cols)-1)
 	n.row = make([]tree.Datum, len(n.cols))
 	n.filterVars = tree.MakeIndexedVarHelper(n, len(n.cols))
 	return nil

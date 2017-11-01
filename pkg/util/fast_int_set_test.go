@@ -203,3 +203,30 @@ func TestFastIntSetTwoSetOps(t *testing.T) {
 		}
 	}
 }
+
+func TestFastIntSetAddRange(t *testing.T) {
+	assertSet := func(set *FastIntSet, from, to int) {
+		// Iterate through the set and ensure that the values
+		// it contain are the values from 'from' to 'to' (inclusively).
+		expected := from
+		set.ForEach(func(actual int) {
+			if actual > to {
+				t.Fatalf("expected last value in FastIntSet to be %d, got %d", to, actual)
+			}
+			if expected != actual {
+				t.Fatalf("expected next value in FastIntSet to be %d, got %d", expected, actual)
+			}
+			expected++
+		})
+	}
+
+	max := smallCutoff + 20
+	// Test all O(n^2) intervals of [from,to] up to smallCutoff + 20.
+	for from := 0; from <= max; from++ {
+		for to := from; to <= max; to++ {
+			var set FastIntSet
+			set.AddRange(from, to)
+			assertSet(&set, from, to)
+		}
+	}
+}

@@ -17,6 +17,7 @@ package util
 import (
 	"bytes"
 	"fmt"
+	math "math"
 	"math/bits"
 
 	"golang.org/x/tools/container/intsets"
@@ -79,6 +80,33 @@ func (s *FastIntSet) Add(i int) {
 		s.small = 0
 	}
 	s.large.Insert(i)
+}
+
+// AddRange adds values 'from' up to 'to' (inclusively) to the set.
+// E.g. AddRange(1,5) adds the values 1, 2, 3, 4, 5 to the set.
+// 'from' must be >= 0 and 'to' must be >= 'from'.
+func (s *FastIntSet) AddRange(from, to int) {
+	if from < 0 {
+		panic("cannot add values less than 0 to FastIntSet")
+	}
+	if to < from {
+		panic("invalid range when adding range to FastIntSet")
+	}
+
+	if to < smallCutoff && s.large == nil {
+		nValues := to - from + 1
+		// Fast path.
+		s.small |= (math.MaxUint64 >> uint64(smallCutoff-nValues)) << uint64(from)
+		return
+	}
+
+	if s.large == nil {
+		s.large = s.toLarge()
+		s.small = 0
+	}
+	for i := from; i <= to; i++ {
+		s.large.Insert(i)
+	}
 }
 
 // Remove removes a value from the set. No-op if the value is not in the set.

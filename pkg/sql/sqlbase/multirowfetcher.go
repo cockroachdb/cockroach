@@ -83,7 +83,8 @@ type MultiRowFetcherTableArgs struct {
 	ColIdxMap        map[ColumnID]int
 	IsSecondaryIndex bool
 	Cols             []ColumnDescriptor
-	ValNeededForCol  []bool
+	// The indexes (0 to # of columns - 1) of the columns to return.
+	ValNeededForCol util.FastIntSet
 }
 
 // MultiRowFetcher handles fetching kvs and forming table rows for an
@@ -168,7 +169,7 @@ type MultiRowFetcher struct {
 }
 
 // Init sets up a MultiRowFetcher for a given table and index. If we are using a
-// non-primary index, valNeededForCol can only be true for the columns in the
+// non-primary index, tables.ValNeededForCol can only refer to columns in the
 // index.
 func (mrf *MultiRowFetcher) Init(
 	reverse, lockForUpdate, returnRangeInfo bool,
@@ -229,17 +230,12 @@ func (mrf *MultiRowFetcher) Init(
 		// The last signature is the given table's equivalence signature.
 		table.equivSignature = equivSignatures[len(equivSignatures)-1]
 
-		for i, v := range tableArgs.ValNeededForCol {
-			if !v {
-				continue
-			}
-			// The i-th column is required. Search the colIdxMap to find the
-			// corresponding ColumnID.
-			for col, idx := range table.colIdxMap {
-				if idx == i {
-					table.neededCols.Add(int(col))
-					break
-				}
+		// Scan through the entire columns map to see which columns are
+		// required.
+		for col, idx := range table.colIdxMap {
+			if tableArgs.ValNeededForCol.Contains(idx) {
+				// The idx-th column is required.
+				table.neededCols.Add(int(col))
 			}
 		}
 
@@ -766,7 +762,7 @@ func (mrf *MultiRowFetcher) processValueTuple(
 
 // NextRow processes keys until we complete one row, which is returned as an
 // EncDatumRow. The row contains one value per table column, regardless of the
-// index used; values that are not needed (as per valNeededForCol) are nil. The
+// index used; values that are not needed (as per neededCols) are nil. The
 // EncDatumRow should not be modified and is only valid until the next call.
 // When there are no more rows, the EncDatumRow is nil.
 // It also returns the table and index descriptor associated with the row
