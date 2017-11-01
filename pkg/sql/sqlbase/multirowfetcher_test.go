@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"golang.org/x/net/context"
 )
@@ -34,7 +35,7 @@ const testDB = "test"
 type initFetcherArgs struct {
 	tableDesc       *TableDescriptor
 	indexIdx        int
-	valNeededForCol []bool
+	valNeededForCol util.FastIntSet
 }
 
 func initFetcher(
@@ -88,7 +89,7 @@ type fetcherEntryArgs struct {
 	nRows            int
 	nCols            int // Number of columns in the table
 	nVals            int // Number of values requested from scan
-	valNeededForCol  []bool
+	valNeededForCol  util.FastIntSet
 	genValue         sqlutils.GenRowFn
 }
 
@@ -122,7 +123,6 @@ func TestNextRowSingle(t *testing.T) {
 	}
 
 	// Initialize tables first.
-	var maxCols int
 	for tableName, table := range tables {
 		sqlutils.CreateTable(
 			t, sqlDB, tableName,
@@ -130,29 +130,22 @@ func TestNextRowSingle(t *testing.T) {
 			table.nRows,
 			sqlutils.ToRowFn(sqlutils.RowIdxFn, sqlutils.RowModuloFn(table.modFactor)),
 		)
-		if table.nCols > maxCols {
-			maxCols = table.nCols
-		}
 	}
 
 	alloc := &DatumAlloc{}
-
-	// Backing slice for specifying which column values should be returned.
-	// By default, we want all the columns.
-	valNeededForCol := make([]bool, maxCols)
-	for i := range valNeededForCol {
-		valNeededForCol[i] = true
-	}
 
 	// We try to read rows from each table.
 	for tableName, table := range tables {
 		t.Run(tableName, func(t *testing.T) {
 			tableDesc := GetTableDescriptor(kvDB, testDB, tableName)
+
+			var valNeededForCol util.FastIntSet
+			valNeededForCol.AddUpTo(table.nCols - 1)
 			args := []initFetcherArgs{
 				{
 					tableDesc:       tableDesc,
 					indexIdx:        0,
-					valNeededForCol: valNeededForCol[:table.nCols],
+					valNeededForCol: valNeededForCol,
 				},
 			}
 
@@ -233,21 +226,19 @@ func TestNextRowSecondaryIndex(t *testing.T) {
 
 	tables := map[string]*fetcherEntryArgs{
 		"nonunique": {
-			modFactor:       20,
-			schema:          "p INT PRIMARY KEY, idx INT, s1 INT, s2 INT, INDEX i1 (idx)",
-			nRows:           422,
-			nCols:           4,
-			nVals:           2,
-			valNeededForCol: []bool{true, true, false, false},
+			modFactor: 20,
+			schema:    "p INT PRIMARY KEY, idx INT, s1 INT, s2 INT, INDEX i1 (idx)",
+			nRows:     422,
+			nCols:     4,
+			nVals:     2,
 		},
 		"unique": {
 			// Must be > nRows since this value must be unique.
-			modFactor:       1000,
-			schema:          "p INT PRIMARY KEY, idx INT, s1 INT, s2 INT, UNIQUE INDEX i1 (idx)",
-			nRows:           123,
-			nCols:           4,
-			nVals:           2,
-			valNeededForCol: []bool{true, true, false, false},
+			modFactor: 1000,
+			schema:    "p INT PRIMARY KEY, idx INT, s1 INT, s2 INT, UNIQUE INDEX i1 (idx)",
+			nRows:     123,
+			nCols:     4,
+			nVals:     2,
 		},
 		"nonuniquestoring": {
 			modFactor: 42,
@@ -290,7 +281,6 @@ func TestNextRowSecondaryIndex(t *testing.T) {
 
 	r := sqlutils.MakeSQLRunner(t, sqlDB)
 	// Initialize tables first.
-	var maxCols int
 	for tableName, table := range tables {
 		sqlutils.CreateTable(
 			t, sqlDB, tableName,
@@ -298,9 +288,6 @@ func TestNextRowSecondaryIndex(t *testing.T) {
 			table.nRows,
 			table.genValue,
 		)
-		if table.nCols > maxCols {
-			maxCols = table.nCols
-		}
 
 		// Insert nNulls NULL secondary index values (this tests if
 		// we're properly decoding (UNIQUE) secondary index keys
@@ -318,29 +305,20 @@ func TestNextRowSecondaryIndex(t *testing.T) {
 	}
 
 	alloc := &DatumAlloc{}
-
-	// Backing slice for specifying which column values should be returned.
-	// By default, we want all the columns.
-	valNeededForCol := make([]bool, maxCols)
-	for i := range valNeededForCol {
-		valNeededForCol[i] = true
-	}
-
 	// We try to read rows from each index.
 	for tableName, table := range tables {
 		t.Run(tableName, func(t *testing.T) {
 			tableDesc := GetTableDescriptor(kvDB, testDB, tableName)
 
-			colsNeeded := valNeededForCol[:table.nCols]
-			if table.valNeededForCol != nil {
-				colsNeeded = table.valNeededForCol
-			}
+			var valNeededForCol util.FastIntSet
+			valNeededForCol.AddUpTo(table.nVals - 1)
+
 			args := []initFetcherArgs{
 				{
 					tableDesc: tableDesc,
 					// We scan from the first secondary index.
 					indexIdx:        1,
-					valNeededForCol: colsNeeded,
+					valNeededForCol: valNeededForCol,
 				},
 			}
 
@@ -550,6 +528,10 @@ func TestNextRowInterleave(t *testing.T) {
 		},
 	}
 
+	for _, table := range tableArgs {
+		table.valNeededForCol.AddUpTo(table.nVals - 1)
+	}
+
 	// Initialize generating value functions for each table.
 	tableArgs["parent1"].genValue = sqlutils.ToRowFn(
 		sqlutils.RowIdxFn,
@@ -613,8 +595,8 @@ func TestNextRowInterleave(t *testing.T) {
 	ggc1idx.indexSchema = `CREATE UNIQUE INDEX ggc1_unique_idx ON test.grandgrandchild1 (p2) INTERLEAVE IN PARENT test.parent2 (p2);`
 	ggc1idx.indexName = "ggc1_unique_idx"
 	ggc1idx.indexIdx = 1
-	// Last column v is not stored in this index.
-	ggc1idx.valNeededForCol = []bool{true, true, true, true, false}
+	// Last column v (idx 4) is not stored in this index.
+	ggc1idx.valNeededForCol.Remove(4)
 	ggc1idx.nVals = 4
 
 	// We need an ordering of the tables in order to execute the interleave
@@ -630,7 +612,6 @@ func TestNextRowInterleave(t *testing.T) {
 		*tableArgs["parent3"],
 	}
 
-	var maxCols int
 	for _, table := range interleaveEntries {
 		if table.indexSchema != "" {
 			// Create interleaved secondary indexes.
@@ -646,21 +627,9 @@ func TestNextRowInterleave(t *testing.T) {
 				table.genValue,
 			)
 		}
-
-		if table.nCols > maxCols {
-			maxCols = table.nCols
-		}
-
 	}
 
 	alloc := &DatumAlloc{}
-	// Backing slice for specifying which column values should be returned.
-	// By default, we want all the columns.
-	valNeededForCol := make([]bool, maxCols)
-	for i := range valNeededForCol {
-		valNeededForCol[i] = true
-	}
-
 	// Retrieve rows from every non-empty subset of the tables/indexes.
 	for _, idxs := range generateIdxSubsets(len(interleaveEntries)-1, nil) {
 		// Initialize our subset of tables/indexes.
@@ -695,15 +664,10 @@ func TestNextRowInterleave(t *testing.T) {
 				}
 				idLookups[idLookupKey(tableDesc.ID, indexID)] = entry
 
-				colsNeeded := valNeededForCol[:entry.nCols]
-				if entry.valNeededForCol != nil {
-					colsNeeded = entry.valNeededForCol
-				}
-
 				args[i] = initFetcherArgs{
 					tableDesc:       tableDesc,
 					indexIdx:        entry.indexIdx,
-					valNeededForCol: colsNeeded,
+					valNeededForCol: entry.valNeededForCol,
 				}
 
 				// We take every entry's index span (primary or

@@ -203,3 +203,24 @@ func TestFastIntSetTwoSetOps(t *testing.T) {
 		}
 	}
 }
+
+func TestFastIntAddUpTo(t *testing.T) {
+	checkBuffer := 100
+
+	for _, n := range []int{0, 1, 20, 32, 42, 62, 63, 64, 100} {
+		var set FastIntSet
+		set.AddUpTo(n)
+
+		for i := 0; i <= n; i++ {
+			if !set.Contains(i) {
+				t.Errorf("expected FastIntSet to contain value %d with AppUpTo(%d)", i, n)
+			}
+		}
+
+		for i := n + 1; i <= n+checkBuffer; i++ {
+			if set.Contains(i) {
+				t.Errorf("expected FastIntSet to not contain value %d with AddUpTo(%d)", i, n)
+			}
+		}
+	}
+}
