@@ -2049,6 +2049,13 @@ type EvalContext struct {
 	// This must not be modified (this is shared from the session).
 	SearchPath SearchPath
 
+	// Placeholders relates placeholder names to their type and, later, value.
+	// This pointer should always be set to the location of the PlaceholderInfo
+	// in the corresponding SemaContext during normal execution. Placeholders are
+	// available during Eval to permit lookup of a particular placeholder's
+	// underlying datum, if available.
+	Placeholders *PlaceholderInfo
+
 	// CtxProvider holds the context in which the expression is evaluated. This
 	// will point to the session, which is itself a provider of contexts.
 	// NOTE: seems a bit lazy to hold a pointer to the session's context here,
@@ -2150,6 +2157,12 @@ func (ctx *EvalContext) GetClusterTimestampRaw() hlc.Timestamp {
 		panic("zero cluster timestamp in EvalContext")
 	}
 	return ctx.clusterTimestamp
+}
+
+// HasPlaceholders returns true if this EvalContext's placeholders have been
+// assigned. Will be false during Prepare.
+func (ctx *EvalContext) HasPlaceholders() bool {
+	return ctx.Placeholders != nil
 }
 
 // TimestampToDecimal converts the logical timestamp into a decimal
