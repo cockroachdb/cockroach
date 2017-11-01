@@ -856,7 +856,7 @@ func (node *CreateSequence) Format(buf *bytes.Buffer, f FmtFlags) {
 	for _, option := range node.Options {
 		buf.WriteByte(' ')
 		switch option.Name {
-		case "MAXVALUE", "MINVALUE":
+		case SeqOptMaxValue, SeqOptMinValue:
 			if option.IntVal == nil {
 				buf.WriteString("NO ")
 				buf.WriteString(option.Name)
@@ -865,13 +865,27 @@ func (node *CreateSequence) Format(buf *bytes.Buffer, f FmtFlags) {
 				buf.WriteByte(' ')
 				buf.WriteString(fmt.Sprintf("%d", *option.IntVal))
 			}
-		case "CYCLE":
+		case SeqOptCycle:
 			if option.BoolVal {
 				buf.WriteString("CYCLE")
 			} else {
 				buf.WriteString("NO CYCLE")
 			}
-		default:
+		case SeqOptStart:
+			buf.WriteString(option.Name)
+			buf.WriteByte(' ')
+			if option.OptionalWord {
+				buf.WriteString("WITH ")
+			}
+			buf.WriteString(fmt.Sprintf("%d", *option.IntVal))
+		case SeqOptIncrement:
+			buf.WriteString(option.Name)
+			buf.WriteByte(' ')
+			if option.OptionalWord {
+				buf.WriteString("BY ")
+			}
+			buf.WriteString(fmt.Sprintf("%d", *option.IntVal))
+		case SeqOptCache:
 			buf.WriteString(option.Name)
 			buf.WriteByte(' ')
 			buf.WriteString(fmt.Sprintf("%d", *option.IntVal))
@@ -885,6 +899,8 @@ type SequenceOption struct {
 
 	IntVal  *int64
 	BoolVal bool
+
+	OptionalWord bool
 }
 
 // Names of options on CREATE SEQUENCE.
