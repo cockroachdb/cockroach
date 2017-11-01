@@ -615,11 +615,14 @@ func (p *planner) notifySchemaChange(
 	tableDesc *sqlbase.TableDescriptor, mutationID sqlbase.MutationID,
 ) {
 	sc := SchemaChanger{
-		tableID:     tableDesc.GetID(),
-		mutationID:  mutationID,
-		nodeID:      p.evalCtx.NodeID,
-		leaseMgr:    p.LeaseMgr(),
-		jobRegistry: p.ExecCfg().JobRegistry,
+		tableID:              tableDesc.GetID(),
+		mutationID:           mutationID,
+		nodeID:               p.evalCtx.NodeID,
+		leaseMgr:             p.LeaseMgr(),
+		jobRegistry:          p.ExecCfg().JobRegistry,
+		leaseHolderCache:     p.ExecCfg().LeaseHolderCache,
+		rangeDescriptorCache: p.ExecCfg().RangeDescriptorCache,
+		clock:                p.ExecCfg().Clock,
 	}
 	p.session.TxnState.schemaChangers.queueSchemaChanger(sc)
 }
