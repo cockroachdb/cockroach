@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/pkg/errors"
@@ -107,10 +108,8 @@ func (cb *columnBackfiller) init() error {
 	}
 
 	// We need all the columns.
-	valNeededForCol := make([]bool, len(desc.Columns))
-	for i := range valNeededForCol {
-		valNeededForCol[i] = true
-	}
+	var valNeededForCol util.FastIntSet
+	valNeededForCol.AddUpTo(len(desc.Columns) - 1)
 
 	colIdxMap = make(map[sqlbase.ColumnID]int, len(desc.Columns))
 	for i, c := range desc.Columns {

@@ -688,23 +688,13 @@ func initTableReaderSpec(
 // getOutputColumnsFromScanNode returns the indices of the columns that are
 // returned by a scanNode.
 func getOutputColumnsFromScanNode(n *scanNode) []uint32 {
-	num := 0
-	for i := range n.resultColumns {
-		if n.valNeededForCol[i] {
-			num++
-		}
-	}
-	outputColumns := make([]uint32, num)
-	idx := 0
-	for i := range n.resultColumns {
-		// TODO(radu): if we have a scan with a filter, valNeededForCol will include
-		// the columns needed for the filter, even if they aren't needed for the
-		// next stage.
-		if n.valNeededForCol[i] {
-			outputColumns[idx] = uint32(i)
-			idx++
-		}
-	}
+	var outputColumns []uint32
+	// TODO(radu): if we have a scan with a filter, valNeededForCol will include
+	// the columns needed for the filter, even if they aren't needed for the
+	// next stage.
+	n.valNeededForCol.ForEach(func(i int) {
+		outputColumns = append(outputColumns, uint32(i))
+	})
 	return outputColumns
 }
 

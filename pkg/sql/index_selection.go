@@ -799,15 +799,16 @@ func (v *indexInfo) isCoveringIndex(scan *scanNode) bool {
 		return true
 	}
 
-	for i, needed := range scan.valNeededForCol {
-		if needed {
-			colID := v.desc.Columns[i].ID
-			if !v.index.ContainsColumnID(colID) {
-				return false
-			}
+	isCovering := true
+
+	scan.valNeededForCol.ForEach(func(i int) {
+		colID := v.desc.Columns[i].ID
+		if !v.index.ContainsColumnID(colID) {
+			isCovering = false
 		}
-	}
-	return true
+	})
+
+	return isCovering
 }
 
 type indexInfoByCost []*indexInfo

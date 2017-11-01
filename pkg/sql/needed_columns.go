@@ -86,14 +86,15 @@ func setNeededColumns(plan planNode, needed []bool) {
 		markOmitted(n.columns, needed)
 
 	case *scanNode:
-		copy(n.valNeededForCol, needed)
-		for i := range needed {
+		for i, colNeeded := range needed {
 			// All the values involved in the filter expression are needed too.
-			if n.filterVars.IndexedVarUsed(i) {
-				n.valNeededForCol[i] = true
+			if colNeeded || n.filterVars.IndexedVarUsed(i) {
+				n.valNeededForCol.Add(i)
+				n.resultColumns[i].Omitted = false
+			} else {
+				n.resultColumns[i].Omitted = true
 			}
 		}
-		markOmitted(n.resultColumns, n.valNeededForCol)
 
 	case *distinctNode:
 		// Distinct needs values for every input column.
