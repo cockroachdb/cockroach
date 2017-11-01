@@ -182,4 +182,21 @@ public class MainTest extends CockroachDBTest {
         String[] result = (String[])rs.getArray(1).getArray();
         Assert.assertArrayEquals(new String[]{"123", "hello", "\"hello\""}, result);
     }
+
+    @Test
+    public void testSequence() throws Exception {
+        PreparedStatement createSeq = conn.prepareStatement("CREATE SEQUENCE foo");
+        int res = createSeq.executeUpdate();
+        Assert.assertEquals(res, 0);
+
+        PreparedStatement getNextVal = conn.prepareStatement("SELECT nextval('foo')");
+
+        ResultSet rs = getNextVal.executeQuery();
+        rs.next();
+        Assert.assertEquals(rs.getInt(1), 1);
+
+        rs = getNextVal.executeQuery();
+        rs.next();
+        Assert.assertEquals(rs.getInt(1), 2);
+    }
 }
