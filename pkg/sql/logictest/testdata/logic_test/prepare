@@ -334,7 +334,7 @@ query error pq: job with ID 123 does not exist
 EXECUTE p6(123)
 
 # Ensure that SET / SET CLUSTER SETTING know about placeholders
-statement
+statement ok
 PREPARE setp(string) AS SET application_name = $1
 
 query T
@@ -350,13 +350,28 @@ hello
 # Note: we can't check the result of SET CLUSTER SETTING synchronously
 # because it doesn't propagate immediately.
 
-statement
+statement ok
 PREPARE sets(string) AS SET CLUSTER SETTING cluster.organization = $1
 
-statement
+statement ok
 EXECUTE sets('hello')
 
 # #19597
 
 statement error could not determine data type of placeholder
 PREPARE x19597 AS SELECT $1 IN ($2, null);
+
+# Regression for #19716: ensure that placeholders for EXECUTE statements inside
+# of PREPARE statements are properly segregated from those of the outer
+# statement.
+
+statement ok
+PREPARE innerStmt AS SELECT $1:::int i, 'foo' t
+
+statement ok
+PREPARE outerStmt AS SELECT * FROM [EXECUTE innerStmt(3)] WHERE t = $1
+
+query IT
+EXECUTE outerStmt('foo')
+----
+3 foo
