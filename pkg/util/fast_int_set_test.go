@@ -203,3 +203,27 @@ func TestFastIntSetTwoSetOps(t *testing.T) {
 		}
 	}
 }
+
+func TestFastIntSetAddUpTo(t *testing.T) {
+	assertSet := func(set *FastIntSet, n int) {
+		// Iterate through the set and ensure that the values
+		// it contain are the values from 0 to n (inclusively).
+		expected := 0
+		set.ForEach(func(actual int) {
+			if actual > n {
+				t.Fatalf("expected last value in FastIntSet to be %d, got %d", n, actual)
+			}
+			if expected != actual {
+				t.Fatalf("expected next value in FastIntSet to be %d, got %d", expected, actual)
+			}
+			expected++
+		})
+	}
+
+	// Test all values of n up to smallCutoff + 100.
+	for n := 0; n <= smallCutoff+100; n++ {
+		var set FastIntSet
+		set.AddUpTo(n)
+		assertSet(&set, n)
+	}
+}

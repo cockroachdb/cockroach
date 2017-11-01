@@ -17,6 +17,7 @@ package util
 import (
 	"bytes"
 	"fmt"
+	math "math"
 	"math/bits"
 
 	"golang.org/x/tools/container/intsets"
@@ -79,6 +80,23 @@ func (s *FastIntSet) Add(i int) {
 		s.small = 0
 	}
 	s.large.Insert(i)
+}
+
+// AddUpTo adds values 0 up to n (inclusively) to the set.
+func (s *FastIntSet) AddUpTo(n int) {
+	if n >= 0 && n < smallCutoff && s.large == nil {
+		// Fast path.
+		s.small |= (math.MaxUint64 >> uint64(smallCutoff-1-n))
+		return
+	}
+
+	if s.large == nil {
+		s.large = s.toLarge()
+		s.small = 0
+	}
+	for i := 0; i <= n; i++ {
+		s.large.Insert(i)
+	}
 }
 
 // Remove removes a value from the set. No-op if the value is not in the set.

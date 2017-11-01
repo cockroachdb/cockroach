@@ -22,6 +22,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	opentracing "github.com/opentracing/opentracing-go"
@@ -140,38 +141,37 @@ func (h *ProcOutputHelper) Init(
 
 // neededColumns calculates the set of internal processor columns that are
 // actually used by the post-processing stage.
-func (h *ProcOutputHelper) neededColumns() []bool {
-	needed := make([]bool, h.numInternalCols)
+func (h *ProcOutputHelper) neededColumns() (colIdxs util.FastIntSet) {
 	if h.outputCols == nil && h.renderExprs == nil {
 		// No projection or rendering; all columns are needed.
-		for i := range needed {
-			needed[i] = true
-		}
-		return needed
+		colIdxs.AddUpTo(h.numInternalCols - 1)
+		return colIdxs
 	}
+
+	// Add all explicit output columns.
 	for _, c := range h.outputCols {
-		needed[c] = true
+		colIdxs.Add(int(c))
 	}
-	if h.filter != nil {
-		for i := range needed {
-			if !needed[i] {
-				needed[i] = h.filter.vars.IndexedVarUsed(i)
-			}
+
+	for i := 0; i < h.numInternalCols; i++ {
+		// See if filter requires this column.
+		if h.filter != nil && h.filter.vars.IndexedVarUsed(i) {
+			colIdxs.Add(i)
+			continue
 		}
-	}
-	if h.renderExprs != nil {
-		for i := range needed {
-			if !needed[i] {
-				for j := range h.renderExprs {
-					if h.renderExprs[j].vars.IndexedVarUsed(i) {
-						needed[i] = true
-						break
-					}
+
+		// See if render expressions require this column.
+		if h.renderExprs != nil {
+			for j := range h.renderExprs {
+				if h.renderExprs[j].vars.IndexedVarUsed(i) {
+					colIdxs.Add(i)
+					break
 				}
 			}
 		}
 	}
-	return needed
+
+	return colIdxs
 }
 
 // emitHelper is a utility wrapper on top of ProcOutputHelper.EmitRow().
