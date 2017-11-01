@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/util"
 )
 
 // Cockroach error extensions:
@@ -259,9 +260,12 @@ func ConvertBatchError(ctx context.Context, tableDesc *TableDescriptor, b *clien
 			return err
 		}
 		var rf MultiRowFetcher
+
+		var valNeededForCol util.FastIntSet
+		valNeededForCol.AddRange(0, len(index.ColumnIDs)-1)
+
 		colIdxMap := make(map[ColumnID]int, len(index.ColumnIDs))
 		cols := make([]ColumnDescriptor, len(index.ColumnIDs))
-		valNeededForCol := make([]bool, len(index.ColumnIDs))
 		for i, colID := range index.ColumnIDs {
 			colIdxMap[colID] = i
 			col, err := tableDesc.FindColumnByID(colID)
@@ -269,7 +273,6 @@ func ConvertBatchError(ctx context.Context, tableDesc *TableDescriptor, b *clien
 				return err
 			}
 			cols[i] = *col
-			valNeededForCol[i] = true
 		}
 
 		tableArgs := MultiRowFetcherTableArgs{

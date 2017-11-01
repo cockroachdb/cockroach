@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -334,10 +335,10 @@ func (tu *tableUpserter) init(txn *client.Txn) error {
 		tu.mon.MakeBoundAccount(), sqlbase.ColTypeInfoFromColDescs(tu.ri.InsertCols), 0,
 	)
 
-	valNeededForCol := make([]bool, len(tu.fetchCols))
+	var valNeededForCol util.FastIntSet
 	for i, col := range tu.fetchCols {
 		if _, ok := tu.fetchColIDtoRowIndex[col.ID]; ok {
-			valNeededForCol[i] = true
+			valNeededForCol.Add(i)
 		}
 	}
 
@@ -811,9 +812,10 @@ func (td *tableDeleter) deleteAllRowsScan(
 	if resume.Key == nil {
 		resume = td.rd.Helper.TableDesc.PrimaryIndexSpan()
 	}
-	valNeededForCol := make([]bool, len(td.rd.Helper.TableDesc.Columns))
+
+	var valNeededForCol util.FastIntSet
 	for _, idx := range td.rd.FetchColIDtoRowIndex {
-		valNeededForCol[idx] = true
+		valNeededForCol.Add(idx)
 	}
 
 	var rf sqlbase.MultiRowFetcher
@@ -904,9 +906,10 @@ func (td *tableDeleter) deleteIndexScan(
 	if resume.Key == nil {
 		resume = td.rd.Helper.TableDesc.PrimaryIndexSpan()
 	}
-	valNeededForCol := make([]bool, len(td.rd.Helper.TableDesc.Columns))
+
+	var valNeededForCol util.FastIntSet
 	for _, idx := range td.rd.FetchColIDtoRowIndex {
-		valNeededForCol[idx] = true
+		valNeededForCol.Add(idx)
 	}
 
 	var rf sqlbase.MultiRowFetcher

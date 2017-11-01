@@ -133,7 +133,7 @@ func (p *planner) makeIndexJoin(
 	// field in the indexJoinNode, and to determine which columns are
 	// provided by this index for the purpose of splitting the WHERE
 	// filter into an index-specific part and a "rest" part.
-	primaryKeyColumns := make([]bool, len(origScan.valNeededForCol))
+	primaryKeyColumns := make([]bool, len(origScan.cols))
 	for _, colID := range table.desc.PrimaryIndex.ColumnIDs {
 		// All the PK columns from the table scanNode must
 		// be fetched in the index scanNode.
@@ -151,7 +151,7 @@ func (p *planner) makeIndexJoin(
 	// contains the PK columns of the indexed table, we also need to
 	// gather here which additional columns are indexed. This is done in
 	// valProvidedIndex.
-	valProvidedIndex := make([]bool, len(origScan.valNeededForCol))
+	valProvidedIndex := make([]bool, len(origScan.cols))
 
 	// Then, in case the index-specific part, post-split, actually
 	// refers to any additional column, we also need to prepare the
