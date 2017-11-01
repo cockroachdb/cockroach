@@ -182,9 +182,7 @@ including:
 - Adding an entry to the `system.namespace` table or erroring if the name is
   already taken, since sequences exist in the same namespace as tables.
 - Writing table descriptor to the `system.descriptor` table.
-- _Note:_ Creating a table or a view also allocates a range. This shouldn't be
-  done for views (this is a bug which, while fairly harmless, should be fixed)
-  or sequences.
+- Creating a new range.
 
 Additionally, `ALTER SEQUENCE` will use machinery designed for table schema
 changes: all nodes will be notified of the change and read the new version of
@@ -195,13 +193,17 @@ discussion of alternate approaches.
 
 #### Sequence values
 
-Values for all sequences in the cluster will be stored in a single range, which
-could later split due to load-based splitting (when we support that) or a large
-number of sequences. Reads and writes to the sequence value (via the functions
-`nextval`, `currval`, etc.), will be implemented by direct calls to the KV
-layer's `Get`, `Inc`, and `Set` functions.
+Each sequence value will be stored in its own range, with a key in this format:
 
-Storing sequence values in their own range means that inserts to tables which
+```
+/Table/<DescriptorID>/SequenceValue
+```
+
+Reads and writes to the sequence value (via the functions `nextval`, `currval`,
+etc.), will be implemented by direct calls to the KV layer's `Get`, `Inc`, and
+`Set` functions.
+
+Storing sequence values in their own ranges means that inserts to tables which
 use sequences will always touch two ranges. However, since the sequence update
 takes place outside of the SQL transaction, this should not trigger the 2PC
 commit protocol. Savvy users might question this; we should note it in our
@@ -332,10 +334,12 @@ Options are:
 
 ### Sequence values
 
-- One range per sequence
+- One range per sequence (chosen)
   - Advantages:
     - Spreads load out; no performance bottleneck or single point of failure
       for all sequences
+    - Allows per-sequence zone config, allowing operators to keep the sequence
+      value local to the table that's using it
     - Already gets created when a `TableDescriptor` is created
   - Disadvantages:
     - A lot of overhead to store a single integer
@@ -343,16 +347,17 @@ Options are:
   - Advantages: Would keep the KV operations for a sequence-using `INSERT`
     local to one range (until the table splits)
   - Sequences can be used by multiple tables; in this situation we wouldn't know
-    where to put it.
-- All sequences in one range (chosen)
+    where to put it. We could allow users to tell us using a syntax extention
+    to `CREATE|ALTER SEQUENCE`, but we should really be directing them toward
+    `unique_rowid`.
+- All sequences in one range
   - Advantages:
     - Avoids overhead of one range per table.
     - Allows a sequence to be used from multiple tables.
   - Disadvantages:
     - Without load-based or manual splitting, this range would be a single point
-      of failure and/or a performance bottleneck. However, with one range per
-      sequence, many applications will fail if the ranges used in a transaction
-      go down anyway.
+      of failure and/or a performance bottleneck. It's unclear how operators
+      would manually split the range. (zone configs? SQL?)
 - A `system.sequences` table
   - Advantages:
     - All those of the "all sequences in one range" approach
