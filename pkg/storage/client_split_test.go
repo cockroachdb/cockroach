@@ -1986,70 +1986,68 @@ func TestDistributedTxnCleanup(t *testing.T) {
 	}
 
 	// Test both commit and abort cases.
-	for _, force := range []bool{true, false} {
-		for _, commit := range []bool{true, false} {
-			t.Run(fmt.Sprintf("force=%t,commit=%t", force, commit), func(t *testing.T) {
-				// Run a distributed transaction involving the lhsKey and rhsKey.
-				var txnKey roachpb.Key
-				ctx := context.Background()
-				txn := client.NewTxn(store.DB(), 0 /* gatewayNodeID */)
-				opts := client.TxnExecOptions{
-					AutoCommit: true,
-					AutoRetry:  false,
+	testutils.RunTrueAndFalse(t, "force", func(t *testing.T, force bool) {
+		testutils.RunTrueAndFalse(t, "commit", func(t *testing.T, commit bool) {
+			// Run a distributed transaction involving the lhsKey and rhsKey.
+			var txnKey roachpb.Key
+			ctx := context.Background()
+			txn := client.NewTxn(store.DB(), 0 /* gatewayNodeID */)
+			opts := client.TxnExecOptions{
+				AutoCommit: true,
+				AutoRetry:  false,
+			}
+			if err := txn.Exec(ctx, opts, func(ctx context.Context, txn *client.Txn, _ *client.TxnExecOptions) error {
+				b := txn.NewBatch()
+				b.Put(fmt.Sprintf("%s.force=%t,commit=%t", string(lhsKey), force, commit), "lhsValue")
+				b.Put(fmt.Sprintf("%s.force=%t,commit=%t", string(rhsKey), force, commit), "rhsValue")
+				if err := txn.Run(ctx, b); err != nil {
+					return err
 				}
-				if err := txn.Exec(ctx, opts, func(ctx context.Context, txn *client.Txn, _ *client.TxnExecOptions) error {
-					b := txn.NewBatch()
-					b.Put(fmt.Sprintf("%s.force=%t,commit=%t", string(lhsKey), force, commit), "lhsValue")
-					b.Put(fmt.Sprintf("%s.force=%t,commit=%t", string(rhsKey), force, commit), "rhsValue")
-					if err := txn.Run(ctx, b); err != nil {
-						return err
-					}
-					txnKey = keys.TransactionKey(txn.Proto().Key, txn.Proto().ID)
-					// If force=true, we're force-aborting the txn out from underneath.
-					// This simulates txn deadlock or a max priority txn aborting a
-					// normal or min priority txn.
-					if force {
-						ba := roachpb.BatchRequest{}
-						ba.RangeID = lhs.RangeID
-						ba.Add(&roachpb.PushTxnRequest{
-							Span: roachpb.Span{
-								Key: txn.Proto().Key,
-							},
-							Now:       store.Clock().Now(),
-							PusheeTxn: txn.Proto().TxnMeta,
-							PushType:  roachpb.PUSH_ABORT,
-							Force:     true,
-						})
-						_, pErr := store.Send(ctx, ba)
-						if pErr != nil {
-							t.Errorf("failed to abort the txn: %s", pErr)
-						}
-					}
-					if commit {
-						return nil
-					}
-					return errors.New("forced abort")
-				}); err != nil {
-					txn.CleanupOnError(ctx, err)
-					if !force && commit {
-						t.Fatalf("expected success with commit == true; got %v", err)
+				txnKey = keys.TransactionKey(txn.Proto().Key, txn.Proto().ID)
+				// If force=true, we're force-aborting the txn out from underneath.
+				// This simulates txn deadlock or a max priority txn aborting a
+				// normal or min priority txn.
+				if force {
+					ba := roachpb.BatchRequest{}
+					ba.RangeID = lhs.RangeID
+					ba.Add(&roachpb.PushTxnRequest{
+						Span: roachpb.Span{
+							Key: txn.Proto().Key,
+						},
+						Now:       store.Clock().Now(),
+						PusheeTxn: txn.Proto().TxnMeta,
+						PushType:  roachpb.PUSH_ABORT,
+						Force:     true,
+					})
+					_, pErr := store.Send(ctx, ba)
+					if pErr != nil {
+						t.Errorf("failed to abort the txn: %s", pErr)
 					}
 				}
-
-				// Verify that the transaction record is cleaned up.
-				testutils.SucceedsSoon(t, func() error {
-					kv, err := store.DB().Get(ctx, txnKey)
-					if err != nil {
-						return err
-					}
-					if kv.Value != nil {
-						return errors.Errorf("expected txn record %s to have been cleaned", txnKey)
-					}
+				if commit {
 					return nil
-				})
+				}
+				return errors.New("forced abort")
+			}); err != nil {
+				txn.CleanupOnError(ctx, err)
+				if !force && commit {
+					t.Fatalf("expected success with commit == true; got %v", err)
+				}
+			}
+
+			// Verify that the transaction record is cleaned up.
+			testutils.SucceedsSoon(t, func() error {
+				kv, err := store.DB().Get(ctx, txnKey)
+				if err != nil {
+					return err
+				}
+				if kv.Value != nil {
+					return errors.Errorf("expected txn record %s to have been cleaned", txnKey)
+				}
+				return nil
 			})
-		}
-	}
+		})
+	})
 }
 
 func TestUnsplittableRange(t *testing.T) {
@@ -2123,112 +2121,110 @@ func TestUnsplittableRange(t *testing.T) {
 func TestPushTxnQueueDependencyCycleWithRangeSplit(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	for _, read2ndPass := range []bool{false, true} {
-		t.Run(fmt.Sprintf("read-2nd-pass:%t", read2ndPass), func(t *testing.T) {
-			var pushCount int32
-			firstPush := make(chan struct{})
+	testutils.RunTrueAndFalse(t, "read2ndPass", func(t *testing.T, read2ndPass bool) {
+		var pushCount int32
+		firstPush := make(chan struct{})
 
-			storeCfg := storage.TestStoreConfig(nil)
-			storeCfg.TestingKnobs.DisableSplitQueue = true
-			storeCfg.TestingKnobs.TestingEvalFilter =
-				func(filterArgs storagebase.FilterArgs) *roachpb.Error {
-					if _, ok := filterArgs.Req.(*roachpb.PushTxnRequest); ok {
-						if atomic.AddInt32(&pushCount, 1) == 1 {
-							close(firstPush)
-						}
+		storeCfg := storage.TestStoreConfig(nil)
+		storeCfg.TestingKnobs.DisableSplitQueue = true
+		storeCfg.TestingKnobs.TestingEvalFilter =
+			func(filterArgs storagebase.FilterArgs) *roachpb.Error {
+				if _, ok := filterArgs.Req.(*roachpb.PushTxnRequest); ok {
+					if atomic.AddInt32(&pushCount, 1) == 1 {
+						close(firstPush)
 					}
-					return nil
 				}
-			stopper := stop.NewStopper()
-			defer stopper.Stop(context.TODO())
-			store := createTestStoreWithConfig(t, stopper, storeCfg)
-
-			lhsKey := roachpb.Key("a")
-			rhsKey := roachpb.Key("b")
-
-			// Split at "a".
-			args := adminSplitArgs(lhsKey)
-			if _, pErr := client.SendWrapped(context.Background(), rg1(store), args); pErr != nil {
-				t.Fatalf("split at %q: %s", lhsKey, pErr)
+				return nil
 			}
-			lhs := store.LookupReplica(roachpb.RKey("a"), nil)
+		stopper := stop.NewStopper()
+		defer stopper.Stop(context.TODO())
+		store := createTestStoreWithConfig(t, stopper, storeCfg)
 
-			var txnACount, txnBCount int32
+		lhsKey := roachpb.Key("a")
+		rhsKey := roachpb.Key("b")
 
-			txnAWritesA := make(chan struct{})
-			txnAProceeds := make(chan struct{})
-			txnBWritesB := make(chan struct{})
-			txnBProceeds := make(chan struct{})
+		// Split at "a".
+		args := adminSplitArgs(lhsKey)
+		if _, pErr := client.SendWrapped(context.Background(), rg1(store), args); pErr != nil {
+			t.Fatalf("split at %q: %s", lhsKey, pErr)
+		}
+		lhs := store.LookupReplica(roachpb.RKey("a"), nil)
 
-			// Start txn to write key a.
-			txnACh := make(chan error)
-			go func() {
-				txnACh <- store.DB().Txn(context.Background(), func(ctx context.Context, txn *client.Txn) error {
-					if err := txn.Put(ctx, lhsKey, "value"); err != nil {
+		var txnACount, txnBCount int32
+
+		txnAWritesA := make(chan struct{})
+		txnAProceeds := make(chan struct{})
+		txnBWritesB := make(chan struct{})
+		txnBProceeds := make(chan struct{})
+
+		// Start txn to write key a.
+		txnACh := make(chan error)
+		go func() {
+			txnACh <- store.DB().Txn(context.Background(), func(ctx context.Context, txn *client.Txn) error {
+				if err := txn.Put(ctx, lhsKey, "value"); err != nil {
+					return err
+				}
+				if atomic.LoadInt32(&txnACount) == 0 {
+					close(txnAWritesA)
+					<-txnAProceeds
+				}
+				atomic.AddInt32(&txnACount, 1)
+				return txn.Put(ctx, rhsKey, "value-from-A")
+			})
+		}()
+		<-txnAWritesA
+
+		// Start txn to write key b.
+		txnBCh := make(chan error)
+		go func() {
+			txnBCh <- store.DB().Txn(context.Background(), func(ctx context.Context, txn *client.Txn) error {
+				if err := txn.Put(ctx, rhsKey, "value"); err != nil {
+					return err
+				}
+				if atomic.LoadInt32(&txnBCount) == 0 {
+					close(txnBWritesB)
+					<-txnBProceeds
+				}
+				atomic.AddInt32(&txnBCount, 1)
+				// Read instead of write key "a" if directed. This caused a
+				// PUSH_TIMESTAMP to be issued from txn B instead of PUSH_ABORT.
+				if read2ndPass {
+					if _, err := txn.Get(ctx, lhsKey); err != nil {
 						return err
 					}
-					if atomic.LoadInt32(&txnACount) == 0 {
-						close(txnAWritesA)
-						<-txnAProceeds
-					}
-					atomic.AddInt32(&txnACount, 1)
-					return txn.Put(ctx, rhsKey, "value-from-A")
-				})
-			}()
-			<-txnAWritesA
-
-			// Start txn to write key b.
-			txnBCh := make(chan error)
-			go func() {
-				txnBCh <- store.DB().Txn(context.Background(), func(ctx context.Context, txn *client.Txn) error {
-					if err := txn.Put(ctx, rhsKey, "value"); err != nil {
+				} else {
+					if err := txn.Put(ctx, lhsKey, "value-from-B"); err != nil {
 						return err
 					}
-					if atomic.LoadInt32(&txnBCount) == 0 {
-						close(txnBWritesB)
-						<-txnBProceeds
-					}
-					atomic.AddInt32(&txnBCount, 1)
-					// Read instead of write key "a" if directed. This caused a
-					// PUSH_TIMESTAMP to be issued from txn B instead of PUSH_ABORT.
-					if read2ndPass {
-						if _, err := txn.Get(ctx, lhsKey); err != nil {
-							return err
-						}
-					} else {
-						if err := txn.Put(ctx, lhsKey, "value-from-B"); err != nil {
-							return err
-						}
-					}
-					return nil
-				})
-			}()
-			<-txnBWritesB
-
-			// Now, let txnA proceed before splitting.
-			close(txnAProceeds)
-			// Wait for the push to occur.
-			<-firstPush
-
-			// Split at "b".
-			args = adminSplitArgs(rhsKey)
-			if _, pErr := client.SendWrappedWith(context.Background(), store, roachpb.Header{
-				RangeID: lhs.RangeID,
-			}, args); pErr != nil {
-				t.Fatalf("split at %q: %s", rhsKey, pErr)
-			}
-
-			// Now that we've split, allow txnB to proceed.
-			close(txnBProceeds)
-
-			// Verify that both complete.
-			for i, ch := range []chan error{txnACh, txnBCh} {
-				if err := <-ch; err != nil {
-					t.Fatalf("%d: txn failure: %v", i, err)
 				}
+				return nil
+			})
+		}()
+		<-txnBWritesB
+
+		// Now, let txnA proceed before splitting.
+		close(txnAProceeds)
+		// Wait for the push to occur.
+		<-firstPush
+
+		// Split at "b".
+		args = adminSplitArgs(rhsKey)
+		if _, pErr := client.SendWrappedWith(context.Background(), store, roachpb.Header{
+			RangeID: lhs.RangeID,
+		}, args); pErr != nil {
+			t.Fatalf("split at %q: %s", rhsKey, pErr)
+		}
+
+		// Now that we've split, allow txnB to proceed.
+		close(txnBProceeds)
+
+		// Verify that both complete.
+		for i, ch := range []chan error{txnACh, txnBCh} {
+			if err := <-ch; err != nil {
+				t.Fatalf("%d: txn failure: %v", i, err)
 			}
-		})
-	}
+		}
+	})
 }
 
 func TestStoreCapacityAfterSplit(t *testing.T) {
@@ -2364,32 +2360,30 @@ func TestRangeLookupAfterMeta2Split(t *testing.T) {
 		t.Fatal(pErr)
 	}
 
-	for _, rev := range []bool{false, true} {
-		t.Run(fmt.Sprintf("reverse=%t", rev), func(t *testing.T) {
-			// Clear the RangeDescriptorCache so that no cached descriptors are
-			// available from previous lookups.
-			s.DistSender().RangeDescriptorCache().Clear()
+	testutils.RunTrueAndFalse(t, "reverse", func(t *testing.T, rev bool) {
+		// Clear the RangeDescriptorCache so that no cached descriptors are
+		// available from previous lookups.
+		s.DistSender().RangeDescriptorCache().Clear()
 
-			// Scan from [/Table/49-/Table/50) both forwards and backwards.
-			// Either way, the resulting RangeLookup scan will be forced to
-			// perform a continuation lookup.
-			scanStart := roachpb.Key(keys.MakeTablePrefix(tableID - 2)) // 49
-			scanEnd := scanStart.PrefixEnd()                            // 50
-			span := roachpb.Span{
-				Key:    scanStart,
-				EndKey: scanEnd,
-			}
+		// Scan from [/Table/49-/Table/50) both forwards and backwards.
+		// Either way, the resulting RangeLookup scan will be forced to
+		// perform a continuation lookup.
+		scanStart := roachpb.Key(keys.MakeTablePrefix(tableID - 2)) // 49
+		scanEnd := scanStart.PrefixEnd()                            // 50
+		span := roachpb.Span{
+			Key:    scanStart,
+			EndKey: scanEnd,
+		}
 
-			var lookupReq roachpb.Request
-			if rev {
-				// A ReverseScanRequest will trigger a reverse RangeLookup scan.
-				lookupReq = &roachpb.ReverseScanRequest{Span: span}
-			} else {
-				lookupReq = &roachpb.ScanRequest{Span: span}
-			}
-			if _, err := client.SendWrapped(ctx, s.DistSender(), lookupReq); err != nil {
-				t.Fatalf("%T %v", err.GoError(), err)
-			}
-		})
-	}
+		var lookupReq roachpb.Request
+		if rev {
+			// A ReverseScanRequest will trigger a reverse RangeLookup scan.
+			lookupReq = &roachpb.ReverseScanRequest{Span: span}
+		} else {
+			lookupReq = &roachpb.ScanRequest{Span: span}
+		}
+		if _, err := client.SendWrapped(ctx, s.DistSender(), lookupReq); err != nil {
+			t.Fatalf("%T %v", err.GoError(), err)
+		}
+	})
 }
