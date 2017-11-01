@@ -16,7 +16,6 @@ package storage
 
 import (
 	"bytes"
-	"fmt"
 	"reflect"
 	"sync/atomic"
 	"testing"
@@ -390,74 +389,72 @@ func TestTxnWaitQueuePusheeExpires(t *testing.T) {
 func TestTxnWaitQueuePusherUpdate(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	for _, txnRecordExists := range []bool{true, false} {
-		t.Run(fmt.Sprintf("record-exists=%t", txnRecordExists), func(t *testing.T) {
-			tc := testContext{}
-			stopper := stop.NewStopper()
-			defer stopper.Stop(context.TODO())
-			tc.Start(t, stopper)
+	testutils.RunTrueAndFalse(t, "txnRecordExists", func(t *testing.T, txnRecordExists bool) {
+		tc := testContext{}
+		stopper := stop.NewStopper()
+		defer stopper.Stop(context.TODO())
+		tc.Start(t, stopper)
 
-			txn, err := createTxnForPushQueue(context.Background(), &tc)
+		txn, err := createTxnForPushQueue(context.Background(), &tc)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var pusher *roachpb.Transaction
+		if txnRecordExists {
+			pusher, err = createTxnForPushQueue(context.Background(), &tc)
 			if err != nil {
 				t.Fatal(err)
 			}
-			var pusher *roachpb.Transaction
-			if txnRecordExists {
-				pusher, err = createTxnForPushQueue(context.Background(), &tc)
-				if err != nil {
-					t.Fatal(err)
-				}
-			} else {
-				pusher = newTransaction("pusher", roachpb.Key("a"), 1, enginepb.SERIALIZABLE, tc.Clock())
+		} else {
+			pusher = newTransaction("pusher", roachpb.Key("a"), 1, enginepb.SERIALIZABLE, tc.Clock())
+		}
+
+		req := roachpb.PushTxnRequest{
+			PushType:  roachpb.PUSH_ABORT,
+			PusherTxn: *pusher,
+			PusheeTxn: txn.TxnMeta,
+		}
+
+		q := tc.repl.txnWaitQueue
+		q.Enable()
+		q.Enqueue(txn)
+
+		retCh := make(chan RespWithErr, 1)
+		go func() {
+			resp, pErr := q.MaybeWaitForPush(context.Background(), tc.repl, &req)
+			retCh <- RespWithErr{resp, pErr}
+		}()
+
+		testutils.SucceedsSoon(t, func() error {
+			expDeps := []uuid.UUID{pusher.ID}
+			if deps := q.GetDependents(txn.ID); !reflect.DeepEqual(deps, expDeps) {
+				return errors.Errorf("expected GetDependents %+v; got %+v", expDeps, deps)
 			}
-
-			req := roachpb.PushTxnRequest{
-				PushType:  roachpb.PUSH_ABORT,
-				PusherTxn: *pusher,
-				PusheeTxn: txn.TxnMeta,
-			}
-
-			q := tc.repl.txnWaitQueue
-			q.Enable()
-			q.Enqueue(txn)
-
-			retCh := make(chan RespWithErr, 1)
-			go func() {
-				resp, pErr := q.MaybeWaitForPush(context.Background(), tc.repl, &req)
-				retCh <- RespWithErr{resp, pErr}
-			}()
-
-			testutils.SucceedsSoon(t, func() error {
-				expDeps := []uuid.UUID{pusher.ID}
-				if deps := q.GetDependents(txn.ID); !reflect.DeepEqual(deps, expDeps) {
-					return errors.Errorf("expected GetDependents %+v; got %+v", expDeps, deps)
-				}
-				return nil
-			})
-
-			// If the record doesn't exist yet, give the push queue enough
-			// time to query the missing record and notice.
-			if !txnRecordExists {
-				time.Sleep(10 * time.Millisecond)
-			}
-
-			// Update txn on disk with status ABORTED.
-			pusherUpdate := *pusher
-			pusherUpdate.Status = roachpb.ABORTED
-			if err := writeTxnRecord(context.Background(), &tc, &pusherUpdate); err != nil {
-				t.Fatal(err)
-			}
-			q.UpdateTxn(context.Background(), &pusherUpdate)
-
-			respWithErr := <-retCh
-			if respWithErr.resp != nil {
-				t.Errorf("expected nil response; got %+v", respWithErr.resp)
-			}
-			if !testutils.IsPError(respWithErr.pErr, "txn aborted") {
-				t.Errorf("expected transaction aborted error; got %v", respWithErr.pErr)
-			}
+			return nil
 		})
-	}
+
+		// If the record doesn't exist yet, give the push queue enough
+		// time to query the missing record and notice.
+		if !txnRecordExists {
+			time.Sleep(10 * time.Millisecond)
+		}
+
+		// Update txn on disk with status ABORTED.
+		pusherUpdate := *pusher
+		pusherUpdate.Status = roachpb.ABORTED
+		if err := writeTxnRecord(context.Background(), &tc, &pusherUpdate); err != nil {
+			t.Fatal(err)
+		}
+		q.UpdateTxn(context.Background(), &pusherUpdate)
+
+		respWithErr := <-retCh
+		if respWithErr.resp != nil {
+			t.Errorf("expected nil response; got %+v", respWithErr.resp)
+		}
+		if !testutils.IsPError(respWithErr.pErr, "txn aborted") {
+			t.Errorf("expected transaction aborted error; got %v", respWithErr.pErr)
+		}
+	})
 }
 
 // TestTxnWaitQueueDependencyCycle verifies that if txn A pushes txn B

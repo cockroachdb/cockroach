@@ -62,46 +62,44 @@ func newTestServer(t testing.TB, ctx *Context, compression bool) *grpc.Server {
 func TestHeartbeatCB(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	for _, compression := range []bool{false, true} {
-		t.Run("", func(t *testing.T) {
-			stopper := stop.NewStopper()
-			defer stopper.Stop(context.TODO())
+	testutils.RunTrueAndFalse(t, "compression", func(t *testing.T, compression bool) {
+		stopper := stop.NewStopper()
+		defer stopper.Stop(context.TODO())
 
-			clock := hlc.NewClock(timeutil.Unix(0, 20).UnixNano, time.Nanosecond)
-			serverCtx := NewContext(log.AmbientContext{Tracer: tracing.NewTracer()}, testutils.NewNodeTestBaseContext(), clock, stopper)
-			serverCtx.rpcCompression = compression
-			s := newTestServer(t, serverCtx, true)
-			RegisterHeartbeatServer(s, &HeartbeatService{
-				clock:              clock,
-				remoteClockMonitor: serverCtx.RemoteClocks,
-			})
-
-			ln, err := netutil.ListenAndServeGRPC(serverCtx.Stopper, s, util.TestAddr)
-			if err != nil {
-				t.Fatal(err)
-			}
-			remoteAddr := ln.Addr().String()
-
-			// Clocks don't matter in this test.
-			clientCtx := NewContext(log.AmbientContext{Tracer: tracing.NewTracer()}, testutils.NewNodeTestBaseContext(), clock, stopper)
-			clientCtx.rpcCompression = compression
-
-			var once sync.Once
-			ch := make(chan struct{})
-
-			clientCtx.HeartbeatCB = func() {
-				once.Do(func() {
-					close(ch)
-				})
-			}
-
-			if _, err := clientCtx.GRPCDial(remoteAddr); err != nil {
-				t.Fatal(err)
-			}
-
-			<-ch
+		clock := hlc.NewClock(timeutil.Unix(0, 20).UnixNano, time.Nanosecond)
+		serverCtx := NewContext(log.AmbientContext{Tracer: tracing.NewTracer()}, testutils.NewNodeTestBaseContext(), clock, stopper)
+		serverCtx.rpcCompression = compression
+		s := newTestServer(t, serverCtx, true)
+		RegisterHeartbeatServer(s, &HeartbeatService{
+			clock:              clock,
+			remoteClockMonitor: serverCtx.RemoteClocks,
 		})
-	}
+
+		ln, err := netutil.ListenAndServeGRPC(serverCtx.Stopper, s, util.TestAddr)
+		if err != nil {
+			t.Fatal(err)
+		}
+		remoteAddr := ln.Addr().String()
+
+		// Clocks don't matter in this test.
+		clientCtx := NewContext(log.AmbientContext{Tracer: tracing.NewTracer()}, testutils.NewNodeTestBaseContext(), clock, stopper)
+		clientCtx.rpcCompression = compression
+
+		var once sync.Once
+		ch := make(chan struct{})
+
+		clientCtx.HeartbeatCB = func() {
+			once.Do(func() {
+				close(ch)
+			})
+		}
+
+		if _, err := clientCtx.GRPCDial(remoteAddr); err != nil {
+			t.Fatal(err)
+		}
+
+		<-ch
+	})
 }
 
 type internalServer struct{}
