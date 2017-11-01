@@ -72,21 +72,22 @@ interface NodeLivenessProps {
 
 class NodeLiveness extends React.Component<NodeLivenessProps, {}> {
   render() {
+    const { liveNodes, suspectNodes, deadNodes } = this.props;
     return (
       <div className="cluster-summary__section">
         <h3 className="cluster-summary__section--title">Node Liveness</h3>
         <div className="cluster-summary__section--metrics">
           <div className="cluster-summary__metric">
             <span className="label">Live<br />Nodes</span>
-            <span className="value">{ this.props.liveNodes }</span>
+            <span className="value">{ liveNodes }</span>
           </div>
           <div className="cluster-summary__metric">
             <span className="label">Suspect<br />Nodes</span>
-            <span className="value">{ this.props.suspectNodes }</span>
+            <span className={ "value" + (suspectNodes ? " warning" : "") }>{ suspectNodes }</span>
           </div>
           <div className="cluster-summary__metric">
             <span className="label">Dead<br />Nodes</span>
-            <span className="value">{ this.props.deadNodes }</span>
+            <span className={ "value" + (deadNodes ? " alert" : "") }>{ deadNodes }</span>
           </div>
         </div>
       </div>
@@ -117,21 +118,22 @@ interface ReplicationStatusProps {
 
 class ReplicationStatus extends React.Component<ReplicationStatusProps, {}> {
   render() {
+    const { totalRanges, underReplicatedRanges, unavailableRanges } = this.props;
     return (
       <div className="cluster-summary__section">
         <h3 className="cluster-summary__section--title">Replication Status</h3>
         <div className="cluster-summary__section--metrics">
           <div className="cluster-summary__metric">
             <span className="label">Total<br />Ranges</span>
-            <span className="value">{ this.props.totalRanges }</span>
+            <span className="value">{ totalRanges }</span>
           </div>
           <div className="cluster-summary__metric">
             <span className="label">Under-replicated<br />Ranges</span>
-            <span className="value">{ this.props.underReplicatedRanges }</span>
+            <span className={ "value" + (underReplicatedRanges ? " warning" : "") }>{ underReplicatedRanges }</span>
           </div>
           <div className="cluster-summary__metric">
             <span className="label">Unavailable<br />Ranges</span>
-            <span className="value">{ this.props.unavailableRanges }</span>
+            <span className={ "value" + (unavailableRanges ? " alert" : "") }>{ unavailableRanges }</span>
           </div>
         </div>
       </div>
