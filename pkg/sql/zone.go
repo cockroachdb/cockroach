@@ -41,7 +41,7 @@ func zoneSpecifierNotFoundError(zs parser.ZoneSpecifier) error {
 	}
 }
 
-func resolveZoneSpecifier(
+func resolveZone(
 	ctx context.Context, txn *client.Txn, zs parser.ZoneSpecifier,
 ) (sqlbase.ID, error) {
 	errMissingKey := errors.New("missing key")
@@ -136,7 +136,7 @@ func (n *setZoneConfigNode) Start(params runParams) error {
 		}
 	}
 
-	targetID, err := resolveZoneSpecifier(params.ctx, params.p.txn, n.zoneSpecifier)
+	targetID, err := resolveZone(params.ctx, params.p.txn, n.zoneSpecifier)
 	if err != nil {
 		return err
 	}
@@ -233,7 +233,7 @@ func (p *planner) ShowZoneConfig(ctx context.Context, n *parser.ShowZoneConfig) 
 }
 
 func (n *showZoneConfigNode) Start(params runParams) error {
-	targetID, err := resolveZoneSpecifier(params.ctx, params.p.txn, n.zoneSpecifier)
+	targetID, err := resolveZone(params.ctx, params.p.txn, n.zoneSpecifier)
 	if err != nil {
 		return err
 	}
