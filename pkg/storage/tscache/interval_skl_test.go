@@ -23,6 +23,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -520,6 +521,74 @@ func TestIntervalSklLookupRangeSingleKeyRanges(t *testing.T) {
 		require.Equal(t, val3, s.LookupTimestampRange(key3, []byte(nil), 0))
 		// DIFFERENT!
 		require.Equal(t, emptyVal, s.LookupTimestampRange(key3, []byte(nil), excludeFrom))
+	})
+}
+
+// TestIntervalSklLookupEqualsEarlierMaxWallTime tests that we properly handle
+// the lookup when the timestamp for a range found in the later page is equal to
+// the maxWallTime of the earlier page.
+func TestIntervalSklLookupEqualsEarlierMaxWallTime(t *testing.T) {
+	ts1 := makeTS(200, 0) // without Logical part
+	ts2 := makeTS(200, 1) // with Logical part
+	ts2Ceil := makeTS(201, 0)
+
+	txnID1 := "1"
+	txnID2 := "2"
+
+	testutils.RunTrueAndFalse(t, "tsWithLogicalPart", func(t *testing.T, logicalPart bool) {
+		s := newIntervalSkl(arenaSize)
+		s.floorTs = floorTs
+
+		// Insert an initial value into intervalSkl.
+		initTS := ts1
+		if logicalPart {
+			initTS = ts2
+		}
+		origVal := makeVal(initTS, txnID1)
+		s.AddRange([]byte("banana"), []byte("orange"), 0, origVal)
+
+		// Verify the later page's maxWallTime is what we expect.
+		expMaxTS := ts1
+		if logicalPart {
+			expMaxTS = ts2Ceil
+		}
+		require.Equal(t, expMaxTS.WallTime, s.later.maxWallTime)
+
+		// Rotate the page so that new writes will go to a different page.
+		s.rotatePages(s.later)
+
+		// Write to overlapping and non-overlapping parts of the new page with
+		// the values that have the same timestamp as the maxWallTime of the
+		// earlier page. One value has the same txnID as the previous write in
+		// the earlier page and one has a different txnID..
+		valSameID := makeVal(expMaxTS, txnID1)
+		valDiffID := makeVal(expMaxTS, txnID2)
+		valNoID := makeValWithoutID(expMaxTS)
+		s.Add([]byte("apricot"), valSameID)
+		s.Add([]byte("banana"), valSameID)
+		s.Add([]byte("orange"), valDiffID)
+		s.Add([]byte("raspberry"), valDiffID)
+
+		require.Equal(t, valSameID, s.LookupTimestamp([]byte("apricot")))
+		require.Equal(t, valSameID, s.LookupTimestamp([]byte("banana")))
+		if logicalPart {
+			// If the initial timestamp had a logical part then
+			// s.earlier.maxWallTime is inexact (see ratchetMaxTimestamp). When
+			// we search in the earlier page, we'll find the exact timestamp of
+			// the overlapping range and realize that its not the same as the
+			// timestamp of the range in the later page. Because of this,
+			// ratchetValue WON'T remove the txnID.
+			require.Equal(t, valDiffID, s.LookupTimestamp([]byte("orange")))
+		} else {
+			// If the initial timestamp did not have a logical part then
+			// s.earlier.maxWallTime is exact. When we search in the earlier
+			// page, we'll find the overlapping range and realize that it is the
+			// same as the timestamp of the range in the later page. Because of
+			// this, ratchetValue WILL remove the txnID.
+			require.Equal(t, valNoID, s.LookupTimestamp([]byte("orange")))
+		}
+		require.Equal(t, valDiffID, s.LookupTimestamp([]byte("raspberry")))
+		require.Equal(t, floorVal, s.LookupTimestamp([]byte("tomato")))
 	})
 }
 
