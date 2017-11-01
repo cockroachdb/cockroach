@@ -19,6 +19,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/util"
 )
 
 // setNeededColumns informs the node about which columns are
@@ -86,14 +87,17 @@ func setNeededColumns(plan planNode, needed []bool) {
 		markOmitted(n.columns, needed)
 
 	case *scanNode:
-		copy(n.valNeededForCol, needed)
-		for i := range needed {
+		// Reset the needed columns set.
+		n.valNeededForCol = util.FastIntSet{}
+		for i, colNeeded := range needed {
 			// All the values involved in the filter expression are needed too.
-			if n.filterVars.IndexedVarUsed(i) {
-				n.valNeededForCol[i] = true
+			if colNeeded || n.filterVars.IndexedVarUsed(i) {
+				n.valNeededForCol.Add(i)
+				n.resultColumns[i].Omitted = false
+			} else {
+				n.resultColumns[i].Omitted = true
 			}
 		}
-		markOmitted(n.resultColumns, n.valNeededForCol)
 
 	case *distinctNode:
 		// Distinct needs values for every input column.

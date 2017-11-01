@@ -23,6 +23,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
@@ -119,7 +120,7 @@ func initRowFetcher(
 	desc *sqlbase.TableDescriptor,
 	indexIdx int,
 	reverseScan bool,
-	valNeededForCol []bool,
+	valNeededForCol util.FastIntSet,
 	alloc *sqlbase.DatumAlloc,
 ) (index *sqlbase.IndexDescriptor, isSecondaryIndex bool, err error) {
 	index, isSecondaryIndex, err = desc.FindIndexByIndexIdx(indexIdx)

@@ -262,17 +262,17 @@ func TestPostProcess(t *testing.T) {
 			}
 
 			// Verify neededColumns().
+			count := 0
 			neededCols := out.neededColumns()
-			if len(neededCols) != len(input[0]) {
-				t.Fatalf("invalid neededCols length %d, expected %d", len(neededCols), len(input[0]))
+			neededCols.ForEach(func(_ int) {
+				count++
+			})
+			if count != len(tc.expNeededCols) {
+				t.Fatalf("invalid neededCols length %d, expected %d", count, len(tc.expNeededCols))
 			}
-			expNeeded := make([]bool, len(input[0]))
 			for _, col := range tc.expNeededCols {
-				expNeeded[col] = true
-			}
-			for i := range neededCols {
-				if neededCols[i] != expNeeded[i] {
-					t.Errorf("column %d needed %t, expected %t", i, neededCols[i], expNeeded[i])
+				if !neededCols.Contains(col) {
+					t.Errorf("column %d not found in neededCols", col)
 				}
 			}
 			// Run the rows through the helper.
