@@ -4,9 +4,16 @@
 .cluster-overview
   /* TODO(couchand): Update the layout styles to get rid of this hack. */
   margin-top -1 * $page-padding-top
+  border-bottom 1px solid $table-border-color
+
+  .cluster-ticker
+    padding-top 0
+    padding-bottom 0
 
   .cluster-summary
     background-color white
+    padding-top $page-padding-top
+    padding-bottom $page-padding-top
     color gray
     display flex
 
@@ -59,6 +66,9 @@
           .label
             text-transform uppercase
             margin-right 14px
+
+          .label, .value
+            font-size 11px
 
   .cluster-summary__chart
     display flex

@@ -13,7 +13,7 @@ import "./cluster.styl";
 class ClusterTicker extends React.Component<{}, {}> {
   render() {
     return (
-      <section className="section">
+      <section className="section cluster-ticker">
         <h2>Cluster Overview</h2>
       </section>
     );
