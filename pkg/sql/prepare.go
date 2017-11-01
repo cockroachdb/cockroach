@@ -388,6 +388,7 @@ func (p *planner) Execute(ctx context.Context, n *parser.Execute) (planNode, err
 	if err != nil {
 		return nil, err
 	}
+	p = makeInternalPlanner("explain execute", p.txn, p.evalCtx.User, p.session.memMetrics)
 	p.semaCtx.Placeholders.Assign(newPInfo)
 
 	return p.newPlan(ctx, ps.Statement, nil)
