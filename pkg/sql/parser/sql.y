@@ -717,7 +717,7 @@ func (u *sqlSymUnion) scrubOption() ScrubOption {
 
 %type <[]SequenceOption> sequence_option_list opt_sequence_option_list
 %type <SequenceOption> sequence_option_elem
-%type <*int64> just_an_int
+%type <*int64> iconst_no_err
 
 %type <bool> all_or_distinct
 %type <empty> join_outer
@@ -3158,17 +3158,20 @@ sequence_option_list:
 | sequence_option_list sequence_option_elem  { $$.val = append($1.seqOpts(), $2.seqOpt()) }
 
 sequence_option_elem:
-  INCREMENT just_an_int   { $$.val = SequenceOption{Name: SeqOptIncrement, IntVal: $2.intVal()} }
-| MINVALUE just_an_int    { $$.val = SequenceOption{Name: SeqOptMinValue, IntVal: $2.intVal()} }
-| NO MINVALUE             { $$.val = SequenceOption{Name: SeqOptMinValue, IntVal: nil} }
-| MAXVALUE just_an_int    { $$.val = SequenceOption{Name: SeqOptMaxValue, IntVal: $2.intVal()} }
-| NO MAXVALUE             { $$.val = SequenceOption{Name: SeqOptMaxValue, IntVal: nil} }
-| START just_an_int       { $$.val = SequenceOption{Name: SeqOptStart, IntVal: $2.intVal()} }
-| CACHE just_an_int       { $$.val = SequenceOption{Name: SeqOptCache, IntVal: $2.intVal()} }
-| CYCLE                   { $$.val = SequenceOption{Name: SeqOptCycle, BoolVal: true} }
-| NO CYCLE                { $$.val = SequenceOption{Name: SeqOptCycle, BoolVal: false} }
+  INCREMENT iconst_no_err    { $$.val = SequenceOption{Name: SeqOptIncrement, IntVal: $2.intVal()} }
+| INCREMENT BY iconst_no_err { $$.val = SequenceOption{Name: SeqOptIncrement, IntVal: $3.intVal(), OptionalWord: true} }
+| MINVALUE iconst_no_err     { $$.val = SequenceOption{Name: SeqOptMinValue, IntVal: $2.intVal()} }
+| NO MINVALUE                { $$.val = SequenceOption{Name: SeqOptMinValue, IntVal: nil} }
+| MAXVALUE iconst_no_err     { $$.val = SequenceOption{Name: SeqOptMaxValue, IntVal: $2.intVal()} }
+| NO MAXVALUE                { $$.val = SequenceOption{Name: SeqOptMaxValue, IntVal: nil} }
+| START iconst_no_err        { $$.val = SequenceOption{Name: SeqOptStart, IntVal: $2.intVal()} }
+| START WITH iconst_no_err   { $$.val = SequenceOption{Name: SeqOptStart, IntVal: $3.intVal(), OptionalWord: true} }
+| CACHE iconst_no_err        { $$.val = SequenceOption{Name: SeqOptCache, IntVal: $2.intVal()} }
+| CYCLE                      { $$.val = SequenceOption{Name: SeqOptCycle, BoolVal: true} }
+| NO CYCLE                   { $$.val = SequenceOption{Name: SeqOptCycle, BoolVal: false} }
 
-just_an_int:
+// iconst_no_err returns an *int64, taking care of handling the error returned by numVal().AsInt64().
+iconst_no_err:
   signed_iconst
   {
     val, err := $1.numVal().AsInt64()

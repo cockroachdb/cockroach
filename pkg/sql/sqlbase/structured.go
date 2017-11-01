@@ -321,9 +321,6 @@ func (desc *TableDescriptor) TypeName() string {
 	return "relation"
 }
 
-// TODO(vilterp): make up "Kind"; do we already have consistent terminology for "relation" vs
-// "table/view/sequence"?
-
 // KindName returns what kind of database object this descriptor describes.
 func (desc *TableDescriptor) KindName() string {
 	if desc.IsTable() {

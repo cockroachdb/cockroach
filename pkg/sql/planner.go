@@ -266,9 +266,8 @@ func (p *planner) IncrementSequence(ctx context.Context, seqName string) (int64,
 		return 0, pgerror.NewErrorf(pgerror.CodeWrongObjectTypeError, `"%s" is not a sequence`, seqName)
 	}
 	seqValueKey := keys.MakeSequenceKey(uint32(descriptor.ID))
-	res, err := client.IncrementValRetryable(
+	return client.IncrementValRetryable(
 		ctx, p.txn.DB(), seqValueKey, descriptor.SequenceSettings.Increment)
-	return res, err
 }
 
 // queryRows executes a SQL query string where multiple result rows are returned.
