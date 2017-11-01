@@ -66,6 +66,10 @@ type SchemaChanger struct {
 	distSQLPlanner *DistSQLPlanner
 	jobRegistry    *jobs.Registry
 	job            *jobs.Job
+	// Caches updated by DistSQL.
+	rangeDescriptorCache *kv.RangeDescriptorCache
+	leaseHolderCache     *kv.LeaseHolderCache
+	clock                *hlc.Clock
 }
 
 // NewSchemaChangerForTesting only for tests.
@@ -914,6 +918,9 @@ type SchemaChangeManager struct {
 	distSQLPlanner *DistSQLPlanner
 	clock          *hlc.Clock
 	jobRegistry    *jobs.Registry
+	// Caches updated by DistSQL.
+	rangeDescriptorCache *kv.RangeDescriptorCache
+	leaseHolderCache     *kv.LeaseHolderCache
 }
 
 // NewSchemaChangeManager returns a new SchemaChangeManager.
@@ -930,16 +937,20 @@ func NewSchemaChangeManager(
 	clock *hlc.Clock,
 	jobRegistry *jobs.Registry,
 	dsp *DistSQLPlanner,
+	rangeDescriptorCache *kv.RangeDescriptorCache,
+	leaseHolderCache *kv.LeaseHolderCache,
 ) *SchemaChangeManager {
 	return &SchemaChangeManager{
-		db:             db,
-		gossip:         gossip,
-		leaseMgr:       leaseMgr,
-		testingKnobs:   testingKnobs,
-		schemaChangers: make(map[sqlbase.ID]SchemaChanger),
-		distSQLPlanner: dsp,
-		jobRegistry:    jobRegistry,
-		clock:          clock,
+		db:                   db,
+		gossip:               gossip,
+		leaseMgr:             leaseMgr,
+		testingKnobs:         testingKnobs,
+		schemaChangers:       make(map[sqlbase.ID]SchemaChanger),
+		distSQLPlanner:       dsp,
+		jobRegistry:          jobRegistry,
+		clock:                clock,
+		rangeDescriptorCache: rangeDescriptorCache,
+		leaseHolderCache:     leaseHolderCache,
 	}
 }
 
@@ -981,12 +992,15 @@ func (s *SchemaChangeManager) Start(stopper *stop.Stopper) {
 					log.Info(ctx, "received a new config")
 				}
 				schemaChanger := SchemaChanger{
-					nodeID:         s.leaseMgr.nodeID.Get(),
-					db:             s.db,
-					leaseMgr:       s.leaseMgr,
-					testingKnobs:   s.testingKnobs,
-					distSQLPlanner: s.distSQLPlanner,
-					jobRegistry:    s.jobRegistry,
+					nodeID:               s.leaseMgr.nodeID.Get(),
+					db:                   s.db,
+					leaseMgr:             s.leaseMgr,
+					testingKnobs:         s.testingKnobs,
+					distSQLPlanner:       s.distSQLPlanner,
+					jobRegistry:          s.jobRegistry,
+					leaseHolderCache:     s.leaseHolderCache,
+					rangeDescriptorCache: s.rangeDescriptorCache,
+					clock:                s.clock,
 				}
 				// Keep track of existing schema changers.
 				oldSchemaChangers := make(map[sqlbase.ID]struct{}, len(s.schemaChangers))
