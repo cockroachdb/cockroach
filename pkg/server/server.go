@@ -1099,6 +1099,8 @@ If problems persist, please see ` + base.DocsURL("cluster-setup-troubleshooting.
 		s.clock,
 		s.jobRegistry,
 		distSQLPlanner,
+		s.distSender.RangeDescriptorCache(),
+		s.distSender.LeaseHolderCache(),
 	).Start(s.stopper)
 
 	s.sqlExecutor.Start(ctx, &s.adminMemMetrics, distSQLPlanner)
