@@ -33,16 +33,14 @@ class CapacityUsage extends React.Component<CapacityUsageProps, {}> {
     const usedPercentage = usableCapacity !== 0 ? usedCapacity / usableCapacity : 0;
     return (
       <div className="cluster-summary__section capacity-usage">
-        <h3 className="cluster-summary__section--title">Capacity Usage</h3>
-        <div className="cluster-summary__section--details">
-          <div className="cluster-summary__chart">
-            <span className="value">{ formatPercentage(usedPercentage) }</span>
-            <CapacityChart used={usedCapacity} usable={usableCapacity} />
-          </div>
-          <div className="cluster-summary__aside">
-            <span className="label">Current Usage</span>
-            <span className="value">{ formatBytes(usedCapacity) }</span>
-          </div>
+        <h3 className="cluster-summary__title">Capacity Usage</h3>
+        <div className="cluster-summary__metric">
+          <span className="value">{ formatPercentage(usedPercentage) }</span>
+          <CapacityChart used={usedCapacity} usable={usableCapacity} />
+        </div>
+        <div className="cluster-summary__aside">
+          <span className="label">Current Usage</span>
+          <span className="value">{ formatBytes(usedCapacity) }</span>
         </div>
       </div>
     );
@@ -74,21 +72,25 @@ class NodeLiveness extends React.Component<NodeLivenessProps, {}> {
   render() {
     const { liveNodes, suspectNodes, deadNodes } = this.props;
     return (
-      <div className="cluster-summary__section">
-        <h3 className="cluster-summary__section--title">Node Liveness</h3>
-        <div className="cluster-summary__section--metrics">
-          <div className="cluster-summary__metric">
-            <span className="label">Live<br />Nodes</span>
-            <span className="value">{ liveNodes }</span>
-          </div>
-          <div className="cluster-summary__metric">
-            <span className="label">Suspect<br />Nodes</span>
-            <span className={ "value" + (suspectNodes ? " warning" : "") }>{ suspectNodes }</span>
-          </div>
-          <div className="cluster-summary__metric">
-            <span className="label">Dead<br />Nodes</span>
-            <span className={ "value" + (deadNodes ? " alert" : "") }>{ deadNodes }</span>
-          </div>
+      <div className="cluster-summary__section node-liveness">
+        <h3 className="cluster-summary__title">Node Liveness</h3>
+        <div className="cluster-summary__metric live-nodes">
+          <span className="value">{ liveNodes }</span>
+        </div>
+        <div className="cluster-summary__label live-nodes">
+          <span className="label">Live<br />Nodes</span>
+        </div>
+        <div className="cluster-summary__metric suspect-nodes">
+          <span className={ "value" + (suspectNodes ? " warning" : "") }>{ suspectNodes }</span>
+        </div>
+        <div className="cluster-summary__label suspect-nodes">
+          <span className="label">Suspect<br />Nodes</span>
+        </div>
+        <div className="cluster-summary__metric dead-nodes">
+          <span className={ "value" + (deadNodes ? " alert" : "") }>{ deadNodes }</span>
+        </div>
+        <div className="cluster-summary__label dead-nodes">
+          <span className="label">Dead<br />Nodes</span>
         </div>
       </div>
     );
@@ -120,21 +122,25 @@ class ReplicationStatus extends React.Component<ReplicationStatusProps, {}> {
   render() {
     const { totalRanges, underReplicatedRanges, unavailableRanges } = this.props;
     return (
-      <div className="cluster-summary__section">
-        <h3 className="cluster-summary__section--title">Replication Status</h3>
-        <div className="cluster-summary__section--metrics">
-          <div className="cluster-summary__metric">
-            <span className="label">Total<br />Ranges</span>
-            <span className="value">{ totalRanges }</span>
-          </div>
-          <div className="cluster-summary__metric">
-            <span className="label">Under-replicated<br />Ranges</span>
-            <span className={ "value" + (underReplicatedRanges ? " warning" : "") }>{ underReplicatedRanges }</span>
-          </div>
-          <div className="cluster-summary__metric">
-            <span className="label">Unavailable<br />Ranges</span>
-            <span className={ "value" + (unavailableRanges ? " alert" : "") }>{ unavailableRanges }</span>
-          </div>
+      <div className="cluster-summary__section replication-status">
+        <h3 className="cluster-summary__title">Replication Status</h3>
+        <div className="cluster-summary__metric total-ranges">
+          <span className="value">{ totalRanges }</span>
+        </div>
+        <div className="cluster-summary__label total-ranges">
+          <span className="label">Total<br />Ranges</span>
+        </div>
+        <div className="cluster-summary__metric under-replicated-ranges">
+          <span className={ "value" + (underReplicatedRanges ? " warning" : "") }>{ underReplicatedRanges }</span>
+        </div>
+        <div className="cluster-summary__label under-replicated-ranges">
+          <span className="label">Under-replicated<br />Ranges</span>
+        </div>
+        <div className="cluster-summary__metric unavailable-ranges">
+          <span className={ "value" + (unavailableRanges ? " alert" : "") }>{ unavailableRanges }</span>
+        </div>
+        <div className="cluster-summary__label unavailable-ranges">
+          <span className="label">Unavailable<br />Ranges</span>
         </div>
       </div>
     );
@@ -159,7 +165,7 @@ const ReplicationStatusConnected = connect(mapStateToReplicationStatusProps)(Rep
 class ClusterSummary extends React.Component<{}, {}> {
   render() {
     return (
-      <section className="section cluster-summary">
+      <section className="cluster-summary">
         <CapacityUsageConnected />
         <NodeLivenessConnected />
         <ReplicationStatusConnected />

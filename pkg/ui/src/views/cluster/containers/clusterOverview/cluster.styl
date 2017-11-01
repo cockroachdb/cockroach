@@ -15,70 +15,108 @@
     padding-top $page-padding-top
     padding-bottom $page-padding-top
     color gray
-    display flex
+    display grid
+    align-items end
+    grid-template-columns 6 fr repeat(8, 1fr)
+    grid-template-rows repeat(3, auto)
+    grid-template-areas "cap-t live-t live-t live-t . rep-t rep-t rep-t ." "cap-m live-a live-b live-c . rep-a rep-b rep-c ." "cap-a live-1 live-2 live-3 . rep-1 rep-2 rep-3 ."
 
     .cluster-summary__section
-      flex 1
-      display flex
-      flex-direction column
-      justify-content space-between
+      display contents
 
-      .cluster-summary__section--title
-        font-weight 400
-
-      .cluster-summary__section--metrics
-        display flex
+      &.capacity-usage
+        .cluster-summary__title
+            grid-area cap-t
 
         .cluster-summary__metric
-          flex 1
-          display flex
-          flex-direction column-reverse
-
-          .label
-            flex 1
-            font-size 11px
-            line-height 14px
-            text-transform uppercase
-            padding-top 7px
-
-          .value
-            flex 1
-            font-size 30px
-            line-height 48px
-            color $link-color
-
-            &.warning
-              color $warning-color
-
-            &.alert
-              color $alert-color
-
-      .cluster-summary__section--details
-        flex 1
-        display flex
-        flex-direction column
-        justify-content space-between
-
-        .value
-          color $link-color
-
-        .cluster-summary__chart
-          .value
-            font-size 30px
-            line-height 48px
-            margin-right 14px
+            grid-area cap-m
 
         .cluster-summary__aside
-          .label
-            text-transform uppercase
-            margin-right 14px
+            grid-area cap-a
 
-          .label, .value
-            font-size 11px
+      &.node-liveness
+        .cluster-summary__title
+            grid-area live-t
 
-  .cluster-summary__chart
-    display flex
+        .cluster-summary__metric.live-nodes
+            grid-area live-a
 
+        .cluster-summary__metric.suspect-nodes
+            grid-area live-b
+
+        .cluster-summary__metric.dead-nodes
+            grid-area live-c
+
+        .cluster-summary__label.live-nodes
+            grid-area live-1
+
+        .cluster-summary__label.suspect-nodes
+            grid-area live-2
+
+        .cluster-summary__label.dead-nodes
+            grid-area live-3
+
+      &.replication-status
+        .cluster-summary__title
+            grid-area rep-t
+
+        .cluster-summary__metric.total-ranges
+            grid-area rep-a
+
+        .cluster-summary__metric.under-replicated-ranges
+            grid-area rep-b
+
+        .cluster-summary__metric.unavailable-ranges
+            grid-area rep-c
+
+        .cluster-summary__label.total-ranges
+            grid-area rep-1
+
+        .cluster-summary__label.under-replicated-ranges
+            grid-area rep-2
+
+        .cluster-summary__label.unavailable-ranges
+            grid-area rep-3
+
+    .cluster-summary__title
+      font-weight 400
+
+    .cluster-summary__metric
+      .label
+        font-size 11px
+        line-height 14px
+        text-transform uppercase
+        padding-top 7px
+
+      .value
+        font-size 30px
+        line-height 48px
+        color $link-color
+
+        &.warning
+          color $warning-color
+
+        &.alert
+          color $alert-color
+
+    .cluster-summary__chart
+      .value
+        font-size 30px
+        line-height 48px
+        margin-right 14px
+
+    .cluster-summary__aside
+      .label
+        text-transform uppercase
+        margin-right 14px
+
+      .value
+        color $link-color
+
+      .label, .value
+        font-size 11px
+
+  .capacity-usage .cluster-summary__metric
     .axis path
       fill none
       stroke none
