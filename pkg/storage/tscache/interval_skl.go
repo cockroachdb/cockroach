@@ -342,18 +342,26 @@ func (s *intervalSkl) LookupTimestampRange(from, to []byte, opt rangeOptions) ca
 		// If later page timestamp is greater than the max timestamp in the
 		// earlier page, then no need to do lookup at all.
 		//
-		// TODO(nvanbenschoten): test this when val.ts == maxTs.
+		// NB: if the max timestamp of the earlier page is equal to the later
+		// page timestamp, then we still need to perform the lookup. This is
+		// because the earlier page's max timestamp _may_ (if the hlc.Timestamp
+		// ceil operation in sklPage.ratchetMaxTimestamp was a no-op) correspond
+		// to a real range's timestamp, and this range _may_ overlap with our
+		// lookup range. If that is the case and that other range has a
+		// different txnID than our current cacheValue result (val), then we
+		// need to remove the txnID from our result, per the ratcheting policy
+		// for cacheValues. This is tested in TestIntervalSklMaxPageTS.
 		maxTs := hlc.Timestamp{WallTime: atomic.LoadInt64(&s.earlier.maxWallTime)}
-		if val.ts.Less(maxTs) {
+		if !maxTs.Less(val.ts) {
 			val2 := s.earlier.lookupTimestampRange(from, to, opt)
 			val, _ = ratchetValue(val, val2)
 		}
 	}
 
-	// Return the higher timestamp from the two lookups.
-	if val.ts.Less(s.floorTs) {
-		val = cacheValue{ts: s.floorTs, txnID: noTxnID}
-	}
+	// Return the higher value from the the page lookups and the floor
+	// timestamp.
+	floorVal := cacheValue{ts: s.floorTs, txnID: noTxnID}
+	val, _ = ratchetValue(val, floorVal)
 
 	return val
 }
