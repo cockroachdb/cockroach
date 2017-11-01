@@ -388,7 +388,13 @@ func (p *planner) Execute(ctx context.Context, n *parser.Execute) (planNode, err
 	if err != nil {
 		return nil, err
 	}
-	p.semaCtx.Placeholders.Assign(newPInfo)
 
-	return p.newPlan(ctx, ps.Statement, nil)
+	// We need to make a fresh planner here, so that writing the placeholders
+	// into the SemaContext doesn't overwrite the outer placeholder values if
+	// there are any.
+	innerPlanner := &planner{}
+	*innerPlanner = *p
+	innerPlanner.semaCtx.Placeholders.Assign(newPInfo)
+
+	return innerPlanner.newPlan(ctx, ps.Statement, nil)
 }
