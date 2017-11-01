@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/abortspan"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
@@ -76,51 +77,49 @@ func TestDeclareKeysResolveIntent(t *testing.T) {
 	ctx := context.Background()
 	engine := engine.NewInMem(roachpb.Attributes{}, 1<<20)
 	defer engine.Close()
-	for _, ranged := range []bool{false, true} {
-		t.Run(fmt.Sprintf("ranged=%t", ranged), func(t *testing.T) {
-			for _, test := range tests {
-				t.Run("", func(t *testing.T) {
-					ri := roachpb.ResolveIntentRequest{
-						IntentTxn: txnMeta,
-						Status:    test.status,
-						Poison:    test.poison,
+	testutils.RunTrueAndFalse(t, "ranged", func(t *testing.T, ranged bool) {
+		for _, test := range tests {
+			t.Run("", func(t *testing.T) {
+				ri := roachpb.ResolveIntentRequest{
+					IntentTxn: txnMeta,
+					Status:    test.status,
+					Poison:    test.poison,
+				}
+				ri.Key = roachpb.Key("b")
+				rir := roachpb.ResolveIntentRangeRequest(ri)
+				rir.EndKey = roachpb.Key("c")
+
+				ac := abortspan.New(desc.RangeID)
+
+				var spans SpanSet
+				batch := engine.NewBatch()
+				batch = makeSpanSetBatch(batch, &spans)
+				defer batch.Close()
+
+				var h roachpb.Header
+				h.RangeID = desc.RangeID
+
+				cArgs := CommandArgs{Header: h}
+				cArgs.EvalCtx.i = &Replica{abortSpan: ac}
+
+				if !ranged {
+					cArgs.Args = &ri
+					declareKeysResolveIntent(desc, h, &ri, &spans)
+					if _, err := evalResolveIntent(ctx, batch, cArgs, &roachpb.ResolveIntentResponse{}); err != nil {
+						t.Fatal(err)
 					}
-					ri.Key = roachpb.Key("b")
-					rir := roachpb.ResolveIntentRangeRequest(ri)
-					rir.EndKey = roachpb.Key("c")
-
-					ac := abortspan.New(desc.RangeID)
-
-					var spans SpanSet
-					batch := engine.NewBatch()
-					batch = makeSpanSetBatch(batch, &spans)
-					defer batch.Close()
-
-					var h roachpb.Header
-					h.RangeID = desc.RangeID
-
-					cArgs := CommandArgs{Header: h}
-					cArgs.EvalCtx.i = &Replica{abortSpan: ac}
-
-					if !ranged {
-						cArgs.Args = &ri
-						declareKeysResolveIntent(desc, h, &ri, &spans)
-						if _, err := evalResolveIntent(ctx, batch, cArgs, &roachpb.ResolveIntentResponse{}); err != nil {
-							t.Fatal(err)
-						}
-					} else {
-						cArgs.Args = &rir
-						declareKeysResolveIntentRange(desc, h, &rir, &spans)
-						if _, err := evalResolveIntentRange(ctx, batch, cArgs, &roachpb.ResolveIntentRangeResponse{}); err != nil {
-							t.Fatal(err)
-						}
+				} else {
+					cArgs.Args = &rir
+					declareKeysResolveIntentRange(desc, h, &rir, &spans)
+					if _, err := evalResolveIntentRange(ctx, batch, cArgs, &roachpb.ResolveIntentRangeResponse{}); err != nil {
+						t.Fatal(err)
 					}
+				}
 
-					if s := spans.String(); strings.Contains(s, abortSpanKey) != test.expDeclares {
-						t.Errorf("expected AbortSpan declared: %t, but got spans\n%s", test.expDeclares, s)
-					}
-				})
-			}
-		})
-	}
+				if s := spans.String(); strings.Contains(s, abortSpanKey) != test.expDeclares {
+					t.Errorf("expected AbortSpan declared: %t, but got spans\n%s", test.expDeclares, s)
+				}
+			})
+		}
+	})
 }

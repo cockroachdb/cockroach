@@ -16,7 +16,6 @@ package storage_test
 
 import (
 	"errors"
-	"fmt"
 	"reflect"
 	"testing"
 
@@ -38,69 +37,67 @@ import (
 func TestStoreRangeLease(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	for _, enableEpoch := range []bool{true, false} {
-		t.Run(fmt.Sprintf("epoch-based leases? %t", enableEpoch), func(t *testing.T) {
-			sc := storage.TestStoreConfig(nil)
-			sc.EnableEpochRangeLeases = enableEpoch
-			mtc := &multiTestContext{storeConfig: &sc}
-			defer mtc.Stop()
-			mtc.Start(t, 1)
+	testutils.RunTrueAndFalse(t, "enableEpoch", func(t *testing.T, enableEpoch bool) {
+		sc := storage.TestStoreConfig(nil)
+		sc.EnableEpochRangeLeases = enableEpoch
+		mtc := &multiTestContext{storeConfig: &sc}
+		defer mtc.Stop()
+		mtc.Start(t, 1)
 
-			// NodeLivenessKeyMax is a static split point, so this is always
-			// the start key of the first range that uses epoch-based
-			// leases. Splitting on it here is redundant, but we want to include
-			// it in our tests of lease types below.
-			splitKeys := []roachpb.Key{
-				keys.NodeLivenessKeyMax, roachpb.Key("a"), roachpb.Key("b"), roachpb.Key("c"),
+		// NodeLivenessKeyMax is a static split point, so this is always
+		// the start key of the first range that uses epoch-based
+		// leases. Splitting on it here is redundant, but we want to include
+		// it in our tests of lease types below.
+		splitKeys := []roachpb.Key{
+			keys.NodeLivenessKeyMax, roachpb.Key("a"), roachpb.Key("b"), roachpb.Key("c"),
+		}
+		for _, splitKey := range splitKeys {
+			splitArgs := adminSplitArgs(splitKey)
+			if _, pErr := client.SendWrapped(context.Background(), mtc.distSenders[0], splitArgs); pErr != nil {
+				t.Fatal(pErr)
 			}
-			for _, splitKey := range splitKeys {
-				splitArgs := adminSplitArgs(splitKey)
-				if _, pErr := client.SendWrapped(context.Background(), mtc.distSenders[0], splitArgs); pErr != nil {
-					t.Fatal(pErr)
-				}
-			}
+		}
 
-			rLeft := mtc.stores[0].LookupReplica(roachpb.RKeyMin, nil)
-			lease, _ := rLeft.GetLease()
+		rLeft := mtc.stores[0].LookupReplica(roachpb.RKeyMin, nil)
+		lease, _ := rLeft.GetLease()
+		if lt := lease.Type(); lt != roachpb.LeaseExpiration {
+			t.Fatalf("expected lease type expiration; got %d", lt)
+		}
+
+		// After the split, expect an expiration lease for other ranges.
+		for _, key := range splitKeys {
+			repl := mtc.stores[0].LookupReplica(roachpb.RKey(key), nil)
+			lease, _ = repl.GetLease()
 			if lt := lease.Type(); lt != roachpb.LeaseExpiration {
-				t.Fatalf("expected lease type expiration; got %d", lt)
+				t.Fatalf("%s: expected lease type epoch; got %d", key, lt)
 			}
+		}
 
-			// After the split, expect an expiration lease for other ranges.
-			for _, key := range splitKeys {
-				repl := mtc.stores[0].LookupReplica(roachpb.RKey(key), nil)
-				lease, _ = repl.GetLease()
+		// Allow leases to expire and send commands to ensure we
+		// re-acquire, then check types again.
+		mtc.advanceClock(context.TODO())
+		for _, key := range splitKeys {
+			if _, err := mtc.dbs[0].Inc(context.TODO(), key, 1); err != nil {
+				t.Fatalf("%s failed to increment: %s", key, err)
+			}
+		}
+
+		// After the expiration, expect an epoch lease for the RHS if
+		// we've enabled epoch based range leases.
+		for _, key := range splitKeys {
+			repl := mtc.stores[0].LookupReplica(roachpb.RKey(key), nil)
+			lease, _ = repl.GetLease()
+			if enableEpoch {
+				if lt := lease.Type(); lt != roachpb.LeaseEpoch {
+					t.Fatalf("expected lease type epoch; got %d", lt)
+				}
+			} else {
 				if lt := lease.Type(); lt != roachpb.LeaseExpiration {
-					t.Fatalf("%s: expected lease type epoch; got %d", key, lt)
+					t.Fatalf("expected lease type expiration; got %d", lt)
 				}
 			}
-
-			// Allow leases to expire and send commands to ensure we
-			// re-acquire, then check types again.
-			mtc.advanceClock(context.TODO())
-			for _, key := range splitKeys {
-				if _, err := mtc.dbs[0].Inc(context.TODO(), key, 1); err != nil {
-					t.Fatalf("%s failed to increment: %s", key, err)
-				}
-			}
-
-			// After the expiration, expect an epoch lease for the RHS if
-			// we've enabled epoch based range leases.
-			for _, key := range splitKeys {
-				repl := mtc.stores[0].LookupReplica(roachpb.RKey(key), nil)
-				lease, _ = repl.GetLease()
-				if enableEpoch {
-					if lt := lease.Type(); lt != roachpb.LeaseEpoch {
-						t.Fatalf("expected lease type epoch; got %d", lt)
-					}
-				} else {
-					if lt := lease.Type(); lt != roachpb.LeaseExpiration {
-						t.Fatalf("expected lease type expiration; got %d", lt)
-					}
-				}
-			}
-		})
-	}
+		}
+	})
 }
 
 // TestStoreRangeLeaseSwitcheroo verifies that ranges can be switched
