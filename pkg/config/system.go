@@ -238,44 +238,25 @@ func (s SystemConfig) getZoneConfigForID(id uint32, keySuffix []byte) (ZoneConfi
 	return DefaultZoneConfig(), nil
 }
 
-// StaticSplits is the list of pre-defined split points in the beginning of
-// the keyspace that are there to support separate zone configs for different
-// parts of the system / system config ranges.
-// Exposed publicly so that its ordering can be tested.
-var StaticSplits = []struct {
-	SplitPoint roachpb.RKey
-	SplitKey   roachpb.RKey
-}{
-	// End of meta records / start of system ranges
-	{
-		SplitPoint: roachpb.RKey(keys.SystemPrefix),
-		SplitKey:   roachpb.RKey(keys.SystemPrefix),
-	},
-	// Start of node liveness span.
-	{
-		SplitPoint: roachpb.RKey(keys.NodeLivenessPrefix),
-		SplitKey:   roachpb.RKey(keys.NodeLivenessPrefix),
-	},
-	// End of node liveness span.
-	{
-		SplitPoint: roachpb.RKey(keys.NodeLivenessKeyMax),
-		SplitKey:   roachpb.RKey(keys.NodeLivenessKeyMax),
-	},
-	// Start of timeseries ranges (within system ranges)
-	{
-		SplitPoint: roachpb.RKey(keys.TimeseriesPrefix),
-		SplitKey:   roachpb.RKey(keys.TimeseriesPrefix),
-	},
-	// End of timeseries ranges (continuation of system ranges)
-	{
-		SplitPoint: roachpb.RKey(keys.TimeseriesPrefix.PrefixEnd()),
-		SplitKey:   roachpb.RKey(keys.TimeseriesPrefix.PrefixEnd()),
-	},
-	// System config tables (end of system ranges)
-	{
-		SplitPoint: roachpb.RKey(keys.TableDataMin),
-		SplitKey:   keys.SystemConfigSplitKey,
-	},
+var staticSplits = []roachpb.RKey{
+	roachpb.RKey(keys.SystemPrefix),                 // end of meta records / start of system ranges
+	roachpb.RKey(keys.NodeLivenessPrefix),           // start of node liveness span
+	roachpb.RKey(keys.NodeLivenessKeyMax),           // end of node liveness span
+	roachpb.RKey(keys.TimeseriesPrefix),             // start of timeseries span
+	roachpb.RKey(keys.TimeseriesPrefix.PrefixEnd()), // end of timeseries span
+	roachpb.RKey(keys.TableDataMin),                 // end of system ranges / start of system config tables
+}
+
+// StaticSplits are predefined split points in the system keyspace.
+//
+// There are two reasons for a static split. First, spans that are critical to
+// cluster stability, like the node liveness span, are split into their own
+// ranges to ease debugging (see #17297). Second, spans in the system keyspace
+// that can be targeted by zone configs, like the meta span and the timeseries
+// span, are split off into their own ranges because zone configs cannot apply
+// to fractions of a range.
+func StaticSplits() []roachpb.RKey {
+	return staticSplits
 }
 
 // ComputeSplitKey takes a start and end key and returns the first key at which
@@ -290,12 +271,12 @@ func (s SystemConfig) ComputeSplitKey(startKey, endKey roachpb.RKey) roachpb.RKe
 	// Before dealing with splits necessitated by SQL tables, handle all of the
 	// static splits earlier in the keyspace. Note that this list must be kept in
 	// the proper order (ascending in the keyspace) for the logic below to work.
-	for _, split := range StaticSplits {
-		if startKey.Less(split.SplitPoint) {
-			if split.SplitPoint.Less(endKey) {
+	for _, split := range staticSplits {
+		if startKey.Less(split) {
+			if split.Less(endKey) {
 				// The split point is contained within [startKey, endKey), so we need to
 				// create the split.
-				return split.SplitKey
+				return split
 			}
 			// [startKey, endKey) is contained between the previous split point and
 			// this split point.
@@ -314,10 +295,6 @@ func (s SystemConfig) ComputeSplitKey(startKey, endKey roachpb.RKey) roachpb.RKe
 		// In either case, start looking for splits at the first ID usable
 		// by the user data span.
 		startID = keys.MaxSystemConfigDescID + 1
-	} else {
-		// The start key is either already a split key, or after the split
-		// key for its ID. We can skip straight to the next one.
-		startID++
 	}
 
 	// Build key prefixes for sequential table IDs until we reach endKey. Note
@@ -330,16 +307,36 @@ func (s SystemConfig) ComputeSplitKey(startKey, endKey roachpb.RKey) roachpb.RKe
 	findSplitKey := func(startID, endID uint32) roachpb.RKey {
 		// endID could be smaller than startID if we don't have user tables.
 		for id := startID; id <= endID; id++ {
-			key := roachpb.RKey(keys.MakeTablePrefix(id))
-			// Skip if this ID matches the provided startKey.
-			if !startKey.Less(key) {
+			tableKey := roachpb.RKey(keys.MakeTablePrefix(id))
+			// This logic is analogous to the well-commented static split logic above.
+			if startKey.Less(tableKey) {
+				if tableKey.Less(endKey) {
+					return tableKey
+				}
+				return nil
+			}
+
+			zoneVal := s.GetValue(MakeZoneKey(id))
+			if zoneVal == nil {
 				continue
 			}
-			// Handle the case where EndKey is already a table prefix.
-			if !key.Less(endKey) {
-				break
+			var zone ZoneConfig
+			if err := zoneVal.GetProto(&zone); err != nil {
+				// An error while decoding the zone proto is unfortunate, but logging a
+				// message here would be excessively spammy. Just move on, which
+				// effectively assumes there are no subzones for this table.
+				continue
 			}
-			return key
+			// This logic is analogous to the well-commented static split logic above.
+			for _, s := range zone.subzoneSplits() {
+				subzoneKey := append(tableKey, s...)
+				if startKey.Less(subzoneKey) {
+					if subzoneKey.Less(endKey) {
+						return subzoneKey
+					}
+					return nil
+				}
+			}
 		}
 		return nil
 	}
