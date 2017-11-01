@@ -1771,6 +1771,7 @@ func (e *Executor) execStmtInOpenTxn(
 	p.evalCtx.SetTxnTimestamp(txnState.sqlTimestamp)
 	p.evalCtx.SetStmtTimestamp(e.cfg.Clock.PhysicalTime())
 	p.semaCtx.Placeholders.Assign(pinfo)
+	p.evalCtx.Placeholders = &p.semaCtx.Placeholders
 	p.avoidCachedDescriptors = avoidCachedDescriptors
 	p.phaseTimes[plannerStartExecStmt] = timeutil.Now()
 	p.stmt = &stmt
