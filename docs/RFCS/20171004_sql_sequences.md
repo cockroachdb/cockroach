@@ -217,6 +217,9 @@ discussion of alternate approaches.
 The sequence functions must respect several optional settings (see [Postgres
 docs][postgres-seq-functions]):
 
+- `AS <integer type>`: What type the sequence value should be (default `INT`,
+  64 bits). We'll store them as 64 bits, but set the `MINVALUE` and `MAXVALUE`
+  settings to limit the value to the specified type.
 - `INCREMENT BY <increment>`: how much to increment by. A negative number
   creates a descending sequence; a positive number creates an ascending
   sequence.
@@ -375,11 +378,9 @@ Options are:
 Users who prefer sequences or who have applications which use them will have
 an obstacle in moving to Cockroach.
 
-## Unresolved questions
+### Possible future work
 
-### Design / scope issues
-
-- Should we change our `SERIAL` type to be backed by sequences? I don't think
+- Change our `SERIAL` type to be backed by sequences: I don't think
   we can do this until we make it faster by implementing `CACHE` (see below).
 
   We would also have to decide whether to make `SERIAL` int32. While more
@@ -391,18 +392,14 @@ an obstacle in moving to Cockroach.
   does. With the implementation in this RFC, to use sequences users will have to
   explicitly type `CREATE SEQUENCE` and set their column to
   `DEFAULT nextval('my_sequence')`.
-- Should we implement the `AS` clause, which enables users to specify which
-  type they want the sequence value to be? I think not, since it works to
-  create a `SMALLINT` column that uses `DEFAULT nextval(seq)` and get a value,
-  even though `nextval` returns `int64` and `SMALLINT` is `int32`. Silent
-  truncation should not occur here, since we [check the size of the value before
-  inserting it][value-size-check-gh] and return an error.
-- Should we implement the `CACHE` setting? (pre-allocation on each node of
+- Implement the `CACHE` setting: (pre-allocation on each node of
   batches of values, which can then be handed out quickly from memory)
   This would probably make sequences fast enough to be our default for the
   `SERIAL` type, but I think we should build the simple version, benchmark,
   and do `CACHE` in a later RFC/PR.
-- Should we make `SELECT * FROM my_sequence` work? In Postgres, it returns a
+- Exposed the sequence values as a `system.sequences` table, for easy
+  introspectability.
+- Make `SELECT * FROM my_sequence` work: In Postgres, it returns a
   single row containing the sequence value and settings:
 
   | sequence_name | last_value | start_value | increment_by |      max_value      | min_value | cache_value | log_cnt | is_cycled | is_called |
@@ -411,9 +408,8 @@ an obstacle in moving to Cockroach.
 
   This is easy to do, and may be helpful for compatibility. It can be saved for
   the last PR of the change, but should probably be done.
-- Should the sequence values be exposed as a `system.sequences` table, for easy
-  introspectability? Ideally yes, if we can still use the KV-level `Inc`
-  operation. I will try this during implementation.
+
+## Unresolved questions
 
 ### Implementation issues
 
