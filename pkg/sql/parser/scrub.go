@@ -78,11 +78,19 @@ func (*ScrubOptionIndex) scrubOptionType() {}
 
 // ScrubOptionIndex represents an INDEX scrub check.
 type ScrubOptionIndex struct {
+	IndexNames NameList
 }
 
 // Format implements the NodeFormatter interface.
 func (n *ScrubOptionIndex) Format(buf *bytes.Buffer, f FmtFlags) {
-	buf.WriteString("INDEX ALL")
+	buf.WriteString("INDEX ")
+	if n.IndexNames != nil {
+		buf.WriteByte('(')
+		n.IndexNames.Format(buf, f)
+		buf.WriteByte(')')
+	} else {
+		buf.WriteString("ALL")
+	}
 }
 
 func (n *ScrubOptionIndex) String() string { return AsString(n) }
