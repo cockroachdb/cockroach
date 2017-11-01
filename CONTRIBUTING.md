@@ -150,13 +150,23 @@ See our separate [style guide](STYLE.md) document.
     to indicate their reach.
   - We publish detailed [release notes](https://www.cockroachlabs.com/docs/releases/)
     describing most non-test changes. To facilitate this, at least one commit in every
-    PR (possibly the PR message/merge commit) should contain a brief description of
+    PR (preferrably the PR message/merge commit) should contain a brief description of
     the change in terms that a user would recognize. This description should be prefixed
-    with "Release note:". For example, a commit like ["distsql: pre-reserve memory needed
-    to mark rows in HashJoiner build phase"](https://github.com/cockroachdb/cockroach/pull/18975)
-    might say "Release note: Fixed a panic in queries with `JOIN` using the
-    distributed SQL engine."
+    with "Release note (category):", where the "category" is one of the following:
+    - cli change
+    - sql change
+    - ui change
+    - performance improvement
+    - bug fix
+    - general change (e.g., change of required go version)
+    - build change (e.g., compatibility with older CPUs)
+    - enterprise change (e.g., change to backup/restore)
+    - backwards-incompatible change
 
+    For example, a commit like ["distsql: pre-reserve memory needed
+    to mark rows in HashJoiner build phase"](https://github.com/cockroachdb/cockroach/pull/18975)
+    might say "Release note (bug fix): Fixed a panic in queries with `JOIN` using the
+    distributed SQL engine."
 
 - Run the linters, code generators, and unit test suites locally:
 
