@@ -164,6 +164,8 @@ func makeInternalPlanner(
 		p.evalCtx.SetStmtTimestamp(ts)
 	}
 
+	p.evalCtx.Placeholders = &p.semaCtx.Placeholders
+
 	return p
 }
 
@@ -229,6 +231,7 @@ func (p *planner) query(ctx context.Context, sql string, args ...interface{}) (p
 		return nil, err
 	}
 	golangFillQueryArguments(&p.semaCtx.Placeholders, args)
+	p.evalCtx.Placeholders = &p.semaCtx.Placeholders
 	return p.makePlan(ctx, Statement{AST: stmt})
 }
 

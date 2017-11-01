@@ -103,6 +103,13 @@ func (p *planner) SetVar(ctx context.Context, n *parser.SetVar) (planNode, error
 
 func (n *setNode) Start(params runParams) error {
 	if n.typedValues != nil {
+		for i, v := range n.typedValues {
+			d, err := v.Eval(&params.p.evalCtx)
+			if err != nil {
+				return err
+			}
+			n.typedValues[i] = d
+		}
 		return n.v.Set(params.ctx, params.p.session, n.typedValues)
 	}
 	return n.v.Reset(params.p.session)
@@ -389,7 +396,7 @@ func setTimeZone(_ context.Context, session *Session, values []parser.TypedExpr)
 
 	var loc *time.Location
 	var offset int64
-	switch v := parser.UnwrapDatum(d).(type) {
+	switch v := parser.UnwrapDatum(&evalCtx, d).(type) {
 	case *parser.DString:
 		location := string(*v)
 		loc, err = timeutil.LoadLocation(location)
