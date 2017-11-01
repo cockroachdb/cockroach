@@ -145,20 +145,24 @@ output row: [2]
 query ITTT
 EXPLAIN SELECT * FROM t x JOIN t y USING(b) WHERE x.b < '3'
 ----
-0  render      ·         ·
-1  render      ·         ·
-2  join        ·         ·
-2  ·           type      inner
-2  ·           equality  (b) = (b)
-3  index-join  ·         ·
-4  scan        ·         ·
-4  ·           table     t@bc
-4  ·           spans     /#-/"3"
-4  scan        ·         ·
-4  ·           table     t@primary
-3  scan        ·         ·
-3  ·           table     t@primary
-3  ·           spans     ALL
+0  render      ·               ·
+1  render      ·               ·
+2  join        ·               ·
+2  ·           type            inner
+2  ·           equality        (b) = (b)
+2  ·           mergeJoinOrder  +"(b=b)"
+3  index-join  ·               ·
+4  scan        ·               ·
+4  ·           table           t@bc
+4  ·           spans           /#-/"3"
+4  scan        ·               ·
+4  ·           table           t@primary
+3  index-join  ·               ·
+4  scan        ·               ·
+4  ·           table           t@bc
+4  ·           spans           /#-/"3"
+4  scan        ·               ·
+4  ·           table           t@primary
 
 statement ok
 TRUNCATE TABLE t

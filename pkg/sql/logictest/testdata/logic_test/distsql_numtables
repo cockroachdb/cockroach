@@ -157,11 +157,12 @@ EXPLAIN (VERBOSE) SELECT x, str FROM NumToSquare JOIN NumToStr ON x = y WHERE x 
 2  scan    ·               ·                    (y, str)                                 y!=NULL; key(y); +y
 2  ·       table           numtostr@primary     ·                                        ·
 2  ·       spans           ALL                  ·                                        ·
+2  ·       filter          (y % 2) = 0          ·                                        ·
 
 query T
 SELECT "URL" FROM [EXPLAIN (DISTSQL) SELECT x, str FROM NumToSquare JOIN NumToStr ON x = y WHERE x % 2 = 0]
 ----
-https://cockroachdb.github.io/distsqlplan/decode.html?eJzclUFr2zAUx-_7FObBoKUaWLKzLIKCT4MMlo7S2_DBjd4Sg2N5kgwrJd992NpI42RSjHYIvsWxfn7v_3ug9wq1FLgqdqiBfwcKBBgQSIBACgRmkBNolFyj1lJ1RyywFL-AxwTKumlN93dOYC0VAn8FU5oKgcNT8VzhIxYCFRAQaIqy6os0qtwV6iWr252R-mdbKAQCn8vKoOLRTUaj9xHjnC9XT7fRfRTbn0DgoTU8yijkewKyNX9KHyo-v0TbQm-Pq_XncwLaFBsETvfkv0cw6tAcyVhQf-yf_R2-09ZSCVQojr6Ud-TfI-cOQEbvbK1hzq-oNvhFlvUwZ4U_zE1G727vVbnZ2p9vsyaDrIccSUCOMx2u5AfZDOOeLZweFaZXPmA6kQGzK_fMJuI5uXLPyUQ8p1fuOZ2IZ88CfkTdyFrjRTd_3CVAsUErRctWrfGbkuu-jH186Ln-3hWojX3L7MOytq-6Bi-HZyHwPARehMCUumk6whgbB89C4HkIvAiBB8ZOaDak47d04tadOGF67Dse0mnIsNywZ1hu2DMsN-wZlhv2DWsWMqyPIbrdsEe3G_bodsMe3W7Yp3seovtTiG437NHthj263bBHtxv26V6E6KZjluXpHTpmW46lfZf_mH05lvY5pyfbwyk937_7HQAA__8EY8gd
+https://cockroachdb.github.io/distsqlplan/decode.html?eJzclkFr2zAUx-_7FObBoKUaWLKzLIKCT4MMlo7S2_DBjd8Sg2N5kgwrJd992NpI42RShHaJb3asn5_e72_08gqNKHFV7FAB_w4UCDAgkACBFAjMICfQSrFGpYTslxhgWf4CHhOomrbT_c85gbWQCPwVdKVrBA5PxXONj1iUKIFAibqo6qFIK6tdIV-ypttpoX52hUQg8LmqNUoe3WQ0eh8xzvly9XQb3UexuQQCD53mUUYh3xMQnf5T-lDx-SXaFmp7XG1YnxNQutggcLon_70FLb32TzIW1AL7ZwuH93SNkCVKLI_elPfk3yXnFkBG70ytsYqvKDf4RVTNWEWNP_RNRu9u72W12ZrLt70mo14PfSQBfZzZ4Up8EO243bOF06PC9Pq_ATqRb4BdfxRsIlEk1x9FMpEo0uuPIp1IFI7_C4-oWtEovGgKxX0HWG7QSFGik2v8JsV6KGNuHwZuOOBLVNo8ZeZm2ZhH_QYvh2ch8DwEXoTAlNpp6mGM-cGzEHgeAi9C4JGxE5qN6fgtndh1J1aYHvuOx3QaEpYddoRlhx1h2WFHWHbYFdYsJKyPIbrtsEO3HXbotsMO3XbYpXseovtTiG477NBthx267bBDtx126V6E6KY-w_L0DPWZlr606_D3mZe-tMs5PZkeVun5_t3vAAAA__8hZ_Il
 
 # Save the result of the following statement to a label.
 query IT rowsort label-sq-2-str
