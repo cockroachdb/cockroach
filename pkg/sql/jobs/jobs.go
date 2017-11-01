@@ -408,6 +408,14 @@ func (j *Job) FinishedWith(ctx context.Context, err error) error {
 	return nil
 }
 
+// IsCancellation returns true if the passed error is a job cancellation.
+func IsCancellation(err error) bool {
+	if err, ok := errors.Cause(err).(*InvalidStatusError); ok {
+		return err.status == StatusCanceled
+	}
+	return false
+}
+
 // SetDetails sets the details field of the currently running tracked job.
 func (j *Job) SetDetails(ctx context.Context, details interface{}) error {
 	return j.update(ctx, func(_ *client.Txn, _ *Status, payload *Payload) (bool, error) {

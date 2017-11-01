@@ -412,7 +412,6 @@ func backup(
 		files          []BackupDescriptor_File
 		exported       roachpb.BulkOpSummary
 		lastCheckpoint time.Time
-		checkpointed   bool
 	}{}
 
 	var checkpointMu syncutil.Mutex
@@ -434,11 +433,16 @@ func backup(
 		// TODO(benesch): verify these files, rather than accepting them as truth
 		// blindly.
 		// No concurrency yet, so these assignments are safe.
-		mu.checkpointed = true
 		mu.files = checkpointDesc.Files
 		mu.exported = checkpointDesc.EntryCounts
 		for _, file := range checkpointDesc.Files {
 			completedSpans = append(completedSpans, file.Span)
+		}
+	}
+
+	cleanupCheckpoint := func() {
+		if err := exportStore.Delete(ctx, BackupDescriptorCheckpointName); err != nil {
+			log.Warningf(ctx, "unable to delete checkpointed backup descriptor: %+v", err)
 		}
 	}
 
@@ -454,7 +458,11 @@ func backup(
 	}
 
 	ctx, cancel := context.WithCancel(ctx)
-	if err := job.Created(ctx, cancel); err != nil {
+	cancelFn := func() {
+		cancel()
+		cleanupCheckpoint()
+	}
+	if err := job.Created(ctx, cancelFn); err != nil {
 		return err
 	}
 	if err := job.Started(ctx); err != nil {
@@ -540,9 +548,6 @@ func backup(
 				checkpointMu.Unlock()
 				if err != nil {
 					log.Errorf(ctx, "unable to checkpoint backup descriptor: %+v", err)
-					mu.Lock()
-					mu.checkpointed = true
-					mu.Unlock()
 				}
 			}
 			return nil
@@ -550,6 +555,9 @@ func backup(
 	}
 
 	if err := g.Wait(); err != nil {
+		if jobs.IsCancellation(err) {
+			cleanupCheckpoint()
+		}
 		return errors.Wrapf(err, "exporting %d ranges", len(spans))
 	}
 
@@ -561,13 +569,37 @@ func backup(
 	if err := writeBackupDescriptor(ctx, exportStore, BackupDescriptorName, backupDesc); err != nil {
 		return err
 	}
+	cleanupCheckpoint()
 
-	if mu.checkpointed {
-		if err := exportStore.Delete(ctx, BackupDescriptorCheckpointName); err != nil {
-			log.Warningf(ctx, "unable to delete checkpointed backup descriptor: %+v", err)
-		}
+	return nil
+}
+
+// verifyUsableExportTarget ensures that the target location does not already
+// contain a BACKUP or checkpoint and writes an empty checkpoint, both verifying
+// that the location is writable and locking out accidental concurrent
+// operations on that location if subsequently try this check. Callers must
+// clean up the written checkpoint file (BackupDescriptorCheckpointName) only
+// after writing to the backup file location (BackupDescriptorName).
+func verifyUsableExportTarget(
+	ctx context.Context, exportStore storageccl.ExportStorage, readable string,
+) error {
+	if r, err := exportStore.ReadFile(ctx, BackupDescriptorName); err == nil {
+		// TODO(dt): If we audit exactly what not-exists error each ExportStorage
+		// returns (and then wrap/tag them), we could narrow this check.
+		r.Close()
+		return errors.Errorf("a %s file already appears to exist in %s",
+			BackupDescriptorName, readable)
 	}
-
+	if r, err := exportStore.ReadFile(ctx, BackupDescriptorCheckpointName); err == nil {
+		r.Close()
+		return errors.Errorf("Is another operation already in progress? %s contains a %s file",
+			readable, BackupDescriptorCheckpointName)
+	}
+	if err := writeBackupDescriptor(
+		ctx, exportStore, BackupDescriptorCheckpointName, &BackupDescriptor{},
+	); err != nil {
+		return errors.Wrapf(err, "cannot write to %s", readable)
+	}
 	return nil
 }
 
@@ -644,18 +676,6 @@ func backupPlanHook(
 		}
 		defer exportStore.Close()
 
-		// Ensure there isn't already a readable backup desc.
-		{
-			r, err := exportStore.ReadFile(ctx, BackupDescriptorName)
-			// TODO(dt): If we audit exactly what not-exists error each ExportStorage
-			// returns (and then wrap/tag them), we could narrow this check.
-			if err == nil {
-				r.Close()
-				return errors.Errorf("a %s file already appears to exist in %s",
-					BackupDescriptorName, to)
-			}
-		}
-
 		opts, err := optsFn()
 		if err != nil {
 			return err
@@ -713,6 +733,11 @@ func backupPlanHook(
 		if err != nil {
 			return err
 		}
+
+		if err := verifyUsableExportTarget(ctx, exportStore, to); err != nil {
+			return err
+		}
+
 		job := p.ExecCfg().JobRegistry.NewJob(jobs.Record{
 			Description: description,
 			Username:    p.User(),
@@ -816,7 +841,11 @@ func backupResumeHook(
 		}
 		var checkpointDesc *BackupDescriptor
 		if desc, err := readBackupDescriptor(ctx, exportStore, BackupDescriptorCheckpointName); err == nil {
-			checkpointDesc = &desc
+			// If the checkpoint is from a different cluster, it's meaningless to us.
+			// More likely though are dummy/lock-out checkpoints with no ClusterID.
+			if desc.ClusterID.Equal(job.ClusterID()) {
+				checkpointDesc = &desc
+			}
 		} else {
 			// TODO(benesch): distinguish between a missing checkpoint, which simply
 			// indicates the prior backup attempt made no progress, and a corrupted
