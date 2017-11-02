@@ -222,11 +222,63 @@ func (*createIndexNode) Next(runParams) (bool, error) { return false, nil }
 func (*createIndexNode) Close(context.Context)        {}
 func (*createIndexNode) Values() parser.Datums        { return parser.Datums{} }
 
+type userAuthInfo struct {
+	name     func() (string, error)
+	password func() (string, error)
+}
+
 type createUserNode struct {
-	name         func() (string, error)
-	password     func() (string, error)
 	ifNotExists  bool
 	rowsAffected int
+	userAuthInfo
+}
+
+func (p *planner) getUserAuthInfo(nameE, passwordE parser.Expr, ctx string) (userAuthInfo, error) {
+	name, err := p.TypeAsString(nameE, ctx)
+	if err != nil {
+		return userAuthInfo{}, err
+	}
+	var password func() (string, error)
+	if passwordE != nil {
+		password, err = p.TypeAsString(passwordE, ctx)
+		if err != nil {
+			return userAuthInfo{}, err
+		}
+	}
+	return userAuthInfo{name: name, password: password}, nil
+}
+
+// resolve returns the actual user name and (hashed) password.
+func (ua *userAuthInfo) resolve() (string, []byte, error) {
+	name, err := ua.name()
+	if err != nil {
+		return "", nil, err
+	}
+	if name == "" {
+		return "", nil, errNoUserNameSpecified
+	}
+	normalizedUsername, err := NormalizeAndValidateUsername(name)
+	if err != nil {
+		return "", nil, err
+	}
+
+	var hashedPassword []byte
+	if ua.password != nil {
+		resolvedPassword, err := ua.password()
+		if err != nil {
+			return "", nil, err
+		}
+		if resolvedPassword == "" {
+			return "", nil, security.ErrEmptyPassword
+		}
+
+		hashedPassword, err = security.HashPassword(resolvedPassword)
+		if err != nil {
+			return "", nil, err
+		}
+	}
+
+	return normalizedUsername, hashedPassword, nil
 }
 
 // CreateUser creates a user.
@@ -243,22 +295,14 @@ func (p *planner) CreateUser(ctx context.Context, n *parser.CreateUser) (planNod
 		return nil, err
 	}
 
-	name, err := p.TypeAsString(n.Name, "CREATE USER")
+	ua, err := p.getUserAuthInfo(n.Name, n.Password, "CREATE USER")
 	if err != nil {
 		return nil, err
 	}
-	var password func() (string, error)
-	if n.HasPassword() {
-		password, err = p.TypeAsString(n.Password, "CREATE USER")
-		if err != nil {
-			return nil, err
-		}
-	}
 
 	return &createUserNode{
-		name:        name,
-		password:    password,
-		ifNotExists: n.IfNotExists,
+		userAuthInfo: ua,
+		ifNotExists:  n.IfNotExists,
 	}, nil
 }
 
@@ -287,32 +331,9 @@ func NormalizeAndValidateUsername(username string) (string, error) {
 var errNoUserNameSpecified = errors.New("no username specified")
 
 func (n *createUserNode) Start(params runParams) error {
-	name, err := n.name()
+	normalizedUsername, hashedPassword, err := n.userAuthInfo.resolve()
 	if err != nil {
 		return err
-	}
-	if name == "" {
-		return errNoUserNameSpecified
-	}
-	normalizedUsername, err := NormalizeAndValidateUsername(name)
-	if err != nil {
-		return err
-	}
-
-	var hashedPassword []byte
-	if n.password != nil {
-		resolvedPassword, err := n.password()
-		if err != nil {
-			return err
-		}
-		if resolvedPassword == "" {
-			return security.ErrEmptyPassword
-		}
-
-		hashedPassword, err = security.HashPassword(resolvedPassword)
-		if err != nil {
-			return err
-		}
 	}
 
 	internalExecutor := InternalExecutor{LeaseManager: params.p.LeaseMgr()}
@@ -356,9 +377,8 @@ func (*createUserNode) Values() parser.Datums          { return parser.Datums{} 
 
 // alterUserSetPasswordNode represents an ALTER USER ... WITH PASSWORD statement.
 type alterUserSetPasswordNode struct {
+	userAuthInfo
 	ifExists     bool
-	name         func() (string, error)
-	password     func() (string, error)
 	rowsAffected int
 }
 
@@ -374,19 +394,14 @@ func (p *planner) AlterUserSetPassword(
 		return nil, err
 	}
 
-	name, err := p.TypeAsString(n.Name, "ALTER USER")
-	if err != nil {
-		return nil, err
-	}
-	password, err := p.TypeAsString(n.Password, "ALTER USER")
+	ua, err := p.getUserAuthInfo(n.Name, n.Password, "ALTER USER")
 	if err != nil {
 		return nil, err
 	}
 
 	return &alterUserSetPasswordNode{
-		ifExists: n.IfExists,
-		name:     name,
-		password: password,
+		userAuthInfo: ua,
+		ifExists:     n.IfExists,
 	}, nil
 }
 
@@ -395,32 +410,9 @@ func (n *alterUserSetPasswordNode) FastPathResults() (int, bool) {
 }
 
 func (n *alterUserSetPasswordNode) Start(params runParams) error {
-	name, err := n.name()
+	normalizedUsername, hashedPassword, err := n.userAuthInfo.resolve()
 	if err != nil {
 		return err
-	}
-	if name == "" {
-		return errNoUserNameSpecified
-	}
-	normalizedUsername, err := NormalizeAndValidateUsername(name)
-	if err != nil {
-		return err
-	}
-
-	var hashedPassword []byte
-	if n.password != nil {
-		resolvedPassword, err := n.password()
-		if err != nil {
-			return err
-		}
-		if resolvedPassword == "" {
-			return security.ErrEmptyPassword
-		}
-
-		hashedPassword, err = security.HashPassword(resolvedPassword)
-		if err != nil {
-			return err
-		}
 	}
 
 	internalExecutor := InternalExecutor{LeaseManager: params.p.LeaseMgr()}
