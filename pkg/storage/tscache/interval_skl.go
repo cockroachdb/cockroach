@@ -141,7 +141,7 @@ type intervalSkl struct {
 	// the overall intervalSkl.
 	later   *sklPage
 	earlier *sklPage
-	floorTs hlc.Timestamp
+	floorTS hlc.Timestamp
 }
 
 // newIntervalSkl creates a new interval skiplist with the given maximum size.
@@ -225,7 +225,7 @@ func (s *intervalSkl) addRange(from, to []byte, opt rangeOptions, val cacheValue
 
 	// If floor ts is >= requested timestamp, then no need to perform a search
 	// or add any records.
-	if !s.floorTs.Less(val.ts) {
+	if !s.floorTS.Less(val.ts) {
 		return nil
 	}
 
@@ -256,7 +256,7 @@ func (s *intervalSkl) addRange(from, to []byte, opt rangeOptions, val cacheValue
 	}
 
 	// Ensure that the starting node has been created.
-	if (opt & excludeFrom) == 0 {
+	if (opt&excludeFrom) == 0 || len(from) == 0 {
 		err = s.later.addNode(&it, from, val, hasKey|hasGap)
 	} else {
 		err = s.later.addNode(&it, from, val, hasGap)
@@ -313,8 +313,8 @@ func (s *intervalSkl) rotatePages(filledPage *sklPage) {
 
 	// Max timestamp of the earlier page becomes the new floor timestamp.
 	if s.earlier != nil {
-		newFloorTs := hlc.Timestamp{WallTime: atomic.LoadInt64(&s.earlier.maxWallTime)}
-		s.floorTs.Forward(newFloorTs)
+		newFloorTS := hlc.Timestamp{WallTime: atomic.LoadInt64(&s.earlier.maxWallTime)}
+		s.floorTS.Forward(newFloorTS)
 	}
 
 	// Make the later page the earlier page.
@@ -355,8 +355,8 @@ func (s *intervalSkl) LookupTimestampRange(from, to []byte, opt rangeOptions) ca
 		// different txnID than our current cacheValue result (val), then we
 		// need to remove the txnID from our result, per the ratcheting policy
 		// for cacheValues. This is tested in TestIntervalSklMaxPageTS.
-		maxTs := hlc.Timestamp{WallTime: atomic.LoadInt64(&s.earlier.maxWallTime)}
-		if !maxTs.Less(val.ts) {
+		maxTS := hlc.Timestamp{WallTime: atomic.LoadInt64(&s.earlier.maxWallTime)}
+		if !maxTS.Less(val.ts) {
 			val2 := s.earlier.lookupTimestampRange(from, to, opt)
 			val, _ = ratchetValue(val, val2)
 		}
@@ -364,7 +364,7 @@ func (s *intervalSkl) LookupTimestampRange(from, to []byte, opt rangeOptions) ca
 
 	// Return the higher value from the the page lookups and the floor
 	// timestamp.
-	floorVal := cacheValue{ts: s.floorTs, txnID: noTxnID}
+	floorVal := cacheValue{ts: s.floorTS, txnID: noTxnID}
 	val, _ = ratchetValue(val, floorVal)
 
 	return val
@@ -410,8 +410,8 @@ func (p *sklPage) lookupTimestampRange(from, to []byte, opt rangeOptions) cacheV
 	var it arenaskl.Iterator
 	it.Init(p.list)
 
-	onKey := it.SeekForPrev(from)
-	return p.scanForTimestamp(&it, from, to, opt, onKey)
+	onFrom := it.SeekForPrev(from)
+	return p.scanForMaxValue(&it, from, to, opt, onFrom)
 }
 
 func (p *sklPage) addNode(
@@ -440,7 +440,7 @@ func (p *sklPage) addNode(
 		// want to consider this new key here because even if it has a larger
 		// key value that indicates that we can take this fast path, it may have
 		// a smaller gap value that we need to ratchet below.
-		prevVal := p.scanForTimestamp(it, key, key, excludeTo, false)
+		prevVal := p.scanForMaxValue(it, key, key, excludeTo, false /* onFrom */)
 		if _, update := ratchetValue(prevVal, val); !update {
 			return nil
 		}
@@ -468,7 +468,7 @@ func (p *sklPage) addNode(
 		case nil:
 			// Add was successful, so finish initialization by scanning for gap
 			// timestamp and using it to ratchet the new nodes' timestamps.
-			p.scanForTimestamp(it, key, key, 0, true)
+			p.scanForMaxValue(it, key, key, 0, true /* onFrom */)
 			return nil
 		default:
 			panic(fmt.Sprintf("unexpected error: %v", err))
@@ -628,68 +628,80 @@ func (p *sklPage) ratchetValueSet(
 	}
 }
 
-// scanForTimestamp scans backwards for the first initialized node and uses its
-// gap timestamp as the initial candidate. It then scans forwards until it
-// reaches the termination key, ratcheting any uninitialized nodes it encounters,
-// and updating the candidate gap timestamp as it goes. The timestamp of the
-// termination key is returned.
+// scanForMaxValue scans for the maximum value in the specified range. It does
+// so by first scanning backwards to the first initialized node and using its
+// gap value as the initial "previous gap value". It then scans forwards until
+// it reaches the "from" key, ratcheting any uninitialized nodes it encounters,
+// and updating the candidate "previous gap value" as it goes. Once the scan
+// enters the specified range, it begins keeping track of the maximum value that
+// it has seen, which is initially set to the "previous gap value". It ratchets
+// this maximum value with each new value that it encounters while iterating
+// between "from" and "to", returning the final maximum when the iteration
+// reaches the end of the range.
 //
 // Iterating backwards and then forwards solves potential race conditions with
-// other threads. During iteration backwards, other nodes can be inserting new
+// other threads. During backwards iteration, other nodes can be inserting new
 // nodes between the previous node and the lookup node, which could change the
-// correct value of the gap timestamp. The solution is two-fold:
+// choice for the "previous gap value". The solution is two-fold:
 //
 // 1. Add new nodes in two phases - initializing and then initialized. Nodes in
 //    the initializing state act as a synchronization point between goroutines
 //    that are adding a particular node and goroutines that are scanning for gap
-//    timestamps. Scanning goroutines encounter the initializing nodes and are
+//    values. Scanning goroutines encounter the initializing nodes and are
 //    forced to deal with them before continuing.
 //
-// 2. After the gap timestamp of the previous node has been found, the scanning
-//    goroutine will scan forwards until it reaches the original key. It will
-//    complete initialization of any nodes along the way and inherit the gap
-//    timestamp of initialized nodes as it goes. By the time it reaches the
-//    original key, it has a valid gap timestamp value.
+// 2. After the gap value of the previous node has been found, the scanning
+//    goroutine will scan forwards until it reaches the original "from" key. It
+//    will complete initialization of any nodes along the way and inherit the
+//    gap value of initialized nodes as it goes. By the time it reaches the
+//    original key, it has a valid gap value, which we have called the "starting
+//    gap value".
 //
 // During forward iteration, if another goroutine inserts a new gap node in the
 // interval between the previous node and the original key, then either:
 //
-// 1. The forward iteration finds it and looks up its gap timestamp. That node
-//    now becomes the new "previous node", and iteration continues.
+// 1. The forward iteration finds it and looks up its gap value. That node now
+//    becomes the new "previous node", and iteration continues.
 //
 // 2. The new node is created after the iterator has move past its position. As
 //    part of node creation, the creator had to scan backwards to find the gap
-//    timestamp of the previous node. It is guaranteed to find a gap timestamp
-//    that is >= the gap timestamp found by the original goroutine.
+//    value of the previous node. It is guaranteed to find a gap value that
+//    is >= the gap value found by the original goroutine.
 //
 // This means that no matter what gets inserted, or when it gets inserted, the
-// scanning goroutine is guaranteed to end up with a timestamp value that will
-// never decrease on future lookups, which is the critical invariant.
-func (p *sklPage) scanForTimestamp(
-	it *arenaskl.Iterator, from, to []byte, opt rangeOptions, onKey bool,
+// scanning goroutine is guaranteed to end up with a value that will never
+// decrease on future lookups, which is the critical invariant.
+//
+// The method takes arguments to specify a range to scan over. It is not legal
+// to pass nil as the "from" argument or for "from" > "to". It also takes an
+// "onFrom" flag, which specifies whether the iterator is currently positioned
+// on the "from" key or not. If "onFrom" == false, it is assumed that the
+// iterator is positioned on the node preceeding "from".
+func (p *sklPage) scanForMaxValue(
+	it *arenaskl.Iterator, from, to []byte, opt rangeOptions, onFrom bool,
 ) cacheValue {
 	clone := *it
 
-	if onKey {
-		// The iterator is currently positioned on the key node, so need to
-		// iterate backwards from there in order to find the gap timestamp.
+	if onFrom {
+		// The iterator is currently positioned on the "from" key, so need to
+		// iterate backwards from there in order to find the gap value.
 		clone.Prev()
 	}
 
 	// First iterate backwards, looking for an already initialized node which
-	// will supply the initial candidate gap timestamp.
+	// will supply the initial "previous gap value".
 	var gapVal cacheValue
 	for {
 		if !clone.Valid() {
-			// No more previous nodes, so use the zero timestamp and begin
-			// forward iteration from the first node.
+			// No more previous nodes, so use the zero value and begin forward
+			// iteration from the first node.
 			clone.SeekToFirst()
 			break
 		}
 
 		meta := clone.Meta()
 		if (meta & initialized) != 0 {
-			// Found the gap timestamp for an initialized node.
+			// Found the gap value for an initialized node.
 			_, gapVal = p.decodeValueSet(clone.Value(), meta)
 			clone.Next()
 			break
@@ -699,18 +711,19 @@ func (p *sklPage) scanForTimestamp(
 	}
 
 	// Now iterate forwards until "key" is reached, update any uninitialized
-	// nodes along the way, and update the gap timestamp. Keep track of the
-	// maximum value seen between from and to, respecting the rangeOptions.
+	// nodes along the way, and update the gap value. Keep track of the maximum
+	// value seen between from and to, respecting the rangeOptions.
 	var maxVal cacheValue
 	for {
 		if !clone.Valid() {
-			// No more nodes. Ratchet max with the current gapVal and return.
+			// No more nodes, which can happen for open ranges. Ratchet maxVal
+			// with the current gapVal and return.
 			maxVal, _ = ratchetValue(maxVal, gapVal)
 			return maxVal
 		}
 
 		if (clone.Meta() & initialized) == 0 {
-			// Finish initializing the node with the gap timestamp.
+			// Finish initializing the node with the last seen gapVal.
 			p.ratchetValueSet(&clone, gapVal, gapVal, true /* setInit */)
 		}
 
