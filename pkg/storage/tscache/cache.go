@@ -15,6 +15,7 @@
 package tscache
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -113,6 +114,19 @@ var lowWaterTxnIDMarker = func() uuid.UUID {
 	}
 	return u
 }()
+
+func (v cacheValue) String() string {
+	var txnIDStr string
+	switch v.txnID {
+	case noTxnID:
+		txnIDStr = "none"
+	case lowWaterTxnIDMarker:
+		txnIDStr = "low water"
+	default:
+		txnIDStr = v.txnID.String()
+	}
+	return fmt.Sprintf("{ts: %s, txnID: %s}", v.ts, txnIDStr)
+}
 
 // ratchetValue returns the cacheValue that results from ratcheting the provided
 // old and new cacheValues. It also returns flags reflecting whether the value

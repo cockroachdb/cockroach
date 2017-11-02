@@ -17,6 +17,7 @@ package tscache
 import (
 	"fmt"
 	"math/rand"
+	"strconv"
 	"sync"
 	"testing"
 	"time"
@@ -191,18 +192,35 @@ func TestIntervalSklSupersetRange(t *testing.T) {
 }
 
 func TestIntervalSklContiguousRanges(t *testing.T) {
-	val1 := makeVal(makeTS(200, 1), "1")
-	val2 := makeVal(makeTS(201, 0), "2")
+	ts1 := makeTS(201, 0)
+
+	val1 := makeVal(ts1, "1")
+	val2 := makeVal(ts1, "2")
+	val2WithoutID := makeValWithoutID(ts1)
 
 	s := newIntervalSkl(arenaSize)
 	s.floorTs = floorTs
 
 	s.AddRange([]byte("banana"), []byte("kiwi"), excludeTo, val1)
 	s.AddRange([]byte("kiwi"), []byte("orange"), excludeTo, val2)
+
+	// Test single-key lookups over the contiguous range.
 	require.Equal(t, floorVal, s.LookupTimestamp([]byte("apple")))
 	require.Equal(t, val1, s.LookupTimestamp([]byte("banana")))
 	require.Equal(t, val2, s.LookupTimestamp([]byte("kiwi")))
 	require.Equal(t, floorVal, s.LookupTimestamp([]byte("orange")))
+
+	// Test range lookups over the contiguous range.
+	require.Equal(t, floorVal, s.LookupTimestampRange([]byte(""), []byte("banana"), excludeTo))
+	require.Equal(t, val1, s.LookupTimestampRange([]byte(""), []byte("kiwi"), excludeTo))
+	require.Equal(t, val2WithoutID, s.LookupTimestampRange([]byte(""), []byte("orange"), excludeTo))
+	require.Equal(t, val2WithoutID, s.LookupTimestampRange([]byte(""), []byte(nil), excludeTo))
+	require.Equal(t, val1, s.LookupTimestampRange([]byte("banana"), []byte("kiwi"), excludeTo))
+	require.Equal(t, val2, s.LookupTimestampRange([]byte("kiwi"), []byte("orange"), excludeTo))
+	require.Equal(t, val2, s.LookupTimestampRange([]byte("kiwi"), []byte(nil), excludeTo))
+	require.Equal(t, val2WithoutID, s.LookupTimestampRange([]byte("banana"), []byte("orange"), excludeTo))
+	require.Equal(t, val2WithoutID, s.LookupTimestampRange([]byte("banana"), []byte(nil), excludeTo))
+	require.Equal(t, floorVal, s.LookupTimestampRange([]byte("orange"), []byte(nil), excludeTo))
 }
 
 func TestIntervalSklOverlappingRanges(t *testing.T) {
@@ -360,16 +378,14 @@ func TestIntervalSklLookupRange(t *testing.T) {
 	ts1 := makeTS(100, 100)
 	ts2 := makeTS(200, 201)
 	ts3 := makeTS(300, 201)
-	ts4 := makeTS(400, 0)
+	ts4 := makeTS(400, 201)
 
 	val1 := makeVal(ts1, "1")
 	val2 := makeVal(ts2, "2")
 	val3 := makeVal(ts2, "3")
 	val3WithoutID := makeValWithoutID(ts2)
 	val4 := makeVal(ts3, "4")
-	val5 := makeVal(ts3, "5")
-	val5WithoutID := makeValWithoutID(ts3)
-	val6 := makeVal(ts4, "6")
+	val5 := makeVal(ts4, "5")
 
 	s := newIntervalSkl(arenaSize)
 
@@ -414,20 +430,19 @@ func TestIntervalSklLookupRange(t *testing.T) {
 	require.Equal(t, val3, s.LookupTimestampRange([]byte("cherry"), []byte(nil), 0))
 	require.Equal(t, emptyVal, s.LookupTimestampRange([]byte("tomato"), []byte(nil), 0))
 
-	// Range with multiple identical timestamps should return no txnID.
-	s.AddRange([]byte("apple"), []byte("kiwi"), excludeTo, val4)
-	s.AddRange([]byte("kiwi"), []byte("tomato"), excludeTo, val5)
-	require.Equal(t, val4, s.LookupTimestampRange([]byte("apple"), []byte("kiwi"), excludeTo))
-	require.Equal(t, val5, s.LookupTimestampRange([]byte("kiwi"), []byte("tomato"), excludeTo))
-	require.Equal(t, val5WithoutID, s.LookupTimestampRange([]byte("apple"), []byte("tomato"), excludeTo))
-
 	// Subset lookup range.
-	s.AddRange([]byte("apple"), []byte("cherry"), excludeTo, val6)
-	require.Equal(t, val6, s.LookupTimestampRange([]byte("apple"), []byte("berry"), 0))
-	require.Equal(t, val6, s.LookupTimestampRange([]byte("apple"), []byte("berry"), excludeFrom))
-	require.Equal(t, val6, s.LookupTimestampRange([]byte("berry"), []byte("blueberry"), 0))
-	require.Equal(t, val6, s.LookupTimestampRange([]byte("berry"), []byte("cherry"), 0))
-	require.Equal(t, val6, s.LookupTimestampRange([]byte("berry"), []byte("cherry"), excludeTo))
+	s.AddRange([]byte("apple"), []byte("cherry"), excludeTo, val4)
+	require.Equal(t, val4, s.LookupTimestampRange([]byte("apple"), []byte("berry"), 0))
+	require.Equal(t, val4, s.LookupTimestampRange([]byte("apple"), []byte("berry"), excludeFrom))
+	require.Equal(t, val4, s.LookupTimestampRange([]byte("berry"), []byte("blueberry"), 0))
+	require.Equal(t, val4, s.LookupTimestampRange([]byte("berry"), []byte("cherry"), 0))
+	require.Equal(t, val4, s.LookupTimestampRange([]byte("berry"), []byte("cherry"), excludeTo))
+
+	// Overlapping range without endpoints.
+	s.AddRange([]byte("banana"), []byte("cherry"), (excludeFrom | excludeTo), val5)
+	require.Equal(t, val4, s.LookupTimestampRange([]byte("apple"), []byte("banana"), (excludeFrom|excludeTo)))
+	require.Equal(t, val5, s.LookupTimestampRange([]byte("banana"), []byte("cherry"), (excludeFrom|excludeTo)))
+	require.Equal(t, val5, s.LookupTimestampRange([]byte("apple"), []byte("cherry"), (excludeFrom|excludeTo)))
 }
 
 func TestIntervalSklLookupRangeSingleKeyRanges(t *testing.T) {
@@ -648,56 +663,105 @@ func TestIntervalSklConcurrency(t *testing.T) {
 	}
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			const n = 10000
-			const slots = 20
+			// Run one subtest using a real clock to generate timestampts and
+			// one subtest using a fake clock to generate timestamps. The former
+			// is good for simulating real conditions while the latter is good
+			// for testing timestamp collisions.
+			testutils.RunTrueAndFalse(t, "useClock", func(t *testing.T, useClock bool) {
+				const n = 10000
+				const slots = 20
 
-			var wg sync.WaitGroup
-			clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
-			s := newIntervalSkl(tc.size)
+				var wg sync.WaitGroup
+				clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
+				s := newIntervalSkl(tc.size)
 
-			for i := 0; i < slots; i++ {
-				wg.Add(1)
+				for i := 0; i < slots; i++ {
+					wg.Add(1)
 
-				go func(i int) {
-					defer wg.Done()
+					// Each goroutine gets its own key to watch as it performs
+					// random operations.
+					go func(i int) {
+						defer wg.Done()
 
-					rng := rand.New(rand.NewSource(timeutil.Now().UnixNano()))
-					key := []byte(fmt.Sprintf("%05d", i))
-					maxVal := cacheValue{}
+						rng := rand.New(rand.NewSource(timeutil.Now().UnixNano()))
+						key := []byte(fmt.Sprintf("%05d", i))
+						txnID := strconv.Itoa(i)
+						maxVal := cacheValue{}
 
-					for j := 0; j < n; j++ {
-						fromNum := rng.Intn(slots)
-						toNum := rng.Intn(slots)
-						if fromNum > toNum {
-							fromNum, toNum = toNum, fromNum
+						for j := 0; j < n; j++ {
+							// Choose a random range.
+							fromNum := rng.Intn(slots)
+							toNum := rng.Intn(slots)
+							if fromNum > toNum {
+								fromNum, toNum = toNum, fromNum
+							}
+
+							from := []byte(fmt.Sprintf("%05d", fromNum))
+							to := []byte(fmt.Sprintf("%05d", toNum))
+
+							// Choose random range options.
+							opt := rangeOptions(rng.Intn(int(excludeFrom|excludeTo) + 1))
+
+							// Add a new value to the range.
+							ts := hlc.Timestamp{WallTime: int64(j)}
+							if useClock {
+								ts = clock.Now()
+							}
+							nowVal := makeVal(ts, txnID)
+							s.AddRange(from, to, opt, nowVal)
+
+							// Test single-key lookup at from, if possible.
+							if (opt & excludeFrom) == 0 {
+								val := s.LookupTimestamp(from)
+								assertRatchet(t, nowVal, val)
+							}
+
+							// Test single-key lookup between from and to, if possible.
+							if middleNum := fromNum + 1; middleNum < toNum {
+								middle := []byte(fmt.Sprintf("%05d", middleNum))
+								val := s.LookupTimestamp(middle)
+								assertRatchet(t, nowVal, val)
+							}
+
+							// Test single-key lookup at to, if possible.
+							if (opt & excludeTo) == 0 {
+								val := s.LookupTimestamp(to)
+								assertRatchet(t, nowVal, val)
+							}
+
+							// Test range lookup between from and to, if possible.
+							if !(fromNum == toNum && opt == (excludeFrom|excludeTo)) {
+								val := s.LookupTimestampRange(from, to, opt)
+								assertRatchet(t, nowVal, val)
+							}
+
+							// Make sure the value at our key did not decrease.
+							val := s.LookupTimestamp(key)
+							assertRatchet(t, maxVal, val)
+							maxVal = val
 						}
+					}(i)
+				}
 
-						from := []byte(fmt.Sprintf("%05d", fromNum))
-						to := []byte(fmt.Sprintf("%05d", toNum))
-
-						now := clock.Now()
-						nowVal := makeValWithoutID(now)
-						s.AddRange(from, to, 0, nowVal)
-
-						val := s.LookupTimestamp(from)
-						require.False(t, val.ts.Less(now))
-
-						val = s.LookupTimestamp(to)
-						require.False(t, val.ts.Less(now))
-
-						val = s.LookupTimestampRange(from, to, 0)
-						require.False(t, val.ts.Less(now))
-
-						val = s.LookupTimestamp(key)
-						require.False(t, val.ts.Less(maxVal.ts))
-						maxVal = val
-					}
-				}(i)
-			}
-
-			wg.Wait()
+				wg.Wait()
+			})
 		})
 	}
+}
+
+// assertRatchet asserts that it would be possible for the first cacheValue
+// (before) to be ratcheted to the second cacheValue (after).
+func assertRatchet(t *testing.T, before, after cacheValue) {
+	// Value ratcheting is an anti-symmetric relation R, so if R(before, after)
+	// holds with before != after, then R(after, before) must not hold. Another
+	// way to look at this is that ratcheting is a monotonically increasing
+	// function, so if after comes later than before and the two are not equal,
+	// then before could not also come later than after.
+	//
+	// If before == after, ratcheting will be a no-op, so the assertion will
+	// still hold.
+	_, upgrade := ratchetValue(after, before)
+	require.False(t, upgrade, "ratchet inversion from %s to %s", before, after)
 }
 
 func BenchmarkIntervalSklAdd(b *testing.B) {
