@@ -1551,6 +1551,7 @@ var datumToTypeCategory = map[reflect.Type]*parser.DString{
 	reflect.TypeOf(types.Bool):        typCategoryBoolean,
 	reflect.TypeOf(types.Bytes):       typCategoryUserDefined,
 	reflect.TypeOf(types.Date):        typCategoryDateTime,
+	reflect.TypeOf(types.Time):        typCategoryDateTime,
 	reflect.TypeOf(types.Float):       typCategoryNumeric,
 	reflect.TypeOf(types.Int):         typCategoryNumeric,
 	reflect.TypeOf(types.Interval):    typCategoryTimespan,

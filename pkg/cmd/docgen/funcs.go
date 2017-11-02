@@ -253,7 +253,7 @@ func linkTypeName(s string) string {
 	s = strings.TrimSuffix(s, "[]")
 	switch s {
 	case "int", "decimal", "float", "bool", "date", "timestamp", "interval", "string", "bytes",
-		"inet", "uuid", "collatedstring":
+		"inet", "uuid", "collatedstring", "time":
 		s = fmt.Sprintf("<a href=\"%s.html\">%s</a>", s, name)
 	}
 	return s

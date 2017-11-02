@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/ipaddr"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/timeofday"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
@@ -85,6 +86,8 @@ func RandDatum(rng *rand.Rand, typ ColumnType, nullOk bool) parser.Datum {
 		return d
 	case ColumnType_DATE:
 		return parser.NewDDate(parser.DDate(rng.Intn(10000)))
+	case ColumnType_TIME:
+		return parser.MakeDTime(timeofday.Random(rng))
 	case ColumnType_TIMESTAMP:
 		return &parser.DTimestamp{Time: timeutil.Unix(rng.Int63n(1000000), rng.Int63n(1000000))}
 	case ColumnType_INTERVAL:

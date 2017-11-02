@@ -128,6 +128,17 @@ func TestBinaryDate(t *testing.T) {
 	})
 }
 
+func TestBinaryTime(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	testBinaryDatumType(t, "time", func(val string) parser.Datum {
+		d, err := parser.ParseDTime(val)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return d
+	})
+}
+
 func TestBinaryIntArray(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	buf := writeBuffer{bytecount: metric.NewCounter(metric.Metadata{})}

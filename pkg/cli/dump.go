@@ -28,6 +28,7 @@ import (
 	"golang.org/x/sync/errgroup"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/util/timeofday"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 )
@@ -460,6 +461,9 @@ func dumpTableData(w io.Writer, conn *sqlConn, clusterTS string, md tableMetadat
 					switch ct {
 					case "DATE":
 						d = parser.NewDDateFromTime(t, time.UTC)
+					case "TIME":
+						// pq awkwardly represents TIME as a time.Time with date 0000-01-01.
+						d = parser.MakeDTime(timeofday.FromTime(t))
 					case "TIMESTAMP":
 						d = parser.MakeDTimestamp(t, time.Nanosecond)
 					case "TIMESTAMP WITH TIME ZONE":
