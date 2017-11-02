@@ -52,6 +52,7 @@ func (*TInt) columnType()            {}
 func (*TFloat) columnType()          {}
 func (*TDecimal) columnType()        {}
 func (*TDate) columnType()           {}
+func (*TTime) columnType()           {}
 func (*TTimestamp) columnType()      {}
 func (*TTimestampTZ) columnType()    {}
 func (*TInterval) columnType()       {}
@@ -72,6 +73,7 @@ func (*TInt) castTargetType()            {}
 func (*TFloat) castTargetType()          {}
 func (*TDecimal) castTargetType()        {}
 func (*TDate) castTargetType()           {}
+func (*TTime) castTargetType()           {}
 func (*TTimestamp) castTargetType()      {}
 func (*TTimestampTZ) castTargetType()    {}
 func (*TInterval) castTargetType()       {}
@@ -91,6 +93,7 @@ func (node *TInt) String() string            { return ColTypeAsString(node) }
 func (node *TFloat) String() string          { return ColTypeAsString(node) }
 func (node *TDecimal) String() string        { return ColTypeAsString(node) }
 func (node *TDate) String() string           { return ColTypeAsString(node) }
+func (node *TTime) String() string           { return ColTypeAsString(node) }
 func (node *TTimestamp) String() string      { return ColTypeAsString(node) }
 func (node *TTimestampTZ) String() string    { return ColTypeAsString(node) }
 func (node *TInterval) String() string       { return ColTypeAsString(node) }

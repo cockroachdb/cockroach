@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/ipaddr"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/timeofday"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uint128"
 	"github.com/lib/pq"
@@ -154,6 +155,12 @@ func (b *writeBuffer) writeTextDatum(ctx context.Context, d tree.Datum, sessionL
 		t := timeutil.Unix(int64(*v)*secondsInDay, 0)
 		// Start at offset 4 because `putInt32` clobbers the first 4 bytes.
 		s := formatTs(t, nil, b.putbuf[4:4])
+		b.putInt32(int32(len(s)))
+		b.write(s)
+
+	case *tree.DTime:
+		// Start at offset 4 because `putInt32` clobbers the first 4 bytes.
+		s := formatTime(timeofday.TimeOfDay(*v), b.putbuf[4:4])
 		b.putInt32(int32(len(s)))
 		b.write(s)
 
@@ -373,6 +380,10 @@ func (b *writeBuffer) writeBinaryDatum(
 		b.putInt32(4)
 		b.putInt32(dateToPgBinary(v))
 
+	case *tree.DTime:
+		b.putInt32(8)
+		b.putInt64(int64(*v))
+
 	case *tree.DArray:
 		if v.ParamTyp.FamilyEqual(types.AnyArray) {
 			b.setError(errors.New("unsupported binary serialization of multidimensional arrays"))
@@ -402,8 +413,16 @@ func (b *writeBuffer) writeBinaryDatum(
 	}
 }
 
-const pgTimeStampFormatNoOffset = "2006-01-02 15:04:05.999999"
+const pgTimeFormat = "15:04:05.999999"
+const pgTimeStampFormatNoOffset = "2006-01-02 " + pgTimeFormat
 const pgTimeStampFormat = pgTimeStampFormatNoOffset + "-07:00"
+
+// formatTime formats t into a format lib/pq understands, appending to the
+// provided tmp buffer and reallocating if needed. The function will then return
+// the resulting buffer.
+func formatTime(t timeofday.TimeOfDay, tmp []byte) []byte {
+	return t.ToTime().AppendFormat(tmp, pgTimeFormat)
+}
 
 // formatTs formats t with an optional offset into a format lib/pq understands,
 // appending to the provided tmp buffer and reallocating if needed. The function
@@ -593,6 +612,12 @@ func decodeOidDatum(id oid.Oid, code formatCode, b []byte) (tree.Datum, error) {
 			}
 			daysSinceEpoch := ts.Unix() / secondsInDay
 			return tree.NewDDate(tree.DDate(daysSinceEpoch)), nil
+		case oid.T_time:
+			d, err := tree.ParseDTime(string(b))
+			if err != nil {
+				return nil, errors.Errorf("could not parse string %q as time", b)
+			}
+			return d, nil
 		case oid.T_interval:
 			d, err := tree.ParseDInterval(string(b))
 			if err != nil {
@@ -793,6 +818,12 @@ func decodeOidDatum(id oid.Oid, code formatCode, b []byte) (tree.Datum, error) {
 			}
 			i := int32(binary.BigEndian.Uint32(b))
 			return pgBinaryToDate(i), nil
+		case oid.T_time:
+			if len(b) < 8 {
+				return nil, errors.Errorf("time requires 8 bytes for binary format")
+			}
+			i := int64(binary.BigEndian.Uint64(b))
+			return tree.MakeDTime(timeofday.TimeOfDay(i)), nil
 		case oid.T_uuid:
 			u, err := tree.ParseDUuidFromBytes(b)
 			if err != nil {

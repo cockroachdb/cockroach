@@ -44,6 +44,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/ipaddr"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/stringencoding"
+	"github.com/cockroachdb/cockroach/pkg/util/timeofday"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uint128"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -1407,6 +1408,104 @@ func (d *DDate) Format(buf *bytes.Buffer, f FmtFlags) {
 
 // Size implements the Datum interface.
 func (d *DDate) Size() uintptr {
+	return unsafe.Sizeof(*d)
+}
+
+// DTime is the time Datum.
+type DTime timeofday.TimeOfDay
+
+// MakeDTime creates a DTime from a TimeOfDay.
+func MakeDTime(t timeofday.TimeOfDay) *DTime {
+	d := DTime(t)
+	return &d
+}
+
+// ParseDTime parses and returns the *DTime Datum value represented by the
+// provided string, or an error if parsing is unsuccessful.
+func ParseDTime(s string) (*DTime, error) {
+	t, err := parseTimestampInLocation("1970-01-01 "+s, time.UTC, types.Time)
+	if err != nil {
+		// Build our own error message to avoid exposing the dummy date.
+		return nil, makeParseError(s, types.Time, nil)
+	}
+	return MakeDTime(timeofday.FromTime(t)), nil
+}
+
+// ResolvedType implements the TypedExpr interface.
+func (*DTime) ResolvedType() types.T {
+	return types.Time
+}
+
+// Compare implements the Datum interface.
+func (d *DTime) Compare(ctx *EvalContext, other Datum) int {
+	if other == DNull {
+		// NULL is less than any non-NULL value.
+		return 1
+	}
+	v, ok := other.(*DTime)
+	if !ok {
+		panic(makeUnsupportedComparisonMessage(d, other))
+	}
+	if *d < *v {
+		return -1
+	}
+	if *v < *d {
+		return 1
+	}
+	return 0
+}
+
+// Prev implements the Datum interface.
+func (d *DTime) Prev(_ *EvalContext) (Datum, bool) {
+	prev := *d - 1
+	return &prev, true
+}
+
+// Next implements the Datum interface.
+func (d *DTime) Next(_ *EvalContext) (Datum, bool) {
+	next := *d + 1
+	return &next, true
+}
+
+var dTimeMin = MakeDTime(timeofday.Min)
+var dTimeMax = MakeDTime(timeofday.Max)
+
+// IsMax implements the Datum interface.
+func (d *DTime) IsMax(_ *EvalContext) bool {
+	return *d == *dTimeMax
+}
+
+// IsMin implements the Datum interface.
+func (d *DTime) IsMin(_ *EvalContext) bool {
+	return *d == *dTimeMin
+}
+
+// Max implements the Datum interface.
+func (d *DTime) Max(_ *EvalContext) (Datum, bool) {
+	return dTimeMax, true
+}
+
+// Min implements the Datum interface.
+func (d *DTime) Min(_ *EvalContext) (Datum, bool) {
+	return dTimeMin, true
+}
+
+// AmbiguousFormat implements the Datum interface.
+func (*DTime) AmbiguousFormat() bool { return false }
+
+// Format implements the NodeFormatter interface.
+func (d *DTime) Format(buf *bytes.Buffer, f FmtFlags) {
+	if !f.encodeFlags.BareStrings {
+		buf.WriteByte('\'')
+	}
+	buf.WriteString(timeofday.TimeOfDay(*d).String())
+	if !f.encodeFlags.BareStrings {
+		buf.WriteByte('\'')
+	}
+}
+
+// Size implements the Datum interface.
+func (d *DTime) Size() uintptr {
 	return unsafe.Sizeof(*d)
 }
 
@@ -2985,6 +3084,7 @@ var baseDatumTypeSizes = map[types.T]struct {
 	types.String:      {unsafe.Sizeof(DString("")), variableSize},
 	types.Bytes:       {unsafe.Sizeof(DBytes("")), variableSize},
 	types.Date:        {unsafe.Sizeof(DDate(0)), fixedSize},
+	types.Time:        {unsafe.Sizeof(DTime(0)), fixedSize},
 	types.Timestamp:   {unsafe.Sizeof(DTimestamp{}), fixedSize},
 	types.TimestampTZ: {unsafe.Sizeof(DTimestampTZ{}), fixedSize},
 	types.Interval:    {unsafe.Sizeof(DInterval{}), fixedSize},

@@ -54,6 +54,7 @@ message ColumnType {
     UUID = 14;
     ARRAY = 15;
     INET = 16;
+    TIME = 17;
 
     INT2VECTOR = 200;
   }

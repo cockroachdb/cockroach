@@ -689,9 +689,11 @@ oid   typname       typnamespace  typowner  typlen  typbyval  typtype
 1041  _inet         1782195457    NULL      -1      false     b
 1043  varchar       1782195457    NULL      -1      false     b
 1082  date          1782195457    NULL      8       true      b
+1083  time          1782195457    NULL      8       true      b
 1114  timestamp     1782195457    NULL      24      true      b
 1115  _timestamp    1782195457    NULL      -1      false     b
 1182  _date         1782195457    NULL      -1      false     b
+1183  _time         1782195457    NULL      -1      false     b
 1184  timestamptz   1782195457    NULL      24      true      b
 1185  _timestamptz  1782195457    NULL      -1      false     b
 1186  interval      1782195457    NULL      24      true      b
@@ -741,9 +743,11 @@ oid   typname       typcategory  typispreferred  typisdefined  typdelim  typreli
 1041  _inet         A            false           true          ,         0         869      0
 1043  varchar       S            false           true          ,         0         0        1015
 1082  date          D            false           true          ,         0         0        1182
+1083  time          D            false           true          ,         0         0        1183
 1114  timestamp     D            false           true          ,         0         0        1115
 1115  _timestamp    A            false           true          ,         0         1114     0
 1182  _date         A            false           true          ,         0         1082     0
+1183  _time         A            false           true          ,         0         1083     0
 1184  timestamptz   D            false           true          ,         0         0        1185
 1185  _timestamptz  A            false           true          ,         0         1184     0
 1186  interval      T            false           true          ,         0         0        1187
@@ -793,9 +797,11 @@ oid   typname       typinput        typoutput        typreceive        typsend  
 1041  _inet         array_in        array_out        array_recv        array_send        0         0          0
 1043  varchar       varcharin       varcharout       varcharrecv       varcharsend       0         0          0
 1082  date          date_in         date_out         date_recv         date_send         0         0          0
+1083  time          time_in         time_out         time_recv         time_send         0         0          0
 1114  timestamp     timestamp_in    timestamp_out    timestamp_recv    timestamp_send    0         0          0
 1115  _timestamp    array_in        array_out        array_recv        array_send        0         0          0
 1182  _date         array_in        array_out        array_recv        array_send        0         0          0
+1183  _time         array_in        array_out        array_recv        array_send        0         0          0
 1184  timestamptz   timestamptz_in  timestamptz_out  timestamptz_recv  timestamptz_send  0         0          0
 1185  _timestamptz  array_in        array_out        array_recv        array_send        0         0          0
 1186  interval      interval_in     interval_out     interval_recv     interval_send     0         0          0
@@ -845,9 +851,11 @@ oid   typname       typalign  typstorage  typnotnull  typbasetype  typtypmod
 1041  _inet         NULL      NULL        false       0            -1
 1043  varchar       NULL      NULL        false       0            -1
 1082  date          NULL      NULL        false       0            -1
+1083  time          NULL      NULL        false       0            -1
 1114  timestamp     NULL      NULL        false       0            -1
 1115  _timestamp    NULL      NULL        false       0            -1
 1182  _date         NULL      NULL        false       0            -1
+1183  _time         NULL      NULL        false       0            -1
 1184  timestamptz   NULL      NULL        false       0            -1
 1185  _timestamptz  NULL      NULL        false       0            -1
 1186  interval      NULL      NULL        false       0            -1
@@ -897,9 +905,11 @@ oid   typname       typndims  typcollation  typdefaultbin  typdefault  typacl
 1041  _inet         0         0             NULL           NULL        NULL
 1043  varchar       0         1661428263    NULL           NULL        NULL
 1082  date          0         0             NULL           NULL        NULL
+1083  time          0         0             NULL           NULL        NULL
 1114  timestamp     0         0             NULL           NULL        NULL
 1115  _timestamp    0         0             NULL           NULL        NULL
 1182  _date         0         0             NULL           NULL        NULL
+1183  _time         0         0             NULL           NULL        NULL
 1184  timestamptz   0         0             NULL           NULL        NULL
 1185  _timestamptz  0         0             NULL           NULL        NULL
 1186  interval      0         0             NULL           NULL        NULL
