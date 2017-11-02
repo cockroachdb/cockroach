@@ -754,13 +754,6 @@ CREATE TABLE t.test (a CHAR PRIMARY KEY, b CHAR, c CHAR, INDEX foo (c));
 	mt.Exec(`DROP INDEX t.test@foo`)
 	// Make "foo" live.
 	mt.makeMutationsActive()
-	// "foo" is being added.
-	mt.writeIndexMutation("foo", sqlbase.DescriptorMutation{Direction: sqlbase.DescriptorMutation_ADD})
-	if _, err := sqlDB.Exec(`DROP INDEX t.test@foo`); !testutils.IsError(err, `index "foo" in the middle of being added, try again later`) {
-		t.Fatal(err)
-	}
-	// Make "foo" live.
-	mt.makeMutationsActive()
 	// Test ALTER TABLE ADD/DROP column in the presence of mutations.
 
 	// Add column DROP mutation "b"
@@ -776,9 +769,6 @@ CREATE TABLE t.test (a CHAR PRIMARY KEY, b CHAR, c CHAR, INDEX foo (c));
 	mt.writeColumnMutation("b", sqlbase.DescriptorMutation{Direction: sqlbase.DescriptorMutation_ADD})
 	if _, err := sqlDB.Exec(`ALTER TABLE t.test ADD b CHAR`); !testutils.IsError(err,
 		`duplicate: column "b" in the middle of being added, not yet public`) {
-		t.Fatal(err)
-	}
-	if _, err := sqlDB.Exec(`ALTER TABLE t.test DROP b`); !testutils.IsError(err, `column "b" in the middle of being added, try again later`) {
 		t.Fatal(err)
 	}
 	// Make "b" live.
@@ -821,13 +811,6 @@ CREATE TABLE t.test (a CHAR PRIMARY KEY, b CHAR, c CHAR, INDEX foo (c));
 	mt.writeIndexMutation("foo", sqlbase.DescriptorMutation{Direction: sqlbase.DescriptorMutation_DROP})
 	// Noop.
 	mt.Exec(`DROP INDEX t.test@foo`)
-	// Make "foo" live.
-	mt.makeMutationsActive()
-	// "foo" is being added.
-	mt.writeIndexMutation("foo", sqlbase.DescriptorMutation{Direction: sqlbase.DescriptorMutation_ADD})
-	if _, err := sqlDB.Exec(`DROP INDEX t.test@foo`); !testutils.IsError(err, `index "foo" in the middle of being added, try again later`) {
-		t.Fatal(err)
-	}
 	// Make "foo" live.
 	mt.makeMutationsActive()
 
