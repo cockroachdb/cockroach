@@ -399,21 +399,23 @@ func (p *planner) ShowDatabases(ctx context.Context, n *parser.ShowDatabases) (p
 }
 
 // ShowGrants returns grant details for the specified objects and users.
-// TODO(marc): implement no targets (meaning full scan).
 // Privileges: None.
 //   Notes: postgres does not have a SHOW GRANTS statement.
 //          mysql only returns the user's privileges.
 func (p *planner) ShowGrants(ctx context.Context, n *parser.ShowGrants) (planNode, error) {
-	if n.Targets == nil {
-		return nil, pgerror.Unimplemented("SHOW GRANTS <no target>",
-			"cannot use SHOW GRANTS without a target")
-	}
-
-	var grantQuery bytes.Buffer
 	var params []string
 	var initCheck func(context.Context) error
 
-	if n.Targets.Databases != nil {
+	const dbPrivQuery = `SELECT TABLE_SCHEMA AS "Database", GRANTEE AS "User", PRIVILEGE_TYPE AS "Privileges" ` +
+		`FROM "".information_schema.schema_privileges`
+	const tablePrivQuery = `SELECT TABLE_SCHEMA AS "Database", TABLE_NAME AS "Table", GRANTEE AS "User", PRIVILEGE_TYPE AS "Privileges" ` +
+		`FROM "".information_schema.table_privileges`
+
+	var source bytes.Buffer
+	var cond bytes.Buffer
+	var orderBy string
+
+	if n.Targets != nil && n.Targets.Databases != nil {
 		// Get grants of database from information_schema.schema_privileges
 		// if the type of target is database.
 		dbNames := n.Targets.Databases.ToStrings()
@@ -431,58 +433,66 @@ func (p *planner) ShowGrants(ctx context.Context, n *parser.ShowGrants) (planNod
 			params = append(params, parser.EscapeSQLString(db))
 		}
 
-		fmt.Fprint(&grantQuery,
-			`SELECT TABLE_SCHEMA AS "Database", GRANTEE AS "User", PRIVILEGE_TYPE AS "Privileges" `+
-				`FROM "".information_schema.schema_privileges`)
+		fmt.Fprint(&source, dbPrivQuery)
+		orderBy = "1,2,3"
 		if len(params) == 0 {
 			// There are no rows, but we can't simply return emptyNode{} because
 			// the result columns must still be defined.
-			grantQuery.WriteString(` WHERE false`)
+			cond.WriteString(`WHERE false`)
 		} else {
-			fmt.Fprintf(&grantQuery, ` WHERE TABLE_SCHEMA IN (%s)`, strings.Join(params, ","))
+			fmt.Fprintf(&cond, `WHERE "Database" IN (%s)`, strings.Join(params, ","))
 		}
 	} else {
-		// Get grants of table from information_schema.table_privileges
-		// if the type of target is table.
-		var allTables parser.TableNames
+		fmt.Fprint(&source, tablePrivQuery)
+		orderBy = "1,2,3,4"
 
-		for _, tableTarget := range n.Targets.Tables {
-			tableGlob, err := tableTarget.NormalizeTablePattern()
-			if err != nil {
-				return nil, err
-			}
-			tables, err := expandTableGlob(ctx, p.txn, p.getVirtualTabler(),
-				p.session.Database, tableGlob)
-			if err != nil {
-				return nil, err
-			}
-			allTables = append(allTables, tables...)
-		}
+		if n.Targets != nil {
+			// Get grants of table from information_schema.table_privileges
+			// if the type of target is table.
+			var allTables parser.TableNames
 
-		initCheck = func(ctx context.Context) error {
-			for i := range allTables {
-				if err := checkTableExists(ctx, p, &allTables[i]); err != nil {
-					return err
+			for _, tableTarget := range n.Targets.Tables {
+				tableGlob, err := tableTarget.NormalizeTablePattern()
+				if err != nil {
+					return nil, err
 				}
+				tables, err := expandTableGlob(ctx, p.txn, p.getVirtualTabler(),
+					p.session.Database, tableGlob)
+				if err != nil {
+					return nil, err
+				}
+				allTables = append(allTables, tables...)
 			}
-			return nil
-		}
 
-		for i := range allTables {
-			params = append(params, fmt.Sprintf("(%s,%s)",
-				parser.EscapeSQLString(allTables[i].Database()),
-				parser.EscapeSQLString(allTables[i].Table())))
-		}
+			initCheck = func(ctx context.Context) error {
+				for i := range allTables {
+					if err := checkTableExists(ctx, p, &allTables[i]); err != nil {
+						return err
+					}
+				}
+				return nil
+			}
 
-		fmt.Fprint(&grantQuery,
-			`SELECT TABLE_NAME AS "Table", GRANTEE AS "User", PRIVILEGE_TYPE AS "Privileges" `+
-				`FROM "".information_schema.table_privileges`)
-		if len(params) == 0 {
-			// There are no rows, but we can't simply return emptyNode{} because
-			// the result columns must still be defined.
-			grantQuery.WriteString(` WHERE false`)
+			for i := range allTables {
+				params = append(params, fmt.Sprintf("(%s,%s)",
+					parser.EscapeSQLString(allTables[i].Database()),
+					parser.EscapeSQLString(allTables[i].Table())))
+			}
+
+			if len(params) == 0 {
+				// The glob pattern has expanded to zero matching tables.
+				// There are no rows, but we can't simply return emptyNode{} because
+				// the result columns must still be defined.
+				cond.WriteString(`WHERE false`)
+			} else {
+				fmt.Fprintf(&cond, `WHERE ("Database", "Table") IN (%s)`, strings.Join(params, ","))
+			}
 		} else {
-			fmt.Fprintf(&grantQuery, ` WHERE (TABLE_SCHEMA, TABLE_NAME) IN (%s)`, strings.Join(params, ","))
+			// No target: also look at databases.
+			source.WriteString(` UNION ALL ` +
+				`SELECT "Database", NULL::STRING AS "Table", "User", "Privileges" FROM (`)
+			source.WriteString(dbPrivQuery)
+			source.WriteByte(')')
 		}
 	}
 
@@ -491,10 +501,11 @@ func (p *planner) ShowGrants(ctx context.Context, n *parser.ShowGrants) (planNod
 		for _, grantee := range n.Grantees.ToStrings() {
 			params = append(params, parser.EscapeSQLString(grantee))
 		}
-		fmt.Fprintf(&grantQuery, ` AND GRANTEE IN (%s)`, strings.Join(params, ","))
+		fmt.Fprintf(&cond, ` AND "User" IN (%s)`, strings.Join(params, ","))
 	}
-	fmt.Fprint(&grantQuery, " ORDER BY 1,2,3")
-	return p.delegateQuery(ctx, "SHOW GRANTS", grantQuery.String(), initCheck, nil)
+	return p.delegateQuery(ctx, "SHOW GRANTS",
+		fmt.Sprintf("SELECT * FROM (%s) %s ORDER BY %s", source.String(), cond.String(), orderBy),
+		initCheck, nil)
 }
 
 // ShowIndex returns all the indexes for a table.

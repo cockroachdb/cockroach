@@ -151,10 +151,10 @@ SHOW CONSTRAINTS FROM information_schema.tables
 ----
 Table   Name     Type  Column(s)  Details
 
-query TTT colnames
+query TTTT colnames
 SHOW GRANTS ON information_schema.tables
 ----
-Table  User  Privileges
+Database  Table  User  Privileges
 
 
 # Verify selecting from information_schema.

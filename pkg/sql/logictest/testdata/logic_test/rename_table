@@ -44,10 +44,10 @@ SHOW TABLES
 new_kv
 
 # check the name in the descriptor, which is used by SHOW GRANTS, is also changed
-query TTT
+query TTTT
 SHOW GRANTS ON TABLE new_kv
 ----
-new_kv        root      ALL
+test  new_kv  root  ALL
 
 statement error empty table name
 ALTER TABLE "" RENAME TO foo

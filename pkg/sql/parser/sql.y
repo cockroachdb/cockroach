@@ -500,10 +500,12 @@ func (u *sqlSymUnion) scrubOption() ScrubOption {
 %type <Statement> stmt
 
 %type <Statement> alter_stmt
+%type <Statement> alter_ddl_stmt
 %type <Statement> alter_table_stmt
 %type <Statement> alter_index_stmt
 %type <Statement> alter_view_stmt
 %type <Statement> alter_database_stmt
+%type <Statement> alter_user_stmt
 %type <Statement> alter_range_stmt
 
 // ALTER RANGE
@@ -520,6 +522,9 @@ func (u *sqlSymUnion) scrubOption() ScrubOption {
 // ALTER DATABASE
 %type <Statement> alter_rename_database_stmt
 %type <Statement> alter_zone_database_stmt
+
+// ALTER USER
+%type <Statement> alter_user_password_stmt
 
 // ALTER INDEX
 %type <Statement> alter_scatter_index_stmt
@@ -547,6 +552,7 @@ func (u *sqlSymUnion) scrubOption() ScrubOption {
 %type <Statement> copy_from_stmt
 
 %type <Statement> create_stmt
+%type <Statement> create_ddl_stmt
 %type <Statement> create_database_stmt
 %type <Statement> create_index_stmt
 %type <Statement> create_table_stmt
@@ -557,6 +563,7 @@ func (u *sqlSymUnion) scrubOption() ScrubOption {
 %type <Statement> discard_stmt
 
 %type <Statement> drop_stmt
+%type <Statement> drop_ddl_stmt
 %type <Statement> drop_database_stmt
 %type <Statement> drop_index_stmt
 %type <Statement> drop_table_stmt
@@ -644,7 +651,7 @@ func (u *sqlSymUnion) scrubOption() ScrubOption {
 %type <ValidationBehavior> opt_validate_behavior
 
 %type <str> opt_template_clause opt_encoding_clause opt_lc_collate_clause opt_lc_ctype_clause
-%type <*string> opt_password
+%type <Expr> opt_password
 
 %type <IsolationLevel> transaction_iso_level
 %type <UserPriority>  transaction_user_priority
@@ -965,14 +972,18 @@ stmt:
 
 // %Help: ALTER
 // %Category: Group
-// %Text: ALTER TABLE, ALTER INDEX, ALTER VIEW, ALTER DATABASE
+// %Text: ALTER TABLE, ALTER INDEX, ALTER VIEW, ALTER DATABASE, ALTER USER
 alter_stmt:
+  alter_ddl_stmt      // help texts in sub-rule
+| alter_user_stmt     // EXTEND WITH HELP: ALTER USER
+| ALTER error         // SHOW HELP: ALTER
+
+alter_ddl_stmt:
   alter_table_stmt    // EXTEND WITH HELP: ALTER TABLE
 | alter_index_stmt    // EXTEND WITH HELP: ALTER INDEX
 | alter_view_stmt     // EXTEND WITH HELP: ALTER VIEW
 | alter_database_stmt // EXTEND WITH HELP: ALTER DATABASE
 | alter_range_stmt
-| ALTER error         // SHOW HELP: ALTER
 
 // %Help: ALTER TABLE - change the definition of a table
 // %Category: DDL
@@ -1020,6 +1031,15 @@ alter_view_stmt:
 // ALTER VIEW has its error help token here because the ALTER VIEW
 // prefix is spread over multiple non-terminals.
 | ALTER VIEW error // SHOW HELP: ALTER VIEW
+
+// %Help: ALTER USER - change user properties
+// %Category: Priv
+// %Text:
+// ALTER USER [IF EXISTS] <name> WITH PASSWORD <password>
+// %SeeAlso: CREATE USER
+alter_user_stmt:
+  alter_user_password_stmt
+| ALTER USER error // SHOW HELP: ALTER USER
 
 // %Help: ALTER DATABASE - change the definition of a database
 // %Category: DDL
@@ -1496,15 +1516,19 @@ cancel_query_stmt:
 // CREATE DATABASE, CREATE TABLE, CREATE INDEX, CREATE TABLE AS,
 // CREATE USER, CREATE VIEW
 create_stmt:
+  create_user_stmt     // EXTEND WITH HELP: CREATE USER
+| create_ddl_stmt      // help texts in sub-rule
+| CREATE error         // SHOW HELP: CREATE
+
+create_ddl_stmt:
   create_database_stmt // EXTEND WITH HELP: CREATE DATABASE
 | create_index_stmt    // EXTEND WITH HELP: CREATE INDEX
 | create_table_stmt    // EXTEND WITH HELP: CREATE TABLE
 | create_table_as_stmt // EXTEND WITH HELP: CREATE TABLE
 // Error case for both CREATE TABLE and CREATE TABLE ... AS in one
 | CREATE TABLE error   // SHOW HELP: CREATE TABLE
-| create_user_stmt     // EXTEND WITH HELP: CREATE USER
 | create_view_stmt     // EXTEND WITH HELP: CREATE VIEW
-| CREATE error         // SHOW HELP: CREATE
+
 
 // %Help: DELETE - delete rows from a table
 // %Category: DML
@@ -1542,12 +1566,15 @@ discard_stmt:
 // %Category: Group
 // %Text: DROP DATABASE, DROP INDEX, DROP TABLE, DROP VIEW, DROP USER
 drop_stmt:
+  drop_ddl_stmt      // help texts in sub-rule
+| drop_user_stmt     // EXTEND WITH HELP: DROP USER
+| DROP error         // SHOW HELP: DROP
+
+drop_ddl_stmt:
   drop_database_stmt // EXTEND WITH HELP: DROP DATABASE
 | drop_index_stmt    // EXTEND WITH HELP: DROP INDEX
 | drop_table_stmt    // EXTEND WITH HELP: DROP TABLE
 | drop_view_stmt     // EXTEND WITH HELP: DROP VIEW
-| drop_user_stmt     // EXTEND WITH HELP: DROP USER
-| DROP error         // SHOW HELP: DROP
 
 // %Help: DROP VIEW - remove a view
 // %Category: DDL
@@ -1630,13 +1657,13 @@ drop_database_stmt:
 // %Text: DROP USER [IF EXISTS] <user> [, ...]
 // %SeeAlso: CREATE USER, SHOW USERS
 drop_user_stmt:
-  DROP USER name_list
+  DROP USER string_or_placeholder_list
   {
-    $$.val = &DropUser{Names: $3.nameList(), IfExists: false}
+    $$.val = &DropUser{Names: $3.exprs(), IfExists: false}
   }
-| DROP USER IF EXISTS name_list
+| DROP USER IF EXISTS string_or_placeholder_list
   {
-    $$.val = &DropUser{Names: $5.nameList(), IfExists: true}
+    $$.val = &DropUser{Names: $5.exprs(), IfExists: true}
   }
 | DROP USER error // SHOW HELP: DROP USER
 
@@ -1701,31 +1728,34 @@ explain_stmt:
 | EXPLAIN '(' error // SHOW HELP: EXPLAIN
 
 preparable_stmt:
-  backup_stmt  // EXTEND WITH HELP: BACKUP
-| cancel_stmt  // help texts in sub-rule
-| delete_stmt  // EXTEND WITH HELP: DELETE
-| import_stmt  // EXTEND WITH HELP: IMPORT
-| insert_stmt  // EXTEND WITH HELP: INSERT
-| pause_stmt   // EXTEND WITH HELP: PAUSE JOB
-| reset_stmt   // help texts in sub-rule
-| restore_stmt // EXTEND WITH HELP: RESTORE
-| resume_stmt  // EXTEND WITH HELP: RESUME JOB
-| select_stmt  // help texts in sub-rule
+  alter_user_stmt   // EXTEND WITH HELP: ALTER USER
+| backup_stmt       // EXTEND WITH HELP: BACKUP
+| cancel_stmt       // help texts in sub-rule
+| create_user_stmt  // EXTEND WITH HELP: CREATE USER
+| delete_stmt       // EXTEND WITH HELP: DELETE
+| drop_user_stmt    // EXTEND WITH HELP: DROP USER
+| import_stmt       // EXTEND WITH HELP: IMPORT
+| insert_stmt       // EXTEND WITH HELP: INSERT
+| pause_stmt        // EXTEND WITH HELP: PAUSE JOB
+| reset_stmt        // help texts in sub-rule
+| restore_stmt      // EXTEND WITH HELP: RESTORE
+| resume_stmt       // EXTEND WITH HELP: RESUME JOB
+| select_stmt       // help texts in sub-rule
   {
     $$.val = $1.slct()
   }
 | set_session_stmt  // EXTEND WITH HELP: SET SESSION
 | set_csetting_stmt // EXTEND WITH HELP: SET CLUSTER SETTING
-| show_stmt    // help texts in sub-rule
-| update_stmt  // EXTEND WITH HELP: UPDATE
-| upsert_stmt  // EXTEND WITH HELP: UPSERT
+| show_stmt         // help texts in sub-rule
+| update_stmt       // EXTEND WITH HELP: UPDATE
+| upsert_stmt       // EXTEND WITH HELP: UPSERT
 
 explainable_stmt:
   preparable_stmt
-| alter_stmt   // help texts in sub-rule
-| create_stmt  // help texts in sub-rule
-| drop_stmt    // help texts in sub-rule
-| execute_stmt // EXTEND WITH HELP: EXECUTE
+| alter_ddl_stmt   // help texts in sub-rule
+| create_ddl_stmt  // help texts in sub-rule
+| drop_ddl_stmt    // help texts in sub-rule
+| execute_stmt     // EXTEND WITH HELP: EXECUTE
 | explain_stmt { /* SKIP DOC */ }
 
 explain_option_list:
@@ -3113,23 +3143,27 @@ truncate_stmt:
 
 // %Help: CREATE USER - define a new user
 // %Category: Priv
-// %Text: CREATE USER <name> [ [WITH] PASSWORD <passwd> ]
+// %Text: CREATE USER [IF NOT EXISTS] <name> [ [WITH] PASSWORD <passwd> ]
 // %SeeAlso: DROP USER, SHOW USERS, WEBDOCS/create-user.html
 create_user_stmt:
-  CREATE USER name opt_password
+  CREATE USER string_or_placeholder opt_password
   {
-    $$.val = &CreateUser{Name: Name($3), Password: $4.strPtr()}
+    $$.val = &CreateUser{Name: $3.expr(), Password: $4.expr()}
+  }
+| CREATE USER IF NOT EXISTS string_or_placeholder opt_password
+  {
+    $$.val = &CreateUser{Name: $6.expr(), Password: $7.expr(), IfNotExists: true}
   }
 | CREATE USER error // SHOW HELP: CREATE USER
 
 opt_password:
-  opt_with PASSWORD SCONST
+  opt_with PASSWORD string_or_placeholder
   {
-    pwd := $3
-    $$.val = &pwd
+    $$.val = $3.expr()
   }
-| /* EMPTY */ {
-    $$.val = (*string)(nil)
+| /* EMPTY */
+  {
+    $$.val = nil
   }
 
 // %Help: CREATE VIEW - create a new view
@@ -3240,6 +3274,17 @@ alter_rename_database_stmt:
   ALTER DATABASE name RENAME TO name
   {
     $$.val = &RenameDatabase{Name: Name($3), NewName: Name($6)}
+  }
+
+// https://www.postgresql.org/docs/10/static/sql-alteruser.html
+alter_user_password_stmt:
+  ALTER USER string_or_placeholder WITH PASSWORD string_or_placeholder
+  {
+    $$.val = &AlterUserSetPassword{Name: $3.expr(), Password: $6.expr()}
+  }
+| ALTER USER IF EXISTS string_or_placeholder WITH PASSWORD string_or_placeholder
+  {
+    $$.val = &AlterUserSetPassword{Name: $5.expr(), Password: $8.expr(), IfExists: true}
   }
 
 alter_rename_table_stmt:

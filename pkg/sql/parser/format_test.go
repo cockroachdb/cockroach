@@ -32,9 +32,9 @@ func TestFormatStatement(t *testing.T) {
 		expected string
 	}{
 		{`CREATE USER foo WITH PASSWORD 'bar'`, FmtSimple,
-			`CREATE USER foo WITH PASSWORD *****`},
+			`CREATE USER 'foo' WITH PASSWORD *****`},
 		{`CREATE USER foo WITH PASSWORD 'bar'`, FmtSimpleWithPasswords,
-			`CREATE USER foo WITH PASSWORD 'bar'`},
+			`CREATE USER 'foo' WITH PASSWORD 'bar'`},
 
 		{`CREATE TABLE foo (x INT)`, tableFormatter,
 			`CREATE TABLE xoxoxo (x INT)`},

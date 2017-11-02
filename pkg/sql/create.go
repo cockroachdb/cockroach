@@ -222,9 +222,63 @@ func (*createIndexNode) Next(runParams) (bool, error) { return false, nil }
 func (*createIndexNode) Close(context.Context)        {}
 func (*createIndexNode) Values() parser.Datums        { return parser.Datums{} }
 
+type userAuthInfo struct {
+	name     func() (string, error)
+	password func() (string, error)
+}
+
 type createUserNode struct {
-	n        *parser.CreateUser
-	password string
+	ifNotExists  bool
+	rowsAffected int
+	userAuthInfo
+}
+
+func (p *planner) getUserAuthInfo(nameE, passwordE parser.Expr, ctx string) (userAuthInfo, error) {
+	name, err := p.TypeAsString(nameE, ctx)
+	if err != nil {
+		return userAuthInfo{}, err
+	}
+	var password func() (string, error)
+	if passwordE != nil {
+		password, err = p.TypeAsString(passwordE, ctx)
+		if err != nil {
+			return userAuthInfo{}, err
+		}
+	}
+	return userAuthInfo{name: name, password: password}, nil
+}
+
+// resolve returns the actual user name and (hashed) password.
+func (ua *userAuthInfo) resolve() (string, []byte, error) {
+	name, err := ua.name()
+	if err != nil {
+		return "", nil, err
+	}
+	if name == "" {
+		return "", nil, errNoUserNameSpecified
+	}
+	normalizedUsername, err := NormalizeAndValidateUsername(name)
+	if err != nil {
+		return "", nil, err
+	}
+
+	var hashedPassword []byte
+	if ua.password != nil {
+		resolvedPassword, err := ua.password()
+		if err != nil {
+			return "", nil, err
+		}
+		if resolvedPassword == "" {
+			return "", nil, security.ErrEmptyPassword
+		}
+
+		hashedPassword, err = security.HashPassword(resolvedPassword)
+		if err != nil {
+			return "", nil, err
+		}
+	}
+
+	return normalizedUsername, hashedPassword, nil
 }
 
 // CreateUser creates a user.
@@ -232,10 +286,6 @@ type createUserNode struct {
 //   notes: postgres allows the creation of users with an empty password. We do
 //          as well, but disallow password authentication for these users.
 func (p *planner) CreateUser(ctx context.Context, n *parser.CreateUser) (planNode, error) {
-	if n.Name == "" {
-		return nil, errors.New("no username specified")
-	}
-
 	tDesc, err := getTableDesc(ctx, p.txn, p.getVirtualTabler(), &parser.TableName{DatabaseName: "system", TableName: "users"})
 	if err != nil {
 		return nil, err
@@ -245,15 +295,15 @@ func (p *planner) CreateUser(ctx context.Context, n *parser.CreateUser) (planNod
 		return nil, err
 	}
 
-	var resolvedPassword string
-	if n.HasPassword() {
-		resolvedPassword = *n.Password
-		if resolvedPassword == "" {
-			return nil, security.ErrEmptyPassword
-		}
+	ua, err := p.getUserAuthInfo(n.Name, n.Password, "CREATE USER")
+	if err != nil {
+		return nil, err
 	}
 
-	return &createUserNode{n: n, password: resolvedPassword}, nil
+	return &createUserNode{
+		userAuthInfo: ua,
+		ifNotExists:  n.IfNotExists,
+	}, nil
 }
 
 const usernameHelp = "usernames are case insensitive, must start with a letter " +
@@ -278,23 +328,16 @@ func NormalizeAndValidateUsername(username string) (string, error) {
 	return username, nil
 }
 
-func (n *createUserNode) Start(params runParams) error {
-	var hashedPassword []byte
-	if n.password != "" {
-		var err error
-		hashedPassword, err = security.HashPassword(n.password)
-		if err != nil {
-			return err
-		}
-	}
+var errNoUserNameSpecified = errors.New("no username specified")
 
-	normalizedUsername, err := NormalizeAndValidateUsername(string(n.n.Name))
+func (n *createUserNode) Start(params runParams) error {
+	normalizedUsername, hashedPassword, err := n.userAuthInfo.resolve()
 	if err != nil {
 		return err
 	}
 
 	internalExecutor := InternalExecutor{LeaseManager: params.p.LeaseMgr()}
-	rowsAffected, err := internalExecutor.ExecuteStatementInTransaction(
+	n.rowsAffected, err = internalExecutor.ExecuteStatementInTransaction(
 		params.ctx,
 		"create-user",
 		params.p.txn,
@@ -304,21 +347,95 @@ func (n *createUserNode) Start(params runParams) error {
 	)
 	if err != nil {
 		if sqlbase.IsUniquenessConstraintViolationError(err) {
+			if n.ifNotExists {
+				// INSERT only detects error at the end of each batch.  This
+				// means perhaps the count by ExecuteStatementInTransactions
+				// will have reported updated rows even though an error was
+				// encountered.  If the error was due to a duplicate entry, we
+				// are not actually inserting anything but are canceling the
+				// error, so clear the row count so that the client can learn
+				// what's going on.
+				n.rowsAffected = 0
+				return nil
+			}
 			err = errors.Errorf("user %s already exists", normalizedUsername)
 		}
 		return err
-	} else if rowsAffected != 1 {
+	} else if n.rowsAffected != 1 {
 		return errors.Errorf(
-			"%d rows affected by user creation; expected exactly one row affected", rowsAffected,
+			"%d rows affected by user creation; expected exactly one row affected", n.rowsAffected,
 		)
 	}
 
 	return nil
 }
 
-func (*createUserNode) Next(runParams) (bool, error) { return false, nil }
-func (*createUserNode) Close(context.Context)        {}
-func (*createUserNode) Values() parser.Datums        { return parser.Datums{} }
+func (n *createUserNode) FastPathResults() (int, bool) { return n.rowsAffected, true }
+func (*createUserNode) Next(runParams) (bool, error)   { return false, nil }
+func (*createUserNode) Close(context.Context)          {}
+func (*createUserNode) Values() parser.Datums          { return parser.Datums{} }
+
+// alterUserSetPasswordNode represents an ALTER USER ... WITH PASSWORD statement.
+type alterUserSetPasswordNode struct {
+	userAuthInfo
+	ifExists     bool
+	rowsAffected int
+}
+
+func (p *planner) AlterUserSetPassword(
+	ctx context.Context, n *parser.AlterUserSetPassword,
+) (planNode, error) {
+	tDesc, err := getTableDesc(ctx, p.txn, p.getVirtualTabler(), &parser.TableName{DatabaseName: "system", TableName: "users"})
+	if err != nil {
+		return nil, err
+	}
+
+	if err := p.CheckPrivilege(tDesc, privilege.UPDATE); err != nil {
+		return nil, err
+	}
+
+	ua, err := p.getUserAuthInfo(n.Name, n.Password, "ALTER USER")
+	if err != nil {
+		return nil, err
+	}
+
+	return &alterUserSetPasswordNode{
+		userAuthInfo: ua,
+		ifExists:     n.IfExists,
+	}, nil
+}
+
+func (n *alterUserSetPasswordNode) FastPathResults() (int, bool) {
+	return n.rowsAffected, true
+}
+
+func (n *alterUserSetPasswordNode) Start(params runParams) error {
+	normalizedUsername, hashedPassword, err := n.userAuthInfo.resolve()
+	if err != nil {
+		return err
+	}
+
+	internalExecutor := InternalExecutor{LeaseManager: params.p.LeaseMgr()}
+	n.rowsAffected, err = internalExecutor.ExecuteStatementInTransaction(
+		params.ctx,
+		"create-user",
+		params.p.txn,
+		`UPDATE system.users SET "hashedPassword" = $2 WHERE username = $1`,
+		normalizedUsername,
+		hashedPassword,
+	)
+	if err != nil {
+		return err
+	}
+	if n.rowsAffected == 0 && !n.ifExists {
+		return errors.Errorf("user %s does not exist", normalizedUsername)
+	}
+	return err
+}
+
+func (*alterUserSetPasswordNode) Next(runParams) (bool, error) { return false, nil }
+func (*alterUserSetPasswordNode) Close(context.Context)        {}
+func (*alterUserSetPasswordNode) Values() parser.Datums        { return parser.Datums{} }
 
 // createViewNode represents a CREATE VIEW statement.
 type createViewNode struct {

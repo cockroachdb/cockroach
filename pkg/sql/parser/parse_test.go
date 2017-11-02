@@ -265,9 +265,6 @@ func TestParse(t *testing.T) {
 		{`DROP VIEW a.b CASCADE`},
 		{`DROP VIEW a, b CASCADE`},
 
-		{`DROP USER a`},
-		{`DROP USER a, b`},
-
 		{`CANCEL JOB a`},
 		{`CANCEL QUERY a`},
 		{`RESUME JOB a`},
@@ -1153,6 +1150,17 @@ func TestParse2(t *testing.T) {
 
 		{`RESET NAMES`, `SET client_encoding = DEFAULT`},
 
+		{`CREATE USER foo`,
+			`CREATE USER 'foo'`},
+		{`CREATE USER IF NOT EXISTS foo`,
+			`CREATE USER IF NOT EXISTS 'foo'`},
+		{`CREATE USER foo PASSWORD bar`,
+			`CREATE USER 'foo' WITH PASSWORD 'bar'`},
+		{`DROP USER foo, bar`,
+			`DROP USER 'foo', 'bar'`},
+		{`ALTER USER foo WITH PASSWORD bar`,
+			`ALTER USER 'foo' WITH PASSWORD 'bar'`},
+
 		{
 			`CREATE TABLE a (b INT, FOREIGN KEY (b) REFERENCES other ON UPDATE NO ACTION ON DELETE NO ACTION)`,
 			`CREATE TABLE a (b INT, FOREIGN KEY (b) REFERENCES other)`,
@@ -1241,7 +1249,7 @@ func TestParse2(t *testing.T) {
 			t.Errorf("%s: expected success, but found %s", d.sql, err)
 			continue
 		}
-		s := stmts.String()
+		s := AsStringWithFlags(stmts, FmtSimpleWithPasswords)
 		if d.expected != s {
 			t.Errorf("%s: expected %s, but found (%d statements): %s", d.sql, d.expected, len(stmts), s)
 		}
