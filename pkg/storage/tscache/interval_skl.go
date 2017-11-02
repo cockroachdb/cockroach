@@ -36,7 +36,7 @@ type rangeOptions int
 
 const (
 	// excludeFrom indicates that the range does not include the starting key.
-	excludeFrom = 1 << iota
+	excludeFrom = rangeOptions(1 << iota)
 
 	// excludeTo indicates that the range does not include the ending key.
 	excludeTo
@@ -430,7 +430,13 @@ func (p *sklPage) addNode(
 		// would not be updated with the new value, then there is no need to add
 		// another node, since its timestamp would be the same as the gap
 		// timestamp and its txnID would be the same as the gap txnID.
-		prevVal := p.scanForTimestamp(it, key, key, 0, false)
+		//
+		// NB: We pass excludeTo here because another thread may race and add a
+		// node at the key while we're scanning for the previous value. We don't
+		// want to consider this new key here because even if it has a larger
+		// key value that indicates that we can take this fast path, it may have
+		// a smaller gap value that we need to ratchet below.
+		prevVal := p.scanForTimestamp(it, key, key, excludeTo, false)
 		if _, update := ratchetValue(prevVal, val); !update {
 			return nil
 		}
