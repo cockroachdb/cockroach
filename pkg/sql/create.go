@@ -1258,12 +1258,7 @@ func addPartitionedBy(
 			return errors.Wrapf(err, "PARTITION %s", p.Name)
 		}
 		if r.Subpartition != nil {
-			newColOffset := colOffset + int(partDesc.NumColumns)
-			if err := addPartitionedBy(
-				ctx, evalCtx, tableDesc, indexDesc, &p.Subpartitioning, r.Subpartition, newColOffset,
-			); err != nil {
-				return err
-			}
+			return errors.Errorf("PARTITION %s: cannot subpartition a range partition", p.Name)
 		}
 		p.UpperBound = encodedTuple
 		partDesc.Range = append(partDesc.Range, p)

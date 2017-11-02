@@ -213,8 +213,6 @@ message PartitioningDescriptor {
     // UpperBound is exclusive upper bound of this range partition. It is
     // encoded with the EncDatum value encoding. MAXVALUE is encoded as NOT NULL.
     optional bytes upper_bound = 2;
-    // Subpartitioning represents a further partitioning of this range partition.
-    optional PartitioningDescriptor subpartitioning = 3 [(gogoproto.nullable) = false];
   }
 
   // NumColumns is how large of a prefix of the columns in an index are used in
