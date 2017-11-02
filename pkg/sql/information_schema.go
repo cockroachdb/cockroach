@@ -870,13 +870,9 @@ func forEachUser(ctx context.Context, origPlanner *planner, fn func(username str
 	query := `SELECT username FROM system.users`
 	p := makeInternalPlanner("for-each-user", origPlanner.txn, security.RootUser, origPlanner.session.memMetrics)
 	defer finishInternalPlanner(p)
-	plan, err := p.query(ctx, query)
+	rows, err := p.queryRows(ctx, query)
 	if err != nil {
 		return nil
-	}
-	defer plan.Close(ctx)
-	if err := p.startPlan(ctx, plan); err != nil {
-		return err
 	}
 
 	// TODO(cuongdo/asubiotto): Get rid of root user special-casing if/when a row
@@ -884,20 +880,8 @@ func forEachUser(ctx context.Context, origPlanner *planner, fn func(username str
 	if err := fn(security.RootUser); err != nil {
 		return err
 	}
-	params := runParams{
-		ctx: ctx,
-		p:   p,
-	}
 
-	for {
-		next, err := plan.Next(params)
-		if err != nil {
-			return err
-		}
-		if !next {
-			break
-		}
-		row := plan.Values()
+	for _, row := range rows {
 		username := parser.MustBeDString(row[0])
 		if err := fn(string(username)); err != nil {
 			return err

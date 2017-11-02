@@ -212,12 +212,16 @@ func (p *planner) setTxn(txn *client.Txn) {
 	}
 }
 
-// query initializes a planNode from a SQL statement string. Close() must be
-// called on the returned planNode after use.
+// makeInternalPlan initializes a planNode from a SQL statement string.
+// Close() must be called on the returned planNode after use.
+// This function changes the planner's placeholder map. It is the caller's
+// responsibility to save and restore the old map if desired.
 // This function is not suitable for use in the planNode constructors directly:
 // the returned planNode has already been optimized.
 // Consider also (*planner).delegateQuery(...).
-func (p *planner) query(ctx context.Context, sql string, args ...interface{}) (planNode, error) {
+func (p *planner) makeInternalPlan(
+	ctx context.Context, sql string, args ...interface{},
+) (planNode, error) {
 	if log.V(2) {
 		log.Infof(ctx, "internal query: %s", sql)
 		if len(args) > 0 {
@@ -254,7 +258,10 @@ func (p *planner) QueryRow(
 func (p *planner) queryRows(
 	ctx context.Context, sql string, args ...interface{},
 ) ([]parser.Datums, error) {
-	plan, err := p.query(ctx, sql, args...)
+	oldPlaceholders := p.semaCtx.Placeholders
+	defer func() { p.semaCtx.Placeholders = oldPlaceholders }()
+
+	plan, err := p.makeInternalPlan(ctx, sql, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -282,7 +289,9 @@ func (p *planner) queryRows(
 // exec executes a SQL query string and returns the number of rows
 // affected.
 func (p *planner) exec(ctx context.Context, sql string, args ...interface{}) (int, error) {
-	plan, err := p.query(ctx, sql, args...)
+	oldPlaceholders := p.semaCtx.Placeholders
+	defer func() { p.semaCtx.Placeholders = oldPlaceholders }()
+	plan, err := p.makeInternalPlan(ctx, sql, args...)
 	if err != nil {
 		return 0, err
 	}
