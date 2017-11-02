@@ -41,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
+	"github.com/cockroachdb/cockroach/pkg/storage/txnwait"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -1749,7 +1750,7 @@ func evalPushTxn(
 	var reason string
 
 	switch {
-	case isExpired(args.Now, &reply.PusheeTxn):
+	case txnwait.IsExpired(args.Now, &reply.PusheeTxn):
 		reason = "pushee is expired"
 		// When cleaning up, actually clean up (as opposed to simply pushing
 		// the garbage in the path of future writers).
@@ -1847,7 +1848,7 @@ func evalQueryTxn(
 		return EvalResult{}, err
 	}
 	// Get the list of txns waiting on this txn.
-	reply.WaitingTxns = cArgs.EvalCtx.GetPushTxnQueue().GetDependents(args.Txn.ID)
+	reply.WaitingTxns = cArgs.EvalCtx.GetTxnWaitQueue().GetDependents(args.Txn.ID)
 	return EvalResult{}, nil
 }
 

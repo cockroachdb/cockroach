@@ -520,7 +520,7 @@ func (r *Replica) leasePostApply(ctx context.Context, newLease roachpb.Lease) {
 	if leaseChangingHands && !iAmTheLeaseHolder {
 		// Also clear and disable the push transaction queue. Any waiters
 		// must be redirected to the new lease holder.
-		r.pushTxnQueue.Clear(true /* disable */)
+		r.txnWaitQueue.Clear(true /* disable */)
 	}
 
 	if !iAmTheLeaseHolder && r.IsLeaseValid(newLease, r.store.Clock().Now()) {
@@ -559,7 +559,7 @@ func (r *Replica) leasePostApply(ctx context.Context, newLease roachpb.Lease) {
 			log.Error(ctx, err)
 		}
 		// Make sure the push transaction queue is enabled.
-		r.pushTxnQueue.Enable()
+		r.txnWaitQueue.Enable()
 	}
 
 	// Mark the new lease in the replica's lease history.
@@ -922,10 +922,10 @@ func (r *Replica) handleReplicatedEvalResult(
 }
 
 func (r *Replica) handleLocalEvalResult(ctx context.Context, lResult LocalEvalResult) {
-	// Enqueue failed push transactions on the pushTxnQueue.
+	// Enqueue failed push transactions on the txnWaitQueue.
 	if !r.store.cfg.DontRetryPushTxnFailures {
 		if tpErr, ok := lResult.Err.GetDetail().(*roachpb.TransactionPushError); ok {
-			r.pushTxnQueue.Enqueue(&tpErr.PusheeTxn)
+			r.txnWaitQueue.Enqueue(&tpErr.PusheeTxn)
 		}
 	}
 
@@ -1002,7 +1002,7 @@ func (r *Replica) handleLocalEvalResult(ctx context.Context, lResult LocalEvalRe
 	}
 
 	if lResult.updatedTxn != nil {
-		r.pushTxnQueue.UpdateTxn(ctx, lResult.updatedTxn)
+		r.txnWaitQueue.UpdateTxn(ctx, lResult.updatedTxn)
 		lResult.updatedTxn = nil
 	}
 
