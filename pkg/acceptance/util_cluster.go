@@ -187,9 +187,8 @@ func StartCluster(ctx context.Context, t *testing.T, cfg cluster.TestConfig) (c 
 		}
 	}
 
-	// Don't bother waiting for a single-node cluster. This is useful for
-	// TestRapidRestarts which wants to kill the process early.
-	if len(cfg.Nodes) > 1 && cfg.InitMode != cluster.INIT_NONE {
+	// Don't wait for replication unless requested (usually it is).
+	if !cfg.NoWait && cfg.InitMode != cluster.INIT_NONE {
 		wantedReplicas := 3
 		if numNodes := c.NumNodes(); numNodes < wantedReplicas {
 			wantedReplicas = numNodes
