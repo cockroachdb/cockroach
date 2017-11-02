@@ -47,6 +47,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/ipaddr"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeofday"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/pkg/errors"
@@ -1373,6 +1374,18 @@ CockroachDB supports the following flags:
 				"Compatible elements: year, quarter, month, week, dayofweek, dayofyear,\n" +
 				"hour, minute, second, millisecond, microsecond, epoch",
 		},
+		Builtin{
+			Types:      ArgTypes{{"element", types.String}, {"input", types.Time}},
+			ReturnType: fixedReturnType(types.Int),
+			category:   categoryDateAndTime,
+			fn: func(ctx *EvalContext, args Datums) (Datum, error) {
+				fromTime := args[1].(*DTime)
+				timeSpan := strings.ToLower(string(MustBeDString(args[0])))
+				return extractStringFromTime(ctx, fromTime, timeSpan)
+			},
+			Info: "Extracts `element` from `input`.\n\n" +
+				"Compatible elements: hour, minute, second, millisecond, microsecond, epoch",
+		},
 	},
 
 	"extract_duration": {
@@ -1421,7 +1434,11 @@ CockroachDB supports the following flags:
 				// extract timeSpan fromTime.
 				fromTS := args[1].(*DTimestamp)
 				timeSpan := strings.ToLower(string(MustBeDString(args[0])))
-				return truncateTimestamp(ctx, fromTS.Time, timeSpan)
+				toTime, err := truncateTimestamp(ctx, fromTS.Time, timeSpan)
+				if err != nil {
+					return nil, err
+				}
+				return MakeDTimestampTZ(*toTime, time.Microsecond), nil
 			},
 			Info: "Truncates `input` to precision `element`.  Sets all fields that are less\n" +
 				"significant than `element` to zero (or one, for day and month)\n\n" +
@@ -1436,12 +1453,33 @@ CockroachDB supports the following flags:
 				timeSpan := strings.ToLower(string(MustBeDString(args[0])))
 				date := args[1].(*DDate)
 				fromTSTZ := MakeDTimestampTZFromDate(ctx.GetLocation(), date)
-				return truncateTimestamp(ctx, fromTSTZ.Time, timeSpan)
+				toTime, err := truncateTimestamp(ctx, fromTSTZ.Time, timeSpan)
+				if err != nil {
+					return nil, err
+				}
+				return MakeDTimestampTZ(*toTime, time.Microsecond), nil
 			},
 			Info: "Truncates `input` to precision `element`.  Sets all fields that are less\n" +
 				"significant than `element` to zero (or one, for day and month)\n\n" +
 				"Compatible elements: year, quarter, month, week, hour, minute, second,\n" +
 				"millisecond, microsecond.",
+		},
+		Builtin{
+			Types:      ArgTypes{{"element", types.String}, {"input", types.Time}},
+			ReturnType: fixedReturnType(types.Time),
+			category:   categoryDateAndTime,
+			fn: func(ctx *EvalContext, args Datums) (Datum, error) {
+				timeSpan := strings.ToLower(string(MustBeDString(args[0])))
+				fromTime := args[1].(*DTime)
+				toTime, err := truncateTime(ctx, fromTime, timeSpan)
+				if err != nil {
+					return nil, err
+				}
+				return MakeDTime(timeofday.FromTime(*toTime)), nil
+			},
+			Info: "Truncates `input` to precision `element`.  Sets all fields that are less\n" +
+				"significant than `element` to zero.\n\n" +
+				"Compatible elements: hour, minute, second, millisecond, microsecond.",
 		},
 		Builtin{
 			Types:      ArgTypes{{"element", types.String}, {"input", types.TimestampTZ}},
@@ -1450,7 +1488,11 @@ CockroachDB supports the following flags:
 			fn: func(ctx *EvalContext, args Datums) (Datum, error) {
 				fromTSTZ := args[1].(*DTimestampTZ)
 				timeSpan := strings.ToLower(string(MustBeDString(args[0])))
-				return truncateTimestamp(ctx, fromTSTZ.Time, timeSpan)
+				toTime, err := truncateTimestamp(ctx, fromTSTZ.Time, timeSpan)
+				if err != nil {
+					return nil, err
+				}
+				return MakeDTimestampTZ(*toTime, time.Microsecond), nil
 			},
 			Info: "Truncates `input` to precision `element`.  Sets all fields that are less\n" +
 				"significant than `element` to zero (or one, for day and month)\n\n" +
@@ -3033,6 +3075,19 @@ func arrayLower(arr *DArray, dim int64) Datum {
 	return arrayLower(a, dim-1)
 }
 
+func extractStringFromTime(ctx *EvalContext, fromTime *DTime, timeSpan string) (Datum, error) {
+	switch timeSpan {
+	case "hour", "hours", "minute", "minutes", "second", "seconds", "millisecond", "milliseconds",
+		"microsecond", "microseconds", "epoch":
+		fromTimestamp := timeofday.TimeOfDay(*fromTime).ToTime()
+		return extractStringFromTimestamp(ctx, fromTimestamp, timeSpan)
+	default:
+		// Disallow date-only timespans like 'year'.
+		return nil, pgerror.NewErrorf(
+			pgerror.CodeInvalidParameterValueError, "unsupported timespan: %s", timeSpan)
+	}
+}
+
 func extractStringFromTimestamp(
 	_ *EvalContext, fromTime time.Time, timeSpan string,
 ) (Datum, error) {
@@ -3083,7 +3138,20 @@ func extractStringFromTimestamp(
 	}
 }
 
-func truncateTimestamp(_ *EvalContext, fromTime time.Time, timeSpan string) (Datum, error) {
+func truncateTime(ctx *EvalContext, fromTime *DTime, timeSpan string) (*time.Time, error) {
+	switch timeSpan {
+	case "hour", "hours", "minute", "minutes", "second", "seconds", "millisecond", "milliseconds",
+		"microsecond", "microseconds", "epoch":
+		fromTimestamp := timeofday.TimeOfDay(*fromTime).ToTime()
+		return truncateTimestamp(ctx, fromTimestamp, timeSpan)
+	default:
+		// Disallow date-only timespans like 'year'.
+		return nil, pgerror.NewErrorf(
+			pgerror.CodeInvalidParameterValueError, "unsupported timespan: %s", timeSpan)
+	}
+}
+
+func truncateTimestamp(_ *EvalContext, fromTime time.Time, timeSpan string) (*time.Time, error) {
 	year := fromTime.Year()
 	month := fromTime.Month()
 	day := fromTime.Day()
@@ -3143,5 +3211,5 @@ func truncateTimestamp(_ *EvalContext, fromTime time.Time, timeSpan string) (Dat
 	}
 
 	toTime := time.Date(year, month, day, hour, min, sec, nsec, loc)
-	return MakeDTimestampTZ(toTime, time.Microsecond), nil
+	return &toTime, nil
 }

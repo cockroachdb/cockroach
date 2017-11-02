@@ -105,6 +105,7 @@ var defaultVals = map[string][]string{
 	"timestamp":   timestampInputs,
 	"timestamptz": timestampInputs,
 	"date":        dateInputs,
+	"time":        timeInputs,
 	"inet":        inetInputs,
 }
 
@@ -177,6 +178,12 @@ var dateInputs = []string{
 	"9999-01-08",
 	"1999-12-30",
 	"1996-02-29",
+}
+
+var timeInputs = []string{
+	"00:00:00",
+	"12:00:00.000001",
+	"23:59:59.999999",
 }
 
 var inetInputs = []string{

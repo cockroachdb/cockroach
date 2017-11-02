@@ -349,6 +349,7 @@ var (
 		types.Float,
 		types.Decimal,
 		types.Date,
+		types.Time,
 		types.Timestamp,
 		types.TimestampTZ,
 		types.Interval,
@@ -429,6 +430,8 @@ func (expr *StrVal) ResolveAsType(ctx *SemaContext, typ types.T) (Datum, error) 
 		return ParseDDecimal(expr.s)
 	case types.Date:
 		return ParseDDate(expr.s, ctx.getLocation())
+	case types.Time:
+		return ParseDTime(expr.s)
 	case types.INet:
 		return ParseDIPAddrFromINetString(expr.s)
 	case types.JSON:

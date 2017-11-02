@@ -5093,6 +5093,14 @@ const_datetime:
   {
     $$.val = dateColTypeDate
   }
+| TIME
+  {
+    $$.val = timeColTypeTime
+  }
+| TIME WITHOUT TIME ZONE
+  {
+    $$.val = timeColTypeTime
+  }
 | TIMESTAMP
   {
     $$.val = timestampColTypeTimestamp

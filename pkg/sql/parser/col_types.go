@@ -45,6 +45,7 @@ func (*IntColType) columnType()            {}
 func (*FloatColType) columnType()          {}
 func (*DecimalColType) columnType()        {}
 func (*DateColType) columnType()           {}
+func (*TimeColType) columnType()           {}
 func (*TimestampColType) columnType()      {}
 func (*TimestampTZColType) columnType()    {}
 func (*IntervalColType) columnType()       {}
@@ -65,6 +66,7 @@ func (*IntColType) castTargetType()            {}
 func (*FloatColType) castTargetType()          {}
 func (*DecimalColType) castTargetType()        {}
 func (*DateColType) castTargetType()           {}
+func (*TimeColType) castTargetType()           {}
 func (*TimestampColType) castTargetType()      {}
 func (*TimestampTZColType) castTargetType()    {}
 func (*IntervalColType) castTargetType()       {}
@@ -253,6 +255,18 @@ type DateColType struct {
 // Format implements the NodeFormatter interface.
 func (node *DateColType) Format(buf *bytes.Buffer, f FmtFlags) {
 	buf.WriteString("DATE")
+}
+
+// Pre-allocated immutable time column type.
+var timeColTypeTime = &TimeColType{}
+
+// TimeColType represents a TIME type.
+type TimeColType struct {
+}
+
+// Format implements the NodeFormatter interface.
+func (node *TimeColType) Format(buf *bytes.Buffer, f FmtFlags) {
+	buf.WriteString("TIME")
 }
 
 // Pre-allocated immutable timestamp column type.
@@ -512,6 +526,7 @@ func (node *IntColType) String() string            { return AsString(node) }
 func (node *FloatColType) String() string          { return AsString(node) }
 func (node *DecimalColType) String() string        { return AsString(node) }
 func (node *DateColType) String() string           { return AsString(node) }
+func (node *TimeColType) String() string           { return AsString(node) }
 func (node *TimestampColType) String() string      { return AsString(node) }
 func (node *TimestampTZColType) String() string    { return AsString(node) }
 func (node *IntervalColType) String() string       { return AsString(node) }
@@ -553,6 +568,8 @@ func DatumTypeToColumnType(t types.T) (ColumnType, error) {
 		return ipnetColTypeINet, nil
 	case types.Date:
 		return dateColTypeDate, nil
+	case types.Time:
+		return timeColTypeTime, nil
 	case types.String:
 		return stringColTypeString, nil
 	case types.Name:
@@ -605,6 +622,8 @@ func CastTargetToDatumType(t CastTargetType) types.T {
 		return types.Bytes
 	case *DateColType:
 		return types.Date
+	case *TimeColType:
+		return types.Time
 	case *TimestampColType:
 		return types.Timestamp
 	case *TimestampTZColType:

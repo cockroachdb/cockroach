@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/ipaddr"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeofday"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
@@ -128,6 +129,14 @@ func (r *RSG) generate(root string, depth int) []string {
 		}
 	}
 	return ret
+}
+
+// Int63n returns a random int64 in [0,n).
+func (r *RSG) Int63n(n int64) int64 {
+	r.lock.Lock()
+	v := r.src.Int63n(n)
+	r.lock.Unlock()
+	return v
 }
 
 // Intn returns a random int.
@@ -235,6 +244,10 @@ func (r *RSG) GenerateRandomArg(typ types.T) string {
 		i := r.Int63()
 		i -= r.Int63()
 		d := parser.NewDDate(parser.DDate(i))
+		v = fmt.Sprintf(`'%s'`, d)
+	case types.Time:
+		i := r.Int63n(int64(timeofday.Max))
+		d := parser.MakeDTime(timeofday.TimeOfDay(i))
 		v = fmt.Sprintf(`'%s'`, d)
 	case types.Interval:
 		d := duration.Duration{Nanos: r.Int63()}

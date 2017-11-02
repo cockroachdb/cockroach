@@ -158,6 +158,8 @@ func ParseStringAs(t types.T, s string, evalCtx *EvalContext) (Datum, error) {
 		d, err = ParseDInterval(s)
 	case types.String:
 		d = NewDString(s)
+	case types.Time:
+		d, err = ParseDTime(s)
 	case types.Timestamp:
 		d, err = ParseDTimestamp(s, time.Microsecond)
 	case types.TimestampTZ:

@@ -140,6 +140,7 @@ func MakeColumnDefDescs(
 				col.Type.Width, col.Type.Precision)
 		}
 	case *parser.DateColType:
+	case *parser.TimeColType:
 	case *parser.TimestampColType:
 	case *parser.TimestampTZColType:
 	case *parser.IntervalColType:
@@ -535,6 +536,11 @@ func EncodeTableKey(b []byte, val parser.Datum, dir encoding.Direction) ([]byte,
 			return encoding.EncodeVarintAscending(b, int64(*t)), nil
 		}
 		return encoding.EncodeVarintDescending(b, int64(*t)), nil
+	case *parser.DTime:
+		if dir == encoding.Ascending {
+			return encoding.EncodeVarintAscending(b, int64(*t)), nil
+		}
+		return encoding.EncodeVarintDescending(b, int64(*t)), nil
 	case *parser.DTimestamp:
 		if dir == encoding.Ascending {
 			return encoding.EncodeTimeAscending(b, t.Time), nil
@@ -618,6 +624,8 @@ func EncodeTableValue(
 	case *parser.DBytes:
 		return encoding.EncodeBytesValue(appendTo, uint32(colID), []byte(*t)), nil
 	case *parser.DDate:
+		return encoding.EncodeIntValue(appendTo, uint32(colID), int64(*t)), nil
+	case *parser.DTime:
 		return encoding.EncodeIntValue(appendTo, uint32(colID), int64(*t)), nil
 	case *parser.DTimestamp:
 		return encoding.EncodeTimeValue(appendTo, uint32(colID), t.Time), nil
@@ -943,6 +951,7 @@ type DatumAlloc struct {
 	dbytesAlloc       []parser.DBytes
 	ddecimalAlloc     []parser.DDecimal
 	ddateAlloc        []parser.DDate
+	dtimeAlloc        []parser.DTime
 	dtimestampAlloc   []parser.DTimestamp
 	dtimestampTzAlloc []parser.DTimestampTZ
 	dintervalAlloc    []parser.DInterval
@@ -1023,6 +1032,18 @@ func (a *DatumAlloc) NewDDate(v parser.DDate) *parser.DDate {
 	buf := &a.ddateAlloc
 	if len(*buf) == 0 {
 		*buf = make([]parser.DDate, datumAllocSize)
+	}
+	r := &(*buf)[0]
+	*r = v
+	*buf = (*buf)[1:]
+	return r
+}
+
+// NewDTime allocates a DTime.
+func (a *DatumAlloc) NewDTime(v parser.DTime) *parser.DTime {
+	buf := &a.dtimeAlloc
+	if len(*buf) == 0 {
+		*buf = make([]parser.DTime, datumAllocSize)
 	}
 	r := &(*buf)[0]
 	*r = v
@@ -1183,6 +1204,14 @@ func DecodeTableKey(
 			rkey, t, err = encoding.DecodeVarintDescending(key)
 		}
 		return a.NewDDate(parser.DDate(t)), rkey, err
+	case types.Time:
+		var t int64
+		if dir == encoding.Ascending {
+			rkey, t, err = encoding.DecodeVarintAscending(key)
+		} else {
+			rkey, t, err = encoding.DecodeVarintDescending(key)
+		}
+		return a.NewDTime(parser.DTime(t)), rkey, err
 	case types.Timestamp:
 		var t time.Time
 		if dir == encoding.Ascending {
@@ -1398,6 +1427,12 @@ func decodeUntaggedDatum(a *DatumAlloc, t types.T, buf []byte) (parser.Datum, []
 			return nil, b, err
 		}
 		return a.NewDDate(parser.DDate(data)), b, nil
+	case types.Time:
+		b, data, err := encoding.DecodeUntaggedIntValue(buf)
+		if err != nil {
+			return nil, b, err
+		}
+		return a.NewDTime(parser.DTime(data)), b, nil
 	case types.Timestamp:
 		b, data, err := encoding.DecodeUntaggedTimeValue(buf)
 		if err != nil {
@@ -1644,6 +1679,11 @@ func MarshalColumnValue(col ColumnDescriptor, val parser.Datum) (roachpb.Value, 
 			r.SetInt(int64(*v))
 			return r, nil
 		}
+	case ColumnType_TIME:
+		if v, ok := val.(*parser.DTime); ok {
+			r.SetInt(int64(*v))
+			return r, nil
+		}
 	case ColumnType_TIMESTAMP:
 		if v, ok := val.(*parser.DTimestamp); ok {
 			r.SetTime(v.Time)
@@ -1785,6 +1825,8 @@ func parserTypeToEncodingType(t types.T) (encoding.Type, error) {
 		return encoding.Bytes, nil
 	case types.Timestamp, types.TimestampTZ, types.Date:
 		return encoding.Time, nil
+	case types.Time:
+		return encoding.Int, nil
 	case types.Interval:
 		return encoding.Duration, nil
 	case types.Bool:
@@ -1820,6 +1862,8 @@ func encodeArrayElement(b []byte, d parser.Datum) ([]byte, error) {
 	case *parser.DDecimal:
 		return encoding.EncodeUntaggedDecimalValue(b, &t.Decimal), nil
 	case *parser.DDate:
+		return encoding.EncodeUntaggedIntValue(b, int64(*t)), nil
+	case *parser.DTime:
 		return encoding.EncodeUntaggedIntValue(b, int64(*t)), nil
 	case *parser.DTimestamp:
 		return encoding.EncodeUntaggedTimeValue(b, t.Time), nil
@@ -1893,6 +1937,12 @@ func UnmarshalColumnValue(
 			return nil, err
 		}
 		return a.NewDDate(parser.DDate(v)), nil
+	case ColumnType_TIME:
+		v, err := value.GetInt()
+		if err != nil {
+			return nil, err
+		}
+		return a.NewDTime(parser.DTime(v)), nil
 	case ColumnType_TIMESTAMP:
 		v, err := value.GetTime()
 		if err != nil {
