@@ -415,7 +415,7 @@ CREATE INDEX foo ON t.test (v)
 }
 
 // checkTableKeyCount returns the number of KVs in the DB, the multiple should be the
-// number of columns.
+// number of indexes (including primary).
 func checkTableKeyCount(ctx context.Context, kvDB *client.DB, multiple int, maxValue int) error {
 	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "test")
 	tablePrefix := roachpb.Key(keys.MakeTablePrefix(uint32(tableDesc.ID)))
@@ -2688,4 +2688,82 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 	if k, x := tableDesc.Columns[0].Name, tableDesc.Columns[1].Name; k != "k" && x != "x" {
 		t.Fatalf("columns %q, %q in descriptor", k, x)
 	}
+}
+
+// Regression test when a table has an index on all columns and OLTP updates
+// are performed during column creation.
+func TestRaceColumnBackfill(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	// protects backfillNotification
+	var mu syncutil.Mutex
+	var backfillNotification chan struct{}
+
+	params, _ := createTestServerParams()
+	initBackfillNotification := func() chan struct{} {
+		mu.Lock()
+		defer mu.Unlock()
+		backfillNotification = make(chan struct{})
+		return backfillNotification
+	}
+	notifyBackfill := func() {
+		mu.Lock()
+		defer mu.Unlock()
+		if backfillNotification != nil {
+			// Close channel to notify that the backfill has started.
+			close(backfillNotification)
+			backfillNotification = nil
+		}
+	}
+	// Disable asynchronous schema change execution to allow synchronous path
+	// to trigger start of backfill notification.
+	params.Knobs = base.TestingKnobs{
+		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
+			RunBeforeBackfillChunk: func(sp roachpb.Span) error {
+				notifyBackfill()
+				return nil
+			},
+			AsyncExecNotification: asyncSchemaChangerDisabled,
+			BackfillChunkSize:     100,
+		},
+		DistSQL: &distsqlrun.TestingKnobs{
+			RunBeforeBackfillChunk: func(sp roachpb.Span) error {
+				notifyBackfill()
+				return nil
+			},
+		},
+	}
+
+	tc := serverutils.StartTestCluster(t, 1,
+		base.TestClusterArgs{
+			ReplicationMode: base.ReplicationManual,
+			ServerArgs:      params,
+		})
+	defer tc.Stopper().Stop(context.TODO())
+	kvDB := tc.Server(0).KVClient().(*client.DB)
+	sqlDB := tc.ServerConn(0)
+	jobRegistry := tc.Server(0).JobRegistry().(*jobs.Registry)
+
+	if _, err := sqlDB.Exec(`
+CREATE DATABASE t;
+CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
+CREATE INDEX allidx ON t.test (k, v);
+`); err != nil {
+		t.Fatal(err)
+	}
+
+	// Bulk insert.
+	if err := bulkInsertIntoTable(sqlDB, 100); err != nil {
+		t.Fatal(err)
+	}
+
+	// Run add column schema change with concurrent updates.
+	runSchemaChangeWithOperations(
+		t,
+		sqlDB,
+		kvDB,
+		jobRegistry,
+		"ALTER TABLE t.test ADD COLUMN x DECIMAL DEFAULT (DECIMAL '1.4')",
+		100,
+		2,
+		initBackfillNotification())
 }
