@@ -679,11 +679,11 @@ func TestPGPreparedQuery(t *testing.T) {
 			baseTest.Results("crdb_internal").Results("d").Results("information_schema").Results("pg_catalog").Results("system"),
 		},
 		"SHOW GRANTS ON system.users": {
-			baseTest.Results("users", security.RootUser, "DELETE").
-				Results("users", security.RootUser, "GRANT").
-				Results("users", security.RootUser, "INSERT").
-				Results("users", security.RootUser, "SELECT").
-				Results("users", security.RootUser, "UPDATE"),
+			baseTest.Results("system", "users", security.RootUser, "DELETE").
+				Results("system", "users", security.RootUser, "GRANT").
+				Results("system", "users", security.RootUser, "INSERT").
+				Results("system", "users", security.RootUser, "SELECT").
+				Results("system", "users", security.RootUser, "UPDATE"),
 		},
 		"SHOW INDEXES FROM system.users": {
 			baseTest.Results("users", "primary", true, 1, "username", "ASC", false, false),

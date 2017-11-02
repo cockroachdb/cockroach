@@ -9,9 +9,6 @@ SHOW GRANTS ON DATABASE a
 Database User Privileges
 a        root ALL
 
-statement error cannot use SHOW GRANTS without a target
-SHOW GRANTS
-
 statement error user root does not have ALL privileges
 REVOKE SELECT ON DATABASE a FROM root
 
@@ -35,13 +32,13 @@ a        test-user ALL
 statement ok
 CREATE TABLE a.t (id INT PRIMARY KEY)
 
-query TTT colnames
+query TTTT colnames
 SHOW GRANTS ON a.t
 ----
-Table    User      Privileges
-t        readwrite ALL
-t        root      ALL
-t        test-user ALL
+Database  Table  User       Privileges
+a         t      readwrite  ALL
+a         t      root       ALL
+a         t      test-user  ALL
 
 query TTT
 SHOW GRANTS ON DATABASE a FOR readwrite, "test-user"
@@ -123,10 +120,10 @@ SHOW GRANTS ON DATABASE a FOR readwrite, "test-user"
 ----
 
 # Verify that the table privileges have not changed.
-query TTT colnames
+query TTTT colnames
 SHOW GRANTS ON a.t
 ----
-Table    User      Privileges
-t        readwrite ALL
-t        root      ALL
-t        test-user ALL
+Database  Table  User       Privileges
+a         t      readwrite  ALL
+a         t      root       ALL
+a         t      test-user  ALL

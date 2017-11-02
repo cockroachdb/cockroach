@@ -55,10 +55,10 @@ kv
 new_v
 
 # check the name in the descriptor, which is used by SHOW GRANTS, is also changed
-query TTT
+query TTTT
 SHOW GRANTS ON new_v
 ----
-new_v  root  ALL
+test  new_v  root  ALL
 
 statement error empty table name
 ALTER VIEW "" RENAME TO foo

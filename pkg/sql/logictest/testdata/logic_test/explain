@@ -204,7 +204,7 @@ query ITTT
 EXPLAIN SHOW GRANTS ON foo
 ----
 0  sort    ·      ·
-0  ·       order  +"Table",+"User",+"Privileges"
+0  ·       order  +"Database",+"Table",+"User",+"Privileges"
 1  render  ·      ·
 2  filter  ·      ·
 3  values  ·      ·

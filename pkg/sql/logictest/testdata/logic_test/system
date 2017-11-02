@@ -180,89 +180,58 @@ SHOW GRANTS ON DATABASE system
 system  root  GRANT
 system  root  SELECT
 
-query TTT
-SHOW GRANTS ON system.namespace
+query TTTT
+SHOW GRANTS ON system.*
 ----
-namespace  root  GRANT
-namespace  root  SELECT
-
-query TTT
-SHOW GRANTS ON system.descriptor
-----
-descriptor  root  GRANT
-descriptor  root  SELECT
-
-query TTT
-SHOW GRANTS ON system.users
-----
-users  root  DELETE
-users  root  GRANT
-users  root  INSERT
-users  root  SELECT
-users  root  UPDATE
-
-query TTT
-SHOW GRANTS ON system.zones
-----
-zones  root  DELETE
-zones  root  GRANT
-zones  root  INSERT
-zones  root  SELECT
-zones  root  UPDATE
-
-query TTT
-SHOW GRANTS ON system.lease
-----
-lease  root  DELETE
-lease  root  GRANT
-lease  root  INSERT
-lease  root  SELECT
-lease  root  UPDATE
-
-query TTT
-SHOW GRANTS ON system.eventlog
-----
-eventlog  root  DELETE
-eventlog  root  GRANT
-eventlog  root  INSERT
-eventlog  root  SELECT
-eventlog  root  UPDATE
-
-query TTT
-SHOW GRANTS ON system.rangelog
-----
-rangelog  root  DELETE
-rangelog  root  GRANT
-rangelog  root  INSERT
-rangelog  root  SELECT
-rangelog  root  UPDATE
-
-query TTT
-SHOW GRANTS ON system.ui
-----
-ui  root  DELETE
-ui  root  GRANT
-ui  root  INSERT
-ui  root  SELECT
-ui  root  UPDATE
-
-query TTT
-SHOW GRANTS ON system.jobs
-----
-jobs  root  DELETE
-jobs  root  GRANT
-jobs  root  INSERT
-jobs  root  SELECT
-jobs  root  UPDATE
-
-query TTT
-SHOW GRANTS ON system.settings
-----
-settings  root  DELETE
-settings  root  GRANT
-settings  root  INSERT
-settings  root  SELECT
-settings  root  UPDATE
+system  descriptor    root  GRANT
+system  descriptor    root  SELECT
+system  eventlog      root  DELETE
+system  eventlog      root  GRANT
+system  eventlog      root  INSERT
+system  eventlog      root  SELECT
+system  eventlog      root  UPDATE
+system  jobs          root  DELETE
+system  jobs          root  GRANT
+system  jobs          root  INSERT
+system  jobs          root  SELECT
+system  jobs          root  UPDATE
+system  lease         root  DELETE
+system  lease         root  GRANT
+system  lease         root  INSERT
+system  lease         root  SELECT
+system  lease         root  UPDATE
+system  namespace     root  GRANT
+system  namespace     root  SELECT
+system  rangelog      root  DELETE
+system  rangelog      root  GRANT
+system  rangelog      root  INSERT
+system  rangelog      root  SELECT
+system  rangelog      root  UPDATE
+system  settings      root  DELETE
+system  settings      root  GRANT
+system  settings      root  INSERT
+system  settings      root  SELECT
+system  settings      root  UPDATE
+system  ui            root  DELETE
+system  ui            root  GRANT
+system  ui            root  INSERT
+system  ui            root  SELECT
+system  ui            root  UPDATE
+system  users         root  DELETE
+system  users         root  GRANT
+system  users         root  INSERT
+system  users         root  SELECT
+system  users         root  UPDATE
+system  web_sessions  root  DELETE
+system  web_sessions  root  GRANT
+system  web_sessions  root  INSERT
+system  web_sessions  root  SELECT
+system  web_sessions  root  UPDATE
+system  zones         root  DELETE
+system  zones         root  GRANT
+system  zones         root  INSERT
+system  zones         root  SELECT
+system  zones         root  UPDATE
 
 statement error user root does not have DROP privilege on database system
 ALTER DATABASE system RENAME TO not_system
