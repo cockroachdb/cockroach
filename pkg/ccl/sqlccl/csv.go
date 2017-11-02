@@ -975,6 +975,15 @@ func importPlanHook(
 			return errors.Errorf("must provide a temporary storage location")
 		}
 
+		tempStorage, err := exportStorageFromURI(ctx, temp, p.ExecCfg().Settings)
+		if err != nil {
+			return err
+		}
+		defer tempStorage.Close()
+		if err := verifyUsableExportTarget(ctx, tempStorage, temp); err != nil {
+			return err
+		}
+
 		sstSize := config.DefaultZoneConfig().RangeMaxBytes / 2
 		if override, ok := opts[importOptionSSTSize]; ok {
 			sz, err := humanizeutil.ParseBytes(override)
@@ -1055,6 +1064,10 @@ func importPlanHook(
 		if importErr != nil {
 			return importErr
 		}
+		if err := tempStorage.Delete(ctx, BackupDescriptorCheckpointName); err != nil {
+			log.Warningf(ctx, "unable to delete checkpointed backup descriptor: %+v", err)
+		}
+
 		if transformOnly {
 			resultsCh <- parser.Datums{
 				parser.NewDInt(parser.DInt(*job.ID())),
