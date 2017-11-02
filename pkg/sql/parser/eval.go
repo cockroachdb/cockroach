@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
+	"github.com/cockroachdb/cockroach/pkg/util/timeofday"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
@@ -460,6 +461,24 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			},
 		},
 		BinOp{
+			LeftType:   types.Time,
+			RightType:  types.Interval,
+			ReturnType: types.Time,
+			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
+				t := timeofday.TimeOfDay(*left.(*DTime))
+				return MakeDTime(timeofday.Add(t, right.(*DInterval).Duration)), nil
+			},
+		},
+		BinOp{
+			LeftType:   types.Interval,
+			RightType:  types.Time,
+			ReturnType: types.Time,
+			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
+				t := timeofday.TimeOfDay(*right.(*DTime))
+				return MakeDTime(timeofday.Add(t, left.(*DInterval).Duration)), nil
+			},
+		},
+		BinOp{
 			LeftType:   types.Timestamp,
 			RightType:  types.Interval,
 			ReturnType: types.Timestamp,
@@ -602,6 +621,17 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			},
 		},
 		BinOp{
+			LeftType:   types.Time,
+			RightType:  types.Time,
+			ReturnType: types.Interval,
+			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
+				t1 := timeofday.TimeOfDay(*left.(*DTime))
+				t2 := timeofday.TimeOfDay(*right.(*DTime))
+				diff := timeofday.Difference(t1, t2)
+				return &DInterval{Duration: diff}, nil
+			},
+		},
+		BinOp{
 			LeftType:   types.Timestamp,
 			RightType:  types.Timestamp,
 			ReturnType: types.Interval,
@@ -635,6 +665,15 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				nanos := left.(*DTimestampTZ).Sub(right.(*DTimestamp).Time).Nanoseconds()
 				return &DInterval{Duration: duration.Duration{Nanos: nanos}}, nil
+			},
+		},
+		BinOp{
+			LeftType:   types.Time,
+			RightType:  types.Interval,
+			ReturnType: types.Time,
+			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
+				t := timeofday.TimeOfDay(*left.(*DTime))
+				return MakeDTime(timeofday.Add(t, right.(*DInterval).Duration.Mul(-1))), nil
 			},
 		},
 		BinOp{
@@ -1334,6 +1373,11 @@ var CmpOps = map[ComparisonOperator]cmpOpOverload{
 			fn:        cmpOpScalarEQFn,
 		},
 		CmpOp{
+			LeftType:  types.Time,
+			RightType: types.Time,
+			fn:        cmpOpScalarEQFn,
+		},
+		CmpOp{
 			LeftType:  types.Timestamp,
 			RightType: types.Timestamp,
 			fn:        cmpOpScalarEQFn,
@@ -1479,6 +1523,11 @@ var CmpOps = map[ComparisonOperator]cmpOpOverload{
 			fn:        cmpOpScalarLTFn,
 		},
 		CmpOp{
+			LeftType:  types.Time,
+			RightType: types.Time,
+			fn:        cmpOpScalarLTFn,
+		},
+		CmpOp{
 			LeftType:  types.Timestamp,
 			RightType: types.Timestamp,
 			fn:        cmpOpScalarLTFn,
@@ -1614,6 +1663,11 @@ var CmpOps = map[ComparisonOperator]cmpOpOverload{
 			fn:        cmpOpScalarLEFn,
 		},
 		CmpOp{
+			LeftType:  types.Time,
+			RightType: types.Time,
+			fn:        cmpOpScalarLEFn,
+		},
+		CmpOp{
 			LeftType:  types.Timestamp,
 			RightType: types.Timestamp,
 			fn:        cmpOpScalarLEFn,
@@ -1686,6 +1740,7 @@ var CmpOps = map[ComparisonOperator]cmpOpOverload{
 		makeEvalTupleIn(types.FamCollatedString),
 		makeEvalTupleIn(types.Bytes),
 		makeEvalTupleIn(types.Date),
+		makeEvalTupleIn(types.Time),
 		makeEvalTupleIn(types.Timestamp),
 		makeEvalTupleIn(types.TimestampTZ),
 		makeEvalTupleIn(types.Interval),
@@ -2500,6 +2555,8 @@ func performCast(ctx *EvalContext, d Datum, t CastTargetType) (Datum, error) {
 			res = NewDInt(DInt(v.Unix()))
 		case *DDate:
 			res = NewDInt(DInt(int64(*v)))
+		case *DTime:
+			res = NewDInt(DInt(int64(*v)))
 		case *DInterval:
 			res = NewDInt(DInt(v.Nanos / 1000000000))
 		case *DOid:
@@ -2536,6 +2593,8 @@ func performCast(ctx *EvalContext, d Datum, t CastTargetType) (Datum, error) {
 			return NewDFloat(DFloat(float64(v.Unix()) + micros*1e-6)), nil
 		case *DDate:
 			return NewDFloat(DFloat(float64(*v))), nil
+		case *DTime:
+			return NewDFloat(DFloat(float64(*v))), nil
 		case *DInterval:
 			micros := v.Nanos / 1000
 			return NewDFloat(DFloat(float64(micros) / 1e-6)), nil
@@ -2553,6 +2612,8 @@ func performCast(ctx *EvalContext, d Datum, t CastTargetType) (Datum, error) {
 		case *DInt:
 			dd.SetCoefficient(int64(*v))
 		case *DDate:
+			dd.SetCoefficient(int64(*v))
+		case *DTime:
 			dd.SetCoefficient(int64(*v))
 		case *DFloat:
 			_, err = dd.SetFloat64(float64(*v))
@@ -2600,7 +2661,7 @@ func performCast(ctx *EvalContext, d Datum, t CastTargetType) (Datum, error) {
 		switch t := d.(type) {
 		case *DBool, *DInt, *DFloat, *DDecimal, dNull:
 			s = d.String()
-		case *DTimestamp, *DTimestampTZ, *DDate:
+		case *DTimestamp, *DTimestampTZ, *DDate, *DTime:
 			s = AsStringWithFlags(d, FmtBareStrings)
 		case *DInterval:
 			// When converting an interval to string, we need a string representation
@@ -2690,6 +2751,18 @@ func performCast(ctx *EvalContext, d Datum, t CastTargetType) (Datum, error) {
 			return NewDDateFromTime(d.Time, ctx.GetLocation()), nil
 		case *DTimestamp:
 			return NewDDateFromTime(d.Time, time.UTC), nil
+		}
+
+	case *TimeColType:
+		switch d := d.(type) {
+		case *DString:
+			return ParseDTime(string(*d))
+		case *DCollatedString:
+			return ParseDTime(d.Contents)
+		case *DInt:
+			return MakeDTime(timeofday.TimeOfDay(int64(*d))), nil
+		case *DTime:
+			return d, nil
 		}
 
 	case *TimestampColType:
@@ -3273,6 +3346,11 @@ func (t *DIPAddr) Eval(_ *EvalContext) (Datum, error) {
 
 // Eval implements the TypedExpr interface.
 func (t *DDate) Eval(_ *EvalContext) (Datum, error) {
+	return t, nil
+}
+
+// Eval implements the TypedExpr interface.
+func (t *DTime) Eval(_ *EvalContext) (Datum, error) {
 	return t, nil
 }
 

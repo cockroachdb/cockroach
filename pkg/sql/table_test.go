@@ -90,6 +90,11 @@ func TestMakeTableDescColumns(t *testing.T) {
 			true,
 		},
 		{
+			"TIME",
+			sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_TIME},
+			true,
+		},
+		{
 			"TIMESTAMP",
 			sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_TIMESTAMP},
 			true,

@@ -1,0 +1,214 @@
+# LogicTest: default parallel-stmts distsql
+
+# Note that the odd '0000-01-01 hh:mi:ss +0000 UTC' result format is an
+# artifact of how pq displays TIMEs.
+
+query T
+SELECT '12:00:00':::TIME;
+----
+0000-01-01 12:00:00 +0000 UTC
+
+query T
+SELECT '12:00:00.456':::TIME;
+----
+0000-01-01 12:00:00.456 +0000 UTC
+
+query T
+SELECT '00:00:00':::TIME;
+----
+0000-01-01 00:00:00 +0000 UTC
+
+query T
+SELECT '23:59:59.999999':::TIME;
+----
+0000-01-01 23:59:59.999999 +0000 UTC
+
+statement error could not parse
+SELECT '24:00:00':::TIME;
+
+# Timezone should be ignored.
+query T
+SELECT '12:00:00-08:00':::TIME;
+----
+0000-01-01 12:00:00 +0000 UTC
+
+# Casting
+
+query T
+SELECT '12:00:00'::TIME;
+----
+0000-01-01 12:00:00 +0000 UTC
+
+# Comparison
+
+query B
+SELECT '12:00:00':::TIME = '12:00:00':::TIME
+----
+true
+
+query B
+SELECT '12:00:00':::TIME = '12:00:00.000000':::TIME
+----
+true
+
+query B
+SELECT '12:00:00':::TIME = '12:00:00.000001':::TIME
+----
+false
+
+query B
+SELECT '12:00:00':::TIME < '12:00:00.000001':::TIME
+----
+true
+
+query B
+SELECT '12:00:00':::TIME < '12:00:00':::TIME
+----
+false
+
+query B
+SELECT '12:00:00':::TIME < '11:59:59.999999':::TIME
+----
+false
+
+query B
+SELECT '12:00:00':::TIME > '11:59:59.999999':::TIME
+----
+true
+
+query B
+SELECT '12:00:00':::TIME > '12:00:00':::TIME
+----
+false
+
+query B
+SELECT '12:00:00':::TIME > '12:00:00.000001':::TIME
+----
+false
+
+query B
+SELECT '12:00:00':::TIME <= '12:00:00':::TIME
+----
+true
+
+query B
+SELECT '12:00:00':::TIME >= '12:00:00':::TIME
+----
+true
+
+query B
+SELECT '12:00:00':::TIME IN ('12:00:00');
+----
+true
+
+query B
+SELECT '12:00:00':::TIME IN ('00:00:00');
+----
+false
+
+# Arithmetic
+
+query T
+SELECT '12:00:00':::TIME + '1s':::INTERVAL
+----
+0000-01-01 12:00:01 +0000 UTC
+
+query T
+SELECT '23:59:59':::TIME + '1s':::INTERVAL
+----
+0000-01-01 00:00:00 +0000 UTC
+
+query T
+SELECT '12:00:00':::TIME + '1d':::INTERVAL
+----
+0000-01-01 12:00:00 +0000 UTC
+
+query T
+SELECT '1s':::INTERVAL + '12:00:00':::TIME
+----
+0000-01-01 12:00:01 +0000 UTC
+
+query T
+SELECT '12:00:00':::TIME - '1s':::INTERVAL
+----
+0000-01-01 11:59:59 +0000 UTC
+
+query T
+SELECT '00:00:00':::TIME - '1s':::INTERVAL
+----
+0000-01-01 23:59:59 +0000 UTC
+
+query T
+SELECT '12:00:00':::TIME - '1d':::INTERVAL
+----
+0000-01-01 12:00:00 +0000 UTC
+
+query T
+SELECT '12:00:00':::TIME - '11:59:59':::TIME
+----
+1s
+
+query T
+SELECT '11:59:59':::TIME - '12:00:00':::TIME
+----
+-1s
+
+# Storage
+
+statement ok
+CREATE TABLE times (t time PRIMARY KEY)
+
+statement ok
+INSERT INTO times VALUES
+  ('00:00:00'),
+  ('00:00:00.000001'),
+  ('11:59:59.999999'),
+  ('12:00:00'),
+  ('12:00:00.000001'),
+  ('23:59:59.999999')
+
+query T
+SELECT * FROM times ORDER BY t
+----
+0000-01-01 00:00:00 +0000 UTC
+0000-01-01 00:00:00.000001 +0000 UTC
+0000-01-01 11:59:59.999999 +0000 UTC
+0000-01-01 12:00:00 +0000 UTC
+0000-01-01 12:00:00.000001 +0000 UTC
+0000-01-01 23:59:59.999999 +0000 UTC
+
+statement ok
+CREATE TABLE arrays (times TIME[])
+
+statement ok
+INSERT INTO arrays VALUES
+  (ARRAY[]),
+  (ARRAY['00:00:00']),
+  (ARRAY['00:00:00', '12:00:00.000001'])
+
+query T rowsort
+SELECT * FROM arrays
+----
+{}
+{00:00:00}
+{00:00:00,12:00:00.000001}
+
+# Built-ins
+
+query I
+SELECT extract(hour from time '12:00:00')
+----
+12
+
+query I
+SELECT extract(microsecond from time '12:00:00.123456')
+----
+123456
+
+query I
+SELECT extract(epoch from time '12:00:00')
+----
+43200
+
+query error extract\(\): unsupported timespan: day
+SELECT extract(day from time '12:00:00')

@@ -46,6 +46,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/ipaddr"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeofday"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/pkg/errors"
@@ -1371,6 +1372,18 @@ CockroachDB supports the following flags:
 			Info: "Extracts `element` from `input`.\n\n" +
 				"Compatible elements: year, quarter, month, week, dayofweek, dayofyear,\n" +
 				"hour, minute, second, millisecond, microsecond, epoch",
+		},
+		Builtin{
+			Types:      ArgTypes{{"element", types.String}, {"input", types.Time}},
+			ReturnType: fixedReturnType(types.Int),
+			category:   categoryDateAndTime,
+			fn: func(ctx *EvalContext, args Datums) (Datum, error) {
+				fromTime := args[1].(*DTime)
+				timeSpan := strings.ToLower(string(MustBeDString(args[0])))
+				return extractStringFromTime(ctx, fromTime, timeSpan)
+			},
+			Info: "Extracts `element` from `input`.\n\n" +
+				"Compatible elements: hour, minute, second, millisecond, microsecond, epoch",
 		},
 	},
 
@@ -3030,6 +3043,19 @@ func arrayLower(arr *DArray, dim int64) Datum {
 		return DNull
 	}
 	return arrayLower(a, dim-1)
+}
+
+func extractStringFromTime(ctx *EvalContext, fromTime *DTime, timeSpan string) (Datum, error) {
+	switch timeSpan {
+	case "hour", "hours", "minute", "minutes", "second", "seconds", "millisecond", "milliseconds",
+		"microsecond", "microseconds", "epoch":
+		fromTimestamp := timeofday.ToTime(timeofday.TimeOfDay(*fromTime))
+		return extractStringFromTimestamp(ctx, fromTimestamp, timeSpan)
+	default:
+		// Disallow date-only timespans like 'year'.
+		return nil, pgerror.NewErrorf(
+			pgerror.CodeInvalidParameterValueError, "unsupported timespan: %s", timeSpan)
+	}
 }
 
 func extractStringFromTimestamp(

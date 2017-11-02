@@ -19,6 +19,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/util/timeofday"
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
@@ -94,6 +95,14 @@ func TestDatumOrdering(t *testing.T) {
 		{`'4000-01-01':::date`, `'3999-12-31'`, `'4000-01-02'`, noMin, noMax},
 		{`'2006-01-02 03:04:05.123123':::timestamp`,
 			`'2006-01-02 03:04:05.123122+00:00'`, `'2006-01-02 03:04:05.123124+00:00'`, noMin, noMax},
+
+		// Times
+		{`'00:00:00':::time`, valIsMin, `'00:00:00.000001'`,
+			`'00:00:00'`, `'23:59:59.999999'`},
+		{`'12:00:00':::time`, `'11:59:59.999999'`, `'12:00:00.000001'`,
+			`'00:00:00'`, `'23:59:59.999999'`},
+		{`'23:59:59.999999':::time`, `'23:59:59.999998'`, valIsMax,
+			`'00:00:00'`, `'23:59:59.999999'`},
 
 		// Intervals
 		{`'1 day':::interval`, noPrev, noNext,
@@ -399,6 +408,46 @@ func TestParseDDate(t *testing.T) {
 		defer evalCtx.Stop(context.Background())
 		if expected.Compare(evalCtx, actual) != 0 {
 			t.Errorf("DATE %s: got %s, expected %s", td.str, actual, expected)
+		}
+	}
+}
+
+func TestParseDTime(t *testing.T) {
+	// Since ParseDTime mostly delegates parsing logic to ParseDTimestamp, we only test a subset of
+	// the timestamp test cases.
+	testData := []struct {
+		str      string
+		expected timeofday.TimeOfDay
+	}{
+		{"04:05:06", timeofday.NewTimeOfDay(4, 5, 6, 0)},
+		{"04:05:06.000001", timeofday.NewTimeOfDay(4, 5, 6, 1)},
+		{"04:05:06-07", timeofday.NewTimeOfDay(4, 5, 6, 0)},
+		{"4:5:6", timeofday.NewTimeOfDay(4, 5, 6, 0)},
+	}
+	for _, td := range testData {
+		actual, err := ParseDTime(td.str)
+		if err != nil {
+			t.Errorf("unexpected error while parsing TIME %s: %s", td.str, err)
+			continue
+		}
+		if *actual != DTime(td.expected) {
+			t.Errorf("TIME %s: got %s, expected %s", td.str, actual, td.expected)
+		}
+	}
+}
+
+func TestParseDTimeError(t *testing.T) {
+	testData := []string{
+		"",
+		"foo",
+		"01",
+		"2001-02-03 04:05:06",
+		"24:00:00",
+	}
+	for _, s := range testData {
+		actual, _ := ParseDTime(s)
+		if actual != nil {
+			t.Errorf("TIME %s: got %s, expected error", s, actual)
 		}
 	}
 }
