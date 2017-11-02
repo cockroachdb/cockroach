@@ -1126,14 +1126,14 @@ func (p *planner) finalizeInterleave(
 	return nil
 }
 
-// valueEncodeTuple typechecks the datums in tuple, returns the concatenation of
-// these datums each encoded using the table "value" encoding. The special
-// values of DEFAULT (for list) and MAXVALUE (for range) are encoded as NOT
-// NULL.
+// valueEncodePartitionTuple typechecks the datums in tuple, returns the
+// concatenation of these datums each encoded using the table "value" encoding.
+// The special values of DEFAULT (for list) and MAXVALUE (for range) are encoded
+// as NOT NULL.
 //
 // TODO(dan): The typechecking here should be run during plan construction, so
 // we can support placeholders.
-func valueEncodeTuple(
+func valueEncodePartitionTuple(
 	typ parser.PartitionByType,
 	evalCtx *parser.EvalContext,
 	tuple *parser.Tuple,
@@ -1143,6 +1143,16 @@ func valueEncodeTuple(
 		return nil, errors.Errorf("partition has %d columns but %d values were supplied",
 			len(cols), len(tuple.Exprs))
 	}
+
+	// Because of some parsing oddness, DEFAULT in the context of PARTITION BY
+	// is parsed as parser.DefaultVal instead of parser.PartitionDefault. Fix it
+	// up.
+	for i := range tuple.Exprs {
+		if _, ok := tuple.Exprs[i].(parser.DefaultVal); ok {
+			tuple.Exprs[i] = parser.PartitionDefault{}
+		}
+	}
+
 	var value, scratch []byte
 	for i, expr := range tuple.Exprs {
 		switch expr.(type) {
@@ -1221,7 +1231,8 @@ func addPartitionedBy(
 			Name: l.Name.Normalize(),
 		}
 		for _, tuple := range l.Tuples {
-			encodedTuple, err := valueEncodeTuple(parser.PartitionByList, evalCtx, tuple, cols)
+			encodedTuple, err := valueEncodePartitionTuple(
+				parser.PartitionByList, evalCtx, tuple, cols)
 			if err != nil {
 				return errors.Wrapf(err, "PARTITION %s", p.Name)
 			}
@@ -1241,7 +1252,8 @@ func addPartitionedBy(
 		p := sqlbase.PartitioningDescriptor_Range{
 			Name: r.Name.Normalize(),
 		}
-		encodedTuple, err := valueEncodeTuple(parser.PartitionByRange, evalCtx, r.Tuple, cols)
+		encodedTuple, err := valueEncodePartitionTuple(
+			parser.PartitionByRange, evalCtx, r.Tuple, cols)
 		if err != nil {
 			return errors.Wrapf(err, "PARTITION %s", p.Name)
 		}
