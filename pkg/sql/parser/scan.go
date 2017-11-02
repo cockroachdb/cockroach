@@ -328,11 +328,11 @@ func (s *Scanner) scan(lval *sqlSymType) {
 			return
 		case '|': // ?|
 			s.pos++
-			lval.id = HAS_SOME_KEY
+			lval.id = SOME_EXISTENCE
 			return
 		case '&': // ?|
 			s.pos++
-			lval.id = HAS_ALL_KEYS
+			lval.id = ALL_EXISTENCE
 			return
 		}
 		return
