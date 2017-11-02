@@ -240,8 +240,20 @@ func NewTestStorePool(cfg StoreConfig) *StorePool {
 	)
 }
 
+func (r *Replica) ReplicaID() roachpb.ReplicaID {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.ReplicaIDLocked()
+}
+
 func (r *Replica) ReplicaIDLocked() roachpb.ReplicaID {
 	return r.mu.replicaID
+}
+
+func (r *Replica) GetLastUpdateTimeForReplica(replicaID roachpb.ReplicaID) time.Time {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.mu.lastUpdateTimes[replicaID]
 }
 
 func (r *Replica) DescLocked() *roachpb.RangeDescriptor {
@@ -287,6 +299,12 @@ func (r *Replica) InitQuotaPool(quota int64) {
 	r.mu.proposalQuota = newQuotaPool(quota)
 	r.mu.quotaReleaseQueue = nil
 	r.mu.commandSizes = make(map[storagebase.CmdIDKey]int)
+}
+
+func (r *Replica) InitLastUpdateTimes() {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.mu.lastUpdateTimes = make(map[roachpb.ReplicaID]time.Time)
 }
 
 // QuotaAvailable returns the quota available in the replica's quota pool. Only
