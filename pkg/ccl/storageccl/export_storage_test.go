@@ -222,7 +222,6 @@ func TestPutLocal(t *testing.T) {
 
 	testExportStore(t, dest, false)
 }
-
 func TestLocalIOLimits(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
@@ -230,11 +229,8 @@ func TestLocalIOLimits(t *testing.T) {
 	const allowed = "/allowed"
 	testSettings.ExternalIODir = allowed
 
-	for dest, expected := range map[string]string{allowed: "", "/blah": "not allowed"} {
-		u, err := MakeLocalStorageURI(dest)
-		if err != nil {
-			t.Fatal(err)
-		}
+	for dest, expected := range map[string]string{allowed: "", "/../../blah": "not allowed"} {
+		u := fmt.Sprintf("nodelocal://%s", dest)
 
 		conf, err := ExportStorageConfFromURI(u)
 		if err != nil {

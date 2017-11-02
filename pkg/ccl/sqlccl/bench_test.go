@@ -40,7 +40,7 @@ func BenchmarkClusterBackup(b *testing.B) {
 	// documentation's description. We're getting useful information out of it,
 	// but this is not a pattern to cargo-cult.
 
-	_, dir, _, sqlDB, cleanupFn := backupRestoreTestSetup(b, multiNode, 0, initNone)
+	_, _, sqlDB, dir, cleanupFn := backupRestoreTestSetup(b, multiNode, 0, initNone)
 	defer cleanupFn()
 	sqlDB.Exec(`DROP TABLE data.bank`)
 
@@ -73,7 +73,7 @@ func BenchmarkClusterRestore(b *testing.B) {
 	// documentation's description. We're getting useful information out of it,
 	// but this is not a pattern to cargo-cult.
 
-	_, dir, _, sqlDB, cleanup := backupRestoreTestSetup(b, multiNode, 0, initNone)
+	_, _, sqlDB, dir, cleanup := backupRestoreTestSetup(b, multiNode, 0, initNone)
 	defer cleanup()
 	sqlDB.Exec(`DROP TABLE data.bank`)
 
@@ -94,7 +94,7 @@ func BenchmarkLoadRestore(b *testing.B) {
 	// documentation's description. We're getting useful information out of it,
 	// but this is not a pattern to cargo-cult.
 
-	ctx, dir, _, sqlDB, cleanup := backupRestoreTestSetup(b, multiNode, 0, initNone)
+	ctx, _, sqlDB, dir, cleanup := backupRestoreTestSetup(b, multiNode, 0, initNone)
 	defer cleanup()
 	sqlDB.Exec(`DROP TABLE data.bank`)
 
@@ -113,7 +113,7 @@ func BenchmarkLoadSQL(b *testing.B) {
 	// NB: This benchmark takes liberties in how b.N is used compared to the go
 	// documentation's description. We're getting useful information out of it,
 	// but this is not a pattern to cargo-cult.
-	_, _, _, sqlDB, cleanup := backupRestoreTestSetup(b, multiNode, 0, initNone)
+	_, _, sqlDB, _, cleanup := backupRestoreTestSetup(b, multiNode, 0, initNone)
 	defer cleanup()
 	sqlDB.Exec(`DROP TABLE data.bank`)
 
@@ -140,9 +140,10 @@ func BenchmarkLoadSQL(b *testing.B) {
 func BenchmarkClusterEmptyIncrementalBackup(b *testing.B) {
 	const numStatements = 100000
 
-	_, dir, _, sqlDB, cleanupFn := backupRestoreTestSetup(b, multiNode, 0, initNone)
+	_, _, sqlDB, _, cleanupFn := backupRestoreTestSetup(b, multiNode, 0, initNone)
 	defer cleanupFn()
 
+	const dir = "nodelocal://foo"
 	restoreDir := filepath.Join(dir, "restore")
 	fullDir := filepath.Join(dir, "full")
 
