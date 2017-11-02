@@ -47,6 +47,7 @@
 <tr><td><code>+</code><a href="int.html">int</a></td><td><a href="int.html">int</a></td></tr>
 <tr><td><a href="date.html">date</a> <code>+</code> <a href="int.html">int</a></td><td><a href="date.html">date</a></td></tr>
 <tr><td><a href="date.html">date</a> <code>+</code> <a href="interval.html">interval</a></td><td><a href="timestamp.html">timestamptz</a></td></tr>
+<tr><td><a href="date.html">date</a> <code>+</code> <a href="time.html">time</a></td><td><a href="timestamp.html">timestamp</a></td></tr>
 <tr><td><a href="decimal.html">decimal</a> <code>+</code> <a href="decimal.html">decimal</a></td><td><a href="decimal.html">decimal</a></td></tr>
 <tr><td><a href="decimal.html">decimal</a> <code>+</code> <a href="int.html">int</a></td><td><a href="decimal.html">decimal</a></td></tr>
 <tr><td><a href="float.html">float</a> <code>+</code> <a href="float.html">float</a></td><td><a href="float.html">float</a></td></tr>
@@ -55,8 +56,11 @@
 <tr><td><a href="int.html">int</a> <code>+</code> <a href="int.html">int</a></td><td><a href="int.html">int</a></td></tr>
 <tr><td><a href="interval.html">interval</a> <code>+</code> <a href="date.html">date</a></td><td><a href="timestamp.html">timestamptz</a></td></tr>
 <tr><td><a href="interval.html">interval</a> <code>+</code> <a href="interval.html">interval</a></td><td><a href="interval.html">interval</a></td></tr>
+<tr><td><a href="interval.html">interval</a> <code>+</code> <a href="time.html">time</a></td><td><a href="time.html">time</a></td></tr>
 <tr><td><a href="interval.html">interval</a> <code>+</code> <a href="timestamp.html">timestamp</a></td><td><a href="timestamp.html">timestamp</a></td></tr>
 <tr><td><a href="interval.html">interval</a> <code>+</code> <a href="timestamp.html">timestamptz</a></td><td><a href="timestamp.html">timestamptz</a></td></tr>
+<tr><td><a href="time.html">time</a> <code>+</code> <a href="date.html">date</a></td><td><a href="timestamp.html">timestamp</a></td></tr>
+<tr><td><a href="time.html">time</a> <code>+</code> <a href="interval.html">interval</a></td><td><a href="time.html">time</a></td></tr>
 <tr><td><a href="timestamp.html">timestamp</a> <code>+</code> <a href="interval.html">interval</a></td><td><a href="timestamp.html">timestamp</a></td></tr>
 <tr><td><a href="timestamp.html">timestamptz</a> <code>+</code> <a href="interval.html">interval</a></td><td><a href="timestamp.html">timestamptz</a></td></tr>
 </tbody></table>
@@ -70,6 +74,7 @@
 <tr><td><a href="date.html">date</a> <code>-</code> <a href="date.html">date</a></td><td><a href="int.html">int</a></td></tr>
 <tr><td><a href="date.html">date</a> <code>-</code> <a href="int.html">int</a></td><td><a href="date.html">date</a></td></tr>
 <tr><td><a href="date.html">date</a> <code>-</code> <a href="interval.html">interval</a></td><td><a href="timestamp.html">timestamptz</a></td></tr>
+<tr><td><a href="date.html">date</a> <code>-</code> <a href="time.html">time</a></td><td><a href="timestamp.html">timestamp</a></td></tr>
 <tr><td><a href="decimal.html">decimal</a> <code>-</code> <a href="decimal.html">decimal</a></td><td><a href="decimal.html">decimal</a></td></tr>
 <tr><td><a href="decimal.html">decimal</a> <code>-</code> <a href="int.html">int</a></td><td><a href="decimal.html">decimal</a></td></tr>
 <tr><td><a href="float.html">float</a> <code>-</code> <a href="float.html">float</a></td><td><a href="float.html">float</a></td></tr>
@@ -78,6 +83,8 @@
 <tr><td><a href="interval.html">interval</a> <code>-</code> <a href="interval.html">interval</a></td><td><a href="interval.html">interval</a></td></tr>
 <tr><td>jsonb <code>-</code> <a href="int.html">int</a></td><td>jsonb</td></tr>
 <tr><td>jsonb <code>-</code> <a href="string.html">string</a></td><td>jsonb</td></tr>
+<tr><td><a href="time.html">time</a> <code>-</code> <a href="interval.html">interval</a></td><td><a href="time.html">time</a></td></tr>
+<tr><td><a href="time.html">time</a> <code>-</code> <a href="time.html">time</a></td><td><a href="interval.html">interval</a></td></tr>
 <tr><td><a href="timestamp.html">timestamp</a> <code>-</code> <a href="interval.html">interval</a></td><td><a href="timestamp.html">timestamp</a></td></tr>
 <tr><td><a href="timestamp.html">timestamp</a> <code>-</code> <a href="timestamp.html">timestamp</a></td><td><a href="interval.html">interval</a></td></tr>
 <tr><td><a href="timestamp.html">timestamp</a> <code>-</code> <a href="timestamp.html">timestamptz</a></td><td><a href="interval.html">interval</a></td></tr>
@@ -138,6 +145,7 @@
 <tr><td><a href="int.html">int</a> <code><</code> <a href="int.html">int</a></td><td><a href="bool.html">bool</a></td></tr>
 <tr><td><a href="interval.html">interval</a> <code><</code> <a href="interval.html">interval</a></td><td><a href="bool.html">bool</a></td></tr>
 <tr><td><a href="string.html">string</a> <code><</code> <a href="string.html">string</a></td><td><a href="bool.html">bool</a></td></tr>
+<tr><td><a href="time.html">time</a> <code><</code> <a href="time.html">time</a></td><td><a href="bool.html">bool</a></td></tr>
 <tr><td><a href="timestamp.html">timestamp</a> <code><</code> <a href="date.html">date</a></td><td><a href="bool.html">bool</a></td></tr>
 <tr><td><a href="timestamp.html">timestamp</a> <code><</code> <a href="timestamp.html">timestamp</a></td><td><a href="bool.html">bool</a></td></tr>
 <tr><td><a href="timestamp.html">timestamp</a> <code><</code> <a href="timestamp.html">timestamptz</a></td><td><a href="bool.html">bool</a></td></tr>
@@ -173,6 +181,7 @@
 <tr><td><a href="int.html">int</a> <code><=</code> <a href="int.html">int</a></td><td><a href="bool.html">bool</a></td></tr>
 <tr><td><a href="interval.html">interval</a> <code><=</code> <a href="interval.html">interval</a></td><td><a href="bool.html">bool</a></td></tr>
 <tr><td><a href="string.html">string</a> <code><=</code> <a href="string.html">string</a></td><td><a href="bool.html">bool</a></td></tr>
+<tr><td><a href="time.html">time</a> <code><=</code> <a href="time.html">time</a></td><td><a href="bool.html">bool</a></td></tr>
 <tr><td><a href="timestamp.html">timestamp</a> <code><=</code> <a href="date.html">date</a></td><td><a href="bool.html">bool</a></td></tr>
 <tr><td><a href="timestamp.html">timestamp</a> <code><=</code> <a href="timestamp.html">timestamp</a></td><td><a href="bool.html">bool</a></td></tr>
 <tr><td><a href="timestamp.html">timestamp</a> <code><=</code> <a href="timestamp.html">timestamptz</a></td><td><a href="bool.html">bool</a></td></tr>
@@ -216,6 +225,8 @@
 <tr><td>oid <code>=</code> oid</td><td><a href="bool.html">bool</a></td></tr>
 <tr><td><a href="string.html">string</a> <code>=</code> <a href="string.html">string</a></td><td><a href="bool.html">bool</a></td></tr>
 <tr><td><a href="string.html">string[]</a> <code>=</code> <a href="string.html">string[]</a></td><td><a href="bool.html">bool</a></td></tr>
+<tr><td><a href="time.html">time</a> <code>=</code> <a href="time.html">time</a></td><td><a href="bool.html">bool</a></td></tr>
+<tr><td><a href="time.html">time[]</a> <code>=</code> <a href="time.html">time[]</a></td><td><a href="bool.html">bool</a></td></tr>
 <tr><td><a href="timestamp.html">timestamp</a> <code>=</code> <a href="date.html">date</a></td><td><a href="bool.html">bool</a></td></tr>
 <tr><td><a href="timestamp.html">timestamp</a> <code>=</code> <a href="timestamp.html">timestamp</a></td><td><a href="bool.html">bool</a></td></tr>
 <tr><td><a href="timestamp.html">timestamp</a> <code>=</code> <a href="timestamp.html">timestamptz</a></td><td><a href="bool.html">bool</a></td></tr>
@@ -268,6 +279,7 @@
 <tr><td>jsonb <code>IN</code> tuple</td><td><a href="bool.html">bool</a></td></tr>
 <tr><td>oid <code>IN</code> tuple</td><td><a href="bool.html">bool</a></td></tr>
 <tr><td><a href="string.html">string</a> <code>IN</code> tuple</td><td><a href="bool.html">bool</a></td></tr>
+<tr><td><a href="time.html">time</a> <code>IN</code> tuple</td><td><a href="bool.html">bool</a></td></tr>
 <tr><td><a href="timestamp.html">timestamp</a> <code>IN</code> tuple</td><td><a href="bool.html">bool</a></td></tr>
 <tr><td><a href="timestamp.html">timestamptz</a> <code>IN</code> tuple</td><td><a href="bool.html">bool</a></td></tr>
 <tr><td>tuple <code>IN</code> tuple</td><td><a href="bool.html">bool</a></td></tr>
@@ -335,6 +347,9 @@
 <tr><td><a href="string.html">string</a> <code>||</code> <a href="string.html">string[]</a></td><td><a href="string.html">string[]</a></td></tr>
 <tr><td><a href="string.html">string[]</a> <code>||</code> <a href="string.html">string</a></td><td><a href="string.html">string[]</a></td></tr>
 <tr><td><a href="string.html">string[]</a> <code>||</code> <a href="string.html">string[]</a></td><td><a href="string.html">string[]</a></td></tr>
+<tr><td><a href="time.html">time</a> <code>||</code> <a href="time.html">time[]</a></td><td><a href="time.html">time[]</a></td></tr>
+<tr><td><a href="time.html">time[]</a> <code>||</code> <a href="time.html">time</a></td><td><a href="time.html">time[]</a></td></tr>
+<tr><td><a href="time.html">time[]</a> <code>||</code> <a href="time.html">time[]</a></td><td><a href="time.html">time[]</a></td></tr>
 <tr><td><a href="timestamp.html">timestamp</a> <code>||</code> <a href="timestamp.html">timestamp[]</a></td><td><a href="timestamp.html">timestamp[]</a></td></tr>
 <tr><td><a href="timestamp.html">timestamp[]</a> <code>||</code> <a href="timestamp.html">timestamp</a></td><td><a href="timestamp.html">timestamp[]</a></td></tr>
 <tr><td><a href="timestamp.html">timestamp[]</a> <code>||</code> <a href="timestamp.html">timestamp[]</a></td><td><a href="timestamp.html">timestamp[]</a></td></tr>
