@@ -39,7 +39,7 @@ export function ComputeByteScale(bytes: number): UnitValue {
 }
 
 export function BytesToUnitValue(bytes: number): UnitValue {
-  const scale = ComputeByteScale(bytes, kibi, byteUnits);
+  const scale = ComputeByteScale(bytes);
   return {
     value: bytes / scale.value,
     units: scale.units,

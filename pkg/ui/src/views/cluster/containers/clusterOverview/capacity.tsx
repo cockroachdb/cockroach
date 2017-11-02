@@ -32,18 +32,18 @@ const axis = d3.svg.axis()
   .ticks(5);
 
 function recomputeScale(el: d3.Selection<CapacityChartProps>) {
-  var capacity = el.datum();
+  const capacity = el.datum();
 
   // Compute the appropriate scale factor for a value slightly smaller than the
   // usable capacity, so that if the usable capacity is exactly 1 {MiB,GiB,etc}
   // we show the scale in the next-smaller unit.
-  var byteScale = ComputeByteScale(capacity.usable - 1);
+  const byteScale = ComputeByteScale(capacity.usable - 1);
 
-  var scaled = {
+  const scaled = {
     used: capacity.used / byteScale.value,
     usable: capacity.usable / byteScale.value,
   };
-  el.datum(scaled)
+  el.datum(scaled);
 
   axis.tickFormat(function (d) {
     return d + " " + byteScale.units;
@@ -57,7 +57,7 @@ function chart(el: d3.Selection<CapacityChartProps>) {
   recomputeScale(el);
 
   const axisGroup = el.selectAll("g.axis")
-    .data(() => [null]);
+    .data(() => [0]);
 
   axisGroup.enter()
     .append("g")
@@ -67,7 +67,7 @@ function chart(el: d3.Selection<CapacityChartProps>) {
   axisGroup.call(axis);
   axisGroup.selectAll("text").attr("y", AXIS_MARGIN + TICK_SIZE);
 
-  const bg= el.selectAll(".bg")
+  const bg = el.selectAll(".bg")
     .data((d: CapacityChartProps) => [d]);
 
   bg.enter()
@@ -87,7 +87,7 @@ function chart(el: d3.Selection<CapacityChartProps>) {
     .attr("height", 10)
     .attr("y", 5);
 
-   bar
+  bar
     .attr("width", (d: CapacityChartProps) => scale(d.used));
 
 }
