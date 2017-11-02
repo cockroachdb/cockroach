@@ -1143,6 +1143,16 @@ func valueEncodeTuple(
 		return nil, errors.Errorf("partition has %d column(s) but %d value(s) were supplied",
 			len(cols), len(tuple.Exprs))
 	}
+
+	// Because of some parsing oddness, DEFAULT in the context of PARTITION BY
+	// is parsed as parser.DefaultVal instead of parser.PartitionDefault. Fix it
+	// up.
+	for i := range tuple.Exprs {
+		if _, ok := tuple.Exprs[i].(parser.DefaultVal); ok {
+			tuple.Exprs[i] = parser.PartitionDefault{}
+		}
+	}
+
 	var value, scratch []byte
 	for i, expr := range tuple.Exprs {
 		switch expr.(type) {
