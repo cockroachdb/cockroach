@@ -699,7 +699,6 @@ func (u *sqlSymUnion) scrubOption() ScrubOption {
 %type <ArraySubscripts> array_subscripts
 %type <UnresolvedName> qname_indirection
 %type <NamePart> name_indirection_elem
-%type <Exprs> ctext_expr_list ctext_row
 %type <GroupBy> group_clause
 %type <*Limit> select_limit opt_select_limit
 %type <TableNameReferences> relation_expr_list
@@ -761,7 +760,6 @@ func (u *sqlSymUnion) scrubOption() ScrubOption {
 %type <*When>  when_clause
 %type <[]*When> when_clause_list
 %type <ComparisonOperator> sub_type
-%type <Expr> ctext_expr
 %type <Expr> numeric_only
 %type <AliasClause> alias_clause opt_alias_clause
 %type <bool> opt_ordinality
@@ -2135,7 +2133,7 @@ var_name:
   any_name
 
 var_value:
-  ctext_expr
+  a_expr
 | ON
   {
     $$.val = UnresolvedName{Name($1)}
@@ -2783,10 +2781,6 @@ partition_exprs:
 
 partition_expr:
   a_expr
-| DEFAULT
-  {
-    $$.val = PartitionDefault{}
-  }
 | MAXVALUE
   {
     $$.val = PartitionMaxValue{}
@@ -3710,25 +3704,15 @@ set_clause:
 | multiple_set_clause
 
 single_set_clause:
-  qualified_name '=' ctext_expr
+  qualified_name '=' a_expr
   {
     $$.val = &UpdateExpr{Names: UnresolvedNames{$1.unresolvedName()}, Expr: $3.expr()}
   }
 
-// Ideally, we'd accept any row-valued a_expr as RHS of a multiple_set_clause.
-// However, per SQL spec the row-constructor case must allow DEFAULT as a row
-// member, and it's pretty unclear how to do that (unless perhaps we allow
-// DEFAULT in any a_expr and let parse analysis sort it out later?). For the
-// moment, the planner/executor only support a subquery as a multiassignment
-// source anyhow, so we need only accept ctext_row and subqueries here.
 multiple_set_clause:
-  '(' qualified_name_list ')' '=' ctext_row
+  '(' qualified_name_list ')' '=' in_expr
   {
-    $$.val = &UpdateExpr{Tuple: true, Names: $2.unresolvedNames(), Expr: &Tuple{Exprs: $5.exprs()}}
-  }
-| '(' qualified_name_list ')' '=' select_with_parens
-  {
-    $$.val = &UpdateExpr{Tuple: true, Names: $2.unresolvedNames(), Expr: &Subquery{Select: $5.selectStmt()}}
+    $$.val = &UpdateExpr{Tuple: true, Names: $2.unresolvedNames(), Expr: $5.expr()}
   }
 
 // A complete SELECT statement looks like this.
@@ -4195,7 +4179,7 @@ opt_for_locking_clause:
   {
     $$.val = false
   }
- 
+
 for_locking_clause:
   FOR UPDATE
   {
@@ -4216,15 +4200,15 @@ for_locking_clause:
 // %Text: VALUES ( <exprs...> ) [, ...]
 // %SeeAlso: SELECT, TABLE, WEBDOCS/table-expressions.html
 values_clause:
-  VALUES ctext_row %prec UMINUS
+  VALUES '(' expr_list ')' %prec UMINUS
   {
-    $$.val = &ValuesClause{[]*Tuple{{Exprs: $2.exprs()}}}
+    $$.val = &ValuesClause{[]*Tuple{{Exprs: $3.exprs()}}}
   }
 | VALUES error // SHOW HELP: VALUES
-| values_clause ',' ctext_row
+| values_clause ',' '(' expr_list ')'
   {
     valNode := $1.selectStmt().(*ValuesClause)
-    valNode.Tuples = append(valNode.Tuples, &Tuple{Exprs: $3.exprs()})
+    valNode.Tuples = append(valNode.Tuples, &Tuple{Exprs: $4.exprs()})
     $$.val = valNode
   }
 
@@ -5596,6 +5580,10 @@ d_expr:
   {
     $$.val = NewPlaceholder($1)
   }
+| DEFAULT
+  {
+    $$.val = DefaultVal{}
+  }
 | '(' a_expr ')'
   {
     $$.val = &ParenExpr{Expr: $2.expr()}
@@ -6274,36 +6262,6 @@ array_subscripts:
 opt_asymmetric:
   ASYMMETRIC {}
 | /* EMPTY */ {}
-
-// The SQL spec defines "contextually typed value expressions" and
-// "contextually typed row value constructors", which for our purposes are the
-// same as "a_expr" and "row" except that DEFAULT can appear at the top level.
-
-ctext_expr:
-  a_expr
-| DEFAULT
-  {
-    $$.val = DefaultVal{}
-  }
-
-ctext_expr_list:
-  ctext_expr
-  {
-    $$.val = Exprs{$1.expr()}
-  }
-| ctext_expr_list ',' ctext_expr
-  {
-    $$.val = append($1.exprs(), $3.expr())
-  }
-
-// We should allow ROW '(' ctext_expr_list ')' too, but that seems to require
-// making VALUES a fully reserved word, which will probably break more apps
-// than allowing the noise-word is worth.
-ctext_row:
-  '(' ctext_expr_list ')'
-  {
-    $$.val = $2.exprs()
-  }
 
 target_list:
   target_elem
