@@ -3124,10 +3124,6 @@ numeric_only:
 // %Help: CREATE SEQUENCE - create a new sequence
 // %Category: DDL
 // %Text:
-// CREATE [UNIQUE] INDEX [IF NOT EXISTS] [<idxname>]
-//        ON <tablename> ( <colname> [ASC | DESC] [, ...] )
-//        [STORING ( <colnames...> )] [<interleave>]
-//
 // CREATE SEQUENCE <seqname>
 //   [INCREMENT <increment>]
 //   [MINVALUE <minvalue> | NO MINVALUE]
@@ -3135,10 +3131,8 @@ numeric_only:
 //   [START <start>]
 //   [CACHE <cache>]
 //   [[NO] CYCLE]
-//   [OWNED BY { <table_name.column_name> | NONE }]
 //
 // %SeeAlso: CREATE TABLE
-// WEBDOCS/create-sequence.html
 create_sequence_stmt:
   CREATE SEQUENCE any_name opt_sequence_option_list
   {
@@ -3148,6 +3142,7 @@ create_sequence_stmt:
     }
     $$.val = node
   }
+| CREATE SEQUENCE error // SHOW HELP: CREATE SEQUENCE
 
 opt_sequence_option_list:
   sequence_option_list
