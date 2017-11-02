@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"math/big"
 	"sort"
+	"strconv"
 	"strings"
 	"unicode"
 	"unsafe"
@@ -53,6 +54,31 @@ type JSON interface {
 	Format(buf *bytes.Buffer)
 	// Size returns the size of the JSON document in bytes.
 	Size() uintptr
+
+	// FetchValKey implements the `->` operator for strings, returning nil if the
+	// key is not found.
+	FetchValKey(key string) JSON
+
+	// FetchValKey implements the `->` operator for ints, returning nil if the
+	// key is not found.
+	FetchValIdx(idx int) JSON
+
+	// FetchValKeyOrIdx is used for path access, if obj is an object, it tries to
+	// access the given field. If it's an array, it interprets the key as an int
+	// and tries to access the given index.
+	FetchValKeyOrIdx(key string) JSON
+
+	// RemoveKey implements the `-` operator for strings.
+	RemoveKey(key string) (JSON, error)
+
+	// RemoveIndex implements the `-` operator for ints.
+	RemoveIndex(idx int) (JSON, error)
+
+	// AsText returns the JSON document as a string, with quotes around strings removed.
+	AsText() string
+
+	// Exists implements the `?` operator.
+	Exists(string) bool
 }
 
 type jsonTrue struct{}
@@ -378,4 +404,146 @@ func MakeJSON(d interface{}) (JSON, error) {
 		return jsonNumber(dec), nil
 	}
 	return nil, pgerror.NewError("invalid value %s passed to MakeJSON", d.(fmt.Stringer).String())
+}
+
+func (j jsonObject) FetchValKey(key string) JSON {
+	for i := range j {
+		if string(j[i].k) == key {
+			return j[i].v
+		}
+		if string(j[i].k) > key {
+			break
+		}
+	}
+	return nil
+}
+
+func (jsonNull) FetchValKey(string) JSON   { return nil }
+func (jsonTrue) FetchValKey(string) JSON   { return nil }
+func (jsonFalse) FetchValKey(string) JSON  { return nil }
+func (jsonString) FetchValKey(string) JSON { return nil }
+func (jsonNumber) FetchValKey(string) JSON { return nil }
+func (jsonArray) FetchValKey(string) JSON  { return nil }
+
+func (j jsonArray) FetchValIdx(idx int) JSON {
+	if idx < 0 {
+		idx = len(j) + idx
+	}
+	if idx >= 0 && idx < len(j) {
+		return j[idx]
+	}
+	return nil
+}
+
+func (jsonNull) FetchValIdx(int) JSON   { return nil }
+func (jsonTrue) FetchValIdx(int) JSON   { return nil }
+func (jsonFalse) FetchValIdx(int) JSON  { return nil }
+func (jsonString) FetchValIdx(int) JSON { return nil }
+func (jsonNumber) FetchValIdx(int) JSON { return nil }
+func (jsonObject) FetchValIdx(int) JSON { return nil }
+
+// FetchPath implements the #> operator.
+func FetchPath(j JSON, path []string) JSON {
+	var next JSON
+	for _, v := range path {
+		next = j.FetchValKeyOrIdx(v)
+		if next == nil {
+			return nil
+		}
+		j = next
+	}
+	return j
+}
+
+func (j jsonObject) FetchValKeyOrIdx(key string) JSON {
+	return j.FetchValKey(key)
+}
+
+func (j jsonArray) FetchValKeyOrIdx(key string) JSON {
+	idx, err := strconv.Atoi(key)
+	if err != nil {
+		return nil
+	}
+	return j.FetchValIdx(idx)
+}
+
+func (jsonNull) FetchValKeyOrIdx(string) JSON   { return nil }
+func (jsonTrue) FetchValKeyOrIdx(string) JSON   { return nil }
+func (jsonFalse) FetchValKeyOrIdx(string) JSON  { return nil }
+func (jsonString) FetchValKeyOrIdx(string) JSON { return nil }
+func (jsonNumber) FetchValKeyOrIdx(string) JSON { return nil }
+
+var errCannotDeleteFromScalar = pgerror.NewError(pgerror.CodeInvalidParameterValueError, "cannot delete from scalar")
+var errCannotDeleteFromObject = pgerror.NewError(pgerror.CodeInvalidParameterValueError, "cannot delete from object using integer index")
+
+func (j jsonArray) RemoveKey(key string) (JSON, error) {
+	return j, nil
+}
+
+func (j jsonObject) RemoveKey(key string) (JSON, error) {
+	newVal := make([]jsonKeyValuePair, 0, len(j))
+	for i := range j {
+		if string(j[i].k) != key {
+			newVal = append(newVal, j[i])
+		}
+	}
+	return jsonObject(newVal), nil
+}
+
+func (jsonNull) RemoveKey(string) (JSON, error)   { return nil, errCannotDeleteFromScalar }
+func (jsonTrue) RemoveKey(string) (JSON, error)   { return nil, errCannotDeleteFromScalar }
+func (jsonFalse) RemoveKey(string) (JSON, error)  { return nil, errCannotDeleteFromScalar }
+func (jsonString) RemoveKey(string) (JSON, error) { return nil, errCannotDeleteFromScalar }
+func (jsonNumber) RemoveKey(string) (JSON, error) { return nil, errCannotDeleteFromScalar }
+
+func (j jsonArray) RemoveIndex(idx int) (JSON, error) {
+	if idx < 0 {
+		idx = len(j) + idx
+	}
+	if idx < 0 || idx >= len(j) {
+		return j, nil
+	}
+	result := make(jsonArray, len(j)-1)
+	for i := 0; i < idx; i++ {
+		result[i] = j[i]
+	}
+	for i := idx + 1; i < len(j); i++ {
+		result[i-1] = j[i]
+	}
+	return result, nil
+}
+
+func (j jsonObject) RemoveIndex(int) (JSON, error) {
+	return nil, errCannotDeleteFromObject
+}
+
+func (jsonNull) RemoveIndex(int) (JSON, error)   { return nil, errCannotDeleteFromScalar }
+func (jsonTrue) RemoveIndex(int) (JSON, error)   { return nil, errCannotDeleteFromScalar }
+func (jsonFalse) RemoveIndex(int) (JSON, error)  { return nil, errCannotDeleteFromScalar }
+func (jsonString) RemoveIndex(int) (JSON, error) { return nil, errCannotDeleteFromScalar }
+func (jsonNumber) RemoveIndex(int) (JSON, error) { return nil, errCannotDeleteFromScalar }
+
+func (j jsonString) AsText() string { return string(j) }
+func (j jsonNull) AsText() string   { return j.String() }
+func (j jsonTrue) AsText() string   { return j.String() }
+func (j jsonFalse) AsText() string  { return j.String() }
+func (j jsonNumber) AsText() string { return j.String() }
+func (j jsonArray) AsText() string  { return j.String() }
+func (j jsonObject) AsText() string { return j.String() }
+
+func (jsonNull) Exists(string) bool   { return false }
+func (jsonTrue) Exists(string) bool   { return false }
+func (jsonFalse) Exists(string) bool  { return false }
+func (jsonNumber) Exists(string) bool { return false }
+func (jsonString) Exists(string) bool { return false }
+func (j jsonArray) Exists(s string) bool {
+	for i := 0; i < len(j); i++ {
+		if elem, ok := j[i].(jsonString); ok && string(elem) == s {
+			return true
+		}
+	}
+	return false
+}
+func (j jsonObject) Exists(s string) bool {
+	return j.FetchValKey(s) != nil
 }

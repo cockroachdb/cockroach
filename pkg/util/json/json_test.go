@@ -16,6 +16,7 @@ package json
 
 import (
 	"encoding/json"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -162,7 +163,7 @@ func TestJSONErrors(t *testing.T) {
 		t.Run(tc.input, func(t *testing.T) {
 			j, err := ParseJSON(tc.input)
 			if err == nil {
-				t.Fatalf("expected parsing '%v' to error with '%s', but no error occurred and parsed as %s", tc.input, tc.msg, j.String())
+				t.Fatalf("expected parsing '%v' to error with '%s', but no error occurred and parsed as %s", tc.input, tc.msg, j)
 			}
 			if !strings.Contains(err.Error(), tc.msg) {
 				t.Fatalf("expected error message to be '%s', but was '%s'", tc.msg, err.Error())
@@ -232,5 +233,287 @@ func TestMakeJSON(t *testing.T) {
 				t.Fatalf("expected %v to equal %v", result, expectedResult)
 			}
 		})
+	}
+}
+
+func jsonTestShorthand(s string) JSON {
+	j, _ := ParseJSON(s)
+	return j
+}
+
+func TestJSONFetch(t *testing.T) {
+	// Shorthand for tests.
+	json := jsonTestShorthand
+	cases := map[string][]struct {
+		key      string
+		expected JSON
+	}{
+		`{}`: {
+			{``, nil},
+			{`foo`, nil},
+		},
+		`{"foo": 1, "bar": "baz"}`: {
+			{``, nil},
+			{`foo`, json(`1`)},
+			{`bar`, json(`"baz"`)},
+			{`baz`, nil},
+		},
+		`["a"]`: {{``, nil}, {`0`, nil}, {`a`, nil}},
+		`"a"`:   {{``, nil}, {`0`, nil}, {`a`, nil}},
+		`1`:     {{``, nil}, {`0`, nil}, {`a`, nil}},
+		`true`:  {{``, nil}, {`0`, nil}, {`a`, nil}},
+	}
+
+	for k, tests := range cases {
+		left, err := ParseJSON(k)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		for _, tc := range tests {
+			t.Run(k+`->`+tc.key, func(t *testing.T) {
+				result := left.FetchValKey(tc.key)
+				if result == nil || tc.expected == nil {
+					if result == tc.expected {
+						return
+					}
+					t.Fatalf("expected %s, got %s", tc.expected, result)
+				}
+				if result.Compare(tc.expected) != 0 {
+					t.Fatalf("expected %s, got %s", tc.expected, result)
+				}
+			})
+		}
+	}
+}
+
+func TestJSONFetchIdx(t *testing.T) {
+	json := jsonTestShorthand
+	cases := map[string][]struct {
+		idx      int
+		expected JSON
+	}{
+		`{}`: {{1, nil}, {2, nil}},
+		`{"foo": 1, "1": "baz"}`: {{0, nil}, {1, nil}, {2, nil}},
+		`[]`: {{-1, nil}, {0, nil}, {1, nil}},
+		`["a", "b", "c"]`: {
+			// Negative indices count from the back.
+			{-4, nil},
+			{-3, json(`"a"`)},
+			{-2, json(`"b"`)},
+			{-1, json(`"c"`)},
+			{0, json(`"a"`)},
+			{1, json(`"b"`)},
+			{2, json(`"c"`)},
+			{3, nil},
+		},
+	}
+
+	for k, tests := range cases {
+		left, err := ParseJSON(k)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		for _, tc := range tests {
+			t.Run(fmt.Sprintf("%s->%d", k, tc.idx), func(t *testing.T) {
+				result := left.FetchValIdx(tc.idx)
+				if result == nil || tc.expected == nil {
+					if result == tc.expected {
+						return
+					}
+					t.Fatalf("expected %s, got %s", tc.expected, result)
+				}
+				if result.Compare(tc.expected) != 0 {
+					t.Fatalf("expected %s, got %s", tc.expected, result)
+				}
+			})
+		}
+	}
+}
+
+func TestJSONFetchPath(t *testing.T) {
+	json := jsonTestShorthand
+	cases := map[string][]struct {
+		path     []string
+		expected JSON
+	}{
+		`{}`: {
+			{[]string{`a`}, nil},
+		},
+		`{"foo": "bar"}`: {
+			{[]string{`foo`}, json(`"bar"`)},
+			{[]string{`goo`}, nil},
+		},
+		`{"foo": {"bar": "baz"}}`: {
+			{[]string{`foo`}, json(`{"bar": "baz"}`)},
+			{[]string{`foo`, `bar`}, json(`"baz"`)},
+			{[]string{`foo`, `baz`}, nil},
+		},
+		`{"foo": [1, 2, {"bar": "baz"}]}`: {
+			{[]string{`foo`}, json(`[1, 2, {"bar": "baz"}]`)},
+			{[]string{`foo`, `0`}, json(`1`)},
+			{[]string{`foo`, `1`}, json(`2`)},
+			{[]string{`foo`, `2`}, json(`{"bar": "baz"}`)},
+			{[]string{`foo`, `2`, "bar"}, json(`"baz"`)},
+			{[]string{`foo`, `-1`, "bar"}, json(`"baz"`)},
+			{[]string{`foo`, `3`}, nil},
+			{[]string{`foo`, `3`, "bar"}, nil},
+		},
+		`[1, 2, [1, 2, [1, 2]]]`: {
+			{[]string{`"foo"`}, nil},
+			{[]string{`0`}, json(`1`)},
+			{[]string{`1`}, json(`2`)},
+			{[]string{`0`, `0`}, nil},
+			{[]string{`2`}, json(`[1, 2, [1, 2]]`)},
+			{[]string{`2`, `0`}, json(`1`)},
+			{[]string{`2`, `1`}, json(`2`)},
+			{[]string{`2`, `2`}, json(`[1, 2]`)},
+			{[]string{`2`, `2`, `0`}, json(`1`)},
+			{[]string{`2`, `2`, `1`}, json(`2`)},
+			{[]string{`-1`, `-1`, `-1`}, json(`2`)},
+		},
+	}
+
+	for k, tests := range cases {
+		left, err := ParseJSON(k)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		for _, tc := range tests {
+			t.Run(fmt.Sprintf("%s#>%v", k, tc.path), func(t *testing.T) {
+				result := FetchPath(left, tc.path)
+				if result == nil || tc.expected == nil {
+					if result == tc.expected {
+						return
+					}
+					t.Fatalf("expected %s, got %s", tc.expected, result)
+				}
+				if result.Compare(tc.expected) != 0 {
+					t.Fatalf("expected %s, got %s", tc.expected, result)
+				}
+			})
+		}
+	}
+}
+
+func TestJSONRemoveKey(t *testing.T) {
+	json := jsonTestShorthand
+	cases := map[string][]struct {
+		key      string
+		expected JSON
+		errMsg   string
+	}{
+		`{}`: {
+			{key: ``, expected: json(`{}`)},
+			{key: `foo`, expected: json(`{}`)},
+		},
+		`{"foo": 1, "bar": "baz"}`: {
+			{key: ``, expected: json(`{"foo": 1, "bar": "baz"}`)},
+			{key: `foo`, expected: json(`{"bar": "baz"}`)},
+			{key: `bar`, expected: json(`{"foo": 1}`)},
+			{key: `baz`, expected: json(`{"foo": 1, "bar": "baz"}`)},
+		},
+		// Deleting a string key from an array never has any effect.
+		`["a", "b", "c"]`: {
+			{key: ``, expected: json(`["a", "b", "c"]`)},
+			{key: `foo`, expected: json(`["a", "b", "c"]`)},
+			{key: `0`, expected: json(`["a", "b", "c"]`)},
+			{key: `1`, expected: json(`["a", "b", "c"]`)},
+			{key: `-1`, expected: json(`["a", "b", "c"]`)},
+		},
+		`5`:     {{key: `a`, errMsg: "cannot delete from scalar"}},
+		`"b"`:   {{key: `a`, errMsg: "cannot delete from scalar"}},
+		`true`:  {{key: `a`, errMsg: "cannot delete from scalar"}},
+		`false`: {{key: `a`, errMsg: "cannot delete from scalar"}},
+		`null`:  {{key: `a`, errMsg: "cannot delete from scalar"}},
+	}
+
+	for k, tests := range cases {
+		left, err := ParseJSON(k)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		for _, tc := range tests {
+			t.Run(k+`-`+tc.key, func(t *testing.T) {
+				result, err := left.RemoveKey(tc.key)
+				if tc.errMsg != "" {
+					if err == nil {
+						t.Fatal("expected error")
+					} else if !strings.Contains(err.Error(), tc.errMsg) {
+						t.Fatalf(`expected error message "%s" to contain "%s"`, err.Error(), tc.errMsg)
+					}
+					return
+				}
+				if err != nil {
+					t.Fatal(err)
+				}
+				if result.Compare(tc.expected) != 0 {
+					t.Fatalf("expected %s, got %s", tc.expected, result)
+				}
+			})
+		}
+	}
+}
+
+func TestJSONRemoveIndex(t *testing.T) {
+	json := jsonTestShorthand
+	cases := map[string][]struct {
+		idx      int
+		expected JSON
+		errMsg   string
+	}{
+		`{"foo": 1, "bar": "baz"}`: {
+			{idx: 0, errMsg: "cannot delete from object using integer"},
+		},
+		`["a", "b", "c"]`: {
+			{idx: -4, expected: json(`["a", "b", "c"]`)},
+			{idx: -3, expected: json(`["b", "c"]`)},
+			{idx: -2, expected: json(`["a", "c"]`)},
+			{idx: -1, expected: json(`["a", "b"]`)},
+			{idx: 0, expected: json(`["b", "c"]`)},
+			{idx: 1, expected: json(`["a", "c"]`)},
+			{idx: 2, expected: json(`["a", "b"]`)},
+			{idx: 3, expected: json(`["a", "b", "c"]`)},
+		},
+		`[]`: {
+			{idx: -1, expected: json(`[]`)},
+			{idx: 0, expected: json(`[]`)},
+			{idx: 1, expected: json(`[]`)},
+		},
+		`5`:     {{idx: 0, errMsg: "cannot delete from scalar"}},
+		`"b"`:   {{idx: 0, errMsg: "cannot delete from scalar"}},
+		`true`:  {{idx: 0, errMsg: "cannot delete from scalar"}},
+		`false`: {{idx: 0, errMsg: "cannot delete from scalar"}},
+		`null`:  {{idx: 0, errMsg: "cannot delete from scalar"}},
+	}
+
+	for k, tests := range cases {
+		left, err := ParseJSON(k)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		for _, tc := range tests {
+			t.Run(fmt.Sprintf("%s-%d", k, tc.idx), func(t *testing.T) {
+				result, err := left.RemoveIndex(tc.idx)
+				if tc.errMsg != "" {
+					if err == nil {
+						t.Fatal("expected error")
+					} else if !strings.Contains(err.Error(), tc.errMsg) {
+						t.Fatalf(`expected error message "%s" to contain "%s"`, err.Error(), tc.errMsg)
+					}
+					return
+				}
+				if err != nil {
+					t.Fatal(err)
+				}
+				if result.Compare(tc.expected) != 0 {
+					t.Fatalf("expected %s, got %s", tc.expected, result)
+				}
+			})
+		}
 	}
 }
