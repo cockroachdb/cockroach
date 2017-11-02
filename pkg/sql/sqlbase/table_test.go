@@ -18,6 +18,7 @@ import (
 	"bytes"
 	"reflect"
 	"testing"
+	"time"
 
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
@@ -29,6 +30,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeofday"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
 type indexKeyTest struct {
@@ -417,6 +420,26 @@ func TestMarshalColumnValue(t *testing.T) {
 				}
 				return
 			}(),
+		},
+		{
+			kind:  ColumnType_DATE,
+			datum: parser.NewDDate(314159),
+			exp:   func() (v roachpb.Value) { v.SetInt(314159); return }(),
+		},
+		{
+			kind:  ColumnType_TIME,
+			datum: parser.MakeDTime(timeofday.TimeOfDay(314159)),
+			exp:   func() (v roachpb.Value) { v.SetInt(314159); return }(),
+		},
+		{
+			kind:  ColumnType_TIMESTAMP,
+			datum: parser.MakeDTimestamp(timeutil.Unix(314159, 1000), time.Microsecond),
+			exp:   func() (v roachpb.Value) { v.SetTime(timeutil.Unix(314159, 1000)); return }(),
+		},
+		{
+			kind:  ColumnType_TIMESTAMPTZ,
+			datum: parser.MakeDTimestampTZ(timeutil.Unix(314159, 1000), time.Microsecond),
+			exp:   func() (v roachpb.Value) { v.SetTime(timeutil.Unix(314159, 1000)); return }(),
 		},
 		{
 			kind:  ColumnType_STRING,

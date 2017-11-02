@@ -36,6 +36,7 @@ const notUsableInfo = "Not usable; exposed only for compatibility with PostgreSQ
 var typeBuiltinsHaveUnderscore = map[oid.Oid]struct{}{
 	types.Any.Oid():         {},
 	types.Date.Oid():        {},
+	types.Time.Oid():        {},
 	types.Decimal.Oid():     {},
 	types.Interval.Oid():    {},
 	types.JSON.Oid():        {},

@@ -51,6 +51,7 @@ func TestParseColumnType(t *testing.T) {
 		{"UUID", &UUIDColType{}},
 		{"INET", &IPAddrColType{Name: "INET"}},
 		{"DATE", &DateColType{}},
+		{"TIME", &TimeColType{}},
 		{"TIMESTAMP", &TimestampColType{}},
 		{"TIMESTAMP WITH TIME ZONE", &TimestampTZColType{}},
 		{"INTERVAL", &IntervalColType{}},

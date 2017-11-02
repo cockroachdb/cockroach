@@ -520,6 +520,9 @@ func (expr *DBytes) Walk(_ Visitor) Expr { return expr }
 func (expr *DDate) Walk(_ Visitor) Expr { return expr }
 
 // Walk implements the Expr interface.
+func (expr *DTime) Walk(_ Visitor) Expr { return expr }
+
+// Walk implements the Expr interface.
 func (expr *DFloat) Walk(_ Visitor) Expr { return expr }
 
 // Walk implements the Expr interface.
