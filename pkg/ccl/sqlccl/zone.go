@@ -18,7 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
-	"github.com/pkg/errors"
 )
 
 // GenerateSubzoneSpans constructs from a TableDescriptor the entries mapping
@@ -100,17 +99,6 @@ func GenerateSubzoneSpans(
 		// precedence perspective) it's safe to append them all together.
 		partitionCoverings = append(partitionCoverings, indexPartitionCoverings...)
 
-		// TODO(dan): A bunch of this logic is easier if we disallow setting
-		// zone configs on indexes that are interleaved into another index.
-		// InterleavedBy is fine, so using the root of the interleave hierarchy
-		// will work. It is expected that this is sufficient for real-world use
-		// cases. Revisit this restriction if that expectation is wrong.
-		indexUsed := indexSubzoneExists || len(indexPartitionCoverings) > 0
-		if indexUsed && len(idxDesc.Interleave.Ancestors) > 0 {
-			return errors.Errorf("cannot set a zone config for interleaved index %s; "+
-				"set it on the root of the interleaved hierarchy instead", idxDesc.Name)
-		}
-
 		return nil
 	}); err != nil {
 		return nil, err
@@ -123,7 +111,7 @@ func GenerateSubzoneSpans(
 	ranges := intervalccl.OverlapCoveringMerge(append(partitionCoverings, indexCovering))
 
 	// NB: This assumes that none of the indexes are interleaved, which is
-	// checked above.
+	// checked in PartitionDescriptor validation.
 	sharedPrefix := keys.MakeTablePrefix(uint32(tableDesc.ID))
 
 	var subzoneSpans []config.SubzoneSpan
