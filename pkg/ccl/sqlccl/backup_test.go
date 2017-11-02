@@ -291,7 +291,7 @@ func backupAndRestore(
 			t.Fatalf("expected %d rows for %d accounts, got %d", expected, numAccounts, exported.rows)
 		}
 		if _, err := sqlDB.DB.Exec(`BACKUP DATABASE data TO $1`, dest); !testutils.IsError(err,
-			"already appears to exist",
+			"already contains a BACKUP file",
 		) {
 			t.Fatalf("expected to refuse to overwrite, got %v", err)
 		}
@@ -687,6 +687,7 @@ func TestBackupRestoreResume(t *testing.T) {
 		}
 		backupCompletedSpan := roachpb.Span{Key: backupStartKey, EndKey: backupEndKey}
 		backupDesc, err := protoutil.Marshal(&sqlccl.BackupDescriptor{
+			ClusterID: tc.Servers[0].ClusterID(),
 			Files: []sqlccl.BackupDescriptor_File{
 				{Path: "garbage-checkpoint", Span: backupCompletedSpan},
 			},
@@ -817,10 +818,12 @@ func TestBackupRestoreControlJob(t *testing.T) {
 	}
 
 	const numAccounts = 1000
-	_, dir, _, sqlDB, cleanup := backupRestoreTestSetupWithParams(t, multiNode, numAccounts, initNone, params)
+	_, dir, _, outerDB, cleanup := backupRestoreTestSetupWithParams(t, multiNode, numAccounts, initNone, params)
 	defer cleanup()
 
-	run := func(op, query string, args ...interface{}) (int64, error) {
+	run := func(t *testing.T, op, query string, args ...interface{}) (int64, error) {
+		sqlDB := sqlutils.MakeSQLRunner(t, outerDB.DB)
+
 		allowResponse = make(chan struct{})
 		errCh := make(chan error)
 		go func() {
@@ -836,6 +839,7 @@ func TestBackupRestoreControlJob(t *testing.T) {
 	}
 
 	t.Run("pause", func(t *testing.T) {
+		sqlDB := sqlutils.MakeSQLRunner(t, outerDB.DB)
 		pauseDir := filepath.Join(dir, "pause")
 		sqlDB.Exec(`CREATE DATABASE pause`)
 
@@ -843,7 +847,7 @@ func TestBackupRestoreControlJob(t *testing.T) {
 			`BACKUP DATABASE data TO $1`,
 			`RESTORE data.* FROM $1 WITH OPTIONS ('into_db'='pause')`,
 		} {
-			jobID, err := run("PAUSE", query, pauseDir)
+			jobID, err := run(t, "PAUSE", query, pauseDir)
 			if !testutils.IsError(err, "job paused") {
 				t.Fatalf("%d: expected 'job paused' error, but got %+v", i, err)
 			}
@@ -860,6 +864,7 @@ func TestBackupRestoreControlJob(t *testing.T) {
 	})
 
 	t.Run("cancel", func(t *testing.T) {
+		sqlDB := sqlutils.MakeSQLRunner(t, outerDB.DB)
 		cancelDir := filepath.Join(dir, "cancel")
 		sqlDB.Exec(`CREATE DATABASE cancel`)
 
@@ -867,7 +872,7 @@ func TestBackupRestoreControlJob(t *testing.T) {
 			`BACKUP DATABASE data TO $1`,
 			`RESTORE data.* FROM $1 WITH OPTIONS ('into_db'='cancel')`,
 		} {
-			if _, err := run("cancel", query, cancelDir); !testutils.IsError(err, "job canceled") {
+			if _, err := run(t, "cancel", query, cancelDir); !testutils.IsError(err, "job canceled") {
 				t.Fatalf("%d: expected 'job canceled' error, but got %+v", i, err)
 			}
 			// Check that executing the same backup or restore succeeds. This won't
