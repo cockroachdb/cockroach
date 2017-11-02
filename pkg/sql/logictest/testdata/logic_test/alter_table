@@ -663,3 +663,23 @@ query I
 SELECT COUNT(*) FROM crdb_internal.jobs WHERE status = 'pending' OR status = 'started'
 ----
 0
+
+# Can add and drop column in same transaction
+statement ok
+BEGIN; CREATE TABLE add_drop_column (id INT); ALTER TABLE add_drop_column ADD COLUMN column_to_drop INT; ALTER TABLE add_drop_column DROP COLUMN column_to_drop; COMMIT;
+
+query TTBTT colnames
+SHOW COLUMNS FROM add_drop_column
+----
+Field Type Null  Default Indices
+id    INT  true  NULL    {}
+
+# Can add and drop index in same transaction
+statement ok
+BEGIN; CREATE TABLE add_drop_index (id INT, val STRING); CREATE INDEX ON add_drop_index (val); DROP INDEX add_drop_index@add_drop_index_val_idx;  COMMIT;
+
+query TTBITTBB colnames
+SHOW INDEXES FROM add_drop_index
+----
+Table           Name     Unique  Seq  Column  Direction  Storing  Implicit
+add_drop_index  primary  true    1    rowid   ASC        false    false
