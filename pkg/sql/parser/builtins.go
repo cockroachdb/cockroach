@@ -265,22 +265,6 @@ var digitNames = []string{"zero", "one", "two", "three", "four", "five", "six", 
 
 // Builtins contains the built-in functions indexed by name.
 var Builtins = map[string][]Builtin{
-	"nextval": {
-		Builtin{
-			Types:      ArgTypes{{"sequence_name", TypeString}},
-			ReturnType: fixedReturnType(TypeInt),
-			impure:     true,
-			fn: func(evalCtx *EvalContext, args Datums) (Datum, error) {
-				seqName := MustBeDString(args[0])
-				res, err := evalCtx.Planner.IncrementSequence(evalCtx.Ctx(), string(seqName))
-				if err != nil {
-					return nil, err
-				}
-				return NewDInt(DInt(res)), nil
-			},
-		},
-	},
-
 	// TODO(XisiHuang): support encoding, i.e., length(str, encoding).
 	"length": {
 		stringBuiltin1(func(_ *EvalContext, s string) (Datum, error) {
@@ -1150,6 +1134,24 @@ CockroachDB supports the following flags:
 				"Primary Key isn't defined for the table. The value is a combination of the " +
 				" insert timestamp and the ID of the node executing the statement, which " +
 				" guarantees this combination is globally unique.",
+		},
+	},
+
+	"nextval": {
+		Builtin{
+			Types:      ArgTypes{{"sequence_name", TypeString}},
+			ReturnType: fixedReturnType(TypeInt),
+			category:   categoryIDGeneration,
+			impure:     true,
+			fn: func(evalCtx *EvalContext, args Datums) (Datum, error) {
+				seqName := MustBeDString(args[0])
+				res, err := evalCtx.Planner.IncrementSequence(evalCtx.Ctx(), string(seqName))
+				if err != nil {
+					return nil, err
+				}
+				return NewDInt(DInt(res)), nil
+			},
+			Info: "Advances the given sequence and returns its new value.",
 		},
 	},
 
