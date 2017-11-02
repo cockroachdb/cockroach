@@ -258,6 +258,9 @@ func (p *planner) QueryRow(
 func (p *planner) queryRows(
 	ctx context.Context, sql string, args ...interface{},
 ) ([]parser.Datums, error) {
+	oldPlaceholders := p.semaCtx.Placeholders
+	defer func() { p.semaCtx.Placeholders = oldPlaceholders }()
+
 	plan, err := p.makeInternalPlan(ctx, sql, args...)
 	if err != nil {
 		return nil, err
@@ -286,6 +289,8 @@ func (p *planner) queryRows(
 // exec executes a SQL query string and returns the number of rows
 // affected.
 func (p *planner) exec(ctx context.Context, sql string, args ...interface{}) (int, error) {
+	oldPlaceholders := p.semaCtx.Placeholders
+	defer func() { p.semaCtx.Placeholders = oldPlaceholders }()
 	plan, err := p.makeInternalPlan(ctx, sql, args...)
 	if err != nil {
 		return 0, err
