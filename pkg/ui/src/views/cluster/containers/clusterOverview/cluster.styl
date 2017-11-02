@@ -14,12 +14,13 @@
     background-color white
     padding-top $page-padding-top
     padding-bottom $page-padding-top
+    padding-left 20px
     color gray
     display grid
     align-items end
-    grid-template-columns 6 fr repeat(8, 1fr)
+    grid-template-columns 0.8fr 3fr 1fr 1fr 1fr 1fr 0.5fr 1fr 1.2fr 1fr 0.5fr
     grid-template-rows repeat(3, auto)
-    grid-template-areas "cap-t live-t live-t live-t . rep-t rep-t rep-t ." "cap-m live-a live-b live-c . rep-a rep-b rep-c ." "cap-a live-1 live-2 live-3 . rep-1 rep-2 rep-3 ."
+    grid-template-areas "cap-t cap-t . live-t live-t live-t . rep-t rep-t rep-t ." "cap-m cap-c . live-a live-b live-c . rep-a rep-b rep-c ." "cap-a cap-a . live-1 live-2 live-3 . rep-1 rep-2 rep-3 ."
 
     .cluster-summary__section
       display contents
@@ -27,6 +28,9 @@
       &.capacity-usage
         .cluster-summary__title
             grid-area cap-t
+
+        .cluster-summary__chart
+            grid-area cap-c
 
         .cluster-summary__metric
             grid-area cap-m
@@ -80,13 +84,10 @@
 
     .cluster-summary__title
       font-weight 400
+      margin-bottom 20px
 
     .cluster-summary__metric
-      .label
-        font-size 11px
-        line-height 14px
-        text-transform uppercase
-        padding-top 7px
+      align-self start
 
       .value
         font-size 30px
@@ -99,11 +100,11 @@
         &.alert
           color $alert-color
 
-    .cluster-summary__chart
-      .value
-        font-size 30px
-        line-height 48px
-        margin-right 14px
+    .cluster-summary__label
+      .label
+        font-size 11px
+        line-height 14px
+        text-transform uppercase
 
     .cluster-summary__aside
       .label
@@ -116,7 +117,13 @@
       .label, .value
         font-size 11px
 
-  .capacity-usage .cluster-summary__metric
+  .capacity-usage .cluster-summary__chart
+    align-self start
+    position relative
+
+    svg
+      position absolute
+
     .axis path
       fill none
       stroke none

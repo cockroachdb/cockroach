@@ -9,7 +9,7 @@ const size = {
 };
 
 const margin = {
-  top: 10,
+  top: 12,
   right: 35,
   bottom: 25,
   left: 15,

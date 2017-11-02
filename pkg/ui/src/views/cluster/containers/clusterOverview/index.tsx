@@ -36,6 +36,8 @@ class CapacityUsage extends React.Component<CapacityUsageProps, {}> {
         <h3 className="cluster-summary__title">Capacity Usage</h3>
         <div className="cluster-summary__metric">
           <span className="value">{ formatPercentage(usedPercentage) }</span>
+        </div>
+        <div className="cluster-summary__chart">
           <CapacityChart used={usedCapacity} usable={usableCapacity} />
         </div>
         <div className="cluster-summary__aside">
