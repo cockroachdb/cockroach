@@ -21,7 +21,6 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
-	"strconv"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -60,6 +59,7 @@ const (
 	multiNode                   = 3
 	backupRestoreDefaultRanges  = 10
 	backupRestoreRowPayloadSize = 100
+	localFoo                    = "nodelocal:///foo"
 )
 
 func backupRestoreTestSetupWithParams(
@@ -70,9 +70,9 @@ func backupRestoreTestSetupWithParams(
 	params base.TestClusterArgs,
 ) (
 	ctx context.Context,
-	tempDir string,
 	tc *testcluster.TestCluster,
 	sqlDB *sqlutils.SQLRunner,
+	tempDir string,
 	cleanup func(),
 ) {
 	ctx = context.Background()
@@ -125,16 +125,16 @@ func backupRestoreTestSetupWithParams(
 		}
 	}
 
-	return ctx, "nodelocal://" + dir, tc, sqlDB, cleanupFn
+	return ctx, tc, sqlDB, dir, cleanupFn
 }
 
 func backupRestoreTestSetup(
 	t testing.TB, clusterSize int, numAccounts int, init func(*cluster.Settings),
 ) (
 	ctx context.Context,
-	tempDir string,
 	tc *testcluster.TestCluster,
 	sqlDB *sqlutils.SQLRunner,
+	tempDir string,
 	cleanup func(),
 ) {
 	return backupRestoreTestSetupWithParams(t, clusterSize, numAccounts, init, base.TestClusterArgs{})
@@ -196,11 +196,11 @@ func TestBackupRestoreStatementResult(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	const numAccounts = 1
-	_, dir, _, sqlDB, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, initNone)
+	_, _, sqlDB, _, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, initNone)
 	defer cleanupFn()
 
 	if err := verifyBackupRestoreStatementResult(
-		sqlDB, "BACKUP DATABASE data TO $1", dir,
+		sqlDB, "BACKUP DATABASE data TO $1", localFoo,
 	); err != nil {
 		t.Fatal(err)
 	}
@@ -208,7 +208,7 @@ func TestBackupRestoreStatementResult(t *testing.T) {
 	sqlDB.Exec("CREATE DATABASE data2")
 
 	if err := verifyBackupRestoreStatementResult(
-		sqlDB, "RESTORE data.* FROM $1 WITH OPTIONS ('into_db'='data2')", dir,
+		sqlDB, "RESTORE data.* FROM $1 WITH OPTIONS ('into_db'='data2')", localFoo,
 	); err != nil {
 		t.Fatal(err)
 	}
@@ -218,20 +218,20 @@ func TestBackupRestoreLocal(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	const numAccounts = 1000
-	ctx, dir, tc, _, cleanupFn := backupRestoreTestSetup(t, multiNode, numAccounts, initNone)
+	ctx, tc, _, _, cleanupFn := backupRestoreTestSetup(t, multiNode, numAccounts, initNone)
 	defer cleanupFn()
 
-	backupAndRestore(ctx, t, tc, dir, numAccounts)
+	backupAndRestore(ctx, t, tc, localFoo, numAccounts)
 }
 
 func TestBackupRestoreEmpty(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	const numAccounts = 0
-	ctx, dir, tc, _, cleanupFn := backupRestoreTestSetup(t, multiNode, numAccounts, initNone)
+	ctx, tc, _, _, cleanupFn := backupRestoreTestSetup(t, multiNode, numAccounts, initNone)
 	defer cleanupFn()
 
-	backupAndRestore(ctx, t, tc, dir, numAccounts)
+	backupAndRestore(ctx, t, tc, localFoo, numAccounts)
 }
 
 // Regression test for #16008. In short, the way RESTORE constructed split keys
@@ -241,7 +241,7 @@ func TestBackupRestoreNegativePrimaryKey(t *testing.T) {
 
 	const numAccounts = 1000
 
-	ctx, dir, tc, sqlDB, cleanupFn := backupRestoreTestSetup(t, multiNode, numAccounts, initNone)
+	ctx, tc, sqlDB, _, cleanupFn := backupRestoreTestSetup(t, multiNode, numAccounts, initNone)
 	defer cleanupFn()
 
 	// Give half the accounts negative primary keys.
@@ -253,7 +253,7 @@ func TestBackupRestoreNegativePrimaryKey(t *testing.T) {
 		-numAccounts/2, numAccounts/backupRestoreDefaultRanges/2,
 	)
 
-	backupAndRestore(ctx, t, tc, dir, numAccounts)
+	backupAndRestore(ctx, t, tc, localFoo, numAccounts)
 }
 
 func backupAndRestore(
@@ -363,13 +363,13 @@ func TestBackupRestoreSystemJobs(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	const numAccounts = 0
-	_, dir, _, sqlDB, cleanupFn := backupRestoreTestSetup(t, multiNode, numAccounts, initNone)
+	_, _, sqlDB, _, cleanupFn := backupRestoreTestSetup(t, multiNode, numAccounts, initNone)
 	defer cleanupFn()
 
-	sanitizedIncDir := dir + "/inc"
+	sanitizedIncDir := localFoo + "/inc"
 	incDir := sanitizedIncDir + "?secretCredentialsHere"
 
-	sanitizedFullDir := dir + "/full"
+	sanitizedFullDir := localFoo + "/full"
 	fullDir := sanitizedFullDir + "?moarSecretsHere"
 
 	backupDatabaseID, err := sqlutils.QueryDatabaseID(sqlDB.DB, "data")
@@ -439,7 +439,7 @@ type inProgressChecker func(context context.Context, ip inProgressState) error
 type inProgressState struct {
 	*gosql.DB
 	backupTableID uint32
-	backupDir     string
+	dir, name     string
 }
 
 func (ip inProgressState) latestJobID() (int64, error) {
@@ -478,7 +478,7 @@ func checkInProgressBackupRestore(
 	const numAccounts = 1000
 	const totalExpectedResponses = backupRestoreDefaultRanges
 
-	ctx, dir, _, sqlDB, cleanup := backupRestoreTestSetupWithParams(t, multiNode, numAccounts, initNone, params)
+	ctx, _, sqlDB, dir, cleanup := backupRestoreTestSetupWithParams(t, multiNode, numAccounts, initNone, params)
 	defer cleanup()
 
 	sqlDB.Exec(`CREATE DATABASE restoredb`)
@@ -493,7 +493,7 @@ func checkInProgressBackupRestore(
 		allowResponse = make(chan struct{}, totalExpectedResponses)
 
 		go func() {
-			_, err := sqlDB.DB.Exec(query, dir)
+			_, err := sqlDB.DB.Exec(query, localFoo)
 			jobDone <- err
 		}()
 
@@ -506,7 +506,8 @@ func checkInProgressBackupRestore(
 			return check(ctx, inProgressState{
 				DB:            sqlDB.DB,
 				backupTableID: backupTableID,
-				backupDir:     strings.TrimPrefix(dir, "nodelocal:"),
+				dir:           dir,
+				name:          "foo",
 			})
 		})
 
@@ -515,11 +516,11 @@ func checkInProgressBackupRestore(
 		// forever.
 		close(allowResponse)
 
-		if err != nil {
-			t.Fatal(err)
+		if err := <-jobDone; err != nil {
+			t.Fatalf("%q: %+v", query, err)
 		}
 
-		if err := <-jobDone; err != nil {
+		if err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -566,7 +567,7 @@ func TestBackupRestoreCheckpointing(t *testing.T) {
 	var checkpointPath string
 
 	checkBackup := func(ctx context.Context, ip inProgressState) error {
-		checkpointPath = filepath.Join(ip.backupDir, sqlccl.BackupDescriptorCheckpointName)
+		checkpointPath = filepath.Join(ip.dir, ip.name, sqlccl.BackupDescriptorCheckpointName)
 		checkpointDescBytes, err := ioutil.ReadFile(checkpointPath)
 		if err != nil {
 			return errors.Errorf("%+v", err)
@@ -676,12 +677,13 @@ func TestBackupRestoreResume(t *testing.T) {
 	ctx := context.Background()
 
 	const numAccounts = 1000
-	_, dir, tc, sqlDB, cleanupFn := backupRestoreTestSetup(t, multiNode, numAccounts, initNone)
+	_, tc, outerDB, dir, cleanupFn := backupRestoreTestSetup(t, multiNode, numAccounts, initNone)
 	defer cleanupFn()
 
 	backupTableDesc := sqlbase.GetTableDescriptor(tc.Servers[0].DB(), "data", "bank")
 
 	t.Run("backup", func(t *testing.T) {
+		sqlDB := sqlutils.MakeSQLRunner(t, outerDB.DB)
 		backupStartKey := backupTableDesc.PrimaryIndexSpan().Key
 		backupEndKey, err := sqlbase.MakePrimaryIndexKey(backupTableDesc, numAccounts/2)
 		if err != nil {
@@ -698,25 +700,23 @@ func TestBackupRestoreResume(t *testing.T) {
 			t.Fatal(err)
 		}
 		backupDir := filepath.Join(dir, "backup")
-		// TODO(benesch): avoid duplicating this TrimPrefix in several tests.
-		backupDirRaw := strings.TrimPrefix(backupDir, "nodelocal:")
-		if err := os.MkdirAll(backupDirRaw, 0755); err != nil {
+		if err := os.MkdirAll(backupDir, 0755); err != nil {
 			t.Fatal(err)
 		}
-		checkpointFile := filepath.Join(backupDirRaw, sqlccl.BackupDescriptorCheckpointName)
+		checkpointFile := filepath.Join(backupDir, sqlccl.BackupDescriptorCheckpointName)
 		if err := ioutil.WriteFile(checkpointFile, backupDesc, 0644); err != nil {
 			t.Fatal(err)
 		}
 		if err := createAndWaitForJob(sqlDB.DB, []sqlbase.ID{backupTableDesc.ID}, jobs.BackupDetails{
 			EndTime: tc.Servers[0].Clock().Now(),
-			URI:     backupDir,
+			URI:     "nodelocal:///backup",
 		}); err != nil {
 			t.Fatal(err)
 		}
 
 		// If the backup properly took the (incorrect) checkpoint into account, it
 		// won't have tried to re-export any keys within backupCompletedSpan.
-		backupDescriptorFile := filepath.Join(backupDirRaw, sqlccl.BackupDescriptorName)
+		backupDescriptorFile := filepath.Join(backupDir, sqlccl.BackupDescriptorName)
 		backupDescriptorBytes, err := ioutil.ReadFile(backupDescriptorFile)
 		if err != nil {
 			t.Fatal(err)
@@ -733,7 +733,8 @@ func TestBackupRestoreResume(t *testing.T) {
 	})
 
 	t.Run("restore", func(t *testing.T) {
-		restoreDir := filepath.Join(dir, "restore")
+		sqlDB := sqlutils.MakeSQLRunner(t, outerDB.DB)
+		restoreDir := "nodelocal:///restore"
 		sqlDB.Exec(`BACKUP DATABASE DATA TO $1`, restoreDir)
 		sqlDB.Exec(`CREATE DATABASE restoredb`)
 		restoreDatabaseID, err := sqlutils.QueryDatabaseID(sqlDB.DB, "restoredb")
@@ -820,7 +821,7 @@ func TestBackupRestoreControlJob(t *testing.T) {
 	}
 
 	const numAccounts = 1000
-	_, dir, _, outerDB, cleanup := backupRestoreTestSetupWithParams(t, multiNode, numAccounts, initNone, params)
+	_, _, outerDB, _, cleanup := backupRestoreTestSetupWithParams(t, multiNode, numAccounts, initNone, params)
 	defer cleanup()
 
 	run := func(t *testing.T, op, query string, args ...interface{}) (int64, error) {
@@ -842,7 +843,7 @@ func TestBackupRestoreControlJob(t *testing.T) {
 
 	t.Run("pause", func(t *testing.T) {
 		sqlDB := sqlutils.MakeSQLRunner(t, outerDB.DB)
-		pauseDir := filepath.Join(dir, "pause")
+		pauseDir := "nodelocal:///pause"
 		sqlDB.Exec(`CREATE DATABASE pause`)
 
 		for i, query := range []string{
@@ -867,7 +868,7 @@ func TestBackupRestoreControlJob(t *testing.T) {
 
 	t.Run("cancel", func(t *testing.T) {
 		sqlDB := sqlutils.MakeSQLRunner(t, outerDB.DB)
-		cancelDir := filepath.Join(dir, "cancel")
+		cancelDir := "nodelocal:///cancel"
 		sqlDB.Exec(`CREATE DATABASE cancel`)
 
 		for i, query := range []string{
@@ -904,17 +905,13 @@ func TestRestoreFailCleanup(t *testing.T) {
 	}
 
 	const numAccounts = 1000
-	_, nodelocalDir, _, sqlDB, cleanup := backupRestoreTestSetupWithParams(t, multiNode, numAccounts, initNone, base.TestClusterArgs{ServerArgs: params})
+	_, _, sqlDB, dir, cleanup := backupRestoreTestSetupWithParams(t, multiNode, numAccounts, initNone, base.TestClusterArgs{ServerArgs: params})
 	defer cleanup()
 
-	url, err := url.Parse(nodelocalDir)
-	if err != nil {
-		t.Fatal(err)
-	}
-	dir := url.Path
+	dir = filepath.Join(dir, "foo")
 
 	sqlDB.Exec(`CREATE DATABASE restore`)
-	sqlDB.Exec(`BACKUP DATABASE data TO $1`, nodelocalDir)
+	sqlDB.Exec(`BACKUP DATABASE data TO $1`, localFoo)
 	// Bugger the backup by removing the SST files.
 	if err := filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
@@ -927,8 +924,9 @@ func TestRestoreFailCleanup(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	_, err = sqlDB.DB.Exec(`RESTORE data.* FROM $1 WITH OPTIONS ('into_db'='restore')`, nodelocalDir)
-	if !testutils.IsError(err, "sst: no such file") {
+	if _, err := sqlDB.DB.Exec(`RESTORE data.* FROM $1 WITH OPTIONS ('into_db'='restore')`, localFoo); !testutils.IsError(
+		err, "sst: no such file",
+	) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	// Verify the failed RESTORE added some DROP tables.
@@ -942,9 +940,9 @@ func TestBackupRestoreInterleaved(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	const numAccounts = 10
 
-	_, dir, tc, sqlDB, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, initNone)
+	_, _, sqlDB, dir, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, initNone)
 	defer cleanupFn()
-	args := base.TestServerArgs{ExternalIODir: tc.Servers[0].ClusterSettings().ExternalIODir}
+	args := base.TestServerArgs{ExternalIODir: dir}
 
 	// TODO(dan): The INTERLEAVE IN PARENT clause currently doesn't allow the
 	// `db.table` syntax. Fix that and use it here instead of `SET DATABASE`.
@@ -970,7 +968,7 @@ func TestBackupRestoreInterleaved(t *testing.T) {
 	_ = sqlDB.Exec(`ALTER TABLE i1 SPLIT AT SELECT * from i0 LIMIT $1`, numAccounts)
 	var unused string
 	var exportedRows int
-	sqlDB.QueryRow(`BACKUP DATABASE data TO $1`, dir).Scan(
+	sqlDB.QueryRow(`BACKUP DATABASE data TO $1`, localFoo).Scan(
 		&unused, &unused, &unused, &exportedRows, &unused, &unused, &unused,
 	)
 	if exportedRows != totalRows {
@@ -986,7 +984,7 @@ func TestBackupRestoreInterleaved(t *testing.T) {
 		sqlDBRestore.Exec(`CREATE DATABASE data`)
 
 		var importedRows int
-		sqlDBRestore.QueryRow(`RESTORE data.* FROM $1`, dir).Scan(
+		sqlDBRestore.QueryRow(`RESTORE data.* FROM $1`, localFoo).Scan(
 			&unused, &unused, &unused, &importedRows, &unused, &unused, &unused,
 		)
 
@@ -1020,7 +1018,7 @@ func TestBackupRestoreInterleaved(t *testing.T) {
 		sqlDBRestore := sqlutils.MakeSQLRunner(t, tcRestore.Conns[0])
 		sqlDBRestore.Exec(`CREATE DATABASE data`)
 
-		_, err := sqlDBRestore.DB.Exec(`RESTORE TABLE data.i0 FROM $1`, dir)
+		_, err := sqlDBRestore.DB.Exec(`RESTORE TABLE data.i0 FROM $1`, localFoo)
 		if !testutils.IsError(err, "without interleave parent") {
 			t.Fatalf("expected 'without interleave parent' error but got: %+v", err)
 		}
@@ -1032,7 +1030,7 @@ func TestBackupRestoreInterleaved(t *testing.T) {
 		sqlDBRestore := sqlutils.MakeSQLRunner(t, tcRestore.Conns[0])
 		sqlDBRestore.Exec(`CREATE DATABASE data`)
 
-		_, err := sqlDBRestore.DB.Exec(`RESTORE TABLE data.bank FROM $1`, dir)
+		_, err := sqlDBRestore.DB.Exec(`RESTORE TABLE data.bank FROM $1`, localFoo)
 		if !testutils.IsError(err, "without interleave child") {
 			t.Fatalf("expected 'without interleave child' error but got: %+v", err)
 		}
@@ -1046,9 +1044,9 @@ func TestBackupRestoreCrossTableReferences(t *testing.T) {
 	const createStore = "CREATE DATABASE store"
 	const createStoreStats = "CREATE DATABASE storestats"
 
-	_, dir, tc, origDB, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, initNone)
+	_, _, origDB, dir, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, initNone)
 	defer cleanupFn()
-	args := base.TestServerArgs{ExternalIODir: tc.Servers[0].ClusterSettings().ExternalIODir}
+	args := base.TestServerArgs{ExternalIODir: dir}
 
 	// Generate some testdata and back it up.
 	{
@@ -1107,7 +1105,7 @@ func TestBackupRestoreCrossTableReferences(t *testing.T) {
 				}
 			}
 		}
-		_ = origDB.Exec(`BACKUP DATABASE store, storestats TO $1`, dir)
+		_ = origDB.Exec(`BACKUP DATABASE store, storestats TO $1`, localFoo)
 	}
 
 	origCustomers := origDB.QueryStr(`SHOW CONSTRAINTS FROM store.customers`)
@@ -1123,7 +1121,7 @@ func TestBackupRestoreCrossTableReferences(t *testing.T) {
 		db := sqlutils.MakeSQLRunner(t, tc.Conns[0])
 
 		db.Exec(createStore)
-		db.Exec(`RESTORE store.* FROM $1`, dir)
+		db.Exec(`RESTORE store.* FROM $1`, localFoo)
 		// Restore's Validate checks all the tables point to each other correctly.
 
 		db.CheckQueryResults(`SHOW CONSTRAINTS FROM store.customers`, origCustomers)
@@ -1165,7 +1163,7 @@ func TestBackupRestoreCrossTableReferences(t *testing.T) {
 		defer tc.Stopper().Stop(context.TODO())
 		db := sqlutils.MakeSQLRunner(t, tc.Conns[0])
 		db.Exec(createStore)
-		db.Exec(`RESTORE store.customers, store.orders FROM $1`, dir)
+		db.Exec(`RESTORE store.customers, store.orders FROM $1`, localFoo)
 		// Restore's Validate checks all the tables point to each other correctly.
 
 		// FK validation on customers from orders is preserved.
@@ -1187,14 +1185,14 @@ func TestBackupRestoreCrossTableReferences(t *testing.T) {
 
 		// FK validation of self-FK is preserved.
 		if _, err := db.DB.Exec(
-			`RESTORE store.orders FROM $1`, dir,
+			`RESTORE store.orders FROM $1`, localFoo,
 		); !testutils.IsError(
 			err, "cannot restore table \"orders\" without referenced table .* \\(or \"skip_missing_foreign_keys\" option\\)",
 		) {
 			t.Fatal(err)
 		}
 
-		db.Exec(`RESTORE store.orders FROM $1 WITH OPTIONS ('skip_missing_foreign_keys')`, dir)
+		db.Exec(`RESTORE store.orders FROM $1 WITH OPTIONS ('skip_missing_foreign_keys')`, localFoo)
 		// Restore's Validate checks all the tables point to each other correctly.
 
 		// FK validation is gone.
@@ -1207,7 +1205,7 @@ func TestBackupRestoreCrossTableReferences(t *testing.T) {
 		defer tc.Stopper().Stop(context.TODO())
 		db := sqlutils.MakeSQLRunner(t, tc.Conns[0])
 		db.Exec(createStore)
-		db.Exec(`RESTORE store.receipts FROM $1 WITH OPTIONS ('skip_missing_foreign_keys')`, dir)
+		db.Exec(`RESTORE store.receipts FROM $1 WITH OPTIONS ('skip_missing_foreign_keys')`, localFoo)
 		// Restore's Validate checks all the tables point to each other correctly.
 
 		// FK validation of orders and customer is gone.
@@ -1226,7 +1224,7 @@ func TestBackupRestoreCrossTableReferences(t *testing.T) {
 		defer tc.Stopper().Stop(context.TODO())
 		db := sqlutils.MakeSQLRunner(t, tc.Conns[0])
 		db.Exec(createStore)
-		db.Exec(`RESTORE store.receipts, store.customers FROM $1 WITH OPTIONS ('skip_missing_foreign_keys')`, dir)
+		db.Exec(`RESTORE store.receipts, store.customers FROM $1 WITH OPTIONS ('skip_missing_foreign_keys')`, localFoo)
 		// Restore's Validate checks all the tables point to each other correctly.
 
 		// FK validation of orders is gone.
@@ -1259,12 +1257,12 @@ func TestBackupRestoreCrossTableReferences(t *testing.T) {
 		defer tc.Stopper().Stop(context.TODO())
 		db := sqlutils.MakeSQLRunner(t, tc.Conns[0])
 		db.Exec(createStore)
-		if _, err := db.DB.Exec(`RESTORE store.early_customers FROM $1`, dir); !testutils.IsError(err,
+		if _, err := db.DB.Exec(`RESTORE store.early_customers FROM $1`, localFoo); !testutils.IsError(err,
 			`cannot restore "early_customers" without restoring referenced table`,
 		) {
 			t.Fatal(err)
 		}
-		db.Exec(`RESTORE store.early_customers, store.customers, store.orders FROM $1`, dir)
+		db.Exec(`RESTORE store.early_customers, store.customers, store.orders FROM $1`, localFoo)
 		db.CheckQueryResults(`SELECT * FROM store.early_customers`, origEarlyCustomers)
 
 		// nothing depends on orders so it can be dropped.
@@ -1295,12 +1293,12 @@ func TestBackupRestoreCrossTableReferences(t *testing.T) {
 		db.Exec(createStoreStats)
 
 		if _, err := db.DB.Exec(
-			`RESTORE storestats.ordercounts, store.customers FROM $1`, dir,
+			`RESTORE storestats.ordercounts, store.customers FROM $1`, localFoo,
 		); !testutils.IsError(err, `cannot restore "ordercounts" without restoring referenced table`) {
 			t.Fatal(err)
 		}
 
-		db.Exec(`RESTORE store.customers, storestats.ordercounts, store.orders FROM $1`, dir)
+		db.Exec(`RESTORE store.customers, storestats.ordercounts, store.orders FROM $1`, localFoo)
 
 		// we want to observe just the view-related errors, not fk errors below.
 		db.Exec(`ALTER TABLE store.orders DROP CONSTRAINT fk_customerid_ref_customers`)
@@ -1354,9 +1352,9 @@ func TestBackupRestoreIncremental(t *testing.T) {
 	const numBackups = 4
 	windowSize := int(numAccounts / 3)
 
-	_, dir, tc, sqlDB, cleanupFn := backupRestoreTestSetup(t, singleNode, 0, initNone)
+	_, _, sqlDB, dir, cleanupFn := backupRestoreTestSetup(t, singleNode, 0, initNone)
 	defer cleanupFn()
-	args := base.TestServerArgs{ExternalIODir: tc.Servers[0].ClusterSettings().ExternalIODir}
+	args := base.TestServerArgs{ExternalIODir: dir}
 	rng, _ := randutil.NewPseudoRand()
 
 	var backupDirs []string
@@ -1383,7 +1381,7 @@ func TestBackupRestoreIncremental(t *testing.T) {
 
 			checksums = append(checksums, checksumBankPayload(t, sqlDB))
 
-			backupDir := filepath.Join(dir, strconv.Itoa(backupNum))
+			backupDir := fmt.Sprintf("nodelocal:///%d", backupNum)
 			var from string
 			if backupNum > 0 {
 				from = fmt.Sprintf(` INCREMENTAL FROM %s`, strings.Join(backupDirs, `,`))
@@ -1398,11 +1396,10 @@ func TestBackupRestoreIncremental(t *testing.T) {
 		// the greatest key in the diff is less than the previous backups.
 		sqlDB.Exec(`INSERT INTO data.bank VALUES (0, -1, 'final')`)
 		checksums = append(checksums, checksumBankPayload(t, sqlDB))
-		finalBackupDir := filepath.Join(dir, "final layer")
 		sqlDB.Exec(fmt.Sprintf(`BACKUP TABLE data.bank TO '%s' %s`,
-			finalBackupDir, fmt.Sprintf(` INCREMENTAL FROM %s`, strings.Join(backupDirs, `,`)),
+			"nodelocal:///final", fmt.Sprintf(` INCREMENTAL FROM %s`, strings.Join(backupDirs, `,`)),
 		))
-		backupDirs = append(backupDirs, fmt.Sprintf(`'%s'`, finalBackupDir))
+		backupDirs = append(backupDirs, `'nodelocal:///final'`)
 	}
 
 	// Start a new cluster to restore into.
@@ -1481,7 +1478,7 @@ func TestBackupRestoreWithConcurrentWrites(t *testing.T) {
 	const rows = 10
 	const numBackgroundTasks = multiNode
 
-	_, baseDir, tc, sqlDB, cleanupFn := backupRestoreTestSetup(t, multiNode, rows, initNone)
+	_, tc, sqlDB, _, cleanupFn := backupRestoreTestSetup(t, multiNode, rows, initNone)
 	defer cleanupFn()
 
 	bgActivity := make(chan struct{})
@@ -1514,12 +1511,12 @@ func TestBackupRestoreWithConcurrentWrites(t *testing.T) {
 	<-bgActivity
 
 	// Backup DB while concurrent writes continue.
-	sqlDB.Exec(`BACKUP DATABASE data TO $1`, baseDir)
+	sqlDB.Exec(`BACKUP DATABASE data TO $1`, localFoo)
 
 	// Drop the table and restore from backup and check our invariant.
 	atomic.StoreInt32(&allowErrors, 1)
 	sqlDB.Exec(`DROP TABLE data.bank`)
-	sqlDB.Exec(`RESTORE data.* FROM $1`, baseDir)
+	sqlDB.Exec(`RESTORE data.* FROM $1`, localFoo)
 	atomic.StoreInt32(&allowErrors, 0)
 
 	bad := sqlDB.QueryStr(`SELECT id, balance, payload FROM data.bank WHERE id != balance`)
@@ -1533,7 +1530,7 @@ func TestConcurrentBackupRestores(t *testing.T) {
 
 	const numAccounts = 10
 	const concurrency, numIterations = 2, 3
-	ctx, dir, _, sqlDB, cleanupFn := backupRestoreTestSetup(t, multiNode, numAccounts, initNone)
+	ctx, _, sqlDB, _, cleanupFn := backupRestoreTestSetup(t, multiNode, numAccounts, initNone)
 	defer cleanupFn()
 
 	g, gCtx := errgroup.WithContext(ctx)
@@ -1546,7 +1543,7 @@ func TestConcurrentBackupRestores(t *testing.T) {
 		g.Go(func() error {
 			for j := 0; j < numIterations; j++ {
 				dbName := fmt.Sprintf("%s_%d", table, j)
-				backupDir := filepath.Join(dir, dbName)
+				backupDir := fmt.Sprintf("nodelocal:///%s", dbName)
 				backupQ := fmt.Sprintf(`BACKUP data.%s TO $1`, table)
 				if _, err := sqlDB.DB.ExecContext(gCtx, backupQ, backupDir); err != nil {
 					return err
@@ -1580,7 +1577,7 @@ func TestBackupAsOfSystemTime(t *testing.T) {
 
 	const numAccounts = 1000
 
-	_, dir, _, sqlDB, cleanupFn := backupRestoreTestSetup(t, multiNode, numAccounts, initNone)
+	_, _, sqlDB, _, cleanupFn := backupRestoreTestSetup(t, multiNode, numAccounts, initNone)
 	defer cleanupFn()
 
 	var beforeTs, equalTs string
@@ -1597,9 +1594,9 @@ func TestBackupAsOfSystemTime(t *testing.T) {
 		t.Fatalf("expected %d rows but found %d", expected, rowCount)
 	}
 
-	beforeDir := filepath.Join(dir, `beforeTs`)
+	beforeDir := filepath.Join(localFoo, `beforeTs`)
 	sqlDB.Exec(fmt.Sprintf(`BACKUP DATABASE data TO '%s' AS OF SYSTEM TIME %s`, beforeDir, beforeTs))
-	equalDir := filepath.Join(dir, `equalTs`)
+	equalDir := filepath.Join(localFoo, `equalTs`)
 	sqlDB.Exec(fmt.Sprintf(`BACKUP DATABASE data TO '%s' AS OF SYSTEM TIME %s`, equalDir, equalTs))
 
 	sqlDB.Exec(`DROP TABLE data.bank`)
@@ -1621,8 +1618,9 @@ func TestRestoreAsOfSystemTime(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	const numAccounts = 10
-	_, dir, _, sqlDB, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, initNone)
+	_, _, sqlDB, _, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, initNone)
 	defer cleanupFn()
+	const dir = "nodelocal:///"
 
 	ts := make([]string, 7)
 
@@ -1703,35 +1701,29 @@ func TestRestoreAsOfSystemTime(t *testing.T) {
 func TestAsOfSystemTimeOnRestoredData(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	_, dir, _, sqlDB, cleanupFn := backupRestoreTestSetup(t, multiNode, 0, initNone)
+	_, _, sqlDB, dir, cleanupFn := backupRestoreTestSetup(t, multiNode, 0, initNone)
 	defer cleanupFn()
-	sqlDB.Exec(`DROP TABLE data.bank`)
 
-	// backupRestoreTestSetup sets nodelocal:// on dir, so strip it off.
-	url, err := url.Parse(dir)
-	if err != nil {
-		t.Fatal(err)
-	}
-	dir = url.Path
+	sqlDB.Exec(`DROP TABLE data.bank`)
 
 	const numAccounts = 10
 	bankData := sampledataccl.BankRows(numAccounts)
-	backup, err := sampledataccl.ToBackup(t, bankData, filepath.Join(dir, "backup"))
-	if err != nil {
+	if _, err := sampledataccl.ToBackup(t, bankData, filepath.Join(dir, "foo")); err != nil {
 		t.Fatalf("%+v", err)
 	}
 
 	var beforeTs string
 	sqlDB.QueryRow(`SELECT cluster_logical_timestamp()`).Scan(&beforeTs)
-	sqlDB.Exec(`RESTORE data.* FROM $1`, fmt.Sprintf("nodelocal://%s", backup.BaseDir))
+	sqlDB.Exec(`RESTORE data.* FROM $1`, localFoo)
 	var afterTs string
 	sqlDB.QueryRow(`SELECT cluster_logical_timestamp()`).Scan(&afterTs)
 
 	var rowCount int
 	const q = `SELECT COUNT(*) FROM data.bank AS OF SYSTEM TIME '%s'`
 	// Before the RESTORE, the table doesn't exist, so an AS OF query should fail.
-	err = sqlDB.DB.QueryRow(fmt.Sprintf(q, beforeTs)).Scan(&rowCount)
-	if !testutils.IsError(err, `relation "data.bank" does not exist`) {
+	if err := sqlDB.DB.QueryRow(fmt.Sprintf(q, beforeTs)).Scan(&rowCount); !testutils.IsError(
+		err, `relation "data.bank" does not exist`,
+	) {
 		t.Fatalf("expected 'foo' error got: %+v", err)
 	}
 	// After the RESTORE, an AS OF query should work.
@@ -1745,17 +1737,15 @@ func TestBackupRestoreChecksum(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	const numAccounts = 1000
-	_, dir, _, sqlDB, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, initNone)
+	_, _, sqlDB, dir, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, initNone)
 	defer cleanupFn()
+	dir = filepath.Join(dir, "foo")
 
-	// The helper helpfully prefixes it, but we're going to do direct file IO.
-	rawDir := strings.TrimPrefix(dir, "nodelocal://")
-
-	sqlDB.Exec(`BACKUP DATABASE data TO $1`, dir)
+	sqlDB.Exec(`BACKUP DATABASE data TO $1`, localFoo)
 
 	var backupDesc sqlccl.BackupDescriptor
 	{
-		backupDescBytes, err := ioutil.ReadFile(filepath.Join(rawDir, sqlccl.BackupDescriptorName))
+		backupDescBytes, err := ioutil.ReadFile(filepath.Join(dir, sqlccl.BackupDescriptorName))
 		if err != nil {
 			t.Fatalf("%+v", err)
 		}
@@ -1765,7 +1755,7 @@ func TestBackupRestoreChecksum(t *testing.T) {
 	}
 
 	// Corrupt one of the files in the backup.
-	f, err := os.OpenFile(filepath.Join(rawDir, backupDesc.Files[1].Path), os.O_WRONLY, 0)
+	f, err := os.OpenFile(filepath.Join(dir, backupDesc.Files[1].Path), os.O_WRONLY, 0)
 	if err != nil {
 		t.Fatalf("%+v", err)
 	}
@@ -1783,7 +1773,7 @@ func TestBackupRestoreChecksum(t *testing.T) {
 	}
 
 	sqlDB.Exec(`DROP TABLE data.bank`)
-	_, err = sqlDB.DB.Exec(`RESTORE data.* FROM $1`, dir)
+	_, err = sqlDB.DB.Exec(`RESTORE data.* FROM $1`, localFoo)
 	if !testutils.IsError(err, "checksum mismatch") {
 		t.Fatalf("expected 'checksum mismatch' error got: %+v", err)
 	}
@@ -1793,15 +1783,16 @@ func TestTimestampMismatch(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	const numAccounts = 1
 
-	_, dir, _, sqlDB, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, initNone)
+	_, _, sqlDB, _, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, initNone)
 	defer cleanupFn()
+
 	sqlDB.Exec(`CREATE TABLE data.t2 (a INT PRIMARY KEY)`)
 	sqlDB.Exec(`INSERT INTO data.t2 VALUES (1)`)
 
-	fullBackup := filepath.Join(dir, "0")
-	incrementalT1FromFull := filepath.Join(dir, "1")
-	incrementalT2FromT1 := filepath.Join(dir, "2")
-	incrementalT3FromT1OneTable := filepath.Join(dir, "3")
+	fullBackup := filepath.Join(localFoo, "0")
+	incrementalT1FromFull := filepath.Join(localFoo, "1")
+	incrementalT2FromT1 := filepath.Join(localFoo, "2")
+	incrementalT3FromT1OneTable := filepath.Join(localFoo, "3")
 
 	sqlDB.Exec(`BACKUP DATABASE data TO $1`,
 		fullBackup)
@@ -1815,28 +1806,28 @@ func TestTimestampMismatch(t *testing.T) {
 	t.Run("Backup", func(t *testing.T) {
 		// Missing the initial full backup.
 		_, err := sqlDB.DB.Exec(`BACKUP DATABASE data TO $1 INCREMENTAL FROM $2`,
-			dir, incrementalT1FromFull)
+			localFoo, incrementalT1FromFull)
 		if !testutils.IsError(err, "no backup covers time") {
 			t.Errorf("expected 'no backup covers time' error got: %+v", err)
 		}
 
 		// Missing an intermediate incremental backup.
 		_, err = sqlDB.DB.Exec(`BACKUP DATABASE data TO $1 INCREMENTAL FROM $2, $3`,
-			dir, fullBackup, incrementalT2FromT1)
+			localFoo, fullBackup, incrementalT2FromT1)
 		if !testutils.IsError(err, "no backup covers time") {
 			t.Errorf("expected 'no backup covers time' error got: %+v", err)
 		}
 
 		// Backups specified out of order.
 		_, err = sqlDB.DB.Exec(`BACKUP DATABASE data TO $1 INCREMENTAL FROM $2, $3`,
-			dir, incrementalT1FromFull, fullBackup)
+			localFoo, incrementalT1FromFull, fullBackup)
 		if !testutils.IsError(err, "out of order") {
 			t.Errorf("expected 'out of order' error got: %+v", err)
 		}
 
 		// Missing data for one table in the most recent backup.
 		_, err = sqlDB.DB.Exec(`BACKUP DATABASE data TO $1 INCREMENTAL FROM $2, $3`,
-			dir, fullBackup, incrementalT3FromT1OneTable)
+			localFoo, fullBackup, incrementalT3FromT1OneTable)
 		if !testutils.IsError(err, "no backup covers time") {
 			t.Errorf("expected 'no backup covers time' error got: %+v", err)
 		}
@@ -1878,11 +1869,10 @@ func TestTimestampMismatch(t *testing.T) {
 func TestBackupLevelDB(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	_, dir, _, sqlDB, cleanupFn := backupRestoreTestSetup(t, singleNode, 0, initNone)
+	_, _, sqlDB, rawDir, cleanupFn := backupRestoreTestSetup(t, singleNode, 0, initNone)
 	defer cleanupFn()
 
-	_ = sqlDB.Exec(`BACKUP DATABASE data TO $1`, dir)
-	rawDir := strings.TrimPrefix(dir, "nodelocal://")
+	_ = sqlDB.Exec(`BACKUP DATABASE data TO $1`, localFoo)
 	// Verify that the sstables are in LevelDB format by checking the trailer
 	// magic.
 	var magic = []byte("\x57\xfb\x80\x8b\x24\x75\x47\xdb")
@@ -1911,9 +1901,9 @@ func TestRestoredPrivileges(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	const numAccounts = 1
-	_, dir, tc, sqlDB, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, initNone)
+	_, _, sqlDB, dir, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, initNone)
 	defer cleanupFn()
-	args := base.TestServerArgs{ExternalIODir: tc.Servers[0].ClusterSettings().ExternalIODir}
+	args := base.TestServerArgs{ExternalIODir: dir}
 
 	rootOnly := sqlDB.QueryStr(`SHOW GRANTS ON data.bank`)
 
@@ -1922,7 +1912,7 @@ func TestRestoredPrivileges(t *testing.T) {
 
 	withGrants := sqlDB.QueryStr(`SHOW GRANTS ON data.bank`)
 
-	sqlDB.Exec(`BACKUP DATABASE data TO $1`, dir)
+	sqlDB.Exec(`BACKUP DATABASE data TO $1`, localFoo)
 	sqlDB.Exec(`DROP TABLE data.bank`)
 
 	t.Run("into fresh db", func(t *testing.T) {
@@ -1930,7 +1920,7 @@ func TestRestoredPrivileges(t *testing.T) {
 		defer tc.Stopper().Stop(context.TODO())
 		sqlDBRestore := sqlutils.MakeSQLRunner(t, tc.Conns[0])
 		sqlDBRestore.Exec(`CREATE DATABASE data`)
-		sqlDBRestore.Exec(`RESTORE data.bank FROM $1`, dir)
+		sqlDBRestore.Exec(`RESTORE data.bank FROM $1`, localFoo)
 		sqlDBRestore.CheckQueryResults(`SHOW GRANTS ON data.bank`, rootOnly)
 	})
 
@@ -1941,7 +1931,7 @@ func TestRestoredPrivileges(t *testing.T) {
 		sqlDBRestore.Exec(`CREATE DATABASE data`)
 		sqlDBRestore.Exec(`CREATE USER someone`)
 		sqlDBRestore.Exec(`GRANT SELECT, INSERT, UPDATE, DELETE ON DATABASE data TO someone`)
-		sqlDBRestore.Exec(`RESTORE data.bank FROM $1`, dir)
+		sqlDBRestore.Exec(`RESTORE data.bank FROM $1`, localFoo)
 		sqlDBRestore.CheckQueryResults(`SHOW GRANTS ON data.bank`, withGrants)
 	})
 }
@@ -1950,12 +1940,12 @@ func TestRestoreInto(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	const numAccounts = 1
-	_, dir, _, sqlDB, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, initNone)
+	_, _, sqlDB, _, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, initNone)
 	defer cleanupFn()
 
-	sqlDB.Exec(`BACKUP DATABASE data TO $1`, dir)
+	sqlDB.Exec(`BACKUP DATABASE data TO $1`, localFoo)
 
-	restoreStmt := fmt.Sprintf(`RESTORE data.bank FROM '%s' WITH into_db = 'data 2'`, dir)
+	restoreStmt := fmt.Sprintf(`RESTORE data.bank FROM '%s' WITH into_db = 'data 2'`, localFoo)
 
 	_, err := sqlDB.DB.Exec(restoreStmt)
 	if !testutils.IsError(err, "a database named \"data 2\" needs to exist") {
@@ -1973,7 +1963,7 @@ func TestBackupRestorePermissions(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	const numAccounts = 1
-	_, dir, tc, sqlDB, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, initNone)
+	_, tc, sqlDB, _, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, initNone)
 	defer cleanupFn()
 
 	sqlDB.Exec(`CREATE USER testuser`)
@@ -1987,7 +1977,7 @@ func TestBackupRestorePermissions(t *testing.T) {
 	}
 	defer testuser.Close()
 
-	backupStmt := fmt.Sprintf(`BACKUP DATABASE data TO '%s'`, dir)
+	backupStmt := fmt.Sprintf(`BACKUP DATABASE data TO '%s'`, localFoo)
 
 	t.Run("root-only", func(t *testing.T) {
 		if _, err := testuser.Exec(backupStmt); !testutils.IsError(
@@ -2007,7 +1997,7 @@ func TestBackupRestorePermissions(t *testing.T) {
 		// Root doesn't have CREATE on `system` DB, so that should fail. Still need
 		// a valid `dir` though, since descriptors are always loaded first.
 		if _, err := sqlDB.DB.Exec(
-			`RESTORE data.bank FROM $1 WITH OPTIONS ('into_db'='system')`, dir,
+			`RESTORE data.bank FROM $1 WITH OPTIONS ('into_db'='system')`, localFoo,
 		); !testutils.IsError(err, "user root does not have CREATE privilege") {
 			t.Fatal(err)
 		}
@@ -2018,7 +2008,7 @@ func TestRestoreDatabaseVersusTable(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	const numAccounts = 1
-	_, dir, tc, origDB, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, initNone)
+	_, tc, origDB, _, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, initNone)
 	defer cleanupFn()
 	args := base.TestServerArgs{ExternalIODir: tc.Servers[0].ClusterSettings().ExternalIODir}
 
@@ -2032,13 +2022,13 @@ func TestRestoreDatabaseVersusTable(t *testing.T) {
 		origDB.Exec(q)
 	}
 
-	origDB.Exec(`BACKUP DATABASE data, d2, d3, d4 TO $1`, dir)
+	origDB.Exec(`BACKUP DATABASE data, d2, d3, d4 TO $1`, localFoo)
 
 	t.Run("db", func(t *testing.T) {
 		tcRestore := testcluster.StartTestCluster(t, multiNode, base.TestClusterArgs{ServerArgs: args})
 		defer tcRestore.Stopper().Stop(context.TODO())
 		sqlDB := sqlutils.MakeSQLRunner(t, tcRestore.Conns[0])
-		if _, err := sqlDB.DB.Exec(`RESTORE DATABASE data, d2, d3 FROM $1`, dir); err != nil {
+		if _, err := sqlDB.DB.Exec(`RESTORE DATABASE data, d2, d3 FROM $1`, localFoo); err != nil {
 			t.Fatal(err)
 		}
 	})
@@ -2052,7 +2042,7 @@ func TestRestoreDatabaseVersusTable(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		if _, err := sqlDB.DB.Exec(`RESTORE DATABASE data FROM $1`, dir); !testutils.IsError(
+		if _, err := sqlDB.DB.Exec(`RESTORE DATABASE data FROM $1`, localFoo); !testutils.IsError(
 			err, "already exists",
 		) {
 			t.Fatal(err)
@@ -2068,7 +2058,7 @@ func TestRestoreDatabaseVersusTable(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		if _, err := sqlDB.DB.Exec(`RESTORE data.* FROM $1`, dir); err != nil {
+		if _, err := sqlDB.DB.Exec(`RESTORE data.* FROM $1`, localFoo); err != nil {
 			t.Fatal(err)
 		}
 	})
@@ -2078,7 +2068,7 @@ func TestRestoreDatabaseVersusTable(t *testing.T) {
 		defer tcRestore.Stopper().Stop(context.TODO())
 		sqlDB := sqlutils.MakeSQLRunner(t, tcRestore.Conns[0])
 
-		if _, err := sqlDB.DB.Exec(`RESTORE data.*, d4.* FROM $1`, dir); !testutils.IsError(
+		if _, err := sqlDB.DB.Exec(`RESTORE data.*, d4.* FROM $1`, localFoo); !testutils.IsError(
 			err, "needs to exist",
 		) {
 			t.Fatal(err)
@@ -2090,7 +2080,7 @@ func TestRestoreDatabaseVersusTable(t *testing.T) {
 		defer tcRestore.Stopper().Stop(context.TODO())
 		sqlDB := sqlutils.MakeSQLRunner(t, tcRestore.Conns[0])
 
-		if _, err := sqlDB.DB.Exec(`RESTORE DATABASE data FROM $1 WITH into_db = 'other'`, dir); !testutils.IsError(
+		if _, err := sqlDB.DB.Exec(`RESTORE DATABASE data FROM $1 WITH into_db = 'other'`, localFoo); !testutils.IsError(
 			err, "cannot use \"into_db\"",
 		) {
 			t.Fatal(err)
@@ -2102,10 +2092,10 @@ func TestShowBackup(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	const numAccounts = 11
-	_, dir, _, sqlDB, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, initNone)
+	_, _, sqlDB, _, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, initNone)
 	defer cleanupFn()
 
-	full, inc := dir+"/full", dir+"/inc"
+	full, inc := localFoo+"/full", localFoo+"/inc"
 
 	beforeFull := timeutil.Now()
 	sqlDB.Exec(`BACKUP data.bank TO $1`, full)
@@ -2165,7 +2155,7 @@ func TestBackupAzureAccountName(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	const numAccounts = 1
-	_, _, _, sqlDB, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, initNone)
+	_, _, sqlDB, _, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, initNone)
 	defer cleanupFn()
 
 	values := url.Values{}
@@ -2193,15 +2183,15 @@ func TestPointInTimeRecovery(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	const numAccounts = 1000
-	_, dir, _, sqlDB, cleanupFn := backupRestoreTestSetup(t, multiNode, numAccounts, initNone)
+	_, _, sqlDB, _, cleanupFn := backupRestoreTestSetup(t, multiNode, numAccounts, initNone)
 	defer cleanupFn()
 
-	fullBackupDir := filepath.Join(dir, "full")
+	fullBackupDir := filepath.Join(localFoo, "full")
 	sqlDB.Exec(`BACKUP data.* TO $1`, fullBackupDir)
 
 	sqlDB.Exec(`UPDATE data.bank SET balance = 2`)
 
-	incBackupDir := filepath.Join(dir, "inc")
+	incBackupDir := filepath.Join(localFoo, "inc")
 	sqlDB.Exec(`BACKUP data.* TO $1 INCREMENTAL FROM $2`, incBackupDir, fullBackupDir)
 
 	var beforeBadThingTs string
@@ -2222,7 +2212,7 @@ func TestPointInTimeRecovery(t *testing.T) {
 	// RENAME-ing the table into the final location.
 	t.Run("recovery=new-backup", func(t *testing.T) {
 		sqlDB = sqlutils.MakeSQLRunner(t, sqlDB.DB)
-		recoveryDir := filepath.Join(dir, "new-backup")
+		recoveryDir := filepath.Join(localFoo, "new-backup")
 		sqlDB.Exec(
 			fmt.Sprintf(`BACKUP data.* TO $1 AS OF SYSTEM TIME '%s'`, beforeBadThingTs),
 			recoveryDir,
@@ -2244,7 +2234,7 @@ func TestPointInTimeRecovery(t *testing.T) {
 	// using that. Everything else works the same as above.
 	t.Run("recovery=inc-backup", func(t *testing.T) {
 		sqlDB = sqlutils.MakeSQLRunner(t, sqlDB.DB)
-		recoveryDir := filepath.Join(dir, "inc-backup")
+		recoveryDir := filepath.Join(localFoo, "inc-backup")
 		sqlDB.Exec(
 			fmt.Sprintf(`BACKUP data.* TO $1 AS OF SYSTEM TIME '%s' INCREMENTAL FROM $2, $3`, beforeBadThingTs),
 			recoveryDir, fullBackupDir, incBackupDir,
@@ -2269,7 +2259,7 @@ func TestBackupRestoreDropDB(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	const numAccounts = 1
-	_, dir, _, sqlDB, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, initNone)
+	_, _, sqlDB, _, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, initNone)
 	defer cleanupFn()
 
 	sqlDB.Exec(`DROP DATABASE data CASCADE`)
@@ -2279,9 +2269,9 @@ func TestBackupRestoreDropDB(t *testing.T) {
 		INSERT INTO data.bank VALUES (1);
 	`)
 
-	sqlDB.Exec("BACKUP DATABASE data TO $1", dir)
+	sqlDB.Exec("BACKUP DATABASE data TO $1", localFoo)
 	sqlDB.Exec("CREATE DATABASE data2")
-	sqlDB.Exec("RESTORE data.* FROM $1 WITH OPTIONS ('into_db'='data2')", dir)
+	sqlDB.Exec("RESTORE data.* FROM $1 WITH OPTIONS ('into_db'='data2')", localFoo)
 
 	expected := sqlDB.QueryStr(`SELECT * FROM data.bank`)
 	sqlDB.CheckQueryResults(`SELECT * FROM data2.bank`, expected)
@@ -2291,7 +2281,7 @@ func TestBackupRestoreDropTable(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	const numAccounts = 1
-	_, dir, _, sqlDB, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, initNone)
+	_, _, sqlDB, _, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, initNone)
 	defer cleanupFn()
 
 	sqlDB.Exec(`DROP TABLE data.bank`)
@@ -2300,9 +2290,9 @@ func TestBackupRestoreDropTable(t *testing.T) {
 		INSERT INTO data.bank VALUES (1);
 	`)
 
-	sqlDB.Exec("BACKUP DATABASE data TO $1", dir)
+	sqlDB.Exec("BACKUP DATABASE data TO $1", localFoo)
 	sqlDB.Exec("CREATE DATABASE data2")
-	sqlDB.Exec("RESTORE data.* FROM $1 WITH OPTIONS ('into_db'='data2')", dir)
+	sqlDB.Exec("RESTORE data.* FROM $1 WITH OPTIONS ('into_db'='data2')", localFoo)
 
 	expected := sqlDB.QueryStr(`SELECT * FROM data.bank`)
 	sqlDB.CheckQueryResults(`SELECT * FROM data2.bank`, expected)
@@ -2312,10 +2302,10 @@ func TestBackupRestoreIncrementalAddTable(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	const numAccounts = 1
-	_, dir, _, sqlDB, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, initNone)
+	_, _, sqlDB, _, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, initNone)
 	defer cleanupFn()
 	sqlDB.Exec(`CREATE TABLE data.t (s string PRIMARY KEY)`)
-	full, inc := filepath.Join(dir, "full"), filepath.Join(dir, "inc")
+	full, inc := filepath.Join(localFoo, "full"), filepath.Join(localFoo, "inc")
 
 	sqlDB.Exec(`INSERT INTO data.t VALUES ('before')`)
 	sqlDB.Exec(`BACKUP DATABASE data TO $1`, full)
@@ -2332,10 +2322,10 @@ func TestBackupRestoreIncrementalTrucateTable(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	const numAccounts = 1
-	_, dir, _, sqlDB, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, initNone)
+	_, _, sqlDB, _, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, initNone)
 	defer cleanupFn()
 	sqlDB.Exec(`CREATE TABLE data.t (s string PRIMARY KEY)`)
-	full, inc := filepath.Join(dir, "full"), filepath.Join(dir, "inc")
+	full, inc := filepath.Join(localFoo, "full"), filepath.Join(localFoo, "inc")
 
 	sqlDB.Exec(`INSERT INTO data.t VALUES ('before')`)
 	sqlDB.Exec(`BACKUP DATABASE data TO $1`, full)
@@ -2353,10 +2343,10 @@ func TestBackupRestoreIncrementalDropTable(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	const numAccounts = 1
-	_, dir, _, sqlDB, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, initNone)
+	_, _, sqlDB, _, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, initNone)
 	defer cleanupFn()
 	sqlDB.Exec(`CREATE TABLE data.t (s string PRIMARY KEY)`)
-	full, inc := filepath.Join(dir, "full"), filepath.Join(dir, "inc")
+	full, inc := filepath.Join(localFoo, "full"), filepath.Join(localFoo, "inc")
 
 	sqlDB.Exec(`INSERT INTO data.t VALUES ('before')`)
 	sqlDB.Exec(`BACKUP DATABASE data TO $1`, full)
@@ -2384,13 +2374,12 @@ func TestFileIOLimits(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	const numAccounts = 11
-	_, dir, _, sqlDB, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, initNone)
+	_, _, sqlDB, _, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, initNone)
 	defer cleanupFn()
 
-	allowed := dir + "/blah"
-	elsewhere := "nodelocal:///blah"
+	elsewhere := "nodelocal:///../../blah"
 
-	sqlDB.Exec(`BACKUP data.bank TO $1`, allowed)
+	sqlDB.Exec(`BACKUP data.bank TO $1`, localFoo)
 	if _, err := sqlDB.DB.Exec(`BACKUP data.bank TO $1`, elsewhere); !testutils.IsError(
 		err, "local file access to paths outside of external-io-dir is not allowed",
 	) {
@@ -2399,7 +2388,7 @@ func TestFileIOLimits(t *testing.T) {
 
 	sqlDB.Exec(`DROP TABLE data.bank`)
 
-	sqlDB.Exec(`RESTORE data.bank FROM $1`, allowed)
+	sqlDB.Exec(`RESTORE data.bank FROM $1`, localFoo)
 	if _, err := sqlDB.DB.Exec(`RESTORE data.bank FROM $1`, elsewhere); !testutils.IsError(
 		err, "local file access to paths outside of external-io-dir is not allowed",
 	) {
