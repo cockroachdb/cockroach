@@ -2997,6 +2997,7 @@ func (s *Store) processRaftRequestWithReplica(
 		log.Fatalf(ctx, "unexpected snapshot: %+v", req)
 	}
 
+	r.setLastUpdateTimeForReplica(req.FromReplica.ReplicaID)
 	if req.Quiesce {
 		if req.Message.Type != raftpb.MsgHeartbeat {
 			log.Fatalf(ctx, "unexpected quiesce: %+v", req)

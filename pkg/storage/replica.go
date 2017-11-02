@@ -85,6 +85,7 @@ const (
 	splitTxnName         = "split"
 	mergeTxnName         = "merge"
 
+	minUpdatesDuration                = 10 * time.Second
 	defaultReplicaRaftMuWarnThreshold = 500 * time.Millisecond
 )
 
@@ -376,6 +377,9 @@ type Replica struct {
 		lastReplicaAdded     roachpb.ReplicaID
 		lastReplicaAddedTime time.Time
 
+		// The most recently updated time for each follower of this range.
+		lastUpdateTimes map[uint64]time.Time
+
 		// The last seen replica descriptors from incoming Raft messages. These are
 		// stored so that the replica still knows the replica descriptors for itself
 		// and for its message recipients in the circumstances when its RangeDescriptor
@@ -659,6 +663,7 @@ func (r *Replica) initRaftMuLockedReplicaMuLocked(
 	r.cmdQMu.Unlock()
 
 	r.mu.proposals = map[storagebase.CmdIDKey]*ProposalData{}
+	r.mu.lastUpdateTimes = make(map[uint64]time.Time)
 	r.mu.checksums = map[uuid.UUID]replicaChecksum{}
 	// Clear the internal raft group in case we're being reset. Since we're
 	// reloading the raft state below, it isn't safe to use the existing raft
@@ -1035,17 +1040,10 @@ func (r *Replica) updateProposalQuotaRaftMuLocked(
 	minIndex := status.Commit
 
 	for _, rep := range r.mu.state.Desc.Replicas {
-		// Only consider followers that have "healthy" RPC connections. We
-		// don't use node liveness here as doing so could lead to deadlock
-		// unless we avoided enforcing proposal quota for node liveness ranges.
-		if r.store.cfg.Transport.resolver != nil {
-			addr, err := r.store.cfg.Transport.resolver(rep.NodeID)
-			if err != nil {
-				continue
-			}
-			if err := r.store.cfg.Transport.rpcContext.ConnHealth(addr.String()); err != nil {
-				continue
-			}
+		now := timeutil.Unix(0, r.store.Clock().PhysicalNow())
+		// Only consider followers that have made communication with leader in the last 10s.
+		if lastUpdateTime, ok := r.getLastUpdateTimeForReplicaLocked(rep.ReplicaID); !ok || now.Sub(lastUpdateTime) > minUpdatesDuration {
+			continue
 		}
 		if progress, ok := status.Progress[uint64(rep.ReplicaID)]; ok {
 			// Only consider followers who are in advance of the quota base
@@ -1671,6 +1669,17 @@ func (r *Replica) setQueueLastProcessed(
 ) error {
 	key := keys.QueueLastProcessedKey(r.Desc().StartKey, queue)
 	return r.store.DB().PutInline(ctx, key, &timestamp)
+}
+
+func (r *Replica) setLastUpdateTimeForReplica(replicaID roachpb.ReplicaID) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.mu.lastUpdateTimes[uint64(replicaID)] = r.store.Clock().PhysicalTime()
+}
+
+func (r *Replica) getLastUpdateTimeForReplicaLocked(replicaID roachpb.ReplicaID) (time.Time, bool) {
+	lastUpdateTime, ok := r.mu.lastUpdateTimes[uint64(replicaID)]
+	return lastUpdateTime, ok
 }
 
 // RaftStatus returns the current raft status of the replica. It returns nil
