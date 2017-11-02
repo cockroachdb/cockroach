@@ -56,48 +56,38 @@ function chart(el: d3.Selection<CapacityChartProps>) {
 
   recomputeScale(el);
 
-  const axisJoin = el.selectAll("g.axis")
+  const axisGroup = el.selectAll("g.axis")
     .data(() => [null]);
 
-  // const axisEnter =
-  axisJoin.enter()
+  axisGroup.enter()
     .append("g")
     .attr("class", "axis")
     .attr("transform", `translate(0,${size.height + AXIS_MARGIN})`);
 
-  // const axisGroup = axisEnter.merge(axisJoin);
-  const axisGroup = axisJoin;
-
   axisGroup.call(axis);
   axisGroup.selectAll("text").attr("y", AXIS_MARGIN + TICK_SIZE);
 
-  const bgJoin = el.selectAll(".bg")
+  const bg= el.selectAll(".bg")
     .data((d: CapacityChartProps) => [d]);
 
-  // const bgEnter =
-  bgJoin.enter()
+  bg.enter()
     .append("rect")
     .attr("class", "bg");
 
-//  const bg = bgEnter.merge(bgJoin);
-  bgJoin
-//  bg
+  bg
     .attr("width", size.width)
     .attr("height", size.height);
 
-  const barJoin = el.selectAll(".bar")
+  const bar = el.selectAll(".bar")
     .data((d: CapacityChartProps) => [d]);
 
-  // const barEnter =
-  barJoin.enter()
+  bar.enter()
     .append("rect")
     .attr("class", "bar")
     .attr("height", 10)
     .attr("y", 5);
 
-  // const bar = barEnter.merge(barJoin);
-  barJoin
-  // bar
+   bar
     .attr("width", (d: CapacityChartProps) => scale(d.used));
 
 }
