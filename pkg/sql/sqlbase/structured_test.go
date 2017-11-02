@@ -865,41 +865,31 @@ func TestValidatePartitioning(t *testing.T) {
 		err  string
 		desc TableDescriptor
 	}{
-		{"not enough columns in index for this partitioning",
-			TableDescriptor{
-				PrimaryIndex: IndexDescriptor{
-					Partitioning: PartitioningDescriptor{
-						NumColumns: 1,
-					},
-				},
-			},
-		},
-		{"not enough columns in index for this partitioning",
-			TableDescriptor{
-				Columns: []ColumnDescriptor{{ID: 1, Type: ColumnType{SemanticType: ColumnType_INT}}},
-				PrimaryIndex: IndexDescriptor{
-					ColumnIDs: []ColumnID{1},
-					Partitioning: PartitioningDescriptor{
-						NumColumns: 1,
-						List: []PartitioningDescriptor_List{
-							{
-								Name:   "p1",
-								Values: [][]byte{{0x03, 0x02}},
-								Subpartitioning: PartitioningDescriptor{
-									NumColumns: 1,
-								},
-							},
-						},
-					},
-				},
-			},
-		},
 		{"at least one of LIST or RANGE partitioning must be used",
 			TableDescriptor{
 				PrimaryIndex: IndexDescriptor{
-					ColumnIDs: []ColumnID{1},
 					Partitioning: PartitioningDescriptor{
 						NumColumns: 1,
+					},
+				},
+			},
+		},
+		{"PARTITION p1: must contain values",
+			TableDescriptor{
+				PrimaryIndex: IndexDescriptor{
+					Partitioning: PartitioningDescriptor{
+						NumColumns: 1,
+						List:       []PartitioningDescriptor_List{{Name: "p1"}},
+					},
+				},
+			},
+		},
+		{"not enough columns in index for this partitioning",
+			TableDescriptor{
+				PrimaryIndex: IndexDescriptor{
+					Partitioning: PartitioningDescriptor{
+						NumColumns: 1,
+						List:       []PartitioningDescriptor_List{{Name: "p1", Values: [][]byte{{}}}},
 					},
 				},
 			},
@@ -907,43 +897,38 @@ func TestValidatePartitioning(t *testing.T) {
 		{"only one LIST or RANGE partitioning may used",
 			TableDescriptor{
 				PrimaryIndex: IndexDescriptor{
-					ColumnIDs: []ColumnID{1},
+					ColumnIDs:        []ColumnID{1},
+					ColumnDirections: []IndexDescriptor_Direction{IndexDescriptor_ASC},
 					Partitioning: PartitioningDescriptor{
 						NumColumns: 1,
-						List: []PartitioningDescriptor_List{
-							{},
-						},
-						Range: []PartitioningDescriptor_Range{
-							{},
-						},
+						List:       []PartitioningDescriptor_List{{}},
+						Range:      []PartitioningDescriptor_Range{{}},
 					},
 				},
 			},
 		},
-		{"partition name must be non-empty",
+		{"PARTITION name must be non-empty",
 			TableDescriptor{
 				Columns: []ColumnDescriptor{{ID: 1, Type: ColumnType{SemanticType: ColumnType_INT}}},
 				PrimaryIndex: IndexDescriptor{
-					ColumnIDs: []ColumnID{1},
+					ColumnIDs:        []ColumnID{1},
+					ColumnDirections: []IndexDescriptor_Direction{IndexDescriptor_ASC},
 					Partitioning: PartitioningDescriptor{
 						NumColumns: 1,
-						List: []PartitioningDescriptor_List{
-							{},
-						},
+						List:       []PartitioningDescriptor_List{{}},
 					},
 				},
 			},
 		},
-		{"partition p1 must contain values",
+		{"PARTITION p1: must contain values",
 			TableDescriptor{
 				Columns: []ColumnDescriptor{{ID: 1, Type: ColumnType{SemanticType: ColumnType_INT}}},
 				PrimaryIndex: IndexDescriptor{
-					ColumnIDs: []ColumnID{1},
+					ColumnIDs:        []ColumnID{1},
+					ColumnDirections: []IndexDescriptor_Direction{IndexDescriptor_ASC},
 					Partitioning: PartitioningDescriptor{
 						NumColumns: 1,
-						List: []PartitioningDescriptor_List{
-							{Name: "p1"},
-						},
+						List:       []PartitioningDescriptor_List{{Name: "p1"}},
 					},
 				},
 			},
@@ -952,12 +937,13 @@ func TestValidatePartitioning(t *testing.T) {
 			TableDescriptor{
 				Columns: []ColumnDescriptor{{ID: 1, Type: ColumnType{SemanticType: ColumnType_INT}}},
 				PrimaryIndex: IndexDescriptor{
-					ColumnIDs: []ColumnID{1},
+					ColumnIDs:        []ColumnID{1},
+					ColumnDirections: []IndexDescriptor_Direction{IndexDescriptor_ASC},
 					Partitioning: PartitioningDescriptor{
 						NumColumns: 1,
-						List: []PartitioningDescriptor_List{
-							{Name: "p1", Values: [][]byte{{}}},
-						},
+						List: []PartitioningDescriptor_List{{
+							Name: "p1", Values: [][]byte{{}},
+						}},
 					},
 				},
 			},
@@ -966,7 +952,8 @@ func TestValidatePartitioning(t *testing.T) {
 			TableDescriptor{
 				Columns: []ColumnDescriptor{{ID: 1, Type: ColumnType{SemanticType: ColumnType_INT}}},
 				PrimaryIndex: IndexDescriptor{
-					ColumnIDs: []ColumnID{1},
+					ColumnIDs:        []ColumnID{1},
+					ColumnDirections: []IndexDescriptor_Direction{IndexDescriptor_ASC},
 					Partitioning: PartitioningDescriptor{
 						NumColumns: 1,
 						List: []PartitioningDescriptor_List{
@@ -980,7 +967,8 @@ func TestValidatePartitioning(t *testing.T) {
 			TableDescriptor{
 				Columns: []ColumnDescriptor{{ID: 1, Type: ColumnType{SemanticType: ColumnType_INT}}},
 				PrimaryIndex: IndexDescriptor{
-					ColumnIDs: []ColumnID{1},
+					ColumnIDs:        []ColumnID{1},
+					ColumnDirections: []IndexDescriptor_Direction{IndexDescriptor_ASC},
 					Partitioning: PartitioningDescriptor{
 						NumColumns: 1,
 						List: []PartitioningDescriptor_List{
@@ -994,7 +982,8 @@ func TestValidatePartitioning(t *testing.T) {
 			TableDescriptor{
 				Columns: []ColumnDescriptor{{ID: 1, Type: ColumnType{SemanticType: ColumnType_INT}}},
 				PrimaryIndex: IndexDescriptor{
-					ColumnIDs: []ColumnID{1, 1},
+					ColumnIDs:        []ColumnID{1, 1},
+					ColumnDirections: []IndexDescriptor_Direction{IndexDescriptor_ASC, IndexDescriptor_ASC},
 					Partitioning: PartitioningDescriptor{
 						NumColumns: 1,
 						Range: []PartitioningDescriptor_Range{
@@ -1005,11 +994,12 @@ func TestValidatePartitioning(t *testing.T) {
 				},
 			},
 		},
-		{"partition name p1 must be unique",
+		{"PARTITION p1: name must be unique",
 			TableDescriptor{
 				Columns: []ColumnDescriptor{{ID: 1, Type: ColumnType{SemanticType: ColumnType_INT}}},
 				PrimaryIndex: IndexDescriptor{
-					ColumnIDs: []ColumnID{1},
+					ColumnIDs:        []ColumnID{1},
+					ColumnDirections: []IndexDescriptor_Direction{IndexDescriptor_ASC},
 					Partitioning: PartitioningDescriptor{
 						NumColumns: 1,
 						List: []PartitioningDescriptor_List{
@@ -1020,11 +1010,32 @@ func TestValidatePartitioning(t *testing.T) {
 				},
 			},
 		},
-		{"partition name p1 must be unique",
+		{"not enough columns in index for this partitioning",
 			TableDescriptor{
 				Columns: []ColumnDescriptor{{ID: 1, Type: ColumnType{SemanticType: ColumnType_INT}}},
 				PrimaryIndex: IndexDescriptor{
-					ColumnIDs: []ColumnID{1, 1},
+					ColumnIDs:        []ColumnID{1},
+					ColumnDirections: []IndexDescriptor_Direction{IndexDescriptor_ASC},
+					Partitioning: PartitioningDescriptor{
+						NumColumns: 1,
+						List: []PartitioningDescriptor_List{{
+							Name:   "p1",
+							Values: [][]byte{{0x03, 0x02}},
+							Subpartitioning: PartitioningDescriptor{
+								NumColumns: 1,
+								List:       []PartitioningDescriptor_List{{Name: "p1_1", Values: [][]byte{{}}}},
+							},
+						}},
+					},
+				},
+			},
+		},
+		{"PARTITION p1: name must be unique",
+			TableDescriptor{
+				Columns: []ColumnDescriptor{{ID: 1, Type: ColumnType{SemanticType: ColumnType_INT}}},
+				PrimaryIndex: IndexDescriptor{
+					ColumnIDs:        []ColumnID{1, 1},
+					ColumnDirections: []IndexDescriptor_Direction{IndexDescriptor_ASC, IndexDescriptor_ASC},
 					Partitioning: PartitioningDescriptor{
 						NumColumns: 1,
 						List: []PartitioningDescriptor_List{
