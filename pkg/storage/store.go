@@ -2983,7 +2983,6 @@ func (s *Store) processRaftRequestWithReplica(
 	if req.Message.Type == raftpb.MsgSnap {
 		log.Fatalf(ctx, "unexpected snapshot: %+v", req)
 	}
-
 	if req.Quiesce {
 		if req.Message.Type != raftpb.MsgHeartbeat {
 			log.Fatalf(ctx, "unexpected quiesce: %+v", req)
