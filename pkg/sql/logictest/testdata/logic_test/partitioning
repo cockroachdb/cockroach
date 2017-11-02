@@ -58,11 +58,31 @@ CREATE TABLE t (a INT, b INT, c INT, PRIMARY KEY (a, b)) PARTITION BY LIST (a) (
     PARTITION P1 VALUES (2)
 )
 
-statement error  PARTITION p1: name must be unique
+statement error PARTITION p1: name must be unique
 CREATE TABLE t (a INT, b INT, c INT, PRIMARY KEY (a, b)) PARTITION BY LIST (a) (
     PARTITION p1 VALUES (1) PARTITION BY LIST (b) (
         PARTITION p1 VALUES (2)
     )
+)
+
+statement error PARTITION p1: cannot subpartition a range partition
+CREATE TABLE t (a INT, b INT, c INT, PRIMARY KEY (a, b)) PARTITION BY RANGE (a) (
+    PARTITION p1 VALUES LESS THAN (1) PARTITION BY LIST (b) (
+        PARTITION p2 VALUES (2)
+    )
+)
+
+statement ok
+CREATE TABLE interleave_root (a INT PRIMARY KEY) PARTITION BY LIST (a) (
+    PARTITION p0 VALUES (0)
+)
+
+statement ok
+CREATE TABLE interleave_child (a INT PRIMARY KEY) INTERLEAVE IN PARENT interleave_root (a)
+
+statement error cannot set a zone config for interleaved index primary; set it on the root of the interleaved hierarchy instead
+CREATE TABLE t (a INT PRIMARY KEY) INTERLEAVE IN PARENT interleave_root (a) PARTITION BY LIST (a) (
+    PARTITION p0 VALUES (0)
 )
 
 statement error PARTITION p1: partition has 1 columns but 2 values were supplied
@@ -259,13 +279,13 @@ CREATE TABLE ok7 (a INT, b INT, c INT, PRIMARY KEY (a, b)) PARTITION BY RANGE (a
 statement ok
 CREATE TABLE ok9 (a INT, b INT, c INT, PRIMARY KEY (a, b, c)) PARTITION BY LIST (a) (
     PARTITION p1 VALUES (1) PARTITION BY LIST (b) (
-        PARTITION p1_1 VALUES (3),
+        PARTITION p1_1 VALUES (3) PARTITION BY LIST (c) (
+            PARTITION p1_1_1 VALUES (8)
+        ),
         PARTITION p1_2 VALUES (4)
     ),
     PARTITION p2 VALUES (6) PARTITION BY RANGE (b) (
-        PARTITION p2_1 VALUES LESS THAN (7) PARTITION BY LIST (c) (
-            PARTITION p2_1_1 VALUES (8)
-        ),
+        PARTITION p2_1 VALUES LESS THAN (7),
         PARTITION p2_2 VALUES LESS THAN (MAXVALUE)
     )
 )
