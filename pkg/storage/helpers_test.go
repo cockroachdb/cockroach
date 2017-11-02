@@ -240,8 +240,20 @@ func NewTestStorePool(cfg StoreConfig) *StorePool {
 	)
 }
 
+func (r *Replica) ReplicaID() roachpb.ReplicaID {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.ReplicaIDLocked()
+}
+
 func (r *Replica) ReplicaIDLocked() roachpb.ReplicaID {
 	return r.mu.replicaID
+}
+
+func (r *Replica) GetLastUpdateTimeForReplica(replicaID roachpb.ReplicaID) time.Time {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.mu.lastUpdateTimes[replicaID]
 }
 
 func (r *Replica) DescLocked() *roachpb.RangeDescriptor {
