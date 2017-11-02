@@ -206,6 +206,7 @@ func (c *Cluster) Start(ctx context.Context) {
 	if c.Cfg.NumNodes > 1 {
 		c.waitForFullReplication()
 	} else {
+		// NB: This is useful for TestRapidRestarts.
 		log.Infof(ctx, "not waiting for initial replication")
 	}
 }

@@ -86,6 +86,9 @@ func testRapidRestartSingle(ctx context.Context, t *testing.T, cfg cluster.TestC
 	// LocalCluster that skip all the waiting so that we get to kill the process
 	// early in its boot sequence.
 	cfg.Nodes = cfg.Nodes[:1]
+	// Make sure StartCluster doesn't wait for replication but just hands us the
+	// cluster straight away.
+	cfg.NoWait = true
 
 	c := StartCluster(ctx, t, cfg)
 	defer c.AssertAndStop(ctx, t)
