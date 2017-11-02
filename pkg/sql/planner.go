@@ -442,3 +442,14 @@ func (p *planner) TypeAsStringArray(
 	}
 	return fn, nil
 }
+
+//Removes schemaChanger from schemaChangers based on mutationID
+func (p *planner) removeSchemaChangerForMutation(mutationID sqlbase.MutationID) {
+	var schemaChangers = p.session.TxnState.schemaChangers.schemaChangers
+	for si, schemaChanger := range schemaChangers {
+		if schemaChanger.sc.mutationID == mutationID {
+			p.session.TxnState.schemaChangers.schemaChangers = append(schemaChangers[:si], schemaChangers[si+1:]...)
+			break
+		}
+	}
+}

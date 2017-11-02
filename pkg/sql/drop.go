@@ -432,16 +432,6 @@ func (p *planner) dropIndexByName(
 	return nil
 }
 
-func (p *planner) removeSchemaChangerForMutation(mutationID sqlbase.MutationID) {
-	var schemaChangers = p.session.TxnState.schemaChangers.schemaChangers
-	for si, schemaChanger := range schemaChangers {
-		if schemaChanger.sc.mutationID == mutationID {
-			p.session.TxnState.schemaChangers.schemaChangers = append(schemaChangers[:si], schemaChangers[si+1:]...)
-			break
-		}
-	}
-}
-
 func (*dropIndexNode) Next(runParams) (bool, error) { return false, nil }
 func (*dropIndexNode) Close(context.Context)        {}
 func (*dropIndexNode) Values() parser.Datums        { return parser.Datums{} }
