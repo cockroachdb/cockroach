@@ -1379,6 +1379,16 @@ func (desc *TableDescriptor) validatePartitioningDescriptor(
 		return nil
 	}
 
+	// TODO(dan): The sqlccl.GenerateSubzoneSpans logic is easier if we disallow
+	// setting zone configs on indexes that are interleaved into another index.
+	// InterleavedBy is fine, so using the root of the interleave hierarchy will
+	// work. It is expected that this is sufficient for real-world use cases.
+	// Revisit this restriction if that expectation is wrong.
+	if len(idxDesc.Interleave.Ancestors) > 0 {
+		return errors.Errorf("cannot set a zone config for interleaved index %s; "+
+			"set it on the root of the interleaved hierarchy instead", idxDesc.Name)
+	}
+
 	// We don't need real prefixes in the TranslateValueEncodingToSpan calls
 	// because we're only using it to look for collisions and the prefix would
 	// be the same for all of them. Faking them out with DNull allows us to make
@@ -1472,13 +1482,6 @@ func (desc *TableDescriptor) validatePartitioningDescriptor(
 				return fmt.Errorf("values must be strictly increasing: %s vs %s", roachpb.Key(lastEndKey), roachpb.Key(endKey))
 			}
 			lastEndKey = endKey
-
-			newColOffset := colOffset + int(partDesc.NumColumns)
-			if err := desc.validatePartitioningDescriptor(
-				a, idxDesc, &p.Subpartitioning, newColOffset, partitionNames,
-			); err != nil {
-				return err
-			}
 		}
 	}
 
