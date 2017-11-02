@@ -66,10 +66,9 @@ const (
 type nodeOptions int
 
 const (
-	// initializing indicates that the node has been created, but is still in a
-	// provisional state. Any key and gap timestamps are not final values, and
-	// should not be used until initialization is complete.
-	initializing = 1 << iota
+	// initialized indicates that the node has been created and fully
+	// initialized. Key and gap values are final, and can now be used.
+	initialized = 1 << iota
 
 	// hasKey indicates that the node has an associated key value. If this is
 	// not set, then the key timestamp is assumed to be zero and the key is
@@ -458,7 +457,7 @@ func (p *sklPage) addNode(
 		// can continue.
 		b, meta := p.encodeValueSet(arr[:0], keyVal, gapVal)
 
-		err := it.Add(key, b, meta|initializing)
+		err := it.Add(key, b, meta)
 		switch err {
 		case arenaskl.ErrArenaFull:
 			atomic.StoreInt32(&p.isFull, 1)
@@ -482,11 +481,11 @@ func (p *sklPage) addNode(
 		}
 	}
 
-	// Ratchet up the timestamps on the existing node, but don't clear the
-	// initializing bit, since we don't have the gap timestamp from the previous
-	// node. Leave finishing initialization to the thread that added the node, or
-	// to a lookup thread that requires it.
-	p.ratchetValueSet(it, keyVal, gapVal, false /* clearInit */)
+	// Ratchet up the timestamps on the existing node, but don't set the
+	// initialized bit, since we don't have the gap value from the previous
+	// node. Leave finishing initialization to the thread that added the node,
+	// or to a lookup thread that requires it.
+	p.ratchetValueSet(it, keyVal, gapVal, false /* setInit */)
 
 	return nil
 }
@@ -511,7 +510,7 @@ func (p *sklPage) ensureFloorValue(it *arenaskl.Iterator, to []byte, val cacheVa
 		// Don't clear the initialization bit, since we don't have the gap
 		// timestamp from the previous node, and don't need an initialized node
 		// for this operation anyway.
-		p.ratchetValueSet(it, val, val, false /* clearInit */)
+		p.ratchetValueSet(it, val, val, false /* setInit */)
 
 		it.Next()
 	}
@@ -551,11 +550,11 @@ func (p *sklPage) ratchetMaxTimestamp(ts hlc.Timestamp) {
 }
 
 // ratchetValueSet will update the current node's key and gap timestamps to the
-// maximum of their current values or the given values. If clearInit is true,
-// then the initializing bit will be cleared, indicating that the node is now
+// maximum of their current values or the given values. If setInit is true,
+// then the initialized bit will be set, indicating that the node is now
 // fully initialized and its timestamps can now be relied upon.
 func (p *sklPage) ratchetValueSet(
-	it *arenaskl.Iterator, keyVal, gapVal cacheValue, clearInit bool,
+	it *arenaskl.Iterator, keyVal, gapVal cacheValue, setInit bool,
 ) {
 	// Array with constant size will remain on the stack.
 	var arr [encodedValSize * 2]byte
@@ -570,23 +569,26 @@ func (p *sklPage) ratchetValueSet(
 		update := keyValUpdate || gapValUpdate
 
 		var initMeta uint16
-		if clearInit {
-			initMeta = 0
+		if setInit {
+			// Always set the initialized bit.
+			initMeta = initialized
 		} else {
-			initMeta = meta & initializing
+			// Preserve the current value of the initialized bit.
+			initMeta = meta & initialized
 		}
 
 		// Check whether it's necessary to make an update.
 		var err error
 		if !update {
-			if !clearInit || (meta&initializing) == 0 {
-				// No update necessary because the init bit doesn't need to be
-				// cleared or it's already cleared.
+			newMeta := meta | initMeta
+
+			if newMeta == meta {
+				// New meta value is same as old, so no update necessary.
 				return
 			}
 
-			// Clear the initializing bit, but no need to update the timestamps.
-			err = it.SetMeta(meta & ^uint16(initializing))
+			// Set the initialized bit, but no need to update the values.
+			err = it.SetMeta(newMeta)
 		} else {
 			// Ratchet the max timestamp.
 			keyTs, gapTs := keyVal.ts, gapVal.ts
@@ -686,7 +688,7 @@ func (p *sklPage) scanForTimestamp(
 		}
 
 		meta := clone.Meta()
-		if (meta & initializing) == 0 {
+		if (meta & initialized) != 0 {
 			// Found the gap timestamp for an initialized node.
 			_, gapVal = p.decodeValueSet(clone.Value(), meta)
 			clone.Next()
@@ -707,9 +709,9 @@ func (p *sklPage) scanForTimestamp(
 			return maxVal
 		}
 
-		if (clone.Meta() & initializing) != 0 {
+		if (clone.Meta() & initialized) == 0 {
 			// Finish initializing the node with the gap timestamp.
-			p.ratchetValueSet(&clone, gapVal, gapVal, true /* clearInit */)
+			p.ratchetValueSet(&clone, gapVal, gapVal, true /* setInit */)
 		}
 
 		itKey := clone.Key()
