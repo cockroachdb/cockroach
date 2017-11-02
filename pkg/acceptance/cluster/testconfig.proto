@@ -53,4 +53,7 @@ message TestConfig {
   // tests such as TestPut that will run indefinitely.
   optional int64 duration = 3 [(gogoproto.nullable) = false, (gogoproto.casttype) = "time.Duration"];
   optional InitMode init_mode = 4 [(gogoproto.nullable) = false];
+  // When set, the cluster is started as quickly as possible, without waiting
+  // for ranges to replicate, or even ports to be opened.
+  optional bool no_wait = 5 [(gogoproto.nullable) = false];
 }
