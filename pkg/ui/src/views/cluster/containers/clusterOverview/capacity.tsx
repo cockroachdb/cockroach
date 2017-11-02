@@ -1,7 +1,7 @@
 import d3 from "d3";
 import React from "react";
 
-import { Bytes as formatBytes } from "src/util/format";
+import { ComputeByteScale } from "src/util/format";
 
 const size = {
   width: 250,
@@ -12,7 +12,7 @@ const margin = {
   top: 12,
   right: 35,
   bottom: 25,
-  left: 15,
+  left: 20,
 };
 
 const TICK_SIZE = 6;
@@ -29,14 +29,35 @@ const scale = d3.scale.linear()
 const axis = d3.svg.axis()
   .scale(scale)
   .tickSize(TICK_SIZE)
-  .tickValues([0, 268435500000, 536870900000]) // TODO(couchand): Not this, obviously.
-  .tickFormat(formatBytes);
+  .ticks(5);
+
+function recomputeScale(el: d3.Selection<CapacityChartProps>) {
+  var capacity = el.datum();
+
+  // Compute the appropriate scale factor for a value slightly smaller than the
+  // usable capacity, so that if the usable capacity is exactly 1 {MiB,GiB,etc}
+  // we show the scale in the next-smaller unit.
+  var byteScale = ComputeByteScale(capacity.usable - 1);
+
+  var scaled = {
+    used: capacity.used / byteScale.value,
+    usable: capacity.usable / byteScale.value,
+  };
+  el.datum(scaled)
+
+  axis.tickFormat(function (d) {
+    return d + " " + byteScale.units;
+  });
+  scale.domain([0, scaled.usable]);
+}
 
 function chart(el: d3.Selection<CapacityChartProps>) {
   el.style("shape-rendering", "crispEdges");
 
+  recomputeScale(el);
+
   const axisJoin = el.selectAll("g.axis")
-    .data((d: CapacityChartProps) => [scale.domain([0, d.usable])]);
+    .data(() => [null]);
 
   // const axisEnter =
   axisJoin.enter()
