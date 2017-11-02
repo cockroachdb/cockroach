@@ -68,7 +68,10 @@ ReactDOM.render(
   <Provider store={store}>
     <Router history={history}>
       <Route path="/" component={Layout}>
-        <IndexRoute component={ClusterOverview} />
+        <IndexRedirect to="overview" />
+        <Route path="overview">
+          <IndexRoute component={ClusterOverview} />
+        </Route>
         <Route path="cluster">
           <IndexRedirect to="all/overview" />
           <Route path={`all/:${dashboardNameAttr}`} component={NodeGraphs} />
