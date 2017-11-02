@@ -451,3 +451,17 @@ func TestParseDTimestamp(t *testing.T) {
 		}
 	}
 }
+
+func TestMakeDJSON(t *testing.T) {
+	j1, err := MakeDJSON(1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	j2, err := MakeDJSON(2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if j1.Compare(NewTestingEvalContext(), j2) != -1 {
+		t.Fatal("expected JSON 1 < 2")
+	}
+}
