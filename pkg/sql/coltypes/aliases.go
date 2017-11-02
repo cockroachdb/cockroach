@@ -67,6 +67,9 @@ var (
 	// Date is an immutable T instance.
 	Date = &TDate{}
 
+	// Time is an immutable T instance.
+	Time = &TTime{}
+
 	// Timestamp is an immutable T instance.
 	Timestamp = &TTimestamp{}
 	// TimestampWithTZ is an immutable T instance.

@@ -6,6 +6,7 @@ import java.sql.Array;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
@@ -125,6 +126,15 @@ public class MainTest extends CockroachDBTest {
         rs.next();
         BigDecimal bigdec = rs.getBigDecimal(1);
         Assert.assertEquals("1E+1", bigdec.toString());
+    }
+
+    @Test
+    public void testTime() throws Exception {
+        PreparedStatement stmt = conn.prepareStatement("SELECT '01:02:03.456'::TIME");
+        ResultSet rs = stmt.executeQuery();
+        rs.next();
+        String actual = new SimpleDateFormat("HH:mm:ss.SSS").format(rs.getTime(1));
+        Assert.assertEquals("01:02:03.456", actual);
     }
 
     @Test

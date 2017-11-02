@@ -21,6 +21,8 @@
 </span></td></tr>
 <tr><td><code>array_append(array: <a href="string.html">string</a>[], elem: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a>[]</code></td><td><span class="funcdesc"><p>Appends <code>elem</code> to <code>array</code>, returning the result.</p>
 </span></td></tr>
+<tr><td><code>array_append(array: <a href="time.html">time</a>[], elem: <a href="time.html">time</a>) &rarr; <a href="time.html">time</a>[]</code></td><td><span class="funcdesc"><p>Appends <code>elem</code> to <code>array</code>, returning the result.</p>
+</span></td></tr>
 <tr><td><code>array_append(array: <a href="timestamp.html">timestamp</a>[], elem: <a href="timestamp.html">timestamp</a>) &rarr; <a href="timestamp.html">timestamp</a>[]</code></td><td><span class="funcdesc"><p>Appends <code>elem</code> to <code>array</code>, returning the result.</p>
 </span></td></tr>
 <tr><td><code>array_append(array: <a href="timestamp.html">timestamptz</a>[], elem: <a href="timestamp.html">timestamptz</a>) &rarr; <a href="timestamp.html">timestamptz</a>[]</code></td><td><span class="funcdesc"><p>Appends <code>elem</code> to <code>array</code>, returning the result.</p>
@@ -46,6 +48,8 @@
 <tr><td><code>array_cat(left: <a href="interval.html">interval</a>[], right: <a href="interval.html">interval</a>[]) &rarr; <a href="interval.html">interval</a>[]</code></td><td><span class="funcdesc"><p>Appends two arrays.</p>
 </span></td></tr>
 <tr><td><code>array_cat(left: <a href="string.html">string</a>[], right: <a href="string.html">string</a>[]) &rarr; <a href="string.html">string</a>[]</code></td><td><span class="funcdesc"><p>Appends two arrays.</p>
+</span></td></tr>
+<tr><td><code>array_cat(left: <a href="time.html">time</a>[], right: <a href="time.html">time</a>[]) &rarr; <a href="time.html">time</a>[]</code></td><td><span class="funcdesc"><p>Appends two arrays.</p>
 </span></td></tr>
 <tr><td><code>array_cat(left: <a href="timestamp.html">timestamp</a>[], right: <a href="timestamp.html">timestamp</a>[]) &rarr; <a href="timestamp.html">timestamp</a>[]</code></td><td><span class="funcdesc"><p>Appends two arrays.</p>
 </span></td></tr>
@@ -77,6 +81,8 @@
 </span></td></tr>
 <tr><td><code>array_position(array: <a href="string.html">string</a>[], elem: <a href="string.html">string</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Return the index of the first occurrence of <code>elem</code> in <code>array</code>.</p>
 </span></td></tr>
+<tr><td><code>array_position(array: <a href="time.html">time</a>[], elem: <a href="time.html">time</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Return the index of the first occurrence of <code>elem</code> in <code>array</code>.</p>
+</span></td></tr>
 <tr><td><code>array_position(array: <a href="timestamp.html">timestamp</a>[], elem: <a href="timestamp.html">timestamp</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Return the index of the first occurrence of <code>elem</code> in <code>array</code>.</p>
 </span></td></tr>
 <tr><td><code>array_position(array: <a href="timestamp.html">timestamptz</a>[], elem: <a href="timestamp.html">timestamptz</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Return the index of the first occurrence of <code>elem</code> in <code>array</code>.</p>
@@ -102,6 +108,8 @@
 <tr><td><code>array_positions(array: <a href="interval.html">interval</a>[], elem: <a href="interval.html">interval</a>) &rarr; <a href="interval.html">interval</a>[]</code></td><td><span class="funcdesc"><p>Returns and array of indexes of all occurrences of <code>elem</code> in <code>array</code>.</p>
 </span></td></tr>
 <tr><td><code>array_positions(array: <a href="string.html">string</a>[], elem: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a>[]</code></td><td><span class="funcdesc"><p>Returns and array of indexes of all occurrences of <code>elem</code> in <code>array</code>.</p>
+</span></td></tr>
+<tr><td><code>array_positions(array: <a href="time.html">time</a>[], elem: <a href="time.html">time</a>) &rarr; <a href="time.html">time</a>[]</code></td><td><span class="funcdesc"><p>Returns and array of indexes of all occurrences of <code>elem</code> in <code>array</code>.</p>
 </span></td></tr>
 <tr><td><code>array_positions(array: <a href="timestamp.html">timestamp</a>[], elem: <a href="timestamp.html">timestamp</a>) &rarr; <a href="timestamp.html">timestamp</a>[]</code></td><td><span class="funcdesc"><p>Returns and array of indexes of all occurrences of <code>elem</code> in <code>array</code>.</p>
 </span></td></tr>
@@ -129,6 +137,8 @@
 </span></td></tr>
 <tr><td><code>array_prepend(elem: <a href="string.html">string</a>, array: <a href="string.html">string</a>[]) &rarr; <a href="string.html">string</a>[]</code></td><td><span class="funcdesc"><p>Prepends <code>elem</code> to <code>array</code>, returning the result.</p>
 </span></td></tr>
+<tr><td><code>array_prepend(elem: <a href="time.html">time</a>, array: <a href="time.html">time</a>[]) &rarr; <a href="time.html">time</a>[]</code></td><td><span class="funcdesc"><p>Prepends <code>elem</code> to <code>array</code>, returning the result.</p>
+</span></td></tr>
 <tr><td><code>array_prepend(elem: <a href="timestamp.html">timestamp</a>, array: <a href="timestamp.html">timestamp</a>[]) &rarr; <a href="timestamp.html">timestamp</a>[]</code></td><td><span class="funcdesc"><p>Prepends <code>elem</code> to <code>array</code>, returning the result.</p>
 </span></td></tr>
 <tr><td><code>array_prepend(elem: <a href="timestamp.html">timestamptz</a>, array: <a href="timestamp.html">timestamptz</a>[]) &rarr; <a href="timestamp.html">timestamptz</a>[]</code></td><td><span class="funcdesc"><p>Prepends <code>elem</code> to <code>array</code>, returning the result.</p>
@@ -155,6 +165,8 @@
 </span></td></tr>
 <tr><td><code>array_remove(array: <a href="string.html">string</a>[], elem: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a>[]</code></td><td><span class="funcdesc"><p>Remove from <code>array</code> all elements equal to <code>elem</code>.</p>
 </span></td></tr>
+<tr><td><code>array_remove(array: <a href="time.html">time</a>[], elem: <a href="time.html">time</a>) &rarr; <a href="time.html">time</a>[]</code></td><td><span class="funcdesc"><p>Remove from <code>array</code> all elements equal to <code>elem</code>.</p>
+</span></td></tr>
 <tr><td><code>array_remove(array: <a href="timestamp.html">timestamp</a>[], elem: <a href="timestamp.html">timestamp</a>) &rarr; <a href="timestamp.html">timestamp</a>[]</code></td><td><span class="funcdesc"><p>Remove from <code>array</code> all elements equal to <code>elem</code>.</p>
 </span></td></tr>
 <tr><td><code>array_remove(array: <a href="timestamp.html">timestamptz</a>[], elem: <a href="timestamp.html">timestamptz</a>) &rarr; <a href="timestamp.html">timestamptz</a>[]</code></td><td><span class="funcdesc"><p>Remove from <code>array</code> all elements equal to <code>elem</code>.</p>
@@ -180,6 +192,8 @@
 <tr><td><code>array_replace(array: <a href="interval.html">interval</a>[], toreplace: <a href="interval.html">interval</a>, replacewith: <a href="interval.html">interval</a>) &rarr; <a href="interval.html">interval</a>[]</code></td><td><span class="funcdesc"><p>Replace all occurrences of <code>toreplace</code> in <code>array</code> with <code>replacewith</code>.</p>
 </span></td></tr>
 <tr><td><code>array_replace(array: <a href="string.html">string</a>[], toreplace: <a href="string.html">string</a>, replacewith: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a>[]</code></td><td><span class="funcdesc"><p>Replace all occurrences of <code>toreplace</code> in <code>array</code> with <code>replacewith</code>.</p>
+</span></td></tr>
+<tr><td><code>array_replace(array: <a href="time.html">time</a>[], toreplace: <a href="time.html">time</a>, replacewith: <a href="time.html">time</a>) &rarr; <a href="time.html">time</a>[]</code></td><td><span class="funcdesc"><p>Replace all occurrences of <code>toreplace</code> in <code>array</code> with <code>replacewith</code>.</p>
 </span></td></tr>
 <tr><td><code>array_replace(array: <a href="timestamp.html">timestamp</a>[], toreplace: <a href="timestamp.html">timestamp</a>, replacewith: <a href="timestamp.html">timestamp</a>) &rarr; <a href="timestamp.html">timestamp</a>[]</code></td><td><span class="funcdesc"><p>Replace all occurrences of <code>toreplace</code> in <code>array</code> with <code>replacewith</code>.</p>
 </span></td></tr>
@@ -237,6 +251,10 @@ significant than <code>element</code> to zero (or one, for day and month)</p>
 <p>Compatible elements: year, quarter, month, week, hour, minute, second,
 millisecond, microsecond.</p>
 </span></td></tr>
+<tr><td><code>date_trunc(element: <a href="string.html">string</a>, input: <a href="time.html">time</a>) &rarr; <a href="time.html">time</a></code></td><td><span class="funcdesc"><p>Truncates <code>input</code> to precision <code>element</code>.  Sets all fields that are less
+significant than <code>element</code> to zero.</p>
+<p>Compatible elements: hour, minute, second, millisecond, microsecond.</p>
+</span></td></tr>
 <tr><td><code>date_trunc(element: <a href="string.html">string</a>, input: <a href="timestamp.html">timestamp</a>) &rarr; <a href="timestamp.html">timestamp</a></code></td><td><span class="funcdesc"><p>Truncates <code>input</code> to precision <code>element</code>.  Sets all fields that are less
 significant than <code>element</code> to zero (or one, for day and month)</p>
 <p>Compatible elements: year, quarter, month, week, hour, minute, second,
@@ -258,6 +276,9 @@ millisecond, microsecond.</p>
 <tr><td><code>extract(element: <a href="string.html">string</a>, input: <a href="date.html">date</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Extracts <code>element</code> from <code>input</code>.</p>
 <p>Compatible elements: year, quarter, month, week, dayofweek, dayofyear,
 hour, minute, second, millisecond, microsecond, epoch</p>
+</span></td></tr>
+<tr><td><code>extract(element: <a href="string.html">string</a>, input: <a href="time.html">time</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Extracts <code>element</code> from <code>input</code>.</p>
+<p>Compatible elements: hour, minute, second, millisecond, microsecond, epoch</p>
 </span></td></tr>
 <tr><td><code>extract(element: <a href="string.html">string</a>, input: <a href="timestamp.html">timestamp</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Extracts <code>element</code> from <code>input</code>.</p>
 <p>Compatible elements: year, quarter, month, week, dayofweek, dayofyear,

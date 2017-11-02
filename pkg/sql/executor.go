@@ -2348,6 +2348,7 @@ func checkResultType(typ types.T) error {
 	case types.Bytes:
 	case types.String:
 	case types.Date:
+	case types.Time:
 	case types.Timestamp:
 	case types.TimestampTZ:
 	case types.Interval:

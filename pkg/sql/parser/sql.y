@@ -5083,6 +5083,14 @@ const_datetime:
   {
     $$.val = coltypes.Date
   }
+| TIME
+  {
+    $$.val = coltypes.Time
+  }
+| TIME WITHOUT TIME ZONE
+  {
+    $$.val = coltypes.Time
+  }
 | TIMESTAMP
   {
     $$.val = coltypes.Timestamp
