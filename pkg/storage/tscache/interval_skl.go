@@ -288,7 +288,8 @@ func (s *intervalSkl) addRange(from, to []byte, opt rangeOptions, val cacheValue
 	}
 
 	// Now iterate forwards and ensure that all nodes between the start and
-	// end (exclusive) have timestamps that are >= the range timestamp.
+	// end (exclusive) have timestamps that are >= the range timestamp. end
+	// is exclusive because we already added a node at that key.
 	if !s.later.ensureFloorValue(&it, to, val) {
 		// Page is filled up, so rotate pages and try again.
 		return s.later
@@ -430,10 +431,10 @@ func (p *sklPage) addNode(
 	}
 
 	if !it.SeekForPrev(key) {
-		// If the previous node has a gap value that would not be updated with
-		// the new value, then there is no need to add another node, since its
-		// timestamp would be the same as the gap timestamp and its txnID would
-		// be the same as the gap txnID.
+		// The key was not found. If the previous node has a gap value that
+		// would not be updated with the new value, then there is no need to add
+		// another node, since its timestamp would be the same as the gap
+		// timestamp and its txnID would be the same as the gap txnID.
 		prevVal := p.scanForTimestamp(it, key, key, 0, false)
 		if _, update := ratchetValue(prevVal, val); !update {
 			return nil
@@ -450,24 +451,27 @@ func (p *sklPage) addNode(
 		// forced to stop and help complete its initialization before they
 		// can continue.
 		b, meta := p.encodeValueSet(arr[:0], keyVal, gapVal)
+
 		err := it.Add(key, b, meta|initializing)
-		if err == arenaskl.ErrArenaFull {
+		switch err {
+		case arenaskl.ErrArenaFull:
 			atomic.StoreInt32(&p.isFull, 1)
 			return err
-		}
-
-		if err == nil {
-			// Add was successful, so finish initialization by scanning for
-			// gap timestamp and using it to ratchet the new nodes' timestamps.
+		case arenaskl.ErrRecordExists:
+			// Another thread raced and added the node, so just ratchet its
+			// timestamps instead (down below).
+		case nil:
+			// Add was successful, so finish initialization by scanning for gap
+			// timestamp and using it to ratchet the new nodes' timestamps.
 			p.scanForTimestamp(it, key, key, 0, true)
 			return nil
+		default:
+			panic(fmt.Sprintf("unexpected error: %v", err))
 		}
-
-		// Another thread raced and added the node, so just ratchet its
-		// timestamps instead.
 	} else {
+		// The key exists already.
 		if opt == 0 {
-			// Don't need to set either key or gap ts, so done.
+			// Don't need to set either key or gap value, so done.
 			return nil
 		}
 	}
@@ -483,6 +487,8 @@ func (p *sklPage) addNode(
 
 func (p *sklPage) ensureFloorValue(it *arenaskl.Iterator, to []byte, val cacheValue) bool {
 	for it.Valid() {
+		// If "to" is not nil (open range) then it is treated as an exclusive
+		// bound.
 		if to != nil && bytes.Compare(it.Key(), to) >= 0 {
 			break
 		}
