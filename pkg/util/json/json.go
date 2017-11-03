@@ -78,6 +78,12 @@ type JSON interface {
 
 	// Exists implements the `?` operator.
 	Exists(string) bool
+
+	// encode appends the encoding of the JSON document to appendTo, returning
+	// the result alongside the JEntry for the document. Note that some values
+	// (true/false/null) are encoded with 0 bytes and are purely defined by their
+	// JEntry.
+	encode(appendTo []byte) (jEntry uint32, b []byte, err error)
 }
 
 type jsonTrue struct{}
