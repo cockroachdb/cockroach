@@ -560,6 +560,9 @@ We propose using the keys from the first encrypted store we find.
 Documentation must mention the same restriction about key and data colocation: the store keys should not be on the
 same disk as the temporary date.
 
+In cases where the data does not need to be persisted across restarts, we can generate data keys in memory,
+removing the restriction on tmp directory location and avoiding key reuse.
+
 ### Enterprise enforcement
 
 Gating at-rest-encryption on the presence of a valid enterprise license is problematic due to the fact that
