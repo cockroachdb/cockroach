@@ -151,6 +151,15 @@ func (l StatementList) Format(buf *bytes.Buffer, f FmtFlags) {
 	}
 }
 
+// ObserverStatement is a marker interface to be implemented by
+// statements which are always valid and do not modify neither the
+// session state, the txn state or the database. They are to be
+// allowed at any point, including when a current transaction is in a
+// transient state like retry_wait.
+type ObserverStatement interface {
+	observerStatement()
+}
+
 // StatementType implements the Statement interface.
 func (*AlterIndex) StatementType() StatementType { return DDL }
 
@@ -699,6 +708,7 @@ func (*ShowSyntax) StatementType() StatementType { return Rows }
 // StatementTag returns a short string identifying the type of statement.
 func (*ShowSyntax) StatementTag() string { return "SHOW SYNTAX" }
 
+func (*ShowSyntax) observerStatement()                 {}
 func (*ShowSyntax) hiddenFromStats()                   {}
 func (*ShowSyntax) independentFromParallelizedPriors() {}
 
@@ -708,6 +718,7 @@ func (*ShowTransactionStatus) StatementType() StatementType { return Rows }
 // StatementTag returns a short string identifying the type of statement.
 func (*ShowTransactionStatus) StatementTag() string { return "SHOW TRANSACTION STATUS" }
 
+func (*ShowTransactionStatus) observerStatement()                 {}
 func (*ShowTransactionStatus) hiddenFromStats()                   {}
 func (*ShowTransactionStatus) independentFromParallelizedPriors() {}
 
