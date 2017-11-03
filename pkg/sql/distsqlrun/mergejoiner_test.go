@@ -363,7 +363,7 @@ func TestMergeJoiner(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			m.Run(context.Background(), nil)
+			m.Run(context.Background(), nil /* wg */)
 
 			if !out.ProducerClosed {
 				t.Fatalf("output RowReceiver not closed")
@@ -388,6 +388,96 @@ func TestMergeJoiner(t *testing.T) {
 			if expStr != retStr {
 				t.Errorf("invalid results; expected:\n   %s\ngot:\n   %s",
 					expStr, retStr)
+			}
+		})
+	}
+}
+
+// Test that the joiner shuts down fine if the consumer is closed prematurely.
+func TestConsumerClosed(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	columnTypeInt := sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_INT}
+	v := [10]sqlbase.EncDatum{}
+	for i := range v {
+		v[i] = sqlbase.DatumToEncDatum(columnTypeInt, parser.NewDInt(parser.DInt(i)))
+	}
+
+	spec := MergeJoinerSpec{
+		LeftOrdering: convertToSpecOrdering(
+			sqlbase.ColumnOrdering{
+				{ColIdx: 0, Direction: encoding.Ascending},
+			}),
+		RightOrdering: convertToSpecOrdering(
+			sqlbase.ColumnOrdering{
+				{ColIdx: 0, Direction: encoding.Ascending},
+			}),
+		Type: JoinType_INNER,
+		// Implicit @1 = @2 constraint.
+	}
+	outCols := []uint32{0}
+	leftTypes := []sqlbase.ColumnType{{SemanticType: sqlbase.ColumnType_INT}}
+	rightTypes := []sqlbase.ColumnType{{SemanticType: sqlbase.ColumnType_INT}}
+
+	testCases := []struct {
+		typ       JoinType
+		leftRows  sqlbase.EncDatumRows
+		rightRows sqlbase.EncDatumRows
+	}{
+		{
+			typ: JoinType_INNER,
+			// Implicit @1 = @2 constraint.
+			leftRows: sqlbase.EncDatumRows{
+				{v[0]},
+			},
+			rightRows: sqlbase.EncDatumRows{
+				{v[0]},
+			},
+		},
+		{
+			typ: JoinType_LEFT_OUTER,
+			// Implicit @1 = @2 constraint.
+			leftRows: sqlbase.EncDatumRows{
+				{v[0]},
+			},
+			rightRows: sqlbase.EncDatumRows{},
+		},
+		{
+			typ: JoinType_RIGHT_OUTER,
+			// Implicit @1 = @2 constraint.
+			leftRows: sqlbase.EncDatumRows{},
+			rightRows: sqlbase.EncDatumRows{
+				{v[0]},
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.typ.String() /* name */, func(t *testing.T) {
+			leftInput := NewRowBuffer(leftTypes, tc.leftRows, RowBufferArgs{})
+			rightInput := NewRowBuffer(rightTypes, tc.rightRows, RowBufferArgs{})
+
+			// Create a consumer and close it immediately. The mergeJoiner should find out
+			// about this closer the first time it attempts to push a row.
+			out := &RowBuffer{}
+			out.ConsumerDone()
+
+			evalCtx := parser.MakeTestingEvalContext()
+			defer evalCtx.Stop(context.Background())
+			flowCtx := FlowCtx{
+				Settings: cluster.MakeTestingClusterSettings(),
+				EvalCtx:  evalCtx,
+			}
+			post := PostProcessSpec{Projection: true, OutputColumns: outCols}
+			m, err := newMergeJoiner(&flowCtx, &spec, leftInput, rightInput, &post, out)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			m.Run(context.TODO(), nil /* wg */)
+
+			if !out.ProducerClosed {
+				t.Fatalf("output RowReceiver not closed")
 			}
 		})
 	}
