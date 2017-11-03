@@ -935,7 +935,6 @@ stmt:
 | alter_stmt      // help texts in sub-rule
 | backup_stmt     // EXTEND WITH HELP: BACKUP
 | cancel_stmt     // help texts in sub-rule
-| scrub_stmt
 | copy_from_stmt
 | create_stmt     // help texts in sub-rule
 | deallocate_stmt // EXTEND WITH HELP: DEALLOCATE
@@ -953,6 +952,7 @@ stmt:
 | resume_stmt     // EXTEND WITH HELP: RESUME JOB
 | revoke_stmt     // EXTEND WITH HELP: REVOKE
 | savepoint_stmt  // EXTEND WITH HELP: SAVEPOINT
+| scrub_stmt      // help texts in sub-rule
 | select_stmt     // help texts in sub-rule
   {
     $$.val = $1.slct()
@@ -1756,7 +1756,7 @@ explainable_stmt:
 | create_ddl_stmt  // help texts in sub-rule
 | drop_ddl_stmt    // help texts in sub-rule
 | execute_stmt     // EXTEND WITH HELP: EXECUTE
-| explain_stmt { /* SKIP DOC */ }
+| explain_stmt     { /* SKIP DOC */ }
 
 explain_option_list:
   explain_option_name
