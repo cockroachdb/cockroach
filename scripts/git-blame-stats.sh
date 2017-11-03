@@ -10,6 +10,9 @@
 FILE_REGEXP='\.go$'
 if [ -n "$1" ]; then FILE_REGEXP=$1; fi
 
+toplevel=$(git rev-parse --show-toplevel)
+cp ${toplevel}/scripts/.mailmap ${toplevel}/.mailmap
+
 git ls-tree -r HEAD \
   | cut -f 2 \
   | grep -E "$FILE_REGEXP" \
@@ -18,3 +21,5 @@ git ls-tree -r HEAD \
   | sort \
   | uniq -c \
   | sort -nr
+
+rm ${toplevel}/.mailmap

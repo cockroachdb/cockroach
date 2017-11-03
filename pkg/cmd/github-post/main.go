@@ -22,6 +22,7 @@ import (
 	"log"
 	"net/url"
 	"os"
+	"os/exec"
 	"regexp"
 	"strings"
 
@@ -63,7 +64,7 @@ func main() {
 		&oauth2.Token{AccessToken: token},
 	)))
 
-	if err := runGH(ctx, os.Stdin, client.Issues.Create, client.Search.Issues, client.Issues.CreateComment); err != nil {
+	if err := runGH(ctx, os.Stdin, client.Issues.Create, client.Search.Issues, client.Issues.CreateComment, client.Repositories.ListCommits); err != nil {
 		log.Fatal(err)
 	}
 }
@@ -105,12 +106,83 @@ func trimIssueRequestBody(message string, usedCharacters int) string {
 	return message
 }
 
+// If the assignee would be the key in this map, assign to the value instead.
+// Helpful to avoid pinging former employees.
+var oldFriendsMap = map[string]string{
+	"tamird": "tschottdorf",
+}
+
+func getAssignee(
+	ctx context.Context,
+	packageName, testName string,
+	listCommits func(ctx context.Context, owner string, repo string, opts *github.CommitsListOptions) ([]*github.RepositoryCommit, *github.Response, error),
+) (string, error) {
+	// Search the source code for the email address of the last committer to touch
+	// the first line of the source code that contains testName. Then, ask GitHub
+	// for the GitHub username of the user with that email address by searching
+	// commits in cockroachdb/cockroach for commits authored by the address.
+	subtests := strings.Split(testName, "/")
+	testName = subtests[0]
+	packageName = strings.TrimPrefix(packageName, "github.com/cockroachdb/cockroach/")
+	cmd := exec.Command(`/bin/bash`, `-c`, fmt.Sprintf(`git grep -n "func %s" $(git rev-parse --show-toplevel)/%s/*_test.go`, testName, packageName))
+	// This command returns output such as:
+	// ../ccl/storageccl/export_test.go:31:func TestExportCmd(t *testing.T) {
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return "", errors.Errorf("couldn't find test %s in %s: %s %s", testName, packageName, err, string(out))
+	}
+	re := regexp.MustCompile(`(.*):(.*):`)
+	// The first 2 :-delimited fields are the filename and line number.
+	matches := re.FindSubmatch(out)
+	if matches == nil {
+		return "", errors.Errorf("couldn't find filename/line number for test %s in %s: %s", testName, packageName, string(out))
+	}
+	filename := matches[1]
+	linenum := matches[2]
+
+	// Now run git blame.
+	cmd = exec.Command(`/bin/bash`, `-c`, fmt.Sprintf(`git blame --porcelain -L%s,+1 %s | grep author-mail`, linenum, filename))
+	// This command returns output such as:
+	// author-mail <jordan@cockroachlabs.com>
+	out, err = cmd.CombinedOutput()
+	if err != nil {
+		return "", errors.Errorf("couldn't find author of test %s in %s: %s %s", testName, packageName, err, string(out))
+	}
+	re = regexp.MustCompile("author-mail <(.*)>")
+	matches = re.FindSubmatch(out)
+	if matches == nil {
+		return "", errors.Errorf("couldn't find author email of test %s in %s: %s", testName, packageName, string(out))
+	}
+	email := string(matches[1])
+
+	commits, _, err := listCommits(ctx, githubUser, githubRepo, &github.CommitsListOptions{
+		Author: email,
+		ListOptions: github.ListOptions{
+			PerPage: 1,
+		},
+	})
+	if err != nil {
+		return "", err
+	}
+	if len(commits) == 0 {
+		return "", errors.Errorf("couldn't find GitHub commits for user email %s", email)
+	}
+
+	assignee := *commits[0].Author.Login
+
+	if newAssignee, ok := oldFriendsMap[assignee]; ok {
+		assignee = newAssignee
+	}
+	return assignee, nil
+}
+
 func runGH(
 	ctx context.Context,
 	input io.Reader,
 	createIssue func(ctx context.Context, owner string, repo string, issue *github.IssueRequest) (*github.Issue, *github.Response, error),
 	searchIssues func(ctx context.Context, query string, opt *github.SearchOptions) (*github.IssuesSearchResult, *github.Response, error),
 	createComment func(ctx context.Context, owner string, repo string, number int, comment *github.IssueComment) (*github.IssueComment, *github.Response, error),
+	listCommits func(ctx context.Context, owner string, repo string, opts *github.CommitsListOptions) ([]*github.RepositoryCommit, *github.Response, error),
 ) error {
 	sha, ok := os.LookupEnv(teamcityVCSNumberEnv)
 	if !ok {
@@ -159,7 +231,7 @@ Parameters:
 
 Stress build found a failed test: %s`
 
-	newIssueRequest := func(packageName, testName, message string) *github.IssueRequest {
+	newIssueRequest := func(packageName, testName, message, assignee string) *github.IssueRequest {
 		title := fmt.Sprintf("%s: %s failed under stress",
 			strings.TrimPrefix(packageName, cockroachPkgPrefix), testName)
 		body := fmt.Sprintf(bodyTemplate, sha, parametersStr, u.String()) + "\n\n```\n%s\n```"
@@ -171,13 +243,14 @@ Stress build found a failed test: %s`
 		body = fmt.Sprintf(body, trimIssueRequestBody(message, len(body)))
 
 		return &github.IssueRequest{
-			Title:  &title,
-			Body:   &body,
-			Labels: &issueLabels,
+			Title:    &title,
+			Body:     &body,
+			Labels:   &issueLabels,
+			Assignee: &assignee,
 		}
 	}
 
-	newIssueComment := func(packageName, testname string) *github.IssueComment {
+	newIssueComment := func(packageName, testName string) *github.IssueComment {
 		body := fmt.Sprintf(bodyTemplate, sha, parametersStr, u.String())
 		return &github.IssueComment{Body: &body}
 	}
@@ -199,7 +272,14 @@ Stress build found a failed test: %s`
 		for _, test := range suite.Tests {
 			switch test.Status {
 			case lib.Failed:
-				issueRequest := newIssueRequest(packageName, test.Name, test.Message)
+				assignee, err := getAssignee(ctx, packageName, test.Name, listCommits)
+				if err != nil {
+					// if we *can't* assign anyone, sigh, feel free to hard-code me.
+					// -- tschottdorf, 11/3/2017
+					assignee = "tschottdorf"
+					test.Message += fmt.Sprintf("\n\nFailed to find issue assignee: \n%s", err)
+				}
+				issueRequest := newIssueRequest(packageName, test.Name, test.Message, assignee)
 				searchQuery := fmt.Sprintf(`"%s" user:%s repo:%s is:open`, *issueRequest.Title, githubUser, githubRepo)
 				for _, label := range issueLabels {
 					searchQuery = searchQuery + fmt.Sprintf(` label:"%s"`, label)
@@ -241,7 +321,7 @@ Stress build found a failed test: %s`
 		if !ok {
 			packageName = unknown
 		}
-		issueRequest := newIssueRequest(packageName, unknown, inputBuf.String())
+		issueRequest := newIssueRequest(packageName, unknown, inputBuf.String(), "")
 		if _, _, err := createIssue(ctx, githubUser, githubRepo, issueRequest); err != nil {
 			return errors.Wrapf(err, "failed to create GitHub issue %s", github.Stringify(issueRequest))
 		}
