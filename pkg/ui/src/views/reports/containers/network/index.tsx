@@ -208,13 +208,13 @@ class Network extends React.Component<NetworkProps, {}> {
           X
         </td>;
       }
-      const a = nodesSummary.nodeStatusByID[nodeIDa].latencies;
-      if (_.isNil(a[nodeIDb])) {
-        return <td key={key} className="network-table__cell network-table__cell--no-connection">
-          X
-        </td>;
+      const a = nodesSummary.nodeStatusByID[nodeIDa].activity;
+      if (_.isNil(a) || _.isNil(a[nodeIDb])) {
+	return <td key={key} className="network-table__cell network-table__cell--no-connection">
+	  X
+	</td>;
       }
-      const latency = NanoToMilli(a[nodeIDb].toNumber());
+      const latency = NanoToMilli(a[nodeIDb].latency.toNumber());
       let heat: string;
       if (latency > stddevPlus2) {
         heat = "stddev-plus-2";
@@ -376,14 +376,14 @@ class Network extends React.Component<NetworkProps, {}> {
     const latencies = _.flatMap(healthyIDs, nodeIDa => (
       _.chain(healthyIDs)
         .without(nodeIDa)
-        .map(nodeIDb => nodesSummary.nodeStatusByID[nodeIDa].latencies[nodeIDb])
-        .map(latency => NanoToMilli(latency.toNumber()))
+        .map(nodeIDb => nodesSummary.nodeStatusByID[nodeIDa].activity[nodeIDb])
+        .map(activity => NanoToMilli(activity.latency.toNumber()))
         .filter(ms => _.isFinite(ms) && ms > 0)
         .value()
     ));
 
     const noConnections: NoConnection[] = _.flatMap(healthyIDs, nodeIDa => (
-      _.chain(nodesSummary.nodeStatusByID[nodeIDa].latencies)
+      _.chain(nodesSummary.nodeStatusByID[nodeIDa].activity)
         .keys()
         .map(nodeIDb => Number.parseInt(nodeIDb, 10))
         .difference(healthyIDs)

@@ -358,6 +358,7 @@ func TestMetricsRecorder(t *testing.T) {
 	}
 	nodeSummary.Args = nil
 	nodeSummary.Env = nil
+	nodeSummary.Activity = nil
 	nodeSummary.Latencies = nil
 
 	sort.Sort(byStoreDescID(nodeSummary.StoreStatuses))
