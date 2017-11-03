@@ -383,7 +383,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		storeCfg.TestingKnobs = *storeTestingKnobs.(*storage.StoreTestingKnobs)
 	}
 
-	s.recorder = status.NewMetricsRecorder(s.clock, s.nodeLiveness, s.rpcContext.RemoteClocks, s.gossip)
+	s.recorder = status.NewMetricsRecorder(s.clock, s.nodeLiveness, s.rpcContext, s.gossip)
 	s.registry.AddMetricStruct(s.rpcContext.RemoteClocks.Metrics())
 
 	s.runtime = status.MakeRuntimeStatSampler(s.clock)

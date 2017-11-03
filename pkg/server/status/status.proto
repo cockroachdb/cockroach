@@ -36,6 +36,18 @@ message NodeStatus {
   repeated StoreStatus store_statuses = 6 [(gogoproto.nullable) = false];
   repeated string args = 7;
   repeated string env = 8;
+  // incoming is a map of nodeIDs to bytes which is the incoming
+  // throughput from the other node to this node.
+  map<int32, int64> incoming = 10 [
+    (gogoproto.nullable) = false,
+    (gogoproto.castkey) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"
+  ];
+  // outgoing is a map of nodeIDs to bytes which is the outgoing
+  // throughput from this node to the other node.
+  map<int32, int64> outgoing = 11 [
+    (gogoproto.nullable) = false,
+    (gogoproto.castkey) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"
+  ];
   // latencies is a map of nodeIDs to nanoseconds which is the latency between
   // this node and the other node.
   map<int32, int64> latencies = 9 [

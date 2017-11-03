@@ -20,6 +20,7 @@ import (
 	"io"
 	"os"
 	"strconv"
+	"time"
 
 	"golang.org/x/net/context"
 
@@ -86,10 +87,10 @@ type storeMetrics interface {
 // store hosted by the node. There are slight differences in the way these are
 // recorded, and they are thus kept separate.
 type MetricsRecorder struct {
-	gossip             *gossip.Gossip
-	nodeLiveness       *storage.NodeLiveness
-	remoteClockMonitor *rpc.RemoteClockMonitor
-	mu                 struct {
+	gossip       *gossip.Gossip
+	nodeLiveness *storage.NodeLiveness
+	rpcContext   *rpc.Context
+	mu           struct {
 		syncutil.Mutex
 		// prometheusExporter merges metrics into families and generates the
 		// prometheus text format.
@@ -124,13 +125,13 @@ type MetricsRecorder struct {
 func NewMetricsRecorder(
 	clock *hlc.Clock,
 	nodeLiveness *storage.NodeLiveness,
-	remoteClockMonitor *rpc.RemoteClockMonitor,
+	rpcContext *rpc.Context,
 	gossip *gossip.Gossip,
 ) *MetricsRecorder {
 	mr := &MetricsRecorder{
-		nodeLiveness:       nodeLiveness,
-		remoteClockMonitor: remoteClockMonitor,
-		gossip:             gossip,
+		nodeLiveness: nodeLiveness,
+		rpcContext:   rpcContext,
+		gossip:       gossip,
 	}
 	mr.mu.storeRegistries = make(map[roachpb.StoreID]*metric.Registry)
 	mr.mu.stores = make(map[roachpb.StoreID]storeMetrics)
@@ -268,35 +269,52 @@ func (mr *MetricsRecorder) GetTimeSeriesData() []tspb.TimeSeriesData {
 	return data
 }
 
-// getLatencies produces a map of latencies from from this node to all other
-// nodes. Latencies are stored as nanos.
-func (mr *MetricsRecorder) getLatencies(ctx context.Context) map[roachpb.NodeID]int64 {
+// getNetworkActivity produces three maps detailing information about
+// network activity between this node and all other nodes. The maps
+// are incoming throughput, outgoing throughput, and average
+// latency. Throughputs are stored as bytes, and latencies as nanos.
+func (mr *MetricsRecorder) getNetworkActivity(
+	ctx context.Context,
+) (map[roachpb.NodeID]int64, map[roachpb.NodeID]int64, map[roachpb.NodeID]int64) {
+	incoming := make(map[roachpb.NodeID]int64)
+	outgoing := make(map[roachpb.NodeID]int64)
 	latencies := make(map[roachpb.NodeID]int64)
-	if mr.nodeLiveness != nil && mr.gossip != nil && mr.remoteClockMonitor != nil {
+	if mr.nodeLiveness != nil && mr.gossip != nil {
 		isLiveMap := mr.nodeLiveness.GetIsLiveMap()
-		currentAverages := mr.remoteClockMonitor.AllLatencies()
+
+		throughputMap := mr.rpcContext.GetStatsMap()
+		var currentAverages map[string]time.Duration
+		if mr.rpcContext.RemoteClocks != nil {
+			currentAverages = mr.rpcContext.RemoteClocks.AllLatencies()
+		}
 		for nodeID, alive := range isLiveMap {
-			if !alive {
-				continue
-			}
 			address, err := mr.gossip.GetNodeIDAddress(nodeID)
 			if err != nil {
 				log.Warning(ctx, err.Error())
 				continue
 			}
-			if latency, ok := currentAverages[address.String()]; ok {
+			key := address.String()
+			if tp, ok := throughputMap.Load(key); ok {
+				stats := tp.(*rpc.Stats)
+				incoming[nodeID] = stats.Incoming()
+				outgoing[nodeID] = stats.Outgoing()
+			}
+			if !alive {
+				continue
+			}
+			if latency, ok := currentAverages[key]; ok {
 				latencies[nodeID] = latency.Nanoseconds()
 			}
 		}
 	}
-	return latencies
+	return incoming, outgoing, latencies
 }
 
 // GetStatusSummary returns a status summary message for the node. The summary
 // includes the recent values of metrics for both the node and all of its
 // component stores.
 func (mr *MetricsRecorder) GetStatusSummary(ctx context.Context) *NodeStatus {
-	latencies := mr.getLatencies(ctx)
+	incoming, outgoing, latencies := mr.getNetworkActivity(ctx)
 
 	mr.mu.Lock()
 	defer mr.mu.Unlock()
@@ -321,6 +339,8 @@ func (mr *MetricsRecorder) GetStatusSummary(ctx context.Context) *NodeStatus {
 		Metrics:       make(map[string]float64, mr.mu.lastNodeMetricCount),
 		Args:          os.Args,
 		Env:           envutil.GetEnvVarsUsed(),
+		Incoming:      incoming,
+		Outgoing:      outgoing,
 		Latencies:     latencies,
 	}
 

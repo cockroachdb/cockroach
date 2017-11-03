@@ -114,8 +114,7 @@ func createTestNode(
 		storage.MakeStorePoolNodeLivenessFunc(cfg.NodeLiveness),
 		/* deterministic */ false,
 	)
-	metricsRecorder := status.NewMetricsRecorder(cfg.Clock, cfg.NodeLiveness,
-		nodeRPCContext.RemoteClocks, cfg.Gossip)
+	metricsRecorder := status.NewMetricsRecorder(cfg.Clock, cfg.NodeLiveness, nodeRPCContext, cfg.Gossip)
 	node := NewNode(cfg, metricsRecorder, metric.NewRegistry(), stopper,
 		kv.MakeTxnMetrics(metric.TestSampleInterval), sql.MakeEventLogger(nil))
 	roachpb.RegisterInternalServer(grpcServer, node)
