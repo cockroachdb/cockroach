@@ -56,13 +56,17 @@ type Parser struct {
 
 // Parse parses the sql and returns a list of statements.
 func (p *Parser) Parse(sql string) (stmts StatementList, err error) {
+	return parseWithDepth(1, sql)
+}
+
+func (p *Parser) parseWithDepth(depth int, sql string) (stmts StatementList, err error) {
 	p.scanner.init(sql)
 	if p.parserImpl.Parse(&p.scanner) != 0 {
 		var err *pgerror.Error
 		if feat := p.scanner.lastError.unimplementedFeature; feat != "" {
-			err = pgerror.Unimplemented(feat, p.scanner.lastError.msg)
+			err = pgerror.UnimplementedWithDepth(depth+1, feat, p.scanner.lastError.msg)
 		} else {
-			err = pgerror.NewError(pgerror.CodeSyntaxError, p.scanner.lastError.msg)
+			err = pgerror.NewErrorWithDepth(depth+1, pgerror.CodeSyntaxError, p.scanner.lastError.msg)
 		}
 		err.Hint = p.scanner.lastError.hint
 		err.Detail = p.scanner.lastError.detail
@@ -130,14 +134,18 @@ func (p *Parser) NormalizeExpr(ctx *EvalContext, typedExpr TypedExpr) (TypedExpr
 
 // Parse parses a sql statement string and returns a list of Statements.
 func Parse(sql string) (StatementList, error) {
+	return parseWithDepth(1, sql)
+}
+
+func parseWithDepth(depth int, sql string) (StatementList, error) {
 	var p Parser
-	return p.Parse(sql)
+	return p.parseWithDepth(depth+1, sql)
 }
 
 // ParseOne parses a sql statement string, ensuring that it contains only a
 // single statement, and returns that Statement.
 func ParseOne(sql string) (Statement, error) {
-	stmts, err := Parse(sql)
+	stmts, err := parseWithDepth(1, sql)
 	if err != nil {
 		return nil, err
 	}
