@@ -65,6 +65,7 @@ var expectedHelpStrings = []string{
 	"SHOW QUERIES",
 	"SHOW SESSION",
 	"SHOW SESSIONS",
+	"SHOW SYNTAX",
 	"SHOW TABLES",
 	"SHOW TRACE",
 	"SHOW TRANSACTION",

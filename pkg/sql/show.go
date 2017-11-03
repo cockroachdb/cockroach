@@ -659,6 +659,50 @@ func (p *planner) ShowTables(ctx context.Context, n *parser.ShowTables) (planNod
 		initialCheck, nil)
 }
 
+// ShowSyntax implements the plan for SHOW SYNTAX. This statement is
+// usually handled as a special case in Executor, but for
+// FROM [SHOW SYNTAX ...] we will arrive here too.
+func (p *planner) ShowSyntax(ctx context.Context, n *parser.ShowSyntax) (planNode, error) {
+	var query bytes.Buffer
+	query.WriteString("SELECT @1 AS field, @2 AS text FROM (VALUES ")
+
+	stmts, err := parser.Parse(n.Statement)
+	if err != nil {
+		pqErr, _ := pgerror.GetPGCause(err)
+		fmt.Fprintf(&query, "('error', %s), ('code', %s)",
+			parser.EscapeSQLString(pqErr.Message),
+			parser.EscapeSQLString(pqErr.Code))
+		if pqErr.Source != nil {
+			if pqErr.Source.File != "" {
+				fmt.Fprintf(&query, ", ('file', %s)", parser.EscapeSQLString(pqErr.Source.File))
+			}
+			if pqErr.Source.Line > 0 {
+				fmt.Fprintf(&query, ", ('line', '%d')", pqErr.Source.Line)
+			}
+			if pqErr.Source.Function != "" {
+				fmt.Fprintf(&query, ", ('function', %s)", parser.EscapeSQLString(pqErr.Source.Function))
+			}
+		}
+		if pqErr.Detail != "" {
+			fmt.Fprintf(&query, ", ('detail', %s)", parser.EscapeSQLString(pqErr.Detail))
+		}
+		if pqErr.Hint != "" {
+			fmt.Fprintf(&query, ", ('hint', %s)", parser.EscapeSQLString(pqErr.Hint))
+		}
+	} else {
+		for i, stmt := range stmts {
+			if i > 0 {
+				query.WriteString(", ")
+			}
+			fmt.Fprintf(&query, "('sql', %s)",
+				parser.EscapeSQLString(parser.AsStringWithFlags(stmt, parser.FmtParsable)))
+		}
+	}
+	query.WriteByte(')')
+
+	return p.delegateQuery(ctx, "SHOW SYNTAX", query.String(), nil, nil)
+}
+
 // ShowTransactionStatus implements the plan for SHOW TRANSACTION STATUS.
 // This statement is usually handled as a special case in Executor,
 // but for FROM [SHOW TRANSACTION STATUS] we will arrive here too.

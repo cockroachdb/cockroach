@@ -218,6 +218,20 @@ func (node *ShowCreateView) Format(buf *bytes.Buffer, f FmtFlags) {
 	FormatNode(buf, f, &node.View)
 }
 
+// ShowSyntax represents a SHOW SYNTAX statement.
+// This the most lightweight thing that can be done on a statement
+// server-side: just report the statement that was entered without
+// any processing. Meant for use for syntax checking on clients,
+// when the client version might differ from the server.
+type ShowSyntax struct {
+	Statement string
+}
+
+func (node *ShowSyntax) Format(buf *bytes.Buffer, f FmtFlags) {
+	buf.WriteString("SHOW SYNTAX ")
+	buf.WriteString(EscapeSQLString(node.Statement))
+}
+
 // ShowTransactionStatus represents a SHOW TRANSACTION STATUS statement.
 type ShowTransactionStatus struct {
 }

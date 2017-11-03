@@ -259,3 +259,23 @@ query ITTTTTTTTRTI colnames
 SELECT * FROM [SHOW JOBS] LIMIT 0
 ----
 id  type  description  username  status  created  started  finished  modified  fraction_completed  error  coordinator_id
+
+query TT colnames
+SELECT * FROM [SHOW SYNTAX 'select 1; select 2']
+----
+field  text
+sql    SELECT 1
+sql    SELECT 2
+
+# Test the SHOW SYNTAX statement. We avoid printing out the line number
+# here because that is highly likely to change as code is edited.
+query TT colnames
+SELECT field, replace(text, e'\n', ' ') AS text FROM [SHOW SYNTAX 'foo']
+ WHERE field != 'line'
+----
+field     text
+error     syntax error at or near "foo"
+code      42601
+file      sql/pgwire/pgerror/errors.go
+function  NewError
+detail    source SQL: foo ^

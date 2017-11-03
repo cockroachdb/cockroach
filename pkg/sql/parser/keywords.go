@@ -275,6 +275,7 @@ var keywords = map[string]struct {
 	"string":                    {STRING, "C"},
 	"substring":                 {SUBSTRING, "C"},
 	"symmetric":                 {SYMMETRIC, "R"},
+	"syntax":                    {SYNTAX, "U"},
 	"system":                    {SYSTEM, "U"},
 	"table":                     {TABLE, "R"},
 	"tables":                    {TABLES, "U"},

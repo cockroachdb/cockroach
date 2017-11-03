@@ -433,6 +433,8 @@ func (p *planner) newPlan(
 		return p.ShowJobs(ctx, n)
 	case *parser.ShowSessions:
 		return p.ShowSessions(ctx, n)
+	case *parser.ShowSyntax:
+		return p.ShowSyntax(ctx, n)
 	case *parser.ShowTables:
 		return p.ShowTables(ctx, n)
 	case *parser.ShowTrace:
