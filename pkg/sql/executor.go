@@ -1024,10 +1024,10 @@ func runWithAutoRetry(
 			state := txnState.State()
 			if err == nil && (state == Aborted || state == RestartWait) {
 				crash := true
-				// SHOW TRANSACTION STATUS statements are always allowed regardless of
+				// Observer statements are always allowed regardless of
 				// the transaction state.
 				if len(stmtsToExec) > 0 {
-					if _, ok := stmtsToExec[0].AST.(*parser.ShowTransactionStatus); ok {
+					if _, ok := stmtsToExec[0].AST.(parser.ObserverStatement); ok {
 						crash = false
 					}
 				}
@@ -1304,10 +1304,10 @@ func (e *Executor) execSingleStatement(
 	}
 
 	var err error
-	// Run SHOW TRANSACTION STATUS in a separate code path so it is
+	// Run observer statements in a separate code path so they are
 	// always guaranteed to execute regardless of the current transaction state.
-	if _, ok := stmt.AST.(*parser.ShowTransactionStatus); ok {
-		err = runShowTransactionState(session, res)
+	if _, ok := stmt.AST.(parser.ObserverStatement); ok {
+		err = runObserverStatement(session, res, stmt)
 	} else {
 		switch txnState.State() {
 		case Open, AutoRetry:
@@ -1368,15 +1368,31 @@ func getTransactionState(txnState *txnState) string {
 	return state.String()
 }
 
-// runShowTransactionState returns the state of current transaction.
-func runShowTransactionState(session *Session, res StatementResult) error {
-	res.BeginResult((*parser.ShowTransactionStatus)(nil))
-	res.SetColumns(sqlbase.ResultColumns{{Name: "TRANSACTION STATUS", Typ: parser.TypeString}})
+// runObserverStatement executes the given observer statement.
+func runObserverStatement(session *Session, res StatementResult, stmt Statement) error {
+	res.BeginResult(stmt.AST)
 
-	state := getTransactionState(&session.TxnState)
-	if err := res.AddRow(session.Ctx(), parser.Datums{parser.NewDString(state)}); err != nil {
-		return err
+	switch sqlStmt := stmt.AST.(type) {
+	case *parser.ShowTransactionStatus:
+		res.SetColumns(sqlbase.ResultColumns{{Name: "TRANSACTION STATUS", Typ: parser.TypeString}})
+		state := getTransactionState(&session.TxnState)
+		if err := res.AddRow(session.Ctx(), parser.Datums{parser.NewDString(state)}); err != nil {
+			return err
+		}
+
+	case *parser.ShowSyntax:
+		res.SetColumns(sqlbase.ResultColumns{
+			{Name: "field", Typ: parser.TypeString},
+			{Name: "message", Typ: parser.TypeString},
+		})
+		if err := runShowSyntax(session.Ctx(), sqlStmt.Statement,
+			func(ctx context.Context, field, msg string) error {
+				return res.AddRow(ctx, parser.Datums{parser.NewDString(field), parser.NewDString(msg)})
+			}); err != nil {
+			return err
+		}
 	}
+
 	return res.CloseResult()
 }
 

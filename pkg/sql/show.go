@@ -666,41 +666,68 @@ func (p *planner) ShowSyntax(ctx context.Context, n *parser.ShowSyntax) (planNod
 	var query bytes.Buffer
 	query.WriteString("SELECT @1 AS field, @2 AS text FROM (VALUES ")
 
-	stmts, err := parser.Parse(n.Statement)
+	first := true
+	if err := runShowSyntax(ctx, n.Statement, func(ctx context.Context, field, msg string) error {
+		if !first {
+			query.WriteString(", ")
+		}
+		first = false
+		fmt.Fprintf(&query, "('%s', %s)", field, parser.EscapeSQLString(msg))
+		return nil
+	}); err != nil {
+		return nil, err
+	}
+	query.WriteByte(')')
+	return p.delegateQuery(ctx, "SHOW SYNTAX", query.String(), nil, nil)
+}
+
+func runShowSyntax(
+	ctx context.Context, stmt string, report func(ctx context.Context, field, msg string) error,
+) error {
+	stmts, err := parser.Parse(stmt)
 	if err != nil {
 		pqErr, _ := pgerror.GetPGCause(err)
-		fmt.Fprintf(&query, "('error', %s), ('code', %s)",
-			parser.EscapeSQLString(pqErr.Message),
-			parser.EscapeSQLString(pqErr.Code))
+		if err := report(ctx, "error", pqErr.Message); err != nil {
+			return err
+		}
+		if err := report(ctx, "code", pqErr.Code); err != nil {
+			return err
+		}
 		if pqErr.Source != nil {
 			if pqErr.Source.File != "" {
-				fmt.Fprintf(&query, ", ('file', %s)", parser.EscapeSQLString(pqErr.Source.File))
+				if err := report(ctx, "file", pqErr.Source.File); err != nil {
+					return err
+				}
 			}
 			if pqErr.Source.Line > 0 {
-				fmt.Fprintf(&query, ", ('line', '%d')", pqErr.Source.Line)
+				if err := report(ctx, "line", fmt.Sprintf("%d", pqErr.Source.Line)); err != nil {
+					return err
+				}
 			}
 			if pqErr.Source.Function != "" {
-				fmt.Fprintf(&query, ", ('function', %s)", parser.EscapeSQLString(pqErr.Source.Function))
+				if err := report(ctx, "function", pqErr.Source.Function); err != nil {
+					return err
+				}
 			}
 		}
 		if pqErr.Detail != "" {
-			fmt.Fprintf(&query, ", ('detail', %s)", parser.EscapeSQLString(pqErr.Detail))
+			if err := report(ctx, "detail", pqErr.Detail); err != nil {
+				return err
+			}
 		}
 		if pqErr.Hint != "" {
-			fmt.Fprintf(&query, ", ('hint', %s)", parser.EscapeSQLString(pqErr.Hint))
+			if err := report(ctx, "hint", pqErr.Hint); err != nil {
+				return err
+			}
 		}
 	} else {
-		for i, stmt := range stmts {
-			if i > 0 {
-				query.WriteString(", ")
+		for _, stmt := range stmts {
+			if err := report(ctx, "sql", parser.AsStringWithFlags(stmt, parser.FmtParsable)); err != nil {
+				return err
 			}
-			fmt.Fprintf(&query, "('sql', %s)",
-				parser.EscapeSQLString(parser.AsStringWithFlags(stmt, parser.FmtParsable)))
 		}
 	}
-	query.WriteByte(')')
-
-	return p.delegateQuery(ctx, "SHOW SYNTAX", query.String(), nil, nil)
+	return nil
 }
 
 // ShowTransactionStatus implements the plan for SHOW TRANSACTION STATUS.
