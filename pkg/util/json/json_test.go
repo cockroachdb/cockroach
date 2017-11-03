@@ -517,3 +517,103 @@ func TestJSONRemoveIndex(t *testing.T) {
 		}
 	}
 }
+
+// TODO(justin): when the JSON random generator is merged, make a round-trip test for that.
+func TestJSONEncodeRoundTrip(t *testing.T) {
+	cases := []string{
+		`true`,
+		`false`,
+		`null`,
+		`""`,
+		`"🤔"`,
+		`"\""`,
+		`"\n"`,
+		`"hello"`,
+		`"goodbye"`,
+		`1`,
+		`1.00`,
+		`100`,
+		`-1`,
+		`1000000000000000`,
+		`100000000000000000000000000000000000`,
+		`[]`,
+		`["hello"]`,
+		`[1]`,
+		`[1, 2]`,
+		`[1, 2, 3]`,
+		`[100000000000000000000000000000000000]`,
+		`[1, true, "three"]`,
+		`[[1]]`,
+		`[[1], [1], [[1]]]`,
+		`[[[["hello"]]]]`,
+		`{}`,
+		`{"a": 1, "b": 2}`,
+		`{"b": 1, "a": 2}`,
+		`{"a": [1, 2, 3]}`,
+		`{"a": [{"b": 2}, {"b": 4}]}`,
+		`[1, {"a": 3}, null, {"b": null}]`,
+		`{"🤔": "foo"}`,
+	}
+
+	for _, tc := range cases {
+		t.Run(tc, func(t *testing.T) {
+			j, err := ParseJSON(tc)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			encoded, err := EncodeJSON(nil, j)
+			if err != nil {
+				t.Fatal(err)
+			}
+			_, decoded, err := DecodeJSON(encoded)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			if j.Compare(decoded) != 0 {
+				t.Fatalf("expected %s, got %s (encoding %v)", j, decoded, encoded)
+			}
+		})
+	}
+}
+
+// This tests that the stringified version is the same, for testing precision
+// is maintained for numbers.  This will not maintain, for example, the
+// ordering of object keys.
+func TestJSONEncodeStrictRoundTrip(t *testing.T) {
+	cases := []string{
+		`1`,
+		`1.00`,
+		`100`,
+		`-1`,
+		`-1.000000000`,
+		`-1000000000`,
+		`1.1231231230`,
+		`1.1231231230000`,
+		`1.1231231230000000`,
+	}
+
+	for _, tc := range cases {
+		t.Run(tc, func(t *testing.T) {
+			j, err := ParseJSON(tc)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			encoded, err := EncodeJSON(nil, j)
+			if err != nil {
+				t.Fatal(err)
+			}
+			_, decoded, err := DecodeJSON(encoded)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			newStr := decoded.String()
+			if newStr != tc {
+				t.Fatalf("expected %s, got %s", tc, newStr)
+			}
+		})
+	}
+}

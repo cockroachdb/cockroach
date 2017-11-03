@@ -79,6 +79,9 @@ type JSON interface {
 
 	// Exists implements the `?` operator.
 	Exists(string) bool
+
+	// encode returns the encoded bytes for the JSON document along with its jEntry.
+	encode(appendTo []byte) (jEntry uint32, b []byte, err error)
 }
 
 type jsonTrue struct{}

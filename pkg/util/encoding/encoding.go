@@ -114,11 +114,24 @@ func (d Direction) Reverse() Direction {
 	}
 }
 
-// EncodeUint32Ascending encodes the uint32 value using a big-endian 8 byte
+// EncodeUint32Ascending encodes the uint32 value using a big-endian 4 byte
 // representation. The bytes are appended to the supplied buffer and
 // the final buffer is returned.
 func EncodeUint32Ascending(b []byte, v uint32) []byte {
 	return append(b, byte(v>>24), byte(v>>16), byte(v>>8), byte(v))
+}
+
+// PutUint32Ascending encodes the uint32 value using a big-endian 4 byte
+// representation at the specified index.
+func PutUint32Ascending(b []byte, v uint32, idx int) []byte {
+	for len(b) < idx+4 {
+		b = append(b, 0)
+	}
+	b[idx] = byte(v >> 24)
+	b[idx+1] = byte(v >> 16)
+	b[idx+2] = byte(v >> 8)
+	b[idx+3] = byte(v)
+	return b
 }
 
 // EncodeUint32Descending encodes the uint32 value so that it sorts in
