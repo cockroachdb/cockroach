@@ -42,39 +42,66 @@ func (p *planner) ShowSyntax(ctx context.Context, n *tree.ShowSyntax) (planNode,
 	var query bytes.Buffer
 	query.WriteString("SELECT @1 AS field, @2 AS text FROM (VALUES ")
 
-	stmts, err := parser.Parse(n.Statement)
+	first := true
+	if err := runShowSyntax(ctx, n.Statement, func(ctx context.Context, field, msg string) error {
+		if !first {
+			query.WriteString(", ")
+		}
+		first = false
+		fmt.Fprintf(&query, "('%s', %s)", field, lex.EscapeSQLString(msg))
+		return nil
+	}); err != nil {
+		return nil, err
+	}
+	query.WriteByte(')')
+	return p.delegateQuery(ctx, "SHOW SYNTAX", query.String(), nil, nil)
+}
+
+func runShowSyntax(
+	ctx context.Context, stmt string, report func(ctx context.Context, field, msg string) error,
+) error {
+	stmts, err := parser.Parse(stmt)
 	if err != nil {
 		pqErr, _ := pgerror.GetPGCause(err)
-		fmt.Fprintf(&query, "('error', %s), ('code', %s)",
-			lex.EscapeSQLString(pqErr.Message),
-			lex.EscapeSQLString(pqErr.Code))
+		if err := report(ctx, "error", pqErr.Message); err != nil {
+			return err
+		}
+		if err := report(ctx, "code", pqErr.Code); err != nil {
+			return err
+		}
 		if pqErr.Source != nil {
 			if pqErr.Source.File != "" {
-				fmt.Fprintf(&query, ", ('file', %s)", lex.EscapeSQLString(pqErr.Source.File))
+				if err := report(ctx, "file", pqErr.Source.File); err != nil {
+					return err
+				}
 			}
 			if pqErr.Source.Line > 0 {
-				fmt.Fprintf(&query, ", ('line', '%d')", pqErr.Source.Line)
+				if err := report(ctx, "line", fmt.Sprintf("%d", pqErr.Source.Line)); err != nil {
+					return err
+				}
 			}
 			if pqErr.Source.Function != "" {
-				fmt.Fprintf(&query, ", ('function', %s)", lex.EscapeSQLString(pqErr.Source.Function))
+				if err := report(ctx, "function", pqErr.Source.Function); err != nil {
+					return err
+				}
 			}
 		}
 		if pqErr.Detail != "" {
-			fmt.Fprintf(&query, ", ('detail', %s)", lex.EscapeSQLString(pqErr.Detail))
+			if err := report(ctx, "detail", pqErr.Detail); err != nil {
+				return err
+			}
 		}
 		if pqErr.Hint != "" {
-			fmt.Fprintf(&query, ", ('hint', %s)", lex.EscapeSQLString(pqErr.Hint))
+			if err := report(ctx, "hint", pqErr.Hint); err != nil {
+				return err
+			}
 		}
 	} else {
-		for i, stmt := range stmts {
-			if i > 0 {
-				query.WriteString(", ")
+		for _, stmt := range stmts {
+			if err := report(ctx, "sql", tree.AsStringWithFlags(stmt, tree.FmtParsable)); err != nil {
+				return err
 			}
-			fmt.Fprintf(&query, "('sql', %s)",
-				lex.EscapeSQLString(tree.AsStringWithFlags(stmt, tree.FmtParsable)))
 		}
 	}
-	query.WriteByte(')')
-
-	return p.delegateQuery(ctx, "SHOW SYNTAX", query.String(), nil, nil)
+	return nil
 }
