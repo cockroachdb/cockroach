@@ -133,8 +133,9 @@ func (m *mergeJoiner) outputBatch(
 				if matchedRight != nil {
 					matchedRight[rIdx] = true
 				}
-				if !emitHelper(ctx, &m.out, renderedRow, ProducerMetadata{}) {
-					return false, nil
+				consumerStatus, err := m.out.EmitRow(ctx, renderedRow)
+				if err != nil || consumerStatus != NeedMoreRows {
+					return false, err
 				}
 			}
 		}
