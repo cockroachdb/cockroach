@@ -302,6 +302,6 @@ SELECT field, replace(text, e'\n', ' ') AS text FROM [SHOW SYNTAX 'foo']
 field     text
 error     syntax error at or near "foo"
 code      42601
-file      sql/pgwire/pgerror/errors.go
-function  NewError
+file      sql/show_syntax.go
+function  runShowSyntax
 detail    source SQL: foo ^
