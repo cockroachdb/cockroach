@@ -686,6 +686,15 @@ func (*ShowHistogram) hiddenFromStats()                   {}
 func (*ShowHistogram) independentFromParallelizedPriors() {}
 
 // StatementType implements the Statement interface.
+func (*ShowSyntax) StatementType() StatementType { return Rows }
+
+// StatementTag returns a short string identifying the type of statement.
+func (*ShowSyntax) StatementTag() string { return "SHOW SYNTAX" }
+
+func (*ShowSyntax) hiddenFromStats()                   {}
+func (*ShowSyntax) independentFromParallelizedPriors() {}
+
+// StatementType implements the Statement interface.
 func (*ShowTransactionStatus) StatementType() StatementType { return Rows }
 
 // StatementTag returns a short string identifying the type of statement.
@@ -859,6 +868,7 @@ func (n *ShowQueries) String() string               { return AsString(n) }
 func (n *ShowRanges) String() string                { return AsString(n) }
 func (n *ShowRoles) String() string                 { return AsString(n) }
 func (n *ShowSessions) String() string              { return AsString(n) }
+func (n *ShowSyntax) String() string                { return AsString(n) }
 func (n *ShowTableStats) String() string            { return AsString(n) }
 func (n *ShowTables) String() string                { return AsString(n) }
 func (n *ShowTrace) String() string                 { return AsString(n) }

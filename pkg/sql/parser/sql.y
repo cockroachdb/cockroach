@@ -494,8 +494,9 @@ func (u *sqlSymUnion) scrubOption() tree.ScrubOption {
 %token <str>   SERIAL SERIAL2 SERIAL4 SERIAL8
 %token <str>   SERIALIZABLE SESSION SESSIONS SESSION_USER SET SETTING SETTINGS
 %token <str>   SHOW SIMILAR SIMPLE SMALLINT SMALLSERIAL SNAPSHOT SOME SOME_EXISTENCE SPLIT SQL
+
 %token <str>   START STATISTICS STATUS STDIN STRICT STRING STORE STORING SUBSTRING
-%token <str>   SYMMETRIC SYSTEM
+%token <str>   SYMMETRIC SYNTAX SYSTEM
 
 %token <str>   TABLE TABLES TEMP TEMPLATE TEMPORARY TESTING_RANGES TESTING_RELOCATE TEXT THAN THEN
 %token <str>   TIME TIMESTAMP TIMESTAMPTZ TO TRAILING TRACE TRANSACTION TREAT TRIM TRUE
@@ -663,6 +664,7 @@ func (u *sqlSymUnion) scrubOption() tree.ScrubOption {
 %type <tree.Statement> show_session_stmt
 %type <tree.Statement> show_sessions_stmt
 %type <tree.Statement> show_stats_stmt
+%type <tree.Statement> show_syntax_stmt
 %type <tree.Statement> show_tables_stmt
 %type <tree.Statement> show_testing_stmt
 %type <tree.Statement> show_trace_stmt
@@ -2483,7 +2485,7 @@ non_reserved_word_or_sconst:
 // %Text:
 // SHOW SESSION, SHOW CLUSTER SETTING, SHOW DATABASES, SHOW TABLES, SHOW COLUMNS, SHOW INDEXES,
 // SHOW CONSTRAINTS, SHOW CREATE TABLE, SHOW CREATE VIEW, SHOW USERS, SHOW TRANSACTION, SHOW BACKUP,
-// SHOW JOBS, SHOW QUERIES, SHOW ROLES, SHOW SESSIONS, SHOW TRACE
+// SHOW JOBS, SHOW QUERIES, SHOW ROLES, SHOW SESSIONS, SHOW SYNTAX, SHOW TRACE
 show_stmt:
   show_backup_stmt       // EXTEND WITH HELP: SHOW BACKUP
 | show_columns_stmt      // EXTEND WITH HELP: SHOW COLUMNS
@@ -2501,6 +2503,7 @@ show_stmt:
 | show_session_stmt      // EXTEND WITH HELP: SHOW SESSION
 | show_sessions_stmt     // EXTEND WITH HELP: SHOW SESSIONS
 | show_stats_stmt        // EXTEND WITH HELP: SHOW STATISTICS
+| show_syntax_stmt       // EXTEND WITH HELP: SHOW SYNTAX
 | show_tables_stmt       // EXTEND WITH HELP: SHOW TABLES
 | show_testing_stmt
 | show_trace_stmt        // EXTEND WITH HELP: SHOW TRACE
@@ -2762,6 +2765,17 @@ show_tables_stmt:
     $$.val = &tree.ShowTables{}
   }
 | SHOW TABLES error // SHOW HELP: SHOW TABLES
+
+// %Help: SHOW SYNTAX - analyze SQL syntax
+// %Category: Misc
+// %Text: SHOW SYNTAX <string>
+show_syntax_stmt:
+  SHOW SYNTAX SCONST
+  {
+    /* SKIP DOC */
+    $$.val = &tree.ShowSyntax{Statement: $3}
+  }
+| SHOW SYNTAX error // SHOW HELP: SHOW SYNTAX
 
 // %Help: SHOW TRANSACTION - display current transaction properties
 // %Category: Cfg
@@ -7183,6 +7197,7 @@ unreserved_keyword:
 | STORING
 | STRICT
 | SPLIT
+| SYNTAX
 | SYSTEM
 | TABLES
 | TEMP

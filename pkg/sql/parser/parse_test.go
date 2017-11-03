@@ -378,6 +378,8 @@ func TestParse(t *testing.T) {
 
 		{`SHOW TRANSACTION STATUS`},
 
+		{`SHOW SYNTAX 'select 1'`},
+
 		{`PREPARE a AS SELECT 1`},
 		{`PREPARE a (INT) AS SELECT $1`},
 		{`PREPARE a (STRING, STRING) AS SELECT $1, $2`},
