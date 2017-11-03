@@ -377,6 +377,8 @@ func TestParse(t *testing.T) {
 		{`SHOW GRANTS ON DATABASE foo FOR bar`},
 		{`SHOW GRANTS FOR bar, baz`},
 
+		{`SHOW TRANSACTION STATUS`},
+
 		{`PREPARE a AS SELECT 1`},
 		{`PREPARE a (INT) AS SELECT $1`},
 		{`PREPARE a (STRING, STRING) AS SELECT $1, $2`},
