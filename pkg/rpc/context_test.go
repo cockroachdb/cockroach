@@ -52,6 +52,7 @@ func newTestServer(t testing.TB, ctx *Context, compression bool) *grpc.Server {
 	opts := []grpc.ServerOption{
 		grpc.Creds(credentials.NewTLS(tlsConfig)),
 		grpc.RPCDecompressor(snappyDecompressor{}),
+		grpc.StatsHandler(&ctx.stats),
 	}
 	if compression {
 		opts = append(opts, grpc.RPCCompressor(snappyCompressor{}))
