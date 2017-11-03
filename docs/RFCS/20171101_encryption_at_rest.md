@@ -718,7 +718,7 @@ Cons:
 
 ### Enterprise feature gating
 
-The current proposal does gate encryption on a valid license due to the fact that we cannot check the license
+The current proposal does not gate encryption on a valid license due to the fact that we cannot check the license
 when initialising the node.
 
 A possible solution to explore is detection when the node joins a cluster. eg:
