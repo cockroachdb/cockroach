@@ -723,6 +723,7 @@ unreserved_keyword ::=
 	| 'STORING'
 	| 'STRICT'
 	| 'SPLIT'
+	| 'SYNTAX'
 	| 'SYSTEM'
 	| 'TABLES'
 	| 'TEMP'

@@ -26,6 +26,8 @@ package tree
 import (
 	"bytes"
 	"fmt"
+
+	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 )
 
 // ShowVar represents a SHOW statement.
@@ -224,6 +226,21 @@ type ShowCreateView struct {
 func (node *ShowCreateView) Format(buf *bytes.Buffer, f FmtFlags) {
 	buf.WriteString("SHOW CREATE VIEW ")
 	FormatNode(buf, f, &node.View)
+}
+
+// ShowSyntax represents a SHOW SYNTAX statement.
+// This the most lightweight thing that can be done on a statement
+// server-side: just report the statement that was entered without
+// any processing. Meant for use for syntax checking on clients,
+// when the client version might differ from the server.
+type ShowSyntax struct {
+	Statement string
+}
+
+// Format implements the NodeFormatter interface.
+func (node *ShowSyntax) Format(buf *bytes.Buffer, f FmtFlags) {
+	buf.WriteString("SHOW SYNTAX ")
+	buf.WriteString(lex.EscapeSQLString(node.Statement))
 }
 
 // ShowTransactionStatus represents a SHOW TRANSACTION STATUS statement.
