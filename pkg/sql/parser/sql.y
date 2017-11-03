@@ -421,7 +421,7 @@ func (u *sqlSymUnion) scrubOption() ScrubOption {
 
 %token <str>   GRANT GRANTS GREATEST GROUP GROUPING
 
-%token <str>   HAVING HELP HIGH HOUR
+%token <str>   HAVING HIGH HOUR
 
 %token <str>   IMPORT INCREMENTAL IF IFNULL ILIKE IN INET INTERLEAVE
 %token <str>   INDEX INDEXES INITIALLY
