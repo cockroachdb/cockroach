@@ -15,8 +15,10 @@
 package main
 
 import (
+	"bufio"
 	"bytes"
 	"context"
+	"flag"
 	"fmt"
 	"io"
 	"log"
@@ -63,12 +65,16 @@ func main() {
 		&oauth2.Token{AccessToken: token},
 	)))
 
-	if err := runGH(ctx, os.Stdin, client.Issues.Create, client.Search.Issues, client.Issues.CreateComment); err != nil {
+	if err := runGH(ctx, os.Args, os.Stdin, client.Issues.Create, client.Search.Issues, client.Issues.CreateComment); err != nil {
 		log.Fatal(err)
 	}
 }
 
 var stacktraceRE = regexp.MustCompile(`(?m:^goroutine\s\d+)`)
+
+// The jepsen test reporter just gives us a directory listing.
+// TODO(bdarnell): this could be a lot better.
+var jepsenTestRE = regexp.MustCompile(`artifacts/(.*)_(.*)/failure-logs.tbz`)
 
 func trimIssueRequestBody(message string, usedCharacters int) string {
 	maxLength := githubIssueBodyMaximumLength - usedCharacters
@@ -107,11 +113,18 @@ func trimIssueRequestBody(message string, usedCharacters int) string {
 
 func runGH(
 	ctx context.Context,
+	args []string,
 	input io.Reader,
 	createIssue func(ctx context.Context, owner string, repo string, issue *github.IssueRequest) (*github.Issue, *github.Response, error),
 	searchIssues func(ctx context.Context, query string, opt *github.SearchOptions) (*github.IssuesSearchResult, *github.Response, error),
 	createComment func(ctx context.Context, owner string, repo string, number int, comment *github.IssueComment) (*github.IssueComment, *github.Response, error),
 ) error {
+	flags := flag.NewFlagSet("github-post", flag.ExitOnError)
+	mode := flags.String("mode", "stress", "test mode (stress or jepsen)")
+	if err := flags.Parse(args); err != nil {
+		return err
+	}
+
 	sha, ok := os.LookupEnv(teamcityVCSNumberEnv)
 	if !ok {
 		return errors.Errorf("VCS number environment variable %s is not set", teamcityVCSNumberEnv)
@@ -159,9 +172,9 @@ Parameters:
 
 Stress build found a failed test: %s`
 
-	newIssueRequest := func(packageName, testName, message string) *github.IssueRequest {
-		title := fmt.Sprintf("%s: %s failed under stress",
-			strings.TrimPrefix(packageName, cockroachPkgPrefix), testName)
+	newIssueRequest := func(packageName, testName, nemesisName, message string) *github.IssueRequest {
+		title := fmt.Sprintf("%s: %s failed under %s",
+			strings.TrimPrefix(packageName, cockroachPkgPrefix), testName, nemesisName)
 		body := fmt.Sprintf(bodyTemplate, sha, parametersStr, u.String()) + "\n\n```\n%s\n```"
 		// We insert a raw "%s" above so we can figure out the length of the
 		// body so far, without the actual error text. We need this length so we
@@ -182,69 +195,98 @@ Stress build found a failed test: %s`
 		return &github.IssueComment{Body: &body}
 	}
 
-	suites, err := lib.ParseGotest(input, "")
-	if err != nil {
-		return errors.Wrap(err, "failed to parse `go test` output")
+	postIssue := func(packageName, testName, nemesisName, message string) error {
+		issueRequest := newIssueRequest(packageName, testName, nemesisName, message)
+		searchQuery := fmt.Sprintf(`"%s" user:%s repo:%s is:open`, *issueRequest.Title, githubUser, githubRepo)
+		for _, label := range issueLabels {
+			searchQuery = searchQuery + fmt.Sprintf(` label:"%s"`, label)
+		}
+
+		var foundIssue *int
+
+		result, _, err := searchIssues(ctx, searchQuery, &github.SearchOptions{
+			ListOptions: github.ListOptions{
+				PerPage: 1,
+			},
+		})
+		if err != nil {
+			return errors.Wrapf(err, "failed to search GitHub with query %s", github.Stringify(searchQuery))
+		}
+		if *result.Total > 0 {
+			foundIssue = result.Issues[0].Number
+		}
+
+		if foundIssue == nil {
+			if _, _, err := createIssue(ctx, githubUser, githubRepo, issueRequest); err != nil {
+				return errors.Wrapf(err, "failed to create GitHub issue %s", github.Stringify(issueRequest))
+			}
+		} else {
+			comment := newIssueComment(packageName, testName)
+			if _, _, err := createComment(ctx, githubUser, githubRepo, *foundIssue, comment); err != nil {
+				return errors.Wrapf(err, "failed to update issue #%d with %s", *foundIssue, github.Stringify(comment))
+			}
+		}
+		return nil
+
 	}
-	posted := false
-	for _, suite := range suites {
-		packageName := suite.Name
-		if packageName == "" {
-			var ok bool
-			packageName, ok = os.LookupEnv(pkgEnv)
+
+	switch *mode {
+	case "stress":
+		suites, err := lib.ParseGotest(input, "")
+		if err != nil {
+			return errors.Wrap(err, "failed to parse `go test` output")
+		}
+		posted := false
+		for _, suite := range suites {
+			packageName := suite.Name
+			if packageName == "" {
+				var ok bool
+				packageName, ok = os.LookupEnv(pkgEnv)
+				if !ok {
+					log.Fatalf("package name environment variable %s is not set", pkgEnv)
+				}
+			}
+			for _, test := range suite.Tests {
+				switch test.Status {
+				case lib.Failed:
+					if err := postIssue(packageName, test.Name, "stress", test.Message); err != nil {
+						return err
+					}
+					posted = true
+				}
+			}
+		}
+
+		if !posted {
+			packageName, ok := os.LookupEnv(pkgEnv)
 			if !ok {
-				log.Fatalf("package name environment variable %s is not set", pkgEnv)
+				packageName = "(unknown)"
+			}
+			issueRequest := newIssueRequest(packageName, "nightly tests", *mode, inputBuf.String())
+			if _, _, err := createIssue(ctx, githubUser, githubRepo, issueRequest); err != nil {
+				return errors.Wrapf(err, "failed to create GitHub issue %s", github.Stringify(issueRequest))
 			}
 		}
-		for _, test := range suite.Tests {
-			switch test.Status {
-			case lib.Failed:
-				issueRequest := newIssueRequest(packageName, test.Name, test.Message)
-				searchQuery := fmt.Sprintf(`"%s" user:%s repo:%s is:open`, *issueRequest.Title, githubUser, githubRepo)
-				for _, label := range issueLabels {
-					searchQuery = searchQuery + fmt.Sprintf(` label:"%s"`, label)
-				}
 
-				var foundIssue *int
+	case "jepsen":
+		scanner := bufio.NewScanner(input)
 
-				result, _, err := searchIssues(ctx, searchQuery, &github.SearchOptions{
-					ListOptions: github.ListOptions{
-						PerPage: 1,
-					},
-				})
-				if err != nil {
-					return errors.Wrapf(err, "failed to search GitHub with query %s", github.Stringify(searchQuery))
-				}
-				if *result.Total > 0 {
-					foundIssue = result.Issues[0].Number
-				}
-
-				if foundIssue == nil {
-					if _, _, err := createIssue(ctx, githubUser, githubRepo, issueRequest); err != nil {
-						return errors.Wrapf(err, "failed to create GitHub issue %s", github.Stringify(issueRequest))
-					}
-				} else {
-					comment := newIssueComment(packageName, test.Name)
-					if _, _, err := createComment(ctx, githubUser, githubRepo, *foundIssue, comment); err != nil {
-						return errors.Wrapf(err, "failed to update issue #%d with %s", *foundIssue, github.Stringify(comment))
-					}
-				}
-				posted = true
+		for scanner.Scan() {
+			line := scanner.Text()
+			if len(line) == 0 {
+				continue
+			}
+			fields := jepsenTestRE.FindStringSubmatch(line)
+			if err := postIssue("jepsen", fields[1], fields[2], "See artifacts tab for logs"); err != nil {
+				return err
 			}
 		}
-	}
-
-	const unknown = "(unknown)"
-
-	if !posted {
-		packageName, ok := os.LookupEnv(pkgEnv)
-		if !ok {
-			packageName = unknown
+		if err := scanner.Err(); err != nil {
+			return err
 		}
-		issueRequest := newIssueRequest(packageName, unknown, inputBuf.String())
-		if _, _, err := createIssue(ctx, githubUser, githubRepo, issueRequest); err != nil {
-			return errors.Wrapf(err, "failed to create GitHub issue %s", github.Stringify(issueRequest))
-		}
+
+	default:
+		log.Fatalf("unknown mode %s", *mode)
 	}
 
 	return nil
