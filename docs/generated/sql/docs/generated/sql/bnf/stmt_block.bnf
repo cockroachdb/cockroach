@@ -9,7 +9,6 @@ stmt ::=
 	| alter_stmt
 	| backup_stmt
 	| cancel_stmt
-	| scrub_stmt
 	| copy_from_stmt
 	| create_stmt
 	| deallocate_stmt
@@ -27,6 +26,7 @@ stmt ::=
 	| resume_stmt
 	| revoke_stmt
 	| savepoint_stmt
+	| scrub_stmt
 	| select_stmt
 	| release_stmt
 	| reset_stmt
@@ -48,10 +48,6 @@ backup_stmt ::=
 cancel_stmt ::=
 	cancel_job_stmt
 	| cancel_query_stmt
-
-scrub_stmt ::=
-	scrub_table_stmt
-	| scrub_database_stmt
 
 copy_from_stmt ::=
 	'COPY' qualified_name 'FROM' 'STDIN'
@@ -117,6 +113,10 @@ revoke_stmt ::=
 
 savepoint_stmt ::=
 	'SAVEPOINT' name
+
+scrub_stmt ::=
+	scrub_table_stmt
+	| scrub_database_stmt
 
 select_stmt ::=
 	select_no_parens
@@ -207,12 +207,6 @@ cancel_job_stmt ::=
 
 cancel_query_stmt ::=
 	'CANCEL' 'QUERY' a_expr
-
-scrub_table_stmt ::=
-	'EXPERIMENTAL' 'SCRUB' 'TABLE' qualified_name opt_as_of_clause opt_scrub_options_clause
-
-scrub_database_stmt ::=
-	'EXPERIMENTAL' 'SCRUB' 'DATABASE' name opt_as_of_clause
 
 qualified_name ::=
 	name
@@ -365,6 +359,12 @@ preparable_stmt ::=
 
 as_of_clause ::=
 	'AS' 'OF' 'SYSTEM' 'TIME' a_expr_const
+
+scrub_table_stmt ::=
+	'EXPERIMENTAL' 'SCRUB' 'TABLE' qualified_name opt_as_of_clause opt_scrub_options_clause
+
+scrub_database_stmt ::=
+	'EXPERIMENTAL' 'SCRUB' 'DATABASE' name opt_as_of_clause
 
 select_no_parens ::=
 	simple_select
@@ -540,10 +540,6 @@ non_reserved_word_or_sconst ::=
 
 kv_option_list ::=
 	( kv_option ) ( ( ',' kv_option ) )*
-
-opt_scrub_options_clause ::=
-	'WITH' 'OPTIONS' scrub_option_list
-	| 
 
 qname_indirection ::=
 	( name_indirection_elem ) ( ( name_indirection_elem ) )*
@@ -940,6 +936,10 @@ a_expr_const ::=
 	| 'FALSE'
 	| 'NULL'
 
+opt_scrub_options_clause ::=
+	'WITH' 'OPTIONS' scrub_option_list
+	| 
+
 simple_select ::=
 	simple_select_clause
 	| values_clause
@@ -1076,9 +1076,6 @@ kv_option ::=
 	| name
 	| 'SCONST' '=' string_or_placeholder
 	| 'SCONST'
-
-scrub_option_list ::=
-	( scrub_option ) ( ( ',' scrub_option ) )*
 
 name_indirection_elem ::=
 	glob_indirection
@@ -1386,6 +1383,9 @@ const_typename ::=
 interval ::=
 	const_interval 'SCONST' opt_interval
 
+scrub_option_list ::=
+	( scrub_option ) ( ( ',' scrub_option ) )*
+
 simple_select_clause ::=
 	'SELECT' opt_all_clause target_list from_clause where_clause group_clause having_clause window_clause
 	| 'SELECT' distinct_clause target_list from_clause where_clause group_clause having_clause window_clause
@@ -1447,13 +1447,6 @@ name_indirection ::=
 
 glob_indirection ::=
 	'.' '*'
-
-scrub_option ::=
-	'INDEX' 'ALL'
-	| 'INDEX' '(' name_list ')'
-	| 'CONSTRAINT' 'ALL'
-	| 'CONSTRAINT' '(' name_list ')'
-	| 'PHYSICAL'
 
 opt_equal ::=
 	'='
@@ -1593,6 +1586,13 @@ const_bit ::=
 const_character ::=
 	character_with_length
 	| character_without_length
+
+scrub_option ::=
+	'INDEX' 'ALL'
+	| 'INDEX' '(' name_list ')'
+	| 'CONSTRAINT' 'ALL'
+	| 'CONSTRAINT' '(' name_list ')'
+	| 'PHYSICAL'
 
 opt_all_clause ::=
 	'ALL'
