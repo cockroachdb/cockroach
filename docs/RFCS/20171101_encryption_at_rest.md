@@ -180,6 +180,13 @@ The size of each data key will depend on the choice of cipher.
 
 ### User control of encryption
 
+#### Recommended production configuration
+
+The need for encryption entails a few recommended changes in production configuration:
+* disable swap: we want to avoid any data hitting disk unencrypted, this includes memory being swapped out.
+* run on architectures that support the [AES-NI instruction set](https://en.wikipedia.org/wiki/AES_instruction_set).
+* have a separate are (partition, fuse-filesystem, etc...) to store the store-level keys.
+
 #### Flag changes for the cockroach binary
 
 * `--rocksdb-preamble-format`: use the new preamble file format in rocksdb. This must be specified at node-creation
@@ -872,3 +879,10 @@ we can verify that the encrypted data has not been tampered with.
 
 Implementing GCM would require additional changes to the raw storage format to store the final
 authentication tag.
+
+### Add sanity checks
+
+We could perform a few checks to ensure data security, such as:
+* detect if keys are on the same disk as the store
+* detect if keys have loose permissions
+* detect if swap is enabled
