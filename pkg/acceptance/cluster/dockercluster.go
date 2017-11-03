@@ -542,6 +542,9 @@ func (l *DockerCluster) startNode(ctx context.Context, node *testNode) {
 // automatically, but exposed for tests that use INIT_NONE. nodeIdx
 // may designate any node in the cluster as the target of the command.
 func (l *DockerCluster) RunInitCommand(ctx context.Context, nodeIdx int) {
+	tCtx, cancel := context.WithTimeout(ctx, time.Minute)
+	defer cancel()
+
 	containerConfig := container.Config{
 		Image:      *cockroachImage,
 		Entrypoint: cockroachEntrypoint(),
@@ -552,8 +555,25 @@ func (l *DockerCluster) RunInitCommand(ctx context.Context, nodeIdx int) {
 			"--logtostderr",
 		},
 	}
-	maybePanic(l.OneShot(ctx, defaultImage, types.ImagePullOptions{},
-		containerConfig, container.HostConfig{}, "init-command"))
+
+	log.Infof(ctx, "trying to initialize via %v", containerConfig.Cmd)
+	// This is called early in the bootstrap sequence, and the node may not have
+	// opened its ports yet. Retry appropriately.
+	for {
+		err := l.OneShot(
+			tCtx, defaultImage, types.ImagePullOptions{}, containerConfig, container.HostConfig{}, "init-command",
+		)
+		switch err {
+		case context.Canceled:
+			maybePanic(errors.Wrap(err, "while trying to run init"))
+		case nil:
+			log.Info(ctx, "cluster successfully initialized")
+			return
+		default:
+			// Keep going as long as the context allows.
+			log.Infof(tCtx, "retrying after: %s", err)
+		}
+	}
 }
 
 // returns false is the event
