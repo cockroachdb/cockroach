@@ -246,7 +246,8 @@ func emitHelper(
 //
 // It returns the consumer's status that was observed when pushing this row. If
 // an error is returned, it's coming from the ProcOutputHelper's filtering or
-// rendering processing; the output has not been closed.
+// rendering processing; the output has not been closed and it's the caller's
+// responsibility to push the error to the output.
 //
 // Note: check out emitHelper() for a useful wrapper.
 func (h *ProcOutputHelper) EmitRow(
