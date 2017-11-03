@@ -1029,45 +1029,42 @@ func TestClusterAPI(t *testing.T) {
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.TODO())
 
-	for _, reportingOn := range []bool{true, false} {
-		for _, enterpriseOn := range []bool{true, false} {
-			testName := fmt.Sprintf("reportingEnabled=%t, enterprise=%t", reportingOn, enterpriseOn)
-			t.Run(testName, func(t *testing.T) {
-				settings := &s.ClusterSettings().SV
-				log.DiagnosticsReportingEnabled.Override(settings, reportingOn)
+	testutils.RunTrueAndFalse(t, "reportingOn", func(t *testing.T, reportingOn bool) {
+		testutils.RunTrueAndFalse(t, "enterpriseOn", func(t *testing.T, enterpriseOn bool) {
+			settings := &s.ClusterSettings().SV
+			log.DiagnosticsReportingEnabled.Override(settings, reportingOn)
 
-				// Override server license check.
-				if enterpriseOn {
-					oldLicenseCheck := LicenseCheckFn
-					LicenseCheckFn = func(_ *cluster.Settings, _ uuid.UUID, _, _ string) error {
-						return nil
-					}
-					defer func() {
-						LicenseCheckFn = oldLicenseCheck
-					}()
-				}
-
-				// We need to retry, because the cluster ID isn't set until after
-				// bootstrapping.
-				testutils.SucceedsSoon(t, func() error {
-					var resp serverpb.ClusterResponse
-					if err := getAdminJSONProto(s, "cluster", &resp); err != nil {
-						return err
-					}
-					if a, e := resp.ClusterID, s.(*TestServer).node.ClusterID.String(); a != e {
-						return errors.Errorf("cluster ID %s != expected %s", a, e)
-					}
-					if a, e := resp.ReportingEnabled, reportingOn; a != e {
-						return errors.Errorf("reportingEnabled = %t, wanted %t", a, e)
-					}
-					if a, e := resp.EnterpriseEnabled, enterpriseOn; a != e {
-						return errors.Errorf("enterpriseEnabled = %t, wanted %t", a, e)
-					}
+			// Override server license check.
+			if enterpriseOn {
+				oldLicenseCheck := LicenseCheckFn
+				LicenseCheckFn = func(_ *cluster.Settings, _ uuid.UUID, _, _ string) error {
 					return nil
-				})
+				}
+				defer func() {
+					LicenseCheckFn = oldLicenseCheck
+				}()
+			}
+
+			// We need to retry, because the cluster ID isn't set until after
+			// bootstrapping.
+			testutils.SucceedsSoon(t, func() error {
+				var resp serverpb.ClusterResponse
+				if err := getAdminJSONProto(s, "cluster", &resp); err != nil {
+					return err
+				}
+				if a, e := resp.ClusterID, s.(*TestServer).node.ClusterID.String(); a != e {
+					return errors.Errorf("cluster ID %s != expected %s", a, e)
+				}
+				if a, e := resp.ReportingEnabled, reportingOn; a != e {
+					return errors.Errorf("reportingEnabled = %t, wanted %t", a, e)
+				}
+				if a, e := resp.EnterpriseEnabled, enterpriseOn; a != e {
+					return errors.Errorf("enterpriseEnabled = %t, wanted %t", a, e)
+				}
+				return nil
 			})
-		}
-	}
+		})
+	})
 }
 
 func TestHealthAPI(t *testing.T) {

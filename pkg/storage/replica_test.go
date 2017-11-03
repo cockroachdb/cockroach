@@ -1824,98 +1824,96 @@ func TestLeaseConcurrent(t *testing.T) {
 	const num = 5
 
 	const origMsg = "boom"
-	for _, withError := range []bool{false, true} {
-		func(withError bool) {
-			tc := testContext{}
-			stopper := stop.NewStopper()
-			defer stopper.Stop(context.TODO())
-			tc.Start(t, stopper)
+	testutils.RunTrueAndFalse(t, "withError", func(t *testing.T, withError bool) {
+		tc := testContext{}
+		stopper := stop.NewStopper()
+		defer stopper.Stop(context.TODO())
+		tc.Start(t, stopper)
 
-			var wg sync.WaitGroup
-			wg.Add(num)
-			var active atomic.Value
-			active.Store(false)
+		var wg sync.WaitGroup
+		wg.Add(num)
+		var active atomic.Value
+		active.Store(false)
 
-			var seen int32
-			tc.repl.mu.Lock()
-			tc.repl.mu.submitProposalFn = func(proposal *ProposalData) error {
-				ll, ok := proposal.Request.Requests[0].
-					GetInner().(*roachpb.RequestLeaseRequest)
-				if !ok || !active.Load().(bool) {
-					return defaultSubmitProposalLocked(tc.repl, proposal)
-				}
-				if c := atomic.AddInt32(&seen, 1); c > 1 {
-					// Morally speaking, this is an error, but reproposals can
-					// happen and so we warn (in case this trips the test up
-					// in more unexpected ways).
-					log.Infof(context.Background(), "reproposal of %+v", ll)
-				}
-				go func() {
-					wg.Wait()
-					tc.repl.mu.Lock()
-					defer tc.repl.mu.Unlock()
-					if withError {
-						// When we complete the command, we have to remove it from the map;
-						// otherwise its context (and tracing span) may be used after the
-						// client cleaned up.
-						delete(tc.repl.mu.proposals, proposal.idKey)
-						proposal.finishRaftApplication(proposalResult{Err: roachpb.NewErrorf(origMsg)})
-						return
-					}
-					if err := defaultSubmitProposalLocked(tc.repl, proposal); err != nil {
-						panic(err) // unlikely, so punt on proper handling
-					}
-				}()
-				return nil
+		var seen int32
+		tc.repl.mu.Lock()
+		tc.repl.mu.submitProposalFn = func(proposal *ProposalData) error {
+			ll, ok := proposal.Request.Requests[0].
+				GetInner().(*roachpb.RequestLeaseRequest)
+			if !ok || !active.Load().(bool) {
+				return defaultSubmitProposalLocked(tc.repl, proposal)
 			}
-			tc.repl.mu.Unlock()
-
-			active.Store(true)
-			tc.manualClock.Increment(leaseExpiry(tc.repl))
-			ts := tc.Clock().Now()
-			pErrCh := make(chan *roachpb.Error, num)
-			for i := 0; i < num; i++ {
-				if err := stopper.RunAsyncTask(context.Background(), "test", func(ctx context.Context) {
-					tc.repl.mu.Lock()
-					status := tc.repl.leaseStatus(*tc.repl.mu.state.Lease, ts, hlc.Timestamp{})
-					leaseCh := tc.repl.requestLeaseLocked(ctx, status)
-					tc.repl.mu.Unlock()
-					wg.Done()
-					pErr := <-leaseCh
-					// Mutate the errors as we receive them to expose races.
-					if pErr != nil {
-						pErr.OriginNode = 0
-					}
-					pErrCh <- pErr
-				}); err != nil {
-					t.Fatal(err)
-				}
+			if c := atomic.AddInt32(&seen, 1); c > 1 {
+				// Morally speaking, this is an error, but reproposals can
+				// happen and so we warn (in case this trips the test up
+				// in more unexpected ways).
+				log.Infof(context.Background(), "reproposal of %+v", ll)
 			}
-
-			pErrs := make([]*roachpb.Error, num)
-			for i := range pErrs {
-				// Make sure all of the responses are in (just so that we can
-				// mess with the "original" error knowing that all of the
-				// cloning must have happened by now).
-				pErrs[i] = <-pErrCh
-			}
-
-			newMsg := "moob"
-			for i, pErr := range pErrs {
-				if withError != (pErr != nil) {
-					t.Errorf("%d: wanted error: %t, got error %v", i, withError, pErr)
+			go func() {
+				wg.Wait()
+				tc.repl.mu.Lock()
+				defer tc.repl.mu.Unlock()
+				if withError {
+					// When we complete the command, we have to remove it from the map;
+					// otherwise its context (and tracing span) may be used after the
+					// client cleaned up.
+					delete(tc.repl.mu.proposals, proposal.idKey)
+					proposal.finishRaftApplication(proposalResult{Err: roachpb.NewErrorf(origMsg)})
+					return
 				}
-				if testutils.IsPError(pErr, newMsg) {
-					t.Errorf("%d: errors shared memory: %v", i, pErr)
-				} else if testutils.IsPError(pErr, origMsg) {
-					// Mess with anyone holding the same reference.
-					pErr.Message = newMsg
-				} else if pErr != nil {
-					t.Errorf("%d: unexpected error: %s", i, pErr)
+				if err := defaultSubmitProposalLocked(tc.repl, proposal); err != nil {
+					panic(err) // unlikely, so punt on proper handling
 				}
+			}()
+			return nil
+		}
+		tc.repl.mu.Unlock()
+
+		active.Store(true)
+		tc.manualClock.Increment(leaseExpiry(tc.repl))
+		ts := tc.Clock().Now()
+		pErrCh := make(chan *roachpb.Error, num)
+		for i := 0; i < num; i++ {
+			if err := stopper.RunAsyncTask(context.Background(), "test", func(ctx context.Context) {
+				tc.repl.mu.Lock()
+				status := tc.repl.leaseStatus(*tc.repl.mu.state.Lease, ts, hlc.Timestamp{})
+				leaseCh := tc.repl.requestLeaseLocked(ctx, status)
+				tc.repl.mu.Unlock()
+				wg.Done()
+				pErr := <-leaseCh
+				// Mutate the errors as we receive them to expose races.
+				if pErr != nil {
+					pErr.OriginNode = 0
+				}
+				pErrCh <- pErr
+			}); err != nil {
+				t.Fatal(err)
 			}
-		}(withError)
-	}
+		}
+
+		pErrs := make([]*roachpb.Error, num)
+		for i := range pErrs {
+			// Make sure all of the responses are in (just so that we can
+			// mess with the "original" error knowing that all of the
+			// cloning must have happened by now).
+			pErrs[i] = <-pErrCh
+		}
+
+		newMsg := "moob"
+		for i, pErr := range pErrs {
+			if withError != (pErr != nil) {
+				t.Errorf("%d: wanted error: %t, got error %v", i, withError, pErr)
+			}
+			if testutils.IsPError(pErr, newMsg) {
+				t.Errorf("%d: errors shared memory: %v", i, pErr)
+			} else if testutils.IsPError(pErr, origMsg) {
+				// Mess with anyone holding the same reference.
+				pErr.Message = newMsg
+			} else if pErr != nil {
+				t.Errorf("%d: unexpected error: %s", i, pErr)
+			}
+		}
+	})
 }
 
 // TestReplicaUpdateTSCache verifies that reads and writes update the
@@ -2982,29 +2980,27 @@ func TestReplicaCommandQueueSelfOverlap(t *testing.T) {
 	defer stopper.Stop(context.TODO())
 	tc.Start(t, stopper)
 
-	for _, cmd1Read := range []bool{false, true} {
-		for _, cmd2Read := range []bool{false, true} {
-			name := fmt.Sprintf("%v,%v", cmd1Read, cmd2Read)
-			t.Run(name, func(t *testing.T) {
-				ba := roachpb.BatchRequest{}
-				ba.Add(readOrWriteArgs(roachpb.Key(name), cmd1Read))
-				ba.Add(readOrWriteArgs(roachpb.Key(name), cmd2Read))
+	testutils.RunTrueAndFalse(t, "cmd1Read", func(t *testing.T, cmd1Read bool) {
+		testutils.RunTrueAndFalse(t, "cmd2Read", func(t *testing.T, cmd2Read bool) {
+			key := fmt.Sprintf("%v,%v", cmd1Read, cmd2Read)
+			ba := roachpb.BatchRequest{}
+			ba.Add(readOrWriteArgs(roachpb.Key(key), cmd1Read))
+			ba.Add(readOrWriteArgs(roachpb.Key(key), cmd2Read))
 
-				// Set a deadline for nicer error behavior on deadlock.
-				ctx, cancel := context.WithTimeout(context.TODO(), 5*time.Second)
-				defer cancel()
-				_, pErr := tc.Sender().Send(ctx, ba)
-				if pErr != nil {
-					if _, ok := pErr.GetDetail().(*roachpb.WriteTooOldError); ok && !cmd1Read && !cmd2Read {
-						// WriteTooOldError is expected in the write/write case because we don't
-						// allow self-overlapping non-transactional batches.
-					} else {
-						t.Fatal(pErr)
-					}
+			// Set a deadline for nicer error behavior on deadlock.
+			ctx, cancel := context.WithTimeout(context.TODO(), 5*time.Second)
+			defer cancel()
+			_, pErr := tc.Sender().Send(ctx, ba)
+			if pErr != nil {
+				if _, ok := pErr.GetDetail().(*roachpb.WriteTooOldError); ok && !cmd1Read && !cmd2Read {
+					// WriteTooOldError is expected in the write/write case because we don't
+					// allow self-overlapping non-transactional batches.
+				} else {
+					t.Fatal(pErr)
 				}
-			})
-		}
-	}
+			}
+		})
+	})
 }
 
 // TestReplicaCommandQueueTimestampNonInterference verifies that
@@ -4167,90 +4163,87 @@ func TestEndTransactionWithErrors(t *testing.T) {
 func TestEndTransactionRollbackAbortedTransaction(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	for _, populateAbortSpan := range []bool{false, true} {
-		t.Run(fmt.Sprintf("populateAbortSpan=%t", populateAbortSpan),
-			func(t *testing.T) {
-				tc := testContext{}
-				stopper := stop.NewStopper()
-				defer stopper.Stop(context.TODO())
-				tc.Start(t, stopper)
+	testutils.RunTrueAndFalse(t, "populateAbortSpan", func(t *testing.T, populateAbortSpan bool) {
+		tc := testContext{}
+		stopper := stop.NewStopper()
+		defer stopper.Stop(context.TODO())
+		tc.Start(t, stopper)
 
-				key := []byte("a")
-				txn := newTransaction("test", key, 1, enginepb.SERIALIZABLE, tc.Clock())
-				_, btH := beginTxnArgs(key, txn)
-				put := putArgs(key, key)
-				if _, pErr := maybeWrapWithBeginTransaction(
-					context.TODO(), tc.Sender(), btH, &put,
-				); pErr != nil {
-					t.Fatal(pErr)
-				}
-				// Simulate what the client is supposed to do (update the transaction
-				// based on the response). The Writing field is needed by this test.
-				txn.Writing = true
+		key := []byte("a")
+		txn := newTransaction("test", key, 1, enginepb.SERIALIZABLE, tc.Clock())
+		_, btH := beginTxnArgs(key, txn)
+		put := putArgs(key, key)
+		if _, pErr := maybeWrapWithBeginTransaction(
+			context.TODO(), tc.Sender(), btH, &put,
+		); pErr != nil {
+			t.Fatal(pErr)
+		}
+		// Simulate what the client is supposed to do (update the transaction
+		// based on the response). The Writing field is needed by this test.
+		txn.Writing = true
 
-				// Abort the transaction by pushing it with maximum priority.
-				pusher := newTransaction("test", key, 1, enginepb.SERIALIZABLE, tc.Clock())
-				pusher.Priority = roachpb.MaxTxnPriority
-				pushArgs := pushTxnArgs(pusher, btH.Txn, roachpb.PUSH_ABORT)
-				if _, pErr := tc.SendWrapped(&pushArgs); pErr != nil {
-					t.Fatal(pErr)
-				}
+		// Abort the transaction by pushing it with maximum priority.
+		pusher := newTransaction("test", key, 1, enginepb.SERIALIZABLE, tc.Clock())
+		pusher.Priority = roachpb.MaxTxnPriority
+		pushArgs := pushTxnArgs(pusher, btH.Txn, roachpb.PUSH_ABORT)
+		if _, pErr := tc.SendWrapped(&pushArgs); pErr != nil {
+			t.Fatal(pErr)
+		}
 
-				// Check that the intent has not yet been resolved.
-				var ba roachpb.BatchRequest
-				gArgs := getArgs(key)
-				ba.Add(&gArgs)
-				if err := ba.SetActiveTimestamp(tc.Clock().Now); err != nil {
-					t.Fatal(err)
-				}
-				_, pErr := tc.Sender().Send(context.Background(), ba)
-				if _, ok := pErr.GetDetail().(*roachpb.WriteIntentError); !ok {
-					t.Errorf("expected write intent error, but got %s", pErr)
-				}
+		// Check that the intent has not yet been resolved.
+		var ba roachpb.BatchRequest
+		gArgs := getArgs(key)
+		ba.Add(&gArgs)
+		if err := ba.SetActiveTimestamp(tc.Clock().Now); err != nil {
+			t.Fatal(err)
+		}
+		_, pErr := tc.Sender().Send(context.Background(), ba)
+		if _, ok := pErr.GetDetail().(*roachpb.WriteIntentError); !ok {
+			t.Errorf("expected write intent error, but got %s", pErr)
+		}
 
-				if populateAbortSpan {
-					var txnRecord roachpb.Transaction
-					txnKey := keys.TransactionKey(txn.Key, txn.ID)
-					ok, err := engine.MVCCGetProto(
-						context.TODO(), tc.repl.store.Engine(),
-						txnKey, hlc.Timestamp{}, true /* consistent */, nil, /* txn */
-						&txnRecord,
-					)
-					if err != nil {
-						t.Fatal(err)
-					}
-					if !ok {
-						t.Fatal("txn record missing")
-					}
+		if populateAbortSpan {
+			var txnRecord roachpb.Transaction
+			txnKey := keys.TransactionKey(txn.Key, txn.ID)
+			ok, err := engine.MVCCGetProto(
+				context.TODO(), tc.repl.store.Engine(),
+				txnKey, hlc.Timestamp{}, true /* consistent */, nil, /* txn */
+				&txnRecord,
+			)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !ok {
+				t.Fatal("txn record missing")
+			}
 
-					if pErr := tc.store.intentResolver.resolveIntents(context.TODO(),
-						[]roachpb.Intent{{
-							Span:   roachpb.Span{Key: key},
-							Txn:    txnRecord.TxnMeta,
-							Status: txnRecord.Status,
-						}}, ResolveOptions{Wait: true, Poison: true}); pErr != nil {
-						t.Fatal(pErr)
-					}
-				}
+			if pErr := tc.store.intentResolver.resolveIntents(context.TODO(),
+				[]roachpb.Intent{{
+					Span:   roachpb.Span{Key: key},
+					Txn:    txnRecord.TxnMeta,
+					Status: txnRecord.Status,
+				}}, ResolveOptions{Wait: true, Poison: true}); pErr != nil {
+				t.Fatal(pErr)
+			}
+		}
 
-				// Abort the transaction again. No error is returned.
-				args, h := endTxnArgs(txn, false /* commit */)
-				args.IntentSpans = []roachpb.Span{{Key: key}}
-				resp, pErr := tc.SendWrappedWith(h, &args)
-				if pErr != nil {
-					t.Fatal(pErr)
-				}
-				reply := resp.(*roachpb.EndTransactionResponse)
-				if reply.Txn.Status != roachpb.ABORTED {
-					t.Errorf("expected transaction status to be ABORTED; got %s", reply.Txn.Status)
-				}
+		// Abort the transaction again. No error is returned.
+		args, h := endTxnArgs(txn, false /* commit */)
+		args.IntentSpans = []roachpb.Span{{Key: key}}
+		resp, pErr := tc.SendWrappedWith(h, &args)
+		if pErr != nil {
+			t.Fatal(pErr)
+		}
+		reply := resp.(*roachpb.EndTransactionResponse)
+		if reply.Txn.Status != roachpb.ABORTED {
+			t.Errorf("expected transaction status to be ABORTED; got %s", reply.Txn.Status)
+		}
 
-				// Verify that the intent has been resolved.
-				if _, pErr := tc.Sender().Send(context.Background(), ba); pErr != nil {
-					t.Errorf("expected resolved intent, but got %s", pErr)
-				}
-			})
-	}
+		// Verify that the intent has been resolved.
+		if _, pErr := tc.Sender().Send(context.Background(), ba); pErr != nil {
+			t.Errorf("expected resolved intent, but got %s", pErr)
+		}
+	})
 }
 
 // TestRaftReplayProtectionInTxn verifies that transactional batches
@@ -6152,15 +6145,11 @@ func TestChangeReplicasDuplicateError(t *testing.T) {
 // we don't erroneously return that descriptor (recently fixed bug).
 func TestReplicaDanglingMetaIntent(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	for _, legacy := range []bool{false, true} {
-		t.Run(fmt.Sprintf("legacy=%t", legacy), func(t *testing.T) {
-			for _, reverse := range []bool{false, true} {
-				t.Run(fmt.Sprintf("reverse=%t", reverse), func(t *testing.T) {
-					testRangeDanglingMetaIntent(t, legacy, reverse)
-				})
-			}
+	testutils.RunTrueAndFalse(t, "legacy", func(t *testing.T, legacy bool) {
+		testutils.RunTrueAndFalse(t, "reverse", func(t *testing.T, reverse bool) {
+			testRangeDanglingMetaIntent(t, legacy, reverse)
 		})
-	}
+	})
 }
 
 func testRangeDanglingMetaIntent(t *testing.T, legacy, isReverse bool) {
@@ -6240,83 +6229,81 @@ func testRangeDanglingMetaIntent(t *testing.T, legacy, isReverse bool) {
 func TestRangeLookupAsyncResolveIntent(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	for _, legacy := range []bool{false, true} {
-		t.Run(fmt.Sprintf("legacy=%t", legacy), func(t *testing.T) {
-			rangeLookup := client.RangeLookup
-			if legacy {
-				rangeLookup = client.LegacyRangeLookup
-			}
+	testutils.RunTrueAndFalse(t, "legacy", func(t *testing.T, legacy bool) {
+		rangeLookup := client.RangeLookup
+		if legacy {
+			rangeLookup = client.LegacyRangeLookup
+		}
 
-			blockPushTxn := make(chan struct{})
-			defer close(blockPushTxn)
+		blockPushTxn := make(chan struct{})
+		defer close(blockPushTxn)
 
-			// Disable async tasks in the intent resolver. All tasks will be synchronous.
-			cfg := TestStoreConfig(nil)
-			cfg.IntentResolverTaskLimit = -1
-			cfg.TestingKnobs.TestingProposalFilter =
-				func(args storagebase.ProposalFilterArgs) *roachpb.Error {
-					for _, union := range args.Req.Requests {
-						if union.GetInner().Method() == roachpb.PushTxn {
-							<-blockPushTxn
-							break
-						}
+		// Disable async tasks in the intent resolver. All tasks will be synchronous.
+		cfg := TestStoreConfig(nil)
+		cfg.IntentResolverTaskLimit = -1
+		cfg.TestingKnobs.TestingProposalFilter =
+			func(args storagebase.ProposalFilterArgs) *roachpb.Error {
+				for _, union := range args.Req.Requests {
+					if union.GetInner().Method() == roachpb.PushTxn {
+						<-blockPushTxn
+						break
 					}
-					return nil
 				}
-			tc := testContext{}
-			ctx := context.Background()
-			stopper := stop.NewStopper()
-			defer stopper.Stop(ctx)
-			tc.StartWithStoreConfig(t, stopper, cfg)
+				return nil
+			}
+		tc := testContext{}
+		ctx := context.Background()
+		stopper := stop.NewStopper()
+		defer stopper.Stop(ctx)
+		tc.StartWithStoreConfig(t, stopper, cfg)
 
-			key := roachpb.Key("a")
+		key := roachpb.Key("a")
 
-			// Get original meta2 descriptor.
-			rs, _, err := rangeLookup(ctx, tc.Sender(), key, roachpb.INCONSISTENT, 0, false)
-			if err != nil {
-				t.Fatal(err)
-			}
+		// Get original meta2 descriptor.
+		rs, _, err := rangeLookup(ctx, tc.Sender(), key, roachpb.INCONSISTENT, 0, false)
+		if err != nil {
+			t.Fatal(err)
+		}
 
-			origDesc := rs[0]
-			newDesc := origDesc
-			newDesc.EndKey, err = keys.Addr(key)
-			if err != nil {
-				t.Fatal(err)
-			}
+		origDesc := rs[0]
+		newDesc := origDesc
+		newDesc.EndKey, err = keys.Addr(key)
+		if err != nil {
+			t.Fatal(err)
+		}
 
-			// Write the new descriptor as an intent.
-			data, err := protoutil.Marshal(&newDesc)
-			if err != nil {
-				t.Fatal(err)
-			}
-			txn := newTransaction("test", key, 1, enginepb.SERIALIZABLE, tc.Clock())
-			// Officially begin the transaction. If not for this, the intent resolution
-			// machinery would simply remove the intent we write below, see #3020.
-			// We send directly to Replica throughout this test, so there's no danger
-			// of the Store aborting this transaction (i.e. we don't have to set a high
-			// priority).
-			pArgs := putArgs(keys.RangeMetaKey(roachpb.RKey(key)).AsRawKey(), data)
-			txn.Sequence++
-			if _, pErr := maybeWrapWithBeginTransaction(ctx, tc.Sender(), roachpb.Header{Txn: txn}, &pArgs); pErr != nil {
-				t.Fatal(pErr)
-			}
+		// Write the new descriptor as an intent.
+		data, err := protoutil.Marshal(&newDesc)
+		if err != nil {
+			t.Fatal(err)
+		}
+		txn := newTransaction("test", key, 1, enginepb.SERIALIZABLE, tc.Clock())
+		// Officially begin the transaction. If not for this, the intent resolution
+		// machinery would simply remove the intent we write below, see #3020.
+		// We send directly to Replica throughout this test, so there's no danger
+		// of the Store aborting this transaction (i.e. we don't have to set a high
+		// priority).
+		pArgs := putArgs(keys.RangeMetaKey(roachpb.RKey(key)).AsRawKey(), data)
+		txn.Sequence++
+		if _, pErr := maybeWrapWithBeginTransaction(ctx, tc.Sender(), roachpb.Header{Txn: txn}, &pArgs); pErr != nil {
+			t.Fatal(pErr)
+		}
 
-			// Now lookup the range. Since the lookup is inconsistent, there's no
-			// WriteIntentError, but we'll try to resolve any intents that are found. If
-			// the RangeLookup op attempts to resolve the intents synchronously, the
-			// operation will block forever.
-			//
-			// Note that 'A' < 'a'.
-			newKey := roachpb.Key{'A'}
-			rs, _, err = rangeLookup(ctx, tc.Sender(), newKey, roachpb.INCONSISTENT, 0, false)
-			if err != nil {
-				t.Fatal(err)
-			}
-			if desc := rs[0]; !reflect.DeepEqual(desc, origDesc) {
-				t.Errorf("expected original descriptor %s; got %s", &origDesc, &desc)
-			}
-		})
-	}
+		// Now lookup the range. Since the lookup is inconsistent, there's no
+		// WriteIntentError, but we'll try to resolve any intents that are found. If
+		// the RangeLookup op attempts to resolve the intents synchronously, the
+		// operation will block forever.
+		//
+		// Note that 'A' < 'a'.
+		newKey := roachpb.Key{'A'}
+		rs, _, err = rangeLookup(ctx, tc.Sender(), newKey, roachpb.INCONSISTENT, 0, false)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if desc := rs[0]; !reflect.DeepEqual(desc, origDesc) {
+			t.Errorf("expected original descriptor %s; got %s", &origDesc, &desc)
+		}
+	})
 }
 
 // TestReplicaLookupUseReverseScan verifies the correctness of the results which are retrieved
@@ -6324,93 +6311,50 @@ func TestRangeLookupAsyncResolveIntent(t *testing.T) {
 func TestReplicaLookupUseReverseScan(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	for _, legacy := range []bool{false, true} {
-		t.Run(fmt.Sprintf("legacy=%t", legacy), func(t *testing.T) {
-			rangeLookup := client.RangeLookup
-			if legacy {
-				rangeLookup = client.LegacyRangeLookup
-			}
+	testutils.RunTrueAndFalse(t, "legacy", func(t *testing.T, legacy bool) {
+		rangeLookup := client.RangeLookup
+		if legacy {
+			rangeLookup = client.LegacyRangeLookup
+		}
 
-			tc := testContext{}
-			ctx := context.Background()
-			stopper := stop.NewStopper()
-			defer stopper.Stop(ctx)
-			tc.Start(t, stopper)
+		tc := testContext{}
+		ctx := context.Background()
+		stopper := stop.NewStopper()
+		defer stopper.Stop(ctx)
+		tc.Start(t, stopper)
 
-			splitRangeBefore := roachpb.RangeDescriptor{RangeID: 3, StartKey: roachpb.RKey("c"), EndKey: roachpb.RKey("h")}
-			splitRangeLHS := roachpb.RangeDescriptor{RangeID: 3, StartKey: roachpb.RKey("c"), EndKey: roachpb.RKey("f")}
-			splitRangeRHS := roachpb.RangeDescriptor{RangeID: 5, StartKey: roachpb.RKey("f"), EndKey: roachpb.RKey("h")}
+		splitRangeBefore := roachpb.RangeDescriptor{RangeID: 3, StartKey: roachpb.RKey("c"), EndKey: roachpb.RKey("h")}
+		splitRangeLHS := roachpb.RangeDescriptor{RangeID: 3, StartKey: roachpb.RKey("c"), EndKey: roachpb.RKey("f")}
+		splitRangeRHS := roachpb.RangeDescriptor{RangeID: 5, StartKey: roachpb.RKey("f"), EndKey: roachpb.RKey("h")}
 
-			// Test ranges: ["a","c"), ["c","f"), ["f","h") and ["h","y").
-			testRanges := []roachpb.RangeDescriptor{
-				{RangeID: 2, StartKey: roachpb.RKey("a"), EndKey: roachpb.RKey("c")},
-				splitRangeBefore,
-				{RangeID: 4, StartKey: roachpb.RKey("h"), EndKey: roachpb.RKey("y")},
-			}
+		// Test ranges: ["a","c"), ["c","f"), ["f","h") and ["h","y").
+		testRanges := []roachpb.RangeDescriptor{
+			{RangeID: 2, StartKey: roachpb.RKey("a"), EndKey: roachpb.RKey("c")},
+			splitRangeBefore,
+			{RangeID: 4, StartKey: roachpb.RKey("h"), EndKey: roachpb.RKey("y")},
+		}
 
-			testCases := []struct {
-				key      string
-				expected roachpb.RangeDescriptor
-			}{
-				// For testRanges[0|1|3] there is no intent. A key in the middle
-				// and the end key should both give us the range itself.
-				{key: "b", expected: testRanges[0]},
-				{key: "c", expected: testRanges[0]},
-				{key: "d", expected: testRanges[1]},
-				{key: "f", expected: testRanges[1]},
-				{key: "j", expected: testRanges[2]},
-				// testRanges[2] has an intent, so the inconsistent scan will read
-				// an old value (nil). Since we're in reverse mode, testRanges[1]
-				// is the result.
-				{key: "g", expected: testRanges[1]},
-				{key: "h", expected: testRanges[1]},
-			}
+		testCases := []struct {
+			key      string
+			expected roachpb.RangeDescriptor
+		}{
+			// For testRanges[0|1|3] there is no intent. A key in the middle
+			// and the end key should both give us the range itself.
+			{key: "b", expected: testRanges[0]},
+			{key: "c", expected: testRanges[0]},
+			{key: "d", expected: testRanges[1]},
+			{key: "f", expected: testRanges[1]},
+			{key: "j", expected: testRanges[2]},
+			// testRanges[2] has an intent, so the inconsistent scan will read
+			// an old value (nil). Since we're in reverse mode, testRanges[1]
+			// is the result.
+			{key: "g", expected: testRanges[1]},
+			{key: "h", expected: testRanges[1]},
+		}
 
-			{
-				txn := newTransaction("test", roachpb.Key{}, 1, enginepb.SERIALIZABLE, tc.Clock())
-				for _, r := range testRanges {
-					// Write the new descriptor as an intent.
-					data, err := protoutil.Marshal(&r)
-					if err != nil {
-						t.Fatal(err)
-					}
-					pArgs := putArgs(keys.RangeMetaKey(r.EndKey).AsRawKey(), data)
-
-					txn.Sequence++
-					if _, pErr := tc.SendWrappedWith(roachpb.Header{Txn: txn}, &pArgs); pErr != nil {
-						t.Fatal(pErr)
-					}
-				}
-
-				// Resolve the intents.
-				rArgs := &roachpb.ResolveIntentRangeRequest{
-					Span: roachpb.Span{
-						Key:    keys.RangeMetaKey(roachpb.RKey("a")).AsRawKey(),
-						EndKey: keys.RangeMetaKey(roachpb.RKey("z")).AsRawKey(),
-					},
-					IntentTxn: txn.TxnMeta,
-					Status:    roachpb.COMMITTED,
-				}
-				if _, pErr := tc.SendWrapped(rArgs); pErr != nil {
-					t.Fatal(pErr)
-				}
-			}
-
-			// Test reverse RangeLookup scan without intents.
-			for _, c := range testCases {
-				rs, _, err := rangeLookup(ctx, tc.Sender(), roachpb.Key(c.key), roachpb.INCONSISTENT, 0, true)
-				if err != nil {
-					t.Fatal(err)
-				}
-				seen := rs[0]
-				if !(seen.StartKey.Equal(c.expected.StartKey) && seen.EndKey.Equal(c.expected.EndKey)) {
-					t.Errorf("expected descriptor %s; got %s", &c.expected, &seen)
-				}
-			}
-
-			// Write the new descriptors as intents.
+		{
 			txn := newTransaction("test", roachpb.Key{}, 1, enginepb.SERIALIZABLE, tc.Clock())
-			for _, r := range []roachpb.RangeDescriptor{splitRangeLHS, splitRangeRHS} {
+			for _, r := range testRanges {
 				// Write the new descriptor as an intent.
 				data, err := protoutil.Marshal(&r)
 				if err != nil {
@@ -6424,19 +6368,60 @@ func TestReplicaLookupUseReverseScan(t *testing.T) {
 				}
 			}
 
-			// Test reverse RangeLookup scan with intents.
-			for _, c := range testCases {
-				rs, _, err := rangeLookup(ctx, tc.Sender(), roachpb.Key(c.key), roachpb.INCONSISTENT, 0, true)
-				if err != nil {
-					t.Fatal(err)
-				}
-				seen := rs[0]
-				if !(seen.StartKey.Equal(c.expected.StartKey) && seen.EndKey.Equal(c.expected.EndKey)) {
-					t.Errorf("expected descriptor %s; got %s", &c.expected, &seen)
-				}
+			// Resolve the intents.
+			rArgs := &roachpb.ResolveIntentRangeRequest{
+				Span: roachpb.Span{
+					Key:    keys.RangeMetaKey(roachpb.RKey("a")).AsRawKey(),
+					EndKey: keys.RangeMetaKey(roachpb.RKey("z")).AsRawKey(),
+				},
+				IntentTxn: txn.TxnMeta,
+				Status:    roachpb.COMMITTED,
 			}
-		})
-	}
+			if _, pErr := tc.SendWrapped(rArgs); pErr != nil {
+				t.Fatal(pErr)
+			}
+		}
+
+		// Test reverse RangeLookup scan without intents.
+		for _, c := range testCases {
+			rs, _, err := rangeLookup(ctx, tc.Sender(), roachpb.Key(c.key), roachpb.INCONSISTENT, 0, true)
+			if err != nil {
+				t.Fatal(err)
+			}
+			seen := rs[0]
+			if !(seen.StartKey.Equal(c.expected.StartKey) && seen.EndKey.Equal(c.expected.EndKey)) {
+				t.Errorf("expected descriptor %s; got %s", &c.expected, &seen)
+			}
+		}
+
+		// Write the new descriptors as intents.
+		txn := newTransaction("test", roachpb.Key{}, 1, enginepb.SERIALIZABLE, tc.Clock())
+		for _, r := range []roachpb.RangeDescriptor{splitRangeLHS, splitRangeRHS} {
+			// Write the new descriptor as an intent.
+			data, err := protoutil.Marshal(&r)
+			if err != nil {
+				t.Fatal(err)
+			}
+			pArgs := putArgs(keys.RangeMetaKey(r.EndKey).AsRawKey(), data)
+
+			txn.Sequence++
+			if _, pErr := tc.SendWrappedWith(roachpb.Header{Txn: txn}, &pArgs); pErr != nil {
+				t.Fatal(pErr)
+			}
+		}
+
+		// Test reverse RangeLookup scan with intents.
+		for _, c := range testCases {
+			rs, _, err := rangeLookup(ctx, tc.Sender(), roachpb.Key(c.key), roachpb.INCONSISTENT, 0, true)
+			if err != nil {
+				t.Fatal(err)
+			}
+			seen := rs[0]
+			if !(seen.StartKey.Equal(c.expected.StartKey) && seen.EndKey.Equal(c.expected.EndKey)) {
+				t.Errorf("expected descriptor %s; got %s", &c.expected, &seen)
+			}
+		}
+	})
 }
 
 func TestRangeLookup(t *testing.T) {
@@ -6466,27 +6451,25 @@ func TestRangeLookup(t *testing.T) {
 		{key: roachpb.RKey(roachpb.KeyMax), reverse: true, expected: expected},
 	}
 
-	for _, legacy := range []bool{false, true} {
-		t.Run(fmt.Sprintf("legacy=%t", legacy), func(t *testing.T) {
-			rangeLookup := client.RangeLookup
-			if legacy {
-				rangeLookup = client.LegacyRangeLookup
-			}
+	testutils.RunTrueAndFalse(t, "legacy", func(t *testing.T, legacy bool) {
+		rangeLookup := client.RangeLookup
+		if legacy {
+			rangeLookup = client.LegacyRangeLookup
+		}
 
-			for i, c := range testCases {
-				rs, _, err := rangeLookup(ctx, tc.Sender(), c.key.AsRawKey(), roachpb.CONSISTENT, 0, c.reverse)
-				if err != nil {
-					if c.expected != nil {
-						t.Fatal(err)
-					}
-				} else {
-					if !reflect.DeepEqual(rs, c.expected) {
-						t.Errorf("%d: expected %+v, got %+v", i, c.expected, rs)
-					}
+		for i, c := range testCases {
+			rs, _, err := rangeLookup(ctx, tc.Sender(), c.key.AsRawKey(), roachpb.CONSISTENT, 0, c.reverse)
+			if err != nil {
+				if c.expected != nil {
+					t.Fatal(err)
+				}
+			} else {
+				if !reflect.DeepEqual(rs, c.expected) {
+					t.Errorf("%d: expected %+v, got %+v", i, c.expected, rs)
 				}
 			}
-		})
-	}
+		}
+	})
 }
 
 // TestRequestLeaderEncounterGroupDeleteError verifies that a lease request which fails with

@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -40,14 +41,6 @@ func forEachCacheImpl(
 		tcName := reflect.TypeOf(tc).Elem().Name()
 		t.Run(tcName, func(t *testing.T) {
 			fn(t, tc, clock, manual)
-		})
-	}
-}
-
-func forTrueAndFalse(t *testing.T, name string, fn func(t *testing.T, b bool)) {
-	for _, b := range []bool{false, true} {
-		t.Run(fmt.Sprintf("%s=%t", name, b), func(t *testing.T) {
-			fn(t, b)
 		})
 	}
 }
@@ -305,16 +298,16 @@ func TestTimestampCacheLayeredIntervals(t *testing.T) {
 				// In simultaneous runs, each span in the test case is given the same
 				// time. Otherwise each gets a distinct timestamp (in the order of
 				// definition).
-				forTrueAndFalse(t, "simultaneous", func(t *testing.T, simultaneous bool) {
+				testutils.RunTrueAndFalse(t, "simultaneous", func(t *testing.T, simultaneous bool) {
 					// In reverse runs, spans are inserted into the timestamp cache out
 					// of order (so spans with higher timestamps are inserted before
 					// those with lower timestamps). In simultaneous+reverse runs,
 					// timestamps are all the same, but running in both directions is
 					// still necessary to exercise all branches in the code.
-					forTrueAndFalse(t, "reverse", func(t *testing.T, reverse bool) {
+					testutils.RunTrueAndFalse(t, "reverse", func(t *testing.T, reverse bool) {
 						// In sameTxn runs, all spans are inserted as a part of the same
 						// transaction; otherwise each is a separate transaction.
-						forTrueAndFalse(t, "sameTxn", func(t *testing.T, sameTxn bool) {
+						testutils.RunTrueAndFalse(t, "sameTxn", func(t *testing.T, sameTxn bool) {
 							defer func() {
 								tc.clear(clock.Now())
 							}()
