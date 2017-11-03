@@ -1,7 +1,7 @@
 - Feature Name: SQL Optimizer Statistics
 - Status: draft
 - Start Date: 2017-09-08
-- Authors: Peter Mattis
+- Authors: Peter Mattis, Radu Berinde
 - RFC PR: [#18399](https:////github.com/cockroachdb/cockroach/pull/18399)
 - Cockroach Issue: (one or more # from the issue tracker)
 
@@ -26,7 +26,7 @@ data that can guide selection between alternatives.
 One example of where statistics guide query optimization is in join
 ordering. Consider the natural join:
 
-  `SELECT * FROM a JOIN b`
+  `SELECT * FROM a NATURAL JOIN b`
 
 In the absence of other opportunities, this might be implemented as a
 hash join. With a hash join, we want to load the smaller set of rows
@@ -73,31 +73,41 @@ which is focused on the collection of basic statistics.
 
 # Terminology
 
-* Sketch: Used in cardinality estimation. Algorithms such as
-  [HyperLogLog](http://algo.inria.fr/flajolet/Publications/FlFuGaMe07.pdf)
-  use a hash of the value to estimate the number of distinct
-  values. Sketches can be merged allowing for parallel
-  computation. For example, the sketches for distinct values on
-  different ranges can be combined into a single sketch for an entire
-  table.
-
-* Histogram: Equi-depth (a.k.a. equi-height) histograms are the
-  classic data structure for computing selectivity. More complex
-  histograms exist that aim to provide more accuracy in various data
-  distributions. In an equi-depth histogram, each bucket contains
-  approximately (or exactly) the same number of values. A simple
-  one-pass algorithm exists for constructing an equi-depth histogram
-  for ordered values. A histogram for unordered values can be
-  constructing by first sampling the data (e.g. using reservoir
-  sampling), sorting it and then using the one-pass algorithm on the
-  sorted data.
-
 * Selectivity: The number of values that pass a predicate divided by
   the total number of values. The selectivity multiplied by the
   cardinality can be used to compute the total number of values after
   applying the predicate to set of values. The selectivity is
-  interesting independent of the number of values because selectivies
-  for multiple predicates can be combined.
+  interesting independent of the number of values because
+  selectivities for multiple predicates can be combined.
+
+* Histogram: Histograms are the classic data structure for computing
+  selectivity. One kind that is frequently used is the equi-depth
+  histogram, where each bucket contains approximately (or exactly) the
+  same number of values. More complex histograms exist that aim to
+  provide more accuracy in various data distributions, e.g. "max-diff"
+  histograms. A simple one-pass algorithm exists for constructing an
+  equi-depth histogram for ordered values. A histogram for unordered
+  values can be constructed by first sampling the data (e.g. using
+  reservoir sampling), sorting it and then using the one-pass
+  algorithm on the sorted data.
+
+* Density: defined as 1 / "number of distinct values".
+
+* Density vector: stores density information for column groups; used
+  to estimate the output of "GROUP BY" operations or to estimate
+  selectivity of equality predicates where a value is unknown (as in
+  the case of prepared queries). The density vector contains density
+  information for all prefixes of a group of columns. For example, for
+  a column group A,B,C the density vector allows us to estimate the
+  number of distinct values of A, the number of distinct pairs (A,B),
+  and the number of distinct tuples (A,B,C).
+
+* Sketch: Used in density estimation. Algorithms such as
+  [HyperLogLog](http://algo.inria.fr/flajolet/Publications/FlFuGaMe07.pdf)
+  use a hash of the value to estimate the number of distinct values.
+  Sketches can be merged allowing for parallel computation. For
+  example, the sketches for distinct values on different ranges can be
+  combined into a single sketch for an entire table.
 
 # Design considerations
 
@@ -112,13 +122,12 @@ which is focused on the collection of basic statistics.
   initial implementation of statistics collection should not preclude
   more complex collection in the future.
 
-* The desired statistics to collect are the number of distinct values
-  for a given column or index, a per-column histogram over the
-  column's values, and a per-index histogram of the indexes values
-  (i.e. a tuple of column values).
+* The desired statistics to collect are:
+    - a histogram for a given column
+    - a density vector for a given set of columns
 
-* The count of distinct values for a column or index can be computed
-  using a sketch algorithm such as
+* The count of distinct values for a column or group of columns can be
+  computed using a sketch algorithm such as
   [HyperLogLog](https://en.wikipedia.org/wiki/HyperLogLog). Such
   sketches can be merged making it feasible to collect a sketch at the
   range-level and combine the sketches to create a table-level sketch.
@@ -130,41 +139,28 @@ which is focused on the collection of basic statistics.
 
 # Design overview
 
+This RFC focuses on the infrastructure and does not set a policy for
+what stats to collect or when to collect them; these are discussed
+under future work.
+
 A single node per table will act as the central coordinator for
-gathering table-level stats. The stats coordinator periodically
-refreshes the stats by sending an operation to every range of the
-primary index. While performed at a specific timestamp, this operation
-explicitly skips the timestamp cache in order to avoid disturbing
-foreground traffic. The stats refresh interval will be on the order of
-hours to days, depending on how expensive the stats refresh turns out
-to be in practice. An `ANALYZE <table>` statement is provided which
-will direct the stats coordinator for the table to refresh the
-stats. (NB: triggering stats refreshes based on queries or table
-modifications is left as future work). [TBD: which node acts at the
-stat coordinator for a table? Presumably there is some sort of lease
-based on the table ID. Can possibly reuse or copy whatever mechanism
-is used for schema changes.]
+gathering table-level stats. This node sets up a DistSQL operation
+that involves reading the primary index and sampling rows (as well as
+computing sketches). While performed at a specific timestamp, the
+table read operations explicitly skip the timestamp cache in order to
+avoid disturbing foreground traffic.
 
-The range-level stats request specifies the columns and indexes (tuple
-of columns) to gather stats for. For each column and index it will
-compute a sketch and gather a random sample of data using reservoir
-sampling. The size of the samples can be adjusted by the central
-coordinator so that the total sample sizes are reasonable even in very
-large tables. The range-level operation will also return an exact
-count of the number of NULL values for each column.
-
-The central coordinator will gather the range-level sketches and
-samples and compute a table-level estimate of the per-column and
-per-index distinct values. The samples will be used to compute
-per-column and per-index histograms.
+[TBD: which node acts at the stat coordinator for a table? Presumably
+there is some sort of lease based on the table ID. Can possibly reuse
+or copy whatever mechanism is used for schema changes.]
 
 A new system table provides storage for stats:
-`system.table_histograms`. This table contains the count of distinct
+`system.table_statistics`. This table contains the count of distinct
 values, NULL values and the histogram buckets for a column/index.
 
 During query optimization, the stats for a table are retrieved from a
 per-node stats cache. The cache is populated on demand from the
-`system.table_histograms` table and refreshed periodically.
+`system.table_statistics` table and refreshed periodically.
 
 Pseudo-stats are used whenever actual statistics are unavailable. For
 example, the selectivity of a less-then or greater-than predicate is
@@ -176,61 +172,71 @@ table.
 
 ## Detailed design
 
-### `system.table_histograms`
+### `system.table_statistics`
 
 The table-level statistics are stored in a new
-`system.table_histograms` table. This table contains a row per
+`system.table_statistics` table. This table contains a row per
 attribute or group of attributes that we maintain stats for. The
 schema is:
 
 ```
-CREATE TABLE system.table_histograms (
+CREATE TABLE system.table_statistics (
   table_id INT,
-  histogram_id INT,
-  is_index BOOL,
+  statistic_id INT,
+  column_ids []INT,
   created_at TIMESTAMP,
-  distinct_count INT,
-  null_count INT,
-  data BYTES,
-  PRIMARY KEY (table_id, histogram_id, is_index)
+  rows INT,
+  density []FLOAT,
+  null_fraction FLOAT,
+  histogram BYTES,
+  PRIMARY KEY (table_id, statistic_id)
 )
 ```
 
-Each table has zero or more rows in the `table_histograms` table
+Each table has zero or more rows in the `table_statistics` table
 corresponding to the histograms maintained for the table.
 
-* `histogram_id` is either the ID of the column or the index upon
-  which the histogram was built.
-
-* `is_index` indicates whether the histogram was built for an index or
-  an individual column and separates the column ID and index ID
-  namespaces so that both IDs can be used for the `histogram_id`
-  field. (If, in the future, we want to maintain a histogram on a
-  tuple of non-indexed columns we can add an `IndexDescriptor` which
-  does not materialize the keys and values for the index).
-
-* `created_at` is the time at which the histogram was generated.
-
-* `distinct_count` is an estimate of the number of distinct values
-
-* `null_count` is the count of the number of `NULL` values for the
-  histogram. This is used by queries that need to know the selectivity
-  of an `IS NULL` or `IS NOT NULL` predicate.
-
-* `data` is a proto defined as:
+* `table_id` is the ID of the table
+* `statistic_id` is an ID that identifies each particular
+  statistic for a table. When a statistic is recalculated, it should
+  have a new `statistic_id`.
+* `column_ids` stores the IDs of the columns for which the statistic
+  is generated.
+* `created_at` is the time at which the statistic was generated.
+* `row_count` is the total number of rows in the table.
+* `density` is the density vector, with one value for each prefix of
+  `column_ids`. E.g. if the statistic is on columns A,B,C there are
+  three density values - one for A, one for (A,B), and one for
+  (A,B,C). Only set if the
+* `null_fraction` is the fraction of the rows that have a NULL on the
+  first column (`column_ids[0]`).
+* `histogram` for `column_ids[0]` (optional). It encodes a proto
+  defined as:
 
 ```
 message HistogramData {
   message Bucket {
-    // The total count of non-NULL values in the bucket.
-    optional int64 count;
-    // The count of distinct non-NULL values in the bucket.
-    optional int64 distinct_count;
+    // The estimated number of rows that are equal to upper_bound.
+    optional int64 eq_rows;
+
+    // The estimated number of rows in the bucket (excluding those
+    // that are equal to upper_bound). Splitting the count into two
+    // makes the histogram effectively equivalent to a histogram with
+    // twice as many buckets, with every other bucket containing a
+    // single value. This might be particularly advantageous if the
+    // histogram algorithm makes sure the top "heavy hitters" (most
+    // frequent elements) are bucket boundaries (similar of a
+    // compressed histogram).
+    optional int64 range_rows;
+
     // The upper boundary of the bucket. The column values for the
-    // upper bound are encoded using the same ordered code used for index
-    // keys.
+    // upper bound are encoded using the same ordered encoding used
+    // for index keys.
     optional bytes upper_bound;
   }
+
+  // Histogram buckets. Note that NULL values are excluded from the
+  // histogram.
   repeated Bucket buckets;
 }
 ```
@@ -239,9 +245,6 @@ message HistogramData {
 ad-hoc querying of the stats data more difficult. We could store the
 buckets in a series of parallel SQL arrays. Or we could store them in
 a separate table.]
-
-Note that the cardinality of the table (i.e. the number of rows) is
-the `distinct_count` for the primary key index.
 
 ### Estimating selectivity
 
@@ -288,104 +291,158 @@ permutations and combinations of columns that we don't maintain
 statistics on than indexes. The intuition behind collecting statistics
 on indexes is that the existence of the index is a hint that the table
 will be queried in such a way that the columns in the index will be
-used.
+used. 
 
-Range-level collection of statistics will be provided by a `Sample`
-operation. Since the range does not know about the associated table
-schema, `SampleRequest` will indicate the tuples of columns for which
-to gather random samples:
+The collection of statistics for a table span will be provided by a
+`Sampler` processor. This processor receives rows from a TableReader
+and:
+ - calculates sketches for estimating the density vector, and
+ - selects a random sample of rows of a given size; it does this by
+   generating a random number for each row and choosing the rows with
+   the top K values. The random values are returned with each row,
+   allowing multiple sample sets to be combined in a single set.
 
 ```
-message SampleRequest {
-  message Tuple {
-    // Indicates whether the tuple of column values is unique. If true
-    // the count of distinct elements will be precise instead of an
-    // estimate.
-    optional bool unique;
-    repeated int32 ids;
+enum SketchType {
+  HLL_PLUS_PLUS_v1 = 0
+}
+
+// SamplerSpec is the specification of a "sampler" processor which
+// returns a sample (random subset) of the input columns and computes
+// cardinality estimation sketches on sets of columns.
+//
+// The sampler is configured with a sample size and sets of columns
+// for the sketches. It produces one row with global statistics, one
+// row with sketch information for each sketch plus at most
+// sample_size sampled rows.
+//
+// The internal schema of the processor is formed of two column
+// groups:
+//   1. sampled row columns:
+//       - columns that map 1-1 to the columns in the input (same
+//         schema as the input).
+//       - an INT column with the random value associated with the row
+//         (this is necessary for combining sample sets).
+//   2. sketch columns:
+//       - a INT column indicating the sketch index
+//         (0 to len(sketches) - 1).
+//       - a INT column indicating the number of rows processed
+//       - a FLOAT column indicating the fraction of NULL values
+//         on the first column of the sketch.
+//       - a BYTES column with the binary sketch data (format
+//         dependent on the sketch type).
+// Rows have NULLs on either all the sampled row columns or on all the
+// sketch columns.
+message SamplerSpec {
+  optional uint32 sample_size;
+
+  message SketchInfo {
+    optional SketchType sketch_type;
+
+    // Each value is an index identifying a column in the input stream.
+    optional repeated uint32 columns;
   }
-
-  // The start and end keys over which to gather the samples.
-  optional Span header;
-  // The timestamp at which to gather stats.
-  optional hlc.Timestamp timestamp;
-  // The size of each sample to return.
-  optional int32 sample_size;
-  // The tuples of values to gather sketches and samples for. An
-  // individual column is requested by specifying a single ID in a tuple.
-  message Tuple tuples;
-}
-
-message Sketch {
-  // TBD: the contents are dependent on the sketch algorithm used.
-}
-
-message TupleData {
-  // Total count of the number of elements seen.
-  optional int64 total_count;
-  // Count of the number of NULL elements seen.
-  optional int64 null_count;
-  // Count of the number of samples.
-  optional int64 sample_count;
-  // Encoded samples containing sample_count tuples. The samples are
-  // encoded using the key encoding routines.
-  optional bytes samples; 
-  // Sketch of the distinct values.
-  optional Sketch sketch;
-}
-
-message SampleResponse {
-  // The per-tuple data. The response tuples parallel the requested
-  // tuples.
-  message TupleData tuples;
+  optional repeated SketchInfo sketches;
 }
 ```
 
-Processing of a `SampleRequest` is performed by iterating over the
-key-value pairs as of the request timestamp using `MVCCIterate`. The
-key-value iteration needs to be aware of of column families in order
-to avoid double-counting columns in keys.  For each tuple specified in
-the request a `SampleBuilder` is created and the desired values are
-supplied to it. A `SampleBuilder` implements reservoir sampling,
-maintains a count of the NULL values and a HyperLogLog sketch.
+A different `SampleAggregator` processor aggregates the results from
+multiple Samplers and generates the histogram and other statistics
+data. The processor is configured to populate the relevant rows in
+`system.table_statistics`.
 
-In order to generate table-level stats, the central coordinator
-constructs a DistSQL plan. The leaf-level of the plan are
-`SampleRequests` sent to every range containing primary index keys for
-the desired table. The results from the `Sample` operations are
-processed in a `SampleAggregator` which combines the range-level
-samples and sketches. Depending on the number of ranges in the table,
-multiple levels of `SampleAggregators` can be planned to reduce the
-number of incoming streams to a reasonable size. A final
-`StatsGenerator` stage takes takes the aggregated lower-level samples
-and sketches and produces a `TableStats` containing one or more
-`TableHistograms`.
+```
+message SampleAggregator {
+  optional sqlbase.TableDescriptor table;
 
-A `SampleAggregator` combines sketches and samples. The incoming
-sample sets have each element sampled with probability `K/N` where `K`
-is the sample size and `N` is the total number of values
-considered. In order to merge the two sets of samples, we need to find
-a common sampling rate and adjust the sets to that common rate. See
-the appendix for details.
+  // The processor merges reservoir sample sets into a single
+  // sample set of this size. This must match the sample size
+  // used for each Sampler.
+  optional uint32 sample_size;
 
-Constructing an equi-depth histogram from the table-level sample data
-is trivial: we sort the sample data and then step through it so that
-each bucket contains the same number of samples. For example, if the
-table-level sample data contains 10,000 samples and we want a
-histogram containing 200 buckets, the boundaries for the buckets are
-chosen from every 50th sample. The literature indicates that ~1000
-samples provide a sufficient size for constructing a histogram. Once
-the equi-depth histogram is working, a MaxDiff histogram will be
-explored as easy follow-on work. [TBD: How many buckets to use for the
-histogram?]
+  message SketchInfo {
+    optional SketchType sketch_type;
+
+    // Each value is a sqlbase.ColumnID.
+    optional repeated uint32 column_ids;
+  }
+  optional repeated SketchInfo sketches;
+
+  // The i-th value indicates the column ID of the i-th sampled row
+  // column.
+  optional repeated uint32 sampled_column_ids;
+
+  // Indicates the columns for which we want to generate histograms.
+  // Must be a subset of the sampled column IDs.
+  optional repeated uint32 histogram_column_ids;
+}
+```
+
+The SampleAggregator combines the samples into a single sample set (by
+choosing the rows with the top K random values across all the sets);
+the histogram is constructed from this sample set. In terms of
+implementation, both the Sampler and SampleAggregator can use the same
+method of obtaining the top-K rows. Some efficient methods:
+ - maintain the top K rows in a heap. Updating the heap is a
+   logarithmic operation, but it only needs to happen when we find a
+   new top element (for the initial sampling, we have only O(KlogK)
+   operations).
+ - maintain the top 2K (or 1.5K) rows; when the set is full, select
+   the Kth element (which takes O(K)) and trim the set down to K.
+
+This RFC is not proposing a specific algorithm for constructing the
+histogram. The literature indicates that a very good choice is the
+Max-Diff histogram with the "area" diff metric; this has a fairly
+simple construction algorithm. We may implement a simpler (e.g.
+equi-depth histogram) as a first iteration. Note that how we generate
+the histogram does not affect the histogram data format, so this can
+be changed arbitrarily.
+
+[TBD: How many buckets to use for the histogram? SQL Server uses at
+most 200].
+
+Good choices for the sketch algorithm are
+[HyperLogLog](http://algo.inria.fr/flajolet/Publications/FlFuGaMe07.pdf)
+and its improved version
+[HLL++](http://research.google.com/pubs/pub40671.html). There are a
+few go implementations for both on github with permissive licenses we
+can use. The infrastructure allows adding better sketch algorithms later. 
+
+A DistSQL plan for this operation will look like this:
+![Sample plan](images/stats-distsql-plan.png?raw=true "Logical Plan")
 
 ### Stats cache
 
-TODO: Describe the API by which the optimizer will request stats from
-the cache and how caching will be performed. We want to cache at the
-granularity of a histogram because very wide tables will have lots of
-histograms most of which the optimizer will not need to use. A
-histogram is expected to be ~5-10KB in size.
+To cache statistics, we emply two caches:
+  1. *statistics cache*: at the level of table and stores information
+     for all statistics available for each table. The information
+     excludes the histogram data.
+  2. *histogram* cache: each entry is a `(table_id, statistic_id)`
+     pair and stores the full statistic information, including the
+     histogram data.
+
+The statistics cache is populated whenever we need the statistics for
+a table. It gets populated by reading the relevant rows from
+`table_statistics`; whenever this happens, we can choose to add the
+histograms to the histogram cache as well (since we're scanning that
+data anyway). The statistics cache can hold a large number of tables,
+as the metadata it stores is fairly small.
+
+The histogram cache is more limited because histograms are expected to
+be 5-10KB in size. Whenever a histogram is required, the cache is
+populated by reading the one row from `table_statistics`.
+
+TBD: how do we update the statistics cache when a new statistic is
+available? One option is to expire entries from the statistics
+periodically to force a rescan. Perhaps using gossip is also an
+option? Can this be integrated with table leases?
+
+The API for accessing the cache mirrors the two levels of caching:
+there will be a function to obtain information (metadata) for all
+statistics of a table, and a function to obtain the full information
+for a given statistic. We can also have a function that returns all
+statistics that include certain columns (which can potentially be more
+efficient than retrieving each histogram separately).
 
 ## Drawbacks
 
@@ -396,6 +453,12 @@ histogram is expected to be ~5-10KB in size.
   initial implementation which wouldn't constrain Future Work?
 
 ## Rationale and Alternatives
+
+* Range-level statistics could be computed by a new KV operation.
+  While this may yield some performance benefits, it would require
+  pushing down more knowledge of row encoding, as well as the sketch
+  algorithms themselves. The Sampler processor model is quite a bit
+  cleaner in terms of separating the implementation.
 
 * Range-level statistics could be computed by a new storage-level
   `StatsQueue` that periodically refreshes the stats for a
@@ -441,7 +504,21 @@ histogram is expected to be ~5-10KB in size.
   (e.g. `/Table/TableID/MaxIndexID`). This would help the
   backup/restore scenario as well.
 
+* There are other ways to obtain and combine reservoir sets, e.g.
+  [this blog post](https://ballsandbins.wordpress.com/2014/04/13/distributedparallel-reservoir-sampling/)
+  Note though that we would still need to pass the sampling rate with
+  each row; otherwise the SampleAggregator can't tell which rows are
+  coming from which set. The "top K random numbers" idea is cleaner.
+
 ## Future work
+
+
+* Determining when and what stats to collect. We will probably start
+  with an explicit command for calculating statistics. Later we can
+  work on automatic stat generation, and automatically choosing which
+  statistics to gather. Columns that form indexes are a good signal
+  that we may see constraints on those columns, so we can start by
+  choosing those columns (or column groups).
 
 * We don't need stats for every column in a table. For example,
   consider the "second line" of an address, the "address complement".
@@ -498,16 +575,9 @@ histogram is expected to be ~5-10KB in size.
 
 ## Unresolved questions
 
-* Which sketch algorithm should be used? HyperLogLog? HLL++? An
-  earlier variant such as LogLog or the original FM-Sketch algorithm?
-  [MTS sketches](https://arxiv.org/pdf/1611.01853.pdf)?
-
 * How is the central coordinator selected? Should there be a different
   coordinator per-table? How is a request to analyze a table directed
   to the central coordinator?
-
-* A DistSQL expert needs to help flesh out the DistSQL specifics and
-  sanity check the proposed usage.
 
 * Should stats be segregated by partition? Doing so could help if we
   expect significant partition-specific data distributions. Would
@@ -519,38 +589,5 @@ histogram is expected to be ~5-10KB in size.
   of the proposals) we'll need to find some way to identify the
   partition for stats storage.
 
-## Appendix (merging reservoir sample sets)
-
-We use a weighted random selection to merge two sets of samples, `R`
-and `S` that have sampling rates of `K/M` and `K/N` respectively to
-produce a new set `T` with rate `K/(M+N)`:
-
-```
-p := float64(M) / float64(M+N)
-for i := 0; i < K; i++ {
-  if rand.Float64() <= p {
-    // choose a random item from R and add to T
-  } else {
-    // choose a random item from S and add to T
-  }
-}
-return T
-```
-
-See this blog post on [distributed parallel reservoir
-sampling](https://ballsandbins.wordpress.com/2014/04/13/distributedparallel-reservoir-sampling/)
-for more details.  The items in `R` started with a sampling rate of
-`K/M`. After the resampling they have a rate of `(K/M) * M/(M+N) =
-K/(M+N)`. Similar math can show that items in `S` end up with the same
-probability of being in the final set.
-
-An alternative to this merging approach is to reframe the sampling
-problem as finding the first K elements from a random
-permutation. Without generating the permutation we can accomplish this
-by assigning each element a random number. At the range-level we
-return the K elements with the smallest random numbers along with the
-random numbers themselves. Merging then involves taking two sets and
-returning the K elements with the smallest assigned numbers. This is
-conceptually quite a bit more straightforward. The downside is that we
-need to pass along the random numbers and use a heap or similar
-structure to find the smallest K elements while sampling and merging.
+* What if a column has very large values? Perhaps we want to adjust
+  the number of buckets depending on that.
