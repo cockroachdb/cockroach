@@ -31,7 +31,8 @@ func TestRunGH(t *testing.T) {
 	const (
 		expOwner    = "cockroachdb"
 		expRepo     = "cockroach"
-		envPkg      = "foo/bar/baz"
+		expAssignee = "hodor"
+		envPkg      = "storage"
 		envTags     = "deadlock"
 		envGoFlags  = "race"
 		sha         = "abcd123"
@@ -137,6 +138,9 @@ Stress build found a failed test: %s`,
 					if repo != expRepo {
 						t.Fatalf("got %s, expected %s", repo, expRepo)
 					}
+					if *issue.Assignee != expAssignee {
+						t.Fatalf("got %s, expected %s", *issue.Assignee, expAssignee)
+					}
 					if expected := fmt.Sprintf("%s: %s failed under stress", expectations.packageName, expectations.testName); *issue.Title != expected {
 						t.Fatalf("got %s, expected %s", *issue.Title, expected)
 					}
@@ -178,7 +182,26 @@ Stress build found a failed test: %s`,
 					return nil, nil, nil
 				}
 
-				if err := runGH(context.Background(), file, postIssue, searchIssues, postComment); err != nil {
+				listCommits := func(_ context.Context, owner string, repo string, opts *github.CommitsListOptions) ([]*github.RepositoryCommit, *github.Response, error) {
+					if owner != expOwner {
+						t.Fatalf("got %s, expected %s", owner, expOwner)
+					}
+					if repo != expRepo {
+						t.Fatalf("got %s, expected %s", repo, expRepo)
+					}
+					if opts.Author == "" {
+						t.Fatalf("found no author, but expected one")
+					}
+					assignee := expAssignee
+					return []*github.RepositoryCommit{
+						&github.RepositoryCommit{
+							Author: &github.User{
+								Login: &assignee,
+							},
+						},
+					}, nil, nil
+				}
+				if err := runGH(context.Background(), file, postIssue, searchIssues, postComment, listCommits); err != nil {
 					t.Fatal(err)
 				}
 				expectedIssues := 1
