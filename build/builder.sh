@@ -147,7 +147,7 @@ if [ "${BUILDER_HIDE_GOPATH_SRC:-}" != "1" ]; then
 fi
 vols="${vols} --volume=${cockroach_toplevel}:/go/src/github.com/cockroachdb/cockroach${cached_volume_mode}"
 
-mkdir -p "${cockroach_toplevel}"/bin.docker_amd64
+mkdir -p "${cockroach_toplevel}"/{bin,bin.docker_amd64}
 vols="${vols} --volume=${cockroach_toplevel}/bin.docker_amd64:/go/src/github.com/cockroachdb/cockroach/bin${delegated_volume_mode}"
 
 mkdir -p "${gocache}"/docker/bin
