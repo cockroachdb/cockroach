@@ -1488,6 +1488,37 @@ func (desc *TableDescriptor) validatePartitioningDescriptor(
 	return nil
 }
 
+// FindPartitionByName returns PartitionDescriptor and the IndexDescriptor that
+// the partition with the specified name belongs to. If no such partition
+// exists, an error is returned.
+func (desc *TableDescriptor) FindPartitionByName(
+	name string,
+) (*PartitioningDescriptor, *IndexDescriptor, error) {
+	var find func(p PartitioningDescriptor) *PartitioningDescriptor
+	find = func(p PartitioningDescriptor) *PartitioningDescriptor {
+		for _, l := range p.List {
+			if l.Name == name {
+				return &p
+			}
+			if s := find(l.Subpartitioning); s != nil {
+				return s
+			}
+		}
+		for _, r := range p.Range {
+			if r.Name == name {
+				return &p
+			}
+		}
+		return nil
+	}
+	for _, idx := range desc.AllNonDropIndexes() {
+		if p := find(idx.Partitioning); p != nil {
+			return p, &idx, nil
+		}
+	}
+	return nil, nil, fmt.Errorf("partition %q does not exist", name)
+}
+
 // validatePartitioning validates that any PartitioningDescriptors contained in
 // table indexes are well-formed. See validatePartitioningDesc for details.
 func (desc *TableDescriptor) validatePartitioning() error {
