@@ -190,13 +190,24 @@ func redact(r interface{}) (string, bool) {
 		return fmt.Sprintf("%+v", v.V)
 	}
 	typAnd := func(i interface{}, text string) string {
+		type stackTracer interface {
+			StackTrace() errors.StackTrace
+		}
 		typ := fmt.Sprintf("%T", i)
+		if e, ok := i.(stackTracer); ok {
+			tr := e.StackTrace()
+			if len(tr) > 0 {
+				typ = fmt.Sprintf("%v", tr[0]) // prints file:line
+			}
+		}
 		if text == "" {
 			return typ
 		}
 		if strings.HasPrefix(typ, "errors.") {
 			// Don't bother reporting the type for errors.New() and its
-			// siblings.
+			// nondescript siblings. Note that errors coming from pkg/errors
+			// usually have `typ` overridden to file:line above, so they won't
+			// hit this path.
 			return text
 		}
 		return typ + ": " + text
