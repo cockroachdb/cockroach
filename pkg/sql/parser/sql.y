@@ -106,10 +106,14 @@ func (u *sqlSymUnion) strPtr() *string {
 func (u *sqlSymUnion) strs() []string {
     return u.val.([]string)
 }
-func (u *sqlSymUnion) tableWithIdx() *TableNameWithIndex {
-    return u.val.(*TableNameWithIndex)
+func (u *sqlSymUnion) newTableWithIdx() *TableNameWithIndex {
+    tn := u.val.(TableNameWithIndex)
+    return &tn
 }
-func (u *sqlSymUnion) tableWithIdxList() TableNameWithIndexList {
+func (u *sqlSymUnion) tableWithIdx() TableNameWithIndex {
+    return u.val.(TableNameWithIndex)
+}
+func (u *sqlSymUnion) newTableWithIdxList() TableNameWithIndexList {
     return u.val.(TableNameWithIndexList)
 }
 func (u *sqlSymUnion) namePart() NamePart {
@@ -1095,7 +1099,7 @@ alter_split_stmt:
 alter_split_index_stmt:
   ALTER INDEX table_name_with_index SPLIT AT select_stmt
   {
-    $$.val = &Split{Index: $3.tableWithIdx(), Rows: $6.slct()}
+    $$.val = &Split{Index: $3.newTableWithIdx(), Rows: $6.slct()}
   }
 
 alter_testing_relocate_stmt:
@@ -1109,7 +1113,7 @@ alter_testing_relocate_index_stmt:
   ALTER INDEX table_name_with_index TESTING_RELOCATE select_stmt
   {
     /* SKIP DOC */
-    $$.val = &TestingRelocate{Index: $3.tableWithIdx(), Rows: $5.slct()}
+    $$.val = &TestingRelocate{Index: $3.newTableWithIdx(), Rows: $5.slct()}
   }
 
 alter_zone_range_stmt:
@@ -1155,11 +1159,11 @@ alter_scatter_stmt:
 alter_scatter_index_stmt:
   ALTER INDEX table_name_with_index SCATTER
   {
-    $$.val = &Scatter{Index: $3.tableWithIdx()}
+    $$.val = &Scatter{Index: $3.newTableWithIdx()}
   }
 | ALTER INDEX table_name_with_index SCATTER FROM '(' expr_list ')' TO '(' expr_list ')'
   {
-    $$.val = &Scatter{Index: $3.tableWithIdx(), From: $7.exprs(), To: $11.exprs()}
+    $$.val = &Scatter{Index: $3.newTableWithIdx(), From: $7.exprs(), To: $11.exprs()}
   }
 
 alter_table_cmds:
@@ -1614,7 +1618,7 @@ drop_index_stmt:
   DROP INDEX table_name_with_index_list opt_drop_behavior
   {
     $$.val = &DropIndex{
-      IndexList: $3.tableWithIdxList(),
+      IndexList: $3.newTableWithIdxList(),
       IfExists: false,
       DropBehavior: $4.dropBehavior(),
     }
@@ -1622,7 +1626,7 @@ drop_index_stmt:
 | DROP INDEX IF EXISTS table_name_with_index_list opt_drop_behavior
   {
     $$.val = &DropIndex{
-      IndexList: $5.tableWithIdxList(),
+      IndexList: $5.newTableWithIdxList(),
       IfExists: true,
       DropBehavior: $6.dropBehavior(),
     }
@@ -2582,7 +2586,7 @@ show_testing_stmt:
 | SHOW TESTING_RANGES FROM INDEX table_name_with_index
   {
     /* SKIP DOC */
-    $$.val = &ShowRanges{Index: $5.tableWithIdx()}
+    $$.val = &ShowRanges{Index: $5.newTableWithIdx()}
   }
 | SHOW EXPERIMENTAL_FINGERPRINTS FROM TABLE qualified_name
   {
@@ -3322,11 +3326,11 @@ alter_rename_view_stmt:
 alter_rename_index_stmt:
   ALTER INDEX table_name_with_index RENAME TO name
   {
-    $$.val = &RenameIndex{Index: $3.tableWithIdx(), NewName: Name($6), IfExists: false}
+    $$.val = &RenameIndex{Index: $3.newTableWithIdx(), NewName: Name($6), IfExists: false}
   }
 | ALTER INDEX IF EXISTS table_name_with_index RENAME TO name
   {
-    $$.val = &RenameIndex{Index: $5.tableWithIdx(), NewName: Name($8), IfExists: true}
+    $$.val = &RenameIndex{Index: $5.newTableWithIdx(), NewName: Name($8), IfExists: true}
   }
 
 opt_column:
@@ -6356,11 +6360,11 @@ qualified_name_list:
 table_name_with_index_list:
   table_name_with_index
   {
-    $$.val = TableNameWithIndexList{$1.tableWithIdx()}
+    $$.val = TableNameWithIndexList{$1.newTableWithIdx()}
   }
 | table_name_with_index_list ',' table_name_with_index
   {
-    $$.val = append($1.tableWithIdxList(), $3.tableWithIdx())
+    $$.val = append($1.newTableWithIdxList(), $3.newTableWithIdx())
   }
 
 table_pattern_list:
@@ -6391,13 +6395,13 @@ qualified_name:
 table_name_with_index:
   qualified_name '@' unrestricted_name
   {
-    $$.val = &TableNameWithIndex{Table: $1.normalizableTableName(), Index: Name($3)}
+    $$.val = TableNameWithIndex{Table: $1.normalizableTableName(), Index: Name($3)}
   }
 | qualified_name
   {
     // This case allows specifying just an index name (potentially schema-qualified).
     // We temporarily store the index name in Table (see TableNameWithIndex).
-    $$.val = &TableNameWithIndex{Table: $1.normalizableTableName(), SearchTable: true}
+    $$.val = TableNameWithIndex{Table: $1.normalizableTableName(), SearchTable: true}
   }
 
 // table_pattern accepts:
