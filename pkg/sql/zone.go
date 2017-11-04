@@ -42,7 +42,7 @@ func zoneSpecifierNotFoundError(zs parser.ZoneSpecifier) error {
 }
 
 func resolveZone(
-	ctx context.Context, txn *client.Txn, zs parser.ZoneSpecifier,
+	ctx context.Context, txn *client.Txn, zs *parser.ZoneSpecifier,
 ) (sqlbase.ID, error) {
 	errMissingKey := errors.New("missing key")
 	id, err := config.ResolveZoneSpecifier(zs,
@@ -91,7 +91,7 @@ func ascendZoneSpecifier(
 	} else if resolvedID != actualID {
 		// We traversed at least one level up, and we're not at the top of the
 		// hierarchy, so we're showing the database zone config.
-		tn, err := zs.Table.NormalizeTableName()
+		tn, err := zs.Table.Table.Normalize()
 		if err != nil {
 			return parser.ZoneSpecifier{}, err
 		}
@@ -136,7 +136,7 @@ func (n *setZoneConfigNode) Start(params runParams) error {
 		}
 	}
 
-	targetID, err := resolveZone(params.ctx, params.p.txn, n.zoneSpecifier)
+	targetID, err := resolveZone(params.ctx, params.p.txn, &n.zoneSpecifier)
 	if err != nil {
 		return err
 	}
@@ -233,7 +233,7 @@ func (p *planner) ShowZoneConfig(ctx context.Context, n *parser.ShowZoneConfig) 
 }
 
 func (n *showZoneConfigNode) Start(params runParams) error {
-	targetID, err := resolveZone(params.ctx, params.p.txn, n.zoneSpecifier)
+	targetID, err := resolveZone(params.ctx, params.p.txn, &n.zoneSpecifier)
 	if err != nil {
 		return err
 	}
