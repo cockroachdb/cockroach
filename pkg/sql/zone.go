@@ -41,7 +41,7 @@ func zoneSpecifierNotFoundError(zs parser.ZoneSpecifier) error {
 	}
 }
 
-func resolveZoneSpecifier(
+func resolveZone(
 	ctx context.Context, txn *client.Txn, zs parser.ZoneSpecifier,
 ) (sqlbase.ID, error) {
 	errMissingKey := errors.New("missing key")
@@ -136,7 +136,7 @@ func (n *setZoneConfigNode) Start(params runParams) error {
 		}
 	}
 
-	targetID, err := resolveZoneSpecifier(params.ctx, params.p.txn, n.zoneSpecifier)
+	targetID, err := resolveZone(params.ctx, params.p.txn, n.zoneSpecifier)
 	if err != nil {
 		return err
 	}
@@ -162,22 +162,22 @@ func (n *setZoneConfigNode) Start(params runParams) error {
 	// TODO(benesch): pass in a proper key suffix to support index/partition
 	// zone configs.
 	var keySuffix []byte
-	proto, _, err := GetZoneConfigInTxn(params.ctx, params.p.txn, uint32(targetID), keySuffix)
+	zone, _, err := GetZoneConfigInTxn(params.ctx, params.p.txn, uint32(targetID), keySuffix)
 	if err == errNoZoneConfigApplies {
 		// TODO(benesch): This shouldn't be the caller's responsibility;
 		// GetZoneConfigInTxn should just return the default zone config if no zone
 		// config applies.
-		proto = config.DefaultZoneConfig()
+		zone = config.DefaultZoneConfig()
 	} else if err != nil {
 		return err
 	}
-	if err := yaml.UnmarshalStrict([]byte(*yamlConfig), &proto); err != nil {
+	if err := yaml.UnmarshalStrict([]byte(*yamlConfig), &zone); err != nil {
 		return fmt.Errorf("could not parse zone config: %s", err)
 	}
-	if err := proto.Validate(); err != nil {
+	if err := zone.Validate(); err != nil {
 		return fmt.Errorf("could not parse zone config: %s", err)
 	}
-	buf, err := protoutil.Marshal(&proto)
+	buf, err := protoutil.Marshal(&zone)
 	if err != nil {
 		return fmt.Errorf("could not marshal zone config: %s", err)
 	}
@@ -233,19 +233,19 @@ func (p *planner) ShowZoneConfig(ctx context.Context, n *parser.ShowZoneConfig) 
 }
 
 func (n *showZoneConfigNode) Start(params runParams) error {
-	targetID, err := resolveZoneSpecifier(params.ctx, params.p.txn, n.zoneSpecifier)
+	targetID, err := resolveZone(params.ctx, params.p.txn, n.zoneSpecifier)
 	if err != nil {
 		return err
 	}
 	// TODO(benesch): pass in a proper key suffix to support index/partition
 	// zone configs.
 	var keySuffix []byte
-	proto, zoneID, err := GetZoneConfigInTxn(params.ctx, params.p.txn, uint32(targetID), keySuffix)
+	zone, zoneID, err := GetZoneConfigInTxn(params.ctx, params.p.txn, uint32(targetID), keySuffix)
 	if err == errNoZoneConfigApplies {
 		// TODO(benesch): This shouldn't be the caller's responsibility;
 		// GetZoneConfigInTxn should just return the default zone config if no zone
 		// config applies.
-		proto = config.DefaultZoneConfig()
+		zone = config.DefaultZoneConfig()
 		zoneID = keys.RootNamespaceID
 	} else if err != nil {
 		return err
@@ -260,11 +260,11 @@ func (n *showZoneConfigNode) Start(params runParams) error {
 	}
 	n.cliSpecifier = config.CLIZoneSpecifier(zs)
 
-	n.protoConfig, err = protoutil.Marshal(&proto)
+	n.protoConfig, err = protoutil.Marshal(&zone)
 	if err != nil {
 		return err
 	}
-	n.yamlConfig, err = yaml.Marshal(proto)
+	n.yamlConfig, err = yaml.Marshal(zone)
 	return err
 }
 
