@@ -123,7 +123,7 @@ func CLIZoneSpecifier(zs parser.ZoneSpecifier) string {
 // ResolveZoneSpecifier converts a zone specifier to the ID of most specific
 // zone whose config applies.
 func ResolveZoneSpecifier(
-	zs parser.ZoneSpecifier, resolveName func(parentID uint32, name string) (id uint32, err error),
+	zs *parser.ZoneSpecifier, resolveName func(parentID uint32, name string) (id uint32, err error),
 ) (uint32, error) {
 	if zs.NamedZone != "" {
 		if zs.NamedZone == DefaultZoneName {
@@ -139,10 +139,11 @@ func ResolveZoneSpecifier(
 		return resolveName(keys.RootNamespaceID, string(zs.Database))
 	}
 
-	tn, err := zs.Table.NormalizeTableName()
+	tn, err := zs.Table.Table.Normalize()
 	if err != nil {
 		return 0, err
 	}
+	tn = zs.Table.Table.TableName()
 	databaseID, err := resolveName(keys.RootNamespaceID, tn.Database())
 	if err != nil {
 		return 0, err
