@@ -158,9 +158,7 @@ func binExprFmtWithParenAndSubOp(
 	}
 	buf.WriteString(op)
 	buf.WriteByte(' ')
-	buf.WriteByte('(')
-	FormatNode(buf, f, StripParens(e2))
-	buf.WriteByte(')')
+	exprFmtWithParen(buf, f, e2)
 }
 
 // Format implements the NodeFormatter interface.
