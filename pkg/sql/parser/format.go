@@ -49,8 +49,10 @@ type fmtFlags struct {
 	disambiguateDatumTypes bool
 	// If false, passwords are replaced by *****.
 	showPasswords bool
-	// if true, always prints qualified names even if originally omitted.
+	// If true, always prints qualified names even if originally omitted.
 	alwaysQualify bool
+	// If true, grouping parentheses are always shown. Used for testing.
+	alwaysParens bool
 }
 
 // FmtFlags enables conditional formatting in the pretty-printer.
@@ -182,7 +184,17 @@ func FormatNode(buf *bytes.Buffer, f FmtFlags, n NodeFormatter) {
 			return
 		}
 	}
+	if f.alwaysParens {
+		if _, ok := n.(Expr); ok {
+			buf.WriteByte('(')
+		}
+	}
 	formatNodeOrHideConstants(buf, f, n)
+	if f.alwaysParens {
+		if _, ok := n.(Expr); ok {
+			buf.WriteByte(')')
+		}
+	}
 	if f.disambiguateDatumTypes {
 		var typ Type
 		if d, isDatum := n.(Datum); isDatum {
