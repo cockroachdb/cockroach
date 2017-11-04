@@ -34,7 +34,7 @@ func TestZoneConfigValidate(t *testing.T) {
 	}{
 		{
 			config.ZoneConfig{},
-			"attributes for at least one replica must be specified in zone config",
+			"at least one replica is required",
 		},
 		{
 			config.ZoneConfig{
@@ -69,6 +69,68 @@ func TestZoneConfigValidate(t *testing.T) {
 		if !testutils.IsError(err, c.expected) {
 			t.Fatalf("%d: expected %q, got %v", i, c.expected, err)
 		}
+	}
+}
+
+func TestZoneConfigSubzones(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	zone := config.DefaultZoneConfig()
+	subzoneAInvalid := config.Subzone{IndexID: 1, PartitionName: "a", Config: config.ZoneConfig{}}
+	subzoneA := config.Subzone{IndexID: 1, PartitionName: "a", Config: config.DefaultZoneConfig()}
+	subzoneB := config.Subzone{IndexID: 1, PartitionName: "b", Config: config.DefaultZoneConfig()}
+
+	if zone.IsSubzonePlaceholder() {
+		t.Errorf("default zone config should not be considered a subzone placeholder")
+	}
+
+	zone.SetSubzone(subzoneAInvalid)
+	zone.SetSubzone(subzoneB)
+	if err := zone.Validate(); !testutils.IsError(err, "at least one replica is required") {
+		t.Errorf("expected 'at least one replica is required' validation error, but got %v", err)
+	}
+
+	zone.SetSubzone(subzoneA)
+	if err := zone.Validate(); err != nil {
+		t.Errorf("expected zone validation to succeed, but got %s", err)
+	}
+	if subzone := zone.GetSubzone(1, "a"); !subzoneA.Equal(subzone) {
+		t.Errorf("expected subzone to equal %+v, but got %+v", &subzoneA, subzone)
+	}
+	if subzone := zone.GetSubzone(1, "b"); !subzoneB.Equal(subzone) {
+		t.Errorf("expected subzone to equal %+v, but got %+v", &subzoneB, subzone)
+	}
+	if subzone := zone.GetSubzone(1, "c"); subzone != nil {
+		t.Errorf("expected nil subzone, but got %+v", subzone)
+	}
+	if subzone := zone.GetSubzone(2, "a"); subzone != nil {
+		t.Errorf("expected nil subzone, but got %+v", subzone)
+	}
+	if zone.IsSubzonePlaceholder() {
+		t.Errorf("zone with its own config should not be considered a subzone placeholder")
+	}
+
+	zone.DeleteTableConfig()
+	if e := (config.ZoneConfig{
+		Subzones: []config.Subzone{subzoneA, subzoneB},
+	}); !e.Equal(zone) {
+		t.Errorf("expected zone after clearing to equal %+v, but got %+v", e, zone)
+	}
+	if !zone.IsSubzonePlaceholder() {
+		t.Errorf("expected cleared zone config to be considered a subzone placeholder")
+	}
+
+	if didDelete := zone.DeleteSubzone(1, "c"); didDelete {
+		t.Errorf("deletion claims to have succeeded on non-existent subzone")
+	}
+	if didDelete := zone.DeleteSubzone(1, "b"); !didDelete {
+		t.Errorf("valid deletion claims to have failed")
+	}
+	if subzone := zone.GetSubzone(1, "b"); subzone != nil {
+		t.Errorf("expected deleted subzone to be nil when retrieved, but got %+v", subzone)
+	}
+	if subzone := zone.GetSubzone(1, "a"); !subzoneA.Equal(subzone) {
+		t.Errorf("expected non-deleted subzone to equal %+v, but got %+v", &subzoneA, subzone)
 	}
 }
 
