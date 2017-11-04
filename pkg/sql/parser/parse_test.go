@@ -1259,6 +1259,36 @@ func TestParse2(t *testing.T) {
 	}
 }
 
+// TestParseTree checks that the implicit grouping done by the grammar
+// is properly reflected in the parse tree.
+func TestParseTree(t *testing.T) {
+	testData := []struct {
+		sql      string
+		expected string
+	}{
+		{`SELECT 1`, `SELECT (1)`},
+		{`SELECT -1+2`, `SELECT (((-(1))) + (2))`},
+		{`SELECT -1:::INT`, `SELECT (-((1):::INT))`},
+		{`SELECT 1 = 2::INT`, `SELECT ((1) = ((2)::INT))`},
+	}
+
+	pfmt := fmtFlags{alwaysParens: true}
+	for _, d := range testData {
+		stmts, err := Parse(d.sql)
+		if err != nil {
+			t.Errorf("%s: expected success, but found %s", d.sql, err)
+			continue
+		}
+		s := AsStringWithFlags(stmts, &pfmt)
+		if d.expected != s {
+			t.Errorf("%s: expected %s, but found (%d statements): %s", d.sql, d.expected, len(stmts), s)
+		}
+		if _, err := Parse(s); err != nil {
+			t.Errorf("expected string found, but not parsable: %s:\n%s", err, s)
+		}
+	}
+}
+
 // TestParseSyntax verifies that parsing succeeds, though the syntax tree
 // likely differs. All of the test cases here should eventually be moved
 // elsewhere.
