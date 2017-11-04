@@ -150,7 +150,7 @@ func (r *Registry) Start(
 		for {
 			select {
 			case <-time.After(adoptInterval):
-				if err := r.maybeAdoptJob(ctx, nl); err != nil {
+				if err := r.maybeAdoptJob(ctx, stopper, nl); err != nil {
 					log.Errorf(ctx, "error while adopting jobs: %+v", err)
 				}
 			case <-stopper.ShouldStop():
@@ -200,7 +200,7 @@ func AddResumeHook(fn resumeHookFn) {
 	resumeHooks = append(resumeHooks, fn)
 }
 
-func (r *Registry) maybeAdoptJob(ctx context.Context, nl nodeLiveness) error {
+func (r *Registry) maybeAdoptJob(ctx context.Context, stopper stop.Stopper, nl nodeLiveness) error {
 	var rows []parser.Datums
 	if err := r.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
 		var err error
@@ -300,7 +300,9 @@ func (r *Registry) maybeAdoptJob(ctx context.Context, nl nodeLiveness) error {
 			continue
 		}
 
-		go func() {
+		ctx := stopper.WithCancel(ctx)
+		jobName := fmt.Sprintf("jobs.Registry: resume job %d", *id)
+		stopper.RunAsyncTask(ctx, jobName, func(ctx context.Context) {
 			log.Infof(ctx, "job %d: resuming", *id)
 			err := resumeFn(ctx, &job)
 			if _, isDuplicate := errors.Cause(err).(*duplicateRegistrationError); isDuplicate {
@@ -325,7 +327,7 @@ func (r *Registry) maybeAdoptJob(ctx context.Context, nl nodeLiveness) error {
 				// Nowhere to report this error but the log.
 				log.Errorf(ctx, "job %d: ignoring FinishedWith error: %+v", *id, err)
 			}
-		}()
+		})
 
 		// Only adopt one job per turn to allow other nodes their fair share.
 		break
