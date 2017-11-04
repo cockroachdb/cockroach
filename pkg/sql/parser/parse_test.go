@@ -560,8 +560,12 @@ func TestParse(t *testing.T) {
 		{`SELECT a FROM t WHERE a IN (SELECT a FROM t)`},
 		{`SELECT a FROM t WHERE a NOT IN (b, c)`},
 		{`SELECT a FROM t WHERE a = ANY (ARRAY[b, c])`},
+		{`SELECT a FROM t WHERE a = ANY ARRAY[b, c]`},
 		{`SELECT a FROM t WHERE a != SOME (ARRAY[b, c])`},
+		{`SELECT a FROM t WHERE a != SOME ARRAY[b, c]`},
+		{`SELECT a FROM t WHERE a = ANY (SELECT 1)`},
 		{`SELECT a FROM t WHERE a LIKE ALL (ARRAY[b, c])`},
+		{`SELECT a FROM t WHERE a LIKE ALL ARRAY[b, c]`},
 		{`SELECT a FROM t WHERE a LIKE b`},
 		{`SELECT a FROM t WHERE a NOT LIKE b`},
 		{`SELECT a FROM t WHERE a ILIKE b`},
@@ -1229,19 +1233,6 @@ func TestParse2(t *testing.T) {
 			`CREATE TABLE a (b INT, FOREIGN KEY (b) REFERENCES other ON UPDATE SET DEFAULT ON DELETE RESTRICT)`,
 			`CREATE TABLE a (b INT, FOREIGN KEY (b) REFERENCES other ON DELETE RESTRICT ON UPDATE SET DEFAULT)`,
 		},
-		// See #19555. This is actually invalid SQL, but we permit it anyway.
-		{
-			`SELECT a FROM t WHERE a = ANY ARRAY[b, c]`,
-			`SELECT a FROM t WHERE a = ANY (ARRAY[b, c])`,
-		},
-		{
-			`SELECT a FROM t WHERE a != SOME ARRAY[b, c]`,
-			`SELECT a FROM t WHERE a != SOME (ARRAY[b, c])`,
-		},
-		{
-			`SELECT a FROM t WHERE a LIKE ALL ARRAY[b, c]`,
-			`SELECT a FROM t WHERE a LIKE ALL (ARRAY[b, c])`,
-		},
 	}
 	for _, d := range testData {
 		stmts, err := Parse(d.sql)
@@ -1270,6 +1261,8 @@ func TestParseTree(t *testing.T) {
 		{`SELECT -1+2`, `SELECT (((-(1))) + (2))`},
 		{`SELECT -1:::INT`, `SELECT (-((1):::INT))`},
 		{`SELECT 1 = 2::INT`, `SELECT ((1) = ((2)::INT))`},
+		{`SELECT 1 = ANY 2::INT`, `SELECT ((1) = ANY ((2)::INT))`},
+		{`SELECT 1 = ANY ARRAY[1]:::INT`, `SELECT ((1) = ANY ((ARRAY[(1)]):::INT))`},
 	}
 
 	pfmt := fmtFlags{alwaysParens: true}
@@ -1612,9 +1605,9 @@ SELECT EXISTS(SELECT 1)[1]
 		},
 		{
 			`SELECT 1 + ANY ARRAY[1, 2, 3]`,
-			`+ ANY <array> is invalid because "+" is not a boolean operator at or near "]"
+			`+ ANY <array> is invalid because "+" is not a boolean operator at or near "EOF"
 SELECT 1 + ANY ARRAY[1, 2, 3]
-                            ^
+                             ^
 `,
 		},
 		{
