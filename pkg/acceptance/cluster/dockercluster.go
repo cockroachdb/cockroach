@@ -23,6 +23,7 @@ import (
 	"io"
 	"io/ioutil"
 	"net"
+	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -49,6 +50,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logflags"
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -542,9 +544,6 @@ func (l *DockerCluster) startNode(ctx context.Context, node *testNode) {
 // automatically, but exposed for tests that use INIT_NONE. nodeIdx
 // may designate any node in the cluster as the target of the command.
 func (l *DockerCluster) RunInitCommand(ctx context.Context, nodeIdx int) {
-	tCtx, cancel := context.WithTimeout(ctx, time.Minute)
-	defer cancel()
-
 	containerConfig := container.Config{
 		Image:      *cockroachImage,
 		Entrypoint: cockroachEntrypoint(),
@@ -559,21 +558,36 @@ func (l *DockerCluster) RunInitCommand(ctx context.Context, nodeIdx int) {
 	log.Infof(ctx, "trying to initialize via %v", containerConfig.Cmd)
 	// This is called early in the bootstrap sequence, and the node may not have
 	// opened its ports yet. Retry appropriately.
-	for {
+	//
+	// TODO(tschottdorf): production code wouldn't do it like this. Instead,
+	// you'd wait until the healthz endpoint indicates that the init command
+	// should be tried. Perhaps these subtleties should simply be folded into
+	// `./cockroach init` as users are likely to get this wrong.
+	//
+	// See #19791.
+	maybePanic(retry.ForDuration(time.Minute, func() error {
 		err := l.OneShot(
-			tCtx, defaultImage, types.ImagePullOptions{}, containerConfig, container.HostConfig{}, "init-command",
+			ctx, defaultImage, types.ImagePullOptions{}, containerConfig, container.HostConfig{}, "init-command",
 		)
-		switch err {
-		case context.Canceled:
-			maybePanic(errors.Wrap(err, "while trying to run init"))
-		case nil:
-			log.Info(ctx, "cluster successfully initialized")
-			return
-		default:
-			// Keep going as long as the context allows.
-			log.Infof(tCtx, "retrying after: %s", err)
+
+		if err != nil {
+			// Run a health check in the hope that Init failed because a
+			// previously issued Init actually went through just fine.
+			url := l.URL(ctx, nodeIdx) + "/health"
+			resp, httpErr := HTTPClient.Get(url)
+			if httpErr != nil {
+				return errors.Wrap(err, httpErr.Error())
+			}
+			defer resp.Body.Close()
+
+			if resp.StatusCode != http.StatusOK {
+				log.Warning(ctx, "init failed and server not healthy; retrying")
+				return err
+			}
 		}
-	}
+		return nil
+	}))
+	log.Info(ctx, "cluster successfully initialized")
 }
 
 // returns false is the event
