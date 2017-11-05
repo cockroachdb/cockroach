@@ -361,17 +361,11 @@ EXECUTE sets('hello')
 statement error could not determine data type of placeholder
 PREPARE x19597 AS SELECT $1 IN ($2, null);
 
-# Regression for #19716: ensure that placeholders for EXECUTE statements inside
-# of PREPARE statements are properly segregated from those of the outer
-# statement.
-
 statement ok
 PREPARE innerStmt AS SELECT $1:::int i, 'foo' t
 
-statement ok
+statement error can't prepare an EXECUTE statement
 PREPARE outerStmt AS SELECT * FROM [EXECUTE innerStmt(3)] WHERE t = $1
 
-query IT
-EXECUTE outerStmt('foo')
-----
-3 foo
+query error can't have more than 1 EXECUTE per statement
+SELECT * FROM [EXECUTE innerStmt(1)] CROSS JOIN [EXECUTE x]

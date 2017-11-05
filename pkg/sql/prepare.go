@@ -384,17 +384,20 @@ func (p *planner) Deallocate(ctx context.Context, s *parser.Deallocate) (planNod
 // the executor - it merely exists to enable explains and traces for execute
 // statements.
 func (p *planner) Execute(ctx context.Context, n *parser.Execute) (planNode, error) {
+	if p.isPreparing {
+		return nil, pgerror.NewErrorf(pgerror.CodeInvalidPreparedStatementDefinitionError,
+			"can't prepare an EXECUTE statement")
+	} else if p.plannedExecute {
+		return nil, pgerror.NewErrorf(pgerror.CodeSyntaxError,
+			"can't have more than 1 EXECUTE per statement")
+	}
+	p.plannedExecute = true
 	ps, newPInfo, err := getPreparedStatementForExecute(p.session, n)
 	if err != nil {
 		return nil, err
 	}
 
-	// We need to make a fresh planner here, so that writing the placeholders
-	// into the SemaContext doesn't overwrite the outer placeholder values if
-	// there are any.
-	innerPlanner := &planner{}
-	*innerPlanner = *p
-	innerPlanner.semaCtx.Placeholders.Assign(newPInfo)
+	p.semaCtx.Placeholders.Assign(newPInfo)
 
-	return innerPlanner.newPlan(ctx, ps.Statement, nil)
+	return p.newPlan(ctx, ps.Statement, nil)
 }

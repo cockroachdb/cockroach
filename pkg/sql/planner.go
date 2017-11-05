@@ -97,6 +97,10 @@ type planner struct {
 	// hasSubqueries collects whether any subqueries expansion has
 	// occurred during logical plan construction.
 	hasSubqueries bool
+	// isPreparing is true if this planner is currently preparing.
+	isPreparing bool
+	// plannedExecute is true if this planner has planned an EXECUTE statement.
+	plannedExecute bool
 
 	// Avoid allocations by embedding commonly used objects and visitors.
 	parser                parser.Parser
