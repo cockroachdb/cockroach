@@ -685,7 +685,8 @@ func (p *planner) addJoinFilter(
 
 	// There are four steps to the transformation below:
 	//  1. For inner joins, incorporate the extra filter into the ON condition.
-	//  2. Extract any join equality constraints from the ON condition.
+	//  2. Extract any join equality constraints from the ON condition and
+	//     append it to the equality indices of the join predicate.
 	//  3. "Expand" the remaining ON condition with new constraints inferred based
 	//     on the equality columns (see expandOnCond).
 	//  4. Propagate the filter and ON condition depending on the join type.

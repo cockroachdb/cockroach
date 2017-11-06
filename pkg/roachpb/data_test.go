@@ -20,6 +20,7 @@ import (
 	"math/rand"
 	"reflect"
 	"sort"
+	"strconv"
 	"testing"
 	"time"
 
@@ -707,6 +708,9 @@ func TestSpanOverlaps(t *testing.T) {
 	sD := Span{Key: []byte("d")}
 	sAtoC := Span{Key: []byte("a"), EndKey: []byte("c")}
 	sBtoD := Span{Key: []byte("b"), EndKey: []byte("d")}
+	// Invalid spans.
+	sCtoA := Span{Key: []byte("c"), EndKey: []byte("a")}
+	sDtoB := Span{Key: []byte("d"), EndKey: []byte("b")}
 
 	testData := []struct {
 		s1, s2   Span
@@ -723,6 +727,11 @@ func TestSpanOverlaps(t *testing.T) {
 		{sAtoC, sAtoC, true},
 		{sAtoC, sBtoD, true},
 		{sBtoD, sAtoC, true},
+		// Invalid spans.
+		{sAtoC, sDtoB, false},
+		{sDtoB, sAtoC, false},
+		{sBtoD, sCtoA, false},
+		{sCtoA, sBtoD, false},
 	}
 	for i, test := range testData {
 		if o := test.s1.Overlaps(test.s2); o != test.overlaps {
@@ -755,13 +764,87 @@ func TestSpanContains(t *testing.T) {
 		{[]byte("b"), []byte("bb"), false},
 		{[]byte("0"), []byte("bb"), false},
 		{[]byte("aa"), []byte("bb"), false},
-		// TODO(bdarnell): check for invalid ranges in Span.Contains?
-		//{[]byte("b"), []byte("a"), false},
+		{[]byte("b"), []byte("a"), false},
 	}
 	for i, test := range testData {
 		if s.Contains(Span{test.start, test.end}) != test.contains {
 			t.Errorf("%d: expected span %q-%q within range to be %v",
 				i, test.start, test.end, test.contains)
+		}
+	}
+}
+
+func TestSpanSplitOnKey(t *testing.T) {
+	s := Span{Key: []byte("b"), EndKey: []byte("c")}
+
+	testData := []struct {
+		split []byte
+		left  Span
+		right Span
+	}{
+		// Split on start/end key should fail.
+		{
+			[]byte("b"),
+			s,
+			Span{},
+		},
+		{
+			[]byte("c"),
+			s,
+			Span{},
+		},
+
+		// Before start key.
+		{
+			[]byte("a"),
+			s,
+			Span{},
+		},
+		// After end key.
+		{
+			[]byte("d"),
+			s,
+			Span{},
+		},
+
+		// Simple split.
+		{
+			[]byte("bb"),
+			Span{[]byte("b"), []byte("bb")},
+			Span{[]byte("bb"), []byte("c")},
+		},
+	}
+	for testIdx, test := range testData {
+		t.Run(strconv.Itoa(testIdx), func(t *testing.T) {
+			actualL, actualR := s.SplitOnKey(test.split)
+			if !test.left.EqualValue(actualL) {
+				t.Fatalf("expected left span after split to be %v, got %v", test.left, actualL)
+			}
+
+			if !test.right.EqualValue(actualR) {
+				t.Fatalf("expected right span after split to be %v, got %v", test.right, actualL)
+			}
+		})
+	}
+}
+
+func TestSpanValid(t *testing.T) {
+	testData := []struct {
+		start, end []byte
+		valid      bool
+	}{
+		{[]byte("a"), nil, true},
+		{[]byte("a"), []byte("b"), true},
+		{nil, nil, false},
+		{nil, []byte("a"), false},
+		{[]byte("a"), []byte("a"), false},
+		{[]byte("b"), []byte("aa"), false},
+	}
+	for i, test := range testData {
+		s := Span{test.start, test.end}
+		if test.valid != s.Valid() {
+			t.Errorf("%d: expected span %q-%q to return %t for Valid, instead got %t",
+				i, test.start, test.end, test.valid, s.Valid())
 		}
 	}
 }
