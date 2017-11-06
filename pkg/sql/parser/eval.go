@@ -2818,7 +2818,7 @@ func performCast(ctx *EvalContext, d Datum, t CastTargetType) (Datum, error) {
 				colType, err := ParseType(s)
 				if err == nil {
 					datumType := CastTargetToDatumType(colType)
-					return &DOid{semanticType: typ, DInt: DInt(datumType.Oid()), name: datumType.SQLName()}, nil
+					return &DOid{semanticType: typ, DInt: DInt(types.Oid(datumType)), name: datumType.SQLName()}, nil
 				}
 				// Fall back to searching pg_type, since we don't provide syntax for
 				// every postgres type that we understand OIDs for.
