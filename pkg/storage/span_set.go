@@ -19,11 +19,14 @@ import (
 	"bytes"
 	"fmt"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/pkg/errors"
 )
@@ -98,6 +101,13 @@ func (ss *SpanSet) getSpans(access SpanAccess, scope spanScope) []roachpb.Span {
 	return ss.spans[access][scope]
 }
 
+// assertAllowed calls checkAllowed and fatals if the access is not allowed.
+func (ss *SpanSet) assertAllowed(access SpanAccess, span roachpb.Span) {
+	if err := ss.checkAllowed(access, span); err != nil {
+		log.Fatal(context.TODO(), err)
+	}
+}
+
 func (ss *SpanSet) checkAllowed(access SpanAccess, span roachpb.Span) error {
 	scope := spanGlobal
 	if keys.IsLocal(span.Key) {
@@ -118,7 +128,7 @@ func (ss *SpanSet) checkAllowed(access SpanAccess, span roachpb.Span) error {
 		action = "write"
 	}
 
-	return errors.Errorf("cannot %s undeclared span %s", action, span)
+	return errors.Errorf("cannot %s undeclared span %s\ndeclared:\n%s", action, span, ss)
 }
 
 // validate returns an error if any spans that have been added to the set
