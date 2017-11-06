@@ -20,24 +20,25 @@ import (
 	"testing"
 )
 
-func TestMergeSpans(t *testing.T) {
-	makeSpan := func(s string) Span {
-		parts := strings.Split(s, "-")
-		if len(parts) == 2 {
-			return Span{Key: Key(parts[0]), EndKey: Key(parts[1])}
-		}
-		return Span{Key: Key(s)}
+func makeSpan(s string) Span {
+	parts := strings.Split(s, "-")
+	if len(parts) == 2 {
+		return Span{Key: Key(parts[0]), EndKey: Key(parts[1])}
 	}
-	makeSpans := func(s string) []Span {
-		var spans []Span
-		if len(s) > 0 {
-			for _, p := range strings.Split(s, ",") {
-				spans = append(spans, makeSpan(p))
-			}
-		}
-		return spans
-	}
+	return Span{Key: Key(s)}
+}
 
+func makeSpans(s string) []Span {
+	var spans []Span
+	if len(s) > 0 {
+		for _, p := range strings.Split(s, ",") {
+			spans = append(spans, makeSpan(p))
+		}
+	}
+	return spans
+}
+
+func TestMergeSpans(t *testing.T) {
 	testCases := []struct {
 		spans    string
 		expected string
@@ -66,6 +67,38 @@ func TestMergeSpans(t *testing.T) {
 		}
 		if c.distinct != distinct {
 			t.Fatalf("%d: expected %t, but found %t", i, c.distinct, distinct)
+		}
+	}
+}
+
+func TestIntersectSpans(t *testing.T) {
+	testCases := []struct {
+		spans    string
+		expected string
+	}{
+		{"", ""},
+		{"a", "a"},
+		{"a,b", ""},
+		{"b,a", ""},
+		{"a,a", "a"},
+		{"a-b", "a-b"},
+		{"a-b,b-c", ""},
+		{"a-c,a-b", "a-b"},
+		{"a,b-c", ""},
+		{"a,a-c", "a"},
+		{"a-c,b", "b"},
+		{"a-c,c", ""},
+		{"a-c,b-bb", "b-bb"},
+		{"b-bb,a-c", "b-bb"},
+		{"a-c,b-c", "b-c"},
+		{"a-b,c-d", ""},
+		{"a-b,a-b,a-b,b", ""},
+	}
+	for i, c := range testCases {
+		spans := IntersectSpans(makeSpans(c.spans))
+		expected := makeSpans(c.expected)
+		if !reflect.DeepEqual(expected, spans) {
+			t.Fatalf("%d: expected\n%s\n, but found:\n%s", i, expected, spans)
 		}
 	}
 }

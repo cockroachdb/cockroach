@@ -143,16 +143,28 @@ func (hj *HashJoinerSpec) summary() (string, []string) {
 	return "HashJoiner", details
 }
 
-func (hj *MergeJoinerSpec) summary() (string, []string) {
+func (mj *MergeJoinerSpec) summary() (string, []string) {
 	details := make([]string, 1, 2)
 	details[0] = fmt.Sprintf(
-		"left(%s)=right(%s)", hj.LeftOrdering.diagramString(), hj.RightOrdering.diagramString(),
+		"left(%s)=right(%s)", mj.LeftOrdering.diagramString(), mj.RightOrdering.diagramString(),
 	)
 
-	if hj.OnExpr.Expr != "" {
-		details = append(details, fmt.Sprintf("ON %s", hj.OnExpr.Expr))
+	if mj.OnExpr.Expr != "" {
+		details = append(details, fmt.Sprintf("ON %s", mj.OnExpr.Expr))
 	}
 	return "MergeJoiner", details
+}
+
+func (irj *InterleaveReaderJoinerSpec) summary() (string, []string) {
+	details := make([]string, 1, 2)
+	details[0] = fmt.Sprintf(
+		"left(%s)=right(%s)", irj.Tables[0].Ordering.diagramString(), irj.Tables[1].Ordering.diagramString(),
+	)
+
+	if irj.OnExpr.Expr != "" {
+		details = append(details, fmt.Sprintf("ON %s", irj.OnExpr.Expr))
+	}
+	return "InterleaveReaderJoiner", details
 }
 
 func (s *SorterSpec) summary() (string, []string) {

@@ -35,6 +35,13 @@ const (
 	joinTypeFullOuter
 )
 
+type joinHint int
+
+const (
+	joinHintNone joinHint = iota
+	joinHintInterleave
+)
+
 // bucket here is the set of rows for a given group key (comprised of
 // columns specified by the join constraints), 'seen' is used to determine if
 // there was a matching row in the opposite stream.
@@ -138,6 +145,12 @@ type joinNode struct {
 	// pred.leftEqualityIndices[i] and right column pred.rightEqualityIndices[i].
 	// See computeMergeJoinOrdering. This information is used by distsql planning.
 	mergeJoinOrdering sqlbase.ColumnOrdering
+
+	// joinHint is set during expandPlan to denote whether a better join
+	// algorithm can be used. For example, if the mergeJoinOrdering is on
+	// the entire interleave prefix, then joinHintInterleave will be set.
+	// This information is currently used by distsql planning.
+	joinHint joinHint
 
 	// ordering is set during expandPlan based on mergeJoinOrdering, but later
 	// trimmed.
@@ -797,4 +810,100 @@ func (n *joinNode) joinOrdering() physicalProps {
 	}
 	info.ordering = info.reduce(info.ordering)
 	return info
+}
+
+// interleaveNodes returns the interleave ancestor and descendant scan node if the
+// left and right children of the joinNode are scan nodes and either of them is
+// interleaved into the other.
+func (n *joinNode) interleaveNodes() (ancestor *scanNode, descendant *scanNode) {
+	leftScan, leftOk := n.left.plan.(*scanNode)
+	rightScan, rightOk := n.right.plan.(*scanNode)
+
+	if !leftOk || !rightOk {
+		return nil, nil
+	}
+
+	leftAncestors := leftScan.index.Interleave.Ancestors
+	rightAncestors := rightScan.index.Interleave.Ancestors
+
+	// TODO(richardwu): The general case where we can have a join
+	// on a common ancestor's primary key requires traversing both
+	// ancestor slices.
+	// The descendant of the two tables must have have more
+	// interleave ancestors than the other.
+	// We assign the potential interleave ancestor and descendant.
+	if len(leftAncestors) > len(rightAncestors) {
+		descendant = leftScan
+		ancestor = rightScan
+	} else {
+		descendant = rightScan
+		ancestor = leftScan
+	}
+
+	hasInterleaveRelation := false
+	// We check the descendantAncestors of the potential descendant to see
+	// if any of them is the potential ancestor.
+	for _, descAncestor := range descendant.index.Interleave.Ancestors {
+		if descAncestor.TableID == ancestor.desc.ID && descAncestor.IndexID == ancestor.index.ID {
+			hasInterleaveRelation = true
+			break
+		}
+	}
+
+	// If the ancestor is indeed an interleave ancestor, then we return it.
+	if hasInterleaveRelation {
+		return ancestor, descendant
+	}
+
+	return nil, nil
+}
+
+func (n *joinNode) computeJoinHint() joinHint {
+	if len(n.mergeJoinOrdering) == 0 {
+		return joinHintNone
+	}
+
+	ancestor, descendant := n.interleaveNodes()
+
+	// There is no interleave ancestor/descendant scan node and thus no
+	// interleave relation.
+	if ancestor == nil || descendant == nil {
+		return joinHintNone
+	}
+
+	// We want full 1-1 correspondence between our join columns and the
+	// primary index of the ancestor.
+	//  TODO(richardwu): We can relax this once we implement a hybrid
+	//  hash/merge for interleave joins after forming merge groups with the
+	//  interleave prefix (or when the merge join logic is combined with
+	//  the interleave join logic).
+	if len(n.mergeJoinOrdering) != len(ancestor.index.ColumnIDs) {
+		return joinHintNone
+	}
+
+	// We iterate through the ordering given by n.mergeJoinOrdering and check
+	// if the columns have a 1-1 correspondence to the interleave
+	// ancestor's primary index columns (i.e. interleave prefix).  We
+	// naively return joinHintNone if any part of the ordering does not
+	// correspond.
+	for i, info := range n.mergeJoinOrdering {
+		colID := ancestor.index.ColumnIDs[i]
+		if info.ColIdx != ancestor.colIdxMap[colID] {
+			// The column in the ordering does not correspond to
+			// the column in the interleave prefix.
+			// We should not try to do an interleave join.
+			return joinHintNone
+		}
+	}
+
+	// We cannot do an interleave join if the tables require scanning in
+	// opposite directions.
+	if ancestor.reverse != descendant.reverse {
+		return joinHintNone
+	}
+
+	// The columns in n.mergeJoinOrdering has a 1-1 correspondence with the
+	// columns in the interleave ancestor's primary index. We can indeed
+	// hint at the possibility of an interleave join.
+	return joinHintInterleave
 }

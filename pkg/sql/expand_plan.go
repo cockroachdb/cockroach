@@ -129,6 +129,8 @@ func doExpandPlan(
 		)
 		n.props = n.joinOrdering()
 
+		n.joinHint = n.computeJoinHint()
+
 	case *ordinalityNode:
 		// There may be too many columns in the required ordering. Filter them.
 		params.desiredOrdering = n.restrictOrdering(params.desiredOrdering)
