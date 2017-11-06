@@ -861,6 +861,34 @@ func TestStyle(t *testing.T) {
 		}
 	})
 
+	t.Run("TestForbiddenLinkage", func (t* testing.T) {
+		verifyNoImports(t,
+			"github.com/cockroachdb/cockroach",
+			[]string{
+				"testing",  // defines flags
+				"go/build", // probably not something we want in the main binary
+				"github.com/cockroachdb/cockroach/pkg/security/securitytest", // contains certificates
+			},
+			[]string{
+				"github.com/cockroachdb/cockroach/pkg/testutils", // meant for testing code only
+			})
+
+		verifyNoImports(t,
+			"github.com/cockroachdb/cockroach",
+			nil /* exact matches */,
+			[]string{"github.com/cockroachdb/cockroach/pkg/ccl"})
+
+		verifyNoImports(t,
+			"github.com/cockroachdb/cockroach/pkg/kv",
+			// TODO(tschottdorf): should really disallow ./storage/... but at the
+			// time of writing there's a (legit) dependency on `enginepb`.
+			[]string{
+				"github.com/cockroachdb/cockroach/pkg/storage",
+				"github.com/cockroachdb/cockroach/pkg/storage/engine",
+			},
+			[]string{})
+	})
+
 	t.Run("TestReturnCheck", func(t *testing.T) {
 		if testing.Short() {
 			t.Skip("short flag")
@@ -1459,4 +1487,64 @@ func asBuiltin(n ast.Expr, info *types.Info) (*types.Builtin, bool) {
 
 	b, ok := obj.(*types.Builtin)
 	return b, ok
+}
+
+// transitiveImports returns a set containing all of importPath's transitive
+// dependencies.
+func transitiveImports(importPath string) (map[string]struct{}, error) {
+	imports := make(map[string]struct{})
+
+	var addImports func(string) error
+	addImports = func(root string) error {
+		pkg, err := build.Import(root, "", 0)
+		if err != nil {
+			return err
+		}
+
+		for _, imp := range pkg.Imports {
+			// https://github.com/golang/tools/blob/master/refactor/importgraph/graph.go#L159
+			if imp == "C" {
+				continue // "C" is fake
+			}
+			importPkg, err := build.Import(imp, pkg.Dir, build.FindOnly)
+			if err != nil {
+				return err
+			}
+			imp = importPkg.ImportPath
+			if _, ok := imports[imp]; !ok {
+				imports[imp] = struct{}{}
+				if err := addImports(imp); err != nil {
+					return err
+				}
+			}
+		}
+		return nil
+	}
+
+	return imports, addImports(importPath)
+}
+
+// verifyNoImports verifies that a package doesn't depend (directly or
+// indirectly) on forbidden packages. The forbidden packages are specified as
+// either exact matches or prefix matches.
+func verifyNoImports(
+	t testing.TB, pkgPath string, forbiddenPkgs, forbiddenPrefixes []string,
+) {
+	imports, err := transitiveImports(pkgPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for _, forbidden := range forbiddenPkgs {
+		if _, ok := imports[forbidden]; ok {
+			t.Errorf("Package %s includes %s, which is forbidden", pkgPath, forbidden)
+		}
+	}
+	for _, forbiddenPrefix := range forbiddenPrefixes {
+		for k := range imports {
+			if strings.HasPrefix(k, forbiddenPrefix) {
+				t.Errorf("Package %s includes %s, which is forbidden", pkgPath, k)
+			}
+		}
+	}
 }
