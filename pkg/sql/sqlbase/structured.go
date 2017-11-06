@@ -2184,7 +2184,7 @@ func DatumTypeToColumnSemanticType(ptyp types.T) (ColumnType_SemanticType, error
 	case types.TypeIntVector:
 		return ColumnType_INT2VECTOR, nil
 	default:
-		if ptyp.FamilyEqual(types.TypeCollatedString) {
+		if ptyp.FamilyEqual(types.FamCollatedString) {
 			return ColumnType_COLLATEDSTRING, nil
 		}
 		return -1, pgerror.NewErrorf(pgerror.CodeFeatureNotSupportedError, "unsupported result type: %s", ptyp)
@@ -2205,7 +2205,7 @@ func DatumTypeToColumnType(ptyp types.T) (ColumnType, error) {
 			return ColumnType{}, err
 		}
 		ctyp.ArrayContents = &contents
-		if t.Typ.FamilyEqual(types.TypeCollatedString) {
+		if t.Typ.FamilyEqual(types.FamCollatedString) {
 			cs := t.Typ.(types.TCollatedString)
 			ctyp.Locale = &cs.Locale
 		}

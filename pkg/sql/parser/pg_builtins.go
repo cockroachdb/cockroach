@@ -34,15 +34,15 @@ const notUsableInfo = "Not usable; exposed only for compatibility with PostgreSQ
 // programmatically determine whether or not this underscore is present, hence
 // the existence of this map.
 var typeBuiltinsHaveUnderscore = map[oid.Oid]struct{}{
-	types.TypeAny.Oid():         {},
-	types.TypeDate.Oid():        {},
-	types.TypeDecimal.Oid():     {},
-	types.TypeInterval.Oid():    {},
-	types.TypeJSON.Oid():        {},
-	types.TypeUUID.Oid():        {},
-	types.TypeTimestamp.Oid():   {},
-	types.TypeTimestampTZ.Oid(): {},
-	types.TypeTuple.Oid():       {},
+	types.Any.Oid():         {},
+	types.Date.Oid():        {},
+	types.Decimal.Oid():     {},
+	types.Interval.Oid():    {},
+	types.JSON.Oid():        {},
+	types.UUID.Oid():        {},
+	types.Timestamp.Oid():   {},
+	types.TimestampTZ.Oid(): {},
+	types.Tuple.Oid():       {},
 }
 
 // PGIOBuiltinPrefix returns the string prefix to a type's IO functions. This

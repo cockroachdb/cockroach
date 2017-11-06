@@ -2364,13 +2364,13 @@ func checkResultType(typ types.T) error {
 		// Compare all types that cannot rely on == equality.
 		istype := typ.FamilyEqual
 		switch {
-		case istype(types.TypeArray):
+		case istype(types.FamArray):
 			if istype(types.UnwrapType(typ).(types.TArray).Typ) {
 				return pgerror.Unimplemented("nested arrays", "arrays cannot have arrays as element type")
 			}
-		case istype(types.TypeCollatedString):
-		case istype(types.TypeTuple):
-		case istype(types.TypePlaceholder):
+		case istype(types.FamCollatedString):
+		case istype(types.FamTuple):
+		case istype(types.FamPlaceholder):
 			return errors.Errorf("could not determine data type of %s", typ)
 		default:
 			return errors.Errorf("unsupported result type: %s", typ)

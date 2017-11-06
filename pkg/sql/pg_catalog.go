@@ -1539,7 +1539,7 @@ func typColl(typ types.T, h oidHasher) parser.Datum {
 		return oidZero
 	} else if typ.Equivalent(types.TypeString) || typ.Equivalent(types.TArray{Typ: types.TypeString}) {
 		return h.CollationOid(defaultCollationTag)
-	} else if typ.FamilyEqual(types.TypeCollatedString) {
+	} else if typ.FamilyEqual(types.FamCollatedString) {
 		return h.CollationOid(typ.(types.TCollatedString).Locale)
 	}
 	return oidZero
@@ -1559,15 +1559,15 @@ var datumToTypeCategory = map[reflect.Type]*parser.DString{
 	reflect.TypeOf(types.TypeString):      typCategoryString,
 	reflect.TypeOf(types.TypeTimestamp):   typCategoryDateTime,
 	reflect.TypeOf(types.TypeTimestampTZ): typCategoryDateTime,
-	reflect.TypeOf(types.TypeTuple):       typCategoryPseudo,
-	reflect.TypeOf(types.TypeTable):       typCategoryPseudo,
+	reflect.TypeOf(types.FamTuple):        typCategoryPseudo,
+	reflect.TypeOf(types.FamTable):        typCategoryPseudo,
 	reflect.TypeOf(types.TypeOid):         typCategoryNumeric,
 	reflect.TypeOf(types.TypeUUID):        typCategoryUserDefined,
 	reflect.TypeOf(types.TypeINet):        typCategoryNetworkAddr,
 }
 
 func typCategory(typ types.T) parser.Datum {
-	if typ.FamilyEqual(types.TypeArray) {
+	if typ.FamilyEqual(types.FamArray) {
 		return typCategoryArray
 	}
 	return datumToTypeCategory[reflect.TypeOf(types.UnwrapType(typ))]

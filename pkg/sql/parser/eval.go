@@ -1269,8 +1269,8 @@ var CmpOps = map[ComparisonOperator]cmpOpOverload{
 			fn:        cmpOpScalarEQFn,
 		},
 		CmpOp{
-			LeftType:  types.TypeCollatedString,
-			RightType: types.TypeCollatedString,
+			LeftType:  types.FamCollatedString,
+			RightType: types.FamCollatedString,
 			fn:        cmpOpScalarEQFn,
 		},
 		CmpOp{
@@ -1399,8 +1399,8 @@ var CmpOps = map[ComparisonOperator]cmpOpOverload{
 			fn:        cmpOpScalarEQFn,
 		},
 		CmpOp{
-			LeftType:  types.TypeTuple,
-			RightType: types.TypeTuple,
+			LeftType:  types.FamTuple,
+			RightType: types.FamTuple,
 			fn: func(ctx *EvalContext, left Datum, right Datum) (Datum, error) {
 				return cmpOpTupleFn(ctx, *left.(*DTuple), *right.(*DTuple), EQ), nil
 			},
@@ -1414,8 +1414,8 @@ var CmpOps = map[ComparisonOperator]cmpOpOverload{
 			fn:        cmpOpScalarLTFn,
 		},
 		CmpOp{
-			LeftType:  types.TypeCollatedString,
-			RightType: types.TypeCollatedString,
+			LeftType:  types.FamCollatedString,
+			RightType: types.FamCollatedString,
 			fn:        cmpOpScalarLTFn,
 		},
 		CmpOp{
@@ -1534,8 +1534,8 @@ var CmpOps = map[ComparisonOperator]cmpOpOverload{
 			fn:        cmpOpScalarLTFn,
 		},
 		CmpOp{
-			LeftType:  types.TypeTuple,
-			RightType: types.TypeTuple,
+			LeftType:  types.FamTuple,
+			RightType: types.FamTuple,
 			fn: func(ctx *EvalContext, left Datum, right Datum) (Datum, error) {
 				return cmpOpTupleFn(ctx, *left.(*DTuple), *right.(*DTuple), LT), nil
 			},
@@ -1549,8 +1549,8 @@ var CmpOps = map[ComparisonOperator]cmpOpOverload{
 			fn:        cmpOpScalarLEFn,
 		},
 		CmpOp{
-			LeftType:  types.TypeCollatedString,
-			RightType: types.TypeCollatedString,
+			LeftType:  types.FamCollatedString,
+			RightType: types.FamCollatedString,
 			fn:        cmpOpScalarLEFn,
 		},
 		CmpOp{
@@ -1669,8 +1669,8 @@ var CmpOps = map[ComparisonOperator]cmpOpOverload{
 			fn:        cmpOpScalarLEFn,
 		},
 		CmpOp{
-			LeftType:  types.TypeTuple,
-			RightType: types.TypeTuple,
+			LeftType:  types.FamTuple,
+			RightType: types.FamTuple,
 			fn: func(ctx *EvalContext, left Datum, right Datum) (Datum, error) {
 				return cmpOpTupleFn(ctx, *left.(*DTuple), *right.(*DTuple), LE), nil
 			},
@@ -1683,7 +1683,7 @@ var CmpOps = map[ComparisonOperator]cmpOpOverload{
 		makeEvalTupleIn(types.TypeFloat),
 		makeEvalTupleIn(types.TypeDecimal),
 		makeEvalTupleIn(types.TypeString),
-		makeEvalTupleIn(types.TypeCollatedString),
+		makeEvalTupleIn(types.FamCollatedString),
 		makeEvalTupleIn(types.TypeBytes),
 		makeEvalTupleIn(types.TypeDate),
 		makeEvalTupleIn(types.TypeTimestamp),
@@ -1692,7 +1692,7 @@ var CmpOps = map[ComparisonOperator]cmpOpOverload{
 		makeEvalTupleIn(types.TypeJSON),
 		makeEvalTupleIn(types.TypeUUID),
 		makeEvalTupleIn(types.TypeINet),
-		makeEvalTupleIn(types.TypeTuple),
+		makeEvalTupleIn(types.FamTuple),
 		makeEvalTupleIn(types.TypeOid),
 	},
 
@@ -1860,7 +1860,7 @@ func cmpOpTupleFn(ctx *EvalContext, left, right DTuple, op ComparisonOperator) D
 func makeEvalTupleIn(typ types.T) CmpOp {
 	return CmpOp{
 		LeftType:  typ,
-		RightType: types.TypeTuple,
+		RightType: types.FamTuple,
 		fn: func(ctx *EvalContext, arg, values Datum) (Datum, error) {
 			if arg == DNull {
 				return DBoolFalse, nil
