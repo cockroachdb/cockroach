@@ -80,11 +80,11 @@ func (p *Parser) Parse(sql string) (stmts StatementList, err error) {
 // their inferred types in the provided context. The optional desired parameter can
 // be used to hint the desired type for the root of the resulting typed expression
 // tree. Like with Expr.TypeCheck, it is not valid to provide a nil desired
-// type. Instead, call it with the wildcard type TypeAny if no specific type is
+// type. Instead, call it with the wildcard type types.TypeAny if no specific type is
 // desired.
 func TypeCheck(expr Expr, ctx *SemaContext, desired types.T) (TypedExpr, error) {
 	if desired == nil {
-		panic("the desired type for parser.TypeCheck cannot be nil, use TypeAny instead")
+		panic("the desired type for parser.TypeCheck cannot be nil, use types.TypeAny instead")
 	}
 
 	expr, err := foldConstantLiterals(expr)
@@ -105,7 +105,7 @@ func TypeCheckAndRequire(
 	if err != nil {
 		return nil, err
 	}
-	if typ := typedExpr.ResolvedType(); !(typ.Equivalent(required) || typ == TypeNull) {
+	if typ := typedExpr.ResolvedType(); !(typ.Equivalent(required) || typ == types.TypeNull) {
 		return typedExpr, pgerror.NewErrorf(
 			pgerror.CodeDatatypeMismatchError, "argument of %s must be type %s, not type %s", op, required, typ)
 	}
@@ -212,32 +212,32 @@ func ParseStringAs(t types.T, s string, evalCtx *EvalContext) (Datum, error) {
 	var d Datum
 	var err error
 	switch t {
-	case TypeBool:
+	case types.TypeBool:
 		d, err = ParseDBool(s)
-	case TypeBytes:
+	case types.TypeBytes:
 		d = NewDBytes(DBytes(s))
-	case TypeDate:
+	case types.TypeDate:
 		d, err = ParseDDate(s, evalCtx.GetLocation())
-	case TypeDecimal:
+	case types.TypeDecimal:
 		d, err = ParseDDecimal(s)
-	case TypeFloat:
+	case types.TypeFloat:
 		d, err = ParseDFloat(s)
-	case TypeInt:
+	case types.TypeInt:
 		d, err = ParseDInt(s)
-	case TypeInterval:
+	case types.TypeInterval:
 		d, err = ParseDInterval(s)
-	case TypeString:
+	case types.TypeString:
 		d = NewDString(s)
-	case TypeTimestamp:
+	case types.TypeTimestamp:
 		d, err = ParseDTimestamp(s, time.Microsecond)
-	case TypeTimestampTZ:
+	case types.TypeTimestampTZ:
 		d, err = ParseDTimestampTZ(s, evalCtx.GetLocation(), time.Microsecond)
-	case TypeUUID:
+	case types.TypeUUID:
 		d, err = ParseDUuidFromString(s)
-	case TypeINet:
+	case types.TypeINet:
 		d, err = ParseDIPAddrFromINetString(s)
 	default:
-		if a, ok := t.(TArray); ok {
+		if a, ok := t.(types.TArray); ok {
 			typ, err := DatumTypeToColumnType(a.Typ)
 			if err != nil {
 				return nil, err

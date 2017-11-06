@@ -218,49 +218,49 @@ func (r *RSG) GenerateRandomArg(typ types.T) string {
 	}
 	var v interface{}
 	switch types.UnwrapType(typ) {
-	case parser.TypeInt:
+	case types.TypeInt:
 		v = r.Int()
-	case parser.TypeFloat, parser.TypeDecimal:
+	case types.TypeFloat, types.TypeDecimal:
 		v = r.Float64()
-	case parser.TypeString:
+	case types.TypeString:
 		v = stringArgs[r.Intn(len(stringArgs))]
-	case parser.TypeBytes:
+	case types.TypeBytes:
 		v = fmt.Sprintf("b%s", stringArgs[r.Intn(len(stringArgs))])
-	case parser.TypeTimestamp, parser.TypeTimestampTZ:
+	case types.TypeTimestamp, types.TypeTimestampTZ:
 		t := timeutil.Unix(0, r.Int63())
 		v = fmt.Sprintf(`'%s'`, t.Format(time.RFC3339Nano))
-	case parser.TypeBool:
+	case types.TypeBool:
 		v = boolArgs[r.Intn(2)]
-	case parser.TypeDate:
+	case types.TypeDate:
 		i := r.Int63()
 		i -= r.Int63()
 		d := parser.NewDDate(parser.DDate(i))
 		v = fmt.Sprintf(`'%s'`, d)
-	case parser.TypeInterval:
+	case types.TypeInterval:
 		d := duration.Duration{Nanos: r.Int63()}
 		v = fmt.Sprintf(`'%s'`, &parser.DInterval{Duration: d})
-	case parser.TypeUUID:
+	case types.TypeUUID:
 		u := uuid.MakeV4()
 		v = fmt.Sprintf(`'%s'`, u)
-	case parser.TypeINet:
+	case types.TypeINet:
 		r.lock.Lock()
 		ipAddr := ipaddr.RandIPAddr(r.src)
 		r.lock.Unlock()
 		v = fmt.Sprintf(`'%s'`, ipAddr)
-	case parser.TypeOid,
-		parser.TypeRegClass,
-		parser.TypeRegNamespace,
-		parser.TypeRegProc,
-		parser.TypeRegProcedure,
-		parser.TypeRegType,
-		parser.TypeAnyArray,
-		parser.TypeAny:
+	case types.TypeOid,
+		types.TypeRegClass,
+		types.TypeRegNamespace,
+		types.TypeRegProc,
+		types.TypeRegProcedure,
+		types.TypeRegType,
+		types.TypeAnyArray,
+		types.TypeAny:
 		v = "NULL"
 	default:
 		// Check types that can't be compared using equality
 		switch types.UnwrapType(typ).(type) {
-		case parser.TTuple,
-			parser.TArray:
+		case types.TTuple,
+			types.TArray:
 			v = "NULL"
 		default:
 			panic(fmt.Errorf("unknown arg type: %s (%T)", typ, typ))

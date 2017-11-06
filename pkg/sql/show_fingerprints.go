@@ -22,6 +22,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/pkg/errors"
 )
@@ -78,8 +79,8 @@ type showFingerprintsNode struct {
 }
 
 var showFingerprintsColumns = sqlbase.ResultColumns{
-	{Name: "index", Typ: parser.TypeString},
-	{Name: "fingerprint", Typ: parser.TypeString},
+	{Name: "index", Typ: types.TypeString},
+	{Name: "fingerprint", Typ: types.TypeString},
 }
 
 func (n *showFingerprintsNode) Start(params runParams) error {

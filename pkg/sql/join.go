@@ -22,6 +22,7 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
 )
@@ -393,7 +394,7 @@ func (p *planner) makeJoin(
 				},
 			}
 			var err error
-			expr, err = c.TypeCheck(&p.semaCtx, parser.TypeAny)
+			expr, err = c.TypeCheck(&p.semaCtx, types.TypeAny)
 			if err != nil {
 				return planDataSource{}, err
 			}

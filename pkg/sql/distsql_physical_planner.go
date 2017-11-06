@@ -246,7 +246,7 @@ var setNotSupportedError = newQueryNotSupportedError("SET / SET CLUSTER SETTING 
 // leafType returns the element type if the given type is an array, and the type
 // itself otherwise.
 func leafType(t types.T) types.T {
-	if a, ok := t.(parser.TArray); ok {
+	if a, ok := t.(types.TArray); ok {
 		return leafType(a.Typ)
 	}
 	return t
@@ -266,7 +266,7 @@ func (dsp *DistSQLPlanner) checkSupportForNode(node planNode) (distRecommendatio
 	case *renderNode:
 		for i, e := range n.render {
 			typ := n.columns[i].Typ
-			if leafType(typ).FamilyEqual(parser.TypeTuple) {
+			if leafType(typ).FamilyEqual(types.TypeTuple) {
 				return 0, newQueryNotSupportedErrorf("unsupported render type %s", typ)
 			}
 			if err := dsp.checkExpr(e); err != nil {

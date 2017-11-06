@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/jobs"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -394,7 +395,7 @@ CREATE TABLE crdb_internal.jobs (
 				ts := timeutil.Unix(0, micros*time.Microsecond.Nanoseconds())
 				return parser.MakeDTimestamp(ts, time.Microsecond)
 			}
-			descriptorIDs := parser.NewDArray(parser.TypeInt)
+			descriptorIDs := parser.NewDArray(types.TypeInt)
 			for _, descID := range payload.DescriptorIDs {
 				if err := descriptorIDs.Append(parser.NewDInt(parser.DInt(int(descID)))); err != nil {
 					return err
@@ -1368,7 +1369,7 @@ CREATE TABLE crdb_internal.ranges (
 			if err := r.ValueProto(&desc); err != nil {
 				return err
 			}
-			arr := parser.NewDArray(parser.TypeInt)
+			arr := parser.NewDArray(types.TypeInt)
 			for _, replica := range desc.Replicas {
 				if err := arr.Append(parser.NewDInt(parser.DInt(replica.StoreID))); err != nil {
 					return err

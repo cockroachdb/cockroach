@@ -203,7 +203,7 @@ func ParseDBool(s string) (*DBool, error) {
 	// spec. Is that ok?
 	b, err := strconv.ParseBool(s)
 	if err != nil {
-		return nil, makeParseError(s, TypeBool, err)
+		return nil, makeParseError(s, types.TypeBool, err)
 	}
 	return MakeDBool(DBool(b)), nil
 }
@@ -214,7 +214,7 @@ func ParseDByte(s string, allowBackslashXFormat bool) (*DBytes, error) {
 	if allowBackslashXFormat && len(s) >= 2 && (s[0] == '\\' && (s[1] == 'x' || s[1] == 'X')) {
 		hexstr, err := hex.DecodeString(s[2:])
 		if err != nil {
-			return nil, makeParseError(s, TypeBytes, err)
+			return nil, makeParseError(s, types.TypeBytes, err)
 		}
 		return NewDBytes(DBytes(hexstr)), nil
 	}
@@ -226,7 +226,7 @@ func ParseDByte(s string, allowBackslashXFormat bool) (*DBytes, error) {
 func ParseDUuidFromString(s string) (*DUuid, error) {
 	uv, err := uuid.FromString(s)
 	if err != nil {
-		return nil, makeParseError(s, TypeUUID, err)
+		return nil, makeParseError(s, types.TypeUUID, err)
 	}
 	return NewDUuid(DUuid{uv}), nil
 }
@@ -236,7 +236,7 @@ func ParseDUuidFromString(s string) (*DUuid, error) {
 func ParseDUuidFromBytes(b []byte) (*DUuid, error) {
 	uv, err := uuid.FromBytes(b)
 	if err != nil {
-		return nil, makeParseError(string(b), TypeUUID, err)
+		return nil, makeParseError(string(b), types.TypeUUID, err)
 	}
 	return NewDUuid(DUuid{uv}), nil
 }
@@ -261,12 +261,12 @@ func GetBool(d Datum) (DBool, error) {
 		return DBool(false), nil
 	}
 	return false, pgerror.NewErrorf(
-		pgerror.CodeInternalError, "cannot convert %s to type %s", d.ResolvedType(), TypeBool)
+		pgerror.CodeInternalError, "cannot convert %s to type %s", d.ResolvedType(), types.TypeBool)
 }
 
 // ResolvedType implements the TypedExpr interface.
 func (*DBool) ResolvedType() types.T {
-	return TypeBool
+	return types.TypeBool
 }
 
 // Compare implements the Datum interface.
@@ -344,7 +344,7 @@ func NewDInt(d DInt) *DInt {
 func ParseDInt(s string) (*DInt, error) {
 	i, err := strconv.ParseInt(s, 0, 64)
 	if err != nil {
-		return nil, makeParseError(s, TypeInt, err)
+		return nil, makeParseError(s, types.TypeInt, err)
 	}
 	return NewDInt(DInt(i)), nil
 }
@@ -375,7 +375,7 @@ func MustBeDInt(e Expr) DInt {
 
 // ResolvedType implements the TypedExpr interface.
 func (*DInt) ResolvedType() types.T {
-	return TypeInt
+	return types.TypeInt
 }
 
 // Compare implements the Datum interface.
@@ -471,14 +471,14 @@ func NewDFloat(d DFloat) *DFloat {
 func ParseDFloat(s string) (*DFloat, error) {
 	f, err := strconv.ParseFloat(s, 64)
 	if err != nil {
-		return nil, makeParseError(s, TypeFloat, err)
+		return nil, makeParseError(s, types.TypeFloat, err)
 	}
 	return NewDFloat(DFloat(f)), nil
 }
 
 // ResolvedType implements the TypedExpr interface.
 func (*DFloat) ResolvedType() types.T {
-	return TypeFloat
+	return types.TypeFloat
 }
 
 // Compare implements the Datum interface.
@@ -618,7 +618,7 @@ func (d *DDecimal) SetString(s string) error {
 	// will result in an error.
 	_, res, err := HighPrecisionCtx.SetString(&d.Decimal, s)
 	if res != 0 || err != nil {
-		return makeParseError(s, TypeDecimal, nil)
+		return makeParseError(s, types.TypeDecimal, nil)
 	}
 	if d.Decimal.Form == apd.NaNSignaling {
 		d.Decimal.Form = apd.NaN
@@ -631,7 +631,7 @@ func (d *DDecimal) SetString(s string) error {
 
 // ResolvedType implements the TypedExpr interface.
 func (*DDecimal) ResolvedType() types.T {
-	return TypeDecimal
+	return types.TypeDecimal
 }
 
 // Compare implements the Datum interface.
@@ -772,7 +772,7 @@ func MustBeDString(e Expr) DString {
 
 // ResolvedType implements the TypedExpr interface.
 func (*DString) ResolvedType() types.T {
-	return TypeString
+	return types.TypeString
 }
 
 // Compare implements the Datum interface.
@@ -910,7 +910,7 @@ func (d *DCollatedString) Format(buf *bytes.Buffer, f FmtFlags) {
 
 // ResolvedType implements the TypedExpr interface.
 func (d *DCollatedString) ResolvedType() types.T {
-	return TCollatedString{Locale: d.Locale}
+	return types.TCollatedString{Locale: d.Locale}
 }
 
 // Compare implements the Datum interface.
@@ -978,7 +978,7 @@ func NewDBytes(d DBytes) *DBytes {
 
 // ResolvedType implements the TypedExpr interface.
 func (*DBytes) ResolvedType() types.T {
-	return TypeBytes
+	return types.TypeBytes
 }
 
 // Compare implements the Datum interface.
@@ -1063,7 +1063,7 @@ func NewDUuid(d DUuid) *DUuid {
 
 // ResolvedType implements the TypedExpr interface.
 func (*DUuid) ResolvedType() types.T {
-	return TypeUUID
+	return types.TypeUUID
 }
 
 // Compare implements the Datum interface.
@@ -1177,7 +1177,7 @@ func MustBeDIPAddr(e Expr) DIPAddr {
 
 // ResolvedType implements the TypedExpr interface.
 func (*DIPAddr) ResolvedType() types.T {
-	return TypeINet
+	return types.TypeINet
 }
 
 // Compare implements the Datum interface.
@@ -1319,7 +1319,7 @@ func NewDDateFromTime(t time.Time, loc *time.Location) *DDate {
 // string in the provided location, or an error if parsing is unsuccessful.
 func ParseDDate(s string, loc *time.Location) (*DDate, error) {
 	// No need to ParseInLocation here because we're only parsing dates.
-	t, err := parseTimestampInLocation(s, time.UTC, TypeDate)
+	t, err := parseTimestampInLocation(s, time.UTC, types.TypeDate)
 	if err != nil {
 		return nil, err
 	}
@@ -1329,7 +1329,7 @@ func ParseDDate(s string, loc *time.Location) (*DDate, error) {
 
 // ResolvedType implements the TypedExpr interface.
 func (*DDate) ResolvedType() types.T {
-	return TypeDate
+	return types.TypeDate
 }
 
 // Compare implements the Datum interface.
@@ -1535,7 +1535,7 @@ func ParseDTimestamp(s string, precision time.Duration) (*DTimestamp, error) {
 	// we do not want to add a non-UTC zone if one is not explicitly stated, so we
 	// use time.UTC rather than the session location. Unfortunately this also means
 	// we do not use the session zone for resolving abbreviations.
-	t, err := parseTimestampInLocation(s, time.UTC, TypeTimestamp)
+	t, err := parseTimestampInLocation(s, time.UTC, types.TypeTimestamp)
 	if err != nil {
 		return nil, err
 	}
@@ -1544,7 +1544,7 @@ func ParseDTimestamp(s string, precision time.Duration) (*DTimestamp, error) {
 
 // ResolvedType implements the TypedExpr interface.
 func (*DTimestamp) ResolvedType() types.T {
-	return TypeTimestamp
+	return types.TypeTimestamp
 }
 
 func timeFromDatum(ctx *EvalContext, d Datum) (time.Time, bool) {
@@ -1661,7 +1661,7 @@ func MakeDTimestampTZFromDate(loc *time.Location, d *DDate) *DTimestampTZ {
 func ParseDTimestampTZ(
 	s string, loc *time.Location, precision time.Duration,
 ) (*DTimestampTZ, error) {
-	t, err := parseTimestampInLocation(s, loc, TypeTimestampTZ)
+	t, err := parseTimestampInLocation(s, loc, types.TypeTimestampTZ)
 	if err != nil {
 		return nil, err
 	}
@@ -1670,7 +1670,7 @@ func ParseDTimestampTZ(
 
 // ResolvedType implements the TypedExpr interface.
 func (*DTimestampTZ) ResolvedType() types.T {
-	return TypeTimestampTZ
+	return types.TypeTimestampTZ
 }
 
 // Compare implements the Datum interface.
@@ -1808,14 +1808,14 @@ func parseDInterval(s string, field durationField) (*DInterval, error) {
 
 	// If it's a blank string, exit early.
 	if len(s) == 0 {
-		return nil, makeParseError(s, TypeInterval, nil)
+		return nil, makeParseError(s, types.TypeInterval, nil)
 	}
 	if s[0] == 'P' {
 		// If it has a leading P we're most likely working with an iso8601
 		// interval.
 		dur, err := iso8601ToDuration(s)
 		if err != nil {
-			return nil, makeParseError(s, TypeInterval, err)
+			return nil, makeParseError(s, types.TypeInterval, err)
 		}
 		return &DInterval{Duration: dur}, nil
 	} else if f, err := strconv.ParseFloat(s, 64); err == nil {
@@ -1844,7 +1844,7 @@ func parseDInterval(s string, field durationField) (*DInterval, error) {
 		// interval, as both postgres and golang have letter(s) and iso8601 has been tested.
 		dur, err := sqlStdToDuration(s)
 		if err != nil {
-			return nil, makeParseError(s, TypeInterval, err)
+			return nil, makeParseError(s, types.TypeInterval, err)
 		}
 		return &DInterval{Duration: dur}, nil
 	}
@@ -1853,14 +1853,14 @@ func parseDInterval(s string, field durationField) (*DInterval, error) {
 	// Our postgres syntax parser also supports golang, so just use that for both.
 	dur, err := parseDuration(s)
 	if err != nil {
-		return nil, makeParseError(s, TypeInterval, err)
+		return nil, makeParseError(s, types.TypeInterval, err)
 	}
 	return &DInterval{Duration: dur}, nil
 }
 
 // ResolvedType implements the TypedExpr interface.
 func (*DInterval) ResolvedType() types.T {
-	return TypeInterval
+	return types.TypeInterval
 }
 
 // Compare implements the Datum interface.
@@ -1973,7 +1973,7 @@ func MakeDJSON(d interface{}) (Datum, error) {
 
 // ResolvedType implements the TypedExpr interface.
 func (*DJSON) ResolvedType() types.T {
-	return TypeJSON
+	return types.TypeJSON
 }
 
 // Compare implements the Datum interface.
@@ -2073,7 +2073,7 @@ func AsDTuple(e Expr) (*DTuple, bool) {
 
 // ResolvedType implements the TypedExpr interface.
 func (d *DTuple) ResolvedType() types.T {
-	typ := make(TTuple, len(d.D))
+	typ := make(types.TTuple, len(d.D))
 	for i, v := range d.D {
 		typ[i] = v.ResolvedType()
 	}
@@ -2312,7 +2312,7 @@ type dNull struct{}
 
 // ResolvedType implements the TypedExpr interface.
 func (dNull) ResolvedType() types.T {
-	return TypeNull
+	return types.TypeNull
 }
 
 // Compare implements the Datum interface.
@@ -2407,7 +2407,7 @@ func MustBeDArray(e Expr) *DArray {
 
 // ResolvedType implements the TypedExpr interface.
 func (d *DArray) ResolvedType() types.T {
-	return TArray{Typ: d.ParamTyp}
+	return types.TArray{Typ: d.ParamTyp}
 }
 
 // Compare implements the Datum interface.
@@ -2529,7 +2529,7 @@ func (d *DArray) Append(v Datum) error {
 	if d.Len() >= maxArrayLength {
 		return arrayTooLongError
 	}
-	if _, ok := d.ParamTyp.(TArray); ok {
+	if _, ok := d.ParamTyp.(types.TArray); ok {
 		if v == DNull {
 			return errNonHomogeneousArray
 		}
@@ -2560,7 +2560,7 @@ type DTable struct {
 
 // EmptyDTable returns a new, empty DTable.
 func EmptyDTable() *DTable {
-	return &DTable{&arrayValueGenerator{array: NewDArray(TypeAny)}}
+	return &DTable{&arrayValueGenerator{array: NewDArray(types.TypeAny)}}
 }
 
 // AmbiguousFormat implements the Datum interface.

@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/pkg/errors"
 )
@@ -65,25 +66,25 @@ type showRangesNode struct {
 var showRangesColumns = sqlbase.ResultColumns{
 	{
 		Name: "Start Key",
-		Typ:  parser.TypeString,
+		Typ:  types.TypeString,
 	},
 	{
 		Name: "End Key",
-		Typ:  parser.TypeString,
+		Typ:  types.TypeString,
 	},
 	{
 		Name: "Range ID",
-		Typ:  parser.TypeInt,
+		Typ:  types.TypeInt,
 	},
 	{
 		Name: "Replicas",
 		// The INTs in the array are Store IDs.
-		Typ: parser.TArray{Typ: parser.TypeInt},
+		Typ: types.TArray{Typ: types.TypeInt},
 	},
 	{
 		Name: "Lease Holder",
 		// The store ID for the lease holder.
-		Typ: parser.TypeInt,
+		Typ: types.TypeInt,
 	},
 }
 
@@ -122,7 +123,7 @@ func (n *showRangesNode) Next(params runParams) (bool, error) {
 	}
 	sort.Ints(replicas)
 
-	replicaArr := parser.NewDArray(parser.TypeInt)
+	replicaArr := parser.NewDArray(types.TypeInt)
 	replicaArr.Array = make(parser.Datums, len(replicas))
 	for i, r := range replicas {
 		replicaArr.Array[i] = parser.NewDInt(parser.DInt(r))
