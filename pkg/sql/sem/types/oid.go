@@ -180,16 +180,13 @@ var oidTypeName = map[oid.Oid]string{
 	oid.T_regtype:      "regtype",
 }
 
-func (t TOid) String() string { return t.SQLName() }
+func (t TOid) String() string { return SQLName(t) }
 
 // Equivalent implements the Type interface.
 func (t TOid) Equivalent(other Type) bool { return t.FamilyEqual(other) || other == TypeAny }
 
 // FamilyEqual implements the Type interface.
 func (TOid) FamilyEqual(other Type) bool { _, ok := UnwrapType(other).(TOid); return ok }
-
-// SQLName implements the Type interface.
-func (t TOid) SQLName() string { return oidTypeName[t.oidType] }
 
 // IsAmbiguous implements the Type interface.
 func (TOid) IsAmbiguous() bool { return false }
