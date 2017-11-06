@@ -433,38 +433,40 @@ func testDecommissionInner(
 		break
 	}
 
-	// Verify the event log has recorded exactly one decommissioned or
-	// recommissioned event for each commissioning operation.
-	db, err := gosql.Open("postgres", c.PGUrl(ctx, 1))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer func() {
-		if err := db.Close(); err != nil {
-			t.Error(err)
-		}
-	}()
-
 	var rows *gosql.Rows
-	for {
-		var err error
+	if err := retry.ForDuration(time.Minute, func() error {
+		// Verify the event log has recorded exactly one decommissioned or
+		// recommissioned event for each commissioning operation.
+		//
+		// Spurious errors appear to be possible since we might be trying to
+		// send RPCs to the (relatively recently) down node:
+		//
+		// pq: rpc error: code = Unavailable desc = grpc: the connection is
+		// unavailable
+		//
+		// Seen in https://teamcity.cockroachdb.com/viewLog.html?buildId=344802.
+		db, err := gosql.Open("postgres", c.PGUrl(ctx, 1))
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer func() {
+			if err := db.Close(); err != nil {
+				t.Error(err)
+			}
+		}()
+
 		rows, err = db.Query(`
 		SELECT "eventType", "targetID" FROM system.eventlog
 		WHERE "eventType" IN ($1, $2) ORDER BY timestamp`,
 			sql.EventLogNodeDecommissioned, sql.EventLogNodeRecommissioned,
 		)
 		if err != nil {
-			// Spurious errors appear to be possible since we might be trying to
-			// send RPCs to the (relatively recently) down node:
-			//
-			// pq: rpc error: code = Unavailable desc = grpc: the connection is
-			// unavailable
-			//
-			// Seen in https://teamcity.cockroachdb.com/viewLog.html?buildId=344802.
 			log.Warning(ctx, errors.Wrap(err, "retrying after"))
-			continue
+			return err
 		}
-		break
+		return nil
+	}); err != nil {
+		t.Fatal(err)
 	}
 
 	matrix, err := sqlutils.RowsToStrMatrix(rows)
