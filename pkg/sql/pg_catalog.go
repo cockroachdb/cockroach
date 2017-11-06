@@ -31,6 +31,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
@@ -1461,12 +1462,12 @@ CREATE TABLE pg_catalog.pg_type (
 					typElem = parser.NewDOid(parser.DInt(oid.T_int2))
 				} else {
 					builtinPrefix = "array_"
-					typElem = parser.NewDOid(parser.DInt(parser.UnwrapType(typ).(parser.TArray).Typ.Oid()))
+					typElem = parser.NewDOid(parser.DInt(types.UnwrapType(typ).(parser.TArray).Typ.Oid()))
 				}
 			} else {
 				typArray = parser.NewDOid(parser.DInt(parser.TArray{Typ: typ}.Oid()))
 			}
-			typname := parser.PGDisplayName(typ)
+			typname := types.PGDisplayName(typ)
 
 			if err := addRow(
 				parser.NewDOid(parser.DInt(o)), // oid
@@ -1569,7 +1570,7 @@ func typCategory(typ parser.Type) parser.Datum {
 	if typ.FamilyEqual(parser.TypeArray) {
 		return typCategoryArray
 	}
-	return datumToTypeCategory[reflect.TypeOf(parser.UnwrapType(typ))]
+	return datumToTypeCategory[reflect.TypeOf(types.UnwrapType(typ))]
 }
 
 // See: https://www.postgresql.org/docs/9.6/static/view-pg-views.html.

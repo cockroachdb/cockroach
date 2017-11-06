@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/ipaddr"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
@@ -909,7 +910,7 @@ func (d *DCollatedString) Format(buf *bytes.Buffer, f FmtFlags) {
 
 // ResolvedType implements the TypedExpr interface.
 func (d *DCollatedString) ResolvedType() Type {
-	return TCollatedString{d.Locale}
+	return TCollatedString{Locale: d.Locale}
 }
 
 // Compare implements the Datum interface.
@@ -2777,7 +2778,7 @@ func UnwrapDatum(evalCtx *EvalContext, d Datum) Datum {
 
 // ResolvedType implements the TypedExpr interface.
 func (d *DOidWrapper) ResolvedType() Type {
-	return wrapTypeWithOid(d.Wrapped.ResolvedType(), d.Oid)
+	return types.WrapTypeWithOid(d.Wrapped.ResolvedType(), d.Oid)
 }
 
 // Compare implements the Datum interface.
@@ -2929,19 +2930,19 @@ func NewDIntVectorFromDArray(d *DArray) Datum {
 func DatumTypeSize(t Type) (uintptr, bool) {
 	// The following are composite types.
 	switch ty := t.(type) {
-	case tOid:
+	case types.TOid:
 		// Note: we have multiple Type instances of tOid (TypeOid,
 		// TypeRegClass, etc). Instead of listing all of them in
 		// baseDatumTypeSizes below, we use a single case here.
 		return unsafe.Sizeof(DInt(0)), fixedSize
 
-	case tOidWrapper:
+	case types.TOidWrapper:
 		return DatumTypeSize(ty.Type)
 
-	case TCollatedString:
+	case types.TCollatedString:
 		return unsafe.Sizeof(DCollatedString{"", "", nil}), variableSize
 
-	case TTuple:
+	case types.TTuple:
 		sz := uintptr(0)
 		variable := false
 		for _, typ := range ty {
@@ -2951,11 +2952,11 @@ func DatumTypeSize(t Type) (uintptr, bool) {
 		}
 		return sz, variable
 
-	case TTable:
+	case types.TTable:
 		sz, _ := DatumTypeSize(ty.Cols)
 		return sz, variableSize
 
-	case TArray:
+	case types.TArray:
 		// TODO(jordan,justin): This seems suspicious.
 		return unsafe.Sizeof(DString("")), variableSize
 	}
@@ -2968,24 +2969,29 @@ func DatumTypeSize(t Type) (uintptr, bool) {
 	panic(fmt.Sprintf("unknown type: %T", t))
 }
 
+const (
+	fixedSize    = false
+	variableSize = true
+)
+
 var baseDatumTypeSizes = map[Type]struct {
 	sz       uintptr
 	variable bool
 }{
-	TypeNull:        {unsafe.Sizeof(dNull{}), fixedSize},
-	TypeBool:        {unsafe.Sizeof(DBool(false)), fixedSize},
-	TypeInt:         {unsafe.Sizeof(DInt(0)), fixedSize},
-	TypeFloat:       {unsafe.Sizeof(DFloat(0.0)), fixedSize},
-	TypeDecimal:     {unsafe.Sizeof(DDecimal{}), variableSize},
-	TypeString:      {unsafe.Sizeof(DString("")), variableSize},
-	TypeBytes:       {unsafe.Sizeof(DBytes("")), variableSize},
-	TypeDate:        {unsafe.Sizeof(DDate(0)), fixedSize},
-	TypeTimestamp:   {unsafe.Sizeof(DTimestamp{}), fixedSize},
-	TypeTimestampTZ: {unsafe.Sizeof(DTimestampTZ{}), fixedSize},
-	TypeInterval:    {unsafe.Sizeof(DInterval{}), fixedSize},
-	TypeJSON:        {unsafe.Sizeof(DJSON{}), variableSize},
-	TypeUUID:        {unsafe.Sizeof(DUuid{}), fixedSize},
-	TypeINet:        {unsafe.Sizeof(DIPAddr{}), fixedSize},
+	types.TypeNull:        {unsafe.Sizeof(dNull{}), fixedSize},
+	types.TypeBool:        {unsafe.Sizeof(DBool(false)), fixedSize},
+	types.TypeInt:         {unsafe.Sizeof(DInt(0)), fixedSize},
+	types.TypeFloat:       {unsafe.Sizeof(DFloat(0.0)), fixedSize},
+	types.TypeDecimal:     {unsafe.Sizeof(DDecimal{}), variableSize},
+	types.TypeString:      {unsafe.Sizeof(DString("")), variableSize},
+	types.TypeBytes:       {unsafe.Sizeof(DBytes("")), variableSize},
+	types.TypeDate:        {unsafe.Sizeof(DDate(0)), fixedSize},
+	types.TypeTimestamp:   {unsafe.Sizeof(DTimestamp{}), fixedSize},
+	types.TypeTimestampTZ: {unsafe.Sizeof(DTimestampTZ{}), fixedSize},
+	types.TypeInterval:    {unsafe.Sizeof(DInterval{}), fixedSize},
+	types.TypeJSON:        {unsafe.Sizeof(DJSON{}), variableSize},
+	types.TypeUUID:        {unsafe.Sizeof(DUuid{}), fixedSize},
+	types.TypeINet:        {unsafe.Sizeof(DIPAddr{}), fixedSize},
 	// TODO(jordan,justin): This seems suspicious.
-	TypeAny: {unsafe.Sizeof(DString("")), variableSize},
+	types.TypeAny: {unsafe.Sizeof(DString("")), variableSize},
 }

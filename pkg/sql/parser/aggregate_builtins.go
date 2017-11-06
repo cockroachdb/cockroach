@@ -23,6 +23,7 @@ import (
 
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 )
@@ -100,7 +101,7 @@ var Aggregates = map[string][]Builtin{
 				if len(args) == 0 {
 					return unknownReturnType
 				}
-				return TArray{args[0].ResolvedType()}
+				return TArray{Typ: args[0].ResolvedType()}
 			},
 			newArrayAggregate,
 			"Aggregates the selected values into an array.",
@@ -160,11 +161,11 @@ var Aggregates = map[string][]Builtin{
 	"max": collectBuiltins(func(t Type) Builtin {
 		return makeAggBuiltin([]Type{t}, t, newMaxAggregate,
 			"Identifies the maximum selected value.")
-	}, TypesAnyNonArray...),
+	}, types.TypesAnyNonArray...),
 	"min": collectBuiltins(func(t Type) Builtin {
 		return makeAggBuiltin([]Type{t}, t, newMinAggregate,
 			"Identifies the minimum selected value.")
-	}, TypesAnyNonArray...),
+	}, types.TypesAnyNonArray...),
 
 	"sum_int": {
 		makeAggBuiltin([]Type{TypeInt}, TypeInt, newSmallIntSumAggregate,

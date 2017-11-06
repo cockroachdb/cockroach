@@ -18,6 +18,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 
 	"golang.org/x/net/context"
 )
@@ -130,38 +131,38 @@ var windows = map[string][]Builtin{
 	"lag": mergeBuiltinSlices(
 		collectBuiltins(func(t Type) Builtin {
 			return makeWindowBuiltin(ArgTypes{{"val", t}}, t, makeLeadLagWindowConstructor(false, false, false))
-		}, TypesAnyNonArray...),
+		}, types.TypesAnyNonArray...),
 		collectBuiltins(func(t Type) Builtin {
 			return makeWindowBuiltin(ArgTypes{{"val", t}, {"n", TypeInt}}, t, makeLeadLagWindowConstructor(false, true, false))
-		}, TypesAnyNonArray...),
+		}, types.TypesAnyNonArray...),
 		// TODO(nvanbenschoten): We still have no good way to represent two parameters that
 		// can be any types but must be the same (eg. lag(T, Int, T)).
 		collectBuiltins(func(t Type) Builtin {
 			return makeWindowBuiltin(ArgTypes{{"val", t}, {"n", TypeInt}, {"default", t}},
 				t, makeLeadLagWindowConstructor(false, true, true))
-		}, TypesAnyNonArray...),
+		}, types.TypesAnyNonArray...),
 	),
 	"lead": mergeBuiltinSlices(
 		collectBuiltins(func(t Type) Builtin {
 			return makeWindowBuiltin(ArgTypes{{"val", t}}, t, makeLeadLagWindowConstructor(true, false, false))
-		}, TypesAnyNonArray...),
+		}, types.TypesAnyNonArray...),
 		collectBuiltins(func(t Type) Builtin {
 			return makeWindowBuiltin(ArgTypes{{"val", t}, {"n", TypeInt}}, t, makeLeadLagWindowConstructor(true, true, false))
-		}, TypesAnyNonArray...),
+		}, types.TypesAnyNonArray...),
 		collectBuiltins(func(t Type) Builtin {
 			return makeWindowBuiltin(ArgTypes{{"val", t}, {"n", TypeInt}, {"default", t}},
 				t, makeLeadLagWindowConstructor(true, true, true))
-		}, TypesAnyNonArray...),
+		}, types.TypesAnyNonArray...),
 	),
 	"first_value": collectBuiltins(func(t Type) Builtin {
 		return makeWindowBuiltin(ArgTypes{{"val", t}}, t, newFirstValueWindow)
-	}, TypesAnyNonArray...),
+	}, types.TypesAnyNonArray...),
 	"last_value": collectBuiltins(func(t Type) Builtin {
 		return makeWindowBuiltin(ArgTypes{{"val", t}}, t, newLastValueWindow)
-	}, TypesAnyNonArray...),
+	}, types.TypesAnyNonArray...),
 	"nth_value": collectBuiltins(func(t Type) Builtin {
 		return makeWindowBuiltin(ArgTypes{{"val", t}, {"n", TypeInt}}, t, newNthValueWindow)
-	}, TypesAnyNonArray...),
+	}, types.TypesAnyNonArray...),
 }
 
 func makeWindowBuiltin(in ArgTypes, ret Type, f func([]Type, *EvalContext) WindowFunc) Builtin {

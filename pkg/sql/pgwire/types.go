@@ -30,6 +30,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/ipaddr"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -644,7 +645,7 @@ func decodeOidDatum(id oid.Oid, code formatCode, b []byte) (parser.Datum, error)
 			}
 			return out, nil
 		}
-		if _, ok := parser.ArrayOids[id]; ok {
+		if _, ok := types.ArrayOids[id]; ok {
 			// Arrays come in in their string form, so we parse them as such and later
 			// convert them to their actual datum form.
 			if err := validateStringBytes(b); err != nil {
