@@ -102,7 +102,7 @@ message TableDescriptor {
 
 A table descriptor at a version `v` has a validity period spanning from
 its `ModificationTime` until the `ModificationTime` of the table descriptor at
-version `v + 2`: [``ModificationTime`, `ModificationTime`~v+2~). A transaction
+version `v + 2`: [`ModificationTime`, `ModificationTime[v+2]`). A transaction
 at time `T` can safely use one of two table descriptors versions: the two
 versions with highest `ModificationTime` less than or equal to `T`.
 Once a table descriptor at `v` has been written, the validity period of the
@@ -128,11 +128,11 @@ CREATE TABLE system.lease (
   DescID     INT,
   Version    INT,
   NodeID     INT,
-  // Expiration is a wall time in microseconds. This is a
-  // microsecond rounded timestamp produced from the timestamp
-  // of the transaction inserting a new row. It would ideally
-  // be an hlc.timestamp but cannot be changed now without much
-  // difficulty.
+  # Expiration is a wall time in microseconds. This is a
+  # microsecond rounded timestamp produced from the timestamp
+  # of the transaction inserting a new row. It would ideally
+  # be an hlc.timestamp but cannot be changed now without much
+  # difficulty.
   Expiration TIMESTAMP,
   PRIMARY KEY (DescID, Version, Expiration, NodeID)
 )
