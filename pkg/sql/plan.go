@@ -473,6 +473,7 @@ func (p *planner) prepare(ctx context.Context, stmt parser.Statement) (planNode,
 	if plan, err := p.maybePlanHook(ctx, stmt); plan != nil || err != nil {
 		return plan, err
 	}
+	p.isPreparing = true
 
 	switch n := stmt.(type) {
 	case *parser.AlterUserSetPassword:
