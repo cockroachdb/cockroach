@@ -154,22 +154,24 @@ func shouldEmitUnmatchedRow(side joinSide, joinType joinType) bool {
 // table; we emit them if it's called for given the type of join, otherwise we
 // discard them.
 //
-// Returns false if no more rows are needed (in which case the inputs still need
-// to be drained and closed).
+// Returns false if no more rows are needed. Also returns any error occurring
+// when emitting the row (i.e. filtering or rendering errors). If false or an
+// error are returned, the inputs still need to be drained and closed and the
+// output needs to be closed. If an error is returned, it is the caller's
+// responsibility to pushed the error to the output.
 func (jb *joinerBase) maybeEmitUnmatchedRow(
 	ctx context.Context, row sqlbase.EncDatumRow, side joinSide,
-) bool {
+) (bool, error) {
 	if !shouldEmitUnmatchedRow(side, jb.joinType) {
-		return true
+		return true, nil
 	}
 
 	renderedRow := jb.renderUnmatchedRow(row, side)
 	consumerStatus, err := jb.out.EmitRow(ctx, renderedRow)
 	if err != nil {
-		jb.out.output.Push(nil /* row */, ProducerMetadata{Err: err})
-		return false
+		return false, err
 	}
-	return consumerStatus == NeedMoreRows
+	return consumerStatus == NeedMoreRows, nil
 }
 
 // render constructs a row with columns from both sides. The ON condition is

@@ -298,8 +298,9 @@ func (h *hashJoiner) receiveRow(
 			return row, false, nil
 		}
 
-		if !h.maybeEmitUnmatchedRow(ctx, row, side) {
-			return nil, true, nil
+		needMoreRows, err := h.maybeEmitUnmatchedRow(ctx, row, side)
+		if !needMoreRows || err != nil {
+			return nil, true, err
 		}
 	}
 }
@@ -555,8 +556,11 @@ func (h *hashJoiner) probeRow(
 		}
 	}
 
-	if !probeMatched && !h.maybeEmitUnmatchedRow(ctx, row, otherSide(h.storedSide)) {
-		return true, nil
+	if !probeMatched {
+		needMoreRows, err := h.maybeEmitUnmatchedRow(ctx, row, otherSide(h.storedSide))
+		if !needMoreRows || err != nil {
+			return true, err
+		}
 	}
 	return false, nil
 }
@@ -628,8 +632,9 @@ func (h *hashJoiner) probePhase(
 			if err != nil {
 				return false, err
 			}
-			if !h.maybeEmitUnmatchedRow(ctx, row, h.storedSide) {
-				return true, nil
+			needMoreRows, err := h.maybeEmitUnmatchedRow(ctx, row, h.storedSide)
+			if !needMoreRows || err != nil {
+				return true, err
 			}
 		}
 	}

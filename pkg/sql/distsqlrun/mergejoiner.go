@@ -133,21 +133,28 @@ func (m *mergeJoiner) outputBatch(
 				if matchedRight != nil {
 					matchedRight[rIdx] = true
 				}
-				if !emitHelper(ctx, &m.out, renderedRow, ProducerMetadata{}) {
-					return false, nil
+				consumerStatus, err := m.out.EmitRow(ctx, renderedRow)
+				if err != nil || consumerStatus != NeedMoreRows {
+					return false, err
 				}
 			}
 		}
-		if !matched && !m.maybeEmitUnmatchedRow(ctx, lrow, leftSide) {
-			return false, nil
+		if !matched {
+			needMoreRows, err := m.maybeEmitUnmatchedRow(ctx, lrow, leftSide)
+			if !needMoreRows || err != nil {
+				return false, err
+			}
 		}
 	}
 
 	if matchedRight != nil {
 		// Produce results for unmatched right rows (for RIGHT OUTER or FULL OUTER).
 		for rIdx, rrow := range rightRows {
-			if !matchedRight[rIdx] && !m.maybeEmitUnmatchedRow(ctx, rrow, rightSide) {
-				return false, nil
+			if !matchedRight[rIdx] {
+				needMoreRows, err := m.maybeEmitUnmatchedRow(ctx, rrow, rightSide)
+				if !needMoreRows || err != nil {
+					return false, err
+				}
 			}
 		}
 	}
