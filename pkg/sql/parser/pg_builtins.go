@@ -66,7 +66,7 @@ func initPGBuiltins() {
 	}
 
 	// Make non-array type i/o builtins.
-	for _, typ := range OidToType {
+	for _, typ := range types.OidToType {
 		// Skip array types. We're doing them separately below.
 		if typ != TypeAny && typ != TypeIntVector && typ.Equivalent(TypeAnyArray) {
 			continue
@@ -289,7 +289,7 @@ var pgBuiltins = map[string][]Builtin{
 				if oidArg == DNull {
 					return DNull, nil
 				}
-				typ, ok := OidToType[oid.Oid(int(oidArg.(*DOid).DInt))]
+				typ, ok := types.OidToType[oid.Oid(int(oidArg.(*DOid).DInt))]
 				if !ok {
 					return NewDString(fmt.Sprintf("unknown (OID=%s)", oidArg)), nil
 				}
