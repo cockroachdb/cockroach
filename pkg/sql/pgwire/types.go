@@ -82,7 +82,7 @@ type pgNumeric struct {
 
 func pgTypeForParserType(t parser.Type) pgType {
 	size := -1
-	if s, variable := t.Size(); !variable {
+	if s, variable := parser.DatumTypeSize(t); !variable {
 		size = int(s)
 	}
 	return pgType{
