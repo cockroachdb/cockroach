@@ -64,7 +64,7 @@ requiring new stores to be added to the cluster.
 
 Encryption is desired for security reasons (prevent access from other users on the same
 machine, prevent data leak through drive theft/disposal) as well as regulatory reasons
-(GDPR, HIPPA, OCI DSS).
+(GDPR, HIPAA, OCI DSS).
 
 Encryption at rest is necessary when other methods of encryption are either not desirable,
 or not sufficient (eg: filesystem-level encryption cannot be used if DBAs do not have
@@ -185,7 +185,7 @@ The size of each data key will depend on the choice of cipher.
 The need for encryption entails a few recommended changes in production configuration:
 * disable swap: we want to avoid any data hitting disk unencrypted, this includes memory being swapped out.
 * run on architectures that support the [AES-NI instruction set](https://en.wikipedia.org/wiki/AES_instruction_set).
-* have a separate are (partition, fuse-filesystem, etc...) to store the store-level keys.
+* have a separate area (partition, fuse-filesystem, etc...) to store the store-level keys.
 
 #### Flag changes for the cockroach binary
 
