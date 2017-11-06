@@ -19,6 +19,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/pkg/errors"
@@ -104,7 +105,7 @@ func (eh *exprHelper) String() string {
 var _ parser.IndexedVarContainer = &exprHelper{}
 
 // IndexedVarResolvedType is part of the parser.IndexedVarContainer interface.
-func (eh *exprHelper) IndexedVarResolvedType(idx int) parser.Type {
+func (eh *exprHelper) IndexedVarResolvedType(idx int) types.T {
 	return eh.types[idx].ToDatumType()
 }
 

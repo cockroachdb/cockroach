@@ -18,10 +18,12 @@ import (
 	"testing"
 
 	"golang.org/x/net/context"
+
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 )
 
 func TestNormalizeExpr(t *testing.T) {
-	defer mockNameTypes(map[string]Type{
+	defer mockNameTypes(map[string]types.T{
 		"a": TypeInt,
 		"b": TypeInt,
 		"c": TypeInt,

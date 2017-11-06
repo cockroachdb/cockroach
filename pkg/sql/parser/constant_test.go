@@ -26,6 +26,8 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/apd"
+
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 )
 
 // TestNumericConstantVerifyAndResolveAvailableTypes verifies that test NumVals will
@@ -38,7 +40,7 @@ func TestNumericConstantVerifyAndResolveAvailableTypes(t *testing.T) {
 
 	testCases := []struct {
 		str   string
-		avail []Type
+		avail []types.T
 	}{
 		{"1", wantInt},
 		{"0", wantInt},
@@ -142,7 +144,7 @@ func TestStringConstantVerifyAvailableTypes(t *testing.T) {
 
 	testCases := []struct {
 		c     *StrVal
-		avail []Type
+		avail []types.T
 	}{
 		{&StrVal{s: "abc 世界", bytesEsc: false}, wantStringButCanBeAll},
 		{&StrVal{s: "t", bytesEsc: false}, wantStringButCanBeAll},
@@ -217,7 +219,7 @@ func mustParseDInterval(t *testing.T, s string) Datum {
 	return d
 }
 
-var parseFuncs = map[Type]func(*testing.T, string) Datum{
+var parseFuncs = map[types.T]func(*testing.T, string) Datum{
 	TypeString:      func(t *testing.T, s string) Datum { return NewDString(s) },
 	TypeBytes:       func(t *testing.T, s string) Datum { return NewDBytes(DBytes(s)) },
 	TypeBool:        mustParseDBool,
@@ -227,9 +229,9 @@ var parseFuncs = map[Type]func(*testing.T, string) Datum{
 	TypeInterval:    mustParseDInterval,
 }
 
-func typeSet(types ...Type) map[Type]struct{} {
-	set := make(map[Type]struct{}, len(types))
-	for _, t := range types {
+func typeSet(tys ...types.T) map[types.T]struct{} {
+	set := make(map[types.T]struct{}, len(tys))
+	for _, t := range tys {
 		set[t] = struct{}{}
 	}
 	return set
@@ -243,7 +245,7 @@ func typeSet(types ...Type) map[Type]struct{} {
 func TestStringConstantResolveAvailableTypes(t *testing.T) {
 	testCases := []struct {
 		c            *StrVal
-		parseOptions map[Type]struct{}
+		parseOptions map[types.T]struct{}
 	}{
 		{
 			c:            &StrVal{s: "abc 世界", bytesEsc: false},

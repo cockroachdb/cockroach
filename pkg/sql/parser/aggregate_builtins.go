@@ -96,8 +96,8 @@ type AggregateFunc interface {
 var Aggregates = map[string][]Builtin{
 	"array_agg": {
 		makeAggBuiltinWithReturnType(
-			[]Type{TypeAny},
-			func(args []TypedExpr) Type {
+			[]types.T{TypeAny},
+			func(args []TypedExpr) types.T {
 				if len(args) == 0 {
 					return unknownReturnType
 				}
@@ -109,21 +109,21 @@ var Aggregates = map[string][]Builtin{
 	},
 
 	"avg": {
-		makeAggBuiltin([]Type{TypeInt}, TypeDecimal, newIntAvgAggregate,
+		makeAggBuiltin([]types.T{TypeInt}, TypeDecimal, newIntAvgAggregate,
 			"Calculates the average of the selected values."),
-		makeAggBuiltin([]Type{TypeFloat}, TypeFloat, newFloatAvgAggregate,
+		makeAggBuiltin([]types.T{TypeFloat}, TypeFloat, newFloatAvgAggregate,
 			"Calculates the average of the selected values."),
-		makeAggBuiltin([]Type{TypeDecimal}, TypeDecimal, newDecimalAvgAggregate,
+		makeAggBuiltin([]types.T{TypeDecimal}, TypeDecimal, newDecimalAvgAggregate,
 			"Calculates the average of the selected values."),
 	},
 
 	"bool_and": {
-		makeAggBuiltin([]Type{TypeBool}, TypeBool, newBoolAndAggregate,
+		makeAggBuiltin([]types.T{TypeBool}, TypeBool, newBoolAndAggregate,
 			"Calculates the boolean value of `AND`ing all selected values."),
 	},
 
 	"bool_or": {
-		makeAggBuiltin([]Type{TypeBool}, TypeBool, newBoolOrAggregate,
+		makeAggBuiltin([]types.T{TypeBool}, TypeBool, newBoolOrAggregate,
 			"Calculates the boolean value of `OR`ing all selected values."),
 	},
 
@@ -131,16 +131,16 @@ var Aggregates = map[string][]Builtin{
 		// TODO(knz): When CockroachDB supports STRING_AGG, CONCAT_AGG(X)
 		// should be substituted to STRING_AGG(X, '') and executed as
 		// such (no need for a separate implementation).
-		makeAggBuiltin([]Type{TypeString}, TypeString, newStringConcatAggregate,
+		makeAggBuiltin([]types.T{TypeString}, TypeString, newStringConcatAggregate,
 			"Concatenates all selected values."),
-		makeAggBuiltin([]Type{TypeBytes}, TypeBytes, newBytesConcatAggregate,
+		makeAggBuiltin([]types.T{TypeBytes}, TypeBytes, newBytesConcatAggregate,
 			"Concatenates all selected values."),
 		// TODO(eisen): support collated strings when the type system properly
 		// supports parametric types.
 	},
 
 	"count": {
-		makeAggBuiltin([]Type{TypeAny}, TypeInt, newCountAggregate,
+		makeAggBuiltin([]types.T{TypeAny}, TypeInt, newCountAggregate,
 			"Calculates the number of selected elements."),
 	},
 
@@ -151,44 +151,44 @@ var Aggregates = map[string][]Builtin{
 			Types:         ArgTypes{},
 			ReturnType:    fixedReturnType(TypeInt),
 			AggregateFunc: newCountRowsAggregate,
-			WindowFunc: func(params []Type, evalCtx *EvalContext) WindowFunc {
+			WindowFunc: func(params []types.T, evalCtx *EvalContext) WindowFunc {
 				return newAggregateWindow(newCountRowsAggregate(params, evalCtx))
 			},
 			Info: "Calculates the number of rows.",
 		},
 	},
 
-	"max": collectBuiltins(func(t Type) Builtin {
-		return makeAggBuiltin([]Type{t}, t, newMaxAggregate,
+	"max": collectBuiltins(func(t types.T) Builtin {
+		return makeAggBuiltin([]types.T{t}, t, newMaxAggregate,
 			"Identifies the maximum selected value.")
 	}, types.TypesAnyNonArray...),
-	"min": collectBuiltins(func(t Type) Builtin {
-		return makeAggBuiltin([]Type{t}, t, newMinAggregate,
+	"min": collectBuiltins(func(t types.T) Builtin {
+		return makeAggBuiltin([]types.T{t}, t, newMinAggregate,
 			"Identifies the minimum selected value.")
 	}, types.TypesAnyNonArray...),
 
 	"sum_int": {
-		makeAggBuiltin([]Type{TypeInt}, TypeInt, newSmallIntSumAggregate,
+		makeAggBuiltin([]types.T{TypeInt}, TypeInt, newSmallIntSumAggregate,
 			"Calculates the sum of the selected values."),
 	},
 
 	"sum": {
-		makeAggBuiltin([]Type{TypeInt}, TypeDecimal, newIntSumAggregate,
+		makeAggBuiltin([]types.T{TypeInt}, TypeDecimal, newIntSumAggregate,
 			"Calculates the sum of the selected values."),
-		makeAggBuiltin([]Type{TypeFloat}, TypeFloat, newFloatSumAggregate,
+		makeAggBuiltin([]types.T{TypeFloat}, TypeFloat, newFloatSumAggregate,
 			"Calculates the sum of the selected values."),
-		makeAggBuiltin([]Type{TypeDecimal}, TypeDecimal, newDecimalSumAggregate,
+		makeAggBuiltin([]types.T{TypeDecimal}, TypeDecimal, newDecimalSumAggregate,
 			"Calculates the sum of the selected values."),
-		makeAggBuiltin([]Type{TypeInterval}, TypeInterval, newIntervalSumAggregate,
+		makeAggBuiltin([]types.T{TypeInterval}, TypeInterval, newIntervalSumAggregate,
 			"Calculates the sum of the selected values."),
 	},
 
 	"sqrdiff": {
-		makeAggBuiltin([]Type{TypeInt}, TypeDecimal, newIntSqrDiffAggregate,
+		makeAggBuiltin([]types.T{TypeInt}, TypeDecimal, newIntSqrDiffAggregate,
 			"Calculates the sum of squared differences from the mean of the selected values."),
-		makeAggBuiltin([]Type{TypeDecimal}, TypeDecimal, newDecimalSqrDiffAggregate,
+		makeAggBuiltin([]types.T{TypeDecimal}, TypeDecimal, newDecimalSqrDiffAggregate,
 			"Calculates the sum of squared differences from the mean of the selected values."),
-		makeAggBuiltin([]Type{TypeFloat}, TypeFloat, newFloatSqrDiffAggregate,
+		makeAggBuiltin([]types.T{TypeFloat}, TypeFloat, newFloatSqrDiffAggregate,
 			"Calculates the sum of squared differences from the mean of the selected values."),
 	},
 
@@ -199,53 +199,53 @@ var Aggregates = map[string][]Builtin{
 
 	// The input signature is: SQDIFF, SUM, COUNT
 	"final_variance": {
-		makeAggBuiltin([]Type{TypeDecimal, TypeDecimal, TypeInt}, TypeDecimal, newDecimalFinalVarianceAggregate,
+		makeAggBuiltin([]types.T{TypeDecimal, TypeDecimal, TypeInt}, TypeDecimal, newDecimalFinalVarianceAggregate,
 			"Calculates the variance from the selected locally-computed squared difference values."),
-		makeAggBuiltin([]Type{TypeFloat, TypeFloat, TypeInt}, TypeFloat, newFloatFinalVarianceAggregate,
+		makeAggBuiltin([]types.T{TypeFloat, TypeFloat, TypeInt}, TypeFloat, newFloatFinalVarianceAggregate,
 			"Calculates the variance from the selected locally-computed squared difference values."),
 	},
 
 	"final_stddev": {
-		makeAggBuiltin([]Type{TypeDecimal, TypeDecimal, TypeInt}, TypeDecimal, newDecimalFinalStdDevAggregate,
+		makeAggBuiltin([]types.T{TypeDecimal, TypeDecimal, TypeInt}, TypeDecimal, newDecimalFinalStdDevAggregate,
 			"Calculates the standard deviation from the selected locally-computed squared difference values."),
-		makeAggBuiltin([]Type{TypeFloat, TypeFloat, TypeInt}, TypeFloat, newFloatFinalStdDevAggregate,
+		makeAggBuiltin([]types.T{TypeFloat, TypeFloat, TypeInt}, TypeFloat, newFloatFinalStdDevAggregate,
 			"Calculates the standard deviation from the selected locally-computed squared difference values."),
 	},
 
 	"variance": {
-		makeAggBuiltin([]Type{TypeInt}, TypeDecimal, newIntVarianceAggregate,
+		makeAggBuiltin([]types.T{TypeInt}, TypeDecimal, newIntVarianceAggregate,
 			"Calculates the variance of the selected values."),
-		makeAggBuiltin([]Type{TypeDecimal}, TypeDecimal, newDecimalVarianceAggregate,
+		makeAggBuiltin([]types.T{TypeDecimal}, TypeDecimal, newDecimalVarianceAggregate,
 			"Calculates the variance of the selected values."),
-		makeAggBuiltin([]Type{TypeFloat}, TypeFloat, newFloatVarianceAggregate,
+		makeAggBuiltin([]types.T{TypeFloat}, TypeFloat, newFloatVarianceAggregate,
 			"Calculates the variance of the selected values."),
 	},
 
 	"stddev": {
-		makeAggBuiltin([]Type{TypeInt}, TypeDecimal, newIntStdDevAggregate,
+		makeAggBuiltin([]types.T{TypeInt}, TypeDecimal, newIntStdDevAggregate,
 			"Calculates the standard deviation of the selected values."),
-		makeAggBuiltin([]Type{TypeDecimal}, TypeDecimal, newDecimalStdDevAggregate,
+		makeAggBuiltin([]types.T{TypeDecimal}, TypeDecimal, newDecimalStdDevAggregate,
 			"Calculates the standard deviation of the selected values."),
-		makeAggBuiltin([]Type{TypeFloat}, TypeFloat, newFloatStdDevAggregate,
+		makeAggBuiltin([]types.T{TypeFloat}, TypeFloat, newFloatStdDevAggregate,
 			"Calculates the standard deviation of the selected values."),
 	},
 
 	"xor_agg": {
-		makeAggBuiltin([]Type{TypeBytes}, TypeBytes, newBytesXorAggregate,
+		makeAggBuiltin([]types.T{TypeBytes}, TypeBytes, newBytesXorAggregate,
 			"Calculates the bitwise XOR of the selected values."),
-		makeAggBuiltin([]Type{TypeInt}, TypeInt, newIntXorAggregate,
+		makeAggBuiltin([]types.T{TypeInt}, TypeInt, newIntXorAggregate,
 			"Calculates the bitwise XOR of the selected values."),
 	},
 }
 
 func makeAggBuiltin(
-	in []Type, ret Type, f func([]Type, *EvalContext) AggregateFunc, info string,
+	in []types.T, ret types.T, f func([]types.T, *EvalContext) AggregateFunc, info string,
 ) Builtin {
 	return makeAggBuiltinWithReturnType(in, fixedReturnType(ret), f, info)
 }
 
 func makeAggBuiltinWithReturnType(
-	in []Type, retType returnTyper, f func([]Type, *EvalContext) AggregateFunc, info string,
+	in []types.T, retType returnTyper, f func([]types.T, *EvalContext) AggregateFunc, info string,
 ) Builtin {
 	argTypes := make(ArgTypes, len(in))
 	for i, typ := range in {
@@ -261,7 +261,7 @@ func makeAggBuiltinWithReturnType(
 		Types:         argTypes,
 		ReturnType:    retType,
 		AggregateFunc: f,
-		WindowFunc: func(params []Type, evalCtx *EvalContext) WindowFunc {
+		WindowFunc: func(params []types.T, evalCtx *EvalContext) WindowFunc {
 			return newAggregateWindow(f(params, evalCtx))
 		},
 		Info: info,
@@ -339,7 +339,7 @@ type arrayAggregate struct {
 	acc mon.BoundAccount
 }
 
-func newArrayAggregate(params []Type, evalCtx *EvalContext) AggregateFunc {
+func newArrayAggregate(params []types.T, evalCtx *EvalContext) AggregateFunc {
 	return &arrayAggregate{
 		arr: NewDArray(params[0]),
 		acc: evalCtx.Mon.MakeBoundAccount(),
@@ -373,13 +373,13 @@ type avgAggregate struct {
 	count int
 }
 
-func newIntAvgAggregate(params []Type, evalCtx *EvalContext) AggregateFunc {
+func newIntAvgAggregate(params []types.T, evalCtx *EvalContext) AggregateFunc {
 	return &avgAggregate{agg: newIntSumAggregate(params, evalCtx)}
 }
-func newFloatAvgAggregate(params []Type, evalCtx *EvalContext) AggregateFunc {
+func newFloatAvgAggregate(params []types.T, evalCtx *EvalContext) AggregateFunc {
 	return &avgAggregate{agg: newFloatSumAggregate(params, evalCtx)}
 }
-func newDecimalAvgAggregate(params []Type, evalCtx *EvalContext) AggregateFunc {
+func newDecimalAvgAggregate(params []types.T, evalCtx *EvalContext) AggregateFunc {
 	return &avgAggregate{agg: newDecimalSumAggregate(params, evalCtx)}
 }
 
@@ -426,13 +426,13 @@ type concatAggregate struct {
 	acc        mon.BoundAccount
 }
 
-func newBytesConcatAggregate(_ []Type, evalCtx *EvalContext) AggregateFunc {
+func newBytesConcatAggregate(_ []types.T, evalCtx *EvalContext) AggregateFunc {
 	return &concatAggregate{
 		forBytes: true,
 		acc:      evalCtx.Mon.MakeBoundAccount(),
 	}
 }
-func newStringConcatAggregate(_ []Type, evalCtx *EvalContext) AggregateFunc {
+func newStringConcatAggregate(_ []types.T, evalCtx *EvalContext) AggregateFunc {
 	return &concatAggregate{acc: evalCtx.Mon.MakeBoundAccount()}
 }
 
@@ -477,7 +477,7 @@ type boolAndAggregate struct {
 	result     bool
 }
 
-func newBoolAndAggregate(_ []Type, _ *EvalContext) AggregateFunc {
+func newBoolAndAggregate(_ []types.T, _ *EvalContext) AggregateFunc {
 	return &boolAndAggregate{}
 }
 
@@ -508,7 +508,7 @@ type boolOrAggregate struct {
 	result     bool
 }
 
-func newBoolOrAggregate(_ []Type, _ *EvalContext) AggregateFunc {
+func newBoolOrAggregate(_ []types.T, _ *EvalContext) AggregateFunc {
 	return &boolOrAggregate{}
 }
 
@@ -535,7 +535,7 @@ type countAggregate struct {
 	count int
 }
 
-func newCountAggregate(_ []Type, _ *EvalContext) AggregateFunc {
+func newCountAggregate(_ []types.T, _ *EvalContext) AggregateFunc {
 	return &countAggregate{}
 }
 
@@ -558,7 +558,7 @@ type countRowsAggregate struct {
 	count int
 }
 
-func newCountRowsAggregate(_ []Type, _ *EvalContext) AggregateFunc {
+func newCountRowsAggregate(_ []types.T, _ *EvalContext) AggregateFunc {
 	return &countRowsAggregate{}
 }
 
@@ -580,7 +580,7 @@ type MaxAggregate struct {
 	evalCtx *EvalContext
 }
 
-func newMaxAggregate(_ []Type, evalCtx *EvalContext) AggregateFunc {
+func newMaxAggregate(_ []types.T, evalCtx *EvalContext) AggregateFunc {
 	return &MaxAggregate{evalCtx: evalCtx}
 }
 
@@ -617,7 +617,7 @@ type MinAggregate struct {
 	evalCtx *EvalContext
 }
 
-func newMinAggregate(_ []Type, evalCtx *EvalContext) AggregateFunc {
+func newMinAggregate(_ []types.T, evalCtx *EvalContext) AggregateFunc {
 	return &MinAggregate{evalCtx: evalCtx}
 }
 
@@ -653,7 +653,7 @@ type smallIntSumAggregate struct {
 	seenNonNull bool
 }
 
-func newSmallIntSumAggregate(_ []Type, _ *EvalContext) AggregateFunc {
+func newSmallIntSumAggregate(_ []types.T, _ *EvalContext) AggregateFunc {
 	return &smallIntSumAggregate{}
 }
 
@@ -690,7 +690,7 @@ type intSumAggregate struct {
 	seenNonNull bool
 }
 
-func newIntSumAggregate(_ []Type, _ *EvalContext) AggregateFunc {
+func newIntSumAggregate(_ []types.T, _ *EvalContext) AggregateFunc {
 	return &intSumAggregate{}
 }
 
@@ -752,7 +752,7 @@ type decimalSumAggregate struct {
 	sawNonNull bool
 }
 
-func newDecimalSumAggregate(_ []Type, _ *EvalContext) AggregateFunc {
+func newDecimalSumAggregate(_ []types.T, _ *EvalContext) AggregateFunc {
 	return &decimalSumAggregate{}
 }
 
@@ -788,7 +788,7 @@ type floatSumAggregate struct {
 	sawNonNull bool
 }
 
-func newFloatSumAggregate(_ []Type, _ *EvalContext) AggregateFunc {
+func newFloatSumAggregate(_ []types.T, _ *EvalContext) AggregateFunc {
 	return &floatSumAggregate{}
 }
 
@@ -819,7 +819,7 @@ type intervalSumAggregate struct {
 	sawNonNull bool
 }
 
-func newIntervalSumAggregate(_ []Type, _ *EvalContext) AggregateFunc {
+func newIntervalSumAggregate(_ []types.T, _ *EvalContext) AggregateFunc {
 	return &intervalSumAggregate{}
 }
 
@@ -861,7 +861,7 @@ func newIntSqrDiff() decimalSqrDiff {
 	return &intSqrDiffAggregate{agg: newDecimalSqrDiff()}
 }
 
-func newIntSqrDiffAggregate(_ []Type, _ *EvalContext) AggregateFunc {
+func newIntSqrDiffAggregate(_ []types.T, _ *EvalContext) AggregateFunc {
 	return newIntSqrDiff()
 }
 
@@ -901,7 +901,7 @@ func newFloatSqrDiff() floatSqrDiff {
 	return &floatSqrDiffAggregate{}
 }
 
-func newFloatSqrDiffAggregate(_ []Type, _ *EvalContext) AggregateFunc {
+func newFloatSqrDiffAggregate(_ []types.T, _ *EvalContext) AggregateFunc {
 	return newFloatSqrDiff()
 }
 
@@ -960,7 +960,7 @@ func newDecimalSqrDiff() decimalSqrDiff {
 	return &decimalSqrDiffAggregate{ed: &ed}
 }
 
-func newDecimalSqrDiffAggregate(_ []Type, _ *EvalContext) AggregateFunc {
+func newDecimalSqrDiffAggregate(_ []types.T, _ *EvalContext) AggregateFunc {
 	return newDecimalSqrDiff()
 }
 
@@ -1185,23 +1185,23 @@ type decimalVarianceAggregate struct {
 // has one input: VALUE; whereas FinalVariance employs SumSqrDiffsAggregate
 // which takes in three inputs: (local) SQRDIFF, SUM, COUNT.
 // FinalVariance is used for local/final aggregation in distsql.
-func newIntVarianceAggregate(params []Type, evalCtx *EvalContext) AggregateFunc {
+func newIntVarianceAggregate(params []types.T, evalCtx *EvalContext) AggregateFunc {
 	return &decimalVarianceAggregate{agg: newIntSqrDiff()}
 }
 
-func newFloatVarianceAggregate(_ []Type, _ *EvalContext) AggregateFunc {
+func newFloatVarianceAggregate(_ []types.T, _ *EvalContext) AggregateFunc {
 	return &floatVarianceAggregate{agg: newFloatSqrDiff()}
 }
 
-func newDecimalVarianceAggregate(_ []Type, _ *EvalContext) AggregateFunc {
+func newDecimalVarianceAggregate(_ []types.T, _ *EvalContext) AggregateFunc {
 	return &decimalVarianceAggregate{agg: newDecimalSqrDiff()}
 }
 
-func newFloatFinalVarianceAggregate(_ []Type, _ *EvalContext) AggregateFunc {
+func newFloatFinalVarianceAggregate(_ []types.T, _ *EvalContext) AggregateFunc {
 	return &floatVarianceAggregate{agg: newFloatSumSqrDiffs()}
 }
 
-func newDecimalFinalVarianceAggregate(_ []Type, _ *EvalContext) AggregateFunc {
+func newDecimalFinalVarianceAggregate(_ []types.T, _ *EvalContext) AggregateFunc {
 	return &decimalVarianceAggregate{agg: newDecimalSumSqrDiffs()}
 }
 
@@ -1279,23 +1279,23 @@ type decimalStdDevAggregate struct {
 // has one input: VALUE; whereas FinalStdDev employs SumSqrDiffsAggregate
 // which takes in three inputs: (local) SQRDIFF, SUM, COUNT.
 // FinalStdDev is used for local/final aggregation in distsql.
-func newIntStdDevAggregate(params []Type, evalCtx *EvalContext) AggregateFunc {
+func newIntStdDevAggregate(params []types.T, evalCtx *EvalContext) AggregateFunc {
 	return &decimalStdDevAggregate{agg: newIntVarianceAggregate(params, evalCtx)}
 }
 
-func newFloatStdDevAggregate(params []Type, evalCtx *EvalContext) AggregateFunc {
+func newFloatStdDevAggregate(params []types.T, evalCtx *EvalContext) AggregateFunc {
 	return &floatStdDevAggregate{agg: newFloatVarianceAggregate(params, evalCtx)}
 }
 
-func newDecimalStdDevAggregate(params []Type, evalCtx *EvalContext) AggregateFunc {
+func newDecimalStdDevAggregate(params []types.T, evalCtx *EvalContext) AggregateFunc {
 	return &decimalStdDevAggregate{agg: newDecimalVarianceAggregate(params, evalCtx)}
 }
 
-func newFloatFinalStdDevAggregate(params []Type, evalCtx *EvalContext) AggregateFunc {
+func newFloatFinalStdDevAggregate(params []types.T, evalCtx *EvalContext) AggregateFunc {
 	return &floatStdDevAggregate{agg: newFloatFinalVarianceAggregate(params, evalCtx)}
 }
 
-func newDecimalFinalStdDevAggregate(params []Type, evalCtx *EvalContext) AggregateFunc {
+func newDecimalFinalStdDevAggregate(params []types.T, evalCtx *EvalContext) AggregateFunc {
 	return &decimalStdDevAggregate{agg: newDecimalFinalVarianceAggregate(params, evalCtx)}
 }
 
@@ -1362,7 +1362,7 @@ type bytesXorAggregate struct {
 	sawNonNull bool
 }
 
-func newBytesXorAggregate(_ []Type, _ *EvalContext) AggregateFunc {
+func newBytesXorAggregate(_ []types.T, _ *EvalContext) AggregateFunc {
 	return &bytesXorAggregate{}
 }
 
@@ -1401,7 +1401,7 @@ type intXorAggregate struct {
 	sawNonNull bool
 }
 
-func newIntXorAggregate(_ []Type, _ *EvalContext) AggregateFunc {
+func newIntXorAggregate(_ []types.T, _ *EvalContext) AggregateFunc {
 	return &intXorAggregate{}
 }
 

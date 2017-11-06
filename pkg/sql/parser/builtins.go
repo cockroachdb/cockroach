@@ -147,8 +147,8 @@ type Builtin struct {
 	// might be more appropriate.
 	Info string
 
-	AggregateFunc func([]Type, *EvalContext) AggregateFunc
-	WindowFunc    func([]Type, *EvalContext) WindowFunc
+	AggregateFunc func([]types.T, *EvalContext) AggregateFunc
+	WindowFunc    func([]types.T, *EvalContext) WindowFunc
 	fn            func(*EvalContext, Datums) (Datum, error)
 }
 
@@ -164,7 +164,7 @@ func (b Builtin) preferred() bool {
 	return b.preferredOverload
 }
 
-func categorizeType(t Type) string {
+func categorizeType(t types.T) string {
 	switch t {
 	case TypeDate, TypeInterval, TypeTimestamp, TypeTimestampTZ:
 		return categoryDateAndTime
@@ -220,7 +220,7 @@ func (b Builtin) Fn() func(*EvalContext, Datums) (Datum, error) {
 
 // FixedReturnType returns a fixed type that the function returns, returning Any
 // if the return type is based on the function's arguments.
-func (b Builtin) FixedReturnType() Type {
+func (b Builtin) FixedReturnType() types.T {
 	if b.ReturnType == nil {
 		return nil
 	}
@@ -1886,7 +1886,7 @@ CockroachDB supports the following flags:
 		},
 	},
 
-	"array_append": arrayBuiltin(func(typ Type) Builtin {
+	"array_append": arrayBuiltin(func(typ types.T) Builtin {
 		return Builtin{
 			Types:        ArgTypes{{"array", TArray{Typ: typ}}, {"elem", typ}},
 			ReturnType:   fixedReturnType(TArray{Typ: typ}),
@@ -1899,7 +1899,7 @@ CockroachDB supports the following flags:
 		}
 	}),
 
-	"array_prepend": arrayBuiltin(func(typ Type) Builtin {
+	"array_prepend": arrayBuiltin(func(typ types.T) Builtin {
 		return Builtin{
 			Types:        ArgTypes{{"elem", typ}, {"array", TArray{Typ: typ}}},
 			ReturnType:   fixedReturnType(TArray{Typ: typ}),
@@ -1912,7 +1912,7 @@ CockroachDB supports the following flags:
 		}
 	}),
 
-	"array_cat": arrayBuiltin(func(typ Type) Builtin {
+	"array_cat": arrayBuiltin(func(typ types.T) Builtin {
 		return Builtin{
 			Types:        ArgTypes{{"left", TArray{Typ: typ}}, {"right", TArray{Typ: typ}}},
 			ReturnType:   fixedReturnType(TArray{Typ: typ}),
@@ -1925,7 +1925,7 @@ CockroachDB supports the following flags:
 		}
 	}),
 
-	"array_remove": arrayBuiltin(func(typ Type) Builtin {
+	"array_remove": arrayBuiltin(func(typ types.T) Builtin {
 		return Builtin{
 			Types:        ArgTypes{{"array", TArray{Typ: typ}}, {"elem", typ}},
 			ReturnType:   fixedReturnType(TArray{Typ: typ}),
@@ -1949,7 +1949,7 @@ CockroachDB supports the following flags:
 		}
 	}),
 
-	"array_replace": arrayBuiltin(func(typ Type) Builtin {
+	"array_replace": arrayBuiltin(func(typ types.T) Builtin {
 		return Builtin{
 			Types:        ArgTypes{{"array", TArray{Typ: typ}}, {"toreplace", typ}, {"replacewith", typ}},
 			ReturnType:   fixedReturnType(TArray{Typ: typ}),
@@ -1977,7 +1977,7 @@ CockroachDB supports the following flags:
 		}
 	}),
 
-	"array_position": arrayBuiltin(func(typ Type) Builtin {
+	"array_position": arrayBuiltin(func(typ types.T) Builtin {
 		return Builtin{
 			Types:        ArgTypes{{"array", TArray{Typ: typ}}, {"elem", typ}},
 			ReturnType:   fixedReturnType(TypeInt),
@@ -1998,7 +1998,7 @@ CockroachDB supports the following flags:
 		}
 	}),
 
-	"array_positions": arrayBuiltin(func(typ Type) Builtin {
+	"array_positions": arrayBuiltin(func(typ types.T) Builtin {
 		return Builtin{
 			Types:        ArgTypes{{"array", TArray{Typ: typ}}, {"elem", typ}},
 			ReturnType:   fixedReturnType(TArray{Typ: typ}),
@@ -2417,7 +2417,7 @@ var powImpls = []Builtin{
 	},
 }
 
-func arrayBuiltin(impl func(Type) Builtin) []Builtin {
+func arrayBuiltin(impl func(types.T) Builtin) []Builtin {
 	result := make([]Builtin, 0, len(types.TypesAnyNonArray))
 	for _, typ := range types.TypesAnyNonArray {
 		if canBeInArray(typ) {
@@ -2495,7 +2495,7 @@ func decimalBuiltin2(
 }
 
 func stringBuiltin1(
-	f func(*EvalContext, string) (Datum, error), returnType Type, info string,
+	f func(*EvalContext, string) (Datum, error), returnType types.T, info string,
 ) Builtin {
 	return Builtin{
 		Types:      ArgTypes{{"val", TypeString}},
@@ -2508,7 +2508,7 @@ func stringBuiltin1(
 }
 
 func stringBuiltin2(
-	a, b string, f func(*EvalContext, string, string) (Datum, error), returnType Type, info string,
+	a, b string, f func(*EvalContext, string, string) (Datum, error), returnType types.T, info string,
 ) Builtin {
 	return Builtin{
 		Types:      ArgTypes{{a, TypeString}, {b, TypeString}},
@@ -2524,7 +2524,7 @@ func stringBuiltin2(
 func stringBuiltin3(
 	a, b, c string,
 	f func(*EvalContext, string, string, string) (Datum, error),
-	returnType Type,
+	returnType types.T,
 	info string,
 ) Builtin {
 	return Builtin{
@@ -2538,7 +2538,7 @@ func stringBuiltin3(
 }
 
 func bytesBuiltin1(
-	f func(*EvalContext, string) (Datum, error), returnType Type, info string,
+	f func(*EvalContext, string) (Datum, error), returnType types.T, info string,
 ) Builtin {
 	return Builtin{
 		Types:      ArgTypes{{"val", TypeBytes}},

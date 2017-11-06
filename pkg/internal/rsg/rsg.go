@@ -212,7 +212,7 @@ func (r *RSG) Float64() float64 {
 
 // GenerateRandomArg generates a random, valid, SQL function argument of
 // the specified type.
-func (r *RSG) GenerateRandomArg(typ parser.Type) string {
+func (r *RSG) GenerateRandomArg(typ types.T) string {
 	if r.Intn(10) == 0 {
 		return "NULL"
 	}

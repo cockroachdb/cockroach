@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -66,7 +67,7 @@ func (p *planner) ShowClusterSetting(
 	if !ok {
 		return nil, errors.Errorf("unknown setting: %q", name)
 	}
-	var dType parser.Type
+	var dType types.T
 	switch val.(type) {
 	case *settings.IntSetting, *settings.EnumSetting:
 		dType = parser.TypeInt

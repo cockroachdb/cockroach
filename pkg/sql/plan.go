@@ -20,6 +20,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -38,7 +39,7 @@ type planMaker interface {
 	// This method should not be used directly; instead prefer makePlan()
 	// or prepare() below.
 	newPlan(
-		ctx context.Context, stmt parser.Statement, desiredTypes []parser.Type,
+		ctx context.Context, stmt parser.Statement, desiredTypes []types.T,
 	) (planNode, error)
 
 	// makePlan prepares the query plan for a single SQL statement.  it
@@ -259,7 +260,7 @@ func (p *planner) delegateQuery(
 	name string,
 	sql string,
 	initialCheck func(ctx context.Context) error,
-	desiredTypes []parser.Type,
+	desiredTypes []types.T,
 ) (planNode, error) {
 	// Prepare the sub-plan.
 	stmt, err := parser.ParseOne(sql)
@@ -306,7 +307,7 @@ func (p *planner) delegateQuery(
 // newPlan constructs a planNode from a statement. This is used
 // recursively by the various node constructors.
 func (p *planner) newPlan(
-	ctx context.Context, stmt parser.Statement, desiredTypes []parser.Type,
+	ctx context.Context, stmt parser.Statement, desiredTypes []types.T,
 ) (planNode, error) {
 	tracing.AnnotateTrace()
 

@@ -19,6 +19,7 @@ import (
 	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 )
 
 // Table generators, also called "set-generating functions", are
@@ -125,7 +126,7 @@ var Generators = map[string][]Builtin{
 	"unnest": {
 		makeGeneratorBuiltinWithReturnType(
 			ArgTypes{{"input", TypeAnyArray}},
-			func(args []TypedExpr) Type {
+			func(args []TypedExpr) types.T {
 				if len(args) == 0 {
 					return unknownReturnType
 				}

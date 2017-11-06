@@ -14,7 +14,37 @@
 
 package types
 
-import "github.com/lib/pq/oid"
+import (
+	"fmt"
+
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/lib/pq/oid"
+)
+
+var (
+	// TypeOid is the type of an OID. Can be compared with ==.
+	TypeOid = TOid{oid.T_oid}
+	// TypeRegClass is the type of an regclass OID variant. Can be compared with ==.
+	TypeRegClass = TOid{oid.T_regclass}
+	// TypeRegNamespace is the type of an regnamespace OID variant. Can be compared with ==.
+	TypeRegNamespace = TOid{oid.T_regnamespace}
+	// TypeRegProc is the type of an regproc OID variant. Can be compared with ==.
+	TypeRegProc = TOid{oid.T_regproc}
+	// TypeRegProcedure is the type of an regprocedure OID variant. Can be compared with ==.
+	TypeRegProcedure = TOid{oid.T_regprocedure}
+	// TypeRegType is the type of an regtype OID variant. Can be compared with ==.
+	TypeRegType = TOid{oid.T_regtype}
+
+	// TypeName is a type-alias for TypeString with a different OID. Can be
+	// compared with ==.
+	TypeName = WrapTypeWithOid(TypeString, oid.T_name)
+	// TypeIntVector is a type-alias for a TypeIntArray with a different OID. Can
+	// be compared with ==.
+	TypeIntVector = WrapTypeWithOid(TArray{TypeInt}, oid.T_int2vector)
+	// TypeNameArray is the type family of a DArray containing the Name alias type.
+	// Can be compared with ==.
+	TypeNameArray T = TArray{TypeName}
+)
 
 var (
 	// Unexported wrapper types. These exist for Postgres type compatibility.
@@ -29,7 +59,7 @@ var (
 // OidToType maps Postgres object IDs to CockroachDB types.  We export
 // the map instead of a method so that other packages can iterate over
 // the map directly.
-var OidToType = map[oid.Oid]Type{
+var OidToType = map[oid.Oid]T{
 	oid.T_anyelement:   TypeAny,
 	oid.T_bool:         TypeBool,
 	oid.T__bool:        TArray{TypeBool},
@@ -137,9 +167,92 @@ var oidToArrayOid = map[oid.Oid]oid.Oid{
 }
 
 // PGDisplayName returns the Postgres display name for a given type.
-func PGDisplayName(typ Type) string {
+func PGDisplayName(typ T) string {
 	if typname, ok := aliasedOidToName[typ.Oid()]; ok {
 		return typname
 	}
 	return typ.String()
+}
+
+type TOid struct {
+	oidType oid.Oid
+}
+
+func (t TOid) String() string { return t.SQLName() }
+
+// Equivalent implements the T interface.
+func (t TOid) Equivalent(other T) bool { return t.FamilyEqual(other) || other == TypeAny }
+
+// FamilyEqual implements the T interface.
+func (TOid) FamilyEqual(other T) bool { _, ok := UnwrapType(other).(TOid); return ok }
+
+// Oid implements the T interface.
+func (t TOid) Oid() oid.Oid { return t.oidType }
+
+// SQLName implements the T interface.
+func (t TOid) SQLName() string {
+	switch t.oidType {
+	case oid.T_oid:
+		return "oid"
+	case oid.T_regclass:
+		return "regclass"
+	case oid.T_regnamespace:
+		return "regnamespace"
+	case oid.T_regproc:
+		return "regproc"
+	case oid.T_regprocedure:
+		return "regprocedure"
+	case oid.T_regtype:
+		return "regtype"
+	default:
+		panic(fmt.Sprintf("unexpected oidType: %v", t.oidType))
+	}
+}
+
+// IsAmbiguous implements the T interface.
+func (TOid) IsAmbiguous() bool { return false }
+
+// TOidWrapper is a T implementation which is a wrapper around a T, allowing
+// custom Oid values to be attached to the T. The T is used by DOidWrapper
+// to permit type aliasing with custom Oids without needing to create new typing
+// rules or define new Datum types.
+type TOidWrapper struct {
+	T
+	oid oid.Oid
+}
+
+var customOidNames = map[oid.Oid]string{
+	oid.T_name: "name",
+}
+
+func (t TOidWrapper) String() string {
+	// Allow custom type names for specific Oids, but default to wrapped String.
+	if s, ok := customOidNames[t.oid]; ok {
+		return s
+	}
+	return t.T.String()
+}
+
+func (t TOidWrapper) Oid() oid.Oid { return t.oid }
+
+// WrapTypeWithOid wraps a T with a custom Oid.
+func WrapTypeWithOid(t T, oid oid.Oid) T {
+	switch v := t.(type) {
+	case tNull, tAny, TOidWrapper:
+		panic(pgerror.NewErrorf(pgerror.CodeInternalError, "cannot wrap %T with an Oid", v))
+	}
+	return TOidWrapper{
+		T:   t,
+		oid: oid,
+	}
+}
+
+// UnwrapType returns the base T type for a provided type, stripping
+// a *TOidWrapper if present. This is useful for cases like type switches,
+// where type aliases should be ignored.
+func UnwrapType(t T) T {
+	if w, ok := t.(TOidWrapper); ok {
+		return w.T
+	}
+	return t
 }

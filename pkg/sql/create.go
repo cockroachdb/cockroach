@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -655,7 +656,7 @@ func (p *planner) CreateTable(ctx context.Context, n *parser.CreateTable) (planN
 		// to populate the new table descriptor in Start() below. We
 		// instantiate the sourcePlan as early as here so that EXPLAIN has
 		// something useful to show about CREATE TABLE .. AS ...
-		sourcePlan, err = p.Select(ctx, n.AsSource, []parser.Type{})
+		sourcePlan, err = p.Select(ctx, n.AsSource, []types.T{})
 		if err != nil {
 			return nil, err
 		}
@@ -1697,7 +1698,7 @@ func (p *planner) makeTableDesc(
 // dummyColumnItem is used in makeCheckConstraint to construct an expression
 // that can be both type-checked and examined for variable expressions.
 type dummyColumnItem struct {
-	typ parser.Type
+	typ types.T
 }
 
 // String implements the Stringer interface.
@@ -1717,7 +1718,7 @@ func (d dummyColumnItem) Walk(_ parser.Visitor) parser.Expr {
 
 // TypeCheck implements the Expr interface.
 func (d dummyColumnItem) TypeCheck(
-	_ *parser.SemaContext, desired parser.Type,
+	_ *parser.SemaContext, desired types.T,
 ) (parser.TypedExpr, error) {
 	return d, nil
 }
@@ -1728,7 +1729,7 @@ func (dummyColumnItem) Eval(_ *parser.EvalContext) (parser.Datum, error) {
 }
 
 // ResolvedType implements the TypedExpr interface.
-func (d dummyColumnItem) ResolvedType() parser.Type {
+func (d dummyColumnItem) ResolvedType() types.T {
 	return d.typ
 }
 

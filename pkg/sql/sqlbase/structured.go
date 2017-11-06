@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 )
 
@@ -595,7 +596,7 @@ func HasCompositeKeyEncoding(semanticType ColumnType_SemanticType) bool {
 
 // DatumTypeHasCompositeKeyEncoding is a version of HasCompositeKeyEncoding
 // which works on datum types.
-func DatumTypeHasCompositeKeyEncoding(typ parser.Type) bool {
+func DatumTypeHasCompositeKeyEncoding(typ types.T) bool {
 	colType, err := DatumTypeToColumnSemanticType(typ)
 	return err == nil && HasCompositeKeyEncoding(colType)
 }
@@ -2147,8 +2148,8 @@ func (c *ColumnType) NumericScale() (int32, bool) {
 	return 0, false
 }
 
-// DatumTypeToColumnSemanticType converts a parser.Type to a SemanticType.
-func DatumTypeToColumnSemanticType(ptyp parser.Type) (ColumnType_SemanticType, error) {
+// DatumTypeToColumnSemanticType converts a types.T to a SemanticType.
+func DatumTypeToColumnSemanticType(ptyp types.T) (ColumnType_SemanticType, error) {
 	switch ptyp {
 	case parser.TypeBool:
 		return ColumnType_BOOL, nil
@@ -2191,7 +2192,7 @@ func DatumTypeToColumnSemanticType(ptyp parser.Type) (ColumnType_SemanticType, e
 }
 
 // DatumTypeToColumnType converts a parser Type to a ColumnType.
-func DatumTypeToColumnType(ptyp parser.Type) (ColumnType, error) {
+func DatumTypeToColumnType(ptyp types.T) (ColumnType, error) {
 	var ctyp ColumnType
 	switch t := ptyp.(type) {
 	case parser.TCollatedString:
@@ -2218,7 +2219,7 @@ func DatumTypeToColumnType(ptyp parser.Type) (ColumnType, error) {
 	return ctyp, nil
 }
 
-func columnSemanticTypeToDatumType(c *ColumnType, k ColumnType_SemanticType) parser.Type {
+func columnSemanticTypeToDatumType(c *ColumnType, k ColumnType_SemanticType) types.T {
 	switch k {
 	case ColumnType_BOOL:
 		return parser.TypeBool
@@ -2263,7 +2264,7 @@ func columnSemanticTypeToDatumType(c *ColumnType, k ColumnType_SemanticType) par
 
 // ToDatumType converts the ColumnType to the correct type, or nil if there is
 // no correspondence.
-func (c *ColumnType) ToDatumType() parser.Type {
+func (c *ColumnType) ToDatumType() types.T {
 	switch c.SemanticType {
 	case ColumnType_ARRAY:
 		return parser.TArray{Typ: columnSemanticTypeToDatumType(c, *c.ArrayContents)}

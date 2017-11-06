@@ -20,11 +20,13 @@ import (
 	"go/token"
 	"strings"
 	"testing"
+
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 )
 
 type testOverload struct {
 	paramTypes ArgTypes
-	retType    Type
+	retType    types.T
 	pref       bool
 }
 
@@ -48,7 +50,7 @@ func (to *testOverload) String() string {
 	return fmt.Sprintf("func(%s) %s", strings.Join(typeNames, ","), to.retType)
 }
 
-func makeTestOverload(retType Type, params ...Type) overloadImpl {
+func makeTestOverload(retType types.T, params ...types.T) overloadImpl {
 	t := make(ArgTypes, len(params))
 	for i := range params {
 		t[i].Typ = params[i]
@@ -95,7 +97,7 @@ func TestTypeCheckOverloadedExprs(t *testing.T) {
 	shouldError := &testOverload{}
 
 	testData := []struct {
-		desired          Type
+		desired          types.T
 		exprs            []Expr
 		overloads        []overloadImpl
 		expectedOverload overloadImpl

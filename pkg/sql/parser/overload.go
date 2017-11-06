@@ -20,6 +20,7 @@ import (
 	"math"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/pkg/errors"
 )
 
@@ -35,20 +36,20 @@ type overloadImpl interface {
 // typeList is a list of types representing a function parameter list.
 type typeList interface {
 	// match checks if all types in the typeList match the corresponding elements in types.
-	match(types []Type) bool
+	match(types []types.T) bool
 	// matchAt checks if the parameter type at index i of the typeList matches type typ.
 	// In all implementations, TypeNull will match with each parameter type, allowing
 	// NULL values to be used as arguments.
-	matchAt(typ Type, i int) bool
+	matchAt(typ types.T, i int) bool
 	// matchLen checks that the typeList can support l parameters.
 	matchLen(l int) bool
 	// getAt returns the type at the given index in the typeList, or nil if the typeList
 	// cannot have a parameter at index i.
-	getAt(i int) Type
+	getAt(i int) types.T
 	// Length returns the number of types in the list
 	Length() int
 	// Types returns a realized copy of the list. variadic lists return a list of size one.
-	Types() []Type
+	Types() []types.T
 	// String returns a human readable signature
 	String() string
 }
@@ -62,10 +63,10 @@ var _ typeList = VariadicType{}
 // human-readable signature.
 type ArgTypes []struct {
 	Name string
-	Typ  Type
+	Typ  types.T
 }
 
-func (a ArgTypes) match(types []Type) bool {
+func (a ArgTypes) match(types []types.T) bool {
 	if len(types) != len(a) {
 		return false
 	}
@@ -77,7 +78,7 @@ func (a ArgTypes) match(types []Type) bool {
 	return true
 }
 
-func (a ArgTypes) matchAt(typ Type, i int) bool {
+func (a ArgTypes) matchAt(typ types.T, i int) bool {
 	// The parameterized types for Tuples are checked in the type checking
 	// routines before getting here, so we only need to check if the argument
 	// type is a TypeTuple below. This allows us to avoid defining overloads
@@ -93,7 +94,7 @@ func (a ArgTypes) matchLen(l int) bool {
 	return len(a) == l
 }
 
-func (a ArgTypes) getAt(i int) Type {
+func (a ArgTypes) getAt(i int) types.T {
 	return a[i].Typ
 }
 
@@ -103,9 +104,9 @@ func (a ArgTypes) Length() int {
 }
 
 // Types implements the typeList interface.
-func (a ArgTypes) Types() []Type {
+func (a ArgTypes) Types() []types.T {
 	n := len(a)
-	ret := make([]Type, n)
+	ret := make([]types.T, n)
 	for i, s := range a {
 		ret[i] = s.Typ
 	}
@@ -130,11 +131,11 @@ func (a ArgTypes) String() string {
 // in typeCheckOverloadedExprs.
 type HomogeneousType struct{}
 
-func (HomogeneousType) match(types []Type) bool {
+func (HomogeneousType) match(types []types.T) bool {
 	return true
 }
 
-func (HomogeneousType) matchAt(typ Type, i int) bool {
+func (HomogeneousType) matchAt(typ types.T, i int) bool {
 	return true
 }
 
@@ -142,7 +143,7 @@ func (HomogeneousType) matchLen(l int) bool {
 	return true
 }
 
-func (HomogeneousType) getAt(i int) Type {
+func (HomogeneousType) getAt(i int) types.T {
 	return TypeAny
 }
 
@@ -152,8 +153,8 @@ func (HomogeneousType) Length() int {
 }
 
 // Types implements the typeList interface.
-func (HomogeneousType) Types() []Type {
-	return []Type{TypeAny}
+func (HomogeneousType) Types() []types.T {
+	return []types.T{TypeAny}
 }
 
 func (HomogeneousType) String() string {
@@ -164,10 +165,10 @@ func (HomogeneousType) String() string {
 // arguments and matches when each argument is either NULL or of the type
 // typ.
 type VariadicType struct {
-	Typ Type
+	Typ types.T
 }
 
-func (v VariadicType) match(types []Type) bool {
+func (v VariadicType) match(types []types.T) bool {
 	for i := range types {
 		if !v.matchAt(types[i], i) {
 			return false
@@ -176,7 +177,7 @@ func (v VariadicType) match(types []Type) bool {
 	return true
 }
 
-func (v VariadicType) matchAt(typ Type, i int) bool {
+func (v VariadicType) matchAt(typ types.T, i int) bool {
 	return typ == TypeNull || v.Typ.Equivalent(typ)
 }
 
@@ -184,7 +185,7 @@ func (v VariadicType) matchLen(l int) bool {
 	return true
 }
 
-func (v VariadicType) getAt(i int) Type {
+func (v VariadicType) getAt(i int) types.T {
 	return v.Typ
 }
 
@@ -194,8 +195,8 @@ func (v VariadicType) Length() int {
 }
 
 // Types implements the typeList interface.
-func (v VariadicType) Types() []Type {
-	return []Type{v.Typ}
+func (v VariadicType) Types() []types.T {
+	return []types.T{v.Typ}
 }
 
 func (v VariadicType) String() string {
@@ -209,21 +210,21 @@ func (v VariadicType) String() string {
 // then the candidate function set cannot be refined. This means that only returnTypers
 // that never return unknownReturnType, like those created with fixedReturnType, can
 // help reduce overload ambiguity.
-var unknownReturnType Type
+var unknownReturnType types.T
 
 // returnTyper defines the type-level function in which a builtin function's return type
 // is determined. returnTypers should make sure to return unknownReturnType when necessary.
-type returnTyper func(args []TypedExpr) Type
+type returnTyper func(args []TypedExpr) types.T
 
 // fixedReturnType functions simply return a fixed type, independent of argument types.
-func fixedReturnType(typ Type) returnTyper {
-	return func(args []TypedExpr) Type { return typ }
+func fixedReturnType(typ types.T) returnTyper {
+	return func(args []TypedExpr) types.T { return typ }
 }
 
 // identityReturnType creates a returnType that is a projection of the idx'th
 // argument type.
 func identityReturnType(idx int) returnTyper {
-	return func(args []TypedExpr) Type {
+	return func(args []TypedExpr) types.T {
 		if len(args) == 0 {
 			return unknownReturnType
 		}
@@ -231,7 +232,7 @@ func identityReturnType(idx int) returnTyper {
 	}
 }
 
-func returnTypeToFixedType(s returnTyper) Type {
+func returnTypeToFixedType(s returnTyper) types.T {
 	if t := s(nil); t != unknownReturnType {
 		return t
 	}
@@ -259,7 +260,7 @@ type typeCheckOverloadState struct {
 // in which case we may need to make a guess that the two parameters are of the same type if one
 // of them is NULL.
 func typeCheckOverloadedExprs(
-	ctx *SemaContext, desired Type, overloads []overloadImpl, inBinOp bool, exprs ...Expr,
+	ctx *SemaContext, desired types.T, overloads []overloadImpl, inBinOp bool, exprs ...Expr,
 ) ([]TypedExpr, []overloadImpl, error) {
 	if len(overloads) > math.MaxUint8 {
 		return nil, nil, pgerror.NewErrorf(pgerror.CodeInternalError, "too many overloads (%d > 255)", len(overloads))
@@ -374,7 +375,7 @@ func typeCheckOverloadedExprs(
 		}
 	}
 
-	var homogeneousTyp Type
+	var homogeneousTyp types.T
 	if len(s.resolvableIdxs) > 0 {
 		homogeneousTyp = s.typedExprs[s.resolvableIdxs[0]].ResolvedType()
 		for _, i := range s.resolvableIdxs[1:] {

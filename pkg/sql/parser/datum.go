@@ -183,7 +183,7 @@ func MakeDBool(d DBool) *DBool {
 // makeParseError returns a parse error using the provided string and type. An
 // optional error can be provided, which will be appended to the end of the
 // error string.
-func makeParseError(s string, typ Type, err error) error {
+func makeParseError(s string, typ types.T, err error) error {
 	var suffix string
 	if err != nil {
 		suffix = fmt.Sprintf(": %v", err)
@@ -265,7 +265,7 @@ func GetBool(d Datum) (DBool, error) {
 }
 
 // ResolvedType implements the TypedExpr interface.
-func (*DBool) ResolvedType() Type {
+func (*DBool) ResolvedType() types.T {
 	return TypeBool
 }
 
@@ -374,7 +374,7 @@ func MustBeDInt(e Expr) DInt {
 }
 
 // ResolvedType implements the TypedExpr interface.
-func (*DInt) ResolvedType() Type {
+func (*DInt) ResolvedType() types.T {
 	return TypeInt
 }
 
@@ -477,7 +477,7 @@ func ParseDFloat(s string) (*DFloat, error) {
 }
 
 // ResolvedType implements the TypedExpr interface.
-func (*DFloat) ResolvedType() Type {
+func (*DFloat) ResolvedType() types.T {
 	return TypeFloat
 }
 
@@ -630,7 +630,7 @@ func (d *DDecimal) SetString(s string) error {
 }
 
 // ResolvedType implements the TypedExpr interface.
-func (*DDecimal) ResolvedType() Type {
+func (*DDecimal) ResolvedType() types.T {
 	return TypeDecimal
 }
 
@@ -771,7 +771,7 @@ func MustBeDString(e Expr) DString {
 }
 
 // ResolvedType implements the TypedExpr interface.
-func (*DString) ResolvedType() Type {
+func (*DString) ResolvedType() types.T {
 	return TypeString
 }
 
@@ -909,7 +909,7 @@ func (d *DCollatedString) Format(buf *bytes.Buffer, f FmtFlags) {
 }
 
 // ResolvedType implements the TypedExpr interface.
-func (d *DCollatedString) ResolvedType() Type {
+func (d *DCollatedString) ResolvedType() types.T {
 	return TCollatedString{Locale: d.Locale}
 }
 
@@ -977,7 +977,7 @@ func NewDBytes(d DBytes) *DBytes {
 }
 
 // ResolvedType implements the TypedExpr interface.
-func (*DBytes) ResolvedType() Type {
+func (*DBytes) ResolvedType() types.T {
 	return TypeBytes
 }
 
@@ -1062,7 +1062,7 @@ func NewDUuid(d DUuid) *DUuid {
 }
 
 // ResolvedType implements the TypedExpr interface.
-func (*DUuid) ResolvedType() Type {
+func (*DUuid) ResolvedType() types.T {
 	return TypeUUID
 }
 
@@ -1176,7 +1176,7 @@ func MustBeDIPAddr(e Expr) DIPAddr {
 }
 
 // ResolvedType implements the TypedExpr interface.
-func (*DIPAddr) ResolvedType() Type {
+func (*DIPAddr) ResolvedType() types.T {
 	return TypeINet
 }
 
@@ -1328,7 +1328,7 @@ func ParseDDate(s string, loc *time.Location) (*DDate, error) {
 }
 
 // ResolvedType implements the TypedExpr interface.
-func (*DDate) ResolvedType() Type {
+func (*DDate) ResolvedType() types.T {
 	return TypeDate
 }
 
@@ -1465,7 +1465,7 @@ var (
 	loneZeroRMatch = regexp.MustCompile(`:(\d(?:[^\d]|$))`)
 )
 
-func parseTimestampInLocation(s string, loc *time.Location, typ Type) (time.Time, error) {
+func parseTimestampInLocation(s string, loc *time.Location, typ types.T) (time.Time, error) {
 	origS := s
 	l := len(s)
 	if loneZeroRMatch.MatchString(s) {
@@ -1543,7 +1543,7 @@ func ParseDTimestamp(s string, precision time.Duration) (*DTimestamp, error) {
 }
 
 // ResolvedType implements the TypedExpr interface.
-func (*DTimestamp) ResolvedType() Type {
+func (*DTimestamp) ResolvedType() types.T {
 	return TypeTimestamp
 }
 
@@ -1669,7 +1669,7 @@ func ParseDTimestampTZ(
 }
 
 // ResolvedType implements the TypedExpr interface.
-func (*DTimestampTZ) ResolvedType() Type {
+func (*DTimestampTZ) ResolvedType() types.T {
 	return TypeTimestampTZ
 }
 
@@ -1859,7 +1859,7 @@ func parseDInterval(s string, field durationField) (*DInterval, error) {
 }
 
 // ResolvedType implements the TypedExpr interface.
-func (*DInterval) ResolvedType() Type {
+func (*DInterval) ResolvedType() types.T {
 	return TypeInterval
 }
 
@@ -1972,7 +1972,7 @@ func MakeDJSON(d interface{}) (Datum, error) {
 }
 
 // ResolvedType implements the TypedExpr interface.
-func (*DJSON) ResolvedType() Type {
+func (*DJSON) ResolvedType() types.T {
 	return TypeJSON
 }
 
@@ -2072,7 +2072,7 @@ func AsDTuple(e Expr) (*DTuple, bool) {
 }
 
 // ResolvedType implements the TypedExpr interface.
-func (d *DTuple) ResolvedType() Type {
+func (d *DTuple) ResolvedType() types.T {
 	typ := make(TTuple, len(d.D))
 	for i, v := range d.D {
 		typ[i] = v.ResolvedType()
@@ -2311,7 +2311,7 @@ func (d *DTuple) SortedDifference(ctx *EvalContext, other *DTuple) *DTuple {
 type dNull struct{}
 
 // ResolvedType implements the TypedExpr interface.
-func (dNull) ResolvedType() Type {
+func (dNull) ResolvedType() types.T {
 	return TypeNull
 }
 
@@ -2369,7 +2369,7 @@ func (d dNull) Size() uintptr {
 // DArray is the array Datum. Any Datum inserted into a DArray are treated as
 // text during serialization.
 type DArray struct {
-	ParamTyp Type
+	ParamTyp types.T
 	Array    Datums
 	// HasNulls is set to true if any of the datums within the array are null.
 	// This is used in the binary array serialization format.
@@ -2377,7 +2377,7 @@ type DArray struct {
 }
 
 // NewDArray returns a DArray containing elements of the specified type.
-func NewDArray(paramTyp Type) *DArray {
+func NewDArray(paramTyp types.T) *DArray {
 	return &DArray{ParamTyp: paramTyp}
 }
 
@@ -2406,7 +2406,7 @@ func MustBeDArray(e Expr) *DArray {
 }
 
 // ResolvedType implements the TypedExpr interface.
-func (d *DArray) ResolvedType() Type {
+func (d *DArray) ResolvedType() types.T {
 	return TArray{Typ: d.ParamTyp}
 }
 
@@ -2572,7 +2572,7 @@ func (t *DTable) Format(buf *bytes.Buffer, _ FmtFlags) {
 }
 
 // ResolvedType implements the TypedExpr interface.
-func (t *DTable) ResolvedType() Type {
+func (t *DTable) ResolvedType() types.T {
 	return t.ValueGenerator.ResolvedType()
 }
 
@@ -2688,7 +2688,7 @@ func (d *DOid) Prev(ctx *EvalContext) (Datum, bool) {
 }
 
 // ResolvedType implements the Datum interface.
-func (d *DOid) ResolvedType() Type {
+func (d *DOid) ResolvedType() types.T {
 	return oidColTypeToType(d.semanticType)
 }
 
@@ -2708,14 +2708,14 @@ func (d *DOid) min(ctx *EvalContext) (Datum, bool) {
 }
 
 // DOidWrapper is a Datum implementation which is a wrapper around a Datum, allowing
-// custom Oid values to be attached to the Datum and its Type (see tOidWrapper).
+// custom Oid values to be attached to the Datum and its types.T (see tOidWrapper).
 // The reason the Datum type was introduced was to permit the introduction of Datum
 // types with new Object IDs while maintaining identical behavior to current Datum
 // types. Specifically, it obviates the need to:
 // - define a new parser.Datum type.
-// - define a new parser.Type type.
-// - support operations and functions for the new Type.
-// - support mixed-type operations between the new Type and the old Type.
+// - define a new types.T type.
+// - support operations and functions for the new types.T.
+// - support mixed-type operations between the new types.T and the old types.T.
 //
 // Instead, DOidWrapper allows a standard Datum to be wrapped with a new Oid.
 // This approach provides two major advantages:
@@ -2777,7 +2777,7 @@ func UnwrapDatum(evalCtx *EvalContext, d Datum) Datum {
 }
 
 // ResolvedType implements the TypedExpr interface.
-func (d *DOidWrapper) ResolvedType() Type {
+func (d *DOidWrapper) ResolvedType() types.T {
 	return types.WrapTypeWithOid(d.Wrapped.ResolvedType(), d.Oid)
 }
 
@@ -2927,7 +2927,7 @@ func NewDIntVectorFromDArray(d *DArray) Datum {
 // sizes.
 //
 // It holds for every Datum d that d.Size() >= DatumSize(d.ResolvedType())
-func DatumTypeSize(t Type) (uintptr, bool) {
+func DatumTypeSize(t types.T) (uintptr, bool) {
 	// The following are composite types.
 	switch ty := t.(type) {
 	case types.TOid:
@@ -2937,7 +2937,7 @@ func DatumTypeSize(t Type) (uintptr, bool) {
 		return unsafe.Sizeof(DInt(0)), fixedSize
 
 	case types.TOidWrapper:
-		return DatumTypeSize(ty.Type)
+		return DatumTypeSize(ty.T)
 
 	case types.TCollatedString:
 		return unsafe.Sizeof(DCollatedString{"", "", nil}), variableSize
@@ -2974,7 +2974,7 @@ const (
 	variableSize = true
 )
 
-var baseDatumTypeSizes = map[Type]struct {
+var baseDatumTypeSizes = map[types.T]struct {
 	sz       uintptr
 	variable bool
 }{

@@ -22,6 +22,7 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
 )
@@ -125,7 +126,7 @@ func (r *renderNode) IndexedVarEval(idx int, ctx *parser.EvalContext) (parser.Da
 }
 
 // IndexedVarResolvedType implements the parser.IndexedVarContainer interface.
-func (r *renderNode) IndexedVarResolvedType(idx int) parser.Type {
+func (r *renderNode) IndexedVarResolvedType(idx int) types.T {
 	return r.sourceInfo[0].sourceColumns[idx].Typ
 }
 
@@ -136,7 +137,7 @@ func (r *renderNode) IndexedVarFormat(buf *bytes.Buffer, f parser.FmtFlags, idx 
 
 // Select selects rows from a SELECT/UNION/VALUES, ordering and/or limiting them.
 func (p *planner) Select(
-	ctx context.Context, n *parser.Select, desiredTypes []parser.Type,
+	ctx context.Context, n *parser.Select, desiredTypes []types.T,
 ) (planNode, error) {
 	wrapped := n.Select
 	limit := n.Limit
@@ -218,7 +219,7 @@ func (p *planner) SelectClause(
 	orderBy parser.OrderBy,
 	limit *parser.Limit,
 	lockForUpdate bool,
-	desiredTypes []parser.Type,
+	desiredTypes []types.T,
 	scanVisibility scanVisibility,
 ) (planNode, error) {
 	r := &renderNode{planner: p}
@@ -319,7 +320,7 @@ func (r *renderNode) initFrom(
 }
 
 func (r *renderNode) initTargets(
-	ctx context.Context, targets parser.SelectExprs, desiredTypes []parser.Type,
+	ctx context.Context, targets parser.SelectExprs, desiredTypes []types.T,
 ) error {
 	// Loop over the select expressions and expand them into the expressions
 	// we're going to use to generate the returned column set and the names for

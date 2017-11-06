@@ -20,6 +20,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
@@ -288,7 +289,7 @@ func (tc *typeContainer) IndexedVarEval(idx int, ctx *parser.EvalContext) (parse
 	panic("no eval allowed in typeContainer")
 }
 
-func (tc *typeContainer) IndexedVarResolvedType(idx int) parser.Type {
+func (tc *typeContainer) IndexedVarResolvedType(idx int) types.T {
 	return tc.types[idx].ToDatumType()
 }
 

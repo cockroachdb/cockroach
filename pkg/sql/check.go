@@ -24,6 +24,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
@@ -109,7 +110,7 @@ func (c *checkHelper) IndexedVarEval(idx int, ctx *parser.EvalContext) (parser.D
 }
 
 // IndexedVarResolvedType implements the parser.IndexedVarContainer interface.
-func (c *checkHelper) IndexedVarResolvedType(idx int) parser.Type {
+func (c *checkHelper) IndexedVarResolvedType(idx int) types.T {
 	return c.sourceInfo.sourceColumns[idx].Typ
 }
 

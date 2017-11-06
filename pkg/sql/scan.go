@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -431,7 +432,7 @@ func (n *scanNode) IndexedVarEval(idx int, ctx *parser.EvalContext) (parser.Datu
 	return n.row[idx].Eval(ctx)
 }
 
-func (n *scanNode) IndexedVarResolvedType(idx int) parser.Type {
+func (n *scanNode) IndexedVarResolvedType(idx int) types.T {
 	return n.resultColumns[idx].Typ
 }
 
