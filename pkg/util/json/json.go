@@ -27,6 +27,7 @@ import (
 
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/stringencoding"
 )
 
@@ -54,6 +55,9 @@ type JSON interface {
 	Format(buf *bytes.Buffer)
 	// Size returns the size of the JSON document in bytes.
 	Size() uintptr
+
+	// EncodeForIndex returns the binary encoding needed for the inverted index key.
+	EncodeForIndex(b []byte) [][]byte
 
 	// FetchValKey implements the `->` operator for strings, returning nil if the
 	// key is not found.
@@ -327,6 +331,50 @@ func ParseJSON(s string) (JSON, error) {
 		return nil, errTrailingCharacters
 	}
 	return MakeJSON(result)
+}
+
+func (j jsonNull) EncodeForIndex(b []byte) [][]byte {
+	return [][]byte{encoding.EncodeNullAscending(b)}
+}
+func (j jsonTrue) EncodeForIndex(b []byte) [][]byte {
+	return [][]byte{encoding.EncodeTrueAscending(b)}
+}
+func (j jsonFalse) EncodeForIndex(b []byte) [][]byte {
+	return [][]byte{encoding.EncodeFalseAscending(b)}
+}
+func (j jsonString) EncodeForIndex(b []byte) [][]byte {
+	return [][]byte{encoding.EncodeStringAscending(b, string(j))}
+}
+func (j jsonNumber) EncodeForIndex(b []byte) [][]byte {
+	var dec apd.Decimal
+	dec = apd.Decimal(j)
+	return [][]byte{encoding.EncodeDecimalAscending(nil, &dec)}
+}
+func (j jsonArray) EncodeForIndex(b []byte) [][]byte {
+	var outBytes [][]byte
+
+	for i := range j {
+		for _, childBytes := range j[i].EncodeForIndex(b) {
+			outBytes = append(outBytes, append(encoding.EncodeArrayAscending(b), childBytes...))
+		}
+	}
+
+	return outBytes
+}
+
+func (j jsonObject) EncodeForIndex(b []byte) [][]byte {
+	var outBytes [][]byte
+	for i := range j {
+		for _, childBytes := range j[i].v.EncodeForIndex(b) {
+			outBytes = append(outBytes,
+				bytes.Join([][]byte{
+					encoding.EncodeNotNullAscending(b),
+					encoding.EncodeStringAscending(b, string(j[i].k)),
+					childBytes}, nil))
+		}
+	}
+
+	return outBytes
 }
 
 // MakeJSON returns a JSON value given a Go-style representation of JSON.
