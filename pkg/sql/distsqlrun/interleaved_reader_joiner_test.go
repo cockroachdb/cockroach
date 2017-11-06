@@ -15,6 +15,7 @@
 package distsqlrun
 
 import (
+	"strconv"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -79,7 +80,7 @@ func TestInterleavedReaderJoiner(t *testing.T) {
 	// other parent row.
 	sqlutils.CreateTableInterleaved(t, sqlDB, "child1",
 		"pid INT, id INT, b INT, PRIMARY KEY (pid, id)",
-		"test.parent (pid)",
+		"parent (pid)",
 		62,
 		sqlutils.ToRowFn(sqlutils.RowModuloShiftedFn(30), sqlutils.RowIdxFn, bFn),
 	)
@@ -88,14 +89,14 @@ func TestInterleavedReaderJoiner(t *testing.T) {
 	// interleaved into each parent row.
 	sqlutils.CreateTableInterleaved(t, sqlDB, "child2",
 		"pid INT, id INT, s STRING, PRIMARY KEY (pid, id), INDEX (s)",
-		"test.parent (pid)",
+		"parent (pid)",
 		15,
 		sqlutils.ToRowFn(sqlutils.RowModuloShiftedFn(30), sqlutils.RowIdxFn, sqlutils.RowEnglishFn),
 	)
 
-	pd := sqlbase.GetTableDescriptor(kvDB, "test", "parent")
-	cd1 := sqlbase.GetTableDescriptor(kvDB, "test", "child1")
-	cd2 := sqlbase.GetTableDescriptor(kvDB, "test", "child2")
+	pd := sqlbase.GetTableDescriptor(kvDB, sqlutils.TestDB, "parent")
+	cd1 := sqlbase.GetTableDescriptor(kvDB, sqlutils.TestDB, "child1")
+	cd2 := sqlbase.GetTableDescriptor(kvDB, sqlutils.TestDB, "child2")
 
 	pdSpans := []TableReaderSpan{{Span: makeSpanWithRootBound(pd, -1, 18)}}
 	cd2Spans := []TableReaderSpan{{Span: makeSpanWithRootBound(pd, 12, -1)}}
@@ -127,8 +128,36 @@ func TestInterleavedReaderJoiner(t *testing.T) {
 			post: PostProcessSpec{
 				Filter:     Expression{Expr: "@1 <= 4 AND @3 <= 4"},
 				Projection: true,
-				// id column of parent and child table.
+				// pd.pid1, cid1, cid2
 				OutputColumns: []uint32{0, 3, 4},
+			},
+			expected: "[[1 1 0] [1 31 3] [1 61 6] [2 2 0] [2 32 3] [2 62 6] [3 3 0] [3 33 3] [4 4 0] [4 34 3]]",
+		},
+
+		// Swap position of child and parent tables.
+		{
+			spec: InterleavedReaderJoinerSpec{
+				Tables: []InterleavedReaderJoinerSpec_Table{
+					{
+						Desc:     *cd1,
+						Ordering: Ordering{Columns: []Ordering_Column{{ColIdx: 1, Direction: Ordering_Column_ASC}}},
+						Spans:    []TableReaderSpan{{Span: cd1.PrimaryIndexSpan()}},
+					},
+					{
+						Desc:     *pd,
+						Ordering: Ordering{Columns: []Ordering_Column{{ColIdx: 1, Direction: Ordering_Column_ASC}}},
+						Spans:    []TableReaderSpan{{Span: pd.PrimaryIndexSpan()}},
+					},
+				},
+				// Join on the interleave prefix (pid).
+				OnExpr: Expression{Expr: "@1 = @5"},
+				Type:   JoinType_INNER,
+			},
+			post: PostProcessSpec{
+				Filter:     Expression{Expr: "@1 <= 4 AND @5 <= 4"},
+				Projection: true,
+				// pd.pid1, cid1, cid2
+				OutputColumns: []uint32{4, 1, 2},
 			},
 			expected: "[[1 1 0] [1 31 3] [1 61 6] [2 2 0] [2 32 3] [2 62 6] [3 3 0] [3 33 3] [4 4 0] [4 34 3]]",
 		},
@@ -359,7 +388,7 @@ func TestInterleavedReaderJoiner(t *testing.T) {
 	}
 
 	for i, tc := range testCases {
-		t.Run(string(i), func(t *testing.T) {
+		t.Run(strconv.Itoa(i), func(t *testing.T) {
 			evalCtx := tree.MakeTestingEvalContext()
 			defer evalCtx.Stop(context.Background())
 			flowCtx := FlowCtx{
@@ -393,7 +422,7 @@ func TestInterleavedReaderJoiner(t *testing.T) {
 			}
 
 			if result := res.String(irj.OutputTypes()); result != tc.expected {
-				t.Errorf("invalid results: %s, expected %s'", result, tc.expected)
+				t.Errorf("invalid results.\ngot: %s\nexpected: %s'", result, tc.expected)
 			}
 		})
 	}
@@ -418,8 +447,8 @@ func TestInterleavedReaderJoinerErrors(t *testing.T) {
 		sqlutils.ToRowFn(sqlutils.RowModuloShiftedFn(5), sqlutils.RowIdxFn),
 	)
 
-	pd := sqlbase.GetTableDescriptor(kvDB, "test", "parent")
-	cd := sqlbase.GetTableDescriptor(kvDB, "test", "child")
+	pd := sqlbase.GetTableDescriptor(kvDB, sqlutils.TestDB, "parent")
+	cd := sqlbase.GetTableDescriptor(kvDB, sqlutils.TestDB, "child")
 
 	testCases := []struct {
 		spec     InterleavedReaderJoinerSpec
