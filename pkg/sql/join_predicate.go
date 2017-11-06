@@ -156,7 +156,7 @@ func (p *planner) makeOnPredicate(
 	}
 
 	// Determine the on condition expression.
-	onCond, err := p.analyzeExpr(ctx, expr, multiSourceInfo{info}, pred.iVarHelper, parser.TypeBool, true, "ON")
+	onCond, err := p.analyzeExpr(ctx, expr, multiSourceInfo{info}, pred.iVarHelper, types.TypeBool, true, "ON")
 	if err != nil {
 		return nil, nil, err
 	}

@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -82,7 +83,7 @@ func TestBufferedWriterBasic(t *testing.T) {
 		if result.RowsAffected != 0 {
 			t.Fatal("expected 0 rows affected, got", result.RowsAffected)
 		}
-		if !result.Columns.TypesEqual(sqlbase.ResultColumns{sqlbase.ResultColumn{Typ: parser.TypeInt}}) {
+		if !result.Columns.TypesEqual(sqlbase.ResultColumns{sqlbase.ResultColumn{Typ: types.TypeInt}}) {
 			t.Fatal("expected 1 column with int type, got", result.Columns)
 		}
 
@@ -99,7 +100,7 @@ func TestBufferedWriterBasic(t *testing.T) {
 		if result.RowsAffected != 0 {
 			t.Fatal("expected 0 rows affected, got", result.RowsAffected)
 		}
-		if !result.Columns.TypesEqual(sqlbase.ResultColumns{sqlbase.ResultColumn{Typ: parser.TypeInt}}) {
+		if !result.Columns.TypesEqual(sqlbase.ResultColumns{sqlbase.ResultColumn{Typ: types.TypeInt}}) {
 			t.Fatal("expected 1 column with decimal type, got", result.Columns)
 		}
 		for i := 1; i < result.Rows.Len(); i++ {
@@ -191,7 +192,7 @@ func TestBufferedWriterReset(t *testing.T) {
 	gw := writer.NewResultsGroup().(*bufferedWriter)
 	sw := gw.NewStatementResult()
 	sw.BeginResult((*parser.Select)(nil))
-	sw.SetColumns(sqlbase.ResultColumns{{Name: "test", Typ: parser.TypeString}})
+	sw.SetColumns(sqlbase.ResultColumns{{Name: "test", Typ: types.TypeString}})
 	if err := sw.AddRow(ctx, parser.Datums{parser.DNull}); err != nil {
 		t.Fatal(err)
 	}

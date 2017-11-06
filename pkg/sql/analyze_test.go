@@ -21,6 +21,7 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
@@ -82,7 +83,7 @@ func parseAndNormalizeExpr(
 	if expr, _, _, err = sel.resolveNames(expr); err != nil {
 		t.Fatalf("%s: %v", sql, err)
 	}
-	typedExpr, err := parser.TypeCheck(expr, nil, parser.TypeAny)
+	typedExpr, err := parser.TypeCheck(expr, nil, types.TypeAny)
 	if err != nil {
 		t.Fatalf("%s: %v", sql, err)
 	}

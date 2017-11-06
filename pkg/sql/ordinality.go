@@ -18,6 +18,7 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -63,7 +64,7 @@ func (p *planner) wrapOrdinality(ds planDataSource) planDataSource {
 	newColIdx := len(res.columns) - 1
 	res.columns[newColIdx] = sqlbase.ResultColumn{
 		Name: "ordinality",
-		Typ:  parser.TypeInt,
+		Typ:  types.TypeInt,
 	}
 
 	// Extend the dataSourceInfo with information about the

@@ -62,7 +62,7 @@ func TestIndexedVars(t *testing.T) {
 	c[0] = NewDInt(3)
 	c[1] = NewDInt(5)
 	c[2] = NewDInt(6)
-	typedExpr, err := expr.TypeCheck(nil, TypeAny)
+	typedExpr, err := expr.TypeCheck(nil, types.TypeAny)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -92,7 +92,7 @@ func TestIndexedVars(t *testing.T) {
 	}
 
 	typ := typedExpr.ResolvedType()
-	if !typ.Equivalent(TypeInt) {
+	if !typ.Equivalent(types.TypeInt) {
 		t.Errorf("invalid expression type %s", typ)
 	}
 	evalCtx := NewTestingEvalContext()

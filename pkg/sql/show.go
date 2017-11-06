@@ -70,15 +70,15 @@ func (p *planner) ShowClusterSetting(
 	var dType types.T
 	switch val.(type) {
 	case *settings.IntSetting, *settings.EnumSetting:
-		dType = parser.TypeInt
+		dType = types.TypeInt
 	case *settings.StringSetting, *settings.ByteSizeSetting, *settings.StateMachineSetting:
-		dType = parser.TypeString
+		dType = types.TypeString
 	case *settings.BoolSetting:
-		dType = parser.TypeBool
+		dType = types.TypeBool
 	case *settings.FloatSetting:
-		dType = parser.TypeFloat
+		dType = types.TypeFloat
 	case *settings.DurationSetting:
-		dType = parser.TypeInterval
+		dType = types.TypeInterval
 	default:
 		return nil, errors.Errorf("unknown setting type for %s: %s", name, val.Typ())
 	}
@@ -550,11 +550,11 @@ func (p *planner) ShowConstraints(
 	}
 
 	columns := sqlbase.ResultColumns{
-		{Name: "Table", Typ: parser.TypeString},
-		{Name: "Name", Typ: parser.TypeString},
-		{Name: "Type", Typ: parser.TypeString},
-		{Name: "Column(s)", Typ: parser.TypeString},
-		{Name: "Details", Typ: parser.TypeString},
+		{Name: "Table", Typ: types.TypeString},
+		{Name: "Name", Typ: types.TypeString},
+		{Name: "Type", Typ: types.TypeString},
+		{Name: "Column(s)", Typ: types.TypeString},
+		{Name: "Details", Typ: types.TypeString},
 	}
 
 	return &delayedNode{

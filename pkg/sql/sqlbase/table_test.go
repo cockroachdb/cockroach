@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
@@ -257,42 +258,42 @@ func TestArrayEncoding(t *testing.T) {
 		{
 			"empty int array",
 			parser.DArray{
-				ParamTyp: parser.TypeInt,
+				ParamTyp: types.TypeInt,
 				Array:    parser.Datums{},
 			},
 			[]byte{1, 3, 0},
 		}, {
 			"single int array",
 			parser.DArray{
-				ParamTyp: parser.TypeInt,
+				ParamTyp: types.TypeInt,
 				Array:    parser.Datums{parser.NewDInt(1)},
 			},
 			[]byte{1, 3, 1, 2},
 		}, {
 			"multiple int array",
 			parser.DArray{
-				ParamTyp: parser.TypeInt,
+				ParamTyp: types.TypeInt,
 				Array:    parser.Datums{parser.NewDInt(1), parser.NewDInt(2), parser.NewDInt(3)},
 			},
 			[]byte{1, 3, 3, 2, 4, 6},
 		}, {
 			"string array",
 			parser.DArray{
-				ParamTyp: parser.TypeString,
+				ParamTyp: types.TypeString,
 				Array:    parser.Datums{parser.NewDString("foo"), parser.NewDString("bar"), parser.NewDString("baz")},
 			},
 			[]byte{1, 6, 3, 3, 102, 111, 111, 3, 98, 97, 114, 3, 98, 97, 122},
 		}, {
 			"bool array",
 			parser.DArray{
-				ParamTyp: parser.TypeBool,
+				ParamTyp: types.TypeBool,
 				Array:    parser.Datums{parser.MakeDBool(true), parser.MakeDBool(false)},
 			},
 			[]byte{1, 10, 2, 10, 11},
 		}, {
 			"array containing a single null",
 			parser.DArray{
-				ParamTyp: parser.TypeInt,
+				ParamTyp: types.TypeInt,
 				Array:    parser.Datums{parser.DNull},
 				HasNulls: true,
 			},
@@ -300,7 +301,7 @@ func TestArrayEncoding(t *testing.T) {
 		}, {
 			"array containing multiple nulls",
 			parser.DArray{
-				ParamTyp: parser.TypeInt,
+				ParamTyp: types.TypeInt,
 				Array:    parser.Datums{parser.NewDInt(1), parser.DNull, parser.DNull},
 				HasNulls: true,
 			},
@@ -308,7 +309,7 @@ func TestArrayEncoding(t *testing.T) {
 		}, {
 			"array whose NULL bitmap spans exactly one byte",
 			parser.DArray{
-				ParamTyp: parser.TypeInt,
+				ParamTyp: types.TypeInt,
 				Array: parser.Datums{
 					parser.NewDInt(1), parser.DNull, parser.DNull, parser.NewDInt(2), parser.NewDInt(3),
 					parser.NewDInt(4), parser.NewDInt(5), parser.NewDInt(6),
@@ -319,7 +320,7 @@ func TestArrayEncoding(t *testing.T) {
 		}, {
 			"array whose NULL bitmap spans more than one byte",
 			parser.DArray{
-				ParamTyp: parser.TypeInt,
+				ParamTyp: types.TypeInt,
 				Array: parser.Datums{
 					parser.NewDInt(1), parser.DNull, parser.DNull, parser.NewDInt(2), parser.NewDInt(3),
 					parser.NewDInt(4), parser.NewDInt(5), parser.NewDInt(6), parser.DNull,
@@ -357,7 +358,7 @@ func TestArrayEncoding(t *testing.T) {
 }
 
 func BenchmarkArrayEncoding(b *testing.B) {
-	ary := parser.DArray{ParamTyp: parser.TypeInt, Array: parser.Datums{}}
+	ary := parser.DArray{ParamTyp: types.TypeInt, Array: parser.Datums{}}
 	for i := 0; i < 10000; i++ {
 		_ = ary.Append(parser.NewDInt(1))
 	}

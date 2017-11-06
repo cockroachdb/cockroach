@@ -96,12 +96,12 @@ type AggregateFunc interface {
 var Aggregates = map[string][]Builtin{
 	"array_agg": {
 		makeAggBuiltinWithReturnType(
-			[]types.T{TypeAny},
+			[]types.T{types.TypeAny},
 			func(args []TypedExpr) types.T {
 				if len(args) == 0 {
 					return unknownReturnType
 				}
-				return TArray{Typ: args[0].ResolvedType()}
+				return types.TArray{Typ: args[0].ResolvedType()}
 			},
 			newArrayAggregate,
 			"Aggregates the selected values into an array.",
@@ -109,21 +109,21 @@ var Aggregates = map[string][]Builtin{
 	},
 
 	"avg": {
-		makeAggBuiltin([]types.T{TypeInt}, TypeDecimal, newIntAvgAggregate,
+		makeAggBuiltin([]types.T{types.TypeInt}, types.TypeDecimal, newIntAvgAggregate,
 			"Calculates the average of the selected values."),
-		makeAggBuiltin([]types.T{TypeFloat}, TypeFloat, newFloatAvgAggregate,
+		makeAggBuiltin([]types.T{types.TypeFloat}, types.TypeFloat, newFloatAvgAggregate,
 			"Calculates the average of the selected values."),
-		makeAggBuiltin([]types.T{TypeDecimal}, TypeDecimal, newDecimalAvgAggregate,
+		makeAggBuiltin([]types.T{types.TypeDecimal}, types.TypeDecimal, newDecimalAvgAggregate,
 			"Calculates the average of the selected values."),
 	},
 
 	"bool_and": {
-		makeAggBuiltin([]types.T{TypeBool}, TypeBool, newBoolAndAggregate,
+		makeAggBuiltin([]types.T{types.TypeBool}, types.TypeBool, newBoolAndAggregate,
 			"Calculates the boolean value of `AND`ing all selected values."),
 	},
 
 	"bool_or": {
-		makeAggBuiltin([]types.T{TypeBool}, TypeBool, newBoolOrAggregate,
+		makeAggBuiltin([]types.T{types.TypeBool}, types.TypeBool, newBoolOrAggregate,
 			"Calculates the boolean value of `OR`ing all selected values."),
 	},
 
@@ -131,16 +131,16 @@ var Aggregates = map[string][]Builtin{
 		// TODO(knz): When CockroachDB supports STRING_AGG, CONCAT_AGG(X)
 		// should be substituted to STRING_AGG(X, '') and executed as
 		// such (no need for a separate implementation).
-		makeAggBuiltin([]types.T{TypeString}, TypeString, newStringConcatAggregate,
+		makeAggBuiltin([]types.T{types.TypeString}, types.TypeString, newStringConcatAggregate,
 			"Concatenates all selected values."),
-		makeAggBuiltin([]types.T{TypeBytes}, TypeBytes, newBytesConcatAggregate,
+		makeAggBuiltin([]types.T{types.TypeBytes}, types.TypeBytes, newBytesConcatAggregate,
 			"Concatenates all selected values."),
 		// TODO(eisen): support collated strings when the type system properly
 		// supports parametric types.
 	},
 
 	"count": {
-		makeAggBuiltin([]types.T{TypeAny}, TypeInt, newCountAggregate,
+		makeAggBuiltin([]types.T{types.TypeAny}, types.TypeInt, newCountAggregate,
 			"Calculates the number of selected elements."),
 	},
 
@@ -149,7 +149,7 @@ var Aggregates = map[string][]Builtin{
 			impure:        true,
 			class:         AggregateClass,
 			Types:         ArgTypes{},
-			ReturnType:    fixedReturnType(TypeInt),
+			ReturnType:    fixedReturnType(types.TypeInt),
 			AggregateFunc: newCountRowsAggregate,
 			WindowFunc: func(params []types.T, evalCtx *EvalContext) WindowFunc {
 				return newAggregateWindow(newCountRowsAggregate(params, evalCtx))
@@ -168,27 +168,27 @@ var Aggregates = map[string][]Builtin{
 	}, types.TypesAnyNonArray...),
 
 	"sum_int": {
-		makeAggBuiltin([]types.T{TypeInt}, TypeInt, newSmallIntSumAggregate,
+		makeAggBuiltin([]types.T{types.TypeInt}, types.TypeInt, newSmallIntSumAggregate,
 			"Calculates the sum of the selected values."),
 	},
 
 	"sum": {
-		makeAggBuiltin([]types.T{TypeInt}, TypeDecimal, newIntSumAggregate,
+		makeAggBuiltin([]types.T{types.TypeInt}, types.TypeDecimal, newIntSumAggregate,
 			"Calculates the sum of the selected values."),
-		makeAggBuiltin([]types.T{TypeFloat}, TypeFloat, newFloatSumAggregate,
+		makeAggBuiltin([]types.T{types.TypeFloat}, types.TypeFloat, newFloatSumAggregate,
 			"Calculates the sum of the selected values."),
-		makeAggBuiltin([]types.T{TypeDecimal}, TypeDecimal, newDecimalSumAggregate,
+		makeAggBuiltin([]types.T{types.TypeDecimal}, types.TypeDecimal, newDecimalSumAggregate,
 			"Calculates the sum of the selected values."),
-		makeAggBuiltin([]types.T{TypeInterval}, TypeInterval, newIntervalSumAggregate,
+		makeAggBuiltin([]types.T{types.TypeInterval}, types.TypeInterval, newIntervalSumAggregate,
 			"Calculates the sum of the selected values."),
 	},
 
 	"sqrdiff": {
-		makeAggBuiltin([]types.T{TypeInt}, TypeDecimal, newIntSqrDiffAggregate,
+		makeAggBuiltin([]types.T{types.TypeInt}, types.TypeDecimal, newIntSqrDiffAggregate,
 			"Calculates the sum of squared differences from the mean of the selected values."),
-		makeAggBuiltin([]types.T{TypeDecimal}, TypeDecimal, newDecimalSqrDiffAggregate,
+		makeAggBuiltin([]types.T{types.TypeDecimal}, types.TypeDecimal, newDecimalSqrDiffAggregate,
 			"Calculates the sum of squared differences from the mean of the selected values."),
-		makeAggBuiltin([]types.T{TypeFloat}, TypeFloat, newFloatSqrDiffAggregate,
+		makeAggBuiltin([]types.T{types.TypeFloat}, types.TypeFloat, newFloatSqrDiffAggregate,
 			"Calculates the sum of squared differences from the mean of the selected values."),
 	},
 
@@ -199,41 +199,41 @@ var Aggregates = map[string][]Builtin{
 
 	// The input signature is: SQDIFF, SUM, COUNT
 	"final_variance": {
-		makeAggBuiltin([]types.T{TypeDecimal, TypeDecimal, TypeInt}, TypeDecimal, newDecimalFinalVarianceAggregate,
+		makeAggBuiltin([]types.T{types.TypeDecimal, types.TypeDecimal, types.TypeInt}, types.TypeDecimal, newDecimalFinalVarianceAggregate,
 			"Calculates the variance from the selected locally-computed squared difference values."),
-		makeAggBuiltin([]types.T{TypeFloat, TypeFloat, TypeInt}, TypeFloat, newFloatFinalVarianceAggregate,
+		makeAggBuiltin([]types.T{types.TypeFloat, types.TypeFloat, types.TypeInt}, types.TypeFloat, newFloatFinalVarianceAggregate,
 			"Calculates the variance from the selected locally-computed squared difference values."),
 	},
 
 	"final_stddev": {
-		makeAggBuiltin([]types.T{TypeDecimal, TypeDecimal, TypeInt}, TypeDecimal, newDecimalFinalStdDevAggregate,
+		makeAggBuiltin([]types.T{types.TypeDecimal, types.TypeDecimal, types.TypeInt}, types.TypeDecimal, newDecimalFinalStdDevAggregate,
 			"Calculates the standard deviation from the selected locally-computed squared difference values."),
-		makeAggBuiltin([]types.T{TypeFloat, TypeFloat, TypeInt}, TypeFloat, newFloatFinalStdDevAggregate,
+		makeAggBuiltin([]types.T{types.TypeFloat, types.TypeFloat, types.TypeInt}, types.TypeFloat, newFloatFinalStdDevAggregate,
 			"Calculates the standard deviation from the selected locally-computed squared difference values."),
 	},
 
 	"variance": {
-		makeAggBuiltin([]types.T{TypeInt}, TypeDecimal, newIntVarianceAggregate,
+		makeAggBuiltin([]types.T{types.TypeInt}, types.TypeDecimal, newIntVarianceAggregate,
 			"Calculates the variance of the selected values."),
-		makeAggBuiltin([]types.T{TypeDecimal}, TypeDecimal, newDecimalVarianceAggregate,
+		makeAggBuiltin([]types.T{types.TypeDecimal}, types.TypeDecimal, newDecimalVarianceAggregate,
 			"Calculates the variance of the selected values."),
-		makeAggBuiltin([]types.T{TypeFloat}, TypeFloat, newFloatVarianceAggregate,
+		makeAggBuiltin([]types.T{types.TypeFloat}, types.TypeFloat, newFloatVarianceAggregate,
 			"Calculates the variance of the selected values."),
 	},
 
 	"stddev": {
-		makeAggBuiltin([]types.T{TypeInt}, TypeDecimal, newIntStdDevAggregate,
+		makeAggBuiltin([]types.T{types.TypeInt}, types.TypeDecimal, newIntStdDevAggregate,
 			"Calculates the standard deviation of the selected values."),
-		makeAggBuiltin([]types.T{TypeDecimal}, TypeDecimal, newDecimalStdDevAggregate,
+		makeAggBuiltin([]types.T{types.TypeDecimal}, types.TypeDecimal, newDecimalStdDevAggregate,
 			"Calculates the standard deviation of the selected values."),
-		makeAggBuiltin([]types.T{TypeFloat}, TypeFloat, newFloatStdDevAggregate,
+		makeAggBuiltin([]types.T{types.TypeFloat}, types.TypeFloat, newFloatStdDevAggregate,
 			"Calculates the standard deviation of the selected values."),
 	},
 
 	"xor_agg": {
-		makeAggBuiltin([]types.T{TypeBytes}, TypeBytes, newBytesXorAggregate,
+		makeAggBuiltin([]types.T{types.TypeBytes}, types.TypeBytes, newBytesXorAggregate,
 			"Calculates the bitwise XOR of the selected values."),
-		makeAggBuiltin([]types.T{TypeInt}, TypeInt, newIntXorAggregate,
+		makeAggBuiltin([]types.T{types.TypeInt}, types.TypeInt, newIntXorAggregate,
 			"Calculates the bitwise XOR of the selected values."),
 	},
 }

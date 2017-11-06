@@ -326,7 +326,7 @@ func (r *renderNode) initTargets(
 	// we're going to use to generate the returned column set and the names for
 	// those columns.
 	for i, target := range targets {
-		desiredType := parser.TypeAny
+		desiredType := types.TypeAny
 		if len(desiredTypes) > i {
 			desiredType = desiredTypes[i]
 		}
@@ -499,7 +499,7 @@ func (r *renderNode) initWhere(ctx context.Context, whereExpr parser.Expr) (*fil
 	if whereExpr != nil {
 		var err error
 		f.filter, err = r.planner.analyzeExpr(ctx, whereExpr, r.sourceInfo, f.ivarHelper,
-			parser.TypeBool, true, "WHERE")
+			types.TypeBool, true, "WHERE")
 		if err != nil {
 			return nil, err
 		}

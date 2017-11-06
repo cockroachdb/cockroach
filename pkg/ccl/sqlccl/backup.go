@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/jobs"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -636,13 +637,13 @@ func backupPlanHook(
 	}
 
 	header := sqlbase.ResultColumns{
-		{Name: "job_id", Typ: parser.TypeInt},
-		{Name: "status", Typ: parser.TypeString},
-		{Name: "fraction_completed", Typ: parser.TypeFloat},
-		{Name: "rows", Typ: parser.TypeInt},
-		{Name: "index_entries", Typ: parser.TypeInt},
-		{Name: "system_records", Typ: parser.TypeInt},
-		{Name: "bytes", Typ: parser.TypeInt},
+		{Name: "job_id", Typ: types.TypeInt},
+		{Name: "status", Typ: types.TypeString},
+		{Name: "fraction_completed", Typ: types.TypeFloat},
+		{Name: "rows", Typ: types.TypeInt},
+		{Name: "index_entries", Typ: types.TypeInt},
+		{Name: "system_records", Typ: types.TypeInt},
+		{Name: "bytes", Typ: types.TypeInt},
 	}
 
 	fn := func(ctx context.Context, resultsCh chan<- parser.Datums) error {
@@ -882,12 +883,12 @@ func showBackupPlanHook(
 		return nil, nil, err
 	}
 	header := sqlbase.ResultColumns{
-		{Name: "database", Typ: parser.TypeString},
-		{Name: "table", Typ: parser.TypeString},
-		{Name: "start_time", Typ: parser.TypeTimestamp},
-		{Name: "end_time", Typ: parser.TypeTimestamp},
-		{Name: "size_bytes", Typ: parser.TypeInt},
-		{Name: "rows", Typ: parser.TypeInt},
+		{Name: "database", Typ: types.TypeString},
+		{Name: "table", Typ: types.TypeString},
+		{Name: "start_time", Typ: types.TypeTimestamp},
+		{Name: "end_time", Typ: types.TypeTimestamp},
+		{Name: "size_bytes", Typ: types.TypeInt},
+		{Name: "rows", Typ: types.TypeInt},
 	}
 	fn := func(ctx context.Context, resultsCh chan<- parser.Datums) error {
 		// TODO(dan): Move this span into sql.

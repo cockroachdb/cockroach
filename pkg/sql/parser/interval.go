@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 )
 
@@ -261,7 +262,7 @@ func sqlStdToDuration(s string) (duration.Duration, error) {
 				return d, newInvalidSQLDurationError(s)
 			}
 			if err != nil {
-				return d, makeParseError(part, TypeInterval, err)
+				return d, makeParseError(part, types.TypeInterval, err)
 			}
 			d = d.Add(duration.Duration{Nanos: dur.Nanoseconds()})
 		} else if strings.ContainsRune(part, '-') {

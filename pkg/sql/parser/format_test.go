@@ -18,6 +18,8 @@ import (
 	"bytes"
 	"fmt"
 	"testing"
+
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 )
 
 func TestFormatStatement(t *testing.T) {
@@ -194,7 +196,7 @@ func TestFormatExpr(t *testing.T) {
 				t.Fatal(err)
 			}
 			ctx := MakeSemaContext(false)
-			typeChecked, err := TypeCheck(expr, &ctx, TypeAny)
+			typeChecked, err := TypeCheck(expr, &ctx, types.TypeAny)
 			if err != nil {
 				t.Fatal(err)
 			}

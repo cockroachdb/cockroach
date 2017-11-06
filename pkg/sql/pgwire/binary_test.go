@@ -30,6 +30,7 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
@@ -130,7 +131,7 @@ func TestBinaryDate(t *testing.T) {
 func TestBinaryIntArray(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	buf := writeBuffer{bytecount: metric.NewCounter(metric.Metadata{})}
-	d := parser.NewDArray(parser.TypeInt)
+	d := parser.NewDArray(types.TypeInt)
 	for i := 0; i < 10; i++ {
 		if err := d.Append(parser.NewDInt(parser.DInt(i))); err != nil {
 			t.Fatal(err)

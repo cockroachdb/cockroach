@@ -1797,7 +1797,7 @@ func makeCheckConstraint(
 	}
 
 	if _, err := sqlbase.SanitizeVarFreeExpr(
-		expr, parser.TypeBool, "CHECK", semaCtx, evalCtx,
+		expr, types.TypeBool, "CHECK", semaCtx, evalCtx,
 	); err != nil {
 		return nil, err
 	}

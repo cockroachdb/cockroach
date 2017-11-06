@@ -365,7 +365,7 @@ func (v *subqueryVisitor) VisitPre(expr parser.Expr) (recurse bool, newExpr pars
 
 	if exists != nil {
 		result.execMode = execModeExists
-		result.typ = parser.TypeBool
+		result.typ = types.TypeBool
 	} else {
 		wantedNumColumns, execMode := v.getSubqueryContext()
 		result.execMode = execMode
@@ -391,7 +391,7 @@ func (v *subqueryVisitor) VisitPre(expr parser.Expr) (recurse bool, newExpr pars
 			// a single value against a tuple.
 			result.typ = cols[0].Typ
 		} else {
-			colTypes := make(parser.TTuple, wantedNumColumns)
+			colTypes := make(types.TTuple, wantedNumColumns)
 			for i, col := range cols {
 				colTypes[i] = col.Typ
 			}

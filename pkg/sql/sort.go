@@ -21,6 +21,7 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -40,7 +41,7 @@ type sortNode struct {
 }
 
 func ensureColumnOrderable(c sqlbase.ResultColumn) error {
-	if _, ok := c.Typ.(parser.TArray); ok {
+	if _, ok := c.Typ.(types.TArray); ok {
 		return errors.Errorf("can't order by column type %s", c.Typ)
 	}
 	return nil
@@ -194,7 +195,7 @@ func (p *planner) orderBy(
 		// to fabricate an intermediate renderNode to add the new render.
 		if index == -1 && s != nil {
 			cols, exprs, hasStar, err := p.computeRenderAllowingStars(
-				ctx, parser.SelectExpr{Expr: expr}, parser.TypeAny,
+				ctx, parser.SelectExpr{Expr: expr}, types.TypeAny,
 				s.sourceInfo, s.ivarHelper, autoGenerateRenderOutputName)
 			if err != nil {
 				return nil, err

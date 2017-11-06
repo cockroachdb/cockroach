@@ -166,11 +166,11 @@ func (b Builtin) preferred() bool {
 
 func categorizeType(t types.T) string {
 	switch t {
-	case TypeDate, TypeInterval, TypeTimestamp, TypeTimestampTZ:
+	case types.TypeDate, types.TypeInterval, types.TypeTimestamp, types.TypeTimestampTZ:
 		return categoryDateAndTime
-	case TypeInt, TypeDecimal, TypeFloat:
+	case types.TypeInt, types.TypeDecimal, types.TypeFloat:
 		return categoryMath
-	case TypeString, TypeBytes:
+	case types.TypeString, types.TypeBytes:
 		return categoryString
 	default:
 		return strings.ToUpper(t.String())
@@ -270,36 +270,36 @@ var Builtins = map[string][]Builtin{
 	"length": {
 		stringBuiltin1(func(_ *EvalContext, s string) (Datum, error) {
 			return NewDInt(DInt(utf8.RuneCountInString(s))), nil
-		}, TypeInt, "Calculates the number of characters in `val`."),
+		}, types.TypeInt, "Calculates the number of characters in `val`."),
 		bytesBuiltin1(func(_ *EvalContext, s string) (Datum, error) {
 			return NewDInt(DInt(len(s))), nil
-		}, TypeInt, "Calculates the number of bytes in `val`."),
+		}, types.TypeInt, "Calculates the number of bytes in `val`."),
 	},
 
 	"octet_length": {
 		stringBuiltin1(func(_ *EvalContext, s string) (Datum, error) {
 			return NewDInt(DInt(len(s))), nil
-		}, TypeInt, "Calculates the number of bytes used to represent `val`."),
+		}, types.TypeInt, "Calculates the number of bytes used to represent `val`."),
 		bytesBuiltin1(func(_ *EvalContext, s string) (Datum, error) {
 			return NewDInt(DInt(len(s))), nil
-		}, TypeInt, "Calculates the number of bytes in `val`."),
+		}, types.TypeInt, "Calculates the number of bytes in `val`."),
 	},
 
-	// TODO(pmattis): What string functions should also support TypeBytes?
+	// TODO(pmattis): What string functions should also support types.TypeBytes?
 
 	"lower": {stringBuiltin1(func(evalCtx *EvalContext, s string) (Datum, error) {
 		if err := evalCtx.ActiveMemAcc.Grow(evalCtx.Ctx(), int64(len(s))); err != nil {
 			return nil, err
 		}
 		return NewDString(strings.ToLower(s)), nil
-	}, TypeString, "Converts all characters in `val` to their lower-case equivalents.")},
+	}, types.TypeString, "Converts all characters in `val` to their lower-case equivalents.")},
 
 	"upper": {stringBuiltin1(func(evalCtx *EvalContext, s string) (Datum, error) {
 		if err := evalCtx.ActiveMemAcc.Grow(evalCtx.Ctx(), int64(len(s))); err != nil {
 			return nil, err
 		}
 		return NewDString(strings.ToUpper(s)), nil
-	}, TypeString, "Converts all characters in `val` to their to their upper-case equivalents.")},
+	}, types.TypeString, "Converts all characters in `val` to their to their upper-case equivalents.")},
 
 	"substr":    substringImpls,
 	"substring": substringImpls,
@@ -308,8 +308,8 @@ var Builtins = map[string][]Builtin{
 	// NULL arguments are ignored.
 	"concat": {
 		Builtin{
-			Types:        VariadicType{TypeString},
-			ReturnType:   fixedReturnType(TypeString),
+			Types:        VariadicType{types.TypeString},
+			ReturnType:   fixedReturnType(types.TypeString),
 			nullableArgs: true,
 			fn: func(evalCtx *EvalContext, args Datums) (Datum, error) {
 				var buffer bytes.Buffer
@@ -331,8 +331,8 @@ var Builtins = map[string][]Builtin{
 
 	"concat_ws": {
 		Builtin{
-			Types:        VariadicType{TypeString},
-			ReturnType:   fixedReturnType(TypeString),
+			Types:        VariadicType{types.TypeString},
+			ReturnType:   fixedReturnType(types.TypeString),
 			nullableArgs: true,
 			fn: func(evalCtx *EvalContext, args Datums) (Datum, error) {
 				if len(args) == 0 {
@@ -370,7 +370,7 @@ var Builtins = map[string][]Builtin{
 	"gen_random_uuid": {
 		Builtin{
 			Types:      ArgTypes{},
-			ReturnType: fixedReturnType(TypeUUID),
+			ReturnType: fixedReturnType(types.TypeUUID),
 			category:   categoryIDGeneration,
 			impure:     true,
 			fn: func(_ *EvalContext, _ Datums) (Datum, error) {
@@ -383,8 +383,8 @@ var Builtins = map[string][]Builtin{
 
 	"to_uuid": {
 		Builtin{
-			Types:      ArgTypes{{"val", TypeString}},
-			ReturnType: fixedReturnType(TypeBytes),
+			Types:      ArgTypes{{"val", types.TypeString}},
+			ReturnType: fixedReturnType(types.TypeBytes),
 			fn: func(_ *EvalContext, args Datums) (Datum, error) {
 				s := string(MustBeDString(args[0]))
 				uv, err := uuid.FromString(s)
@@ -400,8 +400,8 @@ var Builtins = map[string][]Builtin{
 
 	"from_uuid": {
 		Builtin{
-			Types:      ArgTypes{{"val", TypeBytes}},
-			ReturnType: fixedReturnType(TypeString),
+			Types:      ArgTypes{{"val", types.TypeBytes}},
+			ReturnType: fixedReturnType(types.TypeString),
 			fn: func(_ *EvalContext, args Datums) (Datum, error) {
 				b := []byte(*args[0].(*DBytes))
 				uv, err := uuid.FromBytes(b)
@@ -431,8 +431,8 @@ var Builtins = map[string][]Builtin{
 
 	"abbrev": {
 		Builtin{
-			Types:      ArgTypes{{"val", TypeINet}},
-			ReturnType: fixedReturnType(TypeString),
+			Types:      ArgTypes{{"val", types.TypeINet}},
+			ReturnType: fixedReturnType(types.TypeString),
 			fn: func(_ *EvalContext, args Datums) (Datum, error) {
 				dIPAddr := MustBeDIPAddr(args[0])
 				return NewDString(dIPAddr.IPAddr.String()), nil
@@ -445,8 +445,8 @@ var Builtins = map[string][]Builtin{
 
 	"broadcast": {
 		Builtin{
-			Types:      ArgTypes{{"val", TypeINet}},
-			ReturnType: fixedReturnType(TypeINet),
+			Types:      ArgTypes{{"val", types.TypeINet}},
+			ReturnType: fixedReturnType(types.TypeINet),
 			fn: func(_ *EvalContext, args Datums) (Datum, error) {
 				dIPAddr := MustBeDIPAddr(args[0])
 				broadcastIPAddr := dIPAddr.IPAddr.Broadcast()
@@ -459,8 +459,8 @@ var Builtins = map[string][]Builtin{
 
 	"family": {
 		Builtin{
-			Types:      ArgTypes{{"val", TypeINet}},
-			ReturnType: fixedReturnType(TypeInt),
+			Types:      ArgTypes{{"val", types.TypeINet}},
+			ReturnType: fixedReturnType(types.TypeInt),
 			fn: func(_ *EvalContext, args Datums) (Datum, error) {
 				dIPAddr := MustBeDIPAddr(args[0])
 				if dIPAddr.Family == ipaddr.IPv4family {
@@ -475,8 +475,8 @@ var Builtins = map[string][]Builtin{
 
 	"host": {
 		Builtin{
-			Types:      ArgTypes{{"val", TypeINet}},
-			ReturnType: fixedReturnType(TypeString),
+			Types:      ArgTypes{{"val", types.TypeINet}},
+			ReturnType: fixedReturnType(types.TypeString),
 			fn: func(_ *EvalContext, args Datums) (Datum, error) {
 				dIPAddr := MustBeDIPAddr(args[0])
 				s := dIPAddr.IPAddr.String()
@@ -492,8 +492,8 @@ var Builtins = map[string][]Builtin{
 
 	"hostmask": {
 		Builtin{
-			Types:      ArgTypes{{"val", TypeINet}},
-			ReturnType: fixedReturnType(TypeINet),
+			Types:      ArgTypes{{"val", types.TypeINet}},
+			ReturnType: fixedReturnType(types.TypeINet),
 			fn: func(_ *EvalContext, args Datums) (Datum, error) {
 				dIPAddr := MustBeDIPAddr(args[0])
 				ipAddr := dIPAddr.IPAddr.Hostmask()
@@ -506,8 +506,8 @@ var Builtins = map[string][]Builtin{
 
 	"masklen": {
 		Builtin{
-			Types:      ArgTypes{{"val", TypeINet}},
-			ReturnType: fixedReturnType(TypeInt),
+			Types:      ArgTypes{{"val", types.TypeINet}},
+			ReturnType: fixedReturnType(types.TypeInt),
 			fn: func(_ *EvalContext, args Datums) (Datum, error) {
 				dIPAddr := MustBeDIPAddr(args[0])
 				return NewDInt(DInt(dIPAddr.Mask)), nil
@@ -519,8 +519,8 @@ var Builtins = map[string][]Builtin{
 
 	"netmask": {
 		Builtin{
-			Types:      ArgTypes{{"val", TypeINet}},
-			ReturnType: fixedReturnType(TypeINet),
+			Types:      ArgTypes{{"val", types.TypeINet}},
+			ReturnType: fixedReturnType(types.TypeINet),
 			fn: func(_ *EvalContext, args Datums) (Datum, error) {
 				dIPAddr := MustBeDIPAddr(args[0])
 				ipAddr := dIPAddr.IPAddr.Netmask()
@@ -534,10 +534,10 @@ var Builtins = map[string][]Builtin{
 	"set_masklen": {
 		Builtin{
 			Types: ArgTypes{
-				{"val", TypeINet},
-				{"prefixlen", TypeInt},
+				{"val", types.TypeINet},
+				{"prefixlen", types.TypeInt},
 			},
-			ReturnType: fixedReturnType(TypeINet),
+			ReturnType: fixedReturnType(types.TypeINet),
 			fn: func(_ *EvalContext, args Datums) (Datum, error) {
 				dIPAddr := MustBeDIPAddr(args[0])
 				mask := int(MustBeDInt(args[1]))
@@ -555,8 +555,8 @@ var Builtins = map[string][]Builtin{
 
 	"text": {
 		Builtin{
-			Types:      ArgTypes{{"val", TypeINet}},
-			ReturnType: fixedReturnType(TypeString),
+			Types:      ArgTypes{{"val", types.TypeINet}},
+			ReturnType: fixedReturnType(types.TypeString),
 			fn: func(_ *EvalContext, args Datums) (Datum, error) {
 				dIPAddr := MustBeDIPAddr(args[0])
 				s := dIPAddr.IPAddr.String()
@@ -573,10 +573,10 @@ var Builtins = map[string][]Builtin{
 	"inet_same_family": {
 		Builtin{
 			Types: ArgTypes{
-				{"val", TypeINet},
-				{"val", TypeINet},
+				{"val", types.TypeINet},
+				{"val", types.TypeINet},
 			},
-			ReturnType: fixedReturnType(TypeBool),
+			ReturnType: fixedReturnType(types.TypeBool),
 			fn: func(_ *EvalContext, args Datums) (Datum, error) {
 				first := MustBeDIPAddr(args[0])
 				other := MustBeDIPAddr(args[1])
@@ -588,8 +588,8 @@ var Builtins = map[string][]Builtin{
 
 	"from_ip": {
 		Builtin{
-			Types:      ArgTypes{{"val", TypeBytes}},
-			ReturnType: fixedReturnType(TypeString),
+			Types:      ArgTypes{{"val", types.TypeBytes}},
+			ReturnType: fixedReturnType(types.TypeString),
 			fn: func(_ *EvalContext, args Datums) (Datum, error) {
 				ipstr := args[0].(*DBytes)
 				nboip := net.IP(*ipstr)
@@ -607,8 +607,8 @@ var Builtins = map[string][]Builtin{
 
 	"to_ip": {
 		Builtin{
-			Types:      ArgTypes{{"val", TypeString}},
-			ReturnType: fixedReturnType(TypeBytes),
+			Types:      ArgTypes{{"val", types.TypeString}},
+			ReturnType: fixedReturnType(types.TypeBytes),
 			fn: func(_ *EvalContext, args Datums) (Datum, error) {
 				ipdstr := MustBeDString(args[0])
 				ip := net.ParseIP(string(ipdstr))
@@ -628,11 +628,11 @@ var Builtins = map[string][]Builtin{
 	"split_part": {
 		Builtin{
 			Types: ArgTypes{
-				{"input", TypeString},
-				{"delimiter", TypeString},
-				{"return_index_pos", TypeInt},
+				{"input", types.TypeString},
+				{"delimiter", types.TypeString},
+				{"return_index_pos", types.TypeInt},
 			},
-			ReturnType: fixedReturnType(TypeString),
+			ReturnType: fixedReturnType(types.TypeString),
 			fn: func(_ *EvalContext, args Datums) (Datum, error) {
 				text := string(MustBeDString(args[0]))
 				sep := string(MustBeDString(args[1]))
@@ -657,9 +657,9 @@ var Builtins = map[string][]Builtin{
 
 	"repeat": {
 		Builtin{
-			Types:            ArgTypes{{"input", TypeString}, {"repeat_counter", TypeInt}},
+			Types:            ArgTypes{{"input", types.TypeString}, {"repeat_counter", types.TypeInt}},
 			distsqlBlacklist: true,
-			ReturnType:       fixedReturnType(TypeString),
+			ReturnType:       fixedReturnType(types.TypeString),
 			fn: func(evalCtx *EvalContext, args Datums) (_ Datum, err error) {
 				s := string(MustBeDString(args[0]))
 				count := int(MustBeDInt(args[1]))
@@ -689,8 +689,8 @@ var Builtins = map[string][]Builtin{
 	// https://www.postgresql.org/docs/10/static/functions-binarystring.html
 	"encode": {
 		Builtin{
-			Types:      ArgTypes{{"data", TypeBytes}, {"format", TypeString}},
-			ReturnType: fixedReturnType(TypeString),
+			Types:      ArgTypes{{"data", types.TypeBytes}, {"format", types.TypeString}},
+			ReturnType: fixedReturnType(types.TypeString),
 			fn: func(evalCtx *EvalContext, args Datums) (_ Datum, err error) {
 				data, format := string(*args[0].(*DBytes)), string(MustBeDString(args[1]))
 				if format != "hex" {
@@ -707,8 +707,8 @@ var Builtins = map[string][]Builtin{
 
 	"decode": {
 		Builtin{
-			Types:      ArgTypes{{"text", TypeString}, {"format", TypeString}},
-			ReturnType: fixedReturnType(TypeString),
+			Types:      ArgTypes{{"text", types.TypeString}, {"format", types.TypeString}},
+			ReturnType: fixedReturnType(types.TypeString),
 			fn: func(evalCtx *EvalContext, args Datums) (_ Datum, err error) {
 				data, format := string(MustBeDString(args[0])), string(MustBeDString(args[1]))
 				if format != "hex" {
@@ -727,7 +727,7 @@ var Builtins = map[string][]Builtin{
 			return NewDInt(DInt(ch)), nil
 		}
 		return nil, errEmptyInputString
-	}, TypeInt, "Calculates the ASCII value for the first character in `val`.")},
+	}, types.TypeInt, "Calculates the ASCII value for the first character in `val`.")},
 
 	"md5": hashBuiltin(
 		func() hash.Hash { return md5.New() },
@@ -781,16 +781,16 @@ var Builtins = map[string][]Builtin{
 
 	"to_hex": {
 		Builtin{
-			Types:      ArgTypes{{"val", TypeInt}},
-			ReturnType: fixedReturnType(TypeString),
+			Types:      ArgTypes{{"val", types.TypeInt}},
+			ReturnType: fixedReturnType(types.TypeString),
 			fn: func(_ *EvalContext, args Datums) (Datum, error) {
 				return NewDString(fmt.Sprintf("%x", int64(MustBeDInt(args[0])))), nil
 			},
 			Info: "Converts `val` to its hexadecimal representation.",
 		},
 		Builtin{
-			Types:      ArgTypes{{"val", TypeBytes}},
-			ReturnType: fixedReturnType(TypeString),
+			Types:      ArgTypes{{"val", types.TypeBytes}},
+			ReturnType: fixedReturnType(types.TypeString),
 			fn: func(_ *EvalContext, args Datums) (Datum, error) {
 				bytes := *(args[0].(*DBytes))
 				return NewDString(fmt.Sprintf("%x", []byte(bytes))), nil
@@ -807,17 +807,17 @@ var Builtins = map[string][]Builtin{
 		}
 
 		return NewDInt(DInt(utf8.RuneCountInString(s[:index]) + 1)), nil
-	}, TypeInt, "Calculates the position where the string `find` begins in `input`. \n\nFor"+
+	}, types.TypeInt, "Calculates the position where the string `find` begins in `input`. \n\nFor"+
 		" example, `strpos('doggie', 'gie')` returns `4`.")},
 
 	"overlay": {
 		Builtin{
 			Types: ArgTypes{
-				{"input", TypeString},
-				{"overlay_val", TypeString},
-				{"start_pos", TypeInt},
+				{"input", types.TypeString},
+				{"overlay_val", types.TypeString},
+				{"start_pos", types.TypeInt},
 			},
-			ReturnType: fixedReturnType(TypeString),
+			ReturnType: fixedReturnType(types.TypeString),
 			fn: func(_ *EvalContext, args Datums) (Datum, error) {
 				s := string(MustBeDString(args[0]))
 				to := string(MustBeDString(args[1]))
@@ -831,12 +831,12 @@ var Builtins = map[string][]Builtin{
 		},
 		Builtin{
 			Types: ArgTypes{
-				{"input", TypeString},
-				{"overlay_val", TypeString},
-				{"start_pos", TypeInt},
-				{"end_pos", TypeInt},
+				{"input", types.TypeString},
+				{"overlay_val", types.TypeString},
+				{"start_pos", types.TypeInt},
+				{"end_pos", types.TypeInt},
 			},
-			ReturnType: fixedReturnType(TypeString),
+			ReturnType: fixedReturnType(types.TypeString),
 			fn: func(_ *EvalContext, args Datums) (Datum, error) {
 				s := string(MustBeDString(args[0]))
 				to := string(MustBeDString(args[1]))
@@ -853,36 +853,36 @@ var Builtins = map[string][]Builtin{
 	"btrim": {
 		stringBuiltin2("input", "trim_chars", func(_ *EvalContext, s, chars string) (Datum, error) {
 			return NewDString(strings.Trim(s, chars)), nil
-		}, TypeString, "Removes any characters included in `trim_chars` from the beginning or end"+
+		}, types.TypeString, "Removes any characters included in `trim_chars` from the beginning or end"+
 			" of `input` (applies recursively). \n\nFor example, `btrim('doggie', 'eod')` "+
 			"returns `ggi`."),
 		stringBuiltin1(func(_ *EvalContext, s string) (Datum, error) {
 			return NewDString(strings.TrimSpace(s)), nil
-		}, TypeString, "Removes all spaces from the beginning and end of `val`."),
+		}, types.TypeString, "Removes all spaces from the beginning and end of `val`."),
 	},
 
 	// The SQL parser coerces TRIM(LEADING ...) to LTRIM(...).
 	"ltrim": {
 		stringBuiltin2("input", "trim_chars", func(_ *EvalContext, s, chars string) (Datum, error) {
 			return NewDString(strings.TrimLeft(s, chars)), nil
-		}, TypeString, "Removes any characters included in `trim_chars` from the beginning "+
+		}, types.TypeString, "Removes any characters included in `trim_chars` from the beginning "+
 			"(left-hand side) of `input` (applies recursively). \n\nFor example, "+
 			"`ltrim('doggie', 'od')` returns `ggie`."),
 		stringBuiltin1(func(_ *EvalContext, s string) (Datum, error) {
 			return NewDString(strings.TrimLeftFunc(s, unicode.IsSpace)), nil
-		}, TypeString, "Removes all spaces from the beginning (left-hand side) of `val`."),
+		}, types.TypeString, "Removes all spaces from the beginning (left-hand side) of `val`."),
 	},
 
 	// The SQL parser coerces TRIM(TRAILING ...) to RTRIM(...).
 	"rtrim": {
 		stringBuiltin2("input", "trim_chars", func(_ *EvalContext, s, chars string) (Datum, error) {
 			return NewDString(strings.TrimRight(s, chars)), nil
-		}, TypeString, "Removes any characters included in `trim_chars` from the end (right-hand "+
+		}, types.TypeString, "Removes any characters included in `trim_chars` from the end (right-hand "+
 			"side) of `input` (applies recursively). \n\nFor example, `rtrim('doggie', 'ei')` "+
 			"returns `dogg`."),
 		stringBuiltin1(func(_ *EvalContext, s string) (Datum, error) {
 			return NewDString(strings.TrimRightFunc(s, unicode.IsSpace)), nil
-		}, TypeString, "Removes all spaces from the end (right-hand side) of `val`."),
+		}, types.TypeString, "Removes all spaces from the end (right-hand side) of `val`."),
 	},
 
 	"reverse": {stringBuiltin1(func(evalCtx *EvalContext, s string) (Datum, error) {
@@ -894,7 +894,7 @@ var Builtins = map[string][]Builtin{
 			runes[i], runes[j] = runes[j], runes[i]
 		}
 		return NewDString(string(runes)), nil
-	}, TypeString, "Reverses the order of the string's characters.")},
+	}, types.TypeString, "Reverses the order of the string's characters.")},
 
 	"replace": {stringBuiltin3(
 		"input", "find", "replace",
@@ -905,7 +905,7 @@ var Builtins = map[string][]Builtin{
 			}
 			return NewDString(result), nil
 		},
-		TypeString,
+		types.TypeString,
 		"Replaces all occurrences of `find` with `replace` in `input`",
 	)},
 
@@ -938,14 +938,14 @@ var Builtins = map[string][]Builtin{
 				}
 			}
 			return NewDString(string(runes)), nil
-		}, TypeString, "In `input`, replaces the first character from `find` with the first "+
+		}, types.TypeString, "In `input`, replaces the first character from `find` with the first "+
 			"character in `replace`; repeat for each character in `find`. \n\nFor example, "+
 			"`translate('doggie', 'dog', '123');` returns `1233ie`.")},
 
 	"regexp_extract": {
 		Builtin{
-			Types:      ArgTypes{{"input", TypeString}, {"regex", TypeString}},
-			ReturnType: fixedReturnType(TypeString),
+			Types:      ArgTypes{{"input", types.TypeString}, {"regex", types.TypeString}},
+			ReturnType: fixedReturnType(types.TypeString),
 			fn: func(ctx *EvalContext, args Datums) (Datum, error) {
 				s := string(MustBeDString(args[0]))
 				pattern := string(MustBeDString(args[1]))
@@ -958,11 +958,11 @@ var Builtins = map[string][]Builtin{
 	"regexp_replace": {
 		Builtin{
 			Types: ArgTypes{
-				{"input", TypeString},
-				{"regex", TypeString},
-				{"replace", TypeString},
+				{"input", types.TypeString},
+				{"regex", types.TypeString},
+				{"replace", types.TypeString},
 			},
-			ReturnType: fixedReturnType(TypeString),
+			ReturnType: fixedReturnType(types.TypeString),
 			fn: func(evalCtx *EvalContext, args Datums) (Datum, error) {
 				s := string(MustBeDString(args[0]))
 				pattern := string(MustBeDString(args[1]))
@@ -981,12 +981,12 @@ var Builtins = map[string][]Builtin{
 		},
 		Builtin{
 			Types: ArgTypes{
-				{"input", TypeString},
-				{"regex", TypeString},
-				{"replace", TypeString},
-				{"flags", TypeString},
+				{"input", types.TypeString},
+				{"regex", types.TypeString},
+				{"replace", types.TypeString},
+				{"flags", types.TypeString},
 			},
-			ReturnType: fixedReturnType(TypeString),
+			ReturnType: fixedReturnType(types.TypeString),
 			fn: func(evalCtx *EvalContext, args Datums) (Datum, error) {
 				s := string(MustBeDString(args[0]))
 				pattern := string(MustBeDString(args[1]))
@@ -1029,12 +1029,12 @@ CockroachDB supports the following flags:
 			return nil, err
 		}
 		return NewDString(strings.Title(strings.ToLower(s))), nil
-	}, TypeString, "Capitalizes the first letter of `val`.")},
+	}, types.TypeString, "Capitalizes the first letter of `val`.")},
 
 	"left": {
 		Builtin{
-			Types:      ArgTypes{{"input", TypeBytes}, {"return_set", TypeInt}},
-			ReturnType: fixedReturnType(TypeBytes),
+			Types:      ArgTypes{{"input", types.TypeBytes}, {"return_set", types.TypeInt}},
+			ReturnType: fixedReturnType(types.TypeBytes),
 			fn: func(_ *EvalContext, args Datums) (Datum, error) {
 				bytes := []byte(*args[0].(*DBytes))
 				n := int(MustBeDInt(args[1]))
@@ -1051,8 +1051,8 @@ CockroachDB supports the following flags:
 			Info: "Returns the first `return_set` bytes from `input`.",
 		},
 		Builtin{
-			Types:      ArgTypes{{"input", TypeString}, {"return_set", TypeInt}},
-			ReturnType: fixedReturnType(TypeString),
+			Types:      ArgTypes{{"input", types.TypeString}, {"return_set", types.TypeInt}},
+			ReturnType: fixedReturnType(types.TypeString),
 			fn: func(_ *EvalContext, args Datums) (Datum, error) {
 				runes := []rune(string(MustBeDString(args[0])))
 				n := int(MustBeDInt(args[1]))
@@ -1072,8 +1072,8 @@ CockroachDB supports the following flags:
 
 	"right": {
 		Builtin{
-			Types:      ArgTypes{{"input", TypeBytes}, {"return_set", TypeInt}},
-			ReturnType: fixedReturnType(TypeBytes),
+			Types:      ArgTypes{{"input", types.TypeBytes}, {"return_set", types.TypeInt}},
+			ReturnType: fixedReturnType(types.TypeBytes),
 			fn: func(_ *EvalContext, args Datums) (Datum, error) {
 				bytes := []byte(*args[0].(*DBytes))
 				n := int(MustBeDInt(args[1]))
@@ -1090,8 +1090,8 @@ CockroachDB supports the following flags:
 			Info: "Returns the last `return_set` bytes from `input`.",
 		},
 		Builtin{
-			Types:      ArgTypes{{"input", TypeString}, {"return_set", TypeInt}},
-			ReturnType: fixedReturnType(TypeString),
+			Types:      ArgTypes{{"input", types.TypeString}, {"return_set", types.TypeInt}},
+			ReturnType: fixedReturnType(types.TypeString),
 			fn: func(_ *EvalContext, args Datums) (Datum, error) {
 				runes := []rune(string(MustBeDString(args[0])))
 				n := int(MustBeDInt(args[1]))
@@ -1112,7 +1112,7 @@ CockroachDB supports the following flags:
 	"random": {
 		Builtin{
 			Types:                   ArgTypes{},
-			ReturnType:              fixedReturnType(TypeFloat),
+			ReturnType:              fixedReturnType(types.TypeFloat),
 			impure:                  true,
 			needsRepeatedEvaluation: true,
 			fn: func(_ *EvalContext, args Datums) (Datum, error) {
@@ -1125,7 +1125,7 @@ CockroachDB supports the following flags:
 	"unique_rowid": {
 		Builtin{
 			Types:      ArgTypes{},
-			ReturnType: fixedReturnType(TypeInt),
+			ReturnType: fixedReturnType(types.TypeInt),
 			category:   categoryIDGeneration,
 			impure:     true,
 			fn: func(ctx *EvalContext, args Datums) (Datum, error) {
@@ -1170,8 +1170,8 @@ CockroachDB supports the following flags:
 
 	"experimental_strftime": {
 		Builtin{
-			Types:      ArgTypes{{"input", TypeTimestamp}, {"extract_format", TypeString}},
-			ReturnType: fixedReturnType(TypeString),
+			Types:      ArgTypes{{"input", types.TypeTimestamp}, {"extract_format", types.TypeString}},
+			ReturnType: fixedReturnType(types.TypeString),
 			category:   categoryDateAndTime,
 			fn: func(_ *EvalContext, args Datums) (Datum, error) {
 				fromTime := args[0].(*DTimestamp).Time
@@ -1186,8 +1186,8 @@ CockroachDB supports the following flags:
 				"using standard `strftime` notation (though not all formatting is supported).",
 		},
 		Builtin{
-			Types:      ArgTypes{{"input", TypeDate}, {"extract_format", TypeString}},
-			ReturnType: fixedReturnType(TypeString),
+			Types:      ArgTypes{{"input", types.TypeDate}, {"extract_format", types.TypeString}},
+			ReturnType: fixedReturnType(types.TypeString),
 			category:   categoryDateAndTime,
 			fn: func(_ *EvalContext, args Datums) (Datum, error) {
 				fromTime := timeutil.Unix(int64(*args[0].(*DDate))*secondsInDay, 0)
@@ -1202,8 +1202,8 @@ CockroachDB supports the following flags:
 				"using standard `strftime` notation (though not all formatting is supported).",
 		},
 		Builtin{
-			Types:      ArgTypes{{"input", TypeTimestampTZ}, {"extract_format", TypeString}},
-			ReturnType: fixedReturnType(TypeString),
+			Types:      ArgTypes{{"input", types.TypeTimestampTZ}, {"extract_format", types.TypeString}},
+			ReturnType: fixedReturnType(types.TypeString),
 			category:   categoryDateAndTime,
 			fn: func(_ *EvalContext, args Datums) (Datum, error) {
 				fromTime := args[0].(*DTimestampTZ).Time
@@ -1221,8 +1221,8 @@ CockroachDB supports the following flags:
 
 	"experimental_strptime": {
 		Builtin{
-			Types:      ArgTypes{{"input", TypeString}, {"format", TypeString}},
-			ReturnType: fixedReturnType(TypeTimestampTZ),
+			Types:      ArgTypes{{"input", types.TypeString}, {"format", types.TypeString}},
+			ReturnType: fixedReturnType(types.TypeTimestampTZ),
 			category:   categoryDateAndTime,
 			fn: func(_ *EvalContext, args Datums) (Datum, error) {
 				toParse := string(MustBeDString(args[0]))
@@ -1240,16 +1240,16 @@ CockroachDB supports the following flags:
 
 	"age": {
 		Builtin{
-			Types:      ArgTypes{{"val", TypeTimestampTZ}},
-			ReturnType: fixedReturnType(TypeInterval),
+			Types:      ArgTypes{{"val", types.TypeTimestampTZ}},
+			ReturnType: fixedReturnType(types.TypeInterval),
 			fn: func(ctx *EvalContext, args Datums) (Datum, error) {
 				return timestampMinusBinOp.fn(ctx, ctx.GetTxnTimestamp(time.Microsecond), args[0])
 			},
 			Info: "Calculates the interval between `val` and the current time.",
 		},
 		Builtin{
-			Types:      ArgTypes{{"begin", TypeTimestampTZ}, {"end", TypeTimestampTZ}},
-			ReturnType: fixedReturnType(TypeInterval),
+			Types:      ArgTypes{{"begin", types.TypeTimestampTZ}, {"end", types.TypeTimestampTZ}},
+			ReturnType: fixedReturnType(types.TypeInterval),
 			fn: func(ctx *EvalContext, args Datums) (Datum, error) {
 				return timestampMinusBinOp.fn(ctx, args[0], args[1])
 			},
@@ -1260,7 +1260,7 @@ CockroachDB supports the following flags:
 	"current_date": {
 		Builtin{
 			Types:      ArgTypes{},
-			ReturnType: fixedReturnType(TypeDate),
+			ReturnType: fixedReturnType(types.TypeDate),
 			fn: func(ctx *EvalContext, args Datums) (Datum, error) {
 				t := ctx.GetTxnTimestamp(time.Microsecond).Time
 				return NewDDateFromTime(t, ctx.GetLocation()), nil
@@ -1276,7 +1276,7 @@ CockroachDB supports the following flags:
 	"statement_timestamp": {
 		Builtin{
 			Types:             ArgTypes{},
-			ReturnType:        fixedReturnType(TypeTimestampTZ),
+			ReturnType:        fixedReturnType(types.TypeTimestampTZ),
 			preferredOverload: true,
 			impure:            true,
 			fn: func(ctx *EvalContext, args Datums) (Datum, error) {
@@ -1286,7 +1286,7 @@ CockroachDB supports the following flags:
 		},
 		Builtin{
 			Types:      ArgTypes{},
-			ReturnType: fixedReturnType(TypeTimestamp),
+			ReturnType: fixedReturnType(types.TypeTimestamp),
 			impure:     true,
 			fn: func(ctx *EvalContext, args Datums) (Datum, error) {
 				return MakeDTimestamp(ctx.GetStmtTimestamp(), time.Microsecond), nil
@@ -1298,7 +1298,7 @@ CockroachDB supports the following flags:
 	"cluster_logical_timestamp": {
 		Builtin{
 			Types:      ArgTypes{},
-			ReturnType: fixedReturnType(TypeDecimal),
+			ReturnType: fixedReturnType(types.TypeDecimal),
 			category:   categorySystemInfo,
 			impure:     true,
 			fn: func(ctx *EvalContext, args Datums) (Datum, error) {
@@ -1311,7 +1311,7 @@ CockroachDB supports the following flags:
 	"clock_timestamp": {
 		Builtin{
 			Types:             ArgTypes{},
-			ReturnType:        fixedReturnType(TypeTimestampTZ),
+			ReturnType:        fixedReturnType(types.TypeTimestampTZ),
 			preferredOverload: true,
 			impure:            true,
 			fn: func(_ *EvalContext, args Datums) (Datum, error) {
@@ -1321,7 +1321,7 @@ CockroachDB supports the following flags:
 		},
 		Builtin{
 			Types:      ArgTypes{},
-			ReturnType: fixedReturnType(TypeTimestamp),
+			ReturnType: fixedReturnType(types.TypeTimestamp),
 			impure:     true,
 			fn: func(_ *EvalContext, args Datums) (Datum, error) {
 				return MakeDTimestamp(timeutil.Now(), time.Microsecond), nil
@@ -1332,8 +1332,8 @@ CockroachDB supports the following flags:
 
 	"extract": {
 		Builtin{
-			Types:      ArgTypes{{"element", TypeString}, {"input", TypeTimestamp}},
-			ReturnType: fixedReturnType(TypeInt),
+			Types:      ArgTypes{{"element", types.TypeString}, {"input", types.TypeTimestamp}},
+			ReturnType: fixedReturnType(types.TypeInt),
 			category:   categoryDateAndTime,
 			fn: func(ctx *EvalContext, args Datums) (Datum, error) {
 				// extract timeSpan fromTime.
@@ -1346,8 +1346,8 @@ CockroachDB supports the following flags:
 				"hour, minute, second, millisecond, microsecond, epoch",
 		},
 		Builtin{
-			Types:      ArgTypes{{"element", TypeString}, {"input", TypeDate}},
-			ReturnType: fixedReturnType(TypeInt),
+			Types:      ArgTypes{{"element", types.TypeString}, {"input", types.TypeDate}},
+			ReturnType: fixedReturnType(types.TypeInt),
 			category:   categoryDateAndTime,
 			fn: func(ctx *EvalContext, args Datums) (Datum, error) {
 				timeSpan := strings.ToLower(string(MustBeDString(args[0])))
@@ -1360,8 +1360,8 @@ CockroachDB supports the following flags:
 				"hour, minute, second, millisecond, microsecond, epoch",
 		},
 		Builtin{
-			Types:      ArgTypes{{"element", TypeString}, {"input", TypeTimestampTZ}},
-			ReturnType: fixedReturnType(TypeInt),
+			Types:      ArgTypes{{"element", types.TypeString}, {"input", types.TypeTimestampTZ}},
+			ReturnType: fixedReturnType(types.TypeInt),
 			category:   categoryDateAndTime,
 			fn: func(ctx *EvalContext, args Datums) (Datum, error) {
 				fromTSTZ := args[1].(*DTimestampTZ)
@@ -1376,8 +1376,8 @@ CockroachDB supports the following flags:
 
 	"extract_duration": {
 		Builtin{
-			Types:      ArgTypes{{"element", TypeString}, {"input", TypeInterval}},
-			ReturnType: fixedReturnType(TypeInt),
+			Types:      ArgTypes{{"element", types.TypeString}, {"input", types.TypeInterval}},
+			ReturnType: fixedReturnType(types.TypeInt),
 			category:   categoryDateAndTime,
 			fn: func(_ *EvalContext, args Datums) (Datum, error) {
 				// extract timeSpan fromTime.
@@ -1413,8 +1413,8 @@ CockroachDB supports the following flags:
 	// https://www.postgresql.org/docs/10/static/functions-datetime.html#functions-datetime-trunc
 	"date_trunc": {
 		Builtin{
-			Types:      ArgTypes{{"element", TypeString}, {"input", TypeTimestamp}},
-			ReturnType: fixedReturnType(TypeTimestamp),
+			Types:      ArgTypes{{"element", types.TypeString}, {"input", types.TypeTimestamp}},
+			ReturnType: fixedReturnType(types.TypeTimestamp),
 			category:   categoryDateAndTime,
 			fn: func(ctx *EvalContext, args Datums) (Datum, error) {
 				// extract timeSpan fromTime.
@@ -1428,8 +1428,8 @@ CockroachDB supports the following flags:
 				"millisecond, microsecond.",
 		},
 		Builtin{
-			Types:      ArgTypes{{"element", TypeString}, {"input", TypeDate}},
-			ReturnType: fixedReturnType(TypeDate),
+			Types:      ArgTypes{{"element", types.TypeString}, {"input", types.TypeDate}},
+			ReturnType: fixedReturnType(types.TypeDate),
 			category:   categoryDateAndTime,
 			fn: func(ctx *EvalContext, args Datums) (Datum, error) {
 				timeSpan := strings.ToLower(string(MustBeDString(args[0])))
@@ -1443,8 +1443,8 @@ CockroachDB supports the following flags:
 				"millisecond, microsecond.",
 		},
 		Builtin{
-			Types:      ArgTypes{{"element", TypeString}, {"input", TypeTimestampTZ}},
-			ReturnType: fixedReturnType(TypeTimestampTZ),
+			Types:      ArgTypes{{"element", types.TypeString}, {"input", types.TypeTimestampTZ}},
+			ReturnType: fixedReturnType(types.TypeTimestampTZ),
 			category:   categoryDateAndTime,
 			fn: func(ctx *EvalContext, args Datums) (Datum, error) {
 				fromTSTZ := args[1].(*DTimestampTZ)
@@ -1469,8 +1469,8 @@ CockroachDB supports the following flags:
 			return dd, nil
 		}, "Calculates the absolute value of `val`."),
 		Builtin{
-			Types:      ArgTypes{{"val", TypeInt}},
-			ReturnType: fixedReturnType(TypeInt),
+			Types:      ArgTypes{{"val", types.TypeInt}},
+			ReturnType: fixedReturnType(types.TypeInt),
 			fn: func(_ *EvalContext, args Datums) (Datum, error) {
 				x := MustBeDInt(args[0])
 				switch {
@@ -1554,8 +1554,8 @@ CockroachDB supports the following flags:
 			return dd, err
 		}, "Calculates the integer quotient of `x`/`y`."),
 		{
-			Types:      ArgTypes{{"x", TypeInt}, {"y", TypeInt}},
-			ReturnType: fixedReturnType(TypeInt),
+			Types:      ArgTypes{{"x", types.TypeInt}, {"y", types.TypeInt}},
+			ReturnType: fixedReturnType(types.TypeInt),
 			fn: func(_ *EvalContext, args Datums) (Datum, error) {
 				y := MustBeDInt(args[1])
 				if y == 0 {
@@ -1594,16 +1594,16 @@ CockroachDB supports the following flags:
 		Builtin{
 			// Can't use floatBuiltin1 here because this one returns
 			// a boolean.
-			Types:      ArgTypes{{"val", TypeFloat}},
-			ReturnType: fixedReturnType(TypeBool),
+			Types:      ArgTypes{{"val", types.TypeFloat}},
+			ReturnType: fixedReturnType(types.TypeBool),
 			fn: func(_ *EvalContext, args Datums) (Datum, error) {
 				return MakeDBool(DBool(isNaN(args[0]))), nil
 			},
 			Info: "Returns true if `val` is NaN, false otherwise.",
 		},
 		Builtin{
-			Types:      ArgTypes{{"val", TypeDecimal}},
-			ReturnType: fixedReturnType(TypeBool),
+			Types:      ArgTypes{{"val", types.TypeDecimal}},
+			ReturnType: fixedReturnType(types.TypeBool),
 			fn: func(_ *EvalContext, args Datums) (Datum, error) {
 				return MakeDBool(DBool(isNaN(args[0]))), nil
 			},
@@ -1643,8 +1643,8 @@ CockroachDB supports the following flags:
 			return dd, err
 		}, "Calculates `x`%`y`."),
 		Builtin{
-			Types:      ArgTypes{{"x", TypeInt}, {"y", TypeInt}},
-			ReturnType: fixedReturnType(TypeInt),
+			Types:      ArgTypes{{"x", types.TypeInt}, {"y", types.TypeInt}},
+			ReturnType: fixedReturnType(types.TypeInt),
 			fn: func(_ *EvalContext, args Datums) (Datum, error) {
 				y := MustBeDInt(args[1])
 				if y == 0 {
@@ -1660,7 +1660,7 @@ CockroachDB supports the following flags:
 	"pi": {
 		Builtin{
 			Types:      ArgTypes{},
-			ReturnType: fixedReturnType(TypeFloat),
+			ReturnType: fixedReturnType(types.TypeFloat),
 			fn: func(_ *EvalContext, args Datums) (Datum, error) {
 				return NewDFloat(math.Pi), nil
 			},
@@ -1686,8 +1686,8 @@ CockroachDB supports the following flags:
 		}, "Rounds `val` to the nearest integer, half away from zero: "+
 			"ROUND(+/-2.4) = +/-2, ROUND(+/-2.5) = +/-3."),
 		Builtin{
-			Types:      ArgTypes{{"input", TypeFloat}, {"decimal_accuracy", TypeInt}},
-			ReturnType: fixedReturnType(TypeFloat),
+			Types:      ArgTypes{{"input", types.TypeFloat}, {"decimal_accuracy", types.TypeInt}},
+			ReturnType: fixedReturnType(types.TypeFloat),
 			fn: func(_ *EvalContext, args Datums) (Datum, error) {
 				f := float64(*args[0].(*DFloat))
 				if math.IsInf(f, 0) || math.IsNaN(f) {
@@ -1717,8 +1717,8 @@ CockroachDB supports the following flags:
 				" in `input` using half to even (banker's) rounding.",
 		},
 		Builtin{
-			Types:      ArgTypes{{"input", TypeDecimal}, {"decimal_accuracy", TypeInt}},
-			ReturnType: fixedReturnType(TypeDecimal),
+			Types:      ArgTypes{{"input", types.TypeDecimal}, {"decimal_accuracy", types.TypeInt}},
+			ReturnType: fixedReturnType(types.TypeDecimal),
 			fn: func(_ *EvalContext, args Datums) (Datum, error) {
 				// TODO(mjibson): make sure this fits in an int32.
 				scale := int32(MustBeDInt(args[1]))
@@ -1754,8 +1754,8 @@ CockroachDB supports the following flags:
 		}, "Determines the sign of `val`: **1** for positive; **0** for 0 values; **-1** for "+
 			"negative."),
 		Builtin{
-			Types:      ArgTypes{{"val", TypeInt}},
-			ReturnType: fixedReturnType(TypeInt),
+			Types:      ArgTypes{{"val", types.TypeInt}},
+			ReturnType: fixedReturnType(types.TypeInt),
 			fn: func(_ *EvalContext, args Datums) (Datum, error) {
 				x := MustBeDInt(args[0])
 				switch {
@@ -1808,8 +1808,8 @@ CockroachDB supports the following flags:
 
 	"to_english": {
 		Builtin{
-			Types:      ArgTypes{{"val", TypeInt}},
-			ReturnType: fixedReturnType(TypeString),
+			Types:      ArgTypes{{"val", types.TypeInt}},
+			ReturnType: fixedReturnType(types.TypeString),
 			fn: func(_ *EvalContext, args Datums) (Datum, error) {
 				val := int(*args[0].(*DInt))
 				var buf bytes.Buffer
@@ -1840,8 +1840,8 @@ CockroachDB supports the following flags:
 
 	"array_length": {
 		Builtin{
-			Types:      ArgTypes{{"input", TypeAnyArray}, {"array_dimension", TypeInt}},
-			ReturnType: fixedReturnType(TypeInt),
+			Types:      ArgTypes{{"input", types.TypeAnyArray}, {"array_dimension", types.TypeInt}},
+			ReturnType: fixedReturnType(types.TypeInt),
 			category:   categoryArray,
 			fn: func(_ *EvalContext, args Datums) (Datum, error) {
 				arr := MustBeDArray(args[0])
@@ -1856,8 +1856,8 @@ CockroachDB supports the following flags:
 
 	"array_lower": {
 		Builtin{
-			Types:      ArgTypes{{"input", TypeAnyArray}, {"array_dimension", TypeInt}},
-			ReturnType: fixedReturnType(TypeInt),
+			Types:      ArgTypes{{"input", types.TypeAnyArray}, {"array_dimension", types.TypeInt}},
+			ReturnType: fixedReturnType(types.TypeInt),
 			category:   categoryArray,
 			fn: func(_ *EvalContext, args Datums) (Datum, error) {
 				arr := MustBeDArray(args[0])
@@ -1872,8 +1872,8 @@ CockroachDB supports the following flags:
 
 	"array_upper": {
 		Builtin{
-			Types:      ArgTypes{{"input", TypeAnyArray}, {"array_dimension", TypeInt}},
-			ReturnType: fixedReturnType(TypeInt),
+			Types:      ArgTypes{{"input", types.TypeAnyArray}, {"array_dimension", types.TypeInt}},
+			ReturnType: fixedReturnType(types.TypeInt),
 			category:   categoryArray,
 			fn: func(_ *EvalContext, args Datums) (Datum, error) {
 				arr := MustBeDArray(args[0])
@@ -1888,8 +1888,8 @@ CockroachDB supports the following flags:
 
 	"array_append": arrayBuiltin(func(typ types.T) Builtin {
 		return Builtin{
-			Types:        ArgTypes{{"array", TArray{Typ: typ}}, {"elem", typ}},
-			ReturnType:   fixedReturnType(TArray{Typ: typ}),
+			Types:        ArgTypes{{"array", types.TArray{Typ: typ}}, {"elem", typ}},
+			ReturnType:   fixedReturnType(types.TArray{Typ: typ}),
 			category:     categoryArray,
 			nullableArgs: true,
 			fn: func(_ *EvalContext, args Datums) (Datum, error) {
@@ -1901,8 +1901,8 @@ CockroachDB supports the following flags:
 
 	"array_prepend": arrayBuiltin(func(typ types.T) Builtin {
 		return Builtin{
-			Types:        ArgTypes{{"elem", typ}, {"array", TArray{Typ: typ}}},
-			ReturnType:   fixedReturnType(TArray{Typ: typ}),
+			Types:        ArgTypes{{"elem", typ}, {"array", types.TArray{Typ: typ}}},
+			ReturnType:   fixedReturnType(types.TArray{Typ: typ}),
 			category:     categoryArray,
 			nullableArgs: true,
 			fn: func(_ *EvalContext, args Datums) (Datum, error) {
@@ -1914,8 +1914,8 @@ CockroachDB supports the following flags:
 
 	"array_cat": arrayBuiltin(func(typ types.T) Builtin {
 		return Builtin{
-			Types:        ArgTypes{{"left", TArray{Typ: typ}}, {"right", TArray{Typ: typ}}},
-			ReturnType:   fixedReturnType(TArray{Typ: typ}),
+			Types:        ArgTypes{{"left", types.TArray{Typ: typ}}, {"right", types.TArray{Typ: typ}}},
+			ReturnType:   fixedReturnType(types.TArray{Typ: typ}),
 			category:     categoryArray,
 			nullableArgs: true,
 			fn: func(_ *EvalContext, args Datums) (Datum, error) {
@@ -1927,8 +1927,8 @@ CockroachDB supports the following flags:
 
 	"array_remove": arrayBuiltin(func(typ types.T) Builtin {
 		return Builtin{
-			Types:        ArgTypes{{"array", TArray{Typ: typ}}, {"elem", typ}},
-			ReturnType:   fixedReturnType(TArray{Typ: typ}),
+			Types:        ArgTypes{{"array", types.TArray{Typ: typ}}, {"elem", typ}},
+			ReturnType:   fixedReturnType(types.TArray{Typ: typ}),
 			category:     categoryArray,
 			nullableArgs: true,
 			fn: func(ctx *EvalContext, args Datums) (Datum, error) {
@@ -1951,8 +1951,8 @@ CockroachDB supports the following flags:
 
 	"array_replace": arrayBuiltin(func(typ types.T) Builtin {
 		return Builtin{
-			Types:        ArgTypes{{"array", TArray{Typ: typ}}, {"toreplace", typ}, {"replacewith", typ}},
-			ReturnType:   fixedReturnType(TArray{Typ: typ}),
+			Types:        ArgTypes{{"array", types.TArray{Typ: typ}}, {"toreplace", typ}, {"replacewith", typ}},
+			ReturnType:   fixedReturnType(types.TArray{Typ: typ}),
 			category:     categoryArray,
 			nullableArgs: true,
 			fn: func(ctx *EvalContext, args Datums) (Datum, error) {
@@ -1979,8 +1979,8 @@ CockroachDB supports the following flags:
 
 	"array_position": arrayBuiltin(func(typ types.T) Builtin {
 		return Builtin{
-			Types:        ArgTypes{{"array", TArray{Typ: typ}}, {"elem", typ}},
-			ReturnType:   fixedReturnType(TypeInt),
+			Types:        ArgTypes{{"array", types.TArray{Typ: typ}}, {"elem", typ}},
+			ReturnType:   fixedReturnType(types.TypeInt),
 			category:     categoryArray,
 			nullableArgs: true,
 			fn: func(ctx *EvalContext, args Datums) (Datum, error) {
@@ -2000,15 +2000,15 @@ CockroachDB supports the following flags:
 
 	"array_positions": arrayBuiltin(func(typ types.T) Builtin {
 		return Builtin{
-			Types:        ArgTypes{{"array", TArray{Typ: typ}}, {"elem", typ}},
-			ReturnType:   fixedReturnType(TArray{Typ: typ}),
+			Types:        ArgTypes{{"array", types.TArray{Typ: typ}}, {"elem", typ}},
+			ReturnType:   fixedReturnType(types.TArray{Typ: typ}),
 			category:     categoryArray,
 			nullableArgs: true,
 			fn: func(ctx *EvalContext, args Datums) (Datum, error) {
 				if args[0] == DNull {
 					return DNull, nil
 				}
-				result := NewDArray(TypeInt)
+				result := NewDArray(types.TypeInt)
 				for i, e := range MustBeDArray(args[0]).Array {
 					if e.Compare(ctx, args[1]) == 0 {
 						if err := result.Append(NewDInt(DInt(i + 1))); err != nil {
@@ -2027,7 +2027,7 @@ CockroachDB supports the following flags:
 	"version": {
 		Builtin{
 			Types:      ArgTypes{},
-			ReturnType: fixedReturnType(TypeString),
+			ReturnType: fixedReturnType(types.TypeString),
 			category:   categorySystemInfo,
 			fn: func(_ *EvalContext, args Datums) (Datum, error) {
 				return NewDString(build.GetInfo().Short()), nil
@@ -2039,7 +2039,7 @@ CockroachDB supports the following flags:
 	"current_database": {
 		Builtin{
 			Types:      ArgTypes{},
-			ReturnType: fixedReturnType(TypeString),
+			ReturnType: fixedReturnType(types.TypeString),
 			category:   categorySystemInfo,
 			fn: func(ctx *EvalContext, args Datums) (Datum, error) {
 				if len(ctx.Database) == 0 {
@@ -2054,7 +2054,7 @@ CockroachDB supports the following flags:
 	"current_schema": {
 		Builtin{
 			Types:      ArgTypes{},
-			ReturnType: fixedReturnType(TypeString),
+			ReturnType: fixedReturnType(types.TypeString),
 			category:   categorySystemInfo,
 			fn: func(ctx *EvalContext, args Datums) (Datum, error) {
 				if len(ctx.Database) == 0 {
@@ -2073,12 +2073,12 @@ CockroachDB supports the following flags:
 	// and the session's database search path.
 	"current_schemas": {
 		Builtin{
-			Types:      ArgTypes{{"include_pg_catalog", TypeBool}},
-			ReturnType: fixedReturnType(TArray{Typ: TypeString}),
+			Types:      ArgTypes{{"include_pg_catalog", types.TypeBool}},
+			ReturnType: fixedReturnType(types.TArray{Typ: types.TypeString}),
 			category:   categorySystemInfo,
 			fn: func(ctx *EvalContext, args Datums) (Datum, error) {
 				includePgCatalog := *(args[0].(*DBool))
-				schemas := NewDArray(TypeString)
+				schemas := NewDArray(types.TypeString)
 				if len(ctx.Database) != 0 {
 					if err := schemas.Append(NewDString(ctx.Database)); err != nil {
 						return nil, err
@@ -2107,7 +2107,7 @@ CockroachDB supports the following flags:
 	"current_user": {
 		Builtin{
 			Types:      ArgTypes{},
-			ReturnType: fixedReturnType(TypeString),
+			ReturnType: fixedReturnType(types.TypeString),
 			category:   categorySystemInfo,
 			fn: func(ctx *EvalContext, args Datums) (Datum, error) {
 				if len(ctx.User) == 0 {
@@ -2123,7 +2123,7 @@ CockroachDB supports the following flags:
 	"crdb_internal.cluster_id": {
 		Builtin{
 			Types:      ArgTypes{},
-			ReturnType: fixedReturnType(TypeUUID),
+			ReturnType: fixedReturnType(types.TypeUUID),
 			category:   categorySystemInfo,
 			fn: func(ctx *EvalContext, args Datums) (Datum, error) {
 				return NewDUuid(DUuid{ctx.ClusterID}), nil
@@ -2134,8 +2134,8 @@ CockroachDB supports the following flags:
 
 	"crdb_internal.force_error": {
 		Builtin{
-			Types:      ArgTypes{{"errorCode", TypeString}, {"msg", TypeString}},
-			ReturnType: fixedReturnType(TypeInt),
+			Types:      ArgTypes{{"errorCode", types.TypeString}, {"msg", types.TypeString}},
+			ReturnType: fixedReturnType(types.TypeInt),
 			impure:     true,
 			fn: func(ctx *EvalContext, args Datums) (Datum, error) {
 				errCode := string(*args[0].(*DString))
@@ -2149,8 +2149,8 @@ CockroachDB supports the following flags:
 
 	"crdb_internal.force_panic": {
 		Builtin{
-			Types:      ArgTypes{{"msg", TypeString}},
-			ReturnType: fixedReturnType(TypeInt),
+			Types:      ArgTypes{{"msg", types.TypeString}},
+			ReturnType: fixedReturnType(types.TypeInt),
 			impure:     true,
 			privileged: true,
 			fn: func(ctx *EvalContext, args Datums) (Datum, error) {
@@ -2164,8 +2164,8 @@ CockroachDB supports the following flags:
 
 	"crdb_internal.force_log_fatal": {
 		Builtin{
-			Types:      ArgTypes{{"msg", TypeString}},
-			ReturnType: fixedReturnType(TypeInt),
+			Types:      ArgTypes{{"msg", types.TypeString}},
+			ReturnType: fixedReturnType(types.TypeInt),
 			impure:     true,
 			privileged: true,
 			fn: func(ctx *EvalContext, args Datums) (Datum, error) {
@@ -2185,8 +2185,8 @@ CockroachDB supports the following flags:
 	// different than the current statement's transaction.
 	"crdb_internal.force_retry": {
 		Builtin{
-			Types:      ArgTypes{{"val", TypeInterval}},
-			ReturnType: fixedReturnType(TypeInt),
+			Types:      ArgTypes{{"val", types.TypeInterval}},
+			ReturnType: fixedReturnType(types.TypeInt),
 			impure:     true,
 			privileged: true,
 			fn: func(ctx *EvalContext, args Datums) (Datum, error) {
@@ -2204,9 +2204,9 @@ CockroachDB supports the following flags:
 		},
 		Builtin{
 			Types: ArgTypes{
-				{"val", TypeInterval},
-				{"txnID", TypeString}},
-			ReturnType: fixedReturnType(TypeInt),
+				{"val", types.TypeInterval},
+				{"txnID", types.TypeString}},
+			ReturnType: fixedReturnType(types.TypeInt),
 			impure:     true,
 			fn: func(ctx *EvalContext, args Datums) (Datum, error) {
 				minDuration := args[0].(*DInterval).Duration
@@ -2233,7 +2233,7 @@ CockroachDB supports the following flags:
 	// Identity function which is marked as impure to avoid constant folding.
 	"crdb_internal.no_constant_folding": {
 		Builtin{
-			Types:      ArgTypes{{"input", TypeAny}},
+			Types:      ArgTypes{{"input", types.TypeAny}},
 			ReturnType: identityReturnType(0),
 			impure:     true,
 			fn: func(_ *EvalContext, args Datums) (Datum, error) {
@@ -2246,8 +2246,8 @@ CockroachDB supports the following flags:
 
 	"crdb_internal.set_vmodule": {
 		Builtin{
-			Types:      ArgTypes{{"vmodule_string", TypeString}},
-			ReturnType: fixedReturnType(TypeInt),
+			Types:      ArgTypes{{"vmodule_string", types.TypeString}},
+			ReturnType: fixedReturnType(types.TypeInt),
 			impure:     true,
 			privileged: true,
 			fn: func(ctx *EvalContext, args Datums) (Datum, error) {
@@ -2263,10 +2263,10 @@ CockroachDB supports the following flags:
 var substringImpls = []Builtin{
 	{
 		Types: ArgTypes{
-			{"input", TypeString},
-			{"substr_pos", TypeInt},
+			{"input", types.TypeString},
+			{"substr_pos", types.TypeInt},
 		},
-		ReturnType: fixedReturnType(TypeString),
+		ReturnType: fixedReturnType(types.TypeString),
 		fn: func(_ *EvalContext, args Datums) (Datum, error) {
 			runes := []rune(string(MustBeDString(args[0])))
 			// SQL strings are 1-indexed.
@@ -2284,11 +2284,11 @@ var substringImpls = []Builtin{
 	},
 	{
 		Types: ArgTypes{
-			{"input", TypeString},
-			{"start_pos", TypeInt},
-			{"end_pos", TypeInt},
+			{"input", types.TypeString},
+			{"start_pos", types.TypeInt},
+			{"end_pos", types.TypeInt},
 		},
-		ReturnType: fixedReturnType(TypeString),
+		ReturnType: fixedReturnType(types.TypeString),
 		fn: func(_ *EvalContext, args Datums) (Datum, error) {
 			runes := []rune(string(MustBeDString(args[0])))
 			// SQL strings are 1-indexed.
@@ -2322,10 +2322,10 @@ var substringImpls = []Builtin{
 	},
 	{
 		Types: ArgTypes{
-			{"input", TypeString},
-			{"regex", TypeString},
+			{"input", types.TypeString},
+			{"regex", types.TypeString},
 		},
-		ReturnType: fixedReturnType(TypeString),
+		ReturnType: fixedReturnType(types.TypeString),
 		fn: func(ctx *EvalContext, args Datums) (Datum, error) {
 			s := string(MustBeDString(args[0]))
 			pattern := string(MustBeDString(args[1]))
@@ -2335,11 +2335,11 @@ var substringImpls = []Builtin{
 	},
 	{
 		Types: ArgTypes{
-			{"input", TypeString},
-			{"regex", TypeString},
-			{"escape_char", TypeString},
+			{"input", types.TypeString},
+			{"regex", types.TypeString},
+			{"escape_char", types.TypeString},
 		},
-		ReturnType: fixedReturnType(TypeString),
+		ReturnType: fixedReturnType(types.TypeString),
 		fn: func(ctx *EvalContext, args Datums) (Datum, error) {
 			s := string(MustBeDString(args[0]))
 			pattern := string(MustBeDString(args[1]))
@@ -2353,7 +2353,7 @@ var substringImpls = []Builtin{
 
 var uuidV4Impl = Builtin{
 	Types:      ArgTypes{},
-	ReturnType: fixedReturnType(TypeBytes),
+	ReturnType: fixedReturnType(types.TypeBytes),
 	category:   categoryIDGeneration,
 	impure:     true,
 	fn: func(_ *EvalContext, args Datums) (Datum, error) {
@@ -2376,7 +2376,7 @@ var ceilImpl = []Builtin{
 var txnTSImpl = []Builtin{
 	{
 		Types:             ArgTypes{},
-		ReturnType:        fixedReturnType(TypeTimestampTZ),
+		ReturnType:        fixedReturnType(types.TypeTimestampTZ),
 		preferredOverload: true,
 		impure:            true,
 		fn: func(ctx *EvalContext, args Datums) (Datum, error) {
@@ -2386,7 +2386,7 @@ var txnTSImpl = []Builtin{
 	},
 	{
 		Types:      ArgTypes{},
-		ReturnType: fixedReturnType(TypeTimestamp),
+		ReturnType: fixedReturnType(types.TypeTimestamp),
 		impure:     true,
 		fn: func(ctx *EvalContext, args Datums) (Datum, error) {
 			return ctx.GetTxnTimestampNoZone(time.Microsecond), nil
@@ -2406,10 +2406,10 @@ var powImpls = []Builtin{
 	}, "Calculates `x`^`y`."),
 	{
 		Types: ArgTypes{
-			{"x", TypeInt},
-			{"y", TypeInt},
+			{"x", types.TypeInt},
+			{"y", types.TypeInt},
 		},
-		ReturnType: fixedReturnType(TypeInt),
+		ReturnType: fixedReturnType(types.TypeInt),
 		fn: func(_ *EvalContext, args Datums) (Datum, error) {
 			return intPow(MustBeDInt(args[0]), MustBeDInt(args[1]))
 		},
@@ -2446,8 +2446,8 @@ func decimalLogFn(
 
 func floatBuiltin1(f func(float64) (Datum, error), info string) Builtin {
 	return Builtin{
-		Types:      ArgTypes{{"val", TypeFloat}},
-		ReturnType: fixedReturnType(TypeFloat),
+		Types:      ArgTypes{{"val", types.TypeFloat}},
+		ReturnType: fixedReturnType(types.TypeFloat),
 		fn: func(_ *EvalContext, args Datums) (Datum, error) {
 			return f(float64(*args[0].(*DFloat)))
 		},
@@ -2457,8 +2457,8 @@ func floatBuiltin1(f func(float64) (Datum, error), info string) Builtin {
 
 func floatBuiltin2(a, b string, f func(float64, float64) (Datum, error), info string) Builtin {
 	return Builtin{
-		Types:      ArgTypes{{a, TypeFloat}, {b, TypeFloat}},
-		ReturnType: fixedReturnType(TypeFloat),
+		Types:      ArgTypes{{a, types.TypeFloat}, {b, types.TypeFloat}},
+		ReturnType: fixedReturnType(types.TypeFloat),
 		fn: func(_ *EvalContext, args Datums) (Datum, error) {
 			return f(float64(*args[0].(*DFloat)),
 				float64(*args[1].(*DFloat)))
@@ -2469,8 +2469,8 @@ func floatBuiltin2(a, b string, f func(float64, float64) (Datum, error), info st
 
 func decimalBuiltin1(f func(*apd.Decimal) (Datum, error), info string) Builtin {
 	return Builtin{
-		Types:      ArgTypes{{"val", TypeDecimal}},
-		ReturnType: fixedReturnType(TypeDecimal),
+		Types:      ArgTypes{{"val", types.TypeDecimal}},
+		ReturnType: fixedReturnType(types.TypeDecimal),
 		fn: func(_ *EvalContext, args Datums) (Datum, error) {
 			dec := &args[0].(*DDecimal).Decimal
 			return f(dec)
@@ -2483,8 +2483,8 @@ func decimalBuiltin2(
 	a, b string, f func(*apd.Decimal, *apd.Decimal) (Datum, error), info string,
 ) Builtin {
 	return Builtin{
-		Types:      ArgTypes{{a, TypeDecimal}, {b, TypeDecimal}},
-		ReturnType: fixedReturnType(TypeDecimal),
+		Types:      ArgTypes{{a, types.TypeDecimal}, {b, types.TypeDecimal}},
+		ReturnType: fixedReturnType(types.TypeDecimal),
 		fn: func(_ *EvalContext, args Datums) (Datum, error) {
 			dec1 := &args[0].(*DDecimal).Decimal
 			dec2 := &args[1].(*DDecimal).Decimal
@@ -2498,7 +2498,7 @@ func stringBuiltin1(
 	f func(*EvalContext, string) (Datum, error), returnType types.T, info string,
 ) Builtin {
 	return Builtin{
-		Types:      ArgTypes{{"val", TypeString}},
+		Types:      ArgTypes{{"val", types.TypeString}},
 		ReturnType: fixedReturnType(returnType),
 		fn: func(evalCtx *EvalContext, args Datums) (Datum, error) {
 			return f(evalCtx, string(MustBeDString(args[0])))
@@ -2511,9 +2511,9 @@ func stringBuiltin2(
 	a, b string, f func(*EvalContext, string, string) (Datum, error), returnType types.T, info string,
 ) Builtin {
 	return Builtin{
-		Types:      ArgTypes{{a, TypeString}, {b, TypeString}},
+		Types:      ArgTypes{{a, types.TypeString}, {b, types.TypeString}},
 		ReturnType: fixedReturnType(returnType),
-		category:   categorizeType(TypeString),
+		category:   categorizeType(types.TypeString),
 		fn: func(evalCtx *EvalContext, args Datums) (Datum, error) {
 			return f(evalCtx, string(MustBeDString(args[0])), string(MustBeDString(args[1])))
 		},
@@ -2528,7 +2528,7 @@ func stringBuiltin3(
 	info string,
 ) Builtin {
 	return Builtin{
-		Types:      ArgTypes{{a, TypeString}, {b, TypeString}, {c, TypeString}},
+		Types:      ArgTypes{{a, types.TypeString}, {b, types.TypeString}, {c, types.TypeString}},
 		ReturnType: fixedReturnType(returnType),
 		fn: func(evalCtx *EvalContext, args Datums) (Datum, error) {
 			return f(evalCtx, string(MustBeDString(args[0])), string(MustBeDString(args[1])), string(MustBeDString(args[2])))
@@ -2541,7 +2541,7 @@ func bytesBuiltin1(
 	f func(*EvalContext, string) (Datum, error), returnType types.T, info string,
 ) Builtin {
 	return Builtin{
-		Types:      ArgTypes{{"val", TypeBytes}},
+		Types:      ArgTypes{{"val", types.TypeBytes}},
 		ReturnType: fixedReturnType(returnType),
 		fn: func(evalCtx *EvalContext, args Datums) (Datum, error) {
 			return f(evalCtx, string(*args[0].(*DBytes)))
@@ -2570,8 +2570,8 @@ func feedHash(h hash.Hash, args Datums) {
 func hashBuiltin(newHash func() hash.Hash, info string) []Builtin {
 	return []Builtin{
 		{
-			Types:        VariadicType{TypeString},
-			ReturnType:   fixedReturnType(TypeString),
+			Types:        VariadicType{types.TypeString},
+			ReturnType:   fixedReturnType(types.TypeString),
 			nullableArgs: true,
 			fn: func(_ *EvalContext, args Datums) (Datum, error) {
 				h := newHash()
@@ -2581,8 +2581,8 @@ func hashBuiltin(newHash func() hash.Hash, info string) []Builtin {
 			Info: info,
 		},
 		{
-			Types:        VariadicType{TypeBytes},
-			ReturnType:   fixedReturnType(TypeString),
+			Types:        VariadicType{types.TypeBytes},
+			ReturnType:   fixedReturnType(types.TypeString),
 			nullableArgs: true,
 			fn: func(_ *EvalContext, args Datums) (Datum, error) {
 				h := newHash()
@@ -2597,8 +2597,8 @@ func hashBuiltin(newHash func() hash.Hash, info string) []Builtin {
 func hash32Builtin(newHash func() hash.Hash32, info string) []Builtin {
 	return []Builtin{
 		{
-			Types:        VariadicType{TypeString},
-			ReturnType:   fixedReturnType(TypeInt),
+			Types:        VariadicType{types.TypeString},
+			ReturnType:   fixedReturnType(types.TypeInt),
 			nullableArgs: true,
 			fn: func(_ *EvalContext, args Datums) (Datum, error) {
 				h := newHash()
@@ -2608,8 +2608,8 @@ func hash32Builtin(newHash func() hash.Hash32, info string) []Builtin {
 			Info: info,
 		},
 		{
-			Types:        VariadicType{TypeBytes},
-			ReturnType:   fixedReturnType(TypeInt),
+			Types:        VariadicType{types.TypeBytes},
+			ReturnType:   fixedReturnType(types.TypeInt),
 			nullableArgs: true,
 			fn: func(_ *EvalContext, args Datums) (Datum, error) {
 				h := newHash()
@@ -2623,8 +2623,8 @@ func hash32Builtin(newHash func() hash.Hash32, info string) []Builtin {
 func hash64Builtin(newHash func() hash.Hash64, info string) []Builtin {
 	return []Builtin{
 		{
-			Types:        VariadicType{TypeString},
-			ReturnType:   fixedReturnType(TypeInt),
+			Types:        VariadicType{types.TypeString},
+			ReturnType:   fixedReturnType(types.TypeInt),
 			nullableArgs: true,
 			fn: func(_ *EvalContext, args Datums) (Datum, error) {
 				h := newHash()
@@ -2634,8 +2634,8 @@ func hash64Builtin(newHash func() hash.Hash64, info string) []Builtin {
 			Info: info,
 		},
 		{
-			Types:        VariadicType{TypeBytes},
-			ReturnType:   fixedReturnType(TypeInt),
+			Types:        VariadicType{types.TypeBytes},
+			ReturnType:   fixedReturnType(types.TypeInt),
 			nullableArgs: true,
 			fn: func(_ *EvalContext, args Datums) (Datum, error) {
 				h := newHash()

@@ -20,6 +20,8 @@ import (
 	"time"
 
 	"golang.org/x/net/context"
+
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 )
 
 func prepareExpr(t *testing.T, datumExpr string) TypedExpr {
@@ -29,7 +31,7 @@ func prepareExpr(t *testing.T, datumExpr string) TypedExpr {
 	}
 	// Type checking ensures constant folding is performed and type
 	// annotations have come into effect.
-	typedExpr, err := TypeCheck(expr, nil, TypeAny)
+	typedExpr, err := TypeCheck(expr, nil, types.TypeAny)
 	if err != nil {
 		t.Fatalf("%s: %v", datumExpr, err)
 	}
