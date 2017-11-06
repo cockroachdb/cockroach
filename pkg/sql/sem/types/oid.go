@@ -184,9 +184,6 @@ func (t TOid) Equivalent(other Type) bool { return t.FamilyEqual(other) || other
 // FamilyEqual implements the Type interface.
 func (TOid) FamilyEqual(other Type) bool { _, ok := UnwrapType(other).(TOid); return ok }
 
-// SQLName implements the Type interface.
-func (t TOid) SQLName() string { return oidTypeName[t.oidType] }
-
 // IsAmbiguous implements the Type interface.
 func (TOid) IsAmbiguous() bool { return false }
 

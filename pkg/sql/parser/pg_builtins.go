@@ -293,7 +293,7 @@ var pgBuiltins = map[string][]Builtin{
 				if !ok {
 					return NewDString(fmt.Sprintf("unknown (OID=%s)", oidArg)), nil
 				}
-				return NewDString(typ.SQLName()), nil
+				return NewDString(types.SQLName(typ)), nil
 			},
 			Info: "Returns the SQL name of a data type that is " +
 				"identified by its type OID and possibly a type modifier. " +

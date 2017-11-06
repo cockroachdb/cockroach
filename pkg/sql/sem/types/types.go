@@ -31,10 +31,6 @@ type Type interface {
 	// constructor.
 	FamilyEqual(other Type) bool
 
-	// SQLName returns the type's SQL standard name. This can be looked up for a
-	// type `t` in postgres by running `SELECT format_type(t::regtype, NULL)`.
-	SQLName() string
-
 	// IsAmbiguous returns whether the type is ambiguous or fully defined. This
 	// is important for parameterized types to determine whether they are fully
 	// concrete type specification or not.
@@ -114,7 +110,6 @@ type tNull struct{}
 func (tNull) String() string              { return "NULL" }
 func (tNull) Equivalent(other Type) bool  { return other == TypeNull || other == TypeAny }
 func (tNull) FamilyEqual(other Type) bool { return other == TypeNull }
-func (tNull) SQLName() string             { return "unknown" }
 func (tNull) IsAmbiguous() bool           { return true }
 
 type tBool struct{}
@@ -122,7 +117,6 @@ type tBool struct{}
 func (tBool) String() string              { return "bool" }
 func (tBool) Equivalent(other Type) bool  { return UnwrapType(other) == TypeBool || other == TypeAny }
 func (tBool) FamilyEqual(other Type) bool { return UnwrapType(other) == TypeBool }
-func (tBool) SQLName() string             { return "boolean" }
 func (tBool) IsAmbiguous() bool           { return false }
 
 type tInt struct{}
@@ -130,7 +124,6 @@ type tInt struct{}
 func (tInt) String() string              { return "int" }
 func (tInt) Equivalent(other Type) bool  { return UnwrapType(other) == TypeInt || other == TypeAny }
 func (tInt) FamilyEqual(other Type) bool { return UnwrapType(other) == TypeInt }
-func (tInt) SQLName() string             { return "bigint" }
 func (tInt) IsAmbiguous() bool           { return false }
 
 type tFloat struct{}
@@ -138,7 +131,6 @@ type tFloat struct{}
 func (tFloat) String() string              { return "float" }
 func (tFloat) Equivalent(other Type) bool  { return UnwrapType(other) == TypeFloat || other == TypeAny }
 func (tFloat) FamilyEqual(other Type) bool { return UnwrapType(other) == TypeFloat }
-func (tFloat) SQLName() string             { return "double precision" }
 func (tFloat) IsAmbiguous() bool           { return false }
 
 type tDecimal struct{}
@@ -148,7 +140,6 @@ func (tDecimal) Equivalent(other Type) bool {
 	return UnwrapType(other) == TypeDecimal || other == TypeAny
 }
 func (tDecimal) FamilyEqual(other Type) bool { return UnwrapType(other) == TypeDecimal }
-func (tDecimal) SQLName() string             { return "numeric" }
 func (tDecimal) IsAmbiguous() bool           { return false }
 
 type tString struct{}
@@ -156,7 +147,6 @@ type tString struct{}
 func (tString) String() string              { return "string" }
 func (tString) Equivalent(other Type) bool  { return UnwrapType(other) == TypeString || other == TypeAny }
 func (tString) FamilyEqual(other Type) bool { return UnwrapType(other) == TypeString }
-func (tString) SQLName() string             { return "text" }
 func (tString) IsAmbiguous() bool           { return false }
 
 // TCollatedString is the type of strings with a locale.
@@ -187,9 +177,6 @@ func (TCollatedString) FamilyEqual(other Type) bool {
 	return ok
 }
 
-// SQLName implements the Type interface.
-func (TCollatedString) SQLName() string { return "text" }
-
 // IsAmbiguous implements the Type interface.
 func (t TCollatedString) IsAmbiguous() bool {
 	return t.Locale == ""
@@ -200,7 +187,6 @@ type tBytes struct{}
 func (tBytes) String() string              { return "bytes" }
 func (tBytes) Equivalent(other Type) bool  { return UnwrapType(other) == TypeBytes || other == TypeAny }
 func (tBytes) FamilyEqual(other Type) bool { return UnwrapType(other) == TypeBytes }
-func (tBytes) SQLName() string             { return "bytea" }
 func (tBytes) IsAmbiguous() bool           { return false }
 
 type tDate struct{}
@@ -208,7 +194,6 @@ type tDate struct{}
 func (tDate) String() string              { return "date" }
 func (tDate) Equivalent(other Type) bool  { return UnwrapType(other) == TypeDate || other == TypeAny }
 func (tDate) FamilyEqual(other Type) bool { return UnwrapType(other) == TypeDate }
-func (tDate) SQLName() string             { return "date" }
 func (tDate) IsAmbiguous() bool           { return false }
 
 type tTimestamp struct{}
@@ -218,7 +203,6 @@ func (tTimestamp) Equivalent(other Type) bool {
 	return UnwrapType(other) == TypeTimestamp || other == TypeAny
 }
 func (tTimestamp) FamilyEqual(other Type) bool { return UnwrapType(other) == TypeTimestamp }
-func (tTimestamp) SQLName() string             { return "timestamp without time zone" }
 func (tTimestamp) IsAmbiguous() bool           { return false }
 
 type tTimestampTZ struct{}
@@ -228,7 +212,6 @@ func (tTimestampTZ) Equivalent(other Type) bool {
 	return UnwrapType(other) == TypeTimestampTZ || other == TypeAny
 }
 func (tTimestampTZ) FamilyEqual(other Type) bool { return UnwrapType(other) == TypeTimestampTZ }
-func (tTimestampTZ) SQLName() string             { return "timestamp with time zone" }
 func (tTimestampTZ) IsAmbiguous() bool           { return false }
 
 type tInterval struct{}
@@ -238,7 +221,6 @@ func (tInterval) Equivalent(other Type) bool {
 	return UnwrapType(other) == TypeInterval || other == TypeAny
 }
 func (tInterval) FamilyEqual(other Type) bool { return UnwrapType(other) == TypeInterval }
-func (tInterval) SQLName() string             { return "interval" }
 func (tInterval) IsAmbiguous() bool           { return false }
 
 type tJSON struct{}
@@ -248,7 +230,6 @@ func (tJSON) Equivalent(other Type) bool {
 	return UnwrapType(other) == TypeJSON || other == TypeAny
 }
 func (tJSON) FamilyEqual(other Type) bool { return UnwrapType(other) == TypeJSON }
-func (tJSON) SQLName() string             { return "json" }
 func (tJSON) IsAmbiguous() bool           { return false }
 
 type tUUID struct{}
@@ -256,7 +237,6 @@ type tUUID struct{}
 func (tUUID) String() string              { return "uuid" }
 func (tUUID) Equivalent(other Type) bool  { return UnwrapType(other) == TypeUUID || other == TypeAny }
 func (tUUID) FamilyEqual(other Type) bool { return UnwrapType(other) == TypeUUID }
-func (tUUID) SQLName() string             { return "uuid" }
 func (tUUID) IsAmbiguous() bool           { return false }
 
 type tINet struct{}
@@ -264,7 +244,6 @@ type tINet struct{}
 func (tINet) String() string              { return "inet" }
 func (tINet) Equivalent(other Type) bool  { return UnwrapType(other) == TypeINet || other == TypeAny }
 func (tINet) FamilyEqual(other Type) bool { return UnwrapType(other) == TypeINet }
-func (tINet) SQLName() string             { return "inet" }
 func (tINet) IsAmbiguous() bool           { return false }
 
 // TTuple is the type of a DTuple.
@@ -310,9 +289,6 @@ func (TTuple) FamilyEqual(other Type) bool {
 	return ok
 }
 
-// SQLName implements the Type interface.
-func (TTuple) SQLName() string { return "record" }
-
 // IsAmbiguous implements the Type interface.
 func (t TTuple) IsAmbiguous() bool {
 	for _, typ := range t {
@@ -346,9 +322,6 @@ func (TPlaceholder) FamilyEqual(other Type) bool {
 	return ok
 }
 
-// SQLName implements the Type interface.
-func (TPlaceholder) SQLName() string { panic("TPlaceholder.SQLName() is undefined") }
-
 // IsAmbiguous implements the Type interface.
 func (TPlaceholder) IsAmbiguous() bool { panic("TPlaceholder.IsAmbiguous() is undefined") }
 
@@ -372,11 +345,6 @@ func (a TArray) Equivalent(other Type) bool {
 func (TArray) FamilyEqual(other Type) bool {
 	_, ok := UnwrapType(other).(TArray)
 	return ok
-}
-
-// SQLName implements the Type interface.
-func (a TArray) SQLName() string {
-	return a.Typ.SQLName() + "[]"
 }
 
 // IsAmbiguous implements the Type interface.
@@ -407,9 +375,6 @@ func (TTable) FamilyEqual(other Type) bool {
 	return ok
 }
 
-// SQLName implements the Type interface.
-func (TTable) SQLName() string { return "anyelement" }
-
 // IsAmbiguous implements the Type interface.
 func (a TTable) IsAmbiguous() bool {
 	return a.Cols == nil || a.Cols.IsAmbiguous()
@@ -420,7 +385,6 @@ type tAny struct{}
 func (tAny) String() string              { return "anyelement" }
 func (tAny) Equivalent(other Type) bool  { return true }
 func (tAny) FamilyEqual(other Type) bool { return other == TypeAny }
-func (tAny) SQLName() string             { return "anyelement" }
 func (tAny) IsAmbiguous() bool           { return true }
 
 // IsStringType returns true iff t is TypeString
