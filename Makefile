@@ -22,6 +22,15 @@
 # `help` target. They look a bit awkward in the variable declarations below
 # since any whitespace added would become part of the variable's default value.
 
+ifeq ($(PKG),)
+ifneq ($(TESTS),)
+$(error TESTS must be specified with PKG (e.g. PKG=./pkg/sql/))
+endif
+ifneq ($(BENCHES),)
+$(error BENCHES must be specified with PKG (e.g. PKG=./pkg/sql/))
+endif
+endif
+
 PKG          := ./pkg/...## Which package to run tests against, e.g. "./pkg/storage".
 TAGS         :=
 
