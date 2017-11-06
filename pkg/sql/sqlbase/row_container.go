@@ -165,7 +165,7 @@ func (c *RowContainer) Init(acc mon.BoundAccount, ti ColTypeInfo, rowCapacity in
 	}
 
 	for i := 0; i < nCols; i++ {
-		sz, variable := ti.Type(i).Size()
+		sz, variable := parser.DatumTypeSize(ti.Type(i))
 		if variable {
 			if c.varSizedColumns == nil {
 				// Only allocate varSizedColumns if necessary.
