@@ -38,11 +38,6 @@ type fmtFlags struct {
 	placeholderFormat func(buf *bytes.Buffer, f FmtFlags, p *Placeholder)
 	// If true, non-function names are replaced by underscores.
 	anonymize bool
-	// If true, strings will be rendered without wrapping quotes if they
-	// contain no special characters.
-	bareStrings bool
-	// If true, identifiers will be rendered without wrapping quotes.
-	bareIdentifiers bool
 	// If true, strings will be formatted for being contents of ARRAYs.
 	withinArray bool
 	// If true, datums and placeholders will have type annotations (like
@@ -55,6 +50,8 @@ type fmtFlags struct {
 	alwaysQualify bool
 	// If true, grouping parentheses are always shown. Used for testing.
 	alwaysParens bool
+	// Flags that control the formatting of strings and identifiers.
+	encodeFlags encodeFlags
 }
 
 // FmtFlags enables conditional formatting in the pretty-printer.
@@ -74,15 +71,15 @@ var FmtShowTypes FmtFlags = &fmtFlags{showTypes: true}
 
 // FmtBareStrings instructs the pretty-printer to print strings without
 // wrapping quotes, if the string contains no special characters.
-var FmtBareStrings FmtFlags = &fmtFlags{bareStrings: true}
+var FmtBareStrings FmtFlags = &fmtFlags{encodeFlags: encodeFlags{bareStrings: true}}
 
 // FmtArrays instructs the pretty-printer to print strings without
 // wrapping quotes, if the string contains no special characters.
-var FmtArrays FmtFlags = &fmtFlags{withinArray: true, bareStrings: true}
+var FmtArrays FmtFlags = &fmtFlags{withinArray: true, encodeFlags: encodeFlags{bareStrings: true}}
 
 // FmtBareIdentifiers instructs the pretty-printer to print
 // identifiers without wrapping quotes in any case.
-var FmtBareIdentifiers FmtFlags = &fmtFlags{bareIdentifiers: true}
+var FmtBareIdentifiers FmtFlags = &fmtFlags{encodeFlags: encodeFlags{bareIdentifiers: true}}
 
 // FmtParsable instructs the pretty-printer to produce a representation that
 // can be parsed into an equivalent expression (useful for serialization of
