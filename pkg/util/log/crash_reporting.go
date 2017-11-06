@@ -181,21 +181,48 @@ func (e *safeError) Error() string {
 	return e.message
 }
 
-func redact(r interface{}) string {
+// redact returns the redacted string and a boolean indicating whether the
+// supplied item is considered safe. That is, if the returned `bool` is true,
+// then the caller may choose to report the item verbatim (which might have been
+// scrubbed internally), discarding the returned string.
+func redact(r interface{}) (string, bool) {
 	handleSafeType := func(v *SafeType) string {
 		return fmt.Sprintf("%+v", v.V)
 	}
+	typAnd := func(i interface{}, text string) string {
+		type stackTracer interface {
+			StackTrace() errors.StackTrace
+		}
+		typ := fmt.Sprintf("%T", i)
+		if e, ok := i.(stackTracer); ok {
+			tr := e.StackTrace()
+			if len(tr) > 0 {
+				typ = fmt.Sprintf("%v", tr[0]) // prints file:line
+			}
+		}
+		if text == "" {
+			return typ
+		}
+		if strings.HasPrefix(typ, "errors.") {
+			// Don't bother reporting the type for errors.New() and its
+			// nondescript siblings. Note that errors coming from pkg/errors
+			// usually have `typ` overridden to file:line above, so they won't
+			// hit this path.
+			return text
+		}
+		return typ + ": " + text
+	}
 
-	handle := func(r interface{}) string {
+	handle := func(r interface{}) (string, bool) {
 		switch t := r.(type) {
 		case *SafeType:
-			return handleSafeType(t)
+			return handleSafeType(t), false
 		case SafeType:
-			return handleSafeType(&t)
+			return handleSafeType(&t), false
 		case error:
 			// continue below
 		default:
-			return ""
+			return typAnd(r, ""), false
 		}
 
 		// Now that we're looking at an error, see if it's one we can
@@ -203,17 +230,18 @@ func redact(r interface{}) string {
 		// block above ensures that the types below actually implement `error`.
 		switch t := r.(error).(type) {
 		case runtime.Error:
-			return t.Error()
+			return typAnd(t, t.Error()), true
 		case syscall.Errno:
-			return t.Error()
+			return typAnd(t, t.Error()), true
 		case *os.SyscallError:
-			return fmt.Sprintf("%s: %s", t.Syscall, redact(t.Err))
+			s, safe := redact(t.Err)
+			return typAnd(t, fmt.Sprintf("%s: %s", t.Syscall, s)), safe
 		case *os.PathError:
 			t.Path = "<redacted>"
-			return t.Error()
+			return typAnd(t, t.Error()), true
 		case *os.LinkError:
 			t.Old, t.New = "<redacted>", "<redacted>"
-			return t.Error()
+			return typAnd(t, t.Error()), true
 		default:
 		}
 
@@ -229,24 +257,26 @@ func redact(r interface{}) string {
 		case os.ErrClosed:
 		default:
 			// Not a whitelisted sentinel error.
-			return ""
+			return typAnd(r, ""), false
 		}
 		// Whitelisted sentinel error.
-		return r.(error).Error()
+		return typAnd(r, r.(error).Error()), true
 	}
 
 	type causer interface {
 		Cause() error
 	}
 
-	reportable := handle(r)
+	reportable, safe := handle(r)
 	if c, ok := r.(causer); ok {
 		if reportable == "" {
 			reportable += "<redacted>"
 		}
-		reportable += ": caused by " + redact(c.Cause())
+		sub, subSafe := redact(c.Cause())
+		reportable += ": caused by " + sub
+		safe = safe && subSafe
 	}
-	return reportable
+	return reportable, safe
 }
 
 func reportablesToSafeError(depth int, format string, reportables []interface{}) error {
@@ -260,13 +290,13 @@ func reportablesToSafeError(depth int, format string, reportables []interface{})
 		file, line, _ = caller.Lookup(depth)
 	}
 
-	if e, ok := reportables[0].(error); ok {
+	if e, ok := reportables[0].(error); ok && len(reportables) == 1 && format == "" {
 		// Special case so that `panic(err)` for a safe `err` returns `err` (and
 		// doesn't wrap it in a `safeError`). In fact, we go further and also try
 		// the errors.Cause() similarly. The effect is that something like
 		// `errors.Wrap(someSafeErr, "gibberish")` can report `someSafeErr` verbatim.
 		for _, err := range []error{e, errors.Cause(e)} {
-			if format == "" && len(reportables) == 1 && redact(err) == err.Error() {
+			if _, safe := redact(err); safe {
 				return err
 			}
 		}
@@ -274,15 +304,8 @@ func reportablesToSafeError(depth int, format string, reportables []interface{})
 
 	redacted := make([]string, 0, len(reportables))
 	for i := range reportables {
-		msg := redact(reportables[i])
-		typ := fmt.Sprintf("<%T>", reportables[i])
-		if msg == "" {
-			redacted = append(redacted, typ)
-		} else if typ == "<log.SafeType>" || typ == "<*log.SafeType>" {
-			redacted = append(redacted, msg)
-		} else {
-			redacted = append(redacted, typ+": "+msg)
-		}
+		s, _ := redact(reportables[i])
+		redacted = append(redacted, s)
 	}
 	reportables = nil
 
