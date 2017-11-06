@@ -57,25 +57,19 @@ var stderrColorProfile = func() *colorProfile {
 		return nil
 	}
 
+	// Console does not support our color profiles but Powershell supports
+	// colorProfile256. Sadly, detecting the shell is not well supported, so
+	// default to no-color.
+	if runtime.GOOS == "windows" {
+		return nil
+	}
+
 	// Determine whether stderr is a character device and if so, that
 	// the terminal supports color output.
 
 	fi, err := OrigStderr.Stat()
 	if err != nil {
-		// Stat() will return an error on Windows in both Powershell and
-		// console until go1.9. See https://github.com/golang/go/issues/14853.
-		//
-		// Note that this bug does not affect MSYS/Cygwin terminals.
-		//
-		// TODO(bram): remove this hack once we move to go 1.9.
-		//
-		// Console does not support our color profiles but
-		// Powershell supports colorProfile256. Sadly, detecting the
-		// shell is not well supported, so default to no-color.
-		if runtime.GOOS != "windows" {
-			panic(err)
-		}
-		return nil
+		panic(err)
 	}
 	if (fi.Mode() & os.ModeCharDevice) != 0 {
 		term := os.Getenv("TERM")
