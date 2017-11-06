@@ -3,6 +3,7 @@
 - [Prerequisites](#prerequisites)
 - [Getting and Building](#getting-and-building)
 - [Style Guide](#style-guide)
+- [Commit Messages](#commit-messages)
 - [Code Review Workflow](#code-review-workflow)
 - [Debugging](#debugging)
 
@@ -93,6 +94,46 @@ be run as shown in the [README](README.md).
 
 See our separate [style guide](STYLE.md) document.
 
+## Commit Messages
+
+When you're ready to commit, be sure to write a Good Commit Message™. Consult
+https://github.com/erlang/otp/wiki/Writing-good-commit-messages if you're
+not sure what constitutes a Good Commit Message™.
+In addition to the general rules referenced above, please also observe the
+following guidelines:
+
+- Prefix your commit subject line with the affected package, if one can easily
+  be chosen. For example, the subject line of a commit mostly affecting the
+  `server` package might read: "server: use net.Pipe instead of TCP HTTP/gRPC connections".
+  Commits which affect many packages as a result of a shared dependency change
+  should probably begin their subjects with the name of the shared dependency.
+  Finally, some commits may need to affect many packages in a way which does
+  not point to a specific package; those commits may begin with "\*:" or "all:"
+  to indicate their reach.
+
+- We publish detailed [release notes](https://www.cockroachlabs.com/docs/releases/)
+  describing most non-test changes. To facilitate this, at least one commit in every
+  PR (preferably the PR message/merge commit) should contain a brief description of
+  the change in terms that a user would recognize. This description should be prefixed
+  with "Release note (category):", where the "category" is one of the following:
+  - cli change
+  - sql change
+  - web ui change
+  - performance improvement
+  - bug fix
+  - general change (e.g., change of required Go version)
+  - build change (e.g., compatibility with older CPUs)
+  - enterprise change (e.g., change to backup/restore)
+  - backwards-incompatible change
+
+  For example, a commit like ["distsql: pre-reserve memory needed
+  to mark rows in HashJoiner build phase"](https://github.com/cockroachdb/cockroach/pull/18975)
+  might say, "Release note (bug fix): Fixed a panic in queries with `JOIN` using the
+  distributed SQL engine."
+
+  When a commit falls into more than one category, choose the category that matches best
+  or is most affected from a user's perspective.
+
 ## Code Review Workflow
 
 - All contributors need to sign the [Contributor License
@@ -134,42 +175,6 @@ See our separate [style guide](STYLE.md) document.
   ```shell
   make test ... TESTFLAGS="-v -show-logs"
   ```
-
-  When you're ready to commit, be sure to write a Good Commit Message™. Consult
-  https://github.com/erlang/otp/wiki/Writing-good-commit-messages if you're
-  not sure what constitutes a Good Commit Message™.
-  In addition to the general rules referenced above, please also observe the
-  following guidelines:
-  - Prefix your commit subject line with the affected package, if one can easily
-    be chosen. For example, the subject line of a commit mostly affecting the
-    `server` package might read: "server: use net.Pipe instead of TCP HTTP/gRPC connections".
-    Commits which affect many packages as a result of a shared dependency change
-    should probably begin their subjects with the name of the shared dependency.
-    Finally, some commits may need to affect many packages in a way which does
-    not point to a specific package; those commits may begin with "*:" or "all:"
-    to indicate their reach.
-  - We publish detailed [release notes](https://www.cockroachlabs.com/docs/releases/)
-    describing most non-test changes. To facilitate this, at least one commit in every
-    PR (preferably the PR message/merge commit) should contain a brief description of
-    the change in terms that a user would recognize. This description should be prefixed
-    with "Release note (category):", where the "category" is one of the following:
-    - cli change
-    - sql change
-    - web ui change
-    - performance improvement
-    - bug fix
-    - general change (e.g., change of required Go version)
-    - build change (e.g., compatibility with older CPUs)
-    - enterprise change (e.g., change to backup/restore)
-    - backwards-incompatible change
-
-    For example, a commit like ["distsql: pre-reserve memory needed
-    to mark rows in HashJoiner build phase"](https://github.com/cockroachdb/cockroach/pull/18975)
-    might say, "Release note (bug fix): Fixed a panic in queries with `JOIN` using the
-    distributed SQL engine."
-
-    When a commit falls into more than one category, choose the category that matches best
-    or is most affected from a user's perspective.
 
 - Run the linters, code generators, and unit test suites locally:
 
