@@ -2734,8 +2734,13 @@ func performCast(ctx *EvalContext, d Datum, t CastTargetType) (Datum, error) {
 			return ParseDJSON(string(*v))
 		}
 	case *ArrayColType:
-		if s, ok := d.(*DString); ok {
-			return ParseDArrayFromString(ctx, string(*s), typ.ParamType)
+		switch v := d.(type) {
+		case *DString:
+			return ParseDArrayFromString(ctx, string(*v), typ.ParamType)
+		case *DArray:
+			if (*v).ParamTyp == CastTargetToDatumType((*typ).ParamType) {
+				return d, nil
+			}
 		}
 	case *OidColType:
 		switch v := d.(type) {

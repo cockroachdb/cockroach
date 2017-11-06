@@ -957,3 +957,8 @@ query T
 SELECT ARRAY_POSITIONS(NULL::STRING[], 'A')
 ----
 NULL
+
+query T
+SELECT ARRAY[1,2,3]::INT[]
+----
+{1,2,3}
