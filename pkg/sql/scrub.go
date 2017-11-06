@@ -209,25 +209,19 @@ func (n *scrubNode) startScrubTable(
 	return nil
 }
 
-// startIndexCheck will plan and run an index check using the distSQL
-// execution engine. The returned value contains the row iterator and
-// the information about the index that was checked.
-func (n *scrubNode) startIndexCheck(
-	ctx context.Context, p *planner, indexToCheck indexCheckDetails,
-) (*checkedIndex, error) {
-	tableDesc := indexToCheck.tableDesc
-	indexDesc := indexToCheck.indexDesc
-	tableName := indexToCheck.tableName
-
+// getColumns returns the columns that are stored in an index k/v. The
+// column names and types are also returned.
+func getColumns(
+	tableDesc *sqlbase.TableDescriptor, indexDesc *sqlbase.IndexDescriptor,
+) (columns []*sqlbase.ColumnDescriptor, columnNames []string, columnTypes []sqlbase.ColumnType) {
 	colToIdx := make(map[sqlbase.ColumnID]int)
 	for i, col := range tableDesc.Columns {
 		colToIdx[col.ID] = i
 	}
 
-	// Collect all of the columns we are fetching from the secondary
-	// index. This includes the columns involved in the index: columns,
-	// extra columns, and store columns.
-	var columns []*sqlbase.ColumnDescriptor
+	// Collect all of the columns we are fetching from the index. This
+	// includes the columns involved in the index: columns, extra columns,
+	// and store columns.
 	for _, colID := range indexDesc.ColumnIDs {
 		columns = append(columns, &tableDesc.Columns[colToIdx[colID]])
 	}
@@ -239,20 +233,18 @@ func (n *scrubNode) startIndexCheck(
 	}
 
 	// Collect the column names and types.
-	var columnNames []string
-	var columnTypes []sqlbase.ColumnType
 	for _, col := range columns {
 		columnNames = append(columnNames, col.Name)
 		columnTypes = append(columnTypes, col.Type)
 	}
+	return columns, columnNames, columnTypes
+}
 
-	// Because the row results include both primary key data and secondary
-	// key data, the row results will contain two copies of the column
-	// data.
-	columnTypes = append(columnTypes, columnTypes...)
-
-	// Find the row indexes for all of the primary index columns.
-	var primaryColumnRowIndexes []int
+// getPrimaryColIdxs returns a list of the primary index columns and
+// their corresponding index in the columns list.
+func getPrimaryColIdxs(
+	tableDesc *sqlbase.TableDescriptor, columns []*sqlbase.ColumnDescriptor,
+) (primaryColIdxs []int, err error) {
 	for i, colID := range tableDesc.PrimaryIndex.ColumnIDs {
 		rowIdx := -1
 		for idx, col := range columns {
@@ -267,7 +259,31 @@ func (n *scrubNode) startIndexCheck(
 				colID,
 				tableDesc.PrimaryIndex.ColumnNames[i])
 		}
-		primaryColumnRowIndexes = append(primaryColumnRowIndexes, rowIdx)
+		primaryColIdxs = append(primaryColIdxs, rowIdx)
+	}
+	return primaryColIdxs, nil
+}
+
+// startIndexCheck will plan and run an index check using the distSQL
+// execution engine. The returned value contains the row iterator and
+// the information about the index that was checked.
+func (n *scrubNode) startIndexCheck(
+	ctx context.Context, p *planner, indexToCheck indexCheckDetails,
+) (*checkedIndex, error) {
+	tableDesc := indexToCheck.tableDesc
+	indexDesc := indexToCheck.indexDesc
+	tableName := indexToCheck.tableName
+	columns, columnNames, columnTypes := getColumns(tableDesc, indexDesc)
+
+	// Because the row results include both primary key data and secondary
+	// key data, the row results will contain two copies of the column
+	// data.
+	columnTypes = append(columnTypes, columnTypes...)
+
+	// Find the row indexes for all of the primary index columns.
+	primaryColIdxs, err := getPrimaryColIdxs(tableDesc, columns)
+	if err != nil {
+		return nil, err
 	}
 
 	checkQuery := createIndexCheckQuery(columnNames,
@@ -294,7 +310,7 @@ func (n *scrubNode) startIndexCheck(
 	}
 	defer plan.Close(ctx)
 
-	rows, err := scrubIndexRunDistSQL(ctx, p, plan, columnTypes)
+	rows, err := scrubPlanAndRunDistSQL(ctx, p, plan, columnTypes)
 	if err != nil {
 		rows.Close(ctx)
 		return nil, err
@@ -305,14 +321,14 @@ func (n *scrubNode) startIndexCheck(
 	return &checkedIndex{
 		details: indexToCheck,
 		rows:    rows,
-		primaryIndexColumnIndexes: primaryColumnRowIndexes,
+		primaryIndexColumnIndexes: primaryColIdxs,
 		columns:                   columns,
 	}, nil
 }
 
-// scrubIndexRunDistSQL will prepare and run the plan in distSQL. If a
+// scrubPlanAndRunDistSQL will prepare and run the plan in distSQL. If a
 // RowContainer is returned the caller must close it.
-func scrubIndexRunDistSQL(
+func scrubPlanAndRunDistSQL(
 	ctx context.Context, p *planner, plan planNode, columnTypes []sqlbase.ColumnType,
 ) (*sqlbase.RowContainer, error) {
 	ci := sqlbase.ColTypeInfoFromColTypes(columnTypes)
