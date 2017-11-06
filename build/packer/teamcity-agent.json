@@ -9,7 +9,6 @@
       "region": "nyc1",
       "size": "c-16",
       "snapshot_name": "{{user `image_id`}}",
-      "snapshot_regions": ["nyc1"],
       "ssh_username": "root",
       "volumes": [{
         "size": 25,
