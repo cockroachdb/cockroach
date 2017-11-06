@@ -17,9 +17,9 @@ syntax = "proto2";
 package cockroach.storage.engine.enginepb;
 option go_package = "enginepb";
 
-import "cockroach/pkg/storage/engine/enginepb/mvcc3.proto";
-import "cockroach/pkg/util/hlc/legacy_timestamp.proto";
-import "cockroach/pkg/util/hlc/timestamp.proto";
+import "storage/engine/enginepb/mvcc3.proto";
+import "util/hlc/legacy_timestamp.proto";
+import "util/hlc/timestamp.proto";
 import "gogoproto/gogo.proto";
 
 // MVCCMetadata holds MVCC metadata for a key. Used by storage/engine/mvcc.go.

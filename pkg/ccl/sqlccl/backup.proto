@@ -10,11 +10,11 @@ syntax = "proto3";
 package cockroach.ccl.sqlccl;
 option go_package = "sqlccl";
 
-import "cockroach/pkg/build/info.proto";
-import "cockroach/pkg/roachpb/api.proto";
-import "cockroach/pkg/roachpb/data.proto";
-import "cockroach/pkg/sql/sqlbase/structured.proto";
-import "cockroach/pkg/util/hlc/timestamp.proto";
+import "build/info.proto";
+import "roachpb/api.proto";
+import "roachpb/data.proto";
+import "sql/sqlbase/structured.proto";
+import "util/hlc/timestamp.proto";
 import "gogoproto/gogo.proto";
 
 enum MVCCFilter {

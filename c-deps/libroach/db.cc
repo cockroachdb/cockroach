@@ -27,10 +27,10 @@
 #include <rocksdb/sst_file_writer.h>
 #include <rocksdb/table.h>
 #include <rocksdb/utilities/write_batch_with_index.h>
-#include "protos/cockroach/pkg/roachpb/data.pb.h"
-#include "protos/cockroach/pkg/roachpb/internal.pb.h"
-#include "protos/cockroach/pkg/storage/engine/enginepb/rocksdb.pb.h"
-#include "protos/cockroach/pkg/storage/engine/enginepb/mvcc.pb.h"
+#include "protos/roachpb/data.pb.h"
+#include "protos/roachpb/internal.pb.h"
+#include "protos/storage/engine/enginepb/rocksdb.pb.h"
+#include "protos/storage/engine/enginepb/mvcc.pb.h"
 #include "db.h"
 #include "encoding.h"
 #include "eventlistener.h"
