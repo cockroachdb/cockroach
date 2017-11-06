@@ -75,7 +75,7 @@ func (n Name) Format(buf *bytes.Buffer, f FmtFlags) {
 	if f.anonymize {
 		buf.WriteByte('_')
 	} else {
-		encodeRestrictedSQLIdent(buf, string(n), f)
+		encodeRestrictedSQLIdent(buf, string(n), f.bareIdentifiers)
 	}
 }
 
@@ -108,7 +108,7 @@ func (u UnrestrictedName) Format(buf *bytes.Buffer, f FmtFlags) {
 	if f.anonymize {
 		buf.WriteByte('_')
 	} else {
-		encodeUnrestrictedSQLIdent(buf, string(u), f)
+		encodeUnrestrictedSQLIdent(buf, string(u), f.bareIdentifiers)
 	}
 }
 

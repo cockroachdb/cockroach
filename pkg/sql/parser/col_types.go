@@ -382,7 +382,7 @@ func (node *CollatedStringColType) Format(buf *bytes.Buffer, f FmtFlags) {
 		fmt.Fprintf(buf, "(%d)", node.N)
 	}
 	buf.WriteString(" COLLATE ")
-	encodeUnrestrictedSQLIdent(buf, node.Locale, f)
+	encodeUnrestrictedSQLIdent(buf, node.Locale, f.bareIdentifiers)
 }
 
 // ArrayColType represents an ARRAY column type.
@@ -398,7 +398,7 @@ func (node *ArrayColType) Format(buf *bytes.Buffer, f FmtFlags) {
 	buf.WriteString(node.Name)
 	if collation, ok := node.ParamType.(*CollatedStringColType); ok {
 		buf.WriteString(" COLLATE ")
-		encodeUnrestrictedSQLIdent(buf, collation.Locale, f)
+		encodeUnrestrictedSQLIdent(buf, collation.Locale, f.bareIdentifiers)
 	}
 }
 

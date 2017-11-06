@@ -37,7 +37,7 @@ var mustQuoteMap = map[byte]bool{
 // encodeSQLString writes a string literal to buf. All unicode and
 // non-printable characters are escaped.
 func encodeSQLString(buf *bytes.Buffer, in string) {
-	encodeSQLStringWithFlags(buf, in, FmtSimple)
+	encodeSQLStringWithFlags(buf, in, false /*bare*/)
 }
 
 // EscapeSQLString returns an escaped SQL representation of the given
@@ -56,14 +56,14 @@ func hexEncodeString(buf *bytes.Buffer, in string) {
 }
 
 // encodeSQLStringWithFlags writes a string literal to buf. All unicode and
-// non-printable characters are escaped. FmtFlags controls the output format:
-// if f.bareStrings is true, the output string will not be wrapped in quotes
+// non-printable characters are escaped. bare controls the output format:
+// if bare is true, the output string will not be wrapped in quotes
 // if the strings contains no special characters.
-func encodeSQLStringWithFlags(buf *bytes.Buffer, in string, f FmtFlags) {
+func encodeSQLStringWithFlags(buf *bytes.Buffer, in string, bare bool) {
 	// See http://www.postgresql.org/docs/9.4/static/sql-syntax-lexical.html
 	start := 0
 	escapedString := false
-	bareStrings := f.bareStrings
+	bareStrings := bare
 	// Loop through each unicode code point.
 	for i, r := range in {
 		ch := byte(r)
@@ -119,25 +119,25 @@ func encodeSQLStringInsideArray(buf *bytes.Buffer, in string) {
 	buf.WriteByte('"')
 }
 
-func encodeUnrestrictedSQLIdent(buf *bytes.Buffer, s string, f FmtFlags) {
-	if isBareIdentifier(s) {
+func encodeUnrestrictedSQLIdent(buf *bytes.Buffer, s string, bare bool) {
+	if bare || isBareIdentifier(s) {
 		buf.WriteString(s)
 		return
 	}
-	encodeEscapedSQLIdent(buf, s, f)
+	encodeEscapedSQLIdent(buf, s, bare)
 }
 
-func encodeRestrictedSQLIdent(buf *bytes.Buffer, s string, f FmtFlags) {
-	if !isReservedKeyword(s) && isBareIdentifier(s) {
+func encodeRestrictedSQLIdent(buf *bytes.Buffer, s string, bare bool) {
+	if bare || (!isReservedKeyword(s) && isBareIdentifier(s)) {
 		buf.WriteString(s)
 		return
 	}
-	encodeEscapedSQLIdent(buf, s, f)
+	encodeEscapedSQLIdent(buf, s, bare)
 }
 
-func encodeEscapedSQLIdent(buf *bytes.Buffer, s string, f FmtFlags) {
+func encodeEscapedSQLIdent(buf *bytes.Buffer, s string, bare bool) {
 	// The only character that requires escaping is a double quote.
-	if !f.bareIdentifiers {
+	if !bare {
 		buf.WriteString(`"`)
 	}
 	start := 0
@@ -155,7 +155,7 @@ func encodeEscapedSQLIdent(buf *bytes.Buffer, s string, f FmtFlags) {
 	if start < len(s) {
 		buf.WriteString(s[start:])
 	}
-	if !f.bareIdentifiers {
+	if !bare {
 		buf.WriteString(`"`)
 	}
 }

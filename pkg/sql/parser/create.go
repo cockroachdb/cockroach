@@ -51,19 +51,19 @@ func (node *CreateDatabase) Format(buf *bytes.Buffer, f FmtFlags) {
 	FormatNode(buf, f, node.Name)
 	if node.Template != "" {
 		buf.WriteString(" TEMPLATE = ")
-		encodeSQLStringWithFlags(buf, node.Template, f)
+		encodeSQLStringWithFlags(buf, node.Template, f.bareStrings)
 	}
 	if node.Encoding != "" {
 		buf.WriteString(" ENCODING = ")
-		encodeSQLStringWithFlags(buf, node.Encoding, f)
+		encodeSQLStringWithFlags(buf, node.Encoding, f.bareStrings)
 	}
 	if node.Collate != "" {
 		buf.WriteString(" LC_COLLATE = ")
-		encodeSQLStringWithFlags(buf, node.Collate, f)
+		encodeSQLStringWithFlags(buf, node.Collate, f.bareStrings)
 	}
 	if node.CType != "" {
 		buf.WriteString(" LC_CTYPE = ")
-		encodeSQLStringWithFlags(buf, node.CType, f)
+		encodeSQLStringWithFlags(buf, node.CType, f.bareStrings)
 	}
 }
 

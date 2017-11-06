@@ -834,7 +834,7 @@ func (d *DString) Format(buf *bytes.Buffer, f FmtFlags) {
 	if f.withinArray {
 		encodeSQLStringInsideArray(buf, string(*d))
 	} else {
-		encodeSQLStringWithFlags(buf, string(*d), f)
+		encodeSQLStringWithFlags(buf, string(*d), f.bareStrings)
 	}
 }
 
@@ -904,7 +904,7 @@ func (d *DCollatedString) Format(buf *bytes.Buffer, f FmtFlags) {
 	} else {
 		encodeSQLString(buf, d.Contents)
 		buf.WriteString(" COLLATE ")
-		encodeUnrestrictedSQLIdent(buf, d.Locale, FmtSimple)
+		encodeUnrestrictedSQLIdent(buf, d.Locale, false /*bare*/)
 	}
 }
 
@@ -2665,7 +2665,7 @@ func (d *DOid) Format(buf *bytes.Buffer, f FmtFlags) {
 	if d.semanticType == oidColTypeOid || d.name == "" {
 		FormatNode(buf, f, &d.DInt)
 	} else {
-		encodeSQLStringWithFlags(buf, d.name, FmtBareStrings)
+		encodeSQLStringWithFlags(buf, d.name, true /*bare*/)
 	}
 }
 
