@@ -662,7 +662,7 @@ func (c *v3Conn) handleParse(buf *readBuffer) error {
 		if t == 0 {
 			continue
 		}
-		v, ok := parser.OidToType[t]
+		v, ok := types.OidToType[t]
 		if !ok {
 			return c.sendError(pgerror.NewErrorf(pgerror.CodeProtocolViolationError, "unknown oid type: %v", t))
 		}

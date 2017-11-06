@@ -865,7 +865,7 @@ func decodeBinaryArray(b []byte, code formatCode) (parser.Datum, error) {
 	}
 
 	elemOid := oid.Oid(hdr.ElemOid)
-	arr := parser.NewDArray(parser.OidToType[elemOid])
+	arr := parser.NewDArray(types.OidToType[elemOid])
 	var vlen int32
 	for i := int32(0); i < hdr.DimSize; i++ {
 		if err := binary.Read(r, binary.BigEndian, &vlen); err != nil {
