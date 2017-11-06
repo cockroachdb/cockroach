@@ -15,6 +15,7 @@
 package distsqlrun
 
 import (
+	"bytes"
 	"fmt"
 	"sync"
 
@@ -22,11 +23,29 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/scrub"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
+
+// ScrubTypes is the schema for TableReaders that are doing a SCRUB
+// check. This schema is what TableReader output streams are overrided
+// to for check. The column types correspond to:
+// - Error type.
+// - Primary key as a string, if it was obtainable.
+// - JSON of all decoded column values.
+//
+// TODO(joey): If we want a way find the key for the error, we will need
+// additional data such as the key bytes and the table descriptor ID.
+// Repair won't be possible without this.
+var ScrubTypes = []sqlbase.ColumnType{
+	{SemanticType: sqlbase.ColumnType_STRING},
+	{SemanticType: sqlbase.ColumnType_STRING},
+	{SemanticType: sqlbase.ColumnType_JSON},
+}
 
 // tableReader is the start of a computation flow; it performs KV operations to
 // retrieve rows for a table, runs a filter expression, and passes rows with the
@@ -37,7 +56,7 @@ type tableReader struct {
 
 	flowCtx *FlowCtx
 
-	tableID   sqlbase.ID
+	tableDesc sqlbase.TableDescriptor
 	spans     roachpb.Spans
 	limitHint int64
 
@@ -45,6 +64,13 @@ type tableReader struct {
 	alloc   sqlbase.DatumAlloc
 
 	isCheck bool
+	// fetcherResultToColIdx maps RowFetcher results to the column index in
+	// the TableDescriptor. This is only initialized and used during scrub
+	// physical checks.
+	fetcherResultToColIdx []int
+	// indexIdx refers to the index being scanned. This is only used
+	// during scrub physical checks.
+	indexIdx int
 }
 
 var _ Processor = &tableReader{}
@@ -57,9 +83,10 @@ func newTableReader(
 		return nil, errors.Errorf("attempting to create a tableReader with uninitialized NodeID")
 	}
 	tr := &tableReader{
-		flowCtx: flowCtx,
-		tableID: spec.Table.ID,
-		isCheck: spec.IsCheck,
+		flowCtx:   flowCtx,
+		tableDesc: spec.Table,
+		isCheck:   spec.IsCheck,
+		indexIdx:  int(spec.IndexIdx),
 	}
 
 	// We ignore any limits that are higher than this value to avoid any
@@ -99,14 +126,50 @@ func newTableReader(
 	for i := range types {
 		types[i] = spec.Table.Columns[i].Type
 	}
+	// IsCheck is only enabled while running a scrub physical check on an
+	// index. When running the check, the output schema of the table
+	// reader is instead ScrubTypes.
+	if spec.IsCheck {
+		types = ScrubTypes
+	}
 	if err := tr.init(post, types, flowCtx, output); err != nil {
 		return nil, err
 	}
 
-	desc := spec.Table
+	neededColumns := tr.out.neededColumns()
+
+	// If we are doing a scrub physical check, neededColumns needs to be
+	// changed to be all columns available in the index we are scanning.
+	// This is because the emitted schema is ScrubTypes so neededColumns
+	// does not correctly represent the data being scanned.
+	if tr.isCheck {
+		if spec.IndexIdx == 0 {
+			neededColumns = util.FastIntSet{}
+			neededColumns.AddRange(0, len(spec.Table.Columns)-1)
+			for i := range spec.Table.Columns {
+				tr.fetcherResultToColIdx = append(tr.fetcherResultToColIdx, i)
+			}
+		} else {
+			colIDToIdx := make(map[sqlbase.ColumnID]int, len(spec.Table.Columns))
+			for i := range spec.Table.Columns {
+				colIDToIdx[spec.Table.Columns[i].ID] = i
+			}
+			neededColumns = util.FastIntSet{}
+			for _, id := range spec.Table.Indexes[spec.IndexIdx-1].ColumnIDs {
+				neededColumns.Add(colIDToIdx[id])
+			}
+			for _, id := range spec.Table.Indexes[spec.IndexIdx-1].ExtraColumnIDs {
+				neededColumns.Add(colIDToIdx[id])
+			}
+			for _, id := range spec.Table.Indexes[spec.IndexIdx-1].StoreColumnIDs {
+				neededColumns.Add(colIDToIdx[id])
+			}
+		}
+	}
+
 	if _, _, err := initRowFetcher(
-		&tr.fetcher, &desc, int(spec.IndexIdx), spec.Reverse,
-		tr.out.neededColumns(), spec.IsCheck, &tr.alloc,
+		&tr.fetcher, &tr.tableDesc, int(spec.IndexIdx), spec.Reverse,
+		neededColumns, spec.IsCheck, &tr.alloc,
 	); err != nil {
 		return nil, err
 	}
@@ -147,7 +210,7 @@ func initRowFetcher(
 		ValNeededForCol:  valNeededForCol,
 	}
 	if err := fetcher.Init(
-		reverseScan, true /* returnRangeInfo */, false /* isCheck */, alloc, tableArgs,
+		reverseScan, true /* returnRangeInfo */, isCheck, alloc, tableArgs,
 	); err != nil {
 		return nil, false, err
 	}
@@ -185,7 +248,7 @@ func (tr *tableReader) Run(ctx context.Context, wg *sync.WaitGroup) {
 		defer wg.Done()
 	}
 
-	ctx = log.WithLogTagInt(ctx, "TableReader", int(tr.tableID))
+	ctx = log.WithLogTagInt(ctx, "TableReader", int(tr.tableDesc.ID))
 	ctx, span := processorSpan(ctx, "table reader")
 	defer tracing.FinishSpan(span)
 
@@ -210,9 +273,40 @@ func (tr *tableReader) Run(ctx context.Context, wg *sync.WaitGroup) {
 	}
 
 	for {
-		row, _, _, err := tr.fetcher.NextRow(ctx)
+		var row sqlbase.EncDatumRow
+		var err error
+		if !tr.isCheck {
+			row, _, _, err = tr.fetcher.NextRow(ctx)
+		} else {
+			// If we are running a scrub physical check, we use a specialized
+			// procedure that runs additional checks while fetching the row
+			// data.
+			row, err = tr.fetcher.NextRowWithErrors(ctx)
+			// There are four cases that can happen after NextRowWithErrors:
+			// 1) We encounter a ScrubError. We do not propagate the error up,
+			//    but instead generate and emit a row for the final results.
+			// 2) No errors were found. We simply continue scanning the data
+			//    and discard the row values, as they are not needed for any
+			//    results.
+			// 3) A non-scrub error was encountered. This was not considered a
+			//    physical data error, and so we propagate this to the user
+			//    immediately.
+			// 4) There was no error or row data. This signals that there is
+			//    no more data to scan.
+			//
+			// NB: Cases 3 and 4 are handled further below, in the standard
+			// table scanning code path.
+			if v, ok := err.(*scrub.Error); ok {
+				row, err = tr.generateScrubErrorRow(row, v)
+			} else if err == nil && row != nil {
+				continue
+			}
+		}
 		if err != nil || row == nil {
 			if err != nil {
+				if scrub.IsScrubError(err) {
+					err = scrub.UnwrapScrubError(err)
+				}
 				tr.out.output.Push(nil /* row */, ProducerMetadata{Err: err})
 			}
 			break
@@ -229,4 +323,74 @@ func (tr *tableReader) Run(ctx context.Context, wg *sync.WaitGroup) {
 	tr.sendMisplannedRangesMetadata(ctx)
 	sendTraceData(ctx, tr.out.output)
 	tr.out.Close()
+}
+
+// generateScrubErrorRow will create an EncDatumRow describing a
+// physical check error encountered when scanning table data. The schema
+// of the EncDatumRow is the ScrubTypes constant.
+func (tr *tableReader) generateScrubErrorRow(
+	row sqlbase.EncDatumRow, scrubErr *scrub.Error,
+) (sqlbase.EncDatumRow, error) {
+	details := make(map[string]interface{})
+	var index *sqlbase.IndexDescriptor
+	if tr.indexIdx == 0 {
+		index = &tr.tableDesc.PrimaryIndex
+	} else {
+		index = &tr.tableDesc.Indexes[tr.indexIdx-1]
+	}
+	// Collect all the row values into JSON
+	rowDetails := make(map[string]interface{})
+	for i, colIdx := range tr.fetcherResultToColIdx {
+		col := tr.tableDesc.Columns[colIdx]
+		// TODO(joey): We should maybe try to get the underlying type.
+		rowDetails[col.Name] = row[i].String(&col.Type)
+	}
+	details["row_data"] = rowDetails
+	details["index_name"] = index.Name
+	details["error_message"] = scrub.UnwrapScrubError(error(scrubErr)).Error()
+
+	detailsJSON, err := tree.MakeDJSON(details)
+	if err != nil {
+		return nil, err
+	}
+
+	primaryKeyValues := tr.prettyPrimaryKeyValues(row, &tr.tableDesc)
+	return sqlbase.EncDatumRow{
+		sqlbase.DatumToEncDatum(
+			ScrubTypes[0],
+			tree.NewDString(scrubErr.Code),
+		),
+		sqlbase.DatumToEncDatum(
+			ScrubTypes[1],
+			tree.NewDString(primaryKeyValues),
+		),
+		sqlbase.DatumToEncDatum(
+			ScrubTypes[2],
+			detailsJSON,
+		),
+	}, nil
+}
+
+func (tr *tableReader) prettyPrimaryKeyValues(
+	row sqlbase.EncDatumRow, table *sqlbase.TableDescriptor,
+) string {
+	colIdxMap := make(map[sqlbase.ColumnID]int, len(table.Columns))
+	for i, c := range table.Columns {
+		colIdxMap[c.ID] = i
+	}
+	colIDToRowIdxMap := make(map[sqlbase.ColumnID]int, len(table.Columns))
+	for rowIdx, colIdx := range tr.fetcherResultToColIdx {
+		colIDToRowIdxMap[tr.tableDesc.Columns[colIdx].ID] = rowIdx
+	}
+	var primaryKeyValues bytes.Buffer
+	primaryKeyValues.WriteByte('(')
+	for i, id := range table.PrimaryIndex.ColumnIDs {
+		if i > 0 {
+			primaryKeyValues.WriteByte(',')
+		}
+		primaryKeyValues.WriteString(
+			row[colIDToRowIdxMap[id]].String(&table.Columns[colIdxMap[id]].Type))
+	}
+	primaryKeyValues.WriteByte(')')
+	return primaryKeyValues.String()
 }

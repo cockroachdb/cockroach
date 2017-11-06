@@ -395,7 +395,12 @@ func (*TableReaderSpan) Descriptor() ([]byte, []int) { return fileDescriptorProc
 //
 // The "internal columns" of a TableReader (see ProcessorSpec) are all the
 // columns of the table. Internally, only the values for the columns needed by
-// the post-processing stage are be populated.
+// the post-processing stage are be populated. If is_check is set, the
+// TableReader will run additional data checking procedures and the
+// "internal columns" are:
+//  - Error type (string).
+//  - Primary key as a string, if it was obtainable.
+//  - JSON of all decoded column values.
 type TableReaderSpec struct {
 	Table cockroach_sql_sqlbase1.TableDescriptor `protobuf:"bytes,1,opt,name=table" json:"table"`
 	// If 0, we use the primary index. If non-zero, we use the index_idx-th index,

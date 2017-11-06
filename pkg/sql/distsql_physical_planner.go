@@ -673,6 +673,13 @@ func initTableReaderSpec(
 		}
 	}
 
+	// When a TableReader is running scrub checks, do not allow a
+	// post-processor. This is because the outgoing stream is a fixed
+	// format (distsqlrun.ScrubTypes).
+	if n.isCheck {
+		return s, distsqlrun.PostProcessSpec{}, nil
+	}
+
 	post := distsqlrun.PostProcessSpec{
 		Filter: distsqlplan.MakeExpression(n.filter, evalCtx, nil),
 	}
@@ -876,6 +883,61 @@ func (dsp *DistSQLPlanner) createBackfiller(
 		pIdx := p.AddProcessor(proc)
 		p.ResultRouters[i] = pIdx
 	}
+	dsp.FinalizePlan(planCtx, &p)
+	return p, nil
+}
+
+// createScrubPhysicalCheck generates a plan for running a physical
+// check for an index. The plan consists of TableReaders, with IsCheck
+// enabled, that scan an index span. By having IsCheck enabled, the
+// TableReaders will only emit errors encountered during scanning
+// instead of row data. The plan is finalized.
+func (dsp *DistSQLPlanner) createScrubPhysicalCheck(
+	planCtx *planningCtx,
+	n *scanNode,
+	desc sqlbase.TableDescriptor,
+	indexDesc sqlbase.IndexDescriptor,
+	spans []roachpb.Span,
+	readAsOf hlc.Timestamp,
+) (physicalPlan, error) {
+	spec, _, err := initTableReaderSpec(n, planCtx.evalCtx)
+	if err != nil {
+		return physicalPlan{}, err
+	}
+
+	spanPartitions, err := dsp.partitionSpans(planCtx, n.spans)
+	if err != nil {
+		return physicalPlan{}, err
+	}
+
+	var p physicalPlan
+	stageID := p.NewStageID()
+	p.ResultRouters = make([]distsqlplan.ProcessorIdx, len(spanPartitions))
+	for i, sp := range spanPartitions {
+		tr := &distsqlrun.TableReaderSpec{}
+		*tr = spec
+		tr.Spans = make([]distsqlrun.TableReaderSpan, len(sp.spans))
+		for j := range sp.spans {
+			tr.Spans[j].Span = sp.spans[j]
+		}
+
+		proc := distsqlplan.Processor{
+			Node: sp.node,
+			Spec: distsqlrun.ProcessorSpec{
+				Core:    distsqlrun.ProcessorCoreUnion{TableReader: tr},
+				Output:  []distsqlrun.OutputRouterSpec{{Type: distsqlrun.OutputRouterSpec_PASS_THROUGH}},
+				StageID: stageID,
+			},
+		}
+
+		pIdx := p.AddProcessor(proc)
+		p.ResultRouters[i] = pIdx
+	}
+
+	// Set the plan's result types to be ScrubTypes.
+	p.ResultTypes = distsqlrun.ScrubTypes
+	p.planToStreamColMap = identityMapInPlace(make([]int, len(distsqlrun.ScrubTypes)))
+
 	dsp.FinalizePlan(planCtx, &p)
 	return p, nil
 }

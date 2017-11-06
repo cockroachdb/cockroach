@@ -23,20 +23,14 @@ import (
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/scrub"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
-)
-
-const (
-	// ScrubErrorMissingIndexEntry occurs when a primary k/v is missing a
-	// corresponding secondary index k/v.
-	ScrubErrorMissingIndexEntry = "missing_index_entry"
-	// ScrubErrorDanglingIndexReference occurs when a secondary index k/v
-	// points to a non-existing primary k/v.
-	ScrubErrorDanglingIndexReference = "dangling_index_reference"
 )
 
 // checkOperation is an interface for scrub check execution. The
@@ -183,18 +177,19 @@ func (n *scrubNode) startScrubTable(
 					"cannot specify INDEX option more than once")
 			}
 			indexesSet = true
-			indexesToCheck, err := createIndexCheckOperations(v.IndexNames, tableDesc, tableName)
+			checks, err := createIndexCheckOperations(v.IndexNames, tableDesc, tableName)
 			if err != nil {
 				return err
 			}
-			n.checkQueue = append(n.checkQueue, indexesToCheck...)
+			n.checkQueue = append(n.checkQueue, checks...)
 		case *tree.ScrubOptionPhysical:
 			if physicalCheckSet {
 				return pgerror.NewErrorf(pgerror.CodeSyntaxError,
 					"cannot specify PHYSICAL option more than once")
 			}
 			physicalCheckSet = true
-			// TODO(joey): Initialize physical index to check.
+			physicalChecks := createPhysicalCheckOperations(tableDesc, tableName)
+			n.checkQueue = append(n.checkQueue, physicalChecks...)
 		default:
 			panic(fmt.Sprintf("Unhandled SCRUB option received: %+v", v))
 		}
@@ -208,7 +203,8 @@ func (n *scrubNode) startScrubTable(
 			return err
 		}
 		n.checkQueue = append(n.checkQueue, indexesToCheck...)
-		// TODO(joey): Initialize physical index to check.
+		physicalChecks := createPhysicalCheckOperations(tableDesc, tableName)
+		n.checkQueue = append(n.checkQueue, physicalChecks...)
 	}
 
 	return nil
@@ -408,13 +404,13 @@ func (o *indexCheckOperation) Next(ctx context.Context, p *planner) (tree.Datums
 	var errorType tree.Datum
 	var primaryKeyDatums tree.Datums
 	if isMissingIndexReferenceError {
-		errorType = tree.NewDString(ScrubErrorMissingIndexEntry)
+		errorType = tree.NewDString(scrub.MissingIndexEntryError)
 		// Fetch the primary index values from the primary index row data.
 		for _, rowIdx := range o.primaryColIdxs {
 			primaryKeyDatums = append(primaryKeyDatums, row[rowIdx])
 		}
 	} else {
-		errorType = tree.NewDString(ScrubErrorDanglingIndexReference)
+		errorType = tree.NewDString(scrub.DanglingIndexReferenceError)
 		// Fetch the primary index values from the secondary index row
 		// data, because no primary index was found. The secondary index columns
 		// are offset by the length of the distinct columns, as the first
@@ -508,7 +504,7 @@ func tableColumnsIsNullPredicate(tableName string, columns []string, isNull bool
 // tableColumnsEQ creates a predicate that checks if all of the
 // specified columns for two tables are equal. This predicate also needs
 // NULL checks to work around the equivilancy of NULL = NULL. For
-// example, given tables t1, t2 and the columns id, name, then the
+// example, given tables t1, t2 and the co`lumns id, name, then the
 // returned string is:
 //
 //   ((t1.id IS NOT NULL AND t2.id IS NOT NULL AND t1.id = t2.id) OR
@@ -618,9 +614,184 @@ func createIndexCheckQuery(
 	)
 }
 
+// physicalCheckOperation is a check on an indexes physical data.
+type physicalCheckOperation struct {
+	started   bool
+	tableName *tree.TableName
+	tableDesc *sqlbase.TableDescriptor
+	indexDesc *sqlbase.IndexDescriptor
+
+	// Intermediate values.
+	rows     *sqlbase.RowContainer
+	rowIndex int
+
+	// columns is a list of the columns returned in the query result
+	// tree.Datums.
+	columns []*sqlbase.ColumnDescriptor
+	// primaryColIdxs maps PrimaryIndex.Columns to the row
+	// indexes in the query result tree.Datums.
+	primaryColIdxs []int
+}
+
+func newPhysicalCheckOperation(
+	tableName *tree.TableName, tableDesc *sqlbase.TableDescriptor, indexDesc *sqlbase.IndexDescriptor,
+) *physicalCheckOperation {
+	return &physicalCheckOperation{
+		tableName: tableName,
+		tableDesc: tableDesc,
+		indexDesc: indexDesc,
+	}
+}
+
+// createPhysicalCheckOperations will return the physicalCheckOperation
+// for all indexes on a table.
+func createPhysicalCheckOperations(
+	tableDesc *sqlbase.TableDescriptor, tableName *tree.TableName,
+) (checks []checkOperation) {
+	checks = append(checks, newPhysicalCheckOperation(tableName, tableDesc, &tableDesc.PrimaryIndex))
+	for i := range tableDesc.Indexes {
+		checks = append(checks, newPhysicalCheckOperation(tableName, tableDesc, &tableDesc.Indexes[i]))
+	}
+	return checks
+}
+
+// Start implements the checkOperation interface.
+// It will plan and run the physical data check using the distSQL
+// execution engine.
+func (o *physicalCheckOperation) Start(ctx context.Context, p *planner) error {
+	// Collect all of the columns, their types, and their IDs.
+	var columnIDs []tree.ColumnID
+	colIDToIdx := make(map[sqlbase.ColumnID]int, len(o.tableDesc.Columns))
+	columns := make([]*sqlbase.ColumnDescriptor, len(columnIDs))
+	for i := range o.tableDesc.Columns {
+		colIDToIdx[o.tableDesc.Columns[i].ID] = i
+	}
+
+	// Collect all of the columns being scanned.
+	if o.indexDesc.ID == o.tableDesc.PrimaryIndex.ID {
+		for i := range o.tableDesc.Columns {
+			columnIDs = append(columnIDs, tree.ColumnID(o.tableDesc.Columns[i].ID))
+		}
+	} else {
+		for _, id := range o.indexDesc.ColumnIDs {
+			columnIDs = append(columnIDs, tree.ColumnID(id))
+		}
+		for _, id := range o.indexDesc.ExtraColumnIDs {
+			columnIDs = append(columnIDs, tree.ColumnID(id))
+		}
+		for _, id := range o.indexDesc.StoreColumnIDs {
+			columnIDs = append(columnIDs, tree.ColumnID(id))
+		}
+	}
+
+	for i := range columnIDs {
+		idx := colIDToIdx[sqlbase.ColumnID(columnIDs[i])]
+		columns = append(columns, &o.tableDesc.Columns[idx])
+	}
+
+	// Find the row indexes for all of the primary index columns.
+	primaryColIdxs, err := getPrimaryColIdxs(o.tableDesc, columns)
+	if err != nil {
+		return err
+	}
+
+	indexHints := &tree.IndexHints{
+		IndexID:     tree.IndexID(o.indexDesc.ID),
+		NoIndexJoin: true,
+	}
+	scan := p.Scan()
+	scan.isCheck = true
+	if err := scan.initTable(p, o.tableDesc, indexHints, publicColumns, columnIDs); err != nil {
+		return err
+	}
+	plan := planNode(scan)
+
+	neededColumns := make([]bool, len(o.tableDesc.Columns))
+	for _, id := range columnIDs {
+		neededColumns[colIDToIdx[sqlbase.ColumnID(id)]] = true
+	}
+
+	// Optimize the plan. This is required in order to populate scanNode
+	// spans.
+	plan, err = p.optimizePlan(ctx, plan, neededColumns)
+	if err != nil {
+		plan.Close(ctx)
+		return err
+	}
+	defer plan.Close(ctx)
+
+	scan = plan.(*scanNode)
+
+	span := o.tableDesc.IndexSpan(o.indexDesc.ID)
+	spans := []roachpb.Span{span}
+
+	planCtx := p.session.distSQLPlanner.newPlanningCtx(ctx, &p.evalCtx, p.txn)
+	physPlan, err := p.session.distSQLPlanner.createScrubPhysicalCheck(
+		&planCtx, scan, *o.tableDesc, *o.indexDesc, spans, p.ExecCfg().Clock.Now())
+	if err != nil {
+		return err
+	}
+
+	rows, err := scrubRunDistSQL(ctx, &planCtx, p, &physPlan)
+	if err != nil {
+		rows.Close(ctx)
+		return err
+	}
+
+	o.started = true
+	o.rows = rows
+	o.primaryColIdxs = primaryColIdxs
+	o.columns = columns
+	return nil
+}
+
+// Next implements the checkOperation interface.
+func (o *physicalCheckOperation) Next(ctx context.Context, p *planner) (tree.Datums, error) {
+	row := o.rows.At(o.rowIndex)
+	o.rowIndex++
+
+	timestamp := tree.MakeDTimestamp(
+		p.evalCtx.GetStmtTimestamp(), time.Nanosecond)
+
+	details, ok := row[2].(*tree.DJSON)
+	if !ok {
+		return nil, errors.Errorf("expected row value 3 to be DJSON, got: %T", row[2])
+	}
+
+	return tree.Datums{
+		// TODO(joey): Add the job UUID once the SCRUB command uses jobs.
+		tree.DNull, /* job_uuid */
+		row[0],     /* errorType */
+		tree.NewDString(o.tableName.Database()),
+		tree.NewDString(o.tableName.Table()),
+		row[1], /* primaryKey */
+		timestamp,
+		tree.DBoolFalse,
+		details,
+	}, nil
+}
+
+// Started implements the checkOperation interface.
+func (o *physicalCheckOperation) Started() bool {
+	return o.started
+}
+
+// Done implements the checkOperation interface.
+func (o *physicalCheckOperation) Done(ctx context.Context) bool {
+	return o.rows == nil || o.rowIndex >= o.rows.Len()
+}
+
+// Close implements the checkOperation interface.
+func (o *physicalCheckOperation) Close(ctx context.Context) {
+	if o.rows != nil {
+		o.rows.Close(ctx)
+	}
+}
+
 // createIndexCheckOperations will return the checkOperations for the
 // provided indexes. If indexNames is nil, then all indexes are
-// returned. TODO(joey): This can be simplified with
+// returned.
+// TODO(joey): This can be simplified with
 // TableDescriptor.FindIndexByName(), but this will only report the
 // first invalid index.
 func createIndexCheckOperations(
@@ -692,6 +863,43 @@ func scrubPlanAndRunDistSQL(
 	}
 
 	err = p.session.distSQLPlanner.PlanAndRun(ctx, p.txn, plan, &recv, p.evalCtx)
+	if err != nil {
+		return rows, err
+	} else if recv.err != nil {
+		return rows, recv.err
+	}
+
+	if rows.Len() == 0 {
+		rows.Close(ctx)
+		return nil, nil
+	}
+
+	return rows, nil
+}
+
+// scrubPlanAndRunDistSQL will prepare and run the plan in distSQL. If a
+// RowContainer is returned the caller must close it.
+func scrubRunDistSQL(
+	ctx context.Context, planCtx *planningCtx, p *planner, plan *physicalPlan,
+) (*sqlbase.RowContainer, error) {
+	ci := sqlbase.ColTypeInfoFromColTypes(distsqlrun.ScrubTypes)
+	rows := sqlbase.NewRowContainer(*p.evalCtx.ActiveMemAcc, ci, 0)
+	rowResultWriter := NewRowResultWriter(tree.Rows, rows)
+	recv, err := makeDistSQLReceiver(
+		ctx,
+		rowResultWriter,
+		p.ExecCfg().RangeDescriptorCache,
+		p.ExecCfg().LeaseHolderCache,
+		p.txn,
+		func(ts hlc.Timestamp) {
+			_ = p.ExecCfg().Clock.Update(ts)
+		},
+	)
+	if err != nil {
+		return rows, err
+	}
+
+	err = p.session.distSQLPlanner.Run(planCtx, p.txn, plan, &recv, p.evalCtx)
 	if err != nil {
 		return rows, err
 	} else if recv.err != nil {

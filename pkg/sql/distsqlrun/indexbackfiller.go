@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/scrub"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -167,6 +168,9 @@ func (ib *indexBackfiller) runChunk(
 		for i := int64(0); i < chunkSize; i++ {
 			encRow, _, _, err := ib.fetcher.NextRow(ctx)
 			if err != nil {
+				if scrub.IsScrubError(err) {
+					err = scrub.UnwrapScrubError(err)
+				}
 				return nil, err
 			}
 			if encRow == nil {
