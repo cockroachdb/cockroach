@@ -7,6 +7,7 @@ const webpack = require("webpack");
 const FaviconsWebpackPlugin = require("favicons-webpack-plugin");
 const ForkTsCheckerWebpackPlugin = require("fork-ts-checker-webpack-plugin");
 const HtmlWebpackPlugin = require("html-webpack-plugin");
+const DashboardPlugin = require("webpack-dashboard/plugin");
 
 const title = "Cockroach Console";
 
@@ -118,6 +119,7 @@ module.exports = {
     new webpack.DllReferencePlugin({
       manifest: require("./vendor-manifest.json"),
     }),
+    new DashboardPlugin(),
   ],
 
   // https://webpack.js.org/configuration/stats/
