@@ -20,14 +20,14 @@ syntax = "proto2";
 package cockroach.sql.distsqlrun;
 option go_package = "distsqlrun";
 
-import "cockroach/pkg/roachpb/api.proto";
-import "cockroach/pkg/roachpb/csv.proto";
-import "cockroach/pkg/roachpb/data.proto";
-import "cockroach/pkg/roachpb/errors.proto";
-import "cockroach/pkg/sql/sqlbase/structured.proto";
-import "cockroach/pkg/sql/sqlbase/encoded_datum.proto";
-import "cockroach/pkg/sql/distsqlrun/data.proto";
-import "cockroach/pkg/util/hlc/timestamp.proto";
+import "pkg/roachpb/api.proto";
+import "pkg/roachpb/csv.proto";
+import "pkg/roachpb/data.proto";
+import "pkg/roachpb/errors.proto";
+import "pkg/sql/sqlbase/structured.proto";
+import "pkg/sql/sqlbase/encoded_datum.proto";
+import "pkg/sql/distsqlrun/data.proto";
+import "pkg/util/hlc/timestamp.proto";
 import "gogoproto/gogo.proto";
 
 

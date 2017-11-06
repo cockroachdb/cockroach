@@ -16,7 +16,7 @@ syntax = "proto3";
 package cockroach.base;
 option go_package = "cluster";
 
-import "cockroach/pkg/roachpb/metadata.proto";
+import "pkg/roachpb/metadata.proto";
 import "gogoproto/gogo.proto";
 
 message ClusterVersion {

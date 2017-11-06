@@ -17,8 +17,8 @@ syntax = "proto2";
 package cockroach.sql.sqlbase;
 option go_package = "sqlbase";
 
-import "cockroach/pkg/util/hlc/timestamp.proto";
-import "cockroach/pkg/sql/sqlbase/privilege.proto";
+import "pkg/util/hlc/timestamp.proto";
+import "pkg/sql/sqlbase/privilege.proto";
 import "gogoproto/gogo.proto";
 
 message ColumnType {

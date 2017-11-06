@@ -16,7 +16,7 @@ syntax = "proto3";
 package cockroach.storage;
 option go_package = "storage";
 
-import "cockroach/pkg/roachpb/metadata.proto";
+import "pkg/roachpb/metadata.proto";
 import "gogoproto/gogo.proto";
 import "google/protobuf/timestamp.proto";
 

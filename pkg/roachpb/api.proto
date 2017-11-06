@@ -16,12 +16,12 @@ syntax = "proto3";
 package cockroach.roachpb;
 option go_package = "roachpb";
 
-import "cockroach/pkg/roachpb/data.proto";
-import "cockroach/pkg/roachpb/errors.proto";
-import "cockroach/pkg/roachpb/metadata.proto";
-import "cockroach/pkg/storage/engine/enginepb/mvcc3.proto";
-import "cockroach/pkg/util/hlc/timestamp.proto";
-import "cockroach/pkg/util/tracing/recorded_span.proto";
+import "pkg/roachpb/data.proto";
+import "pkg/roachpb/errors.proto";
+import "pkg/roachpb/metadata.proto";
+import "pkg/storage/engine/enginepb/mvcc3.proto";
+import "pkg/util/hlc/timestamp.proto";
+import "pkg/util/tracing/recorded_span.proto";
 import "gogoproto/gogo.proto";
 
 // ReadConsistencyType specifies what type of consistency is observed

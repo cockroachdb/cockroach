@@ -16,11 +16,11 @@ syntax = "proto3";
 package cockroach.storage.storagebase;
 option go_package = "storagebase";
 
-import "cockroach/pkg/storage/engine/enginepb/mvcc.proto";
-import "cockroach/pkg/roachpb/internal_raft.proto";
-import "cockroach/pkg/roachpb/metadata.proto";
-import "cockroach/pkg/roachpb/data.proto";
-import "cockroach/pkg/util/hlc/timestamp.proto";
+import "pkg/storage/engine/enginepb/mvcc.proto";
+import "pkg/roachpb/internal_raft.proto";
+import "pkg/roachpb/metadata.proto";
+import "pkg/roachpb/data.proto";
+import "pkg/util/hlc/timestamp.proto";
 
 import "gogoproto/gogo.proto";
 

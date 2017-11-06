@@ -17,8 +17,8 @@ package cockroach.server.diagnosticspb;
 option go_package = "diagnosticspb";
 
 import "gogoproto/gogo.proto";
-import "cockroach/pkg/roachpb/app_stats.proto";
-import "cockroach/pkg/sql/sqlbase/structured.proto";
+import "pkg/roachpb/app_stats.proto";
+import "pkg/sql/sqlbase/structured.proto";
 
 message DiagnosticReport {
   NodeInfo node = 1 [(gogoproto.nullable) = false];

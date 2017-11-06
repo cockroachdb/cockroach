@@ -15,7 +15,7 @@
 syntax = "proto3";
 package cockroach.storage.engine.enginepb;
 
-import "cockroach/pkg/util/hlc/timestamp.proto";
+import "pkg/util/hlc/timestamp.proto";
 import "gogoproto/gogo.proto";
 
 // TODO(tschottdorf): Should not live in enginepb (but can't live in roachpb

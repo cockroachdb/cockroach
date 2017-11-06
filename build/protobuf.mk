@@ -12,9 +12,7 @@
 # implied. See the License for the specific language governing
 # permissions and limitations under the License.
 
-# This file is evaluated in the repo's parent directory. See main.go's
-# go:generate invocation.
-REPO_ROOT := ./cockroach
+REPO_ROOT := .
 include $(REPO_ROOT)/build/common.mk
 
 CPP_PROTO_ROOT := $(LIBROACH_SRC_DIR)/protos
@@ -60,12 +58,12 @@ GO_SOURCES_TARGET := $(LOCAL_BIN)/.go_protobuf_sources
 $(GO_SOURCES_TARGET): $(PROTOC) $(PROTOC_PLUGIN) $(GO_PROTOS) $(GOGOPROTO_PROTO)
 	(cd $(REPO_ROOT) && git ls-files --exclude-standard --cached --others -- '*.pb.go' | xargs rm -f)
 	for dir in $(sort $(dir $(GO_PROTOS))); do \
-	  $(PROTOC) -I.:$(GOGO_PROTOBUF_PATH):$(PROTOBUF_PATH):$(COREOS_PATH):$(GRPC_GATEWAY_GOOGLEAPIS_PATH) --plugin=$(PROTOC_PLUGIN) --gogoroach_out=$(PROTO_MAPPINGS),plugins=grpc,import_prefix=github.com/cockroachdb/:$(ORG_ROOT) $$dir/*.proto; \
+	  $(PROTOC) -I.:$(GOGO_PROTOBUF_PATH):$(PROTOBUF_PATH):$(COREOS_PATH):$(GRPC_GATEWAY_GOOGLEAPIS_PATH) --plugin=$(PROTOC_PLUGIN) --gogoroach_out=$(PROTO_MAPPINGS),plugins=grpc,import_prefix=github.com/cockroachdb/cockroach/:$(REPO_ROOT) $$dir/*.proto; \
 	done
 	$(SED_INPLACE) '/import _/d' $(GO_SOURCES)
-	$(SED_INPLACE) -E 's!import (fmt|math) "github.com/cockroachdb/(fmt|math)"! !g' $(GO_SOURCES)
-	$(SED_INPLACE) -E 's!cockroachdb/(etcd)!coreos/\1!g' $(GO_SOURCES)
-	$(SED_INPLACE) -E 's!github.com/cockroachdb/(bytes|encoding/binary|errors|fmt|io|math|github\.com|(google\.)?golang\.org)!\1!g' $(GO_SOURCES)
+	$(SED_INPLACE) -E 's!import (fmt|math) "github.com/cockroachdb/cockroach/(fmt|math)"! !g' $(GO_SOURCES)
+	$(SED_INPLACE) -E 's!cockroachdb/cockroach/(etcd)!coreos/\1!g' $(GO_SOURCES)
+	$(SED_INPLACE) -E 's!github.com/cockroachdb/cockroach/(bytes|encoding/binary|errors|fmt|io|math|github\.com|(google\.)?golang\.org)!\1!g' $(GO_SOURCES)
 	gofmt -s -w $(GO_SOURCES)
 	touch $@
 
@@ -87,7 +85,7 @@ $(CPP_SOURCES_TARGET): $(PROTOC) $(CPP_PROTOS)
 $(UI_JS): $(GO_PROTOS) $(COREOS_RAFT_PROTOS) $(YARN_INSTALLED_TARGET)
 	# Add comment recognized by reviewable.
 	echo '// GENERATED FILE DO NOT EDIT' > $@
-	$(PBJS) -t static-module -w es6 --strict-long --keep-case --path $(ORG_ROOT) --path $(GOGO_PROTOBUF_PATH) --path $(COREOS_PATH) --path $(GRPC_GATEWAY_GOOGLEAPIS_PATH) $(GW_PROTOS) >> $@
+	$(PBJS) -t static-module -w es6 --strict-long --keep-case --path $(REPO_ROOT) --path $(GOGO_PROTOBUF_PATH) --path $(COREOS_PATH) --path $(GRPC_GATEWAY_GOOGLEAPIS_PATH) $(GW_PROTOS) >> $@
 
 $(UI_TS): $(UI_JS) $(YARN_INSTALLED_TARGET)
 	# Add comment recognized by reviewable.

@@ -16,9 +16,9 @@ syntax = "proto3";
 package cockroach.roachpb;
 option go_package = "roachpb";
 
-import "cockroach/pkg/roachpb/metadata.proto";
-import "cockroach/pkg/storage/engine/enginepb/mvcc3.proto";
-import "cockroach/pkg/util/hlc/timestamp.proto";
+import "pkg/roachpb/metadata.proto";
+import "pkg/storage/engine/enginepb/mvcc3.proto";
+import "pkg/util/hlc/timestamp.proto";
 import "gogoproto/gogo.proto";
 
 // Span is supplied with every storage node request.

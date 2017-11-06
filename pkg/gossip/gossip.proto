@@ -16,9 +16,9 @@ syntax = "proto3";
 package cockroach.gossip;
 option go_package = "gossip";
 
-import "cockroach/pkg/roachpb/data.proto";
-import "cockroach/pkg/util/hlc/timestamp.proto";
-import "cockroach/pkg/util/unresolved_addr.proto";
+import "pkg/roachpb/data.proto";
+import "pkg/util/hlc/timestamp.proto";
+import "pkg/util/unresolved_addr.proto";
 import "gogoproto/gogo.proto";
 
 // BootstrapInfo contains information necessary to bootstrap the
