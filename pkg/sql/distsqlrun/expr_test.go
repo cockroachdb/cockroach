@@ -20,12 +20,13 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
 type testVarContainer struct{}
 
-func (d testVarContainer) IndexedVarResolvedType(idx int) parser.Type {
+func (d testVarContainer) IndexedVarResolvedType(idx int) types.T {
 	return parser.TypeInt
 }
 

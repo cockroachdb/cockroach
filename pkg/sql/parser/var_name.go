@@ -18,6 +18,7 @@ import (
 	"bytes"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 )
 
 // Variable names are used in multiples places in SQL:
@@ -88,7 +89,7 @@ var singletonStarName VarName = UnqualifiedStar{}
 func StarExpr() VarName { return singletonStarName }
 
 // ResolvedType implements the TypedExpr interface.
-func (UnqualifiedStar) ResolvedType() Type {
+func (UnqualifiedStar) ResolvedType() types.T {
 	panic("unqualified stars ought to be replaced before this point")
 }
 
@@ -96,7 +97,7 @@ func (UnqualifiedStar) ResolvedType() Type {
 func (UnqualifiedStar) Variable() {}
 
 // ResolvedType implements the TypedExpr interface.
-func (UnresolvedName) ResolvedType() Type {
+func (UnresolvedName) ResolvedType() types.T {
 	panic("unresolved names ought to be replaced before this point")
 }
 
@@ -132,7 +133,7 @@ func (a *AllColumnsSelector) NormalizeVarName() (VarName, error) { return a, nil
 func (a *AllColumnsSelector) Variable() {}
 
 // ResolvedType implements the TypedExpr interface.
-func (*AllColumnsSelector) ResolvedType() Type {
+func (*AllColumnsSelector) ResolvedType() types.T {
 	panic("all-columns selectors ought to be replaced before this point")
 }
 
@@ -182,7 +183,7 @@ func (c *ColumnItem) Column() string {
 func (c *ColumnItem) Variable() {}
 
 // ResolvedType implements the TypedExpr interface.
-func (c *ColumnItem) ResolvedType() Type {
+func (c *ColumnItem) ResolvedType() types.T {
 	if presetTypesForTesting == nil {
 		return nil
 	}

@@ -25,6 +25,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 
 	"golang.org/x/text/language"
 
@@ -780,7 +781,7 @@ func (node PartitionDefault) Format(buf *bytes.Buffer, f FmtFlags) {
 }
 
 // ResolvedType implements the TypedExpr interface.
-func (PartitionDefault) ResolvedType() Type { return TypeAny }
+func (PartitionDefault) ResolvedType() types.T { return TypeAny }
 
 // PartitionMaxValue represents the MAXVALUE expression expression in a
 // PARTITION BY clause.
@@ -792,7 +793,7 @@ func (node PartitionMaxValue) Format(buf *bytes.Buffer, f FmtFlags) {
 }
 
 // ResolvedType implements the TypedExpr interface.
-func (PartitionMaxValue) ResolvedType() Type { return TypeAny }
+func (PartitionMaxValue) ResolvedType() types.T { return TypeAny }
 
 // CreateTable represents a CREATE TABLE statement.
 type CreateTable struct {

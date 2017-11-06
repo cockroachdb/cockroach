@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -57,7 +58,7 @@ func (p *planner) Split(ctx context.Context, n *parser.Split) (planNode, error) 
 	}
 	// Calculate the desired types for the select statement. It is OK if the
 	// select statement returns fewer columns (the relevant prefix is used).
-	desiredTypes := make([]parser.Type, len(index.ColumnIDs))
+	desiredTypes := make([]types.T, len(index.ColumnIDs))
 	for i, colID := range index.ColumnIDs {
 		c, err := tableDesc.FindColumnByID(colID)
 		if err != nil {
@@ -168,7 +169,7 @@ func (p *planner) TestingRelocate(
 	//  - int array (list of stores)
 	//  - column values; it is OK if the select statement returns fewer columns
 	//  (the relevant prefix is used).
-	desiredTypes := make([]parser.Type, len(index.ColumnIDs)+1)
+	desiredTypes := make([]types.T, len(index.ColumnIDs)+1)
 	desiredTypes[0] = parser.TArray{Typ: parser.TypeInt}
 	for i, colID := range index.ColumnIDs {
 		c, err := tableDesc.FindColumnByID(colID)
@@ -364,7 +365,7 @@ func (p *planner) Scatter(ctx context.Context, n *parser.Scatter) (planNode, err
 		// Calculate the desired types for the select statement:
 		//  - column values; it is OK if the select statement returns fewer columns
 		//  (the relevant prefix is used).
-		desiredTypes := make([]parser.Type, len(index.ColumnIDs))
+		desiredTypes := make([]types.T, len(index.ColumnIDs))
 		for i, colID := range index.ColumnIDs {
 			c, err := tableDesc.FindColumnByID(colID)
 			if err != nil {

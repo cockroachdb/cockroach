@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
@@ -75,7 +76,7 @@ type insertNode struct {
 //   Notes: postgres requires INSERT. No "on duplicate key update" option.
 //          mysql requires INSERT. Also requires UPDATE on "ON DUPLICATE KEY UPDATE".
 func (p *planner) Insert(
-	ctx context.Context, n *parser.Insert, desiredTypes []parser.Type,
+	ctx context.Context, n *parser.Insert, desiredTypes []types.T,
 ) (planNode, error) {
 	tn, err := p.getAliasedTableName(n.Table)
 	if err != nil {
@@ -144,7 +145,7 @@ func (p *planner) Insert(
 	}
 
 	// Analyze the expressions for column information and typing.
-	desiredTypesFromSelect := make([]parser.Type, len(cols))
+	desiredTypesFromSelect := make([]types.T, len(cols))
 	for i, col := range cols {
 		desiredTypesFromSelect[i] = col.Type.ToDatumType()
 	}

@@ -81,7 +81,7 @@ type pgNumeric struct {
 	sign                    pgNumericSign
 }
 
-func pgTypeForParserType(t parser.Type) pgType {
+func pgTypeForParserType(t types.T) pgType {
 	size := -1
 	if s, variable := parser.DatumTypeSize(t); !variable {
 		size = int(s)

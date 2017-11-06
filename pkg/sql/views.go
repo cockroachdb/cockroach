@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
@@ -89,7 +90,7 @@ func (p *planner) analyzeViewQuery(
 	p.hasStar = false
 
 	// Now generate the source plan.
-	sourcePlan, err := p.Select(ctx, viewSelect, []parser.Type{})
+	sourcePlan, err := p.Select(ctx, viewSelect, []types.T{})
 	if err != nil {
 		return nil, nil, err
 	}
@@ -166,7 +167,7 @@ func RecomputeViewDependencies(ctx context.Context, txn *client.Txn, e *Executor
 		// Request dependency tracking and generate the source plan
 		// to collect the dependencies.
 		p.planDeps = make(planDependencies)
-		sourcePlan, err := p.newPlan(ctx, stmt, []parser.Type{})
+		sourcePlan, err := p.newPlan(ctx, stmt, []types.T{})
 		if err != nil {
 			log.Errorf(ctx, "view [%d] (%q) has broken query %q: %v",
 				tableID, tn, table.ViewQuery, err)

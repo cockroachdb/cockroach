@@ -16,6 +16,7 @@ package parser
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 )
 
 type normalizableExpr interface {
@@ -827,7 +828,7 @@ func init() {
 
 // ReType ensures that the given numeric expression evaluates
 // to the requested type, inserting a cast if necessary.
-func ReType(expr TypedExpr, wantedType Type) (TypedExpr, error) {
+func ReType(expr TypedExpr, wantedType types.T) (TypedExpr, error) {
 	if expr.ResolvedType().Equivalent(wantedType) {
 		return expr, nil
 	}

@@ -18,12 +18,13 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 )
 
 // ResultColumn contains the name and type of a SQL "cell".
 type ResultColumn struct {
 	Name string
-	Typ  parser.Type
+	Typ  types.T
 
 	// If set, this is an implicit column; used internally.
 	Hidden bool

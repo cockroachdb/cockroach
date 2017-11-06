@@ -23,6 +23,7 @@ import (
 
 	"golang.org/x/net/context"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 )
 
@@ -296,7 +297,7 @@ func tuple(exprs ...copyableExpr) copyableExpr {
 		return &Tuple{Exprs: buildExprs(exprs)}
 	}
 }
-func ttuple(types ...Type) TTuple {
+func ttuple(types ...types.T) TTuple {
 	return TTuple(types)
 }
 
@@ -321,10 +322,10 @@ func clonePlaceholderTypes(args PlaceholderTypes) PlaceholderTypes {
 
 type sameTypedExprsTestCase struct {
 	ptypes  PlaceholderTypes
-	desired Type
+	desired types.T
 	exprs   []copyableExpr
 
-	expectedType   Type
+	expectedType   types.T
 	expectedPTypes PlaceholderTypes
 }
 
@@ -455,7 +456,7 @@ func TestTypeCheckSameTypedExprsError(t *testing.T) {
 
 	testData := []struct {
 		ptypes  PlaceholderTypes
-		desired Type
+		desired types.T
 		exprs   []copyableExpr
 
 		expectedErr string

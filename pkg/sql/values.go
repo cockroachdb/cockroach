@@ -23,6 +23,7 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
@@ -67,7 +68,7 @@ func (p *planner) newContainerValuesNode(columns sqlbase.ResultColumns, capacity
 }
 
 func (p *planner) ValuesClause(
-	ctx context.Context, n *parser.ValuesClause, desiredTypes []parser.Type,
+	ctx context.Context, n *parser.ValuesClause, desiredTypes []types.T,
 ) (planNode, error) {
 	v := &valuesNode{
 		p:       p,

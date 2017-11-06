@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/ipaddr"
@@ -52,9 +53,7 @@ func exprContainsVarsError(context string, Expr parser.Expr) error {
 	return fmt.Errorf("%s expression '%s' may not contain variable sub-expressions", context, Expr)
 }
 
-func incompatibleExprTypeError(
-	context string, expectedType parser.Type, actualType parser.Type,
-) error {
+func incompatibleExprTypeError(context string, expectedType types.T, actualType types.T) error {
 	return fmt.Errorf("incompatible type for %s expression: %s vs %s",
 		context, expectedType, actualType)
 }
@@ -64,7 +63,7 @@ func incompatibleExprTypeError(
 // constant-folded expression.
 func SanitizeVarFreeExpr(
 	expr parser.Expr,
-	expectedType parser.Type,
+	expectedType types.T,
 	context string,
 	semaCtx *parser.SemaContext,
 	evalCtx *parser.EvalContext,
@@ -1105,7 +1104,7 @@ func (a *DatumAlloc) NewDOid(v parser.DOid) parser.Datum {
 
 // DecodeTableKey decodes a table key/value.
 func DecodeTableKey(
-	a *DatumAlloc, valType parser.Type, key []byte, dir encoding.Direction,
+	a *DatumAlloc, valType types.T, key []byte, dir encoding.Direction,
 ) (parser.Datum, []byte, error) {
 	if (dir != encoding.Ascending) && (dir != encoding.Descending) {
 		return nil, nil, errors.Errorf("invalid direction: %d", dir)
@@ -1255,7 +1254,7 @@ func DecodeTableKey(
 }
 
 // DecodeTableValue decodes a value encoded by EncodeTableValue.
-func DecodeTableValue(a *DatumAlloc, valType parser.Type, b []byte) (parser.Datum, []byte, error) {
+func DecodeTableValue(a *DatumAlloc, valType types.T, b []byte) (parser.Datum, []byte, error) {
 	_, dataOffset, _, typ, err := encoding.DecodeValueTag(b)
 	if err != nil {
 		return nil, b, err
@@ -1321,7 +1320,7 @@ func decodeArrayHeader(b []byte) (arrayHeader, []byte, error) {
 	}, b, nil
 }
 
-func decodeArray(a *DatumAlloc, elementType parser.Type, b []byte) (parser.Datum, []byte, error) {
+func decodeArray(a *DatumAlloc, elementType types.T, b []byte) (parser.Datum, []byte, error) {
 	b, _, _, err := encoding.DecodeNonsortingUvarint(b)
 	if err != nil {
 		return nil, b, err
@@ -1352,7 +1351,7 @@ func decodeArray(a *DatumAlloc, elementType parser.Type, b []byte) (parser.Datum
 // decodeUntaggedDatum is used to decode a Datum whose type is known, and which
 // doesn't have a value tag (either due to it having been consumed already or
 // not having one in the first place).
-func decodeUntaggedDatum(a *DatumAlloc, t parser.Type, buf []byte) (parser.Datum, []byte, error) {
+func decodeUntaggedDatum(a *DatumAlloc, t types.T, buf []byte) (parser.Datum, []byte, error) {
 	switch t {
 	case parser.TypeInt:
 		b, i, err := encoding.DecodeUntaggedIntValue(buf)
@@ -1560,7 +1559,7 @@ func EncodeSecondaryIndexes(
 // CheckColumnType verifies that a given value is compatible
 // with the type requested by the column. If the value is a
 // placeholder, the type of the placeholder gets populated.
-func CheckColumnType(col ColumnDescriptor, typ parser.Type, pmap *parser.PlaceholderInfo) error {
+func CheckColumnType(col ColumnDescriptor, typ types.T, pmap *parser.PlaceholderInfo) error {
 	if typ == parser.TypeNull {
 		return nil
 	}
@@ -1581,7 +1580,7 @@ func CheckColumnType(col ColumnDescriptor, typ parser.Type, pmap *parser.Placeho
 	return nil
 }
 
-func checkElementType(paramType parser.Type, columnType ColumnType) error {
+func checkElementType(paramType types.T, columnType ColumnType) error {
 	semanticType, err := DatumTypeToColumnSemanticType(paramType)
 	if err != nil {
 		return err
@@ -1772,7 +1771,7 @@ func encodeArray(d *parser.DArray, scratch []byte) ([]byte, error) {
 	return scratch, nil
 }
 
-func parserTypeToEncodingType(t parser.Type) (encoding.Type, error) {
+func parserTypeToEncodingType(t types.T) (encoding.Type, error) {
 	switch t {
 	case parser.TypeInt:
 		return encoding.Int, nil
