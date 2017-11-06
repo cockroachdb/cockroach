@@ -71,7 +71,7 @@ func (p *planner) newReturningHelper(
 	}
 
 	for _, e := range rExprs {
-		if err := p.parser.AssertNoAggregationOrWindowing(
+		if err := p.txCtx.AssertNoAggregationOrWindowing(
 			e.Expr, "RETURNING", p.session.SearchPath,
 		); err != nil {
 			return nil, err

@@ -105,6 +105,7 @@ type planner struct {
 
 	// Avoid allocations by embedding commonly used objects and visitors.
 	parser                parser.Parser
+	txCtx                 parser.ExprTransformContext
 	subqueryVisitor       subqueryVisitor
 	subqueryPlanVisitor   subqueryPlanVisitor
 	nameResolutionVisitor nameResolutionVisitor

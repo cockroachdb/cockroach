@@ -557,20 +557,3 @@ func (v *ContainsWindowVisitor) ContainsWindowFunc(expr Expr) bool {
 	}
 	return false
 }
-
-// WindowFuncInExpr determines if an Expr contains a window function, using
-// the Parser's embedded visitor.
-func (p *Parser) WindowFuncInExpr(expr Expr) bool {
-	return p.containsWindowVisitor.ContainsWindowFunc(expr)
-}
-
-// WindowFuncInExprs determines if any of the provided TypedExpr contains a
-// window function, using the Parser's embedded visitor.
-func (p *Parser) WindowFuncInExprs(exprs []TypedExpr) bool {
-	for _, expr := range exprs {
-		if p.WindowFuncInExpr(expr) {
-			return true
-		}
-	}
-	return false
-}

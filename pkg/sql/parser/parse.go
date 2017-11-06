@@ -48,11 +48,8 @@ func (l StatementList) Format(buf *bytes.Buffer, f FmtFlags) {
 // Parser wraps a scanner, parser and other utilities present in the parser
 // package.
 type Parser struct {
-	scanner               Scanner
-	parserImpl            sqlParserImpl
-	normalizeVisitor      normalizeVisitor
-	isAggregateVisitor    IsAggregateVisitor
-	containsWindowVisitor ContainsWindowVisitor
+	scanner    Scanner
+	parserImpl sqlParserImpl
 }
 
 // Parse parses the sql and returns a list of statements.
@@ -110,20 +107,6 @@ func TypeCheckAndRequire(
 			pgerror.CodeDatatypeMismatchError, "argument of %s must be type %s, not type %s", op, required, typ)
 	}
 	return typedExpr, nil
-}
-
-// NormalizeExpr is wrapper around ctx.NormalizeExpr which avoids allocation of
-// a normalizeVisitor.
-func (p *Parser) NormalizeExpr(ctx *EvalContext, typedExpr TypedExpr) (TypedExpr, error) {
-	if ctx.SkipNormalize {
-		return typedExpr, nil
-	}
-	p.normalizeVisitor = makeNormalizeVisitor(ctx)
-	expr, _ := WalkExpr(&p.normalizeVisitor, typedExpr)
-	if err := p.normalizeVisitor.err; err != nil {
-		return nil, err
-	}
-	return expr.(TypedExpr), nil
 }
 
 // Parse parses a sql statement string and returns a list of Statements.
