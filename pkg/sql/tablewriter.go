@@ -344,7 +344,7 @@ func (tu *tableUpserter) init(txn *client.Txn) error {
 	return tu.fetcher.Init(
 		tableDesc, tu.fetchColIDtoRowIndex, &tableDesc.PrimaryIndex,
 		false /* reverse */, false /* lockForUpdate */, false, /* isSecondaryIndex */
-		tu.fetchCols, valNeededForCol, false /*returnRangeInfo*/, tu.alloc)
+		tu.fetchCols, valNeededForCol, false /*returnRangeInfo*/, false /* isCheck */, tu.alloc)
 }
 
 func (tu *tableUpserter) row(
@@ -813,7 +813,7 @@ func (td *tableDeleter) deleteAllRowsScan(
 	err := rf.Init(
 		td.rd.Helper.TableDesc, td.rd.FetchColIDtoRowIndex, &td.rd.Helper.TableDesc.PrimaryIndex,
 		false /* reverse */, false /* lockForUpdate */, false, /* isSecondaryIndex */
-		td.rd.FetchCols, valNeededForCol, false /* returnRangeInfo */, td.alloc)
+		td.rd.FetchCols, valNeededForCol, false /* returnRangeInfo */, false /* isCheck */, td.alloc)
 	if err != nil {
 		return resume, err
 	}
@@ -901,7 +901,7 @@ func (td *tableDeleter) deleteIndexScan(
 	err := rf.Init(
 		td.rd.Helper.TableDesc, td.rd.FetchColIDtoRowIndex, &td.rd.Helper.TableDesc.PrimaryIndex,
 		false /* reverse */, false /* lockForUpdate */, false, /* isSecondaryIndex */
-		td.rd.FetchCols, valNeededForCol, false /* returnRangeInfo */, td.alloc)
+		td.rd.FetchCols, valNeededForCol, false /* returnRangeInfo */, false /* isCheck */, td.alloc)
 	if err != nil {
 		return resume, err
 	}

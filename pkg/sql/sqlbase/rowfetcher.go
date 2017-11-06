@@ -86,6 +86,10 @@ type RowFetcher struct {
 	// when beginning a new scan.
 	traceKV bool
 
+	// isCheck indicates whether or not we are running checks for k/v
+	// correctness. It is set only during SCRUB commands.
+	isCheck bool
+
 	// -- Fields updated during a scan --
 
 	kvFetcher      kvFetcher
@@ -127,6 +131,7 @@ func (rf *RowFetcher) Init(
 	cols []ColumnDescriptor,
 	valNeededForCol []bool,
 	returnRangeInfo bool,
+	isCheck bool,
 	alloc *DatumAlloc,
 ) error {
 	rf.desc = desc
@@ -139,6 +144,7 @@ func (rf *RowFetcher) Init(
 	rf.returnRangeInfo = returnRangeInfo
 	rf.row = make([]EncDatum, len(rf.cols))
 	rf.decodedRow = make([]tree.Datum, len(rf.cols))
+	rf.isCheck = isCheck
 	rf.alloc = alloc
 
 	for i, v := range valNeededForCol {

@@ -42,6 +42,8 @@ type tableReader struct {
 
 	fetcher sqlbase.RowFetcher
 	alloc   sqlbase.DatumAlloc
+
+	isCheck bool
 }
 
 var _ Processor = &tableReader{}
@@ -56,6 +58,7 @@ func newTableReader(
 	tr := &tableReader{
 		flowCtx: flowCtx,
 		tableID: spec.Table.ID,
+		isCheck: spec.IsCheck,
 	}
 
 	// We ignore any limits that are higher than this value to avoid any
@@ -101,7 +104,8 @@ func newTableReader(
 
 	desc := spec.Table
 	if _, _, err := initRowFetcher(
-		&tr.fetcher, &desc, int(spec.IndexIdx), spec.Reverse, tr.out.neededColumns(), &tr.alloc,
+		&tr.fetcher, &desc, int(spec.IndexIdx), spec.Reverse,
+		tr.out.neededColumns(), spec.IsCheck, &tr.alloc,
 	); err != nil {
 		return nil, err
 	}
@@ -120,6 +124,7 @@ func initRowFetcher(
 	indexIdx int,
 	reverseScan bool,
 	valNeededForCol []bool,
+	isCheck bool,
 	alloc *sqlbase.DatumAlloc,
 ) (index *sqlbase.IndexDescriptor, isSecondaryIndex bool, err error) {
 	// indexIdx is 0 for the primary index, or 1 to <num-indexes> for a
@@ -141,7 +146,7 @@ func initRowFetcher(
 	}
 	if err := fetcher.Init(
 		desc, colIdxMap, index, reverseScan, false /* lockForUpdate */, isSecondaryIndex,
-		desc.Columns, valNeededForCol, true /* returnRangeInfo */, alloc,
+		desc.Columns, valNeededForCol, true /* returnRangeInfo */, false /* isCheck */, alloc,
 	); err != nil {
 		return nil, false, err
 	}

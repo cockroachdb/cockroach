@@ -121,7 +121,8 @@ func (cb *columnBackfiller) init() error {
 	}
 	return cb.fetcher.Init(
 		&desc, colIdxMap, &desc.PrimaryIndex, false /* reverse */, false, /* lockForUpdate */
-		false /* isSecondaryIndex */, desc.Columns, valNeededForCol, false /* returnRangeInfo */, &cb.alloc,
+		false /* isSecondaryIndex */, desc.Columns, valNeededForCol, false, /* returnRangeInfo */
+		false /* isCheck */, &cb.alloc,
 	)
 }
 

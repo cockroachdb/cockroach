@@ -171,6 +171,10 @@ message TableReaderSpec {
   // Not used if there is a limit set in the PostProcessSpec of this processor
   // (that value will be used for sizing batches instead).
   optional int64 limit_hint = 5 [(gogoproto.nullable) = false];
+
+  // Indicates whether the TableReader is being run as an exhaustive
+  // check. This is only true during SCRUB commands.
+  optional bool is_check = 6 [(gogoproto.nullable) = false];
 }
 
 // JoinReaderSpec is the specification for a "join reader". A join reader

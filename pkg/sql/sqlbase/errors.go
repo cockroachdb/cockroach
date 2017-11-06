@@ -273,7 +273,7 @@ func ConvertBatchError(ctx context.Context, tableDesc *TableDescriptor, b *clien
 		}
 		if err := rf.Init(tableDesc, colIdxMap, index, false /* reverse */, false, /* lockForUpdate */
 			indexID != tableDesc.PrimaryIndex.ID /* isSecondaryIndex */, cols, valNeededForCol,
-			false /* returnRangeInfo */, &DatumAlloc{}); err != nil {
+			false /* returnRangeInfo */, false /* isCheck */, &DatumAlloc{}); err != nil {
 			return err
 		}
 		f := singleKVFetcher{kv: roachpb.KeyValue{Key: key}}
