@@ -20,7 +20,10 @@ import (
 	"strings"
 	"testing"
 
+	"bytes"
+	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 )
 
 func TestJSONOrdering(t *testing.T) {
@@ -515,5 +518,51 @@ func TestJSONRemoveIndex(t *testing.T) {
 				}
 			})
 		}
+	}
+}
+
+type testCaseJSON struct {
+	value  JSON
+	expEnc [][]byte
+}
+
+func makeJson(str string) JSON {
+	var json, _ = ParseJSON(str)
+	return json
+}
+
+func getApdEnconding(num float64) *apd.Decimal {
+	dec := apd.Decimal{}
+	dec.SetFloat64(num)
+	return &dec
+}
+
+func TestEncodeDecodeJSON(t *testing.T) {
+	testCases := []testCaseJSON{
+		{makeJson(`{"a":"b"}`), [][]byte{bytes.Join([][]byte{encoding.EncodeNotNullAscending(nil),
+			encoding.EncodeStringAscending(nil, "a"), encoding.EncodeStringAscending(nil, "b")}, nil)}},
+		{makeJson(`["a", "b"]`), [][]byte{append(encoding.EncodeArrayAscending(nil),
+			encoding.EncodeStringAscending(nil, "a")...), append(encoding.EncodeArrayAscending(nil),
+			encoding.EncodeStringAscending(nil, "b")...)}},
+		{makeJson(`null`), [][]byte{encoding.EncodeNullAscending(nil)}},
+		{makeJson(`false`), [][]byte{encoding.EncodeFalseAscending(nil)}},
+		{makeJson(`true`), [][]byte{encoding.EncodeTrueAscending(nil)}},
+		{makeJson(`1.23`), [][]byte{encoding.EncodeDecimalAscending(nil, getApdEnconding(1.23))}},
+		{makeJson(`"a"`), [][]byte{encoding.EncodeStringAscending(nil, "a")}},
+		{makeJson(`["c", {"a":"b"}]`), [][]byte{append(encoding.EncodeArrayAscending(nil),
+			encoding.EncodeStringAscending(nil, "c")...),
+			bytes.Join([][]byte{encoding.EncodeArrayAscending(nil), encoding.EncodeNotNullAscending(nil),
+				encoding.EncodeStringAscending(nil, "a"), encoding.EncodeStringAscending(nil, "b")}, nil)}},
+	}
+
+	for _, c := range testCases {
+		enc := c.value.EncodeForIndex()
+		for j, path := range enc {
+			if !bytes.Equal(path, c.expEnc[j]) {
+				t.Errorf("unexpected encoding mismatch for %v. expected [%#v], got [%#v]",
+					c.value, c.expEnc[j], path)
+			}
+		}
+
 	}
 }

@@ -27,6 +27,7 @@ import (
 
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/stringencoding"
 )
 
@@ -54,6 +55,9 @@ type JSON interface {
 	Format(buf *bytes.Buffer)
 	// Size returns the size of the JSON document in bytes.
 	Size() uintptr
+
+	// Encode for index returns binary encoding needed for the inverted index key.
+	EncodeForIndex() [][]byte
 
 	// FetchValKey implements the `->` operator for strings, returning nil if the
 	// key is not found.
@@ -327,6 +331,47 @@ func ParseJSON(s string) (JSON, error) {
 		return nil, errTrailingCharacters
 	}
 	return MakeJSON(result)
+}
+
+func (j jsonNull) EncodeForIndex() [][]byte {
+	return [][]byte{encoding.EncodeNullAscending(nil)}
+}
+func (j jsonTrue) EncodeForIndex() [][]byte {
+	return [][]byte{encoding.EncodeTrueAscending(nil)}
+}
+func (j jsonFalse) EncodeForIndex() [][]byte {
+	return [][]byte{encoding.EncodeFalseAscending(nil)}
+}
+func (j jsonString) EncodeForIndex() [][]byte {
+	return [][]byte{encoding.EncodeStringAscending(nil, string(j))}
+}
+func (j jsonNumber) EncodeForIndex() [][]byte {
+	var dec apd.Decimal
+	dec = apd.Decimal(j)
+	return [][]byte{encoding.EncodeDecimalAscending(nil, &dec)}
+}
+func (j jsonArray) EncodeForIndex() [][]byte {
+	var outBytes [][]byte
+
+	for i := range j {
+		for _, childBytes := range j[i].EncodeForIndex() {
+			outBytes = append(outBytes, append(encoding.EncodeArrayAscending(nil), childBytes...))
+		}
+	}
+
+	return outBytes
+}
+
+func (j jsonObject) EncodeForIndex() [][]byte {
+	var outBytes [][]byte
+	for i := range j {
+		for _, childBytes := range j[i].v.EncodeForIndex() {
+			outBytes = append(outBytes, append(append(encoding.EncodeNotNullAscending(nil),
+				encoding.EncodeStringAscending(nil, string(j[i].k))...), childBytes...))
+		}
+	}
+
+	return outBytes
 }
 
 // MakeJSON returns a JSON value given a Go-style representation of JSON.

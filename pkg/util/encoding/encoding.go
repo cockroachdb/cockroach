@@ -660,6 +660,17 @@ func EncodeNotNullAscending(b []byte) []byte {
 	return append(b, encodedNotNull)
 }
 
+func EncodeArrayAscending(b []byte) []byte {
+	return append(b, byte(Array))
+}
+
+func EncodeTrueAscending(b []byte) []byte {
+	return append(b, byte(True))
+}
+func EncodeFalseAscending(b []byte) []byte {
+	return append(b, byte(False))
+}
+
 // EncodeNotNullDescending is the descending equivalent of EncodeNotNullAscending.
 func EncodeNotNullDescending(b []byte) []byte {
 	return append(b, encodedNotNullDesc)

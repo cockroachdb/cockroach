@@ -1,0 +1,711 @@
+goroutine profile: total 378
+63 @ 0x5e1b6c 0x5f1ff8 0xa840b6 0xa8d88c 0xa8f2b4 0xdf2dd4 0xa8e2ed 0xbe0c92 0x13ef9b7 0x13f015d 0x6115b1
+#	0xa840b5	github.com/cockroachdb/cockroach/vendor/google.golang.org/grpc/transport.(*Stream).Header+0x145						/go/src/github.com/cockroachdb/cockroach/vendor/google.golang.org/grpc/transport/transport.go:290
+#	0xa8d88b	github.com/cockroachdb/cockroach/vendor/google.golang.org/grpc.recvResponse+0xab							/go/src/github.com/cockroachdb/cockroach/vendor/google.golang.org/grpc/call.go:49
+#	0xa8f2b3	github.com/cockroachdb/cockroach/vendor/google.golang.org/grpc.invoke+0xed3								/go/src/github.com/cockroachdb/cockroach/vendor/google.golang.org/grpc/call.go:282
+#	0xdf2dd3	github.com/cockroachdb/cockroach/vendor/github.com/grpc-ecosystem/grpc-opentracing/go/otgrpc.OpenTracingClientInterceptor.func1+0x5e3	/go/src/github.com/cockroachdb/cockroach/vendor/github.com/grpc-ecosystem/grpc-opentracing/go/otgrpc/client.go:69
+#	0xa8e2ec	github.com/cockroachdb/cockroach/vendor/google.golang.org/grpc.Invoke+0xdc								/go/src/github.com/cockroachdb/cockroach/vendor/google.golang.org/grpc/call.go:135
+#	0xbe0c91	github.com/cockroachdb/cockroach/pkg/roachpb.(*internalClient).Batch+0xd1								/go/src/github.com/cockroachdb/cockroach/pkg/roachpb/api.pb.go:3496
+#	0x13ef9b6	github.com/cockroachdb/cockroach/pkg/kv.(*grpcTransport).SendNext.func1.1+0x166								/go/src/github.com/cockroachdb/cockroach/pkg/kv/transport.go:228
+#	0x13f015c	github.com/cockroachdb/cockroach/pkg/kv.(*grpcTransport).SendNext.func1+0xac								/go/src/github.com/cockroachdb/cockroach/pkg/kv/transport.go:237
+
+61 @ 0x5e1b6c 0x5f1ff8 0x13de13a 0x13d876b 0x13d8c3b 0x13dbe99 0x13dacf8 0x13d9a1d 0x13e8841 0xda1f9c 0xda9467 0xdadad3 0xda17f1 0xda74f1 0xda7aee 0x157af4e 0x1512012 0x1511dc6 0x14e5516 0x14e56b7 0x14e538a 0x14e6340 0x14e34d1 0x14e1bf5 0x14e10d5 0x14dfe7c 0x14debf0 0x14de0e9 0x14dde94 0x16302fe 0x162c83c 0x1622d99
+#	0x13de139	github.com/cockroachdb/cockroach/pkg/kv.(*DistSender).sendToReplicas+0x699		/go/src/github.com/cockroachdb/cockroach/pkg/kv/dist_sender.go:1144
+#	0x13d876a	github.com/cockroachdb/cockroach/pkg/kv.(*DistSender).sendRPC+0x2da			/go/src/github.com/cockroachdb/cockroach/pkg/kv/dist_sender.go:382
+#	0x13d8c3a	github.com/cockroachdb/cockroach/pkg/kv.(*DistSender).sendSingleRange+0x17a		/go/src/github.com/cockroachdb/cockroach/pkg/kv/dist_sender.go:446
+#	0x13dbe98	github.com/cockroachdb/cockroach/pkg/kv.(*DistSender).sendPartialBatch+0x4f8		/go/src/github.com/cockroachdb/cockroach/pkg/kv/dist_sender.go:930
+#	0x13dacf7	github.com/cockroachdb/cockroach/pkg/kv.(*DistSender).divideAndSendBatchToRanges+0xae7	/go/src/github.com/cockroachdb/cockroach/pkg/kv/dist_sender.go:795
+#	0x13d9a1c	github.com/cockroachdb/cockroach/pkg/kv.(*DistSender).Send+0x3ac			/go/src/github.com/cockroachdb/cockroach/pkg/kv/dist_sender.go:597
+#	0x13e8840	github.com/cockroachdb/cockroach/pkg/kv.(*TxnCoordSender).Send+0x1f0			/go/src/github.com/cockroachdb/cockroach/pkg/kv/txn_coord_sender.go:444
+#	0xda1f9b	github.com/cockroachdb/cockroach/pkg/internal/client.(*DB).send+0x2ab			/go/src/github.com/cockroachdb/cockroach/pkg/internal/client/db.go:548
+#	0xda9466	github.com/cockroachdb/cockroach/pkg/internal/client.(*Txn).Send+0x326			/go/src/github.com/cockroachdb/cockroach/pkg/internal/client/txn.go:959
+#	0xdadad2	github.com/cockroachdb/cockroach/pkg/internal/client.(*Txn).Send-fm+0x82		/go/src/github.com/cockroachdb/cockroach/pkg/internal/client/txn.go:510
+#	0xda17f0	github.com/cockroachdb/cockroach/pkg/internal/client.sendAndFill+0x100			/go/src/github.com/cockroachdb/cockroach/pkg/internal/client/db.go:454
+#	0xda74f0	github.com/cockroachdb/cockroach/pkg/internal/client.(*Txn).Run+0xd0			/go/src/github.com/cockroachdb/cockroach/pkg/internal/client/txn.go:510
+#	0xda7aed	github.com/cockroachdb/cockroach/pkg/internal/client.(*Txn).CommitInBatch+0x11d		/go/src/github.com/cockroachdb/cockroach/pkg/internal/client/txn.go:575
+#	0x157af4d	github.com/cockroachdb/cockroach/pkg/sql.(*tableUpserter).finalize+0x6d			/go/src/github.com/cockroachdb/cockroach/pkg/sql/tablewriter.go:615
+#	0x1512011	github.com/cockroachdb/cockroach/pkg/sql.(*insertNode).internalNext+0x151		/go/src/github.com/cockroachdb/cockroach/pkg/sql/insert.go:357
+#	0x1511dc5	github.com/cockroachdb/cockroach/pkg/sql.(*insertNode).Next+0xa5			/go/src/github.com/cockroachdb/cockroach/pkg/sql/insert.go:333
+#	0x14e5515	github.com/cockroachdb/cockroach/pkg/sql.forEachRow+0x95				/go/src/github.com/cockroachdb/cockroach/pkg/sql/executor.go:2028
+#	0x14e56b6	github.com/cockroachdb/cockroach/pkg/sql.countRowsAffected+0xc6				/go/src/github.com/cockroachdb/cockroach/pkg/sql/executor.go:2051
+#	0x14e5389	github.com/cockroachdb/cockroach/pkg/sql.(*Executor).execClassic+0x349			/go/src/github.com/cockroachdb/cockroach/pkg/sql/executor.go:1997
+#	0x14e633f	github.com/cockroachdb/cockroach/pkg/sql.(*Executor).execStmt+0x64f			/go/src/github.com/cockroachdb/cockroach/pkg/sql/executor.go:2158
+#	0x14e34d0	github.com/cockroachdb/cockroach/pkg/sql.(*Executor).execStmtInOpenTxn+0x6a0		/go/src/github.com/cockroachdb/cockroach/pkg/sql/executor.go:1797
+#	0x14e1bf4	github.com/cockroachdb/cockroach/pkg/sql.(*Executor).execSingleStatement+0x6a4		/go/src/github.com/cockroachdb/cockroach/pkg/sql/executor.go:1322
+#	0x14e10d4	github.com/cockroachdb/cockroach/pkg/sql.runTxnAttempt+0x3e4				/go/src/github.com/cockroachdb/cockroach/pkg/sql/executor.go:1197
+#	0x14dfe7b	github.com/cockroachdb/cockroach/pkg/sql.runWithAutoRetry+0x39b				/go/src/github.com/cockroachdb/cockroach/pkg/sql/executor.go:1023
+#	0x14debef	github.com/cockroachdb/cockroach/pkg/sql.(*Executor).execParsed+0x12f			/go/src/github.com/cockroachdb/cockroach/pkg/sql/executor.go:840
+#	0x14de0e8	github.com/cockroachdb/cockroach/pkg/sql.(*Executor).execPrepared+0x158			/go/src/github.com/cockroachdb/cockroach/pkg/sql/executor.go:685
+#	0x14dde93	github.com/cockroachdb/cockroach/pkg/sql.(*Executor).ExecutePreparedStatement+0x133	/go/src/github.com/cockroachdb/cockroach/pkg/sql/executor.go:663
+#	0x16302fd	github.com/cockroachdb/cockroach/pkg/sql/pgwire.(*v3Conn).handleExecute+0x2ed		/go/src/github.com/cockroachdb/cockroach/pkg/sql/pgwire/v3.go:958
+#	0x162c83b	github.com/cockroachdb/cockroach/pkg/sql/pgwire.(*v3Conn).serve+0xb6b			/go/src/github.com/cockroachdb/cockroach/pkg/sql/pgwire/v3.go:526
+#	0x1622d98	github.com/cockroachdb/cockroach/pkg/sql/pgwire.(*Server).ServeConn+0x928		/go/src/github.com/cockroachdb/cockroach/pkg/sql/pgwire/server.go:421
+
+32 @ 0x5e1b6c 0x5e1c5e 0x5f48c0 0x627360 0x106bc0c 0x10a837e 0xd1e1a3 0x6115b1
+#	0x5f48bf	sync.runtime_notifyListWait+0x10f						/usr/local/go/src/runtime/sema.go:507
+#	0x62735f	sync.(*Cond).Wait+0x7f								/usr/local/go/src/sync/cond.go:56
+#	0x106bc0b	github.com/cockroachdb/cockroach/pkg/storage.(*raftScheduler).worker+0x7b	/go/src/github.com/cockroachdb/cockroach/pkg/storage/scheduler.go:198
+#	0x10a837d	github.com/cockroachdb/cockroach/pkg/storage.(*raftScheduler).Start.func2+0x3d	/go/src/github.com/cockroachdb/cockroach/pkg/storage/scheduler.go:167
+#	0xd1e1a2	github.com/cockroachdb/cockroach/pkg/util/stop.(*Stopper).RunWorker.func1+0xf2	/go/src/github.com/cockroachdb/cockroach/pkg/util/stop/stopper.go:198
+
+32 @ 0x5e1b6c 0x5f1ff8 0x15af767 0xd1e1a3 0x6115b1
+#	0x15af766	github.com/cockroachdb/cockroach/pkg/sql.(*distSQLPlanner).initRunners.func1+0x166	/go/src/github.com/cockroachdb/cockroach/pkg/sql/distsql_running.go:86
+#	0xd1e1a2	github.com/cockroachdb/cockroach/pkg/util/stop.(*Stopper).RunWorker.func1+0xf2		/go/src/github.com/cockroachdb/cockroach/pkg/util/stop/stopper.go:198
+
+20 @ 0x5e1b6c 0x5f1ff8 0xa840b6 0xa8d88c 0xa8f2b4 0xdf3617 0xa8e2ed 0xbe0c92 0x13ef9b7 0x13f015d 0x6115b1
+#	0xa840b5	github.com/cockroachdb/cockroach/vendor/google.golang.org/grpc/transport.(*Stream).Header+0x145						/go/src/github.com/cockroachdb/cockroach/vendor/google.golang.org/grpc/transport/transport.go:290
+#	0xa8d88b	github.com/cockroachdb/cockroach/vendor/google.golang.org/grpc.recvResponse+0xab							/go/src/github.com/cockroachdb/cockroach/vendor/google.golang.org/grpc/call.go:49
+#	0xa8f2b3	github.com/cockroachdb/cockroach/vendor/google.golang.org/grpc.invoke+0xed3								/go/src/github.com/cockroachdb/cockroach/vendor/google.golang.org/grpc/call.go:282
+#	0xdf3616	github.com/cockroachdb/cockroach/vendor/github.com/grpc-ecosystem/grpc-opentracing/go/otgrpc.OpenTracingClientInterceptor.func1+0xe26	/go/src/github.com/cockroachdb/cockroach/vendor/github.com/grpc-ecosystem/grpc-opentracing/go/otgrpc/client.go:44
+#	0xa8e2ec	github.com/cockroachdb/cockroach/vendor/google.golang.org/grpc.Invoke+0xdc								/go/src/github.com/cockroachdb/cockroach/vendor/google.golang.org/grpc/call.go:135
+#	0xbe0c91	github.com/cockroachdb/cockroach/pkg/roachpb.(*internalClient).Batch+0xd1								/go/src/github.com/cockroachdb/cockroach/pkg/roachpb/api.pb.go:3496
+#	0x13ef9b6	github.com/cockroachdb/cockroach/pkg/kv.(*grpcTransport).SendNext.func1.1+0x166								/go/src/github.com/cockroachdb/cockroach/pkg/kv/transport.go:228
+#	0x13f015c	github.com/cockroachdb/cockroach/pkg/kv.(*grpcTransport).SendNext.func1+0xac								/go/src/github.com/cockroachdb/cockroach/pkg/kv/transport.go:237
+
+17 @ 0x5e1b6c 0x5f1ff8 0x13de13a 0x13d876b 0x13d8c3b 0x13dbe99 0x13ee22b 0xd1e490 0x6115b1
+#	0x13de139	github.com/cockroachdb/cockroach/pkg/kv.(*DistSender).sendToReplicas+0x699			/go/src/github.com/cockroachdb/cockroach/pkg/kv/dist_sender.go:1144
+#	0x13d876a	github.com/cockroachdb/cockroach/pkg/kv.(*DistSender).sendRPC+0x2da				/go/src/github.com/cockroachdb/cockroach/pkg/kv/dist_sender.go:382
+#	0x13d8c3a	github.com/cockroachdb/cockroach/pkg/kv.(*DistSender).sendSingleRange+0x17a			/go/src/github.com/cockroachdb/cockroach/pkg/kv/dist_sender.go:446
+#	0x13dbe98	github.com/cockroachdb/cockroach/pkg/kv.(*DistSender).sendPartialBatch+0x4f8			/go/src/github.com/cockroachdb/cockroach/pkg/kv/dist_sender.go:930
+#	0x13ee22a	github.com/cockroachdb/cockroach/pkg/kv.(*DistSender).sendPartialBatchAsync.func1+0x11a		/go/src/github.com/cockroachdb/cockroach/pkg/kv/dist_sender.go:862
+#	0xd1e48f	github.com/cockroachdb/cockroach/pkg/util/stop.(*Stopper).RunLimitedAsyncTask.func1+0x10f	/go/src/github.com/cockroachdb/cockroach/pkg/util/stop/stopper.go:330
+
+8 @ 0x5e1b6c 0x5f1ff8 0xaa880d 0x6115b1
+#	0xaa880c	github.com/cockroachdb/cockroach/vendor/google.golang.org/grpc.newClientStream.func3+0x1cc	/go/src/github.com/cockroachdb/cockroach/vendor/google.golang.org/grpc/stream.go:255
+
+7 @ 0x5e1b6c 0x5f1ff8 0x109b3fb 0xd1e1a3 0x6115b1
+#	0x109b3fa	github.com/cockroachdb/cockroach/pkg/storage.(*baseQueue).processLoop.func1+0x1ba	/go/src/github.com/cockroachdb/cockroach/pkg/storage/queue.go:504
+#	0xd1e1a2	github.com/cockroachdb/cockroach/pkg/util/stop.(*Stopper).RunWorker.func1+0xf2		/go/src/github.com/cockroachdb/cockroach/pkg/util/stop/stopper.go:198
+
+6 @ 0x5e1b6c 0x5dccaa 0x5dc2a7 0x64e10e 0x64e18d 0x64ef2a 0x766f02 0x77975d 0x835d95 0x836300 0x839e50 0x6c115b 0x62aa76 0x62abe8 0xa44bab 0xa45514 0xa82f4f 0xa75ff0 0x6115b1
+#	0x5dc2a6	internal/poll.runtime_pollWait+0x56									/usr/local/go/src/runtime/netpoll.go:173
+#	0x64e10d	internal/poll.(*pollDesc).wait+0xad									/usr/local/go/src/internal/poll/fd_poll_runtime.go:85
+#	0x64e18c	internal/poll.(*pollDesc).waitRead+0x3c									/usr/local/go/src/internal/poll/fd_poll_runtime.go:90
+#	0x64ef29	internal/poll.(*FD).Read+0x189										/usr/local/go/src/internal/poll/fd_unix.go:125
+#	0x766f01	net.(*netFD).Read+0x51											/usr/local/go/src/net/fd_unix.go:202
+#	0x77975c	net.(*conn).Read+0x6c											/usr/local/go/src/net/net.go:176
+#	0x835d94	crypto/tls.(*block).readFromUntil+0x94									/usr/local/go/src/crypto/tls/conn.go:488
+#	0x8362ff	crypto/tls.(*Conn).readRecord+0xdf									/usr/local/go/src/crypto/tls/conn.go:590
+#	0x839e4f	crypto/tls.(*Conn).Read+0x10f										/usr/local/go/src/crypto/tls/conn.go:1134
+#	0x6c115a	bufio.(*Reader).Read+0x30a										/usr/local/go/src/bufio/bufio.go:213
+#	0x62aa75	io.ReadAtLeast+0x85											/usr/local/go/src/io/io.go:309
+#	0x62abe7	io.ReadFull+0x57											/usr/local/go/src/io/io.go:327
+#	0xa44baa	github.com/cockroachdb/cockroach/vendor/golang.org/x/net/http2.readFrameHeader+0x7a			/go/src/github.com/cockroachdb/cockroach/vendor/golang.org/x/net/http2/frame.go:237
+#	0xa45513	github.com/cockroachdb/cockroach/vendor/golang.org/x/net/http2.(*Framer).ReadFrame+0xa3			/go/src/github.com/cockroachdb/cockroach/vendor/golang.org/x/net/http2/frame.go:492
+#	0xa82f4e	github.com/cockroachdb/cockroach/vendor/google.golang.org/grpc/transport.(*framer).readFrame+0x2e	/go/src/github.com/cockroachdb/cockroach/vendor/google.golang.org/grpc/transport/http_util.go:592
+#	0xa75fef	github.com/cockroachdb/cockroach/vendor/google.golang.org/grpc/transport.(*http2Client).reader+0xbf	/go/src/github.com/cockroachdb/cockroach/vendor/google.golang.org/grpc/transport/http2_client.go:1154
+
+6 @ 0x5e1b6c 0x5dccaa 0x5dc2a7 0x64e10e 0x64e18d 0x64ef2a 0x766f02 0x77975d 0xdf5981 0x835d95 0x836300 0x839e50 0x6c115b 0x62aa76 0x62abe8 0xa44bab 0xa45514 0xa82f4f 0xa79e2d 0xa9bb70 0xa9b9e3 0xa9b537 0x6115b1
+#	0x5dc2a6	internal/poll.runtime_pollWait+0x56										/usr/local/go/src/runtime/netpoll.go:173
+#	0x64e10d	internal/poll.(*pollDesc).wait+0xad										/usr/local/go/src/internal/poll/fd_poll_runtime.go:85
+#	0x64e18c	internal/poll.(*pollDesc).waitRead+0x3c										/usr/local/go/src/internal/poll/fd_poll_runtime.go:90
+#	0x64ef29	internal/poll.(*FD).Read+0x189											/usr/local/go/src/internal/poll/fd_unix.go:125
+#	0x766f01	net.(*netFD).Read+0x51												/usr/local/go/src/net/fd_unix.go:202
+#	0x77975c	net.(*conn).Read+0x6c												/usr/local/go/src/net/net.go:176
+#	0xdf5980	github.com/cockroachdb/cockroach/vendor/github.com/cockroachdb/cmux.(*MuxConn).Read+0x120			/go/src/github.com/cockroachdb/cockroach/vendor/github.com/cockroachdb/cmux/cmux.go:218
+#	0x835d94	crypto/tls.(*block).readFromUntil+0x94										/usr/local/go/src/crypto/tls/conn.go:488
+#	0x8362ff	crypto/tls.(*Conn).readRecord+0xdf										/usr/local/go/src/crypto/tls/conn.go:590
+#	0x839e4f	crypto/tls.(*Conn).Read+0x10f											/usr/local/go/src/crypto/tls/conn.go:1134
+#	0x6c115a	bufio.(*Reader).Read+0x30a											/usr/local/go/src/bufio/bufio.go:213
+#	0x62aa75	io.ReadAtLeast+0x85												/usr/local/go/src/io/io.go:309
+#	0x62abe7	io.ReadFull+0x57												/usr/local/go/src/io/io.go:327
+#	0xa44baa	github.com/cockroachdb/cockroach/vendor/golang.org/x/net/http2.readFrameHeader+0x7a				/go/src/github.com/cockroachdb/cockroach/vendor/golang.org/x/net/http2/frame.go:237
+#	0xa45513	github.com/cockroachdb/cockroach/vendor/golang.org/x/net/http2.(*Framer).ReadFrame+0xa3				/go/src/github.com/cockroachdb/cockroach/vendor/golang.org/x/net/http2/frame.go:492
+#	0xa82f4e	github.com/cockroachdb/cockroach/vendor/google.golang.org/grpc/transport.(*framer).readFrame+0x2e		/go/src/github.com/cockroachdb/cockroach/vendor/google.golang.org/grpc/transport/http_util.go:592
+#	0xa79e2c	github.com/cockroachdb/cockroach/vendor/google.golang.org/grpc/transport.(*http2Server).HandleStreams+0x30c	/go/src/github.com/cockroachdb/cockroach/vendor/google.golang.org/grpc/transport/http2_server.go:377
+#	0xa9bb6f	github.com/cockroachdb/cockroach/vendor/google.golang.org/grpc.(*Server).serveStreams+0x13f			/go/src/github.com/cockroachdb/cockroach/vendor/google.golang.org/grpc/server.go:547
+#	0xa9b9e2	github.com/cockroachdb/cockroach/vendor/google.golang.org/grpc.(*Server).serveHTTP2Transport+0x462		/go/src/github.com/cockroachdb/cockroach/vendor/google.golang.org/grpc/server.go:540
+#	0xa9b536	github.com/cockroachdb/cockroach/vendor/google.golang.org/grpc.(*Server).handleRawConn+0x496			/go/src/github.com/cockroachdb/cockroach/vendor/google.golang.org/grpc/server.go:507
+
+6 @ 0x5e1b6c 0x5f1ff8 0xa76928 0x6115b1
+#	0xa76927	github.com/cockroachdb/cockroach/vendor/google.golang.org/grpc/transport.(*http2Client).controller+0x147	/go/src/github.com/cockroachdb/cockroach/vendor/google.golang.org/grpc/transport/http2_client.go:1227
+
+6 @ 0x5e1b6c 0x5f1ff8 0xa7e781 0x6115b1
+#	0xa7e780	github.com/cockroachdb/cockroach/vendor/google.golang.org/grpc/transport.(*http2Server).keepalive+0x250	/go/src/github.com/cockroachdb/cockroach/vendor/google.golang.org/grpc/transport/http2_server.go:949
+
+6 @ 0x5e1b6c 0x5f1ff8 0xa7ed68 0x6115b1
+#	0xa7ed67	github.com/cockroachdb/cockroach/vendor/google.golang.org/grpc/transport.(*http2Server).controller+0x147	/go/src/github.com/cockroachdb/cockroach/vendor/google.golang.org/grpc/transport/http2_server.go:1011
+
+6 @ 0x5e1b6c 0x5f1ff8 0xa9452e 0xaa6b68 0x6115b1
+#	0xa9452d	github.com/cockroachdb/cockroach/vendor/google.golang.org/grpc.(*addrConn).transportMonitor+0x1dd	/go/src/github.com/cockroachdb/cockroach/vendor/google.golang.org/grpc/clientconn.go:927
+#	0xaa6b67	github.com/cockroachdb/cockroach/vendor/google.golang.org/grpc.(*ClientConn).resetAddrConn.func1+0x1c7	/go/src/github.com/cockroachdb/cockroach/vendor/google.golang.org/grpc/clientconn.go:642
+
+5 @ 0x5e1b6c 0x5f1ff8 0x1006c45 0xff9302 0xa9f1c3 0xaa0b01 0xaa738f 0x6115b1
+#	0x1006c44	github.com/cockroachdb/cockroach/pkg/storage.(*RaftTransport).RaftMessageBatch+0x214			/go/src/github.com/cockroachdb/cockroach/pkg/storage/raft_transport.go:355
+#	0xff9301	github.com/cockroachdb/cockroach/pkg/storage._MultiRaft_RaftMessageBatch_Handler+0xb1			/go/src/github.com/cockroachdb/cockroach/pkg/storage/raft.pb.go:378
+#	0xa9f1c2	github.com/cockroachdb/cockroach/vendor/google.golang.org/grpc.(*Server).processStreamingRPC+0x942	/go/src/github.com/cockroachdb/cockroach/vendor/google.golang.org/grpc/server.go:891
+#	0xaa0b00	github.com/cockroachdb/cockroach/vendor/google.golang.org/grpc.(*Server).handleStream+0x14c0		/go/src/github.com/cockroachdb/cockroach/vendor/google.golang.org/grpc/server.go:985
+#	0xaa738e	github.com/cockroachdb/cockroach/vendor/google.golang.org/grpc.(*Server).serveStreams.func1.1+0x9e	/go/src/github.com/cockroachdb/cockroach/vendor/google.golang.org/grpc/server.go:551
+
+5 @ 0x5e1b6c 0x5f1ff8 0x100790a 0x109db6a 0x10072a0 0x109e0c0 0xd1e1a3 0x6115b1
+#	0x1007909	github.com/cockroachdb/cockroach/pkg/storage.(*RaftTransport).processQueue+0x529		/go/src/github.com/cockroachdb/cockroach/pkg/storage/raft_transport.go:513
+#	0x109db69	github.com/cockroachdb/cockroach/pkg/storage.(*RaftTransport).connectAndProcess.func1+0x329	/go/src/github.com/cockroachdb/cockroach/pkg/storage/raft_transport.go:458
+#	0x100729f	github.com/cockroachdb/cockroach/pkg/storage.(*RaftTransport).connectAndProcess+0xcf		/go/src/github.com/cockroachdb/cockroach/pkg/storage/raft_transport.go:459
+#	0x109e0bf	github.com/cockroachdb/cockroach/pkg/storage.(*RaftTransport).SendAsync.func1.1+0x5f		/go/src/github.com/cockroachdb/cockroach/pkg/storage/raft_transport.go:587
+#	0xd1e1a2	github.com/cockroachdb/cockroach/pkg/util/stop.(*Stopper).RunWorker.func1+0xf2			/go/src/github.com/cockroachdb/cockroach/pkg/util/stop/stopper.go:198
+
+5 @ 0x5e1b6c 0x5f1ff8 0xa76f6c 0x6115b1
+#	0xa76f6b	github.com/cockroachdb/cockroach/vendor/google.golang.org/grpc/transport.(*http2Client).keepalive+0x13b	/go/src/github.com/cockroachdb/cockroach/vendor/google.golang.org/grpc/transport/http2_client.go:1276
+
+5 @ 0x5e1b6c 0x5f1ff8 0xa83820 0xa848f5 0x62aa76 0x62abe8 0xa8483f 0xa97945 0xa985dd 0xaa37d6 0xff8e92 0x109dc95 0x109de96 0xd1e1a3 0x6115b1
+#	0xa8381f	github.com/cockroachdb/cockroach/vendor/google.golang.org/grpc/transport.(*recvBufferReader).Read+0x2ff	/go/src/github.com/cockroachdb/cockroach/vendor/google.golang.org/grpc/transport/transport.go:126
+#	0xa848f4	github.com/cockroachdb/cockroach/vendor/google.golang.org/grpc/transport.(*transportReader).Read+0x54	/go/src/github.com/cockroachdb/cockroach/vendor/google.golang.org/grpc/transport/transport.go:391
+#	0x62aa75	io.ReadAtLeast+0x85											/usr/local/go/src/io/io.go:309
+#	0x62abe7	io.ReadFull+0x57											/usr/local/go/src/io/io.go:327
+#	0xa8483e	github.com/cockroachdb/cockroach/vendor/google.golang.org/grpc/transport.(*Stream).Read+0xbe		/go/src/github.com/cockroachdb/cockroach/vendor/google.golang.org/grpc/transport/transport.go:375
+#	0xa97944	github.com/cockroachdb/cockroach/vendor/google.golang.org/grpc.(*parser).recvMsg+0x64			/go/src/github.com/cockroachdb/cockroach/vendor/google.golang.org/grpc/rpc_util.go:265
+#	0xa985dc	github.com/cockroachdb/cockroach/vendor/google.golang.org/grpc.recv+0x4c				/go/src/github.com/cockroachdb/cockroach/vendor/google.golang.org/grpc/rpc_util.go:361
+#	0xaa37d5	github.com/cockroachdb/cockroach/vendor/google.golang.org/grpc.(*clientStream).RecvMsg+0xe5		/go/src/github.com/cockroachdb/cockroach/vendor/google.golang.org/grpc/stream.go:398
+#	0xff8e91	github.com/cockroachdb/cockroach/pkg/storage.(*multiRaftRaftMessageBatchClient).Recv+0x61		/go/src/github.com/cockroachdb/cockroach/pkg/storage/raft.pb.go:329
+#	0x109dc94	github.com/cockroachdb/cockroach/pkg/storage.(*RaftTransport).processQueue.func1.1.1+0x34		/go/src/github.com/cockroachdb/cockroach/pkg/storage/raft_transport.go:487
+#	0x109de95	github.com/cockroachdb/cockroach/pkg/storage.(*RaftTransport).processQueue.func1.1+0x65			/go/src/github.com/cockroachdb/cockroach/pkg/storage/raft_transport.go:502
+#	0xd1e1a2	github.com/cockroachdb/cockroach/pkg/util/stop.(*Stopper).RunWorker.func1+0xf2				/go/src/github.com/cockroachdb/cockroach/pkg/util/stop/stopper.go:198
+
+5 @ 0x5e1b6c 0x5f1ff8 0xa83820 0xa848f5 0x62aa76 0x62abe8 0xa8483f 0xa97945 0xa985dd 0xaa502e 0xff9422 0x109d073 0x109d2ad 0xd1e1a3 0x6115b1
+#	0xa8381f	github.com/cockroachdb/cockroach/vendor/google.golang.org/grpc/transport.(*recvBufferReader).Read+0x2ff	/go/src/github.com/cockroachdb/cockroach/vendor/google.golang.org/grpc/transport/transport.go:126
+#	0xa848f4	github.com/cockroachdb/cockroach/vendor/google.golang.org/grpc/transport.(*transportReader).Read+0x54	/go/src/github.com/cockroachdb/cockroach/vendor/google.golang.org/grpc/transport/transport.go:391
+#	0x62aa75	io.ReadAtLeast+0x85											/usr/local/go/src/io/io.go:309
+#	0x62abe7	io.ReadFull+0x57											/usr/local/go/src/io/io.go:327
+#	0xa8483e	github.com/cockroachdb/cockroach/vendor/google.golang.org/grpc/transport.(*Stream).Read+0xbe		/go/src/github.com/cockroachdb/cockroach/vendor/google.golang.org/grpc/transport/transport.go:375
+#	0xa97944	github.com/cockroachdb/cockroach/vendor/google.golang.org/grpc.(*parser).recvMsg+0x64			/go/src/github.com/cockroachdb/cockroach/vendor/google.golang.org/grpc/rpc_util.go:265
+#	0xa985dc	github.com/cockroachdb/cockroach/vendor/google.golang.org/grpc.recv+0x4c				/go/src/github.com/cockroachdb/cockroach/vendor/google.golang.org/grpc/rpc_util.go:361
+#	0xaa502d	github.com/cockroachdb/cockroach/vendor/google.golang.org/grpc.(*serverStream).RecvMsg+0x10d		/go/src/github.com/cockroachdb/cockroach/vendor/google.golang.org/grpc/stream.go:648
+#	0xff9421	github.com/cockroachdb/cockroach/pkg/storage.(*multiRaftRaftMessageBatchServer).Recv+0x61		/go/src/github.com/cockroachdb/cockroach/pkg/storage/raft.pb.go:397
+#	0x109d072	github.com/cockroachdb/cockroach/pkg/storage.(*RaftTransport).RaftMessageBatch.func1.1.1+0x82		/go/src/github.com/cockroachdb/cockroach/pkg/storage/raft_transport.go:326
+#	0x109d2ac	github.com/cockroachdb/cockroach/pkg/storage.(*RaftTransport).RaftMessageBatch.func1.1+0x5c		/go/src/github.com/cockroachdb/cockroach/pkg/storage/raft_transport.go:349
+#	0xd1e1a2	github.com/cockroachdb/cockroach/pkg/util/stop.(*Stopper).RunWorker.func1+0xf2				/go/src/github.com/cockroachdb/cockroach/pkg/util/stop/stopper.go:198
+
+5 @ 0x5e1b6c 0x5f1ff8 0xdfc9fb 0xe01ccb 0xd1e1a3 0x6115b1
+#	0xdfc9fa	github.com/cockroachdb/cockroach/pkg/rpc.(*Context).runHeartbeat+0x2ba		/go/src/github.com/cockroachdb/cockroach/pkg/rpc/context.go:419
+#	0xe01cca	github.com/cockroachdb/cockroach/pkg/rpc.(*Context).GRPCDial.func1.2.1+0x6a	/go/src/github.com/cockroachdb/cockroach/pkg/rpc/context.go:353
+#	0xd1e1a2	github.com/cockroachdb/cockroach/pkg/util/stop.(*Stopper).RunWorker.func1+0xf2	/go/src/github.com/cockroachdb/cockroach/pkg/util/stop/stopper.go:198
+
+3 @ 0x5e1b6c 0x5f1ff8 0x10aa0f9 0xd1e1a3 0x6115b1
+#	0x10aa0f8	github.com/cockroachdb/cockroach/pkg/storage.(*Store).startGossip.func4+0x3e8	/go/src/github.com/cockroachdb/cockroach/pkg/storage/store.go:1308
+#	0xd1e1a2	github.com/cockroachdb/cockroach/pkg/util/stop.(*Stopper).RunWorker.func1+0xf2	/go/src/github.com/cockroachdb/cockroach/pkg/util/stop/stopper.go:198
+
+2 @ 0x5e1b6c 0x5e1c5e 0x5b8ff4 0x5b8c9b 0xdf7994 0xd1e1a3 0x6115b1
+#	0xdf7993	github.com/cockroachdb/cockroach/pkg/util/netutil.MakeServer.func2+0x63		/go/src/github.com/cockroachdb/cockroach/pkg/util/netutil/net.go:100
+#	0xd1e1a2	github.com/cockroachdb/cockroach/pkg/util/stop.(*Stopper).RunWorker.func1+0xf2	/go/src/github.com/cockroachdb/cockroach/pkg/util/stop/stopper.go:198
+
+2 @ 0x5e1b6c 0x5e1c5e 0x5f48c0 0x627360 0xd77a62 0x6115b1
+#	0x5f48bf	sync.runtime_notifyListWait+0x10f						/usr/local/go/src/runtime/sema.go:507
+#	0x62735f	sync.(*Cond).Wait+0x7f								/usr/local/go/src/sync/cond.go:56
+#	0xd77a61	github.com/cockroachdb/cockroach/pkg/storage/engine.(*RocksDB).syncLoop+0xa1	/go/src/github.com/cockroachdb/cockroach/pkg/storage/engine/rocksdb.go:478
+
+2 @ 0x5e1b6c 0x5f1ff8 0x1016b6d 0x101618b 0x100feb1 0x107b9f5 0x108d74f 0x168a267 0xd1c5b7 0x166e682 0x166ea0c 0xcb5aa6 0xdf4124 0xbe0eed 0xa9d2a4 0xaa0b68 0xaa738f 0x6115b1
+#	0x1016b6c	github.com/cockroachdb/cockroach/pkg/storage.(*Replica).tryExecuteWriteBatch+0x60c							/go/src/github.com/cockroachdb/cockroach/pkg/storage/replica.go:2665
+#	0x101618a	github.com/cockroachdb/cockroach/pkg/storage.(*Replica).executeWriteBatch+0xaa								/go/src/github.com/cockroachdb/cockroach/pkg/storage/replica.go:2493
+#	0x100feb0	github.com/cockroachdb/cockroach/pkg/storage.(*Replica).Send+0x280									/go/src/github.com/cockroachdb/cockroach/pkg/storage/replica.go:1791
+#	0x107b9f4	github.com/cockroachdb/cockroach/pkg/storage.(*Store).Send+0x684									/go/src/github.com/cockroachdb/cockroach/pkg/storage/store.go:2570
+#	0x108d74e	github.com/cockroachdb/cockroach/pkg/storage.(*Stores).Send+0x22e									/go/src/github.com/cockroachdb/cockroach/pkg/storage/stores.go:215
+#	0x168a266	github.com/cockroachdb/cockroach/pkg/server.(*Node).batchInternal.func1+0x1a6								/go/src/github.com/cockroachdb/cockroach/pkg/server/node.go:853
+#	0xd1c5b6	github.com/cockroachdb/cockroach/pkg/util/stop.(*Stopper).RunTaskWithErr+0xf6								/go/src/github.com/cockroachdb/cockroach/pkg/util/stop/stopper.go:248
+#	0x166e681	github.com/cockroachdb/cockroach/pkg/server.(*Node).batchInternal+0x151									/go/src/github.com/cockroachdb/cockroach/pkg/server/node.go:840
+#	0x166ea0b	github.com/cockroachdb/cockroach/pkg/server.(*Node).Batch+0x9b										/go/src/github.com/cockroachdb/cockroach/pkg/server/node.go:881
+#	0xcb5aa5	github.com/cockroachdb/cockroach/pkg/roachpb._Internal_Batch_Handler.func1+0x85								/go/src/github.com/cockroachdb/cockroach/pkg/roachpb/api.pb.go:3526
+#	0xdf4123	github.com/cockroachdb/cockroach/vendor/github.com/grpc-ecosystem/grpc-opentracing/go/otgrpc.OpenTracingServerInterceptor.func1+0xa53	/go/src/github.com/cockroachdb/cockroach/vendor/github.com/grpc-ecosystem/grpc-opentracing/go/otgrpc/server.go:48
+#	0xbe0eec	github.com/cockroachdb/cockroach/pkg/roachpb._Internal_Batch_Handler+0x16c								/go/src/github.com/cockroachdb/cockroach/pkg/roachpb/api.pb.go:3528
+#	0xa9d2a3	github.com/cockroachdb/cockroach/vendor/google.golang.org/grpc.(*Server).processUnaryRPC+0xab3						/go/src/github.com/cockroachdb/cockroach/vendor/google.golang.org/grpc/server.go:781
+#	0xaa0b67	github.com/cockroachdb/cockroach/vendor/google.golang.org/grpc.(*Server).handleStream+0x1527						/go/src/github.com/cockroachdb/cockroach/vendor/google.golang.org/grpc/server.go:981
+#	0xaa738e	github.com/cockroachdb/cockroach/vendor/google.golang.org/grpc.(*Server).serveStreams.func1.1+0x9e					/go/src/github.com/cockroachdb/cockroach/vendor/google.golang.org/grpc/server.go:551
+
+2 @ 0x5e1b6c 0x5f1ff8 0x13de13a 0x13d876b 0x13d8c3b 0x13dbe99 0x13dacf8 0x13d9a1d 0x13e8841 0xda1f9c 0xda9467 0x12778ba 0x12783e3 0x127f954 0x127f862 0x127f700 0x154aa90 0x154ad5b 0x14e54d3 0x14e5312 0x14e6340 0x14e34d1 0x14e1bf5 0x14e10d5 0x14dfe7c 0x14debf0 0x14de0e9 0x14dde94 0x16302fe 0x162c83c 0x1622d99 0x168b549
+#	0x13de139	github.com/cockroachdb/cockroach/pkg/kv.(*DistSender).sendToReplicas+0x699		/go/src/github.com/cockroachdb/cockroach/pkg/kv/dist_sender.go:1144
+#	0x13d876a	github.com/cockroachdb/cockroach/pkg/kv.(*DistSender).sendRPC+0x2da			/go/src/github.com/cockroachdb/cockroach/pkg/kv/dist_sender.go:382
+#	0x13d8c3a	github.com/cockroachdb/cockroach/pkg/kv.(*DistSender).sendSingleRange+0x17a		/go/src/github.com/cockroachdb/cockroach/pkg/kv/dist_sender.go:446
+#	0x13dbe98	github.com/cockroachdb/cockroach/pkg/kv.(*DistSender).sendPartialBatch+0x4f8		/go/src/github.com/cockroachdb/cockroach/pkg/kv/dist_sender.go:930
+#	0x13dacf7	github.com/cockroachdb/cockroach/pkg/kv.(*DistSender).divideAndSendBatchToRanges+0xae7	/go/src/github.com/cockroachdb/cockroach/pkg/kv/dist_sender.go:795
+#	0x13d9a1c	github.com/cockroachdb/cockroach/pkg/kv.(*DistSender).Send+0x3ac			/go/src/github.com/cockroachdb/cockroach/pkg/kv/dist_sender.go:597
+#	0x13e8840	github.com/cockroachdb/cockroach/pkg/kv.(*TxnCoordSender).Send+0x1f0			/go/src/github.com/cockroachdb/cockroach/pkg/kv/txn_coord_sender.go:444
+#	0xda1f9b	github.com/cockroachdb/cockroach/pkg/internal/client.(*DB).send+0x2ab			/go/src/github.com/cockroachdb/cockroach/pkg/internal/client/db.go:548
+#	0xda9466	github.com/cockroachdb/cockroach/pkg/internal/client.(*Txn).Send+0x326			/go/src/github.com/cockroachdb/cockroach/pkg/internal/client/txn.go:959
+#	0x12778b9	github.com/cockroachdb/cockroach/pkg/sql/sqlbase.(*txnKVFetcher).fetch+0x499		/go/src/github.com/cockroachdb/cockroach/pkg/sql/sqlbase/kvfetcher.go:248
+#	0x12783e2	github.com/cockroachdb/cockroach/pkg/sql/sqlbase.(*txnKVFetcher).nextKV+0x2e2		/go/src/github.com/cockroachdb/cockroach/pkg/sql/sqlbase/kvfetcher.go:316
+#	0x127f953	github.com/cockroachdb/cockroach/pkg/sql/sqlbase.(*RowFetcher).NextKey+0x93		/go/src/github.com/cockroachdb/cockroach/pkg/sql/sqlbase/rowfetcher.go:255
+#	0x127f861	github.com/cockroachdb/cockroach/pkg/sql/sqlbase.(*RowFetcher).StartScanFrom+0xa1	/go/src/github.com/cockroachdb/cockroach/pkg/sql/sqlbase/rowfetcher.go:245
+#	0x127f6ff	github.com/cockroachdb/cockroach/pkg/sql/sqlbase.(*RowFetcher).StartScan+0x22f		/go/src/github.com/cockroachdb/cockroach/pkg/sql/sqlbase/rowfetcher.go:236
+#	0x154aa8f	github.com/cockroachdb/cockroach/pkg/sql.(*scanNode).initScan+0xff			/go/src/github.com/cockroachdb/cockroach/pkg/sql/scan.go:138
+#	0x154ad5a	github.com/cockroachdb/cockroach/pkg/sql.(*scanNode).Next+0x23a				/go/src/github.com/cockroachdb/cockroach/pkg/sql/scan.go:166
+#	0x14e54d2	github.com/cockroachdb/cockroach/pkg/sql.forEachRow+0x52				/go/src/github.com/cockroachdb/cockroach/pkg/sql/executor.go:2027
+#	0x14e5311	github.com/cockroachdb/cockroach/pkg/sql.(*Executor).execClassic+0x2d1			/go/src/github.com/cockroachdb/cockroach/pkg/sql/executor.go:2004
+#	0x14e633f	github.com/cockroachdb/cockroach/pkg/sql.(*Executor).execStmt+0x64f			/go/src/github.com/cockroachdb/cockroach/pkg/sql/executor.go:2158
+#	0x14e34d0	github.com/cockroachdb/cockroach/pkg/sql.(*Executor).execStmtInOpenTxn+0x6a0		/go/src/github.com/cockroachdb/cockroach/pkg/sql/executor.go:1797
+#	0x14e1bf4	github.com/cockroachdb/cockroach/pkg/sql.(*Executor).execSingleStatement+0x6a4		/go/src/github.com/cockroachdb/cockroach/pkg/sql/executor.go:1322
+#	0x14e10d4	github.com/cockroachdb/cockroach/pkg/sql.runTxnAttempt+0x3e4				/go/src/github.com/cockroachdb/cockroach/pkg/sql/executor.go:1197
+#	0x14dfe7b	github.com/cockroachdb/cockroach/pkg/sql.runWithAutoRetry+0x39b				/go/src/github.com/cockroachdb/cockroach/pkg/sql/executor.go:1023
+#	0x14debef	github.com/cockroachdb/cockroach/pkg/sql.(*Executor).execParsed+0x12f			/go/src/github.com/cockroachdb/cockroach/pkg/sql/executor.go:840
+#	0x14de0e8	github.com/cockroachdb/cockroach/pkg/sql.(*Executor).execPrepared+0x158			/go/src/github.com/cockroachdb/cockroach/pkg/sql/executor.go:685
+#	0x14dde93	github.com/cockroachdb/cockroach/pkg/sql.(*Executor).ExecutePreparedStatement+0x133	/go/src/github.com/cockroachdb/cockroach/pkg/sql/executor.go:663
+#	0x16302fd	github.com/cockroachdb/cockroach/pkg/sql/pgwire.(*v3Conn).handleExecute+0x2ed		/go/src/github.com/cockroachdb/cockroach/pkg/sql/pgwire/v3.go:958
+#	0x162c83b	github.com/cockroachdb/cockroach/pkg/sql/pgwire.(*v3Conn).serve+0xb6b			/go/src/github.com/cockroachdb/cockroach/pkg/sql/pgwire/v3.go:526
+#	0x1622d98	github.com/cockroachdb/cockroach/pkg/sql/pgwire.(*Server).ServeConn+0x928		/go/src/github.com/cockroachdb/cockroach/pkg/sql/pgwire/server.go:421
+#	0x168b548	github.com/cockroachdb/cockroach/pkg/server.(*Server).Start.func9.1+0x148		/go/src/github.com/cockroachdb/cockroach/pkg/server/server.go:749
+
+2 @ 0x5e1b6c 0x5f1ff8 0xa83820 0xa848f5 0x62aa76 0x62abe8 0xa8483f 0xa97945 0xa985dd 0xaa37d6 0xe10db2 0xe21f35 0xe22090 0xd1e1a3 0x6115b1
+#	0xa8381f	github.com/cockroachdb/cockroach/vendor/google.golang.org/grpc/transport.(*recvBufferReader).Read+0x2ff	/go/src/github.com/cockroachdb/cockroach/vendor/google.golang.org/grpc/transport/transport.go:126
+#	0xa848f4	github.com/cockroachdb/cockroach/vendor/google.golang.org/grpc/transport.(*transportReader).Read+0x54	/go/src/github.com/cockroachdb/cockroach/vendor/google.golang.org/grpc/transport/transport.go:391
+#	0x62aa75	io.ReadAtLeast+0x85											/usr/local/go/src/io/io.go:309
+#	0x62abe7	io.ReadFull+0x57											/usr/local/go/src/io/io.go:327
+#	0xa8483e	github.com/cockroachdb/cockroach/vendor/google.golang.org/grpc/transport.(*Stream).Read+0xbe		/go/src/github.com/cockroachdb/cockroach/vendor/google.golang.org/grpc/transport/transport.go:375
+#	0xa97944	github.com/cockroachdb/cockroach/vendor/google.golang.org/grpc.(*parser).recvMsg+0x64			/go/src/github.com/cockroachdb/cockroach/vendor/google.golang.org/grpc/rpc_util.go:265
+#	0xa985dc	github.com/cockroachdb/cockroach/vendor/google.golang.org/grpc.recv+0x4c				/go/src/github.com/cockroachdb/cockroach/vendor/google.golang.org/grpc/rpc_util.go:361
+#	0xaa37d5	github.com/cockroachdb/cockroach/vendor/google.golang.org/grpc.(*clientStream).RecvMsg+0xe5		/go/src/github.com/cockroachdb/cockroach/vendor/google.golang.org/grpc/stream.go:398
+#	0xe10db1	github.com/cockroachdb/cockroach/pkg/gossip.(*gossipGossipClient).Recv+0x61				/go/src/github.com/cockroachdb/cockroach/pkg/gossip/gossip.pb.go:194
+#	0xe21f34	github.com/cockroachdb/cockroach/pkg/gossip.(*client).gossip.func2.1+0x34				/go/src/github.com/cockroachdb/cockroach/pkg/gossip/client.go:311
+#	0xe2208f	github.com/cockroachdb/cockroach/pkg/gossip.(*client).gossip.func2+0xbf					/go/src/github.com/cockroachdb/cockroach/pkg/gossip/client.go:319
+#	0xd1e1a2	github.com/cockroachdb/cockroach/pkg/util/stop.(*Stopper).RunWorker.func1+0xf2				/go/src/github.com/cockroachdb/cockroach/pkg/util/stop/stopper.go:198
+
+2 @ 0x5e1b6c 0x5f1ff8 0xe07e80 0xe21b2d 0xd1e1a3 0x6115b1
+#	0xe07e7f	github.com/cockroachdb/cockroach/pkg/gossip.(*client).gossip+0x34f		/go/src/github.com/cockroachdb/cockroach/pkg/gossip/client.go:323
+#	0xe21b2c	github.com/cockroachdb/cockroach/pkg/gossip.(*client).startLocked.func1+0x3cc	/go/src/github.com/cockroachdb/cockroach/pkg/gossip/client.go:130
+#	0xd1e1a2	github.com/cockroachdb/cockroach/pkg/util/stop.(*Stopper).RunWorker.func1+0xf2	/go/src/github.com/cockroachdb/cockroach/pkg/util/stop/stopper.go:198
+
+1 @ 0x5c4102 0x5f7cb6 0xd29362 0x6115b1
+#	0x5f7cb5	os/signal.signal_recv+0xa5	/usr/local/go/src/runtime/sigqueue.go:131
+#	0xd29361	os/signal.loop+0x21		/usr/local/go/src/os/signal/signal_unix.go:22
+
+1 @ 0x5e1b6c 0x5dccaa 0x5dc2a7 0x64e10e 0x64e18d 0x6505e2 0x767922 0x783cbe 0x7822d9 0xdf5055 0x168abdf 0xd1e1a3 0x6115b1
+#	0x5dc2a6	internal/poll.runtime_pollWait+0x56							/usr/local/go/src/runtime/netpoll.go:173
+#	0x64e10d	internal/poll.(*pollDesc).wait+0xad							/usr/local/go/src/internal/poll/fd_poll_runtime.go:85
+#	0x64e18c	internal/poll.(*pollDesc).waitRead+0x3c							/usr/local/go/src/internal/poll/fd_poll_runtime.go:90
+#	0x6505e1	internal/poll.(*FD).Accept+0x1e1							/usr/local/go/src/internal/poll/fd_unix.go:334
+#	0x767921	net.(*netFD).accept+0x41								/usr/local/go/src/net/fd_unix.go:238
+#	0x783cbd	net.(*TCPListener).accept+0x2d								/usr/local/go/src/net/tcpsock_posix.go:136
+#	0x7822d8	net.(*TCPListener).Accept+0x48								/usr/local/go/src/net/tcpsock.go:247
+#	0xdf5054	github.com/cockroachdb/cockroach/vendor/github.com/cockroachdb/cmux.(*cMux).Serve+0x94	/go/src/github.com/cockroachdb/cockroach/vendor/github.com/cockroachdb/cmux/cmux.go:124
+#	0x168abde	github.com/cockroachdb/cockroach/pkg/server.(*Server).Start.func3+0x2e			/go/src/github.com/cockroachdb/cockroach/pkg/server/server.go:656
+#	0xd1e1a2	github.com/cockroachdb/cockroach/pkg/util/stop.(*Stopper).RunWorker.func1+0xf2		/go/src/github.com/cockroachdb/cockroach/pkg/util/stop/stopper.go:198
+
+1 @ 0x5e1b6c 0x5dccaa 0x5dc2a7 0x64e10e 0x64e18d 0x6505e2 0x767922 0x783cbe 0x7822d9 0xdf5055 0x168bb6f 0x62953e 0x168bbfb 0xd1e1a3 0x6115b1
+#	0x5dc2a6	internal/poll.runtime_pollWait+0x56							/usr/local/go/src/runtime/netpoll.go:173
+#	0x64e10d	internal/poll.(*pollDesc).wait+0xad							/usr/local/go/src/internal/poll/fd_poll_runtime.go:85
+#	0x64e18c	internal/poll.(*pollDesc).waitRead+0x3c							/usr/local/go/src/internal/poll/fd_poll_runtime.go:90
+#	0x6505e1	internal/poll.(*FD).Accept+0x1e1							/usr/local/go/src/internal/poll/fd_unix.go:334
+#	0x767921	net.(*netFD).accept+0x41								/usr/local/go/src/net/fd_unix.go:238
+#	0x783cbd	net.(*TCPListener).accept+0x2d								/usr/local/go/src/net/tcpsock_posix.go:136
+#	0x7822d8	net.(*TCPListener).Accept+0x48								/usr/local/go/src/net/tcpsock.go:247
+#	0xdf5054	github.com/cockroachdb/cockroach/vendor/github.com/cockroachdb/cmux.(*cMux).Serve+0x94	/go/src/github.com/cockroachdb/cockroach/vendor/github.com/cockroachdb/cmux/cmux.go:124
+#	0x168bb6e	github.com/cockroachdb/cockroach/pkg/server.(*Server).Start.func12.1+0x2e		/go/src/github.com/cockroachdb/cockroach/pkg/server/server.go:946
+#	0x62953d	sync.(*Once).Do+0xbd									/usr/local/go/src/sync/once.go:44
+#	0x168bbfa	github.com/cockroachdb/cockroach/pkg/server.(*Server).Start.func12+0x5a			/go/src/github.com/cockroachdb/cockroach/pkg/server/server.go:945
+#	0xd1e1a2	github.com/cockroachdb/cockroach/pkg/util/stop.(*Stopper).RunWorker.func1+0xf2		/go/src/github.com/cockroachdb/cockroach/pkg/util/stop/stopper.go:198
+
+1 @ 0x5e1b6c 0x5e1c5e 0x5b8ff4 0x5b8c9b 0x10a82d9 0xd1e1a3 0x6115b1
+#	0x10a82d8	github.com/cockroachdb/cockroach/pkg/storage.(*raftScheduler).Start.func1+0x48	/go/src/github.com/cockroachdb/cockroach/pkg/storage/scheduler.go:157
+#	0xd1e1a2	github.com/cockroachdb/cockroach/pkg/util/stop.(*Stopper).RunWorker.func1+0xf2	/go/src/github.com/cockroachdb/cockroach/pkg/util/stop/stopper.go:198
+
+1 @ 0x5e1b6c 0x5e1c5e 0x5b8ff4 0x5b8c9b 0x13edecf 0x13da91a 0x13d9a1d 0x13e8841 0xda1f9c 0xdada13 0xda17f1 0xda1a44 0x15ee1df 0x15f694d 0xd1c447 0x15ed9ef 0x15f66f2 0xd1e1a3 0x6115b1
+#	0x13edece	github.com/cockroachdb/cockroach/pkg/kv.(*DistSender).divideAndSendBatchToRanges.func1+0xfe					/go/src/github.com/cockroachdb/cockroach/pkg/kv/dist_sender.go:666
+#	0x13da919	github.com/cockroachdb/cockroach/pkg/kv.(*DistSender).divideAndSendBatchToRanges+0x709						/go/src/github.com/cockroachdb/cockroach/pkg/kv/dist_sender.go:831
+#	0x13d9a1c	github.com/cockroachdb/cockroach/pkg/kv.(*DistSender).Send+0x3ac								/go/src/github.com/cockroachdb/cockroach/pkg/kv/dist_sender.go:597
+#	0x13e8840	github.com/cockroachdb/cockroach/pkg/kv.(*TxnCoordSender).Send+0x1f0								/go/src/github.com/cockroachdb/cockroach/pkg/kv/txn_coord_sender.go:444
+#	0xda1f9b	github.com/cockroachdb/cockroach/pkg/internal/client.(*DB).send+0x2ab								/go/src/github.com/cockroachdb/cockroach/pkg/internal/client/db.go:548
+#	0xdada12	github.com/cockroachdb/cockroach/pkg/internal/client.(*DB).(github.com/cockroachdb/cockroach/pkg/internal/client.send)-fm+0x82	/go/src/github.com/cockroachdb/cockroach/pkg/internal/client/db.go:482
+#	0xda17f0	github.com/cockroachdb/cockroach/pkg/internal/client.sendAndFill+0x100								/go/src/github.com/cockroachdb/cockroach/pkg/internal/client/db.go:454
+#	0xda1a43	github.com/cockroachdb/cockroach/pkg/internal/client.(*DB).Run+0x93								/go/src/github.com/cockroachdb/cockroach/pkg/internal/client/db.go:482
+#	0x15ee1de	github.com/cockroachdb/cockroach/pkg/ts.(*DB).StoreData+0x76e									/go/src/github.com/cockroachdb/cockroach/pkg/ts/db.go:179
+#	0x15f694c	github.com/cockroachdb/cockroach/pkg/ts.(*poller).poll.func1+0x13c								/go/src/github.com/cockroachdb/cockroach/pkg/ts/db.go:136
+#	0xd1c446	github.com/cockroachdb/cockroach/pkg/util/stop.(*Stopper).RunTask+0xf6								/go/src/github.com/cockroachdb/cockroach/pkg/util/stop/stopper.go:231
+#	0x15ed9ee	github.com/cockroachdb/cockroach/pkg/ts.(*poller).poll+0xae									/go/src/github.com/cockroachdb/cockroach/pkg/ts/db.go:127
+#	0x15f66f1	github.com/cockroachdb/cockroach/pkg/ts.(*poller).start.func1+0x91								/go/src/github.com/cockroachdb/cockroach/pkg/ts/db.go:115
+#	0xd1e1a2	github.com/cockroachdb/cockroach/pkg/util/stop.(*Stopper).RunWorker.func1+0xf2							/go/src/github.com/cockroachdb/cockroach/pkg/util/stop/stopper.go:198
+
+1 @ 0x5e1b6c 0x5e1c5e 0x5b8ff4 0x5b8c9b 0x168ab13 0xd1e1a3 0x6115b1
+#	0x168ab12	github.com/cockroachdb/cockroach/pkg/server.(*Server).Start.func2+0x52		/go/src/github.com/cockroachdb/cockroach/pkg/server/server.go:644
+#	0xd1e1a2	github.com/cockroachdb/cockroach/pkg/util/stop.(*Stopper).RunWorker.func1+0xf2	/go/src/github.com/cockroachdb/cockroach/pkg/util/stop/stopper.go:198
+
+1 @ 0x5e1b6c 0x5e1c5e 0x5b8ff4 0x5b8c9b 0x168af7c 0xd1e1a3 0x6115b1
+#	0x168af7b	github.com/cockroachdb/cockroach/pkg/server.(*Server).Start.func6+0x7b		/go/src/github.com/cockroachdb/cockroach/pkg/server/server.go:679
+#	0xd1e1a2	github.com/cockroachdb/cockroach/pkg/util/stop.(*Stopper).RunWorker.func1+0xf2	/go/src/github.com/cockroachdb/cockroach/pkg/util/stop/stopper.go:198
+
+1 @ 0x5e1b6c 0x5e1c5e 0x5b8ff4 0x5b8c9b 0x1732f3c 0x6115b1
+#	0x1732f3b	github.com/cockroachdb/cockroach/pkg/cli.initMemProfile.func1+0x8b	/go/src/github.com/cockroachdb/cockroach/pkg/cli/start.go:157
+
+1 @ 0x5e1b6c 0x5e1c5e 0x5b8ff4 0x5b8c9b 0xe01af1 0xd1e1a3 0x6115b1
+#	0xe01af0	github.com/cockroachdb/cockroach/pkg/rpc.NewContext.func1+0x50			/go/src/github.com/cockroachdb/cockroach/pkg/rpc/context.go:216
+#	0xd1e1a2	github.com/cockroachdb/cockroach/pkg/util/stop.(*Stopper).RunWorker.func1+0xf2	/go/src/github.com/cockroachdb/cockroach/pkg/util/stop/stopper.go:198
+
+1 @ 0x5e1b6c 0x5e1c5e 0x5b8ff4 0x5b8c9b 0xe24b0a 0xd1e1a3 0x6115b1
+#	0xe24b09	github.com/cockroachdb/cockroach/pkg/gossip.(*server).start.func3+0x59		/go/src/github.com/cockroachdb/cockroach/pkg/gossip/server.go:384
+#	0xd1e1a2	github.com/cockroachdb/cockroach/pkg/util/stop.(*Stopper).RunWorker.func1+0xf2	/go/src/github.com/cockroachdb/cockroach/pkg/util/stop/stopper.go:198
+
+1 @ 0x5e1b6c 0x5e1c5e 0x5b8ff4 0x5b8cdb 0x1403291 0x143afee 0x6115b1
+#	0x1403290	github.com/cockroachdb/cockroach/pkg/sql/distsqlrun.(*RowChannel).Next+0x90	/go/src/github.com/cockroachdb/cockroach/pkg/sql/distsqlrun/base.go:355
+#	0x143afed	github.com/cockroachdb/cockroach/pkg/sql/distsqlrun.(*noopProcessor).Run+0x11d	/go/src/github.com/cockroachdb/cockroach/pkg/sql/distsqlrun/processors.go:371
+
+1 @ 0x5e1b6c 0x5e1c5e 0x5b8ff4 0x5b8cdb 0xb4e001 0x6115b1
+#	0xb4e000	github.com/cockroachdb/cockroach/pkg/util/log.(*loggingT).flushDaemon+0x80	/go/src/github.com/cockroachdb/cockroach/pkg/util/log/clog.go:1005
+
+1 @ 0x5e1b6c 0x5e1c5e 0x5b8ff4 0x5b8cdb 0xb4e228 0x6115b1
+#	0xb4e227	github.com/cockroachdb/cockroach/pkg/util/log.(*loggingT).gcDaemon+0x67	/go/src/github.com/cockroachdb/cockroach/pkg/util/log/clog.go:1039
+
+1 @ 0x5e1b6c 0x5e1c5e 0x5b8ff4 0x5b8cdb 0xdf6d15 0x856007 0x8eb3d2 0x168ae72 0xd1e1a3 0x6115b1
+#	0xdf6d14	github.com/cockroachdb/cockroach/vendor/github.com/cockroachdb/cmux.muxListener.Accept+0x64	/go/src/github.com/cockroachdb/cockroach/vendor/github.com/cockroachdb/cmux/cmux.go:184
+#	0xdf6d14	github.com/cockroachdb/cockroach/vendor/github.com/cockroachdb/cmux.(*muxListener).Accept+0x64	<autogenerated>:1
+#	0x856006	crypto/tls.(*listener).Accept+0x36								/usr/local/go/src/crypto/tls/tls.go:52
+#	0x8eb3d1	net/http.(*Server).Serve+0x1b1									/usr/local/go/src/net/http/server.go:2695
+#	0x168ae71	github.com/cockroachdb/cockroach/pkg/server.(*Server).Start.func5+0x41				/go/src/github.com/cockroachdb/cockroach/pkg/server/server.go:675
+#	0xd1e1a2	github.com/cockroachdb/cockroach/pkg/util/stop.(*Stopper).RunWorker.func1+0xf2			/go/src/github.com/cockroachdb/cockroach/pkg/util/stop/stopper.go:198
+
+1 @ 0x5e1b6c 0x5e1c5e 0x5b8ff4 0x5b8cdb 0xdf6d15 0x8eb3d2 0x168adf9 0xd1e1a3 0x6115b1
+#	0xdf6d14	github.com/cockroachdb/cockroach/vendor/github.com/cockroachdb/cmux.muxListener.Accept+0x64	/go/src/github.com/cockroachdb/cockroach/vendor/github.com/cockroachdb/cmux/cmux.go:184
+#	0xdf6d14	github.com/cockroachdb/cockroach/vendor/github.com/cockroachdb/cmux.(*muxListener).Accept+0x64	<autogenerated>:1
+#	0x8eb3d1	net/http.(*Server).Serve+0x1b1									/usr/local/go/src/net/http/server.go:2695
+#	0x168adf8	github.com/cockroachdb/cockroach/pkg/server.(*Server).Start.func4+0x118				/go/src/github.com/cockroachdb/cockroach/pkg/server/server.go:668
+#	0xd1e1a2	github.com/cockroachdb/cockroach/pkg/util/stop.(*Stopper).RunWorker.func1+0xf2			/go/src/github.com/cockroachdb/cockroach/pkg/util/stop/stopper.go:198
+
+1 @ 0x5e1b6c 0x5e1c5e 0x5b8ff4 0x5b8cdb 0xdf6d15 0xa9abe6 0x168b093 0xd1e1a3 0x6115b1
+#	0xdf6d14	github.com/cockroachdb/cockroach/vendor/github.com/cockroachdb/cmux.muxListener.Accept+0x64	/go/src/github.com/cockroachdb/cockroach/vendor/github.com/cockroachdb/cmux/cmux.go:184
+#	0xdf6d14	github.com/cockroachdb/cockroach/vendor/github.com/cockroachdb/cmux.(*muxListener).Accept+0x64	<autogenerated>:1
+#	0xa9abe5	github.com/cockroachdb/cockroach/vendor/google.golang.org/grpc.(*Server).Serve+0x195		/go/src/github.com/cockroachdb/cockroach/vendor/google.golang.org/grpc/server.go:444
+#	0x168b092	github.com/cockroachdb/cockroach/pkg/server.(*Server).Start.func7+0x42				/go/src/github.com/cockroachdb/cockroach/pkg/server/server.go:691
+#	0xd1e1a2	github.com/cockroachdb/cockroach/pkg/util/stop.(*Stopper).RunWorker.func1+0xf2			/go/src/github.com/cockroachdb/cockroach/pkg/util/stop/stopper.go:198
+
+1 @ 0x5e1b6c 0x5e1c5e 0x5b8ff4 0x5b8cdb 0xdf6d15 0xdf7390 0x168b805 0xd1e1a3 0x6115b1
+#	0xdf6d14	github.com/cockroachdb/cockroach/vendor/github.com/cockroachdb/cmux.muxListener.Accept+0x64	/go/src/github.com/cockroachdb/cockroach/vendor/github.com/cockroachdb/cmux/cmux.go:184
+#	0xdf6d14	github.com/cockroachdb/cockroach/vendor/github.com/cockroachdb/cmux.(*muxListener).Accept+0x64	<autogenerated>:1
+#	0xdf738f	github.com/cockroachdb/cockroach/pkg/util/netutil.(*Server).ServeWith+0x4f			/go/src/github.com/cockroachdb/cockroach/pkg/util/netutil/net.go:119
+#	0x168b804	github.com/cockroachdb/cockroach/pkg/server.(*Server).Start.func9+0x1f4				/go/src/github.com/cockroachdb/cockroach/pkg/server/server.go:745
+#	0xd1e1a2	github.com/cockroachdb/cockroach/pkg/util/stop.(*Stopper).RunWorker.func1+0xf2			/go/src/github.com/cockroachdb/cockroach/pkg/util/stop/stopper.go:198
+
+1 @ 0x5e1b6c 0x5e1c5e 0x5f31c4 0x5f2de9 0x62a5c2 0x106bb71 0x10b560e 0xd1e1a3 0x6115b1
+#	0x5f2de8	sync.runtime_Semacquire+0x38							/usr/local/go/src/runtime/sema.go:56
+#	0x62a5c1	sync.(*WaitGroup).Wait+0x71							/usr/local/go/src/sync/waitgroup.go:131
+#	0x106bb70	github.com/cockroachdb/cockroach/pkg/storage.(*raftScheduler).Wait+0x30		/go/src/github.com/cockroachdb/cockroach/pkg/storage/scheduler.go:173
+#	0x10b560d	github.com/cockroachdb/cockroach/pkg/storage.(*raftScheduler).Wait-fm+0x3d	/go/src/github.com/cockroachdb/cockroach/pkg/storage/store.go:3640
+#	0xd1e1a2	github.com/cockroachdb/cockroach/pkg/util/stop.(*Stopper).RunWorker.func1+0xf2	/go/src/github.com/cockroachdb/cockroach/pkg/util/stop/stopper.go:198
+
+1 @ 0x5e1b6c 0x5e1c5e 0x5f31c4 0x5f2de9 0x62a5c2 0x14698c3 0x6115b1
+#	0x5f2de8	sync.runtime_Semacquire+0x38							/usr/local/go/src/runtime/sema.go:56
+#	0x62a5c1	sync.(*WaitGroup).Wait+0x71							/usr/local/go/src/sync/waitgroup.go:131
+#	0x14698c2	github.com/cockroachdb/cockroach/pkg/sql/distsqlrun.(*Flow).Wait.func1+0x32	/go/src/github.com/cockroachdb/cockroach/pkg/sql/distsqlrun/flow.go:405
+
+1 @ 0x5e1b6c 0x5e1c5e 0x5f31c4 0x5f2de9 0x62a5c2 0xfd0c3d 0xfcfa48 0x1098989 0xd1e490 0x6115b1
+#	0x5f2de8	sync.runtime_Semacquire+0x38									/usr/local/go/src/runtime/sema.go:56
+#	0x62a5c1	sync.(*WaitGroup).Wait+0x71									/usr/local/go/src/sync/waitgroup.go:131
+#	0xfd0c3c	github.com/cockroachdb/cockroach/pkg/storage.(*intentResolver).resolveIntents+0x99c		/go/src/github.com/cockroachdb/cockroach/pkg/storage/intent_resolver.go:515
+#	0xfcfa47	github.com/cockroachdb/cockroach/pkg/storage.(*intentResolver).processIntents+0x417		/go/src/github.com/cockroachdb/cockroach/pkg/storage/intent_resolver.go:344
+#	0x1098988	github.com/cockroachdb/cockroach/pkg/storage.(*intentResolver).processIntentsAsync.func1+0x88	/go/src/github.com/cockroachdb/cockroach/pkg/storage/intent_resolver.go:278
+#	0xd1e48f	github.com/cockroachdb/cockroach/pkg/util/stop.(*Stopper).RunLimitedAsyncTask.func1+0x10f	/go/src/github.com/cockroachdb/cockroach/pkg/util/stop/stopper.go:330
+
+1 @ 0x5e1b6c 0x5f1ff8 0x1016b6d 0x101618b 0x100feb1 0x107b9f5 0x108d74f 0x168a267 0xd1c5b7 0x166e682 0x166ea0c 0x13efccb 0x13f015d 0x6115b1
+#	0x1016b6c	github.com/cockroachdb/cockroach/pkg/storage.(*Replica).tryExecuteWriteBatch+0x60c	/go/src/github.com/cockroachdb/cockroach/pkg/storage/replica.go:2665
+#	0x101618a	github.com/cockroachdb/cockroach/pkg/storage.(*Replica).executeWriteBatch+0xaa		/go/src/github.com/cockroachdb/cockroach/pkg/storage/replica.go:2493
+#	0x100feb0	github.com/cockroachdb/cockroach/pkg/storage.(*Replica).Send+0x280			/go/src/github.com/cockroachdb/cockroach/pkg/storage/replica.go:1791
+#	0x107b9f4	github.com/cockroachdb/cockroach/pkg/storage.(*Store).Send+0x684			/go/src/github.com/cockroachdb/cockroach/pkg/storage/store.go:2570
+#	0x108d74e	github.com/cockroachdb/cockroach/pkg/storage.(*Stores).Send+0x22e			/go/src/github.com/cockroachdb/cockroach/pkg/storage/stores.go:215
+#	0x168a266	github.com/cockroachdb/cockroach/pkg/server.(*Node).batchInternal.func1+0x1a6		/go/src/github.com/cockroachdb/cockroach/pkg/server/node.go:853
+#	0xd1c5b6	github.com/cockroachdb/cockroach/pkg/util/stop.(*Stopper).RunTaskWithErr+0xf6		/go/src/github.com/cockroachdb/cockroach/pkg/util/stop/stopper.go:248
+#	0x166e681	github.com/cockroachdb/cockroach/pkg/server.(*Node).batchInternal+0x151			/go/src/github.com/cockroachdb/cockroach/pkg/server/node.go:840
+#	0x166ea0b	github.com/cockroachdb/cockroach/pkg/server.(*Node).Batch+0x9b				/go/src/github.com/cockroachdb/cockroach/pkg/server/node.go:881
+#	0x13efcca	github.com/cockroachdb/cockroach/pkg/kv.(*grpcTransport).SendNext.func1.1+0x47a		/go/src/github.com/cockroachdb/cockroach/pkg/kv/transport.go:224
+#	0x13f015c	github.com/cockroachdb/cockroach/pkg/kv.(*grpcTransport).SendNext.func1+0xac		/go/src/github.com/cockroachdb/cockroach/pkg/kv/transport.go:237
+
+1 @ 0x5e1b6c 0x5f1ff8 0x106aac6 0x10a7be0 0x106f894 0x10a7fb5 0xd1e1a3 0x6115b1
+#	0x106aac5	github.com/cockroachdb/cockroach/pkg/storage.(*replicaScanner).waitAndProcess+0x225	/go/src/github.com/cockroachdb/cockroach/pkg/storage/scanner.go:208
+#	0x10a7bdf	github.com/cockroachdb/cockroach/pkg/storage.(*replicaScanner).scanLoop.func1.1+0x8f	/go/src/github.com/cockroachdb/cockroach/pkg/storage/scanner.go:270
+#	0x106f893	github.com/cockroachdb/cockroach/pkg/storage.(*storeReplicaVisitor).Visit+0x1b3		/go/src/github.com/cockroachdb/cockroach/pkg/storage/store.go:315
+#	0x10a7fb4	github.com/cockroachdb/cockroach/pkg/storage.(*replicaScanner).scanLoop.func1+0x1f4	/go/src/github.com/cockroachdb/cockroach/pkg/storage/scanner.go:268
+#	0xd1e1a2	github.com/cockroachdb/cockroach/pkg/util/stop.(*Stopper).RunWorker.func1+0xf2		/go/src/github.com/cockroachdb/cockroach/pkg/util/stop/stopper.go:198
+
+1 @ 0x5e1b6c 0x5f1ff8 0x1083bf5 0x10b565e 0xd1e1a3 0x6115b1
+#	0x1083bf4	github.com/cockroachdb/cockroach/pkg/storage.(*Store).raftTickLoop+0x204							/go/src/github.com/cockroachdb/cockroach/pkg/storage/store.go:3656
+#	0x10b565d	github.com/cockroachdb/cockroach/pkg/storage.(*Store).(github.com/cockroachdb/cockroach/pkg/storage.raftTickLoop)-fm+0x3d	/go/src/github.com/cockroachdb/cockroach/pkg/storage/store.go:3642
+#	0xd1e1a2	github.com/cockroachdb/cockroach/pkg/util/stop.(*Stopper).RunWorker.func1+0xf2							/go/src/github.com/cockroachdb/cockroach/pkg/util/stop/stopper.go:198
+
+1 @ 0x5e1b6c 0x5f1ff8 0x1083dbd 0x10b56ae 0xd1e1a3 0x6115b1
+#	0x1083dbc	github.com/cockroachdb/cockroach/pkg/storage.(*Store).coalescedHeartbeatsLoop+0x16c							/go/src/github.com/cockroachdb/cockroach/pkg/storage/store.go:3697
+#	0x10b56ad	github.com/cockroachdb/cockroach/pkg/storage.(*Store).(github.com/cockroachdb/cockroach/pkg/storage.coalescedHeartbeatsLoop)-fm+0x3d	/go/src/github.com/cockroachdb/cockroach/pkg/storage/store.go:3643
+#	0xd1e1a2	github.com/cockroachdb/cockroach/pkg/util/stop.(*Stopper).RunWorker.func1+0xf2								/go/src/github.com/cockroachdb/cockroach/pkg/util/stop/stopper.go:198
+
+1 @ 0x5e1b6c 0x5f1ff8 0x10987c4 0xd1e1a3 0x6115b1
+#	0x10987c3	github.com/cockroachdb/cockroach/pkg/storage.(*idAllocator).start.func1+0x6b3	/go/src/github.com/cockroachdb/cockroach/pkg/storage/id_alloc.go:134
+#	0xd1e1a2	github.com/cockroachdb/cockroach/pkg/util/stop.(*Stopper).RunWorker.func1+0xf2	/go/src/github.com/cockroachdb/cockroach/pkg/util/stop/stopper.go:198
+
+1 @ 0x5e1b6c 0x5f1ff8 0x10999a9 0xd1e1a3 0x6115b1
+#	0x10999a8	github.com/cockroachdb/cockroach/pkg/storage.(*NodeLiveness).StartHeartbeat.func1+0x2a8	/go/src/github.com/cockroachdb/cockroach/pkg/storage/node_liveness.go:366
+#	0xd1e1a2	github.com/cockroachdb/cockroach/pkg/util/stop.(*Stopper).RunWorker.func1+0xf2		/go/src/github.com/cockroachdb/cockroach/pkg/util/stop/stopper.go:198
+
+1 @ 0x5e1b6c 0x5f1ff8 0x10a9a42 0xd1e1a3 0x6115b1
+#	0x10a9a41	github.com/cockroachdb/cockroach/pkg/storage.(*Store).Start.func2+0x121		/go/src/github.com/cockroachdb/cockroach/pkg/storage/store.go:1179
+#	0xd1e1a2	github.com/cockroachdb/cockroach/pkg/util/stop.(*Stopper).RunWorker.func1+0xf2	/go/src/github.com/cockroachdb/cockroach/pkg/util/stop/stopper.go:198
+
+1 @ 0x5e1b6c 0x5f1ff8 0x130c875 0xd1e1a3 0x6115b1
+#	0x130c874	github.com/cockroachdb/cockroach/pkg/sql/jobs.(*Registry).Start.func1+0x164	/go/src/github.com/cockroachdb/cockroach/pkg/sql/jobs/registry.go:129
+#	0xd1e1a2	github.com/cockroachdb/cockroach/pkg/util/stop.(*Stopper).RunWorker.func1+0xf2	/go/src/github.com/cockroachdb/cockroach/pkg/util/stop/stopper.go:198
+
+1 @ 0x5e1b6c 0x5f1ff8 0x130c9eb 0xd1e1a3 0x6115b1
+#	0x130c9ea	github.com/cockroachdb/cockroach/pkg/sql/jobs.(*Registry).Start.func2+0x13a	/go/src/github.com/cockroachdb/cockroach/pkg/sql/jobs/registry.go:140
+#	0xd1e1a2	github.com/cockroachdb/cockroach/pkg/util/stop.(*Stopper).RunWorker.func1+0xf2	/go/src/github.com/cockroachdb/cockroach/pkg/util/stop/stopper.go:198
+
+1 @ 0x5e1b6c 0x5f1ff8 0x13de13a 0x13d876b 0x13d8c3b 0x13dbe99 0x13dacf8 0x13d9a1d 0x13e8841 0xda1f9c 0xda9467 0xda85c7 0xda7581 0xda799f 0x14e4a8d 0x14e400c 0x14e1bf5 0x14e10d5 0x14dfe7c 0x14debf0 0x14de84c 0x14ddc4d 0x162d400 0x162c57e 0x1622d99 0x168b549 0xdf7ae9 0x6115b1
+#	0x13de139	github.com/cockroachdb/cockroach/pkg/kv.(*DistSender).sendToReplicas+0x699		/go/src/github.com/cockroachdb/cockroach/pkg/kv/dist_sender.go:1144
+#	0x13d876a	github.com/cockroachdb/cockroach/pkg/kv.(*DistSender).sendRPC+0x2da			/go/src/github.com/cockroachdb/cockroach/pkg/kv/dist_sender.go:382
+#	0x13d8c3a	github.com/cockroachdb/cockroach/pkg/kv.(*DistSender).sendSingleRange+0x17a		/go/src/github.com/cockroachdb/cockroach/pkg/kv/dist_sender.go:446
+#	0x13dbe98	github.com/cockroachdb/cockroach/pkg/kv.(*DistSender).sendPartialBatch+0x4f8		/go/src/github.com/cockroachdb/cockroach/pkg/kv/dist_sender.go:930
+#	0x13dacf7	github.com/cockroachdb/cockroach/pkg/kv.(*DistSender).divideAndSendBatchToRanges+0xae7	/go/src/github.com/cockroachdb/cockroach/pkg/kv/dist_sender.go:795
+#	0x13d9a1c	github.com/cockroachdb/cockroach/pkg/kv.(*DistSender).Send+0x3ac			/go/src/github.com/cockroachdb/cockroach/pkg/kv/dist_sender.go:597
+#	0x13e8840	github.com/cockroachdb/cockroach/pkg/kv.(*TxnCoordSender).Send+0x1f0			/go/src/github.com/cockroachdb/cockroach/pkg/kv/txn_coord_sender.go:444
+#	0xda1f9b	github.com/cockroachdb/cockroach/pkg/internal/client.(*DB).send+0x2ab			/go/src/github.com/cockroachdb/cockroach/pkg/internal/client/db.go:548
+#	0xda9466	github.com/cockroachdb/cockroach/pkg/internal/client.(*Txn).Send+0x326			/go/src/github.com/cockroachdb/cockroach/pkg/internal/client/txn.go:959
+#	0xda85c6	github.com/cockroachdb/cockroach/pkg/internal/client.(*Txn).sendEndTxnReq+0x1d6		/go/src/github.com/cockroachdb/cockroach/pkg/internal/client/txn.go:679
+#	0xda7580	github.com/cockroachdb/cockroach/pkg/internal/client.(*Txn).commit+0x50			/go/src/github.com/cockroachdb/cockroach/pkg/internal/client/txn.go:514
+#	0xda799e	github.com/cockroachdb/cockroach/pkg/internal/client.(*Txn).Commit+0x3e			/go/src/github.com/cockroachdb/cockroach/pkg/internal/client/txn.go:559
+#	0x14e4a8c	github.com/cockroachdb/cockroach/pkg/sql.commitSQLTransaction+0x6c			/go/src/github.com/cockroachdb/cockroach/pkg/sql/executor.go:1907
+#	0x14e400b	github.com/cockroachdb/cockroach/pkg/sql.(*Executor).execStmtInOpenTxn+0x11db		/go/src/github.com/cockroachdb/cockroach/pkg/sql/executor.go:1683
+#	0x14e1bf4	github.com/cockroachdb/cockroach/pkg/sql.(*Executor).execSingleStatement+0x6a4		/go/src/github.com/cockroachdb/cockroach/pkg/sql/executor.go:1322
+#	0x14e10d4	github.com/cockroachdb/cockroach/pkg/sql.runTxnAttempt+0x3e4				/go/src/github.com/cockroachdb/cockroach/pkg/sql/executor.go:1197
+#	0x14dfe7b	github.com/cockroachdb/cockroach/pkg/sql.runWithAutoRetry+0x39b				/go/src/github.com/cockroachdb/cockroach/pkg/sql/executor.go:1023
+#	0x14debef	github.com/cockroachdb/cockroach/pkg/sql.(*Executor).execParsed+0x12f			/go/src/github.com/cockroachdb/cockroach/pkg/sql/executor.go:840
+#	0x14de84b	github.com/cockroachdb/cockroach/pkg/sql.(*Executor).execRequest+0x49b			/go/src/github.com/cockroachdb/cockroach/pkg/sql/executor.go:752
+#	0x14ddc4c	github.com/cockroachdb/cockroach/pkg/sql.(*Executor).ExecuteStatements+0x1bc		/go/src/github.com/cockroachdb/cockroach/pkg/sql/executor.go:638
+#	0x162d3ff	github.com/cockroachdb/cockroach/pkg/sql/pgwire.(*v3Conn).handleSimpleQuery+0x1cf	/go/src/github.com/cockroachdb/cockroach/pkg/sql/pgwire/v3.go:612
+#	0x162c57d	github.com/cockroachdb/cockroach/pkg/sql/pgwire.(*v3Conn).serve+0x8ad			/go/src/github.com/cockroachdb/cockroach/pkg/sql/pgwire/v3.go:503
+#	0x1622d98	github.com/cockroachdb/cockroach/pkg/sql/pgwire.(*Server).ServeConn+0x928		/go/src/github.com/cockroachdb/cockroach/pkg/sql/pgwire/server.go:421
+#	0x168b548	github.com/cockroachdb/cockroach/pkg/server.(*Server).Start.func9.1+0x148		/go/src/github.com/cockroachdb/cockroach/pkg/server/server.go:749
+#	0xdf7ae8	github.com/cockroachdb/cockroach/pkg/util/netutil.(*Server).ServeWith.func1+0xa8	/go/src/github.com/cockroachdb/cockroach/pkg/util/netutil/net.go:140
+
+1 @ 0x5e1b6c 0x5f1ff8 0x13de13a 0x13d876b 0x13d8c3b 0x13dbe99 0x13dacf8 0x13d9a1d 0x13e8841 0xda1f9c 0xdada13 0xda17f1 0xda1a44 0x1098b4e 0x1098c02 0xd1e490 0x6115b1
+#	0x13de139	github.com/cockroachdb/cockroach/pkg/kv.(*DistSender).sendToReplicas+0x699							/go/src/github.com/cockroachdb/cockroach/pkg/kv/dist_sender.go:1144
+#	0x13d876a	github.com/cockroachdb/cockroach/pkg/kv.(*DistSender).sendRPC+0x2da								/go/src/github.com/cockroachdb/cockroach/pkg/kv/dist_sender.go:382
+#	0x13d8c3a	github.com/cockroachdb/cockroach/pkg/kv.(*DistSender).sendSingleRange+0x17a							/go/src/github.com/cockroachdb/cockroach/pkg/kv/dist_sender.go:446
+#	0x13dbe98	github.com/cockroachdb/cockroach/pkg/kv.(*DistSender).sendPartialBatch+0x4f8							/go/src/github.com/cockroachdb/cockroach/pkg/kv/dist_sender.go:930
+#	0x13dacf7	github.com/cockroachdb/cockroach/pkg/kv.(*DistSender).divideAndSendBatchToRanges+0xae7						/go/src/github.com/cockroachdb/cockroach/pkg/kv/dist_sender.go:795
+#	0x13d9a1c	github.com/cockroachdb/cockroach/pkg/kv.(*DistSender).Send+0x3ac								/go/src/github.com/cockroachdb/cockroach/pkg/kv/dist_sender.go:597
+#	0x13e8840	github.com/cockroachdb/cockroach/pkg/kv.(*TxnCoordSender).Send+0x1f0								/go/src/github.com/cockroachdb/cockroach/pkg/kv/txn_coord_sender.go:444
+#	0xda1f9b	github.com/cockroachdb/cockroach/pkg/internal/client.(*DB).send+0x2ab								/go/src/github.com/cockroachdb/cockroach/pkg/internal/client/db.go:548
+#	0xdada12	github.com/cockroachdb/cockroach/pkg/internal/client.(*DB).(github.com/cockroachdb/cockroach/pkg/internal/client.send)-fm+0x82	/go/src/github.com/cockroachdb/cockroach/pkg/internal/client/db.go:482
+#	0xda17f0	github.com/cockroachdb/cockroach/pkg/internal/client.sendAndFill+0x100								/go/src/github.com/cockroachdb/cockroach/pkg/internal/client/db.go:454
+#	0xda1a43	github.com/cockroachdb/cockroach/pkg/internal/client.(*DB).Run+0x93								/go/src/github.com/cockroachdb/cockroach/pkg/internal/client/db.go:482
+#	0x1098b4d	github.com/cockroachdb/cockroach/pkg/storage.(*intentResolver).resolveIntents.func2+0x4d					/go/src/github.com/cockroachdb/cockroach/pkg/storage/intent_resolver.go:480
+#	0x1098c01	github.com/cockroachdb/cockroach/pkg/storage.(*intentResolver).resolveIntents.func3+0x81					/go/src/github.com/cockroachdb/cockroach/pkg/storage/intent_resolver.go:489
+#	0xd1e48f	github.com/cockroachdb/cockroach/pkg/util/stop.(*Stopper).RunLimitedAsyncTask.func1+0x10f					/go/src/github.com/cockroachdb/cockroach/pkg/util/stop/stopper.go:330
+
+1 @ 0x5e1b6c 0x5f1ff8 0x13de13a 0x13d876b 0x13d8c3b 0x13dbe99 0x13dacf8 0x13d9a1d 0x13e8841 0xda1f9c 0xdada13 0xda17f1 0xda1a44 0xda06a8 0x131aa7b 0x1689a1e 0xd1c447 0x166e358 0x16898ec 0xd1e1a3 0x6115b1
+#	0x13de139	github.com/cockroachdb/cockroach/pkg/kv.(*DistSender).sendToReplicas+0x699							/go/src/github.com/cockroachdb/cockroach/pkg/kv/dist_sender.go:1144
+#	0x13d876a	github.com/cockroachdb/cockroach/pkg/kv.(*DistSender).sendRPC+0x2da								/go/src/github.com/cockroachdb/cockroach/pkg/kv/dist_sender.go:382
+#	0x13d8c3a	github.com/cockroachdb/cockroach/pkg/kv.(*DistSender).sendSingleRange+0x17a							/go/src/github.com/cockroachdb/cockroach/pkg/kv/dist_sender.go:446
+#	0x13dbe98	github.com/cockroachdb/cockroach/pkg/kv.(*DistSender).sendPartialBatch+0x4f8							/go/src/github.com/cockroachdb/cockroach/pkg/kv/dist_sender.go:930
+#	0x13dacf7	github.com/cockroachdb/cockroach/pkg/kv.(*DistSender).divideAndSendBatchToRanges+0xae7						/go/src/github.com/cockroachdb/cockroach/pkg/kv/dist_sender.go:795
+#	0x13d9a1c	github.com/cockroachdb/cockroach/pkg/kv.(*DistSender).Send+0x3ac								/go/src/github.com/cockroachdb/cockroach/pkg/kv/dist_sender.go:597
+#	0x13e8840	github.com/cockroachdb/cockroach/pkg/kv.(*TxnCoordSender).Send+0x1f0								/go/src/github.com/cockroachdb/cockroach/pkg/kv/txn_coord_sender.go:444
+#	0xda1f9b	github.com/cockroachdb/cockroach/pkg/internal/client.(*DB).send+0x2ab								/go/src/github.com/cockroachdb/cockroach/pkg/internal/client/db.go:548
+#	0xdada12	github.com/cockroachdb/cockroach/pkg/internal/client.(*DB).(github.com/cockroachdb/cockroach/pkg/internal/client.send)-fm+0x82	/go/src/github.com/cockroachdb/cockroach/pkg/internal/client/db.go:482
+#	0xda17f0	github.com/cockroachdb/cockroach/pkg/internal/client.sendAndFill+0x100								/go/src/github.com/cockroachdb/cockroach/pkg/internal/client/db.go:454
+#	0xda1a43	github.com/cockroachdb/cockroach/pkg/internal/client.(*DB).Run+0x93								/go/src/github.com/cockroachdb/cockroach/pkg/internal/client/db.go:482
+#	0xda06a7	github.com/cockroachdb/cockroach/pkg/internal/client.(*DB).PutInline+0x97							/go/src/github.com/cockroachdb/cockroach/pkg/internal/client/db.go:251
+#	0x131aa7a	github.com/cockroachdb/cockroach/pkg/server/status.(*MetricsRecorder).WriteStatusSummary+0x19a					/go/src/github.com/cockroachdb/cockroach/pkg/server/status/recorder.go:373
+#	0x1689a1d	github.com/cockroachdb/cockroach/pkg/server.(*Node).writeSummaries.func1+0x5d							/go/src/github.com/cockroachdb/cockroach/pkg/server/node.go:765
+#	0xd1c446	github.com/cockroachdb/cockroach/pkg/util/stop.(*Stopper).RunTask+0xf6								/go/src/github.com/cockroachdb/cockroach/pkg/util/stop/stopper.go:231
+#	0x166e357	github.com/cockroachdb/cockroach/pkg/server.(*Node).writeSummaries+0x97								/go/src/github.com/cockroachdb/cockroach/pkg/server/node.go:764
+#	0x16898eb	github.com/cockroachdb/cockroach/pkg/server.(*Node).startWriteSummaries.func1+0x22b						/go/src/github.com/cockroachdb/cockroach/pkg/server/node.go:750
+#	0xd1e1a2	github.com/cockroachdb/cockroach/pkg/util/stop.(*Stopper).RunWorker.func1+0xf2							/go/src/github.com/cockroachdb/cockroach/pkg/util/stop/stopper.go:198
+
+1 @ 0x5e1b6c 0x5f1ff8 0x13de13a 0x13d876b 0x13d8c3b 0x13dbe99 0x13dacf8 0x13d9a1d 0x13eb232 0x13ea563 0x13f12b1 0xd1e2e6 0x6115b1
+#	0x13de139	github.com/cockroachdb/cockroach/pkg/kv.(*DistSender).sendToReplicas+0x699		/go/src/github.com/cockroachdb/cockroach/pkg/kv/dist_sender.go:1144
+#	0x13d876a	github.com/cockroachdb/cockroach/pkg/kv.(*DistSender).sendRPC+0x2da			/go/src/github.com/cockroachdb/cockroach/pkg/kv/dist_sender.go:382
+#	0x13d8c3a	github.com/cockroachdb/cockroach/pkg/kv.(*DistSender).sendSingleRange+0x17a		/go/src/github.com/cockroachdb/cockroach/pkg/kv/dist_sender.go:446
+#	0x13dbe98	github.com/cockroachdb/cockroach/pkg/kv.(*DistSender).sendPartialBatch+0x4f8		/go/src/github.com/cockroachdb/cockroach/pkg/kv/dist_sender.go:930
+#	0x13dacf7	github.com/cockroachdb/cockroach/pkg/kv.(*DistSender).divideAndSendBatchToRanges+0xae7	/go/src/github.com/cockroachdb/cockroach/pkg/kv/dist_sender.go:795
+#	0x13d9a1c	github.com/cockroachdb/cockroach/pkg/kv.(*DistSender).Send+0x3ac			/go/src/github.com/cockroachdb/cockroach/pkg/kv/dist_sender.go:597
+#	0x13eb231	github.com/cockroachdb/cockroach/pkg/kv.(*TxnCoordSender).heartbeat+0x491		/go/src/github.com/cockroachdb/cockroach/pkg/kv/txn_coord_sender.go:778
+#	0x13ea562	github.com/cockroachdb/cockroach/pkg/kv.(*TxnCoordSender).heartbeatLoop+0x3a2		/go/src/github.com/cockroachdb/cockroach/pkg/kv/txn_coord_sender.go:659
+#	0x13f12b0	github.com/cockroachdb/cockroach/pkg/kv.(*TxnCoordSender).updateState.func2+0x50	/go/src/github.com/cockroachdb/cockroach/pkg/kv/txn_coord_sender.go:952
+#	0xd1e2e5	github.com/cockroachdb/cockroach/pkg/util/stop.(*Stopper).RunAsyncTask.func1+0xe5	/go/src/github.com/cockroachdb/cockroach/pkg/util/stop/stopper.go:269
+
+1 @ 0x5e1b6c 0x5f1ff8 0x13e7cb4 0x13f029e 0xd1e1a3 0x6115b1
+#	0x13e7cb3	github.com/cockroachdb/cockroach/pkg/kv.(*TxnCoordSender).printStatsLoop+0x1a3	/go/src/github.com/cockroachdb/cockroach/pkg/kv/txn_coord_sender.go:253
+#	0x13f029d	github.com/cockroachdb/cockroach/pkg/kv.NewTxnCoordSender.func1+0x3d		/go/src/github.com/cockroachdb/cockroach/pkg/kv/txn_coord_sender.go:237
+#	0xd1e1a2	github.com/cockroachdb/cockroach/pkg/util/stop.(*Stopper).RunWorker.func1+0xf2	/go/src/github.com/cockroachdb/cockroach/pkg/util/stop/stopper.go:198
+
+1 @ 0x5e1b6c 0x5f1ff8 0x1421572 0x14ce537 0x14cf95a 0x14e4f07 0x14e60ab 0x14e34d1 0x14e1bf5 0x14e10d5 0x14dfe7c 0x14debf0 0x14de84c 0x14ddc4d 0x162d400 0x162c57e 0x1622d99 0x168b549 0xdf7ae9 0x6115b1
+#	0x1421571	github.com/cockroachdb/cockroach/pkg/sql/distsqlrun.(*Flow).Wait+0x141			/go/src/github.com/cockroachdb/cockroach/pkg/sql/distsqlrun/flow.go:409
+#	0x14ce536	github.com/cockroachdb/cockroach/pkg/sql.(*distSQLPlanner).Run+0xaa6			/go/src/github.com/cockroachdb/cockroach/pkg/sql/distsql_running.go:212
+#	0x14cf959	github.com/cockroachdb/cockroach/pkg/sql.(*distSQLPlanner).PlanAndRun+0x269		/go/src/github.com/cockroachdb/cockroach/pkg/sql/distsql_running.go:446
+#	0x14e4f06	github.com/cockroachdb/cockroach/pkg/sql.(*Executor).execDistSQL+0x2b6			/go/src/github.com/cockroachdb/cockroach/pkg/sql/executor.go:1964
+#	0x14e60aa	github.com/cockroachdb/cockroach/pkg/sql.(*Executor).execStmt+0x3ba			/go/src/github.com/cockroachdb/cockroach/pkg/sql/executor.go:2156
+#	0x14e34d0	github.com/cockroachdb/cockroach/pkg/sql.(*Executor).execStmtInOpenTxn+0x6a0		/go/src/github.com/cockroachdb/cockroach/pkg/sql/executor.go:1797
+#	0x14e1bf4	github.com/cockroachdb/cockroach/pkg/sql.(*Executor).execSingleStatement+0x6a4		/go/src/github.com/cockroachdb/cockroach/pkg/sql/executor.go:1322
+#	0x14e10d4	github.com/cockroachdb/cockroach/pkg/sql.runTxnAttempt+0x3e4				/go/src/github.com/cockroachdb/cockroach/pkg/sql/executor.go:1197
+#	0x14dfe7b	github.com/cockroachdb/cockroach/pkg/sql.runWithAutoRetry+0x39b				/go/src/github.com/cockroachdb/cockroach/pkg/sql/executor.go:1023
+#	0x14debef	github.com/cockroachdb/cockroach/pkg/sql.(*Executor).execParsed+0x12f			/go/src/github.com/cockroachdb/cockroach/pkg/sql/executor.go:840
+#	0x14de84b	github.com/cockroachdb/cockroach/pkg/sql.(*Executor).execRequest+0x49b			/go/src/github.com/cockroachdb/cockroach/pkg/sql/executor.go:752
+#	0x14ddc4c	github.com/cockroachdb/cockroach/pkg/sql.(*Executor).ExecuteStatements+0x1bc		/go/src/github.com/cockroachdb/cockroach/pkg/sql/executor.go:638
+#	0x162d3ff	github.com/cockroachdb/cockroach/pkg/sql/pgwire.(*v3Conn).handleSimpleQuery+0x1cf	/go/src/github.com/cockroachdb/cockroach/pkg/sql/pgwire/v3.go:612
+#	0x162c57d	github.com/cockroachdb/cockroach/pkg/sql/pgwire.(*v3Conn).serve+0x8ad			/go/src/github.com/cockroachdb/cockroach/pkg/sql/pgwire/v3.go:503
+#	0x1622d98	github.com/cockroachdb/cockroach/pkg/sql/pgwire.(*Server).ServeConn+0x928		/go/src/github.com/cockroachdb/cockroach/pkg/sql/pgwire/server.go:421
+#	0x168b548	github.com/cockroachdb/cockroach/pkg/server.(*Server).Start.func9.1+0x148		/go/src/github.com/cockroachdb/cockroach/pkg/server/server.go:749
+#	0xdf7ae8	github.com/cockroachdb/cockroach/pkg/util/netutil.(*Server).ServeWith.func1+0xa8	/go/src/github.com/cockroachdb/cockroach/pkg/util/netutil/net.go:140
+
+1 @ 0x5e1b6c 0x5f1ff8 0x146a2cb 0xd1e1a3 0x6115b1
+#	0x146a2ca	github.com/cockroachdb/cockroach/pkg/sql/distsqlrun.(*flowScheduler).Start.func1+0x17a	/go/src/github.com/cockroachdb/cockroach/pkg/sql/distsqlrun/flow_scheduler.go:126
+#	0xd1e1a2	github.com/cockroachdb/cockroach/pkg/util/stop.(*Stopper).RunWorker.func1+0xf2		/go/src/github.com/cockroachdb/cockroach/pkg/util/stop/stopper.go:198
+
+1 @ 0x5e1b6c 0x5f1ff8 0x15afce2 0xd1e1a3 0x6115b1
+#	0x15afce1	github.com/cockroachdb/cockroach/pkg/sql.(*Executor).Start.func1+0x121		/go/src/github.com/cockroachdb/cockroach/pkg/sql/executor.go:427
+#	0xd1e1a2	github.com/cockroachdb/cockroach/pkg/util/stop.(*Stopper).RunWorker.func1+0xf2	/go/src/github.com/cockroachdb/cockroach/pkg/util/stop/stopper.go:198
+
+1 @ 0x5e1b6c 0x5f1ff8 0x15b6962 0xd1e1a3 0x6115b1
+#	0x15b6961	github.com/cockroachdb/cockroach/pkg/sql.(*LeaseManager).RefreshLeases.func1+0x911	/go/src/github.com/cockroachdb/cockroach/pkg/sql/lease.go:1343
+#	0xd1e1a2	github.com/cockroachdb/cockroach/pkg/util/stop.(*Stopper).RunWorker.func1+0xf2		/go/src/github.com/cockroachdb/cockroach/pkg/util/stop/stopper.go:198
+
+1 @ 0x5e1b6c 0x5f1ff8 0x15bb4e4 0xd1e1a3 0x6115b1
+#	0x15bb4e3	github.com/cockroachdb/cockroach/pkg/sql.(*SchemaChangeManager).Start.func1+0x293	/go/src/github.com/cockroachdb/cockroach/pkg/sql/schema_changer.go:976
+#	0xd1e1a2	github.com/cockroachdb/cockroach/pkg/util/stop.(*Stopper).RunWorker.func1+0xf2		/go/src/github.com/cockroachdb/cockroach/pkg/util/stop/stopper.go:198
+
+1 @ 0x5e1b6c 0x5f1ff8 0x1688f8d 0xd1e1a3 0x6115b1
+#	0x1688f8c	github.com/cockroachdb/cockroach/pkg/server.(*Node).startGossip.func1+0x2dc	/go/src/github.com/cockroachdb/cockroach/pkg/server/node.go:670
+#	0xd1e1a2	github.com/cockroachdb/cockroach/pkg/util/stop.(*Stopper).RunWorker.func1+0xf2	/go/src/github.com/cockroachdb/cockroach/pkg/util/stop/stopper.go:198
+
+1 @ 0x5e1b6c 0x5f1ff8 0x168947f 0xd1e1a3 0x6115b1
+#	0x168947e	github.com/cockroachdb/cockroach/pkg/server.(*Node).startComputePeriodicMetrics.func1+0x14e	/go/src/github.com/cockroachdb/cockroach/pkg/server/node.go:711
+#	0xd1e1a2	github.com/cockroachdb/cockroach/pkg/util/stop.(*Stopper).RunWorker.func1+0xf2			/go/src/github.com/cockroachdb/cockroach/pkg/util/stop/stopper.go:198
+
+1 @ 0x5e1b6c 0x5f1ff8 0x168ca6c 0xd1e1a3 0x6115b1
+#	0x168ca6b	github.com/cockroachdb/cockroach/pkg/server.(*Server).startSampleEnvironment.func1+0x16b	/go/src/github.com/cockroachdb/cockroach/pkg/server/server.go:1213
+#	0xd1e1a2	github.com/cockroachdb/cockroach/pkg/util/stop.(*Stopper).RunWorker.func1+0xf2			/go/src/github.com/cockroachdb/cockroach/pkg/util/stop/stopper.go:198
+
+1 @ 0x5e1b6c 0x5f1ff8 0x168d8fb 0xd1e1a3 0x6115b1
+#	0x168d8fa	github.com/cockroachdb/cockroach/pkg/server.(*Server).refreshSettings.func2+0x2da	/go/src/github.com/cockroachdb/cockroach/pkg/server/settingsworker.go:112
+#	0xd1e1a2	github.com/cockroachdb/cockroach/pkg/util/stop.(*Stopper).RunWorker.func1+0xf2		/go/src/github.com/cockroachdb/cockroach/pkg/util/stop/stopper.go:198
+
+1 @ 0x5e1b6c 0x5f1ff8 0x1690ecd 0xd1e1a3 0x6115b1
+#	0x1690ecc	github.com/cockroachdb/cockroach/pkg/server.(*Server).PeriodicallyCheckForUpdates.func1+0x49c	/go/src/github.com/cockroachdb/cockroach/pkg/server/updates.go:122
+#	0xd1e1a2	github.com/cockroachdb/cockroach/pkg/util/stop.(*Stopper).RunWorker.func1+0xf2			/go/src/github.com/cockroachdb/cockroach/pkg/util/stop/stopper.go:198
+
+1 @ 0x5e1b6c 0x5f1ff8 0x1723db5 0x1731ad7 0x1731c81 0x16ce341 0x16ceaee 0x16ce7cb 0x16fbc4d 0x16fb79c 0x173ca60 0x5e16cd 0x6115b1
+#	0x1723db4	github.com/cockroachdb/cockroach/pkg/cli.runStart+0x6f4						/go/src/github.com/cockroachdb/cockroach/pkg/cli/start.go:596
+#	0x1731ad6	github.com/cockroachdb/cockroach/pkg/cli.MaybeDecorateGRPCError.func1+0x56			/go/src/github.com/cockroachdb/cockroach/pkg/cli/error.go:35
+#	0x1731c80	github.com/cockroachdb/cockroach/pkg/cli.MaybeShoutError.func1+0x50				/go/src/github.com/cockroachdb/cockroach/pkg/cli/error.go:66
+#	0x16ce340	github.com/cockroachdb/cockroach/vendor/github.com/spf13/cobra.(*Command).execute+0x3f0		/go/src/github.com/cockroachdb/cockroach/vendor/github.com/spf13/cobra/command.go:644
+#	0x16ceaed	github.com/cockroachdb/cockroach/vendor/github.com/spf13/cobra.(*Command).ExecuteC+0x2fd	/go/src/github.com/cockroachdb/cockroach/vendor/github.com/spf13/cobra/command.go:734
+#	0x16ce7ca	github.com/cockroachdb/cockroach/vendor/github.com/spf13/cobra.(*Command).Execute+0x2a		/go/src/github.com/cockroachdb/cockroach/vendor/github.com/spf13/cobra/command.go:693
+#	0x16fbc4c	github.com/cockroachdb/cockroach/pkg/cli.Run+0x6c						/go/src/github.com/cockroachdb/cockroach/pkg/cli/cli.go:159
+#	0x16fb79b	github.com/cockroachdb/cockroach/pkg/cli.Main+0x16b						/go/src/github.com/cockroachdb/cockroach/pkg/cli/cli.go:52
+#	0x173ca5f	main.main+0x1f											/go/src/github.com/cockroachdb/cockroach/main.go:26
+#	0x5e16cc	runtime.main+0x20c										/usr/local/go/src/runtime/proc.go:185
+
+1 @ 0x5e1b6c 0x5f1ff8 0x60e210 0x6115b1
+#	0x5e1b6b	runtime.gopark+0x12b		/usr/local/go/src/runtime/proc.go:277
+#	0x5f1ff7	runtime.selectgo+0x1137		/usr/local/go/src/runtime/select.go:395
+#	0x60e20f	runtime.ensureSigM.func1+0x21f	/usr/local/go/src/runtime/signal_unix.go:511
+
+1 @ 0x5e1b6c 0x5f1ff8 0xa77117 0x6115b1
+#	0xa77116	github.com/cockroachdb/cockroach/vendor/google.golang.org/grpc/transport.(*http2Client).keepalive+0x2e6	/go/src/github.com/cockroachdb/cockroach/vendor/google.golang.org/grpc/transport/http2_client.go:1303
+
+1 @ 0x5e1b6c 0x5f1ff8 0xa83820 0xa848f5 0x62aa76 0x62abe8 0xa8483f 0xa97945 0xa985dd 0xaa502e 0x13f9b82 0x142f827 0x142ef7b 0x145f8f8 0x145fb91 0x13f9a62 0xa9f1c3 0xaa0b01 0xaa738f 0x6115b1
+#	0xa8381f	github.com/cockroachdb/cockroach/vendor/google.golang.org/grpc/transport.(*recvBufferReader).Read+0x2ff	/go/src/github.com/cockroachdb/cockroach/vendor/google.golang.org/grpc/transport/transport.go:126
+#	0xa848f4	github.com/cockroachdb/cockroach/vendor/google.golang.org/grpc/transport.(*transportReader).Read+0x54	/go/src/github.com/cockroachdb/cockroach/vendor/google.golang.org/grpc/transport/transport.go:391
+#	0x62aa75	io.ReadAtLeast+0x85											/usr/local/go/src/io/io.go:309
+#	0x62abe7	io.ReadFull+0x57											/usr/local/go/src/io/io.go:327
+#	0xa8483e	github.com/cockroachdb/cockroach/vendor/google.golang.org/grpc/transport.(*Stream).Read+0xbe		/go/src/github.com/cockroachdb/cockroach/vendor/google.golang.org/grpc/transport/transport.go:375
+#	0xa97944	github.com/cockroachdb/cockroach/vendor/google.golang.org/grpc.(*parser).recvMsg+0x64			/go/src/github.com/cockroachdb/cockroach/vendor/google.golang.org/grpc/rpc_util.go:265
+#	0xa985dc	github.com/cockroachdb/cockroach/vendor/google.golang.org/grpc.recv+0x4c				/go/src/github.com/cockroachdb/cockroach/vendor/google.golang.org/grpc/rpc_util.go:361
+#	0xaa502d	github.com/cockroachdb/cockroach/vendor/google.golang.org/grpc.(*serverStream).RecvMsg+0x10d		/go/src/github.com/cockroachdb/cockroach/vendor/google.golang.org/grpc/stream.go:648
+#	0x13f9b81	github.com/cockroachdb/cockroach/pkg/sql/distsqlrun.(*distSQLFlowStreamServer).Recv+0x61		/go/src/github.com/cockroachdb/cockroach/pkg/sql/distsqlrun/api.pb.go:387
+#	0x142f826	github.com/cockroachdb/cockroach/pkg/sql/distsqlrun.processInboundStreamHelper+0x686			/go/src/github.com/cockroachdb/cockroach/pkg/sql/distsqlrun/inbound.go:81
+#	0x142ef7a	github.com/cockroachdb/cockroach/pkg/sql/distsqlrun.ProcessInboundStream+0x9a				/go/src/github.com/cockroachdb/cockroach/pkg/sql/distsqlrun/inbound.go:39
+#	0x145f8f7	github.com/cockroachdb/cockroach/pkg/sql/distsqlrun.(*ServerImpl).flowStreamInt+0x427			/go/src/github.com/cockroachdb/cockroach/pkg/sql/distsqlrun/server.go:415
+#	0x145fb90	github.com/cockroachdb/cockroach/pkg/sql/distsqlrun.(*ServerImpl).FlowStream+0x90			/go/src/github.com/cockroachdb/cockroach/pkg/sql/distsqlrun/server.go:421
+#	0x13f9a61	github.com/cockroachdb/cockroach/pkg/sql/distsqlrun._DistSQL_FlowStream_Handler+0xb1			/go/src/github.com/cockroachdb/cockroach/pkg/sql/distsqlrun/api.pb.go:368
+#	0xa9f1c2	github.com/cockroachdb/cockroach/vendor/google.golang.org/grpc.(*Server).processStreamingRPC+0x942	/go/src/github.com/cockroachdb/cockroach/vendor/google.golang.org/grpc/server.go:891
+#	0xaa0b00	github.com/cockroachdb/cockroach/vendor/google.golang.org/grpc.(*Server).handleStream+0x14c0		/go/src/github.com/cockroachdb/cockroach/vendor/google.golang.org/grpc/server.go:985
+#	0xaa738e	github.com/cockroachdb/cockroach/vendor/google.golang.org/grpc.(*Server).serveStreams.func1.1+0x9e	/go/src/github.com/cockroachdb/cockroach/vendor/google.golang.org/grpc/server.go:551
+
+1 @ 0x5e1b6c 0x5f1ff8 0xa83820 0xa848f5 0x62aa76 0x62abe8 0xa8483f 0xa97945 0xa985dd 0xaa502e 0xe11052 0xe257cf 0xe1fd74 0xe24606 0xd1e1a3 0x6115b1
+#	0xa8381f	github.com/cockroachdb/cockroach/vendor/google.golang.org/grpc/transport.(*recvBufferReader).Read+0x2ff	/go/src/github.com/cockroachdb/cockroach/vendor/google.golang.org/grpc/transport/transport.go:126
+#	0xa848f4	github.com/cockroachdb/cockroach/vendor/google.golang.org/grpc/transport.(*transportReader).Read+0x54	/go/src/github.com/cockroachdb/cockroach/vendor/google.golang.org/grpc/transport/transport.go:391
+#	0x62aa75	io.ReadAtLeast+0x85											/usr/local/go/src/io/io.go:309
+#	0x62abe7	io.ReadFull+0x57											/usr/local/go/src/io/io.go:327
+#	0xa8483e	github.com/cockroachdb/cockroach/vendor/google.golang.org/grpc/transport.(*Stream).Read+0xbe		/go/src/github.com/cockroachdb/cockroach/vendor/google.golang.org/grpc/transport/transport.go:375
+#	0xa97944	github.com/cockroachdb/cockroach/vendor/google.golang.org/grpc.(*parser).recvMsg+0x64			/go/src/github.com/cockroachdb/cockroach/vendor/google.golang.org/grpc/rpc_util.go:265
+#	0xa985dc	github.com/cockroachdb/cockroach/vendor/google.golang.org/grpc.recv+0x4c				/go/src/github.com/cockroachdb/cockroach/vendor/google.golang.org/grpc/rpc_util.go:361
+#	0xaa502d	github.com/cockroachdb/cockroach/vendor/google.golang.org/grpc.(*serverStream).RecvMsg+0x10d		/go/src/github.com/cockroachdb/cockroach/vendor/google.golang.org/grpc/stream.go:648
+#	0xe11051	github.com/cockroachdb/cockroach/pkg/gossip.(*gossipGossipServer).Recv+0x61				/go/src/github.com/cockroachdb/cockroach/pkg/gossip/gossip.pb.go:230
+#	0xe257ce	github.com/cockroachdb/cockroach/pkg/gossip.(Gossip_GossipServer).Recv-fm+0x2e				/go/src/github.com/cockroachdb/cockroach/pkg/gossip/server.go:161
+#	0xe1fd73	github.com/cockroachdb/cockroach/pkg/gossip.(*server).gossipReceiver+0x473				/go/src/github.com/cockroachdb/cockroach/pkg/gossip/server.go:339
+#	0xe24605	github.com/cockroachdb/cockroach/pkg/gossip.(*server).Gossip.func3.1+0x95				/go/src/github.com/cockroachdb/cockroach/pkg/gossip/server.go:161
+#	0xd1e1a2	github.com/cockroachdb/cockroach/pkg/util/stop.(*Stopper).RunWorker.func1+0xf2				/go/src/github.com/cockroachdb/cockroach/pkg/util/stop/stopper.go:198
+
+1 @ 0x5e1b6c 0x5f1ff8 0xd460fd 0x6115b1
+#	0xd460fc	github.com/cockroachdb/cockroach/pkg/security.(*CertificateManager).RegisterSignalHandler.func1+0x10c	/go/src/github.com/cockroachdb/cockroach/pkg/security/certificate_manager.go:125
+
+1 @ 0x5e1b6c 0x5f1ff8 0xd5124a 0xd51edd 0x10818df 0x100822a 0x104775a 0x1046988 0x10699a6 0x1068aa7 0x1067251 0xff366c 0x109b08d 0xd1c447 0x109b64a 0xd1e1a3 0x6115b1
+#	0xd51249	github.com/cockroachdb/cockroach/vendor/golang.org/x/time/rate.(*Limiter).waitN+0x2f9	/go/src/github.com/cockroachdb/cockroach/vendor/golang.org/x/time/rate/rate.go:259
+#	0xd51edc	github.com/cockroachdb/cockroach/vendor/golang.org/x/time/rate.(*Limiter).WaitN+0x6c	/go/src/github.com/cockroachdb/cockroach/vendor/golang.org/x/time/rate/rate_go17.go:20
+#	0x10818de	github.com/cockroachdb/cockroach/pkg/storage.sendSnapshot+0xc8e				/go/src/github.com/cockroachdb/cockroach/pkg/storage/store.go:3399
+#	0x1008229	github.com/cockroachdb/cockroach/pkg/storage.(*RaftTransport).SendSnapshot+0x279	/go/src/github.com/cockroachdb/cockroach/pkg/storage/raft_transport.go:648
+#	0x1047759	github.com/cockroachdb/cockroach/pkg/storage.(*Replica).sendSnapshot+0x429		/go/src/github.com/cockroachdb/cockroach/pkg/storage/replica_command.go:3810
+#	0x1046987	github.com/cockroachdb/cockroach/pkg/storage.(*Replica).changeReplicas+0x4b7		/go/src/github.com/cockroachdb/cockroach/pkg/storage/replica_command.go:3652
+#	0x10699a5	github.com/cockroachdb/cockroach/pkg/storage.(*replicateQueue).addReplica+0xc5		/go/src/github.com/cockroachdb/cockroach/pkg/storage/replicate_queue.go:574
+#	0x1068aa6	github.com/cockroachdb/cockroach/pkg/storage.(*replicateQueue).processOneChange+0x16c6	/go/src/github.com/cockroachdb/cockroach/pkg/storage/replicate_queue.go:475
+#	0x1067250	github.com/cockroachdb/cockroach/pkg/storage.(*replicateQueue).process+0x200		/go/src/github.com/cockroachdb/cockroach/pkg/storage/replicate_queue.go:222
+#	0xff366b	github.com/cockroachdb/cockroach/pkg/storage.(*baseQueue).processReplica+0x2db		/go/src/github.com/cockroachdb/cockroach/pkg/storage/queue.go:631
+#	0x109b08c	github.com/cockroachdb/cockroach/pkg/storage.(*baseQueue).processLoop.func1.2+0xbc	/go/src/github.com/cockroachdb/cockroach/pkg/storage/queue.go:530
+#	0xd1c446	github.com/cockroachdb/cockroach/pkg/util/stop.(*Stopper).RunTask+0xf6			/go/src/github.com/cockroachdb/cockroach/pkg/util/stop/stopper.go:231
+#	0x109b649	github.com/cockroachdb/cockroach/pkg/storage.(*baseQueue).processLoop.func1+0x409	/go/src/github.com/cockroachdb/cockroach/pkg/storage/queue.go:526
+#	0xd1e1a2	github.com/cockroachdb/cockroach/pkg/util/stop.(*Stopper).RunWorker.func1+0xf2		/go/src/github.com/cockroachdb/cockroach/pkg/util/stop/stopper.go:198
+
+1 @ 0x5e1b6c 0x5f1ff8 0xe1f40d 0xe10f32 0xa9f1c3 0xaa0b01 0xaa738f 0x6115b1
+#	0xe1f40c	github.com/cockroachdb/cockroach/pkg/gossip.(*server).Gossip+0x61c					/go/src/github.com/cockroachdb/cockroach/pkg/gossip/server.go:198
+#	0xe10f31	github.com/cockroachdb/cockroach/pkg/gossip._Gossip_Gossip_Handler+0xb1					/go/src/github.com/cockroachdb/cockroach/pkg/gossip/gossip.pb.go:211
+#	0xa9f1c2	github.com/cockroachdb/cockroach/vendor/google.golang.org/grpc.(*Server).processStreamingRPC+0x942	/go/src/github.com/cockroachdb/cockroach/vendor/google.golang.org/grpc/server.go:891
+#	0xaa0b00	github.com/cockroachdb/cockroach/vendor/google.golang.org/grpc.(*Server).handleStream+0x14c0		/go/src/github.com/cockroachdb/cockroach/vendor/google.golang.org/grpc/server.go:985
+#	0xaa738e	github.com/cockroachdb/cockroach/vendor/google.golang.org/grpc.(*Server).serveStreams.func1.1+0x9e	/go/src/github.com/cockroachdb/cockroach/vendor/google.golang.org/grpc/server.go:551
+
+1 @ 0x5e1b6c 0x5f1ff8 0xe22ffb 0xd1e1a3 0x6115b1
+#	0xe22ffa	github.com/cockroachdb/cockroach/pkg/gossip.(*Gossip).bootstrap.func1+0x46a	/go/src/github.com/cockroachdb/cockroach/pkg/gossip/gossip.go:1145
+#	0xd1e1a2	github.com/cockroachdb/cockroach/pkg/util/stop.(*Stopper).RunWorker.func1+0xf2	/go/src/github.com/cockroachdb/cockroach/pkg/util/stop/stopper.go:198
+
+1 @ 0x5e1b6c 0x5f1ff8 0xe236f9 0xd1e1a3 0x6115b1
+#	0xe236f8	github.com/cockroachdb/cockroach/pkg/gossip.(*Gossip).manage.func1+0x268	/go/src/github.com/cockroachdb/cockroach/pkg/gossip/gossip.go:1174
+#	0xd1e1a2	github.com/cockroachdb/cockroach/pkg/util/stop.(*Stopper).RunWorker.func1+0xf2	/go/src/github.com/cockroachdb/cockroach/pkg/util/stop/stopper.go:198
+
+1 @ 0x7b4daf 0xdad4fb 0xda93ed 0xdadad3 0xda17f1 0xda74f1 0xda7aee 0x157af4e 0x1512012 0x1511dc6 0x14e5516 0x14e56b7 0x14e538a 0x14e6340 0x14e34d1 0x14e1bf5 0x14e10d5 0x14dfe7c 0x14debf0 0x14de0e9 0x14dde94 0x16302fe 0x162c83c 0x1622d99 0x168b549 0xdf7ae9 0x6115b1
+#	0x7b4dae	github.com/cockroachdb/cockroach/pkg/util/syncutil.(*Mutex).Unlock+0x3e			/go/src/github.com/cockroachdb/cockroach/pkg/util/syncutil/mutex_sync.go:37
+#	0xdad4fa	github.com/cockroachdb/cockroach/pkg/internal/client.(*Txn).Send.func1+0x7ba		/go/src/github.com/cockroachdb/cockroach/pkg/internal/client/txn.go:951
+#	0xda93ec	github.com/cockroachdb/cockroach/pkg/internal/client.(*Txn).Send+0x2ac			/go/src/github.com/cockroachdb/cockroach/pkg/internal/client/txn.go:953
+#	0xdadad2	github.com/cockroachdb/cockroach/pkg/internal/client.(*Txn).Send-fm+0x82		/go/src/github.com/cockroachdb/cockroach/pkg/internal/client/txn.go:510
+#	0xda17f0	github.com/cockroachdb/cockroach/pkg/internal/client.sendAndFill+0x100			/go/src/github.com/cockroachdb/cockroach/pkg/internal/client/db.go:454
+#	0xda74f0	github.com/cockroachdb/cockroach/pkg/internal/client.(*Txn).Run+0xd0			/go/src/github.com/cockroachdb/cockroach/pkg/internal/client/txn.go:510
+#	0xda7aed	github.com/cockroachdb/cockroach/pkg/internal/client.(*Txn).CommitInBatch+0x11d		/go/src/github.com/cockroachdb/cockroach/pkg/internal/client/txn.go:575
+#	0x157af4d	github.com/cockroachdb/cockroach/pkg/sql.(*tableUpserter).finalize+0x6d			/go/src/github.com/cockroachdb/cockroach/pkg/sql/tablewriter.go:615
+#	0x1512011	github.com/cockroachdb/cockroach/pkg/sql.(*insertNode).internalNext+0x151		/go/src/github.com/cockroachdb/cockroach/pkg/sql/insert.go:357
+#	0x1511dc5	github.com/cockroachdb/cockroach/pkg/sql.(*insertNode).Next+0xa5			/go/src/github.com/cockroachdb/cockroach/pkg/sql/insert.go:333
+#	0x14e5515	github.com/cockroachdb/cockroach/pkg/sql.forEachRow+0x95				/go/src/github.com/cockroachdb/cockroach/pkg/sql/executor.go:2028
+#	0x14e56b6	github.com/cockroachdb/cockroach/pkg/sql.countRowsAffected+0xc6				/go/src/github.com/cockroachdb/cockroach/pkg/sql/executor.go:2051
+#	0x14e5389	github.com/cockroachdb/cockroach/pkg/sql.(*Executor).execClassic+0x349			/go/src/github.com/cockroachdb/cockroach/pkg/sql/executor.go:1997
+#	0x14e633f	github.com/cockroachdb/cockroach/pkg/sql.(*Executor).execStmt+0x64f			/go/src/github.com/cockroachdb/cockroach/pkg/sql/executor.go:2158
+#	0x14e34d0	github.com/cockroachdb/cockroach/pkg/sql.(*Executor).execStmtInOpenTxn+0x6a0		/go/src/github.com/cockroachdb/cockroach/pkg/sql/executor.go:1797
+#	0x14e1bf4	github.com/cockroachdb/cockroach/pkg/sql.(*Executor).execSingleStatement+0x6a4		/go/src/github.com/cockroachdb/cockroach/pkg/sql/executor.go:1322
+#	0x14e10d4	github.com/cockroachdb/cockroach/pkg/sql.runTxnAttempt+0x3e4				/go/src/github.com/cockroachdb/cockroach/pkg/sql/executor.go:1197
+#	0x14dfe7b	github.com/cockroachdb/cockroach/pkg/sql.runWithAutoRetry+0x39b				/go/src/github.com/cockroachdb/cockroach/pkg/sql/executor.go:1023
+#	0x14debef	github.com/cockroachdb/cockroach/pkg/sql.(*Executor).execParsed+0x12f			/go/src/github.com/cockroachdb/cockroach/pkg/sql/executor.go:840
+#	0x14de0e8	github.com/cockroachdb/cockroach/pkg/sql.(*Executor).execPrepared+0x158			/go/src/github.com/cockroachdb/cockroach/pkg/sql/executor.go:685
+#	0x14dde93	github.com/cockroachdb/cockroach/pkg/sql.(*Executor).ExecutePreparedStatement+0x133	/go/src/github.com/cockroachdb/cockroach/pkg/sql/executor.go:663
+#	0x16302fd	github.com/cockroachdb/cockroach/pkg/sql/pgwire.(*v3Conn).handleExecute+0x2ed		/go/src/github.com/cockroachdb/cockroach/pkg/sql/pgwire/v3.go:958
+#	0x162c83b	github.com/cockroachdb/cockroach/pkg/sql/pgwire.(*v3Conn).serve+0xb6b			/go/src/github.com/cockroachdb/cockroach/pkg/sql/pgwire/v3.go:526
+#	0x1622d98	github.com/cockroachdb/cockroach/pkg/sql/pgwire.(*Server).ServeConn+0x928		/go/src/github.com/cockroachdb/cockroach/pkg/sql/pgwire/server.go:421
+#	0x168b548	github.com/cockroachdb/cockroach/pkg/server.(*Server).Start.func9.1+0x148		/go/src/github.com/cockroachdb/cockroach/pkg/server/server.go:749
+#	0xdf7ae8	github.com/cockroachdb/cockroach/pkg/util/netutil.(*Server).ServeWith.func1+0xa8	/go/src/github.com/cockroachdb/cockroach/pkg/util/netutil/net.go:140
+
+1 @ 0x8e1a80 0x6115b1
+#	0x8e1a80	net/http.(*connReader).backgroundRead+0x0	/usr/local/go/src/net/http/server.go:659
+
+1 @ 0xb00cc2 0xb00ac0 0xafd5ab 0x15fd748 0x15fda4b 0x8e8424 0x1667199 0x8e8424 0x1687f7c 0x8e8424 0x8e9ad0 0x1679cdd 0x8eb044 0x8e72fd 0x6115b1
+#	0xb00cc1	runtime/pprof.writeRuntimeProfile+0xa1						/usr/local/go/src/runtime/pprof/pprof.go:637
+#	0xb00abf	runtime/pprof.writeGoroutine+0x9f						/usr/local/go/src/runtime/pprof/pprof.go:599
+#	0xafd5aa	runtime/pprof.(*Profile).WriteTo+0x3aa						/usr/local/go/src/runtime/pprof/pprof.go:310
+#	0x15fd747	net/http/pprof.handler.ServeHTTP+0x1b7						/usr/local/go/src/net/http/pprof/pprof.go:237
+#	0x15fda4a	net/http/pprof.Index+0x1da							/usr/local/go/src/net/http/pprof/pprof.go:248
+#	0x8e8423	net/http.HandlerFunc.ServeHTTP+0x43						/usr/local/go/src/net/http/server.go:1918
+#	0x1667198	github.com/cockroachdb/cockroach/pkg/server.handleDebug+0x68			/go/src/github.com/cockroachdb/cockroach/pkg/server/debug.go:92
+#	0x8e8423	net/http.HandlerFunc.ServeHTTP+0x43						/usr/local/go/src/net/http/server.go:1918
+#	0x1687f7b	github.com/cockroachdb/cockroach/pkg/server.authorizedHandler.func1+0x7b	/go/src/github.com/cockroachdb/cockroach/pkg/server/debug.go:83
+#	0x8e8423	net/http.HandlerFunc.ServeHTTP+0x43						/usr/local/go/src/net/http/server.go:1918
+#	0x8e9acf	net/http.(*ServeMux).ServeHTTP+0x12f						/usr/local/go/src/net/http/server.go:2254
+#	0x1679cdc	github.com/cockroachdb/cockroach/pkg/server.(*Server).ServeHTTP+0x11c		/go/src/github.com/cockroachdb/cockroach/pkg/server/server.go:1249
+#	0x8eb043	net/http.serverHandler.ServeHTTP+0xb3						/usr/local/go/src/net/http/server.go:2619
+#	0x8e72fc	net/http.(*conn).serve+0x71c							/usr/local/go/src/net/http/server.go:1801
+
