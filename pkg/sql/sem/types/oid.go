@@ -14,7 +14,35 @@
 
 package types
 
-import "github.com/lib/pq/oid"
+import (
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/lib/pq/oid"
+)
+
+var (
+	// TypeOid is the type of an OID. Can be compared with ==.
+	TypeOid = TOid{oid.T_oid}
+	// TypeRegClass is the type of an regclass OID variant. Can be compared with ==.
+	TypeRegClass = TOid{oid.T_regclass}
+	// TypeRegNamespace is the type of an regnamespace OID variant. Can be compared with ==.
+	TypeRegNamespace = TOid{oid.T_regnamespace}
+	// TypeRegProc is the type of an regproc OID variant. Can be compared with ==.
+	TypeRegProc = TOid{oid.T_regproc}
+	// TypeRegProcedure is the type of an regprocedure OID variant. Can be compared with ==.
+	TypeRegProcedure = TOid{oid.T_regprocedure}
+	// TypeRegType is the type of an regtype OID variant. Can be compared with ==.
+	TypeRegType = TOid{oid.T_regtype}
+
+	// TypeName is a type-alias for TypeString with a different OID. Can be
+	// compared with ==.
+	TypeName = WrapTypeWithOid(TypeString, oid.T_name)
+	// TypeIntVector is a type-alias for a TypeIntArray with a different OID. Can
+	// be compared with ==.
+	TypeIntVector = WrapTypeWithOid(TArray{TypeInt}, oid.T_int2vector)
+	// TypeNameArray is the type family of a DArray containing the Name alias type.
+	// Can be compared with ==.
+	TypeNameArray Type = TArray{TypeName}
+)
 
 var (
 	// Unexported wrapper types. These exist for Postgres type compatibility.
@@ -134,9 +162,134 @@ var oidToArrayOid = map[oid.Oid]oid.Oid{
 	oid.T_uuid:        oid.T__uuid,
 }
 
+// TOid represents one of the OID type variants.
+type TOid struct {
+	oidType oid.Oid
+}
+
+var oidTypeName = map[oid.Oid]string{
+	oid.T_oid:          "oid",
+	oid.T_regclass:     "regclass",
+	oid.T_regnamespace: "regnamespace",
+	oid.T_regproc:      "regproc",
+	oid.T_regprocedure: "regprocedure",
+	oid.T_regtype:      "regtype",
+}
+
+func (t TOid) String() string { return t.SQLName() }
+
+// Equivalent implements the Type interface.
+func (t TOid) Equivalent(other Type) bool { return t.FamilyEqual(other) || other == TypeAny }
+
+// FamilyEqual implements the Type interface.
+func (TOid) FamilyEqual(other Type) bool { _, ok := UnwrapType(other).(TOid); return ok }
+
+// SQLName implements the Type interface.
+func (t TOid) SQLName() string { return oidTypeName[t.oidType] }
+
+// IsAmbiguous implements the Type interface.
+func (TOid) IsAmbiguous() bool { return false }
+
+// TOidWrapper is a Type implementation which is a wrapper around a Type, allowing
+// custom Oid values to be attached to the Type. The Type is used by DOidWrapper
+// to permit type aliasing with custom Oids without needing to create new typing
+// rules or define new Datum types.
+type TOidWrapper struct {
+	Type
+	oid oid.Oid
+}
+
+var customOidNames = map[oid.Oid]string{
+	oid.T_name: "name",
+}
+
+func (t TOidWrapper) String() string {
+	// Allow custom type names for specific Oids, but default to wrapped String.
+	if s, ok := customOidNames[t.oid]; ok {
+		return s
+	}
+	return t.Type.String()
+}
+
+// WrapTypeWithOid wraps a Type with a custom Oid.
+func WrapTypeWithOid(t Type, oid oid.Oid) Type {
+	switch v := t.(type) {
+	case tNull, tAny, TOidWrapper:
+		panic(pgerror.NewErrorf(pgerror.CodeInternalError, "cannot wrap %T with an Oid", v))
+	}
+	return TOidWrapper{
+		Type: t,
+		oid:  oid,
+	}
+}
+
+// UnwrapType returns the base Type type for a provided type, stripping
+// a *TOidWrapper if present. This is useful for cases like type switches,
+// where type aliases should be ignored.
+func UnwrapType(t Type) Type {
+	if w, ok := t.(TOidWrapper); ok {
+		return w.Type
+	}
+	return t
+}
+
+var baseTypeOids = map[Type]oid.Oid{
+	TypeNull:        oid.T_unknown,
+	TypeBool:        oid.T_bool,
+	TypeInt:         oid.T_int8,
+	TypeFloat:       oid.T_float8,
+	TypeDecimal:     oid.T_numeric,
+	TypeString:      oid.T_text,
+	TypeBytes:       oid.T_bytea,
+	TypeDate:        oid.T_date,
+	TypeTimestamp:   oid.T_timestamp,
+	TypeTimestampTZ: oid.T_timestamptz,
+	TypeInterval:    oid.T_interval,
+	TypeJSON:        oid.T_jsonb,
+	TypeUUID:        oid.T_uuid,
+	TypeINet:        oid.T_inet,
+	TypeAny:         oid.T_anyelement,
+}
+
+const noArrayType = 0
+
+// ArrayOids is a set of all oids which correspond to an array type.
+var ArrayOids = map[oid.Oid]struct{}{}
+
+func init() {
+	for _, v := range oidToArrayOid {
+		ArrayOids[v] = struct{}{}
+	}
+}
+
+// Oid returns the type's Postgres object ID.
+func Oid(t Type) oid.Oid {
+	// Compound types.
+	switch ty := t.(type) {
+	case TOid:
+		return ty.oidType
+	case TOidWrapper:
+		return ty.oid
+	case TCollatedString:
+		return oid.T_unknown
+	case TTuple:
+		return oid.T_record
+	case TTable:
+		return oid.T_anyelement
+	case TArray:
+		if o, ok := oidToArrayOid[Oid(ty.Typ)]; ok {
+			return o
+		}
+		// TODO(jordan,justin): should this not be T_unknown?
+		return noArrayType
+	}
+	// Base types.
+	return baseTypeOids[t]
+}
+
 // PGDisplayName returns the Postgres display name for a given type.
 func PGDisplayName(typ Type) string {
-	if typname, ok := aliasedOidToName[typ.Oid()]; ok {
+	if typname, ok := aliasedOidToName[Oid(typ)]; ok {
 		return typname
 	}
 	return typ.String()

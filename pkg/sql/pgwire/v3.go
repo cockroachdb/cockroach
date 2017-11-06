@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -700,7 +701,7 @@ func (c *v3Conn) handleParse(buf *readBuffer) error {
 		if inTypes[i] != 0 {
 			continue
 		}
-		inTypes[i] = t.Oid()
+		inTypes[i] = types.Oid(t)
 	}
 	for i, t := range inTypes {
 		if t == 0 {

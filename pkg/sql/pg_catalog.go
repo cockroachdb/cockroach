@@ -1106,10 +1106,10 @@ CREATE TABLE pg_catalog.pg_proc (
 							// Functions returning tables with exactly one column
 							// are marked to return the type of that column
 							// (e.g. `generate_series`).
-							retOid = t.Cols[0].Oid()
+							retOid = types.Oid(t.Cols[0])
 						}
 					} else {
-						retOid = fixedRetType.Oid()
+						retOid = types.Oid(fixedRetType)
 					}
 					retType = parser.NewDOid(parser.DInt(retOid))
 				}
@@ -1117,7 +1117,7 @@ CREATE TABLE pg_catalog.pg_proc (
 				argTypes := builtin.Types
 				dArgTypes := make([]string, len(argTypes.Types()))
 				for i, argType := range argTypes.Types() {
-					dArgType := argType.Oid()
+					dArgType := types.Oid(argType)
 					dArgTypes[i] = strconv.Itoa(int(dArgType))
 				}
 				dArgTypeString := strings.Join(dArgTypes, ", ")
@@ -1128,12 +1128,12 @@ CREATE TABLE pg_catalog.pg_proc (
 				case parser.VariadicType:
 					argmodes = proArgModeVariadic
 					argType := argTypes.Types()[0]
-					oid := argType.Oid()
+					oid := types.Oid(argType)
 					variadicType = parser.NewDOid(parser.DInt(oid))
 				case parser.HomogeneousType:
 					argmodes = proArgModeVariadic
 					argType := parser.TypeAny
-					oid := argType.Oid()
+					oid := types.Oid(argType)
 					variadicType = parser.NewDOid(parser.DInt(oid))
 				default:
 					argmodes = parser.DNull
@@ -1462,10 +1462,10 @@ CREATE TABLE pg_catalog.pg_type (
 					typElem = parser.NewDOid(parser.DInt(oid.T_int2))
 				} else {
 					builtinPrefix = "array_"
-					typElem = parser.NewDOid(parser.DInt(types.UnwrapType(typ).(parser.TArray).Typ.Oid()))
+					typElem = parser.NewDOid(parser.DInt(types.Oid(types.UnwrapType(typ).(parser.TArray).Typ)))
 				}
 			} else {
-				typArray = parser.NewDOid(parser.DInt(parser.TArray{Typ: typ}.Oid()))
+				typArray = parser.NewDOid(parser.DInt(types.Oid(types.TArray{Typ: typ})))
 			}
 			typname := types.PGDisplayName(typ)
 
@@ -1516,7 +1516,7 @@ CREATE TABLE pg_catalog.pg_type (
 // object identifiers for types are not arbitrary, but instead need to be kept in
 // sync with Postgres.
 func typOid(typ parser.Type) parser.Datum {
-	return parser.NewDOid(parser.DInt(typ.Oid()))
+	return parser.NewDOid(parser.DInt(types.Oid(typ)))
 }
 
 func typLen(typ parser.Type) *parser.DInt {

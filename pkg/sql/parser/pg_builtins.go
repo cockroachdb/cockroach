@@ -34,15 +34,15 @@ const notUsableInfo = "Not usable; exposed only for compatibility with PostgreSQ
 // programmatically determine whether or not this underscore is present, hence
 // the existence of this map.
 var typeBuiltinsHaveUnderscore = map[oid.Oid]struct{}{
-	TypeAny.Oid():         {},
-	TypeDate.Oid():        {},
-	TypeDecimal.Oid():     {},
-	TypeInterval.Oid():    {},
-	TypeJSON.Oid():        {},
-	TypeUUID.Oid():        {},
-	TypeTimestamp.Oid():   {},
-	TypeTimestampTZ.Oid(): {},
-	TypeTuple.Oid():       {},
+	types.Oid(TypeAny):         {},
+	types.Oid(TypeDate):        {},
+	types.Oid(TypeDecimal):     {},
+	types.Oid(TypeInterval):    {},
+	types.Oid(TypeJSON):        {},
+	types.Oid(TypeUUID):        {},
+	types.Oid(TypeTimestamp):   {},
+	types.Oid(TypeTimestampTZ): {},
+	types.Oid(TypeTuple):       {},
 }
 
 // PGIOBuiltinPrefix returns the string prefix to a type's IO functions. This
@@ -50,7 +50,7 @@ var typeBuiltinsHaveUnderscore = map[oid.Oid]struct{}{
 // name plus an underscore, depending on the type.
 func PGIOBuiltinPrefix(typ Type) string {
 	builtinPrefix := types.PGDisplayName(typ)
-	if _, ok := typeBuiltinsHaveUnderscore[typ.Oid()]; ok {
+	if _, ok := typeBuiltinsHaveUnderscore[types.Oid(typ)]; ok {
 		return builtinPrefix + "_"
 	}
 	return builtinPrefix

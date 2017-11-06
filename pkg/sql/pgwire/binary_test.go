@@ -30,6 +30,7 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
@@ -58,7 +59,7 @@ func testBinaryDatumType(t *testing.T, typ string, datumConstructor func(val str
 		buf.wrapped.Reset()
 
 		d := datumConstructor(test.In)
-		oid := d.ResolvedType().Oid()
+		oid := types.Oid(d.ResolvedType())
 		func() {
 			defer func() {
 				if r := recover(); r != nil {
