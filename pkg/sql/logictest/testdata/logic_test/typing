@@ -158,3 +158,24 @@ query B
 SELECT IFNULL('true', false)
 ----
 true
+
+# Regression tests for #19770
+
+query B
+SELECT 1 in (SELECT 1)
+----
+true
+
+statement error unsupported comparison operator: <int> IN <tuple{string}>
+SELECT 1 IN (SELECT 'a')
+
+statement error unsupported comparison operator: <int> IN <tuple{tuple{int, int}}>
+SELECT 1 in (SELECT (1, 2))
+
+query B
+SELECT (1, 2) in (SELECT 1, 2)
+----
+true
+
+statement error subquery must return 2 columns, found 1
+SELECT (1, 2) in (SELECT (1, 2))
