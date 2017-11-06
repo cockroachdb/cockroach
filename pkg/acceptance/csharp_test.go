@@ -27,6 +27,8 @@ func TestDockerCSharp(t *testing.T) {
 	s := log.Scope(t)
 	defer s.Close(t)
 
+	t.Skip("#19841")
+
 	ctx := context.Background()
 	testDockerSuccess(ctx, t, "csharp", []string{"/bin/sh", "-c", strings.Replace(csharp, "%v", "test", 1)})
 	testDockerFail(ctx, t, "csharp", []string{"/bin/sh", "-c", strings.Replace(csharp, "%v", "other", 1)})
