@@ -2179,7 +2179,7 @@ func DatumTypeToColumnSemanticType(ptyp types.T) (ColumnType_SemanticType, error
 		return ColumnType_INET, nil
 	case types.Oid:
 		return ColumnType_OID, nil
-	case types.Null:
+	case types.Unknown:
 		return ColumnType_NULL, nil
 	case types.IntVector:
 		return ColumnType_INT2VECTOR, nil
@@ -2255,7 +2255,7 @@ func columnSemanticTypeToDatumType(c *ColumnType, k ColumnType_SemanticType) typ
 	case ColumnType_OID:
 		return types.Oid
 	case ColumnType_NULL:
-		return types.Null
+		return types.Unknown
 	case ColumnType_INT2VECTOR:
 		return types.IntVector
 	}

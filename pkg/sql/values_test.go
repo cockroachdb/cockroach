@@ -164,7 +164,7 @@ func TestGolangQueryArgs(t *testing.T) {
 		expectedType reflect.Type
 	}{
 		// Null type.
-		{nil, reflect.TypeOf(types.Null)},
+		{nil, reflect.TypeOf(types.Unknown)},
 
 		// Bool type.
 		{true, reflect.TypeOf(types.Bool)},

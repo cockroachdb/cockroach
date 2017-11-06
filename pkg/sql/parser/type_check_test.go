@@ -384,8 +384,8 @@ func TestTypeCheckSameTypedExprs(t *testing.T) {
 		{nil, nil, exprs(intConst("1"), placeholder("a")), types.Int, mapPTypesInt},
 		{nil, nil, exprs(decConst("1.1"), placeholder("a")), types.Decimal, mapPTypesDecimal},
 		// Verify dealing with Null.
-		{nil, nil, exprs(dnull), types.Null, nil},
-		{nil, nil, exprs(dnull, dnull), types.Null, nil},
+		{nil, nil, exprs(dnull), types.Unknown, nil},
+		{nil, nil, exprs(dnull, dnull), types.Unknown, nil},
 		{nil, nil, exprs(dnull, intConst("1")), types.Int, nil},
 		{nil, nil, exprs(dnull, decConst("1.1")), types.Decimal, nil},
 		{nil, nil, exprs(dnull, dint(1)), types.Int, nil},

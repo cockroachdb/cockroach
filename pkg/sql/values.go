@@ -117,9 +117,9 @@ func (p *planner) ValuesClause(
 			typ := typedExpr.ResolvedType()
 			if num == 0 {
 				v.columns = append(v.columns, sqlbase.ResultColumn{Name: "column" + strconv.Itoa(i+1), Typ: typ})
-			} else if v.columns[i].Typ == types.Null {
+			} else if v.columns[i].Typ == types.Unknown {
 				v.columns[i].Typ = typ
-			} else if typ != types.Null && !typ.Equivalent(v.columns[i].Typ) {
+			} else if typ != types.Unknown && !typ.Equivalent(v.columns[i].Typ) {
 				return nil, fmt.Errorf("VALUES list type mismatch, %s for %s", typ, v.columns[i].Typ)
 			}
 

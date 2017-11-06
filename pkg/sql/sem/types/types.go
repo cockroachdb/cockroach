@@ -38,8 +38,8 @@ type T interface {
 }
 
 var (
-	// Null is the type of a DNull. Can be compared with ==.
-	Null T = tNull{}
+	// Unknown is the type of a DNull. Can be compared with ==.
+	Unknown T = tUnknown{}
 	// Bool is the type of a DBool. Can be compared with ==.
 	Bool T = tBool{}
 	// Int is the type of a DInt. Can be compared with ==.
@@ -106,12 +106,12 @@ var (
 
 // Do not instantiate the tXxx types elsewhere. The variables above are intended
 // to be singletons.
-type tNull struct{}
+type tUnknown struct{}
 
-func (tNull) String() string           { return "NULL" }
-func (tNull) Equivalent(other T) bool  { return other == Null || other == Any }
-func (tNull) FamilyEqual(other T) bool { return other == Null }
-func (tNull) IsAmbiguous() bool        { return true }
+func (tUnknown) String() string           { return "NULL" }
+func (tUnknown) Equivalent(other T) bool  { return other == Unknown || other == Any }
+func (tUnknown) FamilyEqual(other T) bool { return other == Unknown }
+func (tUnknown) IsAmbiguous() bool        { return true }
 
 type tBool struct{}
 

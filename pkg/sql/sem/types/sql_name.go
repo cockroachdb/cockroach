@@ -35,7 +35,7 @@ func SQLName(t T) string {
 }
 
 var sqlTypeNames = map[T]string{
-	Null:        "unknown",
+	Unknown:     "unknown",
 	Bool:        "boolean",
 	Int:         "bigint",
 	Float:       "double precision",

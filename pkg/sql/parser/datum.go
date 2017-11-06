@@ -2311,7 +2311,7 @@ type dNull struct{}
 
 // ResolvedType implements the TypedExpr interface.
 func (dNull) ResolvedType() types.T {
-	return types.Null
+	return types.Unknown
 }
 
 // Compare implements the Datum interface.
@@ -2906,7 +2906,7 @@ var baseDatumTypeSizes = map[types.T]struct {
 	sz       uintptr
 	variable bool
 }{
-	types.Null:        {unsafe.Sizeof(dNull{}), fixedSize},
+	types.Unknown:     {unsafe.Sizeof(dNull{}), fixedSize},
 	types.Bool:        {unsafe.Sizeof(DBool(false)), fixedSize},
 	types.Int:         {unsafe.Sizeof(DInt(0)), fixedSize},
 	types.Float:       {unsafe.Sizeof(DFloat(0.0)), fixedSize},

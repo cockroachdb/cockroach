@@ -1558,7 +1558,7 @@ func EncodeSecondaryIndexes(
 // with the type requested by the column. If the value is a
 // placeholder, the type of the placeholder gets populated.
 func CheckColumnType(col ColumnDescriptor, typ types.T, pmap *parser.PlaceholderInfo) error {
-	if typ == types.Null {
+	if typ == types.Unknown {
 		return nil
 	}
 

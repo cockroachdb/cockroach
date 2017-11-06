@@ -203,7 +203,7 @@ WHERE id = $1`
 		hashedSecret = []byte(*datum[0].(*parser.DBytes))
 		username = string(*datum[1].(*parser.DString))
 		expiresAt = datum[2].(*parser.DTimestamp).Time
-		isRevoked = datum[3].ResolvedType() != types.Null
+		isRevoked = datum[3].ResolvedType() != types.Unknown
 		return nil
 	}); err != nil {
 		return false, "", err
