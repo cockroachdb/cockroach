@@ -20,7 +20,6 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/abortspan"
@@ -116,46 +115,12 @@ func writeInitialState(
 	return newMS, nil
 }
 
-// ReplicaEvalContext is the interface through which command
-// evaluation accesses the in-memory state of a Replica. Any state
-// that corresponds to (mutable) on-disk data must be registered in
-// the SpanSet if one is given.
-type ReplicaEvalContext struct {
-	i  ReplicaI
-	ss *SpanSet
-}
-
-// AbortSpan returns the abort span.
-func (rec *ReplicaEvalContext) AbortSpan() *abortspan.AbortSpan {
-	return rec.i.AbortSpan()
-}
-
-// StoreTestingKnobs returns the StoreTestingKnobs.
-func (rec *ReplicaEvalContext) StoreTestingKnobs() StoreTestingKnobs {
-	return rec.i.StoreTestingKnobs()
-}
-
-// StoreID returns the StoreID.
-func (rec *ReplicaEvalContext) StoreID() roachpb.StoreID {
-	return rec.i.StoreID()
-}
-
-// GetRangeID returns the RangeID.
-func (rec *ReplicaEvalContext) GetRangeID() roachpb.RangeID {
-	return rec.i.GetRangeID()
-}
-
-// ClusterSettings returns the cluster settings.
-func (rec *ReplicaEvalContext) ClusterSettings() *cluster.Settings {
-	return rec.i.ClusterSettings()
-}
-
 // ClusterSettings returns the node's ClusterSettings.
 func (r *Replica) ClusterSettings() *cluster.Settings {
 	return r.store.cfg.Settings
 }
 
-func (rec *ReplicaEvalContext) makeReplicaStateLoader() stateloader.StateLoader {
+func makeReplicaStateLoader(rec ReplicaEvalContext) stateloader.StateLoader {
 	return stateloader.Make(rec.ClusterSettings(), rec.GetRangeID())
 }
 
@@ -177,11 +142,6 @@ func (r *Replica) Tracer() opentracing.Tracer {
 }
 
 // DB returns the Replica's client DB.
-func (rec *ReplicaEvalContext) DB() *client.DB {
-	return rec.i.DB()
-}
-
-// DB returns the Replica's client DB.
 func (r *Replica) DB() *client.DB {
 	return r.store.DB()
 }
@@ -200,19 +160,9 @@ func (r *Replica) AbortSpan() *abortspan.AbortSpan {
 	return r.abortSpan
 }
 
-// GetTxnWaitQueue returns the txnwait.Queue.
-func (rec *ReplicaEvalContext) GetTxnWaitQueue() *txnwait.Queue {
-	return rec.i.GetTxnWaitQueue()
-}
-
-// GetTxnWaitQueue returns the Replica's txnwait.Queue.
+// GetPushTxnQueue returns the Replica's pushTxnQueue.
 func (r *Replica) GetTxnWaitQueue() *txnwait.Queue {
 	return r.txnWaitQueue
-}
-
-// GetTerm returns the term for the given index in the Raft log.
-func (rec *ReplicaEvalContext) GetTerm(i uint64) (uint64, error) {
-	return rec.i.GetTerm(i)
 }
 
 // GetTerm returns the term of the given index in the raft log.
@@ -222,91 +172,9 @@ func (r *Replica) GetTerm(i uint64) (uint64, error) {
 	return r.raftTermRLocked(i)
 }
 
-// NodeID returns the NodeID.
-func (rec *ReplicaEvalContext) NodeID() roachpb.NodeID {
-	return rec.i.NodeID()
-}
-
-// Tracer returns the tracer.
-func (rec *ReplicaEvalContext) Tracer() opentracing.Tracer {
-	return rec.i.Tracer()
-}
-
-// Engine returns the engine.
-func (rec *ReplicaEvalContext) Engine() engine.Engine {
-	return rec.i.Engine()
-}
-
-// GetFirstIndex returns the first index.
-func (rec *ReplicaEvalContext) GetFirstIndex() (uint64, error) {
-	return rec.i.GetFirstIndex()
-}
-
-// IsFirstRange returns true iff the replica belongs to the first range.
-func (rec *ReplicaEvalContext) IsFirstRange() bool {
-	return rec.i.IsFirstRange()
-}
-
-// Fields backed by on-disk data must be registered in the SpanSet.
-
-// Desc returns the Replica's RangeDescriptor.
-func (rec ReplicaEvalContext) Desc() (*roachpb.RangeDescriptor, error) {
-	desc := rec.i.Desc()
-	if rec.ss != nil {
-		if err := rec.ss.checkAllowed(SpanReadOnly,
-			roachpb.Span{Key: keys.RangeDescriptorKey(desc.StartKey)},
-		); err != nil {
-			return nil, err
-		}
-	}
-	return desc, nil
-}
-
 // GetRangeID returns the Range ID.
 func (r *Replica) GetRangeID() roachpb.RangeID {
 	return r.RangeID
-}
-
-// ContainsKey returns true if the given key is within the Replica's range.
-//
-// TODO(bdarnell): Replace this method with one on Desc(). See comment
-// on Replica.ContainsKey.
-func (rec ReplicaEvalContext) ContainsKey(key roachpb.Key) (bool, error) {
-	desc := rec.i.Desc()
-	if rec.ss != nil {
-		if err := rec.ss.checkAllowed(SpanReadOnly,
-			roachpb.Span{Key: keys.RangeDescriptorKey(desc.StartKey)},
-		); err != nil {
-			return false, err
-		}
-	}
-	return containsKey(*desc, key), nil
-}
-
-// GetMVCCStats returns the Replica's MVCCStats.
-func (rec ReplicaEvalContext) GetMVCCStats() (enginepb.MVCCStats, error) {
-	if rec.ss != nil {
-		if err := rec.ss.checkAllowed(SpanReadOnly,
-			roachpb.Span{Key: keys.RangeStatsKey(rec.GetRangeID())},
-		); err != nil {
-			return enginepb.MVCCStats{}, err
-		}
-	}
-	return rec.i.GetMVCCStats(), nil
-}
-
-// GetGCThreshold returns the GC threshold of the Range, typically updated when
-// keys are garbage collected. Reads and writes at timestamps <= this time will
-// not be served.
-func (rec ReplicaEvalContext) GetGCThreshold() (hlc.Timestamp, error) {
-	if rec.ss != nil {
-		if err := rec.ss.checkAllowed(SpanReadOnly,
-			roachpb.Span{Key: keys.RangeLastGCKey(rec.GetRangeID())},
-		); err != nil {
-			return hlc.Timestamp{}, err
-		}
-	}
-	return rec.i.GetGCThreshold(), nil
 }
 
 // GetGCThreshold returns the GC threshold.
@@ -316,51 +184,10 @@ func (r *Replica) GetGCThreshold() hlc.Timestamp {
 	return *r.mu.state.GCThreshold
 }
 
-// GetTxnSpanGCThreshold returns the time of the Replica's last
-// transaction span GC.
-func (rec ReplicaEvalContext) GetTxnSpanGCThreshold() (hlc.Timestamp, error) {
-	if rec.ss != nil {
-		if err := rec.ss.checkAllowed(SpanReadOnly,
-			roachpb.Span{Key: keys.RangeTxnSpanGCThresholdKey(rec.GetRangeID())},
-		); err != nil {
-			return hlc.Timestamp{}, err
-		}
-	}
-	return rec.i.GetTxnSpanGCThreshold(), nil
-}
-
 // GetTxnSpanGCThreshold returns the time of the replica's last transaction span
 // GC.
 func (r *Replica) GetTxnSpanGCThreshold() hlc.Timestamp {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	return *r.mu.state.TxnSpanGCThreshold
-}
-
-// GetLastReplicaGCTimestamp returns the last time the Replica was
-// considered for GC.
-func (rec ReplicaEvalContext) GetLastReplicaGCTimestamp(
-	ctx context.Context,
-) (hlc.Timestamp, error) {
-	if rec.ss != nil {
-		if err := rec.ss.checkAllowed(SpanReadOnly,
-			roachpb.Span{Key: keys.RangeLastReplicaGCTimestampKey(rec.GetRangeID())},
-		); err != nil {
-			return hlc.Timestamp{}, err
-		}
-	}
-	return rec.i.GetLastReplicaGCTimestamp(ctx)
-}
-
-// GetLease returns the Replica's current and next lease (if any).
-func (rec ReplicaEvalContext) GetLease() (roachpb.Lease, *roachpb.Lease, error) {
-	if rec.ss != nil {
-		if err := rec.ss.checkAllowed(SpanReadOnly,
-			roachpb.Span{Key: keys.RangeLeaseKey(rec.GetRangeID())},
-		); err != nil {
-			return roachpb.Lease{}, nil, err
-		}
-	}
-	lease, nextLease := rec.i.GetLease()
-	return lease, nextLease, nil
 }

@@ -17,7 +17,9 @@ package storage
 
 import (
 	"bytes"
+	"context"
 	"fmt"
+	"log"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -96,6 +98,13 @@ func (ss *SpanSet) Add(access SpanAccess, span roachpb.Span) {
 // getSpans returns a slice of spans with the given parameters.
 func (ss *SpanSet) getSpans(access SpanAccess, scope spanScope) []roachpb.Span {
 	return ss.spans[access][scope]
+}
+
+// TODO(tschottdorf): take a context, make sure it's well-annotated.
+func (ss *SpanSet) assertAllowed(access SpanAccess, span roachpb.Span) {
+	if err := ss.checkAllowed(access, span); err != nil {
+		log.Fatal(context.TODO(), err)
+	}
 }
 
 func (ss *SpanSet) checkAllowed(access SpanAccess, span roachpb.Span) error {
