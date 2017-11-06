@@ -13,17 +13,221 @@ import (
 	"strings"
 	"testing"
 
+	"golang.org/x/net/context"
+
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-
-	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
-	"golang.org/x/net/context"
 )
+
+func TestValidIndexPartitionSetShowZones(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(context.TODO())
+
+	sqlDB := sqlutils.MakeSQLRunner(t, db)
+	sqlDB.Exec(`
+		CREATE DATABASE d;
+		USE d;
+		CREATE TABLE t (c STRING PRIMARY KEY) PARTITION BY LIST (c) (
+			PARTITION p0 VALUES ('a'),
+			PARTITION p1 VALUES (DEFAULT)
+		)`)
+
+	yamlDefault := fmt.Sprintf("gc: {ttlseconds: %d}", config.DefaultZoneConfig().GC.TTLSeconds)
+	yamlOverride := "gc: {ttlseconds: 42}"
+	zoneOverride := config.DefaultZoneConfig()
+	zoneOverride.GC.TTLSeconds = 42
+
+	defaultRow := sqlutils.ZoneRow{
+		ID:           keys.RootNamespaceID,
+		CLISpecifier: ".default",
+		Config:       config.DefaultZoneConfig(),
+	}
+	defaultOverrideRow := sqlutils.ZoneRow{
+		ID:           keys.RootNamespaceID,
+		CLISpecifier: ".default",
+		Config:       zoneOverride,
+	}
+	dbRow := sqlutils.ZoneRow{
+		ID:           keys.MaxReservedDescID + 1,
+		CLISpecifier: "d",
+		Config:       zoneOverride,
+	}
+	tableRow := sqlutils.ZoneRow{
+		ID:           keys.MaxReservedDescID + 2,
+		CLISpecifier: "d.t",
+		Config:       zoneOverride,
+	}
+	primaryRow := sqlutils.ZoneRow{
+		ID:           keys.MaxReservedDescID + 2,
+		CLISpecifier: "d.t@primary",
+		Config:       zoneOverride,
+	}
+	p0Row := sqlutils.ZoneRow{
+		ID:           keys.MaxReservedDescID + 2,
+		CLISpecifier: "d.t.p0",
+		Config:       zoneOverride,
+	}
+
+	// Ensure the default is reported for all zones at first.
+	sqlutils.VerifyAllZoneConfigs(sqlDB, defaultRow)
+	sqlutils.VerifyZoneConfigForTarget(sqlDB, "RANGE default", defaultRow)
+	sqlutils.VerifyZoneConfigForTarget(sqlDB, "DATABASE d", defaultRow)
+	sqlutils.VerifyZoneConfigForTarget(sqlDB, "TABLE d.t", defaultRow)
+	sqlutils.VerifyZoneConfigForTarget(sqlDB, "INDEX d.t@primary", defaultRow)
+	sqlutils.VerifyZoneConfigForTarget(sqlDB, "TABLE d.t PARTITION p0", defaultRow)
+	sqlutils.VerifyZoneConfigForTarget(sqlDB, "TABLE d.t PARTITION p1", defaultRow)
+
+	// Ensure a database zone config applies to that database, its tables, and its
+	// tables' indices and partitions.
+	sqlutils.SetZoneConfig(sqlDB, "DATABASE d", yamlOverride)
+	sqlutils.VerifyAllZoneConfigs(sqlDB, defaultRow, dbRow)
+	sqlutils.VerifyZoneConfigForTarget(sqlDB, "DATABASE d", dbRow)
+	sqlutils.VerifyZoneConfigForTarget(sqlDB, "TABLE d.t", dbRow)
+	sqlutils.VerifyZoneConfigForTarget(sqlDB, "INDEX d.t@primary", dbRow)
+	sqlutils.VerifyZoneConfigForTarget(sqlDB, "TABLE d.t PARTITION p0", dbRow)
+	sqlutils.VerifyZoneConfigForTarget(sqlDB, "TABLE d.t PARTITION p1", dbRow)
+
+	// Ensure a table zone config applies to that table and its indices and
+	// partitions, but no other zones.
+	sqlutils.SetZoneConfig(sqlDB, "TABLE d.t", yamlOverride)
+	sqlutils.VerifyAllZoneConfigs(sqlDB, defaultRow, dbRow, tableRow)
+	sqlutils.VerifyZoneConfigForTarget(sqlDB, "DATABASE d", dbRow)
+	sqlutils.VerifyZoneConfigForTarget(sqlDB, "TABLE d.t", tableRow)
+	sqlutils.VerifyZoneConfigForTarget(sqlDB, "INDEX d.t@primary", tableRow)
+	sqlutils.VerifyZoneConfigForTarget(sqlDB, "TABLE d.t PARTITION p0", tableRow)
+	sqlutils.VerifyZoneConfigForTarget(sqlDB, "TABLE d.t PARTITION p1", tableRow)
+
+	// Ensure an index zone config applies to that index and its partitions, but
+	// no other zones.
+	sqlutils.SetZoneConfig(sqlDB, "INDEX d.t@primary", yamlOverride)
+	sqlutils.VerifyAllZoneConfigs(sqlDB, defaultRow, dbRow, tableRow, primaryRow)
+	sqlutils.VerifyZoneConfigForTarget(sqlDB, "DATABASE d", dbRow)
+	sqlutils.VerifyZoneConfigForTarget(sqlDB, "TABLE d.t", tableRow)
+	sqlutils.VerifyZoneConfigForTarget(sqlDB, "INDEX d.t@primary", primaryRow)
+	sqlutils.VerifyZoneConfigForTarget(sqlDB, "TABLE d.t PARTITION p0", primaryRow)
+	sqlutils.VerifyZoneConfigForTarget(sqlDB, "TABLE d.t PARTITION p1", primaryRow)
+
+	// Ensure a partition zone config applies to that partition, but no other
+	// zones.
+	sqlutils.SetZoneConfig(sqlDB, "TABLE d.t PARTITION p0", yamlOverride)
+	sqlutils.VerifyAllZoneConfigs(sqlDB, defaultRow, dbRow, tableRow, primaryRow, p0Row)
+	sqlutils.VerifyZoneConfigForTarget(sqlDB, "DATABASE d", dbRow)
+	sqlutils.VerifyZoneConfigForTarget(sqlDB, "TABLE d.t", tableRow)
+	sqlutils.VerifyZoneConfigForTarget(sqlDB, "INDEX d.t@primary", primaryRow)
+	sqlutils.VerifyZoneConfigForTarget(sqlDB, "TABLE d.t PARTITION p0", p0Row)
+	sqlutils.VerifyZoneConfigForTarget(sqlDB, "TABLE d.t PARTITION p1", primaryRow)
+
+	// Ensure updating the default zone propagates to zones without an override,
+	// but not to those with overrides.
+	sqlutils.SetZoneConfig(sqlDB, "RANGE default", yamlOverride)
+	sqlutils.VerifyAllZoneConfigs(sqlDB, defaultOverrideRow, dbRow, tableRow, primaryRow, p0Row)
+	sqlutils.VerifyZoneConfigForTarget(sqlDB, "DATABASE d", dbRow)
+	sqlutils.VerifyZoneConfigForTarget(sqlDB, "TABLE d.t", tableRow)
+	sqlutils.VerifyZoneConfigForTarget(sqlDB, "INDEX d.t@primary", primaryRow)
+	sqlutils.VerifyZoneConfigForTarget(sqlDB, "TABLE d.t PARTITION p0", p0Row)
+	sqlutils.VerifyZoneConfigForTarget(sqlDB, "TABLE d.t PARTITION p1", primaryRow)
+
+	// Ensure deleting a database zone leaves child overrides in place.
+	sqlutils.DeleteZoneConfig(sqlDB, "DATABASE d")
+	sqlutils.VerifyAllZoneConfigs(sqlDB, defaultOverrideRow, tableRow, primaryRow, p0Row)
+	sqlutils.VerifyZoneConfigForTarget(sqlDB, "DATABASE d", defaultOverrideRow)
+	sqlutils.VerifyZoneConfigForTarget(sqlDB, "TABLE d.t", tableRow)
+	sqlutils.VerifyZoneConfigForTarget(sqlDB, "INDEX d.t@primary", primaryRow)
+	sqlutils.VerifyZoneConfigForTarget(sqlDB, "TABLE d.t PARTITION p0", p0Row)
+	sqlutils.VerifyZoneConfigForTarget(sqlDB, "TABLE d.t PARTITION p1", primaryRow)
+
+	// Ensure deleting a table zone leaves child overrides in place.
+	sqlutils.DeleteZoneConfig(sqlDB, "TABLE d.t")
+	sqlutils.VerifyAllZoneConfigs(sqlDB, defaultOverrideRow, primaryRow, p0Row)
+	sqlutils.VerifyZoneConfigForTarget(sqlDB, "TABLE d.t", defaultOverrideRow)
+	sqlutils.VerifyZoneConfigForTarget(sqlDB, "INDEX d.t@primary", primaryRow)
+	sqlutils.VerifyZoneConfigForTarget(sqlDB, "TABLE d.t PARTITION p0", p0Row)
+	sqlutils.VerifyZoneConfigForTarget(sqlDB, "TABLE d.t PARTITION p1", primaryRow)
+
+	// Ensure deleting an index zone leaves child overrides in place.
+	sqlutils.DeleteZoneConfig(sqlDB, "INDEX d.t@primary")
+	sqlutils.VerifyAllZoneConfigs(sqlDB, defaultOverrideRow, p0Row)
+	sqlutils.VerifyZoneConfigForTarget(sqlDB, "INDEX d.t@primary", defaultOverrideRow)
+	sqlutils.VerifyZoneConfigForTarget(sqlDB, "TABLE d.t PARTITION p0", p0Row)
+
+	// Ensure deleting a partition zone works.
+	sqlutils.DeleteZoneConfig(sqlDB, "TABLE d.t PARTITION p0")
+	sqlutils.VerifyAllZoneConfigs(sqlDB, defaultOverrideRow)
+	sqlutils.VerifyZoneConfigForTarget(sqlDB, "TABLE d.t PARTITION p0", defaultOverrideRow)
+
+	// Ensure deleting non-overridden zones is not an error.
+	sqlutils.DeleteZoneConfig(sqlDB, "DATABASE d")
+	sqlutils.DeleteZoneConfig(sqlDB, "TABLE d.t")
+	sqlutils.DeleteZoneConfig(sqlDB, "TABLE d.t PARTITION p1")
+
+	// Ensure updating the default zone config applies to zones that have had
+	// overrides added and removed.
+	sqlutils.SetZoneConfig(sqlDB, "RANGE default", yamlDefault)
+	sqlutils.VerifyAllZoneConfigs(sqlDB, defaultRow)
+	sqlutils.VerifyZoneConfigForTarget(sqlDB, "RANGE default", defaultRow)
+	sqlutils.VerifyZoneConfigForTarget(sqlDB, "DATABASE d", defaultRow)
+	sqlutils.VerifyZoneConfigForTarget(sqlDB, "TABLE d.t", defaultRow)
+	sqlutils.VerifyZoneConfigForTarget(sqlDB, "INDEX d.t@primary", defaultRow)
+	sqlutils.VerifyZoneConfigForTarget(sqlDB, "TABLE d.t PARTITION p0", defaultRow)
+	sqlutils.VerifyZoneConfigForTarget(sqlDB, "TABLE d.t PARTITION p1", defaultRow)
+
+	// Ensure the shorthand index syntax works.
+	sqlutils.SetZoneConfig(sqlDB, `INDEX "primary"`, yamlOverride)
+	sqlutils.VerifyZoneConfigForTarget(sqlDB, `INDEX "primary"`, primaryRow)
+}
+
+func TestInvalidIndexPartitionSetShowZones(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(context.TODO())
+
+	for i, tc := range []struct {
+		query string
+		err   string
+	}{
+		{
+			"ALTER INDEX foo EXPERIMENTAL CONFIGURE ZONE ''",
+			`no database specified: "foo"`,
+		},
+		{
+			"EXPERIMENTAL SHOW ZONE CONFIGURATION FOR INDEX foo",
+			`no database specified: "foo"`,
+		},
+		{
+			"USE system; ALTER INDEX foo EXPERIMENTAL CONFIGURE ZONE ''",
+			`index "foo" not in any of the tables`,
+		},
+		{
+			"USE system; EXPERIMENTAL SHOW ZONE CONFIGURATION FOR INDEX foo",
+			`index "foo" not in any of the tables`,
+		},
+		{
+			"ALTER TABLE system.jobs PARTITION p0 EXPERIMENTAL CONFIGURE ZONE 'foo'",
+			`partition "p0" does not exist`,
+		},
+		{
+			"EXPERIMENTAL SHOW ZONE CONFIGURATION FOR TABLE system.jobs PARTITION p0",
+			`partition "p0" does not exist`,
+		},
+	} {
+		if _, err := db.Exec(tc.query); !testutils.IsError(err, tc.err) {
+			t.Errorf("#%d: expected error matching %q, but got %v", i, tc.err, err)
+		}
+	}
+}
 
 func TestGenerateSubzoneSpans(t *testing.T) {
 	defer leaktest.AfterTest(t)()
