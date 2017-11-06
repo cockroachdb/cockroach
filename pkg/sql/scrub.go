@@ -23,7 +23,9 @@ import (
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/scrub"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -228,18 +230,19 @@ func (n *scrubNode) startScrubTable(
 					"cannot specify INDEX option more than once")
 			}
 			indexesSet = true
-			indexesToCheck, err := createIndexCheckOperations(v.IndexNames, tableDesc, tableName)
+			checks, err := createIndexCheckOperations(v.IndexNames, tableDesc, tableName)
 			if err != nil {
 				return err
 			}
-			n.run.checkQueue = append(n.run.checkQueue, indexesToCheck...)
+			n.run.checkQueue = append(n.run.checkQueue, checks...)
 		case *tree.ScrubOptionPhysical:
 			if physicalCheckSet {
 				return pgerror.NewErrorf(pgerror.CodeSyntaxError,
 					"cannot specify PHYSICAL option more than once")
 			}
 			physicalCheckSet = true
-			// TODO(joey): Initialize physical index to check.
+			physicalChecks := createPhysicalCheckOperations(tableDesc, tableName)
+			n.run.checkQueue = append(n.run.checkQueue, physicalChecks...)
 		default:
 			panic(fmt.Sprintf("Unhandled SCRUB option received: %+v", v))
 		}
@@ -253,7 +256,9 @@ func (n *scrubNode) startScrubTable(
 			return err
 		}
 		n.run.checkQueue = append(n.run.checkQueue, indexesToCheck...)
-		// TODO(joey): Initialize physical index to check.
+
+		physicalChecks := createPhysicalCheckOperations(tableDesc, tableName)
+		n.run.checkQueue = append(n.run.checkQueue, physicalChecks...)
 	}
 
 	return nil
@@ -419,13 +424,13 @@ func (o *indexCheckOperation) Next(ctx context.Context, p *planner) (tree.Datums
 	var errorType tree.Datum
 	var primaryKeyDatums tree.Datums
 	if isMissingIndexReferenceError {
-		errorType = tree.NewDString(ScrubErrorMissingIndexEntry)
+		errorType = tree.NewDString(scrub.MissingIndexEntryError)
 		// Fetch the primary index values from the primary index row data.
 		for _, rowIdx := range o.primaryColIdxs {
 			primaryKeyDatums = append(primaryKeyDatums, row[rowIdx])
 		}
 	} else {
-		errorType = tree.NewDString(ScrubErrorDanglingIndexReference)
+		errorType = tree.NewDString(scrub.DanglingIndexReferenceError)
 		// Fetch the primary index values from the secondary index row
 		// data, because no primary index was found. The secondary index columns
 		// are offset by the length of the distinct columns, as the first
@@ -629,9 +634,22 @@ func createIndexCheckQuery(
 	)
 }
 
+// createPhysicalCheckOperations will return the physicalCheckOperation
+// for all indexes on a table.
+func createPhysicalCheckOperations(
+	tableDesc *sqlbase.TableDescriptor, tableName *tree.TableName,
+) (checks []checkOperation) {
+	checks = append(checks, newPhysicalCheckOperation(tableName, tableDesc, &tableDesc.PrimaryIndex))
+	for i := range tableDesc.Indexes {
+		checks = append(checks, newPhysicalCheckOperation(tableName, tableDesc, &tableDesc.Indexes[i]))
+	}
+	return checks
+}
+
 // createIndexCheckOperations will return the checkOperations for the
 // provided indexes. If indexNames is nil, then all indexes are
-// returned. TODO(joey): This can be simplified with
+// returned.
+// TODO(joey): This can be simplified with
 // TableDescriptor.FindIndexByName(), but this will only report the
 // first invalid index.
 func createIndexCheckOperations(
@@ -703,6 +721,43 @@ func scrubPlanAndRunDistSQL(
 	}
 
 	err = p.session.distSQLPlanner.PlanAndRun(ctx, p.txn, plan, &recv, p.evalCtx)
+	if err != nil {
+		return rows, err
+	} else if recv.err != nil {
+		return rows, recv.err
+	}
+
+	if rows.Len() == 0 {
+		rows.Close(ctx)
+		return nil, nil
+	}
+
+	return rows, nil
+}
+
+// scrubPlanAndRunDistSQL will prepare and run the plan in distSQL. If a
+// RowContainer is returned the caller must close it.
+func scrubRunDistSQL(
+	ctx context.Context, planCtx *planningCtx, p *planner, plan *physicalPlan,
+) (*sqlbase.RowContainer, error) {
+	ci := sqlbase.ColTypeInfoFromColTypes(distsqlrun.ScrubTypes)
+	rows := sqlbase.NewRowContainer(*p.evalCtx.ActiveMemAcc, ci, 0)
+	rowResultWriter := NewRowResultWriter(tree.Rows, rows)
+	recv, err := makeDistSQLReceiver(
+		ctx,
+		rowResultWriter,
+		p.ExecCfg().RangeDescriptorCache,
+		p.ExecCfg().LeaseHolderCache,
+		p.txn,
+		func(ts hlc.Timestamp) {
+			_ = p.ExecCfg().Clock.Update(ts)
+		},
+	)
+	if err != nil {
+		return rows, err
+	}
+
+	err = p.session.distSQLPlanner.Run(planCtx, p.txn, plan, &recv, p.evalCtx)
 	if err != nil {
 		return rows, err
 	} else if recv.err != nil {

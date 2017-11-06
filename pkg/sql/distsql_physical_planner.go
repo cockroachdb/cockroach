@@ -669,6 +669,13 @@ func initTableReaderSpec(
 		}
 	}
 
+	// When a TableReader is running scrub checks, do not allow a
+	// post-processor. This is because the outgoing stream is a fixed
+	// format (distsqlrun.ScrubTypes).
+	if n.isCheck {
+		return s, distsqlrun.PostProcessSpec{}, nil
+	}
+
 	post := distsqlrun.PostProcessSpec{
 		Filter: distsqlplan.MakeExpression(n.filter, evalCtx, nil),
 	}
