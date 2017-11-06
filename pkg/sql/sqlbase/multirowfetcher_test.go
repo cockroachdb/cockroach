@@ -30,8 +30,6 @@ import (
 	"golang.org/x/net/context"
 )
 
-const testDB = "test"
-
 type initFetcherArgs struct {
 	tableDesc       *TableDescriptor
 	indexIdx        int
@@ -140,10 +138,11 @@ func TestNextRowSingle(t *testing.T) {
 	// We try to read rows from each table.
 	for tableName, table := range tables {
 		t.Run(tableName, func(t *testing.T) {
-			tableDesc := GetTableDescriptor(kvDB, testDB, tableName)
+			tableDesc := GetTableDescriptor(kvDB, sqlutils.TestDB, tableName)
 
 			var valNeededForCol util.FastIntSet
 			valNeededForCol.AddRange(0, table.nCols-1)
+
 			args := []initFetcherArgs{
 				{
 					tableDesc:       tableDesc,
@@ -297,7 +296,8 @@ func TestNextRowSecondaryIndex(t *testing.T) {
 		// properly).
 		for i := 1; i <= nNulls; i++ {
 			r.Exec(t, fmt.Sprintf(
-				`INSERT INTO test.%s VALUES (%d, NULL, %d, %d);`,
+				`INSERT INTO %s.%s VALUES (%d, NULL, %d, %d);`,
+				sqlutils.TestDB,
 				tableName,
 				table.nRows+i,
 				(table.nRows+i)%storingMods[0],
@@ -311,7 +311,7 @@ func TestNextRowSecondaryIndex(t *testing.T) {
 	// We try to read rows from each index.
 	for tableName, table := range tables {
 		t.Run(tableName, func(t *testing.T) {
-			tableDesc := GetTableDescriptor(kvDB, testDB, tableName)
+			tableDesc := GetTableDescriptor(kvDB, sqlutils.TestDB, tableName)
 
 			var valNeededForCol util.FastIntSet
 			valNeededForCol.AddRange(0, table.nVals-1)
@@ -458,7 +458,7 @@ func generateIdxSubsets(maxIdx int, subsets [][]int) [][]int {
 //   grandgrandchild1@ggc1_unique_idx
 // parent3
 // We test reading rows from every non-empty subset for completeness.
-func TestNextRowInterleave(t *testing.T) {
+func TestNextRowInterleaved(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
@@ -485,7 +485,7 @@ func TestNextRowInterleave(t *testing.T) {
 			tableName:        "child1",
 			modFactor:        5,
 			schema:           "p2 INT, c1 INT, v INT, PRIMARY KEY (p2, c1)",
-			interleaveSchema: "test.parent2 (p2)",
+			interleaveSchema: "parent2 (p2)",
 			// child1 has more rows than parent2, thus some parent2
 			// rows will have multiple child1.
 			nRows: 500,
@@ -496,7 +496,7 @@ func TestNextRowInterleave(t *testing.T) {
 			tableName:        "grandchild1",
 			modFactor:        7,
 			schema:           "p2 INT, c1 INT, gc1 INT, v INT, PRIMARY KEY (p2, c1, gc1)",
-			interleaveSchema: "test.child1 (p2, c1)",
+			interleaveSchema: "child1 (p2, c1)",
 			nRows:            2000,
 			nCols:            4,
 			nVals:            4,
@@ -505,7 +505,7 @@ func TestNextRowInterleave(t *testing.T) {
 			tableName:        "grandgrandchild1",
 			modFactor:        12,
 			schema:           "p2 INT, c1 INT, gc1 INT, ggc1 INT, v INT, PRIMARY KEY (p2, c1, gc1, ggc1)",
-			interleaveSchema: "test.grandchild1 (p2, c1, gc1)",
+			interleaveSchema: "grandchild1 (p2, c1, gc1)",
 			nRows:            350,
 			nCols:            5,
 			nVals:            5,
@@ -514,7 +514,7 @@ func TestNextRowInterleave(t *testing.T) {
 			tableName:        "child2",
 			modFactor:        42,
 			schema:           "p2 INT, c2 INT, v INT, PRIMARY KEY (p2, c2)",
-			interleaveSchema: "test.parent2 (p2)",
+			interleaveSchema: "parent2 (p2)",
 			// child2 has less rows than parent2, thus not all
 			// parent2 rows will have a nested child2 row.
 			nRows: 100,
@@ -595,7 +595,11 @@ func TestNextRowInterleave(t *testing.T) {
 	ggc1idx := *tableArgs["grandgrandchild1"]
 	// This is only possible since nrows(ggc1) < nrows(p2) thus c1 is
 	// unique.
-	ggc1idx.indexSchema = `CREATE UNIQUE INDEX ggc1_unique_idx ON test.grandgrandchild1 (p2) INTERLEAVE IN PARENT test.parent2 (p2);`
+	ggc1idx.indexSchema = fmt.Sprintf(
+		`CREATE UNIQUE INDEX ggc1_unique_idx ON %s.grandgrandchild1 (p2) INTERLEAVE IN PARENT %s.parent2 (p2);`,
+		sqlutils.TestDB,
+		sqlutils.TestDB,
+	)
 	ggc1idx.indexName = "ggc1_unique_idx"
 	ggc1idx.indexIdx = 1
 	// Last column v (idx 4) is not stored in this index.
@@ -658,7 +662,7 @@ func TestNextRowInterleave(t *testing.T) {
 			// MultiRowFetcher.
 			idLookups := make(map[uint64]*fetcherEntryArgs, len(entries))
 			for i, entry := range entries {
-				tableDesc := GetTableDescriptor(kvDB, testDB, entry.tableName)
+				tableDesc := GetTableDescriptor(kvDB, sqlutils.TestDB, entry.tableName)
 				var indexID IndexID
 				if entry.indexIdx == 0 {
 					indexID = tableDesc.PrimaryIndex.ID

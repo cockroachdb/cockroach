@@ -71,7 +71,7 @@ func CreateTableInterleaved(
 	}
 
 	r := MakeSQLRunner(sqlDB)
-	stmt := `CREATE DATABASE IF NOT EXISTS test;`
+	stmt := fmt.Sprintf(`CREATE DATABASE IF NOT EXISTS %s;`, TestDB)
 	stmt += fmt.Sprintf(`CREATE TABLE %s.%s (%s) %s;`, TestDB, tableName, schema, interleaveSchema)
 	r.Exec(tb, stmt)
 	for i := 1; i <= numRows; {
