@@ -1446,7 +1446,7 @@ CREATE TABLE pg_catalog.pg_type (
 `,
 	populate: func(_ context.Context, p *planner, _ string, addRow func(...parser.Datum) error) error {
 		h := makeOidHasher()
-		for o, typ := range parser.OidToType {
+		for o, typ := range types.OidToType {
 			cat := typCategory(typ)
 			typElem := oidZero
 			typArray := oidZero

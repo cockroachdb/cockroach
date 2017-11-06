@@ -82,9 +82,6 @@ var (
 	TypeIntVector = types.TypeIntVector
 	// TypeName is a transitionary alias.
 	TypeNameArray = types.TypeNameArray
-
-	// OidToType is a transitionary alias.
-	OidToType = types.OidToType
 )
 
 // TCollatedString is a transitionary alias.
