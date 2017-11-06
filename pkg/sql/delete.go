@@ -131,8 +131,7 @@ func (d *deleteNode) Start(params runParams) error {
 	}
 	if scan, ok := maybeScan.(*scanNode); ok && canDeleteWithoutScan(params.ctx, d.n, scan, &d.tw) {
 		d.run.fastPath = true
-		err := d.fastDelete(params.ctx, scan)
-		return err
+		return d.fastDelete(params.ctx, scan)
 	}
 
 	return d.run.tw.init(d.p.txn)
@@ -153,6 +152,10 @@ func (d *deleteNode) FastPathResults() (int, bool) {
 }
 
 func (d *deleteNode) Next(params runParams) (bool, error) {
+	if d.run.fastPath {
+		return false, nil
+	}
+
 	traceKV := d.p.session.Tracing.KVTracingEnabled()
 
 	next, err := d.run.rows.Next(params)

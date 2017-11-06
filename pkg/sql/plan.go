@@ -112,7 +112,8 @@ type planNode interface {
 	// See executor.go: forEachRow() for an example.
 	//
 	// Available after Start(). It is illegal to call Next() after it returns
-	// false.
+	// false. It is legal to call Next() even if the node implements
+	// planNodeFastPath and the FastPathResults() method returns true.
 	Next(params runParams) (bool, error)
 
 	// Values returns the values at the current row. The result is only valid
@@ -134,6 +135,8 @@ type planNode interface {
 type planNodeFastPath interface {
 	// FastPathResults returns the affected row count and true if the
 	// node has no result set and has already executed when Start() completes.
+	// Note that Next() must still be valid even if this method returns
+	// true, although it may have nothing left to do.
 	FastPathResults() (int, bool)
 }
 
