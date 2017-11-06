@@ -18,6 +18,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 
 	"github.com/lib/pq/oid"
 )
@@ -48,7 +49,7 @@ var typeBuiltinsHaveUnderscore = map[oid.Oid]struct{}{
 // is either the type's postgres display name or the type's postgres display
 // name plus an underscore, depending on the type.
 func PGIOBuiltinPrefix(typ Type) string {
-	builtinPrefix := PGDisplayName(typ)
+	builtinPrefix := types.PGDisplayName(typ)
 	if _, ok := typeBuiltinsHaveUnderscore[typ.Oid()]; ok {
 		return builtinPrefix + "_"
 	}

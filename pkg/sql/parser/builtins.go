@@ -41,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/ipaddr"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -1887,8 +1888,8 @@ CockroachDB supports the following flags:
 
 	"array_append": arrayBuiltin(func(typ Type) Builtin {
 		return Builtin{
-			Types:        ArgTypes{{"array", TArray{typ}}, {"elem", typ}},
-			ReturnType:   fixedReturnType(TArray{typ}),
+			Types:        ArgTypes{{"array", TArray{Typ: typ}}, {"elem", typ}},
+			ReturnType:   fixedReturnType(TArray{Typ: typ}),
 			category:     categoryArray,
 			nullableArgs: true,
 			fn: func(_ *EvalContext, args Datums) (Datum, error) {
@@ -1900,8 +1901,8 @@ CockroachDB supports the following flags:
 
 	"array_prepend": arrayBuiltin(func(typ Type) Builtin {
 		return Builtin{
-			Types:        ArgTypes{{"elem", typ}, {"array", TArray{typ}}},
-			ReturnType:   fixedReturnType(TArray{typ}),
+			Types:        ArgTypes{{"elem", typ}, {"array", TArray{Typ: typ}}},
+			ReturnType:   fixedReturnType(TArray{Typ: typ}),
 			category:     categoryArray,
 			nullableArgs: true,
 			fn: func(_ *EvalContext, args Datums) (Datum, error) {
@@ -1913,8 +1914,8 @@ CockroachDB supports the following flags:
 
 	"array_cat": arrayBuiltin(func(typ Type) Builtin {
 		return Builtin{
-			Types:        ArgTypes{{"left", TArray{typ}}, {"right", TArray{typ}}},
-			ReturnType:   fixedReturnType(TArray{typ}),
+			Types:        ArgTypes{{"left", TArray{Typ: typ}}, {"right", TArray{Typ: typ}}},
+			ReturnType:   fixedReturnType(TArray{Typ: typ}),
 			category:     categoryArray,
 			nullableArgs: true,
 			fn: func(_ *EvalContext, args Datums) (Datum, error) {
@@ -1926,8 +1927,8 @@ CockroachDB supports the following flags:
 
 	"array_remove": arrayBuiltin(func(typ Type) Builtin {
 		return Builtin{
-			Types:        ArgTypes{{"array", TArray{typ}}, {"elem", typ}},
-			ReturnType:   fixedReturnType(TArray{typ}),
+			Types:        ArgTypes{{"array", TArray{Typ: typ}}, {"elem", typ}},
+			ReturnType:   fixedReturnType(TArray{Typ: typ}),
 			category:     categoryArray,
 			nullableArgs: true,
 			fn: func(ctx *EvalContext, args Datums) (Datum, error) {
@@ -1950,8 +1951,8 @@ CockroachDB supports the following flags:
 
 	"array_replace": arrayBuiltin(func(typ Type) Builtin {
 		return Builtin{
-			Types:        ArgTypes{{"array", TArray{typ}}, {"toreplace", typ}, {"replacewith", typ}},
-			ReturnType:   fixedReturnType(TArray{typ}),
+			Types:        ArgTypes{{"array", TArray{Typ: typ}}, {"toreplace", typ}, {"replacewith", typ}},
+			ReturnType:   fixedReturnType(TArray{Typ: typ}),
 			category:     categoryArray,
 			nullableArgs: true,
 			fn: func(ctx *EvalContext, args Datums) (Datum, error) {
@@ -1978,7 +1979,7 @@ CockroachDB supports the following flags:
 
 	"array_position": arrayBuiltin(func(typ Type) Builtin {
 		return Builtin{
-			Types:        ArgTypes{{"array", TArray{typ}}, {"elem", typ}},
+			Types:        ArgTypes{{"array", TArray{Typ: typ}}, {"elem", typ}},
 			ReturnType:   fixedReturnType(TypeInt),
 			category:     categoryArray,
 			nullableArgs: true,
@@ -1999,8 +2000,8 @@ CockroachDB supports the following flags:
 
 	"array_positions": arrayBuiltin(func(typ Type) Builtin {
 		return Builtin{
-			Types:        ArgTypes{{"array", TArray{typ}}, {"elem", typ}},
-			ReturnType:   fixedReturnType(TArray{typ}),
+			Types:        ArgTypes{{"array", TArray{Typ: typ}}, {"elem", typ}},
+			ReturnType:   fixedReturnType(TArray{Typ: typ}),
 			category:     categoryArray,
 			nullableArgs: true,
 			fn: func(ctx *EvalContext, args Datums) (Datum, error) {
@@ -2073,7 +2074,7 @@ CockroachDB supports the following flags:
 	"current_schemas": {
 		Builtin{
 			Types:      ArgTypes{{"include_pg_catalog", TypeBool}},
-			ReturnType: fixedReturnType(TArray{TypeString}),
+			ReturnType: fixedReturnType(TArray{Typ: TypeString}),
 			category:   categorySystemInfo,
 			fn: func(ctx *EvalContext, args Datums) (Datum, error) {
 				includePgCatalog := *(args[0].(*DBool))
@@ -2417,8 +2418,8 @@ var powImpls = []Builtin{
 }
 
 func arrayBuiltin(impl func(Type) Builtin) []Builtin {
-	result := make([]Builtin, 0, len(TypesAnyNonArray))
-	for _, typ := range TypesAnyNonArray {
+	result := make([]Builtin, 0, len(types.TypesAnyNonArray))
+	for _, typ := range types.TypesAnyNonArray {
 		if canBeInArray(typ) {
 			result = append(result, impl(typ))
 		}
