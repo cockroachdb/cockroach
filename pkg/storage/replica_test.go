@@ -60,6 +60,22 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
+// allSpans is a SpanSet that covers *everything* for use in tests that don't
+// care about properly declaring their spans.
+var allSpans = func() SpanSet {
+	var ss SpanSet
+	ss.Add(SpanReadWrite, roachpb.Span{
+		Key:    roachpb.KeyMin,
+		EndKey: roachpb.KeyMax,
+	})
+	// Local keys (see `keys.localPrefix`).
+	ss.Add(SpanReadWrite, roachpb.Span{
+		Key:    append([]byte("\x01"), roachpb.KeyMin...),
+		EndKey: append([]byte("\x01"), roachpb.KeyMax...),
+	})
+	return ss
+}()
+
 func testRangeDescriptor() *roachpb.RangeDescriptor {
 	return &roachpb.RangeDescriptor{
 		RangeID:  1,
@@ -430,7 +446,7 @@ func sendLeaseRequest(r *Replica, l *roachpb.Lease) error {
 	ba.Timestamp = r.store.Clock().Now()
 	ba.Add(&roachpb.RequestLeaseRequest{Lease: *l})
 	exLease, _ := r.GetLease()
-	ch, _, _, pErr := r.propose(context.TODO(), exLease, ba, nil, nil)
+	ch, _, _, pErr := r.propose(context.TODO(), exLease, ba, nil, &allSpans)
 	if pErr == nil {
 		// Next if the command was committed, wait for the range to apply it.
 		// TODO(bdarnell): refactor this to a more conventional error-handling pattern.
@@ -775,7 +791,7 @@ func TestReplicaLease(t *testing.T) {
 	} {
 		if _, err := evalRequestLease(context.Background(), tc.store.Engine(),
 			CommandArgs{
-				EvalCtx: ReplicaEvalContext{tc.repl, nil},
+				EvalCtx: NewReplicaEvalContext(tc.repl, &allSpans),
 				Args: &roachpb.RequestLeaseRequest{
 					Lease: lease,
 				},
@@ -1164,7 +1180,7 @@ func TestReplicaLeaseRejectUnknownRaftNodeID(t *testing.T) {
 	ba := roachpb.BatchRequest{}
 	ba.Timestamp = tc.repl.store.Clock().Now()
 	ba.Add(&roachpb.RequestLeaseRequest{Lease: *lease})
-	ch, _, _, pErr := tc.repl.propose(context.Background(), exLease, ba, nil, nil)
+	ch, _, _, pErr := tc.repl.propose(context.Background(), exLease, ba, nil, &allSpans)
 	if pErr == nil {
 		// Next if the command was committed, wait for the range to apply it.
 		// TODO(bdarnell): refactor to a more conventional error-handling pattern.
@@ -4286,7 +4302,7 @@ func TestRaftRetryProtectionInTxn(t *testing.T) {
 		// also avoid updating the timestamp cache.
 		ba.Timestamp = txn.OrigTimestamp
 		lease, _ := tc.repl.GetLease()
-		ch, _, _, err := tc.repl.propose(context.Background(), lease, ba, nil, nil)
+		ch, _, _, err := tc.repl.propose(context.Background(), lease, ba, nil, &allSpans)
 		if err != nil {
 			t.Fatalf("%d: unexpected error: %s", i, err)
 		}
@@ -5068,7 +5084,7 @@ func TestAbortSpanError(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	rec := ReplicaEvalContext{tc.repl, nil}
+	rec := &SpanSetReplicaEvalContext{tc.repl, allSpans}
 	pErr := checkIfTxnAborted(context.Background(), rec, tc.engine, txn)
 	if _, ok := pErr.GetDetail().(*roachpb.TransactionAbortedError); ok {
 		expected := txn.Clone()
@@ -7454,7 +7470,7 @@ func TestReplicaIDChangePending(t *testing.T) {
 			Key: roachpb.Key("a"),
 		},
 	})
-	_, _, _, err := repl.propose(context.Background(), lease, ba, nil, nil)
+	_, _, _, err := repl.propose(context.Background(), lease, ba, nil, &allSpans)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -7635,7 +7651,7 @@ func TestReplicaCancelRaftCommandProgress(t *testing.T) {
 			ba.Add(&roachpb.PutRequest{Span: roachpb.Span{
 				Key: roachpb.Key(fmt.Sprintf("k%d", i))}})
 			lease, _ := repl.GetLease()
-			proposal, pErr := repl.requestToProposal(context.Background(), makeIDKey(), ba, nil, nil)
+			proposal, pErr := repl.requestToProposal(context.Background(), makeIDKey(), ba, nil, &allSpans)
 			if pErr != nil {
 				t.Fatal(pErr)
 			}
@@ -7712,7 +7728,7 @@ func TestReplicaBurstPendingCommandsAndRepropose(t *testing.T) {
 			ba.Timestamp = tc.Clock().Now()
 			ba.Add(&roachpb.PutRequest{Span: roachpb.Span{
 				Key: roachpb.Key(fmt.Sprintf("k%d", i))}})
-			cmd, pErr := tc.repl.requestToProposal(ctx, makeIDKey(), ba, nil, nil)
+			cmd, pErr := tc.repl.requestToProposal(ctx, makeIDKey(), ba, nil, &allSpans)
 			if pErr != nil {
 				t.Fatal(pErr)
 			}
@@ -7831,7 +7847,7 @@ func TestReplicaRefreshPendingCommandsTicks(t *testing.T) {
 		ba.Timestamp = tc.Clock().Now()
 		ba.Add(&roachpb.PutRequest{Span: roachpb.Span{Key: roachpb.Key(id)}})
 		lease, _ := r.GetLease()
-		cmd, pErr := r.requestToProposal(context.Background(), storagebase.CmdIDKey(id), ba, nil, nil)
+		cmd, pErr := r.requestToProposal(context.Background(), storagebase.CmdIDKey(id), ba, nil, &allSpans)
 		if pErr != nil {
 			t.Fatal(pErr)
 		}
@@ -8107,11 +8123,8 @@ func TestGCWithoutThreshold(t *testing.T) {
 				var resp roachpb.GCResponse
 
 				if _, err := evalGC(ctx, rw, CommandArgs{
-					Args: &gc,
-					EvalCtx: ReplicaEvalContext{
-						i:  tc.repl,
-						ss: &spans,
-					},
+					Args:    &gc,
+					EvalCtx: NewReplicaEvalContext(tc.repl, &spans),
 				}, &resp); err != nil {
 					t.Fatalf("at (%s,%s): %s", keyThresh, txnThresh, err)
 				}
@@ -8294,7 +8307,7 @@ func TestReplicaEvaluationNotTxnMutation(t *testing.T) {
 	ba.Add(&txnPut)
 	ba.Add(&txnPut)
 
-	batch, _, _, _, pErr := tc.repl.evaluateTxnWriteBatch(ctx, makeIDKey(), ba, nil)
+	batch, _, _, _, pErr := tc.repl.evaluateTxnWriteBatch(ctx, makeIDKey(), ba, &allSpans)
 	defer batch.Close()
 	if pErr != nil {
 		t.Fatal(pErr)
@@ -8773,7 +8786,7 @@ func TestErrorInRaftApplicationClearsIntents(t *testing.T) {
 
 	exLease, _ := repl.GetLease()
 	ch, _, _, pErr := repl.propose(
-		context.Background(), exLease, ba, nil /* endCmds */, nil, /* spans */
+		context.Background(), exLease, ba, nil /* endCmds */, &allSpans,
 	)
 	if pErr != nil {
 		t.Fatal(pErr)
