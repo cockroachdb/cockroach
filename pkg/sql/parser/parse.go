@@ -21,7 +21,6 @@
 package parser
 
 import (
-	"bytes"
 	"fmt"
 	"strings"
 	"time"
@@ -31,19 +30,6 @@ import (
 )
 
 //go:generate make
-
-// StatementList is a list of statements.
-type StatementList []Statement
-
-// Format implements the NodeFormatter interface.
-func (l StatementList) Format(buf *bytes.Buffer, f FmtFlags) {
-	for i, s := range l {
-		if i > 0 {
-			buf.WriteString("; ")
-		}
-		FormatNode(buf, f, s)
-	}
-}
 
 // Parser wraps a scanner, parser and other utilities present in the parser
 // package.

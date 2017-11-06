@@ -20,7 +20,10 @@
 
 package parser
 
-import "fmt"
+import (
+	"bytes"
+	"fmt"
+)
 
 // Instructions for creating new types: If a type needs to satisfy an
 // interface, declare that function along with that interface. This
@@ -91,6 +94,19 @@ type HiddenFromShowQueries interface {
 // when they run.
 type IndependentFromParallelizedPriors interface {
 	independentFromParallelizedPriors()
+}
+
+// StatementList is a list of statements.
+type StatementList []Statement
+
+// Format implements the NodeFormatter interface.
+func (l StatementList) Format(buf *bytes.Buffer, f FmtFlags) {
+	for i, s := range l {
+		if i > 0 {
+			buf.WriteString("; ")
+		}
+		FormatNode(buf, f, s)
+	}
 }
 
 // StatementType implements the Statement interface.
