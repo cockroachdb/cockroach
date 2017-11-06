@@ -50,9 +50,6 @@ var (
 	TypeDecimal T = tDecimal{}
 	// TypeString is the type of a DString. Can be compared with ==.
 	TypeString T = tString{}
-	// TypeCollatedString is the type family of a DString. CANNOT be compared with
-	// ==.
-	TypeCollatedString T = TCollatedString{}
 	// TypeBytes is the type of a DBytes. Can be compared with ==.
 	TypeBytes T = tBytes{}
 	// TypeDate is the type of a DDate. Can be compared with ==.
@@ -69,15 +66,6 @@ var (
 	TypeUUID T = tUUID{}
 	// TypeINet is the type of a DIPAddr. Can be compared with ==.
 	TypeINet T = tINet{}
-	// TypeTuple is the type family of a DTuple. CANNOT be compared with ==.
-	TypeTuple T = TTuple(nil)
-	// TypeArray is the type family of a DArray. CANNOT be compared with ==.
-	TypeArray T = TArray{}
-	// TypeTable is the type family of a DTable. CANNOT be compared with ==.
-	TypeTable T = TTable{}
-	// TypePlaceholder is the type family of a placeholder. CANNOT be compared
-	// with ==.
-	TypePlaceholder T = TPlaceholder{}
 	// TypeAnyArray is the type of a DArray with a wildcard parameterized type.
 	// Can be compared with ==.
 	TypeAnyArray T = TArray{TypeAny}
@@ -101,6 +89,19 @@ var (
 		TypeJSON,
 		TypeOid,
 	}
+
+	// FamCollatedString is the type family of a DString. CANNOT be
+	// compared with ==.
+	FamCollatedString T = TCollatedString{}
+	// FamTuple is the type family of a DTuple. CANNOT be compared with ==.
+	FamTuple T = TTuple(nil)
+	// FamArray is the type family of a DArray. CANNOT be compared with ==.
+	FamArray T = TArray{}
+	// FamTable is the type family of a DTable. CANNOT be compared with ==.
+	FamTable T = TTable{}
+	// FamPlaceholder is the type family of a placeholder. CANNOT be compared
+	// with ==.
+	FamPlaceholder T = TPlaceholder{}
 )
 
 // Do not instantiate the tXxx types elsewhere. The variables above are intended

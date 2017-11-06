@@ -1792,7 +1792,7 @@ func parserTypeToEncodingType(t types.T) (encoding.Type, error) {
 	case types.TypeINet:
 		return encoding.IPAddr, nil
 	default:
-		if t.FamilyEqual(types.TypeCollatedString) {
+		if t.FamilyEqual(types.FamCollatedString) {
 			return encoding.Bytes, nil
 		}
 		return 0, errors.Errorf("Don't know encoding type for %s", t)

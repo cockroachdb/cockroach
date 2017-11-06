@@ -89,7 +89,8 @@ var OidToType = map[oid.Oid]T{
 	oid.T__int2:        typeInt2Array,
 	oid.T__int4:        typeInt4Array,
 	oid.T__int8:        TArray{TypeInt},
-	oid.T_record:       TypeTuple,
+	// TODO(jordan): I think this entry for T_record is out of place.
+	oid.T_record:       FamTuple,
 	oid.T_text:         TypeString,
 	oid.T_timestamp:    TypeTimestamp,
 	oid.T__timestamp:   TArray{TypeTimestamp},

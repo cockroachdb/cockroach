@@ -42,7 +42,7 @@ var typeBuiltinsHaveUnderscore = map[oid.Oid]struct{}{
 	types.Oid(types.TypeUUID):        {},
 	types.Oid(types.TypeTimestamp):   {},
 	types.Oid(types.TypeTimestampTZ): {},
-	types.Oid(types.TypeTuple):       {},
+	types.Oid(types.FamTuple):        {},
 }
 
 // PGIOBuiltinPrefix returns the string prefix to a type's IO functions. This
