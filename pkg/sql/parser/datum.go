@@ -2916,3 +2916,76 @@ func NewDName(d string) Datum {
 func NewDIntVectorFromDArray(d *DArray) Datum {
 	return wrapWithOid(d, oid.T_int2vector)
 }
+
+// DatumTypeSize returns a lower bound on the total size of a Datum
+// of the given type in bytes, including memory that is
+// pointed at (even if shared between Datum instances) but excluding
+// allocation overhead.
+//
+// The second argument indicates whether data of this type have different
+// sizes.
+//
+// It holds for every Datum d that d.Size() >= DatumSize(d.ResolvedType())
+func DatumTypeSize(t Type) (uintptr, bool) {
+	// The following are composite types.
+	switch ty := t.(type) {
+	case tOid:
+		// Note: we have multiple Type instances of tOid (TypeOid,
+		// TypeRegClass, etc). Instead of listing all of them in
+		// baseDatumTypeSizes below, we use a single case here.
+		return unsafe.Sizeof(DInt(0)), fixedSize
+
+	case tOidWrapper:
+		return DatumTypeSize(ty.Type)
+
+	case TCollatedString:
+		return unsafe.Sizeof(DCollatedString{"", "", nil}), variableSize
+
+	case TTuple:
+		sz := uintptr(0)
+		variable := false
+		for _, typ := range ty {
+			typsz, typvariable := DatumTypeSize(typ)
+			sz += typsz
+			variable = variable || typvariable
+		}
+		return sz, variable
+
+	case TTable:
+		sz, _ := DatumTypeSize(ty.Cols)
+		return sz, variableSize
+
+	case TArray:
+		// TODO(jordan,justin): This seems suspicious.
+		return unsafe.Sizeof(DString("")), variableSize
+	}
+
+	// All the primary types have fixed size information.
+	if bSzInfo, ok := baseDatumTypeSizes[t]; ok {
+		return bSzInfo.sz, bSzInfo.variable
+	}
+
+	panic(fmt.Sprintf("unknown type: %T", t))
+}
+
+var baseDatumTypeSizes = map[Type]struct {
+	sz       uintptr
+	variable bool
+}{
+	TypeNull:        {unsafe.Sizeof(dNull{}), fixedSize},
+	TypeBool:        {unsafe.Sizeof(DBool(false)), fixedSize},
+	TypeInt:         {unsafe.Sizeof(DInt(0)), fixedSize},
+	TypeFloat:       {unsafe.Sizeof(DFloat(0.0)), fixedSize},
+	TypeDecimal:     {unsafe.Sizeof(DDecimal{}), variableSize},
+	TypeString:      {unsafe.Sizeof(DString("")), variableSize},
+	TypeBytes:       {unsafe.Sizeof(DBytes("")), variableSize},
+	TypeDate:        {unsafe.Sizeof(DDate(0)), fixedSize},
+	TypeTimestamp:   {unsafe.Sizeof(DTimestamp{}), fixedSize},
+	TypeTimestampTZ: {unsafe.Sizeof(DTimestampTZ{}), fixedSize},
+	TypeInterval:    {unsafe.Sizeof(DInterval{}), fixedSize},
+	TypeJSON:        {unsafe.Sizeof(DJSON{}), variableSize},
+	TypeUUID:        {unsafe.Sizeof(DUuid{}), fixedSize},
+	TypeINet:        {unsafe.Sizeof(DIPAddr{}), fixedSize},
+	// TODO(jordan,justin): This seems suspicious.
+	TypeAny: {unsafe.Sizeof(DString("")), variableSize},
+}

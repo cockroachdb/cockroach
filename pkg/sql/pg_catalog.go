@@ -1519,14 +1519,14 @@ func typOid(typ parser.Type) parser.Datum {
 }
 
 func typLen(typ parser.Type) *parser.DInt {
-	if sz, variable := typ.Size(); !variable {
+	if sz, variable := parser.DatumTypeSize(typ); !variable {
 		return parser.NewDInt(parser.DInt(sz))
 	}
 	return negOneVal
 }
 
 func typByVal(typ parser.Type) parser.Datum {
-	_, variable := typ.Size()
+	_, variable := parser.DatumTypeSize(typ)
 	return parser.MakeDBool(parser.DBool(!variable))
 }
 
