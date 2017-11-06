@@ -1791,8 +1791,8 @@ func makeCheckConstraint(
 		return nil, err
 	}
 
-	var p parser.Parser
-	if err := p.AssertNoAggregationOrWindowing(expr, "CHECK expressions", semaCtx.SearchPath); err != nil {
+	var t parser.ExprTransformContext
+	if err := t.AssertNoAggregationOrWindowing(expr, "CHECK expressions", semaCtx.SearchPath); err != nil {
 		return nil, err
 	}
 

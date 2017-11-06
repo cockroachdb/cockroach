@@ -114,7 +114,7 @@ func (p *planner) Insert(
 	numInputColumns := len(cols)
 
 	cols, defaultExprs, err :=
-		sqlbase.ProcessDefaultColumns(cols, en.tableDesc, &p.parser, &p.evalCtx)
+		sqlbase.ProcessDefaultColumns(cols, en.tableDesc, &p.txCtx, &p.evalCtx)
 	if err != nil {
 		return nil, err
 	}
