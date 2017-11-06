@@ -1116,9 +1116,9 @@ func typeCheckComparisonOp(
 				pgerror.NewErrorf(pgerror.CodeInvalidParameterValueError, unsupportedCompErrFmt, sigWithErr)
 		}
 
-		fn, ok := ops.lookupImpl(retType, types.TypeTuple)
+		fn, ok := ops.lookupImpl(retType, types.FamTuple)
 		if !ok {
-			sig := fmt.Sprintf(compSignatureFmt, retType, op, types.TypeTuple)
+			sig := fmt.Sprintf(compSignatureFmt, retType, op, types.FamTuple)
 			return nil, nil, CmpOp{},
 				pgerror.NewErrorf(pgerror.CodeInvalidParameterValueError, unsupportedCompErrFmt, sig)
 		}
@@ -1136,9 +1136,9 @@ func typeCheckComparisonOp(
 		}
 		return typedLeft, rightTuple, fn, nil
 	case leftIsTuple && rightIsTuple:
-		fn, ok := ops.lookupImpl(types.TypeTuple, types.TypeTuple)
+		fn, ok := ops.lookupImpl(types.FamTuple, types.FamTuple)
 		if !ok {
-			sig := fmt.Sprintf(compSignatureFmt, types.TypeTuple, op, types.TypeTuple)
+			sig := fmt.Sprintf(compSignatureFmt, types.FamTuple, op, types.FamTuple)
 			return nil, nil, CmpOp{},
 				pgerror.NewErrorf(pgerror.CodeInvalidParameterValueError, unsupportedCompErrFmt, sig)
 		}
@@ -1177,7 +1177,7 @@ func typeCheckComparisonOp(
 
 	// Throw a typing error if overload resolution found either no compatible candidates
 	// or if it found an ambiguity.
-	collationMismatch := leftReturn.FamilyEqual(types.TypeCollatedString) && !leftReturn.Equivalent(rightReturn)
+	collationMismatch := leftReturn.FamilyEqual(types.FamCollatedString) && !leftReturn.Equivalent(rightReturn)
 	if len(fns) != 1 || collationMismatch {
 		sig := fmt.Sprintf(compSignatureFmt, leftReturn, op, rightReturn)
 		if len(fns) == 0 || collationMismatch {
@@ -1504,7 +1504,7 @@ func checkAllExprsAreTuples(ctx *SemaContext, exprs []Expr) error {
 			if err != nil {
 				return err
 			}
-			return unexpectedTypeError{expr, types.TypeTuple, typedExpr.ResolvedType()}
+			return unexpectedTypeError{expr, types.FamTuple, typedExpr.ResolvedType()}
 		}
 	}
 	return nil

@@ -81,11 +81,11 @@ func (a ArgTypes) match(types []types.T) bool {
 func (a ArgTypes) matchAt(typ types.T, i int) bool {
 	// The parameterized types for Tuples are checked in the type checking
 	// routines before getting here, so we only need to check if the argument
-	// type is a types.TypeTuple below. This allows us to avoid defining overloads
-	// for types.TypeTuple{}, types.TypeTuple{types.TypeAny}, types.TypeTuple{types.TypeAny, types.TypeAny}, etc.
+	// type is a types.FamTuple below. This allows us to avoid defining overloads
+	// for types.FamTuple{}, types.FamTuple{types.TypeAny}, types.FamTuple{types.TypeAny, types.TypeAny}, etc.
 	// for Tuple operators.
-	if typ.FamilyEqual(types.TypeTuple) {
-		typ = types.TypeTuple
+	if typ.FamilyEqual(types.FamTuple) {
+		typ = types.FamTuple
 	}
 	return i < len(a) && (typ == types.TypeNull || a[i].Typ.Equivalent(typ))
 }
