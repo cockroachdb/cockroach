@@ -74,7 +74,12 @@ type ScrubOption interface {
 	scrubOptionType()
 }
 
-func (*ScrubOptionIndex) scrubOptionType() {}
+// scrubOptionType implements the ScrubOption interface
+func (*ScrubOptionIndex) scrubOptionType()    {}
+func (*ScrubOptionPhysical) scrubOptionType() {}
+
+func (n *ScrubOptionIndex) String() string    { return AsString(n) }
+func (n *ScrubOptionPhysical) String() string { return AsString(n) }
 
 // ScrubOptionIndex represents an INDEX scrub check.
 type ScrubOptionIndex struct {
@@ -93,4 +98,10 @@ func (n *ScrubOptionIndex) Format(buf *bytes.Buffer, f FmtFlags) {
 	}
 }
 
-func (n *ScrubOptionIndex) String() string { return AsString(n) }
+// ScrubOptionPhysical represents an INDEX scrub check.
+type ScrubOptionPhysical struct{}
+
+// Format implements the NodeFormatter interface.
+func (n *ScrubOptionPhysical) Format(buf *bytes.Buffer, f FmtFlags) {
+	buf.WriteString("PHYSICAL")
+}

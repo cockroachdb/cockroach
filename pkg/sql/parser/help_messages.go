@@ -456,45 +456,46 @@ SCRUB TABLE <tablename> [WITH <option> [, ...]]
 Options:
   SCRUB TABLE ... WITH OPTIONS INDEX ALL
   SCRUB TABLE ... WITH OPTIONS INDEX (<index>...)
+  SCRUB TABLE ... WITH OPTIONS PHYSICAL
 
 `,
 	},
-	//line sql.y: 2054
+	//line sql.y: 2059
 	`SET CLUSTER SETTING`: {
 		ShortDescription: `change a cluster setting`,
-		//line sql.y: 2055
+		//line sql.y: 2060
 		Category: hCfg,
-		//line sql.y: 2056
+		//line sql.y: 2061
 		Text: `SET CLUSTER SETTING <var> { TO | = } <value>
 `,
-		//line sql.y: 2057
+		//line sql.y: 2062
 		SeeAlso: `SHOW CLUSTER SETTING, RESET CLUSTER SETTING, SET SESSION,
 WEBDOCS/cluster-settings.html
 `,
 	},
-	//line sql.y: 2078
+	//line sql.y: 2083
 	`SET SESSION`: {
 		ShortDescription: `change a session variable`,
-		//line sql.y: 2079
+		//line sql.y: 2084
 		Category: hCfg,
-		//line sql.y: 2080
+		//line sql.y: 2085
 		Text: `
 SET [SESSION] <var> { TO | = } <values...>
 SET [SESSION] TIME ZONE <tz>
 SET [SESSION] CHARACTERISTICS AS TRANSACTION ISOLATION LEVEL { SNAPSHOT | SERIALIZABLE }
 
 `,
-		//line sql.y: 2085
+		//line sql.y: 2090
 		SeeAlso: `SHOW SESSION, RESET, DISCARD, SHOW, SET CLUSTER SETTING, SET TRANSACTION,
 WEBDOCS/set-vars.html
 `,
 	},
-	//line sql.y: 2102
+	//line sql.y: 2107
 	`SET TRANSACTION`: {
 		ShortDescription: `configure the transaction settings`,
-		//line sql.y: 2103
+		//line sql.y: 2108
 		Category: hTxn,
-		//line sql.y: 2104
+		//line sql.y: 2109
 		Text: `
 SET [SESSION] TRANSACTION <txnparameters...>
 
@@ -503,245 +504,245 @@ Transaction parameters:
    PRIORITY { LOW | NORMAL | HIGH }
 
 `,
-		//line sql.y: 2111
+		//line sql.y: 2116
 		SeeAlso: `SHOW TRANSACTION, SET SESSION,
 WEBDOCS/set-transaction.html
 `,
 	},
-	//line sql.y: 2250
+	//line sql.y: 2255
 	`SHOW`: {
-		//line sql.y: 2251
+		//line sql.y: 2256
 		Category: hGroup,
-		//line sql.y: 2252
+		//line sql.y: 2257
 		Text: `
 SHOW SESSION, SHOW CLUSTER SETTING, SHOW DATABASES, SHOW TABLES, SHOW COLUMNS, SHOW INDEXES,
 SHOW CONSTRAINTS, SHOW CREATE TABLE, SHOW CREATE VIEW, SHOW USERS, SHOW TRANSACTION, SHOW BACKUP,
 SHOW JOBS, SHOW QUERIES, SHOW SESSIONS, SHOW TRACE
 `,
 	},
-	//line sql.y: 2278
+	//line sql.y: 2283
 	`SHOW SESSION`: {
 		ShortDescription: `display session variables`,
-		//line sql.y: 2279
+		//line sql.y: 2284
 		Category: hCfg,
-		//line sql.y: 2280
+		//line sql.y: 2285
 		Text: `SHOW [SESSION] { <var> | ALL }
 `,
-		//line sql.y: 2281
+		//line sql.y: 2286
 		SeeAlso: `WEBDOCS/show-vars.html
 `,
 	},
-	//line sql.y: 2302
+	//line sql.y: 2307
 	`SHOW BACKUP`: {
 		ShortDescription: `list backup contents`,
-		//line sql.y: 2303
+		//line sql.y: 2308
 		Category: hCCL,
-		//line sql.y: 2304
+		//line sql.y: 2309
 		Text: `SHOW BACKUP <location>
 `,
-		//line sql.y: 2305
+		//line sql.y: 2310
 		SeeAlso: `WEBDOCS/show-backup.html
 `,
 	},
-	//line sql.y: 2313
+	//line sql.y: 2318
 	`SHOW CLUSTER SETTING`: {
 		ShortDescription: `display cluster settings`,
-		//line sql.y: 2314
+		//line sql.y: 2319
 		Category: hCfg,
-		//line sql.y: 2315
+		//line sql.y: 2320
 		Text: `
 SHOW CLUSTER SETTING <var>
 SHOW ALL CLUSTER SETTINGS
 `,
-		//line sql.y: 2318
+		//line sql.y: 2323
 		SeeAlso: `WEBDOCS/cluster-settings.html
 `,
 	},
-	//line sql.y: 2335
+	//line sql.y: 2340
 	`SHOW COLUMNS`: {
 		ShortDescription: `list columns in relation`,
-		//line sql.y: 2336
+		//line sql.y: 2341
 		Category: hDDL,
-		//line sql.y: 2337
+		//line sql.y: 2342
 		Text: `SHOW COLUMNS FROM <tablename>
 `,
-		//line sql.y: 2338
+		//line sql.y: 2343
 		SeeAlso: `WEBDOCS/show-columns.html
 `,
 	},
-	//line sql.y: 2346
+	//line sql.y: 2351
 	`SHOW DATABASES`: {
 		ShortDescription: `list databases`,
-		//line sql.y: 2347
+		//line sql.y: 2352
 		Category: hDDL,
-		//line sql.y: 2348
+		//line sql.y: 2353
 		Text: `SHOW DATABASES
 `,
-		//line sql.y: 2349
+		//line sql.y: 2354
 		SeeAlso: `WEBDOCS/show-databases.html
 `,
 	},
-	//line sql.y: 2357
+	//line sql.y: 2362
 	`SHOW GRANTS`: {
 		ShortDescription: `list grants`,
-		//line sql.y: 2358
+		//line sql.y: 2363
 		Category: hPriv,
-		//line sql.y: 2359
+		//line sql.y: 2364
 		Text: `SHOW GRANTS [ON <targets...>] [FOR <users...>]
 `,
-		//line sql.y: 2360
+		//line sql.y: 2365
 		SeeAlso: `WEBDOCS/show-grants.html
 `,
 	},
-	//line sql.y: 2368
+	//line sql.y: 2373
 	`SHOW INDEXES`: {
 		ShortDescription: `list indexes`,
-		//line sql.y: 2369
+		//line sql.y: 2374
 		Category: hDDL,
-		//line sql.y: 2370
+		//line sql.y: 2375
 		Text: `SHOW INDEXES FROM <tablename>
 `,
-		//line sql.y: 2371
+		//line sql.y: 2376
 		SeeAlso: `WEBDOCS/show-index.html
 `,
 	},
-	//line sql.y: 2389
+	//line sql.y: 2394
 	`SHOW CONSTRAINTS`: {
 		ShortDescription: `list constraints`,
-		//line sql.y: 2390
+		//line sql.y: 2395
 		Category: hDDL,
-		//line sql.y: 2391
+		//line sql.y: 2396
 		Text: `SHOW CONSTRAINTS FROM <tablename>
 `,
-		//line sql.y: 2392
+		//line sql.y: 2397
 		SeeAlso: `WEBDOCS/show-constraints.html
 `,
 	},
-	//line sql.y: 2405
+	//line sql.y: 2410
 	`SHOW QUERIES`: {
 		ShortDescription: `list running queries`,
-		//line sql.y: 2406
+		//line sql.y: 2411
 		Category: hMisc,
-		//line sql.y: 2407
+		//line sql.y: 2412
 		Text: `SHOW [CLUSTER | LOCAL] QUERIES
 `,
-		//line sql.y: 2408
+		//line sql.y: 2413
 		SeeAlso: `CANCEL QUERY
 `,
 	},
-	//line sql.y: 2424
+	//line sql.y: 2429
 	`SHOW JOBS`: {
 		ShortDescription: `list background jobs`,
-		//line sql.y: 2425
+		//line sql.y: 2430
 		Category: hMisc,
-		//line sql.y: 2426
+		//line sql.y: 2431
 		Text: `SHOW JOBS
 `,
-		//line sql.y: 2427
+		//line sql.y: 2432
 		SeeAlso: `CANCEL JOB, PAUSE JOB, RESUME JOB
 `,
 	},
-	//line sql.y: 2435
+	//line sql.y: 2440
 	`SHOW TRACE`: {
 		ShortDescription: `display an execution trace`,
-		//line sql.y: 2436
+		//line sql.y: 2441
 		Category: hMisc,
-		//line sql.y: 2437
+		//line sql.y: 2442
 		Text: `
 SHOW [KV] TRACE FOR SESSION
 SHOW [KV] TRACE FOR <statement>
 `,
-		//line sql.y: 2440
+		//line sql.y: 2445
 		SeeAlso: `EXPLAIN
 `,
 	},
-	//line sql.y: 2461
+	//line sql.y: 2466
 	`SHOW SESSIONS`: {
 		ShortDescription: `list open client sessions`,
-		//line sql.y: 2462
+		//line sql.y: 2467
 		Category: hMisc,
-		//line sql.y: 2463
+		//line sql.y: 2468
 		Text: `SHOW [CLUSTER | LOCAL] SESSIONS
 `,
 	},
-	//line sql.y: 2479
+	//line sql.y: 2484
 	`SHOW TABLES`: {
 		ShortDescription: `list tables`,
-		//line sql.y: 2480
+		//line sql.y: 2485
 		Category: hDDL,
-		//line sql.y: 2481
+		//line sql.y: 2486
 		Text: `SHOW TABLES [FROM <databasename>]
 `,
-		//line sql.y: 2482
+		//line sql.y: 2487
 		SeeAlso: `WEBDOCS/show-tables.html
 `,
 	},
-	//line sql.y: 2494
+	//line sql.y: 2499
 	`SHOW TRANSACTION`: {
 		ShortDescription: `display current transaction properties`,
-		//line sql.y: 2495
+		//line sql.y: 2500
 		Category: hCfg,
-		//line sql.y: 2496
+		//line sql.y: 2501
 		Text: `SHOW TRANSACTION {ISOLATION LEVEL | PRIORITY | STATUS}
 `,
-		//line sql.y: 2497
+		//line sql.y: 2502
 		SeeAlso: `WEBDOCS/show-transaction.html
 `,
 	},
-	//line sql.y: 2516
+	//line sql.y: 2521
 	`SHOW CREATE TABLE`: {
 		ShortDescription: `display the CREATE TABLE statement for a table`,
-		//line sql.y: 2517
+		//line sql.y: 2522
 		Category: hDDL,
-		//line sql.y: 2518
+		//line sql.y: 2523
 		Text: `SHOW CREATE TABLE <tablename>
 `,
-		//line sql.y: 2519
+		//line sql.y: 2524
 		SeeAlso: `WEBDOCS/show-create-table.html
 `,
 	},
-	//line sql.y: 2527
+	//line sql.y: 2532
 	`SHOW CREATE VIEW`: {
 		ShortDescription: `display the CREATE VIEW statement for a view`,
-		//line sql.y: 2528
+		//line sql.y: 2533
 		Category: hDDL,
-		//line sql.y: 2529
+		//line sql.y: 2534
 		Text: `SHOW CREATE VIEW <viewname>
 `,
-		//line sql.y: 2530
+		//line sql.y: 2535
 		SeeAlso: `WEBDOCS/show-create-view.html
 `,
 	},
-	//line sql.y: 2538
+	//line sql.y: 2543
 	`SHOW USERS`: {
 		ShortDescription: `list defined users`,
-		//line sql.y: 2539
+		//line sql.y: 2544
 		Category: hPriv,
-		//line sql.y: 2540
+		//line sql.y: 2545
 		Text: `SHOW USERS
 `,
-		//line sql.y: 2541
+		//line sql.y: 2546
 		SeeAlso: `CREATE USER, DROP USER, WEBDOCS/show-users.html
 `,
 	},
-	//line sql.y: 2614
+	//line sql.y: 2619
 	`PAUSE JOB`: {
 		ShortDescription: `pause a background job`,
-		//line sql.y: 2615
+		//line sql.y: 2620
 		Category: hMisc,
-		//line sql.y: 2616
+		//line sql.y: 2621
 		Text: `PAUSE JOB <jobid>
 `,
-		//line sql.y: 2617
+		//line sql.y: 2622
 		SeeAlso: `SHOW JOBS, CANCEL JOB, RESUME JOB
 `,
 	},
-	//line sql.y: 2625
+	//line sql.y: 2630
 	`CREATE TABLE`: {
 		ShortDescription: `create a new table`,
-		//line sql.y: 2626
+		//line sql.y: 2631
 		Category: hDDL,
-		//line sql.y: 2627
+		//line sql.y: 2632
 		Text: `
 CREATE TABLE [IF NOT EXISTS] <tablename> ( <elements...> ) [<interleave>]
 CREATE TABLE [IF NOT EXISTS] <tablename> [( <colnames...> )] AS <source>
@@ -769,54 +770,54 @@ Interleave clause:
    INTERLEAVE IN PARENT <tablename> ( <colnames...> ) [CASCADE | RESTRICT]
 
 `,
-		//line sql.y: 2653
+		//line sql.y: 2658
 		SeeAlso: `SHOW TABLES, CREATE VIEW, SHOW CREATE TABLE,
 WEBDOCS/create-table.html
 WEBDOCS/create-table-as.html
 `,
 	},
-	//line sql.y: 3133
+	//line sql.y: 3138
 	`TRUNCATE`: {
 		ShortDescription: `empty one or more tables`,
-		//line sql.y: 3134
+		//line sql.y: 3139
 		Category: hDML,
-		//line sql.y: 3135
+		//line sql.y: 3140
 		Text: `TRUNCATE [TABLE] <tablename> [, ...] [CASCADE | RESTRICT]
 `,
-		//line sql.y: 3136
+		//line sql.y: 3141
 		SeeAlso: `WEBDOCS/truncate.html
 `,
 	},
-	//line sql.y: 3144
+	//line sql.y: 3149
 	`CREATE USER`: {
 		ShortDescription: `define a new user`,
-		//line sql.y: 3145
+		//line sql.y: 3150
 		Category: hPriv,
-		//line sql.y: 3146
+		//line sql.y: 3151
 		Text: `CREATE USER [IF NOT EXISTS] <name> [ [WITH] PASSWORD <passwd> ]
 `,
-		//line sql.y: 3147
+		//line sql.y: 3152
 		SeeAlso: `DROP USER, SHOW USERS, WEBDOCS/create-user.html
 `,
 	},
-	//line sql.y: 3169
+	//line sql.y: 3174
 	`CREATE VIEW`: {
 		ShortDescription: `create a new view`,
-		//line sql.y: 3170
+		//line sql.y: 3175
 		Category: hDDL,
-		//line sql.y: 3171
+		//line sql.y: 3176
 		Text: `CREATE VIEW <viewname> [( <colnames...> )] AS <source>
 `,
-		//line sql.y: 3172
+		//line sql.y: 3177
 		SeeAlso: `CREATE TABLE, SHOW CREATE VIEW, WEBDOCS/create-view.html
 `,
 	},
-	//line sql.y: 3186
+	//line sql.y: 3191
 	`CREATE INDEX`: {
 		ShortDescription: `create a new index`,
-		//line sql.y: 3187
+		//line sql.y: 3192
 		Category: hDDL,
-		//line sql.y: 3188
+		//line sql.y: 3193
 		Text: `
 CREATE [UNIQUE] INDEX [IF NOT EXISTS] [<idxname>]
        ON <tablename> ( <colname> [ASC | DESC] [, ...] )
@@ -826,53 +827,53 @@ Interleave clause:
    INTERLEAVE IN PARENT <tablename> ( <colnames...> ) [CASCADE | RESTRICT]
 
 `,
-		//line sql.y: 3196
+		//line sql.y: 3201
 		SeeAlso: `CREATE TABLE, SHOW INDEXES, SHOW CREATE INDEX,
 WEBDOCS/create-index.html
 `,
 	},
-	//line sql.y: 3346
+	//line sql.y: 3351
 	`RELEASE`: {
 		ShortDescription: `complete a retryable block`,
-		//line sql.y: 3347
+		//line sql.y: 3352
 		Category: hTxn,
-		//line sql.y: 3348
+		//line sql.y: 3353
 		Text: `RELEASE [SAVEPOINT] cockroach_restart
 `,
-		//line sql.y: 3349
+		//line sql.y: 3354
 		SeeAlso: `SAVEPOINT, WEBDOCS/savepoint.html
 `,
 	},
-	//line sql.y: 3357
+	//line sql.y: 3362
 	`RESUME JOB`: {
 		ShortDescription: `resume a background job`,
-		//line sql.y: 3358
+		//line sql.y: 3363
 		Category: hMisc,
-		//line sql.y: 3359
+		//line sql.y: 3364
 		Text: `RESUME JOB <jobid>
 `,
-		//line sql.y: 3360
+		//line sql.y: 3365
 		SeeAlso: `SHOW JOBS, CANCEL JOB, PAUSE JOB
 `,
 	},
-	//line sql.y: 3368
+	//line sql.y: 3373
 	`SAVEPOINT`: {
 		ShortDescription: `start a retryable block`,
-		//line sql.y: 3369
+		//line sql.y: 3374
 		Category: hTxn,
-		//line sql.y: 3370
+		//line sql.y: 3375
 		Text: `SAVEPOINT cockroach_restart
 `,
-		//line sql.y: 3371
+		//line sql.y: 3376
 		SeeAlso: `RELEASE, WEBDOCS/savepoint.html
 `,
 	},
-	//line sql.y: 3385
+	//line sql.y: 3390
 	`BEGIN`: {
 		ShortDescription: `start a transaction`,
-		//line sql.y: 3386
+		//line sql.y: 3391
 		Category: hTxn,
-		//line sql.y: 3387
+		//line sql.y: 3392
 		Text: `
 BEGIN [TRANSACTION] [ <txnparameter> [[,] ...] ]
 START TRANSACTION [ <txnparameter> [[,] ...] ]
@@ -882,97 +883,97 @@ Transaction parameters:
    PRIORITY { LOW | NORMAL | HIGH }
 
 `,
-		//line sql.y: 3395
+		//line sql.y: 3400
 		SeeAlso: `COMMIT, ROLLBACK, WEBDOCS/begin-transaction.html
 `,
 	},
-	//line sql.y: 3408
+	//line sql.y: 3413
 	`COMMIT`: {
 		ShortDescription: `commit the current transaction`,
-		//line sql.y: 3409
+		//line sql.y: 3414
 		Category: hTxn,
-		//line sql.y: 3410
+		//line sql.y: 3415
 		Text: `
 COMMIT [TRANSACTION]
 END [TRANSACTION]
 `,
-		//line sql.y: 3413
+		//line sql.y: 3418
 		SeeAlso: `BEGIN, ROLLBACK, WEBDOCS/commit-transaction.html
 `,
 	},
-	//line sql.y: 3426
+	//line sql.y: 3431
 	`ROLLBACK`: {
 		ShortDescription: `abort the current transaction`,
-		//line sql.y: 3427
+		//line sql.y: 3432
 		Category: hTxn,
-		//line sql.y: 3428
+		//line sql.y: 3433
 		Text: `ROLLBACK [TRANSACTION] [TO [SAVEPOINT] cockroach_restart]
 `,
-		//line sql.y: 3429
+		//line sql.y: 3434
 		SeeAlso: `BEGIN, COMMIT, SAVEPOINT, WEBDOCS/rollback-transaction.html
 `,
 	},
-	//line sql.y: 3542
+	//line sql.y: 3547
 	`CREATE DATABASE`: {
 		ShortDescription: `create a new database`,
-		//line sql.y: 3543
+		//line sql.y: 3548
 		Category: hDDL,
-		//line sql.y: 3544
+		//line sql.y: 3549
 		Text: `CREATE DATABASE [IF NOT EXISTS] <name>
 `,
-		//line sql.y: 3545
+		//line sql.y: 3550
 		SeeAlso: `WEBDOCS/create-database.html
 `,
 	},
-	//line sql.y: 3614
+	//line sql.y: 3619
 	`INSERT`: {
 		ShortDescription: `create new rows in a table`,
-		//line sql.y: 3615
+		//line sql.y: 3620
 		Category: hDML,
-		//line sql.y: 3616
+		//line sql.y: 3621
 		Text: `
 INSERT INTO <tablename> [[AS] <name>] [( <colnames...> )]
        <selectclause>
        [ON CONFLICT [( <colnames...> )] {DO UPDATE SET ... [WHERE <expr>] | DO NOTHING}]
        [RETURNING <exprs...>]
 `,
-		//line sql.y: 3621
+		//line sql.y: 3626
 		SeeAlso: `UPSERT, UPDATE, DELETE, WEBDOCS/insert.html
 `,
 	},
-	//line sql.y: 3638
+	//line sql.y: 3643
 	`UPSERT`: {
 		ShortDescription: `create or replace rows in a table`,
-		//line sql.y: 3639
+		//line sql.y: 3644
 		Category: hDML,
-		//line sql.y: 3640
+		//line sql.y: 3645
 		Text: `
 UPSERT INTO <tablename> [AS <name>] [( <colnames...> )]
        <selectclause>
        [RETURNING <exprs...>]
 `,
-		//line sql.y: 3644
+		//line sql.y: 3649
 		SeeAlso: `INSERT, UPDATE, DELETE, WEBDOCS/upsert.html
 `,
 	},
-	//line sql.y: 3720
+	//line sql.y: 3725
 	`UPDATE`: {
 		ShortDescription: `update rows of a table`,
-		//line sql.y: 3721
+		//line sql.y: 3726
 		Category: hDML,
-		//line sql.y: 3722
+		//line sql.y: 3727
 		Text: `UPDATE <tablename> [[AS] <name>] SET ... [WHERE <expr>] [RETURNING <exprs...>]
 `,
-		//line sql.y: 3723
+		//line sql.y: 3728
 		SeeAlso: `INSERT, UPSERT, DELETE, WEBDOCS/update.html
 `,
 	},
-	//line sql.y: 3889
+	//line sql.y: 3894
 	`<SELECTCLAUSE>`: {
 		ShortDescription: `access tabular data`,
-		//line sql.y: 3890
+		//line sql.y: 3895
 		Category: hDML,
-		//line sql.y: 3891
+		//line sql.y: 3896
 		Text: `
 Select clause:
   TABLE <tablename>
@@ -980,12 +981,12 @@ Select clause:
   SELECT ... [ { INTERSECT | UNION | EXCEPT } [ ALL | DISTINCT ] <selectclause> ]
 `,
 	},
-	//line sql.y: 3902
+	//line sql.y: 3907
 	`SELECT`: {
 		ShortDescription: `retrieve rows from a data source and compute a result`,
-		//line sql.y: 3903
+		//line sql.y: 3908
 		Category: hDML,
-		//line sql.y: 3904
+		//line sql.y: 3909
 		Text: `
 SELECT [DISTINCT]
        { <expr> [[AS] <name>] | [ [<dbname>.] <tablename>. ] * } [, ...]
@@ -1000,40 +1001,40 @@ SELECT [DISTINCT]
        [ OFFSET <expr> [ ROW | ROWS ] ]
        [ FOR UPDATE ]
 `,
-		//line sql.y: 3917
+		//line sql.y: 3922
 		SeeAlso: `WEBDOCS/select.html
 `,
 	},
-	//line sql.y: 3977
+	//line sql.y: 3982
 	`TABLE`: {
 		ShortDescription: `select an entire table`,
-		//line sql.y: 3978
+		//line sql.y: 3983
 		Category: hDML,
-		//line sql.y: 3979
+		//line sql.y: 3984
 		Text: `TABLE <tablename>
 `,
-		//line sql.y: 3980
+		//line sql.y: 3985
 		SeeAlso: `SELECT, VALUES, WEBDOCS/table-expressions.html
 `,
 	},
-	//line sql.y: 4243
+	//line sql.y: 4248
 	`VALUES`: {
 		ShortDescription: `select a given set of values`,
-		//line sql.y: 4244
+		//line sql.y: 4249
 		Category: hDML,
-		//line sql.y: 4245
+		//line sql.y: 4250
 		Text: `VALUES ( <exprs...> ) [, ...]
 `,
-		//line sql.y: 4246
+		//line sql.y: 4251
 		SeeAlso: `SELECT, TABLE, WEBDOCS/table-expressions.html
 `,
 	},
-	//line sql.y: 4351
+	//line sql.y: 4356
 	`<SOURCE>`: {
 		ShortDescription: `define a data source for SELECT`,
-		//line sql.y: 4352
+		//line sql.y: 4357
 		Category: hDML,
-		//line sql.y: 4353
+		//line sql.y: 4358
 		Text: `
 Data sources:
   <tablename> [ @ { <idxname> | <indexhint> } ]
@@ -1053,7 +1054,7 @@ Index hints:
   '{' NO_INDEX_JOIN [, ...] '}'
 
 `,
-		//line sql.y: 4371
+		//line sql.y: 4376
 		SeeAlso: `WEBDOCS/table-expressions.html
 `,
 	},
