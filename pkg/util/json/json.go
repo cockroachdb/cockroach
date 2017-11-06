@@ -27,6 +27,7 @@ import (
 
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/stringencoding"
 )
 
@@ -54,6 +55,10 @@ type JSON interface {
 	Format(buf *bytes.Buffer)
 	// Size returns the size of the JSON document in bytes.
 	Size() uintptr
+
+	// EncodeInvertedIndexKeys takes in a key prefix and returns a slice of inverted index keys,
+	// one per path through the receiver.
+	EncodeInvertedIndexKeys(b []byte) [][]byte
 
 	// FetchValKey implements the `->` operator for strings, returning nil if the
 	// key is not found.
@@ -327,6 +332,51 @@ func ParseJSON(s string) (JSON, error) {
 		return nil, errTrailingCharacters
 	}
 	return MakeJSON(result)
+}
+
+func (j jsonNull) EncodeInvertedIndexKeys(b []byte) [][]byte {
+	return [][]byte{encoding.EncodeNullAscending(b)}
+}
+func (jsonTrue) EncodeInvertedIndexKeys(b []byte) [][]byte {
+	return [][]byte{encoding.EncodeTrueAscending(b)}
+}
+func (jsonFalse) EncodeInvertedIndexKeys(b []byte) [][]byte {
+	return [][]byte{encoding.EncodeFalseAscending(b)}
+}
+func (j jsonString) EncodeInvertedIndexKeys(b []byte) [][]byte {
+	return [][]byte{encoding.EncodeStringAscending(b, string(j))}
+}
+func (j jsonNumber) EncodeInvertedIndexKeys(b []byte) [][]byte {
+	var dec = apd.Decimal(j)
+	return [][]byte{encoding.EncodeDecimalAscending(b, &dec)}
+}
+func (j jsonArray) EncodeInvertedIndexKeys(b []byte) [][]byte {
+	var outKeys [][]byte
+
+	for i := range j {
+		for _, childBytes := range j[i].EncodeInvertedIndexKeys(nil) {
+			encodedKey := bytes.Join([][]byte{b, encoding.EncodeArrayAscending(nil), childBytes}, nil)
+			outKeys = append(outKeys, encodedKey)
+		}
+	}
+
+	return outKeys
+}
+
+func (j jsonObject) EncodeInvertedIndexKeys(b []byte) [][]byte {
+	var outKeys [][]byte
+	for i := range j {
+		for _, childBytes := range j[i].v.EncodeInvertedIndexKeys(nil) {
+			encodedKey := bytes.Join([][]byte{b,
+				encoding.EncodeNotNullAscending(nil),
+				encoding.EncodeStringAscending(nil, string(j[i].k)),
+				childBytes}, nil)
+
+			outKeys = append(outKeys, encodedKey)
+		}
+	}
+
+	return outKeys
 }
 
 // MakeJSON returns a JSON value given a Go-style representation of JSON.
