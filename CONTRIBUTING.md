@@ -118,7 +118,7 @@ following guidelines:
   with "Release note (category):", where the "category" is one of the following:
   - cli change
   - sql change
-  - web ui change
+  - admin ui change
   - performance improvement
   - bug fix
   - general change (e.g., change of required Go version)
