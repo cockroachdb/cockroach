@@ -43,6 +43,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/jobs"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -2336,7 +2337,7 @@ func golangFillQueryArguments(pinfo *parser.PlaceholderInfo, args []interface{})
 
 func checkResultType(typ parser.Type) error {
 	// Compare all types that can rely on == equality.
-	switch parser.UnwrapType(typ) {
+	switch types.UnwrapType(typ) {
 	case parser.TypeNull:
 	case parser.TypeBool:
 	case parser.TypeInt:
@@ -2363,7 +2364,7 @@ func checkResultType(typ parser.Type) error {
 		istype := typ.FamilyEqual
 		switch {
 		case istype(parser.TypeArray):
-			if istype(parser.UnwrapType(typ).(parser.TArray).Typ) {
+			if istype(types.UnwrapType(typ).(parser.TArray).Typ) {
 				return pgerror.Unimplemented("nested arrays", "arrays cannot have arrays as element type")
 			}
 		case istype(parser.TypeCollatedString):

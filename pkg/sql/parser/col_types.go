@@ -21,6 +21,7 @@ import (
 
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	types "github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 )
 
 // CastTargetType represents a type that is a valid cast target.
@@ -575,7 +576,7 @@ func DatumTypeToColumnType(t Type) (ColumnType, error) {
 			return nil, err
 		}
 		return arrayOf(elemTyp, Exprs(nil))
-	case tOidWrapper:
+	case types.TOidWrapper:
 		return DatumTypeToColumnType(typ.Type)
 	}
 
@@ -618,7 +619,7 @@ func CastTargetToDatumType(t CastTargetType) Type {
 	case *CollatedStringColType:
 		return TCollatedString{Locale: ct.Locale}
 	case *ArrayColType:
-		return TArray{CastTargetToDatumType(ct.ParamType)}
+		return TArray{Typ: CastTargetToDatumType(ct.ParamType)}
 	case *VectorColType:
 		return TypeIntVector
 	case *OidColType:

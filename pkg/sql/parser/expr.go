@@ -17,6 +17,8 @@ package parser
 import (
 	"bytes"
 	"fmt"
+
+	types "github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 )
 
 // Expr represents an expression.
@@ -1126,7 +1128,7 @@ var (
 
 // validCastTypes returns a set of types that can be cast into the provided type.
 func validCastTypes(t Type) []Type {
-	switch UnwrapType(t) {
+	switch types.UnwrapType(t) {
 	case TypeBool:
 		return boolCastTypes
 	case TypeInt:

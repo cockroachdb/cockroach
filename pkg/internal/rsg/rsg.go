@@ -23,6 +23,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/internal/rsg/yacc"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/ipaddr"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -216,7 +217,7 @@ func (r *RSG) GenerateRandomArg(typ parser.Type) string {
 		return "NULL"
 	}
 	var v interface{}
-	switch parser.UnwrapType(typ) {
+	switch types.UnwrapType(typ) {
 	case parser.TypeInt:
 		v = r.Int()
 	case parser.TypeFloat, parser.TypeDecimal:
@@ -257,7 +258,7 @@ func (r *RSG) GenerateRandomArg(typ parser.Type) string {
 		v = "NULL"
 	default:
 		// Check types that can't be compared using equality
-		switch parser.UnwrapType(typ).(type) {
+		switch types.UnwrapType(typ).(type) {
 		case parser.TTuple,
 			parser.TArray:
 			v = "NULL"

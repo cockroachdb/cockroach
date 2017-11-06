@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	types "github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
@@ -231,12 +232,12 @@ func prependToMaybeNullArray(typ Type, left Datum, right Datum) (Datum, error) {
 // existing arrays. This would optimize the common case of appending an element
 // (or array) to an array from O(n) to O(1).
 func initArrayElementConcatenation() {
-	for _, t := range TypesAnyNonArray {
+	for _, t := range types.TypesAnyNonArray {
 		typ := t
 		BinOps[Concat] = append(BinOps[Concat], BinOp{
-			LeftType:     TArray{typ},
+			LeftType:     TArray{Typ: typ},
 			RightType:    typ,
-			ReturnType:   TArray{typ},
+			ReturnType:   TArray{Typ: typ},
 			nullableArgs: true,
 			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				return appendToMaybeNullArray(typ, left, right)
@@ -245,8 +246,8 @@ func initArrayElementConcatenation() {
 
 		BinOps[Concat] = append(BinOps[Concat], BinOp{
 			LeftType:     typ,
-			RightType:    TArray{typ},
-			ReturnType:   TArray{typ},
+			RightType:    TArray{Typ: typ},
+			ReturnType:   TArray{Typ: typ},
 			nullableArgs: true,
 			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				return prependToMaybeNullArray(typ, left, right)
@@ -278,12 +279,12 @@ func concatArrays(typ Type, left Datum, right Datum) (Datum, error) {
 }
 
 func initArrayToArrayConcatenation() {
-	for _, t := range TypesAnyNonArray {
+	for _, t := range types.TypesAnyNonArray {
 		typ := t
 		BinOps[Concat] = append(BinOps[Concat], BinOp{
-			LeftType:     TArray{typ},
-			RightType:    TArray{typ},
-			ReturnType:   TArray{typ},
+			LeftType:     TArray{Typ: typ},
+			RightType:    TArray{Typ: typ},
+			ReturnType:   TArray{Typ: typ},
 			nullableArgs: true,
 			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				return concatArrays(typ, left, right)
@@ -1140,7 +1141,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 	FetchValPath: {
 		BinOp{
 			LeftType:   TypeJSON,
-			RightType:  TArray{TypeString},
+			RightType:  TArray{Typ: TypeString},
 			ReturnType: TypeJSON,
 			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				return getJSONPath(*left.(*DJSON), *MustBeDArray(right)), nil
@@ -1178,7 +1179,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 	FetchTextPath: {
 		BinOp{
 			LeftType:   TypeJSON,
-			RightType:  TArray{TypeString},
+			RightType:  TArray{Typ: TypeString},
 			ReturnType: TypeJSON,
 			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				res := getJSONPath(*left.(*DJSON), *MustBeDArray(right))
@@ -1227,10 +1228,10 @@ func (CmpOp) preferred() bool {
 }
 
 func init() {
-	for _, t := range TypesAnyNonArray {
+	for _, t := range types.TypesAnyNonArray {
 		CmpOps[EQ] = append(CmpOps[EQ], CmpOp{
-			LeftType:  TArray{t},
-			RightType: TArray{t},
+			LeftType:  TArray{Typ: t},
+			RightType: TArray{Typ: t},
 			fn:        cmpOpScalarEQFn,
 		})
 	}
@@ -1764,7 +1765,7 @@ var CmpOps = map[ComparisonOperator]cmpOpOverload{
 	SomeExistence: {
 		CmpOp{
 			LeftType:  TypeJSON,
-			RightType: TArray{TypeString},
+			RightType: TArray{Typ: TypeString},
 			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				for _, k := range MustBeDArray(right).Array {
 					if left.(*DJSON).JSON.Exists(string(MustBeDString(k))) {
@@ -1779,7 +1780,7 @@ var CmpOps = map[ComparisonOperator]cmpOpOverload{
 	AllExistence: {
 		CmpOp{
 			LeftType:  TypeJSON,
-			RightType: TArray{TypeString},
+			RightType: TArray{Typ: TypeString},
 			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				for _, k := range MustBeDArray(right).Array {
 					if !left.(*DJSON).JSON.Exists(string(MustBeDString(k))) {
