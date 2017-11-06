@@ -15,6 +15,8 @@
 package sql
 
 import (
+	"fmt"
+
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/config"
@@ -129,4 +131,14 @@ func GetTableDesc(cfg config.SystemConfig, id sqlbase.ID) (*sqlbase.TableDescrip
 		return desc.GetTable(), nil
 	}
 	return nil, nil
+}
+
+// GenerateSubzoneSpans is a hook point for a CCL function that constructs from
+// a TableDescriptor the entries mapping zone config spans to subzones for use
+// in the SubzonzeSpans field of config.ZoneConfig. If no CCL hook is installed,
+// it returns an error that directs users to use a CCL binary.
+var GenerateSubzoneSpans = func(
+	*sqlbase.TableDescriptor, []config.Subzone,
+) ([]config.SubzoneSpan, error) {
+	return nil, fmt.Errorf("setting zone configs on indexes or partitions requires a CCL binary")
 }
