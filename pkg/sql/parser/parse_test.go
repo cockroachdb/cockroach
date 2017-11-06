@@ -1937,7 +1937,7 @@ func BenchmarkEncodeSQLString(b *testing.B) {
 	str := strings.Repeat("foo", 10000)
 	b.Run("old version", func(b *testing.B) {
 		for i := 0; i < b.N; i++ {
-			encodeSQLStringWithFlags(bytes.NewBuffer(nil), str, FmtBareStrings)
+			encodeSQLStringWithFlags(bytes.NewBuffer(nil), str, encodeFlags{bareStrings: true})
 		}
 	})
 	b.Run("new version", func(b *testing.B) {

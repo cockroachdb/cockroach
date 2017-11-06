@@ -834,7 +834,7 @@ func (d *DString) Format(buf *bytes.Buffer, f FmtFlags) {
 	if f.withinArray {
 		encodeSQLStringInsideArray(buf, string(*d))
 	} else {
-		encodeSQLStringWithFlags(buf, string(*d), f)
+		encodeSQLStringWithFlags(buf, string(*d), f.encodeFlags)
 	}
 }
 
@@ -904,7 +904,7 @@ func (d *DCollatedString) Format(buf *bytes.Buffer, f FmtFlags) {
 	} else {
 		encodeSQLString(buf, d.Contents)
 		buf.WriteString(" COLLATE ")
-		encodeUnrestrictedSQLIdent(buf, d.Locale, FmtSimple)
+		encodeUnrestrictedSQLIdent(buf, d.Locale, encodeFlags{})
 	}
 }
 
@@ -1126,11 +1126,11 @@ func (*DUuid) AmbiguousFormat() bool { return false }
 
 // Format implements the NodeFormatter interface.
 func (d *DUuid) Format(buf *bytes.Buffer, f FmtFlags) {
-	if !f.bareStrings {
+	if !f.encodeFlags.bareStrings {
 		buf.WriteByte('\'')
 	}
 	buf.WriteString(d.UUID.String())
-	if !f.bareStrings {
+	if !f.encodeFlags.bareStrings {
 		buf.WriteByte('\'')
 	}
 }
@@ -1284,11 +1284,11 @@ func (*DIPAddr) AmbiguousFormat() bool {
 
 // Format implements the NodeFormatter interface.
 func (d *DIPAddr) Format(buf *bytes.Buffer, f FmtFlags) {
-	if !f.bareStrings {
+	if !f.encodeFlags.bareStrings {
 		buf.WriteByte('\'')
 	}
 	buf.WriteString(d.IPAddr.String())
-	if !f.bareStrings {
+	if !f.encodeFlags.bareStrings {
 		buf.WriteByte('\'')
 	}
 }
@@ -1393,11 +1393,11 @@ func (*DDate) AmbiguousFormat() bool { return true }
 
 // Format implements the NodeFormatter interface.
 func (d *DDate) Format(buf *bytes.Buffer, f FmtFlags) {
-	if !f.bareStrings {
+	if !f.encodeFlags.bareStrings {
 		buf.WriteByte('\'')
 	}
 	buf.WriteString(timeutil.Unix(int64(*d)*secondsInDay, 0).Format(dateFormat))
-	if !f.bareStrings {
+	if !f.encodeFlags.bareStrings {
 		buf.WriteByte('\'')
 	}
 }
@@ -1626,11 +1626,11 @@ func (*DTimestamp) AmbiguousFormat() bool { return true }
 
 // Format implements the NodeFormatter interface.
 func (d *DTimestamp) Format(buf *bytes.Buffer, f FmtFlags) {
-	if !f.bareStrings {
+	if !f.encodeFlags.bareStrings {
 		buf.WriteByte('\'')
 	}
 	buf.WriteString(d.UTC().Format(TimestampOutputFormat))
-	if !f.bareStrings {
+	if !f.encodeFlags.bareStrings {
 		buf.WriteByte('\'')
 	}
 }
@@ -1723,11 +1723,11 @@ func (*DTimestampTZ) AmbiguousFormat() bool { return true }
 
 // Format implements the NodeFormatter interface.
 func (d *DTimestampTZ) Format(buf *bytes.Buffer, f FmtFlags) {
-	if !f.bareStrings {
+	if !f.encodeFlags.bareStrings {
 		buf.WriteByte('\'')
 	}
 	buf.WriteString(d.Time.Format(TimestampOutputFormat))
-	if !f.bareStrings {
+	if !f.encodeFlags.bareStrings {
 		buf.WriteByte('\'')
 	}
 }
@@ -1929,11 +1929,11 @@ func (*DInterval) AmbiguousFormat() bool { return true }
 
 // Format implements the NodeFormatter interface.
 func (d *DInterval) Format(buf *bytes.Buffer, f FmtFlags) {
-	if !f.bareStrings {
+	if !f.encodeFlags.bareStrings {
 		buf.WriteByte('\'')
 	}
 	d.Duration.Format(buf)
-	if !f.bareStrings {
+	if !f.encodeFlags.bareStrings {
 		buf.WriteByte('\'')
 	}
 }
@@ -2665,7 +2665,7 @@ func (d *DOid) Format(buf *bytes.Buffer, f FmtFlags) {
 	if d.semanticType == oidColTypeOid || d.name == "" {
 		FormatNode(buf, f, &d.DInt)
 	} else {
-		encodeSQLStringWithFlags(buf, d.name, FmtBareStrings)
+		encodeSQLStringWithFlags(buf, d.name, encodeFlags{bareStrings: true})
 	}
 }
 
