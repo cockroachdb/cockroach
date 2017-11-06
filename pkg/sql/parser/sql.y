@@ -449,8 +449,8 @@ func (u *sqlSymUnion) scrubOption() ScrubOption {
 %token <str>   OF OFF OFFSET OID ON ONLY OPTIONS OR
 %token <str>   ORDER ORDINALITY OUT OUTER OVER OVERLAPS OVERLAY
 
-%token <str>   PARENT PARTIAL PARTITION PASSWORD PAUSE PLACING PLANS POSITION
-%token <str>   PRECEDING PRECISION PREPARE PRIMARY PRIORITY
+%token <str>   PARENT PARTIAL PARTITION PASSWORD PAUSE PHYSICAL PLACING
+%token <str>   PLANS POSITION PRECEDING PRECISION PREPARE PRIMARY PRIORITY
 
 %token <str>   QUERIES QUERY
 
@@ -2024,6 +2024,7 @@ scrub_stmt:
 // Options:
 //   SCRUB TABLE ... WITH OPTIONS INDEX ALL
 //   SCRUB TABLE ... WITH OPTIONS INDEX (<index>...)
+//   SCRUB TABLE ... WITH OPTIONS PHYSICAL
 //
 scrub_table_stmt:
   EXPERIMENTAL SCRUB TABLE qualified_name
@@ -2053,6 +2054,10 @@ scrub_option:
 | INDEX '(' name_list ')'
   {
     $$.val = &ScrubOptionIndex{IndexNames: $3.nameList()}
+  }
+| PHYSICAL
+  {
+    $$.val = &ScrubOptionPhysical{}
   }
 
 // %Help: SET CLUSTER SETTING - change a cluster setting
@@ -6681,6 +6686,7 @@ unreserved_keyword:
 | PARTITION
 | PASSWORD
 | PAUSE
+| PHYSICAL
 | PLANS
 | PRECEDING
 | PREPARE
