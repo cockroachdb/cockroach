@@ -7,6 +7,7 @@ import { TitledComponent } from "src/interfaces/layout";
 import NavigationBar from "src/views/app/components/layoutSidebar";
 import TimeWindowManager from "src/views/app/containers/timewindow";
 import AlertBanner from "src/views/app/containers/alertBanner";
+import LicenseType from "src/views/shared/components/licenseType";
 
 function isTitledComponent(obj: Object | TitledComponent): obj is TitledComponent {
   return obj && _.isFunction((obj as TitledComponent).title);
@@ -39,6 +40,7 @@ export default class extends React.Component<RouterState, {}> {
       <AlertBanner/>
       <NavigationBar/>
       <StickyContainer className="page">
+        <LicenseType />
         {
           // TODO(mrtracy): The title can be moved down to individual pages,
           // it is not always the top element on the page (for example, on
