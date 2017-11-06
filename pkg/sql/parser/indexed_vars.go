@@ -19,6 +19,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 )
 
 // IndexedVarContainer provides the implementation of TypeCheck, Eval, and
@@ -28,7 +29,7 @@ import (
 // ordinal column reference syntax: fmt.Fprintf(buf, "@%d", idx)
 type IndexedVarContainer interface {
 	IndexedVarEval(idx int, ctx *EvalContext) (Datum, error)
-	IndexedVarResolvedType(idx int) Type
+	IndexedVarResolvedType(idx int) types.T
 	IndexedVarFormat(buf *bytes.Buffer, f FmtFlags, idx int)
 }
 
@@ -52,7 +53,7 @@ func (v *IndexedVar) Walk(_ Visitor) Expr {
 }
 
 // TypeCheck is part of the Expr interface.
-func (v *IndexedVar) TypeCheck(_ *SemaContext, desired Type) (TypedExpr, error) {
+func (v *IndexedVar) TypeCheck(_ *SemaContext, desired types.T) (TypedExpr, error) {
 	if v.container == nil || v.container == unboundContainer {
 		// A more technically correct message would be to say that the
 		// reference is unbound and thus cannot be typed. However this is
@@ -75,7 +76,7 @@ func (v *IndexedVar) Eval(ctx *EvalContext) (Datum, error) {
 }
 
 // ResolvedType is part of the TypedExpr interface.
-func (v *IndexedVar) ResolvedType() Type {
+func (v *IndexedVar) ResolvedType() types.T {
 	if v.container == nil || v.container == unboundContainer {
 		panic("indexed var must be bound to a container before type resolution")
 	}
@@ -270,7 +271,7 @@ func (*unboundContainerType) IndexedVarEval(idx int, _ *EvalContext) (Datum, err
 	panic(fmt.Sprintf("unbound ordinal reference @%d", idx+1))
 }
 
-func (*unboundContainerType) IndexedVarResolvedType(idx int) Type {
+func (*unboundContainerType) IndexedVarResolvedType(idx int) types.T {
 	panic(fmt.Sprintf("unbound ordinal reference @%d", idx+1))
 }
 

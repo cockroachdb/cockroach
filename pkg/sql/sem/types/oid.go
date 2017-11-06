@@ -41,7 +41,7 @@ var (
 	TypeIntVector = WrapTypeWithOid(TArray{TypeInt}, oid.T_int2vector)
 	// TypeNameArray is the type family of a DArray containing the Name alias type.
 	// Can be compared with ==.
-	TypeNameArray Type = TArray{TypeName}
+	TypeNameArray T = TArray{TypeName}
 )
 
 var (
@@ -55,7 +55,7 @@ var (
 )
 
 // OidToType maps Postgres object IDs to CockroachDB types.
-var OidToType = map[oid.Oid]Type{
+var OidToType = map[oid.Oid]T{
 	oid.T_anyelement:   TypeAny,
 	oid.T_bool:         TypeBool,
 	oid.T__bool:        TArray{TypeBool},
@@ -176,15 +176,15 @@ var oidTypeName = map[oid.Oid]string{
 	oid.T_regtype:      "regtype",
 }
 
-func (t TOid) String() string { return t.SQLName() }
+func (t TOid) String() string { return SQLName(t) }
 
-// Equivalent implements the Type interface.
-func (t TOid) Equivalent(other Type) bool { return t.FamilyEqual(other) || other == TypeAny }
+// Equivalent implements the T interface.
+func (t TOid) Equivalent(other T) bool { return t.FamilyEqual(other) || other == TypeAny }
 
-// FamilyEqual implements the Type interface.
-func (TOid) FamilyEqual(other Type) bool { _, ok := UnwrapType(other).(TOid); return ok }
+// FamilyEqual implements the T interface.
+func (TOid) FamilyEqual(other T) bool { _, ok := UnwrapType(other).(TOid); return ok }
 
-// IsAmbiguous implements the Type interface.
+// IsAmbiguous implements the T interface.
 func (TOid) IsAmbiguous() bool { return false }
 
 // TOidWrapper is a Type implementation which is a wrapper around a Type, allowing
@@ -192,7 +192,7 @@ func (TOid) IsAmbiguous() bool { return false }
 // to permit type aliasing with custom Oids without needing to create new typing
 // rules or define new Datum types.
 type TOidWrapper struct {
-	Type
+	T
 	oid oid.Oid
 }
 
@@ -205,32 +205,32 @@ func (t TOidWrapper) String() string {
 	if s, ok := customOidNames[t.oid]; ok {
 		return s
 	}
-	return t.Type.String()
+	return t.T.String()
 }
 
-// WrapTypeWithOid wraps a Type with a custom Oid.
-func WrapTypeWithOid(t Type, oid oid.Oid) Type {
+// WrapTypeWithOid wraps a T with a custom Oid.
+func WrapTypeWithOid(t T, oid oid.Oid) T {
 	switch v := t.(type) {
 	case tNull, tAny, TOidWrapper:
 		panic(pgerror.NewErrorf(pgerror.CodeInternalError, "cannot wrap %T with an Oid", v))
 	}
 	return TOidWrapper{
-		Type: t,
-		oid:  oid,
+		T:   t,
+		oid: oid,
 	}
 }
 
-// UnwrapType returns the base Type type for a provided type, stripping
+// UnwrapType returns the base T type for a provided type, stripping
 // a *TOidWrapper if present. This is useful for cases like type switches,
 // where type aliases should be ignored.
-func UnwrapType(t Type) Type {
+func UnwrapType(t T) T {
 	if w, ok := t.(TOidWrapper); ok {
-		return w.Type
+		return w.T
 	}
 	return t
 }
 
-var baseTypeOids = map[Type]oid.Oid{
+var baseTypeOids = map[T]oid.Oid{
 	TypeNull:        oid.T_unknown,
 	TypeBool:        oid.T_bool,
 	TypeInt:         oid.T_int8,
@@ -260,7 +260,7 @@ func init() {
 }
 
 // Oid returns the type's Postgres object ID.
-func Oid(t Type) oid.Oid {
+func Oid(t T) oid.Oid {
 	// Compound types.
 	switch ty := t.(type) {
 	case TOid:
@@ -285,7 +285,7 @@ func Oid(t Type) oid.Oid {
 }
 
 // PGDisplayName returns the Postgres display name for a given type.
-func PGDisplayName(typ Type) string {
+func PGDisplayName(typ T) string {
 	if typname, ok := aliasedOidToName[Oid(typ)]; ok {
 		return typname
 	}

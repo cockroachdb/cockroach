@@ -19,17 +19,17 @@ import (
 	"fmt"
 )
 
-// Type represents a SQL type.
-type Type interface {
+// T represents a SQL type.
+type T interface {
 	fmt.Stringer
 	// Equivalent returns whether the receiver and the other type are equivalent.
 	// We say that two type patterns are "equivalent" when they are structurally
 	// equivalent given that a wildcard is equivalent to any type. When neither
 	// Type is ambiguous (see IsAmbiguous), equivalency is the same as type equality.
-	Equivalent(other Type) bool
+	Equivalent(other T) bool
 	// FamilyEqual returns whether the receiver and the other type have the same
 	// constructor.
-	FamilyEqual(other Type) bool
+	FamilyEqual(other T) bool
 
 	// IsAmbiguous returns whether the type is ambiguous or fully defined. This
 	// is important for parameterized types to determine whether they are fully
@@ -39,53 +39,53 @@ type Type interface {
 
 var (
 	// TypeNull is the type of a DNull. Can be compared with ==.
-	TypeNull Type = tNull{}
+	TypeNull T = tNull{}
 	// TypeBool is the type of a DBool. Can be compared with ==.
-	TypeBool Type = tBool{}
+	TypeBool T = tBool{}
 	// TypeInt is the type of a DInt. Can be compared with ==.
-	TypeInt Type = tInt{}
+	TypeInt T = tInt{}
 	// TypeFloat is the type of a DFloat. Can be compared with ==.
-	TypeFloat Type = tFloat{}
+	TypeFloat T = tFloat{}
 	// TypeDecimal is the type of a DDecimal. Can be compared with ==.
-	TypeDecimal Type = tDecimal{}
+	TypeDecimal T = tDecimal{}
 	// TypeString is the type of a DString. Can be compared with ==.
-	TypeString Type = tString{}
+	TypeString T = tString{}
 	// TypeCollatedString is the type family of a DString. CANNOT be compared with
 	// ==.
-	TypeCollatedString Type = TCollatedString{}
+	TypeCollatedString T = TCollatedString{}
 	// TypeBytes is the type of a DBytes. Can be compared with ==.
-	TypeBytes Type = tBytes{}
+	TypeBytes T = tBytes{}
 	// TypeDate is the type of a DDate. Can be compared with ==.
-	TypeDate Type = tDate{}
+	TypeDate T = tDate{}
 	// TypeTimestamp is the type of a DTimestamp. Can be compared with ==.
-	TypeTimestamp Type = tTimestamp{}
+	TypeTimestamp T = tTimestamp{}
 	// TypeTimestampTZ is the type of a DTimestampTZ. Can be compared with ==.
-	TypeTimestampTZ Type = tTimestampTZ{}
+	TypeTimestampTZ T = tTimestampTZ{}
 	// TypeInterval is the type of a DInterval. Can be compared with ==.
-	TypeInterval Type = tInterval{}
+	TypeInterval T = tInterval{}
 	// TypeJSON is the type of a DJSON. Can be compared with ==.
-	TypeJSON Type = tJSON{}
+	TypeJSON T = tJSON{}
 	// TypeUUID is the type of a DUuid. Can be compared with ==.
-	TypeUUID Type = tUUID{}
+	TypeUUID T = tUUID{}
 	// TypeINet is the type of a DIPAddr. Can be compared with ==.
-	TypeINet Type = tINet{}
+	TypeINet T = tINet{}
 	// TypeTuple is the type family of a DTuple. CANNOT be compared with ==.
-	TypeTuple Type = TTuple(nil)
+	TypeTuple T = TTuple(nil)
 	// TypeArray is the type family of a DArray. CANNOT be compared with ==.
-	TypeArray Type = TArray{}
+	TypeArray T = TArray{}
 	// TypeTable is the type family of a DTable. CANNOT be compared with ==.
-	TypeTable Type = TTable{}
+	TypeTable T = TTable{}
 	// TypePlaceholder is the type family of a placeholder. CANNOT be compared
 	// with ==.
-	TypePlaceholder Type = TPlaceholder{}
+	TypePlaceholder T = TPlaceholder{}
 	// TypeAnyArray is the type of a DArray with a wildcard parameterized type.
 	// Can be compared with ==.
-	TypeAnyArray Type = TArray{TypeAny}
+	TypeAnyArray T = TArray{TypeAny}
 	// TypeAny can be any type. Can be compared with ==.
-	TypeAny Type = tAny{}
+	TypeAny T = tAny{}
 
 	// TypesAnyNonArray contains all non-array types.
-	TypesAnyNonArray = []Type{
+	TypesAnyNonArray = []T{
 		TypeBool,
 		TypeInt,
 		TypeFloat,
@@ -107,47 +107,47 @@ var (
 // to be singletons.
 type tNull struct{}
 
-func (tNull) String() string              { return "NULL" }
-func (tNull) Equivalent(other Type) bool  { return other == TypeNull || other == TypeAny }
-func (tNull) FamilyEqual(other Type) bool { return other == TypeNull }
-func (tNull) IsAmbiguous() bool           { return true }
+func (tNull) String() string           { return "NULL" }
+func (tNull) Equivalent(other T) bool  { return other == TypeNull || other == TypeAny }
+func (tNull) FamilyEqual(other T) bool { return other == TypeNull }
+func (tNull) IsAmbiguous() bool        { return true }
 
 type tBool struct{}
 
-func (tBool) String() string              { return "bool" }
-func (tBool) Equivalent(other Type) bool  { return UnwrapType(other) == TypeBool || other == TypeAny }
-func (tBool) FamilyEqual(other Type) bool { return UnwrapType(other) == TypeBool }
-func (tBool) IsAmbiguous() bool           { return false }
+func (tBool) String() string           { return "bool" }
+func (tBool) Equivalent(other T) bool  { return UnwrapType(other) == TypeBool || other == TypeAny }
+func (tBool) FamilyEqual(other T) bool { return UnwrapType(other) == TypeBool }
+func (tBool) IsAmbiguous() bool        { return false }
 
 type tInt struct{}
 
-func (tInt) String() string              { return "int" }
-func (tInt) Equivalent(other Type) bool  { return UnwrapType(other) == TypeInt || other == TypeAny }
-func (tInt) FamilyEqual(other Type) bool { return UnwrapType(other) == TypeInt }
-func (tInt) IsAmbiguous() bool           { return false }
+func (tInt) String() string           { return "int" }
+func (tInt) Equivalent(other T) bool  { return UnwrapType(other) == TypeInt || other == TypeAny }
+func (tInt) FamilyEqual(other T) bool { return UnwrapType(other) == TypeInt }
+func (tInt) IsAmbiguous() bool        { return false }
 
 type tFloat struct{}
 
-func (tFloat) String() string              { return "float" }
-func (tFloat) Equivalent(other Type) bool  { return UnwrapType(other) == TypeFloat || other == TypeAny }
-func (tFloat) FamilyEqual(other Type) bool { return UnwrapType(other) == TypeFloat }
-func (tFloat) IsAmbiguous() bool           { return false }
+func (tFloat) String() string           { return "float" }
+func (tFloat) Equivalent(other T) bool  { return UnwrapType(other) == TypeFloat || other == TypeAny }
+func (tFloat) FamilyEqual(other T) bool { return UnwrapType(other) == TypeFloat }
+func (tFloat) IsAmbiguous() bool        { return false }
 
 type tDecimal struct{}
 
 func (tDecimal) String() string { return "decimal" }
-func (tDecimal) Equivalent(other Type) bool {
+func (tDecimal) Equivalent(other T) bool {
 	return UnwrapType(other) == TypeDecimal || other == TypeAny
 }
-func (tDecimal) FamilyEqual(other Type) bool { return UnwrapType(other) == TypeDecimal }
-func (tDecimal) IsAmbiguous() bool           { return false }
+func (tDecimal) FamilyEqual(other T) bool { return UnwrapType(other) == TypeDecimal }
+func (tDecimal) IsAmbiguous() bool        { return false }
 
 type tString struct{}
 
-func (tString) String() string              { return "string" }
-func (tString) Equivalent(other Type) bool  { return UnwrapType(other) == TypeString || other == TypeAny }
-func (tString) FamilyEqual(other Type) bool { return UnwrapType(other) == TypeString }
-func (tString) IsAmbiguous() bool           { return false }
+func (tString) String() string           { return "string" }
+func (tString) Equivalent(other T) bool  { return UnwrapType(other) == TypeString || other == TypeAny }
+func (tString) FamilyEqual(other T) bool { return UnwrapType(other) == TypeString }
+func (tString) IsAmbiguous() bool        { return false }
 
 // TCollatedString is the type of strings with a locale.
 type TCollatedString struct {
@@ -159,8 +159,8 @@ func (t TCollatedString) String() string {
 	return fmt.Sprintf("collatedstring{%s}", t.Locale)
 }
 
-// Equivalent implements the Type interface.
-func (t TCollatedString) Equivalent(other Type) bool {
+// Equivalent implements the T interface.
+func (t TCollatedString) Equivalent(other T) bool {
 	if other == TypeAny {
 		return true
 	}
@@ -171,83 +171,83 @@ func (t TCollatedString) Equivalent(other Type) bool {
 	return false
 }
 
-// FamilyEqual implements the Type interface.
-func (TCollatedString) FamilyEqual(other Type) bool {
+// FamilyEqual implements the T interface.
+func (TCollatedString) FamilyEqual(other T) bool {
 	_, ok := UnwrapType(other).(TCollatedString)
 	return ok
 }
 
-// IsAmbiguous implements the Type interface.
+// IsAmbiguous implements the T interface.
 func (t TCollatedString) IsAmbiguous() bool {
 	return t.Locale == ""
 }
 
 type tBytes struct{}
 
-func (tBytes) String() string              { return "bytes" }
-func (tBytes) Equivalent(other Type) bool  { return UnwrapType(other) == TypeBytes || other == TypeAny }
-func (tBytes) FamilyEqual(other Type) bool { return UnwrapType(other) == TypeBytes }
-func (tBytes) IsAmbiguous() bool           { return false }
+func (tBytes) String() string           { return "bytes" }
+func (tBytes) Equivalent(other T) bool  { return UnwrapType(other) == TypeBytes || other == TypeAny }
+func (tBytes) FamilyEqual(other T) bool { return UnwrapType(other) == TypeBytes }
+func (tBytes) IsAmbiguous() bool        { return false }
 
 type tDate struct{}
 
-func (tDate) String() string              { return "date" }
-func (tDate) Equivalent(other Type) bool  { return UnwrapType(other) == TypeDate || other == TypeAny }
-func (tDate) FamilyEqual(other Type) bool { return UnwrapType(other) == TypeDate }
-func (tDate) IsAmbiguous() bool           { return false }
+func (tDate) String() string           { return "date" }
+func (tDate) Equivalent(other T) bool  { return UnwrapType(other) == TypeDate || other == TypeAny }
+func (tDate) FamilyEqual(other T) bool { return UnwrapType(other) == TypeDate }
+func (tDate) IsAmbiguous() bool        { return false }
 
 type tTimestamp struct{}
 
 func (tTimestamp) String() string { return "timestamp" }
-func (tTimestamp) Equivalent(other Type) bool {
+func (tTimestamp) Equivalent(other T) bool {
 	return UnwrapType(other) == TypeTimestamp || other == TypeAny
 }
-func (tTimestamp) FamilyEqual(other Type) bool { return UnwrapType(other) == TypeTimestamp }
-func (tTimestamp) IsAmbiguous() bool           { return false }
+func (tTimestamp) FamilyEqual(other T) bool { return UnwrapType(other) == TypeTimestamp }
+func (tTimestamp) IsAmbiguous() bool        { return false }
 
 type tTimestampTZ struct{}
 
 func (tTimestampTZ) String() string { return "timestamptz" }
-func (tTimestampTZ) Equivalent(other Type) bool {
+func (tTimestampTZ) Equivalent(other T) bool {
 	return UnwrapType(other) == TypeTimestampTZ || other == TypeAny
 }
-func (tTimestampTZ) FamilyEqual(other Type) bool { return UnwrapType(other) == TypeTimestampTZ }
-func (tTimestampTZ) IsAmbiguous() bool           { return false }
+func (tTimestampTZ) FamilyEqual(other T) bool { return UnwrapType(other) == TypeTimestampTZ }
+func (tTimestampTZ) IsAmbiguous() bool        { return false }
 
 type tInterval struct{}
 
 func (tInterval) String() string { return "interval" }
-func (tInterval) Equivalent(other Type) bool {
+func (tInterval) Equivalent(other T) bool {
 	return UnwrapType(other) == TypeInterval || other == TypeAny
 }
-func (tInterval) FamilyEqual(other Type) bool { return UnwrapType(other) == TypeInterval }
-func (tInterval) IsAmbiguous() bool           { return false }
+func (tInterval) FamilyEqual(other T) bool { return UnwrapType(other) == TypeInterval }
+func (tInterval) IsAmbiguous() bool        { return false }
 
 type tJSON struct{}
 
 func (tJSON) String() string { return "jsonb" }
-func (tJSON) Equivalent(other Type) bool {
+func (tJSON) Equivalent(other T) bool {
 	return UnwrapType(other) == TypeJSON || other == TypeAny
 }
-func (tJSON) FamilyEqual(other Type) bool { return UnwrapType(other) == TypeJSON }
-func (tJSON) IsAmbiguous() bool           { return false }
+func (tJSON) FamilyEqual(other T) bool { return UnwrapType(other) == TypeJSON }
+func (tJSON) IsAmbiguous() bool        { return false }
 
 type tUUID struct{}
 
-func (tUUID) String() string              { return "uuid" }
-func (tUUID) Equivalent(other Type) bool  { return UnwrapType(other) == TypeUUID || other == TypeAny }
-func (tUUID) FamilyEqual(other Type) bool { return UnwrapType(other) == TypeUUID }
-func (tUUID) IsAmbiguous() bool           { return false }
+func (tUUID) String() string           { return "uuid" }
+func (tUUID) Equivalent(other T) bool  { return UnwrapType(other) == TypeUUID || other == TypeAny }
+func (tUUID) FamilyEqual(other T) bool { return UnwrapType(other) == TypeUUID }
+func (tUUID) IsAmbiguous() bool        { return false }
 
 type tINet struct{}
 
-func (tINet) String() string              { return "inet" }
-func (tINet) Equivalent(other Type) bool  { return UnwrapType(other) == TypeINet || other == TypeAny }
-func (tINet) FamilyEqual(other Type) bool { return UnwrapType(other) == TypeINet }
-func (tINet) IsAmbiguous() bool           { return false }
+func (tINet) String() string           { return "inet" }
+func (tINet) Equivalent(other T) bool  { return UnwrapType(other) == TypeINet || other == TypeAny }
+func (tINet) FamilyEqual(other T) bool { return UnwrapType(other) == TypeINet }
+func (tINet) IsAmbiguous() bool        { return false }
 
 // TTuple is the type of a DTuple.
-type TTuple []Type
+type TTuple []T
 
 // String implements the fmt.Stringer interface.
 func (t TTuple) String() string {
@@ -266,8 +266,8 @@ func (t TTuple) String() string {
 	return buf.String()
 }
 
-// Equivalent implements the Type interface.
-func (t TTuple) Equivalent(other Type) bool {
+// Equivalent implements the T interface.
+func (t TTuple) Equivalent(other T) bool {
 	if other == TypeAny {
 		return true
 	}
@@ -283,13 +283,13 @@ func (t TTuple) Equivalent(other Type) bool {
 	return true
 }
 
-// FamilyEqual implements the Type interface.
-func (TTuple) FamilyEqual(other Type) bool {
+// FamilyEqual implements the T interface.
+func (TTuple) FamilyEqual(other T) bool {
 	_, ok := UnwrapType(other).(TTuple)
 	return ok
 }
 
-// IsAmbiguous implements the Type interface.
+// IsAmbiguous implements the T interface.
 func (t TTuple) IsAmbiguous() bool {
 	for _, typ := range t {
 		if typ == nil || typ.IsAmbiguous() {
@@ -307,8 +307,8 @@ type TPlaceholder struct {
 // String implements the fmt.Stringer interface.
 func (t TPlaceholder) String() string { return fmt.Sprintf("placeholder{%s}", t.Name) }
 
-// Equivalent implements the Type interface.
-func (t TPlaceholder) Equivalent(other Type) bool {
+// Equivalent implements the T interface.
+func (t TPlaceholder) Equivalent(other T) bool {
 	if other == TypeAny {
 		return true
 	}
@@ -316,22 +316,22 @@ func (t TPlaceholder) Equivalent(other Type) bool {
 	return ok && t.Name == u.Name
 }
 
-// FamilyEqual implements the Type interface.
-func (TPlaceholder) FamilyEqual(other Type) bool {
+// FamilyEqual implements the T interface.
+func (TPlaceholder) FamilyEqual(other T) bool {
 	_, ok := UnwrapType(other).(TPlaceholder)
 	return ok
 }
 
-// IsAmbiguous implements the Type interface.
+// IsAmbiguous implements the T interface.
 func (TPlaceholder) IsAmbiguous() bool { panic("TPlaceholder.IsAmbiguous() is undefined") }
 
 // TArray is the type of a DArray.
-type TArray struct{ Typ Type }
+type TArray struct{ Typ T }
 
 func (a TArray) String() string { return a.Typ.String() + "[]" }
 
-// Equivalent implements the Type interface.
-func (a TArray) Equivalent(other Type) bool {
+// Equivalent implements the T interface.
+func (a TArray) Equivalent(other T) bool {
 	if other == TypeAny {
 		return true
 	}
@@ -341,13 +341,13 @@ func (a TArray) Equivalent(other Type) bool {
 	return false
 }
 
-// FamilyEqual implements the Type interface.
-func (TArray) FamilyEqual(other Type) bool {
+// FamilyEqual implements the T interface.
+func (TArray) FamilyEqual(other T) bool {
 	_, ok := UnwrapType(other).(TArray)
 	return ok
 }
 
-// IsAmbiguous implements the Type interface.
+// IsAmbiguous implements the T interface.
 func (a TArray) IsAmbiguous() bool {
 	return a.Typ == nil || a.Typ.IsAmbiguous()
 }
@@ -361,35 +361,35 @@ type TTable struct {
 
 func (a TTable) String() string { return "setof " + a.Cols.String() }
 
-// Equivalent implements the Type interface.
-func (a TTable) Equivalent(other Type) bool {
+// Equivalent implements the T interface.
+func (a TTable) Equivalent(other T) bool {
 	if u, ok := UnwrapType(other).(TTable); ok {
 		return a.Cols.Equivalent(u.Cols)
 	}
 	return false
 }
 
-// FamilyEqual implements the Type interface.
-func (TTable) FamilyEqual(other Type) bool {
+// FamilyEqual implements the T interface.
+func (TTable) FamilyEqual(other T) bool {
 	_, ok := UnwrapType(other).(TTable)
 	return ok
 }
 
-// IsAmbiguous implements the Type interface.
+// IsAmbiguous implements the T interface.
 func (a TTable) IsAmbiguous() bool {
 	return a.Cols == nil || a.Cols.IsAmbiguous()
 }
 
 type tAny struct{}
 
-func (tAny) String() string              { return "anyelement" }
-func (tAny) Equivalent(other Type) bool  { return true }
-func (tAny) FamilyEqual(other Type) bool { return other == TypeAny }
-func (tAny) IsAmbiguous() bool           { return true }
+func (tAny) String() string           { return "anyelement" }
+func (tAny) Equivalent(other T) bool  { return true }
+func (tAny) FamilyEqual(other T) bool { return other == TypeAny }
+func (tAny) IsAmbiguous() bool        { return true }
 
 // IsStringType returns true iff t is TypeString
 // or a collated string type.
-func IsStringType(t Type) bool {
+func IsStringType(t T) bool {
 	switch t.(type) {
 	case tString, TCollatedString:
 		return true

@@ -16,12 +16,12 @@ package types
 
 // SQLName returns the type's SQL standard name. This can be looked up for a
 // type `t` in postgres by running `SELECT format_type(t::regtype, NULL)`.
-func SQLName(t Type) string {
+func SQLName(t T) string {
 	switch ty := t.(type) {
 	case TOid:
 		return oidTypeName[ty.oidType]
 	case TOidWrapper:
-		return SQLName(ty.Type)
+		return SQLName(ty.T)
 	case TCollatedString:
 		return "text"
 	case TTuple:
@@ -34,7 +34,7 @@ func SQLName(t Type) string {
 	return sqlTypeNames[t]
 }
 
-var sqlTypeNames = map[Type]string{
+var sqlTypeNames = map[T]string{
 	TypeNull:        "unknown",
 	TypeBool:        "boolean",
 	TypeInt:         "bigint",

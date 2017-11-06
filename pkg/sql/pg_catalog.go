@@ -1515,18 +1515,18 @@ CREATE TABLE pg_catalog.pg_type (
 // typOid is the only OID generation approach that does not use oidHasher, because
 // object identifiers for types are not arbitrary, but instead need to be kept in
 // sync with Postgres.
-func typOid(typ parser.Type) parser.Datum {
+func typOid(typ types.T) parser.Datum {
 	return parser.NewDOid(parser.DInt(types.Oid(typ)))
 }
 
-func typLen(typ parser.Type) *parser.DInt {
+func typLen(typ types.T) *parser.DInt {
 	if sz, variable := parser.DatumTypeSize(typ); !variable {
 		return parser.NewDInt(parser.DInt(sz))
 	}
 	return negOneVal
 }
 
-func typByVal(typ parser.Type) parser.Datum {
+func typByVal(typ types.T) parser.Datum {
 	_, variable := parser.DatumTypeSize(typ)
 	return parser.MakeDBool(parser.DBool(!variable))
 }
@@ -1534,7 +1534,7 @@ func typByVal(typ parser.Type) parser.Datum {
 // typColl returns the collation OID for a given type.
 // The default collation is en-US, which is equivalent to but spelled
 // differently than the default database collation, en_US.utf8.
-func typColl(typ parser.Type, h oidHasher) parser.Datum {
+func typColl(typ types.T, h oidHasher) parser.Datum {
 	if typ.FamilyEqual(parser.TypeAny) {
 		return oidZero
 	} else if typ.Equivalent(parser.TypeString) || typ.Equivalent(parser.TArray{Typ: parser.TypeString}) {
@@ -1566,7 +1566,7 @@ var datumToTypeCategory = map[reflect.Type]*parser.DString{
 	reflect.TypeOf(parser.TypeINet):        typCategoryNetworkAddr,
 }
 
-func typCategory(typ parser.Type) parser.Datum {
+func typCategory(typ types.T) parser.Datum {
 	if typ.FamilyEqual(parser.TypeArray) {
 		return typCategoryArray
 	}

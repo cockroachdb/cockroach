@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/jobs"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -244,7 +245,7 @@ var setNotSupportedError = newQueryNotSupportedError("SET / SET CLUSTER SETTING 
 
 // leafType returns the element type if the given type is an array, and the type
 // itself otherwise.
-func leafType(t parser.Type) parser.Type {
+func leafType(t types.T) types.T {
 	if a, ok := t.(parser.TArray); ok {
 		return leafType(a.Typ)
 	}

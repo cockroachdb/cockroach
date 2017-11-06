@@ -468,7 +468,7 @@ func (node *OidColType) Format(buf *bytes.Buffer, f FmtFlags) {
 	buf.WriteString(node.Name)
 }
 
-func oidColTypeToType(ct *OidColType) Type {
+func oidColTypeToType(ct *OidColType) types.T {
 	switch ct {
 	case oidColTypeOid:
 		return TypeOid
@@ -487,7 +487,7 @@ func oidColTypeToType(ct *OidColType) Type {
 	}
 }
 
-func oidTypeToColType(t Type) *OidColType {
+func oidTypeToColType(t types.T) *OidColType {
 	switch t {
 	case TypeOid:
 		return oidColTypeOid
@@ -528,7 +528,7 @@ func (node *OidColType) String() string            { return AsString(node) }
 // DatumTypeToColumnType produces a SQL column type equivalent to the
 // given Datum type. Used to generate CastExpr nodes during
 // normalization.
-func DatumTypeToColumnType(t Type) (ColumnType, error) {
+func DatumTypeToColumnType(t types.T) (ColumnType, error) {
 	switch t {
 	case TypeBool:
 		return boolColTypeBool, nil
@@ -577,16 +577,16 @@ func DatumTypeToColumnType(t Type) (ColumnType, error) {
 		}
 		return arrayOf(elemTyp, Exprs(nil))
 	case types.TOidWrapper:
-		return DatumTypeToColumnType(typ.Type)
+		return DatumTypeToColumnType(typ.T)
 	}
 
 	return nil, pgerror.NewErrorf(pgerror.CodeInvalidTableDefinitionError,
 		"value type %s cannot be used for table columns", t)
 }
 
-// CastTargetToDatumType produces a Type equivalent to the given
+// CastTargetToDatumType produces a types.T equivalent to the given
 // SQL cast target type.
-func CastTargetToDatumType(t CastTargetType) Type {
+func CastTargetToDatumType(t CastTargetType) types.T {
 	switch ct := t.(type) {
 	case *BoolColType:
 		return TypeBool

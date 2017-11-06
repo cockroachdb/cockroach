@@ -56,8 +56,8 @@ const secondsInDay = 24 * 60 * 60
 
 // UnaryOp is a unary operator.
 type UnaryOp struct {
-	Typ        Type
-	ReturnType Type
+	Typ        types.T
+	ReturnType types.T
 	fn         func(*EvalContext, Datum) (Datum, error)
 
 	types   typeList
@@ -171,9 +171,9 @@ var UnaryOps = map[UnaryOperator]unaryOpOverload{
 
 // BinOp is a binary operator.
 type BinOp struct {
-	LeftType   Type
-	RightType  Type
-	ReturnType Type
+	LeftType   types.T
+	RightType  types.T
+	ReturnType types.T
 	fn         func(*EvalContext, Datum, Datum) (Datum, error)
 
 	types        typeList
@@ -185,7 +185,7 @@ func (op BinOp) params() typeList {
 	return op.types
 }
 
-func (op BinOp) matchParams(l, r Type) bool {
+func (op BinOp) matchParams(l, r types.T) bool {
 	return op.params().matchAt(l, 0) && op.params().matchAt(r, 1)
 }
 
@@ -197,7 +197,7 @@ func (BinOp) preferred() bool {
 	return false
 }
 
-func appendToMaybeNullArray(typ Type, left Datum, right Datum) (Datum, error) {
+func appendToMaybeNullArray(typ types.T, left Datum, right Datum) (Datum, error) {
 	result := NewDArray(typ)
 	if left != DNull {
 		for _, e := range MustBeDArray(left).Array {
@@ -212,7 +212,7 @@ func appendToMaybeNullArray(typ Type, left Datum, right Datum) (Datum, error) {
 	return result, nil
 }
 
-func prependToMaybeNullArray(typ Type, left Datum, right Datum) (Datum, error) {
+func prependToMaybeNullArray(typ types.T, left Datum, right Datum) (Datum, error) {
 	result := NewDArray(typ)
 	if err := result.Append(left); err != nil {
 		return nil, err
@@ -256,7 +256,7 @@ func initArrayElementConcatenation() {
 	}
 }
 
-func concatArrays(typ Type, left Datum, right Datum) (Datum, error) {
+func concatArrays(typ types.T, left Datum, right Datum) (Datum, error) {
 	if left == DNull && right == DNull {
 		return DNull, nil
 	}
@@ -312,7 +312,7 @@ func init() {
 // binOpOverload is an overloaded set of binary operator implementations.
 type binOpOverload []overloadImpl
 
-func (o binOpOverload) lookupImpl(left, right Type) (BinOp, bool) {
+func (o binOpOverload) lookupImpl(left, right types.T) (BinOp, bool) {
 	for _, fn := range o {
 		casted := fn.(BinOp)
 		if casted.matchParams(left, right) {
@@ -1200,8 +1200,8 @@ func init() {
 
 // CmpOp is a comparison operator.
 type CmpOp struct {
-	LeftType  Type
-	RightType Type
+	LeftType  types.T
+	RightType types.T
 
 	// Datum return type is a union between *DBool and dNull.
 	fn func(*EvalContext, Datum, Datum) (Datum, error)
@@ -1213,7 +1213,7 @@ func (op CmpOp) params() typeList {
 	return op.types
 }
 
-func (op CmpOp) matchParams(l, r Type) bool {
+func (op CmpOp) matchParams(l, r types.T) bool {
 	return op.params().matchAt(l, 0) && op.params().matchAt(r, 1)
 }
 
@@ -1250,7 +1250,7 @@ func init() {
 // cmpOpOverload is an overloaded set of comparison operator implementations.
 type cmpOpOverload []overloadImpl
 
-func (o cmpOpOverload) lookupImpl(left, right Type) (CmpOp, bool) {
+func (o cmpOpOverload) lookupImpl(left, right types.T) (CmpOp, bool) {
 	for _, fn := range o {
 		casted := fn.(CmpOp)
 		if casted.matchParams(left, right) {
@@ -1857,7 +1857,7 @@ func cmpOpTupleFn(ctx *EvalContext, left, right DTuple, op ComparisonOperator) D
 	return boolFromCmp(cmp, op)
 }
 
-func makeEvalTupleIn(typ Type) CmpOp {
+func makeEvalTupleIn(typ types.T) CmpOp {
 	return CmpOp{
 		LeftType:  typ,
 		RightType: TypeTuple,
@@ -3177,7 +3177,7 @@ func canBeInArrayColType(t ColumnType) bool {
 	}
 }
 
-func canBeInArray(t Type) bool {
+func canBeInArray(t types.T) bool {
 	switch t {
 	case TypeJSON:
 		return false
@@ -3187,7 +3187,7 @@ func canBeInArray(t Type) bool {
 }
 
 // arrayOfType returns a fresh DArray of the input type.
-func arrayOfType(typ Type) (*DArray, error) {
+func arrayOfType(typ types.T) (*DArray, error) {
 	arrayTyp, ok := typ.(TArray)
 	if !ok {
 		return nil, pgerror.NewErrorf(
@@ -3610,7 +3610,7 @@ func anchorPattern(pattern string, caseInsensitive bool) string {
 // FindEqualComparisonFunction looks up an overload of the "=" operator
 // for a given pair of input operand types.
 func FindEqualComparisonFunction(
-	leftType, rightType Type,
+	leftType, rightType types.T,
 ) (func(*EvalContext, Datum, Datum) (Datum, error), bool) {
 	fn, found := CmpOps[EQ].lookupImpl(leftType, rightType)
 	if found {

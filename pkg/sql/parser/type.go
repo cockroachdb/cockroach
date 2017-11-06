@@ -18,9 +18,6 @@ import (
 	types "github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 )
 
-// Type is a transitionary alias.
-type Type = types.Type
-
 var (
 	// TypeNull is a transitionary alias.
 	TypeNull = types.TypeNull

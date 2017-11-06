@@ -31,6 +31,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/internal/rsg"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -169,7 +170,7 @@ func TestRandomSyntaxFunctions(t *testing.T) {
 			}
 		case parser.HomogeneousType:
 			for i := r.Intn(5); i > 0; i-- {
-				var typ parser.Type
+				var typ types.T
 				switch r.Intn(4) {
 				case 0:
 					typ = parser.TypeString

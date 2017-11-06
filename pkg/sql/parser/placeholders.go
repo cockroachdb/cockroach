@@ -20,11 +20,12 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	types "github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
 )
 
 // PlaceholderTypes relates placeholder names to their resolved type.
-type PlaceholderTypes map[string]Type
+type PlaceholderTypes map[string]types.T
 
 // QueryArguments relates placeholder names to their provided query argument.
 type QueryArguments map[string]TypedExpr
@@ -99,7 +100,7 @@ func (p *PlaceholderInfo) AssertAllAssigned() error {
 // Type returns the known type of a placeholder. If allowHints is true, will
 // return a type hint if there's no known type yet but there is a type hint.
 // Returns false in the 2nd value if the placeholder is not typed.
-func (p *PlaceholderInfo) Type(name string, allowHints bool) (Type, bool) {
+func (p *PlaceholderInfo) Type(name string, allowHints bool) (types.T, bool) {
 	if t, ok := p.Types[name]; ok {
 		return t, true
 	} else if t, ok := p.TypeHints[name]; ok {
@@ -132,7 +133,7 @@ func (p *PlaceholderInfo) SetValue(name string, val Datum) {
 
 // SetType assigns a known type to a placeholder.
 // Reports an error if another type was previously assigned.
-func (p *PlaceholderInfo) SetType(name string, typ Type) error {
+func (p *PlaceholderInfo) SetType(name string, typ types.T) error {
 	t, ok := p.Types[name]
 	if ok && !typ.Equivalent(t) {
 		return pgerror.NewErrorf(pgerror.CodeDatatypeMismatchError, "placeholder %s already has type %s, cannot assign %s", name, t, typ)

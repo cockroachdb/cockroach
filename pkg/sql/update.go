@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/pkg/errors"
@@ -83,7 +84,7 @@ func (r *editNodeRun) initEditNode(
 	tw tableWriter,
 	tn *parser.TableName,
 	re parser.ReturningClause,
-	desiredTypes []parser.Type,
+	desiredTypes []types.T,
 ) error {
 	r.rows = rows
 	r.tw = tw
@@ -203,7 +204,7 @@ func addOrMergeExpr(
 //   Notes: postgres requires UPDATE. Requires SELECT with WHERE clause with table.
 //          mysql requires UPDATE. Also requires SELECT with WHERE clause with table.
 func (p *planner) Update(
-	ctx context.Context, n *parser.Update, desiredTypes []parser.Type,
+	ctx context.Context, n *parser.Update, desiredTypes []types.T,
 ) (planNode, error) {
 	if n.Where == nil && p.session.SafeUpdates {
 		return nil, pgerror.NewDangerousStatementErrorf("UPDATE without WHERE clause")

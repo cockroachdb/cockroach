@@ -24,6 +24,7 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 )
@@ -917,7 +918,7 @@ func (w *windowFuncHolder) String() string { return parser.AsString(w) }
 func (w *windowFuncHolder) Walk(v parser.Visitor) parser.Expr { return w }
 
 func (w *windowFuncHolder) TypeCheck(
-	_ *parser.SemaContext, desired parser.Type,
+	_ *parser.SemaContext, desired types.T,
 ) (parser.TypedExpr, error) {
 	return w, nil
 }
@@ -929,7 +930,7 @@ func (w *windowFuncHolder) Eval(ctx *parser.EvalContext) (parser.Datum, error) {
 	return w.window.windowValues[w.window.curRowIdx][w.funcIdx].Eval(ctx)
 }
 
-func (w *windowFuncHolder) ResolvedType() parser.Type {
+func (w *windowFuncHolder) ResolvedType() types.T {
 	return w.expr.ResolvedType()
 }
 
@@ -975,7 +976,7 @@ type windowNodeColContainer struct {
 }
 
 // IndexedVarResolvedType implements the parser.IndexedVarContainer interface.
-func (cc *windowNodeColContainer) IndexedVarResolvedType(idx int) parser.Type {
+func (cc *windowNodeColContainer) IndexedVarResolvedType(idx int) types.T {
 	return cc.sourceInfo.sourceColumns[idx].Typ
 }
 
@@ -994,7 +995,7 @@ type windowNodeAggContainer struct {
 }
 
 // IndexedVarResolvedType implements the parser.IndexedVarContainer interface.
-func (ac *windowNodeAggContainer) IndexedVarResolvedType(idx int) parser.Type {
+func (ac *windowNodeAggContainer) IndexedVarResolvedType(idx int) types.T {
 	return ac.aggFuncs[idx].ResolvedType()
 }
 

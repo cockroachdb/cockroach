@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
@@ -155,7 +156,7 @@ func (p *planner) SetClusterSetting(
 				expr = parser.NewStrVal(parser.AsStringWithFlags(s, parser.FmtBareIdentifiers))
 			}
 
-			var requiredType parser.Type
+			var requiredType types.T
 			switch setting.(type) {
 			case *settings.StringSetting, *settings.StateMachineSetting, *settings.ByteSizeSetting:
 				requiredType = parser.TypeString

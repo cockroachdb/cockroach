@@ -20,6 +20,7 @@ import (
 
 	"golang.org/x/net/context"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 )
 
@@ -113,7 +114,7 @@ func TestNormalizeNameInExpr(t *testing.T) {
 // TestExprString verifies that converting an expression to a string and back
 // doesn't change the (normalized) expression.
 func TestExprString(t *testing.T) {
-	defer mockNameTypes(map[string]Type{
+	defer mockNameTypes(map[string]types.T{
 		"a": TypeBool,
 		"b": TypeBool,
 		"c": TypeBool,

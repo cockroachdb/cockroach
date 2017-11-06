@@ -21,6 +21,7 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
@@ -81,7 +82,7 @@ type unionNode struct {
 
 // UnionClause constructs a planNode from a UNION/INTERSECT/EXCEPT expression.
 func (p *planner) UnionClause(
-	ctx context.Context, n *parser.UnionClause, desiredTypes []parser.Type,
+	ctx context.Context, n *parser.UnionClause, desiredTypes []types.T,
 ) (planNode, error) {
 	var emitAll = false
 	var emit unionNodeEmit

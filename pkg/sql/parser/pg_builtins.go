@@ -48,7 +48,7 @@ var typeBuiltinsHaveUnderscore = map[oid.Oid]struct{}{
 // PGIOBuiltinPrefix returns the string prefix to a type's IO functions. This
 // is either the type's postgres display name or the type's postgres display
 // name plus an underscore, depending on the type.
-func PGIOBuiltinPrefix(typ Type) string {
+func PGIOBuiltinPrefix(typ types.T) string {
 	builtinPrefix := types.PGDisplayName(typ)
 	if _, ok := typeBuiltinsHaveUnderscore[types.Oid(typ)]; ok {
 		return builtinPrefix + "_"
@@ -84,7 +84,7 @@ func initPGBuiltins() {
 
 var errUnimplemented = pgerror.NewError(pgerror.CodeFeatureNotSupportedError, "unimplemented")
 
-func makeTypeIOBuiltin(argTypes typeList, returnType Type) []Builtin {
+func makeTypeIOBuiltin(argTypes typeList, returnType types.T) []Builtin {
 	return []Builtin{
 		{
 			Types:      argTypes,
@@ -101,7 +101,7 @@ func makeTypeIOBuiltin(argTypes typeList, returnType Type) []Builtin {
 // every type: typein, typeout, typerecv, and typsend. All 4 builtins are no-op,
 // and only supported because ORMs sometimes use their names to form a map for
 // client-side type encoding and decoding. See issue #12526 for more details.
-func makeTypeIOBuiltins(builtinPrefix string, typ Type) map[string][]Builtin {
+func makeTypeIOBuiltins(builtinPrefix string, typ types.T) map[string][]Builtin {
 	typname := typ.String()
 	return map[string][]Builtin{
 		builtinPrefix + "send": makeTypeIOBuiltin(ArgTypes{{typname, typ}}, TypeBytes),

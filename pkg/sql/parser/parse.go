@@ -27,6 +27,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 )
 
 //go:generate make
@@ -81,7 +82,7 @@ func (p *Parser) Parse(sql string) (stmts StatementList, err error) {
 // tree. Like with Expr.TypeCheck, it is not valid to provide a nil desired
 // type. Instead, call it with the wildcard type TypeAny if no specific type is
 // desired.
-func TypeCheck(expr Expr, ctx *SemaContext, desired Type) (TypedExpr, error) {
+func TypeCheck(expr Expr, ctx *SemaContext, desired types.T) (TypedExpr, error) {
 	if desired == nil {
 		panic("the desired type for parser.TypeCheck cannot be nil, use TypeAny instead")
 	}
@@ -102,7 +103,9 @@ func TypeCheck(expr Expr, ctx *SemaContext, desired Type) (TypedExpr, error) {
 // an identical manner to TypeCheck. It then asserts that the resulting TypedExpr
 // has the provided return type, returning both the typed expression and an error
 // if it does not.
-func TypeCheckAndRequire(expr Expr, ctx *SemaContext, required Type, op string) (TypedExpr, error) {
+func TypeCheckAndRequire(
+	expr Expr, ctx *SemaContext, required types.T, op string,
+) (TypedExpr, error) {
 	typedExpr, err := TypeCheck(expr, ctx, required)
 	if err != nil {
 		return nil, err
@@ -210,7 +213,7 @@ func ParseType(sql string) (CastTargetType, error) {
 }
 
 // ParseStringAs parses s as type t.
-func ParseStringAs(t Type, s string, evalCtx *EvalContext) (Datum, error) {
+func ParseStringAs(t types.T, s string, evalCtx *EvalContext) (Datum, error) {
 	var d Datum
 	var err error
 	switch t {
