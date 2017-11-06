@@ -220,13 +220,13 @@ func mustParseDInterval(t *testing.T, s string) Datum {
 }
 
 var parseFuncs = map[types.T]func(*testing.T, string) Datum{
-	types.TypeString:      func(t *testing.T, s string) Datum { return NewDString(s) },
-	types.TypeBytes:       func(t *testing.T, s string) Datum { return NewDBytes(DBytes(s)) },
-	types.TypeBool:        mustParseDBool,
-	types.TypeDate:        mustParseDDate,
-	types.TypeTimestamp:   mustParseDTimestamp,
-	types.TypeTimestampTZ: mustParseDTimestampTZ,
-	types.TypeInterval:    mustParseDInterval,
+	types.String:      func(t *testing.T, s string) Datum { return NewDString(s) },
+	types.Bytes:       func(t *testing.T, s string) Datum { return NewDBytes(DBytes(s)) },
+	types.Bool:        mustParseDBool,
+	types.Date:        mustParseDDate,
+	types.Timestamp:   mustParseDTimestamp,
+	types.TimestampTZ: mustParseDTimestampTZ,
+	types.Interval:    mustParseDInterval,
 }
 
 func typeSet(tys ...types.T) map[types.T]struct{} {
@@ -249,51 +249,51 @@ func TestStringConstantResolveAvailableTypes(t *testing.T) {
 	}{
 		{
 			c:            &StrVal{s: "abc 世界", bytesEsc: false},
-			parseOptions: typeSet(types.TypeString, types.TypeBytes),
+			parseOptions: typeSet(types.String, types.Bytes),
 		},
 		{
 			c:            &StrVal{s: "true", bytesEsc: false},
-			parseOptions: typeSet(types.TypeString, types.TypeBytes, types.TypeBool),
+			parseOptions: typeSet(types.String, types.Bytes, types.Bool),
 		},
 		{
 			c:            &StrVal{s: "2010-09-28", bytesEsc: false},
-			parseOptions: typeSet(types.TypeString, types.TypeBytes, types.TypeDate, types.TypeTimestamp, types.TypeTimestampTZ),
+			parseOptions: typeSet(types.String, types.Bytes, types.Date, types.Timestamp, types.TimestampTZ),
 		},
 		{
 			c:            &StrVal{s: "2010-09-28 12:00:00.1", bytesEsc: false},
-			parseOptions: typeSet(types.TypeString, types.TypeBytes, types.TypeTimestamp, types.TypeTimestampTZ, types.TypeDate),
+			parseOptions: typeSet(types.String, types.Bytes, types.Timestamp, types.TimestampTZ, types.Date),
 		},
 		{
 			c:            &StrVal{s: "2006-07-08T00:00:00.000000123Z", bytesEsc: false},
-			parseOptions: typeSet(types.TypeString, types.TypeBytes, types.TypeTimestamp, types.TypeTimestampTZ, types.TypeDate),
+			parseOptions: typeSet(types.String, types.Bytes, types.Timestamp, types.TimestampTZ, types.Date),
 		},
 		{
 			c:            &StrVal{s: "PT12H2M", bytesEsc: false},
-			parseOptions: typeSet(types.TypeString, types.TypeBytes, types.TypeInterval),
+			parseOptions: typeSet(types.String, types.Bytes, types.Interval),
 		},
 		{
 			c:            &StrVal{s: "abc 世界", bytesEsc: true},
-			parseOptions: typeSet(types.TypeString, types.TypeBytes),
+			parseOptions: typeSet(types.String, types.Bytes),
 		},
 		{
 			c:            &StrVal{s: "true", bytesEsc: true},
-			parseOptions: typeSet(types.TypeString, types.TypeBytes),
+			parseOptions: typeSet(types.String, types.Bytes),
 		},
 		{
 			c:            &StrVal{s: "2010-09-28", bytesEsc: true},
-			parseOptions: typeSet(types.TypeString, types.TypeBytes),
+			parseOptions: typeSet(types.String, types.Bytes),
 		},
 		{
 			c:            &StrVal{s: "2010-09-28 12:00:00.1", bytesEsc: true},
-			parseOptions: typeSet(types.TypeString, types.TypeBytes),
+			parseOptions: typeSet(types.String, types.Bytes),
 		},
 		{
 			c:            &StrVal{s: "PT12H2M", bytesEsc: true},
-			parseOptions: typeSet(types.TypeString, types.TypeBytes),
+			parseOptions: typeSet(types.String, types.Bytes),
 		},
 		{
 			c:            &StrVal{s: string([]byte{0xff, 0xfe, 0xfd}), bytesEsc: true},
-			parseOptions: typeSet(types.TypeBytes),
+			parseOptions: typeSet(types.Bytes),
 		},
 	}
 

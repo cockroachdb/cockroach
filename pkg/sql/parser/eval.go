@@ -94,22 +94,22 @@ type unaryOpOverload []overloadImpl
 var UnaryOps = map[UnaryOperator]unaryOpOverload{
 	UnaryPlus: {
 		UnaryOp{
-			Typ:        types.TypeInt,
-			ReturnType: types.TypeInt,
+			Typ:        types.Int,
+			ReturnType: types.Int,
 			fn: func(_ *EvalContext, d Datum) (Datum, error) {
 				return d, nil
 			},
 		},
 		UnaryOp{
-			Typ:        types.TypeFloat,
-			ReturnType: types.TypeFloat,
+			Typ:        types.Float,
+			ReturnType: types.Float,
 			fn: func(_ *EvalContext, d Datum) (Datum, error) {
 				return d, nil
 			},
 		},
 		UnaryOp{
-			Typ:        types.TypeDecimal,
-			ReturnType: types.TypeDecimal,
+			Typ:        types.Decimal,
+			ReturnType: types.Decimal,
 			fn: func(_ *EvalContext, d Datum) (Datum, error) {
 				return d, nil
 			},
@@ -118,8 +118,8 @@ var UnaryOps = map[UnaryOperator]unaryOpOverload{
 
 	UnaryMinus: {
 		UnaryOp{
-			Typ:        types.TypeInt,
-			ReturnType: types.TypeInt,
+			Typ:        types.Int,
+			ReturnType: types.Int,
 			fn: func(_ *EvalContext, d Datum) (Datum, error) {
 				i := MustBeDInt(d)
 				if i == math.MinInt64 {
@@ -129,15 +129,15 @@ var UnaryOps = map[UnaryOperator]unaryOpOverload{
 			},
 		},
 		UnaryOp{
-			Typ:        types.TypeFloat,
-			ReturnType: types.TypeFloat,
+			Typ:        types.Float,
+			ReturnType: types.Float,
 			fn: func(_ *EvalContext, d Datum) (Datum, error) {
 				return NewDFloat(-*d.(*DFloat)), nil
 			},
 		},
 		UnaryOp{
-			Typ:        types.TypeDecimal,
-			ReturnType: types.TypeDecimal,
+			Typ:        types.Decimal,
+			ReturnType: types.Decimal,
 			fn: func(_ *EvalContext, d Datum) (Datum, error) {
 				dec := &d.(*DDecimal).Decimal
 				dd := &DDecimal{}
@@ -146,8 +146,8 @@ var UnaryOps = map[UnaryOperator]unaryOpOverload{
 			},
 		},
 		UnaryOp{
-			Typ:        types.TypeInterval,
-			ReturnType: types.TypeInterval,
+			Typ:        types.Interval,
+			ReturnType: types.Interval,
 			fn: func(_ *EvalContext, d Datum) (Datum, error) {
 				i := d.(*DInterval).Duration
 				i.Nanos = -i.Nanos
@@ -160,8 +160,8 @@ var UnaryOps = map[UnaryOperator]unaryOpOverload{
 
 	UnaryComplement: {
 		UnaryOp{
-			Typ:        types.TypeInt,
-			ReturnType: types.TypeInt,
+			Typ:        types.Int,
+			ReturnType: types.Int,
 			fn: func(_ *EvalContext, d Datum) (Datum, error) {
 				return NewDInt(^MustBeDInt(d)), nil
 			},
@@ -352,9 +352,9 @@ func getJSONPath(j DJSON, ary DArray) Datum {
 var BinOps = map[BinaryOperator]binOpOverload{
 	Bitand: {
 		BinOp{
-			LeftType:   types.TypeInt,
-			RightType:  types.TypeInt,
-			ReturnType: types.TypeInt,
+			LeftType:   types.Int,
+			RightType:  types.Int,
+			ReturnType: types.Int,
 			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				return NewDInt(MustBeDInt(left) & MustBeDInt(right)), nil
 			},
@@ -363,9 +363,9 @@ var BinOps = map[BinaryOperator]binOpOverload{
 
 	Bitor: {
 		BinOp{
-			LeftType:   types.TypeInt,
-			RightType:  types.TypeInt,
-			ReturnType: types.TypeInt,
+			LeftType:   types.Int,
+			RightType:  types.Int,
+			ReturnType: types.Int,
 			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				return NewDInt(MustBeDInt(left) | MustBeDInt(right)), nil
 			},
@@ -374,9 +374,9 @@ var BinOps = map[BinaryOperator]binOpOverload{
 
 	Bitxor: {
 		BinOp{
-			LeftType:   types.TypeInt,
-			RightType:  types.TypeInt,
-			ReturnType: types.TypeInt,
+			LeftType:   types.Int,
+			RightType:  types.Int,
+			ReturnType: types.Int,
 			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				return NewDInt(MustBeDInt(left) ^ MustBeDInt(right)), nil
 			},
@@ -385,9 +385,9 @@ var BinOps = map[BinaryOperator]binOpOverload{
 
 	Plus: {
 		BinOp{
-			LeftType:   types.TypeInt,
-			RightType:  types.TypeInt,
-			ReturnType: types.TypeInt,
+			LeftType:   types.Int,
+			RightType:  types.Int,
+			ReturnType: types.Int,
 			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				a, b := MustBeDInt(left), MustBeDInt(right)
 				r, ok := addWithOverflow(int64(a), int64(b))
@@ -398,17 +398,17 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			},
 		},
 		BinOp{
-			LeftType:   types.TypeFloat,
-			RightType:  types.TypeFloat,
-			ReturnType: types.TypeFloat,
+			LeftType:   types.Float,
+			RightType:  types.Float,
+			ReturnType: types.Float,
 			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				return NewDFloat(*left.(*DFloat) + *right.(*DFloat)), nil
 			},
 		},
 		BinOp{
-			LeftType:   types.TypeDecimal,
-			RightType:  types.TypeDecimal,
-			ReturnType: types.TypeDecimal,
+			LeftType:   types.Decimal,
+			RightType:  types.Decimal,
+			ReturnType: types.Decimal,
 			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				l := &left.(*DDecimal).Decimal
 				r := &right.(*DDecimal).Decimal
@@ -418,9 +418,9 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			},
 		},
 		BinOp{
-			LeftType:   types.TypeDecimal,
-			RightType:  types.TypeInt,
-			ReturnType: types.TypeDecimal,
+			LeftType:   types.Decimal,
+			RightType:  types.Int,
+			ReturnType: types.Decimal,
 			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				l := &left.(*DDecimal).Decimal
 				r := MustBeDInt(right)
@@ -431,9 +431,9 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			},
 		},
 		BinOp{
-			LeftType:   types.TypeInt,
-			RightType:  types.TypeDecimal,
-			ReturnType: types.TypeDecimal,
+			LeftType:   types.Int,
+			RightType:  types.Decimal,
+			ReturnType: types.Decimal,
 			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				l := MustBeDInt(left)
 				r := &right.(*DDecimal).Decimal
@@ -444,67 +444,67 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			},
 		},
 		BinOp{
-			LeftType:   types.TypeDate,
-			RightType:  types.TypeInt,
-			ReturnType: types.TypeDate,
+			LeftType:   types.Date,
+			RightType:  types.Int,
+			ReturnType: types.Date,
 			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				return NewDDate(*left.(*DDate) + DDate(MustBeDInt(right))), nil
 			},
 		},
 		BinOp{
-			LeftType:   types.TypeInt,
-			RightType:  types.TypeDate,
-			ReturnType: types.TypeDate,
+			LeftType:   types.Int,
+			RightType:  types.Date,
+			ReturnType: types.Date,
 			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				return NewDDate(DDate(MustBeDInt(left)) + *right.(*DDate)), nil
 			},
 		},
 		BinOp{
-			LeftType:   types.TypeTimestamp,
-			RightType:  types.TypeInterval,
-			ReturnType: types.TypeTimestamp,
+			LeftType:   types.Timestamp,
+			RightType:  types.Interval,
+			ReturnType: types.Timestamp,
 			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				return MakeDTimestamp(duration.Add(left.(*DTimestamp).Time, right.(*DInterval).Duration), time.Microsecond), nil
 			},
 		},
 		BinOp{
-			LeftType:   types.TypeInterval,
-			RightType:  types.TypeTimestamp,
-			ReturnType: types.TypeTimestamp,
+			LeftType:   types.Interval,
+			RightType:  types.Timestamp,
+			ReturnType: types.Timestamp,
 			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				return MakeDTimestamp(duration.Add(right.(*DTimestamp).Time, left.(*DInterval).Duration), time.Microsecond), nil
 			},
 		},
 		BinOp{
-			LeftType:   types.TypeTimestampTZ,
-			RightType:  types.TypeInterval,
-			ReturnType: types.TypeTimestampTZ,
+			LeftType:   types.TimestampTZ,
+			RightType:  types.Interval,
+			ReturnType: types.TimestampTZ,
 			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				t := duration.Add(left.(*DTimestampTZ).Time, right.(*DInterval).Duration)
 				return MakeDTimestampTZ(t, time.Microsecond), nil
 			},
 		},
 		BinOp{
-			LeftType:   types.TypeInterval,
-			RightType:  types.TypeTimestampTZ,
-			ReturnType: types.TypeTimestampTZ,
+			LeftType:   types.Interval,
+			RightType:  types.TimestampTZ,
+			ReturnType: types.TimestampTZ,
 			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				t := duration.Add(right.(*DTimestampTZ).Time, left.(*DInterval).Duration)
 				return MakeDTimestampTZ(t, time.Microsecond), nil
 			},
 		},
 		BinOp{
-			LeftType:   types.TypeInterval,
-			RightType:  types.TypeInterval,
-			ReturnType: types.TypeInterval,
+			LeftType:   types.Interval,
+			RightType:  types.Interval,
+			ReturnType: types.Interval,
 			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				return &DInterval{Duration: left.(*DInterval).Duration.Add(right.(*DInterval).Duration)}, nil
 			},
 		},
 		BinOp{
-			LeftType:   types.TypeDate,
-			RightType:  types.TypeInterval,
-			ReturnType: types.TypeTimestampTZ,
+			LeftType:   types.Date,
+			RightType:  types.Interval,
+			ReturnType: types.TimestampTZ,
 			fn: func(ctx *EvalContext, left Datum, right Datum) (Datum, error) {
 				leftTZ := MakeDTimestampTZFromDate(ctx.GetLocation(), left.(*DDate))
 				t := duration.Add(leftTZ.Time, right.(*DInterval).Duration)
@@ -512,9 +512,9 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			},
 		},
 		BinOp{
-			LeftType:   types.TypeInterval,
-			RightType:  types.TypeDate,
-			ReturnType: types.TypeTimestampTZ,
+			LeftType:   types.Interval,
+			RightType:  types.Date,
+			ReturnType: types.TimestampTZ,
 			fn: func(ctx *EvalContext, left Datum, right Datum) (Datum, error) {
 				rightTZ := MakeDTimestampTZFromDate(ctx.GetLocation(), right.(*DDate))
 				t := duration.Add(rightTZ.Time, left.(*DInterval).Duration)
@@ -525,9 +525,9 @@ var BinOps = map[BinaryOperator]binOpOverload{
 
 	Minus: {
 		BinOp{
-			LeftType:   types.TypeInt,
-			RightType:  types.TypeInt,
-			ReturnType: types.TypeInt,
+			LeftType:   types.Int,
+			RightType:  types.Int,
+			ReturnType: types.Int,
 			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				a, b := MustBeDInt(left), MustBeDInt(right)
 				if b < 0 && a > math.MaxInt64+b {
@@ -540,17 +540,17 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			},
 		},
 		BinOp{
-			LeftType:   types.TypeFloat,
-			RightType:  types.TypeFloat,
-			ReturnType: types.TypeFloat,
+			LeftType:   types.Float,
+			RightType:  types.Float,
+			ReturnType: types.Float,
 			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				return NewDFloat(*left.(*DFloat) - *right.(*DFloat)), nil
 			},
 		},
 		BinOp{
-			LeftType:   types.TypeDecimal,
-			RightType:  types.TypeDecimal,
-			ReturnType: types.TypeDecimal,
+			LeftType:   types.Decimal,
+			RightType:  types.Decimal,
+			ReturnType: types.Decimal,
 			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				l := &left.(*DDecimal).Decimal
 				r := &right.(*DDecimal).Decimal
@@ -560,9 +560,9 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			},
 		},
 		BinOp{
-			LeftType:   types.TypeDecimal,
-			RightType:  types.TypeInt,
-			ReturnType: types.TypeDecimal,
+			LeftType:   types.Decimal,
+			RightType:  types.Int,
+			ReturnType: types.Decimal,
 			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				l := &left.(*DDecimal).Decimal
 				r := MustBeDInt(right)
@@ -573,9 +573,9 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			},
 		},
 		BinOp{
-			LeftType:   types.TypeInt,
-			RightType:  types.TypeDecimal,
-			ReturnType: types.TypeDecimal,
+			LeftType:   types.Int,
+			RightType:  types.Decimal,
+			ReturnType: types.Decimal,
 			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				l := MustBeDInt(left)
 				r := &right.(*DDecimal).Decimal
@@ -586,78 +586,78 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			},
 		},
 		BinOp{
-			LeftType:   types.TypeDate,
-			RightType:  types.TypeInt,
-			ReturnType: types.TypeDate,
+			LeftType:   types.Date,
+			RightType:  types.Int,
+			ReturnType: types.Date,
 			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				return NewDDate(*left.(*DDate) - DDate(MustBeDInt(right))), nil
 			},
 		},
 		BinOp{
-			LeftType:   types.TypeDate,
-			RightType:  types.TypeDate,
-			ReturnType: types.TypeInt,
+			LeftType:   types.Date,
+			RightType:  types.Date,
+			ReturnType: types.Int,
 			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				return NewDInt(DInt(*left.(*DDate) - *right.(*DDate))), nil
 			},
 		},
 		BinOp{
-			LeftType:   types.TypeTimestamp,
-			RightType:  types.TypeTimestamp,
-			ReturnType: types.TypeInterval,
+			LeftType:   types.Timestamp,
+			RightType:  types.Timestamp,
+			ReturnType: types.Interval,
 			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				nanos := left.(*DTimestamp).Sub(right.(*DTimestamp).Time).Nanoseconds()
 				return &DInterval{Duration: duration.Duration{Nanos: nanos}}, nil
 			},
 		},
 		BinOp{
-			LeftType:   types.TypeTimestampTZ,
-			RightType:  types.TypeTimestampTZ,
-			ReturnType: types.TypeInterval,
+			LeftType:   types.TimestampTZ,
+			RightType:  types.TimestampTZ,
+			ReturnType: types.Interval,
 			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				nanos := left.(*DTimestampTZ).Sub(right.(*DTimestampTZ).Time).Nanoseconds()
 				return &DInterval{Duration: duration.Duration{Nanos: nanos}}, nil
 			},
 		},
 		BinOp{
-			LeftType:   types.TypeTimestamp,
-			RightType:  types.TypeTimestampTZ,
-			ReturnType: types.TypeInterval,
+			LeftType:   types.Timestamp,
+			RightType:  types.TimestampTZ,
+			ReturnType: types.Interval,
 			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				nanos := left.(*DTimestamp).Sub(right.(*DTimestampTZ).Time).Nanoseconds()
 				return &DInterval{Duration: duration.Duration{Nanos: nanos}}, nil
 			},
 		},
 		BinOp{
-			LeftType:   types.TypeTimestampTZ,
-			RightType:  types.TypeTimestamp,
-			ReturnType: types.TypeInterval,
+			LeftType:   types.TimestampTZ,
+			RightType:  types.Timestamp,
+			ReturnType: types.Interval,
 			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				nanos := left.(*DTimestampTZ).Sub(right.(*DTimestamp).Time).Nanoseconds()
 				return &DInterval{Duration: duration.Duration{Nanos: nanos}}, nil
 			},
 		},
 		BinOp{
-			LeftType:   types.TypeTimestamp,
-			RightType:  types.TypeInterval,
-			ReturnType: types.TypeTimestamp,
+			LeftType:   types.Timestamp,
+			RightType:  types.Interval,
+			ReturnType: types.Timestamp,
 			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				return MakeDTimestamp(duration.Add(left.(*DTimestamp).Time, right.(*DInterval).Duration.Mul(-1)), time.Microsecond), nil
 			},
 		},
 		BinOp{
-			LeftType:   types.TypeTimestampTZ,
-			RightType:  types.TypeInterval,
-			ReturnType: types.TypeTimestampTZ,
+			LeftType:   types.TimestampTZ,
+			RightType:  types.Interval,
+			ReturnType: types.TimestampTZ,
 			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				t := duration.Add(left.(*DTimestampTZ).Time, right.(*DInterval).Duration.Mul(-1))
 				return MakeDTimestampTZ(t, time.Microsecond), nil
 			},
 		},
 		BinOp{
-			LeftType:   types.TypeDate,
-			RightType:  types.TypeInterval,
-			ReturnType: types.TypeTimestampTZ,
+			LeftType:   types.Date,
+			RightType:  types.Interval,
+			ReturnType: types.TimestampTZ,
 			fn: func(ctx *EvalContext, left Datum, right Datum) (Datum, error) {
 				leftTZ := MakeDTimestampTZFromDate(ctx.GetLocation(), left.(*DDate))
 				t := duration.Add(leftTZ.Time, right.(*DInterval).Duration.Mul(-1))
@@ -665,17 +665,17 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			},
 		},
 		BinOp{
-			LeftType:   types.TypeInterval,
-			RightType:  types.TypeInterval,
-			ReturnType: types.TypeInterval,
+			LeftType:   types.Interval,
+			RightType:  types.Interval,
+			ReturnType: types.Interval,
 			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				return &DInterval{Duration: left.(*DInterval).Duration.Sub(right.(*DInterval).Duration)}, nil
 			},
 		},
 		BinOp{
-			LeftType:   types.TypeJSON,
-			RightType:  types.TypeString,
-			ReturnType: types.TypeJSON,
+			LeftType:   types.JSON,
+			RightType:  types.String,
+			ReturnType: types.JSON,
 			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				j, err := left.(*DJSON).JSON.RemoveKey(string(MustBeDString(right)))
 				if err != nil {
@@ -685,9 +685,9 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			},
 		},
 		BinOp{
-			LeftType:   types.TypeJSON,
-			RightType:  types.TypeInt,
-			ReturnType: types.TypeJSON,
+			LeftType:   types.JSON,
+			RightType:  types.Int,
+			ReturnType: types.JSON,
 			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				j, err := left.(*DJSON).JSON.RemoveIndex(int(MustBeDInt(right)))
 				if err != nil {
@@ -700,9 +700,9 @@ var BinOps = map[BinaryOperator]binOpOverload{
 
 	Mult: {
 		BinOp{
-			LeftType:   types.TypeInt,
-			RightType:  types.TypeInt,
-			ReturnType: types.TypeInt,
+			LeftType:   types.Int,
+			RightType:  types.Int,
+			ReturnType: types.Int,
 			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				// See Rob Pike's implementation from
 				// https://groups.google.com/d/msg/golang-nuts/h5oSN5t3Au4/KaNQREhZh0QJ
@@ -721,17 +721,17 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			},
 		},
 		BinOp{
-			LeftType:   types.TypeFloat,
-			RightType:  types.TypeFloat,
-			ReturnType: types.TypeFloat,
+			LeftType:   types.Float,
+			RightType:  types.Float,
+			ReturnType: types.Float,
 			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				return NewDFloat(*left.(*DFloat) * *right.(*DFloat)), nil
 			},
 		},
 		BinOp{
-			LeftType:   types.TypeDecimal,
-			RightType:  types.TypeDecimal,
-			ReturnType: types.TypeDecimal,
+			LeftType:   types.Decimal,
+			RightType:  types.Decimal,
+			ReturnType: types.Decimal,
 			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				l := &left.(*DDecimal).Decimal
 				r := &right.(*DDecimal).Decimal
@@ -743,9 +743,9 @@ var BinOps = map[BinaryOperator]binOpOverload{
 		// The following two overloads are needed becauase DInt/DInt = DDecimal. Due to this
 		// operation, normalization may sometimes create a DInt * DDecimal operation.
 		BinOp{
-			LeftType:   types.TypeDecimal,
-			RightType:  types.TypeInt,
-			ReturnType: types.TypeDecimal,
+			LeftType:   types.Decimal,
+			RightType:  types.Int,
+			ReturnType: types.Decimal,
 			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				l := &left.(*DDecimal).Decimal
 				r := MustBeDInt(right)
@@ -756,9 +756,9 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			},
 		},
 		BinOp{
-			LeftType:   types.TypeInt,
-			RightType:  types.TypeDecimal,
-			ReturnType: types.TypeDecimal,
+			LeftType:   types.Int,
+			RightType:  types.Decimal,
+			ReturnType: types.Decimal,
 			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				l := MustBeDInt(left)
 				r := &right.(*DDecimal).Decimal
@@ -769,25 +769,25 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			},
 		},
 		BinOp{
-			LeftType:   types.TypeInt,
-			RightType:  types.TypeInterval,
-			ReturnType: types.TypeInterval,
+			LeftType:   types.Int,
+			RightType:  types.Interval,
+			ReturnType: types.Interval,
 			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				return &DInterval{Duration: right.(*DInterval).Duration.Mul(int64(MustBeDInt(left)))}, nil
 			},
 		},
 		BinOp{
-			LeftType:   types.TypeInterval,
-			RightType:  types.TypeInt,
-			ReturnType: types.TypeInterval,
+			LeftType:   types.Interval,
+			RightType:  types.Int,
+			ReturnType: types.Interval,
 			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				return &DInterval{Duration: left.(*DInterval).Duration.Mul(int64(MustBeDInt(right)))}, nil
 			},
 		},
 		BinOp{
-			LeftType:   types.TypeInterval,
-			RightType:  types.TypeFloat,
-			ReturnType: types.TypeInterval,
+			LeftType:   types.Interval,
+			RightType:  types.Float,
+			ReturnType: types.Interval,
 			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				r := float64(*right.(*DFloat))
 				return &DInterval{Duration: left.(*DInterval).Duration.MulFloat(r)}, nil
@@ -797,9 +797,9 @@ var BinOps = map[BinaryOperator]binOpOverload{
 
 	Div: {
 		BinOp{
-			LeftType:   types.TypeInt,
-			RightType:  types.TypeInt,
-			ReturnType: types.TypeDecimal,
+			LeftType:   types.Int,
+			RightType:  types.Int,
+			ReturnType: types.Decimal,
 			fn: func(ctx *EvalContext, left Datum, right Datum) (Datum, error) {
 				rInt := MustBeDInt(right)
 				div := ctx.getTmpDec().SetCoefficient(int64(rInt)).SetExponent(0)
@@ -810,17 +810,17 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			},
 		},
 		BinOp{
-			LeftType:   types.TypeFloat,
-			RightType:  types.TypeFloat,
-			ReturnType: types.TypeFloat,
+			LeftType:   types.Float,
+			RightType:  types.Float,
+			ReturnType: types.Float,
 			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				return NewDFloat(*left.(*DFloat) / *right.(*DFloat)), nil
 			},
 		},
 		BinOp{
-			LeftType:   types.TypeDecimal,
-			RightType:  types.TypeDecimal,
-			ReturnType: types.TypeDecimal,
+			LeftType:   types.Decimal,
+			RightType:  types.Decimal,
+			ReturnType: types.Decimal,
 			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				l := &left.(*DDecimal).Decimal
 				r := &right.(*DDecimal).Decimal
@@ -830,9 +830,9 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			},
 		},
 		BinOp{
-			LeftType:   types.TypeDecimal,
-			RightType:  types.TypeInt,
-			ReturnType: types.TypeDecimal,
+			LeftType:   types.Decimal,
+			RightType:  types.Int,
+			ReturnType: types.Decimal,
 			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				l := &left.(*DDecimal).Decimal
 				r := MustBeDInt(right)
@@ -843,9 +843,9 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			},
 		},
 		BinOp{
-			LeftType:   types.TypeInt,
-			RightType:  types.TypeDecimal,
-			ReturnType: types.TypeDecimal,
+			LeftType:   types.Int,
+			RightType:  types.Decimal,
+			ReturnType: types.Decimal,
 			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				l := MustBeDInt(left)
 				r := &right.(*DDecimal).Decimal
@@ -856,9 +856,9 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			},
 		},
 		BinOp{
-			LeftType:   types.TypeInterval,
-			RightType:  types.TypeInt,
-			ReturnType: types.TypeInterval,
+			LeftType:   types.Interval,
+			RightType:  types.Int,
+			ReturnType: types.Interval,
 			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				rInt := MustBeDInt(right)
 				if rInt == 0 {
@@ -868,9 +868,9 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			},
 		},
 		BinOp{
-			LeftType:   types.TypeInterval,
-			RightType:  types.TypeFloat,
-			ReturnType: types.TypeInterval,
+			LeftType:   types.Interval,
+			RightType:  types.Float,
+			ReturnType: types.Interval,
 			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				r := float64(*right.(*DFloat))
 				if r == 0.0 {
@@ -883,9 +883,9 @@ var BinOps = map[BinaryOperator]binOpOverload{
 
 	FloorDiv: {
 		BinOp{
-			LeftType:   types.TypeInt,
-			RightType:  types.TypeInt,
-			ReturnType: types.TypeInt,
+			LeftType:   types.Int,
+			RightType:  types.Int,
+			ReturnType: types.Int,
 			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				rInt := MustBeDInt(right)
 				if rInt == 0 {
@@ -895,9 +895,9 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			},
 		},
 		BinOp{
-			LeftType:   types.TypeFloat,
-			RightType:  types.TypeFloat,
-			ReturnType: types.TypeFloat,
+			LeftType:   types.Float,
+			RightType:  types.Float,
+			ReturnType: types.Float,
 			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				l := float64(*left.(*DFloat))
 				r := float64(*right.(*DFloat))
@@ -905,9 +905,9 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			},
 		},
 		BinOp{
-			LeftType:   types.TypeDecimal,
-			RightType:  types.TypeDecimal,
-			ReturnType: types.TypeDecimal,
+			LeftType:   types.Decimal,
+			RightType:  types.Decimal,
+			ReturnType: types.Decimal,
 			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				l := &left.(*DDecimal).Decimal
 				r := &right.(*DDecimal).Decimal
@@ -917,9 +917,9 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			},
 		},
 		BinOp{
-			LeftType:   types.TypeDecimal,
-			RightType:  types.TypeInt,
-			ReturnType: types.TypeDecimal,
+			LeftType:   types.Decimal,
+			RightType:  types.Int,
+			ReturnType: types.Decimal,
 			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				l := &left.(*DDecimal).Decimal
 				r := MustBeDInt(right)
@@ -933,9 +933,9 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			},
 		},
 		BinOp{
-			LeftType:   types.TypeInt,
-			RightType:  types.TypeDecimal,
-			ReturnType: types.TypeDecimal,
+			LeftType:   types.Int,
+			RightType:  types.Decimal,
+			ReturnType: types.Decimal,
 			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				l := MustBeDInt(left)
 				r := &right.(*DDecimal).Decimal
@@ -952,9 +952,9 @@ var BinOps = map[BinaryOperator]binOpOverload{
 
 	Mod: {
 		BinOp{
-			LeftType:   types.TypeInt,
-			RightType:  types.TypeInt,
-			ReturnType: types.TypeInt,
+			LeftType:   types.Int,
+			RightType:  types.Int,
+			ReturnType: types.Int,
 			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				r := MustBeDInt(right)
 				if r == 0 {
@@ -964,17 +964,17 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			},
 		},
 		BinOp{
-			LeftType:   types.TypeFloat,
-			RightType:  types.TypeFloat,
-			ReturnType: types.TypeFloat,
+			LeftType:   types.Float,
+			RightType:  types.Float,
+			ReturnType: types.Float,
 			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				return NewDFloat(DFloat(math.Mod(float64(*left.(*DFloat)), float64(*right.(*DFloat))))), nil
 			},
 		},
 		BinOp{
-			LeftType:   types.TypeDecimal,
-			RightType:  types.TypeDecimal,
-			ReturnType: types.TypeDecimal,
+			LeftType:   types.Decimal,
+			RightType:  types.Decimal,
+			ReturnType: types.Decimal,
 			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				l := &left.(*DDecimal).Decimal
 				r := &right.(*DDecimal).Decimal
@@ -984,9 +984,9 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			},
 		},
 		BinOp{
-			LeftType:   types.TypeDecimal,
-			RightType:  types.TypeInt,
-			ReturnType: types.TypeDecimal,
+			LeftType:   types.Decimal,
+			RightType:  types.Int,
+			ReturnType: types.Decimal,
 			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				l := &left.(*DDecimal).Decimal
 				r := MustBeDInt(right)
@@ -997,9 +997,9 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			},
 		},
 		BinOp{
-			LeftType:   types.TypeInt,
-			RightType:  types.TypeDecimal,
-			ReturnType: types.TypeDecimal,
+			LeftType:   types.Int,
+			RightType:  types.Decimal,
+			ReturnType: types.Decimal,
 			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				l := MustBeDInt(left)
 				r := &right.(*DDecimal).Decimal
@@ -1013,17 +1013,17 @@ var BinOps = map[BinaryOperator]binOpOverload{
 
 	Concat: {
 		BinOp{
-			LeftType:   types.TypeString,
-			RightType:  types.TypeString,
-			ReturnType: types.TypeString,
+			LeftType:   types.String,
+			RightType:  types.String,
+			ReturnType: types.String,
 			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				return NewDString(string(MustBeDString(left) + MustBeDString(right))), nil
 			},
 		},
 		BinOp{
-			LeftType:   types.TypeBytes,
-			RightType:  types.TypeBytes,
-			ReturnType: types.TypeBytes,
+			LeftType:   types.Bytes,
+			RightType:  types.Bytes,
+			ReturnType: types.Bytes,
 			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				return NewDBytes(*left.(*DBytes) + *right.(*DBytes)), nil
 			},
@@ -1033,9 +1033,9 @@ var BinOps = map[BinaryOperator]binOpOverload{
 	// TODO(pmattis): Check that the shift is valid.
 	LShift: {
 		BinOp{
-			LeftType:   types.TypeInt,
-			RightType:  types.TypeInt,
-			ReturnType: types.TypeInt,
+			LeftType:   types.Int,
+			RightType:  types.Int,
+			ReturnType: types.Int,
 			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				return NewDInt(MustBeDInt(left) << uint(MustBeDInt(right))), nil
 			},
@@ -1044,9 +1044,9 @@ var BinOps = map[BinaryOperator]binOpOverload{
 
 	RShift: {
 		BinOp{
-			LeftType:   types.TypeInt,
-			RightType:  types.TypeInt,
-			ReturnType: types.TypeInt,
+			LeftType:   types.Int,
+			RightType:  types.Int,
+			ReturnType: types.Int,
 			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				return NewDInt(MustBeDInt(left) >> uint(MustBeDInt(right))), nil
 			},
@@ -1055,26 +1055,26 @@ var BinOps = map[BinaryOperator]binOpOverload{
 
 	Pow: {
 		BinOp{
-			LeftType:   types.TypeInt,
-			RightType:  types.TypeInt,
-			ReturnType: types.TypeInt,
+			LeftType:   types.Int,
+			RightType:  types.Int,
+			ReturnType: types.Int,
 			fn: func(ctx *EvalContext, left Datum, right Datum) (Datum, error) {
 				return intPow(MustBeDInt(left), MustBeDInt(right))
 			},
 		},
 		BinOp{
-			LeftType:   types.TypeFloat,
-			RightType:  types.TypeFloat,
-			ReturnType: types.TypeFloat,
+			LeftType:   types.Float,
+			RightType:  types.Float,
+			ReturnType: types.Float,
 			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				f := math.Pow(float64(*left.(*DFloat)), float64(*right.(*DFloat)))
 				return NewDFloat(DFloat(f)), nil
 			},
 		},
 		BinOp{
-			LeftType:   types.TypeDecimal,
-			RightType:  types.TypeDecimal,
-			ReturnType: types.TypeDecimal,
+			LeftType:   types.Decimal,
+			RightType:  types.Decimal,
+			ReturnType: types.Decimal,
 			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				l := &left.(*DDecimal).Decimal
 				r := &right.(*DDecimal).Decimal
@@ -1084,9 +1084,9 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			},
 		},
 		BinOp{
-			LeftType:   types.TypeDecimal,
-			RightType:  types.TypeInt,
-			ReturnType: types.TypeDecimal,
+			LeftType:   types.Decimal,
+			RightType:  types.Int,
+			ReturnType: types.Decimal,
 			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				l := &left.(*DDecimal).Decimal
 				r := MustBeDInt(right)
@@ -1097,9 +1097,9 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			},
 		},
 		BinOp{
-			LeftType:   types.TypeInt,
-			RightType:  types.TypeDecimal,
-			ReturnType: types.TypeDecimal,
+			LeftType:   types.Int,
+			RightType:  types.Decimal,
+			ReturnType: types.Decimal,
 			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				l := MustBeDInt(left)
 				r := &right.(*DDecimal).Decimal
@@ -1113,9 +1113,9 @@ var BinOps = map[BinaryOperator]binOpOverload{
 
 	FetchVal: {
 		BinOp{
-			LeftType:   types.TypeJSON,
-			RightType:  types.TypeString,
-			ReturnType: types.TypeJSON,
+			LeftType:   types.JSON,
+			RightType:  types.String,
+			ReturnType: types.JSON,
 			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				j := left.(*DJSON).JSON.FetchValKey(string(MustBeDString(right)))
 				if j == nil {
@@ -1125,9 +1125,9 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			},
 		},
 		BinOp{
-			LeftType:   types.TypeJSON,
-			RightType:  types.TypeInt,
-			ReturnType: types.TypeJSON,
+			LeftType:   types.JSON,
+			RightType:  types.Int,
+			ReturnType: types.JSON,
 			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				j := left.(*DJSON).JSON.FetchValIdx(int(MustBeDInt(right)))
 				if j == nil {
@@ -1140,9 +1140,9 @@ var BinOps = map[BinaryOperator]binOpOverload{
 
 	FetchValPath: {
 		BinOp{
-			LeftType:   types.TypeJSON,
-			RightType:  types.TArray{Typ: types.TypeString},
-			ReturnType: types.TypeJSON,
+			LeftType:   types.JSON,
+			RightType:  types.TArray{Typ: types.String},
+			ReturnType: types.JSON,
 			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				return getJSONPath(*left.(*DJSON), *MustBeDArray(right)), nil
 			},
@@ -1151,9 +1151,9 @@ var BinOps = map[BinaryOperator]binOpOverload{
 
 	FetchText: {
 		BinOp{
-			LeftType:   types.TypeJSON,
-			RightType:  types.TypeString,
-			ReturnType: types.TypeString,
+			LeftType:   types.JSON,
+			RightType:  types.String,
+			ReturnType: types.String,
 			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				res := left.(*DJSON).JSON.FetchValKey(string(MustBeDString(right)))
 				if res == nil {
@@ -1163,9 +1163,9 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			},
 		},
 		BinOp{
-			LeftType:   types.TypeJSON,
-			RightType:  types.TypeInt,
-			ReturnType: types.TypeString,
+			LeftType:   types.JSON,
+			RightType:  types.Int,
+			ReturnType: types.String,
 			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				res := left.(*DJSON).JSON.FetchValIdx(int(MustBeDInt(right)))
 				if res == nil {
@@ -1178,9 +1178,9 @@ var BinOps = map[BinaryOperator]binOpOverload{
 
 	FetchTextPath: {
 		BinOp{
-			LeftType:   types.TypeJSON,
-			RightType:  types.TArray{Typ: types.TypeString},
-			ReturnType: types.TypeJSON,
+			LeftType:   types.JSON,
+			RightType:  types.TArray{Typ: types.String},
+			ReturnType: types.JSON,
 			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				res := getJSONPath(*left.(*DJSON), *MustBeDArray(right))
 				if res == DNull {
@@ -1195,7 +1195,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 var timestampMinusBinOp BinOp
 
 func init() {
-	timestampMinusBinOp, _ = BinOps[Minus].lookupImpl(types.TypeTimestampTZ, types.TypeTimestampTZ)
+	timestampMinusBinOp, _ = BinOps[Minus].lookupImpl(types.TimestampTZ, types.TimestampTZ)
 }
 
 // CmpOp is a comparison operator.
@@ -1217,7 +1217,7 @@ func (op CmpOp) matchParams(l, r types.T) bool {
 	return op.params().matchAt(l, 0) && op.params().matchAt(r, 1)
 }
 
-var cmpOpReturnType = fixedReturnType(types.TypeBool)
+var cmpOpReturnType = fixedReturnType(types.Bool)
 
 func (op CmpOp) returnType() returnTyper {
 	return cmpOpReturnType
@@ -1264,8 +1264,8 @@ func (o cmpOpOverload) lookupImpl(left, right types.T) (CmpOp, bool) {
 var CmpOps = map[ComparisonOperator]cmpOpOverload{
 	EQ: {
 		CmpOp{
-			LeftType:  types.TypeString,
-			RightType: types.TypeString,
+			LeftType:  types.String,
+			RightType: types.String,
 			fn:        cmpOpScalarEQFn,
 		},
 		CmpOp{
@@ -1274,128 +1274,128 @@ var CmpOps = map[ComparisonOperator]cmpOpOverload{
 			fn:        cmpOpScalarEQFn,
 		},
 		CmpOp{
-			LeftType:  types.TypeBytes,
-			RightType: types.TypeBytes,
+			LeftType:  types.Bytes,
+			RightType: types.Bytes,
 			fn:        cmpOpScalarEQFn,
 		},
 		CmpOp{
-			LeftType:  types.TypeBool,
-			RightType: types.TypeBool,
+			LeftType:  types.Bool,
+			RightType: types.Bool,
 			fn:        cmpOpScalarEQFn,
 		},
 		CmpOp{
-			LeftType:  types.TypeInt,
-			RightType: types.TypeInt,
+			LeftType:  types.Int,
+			RightType: types.Int,
 			fn:        cmpOpScalarEQFn,
 		},
 		CmpOp{
-			LeftType:  types.TypeFloat,
-			RightType: types.TypeFloat,
+			LeftType:  types.Float,
+			RightType: types.Float,
 			fn:        cmpOpScalarEQFn,
 		},
 		CmpOp{
-			LeftType:  types.TypeDecimal,
-			RightType: types.TypeDecimal,
+			LeftType:  types.Decimal,
+			RightType: types.Decimal,
 			fn:        cmpOpScalarEQFn,
 		},
 		CmpOp{
-			LeftType:  types.TypeFloat,
-			RightType: types.TypeInt,
+			LeftType:  types.Float,
+			RightType: types.Int,
 			fn:        cmpOpScalarEQFn,
 		},
 		CmpOp{
-			LeftType:  types.TypeInt,
-			RightType: types.TypeFloat,
+			LeftType:  types.Int,
+			RightType: types.Float,
 			fn:        cmpOpScalarEQFn,
 		},
 		CmpOp{
-			LeftType:  types.TypeDecimal,
-			RightType: types.TypeInt,
+			LeftType:  types.Decimal,
+			RightType: types.Int,
 			fn:        cmpOpScalarEQFn,
 		},
 		CmpOp{
-			LeftType:  types.TypeInt,
-			RightType: types.TypeDecimal,
+			LeftType:  types.Int,
+			RightType: types.Decimal,
 			fn:        cmpOpScalarEQFn,
 		},
 		CmpOp{
-			LeftType:  types.TypeDecimal,
-			RightType: types.TypeFloat,
+			LeftType:  types.Decimal,
+			RightType: types.Float,
 			fn:        cmpOpScalarEQFn,
 		},
 		CmpOp{
-			LeftType:  types.TypeFloat,
-			RightType: types.TypeDecimal,
+			LeftType:  types.Float,
+			RightType: types.Decimal,
 			fn:        cmpOpScalarEQFn,
 		},
 		CmpOp{
-			LeftType:  types.TypeDate,
-			RightType: types.TypeDate,
+			LeftType:  types.Date,
+			RightType: types.Date,
 			fn:        cmpOpScalarEQFn,
 		},
 		CmpOp{
-			LeftType:  types.TypeTimestamp,
-			RightType: types.TypeTimestamp,
+			LeftType:  types.Timestamp,
+			RightType: types.Timestamp,
 			fn:        cmpOpScalarEQFn,
 		},
 		CmpOp{
-			LeftType:  types.TypeTimestampTZ,
-			RightType: types.TypeTimestampTZ,
+			LeftType:  types.TimestampTZ,
+			RightType: types.TimestampTZ,
 			fn:        cmpOpScalarEQFn,
 		},
 		CmpOp{
-			LeftType:  types.TypeTimestamp,
-			RightType: types.TypeTimestampTZ,
+			LeftType:  types.Timestamp,
+			RightType: types.TimestampTZ,
 			fn:        cmpOpScalarEQFn,
 		},
 		CmpOp{
-			LeftType:  types.TypeTimestampTZ,
-			RightType: types.TypeTimestamp,
+			LeftType:  types.TimestampTZ,
+			RightType: types.Timestamp,
 			fn:        cmpOpScalarEQFn,
 		},
 		CmpOp{
-			LeftType:  types.TypeDate,
-			RightType: types.TypeTimestampTZ,
+			LeftType:  types.Date,
+			RightType: types.TimestampTZ,
 			fn:        cmpOpScalarEQFn,
 		},
 		CmpOp{
-			LeftType:  types.TypeDate,
-			RightType: types.TypeTimestamp,
+			LeftType:  types.Date,
+			RightType: types.Timestamp,
 			fn:        cmpOpScalarEQFn,
 		},
 		CmpOp{
-			LeftType:  types.TypeTimestampTZ,
-			RightType: types.TypeDate,
+			LeftType:  types.TimestampTZ,
+			RightType: types.Date,
 			fn:        cmpOpScalarEQFn,
 		},
 		CmpOp{
-			LeftType:  types.TypeTimestamp,
-			RightType: types.TypeDate,
+			LeftType:  types.Timestamp,
+			RightType: types.Date,
 			fn:        cmpOpScalarEQFn,
 		},
 		CmpOp{
-			LeftType:  types.TypeInterval,
-			RightType: types.TypeInterval,
+			LeftType:  types.Interval,
+			RightType: types.Interval,
 			fn:        cmpOpScalarEQFn,
 		},
 		CmpOp{
-			LeftType:  types.TypeJSON,
-			RightType: types.TypeJSON,
+			LeftType:  types.JSON,
+			RightType: types.JSON,
 			fn:        cmpOpScalarEQFn,
 		},
 		CmpOp{
-			LeftType:  types.TypeUUID,
-			RightType: types.TypeUUID,
+			LeftType:  types.UUID,
+			RightType: types.UUID,
 			fn:        cmpOpScalarEQFn,
 		},
 		CmpOp{
-			LeftType:  types.TypeINet,
-			RightType: types.TypeINet,
+			LeftType:  types.INet,
+			RightType: types.INet,
 			fn:        cmpOpScalarEQFn,
 		},
 		CmpOp{
-			LeftType:  types.TypeOid,
-			RightType: types.TypeOid,
+			LeftType:  types.Oid,
+			RightType: types.Oid,
 			fn:        cmpOpScalarEQFn,
 		},
 		CmpOp{
@@ -1409,8 +1409,8 @@ var CmpOps = map[ComparisonOperator]cmpOpOverload{
 
 	LT: {
 		CmpOp{
-			LeftType:  types.TypeString,
-			RightType: types.TypeString,
+			LeftType:  types.String,
+			RightType: types.String,
 			fn:        cmpOpScalarLTFn,
 		},
 		CmpOp{
@@ -1419,118 +1419,118 @@ var CmpOps = map[ComparisonOperator]cmpOpOverload{
 			fn:        cmpOpScalarLTFn,
 		},
 		CmpOp{
-			LeftType:  types.TypeBytes,
-			RightType: types.TypeBytes,
+			LeftType:  types.Bytes,
+			RightType: types.Bytes,
 			fn:        cmpOpScalarLTFn,
 		},
 		CmpOp{
-			LeftType:  types.TypeBool,
-			RightType: types.TypeBool,
+			LeftType:  types.Bool,
+			RightType: types.Bool,
 			fn:        cmpOpScalarLTFn,
 		},
 		CmpOp{
-			LeftType:  types.TypeInt,
-			RightType: types.TypeInt,
+			LeftType:  types.Int,
+			RightType: types.Int,
 			fn:        cmpOpScalarLTFn,
 		},
 		CmpOp{
-			LeftType:  types.TypeFloat,
-			RightType: types.TypeFloat,
+			LeftType:  types.Float,
+			RightType: types.Float,
 			fn:        cmpOpScalarLTFn,
 		},
 		CmpOp{
-			LeftType:  types.TypeDecimal,
-			RightType: types.TypeDecimal,
+			LeftType:  types.Decimal,
+			RightType: types.Decimal,
 			fn:        cmpOpScalarLTFn,
 		},
 		CmpOp{
-			LeftType:  types.TypeFloat,
-			RightType: types.TypeInt,
+			LeftType:  types.Float,
+			RightType: types.Int,
 			fn:        cmpOpScalarLTFn,
 		},
 		CmpOp{
-			LeftType:  types.TypeInt,
-			RightType: types.TypeFloat,
+			LeftType:  types.Int,
+			RightType: types.Float,
 			fn:        cmpOpScalarLTFn,
 		},
 		CmpOp{
-			LeftType:  types.TypeDecimal,
-			RightType: types.TypeInt,
+			LeftType:  types.Decimal,
+			RightType: types.Int,
 			fn:        cmpOpScalarLTFn,
 		},
 		CmpOp{
-			LeftType:  types.TypeInt,
-			RightType: types.TypeDecimal,
+			LeftType:  types.Int,
+			RightType: types.Decimal,
 			fn:        cmpOpScalarLTFn,
 		},
 		CmpOp{
-			LeftType:  types.TypeDecimal,
-			RightType: types.TypeFloat,
+			LeftType:  types.Decimal,
+			RightType: types.Float,
 			fn:        cmpOpScalarLTFn,
 		},
 		CmpOp{
-			LeftType:  types.TypeFloat,
-			RightType: types.TypeDecimal,
+			LeftType:  types.Float,
+			RightType: types.Decimal,
 			fn:        cmpOpScalarLTFn,
 		},
 		CmpOp{
-			LeftType:  types.TypeDate,
-			RightType: types.TypeDate,
+			LeftType:  types.Date,
+			RightType: types.Date,
 			fn:        cmpOpScalarLTFn,
 		},
 		CmpOp{
-			LeftType:  types.TypeTimestamp,
-			RightType: types.TypeTimestamp,
+			LeftType:  types.Timestamp,
+			RightType: types.Timestamp,
 			fn:        cmpOpScalarLTFn,
 		},
 		CmpOp{
-			LeftType:  types.TypeTimestampTZ,
-			RightType: types.TypeTimestampTZ,
+			LeftType:  types.TimestampTZ,
+			RightType: types.TimestampTZ,
 			fn:        cmpOpScalarLTFn,
 		},
 		CmpOp{
-			LeftType:  types.TypeTimestamp,
-			RightType: types.TypeTimestampTZ,
+			LeftType:  types.Timestamp,
+			RightType: types.TimestampTZ,
 			fn:        cmpOpScalarLTFn,
 		},
 		CmpOp{
-			LeftType:  types.TypeTimestampTZ,
-			RightType: types.TypeTimestamp,
+			LeftType:  types.TimestampTZ,
+			RightType: types.Timestamp,
 			fn:        cmpOpScalarLTFn,
 		},
 		CmpOp{
-			LeftType:  types.TypeDate,
-			RightType: types.TypeTimestampTZ,
+			LeftType:  types.Date,
+			RightType: types.TimestampTZ,
 			fn:        cmpOpScalarLTFn,
 		},
 		CmpOp{
-			LeftType:  types.TypeDate,
-			RightType: types.TypeTimestamp,
+			LeftType:  types.Date,
+			RightType: types.Timestamp,
 			fn:        cmpOpScalarLTFn,
 		},
 		CmpOp{
-			LeftType:  types.TypeTimestampTZ,
-			RightType: types.TypeDate,
+			LeftType:  types.TimestampTZ,
+			RightType: types.Date,
 			fn:        cmpOpScalarLTFn,
 		},
 		CmpOp{
-			LeftType:  types.TypeTimestamp,
-			RightType: types.TypeDate,
+			LeftType:  types.Timestamp,
+			RightType: types.Date,
 			fn:        cmpOpScalarLTFn,
 		},
 		CmpOp{
-			LeftType:  types.TypeInterval,
-			RightType: types.TypeInterval,
+			LeftType:  types.Interval,
+			RightType: types.Interval,
 			fn:        cmpOpScalarLTFn,
 		},
 		CmpOp{
-			LeftType:  types.TypeUUID,
-			RightType: types.TypeUUID,
+			LeftType:  types.UUID,
+			RightType: types.UUID,
 			fn:        cmpOpScalarLTFn,
 		},
 		CmpOp{
-			LeftType:  types.TypeINet,
-			RightType: types.TypeINet,
+			LeftType:  types.INet,
+			RightType: types.INet,
 			fn:        cmpOpScalarLTFn,
 		},
 		CmpOp{
@@ -1544,8 +1544,8 @@ var CmpOps = map[ComparisonOperator]cmpOpOverload{
 
 	LE: {
 		CmpOp{
-			LeftType:  types.TypeString,
-			RightType: types.TypeString,
+			LeftType:  types.String,
+			RightType: types.String,
 			fn:        cmpOpScalarLEFn,
 		},
 		CmpOp{
@@ -1554,118 +1554,118 @@ var CmpOps = map[ComparisonOperator]cmpOpOverload{
 			fn:        cmpOpScalarLEFn,
 		},
 		CmpOp{
-			LeftType:  types.TypeBytes,
-			RightType: types.TypeBytes,
+			LeftType:  types.Bytes,
+			RightType: types.Bytes,
 			fn:        cmpOpScalarLEFn,
 		},
 		CmpOp{
-			LeftType:  types.TypeBool,
-			RightType: types.TypeBool,
+			LeftType:  types.Bool,
+			RightType: types.Bool,
 			fn:        cmpOpScalarLEFn,
 		},
 		CmpOp{
-			LeftType:  types.TypeInt,
-			RightType: types.TypeInt,
+			LeftType:  types.Int,
+			RightType: types.Int,
 			fn:        cmpOpScalarLEFn,
 		},
 		CmpOp{
-			LeftType:  types.TypeFloat,
-			RightType: types.TypeFloat,
+			LeftType:  types.Float,
+			RightType: types.Float,
 			fn:        cmpOpScalarLEFn,
 		},
 		CmpOp{
-			LeftType:  types.TypeDecimal,
-			RightType: types.TypeDecimal,
+			LeftType:  types.Decimal,
+			RightType: types.Decimal,
 			fn:        cmpOpScalarLEFn,
 		},
 		CmpOp{
-			LeftType:  types.TypeFloat,
-			RightType: types.TypeInt,
+			LeftType:  types.Float,
+			RightType: types.Int,
 			fn:        cmpOpScalarLEFn,
 		},
 		CmpOp{
-			LeftType:  types.TypeInt,
-			RightType: types.TypeFloat,
+			LeftType:  types.Int,
+			RightType: types.Float,
 			fn:        cmpOpScalarLEFn,
 		},
 		CmpOp{
-			LeftType:  types.TypeDecimal,
-			RightType: types.TypeInt,
+			LeftType:  types.Decimal,
+			RightType: types.Int,
 			fn:        cmpOpScalarLEFn,
 		},
 		CmpOp{
-			LeftType:  types.TypeInt,
-			RightType: types.TypeDecimal,
+			LeftType:  types.Int,
+			RightType: types.Decimal,
 			fn:        cmpOpScalarLEFn,
 		},
 		CmpOp{
-			LeftType:  types.TypeDecimal,
-			RightType: types.TypeFloat,
+			LeftType:  types.Decimal,
+			RightType: types.Float,
 			fn:        cmpOpScalarLEFn,
 		},
 		CmpOp{
-			LeftType:  types.TypeFloat,
-			RightType: types.TypeDecimal,
+			LeftType:  types.Float,
+			RightType: types.Decimal,
 			fn:        cmpOpScalarLEFn,
 		},
 		CmpOp{
-			LeftType:  types.TypeDate,
-			RightType: types.TypeDate,
+			LeftType:  types.Date,
+			RightType: types.Date,
 			fn:        cmpOpScalarLEFn,
 		},
 		CmpOp{
-			LeftType:  types.TypeTimestamp,
-			RightType: types.TypeTimestamp,
+			LeftType:  types.Timestamp,
+			RightType: types.Timestamp,
 			fn:        cmpOpScalarLEFn,
 		},
 		CmpOp{
-			LeftType:  types.TypeTimestampTZ,
-			RightType: types.TypeTimestampTZ,
+			LeftType:  types.TimestampTZ,
+			RightType: types.TimestampTZ,
 			fn:        cmpOpScalarLEFn,
 		},
 		CmpOp{
-			LeftType:  types.TypeTimestampTZ,
-			RightType: types.TypeTimestamp,
+			LeftType:  types.TimestampTZ,
+			RightType: types.Timestamp,
 			fn:        cmpOpScalarLEFn,
 		},
 		CmpOp{
-			LeftType:  types.TypeTimestamp,
-			RightType: types.TypeTimestampTZ,
+			LeftType:  types.Timestamp,
+			RightType: types.TimestampTZ,
 			fn:        cmpOpScalarLEFn,
 		},
 		CmpOp{
-			LeftType:  types.TypeDate,
-			RightType: types.TypeTimestampTZ,
+			LeftType:  types.Date,
+			RightType: types.TimestampTZ,
 			fn:        cmpOpScalarLEFn,
 		},
 		CmpOp{
-			LeftType:  types.TypeDate,
-			RightType: types.TypeTimestamp,
+			LeftType:  types.Date,
+			RightType: types.Timestamp,
 			fn:        cmpOpScalarLEFn,
 		},
 		CmpOp{
-			LeftType:  types.TypeTimestampTZ,
-			RightType: types.TypeDate,
+			LeftType:  types.TimestampTZ,
+			RightType: types.Date,
 			fn:        cmpOpScalarLEFn,
 		},
 		CmpOp{
-			LeftType:  types.TypeTimestamp,
-			RightType: types.TypeDate,
+			LeftType:  types.Timestamp,
+			RightType: types.Date,
 			fn:        cmpOpScalarLEFn,
 		},
 		CmpOp{
-			LeftType:  types.TypeInterval,
-			RightType: types.TypeInterval,
+			LeftType:  types.Interval,
+			RightType: types.Interval,
 			fn:        cmpOpScalarLEFn,
 		},
 		CmpOp{
-			LeftType:  types.TypeUUID,
-			RightType: types.TypeUUID,
+			LeftType:  types.UUID,
+			RightType: types.UUID,
 			fn:        cmpOpScalarLEFn,
 		},
 		CmpOp{
-			LeftType:  types.TypeINet,
-			RightType: types.TypeINet,
+			LeftType:  types.INet,
+			RightType: types.INet,
 			fn:        cmpOpScalarLEFn,
 		},
 		CmpOp{
@@ -1678,28 +1678,28 @@ var CmpOps = map[ComparisonOperator]cmpOpOverload{
 	},
 
 	In: {
-		makeEvalTupleIn(types.TypeBool),
-		makeEvalTupleIn(types.TypeInt),
-		makeEvalTupleIn(types.TypeFloat),
-		makeEvalTupleIn(types.TypeDecimal),
-		makeEvalTupleIn(types.TypeString),
+		makeEvalTupleIn(types.Bool),
+		makeEvalTupleIn(types.Int),
+		makeEvalTupleIn(types.Float),
+		makeEvalTupleIn(types.Decimal),
+		makeEvalTupleIn(types.String),
 		makeEvalTupleIn(types.FamCollatedString),
-		makeEvalTupleIn(types.TypeBytes),
-		makeEvalTupleIn(types.TypeDate),
-		makeEvalTupleIn(types.TypeTimestamp),
-		makeEvalTupleIn(types.TypeTimestampTZ),
-		makeEvalTupleIn(types.TypeInterval),
-		makeEvalTupleIn(types.TypeJSON),
-		makeEvalTupleIn(types.TypeUUID),
-		makeEvalTupleIn(types.TypeINet),
+		makeEvalTupleIn(types.Bytes),
+		makeEvalTupleIn(types.Date),
+		makeEvalTupleIn(types.Timestamp),
+		makeEvalTupleIn(types.TimestampTZ),
+		makeEvalTupleIn(types.Interval),
+		makeEvalTupleIn(types.JSON),
+		makeEvalTupleIn(types.UUID),
+		makeEvalTupleIn(types.INet),
 		makeEvalTupleIn(types.FamTuple),
-		makeEvalTupleIn(types.TypeOid),
+		makeEvalTupleIn(types.Oid),
 	},
 
 	Like: {
 		CmpOp{
-			LeftType:  types.TypeString,
-			RightType: types.TypeString,
+			LeftType:  types.String,
+			RightType: types.String,
 			fn: func(ctx *EvalContext, left Datum, right Datum) (Datum, error) {
 				return matchLike(ctx, left, right, false)
 			},
@@ -1708,8 +1708,8 @@ var CmpOps = map[ComparisonOperator]cmpOpOverload{
 
 	ILike: {
 		CmpOp{
-			LeftType:  types.TypeString,
-			RightType: types.TypeString,
+			LeftType:  types.String,
+			RightType: types.String,
 			fn: func(ctx *EvalContext, left Datum, right Datum) (Datum, error) {
 				return matchLike(ctx, left, right, true)
 			},
@@ -1718,8 +1718,8 @@ var CmpOps = map[ComparisonOperator]cmpOpOverload{
 
 	SimilarTo: {
 		CmpOp{
-			LeftType:  types.TypeString,
-			RightType: types.TypeString,
+			LeftType:  types.String,
+			RightType: types.String,
 			fn: func(ctx *EvalContext, left Datum, right Datum) (Datum, error) {
 				key := similarToKey(MustBeDString(right))
 				return matchRegexpWithKey(ctx, left, key)
@@ -1729,8 +1729,8 @@ var CmpOps = map[ComparisonOperator]cmpOpOverload{
 
 	RegMatch: {
 		CmpOp{
-			LeftType:  types.TypeString,
-			RightType: types.TypeString,
+			LeftType:  types.String,
+			RightType: types.String,
 			fn: func(ctx *EvalContext, left Datum, right Datum) (Datum, error) {
 				key := regexpKey{s: string(MustBeDString(right)), caseInsensitive: false}
 				return matchRegexpWithKey(ctx, left, key)
@@ -1740,8 +1740,8 @@ var CmpOps = map[ComparisonOperator]cmpOpOverload{
 
 	RegIMatch: {
 		CmpOp{
-			LeftType:  types.TypeString,
-			RightType: types.TypeString,
+			LeftType:  types.String,
+			RightType: types.String,
 			fn: func(ctx *EvalContext, left Datum, right Datum) (Datum, error) {
 				key := regexpKey{s: string(MustBeDString(right)), caseInsensitive: true}
 				return matchRegexpWithKey(ctx, left, key)
@@ -1751,8 +1751,8 @@ var CmpOps = map[ComparisonOperator]cmpOpOverload{
 
 	Existence: {
 		CmpOp{
-			LeftType:  types.TypeJSON,
-			RightType: types.TypeString,
+			LeftType:  types.JSON,
+			RightType: types.String,
 			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				if left.(*DJSON).JSON.Exists(string(MustBeDString(right))) {
 					return DBoolTrue, nil
@@ -1764,8 +1764,8 @@ var CmpOps = map[ComparisonOperator]cmpOpOverload{
 
 	SomeExistence: {
 		CmpOp{
-			LeftType:  types.TypeJSON,
-			RightType: types.TArray{Typ: types.TypeString},
+			LeftType:  types.JSON,
+			RightType: types.TArray{Typ: types.String},
 			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				for _, k := range MustBeDArray(right).Array {
 					if left.(*DJSON).JSON.Exists(string(MustBeDString(k))) {
@@ -1779,8 +1779,8 @@ var CmpOps = map[ComparisonOperator]cmpOpOverload{
 
 	AllExistence: {
 		CmpOp{
-			LeftType:  types.TypeJSON,
-			RightType: types.TArray{Typ: types.TypeString},
+			LeftType:  types.JSON,
+			RightType: types.TArray{Typ: types.String},
 			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				for _, k := range MustBeDArray(right).Array {
 					if !left.(*DJSON).JSON.Exists(string(MustBeDString(k))) {
@@ -3189,7 +3189,7 @@ func canBeInArrayColType(t ColumnType) bool {
 
 func canBeInArray(t types.T) bool {
 	switch t {
-	case types.TypeJSON:
+	case types.JSON:
 		return false
 	default:
 		return true

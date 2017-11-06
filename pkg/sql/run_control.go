@@ -75,7 +75,7 @@ func (p *planner) PauseJob(ctx context.Context, n *parser.PauseJob) (planNode, e
 		n.ID,
 		nil,
 		parser.IndexedVarHelper{},
-		types.TypeInt,
+		types.Int,
 		true, /* requireType */
 		"PAUSE JOB",
 	)
@@ -96,7 +96,7 @@ func (p *planner) ResumeJob(ctx context.Context, n *parser.ResumeJob) (planNode,
 		n.ID,
 		nil,
 		parser.IndexedVarHelper{},
-		types.TypeInt,
+		types.Int,
 		true, /* requireType */
 		"RESUME JOB",
 	)
@@ -117,7 +117,7 @@ func (p *planner) CancelJob(ctx context.Context, n *parser.CancelJob) (planNode,
 		n.ID,
 		nil,
 		parser.IndexedVarHelper{},
-		types.TypeInt,
+		types.Int,
 		true, /* requireType */
 		"CANCEL JOB",
 	)
@@ -187,7 +187,7 @@ func (p *planner) CancelQuery(ctx context.Context, n *parser.CancelQuery) (planN
 		n.ID,
 		nil,
 		parser.IndexedVarHelper{},
-		types.TypeString,
+		types.String,
 		true, /* requireType */
 		"CANCEL QUERY",
 	)

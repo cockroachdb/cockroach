@@ -2151,37 +2151,37 @@ func (c *ColumnType) NumericScale() (int32, bool) {
 // DatumTypeToColumnSemanticType converts a types.T to a SemanticType.
 func DatumTypeToColumnSemanticType(ptyp types.T) (ColumnType_SemanticType, error) {
 	switch ptyp {
-	case types.TypeBool:
+	case types.Bool:
 		return ColumnType_BOOL, nil
-	case types.TypeInt:
+	case types.Int:
 		return ColumnType_INT, nil
-	case types.TypeFloat:
+	case types.Float:
 		return ColumnType_FLOAT, nil
-	case types.TypeDecimal:
+	case types.Decimal:
 		return ColumnType_DECIMAL, nil
-	case types.TypeBytes:
+	case types.Bytes:
 		return ColumnType_BYTES, nil
-	case types.TypeString:
+	case types.String:
 		return ColumnType_STRING, nil
-	case types.TypeName:
+	case types.Name:
 		return ColumnType_NAME, nil
-	case types.TypeDate:
+	case types.Date:
 		return ColumnType_DATE, nil
-	case types.TypeTimestamp:
+	case types.Timestamp:
 		return ColumnType_TIMESTAMP, nil
-	case types.TypeTimestampTZ:
+	case types.TimestampTZ:
 		return ColumnType_TIMESTAMPTZ, nil
-	case types.TypeInterval:
+	case types.Interval:
 		return ColumnType_INTERVAL, nil
-	case types.TypeUUID:
+	case types.UUID:
 		return ColumnType_UUID, nil
-	case types.TypeINet:
+	case types.INet:
 		return ColumnType_INET, nil
-	case types.TypeOid:
+	case types.Oid:
 		return ColumnType_OID, nil
-	case types.TypeNull:
+	case types.Null:
 		return ColumnType_NULL, nil
-	case types.TypeIntVector:
+	case types.IntVector:
 		return ColumnType_INT2VECTOR, nil
 	default:
 		if ptyp.FamilyEqual(types.FamCollatedString) {
@@ -2222,42 +2222,42 @@ func DatumTypeToColumnType(ptyp types.T) (ColumnType, error) {
 func columnSemanticTypeToDatumType(c *ColumnType, k ColumnType_SemanticType) types.T {
 	switch k {
 	case ColumnType_BOOL:
-		return types.TypeBool
+		return types.Bool
 	case ColumnType_INT:
-		return types.TypeInt
+		return types.Int
 	case ColumnType_FLOAT:
-		return types.TypeFloat
+		return types.Float
 	case ColumnType_DECIMAL:
-		return types.TypeDecimal
+		return types.Decimal
 	case ColumnType_STRING:
-		return types.TypeString
+		return types.String
 	case ColumnType_BYTES:
-		return types.TypeBytes
+		return types.Bytes
 	case ColumnType_DATE:
-		return types.TypeDate
+		return types.Date
 	case ColumnType_TIMESTAMP:
-		return types.TypeTimestamp
+		return types.Timestamp
 	case ColumnType_TIMESTAMPTZ:
-		return types.TypeTimestampTZ
+		return types.TimestampTZ
 	case ColumnType_INTERVAL:
-		return types.TypeInterval
+		return types.Interval
 	case ColumnType_UUID:
-		return types.TypeUUID
+		return types.UUID
 	case ColumnType_INET:
-		return types.TypeINet
+		return types.INet
 	case ColumnType_COLLATEDSTRING:
 		if c.Locale == nil {
 			panic("locale is required for COLLATEDSTRING")
 		}
 		return types.TCollatedString{Locale: *c.Locale}
 	case ColumnType_NAME:
-		return types.TypeName
+		return types.Name
 	case ColumnType_OID:
-		return types.TypeOid
+		return types.Oid
 	case ColumnType_NULL:
-		return types.TypeNull
+		return types.Null
 	case ColumnType_INT2VECTOR:
-		return types.TypeIntVector
+		return types.IntVector
 	}
 	return nil
 }

@@ -38,7 +38,7 @@ type Expr interface {
 	// The ctx parameter defines the context in which to perform type checking.
 	// The desired parameter hints the desired type that the method's caller wants from
 	// the resulting TypedExpr. It is not valid to call TypeCheck with a nil desired
-	// type. Instead, call it with wildcard type types.TypeAny if no specific type is
+	// type. Instead, call it with wildcard type types.Any if no specific type is
 	// desired. This restriction is also true of most methods and functions related
 	// to type checking.
 	TypeCheck(ctx *SemaContext, desired types.T) (TypedExpr, error)
@@ -171,7 +171,7 @@ func (node *AndExpr) Format(buf *bytes.Buffer, f FmtFlags) {
 // NewTypedAndExpr returns a new AndExpr that is verified to be well-typed.
 func NewTypedAndExpr(left, right TypedExpr) *AndExpr {
 	node := &AndExpr{Left: left, Right: right}
-	node.typ = types.TypeBool
+	node.typ = types.Bool
 	return node
 }
 
@@ -202,7 +202,7 @@ func (node *OrExpr) Format(buf *bytes.Buffer, f FmtFlags) {
 // NewTypedOrExpr returns a new OrExpr that is verified to be well-typed.
 func NewTypedOrExpr(left, right TypedExpr) *OrExpr {
 	node := &OrExpr{Left: left, Right: right}
-	node.typ = types.TypeBool
+	node.typ = types.Bool
 	return node
 }
 
@@ -234,7 +234,7 @@ func (node *NotExpr) Format(buf *bytes.Buffer, f FmtFlags) {
 // NewTypedNotExpr returns a new NotExpr that is verified to be well-typed.
 func NewTypedNotExpr(expr TypedExpr) *NotExpr {
 	node := &NotExpr{Expr: expr}
-	node.typ = types.TypeBool
+	node.typ = types.Bool
 	return node
 }
 
@@ -404,7 +404,7 @@ func (node *ComparisonExpr) Format(buf *bytes.Buffer, f FmtFlags) {
 // NewTypedComparisonExpr returns a new ComparisonExpr that is verified to be well-typed.
 func NewTypedComparisonExpr(op ComparisonOperator, left, right TypedExpr) *ComparisonExpr {
 	node := &ComparisonExpr{Operator: op, Left: left, Right: right}
-	node.typ = types.TypeBool
+	node.typ = types.Bool
 	node.memoizeFn()
 	return node
 }
@@ -461,7 +461,7 @@ func (node *ComparisonExpr) IsMixedTypeComparison() bool {
 }
 
 func sameTypeOrNull(left, right types.T) bool {
-	return left == types.TypeNull || right == types.TypeNull || left.Equivalent(right)
+	return left == types.Null || right == types.Null || left.Equivalent(right)
 }
 
 // RangeCond represents a BETWEEN or a NOT BETWEEN expression.
@@ -1103,54 +1103,54 @@ func (node *CastExpr) castType() types.T {
 }
 
 var (
-	boolCastTypes = []types.T{types.TypeNull, types.TypeBool, types.TypeInt, types.TypeFloat, types.TypeDecimal, types.TypeString, types.FamCollatedString}
-	intCastTypes  = []types.T{types.TypeNull, types.TypeBool, types.TypeInt, types.TypeFloat, types.TypeDecimal, types.TypeString, types.FamCollatedString,
-		types.TypeTimestamp, types.TypeTimestampTZ, types.TypeDate, types.TypeInterval, types.TypeOid}
-	floatCastTypes = []types.T{types.TypeNull, types.TypeBool, types.TypeInt, types.TypeFloat, types.TypeDecimal, types.TypeString, types.FamCollatedString,
-		types.TypeTimestamp, types.TypeTimestampTZ, types.TypeDate, types.TypeInterval}
-	decimalCastTypes = []types.T{types.TypeNull, types.TypeBool, types.TypeInt, types.TypeFloat, types.TypeDecimal, types.TypeString, types.FamCollatedString,
-		types.TypeTimestamp, types.TypeTimestampTZ, types.TypeDate, types.TypeInterval}
-	stringCastTypes = []types.T{types.TypeNull, types.TypeBool, types.TypeInt, types.TypeFloat, types.TypeDecimal, types.TypeString, types.FamCollatedString,
-		types.TypeBytes, types.TypeTimestamp, types.TypeTimestampTZ, types.TypeInterval, types.TypeUUID, types.TypeDate, types.TypeOid, types.TypeINet}
-	bytesCastTypes     = []types.T{types.TypeNull, types.TypeString, types.FamCollatedString, types.TypeBytes, types.TypeUUID}
-	dateCastTypes      = []types.T{types.TypeNull, types.TypeString, types.FamCollatedString, types.TypeDate, types.TypeTimestamp, types.TypeTimestampTZ, types.TypeInt}
-	timestampCastTypes = []types.T{types.TypeNull, types.TypeString, types.FamCollatedString, types.TypeDate, types.TypeTimestamp, types.TypeTimestampTZ, types.TypeInt}
-	intervalCastTypes  = []types.T{types.TypeNull, types.TypeString, types.FamCollatedString, types.TypeInt, types.TypeInterval}
-	oidCastTypes       = []types.T{types.TypeNull, types.TypeString, types.FamCollatedString, types.TypeInt, types.TypeOid}
-	uuidCastTypes      = []types.T{types.TypeNull, types.TypeString, types.FamCollatedString, types.TypeBytes, types.TypeUUID}
-	inetCastTypes      = []types.T{types.TypeNull, types.TypeString, types.FamCollatedString, types.TypeINet}
-	arrayCastTypes     = []types.T{types.TypeNull, types.TypeString}
-	jsonCastTypes      = []types.T{types.TypeNull, types.TypeString}
+	boolCastTypes = []types.T{types.Null, types.Bool, types.Int, types.Float, types.Decimal, types.String, types.FamCollatedString}
+	intCastTypes  = []types.T{types.Null, types.Bool, types.Int, types.Float, types.Decimal, types.String, types.FamCollatedString,
+		types.Timestamp, types.TimestampTZ, types.Date, types.Interval, types.Oid}
+	floatCastTypes = []types.T{types.Null, types.Bool, types.Int, types.Float, types.Decimal, types.String, types.FamCollatedString,
+		types.Timestamp, types.TimestampTZ, types.Date, types.Interval}
+	decimalCastTypes = []types.T{types.Null, types.Bool, types.Int, types.Float, types.Decimal, types.String, types.FamCollatedString,
+		types.Timestamp, types.TimestampTZ, types.Date, types.Interval}
+	stringCastTypes = []types.T{types.Null, types.Bool, types.Int, types.Float, types.Decimal, types.String, types.FamCollatedString,
+		types.Bytes, types.Timestamp, types.TimestampTZ, types.Interval, types.UUID, types.Date, types.Oid, types.INet}
+	bytesCastTypes     = []types.T{types.Null, types.String, types.FamCollatedString, types.Bytes, types.UUID}
+	dateCastTypes      = []types.T{types.Null, types.String, types.FamCollatedString, types.Date, types.Timestamp, types.TimestampTZ, types.Int}
+	timestampCastTypes = []types.T{types.Null, types.String, types.FamCollatedString, types.Date, types.Timestamp, types.TimestampTZ, types.Int}
+	intervalCastTypes  = []types.T{types.Null, types.String, types.FamCollatedString, types.Int, types.Interval}
+	oidCastTypes       = []types.T{types.Null, types.String, types.FamCollatedString, types.Int, types.Oid}
+	uuidCastTypes      = []types.T{types.Null, types.String, types.FamCollatedString, types.Bytes, types.UUID}
+	inetCastTypes      = []types.T{types.Null, types.String, types.FamCollatedString, types.INet}
+	arrayCastTypes     = []types.T{types.Null, types.String}
+	jsonCastTypes      = []types.T{types.Null, types.String}
 )
 
 // validCastTypes returns a set of types that can be cast into the provided type.
 func validCastTypes(t types.T) []types.T {
 	switch types.UnwrapType(t) {
-	case types.TypeBool:
+	case types.Bool:
 		return boolCastTypes
-	case types.TypeInt:
+	case types.Int:
 		return intCastTypes
-	case types.TypeFloat:
+	case types.Float:
 		return floatCastTypes
-	case types.TypeDecimal:
+	case types.Decimal:
 		return decimalCastTypes
-	case types.TypeString:
+	case types.String:
 		return stringCastTypes
-	case types.TypeBytes:
+	case types.Bytes:
 		return bytesCastTypes
-	case types.TypeDate:
+	case types.Date:
 		return dateCastTypes
-	case types.TypeTimestamp, types.TypeTimestampTZ:
+	case types.Timestamp, types.TimestampTZ:
 		return timestampCastTypes
-	case types.TypeInterval:
+	case types.Interval:
 		return intervalCastTypes
-	case types.TypeJSON:
+	case types.JSON:
 		return jsonCastTypes
-	case types.TypeUUID:
+	case types.UUID:
 		return uuidCastTypes
-	case types.TypeINet:
+	case types.INet:
 		return inetCastTypes
-	case types.TypeOid, types.TypeRegClass, types.TypeRegNamespace, types.TypeRegProc, types.TypeRegProcedure, types.TypeRegType:
+	case types.Oid, types.RegClass, types.RegNamespace, types.RegProc, types.RegProcedure, types.RegType:
 		return oidCastTypes
 	default:
 		// TODO(eisen): currently dead -- there is no syntax yet for casting

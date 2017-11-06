@@ -365,7 +365,7 @@ func (v *subqueryVisitor) VisitPre(expr parser.Expr) (recurse bool, newExpr pars
 
 	if exists != nil {
 		result.execMode = execModeExists
-		result.typ = types.TypeBool
+		result.typ = types.Bool
 	} else {
 		wantedNumColumns, execMode := v.getSubqueryContext()
 		result.execMode = execMode

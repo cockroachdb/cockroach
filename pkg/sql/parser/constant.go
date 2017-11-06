@@ -64,7 +64,7 @@ func isConstant(expr Expr) bool {
 
 func typeCheckConstant(c Constant, ctx *SemaContext, desired types.T) (TypedExpr, error) {
 	avail := c.AvailableTypes()
-	if desired != types.TypeAny {
+	if desired != types.Any {
 		for _, typ := range avail {
 			if desired.Equivalent(typ) {
 				return c.ResolveAsType(ctx, desired)
@@ -75,7 +75,7 @@ func typeCheckConstant(c Constant, ctx *SemaContext, desired types.T) (TypedExpr
 	// If a numeric constant will be promoted to a DECIMAL because it was out
 	// of range of an INT, but an INT is desired, throw an error here so that
 	// the error message specifically mentions the overflow.
-	if desired.FamilyEqual(types.TypeInt) {
+	if desired.FamilyEqual(types.Int) {
 		if n, ok := c.(*NumVal); ok {
 			_, err := n.AsInt64()
 			switch err {
@@ -181,8 +181,8 @@ func (expr *NumVal) asConstantInt() (constant.Value, bool) {
 }
 
 var (
-	intLikeTypes     = []types.T{types.TypeInt, types.TypeOid}
-	decimalLikeTypes = []types.T{types.TypeDecimal, types.TypeFloat}
+	intLikeTypes     = []types.T{types.Int, types.Oid}
+	decimalLikeTypes = []types.T{types.Decimal, types.Float}
 
 	numValAvailInteger             = append(intLikeTypes, decimalLikeTypes...)
 	numValAvailDecimalNoFraction   = append(decimalLikeTypes, intLikeTypes...)
@@ -213,7 +213,7 @@ func (expr *NumVal) DesirableTypes() []types.T {
 // ResolveAsType implements the Constant interface.
 func (expr *NumVal) ResolveAsType(ctx *SemaContext, typ types.T) (Datum, error) {
 	switch typ {
-	case types.TypeInt:
+	case types.Int:
 		// We may have already set expr.resInt in AsInt64.
 		if expr.resInt == 0 {
 			if _, err := expr.AsInt64(); err != nil {
@@ -221,11 +221,11 @@ func (expr *NumVal) ResolveAsType(ctx *SemaContext, typ types.T) (Datum, error) 
 			}
 		}
 		return &expr.resInt, nil
-	case types.TypeFloat:
+	case types.Float:
 		f, _ := constant.Float64Val(expr.Value)
 		expr.resFloat = DFloat(f)
 		return &expr.resFloat, nil
-	case types.TypeDecimal:
+	case types.Decimal:
 		dd := &expr.resDecimal
 		s := expr.OrigString
 		if s == "" {
@@ -257,14 +257,14 @@ func (expr *NumVal) ResolveAsType(ctx *SemaContext, typ types.T) (Datum, error) 
 			}
 		}
 		return dd, nil
-	case types.TypeOid,
-		types.TypeRegClass,
-		types.TypeRegNamespace,
-		types.TypeRegProc,
-		types.TypeRegProcedure,
-		types.TypeRegType:
+	case types.Oid,
+		types.RegClass,
+		types.RegNamespace,
+		types.RegProc,
+		types.RegProcedure,
+		types.RegType:
 
-		d, err := expr.ResolveAsType(ctx, types.TypeInt)
+		d, err := expr.ResolveAsType(ctx, types.Int)
 		if err != nil {
 			return nil, err
 		}
@@ -341,21 +341,21 @@ func (expr *StrVal) Format(buf *bytes.Buffer, f FmtFlags) {
 
 var (
 	strValAvailAllParsable = []types.T{
-		types.TypeString,
-		types.TypeBytes,
-		types.TypeBool,
-		types.TypeInt,
-		types.TypeFloat,
-		types.TypeDecimal,
-		types.TypeDate,
-		types.TypeTimestamp,
-		types.TypeTimestampTZ,
-		types.TypeInterval,
-		types.TypeUUID,
-		types.TypeINet,
+		types.String,
+		types.Bytes,
+		types.Bool,
+		types.Int,
+		types.Float,
+		types.Decimal,
+		types.Date,
+		types.Timestamp,
+		types.TimestampTZ,
+		types.Interval,
+		types.UUID,
+		types.INet,
 	}
-	strValAvailBytesString = []types.T{types.TypeBytes, types.TypeString, types.TypeUUID, types.TypeINet}
-	strValAvailBytes       = []types.T{types.TypeBytes, types.TypeUUID}
+	strValAvailBytesString = []types.T{types.Bytes, types.String, types.UUID, types.INet}
+	strValAvailBytes       = []types.T{types.Bytes, types.UUID}
 )
 
 // AvailableTypes implements the Constant interface.
@@ -405,37 +405,37 @@ func (expr *StrVal) DesirableTypes() []types.T {
 // ResolveAsType implements the Constant interface.
 func (expr *StrVal) ResolveAsType(ctx *SemaContext, typ types.T) (Datum, error) {
 	switch typ {
-	case types.TypeString:
+	case types.String:
 		expr.resString = DString(expr.s)
 		return &expr.resString, nil
-	case types.TypeName:
+	case types.Name:
 		expr.resString = DString(expr.s)
 		return NewDNameFromDString(&expr.resString), nil
-	case types.TypeBytes:
+	case types.Bytes:
 		s, err := ParseDByte(expr.s, !expr.bytesEsc)
 		if err == nil {
 			expr.resBytes = *s
 		}
 		return &expr.resBytes, err
-	case types.TypeBool:
+	case types.Bool:
 		return ParseDBool(expr.s)
-	case types.TypeInt:
+	case types.Int:
 		return ParseDInt(expr.s)
-	case types.TypeFloat:
+	case types.Float:
 		return ParseDFloat(expr.s)
-	case types.TypeDecimal:
+	case types.Decimal:
 		return ParseDDecimal(expr.s)
-	case types.TypeDate:
+	case types.Date:
 		return ParseDDate(expr.s, ctx.getLocation())
-	case types.TypeINet:
+	case types.INet:
 		return ParseDIPAddrFromINetString(expr.s)
-	case types.TypeTimestamp:
+	case types.Timestamp:
 		return ParseDTimestamp(expr.s, time.Microsecond)
-	case types.TypeTimestampTZ:
+	case types.TimestampTZ:
 		return ParseDTimestampTZ(expr.s, ctx.getLocation(), time.Microsecond)
-	case types.TypeInterval:
+	case types.Interval:
 		return ParseDInterval(expr.s)
-	case types.TypeUUID:
+	case types.UUID:
 		if expr.bytesEsc {
 			return ParseDUuidFromBytes([]byte(expr.s))
 		}

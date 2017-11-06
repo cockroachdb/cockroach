@@ -395,7 +395,7 @@ CREATE TABLE crdb_internal.jobs (
 				ts := timeutil.Unix(0, micros*time.Microsecond.Nanoseconds())
 				return parser.MakeDTimestamp(ts, time.Microsecond)
 			}
-			descriptorIDs := parser.NewDArray(types.TypeInt)
+			descriptorIDs := parser.NewDArray(types.Int)
 			for _, descID := range payload.DescriptorIDs {
 				if err := descriptorIDs.Append(parser.NewDInt(parser.DInt(int(descID)))); err != nil {
 					return err
@@ -1369,7 +1369,7 @@ CREATE TABLE crdb_internal.ranges (
 			if err := r.ValueProto(&desc); err != nil {
 				return err
 			}
-			arr := parser.NewDArray(types.TypeInt)
+			arr := parser.NewDArray(types.Int)
 			for _, replica := range desc.Replicas {
 				if err := arr.Append(parser.NewDInt(parser.DInt(replica.StoreID))); err != nil {
 					return err

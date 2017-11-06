@@ -48,7 +48,7 @@ func (p *planner) makeGenerator(ctx context.Context, t *parser.FuncExpr) (planNo
 	}
 
 	normalized, err := p.analyzeExpr(
-		ctx, t, multiSourceInfo{}, parser.IndexedVarHelper{}, types.TypeAny, false, "FROM",
+		ctx, t, multiSourceInfo{}, parser.IndexedVarHelper{}, types.Any, false, "FROM",
 	)
 	if err != nil {
 		return nil, err
