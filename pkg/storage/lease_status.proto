@@ -16,9 +16,9 @@ syntax = "proto3";
 package cockroach.storage;
 option go_package = "storage";
 
-import "cockroach/pkg/roachpb/data.proto";
-import "cockroach/pkg/storage/liveness.proto";
-import "cockroach/pkg/util/hlc/timestamp.proto";
+import "roachpb/data.proto";
+import "storage/liveness.proto";
+import "util/hlc/timestamp.proto";
 
 import "gogoproto/gogo.proto";
 

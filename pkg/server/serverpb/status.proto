@@ -16,15 +16,15 @@ syntax = "proto3";
 package cockroach.server.serverpb;
 option go_package = "serverpb";
 
-import "cockroach/pkg/build/info.proto";
-import "cockroach/pkg/gossip/gossip.proto";
-import "cockroach/pkg/roachpb/data.proto";
-import "cockroach/pkg/server/status/status.proto";
-import "cockroach/pkg/storage/engine/enginepb/mvcc.proto";
-import "cockroach/pkg/storage/lease_status.proto";
-import "cockroach/pkg/storage/storagebase/state.proto";
-import "cockroach/pkg/util/log/log.proto";
-import "cockroach/pkg/util/unresolved_addr.proto";
+import "build/info.proto";
+import "gossip/gossip.proto";
+import "roachpb/data.proto";
+import "server/status/status.proto";
+import "storage/engine/enginepb/mvcc.proto";
+import "storage/lease_status.proto";
+import "storage/storagebase/state.proto";
+import "util/log/log.proto";
+import "util/unresolved_addr.proto";
 
 import "etcd/raft/raftpb/raft.proto";
 

@@ -29,7 +29,7 @@ all: lint test $(GOBINDATA_TARGET)
 
 .PHONY: protos
 protos:
-	$(MAKE) -C $(ORG_ROOT) -f cockroach/build/protobuf.mk
+	$(MAKE) -C $(REPO_ROOT) -f build/protobuf.mk
 
 # Running `make generate` from the root will call this target via `go generate`.
 # Update this if you add new generated files.
