@@ -98,6 +98,46 @@ func decorateTypeCheckError(err error, format string, a ...interface{}) error {
 	return errors.Wrapf(err, format, a...)
 }
 
+// TypeCheck performs type checking on the provided expression tree, returning
+// the new typed expression tree, which additionally permits evaluation and type
+// introspection globally and on each sub-tree.
+//
+// While doing so, it will fold numeric constants and bind placeholder names to
+// their inferred types in the provided context. The optional desired parameter can
+// be used to hint the desired type for the root of the resulting typed expression
+// tree. Like with Expr.TypeCheck, it is not valid to provide a nil desired
+// type. Instead, call it with the wildcard type types.Any if no specific type is
+// desired.
+func TypeCheck(expr Expr, ctx *SemaContext, desired types.T) (TypedExpr, error) {
+	if desired == nil {
+		panic("the desired type for parser.TypeCheck cannot be nil, use types.Any instead")
+	}
+
+	expr, err := foldConstantLiterals(expr)
+	if err != nil {
+		return nil, err
+	}
+	return expr.TypeCheck(ctx, desired)
+}
+
+// TypeCheckAndRequire performs type checking on the provided expression tree in
+// an identical manner to TypeCheck. It then asserts that the resulting TypedExpr
+// has the provided return type, returning both the typed expression and an error
+// if it does not.
+func TypeCheckAndRequire(
+	expr Expr, ctx *SemaContext, required types.T, op string,
+) (TypedExpr, error) {
+	typedExpr, err := TypeCheck(expr, ctx, required)
+	if err != nil {
+		return nil, err
+	}
+	if typ := typedExpr.ResolvedType(); !(typ.Equivalent(required) || typ == types.Null) {
+		return typedExpr, pgerror.NewErrorf(
+			pgerror.CodeDatatypeMismatchError, "argument of %s must be type %s, not type %s", op, required, typ)
+	}
+	return typedExpr, nil
+}
+
 // TypeCheck implements the Expr interface.
 func (expr *AndExpr) TypeCheck(ctx *SemaContext, desired types.T) (TypedExpr, error) {
 	leftTyped, err := typeCheckAndRequireBoolean(ctx, expr.Left, "AND argument")
