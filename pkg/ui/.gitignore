@@ -9,4 +9,5 @@ yarn.installed
 .cache-loader
 dist
 embedded.go
+embedded.ccl.go
 *-manifest.json

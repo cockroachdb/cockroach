@@ -127,7 +127,7 @@ $(foreach v,$(filter-out $(strip $(VALID_VARS)),$(.VARIABLES)),\
 
 .PHONY: ui
 ui: libprotobuf
-	$(MAKE) -C $(UI_ROOT) generate
+	$(MAKE) -C $(UI_ROOT) $(if $(findstring ccl,$(TAGS)),generate-ccl,generate-oss)
 
 ifneq ($(GIT_DIR),)
 # If we're in a git worktree, the git hooks directory may not be in our root,

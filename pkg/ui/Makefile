@@ -15,7 +15,8 @@
 REPO_ROOT := ../..
 include $(REPO_ROOT)/build/common.mk
 
-GOBINDATA_TARGET = embedded.go
+GOBINDATA_OSS_TARGET = embedded.go
+GOBINDATA_CCL_TARGET = embedded.ccl.go
 
 STYLINT            := $(NODE_RUN) ./node_modules/.bin/stylint
 TSLINT             := $(NODE_RUN) ./node_modules/.bin/tslint
@@ -25,16 +26,17 @@ WEBPACK_DEV_SERVER := $(NODE_RUN) ./node_modules/.bin/webpack-dev-server
 
 .DEFAULT_GOAL := all
 .PHONY: all
-all: lint test $(GOBINDATA_TARGET)
+all: lint test generate-ccl
 
 .PHONY: protos
 protos:
 	$(MAKE) -C $(REPO_ROOT) -f build/protobuf.mk
 
-# Running `make generate` from the root will call this target via `go generate`.
-# Update this if you add new generated files.
-.PHONY: generate
-generate: $(GOBINDATA_TARGET)
+# Running `make ui` from the root will call one of these targets.
+# Update these if you add new generated files.
+.PHONY: generate-ccl generate-oss
+generate-ccl: $(GOBINDATA_CCL_TARGET)
+generate-oss: $(GOBINDATA_OSS_TARGET)
 
 .PHONY: lint
 lint: | protos
@@ -63,20 +65,31 @@ test-watch: $(DLLS)
 dist/%.dll.js %-manifest.json: webpack.%.js | protos
 	$(WEBPACK) -p --config $<
 
-$(GOBINDATA_TARGET): webpack.app.js $(DLLS) $(shell find src styl)
+$(GOBINDATA_OSS_TARGET): webpack.oss.js $(DLLS) $(shell find src styl)
 	find dist -mindepth 1 -not -name '*.dll.js' -delete
 	$(WEBPACK) --config $<
-	go-bindata -nometadata -pkg ui -o $@ -prefix dist dist/...
+	go-bindata -nometadata -pkg ui -o $@ -tags "!ccl" -prefix dist dist/...
 	# Add comment recognized by reviewable.
 	echo '// GENERATED FILE DO NOT EDIT' >> $@
 	gofmt -s -w $@
 	goimports -w $@
 
-.PHONY: watch
-watch: export TARGET := http://localhost:8080
-watch: PORT := 3000
+$(GOBINDATA_CCL_TARGET): webpack.ccl.js $(DLLS) $(shell find src styl)
+	find dist -mindepth 1 -not -name '*.dll.js' -delete
+	$(WEBPACK) --config $<
+	go-bindata -nometadata -pkg ui -o $@ -tags ccl -prefix dist dist/...
+	# Add comment recognized by reviewable.
+	echo '// GENERATED FILE DO NOT EDIT' >> $@
+	gofmt -s -w $@
+	goimports -w $@
+
+.PHONY: watch watchoss
+watch watchoss: export TARGET := http://localhost:8080
+watch watchoss: PORT := 3000
 watch: $(DLLS)
-	./node_modules/.bin/webpack-dashboard -- $(WEBPACK_DEV_SERVER) --config webpack.app.js --port $(PORT)
+	./node_modules/.bin/webpack-dashboard -- $(WEBPACK_DEV_SERVER) --config webpack.ccl.js --port $(PORT)
+watchoss: $(DLLS)
+	./node_modules/.bin/webpack-dashboard -- $(WEBPACK_DEV_SERVER) --config webpack.oss.js --port $(PORT)
 
 .PHONY: maintainer-clean
 maintainer-clean:
