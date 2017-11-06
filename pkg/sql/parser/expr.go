@@ -1159,7 +1159,7 @@ func validCastTypes(t Type) []Type {
 		if t.FamilyEqual(TypeCollatedString) {
 			return stringCastTypes
 		} else if t.FamilyEqual(TypeArray) {
-			return arrayCastTypes
+			return append(arrayCastTypes, t)
 		}
 		return nil
 	}
