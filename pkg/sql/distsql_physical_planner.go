@@ -656,6 +656,7 @@ func initTableReaderSpec(
 	s := distsqlrun.TableReaderSpec{
 		Table:   *n.desc,
 		Reverse: n.reverse,
+		IsCheck: n.isCheck,
 	}
 	if n.index != &n.desc.PrimaryIndex {
 		for i := range n.desc.Indexes {
