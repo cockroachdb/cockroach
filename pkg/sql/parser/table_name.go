@@ -266,6 +266,8 @@ func (n *TableNameWithIndex) Format(buf *bytes.Buffer, f FmtFlags) {
 	}
 }
 
+func (n *TableNameWithIndex) String() string { return AsString(n) }
+
 // TableNameWithIndexList is a list of indexes.
 type TableNameWithIndexList []*TableNameWithIndex
 
