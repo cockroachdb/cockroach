@@ -2807,7 +2807,7 @@ func performCast(ctx *EvalContext, d Datum, t CastTargetType) (Datum, error) {
 					datumType := CastTargetToDatumType(colType)
 					return &DOid{
 						semanticType: typ,
-						DInt:         DInt(types.Oid(datumType)),
+						DInt:         DInt(types.PGOid(datumType)),
 						name:         types.SQLName(datumType)}, nil
 				}
 				// Fall back to searching pg_type, since we don't provide syntax for

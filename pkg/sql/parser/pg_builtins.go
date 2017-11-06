@@ -34,15 +34,15 @@ const notUsableInfo = "Not usable; exposed only for compatibility with PostgreSQ
 // programmatically determine whether or not this underscore is present, hence
 // the existence of this map.
 var typeBuiltinsHaveUnderscore = map[oid.Oid]struct{}{
-	types.Oid(types.TypeAny):         {},
-	types.Oid(types.TypeDate):        {},
-	types.Oid(types.TypeDecimal):     {},
-	types.Oid(types.TypeInterval):    {},
-	types.Oid(types.TypeJSON):        {},
-	types.Oid(types.TypeUUID):        {},
-	types.Oid(types.TypeTimestamp):   {},
-	types.Oid(types.TypeTimestampTZ): {},
-	types.Oid(types.FamTuple):        {},
+	types.PGOid(types.TypeAny):         {},
+	types.PGOid(types.TypeDate):        {},
+	types.PGOid(types.TypeDecimal):     {},
+	types.PGOid(types.TypeInterval):    {},
+	types.PGOid(types.TypeJSON):        {},
+	types.PGOid(types.TypeUUID):        {},
+	types.PGOid(types.TypeTimestamp):   {},
+	types.PGOid(types.TypeTimestampTZ): {},
+	types.PGOid(types.FamTuple):        {},
 }
 
 // PGIOBuiltinPrefix returns the string prefix to a type's IO functions. This
@@ -50,7 +50,7 @@ var typeBuiltinsHaveUnderscore = map[oid.Oid]struct{}{
 // name plus an underscore, depending on the type.
 func PGIOBuiltinPrefix(typ types.T) string {
 	builtinPrefix := types.PGDisplayName(typ)
-	if _, ok := typeBuiltinsHaveUnderscore[types.Oid(typ)]; ok {
+	if _, ok := typeBuiltinsHaveUnderscore[types.PGOid(typ)]; ok {
 		return builtinPrefix + "_"
 	}
 	return builtinPrefix

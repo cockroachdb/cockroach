@@ -662,7 +662,7 @@ func (c *v3Conn) handleParse(buf *readBuffer) error {
 		if t == 0 {
 			continue
 		}
-		v, ok := types.OidToType[t]
+		v, ok := types.PGOidToType[t]
 		if !ok {
 			return c.sendError(pgerror.NewErrorf(pgerror.CodeProtocolViolationError, "unknown oid type: %v", t))
 		}
@@ -701,7 +701,7 @@ func (c *v3Conn) handleParse(buf *readBuffer) error {
 		if inTypes[i] != 0 {
 			continue
 		}
-		inTypes[i] = types.Oid(t)
+		inTypes[i] = types.PGOid(t)
 	}
 	for i, t := range inTypes {
 		if t == 0 {

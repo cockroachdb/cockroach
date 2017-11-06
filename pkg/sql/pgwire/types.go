@@ -87,7 +87,7 @@ func pgTypeForParserType(t types.T) pgType {
 		size = int(s)
 	}
 	return pgType{
-		oid:  types.Oid(t),
+		oid:  types.PGOid(t),
 		size: size,
 	}
 }
@@ -197,7 +197,7 @@ func (b *writeBuffer) writeTextDatum(
 		// by braces.
 		begin, sep, end := "{", ",", "}"
 
-		if types.Oid(d.ResolvedType()) == oid.T_int2vector {
+		if types.PGOid(d.ResolvedType()) == oid.T_int2vector {
 			// int2vectors are serialized as a string of space-separated values.
 			begin, sep, end = "", " ", ""
 		}
@@ -388,7 +388,7 @@ func (b *writeBuffer) writeBinaryDatum(
 			hasNulls = 1
 		}
 		subWriter.putInt32(int32(hasNulls))
-		subWriter.putInt32(int32(types.Oid(v.ParamTyp)))
+		subWriter.putInt32(int32(types.PGOid(v.ParamTyp)))
 		subWriter.putInt32(int32(v.Len()))
 		subWriter.putInt32(int32(v.Len()))
 		for _, elem := range v.Array {
@@ -865,7 +865,7 @@ func decodeBinaryArray(b []byte, code formatCode) (parser.Datum, error) {
 	}
 
 	elemOid := oid.Oid(hdr.ElemOid)
-	arr := parser.NewDArray(types.OidToType[elemOid])
+	arr := parser.NewDArray(types.PGOidToType[elemOid])
 	var vlen int32
 	for i := int32(0); i < hdr.DimSize; i++ {
 		if err := binary.Read(r, binary.BigEndian, &vlen); err != nil {

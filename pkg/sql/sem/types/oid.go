@@ -260,8 +260,8 @@ func init() {
 	}
 }
 
-// Oid returns the type's Postgres object ID.
-func Oid(t T) oid.Oid {
+// PGOid returns the type's Postgres object ID.
+func PGOid(t T) oid.Oid {
 	// Compound types.
 	switch ty := t.(type) {
 	case TOid:
@@ -275,7 +275,7 @@ func Oid(t T) oid.Oid {
 	case TTable:
 		return oid.T_anyelement
 	case TArray:
-		if o, ok := oidToArrayOid[Oid(ty.Typ)]; ok {
+		if o, ok := oidToArrayOid[PGOid(ty.Typ)]; ok {
 			return o
 		}
 		// TODO(jordan,justin): should this not be T_unknown?
@@ -287,7 +287,7 @@ func Oid(t T) oid.Oid {
 
 // PGDisplayName returns the Postgres display name for a given type.
 func PGDisplayName(typ T) string {
-	if typname, ok := aliasedOidToName[Oid(typ)]; ok {
+	if typname, ok := aliasedOidToName[PGOid(typ)]; ok {
 		return typname
 	}
 	return typ.String()
