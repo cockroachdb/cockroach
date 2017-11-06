@@ -70,6 +70,10 @@ type scanNode struct {
 	reverse bool
 	props   physicalProps
 
+	// Indicates if this scanNode will do a physical data check. This is
+	// only true when running SCRUB commands.
+	isCheck bool
+
 	// filter that can be evaluated using only this table/index; it contains
 	// tree.IndexedVar leaves generated using filterVars.
 	filter     tree.TypedExpr
@@ -158,7 +162,8 @@ func (n *scanNode) Start(params runParams) error {
 		Cols:             n.cols,
 		ValNeededForCol:  n.valNeededForCol.Copy(),
 	}
-	return n.run.fetcher.Init(n.reverse, false /* returnRangeInfo */, &params.p.alloc, tableArgs)
+	return n.run.fetcher.Init(n.reverse, false, /* returnRangeInfo */
+		false /* isCheck */, &params.p.alloc, tableArgs)
 }
 
 func (n *scanNode) Close(context.Context) {
