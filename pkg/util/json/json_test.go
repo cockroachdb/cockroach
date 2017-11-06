@@ -20,7 +20,10 @@ import (
 	"strings"
 	"testing"
 
+	"bytes"
+	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 )
 
 func TestJSONOrdering(t *testing.T) {
@@ -515,5 +518,79 @@ func TestJSONRemoveIndex(t *testing.T) {
 				}
 			})
 		}
+	}
+}
+
+func getApdEncoding(num float64) *apd.Decimal {
+	dec := &apd.Decimal{}
+	dec, _ = dec.SetFloat64(num)
+	return dec
+}
+
+func arraySeparator() []byte {
+	return encoding.EncodeArrayAscending(nil)
+}
+
+func keyPrefix() []byte {
+	return encoding.EncodeNotNullAscending(nil)
+}
+
+func TestEncodeDecodeJSONInvertedIndex(t *testing.T) {
+	testCases := []struct {
+		value  string
+		expEnc [][]byte
+	}{
+		{`{"a":"b"}`, [][]byte{bytes.Join([][]byte{keyPrefix(),
+			encoding.EncodeStringAscending(nil, "a"), encoding.EncodeStringAscending(nil, "b")}, nil)}},
+		{`["a", "b"]`, [][]byte{append(arraySeparator(),
+			encoding.EncodeStringAscending(nil, "a")...), append(arraySeparator(),
+			encoding.EncodeStringAscending(nil, "b")...)}},
+		{`null`, [][]byte{encoding.EncodeNullAscending(nil)}},
+		{`false`, [][]byte{encoding.EncodeFalseAscending(nil)}},
+		{`true`, [][]byte{encoding.EncodeTrueAscending(nil)}},
+		{`1.23`, [][]byte{encoding.EncodeDecimalAscending(nil, getApdEncoding(1.23))}},
+		{`"a"`, [][]byte{encoding.EncodeStringAscending(nil, "a")}},
+		{`["c", {"a":"b"}]`, [][]byte{append(arraySeparator(),
+			encoding.EncodeStringAscending(nil, "c")...),
+
+			bytes.Join([][]byte{arraySeparator(),
+				keyPrefix(),
+				encoding.EncodeStringAscending(nil, "a"),
+				encoding.EncodeStringAscending(nil, "b")}, nil)}},
+		{`["c", {"a":["c","d"]}]`, [][]byte{append(
+			arraySeparator(),
+			encoding.EncodeStringAscending(nil, "c")...),
+
+			bytes.Join([][]byte{arraySeparator(),
+				keyPrefix(),
+				encoding.EncodeStringAscending(nil, "a"),
+				arraySeparator(),
+				encoding.EncodeStringAscending(nil, "c")}, nil),
+
+			bytes.Join([][]byte{arraySeparator(),
+				keyPrefix(),
+				encoding.EncodeStringAscending(nil, "a"),
+				arraySeparator(),
+				encoding.EncodeStringAscending(nil, "d")}, nil)}},
+
+		{`{"a":"b","e":"f"}`, [][]byte{
+
+			bytes.Join([][]byte{keyPrefix(),
+				encoding.EncodeStringAscending(nil, "a"), encoding.EncodeStringAscending(nil, "b")}, nil),
+
+			bytes.Join([][]byte{keyPrefix(),
+				encoding.EncodeStringAscending(nil, "e"), encoding.EncodeStringAscending(nil, "f")}, nil),
+		}},
+	}
+
+	for _, c := range testCases {
+		enc := jsonTestShorthand(c.value).EncodeInvertedIndexKeys(nil)
+		for j, path := range enc {
+			if !bytes.Equal(path, c.expEnc[j]) {
+				t.Errorf("unexpected encoding mismatch for %v. expected [%#v], got [%#v]",
+					c.value, c.expEnc[j], path)
+			}
+		}
+
 	}
 }
