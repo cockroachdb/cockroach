@@ -70,6 +70,40 @@ func resolveZone(
 	return sqlbase.ID(id), nil
 }
 
+func resolveSubzone(
+	ctx context.Context, txn *client.Txn, zs *parser.ZoneSpecifier, targetID sqlbase.ID,
+) (*sqlbase.TableDescriptor, *sqlbase.IndexDescriptor, string, error) {
+	if !zs.TargetsTable() {
+		return nil, nil, "", nil
+	}
+	table, err := sqlbase.GetTableDescFromID(ctx, txn, targetID)
+	if err != nil {
+		return nil, nil, "", err
+	}
+	var index *sqlbase.IndexDescriptor
+	if in := string(zs.Table.Index); in != "" {
+		i, _, err := table.FindIndexByName(in)
+		if err != nil {
+			return nil, nil, "", err
+		}
+		index = &i
+	}
+	pn := string(zs.Partition)
+	if pn != "" {
+		_, pi, err := table.FindNonDropPartitionByName(pn)
+		if err != nil {
+			return nil, nil, "", err
+		}
+		if index != nil && pi.ID != index.ID {
+			return nil, nil, "", fmt.Errorf("partition %q belongs to index %q, not %q",
+				pn, pi.Name, index.Name)
+		}
+		index = pi
+		zs.Table.Index = parser.UnrestrictedName(pi.Name)
+	}
+	return table, index, pn, nil
+}
+
 // ascendZoneSpecifier logically ascends the zone hierarchy for the zone
 // specified by (zs, resolvedID) until the zone matching actualID is found, and
 // returns that zone's specifier. Results are undefined if actualID is not in
@@ -82,7 +116,7 @@ func resolveZone(
 // TODO(benesch): Teach GetZoneConfig to return the specifier of the zone it
 // finds without impacting performance.
 func ascendZoneSpecifier(
-	zs parser.ZoneSpecifier, resolvedID, actualID uint32,
+	zs parser.ZoneSpecifier, resolvedID, actualID uint32, actualSubzone *config.Subzone,
 ) (parser.ZoneSpecifier, error) {
 	if actualID == keys.RootNamespaceID {
 		// We had to traverse to the top of the hierarchy, so we're showing the
@@ -91,11 +125,18 @@ func ascendZoneSpecifier(
 	} else if resolvedID != actualID {
 		// We traversed at least one level up, and we're not at the top of the
 		// hierarchy, so we're showing the database zone config.
-		tn, err := zs.Table.NormalizeTableName()
+		tn, err := zs.Table.Table.Normalize()
 		if err != nil {
 			return parser.ZoneSpecifier{}, err
 		}
 		zs.Database = tn.DatabaseName
+	} else if actualSubzone == nil {
+		// We didn't find a subzone, so no index or partition zone config exists.
+		zs.Table.Index = ""
+		zs.Partition = ""
+	} else if actualSubzone.PartitionName == "" {
+		// The resolved subzone did not name a partition, just an index.
+		zs.Partition = ""
 	}
 	return zs, nil
 }
@@ -136,6 +177,13 @@ func (n *setZoneConfigNode) Start(params runParams) error {
 		}
 	}
 
+	if n.zoneSpecifier.TargetsIndex() {
+		_, err := params.p.expandIndexName(params.ctx, &n.zoneSpecifier.Table, true /* requireTable */)
+		if err != nil {
+			return err
+		}
+	}
+
 	targetID, err := resolveZone(params.ctx, params.p.txn, &n.zoneSpecifier)
 	if err != nil {
 		return err
@@ -144,25 +192,19 @@ func (n *setZoneConfigNode) Start(params runParams) error {
 		return pgerror.NewErrorf(pgerror.CodeCheckViolationError,
 			`cannot set zone configs for system config tables; `+
 				`try setting your config on the entire "system" database instead`)
+	} else if targetID == keys.RootNamespaceID && yamlConfig == nil {
+		return pgerror.NewErrorf(pgerror.CodeCheckViolationError,
+			"cannot remove default zone")
 	}
 
-	internalExecutor := InternalExecutor{LeaseManager: params.p.LeaseMgr()}
-
-	if yamlConfig == nil {
-		if targetID == keys.RootNamespaceID {
-			return pgerror.NewErrorf(pgerror.CodeCheckViolationError,
-				"cannot remove default zone")
-		}
-		n.numAffected, err = internalExecutor.ExecuteStatementInTransaction(
-			params.ctx, "set zone", params.p.txn,
-			"DELETE FROM system.zones WHERE id = $1", targetID)
+	table, index, partition, err := resolveSubzone(params.ctx, params.p.txn,
+		&n.zoneSpecifier, targetID)
+	if err != nil {
 		return err
 	}
 
-	// TODO(benesch): pass in a proper key suffix to support index/partition
-	// zone configs.
-	var keySuffix []byte
-	zone, _, err := GetZoneConfigInTxn(params.ctx, params.p.txn, uint32(targetID), keySuffix)
+	zoneID, zone, subzone, err := GetZoneConfigInTxn(params.ctx, params.p.txn,
+		uint32(targetID), index, partition)
 	if err == errNoZoneConfigApplies {
 		// TODO(benesch): This shouldn't be the caller's responsibility;
 		// GetZoneConfigInTxn should just return the default zone config if no zone
@@ -171,12 +213,61 @@ func (n *setZoneConfigNode) Start(params runParams) error {
 	} else if err != nil {
 		return err
 	}
-	if err := yaml.UnmarshalStrict([]byte(*yamlConfig), &zone); err != nil {
-		return fmt.Errorf("could not parse zone config: %s", err)
+
+	if yamlConfig == nil {
+		if index != nil {
+			didDelete := zone.DeleteSubzone(uint32(index.ID), partition)
+			if !didDelete {
+				// If we didn't do any work, return early. We'd otherwise perform an
+				// update that would make it look like one row was affected.
+				return nil
+			}
+		} else {
+			zone.DeleteTableConfig()
+		}
+	} else {
+		newZone := zone
+		if subzone != nil {
+			newZone = subzone.Config
+		}
+		if err := yaml.UnmarshalStrict([]byte(*yamlConfig), &newZone); err != nil {
+			return fmt.Errorf("could not parse zone config: %s", err)
+		}
+		if index == nil {
+			zone = newZone
+		} else {
+			if uint32(targetID) != zoneID {
+				// If the table containing this subzone didn't have its own zone entry,
+				// create an empty subzone placeholder.
+				zone = config.ZoneConfig{}
+			}
+			zone.SetSubzone(config.Subzone{
+				IndexID:       uint32(index.ID),
+				PartitionName: partition,
+				Config:        newZone,
+			})
+		}
+		if err := zone.Validate(); err != nil {
+			return fmt.Errorf("could not validate zone config: %s", err)
+		}
 	}
-	if err := zone.Validate(); err != nil {
-		return fmt.Errorf("could not parse zone config: %s", err)
+
+	if len(zone.Subzones) > 0 {
+		zone.SubzoneSpans, err = GenerateSubzoneSpans(table, zone.Subzones)
+		if err != nil {
+			return err
+		}
 	}
+
+	internalExecutor := InternalExecutor{LeaseManager: params.p.LeaseMgr()}
+
+	if zone.IsSubzonePlaceholder() && len(zone.Subzones) == 0 {
+		n.numAffected, err = internalExecutor.ExecuteStatementInTransaction(
+			params.ctx, "set zone", params.p.txn,
+			"DELETE FROM system.zones WHERE id = $1", targetID)
+		return err
+	}
+
 	buf, err := protoutil.Marshal(&zone)
 	if err != nil {
 		return fmt.Errorf("could not marshal zone config: %s", err)
@@ -233,14 +324,25 @@ func (p *planner) ShowZoneConfig(ctx context.Context, n *parser.ShowZoneConfig) 
 }
 
 func (n *showZoneConfigNode) Start(params runParams) error {
+	if n.zoneSpecifier.TargetsIndex() {
+		_, err := params.p.expandIndexName(params.ctx, &n.zoneSpecifier.Table, true /* requireTable */)
+		if err != nil {
+			return err
+		}
+	}
+
 	targetID, err := resolveZone(params.ctx, params.p.txn, &n.zoneSpecifier)
 	if err != nil {
 		return err
 	}
-	// TODO(benesch): pass in a proper key suffix to support index/partition
-	// zone configs.
-	var keySuffix []byte
-	zone, zoneID, err := GetZoneConfigInTxn(params.ctx, params.p.txn, uint32(targetID), keySuffix)
+
+	_, index, partition, err := resolveSubzone(params.ctx, params.p.txn, &n.zoneSpecifier, targetID)
+	if err != nil {
+		return err
+	}
+
+	zoneID, zone, subzone, err := GetZoneConfigInTxn(params.ctx, params.p.txn,
+		uint32(targetID), index, partition)
 	if err == errNoZoneConfigApplies {
 		// TODO(benesch): This shouldn't be the caller's responsibility;
 		// GetZoneConfigInTxn should just return the default zone config if no zone
@@ -249,17 +351,22 @@ func (n *showZoneConfigNode) Start(params runParams) error {
 		zoneID = keys.RootNamespaceID
 	} else if err != nil {
 		return err
+	} else if subzone != nil {
+		zone = subzone.Config
 	}
 	n.zoneID = zoneID
 
 	// Determine the CLI specifier for the zone config that actually applies
 	// without performing another KV lookup.
-	zs, err := ascendZoneSpecifier(n.zoneSpecifier, uint32(targetID), zoneID)
+	zs, err := ascendZoneSpecifier(n.zoneSpecifier, uint32(targetID), zoneID, subzone)
 	if err != nil {
 		return err
 	}
 	n.cliSpecifier = config.CLIZoneSpecifier(zs)
 
+	// Ensure subzone configs don't infect the output of config_bytes.
+	zone.Subzones = nil
+	zone.SubzoneSpans = nil
 	n.protoConfig, err = protoutil.Marshal(&zone)
 	if err != nil {
 		return err

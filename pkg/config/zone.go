@@ -75,14 +75,17 @@ func ZoneSpecifierFromID(
 	}
 	tn := &parser.TableName{DatabaseName: parser.Name(db), TableName: parser.Name(name)}
 	return parser.ZoneSpecifier{
-		Table: parser.NormalizableTableName{TableNameReference: tn},
+		Table: parser.TableNameWithIndex{
+			Table: parser.NormalizableTableName{TableNameReference: tn},
+		},
 	}, nil
 }
 
 // ParseCLIZoneSpecifier converts a single string s identifying a zone, as would
 // be used to name a zone on the command line, to a ZoneSpecifier. A valid CLI
 // zone specifier is either 1) a database or table reference of the form
-// DATABASE[.TABLE], or 2) a special named zone of the form [.NAME].
+// DATABASE[.TABLE[.PARTITION][@INDEX]], or 2) a special named zone of the form
+// .NAME.
 func ParseCLIZoneSpecifier(s string) (parser.ZoneSpecifier, error) {
 	if len(s) > 0 && s[0] == '.' {
 		name := s[1:]
@@ -91,20 +94,26 @@ func ParseCLIZoneSpecifier(s string) (parser.ZoneSpecifier, error) {
 		}
 		return parser.ZoneSpecifier{NamedZone: parser.UnrestrictedName(name)}, nil
 	}
-	// ParseTableName is not vulnerable to SQL injection, so passing s directly
-	// is safe. See #8389 for details.
-	tn, err := parser.ParseTableName(s)
+	// ParseTableNameWithIndex is not vulnerable to SQL injection, so passing s
+	// directly is safe. See #8389 for details.
+	parsed, err := parser.ParseTableNameWithIndex(s)
 	if err != nil {
 		return parser.ZoneSpecifier{}, fmt.Errorf("malformed name: %q", s)
 	}
-	db := tn.Database()
-	if db == "" {
-		// No database was specified, so interpret the table name as the database.
-		db = tn.Table()
-		return parser.ZoneSpecifier{Database: parser.Name(db)}, nil
+	parsed.SearchTable = false
+	var partition parser.Name
+	if un := parsed.Table.TableNameReference.(parser.UnresolvedName); len(un) == 1 {
+		return parser.ZoneSpecifier{Database: un[0].(parser.Name)}, nil
+	} else if len(un) == 3 {
+		partition = un[2].(parser.Name)
+		parsed.Table.TableNameReference = un[:2]
+	}
+	if _, err = parsed.Table.Normalize(); err != nil {
+		return parser.ZoneSpecifier{}, err
 	}
 	return parser.ZoneSpecifier{
-		Table: parser.NormalizableTableName{TableNameReference: tn},
+		Table:     parsed,
+		Partition: partition,
 	}, nil
 }
 
@@ -117,7 +126,16 @@ func CLIZoneSpecifier(zs parser.ZoneSpecifier) string {
 	if zs.Database != "" {
 		return zs.Database.String()
 	}
-	return zs.Table.String()
+	t := zs.Table
+	if zs.Partition != "" {
+		tn := t.Table.TableName()
+		t.Table = parser.NormalizableTableName{
+			TableNameReference: parser.UnresolvedName{tn.DatabaseName, tn.TableName, zs.Partition},
+		}
+		// The index is redundant when the partition is specified, so omit it.
+		t.Index = ""
+	}
+	return t.String()
 }
 
 // ResolveZoneSpecifier converts a zone specifier to the ID of most specific
@@ -139,7 +157,7 @@ func ResolveZoneSpecifier(
 		return resolveName(keys.RootNamespaceID, string(zs.Database))
 	}
 
-	tn, err := zs.Table.NormalizeTableName()
+	tn, err := zs.Table.Table.Normalize()
 	if err != nil {
 		return 0, err
 	}

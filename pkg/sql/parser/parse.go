@@ -143,17 +143,18 @@ func ParseOne(sql string) (Statement, error) {
 	return stmts[0], nil
 }
 
-// ParseTableName parses a table name.
-func ParseTableName(sql string) (*TableName, error) {
-	stmt, err := ParseOne(fmt.Sprintf("ALTER TABLE %s RENAME TO x", sql))
+// ParseTableNameWithIndex parses a table name with index.
+func ParseTableNameWithIndex(sql string) (TableNameWithIndex, error) {
+	stmt, err := ParseOne(fmt.Sprintf("ALTER INDEX %s RENAME TO x", sql))
 	if err != nil {
-		return nil, err
+		return TableNameWithIndex{}, err
 	}
-	rename, ok := stmt.(*RenameTable)
+	rename, ok := stmt.(*RenameIndex)
 	if !ok {
-		return nil, pgerror.NewErrorf(pgerror.CodeInternalError, "expected an ALTER TABLE statement, but found %T", stmt)
+		return TableNameWithIndex{}, pgerror.NewErrorf(
+			pgerror.CodeInternalError, "expected an ALTER INDEX statement, but found %T", stmt)
 	}
-	return rename.Name.Normalize()
+	return *rename.Index, nil
 }
 
 // parseExprs parses one or more sql expressions.

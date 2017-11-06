@@ -253,6 +253,10 @@ func TestZoneSpecifiers(t *testing.T) {
 		{"db", 50, ""},
 		{".db", -1, `"db" is not a built-in zone`},
 		{"db.tbl", 51, ""},
+		{"db.tbl.prt", 51, ""},
+		{`db.tbl@idx`, 51, ""},
+		{"db.tbl.too.many.dots", 0, "invalid table name"},
+		{`db.tbl@primary`, 51, ""},
 		{"tbl", -1, `"tbl" not found`},
 		{"table", -1, `malformed name: "table"`}, // SQL keyword; requires quotes
 		{`"table"`, -1, `"table" not found`},

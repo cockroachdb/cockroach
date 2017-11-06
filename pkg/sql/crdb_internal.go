@@ -1456,25 +1456,66 @@ CREATE TABLE crdb_internal.zones (
 			if err != nil {
 				return err
 			}
-			cliSpecifier := parser.NewDString(config.CLIZoneSpecifier(zs))
 
 			configBytes := []byte(*r[1].(*parser.DBytes))
 			var configProto config.ZoneConfig
 			if err := protoutil.Unmarshal(configBytes, &configProto); err != nil {
 				return err
 			}
-			configYAML, err := yaml.Marshal(configProto)
-			if err != nil {
-				return err
+			subzones := configProto.Subzones
+
+			if !configProto.IsSubzonePlaceholder() {
+				// Ensure subzones don't infect the value of the config_proto column.
+				configProto.Subzones = nil
+				configProto.SubzoneSpans = nil
+				configBytes, err = protoutil.Marshal(&configProto)
+				if err != nil {
+					return err
+				}
+				configYAML, err := yaml.Marshal(configProto)
+				if err != nil {
+					return err
+				}
+				if err := addRow(
+					r[0], // id
+					parser.NewDString(config.CLIZoneSpecifier(zs)),
+					parser.NewDBytes(parser.DBytes(configYAML)),
+					parser.NewDBytes(parser.DBytes(configBytes)),
+				); err != nil {
+					return err
+				}
 			}
 
-			if err := addRow(
-				r[0], // id
-				cliSpecifier,
-				parser.NewDBytes(parser.DBytes(configYAML)),
-				parser.NewDBytes(parser.DBytes(configBytes)),
-			); err != nil {
-				return err
+			if len(subzones) > 0 {
+				table, err := sqlbase.GetTableDescFromID(ctx, p.txn, sqlbase.ID(id))
+				if err != nil {
+					return err
+				}
+				for _, s := range subzones {
+					index, err := table.FindIndexByID(sqlbase.IndexID(s.IndexID))
+					if err != nil {
+						return err
+					}
+					zs := zs
+					zs.Table.Index = parser.UnrestrictedName(index.Name)
+					zs.Partition = parser.Name(s.PartitionName)
+					configYAML, err := yaml.Marshal(s.Config)
+					if err != nil {
+						return err
+					}
+					configBytes, err := protoutil.Marshal(&s.Config)
+					if err != nil {
+						return err
+					}
+					if err := addRow(
+						r[0], // id
+						parser.NewDString(config.CLIZoneSpecifier(zs)),
+						parser.NewDBytes(parser.DBytes(configYAML)),
+						parser.NewDBytes(parser.DBytes(configBytes)),
+					); err != nil {
+						return err
+					}
+				}
 			}
 		}
 		return nil
