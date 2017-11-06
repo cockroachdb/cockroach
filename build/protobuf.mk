@@ -17,7 +17,7 @@
 REPO_ROOT := ./cockroach
 include $(REPO_ROOT)/build/common.mk
 
-NATIVE_ROOT := $(LIBROACH_SRC_DIR)/protos
+CPP_PROTO_ROOT := $(LIBROACH_SRC_DIR)/protos
 
 GOGO_PROTOBUF_PATH := $(REPO_ROOT)/vendor/github.com/gogo/protobuf
 PROTOBUF_PATH  := $(GOGO_PROTOBUF_PATH)/protobuf
@@ -32,9 +32,9 @@ GRPC_GATEWAY_GOOGLEAPIS_PACKAGE := github.com/grpc-ecosystem/grpc-gateway/third_
 GRPC_GATEWAY_GOOGLEAPIS_PATH := $(REPO_ROOT)/vendor/$(GRPC_GATEWAY_GOOGLEAPIS_PACKAGE)
 
 # Map protobuf includes to the Go package containing the generated Go code.
-MAPPINGS :=
-MAPPINGS := $(MAPPINGS)Mgoogle/api/annotations.proto=$(GRPC_GATEWAY_GOOGLEAPIS_PACKAGE)/google/api,
-MAPPINGS := $(MAPPINGS)Mgoogle/protobuf/timestamp.proto=github.com/gogo/protobuf/types,
+PROTO_MAPPINGS :=
+PROTO_MAPPINGS := $(PROTO_MAPPINGS)Mgoogle/api/annotations.proto=$(GRPC_GATEWAY_GOOGLEAPIS_PACKAGE)/google/api,
+PROTO_MAPPINGS := $(PROTO_MAPPINGS)Mgoogle/protobuf/timestamp.proto=github.com/gogo/protobuf/types,
 
 GW_SERVER_PROTOS := $(PKG_ROOT)/server/serverpb/admin.proto $(PKG_ROOT)/server/serverpb/status.proto $(PKG_ROOT)/server/serverpb/authentication.proto
 GW_TS_PROTOS := $(PKG_ROOT)/ts/tspb/timeseries.proto
@@ -53,14 +53,14 @@ UI_TS := $(UI_ROOT)/src/js/protos.d.ts
 UI_SOURCES := $(UI_JS) $(UI_TS)
 
 CPP_PROTOS := $(filter %/roachpb/metadata.proto %/roachpb/data.proto %/roachpb/internal.proto %/engine/enginepb/mvcc.proto %/engine/enginepb/mvcc3.proto %/engine/enginepb/rocksdb.proto %/hlc/legacy_timestamp.proto %/hlc/timestamp.proto %/unresolved_addr.proto,$(GO_PROTOS))
-CPP_HEADERS := $(subst ./,$(NATIVE_ROOT)/,$(CPP_PROTOS:%.proto=%.pb.h))
-CPP_SOURCES := $(subst ./,$(NATIVE_ROOT)/,$(CPP_PROTOS:%.proto=%.pb.cc))
+CPP_HEADERS := $(subst ./,$(CPP_PROTO_ROOT)/,$(CPP_PROTOS:%.proto=%.pb.h))
+CPP_SOURCES := $(subst ./,$(CPP_PROTO_ROOT)/,$(CPP_PROTOS:%.proto=%.pb.cc))
 
 GO_SOURCES_TARGET := $(LOCAL_BIN)/.go_protobuf_sources
 $(GO_SOURCES_TARGET): $(PROTOC) $(PROTOC_PLUGIN) $(GO_PROTOS) $(GOGOPROTO_PROTO)
 	(cd $(REPO_ROOT) && git ls-files --exclude-standard --cached --others -- '*.pb.go' | xargs rm -f)
 	for dir in $(sort $(dir $(GO_PROTOS))); do \
-	  $(PROTOC) -I.:$(GOGO_PROTOBUF_PATH):$(PROTOBUF_PATH):$(COREOS_PATH):$(GRPC_GATEWAY_GOOGLEAPIS_PATH) --plugin=$(PROTOC_PLUGIN) --gogoroach_out=$(MAPPINGS),plugins=grpc,import_prefix=github.com/cockroachdb/:$(ORG_ROOT) $$dir/*.proto; \
+	  $(PROTOC) -I.:$(GOGO_PROTOBUF_PATH):$(PROTOBUF_PATH):$(COREOS_PATH):$(GRPC_GATEWAY_GOOGLEAPIS_PATH) --plugin=$(PROTOC_PLUGIN) --gogoroach_out=$(PROTO_MAPPINGS),plugins=grpc,import_prefix=github.com/cockroachdb/:$(ORG_ROOT) $$dir/*.proto; \
 	done
 	$(SED_INPLACE) '/import _/d' $(GO_SOURCES)
 	$(SED_INPLACE) -E 's!import (fmt|math) "github.com/cockroachdb/(fmt|math)"! !g' $(GO_SOURCES)
@@ -79,8 +79,8 @@ $(GW_SOURCES_TARGET): $(PROTOC) $(GW_SERVER_PROTOS) $(GW_TS_PROTOS) $(GO_PROTOS)
 CPP_SOURCES_TARGET := $(LOCAL_BIN)/.cpp_protobuf_sources
 $(CPP_SOURCES_TARGET): $(PROTOC) $(CPP_PROTOS)
 	(cd $(REPO_ROOT) && git ls-files --exclude-standard --cached --others -- '*.pb.h' '*.pb.cc' | xargs rm -f)
-	mkdir -p $(NATIVE_ROOT)
-	$(PROTOC) -I.:$(GOGO_PROTOBUF_PATH):$(PROTOBUF_PATH) --cpp_out=lite:$(NATIVE_ROOT) $(CPP_PROTOS)
+	mkdir -p $(CPP_PROTO_ROOT)
+	$(PROTOC) -I.:$(GOGO_PROTOBUF_PATH):$(PROTOBUF_PATH) --cpp_out=lite:$(CPP_PROTO_ROOT) $(CPP_PROTOS)
 	$(SED_INPLACE) -E '/gogoproto/d' $(CPP_HEADERS) $(CPP_SOURCES)
 	touch $@
 
