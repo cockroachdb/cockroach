@@ -75,7 +75,7 @@ $(GOBINDATA_TARGET): webpack.app.js $(DLLS) $(shell find src styl)
 watch: export TARGET := http://localhost:8080
 watch: PORT := 3000
 watch: $(DLLS)
-	$(WEBPACK_DEV_SERVER) --config webpack.app.js --port $(PORT)
+	./node_modules/.bin/webpack-dashboard -- $(WEBPACK_DEV_SERVER) --config webpack.app.js --port $(PORT)
 
 .PHONY: maintainer-clean
 maintainer-clean:
