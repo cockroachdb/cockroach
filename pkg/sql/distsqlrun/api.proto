@@ -21,10 +21,10 @@ option go_package = "distsqlrun";
 import "gogoproto/gogo.proto";
 import "google/protobuf/timestamp.proto";
 
-import "cockroach/pkg/roachpb/data.proto";
-import "cockroach/pkg/sql/distsqlrun/data.proto";
-import "cockroach/pkg/sql/distsqlrun/processors.proto";
-import "cockroach/pkg/util/hlc/timestamp.proto";
+import "roachpb/data.proto";
+import "sql/distsqlrun/data.proto";
+import "sql/distsqlrun/processors.proto";
+import "util/hlc/timestamp.proto";
 
 message SetupFlowRequest {
   reserved 2;

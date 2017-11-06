@@ -335,7 +335,7 @@ unsafe-clean: maintainer-clean unsafe-clean-c-deps
 
 .PHONY: protobuf
 protobuf: ## Regenerate generated code for protobuf definitions.
-	$(MAKE) -C $(ORG_ROOT) -f cockroach/build/protobuf.mk
+	$(MAKE) -f build/protobuf.mk
 
 # pre-push locally runs most of the checks CI will run. Notably, it doesn't run
 # the acceptance tests.

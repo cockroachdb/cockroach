@@ -16,8 +16,8 @@ syntax = "proto3";
 package cockroach.storage;
 option go_package = "storage";
 
-import "cockroach/pkg/roachpb/internal_raft.proto";
-import "cockroach/pkg/roachpb/metadata.proto";
+import "roachpb/internal_raft.proto";
+import "roachpb/metadata.proto";
 import "gogoproto/gogo.proto";
 
 // StoreRequestHeader locates a Store on a Node.

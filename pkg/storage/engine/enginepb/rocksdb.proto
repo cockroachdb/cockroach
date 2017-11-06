@@ -16,7 +16,7 @@ syntax = "proto3";
 package cockroach.storage.engine.enginepb;
 option go_package = "enginepb";
 
-import "cockroach/pkg/util/hlc/timestamp.proto";
+import "util/hlc/timestamp.proto";
 import "gogoproto/gogo.proto";
 
 // SSTUserProperties contains the user-added properties of a single sstable.

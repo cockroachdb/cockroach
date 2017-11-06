@@ -16,7 +16,7 @@ syntax = "proto3";
 package cockroach.storage;
 option go_package = "storage";
 
-import "cockroach/pkg/util/hlc/legacy_timestamp.proto";
+import "util/hlc/legacy_timestamp.proto";
 import "gogoproto/gogo.proto";
 
 // Liveness holds information about a node's latest heartbeat and epoch.

@@ -24,15 +24,15 @@ add_library(roach
   db.cc
   encoding.cc
   eventlistener.cc
-  protos/cockroach/pkg/roachpb/data.pb.cc
-  protos/cockroach/pkg/roachpb/internal.pb.cc
-  protos/cockroach/pkg/roachpb/metadata.pb.cc
-  protos/cockroach/pkg/storage/engine/enginepb/mvcc.pb.cc
-  protos/cockroach/pkg/storage/engine/enginepb/mvcc3.pb.cc
-  protos/cockroach/pkg/storage/engine/enginepb/rocksdb.pb.cc
-  protos/cockroach/pkg/util/hlc/legacy_timestamp.pb.cc
-  protos/cockroach/pkg/util/hlc/timestamp.pb.cc
-  protos/cockroach/pkg/util/unresolved_addr.pb.cc
+  protos/roachpb/data.pb.cc
+  protos/roachpb/internal.pb.cc
+  protos/roachpb/metadata.pb.cc
+  protos/storage/engine/enginepb/mvcc.pb.cc
+  protos/storage/engine/enginepb/mvcc3.pb.cc
+  protos/storage/engine/enginepb/rocksdb.pb.cc
+  protos/util/hlc/legacy_timestamp.pb.cc
+  protos/util/hlc/timestamp.pb.cc
+  protos/util/unresolved_addr.pb.cc
 )
 target_include_directories(roach
   PUBLIC  ./include

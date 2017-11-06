@@ -17,10 +17,10 @@ package cockroach.sql.jobs;
 option go_package = "jobs";
 
 import "gogoproto/gogo.proto";
-import "cockroach/pkg/roachpb/csv.proto";
-import "cockroach/pkg/roachpb/data.proto";
-import "cockroach/pkg/sql/sqlbase/structured.proto";
-import "cockroach/pkg/util/hlc/timestamp.proto";
+import "roachpb/csv.proto";
+import "roachpb/data.proto";
+import "sql/sqlbase/structured.proto";
+import "util/hlc/timestamp.proto";
 
 message Lease {
   option (gogoproto.equal) = true;
