@@ -1025,6 +1025,30 @@ func typeCheckComparisonOpWithSubOperator(
 	return leftTyped, rightTyped, fn, nil
 }
 
+// typeCheckSubqueryWithIn checks the case where the right side of an IN
+// expression is a subquery.
+func typeCheckSubqueryWithIn(left, right Type) error {
+	if rTuple, ok := right.(TTuple); ok {
+		if lTuple, ok := left.(TTuple); ok {
+			if len(lTuple) != len(rTuple) {
+				return pgerror.NewErrorf(pgerror.CodeInvalidParameterValueError, unsupportedCompErrFmt, fmt.Sprintf(compSignatureFmt, left, In, right))
+			}
+			for i := range rTuple {
+				if rTuple[i] != lTuple[i] {
+					return pgerror.NewErrorf(pgerror.CodeInvalidParameterValueError, unsupportedCompErrFmt, fmt.Sprintf(compSignatureFmt, left, In, right))
+				}
+			}
+		} else {
+			// Subqueries returning a single column come through as a tuple{T}, so
+			// T IN tuple{T} should be accepted.
+			if len(rTuple) != 1 || rTuple[0] != left {
+				return pgerror.NewErrorf(pgerror.CodeInvalidParameterValueError, unsupportedCompErrFmt, fmt.Sprintf(compSignatureFmt, left, In, right))
+			}
+		}
+	}
+	return nil
+}
+
 func typeCheckComparisonOp(
 	ctx *SemaContext, op ComparisonOperator, left, right Expr,
 ) (TypedExpr, TypedExpr, CmpOp, error) {
@@ -1096,6 +1120,12 @@ func typeCheckComparisonOp(
 	}
 	leftReturn := leftExpr.ResolvedType()
 	rightReturn := rightExpr.ResolvedType()
+
+	if foldedOp == In {
+		if err := typeCheckSubqueryWithIn(leftReturn, rightReturn); err != nil {
+			return nil, nil, CmpOp{}, err
+		}
+	}
 
 	// Return early if at least one overload is possible and NULL is an argument.
 	// Callers can handle returning NULL, if necessary.
