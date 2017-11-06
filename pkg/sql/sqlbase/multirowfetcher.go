@@ -171,6 +171,10 @@ type MultiRowFetcher struct {
 	keyRemainingBytes []byte
 	kvEnd             bool
 
+	// isCheck indicates whether or not we are running checks for k/v
+	// correctness. It is set only during SCRUB commands.
+	isCheck bool
+
 	// Buffered allocation of decoded datums.
 	alloc *DatumAlloc
 }
@@ -179,7 +183,11 @@ type MultiRowFetcher struct {
 // non-primary index, tables.ValNeededForCol can only refer to columns in the
 // index.
 func (mrf *MultiRowFetcher) Init(
-	reverse, returnRangeInfo bool, alloc *DatumAlloc, tables ...MultiRowFetcherTableArgs,
+	reverse,
+	returnRangeInfo bool,
+	isCheck bool,
+	alloc *DatumAlloc,
+	tables ...MultiRowFetcherTableArgs,
 ) error {
 	if len(tables) == 0 {
 		panic("no tables to fetch from")
@@ -189,6 +197,7 @@ func (mrf *MultiRowFetcher) Init(
 	mrf.returnRangeInfo = returnRangeInfo
 	mrf.alloc = alloc
 	mrf.allEquivSignatures = make(map[string]int, len(tables))
+	mrf.isCheck = isCheck
 
 	// We must always decode the index key if we need to distinguish between
 	// rows from more than one table.

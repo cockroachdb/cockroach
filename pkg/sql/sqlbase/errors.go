@@ -284,7 +284,7 @@ func ConvertBatchError(ctx context.Context, tableDesc *TableDescriptor, b *clien
 			ValNeededForCol:  valNeededForCol,
 		}
 		if err := rf.Init(
-			false /* reverse */, false /* returnRangeInfo */, &DatumAlloc{}, tableArgs,
+			false /* reverse */, false /* returnRangeInfo */, false /* isCheck */, &DatumAlloc{}, tableArgs,
 		); err != nil {
 			return err
 		}
