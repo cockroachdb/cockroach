@@ -127,7 +127,7 @@ func (cb *columnBackfiller) init() error {
 		ValNeededForCol: valNeededForCol,
 	}
 	return cb.fetcher.Init(
-		false /* reverse */, false /* returnRangeInfo */, &cb.alloc, tableArgs,
+		false /* reverse */, false /* returnRangeInfo */, false /* isCheck */, &cb.alloc, tableArgs,
 	)
 }
 

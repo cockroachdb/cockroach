@@ -146,6 +146,10 @@ type scanRun struct {
 	scanInitialized  bool
 	isSecondaryIndex bool
 
+	// Indicates if this scanNode will do a physical data check. This is
+	// only true when running SCRUB commands.
+	isCheck bool
+
 	fetcher sqlbase.MultiRowFetcher
 }
 
@@ -158,7 +162,8 @@ func (n *scanNode) startExec(params runParams) error {
 		Cols:             n.cols,
 		ValNeededForCol:  n.valNeededForCol.Copy(),
 	}
-	return n.run.fetcher.Init(n.reverse, false /* returnRangeInfo */, &params.p.alloc, tableArgs)
+	return n.run.fetcher.Init(n.reverse, false, /* returnRangeInfo */
+		false /* isCheck */, &params.p.alloc, tableArgs)
 }
 
 func (n *scanNode) Close(context.Context) {
