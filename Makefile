@@ -22,6 +22,15 @@
 # `help` target. They look a bit awkward in the variable declarations below
 # since any whitespace added would become part of the variable's default value.
 
+ifeq ($(PKG),)
+ifneq ($(TESTS),)
+$(error TESTS must be specified with PKG (e.g. PKG=./pkg/sql/))
+endif
+ifneq ($(BENCHES),)
+$(error BENCHES must be specified with PKG (e.g. PKG=./pkg/sql/))
+endif
+endif
+
 PKG          := ./pkg/...## Which package to run tests against, e.g. "./pkg/storage".
 TAGS         :=
 
@@ -239,6 +248,7 @@ bench: TESTTIMEOUT := $(BENCHTIMEOUT)
 
 .PHONY: check test testshort testrace testlogic bench
 check test testshort testrace bench: gotestdashi
+	$(warning You specified TESTS=$(TESTS) without specifying PKG - your tests will run against all packages)
 	$(XGO) test $(GOFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' -run "$(TESTS)" $(if $(BENCHES),-bench "$(BENCHES)") -timeout $(TESTTIMEOUT) $(PKG) $(TESTFLAGS)
 
 # Run make testlogic to run all of the logic tests. Specify test files to run
