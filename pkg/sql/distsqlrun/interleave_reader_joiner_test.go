@@ -58,7 +58,7 @@ func TestInterleaveReaderJoiner(t *testing.T) {
 	// other parent row.
 	sqlutils.CreateTableInterleave(t, sqlDB, "child1",
 		"pid INT, id INT, b INT, PRIMARY KEY (pid, id)",
-		"test.parent (pid)",
+		"parent (pid)",
 		62,
 		sqlutils.ToRowFn(sqlutils.RowModuloShiftedFn(30), sqlutils.RowIdxFn, bFn),
 	)
@@ -67,14 +67,14 @@ func TestInterleaveReaderJoiner(t *testing.T) {
 	// interleaved into each parent row.
 	sqlutils.CreateTableInterleave(t, sqlDB, "child2",
 		"pid INT, id INT, s STRING, PRIMARY KEY (pid, id), INDEX (s)",
-		"test.parent (pid)",
+		"parent (pid)",
 		15,
 		sqlutils.ToRowFn(sqlutils.RowModuloShiftedFn(30), sqlutils.RowIdxFn, sqlutils.RowEnglishFn),
 	)
 
-	pd := sqlbase.GetTableDescriptor(kvDB, "test", "parent")
-	cd1 := sqlbase.GetTableDescriptor(kvDB, "test", "child1")
-	cd2 := sqlbase.GetTableDescriptor(kvDB, "test", "child2")
+	pd := sqlbase.GetTableDescriptor(kvDB, sqlutils.TestDB, "parent")
+	cd1 := sqlbase.GetTableDescriptor(kvDB, sqlutils.TestDB, "child1")
+	cd2 := sqlbase.GetTableDescriptor(kvDB, sqlutils.TestDB, "child2")
 
 	testCases := []struct {
 		spec     InterleaveReaderJoinerSpec
@@ -282,8 +282,8 @@ func TestInterleaveReaderJoinerErrors(t *testing.T) {
 		sqlutils.ToRowFn(sqlutils.RowModuloShiftedFn(5), sqlutils.RowIdxFn),
 	)
 
-	pd := sqlbase.GetTableDescriptor(kvDB, "test", "parent")
-	cd := sqlbase.GetTableDescriptor(kvDB, "test", "child")
+	pd := sqlbase.GetTableDescriptor(kvDB, sqlutils.TestDB, "parent")
+	cd := sqlbase.GetTableDescriptor(kvDB, sqlutils.TestDB, "child")
 
 	testCases := []struct {
 		spec     InterleaveReaderJoinerSpec

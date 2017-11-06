@@ -1,0 +1,89 @@
+# LogicTest: 5node-distsql
+
+statement ok
+CREATE TABLE parent (pid INT PRIMARY KEY, a INT)
+
+statement ok
+CREATE TABLE child (
+  pid INT,
+  cid INT,
+  a INT,
+  PRIMARY KEY(pid, cid),
+  FOREIGN KEY (pid) REFERENCES parent
+)
+INTERLEAVE IN PARENT parent (pid)
+
+statement ok
+CREATE TABLE grandchild (
+  pid INT,
+  cid INT,
+  gcid INT,
+  a INT,
+  PRIMARY KEY(pid, cid, gcid),
+  FOREIGN KEY (pid, cid) REFERENCES child
+)
+INTERLEAVE IN PARENT child (pid, cid)
+
+# Insert some rows.
+statement ok
+INSERT INTO parent SELECT
+  pid,
+  mod(pid, 42)
+FROM
+  GENERATE_SERIES(1, 200) AS ID(pid)
+
+statement ok
+INSERT INTO child SELECT
+  mod(cid-1, 200) + 1,
+  cid,
+  mod(cid, 100)
+FROM
+  GENERATE_SERIES(1, 1234) AS ID(cid)
+
+statement ok
+INSERT INTO grandchild SELECT
+  mod(mod(gcid-1, 1234), 200) + 1,
+  mod(gcid-1, 1234) + 1,
+  gcid,
+  mod(gcid, 2017) FROM
+  GENERATE_SERIES(1, 9999) AS ID(gcid)
+
+# Split into ten parts.
+statement ok
+ALTER TABLE parent SPLIT AT SELECT i FROM GENERATE_SERIES(200/10, 200*9/10, 200/10) AS g(i)
+
+statement ok
+ALTER TABLE child SPLIT AT SELECT i FROM GENERATE_SERIES((1234/10)::INT, (1234*9/10)::INT, (1234/10)::INT) AS g(i)
+
+statement ok
+ALTER TABLE grandchild SPLIT AT SELECT i FROM GENERATE_SERIES((9999/10)::INT, (9999*9/10)::INT, (9999/10)::INT) AS g(i)
+
+# Relocate the ten parts to the five nodes.
+statement ok
+ALTER TABLE parent TESTING_RELOCATE
+  SELECT ARRAY[i%5+1], i FROM GENERATE_SERIES(0, 9) AS g(i)
+
+statement ok
+ALTER TABLE child TESTING_RELOCATE
+  SELECT ARRAY[i%5+1], i FROM GENERATE_SERIES(0, 9) AS g(i)
+
+# Verify data placement.
+# query TTITI colnames
+# SHOW TESTING_RANGES FROM TABLE parent
+# ----
+# Start Key  End Key  Range ID  Replicas  Lease Holder
+# NULL       /1       1         {1}       1
+# /1         /2       2         {2}       2
+# /2         /3       3         {3}       3
+# /3         /4       4         {4}       4
+# /4         /5       5         {5}       5
+# /5         /6       6         {1}       1
+# /6         /7       7         {2}       2
+# /7         /8       8         {3}       3
+# /8         /9       9         {4}       4
+# /9         NULL     10        {5}       5
+
+statement ok
+SET CLUSTER SETTING sql.distsql.merge_joins.enabled = true;
+
+

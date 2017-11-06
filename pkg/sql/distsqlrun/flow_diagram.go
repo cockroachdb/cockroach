@@ -26,6 +26,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	cockroach_sql_sqlbase1 "github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	humanize "github.com/dustin/go-humanize"
 	"github.com/pkg/errors"
 )
@@ -101,16 +102,17 @@ func (a *AggregatorSpec) summary() (string, []string) {
 	return "Aggregator", details
 }
 
-func (tr *TableReaderSpec) summary() (string, []string) {
+func indexDetails(indexIdx uint32, desc *cockroach_sql_sqlbase1.TableDescriptor) []string {
 	index := "primary"
-	if tr.IndexIdx > 0 {
-		index = tr.Table.Indexes[tr.IndexIdx-1].Name
+	if indexIdx > 0 {
+		index = desc.Indexes[indexIdx-1].Name
 	}
-	details := []string{
-		fmt.Sprintf("%s@%s", index, tr.Table.Name),
-	}
+	return []string{fmt.Sprintf("%s@%s", index, desc.Name)}
+}
+
+func (tr *TableReaderSpec) summary() (string, []string) {
 	// TODO(radu): a summary of the spans
-	return "TableReader", details
+	return "TableReader", indexDetails(tr.IndexIdx, &tr.Table)
 }
 
 func (jr *JoinReaderSpec) summary() (string, []string) {
@@ -143,16 +145,36 @@ func (hj *HashJoinerSpec) summary() (string, []string) {
 	return "HashJoiner", details
 }
 
-func (hj *MergeJoinerSpec) summary() (string, []string) {
+func orderedJoinDetails(left, right Ordering, onExpr Expression) []string {
 	details := make([]string, 1, 2)
 	details[0] = fmt.Sprintf(
-		"left(%s)=right(%s)", hj.LeftOrdering.diagramString(), hj.RightOrdering.diagramString(),
+		"left(%s)=right(%s)", left.diagramString(), right.diagramString(),
 	)
 
-	if hj.OnExpr.Expr != "" {
-		details = append(details, fmt.Sprintf("ON %s", hj.OnExpr.Expr))
+	if onExpr.Expr != "" {
+		details = append(details, fmt.Sprintf("ON %s", onExpr.Expr))
 	}
+
+	return details
+}
+
+func (mj *MergeJoinerSpec) summary() (string, []string) {
+	details := orderedJoinDetails(mj.LeftOrdering, mj.RightOrdering, mj.OnExpr)
 	return "MergeJoiner", details
+}
+
+func (irj *InterleaveReaderJoinerSpec) summary() (string, []string) {
+	details := make([]string, 0, len(irj.Tables)*6+2)
+	for i, table := range irj.Tables {
+		// tableX
+		details = append(details, fmt.Sprintf("table%d", i+1))
+		// table@index name
+		details = append(details, indexDetails(table.IndexIdx, &table.Desc)...)
+		// Post process (filters, projections, renderExprs, limits/offsets)
+		details = append(details, table.Post.summary()...)
+	}
+	details = append(details, orderedJoinDetails(irj.Tables[0].Ordering, irj.Tables[1].Ordering, irj.OnExpr)...)
+	return "InterleaveReaderJoiner", details
 }
 
 func (s *SorterSpec) summary() (string, []string) {

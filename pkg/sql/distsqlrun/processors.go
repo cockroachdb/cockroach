@@ -473,6 +473,14 @@ func newProcessor(
 			flowCtx, core.MergeJoiner, inputs[0], inputs[1], post, outputs[0],
 		)
 	}
+	if core.InterleaveReaderJoiner != nil {
+		if err := checkNumInOut(inputs, outputs, 0, 1); err != nil {
+			return nil, err
+		}
+		return newInterleaveReaderJoiner(
+			flowCtx, core.InterleaveReaderJoiner, post, outputs[0],
+		)
+	}
 	if core.HashJoiner != nil {
 		if err := checkNumInOut(inputs, outputs, 2, 1); err != nil {
 			return nil, err

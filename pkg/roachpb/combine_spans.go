@@ -39,6 +39,7 @@ func (s sortedSpans) Len() int {
 
 // MergeSpans sorts the incoming spans and merges overlapping spans. Returns
 // true iff all of the spans are distinct.
+// The input spans is not safe for re-use.
 func MergeSpans(spans []Span) ([]Span, bool) {
 	if len(spans) == 0 {
 		return spans, true
@@ -99,4 +100,68 @@ func MergeSpans(spans []Span) ([]Span, bool) {
 		r = append(r, cur)
 	}
 	return r, distinct
+}
+
+// IntersectSpans returns the logical intersection of all spans represented as
+// a slice of one Span.
+// The input spans is not safe for re-use.
+func IntersectSpans(spans []Span) []Span {
+	if len(spans) == 0 {
+		return spans
+	}
+
+	sort.Sort(sortedSpans(spans))
+
+	// We build up the final one-element slice of spans using the same
+	// backing slice. This is safe since we are never expanding the final
+	// slice into the backing slice, thus yet-to-be-processed spans are
+	// never overwritten.
+	r := spans[:1]
+	// The previous element(s) is always folded into the first span.
+	prev := &r[0]
+
+	for _, cur := range spans[1:] {
+		if len(cur.EndKey) == 0 && len(prev.EndKey) == 0 {
+			if cur.Key.Compare(prev.Key) != 0 {
+				// [a, nil] intersect [b, nil]
+				return nil
+			}
+			// [a, nil] intersect [a, nil]
+			continue
+		}
+
+		if len(prev.EndKey) == 0 {
+			if prev.Key.Compare(cur.Key) < 0 {
+				// [a, nil] intersect [b, c]
+				return nil
+			}
+			// [a, nil] intersect [a, b]
+			// [b, nil] intersect [a, c]
+			continue
+		}
+
+		if c := prev.EndKey.Compare(cur.Key); c > 0 {
+			if cur.EndKey != nil {
+				if prev.EndKey.Compare(cur.EndKey) <= 0 {
+					// [a, c] intersect [b, d]
+					// [a, c] intersect [b, c]
+					prev.Key = cur.Key
+				} else {
+					// [a, d] intersect [b, c]
+					prev.Key = cur.Key
+					prev.EndKey = cur.EndKey
+				}
+			} else {
+				// [a, c] intersect [b, nil]
+				prev.Key = cur.Key
+				prev.EndKey = cur.EndKey
+			}
+			continue
+		}
+		// [a, b] intersect [b, X]
+		// [a, b] intersect [c, X]
+		return nil
+	}
+
+	return r
 }

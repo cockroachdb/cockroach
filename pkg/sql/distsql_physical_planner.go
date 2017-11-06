@@ -108,6 +108,12 @@ var planMergeJoins = settings.RegisterBoolSetting(
 	true,
 )
 
+var planInterleaveJoins = settings.RegisterBoolSetting(
+	"sql.distsql.interleave_joins.enabled",
+	"if distsql.merge_joins is enabled and this is set, we plan interleaved table joins in place of merge joins when possible",
+	true,
+)
+
 // NewDistSQLPlanner initializes a DistSQLPlanner
 func NewDistSQLPlanner(
 	ctx context.Context,
@@ -709,7 +715,7 @@ func getOutputColumnsFromScanNode(n *scanNode) []uint32 {
 	return outputColumns
 }
 
-// convertOrdering maps the columns in ord.ordering to the output columns of a
+// convertOrdering maps the columns in props.ordering to the output columns of a
 // processor.
 func (dsp *DistSQLPlanner) convertOrdering(
 	props physicalProps, planToStreamColMap []int,
@@ -1885,6 +1891,17 @@ func getTypesForPlanResult(node planNode, planToStreamColMap []int) []sqlbase.Co
 func (dsp *DistSQLPlanner) createPlanForJoin(
 	planCtx *planningCtx, n *joinNode,
 ) (physicalPlan, error) {
+	// A hint was provided that the merge join can be performed as an
+	// interleave join.
+	if planInterleaveJoins.Get(&dsp.st.SV) && n.joinHint == joinHintInterleave && n.joinType == joinTypeInner {
+		// TODO(richardwu): We currently only do an interleave join on
+		// all equality columns. This can be relaxed once a hybrid
+		// hash-merge join is implemented (see comment below for merge
+		// joins).
+		if len(n.mergeJoinOrdering) == len(n.pred.leftEqualityIndices) {
+			return dsp.createPlanForInterleaveJoin(planCtx, n)
+		}
+	}
 
 	// Outline of the planning process for joins:
 	//
@@ -1920,15 +1937,12 @@ func (dsp *DistSQLPlanner) createPlanForJoin(
 		&leftPlan.PhysicalPlan, &rightPlan.PhysicalPlan,
 	)
 
-	joinToStreamColMap := makePlanToStreamColMap(len(n.columns))
-
 	// Nodes where we will run the join processors.
 	var nodes []roachpb.NodeID
 
 	// We initialize these properties of the joiner. They will then be used to
 	// fill in the processor spec. See descriptions for HashJoinerSpec.
 	var joinType distsqlrun.JoinType
-	var onExpr distsqlrun.Expression
 	var leftEqCols, rightEqCols []uint32
 	var leftMergeOrd, rightMergeOrd distsqlrun.Ordering
 
@@ -1970,14 +1984,9 @@ func (dsp *DistSQLPlanner) createPlanForJoin(
 		}
 
 		// Set up the equality columns.
-		leftEqCols = make([]uint32, numEq)
-		for i, leftPlanCol := range n.pred.leftEqualityIndices {
-			leftEqCols[i] = uint32(leftPlan.planToStreamColMap[leftPlanCol])
-		}
-		rightEqCols = make([]uint32, numEq)
-		for i, rightPlanCol := range n.pred.rightEqualityIndices {
-			rightEqCols[i] = uint32(rightPlan.planToStreamColMap[rightPlanCol])
-		}
+		leftEqCols = eqCols(n.pred.leftEqualityIndices, leftPlan.planToStreamColMap)
+		rightEqCols = eqCols(n.pred.rightEqualityIndices, rightPlan.planToStreamColMap)
+
 		if planMergeJoins.Get(&dsp.st.SV) && len(n.mergeJoinOrdering) > 0 &&
 			joinType == distsqlrun.JoinType_INNER {
 			// TODO(radu): we currently only use merge joins when we have an ordering on
@@ -1988,18 +1997,8 @@ func (dsp *DistSQLPlanner) createPlanForJoin(
 			//  - or: adding a sort processor to complete the order
 			if len(n.mergeJoinOrdering) == len(n.pred.leftEqualityIndices) {
 				// Excellent! We can use the merge joiner.
-				leftMergeOrd.Columns = make([]distsqlrun.Ordering_Column, len(n.mergeJoinOrdering))
-				rightMergeOrd.Columns = make([]distsqlrun.Ordering_Column, len(n.mergeJoinOrdering))
-				for i, c := range n.mergeJoinOrdering {
-					leftMergeOrd.Columns[i].ColIdx = leftEqCols[c.ColIdx]
-					rightMergeOrd.Columns[i].ColIdx = rightEqCols[c.ColIdx]
-					dir := distsqlrun.Ordering_Column_ASC
-					if c.Direction == encoding.Descending {
-						dir = distsqlrun.Ordering_Column_DESC
-					}
-					leftMergeOrd.Columns[i].Direction = dir
-					rightMergeOrd.Columns[i].Direction = dir
-				}
+				leftMergeOrd = distsqlOrdering(n.mergeJoinOrdering, leftEqCols)
+				rightMergeOrd = distsqlOrdering(n.mergeJoinOrdering, rightEqCols)
 			}
 		}
 	} else {
@@ -2016,54 +2015,8 @@ func (dsp *DistSQLPlanner) createPlanForJoin(
 		}
 	}
 
-	post := distsqlrun.PostProcessSpec{
-		Projection: true,
-	}
-	// addOutCol appends to post.OutputColumns and returns the index
-	// in the slice of the added column.
-	addOutCol := func(col uint32) int {
-		idx := len(post.OutputColumns)
-		post.OutputColumns = append(post.OutputColumns, col)
-		return idx
-	}
-
-	// The join columns are in two groups:
-	//  - the columns on the left side (numLeftCols)
-	//  - the columns on the right side (numRightCols)
-	joinCol := 0
-
-	for i := 0; i < n.pred.numLeftCols; i++ {
-		if !n.columns[joinCol].Omitted {
-			joinToStreamColMap[joinCol] = addOutCol(uint32(leftPlan.planToStreamColMap[i]))
-		}
-		joinCol++
-	}
-	for i := 0; i < n.pred.numRightCols; i++ {
-		if !n.columns[joinCol].Omitted {
-			joinToStreamColMap[joinCol] = addOutCol(
-				uint32(rightPlan.planToStreamColMap[i] + len(leftTypes)),
-			)
-		}
-		joinCol++
-	}
-
-	if n.pred.onCond != nil {
-		// We have to remap ordinal references in the on condition (which refer to
-		// the join columns as described above) to values that make sense in the
-		// joiner (0 to N-1 for the left input columns, N to N+M-1 for the right
-		// input columns).
-		joinColMap := make([]int, len(n.columns))
-		idx := 0
-		for i := 0; i < n.pred.numLeftCols; i++ {
-			joinColMap[idx] = leftPlan.planToStreamColMap[i]
-			idx++
-		}
-		for i := 0; i < n.pred.numRightCols; i++ {
-			joinColMap[idx] = rightPlan.planToStreamColMap[i] + len(leftTypes)
-			idx++
-		}
-		onExpr = distsqlplan.MakeExpression(n.pred.onCond, planCtx.evalCtx, joinColMap)
-	}
+	post, joinToStreamColMap := joinOutColumns(n, leftPlan, rightPlan)
+	onExpr := remapOnExpr(planCtx.evalCtx, n, leftPlan, rightPlan)
 
 	// Create the Core spec.
 	var core distsqlrun.ProcessorCoreUnion
@@ -2086,9 +2039,10 @@ func (dsp *DistSQLPlanner) createPlanForJoin(
 	pIdxStart := distsqlplan.ProcessorIdx(len(p.Processors))
 	stageID := p.NewStageID()
 
-	if len(nodes) == 1 {
+	// Each node has a join processor.
+	for _, n := range nodes {
 		proc := distsqlplan.Processor{
-			Node: nodes[0],
+			Node: n,
 			Spec: distsqlrun.ProcessorSpec{
 				Input: []distsqlrun.InputSyncSpec{
 					{ColumnTypes: leftTypes},
@@ -2101,27 +2055,11 @@ func (dsp *DistSQLPlanner) createPlanForJoin(
 			},
 		}
 		p.Processors = append(p.Processors, proc)
-	} else {
-		// Parallel hash join: we distribute rows (by hash of equality columns) to
-		// len(nodes) join processors.
+	}
 
-		// Each node has a join processor.
-		for _, n := range nodes {
-			proc := distsqlplan.Processor{
-				Node: n,
-				Spec: distsqlrun.ProcessorSpec{
-					Input: []distsqlrun.InputSyncSpec{
-						{ColumnTypes: leftTypes},
-						{ColumnTypes: rightTypes},
-					},
-					Core:    core,
-					Post:    post,
-					Output:  []distsqlrun.OutputRouterSpec{{Type: distsqlrun.OutputRouterSpec_PASS_THROUGH}},
-					StageID: stageID,
-				},
-			}
-			p.Processors = append(p.Processors, proc)
-		}
+	if len(nodes) > 1 {
+		// Parallel hash or merge join: we distribute rows (by hash of
+		// equality columns) to len(nodes) join processors.
 
 		// Set up the left routers.
 		for _, resultProc := range leftRouters {
