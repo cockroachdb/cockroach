@@ -22,7 +22,7 @@ import (
 // of input column descriptors, or nil if none of the input column descriptors
 // have default expressions.
 func MakeDefaultExprs(
-	cols []ColumnDescriptor, parse *parser.Parser, evalCtx *parser.EvalContext,
+	cols []ColumnDescriptor, trans *parser.ExprTransformContext, evalCtx *parser.EvalContext,
 ) ([]parser.TypedExpr, error) {
 	// Check to see if any of the columns have DEFAULT expressions. If there
 	// are no DEFAULT expressions, we don't bother with constructing the
@@ -62,7 +62,7 @@ func MakeDefaultExprs(
 		if err != nil {
 			return nil, err
 		}
-		if typedExpr, err = parse.NormalizeExpr(evalCtx, typedExpr); err != nil {
+		if typedExpr, err = trans.NormalizeExpr(evalCtx, typedExpr); err != nil {
 			return nil, err
 		}
 		defaultExprs = append(defaultExprs, typedExpr)
@@ -76,7 +76,7 @@ func MakeDefaultExprs(
 func ProcessDefaultColumns(
 	cols []ColumnDescriptor,
 	tableDesc *TableDescriptor,
-	parse *parser.Parser,
+	trans *parser.ExprTransformContext,
 	evalCtx *parser.EvalContext,
 ) ([]ColumnDescriptor, []parser.TypedExpr, error) {
 	colIDSet := make(map[ColumnID]struct{}, len(cols))
@@ -107,6 +107,6 @@ func ProcessDefaultColumns(
 		}
 	}
 
-	defaultExprs, err := MakeDefaultExprs(cols, parse, evalCtx)
+	defaultExprs, err := MakeDefaultExprs(cols, trans, evalCtx)
 	return cols, defaultExprs, err
 }

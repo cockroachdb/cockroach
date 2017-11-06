@@ -91,7 +91,7 @@ func (p *planner) makeUpsertHelper(
 	upsertConflictIndex *sqlbase.IndexDescriptor,
 	whereClause *parser.Where,
 ) (*upsertHelper, error) {
-	defaultExprs, err := sqlbase.MakeDefaultExprs(updateCols, &p.parser, &p.evalCtx)
+	defaultExprs, err := sqlbase.MakeDefaultExprs(updateCols, &p.trans, &p.evalCtx)
 	if err != nil {
 		return nil, err
 	}
@@ -150,7 +150,7 @@ func (p *planner) makeUpsertHelper(
 
 		// Make sure there are no aggregation/window functions in the filter
 		// (after subqueries have been expanded).
-		if err := p.parser.AssertNoAggregationOrWindowing(
+		if err := p.trans.AssertNoAggregationOrWindowing(
 			whereExpr, "WHERE", p.session.SearchPath,
 		); err != nil {
 			return nil, err

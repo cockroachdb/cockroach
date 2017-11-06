@@ -54,7 +54,7 @@ func Load(
 		loadChunkBytes = config.DefaultZoneConfig().RangeMaxBytes / 2
 	}
 
-	parse := parser.Parser{}
+	var trans parser.ExprTransformContext
 	curTime := timeutil.Unix(0, ts.WallTime)
 	evalCtx := parser.EvalContext{}
 	evalCtx.SetTxnTimestamp(curTime)
@@ -167,7 +167,7 @@ func Load(
 				return BackupDescriptor{}, errors.Wrap(err, "make row inserter")
 			}
 			cols, defaultExprs, err =
-				sqlbase.ProcessDefaultColumns(tableDesc.Columns, tableDesc, &parse, &evalCtx)
+				sqlbase.ProcessDefaultColumns(tableDesc.Columns, tableDesc, &trans, &evalCtx)
 			if err != nil {
 				return BackupDescriptor{}, errors.Wrap(err, "process default columns")
 			}

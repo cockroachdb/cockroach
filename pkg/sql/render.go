@@ -506,7 +506,7 @@ func (r *renderNode) initWhere(ctx context.Context, whereExpr parser.Expr) (*fil
 
 		// Make sure there are no aggregation/window functions in the filter
 		// (after subqueries have been expanded).
-		if err := r.planner.parser.AssertNoAggregationOrWindowing(
+		if err := r.planner.trans.AssertNoAggregationOrWindowing(
 			f.filter, "WHERE", r.planner.session.SearchPath,
 		); err != nil {
 			return nil, err

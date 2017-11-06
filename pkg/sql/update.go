@@ -243,7 +243,7 @@ func (p *planner) Update(
 		return nil, err
 	}
 
-	defaultExprs, err := sqlbase.MakeDefaultExprs(updateCols, &p.parser, &p.evalCtx)
+	defaultExprs, err := sqlbase.MakeDefaultExprs(updateCols, &p.trans, &p.evalCtx)
 	if err != nil {
 		return nil, err
 	}

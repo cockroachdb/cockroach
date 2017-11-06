@@ -57,7 +57,7 @@ func (p *planner) Limit(ctx context.Context, n *parser.Limit) (*limitNode, error
 
 	for _, datum := range data {
 		if datum.src != nil {
-			if err := p.parser.AssertNoAggregationOrWindowing(
+			if err := p.trans.AssertNoAggregationOrWindowing(
 				datum.src, datum.name, p.session.SearchPath,
 			); err != nil {
 				return nil, err
