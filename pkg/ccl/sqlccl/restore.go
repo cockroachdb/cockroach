@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/jobs"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
@@ -1016,13 +1017,13 @@ func restore(
 }
 
 var restoreHeader = sqlbase.ResultColumns{
-	{Name: "job_id", Typ: parser.TypeInt},
-	{Name: "status", Typ: parser.TypeString},
-	{Name: "fraction_completed", Typ: parser.TypeFloat},
-	{Name: "rows", Typ: parser.TypeInt},
-	{Name: "index_entries", Typ: parser.TypeInt},
-	{Name: "system_records", Typ: parser.TypeInt},
-	{Name: "bytes", Typ: parser.TypeInt},
+	{Name: "job_id", Typ: types.TypeInt},
+	{Name: "status", Typ: types.TypeString},
+	{Name: "fraction_completed", Typ: types.TypeFloat},
+	{Name: "rows", Typ: types.TypeInt},
+	{Name: "index_entries", Typ: types.TypeInt},
+	{Name: "system_records", Typ: types.TypeInt},
+	{Name: "bytes", Typ: types.TypeInt},
 }
 
 func restorePlanHook(

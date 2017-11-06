@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -163,50 +164,50 @@ func TestGolangQueryArgs(t *testing.T) {
 		expectedType reflect.Type
 	}{
 		// Null type.
-		{nil, reflect.TypeOf(parser.TypeNull)},
+		{nil, reflect.TypeOf(types.TypeNull)},
 
 		// Bool type.
-		{true, reflect.TypeOf(parser.TypeBool)},
+		{true, reflect.TypeOf(types.TypeBool)},
 
 		// Primitive Integer types.
-		{int(1), reflect.TypeOf(parser.TypeInt)},
-		{int8(1), reflect.TypeOf(parser.TypeInt)},
-		{int16(1), reflect.TypeOf(parser.TypeInt)},
-		{int32(1), reflect.TypeOf(parser.TypeInt)},
-		{int64(1), reflect.TypeOf(parser.TypeInt)},
-		{uint(1), reflect.TypeOf(parser.TypeInt)},
-		{uint8(1), reflect.TypeOf(parser.TypeInt)},
-		{uint16(1), reflect.TypeOf(parser.TypeInt)},
-		{uint32(1), reflect.TypeOf(parser.TypeInt)},
-		{uint64(1), reflect.TypeOf(parser.TypeInt)},
+		{int(1), reflect.TypeOf(types.TypeInt)},
+		{int8(1), reflect.TypeOf(types.TypeInt)},
+		{int16(1), reflect.TypeOf(types.TypeInt)},
+		{int32(1), reflect.TypeOf(types.TypeInt)},
+		{int64(1), reflect.TypeOf(types.TypeInt)},
+		{uint(1), reflect.TypeOf(types.TypeInt)},
+		{uint8(1), reflect.TypeOf(types.TypeInt)},
+		{uint16(1), reflect.TypeOf(types.TypeInt)},
+		{uint32(1), reflect.TypeOf(types.TypeInt)},
+		{uint64(1), reflect.TypeOf(types.TypeInt)},
 
 		// Primitive Float types.
-		{float32(1.0), reflect.TypeOf(parser.TypeFloat)},
-		{float64(1.0), reflect.TypeOf(parser.TypeFloat)},
+		{float32(1.0), reflect.TypeOf(types.TypeFloat)},
+		{float64(1.0), reflect.TypeOf(types.TypeFloat)},
 
 		// Decimal type.
-		{apd.New(55, 1), reflect.TypeOf(parser.TypeDecimal)},
+		{apd.New(55, 1), reflect.TypeOf(types.TypeDecimal)},
 
 		// String type.
-		{"test", reflect.TypeOf(parser.TypeString)},
+		{"test", reflect.TypeOf(types.TypeString)},
 
 		// Bytes type.
-		{[]byte("abc"), reflect.TypeOf(parser.TypeBytes)},
+		{[]byte("abc"), reflect.TypeOf(types.TypeBytes)},
 
 		// Interval and timestamp.
-		{time.Duration(1), reflect.TypeOf(parser.TypeInterval)},
-		{timeutil.Now(), reflect.TypeOf(parser.TypeTimestamp)},
+		{time.Duration(1), reflect.TypeOf(types.TypeInterval)},
+		{timeutil.Now(), reflect.TypeOf(types.TypeTimestamp)},
 
 		// Primitive type aliases.
-		{roachpb.NodeID(1), reflect.TypeOf(parser.TypeInt)},
-		{sqlbase.ID(1), reflect.TypeOf(parser.TypeInt)},
-		{floatAlias(1), reflect.TypeOf(parser.TypeFloat)},
-		{boolAlias(true), reflect.TypeOf(parser.TypeBool)},
-		{stringAlias("string"), reflect.TypeOf(parser.TypeString)},
+		{roachpb.NodeID(1), reflect.TypeOf(types.TypeInt)},
+		{sqlbase.ID(1), reflect.TypeOf(types.TypeInt)},
+		{floatAlias(1), reflect.TypeOf(types.TypeFloat)},
+		{boolAlias(true), reflect.TypeOf(types.TypeBool)},
+		{stringAlias("string"), reflect.TypeOf(types.TypeString)},
 
 		// Byte slice aliases.
-		{roachpb.Key("key"), reflect.TypeOf(parser.TypeBytes)},
-		{roachpb.RKey("key"), reflect.TypeOf(parser.TypeBytes)},
+		{roachpb.Key("key"), reflect.TypeOf(types.TypeBytes)},
+		{roachpb.RKey("key"), reflect.TypeOf(types.TypeBytes)},
 	}
 
 	pinfo := &parser.PlaceholderInfo{}

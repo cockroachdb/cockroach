@@ -22,6 +22,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -153,7 +154,7 @@ func (p *planner) groupBy(
 		}
 		var err error
 		typedHaving, err = p.analyzeExpr(ctx, n.Having.Expr, r.sourceInfo, r.ivarHelper,
-			parser.TypeBool, true, "HAVING")
+			types.TypeBool, true, "HAVING")
 		if err != nil {
 			return nil, nil, err
 		}
@@ -184,7 +185,7 @@ func (p *planner) groupBy(
 	groupStrs := make(groupByStrMap, len(groupByExprs))
 	for _, g := range groupByExprs {
 		cols, exprs, hasStar, err := p.computeRenderAllowingStars(
-			ctx, parser.SelectExpr{Expr: g}, parser.TypeAny, r.sourceInfo, r.ivarHelper,
+			ctx, parser.SelectExpr{Expr: g}, types.TypeAny, r.sourceInfo, r.ivarHelper,
 			autoGenerateRenderOutputName)
 		if err != nil {
 			return nil, nil, err
@@ -245,7 +246,7 @@ func (p *planner) groupBy(
 
 		havingNode.filter, err = r.planner.analyzeExpr(
 			ctx, havingExpr, nil /* no source info */, havingNode.ivarHelper,
-			parser.TypeBool, true /* require type */, "HAVING",
+			types.TypeBool, true /* require type */, "HAVING",
 		)
 		if err != nil {
 			return nil, nil, err
@@ -621,7 +622,7 @@ func (v *extractAggregatesVisitor) VisitPre(expr parser.Expr) (recurse bool, new
 				col, renderExpr, err := v.planner.computeRender(
 					v.ctx,
 					parser.SelectExpr{Expr: filterExpr},
-					parser.TypeBool,
+					types.TypeBool,
 					v.preRender.sourceInfo,
 					v.preRender.ivarHelper,
 					autoGenerateRenderOutputName,

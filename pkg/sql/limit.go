@@ -21,6 +21,7 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 )
 
 // limitNode represents a node that limits the number of rows
@@ -62,7 +63,7 @@ func (p *planner) Limit(ctx context.Context, n *parser.Limit) (*limitNode, error
 				return nil, err
 			}
 
-			normalized, err := p.analyzeExpr(ctx, datum.src, nil, parser.IndexedVarHelper{}, parser.TypeInt, true, datum.name)
+			normalized, err := p.analyzeExpr(ctx, datum.src, nil, parser.IndexedVarHelper{}, types.TypeInt, true, datum.name)
 			if err != nil {
 				return nil, err
 			}

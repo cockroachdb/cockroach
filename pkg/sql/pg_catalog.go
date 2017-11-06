@@ -556,7 +556,7 @@ func colIDArrayToDatum(arr []sqlbase.ColumnID) (parser.Datum, error) {
 	if len(arr) == 0 {
 		return parser.DNull, nil
 	}
-	d := parser.NewDArray(parser.TypeInt)
+	d := parser.NewDArray(types.TypeInt)
 	for _, val := range arr {
 		if err := d.Append(parser.NewDInt(parser.DInt(val))); err != nil {
 			return nil, err
@@ -1096,7 +1096,7 @@ CREATE TABLE pg_catalog.pg_proc (
 				isRetSet := false
 				if fixedRetType := builtin.FixedReturnType(); fixedRetType != nil {
 					var retOid oid.Oid
-					if t, ok := fixedRetType.(parser.TTable); ok {
+					if t, ok := fixedRetType.(types.TTable); ok {
 						isRetSet = true
 						// Functions returning tables with zero, or more than one
 						// columns are marked to return "anyelement"
@@ -1132,7 +1132,7 @@ CREATE TABLE pg_catalog.pg_proc (
 					variadicType = parser.NewDOid(parser.DInt(oid))
 				case parser.HomogeneousType:
 					argmodes = proArgModeVariadic
-					argType := parser.TypeAny
+					argType := types.TypeAny
 					oid := types.Oid(argType)
 					variadicType = parser.NewDOid(parser.DInt(oid))
 				default:
@@ -1452,7 +1452,7 @@ CREATE TABLE pg_catalog.pg_type (
 			typArray := oidZero
 			builtinPrefix := parser.PGIOBuiltinPrefix(typ)
 			if cat == typCategoryArray {
-				if typ == parser.TypeIntVector {
+				if typ == types.TypeIntVector {
 					// IntVector needs a special case because its a special snowflake
 					// type. It's just like an Int2Array, but it has its own OID. We
 					// can't just wrap our Int2Array type in an OID wrapper, though,
@@ -1462,7 +1462,7 @@ CREATE TABLE pg_catalog.pg_type (
 					typElem = parser.NewDOid(parser.DInt(oid.T_int2))
 				} else {
 					builtinPrefix = "array_"
-					typElem = parser.NewDOid(parser.DInt(types.Oid(types.UnwrapType(typ).(parser.TArray).Typ)))
+					typElem = parser.NewDOid(parser.DInt(types.Oid(types.UnwrapType(typ).(types.TArray).Typ)))
 				}
 			} else {
 				typArray = parser.NewDOid(parser.DInt(types.Oid(types.TArray{Typ: typ})))
@@ -1535,39 +1535,39 @@ func typByVal(typ types.T) parser.Datum {
 // The default collation is en-US, which is equivalent to but spelled
 // differently than the default database collation, en_US.utf8.
 func typColl(typ types.T, h oidHasher) parser.Datum {
-	if typ.FamilyEqual(parser.TypeAny) {
+	if typ.FamilyEqual(types.TypeAny) {
 		return oidZero
-	} else if typ.Equivalent(parser.TypeString) || typ.Equivalent(parser.TArray{Typ: parser.TypeString}) {
+	} else if typ.Equivalent(types.TypeString) || typ.Equivalent(types.TArray{Typ: types.TypeString}) {
 		return h.CollationOid(defaultCollationTag)
-	} else if typ.FamilyEqual(parser.TypeCollatedString) {
-		return h.CollationOid(typ.(parser.TCollatedString).Locale)
+	} else if typ.FamilyEqual(types.TypeCollatedString) {
+		return h.CollationOid(typ.(types.TCollatedString).Locale)
 	}
 	return oidZero
 }
 
 // This mapping should be kept sync with PG's categorization.
 var datumToTypeCategory = map[reflect.Type]*parser.DString{
-	reflect.TypeOf(parser.TypeAny):         typCategoryPseudo,
-	reflect.TypeOf(parser.TypeBool):        typCategoryBoolean,
-	reflect.TypeOf(parser.TypeBytes):       typCategoryUserDefined,
-	reflect.TypeOf(parser.TypeDate):        typCategoryDateTime,
-	reflect.TypeOf(parser.TypeFloat):       typCategoryNumeric,
-	reflect.TypeOf(parser.TypeInt):         typCategoryNumeric,
-	reflect.TypeOf(parser.TypeInterval):    typCategoryTimespan,
-	reflect.TypeOf(parser.TypeJSON):        typCategoryUserDefined,
-	reflect.TypeOf(parser.TypeDecimal):     typCategoryNumeric,
-	reflect.TypeOf(parser.TypeString):      typCategoryString,
-	reflect.TypeOf(parser.TypeTimestamp):   typCategoryDateTime,
-	reflect.TypeOf(parser.TypeTimestampTZ): typCategoryDateTime,
-	reflect.TypeOf(parser.TypeTuple):       typCategoryPseudo,
-	reflect.TypeOf(parser.TypeTable):       typCategoryPseudo,
-	reflect.TypeOf(parser.TypeOid):         typCategoryNumeric,
-	reflect.TypeOf(parser.TypeUUID):        typCategoryUserDefined,
-	reflect.TypeOf(parser.TypeINet):        typCategoryNetworkAddr,
+	reflect.TypeOf(types.TypeAny):         typCategoryPseudo,
+	reflect.TypeOf(types.TypeBool):        typCategoryBoolean,
+	reflect.TypeOf(types.TypeBytes):       typCategoryUserDefined,
+	reflect.TypeOf(types.TypeDate):        typCategoryDateTime,
+	reflect.TypeOf(types.TypeFloat):       typCategoryNumeric,
+	reflect.TypeOf(types.TypeInt):         typCategoryNumeric,
+	reflect.TypeOf(types.TypeInterval):    typCategoryTimespan,
+	reflect.TypeOf(types.TypeJSON):        typCategoryUserDefined,
+	reflect.TypeOf(types.TypeDecimal):     typCategoryNumeric,
+	reflect.TypeOf(types.TypeString):      typCategoryString,
+	reflect.TypeOf(types.TypeTimestamp):   typCategoryDateTime,
+	reflect.TypeOf(types.TypeTimestampTZ): typCategoryDateTime,
+	reflect.TypeOf(types.TypeTuple):       typCategoryPseudo,
+	reflect.TypeOf(types.TypeTable):       typCategoryPseudo,
+	reflect.TypeOf(types.TypeOid):         typCategoryNumeric,
+	reflect.TypeOf(types.TypeUUID):        typCategoryUserDefined,
+	reflect.TypeOf(types.TypeINet):        typCategoryNetworkAddr,
 }
 
 func typCategory(typ types.T) parser.Datum {
-	if typ.FamilyEqual(parser.TypeArray) {
+	if typ.FamilyEqual(types.TypeArray) {
 		return typCategoryArray
 	}
 	return datumToTypeCategory[reflect.TypeOf(types.UnwrapType(typ))]

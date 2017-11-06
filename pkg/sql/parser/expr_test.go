@@ -115,17 +115,17 @@ func TestNormalizeNameInExpr(t *testing.T) {
 // doesn't change the (normalized) expression.
 func TestExprString(t *testing.T) {
 	defer mockNameTypes(map[string]types.T{
-		"a": TypeBool,
-		"b": TypeBool,
-		"c": TypeBool,
-		"d": TypeBool,
-		"e": TypeBool,
-		"f": TypeInt,
-		"g": TypeInt,
-		"h": TypeInt,
-		"i": TypeInt,
-		"j": TypeInt,
-		"k": TypeInt,
+		"a": types.TypeBool,
+		"b": types.TypeBool,
+		"c": types.TypeBool,
+		"d": types.TypeBool,
+		"e": types.TypeBool,
+		"f": types.TypeInt,
+		"g": types.TypeInt,
+		"h": types.TypeInt,
+		"i": types.TypeInt,
+		"j": types.TypeInt,
+		"k": types.TypeInt,
 	})()
 	testExprs := []string{
 		`a AND b`,
@@ -158,7 +158,7 @@ func TestExprString(t *testing.T) {
 		if err != nil {
 			t.Fatalf("%s: %v", exprStr, err)
 		}
-		typedExpr, err := TypeCheck(expr, nil, TypeAny)
+		typedExpr, err := TypeCheck(expr, nil, types.TypeAny)
 		if err != nil {
 			t.Fatalf("%s: %v", expr, err)
 		}
@@ -168,7 +168,7 @@ func TestExprString(t *testing.T) {
 		if err != nil {
 			t.Fatalf("%s: %v", exprStr, err)
 		}
-		typedExpr2, err := TypeCheck(expr2, nil, TypeAny)
+		typedExpr2, err := TypeCheck(expr2, nil, types.TypeAny)
 		if err != nil {
 			t.Fatalf("%s: %v", expr2, err)
 		}

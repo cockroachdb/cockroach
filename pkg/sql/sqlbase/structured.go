@@ -2151,40 +2151,40 @@ func (c *ColumnType) NumericScale() (int32, bool) {
 // DatumTypeToColumnSemanticType converts a types.T to a SemanticType.
 func DatumTypeToColumnSemanticType(ptyp types.T) (ColumnType_SemanticType, error) {
 	switch ptyp {
-	case parser.TypeBool:
+	case types.TypeBool:
 		return ColumnType_BOOL, nil
-	case parser.TypeInt:
+	case types.TypeInt:
 		return ColumnType_INT, nil
-	case parser.TypeFloat:
+	case types.TypeFloat:
 		return ColumnType_FLOAT, nil
-	case parser.TypeDecimal:
+	case types.TypeDecimal:
 		return ColumnType_DECIMAL, nil
-	case parser.TypeBytes:
+	case types.TypeBytes:
 		return ColumnType_BYTES, nil
-	case parser.TypeString:
+	case types.TypeString:
 		return ColumnType_STRING, nil
-	case parser.TypeName:
+	case types.TypeName:
 		return ColumnType_NAME, nil
-	case parser.TypeDate:
+	case types.TypeDate:
 		return ColumnType_DATE, nil
-	case parser.TypeTimestamp:
+	case types.TypeTimestamp:
 		return ColumnType_TIMESTAMP, nil
-	case parser.TypeTimestampTZ:
+	case types.TypeTimestampTZ:
 		return ColumnType_TIMESTAMPTZ, nil
-	case parser.TypeInterval:
+	case types.TypeInterval:
 		return ColumnType_INTERVAL, nil
-	case parser.TypeUUID:
+	case types.TypeUUID:
 		return ColumnType_UUID, nil
-	case parser.TypeINet:
+	case types.TypeINet:
 		return ColumnType_INET, nil
-	case parser.TypeOid:
+	case types.TypeOid:
 		return ColumnType_OID, nil
-	case parser.TypeNull:
+	case types.TypeNull:
 		return ColumnType_NULL, nil
-	case parser.TypeIntVector:
+	case types.TypeIntVector:
 		return ColumnType_INT2VECTOR, nil
 	default:
-		if ptyp.FamilyEqual(parser.TypeCollatedString) {
+		if ptyp.FamilyEqual(types.TypeCollatedString) {
 			return ColumnType_COLLATEDSTRING, nil
 		}
 		return -1, pgerror.NewErrorf(pgerror.CodeFeatureNotSupportedError, "unsupported result type: %s", ptyp)
@@ -2195,18 +2195,18 @@ func DatumTypeToColumnSemanticType(ptyp types.T) (ColumnType_SemanticType, error
 func DatumTypeToColumnType(ptyp types.T) (ColumnType, error) {
 	var ctyp ColumnType
 	switch t := ptyp.(type) {
-	case parser.TCollatedString:
+	case types.TCollatedString:
 		ctyp.SemanticType = ColumnType_COLLATEDSTRING
 		ctyp.Locale = &t.Locale
-	case parser.TArray:
+	case types.TArray:
 		ctyp.SemanticType = ColumnType_ARRAY
 		contents, err := DatumTypeToColumnSemanticType(t.Typ)
 		if err != nil {
 			return ColumnType{}, err
 		}
 		ctyp.ArrayContents = &contents
-		if t.Typ.FamilyEqual(parser.TypeCollatedString) {
-			cs := t.Typ.(parser.TCollatedString)
+		if t.Typ.FamilyEqual(types.TypeCollatedString) {
+			cs := t.Typ.(types.TCollatedString)
 			ctyp.Locale = &cs.Locale
 		}
 	default:
@@ -2222,42 +2222,42 @@ func DatumTypeToColumnType(ptyp types.T) (ColumnType, error) {
 func columnSemanticTypeToDatumType(c *ColumnType, k ColumnType_SemanticType) types.T {
 	switch k {
 	case ColumnType_BOOL:
-		return parser.TypeBool
+		return types.TypeBool
 	case ColumnType_INT:
-		return parser.TypeInt
+		return types.TypeInt
 	case ColumnType_FLOAT:
-		return parser.TypeFloat
+		return types.TypeFloat
 	case ColumnType_DECIMAL:
-		return parser.TypeDecimal
+		return types.TypeDecimal
 	case ColumnType_STRING:
-		return parser.TypeString
+		return types.TypeString
 	case ColumnType_BYTES:
-		return parser.TypeBytes
+		return types.TypeBytes
 	case ColumnType_DATE:
-		return parser.TypeDate
+		return types.TypeDate
 	case ColumnType_TIMESTAMP:
-		return parser.TypeTimestamp
+		return types.TypeTimestamp
 	case ColumnType_TIMESTAMPTZ:
-		return parser.TypeTimestampTZ
+		return types.TypeTimestampTZ
 	case ColumnType_INTERVAL:
-		return parser.TypeInterval
+		return types.TypeInterval
 	case ColumnType_UUID:
-		return parser.TypeUUID
+		return types.TypeUUID
 	case ColumnType_INET:
-		return parser.TypeINet
+		return types.TypeINet
 	case ColumnType_COLLATEDSTRING:
 		if c.Locale == nil {
 			panic("locale is required for COLLATEDSTRING")
 		}
-		return parser.TCollatedString{Locale: *c.Locale}
+		return types.TCollatedString{Locale: *c.Locale}
 	case ColumnType_NAME:
-		return parser.TypeName
+		return types.TypeName
 	case ColumnType_OID:
-		return parser.TypeOid
+		return types.TypeOid
 	case ColumnType_NULL:
-		return parser.TypeNull
+		return types.TypeNull
 	case ColumnType_INT2VECTOR:
-		return parser.TypeIntVector
+		return types.TypeIntVector
 	}
 	return nil
 }
@@ -2267,7 +2267,7 @@ func columnSemanticTypeToDatumType(c *ColumnType, k ColumnType_SemanticType) typ
 func (c *ColumnType) ToDatumType() types.T {
 	switch c.SemanticType {
 	case ColumnType_ARRAY:
-		return parser.TArray{Typ: columnSemanticTypeToDatumType(c, *c.ArrayContents)}
+		return types.TArray{Typ: columnSemanticTypeToDatumType(c, *c.ArrayContents)}
 	default:
 		return columnSemanticTypeToDatumType(c, c.SemanticType)
 	}

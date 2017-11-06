@@ -1372,7 +1372,7 @@ func getTransactionState(txnState *txnState) string {
 // runShowTransactionState returns the state of current transaction.
 func runShowTransactionState(session *Session, res StatementResult) error {
 	res.BeginResult((*parser.ShowTransactionStatus)(nil))
-	res.SetColumns(sqlbase.ResultColumns{{Name: "TRANSACTION STATUS", Typ: parser.TypeString}})
+	res.SetColumns(sqlbase.ResultColumns{{Name: "TRANSACTION STATUS", Typ: types.TypeString}})
 
 	state := getTransactionState(&session.TxnState)
 	if err := res.AddRow(session.Ctx(), parser.Datums{parser.NewDString(state)}); err != nil {
@@ -2338,38 +2338,38 @@ func golangFillQueryArguments(pinfo *parser.PlaceholderInfo, args []interface{})
 func checkResultType(typ types.T) error {
 	// Compare all types that can rely on == equality.
 	switch types.UnwrapType(typ) {
-	case parser.TypeNull:
-	case parser.TypeBool:
-	case parser.TypeInt:
-	case parser.TypeFloat:
-	case parser.TypeDecimal:
-	case parser.TypeBytes:
-	case parser.TypeString:
-	case parser.TypeDate:
-	case parser.TypeTimestamp:
-	case parser.TypeTimestampTZ:
-	case parser.TypeInterval:
-	case parser.TypeJSON:
-	case parser.TypeUUID:
-	case parser.TypeINet:
-	case parser.TypeNameArray:
-	case parser.TypeOid:
-	case parser.TypeRegClass:
-	case parser.TypeRegNamespace:
-	case parser.TypeRegProc:
-	case parser.TypeRegProcedure:
-	case parser.TypeRegType:
+	case types.TypeNull:
+	case types.TypeBool:
+	case types.TypeInt:
+	case types.TypeFloat:
+	case types.TypeDecimal:
+	case types.TypeBytes:
+	case types.TypeString:
+	case types.TypeDate:
+	case types.TypeTimestamp:
+	case types.TypeTimestampTZ:
+	case types.TypeInterval:
+	case types.TypeJSON:
+	case types.TypeUUID:
+	case types.TypeINet:
+	case types.TypeNameArray:
+	case types.TypeOid:
+	case types.TypeRegClass:
+	case types.TypeRegNamespace:
+	case types.TypeRegProc:
+	case types.TypeRegProcedure:
+	case types.TypeRegType:
 	default:
 		// Compare all types that cannot rely on == equality.
 		istype := typ.FamilyEqual
 		switch {
-		case istype(parser.TypeArray):
-			if istype(types.UnwrapType(typ).(parser.TArray).Typ) {
+		case istype(types.TypeArray):
+			if istype(types.UnwrapType(typ).(types.TArray).Typ) {
 				return pgerror.Unimplemented("nested arrays", "arrays cannot have arrays as element type")
 			}
-		case istype(parser.TypeCollatedString):
-		case istype(parser.TypeTuple):
-		case istype(parser.TypePlaceholder):
+		case istype(types.TypeCollatedString):
+		case istype(types.TypeTuple):
+		case istype(types.TypePlaceholder):
 			return errors.Errorf("could not determine data type of %s", typ)
 		default:
 			return errors.Errorf("unsupported result type: %s", typ)
@@ -2383,7 +2383,7 @@ func checkResultType(typ types.T) error {
 func EvalAsOfTimestamp(
 	evalCtx *parser.EvalContext, asOf parser.AsOfClause, max hlc.Timestamp,
 ) (hlc.Timestamp, error) {
-	te, err := asOf.Expr.TypeCheck(nil, parser.TypeString)
+	te, err := asOf.Expr.TypeCheck(nil, types.TypeString)
 	if err != nil {
 		return hlc.Timestamp{}, err
 	}

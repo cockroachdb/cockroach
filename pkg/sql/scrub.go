@@ -18,11 +18,12 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
 type scrubNode struct {
@@ -41,14 +42,14 @@ func (p *planner) Scrub(ctx context.Context, n *parser.Scrub) (planNode, error) 
 }
 
 var scrubColumns = sqlbase.ResultColumns{
-	{Name: "job_uuid", Typ: parser.TypeUUID},
-	{Name: "error_type", Typ: parser.TypeString},
-	{Name: "database", Typ: parser.TypeString},
-	{Name: "table", Typ: parser.TypeString},
-	{Name: "primary_key", Typ: parser.TypeString},
-	{Name: "timestamp", Typ: parser.TypeTimestamp},
-	{Name: "repaired", Typ: parser.TypeBool},
-	{Name: "details", Typ: parser.TypeString},
+	{Name: "job_uuid", Typ: types.TypeUUID},
+	{Name: "error_type", Typ: types.TypeString},
+	{Name: "database", Typ: types.TypeString},
+	{Name: "table", Typ: types.TypeString},
+	{Name: "primary_key", Typ: types.TypeString},
+	{Name: "timestamp", Typ: types.TypeTimestamp},
+	{Name: "repaired", Typ: types.TypeBool},
+	{Name: "details", Typ: types.TypeString},
 }
 
 func (n *scrubNode) Start(params runParams) error {

@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/jobs"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/util/uint128"
 )
 
@@ -74,7 +75,7 @@ func (p *planner) PauseJob(ctx context.Context, n *parser.PauseJob) (planNode, e
 		n.ID,
 		nil,
 		parser.IndexedVarHelper{},
-		parser.TypeInt,
+		types.TypeInt,
 		true, /* requireType */
 		"PAUSE JOB",
 	)
@@ -95,7 +96,7 @@ func (p *planner) ResumeJob(ctx context.Context, n *parser.ResumeJob) (planNode,
 		n.ID,
 		nil,
 		parser.IndexedVarHelper{},
-		parser.TypeInt,
+		types.TypeInt,
 		true, /* requireType */
 		"RESUME JOB",
 	)
@@ -116,7 +117,7 @@ func (p *planner) CancelJob(ctx context.Context, n *parser.CancelJob) (planNode,
 		n.ID,
 		nil,
 		parser.IndexedVarHelper{},
-		parser.TypeInt,
+		types.TypeInt,
 		true, /* requireType */
 		"CANCEL JOB",
 	)
@@ -186,7 +187,7 @@ func (p *planner) CancelQuery(ctx context.Context, n *parser.CancelQuery) (planN
 		n.ID,
 		nil,
 		parser.IndexedVarHelper{},
-		parser.TypeString,
+		types.TypeString,
 		true, /* requireType */
 		"CANCEL QUERY",
 	)

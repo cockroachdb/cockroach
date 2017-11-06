@@ -24,6 +24,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
@@ -182,14 +183,14 @@ func (n *copyNode) addRow(ctx context.Context, line []byte) error {
 			continue
 		}
 		switch t := n.resultColumns[i].Typ; t {
-		case parser.TypeBytes,
-			parser.TypeDate,
-			parser.TypeInterval,
-			parser.TypeINet,
-			parser.TypeString,
-			parser.TypeTimestamp,
-			parser.TypeTimestampTZ,
-			parser.TypeUUID:
+		case types.TypeBytes,
+			types.TypeDate,
+			types.TypeInterval,
+			types.TypeINet,
+			types.TypeString,
+			types.TypeTimestamp,
+			types.TypeTimestampTZ,
+			types.TypeUUID:
 			s, err = decodeCopy(s)
 			if err != nil {
 				return err

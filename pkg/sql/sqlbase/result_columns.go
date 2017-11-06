@@ -17,7 +17,6 @@ package sqlbase
 import (
 	"fmt"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 )
 
@@ -63,7 +62,7 @@ func (r ResultColumns) TypesEqual(other ResultColumns) bool {
 		// NULLs are considered equal because some types of queries (SELECT CASE,
 		// for example) can change their output types between a type and NULL based
 		// on input.
-		if other[i].Typ == parser.TypeNull {
+		if other[i].Typ == types.TypeNull {
 			continue
 		}
 		if !c.Typ.Equivalent(other[i].Typ) {
