@@ -1090,7 +1090,7 @@ func (l *DistLoader) LoadCSV(
 	}
 
 	log.VEventf(ctx, 1, "generated %d splits; begin routing for job %s", len(spans), job.Record.Description)
-	if err := job.Progressed(ctx, 1.0/3.0, jobs.Noop); err != nil {
+	if err := job.Progressed(ctx, 1.0/10.0, jobs.Noop); err != nil {
 		log.Warningf(ctx, "failed to update job progress: %s", err)
 	}
 
