@@ -33,13 +33,17 @@ type joinPredicate struct {
 	// operands.
 	numLeftCols, numRightCols int
 
-	// The comparison function to use for each column. We need
-	// different functions because each USING column may have a different
-	// type (and they may be heterogeneous between left and right).
+	// The comparison function to use for each column. We need different
+	// functions because each USING column (or columns in equality ON
+	// expressions)  may have a different type (and they may be
+	// heterogeneous between left and right).
 	cmpFunctions []func(*tree.EvalContext, tree.Datum, tree.Datum) (tree.Datum, error)
 
 	// left/rightEqualityIndices give the position of USING columns
 	// on the left and right input row arrays, respectively.
+	// Left/right columns that have an equality constraint in the ON
+	// condition also have their indices appended when tryAddEqualityFilter
+	// is invoked (see planner.addJoinFilter).
 	leftEqualityIndices  []int
 	rightEqualityIndices []int
 
@@ -386,6 +390,7 @@ func pickUsingColumn(
 		}
 		if col.Name == colName {
 			idx = j
+			break
 		}
 	}
 	if idx == invalidColIdx {

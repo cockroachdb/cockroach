@@ -1245,9 +1245,13 @@ func (s Span) EqualValue(o Span) bool {
 	return s.Key.Equal(o.Key) && s.EndKey.Equal(o.EndKey)
 }
 
-// Overlaps returns whether the two spans overlap.
+// Overlaps returns true WLOG for span A and B iff:
+// 1. Both spans contain one key (just the start key) and they are equal; or
+// 2. The span with only one key is contained inside the other span; or
+// 3. The end key of span A is strictly greater than the start key of span B
+//    and the end key of span B is strictly greater than the start key of span
+//    A.
 func (s Span) Overlaps(o Span) bool {
-	// Spans must be valid.
 	if !s.Valid() || !o.Valid() {
 		return false
 	}
@@ -1264,7 +1268,6 @@ func (s Span) Overlaps(o Span) bool {
 
 // Contains returns whether the receiver contains the given span.
 func (s Span) Contains(o Span) bool {
-	// Spans must be valid.
 	if !s.Valid() || !o.Valid() {
 		return false
 	}
@@ -1303,11 +1306,10 @@ func (s Span) String() string {
 	return PrettyPrintRange(s.Key, s.EndKey, maxChars)
 }
 
-// SplitOnKey returns two spans where the left span has EndKey
-// and right span has start Key of the split key.
-// If the split key lies outside the span, the original
-// span is returned on the left (and right is an invalid span
-// with empty keys).
+// SplitOnKey returns two spans where the left span has EndKey and right span
+// has start Key of the split key, respectively.
+// If the split key lies outside the span, the original span is returned on the
+// left (and right is an invalid span with empty keys).
 func (s Span) SplitOnKey(key Key) (left Span, right Span) {
 	// Cannot split on or before start key or on or after end key.
 	if bytes.Compare(key, s.Key) <= 0 || bytes.Compare(key, s.EndKey) >= 0 {

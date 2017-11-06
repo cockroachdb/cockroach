@@ -27,6 +27,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	humanize "github.com/dustin/go-humanize"
 	"github.com/pkg/errors"
 )
@@ -102,16 +103,17 @@ func (a *AggregatorSpec) summary() (string, []string) {
 	return "Aggregator", details
 }
 
-func (tr *TableReaderSpec) summary() (string, []string) {
+func indexDetails(indexIdx uint32, desc *sqlbase.TableDescriptor) []string {
 	index := "primary"
-	if tr.IndexIdx > 0 {
-		index = tr.Table.Indexes[tr.IndexIdx-1].Name
+	if indexIdx > 0 {
+		index = desc.Indexes[indexIdx-1].Name
 	}
-	details := []string{
-		fmt.Sprintf("%s@%s", index, tr.Table.Name),
-	}
+	return []string{fmt.Sprintf("%s@%s", index, desc.Name)}
+}
+
+func (tr *TableReaderSpec) summary() (string, []string) {
 	// TODO(radu): a summary of the spans
-	return "TableReader", details
+	return "TableReader", indexDetails(tr.IndexIdx, &tr.Table)
 }
 
 func (jr *JoinReaderSpec) summary() (string, []string) {
@@ -144,16 +146,46 @@ func (hj *HashJoinerSpec) summary() (string, []string) {
 	return "HashJoiner", details
 }
 
-func (hj *MergeJoinerSpec) summary() (string, []string) {
+func orderedJoinDetails(left, right Ordering, onExpr Expression) []string {
 	details := make([]string, 1, 2)
 	details[0] = fmt.Sprintf(
-		"left(%s)=right(%s)", hj.LeftOrdering.diagramString(), hj.RightOrdering.diagramString(),
+		"left(%s)=right(%s)", left.diagramString(), right.diagramString(),
 	)
 
-	if hj.OnExpr.Expr != "" {
-		details = append(details, fmt.Sprintf("ON %s", hj.OnExpr.Expr))
+	if onExpr.Expr != "" {
+		details = append(details, fmt.Sprintf("ON %s", onExpr.Expr))
 	}
+
+	return details
+}
+
+func (mj *MergeJoinerSpec) summary() (string, []string) {
+	details := orderedJoinDetails(mj.LeftOrdering, mj.RightOrdering, mj.OnExpr)
 	return "MergeJoiner", details
+}
+
+func (irj *InterleavedReaderJoinerSpec) summary() (string, []string) {
+	// As of right now, we only plan InterleaveReaderJoiner with two
+	// tables.
+	tables := irj.Tables[:2]
+	details := make([]string, 0, len(tables)*6+3)
+	for i, table := range tables {
+		// left or right label
+		var tableLabel string
+		if i == 0 {
+			tableLabel = "Left"
+		} else if i == 1 {
+			tableLabel = "Right"
+		}
+		details = append(details, tableLabel)
+		// table@index name
+		details = append(details, indexDetails(table.IndexIdx, &table.Desc)...)
+		// Post process (filters, projections, renderExprs, limits/offsets)
+		details = append(details, table.Post.summaryWithPrefix(fmt.Sprintf("%s ", tableLabel))...)
+	}
+	details = append(details, "Joiner")
+	details = append(details, orderedJoinDetails(tables[0].Ordering, tables[1].Ordering, irj.OnExpr)...)
+	return "InterleaveReaderJoiner", details
 }
 
 func (s *SorterSpec) summary() (string, []string) {
@@ -233,16 +265,22 @@ func (r *OutputRouterSpec) summary() (string, []string) {
 }
 
 func (post *PostProcessSpec) summary() []string {
+	return post.summaryWithPrefix("")
+}
+
+// prefix is prepended to every line outputted to disambiguate processors
+// (namely InterleavedReaderJoiner) that have multiple PostProcessors.
+func (post *PostProcessSpec) summaryWithPrefix(prefix string) []string {
 	var res []string
 	if post.Filter.Expr != "" {
-		res = append(res, fmt.Sprintf("Filter: %s", post.Filter.Expr))
+		res = append(res, fmt.Sprintf("%sFilter: %s", prefix, post.Filter.Expr))
 	}
 	if post.Projection {
-		res = append(res, fmt.Sprintf("Out: %s", colListStr(post.OutputColumns)))
+		res = append(res, fmt.Sprintf("%sOut: %s", prefix, colListStr(post.OutputColumns)))
 	}
 	if len(post.RenderExprs) > 0 {
 		var buf bytes.Buffer
-		buf.WriteString("Render: ")
+		buf.WriteString(fmt.Sprintf("%sRender: ", prefix))
 		for i, expr := range post.RenderExprs {
 			if i > 0 {
 				buf.WriteString(", ")
@@ -256,13 +294,13 @@ func (post *PostProcessSpec) summary() []string {
 	if post.Limit != 0 || post.Offset != 0 {
 		var buf bytes.Buffer
 		if post.Limit != 0 {
-			fmt.Fprintf(&buf, "Limit %d", post.Limit)
+			fmt.Fprintf(&buf, "%sLimit %d", prefix, post.Limit)
 		}
 		if post.Offset != 0 {
 			if buf.Len() != 0 {
 				buf.WriteByte(' ')
 			}
-			fmt.Fprintf(&buf, "Offset %d", post.Offset)
+			fmt.Fprintf(&buf, "%sOffset %d", prefix, post.Offset)
 		}
 		res = append(res, buf.String())
 	}
@@ -412,11 +450,11 @@ func generateDiagramData(flows []FlowSpec, nodeNames []string) (diagramData, err
 			pIdx++
 		}
 	}
+
 	return d, nil
 }
 
-// GeneratePlanDiagram generates the json data for a flow diagram.  There should
-// be one FlowSpec per node. The function assumes that StreamIDs are unique
+// GeneratePlanDiagram generates the json data for a flow diagram.  There should // be one FlowSpec per node. The function assumes that StreamIDs are unique
 // across all flows.
 func GeneratePlanDiagram(flows map[roachpb.NodeID]FlowSpec, w io.Writer) error {
 	// We sort the flows by node because we want the diagram data to be
@@ -431,7 +469,6 @@ func GeneratePlanDiagram(flows map[roachpb.NodeID]FlowSpec, w io.Writer) error {
 	nodeNames := make([]string, len(nodeIDs))
 	for i, nVal := range nodeIDs {
 		n := roachpb.NodeID(nVal)
-
 		flowSlice[i] = flows[n]
 		nodeNames[i] = n.String()
 	}

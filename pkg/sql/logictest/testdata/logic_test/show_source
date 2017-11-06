@@ -82,6 +82,7 @@ server.time_until_store_dead                       5m0s           d     the time
 server.web_session_timeout                         168h0m0s       d     the duration that a newly created web session will be valid
 sql.defaults.distsql                               0              e     Default distributed SQL execution mode [off = 0, auto = 1, on = 2]
 sql.distsql.distribute_index_joins                 true           b     if set, for index joins we instantiate a join reader on every node that has a stream; if not set, we use a single join reader
+sql.distsql.interleaved_joins.enabled              true           b     if set we plan interleaved table joins instead of merge joins when possible
 sql.distsql.merge_joins.enabled                    true           b     if set, we plan merge joins when possible
 sql.distsql.temp_storage.joins                     true           b     set to true to enable use of disk for distributed sql joins
 sql.distsql.temp_storage.sorts                     true           b     set to true to enable use of disk for distributed sql sorts
