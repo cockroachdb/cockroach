@@ -27,12 +27,26 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/txnwait"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
 
-// ReplicaI is the glue between a ReplicaEvalContext and a *Replica
-// to avoid a direct dependency.
-type ReplicaI interface {
+// NewReplicaEvalContext returns a ReplicaEvalContext to use for command
+// evaluation. The supplied SpanSet will be ignored except for race builds, in
+// which case state access is asserted against it.
+func NewReplicaEvalContext(r *Replica, ss *SpanSet) ReplicaEvalContext {
+	if util.RaceEnabled {
+		return &SpanSetReplicaEvalContext{
+			i:  r,
+			ss: ss,
+		}
+	}
+	return r
+}
+
+// ReplicaEvalContext is the interface through which command evaluation accesses
+// the in-memory state of a Replica.
+type ReplicaEvalContext interface {
 	fmt.Stringer
 	ClusterSettings() *cluster.Settings
 	StoreTestingKnobs() StoreTestingKnobs
@@ -54,6 +68,7 @@ type ReplicaI interface {
 	GetTerm(uint64) (uint64, error)
 
 	Desc() *roachpb.RangeDescriptor
+	ContainsKey(key roachpb.Key) bool
 
 	GetMVCCStats() enginepb.MVCCStats
 	GetGCThreshold() hlc.Timestamp

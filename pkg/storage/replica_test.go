@@ -775,7 +775,7 @@ func TestReplicaLease(t *testing.T) {
 	} {
 		if _, err := evalRequestLease(context.Background(), tc.store.Engine(),
 			CommandArgs{
-				EvalCtx: ReplicaEvalContext{tc.repl, nil},
+				EvalCtx: &SpanSetReplicaEvalContext{tc.repl, nil},
 				Args: &roachpb.RequestLeaseRequest{
 					Lease: lease,
 				},
@@ -5068,7 +5068,7 @@ func TestAbortSpanError(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	rec := ReplicaEvalContext{tc.repl, nil}
+	rec := &SpanSetReplicaEvalContext{tc.repl, nil}
 	pErr := checkIfTxnAborted(context.Background(), rec, tc.engine, txn)
 	if _, ok := pErr.GetDetail().(*roachpb.TransactionAbortedError); ok {
 		expected := txn.Clone()
@@ -8108,7 +8108,7 @@ func TestGCWithoutThreshold(t *testing.T) {
 
 				if _, err := evalGC(ctx, rw, CommandArgs{
 					Args: &gc,
-					EvalCtx: ReplicaEvalContext{
+					EvalCtx: &SpanSetReplicaEvalContext{
 						i:  tc.repl,
 						ss: &spans,
 					},

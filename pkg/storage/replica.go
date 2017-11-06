@@ -460,7 +460,7 @@ type Replica struct {
 	}
 }
 
-var _ ReplicaI = &Replica{}
+var _ ReplicaEvalContext = &Replica{}
 
 // KeyRange is an interface type for the replicasByKey BTree, to compare
 // Replica and ReplicaPlaceholder.
@@ -2438,7 +2438,7 @@ func (r *Replica) executeAdminBatch(
 
 	case *roachpb.ImportRequest:
 		cArgs := CommandArgs{
-			EvalCtx: ReplicaEvalContext{r, nil},
+			EvalCtx: NewReplicaEvalContext(r, nil),
 			Header:  ba.Header,
 			Args:    args,
 		}
@@ -2519,7 +2519,7 @@ func (r *Replica) executeReadOnlyBatch(
 	// that holding readOnlyCmdMu throughout is important to avoid reads from the
 	// "wrong" key range being served after the range has been split.
 	var result EvalResult
-	rec := ReplicaEvalContext{r, spans}
+	rec := NewReplicaEvalContext(r, spans)
 	readOnly := r.store.Engine().NewReadOnly()
 	defer readOnly.Close()
 	br, result, pErr = evaluateBatch(ctx, storagebase.CmdIDKey(""), readOnly, rec, nil, ba)
@@ -4983,7 +4983,7 @@ func (r *Replica) evaluateTxnWriteBatch(
 		if util.RaceEnabled && spans != nil {
 			batch = makeSpanSetBatch(batch, spans)
 		}
-		rec := ReplicaEvalContext{r, spans}
+		rec := NewReplicaEvalContext(r, spans)
 		br, result, pErr := evaluateBatch(ctx, idKey, batch, rec, &ms, strippedBa)
 		if pErr == nil && ba.Timestamp == br.Timestamp {
 			clonedTxn := ba.Txn.Clone()
@@ -5035,7 +5035,7 @@ func (r *Replica) evaluateTxnWriteBatch(
 	if util.RaceEnabled && spans != nil {
 		batch = makeSpanSetBatch(batch, spans)
 	}
-	rec := ReplicaEvalContext{r, spans}
+	rec := NewReplicaEvalContext(r, spans)
 	br, result, pErr := evaluateBatch(ctx, idKey, batch, rec, &ms, ba)
 	return batch, ms, br, result, pErr
 }
@@ -5492,7 +5492,7 @@ func (r *Replica) maybeGossipNodeLiveness(ctx context.Context, span roachpb.Span
 	ba.Timestamp = r.store.Clock().Now()
 	ba.Add(&roachpb.ScanRequest{Span: span})
 	// Call evaluateBatch instead of Send to avoid command queue reentrance.
-	rec := ReplicaEvalContext{r, nil}
+	rec := NewReplicaEvalContext(r, nil)
 	br, result, pErr :=
 		evaluateBatch(ctx, storagebase.CmdIDKey(""), r.store.Engine(), rec, nil, ba)
 	if pErr != nil {
@@ -5572,7 +5572,7 @@ func (r *Replica) loadSystemConfig(ctx context.Context) (config.SystemConfig, er
 	ba.Timestamp = r.store.Clock().Now()
 	ba.Add(&roachpb.ScanRequest{Span: keys.SystemConfigSpan})
 	// Call evaluateBatch instead of Send to avoid command queue reentrance.
-	rec := ReplicaEvalContext{r, nil}
+	rec := NewReplicaEvalContext(r, nil)
 	br, result, pErr := evaluateBatch(
 		ctx, storagebase.CmdIDKey(""), r.store.Engine(), rec, nil, ba,
 	)
