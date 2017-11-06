@@ -66,25 +66,25 @@ type showRangesNode struct {
 var showRangesColumns = sqlbase.ResultColumns{
 	{
 		Name: "Start Key",
-		Typ:  types.TypeString,
+		Typ:  types.String,
 	},
 	{
 		Name: "End Key",
-		Typ:  types.TypeString,
+		Typ:  types.String,
 	},
 	{
 		Name: "Range ID",
-		Typ:  types.TypeInt,
+		Typ:  types.Int,
 	},
 	{
 		Name: "Replicas",
 		// The INTs in the array are Store IDs.
-		Typ: types.TArray{Typ: types.TypeInt},
+		Typ: types.TArray{Typ: types.Int},
 	},
 	{
 		Name: "Lease Holder",
 		// The store ID for the lease holder.
-		Typ: types.TypeInt,
+		Typ: types.Int,
 	},
 }
 
@@ -123,7 +123,7 @@ func (n *showRangesNode) Next(params runParams) (bool, error) {
 	}
 	sort.Ints(replicas)
 
-	replicaArr := parser.NewDArray(types.TypeInt)
+	replicaArr := parser.NewDArray(types.Int)
 	replicaArr.Array = make(parser.Datums, len(replicas))
 	for i, r := range replicas {
 		replicaArr.Array[i] = parser.NewDInt(parser.DInt(r))

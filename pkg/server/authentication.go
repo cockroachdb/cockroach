@@ -192,9 +192,9 @@ WHERE id = $1`
 			return nil
 		}
 		if datum.Len() != 4 ||
-			datum[0].ResolvedType() != types.TypeBytes ||
-			datum[1].ResolvedType() != types.TypeString ||
-			datum[2].ResolvedType() != types.TypeTimestamp {
+			datum[0].ResolvedType() != types.Bytes ||
+			datum[1].ResolvedType() != types.String ||
+			datum[2].ResolvedType() != types.Timestamp {
 			return errors.Errorf("values returned from auth session lookup do not match expectation")
 		}
 
@@ -203,7 +203,7 @@ WHERE id = $1`
 		hashedSecret = []byte(*datum[0].(*parser.DBytes))
 		username = string(*datum[1].(*parser.DString))
 		expiresAt = datum[2].(*parser.DTimestamp).Time
-		isRevoked = datum[3].ResolvedType() != types.TypeNull
+		isRevoked = datum[3].ResolvedType() != types.Null
 		return nil
 	}); err != nil {
 		return false, "", err
@@ -283,7 +283,7 @@ RETURNING id
 		if err != nil {
 			return err
 		}
-		if datum.Len() != 1 || datum[0].ResolvedType() != types.TypeInt {
+		if datum.Len() != 1 || datum[0].ResolvedType() != types.Int {
 			return errors.Errorf(
 				"expected create auth session statement to return exactly one integer, returned %v",
 				datum,

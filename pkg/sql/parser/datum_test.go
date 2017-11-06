@@ -31,7 +31,7 @@ func prepareExpr(t *testing.T, datumExpr string) TypedExpr {
 	}
 	// Type checking ensures constant folding is performed and type
 	// annotations have come into effect.
-	typedExpr, err := TypeCheck(expr, nil, types.TypeAny)
+	typedExpr, err := TypeCheck(expr, nil, types.Any)
 	if err != nil {
 		t.Fatalf("%s: %v", datumExpr, err)
 	}

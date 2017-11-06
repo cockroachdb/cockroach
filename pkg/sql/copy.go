@@ -183,14 +183,14 @@ func (n *copyNode) addRow(ctx context.Context, line []byte) error {
 			continue
 		}
 		switch t := n.resultColumns[i].Typ; t {
-		case types.TypeBytes,
-			types.TypeDate,
-			types.TypeInterval,
-			types.TypeINet,
-			types.TypeString,
-			types.TypeTimestamp,
-			types.TypeTimestampTZ,
-			types.TypeUUID:
+		case types.Bytes,
+			types.Date,
+			types.Interval,
+			types.INet,
+			types.String,
+			types.Timestamp,
+			types.TimestampTZ,
+			types.UUID:
 			s, err = decodeCopy(s)
 			if err != nil {
 				return err

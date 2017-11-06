@@ -146,11 +146,11 @@ func (n *splitNode) Close(ctx context.Context) {
 var splitNodeColumns = sqlbase.ResultColumns{
 	{
 		Name: "key",
-		Typ:  types.TypeBytes,
+		Typ:  types.Bytes,
 	},
 	{
 		Name: "pretty",
-		Typ:  types.TypeString,
+		Typ:  types.String,
 	},
 }
 
@@ -170,7 +170,7 @@ func (p *planner) TestingRelocate(
 	//  - column values; it is OK if the select statement returns fewer columns
 	//  (the relevant prefix is used).
 	desiredTypes := make([]types.T, len(index.ColumnIDs)+1)
-	desiredTypes[0] = types.TArray{Typ: types.TypeInt}
+	desiredTypes[0] = types.TArray{Typ: types.Int}
 	for i, colID := range index.ColumnIDs {
 		c, err := tableDesc.FindColumnByID(colID)
 		if err != nil {
@@ -264,7 +264,7 @@ func (n *testingRelocateNode) Next(params runParams) (bool, error) {
 	// table/index row.
 	data := n.rows.Values()
 
-	if !data[0].ResolvedType().Equivalent(types.TArray{Typ: types.TypeInt}) {
+	if !data[0].ResolvedType().Equivalent(types.TArray{Typ: types.Int}) {
 		return false, errors.Errorf(
 			"expected int array in the first TESTING_RELOCATE data column; got %s",
 			data[0].ResolvedType(),
@@ -329,11 +329,11 @@ func (n *testingRelocateNode) Close(ctx context.Context) {
 var relocateNodeColumns = sqlbase.ResultColumns{
 	{
 		Name: "key",
-		Typ:  types.TypeBytes,
+		Typ:  types.Bytes,
 	},
 	{
 		Name: "pretty",
-		Typ:  types.TypeString,
+		Typ:  types.String,
 	},
 }
 
@@ -452,11 +452,11 @@ func (n *scatterNode) Next(params runParams) (bool, error) {
 var scatterNodeColumns = sqlbase.ResultColumns{
 	{
 		Name: "key",
-		Typ:  types.TypeBytes,
+		Typ:  types.Bytes,
 	},
 	{
 		Name: "pretty",
-		Typ:  types.TypeString,
+		Typ:  types.String,
 	},
 }
 

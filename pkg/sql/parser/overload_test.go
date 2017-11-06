@@ -75,21 +75,21 @@ func TestTypeCheckOverloadedExprs(t *testing.T) {
 		return &BinaryExpr{Operator: Plus, Left: left, Right: right}
 	}
 
-	unaryIntFn := makeTestOverload(types.TypeInt, types.TypeInt)
-	unaryIntFnPref := &testOverload{retType: types.TypeInt, paramTypes: ArgTypes{}, pref: true}
-	unaryFloatFn := makeTestOverload(types.TypeFloat, types.TypeFloat)
-	unaryDecimalFn := makeTestOverload(types.TypeDecimal, types.TypeDecimal)
-	unaryStringFn := makeTestOverload(types.TypeString, types.TypeString)
-	unaryIntervalFn := makeTestOverload(types.TypeInterval, types.TypeInterval)
-	unaryTimestampFn := makeTestOverload(types.TypeTimestamp, types.TypeTimestamp)
-	binaryIntFn := makeTestOverload(types.TypeInt, types.TypeInt, types.TypeInt)
-	binaryFloatFn := makeTestOverload(types.TypeFloat, types.TypeFloat, types.TypeFloat)
-	binaryDecimalFn := makeTestOverload(types.TypeDecimal, types.TypeDecimal, types.TypeDecimal)
-	binaryStringFn := makeTestOverload(types.TypeString, types.TypeString, types.TypeString)
-	binaryTimestampFn := makeTestOverload(types.TypeTimestamp, types.TypeTimestamp, types.TypeTimestamp)
-	binaryStringFloatFn1 := makeTestOverload(types.TypeInt, types.TypeString, types.TypeFloat)
-	binaryStringFloatFn2 := makeTestOverload(types.TypeFloat, types.TypeString, types.TypeFloat)
-	binaryIntDateFn := makeTestOverload(types.TypeDate, types.TypeInt, types.TypeDate)
+	unaryIntFn := makeTestOverload(types.Int, types.Int)
+	unaryIntFnPref := &testOverload{retType: types.Int, paramTypes: ArgTypes{}, pref: true}
+	unaryFloatFn := makeTestOverload(types.Float, types.Float)
+	unaryDecimalFn := makeTestOverload(types.Decimal, types.Decimal)
+	unaryStringFn := makeTestOverload(types.String, types.String)
+	unaryIntervalFn := makeTestOverload(types.Interval, types.Interval)
+	unaryTimestampFn := makeTestOverload(types.Timestamp, types.Timestamp)
+	binaryIntFn := makeTestOverload(types.Int, types.Int, types.Int)
+	binaryFloatFn := makeTestOverload(types.Float, types.Float, types.Float)
+	binaryDecimalFn := makeTestOverload(types.Decimal, types.Decimal, types.Decimal)
+	binaryStringFn := makeTestOverload(types.String, types.String, types.String)
+	binaryTimestampFn := makeTestOverload(types.Timestamp, types.Timestamp, types.Timestamp)
+	binaryStringFloatFn1 := makeTestOverload(types.Int, types.String, types.Float)
+	binaryStringFloatFn2 := makeTestOverload(types.Float, types.String, types.Float)
+	binaryIntDateFn := makeTestOverload(types.Date, types.Int, types.Date)
 
 	// Out-of-band values used below to distinguish error cases.
 	unsupported := &testOverload{}
@@ -147,16 +147,16 @@ func TestTypeCheckOverloadedExprs(t *testing.T) {
 		{nil, []Expr{NewDFloat(1), NewDString("a")}, []overloadImpl{binaryStringFn, binaryFloatFn, binaryStringFloatFn1}, unsupported, false},
 		{nil, []Expr{NewDString("a"), NewDFloat(1)}, []overloadImpl{binaryStringFn, binaryFloatFn, binaryStringFloatFn1, binaryStringFloatFn2}, ambiguous, false},
 		// Desired type with ambiguity.
-		{types.TypeInt, []Expr{intConst("1"), decConst("1.0")}, []overloadImpl{binaryIntFn, binaryDecimalFn, unaryDecimalFn}, binaryIntFn, false},
-		{types.TypeInt, []Expr{intConst("1"), NewDFloat(1)}, []overloadImpl{binaryIntFn, binaryFloatFn, unaryFloatFn}, binaryFloatFn, false},
-		{types.TypeInt, []Expr{NewDString("a"), NewDFloat(1)}, []overloadImpl{binaryStringFn, binaryFloatFn, binaryStringFloatFn1, binaryStringFloatFn2}, binaryStringFloatFn1, false},
-		{types.TypeFloat, []Expr{NewDString("a"), NewDFloat(1)}, []overloadImpl{binaryStringFn, binaryFloatFn, binaryStringFloatFn1, binaryStringFloatFn2}, binaryStringFloatFn2, false},
-		{types.TypeFloat, []Expr{NewPlaceholder("a"), NewPlaceholder("b")}, []overloadImpl{binaryIntFn, binaryFloatFn}, binaryFloatFn, false},
+		{types.Int, []Expr{intConst("1"), decConst("1.0")}, []overloadImpl{binaryIntFn, binaryDecimalFn, unaryDecimalFn}, binaryIntFn, false},
+		{types.Int, []Expr{intConst("1"), NewDFloat(1)}, []overloadImpl{binaryIntFn, binaryFloatFn, unaryFloatFn}, binaryFloatFn, false},
+		{types.Int, []Expr{NewDString("a"), NewDFloat(1)}, []overloadImpl{binaryStringFn, binaryFloatFn, binaryStringFloatFn1, binaryStringFloatFn2}, binaryStringFloatFn1, false},
+		{types.Float, []Expr{NewDString("a"), NewDFloat(1)}, []overloadImpl{binaryStringFn, binaryFloatFn, binaryStringFloatFn1, binaryStringFloatFn2}, binaryStringFloatFn2, false},
+		{types.Float, []Expr{NewPlaceholder("a"), NewPlaceholder("b")}, []overloadImpl{binaryIntFn, binaryFloatFn}, binaryFloatFn, false},
 		// Sub-expressions.
 		{nil, []Expr{decConst("1.0"), plus(intConst("1"), intConst("2"))}, []overloadImpl{binaryIntFn, binaryDecimalFn}, binaryIntFn, false},
 		{nil, []Expr{decConst("1.1"), plus(intConst("1"), intConst("2"))}, []overloadImpl{binaryIntFn, binaryDecimalFn}, shouldError, false},
 		{nil, []Expr{NewDFloat(1.1), plus(intConst("1"), intConst("2"))}, []overloadImpl{binaryIntFn, binaryDecimalFn, binaryFloatFn}, binaryFloatFn, false},
-		{types.TypeDecimal, []Expr{decConst("1.0"), plus(intConst("1"), intConst("2"))}, []overloadImpl{binaryIntFn, binaryDecimalFn}, binaryIntFn, false},                // Limitation.
+		{types.Decimal, []Expr{decConst("1.0"), plus(intConst("1"), intConst("2"))}, []overloadImpl{binaryIntFn, binaryDecimalFn}, binaryIntFn, false},              // Limitation.
 		{nil, []Expr{plus(intConst("1"), intConst("2")), plus(decConst("1.1"), decConst("2.2"))}, []overloadImpl{binaryIntFn, binaryDecimalFn}, shouldError, false}, // Limitation.
 		{nil, []Expr{plus(decConst("1.1"), decConst("2.2")), plus(intConst("1"), intConst("2"))}, []overloadImpl{binaryIntFn, binaryDecimalFn}, shouldError, false},
 		{nil, []Expr{plus(NewDFloat(1.1), NewDFloat(2.2)), plus(intConst("1"), intConst("2"))}, []overloadImpl{binaryIntFn, binaryFloatFn}, binaryFloatFn, false},
@@ -165,10 +165,10 @@ func TestTypeCheckOverloadedExprs(t *testing.T) {
 		{nil, []Expr{NewDFloat(1), NewPlaceholder("b")}, []overloadImpl{binaryIntFn, binaryIntDateFn}, unsupported, false},
 		{nil, []Expr{intConst("1"), NewPlaceholder("b")}, []overloadImpl{binaryIntFn, binaryIntDateFn}, binaryIntFn, false},
 		{nil, []Expr{decConst("1.0"), NewPlaceholder("b")}, []overloadImpl{binaryIntFn, binaryIntDateFn}, unsupported, false}, // Limitation.
-		{types.TypeDate, []Expr{NewDInt(1), NewPlaceholder("b")}, []overloadImpl{binaryIntFn, binaryIntDateFn}, binaryIntDateFn, false},
-		{types.TypeDate, []Expr{NewDFloat(1), NewPlaceholder("b")}, []overloadImpl{binaryIntFn, binaryIntDateFn}, unsupported, false},
-		{types.TypeDate, []Expr{intConst("1"), NewPlaceholder("b")}, []overloadImpl{binaryIntFn, binaryIntDateFn}, binaryIntDateFn, false},
-		{types.TypeDate, []Expr{decConst("1.0"), NewPlaceholder("b")}, []overloadImpl{binaryIntFn, binaryIntDateFn}, binaryIntDateFn, false},
+		{types.Date, []Expr{NewDInt(1), NewPlaceholder("b")}, []overloadImpl{binaryIntFn, binaryIntDateFn}, binaryIntDateFn, false},
+		{types.Date, []Expr{NewDFloat(1), NewPlaceholder("b")}, []overloadImpl{binaryIntFn, binaryIntDateFn}, unsupported, false},
+		{types.Date, []Expr{intConst("1"), NewPlaceholder("b")}, []overloadImpl{binaryIntFn, binaryIntDateFn}, binaryIntDateFn, false},
+		{types.Date, []Expr{decConst("1.0"), NewPlaceholder("b")}, []overloadImpl{binaryIntFn, binaryIntDateFn}, binaryIntDateFn, false},
 		// BinOps
 		{nil, []Expr{NewDInt(1), DNull}, []overloadImpl{binaryIntFn, binaryIntDateFn}, ambiguous, false},
 		{nil, []Expr{NewDInt(1), DNull}, []overloadImpl{binaryIntFn, binaryIntDateFn}, binaryIntFn, true},
@@ -176,7 +176,7 @@ func TestTypeCheckOverloadedExprs(t *testing.T) {
 	for i, d := range testData {
 		t.Run(fmt.Sprintf("%v/%v", d.exprs, d.overloads), func(t *testing.T) {
 			ctx := MakeSemaContext(false)
-			desired := types.TypeAny
+			desired := types.Any
 			if d.desired != nil {
 				desired = d.desired
 			}

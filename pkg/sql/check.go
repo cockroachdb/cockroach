@@ -63,7 +63,7 @@ func (c *checkHelper) init(
 	ivarHelper := parser.MakeIndexedVarHelper(c, len(c.cols))
 	for i, raw := range exprs {
 		typedExpr, err := p.analyzeExpr(ctx, raw, multiSourceInfo{c.sourceInfo}, ivarHelper,
-			types.TypeBool, false, "")
+			types.Bool, false, "")
 		if err != nil {
 			return err
 		}

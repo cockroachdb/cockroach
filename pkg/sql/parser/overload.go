@@ -38,7 +38,7 @@ type typeList interface {
 	// match checks if all types in the typeList match the corresponding elements in types.
 	match(types []types.T) bool
 	// matchAt checks if the parameter type at index i of the typeList matches type typ.
-	// In all implementations, types.TypeNull will match with each parameter type, allowing
+	// In all implementations, types.Null will match with each parameter type, allowing
 	// NULL values to be used as arguments.
 	matchAt(typ types.T, i int) bool
 	// matchLen checks that the typeList can support l parameters.
@@ -82,12 +82,12 @@ func (a ArgTypes) matchAt(typ types.T, i int) bool {
 	// The parameterized types for Tuples are checked in the type checking
 	// routines before getting here, so we only need to check if the argument
 	// type is a types.FamTuple below. This allows us to avoid defining overloads
-	// for types.FamTuple{}, types.FamTuple{types.TypeAny}, types.FamTuple{types.TypeAny, types.TypeAny}, etc.
+	// for types.FamTuple{}, types.FamTuple{types.Any}, types.FamTuple{types.Any, types.Any}, etc.
 	// for Tuple operators.
 	if typ.FamilyEqual(types.FamTuple) {
 		typ = types.FamTuple
 	}
-	return i < len(a) && (typ == types.TypeNull || a[i].Typ.Equivalent(typ))
+	return i < len(a) && (typ == types.Null || a[i].Typ.Equivalent(typ))
 }
 
 func (a ArgTypes) matchLen(l int) bool {
@@ -144,7 +144,7 @@ func (HomogeneousType) matchLen(l int) bool {
 }
 
 func (HomogeneousType) getAt(i int) types.T {
-	return types.TypeAny
+	return types.Any
 }
 
 // Length implements the typeList interface.
@@ -154,7 +154,7 @@ func (HomogeneousType) Length() int {
 
 // Types implements the typeList interface.
 func (HomogeneousType) Types() []types.T {
-	return []types.T{types.TypeAny}
+	return []types.T{types.Any}
 }
 
 func (HomogeneousType) String() string {
@@ -178,7 +178,7 @@ func (v VariadicType) match(types []types.T) bool {
 }
 
 func (v VariadicType) matchAt(typ types.T, i int) bool {
-	return typ == types.TypeNull || v.Typ.Equivalent(typ)
+	return typ == types.Null || v.Typ.Equivalent(typ)
 }
 
 func (v VariadicType) matchLen(l int) bool {
@@ -236,7 +236,7 @@ func returnTypeToFixedType(s returnTyper) types.T {
 	if t := s(nil); t != unknownReturnType {
 		return t
 	}
-	return types.TypeAny
+	return types.Any
 }
 
 type typeCheckOverloadState struct {
@@ -293,7 +293,7 @@ func typeCheckOverloadedExprs(
 	// If no overloads are provided, just type check parameters and return.
 	if len(overloads) == 0 {
 		for _, i := range s.resolvableIdxs {
-			typ, err := exprs[i].TypeCheck(ctx, types.TypeAny)
+			typ, err := exprs[i].TypeCheck(ctx, types.Any)
 			if err != nil {
 				return nil, nil, errors.Wrap(err, "error type checking resolved expression:")
 			}
@@ -332,7 +332,7 @@ func typeCheckOverloadedExprs(
 
 	// Filter out overloads on resolved types.
 	for _, i := range s.resolvableIdxs {
-		paramDesired := types.TypeAny
+		paramDesired := types.Any
 		if len(s.overloadIdxs) == 1 {
 			// Once we get down to a single overload candidate, begin desiring its
 			// parameter types for the corresponding argument expressions.
@@ -358,7 +358,7 @@ func typeCheckOverloadedExprs(
 	}
 
 	// The first heuristic is to prefer candidates that return the desired type.
-	if desired != types.TypeAny {
+	if desired != types.Any {
 		s.overloadIdxs = filterOverloads(s.overloads, s.overloadIdxs,
 			func(o overloadImpl) bool {
 				// For now, we only filter on the return type for overloads with
@@ -500,22 +500,22 @@ func typeCheckOverloadedExprs(
 			var err error
 			left := s.typedExprs[0]
 			if left == nil {
-				left, err = s.exprs[0].TypeCheck(ctx, types.TypeAny)
+				left, err = s.exprs[0].TypeCheck(ctx, types.Any)
 				if err != nil {
 					return
 				}
 			}
 			right := s.typedExprs[1]
 			if right == nil {
-				right, err = s.exprs[1].TypeCheck(ctx, types.TypeAny)
+				right, err = s.exprs[1].TypeCheck(ctx, types.Any)
 				if err != nil {
 					return
 				}
 			}
 			leftType := left.ResolvedType()
 			rightType := right.ResolvedType()
-			leftIsNull := leftType == types.TypeNull
-			rightIsNull := rightType == types.TypeNull
+			leftIsNull := leftType == types.Null
+			rightIsNull := rightType == types.Null
 			oneIsNull := (leftIsNull || rightIsNull) && !(leftIsNull && rightIsNull)
 			if oneIsNull {
 				if leftIsNull {
@@ -593,7 +593,7 @@ func defaultTypeCheck(
 	ctx *SemaContext, s typeCheckOverloadState, errorOnPlaceholders bool,
 ) (typeCheckOverloadState, error) {
 	for _, i := range s.constIdxs {
-		typ, err := s.exprs[i].TypeCheck(ctx, types.TypeAny)
+		typ, err := s.exprs[i].TypeCheck(ctx, types.Any)
 		if err != nil {
 			return s, errors.Wrap(err, "error type checking constant value")
 		}
@@ -601,7 +601,7 @@ func defaultTypeCheck(
 	}
 	for _, i := range s.placeholderIdxs {
 		if errorOnPlaceholders {
-			_, err := s.exprs[i].TypeCheck(ctx, types.TypeAny)
+			_, err := s.exprs[i].TypeCheck(ctx, types.Any)
 			return s, err
 		}
 		// If we dont want to error on args, avoid type checking them without a desired type.

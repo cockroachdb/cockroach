@@ -83,7 +83,7 @@ func parseAndNormalizeExpr(
 	if expr, _, _, err = sel.resolveNames(expr); err != nil {
 		t.Fatalf("%s: %v", sql, err)
 	}
-	typedExpr, err := parser.TypeCheck(expr, nil, types.TypeAny)
+	typedExpr, err := parser.TypeCheck(expr, nil, types.Any)
 	if err != nil {
 		t.Fatalf("%s: %v", sql, err)
 	}

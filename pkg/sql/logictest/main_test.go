@@ -46,7 +46,7 @@ func init() {
 			return nil, nil, nil
 		}
 		header := sqlbase.ResultColumns{
-			{Name: "value", Typ: types.TypeString},
+			{Name: "value", Typ: types.String},
 		}
 		return func(_ context.Context, resultsCh chan<- parser.Datums) error {
 			resultsCh <- parser.Datums{parser.NewDString(show.Name)}

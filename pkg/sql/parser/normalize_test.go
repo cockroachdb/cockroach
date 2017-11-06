@@ -24,11 +24,11 @@ import (
 
 func TestNormalizeExpr(t *testing.T) {
 	defer mockNameTypes(map[string]types.T{
-		"a": types.TypeInt,
-		"b": types.TypeInt,
-		"c": types.TypeInt,
-		"d": types.TypeBool,
-		"s": types.TypeString,
+		"a": types.Int,
+		"b": types.Int,
+		"c": types.Int,
+		"d": types.Bool,
+		"s": types.String,
 	})()
 	testData := []struct {
 		expr     string
@@ -195,7 +195,7 @@ func TestNormalizeExpr(t *testing.T) {
 		if err != nil {
 			t.Fatalf("%s: %v", d.expr, err)
 		}
-		typedExpr, err := expr.TypeCheck(nil, types.TypeAny)
+		typedExpr, err := expr.TypeCheck(nil, types.Any)
 		if err != nil {
 			t.Fatalf("%s: %v", d.expr, err)
 		}

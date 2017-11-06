@@ -637,13 +637,13 @@ func backupPlanHook(
 	}
 
 	header := sqlbase.ResultColumns{
-		{Name: "job_id", Typ: types.TypeInt},
-		{Name: "status", Typ: types.TypeString},
-		{Name: "fraction_completed", Typ: types.TypeFloat},
-		{Name: "rows", Typ: types.TypeInt},
-		{Name: "index_entries", Typ: types.TypeInt},
-		{Name: "system_records", Typ: types.TypeInt},
-		{Name: "bytes", Typ: types.TypeInt},
+		{Name: "job_id", Typ: types.Int},
+		{Name: "status", Typ: types.String},
+		{Name: "fraction_completed", Typ: types.Float},
+		{Name: "rows", Typ: types.Int},
+		{Name: "index_entries", Typ: types.Int},
+		{Name: "system_records", Typ: types.Int},
+		{Name: "bytes", Typ: types.Int},
 	}
 
 	fn := func(ctx context.Context, resultsCh chan<- parser.Datums) error {
@@ -883,12 +883,12 @@ func showBackupPlanHook(
 		return nil, nil, err
 	}
 	header := sqlbase.ResultColumns{
-		{Name: "database", Typ: types.TypeString},
-		{Name: "table", Typ: types.TypeString},
-		{Name: "start_time", Typ: types.TypeTimestamp},
-		{Name: "end_time", Typ: types.TypeTimestamp},
-		{Name: "size_bytes", Typ: types.TypeInt},
-		{Name: "rows", Typ: types.TypeInt},
+		{Name: "database", Typ: types.String},
+		{Name: "table", Typ: types.String},
+		{Name: "start_time", Typ: types.Timestamp},
+		{Name: "end_time", Typ: types.Timestamp},
+		{Name: "size_bytes", Typ: types.Int},
+		{Name: "rows", Typ: types.Int},
 	}
 	fn := func(ctx context.Context, resultsCh chan<- parser.Datums) error {
 		// TODO(dan): Move this span into sql.

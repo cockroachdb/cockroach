@@ -781,7 +781,7 @@ func (node PartitionDefault) Format(buf *bytes.Buffer, f FmtFlags) {
 }
 
 // ResolvedType implements the TypedExpr interface.
-func (PartitionDefault) ResolvedType() types.T { return types.TypeAny }
+func (PartitionDefault) ResolvedType() types.T { return types.Any }
 
 // PartitionMaxValue represents the MAXVALUE expression expression in a
 // PARTITION BY clause.
@@ -793,7 +793,7 @@ func (node PartitionMaxValue) Format(buf *bytes.Buffer, f FmtFlags) {
 }
 
 // ResolvedType implements the TypedExpr interface.
-func (PartitionMaxValue) ResolvedType() types.T { return types.TypeAny }
+func (PartitionMaxValue) ResolvedType() types.T { return types.Any }
 
 // CreateTable represents a CREATE TABLE statement.
 type CreateTable struct {

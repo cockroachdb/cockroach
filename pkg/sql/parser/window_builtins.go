@@ -111,34 +111,34 @@ type WindowFunc interface {
 // See `windowFuncHolder` in the sql package.
 var windows = map[string][]Builtin{
 	"row_number": {
-		makeWindowBuiltin(ArgTypes{}, types.TypeInt, newRowNumberWindow),
+		makeWindowBuiltin(ArgTypes{}, types.Int, newRowNumberWindow),
 	},
 	"rank": {
-		makeWindowBuiltin(ArgTypes{}, types.TypeInt, newRankWindow),
+		makeWindowBuiltin(ArgTypes{}, types.Int, newRankWindow),
 	},
 	"dense_rank": {
-		makeWindowBuiltin(ArgTypes{}, types.TypeInt, newDenseRankWindow),
+		makeWindowBuiltin(ArgTypes{}, types.Int, newDenseRankWindow),
 	},
 	"percent_rank": {
-		makeWindowBuiltin(ArgTypes{}, types.TypeFloat, newPercentRankWindow),
+		makeWindowBuiltin(ArgTypes{}, types.Float, newPercentRankWindow),
 	},
 	"cume_dist": {
-		makeWindowBuiltin(ArgTypes{}, types.TypeFloat, newCumulativeDistWindow),
+		makeWindowBuiltin(ArgTypes{}, types.Float, newCumulativeDistWindow),
 	},
 	"ntile": {
-		makeWindowBuiltin(ArgTypes{{"n", types.TypeInt}}, types.TypeInt, newNtileWindow),
+		makeWindowBuiltin(ArgTypes{{"n", types.Int}}, types.Int, newNtileWindow),
 	},
 	"lag": mergeBuiltinSlices(
 		collectBuiltins(func(t types.T) Builtin {
 			return makeWindowBuiltin(ArgTypes{{"val", t}}, t, makeLeadLagWindowConstructor(false, false, false))
 		}, types.TypesAnyNonArray...),
 		collectBuiltins(func(t types.T) Builtin {
-			return makeWindowBuiltin(ArgTypes{{"val", t}, {"n", types.TypeInt}}, t, makeLeadLagWindowConstructor(false, true, false))
+			return makeWindowBuiltin(ArgTypes{{"val", t}, {"n", types.Int}}, t, makeLeadLagWindowConstructor(false, true, false))
 		}, types.TypesAnyNonArray...),
 		// TODO(nvanbenschoten): We still have no good way to represent two parameters that
 		// can be any types but must be the same (eg. lag(T, Int, T)).
 		collectBuiltins(func(t types.T) Builtin {
-			return makeWindowBuiltin(ArgTypes{{"val", t}, {"n", types.TypeInt}, {"default", t}},
+			return makeWindowBuiltin(ArgTypes{{"val", t}, {"n", types.Int}, {"default", t}},
 				t, makeLeadLagWindowConstructor(false, true, true))
 		}, types.TypesAnyNonArray...),
 	),
@@ -147,10 +147,10 @@ var windows = map[string][]Builtin{
 			return makeWindowBuiltin(ArgTypes{{"val", t}}, t, makeLeadLagWindowConstructor(true, false, false))
 		}, types.TypesAnyNonArray...),
 		collectBuiltins(func(t types.T) Builtin {
-			return makeWindowBuiltin(ArgTypes{{"val", t}, {"n", types.TypeInt}}, t, makeLeadLagWindowConstructor(true, true, false))
+			return makeWindowBuiltin(ArgTypes{{"val", t}, {"n", types.Int}}, t, makeLeadLagWindowConstructor(true, true, false))
 		}, types.TypesAnyNonArray...),
 		collectBuiltins(func(t types.T) Builtin {
-			return makeWindowBuiltin(ArgTypes{{"val", t}, {"n", types.TypeInt}, {"default", t}},
+			return makeWindowBuiltin(ArgTypes{{"val", t}, {"n", types.Int}, {"default", t}},
 				t, makeLeadLagWindowConstructor(true, true, true))
 		}, types.TypesAnyNonArray...),
 	),
@@ -161,7 +161,7 @@ var windows = map[string][]Builtin{
 		return makeWindowBuiltin(ArgTypes{{"val", t}}, t, newLastValueWindow)
 	}, types.TypesAnyNonArray...),
 	"nth_value": collectBuiltins(func(t types.T) Builtin {
-		return makeWindowBuiltin(ArgTypes{{"val", t}, {"n", types.TypeInt}}, t, newNthValueWindow)
+		return makeWindowBuiltin(ArgTypes{{"val", t}, {"n", types.Int}}, t, newNthValueWindow)
 	}, types.TypesAnyNonArray...),
 }
 

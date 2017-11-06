@@ -153,7 +153,7 @@ func MakeColumnDefDescs(
 		col.Type.Width = int32(t.N)
 	case *parser.ArrayColType:
 		for i, e := range t.BoundsExprs {
-			te, err := parser.TypeCheckAndRequire(e, semaCtx, types.TypeInt, "array bounds")
+			te, err := parser.TypeCheckAndRequire(e, semaCtx, types.Int, "array bounds")
 			if err != nil {
 				return nil, nil, errors.Wrapf(err, "couldn't get bound %d", i)
 			}
@@ -1116,7 +1116,7 @@ func DecodeTableKey(
 	var rkey []byte
 	var err error
 	switch valType {
-	case types.TypeBool:
+	case types.Bool:
 		var i int64
 		if dir == encoding.Ascending {
 			rkey, i, err = encoding.DecodeVarintAscending(key)
@@ -1126,7 +1126,7 @@ func DecodeTableKey(
 		// No need to chunk allocate DBool as MakeDBool returns either
 		// parser.DBoolTrue or parser.DBoolFalse.
 		return parser.MakeDBool(parser.DBool(i != 0)), rkey, err
-	case types.TypeInt:
+	case types.Int:
 		var i int64
 		if dir == encoding.Ascending {
 			rkey, i, err = encoding.DecodeVarintAscending(key)
@@ -1134,7 +1134,7 @@ func DecodeTableKey(
 			rkey, i, err = encoding.DecodeVarintDescending(key)
 		}
 		return a.NewDInt(parser.DInt(i)), rkey, err
-	case types.TypeFloat:
+	case types.Float:
 		var f float64
 		if dir == encoding.Ascending {
 			rkey, f, err = encoding.DecodeFloatAscending(key)
@@ -1142,7 +1142,7 @@ func DecodeTableKey(
 			rkey, f, err = encoding.DecodeFloatDescending(key)
 		}
 		return a.NewDFloat(parser.DFloat(f)), rkey, err
-	case types.TypeDecimal:
+	case types.Decimal:
 		var d apd.Decimal
 		if dir == encoding.Ascending {
 			rkey, d, err = encoding.DecodeDecimalAscending(key, nil)
@@ -1151,7 +1151,7 @@ func DecodeTableKey(
 		}
 		dd := a.NewDDecimal(parser.DDecimal{Decimal: d})
 		return dd, rkey, err
-	case types.TypeString:
+	case types.String:
 		var r string
 		if dir == encoding.Ascending {
 			rkey, r, err = encoding.DecodeUnsafeStringAscending(key, nil)
@@ -1159,7 +1159,7 @@ func DecodeTableKey(
 			rkey, r, err = encoding.DecodeUnsafeStringDescending(key, nil)
 		}
 		return a.NewDString(parser.DString(r)), rkey, err
-	case types.TypeName:
+	case types.Name:
 		var r string
 		if dir == encoding.Ascending {
 			rkey, r, err = encoding.DecodeUnsafeStringAscending(key, nil)
@@ -1167,7 +1167,7 @@ func DecodeTableKey(
 			rkey, r, err = encoding.DecodeUnsafeStringDescending(key, nil)
 		}
 		return a.NewDName(parser.DString(r)), rkey, err
-	case types.TypeBytes:
+	case types.Bytes:
 		var r []byte
 		if dir == encoding.Ascending {
 			rkey, r, err = encoding.DecodeBytesAscending(key, nil)
@@ -1175,7 +1175,7 @@ func DecodeTableKey(
 			rkey, r, err = encoding.DecodeBytesDescending(key, nil)
 		}
 		return a.NewDBytes(parser.DBytes(r)), rkey, err
-	case types.TypeDate:
+	case types.Date:
 		var t int64
 		if dir == encoding.Ascending {
 			rkey, t, err = encoding.DecodeVarintAscending(key)
@@ -1183,7 +1183,7 @@ func DecodeTableKey(
 			rkey, t, err = encoding.DecodeVarintDescending(key)
 		}
 		return a.NewDDate(parser.DDate(t)), rkey, err
-	case types.TypeTimestamp:
+	case types.Timestamp:
 		var t time.Time
 		if dir == encoding.Ascending {
 			rkey, t, err = encoding.DecodeTimeAscending(key)
@@ -1191,7 +1191,7 @@ func DecodeTableKey(
 			rkey, t, err = encoding.DecodeTimeDescending(key)
 		}
 		return a.NewDTimestamp(parser.DTimestamp{Time: t}), rkey, err
-	case types.TypeTimestampTZ:
+	case types.TimestampTZ:
 		var t time.Time
 		if dir == encoding.Ascending {
 			rkey, t, err = encoding.DecodeTimeAscending(key)
@@ -1199,7 +1199,7 @@ func DecodeTableKey(
 			rkey, t, err = encoding.DecodeTimeDescending(key)
 		}
 		return a.NewDTimestampTZ(parser.DTimestampTZ{Time: t}), rkey, err
-	case types.TypeInterval:
+	case types.Interval:
 		var d duration.Duration
 		if dir == encoding.Ascending {
 			rkey, d, err = encoding.DecodeDurationAscending(key)
@@ -1207,7 +1207,7 @@ func DecodeTableKey(
 			rkey, d, err = encoding.DecodeDurationDescending(key)
 		}
 		return a.NewDInterval(parser.DInterval{Duration: d}), rkey, err
-	case types.TypeUUID:
+	case types.UUID:
 		var r []byte
 		if dir == encoding.Ascending {
 			rkey, r, err = encoding.DecodeBytesAscending(key, nil)
@@ -1219,7 +1219,7 @@ func DecodeTableKey(
 		}
 		u, err := uuid.FromBytes(r)
 		return a.NewDUuid(parser.DUuid{UUID: u}), rkey, err
-	case types.TypeINet:
+	case types.INet:
 		var r []byte
 		if dir == encoding.Ascending {
 			rkey, r, err = encoding.DecodeBytesAscending(key, nil)
@@ -1232,7 +1232,7 @@ func DecodeTableKey(
 		var ipAddr ipaddr.IPAddr
 		_, err := ipAddr.FromBuffer(r)
 		return a.NewDIPAddr(parser.DIPAddr{IPAddr: ipAddr}), rkey, err
-	case types.TypeOid:
+	case types.Oid:
 		var i int64
 		if dir == encoding.Ascending {
 			rkey, i, err = encoding.DecodeVarintAscending(key)
@@ -1353,19 +1353,19 @@ func decodeArray(a *DatumAlloc, elementType types.T, b []byte) (parser.Datum, []
 // not having one in the first place).
 func decodeUntaggedDatum(a *DatumAlloc, t types.T, buf []byte) (parser.Datum, []byte, error) {
 	switch t {
-	case types.TypeInt:
+	case types.Int:
 		b, i, err := encoding.DecodeUntaggedIntValue(buf)
 		if err != nil {
 			return nil, b, err
 		}
 		return a.NewDInt(parser.DInt(i)), b, nil
-	case types.TypeString, types.TypeName:
+	case types.String, types.Name:
 		b, data, err := encoding.DecodeUntaggedBytesValue(buf)
 		if err != nil {
 			return nil, b, err
 		}
 		return a.NewDString(parser.DString(data)), b, nil
-	case types.TypeBool:
+	case types.Bool:
 		// The value of booleans are encoded in their tag, so we don't have an
 		// "Untagged" version of this function.
 		b, data, err := encoding.DecodeBoolValue(buf)
@@ -1374,52 +1374,52 @@ func decodeUntaggedDatum(a *DatumAlloc, t types.T, buf []byte) (parser.Datum, []
 		}
 		d := parser.DBool(data)
 		return &d, b, nil
-	case types.TypeFloat:
+	case types.Float:
 		b, data, err := encoding.DecodeUntaggedFloatValue(buf)
 		if err != nil {
 			return nil, b, err
 		}
 		return a.NewDFloat(parser.DFloat(data)), b, nil
-	case types.TypeDecimal:
+	case types.Decimal:
 		b, data, err := encoding.DecodeUntaggedDecimalValue(buf)
 		if err != nil {
 			return nil, b, err
 		}
 		return a.NewDDecimal(parser.DDecimal{Decimal: data}), b, nil
-	case types.TypeBytes:
+	case types.Bytes:
 		b, data, err := encoding.DecodeUntaggedBytesValue(buf)
 		if err != nil {
 			return nil, b, err
 		}
 		return a.NewDBytes(parser.DBytes(data)), b, nil
-	case types.TypeDate:
+	case types.Date:
 		b, data, err := encoding.DecodeUntaggedIntValue(buf)
 		if err != nil {
 			return nil, b, err
 		}
 		return a.NewDDate(parser.DDate(data)), b, nil
-	case types.TypeTimestamp:
+	case types.Timestamp:
 		b, data, err := encoding.DecodeUntaggedTimeValue(buf)
 		if err != nil {
 			return nil, b, err
 		}
 		return a.NewDTimestamp(parser.DTimestamp{Time: data}), b, nil
-	case types.TypeTimestampTZ:
+	case types.TimestampTZ:
 		b, data, err := encoding.DecodeUntaggedTimeValue(buf)
 		if err != nil {
 			return nil, b, err
 		}
 		return a.NewDTimestampTZ(parser.DTimestampTZ{Time: data}), b, nil
-	case types.TypeInterval:
+	case types.Interval:
 		b, data, err := encoding.DecodeUntaggedDurationValue(buf)
 		return a.NewDInterval(parser.DInterval{Duration: data}), b, err
-	case types.TypeUUID:
+	case types.UUID:
 		b, data, err := encoding.DecodeUntaggedUUIDValue(buf)
 		return a.NewDUuid(parser.DUuid{UUID: data}), b, err
-	case types.TypeINet:
+	case types.INet:
 		b, data, err := encoding.DecodeUntaggedIPAddrValue(buf)
 		return a.NewDIPAddr(parser.DIPAddr{IPAddr: data}), b, err
-	case types.TypeOid:
+	case types.Oid:
 		b, data, err := encoding.DecodeUntaggedIntValue(buf)
 		return a.NewDOid(parser.MakeDOid(parser.DInt(data))), b, err
 	default:
@@ -1560,7 +1560,7 @@ func EncodeSecondaryIndexes(
 // with the type requested by the column. If the value is a
 // placeholder, the type of the placeholder gets populated.
 func CheckColumnType(col ColumnDescriptor, typ types.T, pmap *parser.PlaceholderInfo) error {
-	if typ == types.TypeNull {
+	if typ == types.Null {
 		return nil
 	}
 
@@ -1773,25 +1773,25 @@ func encodeArray(d *parser.DArray, scratch []byte) ([]byte, error) {
 
 func parserTypeToEncodingType(t types.T) (encoding.Type, error) {
 	switch t {
-	case types.TypeInt:
+	case types.Int:
 		return encoding.Int, nil
-	case types.TypeOid:
+	case types.Oid:
 		return encoding.Int, nil
-	case types.TypeFloat:
+	case types.Float:
 		return encoding.Float, nil
-	case types.TypeDecimal:
+	case types.Decimal:
 		return encoding.Decimal, nil
-	case types.TypeBytes, types.TypeString, types.TypeName:
+	case types.Bytes, types.String, types.Name:
 		return encoding.Bytes, nil
-	case types.TypeTimestamp, types.TypeTimestampTZ, types.TypeDate:
+	case types.Timestamp, types.TimestampTZ, types.Date:
 		return encoding.Time, nil
-	case types.TypeInterval:
+	case types.Interval:
 		return encoding.Duration, nil
-	case types.TypeBool:
+	case types.Bool:
 		return encoding.True, nil
-	case types.TypeUUID:
+	case types.UUID:
 		return encoding.UUID, nil
-	case types.TypeINet:
+	case types.INet:
 		return encoding.IPAddr, nil
 	default:
 		if t.FamilyEqual(types.FamCollatedString) {

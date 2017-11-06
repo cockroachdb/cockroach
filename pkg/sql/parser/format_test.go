@@ -196,7 +196,7 @@ func TestFormatExpr(t *testing.T) {
 				t.Fatal(err)
 			}
 			ctx := MakeSemaContext(false)
-			typeChecked, err := TypeCheck(expr, &ctx, types.TypeAny)
+			typeChecked, err := TypeCheck(expr, &ctx, types.Any)
 			if err != nil {
 				t.Fatal(err)
 			}

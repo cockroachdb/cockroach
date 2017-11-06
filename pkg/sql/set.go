@@ -75,7 +75,7 @@ func (p *planner) SetVar(ctx context.Context, n *parser.SetVar) (planNode, error
 
 				var dummyHelper parser.IndexedVarHelper
 				typedValue, err := p.analyzeExpr(
-					ctx, expr, nil, dummyHelper, types.TypeString, false, "SET SESSION "+name)
+					ctx, expr, nil, dummyHelper, types.String, false, "SET SESSION "+name)
 				if err != nil {
 					return nil, err
 				}
@@ -159,17 +159,17 @@ func (p *planner) SetClusterSetting(
 			var requiredType types.T
 			switch setting.(type) {
 			case *settings.StringSetting, *settings.StateMachineSetting, *settings.ByteSizeSetting:
-				requiredType = types.TypeString
+				requiredType = types.String
 			case *settings.BoolSetting:
-				requiredType = types.TypeBool
+				requiredType = types.Bool
 			case *settings.IntSetting:
-				requiredType = types.TypeInt
+				requiredType = types.Int
 			case *settings.FloatSetting:
-				requiredType = types.TypeFloat
+				requiredType = types.Float
 			case *settings.EnumSetting:
-				requiredType = types.TypeAny
+				requiredType = types.Any
 			case *settings.DurationSetting:
-				requiredType = types.TypeInterval
+				requiredType = types.Interval
 			default:
 				return nil, errors.Errorf("unsupported setting type %T", setting)
 			}

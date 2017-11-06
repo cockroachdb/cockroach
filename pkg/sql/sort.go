@@ -195,7 +195,7 @@ func (p *planner) orderBy(
 		// to fabricate an intermediate renderNode to add the new render.
 		if index == -1 && s != nil {
 			cols, exprs, hasStar, err := p.computeRenderAllowingStars(
-				ctx, parser.SelectExpr{Expr: expr}, types.TypeAny,
+				ctx, parser.SelectExpr{Expr: expr}, types.Any,
 				s.sourceInfo, s.ivarHelper, autoGenerateRenderOutputName)
 			if err != nil {
 				return nil, err

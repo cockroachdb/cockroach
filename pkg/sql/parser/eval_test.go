@@ -870,7 +870,7 @@ func TestEval(t *testing.T) {
 			t.Fatalf("%s: %v", d.expr, err)
 		}
 		// expr.TypeCheck to avoid constant folding.
-		typedExpr, err := expr.TypeCheck(nil, types.TypeAny)
+		typedExpr, err := expr.TypeCheck(nil, types.Any)
 		if err != nil {
 			t.Fatalf("%s: %v", d.expr, err)
 		}
@@ -974,7 +974,7 @@ func TestTimeConversion(t *testing.T) {
 			t.Errorf("%s: %v", exprStr, err)
 			continue
 		}
-		typedExpr, err := expr.TypeCheck(nil, types.TypeTimestamp)
+		typedExpr, err := expr.TypeCheck(nil, types.Timestamp)
 		if err != nil {
 			t.Errorf("%s: %v", exprStr, err)
 			continue
@@ -1013,7 +1013,7 @@ func TestTimeConversion(t *testing.T) {
 			t.Errorf("%s: %v", exprStr, err)
 			continue
 		}
-		typedExpr, err = expr.TypeCheck(nil, types.TypeTimestamp)
+		typedExpr, err = expr.TypeCheck(nil, types.Timestamp)
 		if err != nil {
 			t.Errorf("%s: %v", exprStr, err)
 			continue
@@ -1105,7 +1105,7 @@ func TestEvalError(t *testing.T) {
 		if err != nil {
 			t.Fatalf("%s: %v", d.expr, err)
 		}
-		typedExpr, err := TypeCheck(expr, nil, types.TypeAny)
+		typedExpr, err := TypeCheck(expr, nil, types.Any)
 		if err == nil {
 			evalCtx := NewTestingEvalContext()
 			defer evalCtx.Stop(context.Background())
@@ -1150,7 +1150,7 @@ func TestEvalComparisonExprCaching(t *testing.T) {
 		ctx := NewTestingEvalContext()
 		defer ctx.Mon.Stop(context.Background())
 		ctx.ReCache = NewRegexpCache(8)
-		typedExpr, err := TypeCheck(expr, nil, types.TypeAny)
+		typedExpr, err := TypeCheck(expr, nil, types.Any)
 		if err != nil {
 			t.Fatalf("%v: %v", d, err)
 		}
@@ -1230,7 +1230,7 @@ func TestCastToCollatedString(t *testing.T) {
 	for _, cas := range cases {
 		t.Run("", func(t *testing.T) {
 			expr := &CastExpr{Expr: NewDString("test"), Type: &cas.typ, syntaxMode: castShort}
-			typedexpr, err := expr.TypeCheck(&SemaContext{}, types.TypeAny)
+			typedexpr, err := expr.TypeCheck(&SemaContext{}, types.Any)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -1272,7 +1272,7 @@ func benchmarkLike(b *testing.B, ctx *EvalContext, caseInsensitive bool) {
 	if caseInsensitive {
 		op = ILike
 	}
-	likeFn, _ := CmpOps[op].lookupImpl(types.TypeString, types.TypeString)
+	likeFn, _ := CmpOps[op].lookupImpl(types.String, types.String)
 	iter := func() {
 		for _, p := range benchmarkLikePatterns {
 			if _, err := likeFn.fn(ctx, NewDString("test"), NewDString(p)); err != nil {

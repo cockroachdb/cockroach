@@ -80,11 +80,11 @@ func (p *Parser) Parse(sql string) (stmts StatementList, err error) {
 // their inferred types in the provided context. The optional desired parameter can
 // be used to hint the desired type for the root of the resulting typed expression
 // tree. Like with Expr.TypeCheck, it is not valid to provide a nil desired
-// type. Instead, call it with the wildcard type types.TypeAny if no specific type is
+// type. Instead, call it with the wildcard type types.Any if no specific type is
 // desired.
 func TypeCheck(expr Expr, ctx *SemaContext, desired types.T) (TypedExpr, error) {
 	if desired == nil {
-		panic("the desired type for parser.TypeCheck cannot be nil, use types.TypeAny instead")
+		panic("the desired type for parser.TypeCheck cannot be nil, use types.Any instead")
 	}
 
 	expr, err := foldConstantLiterals(expr)
@@ -105,7 +105,7 @@ func TypeCheckAndRequire(
 	if err != nil {
 		return nil, err
 	}
-	if typ := typedExpr.ResolvedType(); !(typ.Equivalent(required) || typ == types.TypeNull) {
+	if typ := typedExpr.ResolvedType(); !(typ.Equivalent(required) || typ == types.Null) {
 		return typedExpr, pgerror.NewErrorf(
 			pgerror.CodeDatatypeMismatchError, "argument of %s must be type %s, not type %s", op, required, typ)
 	}
@@ -212,29 +212,29 @@ func ParseStringAs(t types.T, s string, evalCtx *EvalContext) (Datum, error) {
 	var d Datum
 	var err error
 	switch t {
-	case types.TypeBool:
+	case types.Bool:
 		d, err = ParseDBool(s)
-	case types.TypeBytes:
+	case types.Bytes:
 		d = NewDBytes(DBytes(s))
-	case types.TypeDate:
+	case types.Date:
 		d, err = ParseDDate(s, evalCtx.GetLocation())
-	case types.TypeDecimal:
+	case types.Decimal:
 		d, err = ParseDDecimal(s)
-	case types.TypeFloat:
+	case types.Float:
 		d, err = ParseDFloat(s)
-	case types.TypeInt:
+	case types.Int:
 		d, err = ParseDInt(s)
-	case types.TypeInterval:
+	case types.Interval:
 		d, err = ParseDInterval(s)
-	case types.TypeString:
+	case types.String:
 		d = NewDString(s)
-	case types.TypeTimestamp:
+	case types.Timestamp:
 		d, err = ParseDTimestamp(s, time.Microsecond)
-	case types.TypeTimestampTZ:
+	case types.TimestampTZ:
 		d, err = ParseDTimestampTZ(s, evalCtx.GetLocation(), time.Microsecond)
-	case types.TypeUUID:
+	case types.UUID:
 		d, err = ParseDUuidFromString(s)
-	case types.TypeINet:
+	case types.INet:
 		d, err = ParseDIPAddrFromINetString(s)
 	default:
 		if a, ok := t.(types.TArray); ok {

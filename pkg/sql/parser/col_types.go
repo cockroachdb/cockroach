@@ -471,17 +471,17 @@ func (node *OidColType) Format(buf *bytes.Buffer, f FmtFlags) {
 func oidColTypeToType(ct *OidColType) types.T {
 	switch ct {
 	case oidColTypeOid:
-		return types.TypeOid
+		return types.Oid
 	case oidColTypeRegClass:
-		return types.TypeRegClass
+		return types.RegClass
 	case oidColTypeRegNamespace:
-		return types.TypeRegNamespace
+		return types.RegNamespace
 	case oidColTypeRegProc:
-		return types.TypeRegProc
+		return types.RegProc
 	case oidColTypeRegProcedure:
-		return types.TypeRegProcedure
+		return types.RegProcedure
 	case oidColTypeRegType:
-		return types.TypeRegType
+		return types.RegType
 	default:
 		panic(fmt.Sprintf("unexpected *OidColType: %v", ct))
 	}
@@ -489,17 +489,17 @@ func oidColTypeToType(ct *OidColType) types.T {
 
 func oidTypeToColType(t types.T) *OidColType {
 	switch t {
-	case types.TypeOid:
+	case types.Oid:
 		return oidColTypeOid
-	case types.TypeRegClass:
+	case types.RegClass:
 		return oidColTypeRegClass
-	case types.TypeRegNamespace:
+	case types.RegNamespace:
 		return oidColTypeRegNamespace
-	case types.TypeRegProc:
+	case types.RegProc:
 		return oidColTypeRegProc
-	case types.TypeRegProcedure:
+	case types.RegProcedure:
 		return oidColTypeRegProcedure
-	case types.TypeRegType:
+	case types.RegType:
 		return oidColTypeRegType
 	default:
 		panic(fmt.Sprintf("unexpected type: %v", t))
@@ -530,40 +530,40 @@ func (node *OidColType) String() string            { return AsString(node) }
 // normalization.
 func DatumTypeToColumnType(t types.T) (ColumnType, error) {
 	switch t {
-	case types.TypeBool:
+	case types.Bool:
 		return boolColTypeBool, nil
-	case types.TypeInt:
+	case types.Int:
 		return intColTypeInt, nil
-	case types.TypeFloat:
+	case types.Float:
 		return floatColTypeFloat, nil
-	case types.TypeDecimal:
+	case types.Decimal:
 		return decimalColTypeDecimal, nil
-	case types.TypeTimestamp:
+	case types.Timestamp:
 		return timestampColTypeTimestamp, nil
-	case types.TypeTimestampTZ:
+	case types.TimestampTZ:
 		return timestampTzColTypeTimestampWithTZ, nil
-	case types.TypeInterval:
+	case types.Interval:
 		return intervalColTypeInterval, nil
-	case types.TypeJSON:
+	case types.JSON:
 		return jsonColType, nil
-	case types.TypeUUID:
+	case types.UUID:
 		return uuidColTypeUUID, nil
-	case types.TypeINet:
+	case types.INet:
 		return ipnetColTypeINet, nil
-	case types.TypeDate:
+	case types.Date:
 		return dateColTypeDate, nil
-	case types.TypeString:
+	case types.String:
 		return stringColTypeString, nil
-	case types.TypeName:
+	case types.Name:
 		return nameColTypeName, nil
-	case types.TypeBytes:
+	case types.Bytes:
 		return bytesColTypeBytes, nil
-	case types.TypeOid,
-		types.TypeRegClass,
-		types.TypeRegNamespace,
-		types.TypeRegProc,
-		types.TypeRegProcedure,
-		types.TypeRegType:
+	case types.Oid,
+		types.RegClass,
+		types.RegNamespace,
+		types.RegProc,
+		types.RegProcedure,
+		types.RegType:
 		return oidTypeToColType(t), nil
 	}
 
@@ -589,39 +589,39 @@ func DatumTypeToColumnType(t types.T) (ColumnType, error) {
 func CastTargetToDatumType(t CastTargetType) types.T {
 	switch ct := t.(type) {
 	case *BoolColType:
-		return types.TypeBool
+		return types.Bool
 	case *IntColType:
-		return types.TypeInt
+		return types.Int
 	case *FloatColType:
-		return types.TypeFloat
+		return types.Float
 	case *DecimalColType:
-		return types.TypeDecimal
+		return types.Decimal
 	case *StringColType:
-		return types.TypeString
+		return types.String
 	case *NameColType:
-		return types.TypeName
+		return types.Name
 	case *BytesColType:
-		return types.TypeBytes
+		return types.Bytes
 	case *DateColType:
-		return types.TypeDate
+		return types.Date
 	case *TimestampColType:
-		return types.TypeTimestamp
+		return types.Timestamp
 	case *TimestampTZColType:
-		return types.TypeTimestampTZ
+		return types.TimestampTZ
 	case *IntervalColType:
-		return types.TypeInterval
+		return types.Interval
 	case *JSONColType:
-		return types.TypeJSON
+		return types.JSON
 	case *UUIDColType:
-		return types.TypeUUID
+		return types.UUID
 	case *IPAddrColType:
-		return types.TypeINet
+		return types.INet
 	case *CollatedStringColType:
 		return types.TCollatedString{Locale: ct.Locale}
 	case *ArrayColType:
 		return types.TArray{Typ: CastTargetToDatumType(ct.ParamType)}
 	case *VectorColType:
-		return types.TypeIntVector
+		return types.IntVector
 	case *OidColType:
 		return oidColTypeToType(ct)
 	default:

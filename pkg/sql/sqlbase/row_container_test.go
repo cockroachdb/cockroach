@@ -34,7 +34,7 @@ func TestRowContainer(t *testing.T) {
 			for _, numPops := range []int{0, 1, 2, numRows / 3, numRows / 2} {
 				resCol := make(ResultColumns, numCols)
 				for i := range resCol {
-					resCol[i] = ResultColumn{Typ: types.TypeInt}
+					resCol[i] = ResultColumn{Typ: types.Int}
 				}
 				m := mon.MakeUnlimitedMonitor(
 					context.Background(), "test", mon.MemoryResource, nil, nil, math.MaxInt64,

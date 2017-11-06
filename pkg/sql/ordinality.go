@@ -64,7 +64,7 @@ func (p *planner) wrapOrdinality(ds planDataSource) planDataSource {
 	newColIdx := len(res.columns) - 1
 	res.columns[newColIdx] = sqlbase.ResultColumn{
 		Name: "ordinality",
-		Typ:  types.TypeInt,
+		Typ:  types.Int,
 	}
 
 	// Extend the dataSourceInfo with information about the
