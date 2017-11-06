@@ -19,10 +19,11 @@ import (
 	"strings"
 	"time"
 
+	"github.com/pkg/errors"
 	"golang.org/x/text/language"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 )
 
 // SemaContext defines the context in which to perform semantic analysis on an
@@ -285,11 +286,11 @@ func (expr *IndirectionExpr) TypeCheck(ctx *SemaContext, desired Type) (TypedExp
 		t.Begin = beginExpr
 	}
 
-	subExpr, err := expr.Expr.TypeCheck(ctx, TArray{desired})
+	subExpr, err := expr.Expr.TypeCheck(ctx, TArray{Typ: desired})
 	if err != nil {
 		return nil, err
 	}
-	typ := UnwrapType(subExpr.ResolvedType())
+	typ := types.UnwrapType(subExpr.ResolvedType())
 	arrType, ok := typ.(TArray)
 	if !ok {
 		return nil, pgerror.NewErrorf(pgerror.CodeDatatypeMismatchError, "cannot subscript type %s because it is not an array", typ)
@@ -320,14 +321,13 @@ func (expr *CollateExpr) TypeCheck(ctx *SemaContext, desired Type) (TypedExpr, e
 	if err != nil {
 		return nil, err
 	}
-	switch t := subExpr.ResolvedType().(type) {
-	case tString, TCollatedString:
+	t := subExpr.ResolvedType()
+	if types.IsStringType(t) {
 		expr.Expr = subExpr
-		expr.typ = TCollatedString{expr.Locale}
+		expr.typ = TCollatedString{Locale: expr.Locale}
 		return expr, nil
-	default:
-		return nil, pgerror.NewErrorf(pgerror.CodeDatatypeMismatchError, "incompatible type for COLLATE: %s", t)
 	}
+	return nil, pgerror.NewErrorf(pgerror.CodeDatatypeMismatchError, "incompatible type for COLLATE: %s", t)
 }
 
 // TypeCheck implements the Expr interface.
@@ -768,7 +768,7 @@ func (expr *Array) TypeCheck(ctx *SemaContext, desired Type) (TypedExpr, error) 
 		if desiredParam == TypeAny {
 			return nil, errAmbiguousArrayType
 		}
-		expr.typ = TArray{desiredParam}
+		expr.typ = TArray{Typ: desiredParam}
 		return expr, nil
 	}
 
@@ -777,7 +777,7 @@ func (expr *Array) TypeCheck(ctx *SemaContext, desired Type) (TypedExpr, error) 
 		return nil, err
 	}
 
-	expr.typ = TArray{typ}
+	expr.typ = TArray{Typ: typ}
 	for i := range typedSubExprs {
 		expr.Exprs[i] = typedSubExprs[i]
 	}
@@ -796,7 +796,7 @@ func (expr *ArrayFlatten) TypeCheck(ctx *SemaContext, desired Type) (TypedExpr, 
 		return nil, err
 	}
 	expr.Subquery = subqueryTyped
-	expr.typ = TArray{subqueryTyped.ResolvedType()}
+	expr.typ = TArray{Typ: subqueryTyped.ResolvedType()}
 	return expr, nil
 }
 
@@ -1017,7 +1017,7 @@ func typeCheckComparisonOpWithSubOperator(
 		for i, typedExpr := range typedSubExprs[1:] {
 			array.Exprs[i] = typedExpr
 		}
-		array.typ = TArray{retType}
+		array.typ = TArray{Typ: retType}
 
 		rightTyped = array
 		cmpTypeRight = retType
@@ -1048,7 +1048,7 @@ func typeCheckComparisonOpWithSubOperator(
 			// If right is an sql.subquery Expr, it should already be typed.
 			// TODO(richardwu): If right is a subquery, we should really
 			// propagate the left type as a desired type for the result column.
-			rightTyped, err = right.TypeCheck(ctx, TArray{cmpTypeLeft})
+			rightTyped, err = right.TypeCheck(ctx, TArray{Typ: cmpTypeLeft})
 			if err != nil {
 				return nil, nil, CmpOp{}, err
 			}
@@ -1059,7 +1059,7 @@ func typeCheckComparisonOpWithSubOperator(
 			return leftTyped, rightTyped, CmpOp{}, nil
 		}
 
-		switch rightUnwrapped := UnwrapType(rightReturn).(type) {
+		switch rightUnwrapped := types.UnwrapType(rightReturn).(type) {
 		case TArray:
 			cmpTypeRight = rightUnwrapped.Typ
 		case TTuple:
