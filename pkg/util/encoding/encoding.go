@@ -660,6 +660,21 @@ func EncodeNotNullAscending(b []byte) []byte {
 	return append(b, encodedNotNull)
 }
 
+// EncodeArrayAscending encodes a value used to signify membership of an array for JSON objects.
+func EncodeArrayAscending(b []byte) []byte {
+	return append(b, byte(Array))
+}
+
+// EncodeTrueAscending encodes the boolean value true for use with JSON inverted indexes.
+func EncodeTrueAscending(b []byte) []byte {
+	return append(b, byte(True))
+}
+
+// EncodeFalseAscending encodes the boolean value false for use with JSON inverted indexes.
+func EncodeFalseAscending(b []byte) []byte {
+	return append(b, byte(False))
+}
+
 // EncodeNotNullDescending is the descending equivalent of EncodeNotNullAscending.
 func EncodeNotNullDescending(b []byte) []byte {
 	return append(b, encodedNotNullDesc)
