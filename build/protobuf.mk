@@ -21,7 +21,6 @@ NATIVE_ROOT := $(LIBROACH_SRC_DIR)/protos
 GITHUB_ROOT := $(REPO_ROOT)/vendor/github.com
 
 GOGO_PROTOBUF_PACKAGE := github.com/gogo/protobuf
-GOGO_PROTOBUF_TYPES_PACKAGE := $(GOGO_PROTOBUF_PACKAGE)/types
 GOGO_PROTOBUF_PATH := $(GITHUB_ROOT)/../$(GOGO_PROTOBUF_PACKAGE)
 PROTOBUF_PATH  := $(GOGO_PROTOBUF_PATH)/protobuf
 
@@ -33,7 +32,6 @@ COREOS_PATH := $(GITHUB_ROOT)/coreos
 COREOS_RAFT_PROTOS := $(addprefix $(COREOS_PATH)/etcd/raft/, $(sort $(shell git -C $(COREOS_PATH)/etcd/raft ls-files --exclude-standard --cached --others -- '*.proto')))
 
 GRPC_GATEWAY_PACKAGE := github.com/grpc-ecosystem/grpc-gateway
-GRPC_GATEWAY_PLUGIN  := $(LOCAL_BIN)/protoc-gen-grpc-gateway
 GRPC_GATEWAY_GOOGLEAPIS_PACKAGE := $(GRPC_GATEWAY_PACKAGE)/third_party/googleapis
 GRPC_GATEWAY_GOOGLEAPIS_PATH := $(GITHUB_ROOT)/../$(GRPC_GATEWAY_GOOGLEAPIS_PACKAGE)
 
