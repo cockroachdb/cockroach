@@ -77,7 +77,7 @@ func getResultRows(rows *gosql.Rows) (results []scrubResult, err error) {
 // client. This causes a missing index entry error as the row is missing
 // the expected secondary index k/v.
 func TestScrubIndexMissingIndexEntry(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	s, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.TODO())
 
@@ -149,7 +149,7 @@ INSERT INTO t.test VALUES (10, 20);
 // this an index entry is generated and inserted. This creates a
 // dangling index error as the corresponding primary k/v is not equal.
 func TestScrubIndexDanglingIndexReference(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	s, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.TODO())
 
@@ -218,7 +218,7 @@ CREATE INDEX secondary ON t.test (v);
 // by its STORING values. To test this, a row's underlying secondary
 // index k/v is updated using the KV client to have a different value.
 func TestScrubIndexCatchesStoringMismatch(t *testing.T) {
-	defer leaktest.AfterTest(t)
+	defer leaktest.AfterTest(t)()
 	s, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.TODO())
 
