@@ -596,11 +596,11 @@ func (*PartitioningDescriptor_List) Descriptor() ([]byte, []int) {
 
 // Range represents a range partitioning, which maps ranges of tuples to
 // partitions by specifying exclusive upper bounds. The range partitions in a
-// PartitioningDescriptor are required be sorted by values_less_than.
+// PartitioningDescriptor are required be sorted by UpperBound.
 type PartitioningDescriptor_Range struct {
 	// Name is the partition name.
 	Name string `protobuf:"bytes,1,opt,name=name" json:"name"`
-	// UpperBound is exclusive upper bound of this range partition. It is
+	// UpperBound is the exclusive upper bound of this range partition. It is
 	// encoded with the EncDatum value encoding. MAXVALUE is encoded as NOT NULL.
 	UpperBound []byte `protobuf:"bytes,2,opt,name=upper_bound,json=upperBound" json:"upper_bound,omitempty"`
 }
