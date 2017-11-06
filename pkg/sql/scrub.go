@@ -42,14 +42,14 @@ func (p *planner) Scrub(ctx context.Context, n *parser.Scrub) (planNode, error) 
 }
 
 var scrubColumns = sqlbase.ResultColumns{
-	{Name: "job_uuid", Typ: types.TypeUUID},
-	{Name: "error_type", Typ: types.TypeString},
-	{Name: "database", Typ: types.TypeString},
-	{Name: "table", Typ: types.TypeString},
-	{Name: "primary_key", Typ: types.TypeString},
-	{Name: "timestamp", Typ: types.TypeTimestamp},
-	{Name: "repaired", Typ: types.TypeBool},
-	{Name: "details", Typ: types.TypeString},
+	{Name: "job_uuid", Typ: types.UUID},
+	{Name: "error_type", Typ: types.String},
+	{Name: "database", Typ: types.String},
+	{Name: "table", Typ: types.String},
+	{Name: "primary_key", Typ: types.String},
+	{Name: "timestamp", Typ: types.Timestamp},
+	{Name: "repaired", Typ: types.Bool},
+	{Name: "details", Typ: types.String},
 }
 
 func (n *scrubNode) Start(params runParams) error {

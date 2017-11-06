@@ -342,7 +342,7 @@ func isDatabaseVisible(dbName, prefix, user string) bool {
 // string and returns a function that can be called to get the string value
 // during (planNode).Start.
 func (p *planner) TypeAsString(e parser.Expr, op string) (func() (string, error), error) {
-	typedE, err := parser.TypeCheckAndRequire(e, &p.semaCtx, types.TypeString, op)
+	typedE, err := parser.TypeCheckAndRequire(e, &p.semaCtx, types.String, op)
 	if err != nil {
 		return nil, err
 	}
@@ -384,7 +384,7 @@ func (p *planner) TypeAsStringOpts(
 		if !takesValue {
 			return nil, errors.Errorf("option %q does not take a value", k)
 		}
-		r, err := parser.TypeCheckAndRequire(opt.Value, &p.semaCtx, types.TypeString, k)
+		r, err := parser.TypeCheckAndRequire(opt.Value, &p.semaCtx, types.String, k)
 		if err != nil {
 			return nil, err
 		}
@@ -420,7 +420,7 @@ func (p *planner) TypeAsStringArray(
 ) (func() ([]string, error), error) {
 	typedExprs := make([]parser.TypedExpr, len(exprs))
 	for i := range exprs {
-		typedE, err := parser.TypeCheckAndRequire(exprs[i], &p.semaCtx, types.TypeString, op)
+		typedE, err := parser.TypeCheckAndRequire(exprs[i], &p.semaCtx, types.String, op)
 		if err != nil {
 			return nil, err
 		}

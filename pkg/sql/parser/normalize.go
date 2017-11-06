@@ -96,7 +96,7 @@ func (expr *UnaryExpr) normalize(v *normalizeVisitor) TypedExpr {
 		return val
 	case UnaryMinus:
 		// -0 -> 0 (except for float which has negative zero)
-		if val.ResolvedType() != types.TypeFloat && IsNumericZero(val) {
+		if val.ResolvedType() != types.Float && IsNumericZero(val) {
 			return val
 		}
 		switch b := val.(type) {

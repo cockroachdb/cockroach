@@ -1017,13 +1017,13 @@ func restore(
 }
 
 var restoreHeader = sqlbase.ResultColumns{
-	{Name: "job_id", Typ: types.TypeInt},
-	{Name: "status", Typ: types.TypeString},
-	{Name: "fraction_completed", Typ: types.TypeFloat},
-	{Name: "rows", Typ: types.TypeInt},
-	{Name: "index_entries", Typ: types.TypeInt},
-	{Name: "system_records", Typ: types.TypeInt},
-	{Name: "bytes", Typ: types.TypeInt},
+	{Name: "job_id", Typ: types.Int},
+	{Name: "status", Typ: types.String},
+	{Name: "fraction_completed", Typ: types.Float},
+	{Name: "rows", Typ: types.Int},
+	{Name: "index_entries", Typ: types.Int},
+	{Name: "system_records", Typ: types.Int},
+	{Name: "bytes", Typ: types.Int},
 }
 
 func restorePlanHook(

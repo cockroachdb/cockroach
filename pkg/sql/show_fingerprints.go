@@ -79,8 +79,8 @@ type showFingerprintsNode struct {
 }
 
 var showFingerprintsColumns = sqlbase.ResultColumns{
-	{Name: "index", Typ: types.TypeString},
-	{Name: "fingerprint", Typ: types.TypeString},
+	{Name: "index", Typ: types.String},
+	{Name: "fingerprint", Typ: types.String},
 }
 
 func (n *showFingerprintsNode) Start(params runParams) error {

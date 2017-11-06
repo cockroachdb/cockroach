@@ -28,7 +28,7 @@ import (
 type testVarContainer struct{}
 
 func (d testVarContainer) IndexedVarResolvedType(idx int) types.T {
-	return types.TypeInt
+	return types.Int
 }
 
 func (d testVarContainer) IndexedVarEval(idx int, ctx *parser.EvalContext) (parser.Datum, error) {

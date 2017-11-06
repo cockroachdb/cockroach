@@ -1796,7 +1796,7 @@ func makeCheckConstraint(
 		return nil, err
 	}
 
-	if _, err := sqlbase.SanitizeVarFreeExpr(expr, types.TypeBool, "CHECK", searchPath); err != nil {
+	if _, err := sqlbase.SanitizeVarFreeExpr(expr, types.Bool, "CHECK", searchPath); err != nil {
 		return nil, err
 	}
 	if generateName {

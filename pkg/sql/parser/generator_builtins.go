@@ -103,13 +103,13 @@ func initGeneratorBuiltins() {
 var Generators = map[string][]Builtin{
 	"generate_series": {
 		makeGeneratorBuiltin(
-			ArgTypes{{"start", types.TypeInt}, {"end", types.TypeInt}},
+			ArgTypes{{"start", types.Int}, {"end", types.Int}},
 			seriesValueGeneratorType,
 			makeSeriesGenerator,
 			"Produces a virtual table containing the integer values from `start` to `end`, inclusive.",
 		),
 		makeGeneratorBuiltin(
-			ArgTypes{{"start", types.TypeInt}, {"end", types.TypeInt}, {"step", types.TypeInt}},
+			ArgTypes{{"start", types.Int}, {"end", types.Int}, {"step", types.Int}},
 			seriesValueGeneratorType,
 			makeSeriesGenerator,
 			"Produces a virtual table containing the integer values from `start` to `end`, inclusive, by increment of `step`.",
@@ -125,7 +125,7 @@ var Generators = map[string][]Builtin{
 	},
 	"unnest": {
 		makeGeneratorBuiltinWithReturnType(
-			ArgTypes{{"input", types.TypeAnyArray}},
+			ArgTypes{{"input", types.AnyArray}},
 			func(args []TypedExpr) types.T {
 				if len(args) == 0 {
 					return unknownReturnType
@@ -180,7 +180,7 @@ type keywordsValueGenerator struct {
 }
 
 var keywordsValueGeneratorType = types.TTable{
-	Cols:   types.TTuple{types.TypeString, types.TypeString, types.TypeString},
+	Cols:   types.TTuple{types.String, types.String, types.String},
 	Labels: []string{"word", "catcode", "catdesc"},
 }
 
@@ -242,7 +242,7 @@ type seriesValueGenerator struct {
 }
 
 var seriesValueGeneratorType = types.TTable{
-	Cols:   types.TTuple{types.TypeInt},
+	Cols:   types.TTuple{types.Int},
 	Labels: []string{"generate_series"},
 }
 

@@ -71,19 +71,19 @@ func (p *planner) makeExplainPlanNode(
 ) planNode {
 	columns := sqlbase.ResultColumns{
 		// Level is the depth of the node in the tree.
-		{Name: "Level", Typ: types.TypeInt},
+		{Name: "Level", Typ: types.Int},
 		// Type is the node type.
-		{Name: "Type", Typ: types.TypeString},
+		{Name: "Type", Typ: types.String},
 		// Field is the part of the node that a row of output pertains to.
-		{Name: "Field", Typ: types.TypeString},
+		{Name: "Field", Typ: types.String},
 		// Description contains details about the field.
-		{Name: "Description", Typ: types.TypeString},
+		{Name: "Description", Typ: types.String},
 	}
 	if explainer.showMetadata {
 		// Columns is the type signature of the data source.
-		columns = append(columns, sqlbase.ResultColumn{Name: "Columns", Typ: types.TypeString})
+		columns = append(columns, sqlbase.ResultColumn{Name: "Columns", Typ: types.String})
 		// Ordering indicates the known ordering of the data from this source.
-		columns = append(columns, sqlbase.ResultColumn{Name: "Ordering", Typ: types.TypeString})
+		columns = append(columns, sqlbase.ResultColumn{Name: "Ordering", Typ: types.String})
 	}
 
 	explainer.fmtFlags = parser.FmtExpr(

@@ -376,7 +376,7 @@ func (b *writeBuffer) writeBinaryDatum(
 		b.putInt32(dateToPgBinary(v))
 
 	case *parser.DArray:
-		if v.ParamTyp.FamilyEqual(types.TypeAnyArray) {
+		if v.ParamTyp.FamilyEqual(types.AnyArray) {
 			b.setError(errors.New("unsupported binary serialization of multidimensional arrays"))
 			return
 		}
@@ -618,7 +618,7 @@ func decodeOidDatum(id oid.Oid, code formatCode, b []byte) (parser.Datum, error)
 			if err := (&arr).Scan(b); err != nil {
 				return nil, err
 			}
-			out := parser.NewDArray(types.TypeInt)
+			out := parser.NewDArray(types.Int)
 			for _, v := range arr {
 				if err := out.Append(parser.NewDInt(parser.DInt(v))); err != nil {
 					return nil, err
@@ -630,9 +630,9 @@ func decodeOidDatum(id oid.Oid, code formatCode, b []byte) (parser.Datum, error)
 			if err := (&arr).Scan(b); err != nil {
 				return nil, err
 			}
-			out := parser.NewDArray(types.TypeString)
+			out := parser.NewDArray(types.String)
 			if id == oid.T__name {
-				out.ParamTyp = types.TypeName
+				out.ParamTyp = types.Name
 			}
 			for _, v := range arr {
 				var s parser.Datum = parser.NewDString(v)
@@ -865,7 +865,7 @@ func decodeBinaryArray(b []byte, code formatCode) (parser.Datum, error) {
 	}
 
 	elemOid := oid.Oid(hdr.ElemOid)
-	arr := parser.NewDArray(types.PGOidToType[elemOid])
+	arr := parser.NewDArray(types.OidToType[elemOid])
 	var vlen int32
 	for i := int32(0); i < hdr.DimSize; i++ {
 		if err := binary.Read(r, binary.BigEndian, &vlen); err != nil {

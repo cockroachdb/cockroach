@@ -142,7 +142,7 @@ func (p *planner) makeUpsertHelper(
 
 	if whereClause != nil {
 		whereExpr, err := p.analyzeExpr(
-			ctx, whereClause.Expr, sources, ivarHelper, types.TypeBool, true /* requireType */, "WHERE",
+			ctx, whereClause.Expr, sources, ivarHelper, types.Bool, true /* requireType */, "WHERE",
 		)
 		if err != nil {
 			return nil, err

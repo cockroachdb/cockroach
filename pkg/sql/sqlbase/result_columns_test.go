@@ -27,38 +27,38 @@ func TestResultColumnsTypesEqual(t *testing.T) {
 		equal bool
 	}{
 		{
-			r:     ResultColumns{{Typ: types.TypeInt}},
-			o:     ResultColumns{{Typ: types.TypeInt}},
+			r:     ResultColumns{{Typ: types.Int}},
+			o:     ResultColumns{{Typ: types.Int}},
 			equal: true,
 		},
 		{
-			r:     ResultColumns{{Typ: types.TypeInt}},
-			o:     ResultColumns{{Typ: types.TypeString}},
+			r:     ResultColumns{{Typ: types.Int}},
+			o:     ResultColumns{{Typ: types.String}},
 			equal: false,
 		},
 		{
-			r:     ResultColumns{{Typ: types.TypeNull}},
-			o:     ResultColumns{{Typ: types.TypeInt}},
+			r:     ResultColumns{{Typ: types.Null}},
+			o:     ResultColumns{{Typ: types.Int}},
 			equal: false,
 		},
 		{
-			r:     ResultColumns{{Typ: types.TypeInt}},
-			o:     ResultColumns{{Typ: types.TypeNull}},
+			r:     ResultColumns{{Typ: types.Int}},
+			o:     ResultColumns{{Typ: types.Null}},
 			equal: true,
 		},
 		{
-			r:     ResultColumns{{Typ: types.TypeNull}},
-			o:     ResultColumns{{Typ: types.TypeNull}},
+			r:     ResultColumns{{Typ: types.Null}},
+			o:     ResultColumns{{Typ: types.Null}},
 			equal: true,
 		},
 		{
-			r:     ResultColumns{{Typ: types.TypeInt}, {Typ: types.TypeInt}},
-			o:     ResultColumns{{Typ: types.TypeInt}},
+			r:     ResultColumns{{Typ: types.Int}, {Typ: types.Int}},
+			o:     ResultColumns{{Typ: types.Int}},
 			equal: false,
 		},
 		{
 			r:     ResultColumns{},
-			o:     ResultColumns{{Typ: types.TypeNull}},
+			o:     ResultColumns{{Typ: types.Null}},
 			equal: false,
 		},
 	}

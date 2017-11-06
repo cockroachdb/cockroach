@@ -171,7 +171,7 @@ func (v *nameResolutionVisitor) VisitPre(expr parser.Expr) (recurse bool, newNod
 				}
 				// We call TypeCheck to fill in FuncExpr internals. This is a fixed
 				// expression; we should not hit an error here.
-				if _, err := e.TypeCheck(&parser.SemaContext{}, types.TypeAny); err != nil {
+				if _, err := e.TypeCheck(&parser.SemaContext{}, types.Any); err != nil {
 					panic(err)
 				}
 				e.Filter = t.Filter

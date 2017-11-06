@@ -110,7 +110,7 @@ type setZoneConfigNode struct {
 
 func (p *planner) SetZoneConfig(ctx context.Context, n *parser.SetZoneConfig) (planNode, error) {
 	yamlConfig, err := p.analyzeExpr(
-		ctx, n.YAMLConfig, nil, parser.IndexedVarHelper{}, types.TypeString, false, "configure zone")
+		ctx, n.YAMLConfig, nil, parser.IndexedVarHelper{}, types.String, false, "configure zone")
 	if err != nil {
 		return nil, err
 	}
@@ -208,19 +208,19 @@ type showZoneConfigNode struct {
 var showZoneConfigNodeColumns = sqlbase.ResultColumns{
 	{
 		Name: "id",
-		Typ:  types.TypeInt,
+		Typ:  types.Int,
 	},
 	{
 		Name: "cli_specifier",
-		Typ:  types.TypeString,
+		Typ:  types.String,
 	},
 	{
 		Name: "config_yaml",
-		Typ:  types.TypeBytes,
+		Typ:  types.Bytes,
 	},
 	{
 		Name: "config_proto",
-		Typ:  types.TypeBytes,
+		Typ:  types.Bytes,
 	},
 }
 

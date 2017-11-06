@@ -1372,7 +1372,7 @@ func getTransactionState(txnState *txnState) string {
 // runShowTransactionState returns the state of current transaction.
 func runShowTransactionState(session *Session, res StatementResult) error {
 	res.BeginResult((*parser.ShowTransactionStatus)(nil))
-	res.SetColumns(sqlbase.ResultColumns{{Name: "TRANSACTION STATUS", Typ: types.TypeString}})
+	res.SetColumns(sqlbase.ResultColumns{{Name: "TRANSACTION STATUS", Typ: types.String}})
 
 	state := getTransactionState(&session.TxnState)
 	if err := res.AddRow(session.Ctx(), parser.Datums{parser.NewDString(state)}); err != nil {
@@ -2338,27 +2338,27 @@ func golangFillQueryArguments(pinfo *parser.PlaceholderInfo, args []interface{})
 func checkResultType(typ types.T) error {
 	// Compare all types that can rely on == equality.
 	switch types.UnwrapType(typ) {
-	case types.TypeNull:
-	case types.TypeBool:
-	case types.TypeInt:
-	case types.TypeFloat:
-	case types.TypeDecimal:
-	case types.TypeBytes:
-	case types.TypeString:
-	case types.TypeDate:
-	case types.TypeTimestamp:
-	case types.TypeTimestampTZ:
-	case types.TypeInterval:
-	case types.TypeJSON:
-	case types.TypeUUID:
-	case types.TypeINet:
-	case types.TypeNameArray:
-	case types.TypeOid:
-	case types.TypeRegClass:
-	case types.TypeRegNamespace:
-	case types.TypeRegProc:
-	case types.TypeRegProcedure:
-	case types.TypeRegType:
+	case types.Null:
+	case types.Bool:
+	case types.Int:
+	case types.Float:
+	case types.Decimal:
+	case types.Bytes:
+	case types.String:
+	case types.Date:
+	case types.Timestamp:
+	case types.TimestampTZ:
+	case types.Interval:
+	case types.JSON:
+	case types.UUID:
+	case types.INet:
+	case types.NameArray:
+	case types.Oid:
+	case types.RegClass:
+	case types.RegNamespace:
+	case types.RegProc:
+	case types.RegProcedure:
+	case types.RegType:
 	default:
 		// Compare all types that cannot rely on == equality.
 		istype := typ.FamilyEqual
@@ -2383,7 +2383,7 @@ func checkResultType(typ types.T) error {
 func EvalAsOfTimestamp(
 	evalCtx *parser.EvalContext, asOf parser.AsOfClause, max hlc.Timestamp,
 ) (hlc.Timestamp, error) {
-	te, err := asOf.Expr.TypeCheck(nil, types.TypeString)
+	te, err := asOf.Expr.TypeCheck(nil, types.String)
 	if err != nil {
 		return hlc.Timestamp{}, err
 	}

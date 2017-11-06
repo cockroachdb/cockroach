@@ -173,13 +173,13 @@ func TestRandomSyntaxFunctions(t *testing.T) {
 				var typ types.T
 				switch r.Intn(4) {
 				case 0:
-					typ = types.TypeString
+					typ = types.String
 				case 1:
-					typ = types.TypeFloat
+					typ = types.Float
 				case 2:
-					typ = types.TypeBool
+					typ = types.Bool
 				case 3:
-					typ = types.TypeTimestampTZ
+					typ = types.TimestampTZ
 				}
 				args = append(args, r.GenerateRandomArg(typ))
 			}

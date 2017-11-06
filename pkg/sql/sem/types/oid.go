@@ -20,86 +20,86 @@ import (
 )
 
 var (
-	// TypeOid is the type of an OID. Can be compared with ==.
-	TypeOid = TOid{oid.T_oid}
-	// TypeRegClass is the type of an regclass OID variant. Can be compared with ==.
-	TypeRegClass = TOid{oid.T_regclass}
-	// TypeRegNamespace is the type of an regnamespace OID variant. Can be compared with ==.
-	TypeRegNamespace = TOid{oid.T_regnamespace}
-	// TypeRegProc is the type of an regproc OID variant. Can be compared with ==.
-	TypeRegProc = TOid{oid.T_regproc}
-	// TypeRegProcedure is the type of an regprocedure OID variant. Can be compared with ==.
-	TypeRegProcedure = TOid{oid.T_regprocedure}
-	// TypeRegType is the type of an regtype OID variant. Can be compared with ==.
-	TypeRegType = TOid{oid.T_regtype}
+	// Oid is the type of an OID. Can be compared with ==.
+	Oid = TOid{oid.T_oid}
+	// RegClass is the type of an regclass OID variant. Can be compared with ==.
+	RegClass = TOid{oid.T_regclass}
+	// RegNamespace is the type of an regnamespace OID variant. Can be compared with ==.
+	RegNamespace = TOid{oid.T_regnamespace}
+	// RegProc is the type of an regproc OID variant. Can be compared with ==.
+	RegProc = TOid{oid.T_regproc}
+	// RegProcedure is the type of an regprocedure OID variant. Can be compared with ==.
+	RegProcedure = TOid{oid.T_regprocedure}
+	// RegType is the type of an regtype OID variant. Can be compared with ==.
+	RegType = TOid{oid.T_regtype}
 
-	// TypeName is a type-alias for TypeString with a different OID. Can be
+	// Name is a type-alias for String with a different OID. Can be
 	// compared with ==.
-	TypeName = WrapTypeWithOid(TypeString, oid.T_name)
-	// TypeIntVector is a type-alias for a TypeIntArray with a different OID. Can
+	Name = WrapTypeWithOid(String, oid.T_name)
+	// IntVector is a type-alias for a IntArray with a different OID. Can
 	// be compared with ==.
-	TypeIntVector = WrapTypeWithOid(TArray{TypeInt}, oid.T_int2vector)
-	// TypeNameArray is the type family of a DArray containing the Name alias type.
+	IntVector = WrapTypeWithOid(TArray{Int}, oid.T_int2vector)
+	// NameArray is the type family of a DArray containing the Name alias type.
 	// Can be compared with ==.
-	TypeNameArray T = TArray{TypeName}
+	NameArray T = TArray{Name}
 )
 
 var (
 	// Unexported wrapper types. These exist for Postgres type compatibility.
-	typeInt2      = WrapTypeWithOid(TypeInt, oid.T_int2)
-	typeInt4      = WrapTypeWithOid(TypeInt, oid.T_int4)
-	typeFloat4    = WrapTypeWithOid(TypeFloat, oid.T_float4)
-	typeVarChar   = WrapTypeWithOid(TypeString, oid.T_varchar)
+	typeInt2      = WrapTypeWithOid(Int, oid.T_int2)
+	typeInt4      = WrapTypeWithOid(Int, oid.T_int4)
+	typeFloat4    = WrapTypeWithOid(Float, oid.T_float4)
+	typeVarChar   = WrapTypeWithOid(String, oid.T_varchar)
 	typeInt2Array = TArray{typeInt2}
 	typeInt4Array = TArray{typeInt4}
 )
 
 // OidToType maps Postgres object IDs to CockroachDB types.
 var OidToType = map[oid.Oid]T{
-	oid.T_anyelement:   TypeAny,
-	oid.T_bool:         TypeBool,
-	oid.T__bool:        TArray{TypeBool},
-	oid.T_bytea:        TypeBytes,
-	oid.T__bytea:       TArray{TypeBytes},
-	oid.T_date:         TypeDate,
-	oid.T__date:        TArray{TypeDate},
+	oid.T_anyelement:   Any,
+	oid.T_bool:         Bool,
+	oid.T__bool:        TArray{Bool},
+	oid.T_bytea:        Bytes,
+	oid.T__bytea:       TArray{Bytes},
+	oid.T_date:         Date,
+	oid.T__date:        TArray{Date},
 	oid.T_float4:       typeFloat4,
 	oid.T__float4:      TArray{typeFloat4},
-	oid.T_float8:       TypeFloat,
-	oid.T__float8:      TArray{TypeFloat},
+	oid.T_float8:       Float,
+	oid.T__float8:      TArray{Float},
 	oid.T_int2:         typeInt2,
 	oid.T_int4:         typeInt4,
-	oid.T_int8:         TypeInt,
-	oid.T_int2vector:   TypeIntVector,
-	oid.T_interval:     TypeInterval,
-	oid.T__interval:    TArray{TypeInterval},
-	oid.T_jsonb:        TypeJSON,
-	oid.T_name:         TypeName,
-	oid.T__name:        TArray{TypeName},
-	oid.T_numeric:      TypeDecimal,
-	oid.T__numeric:     TArray{TypeDecimal},
-	oid.T_oid:          TypeOid,
-	oid.T__oid:         TArray{TypeOid},
-	oid.T_regclass:     TypeRegClass,
-	oid.T_regnamespace: TypeRegNamespace,
-	oid.T_regproc:      TypeRegProc,
-	oid.T_regprocedure: TypeRegProcedure,
-	oid.T_regtype:      TypeRegType,
-	oid.T__text:        TArray{TypeString},
+	oid.T_int8:         Int,
+	oid.T_int2vector:   IntVector,
+	oid.T_interval:     Interval,
+	oid.T__interval:    TArray{Interval},
+	oid.T_jsonb:        JSON,
+	oid.T_name:         Name,
+	oid.T__name:        TArray{Name},
+	oid.T_numeric:      Decimal,
+	oid.T__numeric:     TArray{Decimal},
+	oid.T_oid:          Oid,
+	oid.T__oid:         TArray{Oid},
+	oid.T_regclass:     RegClass,
+	oid.T_regnamespace: RegNamespace,
+	oid.T_regproc:      RegProc,
+	oid.T_regprocedure: RegProcedure,
+	oid.T_regtype:      RegType,
+	oid.T__text:        TArray{String},
 	oid.T__int2:        typeInt2Array,
 	oid.T__int4:        typeInt4Array,
-	oid.T__int8:        TArray{TypeInt},
+	oid.T__int8:        TArray{Int},
 	// TODO(jordan): I think this entry for T_record is out of place.
 	oid.T_record:       FamTuple,
-	oid.T_text:         TypeString,
-	oid.T_timestamp:    TypeTimestamp,
-	oid.T__timestamp:   TArray{TypeTimestamp},
-	oid.T_timestamptz:  TypeTimestampTZ,
-	oid.T__timestamptz: TArray{TypeTimestampTZ},
-	oid.T_uuid:         TypeUUID,
-	oid.T__uuid:        TArray{TypeUUID},
-	oid.T_inet:         TypeINet,
-	oid.T__inet:        TArray{TypeINet},
+	oid.T_text:         String,
+	oid.T_timestamp:    Timestamp,
+	oid.T__timestamp:   TArray{Timestamp},
+	oid.T_timestamptz:  TimestampTZ,
+	oid.T__timestamptz: TArray{TimestampTZ},
+	oid.T_uuid:         UUID,
+	oid.T__uuid:        TArray{UUID},
+	oid.T_inet:         INet,
+	oid.T__inet:        TArray{INet},
 	oid.T_varchar:      typeVarChar,
 	oid.T__varchar:     TArray{typeVarChar},
 }
@@ -180,7 +180,7 @@ var oidTypeName = map[oid.Oid]string{
 func (t TOid) String() string { return SQLName(t) }
 
 // Equivalent implements the T interface.
-func (t TOid) Equivalent(other T) bool { return t.FamilyEqual(other) || other == TypeAny }
+func (t TOid) Equivalent(other T) bool { return t.FamilyEqual(other) || other == Any }
 
 // FamilyEqual implements the T interface.
 func (TOid) FamilyEqual(other T) bool { _, ok := UnwrapType(other).(TOid); return ok }
@@ -232,21 +232,21 @@ func UnwrapType(t T) T {
 }
 
 var baseTypeOids = map[T]oid.Oid{
-	TypeNull:        oid.T_unknown,
-	TypeBool:        oid.T_bool,
-	TypeInt:         oid.T_int8,
-	TypeFloat:       oid.T_float8,
-	TypeDecimal:     oid.T_numeric,
-	TypeString:      oid.T_text,
-	TypeBytes:       oid.T_bytea,
-	TypeDate:        oid.T_date,
-	TypeTimestamp:   oid.T_timestamp,
-	TypeTimestampTZ: oid.T_timestamptz,
-	TypeInterval:    oid.T_interval,
-	TypeJSON:        oid.T_jsonb,
-	TypeUUID:        oid.T_uuid,
-	TypeINet:        oid.T_inet,
-	TypeAny:         oid.T_anyelement,
+	Null:        oid.T_unknown,
+	Bool:        oid.T_bool,
+	Int:         oid.T_int8,
+	Float:       oid.T_float8,
+	Decimal:     oid.T_numeric,
+	String:      oid.T_text,
+	Bytes:       oid.T_bytea,
+	Date:        oid.T_date,
+	Timestamp:   oid.T_timestamp,
+	TimestampTZ: oid.T_timestamptz,
+	Interval:    oid.T_interval,
+	JSON:        oid.T_jsonb,
+	UUID:        oid.T_uuid,
+	INet:        oid.T_inet,
+	Any:         oid.T_anyelement,
 }
 
 const noArrayType = 0

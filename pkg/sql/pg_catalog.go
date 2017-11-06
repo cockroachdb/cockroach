@@ -556,7 +556,7 @@ func colIDArrayToDatum(arr []sqlbase.ColumnID) (parser.Datum, error) {
 	if len(arr) == 0 {
 		return parser.DNull, nil
 	}
-	d := parser.NewDArray(types.TypeInt)
+	d := parser.NewDArray(types.Int)
 	for _, val := range arr {
 		if err := d.Append(parser.NewDInt(parser.DInt(val))); err != nil {
 			return nil, err
@@ -1132,7 +1132,7 @@ CREATE TABLE pg_catalog.pg_proc (
 					variadicType = parser.NewDOid(parser.DInt(oid))
 				case parser.HomogeneousType:
 					argmodes = proArgModeVariadic
-					argType := types.TypeAny
+					argType := types.Any
 					oid := types.PGOid(argType)
 					variadicType = parser.NewDOid(parser.DInt(oid))
 				default:
@@ -1452,7 +1452,7 @@ CREATE TABLE pg_catalog.pg_type (
 			typArray := oidZero
 			builtinPrefix := parser.PGIOBuiltinPrefix(typ)
 			if cat == typCategoryArray {
-				if typ == types.TypeIntVector {
+				if typ == types.IntVector {
 					// IntVector needs a special case because its a special snowflake
 					// type. It's just like an Int2Array, but it has its own OID. We
 					// can't just wrap our Int2Array type in an OID wrapper, though,
@@ -1535,9 +1535,9 @@ func typByVal(typ types.T) parser.Datum {
 // The default collation is en-US, which is equivalent to but spelled
 // differently than the default database collation, en_US.utf8.
 func typColl(typ types.T, h oidHasher) parser.Datum {
-	if typ.FamilyEqual(types.TypeAny) {
+	if typ.FamilyEqual(types.Any) {
 		return oidZero
-	} else if typ.Equivalent(types.TypeString) || typ.Equivalent(types.TArray{Typ: types.TypeString}) {
+	} else if typ.Equivalent(types.String) || typ.Equivalent(types.TArray{Typ: types.String}) {
 		return h.CollationOid(defaultCollationTag)
 	} else if typ.FamilyEqual(types.FamCollatedString) {
 		return h.CollationOid(typ.(types.TCollatedString).Locale)
@@ -1547,23 +1547,23 @@ func typColl(typ types.T, h oidHasher) parser.Datum {
 
 // This mapping should be kept sync with PG's categorization.
 var datumToTypeCategory = map[reflect.Type]*parser.DString{
-	reflect.TypeOf(types.TypeAny):         typCategoryPseudo,
-	reflect.TypeOf(types.TypeBool):        typCategoryBoolean,
-	reflect.TypeOf(types.TypeBytes):       typCategoryUserDefined,
-	reflect.TypeOf(types.TypeDate):        typCategoryDateTime,
-	reflect.TypeOf(types.TypeFloat):       typCategoryNumeric,
-	reflect.TypeOf(types.TypeInt):         typCategoryNumeric,
-	reflect.TypeOf(types.TypeInterval):    typCategoryTimespan,
-	reflect.TypeOf(types.TypeJSON):        typCategoryUserDefined,
-	reflect.TypeOf(types.TypeDecimal):     typCategoryNumeric,
-	reflect.TypeOf(types.TypeString):      typCategoryString,
-	reflect.TypeOf(types.TypeTimestamp):   typCategoryDateTime,
-	reflect.TypeOf(types.TypeTimestampTZ): typCategoryDateTime,
-	reflect.TypeOf(types.FamTuple):        typCategoryPseudo,
-	reflect.TypeOf(types.FamTable):        typCategoryPseudo,
-	reflect.TypeOf(types.TypeOid):         typCategoryNumeric,
-	reflect.TypeOf(types.TypeUUID):        typCategoryUserDefined,
-	reflect.TypeOf(types.TypeINet):        typCategoryNetworkAddr,
+	reflect.TypeOf(types.Any):         typCategoryPseudo,
+	reflect.TypeOf(types.Bool):        typCategoryBoolean,
+	reflect.TypeOf(types.Bytes):       typCategoryUserDefined,
+	reflect.TypeOf(types.Date):        typCategoryDateTime,
+	reflect.TypeOf(types.Float):       typCategoryNumeric,
+	reflect.TypeOf(types.Int):         typCategoryNumeric,
+	reflect.TypeOf(types.Interval):    typCategoryTimespan,
+	reflect.TypeOf(types.JSON):        typCategoryUserDefined,
+	reflect.TypeOf(types.Decimal):     typCategoryNumeric,
+	reflect.TypeOf(types.String):      typCategoryString,
+	reflect.TypeOf(types.Timestamp):   typCategoryDateTime,
+	reflect.TypeOf(types.TimestampTZ): typCategoryDateTime,
+	reflect.TypeOf(types.FamTuple):    typCategoryPseudo,
+	reflect.TypeOf(types.FamTable):    typCategoryPseudo,
+	reflect.TypeOf(types.Oid):         typCategoryNumeric,
+	reflect.TypeOf(types.UUID):        typCategoryUserDefined,
+	reflect.TypeOf(types.INet):        typCategoryNetworkAddr,
 }
 
 func typCategory(typ types.T) parser.Datum {

@@ -262,7 +262,7 @@ func sqlStdToDuration(s string) (duration.Duration, error) {
 				return d, newInvalidSQLDurationError(s)
 			}
 			if err != nil {
-				return d, makeParseError(part, types.TypeInterval, err)
+				return d, makeParseError(part, types.Interval, err)
 			}
 			d = d.Add(duration.Duration{Nanos: dur.Nanoseconds()})
 		} else if strings.ContainsRune(part, '-') {
