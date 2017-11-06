@@ -64,7 +64,7 @@ requiring new stores to be added to the cluster.
 
 Encryption is desired for security reasons (prevent access from other users on the same
 machine, prevent data leak through drive theft/disposal) as well as regulatory reasons
-(GDPR, HIPAA, OCI DSS).
+(GDPR, HIPAA, PCI DSS).
 
 Encryption at rest is necessary when other methods of encryption are either not desirable,
 or not sufficient (eg: filesystem-level encryption cannot be used if DBAs do not have
@@ -395,7 +395,7 @@ The encryption flag acts as a switch to determine the remainder of the contents.
 
 Possible extensions of the encryption flag include:
 * other modes (eg: GCM)
-* other ciphers (eg: Triple DES, SkipJack, etc...)
+* other ciphers
 
 For AES, the specific type is not included in the preamble as it is dictated by the key size.
 We could encode it in the preamble to validate loaded keys or to make some reports clearer (eg: no need
@@ -413,7 +413,10 @@ This means that we need two things:
 We propose:
 * `--rocksdb-preamble-format` to start a new node with preamble format enabled. Will fail if the data exists in classical format for any store on the node.
 * a `PREAMBLE_FORMAT` file written at rocksdb-creation time. Its presence indicates use of the preamble format.
+Alternative, we may be able to use the existing `COCKROACHDB_VERSION` file.
 
+Once the preamble format has been sufficiently tested, we can make it the default format and remove the flag.
+Stores with the classic data format would not support encryption but would still function properly.
 
 ### Key levels
 
@@ -870,7 +873,7 @@ to rocksdb.
 ### Support for additional block ciphers
 
 Crypto++ supports multiple block ciphers. It should be reasonably easy to add support for
-other ciphers such as Triple DES, Skipjack (both NIST-recommended), and others.
+other ciphers.
 
 ### GCM for data integrity
 
