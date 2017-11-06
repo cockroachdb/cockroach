@@ -16,9 +16,9 @@ syntax = "proto2";
 package cockroach.storage;
 option go_package = "storage";
 
-import "cockroach/pkg/roachpb/errors.proto";
-import "cockroach/pkg/roachpb/metadata.proto";
-import "cockroach/pkg/storage/storagebase/state.proto";
+import "roachpb/errors.proto";
+import "roachpb/metadata.proto";
+import "storage/storagebase/state.proto";
 import "etcd/raft/raftpb/raft.proto";
 import "gogoproto/gogo.proto";
 

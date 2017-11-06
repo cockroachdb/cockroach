@@ -17,7 +17,7 @@ package cockroach.config;
 option go_package = "config";
 
 import "gogoproto/gogo.proto";
-import "cockroach/pkg/roachpb/data.proto";
+import "roachpb/data.proto";
 
 message SystemConfig {
   repeated roachpb.KeyValue values = 1 [(gogoproto.nullable) = false];
