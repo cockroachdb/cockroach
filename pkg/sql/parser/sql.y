@@ -5435,7 +5435,7 @@ a_expr:
   {
     $$.val = &ComparisonExpr{Operator: NotIn, Left: $1.expr(), Right: $4.expr()}
   }
-| a_expr subquery_op sub_type d_expr %prec CONCAT
+| a_expr subquery_op sub_type a_expr %prec CONCAT
   {
     op := $3.cmpOp()
     subOp := $2.op()
