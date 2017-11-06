@@ -30,7 +30,7 @@ import (
 func init() {
 	// TODO(marc): we use a hook to avoid a dependency on the sql package. We
 	// should probably move keys/protos elsewhere.
-	config.ZoneConfigHook = GetZoneConfig
+	config.ZoneConfigHook = ZoneConfigHook
 }
 
 var errNoZoneConfigApplies = errors.New("no zone config applies")
@@ -40,83 +40,99 @@ var errNoZoneConfigApplies = errors.New("no zone config applies")
 //
 // This function must be kept in sync with ascendZoneSpecifier.
 func getZoneConfig(
-	id uint32, keySuffix []byte, get func(roachpb.Key) (*roachpb.Value, error),
-) (config.ZoneConfig, uint32, error) {
+	id uint32,
+	getKey func(roachpb.Key) (*roachpb.Value, error),
+	getSubzone func(config.ZoneConfig) *config.Subzone,
+) (uint32, config.ZoneConfig, *config.Subzone, error) {
 	// Look in the zones table.
-	if zoneVal, err := get(config.MakeZoneKey(id)); err != nil {
-		return config.ZoneConfig{}, 0, err
+	if zoneVal, err := getKey(config.MakeZoneKey(id)); err != nil {
+		return 0, config.ZoneConfig{}, nil, err
 	} else if zoneVal != nil {
 		// We found a matching entry.
 		var zone config.ZoneConfig
 		if err := zoneVal.GetProto(&zone); err != nil {
-			return config.ZoneConfig{}, 0, err
+			return 0, config.ZoneConfig{}, nil, err
 		}
-		if subzone := zone.GetSubzoneForKeySuffix(keySuffix); subzone != nil {
-			// The ZoneConfig has a more-specific index or partition subzone; use
-			// that.
-			return subzone.Config, id, nil
+		subzone := getSubzone(zone)
+		if !zone.IsSubzonePlaceholder() || subzone != nil {
+			return id, zone, subzone, nil
 		}
-		// No subzone matched. Return the parent zone, unless it was just a
-		// placeholder for subzones, in which case we need to keep recursing up the
-		// hierarchy.
-		if !zone.IsSubzonePlaceholder() {
-			return zone, id, nil
-		}
+		// No subzone matched, and the zone is just a placeholder for subzones. Keep
+		// recursing up the hierarchy.
 	}
 
 	// No zone config for this ID. We need to figure out if it's a table, so we
 	// look up its descriptor.
-	if descVal, err := get(sqlbase.MakeDescMetadataKey(sqlbase.ID(id))); err != nil {
-		return config.ZoneConfig{}, 0, err
+	if descVal, err := getKey(sqlbase.MakeDescMetadataKey(sqlbase.ID(id))); err != nil {
+		return 0, config.ZoneConfig{}, nil, err
 	} else if descVal != nil {
 		var desc sqlbase.Descriptor
 		if err := descVal.GetProto(&desc); err != nil {
-			return config.ZoneConfig{}, 0, err
+			return 0, config.ZoneConfig{}, nil, err
 		}
 		if tableDesc := desc.GetTable(); tableDesc != nil {
 			// This is a table descriptor. Look up its parent database zone config.
 			// Don't forward keySuffix, because only tables can have subzones.
-			return getZoneConfig(uint32(tableDesc.ParentID), nil, get)
+			return getZoneConfig(uint32(tableDesc.ParentID), getKey, getSubzone)
 		}
 	}
 
 	// Retrieve the default zone config, but only as long as that wasn't the ID
 	// we were trying to retrieve (avoid infinite recursion).
 	if id != keys.RootNamespaceID {
-		return getZoneConfig(keys.RootNamespaceID, nil, get)
+		return getZoneConfig(keys.RootNamespaceID, getKey, getSubzone)
 	}
 
 	// No descriptor or not a table.
-	return config.ZoneConfig{}, 0, errNoZoneConfigApplies
+	return 0, config.ZoneConfig{}, nil, errNoZoneConfigApplies
 }
 
-// GetZoneConfig returns the zone config for the object with 'id' using the
-// cached system config.
-func GetZoneConfig(
+// ZoneConfigHook returns the zone config for the object with id using the
+// cached system config. If keySuffix is within a subzone, the subzone's config
+// is returned instead.
+func ZoneConfigHook(
 	cfg config.SystemConfig, id uint32, keySuffix []byte,
 ) (config.ZoneConfig, bool, error) {
-	zone, _, err := getZoneConfig(id, keySuffix, func(key roachpb.Key) (*roachpb.Value, error) {
-		return cfg.GetValue(key), nil
-	})
+	_, zone, subzone, err := getZoneConfig(
+		id,
+		func(key roachpb.Key) (*roachpb.Value, error) {
+			return cfg.GetValue(key), nil
+		},
+		func(zone config.ZoneConfig) *config.Subzone {
+			return zone.GetSubzoneForKeySuffix(keySuffix)
+		},
+	)
 	if err == errNoZoneConfigApplies {
 		return config.ZoneConfig{}, false, nil
+	} else if err != nil {
+		return config.ZoneConfig{}, false, err
+	} else if subzone != nil {
+		return subzone.Config, true, nil
 	}
-	found := err == nil
-	return zone, found, err
+	return zone, true, nil
 }
 
-// GetZoneConfigInTxn is like GetZoneConfig, but uses the provided transaction
-// to perform lookups instead of the cached system config.
+// GetZoneConfigInTxn looks up the zone and subzone for the specified object ID,
+// index, and partition.
 func GetZoneConfigInTxn(
-	ctx context.Context, txn *client.Txn, id uint32, keySuffix []byte,
-) (config.ZoneConfig, uint32, error) {
-	return getZoneConfig(id, keySuffix, func(key roachpb.Key) (*roachpb.Value, error) {
-		kv, err := txn.Get(ctx, key)
-		if err != nil {
-			return nil, err
-		}
-		return kv.Value, nil
-	})
+	ctx context.Context, txn *client.Txn, id uint32, index *sqlbase.IndexDescriptor, partition string,
+) (uint32, config.ZoneConfig, *config.Subzone, error) {
+	return getZoneConfig(
+		id,
+		func(key roachpb.Key) (*roachpb.Value, error) {
+			kv, err := txn.Get(ctx, key)
+			if err != nil {
+				return nil, err
+			}
+			return kv.Value, nil
+		},
+		func(zone config.ZoneConfig) *config.Subzone {
+			if index == nil {
+				return nil
+			}
+			return zone.GetSubzone(uint32(index.ID), partition)
+		},
+	)
 }
 
 // GetTableDesc returns the table descriptor for the table with 'id'.
