@@ -14,3 +14,6 @@
 [submodule "c-deps/protobuf"]
 	path = c-deps/protobuf
 	url = https://github.com/cockroachdb/protobuf.git
+[submodule "c-deps/cryptopp"]
+	path = c-deps/cryptopp
+	url = https://github.com/cockroachdb/cryptopp.git
