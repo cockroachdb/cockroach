@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/scrub"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -118,7 +119,7 @@ type kvFetcher interface {
 
 // debugRowFetch can be used to turn on some low-level debugging logs. We use
 // this to avoid using log.V in the hot path.
-const debugRowFetch = false
+const debugRowFetch = true
 
 // Init sets up a RowFetcher for a given table and index. If we are using a
 // non-primary index, valNeededForCol can only be true for the columns in the
@@ -372,12 +373,12 @@ func (rf *RowFetcher) processKV(
 	if !rf.isSecondaryIndex && len(rf.keyRemainingBytes) > 0 {
 		_, familyID, err := encoding.DecodeUvarintAscending(rf.keyRemainingBytes)
 		if err != nil {
-			return "", "", err
+			return "", "", scrub.WrapWithError(scrub.PrimaryKVDecodingFamilyError, err)
 		}
 
 		family, err := rf.desc.FindFamilyByID(FamilyID(familyID))
 		if err != nil {
-			return "", "", err
+			return "", "", scrub.WrapWithError(scrub.PrimaryKVFamilyNotFoundError, err)
 		}
 
 		// If familyID is 0, kv.Value contains values for composite key columns.
@@ -397,12 +398,13 @@ func (rf *RowFetcher) processKV(
 			prettyKey, prettyValue, err = rf.processValueSingle(ctx, family, kv, prettyKey)
 		}
 		if err != nil {
-			return "", "", err
+			return "", "", scrub.WrapWithError(scrub.PrimaryValueDecodingError, err)
 		}
 	} else {
 		valueBytes, err := kv.Value.GetBytes()
 		if err != nil {
-			return "", "", err
+			// FIXME(joey): Secondary k/v value expected more bytes, I think?
+			return "", "", scrub.WrapWithError(scrub.SecondaryValueDecodingError, err)
 		}
 		if rf.extraVals != nil {
 			// This is a unique index; decode the extra column values from
@@ -410,7 +412,8 @@ func (rf *RowFetcher) processKV(
 			var err error
 			valueBytes, err = DecodeKeyVals(rf.extraTypes, rf.extraVals, nil, valueBytes)
 			if err != nil {
-				return "", "", err
+				// FIXME(joey): Secondary k/v key's extra values failed to decode, I think?
+				return "", "", scrub.WrapWithError(scrub.SecondaryKeyDecodingError, err)
 			}
 			for i, id := range rf.index.ExtraColumnIDs {
 				if rf.neededCols.Contains(int(id)) {
@@ -431,6 +434,8 @@ func (rf *RowFetcher) processKV(
 		}
 
 		if len(valueBytes) > 0 {
+			// FIXME(joey): ?? not sure what this is for. This appears to be
+			// extraneous bytes, but why do we expect them and not always return an error?
 			prettyKey, prettyValue, err = rf.processValueBytes(
 				ctx, kv, valueBytes, prettyKey,
 			)
@@ -593,6 +598,7 @@ func (rf *RowFetcher) NextRow(ctx context.Context) (EncDatumRow, error) {
 	for {
 		prettyKey, prettyVal, err := rf.processKV(ctx, rf.kv)
 		if err != nil {
+			log.Errorf(ctx, "Got an error: %+v, isCheck=%v", err, rf.isCheck)
 			return nil, err
 		}
 		if rf.traceKV {
@@ -603,8 +609,8 @@ func (rf *RowFetcher) NextRow(ctx context.Context) (EncDatumRow, error) {
 			return nil, err
 		}
 		if rowDone {
-			rf.finalizeRow()
-			return rf.row, nil
+			err := rf.finalizeRow()
+			return rf.row, err
 		}
 	}
 }
@@ -635,17 +641,139 @@ func (rf *RowFetcher) NextRowDecoded(ctx context.Context) (tree.Datums, error) {
 	return rf.decodedRow, nil
 }
 
-func (rf *RowFetcher) finalizeRow() {
+// NextRowWithErrors calls NextRow to fetch the next row and runs physical checks.
+// It will return the next failure encountered. The checks ran include:
+//  - The KV pair data round-trips (decodes and re-encodes to the same value).
+//  - Any secondary index columns have corresponding entries.
+//  - There is no extra data encoded into the KV pair.
+// The Datums should not be modified and is only valid until the next call.
+// When there are no more rows, the Datums is nil.
+func (rf *RowFetcher) NextRowWithErrors(ctx context.Context) (EncDatumRow, error) {
+	encRow, err := rf.NextRow(ctx)
+	if encRow == nil {
+		return nil, nil
+	}
+	if err != nil {
+
+		return encRow, err
+	}
+
+	if rf.index.ID == rf.desc.PrimaryIndex.ID {
+		err = rf.checkPrimaryIndexDatumEncodings(ctx)
+	} else {
+		log.Errorf(ctx, "Cannot check encoding if not primary index")
+	}
+	// TODO(joey): Keep a buffer of the last key prefix to check the
+	// ordering (last <= current else error) for each value in the key.
+	return encRow, err
+}
+
+func contains(columns []ColumnID, c ColumnID) bool {
+	for _, col := range columns {
+		if col == c {
+			return true
+		}
+	}
+	return false
+}
+
+// FIXME(joey): Handle single value column family optimizations.
+func getEncodingColumnID(desc *TableDescriptor, colID ColumnID) ColumnID {
+	for _, family := range desc.Families {
+		for idx, familyColID := range family.ColumnIDs {
+			if colID == familyColID {
+				if idx == 0 {
+					return colID
+				}
+				return colID - family.ColumnIDs[idx-1]
+			}
+		}
+	}
+	return ColumnID(encoding.NoColumnID)
+}
+
+// checkPrimaryIndexDatumEncodings will run a round-trip encoding check
+// on all values in the buffered row. This check is specific to primary
+// index datums.
+func (rf *RowFetcher) checkPrimaryIndexDatumEncodings(ctx context.Context) error {
+	scratch := make([]byte, 1024)
+	colToDatum := make(map[ColumnID]EncDatum)
+	for i, col := range rf.cols {
+		// Ensure the row is decoded.
+		if err := rf.row[i].EnsureDecoded(&col.Type, rf.alloc); err != nil {
+			log.Error(ctx, errors.Wrapf(err, "Attempted EncDatum.EnsureDecoded"))
+			continue
+		}
+
+		colToDatum[col.ID] = rf.row[i]
+	}
+
+	colIDToColumn := make(map[ColumnID]ColumnDescriptor)
+	for _, col := range rf.desc.Columns {
+		colIDToColumn[col.ID] = col
+	}
+
+	rh := rowHelper{TableDesc: rf.desc, Indexes: rf.desc.Indexes}
+
+	for _, family := range rf.desc.Families {
+		var lastColID ColumnID
+		familySortedColumnIDs, ok := rh.sortedColumnFamily(family.ID)
+		if !ok {
+			panic("invalid family sorted column id map")
+		}
+
+		for _, colID := range familySortedColumnIDs {
+			rowVal := colToDatum[colID]
+			if rowVal.Datum == tree.DNull {
+				// Column is not present.
+				continue
+			}
+
+			if skip, err := rh.skipColumnInPK(colID, family.ID, rowVal.Datum); err != nil {
+				log.Errorf(ctx, "unexpected error: %s", err)
+			} else if skip {
+				continue
+			}
+
+			col := colIDToColumn[colID]
+
+			if lastColID > col.ID {
+				panic(fmt.Errorf("cannot write column id %d after %d", col.ID, lastColID))
+			}
+			colIDDiff := col.ID - lastColID
+			lastColID = col.ID
+
+			if result, err := EncodeTableValue([]byte(nil), colIDDiff, rowVal.Datum,
+				scratch); err != nil {
+				log.Errorf(ctx, "Could not re-encode column %s, value was %#v. Got error %s",
+					col.Name, rowVal.Datum, err)
+			} else if !bytes.Equal(result, rowVal.encoded) {
+				return scrub.WrapWithError(scrub.PrimaryValueDecodingError, errors.Errorf(
+					"value failed to round-trip encode. Column=%s colIDDiff=%d Key=%s expected %#v, got: %#v",
+					col.Name, colIDDiff, rf.kv.Key, rowVal.encoded, result))
+			}
+		}
+	}
+	return nil
+}
+
+func (rf *RowFetcher) finalizeRow() error {
 	// Fill in any missing values with NULLs
 	for i := range rf.cols {
 		if rf.neededCols.Contains(int(rf.cols[i].ID)) && rf.row[i].IsUnset() {
 			if !rf.cols[i].Nullable {
+				if rf.isCheck {
+					return scrub.WrapWithError(scrub.ValueWasNullInNotNullError, errors.Errorf(
+						"non-nullable column \"%s:%s\" has NULL value",
+						rf.desc.Name, rf.cols[i].Name))
+				}
 				panic(fmt.Sprintf("Non-nullable column \"%s:%s\" with no value!",
 					rf.desc.Name, rf.cols[i].Name))
 			}
 			rf.row[i] = EncDatum{Datum: tree.DNull}
 		}
 	}
+	return nil
 }
 
 // Key returns the next key (the key that follows the last returned row).

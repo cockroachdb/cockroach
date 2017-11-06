@@ -893,6 +893,72 @@ func (dsp *DistSQLPlanner) createBackfiller(
 	return p, nil
 }
 
+// createScrubPhysicalCheck generates a plan consisting of physical
+// check for an index. The plan is finalized.
+func (dsp *DistSQLPlanner) createScrubPhysicalCheck(
+	planCtx *planningCtx,
+	n *scanNode,
+	desc sqlbase.TableDescriptor,
+	indexDesc sqlbase.IndexDescriptor,
+	spans []roachpb.Span,
+	readAsOf hlc.Timestamp,
+) (physicalPlan, error) {
+	spec, post, err := initTableReaderSpec(n)
+	if err != nil {
+		return physicalPlan{}, err
+	}
+
+	spanPartitions, err := dsp.partitionSpans(planCtx, n.spans)
+	if err != nil {
+		return physicalPlan{}, err
+	}
+
+	var p physicalPlan
+	stageID := p.NewStageID()
+
+	p.ResultRouters = make([]distsqlplan.ProcessorIdx, len(spanPartitions))
+	for i, sp := range spanPartitions {
+		tr := &distsqlrun.TableReaderSpec{}
+		*tr = spec
+		tr.Spans = make([]distsqlrun.TableReaderSpan, len(sp.spans))
+		for j := range sp.spans {
+			tr.Spans[j].Span = sp.spans[j]
+		}
+
+		proc := distsqlplan.Processor{
+			Node: sp.node,
+			Spec: distsqlrun.ProcessorSpec{
+				Core:    distsqlrun.ProcessorCoreUnion{TableReader: tr},
+				Output:  []distsqlrun.OutputRouterSpec{{Type: distsqlrun.OutputRouterSpec_PASS_THROUGH}},
+				StageID: stageID,
+			},
+		}
+
+		pIdx := p.AddProcessor(proc)
+		p.ResultRouters[i] = pIdx
+	}
+
+	// Modify the TableReader PostProcess spec to correspond to the scrub
+	// types that the TableReaders will return.
+	p.SetLastStagePost(post, distsqlrun.ScrubTypes)
+
+	// Add the a projection stage, notably with the scrub types.
+	// FIXME(joey): Is this necessary? We already modify the
+	// PostProcess spec of the table readers.
+	resultColumns := make([]uint32, len(distsqlrun.ScrubTypes))
+	for i := range resultColumns {
+		resultColumns[i] = uint32(i)
+	}
+	p.AddProjection(resultColumns)
+
+	// Make the stream column map reflect that it's a 1-1 mapping.
+	planToStreamColMap := identityMapInPlace(make([]int, len(distsqlrun.ScrubTypes)))
+	p.planToStreamColMap = planToStreamColMap
+
+	dsp.FinalizePlan(planCtx, &p)
+	return p, nil
+}
+
 // DistLoader uses DistSQL to convert external data formats (csv, etc) into
 // sstables of our mvcc-format key values.
 type DistLoader struct {

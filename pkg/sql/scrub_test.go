@@ -23,11 +23,15 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/scrub"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 type scrubResult struct {
@@ -38,6 +42,24 @@ type scrubResult struct {
 	timestamp  time.Time
 	repaired   bool
 	details    string
+}
+
+// FIXME(joey): Remove this debuggging bit.
+func debugPrintKVs(
+	t *testing.T,
+	kvDB *client.DB,
+	tableDesc *sqlbase.TableDescriptor,
+	indexDesc sqlbase.IndexDescriptor,
+) {
+	span := tableDesc.IndexSpan(indexDesc.ID)
+	results, err := kvDB.Scan(context.TODO(), span.Key, span.EndKey, 10)
+	if err != nil {
+		t.Fatalf("unexpected error: %s", err)
+	}
+
+	for _, result := range results {
+		log.Errorf(context.TODO(), "%v : %s", result.Key, result.Value.PrettyPrint())
+	}
 }
 
 // getResultRows will scan and unmarshal scrubResults from a Rows
@@ -127,9 +149,9 @@ INSERT INTO t.test VALUES (10, 20);
 	if len(results) != 1 {
 		t.Fatalf("expected 1 result, got %d. got %#v", len(results), results)
 	}
-	if result := results[0]; result.errorType != sql.ScrubErrorMissingIndexEntry {
+	if result := results[0]; result.errorType != scrub.MissingIndexEntryError {
 		t.Fatalf("expected %q error, instead got: %s",
-			sql.ScrubErrorMissingIndexEntry, result.errorType)
+			scrub.MissingIndexEntryError, result.errorType)
 	} else if result.database != "t" {
 		t.Fatalf("expected database %q, got %q", "t", result.database)
 	} else if result.table != "test" {
@@ -197,9 +219,9 @@ CREATE INDEX secondary ON t.test (v);
 	if len(results) != 1 {
 		t.Fatalf("expected 1 result, got %d. got %#v", len(results), results)
 	}
-	if result := results[0]; result.errorType != sql.ScrubErrorDanglingIndexReference {
+	if result := results[0]; result.errorType != scrub.DanglingIndexReferenceError {
 		t.Fatalf("expected %q error, instead got: %s",
-			sql.ScrubErrorDanglingIndexReference, result.errorType)
+			scrub.DanglingIndexReferenceError, result.errorType)
 	} else if result.database != "t" {
 		t.Fatalf("expected database %q, got %q", "t", result.database)
 	} else if result.table != "test" {
@@ -305,14 +327,14 @@ INSERT INTO t.test VALUES (10, 20, 1337);
 	// Assert the missing index error is correct.
 	var missingIndexError *scrubResult
 	for _, result := range results {
-		if result.errorType == sql.ScrubErrorMissingIndexEntry {
+		if result.errorType == scrub.MissingIndexEntryError {
 			missingIndexError = &result
 			break
 		}
 	}
 	if result := missingIndexError; result == nil {
 		t.Fatalf("expected errors to include %q error, but got errors: %#v",
-			sql.ScrubErrorMissingIndexEntry, results)
+			scrub.MissingIndexEntryError, results)
 	} else if result.database != "t" {
 		t.Fatalf("expected database %q, got %q", "t", result.database)
 	} else if result.table != "test" {
@@ -328,14 +350,14 @@ INSERT INTO t.test VALUES (10, 20, 1337);
 	// Assert the dangling index error is correct.
 	var danglingIndexResult *scrubResult
 	for _, result := range results {
-		if result.errorType == sql.ScrubErrorDanglingIndexReference {
+		if result.errorType == scrub.DanglingIndexReferenceError {
 			danglingIndexResult = &result
 			break
 		}
 	}
 	if result := danglingIndexResult; result == nil {
 		t.Fatalf("expected errors to include %q error, but got errors: %#v",
-			sql.ScrubErrorDanglingIndexReference, results)
+			scrub.DanglingIndexReferenceError, results)
 	} else if result.database != "t" {
 		t.Fatalf("expected database %q, got %q", "t", result.database)
 	} else if result.table != "test" {
@@ -348,3 +370,269 @@ INSERT INTO t.test VALUES (10, 20, 1337);
 		t.Fatalf("expected erorr details to contain `%s`, got %s", `"data":"314"`, result.details)
 	}
 }
+
+// TestScrubPhysicalNonnullableNullInSingleColumnFamily tests that
+// `SCRUB TABLE ... WITH OPTIONS PHYSICAL` will find any rows where a
+// value is NULL for a column that is not-nullable and the only column
+// in a family. To test this, a row is created that we later overwrite
+// the value for. The value that is inserted is the sentinel value as
+// the column is the only one in the family.
+func TestScrubPhysicalNonnullableNullInSingleColumnFamily(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	s, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(context.TODO())
+
+	// Create the table and the row entry.
+	if _, err := db.Exec(`
+CREATE DATABASE t;
+CREATE TABLE t.test (k INT PRIMARY KEY, v INT NOT NULL);
+INSERT INTO t.test VALUES (217, 314);
+`); err != nil {
+		t.Fatalf("unexpected error: %s", err)
+	}
+
+	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "test")
+
+	// Construct datums for our row values (k, v).
+	values := []tree.Datum{tree.NewDInt(217), tree.NewDInt(314)}
+
+	colIDtoRowIndex := make(map[sqlbase.ColumnID]int)
+	colIDtoRowIndex[tableDesc.Columns[0].ID] = 0
+	colIDtoRowIndex[tableDesc.Columns[1].ID] = 1
+
+	// Create the primary index key
+	primaryIndexKeyPrefix := sqlbase.MakeIndexKeyPrefix(tableDesc, tableDesc.PrimaryIndex.ID)
+	primaryIndexKey, _, err := sqlbase.EncodeIndexKey(
+		tableDesc, &tableDesc.PrimaryIndex, colIDtoRowIndex, values, primaryIndexKeyPrefix)
+	if err != nil {
+		t.Fatalf("unexpected error: %s", err)
+	}
+
+	// Add the family suffix to the key.
+	family := tableDesc.Families[0]
+	primaryIndexKey = keys.MakeFamilyKey(primaryIndexKey, uint32(family.ID))
+
+	// Create an empty sentinel value.
+	var value roachpb.Value
+	value.SetTuple([]byte(nil))
+
+	if err := kvDB.Put(context.TODO(), primaryIndexKey, &value); err != nil {
+		t.Fatalf("unexpected error: %s", err)
+	}
+
+	// Run SCRUB and find the errors we created.
+	rows, err := db.Query(`EXPERIMENTAL SCRUB TABLE t.test WITH OPTIONS PHYSICAL`)
+	if err != nil {
+		t.Fatalf("unexpected error: %s", err)
+	} else if rows.Err() != nil {
+		t.Fatalf("unexpected error: %s", err)
+	}
+	defer rows.Close()
+
+	results, err := getResultRows(rows)
+	if err != nil {
+		t.Fatalf("unexpected error: %s", err)
+	} else if rows.Err() != nil {
+		t.Fatalf("unexpected error: %s", err)
+	} else if len(results) != 1 {
+		t.Fatalf("expected 1 result, got %d. got %#v", len(results), results)
+	}
+
+	if result := results[0]; result.errorType != string(scrub.ValueWasNullInNotNullError) {
+		t.Fatalf("expected %q error, instead got: %s",
+			scrub.ValueWasNullInNotNullError, result.errorType)
+	} else if result.database != "t" {
+		t.Fatalf("expected database %q, got %q", "t", result.database)
+	} else if result.table != "test" {
+		t.Fatalf("expected table %q, got %q", "test", result.table)
+	} else if result.primaryKey != "TODO" {
+		// TODO(joey): plumb through the reconstructed primary key string.
+		t.Fatalf("expected primaryKey %q, got %q", "TODO", result.primaryKey)
+	} else if result.repaired {
+		t.Fatalf("expected repaired %v, got %v", false, result.repaired)
+	} else if !strings.Contains(result.details, `"k":"217"`) {
+		t.Fatalf("expected erorr details to contain `%s`, got %s", `"k":"217"`, result.details)
+	} else if !strings.Contains(result.details, `"v":"<unset>"`) {
+		t.Fatalf("expected erorr details to contain `%s`, got %s", `"v":"<unset>"`, result.details)
+	}
+}
+
+// TestScrubPhysicalNonnullableNullInMulticolumnFamily tests that
+// `SCRUB TABLE ... WITH OPTIONS PHYSICAL` will find any rows where a
+// value is NULL for a column that is not-nullable and is not the only
+// column in a family. To test this, a row is created that we later
+// overwrite the value for. The value that is inserted is missing one of
+// the columns that belongs in the family.
+func TestScrubPhysicalNonnullableNullInMulticolumnFamily(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	s, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(context.TODO())
+
+	// Create the table and the row entry.
+	if _, err := db.Exec(`
+CREATE DATABASE t;
+CREATE TABLE t.test (k INT PRIMARY KEY, v INT NOT NULL, b INT NOT NULL, FAMILY (k), FAMILY(v, b));
+INSERT INTO t.test VALUES (217, 314, 1337);
+`); err != nil {
+		t.Fatalf("unexpected error: %s", err)
+	}
+
+	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "test")
+
+	// Construct datums for our row values (k, v, b).
+	values := []tree.Datum{tree.NewDInt(217), tree.NewDInt(314), tree.NewDInt(1337)}
+
+	colIDtoRowIndex := make(map[sqlbase.ColumnID]int)
+	colIDtoRowIndex[tableDesc.Columns[0].ID] = 0
+	colIDtoRowIndex[tableDesc.Columns[1].ID] = 1
+
+	// Create the primary index key
+	primaryIndexKeyPrefix := sqlbase.MakeIndexKeyPrefix(tableDesc, tableDesc.PrimaryIndex.ID)
+	primaryIndexKey, _, err := sqlbase.EncodeIndexKey(
+		tableDesc, &tableDesc.PrimaryIndex, colIDtoRowIndex, values, primaryIndexKeyPrefix)
+	if err != nil {
+		t.Fatalf("unexpected error: %s", err)
+	}
+
+	// Add the family suffix to the key, in particular we care about the
+	// second column family.
+	family := tableDesc.Families[1]
+	primaryIndexKey = keys.MakeFamilyKey(primaryIndexKey, uint32(family.ID))
+
+	// Encode the second column value.
+	valueBuf, err := sqlbase.EncodeTableValue(
+		[]byte(nil), tableDesc.Columns[1].ID, values[1], []byte(nil))
+	if err != nil {
+		t.Fatalf("unexpected error: %s", err)
+	}
+
+	// Construct the tuple for the family that is missing a column value, i.e. it is NULL.
+	var value roachpb.Value
+	value.SetTuple(valueBuf)
+
+	// Overwrite the existing value.
+	if err := kvDB.Put(context.TODO(), primaryIndexKey, &value); err != nil {
+		t.Fatalf("unexpected error: %s", err)
+	}
+
+	// Run SCRUB and find the errors we created.
+	rows, err := db.Query(`EXPERIMENTAL SCRUB TABLE t.test WITH OPTIONS PHYSICAL`)
+	if err != nil {
+		t.Fatalf("unexpected error: %s", err)
+	} else if rows.Err() != nil {
+		t.Fatalf("unexpected error: %s", err)
+	}
+	defer rows.Close()
+
+	results, err := getResultRows(rows)
+	if err != nil {
+		t.Fatalf("unexpected error: %s", err)
+	} else if rows.Err() != nil {
+		t.Fatalf("unexpected error: %s", err)
+	} else if len(results) != 1 {
+		t.Fatalf("expected 1 result, got %d. got %#v", len(results), results)
+	}
+
+	if result := results[0]; result.errorType != string(scrub.ValueWasNullInNotNullError) {
+		t.Fatalf("expected %q error, instead got: %s",
+			scrub.ValueWasNullInNotNullError, result.errorType)
+	} else if result.database != "t" {
+		t.Fatalf("expected database %q, got %q", "t", result.database)
+	} else if result.table != "test" {
+		t.Fatalf("expected table %q, got %q", "test", result.table)
+	} else if result.primaryKey != "TODO" {
+		// TODO(joey): plumb through the reconstructed primary key string.
+		t.Fatalf("expected primaryKey %q, got %q", "TODO", result.primaryKey)
+	} else if result.repaired {
+		t.Fatalf("expected repaired %v, got %v", false, result.repaired)
+	} else if !strings.Contains(result.details, `"k":"217"`) {
+		t.Fatalf("expected erorr details to contain `%s`, got %s", `"k":"217"`, result.details)
+	} else if !strings.Contains(result.details, `"v":"314"`) {
+		t.Fatalf("expected erorr details to contain `%s`, got %s", `"v":"314"`, result.details)
+	} else if !strings.Contains(result.details, `"b":"<unset>"`) {
+		t.Fatalf("expected erorr details to contain `%s`, got %s", `"b":"<unset>"`, result.details)
+	}
+}
+
+// // TestScrubPhysical tests that SCRUB TABLE ... WITH PHYSICAL
+// // will find ...
+// func TestScrubPhysicalOther(t *testing.T) {
+// 	defer leaktest.AfterTest(t)()
+// 	s, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+// 	defer s.Stopper().Stop(context.TODO())
+
+// 	// Create the table and the row entry.
+// 	if _, err := db.Exec(`
+// CREATE DATABASE t;
+// CREATE TABLE t.test (k INT PRIMARY KEY, v INT NOT NULL);
+// INSERT INTO t.test VALUES (217, 314);
+// `); err != nil {
+// 		t.Fatalf("unexpected error: %s", err)
+// 	}
+
+// 	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "test")
+
+// 	// Construct datums for our row values (k, v).
+// 	values := []tree.Datum{tree.NewDInt(217), tree.NewDInt(314)}
+
+// 	colIDtoRowIndex := make(map[sqlbase.ColumnID]int)
+// 	colIDtoRowIndex[tableDesc.Columns[0].ID] = 0
+// 	colIDtoRowIndex[tableDesc.Columns[1].ID] = 1
+
+// 	// Create the primary index key
+// 	primaryIndexKeyPrefix := sqlbase.MakeIndexKeyPrefix(tableDesc, tableDesc.PrimaryIndex.ID)
+// 	primaryIndexKey, _, err := sqlbase.EncodeIndexKey(
+// 		tableDesc, &tableDesc.PrimaryIndex, colIDtoRowIndex, values, primaryIndexKeyPrefix)
+// 	if err != nil {
+// 		t.Fatalf("unexpected error: %s", err)
+// 	}
+
+// 	// Add the family suffix to the key.
+// 	family := tableDesc.Families[0]
+// 	primaryIndexKey = keys.MakeFamilyKey(primaryIndexKey, uint32(family.ID))
+
+// 	// Create an empty sentinel value.
+// 	var value roachpb.Value
+// 	value.SetTuple([]byte(nil))
+
+// 	debugPrintKVs(t, kvDB, tableDesc, tableDesc.PrimaryIndex) // FIXME(joey): Debugging
+
+// 	if err := kvDB.Put(context.TODO(), primaryIndexKey, &value); err != nil {
+// 		t.Fatalf("unexpected error: %s", err)
+// 	}
+
+// 	debugPrintKVs(t, kvDB, tableDesc, tableDesc.PrimaryIndex) // FIXME(joey): Debugging
+
+// 	// Run SCRUB and find the index errors we created.
+// 	rows, err := db.Query(`EXPERIMENTAL SCRUB TABLE t.test WITH OPTIONS PHYSICAL`)
+// 	if err != nil {
+// 		t.Fatalf("unexpected error: %s", err)
+// 	} else if rows.Err() != nil {
+// 		t.Fatalf("unexpected error: %s", err)
+// 	}
+// 	defer rows.Close()
+
+// 	results, err := getResultRows(rows)
+// 	if err != nil {
+// 		t.Fatalf("unexpected error: %s", err)
+// 	}
+
+// 	if rows.Err() != nil {
+// 		t.Fatalf("unexpected error: %s", err)
+// 	}
+// 	if len(results) != 1 {
+// 		t.Fatalf("expected 1 result, got %d. got %#v", len(results), results)
+// 	}
+// 	if result := results[0]; result.errorType != string(scrub.DanglingIndexReferenceError) {
+// 		t.Fatalf("expected %q error, instead got: %s",
+// 			scrub.DanglingIndexReferenceError, result.errorType)
+// 	} else if result.database != "t" {
+// 		t.Fatalf("expected database %q, got %q", "t", result.database)
+// 	} else if result.table != "test" {
+// 		t.Fatalf("expected table %q, got %q", "test", result.table)
+// 	} else if result.primaryKey != "(10)" {
+// 		t.Fatalf("expected primaryKey %q, got %q", "(10)", result.primaryKey)
+// 	} else if result.repaired {
+// 		t.Fatalf("expected repaired %v, got %v", false, result.repaired)
+// 	}
+// }
