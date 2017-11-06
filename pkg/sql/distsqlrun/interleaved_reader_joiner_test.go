@@ -79,7 +79,7 @@ func TestInterleavedReaderJoiner(t *testing.T) {
 	// other parent row.
 	sqlutils.CreateTableInterleaved(t, sqlDB, "child1",
 		"pid INT, id INT, b INT, PRIMARY KEY (pid, id)",
-		"test.parent (pid)",
+		"parent (pid)",
 		62,
 		sqlutils.ToRowFn(sqlutils.RowModuloShiftedFn(30), sqlutils.RowIdxFn, bFn),
 	)
@@ -88,14 +88,14 @@ func TestInterleavedReaderJoiner(t *testing.T) {
 	// interleaved into each parent row.
 	sqlutils.CreateTableInterleaved(t, sqlDB, "child2",
 		"pid INT, id INT, s STRING, PRIMARY KEY (pid, id), INDEX (s)",
-		"test.parent (pid)",
+		"parent (pid)",
 		15,
 		sqlutils.ToRowFn(sqlutils.RowModuloShiftedFn(30), sqlutils.RowIdxFn, sqlutils.RowEnglishFn),
 	)
 
-	pd := sqlbase.GetTableDescriptor(kvDB, "test", "parent")
-	cd1 := sqlbase.GetTableDescriptor(kvDB, "test", "child1")
-	cd2 := sqlbase.GetTableDescriptor(kvDB, "test", "child2")
+	pd := sqlbase.GetTableDescriptor(kvDB, sqlutils.TestDB, "parent")
+	cd1 := sqlbase.GetTableDescriptor(kvDB, sqlutils.TestDB, "child1")
+	cd2 := sqlbase.GetTableDescriptor(kvDB, sqlutils.TestDB, "child2")
 
 	pdSpans := []TableReaderSpan{{Span: makeSpanWithRootBound(pd, -1, 18)}}
 	cd2Spans := []TableReaderSpan{{Span: makeSpanWithRootBound(pd, 12, -1)}}
@@ -418,8 +418,8 @@ func TestInterleavedReaderJoinerErrors(t *testing.T) {
 		sqlutils.ToRowFn(sqlutils.RowModuloShiftedFn(5), sqlutils.RowIdxFn),
 	)
 
-	pd := sqlbase.GetTableDescriptor(kvDB, "test", "parent")
-	cd := sqlbase.GetTableDescriptor(kvDB, "test", "child")
+	pd := sqlbase.GetTableDescriptor(kvDB, sqlutils.TestDB, "parent")
+	cd := sqlbase.GetTableDescriptor(kvDB, sqlutils.TestDB, "child")
 
 	testCases := []struct {
 		spec     InterleavedReaderJoinerSpec
