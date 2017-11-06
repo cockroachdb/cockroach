@@ -75,14 +75,17 @@ func ZoneSpecifierFromID(
 	}
 	tn := &parser.TableName{DatabaseName: parser.Name(db), TableName: parser.Name(name)}
 	return parser.ZoneSpecifier{
-		Table: parser.NormalizableTableName{TableNameReference: tn},
+		TableOrIndex: parser.TableNameWithIndex{
+			Table: parser.NormalizableTableName{TableNameReference: tn},
+		},
 	}, nil
 }
 
 // ParseCLIZoneSpecifier converts a single string s identifying a zone, as would
 // be used to name a zone on the command line, to a ZoneSpecifier. A valid CLI
 // zone specifier is either 1) a database or table reference of the form
-// DATABASE[.TABLE], or 2) a special named zone of the form [.NAME].
+// DATABASE[.TABLE[.PARTITION|@INDEX]], or 2) a special named zone of the form
+// .NAME.
 func ParseCLIZoneSpecifier(s string) (parser.ZoneSpecifier, error) {
 	if len(s) > 0 && s[0] == '.' {
 		name := s[1:]
@@ -91,20 +94,39 @@ func ParseCLIZoneSpecifier(s string) (parser.ZoneSpecifier, error) {
 		}
 		return parser.ZoneSpecifier{NamedZone: parser.UnrestrictedName(name)}, nil
 	}
-	// ParseTableName is not vulnerable to SQL injection, so passing s directly
-	// is safe. See #8389 for details.
-	tn, err := parser.ParseTableName(s)
+	// ParseTableNameWithIndex is not vulnerable to SQL injection, so passing s
+	// directly is safe. See #8389 for details.
+	parsed, err := parser.ParseTableNameWithIndex(s)
 	if err != nil {
 		return parser.ZoneSpecifier{}, fmt.Errorf("malformed name: %q", s)
 	}
-	db := tn.Database()
-	if db == "" {
-		// No database was specified, so interpret the table name as the database.
-		db = tn.Table()
-		return parser.ZoneSpecifier{Database: parser.Name(db)}, nil
+	parsed.SearchTable = false
+	var partition parser.Name
+	if un := parsed.Table.TableNameReference.(parser.UnresolvedName); len(un) == 1 {
+		// Unlike in SQL, where a name with one part indicates a table in the
+		// current database, if a CLI specifier has just one name part, it indicates
+		// a database.
+		return parser.ZoneSpecifier{Database: un[0].(parser.Name)}, nil
+	} else if len(un) == 3 {
+		// If a CLI specifier has three name parts, the last name is a partition.
+		// Pop it off so TableNameReference.Normalize sees only the table name
+		// below.
+		partition = un[2].(parser.Name)
+		parsed.Table.TableNameReference = un[:2]
+	}
+	// We've handled the special cases for named zones, databases and partitions;
+	// have TableNameReference.Normalize tell us whether what remains is a valid
+	// table or index name.
+	if _, err = parsed.Table.Normalize(); err != nil {
+		return parser.ZoneSpecifier{}, err
+	}
+	if parsed.Index != "" && partition != "" {
+		return parser.ZoneSpecifier{}, fmt.Errorf(
+			"index and partition cannot be specified simultaneously: %q", s)
 	}
 	return parser.ZoneSpecifier{
-		Table: parser.NormalizableTableName{TableNameReference: tn},
+		TableOrIndex: parsed,
+		Partition:    partition,
 	}, nil
 }
 
@@ -117,7 +139,16 @@ func CLIZoneSpecifier(zs parser.ZoneSpecifier) string {
 	if zs.Database != "" {
 		return zs.Database.String()
 	}
-	return zs.Table.String()
+	ti := zs.TableOrIndex
+	if zs.Partition != "" {
+		tn := ti.Table.TableName()
+		ti.Table = parser.NormalizableTableName{
+			TableNameReference: parser.UnresolvedName{tn.DatabaseName, tn.TableName, zs.Partition},
+		}
+		// The index is redundant when the partition is specified, so omit it.
+		ti.Index = ""
+	}
+	return ti.String()
 }
 
 // ResolveZoneSpecifier converts a zone specifier to the ID of most specific
@@ -139,7 +170,7 @@ func ResolveZoneSpecifier(
 		return resolveName(keys.RootNamespaceID, string(zs.Database))
 	}
 
-	tn, err := zs.Table.NormalizeTableName()
+	tn, err := zs.TableOrIndex.Table.Normalize()
 	if err != nil {
 		return 0, err
 	}

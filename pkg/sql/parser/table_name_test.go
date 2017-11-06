@@ -15,6 +15,7 @@
 package parser
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -43,18 +44,23 @@ func TestNormalizeTableName(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
-		tn, err := ParseTableName(tc.in)
-		if err == nil {
+		tn, err := func() (*TableName, error) {
+			stmt, err := ParseOne(fmt.Sprintf("ALTER TABLE %s RENAME TO x", tc.in))
+			if err != nil {
+				return nil, err
+			}
+			tn, err := stmt.(*RenameTable).Name.Normalize()
+			if err != nil {
+				return nil, err
+			}
 			err = tn.QualifyWithDatabase(tc.db)
+			return tn, err
+		}()
+		if !testutils.IsError(err, tc.err) {
+			t.Errorf("%s: expected %s, but found %s", tc.in, tc.err, err.Error())
 		}
 		if tc.err != "" {
-			if !testutils.IsError(err, tc.err) {
-				t.Fatalf("%s: expected %s, but found %s", tc.in, tc.err, err.Error())
-			}
 			continue
-		}
-		if err != nil {
-			t.Fatalf("%s: expected success, but found %v", tc.in, err)
 		}
 		tn.resetRepr()
 		if out := tn.String(); tc.out != out {

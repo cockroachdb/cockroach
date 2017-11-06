@@ -20,10 +20,24 @@ import (
 
 // ZoneSpecifier represents a reference to a configurable zone of the keyspace.
 type ZoneSpecifier struct {
-	// Only one of NamedZone, Database or Table may be set.
-	NamedZone UnrestrictedName
-	Database  Name
-	Table     NormalizableTableName
+	// Only one of NamedZone, Database or TableOrIndex may be set.
+	NamedZone    UnrestrictedName
+	Database     Name
+	TableOrIndex TableNameWithIndex
+
+	// Partition is only respected when Table is set.
+	Partition Name
+}
+
+// TargetsTable returns whether the zone specifier targets a table or a subzone
+// within a table.
+func (node ZoneSpecifier) TargetsTable() bool {
+	return node.NamedZone == "" && node.Database == ""
+}
+
+// TargetsIndex returns whether the zone specifier targets an index.
+func (node ZoneSpecifier) TargetsIndex() bool {
+	return node.TargetsTable() && (node.TableOrIndex.Index != "" || node.TableOrIndex.SearchTable)
 }
 
 // Format implements the NodeFormatter interface.
@@ -35,8 +49,16 @@ func (node ZoneSpecifier) Format(buf *bytes.Buffer, f FmtFlags) {
 		buf.WriteString("DATABASE ")
 		FormatNode(buf, f, &node.Database)
 	} else {
-		buf.WriteString("TABLE ")
-		FormatNode(buf, f, &node.Table)
+		if node.TargetsIndex() {
+			buf.WriteString("INDEX ")
+		} else {
+			buf.WriteString("TABLE ")
+		}
+		FormatNode(buf, f, &node.TableOrIndex)
+	}
+	if node.Partition != "" {
+		buf.WriteString(" PARTITION ")
+		FormatNode(buf, f, &node.Partition)
 	}
 }
 

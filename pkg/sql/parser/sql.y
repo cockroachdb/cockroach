@@ -535,6 +535,7 @@ func (u *sqlSymUnion) scrubOption() ScrubOption {
 %type <Statement> alter_split_index_stmt
 %type <Statement> alter_rename_index_stmt
 %type <Statement> alter_testing_relocate_index_stmt
+%type <Statement> alter_zone_index_stmt
 
 // ALTER VIEW
 %type <Statement> alter_rename_view_stmt
@@ -683,6 +684,7 @@ func (u *sqlSymUnion) scrubOption() ScrubOption {
 %type <TableDefs> opt_table_elem_list table_elem_list
 %type <*InterleaveDef> opt_interleave
 %type <*PartitionBy> opt_partition_by partition_by
+%type <str> partition opt_partition
 %type <[]ListPartition> list_partitions
 %type <[]RangePartition> range_partitions
 %type <[]*Tuple> list_partition_values
@@ -1076,6 +1078,7 @@ alter_index_stmt:
 | alter_testing_relocate_index_stmt
 | alter_scatter_index_stmt
 | alter_rename_index_stmt
+| alter_zone_index_stmt
 // ALTER INDEX has its error help token here because the ALTER INDEX
 // prefix is spread over multiple non-terminals.
 | ALTER INDEX error // SHOW HELP: ALTER INDEX
@@ -1137,12 +1140,28 @@ alter_zone_database_stmt:
   }
 
 alter_zone_table_stmt:
-  ALTER TABLE qualified_name EXPERIMENTAL CONFIGURE ZONE a_expr_const
+  ALTER TABLE qualified_name opt_partition EXPERIMENTAL CONFIGURE ZONE a_expr_const
   {
     /* SKIP DOC */
     $$.val = &SetZoneConfig{
-      ZoneSpecifier: ZoneSpecifier{Table: $3.normalizableTableName()},
-      YAMLConfig: $7.expr(),
+      ZoneSpecifier: ZoneSpecifier{
+        TableOrIndex: TableNameWithIndex{Table: $3.normalizableTableName()},
+        Partition: Name($4),
+      },
+      YAMLConfig: $8.expr(),
+    }
+  }
+
+alter_zone_index_stmt:
+  ALTER INDEX table_name_with_index opt_partition EXPERIMENTAL CONFIGURE ZONE a_expr_const
+  {
+    /* SKIP DOC */
+    $$.val = &SetZoneConfig{
+      ZoneSpecifier: ZoneSpecifier{
+        TableOrIndex: $3.tableWithIdx(),
+        Partition: Name($4),
+      },
+      YAMLConfig: $8.expr(),
     }
   }
 
@@ -2566,10 +2585,21 @@ show_zone_stmt:
     /* SKIP DOC */
     $$.val = &ShowZoneConfig{ZoneSpecifier{Database: Name($7)}}
   }
-| EXPERIMENTAL SHOW ZONE CONFIGURATION FOR TABLE qualified_name
+| EXPERIMENTAL SHOW ZONE CONFIGURATION FOR TABLE qualified_name opt_partition
   {
     /* SKIP DOC */
-    $$.val = &ShowZoneConfig{ZoneSpecifier{Table: $7.normalizableTableName()}}
+    $$.val = &ShowZoneConfig{ZoneSpecifier{
+      TableOrIndex: TableNameWithIndex{Table: $7.normalizableTableName()},
+      Partition: Name($8),
+    }}
+  }
+| EXPERIMENTAL SHOW ZONE CONFIGURATION FOR INDEX table_name_with_index opt_partition
+  {
+    /* SKIP DOC */
+    $$.val = &ShowZoneConfig{ZoneSpecifier{
+      TableOrIndex: $7.tableWithIdx(),
+      Partition: Name($8),
+    }}
   }
 | EXPERIMENTAL SHOW ZONE CONFIGURATIONS
   {
@@ -2750,6 +2780,19 @@ opt_interleave_drop_behavior:
     $$.val = DropDefault
   }
 
+partition:
+  PARTITION unrestricted_name
+  {
+    $$ = $2
+  }
+
+opt_partition:
+  partition
+| /* EMPTY */
+  {
+    $$ = ""
+  }
+
 opt_partition_by:
   partition_by
 | /* EMPTY */
@@ -2774,27 +2817,27 @@ partition_by:
   }
 
 list_partitions:
-  PARTITION unrestricted_name VALUES list_partition_values ',' list_partitions
+  partition VALUES list_partition_values ',' list_partitions
   {
     $$.val = append([]ListPartition{{
-      Name: UnrestrictedName($2),
-      Tuples: $4.tuples(),
+      Name: UnrestrictedName($1),
+      Tuples: $3.tuples(),
+    }}, $5.listPartitions()...)
+  }
+| partition VALUES list_partition_values partition_by ',' list_partitions
+  {
+    $$.val = append([]ListPartition{{
+      Name: UnrestrictedName($1),
+      Tuples: $3.tuples(),
+      Subpartition: $4.partitionBy(),
     }}, $6.listPartitions()...)
   }
-| PARTITION unrestricted_name VALUES list_partition_values partition_by ',' list_partitions
-  {
-    $$.val = append([]ListPartition{{
-      Name: UnrestrictedName($2),
-      Tuples: $4.tuples(),
-      Subpartition: $5.partitionBy(),
-    }}, $7.listPartitions()...)
-  }
-| PARTITION unrestricted_name VALUES list_partition_values opt_partition_by
+| partition VALUES list_partition_values opt_partition_by
   {
     $$.val = []ListPartition{{
-      Name: UnrestrictedName($2),
-      Tuples: $4.tuples(),
-      Subpartition: $5.partitionBy(),
+      Name: UnrestrictedName($1),
+      Tuples: $3.tuples(),
+      Subpartition: $4.partitionBy(),
     }}
   }
 
@@ -2826,27 +2869,27 @@ partition_expr:
   }
 
 range_partitions:
-  PARTITION unrestricted_name VALUES LESS THAN '(' partition_exprs ')' ',' range_partitions
+  partition VALUES LESS THAN '(' partition_exprs ')' ',' range_partitions
   {
     $$.val = append([]RangePartition{{
-      Name: UnrestrictedName($2),
-      Tuple: &Tuple{Exprs: $7.exprs()},
+      Name: UnrestrictedName($1),
+      Tuple: &Tuple{Exprs: $6.exprs()},
+    }}, $9.rangePartitions()...)
+  }
+| partition VALUES LESS THAN '(' partition_exprs ')' partition_by ',' range_partitions
+  {
+    $$.val = append([]RangePartition{{
+      Name: UnrestrictedName($1),
+      Tuple: &Tuple{Exprs: $6.exprs()},
+      Subpartition: $8.partitionBy(),
     }}, $10.rangePartitions()...)
   }
-| PARTITION unrestricted_name VALUES LESS THAN '(' partition_exprs ')' partition_by ',' range_partitions
-  {
-    $$.val = append([]RangePartition{{
-      Name: UnrestrictedName($2),
-      Tuple: &Tuple{Exprs: $7.exprs()},
-      Subpartition: $9.partitionBy(),
-    }}, $11.rangePartitions()...)
-  }
-| PARTITION unrestricted_name VALUES LESS THAN '(' partition_exprs ')' opt_partition_by
+| partition VALUES LESS THAN '(' partition_exprs ')' opt_partition_by
   {
     $$.val = []RangePartition{{
-      Name: UnrestrictedName($2),
-      Tuple: &Tuple{Exprs: $7.exprs()},
-      Subpartition: $9.partitionBy(),
+      Name: UnrestrictedName($1),
+      Tuple: &Tuple{Exprs: $6.exprs()},
+      Subpartition: $8.partitionBy(),
     }}
   }
 
