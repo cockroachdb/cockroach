@@ -99,58 +99,37 @@ type Command struct {
 	Eval func(context.Context, engine.ReadWriter, CommandArgs, roachpb.Response) (EvalResult, error)
 }
 
-// DefaultDeclareKeys is the default implementation of Command.DeclareKeys
-func DefaultDeclareKeys(
-	desc roachpb.RangeDescriptor, header roachpb.Header, req roachpb.Request, spans *spanset.SpanSet,
-) {
-	if roachpb.IsReadOnly(req) {
-		spans.Add(spanset.SpanReadOnly, req.Header())
-	} else {
-		spans.Add(spanset.SpanReadWrite, req.Header())
-	}
-	if header.Txn != nil {
-		header.Txn.AssertInitialized(context.TODO())
-		spans.Add(spanset.SpanReadOnly, roachpb.Span{
-			Key: keys.AbortSpanKey(header.RangeID, header.Txn.ID),
-		})
-	}
-	if header.ReturnRangeInfo {
-		spans.Add(spanset.SpanReadOnly, roachpb.Span{Key: keys.RangeLeaseKey(header.RangeID)})
-		spans.Add(spanset.SpanReadOnly, roachpb.Span{Key: keys.RangeDescriptorKey(desc.StartKey)})
-	}
-}
-
 var commands = map[roachpb.Method]Command{
-	roachpb.Get:                {DeclareKeys: DefaultDeclareKeys, Eval: evalGet},
-	roachpb.Put:                {DeclareKeys: DefaultDeclareKeys, Eval: evalPut},
-	roachpb.ConditionalPut:     {DeclareKeys: DefaultDeclareKeys, Eval: evalConditionalPut},
-	roachpb.InitPut:            {DeclareKeys: DefaultDeclareKeys, Eval: evalInitPut},
-	roachpb.Increment:          {DeclareKeys: DefaultDeclareKeys, Eval: evalIncrement},
-	roachpb.Delete:             {DeclareKeys: DefaultDeclareKeys, Eval: evalDelete},
-	roachpb.DeleteRange:        {DeclareKeys: DefaultDeclareKeys, Eval: evalDeleteRange},
-	roachpb.Scan:               {DeclareKeys: DefaultDeclareKeys, Eval: evalScan},
-	roachpb.ReverseScan:        {DeclareKeys: DefaultDeclareKeys, Eval: evalReverseScan},
+	roachpb.Get:                {DeclareKeys: batcheval.DefaultDeclareKeys, Eval: evalGet},
+	roachpb.Put:                {DeclareKeys: batcheval.DefaultDeclareKeys, Eval: evalPut},
+	roachpb.ConditionalPut:     {DeclareKeys: batcheval.DefaultDeclareKeys, Eval: evalConditionalPut},
+	roachpb.InitPut:            {DeclareKeys: batcheval.DefaultDeclareKeys, Eval: evalInitPut},
+	roachpb.Increment:          {DeclareKeys: batcheval.DefaultDeclareKeys, Eval: evalIncrement},
+	roachpb.Delete:             {DeclareKeys: batcheval.DefaultDeclareKeys, Eval: evalDelete},
+	roachpb.DeleteRange:        {DeclareKeys: batcheval.DefaultDeclareKeys, Eval: evalDeleteRange},
+	roachpb.Scan:               {DeclareKeys: batcheval.DefaultDeclareKeys, Eval: evalScan},
+	roachpb.ReverseScan:        {DeclareKeys: batcheval.DefaultDeclareKeys, Eval: evalReverseScan},
 	roachpb.BeginTransaction:   {DeclareKeys: declareKeysBeginTransaction, Eval: evalBeginTransaction},
 	roachpb.EndTransaction:     {DeclareKeys: declareKeysEndTransaction, Eval: evalEndTransaction},
 	roachpb.RangeLookup:        {DeclareKeys: declareKeysRangeLookup, Eval: evalRangeLookup},
 	roachpb.HeartbeatTxn:       {DeclareKeys: declareKeysHeartbeatTransaction, Eval: evalHeartbeatTxn},
 	roachpb.GC:                 {DeclareKeys: declareKeysGC, Eval: evalGC},
 	roachpb.PushTxn:            {DeclareKeys: declareKeysPushTransaction, Eval: evalPushTxn},
-	roachpb.QueryTxn:           {DeclareKeys: DefaultDeclareKeys, Eval: evalQueryTxn},
+	roachpb.QueryTxn:           {DeclareKeys: batcheval.DefaultDeclareKeys, Eval: evalQueryTxn},
 	roachpb.ResolveIntent:      {DeclareKeys: declareKeysResolveIntent, Eval: evalResolveIntent},
 	roachpb.ResolveIntentRange: {DeclareKeys: declareKeysResolveIntentRange, Eval: evalResolveIntentRange},
-	roachpb.Merge:              {DeclareKeys: DefaultDeclareKeys, Eval: evalMerge},
+	roachpb.Merge:              {DeclareKeys: batcheval.DefaultDeclareKeys, Eval: evalMerge},
 	roachpb.TruncateLog:        {DeclareKeys: declareKeysTruncateLog, Eval: evalTruncateLog},
 	roachpb.RequestLease:       {DeclareKeys: declareKeysRequestLease, Eval: evalRequestLease},
 	roachpb.TransferLease:      {DeclareKeys: declareKeysRequestLease, Eval: evalTransferLease},
 	roachpb.LeaseInfo:          {DeclareKeys: declareKeysLeaseInfo, Eval: evalLeaseInfo},
-	roachpb.ComputeChecksum:    {DeclareKeys: DefaultDeclareKeys, Eval: evalComputeChecksum},
+	roachpb.ComputeChecksum:    {DeclareKeys: batcheval.DefaultDeclareKeys, Eval: evalComputeChecksum},
 	roachpb.WriteBatch:         writeBatchCmd,
 	roachpb.Export:             exportCmd,
 	roachpb.AddSSTable:         addSSTableCmd,
 
 	roachpb.DeprecatedVerifyChecksum: {
-		DeclareKeys: DefaultDeclareKeys,
+		DeclareKeys: batcheval.DefaultDeclareKeys,
 		Eval: func(context.Context, engine.ReadWriter, CommandArgs, roachpb.Response) (EvalResult, error) {
 			return EvalResult{}, nil
 		}},
@@ -936,7 +915,8 @@ func resolveLocalIntents(
 	ms *enginepb.MVCCStats,
 	args roachpb.EndTransactionRequest,
 	txn *roachpb.Transaction,
-	knobs batcheval.TestingKnobs) []roachpb.Intent {
+	knobs batcheval.TestingKnobs,
+) []roachpb.Intent {
 	var preMergeDesc *roachpb.RangeDescriptor
 	if mergeTrigger := args.InternalCommitTrigger.GetMergeTrigger(); mergeTrigger != nil {
 		// If this is a merge, then use the post-merge descriptor to determine
@@ -1150,7 +1130,7 @@ func runCommitTrigger(
 func declareKeysRangeLookup(
 	desc roachpb.RangeDescriptor, header roachpb.Header, req roachpb.Request, spans *spanset.SpanSet,
 ) {
-	DefaultDeclareKeys(desc, header, req, spans)
+	batcheval.DefaultDeclareKeys(desc, header, req, spans)
 	spans.Add(spanset.SpanReadOnly, roachpb.Span{Key: keys.RangeDescriptorKey(desc.StartKey)})
 }
 
@@ -1482,7 +1462,7 @@ func evalHeartbeatTxn(
 func declareKeysGC(
 	desc roachpb.RangeDescriptor, header roachpb.Header, req roachpb.Request, spans *spanset.SpanSet,
 ) {
-	// Intentionally don't call DefaultDeclareKeys: the key range in the header
+	// Intentionally don't call  batcheval.DefaultDeclareKeys: the key range in the header
 	// is usually the whole range (pending resolution of #7880).
 	gcr := req.(*roachpb.GCRequest)
 	for _, key := range gcr.Keys {
@@ -1855,7 +1835,7 @@ func writeAbortSpanOnResolve(status roachpb.TransactionStatus) bool {
 func declareKeysResolveIntentCombined(
 	desc roachpb.RangeDescriptor, header roachpb.Header, req roachpb.Request, spans *spanset.SpanSet,
 ) {
-	DefaultDeclareKeys(desc, header, req, spans)
+	batcheval.DefaultDeclareKeys(desc, header, req, spans)
 	var args *roachpb.ResolveIntentRequest
 	switch t := req.(type) {
 	case *roachpb.ResolveIntentRequest:

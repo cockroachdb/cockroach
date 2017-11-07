@@ -2070,7 +2070,9 @@ func makeTSCacheRequest(ba *roachpb.BatchRequest, br *roachpb.BatchResponse) *ts
 	return cr
 }
 
-func collectSpans(desc roachpb.RangeDescriptor, ba *roachpb.BatchRequest) (*spanset.SpanSet, error) {
+func collectSpans(
+	desc roachpb.RangeDescriptor, ba *roachpb.BatchRequest,
+) (*spanset.SpanSet, error) {
 	spans := &spanset.SpanSet{}
 	// TODO(bdarnell): need to make this less global when the local
 	// command queue is used more heavily. For example, a split will
