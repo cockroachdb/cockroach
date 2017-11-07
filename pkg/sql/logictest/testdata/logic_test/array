@@ -118,6 +118,23 @@ SELECT '{hello}'::VARCHAR(2)[]
 ----
 {"he"}
 
+# array casting
+
+query T
+SELECT ARRAY[1,2,3]::INT[]
+----
+{1,2,3}
+
+query error pq: invalid cast: int[] -> UUID[]
+SELECT ARRAY[1,2,3]::UUID[]
+
+query error pq: invalid cast: inet[] -> INT[]
+SeLECT ARRAY['8.8.8.8'::INET, '8.8.4.4'::INET]::INT[]
+
+# this _should_ be valid, but isn't, yet
+query error pq: invalid cast: int[] -> TEXT[]
+SELECT ARRAY[1,2,3]::TEXT[]
+
 # array subscript access
 
 query T
@@ -957,8 +974,3 @@ query T
 SELECT ARRAY_POSITIONS(NULL::STRING[], 'A')
 ----
 NULL
-
-query T
-SELECT ARRAY[1,2,3]::INT[]
-----
-{1,2,3}

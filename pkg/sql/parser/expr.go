@@ -1120,7 +1120,7 @@ var (
 	oidCastTypes       = []Type{TypeNull, TypeString, TypeCollatedString, TypeInt, TypeOid}
 	uuidCastTypes      = []Type{TypeNull, TypeString, TypeCollatedString, TypeBytes, TypeUUID}
 	inetCastTypes      = []Type{TypeNull, TypeString, TypeCollatedString, TypeINet}
-	arrayCastTypes     = []Type{TypeNull, TypeString}
+	arrayCastTypes     = []Type{TypeNull, TypeString, TypeArray}
 	jsonCastTypes      = []Type{TypeNull, TypeString}
 )
 
@@ -1159,7 +1159,7 @@ func validCastTypes(t Type) []Type {
 		if t.FamilyEqual(TypeCollatedString) {
 			return stringCastTypes
 		} else if t.FamilyEqual(TypeArray) {
-			return append(arrayCastTypes, t)
+			return arrayCastTypes
 		}
 		return nil
 	}
