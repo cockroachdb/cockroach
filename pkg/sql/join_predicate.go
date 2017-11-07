@@ -21,6 +21,7 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
 )
@@ -155,7 +156,7 @@ func (p *planner) makeOnPredicate(
 	}
 
 	// Determine the on condition expression.
-	onCond, err := p.analyzeExpr(ctx, expr, multiSourceInfo{info}, pred.iVarHelper, parser.TypeBool, true, "ON")
+	onCond, err := p.analyzeExpr(ctx, expr, multiSourceInfo{info}, pred.iVarHelper, types.Bool, true, "ON")
 	if err != nil {
 		return nil, nil, err
 	}
@@ -294,7 +295,7 @@ func (p *joinPredicate) IndexedVarEval(idx int, ctx *parser.EvalContext) (parser
 }
 
 // IndexedVarResolvedType implements the parser.IndexedVarContainer interface.
-func (p *joinPredicate) IndexedVarResolvedType(idx int) parser.Type {
+func (p *joinPredicate) IndexedVarResolvedType(idx int) types.T {
 	return p.info.sourceColumns[idx].Typ
 }
 
@@ -375,7 +376,7 @@ func (p *joinPredicate) encode(b []byte, row parser.Datums, cols []int) ([]byte,
 // is reported.
 func pickUsingColumn(
 	cols sqlbase.ResultColumns, colName string, context string,
-) (int, parser.Type, error) {
+) (int, types.T, error) {
 	idx := invalidColIdx
 	for j, col := range cols {
 		if col.Hidden {

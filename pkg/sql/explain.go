@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
@@ -173,9 +174,9 @@ func (n *explainDistSQLNode) Close(ctx context.Context) {
 }
 
 var explainDistSQLColumns = sqlbase.ResultColumns{
-	{Name: "Automatic", Typ: parser.TypeBool},
-	{Name: "URL", Typ: parser.TypeString},
-	{Name: "JSON", Typ: parser.TypeString, Hidden: true},
+	{Name: "Automatic", Typ: types.Bool},
+	{Name: "URL", Typ: types.String},
+	{Name: "JSON", Typ: types.String, Hidden: true},
 }
 
 func (n *explainDistSQLNode) Start(params runParams) error {

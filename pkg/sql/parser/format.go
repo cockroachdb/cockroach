@@ -17,6 +17,8 @@ package parser
 import (
 	"bytes"
 	"fmt"
+
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 )
 
 type fmtFlags struct {
@@ -198,7 +200,7 @@ func FormatNode(buf *bytes.Buffer, f FmtFlags, n NodeFormatter) {
 		}
 	}
 	if f.disambiguateDatumTypes {
-		var typ Type
+		var typ types.T
 		if d, isDatum := n.(Datum); isDatum {
 			if d.AmbiguousFormat() {
 				typ = d.ResolvedType()

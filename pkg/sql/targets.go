@@ -18,6 +18,7 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/pkg/errors"
 )
@@ -28,7 +29,7 @@ const autoGenerateRenderOutputName = ""
 func (p *planner) computeRender(
 	ctx context.Context,
 	target parser.SelectExpr,
-	desiredType parser.Type,
+	desiredType types.T,
 	info multiSourceInfo,
 	ivarHelper parser.IndexedVarHelper,
 	outputName string,
@@ -57,7 +58,7 @@ func (p *planner) computeRender(
 func (p *planner) computeRenderAllowingStars(
 	ctx context.Context,
 	target parser.SelectExpr,
-	desiredType parser.Type,
+	desiredType types.T,
 	info multiSourceInfo,
 	ivarHelper parser.IndexedVarHelper,
 	outputName string,

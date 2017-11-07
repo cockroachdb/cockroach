@@ -30,6 +30,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/ipaddr"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -80,9 +81,9 @@ type pgNumeric struct {
 	sign                    pgNumericSign
 }
 
-func pgTypeForParserType(t parser.Type) pgType {
+func pgTypeForParserType(t types.T) pgType {
 	size := -1
-	if s, variable := t.Size(); !variable {
+	if s, variable := parser.DatumTypeSize(t); !variable {
 		size = int(s)
 	}
 	return pgType{
@@ -375,7 +376,7 @@ func (b *writeBuffer) writeBinaryDatum(
 		b.putInt32(dateToPgBinary(v))
 
 	case *parser.DArray:
-		if v.ParamTyp.FamilyEqual(parser.TypeAnyArray) {
+		if v.ParamTyp.FamilyEqual(types.AnyArray) {
 			b.setError(errors.New("unsupported binary serialization of multidimensional arrays"))
 			return
 		}
@@ -617,7 +618,7 @@ func decodeOidDatum(id oid.Oid, code formatCode, b []byte) (parser.Datum, error)
 			if err := (&arr).Scan(b); err != nil {
 				return nil, err
 			}
-			out := parser.NewDArray(parser.TypeInt)
+			out := parser.NewDArray(types.Int)
 			for _, v := range arr {
 				if err := out.Append(parser.NewDInt(parser.DInt(v))); err != nil {
 					return nil, err
@@ -629,9 +630,9 @@ func decodeOidDatum(id oid.Oid, code formatCode, b []byte) (parser.Datum, error)
 			if err := (&arr).Scan(b); err != nil {
 				return nil, err
 			}
-			out := parser.NewDArray(parser.TypeString)
+			out := parser.NewDArray(types.String)
 			if id == oid.T__name {
-				out.ParamTyp = parser.TypeName
+				out.ParamTyp = types.Name
 			}
 			for _, v := range arr {
 				var s parser.Datum = parser.NewDString(v)
@@ -644,7 +645,7 @@ func decodeOidDatum(id oid.Oid, code formatCode, b []byte) (parser.Datum, error)
 			}
 			return out, nil
 		}
-		if _, ok := parser.ArrayOids[id]; ok {
+		if _, ok := types.ArrayOids[id]; ok {
 			// Arrays come in in their string form, so we parse them as such and later
 			// convert them to their actual datum form.
 			if err := validateStringBytes(b); err != nil {
@@ -864,7 +865,7 @@ func decodeBinaryArray(b []byte, code formatCode) (parser.Datum, error) {
 	}
 
 	elemOid := oid.Oid(hdr.ElemOid)
-	arr := parser.NewDArray(parser.OidToType[elemOid])
+	arr := parser.NewDArray(types.OidToType[elemOid])
 	var vlen int32
 	for i := int32(0); i < hdr.DimSize; i++ {
 		if err := binary.Read(r, binary.BigEndian, &vlen); err != nil {

@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/pkg/errors"
@@ -83,7 +84,7 @@ func (r *editNodeRun) initEditNode(
 	tw tableWriter,
 	tn *parser.TableName,
 	re parser.ReturningClause,
-	desiredTypes []parser.Type,
+	desiredTypes []types.T,
 ) error {
 	r.rows = rows
 	r.tw = tw
@@ -152,7 +153,7 @@ func (ts tupleSlot) extractValues(row parser.Datums) parser.Datums {
 
 func (ts tupleSlot) checkColumnTypes(row []parser.TypedExpr, pmap *parser.PlaceholderInfo) error {
 	renderedResult := row[ts.sourceIndex]
-	for i, typ := range renderedResult.ResolvedType().(parser.TTuple) {
+	for i, typ := range renderedResult.ResolvedType().(types.TTuple) {
 		if err := sqlbase.CheckColumnType(ts.columns[i], typ, pmap); err != nil {
 			return err
 		}
@@ -203,7 +204,7 @@ func addOrMergeExpr(
 //   Notes: postgres requires UPDATE. Requires SELECT with WHERE clause with table.
 //          mysql requires UPDATE. Also requires SELECT with WHERE clause with table.
 func (p *planner) Update(
-	ctx context.Context, n *parser.Update, desiredTypes []parser.Type,
+	ctx context.Context, n *parser.Update, desiredTypes []types.T,
 ) (planNode, error) {
 	if n.Where == nil && p.session.SafeUpdates {
 		return nil, pgerror.NewDangerousStatementErrorf("UPDATE without WHERE clause")
@@ -310,7 +311,7 @@ func (p *planner) Update(
 				}
 			case *subquery:
 				selectExpr := parser.SelectExpr{Expr: t}
-				desiredTupleType := make(parser.TTuple, len(setExpr.Names))
+				desiredTupleType := make(types.TTuple, len(setExpr.Names))
 				for i := range setExpr.Names {
 					desiredTupleType[i] = updateCols[currentUpdateIdx+i].Type.ToDatumType()
 				}
@@ -475,7 +476,7 @@ func (p *planner) namesForExprs(exprs parser.UpdateExprs) (parser.UnresolvedName
 			n := -1
 			switch t := expr.Expr.(type) {
 			case *subquery:
-				if tup, ok := t.typ.(parser.TTuple); ok {
+				if tup, ok := t.typ.(types.TTuple); ok {
 					n = len(tup)
 				}
 			case *parser.Tuple:

@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -57,7 +58,7 @@ func (p *planner) Split(ctx context.Context, n *parser.Split) (planNode, error) 
 	}
 	// Calculate the desired types for the select statement. It is OK if the
 	// select statement returns fewer columns (the relevant prefix is used).
-	desiredTypes := make([]parser.Type, len(index.ColumnIDs))
+	desiredTypes := make([]types.T, len(index.ColumnIDs))
 	for i, colID := range index.ColumnIDs {
 		c, err := tableDesc.FindColumnByID(colID)
 		if err != nil {
@@ -145,11 +146,11 @@ func (n *splitNode) Close(ctx context.Context) {
 var splitNodeColumns = sqlbase.ResultColumns{
 	{
 		Name: "key",
-		Typ:  parser.TypeBytes,
+		Typ:  types.Bytes,
 	},
 	{
 		Name: "pretty",
-		Typ:  parser.TypeString,
+		Typ:  types.String,
 	},
 }
 
@@ -168,8 +169,8 @@ func (p *planner) TestingRelocate(
 	//  - int array (list of stores)
 	//  - column values; it is OK if the select statement returns fewer columns
 	//  (the relevant prefix is used).
-	desiredTypes := make([]parser.Type, len(index.ColumnIDs)+1)
-	desiredTypes[0] = parser.TArray{Typ: parser.TypeInt}
+	desiredTypes := make([]types.T, len(index.ColumnIDs)+1)
+	desiredTypes[0] = types.TArray{Typ: types.Int}
 	for i, colID := range index.ColumnIDs {
 		c, err := tableDesc.FindColumnByID(colID)
 		if err != nil {
@@ -263,7 +264,7 @@ func (n *testingRelocateNode) Next(params runParams) (bool, error) {
 	// table/index row.
 	data := n.rows.Values()
 
-	if !data[0].ResolvedType().Equivalent(parser.TArray{Typ: parser.TypeInt}) {
+	if !data[0].ResolvedType().Equivalent(types.TArray{Typ: types.Int}) {
 		return false, errors.Errorf(
 			"expected int array in the first TESTING_RELOCATE data column; got %s",
 			data[0].ResolvedType(),
@@ -328,11 +329,11 @@ func (n *testingRelocateNode) Close(ctx context.Context) {
 var relocateNodeColumns = sqlbase.ResultColumns{
 	{
 		Name: "key",
-		Typ:  parser.TypeBytes,
+		Typ:  types.Bytes,
 	},
 	{
 		Name: "pretty",
-		Typ:  parser.TypeString,
+		Typ:  types.String,
 	},
 }
 
@@ -364,7 +365,7 @@ func (p *planner) Scatter(ctx context.Context, n *parser.Scatter) (planNode, err
 		// Calculate the desired types for the select statement:
 		//  - column values; it is OK if the select statement returns fewer columns
 		//  (the relevant prefix is used).
-		desiredTypes := make([]parser.Type, len(index.ColumnIDs))
+		desiredTypes := make([]types.T, len(index.ColumnIDs))
 		for i, colID := range index.ColumnIDs {
 			c, err := tableDesc.FindColumnByID(colID)
 			if err != nil {
@@ -451,11 +452,11 @@ func (n *scatterNode) Next(params runParams) (bool, error) {
 var scatterNodeColumns = sqlbase.ResultColumns{
 	{
 		Name: "key",
-		Typ:  parser.TypeBytes,
+		Typ:  types.Bytes,
 	},
 	{
 		Name: "pretty",
-		Typ:  parser.TypeString,
+		Typ:  types.String,
 	},
 }
 

@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/pkg/errors"
@@ -109,7 +110,7 @@ type setZoneConfigNode struct {
 
 func (p *planner) SetZoneConfig(ctx context.Context, n *parser.SetZoneConfig) (planNode, error) {
 	yamlConfig, err := p.analyzeExpr(
-		ctx, n.YAMLConfig, nil, parser.IndexedVarHelper{}, parser.TypeString, false, "configure zone")
+		ctx, n.YAMLConfig, nil, parser.IndexedVarHelper{}, types.String, false, "configure zone")
 	if err != nil {
 		return nil, err
 	}
@@ -207,19 +208,19 @@ type showZoneConfigNode struct {
 var showZoneConfigNodeColumns = sqlbase.ResultColumns{
 	{
 		Name: "id",
-		Typ:  parser.TypeInt,
+		Typ:  types.Int,
 	},
 	{
 		Name: "cli_specifier",
-		Typ:  parser.TypeString,
+		Typ:  types.String,
 	},
 	{
 		Name: "config_yaml",
-		Typ:  parser.TypeBytes,
+		Typ:  types.Bytes,
 	},
 	{
 		Name: "config_proto",
-		Typ:  parser.TypeBytes,
+		Typ:  types.Bytes,
 	},
 }
 

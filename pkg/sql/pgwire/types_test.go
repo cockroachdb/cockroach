@@ -23,6 +23,7 @@ import (
 	"github.com/lib/pq/oid"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 )
@@ -86,7 +87,7 @@ func TestIntArrayRoundTrip(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	buf := writeBuffer{bytecount: metric.NewCounter(metric.Metadata{})}
-	d := parser.NewDArray(parser.TypeInt)
+	d := parser.NewDArray(types.Int)
 	for i := 0; i < 10; i++ {
 		if err := d.Append(parser.NewDInt(parser.DInt(i))); err != nil {
 			t.Fatal(err)
@@ -202,7 +203,7 @@ func benchmarkWriteTuple(b *testing.B, format formatCode) {
 }
 
 func benchmarkWriteArray(b *testing.B, format formatCode) {
-	a := parser.NewDArray(parser.TypeInt)
+	a := parser.NewDArray(types.Int)
 	for i := 0; i < 3; i++ {
 		if err := a.Append(parser.NewDInt(parser.DInt(1234))); err != nil {
 			b.Fatal(err)

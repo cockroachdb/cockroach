@@ -20,6 +20,8 @@ import (
 	"testing"
 
 	"golang.org/x/net/context"
+
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 )
 
 type testVarContainer []Datum
@@ -28,7 +30,7 @@ func (d testVarContainer) IndexedVarEval(idx int, ctx *EvalContext) (Datum, erro
 	return d[idx].Eval(ctx)
 }
 
-func (d testVarContainer) IndexedVarResolvedType(idx int) Type {
+func (d testVarContainer) IndexedVarResolvedType(idx int) types.T {
 	return d[idx].ResolvedType()
 }
 
@@ -60,7 +62,7 @@ func TestIndexedVars(t *testing.T) {
 	c[0] = NewDInt(3)
 	c[1] = NewDInt(5)
 	c[2] = NewDInt(6)
-	typedExpr, err := expr.TypeCheck(nil, TypeAny)
+	typedExpr, err := expr.TypeCheck(nil, types.Any)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -90,7 +92,7 @@ func TestIndexedVars(t *testing.T) {
 	}
 
 	typ := typedExpr.ResolvedType()
-	if !typ.Equivalent(TypeInt) {
+	if !typ.Equivalent(types.Int) {
 		t.Errorf("invalid expression type %s", typ)
 	}
 	evalCtx := NewTestingEvalContext()

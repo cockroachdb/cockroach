@@ -18,15 +18,17 @@ import (
 	"testing"
 
 	"golang.org/x/net/context"
+
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 )
 
 func TestNormalizeExpr(t *testing.T) {
-	defer mockNameTypes(map[string]Type{
-		"a": TypeInt,
-		"b": TypeInt,
-		"c": TypeInt,
-		"d": TypeBool,
-		"s": TypeString,
+	defer mockNameTypes(map[string]types.T{
+		"a": types.Int,
+		"b": types.Int,
+		"c": types.Int,
+		"d": types.Bool,
+		"s": types.String,
 	})()
 	testData := []struct {
 		expr     string
@@ -193,7 +195,7 @@ func TestNormalizeExpr(t *testing.T) {
 		if err != nil {
 			t.Fatalf("%s: %v", d.expr, err)
 		}
-		typedExpr, err := expr.TypeCheck(nil, TypeAny)
+		typedExpr, err := expr.TypeCheck(nil, types.Any)
 		if err != nil {
 			t.Fatalf("%s: %v", d.expr, err)
 		}

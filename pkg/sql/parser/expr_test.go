@@ -20,6 +20,7 @@ import (
 
 	"golang.org/x/net/context"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 )
 
@@ -113,18 +114,18 @@ func TestNormalizeNameInExpr(t *testing.T) {
 // TestExprString verifies that converting an expression to a string and back
 // doesn't change the (normalized) expression.
 func TestExprString(t *testing.T) {
-	defer mockNameTypes(map[string]Type{
-		"a": TypeBool,
-		"b": TypeBool,
-		"c": TypeBool,
-		"d": TypeBool,
-		"e": TypeBool,
-		"f": TypeInt,
-		"g": TypeInt,
-		"h": TypeInt,
-		"i": TypeInt,
-		"j": TypeInt,
-		"k": TypeInt,
+	defer mockNameTypes(map[string]types.T{
+		"a": types.Bool,
+		"b": types.Bool,
+		"c": types.Bool,
+		"d": types.Bool,
+		"e": types.Bool,
+		"f": types.Int,
+		"g": types.Int,
+		"h": types.Int,
+		"i": types.Int,
+		"j": types.Int,
+		"k": types.Int,
 	})()
 	testExprs := []string{
 		`a AND b`,
@@ -157,7 +158,7 @@ func TestExprString(t *testing.T) {
 		if err != nil {
 			t.Fatalf("%s: %v", exprStr, err)
 		}
-		typedExpr, err := TypeCheck(expr, nil, TypeAny)
+		typedExpr, err := TypeCheck(expr, nil, types.Any)
 		if err != nil {
 			t.Fatalf("%s: %v", expr, err)
 		}
@@ -167,7 +168,7 @@ func TestExprString(t *testing.T) {
 		if err != nil {
 			t.Fatalf("%s: %v", exprStr, err)
 		}
-		typedExpr2, err := TypeCheck(expr2, nil, TypeAny)
+		typedExpr2, err := TypeCheck(expr2, nil, types.Any)
 		if err != nil {
 			t.Fatalf("%s: %v", expr2, err)
 		}

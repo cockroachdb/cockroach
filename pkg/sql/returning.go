@@ -20,6 +20,7 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/pkg/errors"
@@ -52,7 +53,7 @@ type returningHelper struct {
 func (p *planner) newReturningHelper(
 	ctx context.Context,
 	r parser.ReturningClause,
-	desiredTypes []parser.Type,
+	desiredTypes []types.T,
 	tn *parser.TableName,
 	tablecols []sqlbase.ColumnDescriptor,
 ) (*returningHelper, error) {
@@ -85,7 +86,7 @@ func (p *planner) newReturningHelper(
 	ivarHelper := parser.MakeIndexedVarHelper(rh, len(tablecols))
 	for _, target := range rExprs {
 		cols, typedExprs, _, err := p.computeRenderAllowingStars(
-			ctx, target, parser.TypeAny, multiSourceInfo{rh.source}, ivarHelper,
+			ctx, target, types.Any, multiSourceInfo{rh.source}, ivarHelper,
 			autoGenerateRenderOutputName)
 		if err != nil {
 			return nil, err
@@ -121,7 +122,7 @@ func (rh *returningHelper) IndexedVarEval(idx int, ctx *parser.EvalContext) (par
 }
 
 // IndexedVarResolvedType implements the parser.IndexedVarContainer interface.
-func (rh *returningHelper) IndexedVarResolvedType(idx int) parser.Type {
+func (rh *returningHelper) IndexedVarResolvedType(idx int) types.T {
 	return rh.source.sourceColumns[idx].Typ
 }
 

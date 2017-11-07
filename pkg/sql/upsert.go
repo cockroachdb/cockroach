@@ -21,6 +21,7 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
 )
@@ -62,7 +63,7 @@ func (uh *upsertHelper) IndexedVarEval(idx int, ctx *parser.EvalContext) (parser
 }
 
 // IndexedVarResolvedType implements the parser.IndexedVarContainer interface.
-func (uh *upsertHelper) IndexedVarResolvedType(idx int) parser.Type {
+func (uh *upsertHelper) IndexedVarResolvedType(idx int) types.T {
 	numSourceColumns := len(uh.sourceInfo.sourceColumns)
 	if idx >= numSourceColumns {
 		return uh.excludedSourceInfo.sourceColumns[idx-numSourceColumns].Typ
@@ -141,7 +142,7 @@ func (p *planner) makeUpsertHelper(
 
 	if whereClause != nil {
 		whereExpr, err := p.analyzeExpr(
-			ctx, whereClause.Expr, sources, ivarHelper, parser.TypeBool, true /* requireType */, "WHERE",
+			ctx, whereClause.Expr, sources, ivarHelper, types.Bool, true /* requireType */, "WHERE",
 		)
 		if err != nil {
 			return nil, err

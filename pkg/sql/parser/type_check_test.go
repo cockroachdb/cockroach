@@ -23,6 +23,7 @@ import (
 
 	"golang.org/x/net/context"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 )
 
@@ -121,7 +122,7 @@ func TestTypeCheck(t *testing.T) {
 			continue
 		}
 		ctx := MakeSemaContext(false)
-		typeChecked, err := TypeCheck(expr, &ctx, TypeAny)
+		typeChecked, err := TypeCheck(expr, &ctx, types.Any)
 		if err != nil {
 			t.Errorf("%s: unexpected error %s", d.expr, err)
 		} else if s := Serialize(typeChecked); s != d.expected {
@@ -139,7 +140,7 @@ func BenchmarkTypeCheck(b *testing.B) {
 	}
 	ctx := MakeSemaContext(false)
 	for i := 0; i < b.N; i++ {
-		_, err := TypeCheck(expr, &ctx, TypeInt)
+		_, err := TypeCheck(expr, &ctx, types.Int)
 		if err != nil {
 			b.Fatalf("unexpected error: %s", err)
 		}
@@ -163,7 +164,7 @@ func TestTypeCheckNormalize(t *testing.T) {
 				t.Fatal(err)
 			}
 			ctx := MakeSemaContext(false)
-			typeChecked, err := TypeCheck(expr, &ctx, TypeAny)
+			typeChecked, err := TypeCheck(expr, &ctx, types.Any)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -230,18 +231,18 @@ func TestTypeCheckError(t *testing.T) {
 		if err != nil {
 			t.Fatalf("%s: %v", d.expr, err)
 		}
-		if _, err := TypeCheck(expr, nil, TypeAny); !testutils.IsError(err, regexp.QuoteMeta(d.expected)) {
+		if _, err := TypeCheck(expr, nil, types.Any); !testutils.IsError(err, regexp.QuoteMeta(d.expected)) {
 			t.Errorf("%s: expected %s, but found %v", d.expr, d.expected, err)
 		}
 	}
 }
 
 var (
-	mapPTypesInt               = PlaceholderTypes{"a": TypeInt}
-	mapPTypesDecimal           = PlaceholderTypes{"a": TypeDecimal}
-	mapPTypesIntAndInt         = PlaceholderTypes{"a": TypeInt, "b": TypeInt}
-	mapPTypesIntAndDecimal     = PlaceholderTypes{"a": TypeInt, "b": TypeDecimal}
-	mapPTypesDecimalAndDecimal = PlaceholderTypes{"a": TypeDecimal, "b": TypeDecimal}
+	mapPTypesInt               = PlaceholderTypes{"a": types.Int}
+	mapPTypesDecimal           = PlaceholderTypes{"a": types.Decimal}
+	mapPTypesIntAndInt         = PlaceholderTypes{"a": types.Int, "b": types.Int}
+	mapPTypesIntAndDecimal     = PlaceholderTypes{"a": types.Int, "b": types.Decimal}
+	mapPTypesDecimalAndDecimal = PlaceholderTypes{"a": types.Decimal, "b": types.Decimal}
 )
 
 // copyableExpr can provide each test permutation with a deep copy of the expression tree.
@@ -296,8 +297,8 @@ func tuple(exprs ...copyableExpr) copyableExpr {
 		return &Tuple{Exprs: buildExprs(exprs)}
 	}
 }
-func ttuple(types ...Type) TTuple {
-	return TTuple(types)
+func ttuple(tys ...types.T) types.TTuple {
+	return types.TTuple(tys)
 }
 
 func forEachPerm(exprs []copyableExpr, i int, fn func([]copyableExpr)) {
@@ -321,10 +322,10 @@ func clonePlaceholderTypes(args PlaceholderTypes) PlaceholderTypes {
 
 type sameTypedExprsTestCase struct {
 	ptypes  PlaceholderTypes
-	desired Type
+	desired types.T
 	exprs   []copyableExpr
 
-	expectedType   Type
+	expectedType   types.T
 	expectedPTypes PlaceholderTypes
 }
 
@@ -335,7 +336,7 @@ func attemptTypeCheckSameTypedExprs(t *testing.T, idx int, test sameTypedExprsTe
 	forEachPerm(test.exprs, 0, func(exprs []copyableExpr) {
 		ctx := MakeSemaContext(false)
 		ctx.Placeholders.SetTypeHints(clonePlaceholderTypes(test.ptypes))
-		desired := TypeAny
+		desired := types.Any
 		if test.desired != nil {
 			desired = test.desired
 		}
@@ -357,57 +358,57 @@ func attemptTypeCheckSameTypedExprs(t *testing.T, idx int, test sameTypedExprsTe
 func TestTypeCheckSameTypedExprs(t *testing.T) {
 	for i, d := range []sameTypedExprsTestCase{
 		// Constants.
-		{nil, nil, exprs(intConst("1")), TypeInt, nil},
-		{nil, nil, exprs(decConst("1.1")), TypeDecimal, nil},
-		{nil, nil, exprs(intConst("1"), decConst("1.0")), TypeDecimal, nil},
-		{nil, nil, exprs(intConst("1"), decConst("1.1")), TypeDecimal, nil},
+		{nil, nil, exprs(intConst("1")), types.Int, nil},
+		{nil, nil, exprs(decConst("1.1")), types.Decimal, nil},
+		{nil, nil, exprs(intConst("1"), decConst("1.0")), types.Decimal, nil},
+		{nil, nil, exprs(intConst("1"), decConst("1.1")), types.Decimal, nil},
 		// Resolved exprs.
-		{nil, nil, exprs(dint(1)), TypeInt, nil},
-		{nil, nil, exprs(ddecimal(1)), TypeDecimal, nil},
+		{nil, nil, exprs(dint(1)), types.Int, nil},
+		{nil, nil, exprs(ddecimal(1)), types.Decimal, nil},
 		// Mixing constants and resolved exprs.
-		{nil, nil, exprs(dint(1), intConst("1")), TypeInt, nil},
-		{nil, nil, exprs(dint(1), decConst("1.0")), TypeInt, nil}, // This is what the AST would look like after folding (0.6 + 0.4).
-		{nil, nil, exprs(dint(1), dint(1)), TypeInt, nil},
-		{nil, nil, exprs(ddecimal(1), intConst("1")), TypeDecimal, nil},
-		{nil, nil, exprs(ddecimal(1), decConst("1.1")), TypeDecimal, nil},
-		{nil, nil, exprs(ddecimal(1), ddecimal(1)), TypeDecimal, nil},
+		{nil, nil, exprs(dint(1), intConst("1")), types.Int, nil},
+		{nil, nil, exprs(dint(1), decConst("1.0")), types.Int, nil}, // This is what the AST would look like after folding (0.6 + 0.4).
+		{nil, nil, exprs(dint(1), dint(1)), types.Int, nil},
+		{nil, nil, exprs(ddecimal(1), intConst("1")), types.Decimal, nil},
+		{nil, nil, exprs(ddecimal(1), decConst("1.1")), types.Decimal, nil},
+		{nil, nil, exprs(ddecimal(1), ddecimal(1)), types.Decimal, nil},
 		// Mixing resolved placeholders with constants and resolved exprs.
-		{mapPTypesDecimal, nil, exprs(ddecimal(1), placeholder("a")), TypeDecimal, mapPTypesDecimal},
-		{mapPTypesDecimal, nil, exprs(intConst("1"), placeholder("a")), TypeDecimal, mapPTypesDecimal},
-		{mapPTypesDecimal, nil, exprs(decConst("1.1"), placeholder("a")), TypeDecimal, mapPTypesDecimal},
-		{mapPTypesInt, nil, exprs(intConst("1"), placeholder("a")), TypeInt, mapPTypesInt},
-		{mapPTypesInt, nil, exprs(decConst("1.0"), placeholder("a")), TypeInt, mapPTypesInt},
-		{mapPTypesDecimalAndDecimal, nil, exprs(placeholder("b"), placeholder("a")), TypeDecimal, mapPTypesDecimalAndDecimal},
+		{mapPTypesDecimal, nil, exprs(ddecimal(1), placeholder("a")), types.Decimal, mapPTypesDecimal},
+		{mapPTypesDecimal, nil, exprs(intConst("1"), placeholder("a")), types.Decimal, mapPTypesDecimal},
+		{mapPTypesDecimal, nil, exprs(decConst("1.1"), placeholder("a")), types.Decimal, mapPTypesDecimal},
+		{mapPTypesInt, nil, exprs(intConst("1"), placeholder("a")), types.Int, mapPTypesInt},
+		{mapPTypesInt, nil, exprs(decConst("1.0"), placeholder("a")), types.Int, mapPTypesInt},
+		{mapPTypesDecimalAndDecimal, nil, exprs(placeholder("b"), placeholder("a")), types.Decimal, mapPTypesDecimalAndDecimal},
 		// Mixing unresolved placeholders with constants and resolved exprs.
-		{nil, nil, exprs(ddecimal(1), placeholder("a")), TypeDecimal, mapPTypesDecimal},
-		{nil, nil, exprs(intConst("1"), placeholder("a")), TypeInt, mapPTypesInt},
-		{nil, nil, exprs(decConst("1.1"), placeholder("a")), TypeDecimal, mapPTypesDecimal},
+		{nil, nil, exprs(ddecimal(1), placeholder("a")), types.Decimal, mapPTypesDecimal},
+		{nil, nil, exprs(intConst("1"), placeholder("a")), types.Int, mapPTypesInt},
+		{nil, nil, exprs(decConst("1.1"), placeholder("a")), types.Decimal, mapPTypesDecimal},
 		// Verify dealing with Null.
-		{nil, nil, exprs(dnull), TypeNull, nil},
-		{nil, nil, exprs(dnull, dnull), TypeNull, nil},
-		{nil, nil, exprs(dnull, intConst("1")), TypeInt, nil},
-		{nil, nil, exprs(dnull, decConst("1.1")), TypeDecimal, nil},
-		{nil, nil, exprs(dnull, dint(1)), TypeInt, nil},
-		{nil, nil, exprs(dnull, ddecimal(1)), TypeDecimal, nil},
-		{nil, nil, exprs(dnull, ddecimal(1), intConst("1")), TypeDecimal, nil},
-		{nil, nil, exprs(dnull, ddecimal(1), decConst("1.1")), TypeDecimal, nil},
-		{nil, nil, exprs(dnull, ddecimal(1), decConst("1.1")), TypeDecimal, nil},
-		{nil, nil, exprs(dnull, intConst("1"), decConst("1.1")), TypeDecimal, nil},
+		{nil, nil, exprs(dnull), types.Null, nil},
+		{nil, nil, exprs(dnull, dnull), types.Null, nil},
+		{nil, nil, exprs(dnull, intConst("1")), types.Int, nil},
+		{nil, nil, exprs(dnull, decConst("1.1")), types.Decimal, nil},
+		{nil, nil, exprs(dnull, dint(1)), types.Int, nil},
+		{nil, nil, exprs(dnull, ddecimal(1)), types.Decimal, nil},
+		{nil, nil, exprs(dnull, ddecimal(1), intConst("1")), types.Decimal, nil},
+		{nil, nil, exprs(dnull, ddecimal(1), decConst("1.1")), types.Decimal, nil},
+		{nil, nil, exprs(dnull, ddecimal(1), decConst("1.1")), types.Decimal, nil},
+		{nil, nil, exprs(dnull, intConst("1"), decConst("1.1")), types.Decimal, nil},
 		// Verify desired type when possible.
-		{nil, TypeInt, exprs(intConst("1")), TypeInt, nil},
-		{nil, TypeInt, exprs(dint(1)), TypeInt, nil},
-		{nil, TypeInt, exprs(decConst("1.0")), TypeInt, nil},
-		{nil, TypeInt, exprs(decConst("1.1")), TypeDecimal, nil},
-		{nil, TypeInt, exprs(ddecimal(1)), TypeDecimal, nil},
-		{nil, TypeDecimal, exprs(intConst("1")), TypeDecimal, nil},
-		{nil, TypeDecimal, exprs(dint(1)), TypeInt, nil},
-		{nil, TypeInt, exprs(intConst("1"), decConst("1.0")), TypeInt, nil},
-		{nil, TypeInt, exprs(intConst("1"), decConst("1.1")), TypeDecimal, nil},
-		{nil, TypeDecimal, exprs(intConst("1"), decConst("1.1")), TypeDecimal, nil},
+		{nil, types.Int, exprs(intConst("1")), types.Int, nil},
+		{nil, types.Int, exprs(dint(1)), types.Int, nil},
+		{nil, types.Int, exprs(decConst("1.0")), types.Int, nil},
+		{nil, types.Int, exprs(decConst("1.1")), types.Decimal, nil},
+		{nil, types.Int, exprs(ddecimal(1)), types.Decimal, nil},
+		{nil, types.Decimal, exprs(intConst("1")), types.Decimal, nil},
+		{nil, types.Decimal, exprs(dint(1)), types.Int, nil},
+		{nil, types.Int, exprs(intConst("1"), decConst("1.0")), types.Int, nil},
+		{nil, types.Int, exprs(intConst("1"), decConst("1.1")), types.Decimal, nil},
+		{nil, types.Decimal, exprs(intConst("1"), decConst("1.1")), types.Decimal, nil},
 		// Verify desired type when possible with unresolved placeholders.
-		{nil, TypeDecimal, exprs(placeholder("a")), TypeDecimal, mapPTypesDecimal},
-		{nil, TypeDecimal, exprs(intConst("1"), placeholder("a")), TypeDecimal, mapPTypesDecimal},
-		{nil, TypeDecimal, exprs(decConst("1.1"), placeholder("a")), TypeDecimal, mapPTypesDecimal},
+		{nil, types.Decimal, exprs(placeholder("a")), types.Decimal, mapPTypesDecimal},
+		{nil, types.Decimal, exprs(intConst("1"), placeholder("a")), types.Decimal, mapPTypesDecimal},
+		{nil, types.Decimal, exprs(decConst("1.1"), placeholder("a")), types.Decimal, mapPTypesDecimal},
 	} {
 		attemptTypeCheckSameTypedExprs(t, i, d)
 	}
@@ -416,31 +417,31 @@ func TestTypeCheckSameTypedExprs(t *testing.T) {
 func TestTypeCheckSameTypedTupleExprs(t *testing.T) {
 	for i, d := range []sameTypedExprsTestCase{
 		// // Constants.
-		{nil, nil, exprs(tuple(intConst("1"))), ttuple(TypeInt), nil},
-		{nil, nil, exprs(tuple(intConst("1"), intConst("1"))), ttuple(TypeInt, TypeInt), nil},
-		{nil, nil, exprs(tuple(intConst("1")), tuple(intConst("1"))), ttuple(TypeInt), nil},
-		{nil, nil, exprs(tuple(intConst("1")), tuple(decConst("1.0"))), ttuple(TypeDecimal), nil},
-		{nil, nil, exprs(tuple(intConst("1")), tuple(decConst("1.1"))), ttuple(TypeDecimal), nil},
+		{nil, nil, exprs(tuple(intConst("1"))), ttuple(types.Int), nil},
+		{nil, nil, exprs(tuple(intConst("1"), intConst("1"))), ttuple(types.Int, types.Int), nil},
+		{nil, nil, exprs(tuple(intConst("1")), tuple(intConst("1"))), ttuple(types.Int), nil},
+		{nil, nil, exprs(tuple(intConst("1")), tuple(decConst("1.0"))), ttuple(types.Decimal), nil},
+		{nil, nil, exprs(tuple(intConst("1")), tuple(decConst("1.1"))), ttuple(types.Decimal), nil},
 		// Resolved exprs.
-		{nil, nil, exprs(tuple(dint(1)), tuple(dint(1))), ttuple(TypeInt), nil},
-		{nil, nil, exprs(tuple(dint(1), ddecimal(1)), tuple(dint(1), ddecimal(1))), ttuple(TypeInt, TypeDecimal), nil},
+		{nil, nil, exprs(tuple(dint(1)), tuple(dint(1))), ttuple(types.Int), nil},
+		{nil, nil, exprs(tuple(dint(1), ddecimal(1)), tuple(dint(1), ddecimal(1))), ttuple(types.Int, types.Decimal), nil},
 		// Mixing constants and resolved exprs.
-		{nil, nil, exprs(tuple(dint(1), decConst("1.1")), tuple(intConst("1"), ddecimal(1))), ttuple(TypeInt, TypeDecimal), nil},
-		{nil, nil, exprs(tuple(dint(1), decConst("1.0")), tuple(intConst("1"), dint(1))), ttuple(TypeInt, TypeInt), nil},
+		{nil, nil, exprs(tuple(dint(1), decConst("1.1")), tuple(intConst("1"), ddecimal(1))), ttuple(types.Int, types.Decimal), nil},
+		{nil, nil, exprs(tuple(dint(1), decConst("1.0")), tuple(intConst("1"), dint(1))), ttuple(types.Int, types.Int), nil},
 		// Mixing resolved placeholders with constants and resolved exprs.
-		{mapPTypesDecimal, nil, exprs(tuple(ddecimal(1), intConst("1")), tuple(placeholder("a"), placeholder("a"))), ttuple(TypeDecimal, TypeDecimal), mapPTypesDecimal},
-		{mapPTypesDecimalAndDecimal, nil, exprs(tuple(placeholder("b"), intConst("1")), tuple(placeholder("a"), placeholder("a"))), ttuple(TypeDecimal, TypeDecimal), mapPTypesDecimalAndDecimal},
-		{mapPTypesIntAndDecimal, nil, exprs(tuple(intConst("1"), intConst("1")), tuple(placeholder("a"), placeholder("b"))), ttuple(TypeInt, TypeDecimal), mapPTypesIntAndDecimal},
+		{mapPTypesDecimal, nil, exprs(tuple(ddecimal(1), intConst("1")), tuple(placeholder("a"), placeholder("a"))), ttuple(types.Decimal, types.Decimal), mapPTypesDecimal},
+		{mapPTypesDecimalAndDecimal, nil, exprs(tuple(placeholder("b"), intConst("1")), tuple(placeholder("a"), placeholder("a"))), ttuple(types.Decimal, types.Decimal), mapPTypesDecimalAndDecimal},
+		{mapPTypesIntAndDecimal, nil, exprs(tuple(intConst("1"), intConst("1")), tuple(placeholder("a"), placeholder("b"))), ttuple(types.Int, types.Decimal), mapPTypesIntAndDecimal},
 		// Mixing unresolved placeholders with constants and resolved exprs.
-		{nil, nil, exprs(tuple(ddecimal(1), intConst("1")), tuple(placeholder("a"), placeholder("a"))), ttuple(TypeDecimal, TypeDecimal), mapPTypesDecimal},
-		{nil, nil, exprs(tuple(intConst("1"), intConst("1")), tuple(placeholder("a"), placeholder("b"))), ttuple(TypeInt, TypeInt), mapPTypesIntAndInt},
+		{nil, nil, exprs(tuple(ddecimal(1), intConst("1")), tuple(placeholder("a"), placeholder("a"))), ttuple(types.Decimal, types.Decimal), mapPTypesDecimal},
+		{nil, nil, exprs(tuple(intConst("1"), intConst("1")), tuple(placeholder("a"), placeholder("b"))), ttuple(types.Int, types.Int), mapPTypesIntAndInt},
 		// Verify dealing with Null.
-		{nil, nil, exprs(tuple(intConst("1"), dnull), tuple(dnull, decConst("1"))), ttuple(TypeInt, TypeDecimal), nil},
-		{nil, nil, exprs(tuple(dint(1), dnull), tuple(dnull, ddecimal(1))), ttuple(TypeInt, TypeDecimal), nil},
+		{nil, nil, exprs(tuple(intConst("1"), dnull), tuple(dnull, decConst("1"))), ttuple(types.Int, types.Decimal), nil},
+		{nil, nil, exprs(tuple(dint(1), dnull), tuple(dnull, ddecimal(1))), ttuple(types.Int, types.Decimal), nil},
 		// Verify desired type when possible.
-		{nil, ttuple(TypeInt, TypeDecimal), exprs(tuple(intConst("1"), intConst("1")), tuple(intConst("1"), intConst("1"))), ttuple(TypeInt, TypeDecimal), nil},
+		{nil, ttuple(types.Int, types.Decimal), exprs(tuple(intConst("1"), intConst("1")), tuple(intConst("1"), intConst("1"))), ttuple(types.Int, types.Decimal), nil},
 		// Verify desired type when possible with unresolved constants.
-		{nil, ttuple(TypeInt, TypeDecimal), exprs(tuple(placeholder("a"), intConst("1")), tuple(intConst("1"), placeholder("b"))), ttuple(TypeInt, TypeDecimal), mapPTypesIntAndDecimal},
+		{nil, ttuple(types.Int, types.Decimal), exprs(tuple(placeholder("a"), intConst("1")), tuple(intConst("1"), placeholder("b"))), ttuple(types.Int, types.Decimal), mapPTypesIntAndDecimal},
 	} {
 		attemptTypeCheckSameTypedExprs(t, i, d)
 	}
@@ -455,7 +456,7 @@ func TestTypeCheckSameTypedExprsError(t *testing.T) {
 
 	testData := []struct {
 		ptypes  PlaceholderTypes
-		desired Type
+		desired types.T
 		exprs   []copyableExpr
 
 		expectedErr string
@@ -474,7 +475,7 @@ func TestTypeCheckSameTypedExprsError(t *testing.T) {
 	for i, d := range testData {
 		ctx := MakeSemaContext(false)
 		ctx.Placeholders.SetTypeHints(d.ptypes)
-		desired := TypeAny
+		desired := types.Any
 		if d.desired != nil {
 			desired = d.desired
 		}
@@ -513,14 +514,14 @@ func TestProcessPlaceholderAnnotations(t *testing.T) {
 			PlaceholderTypes{},
 		},
 		{
-			PlaceholderTypes{"b": TypeBool},
+			PlaceholderTypes{"b": types.Bool},
 			[]Expr{NewPlaceholder("a"), NewPlaceholder("b")},
-			PlaceholderTypes{"b": TypeBool},
+			PlaceholderTypes{"b": types.Bool},
 		},
 		{
-			PlaceholderTypes{"c": TypeFloat},
+			PlaceholderTypes{"c": types.Float},
 			[]Expr{NewPlaceholder("a"), NewPlaceholder("b")},
-			PlaceholderTypes{"c": TypeFloat},
+			PlaceholderTypes{"c": types.Float},
 		},
 		{
 			PlaceholderTypes{},
@@ -531,12 +532,12 @@ func TestProcessPlaceholderAnnotations(t *testing.T) {
 			PlaceholderTypes{},
 		},
 		{
-			PlaceholderTypes{"a": TypeFloat},
+			PlaceholderTypes{"a": types.Float},
 			[]Expr{
 				cast(NewPlaceholder("a"), intType),
 				cast(NewPlaceholder("a"), boolType),
 			},
-			PlaceholderTypes{"a": TypeFloat},
+			PlaceholderTypes{"a": types.Float},
 		},
 		{
 			PlaceholderTypes{},
@@ -544,7 +545,7 @@ func TestProcessPlaceholderAnnotations(t *testing.T) {
 				cast(NewPlaceholder("a"), intType),
 				cast(NewPlaceholder("b"), boolType),
 			},
-			PlaceholderTypes{"a": TypeInt, "b": TypeBool},
+			PlaceholderTypes{"a": types.Int, "b": types.Bool},
 		},
 		{
 			PlaceholderTypes{},
@@ -552,14 +553,14 @@ func TestProcessPlaceholderAnnotations(t *testing.T) {
 				annot(NewPlaceholder("a"), intType),
 				annot(NewPlaceholder("b"), boolType),
 			},
-			PlaceholderTypes{"a": TypeInt, "b": TypeBool},
+			PlaceholderTypes{"a": types.Int, "b": types.Bool},
 		},
 		{
-			PlaceholderTypes{"b": TypeBool},
+			PlaceholderTypes{"b": types.Bool},
 			[]Expr{
 				annot(NewPlaceholder("a"), intType),
 			},
-			PlaceholderTypes{"a": TypeInt, "b": TypeBool},
+			PlaceholderTypes{"a": types.Int, "b": types.Bool},
 		},
 		{
 			PlaceholderTypes{},
@@ -569,7 +570,7 @@ func TestProcessPlaceholderAnnotations(t *testing.T) {
 				cast(NewPlaceholder("a"), intType),
 				cast(NewPlaceholder("b"), intType),
 			},
-			PlaceholderTypes{"a": TypeInt},
+			PlaceholderTypes{"a": types.Int},
 		},
 		{
 			PlaceholderTypes{},
@@ -579,7 +580,7 @@ func TestProcessPlaceholderAnnotations(t *testing.T) {
 				cast(NewPlaceholder("a"), intType),
 				cast(NewPlaceholder("b"), intType),
 			},
-			PlaceholderTypes{"a": TypeInt, "b": TypeBool},
+			PlaceholderTypes{"a": types.Int, "b": types.Bool},
 		},
 		{
 			PlaceholderTypes{},
@@ -588,7 +589,7 @@ func TestProcessPlaceholderAnnotations(t *testing.T) {
 				cast(NewPlaceholder("b"), boolType),
 				NewPlaceholder("a"),
 			},
-			PlaceholderTypes{"b": TypeBool},
+			PlaceholderTypes{"b": types.Bool},
 		},
 		{
 			PlaceholderTypes{},
@@ -597,7 +598,7 @@ func TestProcessPlaceholderAnnotations(t *testing.T) {
 				cast(NewPlaceholder("a"), intType),
 				cast(NewPlaceholder("b"), boolType),
 			},
-			PlaceholderTypes{"b": TypeBool},
+			PlaceholderTypes{"b": types.Bool},
 		},
 		{
 			PlaceholderTypes{},
@@ -606,7 +607,7 @@ func TestProcessPlaceholderAnnotations(t *testing.T) {
 				annot(NewPlaceholder("b"), boolType),
 				NewPlaceholder("a"),
 			},
-			PlaceholderTypes{"a": TypeInt, "b": TypeBool},
+			PlaceholderTypes{"a": types.Int, "b": types.Bool},
 		},
 		{
 			PlaceholderTypes{},
@@ -615,25 +616,25 @@ func TestProcessPlaceholderAnnotations(t *testing.T) {
 				annot(NewPlaceholder("a"), intType),
 				annot(NewPlaceholder("b"), boolType),
 			},
-			PlaceholderTypes{"a": TypeInt, "b": TypeBool},
+			PlaceholderTypes{"a": types.Int, "b": types.Bool},
 		},
 		{
-			PlaceholderTypes{"a": TypeFloat, "b": TypeBool},
+			PlaceholderTypes{"a": types.Float, "b": types.Bool},
 			[]Expr{
 				NewPlaceholder("a"),
 				cast(NewPlaceholder("a"), intType),
 				cast(NewPlaceholder("b"), boolType),
 			},
-			PlaceholderTypes{"a": TypeFloat, "b": TypeBool},
+			PlaceholderTypes{"a": types.Float, "b": types.Bool},
 		},
 		{
-			PlaceholderTypes{"a": TypeFloat, "b": TypeFloat},
+			PlaceholderTypes{"a": types.Float, "b": types.Float},
 			[]Expr{
 				NewPlaceholder("a"),
 				cast(NewPlaceholder("a"), intType),
 				cast(NewPlaceholder("b"), boolType),
 			},
-			PlaceholderTypes{"a": TypeFloat, "b": TypeFloat},
+			PlaceholderTypes{"a": types.Float, "b": types.Float},
 		},
 		{
 			PlaceholderTypes{},
@@ -642,7 +643,7 @@ func TestProcessPlaceholderAnnotations(t *testing.T) {
 				annot(NewPlaceholder("a"), intType),
 				cast(NewPlaceholder("a"), intType),
 			},
-			PlaceholderTypes{"a": TypeInt},
+			PlaceholderTypes{"a": types.Int},
 		},
 		{
 			PlaceholderTypes{},
@@ -651,7 +652,7 @@ func TestProcessPlaceholderAnnotations(t *testing.T) {
 				annot(NewPlaceholder("a"), boolType),
 				cast(NewPlaceholder("a"), intType),
 			},
-			PlaceholderTypes{"a": TypeBool},
+			PlaceholderTypes{"a": types.Bool},
 		},
 	}
 	for i, d := range testData {
@@ -693,14 +694,14 @@ func TestProcessPlaceholderAnnotationsError(t *testing.T) {
 			"multiple conflicting type annotations around a",
 		},
 		{
-			PlaceholderTypes{"a": TypeFloat},
+			PlaceholderTypes{"a": types.Float},
 			[]Expr{
 				annot(NewPlaceholder("a"), intType),
 			},
 			"type annotation around a that conflicts with previously inferred type float",
 		},
 		{
-			PlaceholderTypes{"a": TypeFloat},
+			PlaceholderTypes{"a": types.Float},
 			[]Expr{
 				cast(NewPlaceholder("a"), intType),
 				annot(NewPlaceholder("a"), intType),
@@ -708,7 +709,7 @@ func TestProcessPlaceholderAnnotationsError(t *testing.T) {
 			"type annotation around a that conflicts with previously inferred type float",
 		},
 		{
-			PlaceholderTypes{"a": TypeFloat},
+			PlaceholderTypes{"a": types.Float},
 			[]Expr{
 				annot(NewPlaceholder("a"), floatType),
 				annot(NewPlaceholder("a"), intType),
@@ -716,7 +717,7 @@ func TestProcessPlaceholderAnnotationsError(t *testing.T) {
 			"type annotation around a that conflicts with previously inferred type float",
 		},
 		{
-			PlaceholderTypes{"a": TypeFloat},
+			PlaceholderTypes{"a": types.Float},
 			[]Expr{
 				annot(NewPlaceholder("a"), intType),
 				annot(NewPlaceholder("a"), floatType),

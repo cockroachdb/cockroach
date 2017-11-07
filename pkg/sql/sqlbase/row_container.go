@@ -21,6 +21,7 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 )
@@ -114,7 +115,7 @@ func (ti ColTypeInfo) NumColumns() int {
 }
 
 // Type returns the datum type of the i-th column.
-func (ti ColTypeInfo) Type(idx int) parser.Type {
+func (ti ColTypeInfo) Type(idx int) types.T {
 	if ti.resCols != nil {
 		return ti.resCols[idx].Typ
 	}
@@ -165,7 +166,7 @@ func (c *RowContainer) Init(acc mon.BoundAccount, ti ColTypeInfo, rowCapacity in
 	}
 
 	for i := 0; i < nCols; i++ {
-		sz, variable := ti.Type(i).Size()
+		sz, variable := parser.DatumTypeSize(ti.Type(i))
 		if variable {
 			if c.varSizedColumns == nil {
 				// Only allocate varSizedColumns if necessary.

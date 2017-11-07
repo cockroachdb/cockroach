@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
 )
@@ -528,7 +529,7 @@ func renameSource(
 			(len(src.info.sourceAliases) == 1 && src.info.sourceAliases[0].name == anonymousTable))
 		noColNameSpecified := len(colAlias) == 0
 		if vg, ok := src.plan.(*valueGenerator); ok && isAnonymousTable && noColNameSpecified {
-			if tType, ok := vg.expr.ResolvedType().(parser.TTable); ok && len(tType.Cols) == 1 {
+			if tType, ok := vg.expr.ResolvedType().(types.TTable); ok && len(tType.Cols) == 1 {
 				colAlias = parser.NameList{as.Alias}
 			}
 		}

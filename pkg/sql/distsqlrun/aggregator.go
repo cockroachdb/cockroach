@@ -20,6 +20,7 @@ import (
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -44,7 +45,7 @@ func GetAggregateInfo(
 		return parser.NewIdentAggregate, inputTypes[0], nil
 	}
 
-	datumTypes := make([]parser.Type, len(inputTypes))
+	datumTypes := make([]types.T, len(inputTypes))
 	for i := range inputTypes {
 		datumTypes[i] = inputTypes[i].ToDatumType()
 	}

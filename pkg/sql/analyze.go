@@ -24,6 +24,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 )
 
 // analyzeExpr analyzes and simplifies an expression, returning a list of
@@ -1687,7 +1688,7 @@ func (p *planner) analyzeExpr(
 	raw parser.Expr,
 	sources multiSourceInfo,
 	iVarHelper parser.IndexedVarHelper,
-	expectedType parser.Type,
+	expectedType types.T,
 	requireType bool,
 	typingContext string,
 ) (parser.TypedExpr, error) {

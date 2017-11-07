@@ -23,6 +23,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/internal/rsg/yacc"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/ipaddr"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -211,55 +212,55 @@ func (r *RSG) Float64() float64 {
 
 // GenerateRandomArg generates a random, valid, SQL function argument of
 // the specified type.
-func (r *RSG) GenerateRandomArg(typ parser.Type) string {
+func (r *RSG) GenerateRandomArg(typ types.T) string {
 	if r.Intn(10) == 0 {
 		return "NULL"
 	}
 	var v interface{}
-	switch parser.UnwrapType(typ) {
-	case parser.TypeInt:
+	switch types.UnwrapType(typ) {
+	case types.Int:
 		v = r.Int()
-	case parser.TypeFloat, parser.TypeDecimal:
+	case types.Float, types.Decimal:
 		v = r.Float64()
-	case parser.TypeString:
+	case types.String:
 		v = stringArgs[r.Intn(len(stringArgs))]
-	case parser.TypeBytes:
+	case types.Bytes:
 		v = fmt.Sprintf("b%s", stringArgs[r.Intn(len(stringArgs))])
-	case parser.TypeTimestamp, parser.TypeTimestampTZ:
+	case types.Timestamp, types.TimestampTZ:
 		t := timeutil.Unix(0, r.Int63())
 		v = fmt.Sprintf(`'%s'`, t.Format(time.RFC3339Nano))
-	case parser.TypeBool:
+	case types.Bool:
 		v = boolArgs[r.Intn(2)]
-	case parser.TypeDate:
+	case types.Date:
 		i := r.Int63()
 		i -= r.Int63()
 		d := parser.NewDDate(parser.DDate(i))
 		v = fmt.Sprintf(`'%s'`, d)
-	case parser.TypeInterval:
+	case types.Interval:
 		d := duration.Duration{Nanos: r.Int63()}
 		v = fmt.Sprintf(`'%s'`, &parser.DInterval{Duration: d})
-	case parser.TypeUUID:
+	case types.UUID:
 		u := uuid.MakeV4()
 		v = fmt.Sprintf(`'%s'`, u)
-	case parser.TypeINet:
+	case types.INet:
 		r.lock.Lock()
 		ipAddr := ipaddr.RandIPAddr(r.src)
 		r.lock.Unlock()
 		v = fmt.Sprintf(`'%s'`, ipAddr)
-	case parser.TypeOid,
-		parser.TypeRegClass,
-		parser.TypeRegNamespace,
-		parser.TypeRegProc,
-		parser.TypeRegProcedure,
-		parser.TypeRegType,
-		parser.TypeAnyArray,
-		parser.TypeAny:
+	case types.Oid,
+		types.RegClass,
+		types.RegNamespace,
+		types.RegProc,
+		types.RegProcedure,
+		types.RegType,
+		types.AnyArray,
+		types.Any:
 		v = "NULL"
 	default:
 		// Check types that can't be compared using equality
-		switch parser.UnwrapType(typ).(type) {
-		case parser.TTuple,
-			parser.TArray:
+		switch types.UnwrapType(typ).(type) {
+		case types.TTuple,
+			types.TArray:
 			v = "NULL"
 		default:
 			panic(fmt.Errorf("unknown arg type: %s (%T)", typ, typ))

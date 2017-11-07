@@ -21,6 +21,7 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 )
@@ -33,7 +34,7 @@ func TestRowContainer(t *testing.T) {
 			for _, numPops := range []int{0, 1, 2, numRows / 3, numRows / 2} {
 				resCol := make(ResultColumns, numCols)
 				for i := range resCol {
-					resCol[i] = ResultColumn{Typ: parser.TypeInt}
+					resCol[i] = ResultColumn{Typ: types.Int}
 				}
 				m := mon.MakeUnlimitedMonitor(
 					context.Background(), "test", mon.MemoryResource, nil, nil, math.MaxInt64,

@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -66,18 +67,18 @@ func (p *planner) ShowClusterSetting(
 	if !ok {
 		return nil, errors.Errorf("unknown setting: %q", name)
 	}
-	var dType parser.Type
+	var dType types.T
 	switch val.(type) {
 	case *settings.IntSetting, *settings.EnumSetting:
-		dType = parser.TypeInt
+		dType = types.Int
 	case *settings.StringSetting, *settings.ByteSizeSetting, *settings.StateMachineSetting:
-		dType = parser.TypeString
+		dType = types.String
 	case *settings.BoolSetting:
-		dType = parser.TypeBool
+		dType = types.Bool
 	case *settings.FloatSetting:
-		dType = parser.TypeFloat
+		dType = types.Float
 	case *settings.DurationSetting:
-		dType = parser.TypeInterval
+		dType = types.Interval
 	default:
 		return nil, errors.Errorf("unknown setting type for %s: %s", name, val.Typ())
 	}
@@ -549,11 +550,11 @@ func (p *planner) ShowConstraints(
 	}
 
 	columns := sqlbase.ResultColumns{
-		{Name: "Table", Typ: parser.TypeString},
-		{Name: "Name", Typ: parser.TypeString},
-		{Name: "Type", Typ: parser.TypeString},
-		{Name: "Column(s)", Typ: parser.TypeString},
-		{Name: "Details", Typ: parser.TypeString},
+		{Name: "Table", Typ: types.String},
+		{Name: "Name", Typ: types.String},
+		{Name: "Type", Typ: types.String},
+		{Name: "Column(s)", Typ: types.String},
+		{Name: "Details", Typ: types.String},
 	}
 
 	return &delayedNode{

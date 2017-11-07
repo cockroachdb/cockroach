@@ -26,6 +26,8 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/apd"
+
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 )
 
 // TestNumericConstantVerifyAndResolveAvailableTypes verifies that test NumVals will
@@ -38,7 +40,7 @@ func TestNumericConstantVerifyAndResolveAvailableTypes(t *testing.T) {
 
 	testCases := []struct {
 		str   string
-		avail []Type
+		avail []types.T
 	}{
 		{"1", wantInt},
 		{"0", wantInt},
@@ -142,7 +144,7 @@ func TestStringConstantVerifyAvailableTypes(t *testing.T) {
 
 	testCases := []struct {
 		c     *StrVal
-		avail []Type
+		avail []types.T
 	}{
 		{&StrVal{s: "abc 世界", bytesEsc: false}, wantStringButCanBeAll},
 		{&StrVal{s: "t", bytesEsc: false}, wantStringButCanBeAll},
@@ -217,19 +219,19 @@ func mustParseDInterval(t *testing.T, s string) Datum {
 	return d
 }
 
-var parseFuncs = map[Type]func(*testing.T, string) Datum{
-	TypeString:      func(t *testing.T, s string) Datum { return NewDString(s) },
-	TypeBytes:       func(t *testing.T, s string) Datum { return NewDBytes(DBytes(s)) },
-	TypeBool:        mustParseDBool,
-	TypeDate:        mustParseDDate,
-	TypeTimestamp:   mustParseDTimestamp,
-	TypeTimestampTZ: mustParseDTimestampTZ,
-	TypeInterval:    mustParseDInterval,
+var parseFuncs = map[types.T]func(*testing.T, string) Datum{
+	types.String:      func(t *testing.T, s string) Datum { return NewDString(s) },
+	types.Bytes:       func(t *testing.T, s string) Datum { return NewDBytes(DBytes(s)) },
+	types.Bool:        mustParseDBool,
+	types.Date:        mustParseDDate,
+	types.Timestamp:   mustParseDTimestamp,
+	types.TimestampTZ: mustParseDTimestampTZ,
+	types.Interval:    mustParseDInterval,
 }
 
-func typeSet(types ...Type) map[Type]struct{} {
-	set := make(map[Type]struct{}, len(types))
-	for _, t := range types {
+func typeSet(tys ...types.T) map[types.T]struct{} {
+	set := make(map[types.T]struct{}, len(tys))
+	for _, t := range tys {
 		set[t] = struct{}{}
 	}
 	return set
@@ -243,55 +245,55 @@ func typeSet(types ...Type) map[Type]struct{} {
 func TestStringConstantResolveAvailableTypes(t *testing.T) {
 	testCases := []struct {
 		c            *StrVal
-		parseOptions map[Type]struct{}
+		parseOptions map[types.T]struct{}
 	}{
 		{
 			c:            &StrVal{s: "abc 世界", bytesEsc: false},
-			parseOptions: typeSet(TypeString, TypeBytes),
+			parseOptions: typeSet(types.String, types.Bytes),
 		},
 		{
 			c:            &StrVal{s: "true", bytesEsc: false},
-			parseOptions: typeSet(TypeString, TypeBytes, TypeBool),
+			parseOptions: typeSet(types.String, types.Bytes, types.Bool),
 		},
 		{
 			c:            &StrVal{s: "2010-09-28", bytesEsc: false},
-			parseOptions: typeSet(TypeString, TypeBytes, TypeDate, TypeTimestamp, TypeTimestampTZ),
+			parseOptions: typeSet(types.String, types.Bytes, types.Date, types.Timestamp, types.TimestampTZ),
 		},
 		{
 			c:            &StrVal{s: "2010-09-28 12:00:00.1", bytesEsc: false},
-			parseOptions: typeSet(TypeString, TypeBytes, TypeTimestamp, TypeTimestampTZ, TypeDate),
+			parseOptions: typeSet(types.String, types.Bytes, types.Timestamp, types.TimestampTZ, types.Date),
 		},
 		{
 			c:            &StrVal{s: "2006-07-08T00:00:00.000000123Z", bytesEsc: false},
-			parseOptions: typeSet(TypeString, TypeBytes, TypeTimestamp, TypeTimestampTZ, TypeDate),
+			parseOptions: typeSet(types.String, types.Bytes, types.Timestamp, types.TimestampTZ, types.Date),
 		},
 		{
 			c:            &StrVal{s: "PT12H2M", bytesEsc: false},
-			parseOptions: typeSet(TypeString, TypeBytes, TypeInterval),
+			parseOptions: typeSet(types.String, types.Bytes, types.Interval),
 		},
 		{
 			c:            &StrVal{s: "abc 世界", bytesEsc: true},
-			parseOptions: typeSet(TypeString, TypeBytes),
+			parseOptions: typeSet(types.String, types.Bytes),
 		},
 		{
 			c:            &StrVal{s: "true", bytesEsc: true},
-			parseOptions: typeSet(TypeString, TypeBytes),
+			parseOptions: typeSet(types.String, types.Bytes),
 		},
 		{
 			c:            &StrVal{s: "2010-09-28", bytesEsc: true},
-			parseOptions: typeSet(TypeString, TypeBytes),
+			parseOptions: typeSet(types.String, types.Bytes),
 		},
 		{
 			c:            &StrVal{s: "2010-09-28 12:00:00.1", bytesEsc: true},
-			parseOptions: typeSet(TypeString, TypeBytes),
+			parseOptions: typeSet(types.String, types.Bytes),
 		},
 		{
 			c:            &StrVal{s: "PT12H2M", bytesEsc: true},
-			parseOptions: typeSet(TypeString, TypeBytes),
+			parseOptions: typeSet(types.String, types.Bytes),
 		},
 		{
 			c:            &StrVal{s: string([]byte{0xff, 0xfe, 0xfd}), bytesEsc: true},
-			parseOptions: typeSet(TypeBytes),
+			parseOptions: typeSet(types.Bytes),
 		},
 	}
 

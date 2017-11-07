@@ -20,6 +20,7 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
@@ -44,7 +45,7 @@ func (f *filterNode) IndexedVarEval(idx int, ctx *parser.EvalContext) (parser.Da
 }
 
 // IndexedVarResolvedType implements the parser.IndexedVarContainer interface.
-func (f *filterNode) IndexedVarResolvedType(idx int) parser.Type {
+func (f *filterNode) IndexedVarResolvedType(idx int) types.T {
 	return f.source.info.sourceColumns[idx].Typ
 }
 
