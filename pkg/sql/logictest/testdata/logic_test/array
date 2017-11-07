@@ -125,14 +125,14 @@ SELECT ARRAY[1,2,3]::INT[]
 ----
 {1,2,3}
 
-query error pq: invalid cast: int[] -> UUID[]
+query error invalid cast: int[] -> UUID[]
 SELECT ARRAY[1,2,3]::UUID[]
 
-query error pq: invalid cast: inet[] -> INT[]
-SeLECT ARRAY['8.8.8.8'::INET, '8.8.4.4'::INET]::INT[]
+query error invalid cast: inet[] -> INT[]
+SELECT ARRAY['8.8.8.8'::INET, '8.8.4.4'::INET]::INT[]
 
 # this _should_ be valid, but isn't, yet
-query error pq: invalid cast: int[] -> TEXT[]
+query error invalid cast: int[] -> TEXT[]
 SELECT ARRAY[1,2,3]::TEXT[]
 
 # array subscript access
