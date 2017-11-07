@@ -367,6 +367,42 @@ func TestPutS3(t *testing.T) {
 	)
 }
 
+func TestPutS3Endpoint(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	q := make(url.Values)
+	expect := map[string]string{
+		"AWS_S3_ENDPOINT":        S3EndpointParam,
+		"AWS_S3_ENDPOINT_KEY":    S3AccessKeyParam,
+		"AWS_S3_ENDPOINT_REGION": S3RegionParam,
+		"AWS_S3_ENDPOINT_SECRET": S3SecretParam,
+	}
+	for env, param := range expect {
+		v := os.Getenv(env)
+		if v == "" {
+			t.Skipf("%s env var must be set", env)
+		}
+		q.Add(param, v)
+	}
+
+	bucket := os.Getenv("AWS_S3_ENDPOINT_BUCKET")
+	if bucket == "" {
+		t.Skip("AWS_S3_ENDPOINT_BUCKET env var must be set")
+	}
+
+	// TODO(dt): this prevents leaking an http conn goroutine.
+	http.DefaultTransport.(*http.Transport).DisableKeepAlives = true
+
+	u := url.URL{
+		Scheme:   "s3",
+		Host:     bucket,
+		Path:     "backup-test",
+		RawQuery: q.Encode(),
+	}
+
+	testExportStore(t, u.String(), false)
+}
+
 func TestPutGoogleCloud(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
