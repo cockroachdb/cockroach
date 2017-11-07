@@ -44,6 +44,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/spanset"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/storage/tscache"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -62,14 +63,14 @@ import (
 
 // allSpans is a SpanSet that covers *everything* for use in tests that don't
 // care about properly declaring their spans.
-var allSpans = func() SpanSet {
-	var ss SpanSet
-	ss.Add(SpanReadWrite, roachpb.Span{
+var allSpans = func() spanset.SpanSet {
+	var ss spanset.SpanSet
+	ss.Add(spanset.SpanReadWrite, roachpb.Span{
 		Key:    roachpb.KeyMin,
 		EndKey: roachpb.KeyMax,
 	})
 	// Local keys (see `keys.localPrefix`).
-	ss.Add(SpanReadWrite, roachpb.Span{
+	ss.Add(spanset.SpanReadWrite, roachpb.Span{
 		Key:    append([]byte("\x01"), roachpb.KeyMin...),
 		EndKey: append([]byte("\x01"), roachpb.KeyMax...),
 	})
@@ -2675,7 +2676,7 @@ type cmdQCancelTest struct {
 
 type testCmd struct {
 	id      int
-	spanSet *SpanSet
+	spanSet *spanset.SpanSet
 	prereqs map[int]struct{}
 	cancel  context.CancelFunc
 	done    <-chan *roachpb.Error
@@ -2782,16 +2783,16 @@ func (ct *cmdQCancelTest) startInstr(
 	return done
 }
 
-func spanSetsOverlap(ss, ss2 *SpanSet) bool {
-	for ac1 := SpanAccess(0); ac1 < numSpanAccess; ac1++ {
-		for ac2 := SpanAccess(0); ac2 < numSpanAccess; ac2++ {
-			if ac1 == SpanReadOnly && ac2 == SpanReadOnly {
+func spanSetsOverlap(ss, ss2 *spanset.SpanSet) bool {
+	for ac1 := spanset.SpanAccess(0); ac1 < spanset.NumSpanAccess; ac1++ {
+		for ac2 := spanset.SpanAccess(0); ac2 < spanset.NumSpanAccess; ac2++ {
+			if ac1 == spanset.SpanReadOnly && ac2 == spanset.SpanReadOnly {
 				// Reads ignore other reads.
 				continue
 			}
-			for sc := spanScope(0); sc < numSpanScope; sc++ {
-				for _, s := range ss.spans[ac1][sc] {
-					for _, s2 := range ss2.spans[ac2][sc] {
+			for sc := spanset.SpanScope(0); sc < spanset.NumSpanScope; sc++ {
+				for _, s := range ss.GetSpans(ac1, sc) {
+					for _, s2 := range ss2.GetSpans(ac2, sc) {
 						if s.Overlaps(s2) {
 							return true
 						}
@@ -3140,7 +3141,7 @@ func TestReplicaCommandQueueTimestampNonInterference(t *testing.T) {
 func TestReplicaCommandQueueSplitDeclaresWrites(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	var spans SpanSet
+	var spans spanset.SpanSet
 	commands[roachpb.EndTransaction].DeclareKeys(
 		roachpb.RangeDescriptor{StartKey: roachpb.RKey("a"), EndKey: roachpb.RKey("d")},
 		roachpb.Header{},
@@ -3159,7 +3160,7 @@ func TestReplicaCommandQueueSplitDeclaresWrites(t *testing.T) {
 			},
 		},
 		&spans)
-	if err := spans.checkAllowed(SpanReadWrite, roachpb.Span{Key: roachpb.Key("b")}); err != nil {
+	if err := spans.CheckAllowed(spanset.SpanReadWrite, roachpb.Span{Key: roachpb.Key("b")}); err != nil {
 		t.Fatalf("expected declaration of write access, err=%s", err)
 	}
 }
@@ -7227,7 +7228,7 @@ func TestReplicaTryAbandon(t *testing.T) {
 	func() {
 		tc.repl.cmdQMu.Lock()
 		defer tc.repl.cmdQMu.Unlock()
-		if s := tc.repl.cmdQMu.queues[spanGlobal].String(); s == "" {
+		if s := tc.repl.cmdQMu.queues[spanset.SpanGlobal].String(); s == "" {
 			t.Fatal("expected non-empty command queue")
 		}
 	}()
@@ -7243,7 +7244,7 @@ func TestReplicaTryAbandon(t *testing.T) {
 	testutils.SucceedsSoon(t, func() error {
 		tc.repl.cmdQMu.Lock()
 		defer tc.repl.cmdQMu.Unlock()
-		if s := tc.repl.cmdQMu.queues[spanGlobal].String(); s != "" {
+		if s := tc.repl.cmdQMu.queues[spanset.SpanGlobal].String(); s != "" {
 			return errors.Errorf("expected empty command queue, but found\n%s", s)
 		}
 		return nil
@@ -8102,13 +8103,13 @@ func TestGCWithoutThreshold(t *testing.T) {
 		for j, txnThresh := range options {
 			func() {
 				var gc roachpb.GCRequest
-				var spans SpanSet
+				var spans spanset.SpanSet
 
 				gc.Threshold = keyThresh
 				gc.TxnSpanGCThreshold = txnThresh
 				declareKeysGC(desc, roachpb.Header{RangeID: tc.repl.RangeID}, &gc, &spans)
 
-				if num, exp := spans.len(), i+j+1; num != exp {
+				if num, exp := spans.Len(), i+j+1; num != exp {
 					t.Fatalf("(%s,%s): expected %d declared keys, found %d",
 						keyThresh, txnThresh, exp, num)
 				}

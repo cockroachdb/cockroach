@@ -18,6 +18,7 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/storage/batcheval"
+	"github.com/cockroachdb/cockroach/pkg/storage/spanset"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
@@ -29,13 +30,13 @@ import (
 // See https://github.com/cockroachdb/cockroach/issues/19851.
 //
 // Do not introduce new uses of this.
-var todoSpanSet = &SpanSet{}
+var todoSpanSet = &spanset.SpanSet{}
 
 // NewReplicaEvalContext returns a batcheval.EvalContext to use for command
 // evaluation. The supplied SpanSet will be ignored except for race builds, in
 // which case state access is asserted against it. A SpanSet must always be
 // passed.
-func NewReplicaEvalContext(r *Replica, ss *SpanSet) batcheval.EvalContext {
+func NewReplicaEvalContext(r *Replica, ss *spanset.SpanSet) batcheval.EvalContext {
 	if ss == nil {
 		log.Fatalf(r.AnnotateCtx(context.Background()), "can't create a ReplicaEvalContext with assertions but no SpanSet")
 	}
