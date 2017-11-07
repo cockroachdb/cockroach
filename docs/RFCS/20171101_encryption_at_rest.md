@@ -2,12 +2,13 @@
 - Status: draft
 - Start Date: 2017-11-01
 - Authors: Marc Berhault
-- RFC PR: (PR # after acceptance of initial draft)
+- RFC PR: [#19785](https://github.com/cockroachdb/cockroach/pull/19785)
 - Cockroach Issue: [#19783](https://github.com/cockroachdb/cockroach/issues/19783)
 
 Table of Contents
 =================
 
+   * [Table of Contents](#table-of-contents)
    * [Summary](#summary)
    * [Motivation](#motivation)
    * [Related resources](#related-resources)
@@ -40,6 +41,9 @@ Table of Contents
       * [Rationale and Alternatives](#rationale-and-alternatives)
       * [Unresolved questions](#unresolved-questions)
       * [Future improvements](#future-improvements)
+         * [v1.0: a.k.a. MVP](#v10-aka-mvp)
+         * [Possible future additions](#possible-future-additions)
+
 
 # Summary
 
@@ -84,10 +88,12 @@ The following are not in scope but should not be hindered by implementation of t
 * auditing of key usage and encryption status
 * integration with HSM (hardware security module) or TPM (Trusted Platform Module)
 * FIPS-140-2 compliance
+See [Possible future additions](#possible-future-additions) for more currently-out-of-scope features.
 
 The following are unrelated to encryption-at-rest as currently proposed:
 * encrypted backup (should be supported regardless of encryption-at-rest status)
 * fine-granularity encryption (that cannot use zone configs to select encrypted replicas)
+* restricting data processing on encrypted nodes (requires planning/gateway coordination)
 
 # Guide-level explanation
 
@@ -667,6 +673,8 @@ specific areas. We address them all here (in no particular order):
 
 ### Filesystem encryption
 
+This is [Out of scope](#out-of-scope)
+
 Filesystem encryption can be used without requiring coordination with cockroach or rocksdb.
 While this may be an option in some environments, DBAs do not always have sufficient
 privileges to use this or may not be willing to.
@@ -677,6 +685,8 @@ This can be a reasonable solution for non-enterprise users.
 Should we choose this alternative, this entire RFC can be ignored.
 
 ### Fine-grained encryption
+
+This is [Out of scope](#out-of-scope)
 
 The solution proposed here allows encryption to be enabled or not for individual rocksdb instances.
 This may not be sufficient for fine-grained encryption.
@@ -689,6 +699,8 @@ However, this may not be sufficient for more fine-grained encryption (eg: per co
 It's not clear how encryption for individual keys/values would work.
 
 ### Single level of keys
+
+**We have settled on a two-level key structure**
 
 The current choice of two key levels (store keys vs data keys) is debatable:
 
@@ -726,21 +738,6 @@ Pros:
 Cons:
 * it's not possible to specify a different cipher for store keys
 
-### Enterprise feature gating
-
-The current proposal does not gate encryption on a valid license due to the fact that we cannot check the license
-when initialising the node.
-
-A possible solution to explore is detection when the node joins a cluster. eg:
-* always allow node encryption
-* when a node joins, communicate its encryption status and refuse the join if no enterprise license exists
-* on bootstrap, an encrypted node will only allow SQL operations on the system tables (to set the license)
-* the license can be passed through `init`
-
-This would still cause issues when removing the license (or errors loading/validating the license).
-
-Less drastic actions may be possible.
-
 ### Preamble format
 
 The current preamble format is fixed and clearly defined (see [Preamble Format](#preamble-format).
@@ -765,21 +762,7 @@ meaning the backup will not count towards key usage and will become unreadable w
 
 While we do not currently make use of backups, we have in the past and may again.
 
-### Forcing re-encryption
-
-We need to find a way to force re-encryption when we want to remove an old key.
-While rocksdb regularly creates new files, we may need to force rewrite for less-frequently
-updated files. Other files (such as `MANIFEST`, `OPTIONS`, `CURRENT`, `IDENTITY`, etc...) may need
-a different method to rewrite.
-
-Compaction (of the entire key space, or specific ranges determined through live file metadata) may provide
-the bulk of the needed functionality.
-However, some files (especially with no updates) will not be rewritten.
-
-Some possible solutions to investigate:
-* patches to rocksdb to force rotation even if nothing has changed (may be the safest)
-* "poking" at the files to add changes (may be impossible to do properly)
-* level of indirection in the encryption layer while a file is being rewritten (not supposed to be done for "write-once" files, and probably too dangerous for logs)
+**We currently propose to ignore files not reported as live by rocksdb**
 
 ### Per-store flags
 
@@ -806,11 +789,6 @@ We can default to:
 * use encryption if any of the stores on this node uses encryption
 * use the first set of keys we come across (probably my store ID)
 
-### Garbage collection of old data keys
-
-We would prefer not to keep old data keys forever, but we need to be certain that a key is no longer in use
-before deleting it. How feasible this is depends on the accuracy of our encryption status reporting.
-
 ### Marking data keys as "exposed" if key list was plaintext at any point
 
 Consider the following scenario:
@@ -827,19 +805,6 @@ reporting encryption status. This status must be set on all keys present in the 
 
 Note: "exposed" may be a scary word. We would have to find the appropriate wording for this.
 
-### Processing encrypted data on a non-encrypted node
-
-In a heterogeneous cluster (some nodes are encrypted, some are not), data stored on encrypted nodes should
-never hit a disk unencrypted. This means that any processing of the data must be done on similarly-encrypted
-nodes.
-
-This most likely needs to be enforced at a much higher level when deciding where to do intermediate data processing.
-
-### Performance impact
-
-The performance impact needs to be measure for a variety of workloads and for all supported ciphers.
-This is needed to provide some guidance to users.
-
 ### Instruction set support
 
 Crypto++ can determine support for SSE2 and AES-NI at runtime. We should ensure that our builds properly
@@ -847,10 +812,57 @@ enable this.
 
 ## Future improvements
 
-The improvements listed here can be added later or may be done in the initial implementation.
-This is in addition to some of the features mentioned in the Out Of Scope section.
+We break down future improvements in multiple categories:
+* v1.0: may be not done as part of the initial implementation. Must be done for the first
+stable release.
+* future: possible additions to come after first stable release.
 
-### Encryption-related metrics
+The features are listed in no particular order.
+
+### v1.0: a.k.a. MVP
+
+#### Forcing re-encryption
+
+We need to find a way to force re-encryption when we want to remove an old key.
+While rocksdb regularly creates new files, we may need to force rewrite for less-frequently
+updated files. Other files (such as `MANIFEST`, `OPTIONS`, `CURRENT`, `IDENTITY`, etc...) may need
+a different method to rewrite.
+
+Compaction (of the entire key space, or specific ranges determined through live file metadata) may provide
+the bulk of the needed functionality.
+However, some files (especially with no updates) will not be rewritten.
+
+Some possible solutions to investigate:
+* there is rumor of being able to mark sstables as "dirty"
+* patches to rocksdb to force rotation even if nothing has changed (may be the safest)
+* "poking" at the files to add changes (may be impossible to do properly)
+* level of indirection in the encryption layer while a file is being rewritten (not supposed to be done for "write-once" files, and probably too dangerous for logs)
+
+Part of forcing re-encryption includes:
+* when do to do automatically (eg: age-based. maybe after half the active key lifetime)
+* how to do it manually (user requests quick re-encryption)
+* specifying what to re-encrypt (eg: all data keys up to ID 5)
+
+#### Garbage collection of old data keys
+
+We would prefer not to keep old data keys forever, but we need to be certain that a key is no longer in use
+before deleting it. How feasible this is depends on the accuracy of our encryption status reporting.
+
+
+#### Performance impact
+
+The performance impact needs to be measured for a variety of workloads and for all supported ciphers.
+This is needed to provide some guidance to users.
+
+#### Propagating encrypted status
+
+We may want to automatically mark a store as "encrypted" and make this status available to zone configuration,
+allowing database/table placement to specify encryption status.
+
+When to mark a store as "encrypted" is not clear. For example: can we mark it as encrypted just because encryption
+is enabled, or should we wait until encryption usage is at 100%?
+
+#### Encryption-related metrics
 
 We can export high-level metrics about at-rest-encryption through prometheus.
 This can include:
@@ -859,21 +871,13 @@ This can include:
 * amount of data per cipher (or plaintext)
 * age of in-use keys
 
-### Propagating encrypted status
-
-We may want to automatically mark a store as "encrypted" and make this status available to zone configuration,
-allowing database/table placement to specify encryption status.
-
-When to mark a store as "encrypted" is not clear. For example: can we mark it as encrypted just because encryption
-is enabled, or should we wait until encryption usage is at 100%?
-
-### Reloading store keys
+#### Reloading store keys
 
 The current proposal only reloads store keys at node start time.
 We can avoid restarts by triggering a refresh of the store key file when receiving a signal (eg: `SIGHUP`) or other
 conditions (periodic refresh, admin UI endpoint, filesystem polling, etc...)
 
-### Tooling
+#### Tooling
 
 At the very least, we want `cockroach debug` tools to continue working correctly with preamble/encrypted files.
 We may also need to add tools to convert an existing data directory from/to preample format or encryption, or
@@ -882,12 +886,20 @@ to report the current encryption status of a store (without cockroach running).
 We should examine which rocksdb-provided tools may need modification as well, possibly involving patches
 to rocksdb.
 
-### Support for additional block ciphers
+### Possible future additions
+
+#### Safe file deletion
+
+We may want to delete old files in a less recoverable way (some filesystems allow un-delete).
+On SSDs, a single overwrite pass may be sufficient. We do not propose to handle safe deletion
+on hard drives.
+
+#### Support for additional block ciphers
 
 Crypto++ supports multiple block ciphers. It should be reasonably easy to add support for
 other ciphers.
 
-### GCM for data integrity
+#### GCM for data integrity
 
 GCM (Galois Counter Mode) is similar to CTR mode but provides data integrity as well, meaning
 we can verify that the encrypted data has not been tampered with.
@@ -895,9 +907,24 @@ we can verify that the encrypted data has not been tampered with.
 Implementing GCM would require additional changes to the raw storage format to store the final
 authentication tag.
 
-### Add sanity checks
+#### Add sanity checks
 
 We could perform a few checks to ensure data security, such as:
 * detect if keys are on the same disk as the store
 * detect if keys have loose permissions
 * detect if swap is enabled
+
+#### Enterprise feature gating
+
+The current proposal does not gate encryption on a valid license due to the fact that we cannot check the license
+when initialising the node.
+
+A possible solution to explore is detection when the node joins a cluster. eg:
+* always allow node encryption
+* when a node joins, communicate its encryption status and refuse the join if no enterprise license exists
+* on bootstrap, an encrypted node will only allow SQL operations on the system tables (to set the license)
+* the license can be passed through `init`
+
+This would still cause issues when removing the license (or errors loading/validating the license).
+
+Less drastic actions may be possible.
