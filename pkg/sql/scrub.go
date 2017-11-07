@@ -349,33 +349,48 @@ func scrubIndexRunDistSQL(
 }
 
 // tableColumnsIsNullPredicate creates a predicate that checks if all of
-// the specified columns for a table are NULL. For example, given table
-// is t1 and the columns id, name, data, then the returned string is:
+// the specified columns for a table are NULL (or not NULL, based on the
+// isNull flag). For example, given table is t1 and the columns id,
+// name, data, then the returned string is:
 //
 //   t1.id IS NULL AND t1.name IS NULL AND t1.data IS NULL
-func tableColumnsIsNullPredicate(tableName string, columns []string) string {
+//
+func tableColumnsIsNullPredicate(tableName string, columns []string, isNull bool) string {
 	var buf bytes.Buffer
+	nullCheck := "NOT NULL"
+	if isNull {
+		nullCheck = "NULL"
+	}
 	for i, col := range columns {
 		if i > 0 {
 			buf.WriteString(" AND ")
 		}
-		fmt.Fprintf(&buf, "%[1]s.%[2]s IS NULL", tableName, col)
+		fmt.Fprintf(&buf, "%[1]s.%[2]s IS %[3]s", tableName, col, nullCheck)
 	}
 	return buf.String()
 }
 
 // tableColumnsEQ creates a predicate that checks if all of the
-// specified columns for two tables are equal. For example, given tables
-// t1, t2 and the columns id, name, data, then the returned string is:
+// specified columns for two tables are equal. This predicate also needs
+// NULL checks to work around the equivilancy of NULL = NULL. For
+// example, given tables t1, t2 and the columns id, name, then the
+// returned string is:
 //
-//   t1.id = t2.id AND t1.name = t2.name AND t1.data = t2.data
+//   ((t1.id IS NOT NULL AND t2.id IS NOT NULL AND t1.id = t2.id) OR
+//    (t1.id IS NULL AND t2.id IS NULL)) AND
+//   ((t1.name IS NOT NULL AND t2.name IS NOT NULL AND t1.name = t2.name) OR
+//    (t1.name IS NULL AND t2.name IS NULL))
+//
 func tableColumnsEQ(tableName string, otherTableName string, columns []string) string {
 	var buf bytes.Buffer
 	for i, col := range columns {
 		if i > 0 {
 			buf.WriteString(" AND ")
 		}
-		fmt.Fprintf(&buf, "%[1]s.%[3]s = %[2]s.%[3]s", tableName, otherTableName, col)
+		fmt.Fprintf(&buf, `
+			((%[1]s.%[3]s IS NOT NULL AND %[2]s.%[3]s IS NOT NULL AND %[1]s.%[3]s = %[2]s.%[3]s) OR
+			 (%[1]s.%[3]s IS NULL AND %[2]s.%[3]s IS NULL))`,
+			tableName, otherTableName, col)
 	}
 	return buf.String()
 }
@@ -414,16 +429,21 @@ func tableColumnsProjection(tableName string, columns []string) string {
 //     test@{NO_INDEX_JOIN} as left
 //   FULL OUTER JOIN
 //     test@{FORCE_INDEX=v_idx,NO_INDEX_JOIN} as right
-//     ON left.k = right.k AND
-//        left.s = right.s AND
-//        left.v = right.v
+//   ON
+//      ((left.k IS NOT NULL AND right.k IS NOT NULL AND left.k = right.k) OR
+//       (left.k IS NULL AND right.k IS NULL)) AND
+//      ((left.s IS NOT NULL AND right.s IS NOT NULL AND left.s = right.s) OR
+//       (left.s IS NULL AND right.s IS NULL)) AND
+//      ((left.v IS NOT NULL AND right.v IS NOT NULL AND left.v = right.v) OR
+//       (left.v IS NULL AND right.v IS NULL))
 //   WHERE (left.k  IS NULL AND left.s  IS NULL) OR
 //         (right.k IS NULL AND right.s IS NULL)
 //
 // In short, this query is:
 // 1) Scanning the primary index and the secondary index.
-// 2) Joining them on all of the secondary index columns and
-//    extra columns that are equal.
+// 2) Joining them on all of the secondary index columns and extra
+//    columns that are equivalent. This is a fairly verbose check due to
+//    equivilancy properties when involving NULLs.
 // 3) Filtering to achieve an anti-join. The first line of the predicate
 //    takes rows on the right for the anti-join. The second line of the
 //    predicate takes rows on the left for the anti-join.
@@ -458,8 +478,8 @@ func createIndexCheckQuery(
 		tableName.String(),
 		indexID,
 		tableColumnsEQ("leftside", "rightside", columnNames),
-		tableColumnsIsNullPredicate("leftside", primaryKeyColumnNames),
-		tableColumnsIsNullPredicate("rightside", primaryKeyColumnNames),
+		tableColumnsIsNullPredicate("leftside", primaryKeyColumnNames, true /* isNull */),
+		tableColumnsIsNullPredicate("rightside", primaryKeyColumnNames, true /* isNull */),
 	)
 }
 
