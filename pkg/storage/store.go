@@ -1228,7 +1228,7 @@ var errPeriodicGossipsDisabled = errors.New("periodic gossip is disabled")
 func (s *Store) startGossip() {
 	wakeReplica := func(ctx context.Context, repl *Replica) error {
 		// Acquire the range lease, which in turn triggers system data gossip
-		// functions (e.g. maybeGossipSystemConfig or maybeGossipNodeLiveness).
+		// functions (e.g. MaybeGossipSystemConfig or MaybeGossipNodeLiveness).
 		_, pErr := repl.getLeaseForGossip(ctx)
 		return pErr.GoError()
 	}

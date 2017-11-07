@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/batcheval"
+	"github.com/cockroachdb/cockroach/pkg/storage/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
@@ -444,11 +445,11 @@ func SetMockAddSSTable() (undo func()) {
 	// subparts of the real evalAddSSTable to make this test less likely to rot.
 	evalAddSSTable := func(
 		ctx context.Context, batch engine.ReadWriter, cArgs batcheval.CommandArgs, _ roachpb.Response,
-	) (EvalResult, error) {
+	) (result.Result, error) {
 		log.Event(ctx, "evaluated testing-only AddSSTable mock")
 		args := cArgs.Args.(*roachpb.AddSSTableRequest)
 
-		return EvalResult{
+		return result.Result{
 			Replicated: storagebase.ReplicatedEvalResult{
 				AddSSTable: &storagebase.ReplicatedEvalResult_AddSSTable{
 					Data:  args.Data,

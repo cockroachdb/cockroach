@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/batcheval"
+	"github.com/cockroachdb/cockroach/pkg/storage/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -36,7 +37,7 @@ func init() {
 // this command idempotent.
 func evalWriteBatch(
 	ctx context.Context, batch engine.ReadWriter, cArgs batcheval.CommandArgs, _ roachpb.Response,
-) (storage.EvalResult, error) {
+) (result.Result, error) {
 
 	args := cArgs.Args.(*roachpb.WriteBatchRequest)
 	h := cArgs.Header
@@ -53,7 +54,7 @@ func evalWriteBatch(
 	if args.DataSpan.Key.Compare(args.Key) < 0 || args.DataSpan.EndKey.Compare(args.EndKey) > 0 {
 		// TODO(dan): Add a new field in roachpb.Error, so the client can catch
 		// this and retry.
-		return storage.EvalResult{}, errors.New("data spans multiple ranges")
+		return result.Result{}, errors.New("data spans multiple ranges")
 	}
 
 	mvccStartKey := engine.MVCCKey{Key: args.Key}
@@ -63,7 +64,7 @@ func evalWriteBatch(
 	// request header.
 	msBatch, err := engineccl.VerifyBatchRepr(args.Data, mvccStartKey, mvccEndKey, h.Timestamp.WallTime)
 	if err != nil {
-		return storage.EvalResult{}, err
+		return result.Result{}, err
 	}
 	ms.Add(msBatch)
 
@@ -71,14 +72,14 @@ func evalWriteBatch(
 	// adjust the MVCCStats) before applying the WriteBatch data.
 	existingStats, err := clearExistingData(ctx, batch, mvccStartKey, mvccEndKey, h.Timestamp.WallTime)
 	if err != nil {
-		return storage.EvalResult{}, errors.Wrap(err, "clearing existing data")
+		return result.Result{}, errors.Wrap(err, "clearing existing data")
 	}
 	ms.Subtract(existingStats)
 
 	if err := batch.ApplyBatchRepr(args.Data, false /* sync */); err != nil {
-		return storage.EvalResult{}, err
+		return result.Result{}, err
 	}
-	return storage.EvalResult{}, nil
+	return result.Result{}, nil
 }
 
 func clearExistingData(
