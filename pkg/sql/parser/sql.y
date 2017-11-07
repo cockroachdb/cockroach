@@ -548,6 +548,7 @@ func (u *sqlSymUnion) scrubOption() ScrubOption {
 
 // SCRUB
 %type <Statement> scrub_stmt
+%type <Statement> scrub_database_stmt
 %type <Statement> scrub_table_stmt
 %type <ScrubOptions> scrub_option_list
 %type <ScrubOption> scrub_option
@@ -2015,6 +2016,17 @@ set_stmt:
 // SCRUB
 scrub_stmt:
   scrub_table_stmt
+| scrub_database_stmt
+
+// %Help: SCRUB DATABASE - run a scrub check on a database
+// %Category: Misc
+// %Text:
+// SCRUB DATABASE <databasename>
+scrub_database_stmt:
+  EXPERIMENTAL SCRUB DATABASE name
+  {
+    $$.val = &Scrub{Typ: ScrubDatabase, Database: Name($4)}
+  }
 
 // %Help: SCRUB TABLE - run a scrub check on a table
 // %Category: Misc
