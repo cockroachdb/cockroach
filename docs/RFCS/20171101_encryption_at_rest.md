@@ -15,9 +15,14 @@ Table of Contents
    * [Motivation](#motivation)
    * [Related resources](#related-resources)
    * [Out of scope](#out-of-scope)
+   * [Security analysis](#security-analysis)
+      * [Attack profiles](#attack-profiles)
+      * [Assumptions](#assumptions)
+      * [Considerations](#considerations)
    * [Guide-level explanation](#guide-level-explanation)
       * [Terminology](#terminology)
       * [User-level explanation](#user-level-explanation)
+         * [Configuration recommendations](#configuration-recommendations)
          * [Store keys](#store-keys)
          * [Data keys](#data-keys)
          * [User control of encryption](#user-control-of-encryption)
@@ -39,7 +44,6 @@ Table of Contents
          * [Reporting encryption status](#reporting-encryption-status)
          * [Other uses of rocksdb](#other-uses-of-rocksdb)
          * [Enterprise enforcement](#enterprise-enforcement)
-      * [Security considerations](#security-considerations)
       * [Drawbacks](#drawbacks)
       * [Rationale and Alternatives](#rationale-and-alternatives)
       * [Unresolved questions](#unresolved-questions)
@@ -101,6 +105,83 @@ The following are unrelated to encryption-at-rest as currently proposed:
 * fine-granularity encryption (that cannot use zone configs to select encrypted replicas)
 * restricting data processing on encrypted nodes (requires planning/gateway coordination)
 
+# Security analysis
+
+Caveat: this is not a thorough security analysis of the proposed solution, let alone its implementation.
+
+This section should be expanded and studied carefully before this RFC is approved.
+
+## Attack profiles
+
+We attempt to prevent two attack vectors:
+
+### Access to raw disk offline
+
+An attacker can gain access to the disk after it has been removed from the system (eg: node decommission).
+At-rest encryption should make all data on the disk useless if the following are true:
+* none of the store keys are available or previously compromised
+* none of the data went through a phase where either store or data encryption was `PLAIN`
+
+### Access to a running system by unprivileged user
+
+Unprivileged users (eg: non root) should not be able to extract cockroach data even if they have access to the
+raw rocksdb files.
+This will still not guard against:
+* privileged users (with access to store keys or memory)
+* data that was at some point stored as `PLAIN`
+
+## Assumptions
+
+Some of the assumptions here can be verified by runtime checks, but others must be satisfied by the user (see
+[Configuration Recommendation](#configuration-recommendations).
+
+### No privileged access
+
+We assume attackers do not have privileged access on a running system. Specifically:
+* store keys cannot be read
+* cockroach memory cannot be directly accessed
+
+### No write access by attackers
+
+A big assumption in this document is that attackers do not have write access to the raw files while
+we are operating: we trust the integrity of the store and data key files as well as all data written on disk.
+
+This includes the case of an attacked removing a disk, modifying it, and re-inserting it into the cluster.
+
+We can partially relax this assumption by adding integrity checking to all files on disk (eg: using GCM).
+This would add complexity and cost to filesystem-level operations in rocksdb as we would need to read entire
+files to compute authentication tags.
+
+However, integrity checking can be cheaply used on the data keys file.
+
+## Considerations
+
+### Random number generator
+
+We need to generate random values for a few things:
+* data keys
+* IV/counter for each file
+
+Crypto++ provides [OS_GenerateRandomBlock](https://www.cryptopp.com/wiki/RandomNumberGenerator#OS_Entropy)
+which can operate in blocking (using `/dev/random`) or non-blocking (using `/dev/urandom`) mode.
+We would prefer to use better entropy for data keys, but `/dev/random` is notoriously slow especially
+when just starting rocksdb with very little disk/network utilization.
+
+Generating data keys (other than the first one, or when changing encryption ciphers) can be done
+in the background so we may be able to use the higher entropy `/dev/random`.
+IVs may be safe to keep generating using the lower-entropy `/dev/urandom`.
+
+### Memory safety
+
+We need to provide safety for the keys while held in memory.
+On the C++ side, this done using mlock (`man mlock(2)`) on memory holding unencrypted keys.
+This prevents the corresponding memory pages from being paged out to disk. This does not prevent
+memory access for users with sufficient privileges.
+
+There is no equivalent in Go so the current approach is to avoid loading keys in Go.
+This can become problematic if we want to reuse the keys to encrypt log files written in Go.
+No good answer presents itself.
+
 # Guide-level explanation
 
 ## Terminology
@@ -128,6 +209,20 @@ before turning on encryption, or concurrently. However, an existing rocksdb node
 format **CANNOT** use encryption.
 
 An existing node cannot be converted from classic file format to preamble file format or vice versa.
+
+### Configuration recommendations
+
+We identify a few configuration requirements for users to safely use encryption at rest.
+
+**TODO**: this will need to be fleshed out when writing the docs.
+
+* restricted access to store keys (ideally, only the cockroach user)
+* restricted access to all cockroach data
+* disable swap
+* reasonable key generation/rotation
+* monitoring
+* store keys and cockroach data must not be on the same filesystem/disk
+* ideally, the store keys are not stored on the machine (use something like `keywhiz`)
 
 ### Store keys
 
@@ -424,7 +519,7 @@ message EncryptionDescriptor {
   // Initialization vector, of size `AES::BlockSize` for AES.
   optional bytes initialization_vector = 3;
   // Counter, of size `AES::BlockSize` for AES.
-	optional bytes counter = 4;
+  optional bytes counter = 4;
 }
 ```
 
@@ -532,7 +627,7 @@ The data keys file is an encoded protocol buffer:
 
 ```
 message DataKeysRegistry {
-	// Ordering does not matter.
+  // Ordering does not matter.
   repeated DataKey data_keys = 1;
 }
 
@@ -672,49 +767,6 @@ For now, we propose a reactive approach to license enforcement. When any node in
 
 The overall idea is that the cluster is not negatively impacted by the lack of an enterprise license.
 See [Enterprise feature gating](#enterprise-feature-gating) for possible alternatives.
-
-## Security considerations
-
-Caveat: this is not a thorough security analysis of the proposed solution, let alone its implementation.
-
-This section should be expanded and studied carefully before this RFC is approved.
-
-### No write access by attackers
-
-A big assumption in this document is that attackers do not have write access to the raw files while
-we are operating: we trust the integrity of the store and data key files as well as all data written on disk.
-
-We can relax this assumption by adding integrity checking to all files on disk (eg: using GCM).
-This would add complexity and cost to filesystem-level operations in rocksdb as we would need to read entire
-files to compute authentication tags.
-
-However, GCM can be cheaply used to encode data keys.
-
-### Random number generator
-
-We need to generate random values for a few things:
-* data keys
-* IV/counter for each file
-
-Crypto++ provides [OS_GenerateRandomBlock](https://www.cryptopp.com/wiki/RandomNumberGenerator#OS_Entropy)
-which can operate in blocking (using `/dev/random`) or non-blocking (using `/dev/urandom`) mode.
-We would prefer to use better entropy for data keys, but `/dev/random` is notoriously slow especially
-when just starting rocksdb with very little disk/network utilization.
-
-Generating data keys (other than the first one, or when changing encryption ciphers) can be done
-in the background so we may be able to use the higher entropy `/dev/random`.
-IVs may be safe to keep generating using the lower-entropy `/dev/urandom`.
-
-### Memory safety
-
-We need to provide safety for the keys while held in memory.
-On the C++ side, this done using mlock (`man mlock(2)`) on memory holding unencrypted keys.
-This prevents the corresponding memory pages from being paged out to disk. This does not prevent
-memory access for users with sufficient privileges.
-
-There is no equivalent in Go so the current approach is to avoid loading keys in Go.
-This can become problematic if we want to reuse the keys to encrypt log files written in Go.
-No good answer presents itself.
 
 ## Drawbacks
 
