@@ -175,6 +175,7 @@ func PGDisplayName(typ T) string {
 	return typ.String()
 }
 
+// TOid represents an alias to the Int type with a different Postgres OID.
 type TOid struct {
 	oidType oid.Oid
 }
@@ -234,6 +235,7 @@ func (t TOidWrapper) String() string {
 	return t.T.String()
 }
 
+// Oid implements the T interface.
 func (t TOidWrapper) Oid() oid.Oid { return t.oid }
 
 // WrapTypeWithOid wraps a T with a custom Oid.
