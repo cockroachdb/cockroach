@@ -488,8 +488,12 @@ func TestParse(t *testing.T) {
 		{`SELECT a FROM t WHERE a IN (b, c)`},
 		{`SELECT a FROM t WHERE a IN (SELECT a FROM t)`},
 		{`SELECT a FROM t WHERE a NOT IN (b, c)`},
+		{`SELECT a FROM t WHERE a = ANY (ARRAY[b, c])`},
 		{`SELECT a FROM t WHERE a = ANY ARRAY[b, c]`},
+		{`SELECT a FROM t WHERE a != SOME (ARRAY[b, c])`},
 		{`SELECT a FROM t WHERE a != SOME ARRAY[b, c]`},
+		{`SELECT a FROM t WHERE a = ANY (SELECT 1)`},
+		{`SELECT a FROM t WHERE a LIKE ALL (ARRAY[b, c])`},
 		{`SELECT a FROM t WHERE a LIKE ALL ARRAY[b, c]`},
 		{`SELECT a FROM t WHERE a LIKE b`},
 		{`SELECT a FROM t WHERE a NOT LIKE b`},
@@ -1068,6 +1072,38 @@ func TestParse2(t *testing.T) {
 	}
 }
 
+// TestParseTree checks that the implicit grouping done by the grammar
+// is properly reflected in the parse tree.
+func TestParseTree(t *testing.T) {
+	testData := []struct {
+		sql      string
+		expected string
+	}{
+		{`SELECT 1`, `SELECT (1)`},
+		{`SELECT -1+2`, `SELECT (((-(1))) + (2))`},
+		{`SELECT -1:::INT`, `SELECT (-((1):::INT))`},
+		{`SELECT 1 = 2::INT`, `SELECT ((1) = ((2)::INT))`},
+		{`SELECT 1 = ANY 2::INT`, `SELECT ((1) = ANY ((2)::INT))`},
+		{`SELECT 1 = ANY ARRAY[1]:::INT`, `SELECT ((1) = ANY ((ARRAY[(1)]):::INT))`},
+	}
+
+	pfmt := fmtFlags{alwaysParens: true}
+	for _, d := range testData {
+		stmts, err := Parse(d.sql)
+		if err != nil {
+			t.Errorf("%s: expected success, but found %s", d.sql, err)
+			continue
+		}
+		s := AsStringWithFlags(stmts, &pfmt)
+		if d.expected != s {
+			t.Errorf("%s: expected %s, but found (%d statements): %s", d.sql, d.expected, len(stmts), s)
+		}
+		if _, err := Parse(s); err != nil {
+			t.Errorf("expected string found, but not parsable: %s:\n%s", err, s)
+		}
+	}
+}
+
 // TestParseSyntax verifies that parsing succeeds, though the syntax tree
 // likely differs. All of the test cases here should eventually be moved
 // elsewhere.
@@ -1387,9 +1423,9 @@ SELECT EXISTS(SELECT 1)[1]
 		},
 		{
 			`SELECT 1 + ANY ARRAY[1, 2, 3]`,
-			`+ ANY <array> is invalid because "+" is not a boolean operator at or near "]"
+			`+ ANY <array> is invalid because "+" is not a boolean operator at or near "EOF"
 SELECT 1 + ANY ARRAY[1, 2, 3]
-                            ^
+                             ^
 `,
 		},
 	}
