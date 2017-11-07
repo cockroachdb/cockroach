@@ -24,11 +24,25 @@ export function ComputePrefixExponent(value: number, prefixMultiple: number, pre
   return prefixScale;
 }
 
-export function BytesToUnitValue(bytes: number): UnitValue {
+/**
+ * ComputeByteScale calculates the appropriate scale factor and unit to use to
+ * display a given byte value, without actually converting the value.
+ *
+ * This is used to prescale byte values before passing them to a d3-axis.
+ */
+export function ComputeByteScale(bytes: number): UnitValue {
   const scale = ComputePrefixExponent(bytes, kibi, byteUnits);
   return {
-    value: bytes / Math.pow(kibi, scale),
+    value: Math.pow(kibi, scale),
     units: byteUnits[scale],
+  };
+}
+
+export function BytesToUnitValue(bytes: number): UnitValue {
+  const scale = ComputeByteScale(bytes);
+  return {
+    value: bytes / scale.value,
+    units: scale.units,
   };
 }
 
