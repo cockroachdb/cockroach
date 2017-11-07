@@ -36,7 +36,7 @@ export default function (props: GraphDashboardProps) {
         </div>
       )}
     >
-      <Axis units={AxisUnits.Bytes}>
+      <Axis units={AxisUnits.Bytes} label="memory usage">
         <Metric name="cr.node.sys.rss" title="Total memory (RSS)" />
         <Metric name="cr.node.sys.go.allocbytes" title="Go Allocated" />
         <Metric name="cr.node.sys.go.totalbytes" title="Go Total" />

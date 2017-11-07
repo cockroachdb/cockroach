@@ -7,7 +7,7 @@ import moment from "moment";
 
 import * as protos from "src/js/protos";
 import { NanoToMilli } from "src/util/convert";
-import { Bytes, ComputePrefixExponent, Duration, kibi } from "src/util/format";
+import { Bytes, ComputePrefixExponent, ComputeByteScale, Duration } from "src/util/format";
 
 import {
   MetricProps, AxisProps, AxisUnits, QueryTimeInfo,
@@ -173,14 +173,12 @@ function ComputeCountAxisDomain(
   return axisDomain;
 }
 
-const byteLabels = ["bytes", "kilobytes", "megabytes", "gigabytes", "terabytes", "petabytes", "exabytes", "zettabytes", "yottabytes"];
-
 function ComputeByteAxisDomain(
   min: number, max: number, tickCount: number,
 ): AxisDomain {
   // Compute an appropriate unit for the maximum value to be displayed.
-  const prefixExponent = ComputePrefixExponent(max, kibi, byteLabels);
-  const prefixFactor = Math.pow(kibi, prefixExponent);
+  const scale = ComputeByteScale(max);
+  const prefixFactor = scale.value;
 
   // Compute increment on min/max after conversion to the appropriate prefix unit.
   const increment = computeNormalizedIncrement(max / prefixFactor - min / prefixFactor, tickCount);
@@ -189,7 +187,7 @@ function ComputeByteAxisDomain(
   const axisDomain = new AxisDomain(min, max, increment * prefixFactor);
 
   // Apply the correct label to the axis.
-  axisDomain.label = byteLabels[prefixExponent];
+  axisDomain.label = scale.units;
 
   // Format ticks to display as the correct prefix unit.
   let unitFormat: (v: number) => string;
@@ -467,7 +465,9 @@ export function ConfigureLineChart(
     yAxisDomain = processed.yAxisDomain;
 
     chart.yDomain(yAxisDomain.domain());
-    if (!axis.props.label) {
+    if (axis.props.label) {
+      chart.yAxis.axisLabel(`${axis.props.label} (${yAxisDomain.label})`);
+    } else {
       chart.yAxis.axisLabel(yAxisDomain.label);
     }
     chart.xDomain(xAxisDomain.domain());
