@@ -286,7 +286,7 @@ func (n *alterTableNode) Start(params runParams) error {
 				if containsThisColumn {
 					if containsOnlyThisColumn || t.DropBehavior == parser.DropCascade {
 						if err := params.p.dropIndexByName(
-							params.ctx, parser.UnrestrictedName(idx.Name), n.tableDesc, false, t.DropBehavior,
+							params.ctx, parser.UnrestrictedName(idx.Name), n.tableDesc, false, t.DropBehavior, ignoreOutboundFK,
 							parser.AsStringWithFlags(n.n, parser.FmtSimpleQualified),
 						); err != nil {
 							return err

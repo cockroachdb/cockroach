@@ -293,7 +293,7 @@ func (n *dropIndexNode) Start(params runParams) error {
 		}
 
 		if err := params.p.dropIndexByName(
-			ctx, index.idxName, tableDesc, n.n.IfExists, n.n.DropBehavior,
+			ctx, index.idxName, tableDesc, n.n.IfExists, n.n.DropBehavior, checkOutboundFK,
 			parser.AsStringWithFlags(n.n, parser.FmtSimpleQualified),
 		); err != nil {
 			return err
@@ -302,12 +302,24 @@ func (n *dropIndexNode) Start(params runParams) error {
 	return nil
 }
 
+// dropIdxFKCheck is used when dropping an index to signal whether it is okay to
+// do so even if it is in use as an *outbound FK*. This is a subset of what is
+// implied by DropBehavior CASCADE, which implies dropping *all* dependencies.
+// This is used e.g. when the element constrained is being dropped anyway.
+type dropIdxFKCheck bool
+
+const (
+	checkOutboundFK  dropIdxFKCheck = true
+	ignoreOutboundFK dropIdxFKCheck = false
+)
+
 func (p *planner) dropIndexByName(
 	ctx context.Context,
 	idxName parser.UnrestrictedName,
 	tableDesc *sqlbase.TableDescriptor,
 	ifExists bool,
 	behavior parser.DropBehavior,
+	outboundFKCheck dropIdxFKCheck,
 	jobDesc string,
 ) error {
 	idx, dropped, err := tableDesc.FindIndexByName(string(idxName))
@@ -327,7 +339,7 @@ func (p *planner) dropIndexByName(
 	// Queue the mutation.
 	var droppedViews []string
 	if idx.ForeignKey.IsSet() {
-		if behavior != parser.DropCascade {
+		if behavior != parser.DropCascade && outboundFKCheck != ignoreOutboundFK {
 			return fmt.Errorf("index %q is in use as a foreign key constraint", idx.Name)
 		}
 		if err := p.removeFKBackReference(ctx, tableDesc, idx); err != nil {
