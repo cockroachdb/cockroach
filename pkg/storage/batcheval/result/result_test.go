@@ -12,7 +12,7 @@
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
-package storage
+package result
 
 import (
 	"reflect"
@@ -25,7 +25,7 @@ import (
 func TestEvalResultIsZero(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	var p EvalResult
+	var p Result
 	if !p.IsZero() {
 		t.Fatalf("%v unexpectedly non-zero", p)
 	}
@@ -38,9 +38,9 @@ func TestEvalResultIsZero(t *testing.T) {
 				vf = vf.Addr()
 			}
 			switch f := vf.Interface().(type) {
-			case *LocalEvalResult:
-				f.gossipFirstRange = true
-				defer func() { f.gossipFirstRange = false }()
+			case *LocalResult:
+				f.GossipFirstRange = true
+				defer func() { f.GossipFirstRange = false }()
 			case *storagebase.ReplicatedEvalResult:
 				f.IsLeaseRequest = true
 				defer func() { f.IsLeaseRequest = false }()
