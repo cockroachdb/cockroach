@@ -80,8 +80,8 @@ var (
 	// Any can be any type. Can be compared with ==.
 	Any T = tAny{}
 
-	// TypesAnyNonArray contains all non-array types.
-	TypesAnyNonArray = []T{
+	// AnyNonArray contains all non-array types.
+	AnyNonArray = []T{
 		Bool,
 		Int,
 		Float,

@@ -232,7 +232,7 @@ func prependToMaybeNullArray(typ types.T, left Datum, right Datum) (Datum, error
 // existing arrays. This would optimize the common case of appending an element
 // (or array) to an array from O(n) to O(1).
 func initArrayElementConcatenation() {
-	for _, t := range types.TypesAnyNonArray {
+	for _, t := range types.AnyNonArray {
 		typ := t
 		BinOps[Concat] = append(BinOps[Concat], BinOp{
 			LeftType:     types.TArray{Typ: typ},
@@ -279,7 +279,7 @@ func concatArrays(typ types.T, left Datum, right Datum) (Datum, error) {
 }
 
 func initArrayToArrayConcatenation() {
-	for _, t := range types.TypesAnyNonArray {
+	for _, t := range types.AnyNonArray {
 		typ := t
 		BinOps[Concat] = append(BinOps[Concat], BinOp{
 			LeftType:     types.TArray{Typ: typ},
@@ -1228,7 +1228,7 @@ func (CmpOp) preferred() bool {
 }
 
 func init() {
-	for _, t := range types.TypesAnyNonArray {
+	for _, t := range types.AnyNonArray {
 		CmpOps[EQ] = append(CmpOps[EQ], CmpOp{
 			LeftType:  types.TArray{Typ: t},
 			RightType: types.TArray{Typ: t},

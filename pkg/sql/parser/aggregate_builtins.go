@@ -161,11 +161,11 @@ var Aggregates = map[string][]Builtin{
 	"max": collectBuiltins(func(t types.T) Builtin {
 		return makeAggBuiltin([]types.T{t}, t, newMaxAggregate,
 			"Identifies the maximum selected value.")
-	}, types.TypesAnyNonArray...),
+	}, types.AnyNonArray...),
 	"min": collectBuiltins(func(t types.T) Builtin {
 		return makeAggBuiltin([]types.T{t}, t, newMinAggregate,
 			"Identifies the minimum selected value.")
-	}, types.TypesAnyNonArray...),
+	}, types.AnyNonArray...),
 
 	"sum_int": {
 		makeAggBuiltin([]types.T{types.Int}, types.Int, newSmallIntSumAggregate,
