@@ -645,6 +645,10 @@ func makeSSTs(
 ) error {
 	defer it.Close()
 
+	if totalKVs == 0 {
+		return nil
+	}
+
 	sst, err := engine.MakeRocksDBSstFileWriter()
 	if err != nil {
 		return err
@@ -781,10 +785,6 @@ func finalizeCSVBackup(
 	es storageccl.ExportStorage,
 	execCfg *sql.ExecutorConfig,
 ) error {
-	if len(backupDesc.Files) == 0 {
-		return errors.New("no files in backup")
-	}
-
 	sort.Sort(backupFileDescriptors(backupDesc.Files))
 	backupDesc.Spans = []roachpb.Span{tableDesc.TableSpan()}
 	backupDesc.Descriptors = []sqlbase.Descriptor{
