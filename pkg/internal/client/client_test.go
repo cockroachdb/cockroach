@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -173,7 +174,9 @@ func TestClientRetryNonTxn(t *testing.T) {
 	args := base.TestServerArgs{
 		Knobs: base.TestingKnobs{
 			Store: &storage.StoreTestingKnobs{
-				TestingEvalFilter: filter,
+				EvalKnobs: batcheval.TestingKnobs{
+					TestingEvalFilter: filter,
+				},
 			},
 		},
 	}

@@ -20,7 +20,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
+	"github.com/cockroachdb/cockroach/pkg/storage/spanset"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -47,10 +49,10 @@ func init() {
 }
 
 func declareKeysExport(
-	desc roachpb.RangeDescriptor, header roachpb.Header, req roachpb.Request, spans *storage.SpanSet,
+	desc roachpb.RangeDescriptor, header roachpb.Header, req roachpb.Request, spans *spanset.SpanSet,
 ) {
-	storage.DefaultDeclareKeys(desc, header, req, spans)
-	spans.Add(storage.SpanReadOnly, roachpb.Span{Key: keys.RangeLastGCKey(header.RangeID)})
+	batcheval.DefaultDeclareKeys(desc, header, req, spans)
+	spans.Add(spanset.SpanReadOnly, roachpb.Span{Key: keys.RangeLastGCKey(header.RangeID)})
 }
 
 type rowCounter struct {
@@ -98,7 +100,7 @@ func (r *rowCounter) count(key roachpb.Key) error {
 // evalExport dumps the requested keys into files of non-overlapping key ranges
 // in a format suitable for bulk ingest.
 func evalExport(
-	ctx context.Context, batch engine.ReadWriter, cArgs storage.CommandArgs, resp roachpb.Response,
+	ctx context.Context, batch engine.ReadWriter, cArgs batcheval.CommandArgs, resp roachpb.Response,
 ) (storage.EvalResult, error) {
 	args := cArgs.Args.(*roachpb.ExportRequest)
 	h := cArgs.Header

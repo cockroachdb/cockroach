@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl/engineccl"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -25,7 +26,7 @@ import (
 
 func init() {
 	storage.SetWriteBatchCmd(storage.Command{
-		DeclareKeys: storage.DefaultDeclareKeys,
+		DeclareKeys: batcheval.DefaultDeclareKeys,
 		Eval:        evalWriteBatch,
 	})
 }
@@ -34,7 +35,7 @@ func init() {
 // data in the affected keyrange is first cleared (not tombstoned), which makes
 // this command idempotent.
 func evalWriteBatch(
-	ctx context.Context, batch engine.ReadWriter, cArgs storage.CommandArgs, _ roachpb.Response,
+	ctx context.Context, batch engine.ReadWriter, cArgs batcheval.CommandArgs, _ roachpb.Response,
 ) (storage.EvalResult, error) {
 
 	args := cArgs.Args.(*roachpb.WriteBatchRequest)

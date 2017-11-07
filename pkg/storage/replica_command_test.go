@@ -23,8 +23,10 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/abortspan"
+	"github.com/cockroachdb/cockroach/pkg/storage/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/spanset"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -91,7 +93,7 @@ func TestDeclareKeysResolveIntent(t *testing.T) {
 
 				ac := abortspan.New(desc.RangeID)
 
-				var spans SpanSet
+				var spans spanset.SpanSet
 				batch := engine.NewBatch()
 				batch = makeSpanSetBatch(batch, &spans)
 				defer batch.Close()
@@ -99,7 +101,7 @@ func TestDeclareKeysResolveIntent(t *testing.T) {
 				var h roachpb.Header
 				h.RangeID = desc.RangeID
 
-				cArgs := CommandArgs{Header: h}
+				cArgs := batcheval.CommandArgs{Header: h}
 				cArgs.EvalCtx = &Replica{abortSpan: ac}
 
 				if !ranged {

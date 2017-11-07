@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -228,18 +229,20 @@ func runTestImport(t *testing.T, init func(*cluster.Settings)) {
 	const initialAmbiguousSubReqs = 3
 	remainingAmbiguousSubReqs := int64(initialAmbiguousSubReqs)
 	knobs := base.TestingKnobs{Store: &storage.StoreTestingKnobs{
-		TestingEvalFilter: func(filterArgs storagebase.FilterArgs) *roachpb.Error {
-			switch filterArgs.Req.(type) {
-			case *roachpb.WriteBatchRequest, *roachpb.AddSSTableRequest:
-			// No-op.
-			default:
-				return nil
-			}
-			r := atomic.AddInt64(&remainingAmbiguousSubReqs, -1)
-			if r < 0 {
-				return nil
-			}
-			return roachpb.NewError(roachpb.NewAmbiguousResultError(strconv.Itoa(int(r))))
+		EvalKnobs: batcheval.TestingKnobs{
+			TestingEvalFilter: func(filterArgs storagebase.FilterArgs) *roachpb.Error {
+				switch filterArgs.Req.(type) {
+				case *roachpb.WriteBatchRequest, *roachpb.AddSSTableRequest:
+				// No-op.
+				default:
+					return nil
+				}
+				r := atomic.AddInt64(&remainingAmbiguousSubReqs, -1)
+				if r < 0 {
+					return nil
+				}
+				return roachpb.NewError(roachpb.NewAmbiguousResultError(strconv.Itoa(int(r))))
+			},
 		},
 	}}
 

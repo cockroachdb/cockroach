@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -517,24 +518,26 @@ func TestDistSQLReadsFillGatewayID(t *testing.T) {
 			ServerArgs: base.TestServerArgs{
 				UseDatabase: "test",
 				Knobs: base.TestingKnobs{Store: &storage.StoreTestingKnobs{
-					TestingEvalFilter: func(filterArgs storagebase.FilterArgs) *roachpb.Error {
-						scanReq, ok := filterArgs.Req.(*roachpb.ScanRequest)
-						if !ok {
-							return nil
-						}
-						if !strings.HasPrefix(scanReq.Span.Key.String(), "/Table/51/1") {
-							return nil
-						}
+					EvalKnobs: batcheval.TestingKnobs{
+						TestingEvalFilter: func(filterArgs storagebase.FilterArgs) *roachpb.Error {
+							scanReq, ok := filterArgs.Req.(*roachpb.ScanRequest)
+							if !ok {
+								return nil
+							}
+							if !strings.HasPrefix(scanReq.Span.Key.String(), "/Table/51/1") {
+								return nil
+							}
 
-						atomic.StoreInt64(&foundReq, 1)
-						if gw := filterArgs.Hdr.GatewayNodeID; gw != expectedGateway {
-							return roachpb.NewErrorf(
-								"expected all scans to have gateway 3, found: %d",
-								gw)
-						}
-						return nil
-					},
-				}},
+							atomic.StoreInt64(&foundReq, 1)
+							if gw := filterArgs.Hdr.GatewayNodeID; gw != expectedGateway {
+								return roachpb.NewErrorf(
+									"expected all scans to have gateway 3, found: %d",
+									gw)
+							}
+							return nil
+						},
+					}},
+				},
 			},
 		})
 	defer tc.Stopper().Stop(context.TODO())

@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -294,18 +295,20 @@ func TestTxnDelRangeIntentResolutionCounts(t *testing.T) {
 	params := base.TestServerArgs{
 		Knobs: base.TestingKnobs{
 			Store: &storage.StoreTestingKnobs{
-				NumKeysEvaluatedForRangeIntentResolution: &intentResolutionCount,
-				TestingEvalFilter: func(filterArgs storagebase.FilterArgs) *roachpb.Error {
-					req, ok := filterArgs.Req.(*roachpb.ResolveIntentRequest)
-					if ok {
-						key := req.Header().Key.String()
-						// Check if the intent is from the range being
-						// scanned below.
-						if key >= "a" && key < "d" {
-							t.Errorf("resolving intent on key %s", key)
+				EvalKnobs: batcheval.TestingKnobs{
+					NumKeysEvaluatedForRangeIntentResolution: &intentResolutionCount,
+					TestingEvalFilter: func(filterArgs storagebase.FilterArgs) *roachpb.Error {
+						req, ok := filterArgs.Req.(*roachpb.ResolveIntentRequest)
+						if ok {
+							key := req.Header().Key.String()
+							// Check if the intent is from the range being
+							// scanned below.
+							if key >= "a" && key < "d" {
+								t.Errorf("resolving intent on key %s", key)
+							}
 						}
-					}
-					return nil
+						return nil
+					},
 				},
 			},
 		},
@@ -379,13 +382,15 @@ func TestNonTransactionalRetryableError(t *testing.T) {
 	value := []byte("value")
 	params := base.TestServerArgs{}
 	testingKnobs := &storage.StoreTestingKnobs{
-		TestingEvalFilter: func(args storagebase.FilterArgs) *roachpb.Error {
-			if resArgs, ok := args.Req.(*roachpb.PutRequest); ok {
-				if resArgs.Key.Equal(key) {
-					return roachpb.NewError(&roachpb.WriteTooOldError{})
+		EvalKnobs: batcheval.TestingKnobs{
+			TestingEvalFilter: func(args storagebase.FilterArgs) *roachpb.Error {
+				if resArgs, ok := args.Req.(*roachpb.PutRequest); ok {
+					if resArgs.Key.Equal(key) {
+						return roachpb.NewError(&roachpb.WriteTooOldError{})
+					}
 				}
-			}
-			return nil
+				return nil
+			},
 		},
 	}
 	params.Knobs.Store = testingKnobs
