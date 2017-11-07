@@ -274,7 +274,7 @@ func TestZoneSpecifiers(t *testing.T) {
 				if err != nil {
 					return err
 				}
-				id, err := config.ResolveZoneSpecifier(zs, resolveName)
+				id, err := config.ResolveZoneSpecifier(&zs, resolveName)
 				if err != nil {
 					return err
 				}
