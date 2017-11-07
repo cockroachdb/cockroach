@@ -211,6 +211,26 @@ CREATE INDEX secondary ON t.test (v);
 	} else if !strings.Contains(result.details, `"v":"314"`) {
 		t.Fatalf("expected erorr details to contain `%s`, got %s", `"v":"314"`, result.details)
 	}
+
+	// Run SCRUB DATABASE to make sure it also catches the problem.
+	rows, err = db.Query(`EXPERIMENTAL SCRUB DATABASE t`)
+	if err != nil {
+		t.Fatalf("unexpected error: %Table+v", err)
+	} else if rows.Err() != nil {
+		t.Fatalf("unexpected error: %+v", err)
+	}
+	scrubDatabaseResults, err := getResultRows(rows)
+	if err != nil {
+		t.Fatalf("unexpected error: %s", err)
+	} else if len(scrubDatabaseResults) != 1 {
+		t.Fatalf("expected 1 result, got %d. got %#v", len(scrubDatabaseResults), scrubDatabaseResults)
+	} else if !(scrubDatabaseResults[0].errorType == results[0].errorType &&
+		scrubDatabaseResults[0].database == results[0].database &&
+		scrubDatabaseResults[0].table == results[0].table &&
+		scrubDatabaseResults[0].details == results[0].details) {
+		t.Fatalf("expected results to be equal, SCRUB TABLE got %v. SCRUB DATABASE got %v",
+			results, scrubDatabaseResults)
+	}
 }
 
 // TestScrubIndexCatchesStoringMismatch tests that

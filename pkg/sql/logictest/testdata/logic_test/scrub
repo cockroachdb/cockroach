@@ -28,3 +28,17 @@ EXPERIMENTAL SCRUB TABLE t WITH OPTIONS PHYSICAL, INDEX (name_idx)
 
 statement error specified indexes to check that do not exist on table "t": not_an_index, also_not
 EXPERIMENTAL SCRUB TABLE t WITH OPTIONS INDEX (not_an_index, also_not, name_idx)
+
+# test views
+
+statement ok
+CREATE VIEW v1 AS select id, name from t
+
+statement error "v1" is not a table
+EXPERIMENTAL SCRUB TABLE v1
+
+# scrub database will skip views, so it does not raise an error
+
+query TTTTTTTT
+EXPERIMENTAL SCRUB DATABASE test
+-----

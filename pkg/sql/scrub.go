@@ -42,27 +42,34 @@ const (
 type scrubNode struct {
 	optColumnsSlot
 
-	n         *parser.Scrub
-	indexes   []sqlbase.IndexDescriptor
-	tableDesc *sqlbase.TableDescriptor
-	tableName *parser.TableName
+	n *parser.Scrub
+	// indexes is a queue of index checks planned to be executed.
+	indexes []indexCheckDetails
 
+	// currentIndex holds the intermediate buffered results for an index
+	// check.
 	currentIndex *checkedIndex
 
 	row parser.Datums
 }
 
-// checkedIndex holds the intermediate results for one index that is
-// checked.
+// indexCheckDetails holds the information for an index check that
+// will be executed.
+type indexCheckDetails struct {
+	indexDesc *sqlbase.IndexDescriptor
+	tableDesc *sqlbase.TableDescriptor
+	tableName *parser.TableName
+}
+
+// checkedIndex holds the intermediate results for an index that has
+// buffered results.
 type checkedIndex struct {
+	details indexCheckDetails
+
 	// Intermediate values.
 	rows     *sqlbase.RowContainer
 	rowIndex int
 
-	// Context of the index check.
-	databaseName string
-	tableName    string
-	indexName    string
 	// columns is a list of the columns returned by one side of the
 	// queries join. The actual resulting rows from the RowContainer is
 	// twice this.
@@ -93,24 +100,76 @@ var scrubColumns = sqlbase.ResultColumns{
 }
 
 func (n *scrubNode) Start(params runParams) error {
-	var err error
-	n.tableName, err = n.n.Table.NormalizeWithDatabaseName(
-		params.p.session.Database)
+	switch n.n.Typ {
+	case parser.ScrubTable:
+		tableName, err := n.n.Table.NormalizeWithDatabaseName(params.p.session.Database)
+		if err != nil {
+			return err
+		}
+		if err := tableName.QualifyWithDatabase(params.p.session.Database); err != nil {
+			return err
+		}
+		// If the tableName provided refers to a view and error will be
+		// returned here.
+		tableDesc, err := MustGetTableDesc(params.ctx, params.p.txn, params.p.getVirtualTabler(),
+			tableName, false /* allowAdding */)
+		if err != nil {
+			return err
+		}
+		if err := n.startScrubTable(params.ctx, params.p, tableDesc, tableName); err != nil {
+			return err
+		}
+	case parser.ScrubDatabase:
+		if err := n.startScrubDatabase(params.ctx, params.p, &n.n.Database); err != nil {
+			return err
+		}
+	default:
+		return pgerror.NewErrorf(pgerror.CodeInternalError,
+			"unexpected SCRUB type received, got: %v", n.n.Typ)
+	}
+	return nil
+}
+
+// startScrubDatabase prepares a scrub check for each of the tables in
+// the database. Views are skipped without errors.
+func (n *scrubNode) startScrubDatabase(ctx context.Context, p *planner, name *parser.Name) error {
+	// Check that the database exists.
+	database := string(*name)
+	dbDesc, err := MustGetDatabaseDesc(ctx, p.txn, p.getVirtualTabler(), database)
+	if err != nil {
+		return err
+	}
+	tbNames, err := getTableNames(ctx, p.txn, p.getVirtualTabler(), dbDesc, false)
 	if err != nil {
 		return err
 	}
 
-	n.tableDesc, err = params.p.getTableDesc(params.ctx, n.tableName)
-	if err != nil {
-		return err
+	for i := range tbNames {
+		tableName := &tbNames[i]
+		if err := tableName.QualifyWithDatabase(database); err != nil {
+			return err
+		}
+		tableDesc, err := MustGetTableOrViewDesc(ctx, p.txn, p.getVirtualTabler(), tableName,
+			false /* allowAdding */)
+		if err != nil {
+			return err
+		}
+		// Skip views, but don't throw an error if we encounter one.
+		if tableDesc.IsView() {
+			continue
+		}
+		if err := n.startScrubTable(ctx, p, tableDesc, tableName); err != nil {
+			return err
+		}
 	}
+	return nil
+}
 
-	if n.tableDesc.IsView() {
-		return pgerror.NewErrorf(pgerror.CodeWrongObjectTypeError,
-			"cannot run SCRUB on views")
-	}
-
-	// Process SCRUB options.
+func (n *scrubNode) startScrubTable(
+	ctx context.Context, p *planner, tableDesc *sqlbase.TableDescriptor, tableName *parser.TableName,
+) error {
+	// Process SCRUB options. These are only present during a SCRUB TABLE
+	// statement.
 	var indexesSet bool
 	var physical bool
 	for _, option := range n.n.Options {
@@ -120,10 +179,11 @@ func (n *scrubNode) Start(params runParams) error {
 				return pgerror.NewErrorf(pgerror.CodeSyntaxError,
 					"cannot specify INDEX option more than once")
 			}
-			n.indexes, err = indexesToCheck(v.IndexNames, n.tableDesc)
+			indexesToCheck, err := indexesToCheck(v.IndexNames, tableDesc, tableName)
 			if err != nil {
 				return err
 			}
+			n.indexes = append(n.indexes, indexesToCheck...)
 			indexesSet = true
 		case *parser.ScrubOptionPhysical:
 			if physical {
@@ -136,12 +196,13 @@ func (n *scrubNode) Start(params runParams) error {
 		}
 	}
 
-	// No options were provided. By default exhaustive checks are run.
+	// When no options are provided the default is to run exhaustive checks.
 	if len(n.n.Options) == 0 {
-		n.indexes, err = indexesToCheck(nil /* indexNames */, n.tableDesc)
+		indexesToCheck, err := indexesToCheck(nil /* indexNames */, tableDesc, tableName)
 		if err != nil {
 			return err
 		}
+		n.indexes = append(n.indexes, indexesToCheck...)
 		physical = true
 	}
 
@@ -152,12 +213,12 @@ func (n *scrubNode) Start(params runParams) error {
 // execution engine. The returned value contains the row iterator and
 // the information about the index that was checked.
 func (n *scrubNode) startIndexCheck(
-	ctx context.Context,
-	p *planner,
-	tableDesc *sqlbase.TableDescriptor,
-	tableName *parser.TableName,
-	indexDesc *sqlbase.IndexDescriptor,
+	ctx context.Context, p *planner, indexToCheck indexCheckDetails,
 ) (*checkedIndex, error) {
+	tableDesc := indexToCheck.tableDesc
+	indexDesc := indexToCheck.indexDesc
+	tableName := indexToCheck.tableName
+
 	colToIdx := make(map[sqlbase.ColumnID]int)
 	for i, col := range tableDesc.Columns {
 		colToIdx[col.ID] = i
@@ -242,10 +303,8 @@ func (n *scrubNode) startIndexCheck(
 	}
 
 	return &checkedIndex{
-		rows:                      rows,
-		tableName:                 tableName.Table(),
-		databaseName:              tableName.Database(),
-		indexName:                 indexDesc.Name,
+		details: indexToCheck,
+		rows:    rows,
 		primaryIndexColumnIndexes: primaryColumnRowIndexes,
 		columns:                   columns,
 	}, nil
@@ -395,7 +454,7 @@ func createIndexCheckQuery(
 	return fmt.Sprintf(checkIndexQuery,
 		tableColumnsProjection("leftside", columnNames),
 		tableColumnsProjection("rightside", columnNames),
-		tableName,
+		tableName.String(),
 		indexID,
 		tableColumnsEQ("leftside", "rightside", columnNames),
 		tableColumnsIsNullPredicate("leftside", primaryKeyColumnNames),
@@ -409,12 +468,19 @@ func createIndexCheckQuery(
 // TableDescriptor.FindIndexByName(), but this will only report the
 // first invalid index.
 func indexesToCheck(
-	indexNames parser.NameList, tableDesc *sqlbase.TableDescriptor,
-) (results []sqlbase.IndexDescriptor, err error) {
+	indexNames parser.NameList, tableDesc *sqlbase.TableDescriptor, tableName *parser.TableName,
+) (results []indexCheckDetails, err error) {
 	if indexNames == nil {
 		// Populate results with all secondary indexes of the
 		// table.
-		return tableDesc.Indexes, nil
+		for _, indexDesc := range tableDesc.Indexes {
+			results = append(results, indexCheckDetails{
+				indexDesc: &indexDesc,
+				tableName: tableName,
+				tableDesc: tableDesc,
+			})
+		}
+		return results, nil
 	}
 
 	// Find the indexes corresponding to the user input index names.
@@ -422,10 +488,14 @@ func indexesToCheck(
 	for _, idxName := range indexNames {
 		names[idxName.String()] = struct{}{}
 	}
-	for _, idx := range tableDesc.Indexes {
-		if _, ok := names[idx.Name]; ok {
-			results = append(results, idx)
-			delete(names, idx.Name)
+	for _, indexDesc := range tableDesc.Indexes {
+		if _, ok := names[indexDesc.Name]; ok {
+			results = append(results, indexCheckDetails{
+				indexDesc: &indexDesc,
+				tableName: tableName,
+				tableDesc: tableDesc,
+			})
+			delete(names, indexDesc.Name)
 		}
 	}
 	if len(names) > 0 {
@@ -446,10 +516,10 @@ func indexesToCheck(
 func (n *scrubNode) Next(params runParams) (bool, error) {
 	var err error
 	// Begin the next index check query. It is planned then executed in
-	// the distSQL execution engine.
-	if len(n.indexes) > 0 && n.currentIndex == nil {
-		n.currentIndex, err = n.startIndexCheck(
-			params.ctx, params.p, n.tableDesc, n.tableName, &n.indexes[0])
+	// the distSQL execution engine. While n.currentIndex is nil, the last
+	// index checked had no errors.
+	for len(n.indexes) > 0 && n.currentIndex == nil {
+		n.currentIndex, err = n.startIndexCheck(params.ctx, params.p, n.indexes[0])
 		if err != nil {
 			return false, err
 		}
@@ -517,7 +587,7 @@ func getNextIndexError(
 	details := make(map[string]interface{})
 	rowDetails := make(map[string]interface{})
 	details["row_data"] = rowDetails
-	details["index_name"] = currentIndex.indexName
+	details["index_name"] = currentIndex.details.indexDesc.Name
 	if isMissingIndexReferenceError {
 		// Fetch the primary index values from the primary index row data.
 		for rowIdx, col := range currentIndex.columns {
@@ -543,9 +613,9 @@ func getNextIndexError(
 	return parser.Datums{
 		// TODO(joey): Add the job UUID once the SCRUB command uses jobs.
 		parser.DNull, /* job_uuid */
-		errorType,    /* error_type */
-		parser.NewDString(currentIndex.databaseName),
-		parser.NewDString(currentIndex.tableName),
+		errorType,
+		parser.NewDString(currentIndex.details.tableName.Database()),
+		parser.NewDString(currentIndex.details.tableName.Table()),
 		primaryKey,
 		timestamp,
 		parser.DBoolFalse,
