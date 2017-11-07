@@ -318,7 +318,11 @@ func (rf *RowFetcher) processKV(
 	ctx context.Context, kv client.KeyValue, debugStrings bool,
 ) (prettyKey string, prettyValue string, err error) {
 	if debugStrings {
-		prettyKey = fmt.Sprintf("/%s/%s%s", rf.desc.Name, rf.index.Name, prettyEncDatums(rf.keyVals))
+		if rf.mustDecodeIndexKey {
+			prettyKey = fmt.Sprintf("/%s/%s%s", rf.desc.Name, rf.index.Name, prettyEncDatums(rf.keyVals))
+		} else {
+			prettyKey = fmt.Sprintf("/%s/%s/{not-decoded}", rf.desc.Name, rf.index.Name)
+		}
 	}
 
 	if rf.indexKey == nil {

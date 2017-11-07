@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
@@ -330,4 +331,19 @@ func TestBracketInTracetags(t *testing.T) {
 	if !ok {
 		t.Fatal("expected message not found in trace")
 	}
+}
+
+func TestKVTraceWithCountStar(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	// Test that we don't crash if we try to do a KV trace
+	// on a COUNT(*) query (#19846).
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(context.TODO())
+
+	r := sqlutils.MakeSQLRunner(t, db)
+	r.Exec("CREATE DATABASE test")
+	r.Exec("CREATE TABLE test.a (a INT PRIMARY KEY, b INT)")
+	r.Exec("INSERT INTO test.a VALUES (1,1), (2,2)")
+	r.Exec("SHOW KV TRACE FOR SELECT COUNT(*) FROM test.a")
 }
