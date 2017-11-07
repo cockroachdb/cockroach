@@ -55,7 +55,7 @@ func TestCloudBackupRestoreS3(t *testing.T) {
 	defer sql.TestDisableTableLeases()()
 	const numAccounts = 1000
 
-	ctx, _, _, sqlDB, cleanupFn := backupRestoreTestSetup(t, 1, numAccounts, initNone)
+	ctx, _, tc, _, cleanupFn := backupRestoreTestSetup(t, 1, numAccounts, initNone)
 	defer cleanupFn()
 	prefix := fmt.Sprintf("TestBackupRestoreS3-%d", timeutil.Now().UnixNano())
 	uri := url.URL{Scheme: "s3", Host: bucket, Path: prefix}
@@ -64,7 +64,7 @@ func TestCloudBackupRestoreS3(t *testing.T) {
 	values.Add(storageccl.S3SecretParam, creds.SecretAccessKey)
 	uri.RawQuery = values.Encode()
 
-	backupAndRestore(ctx, t, sqlDB, uri.String(), numAccounts)
+	backupAndRestore(ctx, t, tc, uri.String(), numAccounts)
 }
 
 // TestBackupRestoreGoogleCloudStorage hits the real GCS and so could
@@ -88,11 +88,11 @@ func TestCloudBackupRestoreGoogleCloudStorage(t *testing.T) {
 	}(http.DefaultTransport.(*http.Transport).DisableKeepAlives)
 	http.DefaultTransport.(*http.Transport).DisableKeepAlives = true
 
-	ctx, _, _, sqlDB, cleanupFn := backupRestoreTestSetup(t, 1, numAccounts, initNone)
+	ctx, _, tc, _, cleanupFn := backupRestoreTestSetup(t, 1, numAccounts, initNone)
 	defer cleanupFn()
 	prefix := fmt.Sprintf("TestBackupRestoreGoogleCloudStorage-%d", timeutil.Now().UnixNano())
 	uri := url.URL{Scheme: "gs", Host: bucket, Path: prefix}
-	backupAndRestore(ctx, t, sqlDB, uri.String(), numAccounts)
+	backupAndRestore(ctx, t, tc, uri.String(), numAccounts)
 }
 
 // TestBackupRestoreAzure hits the real Azure Blob Storage and so could
@@ -120,7 +120,7 @@ func TestCloudBackupRestoreAzure(t *testing.T) {
 	}(http.DefaultTransport.(*http.Transport).DisableKeepAlives)
 	http.DefaultTransport.(*http.Transport).DisableKeepAlives = true
 
-	ctx, _, _, sqlDB, cleanupFn := backupRestoreTestSetup(t, 1, numAccounts, initNone)
+	ctx, _, tc, _, cleanupFn := backupRestoreTestSetup(t, 1, numAccounts, initNone)
 	defer cleanupFn()
 	prefix := fmt.Sprintf("TestBackupRestoreAzure-%d", timeutil.Now().UnixNano())
 	uri := url.URL{Scheme: "azure", Host: bucket, Path: prefix}
@@ -129,5 +129,5 @@ func TestCloudBackupRestoreAzure(t *testing.T) {
 	values.Add(storageccl.AzureAccountKeyParam, accountKey)
 	uri.RawQuery = values.Encode()
 
-	backupAndRestore(ctx, t, sqlDB, uri.String(), numAccounts)
+	backupAndRestore(ctx, t, tc, uri.String(), numAccounts)
 }
