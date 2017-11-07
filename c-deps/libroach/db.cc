@@ -2152,7 +2152,7 @@ DBIterator* DBNewTimeBoundIter(DBEngine* db, DBTimestamp min_ts, DBTimestamp max
   const std::string max = EncodeTimestamp(max_ts);
   rocksdb::ReadOptions opts;
   opts.total_order_seek = true;
-  /*opts.table_filter = [min, max](const rocksdb::TableProperties& props) {
+  opts.table_filter = [min, max](const rocksdb::TableProperties& props) {
     auto userprops = props.user_collected_properties;
     auto tbl_min = userprops.find("crdb.ts.min");
     if (tbl_min == userprops.end() || tbl_min->second.empty()) {
@@ -2168,7 +2168,6 @@ DBIterator* DBNewTimeBoundIter(DBEngine* db, DBTimestamp min_ts, DBTimestamp max
     // exclusive, but the max_ts bound is inclusive.
     return max.compare(tbl_min->second) >= 0 && min.compare(tbl_max->second) < 0;
   };
-  */
   return db->NewIter(&opts);
 }
 
