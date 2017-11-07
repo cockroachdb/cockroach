@@ -397,6 +397,7 @@ func (dsp *DistSQLPlanner) checkSupportForNode(node planNode) (distRecommendatio
 // a single query.
 type planningCtx struct {
 	ctx      context.Context
+	evalCtx  *parser.EvalContext
 	spanIter distsqlplan.SpanResolverIterator
 	// nodeAddresses contains addresses for all NodeIDs that are referenced by any
 	// physicalPlan we generate with this context.
@@ -674,7 +675,7 @@ func initTableReaderSpec(
 	}
 
 	post := distsqlrun.PostProcessSpec{
-		Filter: distsqlplan.MakeExpression(n.filter, nil),
+		Filter: distsqlplan.MakeExpression(n.filter, &n.p.evalCtx, nil),
 	}
 
 	if n.hardLimit != 0 {
@@ -1020,7 +1021,7 @@ func (l *DistLoader) LoadCSV(
 	rowContainer := sqlbase.NewRowContainer(*evalCtx.ActiveMemAcc, ci, 0)
 	rowResultWriter := NewRowResultWriter(parser.Rows, rowContainer)
 
-	planCtx := l.distSQLPlanner.newPlanningCtx(ctx, nil)
+	planCtx := l.distSQLPlanner.newPlanningCtx(ctx, &evalCtx, nil)
 	// Because we're not going through the normal pathways, we have to set up
 	// the nodeID -> nodeAddress map ourselves.
 	for _, node := range nodes {
@@ -1220,7 +1221,7 @@ func (dsp *DistSQLPlanner) selectRenders(p *physicalPlan, n *renderNode) {
 		}
 	}
 
-	p.AddRendering(renders, p.planToStreamColMap, getTypesForPlanResult(n, planToStreamColMap))
+	p.AddRendering(renders, &n.planner.evalCtx, p.planToStreamColMap, getTypesForPlanResult(n, planToStreamColMap))
 	p.planToStreamColMap = planToStreamColMap
 }
 
@@ -1654,7 +1655,7 @@ func (dsp *DistSQLPlanner) addAggregators(
 					// aggregations if they are equivalent
 					// across and within stages.
 					mappedIdx := int(finalIdxMap[finalIdx])
-					renderExprs[i] = distsqlplan.MakeExpression(h.IndexedVar(mappedIdx), nil)
+					renderExprs[i] = distsqlplan.MakeExpression(h.IndexedVar(mappedIdx), planCtx.evalCtx, nil)
 				} else {
 					// We have multiple final aggregation
 					// values that we need to be mapped to
@@ -1670,7 +1671,7 @@ func (dsp *DistSQLPlanner) addAggregators(
 					if err != nil {
 						return err
 					}
-					renderExprs[i] = distsqlplan.MakeExpression(expr, nil)
+					renderExprs[i] = distsqlplan.MakeExpression(expr, planCtx.evalCtx, nil)
 				}
 				finalIdx += len(info.FinalStage)
 			}
@@ -1804,7 +1805,7 @@ ColLoop:
 	}
 
 	post := distsqlrun.PostProcessSpec{
-		Filter:        distsqlplan.MakeExpression(n.table.filter, nil),
+		Filter:        distsqlplan.MakeExpression(n.table.filter, planCtx.evalCtx, nil),
 		Projection:    true,
 		OutputColumns: getOutputColumnsFromScanNode(n.table),
 	}
@@ -2061,7 +2062,7 @@ func (dsp *DistSQLPlanner) createPlanForJoin(
 			joinColMap[idx] = rightPlan.planToStreamColMap[i] + len(leftTypes)
 			idx++
 		}
-		onExpr = distsqlplan.MakeExpression(n.pred.onCond, joinColMap)
+		onExpr = distsqlplan.MakeExpression(n.pred.onCond, planCtx.evalCtx, joinColMap)
 	}
 
 	// Create the Core spec.
@@ -2212,7 +2213,7 @@ func (dsp *DistSQLPlanner) createPlanForNode(
 			return physicalPlan{}, err
 		}
 
-		plan.AddFilter(n.filter, plan.planToStreamColMap)
+		plan.AddFilter(n.filter, planCtx.evalCtx, plan.planToStreamColMap)
 
 		return plan, nil
 
@@ -2352,9 +2353,12 @@ func (dsp *DistSQLPlanner) createPlanForDistinct(
 	return plan, nil
 }
 
-func (dsp *DistSQLPlanner) newPlanningCtx(ctx context.Context, txn *client.Txn) planningCtx {
+func (dsp *DistSQLPlanner) newPlanningCtx(
+	ctx context.Context, evalCtx *parser.EvalContext, txn *client.Txn,
+) planningCtx {
 	planCtx := planningCtx{
 		ctx:           ctx,
+		evalCtx:       evalCtx,
 		spanIter:      dsp.spanResolver.NewSpanResolverIterator(txn),
 		nodeAddresses: make(map[roachpb.NodeID]string),
 	}

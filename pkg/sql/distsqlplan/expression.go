@@ -28,23 +28,30 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
-// exprFmtFlagsBase are FmtFlags used for serializing expressions; a proper
-// IndexedVar formatting function needs to be added on.
-var exprFmtFlagsBase = parser.FmtStarDatumFormat(
-	parser.FmtParsable,
-	func(buf *bytes.Buffer, _ parser.FmtFlags) {
-		fmt.Fprintf(buf, "0")
-	},
-)
+// exprFmtFlagsBase produces FmtFlags used for serializing expressions; a proper
+// IndexedVar formatting function needs to be added on. It replaces placeholders
+// with their values.
+func exprFmtFlagsBase(evalCtx *parser.EvalContext) parser.FmtFlags {
+	return parser.FmtPlaceholderFormat(
+		parser.FmtParsable,
+		func(buf *bytes.Buffer, flags parser.FmtFlags, p *parser.Placeholder) {
+			d, err := p.Eval(evalCtx)
+			if err != nil {
+				panic(fmt.Sprintf("failed to serialize placeholder: %s", err))
+			}
+			d.Format(buf, flags)
+		})
+}
 
-// exprFmtFlagsNoMap are FmtFlags used for serializing expressions that don't
-// need to remap IndexedVars.
-var exprFmtFlagsNoMap = parser.FmtIndexedVarFormat(
-	exprFmtFlagsBase,
-	func(buf *bytes.Buffer, _ parser.FmtFlags, _ parser.IndexedVarContainer, idx int) {
-		fmt.Fprintf(buf, "@%d", idx+1)
-	},
-)
+// exprFmtFlagsNoMap produces FmtFlags used for serializing expressions that
+// don't need to remap IndexedVars.
+func exprFmtFlagsNoMap(evalCtx *parser.EvalContext) parser.FmtFlags {
+	return parser.FmtIndexedVarFormat(
+		exprFmtFlagsBase(evalCtx),
+		func(buf *bytes.Buffer, _ parser.FmtFlags, _ parser.IndexedVarContainer, idx int) {
+			fmt.Fprintf(buf, "@%d", idx+1)
+		})
+}
 
 // MakeExpression creates a distsqlrun.Expression.
 //
@@ -54,18 +61,20 @@ var exprFmtFlagsNoMap = parser.FmtIndexedVarFormat(
 // The expr uses IndexedVars to refer to columns. The caller can optionally
 // remap these columns by passing an indexVarMap: an IndexedVar with index i
 // becomes column indexVarMap[i].
-func MakeExpression(expr parser.TypedExpr, indexVarMap []int) distsqlrun.Expression {
+func MakeExpression(
+	expr parser.TypedExpr, evalCtx *parser.EvalContext, indexVarMap []int,
+) distsqlrun.Expression {
 	if expr == nil {
 		return distsqlrun.Expression{}
 	}
 
-	// We format the expression using the IndexedVar and StarDatum formatting interceptors.
+	// We format the expression using the IndexedVar and Placeholder formatting interceptors.
 	var f parser.FmtFlags
 	if indexVarMap == nil {
-		f = exprFmtFlagsNoMap
+		f = exprFmtFlagsNoMap(evalCtx)
 	} else {
 		f = parser.FmtIndexedVarFormat(
-			exprFmtFlagsBase,
+			exprFmtFlagsBase(evalCtx),
 			func(buf *bytes.Buffer, _ parser.FmtFlags, _ parser.IndexedVarContainer, idx int) {
 				remappedIdx := indexVarMap[idx]
 				if remappedIdx < 0 {

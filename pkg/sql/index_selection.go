@@ -1113,7 +1113,7 @@ func spanFromLogicalSpan(
 		}
 		part := ls.start[i]
 		var err error
-		s.Key, err = encodeLogicalKeyPart(s.Key, part)
+		s.Key, err = encodeLogicalKeyPart(evalCtx, s.Key, part)
 		if err != nil {
 			return roachpb.Span{}, err
 		}
@@ -1149,7 +1149,7 @@ func spanFromLogicalSpan(
 		}
 		part := ls.end[i]
 		var err error
-		s.EndKey, err = encodeLogicalKeyPart(s.EndKey, part)
+		s.EndKey, err = encodeLogicalKeyPart(evalCtx, s.EndKey, part)
 		if err != nil {
 			return roachpb.Span{}, err
 		}
@@ -1164,14 +1164,20 @@ func spanFromLogicalSpan(
 	return s, nil
 }
 
-func encodeLogicalKeyPart(b []byte, part logicalKeyPart) ([]byte, error) {
+func encodeLogicalKeyPart(
+	evalCtx *parser.EvalContext, b []byte, part logicalKeyPart,
+) ([]byte, error) {
 	if part.val == parser.DNull && !part.inclusive {
 		if part.dir == encoding.Ascending {
 			return encoding.EncodeNotNullAscending(b), nil
 		}
 		return encoding.EncodeNotNullDescending(b), nil
 	}
-	return sqlbase.EncodeTableKey(b, part.val, part.dir)
+	d, err := part.val.Eval(evalCtx)
+	if err != nil {
+		return nil, err
+	}
+	return sqlbase.EncodeTableKey(b, d, part.dir)
 }
 
 func nextInDirection(

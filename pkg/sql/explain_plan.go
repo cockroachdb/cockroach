@@ -66,7 +66,7 @@ type explainer struct {
 
 // newExplainPlanNode instantiates a planNode that runs an EXPLAIN query.
 func (p *planner) makeExplainPlanNode(
-	explainer explainer, expanded, optimized bool, plan planNode,
+	explainer explainer, expanded, optimized bool, origStmt parser.Statement, plan planNode,
 ) planNode {
 	columns := sqlbase.ResultColumns{
 		// Level is the depth of the node in the tree.
@@ -85,9 +85,18 @@ func (p *planner) makeExplainPlanNode(
 		columns = append(columns, sqlbase.ResultColumn{Name: "Ordering", Typ: parser.TypeString})
 	}
 
-	explainer.fmtFlags = parser.FmtExpr(
+	noPlaceholderFlags := parser.FmtExpr(
 		parser.FmtSimple, explainer.showTypes, explainer.symbolicVars, explainer.qualifyNames,
 	)
+	explainer.fmtFlags = parser.FmtPlaceholderFormat(noPlaceholderFlags,
+		func(buf *bytes.Buffer, f parser.FmtFlags, placeholder *parser.Placeholder) {
+			d, err := placeholder.Eval(&p.evalCtx)
+			if err != nil {
+				placeholder.Format(buf, noPlaceholderFlags)
+				return
+			}
+			d.Format(buf, f)
+		})
 
 	node := &explainPlanNode{
 		explainer: explainer,
