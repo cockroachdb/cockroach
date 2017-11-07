@@ -477,6 +477,23 @@ If this flag is unspecified, the temporary subdirectory will be located under
 the root of the first store.`,
 	}
 
+	ExternalIODir = FlagInfo{
+		Name: "external-io-dir",
+		Description: `
+The local file path under which remotely-initiated operations that can specify
+node-local I/O paths, such as BACKUP, RESTORE or IMPORT, can access files.
+Following symlinks _is_ allowed, meaning that other paths can be added by
+symlinking to them from within this path.
+
+Note: operations in a distributed cluster can run across many nodes, so reading
+or writing to any given node's local file system in a distributed cluster is not
+usually useful unless that filesystem is actually backed by something like NFS.
+
+If left empty, defaults to the "extern" subdirectory of the first store directory.
+
+The value "disabled" will disable all local file I/O. `,
+	}
+
 	URL = FlagInfo{
 		Name:   "url",
 		EnvVar: "COCKROACH_URL",
