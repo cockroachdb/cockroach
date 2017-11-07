@@ -74,7 +74,6 @@
     "dagre-layout": "^0.8.0",
     "enzyme": "^2.8.2",
     "express": "^4.15.2",
-    "favicons-webpack-plugin": "^0.0.7",
     "fetch-mock": "^5.9.4",
     "file-loader": "^0.11.1",
     "fork-ts-checker-webpack-plugin": "^0.2.8",
