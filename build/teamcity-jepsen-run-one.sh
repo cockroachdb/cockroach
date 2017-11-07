@@ -84,7 +84,8 @@ if timeout 20m ssh "${SSH_OPTIONS[@]}" "ubuntu@${controller}" "${testcmd}" \
 
     # Test passed. grab just the results file.
     progress "Test passed. Grabbing minimal logs..."
-    scp "${SSH_OPTIONS[@]}" -C -r \
+    # TODO(bdarnell): remove -v's
+    scp "${SSH_OPTIONS[@]}" -C -r -v -v -v \
         "ubuntu@${controller}:jepsen/cockroachdb/store/latest/{test.fressian,results.edn,latency-quantiles.png,latency-raw.png,rate.png}" \
         "${artifacts_dir}"
 
