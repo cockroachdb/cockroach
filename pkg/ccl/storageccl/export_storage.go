@@ -46,6 +46,10 @@ const (
 	S3AccessKeyParam = "AWS_ACCESS_KEY_ID"
 	// S3SecretParam is the query parameter for the 'secret' in an S3 URI.
 	S3SecretParam = "AWS_SECRET_ACCESS_KEY"
+	// S3EndpointParam is the query parameter for the 'endpoint' in an S3 URI.
+	S3EndpointParam = "AWS_ENDPOINT"
+	// S3RegionParam is the query parameter for the 'endpoint' in an S3 URI.
+	S3RegionParam = "AWS_REGION"
 
 	// AzureAccountNameParam is the query parameter for account_name in an azure URI.
 	AzureAccountNameParam = "AZURE_ACCOUNT_NAME"
@@ -81,6 +85,8 @@ func ExportStorageConfFromURI(path string) (roachpb.ExportStorage, error) {
 			Prefix:    uri.Path,
 			AccessKey: uri.Query().Get(S3AccessKeyParam),
 			Secret:    uri.Query().Get(S3SecretParam),
+			Endpoint:  uri.Query().Get(S3EndpointParam),
+			Region:    uri.Query().Get(S3RegionParam),
 		}
 		if conf.S3Config.AccessKey == "" {
 			return conf, errors.Errorf("s3 uri missing %q parameter", S3AccessKeyParam)
@@ -405,18 +411,27 @@ func makeS3Storage(ctx context.Context, conf *roachpb.ExportStorage_S3) (ExportS
 	if conf == nil {
 		return nil, errors.Errorf("s3 upload requested but info missing")
 	}
-	sess, err := session.NewSession(conf.Keys())
+	region := conf.Region
+	config := conf.Keys()
+	if conf.Endpoint != "" {
+		config.Endpoint = &conf.Endpoint
+		if conf.Region == "" {
+			return nil, errors.New("s3 region must be specified when using custom endpoints")
+		}
+	}
+	sess, err := session.NewSession(config)
 	if err != nil {
 		return nil, errors.Wrap(err, "new aws session")
 	}
-	var region string
-	err = s3Retry(ctx, func() error {
-		var err error
-		region, err = s3manager.GetBucketRegion(ctx, sess, conf.Bucket, "us-east-1")
-		return err
-	})
-	if err != nil {
-		return nil, errors.Wrap(err, "could not find s3 bucket's region")
+	if region == "" {
+		err = s3Retry(ctx, func() error {
+			var err error
+			region, err = s3manager.GetBucketRegion(ctx, sess, conf.Bucket, "us-east-1")
+			return err
+		})
+		if err != nil {
+			return nil, errors.Wrap(err, "could not find s3 bucket's region")
+		}
 	}
 	sess.Config.Region = aws.String(region)
 	return &s3Storage{
