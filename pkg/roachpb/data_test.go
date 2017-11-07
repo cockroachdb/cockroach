@@ -632,6 +632,68 @@ func TestLeaseEquivalence(t *testing.T) {
 	}
 }
 
+func TestLeaseEqual(t *testing.T) {
+	type expectedLease struct {
+		Start                 hlc.Timestamp
+		Expiration            *hlc.Timestamp
+		Replica               ReplicaDescriptor
+		DeprecatedStartStasis *hlc.Timestamp
+		ProposedTS            *hlc.Timestamp
+		Epoch                 int64
+	}
+	// Verify that the lease structure does not change unexpectedly. If a compile
+	// error occurs on the following line of code, update the expectedLease
+	// structure AND update Lease.Equal.
+	var _ = expectedLease(Lease{})
+
+	// Verify that nil == &hlc.Timestamp{} for the Expiration and
+	// DeprecatedStartStasis fields. See #19843.
+	a := Lease{}
+	b := Lease{
+		Expiration:            &hlc.Timestamp{},
+		DeprecatedStartStasis: &hlc.Timestamp{},
+	}
+	if !a.Equal(b) {
+		t.Fatalf("unexpectedly did not compare equal: %s", pretty.Diff(a, b))
+	}
+
+	if !(*Lease)(nil).Equal(nil) {
+		t.Fatalf("unexpectedly did not compare equal")
+	}
+	if !(*Lease)(nil).Equal((*Lease)(nil)) {
+		t.Fatalf("unexpectedly did not compare equal")
+	}
+	if (*Lease)(nil).Equal(Lease{}) {
+		t.Fatalf("expectedly compared equal")
+	}
+	if (*Lease)(nil).Equal(&Lease{}) {
+		t.Fatalf("expectedly compared equal")
+	}
+	if (&Lease{}).Equal(nil) {
+		t.Fatalf("expectedly compared equal")
+	}
+	if (&Lease{}).Equal((*Lease)(nil)) {
+		t.Fatalf("expectedly compared equal")
+	}
+
+	ts := hlc.Timestamp{Logical: 1}
+	testCases := []Lease{
+		{Start: ts},
+		{Expiration: &ts},
+		{Replica: ReplicaDescriptor{NodeID: 1}},
+		{DeprecatedStartStasis: &ts},
+		{ProposedTS: &ts},
+		{Epoch: 1},
+	}
+	for _, c := range testCases {
+		t.Run("", func(t *testing.T) {
+			if c.Equal(Lease{}) {
+				t.Fatalf("unexpected equality: %s", pretty.Diff(c, Lease{}))
+			}
+		})
+	}
+}
+
 func TestLeaseFuzzNullability(t *testing.T) {
 	var l Lease
 	protoutil.Walk(&l, protoutil.ZeroInsertingVisitor)
