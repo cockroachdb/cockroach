@@ -23,15 +23,20 @@ import (
 type ScrubType int
 
 const (
-	// ScrubTable describes the SCRUB operation SCRUB TABLE
+	// ScrubTable describes the SCRUB operation SCRUB TABLE.
 	ScrubTable = iota
+	// ScrubDatabase describes the SCRUB operation SCRUB DATABASE.
+	ScrubDatabase = iota
 )
 
-// Scrub represents a SCRUB TABLE statement.
+// Scrub represents a SCRUB statement.
 type Scrub struct {
 	Typ     ScrubType
-	Table   NormalizableTableName
 	Options ScrubOptions
+	// Table is only set during SCRUB TABLE statements.
+	Table NormalizableTableName
+	// Database is only set during SCRUB DATABASE statements.
+	Database Name
 }
 
 // Format implements the NodeFormatter interface.
@@ -41,6 +46,9 @@ func (n *Scrub) Format(buf *bytes.Buffer, f FmtFlags) {
 	case ScrubTable:
 		buf.WriteString("TABLE ")
 		n.Table.Format(buf, f)
+	case ScrubDatabase:
+		buf.WriteString("DATABASE ")
+		n.Database.Format(buf, f)
 	default:
 		panic("Unhandled ScrubType")
 	}
