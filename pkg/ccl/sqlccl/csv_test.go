@@ -455,6 +455,12 @@ func TestImportStmt(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	empty := filepath.Join(dir, "empty.csv")
+	if err := ioutil.WriteFile(empty, nil, 0666); err != nil {
+		t.Fatal(err)
+	}
+	empty = fmt.Sprintf("'nodelocal://%s'", empty)
+
 	files, filesWithOpts, dups := makeCSVData(t, dir, numFiles, rowsPerFile)
 	expectedRows := numFiles * rowsPerFile
 
@@ -530,6 +536,22 @@ func TestImportStmt(t *testing.T) {
 			`WITH comment = '#', delimiter = '|', distributed, "nullif" = '', temp = %s, transform_only`,
 			"",
 		},
+		{
+			"empty-file",
+			`IMPORT TABLE t CREATE USING $1 CSV DATA (%s) WITH temp = $2`,
+			[]interface{}{fmt.Sprintf("nodelocal://%s", tablePath)},
+			[]string{empty},
+			`WITH temp = %s, transform_only`,
+			"",
+		},
+		{
+			"empty-with-files",
+			`IMPORT TABLE t CREATE USING $1 CSV DATA (%s) WITH temp = $2`,
+			[]interface{}{fmt.Sprintf("nodelocal://%s", tablePath)},
+			append([]string{empty}, files...),
+			`WITH temp = %s, transform_only`,
+			"",
+		},
 		// NB: successes above, failures below, because we check the i-th job.
 		{
 			"missing-temp",
@@ -596,13 +618,12 @@ func TestImportStmt(t *testing.T) {
 			}
 
 			var result int
-			if err := sqlDB.DB.QueryRow(
-				fmt.Sprintf(tc.query, strings.Join(tc.files, ", ")), tc.args...,
-			).Scan(
+			query := fmt.Sprintf(tc.query, strings.Join(tc.files, ", "))
+			if err := sqlDB.DB.QueryRow(query, tc.args...).Scan(
 				&unused, &unused, &unused, &restored.rows, &restored.idx, &restored.sys, &restored.bytes,
 			); err != nil {
 				if !testutils.IsError(err, tc.err) {
-					t.Fatal(err)
+					t.Fatalf("%s: %v", query, err)
 				}
 				return
 			}
@@ -631,6 +652,14 @@ func TestImportStmt(t *testing.T) {
 				); err != nil {
 					t.Fatal(err)
 				}
+			}
+
+			if len(tc.files) == 1 && tc.files[0] == empty {
+				sqlDB.QueryRow(`SELECT count(*) FROM t`).Scan(&result)
+				if expect := 0; result != expect {
+					t.Fatalf("expected %d rows, got %d", expect, result)
+				}
+				return
 			}
 
 			if expected, actual := expectedRows, restored.rows; expected != actual {
