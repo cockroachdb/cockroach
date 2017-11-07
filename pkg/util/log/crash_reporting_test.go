@@ -27,12 +27,18 @@ import (
 	"golang.org/x/net/context"
 )
 
+var errSentinel = struct{ error }{} // explodes if Error() called
+var errFundamental = errors.Errorf("%s", "not recoverable :(")
+var errWrapped1 = errors.Wrap(errFundamental, "not recoverable :(")
+var errWrapped2 = errors.Wrapf(errWrapped1, "not recoverable :(")
+var errWrapped3 = errors.Wrap(errWrapped2, "not recoverable :(")
+var errWrappedSentinel = errors.Wrap(errors.Wrapf(errSentinel, "unseen"), "unsung")
+
 func TestCrashReportingSafeError(t *testing.T) {
 	type testCase struct {
-		format  string
-		rs      []interface{}
-		expType string
-		expErr  string
+		format string
+		rs     []interface{}
+		expErr string
 	}
 
 	runtimeErr := &runtime.TypeAssertionError{}
@@ -40,43 +46,58 @@ func TestCrashReportingSafeError(t *testing.T) {
 	testCases := []testCase{
 		{
 			// Intended result of panic(context.DeadlineExceeded). Note that this is a known sentinel
-			// error.
+			// error but a safeError is returned.
 			format: "", rs: []interface{}{context.DeadlineExceeded},
-			expType: "context.deadlineExceededError", expErr: "context deadline exceeded",
+			expErr: "?:0: context.deadlineExceededError: context deadline exceeded",
 		},
 		{
 			// Intended result of panic(runtimeErr) which exhibits special case of known safe error.
 			format: "", rs: []interface{}{runtimeErr},
-			expType: "*runtime.TypeAssertionError", expErr: "interface conversion: interface is nil, not ",
+			expErr: "?:0: *runtime.TypeAssertionError: interface conversion: interface is nil, not ",
 		},
 		{
 			// Same as last, but skipping through to the cause: panic(errors.Wrap(safeErr, "gibberish")).
 			format: "", rs: []interface{}{errors.Wrap(runtimeErr, "unseen")},
-			expType: "*runtime.TypeAssertionError", expErr: "interface conversion: interface is nil, not ",
+			expErr: "?:0: crash_reporting_test.go:60: caused by *errors.withMessage: caused by *runtime.TypeAssertionError: interface conversion: interface is nil, not ",
 		},
 		{
 			// Special-casing switched off when format string present.
 			format: "%s", rs: []interface{}{runtimeErr},
-			expType: "*log.safeError", expErr: "?:0: %s | <*runtime.TypeAssertionError>: interface conversion: interface is nil, not ",
+			expErr: "?:0: %s | *runtime.TypeAssertionError: interface conversion: interface is nil, not ",
 		},
 		{
 			// Special-casing switched off when more than one reportable present.
 			format: "", rs: []interface{}{runtimeErr, "foo"},
-			expType: "*log.safeError", expErr: "?:0: <*runtime.TypeAssertionError>: interface conversion: interface is nil, not ; <string>",
+			expErr: "?:0: *runtime.TypeAssertionError: interface conversion: interface is nil, not ; string",
 		},
 		{
 			format: "I like %s and %q and my pin code is %d", rs: []interface{}{Safe("A"), &SafeType{V: "B"}, 1234},
-			expType: "*log.safeError", expErr: "?:0: I like %s and %q and my pin code is %d | A; B; <int>",
+			expErr: "?:0: I like %s and %q and my pin code is %d | A; B; int",
 		},
 		{
 			format: "outer %+v", rs: []interface{}{
 				errors.Wrapf(context.Canceled, "this will unfortunately be lost: %d", Safe(6)),
 			},
-			expType: "*log.safeError", expErr: "?:0: outer %+v | <*errors.withStack>: <redacted>: caused by <redacted>: caused by context canceled",
+			expErr: "?:0: outer %+v | crash_reporting_test.go:79: caused by *errors.withMessage: caused by *errors.errorString: context canceled",
 		},
 		{
 			format: "", rs: []interface{}{os.NewSyscallError("write", syscall.ENOSPC)},
-			expType: "*os.SyscallError", expErr: "write: no space left on device",
+			expErr: "?:0: *os.SyscallError: write: syscall.Errno: no space left on device",
+		},
+		{
+			// Verify that the special case still scrubs inside of the error.
+			format: "", rs: []interface{}{&os.LinkError{Op: "moo", Old: "sec", New: "cret", Err: errors.New("assumed safe")}},
+			expErr: "?:0: *os.LinkError: moo <redacted> <redacted>: assumed safe",
+		},
+		{
+			// Verify that unknown sentinel errors print at least their type (regression test).
+			// Also, that its Error() is never called (since it would panic).
+			format: "%s", rs: []interface{}{errWrappedSentinel},
+			expErr: "?:0: %s | crash_reporting_test.go:35: caused by *errors.withMessage: caused by crash_reporting_test.go:35: caused by *errors.withMessage: caused by struct { error }",
+		},
+		{
+			format: "", rs: []interface{}{errWrapped3},
+			expErr: "?:0: crash_reporting_test.go:34: caused by *errors.withMessage: caused by crash_reporting_test.go:33: caused by *errors.withMessage: caused by crash_reporting_test.go:32: caused by *errors.withMessage: caused by crash_reporting_test.go:31",
 		},
 	}
 
@@ -86,11 +107,12 @@ func TestCrashReportingSafeError(t *testing.T) {
 			if err == nil {
 				t.Fatal(err)
 			}
-			if typStr := fmt.Sprintf("%T", err); typStr != test.expType {
-				t.Errorf("expected %s, got %s", test.expType, typStr)
+			const expType = "*log.safeError"
+			if typStr := fmt.Sprintf("%T", err); typStr != expType {
+				t.Errorf("expected type:\n%s\ngot type:\n%s", expType, typStr)
 			}
 			if errStr := err.Error(); errStr != test.expErr {
-				t.Errorf("expected %q, got %q", test.expErr, errStr)
+				t.Errorf("expected:\n%q\ngot:\n%q", test.expErr, errStr)
 			}
 		})
 	}
