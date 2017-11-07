@@ -42,6 +42,7 @@ lint: | protos
 	$(TSLINT) -c tslint.json -p tsconfig.json --type-check
 	@# TODO(benesch): Invoke tslint just once when palantir/tslint#2827 is fixed.
 	$(TSLINT) -c tslint.json *.js
+	@if $(YARN) list | grep phantomjs; then echo ^ forbidden UI dependency >&2; exit 1; fi
 
 # See "DLLs for speedy builds" in the README for details.
 DLLS := dist/protos.dll.js dist/vendor.dll.js protos-manifest.json vendor-manifest.json

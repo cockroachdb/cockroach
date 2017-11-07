@@ -4,7 +4,6 @@ const path = require("path");
 const rimraf = require("rimraf");
 const webpack = require("webpack");
 
-const FaviconsWebpackPlugin = require("favicons-webpack-plugin");
 const ForkTsCheckerWebpackPlugin = require("fork-ts-checker-webpack-plugin");
 const HtmlWebpackPlugin = require("html-webpack-plugin");
 const DashboardPlugin = require("webpack-dashboard/plugin");
@@ -91,24 +90,11 @@ module.exports = {
 
   plugins: [
     new RemoveBrokenDependenciesPlugin(),
-    new FaviconsWebpackPlugin({
-      logo: "./logo.png",
-      persistentCache: false,
-      inject: true,
-      title: title,
-      icons: {
-        // Must explicitly override defaults. Sigh.
-        android: false,
-        appleIcon: true,
-        appleStartup: false,
-        favicons: true,
-        firefox: false,
-      },
-    }),
     new HtmlWebpackPlugin({
       title: title,
       template: require("html-webpack-template"),
       scripts: ["protos.dll.js", "vendor.dll.js"],
+      favicon: "favicon.ico",
       inject: false,
       appMountId: "react-layout",
     }),
