@@ -902,6 +902,8 @@ message ExportStorage {
     string access_key = 3;
     string secret = 4;
     string temp_token = 5;
+    string endpoint = 6;
+    string region = 7;
   }
   message GCS {
     option (gogoproto.equal) = true;
