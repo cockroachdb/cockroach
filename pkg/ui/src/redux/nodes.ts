@@ -140,6 +140,8 @@ const nodeSumsSelector = createSelector(
       capacityTotal: 0,
       usedBytes: 0,
       usedMem: 0,
+      totalRanges: 0,
+      underReplicatedRanges: 0,
       unavailableRanges: 0,
       replicas: 0,
     };
@@ -170,6 +172,8 @@ const nodeSumsSelector = createSelector(
           result.capacityTotal += n.metrics[MetricConstants.capacity];
           result.usedBytes += BytesUsed(n);
           result.usedMem += n.metrics[MetricConstants.rss];
+          result.totalRanges += n.metrics[MetricConstants.ranges];
+          result.underReplicatedRanges += n.metrics[MetricConstants.underReplicatedRanges];
           result.unavailableRanges += n.metrics[MetricConstants.unavailableRanges];
           result.replicas += n.metrics[MetricConstants.replicas];
         }
