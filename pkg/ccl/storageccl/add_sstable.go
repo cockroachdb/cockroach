@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
@@ -25,13 +26,13 @@ import (
 
 func init() {
 	storage.SetAddSSTableCmd(storage.Command{
-		DeclareKeys: storage.DefaultDeclareKeys,
+		DeclareKeys: batcheval.DefaultDeclareKeys,
 		Eval:        evalAddSSTable,
 	})
 }
 
 func evalAddSSTable(
-	ctx context.Context, batch engine.ReadWriter, cArgs storage.CommandArgs, _ roachpb.Response,
+	ctx context.Context, batch engine.ReadWriter, cArgs batcheval.CommandArgs, _ roachpb.Response,
 ) (storage.EvalResult, error) {
 	args := cArgs.Args.(*roachpb.AddSSTableRequest)
 	h := cArgs.Header

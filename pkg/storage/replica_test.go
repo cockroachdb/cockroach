@@ -42,8 +42,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
+	"github.com/cockroachdb/cockroach/pkg/storage/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/spanset"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/storage/tscache"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -62,14 +64,14 @@ import (
 
 // allSpans is a SpanSet that covers *everything* for use in tests that don't
 // care about properly declaring their spans.
-var allSpans = func() SpanSet {
-	var ss SpanSet
-	ss.Add(SpanReadWrite, roachpb.Span{
+var allSpans = func() spanset.SpanSet {
+	var ss spanset.SpanSet
+	ss.Add(spanset.SpanReadWrite, roachpb.Span{
 		Key:    roachpb.KeyMin,
 		EndKey: roachpb.KeyMax,
 	})
 	// Local keys (see `keys.localPrefix`).
-	ss.Add(SpanReadWrite, roachpb.Span{
+	ss.Add(spanset.SpanReadWrite, roachpb.Span{
 		Key:    append([]byte("\x01"), roachpb.KeyMin...),
 		EndKey: append([]byte("\x01"), roachpb.KeyMax...),
 	})
@@ -547,7 +549,7 @@ func TestBehaviorDuringLeaseTransfer(t *testing.T) {
 		}
 	}
 	transferSem := make(chan struct{})
-	tsc.TestingKnobs.TestingEvalFilter =
+	tsc.TestingKnobs.EvalKnobs.TestingEvalFilter =
 		func(filterArgs storagebase.FilterArgs) *roachpb.Error {
 			if _, ok := filterArgs.Req.(*roachpb.TransferLeaseRequest); ok {
 				// Notify the test that the transfer has been trapped.
@@ -790,7 +792,7 @@ func TestReplicaLease(t *testing.T) {
 		{Start: start, Expiration: &hlc.Timestamp{}},
 	} {
 		if _, err := evalRequestLease(context.Background(), tc.store.Engine(),
-			CommandArgs{
+			batcheval.CommandArgs{
 				EvalCtx: NewReplicaEvalContext(tc.repl, &allSpans),
 				Args: &roachpb.RequestLeaseRequest{
 					Lease: lease,
@@ -2055,7 +2057,7 @@ func TestReplicaCommandQueue(t *testing.T) {
 
 						tc := testContext{}
 						tsc := TestStoreConfig(nil)
-						tsc.TestingKnobs.TestingEvalFilter =
+						tsc.TestingKnobs.EvalKnobs.TestingEvalFilter =
 							func(filterArgs storagebase.FilterArgs) *roachpb.Error {
 								if filterArgs.Hdr.UserPriority == blockingPriority && filterArgs.Index == 0 {
 									blockingStart <- struct{}{}
@@ -2214,7 +2216,7 @@ func TestReplicaCommandQueueInconsistent(t *testing.T) {
 
 	tc := testContext{}
 	tsc := TestStoreConfig(nil)
-	tsc.TestingKnobs.TestingEvalFilter =
+	tsc.TestingKnobs.EvalKnobs.TestingEvalFilter =
 		func(filterArgs storagebase.FilterArgs) *roachpb.Error {
 			if put, ok := filterArgs.Req.(*roachpb.PutRequest); ok {
 				putBytes, err := put.Value.GetBytes()
@@ -2675,7 +2677,7 @@ type cmdQCancelTest struct {
 
 type testCmd struct {
 	id      int
-	spanSet *SpanSet
+	spanSet *spanset.SpanSet
 	prereqs map[int]struct{}
 	cancel  context.CancelFunc
 	done    <-chan *roachpb.Error
@@ -2782,16 +2784,16 @@ func (ct *cmdQCancelTest) startInstr(
 	return done
 }
 
-func spanSetsOverlap(ss, ss2 *SpanSet) bool {
-	for ac1 := SpanAccess(0); ac1 < numSpanAccess; ac1++ {
-		for ac2 := SpanAccess(0); ac2 < numSpanAccess; ac2++ {
-			if ac1 == SpanReadOnly && ac2 == SpanReadOnly {
+func spanSetsOverlap(ss, ss2 *spanset.SpanSet) bool {
+	for ac1 := spanset.SpanAccess(0); ac1 < spanset.NumSpanAccess; ac1++ {
+		for ac2 := spanset.SpanAccess(0); ac2 < spanset.NumSpanAccess; ac2++ {
+			if ac1 == spanset.SpanReadOnly && ac2 == spanset.SpanReadOnly {
 				// Reads ignore other reads.
 				continue
 			}
-			for sc := spanScope(0); sc < numSpanScope; sc++ {
-				for _, s := range ss.spans[ac1][sc] {
-					for _, s2 := range ss2.spans[ac2][sc] {
+			for sc := spanset.SpanScope(0); sc < spanset.NumSpanScope; sc++ {
+				for _, s := range ss.GetSpans(ac1, sc) {
+					for _, s2 := range ss2.GetSpans(ac2, sc) {
 						if s.Overlaps(s2) {
 							return true
 						}
@@ -3033,7 +3035,7 @@ func TestReplicaCommandQueueTimestampNonInterference(t *testing.T) {
 
 	tc := testContext{}
 	tsc := TestStoreConfig(nil)
-	tsc.TestingKnobs.TestingEvalFilter =
+	tsc.TestingKnobs.EvalKnobs.TestingEvalFilter =
 		func(filterArgs storagebase.FilterArgs) *roachpb.Error {
 			// Make sure the direct GC path doesn't interfere with this test.
 			if !filterArgs.Req.Header().Key.Equal(blockKey.Load().(roachpb.Key)) {
@@ -3140,7 +3142,7 @@ func TestReplicaCommandQueueTimestampNonInterference(t *testing.T) {
 func TestReplicaCommandQueueSplitDeclaresWrites(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	var spans SpanSet
+	var spans spanset.SpanSet
 	commands[roachpb.EndTransaction].DeclareKeys(
 		roachpb.RangeDescriptor{StartKey: roachpb.RKey("a"), EndKey: roachpb.RKey("d")},
 		roachpb.Header{},
@@ -3159,7 +3161,7 @@ func TestReplicaCommandQueueSplitDeclaresWrites(t *testing.T) {
 			},
 		},
 		&spans)
-	if err := spans.checkAllowed(SpanReadWrite, roachpb.Span{Key: roachpb.Key("b")}); err != nil {
+	if err := spans.CheckAllowed(spanset.SpanReadWrite, roachpb.Span{Key: roachpb.Key("b")}); err != nil {
 		t.Fatalf("expected declaration of write access, err=%s", err)
 	}
 }
@@ -4498,7 +4500,7 @@ func TestEndTransactionLocalGC(t *testing.T) {
 	defer setTxnAutoGC(true)()
 	tc := testContext{}
 	tsc := TestStoreConfig(nil)
-	tsc.TestingKnobs.TestingEvalFilter =
+	tsc.TestingKnobs.EvalKnobs.TestingEvalFilter =
 		func(filterArgs storagebase.FilterArgs) *roachpb.Error {
 			// Make sure the direct GC path doesn't interfere with this test.
 			if filterArgs.Req.Method() == roachpb.GC {
@@ -4607,7 +4609,7 @@ func TestEndTransactionResolveOnlyLocalIntents(t *testing.T) {
 	tsc := TestStoreConfig(nil)
 	key := roachpb.Key("a")
 	splitKey := roachpb.RKey(key).Next()
-	tsc.TestingKnobs.TestingEvalFilter =
+	tsc.TestingKnobs.EvalKnobs.TestingEvalFilter =
 		func(filterArgs storagebase.FilterArgs) *roachpb.Error {
 			if filterArgs.Req.Method() == roachpb.ResolveIntent &&
 				filterArgs.Req.Header().Key.Equal(splitKey.AsRawKey()) {
@@ -4677,7 +4679,7 @@ func TestEndTransactionDirectGC(t *testing.T) {
 			testutils.SucceedsSoon(t, func() error {
 				var gr roachpb.GetResponse
 				if _, err := evalGet(
-					ctx, tc.engine, CommandArgs{
+					ctx, tc.engine, batcheval.CommandArgs{
 						Args: &roachpb.GetRequest{Span: roachpb.Span{
 							Key: keys.TransactionKey(txn.Key, txn.ID),
 						}},
@@ -4716,7 +4718,7 @@ func TestEndTransactionDirectGCFailure(t *testing.T) {
 	splitKey := roachpb.RKey(key).Next()
 	var count int64
 	tsc := TestStoreConfig(nil)
-	tsc.TestingKnobs.TestingEvalFilter =
+	tsc.TestingKnobs.EvalKnobs.TestingEvalFilter =
 		func(filterArgs storagebase.FilterArgs) *roachpb.Error {
 			if filterArgs.Req.Method() == roachpb.ResolveIntent &&
 				filterArgs.Req.Header().Key.Equal(splitKey.AsRawKey()) {
@@ -4800,7 +4802,7 @@ func TestReplicaTransactionRequires1PC(t *testing.T) {
 	var injectErrorOnKey atomic.Value
 	injectErrorOnKey.Store(roachpb.Key(""))
 
-	tsc.TestingKnobs.TestingEvalFilter =
+	tsc.TestingKnobs.EvalKnobs.TestingEvalFilter =
 		func(filterArgs storagebase.FilterArgs) *roachpb.Error {
 			if filterArgs.Req.Method() == roachpb.Put &&
 				injectErrorOnKey.Load().(roachpb.Key).Equal(filterArgs.Req.Header().Key) {
@@ -4907,7 +4909,7 @@ func TestReplicaResolveIntentNoWait(t *testing.T) {
 	var seen int32
 	key := roachpb.Key("zresolveme")
 	tsc := TestStoreConfig(nil)
-	tsc.TestingKnobs.TestingEvalFilter =
+	tsc.TestingKnobs.EvalKnobs.TestingEvalFilter =
 		func(filterArgs storagebase.FilterArgs) *roachpb.Error {
 			if filterArgs.Req.Method() == roachpb.ResolveIntent &&
 				filterArgs.Req.Header().Key.Equal(key) {
@@ -5367,20 +5369,20 @@ func TestResolveIntentPushTxnReplyTxn(t *testing.T) {
 
 	ctx := context.Background()
 	// Should not be able to push or resolve in a transaction.
-	if _, err := evalPushTxn(ctx, b, CommandArgs{Stats: &ms, Header: roachpb.Header{Txn: txn}, Args: &pa}, &roachpb.PushTxnResponse{}); !testutils.IsError(err, errTransactionUnsupported.Error()) {
+	if _, err := evalPushTxn(ctx, b, batcheval.CommandArgs{Stats: &ms, Header: roachpb.Header{Txn: txn}, Args: &pa}, &roachpb.PushTxnResponse{}); !testutils.IsError(err, errTransactionUnsupported.Error()) {
 		t.Fatalf("transactional PushTxn returned unexpected error: %v", err)
 	}
-	if _, err := evalResolveIntent(ctx, b, CommandArgs{Stats: &ms, Header: roachpb.Header{Txn: txn}, Args: &ra}, &roachpb.ResolveIntentResponse{}); !testutils.IsError(err, errTransactionUnsupported.Error()) {
+	if _, err := evalResolveIntent(ctx, b, batcheval.CommandArgs{Stats: &ms, Header: roachpb.Header{Txn: txn}, Args: &ra}, &roachpb.ResolveIntentResponse{}); !testutils.IsError(err, errTransactionUnsupported.Error()) {
 		t.Fatalf("transactional ResolveIntent returned unexpected error: %v", err)
 	}
-	if _, err := evalResolveIntentRange(ctx, b, CommandArgs{Stats: &ms, Header: roachpb.Header{Txn: txn}, Args: &rra}, &roachpb.ResolveIntentRangeResponse{}); !testutils.IsError(err, errTransactionUnsupported.Error()) {
+	if _, err := evalResolveIntentRange(ctx, b, batcheval.CommandArgs{Stats: &ms, Header: roachpb.Header{Txn: txn}, Args: &rra}, &roachpb.ResolveIntentRangeResponse{}); !testutils.IsError(err, errTransactionUnsupported.Error()) {
 		t.Fatalf("transactional ResolveIntentRange returned unexpected error: %v", err)
 	}
 
 	// Should not get a transaction back from PushTxn. It used to erroneously
 	// return args.PusherTxn.
 	var reply roachpb.PushTxnResponse
-	if _, err := evalPushTxn(ctx, b, CommandArgs{Stats: &ms, Args: &pa}, &reply); err != nil {
+	if _, err := evalPushTxn(ctx, b, batcheval.CommandArgs{Stats: &ms, Args: &pa}, &reply); err != nil {
 		t.Fatal(err)
 	} else if reply.Txn != nil {
 		t.Fatalf("expected nil response txn, but got %s", reply.Txn)
@@ -6075,7 +6077,7 @@ func TestReplicaCorruption(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	tsc := TestStoreConfig(nil)
-	tsc.TestingKnobs.TestingEvalFilter =
+	tsc.TestingKnobs.EvalKnobs.TestingEvalFilter =
 		func(filterArgs storagebase.FilterArgs) *roachpb.Error {
 			if filterArgs.Req.Header().Key.Equal(roachpb.Key("boom")) {
 				return roachpb.NewError(NewReplicaCorruptionError(errors.New("boom")))
@@ -7227,7 +7229,7 @@ func TestReplicaTryAbandon(t *testing.T) {
 	func() {
 		tc.repl.cmdQMu.Lock()
 		defer tc.repl.cmdQMu.Unlock()
-		if s := tc.repl.cmdQMu.queues[spanGlobal].String(); s == "" {
+		if s := tc.repl.cmdQMu.queues[spanset.SpanGlobal].String(); s == "" {
 			t.Fatal("expected non-empty command queue")
 		}
 	}()
@@ -7243,7 +7245,7 @@ func TestReplicaTryAbandon(t *testing.T) {
 	testutils.SucceedsSoon(t, func() error {
 		tc.repl.cmdQMu.Lock()
 		defer tc.repl.cmdQMu.Unlock()
-		if s := tc.repl.cmdQMu.queues[spanGlobal].String(); s != "" {
+		if s := tc.repl.cmdQMu.queues[spanset.SpanGlobal].String(); s != "" {
 			return errors.Errorf("expected empty command queue, but found\n%s", s)
 		}
 		return nil
@@ -7260,7 +7262,7 @@ func TestComputeChecksumVersioning(t *testing.T) {
 	tc.Start(t, stopper)
 
 	if pct, _ := evalComputeChecksum(context.TODO(), nil,
-		CommandArgs{Args: &roachpb.ComputeChecksumRequest{
+		batcheval.CommandArgs{Args: &roachpb.ComputeChecksumRequest{
 			ChecksumID: uuid.MakeV4(),
 			Version:    replicaChecksumVersion,
 		}}, &roachpb.ComputeChecksumResponse{},
@@ -7269,7 +7271,7 @@ func TestComputeChecksumVersioning(t *testing.T) {
 	}
 
 	if pct, _ := evalComputeChecksum(context.TODO(), nil,
-		CommandArgs{Args: &roachpb.ComputeChecksumRequest{
+		batcheval.CommandArgs{Args: &roachpb.ComputeChecksumRequest{
 			ChecksumID: uuid.MakeV4(),
 			Version:    replicaChecksumVersion + 1,
 		}}, &roachpb.ComputeChecksumResponse{},
@@ -8102,13 +8104,13 @@ func TestGCWithoutThreshold(t *testing.T) {
 		for j, txnThresh := range options {
 			func() {
 				var gc roachpb.GCRequest
-				var spans SpanSet
+				var spans spanset.SpanSet
 
 				gc.Threshold = keyThresh
 				gc.TxnSpanGCThreshold = txnThresh
 				declareKeysGC(desc, roachpb.Header{RangeID: tc.repl.RangeID}, &gc, &spans)
 
-				if num, exp := spans.len(), i+j+1; num != exp {
+				if num, exp := spans.Len(), i+j+1; num != exp {
 					t.Fatalf("(%s,%s): expected %d declared keys, found %d",
 						keyThresh, txnThresh, exp, num)
 				}
@@ -8122,7 +8124,7 @@ func TestGCWithoutThreshold(t *testing.T) {
 
 				var resp roachpb.GCResponse
 
-				if _, err := evalGC(ctx, rw, CommandArgs{
+				if _, err := evalGC(ctx, rw, batcheval.CommandArgs{
 					Args:    &gc,
 					EvalCtx: NewReplicaEvalContext(tc.repl, &spans),
 				}, &resp); err != nil {

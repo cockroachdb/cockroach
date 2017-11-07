@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
@@ -1276,7 +1277,9 @@ func TestStoreSplitTimestampCacheDifferentLeaseHolder(t *testing.T) {
 	var args base.TestClusterArgs
 	args.ReplicationMode = base.ReplicationManual
 	args.ServerArgs.Knobs.Store = &storage.StoreTestingKnobs{
-		TestingEvalFilter: filter,
+		EvalKnobs: batcheval.TestingKnobs{
+			TestingEvalFilter: filter,
+		},
 	}
 
 	tc := testcluster.StartTestCluster(t, 2, args)
@@ -1469,7 +1472,7 @@ func TestStoreRangeSplitRaceUninitializedRHS(t *testing.T) {
 	}
 	seen.sids = make(map[storagebase.CmdIDKey][2]bool)
 
-	storeCfg.TestingKnobs.TestingEvalFilter = func(args storagebase.FilterArgs) *roachpb.Error {
+	storeCfg.TestingKnobs.EvalKnobs.TestingEvalFilter = func(args storagebase.FilterArgs) *roachpb.Error {
 		et, ok := args.Req.(*roachpb.EndTransactionRequest)
 		if !ok || et.InternalCommitTrigger == nil {
 			return nil
@@ -1756,7 +1759,7 @@ func TestStoreSplitBeginTxnPushMetaIntentRace(t *testing.T) {
 	manual := hlc.NewManualClock(123)
 	storeCfg := storage.TestStoreConfig(hlc.NewClock(manual.UnixNano, time.Nanosecond))
 	storeCfg.TestingKnobs.DisableSplitQueue = true
-	storeCfg.TestingKnobs.TestingEvalFilter = func(filterArgs storagebase.FilterArgs) *roachpb.Error {
+	storeCfg.TestingKnobs.EvalKnobs.TestingEvalFilter = func(filterArgs storagebase.FilterArgs) *roachpb.Error {
 		startMu.Lock()
 		start := startMu.time
 		startMu.Unlock()
@@ -2127,7 +2130,7 @@ func TestTxnWaitQueueDependencyCycleWithRangeSplit(t *testing.T) {
 
 		storeCfg := storage.TestStoreConfig(nil)
 		storeCfg.TestingKnobs.DisableSplitQueue = true
-		storeCfg.TestingKnobs.TestingEvalFilter =
+		storeCfg.TestingKnobs.EvalKnobs.TestingEvalFilter =
 			func(filterArgs storagebase.FilterArgs) *roachpb.Error {
 				if _, ok := filterArgs.Req.(*roachpb.PushTxnRequest); ok {
 					if atomic.AddInt32(&pushCount, 1) == 1 {

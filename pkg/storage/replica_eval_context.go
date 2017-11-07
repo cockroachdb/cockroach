@@ -15,20 +15,11 @@
 package storage
 
 import (
-	"fmt"
-
-	opentracing "github.com/opentracing/opentracing-go"
 	"golang.org/x/net/context"
 
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/storage/abortspan"
-	"github.com/cockroachdb/cockroach/pkg/storage/engine"
-	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
-	"github.com/cockroachdb/cockroach/pkg/storage/txnwait"
+	"github.com/cockroachdb/cockroach/pkg/storage/batcheval"
+	"github.com/cockroachdb/cockroach/pkg/storage/spanset"
 	"github.com/cockroachdb/cockroach/pkg/util"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
@@ -39,13 +30,13 @@ import (
 // See https://github.com/cockroachdb/cockroach/issues/19851.
 //
 // Do not introduce new uses of this.
-var todoSpanSet = &SpanSet{}
+var todoSpanSet = &spanset.SpanSet{}
 
-// NewReplicaEvalContext returns a ReplicaEvalContext to use for command
+// NewReplicaEvalContext returns a batcheval.EvalContext to use for command
 // evaluation. The supplied SpanSet will be ignored except for race builds, in
 // which case state access is asserted against it. A SpanSet must always be
 // passed.
-func NewReplicaEvalContext(r *Replica, ss *SpanSet) ReplicaEvalContext {
+func NewReplicaEvalContext(r *Replica, ss *spanset.SpanSet) batcheval.EvalContext {
 	if ss == nil {
 		log.Fatalf(r.AnnotateCtx(context.Background()), "can't create a ReplicaEvalContext with assertions but no SpanSet")
 	}
@@ -56,37 +47,4 @@ func NewReplicaEvalContext(r *Replica, ss *SpanSet) ReplicaEvalContext {
 		}
 	}
 	return r
-}
-
-// ReplicaEvalContext is the interface through which command evaluation accesses
-// the in-memory state of a Replica.
-type ReplicaEvalContext interface {
-	fmt.Stringer
-	ClusterSettings() *cluster.Settings
-	StoreTestingKnobs() StoreTestingKnobs
-
-	// TODO(tschottdorf): available through ClusterSettings().
-	Tracer() opentracing.Tracer
-
-	Engine() engine.Engine
-	DB() *client.DB
-	AbortSpan() *abortspan.AbortSpan
-	GetTxnWaitQueue() *txnwait.Queue
-
-	NodeID() roachpb.NodeID
-	StoreID() roachpb.StoreID
-	GetRangeID() roachpb.RangeID
-
-	IsFirstRange() bool
-	GetFirstIndex() (uint64, error)
-	GetTerm(uint64) (uint64, error)
-
-	Desc() *roachpb.RangeDescriptor
-	ContainsKey(key roachpb.Key) bool
-
-	GetMVCCStats() enginepb.MVCCStats
-	GetGCThreshold() hlc.Timestamp
-	GetTxnSpanGCThreshold() hlc.Timestamp
-	GetLastReplicaGCTimestamp(context.Context) (hlc.Timestamp, error)
-	GetLease() (roachpb.Lease, *roachpb.Lease)
 }
