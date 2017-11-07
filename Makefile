@@ -78,6 +78,16 @@ help: ## Print help for targets with comments.
 	@echo ""
 	@echo "Useful variables:"
 	@grep -Eh '^[a-zA-Z._-]+ *:=.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":=.*?## "}; {printf "  $(shell tput setaf 6 2>/dev/null)%-30s$(shell tput sgr0 2>/dev/null) %s\n", $$1, $$2}'
+	@echo ""
+	@echo "Typical usage:"
+	@grep -Eh '^## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = "##"}; {printf "  $(shell tput setaf 6 2>/dev/null)%-45s$(shell tput sgr0 2>/dev/null) %s\n", $$2, $$3}'
+
+## make test ## Run all unit tests.
+## make test PKG=./pkg/sql ## Run all unit tests in the ./pkg/sql package
+## make test PKG=./pkg/sql TESTS=TestParse ## Run the TestParse test in the ./pkg/sql package.
+## make bench PKG=./pkg/sql/parser BENCHES=BenchmarkParse ## Run the BenchmarkParse benchmark in the ./pkg/sql/parser package.
+## make testlogic ## Run all SQL Logic Tests.
+## make testlogic FILES=prepare ## Run the logic test with filename prepare.
 
 # Possible values:
 # <empty>: use the default toolchain
@@ -247,6 +257,7 @@ bench: ## Run benchmarks.
 bench: TESTTIMEOUT := $(BENCHTIMEOUT)
 
 .PHONY: check test testshort testrace testlogic bench
+test: ## Run tests.
 check test testshort testrace bench: gotestdashi
 	$(XGO) test $(GOFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' -run "$(TESTS)" $(if $(BENCHES),-bench "$(BENCHES)") -timeout $(TESTTIMEOUT) $(PKG) $(TESTFLAGS)
 
