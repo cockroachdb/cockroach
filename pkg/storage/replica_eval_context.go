@@ -27,12 +27,40 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/txnwait"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
-// ReplicaI is the glue between a ReplicaEvalContext and a *Replica
-// to avoid a direct dependency.
-type ReplicaI interface {
+// todoSpanSet is a placeholder value for callsites that need to pass a properly
+// populated SpanSet (with according protection by the command queue) but fail
+// to do so at the time of writing.
+//
+// See https://github.com/cockroachdb/cockroach/issues/19851.
+//
+// Do not introduce new uses of this.
+var todoSpanSet = &SpanSet{}
+
+// NewReplicaEvalContext returns a ReplicaEvalContext to use for command
+// evaluation. The supplied SpanSet will be ignored except for race builds, in
+// which case state access is asserted against it. A SpanSet must always be
+// passed.
+func NewReplicaEvalContext(r *Replica, ss *SpanSet) ReplicaEvalContext {
+	if ss == nil {
+		log.Fatalf(r.AnnotateCtx(context.Background()), "can't create a ReplicaEvalContext with assertions but no SpanSet")
+	}
+	if util.RaceEnabled {
+		return &SpanSetReplicaEvalContext{
+			i:  r,
+			ss: *ss,
+		}
+	}
+	return r
+}
+
+// ReplicaEvalContext is the interface through which command evaluation accesses
+// the in-memory state of a Replica.
+type ReplicaEvalContext interface {
 	fmt.Stringer
 	ClusterSettings() *cluster.Settings
 	StoreTestingKnobs() StoreTestingKnobs
@@ -54,6 +82,7 @@ type ReplicaI interface {
 	GetTerm(uint64) (uint64, error)
 
 	Desc() *roachpb.RangeDescriptor
+	ContainsKey(key roachpb.Key) bool
 
 	GetMVCCStats() enginepb.MVCCStats
 	GetGCThreshold() hlc.Timestamp
