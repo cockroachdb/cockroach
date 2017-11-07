@@ -2441,7 +2441,7 @@ func (r *Replica) executeAdminBatch(
 		resp = &reply
 
 	case *roachpb.ImportRequest:
-		cArgs := CommandArgs{
+		cArgs := batcheval.CommandArgs{
 			EvalCtx: NewReplicaEvalContext(r, &spanset.SpanSet{}),
 			Header:  ba.Header,
 			Args:    args,

@@ -19,6 +19,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/spanset"
 )
 
@@ -41,4 +42,22 @@ func DefaultDeclareKeys(
 		spans.Add(spanset.SpanReadOnly, roachpb.Span{Key: keys.RangeLeaseKey(header.RangeID)})
 		spans.Add(spanset.SpanReadOnly, roachpb.Span{Key: keys.RangeDescriptorKey(desc.StartKey)})
 	}
+}
+
+// CommandArgs contains all the arguments to a command.
+// TODO(bdarnell): consider merging with storagebase.FilterArgs (which
+// would probably require removing the EvalCtx field due to import order
+// constraints).
+type CommandArgs struct {
+	EvalCtx EvalContext
+	Header  roachpb.Header
+	Args    roachpb.Request
+
+	// If MaxKeys is non-zero, span requests should limit themselves to
+	// that many keys. Commands using this feature should also set
+	// NumKeys and ResumeSpan in their responses.
+	MaxKeys int64
+
+	// *Stats should be mutated to reflect any writes made by the command.
+	Stats *enginepb.MVCCStats
 }

@@ -22,7 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -290,7 +290,7 @@ func TestAddSSTableMVCCStats(t *testing.T) {
 		}()
 
 		nowNanos += rng.Int63n(1e9)
-		cArgs := storage.CommandArgs{
+		cArgs := batcheval.CommandArgs{
 			Header: roachpb.Header{
 				Timestamp: hlc.Timestamp{WallTime: nowNanos},
 			},

@@ -30,7 +30,7 @@ func makeUnimplementedCommand(method roachpb.Method) Command {
 	return Command{
 		DeclareKeys: batcheval.DefaultDeclareKeys,
 		Eval: func(
-			_ context.Context, _ engine.ReadWriter, _ CommandArgs, _ roachpb.Response,
+			_ context.Context, _ engine.ReadWriter, _ batcheval.CommandArgs, _ roachpb.Response,
 		) (EvalResult, error) {
 			return EvalResult{}, errors.Errorf("unimplemented command: %s", method.String())
 		}}
@@ -39,7 +39,7 @@ func makeUnimplementedCommand(method roachpb.Method) Command {
 var writeBatchCmd = makeUnimplementedCommand(roachpb.WriteBatch)
 var addSSTableCmd = makeUnimplementedCommand(roachpb.AddSSTable)
 var exportCmd = makeUnimplementedCommand(roachpb.Export)
-var importCmdFn ImportCmdFunc = func(context.Context, CommandArgs) (*roachpb.ImportResponse, error) {
+var importCmdFn ImportCmdFunc = func(context.Context, batcheval.CommandArgs) (*roachpb.ImportResponse, error) {
 	return &roachpb.ImportResponse{}, errors.Errorf("unimplemented command: %s", roachpb.Import)
 }
 
@@ -66,7 +66,7 @@ func SetExportCmd(cmd Command) {
 
 // ImportCmdFunc is the type of the function that will be called as the
 // implementation of the Import command.
-type ImportCmdFunc func(context.Context, CommandArgs) (*roachpb.ImportResponse, error)
+type ImportCmdFunc func(context.Context, batcheval.CommandArgs) (*roachpb.ImportResponse, error)
 
 // SetImportCmd allows setting the function that will be called as the
 // implementation of the Import command. Only allowed to be called by Init.

@@ -100,7 +100,7 @@ func (r *rowCounter) count(key roachpb.Key) error {
 // evalExport dumps the requested keys into files of non-overlapping key ranges
 // in a format suitable for bulk ingest.
 func evalExport(
-	ctx context.Context, batch engine.ReadWriter, cArgs storage.CommandArgs, resp roachpb.Response,
+	ctx context.Context, batch engine.ReadWriter, cArgs batcheval.CommandArgs, resp roachpb.Response,
 ) (storage.EvalResult, error) {
 	args := cArgs.Args.(*roachpb.ExportRequest)
 	h := cArgs.Header
