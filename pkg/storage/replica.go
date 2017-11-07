@@ -46,6 +46,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/spanset"
 	"github.com/cockroachdb/cockroach/pkg/storage/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/storage/tscache"
@@ -284,7 +285,7 @@ type Replica struct {
 		// the rest (e.g. RangeDescriptor, transaction record, Lease, ...).
 		// Commands with different accesses but the same scope are stored in the
 		// same component.
-		queues [numSpanScope]*CommandQueue
+		queues [spanset.NumSpanScope]*CommandQueue
 	}
 
 	mu struct {
@@ -655,8 +656,8 @@ func (r *Replica) initRaftMuLockedReplicaMuLocked(
 	}
 
 	r.cmdQMu.Lock()
-	r.cmdQMu.queues[spanGlobal] = NewCommandQueue(true /* optimizeOverlap */)
-	r.cmdQMu.queues[spanLocal] = NewCommandQueue(false /* optimizeOverlap */)
+	r.cmdQMu.queues[spanset.SpanGlobal] = NewCommandQueue(true /* optimizeOverlap */)
+	r.cmdQMu.queues[spanset.SpanLocal] = NewCommandQueue(false /* optimizeOverlap */)
 	r.cmdQMu.Unlock()
 
 	r.mu.proposals = map[storagebase.CmdIDKey]*ProposalData{}
@@ -1896,7 +1897,7 @@ func (r *Replica) checkBatchRequest(ba roachpb.BatchRequest, isReadOnly bool) er
 // batch is divided into separate *cmds for access type (read-only or read/write)
 // and key scope (local or global; used to facilitate use by the separate local
 // and global command queues).
-type batchCmdSet [numSpanAccess][numSpanScope]*cmd
+type batchCmdSet [spanset.NumSpanAccess][spanset.NumSpanScope]*cmd
 
 // endCmds holds necessary information to end a batch after Raft
 // command processing.
@@ -2069,8 +2070,8 @@ func makeTSCacheRequest(ba *roachpb.BatchRequest, br *roachpb.BatchResponse) *ts
 	return cr
 }
 
-func collectSpans(desc roachpb.RangeDescriptor, ba *roachpb.BatchRequest) (*SpanSet, error) {
-	spans := &SpanSet{}
+func collectSpans(desc roachpb.RangeDescriptor, ba *roachpb.BatchRequest) (*spanset.SpanSet, error) {
+	spans := &spanset.SpanSet{}
 	// TODO(bdarnell): need to make this less global when the local
 	// command queue is used more heavily. For example, a split will
 	// have a large read-only span but also a write (see #10084).
@@ -2082,9 +2083,9 @@ func collectSpans(desc roachpb.RangeDescriptor, ba *roachpb.BatchRequest) (*Span
 	// TODO(bdarnell): revisit as the local portion gets its appropriate
 	// use.
 	if ba.IsReadOnly() {
-		spans.reserve(SpanReadOnly, spanGlobal, len(ba.Requests))
+		spans.Reserve(spanset.SpanReadOnly, spanset.SpanGlobal, len(ba.Requests))
 	} else {
-		spans.reserve(SpanReadWrite, spanGlobal, len(ba.Requests))
+		spans.Reserve(spanset.SpanReadWrite, spanset.SpanGlobal, len(ba.Requests))
 	}
 
 	for _, union := range ba.Requests {
@@ -2101,7 +2102,7 @@ func collectSpans(desc roachpb.RangeDescriptor, ba *roachpb.BatchRequest) (*Span
 
 	// If any command gave us spans that are invalid, bail out early
 	// (before passing them to the command queue, which may panic).
-	if err := spans.validate(); err != nil {
+	if err := spans.Validate(); err != nil {
 		return nil, err
 	}
 	return spans, nil
@@ -2115,7 +2116,7 @@ func collectSpans(desc roachpb.RangeDescriptor, ba *roachpb.BatchRequest) (*Span
 // commands are done and can be removed from the queue, and whose returned
 // error is to be used in place of the supplied error.
 func (r *Replica) beginCmds(
-	ctx context.Context, ba *roachpb.BatchRequest, spans *SpanSet,
+	ctx context.Context, ba *roachpb.BatchRequest, spans *spanset.SpanSet,
 ) (*endCmds, error) {
 	var newCmds batchCmdSet
 	clocklessReads := r.store.Clock().MaxOffset() == timeutil.ClocklessMaxOffset
@@ -2140,36 +2141,36 @@ func (r *Replica) beginCmds(
 		// as having a zero timestamp which will cause them to always interfere.
 		// This is done to avoid confusion with local keys declared as part of
 		// proposer evaluated KV.
-		scopeTS := func(scope spanScope) hlc.Timestamp {
+		scopeTS := func(scope spanset.SpanScope) hlc.Timestamp {
 			switch scope {
-			case spanGlobal:
+			case spanset.SpanGlobal:
 				if txn := ba.Txn; txn != nil {
 					return txn.OrigTimestamp
 				}
 				return ba.Timestamp
-			case spanLocal:
+			case spanset.SpanLocal:
 				return hlc.Timestamp{}
 			}
 			panic(fmt.Sprintf("unexpected scope %d", scope))
 		}
 
 		r.cmdQMu.Lock()
-		var prereqs [numSpanAccess][numSpanScope][]*cmd
+		var prereqs [spanset.NumSpanAccess][spanset.NumSpanScope][]*cmd
 		var prereqCount int
 		// Collect all the channels to wait on before adding this batch to the
 		// command queue.
-		for i := SpanAccess(0); i < numSpanAccess; i++ {
+		for i := spanset.SpanAccess(0); i < spanset.NumSpanAccess; i++ {
 			// With clockless reads, everything is treated as writing.
-			readOnly := i == SpanReadOnly && !clocklessReads
-			for j := spanScope(0); j < numSpanScope; j++ {
-				prereqs[i][j] = r.cmdQMu.queues[j].getPrereqs(readOnly, scopeTS(j), spans.getSpans(i, j))
+			readOnly := i == spanset.SpanReadOnly && !clocklessReads
+			for j := spanset.SpanScope(0); j < spanset.NumSpanScope; j++ {
+				prereqs[i][j] = r.cmdQMu.queues[j].getPrereqs(readOnly, scopeTS(j), spans.GetSpans(i, j))
 				prereqCount += len(prereqs[i][j])
 			}
 		}
-		for i := SpanAccess(0); i < numSpanAccess; i++ {
-			readOnly := i == SpanReadOnly && !clocklessReads // ditto above
-			for j := spanScope(0); j < numSpanScope; j++ {
-				newCmds[i][j] = r.cmdQMu.queues[j].add(readOnly, scopeTS(j), prereqs[i][j], spans.getSpans(i, j))
+		for i := spanset.SpanAccess(0); i < spanset.NumSpanAccess; i++ {
+			readOnly := i == spanset.SpanReadOnly && !clocklessReads // ditto above
+			for j := spanset.SpanScope(0); j < spanset.NumSpanScope; j++ {
+				newCmds[i][j] = r.cmdQMu.queues[j].add(readOnly, scopeTS(j), prereqs[i][j], spans.GetSpans(i, j))
 			}
 		}
 		r.cmdQMu.Unlock()
@@ -2439,7 +2440,7 @@ func (r *Replica) executeAdminBatch(
 
 	case *roachpb.ImportRequest:
 		cArgs := CommandArgs{
-			EvalCtx: NewReplicaEvalContext(r, &SpanSet{}),
+			EvalCtx: NewReplicaEvalContext(r, &spanset.SpanSet{}),
 			Header:  ba.Header,
 			Args:    args,
 		}
@@ -2790,7 +2791,7 @@ func (r *Replica) requestToProposal(
 	idKey storagebase.CmdIDKey,
 	ba roachpb.BatchRequest,
 	endCmds *endCmds,
-	spans *SpanSet,
+	spans *spanset.SpanSet,
 ) (*ProposalData, *roachpb.Error) {
 	proposal := &ProposalData{
 		ctx:     ctx,
@@ -2833,7 +2834,7 @@ func (r *Replica) requestToProposal(
 //
 // Replica.mu must not be held.
 func (r *Replica) evaluateProposal(
-	ctx context.Context, idKey storagebase.CmdIDKey, ba roachpb.BatchRequest, spans *SpanSet,
+	ctx context.Context, idKey storagebase.CmdIDKey, ba roachpb.BatchRequest, spans *spanset.SpanSet,
 ) (*EvalResult, *roachpb.Error) {
 	// Note that we don't hold any locks at this point. This is important
 	// since evaluating a proposal is expensive (at least under proposer-
@@ -2936,7 +2937,7 @@ func (r *Replica) propose(
 	lease roachpb.Lease,
 	ba roachpb.BatchRequest,
 	endCmds *endCmds,
-	spans *SpanSet,
+	spans *spanset.SpanSet,
 ) (chan proposalResult, func() bool, func(), *roachpb.Error) {
 	noop := func() {}
 	if err := r.IsDestroyed(); err != nil {
@@ -4852,7 +4853,7 @@ func (r *Replica) applyRaftCommand(
 // TODO(bdarnell): merge evaluateProposal and evaluateProposalInner. There
 // is no longer a clear distinction between them.
 func (r *Replica) evaluateProposalInner(
-	ctx context.Context, idKey storagebase.CmdIDKey, ba roachpb.BatchRequest, spans *SpanSet,
+	ctx context.Context, idKey storagebase.CmdIDKey, ba roachpb.BatchRequest, spans *spanset.SpanSet,
 ) EvalResult {
 	// Keep track of original txn Writing state to sanitize txn
 	// reported with any error except TransactionRetryError.
@@ -4963,7 +4964,7 @@ type intentsWithArg struct {
 // is restored and it's re-executed as transactional. This allows it
 // to lay down intents and return an appropriate retryable error.
 func (r *Replica) evaluateTxnWriteBatch(
-	ctx context.Context, idKey storagebase.CmdIDKey, ba roachpb.BatchRequest, spans *SpanSet,
+	ctx context.Context, idKey storagebase.CmdIDKey, ba roachpb.BatchRequest, spans *spanset.SpanSet,
 ) (engine.Batch, enginepb.MVCCStats, *roachpb.BatchResponse, EvalResult, *roachpb.Error) {
 	ms := enginepb.MVCCStats{}
 	// If not transactional or there are indications that the batch's txn will
@@ -5675,8 +5676,8 @@ func (r *Replica) Metrics(
 	desc := r.mu.state.Desc
 	selfBehindCount := r.getEstimatedBehindCountRLocked(raftStatus)
 	r.cmdQMu.Lock()
-	cmdQMetricsLocal := r.cmdQMu.queues[spanLocal].metrics()
-	cmdQMetricsGlobal := r.cmdQMu.queues[spanGlobal].metrics()
+	cmdQMetricsLocal := r.cmdQMu.queues[spanset.SpanLocal].metrics()
+	cmdQMetricsGlobal := r.cmdQMu.queues[spanset.SpanGlobal].metrics()
 	r.cmdQMu.Unlock()
 	r.mu.RUnlock()
 
@@ -5861,7 +5862,7 @@ func (r *Replica) GetCommandQueueSnapshot() storagebase.CommandQueuesSnapshot {
 	defer r.cmdQMu.Unlock()
 	return storagebase.CommandQueuesSnapshot{
 		Timestamp:   r.store.Clock().Now(),
-		LocalScope:  r.cmdQMu.queues[spanLocal].GetSnapshot(),
-		GlobalScope: r.cmdQMu.queues[spanGlobal].GetSnapshot(),
+		LocalScope:  r.cmdQMu.queues[spanset.SpanLocal].GetSnapshot(),
+		GlobalScope: r.cmdQMu.queues[spanset.SpanGlobal].GetSnapshot(),
 	}
 }

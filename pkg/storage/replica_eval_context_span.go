@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/spanset"
 	"github.com/cockroachdb/cockroach/pkg/storage/txnwait"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
@@ -35,7 +36,7 @@ import (
 // SpanSet if one is given.
 type SpanSetReplicaEvalContext struct {
 	i  batcheval.EvalContext
-	ss SpanSet
+	ss spanset.SpanSet
 }
 
 var _ batcheval.EvalContext = &SpanSetReplicaEvalContext{}
@@ -108,7 +109,7 @@ func (rec *SpanSetReplicaEvalContext) IsFirstRange() bool {
 // Desc returns the Replica's RangeDescriptor.
 func (rec SpanSetReplicaEvalContext) Desc() *roachpb.RangeDescriptor {
 	desc := rec.i.Desc()
-	rec.ss.assertAllowed(SpanReadOnly,
+	rec.ss.AssertAllowed(spanset.SpanReadOnly,
 		roachpb.Span{Key: keys.RangeDescriptorKey(desc.StartKey)},
 	)
 	return desc
@@ -125,7 +126,7 @@ func (rec SpanSetReplicaEvalContext) ContainsKey(key roachpb.Key) bool {
 
 // GetMVCCStats returns the Replica's MVCCStats.
 func (rec SpanSetReplicaEvalContext) GetMVCCStats() enginepb.MVCCStats {
-	rec.ss.assertAllowed(SpanReadOnly,
+	rec.ss.AssertAllowed(spanset.SpanReadOnly,
 		roachpb.Span{Key: keys.RangeStatsKey(rec.GetRangeID())},
 	)
 	return rec.i.GetMVCCStats()
@@ -135,7 +136,7 @@ func (rec SpanSetReplicaEvalContext) GetMVCCStats() enginepb.MVCCStats {
 // keys are garbage collected. Reads and writes at timestamps <= this time will
 // not be served.
 func (rec SpanSetReplicaEvalContext) GetGCThreshold() hlc.Timestamp {
-	rec.ss.assertAllowed(SpanReadOnly,
+	rec.ss.AssertAllowed(spanset.SpanReadOnly,
 		roachpb.Span{Key: keys.RangeLastGCKey(rec.GetRangeID())},
 	)
 	return rec.i.GetGCThreshold()
@@ -144,7 +145,7 @@ func (rec SpanSetReplicaEvalContext) GetGCThreshold() hlc.Timestamp {
 // GetTxnSpanGCThreshold returns the time of the Replica's last
 // transaction span GC.
 func (rec SpanSetReplicaEvalContext) GetTxnSpanGCThreshold() hlc.Timestamp {
-	rec.ss.assertAllowed(SpanReadOnly,
+	rec.ss.AssertAllowed(spanset.SpanReadOnly,
 		roachpb.Span{Key: keys.RangeTxnSpanGCThresholdKey(rec.GetRangeID())},
 	)
 	return rec.i.GetTxnSpanGCThreshold()
@@ -160,7 +161,7 @@ func (rec SpanSetReplicaEvalContext) String() string {
 func (rec SpanSetReplicaEvalContext) GetLastReplicaGCTimestamp(
 	ctx context.Context,
 ) (hlc.Timestamp, error) {
-	if err := rec.ss.checkAllowed(SpanReadOnly,
+	if err := rec.ss.CheckAllowed(spanset.SpanReadOnly,
 		roachpb.Span{Key: keys.RangeLastReplicaGCTimestampKey(rec.GetRangeID())},
 	); err != nil {
 		return hlc.Timestamp{}, err
@@ -170,7 +171,7 @@ func (rec SpanSetReplicaEvalContext) GetLastReplicaGCTimestamp(
 
 // GetLease returns the Replica's current and next lease (if any).
 func (rec SpanSetReplicaEvalContext) GetLease() (roachpb.Lease, *roachpb.Lease) {
-	rec.ss.assertAllowed(SpanReadOnly,
+	rec.ss.AssertAllowed(spanset.SpanReadOnly,
 		roachpb.Span{Key: keys.RangeLeaseKey(rec.GetRangeID())},
 	)
 	return rec.i.GetLease()

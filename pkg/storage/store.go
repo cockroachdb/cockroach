@@ -46,6 +46,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/spanset"
 	"github.com/cockroachdb/cockroach/pkg/storage/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/storage/tscache"
@@ -4179,21 +4180,21 @@ func (s *Store) updateCommandQueueGauges() error {
 	newStoreReplicaVisitor(s).Visit(func(rep *Replica) bool {
 		rep.cmdQMu.Lock()
 
-		writes := rep.cmdQMu.queues[spanGlobal].localMetrics.writeCommands
-		writes += rep.cmdQMu.queues[spanLocal].localMetrics.writeCommands
+		writes := rep.cmdQMu.queues[spanset.SpanGlobal].localMetrics.writeCommands
+		writes += rep.cmdQMu.queues[spanset.SpanLocal].localMetrics.writeCommands
 
-		reads := rep.cmdQMu.queues[spanGlobal].localMetrics.readCommands
-		reads += rep.cmdQMu.queues[spanLocal].localMetrics.readCommands
+		reads := rep.cmdQMu.queues[spanset.SpanGlobal].localMetrics.readCommands
+		reads += rep.cmdQMu.queues[spanset.SpanLocal].localMetrics.readCommands
 
-		treeSize := int64(rep.cmdQMu.queues[spanGlobal].treeSize())
-		treeSize += int64(rep.cmdQMu.queues[spanLocal].treeSize())
+		treeSize := int64(rep.cmdQMu.queues[spanset.SpanGlobal].treeSize())
+		treeSize += int64(rep.cmdQMu.queues[spanset.SpanLocal].treeSize())
 
-		maxOverlaps := rep.cmdQMu.queues[spanGlobal].localMetrics.maxOverlapsSeen
-		if locMax := rep.cmdQMu.queues[spanLocal].localMetrics.maxOverlapsSeen; locMax > maxOverlaps {
+		maxOverlaps := rep.cmdQMu.queues[spanset.SpanGlobal].localMetrics.maxOverlapsSeen
+		if locMax := rep.cmdQMu.queues[spanset.SpanLocal].localMetrics.maxOverlapsSeen; locMax > maxOverlaps {
 			maxOverlaps = locMax
 		}
-		rep.cmdQMu.queues[spanGlobal].localMetrics.maxOverlapsSeen = 0
-		rep.cmdQMu.queues[spanLocal].localMetrics.maxOverlapsSeen = 0
+		rep.cmdQMu.queues[spanset.SpanGlobal].localMetrics.maxOverlapsSeen = 0
+		rep.cmdQMu.queues[spanset.SpanLocal].localMetrics.maxOverlapsSeen = 0
 		rep.cmdQMu.Unlock()
 
 		cqSize := writes + reads
