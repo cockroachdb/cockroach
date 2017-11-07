@@ -225,6 +225,14 @@ func (p *planner) RenameTable(ctx context.Context, n *parser.RenameTable) (planN
 	if p.session.Tracing.KVTracingEnabled() {
 		log.VEventf(ctx, 2, "CPut %s -> %d", newTbKey, descID)
 	}
+
+	if id, err := getDescID(ctx, p.txn, newTbKey); err == nil && id != sqlbase.InvalidID {
+		if _, err := p.session.maybeDeleteDescriptorName(ctx, p.txn, newTbKey, id); err != nil {
+			return nil, err
+		}
+	} else if err != nil {
+		return nil, err
+	}
 	b.CPut(newTbKey, descID, nil)
 
 	if err := p.txn.Run(ctx, b); err != nil {

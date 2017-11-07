@@ -1385,6 +1385,68 @@ func (s *Session) maybeRecover(action, stmt string) {
 	}
 }
 
+// A descriptor dropped in a transaction has its name to id map
+// deleted after the transaction has committed, when the schema
+// change executes. This delayed map deletion follows the name being
+// deleted from all the descriptor caches across the entire cluster to
+// prevent the name from being reused and used illegally.
+//
+// But if the name needs to be reused during the transaction itself, the
+// name has to be deleted before the reuse during the transaction. That
+// is done here. One of the ramifications of this is that a new name to id
+// is created once the transaction is committed even though the old name
+// to id map can be present in a descriptor cache on a node.
+// The schema changes that run after the transaction commits purge the
+// old name to id map, but before that the name can be used illegally.
+//
+// Note: statements following the name reuse in the same transaction
+// use the new name and descriptor thanks to the use of uncommittedTables
+// in TableCollection.
+//
+// A node using the old mapping sees the name map to the old dropped
+// descriptor and can potentially add data into a dropped table.
+// This is okay because the dropped table GC is started only once all
+// nodes are not holding leases on the old descriptor. A node using the
+// old descriptor is notified that the old descriptor is no longer
+// valid (dropped), and will release the lease on the old descriptor.
+// While acquiring a new lease on the descriptor it will reevaluate
+// the name to id map and will start using the new descriptor.
+//
+// Furthermore, If a table is dropped-created on node A through a
+// transaction and a user is running another transaction inserting data
+// through node B in a coordinated manner such that the insert is executed
+// after the create is complete, the insert will normally add data into
+// the new table as long as it also uses a timestamp greater than the
+// timestamp of the new descriptor creation transaction. If for some
+// reason node B picks a timestamp from the past for the INSERT
+// (before the DROP+CREATE transaction), the INSERT will write to the
+// old table.
+func (s *Session) maybeDeleteDescriptorName(
+	ctx context.Context, txn *client.Txn, key roachpb.Key, id sqlbase.ID,
+) (bool, error) {
+	// CHECK if the existing descriptor has been dropped in the
+	// current transaction.
+	for _, sc := range s.TxnState.schemaChangers.schemaChangers {
+		if sc.sc.tableID == id {
+			// the transaction touched upon the descriptor being created.
+			tableDesc, err := sqlbase.GetTableDescFromID(ctx, txn, id)
+			if err != nil {
+				return false, err
+			}
+			if tableDesc.Dropped() {
+				// Use CPut because we want to remove a specific name -> id map.
+				if s.Tracing.KVTracingEnabled() {
+					log.VEventf(ctx, 2, "CPut %s -> nil", key)
+				}
+				err := txn.CPut(ctx, key, nil, id)
+				return true, err
+			}
+			break
+		}
+	}
+	return false, nil
+}
+
 // SessionTracing holds the state used by SET TRACING {ON,OFF,LOCAL} statements in
 // the context of one SQL session.
 // It holds the current trace being collected (or the last trace collected, if

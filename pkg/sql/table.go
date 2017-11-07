@@ -503,7 +503,9 @@ func (tc *TableCollection) getUncommittedDatabaseID(tn *parser.TableName) (sqlba
 func (tc *TableCollection) getUncommittedTable(
 	dbID sqlbase.ID, tn *parser.TableName,
 ) (*sqlbase.TableDescriptor, error) {
-	for _, table := range tc.uncommittedTables {
+	// Walk latest to earliest.
+	for i := len(tc.uncommittedTables) - 1; i >= 0; i-- {
+		table := tc.uncommittedTables[i]
 		if table.Name == string(tn.TableName) &&
 			table.ParentID == dbID {
 			if err := filterTableState(table); err != nil {

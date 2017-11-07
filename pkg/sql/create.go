@@ -528,9 +528,15 @@ func (n *createViewNode) Start(params runParams) error {
 	viewName := n.n.Name.TableName().Table()
 	tKey := tableKey{parentID: n.dbDesc.ID, name: viewName}
 	key := tKey.Key()
-	if exists, err := descExists(params.ctx, n.p.txn, key); err == nil && exists {
-		// TODO(a-robinson): Support CREATE OR REPLACE commands.
-		return sqlbase.NewRelationAlreadyExistsError(tKey.Name())
+	if id, err := getDescID(params.ctx, n.p.txn, key); err == nil && id != sqlbase.InvalidID {
+		found, err := params.p.session.maybeDeleteDescriptorName(params.ctx, n.p.txn, key, id)
+		if err != nil {
+			return err
+		}
+		if !found {
+			// TODO(a-robinson): Support CREATE OR REPLACE commands.
+			return sqlbase.NewRelationAlreadyExistsError(tKey.Name())
+		}
 	} else if err != nil {
 		return err
 	}
@@ -710,13 +716,21 @@ func HoistConstraints(n *parser.CreateTable) {
 }
 
 func (n *createTableNode) Start(params runParams) error {
+	ctx := params.ctx
+	txn := params.p.txn
 	tKey := tableKey{parentID: n.dbDesc.ID, name: n.n.Table.TableName().Table()}
 	key := tKey.Key()
-	if exists, err := descExists(params.ctx, params.p.txn, key); err == nil && exists {
-		if n.n.IfNotExists {
-			return nil
+	if id, err := getDescID(ctx, txn, key); err == nil && id != sqlbase.InvalidID {
+		found, err := params.p.session.maybeDeleteDescriptorName(ctx, txn, key, id)
+		if err != nil {
+			return err
 		}
-		return sqlbase.NewRelationAlreadyExistsError(tKey.Name())
+		if !found {
+			if n.n.IfNotExists {
+				return nil
+			}
+			return sqlbase.NewRelationAlreadyExistsError(tKey.Name())
+		}
 	} else if err != nil {
 		return err
 	}

@@ -83,7 +83,7 @@ func (p *planner) createDescriptor(
 ) (bool, error) {
 	idKey := plainKey.Key()
 
-	if exists, err := descExists(ctx, p.txn, idKey); err == nil && exists {
+	if id, err := getDescID(ctx, p.txn, idKey); err == nil && id != sqlbase.InvalidID {
 		if ifNotExists {
 			// Noop.
 			return false, nil
@@ -109,13 +109,13 @@ func (p *planner) createDescriptor(
 	return true, p.createDescriptorWithID(ctx, idKey, id, descriptor)
 }
 
-func descExists(ctx context.Context, txn *client.Txn, idKey roachpb.Key) (bool, error) {
+func getDescID(ctx context.Context, txn *client.Txn, idKey roachpb.Key) (sqlbase.ID, error) {
 	// Check whether idKey exists.
 	gr, err := txn.Get(ctx, idKey)
-	if err != nil {
-		return false, err
+	if err != nil || !gr.Exists() {
+		return sqlbase.InvalidID, err
 	}
-	return gr.Exists(), nil
+	return sqlbase.ID(gr.ValueInt()), nil
 }
 
 func (p *planner) createDescriptorWithID(

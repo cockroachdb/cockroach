@@ -749,7 +749,7 @@ func TestCommandsWhileTableBeingDropped(t *testing.T) {
 
 	params, _ := createTestServerParams()
 	// Block schema changers so that the table we're about to DROP is not
-	// actually dropped; it will be left in the "deleted" state.
+	// actually dropped; it will be left in the "dropped" state.
 	params.Knobs = base.TestingKnobs{
 		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
 			SyncFilter: func(tscc sql.TestingSchemaChangerCollection) {
@@ -774,8 +774,7 @@ CREATE TABLE test.t(a INT PRIMARY KEY);
 		t.Fatal(err)
 	}
 
-	// Check that SHOW TABLES marks a dropped table with the " (dropped)"
-	// suffix.
+	// Check that SHOW TABLES is unable to see the table.
 	rows, err := db.Query(`SHOW TABLES FROM test`)
 	if err != nil {
 		t.Fatal(err)
@@ -792,6 +791,83 @@ CREATE TABLE test.t(a INT PRIMARY KEY);
 
 	// Check that DROP TABLE with the same name returns a proper error.
 	if _, err := db.Exec(`DROP TABLE test.t`); !testutils.IsError(err, `table "t" is being dropped`) {
+		t.Fatal(err)
+	}
+}
+
+// Test INSERT after a CREATE following a DROP in the same transaction.
+// This test recreates an INSERT running on a different node than the
+// one running the DROP-CREATE transaction, with the INSERT running
+// after the DROP-CREATE but before the schema change execution for
+// the DROP-CREATE. The INSERT can write data into the table that was
+// dropped. We also test that an INSERT using a timestamp before the
+// DROP-CREATE transaction will write to the old table.
+func TestInsertWhileTableBeingDropCreated(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	gossipSem := make(chan struct{}, 1)
+	params, _ := createTestServerParams()
+	// Block schema changers so that the table we're about to DROP is not
+	// actually dropped; it will be left in the "dropped" state.
+	params.Knobs = base.TestingKnobs{
+		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
+			SyncFilter: func(tscc sql.TestingSchemaChangerCollection) {
+				tscc.ClearSchemaChangers()
+			},
+			AsyncExecNotification: asyncSchemaChangerDisabled,
+		},
+		// We're going to block gossip so it doesn't clear up the leases
+		SQLLeaseManager: &sql.LeaseManagerTestingKnobs{
+			GossipUpdateEvent: func(cfg config.SystemConfig) {
+				gossipSem <- struct{}{}
+				<-gossipSem
+			},
+		},
+	}
+	s, db, _ := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(context.TODO())
+
+	// Block gossip.
+	gossipSem <- struct{}{}
+	defer func() {
+		// Unblock gossip.
+		<-gossipSem
+	}()
+
+	if _, err := db.Exec(`
+CREATE DATABASE test;
+CREATE TABLE test.t(a INT PRIMARY KEY);
+		`); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := db.Exec(`INSERT INTO test.t VALUES (1), (2), (3)`); err != nil {
+		t.Fatal(err)
+	}
+
+	// Pick a timestamp before the execution of the DROP-CREATE transaction.
+	tx, err := db.Begin()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// DROP and then CREATE the table.
+	if _, err := db.Exec(`BEGIN; DROP TABLE test.t; CREATE TABLE test.t(a INT PRIMARY KEY); COMMIT`); err != nil {
+		t.Fatal(err)
+	}
+
+	// INSERT tries to inserts an entry into the old table.
+	if _, err := db.Exec(`INSERT INTO test.t VALUES (1), (2), (3)`); !testutils.IsError(
+		err, `duplicate key value \(a\)=\(1\) violates unique constraint "primary"`) {
+		t.Fatal(err)
+	}
+
+	if _, err := tx.Exec(`INSERT INTO test.t VALUES (1), (2), (3)`); !testutils.IsError(
+		err, `duplicate key value \(a\)=\(1\) violates unique constraint "primary"`) {
+		t.Fatal(err)
+	}
+
+	if err := tx.Rollback(); err != nil {
 		t.Fatal(err)
 	}
 }
