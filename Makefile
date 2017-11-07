@@ -22,12 +22,18 @@
 # `help` target. They look a bit awkward in the variable declarations below
 # since any whitespace added would become part of the variable's default value.
 
+# The following stanza prevents invoking make with a specific test name without
+# a constraining package.
+ifeq ($(findstring lint,$(MAKECMDGOALS)),)
 ifeq ($(PKG),)
 ifneq ($(TESTS),)
+ifneq ($(TESTS),-)
 $(error TESTS must be specified with PKG (e.g. PKG=./pkg/sql/))
+endif
 endif
 ifneq ($(BENCHES),)
 $(error BENCHES must be specified with PKG (e.g. PKG=./pkg/sql/))
+endif
 endif
 endif
 
