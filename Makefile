@@ -24,7 +24,9 @@
 
 ifeq ($(PKG),)
 ifneq ($(TESTS),)
+ifneq ($(TESTS),-)
 $(error TESTS must be specified with PKG (e.g. PKG=./pkg/sql/))
+endif
 endif
 ifneq ($(BENCHES),)
 $(error BENCHES must be specified with PKG (e.g. PKG=./pkg/sql/))
