@@ -43,6 +43,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
+	"github.com/cockroachdb/cockroach/pkg/storage/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/stateloader"
@@ -645,20 +646,10 @@ type StoreConfig struct {
 // particular point is reached) or to change the behavior by returning
 // an error (which aborts all further processing for the command).
 type StoreTestingKnobs struct {
+	EvalKnobs batcheval.TestingKnobs
+
 	// TestingProposalFilter is called before proposing each command.
 	TestingProposalFilter storagebase.ReplicaProposalFilter
-
-	// TestingEvalFilter is called before evaluating each command. The
-	// number of times this callback is run depends on the propEvalKV
-	// setting, and it is therefore deprecated in favor of either
-	// TestingProposalFilter (which runs only on the lease holder) or
-	// TestingApplyFilter (which runs on each replica). If your filter is
-	// not idempotent, consider wrapping it in a
-	// ReplayProtectionFilterWrapper.
-	// TODO(bdarnell,tschottdorf): Migrate existing tests which use this
-	// to one of the other filters. See #10493
-	// TODO(andrei): Provide guidance on what to use instead for trapping reads.
-	TestingEvalFilter storagebase.ReplicaCommandFilter
 
 	// TestingApplyFilter is called before applying the results of a
 	// command on each replica. If it returns an error, the command will
@@ -755,9 +746,6 @@ type StoreTestingKnobs struct {
 	// process ranges that need to be split, for use in tests that use
 	// the replication queue but disable the split queue.
 	ReplicateQueueAcceptsUnsplit bool
-	// NumKeysEvaluatedForRangeIntentResolution is set by the stores to the
-	// number of keys evaluated for range intent resolution.
-	NumKeysEvaluatedForRangeIntentResolution *int64
 	// SkipMinSizeCheck, if set, makes the store creation process skip the check
 	// for a minimum size.
 	SkipMinSizeCheck bool

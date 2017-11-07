@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -1271,7 +1272,9 @@ func TestReacquireLeaseOnRestart(t *testing.T) {
 	var clockUpdate int32
 	testKey := []byte("test_key")
 	testingKnobs := &storage.StoreTestingKnobs{
-		TestingEvalFilter:     cmdFilters.runFilters,
+		EvalKnobs: batcheval.TestingKnobs{
+			TestingEvalFilter: cmdFilters.runFilters,
+		},
 		DisableMaxOffsetCheck: true,
 		ClockBeforeSend: func(c *hlc.Clock, ba roachpb.BatchRequest) {
 			if atomic.LoadInt32(&clockUpdate) > 0 {
@@ -1356,7 +1359,9 @@ func TestFlushUncommitedDescriptorCacheOnRestart(t *testing.T) {
 	cmdFilters.AppendFilter(checkEndTransactionTrigger, true)
 	testKey := []byte("test_key")
 	testingKnobs := &storage.StoreTestingKnobs{
-		TestingEvalFilter: cmdFilters.runFilters,
+		EvalKnobs: batcheval.TestingKnobs{
+			TestingEvalFilter: cmdFilters.runFilters,
+		},
 	}
 
 	params, _ := createTestServerParams()
@@ -1464,21 +1469,23 @@ func TestDistSQLRetryableError(t *testing.T) {
 				UseDatabase: "test",
 				Knobs: base.TestingKnobs{
 					Store: &storage.StoreTestingKnobs{
-						TestingEvalFilter: func(fArgs storagebase.FilterArgs) *roachpb.Error {
-							_, ok := fArgs.Req.(*roachpb.ScanRequest)
-							if ok && fArgs.Req.Header().Key.Equal(targetKey) && fArgs.Hdr.Txn.Epoch == 0 {
-								restarted = true
-								err := roachpb.NewReadWithinUncertaintyIntervalError(
-									fArgs.Hdr.Timestamp, /* readTS */
-									hlc.Timestamp{})
-								errTxn := fArgs.Hdr.Txn.Clone()
-								errTxn.UpdateObservedTimestamp(roachpb.NodeID(2), hlc.Timestamp{})
-								pErr := roachpb.NewErrorWithTxn(err, &errTxn)
-								pErr.OriginNode = 2
-								return pErr
-							}
+						EvalKnobs: batcheval.TestingKnobs{
+							TestingEvalFilter: func(fArgs storagebase.FilterArgs) *roachpb.Error {
+								_, ok := fArgs.Req.(*roachpb.ScanRequest)
+								if ok && fArgs.Req.Header().Key.Equal(targetKey) && fArgs.Hdr.Txn.Epoch == 0 {
+									restarted = true
+									err := roachpb.NewReadWithinUncertaintyIntervalError(
+										fArgs.Hdr.Timestamp, /* readTS */
+										hlc.Timestamp{})
+									errTxn := fArgs.Hdr.Txn.Clone()
+									errTxn.UpdateObservedTimestamp(roachpb.NodeID(2), hlc.Timestamp{})
+									pErr := roachpb.NewErrorWithTxn(err, &errTxn)
+									pErr.OriginNode = 2
+									return pErr
+								}
 
-							return nil
+								return nil
+							},
 						},
 					},
 				},

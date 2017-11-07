@@ -43,6 +43,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/abortspan"
+	"github.com/cockroachdb/cockroach/pkg/storage/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/stateloader"
@@ -460,7 +461,7 @@ type Replica struct {
 	}
 }
 
-var _ ReplicaEvalContext = &Replica{}
+var _ batcheval.EvalContext = &Replica{}
 
 // KeyRange is an interface type for the replicasByKey BTree, to compare
 // Replica and ReplicaPlaceholder.
@@ -2809,7 +2810,7 @@ func (r *Replica) requestToProposal(
 		WriteBatch:           result.WriteBatch,
 	}
 
-	if r.store.TestingKnobs().TestingEvalFilter != nil {
+	if r.store.TestingKnobs().EvalKnobs.TestingEvalFilter != nil {
 		// For backwards compatibility, tests that use TestingEvalFilter
 		// need the original request to be preserved. See #10493
 		proposal.command.TestingBatchRequest = &ba
@@ -4923,7 +4924,7 @@ func (r *Replica) evaluateProposalInner(
 // transaction. In case the transaction has been aborted, return a
 // transaction abort error.
 func checkIfTxnAborted(
-	ctx context.Context, rec ReplicaEvalContext, b engine.Reader, txn roachpb.Transaction,
+	ctx context.Context, rec batcheval.EvalContext, b engine.Reader, txn roachpb.Transaction,
 ) *roachpb.Error {
 	var entry roachpb.AbortSpanEntry
 	aborted, err := rec.AbortSpan().Get(ctx, b, txn.ID, &entry)
@@ -5177,7 +5178,7 @@ func evaluateBatch(
 	ctx context.Context,
 	idKey storagebase.CmdIDKey,
 	batch engine.ReadWriter,
-	rec ReplicaEvalContext,
+	rec batcheval.EvalContext,
 	ms *enginepb.MVCCStats,
 	ba roachpb.BatchRequest,
 ) (*roachpb.BatchResponse, EvalResult, *roachpb.Error) {

@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/storageutils"
@@ -187,7 +188,9 @@ func createTestServerParams() (base.TestServerArgs, *CommandFilters) {
 	cmdFilters.AppendFilter(checkEndTransactionTrigger, true)
 	params := base.TestServerArgs{}
 	params.Knobs.Store = &storage.StoreTestingKnobs{
-		TestingEvalFilter: cmdFilters.runFilters,
+		EvalKnobs: batcheval.TestingKnobs{
+			TestingEvalFilter: cmdFilters.runFilters,
+		},
 	}
 	return params, &cmdFilters
 }

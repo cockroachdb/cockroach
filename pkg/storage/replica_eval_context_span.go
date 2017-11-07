@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/abortspan"
+	"github.com/cockroachdb/cockroach/pkg/storage/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/txnwait"
@@ -33,20 +34,20 @@ import (
 // ReplicaEvalContext which verifies that access to state is registered in the
 // SpanSet if one is given.
 type SpanSetReplicaEvalContext struct {
-	i  ReplicaEvalContext
+	i  batcheval.EvalContext
 	ss SpanSet
 }
 
-var _ ReplicaEvalContext = &SpanSetReplicaEvalContext{}
+var _ batcheval.EvalContext = &SpanSetReplicaEvalContext{}
 
 // AbortSpan returns the abort span.
 func (rec *SpanSetReplicaEvalContext) AbortSpan() *abortspan.AbortSpan {
 	return rec.i.AbortSpan()
 }
 
-// StoreTestingKnobs returns the StoreTestingKnobs.
-func (rec *SpanSetReplicaEvalContext) StoreTestingKnobs() StoreTestingKnobs {
-	return rec.i.StoreTestingKnobs()
+// EvalKnobs returns the batch evaluation Knobs.
+func (rec *SpanSetReplicaEvalContext) EvalKnobs() batcheval.TestingKnobs {
+	return rec.i.EvalKnobs()
 }
 
 // StoreID returns the StoreID.
