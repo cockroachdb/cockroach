@@ -31,6 +31,11 @@ deb https://download.docker.com/linux/ubuntu xenial stable
 EOF
 apt-add-repository ppa:webupd8team/java
 add-apt-repository ppa:gophers/archive
+# Git 2.7, which ships with Xenial, has a bug where submodule metadata sometimes
+# uses absolute paths instead of relative paths, which means the affected
+# submodules cannot be mounted in Docker containers. Use the latest version of
+# Git until we upgrade to a newer Ubuntu distribution.
+add-apt-repository ppa:git-core/ppa
 apt-get update --yes
 
 # Auto-accept the Oracle Java license agreement.
@@ -39,6 +44,7 @@ debconf-set-selections <<< "oracle-java8-installer shared/accepted-oracle-licens
 # Install the necessary dependencies. Keep this list small!
 apt-get install --yes \
   docker-ce \
+  git \
   golang-1.9 \
   oracle-java8-installer \
   unzip
