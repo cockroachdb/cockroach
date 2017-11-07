@@ -112,10 +112,7 @@ func evalExport(
 	// threshold. If it's not, the mvcc tombstones could have been deleted and
 	// the resulting RocksDB tombstones compacted, which means we'd miss
 	// deletions in the incremental backup.
-	gcThreshold, err := cArgs.EvalCtx.GetGCThreshold()
-	if err != nil {
-		return storage.EvalResult{}, err
-	}
+	gcThreshold := cArgs.EvalCtx.GetGCThreshold()
 	if args.StartTime != (hlc.Timestamp{}) {
 		if !gcThreshold.Less(args.StartTime) {
 			return storage.EvalResult{}, errors.Errorf("start timestamp %v must be after replica GC threshold %v", args.StartTime, gcThreshold)
