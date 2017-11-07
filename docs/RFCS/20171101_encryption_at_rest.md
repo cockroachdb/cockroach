@@ -5,6 +5,8 @@
 - RFC PR: [#19785](https://github.com/cockroachdb/cockroach/pull/19785)
 - Cockroach Issue: [#19783](https://github.com/cockroachdb/cockroach/issues/19783)
 
+
+
 Table of Contents
 =================
 
@@ -27,9 +29,10 @@ Table of Contents
          * [Enabling the preamble format](#enabling-the-preamble-format)
          * [Key levels](#key-levels)
          * [Key status](#key-status)
-         * [Key file format](#key-file-format)
+         * [Store keys file format](#store-keys-file-format)
          * [Loading store keys](#loading-store-keys)
          * [Rotating store keys](#rotating-store-keys)
+         * [Data keys file format](#data-keys-file-format)
          * [Loading data keys](#loading-data-keys)
          * [Generating data keys](#generating-data-keys)
          * [Rotating data keys](#rotating-data-keys)
@@ -40,10 +43,13 @@ Table of Contents
       * [Drawbacks](#drawbacks)
       * [Rationale and Alternatives](#rationale-and-alternatives)
       * [Unresolved questions](#unresolved-questions)
+         * [Nail down store keys file format](#nail-down-store-keys-file-format)
+         * [Non-live rocksdb files](#non-live-rocksdb-files)
+         * [Encryption flags](#encryption-flags)
+         * [Instruction set support](#instruction-set-support)
       * [Future improvements](#future-improvements)
          * [v1.0: a.k.a. MVP](#v10-aka-mvp)
          * [Possible future additions](#possible-future-additions)
-
 
 # Summary
 
@@ -201,6 +207,9 @@ time to enable the preamble file format. Specifying this on a node with existing
 This enables encryption. Keys contained inside dictate the type of encryption to use, including `PLAIN`
 to migrate data back to plaintext. `<store path>` specifies which store uses these keys. The flag can be specified multiple times (once for each store).
 * `--enterprise-encryption-rotation-period=store=<store path>,keys=<key path>`: default: `168h` (one week). How often a new data key should be generated and used. This is per-store flag and can be specified more than once.
+
+The two encryption flags can specify different encryption states for different stores (eg: one encrypted one plain,
+different rotation periods).
 
 The first step in allowing at-rest encryption is using the preamble data format.
 This must be done at node-creation time with the `--rocksdb-preamble-format` flag.
@@ -471,9 +480,14 @@ We have three distinct status for keys:
 * in-use: key is still needed to read some data but is not being used for new data
 * inactive: there is no remaining data encrypted with this key
 
-### Key file format
+### Store keys file format
 
-The file format is the same for store keys and unencrypted data keys.
+Store keys are specified in a single file. See [Nail down store key file format](#nail-down-store-keys-file-format) for alternatives.
+
+The file format proposed here has the following properties:
+* easy to work with without special tools
+* easy to parse/generate at the C++ level
+* contains all needed information
 
 The file may be empty, contain a single key, or contain multiple keys.
 ```
@@ -512,12 +526,46 @@ The store keys file is read at startup (or other mechanisms, see [Reloading stor
 Upon opening and decrypting the data keys file if the key ID used is not the active store key, we
 write a new data keys file encrypted with the active store key.
 
+### Data keys file format
+
+The data keys file is an encoded protocol buffer:
+
+```
+message DataKeysRegistry {
+	// Ordering does not matter.
+  repeated DataKey data_keys = 1;
+}
+
+// EncryptionType is shared with the Preamble EncryptionType.
+enum EncryptionType {
+  // No encryption applied.
+  Plaintext = 0;
+  // AES in counter mode.
+  AES_CTR = 1;
+}
+
+message DataKey {
+  // The ID of this key.
+  optional uint64 key_id = 1;
+  // EncryptionType is the type of encryption (aka: cipher) used with this key.
+  EncryptionType encryption_type = 2;
+  // Creation time is the time at which the key was created (in seconds since epoch).
+  optional int43 creation_time = 3;
+  // Key is the raw key.
+  optional bytes key = 4;
+  // Was exposed is true if we ever wrote the data keys file in plaintext.
+  optional bool was_exposed = 5;
+  // ID of the active store key at creation time.
+  optional uint64 creator_store_key_id = 6;
+}
+```
+
 ### Loading data keys
 
 Data keys are stored in `<data dir>/DATA_KEYS-<sequence>` where `sequence` is a monotonically increasing number.
 Upon startup, we look for the highest sequence file.
 
-The file contains the preamble indicating how to decode it using store keys.
+The file is encrypted using the currently-active store key. It has a preamble containing the encryption context.
 
 ### Generating data keys
 
@@ -525,14 +573,17 @@ To generate a new data key, we look up the following:
 * current maximum key ID
 * current timestamp
 * desired cipher (eg: `AES128-CTR`)
+* current store key ID
 
 If the cipher is other than `PLAIN`, we generate a key of the desired length using the pseudorandom `CryptoPP::OS_GenerateRandomBlock(blocking=false`) (see [Random number generator](#random-number-generator) for alternatives).
 
 We then generate the following new key entry:
-* **ID**: current max key ID + 1
-* **timestamp**: current time
-* **cipher**: as specified
+* **key_id**: current max key ID + 1
+* **creation_time**: current time
+* **encryption_type**: as specified
 * **key**: hexadecimal representation of the created random bytes
+* **create_store_key_id**: the ID of the active store key
+* **was_exposed**: true if the current store encryption type is `PLAIN`
 
 ### Rotating data keys
 
@@ -543,11 +594,14 @@ Rotation is the act of using a new key as the active encryption key. This can be
 * rotation is needed (time based or other)
 
 When a new key has been generated (see above), we build a temporary list of data keys (using the existing
-data keys and the new key). We write the file with encryption to `DATA_KEYS-<sequence>` where `sequence` is a
+data keys and the new key).
+If the current store key encryption type is `PLAIN`, set `was_exposed = true` for all data keys.
+
+We write the file with encryption to `DATA_KEYS-<sequence>` where `sequence` is a
 monotonically increasing number. Upon successful write, we trigger a data key file reload.
 
-The actual process of creating the new file should match the rocksdb method. We need to guarantee that the latest
-file is correct.
+The actual process of creating the new file should match the rocksdb method (write to temporary file and rename).
+We need to guarantee that the latest file is correct.
 
 Key generation is done inline at startup (we may as well wait for the new key before proceeding), but in the
 background for automated changes while the system is already running.
@@ -588,21 +642,22 @@ using a new key/cipher.
 
 Any other uses of rocksdb to store raw or processed data will use the same encryption setting as the node.
 
-This applies to:
-* backup and restore
-* temporary disk storage for query processing
+This applies to the restore phase of backup/restore and temporary disk storage for query processing.
+
+We identify three separate cases:
+1. written through a temporary instance of rocksdb, no file-level interaction with a store rocksdb:
+if encryption is enabled on any of the stores of the node, we enable it on the temporary rocksdb instance.
+Data keys are generated and kept in-memory. This data will not survive node restarts.
+1. written through a custom instance of rocksdb but passed to a store rocksdb (eg: `IngestExternalFile`):
+We must change the code to use the store's instance of rocksdb so that we may encrypt/decrypt the file
+with keys that will survive restarts.
+1. written through a store's instance of rocksdb: use as usual.
 
 Preamble data format support should not be a problem as both cases involve temporary data: we can delete all
 existing data and re-create the rocksdb instance with preamble support.
 
-In the case of multiple stores with different encryption settings, we must pick one.
-We propose using the keys from the first encrypted store we find.
-
 Documentation must mention the same restriction about key and data colocation: the store keys should not be on the
-same disk as the temporary date.
-
-In cases where the data does not need to be persisted across restarts, we can generate data keys in memory,
-removing the restriction on tmp directory location and avoiding key reuse.
+same disk as the temporary data.
 
 ### Enterprise enforcement
 
@@ -745,13 +800,6 @@ This would simplify the logic and reporting (and user understanding). This would
 and potentially make integration with third-party services more difficult. User-provided keys would have to be
 available until no data uses them.
 
-### Specifying keys
-
-Since we only need two store keys, we could specify them as individual files rather than encoded within
-a file.
-
-The advantage of the store key file as described is the ability to specify a creation timestamp and cipher mode.
-
 ### Relationship between store and data keys
 
 The current proposal uses the same cipher and key size for store and data keys.
@@ -767,6 +815,15 @@ Cons:
 
 Before this RFC can be marked as approved, we have a few open questions (in no particular order):
 
+### Nail down store keys file format
+
+The format for the store keys described in here is rather arbitrary.
+We should study alternate ways of specifying the store keys.
+
+More research is needed into existing solutions, but some options include:
+* two flags: one each for the old and new key.
+* json file format
+
 ### Non-live rocksdb files
 
 Some files (eg: backups) generated by rocksdb are not included in the "Live files" or "WAL files".
@@ -777,42 +834,11 @@ While we do not currently make use of backups, we have in the past and may again
 
 **We currently propose to ignore files not reported as live by rocksdb**
 
-### Per-store flags
+### Encryption flags
 
 We introduce two new flags with per-store settings. Other options include:
 * single `--enterprise-encryption=store=<store path>,keys=<keys path>[,period=<rotation period>]`
 * new fields in the `--store` flag
-
-### Heterogeneous stores on the same node
-
-It allows encryption on a single store.
-* **pros**: more flexibility: can have one encrypted store, one plain, or different ciphers
-* **cons**: flags are tedious: we need to specify per-store keys and rotation periods
-
-### Choice of keys for other rocksdb instances
-
-In a multi-store scenario, other rocksdb instances (eg: backup/restore, temporary space) need to determine
-whether to use encryption, and which keys to use.
-
-We can default to:
-* use encryption if any of the stores on this node uses encryption
-* use the first set of keys we come across (probably my store ID)
-
-### Marking data keys as "exposed" if key list was plaintext at any point
-
-Consider the following scenario:
-1. Encryption enabled: data key 1 is in use. Data key list is encrypted.
-1. Encryption disabled: new data is plaintext, but key 1 is still in use. Data key list is plaintext.
-1. Encryption enabled: new data is encrypted with key 2, some plaintext data remains, some data encrypted with key 1 remains. Data key list is encrypted.
-
-At this point, encryption usage accounting will report the data encrypted by key 1 as "encrypted".
-However, during the transition through plaintext, key 1 was readable (data key list was plaintext), meaning the
-remaining data encrypted with key 1 should be reported as "not encrypted".
-
-A possible solution would be to mark key 1 as "exposed" in the data keys file and take that into consideration when
-reporting encryption status. This status must be set on all keys present in the data key list when it is in plaintext.
-
-Note: "exposed" may be a scary word. We would have to find the appropriate wording for this.
 
 ### Instruction set support
 
