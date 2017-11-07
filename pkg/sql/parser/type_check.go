@@ -1097,9 +1097,9 @@ func subOpCompError(leftType, rightType types.T, subOp, op ComparisonOperator) *
 
 // typeCheckSubqueryWithIn checks the case where the right side of an IN
 // expression is a subquery.
-func typeCheckSubqueryWithIn(left, right Type) error {
-	if rTuple, ok := right.(TTuple); ok {
-		if lTuple, ok := left.(TTuple); ok {
+func typeCheckSubqueryWithIn(left, right types.T) error {
+	if rTuple, ok := right.(types.TTuple); ok {
+		if lTuple, ok := left.(types.TTuple); ok {
 			if len(lTuple) != len(rTuple) {
 				return pgerror.NewErrorf(pgerror.CodeInvalidParameterValueError, unsupportedCompErrFmt, fmt.Sprintf(compSignatureFmt, left, In, right))
 			}
