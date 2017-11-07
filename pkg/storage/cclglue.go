@@ -18,6 +18,7 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/pkg/errors"
 )
@@ -27,7 +28,7 @@ import (
 
 func makeUnimplementedCommand(method roachpb.Method) Command {
 	return Command{
-		DeclareKeys: DefaultDeclareKeys,
+		DeclareKeys: batcheval.DefaultDeclareKeys,
 		Eval: func(
 			_ context.Context, _ engine.ReadWriter, _ CommandArgs, _ roachpb.Response,
 		) (EvalResult, error) {
