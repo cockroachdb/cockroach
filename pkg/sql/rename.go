@@ -223,10 +223,8 @@ func (p *planner) RenameTable(ctx context.Context, n *parser.RenameTable) (planN
 	// has made sure it's not in use any more.
 	b := &client.Batch{}
 	if p.session.Tracing.KVTracingEnabled() {
-		log.VEventf(ctx, 2, "Put %s -> %s", descKey, descDesc)
 		log.VEventf(ctx, 2, "CPut %s -> %d", newTbKey, descID)
 	}
-	b.Put(descKey, descDesc)
 	b.CPut(newTbKey, descID, nil)
 
 	if err := p.txn.Run(ctx, b); err != nil {
