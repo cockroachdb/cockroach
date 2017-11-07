@@ -369,3 +369,19 @@ PREPARE outerStmt AS SELECT * FROM [EXECUTE innerStmt(3)] WHERE t = $1
 
 query error can't have more than 1 EXECUTE per statement
 SELECT * FROM [EXECUTE innerStmt(1)] CROSS JOIN [EXECUTE x]
+
+statement ok
+PREPARE selectin AS SELECT 1 in ($1, $2)
+
+statement ok
+PREPARE selectin2 AS SELECT $1::int in ($2, $3)
+
+query B
+EXECUTE selectin(5, 1)
+----
+true
+
+query B
+EXECUTE selectin2(1, 5, 1)
+----
+true

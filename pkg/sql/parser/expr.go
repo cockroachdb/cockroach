@@ -624,8 +624,6 @@ func (node DefaultVal) Format(buf *bytes.Buffer, f FmtFlags) {
 // ResolvedType implements the TypedExpr interface.
 func (DefaultVal) ResolvedType() Type { return nil }
 
-var _ VariableExpr = &Placeholder{}
-
 // Placeholder represents a named placeholder.
 type Placeholder struct {
 	Name string
@@ -638,11 +636,12 @@ func NewPlaceholder(name string) *Placeholder {
 	return &Placeholder{Name: name}
 }
 
-// Variable implements the VariableExpr interface.
-func (*Placeholder) Variable() {}
-
 // Format implements the NodeFormatter interface.
 func (node *Placeholder) Format(buf *bytes.Buffer, f FmtFlags) {
+	if f.placeholderFormat != nil {
+		f.placeholderFormat(buf, f, node)
+		return
+	}
 	buf.WriteByte('$')
 	buf.WriteString(node.Name)
 }

@@ -274,7 +274,7 @@ func (d *DBool) Compare(ctx *EvalContext, other Datum) int {
 		// NULL is less than any non-NULL value.
 		return 1
 	}
-	v, ok := other.(*DBool)
+	v, ok := UnwrapDatum(ctx, other).(*DBool)
 	if !ok {
 		panic(makeUnsupportedComparisonMessage(d, other))
 	}
@@ -384,7 +384,7 @@ func (d *DInt) Compare(ctx *EvalContext, other Datum) int {
 		return 1
 	}
 	var v DInt
-	switch t := UnwrapDatum(other).(type) {
+	switch t := UnwrapDatum(ctx, other).(type) {
 	case *DInt:
 		v = *t
 	case *DFloat, *DDecimal:
@@ -487,7 +487,7 @@ func (d *DFloat) Compare(ctx *EvalContext, other Datum) int {
 		return 1
 	}
 	var v DFloat
-	switch t := UnwrapDatum(other).(type) {
+	switch t := UnwrapDatum(ctx, other).(type) {
 	case *DFloat:
 		v = *t
 	case *DInt:
@@ -640,7 +640,7 @@ func (d *DDecimal) Compare(ctx *EvalContext, other Datum) int {
 		return 1
 	}
 	v := ctx.getTmpDec()
-	switch t := UnwrapDatum(other).(type) {
+	switch t := UnwrapDatum(ctx, other).(type) {
 	case *DDecimal:
 		v = &t.Decimal
 	case *DInt:
@@ -780,14 +780,14 @@ func (d *DString) Compare(ctx *EvalContext, other Datum) int {
 		// NULL is less than any non-NULL value.
 		return 1
 	}
-	v, ok := AsDString(other)
+	v, ok := UnwrapDatum(ctx, other).(*DString)
 	if !ok {
 		panic(makeUnsupportedComparisonMessage(d, other))
 	}
-	if *d < v {
+	if *d < *v {
 		return -1
 	}
-	if *d > v {
+	if *d > *v {
 		return 1
 	}
 	return 0
@@ -918,7 +918,7 @@ func (d *DCollatedString) Compare(ctx *EvalContext, other Datum) int {
 		// NULL is less than any non-NULL value.
 		return 1
 	}
-	v, ok := other.(*DCollatedString)
+	v, ok := UnwrapDatum(ctx, other).(*DCollatedString)
 	if !ok || d.Locale != v.Locale {
 		panic(makeUnsupportedComparisonMessage(d, other))
 	}
@@ -986,7 +986,7 @@ func (d *DBytes) Compare(ctx *EvalContext, other Datum) int {
 		// NULL is less than any non-NULL value.
 		return 1
 	}
-	v, ok := other.(*DBytes)
+	v, ok := UnwrapDatum(ctx, other).(*DBytes)
 	if !ok {
 		panic(makeUnsupportedComparisonMessage(d, other))
 	}
@@ -1071,7 +1071,7 @@ func (d *DUuid) Compare(ctx *EvalContext, other Datum) int {
 		// NULL is less than any non-NULL value.
 		return 1
 	}
-	v, ok := other.(*DUuid)
+	v, ok := UnwrapDatum(ctx, other).(*DUuid)
 	if !ok {
 		panic(makeUnsupportedComparisonMessage(d, other))
 	}
@@ -1185,7 +1185,7 @@ func (d *DIPAddr) Compare(ctx *EvalContext, other Datum) int {
 		// NULL is less than any non-NULL value.
 		return 1
 	}
-	v, ok := other.(*DIPAddr)
+	v, ok := UnwrapDatum(ctx, other).(*DIPAddr)
 	if !ok {
 		panic(makeUnsupportedComparisonMessage(d, other))
 	}
@@ -1338,7 +1338,7 @@ func (d *DDate) Compare(ctx *EvalContext, other Datum) int {
 		return 1
 	}
 	var v DDate
-	switch t := other.(type) {
+	switch t := UnwrapDatum(ctx, other).(type) {
 	case *DDate:
 		v = *t
 	case *DTimestamp, *DTimestampTZ:
@@ -1547,6 +1547,7 @@ func (*DTimestamp) ResolvedType() Type {
 }
 
 func timeFromDatum(ctx *EvalContext, d Datum) (time.Time, bool) {
+	d = UnwrapDatum(ctx, d)
 	switch t := d.(type) {
 	case *DDate:
 		return MakeDTimestampTZFromDate(ctx.GetLocation(), t).Time, true
@@ -1867,7 +1868,7 @@ func (d *DInterval) Compare(ctx *EvalContext, other Datum) int {
 		// NULL is less than any non-NULL value.
 		return 1
 	}
-	v, ok := other.(*DInterval)
+	v, ok := UnwrapDatum(ctx, other).(*DInterval)
 	if !ok {
 		panic(makeUnsupportedComparisonMessage(d, other))
 	}
@@ -1980,7 +1981,7 @@ func (d *DJSON) Compare(ctx *EvalContext, other Datum) int {
 		// NULL is less than any non-NULL value.
 		return 1
 	}
-	v, ok := other.(*DJSON)
+	v, ok := UnwrapDatum(ctx, other).(*DJSON)
 	if !ok {
 		panic(makeUnsupportedComparisonMessage(d, other))
 	}
@@ -2084,7 +2085,7 @@ func (d *DTuple) Compare(ctx *EvalContext, other Datum) int {
 		// NULL is less than any non-NULL value.
 		return 1
 	}
-	v, ok := other.(*DTuple)
+	v, ok := UnwrapDatum(ctx, other).(*DTuple)
 	if !ok {
 		panic(makeUnsupportedComparisonMessage(d, other))
 	}
@@ -2414,7 +2415,7 @@ func (d *DArray) Compare(ctx *EvalContext, other Datum) int {
 		// NULL is less than any non-NULL value.
 		return 1
 	}
-	v, ok := AsDArray(other)
+	v, ok := UnwrapDatum(ctx, other).(*DArray)
 	if !ok {
 		panic(makeUnsupportedComparisonMessage(d, other))
 	}
@@ -2645,7 +2646,7 @@ func (d *DOid) Compare(ctx *EvalContext, other Datum) int {
 		// NULL is less than any non-NULL value.
 		return 1
 	}
-	v, ok := other.(*DOid)
+	v, ok := UnwrapDatum(ctx, other).(*DOid)
 	if !ok {
 		panic(makeUnsupportedComparisonMessage(d, other))
 	}
@@ -2757,9 +2758,19 @@ func wrapWithOid(d Datum, oid oid.Oid) Datum {
 // UnwrapDatum returns the base Datum type for a provided datum, stripping
 // an *DOidWrapper if present. This is useful for cases like type switches,
 // where type aliases should be ignored.
-func UnwrapDatum(d Datum) Datum {
+func UnwrapDatum(evalCtx *EvalContext, d Datum) Datum {
 	if w, ok := d.(*DOidWrapper); ok {
 		return w.Wrapped
+	}
+	if p, ok := d.(*Placeholder); ok && evalCtx != nil && evalCtx.HasPlaceholders() {
+		ret, err := p.Eval(evalCtx)
+		if err != nil {
+			// If we fail to evaluate the placeholder, it's because we don't have
+			// a placeholder available. Just return the placeholder and someone else
+			// will handle this problem.
+			return d
+		}
+		return ret
 	}
 	return d
 }
@@ -2829,6 +2840,63 @@ func (d *DOidWrapper) Format(buf *bytes.Buffer, f FmtFlags) {
 // Size implements the Datum interface.
 func (d *DOidWrapper) Size() uintptr {
 	return unsafe.Sizeof(*d) + d.Wrapped.Size()
+}
+
+// AmbiguousFormat implements the Datum interface.
+func (d *Placeholder) AmbiguousFormat() bool {
+	return true
+}
+
+func (d *Placeholder) mustGetValue(ctx *EvalContext) Datum {
+	e, ok := ctx.Placeholders.Value(d.Name)
+	if !ok {
+		panic("fail")
+	}
+	out, err := e.Eval(ctx)
+	if err != nil {
+		panic(fmt.Sprintf("fail %s", err))
+	}
+	return out
+}
+
+// Compare implements the Datum interface.
+func (d *Placeholder) Compare(ctx *EvalContext, other Datum) int {
+	return d.mustGetValue(ctx).Compare(ctx, other)
+}
+
+// Prev implements the Datum interface.
+func (d *Placeholder) Prev(ctx *EvalContext) (Datum, bool) {
+	return d.mustGetValue(ctx).Prev(ctx)
+}
+
+// IsMin implements the Datum interface.
+func (d *Placeholder) IsMin(ctx *EvalContext) bool {
+	return d.mustGetValue(ctx).IsMin(ctx)
+}
+
+// Next implements the Datum interface.
+func (d *Placeholder) Next(ctx *EvalContext) (Datum, bool) {
+	return d.mustGetValue(ctx).Next(ctx)
+}
+
+// IsMax implements the Datum interface.
+func (d *Placeholder) IsMax(ctx *EvalContext) bool {
+	return d.mustGetValue(ctx).IsMax(ctx)
+}
+
+// max implements the Datum interface.
+func (d *Placeholder) max(ctx *EvalContext) (Datum, bool) {
+	return d.mustGetValue(ctx).max(ctx)
+}
+
+// min implements the Datum interface.
+func (d *Placeholder) min(ctx *EvalContext) (Datum, bool) {
+	return d.mustGetValue(ctx).min(ctx)
+}
+
+// Size implements the Datum interface.
+func (d *Placeholder) Size() uintptr {
+	panic("shouldn't get called")
 }
 
 // NewDNameFromDString is a helper routine to create a *DName (implemented as
