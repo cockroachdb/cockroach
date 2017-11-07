@@ -380,32 +380,56 @@ The two lower-level block access streams are:
 
 ### Preamble format
 
-The preamble is a 4KiB block of data containing a number of fields:
+The preamble is a 4KiB block of data containing encryption context about a specific file.
+
+The raw file contains a 4 byte version number, currently set at 1. This allows for changes in the
+preamble format.
+
+For version 1, the raw preamble looks like:
 ```
------------------------------------------------------
-| encryption flag | key ID | IV | counter | padding |
------------------------------------------------------
+---------------------------------------------
+| version flag | encoded protobuf | padding |
+---------------------------------------------
 ```
 
-| Field | Size | Description |
-| --- | --- | --- |
-| encryption flag | 64 bits | uint64 flag. 0: no encryption, 1: AES-CTR encryption |
-| key ID | 64 bits | uint64 key ID |
-| IV | `AES::BlockSize` | initialization vector for CTR mode |
-| counter | `AES::BlockSize` | uint64 counter for CTR mode |
-| padding | remainder | the rest of the preamble. zero-filled |
+The padding is added to make the preamble 4KiB.
 
-The encryption flag acts as a switch to determine the remainder of the contents. For example:
-* `flag = 0`: no encryption: ignore the rest of the preamble, do not encrypt data.
-* `flag = 1`: read the fields described above and perform AES-CTR encryption/decryption.
+The protocol buffer encoded in the preamble contains encryption information:
+```
+message Preamble {
+  optional EncryptionDescriptor encryption = 1;
+}
 
-Possible extensions of the encryption flag include:
+enum EncryptionType {
+  // No encryption applied.
+  Plaintext = 0;
+  // AES in counter mode.
+  AES_CTR = 1;
+}
+
+message EncryptionDescriptor {
+  // The type of encryption applied.
+  EncryptionType type = 1;
+  // ID of the key in use, if any.
+  optional uint64 key_id = 2;
+  // Initialization vector, of size `AES::BlockSize` for AES.
+  optional bytes initialization_vector = 3;
+  // Counter, of size `AES::BlockSize` for AES.
+	optional bytes counter = 4;
+}
+```
+
+Other possible contents of the preamble:
+* it may make sense to move the encryption fields to a specific `AES_CTR` message.
+* we can include the key size. Not required but useful for better usage/error reporting.
+
+The encryption type acts as a switch to determine the remainder of the contents. For example:
+* `type = Plaintext`: no encryption: encryption fields are not set, do not encrypt data.
+* `type = AES_CTR`: read the fields described above and perform AES-CTR encryption/decryption.
+
+Possible extensions of the encryption type include:
 * other modes (eg: GCM)
 * other ciphers
-
-For AES, the specific type is not included in the preamble as it is dictated by the key size.
-We could encode it in the preamble to validate loaded keys or to make some reports clearer (eg: no need
-for key lookup when computing encryption usage, clearer error messages on missing keys).
 
 ### Enabling the preamble format
 
@@ -418,8 +442,9 @@ This means that we need two things:
 
 We propose:
 * `--rocksdb-preamble-format` to start a new node with preamble format enabled. Will fail if the data exists in classical format for any store on the node.
-* a `PREAMBLE_FORMAT` file written at rocksdb-creation time. Its presence indicates use of the preamble format.
-Alternative, we may be able to use the existing `COCKROACHDB_VERSION` file.
+* a marker created at rocksdb-creation time indicating the use of the preamble format. We may be able to use the
+existing `COCKROACHDB_VERSION` file.
+* all stores on a node must have the preamble format, or none. This simplifies administration.
 
 Once the preamble format has been sufficiently tested, we can make it the default format and remove the flag.
 Stores with the classic data format would not support encryption but would still function properly.
@@ -738,18 +763,6 @@ Pros:
 Cons:
 * it's not possible to specify a different cipher for store keys
 
-### Preamble format
-
-The current preamble format is fixed and clearly defined (see [Preamble Format](#preamble-format).
-
-An alternative would be to use a structured data format such as protocol buffers:
-Pros:
-* easier parsing/writing
-* easier to extend for non-encryption uses
-Cons:
-* harder to impose a size limit, we would need to fail overlong encoded preambles
-* slightly more expensive processing
-
 ## Unresolved questions
 
 Before this RFC can be marked as approved, we have a few open questions (in no particular order):
@@ -771,10 +784,6 @@ We introduce two new flags with per-store settings. Other options include:
 * new fields in the `--store` flag
 
 ### Heterogeneous stores on the same node
-
-The current proposal requires all stores to use the preamble format, or none.
-* **pros**: easier scenarios: single flag controls all stores
-* **cons**: it's not possible to have an existing store in classic data format, then add a store in preamble format
 
 It allows encryption on a single store.
 * **pros**: more flexibility: can have one encrypted store, one plain, or different ciphers
