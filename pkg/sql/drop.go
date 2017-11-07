@@ -236,7 +236,7 @@ type dropIndexNode struct {
 
 type fullIndexName struct {
 	tn      *parser.TableName
-	idxName parser.Name
+	idxName parser.UnrestrictedName
 }
 
 // DropIndex drops an index.
@@ -304,7 +304,7 @@ func (n *dropIndexNode) Start(params runParams) error {
 
 func (p *planner) dropIndexByName(
 	ctx context.Context,
-	idxName parser.Name,
+	idxName parser.UnrestrictedName,
 	tableDesc *sqlbase.TableDescriptor,
 	ifExists bool,
 	behavior parser.DropBehavior,

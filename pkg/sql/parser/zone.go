@@ -21,7 +21,7 @@ import (
 // ZoneSpecifier represents a reference to a configurable zone of the keyspace.
 type ZoneSpecifier struct {
 	// Only one of NamedZone, Database or Table may be set.
-	NamedZone Name
+	NamedZone UnrestrictedName
 	Database  Name
 	Table     NormalizableTableName
 }

@@ -758,7 +758,7 @@ func (p *planner) findTableContainingIndex(
 	txn *client.Txn,
 	vt VirtualTabler,
 	dbName parser.Name,
-	idxName parser.Name,
+	idxName parser.UnrestrictedName,
 	requireTable bool,
 ) (result *parser.TableName, err error) {
 	dbDesc, err := MustGetDatabaseDesc(ctx, txn, vt, string(dbName))
@@ -817,7 +817,7 @@ func (p *planner) expandIndexName(
 		// will generate tn using the new value of index.Table, which
 		// is a table name. Therefore assign index.Index only once.
 		if index.Index == "" {
-			index.Index = tn.TableName
+			index.Index = parser.UnrestrictedName(tn.TableName)
 		}
 		realTableName, err := p.findTableContainingIndex(
 			ctx,
