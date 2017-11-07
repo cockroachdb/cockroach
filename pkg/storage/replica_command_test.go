@@ -23,6 +23,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/abortspan"
+	"github.com/cockroachdb/cockroach/pkg/storage/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/spanset"
@@ -100,7 +101,7 @@ func TestDeclareKeysResolveIntent(t *testing.T) {
 				var h roachpb.Header
 				h.RangeID = desc.RangeID
 
-				cArgs := CommandArgs{Header: h}
+				cArgs := batcheval.CommandArgs{Header: h}
 				cArgs.EvalCtx = &Replica{abortSpan: ac}
 
 				if !ranged {
