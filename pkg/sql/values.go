@@ -23,6 +23,7 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
@@ -67,7 +68,7 @@ func (p *planner) newContainerValuesNode(columns sqlbase.ResultColumns, capacity
 }
 
 func (p *planner) ValuesClause(
-	ctx context.Context, n *parser.ValuesClause, desiredTypes []parser.Type,
+	ctx context.Context, n *parser.ValuesClause, desiredTypes []types.T,
 ) (planNode, error) {
 	v := &valuesNode{
 		p:       p,
@@ -104,7 +105,7 @@ func (p *planner) ValuesClause(
 				return nil, err
 			}
 
-			desired := parser.TypeAny
+			desired := types.Any
 			if len(desiredTypes) > i {
 				desired = desiredTypes[i]
 			}
@@ -116,9 +117,9 @@ func (p *planner) ValuesClause(
 			typ := typedExpr.ResolvedType()
 			if num == 0 {
 				v.columns = append(v.columns, sqlbase.ResultColumn{Name: "column" + strconv.Itoa(i+1), Typ: typ})
-			} else if v.columns[i].Typ == parser.TypeNull {
+			} else if v.columns[i].Typ == types.Null {
 				v.columns[i].Typ = typ
-			} else if typ != parser.TypeNull && !typ.Equivalent(v.columns[i].Typ) {
+			} else if typ != types.Null && !typ.Equivalent(v.columns[i].Typ) {
 				return nil, fmt.Errorf("VALUES list type mismatch, %s for %s", typ, v.columns[i].Typ)
 			}
 

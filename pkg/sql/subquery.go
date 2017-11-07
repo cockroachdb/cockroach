@@ -23,6 +23,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 )
@@ -33,7 +34,7 @@ import (
 // the point the query starts execution / evaluation.
 type subquery struct {
 	planner  *planner
-	typ      parser.Type
+	typ      types.T
 	subquery *parser.Subquery
 	execMode subqueryExecMode
 	expanded bool
@@ -86,7 +87,7 @@ func (s *subquery) Walk(v parser.Visitor) parser.Expr {
 
 func (s *subquery) Variable() {}
 
-func (s *subquery) TypeCheck(_ *parser.SemaContext, desired parser.Type) (parser.TypedExpr, error) {
+func (s *subquery) TypeCheck(_ *parser.SemaContext, desired types.T) (parser.TypedExpr, error) {
 	// TODO(knz): if/when type checking can be extracted from the
 	// newPlan recursion, we can propagate the desired type to the
 	// sub-query. For now, the type is simply derived during the subquery node
@@ -98,7 +99,7 @@ func (s *subquery) TypeCheck(_ *parser.SemaContext, desired parser.Type) (parser
 	return s, nil
 }
 
-func (s *subquery) ResolvedType() parser.Type { return s.typ }
+func (s *subquery) ResolvedType() types.T { return s.typ }
 
 func (s *subquery) Eval(_ *parser.EvalContext) (parser.Datum, error) {
 	if s.result == nil {
@@ -364,7 +365,7 @@ func (v *subqueryVisitor) VisitPre(expr parser.Expr) (recurse bool, newExpr pars
 
 	if exists != nil {
 		result.execMode = execModeExists
-		result.typ = parser.TypeBool
+		result.typ = types.Bool
 	} else {
 		wantedNumColumns, execMode := v.getSubqueryContext()
 		result.execMode = execMode
@@ -390,7 +391,7 @@ func (v *subqueryVisitor) VisitPre(expr parser.Expr) (recurse bool, newExpr pars
 			// a single value against a tuple.
 			result.typ = cols[0].Typ
 		} else {
-			colTypes := make(parser.TTuple, wantedNumColumns)
+			colTypes := make(types.TTuple, wantedNumColumns)
 			for i, col := range cols {
 				colTypes[i] = col.Typ
 			}

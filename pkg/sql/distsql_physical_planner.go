@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/jobs"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -244,8 +245,8 @@ var setNotSupportedError = newQueryNotSupportedError("SET / SET CLUSTER SETTING 
 
 // leafType returns the element type if the given type is an array, and the type
 // itself otherwise.
-func leafType(t parser.Type) parser.Type {
-	if a, ok := t.(parser.TArray); ok {
+func leafType(t types.T) types.T {
+	if a, ok := t.(types.TArray); ok {
 		return leafType(a.Typ)
 	}
 	return t
@@ -265,7 +266,7 @@ func (dsp *DistSQLPlanner) checkSupportForNode(node planNode) (distRecommendatio
 	case *renderNode:
 		for i, e := range n.render {
 			typ := n.columns[i].Typ
-			if leafType(typ).FamilyEqual(parser.TypeTuple) {
+			if leafType(typ).FamilyEqual(types.FamTuple) {
 				return 0, newQueryNotSupportedErrorf("unsupported render type %s", typ)
 			}
 			if err := dsp.checkExpr(e); err != nil {

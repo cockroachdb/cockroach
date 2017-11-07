@@ -31,6 +31,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
@@ -555,7 +556,7 @@ func colIDArrayToDatum(arr []sqlbase.ColumnID) (parser.Datum, error) {
 	if len(arr) == 0 {
 		return parser.DNull, nil
 	}
-	d := parser.NewDArray(parser.TypeInt)
+	d := parser.NewDArray(types.Int)
 	for _, val := range arr {
 		if err := d.Append(parser.NewDInt(parser.DInt(val))); err != nil {
 			return nil, err
@@ -1095,7 +1096,7 @@ CREATE TABLE pg_catalog.pg_proc (
 				isRetSet := false
 				if fixedRetType := builtin.FixedReturnType(); fixedRetType != nil {
 					var retOid oid.Oid
-					if t, ok := fixedRetType.(parser.TTable); ok {
+					if t, ok := fixedRetType.(types.TTable); ok {
 						isRetSet = true
 						// Functions returning tables with zero, or more than one
 						// columns are marked to return "anyelement"
@@ -1131,7 +1132,7 @@ CREATE TABLE pg_catalog.pg_proc (
 					variadicType = parser.NewDOid(parser.DInt(oid))
 				case parser.HomogeneousType:
 					argmodes = proArgModeVariadic
-					argType := parser.TypeAny
+					argType := types.Any
 					oid := argType.Oid()
 					variadicType = parser.NewDOid(parser.DInt(oid))
 				default:
@@ -1445,13 +1446,13 @@ CREATE TABLE pg_catalog.pg_type (
 `,
 	populate: func(_ context.Context, p *planner, _ string, addRow func(...parser.Datum) error) error {
 		h := makeOidHasher()
-		for o, typ := range parser.OidToType {
+		for o, typ := range types.OidToType {
 			cat := typCategory(typ)
 			typElem := oidZero
 			typArray := oidZero
 			builtinPrefix := parser.PGIOBuiltinPrefix(typ)
 			if cat == typCategoryArray {
-				if typ == parser.TypeIntVector {
+				if typ == types.IntVector {
 					// IntVector needs a special case because its a special snowflake
 					// type. It's just like an Int2Array, but it has its own OID. We
 					// can't just wrap our Int2Array type in an OID wrapper, though,
@@ -1461,12 +1462,12 @@ CREATE TABLE pg_catalog.pg_type (
 					typElem = parser.NewDOid(parser.DInt(oid.T_int2))
 				} else {
 					builtinPrefix = "array_"
-					typElem = parser.NewDOid(parser.DInt(parser.UnwrapType(typ).(parser.TArray).Typ.Oid()))
+					typElem = parser.NewDOid(parser.DInt(types.UnwrapType(typ).(types.TArray).Typ.Oid()))
 				}
 			} else {
-				typArray = parser.NewDOid(parser.DInt(parser.TArray{Typ: typ}.Oid()))
+				typArray = parser.NewDOid(parser.DInt(types.TArray{Typ: typ}.Oid()))
 			}
-			typname := parser.PGDisplayName(typ)
+			typname := types.PGDisplayName(typ)
 
 			if err := addRow(
 				parser.NewDOid(parser.DInt(o)), // oid
@@ -1514,62 +1515,62 @@ CREATE TABLE pg_catalog.pg_type (
 // typOid is the only OID generation approach that does not use oidHasher, because
 // object identifiers for types are not arbitrary, but instead need to be kept in
 // sync with Postgres.
-func typOid(typ parser.Type) parser.Datum {
+func typOid(typ types.T) parser.Datum {
 	return parser.NewDOid(parser.DInt(typ.Oid()))
 }
 
-func typLen(typ parser.Type) *parser.DInt {
-	if sz, variable := typ.Size(); !variable {
+func typLen(typ types.T) *parser.DInt {
+	if sz, variable := parser.DatumTypeSize(typ); !variable {
 		return parser.NewDInt(parser.DInt(sz))
 	}
 	return negOneVal
 }
 
-func typByVal(typ parser.Type) parser.Datum {
-	_, variable := typ.Size()
+func typByVal(typ types.T) parser.Datum {
+	_, variable := parser.DatumTypeSize(typ)
 	return parser.MakeDBool(parser.DBool(!variable))
 }
 
 // typColl returns the collation OID for a given type.
 // The default collation is en-US, which is equivalent to but spelled
 // differently than the default database collation, en_US.utf8.
-func typColl(typ parser.Type, h oidHasher) parser.Datum {
-	if typ.FamilyEqual(parser.TypeAny) {
+func typColl(typ types.T, h oidHasher) parser.Datum {
+	if typ.FamilyEqual(types.Any) {
 		return oidZero
-	} else if typ.Equivalent(parser.TypeString) || typ.Equivalent(parser.TArray{Typ: parser.TypeString}) {
+	} else if typ.Equivalent(types.String) || typ.Equivalent(types.TArray{Typ: types.String}) {
 		return h.CollationOid(defaultCollationTag)
-	} else if typ.FamilyEqual(parser.TypeCollatedString) {
-		return h.CollationOid(typ.(parser.TCollatedString).Locale)
+	} else if typ.FamilyEqual(types.FamCollatedString) {
+		return h.CollationOid(typ.(types.TCollatedString).Locale)
 	}
 	return oidZero
 }
 
 // This mapping should be kept sync with PG's categorization.
 var datumToTypeCategory = map[reflect.Type]*parser.DString{
-	reflect.TypeOf(parser.TypeAny):         typCategoryPseudo,
-	reflect.TypeOf(parser.TypeBool):        typCategoryBoolean,
-	reflect.TypeOf(parser.TypeBytes):       typCategoryUserDefined,
-	reflect.TypeOf(parser.TypeDate):        typCategoryDateTime,
-	reflect.TypeOf(parser.TypeFloat):       typCategoryNumeric,
-	reflect.TypeOf(parser.TypeInt):         typCategoryNumeric,
-	reflect.TypeOf(parser.TypeInterval):    typCategoryTimespan,
-	reflect.TypeOf(parser.TypeJSON):        typCategoryUserDefined,
-	reflect.TypeOf(parser.TypeDecimal):     typCategoryNumeric,
-	reflect.TypeOf(parser.TypeString):      typCategoryString,
-	reflect.TypeOf(parser.TypeTimestamp):   typCategoryDateTime,
-	reflect.TypeOf(parser.TypeTimestampTZ): typCategoryDateTime,
-	reflect.TypeOf(parser.TypeTuple):       typCategoryPseudo,
-	reflect.TypeOf(parser.TypeTable):       typCategoryPseudo,
-	reflect.TypeOf(parser.TypeOid):         typCategoryNumeric,
-	reflect.TypeOf(parser.TypeUUID):        typCategoryUserDefined,
-	reflect.TypeOf(parser.TypeINet):        typCategoryNetworkAddr,
+	reflect.TypeOf(types.Any):         typCategoryPseudo,
+	reflect.TypeOf(types.Bool):        typCategoryBoolean,
+	reflect.TypeOf(types.Bytes):       typCategoryUserDefined,
+	reflect.TypeOf(types.Date):        typCategoryDateTime,
+	reflect.TypeOf(types.Float):       typCategoryNumeric,
+	reflect.TypeOf(types.Int):         typCategoryNumeric,
+	reflect.TypeOf(types.Interval):    typCategoryTimespan,
+	reflect.TypeOf(types.JSON):        typCategoryUserDefined,
+	reflect.TypeOf(types.Decimal):     typCategoryNumeric,
+	reflect.TypeOf(types.String):      typCategoryString,
+	reflect.TypeOf(types.Timestamp):   typCategoryDateTime,
+	reflect.TypeOf(types.TimestampTZ): typCategoryDateTime,
+	reflect.TypeOf(types.FamTuple):    typCategoryPseudo,
+	reflect.TypeOf(types.FamTable):    typCategoryPseudo,
+	reflect.TypeOf(types.Oid):         typCategoryNumeric,
+	reflect.TypeOf(types.UUID):        typCategoryUserDefined,
+	reflect.TypeOf(types.INet):        typCategoryNetworkAddr,
 }
 
-func typCategory(typ parser.Type) parser.Datum {
-	if typ.FamilyEqual(parser.TypeArray) {
+func typCategory(typ types.T) parser.Datum {
+	if typ.FamilyEqual(types.FamArray) {
 		return typCategoryArray
 	}
-	return datumToTypeCategory[reflect.TypeOf(parser.UnwrapType(typ))]
+	return datumToTypeCategory[reflect.TypeOf(types.UnwrapType(typ))]
 }
 
 // See: https://www.postgresql.org/docs/9.6/static/view-pg-views.html.

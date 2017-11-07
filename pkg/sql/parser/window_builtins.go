@@ -18,6 +18,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 
 	"golang.org/x/net/context"
 )
@@ -110,61 +111,63 @@ type WindowFunc interface {
 // See `windowFuncHolder` in the sql package.
 var windows = map[string][]Builtin{
 	"row_number": {
-		makeWindowBuiltin(ArgTypes{}, TypeInt, newRowNumberWindow),
+		makeWindowBuiltin(ArgTypes{}, types.Int, newRowNumberWindow),
 	},
 	"rank": {
-		makeWindowBuiltin(ArgTypes{}, TypeInt, newRankWindow),
+		makeWindowBuiltin(ArgTypes{}, types.Int, newRankWindow),
 	},
 	"dense_rank": {
-		makeWindowBuiltin(ArgTypes{}, TypeInt, newDenseRankWindow),
+		makeWindowBuiltin(ArgTypes{}, types.Int, newDenseRankWindow),
 	},
 	"percent_rank": {
-		makeWindowBuiltin(ArgTypes{}, TypeFloat, newPercentRankWindow),
+		makeWindowBuiltin(ArgTypes{}, types.Float, newPercentRankWindow),
 	},
 	"cume_dist": {
-		makeWindowBuiltin(ArgTypes{}, TypeFloat, newCumulativeDistWindow),
+		makeWindowBuiltin(ArgTypes{}, types.Float, newCumulativeDistWindow),
 	},
 	"ntile": {
-		makeWindowBuiltin(ArgTypes{{"n", TypeInt}}, TypeInt, newNtileWindow),
+		makeWindowBuiltin(ArgTypes{{"n", types.Int}}, types.Int, newNtileWindow),
 	},
 	"lag": mergeBuiltinSlices(
-		collectBuiltins(func(t Type) Builtin {
+		collectBuiltins(func(t types.T) Builtin {
 			return makeWindowBuiltin(ArgTypes{{"val", t}}, t, makeLeadLagWindowConstructor(false, false, false))
-		}, TypesAnyNonArray...),
-		collectBuiltins(func(t Type) Builtin {
-			return makeWindowBuiltin(ArgTypes{{"val", t}, {"n", TypeInt}}, t, makeLeadLagWindowConstructor(false, true, false))
-		}, TypesAnyNonArray...),
+		}, types.AnyNonArray...),
+		collectBuiltins(func(t types.T) Builtin {
+			return makeWindowBuiltin(ArgTypes{{"val", t}, {"n", types.Int}}, t, makeLeadLagWindowConstructor(false, true, false))
+		}, types.AnyNonArray...),
 		// TODO(nvanbenschoten): We still have no good way to represent two parameters that
 		// can be any types but must be the same (eg. lag(T, Int, T)).
-		collectBuiltins(func(t Type) Builtin {
-			return makeWindowBuiltin(ArgTypes{{"val", t}, {"n", TypeInt}, {"default", t}},
+		collectBuiltins(func(t types.T) Builtin {
+			return makeWindowBuiltin(ArgTypes{{"val", t}, {"n", types.Int}, {"default", t}},
 				t, makeLeadLagWindowConstructor(false, true, true))
-		}, TypesAnyNonArray...),
+		}, types.AnyNonArray...),
 	),
 	"lead": mergeBuiltinSlices(
-		collectBuiltins(func(t Type) Builtin {
+		collectBuiltins(func(t types.T) Builtin {
 			return makeWindowBuiltin(ArgTypes{{"val", t}}, t, makeLeadLagWindowConstructor(true, false, false))
-		}, TypesAnyNonArray...),
-		collectBuiltins(func(t Type) Builtin {
-			return makeWindowBuiltin(ArgTypes{{"val", t}, {"n", TypeInt}}, t, makeLeadLagWindowConstructor(true, true, false))
-		}, TypesAnyNonArray...),
-		collectBuiltins(func(t Type) Builtin {
-			return makeWindowBuiltin(ArgTypes{{"val", t}, {"n", TypeInt}, {"default", t}},
+		}, types.AnyNonArray...),
+		collectBuiltins(func(t types.T) Builtin {
+			return makeWindowBuiltin(ArgTypes{{"val", t}, {"n", types.Int}}, t, makeLeadLagWindowConstructor(true, true, false))
+		}, types.AnyNonArray...),
+		collectBuiltins(func(t types.T) Builtin {
+			return makeWindowBuiltin(ArgTypes{{"val", t}, {"n", types.Int}, {"default", t}},
 				t, makeLeadLagWindowConstructor(true, true, true))
-		}, TypesAnyNonArray...),
+		}, types.AnyNonArray...),
 	),
-	"first_value": collectBuiltins(func(t Type) Builtin {
+	"first_value": collectBuiltins(func(t types.T) Builtin {
 		return makeWindowBuiltin(ArgTypes{{"val", t}}, t, newFirstValueWindow)
-	}, TypesAnyNonArray...),
-	"last_value": collectBuiltins(func(t Type) Builtin {
+	}, types.AnyNonArray...),
+	"last_value": collectBuiltins(func(t types.T) Builtin {
 		return makeWindowBuiltin(ArgTypes{{"val", t}}, t, newLastValueWindow)
-	}, TypesAnyNonArray...),
-	"nth_value": collectBuiltins(func(t Type) Builtin {
-		return makeWindowBuiltin(ArgTypes{{"val", t}, {"n", TypeInt}}, t, newNthValueWindow)
-	}, TypesAnyNonArray...),
+	}, types.AnyNonArray...),
+	"nth_value": collectBuiltins(func(t types.T) Builtin {
+		return makeWindowBuiltin(ArgTypes{{"val", t}, {"n", types.Int}}, t, newNthValueWindow)
+	}, types.AnyNonArray...),
 }
 
-func makeWindowBuiltin(in ArgTypes, ret Type, f func([]Type, *EvalContext) WindowFunc) Builtin {
+func makeWindowBuiltin(
+	in ArgTypes, ret types.T, f func([]types.T, *EvalContext) WindowFunc,
+) Builtin {
 	return Builtin{
 		impure:     true,
 		class:      WindowClass,
@@ -174,7 +177,7 @@ func makeWindowBuiltin(in ArgTypes, ret Type, f func([]Type, *EvalContext) Windo
 	}
 }
 
-func collectBuiltins(f func(Type) Builtin, types ...Type) []Builtin {
+func collectBuiltins(f func(types.T) Builtin, types ...types.T) []Builtin {
 	r := make([]Builtin, len(types))
 	for i := range types {
 		r[i] = f(types[i])
@@ -252,7 +255,7 @@ func (w *aggregateWindowFunc) Close(ctx context.Context, evalCtx *EvalContext) {
 // counting from 1.
 type rowNumberWindow struct{}
 
-func newRowNumberWindow([]Type, *EvalContext) WindowFunc {
+func newRowNumberWindow([]types.T, *EvalContext) WindowFunc {
 	return &rowNumberWindow{}
 }
 
@@ -267,7 +270,7 @@ type rankWindow struct {
 	peerRes *DInt
 }
 
-func newRankWindow([]Type, *EvalContext) WindowFunc {
+func newRankWindow([]types.T, *EvalContext) WindowFunc {
 	return &rankWindow{}
 }
 
@@ -286,7 +289,7 @@ type denseRankWindow struct {
 	peerRes   *DInt
 }
 
-func newDenseRankWindow([]Type, *EvalContext) WindowFunc {
+func newDenseRankWindow([]types.T, *EvalContext) WindowFunc {
 	return &denseRankWindow{}
 }
 
@@ -308,7 +311,7 @@ type percentRankWindow struct {
 	peerRes *DFloat
 }
 
-func newPercentRankWindow([]Type, *EvalContext) WindowFunc {
+func newPercentRankWindow([]types.T, *EvalContext) WindowFunc {
 	return &percentRankWindow{}
 }
 
@@ -337,7 +340,7 @@ type cumulativeDistWindow struct {
 	peerRes *DFloat
 }
 
-func newCumulativeDistWindow([]Type, *EvalContext) WindowFunc {
+func newCumulativeDistWindow([]types.T, *EvalContext) WindowFunc {
 	return &cumulativeDistWindow{}
 }
 
@@ -362,7 +365,7 @@ type ntileWindow struct {
 	remainder      int   // (total rows) % (bucket num)
 }
 
-func newNtileWindow([]Type, *EvalContext) WindowFunc {
+func newNtileWindow([]types.T, *EvalContext) WindowFunc {
 	return &ntileWindow{}
 }
 
@@ -430,8 +433,8 @@ func newLeadLagWindow(forward, withOffset, withDefault bool) WindowFunc {
 
 func makeLeadLagWindowConstructor(
 	forward, withOffset, withDefault bool,
-) func([]Type, *EvalContext) WindowFunc {
-	return func([]Type, *EvalContext) WindowFunc {
+) func([]types.T, *EvalContext) WindowFunc {
+	return func([]types.T, *EvalContext) WindowFunc {
 		return newLeadLagWindow(forward, withOffset, withDefault)
 	}
 }
@@ -466,7 +469,7 @@ func (w *leadLagWindow) Close(context.Context, *EvalContext) {}
 // firstValueWindow returns value evaluated at the row that is the first row of the window frame.
 type firstValueWindow struct{}
 
-func newFirstValueWindow([]Type, *EvalContext) WindowFunc {
+func newFirstValueWindow([]types.T, *EvalContext) WindowFunc {
 	return &firstValueWindow{}
 }
 
@@ -479,7 +482,7 @@ func (firstValueWindow) Close(context.Context, *EvalContext) {}
 // lastValueWindow returns value evaluated at the row that is the last row of the window frame.
 type lastValueWindow struct{}
 
-func newLastValueWindow([]Type, *EvalContext) WindowFunc {
+func newLastValueWindow([]types.T, *EvalContext) WindowFunc {
 	return &lastValueWindow{}
 }
 
@@ -493,7 +496,7 @@ func (lastValueWindow) Close(context.Context, *EvalContext) {}
 // (counting from 1). Returns null if no such row.
 type nthValueWindow struct{}
 
-func newNthValueWindow([]Type, *EvalContext) WindowFunc {
+func newNthValueWindow([]types.T, *EvalContext) WindowFunc {
 	return &nthValueWindow{}
 }
 

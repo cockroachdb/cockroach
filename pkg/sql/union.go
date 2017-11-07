@@ -21,6 +21,7 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
@@ -81,7 +82,7 @@ type unionNode struct {
 
 // UnionClause constructs a planNode from a UNION/INTERSECT/EXCEPT expression.
 func (p *planner) UnionClause(
-	ctx context.Context, n *parser.UnionClause, desiredTypes []parser.Type,
+	ctx context.Context, n *parser.UnionClause, desiredTypes []types.T,
 ) (planNode, error) {
 	var emitAll = false
 	var emit unionNodeEmit
@@ -129,7 +130,7 @@ func (p *planner) UnionClause(
 		// TODO(dan): This currently checks whether the types are exactly the same,
 		// but Postgres is more lenient:
 		// http://www.postgresql.org/docs/9.5/static/typeconv-union-case.html.
-		if !(l.Typ.Equivalent(r.Typ) || l.Typ == parser.TypeNull || r.Typ == parser.TypeNull) {
+		if !(l.Typ.Equivalent(r.Typ) || l.Typ == types.Null || r.Typ == types.Null) {
 			return nil, fmt.Errorf("%v types %s and %s cannot be matched", n.Type, l.Typ, r.Typ)
 		}
 		if l.Hidden != r.Hidden {

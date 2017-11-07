@@ -16,6 +16,7 @@ package parser
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 )
 
 type normalizableExpr interface {
@@ -95,7 +96,7 @@ func (expr *UnaryExpr) normalize(v *normalizeVisitor) TypedExpr {
 		return val
 	case UnaryMinus:
 		// -0 -> 0 (except for float which has negative zero)
-		if val.ResolvedType() != TypeFloat && v.isNumericZero(val) {
+		if val.ResolvedType() != types.Float && v.isNumericZero(val) {
 			return val
 		}
 		switch b := val.(type) {
@@ -827,7 +828,7 @@ func init() {
 
 // ReType ensures that the given numeric expression evaluates
 // to the requested type, inserting a cast if necessary.
-func ReType(expr TypedExpr, wantedType Type) (TypedExpr, error) {
+func ReType(expr TypedExpr, wantedType types.T) (TypedExpr, error) {
 	if expr.ResolvedType().Equivalent(wantedType) {
 		return expr, nil
 	}

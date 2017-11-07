@@ -17,13 +17,13 @@ package sqlbase
 import (
 	"fmt"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 )
 
 // ResultColumn contains the name and type of a SQL "cell".
 type ResultColumn struct {
 	Name string
-	Typ  parser.Type
+	Typ  types.T
 
 	// If set, this is an implicit column; used internally.
 	Hidden bool
@@ -62,7 +62,7 @@ func (r ResultColumns) TypesEqual(other ResultColumns) bool {
 		// NULLs are considered equal because some types of queries (SELECT CASE,
 		// for example) can change their output types between a type and NULL based
 		// on input.
-		if other[i].Typ == parser.TypeNull {
+		if other[i].Typ == types.Null {
 			continue
 		}
 		if !c.Typ.Equivalent(other[i].Typ) {

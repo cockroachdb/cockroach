@@ -43,6 +43,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/jobs"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -1371,7 +1372,7 @@ func getTransactionState(txnState *txnState) string {
 // runShowTransactionState returns the state of current transaction.
 func runShowTransactionState(session *Session, res StatementResult) error {
 	res.BeginResult((*parser.ShowTransactionStatus)(nil))
-	res.SetColumns(sqlbase.ResultColumns{{Name: "TRANSACTION STATUS", Typ: parser.TypeString}})
+	res.SetColumns(sqlbase.ResultColumns{{Name: "TRANSACTION STATUS", Typ: types.String}})
 
 	state := getTransactionState(&session.TxnState)
 	if err := res.AddRow(session.Ctx(), parser.Datums{parser.NewDString(state)}); err != nil {
@@ -2335,41 +2336,41 @@ func golangFillQueryArguments(pinfo *parser.PlaceholderInfo, args []interface{})
 	}
 }
 
-func checkResultType(typ parser.Type) error {
+func checkResultType(typ types.T) error {
 	// Compare all types that can rely on == equality.
-	switch parser.UnwrapType(typ) {
-	case parser.TypeNull:
-	case parser.TypeBool:
-	case parser.TypeInt:
-	case parser.TypeFloat:
-	case parser.TypeDecimal:
-	case parser.TypeBytes:
-	case parser.TypeString:
-	case parser.TypeDate:
-	case parser.TypeTimestamp:
-	case parser.TypeTimestampTZ:
-	case parser.TypeInterval:
-	case parser.TypeJSON:
-	case parser.TypeUUID:
-	case parser.TypeINet:
-	case parser.TypeNameArray:
-	case parser.TypeOid:
-	case parser.TypeRegClass:
-	case parser.TypeRegNamespace:
-	case parser.TypeRegProc:
-	case parser.TypeRegProcedure:
-	case parser.TypeRegType:
+	switch types.UnwrapType(typ) {
+	case types.Null:
+	case types.Bool:
+	case types.Int:
+	case types.Float:
+	case types.Decimal:
+	case types.Bytes:
+	case types.String:
+	case types.Date:
+	case types.Timestamp:
+	case types.TimestampTZ:
+	case types.Interval:
+	case types.JSON:
+	case types.UUID:
+	case types.INet:
+	case types.NameArray:
+	case types.Oid:
+	case types.RegClass:
+	case types.RegNamespace:
+	case types.RegProc:
+	case types.RegProcedure:
+	case types.RegType:
 	default:
 		// Compare all types that cannot rely on == equality.
 		istype := typ.FamilyEqual
 		switch {
-		case istype(parser.TypeArray):
-			if istype(parser.UnwrapType(typ).(parser.TArray).Typ) {
+		case istype(types.FamArray):
+			if istype(types.UnwrapType(typ).(types.TArray).Typ) {
 				return pgerror.Unimplemented("nested arrays", "arrays cannot have arrays as element type")
 			}
-		case istype(parser.TypeCollatedString):
-		case istype(parser.TypeTuple):
-		case istype(parser.TypePlaceholder):
+		case istype(types.FamCollatedString):
+		case istype(types.FamTuple):
+		case istype(types.FamPlaceholder):
 			return errors.Errorf("could not determine data type of %s", typ)
 		default:
 			return errors.Errorf("unsupported result type: %s", typ)
@@ -2383,7 +2384,7 @@ func checkResultType(typ parser.Type) error {
 func EvalAsOfTimestamp(
 	evalCtx *parser.EvalContext, asOf parser.AsOfClause, max hlc.Timestamp,
 ) (hlc.Timestamp, error) {
-	te, err := asOf.Expr.TypeCheck(nil, parser.TypeString)
+	te, err := asOf.Expr.TypeCheck(nil, types.String)
 	if err != nil {
 		return hlc.Timestamp{}, err
 	}

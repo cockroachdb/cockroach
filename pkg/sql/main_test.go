@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
@@ -203,7 +204,7 @@ func init() {
 			return nil, nil, nil
 		}
 		header := sqlbase.ResultColumns{
-			{Name: "value", Typ: parser.TypeString},
+			{Name: "value", Typ: types.String},
 		}
 		return func(_ context.Context, resultsCh chan<- parser.Datums) error {
 			resultsCh <- parser.Datums{parser.NewDString(show.Name)}

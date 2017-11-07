@@ -20,6 +20,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
@@ -218,13 +219,13 @@ var DistAggregationTable = map[distsqlrun.AggregatorSpec_Func]DistAggregationInf
 			// There is no "FLOAT / INT" operator; cast the denominator to float in
 			// this case. Note that there is a "DECIMAL / INT" operator, so we don't
 			// need the same handling for that case.
-			if sum.ResolvedType().Equivalent(parser.TypeFloat) {
+			if sum.ResolvedType().Equivalent(types.Float) {
 				expr.Right = &parser.CastExpr{
 					Expr: count,
 					Type: parser.NewFloatColType(0 /* prec */, false /* precSpecified */),
 				}
 			}
-			return expr.TypeCheck(nil, parser.TypeAny)
+			return expr.TypeCheck(nil, types.Any)
 		},
 	},
 
@@ -288,7 +289,7 @@ func (tc *typeContainer) IndexedVarEval(idx int, ctx *parser.EvalContext) (parse
 	panic("no eval allowed in typeContainer")
 }
 
-func (tc *typeContainer) IndexedVarResolvedType(idx int) parser.Type {
+func (tc *typeContainer) IndexedVarResolvedType(idx int) types.T {
 	return tc.types[idx].ToDatumType()
 }
 

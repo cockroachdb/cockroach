@@ -19,10 +19,11 @@ import (
 	"strings"
 	"time"
 
+	"github.com/pkg/errors"
 	"golang.org/x/text/language"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 )
 
 // SemaContext defines the context in which to perform semantic analysis on an
@@ -83,7 +84,7 @@ func (err placeholderTypeAmbiguityError) Error() string {
 
 type unexpectedTypeError struct {
 	expr      Expr
-	want, got Type
+	want, got types.T
 }
 
 func (err unexpectedTypeError) Error() string {
@@ -98,7 +99,7 @@ func decorateTypeCheckError(err error, format string, a ...interface{}) error {
 }
 
 // TypeCheck implements the Expr interface.
-func (expr *AndExpr) TypeCheck(ctx *SemaContext, desired Type) (TypedExpr, error) {
+func (expr *AndExpr) TypeCheck(ctx *SemaContext, desired types.T) (TypedExpr, error) {
 	leftTyped, err := typeCheckAndRequireBoolean(ctx, expr.Left, "AND argument")
 	if err != nil {
 		return nil, err
@@ -108,12 +109,12 @@ func (expr *AndExpr) TypeCheck(ctx *SemaContext, desired Type) (TypedExpr, error
 		return nil, err
 	}
 	expr.Left, expr.Right = leftTyped, rightTyped
-	expr.typ = TypeBool
+	expr.typ = types.Bool
 	return expr, nil
 }
 
 // TypeCheck implements the Expr interface.
-func (expr *BinaryExpr) TypeCheck(ctx *SemaContext, desired Type) (TypedExpr, error) {
+func (expr *BinaryExpr) TypeCheck(ctx *SemaContext, desired types.T) (TypedExpr, error) {
 	ops := BinOps[expr.Operator]
 
 	typedSubExprs, fns, err := typeCheckOverloadedExprs(ctx, desired, ops, true, expr.Left, expr.Right)
@@ -127,7 +128,7 @@ func (expr *BinaryExpr) TypeCheck(ctx *SemaContext, desired Type) (TypedExpr, er
 
 	// Return NULL if at least one overload is possible, NULL is an argument,
 	// and none of the overloads accept NULL.
-	if leftReturn == TypeNull || rightReturn == TypeNull {
+	if leftReturn == types.Null || rightReturn == types.Null {
 		if len(fns) > 0 {
 			noneAcceptNull := true
 			for _, e := range fns {
@@ -146,7 +147,7 @@ func (expr *BinaryExpr) TypeCheck(ctx *SemaContext, desired Type) (TypedExpr, er
 	// or if it found an ambiguity.
 	if len(fns) != 1 {
 		var desStr string
-		if desired != TypeAny {
+		if desired != types.Any {
 			desStr = fmt.Sprintf(" (desired <%s>)", desired)
 		}
 		sig := fmt.Sprintf("<%s> %s <%s>%s", leftReturn, expr.Operator, rightReturn, desStr)
@@ -168,7 +169,7 @@ func (expr *BinaryExpr) TypeCheck(ctx *SemaContext, desired Type) (TypedExpr, er
 }
 
 // TypeCheck implements the Expr interface.
-func (expr *CaseExpr) TypeCheck(ctx *SemaContext, desired Type) (TypedExpr, error) {
+func (expr *CaseExpr) TypeCheck(ctx *SemaContext, desired types.T) (TypedExpr, error) {
 	var err error
 	tmpExprs := make([]Expr, 0, len(expr.Whens)+1)
 	if expr.Expr != nil {
@@ -178,7 +179,7 @@ func (expr *CaseExpr) TypeCheck(ctx *SemaContext, desired Type) (TypedExpr, erro
 			tmpExprs = append(tmpExprs, when.Cond)
 		}
 
-		typedSubExprs, _, err := typeCheckSameTypedExprs(ctx, TypeAny, tmpExprs...)
+		typedSubExprs, _, err := typeCheckSameTypedExprs(ctx, types.Any, tmpExprs...)
 		if err != nil {
 			return nil, decorateTypeCheckError(err, "incompatible condition type:")
 		}
@@ -220,13 +221,13 @@ func (expr *CaseExpr) TypeCheck(ctx *SemaContext, desired Type) (TypedExpr, erro
 }
 
 // TypeCheck implements the Expr interface.
-func (expr *CastExpr) TypeCheck(ctx *SemaContext, _ Type) (TypedExpr, error) {
+func (expr *CastExpr) TypeCheck(ctx *SemaContext, _ types.T) (TypedExpr, error) {
 	returnType := expr.castType()
 
 	// The desired type provided to a CastExpr is ignored. Instead,
-	// TypeAny is passed to the child of the cast. There are two
+	// types.Any is passed to the child of the cast. There are two
 	// exceptions, described below.
-	desired := TypeAny
+	desired := types.Any
 	switch {
 	case isConstant(expr.Expr):
 		if canConstantBecome(expr.Expr.(Constant), returnType) {
@@ -248,7 +249,7 @@ func (expr *CastExpr) TypeCheck(ctx *SemaContext, _ Type) (TypedExpr, error) {
 		// the same placeholder in another location where it was either not
 		// the child of a cast, or was the child of a cast to a different type.
 		// In this case, we default to inferring a STRING for the placeholder.
-		desired = TypeString
+		desired = types.String
 	}
 
 	typedSubExpr, err := expr.Expr.TypeCheck(ctx, desired)
@@ -269,7 +270,7 @@ func (expr *CastExpr) TypeCheck(ctx *SemaContext, _ Type) (TypedExpr, error) {
 }
 
 // TypeCheck implements the Expr interface.
-func (expr *IndirectionExpr) TypeCheck(ctx *SemaContext, desired Type) (TypedExpr, error) {
+func (expr *IndirectionExpr) TypeCheck(ctx *SemaContext, desired types.T) (TypedExpr, error) {
 	for i, t := range expr.Indirection {
 		if t.Slice {
 			return nil, pgerror.UnimplementedWithIssueErrorf(2115, "ARRAY slicing in %s", expr)
@@ -278,19 +279,19 @@ func (expr *IndirectionExpr) TypeCheck(ctx *SemaContext, desired Type) (TypedExp
 			return nil, pgerror.UnimplementedWithIssueErrorf(2115, "multidimensional ARRAY %s", expr)
 		}
 
-		beginExpr, err := typeCheckAndRequire(ctx, t.Begin, TypeInt, "ARRAY subscript")
+		beginExpr, err := typeCheckAndRequire(ctx, t.Begin, types.Int, "ARRAY subscript")
 		if err != nil {
 			return nil, err
 		}
 		t.Begin = beginExpr
 	}
 
-	subExpr, err := expr.Expr.TypeCheck(ctx, TArray{desired})
+	subExpr, err := expr.Expr.TypeCheck(ctx, types.TArray{Typ: desired})
 	if err != nil {
 		return nil, err
 	}
-	typ := UnwrapType(subExpr.ResolvedType())
-	arrType, ok := typ.(TArray)
+	typ := types.UnwrapType(subExpr.ResolvedType())
+	arrType, ok := typ.(types.TArray)
 	if !ok {
 		return nil, pgerror.NewErrorf(pgerror.CodeDatatypeMismatchError, "cannot subscript type %s because it is not an array", typ)
 	}
@@ -300,7 +301,7 @@ func (expr *IndirectionExpr) TypeCheck(ctx *SemaContext, desired Type) (TypedExp
 }
 
 // TypeCheck implements the Expr interface.
-func (expr *AnnotateTypeExpr) TypeCheck(ctx *SemaContext, desired Type) (TypedExpr, error) {
+func (expr *AnnotateTypeExpr) TypeCheck(ctx *SemaContext, desired types.T) (TypedExpr, error) {
 	annotType := expr.annotationType()
 	subExpr, err := typeCheckAndRequire(ctx, expr.Expr, annotType,
 		fmt.Sprintf("type annotation for %v as %s, found", expr.Expr, annotType))
@@ -311,27 +312,26 @@ func (expr *AnnotateTypeExpr) TypeCheck(ctx *SemaContext, desired Type) (TypedEx
 }
 
 // TypeCheck implements the Expr interface.
-func (expr *CollateExpr) TypeCheck(ctx *SemaContext, desired Type) (TypedExpr, error) {
+func (expr *CollateExpr) TypeCheck(ctx *SemaContext, desired types.T) (TypedExpr, error) {
 	_, err := language.Parse(expr.Locale)
 	if err != nil {
 		return nil, errors.Wrapf(err, "invalid locale %s", expr.Locale)
 	}
-	subExpr, err := expr.Expr.TypeCheck(ctx, TypeString)
+	subExpr, err := expr.Expr.TypeCheck(ctx, types.String)
 	if err != nil {
 		return nil, err
 	}
-	switch t := subExpr.ResolvedType().(type) {
-	case tString, TCollatedString:
+	t := subExpr.ResolvedType()
+	if types.IsStringType(t) {
 		expr.Expr = subExpr
-		expr.typ = TCollatedString{expr.Locale}
+		expr.typ = types.TCollatedString{Locale: expr.Locale}
 		return expr, nil
-	default:
-		return nil, pgerror.NewErrorf(pgerror.CodeDatatypeMismatchError, "incompatible type for COLLATE: %s", t)
 	}
+	return nil, pgerror.NewErrorf(pgerror.CodeDatatypeMismatchError, "incompatible type for COLLATE: %s", t)
 }
 
 // TypeCheck implements the Expr interface.
-func (expr *CoalesceExpr) TypeCheck(ctx *SemaContext, desired Type) (TypedExpr, error) {
+func (expr *CoalesceExpr) TypeCheck(ctx *SemaContext, desired types.T) (TypedExpr, error) {
 	typedSubExprs, retType, err := typeCheckSameTypedExprs(ctx, desired, expr.Exprs...)
 	if err != nil {
 		return nil, decorateTypeCheckError(err, fmt.Sprintf("incompatible %s expressions", expr.Name))
@@ -345,7 +345,7 @@ func (expr *CoalesceExpr) TypeCheck(ctx *SemaContext, desired Type) (TypedExpr, 
 }
 
 // TypeCheck implements the Expr interface.
-func (expr *ComparisonExpr) TypeCheck(ctx *SemaContext, desired Type) (TypedExpr, error) {
+func (expr *ComparisonExpr) TypeCheck(ctx *SemaContext, desired types.T) (TypedExpr, error) {
 	var leftTyped, rightTyped TypedExpr
 	var fn CmpOp
 	var err error
@@ -373,29 +373,29 @@ func (expr *ComparisonExpr) TypeCheck(ctx *SemaContext, desired Type) (TypedExpr
 		// evaluation directly to NULL in the presence of any NULL arguments.
 		//
 		// TODO(pmattis): For IS {UNKNOWN,TRUE,FALSE} we should be requiring that
-		// TypeLeft.TypeEquals(TypeBool). We currently can't distinguish NULL from
+		// TypeLeft.TypeEquals(types.Bool). We currently can't distinguish NULL from
 		// UNKNOWN. Is it important to do so?
 	default:
 		// Return NULL if at least one overload is possible and NULL is an argument.
-		if leftTyped.ResolvedType() == TypeNull || rightTyped.ResolvedType() == TypeNull {
+		if leftTyped.ResolvedType() == types.Null || rightTyped.ResolvedType() == types.Null {
 			return DNull, nil
 		}
 	}
 
 	expr.Left, expr.Right = leftTyped, rightTyped
 	expr.fn = fn
-	expr.typ = TypeBool
+	expr.typ = types.Bool
 	return expr, err
 }
 
 // TypeCheck implements the Expr interface.
-func (expr *ExistsExpr) TypeCheck(ctx *SemaContext, desired Type) (TypedExpr, error) {
-	subqueryTyped, err := expr.Subquery.TypeCheck(ctx, TypeAny)
+func (expr *ExistsExpr) TypeCheck(ctx *SemaContext, desired types.T) (TypedExpr, error) {
+	subqueryTyped, err := expr.Subquery.TypeCheck(ctx, types.Any)
 	if err != nil {
 		return nil, err
 	}
 	expr.Subquery = subqueryTyped
-	expr.typ = TypeBool
+	expr.typ = types.Bool
 	return expr, nil
 }
 
@@ -407,7 +407,7 @@ var (
 )
 
 // TypeCheck implements the Expr interface.
-func (expr *FuncExpr) TypeCheck(ctx *SemaContext, desired Type) (TypedExpr, error) {
+func (expr *FuncExpr) TypeCheck(ctx *SemaContext, desired types.T) (TypedExpr, error) {
 	var searchPath SearchPath
 	if ctx != nil {
 		searchPath = ctx.SearchPath
@@ -435,7 +435,7 @@ func (expr *FuncExpr) TypeCheck(ctx *SemaContext, desired Type) (TypedExpr, erro
 		}
 		if !handledNull {
 			for _, expr := range typedSubExprs {
-				if expr.ResolvedType() == TypeNull {
+				if expr.ResolvedType() == types.Null {
 					return DNull, nil
 				}
 			}
@@ -452,7 +452,7 @@ func (expr *FuncExpr) TypeCheck(ctx *SemaContext, desired Type) (TypedExpr, erro
 			typeNames = append(typeNames, expr.ResolvedType().String())
 		}
 		var desStr string
-		if desired != TypeAny {
+		if desired != types.Any {
 			desStr = fmt.Sprintf(" (desired <%s>)", desired)
 		}
 		sig := fmt.Sprintf("%s(%s)%s", expr.Func, strings.Join(typeNames, ", "), desStr)
@@ -465,7 +465,7 @@ func (expr *FuncExpr) TypeCheck(ctx *SemaContext, desired Type) (TypedExpr, erro
 
 	if expr.WindowDef != nil {
 		for i, partition := range expr.WindowDef.Partitions {
-			typedPartition, err := partition.TypeCheck(ctx, TypeAny)
+			typedPartition, err := partition.TypeCheck(ctx, types.Any)
 			if err != nil {
 				return nil, err
 			}
@@ -475,7 +475,7 @@ func (expr *FuncExpr) TypeCheck(ctx *SemaContext, desired Type) (TypedExpr, erro
 			if orderBy.OrderType != OrderByColumn {
 				return nil, errOrderByIndexInWindow
 			}
-			typedOrderBy, err := orderBy.Expr.TypeCheck(ctx, TypeAny)
+			typedOrderBy, err := orderBy.Expr.TypeCheck(ctx, types.Any)
 			if err != nil {
 				return nil, err
 			}
@@ -538,7 +538,7 @@ func (expr *FuncExpr) TypeCheck(ctx *SemaContext, desired Type) (TypedExpr, erro
 }
 
 // TypeCheck implements the Expr interface.
-func (expr *IfExpr) TypeCheck(ctx *SemaContext, desired Type) (TypedExpr, error) {
+func (expr *IfExpr) TypeCheck(ctx *SemaContext, desired types.T) (TypedExpr, error) {
 	typedCond, err := typeCheckAndRequireBoolean(ctx, expr.Cond, "IF condition")
 	if err != nil {
 		return nil, err
@@ -556,29 +556,29 @@ func (expr *IfExpr) TypeCheck(ctx *SemaContext, desired Type) (TypedExpr, error)
 }
 
 // TypeCheck implements the Expr interface.
-func (expr *IsOfTypeExpr) TypeCheck(ctx *SemaContext, desired Type) (TypedExpr, error) {
-	exprTyped, err := expr.Expr.TypeCheck(ctx, TypeAny)
+func (expr *IsOfTypeExpr) TypeCheck(ctx *SemaContext, desired types.T) (TypedExpr, error) {
+	exprTyped, err := expr.Expr.TypeCheck(ctx, types.Any)
 	if err != nil {
 		return nil, err
 	}
 	expr.Expr = exprTyped
-	expr.typ = TypeBool
+	expr.typ = types.Bool
 	return expr, nil
 }
 
 // TypeCheck implements the Expr interface.
-func (expr *NotExpr) TypeCheck(ctx *SemaContext, desired Type) (TypedExpr, error) {
+func (expr *NotExpr) TypeCheck(ctx *SemaContext, desired types.T) (TypedExpr, error) {
 	exprTyped, err := typeCheckAndRequireBoolean(ctx, expr.Expr, "NOT argument")
 	if err != nil {
 		return nil, err
 	}
 	expr.Expr = exprTyped
-	expr.typ = TypeBool
+	expr.typ = types.Bool
 	return expr, nil
 }
 
 // TypeCheck implements the Expr interface.
-func (expr *NullIfExpr) TypeCheck(ctx *SemaContext, desired Type) (TypedExpr, error) {
+func (expr *NullIfExpr) TypeCheck(ctx *SemaContext, desired types.T) (TypedExpr, error) {
 	typedSubExprs, retType, err := typeCheckSameTypedExprs(ctx, desired, expr.Expr1, expr.Expr2)
 	if err != nil {
 		return nil, decorateTypeCheckError(err, "incompatible NULLIF expressions")
@@ -590,7 +590,7 @@ func (expr *NullIfExpr) TypeCheck(ctx *SemaContext, desired Type) (TypedExpr, er
 }
 
 // TypeCheck implements the Expr interface.
-func (expr *OrExpr) TypeCheck(ctx *SemaContext, desired Type) (TypedExpr, error) {
+func (expr *OrExpr) TypeCheck(ctx *SemaContext, desired types.T) (TypedExpr, error) {
 	leftTyped, err := typeCheckAndRequireBoolean(ctx, expr.Left, "OR argument")
 	if err != nil {
 		return nil, err
@@ -600,12 +600,12 @@ func (expr *OrExpr) TypeCheck(ctx *SemaContext, desired Type) (TypedExpr, error)
 		return nil, err
 	}
 	expr.Left, expr.Right = leftTyped, rightTyped
-	expr.typ = TypeBool
+	expr.typ = types.Bool
 	return expr, nil
 }
 
 // TypeCheck implements the Expr interface.
-func (expr *ParenExpr) TypeCheck(ctx *SemaContext, desired Type) (TypedExpr, error) {
+func (expr *ParenExpr) TypeCheck(ctx *SemaContext, desired types.T) (TypedExpr, error) {
 	exprTyped, err := expr.Expr.TypeCheck(ctx, desired)
 	if err != nil {
 		return nil, err
@@ -617,9 +617,9 @@ func (expr *ParenExpr) TypeCheck(ctx *SemaContext, desired Type) (TypedExpr, err
 
 // presetTypesForTesting is a mapping of qualified names to types that can be mocked out
 // for tests to allow the qualified names to be type checked without throwing an error.
-var presetTypesForTesting map[string]Type
+var presetTypesForTesting map[string]types.T
 
-func mockNameTypes(types map[string]Type) func() {
+func mockNameTypes(types map[string]types.T) func() {
 	presetTypesForTesting = types
 	return func() {
 		presetTypesForTesting = nil
@@ -630,7 +630,7 @@ func mockNameTypes(types map[string]Type) func() {
 // implementation only for testing within this package. During query
 // execution, ColumnItems are replaced to IndexedVars prior to type
 // checking.
-func (expr *ColumnItem) TypeCheck(_ *SemaContext, desired Type) (TypedExpr, error) {
+func (expr *ColumnItem) TypeCheck(_ *SemaContext, desired types.T) (TypedExpr, error) {
 	name := expr.String()
 	if _, ok := presetTypesForTesting[name]; ok {
 		return expr, nil
@@ -639,12 +639,12 @@ func (expr *ColumnItem) TypeCheck(_ *SemaContext, desired Type) (TypedExpr, erro
 }
 
 // TypeCheck implements the Expr interface.
-func (expr UnqualifiedStar) TypeCheck(_ *SemaContext, desired Type) (TypedExpr, error) {
+func (expr UnqualifiedStar) TypeCheck(_ *SemaContext, desired types.T) (TypedExpr, error) {
 	return nil, errStarNotAllowed
 }
 
 // TypeCheck implements the Expr interface.
-func (expr UnresolvedName) TypeCheck(s *SemaContext, desired Type) (TypedExpr, error) {
+func (expr UnresolvedName) TypeCheck(s *SemaContext, desired types.T) (TypedExpr, error) {
 	v, err := expr.NormalizeVarName()
 	if err != nil {
 		return nil, err
@@ -653,12 +653,12 @@ func (expr UnresolvedName) TypeCheck(s *SemaContext, desired Type) (TypedExpr, e
 }
 
 // TypeCheck implements the Expr interface.
-func (expr *AllColumnsSelector) TypeCheck(_ *SemaContext, desired Type) (TypedExpr, error) {
+func (expr *AllColumnsSelector) TypeCheck(_ *SemaContext, desired types.T) (TypedExpr, error) {
 	return nil, pgerror.NewErrorf(pgerror.CodeSyntaxError, "cannot use %q in this context", expr)
 }
 
 // TypeCheck implements the Expr interface.
-func (expr *RangeCond) TypeCheck(ctx *SemaContext, desired Type) (TypedExpr, error) {
+func (expr *RangeCond) TypeCheck(ctx *SemaContext, desired types.T) (TypedExpr, error) {
 	leftTyped, fromTyped, _, err := typeCheckComparisonOp(ctx, GT, expr.Left, expr.From)
 	if err != nil {
 		return nil, err
@@ -669,17 +669,17 @@ func (expr *RangeCond) TypeCheck(ctx *SemaContext, desired Type) (TypedExpr, err
 	}
 
 	expr.Left, expr.From, expr.To = leftTyped, fromTyped, toTyped
-	expr.typ = TypeBool
+	expr.typ = types.Bool
 	return expr, nil
 }
 
 // TypeCheck implements the Expr interface.
-func (expr *Subquery) TypeCheck(_ *SemaContext, desired Type) (TypedExpr, error) {
+func (expr *Subquery) TypeCheck(_ *SemaContext, desired types.T) (TypedExpr, error) {
 	panic("subquery nodes must be replaced before type checking")
 }
 
 // TypeCheck implements the Expr interface.
-func (expr *UnaryExpr) TypeCheck(ctx *SemaContext, desired Type) (TypedExpr, error) {
+func (expr *UnaryExpr) TypeCheck(ctx *SemaContext, desired types.T) (TypedExpr, error) {
 	ops := UnaryOps[expr.Operator]
 
 	typedSubExprs, fns, err := typeCheckOverloadedExprs(ctx, desired, ops, false, expr.Expr)
@@ -692,7 +692,7 @@ func (expr *UnaryExpr) TypeCheck(ctx *SemaContext, desired Type) (TypedExpr, err
 
 	// Return NULL if at least one overload is possible and NULL is an argument.
 	if len(fns) > 0 {
-		if exprReturn == TypeNull {
+		if exprReturn == types.Null {
 			return DNull, nil
 		}
 	}
@@ -701,7 +701,7 @@ func (expr *UnaryExpr) TypeCheck(ctx *SemaContext, desired Type) (TypedExpr, err
 	// or if it found an ambiguity.
 	if len(fns) != 1 {
 		var desStr string
-		if desired != TypeAny {
+		if desired != types.Any {
 			desStr = fmt.Sprintf(" (desired <%s>)", desired)
 		}
 		sig := fmt.Sprintf("%s <%s>%s", expr.Operator, exprReturn, desStr)
@@ -722,26 +722,26 @@ func (expr *UnaryExpr) TypeCheck(ctx *SemaContext, desired Type) (TypedExpr, err
 }
 
 // TypeCheck implements the Expr interface.
-func (expr DefaultVal) TypeCheck(_ *SemaContext, desired Type) (TypedExpr, error) {
+func (expr DefaultVal) TypeCheck(_ *SemaContext, desired types.T) (TypedExpr, error) {
 	return nil, errInvalidDefaultUsage
 }
 
 // TypeCheck implements the Expr interface.
-func (expr *NumVal) TypeCheck(ctx *SemaContext, desired Type) (TypedExpr, error) {
+func (expr *NumVal) TypeCheck(ctx *SemaContext, desired types.T) (TypedExpr, error) {
 	return typeCheckConstant(expr, ctx, desired)
 }
 
 // TypeCheck implements the Expr interface.
-func (expr *StrVal) TypeCheck(ctx *SemaContext, desired Type) (TypedExpr, error) {
+func (expr *StrVal) TypeCheck(ctx *SemaContext, desired types.T) (TypedExpr, error) {
 	return typeCheckConstant(expr, ctx, desired)
 }
 
 // TypeCheck implements the Expr interface.
-func (expr *Tuple) TypeCheck(ctx *SemaContext, desired Type) (TypedExpr, error) {
-	expr.types = make(TTuple, len(expr.Exprs))
+func (expr *Tuple) TypeCheck(ctx *SemaContext, desired types.T) (TypedExpr, error) {
+	expr.types = make(types.TTuple, len(expr.Exprs))
 	for i, subExpr := range expr.Exprs {
-		desiredElem := TypeAny
-		if t, ok := desired.(TTuple); ok && len(t) > i {
+		desiredElem := types.Any
+		if t, ok := desired.(types.TTuple); ok && len(t) > i {
 			desiredElem = t[i]
 		}
 		typedExpr, err := subExpr.TypeCheck(ctx, desiredElem)
@@ -758,17 +758,17 @@ var errAmbiguousArrayType = pgerror.NewErrorf(pgerror.CodeIndeterminateDatatypeE
 	"Consider annotating with the desired type, for example ARRAY[]:::int[]")
 
 // TypeCheck implements the Expr interface.
-func (expr *Array) TypeCheck(ctx *SemaContext, desired Type) (TypedExpr, error) {
-	desiredParam := TypeAny
-	if arr, ok := desired.(TArray); ok {
+func (expr *Array) TypeCheck(ctx *SemaContext, desired types.T) (TypedExpr, error) {
+	desiredParam := types.Any
+	if arr, ok := desired.(types.TArray); ok {
 		desiredParam = arr.Typ
 	}
 
 	if len(expr.Exprs) == 0 {
-		if desiredParam == TypeAny {
+		if desiredParam == types.Any {
 			return nil, errAmbiguousArrayType
 		}
-		expr.typ = TArray{desiredParam}
+		expr.typ = types.TArray{Typ: desiredParam}
 		return expr, nil
 	}
 
@@ -777,7 +777,7 @@ func (expr *Array) TypeCheck(ctx *SemaContext, desired Type) (TypedExpr, error) 
 		return nil, err
 	}
 
-	expr.typ = TArray{typ}
+	expr.typ = types.TArray{Typ: typ}
 	for i := range typedSubExprs {
 		expr.Exprs[i] = typedSubExprs[i]
 	}
@@ -785,9 +785,9 @@ func (expr *Array) TypeCheck(ctx *SemaContext, desired Type) (TypedExpr, error) 
 }
 
 // TypeCheck implements the Expr interface.
-func (expr *ArrayFlatten) TypeCheck(ctx *SemaContext, desired Type) (TypedExpr, error) {
-	desiredParam := TypeAny
-	if arr, ok := desired.(TArray); ok {
+func (expr *ArrayFlatten) TypeCheck(ctx *SemaContext, desired types.T) (TypedExpr, error) {
+	desiredParam := types.Any
+	if arr, ok := desired.(types.TArray); ok {
 		desiredParam = arr.Typ
 	}
 
@@ -796,12 +796,12 @@ func (expr *ArrayFlatten) TypeCheck(ctx *SemaContext, desired Type) (TypedExpr, 
 		return nil, err
 	}
 	expr.Subquery = subqueryTyped
-	expr.typ = TArray{subqueryTyped.ResolvedType()}
+	expr.typ = types.TArray{Typ: subqueryTyped.ResolvedType()}
 	return expr, nil
 }
 
 // TypeCheck implements the Expr interface.
-func (expr *Placeholder) TypeCheck(ctx *SemaContext, desired Type) (TypedExpr, error) {
+func (expr *Placeholder) TypeCheck(ctx *SemaContext, desired types.T) (TypedExpr, error) {
 	// Perform placeholder typing. This function is only called during Prepare,
 	// when there are no available values for the placeholders yet, because
 	// during Execute all placeholders are replaced from the AST before type
@@ -840,104 +840,106 @@ func (expr *Placeholder) TypeCheck(ctx *SemaContext, desired Type) (TypedExpr, e
 
 // TypeCheck implements the Expr interface. It is implemented as an idempotent
 // identity function for Datum.
-func (d *DBool) TypeCheck(_ *SemaContext, _ Type) (TypedExpr, error) { return d, nil }
+func (d *DBool) TypeCheck(_ *SemaContext, _ types.T) (TypedExpr, error) { return d, nil }
 
 // TypeCheck implements the Expr interface. It is implemented as an idempotent
 // identity function for Datum.
-func (d *DInt) TypeCheck(_ *SemaContext, _ Type) (TypedExpr, error) { return d, nil }
+func (d *DInt) TypeCheck(_ *SemaContext, _ types.T) (TypedExpr, error) { return d, nil }
 
 // TypeCheck implements the Expr interface. It is implemented as an idempotent
 // identity function for Datum.
-func (d *DFloat) TypeCheck(_ *SemaContext, _ Type) (TypedExpr, error) { return d, nil }
+func (d *DFloat) TypeCheck(_ *SemaContext, _ types.T) (TypedExpr, error) { return d, nil }
 
 // TypeCheck implements the Expr interface. It is implemented as an idempotent
 // identity function for Datum.
-func (d *DDecimal) TypeCheck(_ *SemaContext, _ Type) (TypedExpr, error) { return d, nil }
+func (d *DDecimal) TypeCheck(_ *SemaContext, _ types.T) (TypedExpr, error) { return d, nil }
 
 // TypeCheck implements the Expr interface. It is implemented as an idempotent
 // identity function for Datum.
-func (d *DString) TypeCheck(_ *SemaContext, _ Type) (TypedExpr, error) { return d, nil }
+func (d *DString) TypeCheck(_ *SemaContext, _ types.T) (TypedExpr, error) { return d, nil }
 
 // TypeCheck implements the Expr interface. It is implemented as an idempotent
 // identity function for Datum.
-func (d *DCollatedString) TypeCheck(_ *SemaContext, _ Type) (TypedExpr, error) { return d, nil }
+func (d *DCollatedString) TypeCheck(_ *SemaContext, _ types.T) (TypedExpr, error) { return d, nil }
 
 // TypeCheck implements the Expr interface. It is implemented as an idempotent
 // identity function for Datum.
-func (d *DBytes) TypeCheck(_ *SemaContext, _ Type) (TypedExpr, error) { return d, nil }
+func (d *DBytes) TypeCheck(_ *SemaContext, _ types.T) (TypedExpr, error) { return d, nil }
 
 // TypeCheck implements the Expr interface. It is implemented as an idempotent
 // identity function for Datum.
-func (d *DUuid) TypeCheck(_ *SemaContext, _ Type) (TypedExpr, error) { return d, nil }
+func (d *DUuid) TypeCheck(_ *SemaContext, _ types.T) (TypedExpr, error) { return d, nil }
 
 // TypeCheck implements the Expr interface. It is implemented as an idempotent
 // identity function for Datum.
-func (d *DIPAddr) TypeCheck(_ *SemaContext, _ Type) (TypedExpr, error) { return d, nil }
+func (d *DIPAddr) TypeCheck(_ *SemaContext, _ types.T) (TypedExpr, error) { return d, nil }
 
 // TypeCheck implements the Expr interface. It is implemented as an idempotent
 // identity function for Datum.
-func (d *DDate) TypeCheck(_ *SemaContext, _ Type) (TypedExpr, error) { return d, nil }
+func (d *DDate) TypeCheck(_ *SemaContext, _ types.T) (TypedExpr, error) { return d, nil }
 
 // TypeCheck implements the Expr interface. It is implemented as an idempotent
 // identity function for Datum.
-func (d *DTimestamp) TypeCheck(_ *SemaContext, _ Type) (TypedExpr, error) { return d, nil }
+func (d *DTimestamp) TypeCheck(_ *SemaContext, _ types.T) (TypedExpr, error) { return d, nil }
 
 // TypeCheck implements the Expr interface. It is implemented as an idempotent
 // identity function for Datum.
-func (d *DTimestampTZ) TypeCheck(_ *SemaContext, _ Type) (TypedExpr, error) { return d, nil }
+func (d *DTimestampTZ) TypeCheck(_ *SemaContext, _ types.T) (TypedExpr, error) { return d, nil }
 
 // TypeCheck implements the Expr interface. It is implemented as an idempotent
 // identity function for Datum.
-func (d *DInterval) TypeCheck(_ *SemaContext, _ Type) (TypedExpr, error) { return d, nil }
+func (d *DInterval) TypeCheck(_ *SemaContext, _ types.T) (TypedExpr, error) { return d, nil }
 
 // TypeCheck implements the Expr interface. It is implemented as an idempotent
 // identity function for Datum.
-func (d *DJSON) TypeCheck(_ *SemaContext, _ Type) (TypedExpr, error) { return d, nil }
+func (d *DJSON) TypeCheck(_ *SemaContext, _ types.T) (TypedExpr, error) { return d, nil }
 
 // TypeCheck implements the Expr interface. It is implemented as an idempotent
 // identity function for Datum.
-func (d *DTuple) TypeCheck(_ *SemaContext, _ Type) (TypedExpr, error) { return d, nil }
+func (d *DTuple) TypeCheck(_ *SemaContext, _ types.T) (TypedExpr, error) { return d, nil }
 
 // TypeCheck implements the Expr interface. It is implemented as an idempotent
 // identity function for Datum.
-func (d *DArray) TypeCheck(_ *SemaContext, _ Type) (TypedExpr, error) { return d, nil }
+func (d *DArray) TypeCheck(_ *SemaContext, _ types.T) (TypedExpr, error) { return d, nil }
 
 // TypeCheck implements the Expr interface. It is implemented as an idempotent
 // identity function for Datum.
-func (d *DTable) TypeCheck(_ *SemaContext, _ Type) (TypedExpr, error) { return d, nil }
+func (d *DTable) TypeCheck(_ *SemaContext, _ types.T) (TypedExpr, error) { return d, nil }
 
 // TypeCheck implements the Expr interface. It is implemented as an idempotent
 // identity function for Datum.
-func (d *DOid) TypeCheck(_ *SemaContext, _ Type) (TypedExpr, error) { return d, nil }
+func (d *DOid) TypeCheck(_ *SemaContext, _ types.T) (TypedExpr, error) { return d, nil }
 
 // TypeCheck implements the Expr interface. It is implemented as an idempotent
 // identity function for Datum.
-func (d *DOidWrapper) TypeCheck(_ *SemaContext, _ Type) (TypedExpr, error) { return d, nil }
+func (d *DOidWrapper) TypeCheck(_ *SemaContext, _ types.T) (TypedExpr, error) { return d, nil }
 
 // TypeCheck implements the Expr interface. It is implemented as an idempotent
 // identity function for Datum.
-func (d dNull) TypeCheck(_ *SemaContext, desired Type) (TypedExpr, error) { return d, nil }
+func (d dNull) TypeCheck(_ *SemaContext, desired types.T) (TypedExpr, error) { return d, nil }
 
 // TypeCheck implements the Expr interface.
-func (expr PartitionDefault) TypeCheck(_ *SemaContext, desired Type) (TypedExpr, error) {
+func (expr PartitionDefault) TypeCheck(_ *SemaContext, desired types.T) (TypedExpr, error) {
 	return expr, nil
 }
 
 // TypeCheck implements the Expr interface.
-func (expr PartitionMaxValue) TypeCheck(_ *SemaContext, desired Type) (TypedExpr, error) {
+func (expr PartitionMaxValue) TypeCheck(_ *SemaContext, desired types.T) (TypedExpr, error) {
 	return expr, nil
 }
 
 // typeCheckAndRequireTupleElems asserts that all elements in the Tuple
 // can be typed as required and are equivalent to required. Note that one would invoke
-// with the required element type and NOT TTuple (as opposed to how Tuple.TypeCheck operates).
-// For example, (1, 2.5) with required TypeDecimal would raise a sane error whereas (1.0, 2.5)
-// with required TypeDecimal would pass.
+// with the required element type and NOT types.TTuple (as opposed to how Tuple.TypeCheck operates).
+// For example, (1, 2.5) with required types.Decimal would raise a sane error whereas (1.0, 2.5)
+// with required types.Decimal would pass.
 //
 // It is only valid to pass in a Tuple expression
-func typeCheckAndRequireTupleElems(ctx *SemaContext, expr Expr, required Type) (TypedExpr, error) {
+func typeCheckAndRequireTupleElems(
+	ctx *SemaContext, expr Expr, required types.T,
+) (TypedExpr, error) {
 	tuple := expr.(*Tuple)
-	tuple.types = make(TTuple, len(tuple.Exprs))
+	tuple.types = make(types.TTuple, len(tuple.Exprs))
 	for i, subExpr := range tuple.Exprs {
 		// Require that the sub expression is equivalent (or may be inferred) to the required type.
 		typedExpr, err := typeCheckAndRequire(ctx, subExpr, required, "tuple element")
@@ -951,15 +953,17 @@ func typeCheckAndRequireTupleElems(ctx *SemaContext, expr Expr, required Type) (
 }
 
 func typeCheckAndRequireBoolean(ctx *SemaContext, expr Expr, op string) (TypedExpr, error) {
-	return typeCheckAndRequire(ctx, expr, TypeBool, op)
+	return typeCheckAndRequire(ctx, expr, types.Bool, op)
 }
 
-func typeCheckAndRequire(ctx *SemaContext, expr Expr, required Type, op string) (TypedExpr, error) {
+func typeCheckAndRequire(
+	ctx *SemaContext, expr Expr, required types.T, op string,
+) (TypedExpr, error) {
 	typedExpr, err := expr.TypeCheck(ctx, required)
 	if err != nil {
 		return nil, err
 	}
-	if typ := typedExpr.ResolvedType(); !(typ == TypeNull || typ.Equivalent(required)) {
+	if typ := typedExpr.ResolvedType(); !(typ == types.Null || typ.Equivalent(required)) {
 		return nil, pgerror.NewErrorf(pgerror.CodeDatatypeMismatchError, "incompatible %s type: %s", op, typ)
 	}
 	return typedExpr, nil
@@ -992,7 +996,7 @@ func typeCheckComparisonOpWithSubOperator(
 	foldedOp, _, _, _, _ := foldComparisonExpr(subOp, nil, nil)
 	ops := CmpOps[foldedOp]
 
-	var cmpTypeLeft, cmpTypeRight Type
+	var cmpTypeLeft, cmpTypeRight types.T
 	var leftTyped, rightTyped TypedExpr
 	if array, isConstructor := right.(*Array); isConstructor {
 		// If the right expression is an (optionally nested) array constructor, we
@@ -1001,7 +1005,7 @@ func typeCheckComparisonOpWithSubOperator(
 		sameTypeExprs[0] = left
 		copy(sameTypeExprs[1:], array.Exprs)
 
-		typedSubExprs, retType, err := typeCheckSameTypedExprs(ctx, TypeAny, sameTypeExprs...)
+		typedSubExprs, retType, err := typeCheckSameTypedExprs(ctx, types.Any, sameTypeExprs...)
 		if err != nil {
 			sigWithErr := fmt.Sprintf(compExprsWithSubOpFmt, left, subOp, op, right, err)
 			return nil, nil, CmpOp{},
@@ -1017,20 +1021,20 @@ func typeCheckComparisonOpWithSubOperator(
 		for i, typedExpr := range typedSubExprs[1:] {
 			array.Exprs[i] = typedExpr
 		}
-		array.typ = TArray{retType}
+		array.typ = types.TArray{Typ: retType}
 
 		rightTyped = array
 		cmpTypeRight = retType
 
-		// Return early without looking up a CmpOp if the comparison type is TypeNull.
-		if retType == TypeNull {
+		// Return early without looking up a CmpOp if the comparison type is types.Null.
+		if retType == types.Null {
 			return leftTyped, rightTyped, CmpOp{}, nil
 		}
 	} else {
 		// If the right expression is not an array constructor, we type the left
 		// expression in isolation.
 		var err error
-		leftTyped, err = left.TypeCheck(ctx, TypeAny)
+		leftTyped, err = left.TypeCheck(ctx, types.Any)
 		if err != nil {
 			return nil, nil, CmpOp{}, err
 		}
@@ -1048,21 +1052,21 @@ func typeCheckComparisonOpWithSubOperator(
 			// If right is an sql.subquery Expr, it should already be typed.
 			// TODO(richardwu): If right is a subquery, we should really
 			// propagate the left type as a desired type for the result column.
-			rightTyped, err = right.TypeCheck(ctx, TArray{cmpTypeLeft})
+			rightTyped, err = right.TypeCheck(ctx, types.TArray{Typ: cmpTypeLeft})
 			if err != nil {
 				return nil, nil, CmpOp{}, err
 			}
 		}
 
 		rightReturn := rightTyped.ResolvedType()
-		if cmpTypeLeft == TypeNull || rightReturn == TypeNull {
+		if cmpTypeLeft == types.Null || rightReturn == types.Null {
 			return leftTyped, rightTyped, CmpOp{}, nil
 		}
 
-		switch rightUnwrapped := UnwrapType(rightReturn).(type) {
-		case TArray:
+		switch rightUnwrapped := types.UnwrapType(rightReturn).(type) {
+		case types.TArray:
 			cmpTypeRight = rightUnwrapped.Typ
-		case TTuple:
+		case types.TTuple:
 			if len(rightUnwrapped) == 0 {
 				// Literal tuple contains no elements (subquery tuples always contain
 				// one and only one element since subqueries are asserted to return
@@ -1086,7 +1090,7 @@ func typeCheckComparisonOpWithSubOperator(
 	return leftTyped, rightTyped, fn, nil
 }
 
-func subOpCompError(leftType, rightType Type, subOp, op ComparisonOperator) *pgerror.Error {
+func subOpCompError(leftType, rightType types.T, subOp, op ComparisonOperator) *pgerror.Error {
 	sig := fmt.Sprintf(compSignatureWithSubOpFmt, leftType, subOp, op, rightType)
 	return pgerror.NewErrorf(pgerror.CodeInvalidParameterValueError, unsupportedCompErrFmt, sig)
 }
@@ -1129,16 +1133,16 @@ func typeCheckComparisonOp(
 		sameTypeExprs[0] = foldedLeft
 		copy(sameTypeExprs[1:], rightTuple.Exprs)
 
-		typedSubExprs, retType, err := typeCheckSameTypedExprs(ctx, TypeAny, sameTypeExprs...)
+		typedSubExprs, retType, err := typeCheckSameTypedExprs(ctx, types.Any, sameTypeExprs...)
 		if err != nil {
 			sigWithErr := fmt.Sprintf(compExprsFmt, left, op, right, err)
 			return nil, nil, CmpOp{},
 				pgerror.NewErrorf(pgerror.CodeInvalidParameterValueError, unsupportedCompErrFmt, sigWithErr)
 		}
 
-		fn, ok := ops.lookupImpl(retType, TypeTuple)
+		fn, ok := ops.lookupImpl(retType, types.FamTuple)
 		if !ok {
-			sig := fmt.Sprintf(compSignatureFmt, retType, op, TypeTuple)
+			sig := fmt.Sprintf(compSignatureFmt, retType, op, types.FamTuple)
 			return nil, nil, CmpOp{},
 				pgerror.NewErrorf(pgerror.CodeInvalidParameterValueError, unsupportedCompErrFmt, sig)
 		}
@@ -1146,7 +1150,7 @@ func typeCheckComparisonOp(
 		typedLeft := typedSubExprs[0]
 		typedSubExprs = typedSubExprs[1:]
 
-		rightTuple.types = make(TTuple, len(typedSubExprs))
+		rightTuple.types = make(types.TTuple, len(typedSubExprs))
 		for i, typedExpr := range typedSubExprs {
 			rightTuple.Exprs[i] = typedExpr
 			rightTuple.types[i] = retType
@@ -1156,9 +1160,9 @@ func typeCheckComparisonOp(
 		}
 		return typedLeft, rightTuple, fn, nil
 	case leftIsTuple && rightIsTuple:
-		fn, ok := ops.lookupImpl(TypeTuple, TypeTuple)
+		fn, ok := ops.lookupImpl(types.FamTuple, types.FamTuple)
 		if !ok {
-			sig := fmt.Sprintf(compSignatureFmt, TypeTuple, op, TypeTuple)
+			sig := fmt.Sprintf(compSignatureFmt, types.FamTuple, op, types.FamTuple)
 			return nil, nil, CmpOp{},
 				pgerror.NewErrorf(pgerror.CodeInvalidParameterValueError, unsupportedCompErrFmt, sig)
 		}
@@ -1175,7 +1179,7 @@ func typeCheckComparisonOp(
 	// defined to return NULL anyways. Should the SQL dialect ever be extended with
 	// comparisons that can return non-NULL on NULL input, the `inBinOp` parameter
 	// may need altering.
-	typedSubExprs, fns, err := typeCheckOverloadedExprs(ctx, TypeAny, ops, false, foldedLeft, foldedRight)
+	typedSubExprs, fns, err := typeCheckOverloadedExprs(ctx, types.Any, ops, false, foldedLeft, foldedRight)
 	if err != nil {
 		return nil, nil, CmpOp{}, err
 	}
@@ -1196,14 +1200,14 @@ func typeCheckComparisonOp(
 	// Return early if at least one overload is possible and NULL is an argument.
 	// Callers can handle returning NULL, if necessary.
 	if len(fns) > 0 {
-		if leftReturn == TypeNull || rightReturn == TypeNull {
+		if leftReturn == types.Null || rightReturn == types.Null {
 			return leftExpr, rightExpr, CmpOp{}, nil
 		}
 	}
 
 	// Throw a typing error if overload resolution found either no compatible candidates
 	// or if it found an ambiguity.
-	collationMismatch := leftReturn.FamilyEqual(TypeCollatedString) && !leftReturn.Equivalent(rightReturn)
+	collationMismatch := leftReturn.FamilyEqual(types.FamCollatedString) && !leftReturn.Equivalent(rightReturn)
 	if len(fns) != 1 || collationMismatch {
 		sig := fmt.Sprintf(compSignatureFmt, leftReturn, op, rightReturn)
 		if len(fns) == 0 || collationMismatch {
@@ -1233,8 +1237,8 @@ type typeCheckExprsState struct {
 // resolved TypeExprs have the same type. An optional desired type can be provided,
 // which will hint that type which the expressions should resolve to, if possible.
 func typeCheckSameTypedExprs(
-	ctx *SemaContext, desired Type, exprs ...Expr,
-) ([]TypedExpr, Type, error) {
+	ctx *SemaContext, desired types.T, exprs ...Expr,
+) ([]TypedExpr, types.T, error) {
 	switch len(exprs) {
 	case 0:
 		return nil, nil, nil
@@ -1276,28 +1280,28 @@ func typeCheckSameTypedExprs(
 		return typeCheckConstsAndPlaceholdersWithDesired(s, desired)
 	default:
 		firstValidIdx := -1
-		firstValidType := TypeNull
+		firstValidType := types.Null
 		for i, j := range resolvableIdxs {
 			typedExpr, err := exprs[j].TypeCheck(ctx, desired)
 			if err != nil {
 				return nil, nil, err
 			}
 			typedExprs[j] = typedExpr
-			if returnType := typedExpr.ResolvedType(); returnType != TypeNull {
+			if returnType := typedExpr.ResolvedType(); returnType != types.Null {
 				firstValidType = returnType
 				firstValidIdx = i
 				break
 			}
 		}
 
-		if firstValidType == TypeNull {
+		if firstValidType == types.Null {
 			switch {
 			case len(constIdxs) > 0:
 				return typeCheckConstsAndPlaceholdersWithDesired(s, desired)
 			case len(placeholderIdxs) > 0:
 				return nil, nil, placeholderTypeAmbiguityError{s.exprs[placeholderIdxs[0]].(*Placeholder)}
 			default:
-				return typedExprs, TypeNull, nil
+				return typedExprs, types.Null, nil
 			}
 		}
 
@@ -1306,7 +1310,7 @@ func typeCheckSameTypedExprs(
 			if err != nil {
 				return nil, nil, err
 			}
-			if typ := typedExpr.ResolvedType(); !(typ.Equivalent(firstValidType) || typ == TypeNull) {
+			if typ := typedExpr.ResolvedType(); !(typ.Equivalent(firstValidType) || typ == types.Null) {
 				return nil, nil, unexpectedTypeError{exprs[i], firstValidType, typ}
 			}
 			typedExprs[i] = typedExpr
@@ -1326,7 +1330,7 @@ func typeCheckSameTypedExprs(
 }
 
 // Used to set placeholders to the desired typ.
-func typeCheckSameTypedPlaceholders(s typeCheckExprsState, typ Type) error {
+func typeCheckSameTypedPlaceholders(s typeCheckExprsState, typ types.T) error {
 	for _, i := range s.placeholderIdxs {
 		typedExpr, err := typeCheckAndRequire(s.ctx, s.exprs[i], typ, "placeholder")
 		if err != nil {
@@ -1340,8 +1344,8 @@ func typeCheckSameTypedPlaceholders(s typeCheckExprsState, typ Type) error {
 // Used to type check constants to the same type. An optional typ can be
 // provided to signify the desired shared type, which can be set to the
 // required shared type using the second parameter.
-func typeCheckSameTypedConsts(s typeCheckExprsState, typ Type, required bool) (Type, error) {
-	setTypeForConsts := func(typ Type) (Type, error) {
+func typeCheckSameTypedConsts(s typeCheckExprsState, typ types.T, required bool) (types.T, error) {
+	setTypeForConsts := func(typ types.T) (types.T, error) {
 		for _, i := range s.constIdxs {
 			typedExpr, err := typeCheckAndRequire(s.ctx, s.exprs[i], typ, "constant")
 			if err != nil {
@@ -1356,12 +1360,12 @@ func typeCheckSameTypedConsts(s typeCheckExprsState, typ Type, required bool) (T
 	}
 
 	// If typ is not a wildcard, all consts try to become typ.
-	if typ != TypeAny {
+	if typ != types.Any {
 		all := true
 		for _, i := range s.constIdxs {
 			if !canConstantBecome(s.exprs[i].(Constant), typ) {
 				if required {
-					typedExpr, err := s.exprs[i].TypeCheck(s.ctx, TypeAny)
+					typedExpr, err := s.exprs[i].TypeCheck(s.ctx, types.Any)
 					if err != nil {
 						return nil, err
 					}
@@ -1393,7 +1397,7 @@ func typeCheckSameTypedConsts(s typeCheckExprsState, typ Type, required bool) (T
 		if typ := typedExpr.ResolvedType(); !typ.Equivalent(reqTyp) {
 			return nil, unexpectedTypeError{s.exprs[i], reqTyp, typ}
 		}
-		if reqTyp == TypeAny {
+		if reqTyp == types.Any {
 			reqTyp = typedExpr.ResolvedType()
 		}
 	}
@@ -1403,8 +1407,8 @@ func typeCheckSameTypedConsts(s typeCheckExprsState, typ Type, required bool) (T
 // Used to type check all constants with the optional desired type. The
 // type that is chosen here will then be set to any placeholders.
 func typeCheckConstsAndPlaceholdersWithDesired(
-	s typeCheckExprsState, desired Type,
-) ([]TypedExpr, Type, error) {
+	s typeCheckExprsState, desired types.T,
+) ([]TypedExpr, types.T, error) {
 	typ, err := typeCheckSameTypedConsts(s, desired, false)
 	if err != nil {
 		return nil, nil, err
@@ -1447,8 +1451,8 @@ func typeCheckTupleComparison(
 	if err := checkTupleHasLength(right, tupLen); err != nil {
 		return nil, nil, err
 	}
-	left.types = make(TTuple, tupLen)
-	right.types = make(TTuple, tupLen)
+	left.types = make(types.TTuple, tupLen)
+	right.types = make(types.TTuple, tupLen)
 	for elemIdx := range left.Exprs {
 		leftSubExpr := left.Exprs[elemIdx]
 		rightSubExpr := right.Exprs[elemIdx]
@@ -1472,8 +1476,8 @@ func typeCheckTupleComparison(
 // desired type can be provided, which will hint that type which the expressions should
 // resolve to, if possible.
 func typeCheckSameTypedTupleExprs(
-	ctx *SemaContext, desired Type, exprs ...Expr,
-) ([]TypedExpr, Type, error) {
+	ctx *SemaContext, desired types.T, exprs ...Expr,
+) ([]TypedExpr, types.T, error) {
 	// Hold the resolved type expressions of the provided exprs, in order.
 	// TODO(nvanbenschoten): Look into reducing allocations here.
 	typedExprs := make([]TypedExpr, len(exprs))
@@ -1491,19 +1495,19 @@ func typeCheckSameTypedTupleExprs(
 	}
 
 	// Pull out desired types.
-	var desiredTuple TTuple
-	if t, ok := desired.(TTuple); ok {
+	var desiredTuple types.TTuple
+	if t, ok := desired.(types.TTuple); ok {
 		desiredTuple = t
 	}
 
 	// All expressions at the same indexes must be the same type.
-	resTypes := make(TTuple, firstLen)
+	resTypes := make(types.TTuple, firstLen)
 	sameTypeExprs := make([]Expr, len(exprs))
 	for elemIdx := range first.Exprs {
 		for tupleIdx, expr := range exprs {
 			sameTypeExprs[tupleIdx] = expr.(*Tuple).Exprs[elemIdx]
 		}
-		desiredElem := TypeAny
+		desiredElem := types.Any
 		if len(desiredTuple) > elemIdx {
 			desiredElem = desiredTuple[elemIdx]
 		}
@@ -1526,11 +1530,11 @@ func typeCheckSameTypedTupleExprs(
 func checkAllExprsAreTuples(ctx *SemaContext, exprs []Expr) error {
 	for _, expr := range exprs {
 		if _, ok := expr.(*Tuple); !ok {
-			typedExpr, err := expr.TypeCheck(ctx, TypeAny)
+			typedExpr, err := expr.TypeCheck(ctx, types.Any)
 			if err != nil {
 				return err
 			}
-			return unexpectedTypeError{expr, TypeTuple, typedExpr.ResolvedType()}
+			return unexpectedTypeError{expr, types.FamTuple, typedExpr.ResolvedType()}
 		}
 	}
 	return nil
@@ -1560,7 +1564,7 @@ type placeholderAnnotationVisitor struct {
 type annotationState struct {
 	sawAssertion   bool // marks if the placeholder has been subject to at least one type assetion
 	shouldAnnotate bool // marks if the placeholder should be annotated with the type typ
-	typ            Type
+	typ            types.T
 }
 
 func (v *placeholderAnnotationVisitor) VisitPre(expr Expr) (recurse bool, newExpr Expr) {

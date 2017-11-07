@@ -27,6 +27,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 )
 
 //go:generate make
@@ -79,11 +80,11 @@ func (p *Parser) Parse(sql string) (stmts StatementList, err error) {
 // their inferred types in the provided context. The optional desired parameter can
 // be used to hint the desired type for the root of the resulting typed expression
 // tree. Like with Expr.TypeCheck, it is not valid to provide a nil desired
-// type. Instead, call it with the wildcard type TypeAny if no specific type is
+// type. Instead, call it with the wildcard type types.Any if no specific type is
 // desired.
-func TypeCheck(expr Expr, ctx *SemaContext, desired Type) (TypedExpr, error) {
+func TypeCheck(expr Expr, ctx *SemaContext, desired types.T) (TypedExpr, error) {
 	if desired == nil {
-		panic("the desired type for parser.TypeCheck cannot be nil, use TypeAny instead")
+		panic("the desired type for parser.TypeCheck cannot be nil, use types.Any instead")
 	}
 
 	expr, err := foldConstantLiterals(expr)
@@ -97,12 +98,14 @@ func TypeCheck(expr Expr, ctx *SemaContext, desired Type) (TypedExpr, error) {
 // an identical manner to TypeCheck. It then asserts that the resulting TypedExpr
 // has the provided return type, returning both the typed expression and an error
 // if it does not.
-func TypeCheckAndRequire(expr Expr, ctx *SemaContext, required Type, op string) (TypedExpr, error) {
+func TypeCheckAndRequire(
+	expr Expr, ctx *SemaContext, required types.T, op string,
+) (TypedExpr, error) {
 	typedExpr, err := TypeCheck(expr, ctx, required)
 	if err != nil {
 		return nil, err
 	}
-	if typ := typedExpr.ResolvedType(); !(typ.Equivalent(required) || typ == TypeNull) {
+	if typ := typedExpr.ResolvedType(); !(typ.Equivalent(required) || typ == types.Null) {
 		return typedExpr, pgerror.NewErrorf(
 			pgerror.CodeDatatypeMismatchError, "argument of %s must be type %s, not type %s", op, required, typ)
 	}
@@ -205,36 +208,36 @@ func ParseType(sql string) (CastTargetType, error) {
 }
 
 // ParseStringAs parses s as type t.
-func ParseStringAs(t Type, s string, evalCtx *EvalContext) (Datum, error) {
+func ParseStringAs(t types.T, s string, evalCtx *EvalContext) (Datum, error) {
 	var d Datum
 	var err error
 	switch t {
-	case TypeBool:
+	case types.Bool:
 		d, err = ParseDBool(s)
-	case TypeBytes:
+	case types.Bytes:
 		d = NewDBytes(DBytes(s))
-	case TypeDate:
+	case types.Date:
 		d, err = ParseDDate(s, evalCtx.GetLocation())
-	case TypeDecimal:
+	case types.Decimal:
 		d, err = ParseDDecimal(s)
-	case TypeFloat:
+	case types.Float:
 		d, err = ParseDFloat(s)
-	case TypeInt:
+	case types.Int:
 		d, err = ParseDInt(s)
-	case TypeInterval:
+	case types.Interval:
 		d, err = ParseDInterval(s)
-	case TypeString:
+	case types.String:
 		d = NewDString(s)
-	case TypeTimestamp:
+	case types.Timestamp:
 		d, err = ParseDTimestamp(s, time.Microsecond)
-	case TypeTimestampTZ:
+	case types.TimestampTZ:
 		d, err = ParseDTimestampTZ(s, evalCtx.GetLocation(), time.Microsecond)
-	case TypeUUID:
+	case types.UUID:
 		d, err = ParseDUuidFromString(s)
-	case TypeINet:
+	case types.INet:
 		d, err = ParseDIPAddrFromINetString(s)
 	default:
-		if a, ok := t.(TArray); ok {
+		if a, ok := t.(types.TArray); ok {
 			typ, err := DatumTypeToColumnType(a.Typ)
 			if err != nil {
 				return nil, err

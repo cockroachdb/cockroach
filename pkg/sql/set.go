@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
@@ -74,7 +75,7 @@ func (p *planner) SetVar(ctx context.Context, n *parser.SetVar) (planNode, error
 
 				var dummyHelper parser.IndexedVarHelper
 				typedValue, err := p.analyzeExpr(
-					ctx, expr, nil, dummyHelper, parser.TypeString, false, "SET SESSION "+name)
+					ctx, expr, nil, dummyHelper, types.String, false, "SET SESSION "+name)
 				if err != nil {
 					return nil, err
 				}
@@ -155,20 +156,20 @@ func (p *planner) SetClusterSetting(
 				expr = parser.NewStrVal(parser.AsStringWithFlags(s, parser.FmtBareIdentifiers))
 			}
 
-			var requiredType parser.Type
+			var requiredType types.T
 			switch setting.(type) {
 			case *settings.StringSetting, *settings.StateMachineSetting, *settings.ByteSizeSetting:
-				requiredType = parser.TypeString
+				requiredType = types.String
 			case *settings.BoolSetting:
-				requiredType = parser.TypeBool
+				requiredType = types.Bool
 			case *settings.IntSetting:
-				requiredType = parser.TypeInt
+				requiredType = types.Int
 			case *settings.FloatSetting:
-				requiredType = parser.TypeFloat
+				requiredType = types.Float
 			case *settings.EnumSetting:
-				requiredType = parser.TypeAny
+				requiredType = types.Any
 			case *settings.DurationSetting:
-				requiredType = parser.TypeInterval
+				requiredType = types.Interval
 			default:
 				return nil, errors.Errorf("unsupported setting type %T", setting)
 			}

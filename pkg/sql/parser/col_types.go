@@ -21,6 +21,7 @@ import (
 
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 )
 
 // CastTargetType represents a type that is a valid cast target.
@@ -467,38 +468,38 @@ func (node *OidColType) Format(buf *bytes.Buffer, f FmtFlags) {
 	buf.WriteString(node.Name)
 }
 
-func oidColTypeToType(ct *OidColType) Type {
+func oidColTypeToType(ct *OidColType) types.T {
 	switch ct {
 	case oidColTypeOid:
-		return TypeOid
+		return types.Oid
 	case oidColTypeRegClass:
-		return TypeRegClass
+		return types.RegClass
 	case oidColTypeRegNamespace:
-		return TypeRegNamespace
+		return types.RegNamespace
 	case oidColTypeRegProc:
-		return TypeRegProc
+		return types.RegProc
 	case oidColTypeRegProcedure:
-		return TypeRegProcedure
+		return types.RegProcedure
 	case oidColTypeRegType:
-		return TypeRegType
+		return types.RegType
 	default:
 		panic(fmt.Sprintf("unexpected *OidColType: %v", ct))
 	}
 }
 
-func oidTypeToColType(t Type) *OidColType {
+func oidTypeToColType(t types.T) *OidColType {
 	switch t {
-	case TypeOid:
+	case types.Oid:
 		return oidColTypeOid
-	case TypeRegClass:
+	case types.RegClass:
 		return oidColTypeRegClass
-	case TypeRegNamespace:
+	case types.RegNamespace:
 		return oidColTypeRegNamespace
-	case TypeRegProc:
+	case types.RegProc:
 		return oidColTypeRegProc
-	case TypeRegProcedure:
+	case types.RegProcedure:
 		return oidColTypeRegProcedure
-	case TypeRegType:
+	case types.RegType:
 		return oidColTypeRegType
 	default:
 		panic(fmt.Sprintf("unexpected type: %v", t))
@@ -527,100 +528,100 @@ func (node *OidColType) String() string            { return AsString(node) }
 // DatumTypeToColumnType produces a SQL column type equivalent to the
 // given Datum type. Used to generate CastExpr nodes during
 // normalization.
-func DatumTypeToColumnType(t Type) (ColumnType, error) {
+func DatumTypeToColumnType(t types.T) (ColumnType, error) {
 	switch t {
-	case TypeBool:
+	case types.Bool:
 		return boolColTypeBool, nil
-	case TypeInt:
+	case types.Int:
 		return intColTypeInt, nil
-	case TypeFloat:
+	case types.Float:
 		return floatColTypeFloat, nil
-	case TypeDecimal:
+	case types.Decimal:
 		return decimalColTypeDecimal, nil
-	case TypeTimestamp:
+	case types.Timestamp:
 		return timestampColTypeTimestamp, nil
-	case TypeTimestampTZ:
+	case types.TimestampTZ:
 		return timestampTzColTypeTimestampWithTZ, nil
-	case TypeInterval:
+	case types.Interval:
 		return intervalColTypeInterval, nil
-	case TypeJSON:
+	case types.JSON:
 		return jsonColType, nil
-	case TypeUUID:
+	case types.UUID:
 		return uuidColTypeUUID, nil
-	case TypeINet:
+	case types.INet:
 		return ipnetColTypeINet, nil
-	case TypeDate:
+	case types.Date:
 		return dateColTypeDate, nil
-	case TypeString:
+	case types.String:
 		return stringColTypeString, nil
-	case TypeName:
+	case types.Name:
 		return nameColTypeName, nil
-	case TypeBytes:
+	case types.Bytes:
 		return bytesColTypeBytes, nil
-	case TypeOid,
-		TypeRegClass,
-		TypeRegNamespace,
-		TypeRegProc,
-		TypeRegProcedure,
-		TypeRegType:
+	case types.Oid,
+		types.RegClass,
+		types.RegNamespace,
+		types.RegProc,
+		types.RegProcedure,
+		types.RegType:
 		return oidTypeToColType(t), nil
 	}
 
 	switch typ := t.(type) {
-	case TCollatedString:
+	case types.TCollatedString:
 		return &CollatedStringColType{Name: "STRING", Locale: typ.Locale}, nil
-	case TArray:
+	case types.TArray:
 		elemTyp, err := DatumTypeToColumnType(typ.Typ)
 		if err != nil {
 			return nil, err
 		}
 		return arrayOf(elemTyp, Exprs(nil))
-	case tOidWrapper:
-		return DatumTypeToColumnType(typ.Type)
+	case types.TOidWrapper:
+		return DatumTypeToColumnType(typ.T)
 	}
 
 	return nil, pgerror.NewErrorf(pgerror.CodeInvalidTableDefinitionError,
 		"value type %s cannot be used for table columns", t)
 }
 
-// CastTargetToDatumType produces a Type equivalent to the given
+// CastTargetToDatumType produces a types.T equivalent to the given
 // SQL cast target type.
-func CastTargetToDatumType(t CastTargetType) Type {
+func CastTargetToDatumType(t CastTargetType) types.T {
 	switch ct := t.(type) {
 	case *BoolColType:
-		return TypeBool
+		return types.Bool
 	case *IntColType:
-		return TypeInt
+		return types.Int
 	case *FloatColType:
-		return TypeFloat
+		return types.Float
 	case *DecimalColType:
-		return TypeDecimal
+		return types.Decimal
 	case *StringColType:
-		return TypeString
+		return types.String
 	case *NameColType:
-		return TypeName
+		return types.Name
 	case *BytesColType:
-		return TypeBytes
+		return types.Bytes
 	case *DateColType:
-		return TypeDate
+		return types.Date
 	case *TimestampColType:
-		return TypeTimestamp
+		return types.Timestamp
 	case *TimestampTZColType:
-		return TypeTimestampTZ
+		return types.TimestampTZ
 	case *IntervalColType:
-		return TypeInterval
+		return types.Interval
 	case *JSONColType:
-		return TypeJSON
+		return types.JSON
 	case *UUIDColType:
-		return TypeUUID
+		return types.UUID
 	case *IPAddrColType:
-		return TypeINet
+		return types.INet
 	case *CollatedStringColType:
-		return TCollatedString{Locale: ct.Locale}
+		return types.TCollatedString{Locale: ct.Locale}
 	case *ArrayColType:
-		return TArray{CastTargetToDatumType(ct.ParamType)}
+		return types.TArray{Typ: CastTargetToDatumType(ct.ParamType)}
 	case *VectorColType:
-		return TypeIntVector
+		return types.IntVector
 	case *OidColType:
 		return oidColTypeToType(ct)
 	default:
