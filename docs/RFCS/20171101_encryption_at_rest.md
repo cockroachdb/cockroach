@@ -741,6 +741,18 @@ This would still cause issues when removing the license (or errors loading/valid
 
 Less drastic actions may be possible.
 
+### Preamble format
+
+The current preamble format is fixed and clearly defined (see [Preamble Format](#preamble-format).
+
+An alternative would be to use a structured data format such as protocol buffers:
+Pros:
+* easier parsing/writing
+* easier to extend for non-encryption uses
+Cons:
+* harder to impose a size limit, we would need to fail overlong encoded preambles
+* slightly more expensive processing
+
 ## Unresolved questions
 
 Before this RFC can be marked as approved, we have a few open questions (in no particular order):
