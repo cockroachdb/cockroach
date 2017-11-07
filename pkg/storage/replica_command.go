@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/abortspan"
+	"github.com/cockroachdb/cockroach/pkg/storage/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/stateloader"
@@ -71,7 +72,7 @@ var gcBatchSize = settings.RegisterIntSetting("kv.gc.batch_size",
 // would probably require removing the EvalCtx field due to import order
 // constraints).
 type CommandArgs struct {
-	EvalCtx ReplicaEvalContext
+	EvalCtx batcheval.EvalContext
 	Header  roachpb.Header
 	Args    roachpb.Request
 
@@ -163,7 +164,7 @@ func evaluateCommand(
 	raftCmdID storagebase.CmdIDKey,
 	index int,
 	batch engine.ReadWriter,
-	rec ReplicaEvalContext,
+	rec batcheval.EvalContext,
 	ms *enginepb.MVCCStats,
 	h roachpb.Header,
 	maxKeys int64,
@@ -176,7 +177,7 @@ func evaluateCommand(
 	}
 
 	// If a unittest filter was installed, check for an injected error; otherwise, continue.
-	if filter := rec.StoreTestingKnobs().TestingEvalFilter; filter != nil {
+	if filter := rec.EvalKnobs().TestingEvalFilter; filter != nil {
 		filterArgs := storagebase.FilterArgs{
 			Ctx:   ctx,
 			CmdID: raftCmdID,
@@ -751,7 +752,7 @@ func evalEndTransaction(
 			// wanted to abort the transaction.
 			desc := cArgs.EvalCtx.Desc()
 			externalIntents := resolveLocalIntents(ctx, desc,
-				batch, ms, *args, reply.Txn, cArgs.EvalCtx.StoreTestingKnobs())
+				batch, ms, *args, reply.Txn, cArgs.EvalCtx.EvalKnobs())
 			if err := updateTxnWithExternalIntents(
 				ctx, batch, ms, *args, reply.Txn, externalIntents,
 			); err != nil {
@@ -846,7 +847,7 @@ func evalEndTransaction(
 
 	desc := cArgs.EvalCtx.Desc()
 	externalIntents := resolveLocalIntents(ctx, desc,
-		batch, ms, *args, reply.Txn, cArgs.EvalCtx.StoreTestingKnobs())
+		batch, ms, *args, reply.Txn, cArgs.EvalCtx.EvalKnobs())
 	if err := updateTxnWithExternalIntents(ctx, batch, ms, *args, reply.Txn, externalIntents); err != nil {
 		return EvalResult{}, err
 	}
@@ -934,8 +935,7 @@ func resolveLocalIntents(
 	ms *enginepb.MVCCStats,
 	args roachpb.EndTransactionRequest,
 	txn *roachpb.Transaction,
-	storeTestingKnobs StoreTestingKnobs,
-) []roachpb.Intent {
+	knobs batcheval.TestingKnobs) []roachpb.Intent {
 	var preMergeDesc *roachpb.RangeDescriptor
 	if mergeTrigger := args.InternalCommitTrigger.GetMergeTrigger(); mergeTrigger != nil {
 		// If this is a merge, then use the post-merge descriptor to determine
@@ -981,8 +981,8 @@ func resolveLocalIntents(
 			if inSpan != nil {
 				intent.Span = *inSpan
 				num, err := engine.MVCCResolveWriteIntentRangeUsingIter(ctx, batch, iterAndBuf, ms, intent, math.MaxInt64)
-				if storeTestingKnobs.NumKeysEvaluatedForRangeIntentResolution != nil {
-					atomic.AddInt64(storeTestingKnobs.NumKeysEvaluatedForRangeIntentResolution, num)
+				if knobs.NumKeysEvaluatedForRangeIntentResolution != nil {
+					atomic.AddInt64(knobs.NumKeysEvaluatedForRangeIntentResolution, num)
 				}
 				return err
 			}
@@ -1078,7 +1078,7 @@ func intersectSpan(
 
 func runCommitTrigger(
 	ctx context.Context,
-	rec ReplicaEvalContext,
+	rec batcheval.EvalContext,
 	batch engine.Batch,
 	ms *enginepb.MVCCStats,
 	args roachpb.EndTransactionRequest,
@@ -1830,7 +1830,7 @@ func evalQueryTxn(
 // spuriously succeeding on this range.
 func setAbortSpan(
 	ctx context.Context,
-	rec ReplicaEvalContext,
+	rec batcheval.EvalContext,
 	batch engine.ReadWriter,
 	ms *enginepb.MVCCStats,
 	txn enginepb.TxnMeta,
@@ -2167,7 +2167,7 @@ func evalTransferLease(
 // sense to minimize the amount of code intolerant of rolling updates.
 func evalNewLease(
 	ctx context.Context,
-	rec ReplicaEvalContext,
+	rec batcheval.EvalContext,
 	batch engine.ReadWriter,
 	ms *enginepb.MVCCStats,
 	lease roachpb.Lease,
@@ -3025,7 +3025,7 @@ func (r *Replica) adminSplitWithDescriptor(
 // returned trigger and is handled by the Store.
 func splitTrigger(
 	ctx context.Context,
-	rec ReplicaEvalContext,
+	rec batcheval.EvalContext,
 	batch engine.Batch,
 	bothDeltaMS enginepb.MVCCStats,
 	split *roachpb.SplitTrigger,
@@ -3374,7 +3374,7 @@ func (r *Replica) AdminMerge(
 // in splitTrigger.
 func mergeTrigger(
 	ctx context.Context,
-	rec ReplicaEvalContext,
+	rec batcheval.EvalContext,
 	batch engine.Batch,
 	ms *enginepb.MVCCStats,
 	merge *roachpb.MergeTrigger,
@@ -3460,7 +3460,7 @@ func mergeTrigger(
 
 func changeReplicasTrigger(
 	ctx context.Context,
-	rec ReplicaEvalContext,
+	rec batcheval.EvalContext,
 	batch engine.Batch,
 	change *roachpb.ChangeReplicasTrigger,
 ) EvalResult {
