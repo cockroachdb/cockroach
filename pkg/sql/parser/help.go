@@ -134,14 +134,15 @@ func helpWithFunction(sqllex sqlLexer, f tree.ResolvableFunctionReference) int {
 }
 
 const (
-	hGroup = ""
-	hDDL   = "schema manipulation"
-	hDML   = "data manipulation"
-	hTxn   = "transaction control"
-	hPriv  = "privileges and security"
-	hMisc  = "miscellaneous"
-	hCfg   = "configuration"
-	hCCL   = "enterprise features"
+	hGroup        = ""
+	hDDL          = "schema manipulation"
+	hDML          = "data manipulation"
+	hTxn          = "transaction control"
+	hPriv         = "privileges and security"
+	hMisc         = "miscellaneous"
+	hCfg          = "configuration"
+	hExperimental = "experimental"
+	hCCL          = "enterprise features"
 )
 
 // HelpMessageBody defines the body of a help text. The messages are

@@ -312,6 +312,10 @@ func TestContextualHelp(t *testing.T) {
 		{`RELEASE blah ??`, `RELEASE`},
 		{`RELEASE SAVEPOINT blah ??`, `RELEASE`},
 
+		{`EXPERIMENTAL SCRUB ??`, `SCRUB`},
+		{`EXPERIMENTAL SCRUB TABLE ??`, `SCRUB TABLE`},
+		{`EXPERIMENTAL SCRUB DATABASE ??`, `SCRUB DATABASE`},
+
 		{`BACKUP foo TO 'bar' ??`, `BACKUP`},
 		{`BACKUP DATABASE ??`, `BACKUP`},
 		{`BACKUP foo TO 'bar' AS OF ??`, `BACKUP`},
