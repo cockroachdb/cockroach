@@ -198,6 +198,7 @@ buildoss: BUILDTARGET = ./pkg/cmd/cockroach-oss
 buildoss: $(C_LIBS_OSS)
 
 $(COCKROACH) build go-install gotestdashi generate lint lintshort: $(C_LIBS_CCL)
+$(COCKROACH) build go-install gotestdashi generate lint lintshort: TAGS += ccl
 
 $(COCKROACH) build buildoss: BUILDMODE = build -i -o $(COCKROACH)
 
