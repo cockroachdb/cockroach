@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/transform"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
@@ -105,7 +106,7 @@ type planner struct {
 
 	// Avoid allocations by embedding commonly used objects and visitors.
 	parser                parser.Parser
-	txCtx                 parser.ExprTransformContext
+	txCtx                 transform.ExprTransformContext
 	subqueryVisitor       subqueryVisitor
 	subqueryPlanVisitor   subqueryPlanVisitor
 	nameResolutionVisitor nameResolutionVisitor

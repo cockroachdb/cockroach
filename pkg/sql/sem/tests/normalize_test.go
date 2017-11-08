@@ -12,18 +12,20 @@
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
-package parser
+package tests
 
 import (
 	"testing"
 
 	"golang.org/x/net/context"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	_ "github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 )
 
 func TestNormalizeExpr(t *testing.T) {
-	defer mockNameTypes(map[string]types.T{
+	defer parser.MockNameTypes(map[string]types.T{
 		"a": types.Int,
 		"b": types.Int,
 		"c": types.Int,
@@ -191,7 +193,7 @@ func TestNormalizeExpr(t *testing.T) {
 		{`-1 + a < 9223372036854775806`, `a < 9223372036854775807`},
 	}
 	for _, d := range testData {
-		expr, err := ParseExpr(d.expr)
+		expr, err := parser.ParseExpr(d.expr)
 		if err != nil {
 			t.Fatalf("%s: %v", d.expr, err)
 		}
@@ -200,7 +202,7 @@ func TestNormalizeExpr(t *testing.T) {
 			t.Fatalf("%s: %v", d.expr, err)
 		}
 		rOrig := typedExpr.String()
-		ctx := NewTestingEvalContext()
+		ctx := parser.NewTestingEvalContext()
 		defer ctx.Mon.Stop(context.Background())
 		defer ctx.ActiveMemAcc.Close(context.Background())
 		r, err := ctx.NormalizeExpr(typedExpr)

@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/jobs"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -854,13 +855,13 @@ CREATE TABLE crdb_internal.builtin_functions (
 );
 `,
 	populate: func(ctx context.Context, _ *planner, _ string, addRow func(...parser.Datum) error) error {
-		for _, name := range parser.AllBuiltinNames {
-			overloads := parser.Builtins[name]
+		for _, name := range builtins.AllBuiltinNames {
+			overloads := builtins.Builtins[name]
 			for _, f := range overloads {
 				if err := addRow(
 					parser.NewDString(name),
 					parser.NewDString(f.Signature()),
-					parser.NewDString(f.Category()),
+					parser.NewDString(f.Category),
 					parser.NewDString(f.Info),
 				); err != nil {
 					return err

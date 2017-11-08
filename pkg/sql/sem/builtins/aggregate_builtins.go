@@ -12,7 +12,7 @@
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
-package parser
+package builtins
 
 import (
 	"bytes"
@@ -32,10 +32,10 @@ func initAggregateBuiltins() {
 	// Add all aggregates to the Builtins map after a few sanity checks.
 	for k, v := range Aggregates {
 		for i, a := range v {
-			if !a.impure {
+			if !a.Impure {
 				panic(fmt.Sprintf("aggregate functions should all be impure, found %v", a))
 			}
-			if a.class != AggregateClass {
+			if a.Class != AggregateClass {
 				panic(fmt.Sprintf("aggregate functions should be marked with the AggregateClass "+
 					"function class, found %v", a))
 			}
@@ -53,33 +53,11 @@ func initAggregateBuiltins() {
 			// grouped rows as implicit parameter. It may have a different
 			// value in every group, so it cannot be considered constant in
 			// the context of a data source.
-			v[i].needsRepeatedEvaluation = true
+			v[i].NeedsRepeatedEvaluation = true
 		}
 
 		Builtins[k] = v
 	}
-}
-
-// AggregateFunc accumulates the result of a function of a Datum.
-type AggregateFunc interface {
-	// Add accumulates the passed datums into the AggregateFunc.
-	// Most implementations require one and only one firstArg argument.
-	// If an aggregate function requires more than one argument,
-	// all additional arguments (after firstArg) are passed in as a
-	// variadic collection, otherArgs.
-	// This interface (as opposed to `args ...Datum`) avoids unnecessary
-	// allocation of otherArgs in the majority of cases.
-	Add(_ context.Context, firstArg Datum, otherArgs ...Datum) error
-
-	// Result returns the current value of the accumulation. This value
-	// will be a deep copy of any AggregateFunc internal state, so that
-	// it will not be mutated by additional calls to Add.
-	Result() (Datum, error)
-
-	// Close closes out the AggregateFunc and allows it to release any memory it
-	// requested during aggregation, and must be called upon completion of the
-	// aggregation.
-	Close(context.Context)
 }
 
 // Aggregates are a special class of builtin functions that are wrapped
@@ -99,7 +77,7 @@ var Aggregates = map[string][]Builtin{
 			[]types.T{types.Any},
 			func(args []TypedExpr) types.T {
 				if len(args) == 0 {
-					return unknownReturnType
+					return UnknownReturnType
 				}
 				return types.TArray{Typ: args[0].ResolvedType()}
 			},
@@ -146,10 +124,10 @@ var Aggregates = map[string][]Builtin{
 
 	"count_rows": {
 		{
-			impure:        true,
-			class:         AggregateClass,
+			Impure:        true,
+			Class:         AggregateClass,
 			Types:         ArgTypes{},
-			ReturnType:    fixedReturnType(types.Int),
+			ReturnType:    FixedReturnType(types.Int),
 			AggregateFunc: newCountRowsAggregate,
 			WindowFunc: func(params []types.T, evalCtx *EvalContext) WindowFunc {
 				return newAggregateWindow(newCountRowsAggregate(params, evalCtx))
@@ -241,11 +219,11 @@ var Aggregates = map[string][]Builtin{
 func makeAggBuiltin(
 	in []types.T, ret types.T, f func([]types.T, *EvalContext) AggregateFunc, info string,
 ) Builtin {
-	return makeAggBuiltinWithReturnType(in, fixedReturnType(ret), f, info)
+	return makeAggBuiltinWithReturnType(in, FixedReturnType(ret), f, info)
 }
 
 func makeAggBuiltinWithReturnType(
-	in []types.T, retType returnTyper, f func([]types.T, *EvalContext) AggregateFunc, info string,
+	in []types.T, retType ReturnTyper, f func([]types.T, *EvalContext) AggregateFunc, info string,
 ) Builtin {
 	argTypes := make(ArgTypes, len(in))
 	for i, typ := range in {
@@ -256,8 +234,8 @@ func makeAggBuiltinWithReturnType(
 	return Builtin{
 		// See the comment about aggregate functions in the definitions
 		// of the Builtins array above.
-		impure:        true,
-		class:         AggregateClass,
+		Impure:        true,
+		Class:         AggregateClass,
 		Types:         argTypes,
 		ReturnType:    retType,
 		AggregateFunc: f,
@@ -707,7 +685,7 @@ func (a *intSumAggregate) Add(_ context.Context, datum Datum, _ ...Datum) error 
 		// does not provide checked addition, we have to check for the
 		// overflow explicitly.
 		if !a.large {
-			r, ok := addWithOverflow(a.intSum, t)
+			r, ok := AddWithOverflow(a.intSum, t)
 			if ok {
 				a.intSum = r
 			} else {
@@ -998,7 +976,7 @@ func (a *decimalSqrDiffAggregate) Result() (Datum, error) {
 	if a.count.Cmp(decimalOne) < 0 {
 		return DNull, nil
 	}
-	dd := &DDecimal{a.sqrDiff}
+	dd := &DDecimal{Decimal: a.sqrDiff}
 	// Remove trailing zeros. Depending on the order in which the input
 	// is processed, some number of trailing zeros could be added to the
 	// output. Remove them so that the results are the same regardless of order.
@@ -1046,7 +1024,7 @@ func (a *floatSumSqrDiffsAggregate) Add(
 	// https://www.johndcook.com/blog/skewness_kurtosis and our
 	// implementation of NumericStats
 	// https://github.com/cockroachdb/cockroach/pull/17728.
-	totalCount, ok := addWithOverflow(a.count, count)
+	totalCount, ok := AddWithOverflow(a.count, count)
 	if !ok {
 		return pgerror.NewErrorf(pgerror.CodeNumericValueOutOfRangeError, "number of values in aggregate exceed max count of %d", math.MaxInt64)
 	}
@@ -1153,7 +1131,7 @@ func (a *decimalSumSqrDiffsAggregate) Result() (Datum, error) {
 	if a.count.Cmp(decimalOne) < 0 {
 		return DNull, nil
 	}
-	dd := &DDecimal{a.sqrDiff}
+	dd := &DDecimal{Decimal: a.sqrDiff}
 	return dd, nil
 }
 
@@ -1355,8 +1333,6 @@ func (a *floatStdDevAggregate) Close(context.Context) {}
 // Close is part of the AggregateFunc interface.
 func (a *decimalStdDevAggregate) Close(context.Context) {}
 
-var _ Visitor = &IsAggregateVisitor{}
-
 type bytesXorAggregate struct {
 	sum        []byte
 	sawNonNull bool
@@ -1426,42 +1402,3 @@ func (a *intXorAggregate) Result() (Datum, error) {
 
 // Close is part of the AggregateFunc interface.
 func (a *intXorAggregate) Close(context.Context) {}
-
-// IsAggregateVisitor checks if walked expressions contain aggregate functions.
-type IsAggregateVisitor struct {
-	Aggregated bool
-	// searchPath is used to search for unqualified function names.
-	searchPath SearchPath
-}
-
-// VisitPre satisfies the Visitor interface.
-func (v *IsAggregateVisitor) VisitPre(expr Expr) (recurse bool, newExpr Expr) {
-	switch t := expr.(type) {
-	case *FuncExpr:
-		if t.IsWindowFunctionApplication() {
-			// A window function application of an aggregate builtin is not an
-			// aggregate function, but it can contain aggregate functions.
-			return true, expr
-		}
-		fd, err := t.Func.Resolve(v.searchPath)
-		if err != nil {
-			return false, expr
-		}
-		if _, ok := Aggregates[fd.Name]; ok {
-			v.Aggregated = true
-			return false, expr
-		}
-	case *Subquery:
-		return false, expr
-	}
-
-	return true, expr
-}
-
-// VisitPost satisfies the Visitor interface.
-func (*IsAggregateVisitor) VisitPost(expr Expr) Expr { return expr }
-
-// Reset clear the IsAggregateVisitor's internal state.
-func (v *IsAggregateVisitor) Reset() {
-	v.Aggregated = false
-}

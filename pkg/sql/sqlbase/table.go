@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/transform"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -189,7 +190,7 @@ func MakeColumnDefDescs(
 		); err != nil {
 			return nil, nil, err
 		}
-		var t parser.ExprTransformContext
+		var t transform.ExprTransformContext
 		if err := t.AssertNoAggregationOrWindowing(
 			d.DefaultExpr.Expr, "DEFAULT expressions", semaCtx.SearchPath,
 		); err != nil {

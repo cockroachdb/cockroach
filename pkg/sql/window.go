@@ -24,6 +24,7 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/transform"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -801,7 +802,7 @@ type extractWindowFuncsVisitor struct {
 	n *windowNode
 
 	// Avoids allocations.
-	subWindowVisitor parser.ContainsWindowVisitor
+	subWindowVisitor transform.ContainsWindowVisitor
 
 	// Persisted visitor state.
 	aggregatesSeen map[*parser.FuncExpr]struct{}

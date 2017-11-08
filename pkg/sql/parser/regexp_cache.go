@@ -21,12 +21,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
 
-// regexpCacheKey allows cache keys to take the form of different types,
+// RegexpCacheKey allows cache keys to take the form of different types,
 // as long as they are comparable and can produce a pattern when needed
 // for regexp compilation. The pattern method will not be called until
 // after a cache lookup is performed and the result is a miss.
-type regexpCacheKey interface {
-	pattern() (string, error)
+type RegexpCacheKey interface {
+	Pattern() (string, error)
 }
 
 // A RegexpCache is a cache used to store compiled regular expressions.
@@ -55,7 +55,7 @@ func NewRegexpCache(size int) *RegexpCache {
 // GetRegexp consults the cache for the regular expressions stored for
 // the given key, compiling the key's pattern if it is not already
 // in the cache.
-func (rc *RegexpCache) GetRegexp(key regexpCacheKey) (*regexp.Regexp, error) {
+func (rc *RegexpCache) GetRegexp(key RegexpCacheKey) (*regexp.Regexp, error) {
 	if rc != nil {
 		re := rc.lookup(key)
 		if re != nil {
@@ -63,7 +63,7 @@ func (rc *RegexpCache) GetRegexp(key regexpCacheKey) (*regexp.Regexp, error) {
 		}
 	}
 
-	pattern, err := key.pattern()
+	pattern, err := key.Pattern()
 	if err != nil {
 		return nil, err
 	}
@@ -81,7 +81,7 @@ func (rc *RegexpCache) GetRegexp(key regexpCacheKey) (*regexp.Regexp, error) {
 
 // lookup checks for the regular expression in the cache in a
 // synchronized manner, returning it if it exists.
-func (rc *RegexpCache) lookup(key regexpCacheKey) *regexp.Regexp {
+func (rc *RegexpCache) lookup(key RegexpCacheKey) *regexp.Regexp {
 	rc.mu.Lock()
 	defer rc.mu.Unlock()
 	v, ok := rc.cache.Get(key)
@@ -93,7 +93,7 @@ func (rc *RegexpCache) lookup(key regexpCacheKey) *regexp.Regexp {
 
 // update invalidates the regular expression for the given pattern.
 // If a new regular expression is passed in, it is inserted into the cache.
-func (rc *RegexpCache) update(key regexpCacheKey, re *regexp.Regexp) {
+func (rc *RegexpCache) update(key RegexpCacheKey, re *regexp.Regexp) {
 	rc.mu.Lock()
 	defer rc.mu.Unlock()
 	rc.cache.Del(key)

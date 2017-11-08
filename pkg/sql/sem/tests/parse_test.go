@@ -1,4 +1,4 @@
-// Copyright 2015 The Cockroach Authors.
+// Copyright 2017 The Cockroach Authors.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,7 +12,7 @@
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
-package parser
+package tests
 
 import (
 	"go/constant"
@@ -21,7 +21,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	_ "github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	_ "github.com/cockroachdb/cockroach/pkg/util/log" // for flags
 )
@@ -852,7 +854,7 @@ func TestParse(t *testing.T) {
 		{`SELECT * FROM ((t1 NATURAL JOIN t2 WITH ORDINALITY AS o1)) WITH ORDINALITY AS o2`},
 	}
 	for _, d := range testData {
-		stmts, err := Parse(d.sql)
+		stmts, err := parser.Parse(d.sql)
 		if err != nil {
 			t.Fatalf("%s: expected success, but found %s", d.sql, err)
 		}
@@ -1255,16 +1257,16 @@ func TestParse2(t *testing.T) {
 		},
 	}
 	for _, d := range testData {
-		stmts, err := Parse(d.sql)
+		stmts, err := parser.Parse(d.sql)
 		if err != nil {
 			t.Errorf("%s: expected success, but found %s", d.sql, err)
 			continue
 		}
-		s := AsStringWithFlags(stmts, FmtSimpleWithPasswords)
+		s := parser.AsStringWithFlags(stmts, parser.FmtSimpleWithPasswords)
 		if d.expected != s {
 			t.Errorf("%s: expected %s, but found (%d statements): %s", d.sql, d.expected, len(stmts), s)
 		}
-		if _, err := Parse(s); err != nil {
+		if _, err := parser.Parse(s); err != nil {
 			t.Errorf("expected string found, but not parsable: %s:\n%s", err, s)
 		}
 	}
@@ -1285,18 +1287,17 @@ func TestParseTree(t *testing.T) {
 		{`SELECT 1 = ANY ARRAY[1]:::INT`, `SELECT ((1) = ANY ((ARRAY[(1)]):::INT))`},
 	}
 
-	pfmt := fmtFlags{alwaysParens: true}
 	for _, d := range testData {
-		stmts, err := Parse(d.sql)
+		stmts, err := parser.Parse(d.sql)
 		if err != nil {
 			t.Errorf("%s: expected success, but found %s", d.sql, err)
 			continue
 		}
-		s := AsStringWithFlags(stmts, &pfmt)
+		s := parser.AsStringWithFlags(stmts, parser.FmtAlwaysGroupExprs)
 		if d.expected != s {
 			t.Errorf("%s: expected %s, but found (%d statements): %s", d.sql, d.expected, len(stmts), s)
 		}
-		if _, err := Parse(s); err != nil {
+		if _, err := parser.Parse(s); err != nil {
 			t.Errorf("expected string found, but not parsable: %s:\n%s", err, s)
 		}
 	}
@@ -1315,7 +1316,7 @@ func TestParseSyntax(t *testing.T) {
 		{`SELECT '\x' FROM t`},
 	}
 	for _, d := range testData {
-		if _, err := Parse(d.sql); err != nil {
+		if _, err := parser.Parse(d.sql); err != nil {
 			t.Fatalf("%s: expected success, but not parsable %s", d.sql, err)
 		}
 	}
@@ -1639,7 +1640,7 @@ SELECT 'f'::"blah"
 		},
 	}
 	for _, d := range testData {
-		_, err := Parse(d.sql)
+		_, err := parser.Parse(d.sql)
 		if err == nil {
 			t.Errorf("expected error, got nil")
 			continue
@@ -1675,7 +1676,7 @@ func TestParsePanic(t *testing.T) {
 		"(F(F(F(F(F(F(F(F(F(F" +
 		"(F(F(F(F(F(F(F(F(F((" +
 		"F(0"
-	_, err := Parse(s)
+	_, err := parser.Parse(s)
 	expected := `syntax error at or near "EOF"`
 	if !testutils.IsError(err, expected) {
 		t.Fatalf("expected %s, but found %v", expected, err)
@@ -1727,9 +1728,9 @@ func TestParsePrecedence(t *testing.T) {
 	one := &NumVal{Value: constant.MakeInt64(1), OrigString: "1"}
 	two := &NumVal{Value: constant.MakeInt64(2), OrigString: "2"}
 	three := &NumVal{Value: constant.MakeInt64(3), OrigString: "3"}
-	a := &StrVal{s: "a"}
-	b := &StrVal{s: "b"}
-	c := &StrVal{s: "c"}
+	a := parser.NewStrVal("a")
+	b := parser.NewStrVal("b")
+	c := parser.NewStrVal("c")
 
 	testData := []struct {
 		sql      string
@@ -1858,7 +1859,7 @@ func TestParsePrecedence(t *testing.T) {
 		{`~1+2`, binary(Plus, unary(UnaryComplement, one), two)},
 	}
 	for _, d := range testData {
-		expr, err := ParseExpr(d.sql)
+		expr, err := parser.ParseExpr(d.sql)
 		if err != nil {
 			t.Fatalf("%s: %v", d.sql, err)
 		}
@@ -1870,7 +1871,7 @@ func TestParsePrecedence(t *testing.T) {
 
 func BenchmarkParse(b *testing.B) {
 	for i := 0; i < b.N; i++ {
-		st, err := Parse(`
+		st, err := parser.Parse(`
 			BEGIN;
 			UPDATE pgbench_accounts SET abalance = abalance + 77 WHERE aid = 5;
 			SELECT abalance FROM pgbench_accounts WHERE aid = 5;
@@ -1882,7 +1883,7 @@ func BenchmarkParse(b *testing.B) {
 		if len(st) != 5 {
 			b.Fatal("parsed wrong number of statements: ", len(st))
 		}
-		if _, ok := st[1].(*Update); !ok {
+		if _, ok := st[1].(*parser.Update); !ok {
 			b.Fatalf("unexpected statement type: %T", st[1])
 		}
 	}

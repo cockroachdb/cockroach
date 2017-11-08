@@ -12,21 +12,21 @@
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
-package parser
+package builtins
 
 import "testing"
 
 func TestCategory(t *testing.T) {
-	if expected, actual := categoryString, Builtins["lower"][0].Category(); expected != actual {
+	if expected, actual := categoryString, Builtins["lower"][0].Category; expected != actual {
 		t.Fatalf("bad category: expected %q got %q", expected, actual)
 	}
-	if expected, actual := categoryString, Builtins["length"][0].Category(); expected != actual {
+	if expected, actual := categoryString, Builtins["length"][0].Category; expected != actual {
 		t.Fatalf("bad category: expected %q got %q", expected, actual)
 	}
-	if expected, actual := categoryDateAndTime, Builtins["now"][0].Category(); expected != actual {
+	if expected, actual := categoryDateAndTime, Builtins["now"][0].Category; expected != actual {
 		t.Fatalf("bad category: expected %q got %q", expected, actual)
 	}
-	if expected, actual := categorySystemInfo, Builtins["version"][0].Category(); expected != actual {
+	if expected, actual := categorySystemInfo, Builtins["version"][0].Category; expected != actual {
 		t.Fatalf("bad category: expected %q got %q", expected, actual)
 	}
 }

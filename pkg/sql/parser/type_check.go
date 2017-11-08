@@ -468,7 +468,7 @@ func (expr *FuncExpr) TypeCheck(ctx *SemaContext, desired types.T) (TypedExpr, e
 		// arguments, we don't want to take the NULL argument fast-path.
 		handledNull := false
 		for _, fn := range fns {
-			if fn.(Builtin).nullableArgs {
+			if fn.(Builtin).NullableArgs {
 				handledNull = true
 				break
 			}
@@ -535,7 +535,7 @@ func (expr *FuncExpr) TypeCheck(ctx *SemaContext, desired types.T) (TypedExpr, e
 	if expr.IsWindowFunctionApplication() {
 		// Make sure the window function application is of either a built-in window
 		// function or of a builtin aggregate function.
-		switch builtin.class {
+		switch builtin.Class {
 		case AggregateClass:
 		case WindowClass:
 		default:
@@ -548,14 +548,14 @@ func (expr *FuncExpr) TypeCheck(ctx *SemaContext, desired types.T) (TypedExpr, e
 		}
 	} else {
 		// Make sure the window function builtins are used as window function applications.
-		switch builtin.class {
+		switch builtin.Class {
 		case WindowClass:
 			return nil, pgerror.NewErrorf(pgerror.CodeWrongObjectTypeError, "window function %s() requires an OVER clause", expr.Func)
 		}
 	}
 
 	if expr.Filter != nil {
-		if builtin.class != AggregateClass {
+		if builtin.Class != AggregateClass {
 			// Same error message as Postgres.
 			return nil, pgerror.NewErrorf(pgerror.CodeWrongObjectTypeError, "FILTER specified but %s() is not an aggregate function", expr.Func)
 		}
@@ -564,7 +564,7 @@ func (expr *FuncExpr) TypeCheck(ctx *SemaContext, desired types.T) (TypedExpr, e
 
 	// Check that the built-in is allowed for the current user.
 	// TODO(knz): this check can be moved to evaluation time pending #15363.
-	if builtin.privileged && !ctx.privileged {
+	if builtin.Privileged && !ctx.privileged {
 		return nil, pgerror.NewErrorf(pgerror.CodeInsufficientPrivilegeError,
 			"insufficient privilege to use %s", expr.Func)
 	}
@@ -653,17 +653,6 @@ func (expr *ParenExpr) TypeCheck(ctx *SemaContext, desired types.T) (TypedExpr, 
 	// Parentheses are semantically unimportant and can be removed/replaced
 	// with its nested expression in our plan. This makes type checking cleaner.
 	return exprTyped, nil
-}
-
-// presetTypesForTesting is a mapping of qualified names to types that can be mocked out
-// for tests to allow the qualified names to be type checked without throwing an error.
-var presetTypesForTesting map[string]types.T
-
-func mockNameTypes(types map[string]types.T) func() {
-	presetTypesForTesting = types
-	return func() {
-		presetTypesForTesting = nil
-	}
 }
 
 // TypeCheck implements the Expr interface.  This function has a valid
