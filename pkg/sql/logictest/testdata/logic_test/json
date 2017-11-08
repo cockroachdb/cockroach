@@ -96,6 +96,11 @@ SELECT '1'::JSON = '1'::JSON
 true
 
 query B
+SELECT '1'::JSON = '1'
+----
+true
+
+query B
 SELECT '1'::JSON = '2'::JSON
 ----
 false
