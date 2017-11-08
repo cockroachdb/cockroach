@@ -189,8 +189,8 @@ func MakeColumnDefDescs(
 		); err != nil {
 			return nil, nil, err
 		}
-		var p parser.Parser
-		if err := p.AssertNoAggregationOrWindowing(
+		var t parser.ExprTransformContext
+		if err := t.AssertNoAggregationOrWindowing(
 			d.DefaultExpr.Expr, "DEFAULT expressions", semaCtx.SearchPath,
 		); err != nil {
 			return nil, nil, err
@@ -201,7 +201,7 @@ func MakeColumnDefDescs(
 		if err != nil {
 			return nil, nil, err
 		}
-		if typedExpr, err = p.NormalizeExpr(evalCtx, typedExpr); err != nil {
+		if typedExpr, err = t.NormalizeExpr(evalCtx, typedExpr); err != nil {
 			return nil, nil, err
 		}
 		// Try to evaluate once. If it is aimed to succeed during a

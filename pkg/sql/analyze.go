@@ -1728,5 +1728,5 @@ func (p *planner) analyzeExpr(
 	}
 
 	// Normalize.
-	return p.parser.NormalizeExpr(&p.evalCtx, typedExpr)
+	return p.txCtx.NormalizeExpr(&p.evalCtx, typedExpr)
 }
