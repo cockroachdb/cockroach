@@ -2033,31 +2033,48 @@ set_stmt:
 | use_stmt             { /* SKIP DOC */ }
 | SET LOCAL error { return unimplemented(sqllex, "set local") }
 
-// SCRUB
+// %Help: EXPERIMENTAL SCRUB - run checks against databases or tables
+// %Category: Misc
+// %Text:
+// SCRUB TABLE <table> ...
+// SCRUB DATABASE <database>
+//
+// The various checks that ca be run with SCRUB includes:
+//   - Physical table data (encoding)
+//   - Secondary index integrity
+//   - Constraint integrity (NOT NULL, CHECK, FOREIGN KEY, UNIQUE)
+// %SeeAlso: EXPERIMENTAL SCRUB TABLE, EXPERIMENTAL SCRUB DATABASE
 scrub_stmt:
   scrub_table_stmt
 | scrub_database_stmt
+| EXPERIMENTAL SCRUB error // SHOW HELP: EXPERIMENTAL SCRUB
 
-// %Help: SCRUB DATABASE - run a scrub check on a database
+// %Help: EXPERIMENTAL SCRUB DATABASE - run scrub check on a database
 // %Category: Misc
 // %Text:
-// SCRUB DATABASE <databasename>
+// SCRUB DATABASE <database>
+// All scrub checks will be run on the database. This includes:
+//   - Physical table data (encoding)
+//   - Secondary index integrity
+//   - Constraint integrity (NOT NULL, CHECK, FOREIGN KEY, UNIQUE)
+// %SeeAlso: EXPERIMENTAL SCRUB TABLE, EXPERIMENTAL SCRUB
 scrub_database_stmt:
   EXPERIMENTAL SCRUB DATABASE name
   {
     $$.val = &Scrub{Typ: ScrubDatabase, Database: Name($4)}
   }
+| EXPERIMENTAL SCRUB DATABASE error // SHOW HELP: EXPERIMENTAL SCRUB DATABASE
 
-// %Help: SCRUB TABLE - run a scrub check on a table
+// %Help: EXPERIMENTAL SCRUB TABLE - run scrub check on a table
 // %Category: Misc
 // %Text:
-// SCRUB TABLE <tablename> [WITH <option> [, ...]]
+// SCRUB TABLE <tablename> [WITH OPTIONS <option> [, ...]]
 //
 // Options:
 //   SCRUB TABLE ... WITH OPTIONS INDEX ALL
 //   SCRUB TABLE ... WITH OPTIONS INDEX (<index>...)
 //   SCRUB TABLE ... WITH OPTIONS PHYSICAL
-//
+// %SeeAlso: EXPERIMENTAL SCRUB DATABASE, EXPERIMENTAL SRUB
 scrub_table_stmt:
   EXPERIMENTAL SCRUB TABLE qualified_name
   {
@@ -2067,6 +2084,7 @@ scrub_table_stmt:
   {
     $$.val = &Scrub{Typ: ScrubTable, Table: $4.normalizableTableName(), Options: $7.scrubOptions()}
   }
+| EXPERIMENTAL SCRUB TABLE error // SHOW HELP: EXPERIMENTAL SCRUB TABLE
 
 scrub_option_list:
   scrub_option
