@@ -113,7 +113,7 @@ This section should be expanded and studied carefully before this RFC is approve
 
 ## Attack profiles
 
-We attempt to prevent two attack vectors:
+The goal of this feature is to block two attack vectors:
 
 ### Access to raw disk offline
 
@@ -140,6 +140,7 @@ Some of the assumptions here can be verified by runtime checks, but others must 
 We assume attackers do not have privileged access on a running system. Specifically:
 * store keys cannot be read
 * cockroach memory cannot be directly accessed
+* command line flags cannot be modified
 
 ### No write access by attackers
 
@@ -170,6 +171,9 @@ when just starting rocksdb with very little disk/network utilization.
 Generating data keys (other than the first one, or when changing encryption ciphers) can be done
 in the background so we may be able to use the higher entropy `/dev/random`.
 IVs may be safe to keep generating using the lower-entropy `/dev/urandom`.
+
+More research must be done into the use of `/dev/random` in multi-user environment. For example, is it possible
+for an attacked to consume `/dev/random` for long enough that key generation is effectively disabled?
 
 ### Memory safety
 
@@ -217,11 +221,11 @@ We identify a few configuration requirements for users to safely use encryption 
 **TODO**: this will need to be fleshed out when writing the docs.
 
 * restricted access to store keys (ideally, only the cockroach user)
+* store keys and cockroach data must not be on the same filesystem/disk (including temporary working directories)
 * restricted access to all cockroach data
 * disable swap
 * reasonable key generation/rotation
 * monitoring
-* store keys and cockroach data must not be on the same filesystem/disk
 * ideally, the store keys are not stored on the machine (use something like `keywhiz`)
 
 ### Store keys
@@ -486,19 +490,9 @@ The two lower-level block access streams are:
 
 The preamble is a 4KiB block of data containing encryption context about a specific file.
 
-The raw file contains a 4 byte version number, currently set at 1. This allows for changes in the
-preamble format.
+The preamble is an encoded protocol buffer plus padding (zeros) to reach an exact size of 4KiB.
 
-For version 1, the raw preamble looks like:
-```
----------------------------------------------
-| version flag | encoded protobuf | padding |
----------------------------------------------
-```
-
-The padding is added to make the preamble 4KiB.
-
-The protocol buffer encoded in the preamble contains encryption information:
+The protocol buffer consists of:
 ```
 message Preamble {
   optional EncryptionDescriptor encryption = 1;
@@ -534,6 +528,9 @@ The encryption type acts as a switch to determine the remainder of the contents.
 Possible extensions of the encryption type include:
 * other modes (eg: GCM)
 * other ciphers
+
+Any changes to the preamble must keep the 4KiB limit in mind. Size will be checked after serializing
+the message. If the size exceed the 4KiB limit, cockroach will panic.
 
 ### Enabling the preamble format
 
@@ -579,6 +576,8 @@ We have three distinct status for keys:
 
 Store keys are specified in a single file. See [Nail down store key file format](#nail-down-store-keys-file-format) for alternatives.
 
+Support for other store key sources is out of scope for this RFC. Such methods would replace this file.
+
 The file format proposed here has the following properties:
 * easy to work with without special tools
 * easy to parse/generate at the C++ level
@@ -621,6 +620,8 @@ The store keys file is read at startup (or other mechanisms, see [Reloading stor
 Upon opening and decrypting the data keys file if the key ID used is not the active store key, we
 write a new data keys file encrypted with the active store key.
 
+Any changes in active store key (actual key, cipher, key size) triggers a data key rotation.
+
 ### Data keys file format
 
 The data keys file is an encoded protocol buffer:
@@ -654,6 +655,14 @@ message DataKey {
   optional uint64 creator_store_key_id = 6;
 }
 ```
+
+`was_exposed` indicates whether the key was even written to disk as plaintext (encryption was disabled at the
+store level). This will be surfaced in encryption status reports. Data encrypted by an exposed key is securely
+as bad as `PLAIN`.
+
+`creator_store_key_id` is the ID of the active store key when this key was created. This enables two things:
+* check the active data key's `create_store_key_id` against the active store key. Mismatch triggers rotation
+* force re-encryption of all files encrypted up to some store key
 
 ### Loading data keys
 
@@ -715,6 +724,11 @@ With the following information:
 * active data key ID and cipher
 * fraction of live data per key ID and cipher
 
+We can report the following encryption status:
+* `PLAIN`: plaintext data
+* `AES-<size>`: encrypted with AES (one entry for each key size)
+* `AES-<size> EXPOSED`: encrypted, but data key was exposed at some point
+
 Preamble format support and active key IDs and ciphers are known at all times. We need to log them when they change
 (indicating successful key rotation) and propagate the information to the Go layer.
 
@@ -730,7 +744,7 @@ We can find the list of all in-use files the same way rocksdb's backup does, by 
 * `rocksdb::GetSortedWalFiles`: retrieve the sorted list of all wal files
 
 Reading each file preamble means reading the first 4KiB of each file. To avoid performing this too
-frequently, we can cache results. We must take particular care with files being overwritten and
+frequently, we can cache results. We must take particular care with files being overwritten (eg: `CURRENT`) and
 using a new key/cipher.
 
 ### Other uses of rocksdb
@@ -768,6 +782,10 @@ For now, we propose a reactive approach to license enforcement. When any node in
 The overall idea is that the cluster is not negatively impacted by the lack of an enterprise license.
 See [Enterprise feature gating](#enterprise-feature-gating) for possible alternatives.
 
+Actual code for changes proposed here will be broken into CCL and non-CCL code:
+* non-CCL: preamble file support
+* CCL: encryption support (keys, rotation logic, ciphers)
+
 ## Drawbacks
 
 Implementing encryption-at-rest as proposed has a few drawbacks (in no particular order):
@@ -797,6 +815,15 @@ This raises serious concerns about the correctness of the proposed approach.
 
 We can improve testing of this functionality at the rocksdb level as well as within cockroach.
 A testing plan must be developped and implemented to provide some assurances of correctness.
+
+### Complexity of configuration and monitoring
+
+Proper use of encryption-at-rest requires a reasonable amount of user education, including
+* proper configuration of the system (see [Configuration recommendations](#configuration-recommendations))
+* proper monitoring of encryption status
+
+A lot of this falls onto proper documentation and admin UI components, but some are choices made here
+(flag specification, logged information, surfaced encryption status).
 
 ## Rationale and Alternatives
 
@@ -853,6 +880,8 @@ and potentially make integration with third-party services more difficult. User-
 available until no data uses them.
 
 ### Relationship between store and data keys
+
+**We have settled on tied cipher/key-size specification. This can be changed easily.**
 
 The current proposal uses the same cipher and key size for store and data keys.
 
@@ -935,11 +964,17 @@ Part of forcing re-encryption includes:
 We would prefer not to keep old data keys forever, but we need to be certain that a key is no longer in use
 before deleting it. How feasible this is depends on the accuracy of our encryption status reporting.
 
+If we choose to ignore non-live files, garbage collection should be reasonably safe.
 
 #### Performance impact
 
 The performance impact needs to be measured for a variety of workloads and for all supported ciphers.
 This is needed to provide some guidance to users.
+
+Guidance on key rotation period would also be helpful. This is dependent on the rocksdb churn, so will depend
+on the specific workload. We may want to add metrics about data churn to our encryption status reporting. These
+metrics should also be available when using the preamble file format but encryption is disabled. This would allow
+users to understand how much more write activity is expected once encryption is enabled.
 
 #### Propagating encrypted status
 
@@ -948,6 +983,8 @@ allowing database/table placement to specify encryption status.
 
 When to mark a store as "encrypted" is not clear. For example: can we mark it as encrypted just because encryption
 is enabled, or should we wait until encryption usage is at 100%?
+
+If we use the existing store attributes for this marker, we may need to add the concept of "reserved" attributes.
 
 #### Encryption-related metrics
 
