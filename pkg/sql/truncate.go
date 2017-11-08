@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -58,7 +59,10 @@ func (p *planner) Truncate(ctx context.Context, n *parser.Truncate) (planNode, e
 		}
 		// We don't support truncation on views, only real tables.
 		if !tableDesc.IsTable() {
-			return nil, errors.Errorf("cannot run TRUNCATE on view %q - views are not updateable", tn)
+			return nil, pgerror.NewErrorf(
+				pgerror.CodeWrongObjectTypeError,
+				"cannot run TRUNCATE on %s %q - %ss are not updateable",
+				tableDesc.Kind(), tn, tableDesc.Kind())
 		}
 
 		if err := p.CheckPrivilege(tableDesc, privilege.DROP); err != nil {
