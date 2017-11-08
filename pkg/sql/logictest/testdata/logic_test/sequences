@@ -1,0 +1,31 @@
+# LogicTest: default distsql parallel-stmts
+
+# SEQUENCE CREATION
+
+statement ok
+CREATE SEQUENCE foo
+
+# A sequence with the same name can't be created again.
+statement error pgcode 42P07 relation "foo" already exists
+CREATE SEQUENCE foo
+
+statement ok
+CREATE SEQUENCE IF NOT EXISTS foo
+
+statement error pgcode 42601 conflicting or redundant options
+CREATE SEQUENCE bar INCREMENT 5 MAXVALUE 1000 INCREMENT 2
+
+# Sequences are in the same namespace as tables.
+statement error pgcode 42P07 relation "foo" already exists
+CREATE TABLE foo (k BYTES PRIMARY KEY, v BYTES)
+
+# You can't create with 0 increment.
+statement error pgcode 22023 INCREMENT must not be zero
+CREATE SEQUENCE zero_test INCREMENT 0
+
+# Test unimplemented syntax.
+statement error pq: unimplemented at or near "EOF"
+CREATE SEQUENCE err_test AS INT2
+
+statement error pq: unimplemented at or near "EOF"
+CREATE SEQUENCE err_test OWNED BY someuser

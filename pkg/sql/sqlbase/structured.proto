@@ -605,6 +605,24 @@ message TableDescriptor {
   // Mutation jobs queued for execution in a FIFO order. Remains synchronized
   // with the mutations list.
   repeated MutationJob mutationJobs = 27 [(gogoproto.nullable) = false];
+
+  message SequenceOpts {
+    // How much to increment the sequence by when nextval() is called.
+    optional int64 increment = 1 [(gogoproto.nullable) = false];
+    // Minimum value of the sequence.
+    optional int64 min_value = 2 [(gogoproto.nullable) = false];
+    // Maximum value of the sequence.
+    optional int64 max_value = 3 [(gogoproto.nullable) = false];
+    // Start value of the sequence.
+    optional int64 start = 4 [(gogoproto.nullable) = false];
+    // How many values to pre-allocate and cache in memory (not currently supported)
+    optional int64 cache = 5 [(gogoproto.nullable) = false];
+    // Whether to wrap around when the min or max value is hit.
+    optional bool cycle = 6 [(gogoproto.nullable) = false];
+  }
+
+  // The presence of sequence_opts indicates that this descriptor is for a sequence.
+  optional SequenceOpts sequence_opts = 28;
 }
 
 // DatabaseDescriptor represents a namespace (aka database) and is stored
