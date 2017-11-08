@@ -173,7 +173,8 @@ type proposalResult struct {
 	Intents       []result.IntentsWithArg
 }
 
-type replicaChecksum struct {
+// ReplicaChecksum contains progress on a replica checksum computation.
+type ReplicaChecksum struct {
 	// started is true if the checksum computation has started.
 	started bool
 	// Computed checksum. This is set to nil on error.
@@ -423,7 +424,7 @@ type Replica struct {
 		// submitProposalFn can be set to mock out the propose operation.
 		submitProposalFn func(*ProposalData) error
 		// Computed checksum at a snapshot UUID.
-		checksums map[uuid.UUID]replicaChecksum
+		checksums map[uuid.UUID]ReplicaChecksum
 
 		// proposalQuota is the quota pool maintained by the lease holder where
 		// incoming writes acquire quota from a fixed quota pool before going
@@ -662,7 +663,7 @@ func (r *Replica) initRaftMuLockedReplicaMuLocked(
 	r.cmdQMu.Unlock()
 
 	r.mu.proposals = map[storagebase.CmdIDKey]*ProposalData{}
-	r.mu.checksums = map[uuid.UUID]replicaChecksum{}
+	r.mu.checksums = map[uuid.UUID]ReplicaChecksum{}
 	// Clear the internal raft group in case we're being reset. Since we're
 	// reloading the raft state below, it isn't safe to use the existing raft
 	// group.
