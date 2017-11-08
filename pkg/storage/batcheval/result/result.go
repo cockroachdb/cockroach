@@ -25,12 +25,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
-// IntentsWithArg contains a request and the intents it discovered.
-type IntentsWithArg struct {
-	Arg     roachpb.Request
-	Intents []roachpb.Intent
-}
-
 // LocalResult is data belonging to an evaluated command that is
 // only used on the node on which the command was proposed. Note that
 // the proposing node may die before the local results are processed,

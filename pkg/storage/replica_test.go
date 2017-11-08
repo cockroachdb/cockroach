@@ -791,7 +791,7 @@ func TestReplicaLease(t *testing.T) {
 	for _, lease := range []roachpb.Lease{
 		{Start: start, Expiration: &hlc.Timestamp{}},
 	} {
-		if _, err := evalRequestLease(context.Background(), tc.store.Engine(),
+		if _, err := batcheval.RequestLease(context.Background(), tc.store.Engine(),
 			batcheval.CommandArgs{
 				EvalCtx: NewReplicaEvalContext(tc.repl, &allSpans),
 				Args: &roachpb.RequestLeaseRequest{
@@ -4678,7 +4678,7 @@ func TestEndTransactionDirectGC(t *testing.T) {
 
 			testutils.SucceedsSoon(t, func() error {
 				var gr roachpb.GetResponse
-				if _, err := evalGet(
+				if _, err := batcheval.Get(
 					ctx, tc.engine, batcheval.CommandArgs{
 						Args: &roachpb.GetRequest{Span: roachpb.Span{
 							Key: keys.TransactionKey(txn.Key, txn.ID),
@@ -5369,20 +5369,20 @@ func TestResolveIntentPushTxnReplyTxn(t *testing.T) {
 
 	ctx := context.Background()
 	// Should not be able to push or resolve in a transaction.
-	if _, err := evalPushTxn(ctx, b, batcheval.CommandArgs{Stats: &ms, Header: roachpb.Header{Txn: txn}, Args: &pa}, &roachpb.PushTxnResponse{}); !testutils.IsError(err, errTransactionUnsupported.Error()) {
+	if _, err := batcheval.PushTxn(ctx, b, batcheval.CommandArgs{Stats: &ms, Header: roachpb.Header{Txn: txn}, Args: &pa}, &roachpb.PushTxnResponse{}); !testutils.IsError(err, batcheval.ErrTransactionUnsupported.Error()) {
 		t.Fatalf("transactional PushTxn returned unexpected error: %v", err)
 	}
-	if _, err := evalResolveIntent(ctx, b, batcheval.CommandArgs{Stats: &ms, Header: roachpb.Header{Txn: txn}, Args: &ra}, &roachpb.ResolveIntentResponse{}); !testutils.IsError(err, errTransactionUnsupported.Error()) {
+	if _, err := batcheval.ResolveIntent(ctx, b, batcheval.CommandArgs{Stats: &ms, Header: roachpb.Header{Txn: txn}, Args: &ra}, &roachpb.ResolveIntentResponse{}); !testutils.IsError(err, batcheval.ErrTransactionUnsupported.Error()) {
 		t.Fatalf("transactional ResolveIntent returned unexpected error: %v", err)
 	}
-	if _, err := evalResolveIntentRange(ctx, b, batcheval.CommandArgs{Stats: &ms, Header: roachpb.Header{Txn: txn}, Args: &rra}, &roachpb.ResolveIntentRangeResponse{}); !testutils.IsError(err, errTransactionUnsupported.Error()) {
+	if _, err := batcheval.ResolveIntentRange(ctx, b, batcheval.CommandArgs{Stats: &ms, Header: roachpb.Header{Txn: txn}, Args: &rra}, &roachpb.ResolveIntentRangeResponse{}); !testutils.IsError(err, batcheval.ErrTransactionUnsupported.Error()) {
 		t.Fatalf("transactional ResolveIntentRange returned unexpected error: %v", err)
 	}
 
 	// Should not get a transaction back from PushTxn. It used to erroneously
 	// return args.PusherTxn.
 	var reply roachpb.PushTxnResponse
-	if _, err := evalPushTxn(ctx, b, batcheval.CommandArgs{Stats: &ms, Args: &pa}, &reply); err != nil {
+	if _, err := batcheval.PushTxn(ctx, b, batcheval.CommandArgs{Stats: &ms, Args: &pa}, &reply); err != nil {
 		t.Fatal(err)
 	} else if reply.Txn != nil {
 		t.Fatalf("expected nil response txn, but got %s", reply.Txn)
@@ -7261,19 +7261,19 @@ func TestComputeChecksumVersioning(t *testing.T) {
 	defer stopper.Stop(context.TODO())
 	tc.Start(t, stopper)
 
-	if pct, _ := evalComputeChecksum(context.TODO(), nil,
+	if pct, _ := batcheval.ComputeChecksum(context.TODO(), nil,
 		batcheval.CommandArgs{Args: &roachpb.ComputeChecksumRequest{
 			ChecksumID: uuid.MakeV4(),
-			Version:    replicaChecksumVersion,
+			Version:    batcheval.ReplicaChecksumVersion,
 		}}, &roachpb.ComputeChecksumResponse{},
 	); pct.Replicated.ComputeChecksum == nil {
 		t.Error("right checksum version: expected post-commit trigger")
 	}
 
-	if pct, _ := evalComputeChecksum(context.TODO(), nil,
+	if pct, _ := batcheval.ComputeChecksum(context.TODO(), nil,
 		batcheval.CommandArgs{Args: &roachpb.ComputeChecksumRequest{
 			ChecksumID: uuid.MakeV4(),
-			Version:    replicaChecksumVersion + 1,
+			Version:    batcheval.ReplicaChecksumVersion + 1,
 		}}, &roachpb.ComputeChecksumResponse{},
 	); pct.Replicated.ComputeChecksum != nil {
 		t.Errorf("wrong checksum version: expected no post-commit trigger: %s", pct.Replicated.ComputeChecksum)
@@ -8124,7 +8124,7 @@ func TestGCWithoutThreshold(t *testing.T) {
 
 				var resp roachpb.GCResponse
 
-				if _, err := evalGC(ctx, rw, batcheval.CommandArgs{
+				if _, err := batcheval.GC(ctx, rw, batcheval.CommandArgs{
 					Args:    &gc,
 					EvalCtx: NewReplicaEvalContext(tc.repl, &spans),
 				}, &resp); err != nil {
