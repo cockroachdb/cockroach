@@ -86,3 +86,21 @@ CREATE TABLE test.xz (
 
 statement ok
 EXPERIMENTAL SCRUB TABLE xz
+
+# make sure there are no false positives when there are NULL values in foreign key values
+
+statement ok
+CREATE TABLE test.fk_child (id INT PRIMARY KEY, v INT, UNIQUE INDEX (id, v))
+
+statement ok
+CREATE TABLE test.fk_parent (id INT PRIMARY KEY, k INT, INDEX (id, k), CONSTRAINT fkey FOREIGN KEY (id, k) REFERENCES test.fk_child (id, v))
+
+statement ok
+INSERT INTO test.fk_child VALUES (1,1), (2,1), (3,NULL)
+
+statement ok
+INSERT INTO test.fk_parent VALUES (1,1), (2,1), (3,NULL)
+
+query TTTTTTTT
+EXPERIMENTAL SCRUB TABLE test.fk_parent WITH OPTIONS CONSTRAINT (fkey)
+-----
