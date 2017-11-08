@@ -5,7 +5,11 @@ EXPERIMENTAL SCRUB TABLE t
 -----
 
 statement ok
-CREATE TABLE t (id int PRIMARY KEY, name string)
+CREATE TABLE t (
+  id int PRIMARY KEY,
+  name string,
+  CONSTRAINT abc CHECK (name > 'hi')
+)
 
 query TTTTTTTT
 EXPERIMENTAL SCRUB TABLE t
@@ -28,6 +32,17 @@ EXPERIMENTAL SCRUB TABLE t WITH OPTIONS PHYSICAL, INDEX (name_idx)
 
 statement error specified indexes to check that do not exist on table "t": not_an_index, also_not
 EXPERIMENTAL SCRUB TABLE t WITH OPTIONS INDEX (not_an_index, also_not, name_idx)
+
+query TTTTTTTT
+EXPERIMENTAL SCRUB TABLE t WITH OPTIONS CONSTRAINT ALL
+-----
+
+query TTTTTTTT
+EXPERIMENTAL SCRUB TABLE t WITH OPTIONS CONSTRAINT (abc)
+-----
+
+statement error pq: constraint "xyz" of relation "t" does not exist
+EXPERIMENTAL SCRUB TABLE t WITH OPTIONS CONSTRAINT (xyz)
 
 # test views
 
