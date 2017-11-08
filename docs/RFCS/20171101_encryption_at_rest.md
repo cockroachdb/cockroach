@@ -300,25 +300,22 @@ The need for encryption entails a few recommended changes in production configur
 
 #### Flag changes for the cockroach binary
 
-* `--rocksdb-preamble-format`: use the new preamble file format in rocksdb. This must be specified at node-creation
-time to enable the preamble file format. Specifying this on a node with existing data in classic format fails with `ERROR cockroach data directory using classic format, cannot be converted to preamble format`.
-* `--enterprise-encryption-keys=store=<store path>,keys=<key path>`: filename containing the store keys.
-This enables encryption. Keys contained inside dictate the type of encryption to use, including `PLAIN`
-to migrate data back to plaintext. `<store path>` specifies which store uses these keys. The flag can be specified multiple times (once for each store).
-* `--enterprise-encryption-rotation-period=store=<store path>,keys=<key path>`: default: `168h` (one week). How often a new data key should be generated and used. This is per-store flag and can be specified more than once.
+* `format=preamble``: field in the `--store` flag. Enable the preamble format on a specific store. This cannot be changed once the store has been created. Cannot be applied to in-memory stores. Default value: `classic`.
+* `--enterprise-encryption=path=<path to store>,keys=<key path>,rotation_period=<duration>`: enables encryption a given store and specifies the store keys file (required) and data keys rotation period (optional, default one week).
+The flag can be specified multiple times, once for each store.
 
-The two encryption flags can specify different encryption states for different stores (eg: one encrypted one plain,
+The encryption flags can specify different encryption states for different stores (eg: one encrypted one plain,
 different rotation periods).
 
 The first step in allowing at-rest encryption is using the preamble data format.
-This must be done at node-creation time with the `--rocksdb-preamble-format` flag.
+This must be done at node-creation time with the `format=preamble` spec of the `--store` flag.
 
 #### Attempting to convert an existing node
 
-Given an existing node created without `--rocksdb-preamble-format` or with a version of cockroach
+Given an existing node created without `format=preamble` or with a version of cockroach
 unaware of the preamble format:
 ```
-cockroach start <regular options> --rocksdb-preamble-format
+cockroach start <regular options> --store=path=/mnt/data,format=preamble
 ERROR: cockroach data directory using classic format, cannot be converted to preamble format.
 ```
 
@@ -326,7 +323,7 @@ ERROR: cockroach data directory using classic format, cannot be converted to pre
 
 Attempting to use encryption without the preamble format also fails:
 ```
-cockroach start <regular options> --enterprise-encryption-keys=store=/mnt/data,keys=/path/to/cockroach.keys
+cockroach start <regular options> --store=path/mnt/data --enterprise-encryption=path=/mnt/data,keys=/path/to/cockroach.keys
 ERROR: cockroach data directory using classic format, cannot use encryption.
 ```
 
@@ -334,7 +331,7 @@ ERROR: cockroach data directory using classic format, cannot use encryption.
 
 Creating a new cockroach node with preamble format, but no encryption:
 ```
-cockroach start <regular options> --rocksdb-preamble-format
+cockroach start <regular options> --store=path/mnt/data,format=preamble
 SUCCESS
 ```
 
@@ -351,8 +348,8 @@ $ cat cockroach.keys
 1;1509715352;AES256-CTR;67cceefb7319d98b88464f81c5a7786d78ab42600008f117be2884821df7636a
 # Tell cockroach to use a AES128-CTR cipher for data encryption.
 $ cockroach start <regular options> \
-    --rocksdb-preamble-format \
-    --enterprise-encryption-keys=store=/mnt/data,keys=/path/to/cockroach.keys
+    --store=path/mnt/data,format=preamble \
+    --enterprise-encryption=path=/mnt/data,keys=/path/to/cockroach.keys
 ```
 
 The node will generate a 128 bit data key, encrypt the list of data keys with the store key, and use AES128-CTR
@@ -375,8 +372,8 @@ $ cat cockroach.keys
 2;1509715953;AES256-CTR;05ea263650495760de8e517c25ce2e430710b3251624268c0ee923fb1886e64d
 # Tell cockroach to use a AES128-CTR cipher for data encryption.
 $ cockroach start <regular options> \
-    --rocksdb-preamble-format \
-    --enterprise-encryption-keys=store=/mnt/data,keys=/path/to/cockroach.keys
+    --store=path/mnt/data,format=preamble \
+    --enterprise-encryption=path=/mnt/data,keys=/path/to/cockroach.keys
 ```
 
 Examine the logs or node debug pages to see that key 2 is now in use. It is now safe to delete key 1 from the file.
@@ -395,8 +392,8 @@ $ cat cockroach.keys
 3;1509716141;PLAIN;
 # Tell cockroach to use a PLAIN cipher for data encryption.
 $ cockroach start <regular options> \
-    --rocksdb-preamble-format \
-    --enterprise-encryption-keys=store=/mnt/data,keys=/path/to/cockroach.keys
+    --store=path/mnt/data,format=preamble \
+    --enterprise-encryption=path=/mnt/data,keys=/path/to/cockroach.keys
 ```
 
 Examine the logs or node debug pages to see that the node encryption status is now plaintext. It is now safe to delete key 2 from the file.
@@ -542,10 +539,10 @@ This means that we need two things:
 * detect the format of existing rocksdb instances
 
 We propose:
-* `--rocksdb-preamble-format` to start a new node with preamble format enabled. Will fail if the data exists in classical format for any store on the node.
+* a new field `format=preamble` in the `--store` flag to start a new node with preamble format enabled. Will fail if the store exists in classical format.
 * a marker created at rocksdb-creation time indicating the use of the preamble format. We may be able to use the
 existing `COCKROACHDB_VERSION` file.
-* all stores on a node must have the preamble format, or none. This simplifies administration.
+* the preamble format can be enabled on none, some, or all the stores on a node.
 
 Once the preamble format has been sufficiently tested, we can make it the default format and remove the flag.
 Stores with the classic data format would not support encryption but would still function properly.
@@ -605,7 +602,7 @@ key specification.
 Store keys are stored in a plaintext file provided by the user.
 At no point does cockroach modify the file.
 
-It can be specified with `--enterprise-encryption-keys=store=<store data dir>,keys=/path/to/file.keys`
+It can be specified with `--enterprise-encryption=path=<store data dir>,keys=/path/to/file.keys`
 
 The following **should** be true:
 * the file is only accessibly to the cockroach process (or user running the process)
@@ -917,9 +914,11 @@ While we do not currently make use of backups, we have in the past and may again
 
 ### Encryption flags
 
-We introduce two new flags with per-store settings. Other options include:
-* single `--enterprise-encryption=store=<store path>,keys=<keys path>[,period=<rotation period>]`
-* new fields in the `--store` flag
+We introduce a new field in the `--store` flag (`format=preamble`) and a new flag `--enterprise-encryption`.
+
+Some alternatives include:
+* use fields in the `--store` flag
+* include preamble setting in the `--enterprise-encryption` field
 
 ### Instruction set support
 
