@@ -149,7 +149,7 @@ func (r *Replica) computeChecksumPostApply(
 	r.gcOldChecksumEntriesLocked(now)
 
 	// Create an entry with checksum == nil and gcTimestamp unset.
-	r.mu.checksums[id] = replicaChecksum{started: true, notify: notify}
+	r.mu.checksums[id] = ReplicaChecksum{started: true, notify: notify}
 	desc := *r.mu.state.Desc
 	r.mu.Unlock()
 	// Caller is holding raftMu, so an engine snapshot is automatically
