@@ -26,7 +26,7 @@ testcmd="cd jepsen/cockroachdb && set -eo pipefail && \
    --ssh-private-key ~/.ssh/id_rsa \
    --nodes-file ~/nodes \
    --os ubuntu \
-   --time-limit 360 \
+   --time-limit 300 \
    --concurrency 30 \
    --recovery-time 25 \
    --test-count 1 \
