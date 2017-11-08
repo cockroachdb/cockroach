@@ -545,12 +545,12 @@ func convertRecord(
 		return errors.Wrap(err, "make row inserter")
 	}
 
-	parse := parser.Parser{}
+	var txCtx parser.ExprTransformContext
 	evalCtx := parser.EvalContext{Location: &time.UTC}
 	// Although we don't yet support DEFAULT expressions on visible columns,
 	// we do on hidden columns (which is only the default _rowid one). This
 	// allows those expressions to run.
-	cols, defaultExprs, err := sqlbase.ProcessDefaultColumns(tableDesc.Columns, tableDesc, &parse, &evalCtx)
+	cols, defaultExprs, err := sqlbase.ProcessDefaultColumns(tableDesc.Columns, tableDesc, &txCtx, &evalCtx)
 	if err != nil {
 		return errors.Wrap(err, "process default columns")
 	}

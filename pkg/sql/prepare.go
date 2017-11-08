@@ -350,14 +350,14 @@ func getPreparedStatementForExecute(
 	}
 
 	qArgs := make(parser.QueryArguments, len(s.Params))
-	var p parser.Parser
+	var t parser.ExprTransformContext
 	for i, e := range s.Params {
 		idx := strconv.Itoa(i + 1)
 		typedExpr, err := sqlbase.SanitizeVarFreeExpr(e, prepared.TypeHints[idx], "EXECUTE parameter", nil /* semaCtx */, nil /* evalCtx */)
 		if err != nil {
 			return ps, pInfo, pgerror.NewError(pgerror.CodeWrongObjectTypeError, err.Error())
 		}
-		if err := p.AssertNoAggregationOrWindowing(typedExpr, "EXECUTE parameters", session.SearchPath); err != nil {
+		if err := t.AssertNoAggregationOrWindowing(typedExpr, "EXECUTE parameters", session.SearchPath); err != nil {
 			return ps, pInfo, err
 		}
 		qArgs[idx] = typedExpr

@@ -21,7 +21,6 @@
 package parser
 
 import (
-	"bytes"
 	"fmt"
 	"strings"
 	"time"
@@ -32,27 +31,11 @@ import (
 
 //go:generate make
 
-// StatementList is a list of statements.
-type StatementList []Statement
-
-// Format implements the NodeFormatter interface.
-func (l StatementList) Format(buf *bytes.Buffer, f FmtFlags) {
-	for i, s := range l {
-		if i > 0 {
-			buf.WriteString("; ")
-		}
-		FormatNode(buf, f, s)
-	}
-}
-
 // Parser wraps a scanner, parser and other utilities present in the parser
 // package.
 type Parser struct {
-	scanner               Scanner
-	parserImpl            sqlParserImpl
-	normalizeVisitor      normalizeVisitor
-	isAggregateVisitor    IsAggregateVisitor
-	containsWindowVisitor ContainsWindowVisitor
+	scanner    Scanner
+	parserImpl sqlParserImpl
 }
 
 // Parse parses the sql and returns a list of statements.
@@ -70,60 +53,6 @@ func (p *Parser) Parse(sql string) (stmts StatementList, err error) {
 		return nil, err
 	}
 	return p.scanner.stmts, nil
-}
-
-// TypeCheck performs type checking on the provided expression tree, returning
-// the new typed expression tree, which additionally permits evaluation and type
-// introspection globally and on each sub-tree.
-//
-// While doing so, it will fold numeric constants and bind placeholder names to
-// their inferred types in the provided context. The optional desired parameter can
-// be used to hint the desired type for the root of the resulting typed expression
-// tree. Like with Expr.TypeCheck, it is not valid to provide a nil desired
-// type. Instead, call it with the wildcard type types.Any if no specific type is
-// desired.
-func TypeCheck(expr Expr, ctx *SemaContext, desired types.T) (TypedExpr, error) {
-	if desired == nil {
-		panic("the desired type for parser.TypeCheck cannot be nil, use types.Any instead")
-	}
-
-	expr, err := foldConstantLiterals(expr)
-	if err != nil {
-		return nil, err
-	}
-	return expr.TypeCheck(ctx, desired)
-}
-
-// TypeCheckAndRequire performs type checking on the provided expression tree in
-// an identical manner to TypeCheck. It then asserts that the resulting TypedExpr
-// has the provided return type, returning both the typed expression and an error
-// if it does not.
-func TypeCheckAndRequire(
-	expr Expr, ctx *SemaContext, required types.T, op string,
-) (TypedExpr, error) {
-	typedExpr, err := TypeCheck(expr, ctx, required)
-	if err != nil {
-		return nil, err
-	}
-	if typ := typedExpr.ResolvedType(); !(typ.Equivalent(required) || typ == types.Null) {
-		return typedExpr, pgerror.NewErrorf(
-			pgerror.CodeDatatypeMismatchError, "argument of %s must be type %s, not type %s", op, required, typ)
-	}
-	return typedExpr, nil
-}
-
-// NormalizeExpr is wrapper around ctx.NormalizeExpr which avoids allocation of
-// a normalizeVisitor.
-func (p *Parser) NormalizeExpr(ctx *EvalContext, typedExpr TypedExpr) (TypedExpr, error) {
-	if ctx.SkipNormalize {
-		return typedExpr, nil
-	}
-	p.normalizeVisitor = makeNormalizeVisitor(ctx)
-	expr, _ := WalkExpr(&p.normalizeVisitor, typedExpr)
-	if err := p.normalizeVisitor.err; err != nil {
-		return nil, err
-	}
-	return expr.(TypedExpr), nil
 }
 
 // Parse parses a sql statement string and returns a list of Statements.

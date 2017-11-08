@@ -85,7 +85,9 @@ func (cb *columnBackfiller) init() error {
 			}
 		}
 	}
-	defaultExprs, err := sqlbase.MakeDefaultExprs(cb.added, &parser.Parser{}, &cb.flowCtx.EvalCtx)
+	defaultExprs, err := sqlbase.MakeDefaultExprs(
+		cb.added, &parser.ExprTransformContext{}, &cb.flowCtx.EvalCtx,
+	)
 	if err != nil {
 		return err
 	}

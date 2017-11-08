@@ -79,7 +79,7 @@ func (p *planner) groupBy(
 	// Determine if aggregation is being performed. This check is done on the raw
 	// Select expressions as simplification might have removed aggregation
 	// functions (e.g. `SELECT MIN(1)` -> `SELECT 1`).
-	if isAggregate := p.parser.IsAggregate(n, p.session.SearchPath); !isAggregate {
+	if isAggregate := p.txCtx.IsAggregate(n, p.session.SearchPath); !isAggregate {
 		return nil, nil, nil
 	}
 
@@ -139,7 +139,7 @@ func (p *planner) groupBy(
 			groupByExprs[i] = resolvedExpr
 		}
 
-		if err := p.parser.AssertNoAggregationOrWindowing(
+		if err := p.txCtx.AssertNoAggregationOrWindowing(
 			expr, "GROUP BY", p.session.SearchPath,
 		); err != nil {
 			return nil, nil, err
@@ -149,7 +149,7 @@ func (p *planner) groupBy(
 	// Normalize and check the HAVING expression too if it exists.
 	var typedHaving parser.TypedExpr
 	if n.Having != nil {
-		if p.parser.WindowFuncInExpr(n.Having.Expr) {
+		if p.txCtx.WindowFuncInExpr(n.Having.Expr) {
 			return nil, nil, sqlbase.NewWindowingError("HAVING")
 		}
 		var err error
@@ -580,7 +580,7 @@ func (v *extractAggregatesVisitor) VisitPre(expr parser.Expr) (recurse bool, new
 			case 1:
 				argExpr := t.Exprs[0].(parser.TypedExpr)
 
-				if err := v.planner.parser.AssertNoAggregationOrWindowing(
+				if err := v.planner.txCtx.AssertNoAggregationOrWindowing(
 					argExpr,
 					fmt.Sprintf("the argument of %s()", t.Func),
 					v.planner.session.SearchPath,
@@ -612,7 +612,7 @@ func (v *extractAggregatesVisitor) VisitPre(expr parser.Expr) (recurse bool, new
 			if t.Filter != nil {
 				filterExpr := t.Filter.(parser.TypedExpr)
 
-				if err := v.planner.parser.AssertNoAggregationOrWindowing(
+				if err := v.planner.txCtx.AssertNoAggregationOrWindowing(
 					filterExpr, "FILTER", v.planner.session.SearchPath,
 				); err != nil {
 					v.err = err
