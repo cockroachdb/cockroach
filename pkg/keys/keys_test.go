@@ -196,6 +196,14 @@ func TestUserKey(t *testing.T) {
 	}
 }
 
+func TestSequenceKey(t *testing.T) {
+	actual := MakeSequenceKey(55)
+	expected := []byte("\xbfseqval")
+	if !bytes.Equal(actual, expected) {
+		t.Errorf("expected %q (len %d), got %q (len %d)", expected, len(expected), actual, len(actual))
+	}
+}
+
 // TestMetaPrefixLen asserts that both levels of meta keys have the same prefix length,
 // as MetaScanBounds, MetaReverseScanBounds and validateRangeMetaKey depend on this fact.
 func TestMetaPrefixLen(t *testing.T) {

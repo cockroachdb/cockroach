@@ -17,6 +17,7 @@ package sql
 import (
 	"bytes"
 	"fmt"
+	"math"
 	"regexp"
 	"strings"
 
@@ -1440,6 +1441,80 @@ func (n *createViewNode) makeViewTableDesc(
 	return desc, desc.AllocateIDs()
 }
 
+func (n *createSequenceNode) makeSequenceTableDesc(
+	ctx context.Context,
+	sequenceName string,
+	parentID sqlbase.ID,
+	id sqlbase.ID,
+	privileges *sqlbase.PrivilegeDescriptor,
+) (sqlbase.TableDescriptor, error) {
+	desc := initTableDescriptor(id, parentID, sequenceName, n.p.txn.OrigTimestamp(), privileges)
+
+	// Fill in options, starting with defaults then overriding.
+
+	opts := &sqlbase.TableDescriptor_SequenceOpts{
+		Cycle: false,
+	}
+
+	// All other defaults are dependent on the value of increment,
+	// i.e. whether the sequence is ascending or descending.
+	opts.Increment = 1
+	for _, option := range n.n.Options {
+		if option.Name == tree.SeqOptIncrement {
+			opts.Increment = *option.IntVal
+		}
+	}
+	if opts.Increment == 0 {
+		return desc, pgerror.NewError(
+			pgerror.CodeInvalidParameterValueError, "INCREMENT must not be zero")
+	}
+	isAscending := opts.Increment > 0
+
+	// Set increment-dependent defaults.
+	if isAscending {
+		opts.MinValue = 1
+		opts.MaxValue = math.MaxInt64
+		opts.Start = opts.MinValue
+	} else {
+		opts.MinValue = math.MinInt64
+		opts.MaxValue = -1
+		opts.Start = opts.MaxValue
+	}
+
+	// Fill in all other options.
+	settingsSeen := map[string]bool{}
+	for _, option := range n.n.Options {
+		// Error on duplicate options.
+		_, seenBefore := settingsSeen[option.Name]
+		if seenBefore {
+			return desc, pgerror.NewError(pgerror.CodeSyntaxError, "conflicting or redundant options")
+		}
+		settingsSeen[option.Name] = true
+
+		switch option.Name {
+		case tree.SeqOptIncrement:
+			// Do nothing; this has already been set.
+		case tree.SeqOptMinValue:
+			// A value of nil represents the user explicitly saying `NO MINVALUE`.
+			if option.IntVal != nil {
+				opts.MinValue = *option.IntVal
+			}
+		case tree.SeqOptMaxValue:
+			// A value of nil represents the user explicitly saying `NO MAXVALUE`.
+			if option.IntVal != nil {
+				opts.MaxValue = *option.IntVal
+			}
+		case tree.SeqOptStart:
+			opts.Start = *option.IntVal
+		case tree.SeqOptCycle:
+			opts.Cycle = option.BoolVal
+		}
+	}
+	desc.SequenceOpts = opts
+
+	return desc, desc.AllocateIDs()
+}
+
 // makeTableDescIfAs is the MakeTableDesc method for when we have a table
 // that is created with the CREATE AS format.
 func makeTableDescIfAs(
@@ -1821,3 +1896,101 @@ func makeCheckConstraint(
 	}
 	return &sqlbase.TableDescriptor_CheckConstraint{Expr: tree.Serialize(d.Expr), Name: name}, nil
 }
+
+type createSequenceNode struct {
+	p      *planner
+	n      *tree.CreateSequence
+	dbDesc *sqlbase.DatabaseDescriptor
+}
+
+func (p *planner) CreateSequence(ctx context.Context, n *tree.CreateSequence) (planNode, error) {
+	name, err := n.Name.NormalizeWithDatabaseName(p.session.Database)
+	if err != nil {
+		return nil, err
+	}
+
+	dbDesc, err := MustGetDatabaseDesc(ctx, p.txn, p.getVirtualTabler(), name.Database())
+	if err != nil {
+		return nil, err
+	}
+
+	if err := p.CheckPrivilege(dbDesc, privilege.CREATE); err != nil {
+		return nil, err
+	}
+
+	return &createSequenceNode{
+		p:      p,
+		n:      n,
+		dbDesc: dbDesc,
+	}, nil
+}
+
+func (n *createSequenceNode) Start(params runParams) error {
+	seqName := n.n.Name.TableName().Table()
+	tKey := tableKey{parentID: n.dbDesc.ID, name: seqName}
+	key := tKey.Key()
+	if exists, err := descExists(params.ctx, n.p.txn, key); err == nil && exists {
+		if n.n.IfNotExists {
+			// If the sequence exists but the user specified IF NOT EXISTS, return without doing anything.
+			return nil
+		}
+		return sqlbase.NewRelationAlreadyExistsError(tKey.Name())
+	} else if err != nil {
+		return err
+	}
+
+	id, err := GenerateUniqueDescID(params.ctx, n.p.session.execCfg.DB)
+	if err != nil {
+		return nil
+	}
+
+	// Inherit permissions from the database descriptor.
+	privs := n.dbDesc.GetPrivileges()
+
+	desc, err := n.makeSequenceTableDesc(params.ctx, seqName, n.dbDesc.ID, id, privs)
+	if err != nil {
+		return err
+	}
+
+	if err = desc.ValidateTable(); err != nil {
+		return err
+	}
+
+	if err = n.p.createDescriptorWithID(params.ctx, key, id, &desc); err != nil {
+		return err
+	}
+
+	// Initialize the sequence value.
+	seqValueKey := keys.MakeSequenceKey(uint32(id))
+	b := &client.Batch{}
+	b.Inc(seqValueKey, desc.SequenceOpts.Start-desc.SequenceOpts.Increment)
+	if err := n.p.txn.Run(params.ctx, b); err != nil {
+		return err
+	}
+
+	if desc.Adding() {
+		n.p.notifySchemaChange(&desc, sqlbase.InvalidMutationID)
+	}
+	if err := desc.Validate(params.ctx, n.p.txn); err != nil {
+		return err
+	}
+
+	// Log Create Sequence event. This is an auditable log event and is
+	// recorded in the same transaction as the table descriptor update.
+	return MakeEventLogger(n.p.LeaseMgr()).InsertEventRecord(
+		params.ctx,
+		n.p.txn,
+		EventLogCreateSequence,
+		int32(desc.ID),
+		int32(n.p.evalCtx.NodeID),
+		struct {
+			SequenceName string
+			Statement    string
+			User         string
+		}{n.n.Name.String(), n.n.String(), n.p.session.User},
+	)
+}
+
+func (*createSequenceNode) Next(runParams) (bool, error) { return false, nil }
+func (*createSequenceNode) Close(context.Context)        {}
+func (*createSequenceNode) Values() tree.Datums          { return tree.Datums{} }
