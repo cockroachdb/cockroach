@@ -23,6 +23,7 @@ import (
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
@@ -37,6 +38,9 @@ const (
 	// ScrubErrorDanglingIndexReference occurs when a secondary index k/v
 	// points to a non-existing primary k/v.
 	ScrubErrorDanglingIndexReference = "dangling_index_reference"
+	// ScrubErrorCheckConstraintViolation occurs when a row in a table is
+	// violating a check constraint.
+	ScrubErrorCheckConstraintViolation = "check_constraint_violation"
 )
 
 // checkOperation is an interface for scrub check execution. The
@@ -202,6 +206,12 @@ func (n *scrubNode) startScrubTable(
 					"cannot specify CONSTRAINT option more than once")
 			}
 			constraintsSet = true
+			constraintsToCheck, err := createConstraintCheckOperations(
+				ctx, p, v.ConstraintNames, tableDesc, tableName)
+			if err != nil {
+				return err
+			}
+			n.checkQueue = append(n.checkQueue, constraintsToCheck...)
 		default:
 			panic(fmt.Sprintf("Unhandled SCRUB option received: %+v", v))
 		}
@@ -676,6 +686,51 @@ func createIndexCheckOperations(
 	return results, nil
 }
 
+// createConstraintCheckOperations will return all of the constraints
+// that are being checked. If constraintNames is nil, then all
+// constraints are returned.
+// TODO(joey): Only SQL CHECK constraints are implemented.
+func createConstraintCheckOperations(
+	ctx context.Context,
+	p *planner,
+	constraintNames tree.NameList,
+	tableDesc *sqlbase.TableDescriptor,
+	tableName *tree.TableName,
+) (results []checkOperation, err error) {
+	constraints, err := tableDesc.GetConstraintInfo(ctx, p.txn)
+	if err != nil {
+		return nil, err
+	}
+
+	// Keep only the constraints specified by the constraints in
+	// constraintNames.
+	if constraintNames != nil {
+		wantedConstraints := make(map[string]sqlbase.ConstraintDetail)
+		for _, constraintName := range constraintNames {
+			if v, ok := constraints[string(constraintName)]; ok {
+				wantedConstraints[string(constraintName)] = v
+			} else {
+				return nil, pgerror.NewErrorf(pgerror.CodeUndefinedObjectError,
+					"constraint %q of relation %q does not exist", constraintName, tableDesc.Name)
+			}
+		}
+		constraints = wantedConstraints
+	}
+
+	// Populate results with all constraints on the table.
+	for _, constraint := range constraints {
+		switch constraint.Kind {
+		case sqlbase.ConstraintTypeCheck:
+			results = append(results, newSQLCheckConstraintCheckOperation(
+				tableName,
+				tableDesc,
+				constraint.CheckConstraint,
+			))
+		}
+	}
+	return results, nil
+}
+
 // scrubPlanAndRunDistSQL will prepare and run the plan in distSQL. If a
 // RowContainer is returned the caller must close it.
 func scrubPlanAndRunDistSQL(
@@ -711,4 +766,150 @@ func scrubPlanAndRunDistSQL(
 	}
 
 	return rows, nil
+}
+
+// sqlCheckConstraintCheckOperation is a check which validates a SQL
+// CHECK constraint on a table.
+type sqlCheckConstraintCheckOperation struct {
+	started   bool
+	tableName *tree.TableName
+	tableDesc *sqlbase.TableDescriptor
+	checkDesc *sqlbase.TableDescriptor_CheckConstraint
+
+	// Intermediate values.
+	rows        planNode
+	hasRowsLeft bool
+
+	// columns is a list of the columns returned in the query result
+	// tree.Datums.
+	columns []*sqlbase.ColumnDescriptor
+	// primaryColIdxs maps PrimaryIndex.Columns to the row
+	// indexes in the query result tree.Datums.
+	primaryColIdxs []int
+}
+
+func newSQLCheckConstraintCheckOperation(
+	tableName *tree.TableName,
+	tableDesc *sqlbase.TableDescriptor,
+	checkDesc *sqlbase.TableDescriptor_CheckConstraint,
+) *sqlCheckConstraintCheckOperation {
+	return &sqlCheckConstraintCheckOperation{
+		tableName: tableName,
+		tableDesc: tableDesc,
+		checkDesc: checkDesc,
+	}
+}
+
+// Start implements the checkOperation interface.
+// It creates a SELECT expression and generates a plan from it, which
+// then runs in the distSQL execution engine.
+func (o *sqlCheckConstraintCheckOperation) Start(ctx context.Context, p *planner) error {
+	expr, err := parser.ParseExpr(o.checkDesc.Expr)
+	if err != nil {
+		return err
+	}
+	normalizableTableName := &tree.NormalizableTableName{TableNameReference: o.tableName}
+	sel := &tree.SelectClause{
+		Exprs: sqlbase.ColumnsSelectors(o.tableDesc.Columns),
+		From:  &tree.From{Tables: tree.TableExprs{normalizableTableName}},
+		Where: &tree.Where{Expr: &tree.NotExpr{Expr: expr}},
+	}
+	// This could potentially use a variant of planner.SelectClause that could
+	// use the tableDesc we have, but this is a rare operation and the benefit
+	// would be marginal compared to the work of the actual query, so the added
+	// complexity seems unjustified.
+	rows, err := p.SelectClause(ctx, sel, nil /* orderBy */, nil, /* limit */
+		nil /* desiredTypes */, publicColumns)
+	if err != nil {
+		return err
+	}
+	rows, err = p.optimizePlan(ctx, rows, allColumns(rows))
+	if err != nil {
+		return err
+	}
+	if err := p.startPlan(ctx, rows); err != nil {
+		return err
+	}
+
+	o.started = true
+	o.hasRowsLeft = true
+	o.rows = rows
+	// Collect all the columns.
+	for i := range o.tableDesc.Columns {
+		o.columns = append(o.columns, &o.tableDesc.Columns[i])
+	}
+	// Find the row indexes for all of the primary index columns.
+	if o.primaryColIdxs, err = getPrimaryColIdxs(o.tableDesc, o.columns); err != nil {
+		return err
+	}
+	// Begin the first unit of work. This prepares the hasRowsLeft flag
+	// for the first iteration.
+	o.hasRowsLeft, err = o.rows.Next(runParams{ctx: ctx, p: p})
+	return err
+}
+
+// Next implements the checkOperation interface.
+func (o *sqlCheckConstraintCheckOperation) Next(
+	ctx context.Context, p *planner,
+) (tree.Datums, error) {
+	row := o.rows.Values()
+	timestamp := tree.MakeDTimestamp(
+		p.evalCtx.GetStmtTimestamp(), time.Nanosecond)
+
+	// Start the next unit of work. This is required so during the next
+	// call to Done() it is known whether there are any rows left.
+	var err error
+	if o.hasRowsLeft, err = o.rows.Next(runParams{
+		ctx: ctx,
+		p:   p,
+	}); err != nil {
+		return nil, err
+	}
+
+	var primaryKeyDatums tree.Datums
+	for _, rowIdx := range o.primaryColIdxs {
+		primaryKeyDatums = append(primaryKeyDatums, row[rowIdx])
+	}
+
+	details := make(map[string]interface{})
+	rowDetails := make(map[string]interface{})
+	details["row_data"] = rowDetails
+	details["constraint_name"] = o.checkDesc.Name
+	for rowIdx, col := range o.columns {
+		// TODO(joey): We should maybe try to get the underlying type.
+		rowDetails[col.Name] = row[rowIdx].String()
+	}
+	detailsJSON, err := tree.MakeDJSON(details)
+	if err != nil {
+		return nil, err
+	}
+
+	return tree.Datums{
+		// TODO(joey): Add the job UUID once the SCRUB command uses jobs.
+		tree.DNull, /* job_uuid */
+		tree.NewDString(ScrubErrorCheckConstraintViolation),
+		tree.NewDString(o.tableName.Database()),
+		tree.NewDString(o.tableName.Table()),
+		tree.NewDString(primaryKeyDatums.String()),
+		timestamp,
+		tree.DBoolFalse,
+		detailsJSON,
+	}, nil
+}
+
+// Started implements the checkOperation interface.
+func (o *sqlCheckConstraintCheckOperation) Started() bool {
+	return o.started
+}
+
+// Done implements the checkOperation interface.
+func (o *sqlCheckConstraintCheckOperation) Done(ctx context.Context) bool {
+	return o.rows == nil || !o.hasRowsLeft
+}
+
+// Close implements the checkOperation interface.
+func (o *sqlCheckConstraintCheckOperation) Close(ctx context.Context) {
+	if o.rows != nil {
+		o.rows.Close(ctx)
+	}
 }
