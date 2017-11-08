@@ -16,6 +16,7 @@ package sql
 
 import (
 	"fmt"
+	"io"
 	"sync"
 
 	"github.com/pkg/errors"
@@ -86,6 +87,10 @@ func (c cursorPosition) compare(other cursorPosition) int {
 type stmtBuf struct {
 	mu struct {
 		syncutil.Mutex
+
+		// closed, if set, means that the writer has closed the buffer. See Close().
+		closed bool
+
 		// cond is signaled when new statements are pushed.
 		cond *sync.Cond
 
@@ -107,13 +112,27 @@ func newStmtBuf() *stmtBuf {
 	return &buf
 }
 
-// push adds a query string to the end of the buffer. If a curStmt() call was
-// blocked waiting for this query string to arrive, it will be woken up.
-func (buf *stmtBuf) push(stmts parser.StatementList) {
+// Close marks the buffer as closed. Once Close() is called, no further push()es
+// are allowed. If a reader is blocked on a curStmt() call, it is unblocked with
+// io.EOF. Any further curStmt() call also returns io.EOF (even if some
+// statements were already available in the buffer before the Close()).
+func (buf *stmtBuf) Close() {
 	buf.mu.Lock()
-	buf.mu.queryStrings = append(buf.mu.queryStrings, stmts)
+	buf.mu.closed = true
 	buf.mu.cond.Signal()
 	buf.mu.Unlock()
+}
+
+// push adds a query string to the end of the buffer. If a curStmt() call was
+// blocked waiting for this query string to arrive, it will be woken up.
+func (buf *stmtBuf) push(ctx context.Context, stmts parser.StatementList) {
+	buf.mu.Lock()
+	defer buf.mu.Unlock()
+	if buf.mu.closed {
+		log.Fatal(ctx, "cannot push after Close()")
+	}
+	buf.mu.queryStrings = append(buf.mu.queryStrings, stmts)
+	buf.mu.cond.Signal()
 }
 
 // curStmt returns the statement currently indicated by the cursor. Besides
@@ -122,24 +141,31 @@ func (buf *stmtBuf) push(stmts parser.StatementList) {
 // If the cursor is positioned at the beginning of the (next) query string and
 // that query string hasn't arrived yet, this blocks until the query string is
 // pushed to the buffer.
-func (buf *stmtBuf) curStmt(ctx context.Context) (parser.Statement, cursorPosition) {
+//
+// If the buffer has previously been Close()d, or is closed while this is
+// blocked, io.EOF is returned.
+func (buf *stmtBuf) curStmt(ctx context.Context) (parser.Statement, cursorPosition, error) {
 	buf.mu.Lock()
 	defer buf.mu.Unlock()
 	for {
+		if buf.mu.closed {
+			return nil, cursorPosition{}, io.EOF
+		}
 		curPos := buf.mu.curPos
 		qsIdx, err := buf.translateQueryStrPosLocked(curPos.queryStrPos)
 		if err != nil {
-			log.Fatalf(ctx, "unexpected translation error. Corrupt cursor? err: %s", err)
+			return nil, cursorPosition{}, err
 		}
 		if int(qsIdx) < len(buf.mu.queryStrings) {
 			qs := buf.mu.queryStrings[qsIdx]
 			if int(curPos.stmtIdx) >= len(qs) {
 				log.Fatalf(ctx, "corrupt cursor: %s", curPos)
 			}
-			return buf.mu.queryStrings[qsIdx][curPos.stmtIdx], curPos
+			return buf.mu.queryStrings[qsIdx][curPos.stmtIdx], curPos, nil
 		}
 		if (int(qsIdx) != len(buf.mu.queryStrings)) || (curPos.stmtIdx != 0) {
-			log.Fatalf(ctx, "can only wait for next query string; corrupt cursor: %s", curPos)
+			return nil, cursorPosition{}, errors.Errorf(
+				"can only wait for next query string; corrupt cursor: %s", curPos)
 		}
 		// Wait for the next statement to arrive to the buffer.
 		buf.mu.cond.Wait()

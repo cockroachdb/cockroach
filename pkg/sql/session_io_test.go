@@ -16,6 +16,7 @@ package sql
 
 import (
 	"fmt"
+	"io"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
@@ -36,14 +37,17 @@ func TestStmtBuf(t *testing.T) {
 		t.Fatal(err)
 	}
 	buf := newStmtBuf()
-	buf.push(batch1)
-	buf.push(batch2)
+	buf.push(ctx, batch1)
+	buf.push(ctx, batch2)
 
 	// Check that, while we don't manually advance the cursor, we keep getting the
 	// same statement.
 	expPos := cursorPosition{queryStrPos: 0, stmtIdx: 0}
 	for i := 0; i < 2; i++ {
-		stmt, pos := buf.curStmt(ctx)
+		stmt, pos, err := buf.curStmt(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
 		if pos.compare(expPos) != 0 {
 			t.Fatalf("expected pos to be %s, got: %s", expPos, pos)
 		}
@@ -54,7 +58,10 @@ func TestStmtBuf(t *testing.T) {
 
 	buf.advanceOne(ctx)
 	expPos.stmtIdx = 1
-	stmt, pos := buf.curStmt(ctx)
+	stmt, pos, err := buf.curStmt(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if pos.compare(expPos) != 0 {
 		t.Fatalf("expected pos to be %s, got: %s", expPos, pos)
 	}
@@ -64,7 +71,10 @@ func TestStmtBuf(t *testing.T) {
 
 	buf.advanceOne(ctx)
 	expPos.stmtIdx = 2
-	stmt, pos = buf.curStmt(ctx)
+	stmt, pos, err = buf.curStmt(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if pos.compare(expPos) != 0 {
 		t.Fatalf("expected pos to be %s, got: %s", expPos, pos)
 	}
@@ -75,7 +85,10 @@ func TestStmtBuf(t *testing.T) {
 	buf.advanceOne(ctx)
 	expPos.queryStrPos = 1
 	expPos.stmtIdx = 0
-	stmt, pos = buf.curStmt(ctx)
+	stmt, pos, err = buf.curStmt(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if pos.compare(expPos) != 0 {
 		t.Fatalf("expected pos to be %s, got: %s", expPos, pos)
 	}
@@ -87,7 +100,10 @@ func TestStmtBuf(t *testing.T) {
 	expPos.queryStrPos = 0
 	expPos.stmtIdx = 1
 	buf.rewind(ctx, expPos)
-	stmt, pos = buf.curStmt(ctx)
+	stmt, pos, err = buf.curStmt(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if pos.compare(expPos) != 0 {
 		t.Fatalf("expected pos to be %s, got: %s", expPos, pos)
 	}
@@ -99,7 +115,10 @@ func TestStmtBuf(t *testing.T) {
 	expPos.queryStrPos = 1
 	expPos.stmtIdx = 0
 	buf.seekToNextQueryStr()
-	stmt, pos = buf.curStmt(ctx)
+	stmt, pos, err = buf.curStmt(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if pos.compare(expPos) != 0 {
 		t.Fatalf("expected pos to be %s, got: %s", expPos, pos)
 	}
@@ -113,17 +132,21 @@ func TestStmtBuf(t *testing.T) {
 func TestStmtBufSignal(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
+	ctx := context.TODO()
 	buf := newStmtBuf()
 	batch, err := parser.Parse("SELECT 1; SELECT 2; SELECT 3;")
 	if err != nil {
 		t.Fatal(err)
 	}
 	go func() {
-		buf.push(batch)
+		buf.push(ctx, batch)
 	}()
 
 	expPos := cursorPosition{queryStrPos: 0, stmtIdx: 0}
-	stmt, pos := buf.curStmt(context.TODO())
+	stmt, pos, err := buf.curStmt(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if pos.compare(expPos) != 0 {
 		t.Fatalf("expected pos to be %s, got: %s", expPos, pos)
 	}
@@ -143,7 +166,7 @@ func TestStmtBufLtrim(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		buf.push(batch)
+		buf.push(ctx, batch)
 	}
 	// Advance the cursor so that we can trim.
 	buf.seekToNextQueryStr()
@@ -155,5 +178,42 @@ func TestStmtBufLtrim(t *testing.T) {
 	}
 	if s := buf.mu.startPos; s != 2 {
 		t.Fatalf("expected start pos 2, got: %d", s)
+	}
+}
+
+// Test that, after Close() is called, buf.curStmt() returns io.EOF even if
+// there were statements queued up.
+func TestStmtBufClose(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.TODO()
+	buf := newStmtBuf()
+	batch, err := parser.Parse("SELECT 1;")
+	if err != nil {
+		t.Fatal(err)
+	}
+	buf.push(ctx, batch)
+	buf.Close()
+
+	_, _, err = buf.curStmt(ctx)
+	if err != io.EOF {
+		t.Fatalf("expected EOF, got: %v", err)
+	}
+}
+
+// Test that a call to Close() unblocks a curStmt() call.
+func TestStmtBufCloseUnblocksReader(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.TODO()
+	buf := newStmtBuf()
+
+	go func() {
+		buf.Close()
+	}()
+
+	_, _, err := buf.curStmt(ctx)
+	if err != io.EOF {
+		t.Fatalf("expected EOF, got: %v", err)
 	}
 }
