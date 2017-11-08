@@ -540,14 +540,17 @@ func (o *indexCheckOperation) Close(ctx context.Context) {
 	}
 }
 
-// tableColumnsIsNullPredicate creates a predicate that checks if all of
-// the specified columns for a table are NULL (or not NULL, based on the
-// isNull flag). For example, given table is t1 and the columns id,
-// name, data, then the returned string is:
+// tableColumnsIsNullPredicate creates a predicate checking if the
+// specified columns are NULL (or not NULL, based on the isNull flag).
+// The conjunction string is expressions are joined, such as with "AND"
+// or "OR". For example, given table is t1 and the columns id, name,
+// data, then the returned string is:
 //
 //   t1.id IS NULL AND t1.name IS NULL AND t1.data IS NULL
 //
-func tableColumnsIsNullPredicate(tableName string, columns []string, isNull bool) string {
+func tableColumnsIsNullPredicate(
+	tableName string, columns []string, conjunction string, isNull bool,
+) string {
 	var buf bytes.Buffer
 	nullCheck := "NOT NULL"
 	if isNull {
@@ -555,7 +558,9 @@ func tableColumnsIsNullPredicate(tableName string, columns []string, isNull bool
 	}
 	for i, col := range columns {
 		if i > 0 {
-			buf.WriteString(" AND ")
+			buf.WriteByte(' ')
+			buf.WriteString(conjunction)
+			buf.WriteByte(' ')
 		}
 		fmt.Fprintf(&buf, "%[1]s.%[2]s IS %[3]s", tableName, col, nullCheck)
 	}
@@ -568,13 +573,24 @@ func tableColumnsIsNullPredicate(tableName string, columns []string, isNull bool
 //
 //   t1.id = t2.id AND t1.name = t2.name
 //
-func tableColumnsEQ(tableName string, otherTableName string, columns []string) string {
+func tableColumnsEQ(
+	tableName string, otherTableName string, columns []string, otherColumns []string,
+) string {
+	if len(columns) != len(otherColumns) {
+		panic(fmt.Sprintf(
+			"expected columns to have the same size: columns len was %d, otherColumns len was %d",
+			len(columns),
+			len(otherColumns),
+		))
+	}
+
 	var buf bytes.Buffer
-	for i, col := range columns {
+	for i := range columns {
 		if i > 0 {
 			buf.WriteString(" AND ")
 		}
-		fmt.Fprintf(&buf, `%[1]s.%[3]s = %[2]s.%[3]s`, tableName, otherTableName, col)
+		fmt.Fprintf(&buf, `%[1]s.%[3]s = %[2]s.%[4]s`,
+			tableName, otherTableName, columns[i], otherColumns[i])
 	}
 	return buf.String()
 }
@@ -641,8 +657,6 @@ func tableColumnsProjection(tableName string, columns []string) string {
 //   primary index columns are never null.
 // - Otherwise, the left columns is present.
 //
-// TODO(joey): Once we support ANTI JOIN in distSQL this can be
-// simplified, as the the WHERE clause can be completely dropped.
 func createIndexCheckQuery(
 	columnNames []string,
 	tableDesc *sqlbase.TableDescriptor,
@@ -662,15 +676,15 @@ func createIndexCheckQuery(
 				WHERE (%[7]s) OR
 							(%[8]s)`
 	return fmt.Sprintf(checkIndexQuery,
-		tableColumnsProjection("leftside", columnNames),                                                 // 1
-		tableColumnsProjection("rightside", columnNames),                                                // 2
-		tableName.String(),                                                                              // 3
-		indexDesc.ID,                                                                                    // 4
-		strings.Join(columnNames, ","),                                                                  // 5
-		tableColumnsEQ("leftside", "rightside", columnNames),                                            // 6
-		tableColumnsIsNullPredicate("leftside", tableDesc.PrimaryIndex.ColumnNames, true /* isNull */),  // 7
-		tableColumnsIsNullPredicate("rightside", tableDesc.PrimaryIndex.ColumnNames, true /* isNull */), // 8
-		strings.Join(columnNames, ","),                                                                  // 9
+		tableColumnsProjection("leftside", columnNames),                                                        // 1
+		tableColumnsProjection("rightside", columnNames),                                                       // 2
+		tableName.String(),                                                                                     // 3
+		indexDesc.ID,                                                                                           // 4
+		strings.Join(columnNames, ","),                                                                         // 5
+		tableColumnsEQ("leftside", "rightside", columnNames, columnNames),                                      // 6
+		tableColumnsIsNullPredicate("leftside", tableDesc.PrimaryIndex.ColumnNames, "AND", true /* isNull */),  // 7
+		tableColumnsIsNullPredicate("rightside", tableDesc.PrimaryIndex.ColumnNames, "AND", true /* isNull */), // 8
+		strings.Join(columnNames, ","),                                                                         // 9
 	)
 }
 
@@ -728,7 +742,8 @@ func createIndexCheckOperations(
 // createConstraintCheckOperations will return all of the constraints
 // that are being checked. If constraintNames is nil, then all
 // constraints are returned.
-// TODO(joey): Only SQL CHECK constraints are implemented.
+// TODO(joey): Only SQL CHECK and FOREIGN KEY constraints are
+// implemented.
 func createConstraintCheckOperations(
 	ctx context.Context,
 	p *planner,
@@ -765,6 +780,12 @@ func createConstraintCheckOperations(
 				tableDesc,
 				constraint.CheckConstraint,
 			))
+		case sqlbase.ConstraintTypeFK:
+			results = append(results, newSQLForeignKeyCheckOperation(
+				tableName,
+				tableDesc,
+				constraint,
+			))
 		}
 	}
 	return results, nil
@@ -780,8 +801,7 @@ func scrubPlanDistSQL(
 		return nil, err
 	}
 	p.session.distSQLPlanner.FinalizePlan(planCtx, &physPlan)
-
-	return &physPlan, err
+	return &physPlan, nil
 }
 
 // scrubRunDistSQL run a distSQLPhysicalPlan plan in distSQL. If
