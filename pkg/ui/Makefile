@@ -72,11 +72,15 @@ $(GOBINDATA_TARGET): webpack.app.js $(DLLS) $(shell find src styl)
 	gofmt -s -w $@
 	goimports -w $@
 
+yarn.opt.installed:
+	$(YARN) install --cwd opt
+	touch $@
+
 .PHONY: watch
 watch: export TARGET := http://localhost:8080
 watch: PORT := 3000
-watch: $(DLLS)
-	./node_modules/.bin/webpack-dashboard -- $(WEBPACK_DEV_SERVER) --config webpack.app.js --port $(PORT)
+watch: $(DLLS) yarn.opt.installed
+	./opt/node_modules/.bin/webpack-dashboard -- $(WEBPACK_DEV_SERVER) --config webpack.app.js --port $(PORT)
 
 .PHONY: maintainer-clean
 maintainer-clean:
