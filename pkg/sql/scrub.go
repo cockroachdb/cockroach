@@ -41,6 +41,9 @@ const (
 	// ScrubErrorCheckConstraintViolation occurs when a row in a table is
 	// violating a check constraint.
 	ScrubErrorCheckConstraintViolation = "check_constraint_violation"
+	// ScrubErrorForeignKeyConstraintViolation occurs when a row in a
+	// table is violating a foreign key constraint.
+	ScrubErrorForeignKeyConstraintViolation = "foreign_key_violation"
 )
 
 // checkOperation is an interface for scrub check execution. The
@@ -500,14 +503,17 @@ func (o *indexCheckOperation) Close(ctx context.Context) {
 	}
 }
 
-// tableColumnsIsNullPredicate creates a predicate that checks if all of
-// the specified columns for a table are NULL (or not NULL, based on the
-// isNull flag). For example, given table is t1 and the columns id,
-// name, data, then the returned string is:
+// tableColumnsIsNullPredicate creates a predicate checking if the
+// specified columns are NULL (or not NULL, based on the isNull flag).
+// The conjunction string is expressions are joined, such as with "AND"
+// or "OR". For example, given table is t1 and the columns id, name,
+// data, then the returned string is:
 //
 //   t1.id IS NULL AND t1.name IS NULL AND t1.data IS NULL
 //
-func tableColumnsIsNullPredicate(tableName string, columns []string, isNull bool) string {
+func tableColumnsIsNullPredicate(
+	tableName string, columns []string, conjunction string, isNull bool,
+) string {
 	var buf bytes.Buffer
 	nullCheck := "NOT NULL"
 	if isNull {
@@ -515,7 +521,9 @@ func tableColumnsIsNullPredicate(tableName string, columns []string, isNull bool
 	}
 	for i, col := range columns {
 		if i > 0 {
-			buf.WriteString(" AND ")
+			buf.WriteByte(' ')
+			buf.WriteString(conjunction)
+			buf.WriteByte(' ')
 		}
 		fmt.Fprintf(&buf, "%[1]s.%[2]s IS %[3]s", tableName, col, nullCheck)
 	}
@@ -525,24 +533,34 @@ func tableColumnsIsNullPredicate(tableName string, columns []string, isNull bool
 // tableColumnsEQ creates a predicate that checks if all of the
 // specified columns for two tables are equal. This predicate also needs
 // NULL checks to work around the equivilancy of NULL = NULL. For
-// example, given tables t1, t2 and the columns id, name, then the
-// returned string is:
+// example, given tables t1, t2 and the columns id, name for both of
+// them, then the returned string is:
 //
 //   ((t1.id IS NOT NULL AND t2.id IS NOT NULL AND t1.id = t2.id) OR
 //    (t1.id IS NULL AND t2.id IS NULL)) AND
 //   ((t1.name IS NOT NULL AND t2.name IS NOT NULL AND t1.name = t2.name) OR
 //    (t1.name IS NULL AND t2.name IS NULL))
 //
-func tableColumnsEQ(tableName string, otherTableName string, columns []string) string {
+func tableColumnsEQ(
+	tableName string, otherTableName string, columns []string, otherColumns []string,
+) string {
+	if len(columns) != len(otherColumns) {
+		panic(fmt.Sprintf(
+			"expected columns to have the same size: columns len was %d, otherColumns len was %d",
+			len(columns),
+			len(otherColumns),
+		))
+	}
+
 	var buf bytes.Buffer
-	for i, col := range columns {
+	for i := range columns {
 		if i > 0 {
 			buf.WriteString(" AND ")
 		}
 		fmt.Fprintf(&buf, `
-			((%[1]s.%[3]s IS NOT NULL AND %[2]s.%[3]s IS NOT NULL AND %[1]s.%[3]s = %[2]s.%[3]s) OR
-			 (%[1]s.%[3]s IS NULL AND %[2]s.%[3]s IS NULL))`,
-			tableName, otherTableName, col)
+			((%[1]s.%[3]s IS NOT NULL AND %[2]s.%[4]s IS NOT NULL AND %[1]s.%[3]s = %[2]s.%[4]s) OR
+			 (%[1]s.%[3]s IS NULL AND %[2]s.%[4]s IS NULL))`,
+			tableName, otherTableName, columns[i], otherColumns[i])
 	}
 	return buf.String()
 }
@@ -629,9 +647,9 @@ func createIndexCheckQuery(
 		tableColumnsProjection("rightside", columnNames),
 		tableName.String(),
 		indexID,
-		tableColumnsEQ("leftside", "rightside", columnNames),
-		tableColumnsIsNullPredicate("leftside", primaryKeyColumnNames, true /* isNull */),
-		tableColumnsIsNullPredicate("rightside", primaryKeyColumnNames, true /* isNull */),
+		tableColumnsEQ("leftside", "rightside", columnNames, columnNames),
+		tableColumnsIsNullPredicate("leftside", primaryKeyColumnNames, "AND", true /* isNull */),
+		tableColumnsIsNullPredicate("rightside", primaryKeyColumnNames, "AND", true /* isNull */),
 	)
 }
 
@@ -689,7 +707,8 @@ func createIndexCheckOperations(
 // createConstraintCheckOperations will return all of the constraints
 // that are being checked. If constraintNames is nil, then all
 // constraints are returned.
-// TODO(joey): Only SQL CHECK constraints are implemented.
+// TODO(joey): Only SQL CHECK and FOREIGN KEY constraints are
+// implemented.
 func createConstraintCheckOperations(
 	ctx context.Context,
 	p *planner,
@@ -725,6 +744,15 @@ func createConstraintCheckOperations(
 				tableName,
 				tableDesc,
 				constraint.CheckConstraint,
+			))
+		case sqlbase.ConstraintTypeFK:
+			results = append(results, newSQLForeignKeyCheckOperation(
+				tableName,
+				tableDesc,
+				constraint.Index,
+				constraint.FK,
+				constraint.ReferencedTable,
+				constraint.ReferencedIndex,
 			))
 		}
 	}
@@ -912,4 +940,226 @@ func (o *sqlCheckConstraintCheckOperation) Close(ctx context.Context) {
 	if o.rows != nil {
 		o.rows.Close(ctx)
 	}
+}
+
+// sqlForeignKeyCheckOperation is a check on an indexes physical data.
+type sqlForeignKeyCheckOperation struct {
+	started         bool
+	tableName       *tree.TableName
+	tableDesc       *sqlbase.TableDescriptor
+	indexDesc       *sqlbase.IndexDescriptor
+	fkDesc          *sqlbase.ForeignKeyReference
+	referencedTable *sqlbase.TableDescriptor
+	referencedIndex *sqlbase.IndexDescriptor
+
+	// Intermediate values.
+	rows     *sqlbase.RowContainer
+	rowIndex int
+}
+
+func newSQLForeignKeyCheckOperation(
+	tableName *tree.TableName,
+	tableDesc *sqlbase.TableDescriptor,
+	indexDesc *sqlbase.IndexDescriptor,
+	fkDesc *sqlbase.ForeignKeyReference,
+	referencedTable *sqlbase.TableDescriptor,
+	referencedIndex *sqlbase.IndexDescriptor,
+) *sqlForeignKeyCheckOperation {
+	return &sqlForeignKeyCheckOperation{
+		tableName:       tableName,
+		tableDesc:       tableDesc,
+		indexDesc:       indexDesc,
+		fkDesc:          fkDesc,
+		referencedTable: referencedTable,
+		referencedIndex: referencedIndex,
+	}
+}
+
+// Start implements the checkOperation interface.
+// It creates a query string and generates a plan from it, which then
+// runs in the distSQL execution engine.
+func (o *sqlForeignKeyCheckOperation) Start(ctx context.Context, p *planner) error {
+	checkQuery := createFKCheckQuery(o.tableName.Database(), o.tableDesc, o.indexDesc,
+		o.referencedTable, o.referencedIndex)
+	plan, err := p.delegateQuery(ctx, "SCRUB TABLE ... WITH OPTIONS CONSTRAINT", checkQuery, nil, nil)
+	if err != nil {
+		return err
+	}
+
+	// All columns projected in the plan generated from the query are
+	// needed. The columns are the index columns and extra columns in the
+	// index, twice -- for the primary and then secondary index.
+	needed := make([]bool, len(planColumns(plan)))
+	for i := range needed {
+		needed[i] = true
+	}
+
+	// Optimize the plan. This is required in order to populate scanNode
+	// spans.
+	plan, err = p.optimizePlan(ctx, plan, needed)
+	if err != nil {
+		plan.Close(ctx)
+		return err
+	}
+	defer plan.Close(ctx)
+
+	// Collect the expected types for the query results. This includes the
+	// primary key columns and the foreign key index columns.
+	columnsByID := make(map[sqlbase.ColumnID]*sqlbase.ColumnDescriptor)
+	for i := range o.tableDesc.Columns {
+		columnsByID[o.tableDesc.Columns[i].ID] = &o.tableDesc.Columns[i]
+	}
+	primaryIdxColSize := len(o.tableDesc.PrimaryIndex.ColumnIDs)
+	expectedTypes := make([]sqlbase.ColumnType, primaryIdxColSize+len(o.indexDesc.ColumnIDs))
+	for i, id := range o.tableDesc.PrimaryIndex.ColumnIDs {
+		expectedTypes[i] = columnsByID[id].Type
+	}
+	for i, id := range o.indexDesc.ColumnIDs {
+		expectedTypes[primaryIdxColSize+i] = columnsByID[id].Type
+	}
+
+	rows, err := scrubPlanAndRunDistSQL(ctx, p, plan, expectedTypes)
+	if err != nil {
+		rows.Close(ctx)
+		return err
+	}
+
+	o.started = true
+	o.rows = rows
+	return nil
+}
+
+// Next implements the checkOperation interface.
+func (o *sqlForeignKeyCheckOperation) Next(ctx context.Context, p *planner) (tree.Datums, error) {
+	row := o.rows.At(o.rowIndex)
+	o.rowIndex++
+
+	timestamp := tree.MakeDTimestamp(
+		p.evalCtx.GetStmtTimestamp(), time.Nanosecond)
+
+	details := make(map[string]interface{})
+	rowDetails := make(map[string]interface{})
+	details["row_data"] = rowDetails
+	details["constraint_name"] = o.fkDesc.Name
+
+	// Collect the primary index values for generating the value and
+	// populating the row_data details.
+	var primaryKeyDatums tree.Datums
+	for i, name := range o.tableDesc.PrimaryIndex.ColumnNames {
+		primaryKeyDatums = append(primaryKeyDatums, row[i])
+		rowDetails[name] = row[i].String()
+	}
+	primaryKey := tree.NewDString(primaryKeyDatums.String())
+
+	// Collect the foreign key index values for populating row_data
+	// details.
+	primIdxSize := len(o.tableDesc.PrimaryIndex.ColumnNames)
+	for i, name := range o.indexDesc.ColumnNames {
+		primaryKeyDatums = append(primaryKeyDatums, row[i])
+		rowDetails[name] = row[i+primIdxSize].String()
+	}
+
+	detailsJSON, err := tree.MakeDJSON(details)
+	if err != nil {
+		return nil, err
+	}
+
+	return tree.Datums{
+		// TODO(joey): Add the job UUID once the SCRUB command uses jobs.
+		tree.DNull, /* job_uuid */
+		tree.NewDString(ScrubErrorForeignKeyConstraintViolation),
+		tree.NewDString(o.tableName.Database()),
+		tree.NewDString(o.tableName.Table()),
+		primaryKey,
+		timestamp,
+		tree.DBoolFalse,
+		detailsJSON,
+	}, nil
+}
+
+// Started implements the checkOperation interface.
+func (o *sqlForeignKeyCheckOperation) Started() bool {
+	return o.started
+}
+
+// Done implements the checkOperation interface.
+func (o *sqlForeignKeyCheckOperation) Done(ctx context.Context) bool {
+	return o.rows == nil || o.rowIndex >= o.rows.Len()
+}
+
+// Close implements the checkOperation interface.
+func (o *sqlForeignKeyCheckOperation) Close(ctx context.Context) {
+	if o.rows != nil {
+		o.rows.Close(ctx)
+	}
+}
+
+// createFKCheckQuery will make the foreign key check query for a given
+// table, the referenced tables and the mapping from table columns to
+// referenced table columns.
+//
+// For example, given the following table schemas:
+//
+//   CREATE TABLE parent (
+//     id INT, dept_id INT,
+//     PRIMARY KEY (id),
+//     CONSTRAINT "child_fk" FOREIGN KEY (dept_id) REFERENCES child (dept_id)
+//   )
+//
+//   CREATE TABLE child (
+//     id INT, dept_id INT
+//     PRIMARY KEY (id),
+//     INDEX dept_idx (dept_id)
+//   )
+//
+// The generated query to check the `child_fk` will be:
+//
+//   SELECT p.id, p.dept_id
+//   FROM
+//     parent as p
+//   LEFT OUTER JOIN
+//     child@{FORCE_INDEX=dept_idx,NO_INDEX_JOIN} as c
+//   ON
+//      (p.dept_id IS NOT NULL AND c.dept_id IS NOT NULL AND p.dept_id.k = c.dept_id)
+//   WHERE p.dept_id IS NOT NULL AND c.dept_id IS NULL
+//
+// In short, this query is:
+// 1) Scanning the primary index of the parent table and the referenced
+//    index of the foreign table.
+// 2) Joining all of the referencing columns from both tables columns
+//    that are equivalent. This is a fairly verbose check due to
+//    equivilancy properties when involving NULLs.
+// 3) Filtering to achieve an anti-join and where we filter out any
+//    NULLs in the parent table's foreign key columns.
+//
+// TODO(joey): Once we support ANTI JOIN in distSQL this can be
+// simplified, as the ON clause can be simplified to just equals between
+// the foreign key columns.
+func createFKCheckQuery(
+	database string,
+	tableDesc *sqlbase.TableDescriptor,
+	indexDesc *sqlbase.IndexDescriptor,
+	referencedTable *sqlbase.TableDescriptor,
+	referencedIndex *sqlbase.IndexDescriptor,
+) string {
+	const checkIndexQuery = `
+				SELECT %[1]s, %[2]s
+				FROM
+					%[3]s.%[4]s@{NO_INDEX_JOIN} as p
+				FULL OUTER JOIN
+					%[3]s.%[5]s@{FORCE_INDEX=[%[6]d],NO_INDEX_JOIN} as c
+					ON %[7]s
+        WHERE (%[8]s) AND %[9]s`
+
+	return fmt.Sprintf(checkIndexQuery,
+		tableColumnsProjection("p", tableDesc.PrimaryIndex.ColumnNames),
+		tableColumnsProjection("p", indexDesc.ColumnNames),
+		database,
+		tableDesc.Name,
+		referencedTable.Name,
+		referencedIndex.ID,
+		tableColumnsEQ("p", "c", indexDesc.ColumnNames, referencedIndex.ColumnNames),
+		tableColumnsIsNullPredicate("p", indexDesc.ColumnNames, "OR", false /* isNull */),
+		tableColumnsIsNullPredicate("c", referencedIndex.ColumnNames, "AND", true /* isNull */),
+	)
 }

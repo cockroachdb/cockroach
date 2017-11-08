@@ -440,3 +440,217 @@ INSERT INTO t.test VALUES (10, 2);
 			result.details)
 	}
 }
+
+// TestScrubFKConstraintFKIsNull tests that `SCRUB TABLE ... CONSTRAINT
+// ALL` will fail if a foreign key constraint is violated when there is
+// no referenced foreign key row found. To test this, a row's underlying
+// value is updated using the KV client. We also add a dummy child row
+// for the test with NULL values which should not cause a scrub error.
+// NB: A column family is used on the "child" table to simplify the
+// encoding, so we only need to marshal one column.
+func TestScrubFKConstraintFKIsNull(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	s, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(context.TODO())
+
+	// Create the table and the row entry.
+	if _, err := db.Exec(`
+CREATE DATABASE t;
+CREATE TABLE t.parent (
+	id INT PRIMARY KEY
+);
+CREATE TABLE t.child (
+	child_id INT PRIMARY KEY,
+	parent_id INT,
+	INDEX (parent_id),
+	FOREIGN KEY (parent_id) REFERENCES t.parent (id)
+);
+INSERT INTO t.parent VALUES (314);
+INSERT INTO t.child VALUES (10, 314);
+INSERT INTO t.child VALUES (12, NULL);
+`); err != nil {
+		t.Fatalf("unexpected error: %s", err)
+	}
+
+	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "child")
+
+	colIDtoRowIndex := make(map[sqlbase.ColumnID]int)
+	colIDtoRowIndex[tableDesc.Columns[0].ID] = 0
+	colIDtoRowIndex[tableDesc.Columns[1].ID] = 1
+
+	// Create the primary index key for the child k/v.
+	values := []tree.Datum{tree.NewDInt(10), tree.NewDInt(314)}
+	primaryIndexKeyPrefix := sqlbase.MakeIndexKeyPrefix(tableDesc, tableDesc.PrimaryIndex.ID)
+	primaryIndexKey, _, err := sqlbase.EncodeIndexKey(
+		tableDesc, &tableDesc.PrimaryIndex, colIDtoRowIndex, values, primaryIndexKeyPrefix)
+	if err != nil {
+		t.Fatalf("unexpected error: %s", err)
+	}
+
+	// Add the family suffix to the key.
+	family := tableDesc.Families[0]
+	primaryIndexKey = keys.MakeFamilyKey(primaryIndexKey, uint32(family.ID))
+
+	// Generate a k/v that has a different value that violates the
+	// constraint.
+	values = []tree.Datum{tree.NewDInt(10), tree.NewDInt(0)}
+	// Encode the column value.
+	valueBuf, err := sqlbase.EncodeTableValue(
+		[]byte(nil), tableDesc.Columns[1].ID, values[1], []byte(nil))
+	if err != nil {
+		t.Fatalf("unexpected error: %s", err)
+	}
+	// Construct the tuple for the family value.
+	var value roachpb.Value
+	value.SetTuple(valueBuf)
+
+	// Overwrite the existing value.
+	if err := kvDB.Put(context.TODO(), primaryIndexKey, &value); err != nil {
+		t.Fatalf("unexpected error: %s", err)
+	}
+
+	// Run SCRUB and find the FOREIGN KEY violation created.
+	rows, err := db.Query(`EXPERIMENTAL SCRUB TABLE t.child WITH OPTIONS CONSTRAINT ALL`)
+	if err != nil {
+		t.Fatalf("unexpected error: %s", err)
+	} else if rows.Err() != nil {
+		t.Fatalf("unexpected error: %s", err)
+	}
+
+	results, err := getResultRows(rows)
+	if err != nil {
+		t.Fatalf("unexpected error: %s", err)
+	}
+
+	if len(results) != 1 {
+		t.Fatalf("expected 1 result, got %d. got %#v", len(results), results)
+	}
+
+	if result := results[0]; result.errorType != string(sql.ScrubErrorForeignKeyConstraintViolation) {
+		t.Fatalf("expected %q error, instead got: %s",
+			sql.ScrubErrorForeignKeyConstraintViolation, result.errorType)
+	} else if result.database != "t" {
+		t.Fatalf("expected database %q, got %q", "t", result.database)
+	} else if result.table != "child" {
+		t.Fatalf("expected table %q, got %q", "child", result.table)
+	} else if result.primaryKey != "(10)" {
+		t.Fatalf("expected primaryKey %q, got %q", "(10)", result.primaryKey)
+	} else if result.repaired {
+		t.Fatalf("expected repaired %v, got %v", false, result.repaired)
+	} else if !strings.Contains(result.details,
+		`{"constraint_name":"fk_parent_id_ref_parent","row_data":{"child_id":"10","parent_id":"0"}}`) {
+		t.Fatalf("expected erorr details to contain %s, got %s",
+			`{"constraint_name":"fk_parent_id_ref_parent","row_data":{"child_id":"10","parent_id":"0"}}`,
+			result.details)
+	}
+}
+
+// TestScrubFKConstraintFKIsNullAndMissing tests that
+// `SCRUB TABLE ... CONSTRAINT ALL` will fail if a foreign key
+// constraint is violated when there is no referenced foreign key row
+// found and the foreign key values are partially null. To test this, a
+// row's underlying value is updated using the KV client.
+// NB: A column family is used on the "child" table to simplify the
+// encoding, so we only need to marshal one column.
+func TestScrubFKConstraintFKIsNullAndMissing(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	s, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(context.TODO())
+
+	// Create the table and the row entry.
+	if _, err := db.Exec(`
+CREATE DATABASE t;
+CREATE TABLE t.parent (
+	id INT PRIMARY KEY,
+	id2 INT,
+	UNIQUE INDEX (id, id2)
+);
+CREATE TABLE t.child (
+	child_id INT PRIMARY KEY,
+	parent_id INT,
+	parent_id2 INT,
+	FAMILY (parent_id2),
+	INDEX (parent_id, parent_id2),
+	FOREIGN KEY (parent_id, parent_id2) REFERENCES t.parent (id, id2)
+);
+INSERT INTO t.parent VALUES (1337, 300);
+INSERT INTO t.child VALUES (11, 1337, 300);
+`); err != nil {
+		t.Fatalf("unexpected error: %s", err)
+	}
+
+	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "child")
+
+	colIDtoRowIndex := make(map[sqlbase.ColumnID]int)
+	colIDtoRowIndex[tableDesc.Columns[0].ID] = 0
+	colIDtoRowIndex[tableDesc.Columns[1].ID] = 1
+
+	// Create the primary index key for the child k/v.
+	values := []tree.Datum{tree.NewDInt(11), tree.NewDInt(1337), tree.NewDInt(300)}
+	primaryIndexKeyPrefix := sqlbase.MakeIndexKeyPrefix(tableDesc, tableDesc.PrimaryIndex.ID)
+	primaryIndexKey, _, err := sqlbase.EncodeIndexKey(
+		tableDesc, &tableDesc.PrimaryIndex, colIDtoRowIndex, values, primaryIndexKeyPrefix)
+	if err != nil {
+		t.Fatalf("unexpected error: %s", err)
+	}
+
+	// Add the family suffix to the key.
+	family := tableDesc.Families[0]
+	primaryIndexKey = keys.MakeFamilyKey(primaryIndexKey, uint32(family.ID))
+
+	// Generate a k/v that has a null value that violates the
+	// constraint.
+	valueBuf, err := sqlbase.EncodeTableValue(
+		[]byte(nil), tableDesc.Columns[1].ID, tree.NewDInt(1337), []byte(nil))
+	if err != nil {
+		t.Fatalf("unexpected error: %s", err)
+	}
+	colIDDiff := tableDesc.Columns[2].ID - tableDesc.Columns[1].ID
+	valueBuf, err = sqlbase.EncodeTableValue(
+		valueBuf, colIDDiff, tree.DNull, []byte(nil))
+	if err != nil {
+		t.Fatalf("unexpected error: %s", err)
+	}
+	var value roachpb.Value
+	value.SetTuple(valueBuf)
+
+	// Overwrite the existing value.
+	if err := kvDB.Put(context.TODO(), primaryIndexKey, &value); err != nil {
+		t.Fatalf("unexpected error: %s", err)
+	}
+
+	// Run SCRUB and find the FOREIGN KEY violation created.
+	rows, err := db.Query(`EXPERIMENTAL SCRUB TABLE t.child WITH OPTIONS CONSTRAINT ALL`)
+	if err != nil {
+		t.Fatalf("unexpected error: %s", err)
+	} else if rows.Err() != nil {
+		t.Fatalf("unexpected error: %s", err)
+	}
+
+	results, err := getResultRows(rows)
+	if err != nil {
+		t.Fatalf("unexpected error: %s", err)
+	}
+
+	if len(results) != 1 {
+		t.Fatalf("expected 1 result, got %d. got %#v", len(results), results)
+	}
+
+	if result := results[0]; result.errorType != string(sql.ScrubErrorForeignKeyConstraintViolation) {
+		t.Fatalf("expected %q error, instead got: %s",
+			sql.ScrubErrorForeignKeyConstraintViolation, result.errorType)
+	} else if result.database != "t" {
+		t.Fatalf("expected database %q, got %q", "t", result.database)
+	} else if result.table != "child" {
+		t.Fatalf("expected table %q, got %q", "child", result.table)
+	} else if result.primaryKey != "(11)" {
+		t.Fatalf("expected primaryKey %q, got %q", "(11)", result.primaryKey)
+	} else if result.repaired {
+		t.Fatalf("expected repaired %v, got %v", false, result.repaired)
+	} else if !strings.Contains(result.details,
+		`{"constraint_name":"fk_parent_id_ref_parent","row_data":{"child_id":"11","parent_id":"1337","parent_id2":"NULL"}}`) {
+		t.Fatalf("expected erorr details to contain %s, got %s",
+			`{"constraint_name":"fk_parent_id_ref_parent","row_data":{"child_id":"11","parent_id":"1337","parent_id2":"NULL"}}`,
+			result.details)
+	}
+}
