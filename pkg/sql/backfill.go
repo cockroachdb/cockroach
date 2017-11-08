@@ -18,6 +18,8 @@ import (
 	"sort"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
@@ -459,6 +461,8 @@ func (sc *SchemaChanger) distBackfill(
 	}
 	chunkSize := sc.getChunkSize(backfillChunkSize)
 
+	time.Sleep(30 * time.Second) // FIXME(joey): debugging
+
 	origNRanges := -1
 	origFractionCompleted := sc.job.Payload().FractionCompleted
 	fractionLeft := 1 - origFractionCompleted
@@ -512,7 +516,9 @@ func (sc *SchemaChanger) distBackfill(
 				fractionRangesFinished := float32(origNRanges-nRanges) / float32(origNRanges)
 				fractionCompleted := origFractionCompleted + fractionLeft*fractionRangesFinished
 				if err := sc.job.Progressed(ctx, fractionCompleted, jobs.Noop); err != nil {
-					log.Infof(ctx, "Ignoring error reporting progress %f for job %d: %v", fractionCompleted, *sc.job.ID(), err)
+					log.Warningf(ctx, "schema change job %d had error during progressing: %s", *sc.job.ID(), err)
+					// FIXME(joey): This currently discards non-cancel errors.
+					return pgerror.NewErrorf(pgerror.CodeQueryCanceledError, "schema change job %d was canceled", *sc.job.ID())
 				}
 			}
 

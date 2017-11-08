@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -1335,6 +1336,11 @@ func (scc *schemaChangerCollection) execSchemaChanges(
 				if shouldLogSchemaChangeError(err) {
 					log.Warningf(ctx, "error executing schema change: %s", err)
 				}
+
+				if er, ok := err.(*pgerror.Error); ok {
+					log.Warningf(ctx, "error from schema change %#v", er)
+				}
+
 				if err == sqlbase.ErrDescriptorNotFound {
 				} else if sqlbase.IsPermanentSchemaChangeError(err) {
 					// All constraint violations can be reported; we report it as the result

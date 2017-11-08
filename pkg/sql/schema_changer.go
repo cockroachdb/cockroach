@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/jobs"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -363,6 +364,7 @@ func (sc *SchemaChanger) maybeAddDropRename(
 func (sc *SchemaChanger) exec(
 	ctx context.Context, inSession bool, evalCtx parser.EvalContext,
 ) error {
+	log.Warningf(ctx, "schema change job has had exec called: mutationID=%d", sc.mutationID) // FIXME(joey): debugging
 	// Acquire lease.
 	lease, err := sc.AcquireLease(ctx)
 	if err != nil {
@@ -436,11 +438,23 @@ func (sc *SchemaChanger) exec(
 		return nil
 	}
 
+	log.Errorf(ctx, "exec job details=%#v", sc.job.Record.Details) // FIXME(joey): debugging
+
+	time.Sleep(20 * time.Second) // FIXME(joey): debugging
 	if err := sc.job.Started(ctx); err != nil {
 		if log.V(2) {
-			log.Infof(ctx, "Failed to mark job %d as started: %v", *sc.job.ID(), err)
+			log.Infof(ctx, "failed to mark job %d as started: %v", *sc.job.ID(), err)
 		}
 	}
+
+	// Set the progress to specifically check if this schema change has
+	// been canceled before beginning.
+	if err := sc.job.Progressed(ctx, 0.0, jobs.Noop); err != nil {
+		log.Warningf(ctx, "schema change job %d had error during progressing: %s", *sc.job.ID(), err)
+		// FIXME(joey): This currently discards non-cancel errors.
+		return pgerror.NewErrorf(pgerror.CodeQueryCanceledError, "schema change job %d was canceled", *sc.job.ID())
+	}
+	log.Errorf(ctx, "Schema change STARTING BOIZ")
 
 	// Another transaction might set the up_version bit again,
 	// but we're no longer responsible for taking care of that.
@@ -451,7 +465,7 @@ func (sc *SchemaChanger) exec(
 	// Purge the mutations if the application of the mutations failed due to
 	// a permanent error. All other errors are transient errors that are
 	// resolved by retrying the backfill.
-	if sqlbase.IsPermanentSchemaChangeError(err) {
+	if sqlbase.IsPermanentSchemaChangeError(err) && !sqlbase.IsSchemaChangeCancelError(err) {
 		if err := sc.rollbackSchemaChange(ctx, err, &lease, evalCtx); err != nil {
 			return err
 		}
@@ -468,7 +482,7 @@ func (sc *SchemaChanger) rollbackSchemaChange(
 ) error {
 	log.Warningf(ctx, "reversing schema change %d due to irrecoverable error: %s", *sc.job.ID(), err)
 	sc.job.Failed(ctx, err)
-	if errReverse := sc.reverseMutations(ctx, err); errReverse != nil {
+	if errReverse := sc.reverseMutations(ctx, nil, err); errReverse != nil {
 		// Although the backfill did hit an integrity constraint violation
 		// and made a decision to reverse the mutations,
 		// reverseMutations() failed. If exec() is called again the entire
@@ -675,8 +689,9 @@ func (sc *SchemaChanger) runStateMachineAndBackfill(
 	}
 
 	if err := sc.job.Progressed(ctx, .1, jobs.Noop); err != nil {
-		log.Warningf(ctx, "failed to log progress on job %v after completing state machine: %v",
-			*sc.job.ID(), err)
+		log.Warningf(ctx, "schema change job %d had error during progressing: %s", *sc.job.ID(), err)
+		// FIXME(joey): This currently discards non-cancel errors.
+		return pgerror.NewErrorf(pgerror.CodeQueryCanceledError, "schema change job %d was canceled", *sc.job.ID())
 	}
 
 	// Run backfill(s).
@@ -691,9 +706,12 @@ func (sc *SchemaChanger) runStateMachineAndBackfill(
 
 // reverseMutations reverses the direction of all the mutations with the
 // mutationID. This is called after hitting an irrecoverable error while
-// applying a schema change. If a column being added is reversed and dropped,
-// all new indexes referencing the column will also be dropped.
-func (sc *SchemaChanger) reverseMutations(ctx context.Context, causingError error) error {
+// applying a schema change or when a schema change has been canceled.
+// If a column being added is reversed and dropped, all new indexes
+// referencing the column will also be dropped.
+func (sc *SchemaChanger) reverseMutations(
+	ctx context.Context, txn *client.Txn, causingError error,
+) error {
 	// Reverse the flow of the state machine.
 	_, err := sc.leaseMgr.Publish(ctx, sc.tableID, func(desc *sqlbase.TableDescriptor) error {
 		// Keep track of the column mutations being reversed so that indexes
@@ -711,7 +729,7 @@ func (sc *SchemaChanger) reverseMutations(ctx context.Context, causingError erro
 			if err != nil {
 				return err
 			}
-			job, err := sc.jobRegistry.LoadJob(ctx, jobID)
+			job, err := sc.jobRegistry.LoadJobWithTxn(ctx, jobID, txn)
 			if err != nil {
 				return err
 			}
@@ -720,6 +738,7 @@ func (sc *SchemaChanger) reverseMutations(ctx context.Context, causingError erro
 			if !ok {
 				return errors.Errorf("expected SchemaChangeDetails job type, got %T", sc.job.Record.Details)
 			}
+			log.Errorf(ctx, "inside rollback job: job=%#v details=%#v", job, details) // FIXME(joey): debugging
 			details.ResumeSpanList[i].ResumeSpans = nil
 			err = job.SetDetails(ctx, details)
 			if err != nil {
@@ -746,6 +765,10 @@ func (sc *SchemaChanger) reverseMutations(ctx context.Context, causingError erro
 				record := sc.job.Record
 				record.Description = "ROLL BACK " + record.Description
 				job := sc.jobRegistry.NewJob(record)
+				job.Record.Details = jobs.SchemaChangeDetails{
+					MutationID: sc.mutationID,
+					TableID:    sc.tableID,
+				}
 				if err := job.Created(ctx, jobs.WithoutCancel); err != nil {
 					return err
 				}
@@ -940,7 +963,7 @@ func NewSchemaChangeManager(
 	rangeDescriptorCache *kv.RangeDescriptorCache,
 	leaseHolderCache *kv.LeaseHolderCache,
 ) *SchemaChangeManager {
-	return &SchemaChangeManager{
+	manager := &SchemaChangeManager{
 		db:                   db,
 		gossip:               gossip,
 		leaseMgr:             leaseMgr,
@@ -952,6 +975,17 @@ func NewSchemaChangeManager(
 		rangeDescriptorCache: rangeDescriptorCache,
 		leaseHolderCache:     leaseHolderCache,
 	}
+
+	jobs.CancelSchemaChangeHook = func(
+		ctx context.Context,
+		txn *client.Txn,
+		job *jobs.Job,
+		details *jobs.SchemaChangeDetails,
+	) error {
+		return manager.cancelSchemaChange(ctx, txn, job, details)
+	}
+
+	return manager
 }
 
 // Creates a timer that is used by the manager to decide on
@@ -1145,4 +1179,46 @@ func createSchemaChangeEvalCtx(ts hlc.Timestamp) parser.EvalContext {
 	evalCtx.SetClusterTimestamp(ts)
 
 	return evalCtx
+}
+
+// cancelSchemaChange begins a new job to revert a schema change.
+func (s *SchemaChangeManager) cancelSchemaChange(
+	ctx context.Context, txn *client.Txn, job *jobs.Job, details *jobs.SchemaChangeDetails,
+) error {
+	sc := SchemaChanger{
+		nodeID:               s.leaseMgr.nodeID.Get(),
+		db:                   s.db,
+		leaseMgr:             s.leaseMgr,
+		testingKnobs:         s.testingKnobs,
+		distSQLPlanner:       s.distSQLPlanner,
+		jobRegistry:          s.jobRegistry,
+		leaseHolderCache:     s.leaseHolderCache,
+		rangeDescriptorCache: s.rangeDescriptorCache,
+		clock:                s.clock,
+		tableID:              details.TableID,
+		mutationID:           details.MutationID,
+		job:                  job,
+	}
+
+	log.Errorf(ctx, "cancel job: details=%#v payload=%#v", job.Record.Details, job.Payload()) // FIXME(joey): debugging
+	// debug.PrintStack()
+
+	log.Warningf(ctx, "reversing schema change due to cancellation")
+	if err := sc.reverseMutations(ctx, txn, nil); err != nil {
+		log.Fatalf(ctx, "cancel schema change error. got: %+v", err)
+		return err
+	}
+
+	log.Errorf(ctx, "cancel schema change") // FIXME(joey): debugging
+	// // Acquire lease.
+	// lease, err := sc.AcquireLease(ctx)
+	// if err != nil {
+	// 	return err
+	// }
+	// evalCtx := createSchemaChangeEvalCtx(s.clock.Now())
+	// // FIXME(joey): Run this in the background, possibly with stopper.NewWorker ?
+	// if err := sc.rollbackSchemaChange(ctx, nil, nil, evalCtx); err != nil {
+	// 	return err
+	// }
+	return nil
 }
