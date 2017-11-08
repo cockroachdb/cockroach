@@ -6,7 +6,6 @@ const webpack = require("webpack");
 
 const ForkTsCheckerWebpackPlugin = require("fork-ts-checker-webpack-plugin");
 const HtmlWebpackPlugin = require("html-webpack-plugin");
-const DashboardPlugin = require("webpack-dashboard/plugin");
 
 const title = "Cockroach Console";
 
@@ -21,6 +20,13 @@ class RemoveBrokenDependenciesPlugin {
   apply(compiler) {
     compiler.plugin("compile", () => rimraf.sync("./node_modules/@types/node"));
   }
+}
+
+let DashboardPlugin;
+try {
+  DashboardPlugin = require("./opt/node_modules/webpack-dashboard/plugin");
+} catch (e) {
+  DashboardPlugin = class { apply() { /* no-op */ } };
 }
 
 // tslint:disable:object-literal-sort-keys
