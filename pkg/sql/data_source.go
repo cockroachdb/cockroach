@@ -619,6 +619,9 @@ func (p *planner) getPlanForDesc(
 				errors.Errorf("cannot specify an explicit column list when accessing a view by reference")
 		}
 		return p.getViewPlan(ctx, tn, desc)
+	} else if desc.IsSequence() {
+		return planDataSource{}, pgerror.NewError(
+			pgerror.CodeWrongObjectTypeError, "cannot SELECT from a sequence")
 	} else if !desc.IsTable() {
 		return planDataSource{}, errors.Errorf(
 			"unexpected table descriptor of type %s for %q", desc.TypeName(), tree.ErrString(tn))
