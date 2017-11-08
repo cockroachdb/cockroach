@@ -29,3 +29,21 @@ CREATE SEQUENCE err_test AS INT2
 
 statement error pq: unimplemented at or near "EOF"
 CREATE SEQUENCE err_test OWNED BY someuser
+
+# DML & DDL ERRORS
+
+statement error pgcode 42809 cannot run INSERT on sequence "foo" - sequences are not updateable
+INSERT INTO foo VALUES (1, 2, 3)
+
+statement error pgcode 42809 cannot run UPDATE on sequence "foo" - sequences are not updateable
+UPDATE foo SET value = 5
+
+statement error pgcode 42809 cannot run DELETE on sequence "foo" - sequences are not updateable
+DELETE FROM foo
+
+statement error pgcode 42809 cannot run TRUNCATE on sequence "foo" - sequences are not updateable
+TRUNCATE foo
+
+# Drop table on sequences doesn't work; you have to use DROP SEQUENCE.
+statement error pgcode 42809 "foo" is not a table
+DROP TABLE foo
