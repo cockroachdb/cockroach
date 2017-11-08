@@ -822,6 +822,75 @@ func (node *CreateTable) Format(buf *bytes.Buffer, f FmtFlags) {
 	}
 }
 
+// CreateSequence represents a CREATE SEQUENCE statement.
+type CreateSequence struct {
+	IfNotExists bool
+	Name        NormalizableTableName
+	Options     []SequenceOption
+}
+
+// Format implements the NodeFormatter interface.
+func (node *CreateSequence) Format(buf *bytes.Buffer, f FmtFlags) {
+	buf.WriteString("CREATE SEQUENCE ")
+	if node.IfNotExists {
+		buf.WriteString("IF NOT EXISTS ")
+	}
+	FormatNode(buf, f, &node.Name)
+	for _, option := range node.Options {
+		buf.WriteByte(' ')
+		switch option.Name {
+		case SeqOptMaxValue, SeqOptMinValue:
+			if option.IntVal == nil {
+				buf.WriteString("NO ")
+				buf.WriteString(option.Name)
+			} else {
+				buf.WriteString(option.Name)
+				buf.WriteByte(' ')
+				buf.WriteString(fmt.Sprintf("%d", *option.IntVal))
+			}
+		case SeqOptCycle:
+			if option.BoolVal {
+				buf.WriteString("CYCLE")
+			} else {
+				buf.WriteString("NO CYCLE")
+			}
+		case SeqOptStart:
+			buf.WriteString(option.Name)
+			buf.WriteByte(' ')
+			if option.OptionalWord {
+				buf.WriteString("WITH ")
+			}
+			buf.WriteString(fmt.Sprintf("%d", *option.IntVal))
+		case SeqOptIncrement:
+			buf.WriteString(option.Name)
+			buf.WriteByte(' ')
+			if option.OptionalWord {
+				buf.WriteString("BY ")
+			}
+			buf.WriteString(fmt.Sprintf("%d", *option.IntVal))
+		}
+	}
+}
+
+// SequenceOption represents an option on a CREATE SEQUENCE statement.
+type SequenceOption struct {
+	Name string
+
+	IntVal  *int64
+	BoolVal bool
+
+	OptionalWord bool
+}
+
+// Names of options on CREATE SEQUENCE.
+const (
+	SeqOptIncrement = "INCREMENT"
+	SeqOptMinValue  = "MINVALUE"
+	SeqOptMaxValue  = "MAXVALUE"
+	SeqOptStart     = "START"
+	SeqOptCycle     = "CYCLE"
+)
+
 // CreateUser represents a CREATE USER statement.
 type CreateUser struct {
 	Name        Expr
