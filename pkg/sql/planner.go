@@ -19,8 +19,10 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/transform"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
@@ -254,6 +256,12 @@ func (p *planner) ParseType(sql string) (coltypes.CastTargetType, error) {
 	return parser.ParseType(sql)
 }
 
+// ParseTableNameWithIndex implements the parser.EvalPlanner interface.
+// We define this here to break the dependency from builtins.go to the parser.
+func (p *planner) ParseTableNameWithIndex(sql string) (tree.TableNameWithIndex, error) {
+	return parser.ParseTableNameWithIndex(sql)
+}
+
 // QueryRow implements the parser.EvalPlanner interface.
 func (p *planner) QueryRow(
 	ctx context.Context, sql string, args ...interface{},
@@ -270,6 +278,20 @@ func (p *planner) QueryRow(
 	default:
 		return nil, &tree.MultipleResultsError{SQL: sql}
 	}
+}
+
+// IncrementSequence implements the parser.EvalPlanner interface.
+func (p *planner) IncrementSequence(ctx context.Context, seqName *tree.TableName) (int64, error) {
+	descriptor, err := p.getTableDesc(ctx, seqName)
+	if err != nil {
+		return 0, err
+	}
+	if descriptor.SequenceOpts == nil {
+		return 0, pgerror.NewErrorf(pgerror.CodeWrongObjectTypeError, `"%s" is not a sequence`, seqName)
+	}
+	seqValueKey := keys.MakeSequenceKey(uint32(descriptor.ID))
+	return client.IncrementValRetryable(
+		ctx, p.txn.DB(), seqValueKey, descriptor.SequenceOpts.Increment)
 }
 
 // queryRows executes a SQL query string where multiple result rows are returned.
