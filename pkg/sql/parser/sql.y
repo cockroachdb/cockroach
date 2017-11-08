@@ -2178,6 +2178,8 @@ scrub_database_stmt:
 // Options:
 //   EXPERIMENTAL SCRUB TABLE ... WITH OPTIONS INDEX ALL
 //   EXPERIMENTAL SCRUB TABLE ... WITH OPTIONS INDEX (<index>...)
+//   EXPERIMENTAL SCRUB TABLE ... WITH OPTIONS CONSTRAINT ALL
+//   EXPERIMENTAL SCRUB TABLE ... WITH OPTIONS CONSTRAINT (<constraint>...)
 //   EXPERIMENTAL SCRUB TABLE ... WITH OPTIONS PHYSICAL
 // %SeeAlso: SCRUB DATABASE, SRUB
 scrub_table_stmt:
@@ -2209,6 +2211,14 @@ scrub_option:
 | INDEX '(' name_list ')'
   {
     $$.val = &tree.ScrubOptionIndex{IndexNames: $3.nameList()}
+  }
+| CONSTRAINT ALL
+  {
+    $$.val = &tree.ScrubOptionConstraint{}
+  }
+| CONSTRAINT '(' name_list ')'
+  {
+    $$.val = &tree.ScrubOptionConstraint{ConstraintNames: $3.nameList()}
   }
 | PHYSICAL
   {
