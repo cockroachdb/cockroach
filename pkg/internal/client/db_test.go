@@ -430,6 +430,7 @@ func TestCommonMethods(t *testing.T) {
 		{txnType, "ID"}:                              {},
 		{txnType, "IsAborted"}:                       {},
 		{txnType, "IsCommitted"}:                     {},
+		{txnType, "DB"}:                              {},
 	}
 
 	for b := range omittedChecks {
