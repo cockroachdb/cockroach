@@ -218,6 +218,12 @@ func (u *sqlSymUnion) colTypes() []coltypes.T {
 func (u *sqlSymUnion) int64() int64 {
     return u.val.(int64)
 }
+func (u *sqlSymUnion) seqOpt() tree.SequenceOption {
+    return u.val.(tree.SequenceOption)
+}
+func (u *sqlSymUnion) seqOpts() []tree.SequenceOption {
+    return u.val.([]tree.SequenceOption)
+}
 func (u *sqlSymUnion) expr() tree.Expr {
     if expr, ok := u.val.(tree.Expr); ok {
         return expr
@@ -418,7 +424,7 @@ func (u *sqlSymUnion) scrubOption() tree.ScrubOption {
 %token <str>   BACKUP BEGIN BETWEEN BIGINT BIGSERIAL BIT
 %token <str>   BLOB BOOL BOOLEAN BOTH BY BYTEA BYTES
 
-%token <str>   CANCEL CASCADE CASE CAST CHAR
+%token <str>   CACHE CANCEL CASCADE CASE CAST CHAR
 %token <str>   CHARACTER CHARACTERISTICS CHECK
 %token <str>   CLUSTER COALESCE COLLATE COLLATION COLUMN COLUMNS COMMIT
 %token <str>   COMMITTED CONCAT CONFIGURATION CONFIGURATIONS CONFIGURE
@@ -442,7 +448,7 @@ func (u *sqlSymUnion) scrubOption() tree.ScrubOption {
 
 %token <str>   HAVING HELP HIGH HOUR
 
-%token <str>   IMPORT INCREMENTAL IF IFNULL ILIKE IN INET INTERLEAVE
+%token <str>   IMPORT INCREMENT INCREMENTAL IF IFNULL ILIKE IN INET INTERLEAVE
 %token <str>   INDEX INDEXES INITIALLY
 %token <str>   INNER INSERT INT INT2VECTOR INT2 INT4 INT8 INT64 INTEGER
 %token <str>   INTERSECT INTERVAL INTO IS ISOLATION
@@ -455,14 +461,14 @@ func (u *sqlSymUnion) scrubOption() tree.ScrubOption {
 %token <str>   LEADING LEAST LEFT LESS LEVEL LIKE LIMIT LIST LOCAL
 %token <str>   LOCALTIME LOCALTIMESTAMP LOW LSHIFT
 
-%token <str>   MATCH MAXVALUE MINUTE MONTH
+%token <str>   MATCH MINVALUE MAXVALUE MINUTE MONTH
 
 %token <str>   NAN NAME NAMES NATURAL NEXT NO NO_INDEX_JOIN NORMAL
 %token <str>   NOT NOTHING NULL NULLIF
 %token <str>   NULLS NUMERIC
 
 %token <str>   OF OFF OFFSET OID ON ONLY OPTIONS OR
-%token <str>   ORDER ORDINALITY OUT OUTER OVER OVERLAPS OVERLAY
+%token <str>   ORDER ORDINALITY OUT OUTER OVER OVERLAPS OVERLAY OWNED
 
 %token <str>   PARENT PARTIAL PARTITION PASSWORD PAUSE PHYSICAL PLACING
 %token <str>   PLANS POSITION PRECEDING PRECISION PREPARE PRIMARY PRIORITY
@@ -475,7 +481,7 @@ func (u *sqlSymUnion) scrubOption() tree.ScrubOption {
 %token <str>   RELEASE RESET RESTORE RESTRICT RESUME RETURNING REVOKE RIGHT
 %token <str>   ROLLBACK ROLLUP ROW ROWS RSHIFT
 
-%token <str>   SAVEPOINT SCATTER SCRUB SEARCH SECOND SELECT SEQUENCES
+%token <str>   SAVEPOINT SCATTER SCRUB SEARCH SECOND SELECT SEQUENCE SEQUENCES
 %token <str>   SERIAL SERIALIZABLE SESSION SESSIONS SESSION_USER SET SETTING SETTINGS
 %token <str>   SHOW SIMILAR SIMPLE SMALLINT SMALLSERIAL SNAPSHOT SOME SOME_EXISTENCE SPLIT SQL
 %token <str>   START STATUS STDIN STRICT STRING STORE STORING SUBSTRING
@@ -580,6 +586,7 @@ func (u *sqlSymUnion) scrubOption() tree.ScrubOption {
 %type <tree.Statement> create_table_as_stmt
 %type <tree.Statement> create_user_stmt
 %type <tree.Statement> create_view_stmt
+%type <tree.Statement> create_sequence_stmt
 %type <tree.Statement> delete_stmt
 %type <tree.Statement> discard_stmt
 
@@ -731,6 +738,9 @@ func (u *sqlSymUnion) scrubOption() tree.ScrubOption {
 %type <*tree.Limit> select_limit
 %type <tree.TableNameReferences> relation_expr_list
 %type <tree.ReturningClause> returning_clause
+
+%type <[]tree.SequenceOption> sequence_option_list opt_sequence_option_list
+%type <tree.SequenceOption> sequence_option_elem
 
 %type <bool> all_or_distinct
 %type <empty> join_outer
@@ -1553,7 +1563,7 @@ cancel_query_stmt:
 // %Category: Group
 // %Text:
 // CREATE DATABASE, CREATE TABLE, CREATE INDEX, CREATE TABLE AS,
-// CREATE USER, CREATE VIEW
+// CREATE USER, CREATE VIEW, CREATE SEQUENCE
 create_stmt:
   create_user_stmt     // EXTEND WITH HELP: CREATE USER
 | create_ddl_stmt      // help texts in sub-rule
@@ -1567,7 +1577,7 @@ create_ddl_stmt:
 // Error case for both CREATE TABLE and CREATE TABLE ... AS in one
 | CREATE TABLE error   // SHOW HELP: CREATE TABLE
 | create_view_stmt     // EXTEND WITH HELP: CREATE VIEW
-
+| create_sequence_stmt // EXTEND WITH HELP: CREATE SEQUENCE
 
 // %Help: DELETE - delete rows from a table
 // %Category: DML
@@ -3171,6 +3181,66 @@ numeric_only:
   {
     $$.val = $1.numVal()
   }
+
+// %Help: CREATE SEQUENCE - create a new sequence
+// %Category: DDL
+// %Text:
+// CREATE SEQUENCE <seqname>
+//   [INCREMENT <increment>]
+//   [MINVALUE <minvalue> | NO MINVALUE]
+//   [MAXVALUE <maxvalue> | NO MAXVALUE]
+//   [START <start>]
+//   [[NO] CYCLE]
+//
+// %SeeAlso: CREATE TABLE
+create_sequence_stmt:
+  CREATE SEQUENCE any_name opt_sequence_option_list
+  {
+    node := &tree.CreateSequence{
+      Name: $3.normalizableTableName(),
+      Options: $4.seqOpts(),
+    }
+    $$.val = node
+  }
+| CREATE SEQUENCE IF NOT EXISTS any_name opt_sequence_option_list
+	{
+		node := &tree.CreateSequence{
+			Name: $6.normalizableTableName(),
+			Options: $7.seqOpts(),
+			IfNotExists: true,
+		}
+		$$.val = node
+	}
+| CREATE SEQUENCE error // SHOW HELP: CREATE SEQUENCE
+
+opt_sequence_option_list:
+  sequence_option_list
+| /* EMPTY */          { $$.val = []tree.SequenceOption(nil) }
+
+sequence_option_list:
+  sequence_option_elem                       { $$.val = []tree.SequenceOption{$1.seqOpt()} }
+| sequence_option_list sequence_option_elem  { $$.val = append($1.seqOpts(), $2.seqOpt()) }
+
+sequence_option_elem:
+  AS any_name                  { return unimplemented(sqllex, "create sequence AS option") }
+| OWNED BY any_name            { return unimplemented(sqllex, "create sequence OWNED BY option") }
+| CACHE signed_iconst64        { return unimplemented(sqllex, "create sequence CACHE option") }
+| INCREMENT signed_iconst64    { x := $2.int64()
+                                 $$.val = tree.SequenceOption{Name: tree.SeqOptIncrement, IntVal: &x} }
+| INCREMENT BY signed_iconst64 { x := $3.int64()
+                                 $$.val = tree.SequenceOption{Name: tree.SeqOptIncrement, IntVal: &x, OptionalWord: true} }
+| MINVALUE signed_iconst64     { x := $2.int64()
+                                 $$.val = tree.SequenceOption{Name: tree.SeqOptMinValue, IntVal: &x} }
+| NO MINVALUE                  { $$.val = tree.SequenceOption{Name: tree.SeqOptMinValue, IntVal: nil} }
+| MAXVALUE signed_iconst64     { x := $2.int64()
+                                 $$.val = tree.SequenceOption{Name: tree.SeqOptMaxValue, IntVal: &x} }
+| NO MAXVALUE                  { $$.val = tree.SequenceOption{Name: tree.SeqOptMaxValue, IntVal: nil} }
+| START signed_iconst64        { x := $2.int64()
+                                 $$.val = tree.SequenceOption{Name: tree.SeqOptStart, IntVal: &x} }
+| START WITH signed_iconst64   { x := $3.int64()
+                                 $$.val = tree.SequenceOption{Name: tree.SeqOptStart, IntVal: &x, OptionalWord: true} }
+| CYCLE                        { $$.val = tree.SequenceOption{Name: tree.SeqOptCycle, BoolVal: true} }
+| NO CYCLE                     { $$.val = tree.SequenceOption{Name: tree.SeqOptCycle, BoolVal: false} }
 
 // %Help: TRUNCATE - empty one or more tables
 // %Category: DML
@@ -6612,6 +6682,7 @@ unreserved_keyword:
 | BEGIN
 | BLOB
 | BY
+| CACHE
 | CANCEL
 | CASCADE
 | CLUSTER
@@ -6651,6 +6722,7 @@ unreserved_keyword:
 | HIGH
 | HOUR
 | IMPORT
+| INCREMENT
 | INCREMENTAL
 | INDEXES
 | INSERT
@@ -6671,6 +6743,7 @@ unreserved_keyword:
 | LOW
 | MATCH
 | MINUTE
+| MINVALUE
 | MONTH
 | NAMES
 | NAN
@@ -6685,6 +6758,7 @@ unreserved_keyword:
 | OPTIONS
 | ORDINALITY
 | OVER
+| OWNED
 | PARENT
 | PARTIAL
 | PARTITION
@@ -6726,6 +6800,7 @@ unreserved_keyword:
 | SEARCH
 | SECOND
 | SERIALIZABLE
+| SEQUENCE
 | SEQUENCES
 | SESSION
 | SESSIONS
