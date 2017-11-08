@@ -23,6 +23,8 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -234,7 +236,7 @@ CREATE INDEX secondary ON t.test (v);
 }
 
 // TestScrubIndexCatchesStoringMismatch tests that
-// `SCRUB TABLE ... INDEX ALL`` will fail if an index entry only differs
+// `SCRUB TABLE ... INDEX ALL` will fail if an index entry only differs
 // by its STORING values. To test this, a row's underlying secondary
 // index k/v is updated using the KV client to have a different value.
 func TestScrubIndexCatchesStoringMismatch(t *testing.T) {
@@ -346,5 +348,95 @@ INSERT INTO t.test VALUES (10, 20, 1337);
 		t.Fatalf("expected repaired %v, got %v", false, result.repaired)
 	} else if !strings.Contains(result.details, `"data":"314"`) {
 		t.Fatalf("expected erorr details to contain `%s`, got %s", `"data":"314"`, result.details)
+	}
+}
+
+// TestScrubCheckConstraint tests that `SCRUB TABLE ... CONSTRAINT ALL`
+// will fail if a check constraint is violated. To test this, a row's
+// underlying value is updated using the KV client so the row violates
+// the constraint..
+func TestScrubCheckConstraint(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	s, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(context.TODO())
+
+	// Create the table and the row entry.
+	if _, err := db.Exec(`
+CREATE DATABASE t;
+CREATE TABLE t.test (k INT PRIMARY KEY, v INT, CHECK (v > 1));
+INSERT INTO t.test VALUES (10, 2);
+`); err != nil {
+		t.Fatalf("unexpected error: %s", err)
+	}
+
+	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "test")
+
+	colIDtoRowIndex := make(map[sqlbase.ColumnID]int)
+	colIDtoRowIndex[tableDesc.Columns[0].ID] = 0
+	colIDtoRowIndex[tableDesc.Columns[1].ID] = 1
+
+	// Create the primary index key.
+	values := []tree.Datum{tree.NewDInt(10), tree.NewDInt(2)}
+	primaryIndexKeyPrefix := sqlbase.MakeIndexKeyPrefix(tableDesc, tableDesc.PrimaryIndex.ID)
+	primaryIndexKey, _, err := sqlbase.EncodeIndexKey(
+		tableDesc, &tableDesc.PrimaryIndex, colIDtoRowIndex, values, primaryIndexKeyPrefix)
+	if err != nil {
+		t.Fatalf("unexpected error: %s", err)
+	}
+
+	// Add the family suffix to the key.
+	family := tableDesc.Families[0]
+	primaryIndexKey = keys.MakeFamilyKey(primaryIndexKey, uint32(family.ID))
+
+	// Generate a k/v that has a different value that violates the
+	// constraint.
+	values = []tree.Datum{tree.NewDInt(10), tree.NewDInt(0)}
+	// Encode the column value.
+	valueBuf, err := sqlbase.EncodeTableValue(
+		[]byte(nil), tableDesc.Columns[1].ID, values[1], []byte(nil))
+	if err != nil {
+		t.Fatalf("unexpected error: %s", err)
+	}
+	// Construct the tuple for the family value.
+	var value roachpb.Value
+	value.SetTuple(valueBuf)
+
+	// Overwrite the existing value.
+	if err := kvDB.Put(context.TODO(), primaryIndexKey, &value); err != nil {
+		t.Fatalf("unexpected error: %s", err)
+	}
+	// Run SCRUB and find the CHECK violation created.
+	rows, err := db.Query(`EXPERIMENTAL SCRUB TABLE t.test WITH OPTIONS CONSTRAINT ALL`)
+	if err != nil {
+		t.Fatalf("unexpected error: %s", err)
+	} else if rows.Err() != nil {
+		t.Fatalf("unexpected error: %s", err)
+	}
+
+	results, err := getResultRows(rows)
+	if err != nil {
+		t.Fatalf("unexpected error: %s", err)
+	}
+
+	if len(results) != 1 {
+		t.Fatalf("expected 1 result, got %d. got %#v", len(results), results)
+	}
+
+	if result := results[0]; result.errorType != string(sql.ScrubErrorCheckConstraintViolation) {
+		t.Fatalf("expected %q error, instead got: %s",
+			sql.ScrubErrorCheckConstraintViolation, result.errorType)
+	} else if result.database != "t" {
+		t.Fatalf("expected database %q, got %q", "t", result.database)
+	} else if result.table != "test" {
+		t.Fatalf("expected table %q, got %q", "test", result.table)
+	} else if result.primaryKey != "(10)" {
+		t.Fatalf("expected primaryKey %q, got %q", "(10)", result.primaryKey)
+	} else if result.repaired {
+		t.Fatalf("expected repaired %v, got %v", false, result.repaired)
+	} else if !strings.Contains(result.details,
+		`{"constraint_name":"check_v","row_data":{"k":"10","v":"0"}}`) {
+		t.Fatalf("expected erorr details to contain `%s`, got %s",
+			`{"constraint_name":"check_v","row_data":{"k":"10","v":"0"}}`,
+			result.details)
 	}
 }

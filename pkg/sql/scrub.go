@@ -248,6 +248,12 @@ func (n *scrubNode) startScrubTable(
 					"cannot specify CONSTRAINT option more than once")
 			}
 			constraintsSet = true
+			constraintsToCheck, err := createConstraintCheckOperations(
+				ctx, p, v.ConstraintNames, tableDesc, tableName)
+			if err != nil {
+				return err
+			}
+			n.run.checkQueue = append(n.run.checkQueue, constraintsToCheck...)
 		default:
 			panic(fmt.Sprintf("Unhandled SCRUB option received: %+v", v))
 		}
@@ -261,6 +267,14 @@ func (n *scrubNode) startScrubTable(
 			return err
 		}
 		n.run.checkQueue = append(n.run.checkQueue, indexesToCheck...)
+
+		constraintsToCheck, err := createConstraintCheckOperations(
+			ctx, p, nil /* constraintNames */, tableDesc, tableName)
+		if err != nil {
+			return err
+		}
+		n.run.checkQueue = append(n.run.checkQueue, constraintsToCheck...)
+
 		// TODO(joey): Initialize physical index to check.
 	}
 
@@ -711,6 +725,51 @@ func createIndexCheckOperations(
 	return results, nil
 }
 
+// createConstraintCheckOperations will return all of the constraints
+// that are being checked. If constraintNames is nil, then all
+// constraints are returned.
+// TODO(joey): Only SQL CHECK constraints are implemented.
+func createConstraintCheckOperations(
+	ctx context.Context,
+	p *planner,
+	constraintNames tree.NameList,
+	tableDesc *sqlbase.TableDescriptor,
+	tableName *tree.TableName,
+) (results []checkOperation, err error) {
+	constraints, err := tableDesc.GetConstraintInfo(ctx, p.txn)
+	if err != nil {
+		return nil, err
+	}
+
+	// Keep only the constraints specified by the constraints in
+	// constraintNames.
+	if constraintNames != nil {
+		wantedConstraints := make(map[string]sqlbase.ConstraintDetail)
+		for _, constraintName := range constraintNames {
+			if v, ok := constraints[string(constraintName)]; ok {
+				wantedConstraints[string(constraintName)] = v
+			} else {
+				return nil, pgerror.NewErrorf(pgerror.CodeUndefinedObjectError,
+					"constraint %q of relation %q does not exist", constraintName, tableDesc.Name)
+			}
+		}
+		constraints = wantedConstraints
+	}
+
+	// Populate results with all constraints on the table.
+	for _, constraint := range constraints {
+		switch constraint.Kind {
+		case sqlbase.ConstraintTypeCheck:
+			results = append(results, newSQLCheckConstraintCheckOperation(
+				tableName,
+				tableDesc,
+				constraint.CheckConstraint,
+			))
+		}
+	}
+	return results, nil
+}
+
 // scrubPlanDistSQL will prepare and run the plan in distSQL.
 func scrubPlanDistSQL(
 	ctx context.Context, planCtx *planningCtx, p *planner, plan planNode,
@@ -725,8 +784,8 @@ func scrubPlanDistSQL(
 	return &physPlan, err
 }
 
-// scrubRunDistSQL run a distSQLPhysicalPlan plan in distSQL. If a
-// RowContainer is returned the caller must close it.
+// scrubRunDistSQL run a distSQLPhysicalPlan plan in distSQL. If
+// RowContainer is returned, the caller must close it.
 func scrubRunDistSQL(
 	ctx context.Context,
 	planCtx *planningCtx,
