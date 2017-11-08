@@ -101,6 +101,8 @@ func TestContextualHelp(t *testing.T) {
 		{`CREATE VIEW blah AS SELECT c FROM x ??`, `SELECT`},
 		{`CREATE VIEW blah AS (??`, `<SELECTCLAUSE>`},
 
+		{`CREATE SEQUENCE ??`, `CREATE SEQUENCE`},
+
 		{`CREATE TABLE blah (??`, `CREATE TABLE`},
 		{`CREATE TABLE IF NOT ??`, `CREATE TABLE`},
 		{`CREATE TABLE blah (x, y) AS ??`, `CREATE TABLE`},
