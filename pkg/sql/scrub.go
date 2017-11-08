@@ -100,14 +100,12 @@ func (n *scrubNode) Start(params runParams) error {
 		return err
 	}
 
-	n.tableDesc, err = params.p.getTableDesc(params.ctx, n.tableName)
+	// If the tableName provided refers to a view and error will be
+	// returned here.
+	n.tableDesc, err = MustGetTableDesc(params.ctx, params.p.txn, params.p.getVirtualTabler(),
+		n.tableName, false /* allowAdding */)
 	if err != nil {
 		return err
-	}
-
-	if n.tableDesc.IsView() {
-		return pgerror.NewErrorf(pgerror.CodeWrongObjectTypeError,
-			"cannot run SCRUB on views")
 	}
 
 	// Process SCRUB options.
