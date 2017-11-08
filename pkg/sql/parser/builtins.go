@@ -40,6 +40,7 @@ import (
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
@@ -715,7 +716,7 @@ var Builtins = map[string][]Builtin{
 					return nil, pgerror.NewError(pgerror.CodeInvalidParameterValueError, "only 'hex' format is supported for DECODE")
 				}
 				var buf bytes.Buffer
-				hexEncodeString(&buf, data)
+				lex.HexEncodeString(&buf, data)
 				return NewDString(buf.String()), nil
 			},
 			Info: "Decodes `data` as the format specified by `format` (only \"hex\" is supported).",
