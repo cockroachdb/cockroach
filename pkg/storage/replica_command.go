@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/abortspan"
 	"github.com/cockroachdb/cockroach/pkg/storage/batcheval"
+	"github.com/cockroachdb/cockroach/pkg/storage/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/spanset"
@@ -75,10 +76,10 @@ type Command struct {
 
 	// Eval evaluates a command on the given engine. It should populate
 	// the supplied response (always a non-nil pointer to the correct
-	// type) and return special side effects (if any) in the EvalResult.
+	// type) and return special side effects (if any) in the Result.
 	// If it writes to the engine it should also update
 	// *CommandArgs.Stats.
-	Eval func(context.Context, engine.ReadWriter, batcheval.CommandArgs, roachpb.Response) (EvalResult, error)
+	Eval func(context.Context, engine.ReadWriter, batcheval.CommandArgs, roachpb.Response) (result.Result, error)
 }
 
 var commands = map[roachpb.Method]Command{
@@ -112,13 +113,13 @@ var commands = map[roachpb.Method]Command{
 
 	roachpb.DeprecatedVerifyChecksum: {
 		DeclareKeys: batcheval.DefaultDeclareKeys,
-		Eval: func(context.Context, engine.ReadWriter, batcheval.CommandArgs, roachpb.Response) (EvalResult, error) {
-			return EvalResult{}, nil
+		Eval: func(context.Context, engine.ReadWriter, batcheval.CommandArgs, roachpb.Response) (result.Result, error) {
+			return result.Result{}, nil
 		}},
 }
 
 // evaluateCommand delegates to the eval method for the given
-// roachpb.Request. The returned EvalResult may be partially valid
+// roachpb.Request. The returned Result may be partially valid
 // even if an error is returned. maxKeys is the number of scan results
 // remaining for this batch (MaxInt64 for no limit).
 func evaluateCommand(
@@ -132,10 +133,10 @@ func evaluateCommand(
 	maxKeys int64,
 	args roachpb.Request,
 	reply roachpb.Response,
-) (EvalResult, *roachpb.Error) {
+) (result.Result, *roachpb.Error) {
 
 	if _, ok := args.(*roachpb.NoopRequest); ok {
-		return EvalResult{}, nil
+		return result.Result{}, nil
 	}
 
 	// If a unittest filter was installed, check for an injected error; otherwise, continue.
@@ -150,12 +151,12 @@ func evaluateCommand(
 		}
 		if pErr := filter(filterArgs); pErr != nil {
 			log.Infof(ctx, "test injecting error: %s", pErr)
-			return EvalResult{}, pErr
+			return result.Result{}, pErr
 		}
 	}
 
 	var err error
-	var pd EvalResult
+	var pd result.Result
 
 	if cmd, ok := commands[args.Method()]; ok {
 		cArgs := batcheval.CommandArgs{
@@ -215,15 +216,15 @@ func evaluateCommand(
 
 func intentsToEvalResult(
 	intents []roachpb.Intent, args roachpb.Request, alwaysReturn bool,
-) EvalResult {
-	var pd EvalResult
+) result.Result {
+	var pd result.Result
 	if len(intents) == 0 {
 		return pd
 	}
 	if alwaysReturn {
-		pd.Local.intentsAlways = &[]intentsWithArg{{args: args, intents: intents}}
+		pd.Local.IntentsAlways = &[]result.IntentsWithArg{{Arg: args, Intents: intents}}
 	} else {
-		pd.Local.intents = &[]intentsWithArg{{args: args, intents: intents}}
+		pd.Local.Intents = &[]result.IntentsWithArg{{Arg: args, Intents: intents}}
 	}
 	return pd
 }
@@ -231,7 +232,7 @@ func intentsToEvalResult(
 // evalGet returns the value for a specified key.
 func evalGet(
 	ctx context.Context, batch engine.ReadWriter, cArgs batcheval.CommandArgs, resp roachpb.Response,
-) (EvalResult, error) {
+) (result.Result, error) {
 	args := cArgs.Args.(*roachpb.GetRequest)
 	h := cArgs.Header
 	reply := resp.(*roachpb.GetResponse)
@@ -244,7 +245,7 @@ func evalGet(
 // evalPut sets the value for a specified key.
 func evalPut(
 	ctx context.Context, batch engine.ReadWriter, cArgs batcheval.CommandArgs, resp roachpb.Response,
-) (EvalResult, error) {
+) (result.Result, error) {
 	args := cArgs.Args.(*roachpb.PutRequest)
 	h := cArgs.Header
 	ms := cArgs.Stats
@@ -263,9 +264,9 @@ func evalPut(
 		}
 	}
 	if args.Blind {
-		return EvalResult{}, engine.MVCCBlindPut(ctx, batch, ms, args.Key, ts, args.Value, h.Txn)
+		return result.Result{}, engine.MVCCBlindPut(ctx, batch, ms, args.Key, ts, args.Value, h.Txn)
 	}
-	return EvalResult{}, engine.MVCCPut(ctx, batch, ms, args.Key, ts, args.Value, h.Txn)
+	return result.Result{}, engine.MVCCPut(ctx, batch, ms, args.Key, ts, args.Value, h.Txn)
 }
 
 // evalConditionalPut sets the value for a specified key only if
@@ -273,7 +274,7 @@ func evalPut(
 // the actual value.
 func evalConditionalPut(
 	ctx context.Context, batch engine.ReadWriter, cArgs batcheval.CommandArgs, resp roachpb.Response,
-) (EvalResult, error) {
+) (result.Result, error) {
 	args := cArgs.Args.(*roachpb.ConditionalPutRequest)
 	h := cArgs.Header
 
@@ -287,9 +288,9 @@ func evalConditionalPut(
 		}
 	}
 	if args.Blind {
-		return EvalResult{}, engine.MVCCBlindConditionalPut(ctx, batch, cArgs.Stats, args.Key, h.Timestamp, args.Value, args.ExpValue, h.Txn)
+		return result.Result{}, engine.MVCCBlindConditionalPut(ctx, batch, cArgs.Stats, args.Key, h.Timestamp, args.Value, args.ExpValue, h.Txn)
 	}
-	return EvalResult{}, engine.MVCCConditionalPut(ctx, batch, cArgs.Stats, args.Key, h.Timestamp, args.Value, args.ExpValue, h.Txn)
+	return result.Result{}, engine.MVCCConditionalPut(ctx, batch, cArgs.Stats, args.Key, h.Timestamp, args.Value, args.ExpValue, h.Txn)
 }
 
 // evalInitPut sets the value for a specified key only if it doesn't exist. It
@@ -298,7 +299,7 @@ func evalConditionalPut(
 // tombstones count as mismatched values and will cause a ConditionFailedError.
 func evalInitPut(
 	ctx context.Context, batch engine.ReadWriter, cArgs batcheval.CommandArgs, resp roachpb.Response,
-) (EvalResult, error) {
+) (result.Result, error) {
 	args := cArgs.Args.(*roachpb.InitPutRequest)
 	h := cArgs.Header
 
@@ -312,9 +313,9 @@ func evalInitPut(
 		}
 	}
 	if args.Blind {
-		return EvalResult{}, engine.MVCCBlindInitPut(ctx, batch, cArgs.Stats, args.Key, h.Timestamp, args.Value, args.FailOnTombstones, h.Txn)
+		return result.Result{}, engine.MVCCBlindInitPut(ctx, batch, cArgs.Stats, args.Key, h.Timestamp, args.Value, args.FailOnTombstones, h.Txn)
 	}
-	return EvalResult{}, engine.MVCCInitPut(ctx, batch, cArgs.Stats, args.Key, h.Timestamp, args.Value, args.FailOnTombstones, h.Txn)
+	return result.Result{}, engine.MVCCInitPut(ctx, batch, cArgs.Stats, args.Key, h.Timestamp, args.Value, args.FailOnTombstones, h.Txn)
 }
 
 // evalIncrement increments the value (interpreted as varint64 encoded) and
@@ -322,31 +323,31 @@ func evalInitPut(
 // exists for the key, zero is incremented.
 func evalIncrement(
 	ctx context.Context, batch engine.ReadWriter, cArgs batcheval.CommandArgs, resp roachpb.Response,
-) (EvalResult, error) {
+) (result.Result, error) {
 	args := cArgs.Args.(*roachpb.IncrementRequest)
 	h := cArgs.Header
 	reply := resp.(*roachpb.IncrementResponse)
 
 	newVal, err := engine.MVCCIncrement(ctx, batch, cArgs.Stats, args.Key, h.Timestamp, h.Txn, args.Increment)
 	reply.NewValue = newVal
-	return EvalResult{}, err
+	return result.Result{}, err
 }
 
 // evalDelete deletes the key and value specified by key.
 func evalDelete(
 	ctx context.Context, batch engine.ReadWriter, cArgs batcheval.CommandArgs, resp roachpb.Response,
-) (EvalResult, error) {
+) (result.Result, error) {
 	args := cArgs.Args.(*roachpb.DeleteRequest)
 	h := cArgs.Header
 
-	return EvalResult{}, engine.MVCCDelete(ctx, batch, cArgs.Stats, args.Key, h.Timestamp, h.Txn)
+	return result.Result{}, engine.MVCCDelete(ctx, batch, cArgs.Stats, args.Key, h.Timestamp, h.Txn)
 }
 
 // evalDeleteRange deletes the range of key/value pairs specified by
 // start and end keys.
 func evalDeleteRange(
 	ctx context.Context, batch engine.ReadWriter, cArgs batcheval.CommandArgs, resp roachpb.Response,
-) (EvalResult, error) {
+) (result.Result, error) {
 	args := cArgs.Args.(*roachpb.DeleteRangeRequest)
 	h := cArgs.Header
 	reply := resp.(*roachpb.DeleteRangeResponse)
@@ -372,7 +373,7 @@ func evalDeleteRange(
 		reply.ResumeSpan = resumeSpan
 		reply.ResumeReason = roachpb.RESUME_KEY_LIMIT
 	}
-	return EvalResult{}, err
+	return result.Result{}, err
 }
 
 // evalScan scans the key range specified by start key through end key
@@ -381,7 +382,7 @@ func evalDeleteRange(
 // (MaxInt64 for no limit).
 func evalScan(
 	ctx context.Context, batch engine.ReadWriter, cArgs batcheval.CommandArgs, resp roachpb.Response,
-) (EvalResult, error) {
+) (result.Result, error) {
 	args := cArgs.Args.(*roachpb.ScanRequest)
 	h := cArgs.Header
 	reply := resp.(*roachpb.ScanResponse)
@@ -389,7 +390,7 @@ func evalScan(
 	rows, resumeSpan, intents, err := engine.MVCCScan(ctx, batch, args.Key, args.EndKey,
 		cArgs.MaxKeys, h.Timestamp, h.ReadConsistency == roachpb.CONSISTENT, h.Txn)
 	if err != nil {
-		return EvalResult{}, err
+		return result.Result{}, err
 	}
 
 	reply.NumKeys = int64(len(rows))
@@ -410,7 +411,7 @@ func evalScan(
 // (MaxInt64 for no limit).
 func evalReverseScan(
 	ctx context.Context, batch engine.ReadWriter, cArgs batcheval.CommandArgs, resp roachpb.Response,
-) (EvalResult, error) {
+) (result.Result, error) {
 	args := cArgs.Args.(*roachpb.ReverseScanRequest)
 	h := cArgs.Header
 	reply := resp.(*roachpb.ReverseScanResponse)
@@ -418,7 +419,7 @@ func evalReverseScan(
 	rows, resumeSpan, intents, err := engine.MVCCReverseScan(ctx, batch, args.Key, args.EndKey,
 		cArgs.MaxKeys, h.Timestamp, h.ReadConsistency == roachpb.CONSISTENT, h.Txn)
 	if err != nil {
-		return EvalResult{}, err
+		return result.Result{}, err
 	}
 
 	reply.NumKeys = int64(len(rows))
@@ -508,13 +509,13 @@ func declareKeysBeginTransaction(
 // performed first and aborts the transaction.
 func evalBeginTransaction(
 	ctx context.Context, batch engine.ReadWriter, cArgs batcheval.CommandArgs, resp roachpb.Response,
-) (EvalResult, error) {
+) (result.Result, error) {
 	args := cArgs.Args.(*roachpb.BeginTransactionRequest)
 	h := cArgs.Header
 	reply := resp.(*roachpb.BeginTransactionResponse)
 
 	if err := verifyTransaction(h, args); err != nil {
-		return EvalResult{}, err
+		return result.Result{}, err
 	}
 	key := keys.TransactionKey(h.Txn.Key, h.Txn.ID)
 	clonedTxn := h.Txn.Clone()
@@ -524,14 +525,14 @@ func evalBeginTransaction(
 	tmpTxn := roachpb.Transaction{}
 	ok, err := engine.MVCCGetProto(ctx, batch, key, hlc.Timestamp{}, true, nil, &tmpTxn)
 	if err != nil {
-		return EvalResult{}, err
+		return result.Result{}, err
 	}
 	if ok {
 		switch tmpTxn.Status {
 		case roachpb.ABORTED:
 			// Check whether someone has come in ahead and already aborted the
 			// txn.
-			return EvalResult{}, roachpb.NewTransactionAbortedError()
+			return result.Result{}, roachpb.NewTransactionAbortedError()
 
 		case roachpb.PENDING:
 			if h.Txn.Epoch > tmpTxn.Epoch {
@@ -544,16 +545,16 @@ func evalBeginTransaction(
 				// Our txn record already exists. This is either a client error, sending
 				// a duplicate BeginTransaction, or it's an artifact of DistSender
 				// re-sending a batch. Assume the latter and ask the client to restart.
-				return EvalResult{}, roachpb.NewTransactionRetryError(roachpb.RETRY_POSSIBLE_REPLAY)
+				return result.Result{}, roachpb.NewTransactionRetryError(roachpb.RETRY_POSSIBLE_REPLAY)
 			}
 
 		case roachpb.COMMITTED:
-			return EvalResult{}, roachpb.NewTransactionStatusError(
+			return result.Result{}, roachpb.NewTransactionStatusError(
 				fmt.Sprintf("BeginTransaction can't overwrite %s", tmpTxn),
 			)
 
 		default:
-			return EvalResult{}, roachpb.NewTransactionStatusError(
+			return result.Result{}, roachpb.NewTransactionStatusError(
 				fmt.Sprintf("bad txn state: %s", tmpTxn),
 			)
 		}
@@ -568,12 +569,12 @@ func evalBeginTransaction(
 	//
 	// See #9265.
 	if reply.Txn.LastActive().Less(threshold) {
-		return EvalResult{}, roachpb.NewTransactionAbortedError()
+		return result.Result{}, roachpb.NewTransactionAbortedError()
 	}
 
 	// Write the txn record.
 	reply.Txn.Writing = true
-	return EvalResult{}, engine.MVCCPutProto(ctx, batch, cArgs.Stats, key, hlc.Timestamp{}, nil, reply.Txn)
+	return result.Result{}, engine.MVCCPutProto(ctx, batch, cArgs.Stats, key, hlc.Timestamp{}, nil, reply.Txn)
 }
 
 func declareKeysEndTransaction(
@@ -670,19 +671,19 @@ func declareKeysEndTransaction(
 // an already rolled-back txn is ok.
 func evalEndTransaction(
 	ctx context.Context, batch engine.ReadWriter, cArgs batcheval.CommandArgs, resp roachpb.Response,
-) (EvalResult, error) {
+) (result.Result, error) {
 	args := cArgs.Args.(*roachpb.EndTransactionRequest)
 	h := cArgs.Header
 	ms := cArgs.Stats
 	reply := resp.(*roachpb.EndTransactionResponse)
 
 	if err := verifyTransaction(h, args); err != nil {
-		return EvalResult{}, err
+		return result.Result{}, err
 	}
 
 	// If a 1PC txn was required and we're in EndTransaction, something went wrong.
 	if args.Require1PC {
-		return EvalResult{}, roachpb.NewTransactionStatusError("could not commit in one phase as requested")
+		return result.Result{}, roachpb.NewTransactionStatusError("could not commit in one phase as requested")
 	}
 
 	key := keys.TransactionKey(h.Txn.Key, h.Txn.ID)
@@ -692,9 +693,9 @@ func evalEndTransaction(
 	if ok, err := engine.MVCCGetProto(
 		ctx, batch, key, hlc.Timestamp{}, true, nil, &existingTxn,
 	); err != nil {
-		return EvalResult{}, err
+		return result.Result{}, err
 	} else if !ok {
-		return EvalResult{}, roachpb.NewTransactionStatusError("does not exist")
+		return result.Result{}, roachpb.NewTransactionStatusError("does not exist")
 	}
 	// We're using existingTxn on the reply, even though it can be stale compared
 	// to the Transaction in the request (e.g. the Sequence can be stale). This is
@@ -708,7 +709,7 @@ func evalEndTransaction(
 	// not suffered regression.
 	switch reply.Txn.Status {
 	case roachpb.COMMITTED:
-		return EvalResult{}, roachpb.NewTransactionStatusError("already committed")
+		return result.Result{}, roachpb.NewTransactionStatusError("already committed")
 
 	case roachpb.ABORTED:
 		if !args.Commit {
@@ -721,7 +722,7 @@ func evalEndTransaction(
 			if err := updateTxnWithExternalIntents(
 				ctx, batch, ms, *args, reply.Txn, externalIntents,
 			); err != nil {
-				return EvalResult{}, err
+				return result.Result{}, err
 			}
 			// Use alwaysReturn==true because the transaction is definitely
 			// aborted, no matter what happens to this command.
@@ -745,7 +746,7 @@ func evalEndTransaction(
 			// importantly, intents) dangling; we can't currently write on
 			// error. Would panic, but that makes TestEndTransactionWithErrors
 			// awkward.
-			return EvalResult{}, roachpb.NewTransactionStatusError(
+			return result.Result{}, roachpb.NewTransactionStatusError(
 				fmt.Sprintf("epoch regression: %d", h.Txn.Epoch),
 			)
 		} else if h.Txn.Epoch == reply.Txn.Epoch && reply.Txn.Timestamp.Less(h.Txn.OrigTimestamp) {
@@ -754,13 +755,13 @@ func evalEndTransaction(
 			// than the original transaction timestamp.
 
 			// TODO(tschottdorf): see above comment on epoch regression.
-			return EvalResult{}, roachpb.NewTransactionStatusError(
+			return result.Result{}, roachpb.NewTransactionStatusError(
 				fmt.Sprintf("timestamp regression: %s", h.Txn.OrigTimestamp),
 			)
 		}
 
 	default:
-		return EvalResult{}, roachpb.NewTransactionStatusError(
+		return result.Result{}, roachpb.NewTransactionStatusError(
 			fmt.Sprintf("bad txn status: %s", reply.Txn),
 		)
 	}
@@ -786,7 +787,7 @@ func evalEndTransaction(
 	// args.Commit parameter.
 	if args.Commit {
 		if retry, reason := isEndTransactionTriggeringRetryError(h.Txn, reply.Txn); retry {
-			return EvalResult{}, roachpb.NewTransactionRetryError(reason)
+			return result.Result{}, roachpb.NewTransactionRetryError(reason)
 		}
 
 		if isEndTransactionExceedingDeadline(reply.Txn.Timestamp, *args) {
@@ -801,7 +802,7 @@ func evalEndTransaction(
 			// transactions; unless the client misconfigured the txn, the deadline can
 			// only be expired if the txn has been pushed, and pushed Serializable
 			// transactions are detected above.
-			return EvalResult{}, roachpb.NewTransactionStatusError(
+			return result.Result{}, roachpb.NewTransactionStatusError(
 				"transaction deadline exceeded")
 		}
 
@@ -814,15 +815,15 @@ func evalEndTransaction(
 	externalIntents := resolveLocalIntents(ctx, desc,
 		batch, ms, *args, reply.Txn, cArgs.EvalCtx.EvalKnobs())
 	if err := updateTxnWithExternalIntents(ctx, batch, ms, *args, reply.Txn, externalIntents); err != nil {
-		return EvalResult{}, err
+		return result.Result{}, err
 	}
 
 	// Run triggers if successfully committed.
-	var pd EvalResult
+	var pd result.Result
 	if reply.Txn.Status == roachpb.COMMITTED {
 		var err error
 		if pd, err = runCommitTrigger(ctx, cArgs.EvalCtx, batch.(engine.Batch), ms, *args, reply.Txn); err != nil {
-			return EvalResult{}, NewReplicaCorruptionError(err)
+			return result.Result{}, NewReplicaCorruptionError(err)
 		}
 	}
 
@@ -847,9 +848,9 @@ func evalEndTransaction(
 	// don't want the intents to be up for resolution. That should happen only
 	// if the commit actually happens; otherwise, we risk losing writes.
 	intentsResult := intentsToEvalResult(externalIntents, args, false /* alwaysReturn */)
-	intentsResult.Local.updatedTxn = reply.Txn
+	intentsResult.Local.UpdatedTxn = reply.Txn
 	if err := pd.MergeAndDestroy(intentsResult); err != nil {
-		return EvalResult{}, err
+		return result.Result{}, err
 	}
 	return pd, nil
 }
@@ -1049,10 +1050,10 @@ func runCommitTrigger(
 	ms *enginepb.MVCCStats,
 	args roachpb.EndTransactionRequest,
 	txn *roachpb.Transaction,
-) (EvalResult, error) {
+) (result.Result, error) {
 	ct := args.InternalCommitTrigger
 	if ct == nil {
-		return EvalResult{}, nil
+		return result.Result{}, nil
 	}
 
 	if ct.GetSplitTrigger() != nil {
@@ -1069,7 +1070,7 @@ func runCommitTrigger(
 		return changeReplicasTrigger(ctx, rec, batch, crt), nil
 	}
 	if ct.GetModifiedSpanTrigger() != nil {
-		var pd EvalResult
+		var pd result.Result
 		if ct.ModifiedSpanTrigger.SystemConfigSpan {
 			// Check if we need to gossip the system config.
 			// NOTE: System config gossiping can only execute correctly if
@@ -1081,13 +1082,13 @@ func runCommitTrigger(
 			// in the transaction.
 			if rec.ContainsKey(keys.SystemConfigSpan.Key) {
 				if err := pd.MergeAndDestroy(
-					EvalResult{
-						Local: LocalEvalResult{
-							maybeGossipSystemConfig: true,
+					result.Result{
+						Local: result.LocalResult{
+							MaybeGossipSystemConfig: true,
 						},
 					},
 				); err != nil {
-					return EvalResult{}, err
+					return result.Result{}, err
 				}
 			} else {
 				log.Errorf(ctx, "System configuration span was modified, but the "+
@@ -1097,19 +1098,19 @@ func runCommitTrigger(
 		}
 		if nlSpan := ct.ModifiedSpanTrigger.NodeLivenessSpan; nlSpan != nil {
 			if err := pd.MergeAndDestroy(
-				EvalResult{
-					Local: LocalEvalResult{
-						maybeGossipNodeLiveness: nlSpan,
+				result.Result{
+					Local: result.LocalResult{
+						MaybeGossipNodeLiveness: nlSpan,
 					},
 				},
 			); err != nil {
-				return EvalResult{}, err
+				return result.Result{}, err
 			}
 		}
 		return pd, nil
 	}
 	log.Fatalf(ctx, "unknown commit trigger: %+v", ct)
-	return EvalResult{}, nil
+	return result.Result{}, nil
 }
 
 func declareKeysRangeLookup(
@@ -1154,7 +1155,7 @@ func declareKeysRangeLookup(
 // order.
 func evalRangeLookup(
 	ctx context.Context, batch engine.ReadWriter, cArgs batcheval.CommandArgs, resp roachpb.Response,
-) (EvalResult, error) {
+) (result.Result, error) {
 	log.Event(ctx, "RangeLookup")
 	args := cArgs.Args.(*roachpb.RangeLookupRequest)
 	h := cArgs.Header
@@ -1162,14 +1163,14 @@ func evalRangeLookup(
 
 	key, err := keys.Addr(args.Key)
 	if err != nil {
-		return EvalResult{}, err
+		return result.Result{}, err
 	}
 	if !key.Equal(args.Key) {
-		return EvalResult{}, errors.Errorf("illegal lookup of range-local key %q", args.Key)
+		return result.Result{}, errors.Errorf("illegal lookup of range-local key %q", args.Key)
 	}
 	ts, txn, consistent, rangeCount := h.Timestamp, h.Txn, h.ReadConsistency != roachpb.INCONSISTENT, int64(args.MaxRanges)
 	if rangeCount < 1 {
-		return EvalResult{}, errors.Errorf("range lookup specified invalid maximum range count %d: must be > 0", rangeCount)
+		return result.Result{}, errors.Errorf("range lookup specified invalid maximum range count %d: must be > 0", rangeCount)
 	}
 
 	desc := cArgs.EvalCtx.Desc()
@@ -1194,11 +1195,11 @@ func evalRangeLookup(
 		// afterwards, up to MaxRanges.
 		span, err := keys.MetaScanBounds(key)
 		if err != nil {
-			return EvalResult{}, err
+			return result.Result{}, err
 		}
 		span, err = span.Intersect(desc)
 		if err != nil {
-			return EvalResult{}, err
+			return result.Result{}, err
 		}
 
 		// Scan for descriptors.
@@ -1207,7 +1208,7 @@ func evalRangeLookup(
 		)
 		if err != nil {
 			// An error here is likely a WriteIntentError when reading consistently.
-			return EvalResult{}, err
+			return result.Result{}, err
 		}
 	} else {
 		// Use MVCCScan to get the first range. There are three cases:
@@ -1249,18 +1250,18 @@ func evalRangeLookup(
 		if key.Less(roachpb.RKey(keys.Meta2KeyMax)) {
 			span, err := keys.MetaScanBounds(key)
 			if err != nil {
-				return EvalResult{}, err
+				return result.Result{}, err
 			}
 			span, err = span.Intersect(desc)
 			if err != nil {
-				return EvalResult{}, err
+				return result.Result{}, err
 			}
 
 			kvs, _, intents, err = engine.MVCCScan(
 				ctx, batch, span.Key.AsRawKey(), span.EndKey.AsRawKey(), 1, ts, consistent, txn,
 			)
 			if err != nil {
-				return EvalResult{}, err
+				return result.Result{}, err
 			}
 		}
 		// We want to search for the metadata key just less or equal to
@@ -1268,11 +1269,11 @@ func evalRangeLookup(
 		// keys immediately backwards, up to MaxRanges.
 		span, err := keys.MetaReverseScanBounds(key)
 		if err != nil {
-			return EvalResult{}, err
+			return result.Result{}, err
 		}
 		span, err = span.Intersect(desc)
 		if err != nil {
-			return EvalResult{}, err
+			return result.Result{}, err
 		}
 
 		// Reverse scan for descriptors.
@@ -1281,7 +1282,7 @@ func evalRangeLookup(
 		)
 		if err != nil {
 			// An error here is likely a WriteIntentError when reading consistently.
-			return EvalResult{}, err
+			return result.Result{}, err
 		}
 
 		// Merge the results, the total ranges may be bigger than rangeCount.
@@ -1299,7 +1300,7 @@ func evalRangeLookup(
 		// TODO(tschottdorf): Candidate for a ReplicaCorruptionError.
 		rd, err := checkAndUnmarshal(kv.Value)
 		if err != nil {
-			return EvalResult{}, err
+			return result.Result{}, err
 		}
 		if rd != nil {
 			// Add the first valid descriptor to the desired range descriptor
@@ -1328,7 +1329,7 @@ func evalRangeLookup(
 			ctx, batch, intent.Key, intent.Txn.Timestamp, intent.Txn,
 		)
 		if err != nil {
-			return EvalResult{}, err
+			return result.Result{}, err
 		}
 
 		if val == nil {
@@ -1337,7 +1338,7 @@ func evalRangeLookup(
 		}
 		rd, err := checkAndUnmarshal(*val)
 		if err != nil {
-			return EvalResult{}, err
+			return result.Result{}, err
 		}
 		if rd != nil {
 			if containsFn(*rd, userKey) {
@@ -1411,37 +1412,37 @@ func declareKeysHeartbeatTransaction(
 // coordinator. Returns the updated transaction.
 func evalHeartbeatTxn(
 	ctx context.Context, batch engine.ReadWriter, cArgs batcheval.CommandArgs, resp roachpb.Response,
-) (EvalResult, error) {
+) (result.Result, error) {
 	args := cArgs.Args.(*roachpb.HeartbeatTxnRequest)
 	h := cArgs.Header
 	reply := resp.(*roachpb.HeartbeatTxnResponse)
 
 	if err := verifyTransaction(h, args); err != nil {
-		return EvalResult{}, err
+		return result.Result{}, err
 	}
 
 	key := keys.TransactionKey(h.Txn.Key, h.Txn.ID)
 
 	var txn roachpb.Transaction
 	if ok, err := engine.MVCCGetProto(ctx, batch, key, hlc.Timestamp{}, true, nil, &txn); err != nil {
-		return EvalResult{}, err
+		return result.Result{}, err
 	} else if !ok {
 		// If no existing transaction record was found, skip heartbeat.
 		// This could mean the heartbeat is a delayed relic or it could
 		// mean that the BeginTransaction call was delayed. In either
 		// case, there's no reason to persist a new transaction record.
-		return EvalResult{}, errors.Errorf("heartbeat for transaction %s failed; record not present", h.Txn)
+		return result.Result{}, errors.Errorf("heartbeat for transaction %s failed; record not present", h.Txn)
 	}
 
 	if txn.Status == roachpb.PENDING {
 		txn.LastHeartbeat.Forward(args.Now)
 		if err := engine.MVCCPutProto(ctx, batch, cArgs.Stats, key, hlc.Timestamp{}, nil, &txn); err != nil {
-			return EvalResult{}, err
+			return result.Result{}, err
 		}
 	}
 
 	reply.Txn = &txn
-	return EvalResult{}, nil
+	return result.Result{}, nil
 }
 
 func declareKeysGC(
@@ -1479,7 +1480,7 @@ func declareKeysGC(
 // specified in the args is persisted after GC.
 func evalGC(
 	ctx context.Context, batch engine.ReadWriter, cArgs batcheval.CommandArgs, resp roachpb.Response,
-) (EvalResult, error) {
+) (result.Result, error) {
 	args := cArgs.Args.(*roachpb.GCRequest)
 	h := cArgs.Header
 
@@ -1500,7 +1501,7 @@ func evalGC(
 		ctx, batch, cArgs.Stats, keys, h.Timestamp,
 		gcBatchSize.Get(&cArgs.EvalCtx.ClusterSettings().SV),
 	); err != nil {
-		return EvalResult{}, err
+		return result.Result{}, err
 	}
 
 	// Protect against multiple GC requests arriving out of order; we track
@@ -1520,7 +1521,7 @@ func evalGC(
 		newTxnSpanGCThreshold.Forward(args.TxnSpanGCThreshold)
 	}
 
-	var pd EvalResult
+	var pd result.Result
 	stateLoader := makeReplicaStateLoader(cArgs.EvalCtx)
 
 	// Don't write these keys unless we have to. We also don't declare these
@@ -1531,14 +1532,14 @@ func evalGC(
 	if newThreshold != (hlc.Timestamp{}) {
 		pd.Replicated.State.GCThreshold = &newThreshold
 		if err := stateLoader.SetGCThreshold(ctx, batch, cArgs.Stats, &newThreshold); err != nil {
-			return EvalResult{}, err
+			return result.Result{}, err
 		}
 	}
 
 	if newTxnSpanGCThreshold != (hlc.Timestamp{}) {
 		pd.Replicated.State.TxnSpanGCThreshold = &newTxnSpanGCThreshold
 		if err := stateLoader.SetTxnSpanGCThreshold(ctx, batch, cArgs.Stats, &newTxnSpanGCThreshold); err != nil {
-			return EvalResult{}, err
+			return result.Result{}, err
 		}
 	}
 
@@ -1598,22 +1599,22 @@ func declareKeysPushTransaction(
 // out via its heartbeats that the transaction has failed.
 func evalPushTxn(
 	ctx context.Context, batch engine.ReadWriter, cArgs batcheval.CommandArgs, resp roachpb.Response,
-) (EvalResult, error) {
+) (result.Result, error) {
 	args := cArgs.Args.(*roachpb.PushTxnRequest)
 	reply := resp.(*roachpb.PushTxnResponse)
 
 	if cArgs.Header.Txn != nil {
-		return EvalResult{}, errTransactionUnsupported
+		return result.Result{}, errTransactionUnsupported
 	}
 	if args.Now == (hlc.Timestamp{}) {
-		return EvalResult{}, errors.Errorf("the field Now must be provided")
+		return result.Result{}, errors.Errorf("the field Now must be provided")
 	}
 	if args.PushType == roachpb.PUSH_QUERY {
-		return EvalResult{}, errors.Errorf("PUSH_QUERY no longer supported")
+		return result.Result{}, errors.Errorf("PUSH_QUERY no longer supported")
 	}
 
 	if !bytes.Equal(args.Key, args.PusheeTxn.Key) {
-		return EvalResult{}, errors.Errorf("request key %s should match pushee's txn key %s", args.Key, args.PusheeTxn.Key)
+		return result.Result{}, errors.Errorf("request key %s should match pushee's txn key %s", args.Key, args.PusheeTxn.Key)
 	}
 	key := keys.TransactionKey(args.PusheeTxn.Key, args.PusheeTxn.ID)
 
@@ -1622,7 +1623,7 @@ func evalPushTxn(
 	ok, err := engine.MVCCGetProto(ctx, batch, key, hlc.Timestamp{},
 		true /* consistent */, nil /* txn */, existTxn)
 	if err != nil {
-		return EvalResult{}, err
+		return result.Result{}, err
 	}
 	// There are three cases in which there is no transaction entry:
 	//
@@ -1657,8 +1658,8 @@ func evalPushTxn(
 		reply.PusheeTxn.Timestamp = args.Now // see method comment
 		// Setting OrigTimestamp bumps LastActive(); see #9265.
 		reply.PusheeTxn.OrigTimestamp = args.Now
-		result := EvalResult{}
-		result.Local.updatedTxn = &reply.PusheeTxn
+		result := result.Result{}
+		result.Local.UpdatedTxn = &reply.PusheeTxn
 		return result, engine.MVCCPutProto(ctx, batch, cArgs.Stats, key, hlc.Timestamp{}, nil, &reply.PusheeTxn)
 	}
 	// Start with the persisted transaction record as final transaction.
@@ -1667,14 +1668,14 @@ func evalPushTxn(
 	// If already committed or aborted, return success.
 	if reply.PusheeTxn.Status != roachpb.PENDING {
 		// Trivial noop.
-		return EvalResult{}, nil
+		return result.Result{}, nil
 	}
 
 	// If we're trying to move the timestamp forward, and it's already
 	// far enough forward, return success.
 	if args.PushType == roachpb.PUSH_TIMESTAMP && args.PushTo.Less(reply.PusheeTxn.Timestamp) {
 		// Trivial noop.
-		return EvalResult{}, nil
+		return result.Result{}, nil
 	}
 
 	// The pusher might be aware of a newer version of the pushee.
@@ -1726,7 +1727,7 @@ func evalPushTxn(
 		if log.V(1) {
 			log.Infof(ctx, "%v", err)
 		}
-		return EvalResult{}, err
+		return result.Result{}, err
 	}
 
 	// Upgrade priority of pushed transaction to one less than pusher's.
@@ -1746,10 +1747,10 @@ func evalPushTxn(
 
 	// Persist the pushed transaction using zero timestamp for inline value.
 	if err := engine.MVCCPutProto(ctx, batch, cArgs.Stats, key, hlc.Timestamp{}, nil, &reply.PusheeTxn); err != nil {
-		return EvalResult{}, err
+		return result.Result{}, err
 	}
-	result := EvalResult{}
-	result.Local.updatedTxn = &reply.PusheeTxn
+	result := result.Result{}
+	result.Local.UpdatedTxn = &reply.PusheeTxn
 	return result, nil
 }
 
@@ -1767,15 +1768,15 @@ func canPushWithPriority(pusher, pushee *roachpb.Transaction) bool {
 // to find dependency cycles.
 func evalQueryTxn(
 	ctx context.Context, batch engine.ReadWriter, cArgs batcheval.CommandArgs, resp roachpb.Response,
-) (EvalResult, error) {
+) (result.Result, error) {
 	args := cArgs.Args.(*roachpb.QueryTxnRequest)
 	reply := resp.(*roachpb.QueryTxnResponse)
 
 	if cArgs.Header.Txn != nil {
-		return EvalResult{}, errTransactionUnsupported
+		return result.Result{}, errTransactionUnsupported
 	}
 	if !bytes.Equal(args.Key, args.Txn.Key) {
-		return EvalResult{}, errors.Errorf("request key %s does not match txn key %s", args.Key, args.Txn.Key)
+		return result.Result{}, errors.Errorf("request key %s does not match txn key %s", args.Key, args.Txn.Key)
 	}
 	key := keys.TransactionKey(args.Txn.Key, args.Txn.ID)
 
@@ -1783,11 +1784,11 @@ func evalQueryTxn(
 	ok, err := engine.MVCCGetProto(ctx, batch, key, hlc.Timestamp{},
 		true /* consistent */, nil /* txn */, &reply.QueriedTxn)
 	if err != nil || !ok {
-		return EvalResult{}, err
+		return result.Result{}, err
 	}
 	// Get the list of txns waiting on this txn.
 	reply.WaitingTxns = cArgs.EvalCtx.GetTxnWaitQueue().GetDependents(args.Txn.ID)
-	return EvalResult{}, nil
+	return result.Result{}, nil
 }
 
 // setAbortSpan clears any AbortSpan entry if poison is false.
@@ -1845,13 +1846,13 @@ func declareKeysResolveIntent(
 // according to the status of the transaction which created it.
 func evalResolveIntent(
 	ctx context.Context, batch engine.ReadWriter, cArgs batcheval.CommandArgs, resp roachpb.Response,
-) (EvalResult, error) {
+) (result.Result, error) {
 	args := cArgs.Args.(*roachpb.ResolveIntentRequest)
 	h := cArgs.Header
 	ms := cArgs.Stats
 
 	if h.Txn != nil {
-		return EvalResult{}, errTransactionUnsupported
+		return result.Result{}, errTransactionUnsupported
 	}
 
 	intent := roachpb.Intent{
@@ -1860,12 +1861,12 @@ func evalResolveIntent(
 		Status: args.Status,
 	}
 	if err := engine.MVCCResolveWriteIntent(ctx, batch, ms, intent); err != nil {
-		return EvalResult{}, err
+		return result.Result{}, err
 	}
 	if writeAbortSpanOnResolve(args.Status) {
-		return EvalResult{}, setAbortSpan(ctx, cArgs.EvalCtx, batch, ms, args.IntentTxn, args.Poison)
+		return result.Result{}, setAbortSpan(ctx, cArgs.EvalCtx, batch, ms, args.IntentTxn, args.Poison)
 	}
-	return EvalResult{}, nil
+	return result.Result{}, nil
 }
 
 func declareKeysResolveIntentRange(
@@ -1878,13 +1879,13 @@ func declareKeysResolveIntentRange(
 // key range according to the status of the transaction which created it.
 func evalResolveIntentRange(
 	ctx context.Context, batch engine.ReadWriter, cArgs batcheval.CommandArgs, resp roachpb.Response,
-) (EvalResult, error) {
+) (result.Result, error) {
 	args := cArgs.Args.(*roachpb.ResolveIntentRangeRequest)
 	h := cArgs.Header
 	ms := cArgs.Stats
 
 	if h.Txn != nil {
-		return EvalResult{}, errTransactionUnsupported
+		return result.Result{}, errTransactionUnsupported
 	}
 
 	intent := roachpb.Intent{
@@ -1894,12 +1895,12 @@ func evalResolveIntentRange(
 	}
 
 	if _, err := engine.MVCCResolveWriteIntentRange(ctx, batch, ms, intent, math.MaxInt64); err != nil {
-		return EvalResult{}, err
+		return result.Result{}, err
 	}
 	if writeAbortSpanOnResolve(args.Status) {
-		return EvalResult{}, setAbortSpan(ctx, cArgs.EvalCtx, batch, ms, args.IntentTxn, args.Poison)
+		return result.Result{}, setAbortSpan(ctx, cArgs.EvalCtx, batch, ms, args.IntentTxn, args.Poison)
 	}
-	return EvalResult{}, nil
+	return result.Result{}, nil
 }
 
 // evalMerge is used to merge a value into an existing key. Merge is an
@@ -1910,11 +1911,11 @@ func evalResolveIntentRange(
 // clients. Merged values are explicitly not MVCC data.
 func evalMerge(
 	ctx context.Context, batch engine.ReadWriter, cArgs batcheval.CommandArgs, resp roachpb.Response,
-) (EvalResult, error) {
+) (result.Result, error) {
 	args := cArgs.Args.(*roachpb.MergeRequest)
 	h := cArgs.Header
 
-	return EvalResult{}, engine.MVCCMerge(ctx, batch, cArgs.Stats, args.Key, h.Timestamp, args.Value)
+	return result.Result{}, engine.MVCCMerge(ctx, batch, cArgs.Stats, args.Key, h.Timestamp, args.Value)
 }
 
 func declareKeysTruncateLog(
@@ -1930,7 +1931,7 @@ func declareKeysTruncateLog(
 // specified within the request body, the request will also be ignored.
 func evalTruncateLog(
 	ctx context.Context, batch engine.ReadWriter, cArgs batcheval.CommandArgs, resp roachpb.Response,
-) (EvalResult, error) {
+) (result.Result, error) {
 	args := cArgs.Args.(*roachpb.TruncateLogRequest)
 
 	// After a merge, it's possible that this request was sent to the wrong
@@ -1939,13 +1940,13 @@ func evalTruncateLog(
 	if cArgs.EvalCtx.GetRangeID() != args.RangeID {
 		log.Infof(ctx, "attempting to truncate raft logs for another range: r%d. Normally this is due to a merge and can be ignored.",
 			args.RangeID)
-		return EvalResult{}, nil
+		return result.Result{}, nil
 	}
 
 	// Have we already truncated this log? If so, just return without an error.
 	firstIndex, err := cArgs.EvalCtx.GetFirstIndex()
 	if err != nil {
-		return EvalResult{}, err
+		return result.Result{}, err
 	}
 
 	if firstIndex >= args.Index {
@@ -1953,13 +1954,13 @@ func evalTruncateLog(
 			log.Infof(ctx, "attempting to truncate previously truncated raft log. FirstIndex:%d, TruncateFrom:%d",
 				firstIndex, args.Index)
 		}
-		return EvalResult{}, nil
+		return result.Result{}, nil
 	}
 
 	// args.Index is the first index to keep.
 	term, err := cArgs.EvalCtx.GetTerm(args.Index - 1)
 	if err != nil {
-		return EvalResult{}, err
+		return result.Result{}, err
 	}
 
 	// We start at index zero because it's always possible that a previous
@@ -1984,14 +1985,14 @@ func evalTruncateLog(
 		var err error
 		ms, err = iter.ComputeStats(start, end, 0 /* nowNanos */)
 		if err != nil {
-			return EvalResult{}, errors.Wrap(err, "while computing stats of Raft log freed by truncation")
+			return result.Result{}, errors.Wrap(err, "while computing stats of Raft log freed by truncation")
 		}
 		ms.SysBytes = -ms.SysBytes // simulate the deletion
 
 	} else {
 		if _, _, _, err := engine.MVCCDeleteRange(ctx, batch, &ms, start.Key, end.Key, math.MaxInt64, /* max */
 			hlc.Timestamp{}, nil /* txn */, false /* returnKeys */); err != nil {
-			return EvalResult{}, err
+			return result.Result{}, err
 		}
 	}
 
@@ -2000,7 +2001,7 @@ func evalTruncateLog(
 		Term:  term,
 	}
 
-	var pd EvalResult
+	var pd result.Result
 	pd.Replicated.State = &storagebase.ReplicaState{
 		TruncatedState: tState,
 	}
@@ -2009,13 +2010,13 @@ func evalTruncateLog(
 	return pd, makeReplicaStateLoader(cArgs.EvalCtx).SetTruncatedState(ctx, batch, cArgs.Stats, tState)
 }
 
-func newFailedLeaseTrigger(isTransfer bool) EvalResult {
-	var trigger EvalResult
-	trigger.Local.leaseMetricsResult = new(leaseMetricsType)
+func newFailedLeaseTrigger(isTransfer bool) result.Result {
+	var trigger result.Result
+	trigger.Local.LeaseMetricsResult = new(result.LeaseMetricsType)
 	if isTransfer {
-		*trigger.Local.leaseMetricsResult = leaseTransferError
+		*trigger.Local.LeaseMetricsResult = result.LeaseTransferError
 	} else {
-		*trigger.Local.leaseMetricsResult = leaseRequestError
+		*trigger.Local.LeaseMetricsResult = result.LeaseRequestError
 	}
 	return trigger
 }
@@ -2036,7 +2037,7 @@ func declareKeysRequestLease(
 // clearing the command queue and timestamp cache.
 func evalRequestLease(
 	ctx context.Context, batch engine.ReadWriter, cArgs batcheval.CommandArgs, resp roachpb.Response,
-) (EvalResult, error) {
+) (result.Result, error) {
 	args := cArgs.Args.(*roachpb.RequestLeaseRequest)
 	// When returning an error from this method, must always return
 	// a newFailedLeaseTrigger() to satisfy stats.
@@ -2105,7 +2106,7 @@ func evalRequestLease(
 // before proposing.
 func evalTransferLease(
 	ctx context.Context, batch engine.ReadWriter, cArgs batcheval.CommandArgs, resp roachpb.Response,
-) (EvalResult, error) {
+) (result.Result, error) {
 	args := cArgs.Args.(*roachpb.TransferLeaseRequest)
 
 	// When returning an error from this method, must always return
@@ -2140,7 +2141,7 @@ func evalNewLease(
 	prevLease roachpb.Lease,
 	isExtension bool,
 	isTransfer bool,
-) (EvalResult, error) {
+) (result.Result, error) {
 	// When returning an error from this method, must always return
 	// a newFailedLeaseTrigger() to satisfy stats.
 
@@ -2173,7 +2174,7 @@ func evalNewLease(
 		return newFailedLeaseTrigger(isTransfer), err
 	}
 
-	var pd EvalResult
+	var pd result.Result
 	// If we didn't block concurrent reads here, there'd be a chance that
 	// reads could sneak in on a new lease holder between setting the lease
 	// and updating the low water mark. This in itself isn't a consistency
@@ -2187,11 +2188,11 @@ func evalNewLease(
 	pd.Replicated.State = &storagebase.ReplicaState{
 		Lease: &lease,
 	}
-	pd.Local.leaseMetricsResult = new(leaseMetricsType)
+	pd.Local.LeaseMetricsResult = new(result.LeaseMetricsType)
 	if isTransfer {
-		*pd.Local.leaseMetricsResult = leaseTransferSuccess
+		*pd.Local.LeaseMetricsResult = result.LeaseTransferSuccess
 	} else {
-		*pd.Local.leaseMetricsResult = leaseRequestSuccess
+		*pd.Local.LeaseMetricsResult = result.LeaseRequestSuccess
 	}
 	return pd, nil
 }
@@ -2404,14 +2405,14 @@ func (r *Replica) computeChecksumDone(
 // CollectChecksumRequest.
 func evalComputeChecksum(
 	ctx context.Context, batch engine.ReadWriter, cArgs batcheval.CommandArgs, resp roachpb.Response,
-) (EvalResult, error) {
+) (result.Result, error) {
 	args := cArgs.Args.(*roachpb.ComputeChecksumRequest)
 
 	if args.Version != replicaChecksumVersion {
 		log.Errorf(ctx, "Incompatible versions: e=%d, v=%d", replicaChecksumVersion, args.Version)
-		return EvalResult{}, nil
+		return result.Result{}, nil
 	}
-	var pd EvalResult
+	var pd result.Result
 	pd.Replicated.ComputeChecksum = args
 	return pd, nil
 }
@@ -2996,7 +2997,7 @@ func splitTrigger(
 	bothDeltaMS enginepb.MVCCStats,
 	split *roachpb.SplitTrigger,
 	ts hlc.Timestamp,
-) (enginepb.MVCCStats, EvalResult, error) {
+) (enginepb.MVCCStats, result.Result, error) {
 	// TODO(tschottdorf): should have an incoming context from the corresponding
 	// EndTransaction, but the plumbing has not been done yet.
 	sp := rec.Tracer().StartSpan("split")
@@ -3004,7 +3005,7 @@ func splitTrigger(
 	desc := rec.Desc()
 	if !bytes.Equal(desc.StartKey, split.LeftDesc.StartKey) ||
 		!bytes.Equal(desc.EndKey, split.RightDesc.EndKey) {
-		return enginepb.MVCCStats{}, EvalResult{}, errors.Errorf("range does not match splits: (%s-%s) + (%s-%s) != %s",
+		return enginepb.MVCCStats{}, result.Result{}, errors.Errorf("range does not match splits: (%s-%s) + (%s-%s) != %s",
 			split.LeftDesc.StartKey, split.LeftDesc.EndKey,
 			split.RightDesc.StartKey, split.RightDesc.EndKey, rec)
 	}
@@ -3020,7 +3021,7 @@ func splitTrigger(
 	// to the LHS must happen below this point.
 	leftMS, err := ComputeStatsForRange(&split.LeftDesc, batch, ts.WallTime)
 	if err != nil {
-		return enginepb.MVCCStats{}, EvalResult{}, errors.Wrap(err, "unable to compute stats for LHS range after split")
+		return enginepb.MVCCStats{}, result.Result{}, errors.Wrap(err, "unable to compute stats for LHS range after split")
 	}
 	log.Event(ctx, "computed stats for left hand side range")
 
@@ -3029,17 +3030,17 @@ func splitTrigger(
 	// MVCCPutProto.
 	replicaGCTS, err := rec.GetLastReplicaGCTimestamp(ctx)
 	if err != nil {
-		return enginepb.MVCCStats{}, EvalResult{}, errors.Wrap(err, "unable to fetch last replica GC timestamp")
+		return enginepb.MVCCStats{}, result.Result{}, errors.Wrap(err, "unable to fetch last replica GC timestamp")
 	}
 	if err := engine.MVCCPutProto(ctx, batch, nil, keys.RangeLastReplicaGCTimestampKey(split.RightDesc.RangeID), hlc.Timestamp{}, nil, &replicaGCTS); err != nil {
-		return enginepb.MVCCStats{}, EvalResult{}, errors.Wrap(err, "unable to copy last replica GC timestamp")
+		return enginepb.MVCCStats{}, result.Result{}, errors.Wrap(err, "unable to copy last replica GC timestamp")
 	}
 
 	// Initialize the RHS range's AbortSpan by copying the LHS's.
 	seqCount, err := rec.AbortSpan().CopyInto(batch, &bothDeltaMS, split.RightDesc.RangeID)
 	if err != nil {
 		// TODO(tschottdorf): ReplicaCorruptionError.
-		return enginepb.MVCCStats{}, EvalResult{}, errors.Wrap(err, "unable to copy AbortSpan to RHS split range")
+		return enginepb.MVCCStats{}, result.Result{}, errors.Wrap(err, "unable to copy AbortSpan to RHS split range")
 	}
 	log.Eventf(ctx, "copied AbortSpan (%d entries)", seqCount)
 
@@ -3052,7 +3053,7 @@ func splitTrigger(
 		// over the keys and counting.
 		rightMS, err = ComputeStatsForRange(&split.RightDesc, batch, ts.WallTime)
 		if err != nil {
-			return enginepb.MVCCStats{}, EvalResult{}, errors.Wrap(err, "unable to compute stats for RHS range after split")
+			return enginepb.MVCCStats{}, result.Result{}, errors.Wrap(err, "unable to compute stats for RHS range after split")
 		}
 	} else {
 		// Because neither the original stats nor the delta stats contain
@@ -3092,7 +3093,7 @@ func splitTrigger(
 
 		// Account for MVCCStats' own contribution to the RHS range's statistics.
 		if err := engine.AccountForSelf(&rightMS, split.RightDesc.RangeID); err != nil {
-			return enginepb.MVCCStats{}, EvalResult{}, errors.Wrap(err, "unable to account for enginepb.MVCCStats's own stats impact")
+			return enginepb.MVCCStats{}, result.Result{}, errors.Wrap(err, "unable to account for enginepb.MVCCStats's own stats impact")
 		}
 
 		// Various pieces of code rely on a replica's lease never being unitialized,
@@ -3115,7 +3116,7 @@ func splitTrigger(
 		// batch?
 		leftLease, err := makeReplicaStateLoader(rec).LoadLease(ctx, rec.Engine())
 		if err != nil {
-			return enginepb.MVCCStats{}, EvalResult{}, errors.Wrap(err, "unable to load lease")
+			return enginepb.MVCCStats{}, result.Result{}, errors.Wrap(err, "unable to load lease")
 		}
 		if (leftLease == roachpb.Lease{}) {
 			log.Fatalf(ctx, "LHS of split has no lease")
@@ -3123,7 +3124,7 @@ func splitTrigger(
 
 		replica, found := split.RightDesc.GetReplicaDescriptor(leftLease.Replica.StoreID)
 		if !found {
-			return enginepb.MVCCStats{}, EvalResult{}, errors.Errorf(
+			return enginepb.MVCCStats{}, result.Result{}, errors.Errorf(
 				"pre-split lease holder %+v not found in post-split descriptor %+v",
 				leftLease.Replica, split.RightDesc,
 			)
@@ -3133,7 +3134,7 @@ func splitTrigger(
 
 		gcThreshold, err := makeReplicaStateLoader(rec).LoadGCThreshold(ctx, rec.Engine())
 		if err != nil {
-			return enginepb.MVCCStats{}, EvalResult{}, errors.Wrap(err, "unable to load GCThreshold")
+			return enginepb.MVCCStats{}, result.Result{}, errors.Wrap(err, "unable to load GCThreshold")
 		}
 		if (*gcThreshold == hlc.Timestamp{}) {
 			log.VEventf(ctx, 1, "LHS's GCThreshold of split is not set")
@@ -3141,7 +3142,7 @@ func splitTrigger(
 
 		txnSpanGCThreshold, err := makeReplicaStateLoader(rec).LoadTxnSpanGCThreshold(ctx, rec.Engine())
 		if err != nil {
-			return enginepb.MVCCStats{}, EvalResult{}, errors.Wrap(err, "unable to load TxnSpanGCThreshold")
+			return enginepb.MVCCStats{}, result.Result{}, errors.Wrap(err, "unable to load TxnSpanGCThreshold")
 		}
 		if (*txnSpanGCThreshold == hlc.Timestamp{}) {
 			log.VEventf(ctx, 1, "LHS's TxnSpanGCThreshold of split is not set")
@@ -3181,7 +3182,7 @@ func splitTrigger(
 			rightLease, *gcThreshold, *txnSpanGCThreshold,
 		)
 		if err != nil {
-			return enginepb.MVCCStats{}, EvalResult{}, errors.Wrap(err, "unable to write initial Replica state")
+			return enginepb.MVCCStats{}, result.Result{}, errors.Wrap(err, "unable to write initial Replica state")
 		}
 
 		if !rec.ClusterSettings().Version.IsActive(cluster.VersionSplitHardStateBelowRaft) {
@@ -3191,7 +3192,7 @@ func splitTrigger(
 			// won't write a HardState at all and is guaranteed to crash.
 			rsl := stateloader.Make(rec.ClusterSettings(), split.RightDesc.RangeID)
 			if err := rsl.SynthesizeRaftState(ctx, batch); err != nil {
-				return enginepb.MVCCStats{}, EvalResult{}, errors.Wrap(err, "unable to synthesize initial Raft state")
+				return enginepb.MVCCStats{}, result.Result{}, errors.Wrap(err, "unable to synthesize initial Raft state")
 			}
 		}
 
@@ -3213,7 +3214,7 @@ func splitTrigger(
 	// counters) aware.
 	rightDeltaMS := bothDeltaMS
 	rightDeltaMS.Subtract(leftDeltaMS)
-	var pd EvalResult
+	var pd result.Result
 	// This makes sure that no reads are happening in parallel; see #3148.
 	pd.Replicated.BlockReads = true
 	pd.Replicated.Split = &storagebase.Split{
@@ -3345,21 +3346,21 @@ func mergeTrigger(
 	ms *enginepb.MVCCStats,
 	merge *roachpb.MergeTrigger,
 	ts hlc.Timestamp,
-) (EvalResult, error) {
+) (result.Result, error) {
 	desc := rec.Desc()
 	if !bytes.Equal(desc.StartKey, merge.LeftDesc.StartKey) {
-		return EvalResult{}, errors.Errorf("LHS range start keys do not match: %s != %s",
+		return result.Result{}, errors.Errorf("LHS range start keys do not match: %s != %s",
 			desc.StartKey, merge.LeftDesc.StartKey)
 	}
 
 	if !desc.EndKey.Less(merge.LeftDesc.EndKey) {
-		return EvalResult{}, errors.Errorf("original LHS end key is not less than the post merge end key: %s >= %s",
+		return result.Result{}, errors.Errorf("original LHS end key is not less than the post merge end key: %s >= %s",
 			desc.EndKey, merge.LeftDesc.EndKey)
 	}
 
 	rightRangeID := merge.RightDesc.RangeID
 	if rightRangeID <= 0 {
-		return EvalResult{}, errors.Errorf("RHS range ID must be provided: %d", rightRangeID)
+		return result.Result{}, errors.Errorf("RHS range ID must be provided: %d", rightRangeID)
 	}
 
 	// Compute stats for premerged range, including current transaction.
@@ -3373,14 +3374,14 @@ func mergeTrigger(
 	// stats, which will need to be recomputed.
 	rightMS, err := engine.MVCCGetRangeStats(ctx, batch, rightRangeID)
 	if err != nil {
-		return EvalResult{}, err
+		return result.Result{}, err
 	}
 	rightMS.SysBytes, rightMS.SysCount = 0, 0
 	mergedMS.Add(rightMS)
 
 	// Copy the RHS range's AbortSpan to the new LHS one.
 	if _, err := rec.AbortSpan().CopyFrom(ctx, batch, &mergedMS, rightRangeID); err != nil {
-		return EvalResult{}, errors.Errorf("unable to copy AbortSpan to new split range: %s", err)
+		return result.Result{}, errors.Errorf("unable to copy AbortSpan to new split range: %s", err)
 	}
 
 	// Remove the RHS range's metadata. Note that we don't need to
@@ -3388,7 +3389,7 @@ func mergeTrigger(
 	// system-local stats contribution to 0.
 	localRangeIDKeyPrefix := keys.MakeRangeIDPrefix(rightRangeID)
 	if _, _, _, err := engine.MVCCDeleteRange(ctx, batch, nil, localRangeIDKeyPrefix, localRangeIDKeyPrefix.PrefixEnd(), math.MaxInt64, hlc.Timestamp{}, nil, false); err != nil {
-		return EvalResult{}, errors.Errorf("cannot remove range metadata %s", err)
+		return result.Result{}, errors.Errorf("cannot remove range metadata %s", err)
 	}
 
 	// Add in the stats for the RHS range's range keys.
@@ -3398,13 +3399,13 @@ func mergeTrigger(
 	localRangeKeyEnd := engine.MakeMVCCMetadataKey(keys.MakeRangeKeyPrefix(merge.RightDesc.EndKey))
 	msRange, err := iter.ComputeStats(localRangeKeyStart, localRangeKeyEnd, ts.WallTime)
 	if err != nil {
-		return EvalResult{}, errors.Errorf("unable to compute RHS range's local stats: %s", err)
+		return result.Result{}, errors.Errorf("unable to compute RHS range's local stats: %s", err)
 	}
 	mergedMS.Add(msRange)
 
 	// Set stats for updated range.
 	if err := makeReplicaStateLoader(rec).SetMVCCStats(ctx, batch, &mergedMS); err != nil {
-		return EvalResult{}, errors.Errorf("unable to write MVCC stats: %s", err)
+		return result.Result{}, errors.Errorf("unable to write MVCC stats: %s", err)
 	}
 
 	// Clear the timestamp cache. In case both the LHS and RHS replicas
@@ -3416,7 +3417,7 @@ func mergeTrigger(
 	mergedMS.Subtract(*ms)
 	*ms = mergedMS
 
-	var pd EvalResult
+	var pd result.Result
 	pd.Replicated.BlockReads = true
 	pd.Replicated.Merge = &storagebase.Merge{
 		MergeTrigger: *merge,
@@ -3429,15 +3430,15 @@ func changeReplicasTrigger(
 	rec batcheval.EvalContext,
 	batch engine.Batch,
 	change *roachpb.ChangeReplicasTrigger,
-) EvalResult {
-	var pd EvalResult
+) result.Result {
+	var pd result.Result
 	// After a successful replica addition or removal check to see if the
 	// range needs to be split. Splitting usually takes precedence over
 	// replication via configuration of the split and replicate queues, but
 	// if the split occurs concurrently with the replicas change the split
 	// can fail and won't retry until the next scanner cycle. Re-queuing
 	// the replica here removes that latency.
-	pd.Local.maybeAddToSplitQueue = true
+	pd.Local.MaybeAddToSplitQueue = true
 
 	// Gossip the first range whenever the range descriptor changes. We also
 	// gossip the first range whenever the lease holder changes, but that might
@@ -3445,7 +3446,7 @@ func changeReplicasTrigger(
 	// replica was being removed. Note that we attempt the gossiping even from
 	// the removed replica in case it was the lease-holder and it is still
 	// holding the lease.
-	pd.Local.gossipFirstRange = rec.IsFirstRange()
+	pd.Local.GossipFirstRange = rec.IsFirstRange()
 
 	var cpy roachpb.RangeDescriptor
 	{
@@ -3881,7 +3882,7 @@ func declareKeysLeaseInfo(
 // LeaseInfo returns information about the lease holder for the range.
 func evalLeaseInfo(
 	ctx context.Context, batch engine.ReadWriter, cArgs batcheval.CommandArgs, resp roachpb.Response,
-) (EvalResult, error) {
+) (result.Result, error) {
 	reply := resp.(*roachpb.LeaseInfoResponse)
 	lease, nextLease := cArgs.EvalCtx.GetLease()
 	if nextLease != nil {
@@ -3891,7 +3892,7 @@ func evalLeaseInfo(
 	} else {
 		reply.Lease = lease
 	}
-	return EvalResult{}, nil
+	return result.Result{}, nil
 }
 
 // TestingRelocateRange relocates a given range to a given set of stores. The first
