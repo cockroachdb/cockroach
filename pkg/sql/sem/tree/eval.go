@@ -2013,6 +2013,11 @@ type EvalPlanner interface {
 
 	// ParseType parses a column type.
 	ParseType(sql string) (coltypes.CastTargetType, error)
+
+	// IncrementSequence increments the given sequence and returns the result.
+	// It returns an error if the given name is not a sequence.
+	// The caller must ensure that seqName is fully qualified already.
+	IncrementSequence(context context.Context, seqName *TableName) (int64, error)
 }
 
 // CtxProvider is anything that can return a Context.

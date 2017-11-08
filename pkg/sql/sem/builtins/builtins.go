@@ -40,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
@@ -960,6 +961,33 @@ CockroachDB supports the following flags:
 				"Primary Key isn't defined for the table. The value is a combination of the " +
 				" insert timestamp and the ID of the node executing the statement, which " +
 				" guarantees this combination is globally unique.",
+		},
+	},
+
+	"nextval": {
+		tree.Builtin{
+			Types:      tree.ArgTypes{{"sequence_name", types.String}},
+			ReturnType: tree.FixedReturnType(types.Int),
+			Category:   categoryIDGeneration,
+			Impure:     true,
+			Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				name := tree.MustBeDString(args[0])
+				parsedNameWithIndex, err := parser.ParseTableNameWithIndex(string(name))
+				if err != nil {
+					return nil, err
+				}
+				parsedName := parsedNameWithIndex.Table
+				qualifiedName, err := evalCtx.Planner.QualifyWithDatabase(evalCtx.Ctx(), &parsedName)
+				if err != nil {
+					return nil, err
+				}
+				res, err := evalCtx.Planner.IncrementSequence(evalCtx.Ctx(), qualifiedName)
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDInt(tree.DInt(res)), nil
+			},
+			Info: "Advances the given sequence and returns its new value.",
 		},
 	},
 
