@@ -17,6 +17,7 @@ this test, you must:
 
 * Add it to the `package.json` so that anyone running the tests locally will be
   able to install it.
-* Add it to the `Dockerfile` for the
-  [postgres-test](https://github.com/cockroachdb/postgres-test) image (there's
-  an `npm install -g ...` line).
+* Rebuild the cockroach-acceptance container (see [../Dockerfile]), which will
+  automatically bake in the new dependency.
+
+[../Dockerfile]: ../Dockerfile
