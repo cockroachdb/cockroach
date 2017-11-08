@@ -83,11 +83,13 @@ type ScrubOption interface {
 }
 
 // scrubOptionType implements the ScrubOption interface
-func (*ScrubOptionIndex) scrubOptionType()    {}
-func (*ScrubOptionPhysical) scrubOptionType() {}
+func (*ScrubOptionIndex) scrubOptionType()      {}
+func (*ScrubOptionPhysical) scrubOptionType()   {}
+func (*ScrubOptionConstraint) scrubOptionType() {}
 
-func (n *ScrubOptionIndex) String() string    { return AsString(n) }
-func (n *ScrubOptionPhysical) String() string { return AsString(n) }
+func (n *ScrubOptionIndex) String() string      { return AsString(n) }
+func (n *ScrubOptionPhysical) String() string   { return AsString(n) }
+func (n *ScrubOptionConstraint) String() string { return AsString(n) }
 
 // ScrubOptionIndex represents an INDEX scrub check.
 type ScrubOptionIndex struct {
@@ -112,4 +114,21 @@ type ScrubOptionPhysical struct{}
 // Format implements the NodeFormatter interface.
 func (n *ScrubOptionPhysical) Format(buf *bytes.Buffer, f FmtFlags) {
 	buf.WriteString("PHYSICAL")
+}
+
+// ScrubOptionConstraint represents a CONSTRAINT scrub check.
+type ScrubOptionConstraint struct {
+	ConstraintNames NameList
+}
+
+// Format implements the NodeFormatter interface.
+func (n *ScrubOptionConstraint) Format(buf *bytes.Buffer, f FmtFlags) {
+	buf.WriteString("CONSTRAINT ")
+	if n.ConstraintNames != nil {
+		buf.WriteByte('(')
+		n.ConstraintNames.Format(buf, f)
+		buf.WriteByte(')')
+	} else {
+		buf.WriteString("ALL")
+	}
 }
