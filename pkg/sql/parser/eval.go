@@ -2003,6 +2003,11 @@ type EvalPlanner interface {
 	// QualifyWithDatabase resolves a possibly unqualified table name into a
 	// normalized table name that is qualified by database.
 	QualifyWithDatabase(ctx context.Context, t *NormalizableTableName) (*TableName, error)
+
+	// IncrementSequence increments the given sequence and returns the result.
+	// It returns an error if the given name is not a sequence.
+	// The caller must ensure that seqName is fully qualified already.
+	IncrementSequence(context context.Context, seqName *TableName) (int64, error)
 }
 
 // CtxProvider is anything that can return a Context.
