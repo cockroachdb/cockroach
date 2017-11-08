@@ -353,6 +353,7 @@ var (
 		types.Interval,
 		types.UUID,
 		types.INet,
+		types.JSON,
 	}
 	strValAvailBytesString = []types.T{types.Bytes, types.String, types.UUID, types.INet}
 	strValAvailBytes       = []types.T{types.Bytes, types.UUID}
@@ -429,6 +430,8 @@ func (expr *StrVal) ResolveAsType(ctx *SemaContext, typ types.T) (Datum, error) 
 		return ParseDDate(expr.s, ctx.getLocation())
 	case types.INet:
 		return ParseDIPAddrFromINetString(expr.s)
+	case types.JSON:
+		return ParseDJSON(expr.s)
 	case types.Timestamp:
 		return ParseDTimestamp(expr.s, time.Microsecond)
 	case types.TimestampTZ:
