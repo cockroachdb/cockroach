@@ -17,6 +17,7 @@ package tscache
 import (
 	"fmt"
 	"math/rand"
+	"runtime"
 	"strconv"
 	"sync"
 	"testing"
@@ -827,12 +828,12 @@ func TestIntervalSklConcurrency(t *testing.T) {
 			// for testing timestamp collisions.
 			testutils.RunTrueAndFalse(t, "useClock", func(t *testing.T, useClock bool) {
 				const n = 10000
-				const slots = 20
 
 				var wg sync.WaitGroup
 				clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 				s := newIntervalSkl(tc.size)
 
+				slots := 5 * runtime.NumCPU()
 				for i := 0; i < slots; i++ {
 					wg.Add(1)
 
