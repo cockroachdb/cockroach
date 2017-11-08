@@ -18,7 +18,7 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file
 
-package parser
+package lex
 
 import (
 	"bytes"
@@ -34,18 +34,20 @@ var mustQuoteMap = map[byte]bool{
 	'}': true,
 }
 
-type encodeFlags struct {
-	// If set, strings will be rendered without wrapping quotes if they
-	// contain no special characters.
-	bareStrings bool
-	// If set, identifiers will be rendered without wrapping quotes.
-	bareIdentifiers bool
+// EncodeFlags influence the formatting of strings and identifiers.
+type EncodeFlags struct {
+	// BareStrings indicates that strings will be rendered without
+	// wrapping quotes if they contain no special characters.
+	BareStrings bool
+	// BareIdentifiers indicates that identifiers will be rendered
+	// without wrapping quotes.
+	BareIdentifiers bool
 }
 
-// encodeSQLString writes a string literal to buf. All unicode and
+// EncodeSQLString writes a string literal to buf. All unicode and
 // non-printable characters are escaped.
-func encodeSQLString(buf *bytes.Buffer, in string) {
-	encodeSQLStringWithFlags(buf, in, encodeFlags{})
+func EncodeSQLString(buf *bytes.Buffer, in string) {
+	EncodeSQLStringWithFlags(buf, in, EncodeFlags{})
 }
 
 // EscapeSQLString returns an escaped SQL representation of the given
@@ -53,26 +55,28 @@ func encodeSQLString(buf *bytes.Buffer, in string) {
 // for input to the parser.
 func EscapeSQLString(in string) string {
 	var buf bytes.Buffer
-	encodeSQLString(&buf, in)
+	EncodeSQLString(&buf, in)
 	return buf.String()
 }
 
-func hexEncodeString(buf *bytes.Buffer, in string) {
+// HexEncodeString writes a hexadecimal representation of the string
+// to buf.
+func HexEncodeString(buf *bytes.Buffer, in string) {
 	for i := 0; i < len(in); i++ {
 		buf.Write(stringencoding.RawHexMap[in[i]])
 	}
 }
 
-// encodeSQLStringWithFlags writes a string literal to buf. All
+// EncodeSQLStringWithFlags writes a string literal to buf. All
 // unicode and non-printable characters are escaped. flags controls
 // the output format: if encodeBareString is set, the output string
 // will not be wrapped in quotes if the strings contains no special
 // characters.
-func encodeSQLStringWithFlags(buf *bytes.Buffer, in string, flags encodeFlags) {
+func EncodeSQLStringWithFlags(buf *bytes.Buffer, in string, flags EncodeFlags) {
 	// See http://www.postgresql.org/docs/9.4/static/sql-syntax-lexical.html
 	start := 0
 	escapedString := false
-	bareStrings := flags.bareStrings
+	bareStrings := flags.BareStrings
 	// Loop through each unicode code point.
 	for i, r := range in {
 		ch := byte(r)
@@ -110,9 +114,9 @@ func encodeSQLStringWithFlags(buf *bytes.Buffer, in string, flags encodeFlags) {
 	}
 }
 
-// encodeSQLStringInsideArray writes a string literal to buf using the "string
+// EncodeSQLStringInsideArray writes a string literal to buf using the "string
 // within array" formatting.
-func encodeSQLStringInsideArray(buf *bytes.Buffer, in string) {
+func EncodeSQLStringInsideArray(buf *bytes.Buffer, in string) {
 	buf.WriteByte('"')
 	// Loop through each unicode code point.
 	for i, r := range in {
@@ -128,26 +132,35 @@ func encodeSQLStringInsideArray(buf *bytes.Buffer, in string) {
 	buf.WriteByte('"')
 }
 
-func encodeUnrestrictedSQLIdent(buf *bytes.Buffer, s string, flags encodeFlags) {
-	if flags.bareIdentifiers || isBareIdentifier(s) {
+// EncodeUnrestrictedSQLIdent writes the identifier in s to buf.
+// The identifier is only quoted if the flags don't tell otherwise and
+// the identifier contains special characters.
+func EncodeUnrestrictedSQLIdent(buf *bytes.Buffer, s string, flags EncodeFlags) {
+	if flags.BareIdentifiers || isBareIdentifier(s) {
 		buf.WriteString(s)
 		return
 	}
 	encodeEscapedSQLIdent(buf, s, flags)
 }
 
-func encodeRestrictedSQLIdent(buf *bytes.Buffer, s string, flags encodeFlags) {
-	if flags.bareIdentifiers || (!isReservedKeyword(s) && isBareIdentifier(s)) {
+// EncodeRestrictedSQLIdent writes the identifier in s to buf. The
+// identifier is quoted if either the flags ask for it, the identifier
+// contains special characters, or the identifier is a reserved SQL
+// keyword.
+func EncodeRestrictedSQLIdent(buf *bytes.Buffer, s string, flags EncodeFlags) {
+	if flags.BareIdentifiers || (!isReservedKeyword(s) && isBareIdentifier(s)) {
 		buf.WriteString(s)
 		return
 	}
 	encodeEscapedSQLIdent(buf, s, flags)
 }
 
-func encodeEscapedSQLIdent(buf *bytes.Buffer, s string, flags encodeFlags) {
-	bare := flags.bareIdentifiers
-	if !bare {
-		buf.WriteString(`"`)
+// encodeEscapedSQLIdent writes the identifier in s to buf. The
+// identifier is quoted based on flags. Double quotes inside the
+// identifier are escaped.
+func encodeEscapedSQLIdent(buf *bytes.Buffer, s string, flags EncodeFlags) {
+	if !flags.BareIdentifiers {
+		buf.WriteByte('"')
 	}
 	start := 0
 	for i, n := 0, len(s); i < n; i++ {
@@ -165,12 +178,13 @@ func encodeEscapedSQLIdent(buf *bytes.Buffer, s string, flags encodeFlags) {
 	if start < len(s) {
 		buf.WriteString(s[start:])
 	}
-	if !bare {
-		buf.WriteString(`"`)
+	if !flags.BareIdentifiers {
+		buf.WriteByte('"')
 	}
 }
 
-func encodeSQLBytes(buf *bytes.Buffer, in string) {
+// EncodeSQLBytes encodes the SQL byte array in 'in' to buf.
+func EncodeSQLBytes(buf *bytes.Buffer, in string) {
 	start := 0
 	buf.WriteString("b'")
 	// Loop over the bytes of the string (i.e., don't use range over unicode

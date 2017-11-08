@@ -23,6 +23,7 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
@@ -162,7 +163,7 @@ func (p *planner) ShowVar(ctx context.Context, n *parser.ShowVar) (planNode, err
 		return nil, fmt.Errorf("unknown variable: %q", origName)
 	}
 
-	varName := parser.EscapeSQLString(name)
+	varName := lex.EscapeSQLString(name)
 	return p.delegateQuery(ctx, "SHOW "+varName,
 		fmt.Sprintf(
 			`SELECT value AS %[1]s FROM crdb_internal.session_variables `+
@@ -230,9 +231,9 @@ func (p *planner) showTableDetails(
 
 	return p.delegateQuery(ctx, showType,
 		fmt.Sprintf(query,
-			parser.EscapeSQLString(db),
-			parser.EscapeSQLString(tn.Table()),
-			parser.EscapeSQLString(tn.String()),
+			lex.EscapeSQLString(db),
+			lex.EscapeSQLString(tn.Table()),
+			lex.EscapeSQLString(tn.String()),
 			tn.DatabaseName.String()),
 		initialCheck, nil)
 }
@@ -431,7 +432,7 @@ func (p *planner) ShowGrants(ctx context.Context, n *parser.ShowGrants) (planNod
 		}
 
 		for _, db := range dbNames {
-			params = append(params, parser.EscapeSQLString(db))
+			params = append(params, lex.EscapeSQLString(db))
 		}
 
 		fmt.Fprint(&source, dbPrivQuery)
@@ -476,8 +477,8 @@ func (p *planner) ShowGrants(ctx context.Context, n *parser.ShowGrants) (planNod
 
 			for i := range allTables {
 				params = append(params, fmt.Sprintf("(%s,%s)",
-					parser.EscapeSQLString(allTables[i].Database()),
-					parser.EscapeSQLString(allTables[i].Table())))
+					lex.EscapeSQLString(allTables[i].Database()),
+					lex.EscapeSQLString(allTables[i].Table())))
 			}
 
 			if len(params) == 0 {
@@ -500,7 +501,7 @@ func (p *planner) ShowGrants(ctx context.Context, n *parser.ShowGrants) (planNod
 	if n.Grantees != nil {
 		params = params[:0]
 		for _, grantee := range n.Grantees.ToStrings() {
-			params = append(params, parser.EscapeSQLString(grantee))
+			params = append(params, lex.EscapeSQLString(grantee))
 		}
 		fmt.Fprintf(&cond, ` AND "User" IN (%s)`, strings.Join(params, ","))
 	}
@@ -656,7 +657,7 @@ func (p *planner) ShowTables(ctx context.Context, n *parser.ShowTables) (planNod
 				ORDER BY tables.TABLE_NAME`
 
 	return p.delegateQuery(ctx, "SHOW TABLES",
-		fmt.Sprintf(getTablesQuery, parser.EscapeSQLString(name)),
+		fmt.Sprintf(getTablesQuery, lex.EscapeSQLString(name)),
 		initialCheck, nil)
 }
 

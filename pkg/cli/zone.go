@@ -24,7 +24,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/cockroachdb/cockroach/pkg/config"
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 )
 
 func queryZoneSpecifiers(conn *sqlConn) ([]string, error) {
@@ -243,7 +243,7 @@ func runSetZone(cmd *cobra.Command, args []string) error {
 
 	err = conn.ExecTxn(func(conn *sqlConn) error {
 		if err := conn.Exec(fmt.Sprintf(`ALTER %s EXPERIMENTAL CONFIGURE ZONE %s`, zs,
-			parser.EscapeSQLString(string(configYAML))), nil); err != nil {
+			lex.EscapeSQLString(string(configYAML))), nil); err != nil {
 			return err
 		}
 		vals, err := conn.QueryRow(fmt.Sprintf(

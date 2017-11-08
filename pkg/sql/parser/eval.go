@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
@@ -2618,7 +2619,7 @@ func performCast(ctx *EvalContext, d Datum, t CastTargetType) (Datum, error) {
 		case *DBytes:
 			var buf bytes.Buffer
 			buf.WriteString("\\x")
-			hexEncodeString(&buf, string(*t))
+			lex.HexEncodeString(&buf, string(*t))
 			s = buf.String()
 		case *DOid:
 			s = t.name

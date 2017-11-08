@@ -21,7 +21,7 @@ import (
 	yaml "gopkg.in/yaml.v2"
 
 	"github.com/cockroachdb/cockroach/pkg/config"
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 )
 
@@ -59,7 +59,7 @@ func DeleteZoneConfig(sqlDB *SQLRunner, target string) {
 func SetZoneConfig(sqlDB *SQLRunner, target string, config string) {
 	sqlDB.Helper()
 	sqlDB.Exec(fmt.Sprintf("ALTER %s EXPERIMENTAL CONFIGURE ZONE %s",
-		target, parser.EscapeSQLString(config)))
+		target, lex.EscapeSQLString(config)))
 }
 
 // TxnSetZoneConfig updates the specified zone config through the SQL interface
@@ -67,7 +67,7 @@ func SetZoneConfig(sqlDB *SQLRunner, target string, config string) {
 func TxnSetZoneConfig(sqlDB *SQLRunner, txn *gosql.Tx, target string, config string) {
 	sqlDB.Helper()
 	_, err := txn.Exec(fmt.Sprintf("ALTER %s EXPERIMENTAL CONFIGURE ZONE %s",
-		target, parser.EscapeSQLString(config)))
+		target, lex.EscapeSQLString(config)))
 	if err != nil {
 		sqlDB.Fatal(err)
 	}

@@ -23,6 +23,7 @@ import (
     "go/constant"
     "go/token"
 
+    "github.com/cockroachdb/cockroach/pkg/sql/lex"
     "github.com/cockroachdb/cockroach/pkg/sql/privilege"
 )
 

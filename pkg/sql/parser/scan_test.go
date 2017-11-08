@@ -19,6 +19,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -152,12 +153,12 @@ foo`, "", "foo"},
 }
 
 func TestScanKeyword(t *testing.T) {
-	for kwName, kwID := range keywords {
+	for kwName, kwID := range lex.Keywords {
 		s := MakeScanner(kwName)
 		var lval sqlSymType
 		id := s.Lex(&lval)
-		if kwID.tok != id {
-			t.Errorf("%s: expected %d, but found %d", kwName, kwID.tok, id)
+		if kwID.Tok != id {
+			t.Errorf("%s: expected %d, but found %d", kwName, kwID.Tok, id)
 		}
 	}
 }

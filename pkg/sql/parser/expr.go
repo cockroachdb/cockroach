@@ -18,6 +18,7 @@ import (
 	"bytes"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 )
 
@@ -1241,7 +1242,7 @@ type CollateExpr struct {
 func (node *CollateExpr) Format(buf *bytes.Buffer, f FmtFlags) {
 	exprFmtWithParen(buf, f, node.Expr)
 	buf.WriteString(" COLLATE ")
-	encodeUnrestrictedSQLIdent(buf, node.Locale, encodeFlags{})
+	lex.EncodeUnrestrictedSQLIdent(buf, node.Locale, lex.EncodeFlags{})
 }
 
 func (node *AliasedTableExpr) String() string { return AsString(node) }
