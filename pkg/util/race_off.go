@@ -19,3 +19,8 @@ package util
 
 // RaceEnabled is true if CockroachDB was built with the race build tag.
 const RaceEnabled = false
+
+// RacePreempt adds a goroutine preemption point if CockroachDB was built with
+// the race build tag. The function is a no-op (and should be optimized out
+// through dead code elimination) if the race build tag was not used.
+func RacePreempt() {}
