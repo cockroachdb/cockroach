@@ -615,7 +615,7 @@ func (nl *NodeLiveness) updateLiveness(
 		if err := nl.updateLivenessAttempt(ctx, newLiveness, oldLiveness, handleCondFailed); err != nil {
 			// Intentionally don't errors.Cause() the error, or we'd hop past errRetryLiveness.
 			if _, ok := err.(*errRetryLiveness); ok {
-				log.Eventf(ctx, "retrying liveness update after %s", err)
+				log.Infof(ctx, "retrying liveness update after %s", err)
 				continue
 			}
 			return err
