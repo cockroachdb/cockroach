@@ -121,10 +121,6 @@ func (r *Replica) ClusterSettings() *cluster.Settings {
 	return r.store.cfg.Settings
 }
 
-func makeReplicaStateLoader(rec batcheval.EvalContext) stateloader.StateLoader {
-	return stateloader.Make(rec.ClusterSettings(), rec.GetRangeID())
-}
-
 // In-memory state, immutable fields, and debugging methods are accessed directly.
 
 // StoreID returns the Replica's StoreID.

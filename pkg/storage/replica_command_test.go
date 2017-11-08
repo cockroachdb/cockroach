@@ -107,13 +107,13 @@ func TestDeclareKeysResolveIntent(t *testing.T) {
 				if !ranged {
 					cArgs.Args = &ri
 					declareKeysResolveIntent(desc, h, &ri, &spans)
-					if _, err := evalResolveIntent(ctx, batch, cArgs, &roachpb.ResolveIntentResponse{}); err != nil {
+					if _, err := batcheval.ResolveIntent(ctx, batch, cArgs, &roachpb.ResolveIntentResponse{}); err != nil {
 						t.Fatal(err)
 					}
 				} else {
 					cArgs.Args = &rir
 					declareKeysResolveIntentRange(desc, h, &rir, &spans)
-					if _, err := evalResolveIntentRange(ctx, batch, cArgs, &roachpb.ResolveIntentRangeResponse{}); err != nil {
+					if _, err := batcheval.ResolveIntentRange(ctx, batch, cArgs, &roachpb.ResolveIntentRangeResponse{}); err != nil {
 						t.Fatal(err)
 					}
 				}
