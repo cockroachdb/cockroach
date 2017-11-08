@@ -30,6 +30,7 @@ import (
 	"unsafe"
 
 	"github.com/lib/pq/oid"
+	"github.com/pkg/errors"
 	"golang.org/x/text/collate"
 	"golang.org/x/text/language"
 
@@ -1950,7 +1951,7 @@ type DJSON struct{ json.JSON }
 func ParseDJSON(s string) (Datum, error) {
 	j, err := json.ParseJSON(s)
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "could not parse JSON")
 	}
 	return &DJSON{j}, nil
 }

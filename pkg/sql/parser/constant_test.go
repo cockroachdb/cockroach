@@ -218,6 +218,13 @@ func mustParseDInterval(t *testing.T, s string) Datum {
 	}
 	return d
 }
+func mustParseDJSON(t *testing.T, s string) Datum {
+	d, err := ParseDJSON(s)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return d
+}
 
 var parseFuncs = map[types.T]func(*testing.T, string) Datum{
 	types.String:      func(t *testing.T, s string) Datum { return NewDString(s) },
@@ -227,6 +234,7 @@ var parseFuncs = map[types.T]func(*testing.T, string) Datum{
 	types.Timestamp:   mustParseDTimestamp,
 	types.TimestampTZ: mustParseDTimestampTZ,
 	types.Interval:    mustParseDInterval,
+	types.JSON:        mustParseDJSON,
 }
 
 func typeSet(tys ...types.T) map[types.T]struct{} {
@@ -253,7 +261,7 @@ func TestStringConstantResolveAvailableTypes(t *testing.T) {
 		},
 		{
 			c:            &StrVal{s: "true", bytesEsc: false},
-			parseOptions: typeSet(types.String, types.Bytes, types.Bool),
+			parseOptions: typeSet(types.String, types.Bytes, types.Bool, types.JSON),
 		},
 		{
 			c:            &StrVal{s: "2010-09-28", bytesEsc: false},
@@ -290,6 +298,10 @@ func TestStringConstantResolveAvailableTypes(t *testing.T) {
 		{
 			c:            &StrVal{s: "PT12H2M", bytesEsc: true},
 			parseOptions: typeSet(types.String, types.Bytes),
+		},
+		{
+			c:            &StrVal{s: `{"a": 1}`, bytesEsc: false},
+			parseOptions: typeSet(types.String, types.Bytes, types.JSON),
 		},
 		{
 			c:            &StrVal{s: string([]byte{0xff, 0xfe, 0xfd}), bytesEsc: true},

@@ -2746,6 +2746,8 @@ func performCast(ctx *EvalContext, d Datum, t CastTargetType) (Datum, error) {
 		switch v := d.(type) {
 		case *DString:
 			return ParseDJSON(string(*v))
+		case *DJSON:
+			return v, nil
 		}
 	case *ArrayColType:
 		if s, ok := d.(*DString); ok {
