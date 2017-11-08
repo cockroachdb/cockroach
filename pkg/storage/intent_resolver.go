@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -275,7 +276,7 @@ func (ir *intentResolver) maybePushTransactions(
 // differently and would be better served by different entry points,
 // but combining them simplifies the plumbing necessary in Replica.
 func (ir *intentResolver) processIntentsAsync(
-	ctx context.Context, r *Replica, intents []intentsWithArg, allowSyncProcessing bool,
+	ctx context.Context, r *Replica, intents []result.IntentsWithArg, allowSyncProcessing bool,
 ) {
 	if r.store.TestingKnobs().DisableAsyncIntentResolution {
 		return
@@ -308,7 +309,7 @@ func (ir *intentResolver) processIntentsAsync(
 }
 
 func (ir *intentResolver) processIntents(
-	ctx context.Context, r *Replica, item intentsWithArg, now hlc.Timestamp,
+	ctx context.Context, r *Replica, item result.IntentsWithArg, now hlc.Timestamp,
 ) {
 	// Everything here is best effort; so give the context a timeout to avoid
 	// waiting too long. This may be a larger timeout than the context already
@@ -316,10 +317,10 @@ func (ir *intentResolver) processIntents(
 	ctxWithTimeout, cancel := context.WithTimeout(ctx, intentResolverTimeout)
 	defer cancel()
 
-	if item.args.Method() != roachpb.EndTransaction {
+	if item.Arg.Method() != roachpb.EndTransaction {
 		h := roachpb.Header{Timestamp: now}
 		resolveIntents, pushErr := ir.maybePushTransactions(ctxWithTimeout,
-			item.intents, h, roachpb.PUSH_TOUCH, true /* skipInFlight */)
+			item.Intents, h, roachpb.PUSH_TOUCH, true /* skipInFlight */)
 
 		// resolveIntents with poison=true because we're resolving
 		// intents outside of the context of an EndTransaction.
@@ -358,7 +359,7 @@ func (ir *intentResolver) processIntents(
 		// example, an attempt to explicitly rollback the transaction
 		// may succeed (triggering this code path), but the result may
 		// not make it back to the client.
-		if err := ir.resolveIntents(ctxWithTimeout, item.intents,
+		if err := ir.resolveIntents(ctxWithTimeout, item.Intents,
 			ResolveOptions{Wait: true, Poison: false}); err != nil {
 			log.Warningf(ctx, "%s: failed to resolve intents: %s", r, err)
 			return
@@ -367,7 +368,7 @@ func (ir *intentResolver) processIntents(
 		// We successfully resolved the intents, so we're able to GC from
 		// the txn span directly.
 		b := &client.Batch{}
-		txn := item.intents[0].Txn
+		txn := item.Intents[0].Txn
 		txnKey := keys.TransactionKey(txn.Key, txn.ID)
 
 		// This is pretty tricky. Transaction keys are range-local and

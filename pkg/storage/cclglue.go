@@ -19,6 +19,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/batcheval"
+	"github.com/cockroachdb/cockroach/pkg/storage/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/pkg/errors"
 )
@@ -31,8 +32,8 @@ func makeUnimplementedCommand(method roachpb.Method) Command {
 		DeclareKeys: batcheval.DefaultDeclareKeys,
 		Eval: func(
 			_ context.Context, _ engine.ReadWriter, _ batcheval.CommandArgs, _ roachpb.Response,
-		) (EvalResult, error) {
-			return EvalResult{}, errors.Errorf("unimplemented command: %s", method.String())
+		) (result.Result, error) {
+			return result.Result{}, errors.Errorf("unimplemented command: %s", method.String())
 		}}
 }
 
