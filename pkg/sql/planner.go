@@ -19,7 +19,9 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
@@ -261,6 +263,21 @@ func (p *planner) QueryRow(
 	default:
 		return nil, &parser.MultipleResultsError{SQL: sql}
 	}
+}
+
+// IncrementSequence increments the given sequence and returns the result.
+// Returns an error if the given name is not a sequence.
+func (p *planner) IncrementSequence(ctx context.Context, seqName *parser.TableName) (int64, error) {
+	descriptor, err := p.getTableDesc(ctx, seqName)
+	if err != nil {
+		return 0, err
+	}
+	if descriptor.SequenceOpts == nil {
+		return 0, pgerror.NewErrorf(pgerror.CodeWrongObjectTypeError, `"%s" is not a sequence`, seqName)
+	}
+	seqValueKey := keys.MakeSequenceKey(uint32(descriptor.ID))
+	return client.IncrementValRetryable(
+		ctx, p.txn.DB(), seqValueKey, descriptor.SequenceOpts.Increment)
 }
 
 // queryRows executes a SQL query string where multiple result rows are returned.
