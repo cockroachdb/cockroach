@@ -2056,6 +2056,8 @@ scrub_database_stmt:
 // Options:
 //   SCRUB TABLE ... WITH OPTIONS INDEX ALL
 //   SCRUB TABLE ... WITH OPTIONS INDEX (<index>...)
+//   SCRUB TABLE ... WITH OPTIONS CONSTRAINT ALL
+//   SCRUB TABLE ... WITH OPTIONS CONSTRAINT (<constraint>...)
 //   SCRUB TABLE ... WITH OPTIONS PHYSICAL
 //
 scrub_table_stmt:
@@ -2086,6 +2088,14 @@ scrub_option:
 | INDEX '(' name_list ')'
   {
     $$.val = &ScrubOptionIndex{IndexNames: $3.nameList()}
+  }
+| CONSTRAINT ALL
+  {
+    $$.val = &ScrubOptionConstraint{}
+  }
+| CONSTRAINT '(' name_list ')'
+  {
+    $$.val = &ScrubOptionConstraint{ConstraintNames: $3.nameList()}
   }
 | PHYSICAL
   {

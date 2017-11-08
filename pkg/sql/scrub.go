@@ -175,6 +175,7 @@ func (n *scrubNode) startScrubTable(
 	// statement.
 	var indexesSet bool
 	var physicalCheckSet bool
+	var constraintsSet bool
 	for _, option := range n.n.Options {
 		switch v := option.(type) {
 		case *parser.ScrubOptionIndex:
@@ -195,6 +196,12 @@ func (n *scrubNode) startScrubTable(
 			}
 			physicalCheckSet = true
 			// TODO(joey): Initialize physical index to check.
+		case *parser.ScrubOptionConstraint:
+			if constraintsSet {
+				return pgerror.NewErrorf(pgerror.CodeSyntaxError,
+					"cannot specify CONSTRAINT option more than once")
+			}
+			constraintsSet = true
 		default:
 			panic(fmt.Sprintf("Unhandled SCRUB option received: %+v", v))
 		}
