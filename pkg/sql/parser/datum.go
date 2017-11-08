@@ -36,6 +36,7 @@ import (
 
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
@@ -833,9 +834,9 @@ func (*DString) AmbiguousFormat() bool { return true }
 // Format implements the NodeFormatter interface.
 func (d *DString) Format(buf *bytes.Buffer, f FmtFlags) {
 	if f.withinArray {
-		encodeSQLStringInsideArray(buf, string(*d))
+		lex.EncodeSQLStringInsideArray(buf, string(*d))
 	} else {
-		encodeSQLStringWithFlags(buf, string(*d), f.encodeFlags)
+		lex.EncodeSQLStringWithFlags(buf, string(*d), f.encodeFlags)
 	}
 }
 
@@ -901,11 +902,11 @@ func (*DCollatedString) AmbiguousFormat() bool { return false }
 // Format implements the NodeFormatter interface.
 func (d *DCollatedString) Format(buf *bytes.Buffer, f FmtFlags) {
 	if f.withinArray {
-		encodeSQLStringInsideArray(buf, d.Contents)
+		lex.EncodeSQLStringInsideArray(buf, d.Contents)
 	} else {
-		encodeSQLString(buf, d.Contents)
+		lex.EncodeSQLString(buf, d.Contents)
 		buf.WriteString(" COLLATE ")
-		encodeUnrestrictedSQLIdent(buf, d.Locale, encodeFlags{})
+		lex.EncodeUnrestrictedSQLIdent(buf, d.Locale, lex.EncodeFlags{})
 	}
 }
 
@@ -1127,11 +1128,11 @@ func (*DUuid) AmbiguousFormat() bool { return false }
 
 // Format implements the NodeFormatter interface.
 func (d *DUuid) Format(buf *bytes.Buffer, f FmtFlags) {
-	if !f.encodeFlags.bareStrings {
+	if !f.encodeFlags.BareStrings {
 		buf.WriteByte('\'')
 	}
 	buf.WriteString(d.UUID.String())
-	if !f.encodeFlags.bareStrings {
+	if !f.encodeFlags.BareStrings {
 		buf.WriteByte('\'')
 	}
 }
@@ -1285,11 +1286,11 @@ func (*DIPAddr) AmbiguousFormat() bool {
 
 // Format implements the NodeFormatter interface.
 func (d *DIPAddr) Format(buf *bytes.Buffer, f FmtFlags) {
-	if !f.encodeFlags.bareStrings {
+	if !f.encodeFlags.BareStrings {
 		buf.WriteByte('\'')
 	}
 	buf.WriteString(d.IPAddr.String())
-	if !f.encodeFlags.bareStrings {
+	if !f.encodeFlags.BareStrings {
 		buf.WriteByte('\'')
 	}
 }
@@ -1394,11 +1395,11 @@ func (*DDate) AmbiguousFormat() bool { return true }
 
 // Format implements the NodeFormatter interface.
 func (d *DDate) Format(buf *bytes.Buffer, f FmtFlags) {
-	if !f.encodeFlags.bareStrings {
+	if !f.encodeFlags.BareStrings {
 		buf.WriteByte('\'')
 	}
 	buf.WriteString(timeutil.Unix(int64(*d)*secondsInDay, 0).Format(dateFormat))
-	if !f.encodeFlags.bareStrings {
+	if !f.encodeFlags.BareStrings {
 		buf.WriteByte('\'')
 	}
 }
@@ -1627,11 +1628,11 @@ func (*DTimestamp) AmbiguousFormat() bool { return true }
 
 // Format implements the NodeFormatter interface.
 func (d *DTimestamp) Format(buf *bytes.Buffer, f FmtFlags) {
-	if !f.encodeFlags.bareStrings {
+	if !f.encodeFlags.BareStrings {
 		buf.WriteByte('\'')
 	}
 	buf.WriteString(d.UTC().Format(TimestampOutputFormat))
-	if !f.encodeFlags.bareStrings {
+	if !f.encodeFlags.BareStrings {
 		buf.WriteByte('\'')
 	}
 }
@@ -1724,11 +1725,11 @@ func (*DTimestampTZ) AmbiguousFormat() bool { return true }
 
 // Format implements the NodeFormatter interface.
 func (d *DTimestampTZ) Format(buf *bytes.Buffer, f FmtFlags) {
-	if !f.encodeFlags.bareStrings {
+	if !f.encodeFlags.BareStrings {
 		buf.WriteByte('\'')
 	}
 	buf.WriteString(d.Time.Format(TimestampOutputFormat))
-	if !f.encodeFlags.bareStrings {
+	if !f.encodeFlags.BareStrings {
 		buf.WriteByte('\'')
 	}
 }
@@ -1930,11 +1931,11 @@ func (*DInterval) AmbiguousFormat() bool { return true }
 
 // Format implements the NodeFormatter interface.
 func (d *DInterval) Format(buf *bytes.Buffer, f FmtFlags) {
-	if !f.encodeFlags.bareStrings {
+	if !f.encodeFlags.BareStrings {
 		buf.WriteByte('\'')
 	}
 	d.Duration.Format(buf)
-	if !f.encodeFlags.bareStrings {
+	if !f.encodeFlags.BareStrings {
 		buf.WriteByte('\'')
 	}
 }
@@ -2666,7 +2667,7 @@ func (d *DOid) Format(buf *bytes.Buffer, f FmtFlags) {
 	if d.semanticType == oidColTypeOid || d.name == "" {
 		FormatNode(buf, f, &d.DInt)
 	} else {
-		encodeSQLStringWithFlags(buf, d.name, encodeFlags{bareStrings: true})
+		lex.EncodeSQLStringWithFlags(buf, d.name, lex.EncodeFlags{BareStrings: true})
 	}
 }
 

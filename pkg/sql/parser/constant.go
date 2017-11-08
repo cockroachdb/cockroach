@@ -25,6 +25,7 @@ import (
 
 	"github.com/pkg/errors"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 )
@@ -333,9 +334,9 @@ func NewStrVal(s string) *StrVal {
 // Format implements the NodeFormatter interface.
 func (expr *StrVal) Format(buf *bytes.Buffer, f FmtFlags) {
 	if expr.bytesEsc {
-		encodeSQLBytes(buf, expr.s)
+		lex.EncodeSQLBytes(buf, expr.s)
 	} else {
-		encodeSQLStringWithFlags(buf, expr.s, f.encodeFlags)
+		lex.EncodeSQLStringWithFlags(buf, expr.s, f.encodeFlags)
 	}
 }
 
