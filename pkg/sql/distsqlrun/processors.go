@@ -460,6 +460,12 @@ func newProcessor(
 		}
 		return newAlgebraicSetOp(flowCtx, core.SetOp, inputs[0], inputs[1], post, outputs[0])
 	}
+	if core.Sampler != nil {
+		if err := checkNumInOut(inputs, outputs, 1, 1); err != nil {
+			return nil, err
+		}
+		return newSamplerProcessor(flowCtx, core.Sampler, inputs[0], post, outputs[0])
+	}
 	if core.ReadCSV != nil {
 		if err := checkNumInOut(inputs, outputs, 0, 1); err != nil {
 			return nil, err
