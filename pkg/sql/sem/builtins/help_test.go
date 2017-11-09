@@ -20,6 +20,7 @@ import (
 	"testing"
 	"unicode"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 )
 
@@ -30,7 +31,7 @@ func TestHelpFunctions(t *testing.T) {
 			continue
 		}
 		t.Run(f, func(t *testing.T) {
-			_, err := Parse("select " + f + "(??")
+			_, err := parser.Parse("select " + f + "(??")
 			if err == nil {
 				t.Errorf("parser didn't trigger error")
 				return

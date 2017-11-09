@@ -21,24 +21,27 @@ import (
 
 	"golang.org/x/net/context"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 )
 
-// testAggregateResultDeepCopy verifies that Datum returned from AggregateFunc's
+// testAggregateResultDeepCopy verifies that parser.Datum returned from parser.AggregateFunc's
 // Result() method are not mutated during future accumulation. It verifies this by
 // printing all values to strings immediately after calling Result(), and later
 // printing all values to strings once the accumulation has finished. If the string
-// slices are not equal, it means that the result Datums were modified during later
+// slices are not equal, it means that the result parser.Datums were modified during later
 // accumulation, which violates the "deep copy of any internal state" condition.
 func testAggregateResultDeepCopy(
-	t *testing.T, aggFunc func([]types.T, *EvalContext) AggregateFunc, vals []Datum,
+	t *testing.T,
+	aggFunc func([]types.T, *parser.EvalContext) parser.AggregateFunc,
+	vals []parser.Datum,
 ) {
-	evalCtx := NewTestingEvalContext()
+	evalCtx := parser.NewTestingEvalContext()
 	defer evalCtx.Stop(context.Background())
 	aggImpl := aggFunc([]types.T{vals[0].ResolvedType()}, evalCtx)
-	runningDatums := make([]Datum, len(vals))
+	runningDatums := make([]parser.Datum, len(vals))
 	runningStrings := make([]string, len(vals))
 	for i := range vals {
 		if err := aggImpl.Add(context.Background(), vals[i]); err != nil {
@@ -161,12 +164,12 @@ func TestStdDevDecimalResultDeepCopy(t *testing.T) {
 	testAggregateResultDeepCopy(t, newDecimalStdDevAggregate, makeDecimalTestDatum(10))
 }
 
-func makeIntTestDatum(count int) []Datum {
+func makeIntTestDatum(count int) []parser.Datum {
 	rng, _ := randutil.NewPseudoRand()
 
-	vals := make([]Datum, count)
+	vals := make([]parser.Datum, count)
 	for i := range vals {
-		vals[i] = NewDInt(DInt(rng.Int63()))
+		vals[i] = parser.NewDInt(parser.DInt(rng.Int63()))
 	}
 	return vals
 }
@@ -176,36 +179,36 @@ func makeIntTestDatum(count int) []Datum {
 // significant part of the test without overflow. This is meant to
 // test the implementation of aggregates that can use an int64 to
 // optimize computations small decimal values.
-func makeSmallIntTestDatum(count int) []Datum {
+func makeSmallIntTestDatum(count int) []parser.Datum {
 	rng, _ := randutil.NewPseudoRand()
 
-	vals := make([]Datum, count)
+	vals := make([]parser.Datum, count)
 	for i := range vals {
 		sign := int32(1)
 		if 0 == rng.Int31()&1 {
 			sign = -1
 		}
-		vals[i] = NewDInt(DInt(rng.Int31() * sign))
+		vals[i] = parser.NewDInt(parser.DInt(rng.Int31() * sign))
 	}
 	return vals
 }
 
-func makeFloatTestDatum(count int) []Datum {
+func makeFloatTestDatum(count int) []parser.Datum {
 	rng, _ := randutil.NewPseudoRand()
 
-	vals := make([]Datum, count)
+	vals := make([]parser.Datum, count)
 	for i := range vals {
-		vals[i] = NewDFloat(DFloat(rng.Float64()))
+		vals[i] = parser.NewDFloat(parser.DFloat(rng.Float64()))
 	}
 	return vals
 }
 
-func makeDecimalTestDatum(count int) []Datum {
+func makeDecimalTestDatum(count int) []parser.Datum {
 	rng, _ := randutil.NewPseudoRand()
 
-	vals := make([]Datum, count)
+	vals := make([]parser.Datum, count)
 	for i := range vals {
-		dd := &DDecimal{}
+		dd := &parser.DDecimal{}
 		if _, err := dd.SetFloat64(rng.Float64()); err != nil {
 			panic(err)
 		}
@@ -214,22 +217,22 @@ func makeDecimalTestDatum(count int) []Datum {
 	return vals
 }
 
-func makeBoolTestDatum(count int) []Datum {
+func makeBoolTestDatum(count int) []parser.Datum {
 	rng, _ := randutil.NewPseudoRand()
 
-	vals := make([]Datum, count)
+	vals := make([]parser.Datum, count)
 	for i := range vals {
-		vals[i] = MakeDBool(DBool(rng.Int31n(2) == 0))
+		vals[i] = parser.MakeDBool(parser.DBool(rng.Int31n(2) == 0))
 	}
 	return vals
 }
 
-func makeIntervalTestDatum(count int) []Datum {
+func makeIntervalTestDatum(count int) []parser.Datum {
 	rng, _ := randutil.NewPseudoRand()
 
-	vals := make([]Datum, count)
+	vals := make([]parser.Datum, count)
 	for i := range vals {
-		vals[i] = &DInterval{Duration: duration.Duration{Months: rng.Int63n(1000),
+		vals[i] = &parser.DInterval{Duration: duration.Duration{Months: rng.Int63n(1000),
 			Days:  rng.Int63n(1000),
 			Nanos: rng.Int63n(1000000),
 		}}
@@ -238,9 +241,11 @@ func makeIntervalTestDatum(count int) []Datum {
 }
 
 func runBenchmarkAggregate(
-	b *testing.B, aggFunc func([]types.T, *EvalContext) AggregateFunc, vals []Datum,
+	b *testing.B,
+	aggFunc func([]types.T, *parser.EvalContext) parser.AggregateFunc,
+	vals []parser.Datum,
 ) {
-	evalCtx := NewTestingEvalContext()
+	evalCtx := parser.NewTestingEvalContext()
 	defer evalCtx.Stop(context.Background())
 	params := []types.T{vals[0].ResolvedType()}
 	b.ResetTimer()
