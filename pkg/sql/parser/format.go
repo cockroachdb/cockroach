@@ -111,6 +111,10 @@ var FmtAnonymize FmtFlags = &fmtFlags{anonymize: true}
 // a straightforward representation that qualifies table names.
 var FmtSimpleQualified FmtFlags = &fmtFlags{alwaysQualify: true}
 
+// FmtAlwaysGroupExprs instructs the pretty-printer to enclose
+// sub-expressions between parentheses.
+var FmtAlwaysGroupExprs FmtFlags = &fmtFlags{alwaysParens: true}
+
 // FmtReformatTableNames returns FmtFlags that instructs the pretty-printer
 // to substitute the printing of table names using the provided function.
 func FmtReformatTableNames(

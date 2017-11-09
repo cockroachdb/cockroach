@@ -1286,14 +1286,13 @@ func TestParseTree(t *testing.T) {
 		{`SELECT 1 = ANY ARRAY[1]:::INT`, `SELECT ((1) = ANY ((ARRAY[(1)]):::INT))`},
 	}
 
-	pfmt := fmtFlags{alwaysParens: true}
 	for _, d := range testData {
 		stmts, err := Parse(d.sql)
 		if err != nil {
 			t.Errorf("%s: expected success, but found %s", d.sql, err)
 			continue
 		}
-		s := AsStringWithFlags(stmts, &pfmt)
+		s := AsStringWithFlags(stmts, FmtAlwaysGroupExprs)
 		if d.expected != s {
 			t.Errorf("%s: expected %s, but found (%d statements): %s", d.sql, d.expected, len(stmts), s)
 		}
