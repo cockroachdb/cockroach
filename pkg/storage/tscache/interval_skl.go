@@ -16,9 +16,11 @@ package tscache
 
 import (
 	"bytes"
+	"container/list"
 	"encoding/binary"
 	"fmt"
 	"sync/atomic"
+	"time"
 	"unsafe"
 
 	"github.com/andy-kimball/arenaskl"
@@ -89,9 +91,10 @@ const (
 )
 
 const (
-	encodedTsSize    = int(unsafe.Sizeof(hlc.Timestamp{}))
-	encodedTxnIDSize = int(unsafe.Sizeof(uuid.UUID{}))
-	encodedValSize   = encodedTsSize + encodedTxnIDSize
+	encodedTsSize      = int(unsafe.Sizeof(hlc.Timestamp{}))
+	encodedTxnIDSize   = int(unsafe.Sizeof(uuid.UUID{}))
+	encodedValSize     = encodedTsSize + encodedTxnIDSize
+	defaultMinSklPages = 2
 )
 
 // intervalSkl efficiently tracks the latest logical time at which any key or
@@ -123,33 +126,57 @@ const (
 //   type intervalSkl<K: Comparable, V: Ratchetable>
 //
 type intervalSkl struct {
-	// Maximum size of the data structure in bytes. When the data structure
-	// fills, older entries are discarded.
-	size uint32
-
 	// rotMutex synchronizes page rotation with all other operations. The read
 	// lock is acquired by the Add and Lookup operations. The write lock is
 	// acquired only when the pages are rotated. Since that is very rare, the
 	// vast majority of operations can proceed without blocking.
 	rotMutex syncutil.RWMutex
 
-	// The structure maintains two fixed-size skiplist pages. When the later
-	// page fills, it becomes the earlier page, and the previous earlier page is
-	// discarded. In order to ensure that timestamps never decrease, intervalSkl
-	// maintains a floor timestamp, which is the minimum read timestamp that can
-	// be returned by the lookup operations. When the earlier page is discarded,
-	// its current maximum read timestamp becomes the new floor timestamp for
-	// the overall intervalSkl.
-	later   *sklPage
-	earlier *sklPage
+	// The following fields are used to enforce a minimum retention window on
+	// all timestamp intervals. intervalSkl promises to retain all timestamp
+	// intervals until they are at least this old before allowing the floor
+	// timestamp to ratchet and subsume them. If clock is nil then no minimum
+	// retention policy will be employed.
+	clock  *hlc.Clock
+	minRet time.Duration
+
+	// Soft maximum size of the data structure in bytes. When the data structure
+	// fills, older entries are discarded. However, this maximum can be violated
+	// if the intervalSkl needs to grow larger to enforce a minimum retention
+	// policy. As such, the minimum retention policy takes priority over the
+	// maximum size policy (which is why we call this a "soft" maximum).
+	size uint32
+
+	// The linked list maintains fixed-size skiplist pages, ordered by creation
+	// time such that the first page is the one most recently created. When the
+	// first page fills, a new empty page is prepended to the front of the list
+	// and all others are pushed back. This first page is the only sklPage that
+	// is written to, all others are immutable after they have left the front of
+	// the list. However, earlier pages are accessed whenever necessary during
+	// lookups. Pages are evicted when they become too old, subject to a minimum
+	// retention policy described above.
+	pages    list.List // List<*sklPage>
+	minPages int
+
+	// In order to ensure that timestamps never decrease, intervalSkl maintains
+	// a floor timestamp, which is the minimum timestamp that can be returned by
+	// the lookup operations. When the earliest page is discarded, its current
+	// maximum timestamp becomes the new floor timestamp for the overall
+	// intervalSkl.
 	floorTS hlc.Timestamp
 }
 
-// newIntervalSkl creates a new interval skiplist with the given maximum size.
-func newIntervalSkl(size uint32) *intervalSkl {
-	// The earlier and later fixed pages are each 1/2 the size of the larger
-	// page.
-	return &intervalSkl{size: size, later: newSklPage(size / 2)}
+// newIntervalSkl creates a new interval skiplist with the given minimum
+// retention duration and the maximum size.
+func newIntervalSkl(clock *hlc.Clock, minRet time.Duration, size uint32) *intervalSkl {
+	s := intervalSkl{
+		clock:    clock,
+		minRet:   minRet,
+		size:     size,
+		minPages: defaultMinSklPages,
+	}
+	s.pushNewPage(0)
+	return &s
 }
 
 // Add marks the a single key as having been read at the given timestamp. Once
@@ -230,8 +257,10 @@ func (s *intervalSkl) addRange(from, to []byte, opt rangeOptions, val cacheValue
 		return nil
 	}
 
+	fp := s.frontPage()
+
 	var it arenaskl.Iterator
-	it.Init(s.later.list)
+	it.Init(fp.list)
 
 	// Start by ensuring that the ending node has been created (unless "to" is
 	// nil, in which case the range extends indefinitely). Do this before creating
@@ -240,13 +269,13 @@ func (s *intervalSkl) addRange(from, to []byte, opt rangeOptions, val cacheValue
 	var err error
 	if to != nil {
 		if (opt & excludeTo) == 0 {
-			err = s.later.addNode(&it, to, val, hasKey)
+			err = fp.addNode(&it, to, val, hasKey)
 		} else {
-			err = s.later.addNode(&it, to, val, 0)
+			err = fp.addNode(&it, to, val, 0)
 		}
 
 		if err == arenaskl.ErrArenaFull {
-			return s.later
+			return fp
 		}
 	}
 
@@ -258,13 +287,13 @@ func (s *intervalSkl) addRange(from, to []byte, opt rangeOptions, val cacheValue
 
 	// Ensure that the starting node has been created.
 	if (opt&excludeFrom) == 0 || len(from) == 0 {
-		err = s.later.addNode(&it, from, val, hasKey|hasGap)
+		err = fp.addNode(&it, from, val, hasKey|hasGap)
 	} else {
-		err = s.later.addNode(&it, from, val, hasGap)
+		err = fp.addNode(&it, from, val, hasGap)
 	}
 
 	if err == arenaskl.ErrArenaFull {
-		return s.later
+		return fp
 	}
 
 	// Seek to the node immediately after the "from" node.
@@ -290,12 +319,24 @@ func (s *intervalSkl) addRange(from, to []byte, opt rangeOptions, val cacheValue
 	// Now iterate forwards and ensure that all nodes between the start and
 	// end (exclusive) have timestamps that are >= the range timestamp. end
 	// is exclusive because we already added a node at that key.
-	if !s.later.ensureFloorValue(&it, to, val) {
+	if !fp.ensureFloorValue(&it, to, val) {
 		// Page is filled up, so rotate pages and try again.
-		return s.later
+		return fp
 	}
 
 	return nil
+}
+
+// frontPage returns the front page of the intervalSkl.
+func (s *intervalSkl) frontPage() *sklPage {
+	return s.pages.Front().Value.(*sklPage)
+}
+
+// pushNewPage prepends a new empty page to the front of the pages list.
+func (s *intervalSkl) pushNewPage(maxWallTime int64) {
+	p := newSklPage(s.size / uint32(s.minPages))
+	p.maxWallTime = maxWallTime
+	s.pages.PushFront(p)
 }
 
 // rotatePages makes the later page the earlier page, and then discards the
@@ -307,20 +348,49 @@ func (s *intervalSkl) rotatePages(filledPage *sklPage) {
 	s.rotMutex.Lock()
 	defer s.rotMutex.Unlock()
 
-	if filledPage != s.later {
+	fp := s.frontPage()
+	if filledPage != fp {
 		// Another thread already rotated the pages, so don't do anything more.
 		return
 	}
 
-	// Max timestamp of the earlier page becomes the new floor timestamp.
-	if s.earlier != nil {
-		newFloorTS := hlc.Timestamp{WallTime: atomic.LoadInt64(&s.earlier.maxWallTime)}
-		s.floorTS.Forward(newFloorTS)
+	// Push a new empty page on the front of the pages list. We give this page
+	// the maxWallTime of the old front page. This assures that the maxWallTime
+	// for a page is always equal to or greater than that for all earlier pages.
+	// In other words, it assures that the maxWallTime for a page is not only
+	// the maximum timestamp for all values it contains, but also for all values
+	// any earlier pages contain.
+	s.pushNewPage(atomic.LoadInt64(&fp.maxWallTime))
+
+	// Determine the minimum timestamp a page must contain to be within the
+	// minimum retention window. If clock is nil, we have no minimum retention
+	// window.
+	minTSToRetain := hlc.MaxTimestamp
+	if s.clock != nil {
+		minTSToRetain = s.clock.Now()
+		minTSToRetain.WallTime -= s.minRet.Nanoseconds()
 	}
 
-	// Make the later page the earlier page.
-	s.earlier = s.later
-	s.later = newSklPage(s.size / 2)
+	// Iterate over the pages in reverse, evicting pages that are no longer
+	// needed and ratcheting up the floor timestamp in the process.
+	back := s.pages.Back()
+	for s.pages.Len() > s.minPages {
+		bp := back.Value.(*sklPage)
+		bpMaxTS := hlc.Timestamp{WallTime: atomic.LoadInt64(&bp.maxWallTime)}
+		if !bpMaxTS.Less(minTSToRetain) {
+			// The back page's maximum timestamp is within the time
+			// window we've promised to retain, so we can't evict it.
+			break
+		}
+
+		// Max timestamp of the back page becomes the new floor timestamp.
+		s.floorTS.Forward(bpMaxTS)
+
+		// Evict the page.
+		evict := back
+		back = back.Prev()
+		s.pages.Remove(evict)
+	}
 }
 
 // LookupTimestamp returns the latest timestamp value at which the given key was
@@ -339,28 +409,34 @@ func (s *intervalSkl) LookupTimestampRange(from, to []byte, opt rangeOptions) ca
 	s.rotMutex.RLock()
 	defer s.rotMutex.RUnlock()
 
-	// First perform lookup on the later page.
-	val := s.later.lookupTimestampRange(from, to, opt)
+	// Iterate over the pages, performing the lookup on each and remembering the
+	// maximum value we've seen so far.
+	var val cacheValue
+	for e := s.pages.Front(); e != nil; e = e.Next() {
+		p := e.Value.(*sklPage)
 
-	// Now perform same lookup on the earlier page.
-	if s.earlier != nil {
-		// If later page timestamp is greater than the max timestamp in the
-		// earlier page, then no need to do lookup at all.
+		// If the maximum value's timestamp is greater than the max timestamp in
+		// the current page, then there's no need to do the lookup in this page.
+		// There's also no reason to do the lookup in any earlier pages either,
+		// because rotatePages assures that a page will never have a max
+		// timestamp smaller than that of any page earlier than it.
 		//
-		// NB: if the max timestamp of the earlier page is equal to the later
-		// page timestamp, then we still need to perform the lookup. This is
-		// because the earlier page's max timestamp _may_ (if the hlc.Timestamp
+		// NB: if the max timestamp of the current page is equal to the maximum
+		// value's timestamp, then we still need to perform the lookup. This is
+		// because the current page's max timestamp _may_ (if the hlc.Timestamp
 		// ceil operation in sklPage.ratchetMaxTimestamp was a no-op) correspond
 		// to a real range's timestamp, and this range _may_ overlap with our
 		// lookup range. If that is the case and that other range has a
 		// different txnID than our current cacheValue result (val), then we
 		// need to remove the txnID from our result, per the ratcheting policy
 		// for cacheValues. This is tested in TestIntervalSklMaxPageTS.
-		maxTS := hlc.Timestamp{WallTime: atomic.LoadInt64(&s.earlier.maxWallTime)}
-		if !maxTS.Less(val.ts) {
-			val2 := s.earlier.lookupTimestampRange(from, to, opt)
-			val, _ = ratchetValue(val, val2)
+		maxTS := hlc.Timestamp{WallTime: atomic.LoadInt64(&p.maxWallTime)}
+		if maxTS.Less(val.ts) {
+			break
 		}
+
+		val2 := p.lookupTimestampRange(from, to, opt)
+		val, _ = ratchetValue(val, val2)
 	}
 
 	// Return the higher value from the the page lookups and the floor
