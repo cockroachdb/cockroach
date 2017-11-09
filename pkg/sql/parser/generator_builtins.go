@@ -293,6 +293,11 @@ func (s *arrayValueGenerator) Values() Datums {
 	return Datums{s.array.Array[s.nextIndex]}
 }
 
+// EmptyDTable returns a new, empty DTable.
+func EmptyDTable() *DTable {
+	return &DTable{ValueGenerator: &arrayValueGenerator{array: NewDArray(types.Any)}}
+}
+
 // unaryValueGenerator supports the execution of crdb_internal.unary_table().
 type unaryValueGenerator struct {
 	done bool
