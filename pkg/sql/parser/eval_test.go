@@ -24,7 +24,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
 
 func TestEval(t *testing.T) {
@@ -1162,34 +1161,6 @@ func TestEvalComparisonExprCaching(t *testing.T) {
 		}
 		if count := ctx.ReCache.Len(); count != d.cacheCount {
 			t.Errorf("%s: expected regular expression cache to contain %d compiled patterns, but found %d", expr, d.cacheCount, count)
-		}
-	}
-}
-
-func TestClusterTimestampConversion(t *testing.T) {
-	testData := []struct {
-		walltime int64
-		logical  int32
-		expected string
-	}{
-		{0, 0, "0.0000000000"},
-		{42, 0, "42.0000000000"},
-		{-42, 0, "-42.0000000000"},
-		{42, 69, "42.0000000069"},
-		{42, 2147483647, "42.2147483647"},
-		{9223372036854775807, 2147483647, "9223372036854775807.2147483647"},
-	}
-
-	ctx := NewTestingEvalContext()
-	defer ctx.Mon.Stop(context.Background())
-	ctx.PrepareOnly = true
-	for _, d := range testData {
-		ts := hlc.Timestamp{WallTime: d.walltime, Logical: d.logical}
-		ctx.SetClusterTimestamp(ts)
-		dec := ctx.GetClusterTimestamp()
-		final := dec.Text('f')
-		if final != d.expected {
-			t.Errorf("expected %s, but found %s", d.expected, final)
 		}
 	}
 }
