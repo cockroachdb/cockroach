@@ -187,9 +187,11 @@ func (jb *joinerBase) render(lrow, rrow sqlbase.EncDatumRow) (sqlbase.EncDatumRo
 	}
 	jb.combinedRow = append(jb.combinedRow, lrow...)
 	jb.combinedRow = append(jb.combinedRow, rrow...)
-	res, err := jb.onCond.evalFilter(jb.combinedRow)
-	if !res || err != nil {
-		return nil, err
+	if jb.onCond.expr != nil {
+		res, err := jb.onCond.evalFilter(jb.combinedRow)
+		if !res || err != nil {
+			return nil, err
+		}
 	}
 	return jb.combinedRow, nil
 }
