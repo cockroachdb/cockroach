@@ -288,3 +288,6 @@ type DTimestampTZ = parser.DTimestampTZ
 
 // DString is a temporary alias.
 type DString = parser.DString
+
+// Serialize is a temporary alias.
+var Serialize = parser.Serialize
