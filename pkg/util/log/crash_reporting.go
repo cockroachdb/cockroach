@@ -66,6 +66,12 @@ var (
 	// startTime records when the process started so that crash reports can
 	// include the server's uptime as an extra tag.
 	startTime = timeutil.Now()
+
+	// ReportSensitiveDetails enables reporting of unanonymized data.
+	//
+	// This should not be used by anyone unwilling to share the whole cluster
+	// data with Cockroach Labs and various cloud services.
+	ReportSensitiveDetails = envutil.EnvOrDefaultBool("COCKROACH_REPORT_SENSITIVE_DETAILS", false)
 )
 
 // RecoverAndReportPanic can be invoked on goroutines that run with
@@ -341,10 +347,12 @@ func SendCrashReport(
 
 	ex := raven.NewException(err, raven.NewStacktrace(depth+1, contextLines, crdbPaths))
 	packet := raven.NewPacket(err.Error(), ex)
-	// Avoid leaking the machine's hostname by injecting the literal "<redacted>".
-	// Otherwise, raven.Client.Capture will see an empty ServerName field and
-	// automatically fill in the machine's hostname.
-	packet.ServerName = "<redacted>"
+	if !ReportSensitiveDetails {
+		// Avoid leaking the machine's hostname by injecting the literal "<redacted>".
+		// Otherwise, raven.Client.Capture will see an empty ServerName field and
+		// automatically fill in the machine's hostname.
+		packet.ServerName = "<redacted>"
+	}
 	tags := map[string]string{
 		"uptime": uptimeTag(timeutil.Now()),
 	}
