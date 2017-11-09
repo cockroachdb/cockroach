@@ -180,6 +180,9 @@ type queueConfig struct {
 	// want to try to replicate a range until we know which zone it is in and
 	// therefore how many replicas are required).
 	acceptsUnsplitRanges bool
+	// processDestroyedReplicas controls whether or not we want to process replicas
+	// that have been destroyed but not GCed.
+	processDestroyedReplicas bool
 	// processTimeout is the timeout for processing a replica.
 	processTimeout time.Duration
 	// successes is a counter of replicas processed successfully.
@@ -599,11 +602,13 @@ func (bq *baseQueue) processReplica(
 		return errors.New("cannot process uninitialized replica")
 	}
 
-	if err := repl.IsDestroyed(); err != nil {
-		if log.V(3) {
-			log.Infof(queueCtx, "replica destroyed (%s); skipping", err)
+	if reason, err := repl.IsDestroyed(); err != nil {
+		if !bq.queueConfig.processDestroyedReplicas || reason != destroyReasonRemovalPending {
+			if log.V(3) {
+				log.Infof(queueCtx, "replica destroyed (%s); skipping", err)
+			}
+			return nil
 		}
-		return nil
 	}
 
 	// If the queue requires a replica to have the range lease in

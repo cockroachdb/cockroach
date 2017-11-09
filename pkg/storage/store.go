@@ -314,10 +314,10 @@ func (rs *storeReplicaVisitor) Visit(visitor func(*Replica) bool) {
 		// can still happen with this code.
 		rs.visited++
 		repl.mu.RLock()
-		destroyed := repl.mu.destroyed
+		destroyed := repl.mu.destroyStatus
 		initialized := repl.isInitializedRLocked()
 		repl.mu.RUnlock()
-		if initialized && destroyed == nil && !visitor(repl) {
+		if initialized && (destroyed.IsAlive() || destroyed.reason == destroyReasonRemovalPending) && !visitor(repl) {
 			break
 		}
 	}
@@ -2145,7 +2145,6 @@ func (s *Store) RemoveReplica(
 			<-s.snapshotApplySem
 		}()
 	}
-
 	rep.raftMu.Lock()
 	defer rep.raftMu.Unlock()
 	return s.removeReplicaImpl(ctx, rep, consistentDesc, destroy)
@@ -2205,7 +2204,7 @@ func (s *Store) removeReplicaImpl(
 	rep.mu.Lock()
 	rep.cancelPendingCommandsLocked()
 	rep.mu.internalRaftGroup = nil
-	rep.mu.destroyed = roachpb.NewRangeNotFoundError(rep.RangeID)
+	rep.mu.destroyStatus.Set(roachpb.NewRangeNotFoundError(rep.RangeID), destroyReasonRemoved)
 	rep.mu.Unlock()
 	rep.readOnlyCmdMu.Unlock()
 
@@ -2229,6 +2228,7 @@ func (s *Store) removeReplicaImpl(
 	// TODO(peter): Could release s.mu.Lock() here.
 	s.maybeGossipOnCapacityChange(ctx, rangeChangeEvent)
 	s.scanner.RemoveReplica(rep)
+
 	return nil
 }
 
@@ -2380,7 +2380,7 @@ func (s *Store) deadReplicas() roachpb.StoreDeadReplicas {
 	s.mu.replicas.Range(func(k int64, v unsafe.Pointer) bool {
 		r := (*Replica)(v)
 		r.mu.RLock()
-		corrupted := r.mu.corrupted
+		corrupted := r.mu.destroyStatus.reason == destroyReasonCorrupted
 		desc := r.mu.state.Desc
 		r.mu.RUnlock()
 		replicaDesc, ok := desc.GetReplicaDescriptor(s.Ident.StoreID)
@@ -2566,7 +2566,6 @@ func (s *Store) Send(
 		if br, pErr = s.maybeWaitForPushee(ctx, &ba, repl); br != nil || pErr != nil {
 			return br, pErr
 		}
-
 		br, pErr = repl.Send(ctx, ba)
 		if pErr == nil {
 			return br, nil
@@ -2824,7 +2823,6 @@ func (s *Store) HandleSnapshot(
 			if header.RaftMessageRequest.ToReplica.ReplicaID == 0 {
 				inSnap.snapType = snapTypePreemptive
 			}
-
 			if err := s.processRaftSnapshotRequest(ctx, &header.RaftMessageRequest, inSnap); err != nil {
 				return sendSnapError(errors.Wrap(err.GoError(), "failed to apply snapshot"))
 			}
@@ -3278,6 +3276,16 @@ func (s *Store) HandleRaftResponse(ctx context.Context, resp *RaftMessageRespons
 			if err != nil {
 				log.Errorf(ctx, "unable to add to replica GC queue: %s", err)
 			} else if added {
+				repl.mu.Lock()
+				// The replica will be garbage collected soon (we are sure
+				// since our replicaID is definitely too old), but in the meantime we
+				// already want to bounce all traffic from it. Note that the replica
+				// could be re-added with a higher replicaID, in which this error is
+				// cleared in setReplicaIDRaftMuLockedMuLocked.
+				if repl.mu.destroyStatus.IsAlive() {
+					repl.mu.destroyStatus.Set(roachpb.NewRangeNotFoundError(repl.RangeID), destroyReasonRemovalPending)
+				}
+				repl.mu.Unlock()
 				log.Infof(ctx, "added to replica GC queue (peer suggestion)")
 			}
 		case *roachpb.StoreNotFoundError:
@@ -3904,14 +3912,15 @@ func (s *Store) tryGetOrCreateReplica(
 
 		repl.raftMu.Lock()
 		repl.mu.RLock()
-		destroyed, corrupted := repl.mu.destroyed, repl.mu.corrupted
+		destroyed := repl.mu.destroyStatus
 		repl.mu.RUnlock()
-		if destroyed != nil {
+		if destroyed.reason == destroyReasonRemoved {
 			repl.raftMu.Unlock()
-			if corrupted {
-				return nil, false, destroyed
-			}
 			return nil, false, errRetry
+		}
+		if destroyed.reason == destroyReasonCorrupted {
+			repl.raftMu.Unlock()
+			return nil, false, destroyed.err
 		}
 		repl.mu.Lock()
 		if err := repl.setReplicaIDRaftMuLockedMuLocked(replicaID); err != nil {
@@ -3973,7 +3982,7 @@ func (s *Store) tryGetOrCreateReplica(
 	if err := repl.initRaftMuLockedReplicaMuLocked(desc, s.Clock(), replicaID); err != nil {
 		// Mark the replica as destroyed and remove it from the replicas maps to
 		// ensure nobody tries to use it
-		repl.mu.destroyed = errors.Wrapf(err, "%s: failed to initialize", repl)
+		repl.mu.destroyStatus.Set(errors.Wrapf(err, "%s: failed to initialize", repl), destroyReasonRemoved)
 		repl.mu.Unlock()
 		s.mu.Lock()
 		s.mu.replicas.Delete(int64(rangeID))
