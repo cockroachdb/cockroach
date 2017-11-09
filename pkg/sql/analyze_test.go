@@ -58,7 +58,7 @@ func testTableDesc() *sqlbase.TableDescriptor {
 	}
 }
 
-func makeSelectNode(t *testing.T) *renderNode {
+func makeSelectNode(t *testing.T, evalCtx *parser.EvalContext) *renderNode {
 	desc := testTableDesc()
 	sel := testInitDummySelectNode(desc)
 	if err := desc.AllocateIDs(); err != nil {
@@ -66,6 +66,7 @@ func makeSelectNode(t *testing.T) *renderNode {
 	}
 	numColumns := len(sel.sourceInfo[0].sourceColumns)
 	sel.ivarHelper = parser.MakeIndexedVarHelper(sel, numColumns)
+	evalCtx.IVarHelper = &sel.ivarHelper
 	sel.curSourceRow = make(parser.Datums, numColumns)
 	return sel
 }
@@ -83,7 +84,8 @@ func parseAndNormalizeExpr(
 	if expr, _, _, err = sel.resolveNames(expr); err != nil {
 		t.Fatalf("%s: %v", sql, err)
 	}
-	typedExpr, err := parser.TypeCheck(expr, nil, types.Any)
+	semaCtx := parser.SemaContext{IVarHelper: evalCtx.IVarHelper}
+	typedExpr, err := parser.TypeCheck(expr, &semaCtx, types.Any)
 	if err != nil {
 		t.Fatalf("%s: %v", sql, err)
 	}
@@ -141,7 +143,7 @@ func TestSplitOrExpr(t *testing.T) {
 		t.Run(d.expr+"~"+d.expected, func(t *testing.T) {
 			evalCtx := parser.NewTestingEvalContext()
 			defer evalCtx.Stop(context.Background())
-			sel := makeSelectNode(t)
+			sel := makeSelectNode(t, evalCtx)
 			expr := parseAndNormalizeExpr(t, evalCtx, d.expr, sel)
 			exprs := splitOrExpr(evalCtx, expr, nil)
 			if s := exprs.String(); d.expected != s {
@@ -167,7 +169,7 @@ func TestSplitAndExpr(t *testing.T) {
 		t.Run(d.expr+"~"+d.expected, func(t *testing.T) {
 			evalCtx := parser.NewTestingEvalContext()
 			defer evalCtx.Stop(context.Background())
-			sel := makeSelectNode(t)
+			sel := makeSelectNode(t, evalCtx)
 			expr := parseAndNormalizeExpr(t, evalCtx, d.expr, sel)
 			exprs := splitAndExpr(evalCtx, expr, nil)
 			if s := exprs.String(); d.expected != s {
@@ -294,10 +296,11 @@ func TestSimplifyExpr(t *testing.T) {
 		t.Run(d.expr+"~"+d.expected, func(t *testing.T) {
 			evalCtx := parser.NewTestingEvalContext()
 			defer evalCtx.Stop(context.Background())
-			sel := makeSelectNode(t)
+			sel := makeSelectNode(t, evalCtx)
 			// We need to manually close this memory account because we're doing the
 			// evals ourselves here.
 			defer evalCtx.ActiveMemAcc.Close(context.Background())
+			evalCtx.IVarHelper = &sel.ivarHelper
 			expr := parseAndNormalizeExpr(t, evalCtx, d.expr, sel)
 			expr, equiv := simplifyExpr(evalCtx, expr)
 			if s := expr.String(); d.expected != s {
@@ -350,7 +353,7 @@ func TestSimplifyNotExpr(t *testing.T) {
 		t.Run(d.expr+"~"+d.expected, func(t *testing.T) {
 			evalCtx := parser.NewTestingEvalContext()
 			defer evalCtx.Stop(context.Background())
-			sel := makeSelectNode(t)
+			sel := makeSelectNode(t, evalCtx)
 			expr1 := parseAndNormalizeExpr(t, evalCtx, d.expr, sel)
 			expr2, equiv := simplifyExpr(evalCtx, expr1)
 			if s := expr2.String(); d.expected != s {
@@ -387,7 +390,7 @@ func TestSimplifyAndExpr(t *testing.T) {
 		t.Run(d.expr+"~"+d.expected, func(t *testing.T) {
 			evalCtx := parser.NewTestingEvalContext()
 			defer evalCtx.Stop(context.Background())
-			sel := makeSelectNode(t)
+			sel := makeSelectNode(t, evalCtx)
 			expr1 := parseAndNormalizeExpr(t, evalCtx, d.expr, sel)
 			expr2, equiv := simplifyExpr(evalCtx, expr1)
 			if s := expr2.String(); d.expected != s {
@@ -592,7 +595,7 @@ func TestSimplifyAndExprCheck(t *testing.T) {
 		t.Run(d.expr+"~"+d.expected, func(t *testing.T) {
 			evalCtx := parser.NewTestingEvalContext()
 			defer evalCtx.Stop(context.Background())
-			sel := makeSelectNode(t)
+			sel := makeSelectNode(t, evalCtx)
 			expr1 := parseAndNormalizeExpr(t, evalCtx, d.expr, sel)
 			expr2, equiv := simplifyExpr(evalCtx, expr1)
 			if s := expr2.String(); d.expected != s {
@@ -644,7 +647,7 @@ func TestSimplifyOrExpr(t *testing.T) {
 		t.Run(d.expr+"~"+d.expected, func(t *testing.T) {
 			evalCtx := parser.NewTestingEvalContext()
 			defer evalCtx.Stop(context.Background())
-			sel := makeSelectNode(t)
+			sel := makeSelectNode(t, evalCtx)
 			expr1 := parseAndNormalizeExpr(t, evalCtx, d.expr, sel)
 			expr2, _ := simplifyExpr(evalCtx, expr1)
 			if s := expr2.String(); d.expected != s {
@@ -819,7 +822,7 @@ func TestSimplifyOrExprCheck(t *testing.T) {
 		t.Run(d.expr+"~"+d.expected, func(t *testing.T) {
 			evalCtx := parser.NewTestingEvalContext()
 			defer evalCtx.Stop(context.Background())
-			sel := makeSelectNode(t)
+			sel := makeSelectNode(t, evalCtx)
 			expr1 := parseAndNormalizeExpr(t, evalCtx, d.expr, sel)
 			expr2, equiv := simplifyExpr(evalCtx, expr1)
 			if s := expr2.String(); d.expected != s {

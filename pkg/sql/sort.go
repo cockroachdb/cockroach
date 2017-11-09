@@ -208,7 +208,7 @@ func (p *planner) orderBy(
 			}
 
 			// ORDER BY (a, b) -> ORDER BY a, b
-			cols, exprs = flattenTuples(cols, exprs)
+			cols, exprs = flattenTuples(cols, exprs, &s.ivarHelper)
 
 			colIdxs := s.addOrReuseRenders(cols, exprs, true)
 			for i := 0; i < len(colIdxs)-1; i++ {
@@ -243,7 +243,7 @@ func (p *planner) orderBy(
 
 // flattenTuples extracts the members of tuples into a list of columns.
 func flattenTuples(
-	cols sqlbase.ResultColumns, exprs []parser.TypedExpr,
+	cols sqlbase.ResultColumns, exprs []parser.TypedExpr, ivarHelper *parser.IndexedVarHelper,
 ) (sqlbase.ResultColumns, []parser.TypedExpr) {
 	// We want to avoid allocating new slices unless strictly necessary.
 	var newExprs []parser.TypedExpr
@@ -258,7 +258,7 @@ func flattenTuples(
 				copy(newCols, cols[:i])
 			}
 
-			newCols, newExprs = flattenTuple(t, newCols, newExprs)
+			newCols, newExprs = flattenTuple(t, newCols, newExprs, ivarHelper)
 		} else if newExprs != nil {
 			newExprs = append(newExprs, e)
 			newCols = append(newCols, cols[i])
@@ -272,16 +272,19 @@ func flattenTuples(
 
 // flattenTuple extracts the members of one tuple into a list of columns.
 func flattenTuple(
-	t *parser.Tuple, cols sqlbase.ResultColumns, exprs []parser.TypedExpr,
+	t *parser.Tuple,
+	cols sqlbase.ResultColumns,
+	exprs []parser.TypedExpr,
+	ivarHelper *parser.IndexedVarHelper,
 ) (sqlbase.ResultColumns, []parser.TypedExpr) {
 	for _, e := range t.Exprs {
 		if eT, ok := e.(*parser.Tuple); ok {
-			cols, exprs = flattenTuple(eT, cols, exprs)
+			cols, exprs = flattenTuple(eT, cols, exprs, ivarHelper)
 		} else {
 			expr := e.(parser.TypedExpr)
 			exprs = append(exprs, expr)
 			cols = append(cols, sqlbase.ResultColumn{
-				Name: e.String(),
+				Name: expr.String(),
 				Typ:  expr.ResolvedType(),
 			})
 		}

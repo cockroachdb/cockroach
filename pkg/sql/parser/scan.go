@@ -611,7 +611,7 @@ func (s *Scanner) scanIdent(lval *sqlSymType) {
 		// Already lowercased - nothing to do.
 		lval.str = s.in[start:s.pos]
 	} else if isASCII {
-		// We know that the identifier we've seen so far is ASCII, so we don't need
+		// We know that the identifier we've Used so far is ASCII, so we don't need
 		// to unicode normalize. Instead, just lowercase as normal.
 		b := make([]byte, s.pos-start)
 		for i, c := range s.in[start:s.pos] {

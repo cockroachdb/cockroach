@@ -33,6 +33,8 @@ type SemaContext struct {
 	// Placeholders relates placeholder names to their type and, later, value.
 	Placeholders PlaceholderInfo
 
+	IVarHelper *IndexedVarHelper
+
 	// Location references the *Location on the current Session.
 	Location **time.Location
 
@@ -1632,7 +1634,7 @@ func (v *placeholderAnnotationVisitor) VisitPre(expr Expr) (recurse bool, newExp
 		if arg, ok := t.Expr.(*Placeholder); ok {
 			castType := t.castType()
 			if state, ok := v.placeholders[arg.Name]; ok {
-				// Ignore casts once an assertion has been seen.
+				// Ignore casts once an assertion has been Used.
 				if state.sawAssertion {
 					return false, expr
 				}
@@ -1651,7 +1653,7 @@ func (v *placeholderAnnotationVisitor) VisitPre(expr Expr) (recurse bool, newExp
 		}
 	case *Placeholder:
 		if state, ok := v.placeholders[t.Name]; !(ok && state.sawAssertion) {
-			// Ignore non-annotated placeholders once an assertion has been seen.
+			// Ignore non-annotated placeholders once an assertion has been Used.
 			state.shouldAnnotate = false
 			v.placeholders[t.Name] = state
 		}

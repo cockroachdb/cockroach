@@ -15,8 +15,6 @@
 package sql
 
 import (
-	"bytes"
-
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
@@ -31,7 +29,8 @@ import (
 type returningHelper struct {
 	p *planner
 	// Expected columns.
-	columns sqlbase.ResultColumns
+	columns    sqlbase.ResultColumns
+	ivarHelper parser.IndexedVarHelper
 	// Processed copies of expressions from ReturningExprs.
 	exprs        []parser.TypedExpr
 	rowCount     int
@@ -91,6 +90,7 @@ func (p *planner) newReturningHelper(
 		if err != nil {
 			return nil, err
 		}
+		rh.ivarHelper = ivarHelper
 		rh.columns = append(rh.columns, cols...)
 		rh.exprs = append(rh.exprs, typedExprs...)
 	}
@@ -107,6 +107,7 @@ func (rh *returningHelper) cookResultRow(rowVals parser.Datums) (parser.Datums, 
 	rh.curSourceRow = rowVals
 	resRow := make(parser.Datums, len(rh.exprs))
 	for i, e := range rh.exprs {
+		rh.p.evalCtx.IVarHelper = &rh.ivarHelper
 		d, err := e.Eval(&rh.p.evalCtx)
 		if err != nil {
 			return nil, err
@@ -126,7 +127,7 @@ func (rh *returningHelper) IndexedVarResolvedType(idx int) types.T {
 	return rh.source.sourceColumns[idx].Typ
 }
 
-// IndexedVarFormat implements the parser.IndexedVarContainer interface.
-func (rh *returningHelper) IndexedVarFormat(buf *bytes.Buffer, f parser.FmtFlags, idx int) {
-	rh.source.FormatVar(buf, f, idx)
+// IndexedVarNodeFormatter implements the parser.IndexedVarContainer interface.
+func (rh *returningHelper) IndexedVarNodeFormatter(idx int) parser.NodeFormatter {
+	return rh.source.NodeFormatter(idx)
 }

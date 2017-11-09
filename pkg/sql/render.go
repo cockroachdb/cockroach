@@ -15,7 +15,6 @@
 package sql
 
 import (
-	"bytes"
 	"errors"
 	"fmt"
 
@@ -130,9 +129,9 @@ func (r *renderNode) IndexedVarResolvedType(idx int) types.T {
 	return r.sourceInfo[0].sourceColumns[idx].Typ
 }
 
-// IndexedVarString implements the parser.IndexedVarContainer interface.
-func (r *renderNode) IndexedVarFormat(buf *bytes.Buffer, f parser.FmtFlags, idx int) {
-	r.sourceInfo[0].FormatVar(buf, f, idx)
+// IndexedVarNodeFormatter implements the parser.IndexedVarContainer interface.
+func (r *renderNode) IndexedVarNodeFormatter(idx int) parser.NodeFormatter {
+	return r.sourceInfo[0].NodeFormatter(idx)
 }
 
 // Select selects rows from a SELECT/UNION/VALUES, ordering and/or limiting them.
@@ -333,7 +332,7 @@ func (r *renderNode) initTargets(
 
 		// Output column names should exactly match the original expression, so we
 		// have to determine the output column name before we rewrite SRFs below.
-		outputName, err := getRenderColName(r.planner.session.SearchPath, target)
+		outputName, err := getRenderColName(r.planner.session.SearchPath, target, &r.ivarHelper)
 		if err != nil {
 			return err
 		}
@@ -427,7 +426,9 @@ func (v *srfExtractionVisitor) VisitPost(expr parser.Expr) parser.Expr {
 				return expr
 			}
 			v.srf = t
-			return v.ivarHelper.IndexedVar(v.ivarHelper.AppendSlot())
+			// We'll fill in the type later once the generator function has been
+			// analyzed.
+			return v.ivarHelper.IndexedVarWithType(v.ivarHelper.AppendSlot(), types.TTable{})
 		}
 	}
 	return expr
@@ -522,7 +523,9 @@ func (r *renderNode) initWhere(ctx context.Context, whereExpr parser.Expr) (*fil
 }
 
 // getRenderColName returns the output column name for a render expression.
-func getRenderColName(searchPath parser.SearchPath, target parser.SelectExpr) (string, error) {
+func getRenderColName(
+	searchPath parser.SearchPath, target parser.SelectExpr, helper *parser.IndexedVarHelper,
+) (string, error) {
 	if target.As != "" {
 		return string(target.As), nil
 	}
@@ -595,6 +598,7 @@ func (r *renderNode) renderRow() error {
 	}
 	for i, e := range r.render {
 		var err error
+		r.planner.evalCtx.IVarHelper = &r.ivarHelper
 		r.row[i], err = e.Eval(&r.planner.evalCtx)
 		if err != nil {
 			return err

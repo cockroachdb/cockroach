@@ -943,21 +943,32 @@ func (src *dataSourceInfo) findTableAlias(colIdx int) (parser.TableName, bool) {
 	return anonymousTable, false
 }
 
-func (src *dataSourceInfo) FormatVar(buf *bytes.Buffer, f parser.FmtFlags, colIdx int) {
-	if f.ShowTableAliases {
-		tableAlias, found := src.findTableAlias(colIdx)
-		if found {
-			if tableAlias.TableName != "" {
-				if tableAlias.DatabaseName != "" {
-					parser.FormatNode(buf, f, tableAlias.DatabaseName)
-					buf.WriteByte('.')
-				}
-				parser.FormatNode(buf, f, tableAlias.TableName)
-				buf.WriteByte('.')
-			}
-		} else {
-			buf.WriteString("_.")
+type varFormatter struct {
+	TableName  parser.TableName
+	ColumnName parser.Name
+}
+
+// Format implements the NodeFormatter interface.
+func (c *varFormatter) Format(buf *bytes.Buffer, f parser.FmtFlags) {
+	if f.ShowTableAliases && c.TableName.TableName != "" {
+		if c.TableName.DatabaseName != "" {
+			parser.FormatNode(buf, f, c.TableName.DatabaseName)
+			buf.WriteByte('.')
 		}
+
+		parser.FormatNode(buf, f, c.TableName.TableName)
+		buf.WriteByte('.')
 	}
-	parser.Name(src.sourceColumns[colIdx].Name).Format(buf, f)
+	parser.FormatNode(buf, f, c.ColumnName)
+}
+
+// NodeFormatter returns a parser.NodeFormatter that, when formatted,
+// represents the object at the input column index.
+func (src *dataSourceInfo) NodeFormatter(colIdx int) parser.NodeFormatter {
+	var ret varFormatter
+	ret.ColumnName = parser.Name(src.sourceColumns[colIdx].Name)
+	if tableAlias, found := src.findTableAlias(colIdx); found {
+		ret.TableName = tableAlias
+	}
+	return &ret
 }

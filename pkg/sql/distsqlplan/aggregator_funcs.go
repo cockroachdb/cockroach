@@ -15,7 +15,6 @@
 package distsqlplan
 
 import (
-	"bytes"
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
@@ -226,7 +225,8 @@ var DistAggregationTable = map[distsqlrun.AggregatorSpec_Func]DistAggregationInf
 					Type: coltypes.NewFloat(0 /* prec */, false /* precSpecified */),
 				}
 			}
-			return expr.TypeCheck(nil, types.Any)
+			ctx := &parser.SemaContext{IVarHelper: h}
+			return expr.TypeCheck(ctx, types.Any)
 		},
 	},
 
@@ -294,8 +294,8 @@ func (tc *typeContainer) IndexedVarResolvedType(idx int) types.T {
 	return tc.types[idx].ToDatumType()
 }
 
-func (tc *typeContainer) IndexedVarFormat(buf *bytes.Buffer, f parser.FmtFlags, idx int) {
-	fmt.Fprintf(buf, "@%d", idx+1)
+func (tc *typeContainer) IndexedVarNodeFormatter(idx int) parser.NodeFormatter {
+	return parser.Name(fmt.Sprintf("$%d", idx+1))
 }
 
 // MakeTypeIndexedVarHelper returns an IndexedVarHelper which creates IndexedVars

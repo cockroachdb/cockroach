@@ -394,7 +394,9 @@ func (p *planner) makeJoin(
 				},
 			}
 			var err error
+			p.semaCtx.IVarHelper = &r.ivarHelper
 			expr, err = c.TypeCheck(&p.semaCtx, types.Any)
+			p.semaCtx.IVarHelper = nil
 			if err != nil {
 				return planDataSource{}, err
 			}

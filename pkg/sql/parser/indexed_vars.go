@@ -30,15 +30,20 @@ import (
 type IndexedVarContainer interface {
 	IndexedVarEval(idx int, ctx *EvalContext) (Datum, error)
 	IndexedVarResolvedType(idx int) types.T
-	IndexedVarFormat(buf *bytes.Buffer, f FmtFlags, idx int)
+	IndexedVarNodeFormatter(idx int) NodeFormatter
 }
 
 // IndexedVar is a VariableExpr that can be used as a leaf in expressions; it
 // represents a dynamic value. It defers calls to TypeCheck, Eval, String to an
 // IndexedVarContainer.
 type IndexedVar struct {
-	Idx       int
-	container IndexedVarContainer
+	Idx         int
+	Used        bool
+	bindInPlace bool
+
+	col NodeFormatter
+
+	typeAnnotation
 }
 
 var _ TypedExpr = &IndexedVar{}
@@ -53,8 +58,11 @@ func (v *IndexedVar) Walk(_ Visitor) Expr {
 }
 
 // TypeCheck is part of the Expr interface.
-func (v *IndexedVar) TypeCheck(_ *SemaContext, desired types.T) (TypedExpr, error) {
-	if v.container == nil || v.container == unboundContainer {
+func (v *IndexedVar) TypeCheck(ctx *SemaContext, desired types.T) (TypedExpr, error) {
+	if ctx.IVarHelper == nil {
+		panic("indexed var had no SemaContext.IVarHelper during type checking")
+	}
+	if ctx.IVarHelper.container == nil || ctx.IVarHelper.container == unboundContainer {
 		// A more technically correct message would be to say that the
 		// reference is unbound and thus cannot be typed. However this is
 		// a tad bit too technical for the average SQL use case and
@@ -64,33 +72,34 @@ func (v *IndexedVar) TypeCheck(_ *SemaContext, desired types.T) (TypedExpr, erro
 		return nil, pgerror.NewErrorf(
 			pgerror.CodeUndefinedColumnError, "column reference @%d not allowed in this context", v.Idx+1)
 	}
+	v.typ = ctx.IVarHelper.container.IndexedVarResolvedType(v.Idx)
 	return v, nil
 }
 
 // Eval is part of the TypedExpr interface.
 func (v *IndexedVar) Eval(ctx *EvalContext) (Datum, error) {
-	if v.container == nil || v.container == unboundContainer {
+	if ctx.IVarHelper.container == nil || ctx.IVarHelper.container == unboundContainer {
 		panic("indexed var must be bound to a container before evaluation")
 	}
-	return v.container.IndexedVarEval(v.Idx, ctx)
+	return ctx.IVarHelper.container.IndexedVarEval(v.Idx, ctx)
 }
 
 // ResolvedType is part of the TypedExpr interface.
 func (v *IndexedVar) ResolvedType() types.T {
-	if v.container == nil || v.container == unboundContainer {
-		panic("indexed var must be bound to a container before type resolution")
+	if v.typ == nil {
+		panic("indexed var must be type checked first")
 	}
-	return v.container.IndexedVarResolvedType(v.Idx)
+	return v.typ
 }
 
 // Format implements the NodeFormatter interface.
 func (v *IndexedVar) Format(buf *bytes.Buffer, f FmtFlags) {
 	if f.indexedVarFormat != nil {
-		f.indexedVarFormat(buf, f, v.container, v.Idx)
-	} else if f.symbolicVars || v.container == nil || v.container == unboundContainer {
+		f.indexedVarFormat(buf, v.Idx)
+	} else if f.symbolicVars || v.col == nil {
 		fmt.Fprintf(buf, "@%d", v.Idx+1)
 	} else {
-		v.container.IndexedVarFormat(buf, f, v.Idx)
+		v.col.Format(buf, f)
 	}
 }
 
@@ -98,7 +107,7 @@ func (v *IndexedVar) Format(buf *bytes.Buffer, f FmtFlags) {
 // IndexedVar with the given index value. This needs to undergo
 // BindIfUnbound() below before it can be fully used.
 func NewOrdinalReference(r int) *IndexedVar {
-	return &IndexedVar{Idx: r, container: unboundContainer}
+	return &IndexedVar{Idx: r}
 }
 
 // NewIndexedVar is a helper routine to create a standalone Indexedvar
@@ -110,7 +119,7 @@ func NewOrdinalReference(r int) *IndexedVar {
 // Do not use NewIndexedVar for AST nodes that can undergo binding two
 // or more times.
 func NewIndexedVar(r int) *IndexedVar {
-	return &IndexedVar{Idx: r, container: nil}
+	return &IndexedVar{Idx: r, bindInPlace: true}
 }
 
 // IndexedVarHelper wraps an IndexedVarContainer (an interface) and creates
@@ -137,22 +146,17 @@ func (h *IndexedVarHelper) BindIfUnbound(ivar *IndexedVar) (*IndexedVar, error) 
 			pgerror.CodeUndefinedColumnError, "invalid column ordinal: @%d", ivar.Idx+1)
 	}
 
-	if ivar.container == nil {
-		// This container must also remember it has "seen" the variable
-		// so that IndexedVarUsed() below returns the right results.
-		// The IndexedVar() method ensures this.
-		*ivar = *h.IndexedVar(ivar.Idx)
-		return ivar, nil
-	}
-	if ivar.container == unboundContainer {
+	if !ivar.Used {
+		if ivar.bindInPlace {
+			// This container must also remember it has "seen" the variable
+			// so that IndexedVarUsed() below returns the right results.
+			// The IndexedVar() method ensures this.
+			*ivar = *h.IndexedVar(ivar.Idx)
+			return ivar, nil
+		}
 		return h.IndexedVar(ivar.Idx), nil
 	}
-	if ivar.container == h.container {
-		return ivar, nil
-	}
-	return nil, pgerror.NewErrorf(pgerror.CodeInternalError,
-		"indexed var linked to different container (%T) %+v, expected (%T) %+v",
-		ivar.container, ivar.container, h.container, h.container)
+	return ivar, nil
 }
 
 // MakeIndexedVarHelper initializes an IndexedVarHelper structure.
@@ -185,7 +189,22 @@ func (h *IndexedVarHelper) IndexedVar(idx int) *IndexedVar {
 	h.checkIndex(idx)
 	v := &h.vars[idx]
 	v.Idx = idx
-	v.container = h.container
+	v.Used = true
+	v.typ = h.container.IndexedVarResolvedType(idx)
+	v.col = h.container.IndexedVarNodeFormatter(idx)
+	return v
+}
+
+// IndexedVarWithType returns an IndexedVar for the given index, with the given
+// type. The index must be valid. This should be used in the case where an
+// indexed var is being added before its container has a corresponding entry
+// for it.
+func (h *IndexedVarHelper) IndexedVarWithType(idx int, typ types.T) *IndexedVar {
+	h.checkIndex(idx)
+	v := &h.vars[idx]
+	v.Idx = idx
+	v.Used = true
+	v.typ = typ
 	return v
 }
 
@@ -193,25 +212,14 @@ func (h *IndexedVarHelper) IndexedVar(idx int) *IndexedVar {
 // The index must be valid.
 func (h *IndexedVarHelper) IndexedVarUsed(idx int) bool {
 	h.checkIndex(idx)
-	return h.vars[idx].container != nil
+	return h.vars[idx].Used
 }
 
-// InvalidColIdx is the index value of a non-initialized IndexedVar.
-const InvalidColIdx = -1
-
-// GetIndexedVars transfers ownership of the array of initialized
-// IndexedVars to the caller; unused vars are guaranteed to have an
-// invalid index. The helper cannot be used any more after the
-// ownership has been transferred.
+// GetIndexedVars returns the indexed var array of this helper.
+// IndexedVars to the caller; unused vars are guaranteed to have
+// a false Used field.
 func (h *IndexedVarHelper) GetIndexedVars() []IndexedVar {
-	for i := range h.vars {
-		if h.vars[i].container == nil {
-			h.vars[i].Idx = InvalidColIdx
-		}
-	}
-	ret := h.vars
-	h.vars = nil
-	return ret
+	return h.vars
 }
 
 // Reset re-initializes an IndexedVarHelper structure with the same
@@ -275,6 +283,6 @@ func (*unboundContainerType) IndexedVarResolvedType(idx int) types.T {
 	panic(fmt.Sprintf("unbound ordinal reference @%d", idx+1))
 }
 
-func (*unboundContainerType) IndexedVarFormat(_ *bytes.Buffer, _ FmtFlags, idx int) {
+func (*unboundContainerType) IndexedVarNodeFormatter(idx int) NodeFormatter {
 	panic(fmt.Sprintf("unbound ordinal reference @%d", idx+1))
 }

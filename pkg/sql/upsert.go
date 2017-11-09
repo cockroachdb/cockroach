@@ -15,7 +15,6 @@
 package sql
 
 import (
-	"bytes"
 	"fmt"
 
 	"golang.org/x/net/context"
@@ -40,6 +39,8 @@ type upsertHelper struct {
 	excludedSourceInfo *dataSourceInfo
 	curSourceRow       parser.Datums
 	curExcludedRow     parser.Datums
+
+	ivarHelper *parser.IndexedVarHelper
 
 	// This struct must be allocated on the heap and its location stay
 	// stable after construction because it implements
@@ -71,14 +72,13 @@ func (uh *upsertHelper) IndexedVarResolvedType(idx int) types.T {
 	return uh.sourceInfo.sourceColumns[idx].Typ
 }
 
-// IndexedVarFormat implements the parser.IndexedVarContainer interface.
-func (uh *upsertHelper) IndexedVarFormat(buf *bytes.Buffer, f parser.FmtFlags, idx int) {
+// IndexedVarNodeFormatter implements the parser.IndexedVarContainer interface.
+func (uh *upsertHelper) IndexedVarNodeFormatter(idx int) parser.NodeFormatter {
 	numSourceColumns := len(uh.sourceInfo.sourceColumns)
 	if idx >= numSourceColumns {
-		uh.excludedSourceInfo.FormatVar(buf, f, idx-numSourceColumns)
-	} else {
-		uh.sourceInfo.FormatVar(buf, f, idx)
+		return uh.excludedSourceInfo.NodeFormatter(idx - numSourceColumns)
 	}
+	return uh.sourceInfo.NodeFormatter(idx)
 }
 
 func (p *planner) makeUpsertHelper(
@@ -138,6 +138,7 @@ func (p *planner) makeUpsertHelper(
 		}
 		evalExprs = append(evalExprs, normExpr)
 	}
+	helper.ivarHelper = &ivarHelper
 	helper.evalExprs = evalExprs
 
 	if whereClause != nil {
@@ -178,6 +179,8 @@ func (uh *upsertHelper) eval(
 
 	var err error
 	ret := make([]parser.Datum, len(uh.evalExprs))
+	uh.p.evalCtx.IVarHelper = uh.ivarHelper
+	defer func() { uh.p.evalCtx.IVarHelper = nil }()
 	for i, evalExpr := range uh.evalExprs {
 		ret[i], err = evalExpr.Eval(&uh.p.evalCtx)
 		if err != nil {
@@ -195,6 +198,8 @@ func (uh *upsertHelper) shouldUpdate(
 	uh.curSourceRow = existingRow
 	uh.curExcludedRow = insertRow
 
+	uh.p.evalCtx.IVarHelper = uh.ivarHelper
+	defer func() { uh.p.evalCtx.IVarHelper = nil }()
 	return sqlbase.RunFilter(uh.whereExpr, &uh.p.evalCtx)
 }
 

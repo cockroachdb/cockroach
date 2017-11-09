@@ -50,8 +50,8 @@ func TestDesiredAggregateOrder(t *testing.T) {
 	for _, d := range testData {
 		evalCtx := parser.NewTestingEvalContext()
 		defer evalCtx.Stop(context.Background())
-		sel := makeSelectNode(t)
-		expr := parseAndNormalizeExpr(t, &p.evalCtx, d.expr, sel)
+		sel := makeSelectNode(t, evalCtx)
+		expr := parseAndNormalizeExpr(t, evalCtx, d.expr, sel)
 		group := &groupNode{planner: p}
 		render := &renderNode{planner: p}
 		postRender := &renderNode{planner: p}

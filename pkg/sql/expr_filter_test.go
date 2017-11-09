@@ -122,7 +122,7 @@ func TestSplitFilter(t *testing.T) {
 		t.Run(fmt.Sprintf("%s~(%s, %s)", d.expr, d.expectedRes, d.expectedRem), func(t *testing.T) {
 			evalCtx := parser.NewTestingEvalContext()
 			defer evalCtx.Stop(context.Background())
-			sel := makeSelectNode(t)
+			sel := makeSelectNode(t, evalCtx)
 			// A function that "converts" only vars in the list.
 			conv := func(expr parser.VariableExpr) (bool, parser.Expr) {
 				iv := expr.(*parser.IndexedVar)
@@ -205,7 +205,7 @@ func TestExtractNotNullConstraints(t *testing.T) {
 			evalCtx := parser.NewTestingEvalContext()
 			defer evalCtx.Stop(context.Background())
 
-			sel := makeSelectNode(t)
+			sel := makeSelectNode(t, evalCtx)
 			expr := parseAndNormalizeExpr(t, evalCtx, tc.expr, sel)
 			result := extractNotNullConstraints(expr)
 			var expected util.FastIntSet

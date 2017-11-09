@@ -34,7 +34,7 @@ type checkHelper struct {
 	exprs        []parser.TypedExpr
 	cols         []sqlbase.ColumnDescriptor
 	sourceInfo   *dataSourceInfo
-	ivars        []parser.IndexedVar
+	ivarHelper   *parser.IndexedVarHelper
 	curSourceRow parser.Datums
 }
 
@@ -69,7 +69,7 @@ func (c *checkHelper) init(
 		}
 		c.exprs[i] = typedExpr
 	}
-	c.ivars = ivarHelper.GetIndexedVars()
+	c.ivarHelper = &ivarHelper
 	c.curSourceRow = make(parser.Datums, len(c.cols))
 	return nil
 }
@@ -84,8 +84,8 @@ func (c *checkHelper) loadRow(
 		return nil
 	}
 	// Populate IndexedVars.
-	for _, ivar := range c.ivars {
-		if ivar.Idx == invalidColIdx {
+	for _, ivar := range c.ivarHelper.GetIndexedVars() {
+		if !ivar.Used {
 			continue
 		}
 		ri, has := colIdx[c.cols[ivar.Idx].ID]
@@ -114,12 +114,14 @@ func (c *checkHelper) IndexedVarResolvedType(idx int) types.T {
 	return c.sourceInfo.sourceColumns[idx].Typ
 }
 
-// IndexedVarFormat implements the parser.IndexedVarContainer interface.
-func (c *checkHelper) IndexedVarFormat(buf *bytes.Buffer, f parser.FmtFlags, idx int) {
-	c.sourceInfo.FormatVar(buf, f, idx)
+// IndexedVarNodeFormatter implements the parser.IndexedVarContainer interface.
+func (c *checkHelper) IndexedVarNodeFormatter(idx int) parser.NodeFormatter {
+	return c.sourceInfo.NodeFormatter(idx)
 }
 
 func (c *checkHelper) check(ctx *parser.EvalContext) error {
+	ctx.IVarHelper = c.ivarHelper
+	defer func() { ctx.IVarHelper = nil }()
 	for _, expr := range c.exprs {
 		if d, err := expr.Eval(ctx); err != nil {
 			return err

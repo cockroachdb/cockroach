@@ -1717,12 +1717,14 @@ func (p *planner) analyzeExpr(
 
 	// Type check.
 	var typedExpr parser.TypedExpr
+	p.semaCtx.IVarHelper = &iVarHelper
 	if requireType {
 		typedExpr, err = parser.TypeCheckAndRequire(resolved, &p.semaCtx,
 			expectedType, typingContext)
 	} else {
 		typedExpr, err = parser.TypeCheck(resolved, &p.semaCtx, expectedType)
 	}
+	p.semaCtx.IVarHelper = nil
 	if err != nil {
 		return nil, err
 	}

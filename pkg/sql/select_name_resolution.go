@@ -28,8 +28,7 @@ import (
 const invalidSrcIdx = -1
 
 // invalidColIdx is the colIdx value returned by findColumn() when there is no match.
-// We reuse the value from parser.InvalidColIdx because its meaning is the same.
-const invalidColIdx = parser.InvalidColIdx
+const invalidColIdx = -1
 
 // nameResolutionVisitor is a parser.Visitor implementation used to
 // resolve the column names in an expression.

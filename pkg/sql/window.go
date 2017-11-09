@@ -331,6 +331,7 @@ func (n *windowNode) replaceIndexVarsAndAggFuncs(s *renderNode) {
 		sourceInfo:              s.sourceInfo[0],
 	}
 	ivarHelper := parser.MakeIndexedVarHelper(&n.colContainer, s.ivarHelper.NumVars())
+	n.ivarHelper = &ivarHelper
 
 	n.aggContainer = windowNodeAggContainer{
 		windowNodeIvarContainer: makeWindowNodeIvarContainer(n),
@@ -351,7 +352,10 @@ func (n *windowNode) replaceIndexVarsAndAggFuncs(s *renderNode) {
 			case *parser.IndexedVar:
 				// We add a new render to the source renderNode for each new IndexedVar we
 				// see. We also register this mapping in the idxMap.
-				col := sqlbase.ResultColumn{Name: t.String(), Typ: t.ResolvedType()}
+				col := sqlbase.ResultColumn{
+					Name: t.String(),
+					Typ:  t.ResolvedType(),
+				}
 				colIdx := s.addOrReuseRender(col, t, true)
 				n.colContainer.idxMap[t.Idx] = colIdx
 				return nil, false, ivarHelper.IndexedVar(t.Idx)
@@ -455,6 +459,7 @@ type windowNode struct {
 	// to migrate IndexedVars and aggregate functions below the windowing level.
 	colContainer windowNodeColContainer
 	aggContainer windowNodeAggContainer
+	ivarHelper   *parser.IndexedVarHelper
 
 	windowsAcc WrappableMemoryAccount
 }
@@ -761,7 +766,9 @@ func (n *windowNode) populateValues(ctx context.Context) error {
 				}
 				// Instead, we evaluate the current window render, which depends on at least
 				// one window function, at the given row.
+				n.planner.evalCtx.IVarHelper = n.ivarHelper
 				res, err := curWindowRender.Eval(&n.planner.evalCtx)
+				n.planner.evalCtx.IVarHelper = nil
 				if err != nil {
 					return err
 				}
@@ -980,9 +987,10 @@ func (cc *windowNodeColContainer) IndexedVarResolvedType(idx int) types.T {
 	return cc.sourceInfo.sourceColumns[idx].Typ
 }
 
-// IndexedVarString implements the parser.IndexedVarContainer interface.
-func (cc *windowNodeColContainer) IndexedVarFormat(buf *bytes.Buffer, f parser.FmtFlags, idx int) {
-	cc.sourceInfo.FormatVar(buf, f, idx)
+// IndexedVarNodeFormatter implements the parser.IndexedVarContainer interface.
+func (cc *windowNodeColContainer) IndexedVarNodeFormatter(idx int) parser.NodeFormatter {
+	// Avoid duplicating the type annotation by calling .Format directly.
+	return cc.sourceInfo.NodeFormatter(idx)
 }
 
 // windowNodeAggContainer is a IndexedVarContainer providing indirection for
@@ -999,8 +1007,8 @@ func (ac *windowNodeAggContainer) IndexedVarResolvedType(idx int) types.T {
 	return ac.aggFuncs[idx].ResolvedType()
 }
 
-// IndexedVarString implements the parser.IndexedVarContainer interface.
-func (ac *windowNodeAggContainer) IndexedVarFormat(buf *bytes.Buffer, f parser.FmtFlags, idx int) {
+// IndexedVarNodeFormatter implements the parser.IndexedVarContainer interface.
+func (ac *windowNodeAggContainer) IndexedVarNodeFormatter(idx int) parser.NodeFormatter {
 	// Avoid duplicating the type annotation by calling .Format directly.
-	ac.aggFuncs[idx].Format(buf, f)
+	return ac.aggFuncs[idx]
 }
