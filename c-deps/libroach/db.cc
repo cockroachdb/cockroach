@@ -2573,7 +2573,7 @@ DBStatus DBSstFileWriterOpen(DBSstFileWriter* fw) {
 }
 
 DBStatus DBSstFileWriterAdd(DBSstFileWriter* fw, DBKey key, DBSlice val) {
-  rocksdb::Status status = fw->rep.Put(EncodeKey(key), ToSlice(val));
+  rocksdb::Status status = fw->rep.Add(EncodeKey(key), ToSlice(val));
   if (!status.ok()) {
     return ToDBStatus(status);
   }
