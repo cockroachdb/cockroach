@@ -20,8 +20,8 @@ import "github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 // for tests to allow the qualified names to be type checked without throwing an error.
 var presetTypesForTesting map[string]types.T
 
-// mockNameTypes populates presetTypesForTesting for a test.
-func mockNameTypes(types map[string]types.T) func() {
+// MockNameTypes populates presetTypesForTesting for a test.
+func MockNameTypes(types map[string]types.T) func() {
 	presetTypesForTesting = types
 	return func() {
 		presetTypesForTesting = nil

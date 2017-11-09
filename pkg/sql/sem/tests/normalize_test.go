@@ -12,7 +12,7 @@
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
-package parser
+package tests
 
 import (
 	"testing"
@@ -23,7 +23,7 @@ import (
 )
 
 func TestNormalizeExpr(t *testing.T) {
-	defer mockNameTypes(map[string]types.T{
+	defer MockNameTypes(map[string]types.T{
 		"a": types.Int,
 		"b": types.Int,
 		"c": types.Int,
