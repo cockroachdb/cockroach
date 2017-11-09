@@ -34,7 +34,7 @@ func TestDockerJava(t *testing.T) {
 
 const java = `
 set -e
-cd /testdata/java
+cd /mnt/data/java
 # See: https://basildoncoder.com/blog/postgresql-jdbc-client-certificates.html
 openssl pkcs8 -topk8 -inform PEM -outform DER -in /certs/node.key -out key.pk8 -nocrypt
 
