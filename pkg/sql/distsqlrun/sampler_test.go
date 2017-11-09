@@ -19,17 +19,22 @@ import (
 
 	"golang.org/x/net/context"
 
+	"github.com/axiomhq/hyperloglog"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
+func intEncDatum(i int) sqlbase.EncDatum {
+	return sqlbase.EncDatum{Datum: parser.NewDInt(parser.DInt(i))}
+}
+
 // runSampler runs the sampler aggregator on numRows and returns numSamples rows.
 func runSampler(t *testing.T, numRows, numSamples int) []int {
 	rows := make([]sqlbase.EncDatumRow, numRows)
 	for i := range rows {
-		rows[i] = sqlbase.EncDatumRow{sqlbase.DatumToEncDatum(intType, parser.NewDInt(parser.DInt(i)))}
+		rows[i] = sqlbase.EncDatumRow{intEncDatum(i)}
 	}
 	in := NewRowBuffer(oneIntCol, rows, RowBufferArgs{})
 	outTypes := []sqlbase.ColumnType{
@@ -67,7 +72,7 @@ func runSampler(t *testing.T, numRows, numSamples int) []int {
 			break
 		}
 		for i := 2; i < len(outTypes); i++ {
-			if row[i].Datum != parser.DNull {
+			if !row[i].IsNull() {
 				t.Fatalf("expected NULL on column %d, got %s", i, row[i].Datum)
 			}
 		}
@@ -110,6 +115,107 @@ func TestSampler(t *testing.T) {
 	for i := range freq {
 		if float64(freq[i]) < f/(1+delta) || float64(freq[i]) > f*(1+delta) {
 			t.Errorf("frequency %d out of bound (expected value %f)", freq[i], f)
+		}
+	}
+}
+
+func TestSamplerSketch(t *testing.T) {
+	inputRows := [][]int{
+		{1, 1},
+		{2, 2},
+		{1, 3},
+		{2, 4},
+		{1, 5},
+		{2, 6},
+		{1, 7},
+		{2, 8},
+		{-1, 1},
+		{-1, 3},
+		{1, -1},
+	}
+	cardinalities := []int{2, 8}
+	numNulls := []int{2, 1}
+
+	rows := make(sqlbase.EncDatumRows, len(inputRows))
+	for i, inputRow := range inputRows {
+		for _, x := range inputRow {
+			if x == -1 {
+				rows[i] = append(rows[i], sqlbase.EncDatum{Datum: parser.DNull})
+				continue
+			}
+			rows[i] = append(rows[i], intEncDatum(x))
+		}
+	}
+	in := NewRowBuffer(twoIntCols, rows, RowBufferArgs{})
+	outTypes := []sqlbase.ColumnType{
+		intType, // original column
+		intType, // original column
+		intType, // rank
+		intType, // sketch index
+		intType, // num rows
+		intType, // null vals
+		{SemanticType: sqlbase.ColumnType_BYTES}, // sketch data
+	}
+
+	out := NewRowBuffer(outTypes, nil /* rows */, RowBufferArgs{})
+
+	evalCtx := parser.MakeTestingEvalContext()
+	defer evalCtx.Stop(context.Background())
+	flowCtx := FlowCtx{
+		Settings: cluster.MakeTestingClusterSettings(),
+		EvalCtx:  evalCtx,
+	}
+
+	spec := &SamplerSpec{
+		SampleSize: uint32(1),
+		Sketches: []SamplerSpec_SketchInfo{
+			{
+				SketchType: SketchType_HLL_PLUS_PLUS_V1,
+				Columns:    []uint32{0},
+			},
+			{
+				SketchType: SketchType_HLL_PLUS_PLUS_V1,
+				Columns:    []uint32{1},
+			},
+		},
+	}
+	p, err := newSamplerProcessor(&flowCtx, spec, in, &PostProcessSpec{}, out)
+	if err != nil {
+		t.Fatal(err)
+	}
+	p.Run(context.Background(), nil)
+
+	rows = out.GetRowsNoMeta(t)
+	// We expect one sampled row and two sketch rows.
+	if len(rows) != 3 {
+		t.Fatalf("expected 3 rows, got %v\n", rows.String(outTypes))
+	}
+	rows = rows[1:]
+
+	for sketchIdx, r := range rows {
+		// First three columns are for sampled rows.
+		for i := 0; i < 3; i++ {
+			if !r[i].IsNull() {
+				t.Errorf("expected NULL on column %d, got %s", i, r[i].Datum)
+			}
+		}
+		if v := int(*r[3].Datum.(*parser.DInt)); v != sketchIdx {
+			t.Errorf("expected sketch index %d, got %d", sketchIdx, v)
+		}
+		if v := int(*r[4].Datum.(*parser.DInt)); v != len(inputRows) {
+			t.Errorf("expected numRows %d, got %d", len(inputRows), v)
+		}
+		if v := int(*r[5].Datum.(*parser.DInt)); v != numNulls[sketchIdx] {
+			t.Errorf("expected numNulls %d, got %d", numNulls[sketchIdx], v)
+		}
+		data := []byte(*r[6].Datum.(*parser.DBytes))
+		var s hyperloglog.Sketch
+		if err := s.UnmarshalBinary(data); err != nil {
+			t.Fatal(err)
+		}
+		// HLL++ should be exact on small datasets.
+		if v := int(s.Estimate()); v != cardinalities[sketchIdx] {
+			t.Errorf("expected cardinality %d, got %d", cardinalities[sketchIdx], v)
 		}
 	}
 }
