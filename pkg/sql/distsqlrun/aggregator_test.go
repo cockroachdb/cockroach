@@ -37,17 +37,15 @@ import (
 func TestAggregator(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	columnTypeInt := sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_INT}
 	v := [15]sqlbase.EncDatum{}
 	null := sqlbase.EncDatum{Datum: parser.DNull}
 	for i := range v {
-		v[i] = sqlbase.DatumToEncDatum(columnTypeInt, parser.NewDInt(parser.DInt(i)))
+		v[i] = sqlbase.DatumToEncDatum(intType, parser.NewDInt(parser.DInt(i)))
 	}
 
-	columnTypeBool := sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_BOOL}
-	boolTrue := sqlbase.DatumToEncDatum(columnTypeBool, parser.DBoolTrue)
-	boolFalse := sqlbase.DatumToEncDatum(columnTypeBool, parser.DBoolFalse)
-	boolNULL := sqlbase.DatumToEncDatum(columnTypeBool, parser.DNull)
+	boolTrue := sqlbase.DatumToEncDatum(boolType, parser.DBoolTrue)
+	boolFalse := sqlbase.DatumToEncDatum(boolType, parser.DBoolFalse)
+	boolNULL := sqlbase.DatumToEncDatum(boolType, parser.DNull)
 
 	colPtr := func(idx uint32) *uint32 { return &idx }
 
