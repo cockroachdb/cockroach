@@ -86,7 +86,7 @@ type FlowCtx struct {
 }
 
 // MakeEvalCtx returns a modifiable copy of the FlowCtx's EvalContext.
-func (ctx *FlowCtx) MakeEvalCtx() *parser.EvalContext {
+func (ctx *FlowCtx) MakeEvalCtx() *tree.EvalContext {
 	evalCtx := ctx.EvalCtx
 	return &evalCtx
 }

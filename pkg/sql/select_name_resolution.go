@@ -28,8 +28,7 @@ import (
 const invalidSrcIdx = -1
 
 // invalidColIdx is the colIdx value returned by findColumn() when there is no match.
-// We reuse the value from tree.InvalidColIdx because its meaning is the same.
-const invalidColIdx = tree.InvalidColIdx
+const invalidColIdx = -1
 
 // nameResolutionVisitor is a tree.Visitor implementation used to
 // resolve the column names in an expression.

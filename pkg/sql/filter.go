@@ -15,8 +15,6 @@
 package sql
 
 import (
-	"bytes"
-
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -49,9 +47,9 @@ func (f *filterNode) IndexedVarResolvedType(idx int) types.T {
 	return f.source.info.sourceColumns[idx].Typ
 }
 
-// IndexedVarFormat implements the tree.IndexedVarContainer interface.
-func (f *filterNode) IndexedVarFormat(buf *bytes.Buffer, fl tree.FmtFlags, idx int) {
-	f.source.info.FormatVar(buf, fl, idx)
+// IndexedVarNodeFormatter implements the tree.IndexedVarContainer interface.
+func (f *filterNode) IndexedVarNodeFormatter(idx int) tree.NodeFormatter {
+	return f.source.info.NodeFormatter(idx)
 }
 
 // Start implements the planNode interface.
@@ -66,7 +64,9 @@ func (f *filterNode) Next(params runParams) (bool, error) {
 			return false, err
 		}
 
+		params.p.evalCtx.IVarHelper = &f.ivarHelper
 		passesFilter, err := sqlbase.RunFilter(f.filter, &params.p.evalCtx)
+		params.p.evalCtx.IVarHelper = nil
 		if err != nil {
 			return false, err
 		}
