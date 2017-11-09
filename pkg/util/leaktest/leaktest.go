@@ -1,6 +1,6 @@
 // Copyright 2013 The Go Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style
-// license that can be found in the LICENSE file.
+// license that can be found in licenses/BSD-golang.txt.
 
 // Package leaktest provides tools to detect leaked goroutines in tests.
 // To use it, call "defer leaktest.AfterTest(t)()" at the beginning of each
