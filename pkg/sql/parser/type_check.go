@@ -445,6 +445,7 @@ var (
 	errFilterWithinWindow   = pgerror.NewErrorf(pgerror.CodeFeatureNotSupportedError, "FILTER within a window function call is not yet supported")
 	errStarNotAllowed       = pgerror.NewError(pgerror.CodeSyntaxError, "cannot use \"*\" in this context")
 	errInvalidDefaultUsage  = pgerror.NewError(pgerror.CodeSyntaxError, "DEFAULT can only appear in a VALUES list within INSERT or on the right side of a SET")
+	errInvalidMaxUsage      = pgerror.NewError(pgerror.CodeSyntaxError, "MAXVALUE can only appear within a range partition expression")
 )
 
 // TypeCheck implements the Expr interface.
@@ -768,6 +769,11 @@ func (expr DefaultVal) TypeCheck(_ *SemaContext, desired types.T) (TypedExpr, er
 }
 
 // TypeCheck implements the Expr interface.
+func (expr MaxVal) TypeCheck(_ *SemaContext, desired types.T) (TypedExpr, error) {
+	return nil, errInvalidMaxUsage
+}
+
+// TypeCheck implements the Expr interface.
 func (expr *NumVal) TypeCheck(ctx *SemaContext, desired types.T) (TypedExpr, error) {
 	return typeCheckConstant(expr, ctx, desired)
 }
@@ -958,16 +964,6 @@ func (d *DOidWrapper) TypeCheck(_ *SemaContext, _ types.T) (TypedExpr, error) { 
 // TypeCheck implements the Expr interface. It is implemented as an idempotent
 // identity function for Datum.
 func (d dNull) TypeCheck(_ *SemaContext, desired types.T) (TypedExpr, error) { return d, nil }
-
-// TypeCheck implements the Expr interface.
-func (expr PartitionDefault) TypeCheck(_ *SemaContext, desired types.T) (TypedExpr, error) {
-	return expr, nil
-}
-
-// TypeCheck implements the Expr interface.
-func (expr PartitionMaxValue) TypeCheck(_ *SemaContext, desired types.T) (TypedExpr, error) {
-	return expr, nil
-}
 
 // typeCheckAndRequireTupleElems asserts that all elements in the Tuple
 // can be typed as required and are equivalent to required. Note that one would invoke

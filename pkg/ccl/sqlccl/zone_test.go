@@ -40,8 +40,8 @@ func TestValidIndexPartitionSetShowZones(t *testing.T) {
 		CREATE DATABASE d;
 		USE d;
 		CREATE TABLE t (c STRING PRIMARY KEY) PARTITION BY LIST (c) (
-			PARTITION p0 VALUES ('a'),
-			PARTITION p1 VALUES (DEFAULT)
+			PARTITION p0 VALUES IN ('a'),
+			PARTITION p1 VALUES IN (DEFAULT)
 		)`)
 
 	yamlDefault := fmt.Sprintf("gc: {ttlseconds: %d}", config.DefaultZoneConfig().GC.TTLSeconds)
@@ -280,8 +280,8 @@ func TestGenerateSubzoneSpans(t *testing.T) {
 		{
 			name: `single col list partitioning`,
 			schema: `CREATE TABLE t (a INT PRIMARY KEY) PARTITION BY LIST (a) (
-				PARTITION p3 VALUES (3),
-				PARTITION p4 VALUES (4)
+				PARTITION p3 VALUES IN (3),
+				PARTITION p4 VALUES IN (4)
 			)`,
 			subzones: []string{`@primary`, `.p3`, `.p4`},
 			expected: []string{
@@ -294,9 +294,9 @@ func TestGenerateSubzoneSpans(t *testing.T) {
 		{
 			name: `single col list partitioning - DEFAULT`,
 			schema: `CREATE TABLE t (a INT PRIMARY KEY) PARTITION BY LIST (a) (
-				PARTITION p3 VALUES (3),
-				PARTITION p4 VALUES (4),
-				PARTITION pd VALUES (DEFAULT)
+				PARTITION p3 VALUES IN (3),
+				PARTITION p4 VALUES IN (4),
+				PARTITION pd VALUES IN (DEFAULT)
 			)`,
 			subzones: []string{`@primary`, `.p3`, `.p4`, `.pd`},
 			expected: []string{
@@ -309,9 +309,9 @@ func TestGenerateSubzoneSpans(t *testing.T) {
 		{
 			name: `multi col list partitioning`,
 			schema: `CREATE TABLE t (a INT, b INT, PRIMARY KEY (a, b)) PARTITION BY LIST (a, b) (
-				PARTITION p34 VALUES (3, 4),
-				PARTITION p56 VALUES (5, 6),
-				PARTITION p57 VALUES (5, 7)
+				PARTITION p34 VALUES IN ((3, 4)),
+				PARTITION p56 VALUES IN ((5, 6)),
+				PARTITION p57 VALUES IN ((5, 7))
 			)`,
 			subzones: []string{`@primary`, `.p34`, `.p56`, `.p57`},
 			expected: []string{
@@ -326,11 +326,11 @@ func TestGenerateSubzoneSpans(t *testing.T) {
 		{
 			name: `multi col list partitioning - DEFAULT`,
 			schema: `CREATE TABLE t (a INT, b INT, PRIMARY KEY (a, b)) PARTITION BY LIST (a, b) (
-				PARTITION p34 VALUES (3, 4),
-				PARTITION p56 VALUES (5, 6),
-				PARTITION p57 VALUES (5, 7),
-				PARTITION p5d VALUES (5, DEFAULT),
-				PARTITION pd VALUES (DEFAULT, DEFAULT)
+				PARTITION p34 VALUES IN ((3, 4)),
+				PARTITION p56 VALUES IN ((5, 6)),
+				PARTITION p57 VALUES IN ((5, 7)),
+				PARTITION p5d VALUES IN ((5, DEFAULT)),
+				PARTITION pd VALUES IN ((DEFAULT, DEFAULT))
 			)`,
 			subzones: []string{`@primary`, `.p34`, `.p56`, `.p57`, `.p5d`, `.pd`},
 			expected: []string{
@@ -348,8 +348,8 @@ func TestGenerateSubzoneSpans(t *testing.T) {
 		{
 			name: `single col range partitioning`,
 			schema: `CREATE TABLE t (a INT PRIMARY KEY) PARTITION BY RANGE (a) (
-				PARTITION p3 VALUES LESS THAN (3),
-				PARTITION p4 VALUES LESS THAN (4)
+				PARTITION p3 VALUES < 3,
+				PARTITION p4 VALUES < 4
 			)`,
 			subzones: []string{`@primary`, `.p3`, `.p4`},
 			expected: []string{
@@ -361,9 +361,9 @@ func TestGenerateSubzoneSpans(t *testing.T) {
 		{
 			name: `single col range partitioning - MAXVALUE`,
 			schema: `CREATE TABLE t (a INT PRIMARY KEY) PARTITION BY RANGE (a) (
-				PARTITION p3 VALUES LESS THAN (3),
-				PARTITION p4 VALUES LESS THAN (4),
-				PARTITION pm VALUES LESS THAN (MAXVALUE)
+				PARTITION p3 VALUES < 3,
+				PARTITION p4 VALUES < 4,
+				PARTITION pm VALUES < MAXVALUE
 			)`,
 			subzones: []string{`@primary`, `.p3`, `.p4`, `.pm`},
 			expected: []string{
@@ -375,9 +375,9 @@ func TestGenerateSubzoneSpans(t *testing.T) {
 		{
 			name: `multi col range partitioning`,
 			schema: `CREATE TABLE t (a INT, b INT, PRIMARY KEY (a, b)) PARTITION BY RANGE (a, b) (
-				PARTITION p34 VALUES LESS THAN (3, 4),
-				PARTITION p56 VALUES LESS THAN (5, 6),
-				PARTITION p57 VALUES LESS THAN (5, 7)
+				PARTITION p34 VALUES < (3, 4),
+				PARTITION p56 VALUES < (5, 6),
+				PARTITION p57 VALUES < (5, 7)
 			)`,
 			subzones: []string{`@primary`, `.p34`, `.p56`, `.p57`},
 			expected: []string{
@@ -390,11 +390,11 @@ func TestGenerateSubzoneSpans(t *testing.T) {
 		{
 			name: `multi col range partitioning - MAXVALUE`,
 			schema: `CREATE TABLE t (a INT, b INT, PRIMARY KEY (a, b)) PARTITION BY RANGE (a, b) (
-				PARTITION p34 VALUES LESS THAN (3, 4),
-				PARTITION p3m VALUES LESS THAN (3, MAXVALUE),
-				PARTITION p56 VALUES LESS THAN (5, 6),
-				PARTITION p57 VALUES LESS THAN (5, 7),
-				PARTITION pm VALUES LESS THAN (MAXVALUE, MAXVALUE)
+				PARTITION p34 VALUES < (3, 4),
+				PARTITION p3m VALUES < (3, MAXVALUE),
+				PARTITION p56 VALUES < (5, 6),
+				PARTITION p57 VALUES < (5, 7),
+				PARTITION pm VALUES < (MAXVALUE, MAXVALUE)
 			)`,
 			subzones: []string{`@primary`, `.p34`, `.p3m`, `.p56`, `.p57`, `.pm`},
 			expected: []string{
@@ -409,14 +409,14 @@ func TestGenerateSubzoneSpans(t *testing.T) {
 		{
 			name: `list-list partitioning`,
 			schema: `CREATE TABLE t (a INT, b INT, PRIMARY KEY (a, b)) PARTITION BY LIST (a) (
-				PARTITION p3 VALUES (3) PARTITION BY LIST (b) (
-					PARTITION p34 VALUES (4)
+				PARTITION p3 VALUES IN (3) PARTITION BY LIST (b) (
+					PARTITION p34 VALUES IN (4)
 				),
-				PARTITION p5 VALUES (5) PARTITION BY LIST (b) (
-					PARTITION p56 VALUES (6),
-					PARTITION p5d VALUES (DEFAULT)
+				PARTITION p5 VALUES IN (5) PARTITION BY LIST (b) (
+					PARTITION p56 VALUES IN (6),
+					PARTITION p5d VALUES IN (DEFAULT)
 				),
-				PARTITION pd VALUES (DEFAULT)
+				PARTITION pd VALUES IN (DEFAULT)
 			)`,
 			subzones: []string{`@primary`, `.p3`, `.p34`, `.p5`, `.p56`, `.p5d`, `.pd`},
 			expected: []string{
@@ -434,14 +434,14 @@ func TestGenerateSubzoneSpans(t *testing.T) {
 		{
 			name: `list-range partitioning`,
 			schema: `CREATE TABLE t (a INT, b INT, PRIMARY KEY (a, b)) PARTITION BY LIST (a) (
-				PARTITION p3 VALUES (3) PARTITION BY RANGE (b) (
-					PARTITION p34 VALUES LESS THAN (4)
+				PARTITION p3 VALUES IN (3) PARTITION BY RANGE (b) (
+					PARTITION p34 VALUES < 4
 				),
-				PARTITION p5 VALUES (5) PARTITION BY RANGE (b) (
-					PARTITION p56 VALUES LESS THAN (6),
-					PARTITION p5d VALUES LESS THAN (MAXVALUE)
+				PARTITION p5 VALUES IN (5) PARTITION BY RANGE (b) (
+					PARTITION p56 VALUES < 6,
+					PARTITION p5d VALUES < MAXVALUE
 				),
-				PARTITION pd VALUES (DEFAULT)
+				PARTITION pd VALUES IN (DEFAULT)
 			)`,
 			subzones: []string{`@primary`, `.p3`, `.p34`, `.p5`, `.p56`, `.p5d`, `.pd`},
 			expected: []string{
@@ -458,7 +458,7 @@ func TestGenerateSubzoneSpans(t *testing.T) {
 		{
 			name: `inheritance - index`,
 			schema: `CREATE TABLE t (a INT PRIMARY KEY) PARTITION BY LIST (a) (
-				PARTITION pd VALUES (DEFAULT)
+				PARTITION pd VALUES IN (DEFAULT)
 			)`,
 			subzones: []string{`@primary`},
 			expected: []string{`@primary /1-/2`},
@@ -466,8 +466,8 @@ func TestGenerateSubzoneSpans(t *testing.T) {
 		{
 			name: `inheritance - single col default`,
 			schema: `CREATE TABLE t (a INT PRIMARY KEY) PARTITION BY LIST (a) (
-				PARTITION p3 VALUES (3),
-				PARTITION pd VALUES (DEFAULT)
+				PARTITION p3 VALUES IN (3),
+				PARTITION pd VALUES IN (DEFAULT)
 			)`,
 			subzones: []string{`@primary`, `.pd`},
 			expected: []string{`.pd /1-/2`},
@@ -475,10 +475,10 @@ func TestGenerateSubzoneSpans(t *testing.T) {
 		{
 			name: `inheritance - multi col default`,
 			schema: `CREATE TABLE t (a INT, b INT, PRIMARY KEY (a, b)) PARTITION BY LIST (a, b) (
-				PARTITION p34 VALUES (3, 4),
-				PARTITION p3d VALUES (3, DEFAULT),
-				PARTITION p56 VALUES (5, 6),
-				PARTITION p5d VALUES (5, DEFAULT)
+				PARTITION p34 VALUES IN ((3, 4)),
+				PARTITION p3d VALUES IN ((3, DEFAULT)),
+				PARTITION p56 VALUES IN ((5, 6)),
+				PARTITION p5d VALUES IN ((5, DEFAULT))
 			)`,
 			subzones: []string{`@primary`, `.p3d`, `.p56`},
 			expected: []string{
@@ -492,17 +492,17 @@ func TestGenerateSubzoneSpans(t *testing.T) {
 		{
 			name: `inheritance - subpartitioning`,
 			schema: `CREATE TABLE t (a INT, b INT, PRIMARY KEY (a, b)) PARTITION BY LIST (a) (
-				PARTITION p3 VALUES (3) PARTITION BY LIST (b) (
-					PARTITION p34 VALUES (4),
-					PARTITION p3d VALUES (DEFAULT)
+				PARTITION p3 VALUES IN (3) PARTITION BY LIST (b) (
+					PARTITION p34 VALUES IN (4),
+					PARTITION p3d VALUES IN (DEFAULT)
 				),
-				PARTITION p5 VALUES (5) PARTITION BY LIST (b) (
-					PARTITION p56 VALUES (6),
-					PARTITION p5d VALUES (DEFAULT)
+				PARTITION p5 VALUES IN (5) PARTITION BY LIST (b) (
+					PARTITION p56 VALUES IN (6),
+					PARTITION p5d VALUES IN (DEFAULT)
 				),
-				PARTITION p7 VALUES (7) PARTITION BY LIST (b) (
-					PARTITION p78 VALUES (8),
-					PARTITION p7d VALUES (DEFAULT)
+				PARTITION p7 VALUES IN (7) PARTITION BY LIST (b) (
+					PARTITION p78 VALUES IN (8),
+					PARTITION p7d VALUES IN (DEFAULT)
 				)
 			)`,
 			subzones: []string{`@primary`, `.p3d`, `.p56`, `.p7`},

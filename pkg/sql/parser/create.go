@@ -27,7 +27,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 
 	"golang.org/x/text/language"
 
@@ -736,7 +735,7 @@ func (node *PartitionBy) Format(buf *bytes.Buffer, f FmtFlags) {
 // ListPartition represents a PARTITION definition within a PARTITION BY LIST.
 type ListPartition struct {
 	Name         UnrestrictedName
-	Tuples       []*Tuple
+	Exprs        Exprs
 	Subpartition *PartitionBy
 }
 
@@ -744,13 +743,9 @@ type ListPartition struct {
 func (node ListPartition) Format(buf *bytes.Buffer, f FmtFlags) {
 	buf.WriteString(`PARTITION `)
 	FormatNode(buf, f, node.Name)
-	buf.WriteString(` VALUES `)
-	for i, n := range node.Tuples {
-		if i > 0 {
-			buf.WriteString(", ")
-		}
-		FormatNode(buf, f, n)
-	}
+	buf.WriteString(` VALUES IN (`)
+	FormatNode(buf, f, node.Exprs)
+	buf.WriteByte(')')
 	if node.Subpartition != nil {
 		FormatNode(buf, f, node.Subpartition)
 	}
@@ -759,7 +754,7 @@ func (node ListPartition) Format(buf *bytes.Buffer, f FmtFlags) {
 // RangePartition represents a PARTITION definition within a PARTITION BY LIST.
 type RangePartition struct {
 	Name         UnrestrictedName
-	Tuple        *Tuple
+	Expr         Expr
 	Subpartition *PartitionBy
 }
 
@@ -767,35 +762,12 @@ type RangePartition struct {
 func (node RangePartition) Format(buf *bytes.Buffer, f FmtFlags) {
 	buf.WriteString(`PARTITION `)
 	FormatNode(buf, f, node.Name)
-	buf.WriteString(` VALUES LESS THAN `)
-	FormatNode(buf, f, node.Tuple)
+	buf.WriteString(` VALUES < `)
+	FormatNode(buf, f, node.Expr)
 	if node.Subpartition != nil {
 		FormatNode(buf, f, node.Subpartition)
 	}
 }
-
-// PartitionDefault represents the DEFAULT expression in a PARTITION BY clause.
-type PartitionDefault struct{}
-
-// Format implements the NodeFormatter interface.
-func (node PartitionDefault) Format(buf *bytes.Buffer, f FmtFlags) {
-	buf.WriteString("DEFAULT")
-}
-
-// ResolvedType implements the TypedExpr interface.
-func (PartitionDefault) ResolvedType() types.T { return types.Any }
-
-// PartitionMaxValue represents the MAXVALUE expression expression in a
-// PARTITION BY clause.
-type PartitionMaxValue struct{}
-
-// Format implements the NodeFormatter interface.
-func (node PartitionMaxValue) Format(buf *bytes.Buffer, f FmtFlags) {
-	buf.WriteString("MAXVALUE")
-}
-
-// ResolvedType implements the TypedExpr interface.
-func (PartitionMaxValue) ResolvedType() types.T { return types.Any }
 
 // CreateTable represents a CREATE TABLE statement.
 type CreateTable struct {
