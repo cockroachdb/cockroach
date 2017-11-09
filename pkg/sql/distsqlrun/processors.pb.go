@@ -66,7 +66,7 @@ type SketchType int32
 
 const (
 	// This is the github.com/axiomhq/hyperloglog binary format
-	// (as of commit 730eea1).
+	// (as of commit 730eea1) for a sketch with precision 14.
 	SketchType_HLL_PLUS_PLUS_V1 SketchType = 0
 )
 
