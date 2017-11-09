@@ -34,7 +34,7 @@ type fmtFlags struct {
 	// indexedVarFormat is an optional interceptor for
 	// IndexedVarContainer.IndexedVarFormat calls; it can be used to
 	// customize the formatting of IndexedVars.
-	indexedVarFormat func(buf *bytes.Buffer, f FmtFlags, c IndexedVarContainer, idx int)
+	indexedVarFormat func(buf *bytes.Buffer, idx int)
 	// placeholderFormat is an optional interceptor for Placeholder.Format calls;
 	// it can be used to format placeholders differently than normal.
 	placeholderFormat func(buf *bytes.Buffer, f FmtFlags, p *Placeholder)
@@ -145,9 +145,7 @@ func FmtExpr(base FmtFlags, showTypes bool, symbolicVars bool, showTableAliases 
 
 // FmtIndexedVarFormat returns FmtFlags that customizes the printing of
 // IndexedVars using the provided function.
-func FmtIndexedVarFormat(
-	base FmtFlags, fn func(buf *bytes.Buffer, f FmtFlags, c IndexedVarContainer, idx int),
-) FmtFlags {
+func FmtIndexedVarFormat(base FmtFlags, fn func(buf *bytes.Buffer, idx int)) FmtFlags {
 	f := *base
 	f.indexedVarFormat = fn
 	return &f

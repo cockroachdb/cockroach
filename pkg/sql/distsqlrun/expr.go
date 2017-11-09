@@ -15,7 +15,6 @@
 package distsqlrun
 
 import (
-	"bytes"
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
@@ -70,7 +69,7 @@ func processExpression(exprSpec Expression, h *tree.IndexedVarHelper) (tree.Type
 	}
 
 	// Convert to a fully typed expression.
-	typedExpr, err := tree.TypeCheck(expr, nil, types.Any)
+	typedExpr, err := tree.TypeCheck(expr, &tree.SemaContext{IVarHelper: h}, types.Any)
 	if err != nil {
 		return nil, errors.Wrap(err, expr.String())
 	}
@@ -120,19 +119,19 @@ func (eh *exprHelper) IndexedVarEval(idx int, ctx *tree.EvalContext) (tree.Datum
 	return eh.row[idx].Datum.Eval(ctx)
 }
 
-// IndexedVarString is part of the tree.IndexedVarContainer interface.
-func (eh *exprHelper) IndexedVarFormat(buf *bytes.Buffer, _ tree.FmtFlags, idx int) {
-	fmt.Fprintf(buf, "$%d", idx)
+// IndexedVarNodeFormatter is part of the parser.IndexedVarContainer interface.
+func (eh *exprHelper) IndexedVarNodeFormatter(idx int) tree.NodeFormatter {
+	return tree.Name(fmt.Sprintf("$%d", idx))
 }
 
 func (eh *exprHelper) init(
 	expr Expression, types []sqlbase.ColumnType, evalCtx *tree.EvalContext,
 ) error {
+	eh.evalCtx = evalCtx
 	if expr.Expr == "" {
 		return nil
 	}
 	eh.types = types
-	eh.evalCtx = evalCtx
 	eh.vars = tree.MakeIndexedVarHelper(eh, len(types))
 	var err error
 	eh.expr, err = processExpression(expr, &eh.vars)
@@ -150,7 +149,10 @@ func (eh *exprHelper) init(
 // returns whether the filter passes.
 func (eh *exprHelper) evalFilter(row sqlbase.EncDatumRow) (bool, error) {
 	eh.row = row
-	return sqlbase.RunFilter(eh.expr, eh.evalCtx)
+	eh.evalCtx.IVarHelper = &eh.vars
+	pass, err := sqlbase.RunFilter(eh.expr, eh.evalCtx)
+	eh.evalCtx.IVarHelper = nil
+	return pass, err
 }
 
 // Given a row, eval evaluates the wrapped expression and returns the
@@ -162,5 +164,8 @@ func (eh *exprHelper) evalFilter(row sqlbase.EncDatumRow) (bool, error) {
 func (eh *exprHelper) eval(row sqlbase.EncDatumRow) (tree.Datum, error) {
 	eh.row = row
 
-	return eh.expr.Eval(eh.evalCtx)
+	eh.evalCtx.IVarHelper = &eh.vars
+	d, err := eh.expr.Eval(eh.evalCtx)
+	eh.evalCtx.IVarHelper = nil
+	return d, err
 }
