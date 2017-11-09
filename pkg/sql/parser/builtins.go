@@ -28,7 +28,6 @@ import (
 	"math/rand"
 	"net"
 	"regexp/syntax"
-	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -180,22 +179,7 @@ func categorizeType(t types.T) string {
 
 // Category is used to categorize a function (for documentation purposes).
 func (b Builtin) Category() string {
-	// If an explicit category is specified, use it.
-	if b.category != "" {
-		return b.category
-	}
-	// If single argument attempt to categorize by the type of the argument.
-	switch typ := b.Types.(type) {
-	case ArgTypes:
-		if len(typ) == 1 {
-			return categorizeType(typ[0].Typ)
-		}
-	}
-	// Fall back to categorizing by return type.
-	if retType := b.FixedReturnType(); retType != nil {
-		return categorizeType(retType)
-	}
-	return ""
+	return b.category
 }
 
 // Class returns the FunctionClass of this builtin.
@@ -231,36 +215,6 @@ func (b Builtin) FixedReturnType() types.T {
 // Signature returns a human-readable signature.
 func (b Builtin) Signature() string {
 	return fmt.Sprintf("(%s) -> %s", b.Types.String(), b.FixedReturnType())
-}
-
-// AllBuiltinNames is an array containing all the built-in function
-// names, sorted in alphabetical order. This can be used for a
-// deterministic walk through the Builtins map.
-var AllBuiltinNames []string
-
-func init() {
-	initAggregateBuiltins()
-	initWindowBuiltins()
-	initGeneratorBuiltins()
-	initPGBuiltins()
-
-	AllBuiltinNames = make([]string, 0, len(Builtins))
-	funDefs = make(map[string]*FunctionDefinition)
-	for name, def := range Builtins {
-		funDefs[name] = newFunctionDefinition(name, def)
-		AllBuiltinNames = append(AllBuiltinNames, name)
-	}
-
-	// We alias the builtins to uppercase to hasten the lookup in the
-	// common case.
-	for _, name := range AllBuiltinNames {
-		uname := strings.ToUpper(name)
-		def := Builtins[name]
-		Builtins[uname] = def
-		funDefs[uname] = funDefs[name]
-	}
-
-	sort.Strings(AllBuiltinNames)
 }
 
 var digitNames = []string{"zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine"}
