@@ -58,7 +58,7 @@ export default function (props: GraphDashboardProps) {
     </LineGraph>,
 
     <LineGraph title="Logical Bytes per Store" tooltip={`The number of logical bytes of data on each store.`}>
-      <Axis units={AxisUnits.Bytes}>
+      <Axis units={AxisUnits.Bytes} label="logical store size">
         {
           _.map(nodeIDs, (nid) => (
             <Metric
