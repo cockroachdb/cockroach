@@ -3654,3 +3654,26 @@ func intPow(x, y DInt) (*DInt, error) {
 	}
 	return NewDInt(DInt(i)), nil
 }
+
+// pickFromTuple picks the greatest (or least value) from a tuple.
+func pickFromTuple(ctx *EvalContext, greatest bool, args Datums) (Datum, error) {
+	g := args[0]
+	// Pick a greater (or smaller) value.
+	for _, d := range args[1:] {
+		var eval Datum
+		var err error
+		if greatest {
+			eval, err = evalComparison(ctx, LT, g, d)
+		} else {
+			eval, err = evalComparison(ctx, LT, d, g)
+		}
+		if err != nil {
+			return nil, err
+		}
+		if eval == DBoolTrue ||
+			(eval == DNull && g == DNull) {
+			g = d
+		}
+	}
+	return g, nil
+}
