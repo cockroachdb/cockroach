@@ -1194,7 +1194,16 @@ var BinOps = map[BinaryOperator]binOpOverload{
 	},
 }
 
+// timestampMinusBinOp is the implementation of the subtraction
+// between types.TimestampTZ operands.
 var timestampMinusBinOp BinOp
+
+// TimestampDifference computes the interval difference between two
+// TimestampTZ datums. The result is a DInterval. The caller must
+// ensure that the arguments are of the proper Datum type.
+func TimestampDifference(ctx *EvalContext, start, end Datum) (Datum, error) {
+	return timestampMinusBinOp.fn(ctx, start, end)
+}
 
 func init() {
 	timestampMinusBinOp, _ = BinOps[Minus].lookupImpl(types.TimestampTZ, types.TimestampTZ)

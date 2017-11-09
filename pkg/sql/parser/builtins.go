@@ -1244,7 +1244,7 @@ CockroachDB supports the following flags:
 			Types:      ArgTypes{{"val", types.TimestampTZ}},
 			ReturnType: fixedReturnType(types.Interval),
 			fn: func(ctx *EvalContext, args Datums) (Datum, error) {
-				return timestampMinusBinOp.fn(ctx, ctx.GetTxnTimestamp(time.Microsecond), args[0])
+				return TimestampDifference(ctx, ctx.GetTxnTimestamp(time.Microsecond), args[0])
 			},
 			Info: "Calculates the interval between `val` and the current time.",
 		},
@@ -1252,7 +1252,7 @@ CockroachDB supports the following flags:
 			Types:      ArgTypes{{"begin", types.TimestampTZ}, {"end", types.TimestampTZ}},
 			ReturnType: fixedReturnType(types.Interval),
 			fn: func(ctx *EvalContext, args Datums) (Datum, error) {
-				return timestampMinusBinOp.fn(ctx, args[0], args[1])
+				return TimestampDifference(ctx, args[0], args[1])
 			},
 			Info: "Calculates the interval between `begin` and `end`.",
 		},
