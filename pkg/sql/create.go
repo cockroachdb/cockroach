@@ -1244,7 +1244,7 @@ func (p *planner) finalizeInterleave(
 	return nil
 }
 
-// valueEncodePartitionTuple typechecks the datums in tuple, returns the
+// valueEncodePartitionTuple typechecks the datums in maybeTuple, returns the
 // concatenation of these datums each encoded using the table "value" encoding.
 // The special values of DEFAULT (for list) and MAXVALUE (for range) are encoded
 // as NOT NULL.
@@ -1254,34 +1254,41 @@ func (p *planner) finalizeInterleave(
 func valueEncodePartitionTuple(
 	typ parser.PartitionByType,
 	evalCtx *parser.EvalContext,
-	tuple *parser.Tuple,
+	maybeTuple parser.Expr,
 	cols []sqlbase.ColumnDescriptor,
 ) ([]byte, error) {
+	var tuple *parser.Tuple
+	switch t := maybeTuple.(type) {
+	case *parser.Tuple:
+		// If we already have a tuple, use it directly.
+		tuple = t
+	case *parser.ParenExpr:
+		// A parenthesized expression looks like a 1-tuple, so interpret it as one.
+		// This ensures we see the MAXVALUE in VALUES < (MAXVALUE). We don't bother
+		// walking the expression to discover crazier nestings, like
+		// VALUES < (((MAXVALUE))).
+		tuple = &parser.Tuple{Exprs: []parser.Expr{t.Expr}}
+	default:
+		// Otherwise, promote whatever we have to a 1-tuple.
+		tuple = &parser.Tuple{Exprs: []parser.Expr{t}}
+	}
+
 	if len(tuple.Exprs) != len(cols) {
 		return nil, errors.Errorf("partition has %d columns but %d values were supplied",
 			len(cols), len(tuple.Exprs))
 	}
 
-	// Because of some parsing oddness, DEFAULT in the context of PARTITION BY
-	// is parsed as parser.DefaultVal instead of parser.PartitionDefault. Fix it
-	// up.
-	for i := range tuple.Exprs {
-		if _, ok := tuple.Exprs[i].(parser.DefaultVal); ok {
-			tuple.Exprs[i] = parser.PartitionDefault{}
-		}
-	}
-
 	var value, scratch []byte
 	for i, expr := range tuple.Exprs {
 		switch expr.(type) {
-		case parser.PartitionDefault:
+		case parser.DefaultVal:
 			if typ != parser.PartitionByList {
 				return nil, errors.Errorf("%s cannot be used with PARTITION BY %s", expr, typ)
 			}
 			// NOT NULL is used to signal DEFAULT.
 			value = encoding.EncodeNotNullValue(value, encoding.NoColumnID)
 			continue
-		case parser.PartitionMaxValue:
+		case parser.MaxVal:
 			if typ != parser.PartitionByRange {
 				return nil, errors.Errorf("%s cannot be used with PARTITION BY %s", expr, typ)
 			}
@@ -1348,9 +1355,9 @@ func addPartitionedBy(
 		p := sqlbase.PartitioningDescriptor_List{
 			Name: l.Name.Normalize(),
 		}
-		for _, tuple := range l.Tuples {
+		for _, expr := range l.Exprs {
 			encodedTuple, err := valueEncodePartitionTuple(
-				parser.PartitionByList, evalCtx, tuple, cols)
+				parser.PartitionByList, evalCtx, expr, cols)
 			if err != nil {
 				return errors.Wrapf(err, "PARTITION %s", p.Name)
 			}
@@ -1371,7 +1378,7 @@ func addPartitionedBy(
 			Name: r.Name.Normalize(),
 		}
 		encodedTuple, err := valueEncodePartitionTuple(
-			parser.PartitionByRange, evalCtx, r.Tuple, cols)
+			parser.PartitionByRange, evalCtx, r.Expr, cols)
 		if err != nil {
 			return errors.Wrapf(err, "PARTITION %s", p.Name)
 		}
