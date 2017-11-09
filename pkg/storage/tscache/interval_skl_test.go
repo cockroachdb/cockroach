@@ -62,6 +62,13 @@ func makeVal(ts hlc.Timestamp, txnIDStr string) cacheValue {
 	return cacheValue{ts: ts, txnID: txnID}
 }
 
+// setMinPages sets the minimum number of pages intervalSkl will evict down to.
+// This is only exposed as a testing method because there's no reason to use
+// this outside of testing.
+func (s *intervalSkl) setMinPages(minPages int) {
+	s.minPages = minPages
+}
+
 func TestIntervalSklAdd(t *testing.T) {
 	ts1 := makeTS(200, 0)
 	ts2 := makeTS(200, 201)
@@ -70,16 +77,16 @@ func TestIntervalSklAdd(t *testing.T) {
 	val1 := makeVal(ts1, "1")
 	val2 := makeVal(ts2, "2")
 
-	s := newIntervalSkl(arenaSize)
+	s := newIntervalSkl(nil /* clock */, 0 /* minRet */, arenaSize)
 
 	s.Add([]byte("apricot"), val1)
-	require.Equal(t, ts1.WallTime, s.later.maxWallTime)
+	require.Equal(t, ts1.WallTime, s.frontPage().maxWallTime)
 	require.Equal(t, emptyVal, s.LookupTimestamp([]byte("apple")))
 	require.Equal(t, val1, s.LookupTimestamp([]byte("apricot")))
 	require.Equal(t, emptyVal, s.LookupTimestamp([]byte("banana")))
 
 	s.Add([]byte("banana"), val2)
-	require.Equal(t, ts3Ceil.WallTime, s.later.maxWallTime)
+	require.Equal(t, ts3Ceil.WallTime, s.frontPage().maxWallTime)
 	require.Equal(t, emptyVal, s.LookupTimestamp([]byte("apple")))
 	require.Equal(t, val1, s.LookupTimestamp([]byte("apricot")))
 	require.Equal(t, val2, s.LookupTimestamp([]byte("banana")))
@@ -92,7 +99,7 @@ func TestIntervalSklSingleRange(t *testing.T) {
 	val3 := makeVal(makeTS(300, 50), "3")
 	val4 := makeVal(makeTS(400, 50), "4")
 
-	s := newIntervalSkl(arenaSize)
+	s := newIntervalSkl(nil /* clock */, 0 /* minRet */, arenaSize)
 
 	// val1:  [a--------------o]
 	s.AddRange([]byte("apricot"), []byte("orange"), 0, val1)
@@ -181,7 +188,7 @@ func TestIntervalSklOpenRanges(t *testing.T) {
 	val3 := makeVal(makeTS(300, 0), "3")
 	val4 := makeVal(makeTS(400, 0), "4")
 
-	s := newIntervalSkl(arenaSize)
+	s := newIntervalSkl(nil /* clock */, 0 /* minRet */, arenaSize)
 	s.floorTS = floorTS
 
 	// Range extending to infinity. excludeTo doesn't make a difference.
@@ -229,7 +236,7 @@ func TestIntervalSklSupersetRange(t *testing.T) {
 	val5 := makeVal(makeTS(500, 0), "5")
 	val6 := makeVal(makeTS(600, 0), "6")
 
-	s := newIntervalSkl(arenaSize)
+	s := newIntervalSkl(nil /* clock */, 0 /* minRet */, arenaSize)
 	s.floorTS = floorTS
 
 	// Same range.
@@ -324,7 +331,7 @@ func TestIntervalSklContiguousRanges(t *testing.T) {
 	val2 := makeVal(ts1, "2")
 	val2WithoutID := makeValWithoutID(ts1)
 
-	s := newIntervalSkl(arenaSize)
+	s := newIntervalSkl(nil /* clock */, 0 /* minRet */, arenaSize)
 	s.floorTS = floorTS
 
 	// val1:  [b---------k)
@@ -358,7 +365,7 @@ func TestIntervalSklOverlappingRanges(t *testing.T) {
 	val3 := makeVal(makeTS(300, 0), "3")
 	val4 := makeVal(makeTS(400, 0), "4")
 
-	s := newIntervalSkl(arenaSize)
+	s := newIntervalSkl(nil /* clock */, 0 /* minRet */, arenaSize)
 	s.floorTS = floorTS
 
 	// val1:  [b---------k]
@@ -402,7 +409,7 @@ func TestIntervalSklOverlappingRanges(t *testing.T) {
 func TestIntervalSklBoundaryRange(t *testing.T) {
 	val1 := makeVal(makeTS(100, 100), "1")
 
-	s := newIntervalSkl(arenaSize)
+	s := newIntervalSkl(nil /* clock */, 0 /* minRet */, arenaSize)
 
 	// Don't allow nil from and to keys.
 	require.Panics(t, func() { s.AddRange([]byte(nil), []byte(nil), 0, val1) })
@@ -412,7 +419,7 @@ func TestIntervalSklBoundaryRange(t *testing.T) {
 
 	// Don't allow inverted ranges.
 	require.Panics(t, func() { s.AddRange([]byte("kiwi"), []byte("apple"), 0, val1) })
-	require.Equal(t, int64(0), s.later.maxWallTime)
+	require.Equal(t, int64(0), s.frontPage().maxWallTime)
 	require.Equal(t, emptyVal, s.LookupTimestamp([]byte("apple")))
 	require.Equal(t, emptyVal, s.LookupTimestamp([]byte("banana")))
 	require.Equal(t, emptyVal, s.LookupTimestamp([]byte("kiwi")))
@@ -464,7 +471,7 @@ func TestIntervalSklRatchetTxnIDs(t *testing.T) {
 	val6 := makeVal(ts3, "5")
 	val6WithoutID := makeValWithoutID(ts3)
 
-	s := newIntervalSkl(arenaSize)
+	s := newIntervalSkl(nil /* clock */, 0 /* minRet */, arenaSize)
 
 	s.AddRange([]byte("apricot"), []byte("raspberry"), 0, val1)
 	require.Equal(t, emptyVal, s.LookupTimestamp([]byte("apple")))
@@ -540,7 +547,7 @@ func TestIntervalSklLookupRange(t *testing.T) {
 	val4 := makeVal(ts3, "4")
 	val5 := makeVal(ts4, "5")
 
-	s := newIntervalSkl(arenaSize)
+	s := newIntervalSkl(nil /* clock */, 0 /* minRet */, arenaSize)
 
 	// Perform range lookups over a single key.
 	s.Add([]byte("apricot"), val1)
@@ -615,7 +622,7 @@ func TestIntervalSklLookupRangeSingleKeyRanges(t *testing.T) {
 
 	// Perform range lookups over [key, key.Next()) ranges.
 	t.Run("[key, key.Next())", func(t *testing.T) {
-		s := newIntervalSkl(arenaSize)
+		s := newIntervalSkl(nil /* clock */, 0 /* minRet */, arenaSize)
 
 		s.AddRange(key1, key2, excludeTo, val1)
 		s.AddRange(key2, key3, excludeTo, val2)
@@ -661,7 +668,7 @@ func TestIntervalSklLookupRangeSingleKeyRanges(t *testing.T) {
 
 	// Perform the same lookups, but this time use single key ranges.
 	t.Run("[key, key]", func(t *testing.T) {
-		s := newIntervalSkl(arenaSize)
+		s := newIntervalSkl(nil /* clock */, 0 /* minRet */, arenaSize)
 
 		s.AddRange(key1, key1, 0, val1) // same as Add(key1, val1)
 		s.AddRange(key2, key2, 0, val2) //   ...   Add(key2, val2)
@@ -708,7 +715,7 @@ func TestIntervalSklLookupEqualsEarlierMaxWallTime(t *testing.T) {
 	txnID2 := "2"
 
 	testutils.RunTrueAndFalse(t, "tsWithLogicalPart", func(t *testing.T, logicalPart bool) {
-		s := newIntervalSkl(arenaSize)
+		s := newIntervalSkl(nil /* clock */, 0 /* minRet */, arenaSize)
 		s.floorTS = floorTS
 
 		// Insert an initial value into intervalSkl.
@@ -724,10 +731,10 @@ func TestIntervalSklLookupEqualsEarlierMaxWallTime(t *testing.T) {
 		if logicalPart {
 			expMaxTS = ts2Ceil
 		}
-		require.Equal(t, expMaxTS.WallTime, s.later.maxWallTime)
+		require.Equal(t, expMaxTS.WallTime, s.frontPage().maxWallTime)
 
 		// Rotate the page so that new writes will go to a different page.
-		s.rotatePages(s.later)
+		s.rotatePages(s.frontPage())
 
 		// Write to overlapping and non-overlapping parts of the new page with
 		// the values that have the same timestamp as the maxWallTime of the
@@ -768,15 +775,14 @@ func TestIntervalSklFill(t *testing.T) {
 	const n = 200
 	const txnID = "123"
 
-	s := newIntervalSkl(3000)
+	s := newIntervalSkl(nil /* clock */, 0 /* minRet */, 3000)
 
 	for i := 0; i < n; i++ {
 		key := []byte(fmt.Sprintf("%05d", i))
 		s.AddRange(key, key, 0, makeVal(makeTS(int64(100+i), int32(i)), txnID))
 	}
 
-	floorTS := s.floorTS
-	require.True(t, makeTS(100, 0).Less(floorTS))
+	require.True(t, makeTS(100, 0).Less(s.floorTS))
 
 	// Verify that the last key inserted is still in the intervalSkl and has not
 	// been rotated out.
@@ -788,7 +794,7 @@ func TestIntervalSklFill(t *testing.T) {
 	// been rotated out and used to ratchet the floorTS.
 	for i := 0; i < n; i++ {
 		key := []byte(fmt.Sprintf("%05d", i))
-		require.False(t, s.LookupTimestamp(key).ts.Less(floorTS))
+		require.False(t, s.LookupTimestamp(key).ts.Less(s.floorTS))
 	}
 }
 
@@ -798,7 +804,7 @@ func TestIntervalSklFill2(t *testing.T) {
 	const txnID = "123"
 
 	// n >> 997 so the intervalSkl will be filled.
-	s := newIntervalSkl(997)
+	s := newIntervalSkl(nil /* clock */, 0 /* minRet */, 997)
 	key := []byte("some key")
 
 	for i := 0; i < n; i++ {
@@ -808,14 +814,71 @@ func TestIntervalSklFill2(t *testing.T) {
 	}
 }
 
+// TestIntervalSklMinRetentionWindow tests that if a value is within the minimum
+// retention window, its page will never be evicted and it will never be subsumed
+// by the floor timestamp.
+func TestIntervalSklMinRetentionWindow(t *testing.T) {
+	manual := hlc.NewManualClock(200)
+	clock := hlc.NewClock(manual.UnixNano, time.Nanosecond)
+
+	const minRet = 500
+	s := newIntervalSkl(clock, minRet, 3000)
+	s.floorTS = floorTS
+
+	// Add an initial value. Rotate the page so it's alone.
+	origKey := []byte("banana")
+	origVal := makeVal(clock.Now(), "1")
+	s.Add(origKey, origVal)
+	s.rotatePages(s.frontPage())
+
+	// Add a large number of other values, forcing rotations. Continue until
+	// there are more pages than s.minPages.
+	manual.Increment(300)
+	for i := 0; s.pages.Len() <= s.minPages; i++ {
+		key := []byte(fmt.Sprintf("%05d", i))
+		s.Add(key, makeVal(clock.Now(), "2"))
+	}
+
+	// We should still be able to look up the initial value.
+	require.Equal(t, origVal, s.LookupTimestamp(origKey))
+
+	// Even if we rotate the pages, we should still be able to look up the
+	// value. No pages should be evicted.
+	pagesBefore := s.pages.Len()
+	s.rotatePages(s.frontPage())
+	require.Equal(t, pagesBefore+1, s.pages.Len(), "page should not be evicted")
+	require.Equal(t, origVal, s.LookupTimestamp(origKey))
+
+	// Increment the clock so that the original value is not in the minimum
+	// retention window. Rotate the pages and the back page should be evicted.
+	manual.Increment(300)
+	s.rotatePages(s.frontPage())
+
+	newVal := s.LookupTimestamp(origKey)
+	require.NotEqual(t, origVal, newVal, "the original value should be evicted")
+
+	_, update := ratchetValue(origVal, newVal)
+	require.True(t, update, "the original value should have been ratcheted to the new value")
+
+	// Increment the clock again so that all the other values can be evicted.
+	// The pages should collapse back down to s.minPages.
+	manual.Increment(300)
+	s.rotatePages(s.frontPage())
+	require.Equal(t, s.pages.Len(), s.minPages)
+}
+
 func TestIntervalSklConcurrency(t *testing.T) {
 	testCases := []struct {
-		name string
-		size uint32
+		name     string
+		size     uint32
+		minPages int
 	}{
 		// Test concurrency with a small page size in order to force lots of
 		// page rotations.
-		{name: "Rotates", size: 2048},
+		{name: "Rotates", size: 4096},
+		// Test concurrency with a small page size and a large number of pages
+		// in order to force lots of page growth.
+		{name: "Pages", size: 32768, minPages: 16},
 		// Test concurrency with a larger page size in order to test slot
 		// concurrency without the added complication of page rotations.
 		{name: "Slots", size: arenaSize},
@@ -831,7 +894,11 @@ func TestIntervalSklConcurrency(t *testing.T) {
 
 				var wg sync.WaitGroup
 				clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
-				s := newIntervalSkl(tc.size)
+
+				s := newIntervalSkl(clock, 0 /* minRet */, tc.size)
+				if tc.minPages != 0 {
+					s.setMinPages(tc.minPages)
+				}
 
 				slots := 5 * runtime.NumCPU()
 				for i := 0; i < slots; i++ {
@@ -928,7 +995,7 @@ func BenchmarkIntervalSklAdd(b *testing.B) {
 	const txnID = "123"
 
 	clock := hlc.NewClock(hlc.UnixNano, time.Millisecond)
-	s := newIntervalSkl(64 * 1024 * 1024)
+	s := newIntervalSkl(clock, MinRetentionWindow, 64*1024*1024)
 	rng := rand.New(rand.NewSource(timeutil.Now().UnixNano()))
 
 	size := 1
@@ -952,8 +1019,8 @@ func BenchmarkIntervalSklAddAndLookup(b *testing.B) {
 	const data = 500000    // number of ranges
 	const txnID = "123"
 
-	s := newIntervalSkl(arenaSize)
 	clock := hlc.NewClock(hlc.UnixNano, time.Millisecond)
+	s := newIntervalSkl(clock, MinRetentionWindow, arenaSize)
 	rng := rand.New(rand.NewSource(timeutil.Now().UnixNano()))
 
 	for i := 0; i < data; i++ {
