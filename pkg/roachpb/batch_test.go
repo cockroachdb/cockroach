@@ -242,6 +242,9 @@ func TestBatchResponseCombine(t *testing.T) {
 			Rows: []KeyValue{{
 				Key: Key("bar"),
 			}},
+			IntentRows: []KeyValue{{
+				Key: Key("baz"),
+			}},
 		})
 		return &BatchResponse{
 			Responses: []ResponseUnion{union},
@@ -253,8 +256,12 @@ func TestBatchResponseCombine(t *testing.T) {
 		if err := br.Combine(singleScanBR(), []int{0}); err != nil {
 			t.Fatal(err)
 		}
-		if exp := i + 1; len(br.Responses[0].GetInner().(*ScanResponse).Rows) != exp {
+		scan := br.Responses[0].GetInner().(*ScanResponse)
+		if exp := i + 1; len(scan.Rows) != exp {
 			t.Fatalf("expected %d rows, got %+v", exp, br)
+		}
+		if exp := i + 1; len(scan.IntentRows) != exp {
+			t.Fatalf("expected %d intent rows, got %+v", exp, br)
 		}
 	}
 
@@ -267,8 +274,13 @@ func TestBatchResponseCombine(t *testing.T) {
 	if err := br.Combine(singleScanBR(), []int{1}); err != nil {
 		t.Fatal(err)
 	}
-	if exp, scan := 3, br.Responses[1].GetInner().(*ScanResponse); len(scan.Rows) != exp {
-		t.Fatalf("expected %d rows, got %s", exp, pretty.Sprint(scan))
+	scan := br.Responses[1].GetInner().(*ScanResponse)
+	expRows := 3
+	if len(scan.Rows) != expRows {
+		t.Fatalf("expected %d rows, got %s", expRows, pretty.Sprint(scan))
+	}
+	if len(scan.IntentRows) != expRows {
+		t.Fatalf("expected %d intent rows, got %s", expRows, pretty.Sprint(scan))
 	}
 	if err := br.Combine(singleScanBR(), []int{0}); err.Error() !=
 		`can not combine *roachpb.PutResponse and *roachpb.ScanResponse` {
