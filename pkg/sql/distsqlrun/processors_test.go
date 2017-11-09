@@ -288,10 +288,7 @@ func TestPostProcess(t *testing.T) {
 			}
 			var res sqlbase.EncDatumRows
 			for {
-				row, meta := outBuf.Next()
-				if !meta.Empty() {
-					t.Fatalf("unexpected metadata: %v", meta)
-				}
+				row := outBuf.NextNoMeta(t)
 				if row == nil {
 					break
 				}
