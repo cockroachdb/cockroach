@@ -37,30 +37,35 @@ type WindowFrame struct {
 	PeerRowCount int // the number of rows in the current peer group
 }
 
-func (wf WindowFrame) rank() int {
+// Rank returns the rank of this frame.
+func (wf WindowFrame) Rank() int {
 	return wf.RowIdx + 1
 }
 
-func (wf WindowFrame) rowCount() int {
+// RowCount returns the number of rows in this frame.
+func (wf WindowFrame) RowCount() int {
 	return len(wf.Rows)
 }
 
+// FrameSize returns the size of this frame.
 // TODO(nvanbenschoten): This definition only holds while we don't support
 // frame specification (RANGE or ROWS) in the OVER clause.
-func (wf WindowFrame) frameSize() int {
+func (wf WindowFrame) FrameSize() int {
 	return wf.FirstPeerIdx + wf.PeerRowCount
 }
 
-// firstInPeerGroup returns if the current row is the first in its peer group.
-func (wf WindowFrame) firstInPeerGroup() bool {
+// FirstInPeerGroup returns if the current row is the first in its peer group.
+func (wf WindowFrame) FirstInPeerGroup() bool {
 	return wf.RowIdx == wf.FirstPeerIdx
 }
 
-func (wf WindowFrame) args() Datums {
-	return wf.argsWithRowOffset(0)
+// Args returns the current argument set in the window frame.
+func (wf WindowFrame) Args() Datums {
+	return wf.ArgsWithRowOffset(0)
 }
 
-func (wf WindowFrame) argsWithRowOffset(offset int) Datums {
+// ArgsWithRowOffset returns the argumnent set at the given offset in the window frame.
+func (wf WindowFrame) ArgsWithRowOffset(offset int) Datums {
 	return wf.Rows[wf.RowIdx+offset].Row[wf.ArgIdxStart : wf.ArgIdxStart+wf.ArgCount]
 }
 

@@ -20,6 +20,7 @@ import (
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -42,7 +43,7 @@ func GetAggregateInfo(
 		if len(inputTypes) != 1 {
 			return nil, sqlbase.ColumnType{}, errors.Errorf("ident aggregate needs 1 input")
 		}
-		return parser.NewIdentAggregate, inputTypes[0], nil
+		return builtins.NewIdentAggregate, inputTypes[0], nil
 	}
 
 	datumTypes := make([]types.T, len(inputTypes))
@@ -50,7 +51,7 @@ func GetAggregateInfo(
 		datumTypes[i] = inputTypes[i].ToDatumType()
 	}
 
-	builtins := parser.Aggregates[strings.ToLower(fn.String())]
+	builtins := builtins.Aggregates[strings.ToLower(fn.String())]
 	for _, b := range builtins {
 		types := b.Types.Types()
 		if len(types) != len(inputTypes) {

@@ -12,25 +12,25 @@
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
-package parser
+package builtins
 
 import (
 	"fmt"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
-
-	"golang.org/x/net/context"
 )
 
 func initWindowBuiltins() {
 	// Add all windows to the Builtins map after a few sanity checks.
 	for k, v := range windows {
 		for _, w := range v {
-			if !w.impure {
+			if !w.Impure {
 				panic(fmt.Sprintf("window functions should all be impure, found %v", w))
 			}
-			if w.class != WindowClass {
+			if w.Class != WindowClass {
 				panic(fmt.Sprintf("window functions should be marked with the WindowClass "+
 					"function class, found %v", w))
 			}
@@ -106,10 +106,10 @@ func makeWindowBuiltin(
 	in ArgTypes, ret types.T, f func([]types.T, *EvalContext) WindowFunc,
 ) Builtin {
 	return Builtin{
-		impure:     true,
-		class:      WindowClass,
+		Impure:     true,
+		Class:      WindowClass,
 		Types:      in,
-		ReturnType: fixedReturnType(ret),
+		ReturnType: FixedReturnType(ret),
 		WindowFunc: f,
 	}
 }
@@ -148,14 +148,14 @@ func newAggregateWindow(agg AggregateFunc) WindowFunc {
 func (w *aggregateWindowFunc) Compute(
 	ctx context.Context, evalCtx *EvalContext, wf WindowFrame,
 ) (Datum, error) {
-	if !wf.firstInPeerGroup() {
+	if !wf.FirstInPeerGroup() {
 		return w.peerRes, nil
 	}
 
 	// Accumulate all values in the peer group at the same time, as these
 	// must return the same value.
 	for i := 0; i < wf.PeerRowCount; i++ {
-		args := wf.argsWithRowOffset(i)
+		args := wf.ArgsWithRowOffset(i)
 		var value Datum
 		// COUNT_ROWS takes no arguments.
 		if len(args) > 0 {
@@ -204,8 +204,8 @@ func newRankWindow([]types.T, *EvalContext) WindowFunc {
 }
 
 func (w *rankWindow) Compute(_ context.Context, _ *EvalContext, wf WindowFrame) (Datum, error) {
-	if wf.firstInPeerGroup() {
-		w.peerRes = NewDInt(DInt(wf.rank()))
+	if wf.FirstInPeerGroup() {
+		w.peerRes = NewDInt(DInt(wf.Rank()))
 	}
 	return w.peerRes, nil
 }
@@ -225,7 +225,7 @@ func newDenseRankWindow([]types.T, *EvalContext) WindowFunc {
 func (w *denseRankWindow) Compute(
 	_ context.Context, _ *EvalContext, wf WindowFrame,
 ) (Datum, error) {
-	if wf.firstInPeerGroup() {
+	if wf.FirstInPeerGroup() {
 		w.denseRank++
 		w.peerRes = NewDInt(DInt(w.denseRank))
 	}
@@ -250,13 +250,13 @@ func (w *percentRankWindow) Compute(
 	_ context.Context, _ *EvalContext, wf WindowFrame,
 ) (Datum, error) {
 	// Return zero if there's only one row, per spec.
-	if wf.rowCount() <= 1 {
+	if wf.RowCount() <= 1 {
 		return dfloatZero, nil
 	}
 
-	if wf.firstInPeerGroup() {
+	if wf.FirstInPeerGroup() {
 		// (rank - 1) / (total rows - 1)
-		w.peerRes = NewDFloat(DFloat(wf.rank()-1) / DFloat(wf.rowCount()-1))
+		w.peerRes = NewDFloat(DFloat(wf.Rank()-1) / DFloat(wf.RowCount()-1))
 	}
 	return w.peerRes, nil
 }
@@ -276,9 +276,9 @@ func newCumulativeDistWindow([]types.T, *EvalContext) WindowFunc {
 func (w *cumulativeDistWindow) Compute(
 	_ context.Context, _ *EvalContext, wf WindowFrame,
 ) (Datum, error) {
-	if wf.firstInPeerGroup() {
+	if wf.FirstInPeerGroup() {
 		// (number of rows preceding or peer with current row) / (total rows)
-		w.peerRes = NewDFloat(DFloat(wf.frameSize()) / DFloat(wf.rowCount()))
+		w.peerRes = NewDFloat(DFloat(wf.FrameSize()) / DFloat(wf.RowCount()))
 	}
 	return w.peerRes, nil
 }
@@ -298,14 +298,15 @@ func newNtileWindow([]types.T, *EvalContext) WindowFunc {
 	return &ntileWindow{}
 }
 
-var errInvalidArgumentForNtile = pgerror.NewErrorf(pgerror.CodeInvalidParameterValueError, "argument of ntile() must be greater than zero")
+var errInvalidArgumentForNtile = pgerror.NewErrorf(
+	pgerror.CodeInvalidParameterValueError, "argument of ntile() must be greater than zero")
 
 func (w *ntileWindow) Compute(_ context.Context, _ *EvalContext, wf WindowFrame) (Datum, error) {
 	if w.ntile == nil {
 		// If this is the first call to ntileWindow.Compute, set up the buckets.
-		total := wf.rowCount()
+		total := wf.RowCount()
 
-		arg := wf.args()[0]
+		arg := wf.Args()[0]
 		if arg == DNull {
 			// per spec: If argument is the null value, then the result is the null value.
 			return DNull, nil
@@ -371,7 +372,7 @@ func makeLeadLagWindowConstructor(
 func (w *leadLagWindow) Compute(_ context.Context, _ *EvalContext, wf WindowFrame) (Datum, error) {
 	offset := 1
 	if w.withOffset {
-		offsetArg := wf.args()[1]
+		offsetArg := wf.Args()[1]
 		if offsetArg == DNull {
 			return DNull, nil
 		}
@@ -381,16 +382,16 @@ func (w *leadLagWindow) Compute(_ context.Context, _ *EvalContext, wf WindowFram
 		offset *= -1
 	}
 
-	if targetRow := wf.RowIdx + offset; targetRow < 0 || targetRow >= wf.rowCount() {
+	if targetRow := wf.RowIdx + offset; targetRow < 0 || targetRow >= wf.RowCount() {
 		// Target row is out of the partition; supply default value if provided,
 		// otherwise return NULL.
 		if w.withDefault {
-			return wf.args()[2], nil
+			return wf.Args()[2], nil
 		}
 		return DNull, nil
 	}
 
-	return wf.argsWithRowOffset(offset)[0], nil
+	return wf.ArgsWithRowOffset(offset)[0], nil
 }
 
 func (w *leadLagWindow) Close(context.Context, *EvalContext) {}
@@ -416,7 +417,7 @@ func newLastValueWindow([]types.T, *EvalContext) WindowFunc {
 }
 
 func (lastValueWindow) Compute(_ context.Context, _ *EvalContext, wf WindowFrame) (Datum, error) {
-	return wf.Rows[wf.frameSize()-1].Row[wf.ArgIdxStart], nil
+	return wf.Rows[wf.FrameSize()-1].Row[wf.ArgIdxStart], nil
 }
 
 func (lastValueWindow) Close(context.Context, *EvalContext) {}
@@ -429,10 +430,11 @@ func newNthValueWindow([]types.T, *EvalContext) WindowFunc {
 	return &nthValueWindow{}
 }
 
-var errInvalidArgumentForNthValue = pgerror.NewErrorf(pgerror.CodeInvalidParameterValueError, "argument of nth_value() must be greater than zero")
+var errInvalidArgumentForNthValue = pgerror.NewErrorf(
+	pgerror.CodeInvalidParameterValueError, "argument of nth_value() must be greater than zero")
 
 func (nthValueWindow) Compute(_ context.Context, _ *EvalContext, wf WindowFrame) (Datum, error) {
-	arg := wf.args()[1]
+	arg := wf.Args()[1]
 	if arg == DNull {
 		return DNull, nil
 	}
@@ -444,7 +446,7 @@ func (nthValueWindow) Compute(_ context.Context, _ *EvalContext, wf WindowFrame)
 
 	// per spec: Only consider the rows within the "window frame", which by default contains
 	// the rows from the start of the partition through the last peer of the current row.
-	if nth > wf.frameSize() {
+	if nth > wf.FrameSize() {
 		return DNull, nil
 	}
 	return wf.Rows[nth-1].Row[wf.ArgIdxStart], nil

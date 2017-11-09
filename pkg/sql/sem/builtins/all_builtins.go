@@ -12,12 +12,13 @@
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
-package parser
+package builtins
 
 import (
 	"sort"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 )
 
@@ -33,9 +34,9 @@ func init() {
 	initPGBuiltins()
 
 	AllBuiltinNames = make([]string, 0, len(Builtins))
-	funDefs = make(map[string]*FunctionDefinition)
+	parser.FunDefs = make(map[string]*FunctionDefinition)
 	for name, def := range Builtins {
-		funDefs[name] = newFunctionDefinition(name, def)
+		parser.FunDefs[name] = NewFunctionDefinition(name, def)
 		AllBuiltinNames = append(AllBuiltinNames, name)
 	}
 
@@ -45,18 +46,17 @@ func init() {
 		uname := strings.ToUpper(name)
 		def := Builtins[name]
 		for i, b := range def {
-			if b.category == "" {
-				def[i].category = getCategory(def[i])
+			if b.Category == "" {
+				def[i].Category = getCategory(def[i])
 			}
 		}
 		Builtins[uname] = def
-		funDefs[uname] = funDefs[name]
+		parser.FunDefs[uname] = parser.FunDefs[name]
 	}
 
 	sort.Strings(AllBuiltinNames)
 }
 
-// getCategory generates a missing category string.
 func getCategory(b Builtin) string {
 	// If single argument attempt to categorize by the type of the argument.
 	switch typ := b.Types.(type) {
@@ -72,9 +72,6 @@ func getCategory(b Builtin) string {
 	return ""
 }
 
-// collectBuiltins maps a built-in generator function over a set of
-// input types and merges the results in a single overload set
-// definition.
 func collectBuiltins(f func(types.T) Builtin, types ...types.T) []Builtin {
 	r := make([]Builtin, len(types))
 	for i := range types {

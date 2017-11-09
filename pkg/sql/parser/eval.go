@@ -44,17 +44,20 @@ import (
 )
 
 var (
-	errZeroModulus     = pgerror.NewError(pgerror.CodeDivisionByZeroError, "zero modulus")
-	errDivByZero       = pgerror.NewError(pgerror.CodeDivisionByZeroError, "division by zero")
 	errIntOutOfRange   = pgerror.NewError(pgerror.CodeNumericValueOutOfRangeError, "integer out of range")
 	errFloatOutOfRange = pgerror.NewError(pgerror.CodeNumericValueOutOfRangeError, "float out of range")
+
+	// ErrDivByZero is reported on a division by zero.
+	ErrDivByZero = pgerror.NewError(pgerror.CodeDivisionByZeroError, "division by zero")
+	// ErrZeroModulus is reported when computing the rest of a division by zero.
+	ErrZeroModulus = pgerror.NewError(pgerror.CodeDivisionByZeroError, "zero modulus")
 
 	big10E6  = big.NewInt(1e6)
 	big10E10 = big.NewInt(1e10)
 )
 
-// secondsInDay is the number of seconds in a day.
-const secondsInDay = 24 * 60 * 60
+// SecondsInDay is the number of seconds in a day.
+const SecondsInDay = 24 * 60 * 60
 
 // UnaryOp is a unary operator.
 type UnaryOp struct {
@@ -62,15 +65,15 @@ type UnaryOp struct {
 	ReturnType types.T
 	fn         func(*EvalContext, Datum) (Datum, error)
 
-	types   typeList
-	retType returnTyper
+	types   TypeList
+	retType ReturnTyper
 }
 
-func (op UnaryOp) params() typeList {
+func (op UnaryOp) params() TypeList {
 	return op.types
 }
 
-func (op UnaryOp) returnType() returnTyper {
+func (op UnaryOp) returnType() ReturnTyper {
 	return op.retType
 }
 
@@ -83,7 +86,7 @@ func init() {
 		for i, impl := range overload {
 			casted := impl.(UnaryOp)
 			casted.types = ArgTypes{{"arg", casted.Typ}}
-			casted.retType = fixedReturnType(casted.ReturnType)
+			casted.retType = FixedReturnType(casted.ReturnType)
 			UnaryOps[op][i] = casted
 		}
 	}
@@ -178,12 +181,12 @@ type BinOp struct {
 	ReturnType types.T
 	fn         func(*EvalContext, Datum, Datum) (Datum, error)
 
-	types        typeList
-	retType      returnTyper
+	types        TypeList
+	retType      ReturnTyper
 	nullableArgs bool
 }
 
-func (op BinOp) params() typeList {
+func (op BinOp) params() TypeList {
 	return op.types
 }
 
@@ -191,7 +194,7 @@ func (op BinOp) matchParams(l, r types.T) bool {
 	return op.params().matchAt(l, 0) && op.params().matchAt(r, 1)
 }
 
-func (op BinOp) returnType() returnTyper {
+func (op BinOp) returnType() ReturnTyper {
 	return op.retType
 }
 
@@ -199,7 +202,9 @@ func (BinOp) preferred() bool {
 	return false
 }
 
-func appendToMaybeNullArray(typ types.T, left Datum, right Datum) (Datum, error) {
+// AppendToMaybeNullArray appends an element to an array. If the first
+// argument is NULL, an array of one element is created.
+func AppendToMaybeNullArray(typ types.T, left Datum, right Datum) (Datum, error) {
 	result := NewDArray(typ)
 	if left != DNull {
 		for _, e := range MustBeDArray(left).Array {
@@ -214,7 +219,9 @@ func appendToMaybeNullArray(typ types.T, left Datum, right Datum) (Datum, error)
 	return result, nil
 }
 
-func prependToMaybeNullArray(typ types.T, left Datum, right Datum) (Datum, error) {
+// PrependToMaybeNullArray prepends an element in the front of an arrray.
+// If the argument is NULL, an array of one element is created.
+func PrependToMaybeNullArray(typ types.T, left Datum, right Datum) (Datum, error) {
 	result := NewDArray(typ)
 	if err := result.Append(left); err != nil {
 		return nil, err
@@ -242,7 +249,7 @@ func initArrayElementConcatenation() {
 			ReturnType:   types.TArray{Typ: typ},
 			nullableArgs: true,
 			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
-				return appendToMaybeNullArray(typ, left, right)
+				return AppendToMaybeNullArray(typ, left, right)
 			},
 		})
 
@@ -252,13 +259,14 @@ func initArrayElementConcatenation() {
 			ReturnType:   types.TArray{Typ: typ},
 			nullableArgs: true,
 			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
-				return prependToMaybeNullArray(typ, left, right)
+				return PrependToMaybeNullArray(typ, left, right)
 			},
 		})
 	}
 }
 
-func concatArrays(typ types.T, left Datum, right Datum) (Datum, error) {
+// ConcatArrays concatenates two arrays.
+func ConcatArrays(typ types.T, left Datum, right Datum) (Datum, error) {
 	if left == DNull && right == DNull {
 		return DNull, nil
 	}
@@ -289,7 +297,7 @@ func initArrayToArrayConcatenation() {
 			ReturnType:   types.TArray{Typ: typ},
 			nullableArgs: true,
 			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
-				return concatArrays(typ, left, right)
+				return ConcatArrays(typ, left, right)
 			},
 		})
 	}
@@ -305,7 +313,7 @@ func init() {
 		for i, impl := range overload {
 			casted := impl.(BinOp)
 			casted.types = ArgTypes{{"left", casted.LeftType}, {"right", casted.RightType}}
-			casted.retType = fixedReturnType(casted.ReturnType)
+			casted.retType = FixedReturnType(casted.ReturnType)
 			BinOps[op][i] = casted
 		}
 	}
@@ -324,8 +332,8 @@ func (o binOpOverload) lookupImpl(left, right types.T) (BinOp, bool) {
 	return BinOp{}, false
 }
 
-// addWithOverflow returns a+b. If ok is false, a+b overflowed.
-func addWithOverflow(a, b int64) (r int64, ok bool) {
+// AddWithOverflow returns a+b. If ok is false, a+b overflowed.
+func AddWithOverflow(a, b int64) (r int64, ok bool) {
 	if b > 0 && a > math.MaxInt64-b {
 		return 0, false
 	}
@@ -392,7 +400,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			ReturnType: types.Int,
 			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				a, b := MustBeDInt(left), MustBeDInt(right)
-				r, ok := addWithOverflow(int64(a), int64(b))
+				r, ok := AddWithOverflow(int64(a), int64(b))
 				if !ok {
 					return nil, errIntOutOfRange
 				}
@@ -864,7 +872,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				rInt := MustBeDInt(right)
 				if rInt == 0 {
-					return nil, errDivByZero
+					return nil, ErrDivByZero
 				}
 				return &DInterval{Duration: left.(*DInterval).Duration.Div(int64(rInt))}, nil
 			},
@@ -876,7 +884,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				r := float64(*right.(*DFloat))
 				if r == 0.0 {
-					return nil, errDivByZero
+					return nil, ErrDivByZero
 				}
 				return &DInterval{Duration: left.(*DInterval).Duration.DivFloat(r)}, nil
 			},
@@ -891,7 +899,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				rInt := MustBeDInt(right)
 				if rInt == 0 {
-					return nil, errDivByZero
+					return nil, ErrDivByZero
 				}
 				return NewDInt(MustBeDInt(left) / rInt), nil
 			},
@@ -926,7 +934,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 				l := &left.(*DDecimal).Decimal
 				r := MustBeDInt(right)
 				if r == 0 {
-					return nil, errDivByZero
+					return nil, ErrDivByZero
 				}
 				dd := &DDecimal{}
 				dd.SetCoefficient(int64(r))
@@ -942,7 +950,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 				l := MustBeDInt(left)
 				r := &right.(*DDecimal).Decimal
 				if r.Sign() == 0 {
-					return nil, errDivByZero
+					return nil, ErrDivByZero
 				}
 				dd := &DDecimal{}
 				dd.SetCoefficient(int64(l))
@@ -960,7 +968,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				r := MustBeDInt(right)
 				if r == 0 {
-					return nil, errZeroModulus
+					return nil, ErrZeroModulus
 				}
 				return NewDInt(MustBeDInt(left) % r), nil
 			},
@@ -1061,7 +1069,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			RightType:  types.Int,
 			ReturnType: types.Int,
 			fn: func(ctx *EvalContext, left Datum, right Datum) (Datum, error) {
-				return intPow(MustBeDInt(left), MustBeDInt(right))
+				return IntPow(MustBeDInt(left), MustBeDInt(right))
 			},
 		},
 		BinOp{
@@ -1217,10 +1225,10 @@ type CmpOp struct {
 	// Datum return type is a union between *DBool and dNull.
 	fn func(*EvalContext, Datum, Datum) (Datum, error)
 
-	types typeList
+	types TypeList
 }
 
-func (op CmpOp) params() typeList {
+func (op CmpOp) params() TypeList {
 	return op.types
 }
 
@@ -1228,9 +1236,9 @@ func (op CmpOp) matchParams(l, r types.T) bool {
 	return op.params().matchAt(l, 0) && op.params().matchAt(r, 1)
 }
 
-var cmpOpReturnType = fixedReturnType(types.Bool)
+var cmpOpReturnType = FixedReturnType(types.Bool)
 
-func (op CmpOp) returnType() returnTyper {
+func (op CmpOp) returnType() ReturnTyper {
 	return cmpOpReturnType
 }
 
@@ -1975,7 +1983,7 @@ func matchLike(ctx *EvalContext, left, right Datum, caseInsensitive bool) (Datum
 	return MakeDBool(DBool(like(string(MustBeDString(left))))), nil
 }
 
-func matchRegexpWithKey(ctx *EvalContext, str Datum, key regexpCacheKey) (Datum, error) {
+func matchRegexpWithKey(ctx *EvalContext, str Datum, key RegexpCacheKey) (Datum, error) {
 	re, err := ctx.ReCache.GetRegexp(key)
 	if err != nil {
 		return DBoolFalse, err
@@ -2031,11 +2039,11 @@ type EvalContext struct {
 	NodeID    roachpb.NodeID
 	// The statement timestamp. May be different for every statement.
 	// Used for statement_timestamp().
-	stmtTimestamp time.Time
+	StmtTimestamp time.Time
 	// The transaction timestamp. Needs to stay stable for the lifetime
 	// of a transaction. Used for now(), current_timestamp(),
 	// transaction_timestamp() and the like.
-	txnTimestamp time.Time
+	TxnTimestamp time.Time
 	// The cluster timestamp. Needs to be stable for the lifetime of the
 	// transaction. Used for cluster_logical_timestamp().
 	clusterTimestamp hlc.Timestamp
@@ -2133,10 +2141,10 @@ func (ctx *EvalContext) Stop(c context.Context) {
 func (ctx *EvalContext) GetStmtTimestamp() time.Time {
 	// TODO(knz): a zero timestamp should never be read, even during
 	// Prepare. This will need to be addressed.
-	if !ctx.PrepareOnly && ctx.stmtTimestamp.IsZero() {
+	if !ctx.PrepareOnly && ctx.StmtTimestamp.IsZero() {
 		panic("zero statement timestamp in EvalContext")
 	}
-	return ctx.stmtTimestamp
+	return ctx.StmtTimestamp
 }
 
 // GetClusterTimestamp retrieves the current cluster timestamp as per
@@ -2190,10 +2198,10 @@ func TimestampToDecimal(ts hlc.Timestamp) *DDecimal {
 func (ctx *EvalContext) GetTxnTimestamp(precision time.Duration) *DTimestampTZ {
 	// TODO(knz): a zero timestamp should never be read, even during
 	// Prepare. This will need to be addressed.
-	if !ctx.PrepareOnly && ctx.txnTimestamp.IsZero() {
+	if !ctx.PrepareOnly && ctx.TxnTimestamp.IsZero() {
 		panic("zero transaction timestamp in EvalContext")
 	}
-	return MakeDTimestampTZ(ctx.txnTimestamp, precision)
+	return MakeDTimestampTZ(ctx.TxnTimestamp, precision)
 }
 
 // GetTxnTimestampNoZone retrieves the current transaction timestamp as per
@@ -2201,29 +2209,29 @@ func (ctx *EvalContext) GetTxnTimestamp(precision time.Duration) *DTimestampTZ {
 func (ctx *EvalContext) GetTxnTimestampNoZone(precision time.Duration) *DTimestamp {
 	// TODO(knz): a zero timestamp should never be read, even during
 	// Prepare. This will need to be addressed.
-	if !ctx.PrepareOnly && ctx.txnTimestamp.IsZero() {
+	if !ctx.PrepareOnly && ctx.TxnTimestamp.IsZero() {
 		panic("zero transaction timestamp in EvalContext")
 	}
-	return MakeDTimestamp(ctx.txnTimestamp, precision)
+	return MakeDTimestamp(ctx.TxnTimestamp, precision)
 }
 
 // GetTxnTimestampRaw exposes the txnTimestamp field. Also see GetTxnTimestamp()
 // and GetTxnTimestampNoZone().
 func (ctx *EvalContext) GetTxnTimestampRaw() time.Time {
-	if !ctx.PrepareOnly && ctx.txnTimestamp.IsZero() {
+	if !ctx.PrepareOnly && ctx.TxnTimestamp.IsZero() {
 		panic("zero transaction timestamp in EvalContext")
 	}
-	return ctx.txnTimestamp
+	return ctx.TxnTimestamp
 }
 
 // SetTxnTimestamp sets the corresponding timestamp in the EvalContext.
 func (ctx *EvalContext) SetTxnTimestamp(ts time.Time) {
-	ctx.txnTimestamp = ts
+	ctx.TxnTimestamp = ts
 }
 
 // SetStmtTimestamp sets the corresponding timestamp in the EvalContext.
 func (ctx *EvalContext) SetStmtTimestamp(ts time.Time) {
-	ctx.stmtTimestamp = ts
+	ctx.StmtTimestamp = ts
 }
 
 // SetClusterTimestamp sets the corresponding timestamp in the EvalContext.
@@ -2700,7 +2708,7 @@ func performCast(ctx *EvalContext, d Datum, t coltypes.CastTargetType) (Datum, e
 		case *DCollatedString:
 			return ParseDTimestamp(d.Contents, time.Microsecond)
 		case *DDate:
-			year, month, day := timeutil.Unix(int64(*d)*secondsInDay, 0).Date()
+			year, month, day := timeutil.Unix(int64(*d)*SecondsInDay, 0).Date()
 			return MakeDTimestamp(time.Date(year, month, day, 0, 0, 0, 0, time.UTC), time.Microsecond), nil
 		case *DInt:
 			return MakeDTimestamp(timeutil.Unix(int64(*d), 0), time.Second), nil
@@ -3000,13 +3008,13 @@ func (expr *FuncExpr) Eval(ctx *EvalContext) (Datum, error) {
 		if err != nil {
 			return nil, err
 		}
-		if arg == DNull && !expr.fn.nullableArgs {
+		if arg == DNull && !expr.fn.NullableArgs {
 			return DNull, nil
 		}
 		args.D = append(args.D, arg)
 	}
 
-	res, err := expr.fn.fn(ctx, args.D)
+	res, err := expr.fn.Fn(ctx, args.D)
 	if err != nil {
 		// If we are facing a retry error, in particular those generated
 		// by crdb_internal.force_retry(), propagate it unchanged, so that
@@ -3504,7 +3512,8 @@ type likeKey struct {
 	caseInsensitive bool
 }
 
-func (k likeKey) pattern() (string, error) {
+// Pattern implements the RegexpCacheKey interface.
+func (k likeKey) Pattern() (string, error) {
 	pattern := regexp.QuoteMeta(k.s)
 	// Replace LIKE/ILIKE specific wildcards with standard wildcards
 	pattern = strings.Replace(pattern, "%", ".*", -1)
@@ -3514,7 +3523,8 @@ func (k likeKey) pattern() (string, error) {
 
 type similarToKey string
 
-func (k similarToKey) pattern() (string, error) {
+// Pattern implements the RegexpCacheKey interface.
+func (k similarToKey) Pattern() (string, error) {
 	pattern := SimilarEscape(string(k))
 	return anchorPattern(pattern, false), nil
 }
@@ -3524,7 +3534,8 @@ type regexpKey struct {
 	caseInsensitive bool
 }
 
-func (k regexpKey) pattern() (string, error) {
+// Pattern implements the RegexpCacheKey interface.
+func (k regexpKey) Pattern() (string, error) {
 	if k.caseInsensitive {
 		return caseInsensitive(k.s), nil
 	}
@@ -3631,8 +3642,8 @@ func FindEqualComparisonFunction(
 	return nil, false
 }
 
-// intPow computes the value of x^y.
-func intPow(x, y DInt) (*DInt, error) {
+// IntPow computes the value of x^y.
+func IntPow(x, y DInt) (*DInt, error) {
 	xd := apd.New(int64(x), 0)
 	yd := apd.New(int64(y), 0)
 	_, err := DecimalCtx.Pow(xd, xd, yd)
@@ -3646,8 +3657,8 @@ func intPow(x, y DInt) (*DInt, error) {
 	return NewDInt(DInt(i)), nil
 }
 
-// pickFromTuple picks the greatest (or least value) from a tuple.
-func pickFromTuple(ctx *EvalContext, greatest bool, args Datums) (Datum, error) {
+// PickFromTuple picks the greatest (or least value) from a tuple.
+func PickFromTuple(ctx *EvalContext, greatest bool, args Datums) (Datum, error) {
 	g := args[0]
 	// Pick a greater (or smaller) value.
 	for _, d := range args[1:] {

@@ -119,7 +119,7 @@ func helpWithFunction(sqllex sqlLexer, f ResolvableFunctionReference) int {
 		}
 		lastInfo = b.Info
 
-		cat := b.Category()
+		cat := b.Category
 		if cat != "" {
 			cat = "[" + cat + "]"
 		}

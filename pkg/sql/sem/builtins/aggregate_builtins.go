@@ -12,7 +12,7 @@
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
-package parser
+package builtins
 
 import (
 	"bytes"
@@ -32,10 +32,10 @@ func initAggregateBuiltins() {
 	// Add all aggregates to the Builtins map after a few sanity checks.
 	for k, v := range Aggregates {
 		for i, a := range v {
-			if !a.impure {
+			if !a.Impure {
 				panic(fmt.Sprintf("aggregate functions should all be impure, found %v", a))
 			}
-			if a.class != AggregateClass {
+			if a.Class != AggregateClass {
 				panic(fmt.Sprintf("aggregate functions should be marked with the AggregateClass "+
 					"function class, found %v", a))
 			}
@@ -53,7 +53,7 @@ func initAggregateBuiltins() {
 			// grouped rows as implicit parameter. It may have a different
 			// value in every group, so it cannot be considered constant in
 			// the context of a data source.
-			v[i].needsRepeatedEvaluation = true
+			v[i].NeedsRepeatedEvaluation = true
 		}
 
 		Builtins[k] = v
@@ -77,7 +77,7 @@ var Aggregates = map[string][]Builtin{
 			[]types.T{types.Any},
 			func(args []TypedExpr) types.T {
 				if len(args) == 0 {
-					return unknownReturnType
+					return UnknownReturnType
 				}
 				return types.TArray{Typ: args[0].ResolvedType()}
 			},
@@ -124,10 +124,10 @@ var Aggregates = map[string][]Builtin{
 
 	"count_rows": {
 		{
-			impure:        true,
-			class:         AggregateClass,
+			Impure:        true,
+			Class:         AggregateClass,
 			Types:         ArgTypes{},
-			ReturnType:    fixedReturnType(types.Int),
+			ReturnType:    FixedReturnType(types.Int),
 			AggregateFunc: newCountRowsAggregate,
 			WindowFunc: func(params []types.T, evalCtx *EvalContext) WindowFunc {
 				return newAggregateWindow(newCountRowsAggregate(params, evalCtx))
@@ -219,11 +219,11 @@ var Aggregates = map[string][]Builtin{
 func makeAggBuiltin(
 	in []types.T, ret types.T, f func([]types.T, *EvalContext) AggregateFunc, info string,
 ) Builtin {
-	return makeAggBuiltinWithReturnType(in, fixedReturnType(ret), f, info)
+	return makeAggBuiltinWithReturnType(in, FixedReturnType(ret), f, info)
 }
 
 func makeAggBuiltinWithReturnType(
-	in []types.T, retType returnTyper, f func([]types.T, *EvalContext) AggregateFunc, info string,
+	in []types.T, retType ReturnTyper, f func([]types.T, *EvalContext) AggregateFunc, info string,
 ) Builtin {
 	argTypes := make(ArgTypes, len(in))
 	for i, typ := range in {
@@ -234,8 +234,8 @@ func makeAggBuiltinWithReturnType(
 	return Builtin{
 		// See the comment about aggregate functions in the definitions
 		// of the Builtins array above.
-		impure:        true,
-		class:         AggregateClass,
+		Impure:        true,
+		Class:         AggregateClass,
 		Types:         argTypes,
 		ReturnType:    retType,
 		AggregateFunc: f,
@@ -685,7 +685,7 @@ func (a *intSumAggregate) Add(_ context.Context, datum Datum, _ ...Datum) error 
 		// does not provide checked addition, we have to check for the
 		// overflow explicitly.
 		if !a.large {
-			r, ok := addWithOverflow(a.intSum, t)
+			r, ok := AddWithOverflow(a.intSum, t)
 			if ok {
 				a.intSum = r
 			} else {
@@ -976,7 +976,7 @@ func (a *decimalSqrDiffAggregate) Result() (Datum, error) {
 	if a.count.Cmp(decimalOne) < 0 {
 		return DNull, nil
 	}
-	dd := &DDecimal{a.sqrDiff}
+	dd := &DDecimal{Decimal: a.sqrDiff}
 	// Remove trailing zeros. Depending on the order in which the input
 	// is processed, some number of trailing zeros could be added to the
 	// output. Remove them so that the results are the same regardless of order.
@@ -1024,7 +1024,7 @@ func (a *floatSumSqrDiffsAggregate) Add(
 	// https://www.johndcook.com/blog/skewness_kurtosis and our
 	// implementation of NumericStats
 	// https://github.com/cockroachdb/cockroach/pull/17728.
-	totalCount, ok := addWithOverflow(a.count, count)
+	totalCount, ok := AddWithOverflow(a.count, count)
 	if !ok {
 		return pgerror.NewErrorf(pgerror.CodeNumericValueOutOfRangeError, "number of values in aggregate exceed max count of %d", math.MaxInt64)
 	}
@@ -1131,7 +1131,7 @@ func (a *decimalSumSqrDiffsAggregate) Result() (Datum, error) {
 	if a.count.Cmp(decimalOne) < 0 {
 		return DNull, nil
 	}
-	dd := &DDecimal{a.sqrDiff}
+	dd := &DDecimal{Decimal: a.sqrDiff}
 	return dd, nil
 }
 

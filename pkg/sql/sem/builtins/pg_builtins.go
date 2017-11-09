@@ -12,15 +12,15 @@
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
-package parser
+package builtins
 
 import (
 	"fmt"
 
+	"github.com/lib/pq/oid"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
-
-	"github.com/lib/pq/oid"
 )
 
 // This file contains builtin functions that we implement primarily for
@@ -60,7 +60,7 @@ func PGIOBuiltinPrefix(typ types.T) string {
 func initPGBuiltins() {
 	for k, v := range pgBuiltins {
 		for i := range v {
-			v[i].category = categoryCompatibility
+			v[i].Category = categoryCompatibility
 		}
 		Builtins[k] = v
 	}
@@ -84,12 +84,12 @@ func initPGBuiltins() {
 
 var errUnimplemented = pgerror.NewError(pgerror.CodeFeatureNotSupportedError, "unimplemented")
 
-func makeTypeIOBuiltin(argTypes typeList, returnType types.T) []Builtin {
+func makeTypeIOBuiltin(argTypes TypeList, returnType types.T) []Builtin {
 	return []Builtin{
 		{
 			Types:      argTypes,
-			ReturnType: fixedReturnType(returnType),
-			fn: func(_ *EvalContext, _ Datums) (Datum, error) {
+			ReturnType: FixedReturnType(returnType),
+			Fn: func(_ *EvalContext, _ Datums) (Datum, error) {
 				return nil, errUnimplemented
 			},
 			Info: notUsableInfo,
@@ -131,9 +131,9 @@ var (
 func makePGGetViewDef(argTypes ArgTypes) Builtin {
 	return Builtin{
 		Types:            argTypes,
-		distsqlBlacklist: true,
-		ReturnType:       fixedReturnType(types.String),
-		fn: func(ctx *EvalContext, args Datums) (Datum, error) {
+		DistsqlBlacklist: true,
+		ReturnType:       FixedReturnType(types.String),
+		Fn: func(ctx *EvalContext, args Datums) (Datum, error) {
 			r, err := ctx.Planner.QueryRow(
 				ctx.Ctx(), "SELECT definition FROM pg_catalog.pg_views v JOIN pg_catalog.pg_class c ON "+
 					"c.relname=v.viewname WHERE oid=$1", args[0])
@@ -154,8 +154,8 @@ var pgBuiltins = map[string][]Builtin{
 	"pg_backend_pid": {
 		Builtin{
 			Types:      ArgTypes{},
-			ReturnType: fixedReturnType(types.Int),
-			fn: func(_ *EvalContext, _ Datums) (Datum, error) {
+			ReturnType: FixedReturnType(types.Int),
+			Fn: func(_ *EvalContext, _ Datums) (Datum, error) {
 				return NewDInt(-1), nil
 			},
 			Info: notUsableInfo,
@@ -168,8 +168,8 @@ var pgBuiltins = map[string][]Builtin{
 			Types: ArgTypes{
 				{"encoding_id", types.Int},
 			},
-			ReturnType: fixedReturnType(types.String),
-			fn: func(ctx *EvalContext, args Datums) (Datum, error) {
+			ReturnType: FixedReturnType(types.String),
+			Fn: func(ctx *EvalContext, args Datums) (Datum, error) {
 				if args[0].Compare(ctx, DatEncodingUTFId) == 0 {
 					return datEncodingUTF8ShortName, nil
 				}
@@ -191,8 +191,8 @@ var pgBuiltins = map[string][]Builtin{
 				{"pg_node_tree", types.String},
 				{"relation_oid", types.Oid},
 			},
-			ReturnType: fixedReturnType(types.String),
-			fn: func(_ *EvalContext, args Datums) (Datum, error) {
+			ReturnType: FixedReturnType(types.String),
+			Fn: func(_ *EvalContext, args Datums) (Datum, error) {
 				return args[0], nil
 			},
 			Info: notUsableInfo,
@@ -203,8 +203,8 @@ var pgBuiltins = map[string][]Builtin{
 				{"relation_oid", types.Oid},
 				{"pretty_bool", types.Bool},
 			},
-			ReturnType: fixedReturnType(types.String),
-			fn: func(_ *EvalContext, args Datums) (Datum, error) {
+			ReturnType: FixedReturnType(types.String),
+			Fn: func(_ *EvalContext, args Datums) (Datum, error) {
 				return args[0], nil
 			},
 			Info: notUsableInfo,
@@ -218,9 +218,9 @@ var pgBuiltins = map[string][]Builtin{
 			Types: ArgTypes{
 				{"index_oid", types.Oid},
 			},
-			distsqlBlacklist: true,
-			ReturnType:       fixedReturnType(types.String),
-			fn: func(ctx *EvalContext, args Datums) (Datum, error) {
+			DistsqlBlacklist: true,
+			ReturnType:       FixedReturnType(types.String),
+			Fn: func(ctx *EvalContext, args Datums) (Datum, error) {
 				r, err := ctx.Planner.QueryRow(
 					ctx.Ctx(), "SELECT indexdef FROM pg_catalog.pg_indexes WHERE crdb_oid=$1", args[0])
 				if err != nil {
@@ -250,8 +250,8 @@ var pgBuiltins = map[string][]Builtin{
 		// properly.
 		Builtin{
 			Types:      ArgTypes{{"val", types.Any}},
-			ReturnType: fixedReturnType(types.String),
-			fn: func(_ *EvalContext, args Datums) (Datum, error) {
+			ReturnType: FixedReturnType(types.String),
+			Fn: func(_ *EvalContext, args Datums) (Datum, error) {
 				return NewDString(args[0].ResolvedType().String()), nil
 			},
 			Info: notUsableInfo,
@@ -262,9 +262,9 @@ var pgBuiltins = map[string][]Builtin{
 			Types: ArgTypes{
 				{"role_oid", types.Oid},
 			},
-			distsqlBlacklist: true,
-			ReturnType:       fixedReturnType(types.String),
-			fn: func(ctx *EvalContext, args Datums) (Datum, error) {
+			DistsqlBlacklist: true,
+			ReturnType:       FixedReturnType(types.String),
+			Fn: func(ctx *EvalContext, args Datums) (Datum, error) {
 				oid := args[0]
 				t, err := ctx.Planner.QueryRow(
 					ctx.Ctx(), "SELECT rolname FROM pg_catalog.pg_roles WHERE oid=$1", oid)
@@ -282,9 +282,9 @@ var pgBuiltins = map[string][]Builtin{
 	"format_type": {
 		Builtin{
 			Types:        ArgTypes{{"type_oid", types.Oid}, {"typemod", types.Int}},
-			ReturnType:   fixedReturnType(types.String),
-			nullableArgs: true,
-			fn: func(ctx *EvalContext, args Datums) (Datum, error) {
+			ReturnType:   FixedReturnType(types.String),
+			NullableArgs: true,
+			Fn: func(ctx *EvalContext, args Datums) (Datum, error) {
 				oidArg := args[0]
 				if oidArg == DNull {
 					return DNull, nil
@@ -303,8 +303,8 @@ var pgBuiltins = map[string][]Builtin{
 	"col_description": {
 		Builtin{
 			Types:      ArgTypes{{"table_oid", types.Oid}, {"column_number", types.Int}},
-			ReturnType: fixedReturnType(types.String),
-			fn: func(_ *EvalContext, _ Datums) (Datum, error) {
+			ReturnType: FixedReturnType(types.String),
+			Fn: func(_ *EvalContext, _ Datums) (Datum, error) {
 				return DNull, nil
 			},
 			Info: notUsableInfo,
@@ -313,16 +313,16 @@ var pgBuiltins = map[string][]Builtin{
 	"obj_description": {
 		Builtin{
 			Types:      ArgTypes{{"object_oid", types.Oid}},
-			ReturnType: fixedReturnType(types.String),
-			fn: func(_ *EvalContext, _ Datums) (Datum, error) {
+			ReturnType: FixedReturnType(types.String),
+			Fn: func(_ *EvalContext, _ Datums) (Datum, error) {
 				return DNull, nil
 			},
 			Info: notUsableInfo,
 		},
 		Builtin{
 			Types:      ArgTypes{{"object_oid", types.Oid}, {"catalog_name", types.String}},
-			ReturnType: fixedReturnType(types.String),
-			fn: func(_ *EvalContext, _ Datums) (Datum, error) {
+			ReturnType: FixedReturnType(types.String),
+			Fn: func(_ *EvalContext, _ Datums) (Datum, error) {
 				return DNull, nil
 			},
 			Info: notUsableInfo,
@@ -331,8 +331,8 @@ var pgBuiltins = map[string][]Builtin{
 	"oid": {
 		Builtin{
 			Types:      ArgTypes{{"int", types.Int}},
-			ReturnType: fixedReturnType(types.Oid),
-			fn: func(_ *EvalContext, args Datums) (Datum, error) {
+			ReturnType: FixedReturnType(types.Oid),
+			Fn: func(_ *EvalContext, args Datums) (Datum, error) {
 				return NewDOid(*args[0].(*DInt)), nil
 			},
 			Info: "Converts an integer to an OID.",
@@ -341,8 +341,8 @@ var pgBuiltins = map[string][]Builtin{
 	"shobj_description": {
 		Builtin{
 			Types:      ArgTypes{{"object_oid", types.Oid}, {"catalog_name", types.String}},
-			ReturnType: fixedReturnType(types.String),
-			fn: func(_ *EvalContext, _ Datums) (Datum, error) {
+			ReturnType: FixedReturnType(types.String),
+			Fn: func(_ *EvalContext, _ Datums) (Datum, error) {
 				return DNull, nil
 			},
 			Info: notUsableInfo,
@@ -351,8 +351,8 @@ var pgBuiltins = map[string][]Builtin{
 	"pg_try_advisory_lock": {
 		Builtin{
 			Types:      ArgTypes{{"int", types.Int}},
-			ReturnType: fixedReturnType(types.Bool),
-			fn: func(_ *EvalContext, _ Datums) (Datum, error) {
+			ReturnType: FixedReturnType(types.Bool),
+			Fn: func(_ *EvalContext, _ Datums) (Datum, error) {
 				return DBoolTrue, nil
 			},
 			Info: notUsableInfo,
@@ -361,8 +361,8 @@ var pgBuiltins = map[string][]Builtin{
 	"pg_advisory_unlock": {
 		Builtin{
 			Types:      ArgTypes{{"int", types.Int}},
-			ReturnType: fixedReturnType(types.Bool),
-			fn: func(_ *EvalContext, _ Datums) (Datum, error) {
+			ReturnType: FixedReturnType(types.Bool),
+			Fn: func(_ *EvalContext, _ Datums) (Datum, error) {
 				return DBoolTrue, nil
 			},
 			Info: notUsableInfo,
@@ -374,8 +374,8 @@ var pgBuiltins = map[string][]Builtin{
 	"pg_table_is_visible": {
 		Builtin{
 			Types:      ArgTypes{{"oid", types.Oid}},
-			ReturnType: fixedReturnType(types.Bool),
-			fn: func(ctx *EvalContext, args Datums) (Datum, error) {
+			ReturnType: FixedReturnType(types.Bool),
+			Fn: func(ctx *EvalContext, args Datums) (Datum, error) {
 				oid := args[0]
 				t, err := ctx.Planner.QueryRow(ctx.Ctx(),
 					"SELECT nspname FROM pg_catalog.pg_class c JOIN pg_catalog.pg_namespace n ON c.relnamespace=n.oid "+
