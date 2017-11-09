@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/jobs"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/transform"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -545,7 +546,7 @@ func convertRecord(
 		return errors.Wrap(err, "make row inserter")
 	}
 
-	var txCtx parser.ExprTransformContext
+	var txCtx transform.ExprTransformContext
 	evalCtx := parser.EvalContext{Location: &time.UTC}
 	// Although we don't yet support DEFAULT expressions on visible columns,
 	// we do on hidden columns (which is only the default _rowid one). This

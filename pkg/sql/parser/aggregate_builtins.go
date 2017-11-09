@@ -1333,8 +1333,6 @@ func (a *floatStdDevAggregate) Close(context.Context) {}
 // Close is part of the AggregateFunc interface.
 func (a *decimalStdDevAggregate) Close(context.Context) {}
 
-var _ Visitor = &IsAggregateVisitor{}
-
 type bytesXorAggregate struct {
 	sum        []byte
 	sawNonNull bool
@@ -1404,42 +1402,3 @@ func (a *intXorAggregate) Result() (Datum, error) {
 
 // Close is part of the AggregateFunc interface.
 func (a *intXorAggregate) Close(context.Context) {}
-
-// IsAggregateVisitor checks if walked expressions contain aggregate functions.
-type IsAggregateVisitor struct {
-	Aggregated bool
-	// searchPath is used to search for unqualified function names.
-	searchPath SearchPath
-}
-
-// VisitPre satisfies the Visitor interface.
-func (v *IsAggregateVisitor) VisitPre(expr Expr) (recurse bool, newExpr Expr) {
-	switch t := expr.(type) {
-	case *FuncExpr:
-		if t.IsWindowFunctionApplication() {
-			// A window function application of an aggregate builtin is not an
-			// aggregate function, but it can contain aggregate functions.
-			return true, expr
-		}
-		fd, err := t.Func.Resolve(v.searchPath)
-		if err != nil {
-			return false, expr
-		}
-		if _, ok := Aggregates[fd.Name]; ok {
-			v.Aggregated = true
-			return false, expr
-		}
-	case *Subquery:
-		return false, expr
-	}
-
-	return true, expr
-}
-
-// VisitPost satisfies the Visitor interface.
-func (*IsAggregateVisitor) VisitPost(expr Expr) Expr { return expr }
-
-// Reset clear the IsAggregateVisitor's internal state.
-func (v *IsAggregateVisitor) Reset() {
-	v.Aggregated = false
-}

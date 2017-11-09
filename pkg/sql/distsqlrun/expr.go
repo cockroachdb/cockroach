@@ -19,6 +19,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/transform"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -137,7 +138,7 @@ func (eh *exprHelper) init(
 	if err != nil {
 		return err
 	}
-	var t parser.ExprTransformContext
+	var t transform.ExprTransformContext
 	if t.AggregateInExpr(eh.expr, evalCtx.SearchPath) {
 		return errors.Errorf("expression '%s' has aggregate", eh.expr)
 	}

@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/transform"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -86,7 +87,7 @@ func (cb *columnBackfiller) init() error {
 		}
 	}
 	defaultExprs, err := sqlbase.MakeDefaultExprs(
-		cb.added, &parser.ExprTransformContext{}, &cb.flowCtx.EvalCtx,
+		cb.added, &transform.ExprTransformContext{}, &cb.flowCtx.EvalCtx,
 	)
 	if err != nil {
 		return err
