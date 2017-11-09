@@ -55,12 +55,9 @@ type Cache interface {
 	// ExpandRequests expands any request that overlaps the specified span and
 	// which is newer than the specified timestamp.
 	ExpandRequests(span roachpb.RSpan, timestamp hlc.Timestamp)
-
 	// SetLowWater sets the low water mark of the cache for the specified span
 	// to the provided timestamp.
 	SetLowWater(start, end roachpb.Key, timestamp hlc.Timestamp)
-	// GlobalLowWater returns the low water mark for the entire cache.
-	GlobalLowWater() hlc.Timestamp
 
 	// GetMaxRead returns the maximum read timestamp which overlaps the interval
 	// spanning from start to end. If that maximum timestamp belongs to a single
@@ -78,9 +75,11 @@ type Cache interface {
 	//
 	// add the specified timestamp to the cache covering the range of keys from
 	// start to end.
-	add(start, end roachpb.Key, timestamp hlc.Timestamp, txnID uuid.UUID, readTSCache bool)
+	add(start, end roachpb.Key, ts hlc.Timestamp, txnID uuid.UUID, readCache bool)
 	// clear clears the cache and resets the low-water mark.
 	clear(lowWater hlc.Timestamp)
+	// getLowWater return the low water mark for the specified cache.
+	getLowWater(readCache bool) hlc.Timestamp
 }
 
 // New returns a new timestamp cache with the supplied hybrid clock.

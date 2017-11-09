@@ -232,7 +232,7 @@ var layeredIntervalTestCase3 = layeredIntervalTestCase{
 
 		assertTS(t, tc, roachpb.Key("a"), nil, acTx.ts, acTx.id)
 		assertTS(t, tc, roachpb.Key("b"), nil, bcTx.ts, zeroIfSimul(txns, bcTx.id))
-		assertTS(t, tc, roachpb.Key("c"), nil, tc.GlobalLowWater(), noTxnID)
+		assertTS(t, tc, roachpb.Key("c"), nil, tc.getLowWater(true /* readCache */), noTxnID)
 		assertTS(t, tc, roachpb.Key("a"), roachpb.Key("c"), bcTx.ts, zeroIfSimul(txns, bcTx.id))
 		assertTS(t, tc, roachpb.Key("a"), roachpb.Key("b"), acTx.ts, acTx.id)
 		assertTS(t, tc, roachpb.Key("b"), roachpb.Key("c"), bcTx.ts, zeroIfSimul(txns, bcTx.id))
@@ -256,7 +256,7 @@ var layeredIntervalTestCase4 = layeredIntervalTestCase{
 
 		assertTS(t, tc, roachpb.Key("a"), nil, abTx.ts, zeroIfSimul(txns, abTx.id))
 		assertTS(t, tc, roachpb.Key("b"), nil, acTx.ts, acTx.id)
-		assertTS(t, tc, roachpb.Key("c"), nil, tc.GlobalLowWater(), noTxnID)
+		assertTS(t, tc, roachpb.Key("c"), nil, tc.getLowWater(true /* readCache */), noTxnID)
 		assertTS(t, tc, roachpb.Key("a"), roachpb.Key("c"), abTx.ts, zeroIfSimul(txns, abTx.id))
 		assertTS(t, tc, roachpb.Key("a"), roachpb.Key("b"), abTx.ts, zeroIfSimul(txns, abTx.id))
 		assertTS(t, tc, roachpb.Key("b"), roachpb.Key("c"), acTx.ts, acTx.id)
