@@ -152,9 +152,10 @@ func (d *distinct) matchLastGroupKey(row sqlbase.EncDatumRow) (bool, error) {
 	if d.lastGroupKey == nil {
 		return false, nil
 	}
+	evalCtx := d.flowCtx.MakeEvalCtx()
 	for colIdx := range d.orderedCols {
 		res, err := d.lastGroupKey[colIdx].Compare(
-			&d.types[colIdx], &d.datumAlloc, &d.flowCtx.EvalCtx, &row[colIdx],
+			&d.types[colIdx], &d.datumAlloc, evalCtx, &row[colIdx],
 		)
 		if res != 0 || err != nil {
 			return false, err
