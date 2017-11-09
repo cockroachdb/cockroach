@@ -40,7 +40,7 @@ func BenchmarkClusterBackup(b *testing.B) {
 	// documentation's description. We're getting useful information out of it,
 	// but this is not a pattern to cargo-cult.
 
-	_, dir, _, sqlDB, cleanupFn := backupRestoreTestSetup(b, multiNode, 0, initNone)
+	_, _, sqlDB, dir, cleanupFn := backupRestoreTestSetup(b, multiNode, 0, initNone)
 	defer cleanupFn()
 	sqlDB.Exec(`DROP TABLE data.bank`)
 
@@ -73,7 +73,7 @@ func BenchmarkClusterRestore(b *testing.B) {
 	// documentation's description. We're getting useful information out of it,
 	// but this is not a pattern to cargo-cult.
 
-	_, dir, _, sqlDB, cleanup := backupRestoreTestSetup(b, multiNode, 0, initNone)
+	_, _, sqlDB, dir, cleanup := backupRestoreTestSetup(b, multiNode, 0, initNone)
 	defer cleanup()
 	sqlDB.Exec(`DROP TABLE data.bank`)
 
@@ -94,7 +94,7 @@ func BenchmarkLoadRestore(b *testing.B) {
 	// documentation's description. We're getting useful information out of it,
 	// but this is not a pattern to cargo-cult.
 
-	ctx, dir, _, sqlDB, cleanup := backupRestoreTestSetup(b, multiNode, 0, initNone)
+	ctx, _, sqlDB, dir, cleanup := backupRestoreTestSetup(b, multiNode, 0, initNone)
 	defer cleanup()
 	sqlDB.Exec(`DROP TABLE data.bank`)
 
@@ -113,7 +113,7 @@ func BenchmarkLoadSQL(b *testing.B) {
 	// NB: This benchmark takes liberties in how b.N is used compared to the go
 	// documentation's description. We're getting useful information out of it,
 	// but this is not a pattern to cargo-cult.
-	_, _, _, sqlDB, cleanup := backupRestoreTestSetup(b, multiNode, 0, initNone)
+	_, _, sqlDB, _, cleanup := backupRestoreTestSetup(b, multiNode, 0, initNone)
 	defer cleanup()
 	sqlDB.Exec(`DROP TABLE data.bank`)
 
@@ -140,11 +140,11 @@ func BenchmarkLoadSQL(b *testing.B) {
 func BenchmarkClusterEmptyIncrementalBackup(b *testing.B) {
 	const numStatements = 100000
 
-	_, dir, _, sqlDB, cleanupFn := backupRestoreTestSetup(b, multiNode, 0, initNone)
+	_, _, sqlDB, _, cleanupFn := backupRestoreTestSetup(b, multiNode, 0, initNone)
 	defer cleanupFn()
 
-	restoreDir := filepath.Join(dir, "restore")
-	fullDir := filepath.Join(dir, "full")
+	restoreDir := filepath.Join(localFoo, "restore")
+	fullDir := filepath.Join(localFoo, "full")
 
 	bankData := sampledataccl.BankRows(numStatements)
 	_, err := sampledataccl.ToBackup(b, bankData, restoreDir)
@@ -165,7 +165,7 @@ func BenchmarkClusterEmptyIncrementalBackup(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		incrementalDir := filepath.Join(dir, fmt.Sprintf("incremental%d", i))
+		incrementalDir := filepath.Join(localFoo, fmt.Sprintf("incremental%d", i))
 		sqlDB.Exec(`BACKUP DATABASE data TO $1 INCREMENTAL FROM $2`, incrementalDir, fullDir)
 	}
 	b.StopTimer()

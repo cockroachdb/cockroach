@@ -128,9 +128,9 @@ func TestToBackup(t *testing.T) {
 	for _, rows := range []int{1, 10} {
 		for _, chunkBytes := range chunkBytesSizes {
 			t.Run(fmt.Sprintf("rows=%d/chunk=%d", rows, chunkBytes), func(t *testing.T) {
-				dir := filepath.Join(outerDir, fmt.Sprintf("%d-%d", rows, chunkBytes))
+				dir := fmt.Sprintf("%d-%d", rows, chunkBytes)
 				data := Bank(rows, payloadBytes, bankConfigDefault)
-				backup, err := toBackup(t, data, dir, chunkBytes)
+				backup, err := toBackup(t, data, filepath.Join(outerDir, dir), chunkBytes)
 				if err != nil {
 					t.Fatalf("%+v", err)
 				}
@@ -139,7 +139,7 @@ func TestToBackup(t *testing.T) {
 					sqlDB := sqlutils.MakeSQLRunner(t, db)
 					sqlDB.Exec(`DROP DATABASE IF EXISTS data CASCADE`)
 					sqlDB.Exec(`CREATE DATABASE data`)
-					sqlDB.Exec(`RESTORE data.* FROM $1`, `nodelocal://`+dir)
+					sqlDB.Exec(`RESTORE data.* FROM $1`, `nodelocal:///`+dir)
 
 					var rowCount int
 					sqlDB.QueryRow(fmt.Sprintf(`SELECT COUNT(*) FROM %s`, data.Name())).Scan(&rowCount)

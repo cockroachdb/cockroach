@@ -205,7 +205,8 @@ var (
 )
 
 type localFileStorage struct {
-	base string
+	rawBase string // un-prefixed base -- DO NOT use for I/O ops.
+	base    string // the prefixed base, for I/O ops on this node.
 }
 
 var _ ExportStorage = &localFileStorage{}
@@ -225,25 +226,27 @@ func makeLocalStorage(base string, settings *cluster.Settings) (ExportStorage, e
 		return nil, errors.Errorf("Local storage requested but path not provided")
 	}
 
+	localBase := base
 	// In non-server execution we have no settings and no restriction on local IO.
 	if settings != nil {
 		if settings.ExternalIODir == "" {
 			return nil, errors.Errorf("local file access is disabled")
 		}
-		// TODO(dt): base = filepath.Join(settings.ExternalIODir, base)
-		base = filepath.Clean(base)
-		if !strings.HasPrefix(base, settings.ExternalIODir) {
+		// we prefix with the IO dir
+		localBase = filepath.Clean(filepath.Join(settings.ExternalIODir, localBase))
+		// ... and make sure we didn't ../ our way back out.
+		if !strings.HasPrefix(localBase, settings.ExternalIODir) {
 			return nil, errors.Errorf("local file access to paths outside of external-io-dir is not allowed")
 		}
 	}
-	return &localFileStorage{base: base}, nil
+	return &localFileStorage{base: localBase, rawBase: base}, nil
 }
 
 func (l *localFileStorage) Conf() roachpb.ExportStorage {
 	return roachpb.ExportStorage{
 		Provider: roachpb.ExportStorageProvider_LocalFile,
 		LocalFile: roachpb.ExportStorage_LocalFilePath{
-			Path: l.base,
+			Path: l.rawBase,
 		},
 	}
 }
