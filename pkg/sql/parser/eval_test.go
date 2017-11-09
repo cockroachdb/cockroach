@@ -1166,28 +1166,6 @@ func TestEvalComparisonExprCaching(t *testing.T) {
 	}
 }
 
-func TestSimilarEscape(t *testing.T) {
-	testData := []struct {
-		expr     string
-		expected string
-	}{
-		{`test`, `test`},
-		{`test%`, `test.*`},
-		{`_test_`, `.test.`},
-		{`_%*`, `..**`},
-		{`[_%]*`, `[_%]*`},
-		{`.^$`, `\.\^\$`},
-		{`%(b|d)%`, `.*(?:b|d).*`},
-		{`se\"arch\"[\"]`, `se(arch)[\"]`},
-	}
-	for _, d := range testData {
-		s := SimilarEscape(d.expr)
-		if s != d.expected {
-			t.Errorf("%s: expected %s, but found %v", d.expr, d.expected, s)
-		}
-	}
-}
-
 func TestClusterTimestampConversion(t *testing.T) {
 	testData := []struct {
 		walltime int64
@@ -1214,67 +1192,4 @@ func TestClusterTimestampConversion(t *testing.T) {
 			t.Errorf("expected %s, but found %s", d.expected, final)
 		}
 	}
-}
-
-var benchmarkLikePatterns = []string{
-	`test%`,
-	`%test%`,
-	`%test`,
-	``,
-	`%`,
-	`_`,
-	`test`,
-	`bad`,
-	`also\%`,
-}
-
-func benchmarkLike(b *testing.B, ctx *EvalContext, caseInsensitive bool) {
-	op := Like
-	if caseInsensitive {
-		op = ILike
-	}
-	likeFn, _ := CmpOps[op].lookupImpl(types.String, types.String)
-	iter := func() {
-		for _, p := range benchmarkLikePatterns {
-			if _, err := likeFn.fn(ctx, NewDString("test"), NewDString(p)); err != nil {
-				b.Fatalf("LIKE evaluation failed with error: %v", err)
-			}
-		}
-	}
-	// Warm up cache, if applicable
-	iter()
-	b.ResetTimer()
-	for n := 0; n < b.N; n++ {
-		iter()
-	}
-}
-
-func BenchmarkLikeWithCache(b *testing.B) {
-	ctx := NewTestingEvalContext()
-	ctx.ReCache = NewRegexpCache(len(benchmarkLikePatterns))
-	defer ctx.Mon.Stop(context.Background())
-
-	benchmarkLike(b, ctx, false)
-}
-
-func BenchmarkLikeWithoutCache(b *testing.B) {
-	evalCtx := NewTestingEvalContext()
-	defer evalCtx.Stop(context.Background())
-
-	benchmarkLike(b, evalCtx, false)
-}
-
-func BenchmarkILikeWithCache(b *testing.B) {
-	ctx := NewTestingEvalContext()
-	ctx.ReCache = NewRegexpCache(len(benchmarkLikePatterns))
-	defer ctx.Mon.Stop(context.Background())
-
-	benchmarkLike(b, ctx, true)
-}
-
-func BenchmarkILikeWithoutCache(b *testing.B) {
-	evalCtx := NewTestingEvalContext()
-	defer evalCtx.Stop(context.Background())
-
-	benchmarkLike(b, evalCtx, true)
 }
