@@ -87,3 +87,6 @@ type SelectClause = parser.SelectClause
 
 // FuncExpr is a temporary alias.
 type FuncExpr = parser.FuncExpr
+
+// NewTestingEvalContext is a temporary alias.
+var NewTestingEvalContext = parser.NewTestingEvalContext
