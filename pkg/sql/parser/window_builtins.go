@@ -43,69 +43,6 @@ func initWindowBuiltins() {
 	}
 }
 
-// IndexedRow is a row with a corresponding index.
-type IndexedRow struct {
-	Idx int
-	Row Datums
-}
-
-// WindowFrame is a view into a subset of data over which calculations are made.
-type WindowFrame struct {
-	// constant for all calls to WindowFunc.Add
-	Rows        []IndexedRow
-	ArgIdxStart int // the index which arguments to the window function begin
-	ArgCount    int // the number of window function arguments
-
-	// changes for each row (each call to WindowFunc.Add)
-	RowIdx int // the current row index
-
-	// changes for each peer group
-	FirstPeerIdx int // the first index in the current peer group
-	PeerRowCount int // the number of rows in the current peer group
-}
-
-func (wf WindowFrame) rank() int {
-	return wf.RowIdx + 1
-}
-
-func (wf WindowFrame) rowCount() int {
-	return len(wf.Rows)
-}
-
-// TODO(nvanbenschoten): This definition only holds while we don't support
-// frame specification (RANGE or ROWS) in the OVER clause.
-func (wf WindowFrame) frameSize() int {
-	return wf.FirstPeerIdx + wf.PeerRowCount
-}
-
-// firstInPeerGroup returns if the current row is the first in its peer group.
-func (wf WindowFrame) firstInPeerGroup() bool {
-	return wf.RowIdx == wf.FirstPeerIdx
-}
-
-func (wf WindowFrame) args() Datums {
-	return wf.argsWithRowOffset(0)
-}
-
-func (wf WindowFrame) argsWithRowOffset(offset int) Datums {
-	return wf.Rows[wf.RowIdx+offset].Row[wf.ArgIdxStart : wf.ArgIdxStart+wf.ArgCount]
-}
-
-// WindowFunc performs a computation on each row using data from a provided WindowFrame.
-type WindowFunc interface {
-	// Compute computes the window function for the provided window frame, given the
-	// current state of WindowFunc. The method should be called sequentially for every
-	// row in a partition in turn with the desired ordering of the WindowFunc. This is
-	// because there is an implicit carried dependency between each row and all those
-	// that have come before it (like in an AggregateFunc). As such, this approach does
-	// not present any exploitable associativity/commutativity for optimization.
-	Compute(context.Context, *EvalContext, WindowFrame) (Datum, error)
-
-	// Close allows the window function to free any memory it requested during execution,
-	// such as during the execution of an aggregation like CONCAT_AGG or ARRAY_AGG.
-	Close(context.Context, *EvalContext)
-}
-
 // windows are a special class of builtin functions that can only be applied
 // as window functions using an OVER clause.
 // See `windowFuncHolder` in the sql package.
