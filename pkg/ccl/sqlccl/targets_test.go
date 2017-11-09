@@ -97,7 +97,7 @@ func TestDescriptorsMatchingTargets(t *testing.T) {
 			}
 			targets := stmt.(*tree.Grant).Targets
 
-			matched, dbs, err := descriptorsMatchingTargets(test.sessionDatabase, descriptors, targets)
+			matched, err := descriptorsMatchingTargets(test.sessionDatabase, descriptors, targets)
 			if test.err != "" {
 				if !testutils.IsError(err, test.err) {
 					t.Fatalf("expected error matching '%v', but got '%v'", test.err, err)
@@ -106,11 +106,11 @@ func TestDescriptorsMatchingTargets(t *testing.T) {
 				t.Fatal(err)
 			} else {
 				var matchedNames []string
-				for _, m := range matched {
+				for _, m := range matched.descs {
 					matchedNames = append(matchedNames, m.GetName())
 				}
 				var matchedDBNames []string
-				for _, m := range dbs {
+				for _, m := range matched.requestedDBs {
 					matchedDBNames = append(matchedDBNames, m.GetName())
 				}
 				sort.Strings(test.expected)

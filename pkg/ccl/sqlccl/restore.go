@@ -78,22 +78,29 @@ func selectTargets(
 ) ([]sqlbase.Descriptor, []*sqlbase.DatabaseDescriptor, error) {
 	sessionDatabase := p.EvalContext().Database
 	lastBackupDesc := backupDescs[len(backupDescs)-1]
-	sqlDescs, dbs, err := descriptorsMatchingTargets(sessionDatabase, lastBackupDesc.Descriptors, targets)
+	matched, err := descriptorsMatchingTargets(sessionDatabase, lastBackupDesc.Descriptors, targets)
 	if err != nil {
 		return nil, nil, err
 	}
 
 	seenTable := false
-	for _, desc := range sqlDescs {
+	for _, desc := range matched.descs {
 		if desc.GetTable() != nil {
 			seenTable = true
+			break
 		}
 	}
 	if !seenTable {
 		return nil, nil, errors.Errorf("no tables found: %s", tree.AsString(targets))
 	}
 
-	return sqlDescs, dbs, nil
+	if lastBackupDesc.FormatVersion >= BackupFormatDescriptorTrackingVersion {
+		if err := matched.checkExpansions(lastBackupDesc.CompleteDbs); err != nil {
+			return nil, nil, err
+		}
+	}
+
+	return matched.descs, matched.requestedDBs, nil
 }
 
 // allocateTableRewrites determines the new ID and parentID (a "TableRewrite")
@@ -1102,6 +1109,7 @@ func doRestorePlan(
 	if err != nil {
 		return err
 	}
+
 	tableRewrites, err := allocateTableRewrites(ctx, p, sqlDescs, restoreDBs, opts)
 	if err != nil {
 		return err

@@ -52,6 +52,8 @@ const (
 	BackupDescriptorCheckpointName = "BACKUP-CHECKPOINT"
 	// BackupFormatInitialVersion is the first version of backup and its files.
 	BackupFormatInitialVersion uint32 = 0
+	// BackupFormatDescriptorTrackingVersion added tracking of complete DBs.
+	BackupFormatDescriptorTrackingVersion uint32 = 1
 )
 
 const (
@@ -333,12 +335,12 @@ func writeBackupDescriptor(
 
 func resolveTargetsToDescriptors(
 	ctx context.Context, p sql.PlanHookState, endTime hlc.Timestamp, targets tree.TargetList,
-) ([]sqlbase.Descriptor, error) {
+) ([]sqlbase.Descriptor, []sqlbase.ID, error) {
 	var err error
-	var sqlDescs []sqlbase.Descriptor
 
 	db := p.ExecCfg().DB
 
+	var allDescs []sqlbase.Descriptor
 	{
 		// TODO(andrei): Plumb a gatewayNodeID in here and also find a way to
 		// express that whatever this txn does should not count towards lease
@@ -348,35 +350,37 @@ func resolveTargetsToDescriptors(
 		err := txn.Exec(ctx, opt, func(ctx context.Context, txn *client.Txn, opt *client.TxnExecOptions) error {
 			var err error
 			txn.SetFixedTimestamp(ctx, endTime)
-			sqlDescs, err = allSQLDescriptors(ctx, txn)
+			allDescs, err = allSQLDescriptors(ctx, txn)
 			return err
 		})
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 	}
 
 	sessionDatabase := p.EvalContext().Database
-	if sqlDescs, _, err = descriptorsMatchingTargets(sessionDatabase, sqlDescs, targets); err != nil {
-		return nil, err
+
+	var matched descriptorsMatched
+	if matched, err = descriptorsMatchingTargets(sessionDatabase, allDescs, targets); err != nil {
+		return nil, nil, err
 	}
 
 	// Dedupe. Duplicate descriptors will cause restore to fail.
 	{
-		descsByID := make(map[sqlbase.ID]sqlbase.Descriptor)
-		for _, sqlDesc := range sqlDescs {
+		descsByID := make(map[sqlbase.ID]sqlbase.Descriptor, len(matched.descs))
+		for _, sqlDesc := range matched.descs {
 			descsByID[sqlDesc.GetID()] = sqlDesc
 		}
-		sqlDescs = sqlDescs[:0]
+		matched.descs = matched.descs[:0]
 		for _, sqlDesc := range descsByID {
-			sqlDescs = append(sqlDescs, sqlDesc)
+			matched.descs = append(matched.descs, sqlDesc)
 		}
 	}
 
 	// Ensure interleaved tables appear after their parent. Since parents must be
 	// created before their children, simply sorting by ID accomplishes this.
-	sort.Slice(sqlDescs, func(i, j int) bool { return sqlDescs[i].GetID() < sqlDescs[j].GetID() })
-	return sqlDescs, nil
+	sort.Slice(matched.descs, func(i, j int) bool { return matched.descs[i].GetID() < matched.descs[j].GetID() })
+	return matched.descs, matched.expandedDB, nil
 }
 
 // backup exports a snapshot of every kv entry into ranged sstables.
@@ -673,7 +677,7 @@ func backupPlanHook(
 			return err
 		}
 
-		targetDescs, err := resolveTargetsToDescriptors(ctx, p, endTime, backupStmt.Targets)
+		targetDescs, completeDBs, err := resolveTargetsToDescriptors(ctx, p, endTime, backupStmt.Targets)
 		if err != nil {
 			return err
 		}
@@ -714,8 +718,9 @@ func backupPlanHook(
 			EndTime:       endTime,
 			MVCCFilter:    mvccFilter,
 			Descriptors:   targetDescs,
+			CompleteDbs:   completeDBs,
 			Spans:         spans,
-			FormatVersion: BackupFormatInitialVersion,
+			FormatVersion: BackupFormatDescriptorTrackingVersion,
 			BuildInfo:     build.GetInfo(),
 			NodeID:        p.ExecCfg().NodeID.Get(),
 			ClusterID:     p.ExecCfg().ClusterID(),
