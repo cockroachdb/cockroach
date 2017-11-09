@@ -34,9 +34,9 @@ func init() {
 	initPGBuiltins()
 
 	AllBuiltinNames = make([]string, 0, len(Builtins))
-	parser.FunDefs = make(map[string]*FunctionDefinition)
+	parser.FunDefs = make(map[string]*parser.FunctionDefinition)
 	for name, def := range Builtins {
-		parser.FunDefs[name] = NewFunctionDefinition(name, def)
+		parser.FunDefs[name] = parser.NewFunctionDefinition(name, def)
 		AllBuiltinNames = append(AllBuiltinNames, name)
 	}
 
@@ -57,10 +57,10 @@ func init() {
 	sort.Strings(AllBuiltinNames)
 }
 
-func getCategory(b Builtin) string {
+func getCategory(b parser.Builtin) string {
 	// If single argument attempt to categorize by the type of the argument.
 	switch typ := b.Types.(type) {
-	case ArgTypes:
+	case parser.ArgTypes:
 		if len(typ) == 1 {
 			return categorizeType(typ[0].Typ)
 		}
@@ -72,8 +72,8 @@ func getCategory(b Builtin) string {
 	return ""
 }
 
-func collectBuiltins(f func(types.T) Builtin, types ...types.T) []Builtin {
-	r := make([]Builtin, len(types))
+func collectBuiltins(f func(types.T) parser.Builtin, types ...types.T) []parser.Builtin {
+	r := make([]parser.Builtin, len(types))
 	for i := range types {
 		r[i] = f(types[i])
 	}

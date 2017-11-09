@@ -19,6 +19,7 @@ import (
 	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 )
@@ -27,11 +28,11 @@ import (
 // this functionality.
 
 // generatorFactory is the type of constructor functions for
-// ValueGenerator objects suitable for use with DTable.
-type generatorFactory func(ctx *EvalContext, args Datums) (ValueGenerator, error)
+// parser.ValueGenerator objects suitable for use with parser.DTable.
+type generatorFactory func(ctx *parser.EvalContext, args parser.Datums) (parser.ValueGenerator, error)
 
-var _ ValueGenerator = &seriesValueGenerator{}
-var _ ValueGenerator = &arrayValueGenerator{}
+var _ parser.ValueGenerator = &seriesValueGenerator{}
+var _ parser.ValueGenerator = &arrayValueGenerator{}
 
 func initGeneratorBuiltins() {
 	// Add all windows to the Builtins map after a few sanity checks.
@@ -40,8 +41,8 @@ func initGeneratorBuiltins() {
 			if !g.Impure {
 				panic(fmt.Sprintf("generator functions should all be impure, found %v", g))
 			}
-			if g.Class != GeneratorClass {
-				panic(fmt.Sprintf("generator functions should be marked with the GeneratorClass "+
+			if g.Class != parser.GeneratorClass {
+				panic(fmt.Sprintf("generator functions should be marked with the parser.GeneratorClass "+
 					"function class, found %v", g))
 			}
 		}
@@ -51,16 +52,16 @@ func initGeneratorBuiltins() {
 
 // Generators is a map from name to slice of Builtins for all built-in
 // generators.
-var Generators = map[string][]Builtin{
+var Generators = map[string][]parser.Builtin{
 	"generate_series": {
 		makeGeneratorBuiltin(
-			ArgTypes{{"start", types.Int}, {"end", types.Int}},
+			parser.ArgTypes{{"start", types.Int}, {"end", types.Int}},
 			seriesValueGeneratorType,
 			makeSeriesGenerator,
 			"Produces a virtual table containing the integer values from `start` to `end`, inclusive.",
 		),
 		makeGeneratorBuiltin(
-			ArgTypes{{"start", types.Int}, {"end", types.Int}, {"step", types.Int}},
+			parser.ArgTypes{{"start", types.Int}, {"end", types.Int}, {"step", types.Int}},
 			seriesValueGeneratorType,
 			makeSeriesGenerator,
 			"Produces a virtual table containing the integer values from `start` to `end`, inclusive, by increment of `step`.",
@@ -68,18 +69,18 @@ var Generators = map[string][]Builtin{
 	},
 	"pg_get_keywords": {
 		makeGeneratorBuiltin(
-			ArgTypes{},
+			parser.ArgTypes{},
 			keywordsValueGeneratorType,
 			makeKeywordsGenerator,
-			"Produces a virtual table containing the keywords known to the SQL ",
+			"Produces a virtual table containing the keywords known to the SQL parser.",
 		),
 	},
 	"unnest": {
 		makeGeneratorBuiltinWithReturnType(
-			ArgTypes{{"input", types.AnyArray}},
-			func(args []TypedExpr) types.T {
+			parser.ArgTypes{{"input", types.AnyArray}},
+			func(args []parser.TypedExpr) types.T {
 				if len(args) == 0 {
-					return UnknownReturnType
+					return parser.UnknownReturnType
 				}
 				return types.TTable{
 					Cols:   types.TTuple{args[0].ResolvedType().(types.TArray).Typ},
@@ -92,7 +93,7 @@ var Generators = map[string][]Builtin{
 	},
 	"crdb_internal.unary_table": {
 		makeGeneratorBuiltin(
-			ArgTypes{},
+			parser.ArgTypes{},
 			unaryValueGeneratorType,
 			makeUnaryGenerator,
 			"Produces a virtual table containing a single row with no values.\n\n"+
@@ -101,24 +102,26 @@ var Generators = map[string][]Builtin{
 	},
 }
 
-func makeGeneratorBuiltin(in ArgTypes, ret types.TTable, g generatorFactory, info string) Builtin {
-	return makeGeneratorBuiltinWithReturnType(in, FixedReturnType(ret), g, info)
+func makeGeneratorBuiltin(
+	in parser.ArgTypes, ret types.TTable, g generatorFactory, info string,
+) parser.Builtin {
+	return makeGeneratorBuiltinWithReturnType(in, parser.FixedReturnType(ret), g, info)
 }
 
 func makeGeneratorBuiltinWithReturnType(
-	in ArgTypes, retType ReturnTyper, g generatorFactory, info string,
-) Builtin {
-	return Builtin{
+	in parser.ArgTypes, retType parser.ReturnTyper, g generatorFactory, info string,
+) parser.Builtin {
+	return parser.Builtin{
 		Impure:     true,
-		Class:      GeneratorClass,
+		Class:      parser.GeneratorClass,
 		Types:      in,
 		ReturnType: retType,
-		Fn: func(ctx *EvalContext, args Datums) (Datum, error) {
+		Fn: func(ctx *parser.EvalContext, args parser.Datums) (parser.Datum, error) {
 			gen, err := g(ctx, args)
 			if err != nil {
 				return nil, err
 			}
-			return &DTable{ValueGenerator: gen}, nil
+			return &parser.DTable{ValueGenerator: gen}, nil
 		},
 		Category: categoryCompatibility,
 		Info:     info,
@@ -135,17 +138,17 @@ var keywordsValueGeneratorType = types.TTable{
 	Labels: []string{"word", "catcode", "catdesc"},
 }
 
-func makeKeywordsGenerator(_ *EvalContext, _ Datums) (ValueGenerator, error) {
+func makeKeywordsGenerator(_ *parser.EvalContext, _ parser.Datums) (parser.ValueGenerator, error) {
 	return &keywordsValueGenerator{}, nil
 }
 
-// ResolvedType implements the ValueGenerator interface.
+// ResolvedType implements the parser.ValueGenerator interface.
 func (*keywordsValueGenerator) ResolvedType() types.TTable { return keywordsValueGeneratorType }
 
-// Close implements the ValueGenerator interface.
+// Close implements the parser.ValueGenerator interface.
 func (*keywordsValueGenerator) Close() {}
 
-// Start implements the ValueGenerator interface.
+// Start implements the parser.ValueGenerator interface.
 func (k *keywordsValueGenerator) Start() error {
 	k.curKeyword = -1
 	return nil
@@ -158,13 +161,13 @@ func (k *keywordsValueGenerator) Next() (bool, error) {
 	return true, nil
 }
 
-// Values implements the ValueGenerator interface.
-func (k *keywordsValueGenerator) Values() Datums {
+// Values implements the parser.ValueGenerator interface.
+func (k *keywordsValueGenerator) Values() parser.Datums {
 	kw := keywordNames[k.curKeyword]
 	info := lex.Keywords[kw]
 	cat := info.Cat
 	desc := keywordCategoryDescriptions[cat]
-	return Datums{NewDString(kw), NewDString(cat), NewDString(desc)}
+	return parser.Datums{parser.NewDString(kw), parser.NewDString(cat), parser.NewDString(desc)}
 }
 
 var keywordCategoryDescriptions = map[string]string{
@@ -199,12 +202,12 @@ var seriesValueGeneratorType = types.TTable{
 
 var errStepCannotBeZero = pgerror.NewError(pgerror.CodeInvalidParameterValueError, "step cannot be 0")
 
-func makeSeriesGenerator(_ *EvalContext, args Datums) (ValueGenerator, error) {
-	start := int64(MustBeDInt(args[0]))
-	stop := int64(MustBeDInt(args[1]))
+func makeSeriesGenerator(_ *parser.EvalContext, args parser.Datums) (parser.ValueGenerator, error) {
+	start := int64(parser.MustBeDInt(args[0]))
+	stop := int64(parser.MustBeDInt(args[1]))
 	step := int64(1)
 	if len(args) > 2 {
-		step = int64(MustBeDInt(args[2]))
+		step = int64(parser.MustBeDInt(args[2]))
 	}
 	if step == 0 {
 		return nil, errStepCannotBeZero
@@ -218,16 +221,16 @@ func makeSeriesGenerator(_ *EvalContext, args Datums) (ValueGenerator, error) {
 	}, nil
 }
 
-// ResolvedType implements the ValueGenerator interface.
+// ResolvedType implements the parser.ValueGenerator interface.
 func (*seriesValueGenerator) ResolvedType() types.TTable { return seriesValueGeneratorType }
 
-// Start implements the ValueGenerator interface.
+// Start implements the parser.ValueGenerator interface.
 func (s *seriesValueGenerator) Start() error { return nil }
 
-// Close implements the ValueGenerator interface.
+// Close implements the parser.ValueGenerator interface.
 func (s *seriesValueGenerator) Close() {}
 
-// Next implements the ValueGenerator interface.
+// Next implements the parser.ValueGenerator interface.
 func (s *seriesValueGenerator) Next() (bool, error) {
 	if !s.nextOK {
 		return false, nil
@@ -239,30 +242,30 @@ func (s *seriesValueGenerator) Next() (bool, error) {
 		return false, nil
 	}
 	s.value = s.start
-	s.start, s.nextOK = AddWithOverflow(s.start, s.step)
+	s.start, s.nextOK = parser.AddWithOverflow(s.start, s.step)
 	return true, nil
 }
 
-// Values implements the ValueGenerator interface.
-func (s *seriesValueGenerator) Values() Datums {
-	return Datums{NewDInt(DInt(s.value))}
+// Values implements the parser.ValueGenerator interface.
+func (s *seriesValueGenerator) Values() parser.Datums {
+	return parser.Datums{parser.NewDInt(parser.DInt(s.value))}
 }
 
-func makeArrayGenerator(_ *EvalContext, args Datums) (ValueGenerator, error) {
-	arr := MustBeDArray(args[0])
+func makeArrayGenerator(_ *parser.EvalContext, args parser.Datums) (parser.ValueGenerator, error) {
+	arr := parser.MustBeDArray(args[0])
 	return &arrayValueGenerator{array: arr}, nil
 }
 
 // arrayValueGenerator is a value generator that returns each element of an
 // array.
 type arrayValueGenerator struct {
-	array     *DArray
+	array     *parser.DArray
 	nextIndex int
 }
 
 var arrayValueGeneratorLabels = []string{"unnest"}
 
-// ResolvedType implements the ValueGenerator interface.
+// ResolvedType implements the parser.ValueGenerator interface.
 func (s *arrayValueGenerator) ResolvedType() types.TTable {
 	return types.TTable{
 		Cols:   types.TTuple{s.array.ParamTyp},
@@ -270,16 +273,16 @@ func (s *arrayValueGenerator) ResolvedType() types.TTable {
 	}
 }
 
-// Start implements the ValueGenerator interface.
+// Start implements the parser.ValueGenerator interface.
 func (s *arrayValueGenerator) Start() error {
 	s.nextIndex = -1
 	return nil
 }
 
-// Close implements the ValueGenerator interface.
+// Close implements the parser.ValueGenerator interface.
 func (s *arrayValueGenerator) Close() {}
 
-// Next implements the ValueGenerator interface.
+// Next implements the parser.ValueGenerator interface.
 func (s *arrayValueGenerator) Next() (bool, error) {
 	s.nextIndex++
 	if s.nextIndex >= s.array.Len() {
@@ -288,14 +291,14 @@ func (s *arrayValueGenerator) Next() (bool, error) {
 	return true, nil
 }
 
-// Values implements the ValueGenerator interface.
-func (s *arrayValueGenerator) Values() Datums {
-	return Datums{s.array.Array[s.nextIndex]}
+// Values implements the parser.ValueGenerator interface.
+func (s *arrayValueGenerator) Values() parser.Datums {
+	return parser.Datums{s.array.Array[s.nextIndex]}
 }
 
-// EmptyDTable returns a new, empty DTable.
-func EmptyDTable() *DTable {
-	return &DTable{ValueGenerator: &arrayValueGenerator{array: NewDArray(types.Any)}}
+// EmptyDTable returns a new, empty parser.DTable.
+func EmptyDTable() *parser.DTable {
+	return &parser.DTable{ValueGenerator: &arrayValueGenerator{array: parser.NewDArray(types.Any)}}
 }
 
 // unaryValueGenerator supports the execution of crdb_internal.unary_table().
@@ -308,20 +311,20 @@ var unaryValueGeneratorType = types.TTable{
 	Labels: []string{"unary_table"},
 }
 
-func makeUnaryGenerator(_ *EvalContext, args Datums) (ValueGenerator, error) {
+func makeUnaryGenerator(_ *parser.EvalContext, args parser.Datums) (parser.ValueGenerator, error) {
 	return &unaryValueGenerator{}, nil
 }
 
-// ResolvedType implements the ValueGenerator interface.
+// ResolvedType implements the parser.ValueGenerator interface.
 func (*unaryValueGenerator) ResolvedType() types.TTable { return unaryValueGeneratorType }
 
-// Start implements the ValueGenerator interface.
+// Start implements the parser.ValueGenerator interface.
 func (s *unaryValueGenerator) Start() error { return nil }
 
-// Close implements the ValueGenerator interface.
+// Close implements the parser.ValueGenerator interface.
 func (s *unaryValueGenerator) Close() {}
 
-// Next implements the ValueGenerator interface.
+// Next implements the parser.ValueGenerator interface.
 func (s *unaryValueGenerator) Next() (bool, error) {
 	if !s.done {
 		s.done = true
@@ -330,5 +333,5 @@ func (s *unaryValueGenerator) Next() (bool, error) {
 	return false, nil
 }
 
-// Values implements the ValueGenerator interface.
-func (s *unaryValueGenerator) Values() Datums { return Datums{} }
+// Values implements the parser.ValueGenerator interface.
+func (s *unaryValueGenerator) Values() parser.Datums { return parser.Datums{} }
