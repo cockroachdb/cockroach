@@ -15,7 +15,6 @@
 package sql
 
 import (
-	"bytes"
 	"fmt"
 
 	"golang.org/x/net/context"
@@ -299,9 +298,9 @@ func (p *joinPredicate) IndexedVarResolvedType(idx int) types.T {
 	return p.info.sourceColumns[idx].Typ
 }
 
-// IndexedVarFormat implements the tree.IndexedVarContainer interface.
-func (p *joinPredicate) IndexedVarFormat(buf *bytes.Buffer, f tree.FmtFlags, idx int) {
-	p.info.FormatVar(buf, f, idx)
+// IndexedVarNodeFormatter implements the tree.IndexedVarContainer interface.
+func (p *joinPredicate) IndexedVarNodeFormatter(idx int) tree.NodeFormatter {
+	return p.info.NodeFormatter(idx)
 }
 
 // eval for joinPredicate runs the on condition across the columns that do
@@ -316,7 +315,10 @@ func (p *joinPredicate) eval(
 		p.curRow = result
 		copy(p.curRow[:len(leftRow)], leftRow)
 		copy(p.curRow[len(leftRow):], rightRow)
-		return sqlbase.RunFilter(p.onCond, ctx)
+		ctx.IVarHelper = &p.iVarHelper
+		pred, err := sqlbase.RunFilter(p.onCond, ctx)
+		ctx.IVarHelper = nil
+		return pred, err
 	}
 	return true, nil
 }

@@ -2068,6 +2068,8 @@ type EvalContext struct {
 	// underlying datum, if available.
 	Placeholders *PlaceholderInfo
 
+	IVarHelper *IndexedVarHelper
+
 	// CtxProvider holds the context in which the expression is evaluated. This
 	// will point to the session, which is itself a provider of contexts.
 	// NOTE: seems a bit lazy to hold a pointer to the session's context here,

@@ -15,7 +15,6 @@
 package sql
 
 import (
-	"bytes"
 	"fmt"
 	"sync"
 
@@ -185,6 +184,7 @@ func (n *scanNode) Next(params runParams) (bool, error) {
 		if err != nil || n.row == nil {
 			return false, err
 		}
+		n.p.evalCtx.IVarHelper = &n.filterVars
 		passesFilter, err := sqlbase.RunFilter(n.filter, &n.p.evalCtx)
 		if err != nil {
 			return false, err
@@ -436,8 +436,8 @@ func (n *scanNode) IndexedVarResolvedType(idx int) types.T {
 	return n.resultColumns[idx].Typ
 }
 
-func (n *scanNode) IndexedVarFormat(buf *bytes.Buffer, f tree.FmtFlags, idx int) {
-	tree.Name(n.resultColumns[idx].Name).Format(buf, f)
+func (n *scanNode) IndexedVarNodeFormatter(idx int) tree.NodeFormatter {
+	return tree.Name(n.resultColumns[idx].Name)
 }
 
 // scanVisibility represents which table columns should be included in a scan.

@@ -33,23 +33,13 @@ import (
 // with their values.
 func exprFmtFlagsBase(evalCtx *tree.EvalContext) tree.FmtFlags {
 	return tree.FmtPlaceholderFormat(
-		tree.FmtParsable,
+		tree.FmtCheckEquivalence,
 		func(buf *bytes.Buffer, flags tree.FmtFlags, p *tree.Placeholder) {
 			d, err := p.Eval(evalCtx)
 			if err != nil {
 				panic(fmt.Sprintf("failed to serialize placeholder: %s", err))
 			}
 			d.Format(buf, flags)
-		})
-}
-
-// exprFmtFlagsNoMap produces FmtFlags used for serializing expressions that
-// don't need to remap IndexedVars.
-func exprFmtFlagsNoMap(evalCtx *tree.EvalContext) tree.FmtFlags {
-	return tree.FmtIndexedVarFormat(
-		exprFmtFlagsBase(evalCtx),
-		func(buf *bytes.Buffer, _ tree.FmtFlags, _ tree.IndexedVarContainer, idx int) {
-			fmt.Fprintf(buf, "@%d", idx+1)
 		})
 }
 
@@ -71,11 +61,11 @@ func MakeExpression(
 	// We format the expression using the IndexedVar and Placeholder formatting interceptors.
 	var f tree.FmtFlags
 	if indexVarMap == nil {
-		f = exprFmtFlagsNoMap(evalCtx)
+		f = exprFmtFlagsBase(evalCtx)
 	} else {
 		f = tree.FmtIndexedVarFormat(
 			exprFmtFlagsBase(evalCtx),
-			func(buf *bytes.Buffer, _ tree.FmtFlags, _ tree.IndexedVarContainer, idx int) {
+			func(buf *bytes.Buffer, idx int) {
 				remappedIdx := indexVarMap[idx]
 				if remappedIdx < 0 {
 					panic(fmt.Sprintf("unmapped index %d", idx))
