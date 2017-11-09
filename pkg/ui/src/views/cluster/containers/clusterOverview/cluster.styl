@@ -22,65 +22,62 @@
     grid-template-rows repeat(3, auto)
     grid-template-areas "cap-t cap-t . live-t live-t live-t . rep-t rep-t rep-t ." "cap-m cap-c . live-a live-b live-c . rep-a rep-b rep-c ." "cap-a cap-a . live-1 live-2 live-3 . rep-1 rep-2 rep-3 ."
 
-    &__section
-      display contents
+    .capacity-usage
+      &.cluster-summary__title
+          grid-area cap-t
 
-      &.capacity-usage
-        .cluster-summary__title
-            grid-area cap-t
+      &.cluster-summary__chart
+          grid-area cap-c
 
-        .cluster-summary__chart
-            grid-area cap-c
+      &.cluster-summary__metric
+          grid-area cap-m
 
-        .cluster-summary__metric
-            grid-area cap-m
+      &.cluster-summary__aside
+          grid-area cap-a
 
-        .cluster-summary__aside
-            grid-area cap-a
+    .node-liveness
+      &.cluster-summary__title
+          grid-area live-t
 
-      &.node-liveness
-        .cluster-summary__title
-            grid-area live-t
+      &.cluster-summary__metric.live-nodes
+          grid-area live-a
 
-        .cluster-summary__metric.live-nodes
-            grid-area live-a
+      &.cluster-summary__metric.suspect-nodes
+          grid-area live-b
 
-        .cluster-summary__metric.suspect-nodes
-            grid-area live-b
+      &.cluster-summary__metric.dead-nodes
+          grid-area live-c
 
-        .cluster-summary__metric.dead-nodes
-            grid-area live-c
+      &.cluster-summary__label.live-nodes
+          grid-area live-1
 
-        .cluster-summary__label.live-nodes
-            grid-area live-1
+      &.cluster-summary__label.suspect-nodes
+          grid-area live-2
 
-        .cluster-summary__label.suspect-nodes
-            grid-area live-2
+      &.cluster-summary__label.dead-nodes
+          grid-area live-3
 
-        .cluster-summary__label.dead-nodes
-            grid-area live-3
+    .replication-status
+      &.cluster-summary__title
+          grid-area rep-t
 
-      &.replication-status
-        .cluster-summary__title
-            grid-area rep-t
+      &.cluster-summary__metric.total-ranges
+          grid-area rep-a
 
-        .cluster-summary__metric.total-ranges
-            grid-area rep-a
+      &.cluster-summary__metric.under-replicated-ranges
+          grid-area rep-b
 
-        .cluster-summary__metric.under-replicated-ranges
-            grid-area rep-b
+      &.cluster-summary__metric.unavailable-ranges
+          grid-area rep-c
 
-        .cluster-summary__metric.unavailable-ranges
-            grid-area rep-c
+      &.cluster-summary__label.total-ranges
+          grid-area rep-1
 
-        .cluster-summary__label.total-ranges
-            grid-area rep-1
+      &.cluster-summary__label.under-replicated-ranges
+          grid-area rep-2
 
-        .cluster-summary__label.under-replicated-ranges
-            grid-area rep-2
-
-        .cluster-summary__label.unavailable-ranges
-            grid-area rep-3
+      &.cluster-summary__label.unavailable-ranges
+          grid-area rep-3
 
     &__title
       font-weight 400
@@ -116,7 +113,7 @@
       .label, .value
         font-size 11px
 
-  .capacity-usage .cluster-summary__chart
+  .capacity-usage.cluster-summary__chart
     align-self start
     position relative
 
