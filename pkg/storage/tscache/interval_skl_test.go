@@ -26,6 +26,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -900,7 +901,14 @@ func TestIntervalSklConcurrency(t *testing.T) {
 					s.setMinPages(tc.minPages)
 				}
 
-				slots := 5 * runtime.NumCPU()
+				slots := 4 * runtime.NumCPU()
+				if util.RaceEnabled {
+					// We add in a lot of preemption points when race detection
+					// is enabled, so things will already be very slow. Reduce
+					// the concurrency to that we don't time out.
+					slots /= 2
+				}
+
 				for i := 0; i < slots; i++ {
 					wg.Add(1)
 
