@@ -1051,6 +1051,26 @@ func TestParse2(t *testing.T) {
 			`SET "time zone" = '-7h'`},
 		{`SET TIME ZONE INTERVAL '-7h0m5s' HOUR TO MINUTE`,
 			`SET "time zone" = '-6h-59m'`},
+		{`SET TIMEZONE 'pst8pdt'`,
+			`SET "time zone" = 'pst8pdt'`},
+		{`SET TIMEZONE 'Europe/Rome'`,
+			`SET "time zone" = 'Europe/Rome'`},
+		{`SET TIMEZONE -7`,
+			`SET "time zone" = -7`},
+		{`SET TIMEZONE -7.3`,
+			`SET "time zone" = -7.3`},
+		{`SET TIMEZONE DEFAULT`,
+			`SET "time zone" = DEFAULT`},
+		{`SET TIMEZONE LOCAL`,
+			`SET "time zone" = 'local'`},
+		{`SET TIMEZONE pst8pdt`,
+			`SET "time zone" = 'pst8pdt'`},
+		{`SET TIMEZONE "Europe/Rome"`,
+			`SET "time zone" = 'Europe/Rome'`},
+		{`SET TIMEZONE INTERVAL '-7h'`,
+			`SET "time zone" = '-7h'`},
+		{`SET TIMEZONE INTERVAL '-7h0m5s' HOUR TO MINUTE`,
+			`SET "time zone" = '-6h-59m'`},
 		{`SET CLUSTER SETTING a = on`,
 			`SET CLUSTER SETTING a = "on"`},
 		{`SET a = on`,
@@ -1118,6 +1138,7 @@ func TestParse2(t *testing.T) {
 		{`SHOW SESSION barfoo`, `SHOW barfoo`},
 		{`SHOW SESSION database`, `SHOW database`},
 		{`SHOW SESSION TIME ZONE`, `SHOW TIME ZONE`},
+		{`SHOW SESSION TIMEZONE`, `SHOW TIME ZONE`},
 		{`EXPERIMENTAL SHOW ALL ZONE CONFIGURATIONS`, `EXPERIMENTAL SHOW ZONE CONFIGURATIONS`},
 		{`BEGIN`,
 			`BEGIN TRANSACTION`},
@@ -1338,6 +1359,10 @@ HINT: try \h <SOURCE>`},
 		{`SET TIME ZONE INTERVAL 'foobar'`, `could not parse "foobar" as type interval: interval: missing unit at position 0: "foobar" at or near "EOF"
 SET TIME ZONE INTERVAL 'foobar'
                                ^
+`},
+		{`SET TIMEZONE INTERVAL 'foobar'`, `could not parse "foobar" as type interval: interval: missing unit at position 0: "foobar" at or near "EOF"
+SET TIMEZONE INTERVAL 'foobar'
+                              ^
 `},
 		{`SELECT INTERVAL 'foo'`, `could not parse "foo" as type interval: interval: missing unit at position 0: "foo" at or near "EOF"
 SELECT INTERVAL 'foo'

@@ -478,7 +478,7 @@ func (u *sqlSymUnion) scrubOption() ScrubOption {
 %token <str>   SYMMETRIC SYSTEM
 
 %token <str>   TABLE TABLES TEMP TEMPLATE TEMPORARY TESTING_RANGES TESTING_RELOCATE TEXT THAN THEN
-%token <str>   TIME TIMESTAMP TIMESTAMPTZ TO TRAILING TRACE TRANSACTION TREAT TRIM TRUE
+%token <str>   TIME TIMESTAMP TIMESTAMPTZ TIMEZONE TO TRAILING TRACE TRANSACTION TREAT TRIM TRUE
 %token <str>   TRUNCATE TYPE
 
 %token <str>   UNBOUNDED UNCOMMITTED UNION UNIQUE UNKNOWN
@@ -2191,6 +2191,11 @@ set_rest_more:
     /* SKIP DOC */
     $$.val = &SetVar{Name: UnresolvedName{Name("time zone")}, Values: Exprs{$3.expr()}}
   }
+| TIMEZONE zone_value
+  {
+    /* SKIP DOC */
+    $$.val = &SetVar{Name: UnresolvedName{Name("time zone")}, Values: Exprs{$2.expr()}}
+  }
 | var_name FROM CURRENT { return unimplemented(sqllex, "set from current") }
 | set_names
 | error // SHOW HELP: SET SESSION
@@ -2347,6 +2352,7 @@ session_var:
 | SESSION_USER
 // TIME ZONE is special: it is two tokens, but is really the identifier "TIME ZONE".
 | TIME ZONE { $$ = "TIME ZONE" }
+| TIMEZONE { $$ = "TIME ZONE" }
 | TIME error // SHOW HELP: SHOW SESSION
 
 // %Help: SHOW BACKUP - list backup contents
@@ -6782,6 +6788,7 @@ unreserved_keyword:
 | TESTING_RELOCATE
 | TEXT
 | THAN
+| TIMEZONE
 | TRACE
 | TRANSACTION
 | TRUNCATE
