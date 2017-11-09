@@ -261,9 +261,7 @@ func captureOutput(f func()) (out string, err error) {
 }
 
 func (c cliTest) RunWithArgs(origArgs []string) {
-	sqlCtx.execStmts = nil
-	zoneCtx.zoneConfig = ""
-	zoneCtx.zoneDisableReplication = false
+	TestingReset()
 
 	if err := func() error {
 		args := append([]string(nil), origArgs[:1]...)
@@ -293,9 +291,7 @@ func (c cliTest) RunWithArgs(origArgs []string) {
 }
 
 func (c cliTest) RunWithCAArgs(origArgs []string) {
-	sqlCtx.execStmts = nil
-	zoneCtx.zoneConfig = ""
-	zoneCtx.zoneDisableReplication = false
+	TestingReset()
 
 	if err := func() error {
 		args := append([]string(nil), origArgs[:1]...)
@@ -528,6 +524,7 @@ func Example_zone() {
 	c.Run("zone rm .meta")
 	c.Run("zone rm .system")
 	c.Run("zone rm .timeseries")
+	c.Run("zone set system.jobs@primary --file=./testdata/zone_attrs.yaml")
 
 	// Output:
 	// zone ls
@@ -668,6 +665,8 @@ func Example_zone() {
 	// CONFIGURE ZONE 0
 	// zone rm .timeseries
 	// CONFIGURE ZONE 0
+	// zone set system.jobs@primary --file=./testdata/zone_attrs.yaml
+	// pq: setting zone configs on indexes or partitions requires a CCL binary
 }
 
 func Example_sql() {

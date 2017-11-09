@@ -158,3 +158,11 @@ func Run(args []string) error {
 	cockroachCmd.SetArgs(args)
 	return cockroachCmd.Execute()
 }
+
+// TestingReset resets global mutable state so that Run can be called multiple
+// times from the same test process. It is public for cliccl.
+func TestingReset() {
+	sqlCtx.execStmts = nil
+	zoneCtx.zoneConfig = ""
+	zoneCtx.zoneDisableReplication = false
+}
