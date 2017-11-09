@@ -657,17 +657,6 @@ func (expr *ParenExpr) TypeCheck(ctx *SemaContext, desired types.T) (TypedExpr, 
 	return exprTyped, nil
 }
 
-// presetTypesForTesting is a mapping of qualified names to types that can be mocked out
-// for tests to allow the qualified names to be type checked without throwing an error.
-var presetTypesForTesting map[string]types.T
-
-func mockNameTypes(types map[string]types.T) func() {
-	presetTypesForTesting = types
-	return func() {
-		presetTypesForTesting = nil
-	}
-}
-
 // TypeCheck implements the Expr interface.  This function has a valid
 // implementation only for testing within this package. During query
 // execution, ColumnItems are replaced to IndexedVars prior to type
