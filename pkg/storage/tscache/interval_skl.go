@@ -140,12 +140,12 @@ type intervalSkl struct {
 	clock  *hlc.Clock
 	minRet time.Duration
 
-	// Soft maximum size of the data structure in bytes. When the data structure
-	// fills, older entries are discarded. However, this maximum can be violated
-	// if the intervalSkl needs to grow larger to enforce a minimum retention
-	// policy. As such, the minimum retention policy takes priority over the
-	// maximum size policy (which is why we call this a "soft" maximum).
-	size uint32
+	// The size of each page in the data structure, in bytes. When a page fills,
+	// the pages will be rotated and older entries will be discarded. The entire
+	// data structure will usually have a size limit of pageSize*minPages.
+	// However, this limit can be violated if the intervalSkl needs to grow
+	// larger to enforce a minimum retention policy.
+	pageSize uint32
 
 	// The linked list maintains fixed-size skiplist pages, ordered by creation
 	// time such that the first page is the one most recently created. When the
@@ -168,11 +168,11 @@ type intervalSkl struct {
 
 // newIntervalSkl creates a new interval skiplist with the given minimum
 // retention duration and the maximum size.
-func newIntervalSkl(clock *hlc.Clock, minRet time.Duration, size uint32) *intervalSkl {
+func newIntervalSkl(clock *hlc.Clock, minRet time.Duration, pageSize uint32) *intervalSkl {
 	s := intervalSkl{
 		clock:    clock,
 		minRet:   minRet,
-		size:     size,
+		pageSize: pageSize,
 		minPages: defaultMinSklPages,
 	}
 	s.pushNewPage(0)
@@ -334,7 +334,7 @@ func (s *intervalSkl) frontPage() *sklPage {
 
 // pushNewPage prepends a new empty page to the front of the pages list.
 func (s *intervalSkl) pushNewPage(maxWallTime int64) {
-	p := newSklPage(s.size / uint32(s.minPages))
+	p := newSklPage(s.pageSize)
 	p.maxWallTime = maxWallTime
 	s.pages.PushFront(p)
 }
