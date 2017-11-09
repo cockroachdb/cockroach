@@ -3180,15 +3180,6 @@ func (t *Tuple) Eval(ctx *EvalContext) (Datum, error) {
 	return tuple, nil
 }
 
-func canBeInArray(t types.T) bool {
-	switch t {
-	case types.JSON:
-		return false
-	default:
-		return true
-	}
-}
-
 // arrayOfType returns a fresh DArray of the input type.
 func arrayOfType(typ types.T) (*DArray, error) {
 	arrayTyp, ok := typ.(types.TArray)
@@ -3196,7 +3187,7 @@ func arrayOfType(typ types.T) (*DArray, error) {
 		return nil, pgerror.NewErrorf(
 			pgerror.CodeInternalError, "array node type (%v) is not types.TArray", typ)
 	}
-	if !canBeInArray(arrayTyp.Typ) {
+	if !types.IsValidArrayElementType(arrayTyp.Typ) {
 		return nil, pgerror.NewErrorf(pgerror.CodeFeatureNotSupportedError, "arrays of %s not allowed", arrayTyp.Typ)
 	}
 	return NewDArray(arrayTyp.Typ), nil
