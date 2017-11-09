@@ -22,6 +22,7 @@ import (
 
 	"golang.org/x/net/context"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 )
@@ -860,11 +861,11 @@ func TestEval(t *testing.T) {
 		{`'NaN'::decimal::float`, `NaN`},
 		{`'NaN'::float::decimal`, `NaN`},
 	}
-	ctx := NewTestingEvalContext()
+	ctx := parser.NewTestingEvalContext()
 	defer ctx.Mon.Stop(context.Background())
 	defer ctx.ActiveMemAcc.Close(context.Background())
 	for _, d := range testData {
-		expr, err := ParseExpr(d.expr)
+		expr, err := parser.ParseExpr(d.expr)
 		if err != nil {
 			t.Fatalf("%s: %v", d.expr, err)
 		}
@@ -965,10 +966,10 @@ func TestTimeConversion(t *testing.T) {
 	}
 
 	for _, test := range tests {
-		ctx := NewTestingEvalContext()
+		ctx := parser.NewTestingEvalContext()
 		defer ctx.Mon.Stop(context.Background())
 		exprStr := fmt.Sprintf("experimental_strptime('%s', '%s')", test.start, test.format)
-		expr, err := ParseExpr(exprStr)
+		expr, err := parser.ParseExpr(exprStr)
 		if err != nil {
 			t.Errorf("%s: %v", exprStr, err)
 			continue
@@ -983,7 +984,7 @@ func TestTimeConversion(t *testing.T) {
 			t.Errorf("%s: %v", exprStr, err)
 			continue
 		}
-		ts, ok := r.(*DTimestampTZ)
+		ts, ok := r.(*parser.DTimestampTZ)
 		if !ok {
 			t.Errorf("%s: result not a timestamp: %s", exprStr, r)
 			continue
@@ -1007,7 +1008,7 @@ func TestTimeConversion(t *testing.T) {
 		}
 
 		exprStr = fmt.Sprintf("experimental_strftime('%s'::timestamp, '%s')", tmS, revfmt)
-		expr, err = ParseExpr(exprStr)
+		expr, err = parser.ParseExpr(exprStr)
 		if err != nil {
 			t.Errorf("%s: %v", exprStr, err)
 			continue
@@ -1022,7 +1023,7 @@ func TestTimeConversion(t *testing.T) {
 			t.Errorf("%s: %v", exprStr, err)
 			continue
 		}
-		rs, ok := r.(*DString)
+		rs, ok := r.(*parser.DString)
 		if !ok {
 			t.Errorf("%s: result not a string: %s", exprStr, r)
 			continue
@@ -1100,13 +1101,13 @@ func TestEvalError(t *testing.T) {
 		{`'1.1'::int`, `could not parse "1.1" as type int`},
 	}
 	for _, d := range testData {
-		expr, err := ParseExpr(d.expr)
+		expr, err := parser.ParseExpr(d.expr)
 		if err != nil {
 			t.Fatalf("%s: %v", d.expr, err)
 		}
-		typedExpr, err := TypeCheck(expr, nil, types.Any)
+		typedExpr, err := parser.TypeCheck(expr, nil, types.Any)
 		if err == nil {
-			evalCtx := NewTestingEvalContext()
+			evalCtx := parser.NewTestingEvalContext()
 			defer evalCtx.Stop(context.Background())
 			_, err = typedExpr.Eval(evalCtx)
 		}
