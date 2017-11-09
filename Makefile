@@ -12,48 +12,34 @@
 # implied. See the License for the specific language governing
 # permissions and limitations under the License.
 
-# Variables to be overridden on the command line only, e.g.
-#
-#   make test PKG=./pkg/storage TESTFLAGS=--vmodule=raft=1
-#
-# Note that environment variable overrides are intentionally ignored.
+ifeq "$(findstring bench,$(MAKECMDGOALS))" "bench"
+$(if $(TESTS),$(error TESTS cannot be specified with `make bench` (did you mean BENCHES?)))
+else
+$(if $(BENCHES),$(error BENCHES can only be specified with `make bench`))
+endif
+
+# Prevent invoking make with a specific test name without a constraining
+# package.
+ifneq "$(filter-out acceptance lint,$(MAKECMDGOALS))" ""
+ifeq "$(PKG)" ""
+$(if $(subst -,,$(TESTS)),$(error TESTS must be specified with PKG (e.g. PKG=./pkg/sql)))
+$(if $(subst -,,$(BENCHES)),$(error BENCHES must be specified with PKG (e.g. PKG=./pkg/sql)))
+endif
+endif
 
 # Comments starting with a double-hash (##) are for self-documentation, see the
 # `help` target. They look a bit awkward in the variable declarations below
 # since any whitespace added would become part of the variable's default value.
 
-# The following stanza prevents invoking make with a specific test name without
-# a constraining package.
-ifeq ($(findstring lint,$(MAKECMDGOALS)),)
-ifeq ($(PKG),)
-ifneq ($(TESTS),)
-ifneq ($(TESTS),-)
-$(error TESTS must be specified with PKG (e.g. PKG=./pkg/sql/))
-endif
-endif
-ifneq ($(BENCHES),)
-$(error BENCHES must be specified with PKG (e.g. PKG=./pkg/sql/))
-endif
-endif
-endif
-
+# Variables to be overridden on the command line only, e.g.
+#
+#   make test PKG=./pkg/storage TESTFLAGS=--vmodule=raft=1
+#
+# Note that environment variable overrides are intentionally ignored.
 PKG          := ./pkg/...## Which package to run tests against, e.g. "./pkg/storage".
 TAGS         :=
-
-ifneq ($(findstring bench,$(MAKECMDGOALS)),)
-ifneq ($(TESTS),)
-$(error TESTS specified with "make bench"; did you mean BENCHES?)
-endif
-TESTS := -
-BENCHES := .## Benchmarks to run for use with `make bench`.
-else
-ifneq ($(BENCHES),)
-$(error BENCHES should only be specified for "make bench")
-endif
-TESTS := .## Tests to run for use with `make test`.
-BENCHES :=
-endif
-
+TESTS        := .## Tests to run for use with `make test`.
+BENCHES      := -## Benchmarks to run for use with `make bench`.
 FILES        :=## Space delimited list of logic test files to run, for make testlogic.
 TESTTIMEOUT  := 4m## Test timeout to use for regular tests.
 RACETIMEOUT  := 25m## Test timeout to use for race tests.
@@ -277,6 +263,8 @@ bin/logictest.test: main.go $(shell $(FIND_RELEVANT) ! -name 'zcgo_flags.go' -na
 	$(XGO) test $(GOFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' -c -o bin/logictest.test $(PKG)
 
 bench: ## Run benchmarks.
+bench: TESTS := -
+bench: BENCHES := .
 bench: TESTTIMEOUT := $(BENCHTIMEOUT)
 
 .PHONY: check test testshort testrace testlogic bench
