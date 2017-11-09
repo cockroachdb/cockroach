@@ -60,28 +60,6 @@ func initAggregateBuiltins() {
 	}
 }
 
-// AggregateFunc accumulates the result of a function of a Datum.
-type AggregateFunc interface {
-	// Add accumulates the passed datums into the AggregateFunc.
-	// Most implementations require one and only one firstArg argument.
-	// If an aggregate function requires more than one argument,
-	// all additional arguments (after firstArg) are passed in as a
-	// variadic collection, otherArgs.
-	// This interface (as opposed to `args ...Datum`) avoids unnecessary
-	// allocation of otherArgs in the majority of cases.
-	Add(_ context.Context, firstArg Datum, otherArgs ...Datum) error
-
-	// Result returns the current value of the accumulation. This value
-	// will be a deep copy of any AggregateFunc internal state, so that
-	// it will not be mutated by additional calls to Add.
-	Result() (Datum, error)
-
-	// Close closes out the AggregateFunc and allows it to release any memory it
-	// requested during aggregation, and must be called upon completion of the
-	// aggregation.
-	Close(context.Context)
-}
-
 // Aggregates are a special class of builtin functions that are wrapped
 // at execution in a bucketing layer to combine (aggregate) the result
 // of the function being run over many rows.
