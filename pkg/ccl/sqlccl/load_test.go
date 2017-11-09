@@ -28,11 +28,11 @@ func TestImportChunking(t *testing.T) {
 	const chunkSize = 1024 * 500
 	numAccounts := int(chunkSize / backupRestoreRowPayloadSize * 2)
 
-	ctx, dir, _, sqlDB, cleanupFn := backupRestoreTestSetup(t, singleNode, 0, initNone)
+	ctx, _, sqlDB, dir, cleanupFn := backupRestoreTestSetup(t, singleNode, 0, initNone)
 	defer cleanupFn()
 
 	ts := hlc.Timestamp{WallTime: hlc.UnixNano()}
-	desc, err := sqlccl.Load(ctx, sqlDB.DB, bankBuf(numAccounts), "data", dir, ts, chunkSize, dir)
+	desc, err := sqlccl.Load(ctx, sqlDB.DB, bankBuf(numAccounts), "data", "nodelocal://"+dir, ts, chunkSize, dir)
 	if err != nil {
 		t.Fatalf("%+v", err)
 	}
@@ -44,7 +44,7 @@ func TestImportChunking(t *testing.T) {
 func TestImportOutOfOrder(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	ctx, dir, _, sqlDB, cleanupFn := backupRestoreTestSetup(t, singleNode, 0, initNone)
+	ctx, _, sqlDB, dir, cleanupFn := backupRestoreTestSetup(t, singleNode, 0, initNone)
 	defer cleanupFn()
 
 	bankData := sampledataccl.Bank(2, 0, 0)
@@ -64,7 +64,7 @@ func TestImportOutOfOrder(t *testing.T) {
 	fmt.Fprintf(&buf, "INSERT INTO %s VALUES (%s);\n", bankData.Name(), strings.Join(row1, `,`))
 
 	ts := hlc.Timestamp{WallTime: hlc.UnixNano()}
-	_, err := sqlccl.Load(ctx, sqlDB.DB, &buf, "data", dir, ts, 0, dir)
+	_, err := sqlccl.Load(ctx, sqlDB.DB, &buf, "data", localFoo, ts, 0, dir)
 	if !testutils.IsError(err, "out of order row") {
 		t.Fatalf("expected out of order row, got: %+v", err)
 	}
@@ -74,7 +74,7 @@ func BenchmarkLoad(b *testing.B) {
 	// NB: This benchmark takes liberties in how b.N is used compared to the go
 	// documentation's description. We're getting useful information out of it,
 	// but this is not a pattern to cargo-cult.
-	ctx, dir, _, sqlDB, cleanup := backupRestoreTestSetup(b, multiNode, 0, initNone)
+	ctx, _, sqlDB, dir, cleanup := backupRestoreTestSetup(b, multiNode, 0, initNone)
 	defer cleanup()
 
 	ts := hlc.Timestamp{WallTime: hlc.UnixNano()}

@@ -46,7 +46,7 @@ func TestExportCmd(t *testing.T) {
 			StartTime: start,
 			Storage: roachpb.ExportStorage{
 				Provider:  roachpb.ExportStorageProvider_LocalFile,
-				LocalFile: roachpb.ExportStorage_LocalFilePath{Path: dir},
+				LocalFile: roachpb.ExportStorage_LocalFilePath{Path: "/foo"},
 			},
 			MVCCFilter: mvccFilter,
 		}
@@ -67,7 +67,7 @@ func TestExportCmd(t *testing.T) {
 			sst := engine.MakeRocksDBSstFileReader()
 			defer sst.Close()
 
-			fileContents, err := ioutil.ReadFile(filepath.Join(dir, file.Path))
+			fileContents, err := ioutil.ReadFile(filepath.Join(dir, "foo", file.Path))
 			if err != nil {
 				t.Fatalf("%+v", err)
 			}

@@ -11,6 +11,7 @@ package storageccl
 import (
 	"fmt"
 	"io/ioutil"
+	"os"
 	"path/filepath"
 	"reflect"
 	"strconv"
@@ -151,6 +152,10 @@ func runTestImport(t *testing.T, init func(*cluster.Settings)) {
 	dir, dirCleanupFn := testutils.TempDir(t)
 	defer dirCleanupFn()
 
+	if err := os.Mkdir(filepath.Join(dir, "foo"), 0755); err != nil {
+		t.Fatal(err)
+	}
+
 	writeSST := func(keys ...[]byte) string {
 		path := strconv.FormatInt(hlc.UnixNano(), 10)
 
@@ -173,7 +178,7 @@ func runTestImport(t *testing.T, init func(*cluster.Settings)) {
 		if err != nil {
 			t.Fatalf("%+v", err)
 		}
-		if err := ioutil.WriteFile(filepath.Join(dir, path), sstContents, 0644); err != nil {
+		if err := ioutil.WriteFile(filepath.Join(dir, "foo", path), sstContents, 0644); err != nil {
 			t.Fatalf("%+v", err)
 		}
 		return path
@@ -258,7 +263,7 @@ func runTestImport(t *testing.T, init func(*cluster.Settings)) {
 
 	init(s.ClusterSettings())
 
-	storage, err := ExportStorageConfFromURI("nodelocal://" + dir)
+	storage, err := ExportStorageConfFromURI("nodelocal:///foo")
 	if err != nil {
 		t.Fatalf("%+v", err)
 	}
@@ -276,7 +281,7 @@ func runTestImport(t *testing.T, init func(*cluster.Settings)) {
 			for _, f := range files[:i] {
 				req.Files = append(req.Files, roachpb.ImportRequest_File{Dir: storage, Path: f})
 			}
-			expectedKVs := slurpSSTablesLatestKey(t, dir, files[:i], kr)
+			expectedKVs := slurpSSTablesLatestKey(t, filepath.Join(dir, "foo"), files[:i], kr)
 
 			// Import may be retried by DistSender if it takes too long to return, so
 			// make sure it's idempotent.
