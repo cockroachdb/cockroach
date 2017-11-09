@@ -35,7 +35,7 @@ func TestDockerCSharp(t *testing.T) {
 const csharp = `
 set -euxo pipefail
 
-cd /testdata/csharp
+cd /mnt/data/csharp
 
 # In dotnet, to get a cert with a private key, we have to use a pfx file.
 # See:
