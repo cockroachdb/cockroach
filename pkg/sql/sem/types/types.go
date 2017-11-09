@@ -489,3 +489,14 @@ func IsStringType(t T) bool {
 		return false
 	}
 }
+
+// IsValidArrayElementType returns true if the T
+// can be used in TArray.
+func IsValidArrayElementType(t T) bool {
+	switch t {
+	case JSON:
+		return false
+	default:
+		return true
+	}
+}
