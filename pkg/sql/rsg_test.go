@@ -31,6 +31,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/internal/rsg"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -144,7 +145,7 @@ func TestRandomSyntaxFunctions(t *testing.T) {
 	namedBuiltinChan := make(chan namedBuiltin)
 	go func() {
 		for {
-			for name, variations := range parser.Builtins {
+			for name, variations := range builtins.Builtins {
 				switch strings.ToLower(name) {
 				case "crdb_internal.force_panic", "crdb_internal.force_log_fatal":
 					continue

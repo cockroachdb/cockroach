@@ -30,12 +30,12 @@ type testOverload struct {
 	pref       bool
 }
 
-func (to *testOverload) params() typeList {
+func (to *testOverload) params() TypeList {
 	return to.paramTypes
 }
 
-func (to *testOverload) returnType() returnTyper {
-	return fixedReturnType(to.retType)
+func (to *testOverload) returnType() ReturnTyper {
+	return FixedReturnType(to.retType)
 }
 
 func (to testOverload) preferred() bool {

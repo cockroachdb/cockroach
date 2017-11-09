@@ -34,12 +34,14 @@ type FunctionDefinition struct {
 	Definition []overloadImpl
 }
 
-func newFunctionDefinition(name string, def []Builtin) *FunctionDefinition {
+// NewFunctionDefinition allocates a function definition corresponding
+// to the given built-in definition.
+func NewFunctionDefinition(name string, def []Builtin) *FunctionDefinition {
 	hasRowDependentOverloads := false
 	overloads := make([]overloadImpl, len(def))
 	for i, d := range def {
 		overloads[i] = d
-		if d.needsRepeatedEvaluation {
+		if d.NeedsRepeatedEvaluation {
 			hasRowDependentOverloads = true
 		}
 	}
@@ -50,9 +52,9 @@ func newFunctionDefinition(name string, def []Builtin) *FunctionDefinition {
 	}
 }
 
-// funDefs holds pre-allocated FunctionDefinition instances
-// for every builtin function. Initialized by setupBuiltins().
-var funDefs map[string]*FunctionDefinition
+// FunDefs holds pre-allocated FunctionDefinition instances
+// for every builtin function. Initialized by builtins.init().
+var FunDefs map[string]*FunctionDefinition
 
 // Format implements the NodeFormatter interface.
 func (fd *FunctionDefinition) Format(buf *bytes.Buffer, f FmtFlags) {
@@ -73,7 +75,7 @@ func (n UnresolvedName) ResolveFunction(searchPath SearchPath) (*FunctionDefinit
 		return nil, pgerror.NewErrorf(pgerror.CodeSyntaxError, "invalid function name: %s", n)
 	}
 
-	if d, ok := funDefs[fn.function()]; ok && fn.prefix() == "" {
+	if d, ok := FunDefs[fn.function()]; ok && fn.prefix() == "" {
 		// Fast path: return early.
 		return d, nil
 	}
@@ -98,7 +100,7 @@ func (n UnresolvedName) ResolveFunction(searchPath SearchPath) (*FunctionDefinit
 	if prefix != "" {
 		fullName = prefix + "." + smallName
 	}
-	def, ok := funDefs[fullName]
+	def, ok := FunDefs[fullName]
 	if !ok {
 		found := false
 		if prefix == "" {
@@ -107,7 +109,7 @@ func (n UnresolvedName) ResolveFunction(searchPath SearchPath) (*FunctionDefinit
 			iter := searchPath.Iter()
 			for alt, ok := iter(); ok; alt, ok = iter() {
 				fullName = alt + "." + smallName
-				if def, ok = funDefs[fullName]; ok {
+				if def, ok = FunDefs[fullName]; ok {
 					found = true
 					break
 				}

@@ -39,53 +39,61 @@ var _ = NormalClass
 
 // Builtin is a built-in function.
 type Builtin struct {
-	Types      typeList
-	ReturnType returnTyper
+	Types      TypeList
+	ReturnType ReturnTyper
 
+	// PreferredOverload determines overload resolution as follows.
 	// When multiple overloads are eligible based on types even after all of of
 	// the heuristics to pick one have been used, if one of the overloads is a
-	// Builtin with the `preferredOverload` flag set to true it can be selected
+	// Builtin with the `PreferredOverload` flag set to true it can be selected
 	// rather than returning a no-such-method error.
 	// This should generally be avoided -- avoiding introducing ambiguous
 	// overloads in the first place is a much better solution -- and only done
 	// after consultation with @knz @nvanbenschoten.
-	preferredOverload bool
+	PreferredOverload bool
 
-	// Set to true when a function potentially returns a different value
-	// when called in the same statement with the same parameters.
-	// e.g.: random(), clock_timestamp(). Some functions like now()
-	// return the same value in the same statement, but different values
-	// in separate statements, and should not be marked as impure.
-	impure bool
+	// Impure is set to true when a function potentially returns a
+	// different value when called in the same statement with the same
+	// parameters. e.g.: random(), clock_timestamp(). Some functions
+	// like now() return the same value in the same statement, but
+	// different values in separate statements, and should not be marked
+	// as impure.
+	Impure bool
 
-	// Set to true when a function depends on members of the EvalContext that are
-	// not marshalled by DistSQL (e.g. planner). Currently used for DistSQL to
-	// determine if expressions can be evaluated on a different node without
-	// sending over the EvalContext.
+	// DistsqlBlacklist is set to true when a function depends on
+	// members of the EvalContext that are not marshalled by DistSQL
+	// (e.g. planner). Currently used for DistSQL to determine if
+	// expressions can be evaluated on a different node without sending
+	// over the EvalContext.
 	//
 	// TODO(andrei): Get rid of the planner from the EvalContext and then we can
 	// get rid of this blacklist.
-	distsqlBlacklist bool
+	DistsqlBlacklist bool
 
-	// Set to true when a function's definition can handle NULL arguments. When
-	// set, the function will be given the chance to see NULL arguments. When not,
-	// the function will evaluate directly to NULL in the presence of any NULL
-	// arguments.
+	// NullableArgs is set to true when a function's definition can
+	// handle NULL arguments. When set, the function will be given the
+	// chance to see NULL arguments. When not, the function will
+	// evaluate directly to NULL in the presence of any NULL arguments.
 	//
 	// NOTE: when set, a function should be prepared for any of its arguments to
 	// be NULL and should act accordingly.
-	nullableArgs bool
+	NullableArgs bool
 
-	// Set to true when a function may change at every row whether or
-	// not it is applied to an expression that contains row-dependent
-	// variables. Used e.g. by `random` and aggregate functions.
-	needsRepeatedEvaluation bool
+	// NeedsRepeatedEvaluation is set to true when a function may change
+	// at every row whether or not it is applied to an expression that
+	// contains row-dependent variables. Used e.g. by `random` and
+	// aggregate functions.
+	NeedsRepeatedEvaluation bool
 
-	// Set to true when the built-in can only be used by security.RootUser.
-	privileged bool
+	// Privileged is set to true when the built-in can only be used by
+	// security.RootUser.
+	Privileged bool
 
-	class    FunctionClass
-	category string
+	// Class is the kind of built-in function (normal/aggregate/window/etc.)
+	Class FunctionClass
+
+	// Category is used to generate documentation strings.
+	Category string
 
 	// Info is a description of the function, which is surfaced on the CockroachDB
 	// docs site on the "Functions and Operators" page. Descriptions typically use
@@ -96,49 +104,17 @@ type Builtin struct {
 
 	AggregateFunc func([]types.T, *EvalContext) AggregateFunc
 	WindowFunc    func([]types.T, *EvalContext) WindowFunc
-	fn            func(*EvalContext, Datums) (Datum, error)
+	Fn            func(*EvalContext, Datums) (Datum, error)
 }
 
 // params implements the overloadImpl interface.
-func (b Builtin) params() typeList {
-	return b.Types
-}
+func (b Builtin) params() TypeList { return b.Types }
 
 // returnType implements the overloadImpl interface.
-func (b Builtin) returnType() returnTyper {
-	return b.ReturnType
-}
+func (b Builtin) returnType() ReturnTyper { return b.ReturnType }
 
 // preferred implements the overloadImpl interface.
-func (b Builtin) preferred() bool {
-	return b.preferredOverload
-}
-
-// Category is used to categorize a function (for documentation purposes).
-func (b Builtin) Category() string {
-	return b.category
-}
-
-// Class returns the FunctionClass of this builtin.
-func (b Builtin) Class() FunctionClass {
-	return b.class
-}
-
-// Impure returns false if this builtin is a pure function of its inputs.
-func (b Builtin) Impure() bool {
-	return b.impure
-}
-
-// DistSQLBlacklist returns true if the builtin is not supported by DistSQL.
-// See distsqlBlacklist.
-func (b Builtin) DistSQLBlacklist() bool {
-	return b.distsqlBlacklist
-}
-
-// Fn returns the Go function which implements the builtin.
-func (b Builtin) Fn() func(*EvalContext, Datums) (Datum, error) {
-	return b.fn
-}
+func (b Builtin) preferred() bool { return b.PreferredOverload }
 
 // FixedReturnType returns a fixed type that the function returns, returning Any
 // if the return type is based on the function's arguments.

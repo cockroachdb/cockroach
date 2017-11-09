@@ -16,6 +16,7 @@ package transform
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 )
 
 // IsAggregateVisitor checks if walked expressions contain aggregate functions.
@@ -40,7 +41,7 @@ func (v *IsAggregateVisitor) VisitPre(expr parser.Expr) (recurse bool, newExpr p
 		if err != nil {
 			return false, expr
 		}
-		if _, ok := parser.Aggregates[fd.Name]; ok {
+		if _, ok := builtins.Aggregates[fd.Name]; ok {
 			v.Aggregated = true
 			return false, expr
 		}

@@ -31,6 +31,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
@@ -359,7 +360,7 @@ CREATE TABLE pg_catalog.pg_collation (
 				parser.NewDString(collName), // collname
 				pgNamespacePGCatalog.Oid,    // collnamespace
 				parser.DNull,                // collowner
-				parser.DatEncodingUTFId,     // collencoding
+				builtins.DatEncodingUTFId,   // collencoding
 				// It's not clear how to translate a Go collation tag into the format
 				// required by LC_COLLATE and LC_CTYPE.
 				parser.DNull, // collcollate
@@ -602,20 +603,20 @@ CREATE TABLE pg_catalog.pg_database (
 		h := makeOidHasher()
 		return forEachDatabaseDesc(ctx, p, func(db *sqlbase.DatabaseDescriptor) error {
 			return addRow(
-				h.DBOid(db),              // oid
-				parser.NewDName(db.Name), // datname
-				parser.DNull,             // datdba
-				parser.DatEncodingUTFId,  // encoding
-				parser.DatEncodingEnUTF8, // datcollate
-				parser.DatEncodingEnUTF8, // datctype
-				parser.MakeDBool(false),  // datistemplate
-				parser.MakeDBool(true),   // datallowconn
-				negOneVal,                // datconnlimit
-				parser.DNull,             // datlastsysoid
-				parser.DNull,             // datfrozenxid
-				parser.DNull,             // datminmxid
-				oidZero,                  // dattablespace
-				parser.DNull,             // datacl
+				h.DBOid(db),                // oid
+				parser.NewDName(db.Name),   // datname
+				parser.DNull,               // datdba
+				builtins.DatEncodingUTFId,  // encoding
+				builtins.DatEncodingEnUTF8, // datcollate
+				builtins.DatEncodingEnUTF8, // datctype
+				parser.MakeDBool(false),    // datistemplate
+				parser.MakeDBool(true),     // datallowconn
+				negOneVal,                  // datconnlimit
+				parser.DNull,               // datlastsysoid
+				parser.DNull,               // datfrozenxid
+				parser.DNull,               // datminmxid
+				oidZero,                    // dattablespace
+				parser.DNull,               // datacl
 			)
 		})
 	},
@@ -1075,7 +1076,7 @@ CREATE TABLE pg_catalog.pg_proc (
 			return err
 		}
 		nspOid := pgNamespaceForDB(dbDesc, h).Oid
-		for name, builtins := range parser.Builtins {
+		for name, builtins := range builtins.Builtins {
 			// parser.Builtins contains duplicate uppercase and lowercase keys.
 			// Only return the lowercase ones for compatibility with postgres.
 			var first rune
@@ -1089,8 +1090,8 @@ CREATE TABLE pg_catalog.pg_proc (
 			for _, builtin := range builtins {
 				dName := parser.NewDName(name)
 				dSrc := parser.NewDString(name)
-				isAggregate := builtin.Class() == parser.AggregateClass
-				isWindow := builtin.Class() == parser.WindowClass
+				isAggregate := builtin.Class == parser.AggregateClass
+				isWindow := builtin.Class == parser.WindowClass
 
 				var retType parser.Datum
 				isRetSet := false
@@ -1141,22 +1142,22 @@ CREATE TABLE pg_catalog.pg_proc (
 				}
 				err := addRow(
 					h.BuiltinOid(name, &builtin), // oid
-					dName,                                             // proname
-					nspOid,                                            // pronamespace
-					parser.DNull,                                      // proowner
-					oidZero,                                           // prolang
-					parser.DNull,                                      // procost
-					parser.DNull,                                      // prorows
-					variadicType,                                      // provariadic
-					parser.DNull,                                      // protransform
-					parser.MakeDBool(parser.DBool(isAggregate)),       // proisagg
-					parser.MakeDBool(parser.DBool(isWindow)),          // proiswindow
-					parser.MakeDBool(false),                           // prosecdef
-					parser.MakeDBool(parser.DBool(!builtin.Impure())), // proleakproof
-					parser.MakeDBool(false),                           // proisstrict
-					parser.MakeDBool(parser.DBool(isRetSet)),          // proretset
-					parser.DNull,                                      // provolatile
-					parser.DNull,                                      // proparallel
+					dName,                                           // proname
+					nspOid,                                          // pronamespace
+					parser.DNull,                                    // proowner
+					oidZero,                                         // prolang
+					parser.DNull,                                    // procost
+					parser.DNull,                                    // prorows
+					variadicType,                                    // provariadic
+					parser.DNull,                                    // protransform
+					parser.MakeDBool(parser.DBool(isAggregate)),     // proisagg
+					parser.MakeDBool(parser.DBool(isWindow)),        // proiswindow
+					parser.MakeDBool(false),                         // prosecdef
+					parser.MakeDBool(parser.DBool(!builtin.Impure)), // proleakproof
+					parser.MakeDBool(false),                         // proisstrict
+					parser.MakeDBool(parser.DBool(isRetSet)),        // proretset
+					parser.DNull,                                    // provolatile
+					parser.DNull,                                    // proparallel
 					parser.NewDInt(parser.DInt(builtin.Types.Length())), // pronargs
 					parser.NewDInt(parser.DInt(0)),                      // pronargdefaults
 					retType, // prorettype
@@ -1450,7 +1451,7 @@ CREATE TABLE pg_catalog.pg_type (
 			cat := typCategory(typ)
 			typElem := oidZero
 			typArray := oidZero
-			builtinPrefix := parser.PGIOBuiltinPrefix(typ)
+			builtinPrefix := builtins.PGIOBuiltinPrefix(typ)
 			if cat == typCategoryArray {
 				if typ == types.IntVector {
 					// IntVector needs a special case because its a special snowflake
@@ -1802,7 +1803,7 @@ func (h oidHasher) BuiltinOid(name string, builtin *parser.Builtin) *parser.DOid
 }
 
 func (h oidHasher) RegProc(name string) parser.Datum {
-	builtin, ok := parser.Builtins[name]
+	builtin, ok := builtins.Builtins[name]
 	if !ok {
 		return parser.DNull
 	}

@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/lib/pq"
@@ -101,26 +102,26 @@ func TestBuiltinsAccountForMemory(t *testing.T) {
 		args               parser.Datums
 		expectedAllocation int64
 	}{
-		{parser.Builtins["repeat"][0],
+		{builtins.Builtins["repeat"][0],
 			parser.Datums{
 				parser.NewDString("abc"),
 				parser.NewDInt(123),
 			},
 			int64(3 * 123)},
-		{parser.Builtins["concat"][0],
+		{builtins.Builtins["concat"][0],
 			parser.Datums{
 				parser.NewDString("abc"),
 				parser.NewDString("abc"),
 			},
 			int64(3 + 3)},
-		{parser.Builtins["concat_ws"][0],
+		{builtins.Builtins["concat_ws"][0],
 			parser.Datums{
 				parser.NewDString("!"),
 				parser.NewDString("abc"),
 				parser.NewDString("abc"),
 			},
 			int64(3 + 1 + 3)},
-		{parser.Builtins["lower"][0],
+		{builtins.Builtins["lower"][0],
 			parser.Datums{
 				parser.NewDString("ABC"),
 			},
@@ -133,7 +134,7 @@ func TestBuiltinsAccountForMemory(t *testing.T) {
 			defer evalCtx.Stop(context.Background())
 			defer evalCtx.ActiveMemAcc.Close(context.Background())
 			previouslyAllocated := evalCtx.Mon.GetCurrentAllocationForTesting()
-			_, err := test.builtin.Fn()(evalCtx, test.args)
+			_, err := test.builtin.Fn(evalCtx, test.args)
 			if err != nil {
 				t.Fatal(err)
 			}

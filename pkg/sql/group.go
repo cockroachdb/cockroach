@@ -22,6 +22,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -490,9 +491,9 @@ func (n *groupNode) desiredAggregateOrdering() sqlbase.ColumnOrdering {
 	f := n.funcs[0]
 	impl := f.create(&n.planner.evalCtx)
 	switch impl.(type) {
-	case *parser.MinAggregate:
+	case *builtins.MinAggregate:
 		return sqlbase.ColumnOrdering{{ColIdx: f.argRenderIdx, Direction: encoding.Ascending}}
-	case *parser.MaxAggregate:
+	case *builtins.MaxAggregate:
 		return sqlbase.ColumnOrdering{{ColIdx: f.argRenderIdx, Direction: encoding.Descending}}
 	}
 	return nil
@@ -562,7 +563,7 @@ func (v *extractAggregatesVisitor) VisitPre(expr parser.Expr) (recurse bool, new
 		// This expression is in the GROUP BY; it is already being rendered by the
 		// renderNode.
 		f := v.groupNode.newAggregateFuncHolder(
-			v.preRender.render[groupIdx], groupIdx, true /* ident */, parser.NewIdentAggregate,
+			v.preRender.render[groupIdx], groupIdx, true /* ident */, builtins.NewIdentAggregate,
 		)
 
 		return false, v.addAggregation(f)
