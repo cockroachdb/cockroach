@@ -414,7 +414,7 @@ func TestBackupRestoreSystemJobs(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	sqlDB.Exec(`RESTORE data.* FROM $1, $2 WITH OPTIONS ('into_db'='restoredb')`, fullDir, incDir)
+	sqlDB.Exec(`RESTORE bank FROM $1, $2 WITH OPTIONS ('into_db'='restoredb')`, fullDir, incDir)
 	if err := jobutils.VerifySystemJob(sqlDB, 2, jobs.TypeRestore, jobs.Record{
 		Username: security.RootUser,
 		Description: fmt.Sprintf(
@@ -1548,7 +1548,7 @@ func TestConcurrentBackupRestores(t *testing.T) {
 				if _, err := sqlDB.DB.Exec(fmt.Sprintf(`CREATE DATABASE %s`, dbName)); err != nil {
 					return err
 				}
-				restoreQ := fmt.Sprintf(`RESTORE data.* FROM $1 WITH OPTIONS ('into_db'='%s')`, dbName)
+				restoreQ := fmt.Sprintf(`RESTORE data.%s FROM $1 WITH OPTIONS ('into_db'='%s')`, table, dbName)
 				if _, err := sqlDB.DB.ExecContext(gCtx, restoreQ, backupDir); err != nil {
 					return err
 				}
@@ -2015,11 +2015,60 @@ func TestRestoreDatabaseVersusTable(t *testing.T) {
 		`CREATE TABLE d3.foo (a INT)`,
 		`CREATE DATABASE d4`,
 		`CREATE TABLE d4.foo (a INT)`,
+		`CREATE TABLE d4.bar (a INT)`,
 	} {
 		origDB.Exec(q)
 	}
 
+	d4foo := "nodelocal:///d4foo"
+	d4foobar := "nodelocal:///d4foobar"
+	d4star := "nodelocal:///d4star"
+
 	origDB.Exec(`BACKUP DATABASE data, d2, d3, d4 TO $1`, localFoo)
+	origDB.Exec(`BACKUP d4.foo TO $1`, d4foo)
+	origDB.Exec(`BACKUP d4.foo, d4.bar TO $1`, d4foobar)
+	origDB.Exec(`BACKUP d4.* TO $1`, d4star)
+
+	t.Run("incomplete-db", func(t *testing.T) {
+		tcRestore := testcluster.StartTestCluster(t, multiNode, base.TestClusterArgs{ServerArgs: args})
+		defer tcRestore.Stopper().Stop(context.TODO())
+		sqlDB := sqlutils.MakeSQLRunner(t, tcRestore.Conns[0])
+
+		sqlDB.Exec(`create database d5`)
+
+		if _, err := sqlDB.DB.Exec(`RESTORE database d4 FROM $1`, d4foo); !testutils.IsError(
+			err, "cannot RESTORE DATABASE from a backup of individual tables",
+		) {
+			t.Fatal(err)
+		}
+
+		if _, err := sqlDB.DB.Exec(`RESTORE d4.* FROM $1 WITH into_db = 'd5'`, d4foo); !testutils.IsError(
+			err, "cannot RESTORE <database>.* from a backup of individual tables",
+		) {
+			t.Fatal(err)
+		}
+
+		if _, err := sqlDB.DB.Exec(`RESTORE database d4 FROM $1`, d4foobar); !testutils.IsError(
+			err, "cannot RESTORE DATABASE from a backup of individual tables",
+		) {
+			t.Fatal(err)
+		}
+
+		if _, err := sqlDB.DB.Exec(`RESTORE d4.* FROM $1 WITH into_db = 'd5'`, d4foobar); !testutils.IsError(
+			err, "cannot RESTORE <database>.* from a backup of individual tables",
+		) {
+			t.Fatal(err)
+		}
+
+		if _, err := sqlDB.DB.Exec(`RESTORE database d4 FROM $1`, d4foo); !testutils.IsError(
+			err, "cannot RESTORE DATABASE from a backup of individual tables",
+		) {
+			t.Fatal(err)
+		}
+
+		sqlDB.Exec(`RESTORE database d4 FROM $1`, d4star)
+
+	})
 
 	t.Run("db", func(t *testing.T) {
 		tcRestore := testcluster.StartTestCluster(t, multiNode, base.TestClusterArgs{ServerArgs: args})
@@ -2060,7 +2109,7 @@ func TestRestoreDatabaseVersusTable(t *testing.T) {
 		}
 	})
 
-	t.Run("tables-missing", func(t *testing.T) {
+	t.Run("tables-needs-db", func(t *testing.T) {
 		tcRestore := testcluster.StartTestCluster(t, multiNode, base.TestClusterArgs{ServerArgs: args})
 		defer tcRestore.Stopper().Stop(context.TODO())
 		sqlDB := sqlutils.MakeSQLRunner(t, tcRestore.Conns[0])
