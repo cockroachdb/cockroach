@@ -19,23 +19,24 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 )
 
 func TestFormatStatement(t *testing.T) {
-	tableFormatter := FmtReformatTableNames(FmtSimple,
-		func(_ *NormalizableTableName, buf *bytes.Buffer, _ FmtFlags) {
+	tableFormatter := parser.FmtReformatTableNames(parser.FmtSimple,
+		func(_ *parser.NormalizableTableName, buf *bytes.Buffer, _ parser.FmtFlags) {
 			buf.WriteString("xoxoxo")
 		})
 
 	testData := []struct {
 		stmt     string
-		f        FmtFlags
+		f        parser.FmtFlags
 		expected string
 	}{
-		{`CREATE USER foo WITH PASSWORD 'bar'`, FmtSimple,
+		{`CREATE USER foo WITH PASSWORD 'bar'`, parser.FmtSimple,
 			`CREATE USER 'foo' WITH PASSWORD *****`},
-		{`CREATE USER foo WITH PASSWORD 'bar'`, FmtSimpleWithPasswords,
+		{`CREATE USER foo WITH PASSWORD 'bar'`, parser.FmtSimpleWithPasswords,
 			`CREATE USER 'foo' WITH PASSWORD 'bar'`},
 
 		{`CREATE TABLE foo (x INT)`, tableFormatter,
@@ -53,62 +54,62 @@ func TestFormatStatement(t *testing.T) {
 		{`SHOW CREATE TABLE foo`, tableFormatter,
 			`SHOW CREATE TABLE xoxoxo`},
 		// TODO(knz): TRUNCATE and GRANT table names are removed by
-		// FmtAnonymize but not processed by table formatters.
+		// parser.FmtAnonymize but not processed by table formatters.
 		//
 		// {`TRUNCATE foo`, tableFormatter,
 		// `TRUNCATE TABLE xoxoxo`},
 		// {`GRANT SELECT ON bar TO foo`, tableFormatter,
 		// `GRANT SELECT ON xoxoxo TO foo`},
 
-		{`CREATE TABLE foo (x INT)`, FmtAnonymize,
+		{`CREATE TABLE foo (x INT)`, parser.FmtAnonymize,
 			`CREATE TABLE _ (_ INT)`},
-		{`INSERT INTO foo(x) TABLE bar`, FmtAnonymize,
+		{`INSERT INTO foo(x) TABLE bar`, parser.FmtAnonymize,
 			`INSERT INTO _(_) TABLE _`},
-		{`UPDATE foo SET x = y`, FmtAnonymize,
+		{`UPDATE foo SET x = y`, parser.FmtAnonymize,
 			`UPDATE _ SET _ = _`},
-		{`DELETE FROM foo`, FmtAnonymize,
+		{`DELETE FROM foo`, parser.FmtAnonymize,
 			`DELETE FROM _`},
-		{`TRUNCATE foo`, FmtAnonymize,
+		{`TRUNCATE foo`, parser.FmtAnonymize,
 			`TRUNCATE TABLE _`},
-		{`ALTER TABLE foo RENAME TO bar`, FmtAnonymize,
+		{`ALTER TABLE foo RENAME TO bar`, parser.FmtAnonymize,
 			`ALTER TABLE _ RENAME TO _`},
-		{`SHOW COLUMNS FROM foo`, FmtAnonymize,
+		{`SHOW COLUMNS FROM foo`, parser.FmtAnonymize,
 			`SHOW COLUMNS FROM _`},
-		{`SHOW CREATE TABLE foo`, FmtAnonymize,
+		{`SHOW CREATE TABLE foo`, parser.FmtAnonymize,
 			`SHOW CREATE TABLE _`},
-		{`GRANT SELECT ON bar TO foo`, FmtAnonymize,
+		{`GRANT SELECT ON bar TO foo`, parser.FmtAnonymize,
 			`GRANT SELECT ON _ TO _`},
 
-		{`SELECT 1+COALESCE(NULL, 'a', x)-ARRAY[3.14]`, FmtHideConstants,
+		{`SELECT 1+COALESCE(NULL, 'a', x)-ARRAY[3.14]`, parser.FmtHideConstants,
 			`SELECT (_ + COALESCE(_, _, x)) - ARRAY[_]`},
 
-		// This here checks encodeSQLString on non-DString strings also
+		// This here checks encodeSQLString on non-parser.DString strings also
 		// calls encodeSQLString with the right formatter.
 		// See TestFormatExprs below for the test on DStrings.
-		{`CREATE DATABASE foo TEMPLATE = 'bar-baz'`, FmtBareStrings,
+		{`CREATE DATABASE foo TEMPLATE = 'bar-baz'`, parser.FmtBareStrings,
 			`CREATE DATABASE foo TEMPLATE = bar-baz`},
-		{`CREATE DATABASE foo TEMPLATE = 'bar baz'`, FmtBareStrings,
+		{`CREATE DATABASE foo TEMPLATE = 'bar baz'`, parser.FmtBareStrings,
 			`CREATE DATABASE foo TEMPLATE = 'bar baz'`},
-		{`CREATE DATABASE foo TEMPLATE = 'bar,baz'`, FmtBareStrings,
+		{`CREATE DATABASE foo TEMPLATE = 'bar,baz'`, parser.FmtBareStrings,
 			`CREATE DATABASE foo TEMPLATE = 'bar,baz'`},
-		{`CREATE DATABASE foo TEMPLATE = 'bar{baz}'`, FmtBareStrings,
+		{`CREATE DATABASE foo TEMPLATE = 'bar{baz}'`, parser.FmtBareStrings,
 			`CREATE DATABASE foo TEMPLATE = 'bar{baz}'`},
 
-		{`SET "time zone" = UTC`, FmtSimple,
+		{`SET "time zone" = UTC`, parser.FmtSimple,
 			`SET "time zone" = utc`},
-		{`SET "time zone" = UTC`, FmtBareIdentifiers,
+		{`SET "time zone" = UTC`, parser.FmtBareIdentifiers,
 			`SET time zone = utc`},
-		{`SET "time zone" = UTC`, FmtBareStrings,
+		{`SET "time zone" = UTC`, parser.FmtBareStrings,
 			`SET "time zone" = utc`},
 	}
 
 	for i, test := range testData {
 		t.Run(fmt.Sprintf("%d %s", i, test.stmt), func(t *testing.T) {
-			stmt, err := ParseOne(test.stmt)
+			stmt, err := parser.ParseOne(test.stmt)
 			if err != nil {
 				t.Fatal(err)
 			}
-			stmtStr := AsStringWithFlags(stmt, test.f)
+			stmtStr := parser.AsStringWithFlags(stmt, test.f)
 			if stmtStr != test.expected {
 				t.Fatalf("expected %q, got %q", test.expected, stmtStr)
 			}
@@ -119,88 +120,88 @@ func TestFormatStatement(t *testing.T) {
 func TestFormatExpr(t *testing.T) {
 	testData := []struct {
 		expr     string
-		f        FmtFlags
+		f        parser.FmtFlags
 		expected string
 	}{
-		{`null`, FmtShowTypes,
+		{`null`, parser.FmtShowTypes,
 			`(NULL)[NULL]`},
-		{`true`, FmtShowTypes,
+		{`true`, parser.FmtShowTypes,
 			`(true)[bool]`},
-		{`123`, FmtShowTypes,
+		{`123`, parser.FmtShowTypes,
 			`(123)[int]`},
-		{`123.456`, FmtShowTypes,
+		{`123.456`, parser.FmtShowTypes,
 			`(123.456)[decimal]`},
-		{`'abc'`, FmtShowTypes,
+		{`'abc'`, parser.FmtShowTypes,
 			`('abc')[string]`},
-		{`b'abc'`, FmtShowTypes,
+		{`b'abc'`, parser.FmtShowTypes,
 			`('\x616263')[bytes]`},
-		{`interval '3s'`, FmtShowTypes,
+		{`interval '3s'`, parser.FmtShowTypes,
 			`('3s')[interval]`},
-		{`date '2003-01-01'`, FmtShowTypes,
+		{`date '2003-01-01'`, parser.FmtShowTypes,
 			`('2003-01-01')[date]`},
-		{`timestamp '2003-01-01 00:00:00'`, FmtShowTypes,
+		{`timestamp '2003-01-01 00:00:00'`, parser.FmtShowTypes,
 			`('2003-01-01 00:00:00+00:00')[timestamp]`},
-		{`timestamptz '2003-01-01 00:00:00+03'`, FmtShowTypes,
+		{`timestamptz '2003-01-01 00:00:00+03'`, parser.FmtShowTypes,
 			`('2003-01-01 00:00:00+03:00')[timestamptz]`},
-		{`greatest(unique_rowid(), 12)`, FmtShowTypes,
+		{`greatest(unique_rowid(), 12)`, parser.FmtShowTypes,
 			`(greatest((unique_rowid())[int], (12)[int]))[int]`},
 
 		// While TestFormatStmt above checks StrVals, this here
 		// checks DStrings.
-		{`ARRAY['a','b c','d,e','f{g','h}i']`, FmtBareStrings,
+		{`ARRAY['a','b c','d,e','f{g','h}i']`, parser.FmtBareStrings,
 			`ARRAY[a, 'b c', 'd,e', 'f{g', 'h}i']`},
 		// TODO(jordan): pg does *not* quote strings merely containing hex
 		// escapes when included in array values. #16487
-		// {`ARRAY[e'j\x10k']`, FmtBareStrings,
+		// {`ARRAY[e'j\x10k']`, parser.FmtBareStrings,
 		//	 `ARRAY[j\x10k]`},
 
-		{`1`, FmtParsable, "1:::INT"},
-		{`9223372036854775807`, FmtParsable, "9223372036854775807:::INT"},
-		{`9223372036854775808`, FmtParsable, "9223372036854775808:::DECIMAL"},
-		{`-1`, FmtParsable, "(-1):::INT"},
-		{`-9223372036854775808`, FmtParsable, "(-9223372036854775808):::INT"},
-		{`-9223372036854775809`, FmtParsable, "-9223372036854775809:::DECIMAL"},
+		{`1`, parser.FmtParsable, "1:::INT"},
+		{`9223372036854775807`, parser.FmtParsable, "9223372036854775807:::INT"},
+		{`9223372036854775808`, parser.FmtParsable, "9223372036854775808:::DECIMAL"},
+		{`-1`, parser.FmtParsable, "(-1):::INT"},
+		{`-9223372036854775808`, parser.FmtParsable, "(-9223372036854775808):::INT"},
+		{`-9223372036854775809`, parser.FmtParsable, "-9223372036854775809:::DECIMAL"},
 
-		{`unique_rowid() + 123`, FmtParsable,
+		{`unique_rowid() + 123`, parser.FmtParsable,
 			`unique_rowid() + 123:::INT`},
-		{`sqrt(123.0) + 456`, FmtParsable,
+		{`sqrt(123.0) + 456`, parser.FmtParsable,
 			`sqrt(123.0:::DECIMAL) + 456:::DECIMAL`},
-		{`now() + interval '3s'`, FmtSimple,
+		{`now() + interval '3s'`, parser.FmtSimple,
 			`now() + '3s'`},
-		{`now() + interval '3s'`, FmtParsable,
+		{`now() + interval '3s'`, parser.FmtParsable,
 			`now() + '3s':::INTERVAL`},
-		{`current_date() - date '2003-01-01'`, FmtSimple,
+		{`current_date() - date '2003-01-01'`, parser.FmtSimple,
 			`current_date() - '2003-01-01'`},
-		{`current_date() - date '2003-01-01'`, FmtParsable,
+		{`current_date() - date '2003-01-01'`, parser.FmtParsable,
 			`current_date() - '2003-01-01':::DATE`},
-		{`now() - timestamp '2003-01-01'`, FmtSimple,
+		{`now() - timestamp '2003-01-01'`, parser.FmtSimple,
 			`now() - '2003-01-01 00:00:00+00:00'`},
-		{`now() - timestamp '2003-01-01'`, FmtParsable,
+		{`now() - timestamp '2003-01-01'`, parser.FmtParsable,
 			`now() - '2003-01-01 00:00:00+00:00':::TIMESTAMP`},
-		{`'+Inf':::DECIMAL + '-Inf':::DECIMAL + 'NaN':::DECIMAL`, FmtParsable,
+		{`'+Inf':::DECIMAL + '-Inf':::DECIMAL + 'NaN':::DECIMAL`, parser.FmtParsable,
 			`('Infinity':::DECIMAL + '-Infinity':::DECIMAL) + 'NaN':::DECIMAL`},
-		{`'+Inf':::FLOAT + '-Inf':::FLOAT + 'NaN':::FLOAT`, FmtParsable,
+		{`'+Inf':::FLOAT + '-Inf':::FLOAT + 'NaN':::FLOAT`, parser.FmtParsable,
 			`('+Inf':::FLOAT + '-Inf':::FLOAT) + 'NaN':::FLOAT`},
 
-		{`(123:::INT, 123:::DECIMAL)`, FmtCheckEquivalence,
+		{`(123:::INT, 123:::DECIMAL)`, parser.FmtCheckEquivalence,
 			`(123:::INT, 123:::DECIMAL)`},
 
-		{`(1, COALESCE(NULL, 123), ARRAY[45.6])`, FmtHideConstants,
+		{`(1, COALESCE(NULL, 123), ARRAY[45.6])`, parser.FmtHideConstants,
 			`(_, COALESCE(_, _), ARRAY[_])`},
 	}
 
 	for i, test := range testData {
 		t.Run(fmt.Sprintf("%d %s", i, test.expr), func(t *testing.T) {
-			expr, err := ParseExpr(test.expr)
+			expr, err := parser.ParseExpr(test.expr)
 			if err != nil {
 				t.Fatal(err)
 			}
-			ctx := MakeSemaContext(false)
-			typeChecked, err := TypeCheck(expr, &ctx, types.Any)
+			ctx := parser.MakeSemaContext(false)
+			typeChecked, err := parser.TypeCheck(expr, &ctx, types.Any)
 			if err != nil {
 				t.Fatal(err)
 			}
-			exprStr := AsStringWithFlags(typeChecked, test.f)
+			exprStr := parser.AsStringWithFlags(typeChecked, test.f)
 			if exprStr != test.expected {
 				t.Fatalf("expected %q, got %q", test.expected, exprStr)
 			}

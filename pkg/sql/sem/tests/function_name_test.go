@@ -17,6 +17,7 @@ package tests
 import (
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 )
 
@@ -34,15 +35,15 @@ func TestResolveFunction(t *testing.T) {
 		{`foo.*`, ``, `invalid function name: foo.*`},
 	}
 
-	searchPath := MakeSearchPath([]string{"pg_catalog"})
+	searchPath := parser.MakeSearchPath([]string{"pg_catalog"})
 	for _, tc := range testCases {
-		stmt, err := ParseOne("SELECT " + tc.in + "(1)")
+		stmt, err := parser.ParseOne("SELECT " + tc.in + "(1)")
 		if err != nil {
 			t.Fatalf("%s: %v", tc.in, err)
 		}
-		f, ok := stmt.(*Select).Select.(*SelectClause).Exprs[0].Expr.(*FuncExpr)
+		f, ok := stmt.(*parser.Select).Select.(*parser.SelectClause).Exprs[0].Expr.(*parser.FuncExpr)
 		if !ok {
-			t.Fatalf("%s does not parse to a FuncExpr", tc.in)
+			t.Fatalf("%s does not parse to a parser.FuncExpr", tc.in)
 		}
 		q := f.Func
 		_, err = q.Resolve(searchPath)

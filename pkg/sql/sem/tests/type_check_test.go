@@ -18,6 +18,7 @@ import (
 	"regexp"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 )
@@ -104,7 +105,7 @@ func TestTypeCheck(t *testing.T) {
 		{`$1:::INT`, `$1:::INT`},
 
 		// These outputs, while bizarre looking, are correct and expected. The
-		// type annotation is caused by the call to Serialize, which formats the
+		// type annotation is caused by the call to parser.Serialize, which formats the
 		// output using the Parseable formatter which inserts type annotations
 		// at the end of all well-typed datums. And the second cast is caused by
 		// the test itself.
@@ -114,16 +115,16 @@ func TestTypeCheck(t *testing.T) {
 		{`'-Inf'::decimal`, `'-Infinity':::DECIMAL::DECIMAL`},
 	}
 	for _, d := range testData {
-		expr, err := ParseExpr(d.expr)
+		expr, err := parser.ParseExpr(d.expr)
 		if err != nil {
 			t.Errorf("%s: %v", d.expr, err)
 			continue
 		}
-		ctx := MakeSemaContext(false)
-		typeChecked, err := TypeCheck(expr, &ctx, types.Any)
+		ctx := parser.MakeSemaContext(false)
+		typeChecked, err := parser.TypeCheck(expr, &ctx, types.Any)
 		if err != nil {
 			t.Errorf("%s: unexpected error %s", d.expr, err)
-		} else if s := Serialize(typeChecked); s != d.expected {
+		} else if s := parser.Serialize(typeChecked); s != d.expected {
 			t.Errorf("%s: expected %s, but found %s", d.expr, d.expected, s)
 		}
 	}
@@ -175,11 +176,11 @@ func TestTypeCheckError(t *testing.T) {
 		{`3:::int[]`, `incompatible type annotation for 3 as int[], found type: int`},
 	}
 	for _, d := range testData {
-		expr, err := ParseExpr(d.expr)
+		expr, err := parser.ParseExpr(d.expr)
 		if err != nil {
 			t.Fatalf("%s: %v", d.expr, err)
 		}
-		if _, err := TypeCheck(expr, nil, types.Any); !testutils.IsError(err, regexp.QuoteMeta(d.expected)) {
+		if _, err := parser.TypeCheck(expr, nil, types.Any); !testutils.IsError(err, regexp.QuoteMeta(d.expected)) {
 			t.Errorf("%s: expected %s, but found %v", d.expr, d.expected, err)
 		}
 	}

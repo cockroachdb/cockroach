@@ -21,6 +21,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	_ "github.com/cockroachdb/cockroach/pkg/util/log" // for flags
@@ -853,7 +854,7 @@ func TestParse(t *testing.T) {
 		{`SELECT * FROM ((t1 NATURAL JOIN t2 WITH ORDINALITY AS o1)) WITH ORDINALITY AS o2`},
 	}
 	for _, d := range testData {
-		stmts, err := Parse(d.sql)
+		stmts, err := parser.Parse(d.sql)
 		if err != nil {
 			t.Fatalf("%s: expected success, but found %s", d.sql, err)
 		}
@@ -1256,16 +1257,16 @@ func TestParse2(t *testing.T) {
 		},
 	}
 	for _, d := range testData {
-		stmts, err := Parse(d.sql)
+		stmts, err := parser.Parse(d.sql)
 		if err != nil {
 			t.Errorf("%s: expected success, but found %s", d.sql, err)
 			continue
 		}
-		s := AsStringWithFlags(stmts, FmtSimpleWithPasswords)
+		s := parser.AsStringWithFlags(stmts, parser.FmtSimpleWithPasswords)
 		if d.expected != s {
 			t.Errorf("%s: expected %s, but found (%d statements): %s", d.sql, d.expected, len(stmts), s)
 		}
-		if _, err := Parse(s); err != nil {
+		if _, err := parser.Parse(s); err != nil {
 			t.Errorf("expected string found, but not parsable: %s:\n%s", err, s)
 		}
 	}
@@ -1287,16 +1288,16 @@ func TestParseTree(t *testing.T) {
 	}
 
 	for _, d := range testData {
-		stmts, err := Parse(d.sql)
+		stmts, err := parser.Parse(d.sql)
 		if err != nil {
 			t.Errorf("%s: expected success, but found %s", d.sql, err)
 			continue
 		}
-		s := AsStringWithFlags(stmts, FmtAlwaysGroupExprs)
+		s := parser.AsStringWithFlags(stmts, parser.FmtAlwaysGroupExprs)
 		if d.expected != s {
 			t.Errorf("%s: expected %s, but found (%d statements): %s", d.sql, d.expected, len(stmts), s)
 		}
-		if _, err := Parse(s); err != nil {
+		if _, err := parser.Parse(s); err != nil {
 			t.Errorf("expected string found, but not parsable: %s:\n%s", err, s)
 		}
 	}
@@ -1315,7 +1316,7 @@ func TestParseSyntax(t *testing.T) {
 		{`SELECT '\x' FROM t`},
 	}
 	for _, d := range testData {
-		if _, err := Parse(d.sql); err != nil {
+		if _, err := parser.Parse(d.sql); err != nil {
 			t.Fatalf("%s: expected success, but not parsable %s", d.sql, err)
 		}
 	}
@@ -1639,7 +1640,7 @@ SELECT 'f'::"blah"
 		},
 	}
 	for _, d := range testData {
-		_, err := Parse(d.sql)
+		_, err := parser.Parse(d.sql)
 		if err == nil {
 			t.Errorf("expected error, got nil")
 			continue
@@ -1675,7 +1676,7 @@ func TestParsePanic(t *testing.T) {
 		"(F(F(F(F(F(F(F(F(F(F" +
 		"(F(F(F(F(F(F(F(F(F((" +
 		"F(0"
-	_, err := Parse(s)
+	_, err := parser.Parse(s)
 	expected := `syntax error at or near "EOF"`
 	if !testutils.IsError(err, expected) {
 		t.Fatalf("expected %s, but found %v", expected, err)
@@ -1696,145 +1697,145 @@ func TestParsePrecedence(t *testing.T) {
 	//   9: AND
 	//  10: OR
 
-	unary := func(op UnaryOperator, expr Expr) Expr {
-		return &UnaryExpr{Operator: op, Expr: expr}
+	unary := func(op parser.UnaryOperator, expr parser.Expr) parser.Expr {
+		return &parser.UnaryExpr{Operator: op, Expr: expr}
 	}
-	binary := func(op BinaryOperator, left, right Expr) Expr {
-		return &BinaryExpr{Operator: op, Left: left, Right: right}
+	binary := func(op parser.BinaryOperator, left, right parser.Expr) parser.Expr {
+		return &parser.BinaryExpr{Operator: op, Left: left, Right: right}
 	}
-	cmp := func(op ComparisonOperator, left, right Expr) Expr {
-		return &ComparisonExpr{Operator: op, Left: left, Right: right}
+	cmp := func(op parser.ComparisonOperator, left, right parser.Expr) parser.Expr {
+		return &parser.ComparisonExpr{Operator: op, Left: left, Right: right}
 	}
-	not := func(expr Expr) Expr {
-		return &NotExpr{Expr: expr}
+	not := func(expr parser.Expr) parser.Expr {
+		return &parser.NotExpr{Expr: expr}
 	}
-	and := func(left, right Expr) Expr {
-		return &AndExpr{Left: left, Right: right}
+	and := func(left, right parser.Expr) parser.Expr {
+		return &parser.AndExpr{Left: left, Right: right}
 	}
-	or := func(left, right Expr) Expr {
-		return &OrExpr{Left: left, Right: right}
+	or := func(left, right parser.Expr) parser.Expr {
+		return &parser.OrExpr{Left: left, Right: right}
 	}
-	concat := func(left, right Expr) Expr {
-		return &BinaryExpr{Operator: Concat, Left: left, Right: right}
+	concat := func(left, right parser.Expr) parser.Expr {
+		return &parser.BinaryExpr{Operator: parser.Concat, Left: left, Right: right}
 	}
-	regmatch := func(left, right Expr) Expr {
-		return &ComparisonExpr{Operator: RegMatch, Left: left, Right: right}
+	regmatch := func(left, right parser.Expr) parser.Expr {
+		return &parser.ComparisonExpr{Operator: parser.RegMatch, Left: left, Right: right}
 	}
-	regimatch := func(left, right Expr) Expr {
-		return &ComparisonExpr{Operator: RegIMatch, Left: left, Right: right}
+	regimatch := func(left, right parser.Expr) parser.Expr {
+		return &parser.ComparisonExpr{Operator: parser.RegIMatch, Left: left, Right: right}
 	}
 
-	one := &NumVal{Value: constant.MakeInt64(1), OrigString: "1"}
-	two := &NumVal{Value: constant.MakeInt64(2), OrigString: "2"}
-	three := &NumVal{Value: constant.MakeInt64(3), OrigString: "3"}
-	a := NewStrVal("a")
-	b := NewStrVal("b")
-	c := NewStrVal("c")
+	one := &parser.NumVal{Value: constant.MakeInt64(1), OrigString: "1"}
+	two := &parser.NumVal{Value: constant.MakeInt64(2), OrigString: "2"}
+	three := &parser.NumVal{Value: constant.MakeInt64(3), OrigString: "3"}
+	a := parser.NewStrVal("a")
+	b := parser.NewStrVal("b")
+	c := parser.NewStrVal("c")
 
 	testData := []struct {
 		sql      string
-		expected Expr
+		expected parser.Expr
 	}{
 		// Unary plus and complement.
-		{`~-1`, unary(UnaryComplement, unary(UnaryMinus, one))},
-		{`-~1`, unary(UnaryMinus, unary(UnaryComplement, one))},
+		{`~-1`, unary(parser.UnaryComplement, unary(parser.UnaryMinus, one))},
+		{`-~1`, unary(parser.UnaryMinus, unary(parser.UnaryComplement, one))},
 
 		// Mul, div, floordiv, mod combined with higher precedence.
-		{`-1*2`, binary(Mult, unary(UnaryMinus, one), two)},
-		{`1*-2`, binary(Mult, one, unary(UnaryMinus, two))},
-		{`-1/2`, binary(Div, unary(UnaryMinus, one), two)},
-		{`1/-2`, binary(Div, one, unary(UnaryMinus, two))},
-		{`-1//2`, binary(FloorDiv, unary(UnaryMinus, one), two)},
-		{`1//-2`, binary(FloorDiv, one, unary(UnaryMinus, two))},
-		{`-1%2`, binary(Mod, unary(UnaryMinus, one), two)},
-		{`1%-2`, binary(Mod, one, unary(UnaryMinus, two))},
+		{`-1*2`, binary(parser.Mult, unary(parser.UnaryMinus, one), two)},
+		{`1*-2`, binary(parser.Mult, one, unary(parser.UnaryMinus, two))},
+		{`-1/2`, binary(parser.Div, unary(parser.UnaryMinus, one), two)},
+		{`1/-2`, binary(parser.Div, one, unary(parser.UnaryMinus, two))},
+		{`-1//2`, binary(parser.FloorDiv, unary(parser.UnaryMinus, one), two)},
+		{`1//-2`, binary(parser.FloorDiv, one, unary(parser.UnaryMinus, two))},
+		{`-1%2`, binary(parser.Mod, unary(parser.UnaryMinus, one), two)},
+		{`1%-2`, binary(parser.Mod, one, unary(parser.UnaryMinus, two))},
 
 		// Mul, div, floordiv, mod combined with self (left associative).
-		{`1*2*3`, binary(Mult, binary(Mult, one, two), three)},
-		{`1*2/3`, binary(Div, binary(Mult, one, two), three)},
-		{`1/2*3`, binary(Mult, binary(Div, one, two), three)},
-		{`1*2//3`, binary(FloorDiv, binary(Mult, one, two), three)},
-		{`1//2*3`, binary(Mult, binary(FloorDiv, one, two), three)},
-		{`1*2%3`, binary(Mod, binary(Mult, one, two), three)},
-		{`1%2*3`, binary(Mult, binary(Mod, one, two), three)},
-		{`1/2/3`, binary(Div, binary(Div, one, two), three)},
-		{`1/2//3`, binary(FloorDiv, binary(Div, one, two), three)},
-		{`1//2/3`, binary(Div, binary(FloorDiv, one, two), three)},
-		{`1/2%3`, binary(Mod, binary(Div, one, two), three)},
-		{`1%2/3`, binary(Div, binary(Mod, one, two), three)},
-		{`1//2//3`, binary(FloorDiv, binary(FloorDiv, one, two), three)},
-		{`1//2%3`, binary(Mod, binary(FloorDiv, one, two), three)},
-		{`1%2//3`, binary(FloorDiv, binary(Mod, one, two), three)},
-		{`1%2%3`, binary(Mod, binary(Mod, one, two), three)},
+		{`1*2*3`, binary(parser.Mult, binary(parser.Mult, one, two), three)},
+		{`1*2/3`, binary(parser.Div, binary(parser.Mult, one, two), three)},
+		{`1/2*3`, binary(parser.Mult, binary(parser.Div, one, two), three)},
+		{`1*2//3`, binary(parser.FloorDiv, binary(parser.Mult, one, two), three)},
+		{`1//2*3`, binary(parser.Mult, binary(parser.FloorDiv, one, two), three)},
+		{`1*2%3`, binary(parser.Mod, binary(parser.Mult, one, two), three)},
+		{`1%2*3`, binary(parser.Mult, binary(parser.Mod, one, two), three)},
+		{`1/2/3`, binary(parser.Div, binary(parser.Div, one, two), three)},
+		{`1/2//3`, binary(parser.FloorDiv, binary(parser.Div, one, two), three)},
+		{`1//2/3`, binary(parser.Div, binary(parser.FloorDiv, one, two), three)},
+		{`1/2%3`, binary(parser.Mod, binary(parser.Div, one, two), three)},
+		{`1%2/3`, binary(parser.Div, binary(parser.Mod, one, two), three)},
+		{`1//2//3`, binary(parser.FloorDiv, binary(parser.FloorDiv, one, two), three)},
+		{`1//2%3`, binary(parser.Mod, binary(parser.FloorDiv, one, two), three)},
+		{`1%2//3`, binary(parser.FloorDiv, binary(parser.Mod, one, two), three)},
+		{`1%2%3`, binary(parser.Mod, binary(parser.Mod, one, two), three)},
 
 		// Binary plus and minus combined with higher precedence.
-		{`1*2+3`, binary(Plus, binary(Mult, one, two), three)},
-		{`1+2*3`, binary(Plus, one, binary(Mult, two, three))},
-		{`1*2-3`, binary(Minus, binary(Mult, one, two), three)},
-		{`1-2*3`, binary(Minus, one, binary(Mult, two, three))},
+		{`1*2+3`, binary(parser.Plus, binary(parser.Mult, one, two), three)},
+		{`1+2*3`, binary(parser.Plus, one, binary(parser.Mult, two, three))},
+		{`1*2-3`, binary(parser.Minus, binary(parser.Mult, one, two), three)},
+		{`1-2*3`, binary(parser.Minus, one, binary(parser.Mult, two, three))},
 
 		// Binary plus and minus combined with self (left associative).
-		{`1+2-3`, binary(Minus, binary(Plus, one, two), three)},
-		{`1-2+3`, binary(Plus, binary(Minus, one, two), three)},
+		{`1+2-3`, binary(parser.Minus, binary(parser.Plus, one, two), three)},
+		{`1-2+3`, binary(parser.Plus, binary(parser.Minus, one, two), three)},
 
 		// Left and right shift combined with higher precedence.
-		{`1<<2+3`, binary(LShift, one, binary(Plus, two, three))},
-		{`1+2<<3`, binary(LShift, binary(Plus, one, two), three)},
-		{`1>>2+3`, binary(RShift, one, binary(Plus, two, three))},
-		{`1+2>>3`, binary(RShift, binary(Plus, one, two), three)},
+		{`1<<2+3`, binary(parser.LShift, one, binary(parser.Plus, two, three))},
+		{`1+2<<3`, binary(parser.LShift, binary(parser.Plus, one, two), three)},
+		{`1>>2+3`, binary(parser.RShift, one, binary(parser.Plus, two, three))},
+		{`1+2>>3`, binary(parser.RShift, binary(parser.Plus, one, two), three)},
 
 		// Left and right shift combined with self (left associative).
-		{`1<<2<<3`, binary(LShift, binary(LShift, one, two), three)},
-		{`1<<2>>3`, binary(RShift, binary(LShift, one, two), three)},
-		{`1>>2<<3`, binary(LShift, binary(RShift, one, two), three)},
-		{`1>>2>>3`, binary(RShift, binary(RShift, one, two), three)},
+		{`1<<2<<3`, binary(parser.LShift, binary(parser.LShift, one, two), three)},
+		{`1<<2>>3`, binary(parser.RShift, binary(parser.LShift, one, two), three)},
+		{`1>>2<<3`, binary(parser.LShift, binary(parser.RShift, one, two), three)},
+		{`1>>2>>3`, binary(parser.RShift, binary(parser.RShift, one, two), three)},
 
 		// Power combined with lower precedence.
-		{`1*2^3`, binary(Mult, one, binary(Pow, two, three))},
-		{`1^2*3`, binary(Mult, binary(Pow, one, two), three)},
+		{`1*2^3`, binary(parser.Mult, one, binary(parser.Pow, two, three))},
+		{`1^2*3`, binary(parser.Mult, binary(parser.Pow, one, two), three)},
 
 		// Bit-and combined with higher precedence.
-		{`1&2<<3`, binary(Bitand, one, binary(LShift, two, three))},
-		{`1<<2&3`, binary(Bitand, binary(LShift, one, two), three)},
+		{`1&2<<3`, binary(parser.Bitand, one, binary(parser.LShift, two, three))},
+		{`1<<2&3`, binary(parser.Bitand, binary(parser.LShift, one, two), three)},
 
 		// Bit-and combined with self (left associative)
-		{`1&2&3`, binary(Bitand, binary(Bitand, one, two), three)},
+		{`1&2&3`, binary(parser.Bitand, binary(parser.Bitand, one, two), three)},
 
 		// Bit-xor combined with higher precedence.
-		{`1#2&3`, binary(Bitxor, one, binary(Bitand, two, three))},
-		{`1&2#3`, binary(Bitxor, binary(Bitand, one, two), three)},
+		{`1#2&3`, binary(parser.Bitxor, one, binary(parser.Bitand, two, three))},
+		{`1&2#3`, binary(parser.Bitxor, binary(parser.Bitand, one, two), three)},
 
 		// Bit-xor combined with self (left associative)
-		{`1#2#3`, binary(Bitxor, binary(Bitxor, one, two), three)},
+		{`1#2#3`, binary(parser.Bitxor, binary(parser.Bitxor, one, two), three)},
 
 		// Bit-or combined with higher precedence.
-		{`1|2#3`, binary(Bitor, one, binary(Bitxor, two, three))},
-		{`1#2|3`, binary(Bitor, binary(Bitxor, one, two), three)},
+		{`1|2#3`, binary(parser.Bitor, one, binary(parser.Bitxor, two, three))},
+		{`1#2|3`, binary(parser.Bitor, binary(parser.Bitxor, one, two), three)},
 
 		// Bit-or combined with self (left associative)
-		{`1|2|3`, binary(Bitor, binary(Bitor, one, two), three)},
+		{`1|2|3`, binary(parser.Bitor, binary(parser.Bitor, one, two), three)},
 
 		// Equals, not-equals, greater-than, greater-than equals, less-than and
 		// less-than equals combined with higher precedence.
-		{`1 = 2|3`, cmp(EQ, one, binary(Bitor, two, three))},
-		{`1|2 = 3`, cmp(EQ, binary(Bitor, one, two), three)},
-		{`1 != 2|3`, cmp(NE, one, binary(Bitor, two, three))},
-		{`1|2 != 3`, cmp(NE, binary(Bitor, one, two), three)},
-		{`1 > 2|3`, cmp(GT, one, binary(Bitor, two, three))},
-		{`1|2 > 3`, cmp(GT, binary(Bitor, one, two), three)},
-		{`1 >= 2|3`, cmp(GE, one, binary(Bitor, two, three))},
-		{`1|2 >= 3`, cmp(GE, binary(Bitor, one, two), three)},
-		{`1 < 2|3`, cmp(LT, one, binary(Bitor, two, three))},
-		{`1|2 < 3`, cmp(LT, binary(Bitor, one, two), three)},
-		{`1 <= 2|3`, cmp(LE, one, binary(Bitor, two, three))},
-		{`1|2 <= 3`, cmp(LE, binary(Bitor, one, two), three)},
+		{`1 = 2|3`, cmp(parser.EQ, one, binary(parser.Bitor, two, three))},
+		{`1|2 = 3`, cmp(parser.EQ, binary(parser.Bitor, one, two), three)},
+		{`1 != 2|3`, cmp(parser.NE, one, binary(parser.Bitor, two, three))},
+		{`1|2 != 3`, cmp(parser.NE, binary(parser.Bitor, one, two), three)},
+		{`1 > 2|3`, cmp(parser.GT, one, binary(parser.Bitor, two, three))},
+		{`1|2 > 3`, cmp(parser.GT, binary(parser.Bitor, one, two), three)},
+		{`1 >= 2|3`, cmp(parser.GE, one, binary(parser.Bitor, two, three))},
+		{`1|2 >= 3`, cmp(parser.GE, binary(parser.Bitor, one, two), three)},
+		{`1 < 2|3`, cmp(parser.LT, one, binary(parser.Bitor, two, three))},
+		{`1|2 < 3`, cmp(parser.LT, binary(parser.Bitor, one, two), three)},
+		{`1 <= 2|3`, cmp(parser.LE, one, binary(parser.Bitor, two, three))},
+		{`1|2 <= 3`, cmp(parser.LE, binary(parser.Bitor, one, two), three)},
 
 		// NOT combined with higher precedence.
-		{`NOT 1 = 2`, not(cmp(EQ, one, two))},
-		{`NOT 1 = NOT 2 = 3`, not(cmp(EQ, one, not(cmp(EQ, two, three))))},
+		{`NOT 1 = 2`, not(cmp(parser.EQ, one, two))},
+		{`NOT 1 = NOT 2 = 3`, not(cmp(parser.EQ, one, not(cmp(parser.EQ, two, three))))},
 
 		// NOT combined with self.
-		{`NOT NOT 1 = 2`, not(not(cmp(EQ, one, two)))},
+		{`NOT NOT 1 = 2`, not(not(cmp(parser.EQ, one, two)))},
 
 		// AND combined with higher precedence.
 		{`NOT 1 AND 2`, and(not(one), two)},
@@ -1855,10 +1856,10 @@ func TestParsePrecedence(t *testing.T) {
 		{`'a' || 'b' ~* 'c'`, regimatch(concat(a, b), c)},
 
 		// Unary ~ should have highest precedence.
-		{`~1+2`, binary(Plus, unary(UnaryComplement, one), two)},
+		{`~1+2`, binary(parser.Plus, unary(parser.UnaryComplement, one), two)},
 	}
 	for _, d := range testData {
-		expr, err := ParseExpr(d.sql)
+		expr, err := parser.ParseExpr(d.sql)
 		if err != nil {
 			t.Fatalf("%s: %v", d.sql, err)
 		}
@@ -1870,7 +1871,7 @@ func TestParsePrecedence(t *testing.T) {
 
 func BenchmarkParse(b *testing.B) {
 	for i := 0; i < b.N; i++ {
-		st, err := Parse(`
+		st, err := parser.Parse(`
 			BEGIN;
 			UPDATE pgbench_accounts SET abalance = abalance + 77 WHERE aid = 5;
 			SELECT abalance FROM pgbench_accounts WHERE aid = 5;
@@ -1882,7 +1883,7 @@ func BenchmarkParse(b *testing.B) {
 		if len(st) != 5 {
 			b.Fatal("parsed wrong number of statements: ", len(st))
 		}
-		if _, ok := st[1].(*Update); !ok {
+		if _, ok := st[1].(*parser.Update); !ok {
 			b.Fatalf("unexpected statement type: %T", st[1])
 		}
 	}
