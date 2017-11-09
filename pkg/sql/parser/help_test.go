@@ -16,10 +16,8 @@ package parser
 
 import (
 	"bytes"
-	"regexp"
 	"strings"
 	"testing"
-	"unicode"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/urlcheck/lib/urlcheck"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -361,42 +359,6 @@ func TestContextualHelp(t *testing.T) {
 			expected := msg.String()
 			if help != expected {
 				t.Errorf("unexpected help message: got:\n%s\nexpected:\n%s", help, expected)
-			}
-		})
-	}
-}
-
-func TestHelpFunctions(t *testing.T) {
-	// This test checks that all the built-in functions receive contextual help.
-	for f := range Builtins {
-		if unicode.IsUpper(rune(f[0])) {
-			continue
-		}
-		t.Run(f, func(t *testing.T) {
-			_, err := Parse("select " + f + "(??")
-			if err == nil {
-				t.Errorf("parser didn't trigger error")
-				return
-			}
-			if err.Error() != "help token in input" {
-				t.Fatal(err)
-			}
-			pgerr, ok := pgerror.GetPGCause(err)
-			if !ok {
-				t.Fatalf("expected pg error, got %v", err)
-			}
-			if !strings.HasPrefix(pgerr.Hint, "help:\n") {
-				t.Errorf("expected 'help: ' prefix, got %q", pgerr.Hint)
-				return
-			}
-			help := pgerr.Hint[6:]
-			pattern := "Function:\\s+" + f + "\n"
-			if m, err := regexp.MatchString(pattern, help); err != nil || !m {
-				if err != nil {
-					t.Errorf("pattern match failure: %v", err)
-					return
-				}
-				t.Errorf("help text didn't match %q:\n%s", pattern, help)
 			}
 		})
 	}
