@@ -106,7 +106,7 @@ func newSamplerProcessor(
 	outTypes = append(outTypes, sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_BYTES})
 	s.outTypes = outTypes
 
-	if err := s.out.Init(post, outTypes, &flowCtx.EvalCtx, output); err != nil {
+	if err := s.init(post, outTypes, flowCtx, output); err != nil {
 		return nil, err
 	}
 	return s, nil

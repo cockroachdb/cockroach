@@ -193,7 +193,7 @@ func (rb *routerBase) init(flowCtx *FlowCtx, types []sqlbase.ColumnType) {
 	for i := range rb.outputs {
 		// This method must be called before we start() so we don't need
 		// to take the mutex.
-		rb.outputs[i].mu.rowContainer.init(nil /* ordering */, types, &flowCtx.EvalCtx)
+		rb.outputs[i].mu.rowContainer.init(nil /* ordering */, types, flowCtx.NewEvalCtx())
 		// Initialize any outboxes.
 		if o, ok := rb.outputs[i].stream.(*outbox); ok {
 			o.init(types)

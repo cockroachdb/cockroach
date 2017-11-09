@@ -58,7 +58,7 @@ func newDistinct(
 	}
 
 	d.types = input.Types()
-	if err := d.out.Init(post, d.types, &flowCtx.EvalCtx, output); err != nil {
+	if err := d.init(post, d.types, flowCtx, output); err != nil {
 		return nil, err
 	}
 
@@ -152,9 +152,10 @@ func (d *distinct) matchLastGroupKey(row sqlbase.EncDatumRow) (bool, error) {
 	if d.lastGroupKey == nil {
 		return false, nil
 	}
+	evalCtx := d.flowCtx.NewEvalCtx()
 	for colIdx := range d.orderedCols {
 		res, err := d.lastGroupKey[colIdx].Compare(
-			&d.types[colIdx], &d.datumAlloc, &d.flowCtx.EvalCtx, &row[colIdx],
+			&d.types[colIdx], &d.datumAlloc, evalCtx, &row[colIdx],
 		)
 		if res != 0 || err != nil {
 			return false, err

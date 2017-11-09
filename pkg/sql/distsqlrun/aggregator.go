@@ -165,7 +165,7 @@ func newAggregator(
 
 		ag.outputTypes[i] = retType
 	}
-	if err := ag.out.Init(post, ag.outputTypes, &flowCtx.EvalCtx, output); err != nil {
+	if err := ag.init(post, ag.outputTypes, flowCtx, output); err != nil {
 		return nil, err
 	}
 
