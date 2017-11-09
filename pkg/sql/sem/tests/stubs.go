@@ -75,3 +75,15 @@ var ParseOne = parser.ParseOne
 
 // TypeCheck is a temporary alias.
 var TypeCheck = parser.TypeCheck
+
+// MakeSearchPath is a temporary alias.
+var MakeSearchPath = parser.MakeSearchPath
+
+// Select is a temporary alias.
+type Select = parser.Select
+
+// SelectClause is a temporary alias.
+type SelectClause = parser.SelectClause
+
+// FuncExpr is a temporary alias.
+type FuncExpr = parser.FuncExpr
