@@ -84,10 +84,7 @@ func TestValues(t *testing.T) {
 
 					var res sqlbase.EncDatumRows
 					for {
-						row, meta := out.Next()
-						if !meta.Empty() {
-							t.Fatalf("unexpected metadata: %v", meta)
-						}
+						row := out.NextNoMeta(t)
 						if row == nil {
 							break
 						}
