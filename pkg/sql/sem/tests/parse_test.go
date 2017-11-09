@@ -12,7 +12,7 @@
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
-package parser
+package tests
 
 import (
 	"go/constant"
@@ -1727,9 +1727,9 @@ func TestParsePrecedence(t *testing.T) {
 	one := &NumVal{Value: constant.MakeInt64(1), OrigString: "1"}
 	two := &NumVal{Value: constant.MakeInt64(2), OrigString: "2"}
 	three := &NumVal{Value: constant.MakeInt64(3), OrigString: "3"}
-	a := &StrVal{s: "a"}
-	b := &StrVal{s: "b"}
-	c := &StrVal{s: "c"}
+	a := NewStrVal("a")
+	b := NewStrVal("b")
+	c := NewStrVal("c")
 
 	testData := []struct {
 		sql      string
