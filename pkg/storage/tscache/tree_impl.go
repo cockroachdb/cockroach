@@ -125,11 +125,11 @@ func (tc *treeImpl) len() int {
 
 // add the specified timestamp to the cache covering the range of keys from
 // start to end. If end is nil, the range covers the start key only. txnID is
-// nil for no transaction. readTSCache specifies whether the command adding this
+// nil for no transaction. readCache specifies whether the command adding this
 // timestamp should update the read timestamp; false to update the write
 // timestamp cache.
 func (tc *treeImpl) add(
-	start, end roachpb.Key, timestamp hlc.Timestamp, txnID uuid.UUID, readTSCache bool,
+	start, end roachpb.Key, timestamp hlc.Timestamp, txnID uuid.UUID, readCache bool,
 ) {
 	// This gives us a memory-efficient end key if end is empty.
 	if len(end) == 0 {
@@ -141,7 +141,7 @@ func (tc *treeImpl) add(
 	// low water mark.
 	if tc.lowWater.Less(timestamp) {
 		tcache := tc.wCache
-		if readTSCache {
+		if readCache {
 			tcache = tc.rCache
 		}
 
@@ -552,18 +552,18 @@ func (tc *treeImpl) ExpandRequests(span roachpb.RSpan, timestamp hlc.Timestamp) 
 		tc.bytes -= reqSize
 		for i := range req.Reads {
 			sp := &req.Reads[i]
-			tc.add(sp.Key, sp.EndKey, req.Timestamp, req.TxnID, true /* readTSCache */)
+			tc.add(sp.Key, sp.EndKey, req.Timestamp, req.TxnID, true /* readCache */)
 		}
 		for i := range req.Writes {
 			sp := &req.Writes[i]
-			tc.add(sp.Key, sp.EndKey, req.Timestamp, req.TxnID, false /* readTSCache */)
+			tc.add(sp.Key, sp.EndKey, req.Timestamp, req.TxnID, false /* readCache */)
 		}
 		if req.Txn.Key != nil {
 			// Make the transaction key from the request key. We're guaranteed
 			// req.TxnID != nil because we only hit this code path for
 			// EndTransactionRequests.
 			key := keys.TransactionKey(req.Txn.Key, req.TxnID)
-			tc.add(key, nil, req.Timestamp, req.TxnID, false /* readTSCache */)
+			tc.add(key, nil, req.Timestamp, req.TxnID, false /* readCache */)
 		}
 		req.release()
 	}
@@ -575,8 +575,10 @@ func (tc *treeImpl) SetLowWater(start, end roachpb.Key, timestamp hlc.Timestamp)
 	tc.add(start, end, timestamp, noTxnID, true)
 }
 
-// GlobalLowWater implements the Cache interface.
-func (tc *treeImpl) GlobalLowWater() hlc.Timestamp {
+// getLowWater implements the Cache interface.
+func (tc *treeImpl) getLowWater(readCache bool) hlc.Timestamp {
+	// The lowWater timestamp is shared between the read and write caches, so
+	// ignore the readCache argument.
 	return tc.lowWater
 }
 
@@ -590,14 +592,14 @@ func (tc *treeImpl) GetMaxWrite(start, end roachpb.Key) (hlc.Timestamp, uuid.UUI
 	return tc.getMax(start, end, false)
 }
 
-func (tc *treeImpl) getMax(start, end roachpb.Key, readTSCache bool) (hlc.Timestamp, uuid.UUID) {
+func (tc *treeImpl) getMax(start, end roachpb.Key, readCache bool) (hlc.Timestamp, uuid.UUID) {
 	if len(end) == 0 {
 		end = start.Next()
 	}
 	maxTS := tc.lowWater
 	maxTxnID := noTxnID
 	cache := tc.wCache
-	if readTSCache {
+	if readCache {
 		cache = tc.rCache
 	}
 	for _, o := range cache.GetOverlaps(start, end) {
