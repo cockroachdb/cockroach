@@ -1598,7 +1598,7 @@ CockroachDB supports the following flags:
 			Types:      ArgTypes{{"val", types.Float}},
 			ReturnType: fixedReturnType(types.Bool),
 			fn: func(_ *EvalContext, args Datums) (Datum, error) {
-				return MakeDBool(DBool(isNaN(args[0]))), nil
+				return MakeDBool(DBool(math.IsNaN(float64(*args[0].(*DFloat))))), nil
 			},
 			Info: "Returns true if `val` is NaN, false otherwise.",
 		},
@@ -1606,7 +1606,8 @@ CockroachDB supports the following flags:
 			Types:      ArgTypes{{"val", types.Decimal}},
 			ReturnType: fixedReturnType(types.Bool),
 			fn: func(_ *EvalContext, args Datums) (Datum, error) {
-				return MakeDBool(DBool(isNaN(args[0]))), nil
+				isNaN := args[0].(*DDecimal).Decimal.Form == apd.NaN
+				return MakeDBool(DBool(isNaN)), nil
 			},
 			Info: "Returns true if `val` is NaN, false otherwise.",
 		},
