@@ -18,6 +18,7 @@ import (
 	"bytes"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 )
 
@@ -51,7 +52,7 @@ type fmtFlags struct {
 	// If true, grouping parentheses are always shown. Used for testing.
 	alwaysParens bool
 	// Flags that control the formatting of strings and identifiers.
-	encodeFlags encodeFlags
+	encodeFlags lex.EncodeFlags
 }
 
 // FmtFlags enables conditional formatting in the pretty-printer.
@@ -71,15 +72,15 @@ var FmtShowTypes FmtFlags = &fmtFlags{showTypes: true}
 
 // FmtBareStrings instructs the pretty-printer to print strings without
 // wrapping quotes, if the string contains no special characters.
-var FmtBareStrings FmtFlags = &fmtFlags{encodeFlags: encodeFlags{bareStrings: true}}
+var FmtBareStrings FmtFlags = &fmtFlags{encodeFlags: lex.EncodeFlags{BareStrings: true}}
 
 // FmtArrays instructs the pretty-printer to print strings without
 // wrapping quotes, if the string contains no special characters.
-var FmtArrays FmtFlags = &fmtFlags{withinArray: true, encodeFlags: encodeFlags{bareStrings: true}}
+var FmtArrays FmtFlags = &fmtFlags{withinArray: true, encodeFlags: lex.EncodeFlags{BareStrings: true}}
 
 // FmtBareIdentifiers instructs the pretty-printer to print
 // identifiers without wrapping quotes in any case.
-var FmtBareIdentifiers FmtFlags = &fmtFlags{encodeFlags: encodeFlags{bareIdentifiers: true}}
+var FmtBareIdentifiers FmtFlags = &fmtFlags{encodeFlags: lex.EncodeFlags{BareIdentifiers: true}}
 
 // FmtParsable instructs the pretty-printer to produce a representation that
 // can be parsed into an equivalent expression (useful for serialization of
