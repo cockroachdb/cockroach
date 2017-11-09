@@ -114,14 +114,6 @@ func makeWindowBuiltin(
 	}
 }
 
-func collectBuiltins(f func(types.T) Builtin, types ...types.T) []Builtin {
-	r := make([]Builtin, len(types))
-	for i := range types {
-		r[i] = f(types[i])
-	}
-	return r
-}
-
 func mergeBuiltinSlices(s ...[]Builtin) []Builtin {
 	var r []Builtin
 	for _, bs := range s {
