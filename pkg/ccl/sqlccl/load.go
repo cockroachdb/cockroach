@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/transform"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -54,7 +55,7 @@ func Load(
 		loadChunkBytes = config.DefaultZoneConfig().RangeMaxBytes / 2
 	}
 
-	var txCtx parser.ExprTransformContext
+	var txCtx transform.ExprTransformContext
 	curTime := timeutil.Unix(0, ts.WallTime)
 	evalCtx := parser.EvalContext{}
 	evalCtx.SetTxnTimestamp(curTime)

@@ -451,38 +451,3 @@ func (nthValueWindow) Compute(_ context.Context, _ *EvalContext, wf WindowFrame)
 }
 
 func (nthValueWindow) Close(context.Context, *EvalContext) {}
-
-var _ Visitor = &ContainsWindowVisitor{}
-
-// ContainsWindowVisitor checks if walked expressions contain window functions.
-type ContainsWindowVisitor struct {
-	sawWindow bool
-}
-
-// VisitPre satisfies the Visitor interface.
-func (v *ContainsWindowVisitor) VisitPre(expr Expr) (recurse bool, newExpr Expr) {
-	switch t := expr.(type) {
-	case *FuncExpr:
-		if t.IsWindowFunctionApplication() {
-			v.sawWindow = true
-			return false, expr
-		}
-	case *Subquery:
-		return false, expr
-	}
-	return true, expr
-}
-
-// VisitPost satisfies the Visitor interface.
-func (*ContainsWindowVisitor) VisitPost(expr Expr) Expr { return expr }
-
-// ContainsWindowFunc determines if an Expr contains a window function.
-func (v *ContainsWindowVisitor) ContainsWindowFunc(expr Expr) bool {
-	if expr != nil {
-		WalkExprConst(v, expr)
-		ret := v.sawWindow
-		v.sawWindow = false
-		return ret
-	}
-	return false
-}

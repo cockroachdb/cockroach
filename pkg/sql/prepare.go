@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/transform"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/uint128"
@@ -351,7 +352,7 @@ func getPreparedStatementForExecute(
 	}
 
 	qArgs := make(parser.QueryArguments, len(s.Params))
-	var t parser.ExprTransformContext
+	var t transform.ExprTransformContext
 	for i, e := range s.Params {
 		idx := strconv.Itoa(i + 1)
 		typedExpr, err := sqlbase.SanitizeVarFreeExpr(e, prepared.TypeHints[idx], "EXECUTE parameter", nil /* semaCtx */, nil /* evalCtx */)

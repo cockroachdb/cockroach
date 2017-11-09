@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/transform"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -1790,7 +1791,7 @@ func makeCheckConstraint(
 		return nil, err
 	}
 
-	var t parser.ExprTransformContext
+	var t transform.ExprTransformContext
 	if err := t.AssertNoAggregationOrWindowing(expr, "CHECK expressions", semaCtx.SearchPath); err != nil {
 		return nil, err
 	}
