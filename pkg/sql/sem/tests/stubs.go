@@ -282,3 +282,9 @@ var NewStrVal = parser.NewStrVal
 
 // MockNameTypes is a temporary alias.
 var MockNameTypes = parser.MockNameTypes
+
+// DTimestampTZ is a temporary alias.
+type DTimestampTZ = parser.DTimestampTZ
+
+// DString is a temporary alias.
+type DString = parser.DString
