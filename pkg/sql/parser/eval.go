@@ -3639,3 +3639,18 @@ func FindEqualComparisonFunction(
 	}
 	return nil, false
 }
+
+// intPow computes the value of x^y.
+func intPow(x, y DInt) (*DInt, error) {
+	xd := apd.New(int64(x), 0)
+	yd := apd.New(int64(y), 0)
+	_, err := DecimalCtx.Pow(xd, xd, yd)
+	if err != nil {
+		return nil, err
+	}
+	i, err := xd.Int64()
+	if err != nil {
+		return nil, errIntOutOfRange
+	}
+	return NewDInt(DInt(i)), nil
+}

@@ -2946,20 +2946,6 @@ func pickFromTuple(ctx *EvalContext, greatest bool, args Datums) (Datum, error) 
 	return g, nil
 }
 
-func intPow(x, y DInt) (*DInt, error) {
-	xd := apd.New(int64(x), 0)
-	yd := apd.New(int64(y), 0)
-	_, err := DecimalCtx.Pow(xd, xd, yd)
-	if err != nil {
-		return nil, err
-	}
-	i, err := xd.Int64()
-	if err != nil {
-		return nil, errIntOutOfRange
-	}
-	return NewDInt(DInt(i)), nil
-}
-
 var uniqueIntState struct {
 	syncutil.Mutex
 	timestamp uint64
