@@ -279,3 +279,6 @@ type Update = parser.Update
 
 // NewStrVal is a temporary alias.
 var NewStrVal = parser.NewStrVal
+
+// MockNameTypes is a temporary alias.
+var MockNameTypes = parser.MockNameTypes
