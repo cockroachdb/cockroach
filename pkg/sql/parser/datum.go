@@ -1314,7 +1314,7 @@ func NewDDate(d DDate) *DDate {
 func NewDDateFromTime(t time.Time, loc *time.Location) *DDate {
 	year, month, day := t.In(loc).Date()
 	secs := time.Date(year, month, day, 0, 0, 0, 0, time.UTC).Unix()
-	return NewDDate(DDate(secs / secondsInDay))
+	return NewDDate(DDate(secs / SecondsInDay))
 }
 
 // ParseDDate parses and returns the *DDate Datum value represented by the provided
@@ -1398,7 +1398,7 @@ func (d *DDate) Format(buf *bytes.Buffer, f FmtFlags) {
 	if !f.encodeFlags.BareStrings {
 		buf.WriteByte('\'')
 	}
-	buf.WriteString(timeutil.Unix(int64(*d)*secondsInDay, 0).Format(dateFormat))
+	buf.WriteString(timeutil.Unix(int64(*d)*SecondsInDay, 0).Format(dateFormat))
 	if !f.encodeFlags.BareStrings {
 		buf.WriteByte('\'')
 	}
@@ -1654,7 +1654,7 @@ func MakeDTimestampTZ(t time.Time, precision time.Duration) *DTimestampTZ {
 
 // MakeDTimestampTZFromDate creates a DTimestampTZ from a DDate.
 func MakeDTimestampTZFromDate(loc *time.Location, d *DDate) *DTimestampTZ {
-	year, month, day := timeutil.Unix(int64(*d)*secondsInDay, 0).Date()
+	year, month, day := timeutil.Unix(int64(*d)*SecondsInDay, 0).Date()
 	return MakeDTimestampTZ(time.Date(year, month, day, 0, 0, 0, 0, loc), time.Microsecond)
 }
 
@@ -2558,11 +2558,6 @@ func (d *DArray) Append(v Datum) error {
 // for details.
 type DTable struct {
 	ValueGenerator
-}
-
-// EmptyDTable returns a new, empty DTable.
-func EmptyDTable() *DTable {
-	return &DTable{&arrayValueGenerator{array: NewDArray(types.Any)}}
 }
 
 // AmbiguousFormat implements the Datum interface.

@@ -114,7 +114,7 @@ func TestNormalizeNameInExpr(t *testing.T) {
 // TestExprString verifies that converting an expression to a string and back
 // doesn't change the (normalized) expression.
 func TestExprString(t *testing.T) {
-	defer mockNameTypes(map[string]types.T{
+	defer MockNameTypes(map[string]types.T{
 		"a": types.Bool,
 		"b": types.Bool,
 		"c": types.Bool,
@@ -151,7 +151,7 @@ func TestExprString(t *testing.T) {
 		`(a OR (g BETWEEN (h+i) AND (j+k))) AND b`,
 		`(1 >= 2) IS OF (BOOL)`,
 		`(1 >= 2) = (2 IS OF (BOOL))`,
-		`count(1) FILTER (WHERE true)`,
+		// `count(1) FILTER (WHERE true)`,
 	}
 	for _, exprStr := range testExprs {
 		expr, err := ParseExpr(exprStr)

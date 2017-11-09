@@ -19,6 +19,7 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
@@ -78,7 +79,7 @@ func (n *valueGenerator) Start(params runParams) error {
 	}
 	var tb *parser.DTable
 	if expr == parser.DNull {
-		tb = parser.EmptyDTable()
+		tb = builtins.EmptyDTable()
 	} else {
 		tb = expr.(*parser.DTable)
 	}

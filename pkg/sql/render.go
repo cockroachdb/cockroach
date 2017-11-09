@@ -22,6 +22,7 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -421,7 +422,7 @@ func (v *srfExtractionVisitor) VisitPost(expr parser.Expr) parser.Expr {
 			v.err = err
 			return expr
 		}
-		if _, ok := parser.Generators[fd.Name]; ok {
+		if _, ok := builtins.Generators[fd.Name]; ok {
 			if v.srf != nil {
 				v.err = errors.New("cannot specify two set-returning functions in the same SELECT expression")
 				return expr
@@ -556,7 +557,7 @@ func getRenderColName(searchPath parser.SearchPath, target parser.SelectExpr) (s
 		if err != nil {
 			return "", err
 		}
-		if _, ok := parser.Generators[fd.Name]; ok {
+		if _, ok := builtins.Generators[fd.Name]; ok {
 			return fd.Name, nil
 		}
 	}

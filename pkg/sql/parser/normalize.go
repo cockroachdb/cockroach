@@ -21,17 +21,17 @@ import (
 
 type normalizableExpr interface {
 	Expr
-	normalize(*normalizeVisitor) TypedExpr
+	normalize(*NormalizeVisitor) TypedExpr
 }
 
-func (expr *CastExpr) normalize(v *normalizeVisitor) TypedExpr {
+func (expr *CastExpr) normalize(v *NormalizeVisitor) TypedExpr {
 	if expr.Expr == DNull {
 		return DNull
 	}
 	return expr
 }
 
-func (expr *CoalesceExpr) normalize(v *normalizeVisitor) TypedExpr {
+func (expr *CoalesceExpr) normalize(v *NormalizeVisitor) TypedExpr {
 	// This normalization checks whether COALESCE can be simplified
 	// based on constant expressions at the start of the COALESCE
 	// argument list. All known-null constant arguments are simply
@@ -65,7 +65,7 @@ func (expr *CoalesceExpr) normalize(v *normalizeVisitor) TypedExpr {
 	return expr
 }
 
-func (expr *IfExpr) normalize(v *normalizeVisitor) TypedExpr {
+func (expr *IfExpr) normalize(v *NormalizeVisitor) TypedExpr {
 	if v.isConst(expr.Cond) {
 		cond, err := expr.TypedCondExpr().Eval(v.ctx)
 		if err != nil {
@@ -83,7 +83,7 @@ func (expr *IfExpr) normalize(v *normalizeVisitor) TypedExpr {
 	return expr
 }
 
-func (expr *UnaryExpr) normalize(v *normalizeVisitor) TypedExpr {
+func (expr *UnaryExpr) normalize(v *NormalizeVisitor) TypedExpr {
 	val := expr.TypedInnerExpr()
 
 	if val == DNull {
@@ -122,7 +122,7 @@ func (expr *UnaryExpr) normalize(v *normalizeVisitor) TypedExpr {
 	return expr
 }
 
-func (expr *BinaryExpr) normalize(v *normalizeVisitor) TypedExpr {
+func (expr *BinaryExpr) normalize(v *NormalizeVisitor) TypedExpr {
 	left := expr.TypedLeft()
 	right := expr.TypedRight()
 	expectedType := expr.ResolvedType()
@@ -173,7 +173,7 @@ func (expr *BinaryExpr) normalize(v *normalizeVisitor) TypedExpr {
 	return final
 }
 
-func (expr *AndExpr) normalize(v *normalizeVisitor) TypedExpr {
+func (expr *AndExpr) normalize(v *NormalizeVisitor) TypedExpr {
 	left := expr.TypedLeft()
 	right := expr.TypedRight()
 	var dleft, dright Datum
@@ -224,7 +224,7 @@ func (expr *AndExpr) normalize(v *normalizeVisitor) TypedExpr {
 	return expr
 }
 
-func (expr *ComparisonExpr) normalize(v *normalizeVisitor) TypedExpr {
+func (expr *ComparisonExpr) normalize(v *NormalizeVisitor) TypedExpr {
 	switch expr.Operator {
 	case EQ, GE, GT, LE, LT:
 		// We want var nodes (VariableExpr, VarName, etc) to be immediate
@@ -487,7 +487,7 @@ func (expr *ComparisonExpr) normalize(v *normalizeVisitor) TypedExpr {
 	return expr
 }
 
-func (expr *OrExpr) normalize(v *normalizeVisitor) TypedExpr {
+func (expr *OrExpr) normalize(v *NormalizeVisitor) TypedExpr {
 	left := expr.TypedLeft()
 	right := expr.TypedRight()
 	var dleft, dright Datum
@@ -538,7 +538,7 @@ func (expr *OrExpr) normalize(v *normalizeVisitor) TypedExpr {
 	return expr
 }
 
-func (expr *NotExpr) normalize(v *normalizeVisitor) TypedExpr {
+func (expr *NotExpr) normalize(v *NormalizeVisitor) TypedExpr {
 	inner := expr.TypedInnerExpr()
 	switch t := inner.(type) {
 	case *NotExpr:
@@ -547,17 +547,17 @@ func (expr *NotExpr) normalize(v *normalizeVisitor) TypedExpr {
 	return expr
 }
 
-func (expr *ParenExpr) normalize(v *normalizeVisitor) TypedExpr {
+func (expr *ParenExpr) normalize(v *NormalizeVisitor) TypedExpr {
 	return expr.TypedInnerExpr()
 }
 
-func (expr *AnnotateTypeExpr) normalize(v *normalizeVisitor) TypedExpr {
+func (expr *AnnotateTypeExpr) normalize(v *NormalizeVisitor) TypedExpr {
 	// Type annotations have no runtime effect, so they can be removed after
 	// semantic analysis.
 	return expr.TypedInnerExpr()
 }
 
-func (expr *RangeCond) normalize(v *normalizeVisitor) TypedExpr {
+func (expr *RangeCond) normalize(v *NormalizeVisitor) TypedExpr {
 	left, from, to := expr.TypedLeft(), expr.TypedFrom(), expr.TypedTo()
 	if left == DNull || (from == DNull && to == DNull) {
 		return DNull
@@ -594,7 +594,7 @@ func (expr *RangeCond) normalize(v *normalizeVisitor) TypedExpr {
 	return makeOpExpr(newLeft, newRight).normalize(v)
 }
 
-func (expr *Tuple) normalize(v *normalizeVisitor) TypedExpr {
+func (expr *Tuple) normalize(v *NormalizeVisitor) TypedExpr {
 	// A Tuple should be directly evaluated into a DTuple if it's either fully
 	// constant or contains only constants and top-level Placeholders.
 	isConst := true
@@ -625,7 +625,7 @@ func (expr *Tuple) normalize(v *normalizeVisitor) TypedExpr {
 //   a BETWEEN b AND c     -> (a >= b) AND (a <= c)
 //   a NOT BETWEEN b AND c -> (a < b) OR (a > c)
 func (ctx *EvalContext) NormalizeExpr(typedExpr TypedExpr) (TypedExpr, error) {
-	v := makeNormalizeVisitor(ctx)
+	v := MakeNormalizeVisitor(ctx)
 	expr, _ := WalkExpr(&v, typedExpr)
 	if v.err != nil {
 		return nil, v.err
@@ -633,21 +633,26 @@ func (ctx *EvalContext) NormalizeExpr(typedExpr TypedExpr) (TypedExpr, error) {
 	return expr.(TypedExpr), nil
 }
 
-type normalizeVisitor struct {
+// NormalizeVisitor supports the execution of NormalizeExpr.
+type NormalizeVisitor struct {
 	ctx *EvalContext
 	err error
 
 	isConstVisitor isConstVisitor
 }
 
-var _ Visitor = &normalizeVisitor{}
+var _ Visitor = &NormalizeVisitor{}
 
-// makeNormalizeVisistor creates a normalizeVisistor instance.
-func makeNormalizeVisitor(ctx *EvalContext) normalizeVisitor {
-	return normalizeVisitor{ctx: ctx, isConstVisitor: isConstVisitor{ctx: ctx}}
+// MakeNormalizeVisistor creates a NormalizeVisitor instance.
+func MakeNormalizeVisitor(ctx *EvalContext) NormalizeVisitor {
+	return NormalizeVisitor{ctx: ctx, isConstVisitor: isConstVisitor{ctx: ctx}}
 }
 
-func (v *normalizeVisitor) VisitPre(expr Expr) (recurse bool, newExpr Expr) {
+// Err retrieves the error field in the NormalizeVisitor.
+func (v *NormalizeVisitor) Err() error { return v.err }
+
+// VisitPre implements the Visitor interface.
+func (v *NormalizeVisitor) VisitPre(expr Expr) (recurse bool, newExpr Expr) {
 	if v.err != nil {
 		return false, expr
 	}
@@ -664,7 +669,8 @@ func (v *normalizeVisitor) VisitPre(expr Expr) (recurse bool, newExpr Expr) {
 	return true, expr
 }
 
-func (v *normalizeVisitor) VisitPost(expr Expr) Expr {
+// VisitPost implements the Visitor interface.
+func (v *NormalizeVisitor) VisitPost(expr Expr) Expr {
 	if v.err != nil {
 		return expr
 	}
@@ -694,13 +700,13 @@ func (v *normalizeVisitor) VisitPost(expr Expr) Expr {
 	return expr
 }
 
-func (v *normalizeVisitor) isConst(expr Expr) bool {
+func (v *NormalizeVisitor) isConst(expr Expr) bool {
 	return v.isConstVisitor.run(expr)
 }
 
 // isNumericZero returns true if the datum is a number and equal to
 // zero.
-func (v *normalizeVisitor) isNumericZero(expr TypedExpr) bool {
+func (v *NormalizeVisitor) isNumericZero(expr TypedExpr) bool {
 	if d, ok := expr.(Datum); ok {
 		switch t := UnwrapDatum(v.ctx, d).(type) {
 		case *DDecimal:
@@ -716,7 +722,7 @@ func (v *normalizeVisitor) isNumericZero(expr TypedExpr) bool {
 
 // isNumericOne returns true if the datum is a number and equal to
 // one.
-func (v *normalizeVisitor) isNumericOne(expr TypedExpr) bool {
+func (v *NormalizeVisitor) isNumericOne(expr TypedExpr) bool {
 	if d, ok := expr.(Datum); ok {
 		switch t := UnwrapDatum(v.ctx, d).(type) {
 		case *DDecimal:

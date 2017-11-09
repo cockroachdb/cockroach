@@ -29,6 +29,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 )
 
 var functionsCmd = &cobra.Command{
@@ -47,12 +48,12 @@ var functionsCmd = &cobra.Command{
 		}
 
 		if err := ioutil.WriteFile(
-			filepath.Join(outDir, "functions.md"), generateFunctions(parser.Builtins, true), 0644,
+			filepath.Join(outDir, "functions.md"), generateFunctions(builtins.Builtins, true), 0644,
 		); err != nil {
 			return err
 		}
 		if err := ioutil.WriteFile(
-			filepath.Join(outDir, "aggregates.md"), generateFunctions(parser.Aggregates, false), 0644,
+			filepath.Join(outDir, "aggregates.md"), generateFunctions(builtins.Aggregates, false), 0644,
 		); err != nil {
 			return err
 		}
@@ -182,7 +183,7 @@ func generateFunctions(from map[string][]parser.Builtin, categorize bool) []byte
 			args := fn.Types.String()
 			ret := fn.FixedReturnType().String()
 			cat := ret
-			if c := fn.Category(); c != "" {
+			if c := fn.Category; c != "" {
 				cat = c
 			}
 			if !categorize {

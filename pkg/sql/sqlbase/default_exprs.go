@@ -16,13 +16,14 @@ package sqlbase
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/transform"
 )
 
 // MakeDefaultExprs returns a slice of the default expressions for the slice
 // of input column descriptors, or nil if none of the input column descriptors
 // have default expressions.
 func MakeDefaultExprs(
-	cols []ColumnDescriptor, txCtx *parser.ExprTransformContext, evalCtx *parser.EvalContext,
+	cols []ColumnDescriptor, txCtx *transform.ExprTransformContext, evalCtx *parser.EvalContext,
 ) ([]parser.TypedExpr, error) {
 	// Check to see if any of the columns have DEFAULT expressions. If there
 	// are no DEFAULT expressions, we don't bother with constructing the
@@ -76,7 +77,7 @@ func MakeDefaultExprs(
 func ProcessDefaultColumns(
 	cols []ColumnDescriptor,
 	tableDesc *TableDescriptor,
-	txCtx *parser.ExprTransformContext,
+	txCtx *transform.ExprTransformContext,
 	evalCtx *parser.EvalContext,
 ) ([]ColumnDescriptor, []parser.TypedExpr, error) {
 	colIDSet := make(map[ColumnID]struct{}, len(cols))

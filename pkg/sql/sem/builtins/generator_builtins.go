@@ -12,7 +12,7 @@
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
-package parser
+package builtins
 
 import (
 	"fmt"
@@ -53,32 +53,9 @@ import (
 
 // generatorFactory is the type of constructor functions for
 // ValueGenerator objects suitable for use with DTable.
-type generatorFactory func(ctx *EvalContext, args Datums) (ValueGenerator, error)
-
-// ValueGenerator is the interface provided by the object held by a
-// DTable; objects that implement this interface are able to produce
-// rows of values in a streaming fashion (like Go iterators or
-// generators in Python).
-type ValueGenerator interface {
-	// ResolvedType returns the type signature of this value generator.
-	// Used by DTable.ResolvedType().
-	ResolvedType() types.TTable
-
-	// Start initializes the generator. Must be called once before
-	// Next() and Values().
-	Start() error
-
-	// Next determines whether there is a row of data available.
-	Next() (bool, error)
-
-	// Values retrieves the current row of data.
-	Values() Datums
-
-	// Close must be called after Start() before disposing of the
-	// ValueGenerator. It does not need to be called if Start() has not
-	// been called yet.
-	Close()
-}
+type generatorFactory func(
+	ctx *EvalContext, args Datums,
+) (ValueGenerator, error)
 
 var _ ValueGenerator = &seriesValueGenerator{}
 var _ ValueGenerator = &arrayValueGenerator{}
@@ -87,10 +64,10 @@ func initGeneratorBuiltins() {
 	// Add all windows to the Builtins map after a few sanity checks.
 	for k, v := range Generators {
 		for _, g := range v {
-			if !g.impure {
+			if !g.Impure {
 				panic(fmt.Sprintf("generator functions should all be impure, found %v", g))
 			}
-			if g.class != GeneratorClass {
+			if g.Class != GeneratorClass {
 				panic(fmt.Sprintf("generator functions should be marked with the GeneratorClass "+
 					"function class, found %v", g))
 			}
@@ -121,7 +98,7 @@ var Generators = map[string][]Builtin{
 			ArgTypes{},
 			keywordsValueGeneratorType,
 			makeKeywordsGenerator,
-			"Produces a virtual table containing the keywords known to the SQL parser.",
+			"Produces a virtual table containing the keywords known to the SQL ",
 		),
 	},
 	"unnest": {
@@ -129,7 +106,7 @@ var Generators = map[string][]Builtin{
 			ArgTypes{{"input", types.AnyArray}},
 			func(args []TypedExpr) types.T {
 				if len(args) == 0 {
-					return unknownReturnType
+					return UnknownReturnType
 				}
 				return types.TTable{
 					Cols:   types.TTuple{args[0].ResolvedType().(types.TArray).Typ},
@@ -152,25 +129,25 @@ var Generators = map[string][]Builtin{
 }
 
 func makeGeneratorBuiltin(in ArgTypes, ret types.TTable, g generatorFactory, info string) Builtin {
-	return makeGeneratorBuiltinWithReturnType(in, fixedReturnType(ret), g, info)
+	return makeGeneratorBuiltinWithReturnType(in, FixedReturnType(ret), g, info)
 }
 
 func makeGeneratorBuiltinWithReturnType(
-	in ArgTypes, retType returnTyper, g generatorFactory, info string,
+	in ArgTypes, retType ReturnTyper, g generatorFactory, info string,
 ) Builtin {
 	return Builtin{
-		impure:     true,
-		class:      GeneratorClass,
+		Impure:     true,
+		Class:      GeneratorClass,
 		Types:      in,
 		ReturnType: retType,
-		fn: func(ctx *EvalContext, args Datums) (Datum, error) {
+		Fn: func(ctx *EvalContext, args Datums) (Datum, error) {
 			gen, err := g(ctx, args)
 			if err != nil {
 				return nil, err
 			}
-			return &DTable{gen}, nil
+			return &DTable{ValueGenerator: gen}, nil
 		},
-		category: categoryCompatibility,
+		Category: categoryCompatibility,
 		Info:     info,
 	}
 }
@@ -289,7 +266,7 @@ func (s *seriesValueGenerator) Next() (bool, error) {
 		return false, nil
 	}
 	s.value = s.start
-	s.start, s.nextOK = addWithOverflow(s.start, s.step)
+	s.start, s.nextOK = AddWithOverflow(s.start, s.step)
 	return true, nil
 }
 
@@ -341,6 +318,11 @@ func (s *arrayValueGenerator) Next() (bool, error) {
 // Values implements the ValueGenerator interface.
 func (s *arrayValueGenerator) Values() Datums {
 	return Datums{s.array.Array[s.nextIndex]}
+}
+
+// EmptyDTable returns a new, empty DTable.
+func EmptyDTable() *DTable {
+	return &DTable{ValueGenerator: &arrayValueGenerator{array: NewDArray(types.Any)}}
 }
 
 // unaryValueGenerator supports the execution of crdb_internal.unary_table().
