@@ -19,12 +19,17 @@ import (
 
 	"golang.org/x/net/context"
 
+	"github.com/axiomhq/hyperloglog"
+	"github.com/pkg/errors"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
-	"github.com/pkg/errors"
 )
+
+// TODO(radu): for now just force the import.
+var _ hyperloglog.Sketch
 
 // A sampler processor returns a random sample of rows, as well as "global"
 // statistics (including cardinality estimation sketch data). See SamplerSpec

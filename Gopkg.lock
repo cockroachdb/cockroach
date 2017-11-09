@@ -112,6 +112,12 @@
 
 [[projects]]
   branch = "master"
+  name = "github.com/axiomhq/hyperloglog"
+  packages = ["."]
+  revision = "730eea1500d5c665305c6717138f62f269c2bf79"
+
+[[projects]]
+  branch = "master"
   name = "github.com/backtrace-labs/go-bcd"
   packages = ["."]
   revision = "5d8e01b2f0438922289238fd3ba043761daf1102"
@@ -211,6 +217,18 @@
   packages = ["."]
   revision = "dbeaa9332f19a944acb5736b4456cfcc02140e29"
   version = "v3.1.0"
+
+[[projects]]
+  branch = "master"
+  name = "github.com/dgryski/go-bits"
+  packages = ["."]
+  revision = "2ad8d707cc05b1815ce6ff2543bb5e8d8f9298ef"
+
+[[projects]]
+  branch = "master"
+  name = "github.com/dgryski/go-metro"
+  packages = ["."]
+  revision = "0f6473574cdfd7be3962c41fb23dc4768b1f7deb"
 
 [[projects]]
   branch = "master"
@@ -833,6 +851,6 @@
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "36eccb7ec47b760d2085ed99aa6e1fa05883335b24d13dc639ea0b87ed66dfd9"
+  inputs-digest = "e62ba186daac43df40d0f7023622de737343277b37788c4f2028603f4dfc4981"
   solver-name = "gps-cdcl"
   solver-version = 1
