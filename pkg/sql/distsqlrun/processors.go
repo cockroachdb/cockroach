@@ -339,7 +339,7 @@ func newNoopProcessor(
 	flowCtx *FlowCtx, input RowSource, post *PostProcessSpec, output RowReceiver,
 ) (*noopProcessor, error) {
 	n := &noopProcessor{flowCtx: flowCtx, input: input}
-	if err := n.out.Init(post, input.Types(), &flowCtx.EvalCtx, output); err != nil {
+	if err := n.out.Init(post, input.Types(), flowCtx.MakeEvalCtx(), output); err != nil {
 		return nil, err
 	}
 	return n, nil

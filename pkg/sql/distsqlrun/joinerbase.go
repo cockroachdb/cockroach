@@ -91,10 +91,11 @@ func (jb *joinerBase) init(
 	types = append(types, leftTypes...)
 	types = append(types, rightTypes...)
 
-	if err := jb.onCond.init(onExpr, types, &flowCtx.EvalCtx); err != nil {
+	evalCtx := flowCtx.MakeEvalCtx()
+	if err := jb.onCond.init(onExpr, types, evalCtx); err != nil {
 		return err
 	}
-	return jb.out.Init(post, types, &flowCtx.EvalCtx, output)
+	return jb.out.Init(post, types, evalCtx, output)
 }
 
 type joinSide uint8

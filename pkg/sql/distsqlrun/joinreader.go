@@ -72,7 +72,7 @@ func newJoinReader(
 		types[i] = spec.Table.Columns[i].Type
 	}
 
-	if err := jr.out.Init(post, types, &flowCtx.EvalCtx, output); err != nil {
+	if err := jr.out.Init(post, types, flowCtx.MakeEvalCtx(), output); err != nil {
 		return nil, err
 	}
 

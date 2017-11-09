@@ -47,7 +47,7 @@ func newValuesProcessor(
 	for i := range v.columns {
 		types[i] = v.columns[i].Type
 	}
-	if err := v.out.Init(post, types, &flowCtx.EvalCtx, output); err != nil {
+	if err := v.out.Init(post, types, flowCtx.MakeEvalCtx(), output); err != nil {
 		return nil, err
 	}
 	return v, nil

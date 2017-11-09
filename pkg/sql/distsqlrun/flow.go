@@ -85,6 +85,12 @@ type FlowCtx struct {
 	JobRegistry *jobs.Registry
 }
 
+// MakeEvalCtx returns a modifiable copy of the FlowCtx's EvalContext.
+func (ctx *FlowCtx) MakeEvalCtx() *parser.EvalContext {
+	evalCtx := ctx.EvalCtx
+	return &evalCtx
+}
+
 type flowStatus int
 
 // Flow status indicators.
