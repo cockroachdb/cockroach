@@ -31,45 +31,45 @@ PKG=./pkg/acceptance
 case $TESTNAME in
   TestUpreplicate_1To3Small)
     TESTTIMEOUT=4h
-    COCKROACH_EXTRA_FLAGS+=' -tf.cockroach-env=COCKROACH_PREEMPTIVE_SNAPSHOT_RATE=8388608 -tf.cockroach-flags="--vmodule=allocator=5,allocator_scorer=5,replicate_queue=5"'
+    COCKROACH_EXTRA_FLAGS+=' -tf.cockroach-env=COCKROACH_PREEMPTIVE_SNAPSHOT_RATE=8388608,COCKROACH_REPORT_SENSITIVE_DETAILS=true -tf.cockroach-flags="--vmodule=allocator=5,allocator_scorer=5,replicate_queue=5"'
     ;;
   TestRebalance_3To5Small)
     TESTTIMEOUT=4h
-    COCKROACH_EXTRA_FLAGS+=' -tf.cockroach-env=COCKROACH_PREEMPTIVE_SNAPSHOT_RATE=8388608 -tf.cockroach-flags="--vmodule=allocator=5,allocator_scorer=5,replicate_queue=5" -at.std-dev 42'
+    COCKROACH_EXTRA_FLAGS+=' -tf.cockroach-env=COCKROACH_PREEMPTIVE_SNAPSHOT_RATE=8388608,COCKROACH_REPORT_SENSITIVE_DETAILS=true -tf.cockroach-flags="--vmodule=allocator=5,allocator_scorer=5,replicate_queue=5" -at.std-dev 42'
     ;;
   TestRebalance_3To5Small_WithSchemaChanges)
     TESTTIMEOUT=24h
-    COCKROACH_EXTRA_FLAGS+=' -tf.cockroach-env=COCKROACH_PREEMPTIVE_SNAPSHOT_RATE=8388608 -tf.cockroach-flags="--vmodule=allocator=5,allocator_scorer=5,replicate_queue=5" -at.std-dev 42'
+    COCKROACH_EXTRA_FLAGS+=' -tf.cockroach-env=COCKROACH_PREEMPTIVE_SNAPSHOT_RATE=8388608,COCKROACH_REPORT_SENSITIVE_DETAILS=true -tf.cockroach-flags="--vmodule=allocator=5,allocator_scorer=5,replicate_queue=5" -at.std-dev 42'
     ;;
   TestSteady_3Small)
     TESTTIMEOUT=24h
-    COCKROACH_EXTRA_FLAGS+=' -tf.cockroach-env=COCKROACH_PREEMPTIVE_SNAPSHOT_RATE=8388608 -at.std-dev 14'
+    COCKROACH_EXTRA_FLAGS+=' -tf.cockroach-env=COCKROACH_PREEMPTIVE_SNAPSHOT_RATE=8388608,COCKROACH_REPORT_SENSITIVE_DETAILS=true -at.std-dev 14'
     ;;
   TestSteady_6Medium)
     TESTTIMEOUT=24h
-    COCKROACH_EXTRA_FLAGS+=' -tf.cockroach-env=COCKROACH_PREEMPTIVE_SNAPSHOT_RATE=8388608 -tf.cockroach-flags="--vmodule=allocator=5,allocator_scorer=5,replicate_queue=5" -at.std-dev 960'
+    COCKROACH_EXTRA_FLAGS+=' -tf.cockroach-env=COCKROACH_PREEMPTIVE_SNAPSHOT_RATE=8388608,COCKROACH_REPORT_SENSITIVE_DETAILS=true -tf.cockroach-flags="--vmodule=allocator=5,allocator_scorer=5,replicate_queue=5" -at.std-dev 960'
     ;;
   TestUpreplicate_1To6Medium)
     TESTTIMEOUT=18h
-    COCKROACH_EXTRA_FLAGS+=' -tf.cockroach-env=COCKROACH_PREEMPTIVE_SNAPSHOT_RATE=8388608 -tf.cockroach-flags="--vmodule=allocator=5,allocator_scorer=5,replicate_queue=5" -at.std-dev 960'
+    COCKROACH_EXTRA_FLAGS+=' -tf.cockroach-env=COCKROACH_PREEMPTIVE_SNAPSHOT_RATE=8388608,COCKROACH_REPORT_SENSITIVE_DETAILS=true -tf.cockroach-flags="--vmodule=allocator=5,allocator_scorer=5,replicate_queue=5" -at.std-dev 960'
     ;;
   TestContinuousLoad_BlockWriter)
     TESTTIMEOUT=6h
-    COCKROACH_EXTRA_FLAGS+=' -nodes 4'
+    COCKROACH_EXTRA_FLAGS+=' -tf.cockroach-env=COCKROACH_REPORT_SENSITIVE_DETAILS=true -nodes 4'
     ;;
   TestContinuousLoad_Photos)
     TESTTIMEOUT=6h
-    COCKROACH_EXTRA_FLAGS+=' -nodes 4'
+    COCKROACH_EXTRA_FLAGS+=' -tf.cockroach-env=COCKROACH_REPORT_SENSITIVE_DETAILS=true -nodes 4'
     ;;
   BenchmarkRestoreBig|BenchmarkRestoreTPCH10/numNodes=1|BenchmarkRestoreTPCH10/numNodes=3|BenchmarkRestoreTPCH10/numNodes=10|BenchmarkBackup2TB)
     PKG=./pkg/ccl/acceptanceccl
     TESTTIMEOUT=2h
-    COCKROACH_EXTRA_FLAGS+=" -tf.cockroach-env=COCKROACH_PREEMPTIVE_SNAPSHOT_RATE=8388608 -tf.storage-location=westus --vmodule=jobs=1"
+    COCKROACH_EXTRA_FLAGS+=" -tf.cockroach-env=COCKROACH_PREEMPTIVE_SNAPSHOT_RATE=8388608,COCKROACH_REPORT_SENSITIVE_DETAILS=true -tf.storage-location=westus --vmodule=jobs=1"
     ;;
   BenchmarkRestore2TB)
     PKG=./pkg/ccl/acceptanceccl
     TESTTIMEOUT=2h
-    COCKROACH_EXTRA_FLAGS+=" -tf.cockroach-env=COCKROACH_PREEMPTIVE_SNAPSHOT_RATE=8388608 -tf.storage-location=westus -cwd=$PWD/pkg/acceptance/terraform/gce --vmodule=jobs=1"
+    COCKROACH_EXTRA_FLAGS+=" -tf.cockroach-env=COCKROACH_PREEMPTIVE_SNAPSHOT_RATE=8388608,COCKROACH_REPORT_SENSITIVE_DETAILS=true -tf.storage-location=westus -cwd=$PWD/pkg/acceptance/terraform/gce --vmodule=jobs=1"
     ;;
   *)
     echo "unknown test name $TESTNAME"
