@@ -33,6 +33,9 @@ func TestCombinable(t *testing.T) {
 		Rows: []KeyValue{
 			{Key: Key("A"), Value: MakeValueFromString("V")},
 		},
+		IntentRows: []KeyValue{
+			{Key: Key("Ai"), Value: MakeValueFromString("X")},
+		},
 	}
 
 	if _, ok := interface{}(sr1).(combinable); !ok {
@@ -43,10 +46,14 @@ func TestCombinable(t *testing.T) {
 		Rows: []KeyValue{
 			{Key: Key("B"), Value: MakeValueFromString("W")},
 		},
+		IntentRows: []KeyValue{
+			{Key: Key("Bi"), Value: MakeValueFromString("Z")},
+		},
 	}
 
 	wantedSR := &ScanResponse{
-		Rows: append(append([]KeyValue(nil), sr1.Rows...), sr2.Rows...),
+		Rows:       append(append([]KeyValue(nil), sr1.Rows...), sr2.Rows...),
+		IntentRows: append(append([]KeyValue(nil), sr1.IntentRows...), sr2.IntentRows...),
 	}
 
 	if err := sr1.combine(sr2); err != nil {
