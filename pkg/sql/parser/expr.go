@@ -628,6 +628,14 @@ func (node DefaultVal) Format(buf *bytes.Buffer, f FmtFlags) {
 // ResolvedType implements the TypedExpr interface.
 func (DefaultVal) ResolvedType() types.T { return nil }
 
+// MaxVal represents the MAXVALUE expression.
+type MaxVal struct{}
+
+// Format implements the NodeFormatter interface.
+func (node MaxVal) Format(buf *bytes.Buffer, f FmtFlags) {
+	buf.WriteString("MAXVALUE")
+}
+
 // Placeholder represents a named placeholder.
 type Placeholder struct {
 	Name string
@@ -1299,8 +1307,7 @@ func (node *Tuple) String() string            { return AsString(node) }
 func (node *AnnotateTypeExpr) String() string { return AsString(node) }
 func (node *UnaryExpr) String() string        { return AsString(node) }
 func (node DefaultVal) String() string        { return AsString(node) }
+func (node MaxVal) String() string            { return AsString(node) }
 func (node *Placeholder) String() string      { return AsString(node) }
 func (node dNull) String() string             { return AsString(node) }
 func (list NameList) String() string          { return AsString(list) }
-func (node PartitionDefault) String() string  { return AsString(node) }
-func (node PartitionMaxValue) String() string { return AsString(node) }

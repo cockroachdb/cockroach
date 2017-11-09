@@ -502,6 +502,9 @@ func (expr *ColumnItem) Walk(_ Visitor) Expr {
 func (expr DefaultVal) Walk(_ Visitor) Expr { return expr }
 
 // Walk implements the Expr interface.
+func (expr MaxVal) Walk(_ Visitor) Expr { return expr }
+
+// Walk implements the Expr interface.
 func (expr *NumVal) Walk(_ Visitor) Expr { return expr }
 
 // Walk implements the Expr interface.
@@ -569,12 +572,6 @@ func (expr *DOid) Walk(_ Visitor) Expr { return expr }
 
 // Walk implements the Expr interface.
 func (expr *DOidWrapper) Walk(_ Visitor) Expr { return expr }
-
-// Walk implements the Expr interface.
-func (expr PartitionDefault) Walk(_ Visitor) Expr { return expr }
-
-// Walk implements the Expr interface.
-func (expr PartitionMaxValue) Walk(_ Visitor) Expr { return expr }
 
 // WalkExpr traverses the nodes in an expression.
 //
