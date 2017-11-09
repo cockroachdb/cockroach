@@ -22,7 +22,6 @@ import (
 
 	"golang.org/x/net/context"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -1214,45 +1213,6 @@ func TestClusterTimestampConversion(t *testing.T) {
 		if final != d.expected {
 			t.Errorf("expected %s, but found %s", d.expected, final)
 		}
-	}
-}
-
-func TestCastToCollatedString(t *testing.T) {
-	cases := []struct {
-		typ      coltypes.TCollatedString
-		contents string
-	}{
-		{coltypes.TCollatedString{Locale: "de"}, "test"},
-		{coltypes.TCollatedString{Locale: "en"}, "test"},
-		{coltypes.TCollatedString{Locale: "en", N: 5}, "test"},
-		{coltypes.TCollatedString{Locale: "en", N: 4}, "test"},
-		{coltypes.TCollatedString{Locale: "en", N: 3}, "tes"},
-	}
-	for _, cas := range cases {
-		t.Run("", func(t *testing.T) {
-			expr := &CastExpr{Expr: NewDString("test"), Type: &cas.typ, syntaxMode: castShort}
-			typedexpr, err := expr.TypeCheck(&SemaContext{}, types.Any)
-			if err != nil {
-				t.Fatal(err)
-			}
-			evalCtx := NewTestingEvalContext()
-			defer evalCtx.Stop(context.Background())
-			val, err := typedexpr.Eval(evalCtx)
-			if err != nil {
-				t.Fatal(err)
-			}
-			switch v := val.(type) {
-			case *DCollatedString:
-				if v.Locale != cas.typ.Locale {
-					t.Errorf("expected locale %q but got %q", cas.typ.Locale, v.Locale)
-				}
-				if v.Contents != cas.contents {
-					t.Errorf("expected contents %q but got %q", cas.contents, v.Contents)
-				}
-			default:
-				t.Errorf("expected type *DCollatedString but got %T", v)
-			}
-		})
 	}
 }
 
