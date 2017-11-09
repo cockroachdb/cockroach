@@ -108,8 +108,11 @@ func TestCrashReportingPacket(t *testing.T) {
 		p := packets[0]
 		packets = packets[1:]
 		t.Run("", func(t *testing.T) {
-			if e, a := "<redacted>", p.ServerName; e != a {
-				t.Errorf("expected ServerName to be '<redacted>', but got '%s'", a)
+			if !log.ReportSensitiveDetails {
+				e, a := "<redacted>", p.ServerName
+				if e != a {
+					t.Errorf("expected ServerName to be '<redacted>', but got '%s'", a)
+				}
 			}
 
 			tags := make(map[string]string, len(p.Tags))
