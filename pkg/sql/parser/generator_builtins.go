@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"sort"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 )
@@ -210,8 +211,8 @@ func (k *keywordsValueGenerator) Next() (bool, error) {
 // Values implements the ValueGenerator interface.
 func (k *keywordsValueGenerator) Values() Datums {
 	kw := keywordNames[k.curKeyword]
-	info := keywords[kw]
-	cat := info.cat
+	info := lex.Keywords[kw]
+	cat := info.Cat
 	desc := keywordCategoryDescriptions[cat]
 	return Datums{NewDString(kw), NewDString(cat), NewDString(desc)}
 }
@@ -226,8 +227,8 @@ var keywordCategoryDescriptions = map[string]string{
 // keywordNames contains all the keys in the `keywords` map, sorted so
 // that pg_get_keywords returns deterministic results.
 var keywordNames = func() []string {
-	ret := make([]string, 0, len(keywords))
-	for k := range keywords {
+	ret := make([]string, 0, len(lex.Keywords))
+	for k := range lex.Keywords {
 		ret = append(ret, k)
 	}
 	sort.Strings(ret)
