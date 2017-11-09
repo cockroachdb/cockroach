@@ -215,6 +215,9 @@ func (u *sqlSymUnion) castTargetType() coltypes.CastTargetType {
 func (u *sqlSymUnion) colTypes() []coltypes.T {
     return u.val.([]coltypes.T)
 }
+func (u *sqlSymUnion) int64() int64 {
+    return u.val.(int64)
+}
 func (u *sqlSymUnion) expr() tree.Expr {
     if expr, ok := u.val.(tree.Expr); ok {
         return expr
@@ -815,6 +818,8 @@ func (u *sqlSymUnion) scrubOption() tree.ScrubOption {
 %type <empty> opt_varying
 
 %type <*tree.NumVal>  signed_iconst
+%type <int64> signed_iconst64
+%type <int64> iconst64
 %type <tree.Expr>  var_value
 %type <tree.Exprs> var_list
 %type <tree.UnresolvedName> var_name
@@ -4325,12 +4330,10 @@ index_hints_param:
   {
      $$.val = &tree.IndexHints{Index: tree.UnrestrictedName($3)}
   }
-| FORCE_INDEX '=' '[' ICONST ']'
+| FORCE_INDEX '=' '[' iconst64 ']'
   {
     /* SKIP DOC */
-    id, err := $4.numVal().AsInt64()
-    if err != nil { sqllex.Error(err.Error()); return 1 }
-    $$.val = &tree.IndexHints{IndexID: tree.IndexID(id)}
+    $$.val = &tree.IndexHints{IndexID: tree.IndexID($4.int64())}
   }
 |
   NO_INDEX_JOIN
@@ -4371,11 +4374,9 @@ opt_index_hints:
   {
     $$.val = &tree.IndexHints{Index: tree.UnrestrictedName($2)}
   }
-| '@' '[' ICONST ']'
+| '@' '[' iconst64 ']'
   {
-    id, err := $3.numVal().AsInt64()
-    if err != nil { sqllex.Error(err.Error()); return 1 }
-    $$.val = &tree.IndexHints{IndexID: tree.IndexID(id)}
+    $$.val = &tree.IndexHints{IndexID: tree.IndexID($3.int64())}
   }
 | '@' '{' index_hints_param_list '}'
   {
@@ -4408,17 +4409,12 @@ opt_index_hints:
 //
 // %SeeAlso: WEBDOCS/table-expressions.html
 table_ref:
-  '[' ICONST opt_tableref_col_list alias_clause ']' opt_index_hints opt_ordinality opt_alias_clause
+  '[' iconst64 opt_tableref_col_list alias_clause ']' opt_index_hints opt_ordinality opt_alias_clause
   {
     /* SKIP DOC */
-    id, err := $2.numVal().AsInt64()
-    if err != nil {
-      sqllex.Error(err.Error())
-      return 1
-    }
     $$.val = &tree.AliasedTableExpr{
                  Expr: &tree.TableRef{
-                    TableID: id,
+                    TableID: $2.int64(),
                     Columns: $3.tableRefCols(),
 		    As: $4.aliasClause(),
                  },
@@ -4475,17 +4471,13 @@ opt_tableref_col_list:
 | '(' tableref_col_list ')' { $$.val = $2.tableRefCols() }
 
 tableref_col_list:
-  ICONST
+  iconst64
   {
-    id, err := $1.numVal().AsInt64()
-    if err != nil { sqllex.Error(err.Error()); return 1 }
-    $$.val = []tree.ColumnID{tree.ColumnID(id)}
+    $$.val = []tree.ColumnID{tree.ColumnID($1.int64())}
   }
-| tableref_col_list ',' ICONST
+| tableref_col_list ',' iconst64
   {
-    id, err := $3.numVal().AsInt64()
-    if err != nil { sqllex.Error(err.Error()); return 1 }
-    $$.val = append($1.tableRefCols(), tree.ColumnID(id))
+    $$.val = append($1.tableRefCols(), tree.ColumnID($3.int64()))
   }
 
 opt_ordinality:
@@ -4832,28 +4824,13 @@ const_typename:
 | const_datetime
 
 opt_numeric_modifiers:
-  '(' ICONST ')'
+  '(' iconst64 ')'
   {
-    prec, err := $2.numVal().AsInt64()
-    if err != nil {
-      sqllex.Error(err.Error())
-      return 1
-    }
-    $$.val = &coltypes.TDecimal{Prec: int(prec)}
+    $$.val = &coltypes.TDecimal{Prec: int($2.int64())}
   }
-| '(' ICONST ',' ICONST ')'
+| '(' iconst64 ',' iconst64 ')'
   {
-    prec, err := $2.numVal().AsInt64()
-    if err != nil {
-      sqllex.Error(err.Error())
-      return 1
-    }
-    scale, err := $4.numVal().AsInt64()
-    if err != nil {
-      sqllex.Error(err.Error())
-      return 1
-    }
-    $$.val = &coltypes.TDecimal{Prec: int(prec), Scale: int(scale)}
+    $$.val = &coltypes.TDecimal{Prec: int($2.int64()), Scale: int($4.int64())}
   }
 | /* EMPTY */
   {
@@ -5002,14 +4979,9 @@ const_bit:
 | bit_without_length
 
 bit_with_length:
-  BIT opt_varying '(' ICONST ')'
+  BIT opt_varying '(' iconst64 ')'
   {
-    n, err := $4.numVal().AsInt64()
-    if err != nil {
-      sqllex.Error(err.Error())
-      return 1
-    }
-    bit, err := coltypes.NewIntBitType(int(n))
+    bit, err := coltypes.NewIntBitType(int($4.int64()))
     if err != nil {
       sqllex.Error(err.Error())
       return 1
@@ -5034,14 +5006,10 @@ const_character:
 | character_without_length
 
 character_with_length:
-  character_base '(' ICONST ')'
+  character_base '(' iconst64 ')'
   {
-    n, err := $3.numVal().AsInt64()
-    if err != nil {
-      sqllex.Error(err.Error())
-      return 1
-    }
     $$.val = $1.colType()
+    n := $3.int64()
     if n != 0 {
       strType := &coltypes.TString{N: int(n)}
       strType.Name = $$.val.(*coltypes.TString).Name
@@ -5659,13 +5627,9 @@ d_expr:
     $$.val = $1.unresolvedName()
   }
 | a_expr_const
-| '@' ICONST
+| '@' iconst64
   {
-    colNum, err := $2.numVal().AsInt64()
-    if err != nil {
-      sqllex.Error(err.Error())
-      return 1
-    }
+    colNum := $2.int64()
     if colNum < 1 || colNum > int64(MaxInt) {
       sqllex.Error(fmt.Sprintf("invalid column ordinal: @%d", colNum))
       return 1
@@ -6553,6 +6517,28 @@ signed_iconst:
 | '-' ICONST
   {
     $$.val = &tree.NumVal{Value: constant.UnaryOp(token.SUB, $2.numVal().Value, 0)}
+  }
+
+// signed_iconst64 is a variant of signed_iconst which only accepts (signed) integer literals that fit in an int64.
+signed_iconst64:
+  signed_iconst
+  {
+    val, err := $1.numVal().AsInt64()
+    if err != nil {
+      sqllex.Error(err.Error()); return 1
+    }
+    $$.val = val
+  }
+
+// iconst64 accepts only unsigned integer literals that fit in an int64.
+iconst64:
+  ICONST
+  {
+    val, err := $1.numVal().AsInt64()
+    if err != nil {
+      sqllex.Error(err.Error()); return 1
+    }
+    $$.val = val
   }
 
 interval:
