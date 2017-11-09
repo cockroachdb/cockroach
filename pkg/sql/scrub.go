@@ -39,37 +39,47 @@ const (
 	ScrubErrorDanglingIndexReference = "dangling_index_reference"
 )
 
+// checkOperation is an interface for scrub check execution. The
+// different types of checks implement the interface. The checks are
+// then bundled together and iterated through to pull results.
+//
+// NB: Other changes that need to be made to implement a new check are:
+//  1) Add the option parsing in startScrubTable
+//  2) Queue the checkOperation structs into scrubNode.checkQueue.
+//
+// TODO(joey): Eventually we will add the ability to repair check
+// failures. In that case, we can add a AttemptRepair function that is
+// called after each call to Next.
+type checkOperation interface {
+	// Started indicates if a checkOperation has already been initialized
+	// by Start during the lifetime of the operation.
+	Started() bool
+
+	// Start initializes the check. In many cases, this does the bulk of
+	// the work behind a check.
+	Start(context.Context, *planner) error
+
+	// Next will return the next check result. The datums returned have
+	// the column types specified by scrubTypes, which are the valeus
+	// returned to the user.
+	//
+	// Next is not called if Done() is false.
+	Next(context.Context, *planner) (parser.Datums, error)
+
+	// Done indicates when there are no more results to iterate through.
+	Done(context.Context) bool
+
+	// Close will clean up any in progress resources.
+	Close(context.Context)
+}
+
 type scrubNode struct {
 	optColumnsSlot
 
-	n         *parser.Scrub
-	indexes   []sqlbase.IndexDescriptor
-	tableDesc *sqlbase.TableDescriptor
-	tableName *parser.TableName
+	n *parser.Scrub
 
-	currentIndex *checkedIndex
-
-	row parser.Datums
-}
-
-// checkedIndex holds the intermediate results for one index that is
-// checked.
-type checkedIndex struct {
-	// Intermediate values.
-	rows     *sqlbase.RowContainer
-	rowIndex int
-
-	// Context of the index check.
-	databaseName string
-	tableName    string
-	indexName    string
-	// columns is a list of the columns returned by one side of the
-	// queries join. The actual resulting rows from the RowContainer is
-	// twice this.
-	columns []*sqlbase.ColumnDescriptor
-	// primaryIndexColumnIndexes maps PrimaryIndex.Columns to the row
-	// indexes in the query result parser.Datums.
-	primaryIndexColumnIndexes []int
+	checkQueue []checkOperation
+	row        parser.Datums
 }
 
 // Scrub checks the database.
@@ -93,26 +103,78 @@ var scrubColumns = sqlbase.ResultColumns{
 }
 
 func (n *scrubNode) Start(params runParams) error {
-	var err error
-	n.tableName, err = n.n.Table.NormalizeWithDatabaseName(
-		params.p.session.Database)
+	switch n.n.Typ {
+	case parser.ScrubTable:
+		tableName, err := n.n.Table.NormalizeWithDatabaseName(params.p.session.Database)
+		if err != nil {
+			return err
+		}
+		if err := tableName.QualifyWithDatabase(params.p.session.Database); err != nil {
+			return err
+		}
+		// If the tableName provided refers to a view and error will be
+		// returned here.
+		tableDesc, err := MustGetTableDesc(params.ctx, params.p.txn, params.p.getVirtualTabler(),
+			tableName, false /* allowAdding */)
+		if err != nil {
+			return err
+		}
+		if err := n.startScrubTable(params.ctx, params.p, tableDesc, tableName); err != nil {
+			return err
+		}
+	case parser.ScrubDatabase:
+		if err := n.startScrubDatabase(params.ctx, params.p, &n.n.Database); err != nil {
+			return err
+		}
+	default:
+		return pgerror.NewErrorf(pgerror.CodeInternalError,
+			"unexpected SCRUB type received, got: %v", n.n.Typ)
+	}
+	return nil
+}
+
+// startScrubDatabase prepares a scrub check for each of the tables in
+// the database. Views are skipped without errors.
+func (n *scrubNode) startScrubDatabase(ctx context.Context, p *planner, name *parser.Name) error {
+	// Check that the database exists.
+	database := string(*name)
+	dbDesc, err := MustGetDatabaseDesc(ctx, p.txn, p.getVirtualTabler(), database)
+	if err != nil {
+		return err
+	}
+	tbNames, err := getTableNames(ctx, p.txn, p.getVirtualTabler(), dbDesc, false)
 	if err != nil {
 		return err
 	}
 
-	n.tableDesc, err = params.p.getTableDesc(params.ctx, n.tableName)
-	if err != nil {
-		return err
+	for i := range tbNames {
+		tableName := &tbNames[i]
+		if err := tableName.QualifyWithDatabase(database); err != nil {
+			return err
+		}
+		tableDesc, err := MustGetTableOrViewDesc(ctx, p.txn, p.getVirtualTabler(), tableName,
+			false /* allowAdding */)
+		if err != nil {
+			return err
+		}
+		// Skip views and don't throw an error if we encounter one.
+		if tableDesc.IsView() {
+			continue
+		}
+		if err := n.startScrubTable(ctx, p, tableDesc, tableName); err != nil {
+			return err
+		}
 	}
+	return nil
+}
 
-	if n.tableDesc.IsView() {
-		return pgerror.NewErrorf(pgerror.CodeWrongObjectTypeError,
-			"cannot run SCRUB on views")
-	}
-
-	// Process SCRUB options.
+func (n *scrubNode) startScrubTable(
+	ctx context.Context, p *planner, tableDesc *sqlbase.TableDescriptor, tableName *parser.TableName,
+) error {
+	// Process SCRUB options. These are only present during a SCRUB TABLE
+	// statement.
 	var indexesSet bool
-	var physical bool
+	var physicalCheckSet bool
 	for _, option := range n.n.Options {
 		switch v := option.(type) {
 		case *parser.ScrubOptionIndex:
@@ -120,53 +182,91 @@ func (n *scrubNode) Start(params runParams) error {
 				return pgerror.NewErrorf(pgerror.CodeSyntaxError,
 					"cannot specify INDEX option more than once")
 			}
-			n.indexes, err = indexesToCheck(v.IndexNames, n.tableDesc)
+			indexesSet = true
+			indexesToCheck, err := createIndexCheckOperations(v.IndexNames, tableDesc, tableName)
 			if err != nil {
 				return err
 			}
-			indexesSet = true
+			n.checkQueue = append(n.checkQueue, indexesToCheck...)
 		case *parser.ScrubOptionPhysical:
-			if physical {
+			if physicalCheckSet {
 				return pgerror.NewErrorf(pgerror.CodeSyntaxError,
 					"cannot specify PHYSICAL option more than once")
 			}
-			physical = true
+			physicalCheckSet = true
+			// TODO(joey): Initialize physical index to check.
 		default:
 			panic(fmt.Sprintf("Unhandled SCRUB option received: %+v", v))
 		}
 	}
 
-	// No options were provided. By default exhaustive checks are run.
+	// When no options are provided the default behaviour is to run
+	// exhaustive checks.
 	if len(n.n.Options) == 0 {
-		n.indexes, err = indexesToCheck(nil /* indexNames */, n.tableDesc)
+		indexesToCheck, err := createIndexCheckOperations(nil /* indexNames */, tableDesc, tableName)
 		if err != nil {
 			return err
 		}
-		physical = true
+		n.checkQueue = append(n.checkQueue, indexesToCheck...)
+		// TODO(joey): Initialize physical index to check.
 	}
 
 	return nil
 }
 
-// startIndexCheck will plan and run an index check using the distSQL
-// execution engine. The returned value contains the row iterator and
-// the information about the index that was checked.
-func (n *scrubNode) startIndexCheck(
-	ctx context.Context,
-	p *planner,
-	tableDesc *sqlbase.TableDescriptor,
-	tableName *parser.TableName,
-	indexDesc *sqlbase.IndexDescriptor,
-) (*checkedIndex, error) {
+func (n *scrubNode) Next(params runParams) (bool, error) {
+	for len(n.checkQueue) > 0 {
+		nextCheck := n.checkQueue[0]
+		if !nextCheck.Started() {
+			if err := nextCheck.Start(params.ctx, params.p); err != nil {
+				return false, err
+			}
+		}
+
+		// Check if the iterator is finished before calling Next. This
+		// happens if there are no more results to report.
+		if !nextCheck.Done(params.ctx) {
+			var err error
+			n.row, err = nextCheck.Next(params.ctx, params.p)
+			if err != nil {
+				return false, err
+			}
+			return true, nil
+		}
+
+		nextCheck.Close(params.ctx)
+		// Prepare the next iterator. If we happen to finish this iterator,
+		// we want to begin the next one so we still return a result.
+		n.checkQueue = n.checkQueue[1:]
+	}
+	return false, nil
+}
+
+func (n *scrubNode) Close(ctx context.Context) {
+	// Close any iterators which have not been completed.
+	for len(n.checkQueue) > 0 {
+		n.checkQueue[0].Close(ctx)
+		n.checkQueue = n.checkQueue[1:]
+	}
+}
+
+func (n *scrubNode) Values() parser.Datums {
+	return n.row
+}
+
+// getColumns returns the columns that are stored in an index k/v. The
+// column names and types are also returned.
+func getColumns(
+	tableDesc *sqlbase.TableDescriptor, indexDesc *sqlbase.IndexDescriptor,
+) (columns []*sqlbase.ColumnDescriptor, columnNames []string, columnTypes []sqlbase.ColumnType) {
 	colToIdx := make(map[sqlbase.ColumnID]int)
 	for i, col := range tableDesc.Columns {
 		colToIdx[col.ID] = i
 	}
 
-	// Collect all of the columns we are fetching from the secondary
-	// index. This includes the columns involved in the index: columns,
-	// extra columns, and store columns.
-	var columns []*sqlbase.ColumnDescriptor
+	// Collect all of the columns we are fetching from the index. This
+	// includes the columns involved in the index: columns, extra columns,
+	// and store columns.
 	for _, colID := range indexDesc.ColumnIDs {
 		columns = append(columns, &tableDesc.Columns[colToIdx[colID]])
 	}
@@ -178,20 +278,18 @@ func (n *scrubNode) startIndexCheck(
 	}
 
 	// Collect the column names and types.
-	var columnNames []string
-	var columnTypes []sqlbase.ColumnType
 	for _, col := range columns {
 		columnNames = append(columnNames, col.Name)
 		columnTypes = append(columnTypes, col.Type)
 	}
+	return columns, columnNames, columnTypes
+}
 
-	// Because the row results include both primary key data and secondary
-	// key data, the row results will contain two copies of the column
-	// data.
-	columnTypes = append(columnTypes, columnTypes...)
-
-	// Find the row indexes for all of the primary index columns.
-	var primaryColumnRowIndexes []int
+// getPrimaryColIdxs returns a list of the primary index columns and
+// their corresponding index in the columns list.
+func getPrimaryColIdxs(
+	tableDesc *sqlbase.TableDescriptor, columns []*sqlbase.ColumnDescriptor,
+) (primaryColIdxs []int, err error) {
 	for i, colID := range tableDesc.PrimaryIndex.ColumnIDs {
 		rowIdx := -1
 		for idx, col := range columns {
@@ -206,14 +304,64 @@ func (n *scrubNode) startIndexCheck(
 				colID,
 				tableDesc.PrimaryIndex.ColumnNames[i])
 		}
-		primaryColumnRowIndexes = append(primaryColumnRowIndexes, rowIdx)
+		primaryColIdxs = append(primaryColIdxs, rowIdx)
+	}
+	return primaryColIdxs, nil
+}
+
+// indexCheckOperation is a check on a secondary index's integrity.
+type indexCheckOperation struct {
+	started   bool
+	tableName *parser.TableName
+	tableDesc *sqlbase.TableDescriptor
+	indexDesc *sqlbase.IndexDescriptor
+
+	// Intermediate values.
+	rows     *sqlbase.RowContainer
+	rowIndex int
+
+	// columns is a list of the columns returned by one side of the
+	// queries join. The actual resulting rows from the RowContainer is
+	// twice this.
+	columns []*sqlbase.ColumnDescriptor
+	// primaryColIdxs maps PrimaryIndex.Columns to the row
+	// indexes in the query result parser.Datums.
+	primaryColIdxs []int
+}
+
+func newIndexCheckOperation(
+	tableName *parser.TableName,
+	tableDesc *sqlbase.TableDescriptor,
+	indexDesc *sqlbase.IndexDescriptor,
+) *indexCheckOperation {
+	return &indexCheckOperation{
+		tableName: tableName,
+		tableDesc: tableDesc,
+		indexDesc: indexDesc,
+	}
+}
+
+// Start will plan and run an index check using the distSQL execution
+// engine.
+func (o *indexCheckOperation) Start(ctx context.Context, p *planner) error {
+	columns, columnNames, columnTypes := getColumns(o.tableDesc, o.indexDesc)
+
+	// Because the row results include both primary key data and secondary
+	// key data, the row results will contain two copies of the column
+	// data.
+	columnTypes = append(columnTypes, columnTypes...)
+
+	// Find the row indexes for all of the primary index columns.
+	primaryColIdxs, err := getPrimaryColIdxs(o.tableDesc, columns)
+	if err != nil {
+		return err
 	}
 
 	checkQuery := createIndexCheckQuery(columnNames,
-		tableDesc.PrimaryIndex.ColumnNames, tableName, indexDesc.ID)
+		o.tableDesc.PrimaryIndex.ColumnNames, o.tableName, o.indexDesc.ID)
 	plan, err := p.delegateQuery(ctx, "SCRUB TABLE ... WITH OPTIONS INDEX", checkQuery, nil, nil)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	// All columns projected in the plan generated from the query are
@@ -229,93 +377,157 @@ func (n *scrubNode) startIndexCheck(
 	plan, err = p.optimizePlan(ctx, plan, needed)
 	if err != nil {
 		plan.Close(ctx)
-		return nil, err
+		return err
 	}
 	defer plan.Close(ctx)
 
-	rows, err := scrubIndexRunDistSQL(ctx, p, plan, columnTypes)
+	rows, err := scrubPlanAndRunDistSQL(ctx, p, plan, columnTypes)
 	if err != nil {
 		rows.Close(ctx)
-		return nil, err
-	} else if rows == nil {
-		return nil, nil
+		return err
 	}
 
-	return &checkedIndex{
-		rows:                      rows,
-		tableName:                 tableName.Table(),
-		databaseName:              tableName.Database(),
-		indexName:                 indexDesc.Name,
-		primaryIndexColumnIndexes: primaryColumnRowIndexes,
-		columns:                   columns,
+	o.started = true
+	o.rows = rows
+	o.primaryColIdxs = primaryColIdxs
+	o.columns = columns
+	return nil
+}
+
+// Next implements the checkOperation interface.
+func (o *indexCheckOperation) Next(ctx context.Context, p *planner) (parser.Datums, error) {
+	row := o.rows.At(o.rowIndex)
+	o.rowIndex++
+
+	// Check if this row has results from the left. See the comment above
+	// createIndexCheckQuery indicating why this is true.
+	var isMissingIndexReferenceError bool
+	if row[o.primaryColIdxs[0]] != parser.DNull {
+		isMissingIndexReferenceError = true
+	}
+
+	colLen := len(o.columns)
+	var errorType parser.Datum
+	var primaryKeyDatums parser.Datums
+	if isMissingIndexReferenceError {
+		errorType = parser.NewDString(ScrubErrorMissingIndexEntry)
+		// Fetch the primary index values from the primary index row data.
+		for _, rowIdx := range o.primaryColIdxs {
+			primaryKeyDatums = append(primaryKeyDatums, row[rowIdx])
+		}
+	} else {
+		errorType = parser.NewDString(ScrubErrorDanglingIndexReference)
+		// Fetch the primary index values from the secondary index row
+		// data, because no primary index was found. The secondary index columns
+		// are offset by the length of the distinct columns, as the first
+		// set of columns is for the primary index.
+		for _, rowIdx := range o.primaryColIdxs {
+			primaryKeyDatums = append(primaryKeyDatums, row[rowIdx+colLen])
+		}
+	}
+	primaryKey := parser.NewDString(primaryKeyDatums.String())
+	timestamp := parser.MakeDTimestamp(
+		p.evalCtx.GetStmtTimestamp(), time.Nanosecond)
+
+	details := make(map[string]interface{})
+	rowDetails := make(map[string]interface{})
+	details["row_data"] = rowDetails
+	details["index_name"] = o.indexDesc.Name
+	if isMissingIndexReferenceError {
+		// Fetch the primary index values from the primary index row data.
+		for rowIdx, col := range o.columns {
+			// TODO(joey): We should maybe try to get the underlying type.
+			rowDetails[col.Name] = row[rowIdx].String()
+		}
+	} else {
+		// Fetch the primary index values from the secondary index row data,
+		// because no primary index was found. The secondary index columns
+		// are offset by the length of the distinct columns, as the first
+		// set of columns is for the primary index.
+		for rowIdx, col := range o.columns {
+			// TODO(joey): We should maybe try to get the underlying type.
+			rowDetails[col.Name] = row[rowIdx+colLen].String()
+		}
+	}
+
+	detailsJSON, err := parser.MakeDJSON(details)
+	if err != nil {
+		return nil, err
+	}
+
+	return parser.Datums{
+		// TODO(joey): Add the job UUID once the SCRUB command uses jobs.
+		parser.DNull, /* job_uuid */
+		errorType,
+		parser.NewDString(o.tableName.Database()),
+		parser.NewDString(o.tableName.Table()),
+		primaryKey,
+		timestamp,
+		parser.DBoolFalse,
+		detailsJSON,
 	}, nil
 }
 
-// scrubIndexRunDistSQL will prepare and run the plan in distSQL. If a
-// RowContainer is returned the caller must close it.
-func scrubIndexRunDistSQL(
-	ctx context.Context, p *planner, plan planNode, columnTypes []sqlbase.ColumnType,
-) (*sqlbase.RowContainer, error) {
-	ci := sqlbase.ColTypeInfoFromColTypes(columnTypes)
-	rows := sqlbase.NewRowContainer(*p.evalCtx.ActiveMemAcc, ci, 0)
-	rowResultWriter := NewRowResultWriter(parser.Rows, rows)
-	recv, err := makeDistSQLReceiver(
-		ctx,
-		rowResultWriter,
-		p.ExecCfg().RangeDescriptorCache,
-		p.ExecCfg().LeaseHolderCache,
-		p.txn,
-		func(ts hlc.Timestamp) {
-			_ = p.ExecCfg().Clock.Update(ts)
-		},
-	)
-	if err != nil {
-		return rows, err
-	}
+// Started implements the checkOperation interface.
+func (o *indexCheckOperation) Started() bool {
+	return o.started
+}
 
-	err = p.session.distSQLPlanner.PlanAndRun(ctx, p.txn, plan, &recv, p.evalCtx)
-	if err != nil {
-		return rows, err
-	} else if recv.err != nil {
-		return rows, recv.err
-	}
+// Done implements the checkOperation interface.
+func (o *indexCheckOperation) Done(ctx context.Context) bool {
+	return o.rows == nil || o.rowIndex >= o.rows.Len()
+}
 
-	if rows.Len() == 0 {
-		rows.Close(ctx)
-		return nil, nil
+// Close4 implements the checkOperation interface.
+func (o *indexCheckOperation) Close(ctx context.Context) {
+	if o.rows != nil {
+		o.rows.Close(ctx)
 	}
-
-	return rows, nil
 }
 
 // tableColumnsIsNullPredicate creates a predicate that checks if all of
-// the specified columns for a table are NULL. For example, given table
-// is t1 and the columns id, name, data, then the returned string is:
+// the specified columns for a table are NULL (or not NULL, based on the
+// isNull flag). For example, given table is t1 and the columns id,
+// name, data, then the returned string is:
 //
 //   t1.id IS NULL AND t1.name IS NULL AND t1.data IS NULL
-func tableColumnsIsNullPredicate(tableName string, columns []string) string {
+//
+func tableColumnsIsNullPredicate(tableName string, columns []string, isNull bool) string {
 	var buf bytes.Buffer
+	nullCheck := "NOT NULL"
+	if isNull {
+		nullCheck = "NULL"
+	}
 	for i, col := range columns {
 		if i > 0 {
 			buf.WriteString(" AND ")
 		}
-		fmt.Fprintf(&buf, "%[1]s.%[2]s IS NULL", tableName, col)
+		fmt.Fprintf(&buf, "%[1]s.%[2]s IS %[3]s", tableName, col, nullCheck)
 	}
 	return buf.String()
 }
 
 // tableColumnsEQ creates a predicate that checks if all of the
-// specified columns for two tables are equal. For example, given tables
-// t1, t2 and the columns id, name, data, then the returned string is:
+// specified columns for two tables are equal. This predicate also needs
+// NULL checks to work around the equivilancy of NULL = NULL. For
+// example, given tables t1, t2 and the columns id, name, then the
+// returned string is:
 //
-//   t1.id = t2.id AND t1.name = t2.name AND t1.data = t2.data
+//   ((t1.id IS NOT NULL AND t2.id IS NOT NULL AND t1.id = t2.id) OR
+//    (t1.id IS NULL AND t2.id IS NULL)) AND
+//   ((t1.name IS NOT NULL AND t2.name IS NOT NULL AND t1.name = t2.name) OR
+//    (t1.name IS NULL AND t2.name IS NULL))
+//
 func tableColumnsEQ(tableName string, otherTableName string, columns []string) string {
 	var buf bytes.Buffer
 	for i, col := range columns {
 		if i > 0 {
 			buf.WriteString(" AND ")
 		}
-		fmt.Fprintf(&buf, "%[1]s.%[3]s = %[2]s.%[3]s", tableName, otherTableName, col)
+		fmt.Fprintf(&buf, `
+			((%[1]s.%[3]s IS NOT NULL AND %[2]s.%[3]s IS NOT NULL AND %[1]s.%[3]s = %[2]s.%[3]s) OR
+			 (%[1]s.%[3]s IS NULL AND %[2]s.%[3]s IS NULL))`,
+			tableName, otherTableName, col)
 	}
 	return buf.String()
 }
@@ -354,16 +566,21 @@ func tableColumnsProjection(tableName string, columns []string) string {
 //     test@{NO_INDEX_JOIN} as left
 //   FULL OUTER JOIN
 //     test@{FORCE_INDEX=v_idx,NO_INDEX_JOIN} as right
-//     ON left.k = right.k AND
-//        left.s = right.s AND
-//        left.v = right.v
+//   ON
+//      ((left.k IS NOT NULL AND right.k IS NOT NULL AND left.k = right.k) OR
+//       (left.k IS NULL AND right.k IS NULL)) AND
+//      ((left.s IS NOT NULL AND right.s IS NOT NULL AND left.s = right.s) OR
+//       (left.s IS NULL AND right.s IS NULL)) AND
+//      ((left.v IS NOT NULL AND right.v IS NOT NULL AND left.v = right.v) OR
+//       (left.v IS NULL AND right.v IS NULL))
 //   WHERE (left.k  IS NULL AND left.s  IS NULL) OR
 //         (right.k IS NULL AND right.s IS NULL)
 //
 // In short, this query is:
 // 1) Scanning the primary index and the secondary index.
-// 2) Joining them on all of the secondary index columns and
-//    extra columns that are equal.
+// 2) Joining them on all of the secondary index columns and extra
+//    columns that are equivalent. This is a fairly verbose check due to
+//    equivilancy properties when involving NULLs.
 // 3) Filtering to achieve an anti-join. The first line of the predicate
 //    takes rows on the right for the anti-join. The second line of the
 //    predicate takes rows on the left for the anti-join.
@@ -395,26 +612,33 @@ func createIndexCheckQuery(
 	return fmt.Sprintf(checkIndexQuery,
 		tableColumnsProjection("leftside", columnNames),
 		tableColumnsProjection("rightside", columnNames),
-		tableName,
+		tableName.String(),
 		indexID,
 		tableColumnsEQ("leftside", "rightside", columnNames),
-		tableColumnsIsNullPredicate("leftside", primaryKeyColumnNames),
-		tableColumnsIsNullPredicate("rightside", primaryKeyColumnNames),
+		tableColumnsIsNullPredicate("leftside", primaryKeyColumnNames, true /* isNull */),
+		tableColumnsIsNullPredicate("rightside", primaryKeyColumnNames, true /* isNull */),
 	)
 }
 
-// indexesToCheck will return all of the indexes that are being checked.
-// If indexNames is nil, then all indexes are returned.
-// TODO(joey): This can be simplified with
+// createIndexCheckOperations will return the checkOperations for the
+// provided indexes. If indexNames is nil, then all indexes are
+// returned. TODO(joey): This can be simplified with
 // TableDescriptor.FindIndexByName(), but this will only report the
 // first invalid index.
-func indexesToCheck(
-	indexNames parser.NameList, tableDesc *sqlbase.TableDescriptor,
-) (results []sqlbase.IndexDescriptor, err error) {
+func createIndexCheckOperations(
+	indexNames parser.NameList, tableDesc *sqlbase.TableDescriptor, tableName *parser.TableName,
+) (results []checkOperation, err error) {
 	if indexNames == nil {
 		// Populate results with all secondary indexes of the
 		// table.
-		return tableDesc.Indexes, nil
+		for i := range tableDesc.Indexes {
+			results = append(results, newIndexCheckOperation(
+				tableName,
+				tableDesc,
+				&tableDesc.Indexes[i],
+			))
+		}
+		return results, nil
 	}
 
 	// Find the indexes corresponding to the user input index names.
@@ -422,10 +646,14 @@ func indexesToCheck(
 	for _, idxName := range indexNames {
 		names[idxName.String()] = struct{}{}
 	}
-	for _, idx := range tableDesc.Indexes {
-		if _, ok := names[idx.Name]; ok {
-			results = append(results, idx)
-			delete(names, idx.Name)
+	for i := range tableDesc.Indexes {
+		if _, ok := names[tableDesc.Indexes[i].Name]; ok {
+			results = append(results, newIndexCheckOperation(
+				tableName,
+				tableDesc,
+				&tableDesc.Indexes[i],
+			))
+			delete(names, tableDesc.Indexes[i].Name)
 		}
 	}
 	if len(names) > 0 {
@@ -443,119 +671,39 @@ func indexesToCheck(
 	return results, nil
 }
 
-func (n *scrubNode) Next(params runParams) (bool, error) {
-	var err error
-	// Begin the next index check query. It is planned then executed in
-	// the distSQL execution engine.
-	if len(n.indexes) > 0 && n.currentIndex == nil {
-		n.currentIndex, err = n.startIndexCheck(
-			params.ctx, params.p, n.tableDesc, n.tableName, &n.indexes[0])
-		if err != nil {
-			return false, err
-		}
-		n.indexes = n.indexes[1:]
-	}
-
-	// If an index check query is in progress then we will pull the rows
-	// from its buffer.
-	if n.currentIndex != nil {
-		resultRow := n.currentIndex.rows.At(n.currentIndex.rowIndex)
-		n.row, err = getNextIndexError(params.p, n.currentIndex, resultRow)
-		if err != nil {
-			return false, err
-		}
-		n.currentIndex.rowIndex++
-		if n.currentIndex.rowIndex >= n.currentIndex.rows.Len() {
-			n.currentIndex.rows.Close(params.ctx)
-			n.currentIndex = nil
-		}
-		return true, nil
-	}
-
-	return false, nil
-}
-
-// getNextIndexError will translate an row returned from an index error
-// and generate the corresponding SCRUB result row.
-func getNextIndexError(
-	p *planner, currentIndex *checkedIndex, row parser.Datums,
-) (parser.Datums, error) {
-	// Check if this row has results from the left. See the comment above
-	// createIndexCheckQuery indicating why this is true.
-	var isMissingIndexReferenceError bool
-	if row[currentIndex.primaryIndexColumnIndexes[0]] != parser.DNull {
-		isMissingIndexReferenceError = true
-	}
-
-	colLen := len(currentIndex.columns)
-	var primaryKeyDatums parser.Datums
-	if isMissingIndexReferenceError {
-		// Fetch the primary index values from the primary index row data.
-		for _, rowIdx := range currentIndex.primaryIndexColumnIndexes {
-			primaryKeyDatums = append(primaryKeyDatums, row[rowIdx])
-		}
-	} else {
-		// Fetch the primary index values from the secondary index row
-		// data, because no primary index was found. The secondary index columns
-		// are offset by the length of the distinct columns, as the first
-		// set of columns is for the primary index.
-		for _, rowIdx := range currentIndex.primaryIndexColumnIndexes {
-			primaryKeyDatums = append(primaryKeyDatums, row[rowIdx+colLen])
-		}
-	}
-	primaryKey := parser.NewDString(primaryKeyDatums.String())
-	timestamp := parser.MakeDTimestamp(
-		p.evalCtx.GetStmtTimestamp(), time.Nanosecond)
-
-	var errorType parser.Datum
-	if isMissingIndexReferenceError {
-		errorType = parser.NewDString(ScrubErrorMissingIndexEntry)
-	} else {
-		errorType = parser.NewDString(ScrubErrorDanglingIndexReference)
-	}
-
-	details := make(map[string]interface{})
-	rowDetails := make(map[string]interface{})
-	details["row_data"] = rowDetails
-	details["index_name"] = currentIndex.indexName
-	if isMissingIndexReferenceError {
-		// Fetch the primary index values from the primary index row data.
-		for rowIdx, col := range currentIndex.columns {
-			// TODO(joey): We should maybe try to get the underlying type.
-			rowDetails[col.Name] = row[rowIdx].String()
-		}
-	} else {
-		// Fetch the primary index values from the secondary index row data,
-		// because no primary index was found. The secondary index columns
-		// are offset by the length of the distinct columns, as the first
-		// set of columns is for the primary index.
-		for rowIdx, col := range currentIndex.columns {
-			// TODO(joey): We should maybe try to get the underlying type.
-			rowDetails[col.Name] = row[rowIdx+colLen].String()
-		}
-	}
-
-	detailsJSON, err := parser.MakeDJSON(details)
+// scrubPlanAndRunDistSQL will prepare and run the plan in distSQL. If a
+// RowContainer is returned the caller must close it.
+func scrubPlanAndRunDistSQL(
+	ctx context.Context, p *planner, plan planNode, columnTypes []sqlbase.ColumnType,
+) (*sqlbase.RowContainer, error) {
+	ci := sqlbase.ColTypeInfoFromColTypes(columnTypes)
+	rows := sqlbase.NewRowContainer(*p.evalCtx.ActiveMemAcc, ci, 0)
+	rowResultWriter := NewRowResultWriter(parser.Rows, rows)
+	recv, err := makeDistSQLReceiver(
+		ctx,
+		rowResultWriter,
+		p.ExecCfg().RangeDescriptorCache,
+		p.ExecCfg().LeaseHolderCache,
+		p.txn,
+		func(ts hlc.Timestamp) {
+			_ = p.ExecCfg().Clock.Update(ts)
+		},
+	)
 	if err != nil {
-		return nil, err
+		return rows, err
 	}
 
-	return parser.Datums{
-		// TODO(joey): Add the job UUID once the SCRUB command uses jobs.
-		parser.DNull, /* job_uuid */
-		errorType,    /* error_type */
-		parser.NewDString(currentIndex.databaseName),
-		parser.NewDString(currentIndex.tableName),
-		primaryKey,
-		timestamp,
-		parser.DBoolFalse,
-		detailsJSON,
-	}, nil
-}
+	err = p.session.distSQLPlanner.PlanAndRun(ctx, p.txn, plan, &recv, p.evalCtx)
+	if err != nil {
+		return rows, err
+	} else if recv.err != nil {
+		return rows, recv.err
+	}
 
-func (n *scrubNode) Close(ctx context.Context) {
-}
+	if rows.Len() == 0 {
+		rows.Close(ctx)
+		return nil, nil
+	}
 
-func (n *scrubNode) Values() parser.Datums {
-	return n.row
+	return rows, nil
 }
