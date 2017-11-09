@@ -22,12 +22,11 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-	"unicode"
+	"unicode/utf8"
 	"unsafe"
 
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-	"github.com/cockroachdb/cockroach/pkg/util/stringencoding"
 )
 
 type jsonType int
@@ -231,22 +230,64 @@ func (j jsonNumber) String() string { return asString(j) }
 func (j jsonArray) String() string  { return asString(j) }
 func (j jsonObject) String() string { return asString(j) }
 
-// encodeJSONString writes a string literal to buf as a JSON string.
-// Very similar to encodeSQLStringInsideArray. Primary difference is that it is
-// legal to directly print out unicode characters.
-func encodeJSONString(buf *bytes.Buffer, in string) {
-	buf.WriteByte('"')
-	// Loop through each unicode code point.
-	for i, r := range in {
-		ch := byte(r)
-		if unicode.IsPrint(r) && !stringencoding.NeedEscape(ch) && ch != '"' {
-			// Character is printable doesn't need escaping - just print it out.
-			buf.WriteRune(r)
-		} else {
-			stringencoding.EncodeEscapedChar(buf, in, r, ch, i, '"')
-		}
-	}
+const hex = "0123456789abcdef"
 
+// encodeJSONString writes a string literal to buf as a JSON string.
+// Cribbed from https://github.com/golang/go/blob/master/src/encoding/json/encode.go.
+func encodeJSONString(buf *bytes.Buffer, s string) {
+	buf.WriteByte('"')
+	start := 0
+	for i := 0; i < len(s); {
+		if b := s[i]; b < utf8.RuneSelf {
+			if safeSet[b] {
+				i++
+				continue
+			}
+			if start < i {
+				buf.WriteString(s[start:i])
+			}
+			switch b {
+			case '\\', '"':
+				buf.WriteByte('\\')
+				buf.WriteByte(b)
+			case '\n':
+				buf.WriteByte('\\')
+				buf.WriteByte('n')
+			case '\r':
+				buf.WriteByte('\\')
+				buf.WriteByte('r')
+			case '\t':
+				buf.WriteByte('\\')
+				buf.WriteByte('t')
+			default:
+				// This encodes bytes < 0x20 except for \t, \n and \r.
+				// If escapeHTML is set, it also escapes <, >, and &
+				// because they can lead to security holes when
+				// user-controlled strings are rendered into JSON
+				// and served to some browsers.
+				buf.WriteString(`\u00`)
+				buf.WriteByte(hex[b>>4])
+				buf.WriteByte(hex[b&0xF])
+			}
+			i++
+			start = i
+			continue
+		}
+		c, size := utf8.DecodeRuneInString(s[i:])
+		if c == utf8.RuneError && size == 1 {
+			if start < i {
+				buf.WriteString(s[start:i])
+			}
+			buf.WriteString(`\ufffd`)
+			i += size
+			start = i
+			continue
+		}
+		i += size
+	}
+	if start < len(s) {
+		buf.WriteString(s[start:])
+	}
 	buf.WriteByte('"')
 }
 
