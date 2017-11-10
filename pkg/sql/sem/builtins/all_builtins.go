@@ -19,6 +19,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 )
 
@@ -34,9 +35,9 @@ func init() {
 	initPGBuiltins()
 
 	AllBuiltinNames = make([]string, 0, len(Builtins))
-	parser.FunDefs = make(map[string]*parser.FunctionDefinition)
+	tree.FunDefs = make(map[string]*parser.FunctionDefinition)
 	for name, def := range Builtins {
-		parser.FunDefs[name] = parser.NewFunctionDefinition(name, def)
+		tree.FunDefs[name] = parser.NewFunctionDefinition(name, def)
 		AllBuiltinNames = append(AllBuiltinNames, name)
 	}
 
@@ -51,7 +52,7 @@ func init() {
 			}
 		}
 		Builtins[uname] = def
-		parser.FunDefs[uname] = parser.FunDefs[name]
+		tree.FunDefs[uname] = tree.FunDefs[name]
 	}
 
 	sort.Strings(AllBuiltinNames)
