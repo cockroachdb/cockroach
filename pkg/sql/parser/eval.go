@@ -2010,6 +2010,9 @@ type EvalPlanner interface {
 	// QualifyWithDatabase resolves a possibly unqualified table name into a
 	// normalized table name that is qualified by database.
 	QualifyWithDatabase(ctx context.Context, t *NormalizableTableName) (*TableName, error)
+
+	// ParseType parses a column type.
+	ParseType(sql string) (coltypes.CastTargetType, error)
 }
 
 // CtxProvider is anything that can return a Context.
@@ -2825,7 +2828,7 @@ func performCast(ctx *EvalContext, d Datum, t coltypes.CastTargetType) (Datum, e
 				}
 				return queryOid(ctx, typ, NewDString(funcDef.Name))
 			case coltypes.RegType:
-				colType, err := ParseType(s)
+				colType, err := ctx.Planner.ParseType(s)
 				if err == nil {
 					datumType := coltypes.CastTargetToDatumType(colType)
 					return &DOid{semanticType: typ, DInt: DInt(datumType.Oid()), name: datumType.SQLName()}, nil
