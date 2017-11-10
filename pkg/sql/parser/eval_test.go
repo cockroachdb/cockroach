@@ -22,6 +22,7 @@ import (
 
 	"golang.org/x/net/context"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -1218,14 +1219,14 @@ func TestClusterTimestampConversion(t *testing.T) {
 
 func TestCastToCollatedString(t *testing.T) {
 	cases := []struct {
-		typ      CollatedStringColType
+		typ      coltypes.CollatedStringColType
 		contents string
 	}{
-		{CollatedStringColType{Locale: "de"}, "test"},
-		{CollatedStringColType{Locale: "en"}, "test"},
-		{CollatedStringColType{Locale: "en", N: 5}, "test"},
-		{CollatedStringColType{Locale: "en", N: 4}, "test"},
-		{CollatedStringColType{Locale: "en", N: 3}, "tes"},
+		{coltypes.CollatedStringColType{Locale: "de"}, "test"},
+		{coltypes.CollatedStringColType{Locale: "en"}, "test"},
+		{coltypes.CollatedStringColType{Locale: "en", N: 5}, "test"},
+		{coltypes.CollatedStringColType{Locale: "en", N: 4}, "test"},
+		{coltypes.CollatedStringColType{Locale: "en", N: 3}, "tes"},
 	}
 	for _, cas := range cases {
 		t.Run("", func(t *testing.T) {

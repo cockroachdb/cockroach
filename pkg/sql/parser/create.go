@@ -24,6 +24,7 @@ import (
 	"bytes"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
@@ -181,7 +182,7 @@ const (
 // statement.
 type ColumnTableDef struct {
 	Name     Name
-	Type     ColumnType
+	Type     coltypes.ColumnType
 	Nullable struct {
 		Nullability    Nullability
 		ConstraintName Name
@@ -214,15 +215,15 @@ type ColumnTableDefCheckExpr struct {
 	ConstraintName Name
 }
 
-func processCollationOnType(name Name, typ ColumnType, c ColumnCollation) (ColumnType, error) {
+func processCollationOnType(name Name, typ coltypes.ColumnType, c ColumnCollation) (coltypes.ColumnType, error) {
 	locale := string(c)
 	switch s := typ.(type) {
-	case *StringColType:
-		return &CollatedStringColType{Name: s.Name, N: s.N, Locale: locale}, nil
-	case *CollatedStringColType:
+	case *coltypes.StringColType:
+		return &coltypes.CollatedStringColType{Name: s.Name, N: s.N, Locale: locale}, nil
+	case *coltypes.CollatedStringColType:
 		return nil, pgerror.NewErrorf(pgerror.CodeSyntaxError,
 			"multiple COLLATE declarations for column %q", name)
-	case *ArrayColType:
+	case *coltypes.ArrayColType:
 		var err error
 		s.ParamType, err = processCollationOnType(name, s.ParamType, c)
 		if err != nil {
@@ -236,7 +237,7 @@ func processCollationOnType(name Name, typ ColumnType, c ColumnCollation) (Colum
 }
 
 func newColumnTableDef(
-	name Name, typ ColumnType, qualifications []NamedColumnQualification,
+	name Name, typ coltypes.ColumnType, qualifications []NamedColumnQualification,
 ) (*ColumnTableDef, error) {
 	d := &ColumnTableDef{
 		Name: name,

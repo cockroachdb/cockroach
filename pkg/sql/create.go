@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -1422,7 +1423,7 @@ func (n *createViewNode) makeViewTableDesc(
 	desc := initTableDescriptor(id, parentID, viewName, n.p.txn.OrigTimestamp(), privileges)
 	desc.ViewQuery = parser.AsStringWithFlags(n.n.AsSource, parser.FmtParsable)
 	for i, colRes := range resultColumns {
-		colType, err := parser.DatumTypeToColumnType(colRes.Typ)
+		colType, err := coltypes.DatumTypeToColumnType(colRes.Typ)
 		if err != nil {
 			return desc, err
 		}
@@ -1457,7 +1458,7 @@ func makeTableDescIfAs(
 	}
 	desc = initTableDescriptor(id, parentID, tableName.Table(), creationTime, privileges)
 	for i, colRes := range resultColumns {
-		colType, err := parser.DatumTypeToColumnType(colRes.Typ)
+		colType, err := coltypes.DatumTypeToColumnType(colRes.Typ)
 		if err != nil {
 			return desc, err
 		}
@@ -1499,7 +1500,7 @@ func MakeTableDesc(
 	for _, def := range n.Defs {
 		if d, ok := def.(*parser.ColumnTableDef); ok {
 			if !desc.IsVirtualTable() {
-				if _, ok := d.Type.(*parser.VectorColType); ok {
+				if _, ok := d.Type.(*coltypes.VectorColType); ok {
 					return desc, pgerror.NewErrorf(
 						pgerror.CodeFeatureNotSupportedError,
 						"VECTOR column types are unsupported",

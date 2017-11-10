@@ -22,6 +22,7 @@ import (
 	"github.com/pkg/errors"
 	"golang.org/x/text/language"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 )
@@ -279,8 +280,8 @@ func (expr *CastExpr) TypeCheck(ctx *SemaContext, _ types.T) (TypedExpr, error) 
 			// If the type doesn't have any possible parameters (like length,
 			// precision), the CastExpr becomes a no-op and can be elided.
 			switch expr.Type.(type) {
-			case *BoolColType, *DateColType, *TimestampColType, *TimestampTZColType,
-				*IntervalColType, *BytesColType:
+			case *coltypes.BoolColType, *coltypes.DateColType, *coltypes.TimestampColType, *coltypes.TimestampTZColType,
+				*coltypes.IntervalColType, *coltypes.BytesColType:
 				return expr.Expr.TypeCheck(ctx, returnType)
 			}
 		}

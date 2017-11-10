@@ -23,6 +23,7 @@ import (
     "go/constant"
     "go/token"
 
+    "github.com/cockroachdb/cockroach/pkg/sql/coltypes"
     "github.com/cockroachdb/cockroach/pkg/sql/lex"
     "github.com/cockroachdb/cockroach/pkg/sql/privilege"
 )
@@ -195,8 +196,8 @@ func (u *sqlSymUnion) colQualElem() ColumnQualification {
 func (u *sqlSymUnion) colQuals() []NamedColumnQualification {
     return u.val.([]NamedColumnQualification)
 }
-func (u *sqlSymUnion) colType() ColumnType {
-    if colType, ok := u.val.(ColumnType); ok {
+func (u *sqlSymUnion) colType() coltypes.ColumnType {
+    if colType, ok := u.val.(coltypes.ColumnType); ok {
         return colType
     }
     return nil
@@ -207,11 +208,11 @@ func (u *sqlSymUnion) tableRefCols() []ColumnID {
     }
     return nil
 }
-func (u *sqlSymUnion) castTargetType() CastTargetType {
-    return u.val.(CastTargetType)
+func (u *sqlSymUnion) castTargetType() coltypes.CastTargetType {
+    return u.val.(coltypes.CastTargetType)
 }
-func (u *sqlSymUnion) colTypes() []ColumnType {
-    return u.val.([]ColumnType)
+func (u *sqlSymUnion) colTypes() []coltypes.ColumnType {
+    return u.val.([]coltypes.ColumnType)
 }
 func (u *sqlSymUnion) expr() Expr {
     if expr, ok := u.val.(Expr); ok {
@@ -771,7 +772,7 @@ func (u *sqlSymUnion) scrubOption() ScrubOption {
 %type <Expr>  having_clause
 %type <Expr>  array_expr
 %type <Expr>  interval
-%type <[]ColumnType> type_list prep_type_clause
+%type <[]coltypes.ColumnType> type_list prep_type_clause
 %type <Exprs> array_expr_list
 %type <Expr>  row explicit_row implicit_row
 %type <Expr>  case_expr case_arg case_default
@@ -794,16 +795,16 @@ func (u *sqlSymUnion) scrubOption() ScrubOption {
 %type <str> explain_option_name
 %type <[]string> explain_option_list
 
-%type <ColumnType> typename simple_typename const_typename
-%type <ColumnType> numeric opt_numeric_modifiers
+%type <coltypes.ColumnType> typename simple_typename const_typename
+%type <coltypes.ColumnType> numeric opt_numeric_modifiers
 %type <*NumVal> opt_float
-%type <ColumnType> character const_character
-%type <ColumnType> character_with_length character_without_length
-%type <ColumnType> const_datetime const_interval
-%type <ColumnType> bit const_bit bit_with_length bit_without_length
-%type <ColumnType> character_base
-%type <CastTargetType> postgres_oid
-%type <CastTargetType> cast_target
+%type <coltypes.ColumnType> character const_character
+%type <coltypes.ColumnType> character_with_length character_without_length
+%type <coltypes.ColumnType> const_datetime const_interval
+%type <coltypes.ColumnType> bit const_bit bit_with_length bit_without_length
+%type <coltypes.ColumnType> character_base
+%type <coltypes.CastTargetType> postgres_oid
+%type <coltypes.CastTargetType> cast_target
 %type <str> extract_arg
 %type <empty> opt_varying
 
@@ -1821,7 +1822,7 @@ prep_type_clause:
   }
 | /* EMPTY */
   {
-    $$.val = []ColumnType(nil)
+    $$.val = []coltypes.ColumnType(nil)
   }
 
 // %Help: EXECUTE - execute a statement prepared previously
@@ -4713,7 +4714,7 @@ typename:
   {
     if bounds := $2.int32s(); bounds != nil {
       var err error
-      $$.val, err = arrayOf($1.colType(), bounds)
+      $$.val, err = coltypes.ArrayOf($1.colType(), bounds)
       if err != nil {
         sqllex.Error(err.Error())
         return 1
@@ -4727,7 +4728,7 @@ typename:
 | simple_typename ARRAY '[' ICONST ']' {
     /* SKIP DOC */
     var err error
-    $$.val, err = arrayOf($1.colType(), []int32{-1})
+    $$.val, err = coltypes.ArrayOf($1.colType(), []int32{-1})
     if err != nil {
       sqllex.Error(err.Error())
       return 1
@@ -4735,7 +4736,7 @@ typename:
   }
 | simple_typename ARRAY {
     var err error
-    $$.val, err = arrayOf($1.colType(), []int32{-1})
+    $$.val, err = coltypes.ArrayOf($1.colType(), []int32{-1})
     if err != nil {
       sqllex.Error(err.Error())
       return 1
@@ -4777,59 +4778,59 @@ simple_typename:
 | const_interval '(' ICONST ')' { return unimplemented(sqllex, "simple_type const_interval") }
 | BLOB
   {
-    $$.val = bytesColTypeBlob
+    $$.val = coltypes.BytesColTypeBlob
   }
 | BYTES
   {
-    $$.val = bytesColTypeBytes
+    $$.val = coltypes.BytesColTypeBytes
   }
 | BYTEA
   {
-    $$.val = bytesColTypeBytea
+    $$.val = coltypes.BytesColTypeBytea
   }
 | JSONB
   {
-    $$.val = jsonbColType
+    $$.val = coltypes.JsonbColType
   }
 | JSON
   {
-    $$.val = jsonColType
+    $$.val = coltypes.JsonColType
   }
 | TEXT
   {
-    $$.val = stringColTypeText
+    $$.val = coltypes.StringColTypeText
   }
 | NAME
   {
-    $$.val = nameColTypeName
+    $$.val = coltypes.NameColTypeName
   }
 | SERIAL
   {
-    $$.val = intColTypeSerial
+    $$.val = coltypes.IntColTypeSerial
   }
 | SMALLSERIAL
   {
-    $$.val = intColTypeSmallSerial
+    $$.val = coltypes.IntColTypeSmallSerial
   }
 | UUID
   {
-    $$.val = uuidColTypeUUID
+    $$.val = coltypes.UuidColTypeUUID
   }
 | INET
   {
-    $$.val = ipnetColTypeINet
+    $$.val = coltypes.IpnetColTypeINet
   }
 | BIGSERIAL
   {
-    $$.val = intColTypeBigSerial
+    $$.val = coltypes.IntColTypeBigSerial
   }
 | OID
   {
-    $$.val = oidColTypeOid
+    $$.val = coltypes.OidColTypeOid
   }
 | INT2VECTOR
   {
-    $$.val = int2vectorColType
+    $$.val = coltypes.Int2vectorColType
   }
 | IDENT
   {
@@ -4839,7 +4840,7 @@ simple_typename:
     // Eventually this clause will be used to parse user-defined types as well,
     // since their names can be quoted.
     if $1 == "char" {
-      $$.val = stringColTypeChar
+      $$.val = coltypes.StringColTypeChar
     } else {
       sqllex.Error("syntax error")
       return 1
@@ -4869,7 +4870,7 @@ opt_numeric_modifiers:
       sqllex.Error(err.Error())
       return 1
     }
-    $$.val = &DecimalColType{Prec: int(prec)}
+    $$.val = &coltypes.DecimalColType{Prec: int(prec)}
   }
 | '(' ICONST ',' ICONST ')'
   {
@@ -4883,7 +4884,7 @@ opt_numeric_modifiers:
       sqllex.Error(err.Error())
       return 1
     }
-    $$.val = &DecimalColType{Prec: int(prec), Scale: int(scale)}
+    $$.val = &coltypes.DecimalColType{Prec: int(prec), Scale: int(scale)}
   }
 | /* EMPTY */
   {
@@ -4894,47 +4895,47 @@ opt_numeric_modifiers:
 numeric:
   INT
   {
-    $$.val = intColTypeInt
+    $$.val = coltypes.IntColTypeInt
   }
 | INT2
     {
-      $$.val = intColTypeInt2
+      $$.val = coltypes.IntColTypeInt2
     }
 | INT4
   {
-    $$.val = intColTypeInt4
+    $$.val = coltypes.IntColTypeInt4
   }
 | INT8
   {
-    $$.val = intColTypeInt8
+    $$.val = coltypes.IntColTypeInt8
   }
 | INT64
   {
-    $$.val = intColTypeInt64
+    $$.val = coltypes.IntColTypeInt64
   }
 | INTEGER
   {
-    $$.val = intColTypeInteger
+    $$.val = coltypes.IntColTypeInteger
   }
 | SMALLINT
   {
-    $$.val = intColTypeSmallInt
+    $$.val = coltypes.IntColTypeSmallInt
   }
 | BIGINT
   {
-    $$.val = intColTypeBigInt
+    $$.val = coltypes.IntColTypeBigInt
   }
 | REAL
   {
-    $$.val = floatColTypeReal
+    $$.val = coltypes.FloatColTypeReal
   }
 | FLOAT4
     {
-      $$.val = floatColTypeFloat4
+      $$.val = coltypes.FloatColTypeFloat4
     }
 | FLOAT8
     {
-      $$.val = floatColTypeFloat8
+      $$.val = coltypes.FloatColTypeFloat8
     }
 | FLOAT opt_float
   {
@@ -4944,69 +4945,69 @@ numeric:
       sqllex.Error(err.Error())
       return 1
     }
-    $$.val = NewFloatColType(int(prec), len(nv.OrigString) > 0)
+    $$.val = coltypes.NewFloatColType(int(prec), len(nv.OrigString) > 0)
   }
 | DOUBLE PRECISION
   {
-    $$.val = floatColTypeDouble
+    $$.val = coltypes.FloatColTypeDouble
   }
 | DECIMAL opt_numeric_modifiers
   {
     $$.val = $2.colType()
     if $$.val == nil {
-      $$.val = decimalColTypeDecimal
+      $$.val = coltypes.DecimalColTypeDecimal
     } else {
-      $$.val.(*DecimalColType).Name = "DECIMAL"
+      $$.val.(*coltypes.DecimalColType).Name = "DECIMAL"
     }
   }
 | DEC opt_numeric_modifiers
   {
     $$.val = $2.colType()
     if $$.val == nil {
-      $$.val = decimalColTypeDec
+      $$.val = coltypes.DecimalColTypeDec
     } else {
-      $$.val.(*DecimalColType).Name = "DEC"
+      $$.val.(*coltypes.DecimalColType).Name = "DEC"
     }
   }
 | NUMERIC opt_numeric_modifiers
   {
     $$.val = $2.colType()
     if $$.val == nil {
-      $$.val = decimalColTypeNumeric
+      $$.val = coltypes.DecimalColTypeNumeric
     } else {
-      $$.val.(*DecimalColType).Name = "NUMERIC"
+      $$.val.(*coltypes.DecimalColType).Name = "NUMERIC"
     }
   }
 | BOOLEAN
   {
-    $$.val = boolColTypeBoolean
+    $$.val = coltypes.BoolColTypeBoolean
   }
 | BOOL
   {
-    $$.val = boolColTypeBool
+    $$.val = coltypes.BoolColTypeBool
   }
 
 // Postgres OID pseudo-types. See https://www.postgresql.org/docs/9.4/static/datatype-oid.html.
 postgres_oid:
   REGPROC
   {
-    $$.val = oidColTypeRegProc
+    $$.val = coltypes.OidColTypeRegProc
   }
 | REGPROCEDURE
   {
-    $$.val = oidColTypeRegProcedure
+    $$.val = coltypes.OidColTypeRegProcedure
   }
 | REGCLASS
   {
-    $$.val = oidColTypeRegClass
+    $$.val = coltypes.OidColTypeRegClass
   }
 | REGTYPE
   {
-    $$.val = oidColTypeRegType
+    $$.val = coltypes.OidColTypeRegType
   }
 | REGNAMESPACE
   {
-    $$.val = oidColTypeRegNamespace
+    $$.val = coltypes.OidColTypeRegNamespace
   }
 
 opt_float:
@@ -5039,7 +5040,7 @@ bit_with_length:
       sqllex.Error(err.Error())
       return 1
     }
-    bit, err := newIntBitType(int(n))
+    bit, err := coltypes.NewIntBitType(int(n))
     if err != nil {
       sqllex.Error(err.Error())
       return 1
@@ -5050,7 +5051,7 @@ bit_with_length:
 bit_without_length:
   BIT opt_varying
   {
-    $$.val = intColTypeBit
+    $$.val = coltypes.IntColTypeBit
   }
 
 // SQL character data types
@@ -5073,8 +5074,8 @@ character_with_length:
     }
     $$.val = $1.colType()
     if n != 0 {
-      strType := &StringColType{N: int(n)}
-      strType.Name = $$.val.(*StringColType).Name
+      strType := &coltypes.StringColType{N: int(n)}
+      strType.Name = $$.val.(*coltypes.StringColType).Name
       $$.val = strType
     }
   }
@@ -5088,19 +5089,19 @@ character_without_length:
 character_base:
   CHARACTER opt_varying
   {
-    $$.val = stringColTypeChar
+    $$.val = coltypes.StringColTypeChar
   }
 | CHAR opt_varying
   {
-    $$.val = stringColTypeChar
+    $$.val = coltypes.StringColTypeChar
   }
 | VARCHAR
   {
-    $$.val = stringColTypeVarChar
+    $$.val = coltypes.StringColTypeVarChar
   }
 | STRING
   {
-    $$.val = stringColTypeString
+    $$.val = coltypes.StringColTypeString
   }
 
 opt_varying:
@@ -5111,28 +5112,28 @@ opt_varying:
 const_datetime:
   DATE
   {
-    $$.val = dateColTypeDate
+    $$.val = coltypes.DateColTypeDate
   }
 | TIMESTAMP
   {
-    $$.val = timestampColTypeTimestamp
+    $$.val = coltypes.TimestampColTypeTimestamp
   }
 | TIMESTAMP WITHOUT TIME ZONE
   {
-    $$.val = timestampColTypeTimestamp
+    $$.val = coltypes.TimestampColTypeTimestamp
   }
 | TIMESTAMPTZ
   {
-    $$.val = timestampTzColTypeTimestampWithTZ
+    $$.val = coltypes.TimestampTzColTypeTimestampWithTZ
   }
 | TIMESTAMP WITH_LA TIME ZONE
   {
-    $$.val = timestampTzColTypeTimestampWithTZ
+    $$.val = coltypes.TimestampTzColTypeTimestampWithTZ
   }
 
 const_interval:
   INTERVAL {
-    $$.val = intervalColTypeInterval
+    $$.val = coltypes.IntervalColTypeInterval
   }
 
 opt_interval:
@@ -6120,7 +6121,7 @@ expr_list:
 type_list:
   typename
   {
-    $$.val = []ColumnType{$1.colType()}
+    $$.val = []coltypes.ColumnType{$1.colType()}
   }
 | type_list ',' typename
   {

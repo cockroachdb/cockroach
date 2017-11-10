@@ -23,6 +23,7 @@ import (
 
 	"golang.org/x/net/context"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 )
@@ -487,16 +488,16 @@ func TestTypeCheckSameTypedExprsError(t *testing.T) {
 	}
 }
 
-func cast(p *Placeholder, typ ColumnType) Expr {
+func cast(p *Placeholder, typ coltypes.ColumnType) Expr {
 	return &CastExpr{Expr: p, Type: typ}
 }
-func annot(p *Placeholder, typ ColumnType) Expr {
+func annot(p *Placeholder, typ coltypes.ColumnType) Expr {
 	return &AnnotateTypeExpr{Expr: p, Type: typ}
 }
 
 func TestProcessPlaceholderAnnotations(t *testing.T) {
-	intType := intColTypeInt
-	boolType := boolColTypeBoolean
+	intType := coltypes.IntColTypeInt
+	boolType := coltypes.BoolColTypeBoolean
 
 	testData := []struct {
 		initArgs  PlaceholderTypes
@@ -667,8 +668,8 @@ func TestProcessPlaceholderAnnotations(t *testing.T) {
 }
 
 func TestProcessPlaceholderAnnotationsError(t *testing.T) {
-	intType := intColTypeInt
-	floatType := floatColTypeFloat
+	intType := coltypes.IntColTypeInt
+	floatType := coltypes.FloatColTypeFloat
 
 	testData := []struct {
 		initArgs  PlaceholderTypes

@@ -18,6 +18,7 @@ import (
 	"bytes"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
@@ -222,7 +223,7 @@ var DistAggregationTable = map[distsqlrun.AggregatorSpec_Func]DistAggregationInf
 			if sum.ResolvedType().Equivalent(types.Float) {
 				expr.Right = &parser.CastExpr{
 					Expr: count,
-					Type: parser.NewFloatColType(0 /* prec */, false /* precSpecified */),
+					Type: coltypes.NewFloatColType(0 /* prec */, false /* precSpecified */),
 				}
 			}
 			return expr.TypeCheck(nil, types.Any)
