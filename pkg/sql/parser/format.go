@@ -212,7 +212,7 @@ func FormatNode(buf *bytes.Buffer, f FmtFlags, n NodeFormatter) {
 			if err != nil {
 				panic(err)
 			}
-			FormatNode(buf, f, colType)
+			colType.Format(buf, f.encodeFlags)
 		}
 	}
 }
