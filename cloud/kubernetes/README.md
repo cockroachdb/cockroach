@@ -73,12 +73,7 @@ which will lead to a lot of trouble.
 
 ### Secure mode
 
-Secure mode currently works by requesting node/client certificates from the kubernetes
-controller at pod initialization time.
-
-This means that rescheduled pods will go through the CSR process, requiring manual involvement.
-A future improvement for node/client certificates will use kubernetes secrets, simplifying
-deployment and maintenance.
+Secure mode currently works by requesting node/client certificates from the kubernetes controller at pod initialization time.
 
 ## Creating your kubernetes cluster
 
