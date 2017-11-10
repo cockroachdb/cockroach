@@ -170,7 +170,7 @@ func TestSamplerSketch(t *testing.T) {
 
 	spec := &SamplerSpec{
 		SampleSize: uint32(1),
-		Sketches: []SamplerSpec_SketchInfo{
+		Sketches: []SamplerSpec_SketchSpec{
 			{
 				SketchType: SketchType_HLL_PLUS_PLUS_V1,
 				Columns:    []uint32{0},
