@@ -1,6 +1,6 @@
 // Copyright ©2012 The bíogo Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style
-// license that can be found in the LICENSE file.
+// license that can be found in licenses/BSD-biogo.txt.
 
 // Package interval provides two implementations for an interval tree. One is
 // based on an augmented Left-Leaning Red Black tree. The other is based on an
