@@ -201,6 +201,10 @@ SQLPARSER_TARGETS = \
 	$(PKG_ROOT)/sql/lex/keywords.go \
 	$(PKG_ROOT)/sql/lex/reserved_keywords.go
 
+GO_PROTOS_TARGET := $(LOCAL_BIN)/.go_protobuf_sources
+GW_PROTOS_TARGET := $(LOCAL_BIN)/.gw_protobuf_sources
+CPP_PROTOS_TARGET := $(LOCAL_BIN)/.cpp_protobuf_sources
+
 .DEFAULT_GOAL := all
 all: $(COCKROACH)
 
@@ -214,7 +218,8 @@ $(COCKROACH) build buildoss: BUILDMODE = build -i -o $(COCKROACH)
 BUILDINFO = .buildinfo/tag .buildinfo/rev .buildinfo/basebranch
 
 # The build.utcTime format must remain in sync with TimeFormat in pkg/build/info.go.
-$(COCKROACH) build buildoss go-install gotestdashi generate lint lintshort: $(CGO_FLAGS_FILES) $(BOOTSTRAP_TARGET) $(GOBINDATA_TARGET) $(SQLPARSER_TARGETS) $(BUILDINFO)
+$(COCKROACH) build buildoss go-install gotestdashi generate lint lintshort: \
+	$(CGO_FLAGS_FILES) $(BOOTSTRAP_TARGET) $(GOBINDATA_TARGET) $(SQLPARSER_TARGETS) $(GO_PROTOS_TARGET) $(GW_PROTOS_TARGET) $(BUILDINFO)
 $(COCKROACH) build buildoss go-install gotestdashi generate lint lintshort: override LINKFLAGS += \
 	-X "github.com/cockroachdb/cockroach/pkg/build.tag=$(shell cat .buildinfo/tag)" \
 	-X "github.com/cockroachdb/cockroach/pkg/build.utcTime=$(shell date -u '+%Y/%m/%d %H:%M:%S')" \
@@ -352,10 +357,6 @@ lintshort: override TAGS += lint
 lintshort: ## Run a fast subset of the style checkers and linters.
 	$(XGO) test ./build -v $(GOFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' -short -run 'TestStyle/$(TESTS)'
 
-.PHONY: protobuf
-protobuf: ## Regenerate generated code for protobuf definitions.
-	$(MAKE) -f build/protobuf.mk
-
 # pre-push locally runs most of the checks CI will run. Notably, it doesn't run
 # the acceptance tests.
 .PHONY: pre-push
@@ -415,6 +416,82 @@ ifneq ($(GIT_DIR),)
 .buildinfo/basebranch: .ALWAYS_REBUILD
 endif
 
+CPP_PROTO_ROOT := $(LIBROACH_SRC_DIR)/protos
+
+GOGO_PROTOBUF_PATH := $(REPO_ROOT)/vendor/github.com/gogo/protobuf
+PROTOBUF_PATH  := $(GOGO_PROTOBUF_PATH)/protobuf
+
+PROTOC_PLUGIN   := $(LOCAL_BIN)/protoc-gen-gogoroach
+GOGOPROTO_PROTO := $(GOGO_PROTOBUF_PATH)/gogoproto/gogo.proto
+
+COREOS_PATH := $(REPO_ROOT)/vendor/github.com/coreos
+COREOS_RAFT_PROTOS := $(addprefix $(COREOS_PATH)/etcd/raft/, $(sort $(shell git -C $(COREOS_PATH)/etcd/raft ls-files --exclude-standard --cached --others -- '*.proto')))
+
+GRPC_GATEWAY_GOOGLEAPIS_PACKAGE := github.com/grpc-ecosystem/grpc-gateway/third_party/googleapis
+GRPC_GATEWAY_GOOGLEAPIS_PATH := $(REPO_ROOT)/vendor/$(GRPC_GATEWAY_GOOGLEAPIS_PACKAGE)
+
+# Map protobuf includes to the Go package containing the generated Go code.
+PROTO_MAPPINGS :=
+PROTO_MAPPINGS := $(PROTO_MAPPINGS)Mgoogle/api/annotations.proto=$(GRPC_GATEWAY_GOOGLEAPIS_PACKAGE)/google/api,
+PROTO_MAPPINGS := $(PROTO_MAPPINGS)Mgoogle/protobuf/timestamp.proto=github.com/gogo/protobuf/types,
+
+GW_SERVER_PROTOS := $(PKG_ROOT)/server/serverpb/admin.proto $(PKG_ROOT)/server/serverpb/status.proto $(PKG_ROOT)/server/serverpb/authentication.proto
+GW_TS_PROTOS := $(PKG_ROOT)/ts/tspb/timeseries.proto
+
+GW_PROTOS  := $(GW_SERVER_PROTOS) $(GW_TS_PROTOS)
+GW_SOURCES := $(GW_PROTOS:%.proto=%.pb.gw.go)
+
+GO_PROTOS := $(addprefix $(REPO_ROOT)/, $(sort $(shell git -C $(REPO_ROOT) ls-files --exclude-standard --cached --others -- '*.proto')))
+GO_SOURCES := $(GO_PROTOS:%.proto=%.pb.go)
+
+PBJS := $(NODE_RUN) $(UI_ROOT)/node_modules/.bin/pbjs
+PBTS := $(NODE_RUN) $(UI_ROOT)/node_modules/.bin/pbts
+
+UI_JS := $(UI_ROOT)/src/js/protos.js
+UI_TS := $(UI_ROOT)/src/js/protos.d.ts
+UI_PROTOS := $(UI_JS) $(UI_TS)
+
+CPP_PROTOS := $(filter %/roachpb/metadata.proto %/roachpb/data.proto %/roachpb/internal.proto %/engine/enginepb/mvcc.proto %/engine/enginepb/mvcc3.proto %/engine/enginepb/rocksdb.proto %/hlc/legacy_timestamp.proto %/hlc/timestamp.proto %/unresolved_addr.proto,$(GO_PROTOS))
+CPP_HEADERS := $(subst $(PKG_ROOT),$(CPP_PROTO_ROOT),$(CPP_PROTOS:%.proto=%.pb.h))
+CPP_SOURCES := $(subst $(PKG_ROOT),$(CPP_PROTO_ROOT),$(CPP_PROTOS:%.proto=%.pb.cc))
+
+UI_PROTOS := $(UI_JS) $(UI_TS)
+
+$(GO_PROTOS_TARGET): $(PROTOC) $(PROTOC_PLUGIN) $(GO_PROTOS) $(GOGOPROTO_PROTO)
+	(cd $(REPO_ROOT) && git ls-files --exclude-standard --cached --others -- '*.pb.go' | xargs rm -f)
+	for dir in $(sort $(dir $(GO_PROTOS))); do \
+	  $(PROTOC) -I$(PKG_ROOT):$(GOGO_PROTOBUF_PATH):$(PROTOBUF_PATH):$(COREOS_PATH):$(GRPC_GATEWAY_GOOGLEAPIS_PATH) --plugin=$(PROTOC_PLUGIN) --gogoroach_out=$(PROTO_MAPPINGS),plugins=grpc,import_prefix=github.com/cockroachdb/cockroach/pkg/:$(PKG_ROOT) $$dir/*.proto; \
+	done
+	$(SED_INPLACE) '/import _/d' $(GO_SOURCES)
+	$(SED_INPLACE) -E 's!import (fmt|math) "github.com/cockroachdb/cockroach/pkg/(fmt|math)"! !g' $(GO_SOURCES)
+	$(SED_INPLACE) -E 's!cockroachdb/cockroach/pkg/(etcd)!coreos/\1!g' $(GO_SOURCES)
+	$(SED_INPLACE) -E 's!github.com/cockroachdb/cockroach/pkg/(bytes|encoding/binary|errors|fmt|io|math|github\.com|(google\.)?golang\.org)!\1!g' $(GO_SOURCES)
+	gofmt -s -w $(GO_SOURCES)
+	touch $@
+
+$(GW_PROTOS_TARGET): $(PROTOC) $(GW_SERVER_PROTOS) $(GW_TS_PROTOS) $(GO_PROTOS) $(GOGOPROTO_PROTO)
+	(cd $(REPO_ROOT) && git ls-files --exclude-standard --cached --others -- '*.pb.gw.go' | xargs rm -f)
+	$(PROTOC) -I$(PKG_ROOT):$(GOGO_PROTOBUF_PATH):$(PROTOBUF_PATH):$(COREOS_PATH):$(GRPC_GATEWAY_GOOGLEAPIS_PATH) --grpc-gateway_out=logtostderr=true,request_context=true:$(PKG_ROOT) $(GW_SERVER_PROTOS)
+	$(PROTOC) -I$(PKG_ROOT):$(GOGO_PROTOBUF_PATH):$(PROTOBUF_PATH):$(COREOS_PATH):$(GRPC_GATEWAY_GOOGLEAPIS_PATH) --grpc-gateway_out=logtostderr=true,request_context=true:$(PKG_ROOT) $(GW_TS_PROTOS)
+	touch $@
+
+$(CPP_PROTOS_TARGET): $(PROTOC) $(CPP_PROTOS)
+	(cd $(REPO_ROOT) && git ls-files --exclude-standard --cached --others -- '*.pb.h' '*.pb.cc' | xargs rm -f)
+	mkdir -p $(CPP_PROTO_ROOT)
+	$(PROTOC) -I$(PKG_ROOT):$(GOGO_PROTOBUF_PATH):$(PROTOBUF_PATH) --cpp_out=lite:$(CPP_PROTO_ROOT) $(CPP_PROTOS)
+	$(SED_INPLACE) -E '/gogoproto/d' $(CPP_HEADERS) $(CPP_SOURCES)
+	touch $@
+
+$(UI_JS): $(GO_PROTOS) $(COREOS_RAFT_PROTOS) $(YARN_INSTALLED_TARGET)
+	# Add comment recognized by reviewable.
+	echo '// GENERATED FILE DO NOT EDIT' > $@
+	$(PBJS) -t static-module -w es6 --strict-long --keep-case --path $(PKG_ROOT) --path $(GOGO_PROTOBUF_PATH) --path $(COREOS_PATH) --path $(GRPC_GATEWAY_GOOGLEAPIS_PATH) $(GW_PROTOS) >> $@
+
+$(UI_TS): $(UI_JS) $(YARN_INSTALLED_TARGET)
+	# Add comment recognized by reviewable.
+	echo '// GENERATED FILE DO NOT EDIT' > $@
+	$(PBTS) $(UI_JS) >> $@
+
 STYLINT            := ./node_modules/.bin/stylint
 TSLINT             := ./node_modules/.bin/tslint
 KARMA              := ./node_modules/.bin/karma
@@ -426,7 +503,7 @@ WEBPACK_DASHBOARD  := ./opt/node_modules/.bin/webpack-dashboard
 ui-generate: $(GOBINDATA_TARGET)
 
 .PHONY: ui-lint
-ui-lint: | protobuf
+ui-lint: | $(UI_PROTOS)
 	$(NODE_RUN) -C $(UI_ROOT) $(STYLINT) -c .stylintrc styl
 	$(NODE_RUN) -C $(UI_ROOT) $(TSLINT) -c tslint.json -p tsconfig.json --type-check
 	@# TODO(benesch): Invoke tslint just once when palantir/tslint#2827 is fixed.
@@ -454,7 +531,7 @@ ui-test-watch: $(UI_DLLS)
 # were both out-of-date.
 #
 # See: https://stackoverflow.com/a/3077254/1122351
-$(UI_ROOT)/dist/%.dll.js $(UI_ROOT)/%-manifest.json: $(UI_ROOT)/webpack.%.js | protobuf
+$(UI_ROOT)/dist/%.dll.js $(UI_ROOT)/%-manifest.json: $(UI_ROOT)/webpack.%.js | $(UI_PROTOS)
 	$(NODE_RUN) -C $(UI_ROOT) $(WEBPACK) -p --config webpack.$*.js
 
 $(GOBINDATA_TARGET): $(UI_ROOT)/webpack.app.js $(UI_DLLS) $(shell find $(UI_ROOT)/src $(UI_ROOT)/styl)
@@ -564,7 +641,7 @@ $(SQLPARSER_ROOT)/help_messages.go: $(SQLPARSER_ROOT)/sql.y $(SQLPARSER_ROOT)/he
 .PHONY: clean
 clean: ## Remove build artifacts.
 clean: clean-c-deps
-	$(MAKE) -f build/protobuf.mk clean
+	rm -rf $(GO_PROTOS_TARGET) $(GW_PROTOS_TARGET) $(CPP_PROTOS_TARGET)
 	$(GO) clean $(GOFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' -i github.com/cockroachdb/...
 	$(FIND_RELEVANT) -type f \( -name 'zcgo_flags*.go' -o -name '*.test' \) -exec rm {} +
 	for f in cockroach*; do if [ -f "$$f" ]; then rm "$$f"; fi; done
@@ -574,7 +651,7 @@ clean: clean-c-deps
 maintainer-clean: ## Like clean, but also remove some auto-generated source code.
 maintainer-clean: clean
 	rm -rf $(UI_ROOT)/dist $(UI_ROOT)/node_modules $(UI_DLLS) $(GOBINDATA_TARGET) $(YARN_INSTALLED_TARGET)
-	rm -f $(SQLPARSER_TARGETS)
+	rm -f $(SQLPARSER_TARGETS) $(UI_PROTOS)
 	rm -rf $(SQLPARSER_ROOT)/gen
 
 .PHONY: unsafe-clean
