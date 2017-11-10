@@ -124,10 +124,6 @@ $(foreach v,$(filter-out $(strip $(VALID_VARS)),$(.VARIABLES)),\
 .ALWAYS_REBUILD:
 .PHONY: .ALWAYS_REBUILD
 
-.PHONY: ui
-ui: libprotobuf
-	$(MAKE) -C $(UI_ROOT) generate
-
 .PHONY: sqlparser
 sqlparser:
 	$(MAKE) -C $(SQLPARSER_ROOT) generate
@@ -456,13 +452,12 @@ libsnappy: $(SNAPPY_DIR)/Makefile
 librocksdb: $(ROCKSDB_DIR)/Makefile
 	@$(MAKE) --no-print-directory -C $(ROCKSDB_DIR) rocksdb
 
-# libroach depends on ui because generating the UI indirectly updates the
-# timestamps on the generated C++ protobufs that libroach depends on.
+# libroach should depend on the generated C++ protobufrs.
 #
-# TODO(benesch): merge the protobuf, UI, and top-level Makefile so this
-# dependency can be clearly expressed.
+# TODO(benesch): merge the protobuf and top-level Makefile so this dependency
+# can be clearly expressed.
 .PHONY: libroach
-libroach: $(LIBROACH_DIR)/Makefile | ui
+libroach: $(LIBROACH_DIR)/Makefile
 	@$(MAKE) --no-print-directory -C $(LIBROACH_DIR) roach
 
 .PHONY: libroachccl
