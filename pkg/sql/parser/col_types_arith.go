@@ -17,11 +17,8 @@ package parser
 import (
 	"bytes"
 	"fmt"
-	"math"
 
-	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 )
 
 // BoolColType represents a BOOLEAN type.
@@ -89,44 +86,4 @@ func (node *DecimalColType) Format(buf *bytes.Buffer, f lex.EncodeFlags) {
 		}
 		buf.WriteByte(')')
 	}
-}
-
-var errScaleOutOfRange = pgerror.NewError(pgerror.CodeNumericValueOutOfRangeError, "scale out of range")
-
-// LimitDecimalWidth limits d's precision (total number of digits) and scale
-// (number of digits after the decimal point).
-func LimitDecimalWidth(d *apd.Decimal, precision, scale int) error {
-	if d.Form != apd.Finite || precision <= 0 {
-		return nil
-	}
-	// Use +1 here because it is inverted later.
-	if scale < math.MinInt32+1 || scale > math.MaxInt32 {
-		return errScaleOutOfRange
-	}
-	if scale > precision {
-		return pgerror.NewErrorf(pgerror.CodeInvalidParameterValueError, "scale (%d) must be between 0 and precision (%d)", scale, precision)
-	}
-
-	// http://www.postgresql.org/docs/9.5/static/datatype-numeric.html
-	// "If the scale of a value to be stored is greater than
-	// the declared scale of the column, the system will round the
-	// value to the specified number of fractional digits. Then,
-	// if the number of digits to the left of the decimal point
-	// exceeds the declared precision minus the declared scale, an
-	// error is raised."
-
-	c := DecimalCtx.WithPrecision(uint32(precision))
-	c.Traps = apd.InvalidOperation
-
-	if _, err := c.Quantize(d, d, -int32(scale)); err != nil {
-		var lt string
-		switch v := precision - scale; v {
-		case 0:
-			lt = "1"
-		default:
-			lt = fmt.Sprintf("10^%d", v)
-		}
-		return pgerror.NewErrorf(pgerror.CodeNumericValueOutOfRangeError, "value with precision %d, scale %d must round to an absolute value less than %s", precision, scale, lt)
-	}
-	return nil
 }
