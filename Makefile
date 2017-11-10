@@ -201,8 +201,10 @@ $(COCKROACH) build go-install gotestdashi generate lint lintshort: $(C_LIBS_CCL)
 
 $(COCKROACH) build buildoss: BUILDMODE = build -i -o $(COCKROACH)
 
+BUILDINFO = .buildinfo/tag .buildinfo/rev .buildinfo/basebranch
+
 # The build.utcTime format must remain in sync with TimeFormat in pkg/build/info.go.
-$(COCKROACH) build buildoss go-install gotestdashi generate lint lintshort: $(CGO_FLAGS_FILES) $(BOOTSTRAP_TARGET) ui .buildinfo/tag .buildinfo/rev .buildinfo/basebranch
+$(COCKROACH) build buildoss go-install gotestdashi generate lint lintshort: $(CGO_FLAGS_FILES) $(BOOTSTRAP_TARGET) ui sqlparser $(BUILDINFO)
 $(COCKROACH) build buildoss go-install gotestdashi generate lint lintshort: override LINKFLAGS += \
 	-X "github.com/cockroachdb/cockroach/pkg/build.tag=$(shell cat .buildinfo/tag)" \
 	-X "github.com/cockroachdb/cockroach/pkg/build.utcTime=$(shell date -u '+%Y/%m/%d %H:%M:%S')" \
@@ -353,6 +355,7 @@ clean: clean-c-deps
 maintainer-clean: ## Like clean, but also remove some auto-generated source code.
 maintainer-clean: clean
 	$(MAKE) -C $(UI_ROOT) maintainer-clean
+	$(MAKE) -C $(SQLPARSER_ROOT) maintainer-clean
 
 .PHONY: unsafe-clean
 unsafe-clean: ## Like maintainer-clean, but also remove ALL untracked/ignored files.
@@ -390,6 +393,8 @@ $(ARCHIVE).tmp: ARCHIVE_BASE = cockroach-$(shell cat .buildinfo/tag)
 $(ARCHIVE).tmp: .buildinfo/tag .buildinfo/rev .buildinfo/basebranch
 	scripts/ls-files.sh | $(TAR) -cf $@ -T - $(TAR_XFORM_FLAG),^,$(ARCHIVE_BASE)/src/github.com/cockroachdb/cockroach/, $^
 	$(TAR) -rf $@ pkg/ui/embedded.go
+	$(TAR) -rf $@ pkg/sql/lex/keywords.go pkg/sql/lex/reserved_keywords.go pkg/sql/lex/tokens.go
+	$(TAR) -rf $@ pkg/sql/parser/sql.go pkg/sql/parser/help_messages.go pkg/sql/parser/helpmap_test.go
 	(cd build/archive/contents && $(TAR) -rf ../../../$@ $(TAR_XFORM_FLAG),^,$(ARCHIVE_BASE)/, *)
 
 .buildinfo:
