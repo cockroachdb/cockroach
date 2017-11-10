@@ -581,24 +581,21 @@ func (tc *treeImpl) GlobalLowWater() hlc.Timestamp {
 }
 
 // GetMaxRead implements the Cache interface.
-func (tc *treeImpl) GetMaxRead(start, end roachpb.Key) (hlc.Timestamp, uuid.UUID, bool) {
+func (tc *treeImpl) GetMaxRead(start, end roachpb.Key) (hlc.Timestamp, uuid.UUID) {
 	return tc.getMax(start, end, true)
 }
 
 // GetMaxWrite implements the Cache interface.
-func (tc *treeImpl) GetMaxWrite(start, end roachpb.Key) (hlc.Timestamp, uuid.UUID, bool) {
+func (tc *treeImpl) GetMaxWrite(start, end roachpb.Key) (hlc.Timestamp, uuid.UUID) {
 	return tc.getMax(start, end, false)
 }
 
-func (tc *treeImpl) getMax(
-	start, end roachpb.Key, readTSCache bool,
-) (hlc.Timestamp, uuid.UUID, bool) {
+func (tc *treeImpl) getMax(start, end roachpb.Key, readTSCache bool) (hlc.Timestamp, uuid.UUID) {
 	if len(end) == 0 {
 		end = start.Next()
 	}
-	var ok bool
 	maxTS := tc.lowWater
-	var maxTxnID uuid.UUID
+	maxTxnID := noTxnID
 	cache := tc.wCache
 	if readTSCache {
 		cache = tc.rCache
@@ -606,17 +603,13 @@ func (tc *treeImpl) getMax(
 	for _, o := range cache.GetOverlaps(start, end) {
 		ce := o.Value.(*cacheValue)
 		if maxTS.Less(ce.ts) {
-			ok = true
 			maxTS = ce.ts
 			maxTxnID = ce.txnID
 		} else if maxTS == ce.ts && maxTxnID != ce.txnID {
 			maxTxnID = noTxnID
 		}
 	}
-	if maxTxnID == noTxnID {
-		ok = false
-	}
-	return maxTS, maxTxnID, ok
+	return maxTS, maxTxnID
 }
 
 // shouldEvict returns true if the cache entry's timestamp is no
