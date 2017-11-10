@@ -61,16 +61,6 @@ cases on a private Kubernetes cluster may want to consider a
 deployment until StatefulSets support node-local storage
 ([open issue here](https://github.com/kubernetes/kubernetes/issues/7562)).
 
-### Recovery after persistent storage failure
-
-A persistent storage failure (e.g. losing the hard drive) is gracefully handled
-by CockroachDB as long as enough replicas survive (two out of three by
-default). Due to the bootstrapping in this deployment, a storage failure of the
-first node is special in that the administrator must manually prepopulate the
-"new" storage medium by running an instance of CockroachDB with the `--join`
-parameter. If this is not done, the first node will bootstrap a new cluster,
-which will lead to a lot of trouble.
-
 ### Secure mode
 
 Secure mode currently works by requesting node/client certificates from the kubernetes
@@ -115,15 +105,23 @@ Once your kubernetes cluster is up and running, you can launch your cockroach cl
 
 ### Insecure mode
 
-Run: `kubectl create -f cockroachdb-statefulset.yaml`
+To create the cluster, run:
+```shell
+kubectl create -f cockroachdb-statefulset.yaml
+```
+
+Then, to initialize the cluster, run:
+```shell
+kubectl run cockroachdb -it --image=cockroachdb/cockroach --rm --restart=Never -- init --insecure --host=cockroachdb-0.cockroachdb
+```
 
 ### Secure mode
 
 **REQUIRED**: the kubernetes cluster must run with the certificate controller enabled.
 This is done by passing the `--cluster-signing-cert-file` and `--cluster-signing-key-file` flags.
 On minikube, you can tell it to use the minikube-generated CA by specifying:
-```
-$ minikube start --extra-config=controller-manager.ClusterSigningCertFile="/var/lib/localkube/ca.crt" --extra-config=controller-manager.ClusterSigningKeyFile="/var/lib/localkube/ca.key"
+```shell
+minikube start --extra-config=controller-manager.ClusterSigningCertFile="/var/lib/localkube/ca.crt" --extra-config=controller-manager.ClusterSigningKeyFile="/var/lib/localkube/ca.key"
 ```
 
 Run: `kubectl create -f cockroachdb-statefulset-secure.yaml`
@@ -131,7 +129,6 @@ Run: `kubectl create -f cockroachdb-statefulset-secure.yaml`
 Each new node will request a certificate from the kubernetes CA during its initialization phase.
 Statefulsets create pods one at a time, waiting for each previous pod to be initialized.
 This means that you must approve podN's certificate for podN+1 to be created.
-
 
 If a pod is rescheduled, it will reuse the previously-generated certificate.
 
@@ -169,6 +166,28 @@ certificatesigningrequest "default.node.cockroachdb-0" approved
 # Otherwise, deny the CSR:
 $ kubectl certificate deny default.node.cockroachdb-0
 certificatesigningrequest "default.node.cockroachdb-0" denied
+```
+
+Once all the pods have started, to initialize the cluster run:
+```shell
+kubectl create -f cluster_init_secure.yaml
+```
+
+This will create a CSR called "default.client.root", which you can approve by
+running:
+```shell
+kubectl certificate approve default.client.root
+```
+
+To confirm that it's done, run:
+```shell
+kubectl get job cluster-init-secure
+```
+
+The output should look like:
+```
+NAME                  DESIRED   SUCCESSFUL   AGE
+cluster-init-secure   1         1            5m
 ```
 
 ## Accessing the database
