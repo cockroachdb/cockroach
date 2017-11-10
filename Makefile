@@ -553,7 +553,9 @@ ui-watch: PORT := 3000
 ui-watch: $(UI_DLLS) $(UI_ROOT)/yarn.opt.installed
 	cd $(UI_ROOT) && $(WEBPACK_DASHBOARD) -- $(WEBPACK_DEV_SERVER) --config webpack.app.js --port $(PORT)
 
-.INTERMEDIATE: $(SQLPARSER_ROOT)/gen/sql.go
+# TODO(benesch): Marking this target intermediate tickles a bug in GNU Make 3.81
+# (the version shipped by macOS) that causes infinite recursion. Figure out why.
+# .INTERMEDIATE: $(SQLPARSER_ROOT)/gen/sql.go
 $(SQLPARSER_ROOT)/gen/sql.go: $(SQLPARSER_ROOT)/gen/sql.y $(BOOTSTRAP_TARGET)
 	set -euo pipefail; \
 	  ret=$$(cd $(SQLPARSER_ROOT)/gen && goyacc -p sql -o sql.go sql.y); \
