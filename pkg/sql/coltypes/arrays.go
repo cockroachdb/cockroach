@@ -20,43 +20,43 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 )
 
-// ArrayColType represents an ARRAY column type.
-type ArrayColType struct {
+// TArray represents an ARRAY column type.
+type TArray struct {
 	Name string
 	// ParamTyp is the type of the elements in this array.
-	ParamType ColumnType
+	ParamType T
 	Bounds    []int32
 }
 
 // Format implements the ColTypeFormatter interface.
-func (node *ArrayColType) Format(buf *bytes.Buffer, f lex.EncodeFlags) {
+func (node *TArray) Format(buf *bytes.Buffer, f lex.EncodeFlags) {
 	buf.WriteString(node.Name)
-	if collation, ok := node.ParamType.(*CollatedStringColType); ok {
+	if collation, ok := node.ParamType.(*TCollatedString); ok {
 		buf.WriteString(" COLLATE ")
 		lex.EncodeUnrestrictedSQLIdent(buf, collation.Locale, f)
 	}
 }
 
-// canBeInArrayColType returns true if the given ColumnType is a valid
+// canBeInArrayColType returns true if the given T is a valid
 // element type for an array column type.
-func canBeInArrayColType(t ColumnType) bool {
+func canBeInArrayColType(t T) bool {
 	switch t.(type) {
-	case *JSONColType:
+	case *TJSON:
 		return false
 	default:
 		return true
 	}
 }
 
-// VectorColType is the base for VECTOR column types, which are Postgres's
+// TVector is the base for VECTOR column types, which are Postgres's
 // older, limited version of ARRAYs. These are not meant to be persisted,
 // because ARRAYs are a strict superset.
-type VectorColType struct {
+type TVector struct {
 	Name      string
-	ParamType ColumnType
+	ParamType T
 }
 
 // Format implements the ColTypeFormatter interface.
-func (node *VectorColType) Format(buf *bytes.Buffer, _ lex.EncodeFlags) {
+func (node *TVector) Format(buf *bytes.Buffer, _ lex.EncodeFlags) {
 	buf.WriteString(node.Name)
 }

@@ -26,46 +26,46 @@ import (
 // types form a group, consider splitting that group into its own
 // file.
 
-// UUIDColType represents a UUID type.
-type UUIDColType struct{}
+// TUUID represents a UUID type.
+type TUUID struct{}
 
 // Format implements the ColTypeFormatter interface.
-func (node *UUIDColType) Format(buf *bytes.Buffer, f lex.EncodeFlags) {
+func (node *TUUID) Format(buf *bytes.Buffer, f lex.EncodeFlags) {
 	buf.WriteString("UUID")
 }
 
-// IPAddrColType represents an INET or CIDR type.
-type IPAddrColType struct {
+// TIPAddr represents an INET or CIDR type.
+type TIPAddr struct {
 	Name string
 }
 
 // Format implements the ColTypeFormatter interface.
-func (node *IPAddrColType) Format(buf *bytes.Buffer, f lex.EncodeFlags) {
+func (node *TIPAddr) Format(buf *bytes.Buffer, f lex.EncodeFlags) {
 	buf.WriteString(node.Name)
 }
 
-// JSONColType represents the JSON column type.
-type JSONColType struct {
+// TJSON represents the JSON column type.
+type TJSON struct {
 	Name string
 }
 
 // Format implements the ColTypeFormatter interface.
-func (node *JSONColType) Format(buf *bytes.Buffer, _ lex.EncodeFlags) {
+func (node *TJSON) Format(buf *bytes.Buffer, _ lex.EncodeFlags) {
 	buf.WriteString(node.Name)
 }
 
-// OidColType represents an OID type, which is the type of system object
+// TOid represents an OID type, which is the type of system object
 // identifiers. There are several different OID types: the raw OID type, which
 // can be any integer, and the reg* types, each of which corresponds to the
 // particular system table that contains the system object identified by the
 // OID itself.
 //
 // See https://www.postgresql.org/docs/9.6/static/datatype-oid.html.
-type OidColType struct {
+type TOid struct {
 	Name string
 }
 
 // Format implements the ColTypeFormatter interface.
-func (node *OidColType) Format(buf *bytes.Buffer, f lex.EncodeFlags) {
+func (node *TOid) Format(buf *bytes.Buffer, f lex.EncodeFlags) {
 	buf.WriteString(node.Name)
 }

@@ -280,8 +280,8 @@ func (expr *CastExpr) TypeCheck(ctx *SemaContext, _ types.T) (TypedExpr, error) 
 			// If the type doesn't have any possible parameters (like length,
 			// precision), the CastExpr becomes a no-op and can be elided.
 			switch expr.Type.(type) {
-			case *coltypes.BoolColType, *coltypes.DateColType, *coltypes.TimestampColType, *coltypes.TimestampTZColType,
-				*coltypes.IntervalColType, *coltypes.BytesColType:
+			case *coltypes.TBool, *coltypes.TDate, *coltypes.TTimestamp, *coltypes.TTimestampTZ,
+				*coltypes.TInterval, *coltypes.TBytes:
 				return expr.Expr.TypeCheck(ctx, returnType)
 			}
 		}

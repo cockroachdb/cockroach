@@ -17,133 +17,133 @@ package coltypes
 import "github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 
 var (
-	// BoolColTypeBool is an immutable ColumnType instance.
-	BoolColTypeBool = &BoolColType{Name: "BOOL"}
-	// BoolColTypeBoolean is an immutable ColumnType instance.
-	BoolColTypeBoolean = &BoolColType{Name: "BOOLEAN"}
-	// IntColTypeBit is an immutable ColumnType instance.
-	IntColTypeBit = &IntColType{Name: "BIT", Width: 1, ImplicitWidth: true}
-	// IntColTypeInt is an immutable ColumnType instance.
-	IntColTypeInt = &IntColType{Name: "INT"}
-	// IntColTypeInt2 is an immutable ColumnType instance.
-	IntColTypeInt2 = &IntColType{Name: "INT2", Width: 16, ImplicitWidth: true}
-	// IntColTypeInt4 is an immutable ColumnType instance.
-	IntColTypeInt4 = &IntColType{Name: "INT4", Width: 32, ImplicitWidth: true}
-	// IntColTypeInt8 is an immutable ColumnType instance.
-	IntColTypeInt8 = &IntColType{Name: "INT8"}
-	// IntColTypeInt64 is an immutable ColumnType instance.
-	IntColTypeInt64 = &IntColType{Name: "INT64"}
-	// IntColTypeInteger is an immutable ColumnType instance.
-	IntColTypeInteger = &IntColType{Name: "INTEGER"}
-	// IntColTypeSmallInt is an immutable ColumnType instance.
-	IntColTypeSmallInt = &IntColType{Name: "SMALLINT", Width: 16, ImplicitWidth: true}
-	// IntColTypeBigInt is an immutable ColumnType instance.
-	IntColTypeBigInt = &IntColType{Name: "BIGINT"}
-	// IntColTypeSerial is an immutable ColumnType instance.
-	IntColTypeSerial = &IntColType{Name: "SERIAL"}
-	// IntColTypeSmallSerial is an immutable ColumnType instance.
-	IntColTypeSmallSerial = &IntColType{Name: "SMALLSERIAL"}
-	// IntColTypeBigSerial is an immutable ColumnType instance.
-	IntColTypeBigSerial = &IntColType{Name: "BIGSERIAL"}
+	// Bool is an immutable T instance.
+	Bool = &TBool{Name: "BOOL"}
+	// Boolean is an immutable T instance.
+	Boolean = &TBool{Name: "BOOLEAN"}
+	// Bit is an immutable T instance.
+	Bit = &TInt{Name: "BIT", Width: 1, ImplicitWidth: true}
+	// Int is an immutable T instance.
+	Int = &TInt{Name: "INT"}
+	// Int2 is an immutable T instance.
+	Int2 = &TInt{Name: "INT2", Width: 16, ImplicitWidth: true}
+	// Int4 is an immutable T instance.
+	Int4 = &TInt{Name: "INT4", Width: 32, ImplicitWidth: true}
+	// Int8 is an immutable T instance.
+	Int8 = &TInt{Name: "INT8"}
+	// Int64 is an immutable T instance.
+	Int64 = &TInt{Name: "INT64"}
+	// Integer is an immutable T instance.
+	Integer = &TInt{Name: "INTEGER"}
+	// SmallInt is an immutable T instance.
+	SmallInt = &TInt{Name: "SMALLINT", Width: 16, ImplicitWidth: true}
+	// BigInt is an immutable T instance.
+	BigInt = &TInt{Name: "BIGINT"}
+	// Serial is an immutable T instance.
+	Serial = &TInt{Name: "SERIAL"}
+	// SmallSerial is an immutable T instance.
+	SmallSerial = &TInt{Name: "SMALLSERIAL"}
+	// BigSerial is an immutable T instance.
+	BigSerial = &TInt{Name: "BIGSERIAL"}
 
-	// FloatColTypeReal is an immutable ColumnType instance.
-	FloatColTypeReal = &FloatColType{Name: "REAL", Width: 32}
-	// FloatColTypeFloat is an immutable ColumnType instance.
-	FloatColTypeFloat = &FloatColType{Name: "FLOAT", Width: 64}
-	// FloatColTypeFloat4 is an immutable ColumnType instance.
-	FloatColTypeFloat4 = &FloatColType{Name: "FLOAT4", Width: 32}
-	// FloatColTypeFloat8 is an immutable ColumnType instance.
-	FloatColTypeFloat8 = &FloatColType{Name: "FLOAT8", Width: 64}
-	// FloatColTypeDouble is an immutable ColumnType instance.
-	FloatColTypeDouble = &FloatColType{Name: "DOUBLE PRECISION", Width: 64}
+	// Real is an immutable T instance.
+	Real = &TFloat{Name: "REAL", Width: 32}
+	// Float is an immutable T instance.
+	Float = &TFloat{Name: "FLOAT", Width: 64}
+	// Float4 is an immutable T instance.
+	Float4 = &TFloat{Name: "FLOAT4", Width: 32}
+	// Float8 is an immutable T instance.
+	Float8 = &TFloat{Name: "FLOAT8", Width: 64}
+	// Double is an immutable T instance.
+	Double = &TFloat{Name: "DOUBLE PRECISION", Width: 64}
 
-	// DecimalColTypeDec is an immutable ColumnType instance.
-	DecimalColTypeDec = &DecimalColType{Name: "DEC"}
-	// DecimalColTypeDecimal is an immutable ColumnType instance.
-	DecimalColTypeDecimal = &DecimalColType{Name: "DECIMAL"}
-	// DecimalColTypeNumeric is an immutable ColumnType instance.
-	DecimalColTypeNumeric = &DecimalColType{Name: "NUMERIC"}
+	// Dec is an immutable T instance.
+	Dec = &TDecimal{Name: "DEC"}
+	// Decimal is an immutable T instance.
+	Decimal = &TDecimal{Name: "DECIMAL"}
+	// Numeric is an immutable T instance.
+	Numeric = &TDecimal{Name: "NUMERIC"}
 
-	// DateColTypeDate is an immutable ColumnType instance.
-	DateColTypeDate = &DateColType{}
+	// Date is an immutable T instance.
+	Date = &TDate{}
 
-	// TimestampColTypeTimestamp is an immutable ColumnType instance.
-	TimestampColTypeTimestamp = &TimestampColType{}
-	// TimestampTzColTypeTimestampWithTZ is an immutable ColumnType instance.
-	TimestampTzColTypeTimestampWithTZ = &TimestampTZColType{}
+	// Timestamp is an immutable T instance.
+	Timestamp = &TTimestamp{}
+	// TimestampWithTZ is an immutable T instance.
+	TimestampWithTZ = &TTimestampTZ{}
 
-	// IntervalColTypeInterval is an immutable ColumnType instance.
-	IntervalColTypeInterval = &IntervalColType{}
+	// Interval is an immutable T instance.
+	Interval = &TInterval{}
 
-	// StringColTypeChar is an immutable ColumnType instance.
-	StringColTypeChar = &StringColType{Name: "CHAR"}
-	// StringColTypeVarChar is an immutable ColumnType instance.
-	StringColTypeVarChar = &StringColType{Name: "VARCHAR"}
-	// StringColTypeString is an immutable ColumnType instance.
-	StringColTypeString = &StringColType{Name: "STRING"}
-	// StringColTypeText is an immutable ColumnType instance.
-	StringColTypeText = &StringColType{Name: "TEXT"}
+	// Char is an immutable T instance.
+	Char = &TString{Name: "CHAR"}
+	// VarChar is an immutable T instance.
+	VarChar = &TString{Name: "VARCHAR"}
+	// String is an immutable T instance.
+	String = &TString{Name: "STRING"}
+	// Text is an immutable T instance.
+	Text = &TString{Name: "TEXT"}
 
-	// NameColTypeName is an immutable ColumnType instance.
-	NameColTypeName = &NameColType{}
+	// Name is an immutable T instance.
+	Name = &TName{}
 
-	// BytesColTypeBlob is an immutable ColumnType instance.
-	BytesColTypeBlob = &BytesColType{Name: "BLOB"}
-	// BytesColTypeBytes is an immutable ColumnType instance.
-	BytesColTypeBytes = &BytesColType{Name: "BYTES"}
-	// BytesColTypeBytea is an immutable ColumnType instance.
-	BytesColTypeBytea = &BytesColType{Name: "BYTEA"}
+	// Blob is an immutable T instance.
+	Blob = &TBytes{Name: "BLOB"}
+	// Bytes is an immutable T instance.
+	Bytes = &TBytes{Name: "BYTES"}
+	// Bytea is an immutable T instance.
+	Bytea = &TBytes{Name: "BYTEA"}
 
-	// Int2vectorColType is an immutable ColumnType instance.
-	Int2vectorColType = &VectorColType{Name: "INT2VECTOR", ParamType: IntColTypeInt}
+	// Int2vector is an immutable T instance.
+	Int2vector = &TVector{Name: "INT2VECTOR", ParamType: Int}
 
-	// UuidColTypeUUID is an immutable ColumnType instance.
-	UuidColTypeUUID = &UUIDColType{}
+	// UUID is an immutable T instance.
+	UUID = &TUUID{}
 
-	// IpnetColTypeINet is an immutable ColumnType instance.
-	IpnetColTypeINet = &IPAddrColType{Name: "INET"}
+	// INet is an immutable T instance.
+	INet = &TIPAddr{Name: "INET"}
 
-	// JsonColType is an immutable ColumnType instance.
-	JsonColType = &JSONColType{Name: "JSON"}
-	// JsonbColType is an immutable ColumnType instance.
-	JsonbColType = &JSONColType{Name: "JSONB"}
+	// JSON is an immutable T instance.
+	JSON = &TJSON{Name: "JSON"}
+	// JSONB is an immutable T instance.
+	JSONB = &TJSON{Name: "JSONB"}
 
-	// OidColTypeOid is an immutable ColumnType instance.
-	OidColTypeOid = &OidColType{Name: "OID"}
-	// OidColTypeRegClass is an immutable ColumnType instance.
-	OidColTypeRegClass = &OidColType{Name: "REGCLASS"}
-	// OidColTypeRegNamespace is an immutable ColumnType instance.
-	OidColTypeRegNamespace = &OidColType{Name: "REGNAMESPACE"}
-	// OidColTypeRegProc is an immutable ColumnType instance.
-	OidColTypeRegProc = &OidColType{Name: "REGPROC"}
-	// OidColTypeRegProcedure is an immutable ColumnType instance.
-	OidColTypeRegProcedure = &OidColType{Name: "REGPROCEDURE"}
-	// OidColTypeRegType is an immutable ColumnType instance.
-	OidColTypeRegType = &OidColType{Name: "REGTYPE"}
+	// Oid is an immutable T instance.
+	Oid = &TOid{Name: "OID"}
+	// RegClass is an immutable T instance.
+	RegClass = &TOid{Name: "REGCLASS"}
+	// RegNamespace is an immutable T instance.
+	RegNamespace = &TOid{Name: "REGNAMESPACE"}
+	// RegProc is an immutable T instance.
+	RegProc = &TOid{Name: "REGPROC"}
+	// RegProcedure is an immutable T instance.
+	RegProcedure = &TOid{Name: "REGPROCEDURE"}
+	// RegType is an immutable T instance.
+	RegType = &TOid{Name: "REGTYPE"}
 )
 
 var errBitLengthNotPositive = pgerror.NewError(pgerror.CodeInvalidParameterValueError, "length for type bit must be at least 1")
 
 // NewIntBitType creates a type alias for INT named BIT with the given bit width.
-func NewIntBitType(width int) (*IntColType, error) {
+func NewIntBitType(width int) (*TInt, error) {
 	if width < 1 {
 		return nil, errBitLengthNotPositive
 	}
-	return &IntColType{Name: "BIT", Width: width}, nil
+	return &TInt{Name: "BIT", Width: width}, nil
 }
 
-// NewFloatColType creates a type alias for FLOAT with the given precision.
-func NewFloatColType(prec int, precSpecified bool) *FloatColType {
+// NewFloat creates a type alias for FLOAT with the given precision.
+func NewFloat(prec int, precSpecified bool) *TFloat {
 	if prec == 0 && !precSpecified {
-		return FloatColTypeFloat
+		return Float
 	}
-	return &FloatColType{Name: "FLOAT", Width: 64, Prec: prec, PrecSpecified: precSpecified}
+	return &TFloat{Name: "FLOAT", Width: 64, Prec: prec, PrecSpecified: precSpecified}
 }
 
 // ArrayOf creates a type alias for an array of the given element type and fixed bounds.
-func ArrayOf(colType ColumnType, bounds []int32) (ColumnType, error) {
+func ArrayOf(colType T, bounds []int32) (T, error) {
 	if !canBeInArrayColType(colType) {
 		return nil, pgerror.NewErrorf(pgerror.CodeFeatureNotSupportedError, "arrays of %s not allowed", colType)
 	}
-	return &ArrayColType{Name: colType.String() + "[]", ParamType: colType, Bounds: bounds}, nil
+	return &TArray{Name: colType.String() + "[]", ParamType: colType, Bounds: bounds}, nil
 }

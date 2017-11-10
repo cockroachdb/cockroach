@@ -1219,14 +1219,14 @@ func TestClusterTimestampConversion(t *testing.T) {
 
 func TestCastToCollatedString(t *testing.T) {
 	cases := []struct {
-		typ      coltypes.CollatedStringColType
+		typ      coltypes.TCollatedString
 		contents string
 	}{
-		{coltypes.CollatedStringColType{Locale: "de"}, "test"},
-		{coltypes.CollatedStringColType{Locale: "en"}, "test"},
-		{coltypes.CollatedStringColType{Locale: "en", N: 5}, "test"},
-		{coltypes.CollatedStringColType{Locale: "en", N: 4}, "test"},
-		{coltypes.CollatedStringColType{Locale: "en", N: 3}, "tes"},
+		{coltypes.TCollatedString{Locale: "de"}, "test"},
+		{coltypes.TCollatedString{Locale: "en"}, "test"},
+		{coltypes.TCollatedString{Locale: "en", N: 5}, "test"},
+		{coltypes.TCollatedString{Locale: "en", N: 4}, "test"},
+		{coltypes.TCollatedString{Locale: "en", N: 3}, "tes"},
 	}
 	for _, cas := range cases {
 		t.Run("", func(t *testing.T) {

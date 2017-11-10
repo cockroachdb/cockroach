@@ -182,7 +182,7 @@ const (
 // statement.
 type ColumnTableDef struct {
 	Name     Name
-	Type     coltypes.ColumnType
+	Type     coltypes.T
 	Nullable struct {
 		Nullability    Nullability
 		ConstraintName Name
@@ -215,15 +215,15 @@ type ColumnTableDefCheckExpr struct {
 	ConstraintName Name
 }
 
-func processCollationOnType(name Name, typ coltypes.ColumnType, c ColumnCollation) (coltypes.ColumnType, error) {
+func processCollationOnType(name Name, typ coltypes.T, c ColumnCollation) (coltypes.T, error) {
 	locale := string(c)
 	switch s := typ.(type) {
-	case *coltypes.StringColType:
-		return &coltypes.CollatedStringColType{Name: s.Name, N: s.N, Locale: locale}, nil
-	case *coltypes.CollatedStringColType:
+	case *coltypes.TString:
+		return &coltypes.TCollatedString{Name: s.Name, N: s.N, Locale: locale}, nil
+	case *coltypes.TCollatedString:
 		return nil, pgerror.NewErrorf(pgerror.CodeSyntaxError,
 			"multiple COLLATE declarations for column %q", name)
-	case *coltypes.ArrayColType:
+	case *coltypes.TArray:
 		var err error
 		s.ParamType, err = processCollationOnType(name, s.ParamType, c)
 		if err != nil {
@@ -237,7 +237,7 @@ func processCollationOnType(name Name, typ coltypes.ColumnType, c ColumnCollatio
 }
 
 func newColumnTableDef(
-	name Name, typ coltypes.ColumnType, qualifications []NamedColumnQualification,
+	name Name, typ coltypes.T, qualifications []NamedColumnQualification,
 ) (*ColumnTableDef, error) {
 	d := &ColumnTableDef{
 		Name: name,

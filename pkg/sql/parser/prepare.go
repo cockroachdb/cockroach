@@ -23,7 +23,7 @@ import (
 // Prepare represents a PREPARE statement.
 type Prepare struct {
 	Name      Name
-	Types     []coltypes.ColumnType
+	Types     []coltypes.T
 	Statement Statement
 }
 

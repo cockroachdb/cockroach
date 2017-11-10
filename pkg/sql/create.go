@@ -1500,7 +1500,7 @@ func MakeTableDesc(
 	for _, def := range n.Defs {
 		if d, ok := def.(*parser.ColumnTableDef); ok {
 			if !desc.IsVirtualTable() {
-				if _, ok := d.Type.(*coltypes.VectorColType); ok {
+				if _, ok := d.Type.(*coltypes.TVector); ok {
 					return desc, pgerror.NewErrorf(
 						pgerror.CodeFeatureNotSupportedError,
 						"VECTOR column types are unsupported",

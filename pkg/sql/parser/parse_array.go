@@ -76,7 +76,7 @@ type parseState struct {
 	s       string
 	evalCtx *EvalContext
 	result  *DArray
-	t       coltypes.ColumnType
+	t       coltypes.T
 }
 
 func (p *parseState) advance() {
@@ -147,34 +147,34 @@ func (p *parseState) parseElement() error {
 
 // StringToColType returns a column type given a string representation of the
 // type. Used by dump.
-func StringToColType(s string) (coltypes.ColumnType, error) {
+func StringToColType(s string) (coltypes.T, error) {
 	switch s {
 	case "BOOL":
-		return coltypes.BoolColTypeBool, nil
+		return coltypes.Bool, nil
 	case "INT":
-		return coltypes.IntColTypeInt, nil
+		return coltypes.Int, nil
 	case "FLOAT":
-		return coltypes.FloatColTypeFloat, nil
+		return coltypes.Float, nil
 	case "DECIMAL":
-		return coltypes.DecimalColTypeDecimal, nil
+		return coltypes.Decimal, nil
 	case "TIMESTAMP":
-		return coltypes.TimestampColTypeTimestamp, nil
+		return coltypes.Timestamp, nil
 	case "TIMESTAMPTZ", "TIMESTAMP WITH TIME ZONE":
-		return coltypes.TimestampTzColTypeTimestampWithTZ, nil
+		return coltypes.TimestampWithTZ, nil
 	case "INTERVAL":
-		return coltypes.IntervalColTypeInterval, nil
+		return coltypes.Interval, nil
 	case "UUID":
-		return coltypes.UuidColTypeUUID, nil
+		return coltypes.UUID, nil
 	case "INET":
-		return coltypes.IpnetColTypeINet, nil
+		return coltypes.INet, nil
 	case "DATE":
-		return coltypes.DateColTypeDate, nil
+		return coltypes.Date, nil
 	case "STRING":
-		return coltypes.StringColTypeString, nil
+		return coltypes.String, nil
 	case "NAME":
-		return coltypes.NameColTypeName, nil
+		return coltypes.Name, nil
 	case "BYTES":
-		return coltypes.BytesColTypeBytes, nil
+		return coltypes.Bytes, nil
 	default:
 		return nil, pgerror.NewErrorf(pgerror.CodeInternalError, "unexpected column type %s", s)
 	}
@@ -182,7 +182,7 @@ func StringToColType(s string) (coltypes.ColumnType, error) {
 
 // ParseDArrayFromString parses the string-form of constructing arrays, handling
 // cases such as `'{1,2,3}'::INT[]`.
-func ParseDArrayFromString(evalCtx *EvalContext, s string, t coltypes.ColumnType) (*DArray, error) {
+func ParseDArrayFromString(evalCtx *EvalContext, s string, t coltypes.T) (*DArray, error) {
 	parser := parseState{
 		s:       s,
 		evalCtx: evalCtx,

@@ -21,25 +21,25 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 )
 
-// BoolColType represents a BOOLEAN type.
-type BoolColType struct {
+// TBool represents a BOOLEAN type.
+type TBool struct {
 	Name string
 }
 
 // Format implements the ColTypeFormatter interface.
-func (node *BoolColType) Format(buf *bytes.Buffer, f lex.EncodeFlags) {
+func (node *TBool) Format(buf *bytes.Buffer, f lex.EncodeFlags) {
 	buf.WriteString(node.Name)
 }
 
-// IntColType represents an INT, INTEGER, SMALLINT or BIGINT type.
-type IntColType struct {
+// TInt represents an INT, INTEGER, SMALLINT or BIGINT type.
+type TInt struct {
 	Name          string
 	Width         int
 	ImplicitWidth bool
 }
 
 // Format implements the ColTypeFormatter interface.
-func (node *IntColType) Format(buf *bytes.Buffer, f lex.EncodeFlags) {
+func (node *TInt) Format(buf *bytes.Buffer, f lex.EncodeFlags) {
 	buf.WriteString(node.Name)
 	if node.Width > 0 && !node.ImplicitWidth {
 		fmt.Fprintf(buf, "(%d)", node.Width)
@@ -48,13 +48,13 @@ func (node *IntColType) Format(buf *bytes.Buffer, f lex.EncodeFlags) {
 
 // IsSerial returns true when this column should be given a DEFAULT of a unique,
 // incrementing function.
-func (node *IntColType) IsSerial() bool {
-	return node.Name == IntColTypeSerial.Name || node.Name == IntColTypeSmallSerial.Name ||
-		node.Name == IntColTypeBigSerial.Name
+func (node *TInt) IsSerial() bool {
+	return node.Name == Serial.Name || node.Name == SmallSerial.Name ||
+		node.Name == BigSerial.Name
 }
 
-// FloatColType represents a REAL, DOUBLE or FLOAT type.
-type FloatColType struct {
+// TFloat represents a REAL, DOUBLE or FLOAT type.
+type TFloat struct {
 	Name          string
 	Prec          int
 	Width         int
@@ -62,22 +62,22 @@ type FloatColType struct {
 }
 
 // Format implements the ColTypeFormatter interface.
-func (node *FloatColType) Format(buf *bytes.Buffer, f lex.EncodeFlags) {
+func (node *TFloat) Format(buf *bytes.Buffer, f lex.EncodeFlags) {
 	buf.WriteString(node.Name)
 	if node.Prec > 0 {
 		fmt.Fprintf(buf, "(%d)", node.Prec)
 	}
 }
 
-// DecimalColType represents a DECIMAL or NUMERIC type.
-type DecimalColType struct {
+// TDecimal represents a DECIMAL or NUMERIC type.
+type TDecimal struct {
 	Name  string
 	Prec  int
 	Scale int
 }
 
 // Format implements the ColTypeFormatter interface.
-func (node *DecimalColType) Format(buf *bytes.Buffer, f lex.EncodeFlags) {
+func (node *TDecimal) Format(buf *bytes.Buffer, f lex.EncodeFlags) {
 	buf.WriteString(node.Name)
 	if node.Prec > 0 {
 		fmt.Fprintf(buf, "(%d", node.Prec)
