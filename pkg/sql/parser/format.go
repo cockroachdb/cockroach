@@ -18,6 +18,7 @@ import (
 	"bytes"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 )
@@ -208,11 +209,11 @@ func FormatNode(buf *bytes.Buffer, f FmtFlags, n NodeFormatter) {
 		}
 		if typ != nil {
 			buf.WriteString(":::")
-			colType, err := DatumTypeToColumnType(typ)
+			colType, err := coltypes.DatumTypeToColumnType(typ)
 			if err != nil {
 				panic(err)
 			}
-			FormatNode(buf, f, colType)
+			colType.Format(buf, f.encodeFlags)
 		}
 	}
 }

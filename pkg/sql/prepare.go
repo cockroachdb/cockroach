@@ -21,6 +21,7 @@ import (
 
 	"golang.org/x/net/context"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -321,7 +322,7 @@ func (e *Executor) PrepareStmt(session *Session, s *parser.Prepare) error {
 	}
 	typeHints := make(parser.PlaceholderTypes, len(s.Types))
 	for i, t := range s.Types {
-		typeHints[strconv.Itoa(i+1)] = parser.CastTargetToDatumType(t)
+		typeHints[strconv.Itoa(i+1)] = coltypes.CastTargetToDatumType(t)
 	}
 	_, err := session.PreparedStatements.New(
 		e, name, Statement{AST: s.Statement}, s.Statement.String(), typeHints,

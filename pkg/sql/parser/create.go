@@ -24,6 +24,7 @@ import (
 	"bytes"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
@@ -181,7 +182,7 @@ const (
 // statement.
 type ColumnTableDef struct {
 	Name     Name
-	Type     ColumnType
+	Type     coltypes.T
 	Nullable struct {
 		Nullability    Nullability
 		ConstraintName Name
@@ -214,15 +215,15 @@ type ColumnTableDefCheckExpr struct {
 	ConstraintName Name
 }
 
-func processCollationOnType(name Name, typ ColumnType, c ColumnCollation) (ColumnType, error) {
+func processCollationOnType(name Name, typ coltypes.T, c ColumnCollation) (coltypes.T, error) {
 	locale := string(c)
 	switch s := typ.(type) {
-	case *StringColType:
-		return &CollatedStringColType{s.Name, s.N, locale}, nil
-	case *CollatedStringColType:
+	case *coltypes.TString:
+		return &coltypes.TCollatedString{Name: s.Name, N: s.N, Locale: locale}, nil
+	case *coltypes.TCollatedString:
 		return nil, pgerror.NewErrorf(pgerror.CodeSyntaxError,
 			"multiple COLLATE declarations for column %q", name)
-	case *ArrayColType:
+	case *coltypes.TArray:
 		var err error
 		s.ParamType, err = processCollationOnType(name, s.ParamType, c)
 		if err != nil {
@@ -236,7 +237,7 @@ func processCollationOnType(name Name, typ ColumnType, c ColumnCollation) (Colum
 }
 
 func newColumnTableDef(
-	name Name, typ ColumnType, qualifications []NamedColumnQualification,
+	name Name, typ coltypes.T, qualifications []NamedColumnQualification,
 ) (*ColumnTableDef, error) {
 	d := &ColumnTableDef{
 		Name: name,
@@ -334,7 +335,7 @@ func (node *ColumnTableDef) HasColumnFamily() bool {
 func (node *ColumnTableDef) Format(buf *bytes.Buffer, f FmtFlags) {
 	FormatNode(buf, f, node.Name)
 	buf.WriteByte(' ')
-	FormatNode(buf, f, node.Type)
+	node.Type.Format(buf, f.encodeFlags)
 	if node.Nullable.Nullability != SilentNull && node.Nullable.ConstraintName != "" {
 		buf.WriteString(" CONSTRAINT ")
 		FormatNode(buf, f, node.Nullable.ConstraintName)

@@ -25,6 +25,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 )
@@ -121,7 +122,7 @@ func ParseExpr(sql string) (Expr, error) {
 }
 
 // ParseType parses a column type.
-func ParseType(sql string) (CastTargetType, error) {
+func ParseType(sql string) (coltypes.CastTargetType, error) {
 	expr, err := ParseExpr(fmt.Sprintf("1::%s", sql))
 	if err != nil {
 		return nil, err
@@ -166,7 +167,7 @@ func ParseStringAs(t types.T, s string, evalCtx *EvalContext) (Datum, error) {
 		d, err = ParseDIPAddrFromINetString(s)
 	default:
 		if a, ok := t.(types.TArray); ok {
-			typ, err := DatumTypeToColumnType(a.Typ)
+			typ, err := coltypes.DatumTypeToColumnType(a.Typ)
 			if err != nil {
 				return nil, err
 			}

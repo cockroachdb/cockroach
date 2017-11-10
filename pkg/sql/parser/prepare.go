@@ -14,12 +14,16 @@
 
 package parser
 
-import "bytes"
+import (
+	"bytes"
+
+	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
+)
 
 // Prepare represents a PREPARE statement.
 type Prepare struct {
 	Name      Name
-	Types     []ColumnType
+	Types     []coltypes.T
 	Statement Statement
 }
 
@@ -33,7 +37,7 @@ func (node *Prepare) Format(buf *bytes.Buffer, f FmtFlags) {
 			if i > 0 {
 				buf.WriteString(", ")
 			}
-			FormatNode(buf, f, t)
+			t.Format(buf, f.encodeFlags)
 		}
 		buf.WriteRune(')')
 	}
