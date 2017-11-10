@@ -33,7 +33,7 @@ func (node *Prepare) Format(buf *bytes.Buffer, f FmtFlags) {
 			if i > 0 {
 				buf.WriteString(", ")
 			}
-			FormatNode(buf, f, t)
+			t.Format(buf, f.encodeFlags)
 		}
 		buf.WriteRune(')')
 	}

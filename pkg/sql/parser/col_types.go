@@ -25,11 +25,22 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 )
 
+// ColTypeFormatter knows how to format a ColType to a bytes.Buffer.
+type ColTypeFormatter interface {
+	fmt.Stringer
+	Format(buf *bytes.Buffer, flags lex.EncodeFlags)
+}
+
+// ColTypeAsString print a ColumnType to a string.
+func ColTypeAsString(n ColTypeFormatter) string {
+	var buf bytes.Buffer
+	n.Format(&buf, lex.EncodeFlags{})
+	return buf.String()
+}
+
 // CastTargetType represents a type that is a valid cast target.
 type CastTargetType interface {
-	fmt.Stringer
-	NodeFormatter
-
+	ColTypeFormatter
 	castTargetType()
 }
 
@@ -90,8 +101,8 @@ type BoolColType struct {
 	Name string
 }
 
-// Format implements the NodeFormatter interface.
-func (node *BoolColType) Format(buf *bytes.Buffer, f FmtFlags) {
+// Format implements the ColTypeFormatter interface.
+func (node *BoolColType) Format(buf *bytes.Buffer, f lex.EncodeFlags) {
 	buf.WriteString(node.Name)
 }
 
@@ -130,8 +141,8 @@ type IntColType struct {
 	ImplicitWidth bool
 }
 
-// Format implements the NodeFormatter interface.
-func (node *IntColType) Format(buf *bytes.Buffer, f FmtFlags) {
+// Format implements the ColTypeFormatter interface.
+func (node *IntColType) Format(buf *bytes.Buffer, f lex.EncodeFlags) {
 	buf.WriteString(node.Name)
 	if node.Width > 0 && !node.ImplicitWidth {
 		fmt.Fprintf(buf, "(%d)", node.Width)
@@ -171,8 +182,8 @@ func NewFloatColType(prec int, precSpecified bool) *FloatColType {
 	return &FloatColType{Name: "FLOAT", Width: 64, Prec: prec, PrecSpecified: precSpecified}
 }
 
-// Format implements the NodeFormatter interface.
-func (node *FloatColType) Format(buf *bytes.Buffer, f FmtFlags) {
+// Format implements the ColTypeFormatter interface.
+func (node *FloatColType) Format(buf *bytes.Buffer, f lex.EncodeFlags) {
 	buf.WriteString(node.Name)
 	if node.Prec > 0 {
 		fmt.Fprintf(buf, "(%d)", node.Prec)
@@ -193,8 +204,8 @@ type DecimalColType struct {
 	Scale int
 }
 
-// Format implements the NodeFormatter interface.
-func (node *DecimalColType) Format(buf *bytes.Buffer, f FmtFlags) {
+// Format implements the ColTypeFormatter interface.
+func (node *DecimalColType) Format(buf *bytes.Buffer, f lex.EncodeFlags) {
 	buf.WriteString(node.Name)
 	if node.Prec > 0 {
 		fmt.Fprintf(buf, "(%d", node.Prec)
@@ -250,8 +261,8 @@ var dateColTypeDate = &DateColType{}
 type DateColType struct {
 }
 
-// Format implements the NodeFormatter interface.
-func (node *DateColType) Format(buf *bytes.Buffer, f FmtFlags) {
+// Format implements the ColTypeFormatter interface.
+func (node *DateColType) Format(buf *bytes.Buffer, f lex.EncodeFlags) {
 	buf.WriteString("DATE")
 }
 
@@ -262,8 +273,8 @@ var timestampColTypeTimestamp = &TimestampColType{}
 type TimestampColType struct {
 }
 
-// Format implements the NodeFormatter interface.
-func (node *TimestampColType) Format(buf *bytes.Buffer, f FmtFlags) {
+// Format implements the ColTypeFormatter interface.
+func (node *TimestampColType) Format(buf *bytes.Buffer, f lex.EncodeFlags) {
 	buf.WriteString("TIMESTAMP")
 }
 
@@ -274,8 +285,8 @@ var timestampTzColTypeTimestampWithTZ = &TimestampTZColType{}
 type TimestampTZColType struct {
 }
 
-// Format implements the NodeFormatter interface.
-func (node *TimestampTZColType) Format(buf *bytes.Buffer, f FmtFlags) {
+// Format implements the ColTypeFormatter interface.
+func (node *TimestampTZColType) Format(buf *bytes.Buffer, f lex.EncodeFlags) {
 	buf.WriteString("TIMESTAMP WITH TIME ZONE")
 }
 
@@ -286,8 +297,8 @@ var intervalColTypeInterval = &IntervalColType{}
 type IntervalColType struct {
 }
 
-// Format implements the NodeFormatter interface.
-func (node *IntervalColType) Format(buf *bytes.Buffer, f FmtFlags) {
+// Format implements the ColTypeFormatter interface.
+func (node *IntervalColType) Format(buf *bytes.Buffer, f lex.EncodeFlags) {
 	buf.WriteString("INTERVAL")
 }
 
@@ -298,8 +309,8 @@ var uuidColTypeUUID = &UUIDColType{}
 type UUIDColType struct {
 }
 
-// Format implements the NodeFormatter interface.
-func (node *UUIDColType) Format(buf *bytes.Buffer, f FmtFlags) {
+// Format implements the ColTypeFormatter interface.
+func (node *UUIDColType) Format(buf *bytes.Buffer, f lex.EncodeFlags) {
 	buf.WriteString("UUID")
 }
 
@@ -313,8 +324,8 @@ type IPAddrColType struct {
 	Name string
 }
 
-// Format implements the NodeFormatter interface.
-func (node *IPAddrColType) Format(buf *bytes.Buffer, f FmtFlags) {
+// Format implements the ColTypeFormatter interface.
+func (node *IPAddrColType) Format(buf *bytes.Buffer, f lex.EncodeFlags) {
 	buf.WriteString(node.Name)
 }
 
@@ -332,8 +343,8 @@ type StringColType struct {
 	N    int
 }
 
-// Format implements the NodeFormatter interface.
-func (node *StringColType) Format(buf *bytes.Buffer, f FmtFlags) {
+// Format implements the ColTypeFormatter interface.
+func (node *StringColType) Format(buf *bytes.Buffer, f lex.EncodeFlags) {
 	buf.WriteString(node.Name)
 	if node.N > 0 {
 		fmt.Fprintf(buf, "(%d)", node.N)
@@ -346,8 +357,8 @@ var nameColTypeName = &NameColType{}
 // NameColType represents a a NAME type.
 type NameColType struct{}
 
-// Format implements the NodeFormatter interface.
-func (node *NameColType) Format(buf *bytes.Buffer, f FmtFlags) {
+// Format implements the ColTypeFormatter interface.
+func (node *NameColType) Format(buf *bytes.Buffer, f lex.EncodeFlags) {
 	buf.WriteString("NAME")
 }
 
@@ -363,8 +374,8 @@ type BytesColType struct {
 	Name string
 }
 
-// Format implements the NodeFormatter interface.
-func (node *BytesColType) Format(buf *bytes.Buffer, f FmtFlags) {
+// Format implements the ColTypeFormatter interface.
+func (node *BytesColType) Format(buf *bytes.Buffer, f lex.EncodeFlags) {
 	buf.WriteString(node.Name)
 }
 
@@ -376,14 +387,14 @@ type CollatedStringColType struct {
 	Locale string
 }
 
-// Format implements the NodeFormatter interface.
-func (node *CollatedStringColType) Format(buf *bytes.Buffer, f FmtFlags) {
+// Format implements the ColTypeFormatter interface.
+func (node *CollatedStringColType) Format(buf *bytes.Buffer, f lex.EncodeFlags) {
 	buf.WriteString(node.Name)
 	if node.N > 0 {
 		fmt.Fprintf(buf, "(%d)", node.N)
 	}
 	buf.WriteString(" COLLATE ")
-	lex.EncodeUnrestrictedSQLIdent(buf, node.Locale, f.encodeFlags)
+	lex.EncodeUnrestrictedSQLIdent(buf, node.Locale, f)
 }
 
 // ArrayColType represents an ARRAY column type.
@@ -394,12 +405,12 @@ type ArrayColType struct {
 	BoundsExprs Exprs
 }
 
-// Format implements the NodeFormatter interface.
-func (node *ArrayColType) Format(buf *bytes.Buffer, f FmtFlags) {
+// Format implements the ColTypeFormatter interface.
+func (node *ArrayColType) Format(buf *bytes.Buffer, f lex.EncodeFlags) {
 	buf.WriteString(node.Name)
 	if collation, ok := node.ParamType.(*CollatedStringColType); ok {
 		buf.WriteString(" COLLATE ")
-		lex.EncodeUnrestrictedSQLIdent(buf, collation.Locale, f.encodeFlags)
+		lex.EncodeUnrestrictedSQLIdent(buf, collation.Locale, f)
 	}
 }
 
@@ -418,8 +429,8 @@ type VectorColType struct {
 	ParamType ColumnType
 }
 
-// Format implements the NodeFormatter interface.
-func (node *VectorColType) Format(buf *bytes.Buffer, _ FmtFlags) {
+// Format implements the ColTypeFormatter interface.
+func (node *VectorColType) Format(buf *bytes.Buffer, _ lex.EncodeFlags) {
 	buf.WriteString(node.Name)
 }
 
@@ -434,8 +445,8 @@ type JSONColType struct {
 	Name string
 }
 
-// Format implements the NodeFormatter interface.
-func (node *JSONColType) Format(buf *bytes.Buffer, _ FmtFlags) {
+// Format implements the ColTypeFormatter interface.
+func (node *JSONColType) Format(buf *bytes.Buffer, _ lex.EncodeFlags) {
 	buf.WriteString(node.Name)
 }
 
@@ -464,8 +475,8 @@ type OidColType struct {
 	Name string
 }
 
-// Format implements the NodeFormatter interface.
-func (node *OidColType) Format(buf *bytes.Buffer, f FmtFlags) {
+// Format implements the ColTypeFormatter interface.
+func (node *OidColType) Format(buf *bytes.Buffer, f lex.EncodeFlags) {
 	buf.WriteString(node.Name)
 }
 
@@ -507,24 +518,24 @@ func oidTypeToColType(t types.T) *OidColType {
 	}
 }
 
-func (node *BoolColType) String() string           { return AsString(node) }
-func (node *IntColType) String() string            { return AsString(node) }
-func (node *FloatColType) String() string          { return AsString(node) }
-func (node *DecimalColType) String() string        { return AsString(node) }
-func (node *DateColType) String() string           { return AsString(node) }
-func (node *TimestampColType) String() string      { return AsString(node) }
-func (node *TimestampTZColType) String() string    { return AsString(node) }
-func (node *IntervalColType) String() string       { return AsString(node) }
-func (node *JSONColType) String() string           { return AsString(node) }
-func (node *UUIDColType) String() string           { return AsString(node) }
-func (node *IPAddrColType) String() string         { return AsString(node) }
-func (node *StringColType) String() string         { return AsString(node) }
-func (node *NameColType) String() string           { return AsString(node) }
-func (node *BytesColType) String() string          { return AsString(node) }
-func (node *CollatedStringColType) String() string { return AsString(node) }
-func (node *ArrayColType) String() string          { return AsString(node) }
-func (node *VectorColType) String() string         { return AsString(node) }
-func (node *OidColType) String() string            { return AsString(node) }
+func (node *BoolColType) String() string           { return ColTypeAsString(node) }
+func (node *IntColType) String() string            { return ColTypeAsString(node) }
+func (node *FloatColType) String() string          { return ColTypeAsString(node) }
+func (node *DecimalColType) String() string        { return ColTypeAsString(node) }
+func (node *DateColType) String() string           { return ColTypeAsString(node) }
+func (node *TimestampColType) String() string      { return ColTypeAsString(node) }
+func (node *TimestampTZColType) String() string    { return ColTypeAsString(node) }
+func (node *IntervalColType) String() string       { return ColTypeAsString(node) }
+func (node *JSONColType) String() string           { return ColTypeAsString(node) }
+func (node *UUIDColType) String() string           { return ColTypeAsString(node) }
+func (node *IPAddrColType) String() string         { return ColTypeAsString(node) }
+func (node *StringColType) String() string         { return ColTypeAsString(node) }
+func (node *NameColType) String() string           { return ColTypeAsString(node) }
+func (node *BytesColType) String() string          { return ColTypeAsString(node) }
+func (node *CollatedStringColType) String() string { return ColTypeAsString(node) }
+func (node *ArrayColType) String() string          { return ColTypeAsString(node) }
+func (node *VectorColType) String() string         { return ColTypeAsString(node) }
+func (node *OidColType) String() string            { return ColTypeAsString(node) }
 
 // DatumTypeToColumnType produces a SQL column type equivalent to the
 // given Datum type. Used to generate CastExpr nodes during

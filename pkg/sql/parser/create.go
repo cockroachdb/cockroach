@@ -334,7 +334,7 @@ func (node *ColumnTableDef) HasColumnFamily() bool {
 func (node *ColumnTableDef) Format(buf *bytes.Buffer, f FmtFlags) {
 	FormatNode(buf, f, node.Name)
 	buf.WriteByte(' ')
-	FormatNode(buf, f, node.Type)
+	node.Type.Format(buf, f.encodeFlags)
 	if node.Nullable.Nullability != SilentNull && node.Nullable.ConstraintName != "" {
 		buf.WriteString(" CONSTRAINT ")
 		FormatNode(buf, f, node.Nullable.ConstraintName)
