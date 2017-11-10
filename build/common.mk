@@ -124,10 +124,6 @@ $(foreach v,$(filter-out $(strip $(VALID_VARS)),$(.VARIABLES)),\
 .ALWAYS_REBUILD:
 .PHONY: .ALWAYS_REBUILD
 
-.PHONY: ui
-ui: libprotobuf
-	$(MAKE) -C $(UI_ROOT) generate
-
 .PHONY: sqlparser
 sqlparser:
 	$(MAKE) -C $(SQLPARSER_ROOT) generate
@@ -437,7 +433,7 @@ $(LIBROACH_DIR)/Makefile: $(C_DEPS_DIR)/libroach-rebuild $(BOOTSTRAP_TARGET)
 # .PHONY and .ALWAYS_REBUILD). We don't have the targets' prerequisites here,
 # and we certainly don't want to duplicate them.
 
-$(PROTOC): $(PROTOC_DIR)/Makefile .ALWAYS_REBUILD
+$(PROTOC): $(PROTOC_DIR)/Makefile .ALWAYS_REBUILD | libprotobuf
 	@$(MAKE) --no-print-directory -C $(PROTOC_DIR) protoc
 
 .PHONY: libjemalloc
@@ -456,13 +452,12 @@ libsnappy: $(SNAPPY_DIR)/Makefile
 librocksdb: $(ROCKSDB_DIR)/Makefile
 	@$(MAKE) --no-print-directory -C $(ROCKSDB_DIR) rocksdb
 
-# libroach depends on ui because generating the UI indirectly updates the
-# timestamps on the generated C++ protobufs that libroach depends on.
+# libroach should depend on the generated C++ protobufs.
 #
-# TODO(benesch): merge the protobuf, UI, and top-level Makefile so this
-# dependency can be clearly expressed.
+# TODO(benesch): merge the protobuf and top-level Makefile so this dependency
+# can be clearly expressed.
 .PHONY: libroach
-libroach: $(LIBROACH_DIR)/Makefile | ui
+libroach: $(LIBROACH_DIR)/Makefile
 	@$(MAKE) --no-print-directory -C $(LIBROACH_DIR) roach
 
 .PHONY: libroachccl
