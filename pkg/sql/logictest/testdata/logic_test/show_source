@@ -43,7 +43,7 @@ tracing                        off
 transaction isolation level    SERIALIZABLE
 transaction priority           NORMAL
 transaction status             NoTxn
-transaction_read_only          false
+transaction_read_only          off
 
 query I colnames
 SELECT * FROM [SHOW CLUSTER SETTING sql.defaults.distsql]

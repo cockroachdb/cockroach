@@ -338,7 +338,7 @@ var varGen = map[string]sessionVar{
 	`transaction_read_only`: {
 		// Supported for PG driver compatibility only. We don't support setting it
 		// in any way.
-		Get: func(*Session) string { return "false" },
+		Get: func(*Session) string { return "off" },
 	},
 
 	`tracing`: {
