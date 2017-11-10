@@ -518,12 +518,12 @@ enum SketchType {
 // Rows have NULLs on either all the sampled row columns or on all the
 // sketch columns.
 message SamplerSpec {
-  message SketchInfo {
+  message SketchSpec {
     optional SketchType sketch_type = 1 [(gogoproto.nullable) = false];
 
     // Each value is an index identifying a column in the input stream.
     repeated uint32 columns = 2;
   }
-  repeated SketchInfo sketches = 1 [(gogoproto.nullable) = false];
+  repeated SketchSpec sketches = 1 [(gogoproto.nullable) = false];
   optional uint32 sample_size = 2 [(gogoproto.nullable) = false];
 }
