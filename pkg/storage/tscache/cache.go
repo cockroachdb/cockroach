@@ -63,19 +63,16 @@ type Cache interface {
 	GlobalLowWater() hlc.Timestamp
 
 	// GetMaxRead returns the maximum read timestamp which overlaps the interval
-	// spanning from start to end. If that timestamp belongs to a single
-	// transaction, that transaction's ID is returned. If no part of the
-	// specified range is overlapped by timestamps from different transactions
-	// in the cache, the low water timestamp is returned for the read
-	// timestamps. Also returns an "ok" bool, indicating whether the overlapping
-	// interval had a distinct (non-empty) txnID.
-	//
-	// DURING REVIEW: Don't worry about the bool semantics since no-one uses
-	// them anymore, just proving that this is safe between commits.
-	GetMaxRead(start, end roachpb.Key) (hlc.Timestamp, uuid.UUID, bool)
+	// spanning from start to end. If that maximum timestamp belongs to a single
+	// transaction, that transaction's ID is returned. Otherwise, if that
+	// maximum is shared between multiple transactions, no transaction ID is
+	// returned. Finally, if no part of the specified range is overlapped by
+	// timestamp intervals from any transactions in the cache, the low water
+	// timestamp is returned for the read timestamps.
+	GetMaxRead(start, end roachpb.Key) (hlc.Timestamp, uuid.UUID)
 	// GetMaxWrite behaves like GetMaxRead, but returns the maximum write
 	// timestamp which overlaps the interval spanning from start to end.
-	GetMaxWrite(start, end roachpb.Key) (hlc.Timestamp, uuid.UUID, bool)
+	GetMaxWrite(start, end roachpb.Key) (hlc.Timestamp, uuid.UUID)
 
 	// The following methods are used for testing within this package:
 	//

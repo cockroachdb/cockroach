@@ -44,8 +44,8 @@ func TestTreeImplEviction(t *testing.T) {
 	tc.add(roachpb.Key("b"), nil, clock.Now(), noTxnID, true)
 
 	// Verify looking up key "c" returns the new low water mark ("a"'s timestamp).
-	if rTS, _, ok := tc.GetMaxRead(roachpb.Key("c"), nil); rTS != aTS || ok {
-		t.Errorf("expected low water mark %s, got %s; ok=%t", aTS, rTS, ok)
+	if rTS, rTxnID := tc.GetMaxRead(roachpb.Key("c"), nil); rTS != aTS || rTxnID != noTxnID {
+		t.Errorf("expected low water mark %s, got %s; txnID=%s", aTS, rTS, rTxnID)
 	}
 }
 
