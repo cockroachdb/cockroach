@@ -407,9 +407,6 @@ func TestBackupRestoreSystemJobs(t *testing.T) {
 			sanitizedIncDir, sanitizedFullDir,
 		),
 		DescriptorIDs: sqlbase.IDs{
-			keys.SystemDatabaseID,
-			keys.DescriptorTableID,
-			keys.UsersTableID,
 			sqlbase.ID(backupDatabaseID),
 			sqlbase.ID(backupTableID),
 		},
@@ -1869,7 +1866,7 @@ func TestTimestampMismatch(t *testing.T) {
 func TestBackupLevelDB(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	_, _, sqlDB, rawDir, cleanupFn := backupRestoreTestSetup(t, singleNode, 0, initNone)
+	_, _, sqlDB, rawDir, cleanupFn := backupRestoreTestSetup(t, singleNode, 1, initNone)
 	defer cleanupFn()
 
 	_ = sqlDB.Exec(`BACKUP DATABASE data TO $1`, localFoo)
