@@ -18,6 +18,7 @@ import (
 	"bytes"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 )
@@ -506,7 +507,7 @@ func (node *RangeCond) TypedTo() TypedExpr {
 type IsOfTypeExpr struct {
 	Not   bool
 	Expr  Expr
-	Types []ColumnType
+	Types []coltypes.T
 
 	typeAnnotation
 }
@@ -525,7 +526,7 @@ func (node *IsOfTypeExpr) Format(buf *bytes.Buffer, f FmtFlags) {
 		if i > 0 {
 			buf.WriteString(", ")
 		}
-		FormatNode(buf, f, t)
+		t.Format(buf, f.encodeFlags)
 	}
 	buf.WriteByte(')')
 }
@@ -1066,7 +1067,7 @@ const (
 // CastExpr represents a CAST(expr AS type) expression.
 type CastExpr struct {
 	Expr Expr
-	Type CastTargetType
+	Type coltypes.CastTargetType
 
 	typeAnnotation
 	syntaxMode castSyntaxMode
@@ -1080,7 +1081,7 @@ func (node *CastExpr) Format(buf *bytes.Buffer, f FmtFlags) {
 		// with string constats; if the underlying expression was changed, we fall
 		// back to the short syntax.
 		if _, ok := node.Expr.(*StrVal); ok {
-			FormatNode(buf, f, node.Type)
+			node.Type.Format(buf, f.encodeFlags)
 			buf.WriteByte(' ')
 			FormatNode(buf, f, node.Expr)
 			break
@@ -1089,18 +1090,18 @@ func (node *CastExpr) Format(buf *bytes.Buffer, f FmtFlags) {
 	case castShort:
 		exprFmtWithParen(buf, f, node.Expr)
 		buf.WriteString("::")
-		FormatNode(buf, f, node.Type)
+		node.Type.Format(buf, f.encodeFlags)
 	default:
 		buf.WriteString("CAST(")
 		FormatNode(buf, f, node.Expr)
 		buf.WriteString(" AS ")
-		FormatNode(buf, f, node.Type)
+		node.Type.Format(buf, f.encodeFlags)
 		buf.WriteByte(')')
 	}
 }
 
 func (node *CastExpr) castType() types.T {
-	return CastTargetToDatumType(node.Type)
+	return coltypes.CastTargetToDatumType(node.Type)
 }
 
 var (
@@ -1199,7 +1200,7 @@ const (
 // AnnotateTypeExpr represents a ANNOTATE_TYPE(expr, type) expression.
 type AnnotateTypeExpr struct {
 	Expr Expr
-	Type CastTargetType
+	Type coltypes.CastTargetType
 
 	syntaxMode annotateSyntaxMode
 }
@@ -1210,13 +1211,13 @@ func (node *AnnotateTypeExpr) Format(buf *bytes.Buffer, f FmtFlags) {
 	case annotateShort:
 		exprFmtWithParen(buf, f, node.Expr)
 		buf.WriteString(":::")
-		FormatNode(buf, f, node.Type)
+		node.Type.Format(buf, f.encodeFlags)
 
 	default:
 		buf.WriteString("ANNOTATE_TYPE(")
 		FormatNode(buf, f, node.Expr)
 		buf.WriteString(", ")
-		FormatNode(buf, f, node.Type)
+		node.Type.Format(buf, f.encodeFlags)
 		buf.WriteByte(')')
 	}
 }
@@ -1227,7 +1228,7 @@ func (node *AnnotateTypeExpr) TypedInnerExpr() TypedExpr {
 }
 
 func (node *AnnotateTypeExpr) annotationType() types.T {
-	return CastTargetToDatumType(node.Type)
+	return coltypes.CastTargetToDatumType(node.Type)
 }
 
 // CollateExpr represents an (expr COLLATE locale) expression.

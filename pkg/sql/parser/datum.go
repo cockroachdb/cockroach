@@ -36,6 +36,7 @@ import (
 
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
@@ -2616,14 +2617,14 @@ type DOid struct {
 	DInt
 	// semanticType indicates the particular variety of OID this datum is, whether raw
 	// oid or a reg* type.
-	semanticType *OidColType
+	semanticType *coltypes.TOid
 	// name is set to the resolved name of this OID, if available.
 	name string
 }
 
 // MakeDOid is a helper routine to create a DOid initialized from a DInt.
 func MakeDOid(d DInt) DOid {
-	return DOid{DInt: d, semanticType: oidColTypeOid, name: ""}
+	return DOid{DInt: d, semanticType: coltypes.Oid, name: ""}
 }
 
 // NewDOid is a helper routine to create a *DOid initialized from a DInt.
@@ -2636,7 +2637,7 @@ func NewDOid(d DInt) *DOid {
 // returns it.
 func (d *DOid) AsRegProc(name string) *DOid {
 	d.name = name
-	d.semanticType = oidColTypeRegProc
+	d.semanticType = coltypes.RegProc
 	return d
 }
 
@@ -2664,7 +2665,7 @@ func (d *DOid) Compare(ctx *EvalContext, other Datum) int {
 
 // Format implements the Datum interface.
 func (d *DOid) Format(buf *bytes.Buffer, f FmtFlags) {
-	if d.semanticType == oidColTypeOid || d.name == "" {
+	if d.semanticType == coltypes.Oid || d.name == "" {
 		FormatNode(buf, f, &d.DInt)
 	} else {
 		lex.EncodeSQLStringWithFlags(buf, d.name, lex.EncodeFlags{BareStrings: true})
@@ -2691,7 +2692,7 @@ func (d *DOid) Prev(ctx *EvalContext) (Datum, bool) {
 
 // ResolvedType implements the Datum interface.
 func (d *DOid) ResolvedType() types.T {
-	return oidColTypeToType(d.semanticType)
+	return coltypes.TOidToType(d.semanticType)
 }
 
 // Size implements the Datum interface.

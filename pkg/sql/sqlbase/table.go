@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
@@ -96,7 +97,7 @@ func MakeColumnDefDescs(
 	}
 
 	// Set Type.SemanticType and Type.Locale.
-	colDatumType := parser.CastTargetToDatumType(d.Type)
+	colDatumType := coltypes.CastTargetToDatumType(d.Type)
 	colTyp, err := DatumTypeToColumnType(colDatumType)
 	if err != nil {
 		return nil, nil, err
@@ -105,8 +106,8 @@ func MakeColumnDefDescs(
 
 	// Set other attributes of col.Type and perform type-specific verification.
 	switch t := d.Type.(type) {
-	case *parser.BoolColType:
-	case *parser.IntColType:
+	case *coltypes.TBool:
+	case *coltypes.TInt:
 		col.Type.Width = int32(t.Width)
 		if t.IsSerial() {
 			if d.HasDefaultExpr() {
@@ -118,7 +119,7 @@ func MakeColumnDefDescs(
 		if val, present := nameToVisibleTypeMap[t.Name]; present {
 			col.Type.VisibleType = val
 		}
-	case *parser.FloatColType:
+	case *coltypes.TFloat:
 		// If the precision for this float col was intentionally specified as 0, return an error.
 		if t.Prec == 0 && t.PrecSpecified {
 			return nil, nil, errors.New("precision for type float must be at least 1 bit")
@@ -127,7 +128,7 @@ func MakeColumnDefDescs(
 		if val, present := nameToVisibleTypeMap[t.Name]; present {
 			col.Type.VisibleType = val
 		}
-	case *parser.DecimalColType:
+	case *coltypes.TDecimal:
 		col.Type.Width = int32(t.Scale)
 		col.Type.Precision = int32(t.Prec)
 
@@ -139,36 +140,25 @@ func MakeColumnDefDescs(
 			return nil, nil, fmt.Errorf("NUMERIC scale %d must be between 0 and precision %d",
 				col.Type.Width, col.Type.Precision)
 		}
-	case *parser.DateColType:
-	case *parser.TimestampColType:
-	case *parser.TimestampTZColType:
-	case *parser.IntervalColType:
-	case *parser.UUIDColType:
-	case *parser.IPAddrColType:
-	case *parser.StringColType:
+	case *coltypes.TDate:
+	case *coltypes.TTimestamp:
+	case *coltypes.TTimestampTZ:
+	case *coltypes.TInterval:
+	case *coltypes.TUUID:
+	case *coltypes.TIPAddr:
+	case *coltypes.TString:
 		col.Type.Width = int32(t.N)
-	case *parser.NameColType:
-	case *parser.BytesColType:
-	case *parser.CollatedStringColType:
+	case *coltypes.TName:
+	case *coltypes.TBytes:
+	case *coltypes.TCollatedString:
 		col.Type.Width = int32(t.N)
-	case *parser.ArrayColType:
-		for i, e := range t.BoundsExprs {
-			te, err := parser.TypeCheckAndRequire(e, semaCtx, types.Int, "array bounds")
-			if err != nil {
-				return nil, nil, errors.Wrapf(err, "couldn't get bound %d", i)
-			}
-			d, err := te.Eval(nil)
-			if err != nil {
-				return nil, nil, errors.Wrapf(err, "couldn't Eval bound %d", i)
-			}
-			b := parser.MustBeDInt(d)
-			col.Type.ArrayDimensions = append(col.Type.ArrayDimensions, int32(b))
-		}
-	case *parser.VectorColType:
-		if _, ok := t.ParamType.(*parser.IntColType); !ok {
+	case *coltypes.TArray:
+		col.Type.ArrayDimensions = t.Bounds
+	case *coltypes.TVector:
+		if _, ok := t.ParamType.(*coltypes.TInt); !ok {
 			return nil, nil, errors.Errorf("vectors of type %s are unsupported", t.ParamType)
 		}
-	case *parser.OidColType:
+	case *coltypes.TOid:
 	default:
 		return nil, nil, errors.Errorf("unexpected type %T", t)
 	}

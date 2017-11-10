@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -55,7 +56,7 @@ func TestValues(t *testing.T) {
 	floatVal := func(f float64) *parser.CastExpr {
 		return &parser.CastExpr{
 			Expr: &parser.NumVal{Value: constant.MakeFloat64(f)},
-			Type: &parser.FloatColType{},
+			Type: &coltypes.TFloat{},
 		}
 	}
 	asRow := func(datums ...parser.Datum) []parser.Datums {

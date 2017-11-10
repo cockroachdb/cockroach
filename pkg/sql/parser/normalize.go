@@ -15,6 +15,7 @@
 package parser
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 )
@@ -832,7 +833,7 @@ func ReType(expr TypedExpr, wantedType types.T) (TypedExpr, error) {
 	if expr.ResolvedType().Equivalent(wantedType) {
 		return expr, nil
 	}
-	reqType, err := DatumTypeToColumnType(wantedType)
+	reqType, err := coltypes.DatumTypeToColumnType(wantedType)
 	if err != nil {
 		return nil, err
 	}
