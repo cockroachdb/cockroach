@@ -29,8 +29,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 )
 
-//go:generate make
-
 // Parser wraps a scanner, parser and other utilities present in the parser
 // package.
 type Parser struct {
