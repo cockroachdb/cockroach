@@ -1,0 +1,788 @@
+// Copyright 2017 The Cockroach Authors.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
+// implied. See the License for the specific language governing
+// permissions and limitations under the License.
+
+package sql
+
+import (
+	"context"
+	"fmt"
+	"strings"
+	"testing"
+	"time"
+
+	opentracing "github.com/opentracing/opentracing-go"
+	"github.com/pkg/errors"
+
+	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	// We dot-import fsm to use common names such as fsm.True/False.
+	. "github.com/cockroachdb/cockroach/pkg/util/fsm"
+)
+
+const noFlush bool = false
+const flushSet bool = true
+
+var _ = noFlush
+
+var noRewind = cursorPosition{queryStrPos: -1, stmtIdx: -1}
+
+type testContext struct {
+	manualClock *hlc.ManualClock
+	clock       *hlc.Clock
+	mockDB      *client.DB
+	mon         mon.BytesMonitor
+	tracer      opentracing.Tracer
+	// ctx is mimicking the spirit of a clientn connection's context
+	ctx context.Context
+}
+
+func makeTestContext() testContext {
+	manual := hlc.NewManualClock(123)
+	clock := hlc.NewClock(manual.UnixNano, time.Nanosecond)
+	return testContext{
+		manualClock: manual,
+		clock:       clock,
+		mockDB:      client.NewDB(nil /* sender */, clock),
+		mon: mon.MakeMonitor(
+			"test root mon",
+			mon.MemoryResource,
+			nil,  /* curCount */
+			nil,  /* maxHist */
+			-1,   /* increment */
+			1000, /* noteworthy */
+		),
+		tracer: tracing.NewTracer(),
+		ctx:    context.TODO(),
+	}
+}
+
+type retryIntentEnum int
+
+const (
+	retryIntentUnknown retryIntentEnum = iota
+	retryIntentSet
+	retryIntentNotSet
+)
+
+// createOpenState returns a txnState initialized with an open txn.
+func (tc *testContext) createOpenState(
+	typ txnType, retryIntentOpt retryIntentEnum,
+) (State, *txnState2) {
+	if retryIntentOpt == retryIntentUnknown {
+		log.Fatalf(context.TODO(), "retryIntentOpt not specified")
+	}
+
+	sp := tc.tracer.StartSpan("createOpenState")
+	ctx := opentracing.ContextWithSpan(tc.ctx, sp)
+	ctx, cancel := context.WithCancel(ctx)
+
+	txnStateMon := mon.MakeMonitor("test mon",
+		mon.MemoryResource,
+		nil,  /* curCount */
+		nil,  /* maxHist */
+		-1,   /* increment */
+		1000, /* noteworthy */
+	)
+	txnStateMon.Start(tc.ctx, &tc.mon, mon.BoundAccount{})
+
+	ts := txnState2{
+		Ctx:          ctx,
+		sp:           sp,
+		cancel:       cancel,
+		sqlTimestamp: timeutil.Now(),
+		isolation:    enginepb.SERIALIZABLE,
+		priority:     roachpb.NormalUserPriority,
+		mon:          &txnStateMon,
+	}
+	ts.mu.txn = client.NewTxn(tc.mockDB, roachpb.NodeID(1) /* gatewayNodeID */)
+
+	state := stateOpen{
+		ImplicitTxn: FromBool(typ == implicitTxn),
+		RetryIntent: FromBool(retryIntentOpt == retryIntentSet),
+	}
+	return state, &ts
+}
+
+// createAbortedState returns a txnState initialized with an aborted txn.
+func (tc *testContext) createAbortedState(retryIntentOpt retryIntentEnum) (State, *txnState2) {
+	_, ts := tc.createOpenState(explicitTxn, retryIntentOpt)
+	ts.mu.txn.CleanupOnError(ts.Ctx, errors.Errorf("dummy error"))
+	s := stateAborted{RetryIntent: FromBool(retryIntentOpt == retryIntentSet)}
+	return s, ts
+}
+
+func (tc *testContext) createRestartWaitState() (State, *txnState2) {
+	_, ts := tc.createOpenState(
+		explicitTxn,
+		// retryIntent must had been set in order for the state to advance to
+		// RestartWait.
+		retryIntentSet)
+	s := stateRestartWait{}
+	return s, ts
+}
+
+func (tc *testContext) createCommitWaitState() (State, *txnState2, error) {
+	_, ts := tc.createOpenState(explicitTxn, retryIntentSet)
+	// Commit the KV txn, simulating what the execution layer is doing.
+	if err := ts.mu.txn.Commit(ts.Ctx); err != nil {
+		return nil, nil, err
+	}
+	s := stateCommitWait{}
+	return s, ts, nil
+}
+
+func (tc *testContext) createNoTxnState() (State, *txnState2) {
+	txnStateMon := mon.MakeMonitor("test mon",
+		mon.MemoryResource,
+		nil,  /* curCount */
+		nil,  /* maxHist */
+		-1,   /* increment */
+		1000, /* noteworthy */
+	)
+	ts := txnState2{mon: &txnStateMon}
+	return stateNoTxn{}, &ts
+}
+
+// checkAdv returns an error if adv does not match all the expected fields.
+//
+// Pass noFlush/flushSet for expFlush. Pass noRewind for expRewPos if a rewind
+// is not expected.
+func checkAdv(adv advanceInfo, expCode advanceCode, expFlush bool, expRewPos cursorPosition) error {
+	if adv.code != expCode {
+		return errors.Errorf("expected code: %s, but got: %s (%+v)", expCode, adv.code, adv)
+	}
+	if adv.flush != expFlush {
+		return errors.Errorf("expected flush: %t, but got: %+v", expFlush, adv)
+	}
+	if expRewPos == noRewind {
+		if adv.rewCap != (rewindCapability{}) {
+			return errors.Errorf("expected not rewind, but got: %+v", adv)
+		}
+	} else {
+		if adv.rewCap.rewindPos != expRewPos {
+			return errors.Errorf("expected rewind to %s, but got: %+v", expRewPos, adv)
+		}
+	}
+	return nil
+}
+
+// expKVTxn is used with checkTxn to check that fields on a client.Txn
+// correspond to expectations. Any field left nil will not be checked.
+type expKVTxn struct {
+	debugName    *string
+	isolation    *enginepb.IsolationType
+	userPriority *roachpb.UserPriority
+	// For the timestamps we just check the physical part. The logical part is
+	// incremented every time the clock is read and so it's unpredictable.
+	tsNanos     *int64
+	origTSNanos *int64
+	maxTSNanos  *int64
+	isFinalized *bool
+}
+
+func checkTxn(txn *client.Txn, exp expKVTxn) error {
+	if txn == nil {
+		return errors.Errorf("expected a KV txn but found an uninitialized txn")
+	}
+	if exp.debugName != nil && !strings.HasPrefix(txn.DebugName(), *exp.debugName+" (") {
+		return errors.Errorf("expected DebugName: %s, but got: %s",
+			*exp.debugName, txn.DebugName())
+	}
+	if exp.isolation != nil && *exp.isolation != txn.Isolation() {
+		return errors.Errorf("expected isolation: %s, but got: %s",
+			*exp.isolation, txn.Isolation())
+	}
+	if exp.userPriority != nil && *exp.userPriority != txn.UserPriority() {
+		return errors.Errorf("expected UserPriority: %s, but got: %s",
+			*exp.userPriority, txn.UserPriority())
+	}
+	if exp.tsNanos != nil && *exp.tsNanos != txn.Proto().Timestamp.WallTime {
+		return errors.Errorf("expected Timestamp: %d, but got: %s",
+			*exp.tsNanos, txn.Proto().Timestamp)
+	}
+	if exp.origTSNanos != nil && *exp.origTSNanos != txn.OrigTimestamp().WallTime {
+		return errors.Errorf("expected OrigTimestamp: %d, but got: %s",
+			*exp.origTSNanos, txn.OrigTimestamp())
+	}
+	if exp.maxTSNanos != nil && *exp.maxTSNanos != txn.Proto().MaxTimestamp.WallTime {
+		return errors.Errorf("expected MaxTimestamp: %d, but got: %s",
+			*exp.maxTSNanos, txn.Proto().MaxTimestamp)
+	}
+	if exp.isFinalized != nil && *exp.isFinalized != txn.IsFinalized() {
+		return errors.Errorf("expected finalized: %t but wasn't", *exp.isFinalized)
+	}
+	return nil
+}
+
+func TestTransitions(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.TODO()
+	dummyRewCap := rewindCapability{rewindPos: cursorPosition{12, 13}}
+	testCon := makeTestContext()
+	tranCtx := transitionCtx{
+		db:                    testCon.mockDB,
+		nodeID:                roachpb.NodeID(5),
+		clock:                 testCon.clock,
+		tracer:                tracing.NewTracer(),
+		defaultIsolationLevel: enginepb.SERIALIZABLE,
+		connMon:               &testCon.mon,
+	}
+
+	type expAdvance struct {
+		expCode advanceCode
+		// Use noFlush/flushSet.
+		expFlush bool
+	}
+
+	implicitTxnName := sqlImplicitTxnName
+	explicitTxnName := sqlTxnName
+	now := testCon.clock.Now()
+	iso := enginepb.SERIALIZABLE
+	pri := roachpb.NormalUserPriority
+	maxTS := testCon.clock.Now().Add(testCon.clock.MaxOffset().Nanoseconds(), 0 /* logical */)
+	varTrue := true
+	varFalse := false
+	type test struct {
+		name string
+
+		// A function used to init the txnState to the desired state before the
+		// transition. The returned State and txnState are to be used to initialize
+		// a Machine.
+		init func() (State, *txnState2, error)
+
+		// The event to deliver to the state machine.
+		ev Event
+		// evBaggage, if not nil, is the baggage to be delivered with the event.
+		evBaggage EventBaggage
+		// evFun, if specified, replaces ev and allows a test to create an event
+		// that depends on the transactionState.
+		evFun func(ts *txnState2) (Event, EventBaggage)
+
+		// The expected state of the fsm after the transition.
+		expState State
+
+		// The expected advance instructions resulting from the transition.
+		expAdv expAdvance
+
+		// If nil, the kv txn is expected to be nil. Otherwise, the txn's fields are
+		// compared.
+		expTxn *expKVTxn
+	}
+	tests := []test{
+		//
+		// Tests starting from the NoTxn state.
+		//
+		{
+			// Start an implicit txn from NoTxn.
+			name: "NoTxn->Starting (implicit txn)",
+			init: func() (State, *txnState2, error) {
+				s, ts := testCon.createNoTxnState()
+				return s, ts, nil
+			},
+			ev:        eventTxnStart{ImplicitTxn: True},
+			evBaggage: baggageEventTxnStart{tranCtx: tranCtx},
+			expState:  stateOpen{ImplicitTxn: True, RetryIntent: False},
+			expAdv: expAdvance{
+				// We expect to stayInPlace; upon starting a txn the statement is
+				// executed again, this time in state Open.
+				expCode:  stayInPlace,
+				expFlush: flushSet,
+			},
+			expTxn: &expKVTxn{
+				debugName:    &implicitTxnName,
+				isolation:    &iso,
+				userPriority: &pri,
+				tsNanos:      &now.WallTime,
+				origTSNanos:  &now.WallTime,
+				maxTSNanos:   &maxTS.WallTime,
+				isFinalized:  &varFalse,
+			},
+		},
+		{
+			// Start an explicit txn from NoTxn.
+			name: "NoTxn->Starting (explicit txn)",
+			init: func() (State, *txnState2, error) {
+				s, ts := testCon.createNoTxnState()
+				return s, ts, nil
+			},
+			ev:        eventTxnStart{ImplicitTxn: False},
+			evBaggage: baggageEventTxnStart{tranCtx: tranCtx},
+			expState:  stateOpen{ImplicitTxn: False, RetryIntent: False},
+			expAdv: expAdvance{
+				expCode:  stayInPlace,
+				expFlush: flushSet,
+			},
+			expTxn: &expKVTxn{
+				debugName:    &explicitTxnName,
+				isolation:    &iso,
+				userPriority: &pri,
+				tsNanos:      &now.WallTime,
+				origTSNanos:  &now.WallTime,
+				maxTSNanos:   &maxTS.WallTime,
+				isFinalized:  &varFalse,
+			},
+		},
+		//
+		// Tests starting from the Open state.
+		//
+		{
+			// Set the retry intent.
+			name: "Open->Open + retry intent",
+			init: func() (State, *txnState2, error) {
+				s, ts := testCon.createOpenState(explicitTxn, retryIntentNotSet)
+				return s, ts, nil
+			},
+			ev:       eventRetryIntentSet{},
+			expState: stateOpen{ImplicitTxn: False, RetryIntent: True},
+			expAdv: expAdvance{
+				expCode:  advanceOne,
+				expFlush: flushSet,
+			},
+			expTxn: &expKVTxn{},
+		},
+		{
+			// Finish an implicit txn.
+			name: "Open (implicit) -> NoTxn",
+			init: func() (State, *txnState2, error) {
+				s, ts := testCon.createOpenState(implicitTxn, retryIntentNotSet)
+				// We commit the KV transaction, as that's done by the layer below
+				// txnState.
+				if err := ts.mu.txn.Commit(ts.Ctx); err != nil {
+					return nil, nil, err
+				}
+				return s, ts, nil
+			},
+			ev:       eventTxnFinish{},
+			expState: stateNoTxn{},
+			expAdv: expAdvance{
+				expCode:  advanceOne,
+				expFlush: flushSet,
+			},
+			expTxn: nil,
+		},
+		{
+			// Finish an explicit txn.
+			name: "Open (explicit) -> NoTxn",
+			init: func() (State, *txnState2, error) {
+				s, ts := testCon.createOpenState(explicitTxn, retryIntentNotSet)
+				// We commit the KV transaction, as that's done by the layer below
+				// txnState.
+				if err := ts.mu.txn.Commit(ts.Ctx); err != nil {
+					return nil, nil, err
+				}
+				return s, ts, nil
+			},
+			ev:       eventTxnFinish{},
+			expState: stateNoTxn{},
+			expAdv: expAdvance{
+				expCode:  advanceOne,
+				expFlush: flushSet,
+			},
+			expTxn: nil,
+		},
+		{
+			// Get a retriable error while we can auto-retry.
+			name: "Open + auto-retry",
+			init: func() (State, *txnState2, error) {
+				s, ts := testCon.createOpenState(explicitTxn, retryIntentNotSet)
+				return s, ts, nil
+			},
+			evFun: func(ts *txnState2) (Event, EventBaggage) {
+				b := baggageEventRetriableErr{
+					err: roachpb.NewHandledRetryableTxnError(
+						"test retriable err",
+						ts.mu.txn.ID(),
+						*ts.mu.txn.Proto()),
+					rewCap: dummyRewCap,
+				}
+				return eventRetriableErr{CanAutoRetry: True, IsCommit: False}, b
+			},
+			expState: stateOpen{ImplicitTxn: False, RetryIntent: False},
+			expAdv: expAdvance{
+				expCode:  rewind,
+				expFlush: noFlush,
+			},
+			// Expect non-nil txn.
+			expTxn: &expKVTxn{
+				isFinalized: &varFalse,
+			},
+		},
+		{
+			// Like the above test - get a retriable error while we can auto-retry,
+			// except this time the error is on a COMMIT. This shouldn't make any
+			// difference; we should still auto-retry like the above.
+			name: "Open + auto-retry (COMMIT)",
+			init: func() (State, *txnState2, error) {
+				s, ts := testCon.createOpenState(explicitTxn, retryIntentNotSet)
+				return s, ts, nil
+			},
+			evFun: func(ts *txnState2) (Event, EventBaggage) {
+				b := baggageEventRetriableErr{
+					err: roachpb.NewHandledRetryableTxnError(
+						"test retriable err",
+						ts.mu.txn.ID(),
+						*ts.mu.txn.Proto()),
+					rewCap: dummyRewCap,
+				}
+				return eventRetriableErr{CanAutoRetry: True, IsCommit: True}, b
+			},
+			expState: stateOpen{ImplicitTxn: False, RetryIntent: False},
+			expAdv: expAdvance{
+				expCode:  rewind,
+				expFlush: noFlush,
+			},
+			// Expect non-nil txn.
+			expTxn: &expKVTxn{
+				isFinalized: &varFalse,
+			},
+		},
+		{
+			// Get a retriable error when we can no longer auto-retry, but the client
+			// is doing client-side retries.
+			name: "Open + client retry",
+			init: func() (State, *txnState2, error) {
+				s, ts := testCon.createOpenState(explicitTxn, retryIntentSet)
+				return s, ts, nil
+			},
+			evFun: func(ts *txnState2) (Event, EventBaggage) {
+				b := baggageEventRetriableErr{
+					err: roachpb.NewHandledRetryableTxnError(
+						"test retriable err",
+						ts.mu.txn.ID(),
+						*ts.mu.txn.Proto()),
+					rewCap: rewindCapability{},
+				}
+				return eventRetriableErr{CanAutoRetry: False, IsCommit: False}, b
+			},
+			expState: stateRestartWait{},
+			expAdv: expAdvance{
+				expCode:  skipQueryStr,
+				expFlush: flushSet,
+			},
+			// Expect non-nil txn.
+			expTxn: &expKVTxn{
+				isFinalized: &varFalse,
+			},
+		},
+		{
+			// Like the above (a retriable error when we can no longer auto-retry, but
+			// the client is doing client-side retries) except the retriable error
+			// comes from a COMMIT statement. This means that the client didn't
+			// properly respect the client-directed retries protocol (it should've
+			// done a RELEASE such that COMMIT couldn't get retriable errors), and so
+			// we can't go to RestartWait.
+			name: "Open + client retry + error on COMMIT",
+			init: func() (State, *txnState2, error) {
+				s, ts := testCon.createOpenState(explicitTxn, retryIntentSet)
+				return s, ts, nil
+			},
+			evFun: func(ts *txnState2) (Event, EventBaggage) {
+				b := baggageEventRetriableErr{
+					err: roachpb.NewHandledRetryableTxnError(
+						"test retriable err",
+						ts.mu.txn.ID(),
+						*ts.mu.txn.Proto()),
+					rewCap: rewindCapability{},
+				}
+				return eventRetriableErr{CanAutoRetry: False, IsCommit: True}, b
+			},
+			expState: stateNoTxn{},
+			expAdv: expAdvance{
+				expCode:  skipQueryStr,
+				expFlush: flushSet,
+			},
+			// Expect nil txn.
+			expTxn: nil,
+		},
+		{
+			// An error on COMMIT leaves us in NoTxn, not in Aborted.
+			name: "Open + non-retriable error on COMMIT",
+			init: func() (State, *txnState2, error) {
+				s, ts := testCon.createOpenState(explicitTxn, retryIntentSet)
+				return s, ts, nil
+			},
+			ev:        eventNonRetriableErr{IsCommit: True},
+			evBaggage: baggageEventNonRetriableErr{err: fmt.Errorf("test non-retriable err")},
+			expState:  stateNoTxn{},
+			expAdv: expAdvance{
+				expCode:  skipQueryStr,
+				expFlush: flushSet,
+			},
+			// Expect nil txn.
+			expTxn: nil,
+		},
+		{
+			// We get a retriable error, but we can't auto-retry and the client is not
+			// doing client-directed retries.
+			name: "Open + useless retriable error (explicit)",
+			init: func() (State, *txnState2, error) {
+				s, ts := testCon.createOpenState(explicitTxn, retryIntentNotSet)
+				return s, ts, nil
+			},
+			evFun: func(ts *txnState2) (Event, EventBaggage) {
+				b := baggageEventRetriableErr{
+					err: roachpb.NewHandledRetryableTxnError(
+						"test retriable err",
+						ts.mu.txn.ID(),
+						*ts.mu.txn.Proto()),
+					rewCap: rewindCapability{},
+				}
+				return eventRetriableErr{CanAutoRetry: False, IsCommit: False}, b
+			},
+			expState: stateAborted{RetryIntent: False},
+			expAdv: expAdvance{
+				expCode:  skipQueryStr,
+				expFlush: flushSet,
+			},
+			expTxn: &expKVTxn{
+				isFinalized: &varTrue,
+			},
+		},
+		{
+			// Like the above, but this time with an implicit txn: we get a retriable
+			// error, but we can't auto-retry. We expect to go to NoTxn.
+			name: "Open + useless retriable error (implicit)",
+			init: func() (State, *txnState2, error) {
+				s, ts := testCon.createOpenState(implicitTxn, retryIntentNotSet)
+				return s, ts, nil
+			},
+			evFun: func(ts *txnState2) (Event, EventBaggage) {
+				b := baggageEventRetriableErr{
+					err: roachpb.NewHandledRetryableTxnError(
+						"test retriable err",
+						ts.mu.txn.ID(),
+						*ts.mu.txn.Proto()),
+					rewCap: rewindCapability{},
+				}
+				return eventRetriableErr{CanAutoRetry: False, IsCommit: False}, b
+			},
+			expState: stateNoTxn{},
+			expAdv: expAdvance{
+				expCode:  skipQueryStr,
+				expFlush: flushSet,
+			},
+			// Expect the txn to have been cleared.
+			expTxn: nil,
+		},
+		{
+			// We get a non-retriable error.
+			name: "Open + non-retriable error",
+			init: func() (State, *txnState2, error) {
+				s, ts := testCon.createOpenState(explicitTxn, retryIntentNotSet)
+				return s, ts, nil
+			},
+			ev:        eventNonRetriableErr{IsCommit: False},
+			evBaggage: baggageEventNonRetriableErr{err: fmt.Errorf("test non-retriable err")},
+			expState:  stateAborted{RetryIntent: False},
+			expAdv: expAdvance{
+				expCode:  skipQueryStr,
+				expFlush: flushSet,
+			},
+			expTxn: &expKVTxn{
+				isFinalized: &varTrue,
+			},
+		},
+		{
+			// We go to CommitWait (after a RELEASE SAVEPOINT).
+			name: "Open->CommitWait",
+			init: func() (State, *txnState2, error) {
+				s, ts := testCon.createOpenState(explicitTxn, retryIntentSet)
+				// Simulate what execution does before generating this event.
+				err := ts.mu.txn.Commit(ts.Ctx)
+				return s, ts, err
+			},
+			ev:       eventTxnReleased{},
+			expState: stateCommitWait{},
+			expAdv: expAdvance{
+				expCode:  advanceOne,
+				expFlush: flushSet,
+			},
+			expTxn: &expKVTxn{
+				isFinalized: &varTrue,
+			},
+		},
+		//
+		// Tests starting from the Aborted state.
+		//
+		{
+			// The txn finished, such as after a ROLLBACK.
+			name: "Aborted->NoTxn",
+			init: func() (State, *txnState2, error) {
+				s, ts := testCon.createAbortedState(retryIntentNotSet)
+				return s, ts, nil
+			},
+			ev:       eventTxnFinish{},
+			expState: stateNoTxn{},
+			expAdv: expAdvance{
+				expCode:  advanceOne,
+				expFlush: flushSet,
+			},
+			expTxn: nil,
+		},
+		{
+			// The txn is starting again (e.g. ROLLBACK TO SAVEPOINT while in Aborted).
+			name: "Aborted->Starting",
+			init: func() (State, *txnState2, error) {
+				s, ts := testCon.createAbortedState(retryIntentSet)
+				return s, ts, nil
+			},
+			ev:        eventTxnStart{ImplicitTxn: False},
+			evBaggage: baggageEventTxnStart{tranCtx: tranCtx},
+			expState:  stateOpen{ImplicitTxn: False, RetryIntent: True},
+			expAdv: expAdvance{
+				expCode:  advanceOne,
+				expFlush: flushSet,
+			},
+			expTxn: &expKVTxn{
+				isFinalized: &varFalse,
+			},
+		},
+		//
+		// Tests starting from the RestartWait state.
+		//
+		{
+			// The txn got finished, such as after a ROLLBACK.
+			name: "RestartWait->NoTxn",
+			init: func() (State, *txnState2, error) {
+				s, ts := testCon.createRestartWaitState()
+				err := ts.mu.txn.Rollback(ts.Ctx)
+				return s, ts, err
+			},
+			ev:       eventTxnFinish{},
+			expState: stateNoTxn{},
+			expAdv: expAdvance{
+				expCode:  advanceOne,
+				expFlush: flushSet,
+			},
+			expTxn: nil,
+		},
+		{
+			// The txn got restarted, through a ROLLBACK TO SAVEPOINT.
+			name: "RestartWait->Open",
+			init: func() (State, *txnState2, error) {
+				s, ts := testCon.createRestartWaitState()
+				return s, ts, nil
+			},
+			ev:       eventTxnRestart{},
+			expState: stateOpen{ImplicitTxn: False, RetryIntent: True},
+			expAdv: expAdvance{
+				expCode:  advanceOne,
+				expFlush: flushSet,
+			},
+			expTxn: &expKVTxn{},
+		},
+		{
+			name: "RestartWait->Aborted",
+			init: func() (State, *txnState2, error) {
+				s, ts := testCon.createRestartWaitState()
+				return s, ts, nil
+			},
+			ev:        eventNonRetriableErr{IsCommit: False},
+			evBaggage: baggageEventNonRetriableErr{err: fmt.Errorf("test non-retriable err")},
+			expState:  stateAborted{RetryIntent: True},
+			expAdv: expAdvance{
+				expCode:  skipQueryStr,
+				expFlush: flushSet,
+			},
+			expTxn: nil,
+		},
+		//
+		// Tests starting from the CommitWait state,
+		//
+		{
+			name: "CommitWait->NoTxn",
+			init: func() (State, *txnState2, error) {
+				return testCon.createCommitWaitState()
+			},
+			ev:       eventTxnFinish{},
+			expState: stateNoTxn{},
+			expAdv: expAdvance{
+				expCode:  advanceOne,
+				expFlush: flushSet,
+			},
+			expTxn: nil,
+		},
+		{
+			name: "CommitWait->Aborted",
+			init: func() (State, *txnState2, error) {
+				return testCon.createCommitWaitState()
+			},
+			ev:        eventNonRetriableErr{IsCommit: False},
+			evBaggage: baggageEventNonRetriableErr{err: fmt.Errorf("test non-retriable err")},
+			expState:  stateAborted{RetryIntent: True},
+			expAdv: expAdvance{
+				expCode:  skipQueryStr,
+				expFlush: flushSet,
+			},
+			expTxn: &expKVTxn{
+				isFinalized: &varTrue,
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			// Get the initial state.
+			s, ts, err := tc.init()
+			if err != nil {
+				t.Fatal(err)
+			}
+			machine := MakeMachine(txnStateTransitions, s, ts)
+
+			// Perform the test's transition.
+			ev := tc.ev
+			baggage := tc.evBaggage
+			if tc.evFun != nil {
+				ev, baggage = tc.evFun(ts)
+			}
+			if err := machine.ApplyWithBaggage(ctx, ev, baggage); err != nil {
+				t.Fatal(err)
+			}
+
+			// Check that we moved to the right high-level state.
+			if state := machine.GetCurState(); state != tc.expState {
+				t.Fatalf("expected state %#v, got: %#v", tc.expState, state)
+			}
+
+			// Check the resulting advanceInfo.
+			adv := ts.adv
+			expRewPos := noRewind
+			if tc.expAdv.expCode == rewind {
+				expRewPos = dummyRewCap.rewindPos
+			}
+			if err := checkAdv(adv, tc.expAdv.expCode, tc.expAdv.expFlush, expRewPos); err != nil {
+				t.Fatal(err)
+			}
+
+			// Check that the KV txn is in the expected state.
+			if tc.expTxn == nil {
+				if ts.mu.txn != nil {
+					t.Fatalf("expected no txn, got: %+v", ts.mu.txn)
+				}
+			} else {
+				if err := checkTxn(ts.mu.txn, *tc.expTxn); err != nil {
+					t.Fatal(err)
+				}
+			}
+		})
+	}
+}
