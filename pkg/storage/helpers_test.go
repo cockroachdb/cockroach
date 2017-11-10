@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/pkg/errors"
 )
 
@@ -317,10 +318,11 @@ func (r *Replica) GetTimestampCacheLowWater() hlc.Timestamp {
 	// Bump the per-Store low-water mark using the per-range read and write info.
 	start := roachpb.Key(r.Desc().StartKey)
 	end := roachpb.Key(r.Desc().EndKey)
-	if r, _, ok := r.store.tsCacheMu.cache.GetMaxRead(start, end); !ok && t.Less(r) {
+	noID := uuid.UUID{}
+	if r, txnID := r.store.tsCacheMu.cache.GetMaxRead(start, end); txnID == noID && t.Less(r) {
 		t = r
 	}
-	if w, _, ok := r.store.tsCacheMu.cache.GetMaxWrite(start, end); !ok && t.Less(w) {
+	if w, txnID := r.store.tsCacheMu.cache.GetMaxWrite(start, end); txnID == noID && t.Less(w) {
 		t = w
 	}
 	return t
