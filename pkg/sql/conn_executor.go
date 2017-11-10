@@ -47,40 +47,47 @@ package sql
 // automatic retries. Rewinding can only be done if results for the rewound
 // statements have not actually been delivered to the client; see below.
 //
-//                                                  +-----------------+
-//     +--------------------+                       |ConnExecutor     |
-//     |stmtBuf             |                       |                 |
-//     |                    | statements are read   |                 |
-//     | +-+-+ +-+-+ +-+-+  +-----------------------+  +------------+ |
-//     | | | | | | | | | |  |                       |  |txnState    | |
-// +---> +-+-+ +++-+ +-+-+  |                       |  +------------+ |
-// |   |        ^           |                       |  +------------+ |
-// |   |        |   +-------------------------------+  |session data| |
-// |   |        +   v       | cursor is advanced    |  +------------+ |
-// |   |       cursor       |           +           |                 |
-// |   +--------------------+           |           +------------+----+
-// |                                    |                        |
-// |                                    |                        |
-// +-------------+                      |                        |
-//               +--------+             |                        |
-//               ||parser |             |results are produced    |
-//               +--------+             |                        |
-//               |                      |                        |
-//               |                      |                        v
-//               |                      |            +-----------+----+
-//       +-------+------+               |            |execution engine|
-//       | pgwire conn  |               |            |(local/DistSQL) |
-//       |              |               |            +----------------+
-//       |   +----------+               |
-//       |   |clientComm<---------------+
-//       |   +----------+
-//       |              |
-//       +-------^------+
-//               |
-//               |
-//       +-------+------+
-//       | SQL client   |
-//       +--------------+
+//
+//                                                    +---------------------+
+//                                                    |ConnExecutor         |
+//                                                    |                     |
+//                                                    |  execution---------------+
+//                                                    |    +                |    |
+//                                                    |    |inputEvent      |    |
+//                                                    |    |                |    |
+//       +--------------------+                       |    v                |    |
+//       |stmtBuf             |                       |  +------------+     |    |
+//       |                    | statements are read   |  |txnState    |     |    |
+//       | +---+ +---+ +---+  +----------------------->  +------------+     |    |
+//       | | | | | | | | | |  |                       |   |   +-------------+    |
+//   +---> +---+ +---+ +---+  |                       |   |   |session data |    |
+//   |   |        ^           |                       |   |   +-------------+    |
+//   |   |        |   +-----------------------------------+                 |    |
+//   |   |        +   v       | cursor is advanced    |  advanceInfo        |    |
+//   |   |       cursor       |           +           |                     |    |
+//   |   +--------------------+           |           +---------------------+    |
+//   |                                    |                                      |
+//   |                                    |                                      |
+//   +-------------+                      |                                      |
+//                 +--------+             |                                      |
+//                 | parser |             |results are produced                  |
+//                 +--------+             |                                      |
+//                 |                      |                                      |
+//                 |                      |                                      |
+//                 |                      |            +----------------+        |
+//         +--------------+               |            |execution engine<--------+
+//         | pgwire conn  |               |            |(local/DistSQL) |
+//         |              |               |            +----------------+
+//         |   +----------+               |
+//         |   |clientComm<---------------+
+//         |   +----------+
+//         |              |
+//         +-------^------+
+//                 |
+//                 |
+//         +--------------+
+//         | SQL client   |
+//         +--------------+
 //
 // The ConnExecutor is disconnected from client communication (i.e. generally
 // network communication - pgwire); the module doing client communication is
