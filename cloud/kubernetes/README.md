@@ -189,7 +189,7 @@ kubectl create -f cockroachdb-client-secure.yaml
 Check and approve the CSR for the pod as described above, and then get a shell to the pod and run:
 
 ```shell
-kubectl exec -it <pod name> -- ./cockroach sql --certs-dir=/cockroach-certs --host=cockroachdb-public
+kubectl exec -it cockroachdb-client-secure -- ./cockroach sql --certs-dir=/cockroach-certs --host=cockroachdb-public
 ```
 
 You can see example SQL statements for inserting and querying data in the
