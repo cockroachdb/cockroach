@@ -37,11 +37,11 @@ type Event interface {
 	Event()
 }
 
-// EventBaggage is extra baggage on an Event that does not contribute to state
+// EventPayload is extra payload on an Event that does not contribute to state
 // transition decisions, but that can be affected by a state transition. The
 // interface is provided as part of the Args passed to Action after being
-// given to a Machine during a call to ApplyWithBaggage.
-type EventBaggage interface{}
+// given to a Machine during a call to ApplyWithPayload.
+type EventPayload interface{}
 
 // Args is a structure containing the arguments passed to Transition.Action.
 type Args struct {
@@ -51,7 +51,7 @@ type Args struct {
 	Extended ExtendedState
 
 	Event   Event
-	Baggage EventBaggage
+	Payload EventPayload
 }
 
 // Transition is a Machine's response to an Event applied to a State. It may
@@ -127,18 +127,18 @@ func MakeMachine(t Transitions, start State, es ExtendedState) Machine {
 
 // Apply applies the Event to the state Machine.
 func (m *Machine) Apply(ctx context.Context, e Event) error {
-	return m.ApplyWithBaggage(ctx, e, nil)
+	return m.ApplyWithPayload(ctx, e, nil)
 }
 
-// ApplyWithBaggage applies the Event to the state Machine, passing along the
-// EventBaggage to the state transition's Action function.
-func (m *Machine) ApplyWithBaggage(ctx context.Context, e Event, b EventBaggage) (err error) {
+// ApplyWithPayload applies the Event to the state Machine, passing along the
+// EventPayload to the state transition's Action function.
+func (m *Machine) ApplyWithPayload(ctx context.Context, e Event, b EventPayload) (err error) {
 	m.cur, err = m.t.apply(Args{
 		Ctx:      ctx,
 		Prev:     m.cur,
 		Extended: m.es,
 		Event:    e,
-		Baggage:  b,
+		Payload:  b,
 	})
 	return err
 }
