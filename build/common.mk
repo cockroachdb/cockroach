@@ -448,12 +448,8 @@ libsnappy: $(SNAPPY_DIR)/Makefile
 librocksdb: $(ROCKSDB_DIR)/Makefile
 	@$(MAKE) --no-print-directory -C $(ROCKSDB_DIR) rocksdb
 
-# libroach should depend on the generated C++ protobufs.
-#
-# TODO(benesch): merge the protobuf and top-level Makefile so this dependency
-# can be clearly expressed.
 .PHONY: libroach
-libroach: $(LIBROACH_DIR)/Makefile
+libroach: $(LIBROACH_DIR)/Makefile $(CPP_PROTOS_TARGET)
 	@$(MAKE) --no-print-directory -C $(LIBROACH_DIR) roach
 
 .PHONY: libroachccl
