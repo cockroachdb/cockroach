@@ -37,7 +37,7 @@ type samplerProcessor struct {
 
 	flowCtx     *FlowCtx
 	input       RowSource
-	sr          sqlbase.SampleReservoir
+	sr          stats.SampleReservoir
 	sketchSpecs []SamplerSpec_SketchSpec
 	outTypes    []sqlbase.ColumnType
 	// Output column indices for special columns.
