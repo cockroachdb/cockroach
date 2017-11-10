@@ -401,8 +401,8 @@ func (node *CollatedStringColType) Format(buf *bytes.Buffer, f lex.EncodeFlags) 
 type ArrayColType struct {
 	Name string
 	// ParamTyp is the type of the elements in this array.
-	ParamType   ColumnType
-	BoundsExprs Exprs
+	ParamType ColumnType
+	Bounds    []int32
 }
 
 // Format implements the ColTypeFormatter interface.
@@ -414,11 +414,11 @@ func (node *ArrayColType) Format(buf *bytes.Buffer, f lex.EncodeFlags) {
 	}
 }
 
-func arrayOf(colType ColumnType, boundsExprs Exprs) (ColumnType, error) {
+func arrayOf(colType ColumnType, bounds []int32) (ColumnType, error) {
 	if !canBeInArrayColType(colType) {
 		return nil, pgerror.NewErrorf(pgerror.CodeFeatureNotSupportedError, "arrays of %s not allowed", colType)
 	}
-	return &ArrayColType{Name: colType.String() + "[]", ParamType: colType, BoundsExprs: boundsExprs}, nil
+	return &ArrayColType{Name: colType.String() + "[]", ParamType: colType, Bounds: bounds}, nil
 }
 
 // VectorColType is the base for VECTOR column types, which are Postgres's
@@ -587,7 +587,7 @@ func DatumTypeToColumnType(t types.T) (ColumnType, error) {
 		if err != nil {
 			return nil, err
 		}
-		return arrayOf(elemTyp, Exprs(nil))
+		return arrayOf(elemTyp, nil)
 	case types.TOidWrapper:
 		return DatumTypeToColumnType(typ.T)
 	}

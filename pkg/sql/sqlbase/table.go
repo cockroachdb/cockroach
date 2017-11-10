@@ -152,18 +152,7 @@ func MakeColumnDefDescs(
 	case *parser.CollatedStringColType:
 		col.Type.Width = int32(t.N)
 	case *parser.ArrayColType:
-		for i, e := range t.BoundsExprs {
-			te, err := parser.TypeCheckAndRequire(e, semaCtx, types.Int, "array bounds")
-			if err != nil {
-				return nil, nil, errors.Wrapf(err, "couldn't get bound %d", i)
-			}
-			d, err := te.Eval(nil)
-			if err != nil {
-				return nil, nil, errors.Wrapf(err, "couldn't Eval bound %d", i)
-			}
-			b := parser.MustBeDInt(d)
-			col.Type.ArrayDimensions = append(col.Type.ArrayDimensions, int32(b))
-		}
+		col.Type.ArrayDimensions = t.Bounds
 	case *parser.VectorColType:
 		if _, ok := t.ParamType.(*parser.IntColType); !ok {
 			return nil, nil, errors.Errorf("vectors of type %s are unsupported", t.ParamType)
