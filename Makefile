@@ -191,6 +191,8 @@ XGO := $(strip $(if $(XGOOS),GOOS=$(XGOOS)) $(if $(XGOARCH),GOARCH=$(XGOARCH)) $
 
 COCKROACH := ./cockroach$(SUFFIX)$(shell $(XGO) env GOEXE)
 
+GOBINDATA_TARGET = $(UI_ROOT)/embedded.go
+
 .DEFAULT_GOAL := all
 all: $(COCKROACH)
 
@@ -204,7 +206,7 @@ $(COCKROACH) build buildoss: BUILDMODE = build -i -o $(COCKROACH)
 BUILDINFO = .buildinfo/tag .buildinfo/rev .buildinfo/basebranch
 
 # The build.utcTime format must remain in sync with TimeFormat in pkg/build/info.go.
-$(COCKROACH) build buildoss go-install gotestdashi generate lint lintshort: $(CGO_FLAGS_FILES) $(BOOTSTRAP_TARGET) ui sqlparser $(BUILDINFO)
+$(COCKROACH) build buildoss go-install gotestdashi generate lint lintshort: $(CGO_FLAGS_FILES) $(BOOTSTRAP_TARGET) $(GOBINDATA_TARGET) sqlparser $(BUILDINFO)
 $(COCKROACH) build buildoss go-install gotestdashi generate lint lintshort: override LINKFLAGS += \
 	-X "github.com/cockroachdb/cockroach/pkg/build.tag=$(shell cat .buildinfo/tag)" \
 	-X "github.com/cockroachdb/cockroach/pkg/build.utcTime=$(shell date -u '+%Y/%m/%d %H:%M:%S')" \
@@ -405,6 +407,67 @@ ifneq ($(GIT_DIR),)
 .buildinfo/basebranch: .ALWAYS_REBUILD
 endif
 
+STYLINT            := ./node_modules/.bin/stylint
+TSLINT             := ./node_modules/.bin/tslint
+KARMA              := ./node_modules/.bin/karma
+WEBPACK            := ./node_modules/.bin/webpack
+WEBPACK_DEV_SERVER := ./node_modules/.bin/webpack-dev-server
+WEBPACK_DASHBOARD  := ./opt/node_modules/.bin/webpack-dashboard
+
+.PHONY: ui-generate
+ui-generate: $(GOBINDATA_TARGET)
+
+.PHONY: ui-lint
+ui-lint: | protobuf
+	$(NODE_RUN) -C $(UI_ROOT) $(STYLINT) -c .stylintrc styl
+	$(NODE_RUN) -C $(UI_ROOT) $(TSLINT) -c tslint.json -p tsconfig.json --type-check
+	@# TODO(benesch): Invoke tslint just once when palantir/tslint#2827 is fixed.
+	$(NODE_RUN) -C $(UI_ROOT) $(TSLINT) -c tslint.json *.js
+	@if $(NODE_RUN) -C $(UI_ROOT) yarn list | grep phantomjs; then echo ^ forbidden UI dependency >&2; exit 1; fi
+
+# DLLs are Webpack bundles, not Windows shared libraries. See "DLLs for speedy
+# builds" in the UI README for details.
+UI_DLLS := \
+	$(UI_ROOT)/dist/protos.dll.js \
+	$(UI_ROOT)/dist/vendor.dll.js \
+	$(UI_ROOT)/protos-manifest.json \
+	$(UI_ROOT)/vendor-manifest.json
+
+.PHONY: ui-test
+ui-test: $(UI_DLLS)
+	$(NODE_RUN) -C $(UI_ROOT) $(KARMA) start
+
+.PHONY: ui-test-watch
+ui-test-watch: $(UI_DLLS)
+	$(NODE_RUN) -C $(UI_ROOT) $(KARMA) start --no-single-run --auto-watch
+
+# (Ab)use a pattern rule to teach Make that this one command produces two files.
+# Normally, it would run the recipe twice if dist/FOO.js and FOO-manifest.js
+# were both out-of-date.
+#
+# See: https://stackoverflow.com/a/3077254/1122351
+$(UI_ROOT)/dist/%.dll.js $(UI_ROOT)/%-manifest.json: $(UI_ROOT)/webpack.%.js | protobuf
+	$(NODE_RUN) -C $(UI_ROOT) $(WEBPACK) -p --config webpack.$*.js
+
+$(GOBINDATA_TARGET): $(UI_ROOT)/webpack.app.js $(UI_DLLS) $(shell find $(UI_ROOT)/src $(UI_ROOT)/styl)
+	find $(UI_ROOT)/dist -mindepth 1 -not -name '*.dll.js' -delete
+	$(NODE_RUN) -C $(UI_ROOT) $(WEBPACK) --config webpack.app.js
+	go-bindata -nometadata -pkg ui -o $@ -prefix $(UI_ROOT)/dist $(UI_ROOT)/dist/...
+	# Add comment recognized by reviewable.
+	echo '// GENERATED FILE DO NOT EDIT' >> $@
+	gofmt -s -w $@
+	goimports -w $@
+
+$(UI_ROOT)/yarn.opt.installed:
+	$(NODE_RUN) -C $(UI_ROOT)/opt yarn install
+	touch $@
+
+.PHONY: ui-watch
+ui-watch: export TARGET := http://localhost:8080
+ui-watch: PORT := 3000
+ui-watch: $(UI_DLLS) $(UI_ROOT)/yarn.opt.installed
+	cd $(UI_ROOT) && $(WEBPACK_DASHBOARD) -- $(WEBPACK_DEV_SERVER) --config webpack.app.js --port $(PORT)
+
 .PHONY: clean
 clean: ## Remove build artifacts.
 clean: clean-c-deps
@@ -417,7 +480,7 @@ clean: clean-c-deps
 .PHONY: maintainer-clean
 maintainer-clean: ## Like clean, but also remove some auto-generated source code.
 maintainer-clean: clean
-	$(MAKE) -C $(UI_ROOT) maintainer-clean
+	rm -rf $(UI_ROOT)/dist $(UI_ROOT)/node_modules $(UI_DLLS) $(GOBINDATA_TARGET) $(YARN_INSTALLED_TARGET)
 	$(MAKE) -C $(SQLPARSER_ROOT) maintainer-clean
 
 .PHONY: unsafe-clean
