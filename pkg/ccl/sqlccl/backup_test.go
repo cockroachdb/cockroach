@@ -2262,12 +2262,10 @@ func TestBackupRestoreDropDB(t *testing.T) {
 	_, _, sqlDB, _, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, initNone)
 	defer cleanupFn()
 
-	sqlDB.Exec(`DROP DATABASE data CASCADE`)
-	sqlDB.Exec(`
-		CREATE DATABASE data;
-		CREATE TABLE data.bank (i int);
-		INSERT INTO data.bank VALUES (1);
-	`)
+	sqlDB.Exec(`DROP DATABASE data`)
+	sqlDB.Exec(`CREATE DATABASE data`)
+	sqlDB.Exec(`CREATE TABLE data.bank (i int)`)
+	sqlDB.Exec(`INSERT INTO data.bank VALUES (1)`)
 
 	sqlDB.Exec("BACKUP DATABASE data TO $1", localFoo)
 	sqlDB.Exec("CREATE DATABASE data2")
