@@ -246,6 +246,9 @@ func (u *sqlSymUnion) tblExprs() TableExprs {
 func (u *sqlSymUnion) from() *From {
     return u.val.(*From)
 }
+func (u *sqlSymUnion) int32s() []int32 {
+    return u.val.([]int32)
+}
 func (u *sqlSymUnion) joinCond() JoinCond {
     return u.val.(JoinCond)
 }
@@ -699,7 +702,7 @@ func (u *sqlSymUnion) scrubOption() ScrubOption {
 %type <[]*Order> sortby_list
 %type <IndexElemList> index_params
 %type <NameList> name_list opt_name_list
-%type <Exprs> opt_array_bounds
+%type <[]int32> opt_array_bounds
 %type <*From> from_clause update_from_clause
 %type <TableExprs> from_list
 %type <UnresolvedNames> qualified_name_list
@@ -4708,9 +4711,9 @@ where_clause:
 typename:
   simple_typename opt_array_bounds
   {
-    if exprs := $2.exprs(); exprs != nil {
+    if bounds := $2.int32s(); bounds != nil {
       var err error
-      $$.val, err = arrayOf($1.colType(), exprs)
+      $$.val, err = arrayOf($1.colType(), bounds)
       if err != nil {
         sqllex.Error(err.Error())
         return 1
@@ -4724,7 +4727,7 @@ typename:
 | simple_typename ARRAY '[' ICONST ']' {
     /* SKIP DOC */
     var err error
-    $$.val, err = arrayOf($1.colType(), Exprs{NewDInt(DInt(-1))})
+    $$.val, err = arrayOf($1.colType(), []int32{-1})
     if err != nil {
       sqllex.Error(err.Error())
       return 1
@@ -4732,7 +4735,7 @@ typename:
   }
 | simple_typename ARRAY {
     var err error
-    $$.val, err = arrayOf($1.colType(), Exprs{NewDInt(DInt(-1))})
+    $$.val, err = arrayOf($1.colType(), []int32{-1})
     if err != nil {
       sqllex.Error(err.Error())
       return 1
@@ -4751,14 +4754,19 @@ cast_target:
 
 opt_array_bounds:
   // TODO(justin): reintroduce multiple array bounds
-  // opt_array_bounds '[' ']' { $$.val = Exprs{NewDInt(DInt(-1))} }
-  '[' ']' { $$.val = Exprs{NewDInt(DInt(-1))} }
+  // opt_array_bounds '[' ']' { $$.val = append($1.int32s(), -1) }
+  '[' ']' { $$.val = []int32{-1} }
 | '[' ICONST ']'
   {
     /* SKIP DOC */
-    $$.val = Exprs{NewDInt(DInt(-1))}
+    bound, err := $2.numVal().AsInt32()
+    if err != nil {
+      sqllex.Error(err.Error())
+      return 1
+    }
+    $$.val = []int32{bound}
   }
-| /* EMPTY */ { $$.val = Exprs(nil) }
+| /* EMPTY */ { $$.val = []int32(nil) }
 
 simple_typename:
   numeric
