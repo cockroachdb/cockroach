@@ -64,14 +64,16 @@ func (sc *spanContext) ForeachBaggageItem(handler func(k, v string) bool) {
 }
 
 // RecordingType is the type of recording that a span might be performing.
-type RecordingType bool
+type RecordingType int
 
 const (
+	// NoRecording means that the span isn't recording.
+	NoRecording RecordingType = iota
 	// SnowballRecording means that remote child spans (generally opened through
 	// RPCs) are also recorded.
-	SnowballRecording RecordingType = true
+	SnowballRecording
 	// SingleNodeRecording means that only spans on the current node are recorded.
-	SingleNodeRecording RecordingType = false
+	SingleNodeRecording
 )
 
 type span struct {
@@ -153,6 +155,9 @@ func (s *span) enableRecording(group *spanGroup, recType RecordingType) {
 // If recording was already started on this span (either directly or because a
 // parent span is recording), the old recording is lost.
 func StartRecording(os opentracing.Span, recType RecordingType) {
+	if recType == NoRecording {
+		panic("StartRecording called with NoRecording")
+	}
 	if _, noop := os.(*noopSpan); noop {
 		panic("StartRecording called on NoopSpan; use the Force option for StartSpan")
 	}
