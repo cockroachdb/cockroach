@@ -1,18 +1,52 @@
-# Trigger these rules by running `make generate PKG=./pkg/sql/parser` from the
-# repository root to ensure your PATH includes vendored binaries.
+# Copyright 2017 The Cockroach Authors.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
+# implied. See the License for the specific language governing
+# permissions and limitations under the License.
 
-SHELL = /usr/bin/env bash
+REPO_ROOT := ../../..
+include $(REPO_ROOT)/build/common.mk
 
-TARGETS = sql.go helpmap_test.go help_messages.go \
-	../lex/tokens.go ../lex/keywords.go ../lex/reserved_keywords.go
-.PHONY: $(TARGETS)
-all: $(TARGETS)
+SQLPARSER_TARGETS = \
+	sql.go \
+	helpmap_test.go \
+	help_messages.go \
+	../lex/tokens.go \
+	../lex/keywords.go \
+	../lex/reserved_keywords.go
 
-gen:
-	mkdir -p gen
+.DEFAULT_GOAL := all
+.PHONY: all
+all: $(SQLPARSER_TARGETS)
+
+# Running `make generate` from the root will call this target via `go generate`.
+# Update this if you add new generated files.
+.PHONY: generate
+generate: $(SQLPARSER_TARGETS)
+
+.PHONY: maintainer-clean
+maintainer-clean:
+	rm -f $(SQLPARSER_TARGETS)
+	rm -rf gen
+
+# We install goyacc here, because it might not be present in the
+# builder image, and the .bootstrap rule is not re-generated when
+# running a test in the builder. The dependency on $(BOOTSTRAP_TARGET)
+# ensures the installation is re-run when switching branches.
+goyacc.installed: $(BOOTSTRAP_TARGET)
+	@$(GO_INSTALL) -v $(REPO_ROOT)/vendor/golang.org/x/tools/cmd/goyacc
+	touch $@
 
 .INTERMEDIATE: gen/sql.go
-gen/sql.go: gen/sql.y
+gen/sql.go: gen/sql.y goyacc.installed
 	set -euo pipefail; \
 	  ret=$$(cd gen && goyacc -p sql -o sql.go sql.y); \
 	  if expr "$$ret" : ".*conflicts" >/dev/null; then \
@@ -56,7 +90,8 @@ sql.go: gen/sql.go
 # Then translate the original syntax file, with the types determined
 # above being replaced with the union type in their type declarations.
 .INTERMEDIATE: gen/sql.y
-gen/sql.y: sql.y replace_help_rules.awk | gen
+gen/sql.y: sql.y replace_help_rules.awk
+	mkdir -p gen
 	set -euo pipefail; \
 	TYPES=$$(awk '/func.*sqlSymUnion/ {print $$(NF - 1)}' sql.y | \
 	        sed -e 's/[]\/$$*.^|[]/\\&/g' | \
