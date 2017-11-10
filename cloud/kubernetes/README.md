@@ -172,14 +172,25 @@ Along with our StatefulSet configuration, we expose a standard Kubernetes servic
 that offers a load-balanced virtual IP for clients to access the database
 with. In our example, we've called this service `cockroachdb-public`.
 
-Start up a client pod and open up an interactive, (mostly) Postgres-flavor
-SQL shell using:
+In insecure mode, start up a client pod and open up an interactive, (mostly) Postgres-flavor
+SQL shell:
 
-```console
-$ kubectl run -it --rm cockroach-client --image=cockroachdb/cockroach --restart=Never --command -- ./cockroach sql --host cockroachdb-public
+```shell
+$ kubectl run cockroachdb -it --image=cockroachdb/cockroach --rm --restart=Never \
+    -- sql --insecure --host=cockroachdb-public
 ```
 
-**WARNING**: there is no secure mode equivalent of doing this (yet).
+In secure mode, use our `cockroachdb-client-secure.yaml` config to launch a pod that runs indefinitely with the `cockroach` binary inside it:
+
+```shell
+kubectl create -f cockroachdb-client-secure.yaml
+```
+
+Check and approve the CSR for the pod as described above, and then get a shell to the pod and run:
+
+```shell
+kubectl exec -it <pod name> -- ./cockroach sql --certs-dir=/cockroach-certs --host=cockroachdb-public
+```
 
 You can see example SQL statements for inserting and querying data in the
 included [demo script](demo.sh), but can use almost any Postgres-style SQL
