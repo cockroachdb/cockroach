@@ -19,6 +19,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/transform"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
@@ -244,6 +245,12 @@ func (p *planner) makeInternalPlan(
 	golangFillQueryArguments(&p.semaCtx.Placeholders, args)
 	p.evalCtx.Placeholders = &p.semaCtx.Placeholders
 	return p.makePlan(ctx, Statement{AST: stmt})
+}
+
+// ParseType implements the parser.EvalPlanner interface.
+// We define this here to break the dependency from eval.go to the parser.
+func (p *planner) ParseType(sql string) (coltypes.CastTargetType, error) {
+	return parser.ParseType(sql)
 }
 
 // QueryRow implements the parser.EvalPlanner interface.
