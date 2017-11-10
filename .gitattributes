@@ -1,5 +1,3 @@
 *.ir.* -diff
 *.pb.* -diff
 pkg/sql/ir/parser/irgen/irgen.go -diff
-pkg/sql/parser/help_messages.go -diff
-pkg/sql/parser/sql.go -diff
