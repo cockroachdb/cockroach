@@ -335,6 +335,12 @@ var varGen = map[string]sessionVar{
 		Get: func(session *Session) string { return getTransactionState(&session.TxnState) },
 	},
 
+	`transaction_read_only`: {
+		// Supported for PG driver compatibility only. We don't support setting it
+		// in any way.
+		Get: func(*Session) string { return "false" },
+	},
+
 	`tracing`: {
 		Get: func(session *Session) string {
 			if session.Tracing.Enabled() {
