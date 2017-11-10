@@ -17,88 +17,115 @@ package coltypes
 import "github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 
 var (
-	// Pre-allocated immutable boolean column types.
-	boolColTypeBool    = &BoolColType{Name: "BOOL"}
-	boolColTypeBoolean = &BoolColType{Name: "BOOLEAN"}
+	// BoolColTypeBool is an immutable ColumnType instance.
+	BoolColTypeBool = &BoolColType{Name: "BOOL"}
+	// BoolColTypeBoolean is an immutable ColumnType instance.
+	BoolColTypeBoolean = &BoolColType{Name: "BOOLEAN"}
+	// IntColTypeBit is an immutable ColumnType instance.
+	IntColTypeBit = &IntColType{Name: "BIT", Width: 1, ImplicitWidth: true}
+	// IntColTypeInt is an immutable ColumnType instance.
+	IntColTypeInt = &IntColType{Name: "INT"}
+	// IntColTypeInt2 is an immutable ColumnType instance.
+	IntColTypeInt2 = &IntColType{Name: "INT2", Width: 16, ImplicitWidth: true}
+	// IntColTypeInt4 is an immutable ColumnType instance.
+	IntColTypeInt4 = &IntColType{Name: "INT4", Width: 32, ImplicitWidth: true}
+	// IntColTypeInt8 is an immutable ColumnType instance.
+	IntColTypeInt8 = &IntColType{Name: "INT8"}
+	// IntColTypeInt64 is an immutable ColumnType instance.
+	IntColTypeInt64 = &IntColType{Name: "INT64"}
+	// IntColTypeInteger is an immutable ColumnType instance.
+	IntColTypeInteger = &IntColType{Name: "INTEGER"}
+	// IntColTypeSmallInt is an immutable ColumnType instance.
+	IntColTypeSmallInt = &IntColType{Name: "SMALLINT", Width: 16, ImplicitWidth: true}
+	// IntColTypeBigInt is an immutable ColumnType instance.
+	IntColTypeBigInt = &IntColType{Name: "BIGINT"}
+	// IntColTypeSerial is an immutable ColumnType instance.
+	IntColTypeSerial = &IntColType{Name: "SERIAL"}
+	// IntColTypeSmallSerial is an immutable ColumnType instance.
+	IntColTypeSmallSerial = &IntColType{Name: "SMALLSERIAL"}
+	// IntColTypeBigSerial is an immutable ColumnType instance.
+	IntColTypeBigSerial = &IntColType{Name: "BIGSERIAL"}
 
-	// Pre-allocated immutable integer column types.
-	intColTypeBit         = &IntColType{Name: "BIT", Width: 1, ImplicitWidth: true}
-	intColTypeInt         = &IntColType{Name: "INT"}
-	intColTypeInt2        = &IntColType{Name: "INT2", Width: 16, ImplicitWidth: true}
-	intColTypeInt4        = &IntColType{Name: "INT4", Width: 32, ImplicitWidth: true}
-	intColTypeInt8        = &IntColType{Name: "INT8"}
-	intColTypeInt64       = &IntColType{Name: "INT64"}
-	intColTypeInteger     = &IntColType{Name: "INTEGER"}
-	intColTypeSmallInt    = &IntColType{Name: "SMALLINT", Width: 16, ImplicitWidth: true}
-	intColTypeBigInt      = &IntColType{Name: "BIGINT"}
-	intColTypeSerial      = &IntColType{Name: "SERIAL"}
-	intColTypeSmallSerial = &IntColType{Name: "SMALLSERIAL"}
-	intColTypeBigSerial   = &IntColType{Name: "BIGSERIAL"}
+	// FloatColTypeReal is an immutable ColumnType instance.
+	FloatColTypeReal = &FloatColType{Name: "REAL", Width: 32}
+	// FloatColTypeFloat is an immutable ColumnType instance.
+	FloatColTypeFloat = &FloatColType{Name: "FLOAT", Width: 64}
+	// FloatColTypeFloat4 is an immutable ColumnType instance.
+	FloatColTypeFloat4 = &FloatColType{Name: "FLOAT4", Width: 32}
+	// FloatColTypeFloat8 is an immutable ColumnType instance.
+	FloatColTypeFloat8 = &FloatColType{Name: "FLOAT8", Width: 64}
+	// FloatColTypeDouble is an immutable ColumnType instance.
+	FloatColTypeDouble = &FloatColType{Name: "DOUBLE PRECISION", Width: 64}
 
-	// Pre-allocated immutable float column types.
-	floatColTypeReal   = &FloatColType{Name: "REAL", Width: 32}
-	floatColTypeFloat  = &FloatColType{Name: "FLOAT", Width: 64}
-	floatColTypeFloat4 = &FloatColType{Name: "FLOAT4", Width: 32}
-	floatColTypeFloat8 = &FloatColType{Name: "FLOAT8", Width: 64}
-	floatColTypeDouble = &FloatColType{Name: "DOUBLE PRECISION", Width: 64}
+	// DecimalColTypeDec is an immutable ColumnType instance.
+	DecimalColTypeDec = &DecimalColType{Name: "DEC"}
+	// DecimalColTypeDecimal is an immutable ColumnType instance.
+	DecimalColTypeDecimal = &DecimalColType{Name: "DECIMAL"}
+	// DecimalColTypeNumeric is an immutable ColumnType instance.
+	DecimalColTypeNumeric = &DecimalColType{Name: "NUMERIC"}
 
-	// Pre-allocated immutable decimal column types.
-	decimalColTypeDec     = &DecimalColType{Name: "DEC"}
-	decimalColTypeDecimal = &DecimalColType{Name: "DECIMAL"}
-	decimalColTypeNumeric = &DecimalColType{Name: "NUMERIC"}
+	// DateColTypeDate is an immutable ColumnType instance.
+	DateColTypeDate = &DateColType{}
 
-	// Pre-allocated immutable date column type.
-	dateColTypeDate = &DateColType{}
+	// TimestampColTypeTimestamp is an immutable ColumnType instance.
+	TimestampColTypeTimestamp = &TimestampColType{}
+	// TimestampTzColTypeTimestampWithTZ is an immutable ColumnType instance.
+	TimestampTzColTypeTimestampWithTZ = &TimestampTZColType{}
 
-	// Pre-allocated immutable timestamp column type.
-	timestampColTypeTimestamp = &TimestampColType{}
+	// IntervalColTypeInterval is an immutable ColumnType instance.
+	IntervalColTypeInterval = &IntervalColType{}
 
-	// Pre-allocated immutable timestamp with time zone column type.
-	timestampTzColTypeTimestampWithTZ = &TimestampTZColType{}
+	// StringColTypeChar is an immutable ColumnType instance.
+	StringColTypeChar = &StringColType{Name: "CHAR"}
+	// StringColTypeVarChar is an immutable ColumnType instance.
+	StringColTypeVarChar = &StringColType{Name: "VARCHAR"}
+	// StringColTypeString is an immutable ColumnType instance.
+	StringColTypeString = &StringColType{Name: "STRING"}
+	// StringColTypeText is an immutable ColumnType instance.
+	StringColTypeText = &StringColType{Name: "TEXT"}
 
-	// Pre-allocated immutable interval column type.
-	intervalColTypeInterval = &IntervalColType{}
+	// NameColTypeName is an immutable ColumnType instance.
+	NameColTypeName = &NameColType{}
 
-	// Pre-allocated immutable string column types.
-	stringColTypeChar    = &StringColType{Name: "CHAR"}
-	stringColTypeVarChar = &StringColType{Name: "VARCHAR"}
-	stringColTypeString  = &StringColType{Name: "STRING"}
-	stringColTypeText    = &StringColType{Name: "TEXT"}
+	// BytesColTypeBlob is an immutable ColumnType instance.
+	BytesColTypeBlob = &BytesColType{Name: "BLOB"}
+	// BytesColTypeBytes is an immutable ColumnType instance.
+	BytesColTypeBytes = &BytesColType{Name: "BYTES"}
+	// BytesColTypeBytea is an immutable ColumnType instance.
+	BytesColTypeBytea = &BytesColType{Name: "BYTEA"}
 
-	// Pre-allocated immutable name column type.
-	nameColTypeName = &NameColType{}
+	// Int2vectorColType is an immutable ColumnType instance.
+	Int2vectorColType = &VectorColType{Name: "INT2VECTOR", ParamType: IntColTypeInt}
 
-	// Pre-allocated immutable bytes column types.
-	bytesColTypeBlob  = &BytesColType{Name: "BLOB"}
-	bytesColTypeBytes = &BytesColType{Name: "BYTES"}
-	bytesColTypeBytea = &BytesColType{Name: "BYTEA"}
+	// UuidColTypeUUID is an immutable ColumnType instance.
+	UuidColTypeUUID = &UUIDColType{}
 
-	// Int2VectorColType represents an INT2VECTOR column type.
-	int2vectorColType = &VectorColType{Name: "INT2VECTOR", ParamType: intColTypeInt}
+	// IpnetColTypeINet is an immutable ColumnType instance.
+	IpnetColTypeINet = &IPAddrColType{Name: "INET"}
 
-	// Pre-allocated immutable uuid column type.
-	uuidColTypeUUID = &UUIDColType{}
+	// JsonColType is an immutable ColumnType instance.
+	JsonColType = &JSONColType{Name: "JSON"}
+	// JsonbColType is an immutable ColumnType instance.
+	JsonbColType = &JSONColType{Name: "JSONB"}
 
-	// Pre-allocated immutable IPAddr column type.
-	ipnetColTypeINet = &IPAddrColType{Name: "INET"}
-
-	// Pre-allocated immutable JSON column type.
-	jsonColType  = &JSONColType{Name: "JSON"}
-	jsonbColType = &JSONColType{Name: "JSONB"}
-
-	// Pre-allocated immutable Postgres oid column types.
-	oidColTypeOid          = &OidColType{Name: "OID"}
-	oidColTypeRegClass     = &OidColType{Name: "REGCLASS"}
-	oidColTypeRegNamespace = &OidColType{Name: "REGNAMESPACE"}
-	oidColTypeRegProc      = &OidColType{Name: "REGPROC"}
-	oidColTypeRegProcedure = &OidColType{Name: "REGPROCEDURE"}
-	oidColTypeRegType      = &OidColType{Name: "REGTYPE"}
+	// OidColTypeOid is an immutable ColumnType instance.
+	OidColTypeOid = &OidColType{Name: "OID"}
+	// OidColTypeRegClass is an immutable ColumnType instance.
+	OidColTypeRegClass = &OidColType{Name: "REGCLASS"}
+	// OidColTypeRegNamespace is an immutable ColumnType instance.
+	OidColTypeRegNamespace = &OidColType{Name: "REGNAMESPACE"}
+	// OidColTypeRegProc is an immutable ColumnType instance.
+	OidColTypeRegProc = &OidColType{Name: "REGPROC"}
+	// OidColTypeRegProcedure is an immutable ColumnType instance.
+	OidColTypeRegProcedure = &OidColType{Name: "REGPROCEDURE"}
+	// OidColTypeRegType is an immutable ColumnType instance.
+	OidColTypeRegType = &OidColType{Name: "REGTYPE"}
 )
 
 var errBitLengthNotPositive = pgerror.NewError(pgerror.CodeInvalidParameterValueError, "length for type bit must be at least 1")
 
-// newIntBitType creates a type alias for INT named BIT with the given bit width.
-func newIntBitType(width int) (*IntColType, error) {
+// NewIntBitType creates a type alias for INT named BIT with the given bit width.
+func NewIntBitType(width int) (*IntColType, error) {
 	if width < 1 {
 		return nil, errBitLengthNotPositive
 	}
@@ -108,13 +135,13 @@ func newIntBitType(width int) (*IntColType, error) {
 // NewFloatColType creates a type alias for FLOAT with the given precision.
 func NewFloatColType(prec int, precSpecified bool) *FloatColType {
 	if prec == 0 && !precSpecified {
-		return floatColTypeFloat
+		return FloatColTypeFloat
 	}
 	return &FloatColType{Name: "FLOAT", Width: 64, Prec: prec, PrecSpecified: precSpecified}
 }
 
-// arrayOf creates a type alias for an array of the given element type and fixed bounds.
-func arrayOf(colType ColumnType, bounds []int32) (ColumnType, error) {
+// ArrayOf creates a type alias for an array of the given element type and fixed bounds.
+func ArrayOf(colType ColumnType, bounds []int32) (ColumnType, error) {
 	if !canBeInArrayColType(colType) {
 		return nil, pgerror.NewErrorf(pgerror.CodeFeatureNotSupportedError, "arrays of %s not allowed", colType)
 	}

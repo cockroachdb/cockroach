@@ -49,8 +49,8 @@ func (node *IntColType) Format(buf *bytes.Buffer, f lex.EncodeFlags) {
 // IsSerial returns true when this column should be given a DEFAULT of a unique,
 // incrementing function.
 func (node *IntColType) IsSerial() bool {
-	return node.Name == intColTypeSerial.Name || node.Name == intColTypeSmallSerial.Name ||
-		node.Name == intColTypeBigSerial.Name
+	return node.Name == IntColTypeSerial.Name || node.Name == IntColTypeSmallSerial.Name ||
+		node.Name == IntColTypeBigSerial.Name
 }
 
 // FloatColType represents a REAL, DOUBLE or FLOAT type.
