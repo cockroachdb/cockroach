@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"go/constant"
 	"go/token"
+	"math"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -80,7 +81,7 @@ func typeCheckConstant(c Constant, ctx *SemaContext, desired types.T) (TypedExpr
 		if n, ok := c.(*NumVal); ok {
 			_, err := n.AsInt64()
 			switch err {
-			case errConstOutOfRange:
+			case errConstOutOfRange64:
 				return nil, err
 			case errConstNotInt:
 			default:
@@ -153,7 +154,8 @@ func (expr *NumVal) ShouldBeInt64() bool {
 // These errors are statically allocated, because they are returned in the
 // common path of AsInt64.
 var errConstNotInt = pgerror.NewError(pgerror.CodeNumericValueOutOfRangeError, "cannot represent numeric constant as an int")
-var errConstOutOfRange = pgerror.NewError(pgerror.CodeNumericValueOutOfRangeError, "numeric constant out of int64 range")
+var errConstOutOfRange64 = pgerror.NewError(pgerror.CodeNumericValueOutOfRangeError, "numeric constant out of int64 range")
+var errConstOutOfRange32 = pgerror.NewError(pgerror.CodeNumericValueOutOfRangeError, "numeric constant out of int32 range")
 
 // AsInt64 returns the value as a 64-bit integer if possible, or returns an
 // error if not possible. The method will set expr.resInt to the value of
@@ -165,10 +167,30 @@ func (expr *NumVal) AsInt64() (int64, error) {
 	}
 	i, exact := constant.Int64Val(intVal)
 	if !exact {
-		return 0, errConstOutOfRange
+		return 0, errConstOutOfRange64
 	}
 	expr.resInt = DInt(i)
 	return i, nil
+}
+
+// AsInt32 returns the value as 32-bit integer if possible, or returns
+// an error if not possible. The method will set expr.resInt to the
+// value of this int32 if it is successful, avoiding the need to call
+// the method again.
+func (expr *NumVal) AsInt32() (int32, error) {
+	intVal, ok := expr.asConstantInt()
+	if !ok {
+		return 0, errConstNotInt
+	}
+	i, exact := constant.Int64Val(intVal)
+	if !exact {
+		return 0, errConstOutOfRange32
+	}
+	if i > math.MaxInt32 || i < math.MinInt32 {
+		return 0, errConstOutOfRange32
+	}
+	expr.resInt = DInt(i)
+	return int32(i), nil
 }
 
 // asConstantInt returns the value as an constant.Int if possible, along
