@@ -146,7 +146,7 @@ func TestRouters(t *testing.T) {
 				if !b.ProducerClosed {
 					t.Fatalf("bucket not closed: %d", i)
 				}
-				rows[i] = getRowsFromBuffer(t, b)
+				rows[i] = b.GetRowsNoMeta(t)
 			}
 
 			switch tc.spec.Type {
@@ -238,21 +238,6 @@ func TestRouters(t *testing.T) {
 			}
 		})
 	}
-}
-
-func getRowsFromBuffer(t *testing.T, buf *RowBuffer) sqlbase.EncDatumRows {
-	var res sqlbase.EncDatumRows
-	for {
-		row, meta := buf.Next()
-		if !meta.Empty() {
-			t.Fatalf("unexpected metadata: %v", meta)
-		}
-		if row == nil {
-			break
-		}
-		res = append(res, row)
-	}
-	return res
 }
 
 const testRangeRouterSpanBreak byte = (encoding.IntMax + encoding.IntMin) / 2

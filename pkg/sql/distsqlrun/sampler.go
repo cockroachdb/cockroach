@@ -37,11 +37,11 @@ var _ hyperloglog.Sketch
 type samplerProcessor struct {
 	processorBase
 
-	flowCtx  *FlowCtx
-	input    RowSource
-	sr       sqlbase.SampleReservoir
-	sketches []SamplerSpec_SketchInfo
-	outTypes []sqlbase.ColumnType
+	flowCtx    *FlowCtx
+	input      RowSource
+	sr         sqlbase.SampleReservoir
+	sketchInfo []SamplerSpec_SketchInfo
+	outTypes   []sqlbase.ColumnType
 	// Output column indices for special columns.
 	rankCol      int
 	sketchIdxCol int
@@ -52,8 +52,11 @@ type samplerProcessor struct {
 
 var _ Processor = &samplerProcessor{}
 
-// TODO(radu): no sketches supported yet
-var supportedSketchTypes = map[SketchType]struct{}{}
+var supportedSketchTypes = map[SketchType]struct{}{
+	// The code currently hardcodes the use of this single type of sketch
+	// (which avoids the extra complexity until we actually have multiple types).
+	SketchType_HLL_PLUS_PLUS_V1: {},
+}
 
 func newSamplerProcessor(
 	flowCtx *FlowCtx, spec *SamplerSpec, input RowSource, post *PostProcessSpec, output RowReceiver,
@@ -62,12 +65,15 @@ func newSamplerProcessor(
 		if _, ok := supportedSketchTypes[s.SketchType]; !ok {
 			return nil, errors.Errorf("unsupported sketch type %s", s.SketchType)
 		}
+		if len(s.Columns) != 1 {
+			return nil, errors.Errorf("multi-column sketches not supported yet")
+		}
 	}
 
 	s := &samplerProcessor{
-		flowCtx:  flowCtx,
-		input:    input,
-		sketches: spec.Sketches,
+		flowCtx:    flowCtx,
+		input:      input,
+		sketchInfo: spec.Sketches,
 	}
 
 	s.sr.Init(int(spec.SampleSize))
@@ -125,7 +131,17 @@ func (s *samplerProcessor) Run(ctx context.Context, wg *sync.WaitGroup) {
 }
 
 func (s *samplerProcessor) mainLoop(ctx context.Context) (earlyExit bool, _ error) {
+	sketches := make([]*hyperloglog.Sketch, len(s.sketchInfo))
+	for i := range sketches {
+		sketches[i] = hyperloglog.New14()
+	}
+
+	var numRows int64
+	numNulls := make([]int64, len(s.sketchInfo))
+
 	rng, _ := randutil.NewPseudoRand()
+	var da sqlbase.DatumAlloc
+	var buf []byte
 	for {
 		row, meta := s.input.Next()
 		if !meta.Empty() {
@@ -138,6 +154,25 @@ func (s *samplerProcessor) mainLoop(ctx context.Context) (earlyExit bool, _ erro
 		if row == nil {
 			break
 		}
+		numRows++
+
+		for i := range s.sketchInfo {
+			col := s.sketchInfo[i].Columns[0]
+			if row[col].IsNull() {
+				numNulls[i]++
+				continue
+			}
+			// We need to use a KEY encoding because equal values should have the same
+			// encoding.
+			// TODO(radu): a fast path for simple columns (like integer)?
+			var err error
+			buf, err = row[col].Encode(&s.outTypes[col], &da, sqlbase.DatumEncoding_ASCENDING_KEY, buf[:0])
+			if err != nil {
+				return false, err
+			}
+			sketches[i].Insert(buf)
+		}
+
 		// Use Int63 so we don't have headaches converting to DInt.
 		rank := uint64(rng.Int63())
 		s.sr.SampleRow(row, rank)
@@ -150,9 +185,28 @@ func (s *samplerProcessor) mainLoop(ctx context.Context) (earlyExit bool, _ erro
 	// Emit the sampled rows.
 	for _, sample := range s.sr.Get() {
 		copy(outRow, sample.Row)
-		outRow[s.rankCol] = sqlbase.DatumToEncDatum(
-			s.outTypes[s.rankCol], parser.NewDInt(parser.DInt(sample.Rank)),
-		)
+		outRow[s.rankCol] = sqlbase.EncDatum{Datum: parser.NewDInt(parser.DInt(sample.Rank))}
+		if !emitHelper(ctx, &s.out, outRow, ProducerMetadata{}, s.input) {
+			return true, nil
+		}
+	}
+	// Release the memory for the sampled rows.
+	s.sr = sqlbase.SampleReservoir{}
+
+	// Emit the sketch rows.
+	for i := range outRow {
+		outRow[i] = sqlbase.DatumToEncDatum(s.outTypes[i], parser.DNull)
+	}
+
+	for i := range s.sketchInfo {
+		outRow[s.sketchIdxCol] = sqlbase.EncDatum{Datum: parser.NewDInt(parser.DInt(i))}
+		outRow[s.numRowsCol] = sqlbase.EncDatum{Datum: parser.NewDInt(parser.DInt(numRows))}
+		outRow[s.nullValsCol] = sqlbase.EncDatum{Datum: parser.NewDInt(parser.DInt(numNulls[i]))}
+		data, err := sketches[i].MarshalBinary()
+		if err != nil {
+			return false, err
+		}
+		outRow[s.sketchCol] = sqlbase.EncDatum{Datum: parser.NewDBytes(parser.DBytes(data))}
 		if !emitHelper(ctx, &s.out, outRow, ProducerMetadata{}, s.input) {
 			return true, nil
 		}

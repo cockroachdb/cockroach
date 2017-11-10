@@ -14,7 +14,11 @@
 
 package distsqlrun
 
-import "github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+import (
+	"testing"
+
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+)
 
 // RepeatableRowSource is a RowSource used in benchmarks to avoid having to
 // reinitialize a new RowSource every time during multiple passes of the input.
@@ -80,3 +84,27 @@ func (r *RowDisposer) Push(row sqlbase.EncDatumRow, meta ProducerMetadata) Consu
 
 // ProducerDone is part of the RowReceiver interface.
 func (r *RowDisposer) ProducerDone() {}
+
+// NextNoMeta is a version of Next which fails the test if
+// it encounters any metadata.
+func (rb *RowBuffer) NextNoMeta(tb testing.TB) sqlbase.EncDatumRow {
+	row, meta := rb.Next()
+	if !meta.Empty() {
+		tb.Fatalf("unexpected metadata: %v", meta)
+	}
+	return row
+}
+
+// GetRowsNoMeta returns the rows in the buffer; it fails the test if it
+// encounters any metadata.
+func (rb *RowBuffer) GetRowsNoMeta(t *testing.T) sqlbase.EncDatumRows {
+	var res sqlbase.EncDatumRows
+	for {
+		row := rb.NextNoMeta(t)
+		if row == nil {
+			break
+		}
+		res = append(res, row)
+	}
+	return res
+}
