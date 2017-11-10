@@ -37,16 +37,8 @@ maintainer-clean:
 	rm -f $(SQLPARSER_TARGETS)
 	rm -rf gen
 
-# We install goyacc here, because it might not be present in the
-# builder image, and the .bootstrap rule is not re-generated when
-# running a test in the builder. The dependency on $(BOOTSTRAP_TARGET)
-# ensures the installation is re-run when switching branches.
-goyacc.installed: $(BOOTSTRAP_TARGET)
-	@$(GO_INSTALL) -v $(REPO_ROOT)/vendor/golang.org/x/tools/cmd/goyacc
-	touch $@
-
 .INTERMEDIATE: gen/sql.go
-gen/sql.go: gen/sql.y goyacc.installed
+gen/sql.go: gen/sql.y $(BOOTSTRAP_TARGET)
 	set -euo pipefail; \
 	  ret=$$(cd gen && goyacc -p sql -o sql.go sql.y); \
 	  if expr "$$ret" : ".*conflicts" >/dev/null; then \
