@@ -255,6 +255,50 @@ func (ed *EncDatum) Compare(
 	return ed.Datum.Compare(evalCtx, rhs.Datum), nil
 }
 
+// GetInt decodes an EncDatum that is known to be of integer type and returns
+// the integer value. It is a more convenient and more efficient alternative to
+// calling EnsureDecoded and casting the Datum.
+func (ed *EncDatum) GetInt() (int64, error) {
+	if ed.Datum != nil {
+		if ed.Datum == tree.DNull {
+			return 0, errors.Errorf("NULL INT value")
+		}
+		return int64(*ed.Datum.(*tree.DInt)), nil
+	}
+
+	switch ed.encoding {
+	case DatumEncoding_ASCENDING_KEY:
+		if _, isNull := encoding.DecodeIfNull(ed.encoded); isNull {
+			return 0, errors.Errorf("NULL INT value")
+		}
+		_, val, err := encoding.DecodeVarintAscending(ed.encoded)
+		return val, err
+
+	case DatumEncoding_DESCENDING_KEY:
+		if _, isNull := encoding.DecodeIfNull(ed.encoded); isNull {
+			return 0, errors.Errorf("NULL INT value")
+		}
+		_, val, err := encoding.DecodeVarintDescending(ed.encoded)
+		return val, err
+
+	case DatumEncoding_VALUE:
+		_, dataOffset, _, typ, err := encoding.DecodeValueTag(ed.encoded)
+		if err != nil {
+			return 0, err
+		}
+		// NULL, true, and false are special, because their values are fully encoded by their value tag.
+		if typ == encoding.Null {
+			return 0, errors.Errorf("NULL INT value")
+		}
+
+		_, val, err := encoding.DecodeUntaggedIntValue(ed.encoded[dataOffset:])
+		return val, err
+
+	default:
+		return 0, errors.Errorf("unknown encoding %s", ed.encoding)
+	}
+}
+
 // EncDatumRow is a row of EncDatums.
 type EncDatumRow []EncDatum
 
