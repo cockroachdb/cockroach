@@ -98,6 +98,7 @@ tracing                        off
 transaction isolation level    SERIALIZABLE
 transaction priority           NORMAL
 transaction status             NoTxn
+transaction_read_only          false
 
 # SESSION_USER is a special keyword, check that SHOW knows about it.
 query T
