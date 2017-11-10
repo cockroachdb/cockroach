@@ -17,6 +17,7 @@ package distsqlrun
 import (
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
@@ -107,4 +108,28 @@ func (rb *RowBuffer) GetRowsNoMeta(t *testing.T) sqlbase.EncDatumRows {
 		res = append(res, row)
 	}
 	return res
+}
+
+func intEncDatum(i int) sqlbase.EncDatum {
+	return sqlbase.EncDatum{Datum: tree.NewDInt(tree.DInt(i))}
+}
+
+func nullEncDatum() sqlbase.EncDatum {
+	return sqlbase.EncDatum{Datum: tree.DNull}
+}
+
+// genEncDatumRowsInt converts rows of ints to rows of EncDatum DInts.
+// If an int is negative, the corresponding value is NULL.
+func genEncDatumRowsInt(inputRows [][]int) sqlbase.EncDatumRows {
+	rows := make(sqlbase.EncDatumRows, len(inputRows))
+	for i, inputRow := range inputRows {
+		for _, x := range inputRow {
+			if x < 0 {
+				rows[i] = append(rows[i], nullEncDatum())
+			} else {
+				rows[i] = append(rows[i], intEncDatum(x))
+			}
+		}
+	}
+	return rows
 }

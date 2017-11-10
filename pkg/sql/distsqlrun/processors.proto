@@ -123,6 +123,7 @@ message ProcessorCoreUnion {
   optional ReadCSVSpec readCSV = 13;
   optional SSTWriterSpec SSTWriter = 14;
   optional SamplerSpec Sampler = 15;
+  optional SampleAggregatorSpec SampleAggregator = 16;
 }
 
 // NoopCoreSpec indicates a "no-op" processor core. This is used when we just
@@ -526,4 +527,48 @@ message SamplerSpec {
   }
   repeated SketchSpec sketches = 1 [(gogoproto.nullable) = false];
   optional uint32 sample_size = 2 [(gogoproto.nullable) = false];
+}
+
+// SampleAggregatorSpec is the specification of a processor that aggregates the
+// results form multiple sampler processors and writes out the statistics to
+// system.table_statistics.
+//
+// The input schema it expects matches the output schema of a sampler spec:
+//  1. sampled row columns:
+//    - sampled columns
+//    - row rank
+//  2. sketch columns:
+//    - sketch index
+//    - number of rows processed
+//    - number of NULL values encountered on the first column of the sketch
+//    - binary sketch data
+message SampleAggregatorSpec {
+  // The processor merges reservoir sample sets into a single
+  // sample set of this size. This must match the sample size
+  // used for each Sampler.
+  optional uint32 sample_size = 2 [(gogoproto.nullable) = false];
+
+  // The i-th value indicates the column ID of the i-th sampled row
+  // column.
+  repeated uint32 sampled_column_ids = 3 [
+    (gogoproto.customname) = "SampledColumnIDs",
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sqlbase.ColumnID"
+  ];
+
+  message SketchSpec {
+    optional SketchType sketch_type = 1 [(gogoproto.nullable) = false];
+
+    // Columns for which to compute the sketch.
+    // TODO(radu): currently only one column is supported.
+    repeated uint32 column_ids = 2 [
+      (gogoproto.customname) = "ColumnIDs",
+      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sqlbase.ColumnID"
+    ];
+
+    // If set, we generate a histogram for the first column in the sketch.
+    optional bool generate_histogram = 3 [(gogoproto.nullable) = false];
+    // If set, controls the maximum number of buckets in the histogram.
+    optional uint32 histogram_max_buckets = 4 [(gogoproto.nullable) = false];
+  }
+  repeated SketchSpec sketches = 4 [(gogoproto.nullable) = false];
 }
