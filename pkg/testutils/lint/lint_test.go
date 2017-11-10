@@ -937,9 +937,14 @@ func TestLint(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		if err := stream.ForEach(filter, func(s string) {
-			t.Error(s)
-		}); err != nil {
+		if err := stream.ForEach(
+			stream.Sequence(
+				filter,
+				// _fsm.go files are allowed to dot-import the util/fsm package.
+				stream.GrepNot("_fsm.go.*should not use dot imports"),
+			), func(s string) {
+				t.Error(s)
+			}); err != nil {
 			t.Error(err)
 		}
 
