@@ -21,43 +21,43 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 )
 
-// oidColTypeToType produces a Datum type equivalent to the given
+// OidColTypeToType produces a Datum type equivalent to the given
 // OidColType.
-func oidColTypeToType(ct *OidColType) types.T {
+func OidColTypeToType(ct *OidColType) types.T {
 	switch ct {
-	case oidColTypeOid:
+	case OidColTypeOid:
 		return types.Oid
-	case oidColTypeRegClass:
+	case OidColTypeRegClass:
 		return types.RegClass
-	case oidColTypeRegNamespace:
+	case OidColTypeRegNamespace:
 		return types.RegNamespace
-	case oidColTypeRegProc:
+	case OidColTypeRegProc:
 		return types.RegProc
-	case oidColTypeRegProcedure:
+	case OidColTypeRegProcedure:
 		return types.RegProcedure
-	case oidColTypeRegType:
+	case OidColTypeRegType:
 		return types.RegType
 	default:
 		panic(fmt.Sprintf("unexpected *OidColType: %v", ct))
 	}
 }
 
-// oidTypeToColType produces an OidColType equivalent to the given
+// OidTypeToColType produces an OidColType equivalent to the given
 // Datum type.
-func oidTypeToColType(t types.T) *OidColType {
+func OidTypeToColType(t types.T) *OidColType {
 	switch t {
 	case types.Oid:
-		return oidColTypeOid
+		return OidColTypeOid
 	case types.RegClass:
-		return oidColTypeRegClass
+		return OidColTypeRegClass
 	case types.RegNamespace:
-		return oidColTypeRegNamespace
+		return OidColTypeRegNamespace
 	case types.RegProc:
-		return oidColTypeRegProc
+		return OidColTypeRegProc
 	case types.RegProcedure:
-		return oidColTypeRegProcedure
+		return OidColTypeRegProcedure
 	case types.RegType:
-		return oidColTypeRegType
+		return OidColTypeRegType
 	default:
 		panic(fmt.Sprintf("unexpected type: %v", t))
 	}
@@ -69,40 +69,40 @@ func oidTypeToColType(t types.T) *OidColType {
 func DatumTypeToColumnType(t types.T) (ColumnType, error) {
 	switch t {
 	case types.Bool:
-		return boolColTypeBool, nil
+		return BoolColTypeBool, nil
 	case types.Int:
-		return intColTypeInt, nil
+		return IntColTypeInt, nil
 	case types.Float:
-		return floatColTypeFloat, nil
+		return FloatColTypeFloat, nil
 	case types.Decimal:
-		return decimalColTypeDecimal, nil
+		return DecimalColTypeDecimal, nil
 	case types.Timestamp:
-		return timestampColTypeTimestamp, nil
+		return TimestampColTypeTimestamp, nil
 	case types.TimestampTZ:
-		return timestampTzColTypeTimestampWithTZ, nil
+		return TimestampTzColTypeTimestampWithTZ, nil
 	case types.Interval:
-		return intervalColTypeInterval, nil
+		return IntervalColTypeInterval, nil
 	case types.JSON:
-		return jsonColType, nil
+		return JsonColType, nil
 	case types.UUID:
-		return uuidColTypeUUID, nil
+		return UuidColTypeUUID, nil
 	case types.INet:
-		return ipnetColTypeINet, nil
+		return IpnetColTypeINet, nil
 	case types.Date:
-		return dateColTypeDate, nil
+		return DateColTypeDate, nil
 	case types.String:
-		return stringColTypeString, nil
+		return StringColTypeString, nil
 	case types.Name:
-		return nameColTypeName, nil
+		return NameColTypeName, nil
 	case types.Bytes:
-		return bytesColTypeBytes, nil
+		return BytesColTypeBytes, nil
 	case types.Oid,
 		types.RegClass,
 		types.RegNamespace,
 		types.RegProc,
 		types.RegProcedure,
 		types.RegType:
-		return oidTypeToColType(t), nil
+		return OidTypeToColType(t), nil
 	}
 
 	switch typ := t.(type) {
@@ -113,7 +113,7 @@ func DatumTypeToColumnType(t types.T) (ColumnType, error) {
 		if err != nil {
 			return nil, err
 		}
-		return arrayOf(elemTyp, nil)
+		return ArrayOf(elemTyp, nil)
 	case types.TOidWrapper:
 		return DatumTypeToColumnType(typ.T)
 	}
@@ -161,7 +161,7 @@ func CastTargetToDatumType(t CastTargetType) types.T {
 	case *VectorColType:
 		return types.IntVector
 	case *OidColType:
-		return oidColTypeToType(ct)
+		return OidColTypeToType(ct)
 	default:
 		panic(fmt.Sprintf("unexpected CastTarget %T", t))
 	}
