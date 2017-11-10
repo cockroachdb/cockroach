@@ -187,6 +187,7 @@ $(BOOTSTRAP_TARGET): $(GITHOOKS) $(REPO_ROOT)/Gopkg.lock $(LOCAL_BIN)/returnchec
 		$(REPO_ROOT)/vendor/github.com/wadey/gocovmerge \
 		$(REPO_ROOT)/vendor/golang.org/x/perf/cmd/benchstat \
 		$(REPO_ROOT)/vendor/golang.org/x/tools/cmd/goimports \
+		$(REPO_ROOT)/vendor/golang.org/x/tools/cmd/goyacc \
 		$(REPO_ROOT)/vendor/golang.org/x/tools/cmd/stringer
 	touch $@
 
