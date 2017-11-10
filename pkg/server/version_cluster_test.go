@@ -245,6 +245,10 @@ func TestClusterVersionMixedVersionTooOld(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
 
+	// Prevent node crashes from generating several megabytes of stacks when
+	// GOTRACEBACK=all, as it is on CI.
+	defer log.DisableTracebacks()()
+
 	exits := make(chan int, 100)
 
 	log.SetExitFunc(func(i int) { exits <- i })
@@ -292,11 +296,11 @@ func TestClusterVersionMixedVersionTooNew(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
 
-	exits := make(chan int, 100)
-
 	// Prevent node crashes from generating several megabytes of stacks when
 	// GOTRACEBACK=all, as it is on CI.
 	defer log.DisableTracebacks()()
+
+	exits := make(chan int, 100)
 
 	log.SetExitFunc(func(i int) { exits <- i })
 	defer log.SetExitFunc(os.Exit)
