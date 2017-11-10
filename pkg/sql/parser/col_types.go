@@ -90,12 +90,6 @@ func (*ArrayColType) castTargetType()          {}
 func (*VectorColType) castTargetType()         {}
 func (*OidColType) castTargetType()            {}
 
-// Pre-allocated immutable boolean column types.
-var (
-	boolColTypeBool    = &BoolColType{Name: "BOOL"}
-	boolColTypeBoolean = &BoolColType{Name: "BOOLEAN"}
-)
-
 // BoolColType represents a BOOLEAN type.
 type BoolColType struct {
 	Name string
@@ -106,33 +100,9 @@ func (node *BoolColType) Format(buf *bytes.Buffer, f lex.EncodeFlags) {
 	buf.WriteString(node.Name)
 }
 
-// Pre-allocated immutable integer column types.
 var (
-	intColTypeBit         = &IntColType{Name: "BIT", Width: 1, ImplicitWidth: true}
-	intColTypeInt         = &IntColType{Name: "INT"}
-	intColTypeInt2        = &IntColType{Name: "INT2", Width: 16, ImplicitWidth: true}
-	intColTypeInt4        = &IntColType{Name: "INT4", Width: 32, ImplicitWidth: true}
-	intColTypeInt8        = &IntColType{Name: "INT8"}
-	intColTypeInt64       = &IntColType{Name: "INT64"}
-	intColTypeInteger     = &IntColType{Name: "INTEGER"}
-	intColTypeSmallInt    = &IntColType{Name: "SMALLINT", Width: 16, ImplicitWidth: true}
-	intColTypeBigInt      = &IntColType{Name: "BIGINT"}
-	intColTypeSerial      = &IntColType{Name: "SERIAL"}
-	intColTypeSmallSerial = &IntColType{Name: "SMALLSERIAL"}
-	intColTypeBigSerial   = &IntColType{Name: "BIGSERIAL"}
+	errScaleOutOfRange = pgerror.NewError(pgerror.CodeNumericValueOutOfRangeError, "scale out of range")
 )
-
-var (
-	errBitLengthNotPositive = pgerror.NewError(pgerror.CodeInvalidParameterValueError, "length for type bit must be at least 1")
-	errScaleOutOfRange      = pgerror.NewError(pgerror.CodeNumericValueOutOfRangeError, "scale out of range")
-)
-
-func newIntBitType(width int) (*IntColType, error) {
-	if width < 1 {
-		return nil, errBitLengthNotPositive
-	}
-	return &IntColType{Name: "BIT", Width: width}, nil
-}
 
 // IntColType represents an INT, INTEGER, SMALLINT or BIGINT type.
 type IntColType struct {
@@ -156,30 +126,12 @@ func (node *IntColType) IsSerial() bool {
 		node.Name == intColTypeBigSerial.Name
 }
 
-// Pre-allocated immutable float column types.
-var (
-	floatColTypeReal   = &FloatColType{Name: "REAL", Width: 32}
-	floatColTypeFloat  = &FloatColType{Name: "FLOAT", Width: 64}
-	floatColTypeFloat4 = &FloatColType{Name: "FLOAT4", Width: 32}
-	floatColTypeFloat8 = &FloatColType{Name: "FLOAT8", Width: 64}
-	floatColTypeDouble = &FloatColType{Name: "DOUBLE PRECISION", Width: 64}
-)
-
 // FloatColType represents a REAL, DOUBLE or FLOAT type.
 type FloatColType struct {
 	Name          string
 	Prec          int
 	Width         int
 	PrecSpecified bool // true if the value of Prec is not the default
-}
-
-// NewFloatColType creates a type representing a FLOAT, optionally with a
-// precision.
-func NewFloatColType(prec int, precSpecified bool) *FloatColType {
-	if prec == 0 && !precSpecified {
-		return floatColTypeFloat
-	}
-	return &FloatColType{Name: "FLOAT", Width: 64, Prec: prec, PrecSpecified: precSpecified}
 }
 
 // Format implements the ColTypeFormatter interface.
@@ -189,13 +141,6 @@ func (node *FloatColType) Format(buf *bytes.Buffer, f lex.EncodeFlags) {
 		fmt.Fprintf(buf, "(%d)", node.Prec)
 	}
 }
-
-// Pre-allocated immutable decimal column types.
-var (
-	decimalColTypeDec     = &DecimalColType{Name: "DEC"}
-	decimalColTypeDecimal = &DecimalColType{Name: "DECIMAL"}
-	decimalColTypeNumeric = &DecimalColType{Name: "NUMERIC"}
-)
 
 // DecimalColType represents a DECIMAL or NUMERIC type.
 type DecimalColType struct {
@@ -254,9 +199,6 @@ func LimitDecimalWidth(d *apd.Decimal, precision, scale int) error {
 	return nil
 }
 
-// Pre-allocated immutable date column type.
-var dateColTypeDate = &DateColType{}
-
 // DateColType represents a DATE type.
 type DateColType struct {
 }
@@ -265,9 +207,6 @@ type DateColType struct {
 func (node *DateColType) Format(buf *bytes.Buffer, f lex.EncodeFlags) {
 	buf.WriteString("DATE")
 }
-
-// Pre-allocated immutable timestamp column type.
-var timestampColTypeTimestamp = &TimestampColType{}
 
 // TimestampColType represents a TIMESTAMP type.
 type TimestampColType struct {
@@ -278,9 +217,6 @@ func (node *TimestampColType) Format(buf *bytes.Buffer, f lex.EncodeFlags) {
 	buf.WriteString("TIMESTAMP")
 }
 
-// Pre-allocated immutable timestamp with time zone column type.
-var timestampTzColTypeTimestampWithTZ = &TimestampTZColType{}
-
 // TimestampTZColType represents a TIMESTAMP type.
 type TimestampTZColType struct {
 }
@@ -289,9 +225,6 @@ type TimestampTZColType struct {
 func (node *TimestampTZColType) Format(buf *bytes.Buffer, f lex.EncodeFlags) {
 	buf.WriteString("TIMESTAMP WITH TIME ZONE")
 }
-
-// Pre-allocated immutable interval column type.
-var intervalColTypeInterval = &IntervalColType{}
 
 // IntervalColType represents an INTERVAL type
 type IntervalColType struct {
@@ -302,9 +235,6 @@ func (node *IntervalColType) Format(buf *bytes.Buffer, f lex.EncodeFlags) {
 	buf.WriteString("INTERVAL")
 }
 
-// Pre-allocated immutable uuid column type.
-var uuidColTypeUUID = &UUIDColType{}
-
 // UUIDColType represents a UUID type.
 type UUIDColType struct {
 }
@@ -313,11 +243,6 @@ type UUIDColType struct {
 func (node *UUIDColType) Format(buf *bytes.Buffer, f lex.EncodeFlags) {
 	buf.WriteString("UUID")
 }
-
-// Pre-allocated immutable ip column types.
-var (
-	ipnetColTypeINet = &IPAddrColType{Name: "INET"}
-)
 
 // IPAddrColType represents an INET or CIDR type.
 type IPAddrColType struct {
@@ -328,14 +253,6 @@ type IPAddrColType struct {
 func (node *IPAddrColType) Format(buf *bytes.Buffer, f lex.EncodeFlags) {
 	buf.WriteString(node.Name)
 }
-
-// Pre-allocated immutable string column types.
-var (
-	stringColTypeChar    = &StringColType{Name: "CHAR"}
-	stringColTypeVarChar = &StringColType{Name: "VARCHAR"}
-	stringColTypeString  = &StringColType{Name: "STRING"}
-	stringColTypeText    = &StringColType{Name: "TEXT"}
-)
 
 // StringColType represents a STRING, CHAR or VARCHAR type.
 type StringColType struct {
@@ -351,9 +268,6 @@ func (node *StringColType) Format(buf *bytes.Buffer, f lex.EncodeFlags) {
 	}
 }
 
-// Pre-allocated immutable name column type.
-var nameColTypeName = &NameColType{}
-
 // NameColType represents a a NAME type.
 type NameColType struct{}
 
@@ -361,13 +275,6 @@ type NameColType struct{}
 func (node *NameColType) Format(buf *bytes.Buffer, f lex.EncodeFlags) {
 	buf.WriteString("NAME")
 }
-
-// Pre-allocated immutable bytes column types.
-var (
-	bytesColTypeBlob  = &BytesColType{Name: "BLOB"}
-	bytesColTypeBytes = &BytesColType{Name: "BYTES"}
-	bytesColTypeBytea = &BytesColType{Name: "BYTEA"}
-)
 
 // BytesColType represents a BYTES or BLOB type.
 type BytesColType struct {
@@ -414,13 +321,6 @@ func (node *ArrayColType) Format(buf *bytes.Buffer, f lex.EncodeFlags) {
 	}
 }
 
-func arrayOf(colType ColumnType, bounds []int32) (ColumnType, error) {
-	if !canBeInArrayColType(colType) {
-		return nil, pgerror.NewErrorf(pgerror.CodeFeatureNotSupportedError, "arrays of %s not allowed", colType)
-	}
-	return &ArrayColType{Name: colType.String() + "[]", ParamType: colType, Bounds: bounds}, nil
-}
-
 // VectorColType is the base for VECTOR column types, which are Postgres's
 // older, limited version of ARRAYs. These are not meant to be persisted,
 // because ARRAYs are a strict superset.
@@ -434,12 +334,6 @@ func (node *VectorColType) Format(buf *bytes.Buffer, _ lex.EncodeFlags) {
 	buf.WriteString(node.Name)
 }
 
-// Int2VectorColType represents an INT2VECTOR column type.
-var int2vectorColType = &VectorColType{
-	Name:      "INT2VECTOR",
-	ParamType: intColTypeInt,
-}
-
 // JSONColType represents the JSON column type.
 type JSONColType struct {
 	Name string
@@ -449,20 +343,6 @@ type JSONColType struct {
 func (node *JSONColType) Format(buf *bytes.Buffer, _ lex.EncodeFlags) {
 	buf.WriteString(node.Name)
 }
-
-// Pre-allocated immutable JSON column type.
-var jsonColType = &JSONColType{Name: "JSON"}
-var jsonbColType = &JSONColType{Name: "JSONB"}
-
-// Pre-allocated immutable postgres oid column types.
-var (
-	oidColTypeOid          = &OidColType{Name: "OID"}
-	oidColTypeRegClass     = &OidColType{Name: "REGCLASS"}
-	oidColTypeRegNamespace = &OidColType{Name: "REGNAMESPACE"}
-	oidColTypeRegProc      = &OidColType{Name: "REGPROC"}
-	oidColTypeRegProcedure = &OidColType{Name: "REGPROCEDURE"}
-	oidColTypeRegType      = &OidColType{Name: "REGTYPE"}
-)
 
 // OidColType represents an OID type, which is the type of system object
 // identifiers. There are several different OID types: the raw OID type, which
