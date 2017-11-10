@@ -37,6 +37,17 @@ func (node *ArrayColType) Format(buf *bytes.Buffer, f lex.EncodeFlags) {
 	}
 }
 
+// canBeInArrayColType returns true if the given ColumnType is a valid
+// element type for an array column type.
+func canBeInArrayColType(t ColumnType) bool {
+	switch t.(type) {
+	case *JSONColType:
+		return false
+	default:
+		return true
+	}
+}
+
 // VectorColType is the base for VECTOR column types, which are Postgres's
 // older, limited version of ARRAYs. These are not meant to be persisted,
 // because ARRAYs are a strict superset.
