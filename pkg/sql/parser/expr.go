@@ -18,6 +18,7 @@ import (
 	"bytes"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 )
@@ -506,7 +507,7 @@ func (node *RangeCond) TypedTo() TypedExpr {
 type IsOfTypeExpr struct {
 	Not   bool
 	Expr  Expr
-	Types []ColumnType
+	Types []coltypes.ColumnType
 
 	typeAnnotation
 }
@@ -1066,7 +1067,7 @@ const (
 // CastExpr represents a CAST(expr AS type) expression.
 type CastExpr struct {
 	Expr Expr
-	Type CastTargetType
+	Type coltypes.CastTargetType
 
 	typeAnnotation
 	syntaxMode castSyntaxMode
@@ -1100,7 +1101,7 @@ func (node *CastExpr) Format(buf *bytes.Buffer, f FmtFlags) {
 }
 
 func (node *CastExpr) castType() types.T {
-	return CastTargetToDatumType(node.Type)
+	return coltypes.CastTargetToDatumType(node.Type)
 }
 
 var (
@@ -1199,7 +1200,7 @@ const (
 // AnnotateTypeExpr represents a ANNOTATE_TYPE(expr, type) expression.
 type AnnotateTypeExpr struct {
 	Expr Expr
-	Type CastTargetType
+	Type coltypes.CastTargetType
 
 	syntaxMode annotateSyntaxMode
 }
@@ -1227,7 +1228,7 @@ func (node *AnnotateTypeExpr) TypedInnerExpr() TypedExpr {
 }
 
 func (node *AnnotateTypeExpr) annotationType() types.T {
-	return CastTargetToDatumType(node.Type)
+	return coltypes.CastTargetToDatumType(node.Type)
 }
 
 // CollateExpr represents an (expr COLLATE locale) expression.

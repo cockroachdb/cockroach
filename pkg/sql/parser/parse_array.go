@@ -20,6 +20,7 @@ import (
 	"unicode"
 	"unicode/utf8"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 )
 
@@ -75,7 +76,7 @@ type parseState struct {
 	s       string
 	evalCtx *EvalContext
 	result  *DArray
-	t       ColumnType
+	t       coltypes.ColumnType
 }
 
 func (p *parseState) advance() {
@@ -146,34 +147,34 @@ func (p *parseState) parseElement() error {
 
 // StringToColType returns a column type given a string representation of the
 // type. Used by dump.
-func StringToColType(s string) (ColumnType, error) {
+func StringToColType(s string) (coltypes.ColumnType, error) {
 	switch s {
 	case "BOOL":
-		return boolColTypeBool, nil
+		return coltypes.BoolColTypeBool, nil
 	case "INT":
-		return intColTypeInt, nil
+		return coltypes.IntColTypeInt, nil
 	case "FLOAT":
-		return floatColTypeFloat, nil
+		return coltypes.FloatColTypeFloat, nil
 	case "DECIMAL":
-		return decimalColTypeDecimal, nil
+		return coltypes.DecimalColTypeDecimal, nil
 	case "TIMESTAMP":
-		return timestampColTypeTimestamp, nil
+		return coltypes.TimestampColTypeTimestamp, nil
 	case "TIMESTAMPTZ", "TIMESTAMP WITH TIME ZONE":
-		return timestampTzColTypeTimestampWithTZ, nil
+		return coltypes.TimestampTzColTypeTimestampWithTZ, nil
 	case "INTERVAL":
-		return intervalColTypeInterval, nil
+		return coltypes.IntervalColTypeInterval, nil
 	case "UUID":
-		return uuidColTypeUUID, nil
+		return coltypes.UuidColTypeUUID, nil
 	case "INET":
-		return ipnetColTypeINet, nil
+		return coltypes.IpnetColTypeINet, nil
 	case "DATE":
-		return dateColTypeDate, nil
+		return coltypes.DateColTypeDate, nil
 	case "STRING":
-		return stringColTypeString, nil
+		return coltypes.StringColTypeString, nil
 	case "NAME":
-		return nameColTypeName, nil
+		return coltypes.NameColTypeName, nil
 	case "BYTES":
-		return bytesColTypeBytes, nil
+		return coltypes.BytesColTypeBytes, nil
 	default:
 		return nil, pgerror.NewErrorf(pgerror.CodeInternalError, "unexpected column type %s", s)
 	}
@@ -181,11 +182,11 @@ func StringToColType(s string) (ColumnType, error) {
 
 // ParseDArrayFromString parses the string-form of constructing arrays, handling
 // cases such as `'{1,2,3}'::INT[]`.
-func ParseDArrayFromString(evalCtx *EvalContext, s string, t ColumnType) (*DArray, error) {
+func ParseDArrayFromString(evalCtx *EvalContext, s string, t coltypes.ColumnType) (*DArray, error) {
 	parser := parseState{
 		s:       s,
 		evalCtx: evalCtx,
-		result:  NewDArray(CastTargetToDatumType(t)),
+		result:  NewDArray(coltypes.CastTargetToDatumType(t)),
 		t:       t,
 	}
 

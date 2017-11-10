@@ -18,69 +18,71 @@ import (
 	"bytes"
 	"math/rand"
 	"testing"
+
+	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 )
 
 func TestParseArray(t *testing.T) {
 	testData := []struct {
 		str      string
-		typ      ColumnType
+		typ      coltypes.ColumnType
 		expected Datums
 	}{
-		{`{}`, intColTypeInt, Datums{}},
-		{`{1}`, intColTypeInt, Datums{NewDInt(1)}},
-		{`{1,2}`, intColTypeInt, Datums{NewDInt(1), NewDInt(2)}},
-		{`   { 1    ,  2  }  `, intColTypeInt, Datums{NewDInt(1), NewDInt(2)}},
+		{`{}`, coltypes.IntColTypeInt, Datums{}},
+		{`{1}`, coltypes.IntColTypeInt, Datums{NewDInt(1)}},
+		{`{1,2}`, coltypes.IntColTypeInt, Datums{NewDInt(1), NewDInt(2)}},
+		{`   { 1    ,  2  }  `, coltypes.IntColTypeInt, Datums{NewDInt(1), NewDInt(2)}},
 		{`   { 1    ,
-			"2"  }  `, intColTypeInt, Datums{NewDInt(1), NewDInt(2)}},
-		{`{1,2,3}`, intColTypeInt, Datums{NewDInt(1), NewDInt(2), NewDInt(3)}},
-		{`{"1"}`, intColTypeInt, Datums{NewDInt(1)}},
-		{` { "1" , "2"}`, intColTypeInt, Datums{NewDInt(1), NewDInt(2)}},
-		{` { "1" , 2}`, intColTypeInt, Datums{NewDInt(1), NewDInt(2)}},
-		{`{1,NULL}`, intColTypeInt, Datums{NewDInt(1), DNull}},
+			"2"  }  `, coltypes.IntColTypeInt, Datums{NewDInt(1), NewDInt(2)}},
+		{`{1,2,3}`, coltypes.IntColTypeInt, Datums{NewDInt(1), NewDInt(2), NewDInt(3)}},
+		{`{"1"}`, coltypes.IntColTypeInt, Datums{NewDInt(1)}},
+		{` { "1" , "2"}`, coltypes.IntColTypeInt, Datums{NewDInt(1), NewDInt(2)}},
+		{` { "1" , 2}`, coltypes.IntColTypeInt, Datums{NewDInt(1), NewDInt(2)}},
+		{`{1,NULL}`, coltypes.IntColTypeInt, Datums{NewDInt(1), DNull}},
 
-		{`{hello}`, stringColTypeString, Datums{NewDString(`hello`)}},
+		{`{hello}`, coltypes.StringColTypeString, Datums{NewDString(`hello`)}},
 		{`{hel
-lo}`, stringColTypeString, Datums{NewDString(`hel
+lo}`, coltypes.StringColTypeString, Datums{NewDString(`hel
 lo`)}},
 		{`{hel,
-lo}`, stringColTypeString, Datums{NewDString(`hel`), NewDString(`lo`)}},
-		{`{hel,lo}`, stringColTypeString, Datums{NewDString(`hel`), NewDString(`lo`)}},
-		{`{  he llo  }`, stringColTypeString, Datums{NewDString(`he llo`)}},
-		{"{hello,\u1680world}", stringColTypeString, Datums{NewDString(`hello`), NewDString(`world`)}},
-		{`{hell\\o}`, stringColTypeString, Datums{NewDString(`hell\o`)}},
-		{`{"hell\\o"}`, stringColTypeString, Datums{NewDString(`hell\o`)}},
-		{`{NULL,"NULL"}`, stringColTypeString, Datums{DNull, NewDString(`NULL`)}},
-		{`{"hello"}`, stringColTypeString, Datums{NewDString(`hello`)}},
-		{`{" hello "}`, stringColTypeString, Datums{NewDString(` hello `)}},
-		{`{"hel,lo"}`, stringColTypeString, Datums{NewDString(`hel,lo`)}},
-		{`{"hel\"lo"}`, stringColTypeString, Datums{NewDString(`hel"lo`)}},
-		{`{"h\"el\"lo"}`, stringColTypeString, Datums{NewDString(`h"el"lo`)}},
-		{`{"\"hello"}`, stringColTypeString, Datums{NewDString(`"hello`)}},
-		{`{"hello\""}`, stringColTypeString, Datums{NewDString(`hello"`)}},
-		{`{"hel\nlo"}`, stringColTypeString, Datums{NewDString(`helnlo`)}},
-		{`{"hel\\lo"}`, stringColTypeString, Datums{NewDString(`hel\lo`)}},
-		{`{"hel\\\"lo"}`, stringColTypeString, Datums{NewDString(`hel\"lo`)}},
-		{`{"hel\\\\lo"}`, stringColTypeString, Datums{NewDString(`hel\\lo`)}},
-		{`{"hel\\\\\\lo"}`, stringColTypeString, Datums{NewDString(`hel\\\lo`)}},
-		{`{"\\"}`, stringColTypeString, Datums{NewDString(`\`)}},
-		{`{"\\\\"}`, stringColTypeString, Datums{NewDString(`\\`)}},
-		{`{"\\\\\\"}`, stringColTypeString, Datums{NewDString(`\\\`)}},
-		{`{"he\,l\}l\{o"}`, stringColTypeString, Datums{NewDString(`he,l}l{o`)}},
+lo}`, coltypes.StringColTypeString, Datums{NewDString(`hel`), NewDString(`lo`)}},
+		{`{hel,lo}`, coltypes.StringColTypeString, Datums{NewDString(`hel`), NewDString(`lo`)}},
+		{`{  he llo  }`, coltypes.StringColTypeString, Datums{NewDString(`he llo`)}},
+		{"{hello,\u1680world}", coltypes.StringColTypeString, Datums{NewDString(`hello`), NewDString(`world`)}},
+		{`{hell\\o}`, coltypes.StringColTypeString, Datums{NewDString(`hell\o`)}},
+		{`{"hell\\o"}`, coltypes.StringColTypeString, Datums{NewDString(`hell\o`)}},
+		{`{NULL,"NULL"}`, coltypes.StringColTypeString, Datums{DNull, NewDString(`NULL`)}},
+		{`{"hello"}`, coltypes.StringColTypeString, Datums{NewDString(`hello`)}},
+		{`{" hello "}`, coltypes.StringColTypeString, Datums{NewDString(` hello `)}},
+		{`{"hel,lo"}`, coltypes.StringColTypeString, Datums{NewDString(`hel,lo`)}},
+		{`{"hel\"lo"}`, coltypes.StringColTypeString, Datums{NewDString(`hel"lo`)}},
+		{`{"h\"el\"lo"}`, coltypes.StringColTypeString, Datums{NewDString(`h"el"lo`)}},
+		{`{"\"hello"}`, coltypes.StringColTypeString, Datums{NewDString(`"hello`)}},
+		{`{"hello\""}`, coltypes.StringColTypeString, Datums{NewDString(`hello"`)}},
+		{`{"hel\nlo"}`, coltypes.StringColTypeString, Datums{NewDString(`helnlo`)}},
+		{`{"hel\\lo"}`, coltypes.StringColTypeString, Datums{NewDString(`hel\lo`)}},
+		{`{"hel\\\"lo"}`, coltypes.StringColTypeString, Datums{NewDString(`hel\"lo`)}},
+		{`{"hel\\\\lo"}`, coltypes.StringColTypeString, Datums{NewDString(`hel\\lo`)}},
+		{`{"hel\\\\\\lo"}`, coltypes.StringColTypeString, Datums{NewDString(`hel\\\lo`)}},
+		{`{"\\"}`, coltypes.StringColTypeString, Datums{NewDString(`\`)}},
+		{`{"\\\\"}`, coltypes.StringColTypeString, Datums{NewDString(`\\`)}},
+		{`{"\\\\\\"}`, coltypes.StringColTypeString, Datums{NewDString(`\\\`)}},
+		{`{"he\,l\}l\{o"}`, coltypes.StringColTypeString, Datums{NewDString(`he,l}l{o`)}},
 		// There is no way to input non-printing characters (without having used an escape string previously).
-		{`{\\x07}`, stringColTypeString, Datums{NewDString(`\x07`)}},
-		{`{\x07}`, stringColTypeString, Datums{NewDString(`x07`)}},
+		{`{\\x07}`, coltypes.StringColTypeString, Datums{NewDString(`\x07`)}},
+		{`{\x07}`, coltypes.StringColTypeString, Datums{NewDString(`x07`)}},
 
-		{`{日本語}`, stringColTypeString, Datums{NewDString(`日本語`)}},
+		{`{日本語}`, coltypes.StringColTypeString, Datums{NewDString(`日本語`)}},
 
 		// This can generate some strings with invalid UTF-8, but this isn't a
 		// problem, since the input would have had to be invalid UTF-8 for that to
 		// occur.
-		{string([]byte{'{', 'a', 200, '}'}), stringColTypeString, Datums{NewDString("a\xc8")}},
-		{string([]byte{'{', 'a', 200, 'a', '}'}), stringColTypeString, Datums{NewDString("a\xc8a")}},
+		{string([]byte{'{', 'a', 200, '}'}), coltypes.StringColTypeString, Datums{NewDString("a\xc8")}},
+		{string([]byte{'{', 'a', 200, 'a', '}'}), coltypes.StringColTypeString, Datums{NewDString("a\xc8a")}},
 	}
 	for _, td := range testData {
 		t.Run(td.str, func(t *testing.T) {
-			expected := NewDArray(CastTargetToDatumType(td.typ))
+			expected := NewDArray(coltypes.CastTargetToDatumType(td.typ))
 			for _, d := range td.expected {
 				if err := expected.Append(d); err != nil {
 					t.Fatal(err)
@@ -135,7 +137,7 @@ func TestParseArrayRandomParseArray(t *testing.T) {
 		}
 		buf.WriteByte('}')
 
-		parsed, err := ParseDArrayFromString(NewTestingEvalContext(), buf.String(), stringColTypeString)
+		parsed, err := ParseDArrayFromString(NewTestingEvalContext(), buf.String(), coltypes.StringColTypeString)
 		if err != nil {
 			t.Fatalf(`got error: "%s" for elem "%s"`, err, buf.String())
 		}
@@ -151,27 +153,27 @@ func TestParseArrayRandomParseArray(t *testing.T) {
 func TestParseArrayError(t *testing.T) {
 	testData := []struct {
 		str           string
-		typ           ColumnType
+		typ           coltypes.ColumnType
 		expectedError string
 	}{
-		{``, intColTypeInt, "array must be enclosed in { and }"},
-		{`1`, intColTypeInt, "array must be enclosed in { and }"},
-		{`1,2`, intColTypeInt, "array must be enclosed in { and }"},
-		{`{1,2`, intColTypeInt, "malformed array"},
-		{`{1,2,`, intColTypeInt, "malformed array"},
-		{`{`, intColTypeInt, "malformed array"},
-		{`{,}`, intColTypeInt, "malformed array"},
-		{`{}{}`, intColTypeInt, "extra text after closing right brace"},
-		{`{} {}`, intColTypeInt, "extra text after closing right brace"},
-		{`{{}}`, intColTypeInt, "nested arrays not supported"},
-		{`{1, {1}}`, intColTypeInt, "nested arrays not supported"},
-		{`{hello}`, intColTypeInt, `could not parse "hello" as type int: strconv.ParseInt: parsing "hello": invalid syntax`},
-		{`{"hello}`, stringColTypeString, `malformed array`},
+		{``, coltypes.IntColTypeInt, "array must be enclosed in { and }"},
+		{`1`, coltypes.IntColTypeInt, "array must be enclosed in { and }"},
+		{`1,2`, coltypes.IntColTypeInt, "array must be enclosed in { and }"},
+		{`{1,2`, coltypes.IntColTypeInt, "malformed array"},
+		{`{1,2,`, coltypes.IntColTypeInt, "malformed array"},
+		{`{`, coltypes.IntColTypeInt, "malformed array"},
+		{`{,}`, coltypes.IntColTypeInt, "malformed array"},
+		{`{}{}`, coltypes.IntColTypeInt, "extra text after closing right brace"},
+		{`{} {}`, coltypes.IntColTypeInt, "extra text after closing right brace"},
+		{`{{}}`, coltypes.IntColTypeInt, "nested arrays not supported"},
+		{`{1, {1}}`, coltypes.IntColTypeInt, "nested arrays not supported"},
+		{`{hello}`, coltypes.IntColTypeInt, `could not parse "hello" as type int: strconv.ParseInt: parsing "hello": invalid syntax`},
+		{`{"hello}`, coltypes.StringColTypeString, `malformed array`},
 		// It might be unnecessary to disallow this, but Postgres does.
-		{`{he"lo}`, stringColTypeString, "malformed array"},
+		{`{he"lo}`, coltypes.StringColTypeString, "malformed array"},
 
-		{string([]byte{200}), stringColTypeString, "array must be enclosed in { and }"},
-		{string([]byte{'{', 'a', 200}), stringColTypeString, "malformed array"},
+		{string([]byte{200}), coltypes.StringColTypeString, "array must be enclosed in { and }"},
+		{string([]byte{'{', 'a', 200}), coltypes.StringColTypeString, "malformed array"},
 	}
 	for _, td := range testData {
 		t.Run(td.str, func(t *testing.T) {

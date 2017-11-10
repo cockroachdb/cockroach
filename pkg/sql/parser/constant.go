@@ -26,6 +26,7 @@ import (
 
 	"github.com/pkg/errors"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
@@ -292,7 +293,7 @@ func (expr *NumVal) ResolveAsType(ctx *SemaContext, typ types.T) (Datum, error) 
 			return nil, err
 		}
 		oid := NewDOid(*d.(*DInt))
-		oid.semanticType = oidTypeToColType(typ)
+		oid.semanticType = coltypes.OidTypeToColType(typ)
 		return oid, nil
 	default:
 		return nil, pgerror.NewErrorf(pgerror.CodeInternalError,
