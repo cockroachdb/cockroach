@@ -5,3 +5,4 @@ helpmap_test.go
 help_messages.go
 sql.go
 y.output
+gen
