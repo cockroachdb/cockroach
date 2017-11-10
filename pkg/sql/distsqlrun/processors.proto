@@ -123,6 +123,7 @@ message ProcessorCoreUnion {
   optional ReadCSVSpec readCSV = 13;
   optional SSTWriterSpec SSTWriter = 14;
   optional SamplerSpec Sampler = 15;
+  optional SampleAggregatorSpec SampleAggregator = 16;
 }
 
 // NoopCoreSpec indicates a "no-op" processor core. This is used when we just
@@ -486,6 +487,22 @@ enum SketchType {
   HLL_PLUS_PLUS_V1 = 0;
 }
 
+// SketchSpec contains the specification for a generated statistic.
+message SketchSpec {
+  optional SketchType sketch_type = 1 [(gogoproto.nullable) = false];
+
+  // Each value is an index identifying a column in the input stream.
+  // TODO(radu): currently only one column is supported.
+  repeated uint32 columns = 2;
+
+  // If set, we generate a histogram for the first column in the sketch.
+  // Only used by the SampleAggregator.
+  optional bool generate_histogram = 3 [(gogoproto.nullable) = false];
+  // Controls the maximum number of buckets in the histogram.
+  // Only used by the SampleAggregator.
+  optional uint32 histogram_max_buckets = 4 [(gogoproto.nullable) = false];
+}
+
 // SamplerSpec is the specification of a "sampler" processor which
 // returns a sample (random subset) of the input columns and computes
 // cardinality estimation sketches on sets of columns.
@@ -518,12 +535,36 @@ enum SketchType {
 // Rows have NULLs on either all the sampled row columns or on all the
 // sketch columns.
 message SamplerSpec {
-  message SketchSpec {
-    optional SketchType sketch_type = 1 [(gogoproto.nullable) = false];
-
-    // Each value is an index identifying a column in the input stream.
-    repeated uint32 columns = 2;
-  }
   repeated SketchSpec sketches = 1 [(gogoproto.nullable) = false];
   optional uint32 sample_size = 2 [(gogoproto.nullable) = false];
+}
+
+// SampleAggregatorSpec is the specification of a processor that aggregates the
+// results from multiple sampler processors and writes out the statistics to
+// system.table_statistics.
+//
+// The input schema it expects matches the output schema of a sampler spec (see
+// the comment for SamplerSpec for all the details):
+//  1. sampled row columns:
+//    - sampled columns
+//    - row rank
+//  2. sketch columns:
+//    - sketch index
+//    - number of rows processed
+//    - number of NULL values encountered on the first column of the sketch
+//    - binary sketch data
+message SampleAggregatorSpec {
+  repeated SketchSpec sketches = 1 [(gogoproto.nullable) = false];
+
+  // The processor merges reservoir sample sets into a single
+  // sample set of this size. This must match the sample size
+  // used for each Sampler.
+  optional uint32 sample_size = 2 [(gogoproto.nullable) = false];
+
+  // The i-th value indicates the ColumnID of the i-th sampled row column.
+  // These are necessary for writing out the statistic data.
+  repeated uint32 sampled_column_ids = 3 [
+    (gogoproto.customname) = "SampledColumnIDs",
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sqlbase.ColumnID"
+  ];
 }

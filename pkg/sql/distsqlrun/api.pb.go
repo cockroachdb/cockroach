@@ -46,7 +46,9 @@
 		AlgebraicSetOpSpec
 		ReadCSVSpec
 		SSTWriterSpec
+		SketchSpec
 		SamplerSpec
+		SampleAggregatorSpec
 */
 package distsqlrun
 
