@@ -345,7 +345,7 @@ lintshort: ## Run a fast subset of the style checkers and linters.
 .PHONY: clean
 clean: ## Remove build artifacts.
 clean: clean-c-deps
-	$(MAKE) -C $(ORG_ROOT) -f cockroach/build/protobuf.mk clean
+	$(MAKE) -f build/protobuf.mk clean
 	$(GO) clean $(GOFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' -i github.com/cockroachdb/...
 	$(FIND_RELEVANT) -type f \( -name 'zcgo_flags*.go' -o -name '*.test' \) -exec rm {} +
 	for f in cockroach*; do if [ -f "$$f" ]; then rm "$$f"; fi; done
