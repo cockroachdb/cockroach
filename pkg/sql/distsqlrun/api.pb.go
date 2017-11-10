@@ -47,6 +47,7 @@
 		ReadCSVSpec
 		SSTWriterSpec
 		SamplerSpec
+		SampleAggregatorSpec
 */
 package distsqlrun
 
