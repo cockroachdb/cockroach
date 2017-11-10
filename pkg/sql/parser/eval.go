@@ -3181,15 +3181,6 @@ func (t *Tuple) Eval(ctx *EvalContext) (Datum, error) {
 	return tuple, nil
 }
 
-func canBeInArrayColType(t ColumnType) bool {
-	switch t.(type) {
-	case *JSONColType:
-		return false
-	default:
-		return true
-	}
-}
-
 func canBeInArray(t types.T) bool {
 	switch t {
 	case types.JSON:
