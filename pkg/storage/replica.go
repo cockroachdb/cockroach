@@ -2337,7 +2337,9 @@ func (r *Replica) removeCmdsFromCommandQueue(cmds batchCmdSet) {
 // timestamp cache. When the write returns, the updated timestamp
 // will inform the batch response timestamp or batch response txn
 // timestamp.
-func (r *Replica) applyTimestampCache(ba *roachpb.BatchRequest) (bool, *roachpb.Error) {
+func (r *Replica) applyTimestampCache(
+	ctx context.Context, ba *roachpb.BatchRequest,
+) (bool, *roachpb.Error) {
 	span, err := keys.RangeMatchingPred(*ba, roachpb.ConsultsTimestampCache)
 	if err != nil {
 		return false, roachpb.NewError(err)
@@ -2364,8 +2366,17 @@ func (r *Replica) applyTimestampCache(ba *roachpb.BatchRequest) (bool, *roachpb.
 			// has already been finalized, in which case this is a replay.
 			if _, ok := args.(*roachpb.BeginTransactionRequest); ok {
 				key := keys.TransactionKey(header.Key, ba.Txn.ID)
-				wTS, _, wOK := r.store.tsCacheMu.cache.GetMaxWrite(key, nil)
+				wTS, wTxnID, wOK := r.store.tsCacheMu.cache.GetMaxWrite(key, nil)
 				if wOK {
+					// GetMaxWrite will only find a timestamp interval with an
+					// associated txnID on the TransactionKey if an EndTxnReq
+					// has been processed. All other timestamp intervals will
+					// have no associated txnID and will be due to the low-water
+					// mark.
+					if wTxnID != ba.Txn.ID {
+						log.Fatalf(ctx, "unexpected tscache interval (%s,%s) on TxnKey %s",
+							wTS, wTxnID, key)
+					}
 					return bumped, roachpb.NewError(roachpb.NewTransactionReplayError())
 				} else if !wTS.Less(ba.Txn.Timestamp) {
 					// This is a crucial bit of code. The timestamp cache is
@@ -2728,7 +2739,7 @@ func (r *Replica) tryExecuteWriteBatch(
 	// commands which require this command to move its timestamp
 	// forward. Or, in the case of a transactional write, the txn
 	// timestamp and possible write-too-old bool.
-	if bumped, pErr := r.applyTimestampCache(&ba); pErr != nil {
+	if bumped, pErr := r.applyTimestampCache(ctx, &ba); pErr != nil {
 		return nil, pErr, proposalNoRetry
 	} else if bumped {
 		// If we bump the transaction's timestamp, we must absolutely

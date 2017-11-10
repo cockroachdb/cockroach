@@ -563,8 +563,7 @@ func (tc *treeImpl) ExpandRequests(span roachpb.RSpan, timestamp hlc.Timestamp) 
 			// req.TxnID != nil because we only hit this code path for
 			// EndTransactionRequests.
 			key := keys.TransactionKey(req.Txn.Key, req.TxnID)
-			// We set txnID=nil because we want hits for same txn ID.
-			tc.add(key, nil, req.Timestamp, noTxnID, false /* readTSCache */)
+			tc.add(key, nil, req.Timestamp, req.TxnID, false /* readTSCache */)
 		}
 		req.release()
 	}
@@ -572,8 +571,8 @@ func (tc *treeImpl) ExpandRequests(span roachpb.RSpan, timestamp hlc.Timestamp) 
 
 // SetLowWater implements the Cache interface.
 func (tc *treeImpl) SetLowWater(start, end roachpb.Key, timestamp hlc.Timestamp) {
-	tc.add(start, end, timestamp, lowWaterTxnIDMarker, false)
-	tc.add(start, end, timestamp, lowWaterTxnIDMarker, true)
+	tc.add(start, end, timestamp, noTxnID, false)
+	tc.add(start, end, timestamp, noTxnID, true)
 }
 
 // GlobalLowWater implements the Cache interface.
@@ -614,7 +613,7 @@ func (tc *treeImpl) getMax(
 			maxTxnID = noTxnID
 		}
 	}
-	if maxTxnID == lowWaterTxnIDMarker {
+	if maxTxnID == noTxnID {
 		ok = false
 	}
 	return maxTS, maxTxnID, ok

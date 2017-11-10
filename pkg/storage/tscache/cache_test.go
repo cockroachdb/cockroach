@@ -75,34 +75,34 @@ func TestTimestampCache(t *testing.T) {
 		tc.add(roachpb.Key("b"), roachpb.Key("c"), ts, noTxnID, true)
 
 		// Verify all permutations of direct and range access.
-		if rTS, _, ok := tc.GetMaxRead(roachpb.Key("b"), nil); rTS != ts || !ok {
+		if rTS, _, ok := tc.GetMaxRead(roachpb.Key("b"), nil); rTS != ts || ok {
 			t.Errorf("expected current time for key \"b\"; got %s; ok=%t", rTS, ok)
 		}
-		if rTS, _, ok := tc.GetMaxRead(roachpb.Key("bb"), nil); rTS != ts || !ok {
+		if rTS, _, ok := tc.GetMaxRead(roachpb.Key("bb"), nil); rTS != ts || ok {
 			t.Errorf("expected current time for key \"bb\"; ok=%t", ok)
 		}
 		if rTS, _, ok := tc.GetMaxRead(roachpb.Key("c"), nil); rTS.WallTime != baseTS || ok {
 			t.Errorf("expected baseTS for key \"c\"; ok=%t", ok)
 		}
-		if rTS, _, ok := tc.GetMaxRead(roachpb.Key("b"), roachpb.Key("c")); rTS != ts || !ok {
+		if rTS, _, ok := tc.GetMaxRead(roachpb.Key("b"), roachpb.Key("c")); rTS != ts || ok {
 			t.Errorf("expected current time for key \"b\"-\"c\"; ok=%t", ok)
 		}
-		if rTS, _, ok := tc.GetMaxRead(roachpb.Key("bb"), roachpb.Key("bz")); rTS != ts || !ok {
+		if rTS, _, ok := tc.GetMaxRead(roachpb.Key("bb"), roachpb.Key("bz")); rTS != ts || ok {
 			t.Errorf("expected current time for key \"bb\"-\"bz\"; ok=%t", ok)
 		}
 		if rTS, _, ok := tc.GetMaxRead(roachpb.Key("a"), roachpb.Key("b")); rTS.WallTime != baseTS || ok {
 			t.Errorf("expected baseTS for key \"a\"-\"b\"; ok=%t", ok)
 		}
-		if rTS, _, ok := tc.GetMaxRead(roachpb.Key("a"), roachpb.Key("bb")); rTS != ts || !ok {
+		if rTS, _, ok := tc.GetMaxRead(roachpb.Key("a"), roachpb.Key("bb")); rTS != ts || ok {
 			t.Errorf("expected current time for key \"a\"-\"bb\"; ok=%t", ok)
 		}
-		if rTS, _, ok := tc.GetMaxRead(roachpb.Key("a"), roachpb.Key("d")); rTS != ts || !ok {
+		if rTS, _, ok := tc.GetMaxRead(roachpb.Key("a"), roachpb.Key("d")); rTS != ts || ok {
 			t.Errorf("expected current time for key \"a\"-\"d\"; ok=%t", ok)
 		}
-		if rTS, _, ok := tc.GetMaxRead(roachpb.Key("bz"), roachpb.Key("c")); rTS != ts || !ok {
+		if rTS, _, ok := tc.GetMaxRead(roachpb.Key("bz"), roachpb.Key("c")); rTS != ts || ok {
 			t.Errorf("expected current time for key \"bz\"-\"c\"; ok=%t", ok)
 		}
-		if rTS, _, ok := tc.GetMaxRead(roachpb.Key("bz"), roachpb.Key("d")); rTS != ts || !ok {
+		if rTS, _, ok := tc.GetMaxRead(roachpb.Key("bz"), roachpb.Key("d")); rTS != ts || ok {
 			t.Errorf("expected current time for key \"bz\"-\"d\"; ok=%t", ok)
 		}
 		if rTS, _, ok := tc.GetMaxRead(roachpb.Key("c"), roachpb.Key("d")); rTS.WallTime != baseTS || ok {
