@@ -176,18 +176,18 @@ func TestParse(t *testing.T) {
 		{`CREATE TABLE a.b (b INT)`},
 		{`CREATE TABLE IF NOT EXISTS a (b INT)`},
 
-		{`CREATE TABLE a (b INT) PARTITION BY LIST (b) (PARTITION p1 VALUES (1, DEFAULT), PARTITION p2 VALUES (2), (3))`},
-		{`CREATE TABLE a (b INT) PARTITION BY RANGE (b) (PARTITION p1 VALUES LESS THAN (1), PARTITION p2 VALUES LESS THAN (2, 3), PARTITION p3 VALUES LESS THAN (MAXVALUE))`},
-		// This montrosity was added on the assumption that it's more readable
+		{`CREATE TABLE a (b INT) PARTITION BY LIST (b) (PARTITION p1 VALUES IN (1, DEFAULT), PARTITION p2 VALUES IN ((1, 2), (3, 4)))`},
+		{`CREATE TABLE a (b INT) PARTITION BY RANGE (b) (PARTITION p1 VALUES < 1, PARTITION p2 VALUES < (2, MAXVALUE), PARTITION p3 VALUES < MAXVALUE)`},
+		// This monstrosity was added on the assumption that it's more readable
 		// than all on one line. Feel free to rip it out if you come across it
 		// and disagree.
 		{regexp.MustCompile(`\n\s*`).ReplaceAllLiteralString(
 			`CREATE TABLE a (b INT, c INT, d INT) PARTITION BY LIST (b) (
-				PARTITION p1 VALUES (1) PARTITION BY LIST (c) (
-					PARTITION p1_1 VALUES (3), PARTITION p1_2 VALUES (4, 5)
-				), PARTITION p2 VALUES (6) PARTITION BY RANGE (c) (
-					PARTITION p2_1 VALUES LESS THAN (7) PARTITION BY LIST (d) (
-						PARTITION p2_1_1 VALUES (8)
+				PARTITION p1 VALUES IN (1) PARTITION BY LIST (c) (
+					PARTITION p1_1 VALUES IN (3), PARTITION p1_2 VALUES IN (4, 5)
+				), PARTITION p2 VALUES IN (6) PARTITION BY RANGE (c) (
+					PARTITION p2_1 VALUES < 7 PARTITION BY LIST (d) (
+						PARTITION p2_1_1 VALUES IN (8)
 					)
 				)
 			)`, ``),

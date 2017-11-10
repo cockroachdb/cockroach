@@ -3378,16 +3378,6 @@ func (t *Placeholder) Eval(ctx *EvalContext) (Datum, error) {
 	return e.Eval(ctx)
 }
 
-// Eval implements the TypedExpr interface.
-func (expr PartitionDefault) Eval(ctx *EvalContext) (Datum, error) {
-	return nil, pgerror.NewErrorf(pgerror.CodeInternalError, "unhandled type %T", expr)
-}
-
-// Eval implements the TypedExpr interface.
-func (expr PartitionMaxValue) Eval(ctx *EvalContext) (Datum, error) {
-	return nil, pgerror.NewErrorf(pgerror.CodeInternalError, "unhandled type %T", expr)
-}
-
 func evalComparison(ctx *EvalContext, op ComparisonOperator, left, right Datum) (Datum, error) {
 	if left == DNull || right == DNull {
 		return DNull, nil
