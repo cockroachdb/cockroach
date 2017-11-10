@@ -17,11 +17,12 @@ include $(REPO_ROOT)/build/common.mk
 
 GOBINDATA_TARGET = embedded.go
 
-STYLINT            := $(NODE_RUN) ./node_modules/.bin/stylint
-TSLINT             := $(NODE_RUN) ./node_modules/.bin/tslint
-KARMA              := $(NODE_RUN) ./node_modules/.bin/karma
-WEBPACK            := $(NODE_RUN) ./node_modules/.bin/webpack
-WEBPACK_DEV_SERVER := $(NODE_RUN) ./node_modules/.bin/webpack-dev-server
+STYLINT            := ./node_modules/.bin/stylint
+TSLINT             := ./node_modules/.bin/tslint
+KARMA              := ./node_modules/.bin/karma
+WEBPACK            := ./node_modules/.bin/webpack
+WEBPACK_DEV_SERVER := ./node_modules/.bin/webpack-dev-server
+WEBPACK_DASHBOARD  := ./opt/node_modules/.bin/webpack-dashboard
 
 .DEFAULT_GOAL := all
 .PHONY: all
@@ -38,22 +39,22 @@ generate: $(GOBINDATA_TARGET)
 
 .PHONY: lint
 lint: | protos
-	$(STYLINT) -c .stylintrc styl
-	$(TSLINT) -c tslint.json -p tsconfig.json --type-check
+	$(NODE_RUN) $(STYLINT) -c .stylintrc styl
+	$(NODE_RUN) $(TSLINT) -c tslint.json -p tsconfig.json --type-check
 	@# TODO(benesch): Invoke tslint just once when palantir/tslint#2827 is fixed.
-	$(TSLINT) -c tslint.json *.js
-	@if $(YARN) list | grep phantomjs; then echo ^ forbidden UI dependency >&2; exit 1; fi
+	$(NODE_RUN) $(TSLINT) -c tslint.json *.js
+	@if $(NODE_RUN) yarn list | grep phantomjs; then echo ^ forbidden UI dependency >&2; exit 1; fi
 
 # See "DLLs for speedy builds" in the README for details.
 DLLS := dist/protos.dll.js dist/vendor.dll.js protos-manifest.json vendor-manifest.json
 
 .PHONY: test
 test: $(DLLS)
-	$(KARMA) start
+	$(NODE_RUN) $(KARMA) start
 
 .PHONY: test-watch
 test-watch: $(DLLS)
-	$(KARMA) start --no-single-run --auto-watch
+	$(NODE_RUN) $(KARMA) start --no-single-run --auto-watch
 
 # (Ab)use a pattern rule to teach Make that this one command produces two files.
 # Normally, it would run the recipe twice if dist/FOO.js and FOO-manifest.js
@@ -61,11 +62,11 @@ test-watch: $(DLLS)
 #
 # See: https://stackoverflow.com/a/3077254/1122351
 dist/%.dll.js %-manifest.json: webpack.%.js | protos
-	$(WEBPACK) -p --config $<
+	$(NODE_RUN) $(WEBPACK) -p --config $<
 
 $(GOBINDATA_TARGET): webpack.app.js $(DLLS) $(shell find src styl)
 	find dist -mindepth 1 -not -name '*.dll.js' -delete
-	$(WEBPACK) --config $<
+	$(NODE_RUN) $(WEBPACK) --config $<
 	go-bindata -nometadata -pkg ui -o $@ -prefix dist dist/...
 	# Add comment recognized by reviewable.
 	echo '// GENERATED FILE DO NOT EDIT' >> $@
@@ -73,14 +74,14 @@ $(GOBINDATA_TARGET): webpack.app.js $(DLLS) $(shell find src styl)
 	goimports -w $@
 
 yarn.opt.installed:
-	$(YARN) install --cwd opt
+	$(NODE_RUN) -C opt yarn install
 	touch $@
 
 .PHONY: watch
 watch: export TARGET := http://localhost:8080
 watch: PORT := 3000
 watch: $(DLLS) yarn.opt.installed
-	./opt/node_modules/.bin/webpack-dashboard -- $(WEBPACK_DEV_SERVER) --config webpack.app.js --port $(PORT)
+	$(WEBPACK_DASHBOARD) -- $(WEBPACK_DEV_SERVER) --config webpack.app.js --port $(PORT)
 
 .PHONY: maintainer-clean
 maintainer-clean:
