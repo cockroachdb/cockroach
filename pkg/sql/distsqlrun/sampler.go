@@ -29,20 +29,17 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
 
-// TODO(radu): for now just force the import.
-var _ hyperloglog.Sketch
-
 // A sampler processor returns a random sample of rows, as well as "global"
 // statistics (including cardinality estimation sketch data). See SamplerSpec
 // for more details.
 type samplerProcessor struct {
 	processorBase
 
-	flowCtx    *FlowCtx
-	input      RowSource
-	sr         stats.SampleReservoir
-	sketchInfo []SamplerSpec_SketchInfo
-	outTypes   []sqlbase.ColumnType
+	flowCtx     *FlowCtx
+	input       RowSource
+	sr          sqlbase.SampleReservoir
+	sketchSpecs []SamplerSpec_SketchSpec
+	outTypes    []sqlbase.ColumnType
 	// Output column indices for special columns.
 	rankCol      int
 	sketchIdxCol int
@@ -72,9 +69,9 @@ func newSamplerProcessor(
 	}
 
 	s := &samplerProcessor{
-		flowCtx:    flowCtx,
-		input:      input,
-		sketchInfo: spec.Sketches,
+		flowCtx:     flowCtx,
+		input:       input,
+		sketchSpecs: spec.Sketches,
 	}
 
 	s.sr.Init(int(spec.SampleSize))
@@ -132,13 +129,13 @@ func (s *samplerProcessor) Run(ctx context.Context, wg *sync.WaitGroup) {
 }
 
 func (s *samplerProcessor) mainLoop(ctx context.Context) (earlyExit bool, _ error) {
-	sketches := make([]*hyperloglog.Sketch, len(s.sketchInfo))
+	sketches := make([]*hyperloglog.Sketch, len(s.sketchSpecs))
 	for i := range sketches {
 		sketches[i] = hyperloglog.New14()
 	}
 
 	var numRows int64
-	numNulls := make([]int64, len(s.sketchInfo))
+	numNulls := make([]int64, len(s.sketchSpecs))
 
 	rng, _ := randutil.NewPseudoRand()
 	var da sqlbase.DatumAlloc
@@ -157,8 +154,8 @@ func (s *samplerProcessor) mainLoop(ctx context.Context) (earlyExit bool, _ erro
 		}
 		numRows++
 
-		for i := range s.sketchInfo {
-			col := s.sketchInfo[i].Columns[0]
+		for i := range s.sketchSpecs {
+			col := s.sketchSpecs[i].Columns[0]
 			if row[col].IsNull() {
 				numNulls[i]++
 				continue
@@ -199,7 +196,7 @@ func (s *samplerProcessor) mainLoop(ctx context.Context) (earlyExit bool, _ erro
 		outRow[i] = sqlbase.DatumToEncDatum(s.outTypes[i], tree.DNull)
 	}
 
-	for i := range s.sketchInfo {
+	for i := range s.sketchSpecs {
 		outRow[s.sketchIdxCol] = sqlbase.EncDatum{Datum: tree.NewDInt(tree.DInt(i))}
 		outRow[s.numRowsCol] = sqlbase.EncDatum{Datum: tree.NewDInt(tree.DInt(numRows))}
 		outRow[s.nullValsCol] = sqlbase.EncDatum{Datum: tree.NewDInt(tree.DInt(numNulls[i]))}
