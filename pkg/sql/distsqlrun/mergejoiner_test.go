@@ -374,13 +374,7 @@ func TestMergeJoiner(t *testing.T) {
 
 			var retRows sqlbase.EncDatumRows
 			for {
-				row, meta := out.Next()
-				if err != nil {
-					t.Fatal(err)
-				}
-				if !meta.Empty() {
-					t.Fatalf("unexpected metadata: %v", meta)
-				}
+				row := out.NextNoMeta(t)
 				if row == nil {
 					break
 				}
