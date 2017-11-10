@@ -106,8 +106,8 @@ func MakeColumnDefDescs(
 
 	// Set other attributes of col.Type and perform type-specific verification.
 	switch t := d.Type.(type) {
-	case *coltypes.BoolColType:
-	case *coltypes.IntColType:
+	case *coltypes.TBool:
+	case *coltypes.TInt:
 		col.Type.Width = int32(t.Width)
 		if t.IsSerial() {
 			if d.HasDefaultExpr() {
@@ -119,7 +119,7 @@ func MakeColumnDefDescs(
 		if val, present := nameToVisibleTypeMap[t.Name]; present {
 			col.Type.VisibleType = val
 		}
-	case *coltypes.FloatColType:
+	case *coltypes.TFloat:
 		// If the precision for this float col was intentionally specified as 0, return an error.
 		if t.Prec == 0 && t.PrecSpecified {
 			return nil, nil, errors.New("precision for type float must be at least 1 bit")
@@ -128,7 +128,7 @@ func MakeColumnDefDescs(
 		if val, present := nameToVisibleTypeMap[t.Name]; present {
 			col.Type.VisibleType = val
 		}
-	case *coltypes.DecimalColType:
+	case *coltypes.TDecimal:
 		col.Type.Width = int32(t.Scale)
 		col.Type.Precision = int32(t.Prec)
 
@@ -140,25 +140,25 @@ func MakeColumnDefDescs(
 			return nil, nil, fmt.Errorf("NUMERIC scale %d must be between 0 and precision %d",
 				col.Type.Width, col.Type.Precision)
 		}
-	case *coltypes.DateColType:
-	case *coltypes.TimestampColType:
-	case *coltypes.TimestampTZColType:
-	case *coltypes.IntervalColType:
-	case *coltypes.UUIDColType:
-	case *coltypes.IPAddrColType:
-	case *coltypes.StringColType:
+	case *coltypes.TDate:
+	case *coltypes.TTimestamp:
+	case *coltypes.TTimestampTZ:
+	case *coltypes.TInterval:
+	case *coltypes.TUUID:
+	case *coltypes.TIPAddr:
+	case *coltypes.TString:
 		col.Type.Width = int32(t.N)
-	case *coltypes.NameColType:
-	case *coltypes.BytesColType:
-	case *coltypes.CollatedStringColType:
+	case *coltypes.TName:
+	case *coltypes.TBytes:
+	case *coltypes.TCollatedString:
 		col.Type.Width = int32(t.N)
-	case *coltypes.ArrayColType:
+	case *coltypes.TArray:
 		col.Type.ArrayDimensions = t.Bounds
-	case *coltypes.VectorColType:
-		if _, ok := t.ParamType.(*coltypes.IntColType); !ok {
+	case *coltypes.TVector:
+		if _, ok := t.ParamType.(*coltypes.TInt); !ok {
 			return nil, nil, errors.Errorf("vectors of type %s are unsupported", t.ParamType)
 		}
-	case *coltypes.OidColType:
+	case *coltypes.TOid:
 	default:
 		return nil, nil, errors.Errorf("unexpected type %T", t)
 	}

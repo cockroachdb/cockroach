@@ -20,34 +20,34 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 )
 
-// DateColType represents a DATE type.
-type DateColType struct{}
+// TDate represents a DATE type.
+type TDate struct{}
 
 // Format implements the ColTypeFormatter interface.
-func (node *DateColType) Format(buf *bytes.Buffer, f lex.EncodeFlags) {
+func (node *TDate) Format(buf *bytes.Buffer, f lex.EncodeFlags) {
 	buf.WriteString("DATE")
 }
 
-// TimestampColType represents a TIMESTAMP type.
-type TimestampColType struct{}
+// TTimestamp represents a TIMESTAMP type.
+type TTimestamp struct{}
 
 // Format implements the ColTypeFormatter interface.
-func (node *TimestampColType) Format(buf *bytes.Buffer, f lex.EncodeFlags) {
+func (node *TTimestamp) Format(buf *bytes.Buffer, f lex.EncodeFlags) {
 	buf.WriteString("TIMESTAMP")
 }
 
-// TimestampTZColType represents a TIMESTAMP type.
-type TimestampTZColType struct{}
+// TTimestampTZ represents a TIMESTAMP type.
+type TTimestampTZ struct{}
 
 // Format implements the ColTypeFormatter interface.
-func (node *TimestampTZColType) Format(buf *bytes.Buffer, f lex.EncodeFlags) {
+func (node *TTimestampTZ) Format(buf *bytes.Buffer, f lex.EncodeFlags) {
 	buf.WriteString("TIMESTAMP WITH TIME ZONE")
 }
 
-// IntervalColType represents an INTERVAL type
-type IntervalColType struct{}
+// TInterval represents an INTERVAL type
+type TInterval struct{}
 
 // Format implements the ColTypeFormatter interface.
-func (node *IntervalColType) Format(buf *bytes.Buffer, f lex.EncodeFlags) {
+func (node *TInterval) Format(buf *bytes.Buffer, f lex.EncodeFlags) {
 	buf.WriteString("INTERVAL")
 }

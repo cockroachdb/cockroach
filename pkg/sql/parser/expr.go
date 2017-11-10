@@ -507,7 +507,7 @@ func (node *RangeCond) TypedTo() TypedExpr {
 type IsOfTypeExpr struct {
 	Not   bool
 	Expr  Expr
-	Types []coltypes.ColumnType
+	Types []coltypes.T
 
 	typeAnnotation
 }

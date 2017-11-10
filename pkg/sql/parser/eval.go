@@ -2360,26 +2360,26 @@ type regTypeInfo struct {
 	errType string
 }
 
-// regTypeInfos maps an coltypes.OidColType to a regTypeInfo that describes the
+// regTypeInfos maps an coltypes.TOid to a regTypeInfo that describes the
 // pg_catalog table that contains the entities of the type of the key.
-var regTypeInfos = map[*coltypes.OidColType]regTypeInfo{
-	coltypes.OidColTypeRegClass:     {"pg_class", "relname", "relation", pgerror.CodeUndefinedTableError},
-	coltypes.OidColTypeRegType:      {"pg_type", "typname", "type", pgerror.CodeUndefinedObjectError},
-	coltypes.OidColTypeRegProc:      {"pg_proc", "proname", "function", pgerror.CodeUndefinedFunctionError},
-	coltypes.OidColTypeRegProcedure: {"pg_proc", "proname", "function", pgerror.CodeUndefinedFunctionError},
-	coltypes.OidColTypeRegNamespace: {"pg_namespace", "nspname", "namespace", pgerror.CodeUndefinedObjectError},
+var regTypeInfos = map[*coltypes.TOid]regTypeInfo{
+	coltypes.RegClass:     {"pg_class", "relname", "relation", pgerror.CodeUndefinedTableError},
+	coltypes.RegType:      {"pg_type", "typname", "type", pgerror.CodeUndefinedObjectError},
+	coltypes.RegProc:      {"pg_proc", "proname", "function", pgerror.CodeUndefinedFunctionError},
+	coltypes.RegProcedure: {"pg_proc", "proname", "function", pgerror.CodeUndefinedFunctionError},
+	coltypes.RegNamespace: {"pg_namespace", "nspname", "namespace", pgerror.CodeUndefinedObjectError},
 }
 
 // queryOidWithJoin looks up the name or OID of an input OID or string in the
-// pg_catalog table that the input coltypes.OidColType belongs to. If the input Datum
+// pg_catalog table that the input coltypes.TOid belongs to. If the input Datum
 // is a DOid, the relevant table will be queried by OID; if the input is a
 // DString, the table will be queried by its name column.
 //
-// The return value is a fresh DOid of the input coltypes.OidColType with name and OID
+// The return value is a fresh DOid of the input coltypes.TOid with name and OID
 // set to the result of the query. If there was not exactly one result to the
 // query, an error will be returned.
 func queryOidWithJoin(
-	ctx *EvalContext, typ *coltypes.OidColType, d Datum, joinClause string, additionalWhere string,
+	ctx *EvalContext, typ *coltypes.TOid, d Datum, joinClause string, additionalWhere string,
 ) (*DOid, error) {
 	ret := &DOid{semanticType: typ}
 	info := regTypeInfos[typ]
@@ -2413,7 +2413,7 @@ func queryOidWithJoin(
 	return ret, nil
 }
 
-func queryOid(ctx *EvalContext, typ *coltypes.OidColType, d Datum) (*DOid, error) {
+func queryOid(ctx *EvalContext, typ *coltypes.TOid, d Datum) (*DOid, error) {
 	return queryOidWithJoin(ctx, typ, d, "", "")
 }
 
@@ -2434,7 +2434,7 @@ func (expr *CastExpr) Eval(ctx *EvalContext) (Datum, error) {
 
 func performCast(ctx *EvalContext, d Datum, t coltypes.CastTargetType) (Datum, error) {
 	switch typ := t.(type) {
-	case *coltypes.BoolColType:
+	case *coltypes.TBool:
 		switch v := d.(type) {
 		case *DBool:
 			return d, nil
@@ -2450,7 +2450,7 @@ func performCast(ctx *EvalContext, d Datum, t coltypes.CastTargetType) (Datum, e
 			return ParseDBool(v.Contents)
 		}
 
-	case *coltypes.IntColType:
+	case *coltypes.TInt:
 		var res *DInt
 		switch v := d.(type) {
 		case *DBool:
@@ -2509,7 +2509,7 @@ func performCast(ctx *EvalContext, d Datum, t coltypes.CastTargetType) (Datum, e
 		}
 		return res, nil
 
-	case *coltypes.FloatColType:
+	case *coltypes.TFloat:
 		switch v := d.(type) {
 		case *DBool:
 			if *v {
@@ -2543,7 +2543,7 @@ func performCast(ctx *EvalContext, d Datum, t coltypes.CastTargetType) (Datum, e
 			return NewDFloat(DFloat(float64(micros) / 1e-6)), nil
 		}
 
-	case *coltypes.DecimalColType:
+	case *coltypes.TDecimal:
 		var dd DDecimal
 		var err error
 		unset := false
@@ -2597,7 +2597,7 @@ func performCast(ctx *EvalContext, d Datum, t coltypes.CastTargetType) (Datum, e
 			return &dd, err
 		}
 
-	case *coltypes.StringColType, *coltypes.CollatedStringColType, *coltypes.NameColType:
+	case *coltypes.TString, *coltypes.TCollatedString, *coltypes.TName:
 		var s string
 		switch t := d.(type) {
 		case *DBool, *DInt, *DFloat, *DDecimal, dNull:
@@ -2626,25 +2626,25 @@ func performCast(ctx *EvalContext, d Datum, t coltypes.CastTargetType) (Datum, e
 			s = t.name
 		}
 		switch c := t.(type) {
-		case *coltypes.StringColType:
+		case *coltypes.TString:
 			// If the CHAR type specifies a limit we truncate to that limit:
 			//   'hello'::CHAR(2) -> 'he'
 			if c.N > 0 && c.N < len(s) {
 				s = s[:c.N]
 			}
 			return NewDString(s), nil
-		case *coltypes.CollatedStringColType:
+		case *coltypes.TCollatedString:
 			if c.N > 0 && c.N < len(s) {
 				s = s[:c.N]
 			}
 			return NewDCollatedString(s, c.Locale, &ctx.collationEnv), nil
-		case *coltypes.NameColType:
+		case *coltypes.TName:
 			return NewDName(s), nil
 		default:
 			panic(fmt.Sprintf("missing case for cast to string: %T", c))
 		}
 
-	case *coltypes.BytesColType:
+	case *coltypes.TBytes:
 		switch t := d.(type) {
 		case *DString:
 			return ParseDByte(string(*t), true)
@@ -2656,7 +2656,7 @@ func performCast(ctx *EvalContext, d Datum, t coltypes.CastTargetType) (Datum, e
 			return d, nil
 		}
 
-	case *coltypes.UUIDColType:
+	case *coltypes.TUUID:
 		switch t := d.(type) {
 		case *DString:
 			return ParseDUuidFromString(string(*t))
@@ -2668,7 +2668,7 @@ func performCast(ctx *EvalContext, d Datum, t coltypes.CastTargetType) (Datum, e
 			return d, nil
 		}
 
-	case *coltypes.IPAddrColType:
+	case *coltypes.TIPAddr:
 		switch t := d.(type) {
 		case *DString:
 			return ParseDIPAddrFromINetString(string(*t))
@@ -2678,7 +2678,7 @@ func performCast(ctx *EvalContext, d Datum, t coltypes.CastTargetType) (Datum, e
 			return d, nil
 		}
 
-	case *coltypes.DateColType:
+	case *coltypes.TDate:
 		switch d := d.(type) {
 		case *DString:
 			return ParseDDate(string(*d), ctx.GetLocation())
@@ -2694,7 +2694,7 @@ func performCast(ctx *EvalContext, d Datum, t coltypes.CastTargetType) (Datum, e
 			return NewDDateFromTime(d.Time, time.UTC), nil
 		}
 
-	case *coltypes.TimestampColType:
+	case *coltypes.TTimestamp:
 		// TODO(knz): Timestamp from float, decimal.
 		switch d := d.(type) {
 		case *DString:
@@ -2712,7 +2712,7 @@ func performCast(ctx *EvalContext, d Datum, t coltypes.CastTargetType) (Datum, e
 			return MakeDTimestamp(d.Time.In(ctx.GetLocation()), time.Microsecond), nil
 		}
 
-	case *coltypes.TimestampTZColType:
+	case *coltypes.TTimestampTZ:
 		// TODO(knz): TimestampTZ from float, decimal.
 		switch d := d.(type) {
 		case *DString:
@@ -2731,7 +2731,7 @@ func performCast(ctx *EvalContext, d Datum, t coltypes.CastTargetType) (Datum, e
 			return d, nil
 		}
 
-	case *coltypes.IntervalColType:
+	case *coltypes.TInterval:
 		// TODO(knz): Interval from float, decimal.
 		switch v := d.(type) {
 		case *DString:
@@ -2744,22 +2744,22 @@ func performCast(ctx *EvalContext, d Datum, t coltypes.CastTargetType) (Datum, e
 		case *DInterval:
 			return d, nil
 		}
-	case *coltypes.JSONColType:
+	case *coltypes.TJSON:
 		switch v := d.(type) {
 		case *DString:
 			return ParseDJSON(string(*v))
 		case *DJSON:
 			return v, nil
 		}
-	case *coltypes.ArrayColType:
+	case *coltypes.TArray:
 		if s, ok := d.(*DString); ok {
 			return ParseDArrayFromString(ctx, string(*s), typ.ParamType)
 		}
-	case *coltypes.OidColType:
+	case *coltypes.TOid:
 		switch v := d.(type) {
 		case *DOid:
 			switch typ {
-			case coltypes.OidColTypeOid:
+			case coltypes.Oid:
 				return &DOid{semanticType: typ, DInt: v.DInt}, nil
 			default:
 				oid, err := queryOid(ctx, typ, v)
@@ -2771,7 +2771,7 @@ func performCast(ctx *EvalContext, d Datum, t coltypes.CastTargetType) (Datum, e
 			}
 		case *DInt:
 			switch typ {
-			case coltypes.OidColTypeOid:
+			case coltypes.Oid:
 				return &DOid{semanticType: typ, DInt: *v}, nil
 			default:
 				tmpOid := NewDOid(*v)
@@ -2794,13 +2794,13 @@ func performCast(ctx *EvalContext, d Datum, t coltypes.CastTargetType) (Datum, e
 			}
 
 			switch typ {
-			case coltypes.OidColTypeOid:
+			case coltypes.Oid:
 				i, err := ParseDInt(s)
 				if err != nil {
 					return nil, err
 				}
 				return &DOid{semanticType: typ, DInt: *i}, nil
-			case coltypes.OidColTypeRegProc, coltypes.OidColTypeRegProcedure:
+			case coltypes.RegProc, coltypes.RegProcedure:
 				// Trim procedure type parameters, e.g. `max(int)` becomes `max`.
 				// Postgres only does this when the cast is ::regprocedure, but we're
 				// going to always do it.
@@ -2818,7 +2818,7 @@ func performCast(ctx *EvalContext, d Datum, t coltypes.CastTargetType) (Datum, e
 					return nil, err
 				}
 				return queryOid(ctx, typ, NewDString(funcDef.Name))
-			case coltypes.OidColTypeRegType:
+			case coltypes.RegType:
 				colType, err := ParseType(s)
 				if err == nil {
 					datumType := coltypes.CastTargetToDatumType(colType)
@@ -2830,7 +2830,7 @@ func performCast(ctx *EvalContext, d Datum, t coltypes.CastTargetType) (Datum, e
 				s = pgSignatureRegexp.ReplaceAllString(s, "$1")
 				return queryOid(ctx, typ, NewDString(s))
 
-			case coltypes.OidColTypeRegClass:
+			case coltypes.RegClass:
 				// Resolving a table name requires looking at the search path to
 				// determine the database that owns it.
 				// If the table wasn't quoted, normalize it. This matches the behavior

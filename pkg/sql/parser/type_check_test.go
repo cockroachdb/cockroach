@@ -488,16 +488,16 @@ func TestTypeCheckSameTypedExprsError(t *testing.T) {
 	}
 }
 
-func cast(p *Placeholder, typ coltypes.ColumnType) Expr {
+func cast(p *Placeholder, typ coltypes.T) Expr {
 	return &CastExpr{Expr: p, Type: typ}
 }
-func annot(p *Placeholder, typ coltypes.ColumnType) Expr {
+func annot(p *Placeholder, typ coltypes.T) Expr {
 	return &AnnotateTypeExpr{Expr: p, Type: typ}
 }
 
 func TestProcessPlaceholderAnnotations(t *testing.T) {
-	intType := coltypes.IntColTypeInt
-	boolType := coltypes.BoolColTypeBoolean
+	intType := coltypes.Int
+	boolType := coltypes.Boolean
 
 	testData := []struct {
 		initArgs  PlaceholderTypes
@@ -668,8 +668,8 @@ func TestProcessPlaceholderAnnotations(t *testing.T) {
 }
 
 func TestProcessPlaceholderAnnotationsError(t *testing.T) {
-	intType := coltypes.IntColTypeInt
-	floatType := coltypes.FloatColTypeFloat
+	intType := coltypes.Int
+	floatType := coltypes.Float
 
 	testData := []struct {
 		initArgs  PlaceholderTypes

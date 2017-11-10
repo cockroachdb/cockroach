@@ -21,48 +21,48 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 )
 
-// StringColType represents a STRING, CHAR or VARCHAR type.
-type StringColType struct {
+// TString represents a STRING, CHAR or VARCHAR type.
+type TString struct {
 	Name string
 	N    int
 }
 
 // Format implements the ColTypeFormatter interface.
-func (node *StringColType) Format(buf *bytes.Buffer, f lex.EncodeFlags) {
+func (node *TString) Format(buf *bytes.Buffer, f lex.EncodeFlags) {
 	buf.WriteString(node.Name)
 	if node.N > 0 {
 		fmt.Fprintf(buf, "(%d)", node.N)
 	}
 }
 
-// NameColType represents a a NAME type.
-type NameColType struct{}
+// TName represents a a NAME type.
+type TName struct{}
 
 // Format implements the ColTypeFormatter interface.
-func (node *NameColType) Format(buf *bytes.Buffer, f lex.EncodeFlags) {
+func (node *TName) Format(buf *bytes.Buffer, f lex.EncodeFlags) {
 	buf.WriteString("NAME")
 }
 
-// BytesColType represents a BYTES or BLOB type.
-type BytesColType struct {
+// TBytes represents a BYTES or BLOB type.
+type TBytes struct {
 	Name string
 }
 
 // Format implements the ColTypeFormatter interface.
-func (node *BytesColType) Format(buf *bytes.Buffer, f lex.EncodeFlags) {
+func (node *TBytes) Format(buf *bytes.Buffer, f lex.EncodeFlags) {
 	buf.WriteString(node.Name)
 }
 
-// CollatedStringColType represents a STRING, CHAR or VARCHAR type with a
+// TCollatedString represents a STRING, CHAR or VARCHAR type with a
 // collation locale.
-type CollatedStringColType struct {
+type TCollatedString struct {
 	Name   string
 	N      int
 	Locale string
 }
 
 // Format implements the ColTypeFormatter interface.
-func (node *CollatedStringColType) Format(buf *bytes.Buffer, f lex.EncodeFlags) {
+func (node *TCollatedString) Format(buf *bytes.Buffer, f lex.EncodeFlags) {
 	buf.WriteString(node.Name)
 	if node.N > 0 {
 		fmt.Fprintf(buf, "(%d)", node.N)

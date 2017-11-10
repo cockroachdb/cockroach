@@ -27,7 +27,7 @@ type ColTypeFormatter interface {
 	Format(buf *bytes.Buffer, flags lex.EncodeFlags)
 }
 
-// ColTypeAsString print a ColumnType to a string.
+// ColTypeAsString print a T to a string.
 func ColTypeAsString(n ColTypeFormatter) string {
 	var buf bytes.Buffer
 	n.Format(&buf, lex.EncodeFlags{})
@@ -40,67 +40,67 @@ type CastTargetType interface {
 	castTargetType()
 }
 
-// ColumnType represents a type in a column definition.
-type ColumnType interface {
+// T represents a type in a column definition.
+type T interface {
 	CastTargetType
 
 	columnType()
 }
 
-func (*BoolColType) columnType()           {}
-func (*IntColType) columnType()            {}
-func (*FloatColType) columnType()          {}
-func (*DecimalColType) columnType()        {}
-func (*DateColType) columnType()           {}
-func (*TimestampColType) columnType()      {}
-func (*TimestampTZColType) columnType()    {}
-func (*IntervalColType) columnType()       {}
-func (*JSONColType) columnType()           {}
-func (*UUIDColType) columnType()           {}
-func (*IPAddrColType) columnType()         {}
-func (*StringColType) columnType()         {}
-func (*NameColType) columnType()           {}
-func (*BytesColType) columnType()          {}
-func (*CollatedStringColType) columnType() {}
-func (*ArrayColType) columnType()          {}
-func (*VectorColType) columnType()         {}
-func (*OidColType) columnType()            {}
+func (*TBool) columnType()           {}
+func (*TInt) columnType()            {}
+func (*TFloat) columnType()          {}
+func (*TDecimal) columnType()        {}
+func (*TDate) columnType()           {}
+func (*TTimestamp) columnType()      {}
+func (*TTimestampTZ) columnType()    {}
+func (*TInterval) columnType()       {}
+func (*TJSON) columnType()           {}
+func (*TUUID) columnType()           {}
+func (*TIPAddr) columnType()         {}
+func (*TString) columnType()         {}
+func (*TName) columnType()           {}
+func (*TBytes) columnType()          {}
+func (*TCollatedString) columnType() {}
+func (*TArray) columnType()          {}
+func (*TVector) columnType()         {}
+func (*TOid) columnType()            {}
 
-// All ColumnTypes also implement CastTargetType.
-func (*BoolColType) castTargetType()           {}
-func (*IntColType) castTargetType()            {}
-func (*FloatColType) castTargetType()          {}
-func (*DecimalColType) castTargetType()        {}
-func (*DateColType) castTargetType()           {}
-func (*TimestampColType) castTargetType()      {}
-func (*TimestampTZColType) castTargetType()    {}
-func (*IntervalColType) castTargetType()       {}
-func (*JSONColType) castTargetType()           {}
-func (*UUIDColType) castTargetType()           {}
-func (*IPAddrColType) castTargetType()         {}
-func (*StringColType) castTargetType()         {}
-func (*NameColType) castTargetType()           {}
-func (*BytesColType) castTargetType()          {}
-func (*CollatedStringColType) castTargetType() {}
-func (*ArrayColType) castTargetType()          {}
-func (*VectorColType) castTargetType()         {}
-func (*OidColType) castTargetType()            {}
+// All Ts also implement CastTargetType.
+func (*TBool) castTargetType()           {}
+func (*TInt) castTargetType()            {}
+func (*TFloat) castTargetType()          {}
+func (*TDecimal) castTargetType()        {}
+func (*TDate) castTargetType()           {}
+func (*TTimestamp) castTargetType()      {}
+func (*TTimestampTZ) castTargetType()    {}
+func (*TInterval) castTargetType()       {}
+func (*TJSON) castTargetType()           {}
+func (*TUUID) castTargetType()           {}
+func (*TIPAddr) castTargetType()         {}
+func (*TString) castTargetType()         {}
+func (*TName) castTargetType()           {}
+func (*TBytes) castTargetType()          {}
+func (*TCollatedString) castTargetType() {}
+func (*TArray) castTargetType()          {}
+func (*TVector) castTargetType()         {}
+func (*TOid) castTargetType()            {}
 
-func (node *BoolColType) String() string           { return ColTypeAsString(node) }
-func (node *IntColType) String() string            { return ColTypeAsString(node) }
-func (node *FloatColType) String() string          { return ColTypeAsString(node) }
-func (node *DecimalColType) String() string        { return ColTypeAsString(node) }
-func (node *DateColType) String() string           { return ColTypeAsString(node) }
-func (node *TimestampColType) String() string      { return ColTypeAsString(node) }
-func (node *TimestampTZColType) String() string    { return ColTypeAsString(node) }
-func (node *IntervalColType) String() string       { return ColTypeAsString(node) }
-func (node *JSONColType) String() string           { return ColTypeAsString(node) }
-func (node *UUIDColType) String() string           { return ColTypeAsString(node) }
-func (node *IPAddrColType) String() string         { return ColTypeAsString(node) }
-func (node *StringColType) String() string         { return ColTypeAsString(node) }
-func (node *NameColType) String() string           { return ColTypeAsString(node) }
-func (node *BytesColType) String() string          { return ColTypeAsString(node) }
-func (node *CollatedStringColType) String() string { return ColTypeAsString(node) }
-func (node *ArrayColType) String() string          { return ColTypeAsString(node) }
-func (node *VectorColType) String() string         { return ColTypeAsString(node) }
-func (node *OidColType) String() string            { return ColTypeAsString(node) }
+func (node *TBool) String() string           { return ColTypeAsString(node) }
+func (node *TInt) String() string            { return ColTypeAsString(node) }
+func (node *TFloat) String() string          { return ColTypeAsString(node) }
+func (node *TDecimal) String() string        { return ColTypeAsString(node) }
+func (node *TDate) String() string           { return ColTypeAsString(node) }
+func (node *TTimestamp) String() string      { return ColTypeAsString(node) }
+func (node *TTimestampTZ) String() string    { return ColTypeAsString(node) }
+func (node *TInterval) String() string       { return ColTypeAsString(node) }
+func (node *TJSON) String() string           { return ColTypeAsString(node) }
+func (node *TUUID) String() string           { return ColTypeAsString(node) }
+func (node *TIPAddr) String() string         { return ColTypeAsString(node) }
+func (node *TString) String() string         { return ColTypeAsString(node) }
+func (node *TName) String() string           { return ColTypeAsString(node) }
+func (node *TBytes) String() string          { return ColTypeAsString(node) }
+func (node *TCollatedString) String() string { return ColTypeAsString(node) }
+func (node *TArray) String() string          { return ColTypeAsString(node) }
+func (node *TVector) String() string         { return ColTypeAsString(node) }
+func (node *TOid) String() string            { return ColTypeAsString(node) }
