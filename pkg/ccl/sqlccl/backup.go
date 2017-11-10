@@ -66,14 +66,6 @@ var backupOptionExpectValues = map[string]bool{
 // to durable storage.
 var BackupCheckpointInterval = time.Minute
 
-// BackupImplicitSQLDescriptors are descriptors for tables that are implicitly
-// included in every backup, plus their parent database descriptors.
-var BackupImplicitSQLDescriptors = []sqlbase.Descriptor{
-	*sqlbase.WrapDescriptor(&sqlbase.SystemDB),
-	*sqlbase.WrapDescriptor(&sqlbase.DescriptorTable),
-	*sqlbase.WrapDescriptor(&sqlbase.UsersTable),
-}
-
 // exportStorageFromURI returns an ExportStorage for the given URI.
 func exportStorageFromURI(
 	ctx context.Context, uri string, settings *cluster.Settings,
@@ -368,8 +360,6 @@ func resolveTargetsToDescriptors(
 	if sqlDescs, _, err = descriptorsMatchingTargets(sessionDatabase, sqlDescs, targets); err != nil {
 		return nil, err
 	}
-
-	sqlDescs = append(sqlDescs, BackupImplicitSQLDescriptors...)
 
 	// Dedupe. Duplicate descriptors will cause restore to fail.
 	{
