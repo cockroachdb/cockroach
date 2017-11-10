@@ -134,13 +134,13 @@ func (u *sqlSymUnion) functionReference() FunctionReference {
     return u.val.(FunctionReference)
 }
 func (u *sqlSymUnion) resolvableFunctionReference() ResolvableFunctionReference {
-    return ResolvableFunctionReference{u.val.(FunctionReference)}
+    return ResolvableFunctionReference{FunctionReference: u.val.(FunctionReference)}
 }
 func (u *sqlSymUnion) normalizableTableName() NormalizableTableName {
-    return NormalizableTableName{u.val.(TableNameReference)}
+    return NormalizableTableName{TableNameReference: u.val.(TableNameReference)}
 }
 func (u *sqlSymUnion) newNormalizableTableName() *NormalizableTableName {
-    return &NormalizableTableName{u.val.(TableNameReference)}
+    return &NormalizableTableName{TableNameReference: u.val.(TableNameReference)}
 }
 func (u *sqlSymUnion) tablePatterns() TablePatterns {
     return u.val.(TablePatterns)
@@ -2600,17 +2600,17 @@ show_zone_stmt:
   EXPERIMENTAL SHOW ZONE CONFIGURATION FOR RANGE unrestricted_name
   {
     /* SKIP DOC */
-    $$.val = &ShowZoneConfig{ZoneSpecifier{NamedZone: UnrestrictedName($7)}}
+    $$.val = &ShowZoneConfig{ZoneSpecifier: ZoneSpecifier{NamedZone: UnrestrictedName($7)}}
   }
 | EXPERIMENTAL SHOW ZONE CONFIGURATION FOR DATABASE name
   {
     /* SKIP DOC */
-    $$.val = &ShowZoneConfig{ZoneSpecifier{Database: Name($7)}}
+    $$.val = &ShowZoneConfig{ZoneSpecifier: ZoneSpecifier{Database: Name($7)}}
   }
 | EXPERIMENTAL SHOW ZONE CONFIGURATION FOR TABLE qualified_name opt_partition
   {
     /* SKIP DOC */
-    $$.val = &ShowZoneConfig{ZoneSpecifier{
+    $$.val = &ShowZoneConfig{ZoneSpecifier: ZoneSpecifier{
       TableOrIndex: TableNameWithIndex{Table: $7.normalizableTableName()},
       Partition: Name($8),
     }}
@@ -2618,7 +2618,7 @@ show_zone_stmt:
 | EXPERIMENTAL SHOW ZONE CONFIGURATION FOR INDEX table_name_with_index opt_partition
   {
     /* SKIP DOC */
-    $$.val = &ShowZoneConfig{ZoneSpecifier{
+    $$.val = &ShowZoneConfig{ZoneSpecifier: ZoneSpecifier{
       TableOrIndex: $7.tableWithIdx(),
       Partition: Name($8),
     }}
@@ -4284,7 +4284,7 @@ for_locking_clause:
 values_clause:
   VALUES '(' expr_list ')' %prec UMINUS
   {
-    $$.val = &ValuesClause{[]*Tuple{{Exprs: $3.exprs()}}}
+    $$.val = &ValuesClause{Tuples: []*Tuple{{Exprs: $3.exprs()}}}
   }
 | VALUES error // SHOW HELP: VALUES
 | values_clause ',' '(' expr_list ')'
@@ -4445,7 +4445,7 @@ table_ref:
   }
 | '(' joined_table ')' opt_ordinality alias_clause
   {
-    $$.val = &AliasedTableExpr{Expr: &ParenTableExpr{$2.tblExpr()}, Ordinality: $4.bool(), As: $5.aliasClause()}
+    $$.val = &AliasedTableExpr{Expr: &ParenTableExpr{Expr: $2.tblExpr()}, Ordinality: $4.bool(), As: $5.aliasClause()}
   }
 
 // The following syntax is a CockroachDB extension:
@@ -5767,7 +5767,7 @@ func_expr_common_subexpr:
   {
     $$.val = &FuncExpr{Func: wrapFunction($1)}
   }
-| CURRENT_DATE '(' error { return helpWithFunction(sqllex, ResolvableFunctionReference{UnresolvedName{Name($1)}}) }
+| CURRENT_DATE '(' error { return helpWithFunction(sqllex, ResolvableFunctionReference{FunctionReference: UnresolvedName{Name($1)}}) }
 | CURRENT_SCHEMA
   {
     $$.val = &FuncExpr{Func: wrapFunction($1)}
@@ -5776,7 +5776,7 @@ func_expr_common_subexpr:
   {
     $$.val = &FuncExpr{Func: wrapFunction($1)}
   }
-| CURRENT_SCHEMA '(' error { return helpWithFunction(sqllex, ResolvableFunctionReference{UnresolvedName{Name($1)}}) }
+| CURRENT_SCHEMA '(' error { return helpWithFunction(sqllex, ResolvableFunctionReference{FunctionReference: UnresolvedName{Name($1)}}) }
 | CURRENT_TIMESTAMP
   {
     $$.val = &FuncExpr{Func: wrapFunction($1)}
@@ -5785,7 +5785,7 @@ func_expr_common_subexpr:
   {
     $$.val = &FuncExpr{Func: wrapFunction($1)}
   }
-| CURRENT_TIMESTAMP '(' error { return helpWithFunction(sqllex, ResolvableFunctionReference{UnresolvedName{Name($1)}}) }
+| CURRENT_TIMESTAMP '(' error { return helpWithFunction(sqllex, ResolvableFunctionReference{FunctionReference: UnresolvedName{Name($1)}}) }
 | CURRENT_ROLE { return unimplemented(sqllex, "current role") }
 | CURRENT_USER
   {
@@ -5795,7 +5795,7 @@ func_expr_common_subexpr:
   {
     $$.val = &FuncExpr{Func: wrapFunction($1)}
   }
-| CURRENT_USER '(' error { return helpWithFunction(sqllex, ResolvableFunctionReference{UnresolvedName{Name($1)}}) }
+| CURRENT_USER '(' error { return helpWithFunction(sqllex, ResolvableFunctionReference{FunctionReference: UnresolvedName{Name($1)}}) }
 | SESSION_USER
   {
     $$.val = &FuncExpr{Func: wrapFunction("current_user")}
@@ -5816,17 +5816,17 @@ func_expr_common_subexpr:
   {
     $$.val = &FuncExpr{Func: wrapFunction($1), Exprs: $3.exprs()}
   }
-| EXTRACT '(' error { return helpWithFunction(sqllex, ResolvableFunctionReference{UnresolvedName{Name($1)}}) }
+| EXTRACT '(' error { return helpWithFunction(sqllex, ResolvableFunctionReference{FunctionReference: UnresolvedName{Name($1)}}) }
 | EXTRACT_DURATION '(' extract_list ')'
   {
     $$.val = &FuncExpr{Func: wrapFunction($1), Exprs: $3.exprs()}
   }
-| EXTRACT_DURATION '(' error { return helpWithFunction(sqllex, ResolvableFunctionReference{UnresolvedName{Name($1)}}) }
+| EXTRACT_DURATION '(' error { return helpWithFunction(sqllex, ResolvableFunctionReference{FunctionReference: UnresolvedName{Name($1)}}) }
 | OVERLAY '(' overlay_list ')'
   {
     $$.val = &FuncExpr{Func: wrapFunction($1), Exprs: $3.exprs()}
   }
-| OVERLAY '(' error { return helpWithFunction(sqllex, ResolvableFunctionReference{UnresolvedName{Name($1)}}) }
+| OVERLAY '(' error { return helpWithFunction(sqllex, ResolvableFunctionReference{FunctionReference: UnresolvedName{Name($1)}}) }
 | POSITION '(' position_list ')'
   {
     $$.val = &FuncExpr{Func: wrapFunction("STRPOS"), Exprs: $3.exprs()}
@@ -5835,7 +5835,7 @@ func_expr_common_subexpr:
   {
     $$.val = &FuncExpr{Func: wrapFunction($1), Exprs: $3.exprs()}
   }
-| SUBSTRING '(' error { return helpWithFunction(sqllex, ResolvableFunctionReference{UnresolvedName{Name($1)}}) }
+| SUBSTRING '(' error { return helpWithFunction(sqllex, ResolvableFunctionReference{FunctionReference: UnresolvedName{Name($1)}}) }
 | TREAT '(' a_expr AS typename ')' { return unimplemented(sqllex, "treat") }
 | TRIM '(' BOTH trim_list ')'
   {
@@ -5873,12 +5873,12 @@ func_expr_common_subexpr:
   {
     $$.val = &FuncExpr{Func: wrapFunction($1), Exprs: $3.exprs()}
   }
-| GREATEST '(' error { return helpWithFunction(sqllex, ResolvableFunctionReference{UnresolvedName{Name($1)}}) }
+| GREATEST '(' error { return helpWithFunction(sqllex, ResolvableFunctionReference{FunctionReference: UnresolvedName{Name($1)}}) }
 | LEAST '(' expr_list ')'
   {
     $$.val = &FuncExpr{Func: wrapFunction($1), Exprs: $3.exprs()}
   }
-| LEAST '(' error { return helpWithFunction(sqllex, ResolvableFunctionReference{UnresolvedName{Name($1)}}) }
+| LEAST '(' error { return helpWithFunction(sqllex, ResolvableFunctionReference{FunctionReference: UnresolvedName{Name($1)}}) }
 
 // Aggregate decoration clauses
 within_group_clause:
