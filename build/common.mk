@@ -165,9 +165,11 @@ $(YARN_INSTALLED_TARGET): $(BOOTSTRAP_TARGET) $(UI_ROOT)/package.json $(UI_ROOT)
 # extracted into a variable for the same reasons as YARN_INSTALLED_TARGET.
 BOOTSTRAP_TARGET := $(LOCAL_BIN)/.bootstrap
 
+SUBMODULES_TARGET := $(LOCAL_BIN)/.submodules-initialized
+
 # Update the git hooks and install commands from dependencies whenever they
 # change.
-$(BOOTSTRAP_TARGET): $(GITHOOKS) $(REPO_ROOT)/Gopkg.lock $(LOCAL_BIN)/returncheck | submodules
+$(BOOTSTRAP_TARGET): $(GITHOOKS) $(REPO_ROOT)/Gopkg.lock $(LOCAL_BIN)/returncheck | $(SUBMODULES_TARGET)
 	@$(GO_INSTALL) -v \
 		$(REPO_ROOT)/vendor/github.com/golang/dep/cmd/dep \
 		$(REPO_ROOT)/vendor/github.com/client9/misspell/cmd/misspell \
@@ -187,11 +189,11 @@ $(BOOTSTRAP_TARGET): $(GITHOOKS) $(REPO_ROOT)/Gopkg.lock $(LOCAL_BIN)/returnchec
 		$(REPO_ROOT)/vendor/golang.org/x/tools/cmd/stringer
 	touch $@
 
-.PHONY: submodules
-submodules:
+$(SUBMODULES_TARGET):
 ifneq ($(GIT_DIR),)
 	git submodule update --init
 endif
+	mkdir -p $(@D) touch $@
 
 # Make doesn't expose a list of the variables declared in a given file, so we
 # resort to sed magic. Roughly, this sed command prints VARIABLE in lines of the
@@ -471,5 +473,5 @@ unsafe-clean-c-deps:
 	git -C $(SNAPPY_SRC_DIR)   clean -dxf
 
 .SECONDEXPANSION:
-$(LOCAL_BIN)/%: $$(shell find $(PKG_ROOT)/cmd/$$*) | submodules
+$(LOCAL_BIN)/%: $$(shell find $(PKG_ROOT)/cmd/$$*) | $(SUBMODULES_TARGET)
 	@$(GO_INSTALL) -v $(PKG_ROOT)/cmd/$*
