@@ -342,26 +342,6 @@ lintshort: override TAGS += lint
 lintshort: ## Run a fast subset of the style checkers and linters.
 	$(XGO) test ./build -v $(GOFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' -short -run 'TestStyle/$(TESTS)'
 
-.PHONY: clean
-clean: ## Remove build artifacts.
-clean: clean-c-deps
-	$(MAKE) -f build/protobuf.mk clean
-	$(GO) clean $(GOFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' -i github.com/cockroachdb/...
-	$(FIND_RELEVANT) -type f \( -name 'zcgo_flags*.go' -o -name '*.test' \) -exec rm {} +
-	for f in cockroach*; do if [ -f "$$f" ]; then rm "$$f"; fi; done
-	rm -rf artifacts $(LOCAL_BIN) $(ARCHIVE)
-
-.PHONY: maintainer-clean
-maintainer-clean: ## Like clean, but also remove some auto-generated source code.
-maintainer-clean: clean
-	$(MAKE) -C $(UI_ROOT) maintainer-clean
-	$(MAKE) -C $(SQLPARSER_ROOT) maintainer-clean
-
-.PHONY: unsafe-clean
-unsafe-clean: ## Like maintainer-clean, but also remove ALL untracked/ignored files.
-unsafe-clean: maintainer-clean unsafe-clean-c-deps
-	git clean -dxf
-
 .PHONY: protobuf
 protobuf: ## Regenerate generated code for protobuf definitions.
 	$(MAKE) -f build/protobuf.mk
@@ -424,3 +404,23 @@ ifneq ($(GIT_DIR),)
 .buildinfo/rev: .ALWAYS_REBUILD
 .buildinfo/basebranch: .ALWAYS_REBUILD
 endif
+
+.PHONY: clean
+clean: ## Remove build artifacts.
+clean: clean-c-deps
+	$(MAKE) -f build/protobuf.mk clean
+	$(GO) clean $(GOFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' -i github.com/cockroachdb/...
+	$(FIND_RELEVANT) -type f \( -name 'zcgo_flags*.go' -o -name '*.test' \) -exec rm {} +
+	for f in cockroach*; do if [ -f "$$f" ]; then rm "$$f"; fi; done
+	rm -rf artifacts $(LOCAL_BIN) $(ARCHIVE)
+
+.PHONY: maintainer-clean
+maintainer-clean: ## Like clean, but also remove some auto-generated source code.
+maintainer-clean: clean
+	$(MAKE) -C $(UI_ROOT) maintainer-clean
+	$(MAKE) -C $(SQLPARSER_ROOT) maintainer-clean
+
+.PHONY: unsafe-clean
+unsafe-clean: ## Like maintainer-clean, but also remove ALL untracked/ignored files.
+unsafe-clean: maintainer-clean unsafe-clean-c-deps
+	git clean -dxf
