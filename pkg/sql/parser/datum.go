@@ -120,13 +120,13 @@ type Datum interface {
 	// type can hold.
 	IsMax(ctx *EvalContext) bool
 
-	// max() returns the upper value and true, if one exists, otherwise
+	// Max returns the upper value and true, if one exists, otherwise
 	// nil and false. Used By Prev().
-	max(ctx *EvalContext) (Datum, bool)
+	Max(ctx *EvalContext) (Datum, bool)
 
-	// min() returns the lower value, if one exists, otherwise nil and
+	// Min returns the lower value, if one exists, otherwise nil and
 	// false. Used by Next().
-	min(ctx *EvalContext) (Datum, bool)
+	Min(ctx *EvalContext) (Datum, bool)
 
 	// Size returns a lower bound on the total size of the receiver in bytes,
 	// including memory that is pointed at (even if shared between Datum
@@ -311,13 +311,13 @@ func (d *DBool) IsMin(_ *EvalContext) bool {
 	return !bool(*d)
 }
 
-// min implements the Datum interface.
-func (d *DBool) min(_ *EvalContext) (Datum, bool) {
+// Min implements the Datum interface.
+func (d *DBool) Min(_ *EvalContext) (Datum, bool) {
 	return DBoolFalse, true
 }
 
-// max implements the Datum interface.
-func (d *DBool) max(_ *EvalContext) (Datum, bool) {
+// Max implements the Datum interface.
+func (d *DBool) Max(_ *EvalContext) (Datum, bool) {
 	return DBoolTrue, true
 }
 
@@ -428,13 +428,13 @@ func (d *DInt) IsMin(_ *EvalContext) bool {
 var dMaxInt = NewDInt(math.MaxInt64)
 var dMinInt = NewDInt(math.MinInt64)
 
-// max implements the Datum interface.
-func (d *DInt) max(_ *EvalContext) (Datum, bool) {
+// Max implements the Datum interface.
+func (d *DInt) Max(_ *EvalContext) (Datum, bool) {
 	return dMaxInt, true
 }
 
-// min implements the Datum interface.
-func (d *DInt) min(_ *EvalContext) (Datum, bool) {
+// Min implements the Datum interface.
+func (d *DInt) Min(_ *EvalContext) (Datum, bool) {
 	return dMinInt, true
 }
 
@@ -558,13 +558,13 @@ func (d *DFloat) IsMin(_ *EvalContext) bool {
 	return math.IsNaN(float64(*d))
 }
 
-// max implements the Datum interface.
-func (d *DFloat) max(_ *EvalContext) (Datum, bool) {
+// Max implements the Datum interface.
+func (d *DFloat) Max(_ *EvalContext) (Datum, bool) {
 	return dPosInfFloat, true
 }
 
-// min implements the Datum interface.
-func (d *DFloat) min(_ *EvalContext) (Datum, bool) {
+// Min implements the Datum interface.
+func (d *DFloat) Min(_ *EvalContext) (Datum, bool) {
 	return dNaNFloat, true
 }
 
@@ -690,13 +690,13 @@ func (d *DDecimal) IsMin(_ *EvalContext) bool {
 	return d.Form == apd.NaN
 }
 
-// max implements the Datum interface.
-func (d *DDecimal) max(_ *EvalContext) (Datum, bool) {
+// Max implements the Datum interface.
+func (d *DDecimal) Max(_ *EvalContext) (Datum, bool) {
 	return dPosInfDecimal, true
 }
 
-// min implements the Datum interface.
-func (d *DDecimal) min(_ *EvalContext) (Datum, bool) {
+// Min implements the Datum interface.
+func (d *DDecimal) Min(_ *EvalContext) (Datum, bool) {
 	return dNaNDecimal, true
 }
 
@@ -819,13 +819,13 @@ func (d *DString) IsMin(_ *EvalContext) bool {
 
 var dEmptyString = NewDString("")
 
-// min implements the Datum interface.
-func (d *DString) min(_ *EvalContext) (Datum, bool) {
+// Min implements the Datum interface.
+func (d *DString) Min(_ *EvalContext) (Datum, bool) {
 	return dEmptyString, true
 }
 
-// max implements the Datum interface.
-func (d *DString) max(_ *EvalContext) (Datum, bool) {
+// Max implements the Datum interface.
+func (d *DString) Max(_ *EvalContext) (Datum, bool) {
 	return nil, false
 }
 
@@ -949,13 +949,13 @@ func (d *DCollatedString) IsMin(_ *EvalContext) bool {
 	return d.Contents == ""
 }
 
-// min implements the Datum interface.
-func (d *DCollatedString) min(_ *EvalContext) (Datum, bool) {
+// Min implements the Datum interface.
+func (d *DCollatedString) Min(_ *EvalContext) (Datum, bool) {
 	return &DCollatedString{"", d.Locale, nil}, true
 }
 
-// max implements the Datum interface.
-func (d *DCollatedString) max(_ *EvalContext) (Datum, bool) {
+// Max implements the Datum interface.
+func (d *DCollatedString) Max(_ *EvalContext) (Datum, bool) {
 	return nil, false
 }
 
@@ -1025,13 +1025,13 @@ func (d *DBytes) IsMin(_ *EvalContext) bool {
 
 var dEmptyBytes = NewDBytes(DBytes(""))
 
-// min implements the Datum interface.
-func (d *DBytes) min(_ *EvalContext) (Datum, bool) {
+// Min implements the Datum interface.
+func (d *DBytes) Min(_ *EvalContext) (Datum, bool) {
 	return dEmptyBytes, true
 }
 
-// max implements the Datum interface.
-func (d *DBytes) max(_ *EvalContext) (Datum, bool) {
+// Max implements the Datum interface.
+func (d *DBytes) Max(_ *EvalContext) (Datum, bool) {
 	return nil, false
 }
 
@@ -1114,13 +1114,13 @@ var dMinUUID = NewDUuid(DUuid{uuid.UUID{}})
 var dMaxUUID = NewDUuid(DUuid{uuid.UUID{UUID: [16]byte{0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
 	0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF}}})
 
-// min implements the Datum interface.
-func (*DUuid) min(_ *EvalContext) (Datum, bool) {
+// Min implements the Datum interface.
+func (*DUuid) Min(_ *EvalContext) (Datum, bool) {
 	return dMinUUID, true
 }
 
-// max implements the Datum interface.
-func (*DUuid) max(_ *EvalContext) (Datum, bool) {
+// Max implements the Datum interface.
+func (*DUuid) Max(_ *EvalContext) (Datum, bool) {
 	return dMaxUUID, true
 }
 
@@ -1270,13 +1270,13 @@ var dMinIPv6Addr = NewDIPAddr(DIPAddr{ipaddr.IPAddr{Family: ipaddr.IPv6family, A
 var dMinIPAddr = NewDIPAddr(DIPAddr{ipaddr.IPAddr{Family: ipaddr.IPv4family, Addr: dIPv4min, Mask: 0}})
 var dMaxIPAddr = NewDIPAddr(DIPAddr{ipaddr.IPAddr{Family: ipaddr.IPv6family, Addr: dIPv6max, Mask: 128}})
 
-// min implements the Datum interface.
-func (*DIPAddr) min(_ *EvalContext) (Datum, bool) {
+// Min implements the Datum interface.
+func (*DIPAddr) Min(_ *EvalContext) (Datum, bool) {
 	return dMinIPAddr, true
 }
 
-// max implements the Datum interface.
-func (*DIPAddr) max(_ *EvalContext) (Datum, bool) {
+// Max implements the Datum interface.
+func (*DIPAddr) Max(_ *EvalContext) (Datum, bool) {
 	return dMaxIPAddr, true
 }
 
@@ -1379,14 +1379,14 @@ func (d *DDate) IsMin(_ *EvalContext) bool {
 	return *d == math.MinInt64
 }
 
-// max implements the Datum interface.
-func (d *DDate) max(_ *EvalContext) (Datum, bool) {
+// Max implements the Datum interface.
+func (d *DDate) Max(_ *EvalContext) (Datum, bool) {
 	// TODO(knz): figure a good way to find a maximum.
 	return nil, false
 }
 
-// min implements the Datum interface.
-func (d *DDate) min(_ *EvalContext) (Datum, bool) {
+// Min implements the Datum interface.
+func (d *DDate) Min(_ *EvalContext) (Datum, bool) {
 	// TODO(knz): figure a good way to find a minimum.
 	return nil, false
 }
@@ -1612,14 +1612,14 @@ func (d *DTimestamp) IsMin(_ *EvalContext) bool {
 	return d.Before(tPrev)
 }
 
-// min implements the Datum interface.
-func (d *DTimestamp) min(_ *EvalContext) (Datum, bool) {
+// Min implements the Datum interface.
+func (d *DTimestamp) Min(_ *EvalContext) (Datum, bool) {
 	// TODO(knz): figure a good way to find a minimum.
 	return nil, false
 }
 
-// max implements the Datum interface.
-func (d *DTimestamp) max(_ *EvalContext) (Datum, bool) {
+// Max implements the Datum interface.
+func (d *DTimestamp) Max(_ *EvalContext) (Datum, bool) {
 	// TODO(knz): figure a good way to find a minimum.
 	return nil, false
 }
@@ -1709,14 +1709,14 @@ func (d *DTimestampTZ) IsMin(_ *EvalContext) bool {
 	return d.Before(tPrev)
 }
 
-// min implements the Datum interface.
-func (d *DTimestampTZ) min(_ *EvalContext) (Datum, bool) {
+// Min implements the Datum interface.
+func (d *DTimestampTZ) Min(_ *EvalContext) (Datum, bool) {
 	// TODO(knz): figure a good way to find a minimum.
 	return nil, false
 }
 
-// max implements the Datum interface.
-func (d *DTimestampTZ) max(_ *EvalContext) (Datum, bool) {
+// Max implements the Datum interface.
+func (d *DTimestampTZ) Max(_ *EvalContext) (Datum, bool) {
 	// TODO(knz): figure a good way to find a minimum.
 	return nil, false
 }
@@ -1912,13 +1912,13 @@ var dMinInterval = &DInterval{
 		Nanos:  math.MinInt64,
 	}}
 
-// max implements the Datum interface.
-func (d *DInterval) max(_ *EvalContext) (Datum, bool) {
+// Max implements the Datum interface.
+func (d *DInterval) Max(_ *EvalContext) (Datum, bool) {
 	return dMaxInterval, true
 }
 
-// min implements the Datum interface.
-func (d *DInterval) min(_ *EvalContext) (Datum, bool) {
+// Min implements the Datum interface.
+func (d *DInterval) Min(_ *EvalContext) (Datum, bool) {
 	return dMinInterval, true
 }
 
@@ -2012,13 +2012,13 @@ func (d *DJSON) IsMin(_ *EvalContext) bool {
 	return d.JSON == json.NullJSONValue
 }
 
-// max implements the Datum interface.
-func (d *DJSON) max(_ *EvalContext) (Datum, bool) {
+// Max implements the Datum interface.
+func (d *DJSON) Max(_ *EvalContext) (Datum, bool) {
 	return nil, false
 }
 
-// min implements the Datum interface.
-func (d *DJSON) min(_ *EvalContext) (Datum, bool) {
+// Min implements the Datum interface.
+func (d *DJSON) Min(_ *EvalContext) (Datum, bool) {
 	return &DJSON{json.NullJSONValue}, true
 }
 
@@ -2134,7 +2134,7 @@ func (d *DTuple) Prev(ctx *EvalContext) (Datum, bool) {
 			res.D[i] = prevVal
 			break
 		}
-		maxVal, ok := res.D[i].max(ctx)
+		maxVal, ok := res.D[i].Max(ctx)
 		if !ok {
 			return nil, false
 		}
@@ -2171,11 +2171,11 @@ func (d *DTuple) Next(ctx *EvalContext) (Datum, bool) {
 	return res, true
 }
 
-// max implements the Datum interface.
-func (d *DTuple) max(ctx *EvalContext) (Datum, bool) {
+// Max implements the Datum interface.
+func (d *DTuple) Max(ctx *EvalContext) (Datum, bool) {
 	res := NewDTupleWithLen(len(d.D))
 	for i, v := range d.D {
-		m, ok := v.max(ctx)
+		m, ok := v.Max(ctx)
 		if !ok {
 			return nil, false
 		}
@@ -2184,11 +2184,11 @@ func (d *DTuple) max(ctx *EvalContext) (Datum, bool) {
 	return res, true
 }
 
-// max implements the Datum interface.
-func (d *DTuple) min(ctx *EvalContext) (Datum, bool) {
+// Min implements the Datum interface.
+func (d *DTuple) Min(ctx *EvalContext) (Datum, bool) {
 	res := NewDTupleWithLen(len(d.D))
 	for i, v := range d.D {
-		m, ok := v.min(ctx)
+		m, ok := v.Min(ctx)
 		if !ok {
 			return nil, false
 		}
@@ -2346,13 +2346,13 @@ func (dNull) IsMin(_ *EvalContext) bool {
 	return true
 }
 
-// max implements the Datum interface.
-func (dNull) max(_ *EvalContext) (Datum, bool) {
+// Max implements the Datum interface.
+func (dNull) Max(_ *EvalContext) (Datum, bool) {
 	return DNull, true
 }
 
-// min implements the Datum interface.
-func (dNull) min(_ *EvalContext) (Datum, bool) {
+// Min implements the Datum interface.
+func (dNull) Min(_ *EvalContext) (Datum, bool) {
 	return DNull, true
 }
 
@@ -2455,13 +2455,13 @@ func (d *DArray) Next(_ *EvalContext) (Datum, bool) {
 	return &a, true
 }
 
-// max implements the Datum interface.
-func (d *DArray) max(_ *EvalContext) (Datum, bool) {
+// Max implements the Datum interface.
+func (d *DArray) Max(_ *EvalContext) (Datum, bool) {
 	return nil, false
 }
 
-// min implements the Datum interface.
-func (d *DArray) min(_ *EvalContext) (Datum, bool) {
+// Min implements the Datum interface.
+func (d *DArray) Min(_ *EvalContext) (Datum, bool) {
 	return &DArray{ParamTyp: d.ParamTyp}, true
 }
 
@@ -2596,11 +2596,11 @@ func (*DTable) IsMax(_ *EvalContext) bool { return false }
 // IsMin implements the Datum interface.
 func (*DTable) IsMin(_ *EvalContext) bool { return false }
 
-// max implements the Datum interface.
-func (*DTable) max(_ *EvalContext) (Datum, bool) { return nil, false }
+// Max implements the Datum interface.
+func (*DTable) Max(_ *EvalContext) (Datum, bool) { return nil, false }
 
-// min implements the Datum interface.
-func (*DTable) min(_ *EvalContext) (Datum, bool) { return nil, false }
+// Min implements the Datum interface.
+func (*DTable) Min(_ *EvalContext) (Datum, bool) { return nil, false }
 
 // Size implements the Datum interface.
 func (*DTable) Size() uintptr { return unsafe.Sizeof(DTable{}) }
@@ -2693,15 +2693,15 @@ func (d *DOid) ResolvedType() types.T {
 // Size implements the Datum interface.
 func (d *DOid) Size() uintptr { return unsafe.Sizeof(*d) }
 
-// max implements the Datum interface.
-func (d *DOid) max(ctx *EvalContext) (Datum, bool) {
-	max, ok := d.DInt.max(ctx)
+// Max implements the Datum interface.
+func (d *DOid) Max(ctx *EvalContext) (Datum, bool) {
+	max, ok := d.DInt.Max(ctx)
 	return &DOid{*max.(*DInt), d.semanticType, ""}, ok
 }
 
-// min implements the Datum interface.
-func (d *DOid) min(ctx *EvalContext) (Datum, bool) {
-	min, ok := d.DInt.min(ctx)
+// Min implements the Datum interface.
+func (d *DOid) Min(ctx *EvalContext) (Datum, bool) {
+	min, ok := d.DInt.Min(ctx)
 	return &DOid{*min.(*DInt), d.semanticType, ""}, ok
 }
 
@@ -2813,15 +2813,15 @@ func (d *DOidWrapper) IsMin(ctx *EvalContext) bool {
 	return d.Wrapped.IsMin(ctx)
 }
 
-// max implements the Datum interface.
-func (d *DOidWrapper) max(ctx *EvalContext) (Datum, bool) {
-	max, ok := d.Wrapped.max(ctx)
+// Max implements the Datum interface.
+func (d *DOidWrapper) Max(ctx *EvalContext) (Datum, bool) {
+	max, ok := d.Wrapped.Max(ctx)
 	return wrapWithOid(max, d.Oid), ok
 }
 
-// min implements the Datum interface.
-func (d *DOidWrapper) min(ctx *EvalContext) (Datum, bool) {
-	min, ok := d.Wrapped.min(ctx)
+// Min implements the Datum interface.
+func (d *DOidWrapper) Min(ctx *EvalContext) (Datum, bool) {
+	min, ok := d.Wrapped.Min(ctx)
 	return wrapWithOid(min, d.Oid), ok
 }
 
@@ -2883,14 +2883,14 @@ func (d *Placeholder) IsMax(ctx *EvalContext) bool {
 	return d.mustGetValue(ctx).IsMax(ctx)
 }
 
-// max implements the Datum interface.
-func (d *Placeholder) max(ctx *EvalContext) (Datum, bool) {
-	return d.mustGetValue(ctx).max(ctx)
+// Max implements the Datum interface.
+func (d *Placeholder) Max(ctx *EvalContext) (Datum, bool) {
+	return d.mustGetValue(ctx).Max(ctx)
 }
 
-// min implements the Datum interface.
-func (d *Placeholder) min(ctx *EvalContext) (Datum, bool) {
-	return d.mustGetValue(ctx).min(ctx)
+// Min implements the Datum interface.
+func (d *Placeholder) Min(ctx *EvalContext) (Datum, bool) {
+	return d.mustGetValue(ctx).Min(ctx)
 }
 
 // Size implements the Datum interface.

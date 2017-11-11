@@ -263,8 +263,8 @@ func TestDatumOrdering(t *testing.T) {
 			}
 		}
 
-		minVal, hasMin := d.min(ctx)
-		maxVal, hasMax := d.max(ctx)
+		minVal, hasMin := d.Min(ctx)
+		maxVal, hasMax := d.Max(ctx)
 
 		if td.min == noMin {
 			if hasMin {
