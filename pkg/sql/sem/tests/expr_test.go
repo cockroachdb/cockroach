@@ -21,6 +21,7 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	_ "github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -153,7 +154,7 @@ func TestExprString(t *testing.T) {
 		`(a OR (g BETWEEN (h+i) AND (j+k))) AND b`,
 		`(1 >= 2) IS OF (BOOL)`,
 		`(1 >= 2) = (2 IS OF (BOOL))`,
-		// `count(1) FILTER (WHERE true)`,
+		`count(1) FILTER (WHERE true)`,
 	}
 	for _, exprStr := range testExprs {
 		expr, err := parser.ParseExpr(exprStr)
