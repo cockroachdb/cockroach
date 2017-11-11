@@ -1080,12 +1080,12 @@ type CastExpr struct {
 	Type coltypes.CastTargetType
 
 	typeAnnotation
-	syntaxMode castSyntaxMode
+	SyntaxMode castSyntaxMode
 }
 
 // Format implements the NodeFormatter interface.
 func (node *CastExpr) Format(buf *bytes.Buffer, f FmtFlags) {
-	switch node.syntaxMode {
+	switch node.SyntaxMode {
 	case castPrepend:
 		// This is a special case for things like INTERVAL '1s'. These only work
 		// with string constats; if the underlying expression was changed, we fall
@@ -1212,12 +1212,12 @@ type AnnotateTypeExpr struct {
 	Expr Expr
 	Type coltypes.CastTargetType
 
-	syntaxMode annotateSyntaxMode
+	SyntaxMode annotateSyntaxMode
 }
 
 // Format implements the NodeFormatter interface.
 func (node *AnnotateTypeExpr) Format(buf *bytes.Buffer, f FmtFlags) {
-	switch node.syntaxMode {
+	switch node.SyntaxMode {
 	case annotateShort:
 		exprFmtWithParen(buf, f, node.Expr)
 		buf.WriteString(":::")
