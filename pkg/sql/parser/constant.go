@@ -354,6 +354,11 @@ func NewStrVal(s string) *StrVal {
 	return &StrVal{s: s}
 }
 
+// NewBytesStrVal constructs a StrVal instance suitable as byte array.
+func NewBytesStrVal(s string) *StrVal {
+	return &StrVal{s: s, bytesEsc: true}
+}
+
 // Format implements the NodeFormatter interface.
 func (expr *StrVal) Format(buf *bytes.Buffer, f FmtFlags) {
 	if expr.bytesEsc {
