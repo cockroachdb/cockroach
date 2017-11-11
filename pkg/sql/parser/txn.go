@@ -122,7 +122,9 @@ var (
 	errReadModeSpecifiedMultipleTimes       = pgerror.NewError(pgerror.CodeSyntaxError, "read mode specified multiple times")
 )
 
-func (node *TransactionModes) merge(other TransactionModes) error {
+// Merge groups two sets of transaction modes together.
+// Used in the parser.
+func (node *TransactionModes) Merge(other TransactionModes) error {
 	if other.Isolation != UnspecifiedIsolation {
 		if node.Isolation != UnspecifiedIsolation {
 			return errIsolationLevelSpecifiedMultipleTimes
