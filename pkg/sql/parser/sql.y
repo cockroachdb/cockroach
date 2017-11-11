@@ -3526,7 +3526,7 @@ transaction_mode_list:
   {
     a := $1.transactionModes()
     b := $3.transactionModes()
-    err := a.merge(b)
+    err := a.Merge(b)
     if err != nil { sqllex.Error(err.Error()); return 1 }
     $$.val = a
   }
