@@ -64,7 +64,7 @@ spec:
   selector:
     matchLabels:
       app: cockroachdb
-  minAvailable: 67%
+  maxUnavailable: 1
 ---
 apiVersion: apps/v1beta1
 kind: StatefulSet

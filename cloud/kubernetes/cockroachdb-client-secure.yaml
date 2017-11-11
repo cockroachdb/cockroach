@@ -3,7 +3,7 @@ kind: Pod
 metadata:
   name: cockroachdb-client-secure
   labels:
-    app: cockroachdb
+    app: cockroachdb-client
 spec:
   initContainers:
   # The init-certs container sends a certificate signing request to the
