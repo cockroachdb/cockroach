@@ -1434,7 +1434,7 @@ import_stmt:
 string_or_placeholder:
   non_reserved_word_or_sconst
   {
-    $$.val = &StrVal{s: $1}
+    $$.val = NewStrVal($1)
   }
 | PLACEHOLDER
   {
@@ -2273,11 +2273,11 @@ user_priority:
 zone_value:
   SCONST
   {
-    $$.val = &StrVal{s: $1}
+    $$.val = NewStrVal($1)
   }
 | IDENT
   {
-    $$.val = &StrVal{s: $1}
+    $$.val = NewStrVal($1)
   }
 | interval
   {
@@ -2290,7 +2290,7 @@ zone_value:
   }
 | LOCAL
   {
-    $$.val = &StrVal{s: $1}
+    $$.val = NewStrVal($1)
   }
 
 non_reserved_word_or_sconst:
@@ -6123,7 +6123,7 @@ array_expr_list:
 extract_list:
   extract_arg FROM a_expr
   {
-    $$.val = Exprs{&StrVal{s: $1}, $3.expr()}
+    $$.val = Exprs{NewStrVal($1), $3.expr()}
   }
 | expr_list
   {
@@ -6514,16 +6514,16 @@ a_expr_const:
   }
 | SCONST
   {
-    $$.val = &StrVal{s: $1}
+    $$.val = NewStrVal($1)
   }
 | BCONST
   {
-    $$.val = &StrVal{s: $1, bytesEsc: true}
+    $$.val = NewBytesStrVal($1)
   }
 | func_name '(' expr_list opt_sort_clause ')' SCONST { return unimplemented(sqllex, "func const") }
 | const_typename SCONST
   {
-    $$.val = &CastExpr{Expr: &StrVal{s: $2}, Type: $1.colType(), syntaxMode: castPrepend}
+    $$.val = &CastExpr{Expr: NewStrVal($2), Type: $1.colType(), syntaxMode: castPrepend}
   }
 | interval
   {
