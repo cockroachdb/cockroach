@@ -56,7 +56,7 @@ var (
 	big10E10 = big.NewInt(1e10)
 )
 
-// SecondsInDay is the number of seconds in a day.
+// SecondsInDay is the number of seconds in a Day.
 const SecondsInDay = 24 * 60 * 60
 
 // UnaryOp is a unary operator.

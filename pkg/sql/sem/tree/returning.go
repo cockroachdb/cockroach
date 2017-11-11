@@ -38,8 +38,8 @@ func (r *ReturningExprs) Format(buf *bytes.Buffer, f FmtFlags) {
 	FormatNode(buf, f, SelectExprs(*r))
 }
 
-// Shared instance to avoid unnecessary allocations.
-var returningNothingClause = &ReturningNothing{}
+// ReturningNothingClause is a shared instance to avoid unnecessary allocations.
+var ReturningNothingClause = &ReturningNothing{}
 
 // ReturningNothing represents RETURNING NOTHING.
 type ReturningNothing struct{}

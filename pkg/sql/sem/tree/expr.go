@@ -89,14 +89,14 @@ var _ operatorExpr = &ComparisonExpr{}
 var _ operatorExpr = &RangeCond{}
 var _ operatorExpr = &IsOfTypeExpr{}
 
-// operator is used to identify operators; used in sql.y.
-type operator interface {
+// Operator is used to identify Operators; used in sql.y.
+type Operator interface {
 	operator()
 }
 
-var _ operator = UnaryOperator(0)
-var _ operator = BinaryOperator(0)
-var _ operator = ComparisonOperator(0)
+var _ Operator = UnaryOperator(0)
+var _ Operator = BinaryOperator(0)
+var _ Operator = ComparisonOperator(0)
 
 // exprFmtWithParen is a variant of Format() which adds a set of outer parens
 // if the expression involves an operator. It is used internally when the
@@ -1068,10 +1068,11 @@ func (node *When) Format(buf *bytes.Buffer, f FmtFlags) {
 
 type castSyntaxMode int
 
+// These constants separate the syntax X::Y from CAST(X AS Y).
 const (
-	castExplicit castSyntaxMode = iota
-	castShort
-	castPrepend
+	CastExplicit castSyntaxMode = iota
+	CastShort
+	CastPrepend
 )
 
 // CastExpr represents a CAST(expr AS type) expression.
@@ -1086,7 +1087,7 @@ type CastExpr struct {
 // Format implements the NodeFormatter interface.
 func (node *CastExpr) Format(buf *bytes.Buffer, f FmtFlags) {
 	switch node.SyntaxMode {
-	case castPrepend:
+	case CastPrepend:
 		// This is a special case for things like INTERVAL '1s'. These only work
 		// with string constats; if the underlying expression was changed, we fall
 		// back to the short syntax.
@@ -1097,7 +1098,7 @@ func (node *CastExpr) Format(buf *bytes.Buffer, f FmtFlags) {
 			break
 		}
 		fallthrough
-	case castShort:
+	case CastShort:
 		exprFmtWithParen(buf, f, node.Expr)
 		buf.WriteString("::")
 		node.Type.Format(buf, f.encodeFlags)
@@ -1202,9 +1203,10 @@ func (node *IndirectionExpr) Format(buf *bytes.Buffer, f FmtFlags) {
 
 type annotateSyntaxMode int
 
+// These constants separate the syntax X:::Y from ANNOTATE_TYPE(X, Y)
 const (
-	annotateExplicit annotateSyntaxMode = iota
-	annotateShort
+	AnnotateExplicit annotateSyntaxMode = iota
+	AnnotateShort
 )
 
 // AnnotateTypeExpr represents a ANNOTATE_TYPE(expr, type) expression.
@@ -1218,7 +1220,7 @@ type AnnotateTypeExpr struct {
 // Format implements the NodeFormatter interface.
 func (node *AnnotateTypeExpr) Format(buf *bytes.Buffer, f FmtFlags) {
 	switch node.SyntaxMode {
-	case annotateShort:
+	case AnnotateShort:
 		exprFmtWithParen(buf, f, node.Expr)
 		buf.WriteString(":::")
 		node.Type.Format(buf, f.encodeFlags)
