@@ -1,7 +1,5 @@
 FROM registry.access.redhat.com/rhel-atomic:latest
 
-MAINTAINER Alex Robinson <alex@cockroachlabs.com>
-
 LABEL name="cockroachdb/cockroach" \
       vendor="Cockroach Labs" \
       version="1.1.2" \

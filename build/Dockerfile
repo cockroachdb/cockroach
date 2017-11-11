@@ -1,7 +1,5 @@
 FROM ubuntu:xenial-20170915
 
-MAINTAINER Tamir Duberstein <tamird@gmail.com>
-
 RUN apt-get update && apt-get install -y --no-install-recommends \
     apt-transport-https \
     ca-certificates \
