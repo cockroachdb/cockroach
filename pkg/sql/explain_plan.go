@@ -20,7 +20,7 @@ import (
 
 	"golang.org/x/net/context"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
@@ -45,7 +45,7 @@ type explainer struct {
 	symbolicVars bool
 
 	// fmtFlags is the formatter to use for pretty-printing expressions.
-	fmtFlags parser.FmtFlags
+	fmtFlags tree.FmtFlags
 
 	// showTypes indicates whether to print the type of embedded
 	// expressions and result columns.
@@ -67,7 +67,7 @@ type explainer struct {
 
 // newExplainPlanNode instantiates a planNode that runs an EXPLAIN query.
 func (p *planner) makeExplainPlanNode(
-	explainer explainer, expanded, optimized bool, origStmt parser.Statement, plan planNode,
+	explainer explainer, expanded, optimized bool, origStmt tree.Statement, plan planNode,
 ) planNode {
 	columns := sqlbase.ResultColumns{
 		// Level is the depth of the node in the tree.
@@ -86,11 +86,11 @@ func (p *planner) makeExplainPlanNode(
 		columns = append(columns, sqlbase.ResultColumn{Name: "Ordering", Typ: types.String})
 	}
 
-	noPlaceholderFlags := parser.FmtExpr(
-		parser.FmtSimple, explainer.showTypes, explainer.symbolicVars, explainer.qualifyNames,
+	noPlaceholderFlags := tree.FmtExpr(
+		tree.FmtSimple, explainer.showTypes, explainer.symbolicVars, explainer.qualifyNames,
 	)
-	explainer.fmtFlags = parser.FmtPlaceholderFormat(noPlaceholderFlags,
-		func(buf *bytes.Buffer, f parser.FmtFlags, placeholder *parser.Placeholder) {
+	explainer.fmtFlags = tree.FmtPlaceholderFormat(noPlaceholderFlags,
+		func(buf *bytes.Buffer, f tree.FmtFlags, placeholder *tree.Placeholder) {
 			d, err := placeholder.Eval(&p.evalCtx)
 			if err != nil {
 				placeholder.Format(buf, noPlaceholderFlags)
@@ -109,7 +109,7 @@ func (p *planner) makeExplainPlanNode(
 	return node
 }
 
-var emptyString = parser.NewDString("")
+var emptyString = tree.NewDString("")
 
 // populateExplain invokes explain() with a makeRow method
 // which populates a valuesNode.
@@ -121,17 +121,17 @@ func (p *planner) populateExplain(
 			return
 		}
 
-		row := parser.Datums{
-			parser.NewDInt(parser.DInt(level)),
-			parser.NewDString(name),
-			parser.NewDString(field),
-			parser.NewDString(description),
+		row := tree.Datums{
+			tree.NewDInt(tree.DInt(level)),
+			tree.NewDString(name),
+			tree.NewDString(field),
+			tree.NewDString(description),
 		}
 		if e.showMetadata {
 			if plan != nil {
 				cols := planColumns(plan)
-				row = append(row, parser.NewDString(formatColumns(cols, e.showTypes)))
-				row = append(row, parser.NewDString(planPhysicalProps(plan).AsString(cols)))
+				row = append(row, tree.NewDString(formatColumns(cols, e.showTypes)))
+				row = append(row, tree.NewDString(planPhysicalProps(plan).AsString(cols)))
 			} else {
 				row = append(row, emptyString, emptyString)
 			}
@@ -153,7 +153,7 @@ func planToString(ctx context.Context, plan planNode) string {
 		showMetadata: true,
 		showExprs:    true,
 		showTypes:    true,
-		fmtFlags:     parser.FmtExpr(parser.FmtSimple, true, true, true),
+		fmtFlags:     tree.FmtExpr(tree.FmtSimple, true, true, true),
 		makeRow: func(level int, name, field, description string, plan planNode) {
 			if field != "" {
 				field = "." + field
@@ -183,7 +183,7 @@ func (e *explainer) observer() planObserver {
 }
 
 // expr implements the planObserver interface.
-func (e *explainer) expr(nodeName, fieldName string, n int, expr parser.Expr) {
+func (e *explainer) expr(nodeName, fieldName string, n int, expr tree.Expr) {
 	if e.showExprs && expr != nil {
 		if nodeName == "join" {
 			qualifySave := e.fmtFlags.ShowTableAliases
@@ -194,7 +194,7 @@ func (e *explainer) expr(nodeName, fieldName string, n int, expr parser.Expr) {
 			fieldName = fmt.Sprintf("%s %d", fieldName, n)
 		}
 		e.attr(nodeName, fieldName,
-			parser.AsStringWithFlags(expr, e.fmtFlags))
+			tree.AsStringWithFlags(expr, e.fmtFlags))
 	}
 }
 
@@ -233,7 +233,7 @@ func formatColumns(cols sqlbase.ResultColumns, printTypes bool) string {
 		if i > 0 {
 			buf.WriteString(", ")
 		}
-		parser.FormatNode(&buf, parser.FmtSimple, parser.Name(rCol.Name))
+		tree.FormatNode(&buf, tree.FmtSimple, tree.Name(rCol.Name))
 		// Output extra properties like [hidden,omitted].
 		hasProps := false
 		outputProp := func(prop string) {
@@ -282,7 +282,7 @@ type explainPlanNode struct {
 }
 
 func (e *explainPlanNode) Next(params runParams) (bool, error) { return e.results.Next(params) }
-func (e *explainPlanNode) Values() parser.Datums               { return e.results.Values() }
+func (e *explainPlanNode) Values() tree.Datums                 { return e.results.Values() }
 
 func (e *explainPlanNode) Start(params runParams) error {
 	// Note that we don't call start on e.plan. That's on purpose, Start() can

@@ -32,8 +32,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/security"
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
@@ -77,7 +77,7 @@ func (c *sqlConn) ensureConn() error {
 		if c.reconnecting && c.dbName != "" {
 			// Attempt to reset the current database.
 			if _, err := conn.(sqlConnI).Exec(
-				`SET DATABASE = `+parser.Name(c.dbName).String(), nil,
+				`SET DATABASE = `+tree.Name(c.dbName).String(), nil,
 			); err != nil {
 				fmt.Fprintf(stderr, "unable to restore current database: %v\n", err)
 			}
@@ -683,7 +683,7 @@ func formatVal(val driver.Value, showPrintableUnicode bool, showNewLinesAndTabs 
 		return fmt.Sprintf("%+q", t)
 
 	case time.Time:
-		return t.Format(parser.TimestampOutputFormat)
+		return t.Format(tree.TimestampOutputFormat)
 	}
 
 	return fmt.Sprint(val)

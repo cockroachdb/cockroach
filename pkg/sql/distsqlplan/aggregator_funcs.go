@@ -20,7 +20,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
@@ -81,7 +81,7 @@ type DistAggregationInfo struct {
 	// with visitors, we use a function that directly creates a typed expression
 	// on demand. The expression will refer to the final stage results using
 	// IndexedVars, with indices specified by varIdxs (1-1 mapping).
-	FinalRendering func(h *parser.IndexedVarHelper, varIdxs []int) (parser.TypedExpr, error)
+	FinalRendering func(h *tree.IndexedVarHelper, varIdxs []int) (tree.TypedExpr, error)
 }
 
 // Convenient value for FinalStageInfo.LocalIdxs when there is only one aggregation
@@ -204,15 +204,15 @@ var DistAggregationTable = map[distsqlrun.AggregatorSpec_Func]DistAggregationInf
 				LocalIdxs: []uint32{1},
 			},
 		},
-		FinalRendering: func(h *parser.IndexedVarHelper, varIdxs []int) (parser.TypedExpr, error) {
+		FinalRendering: func(h *tree.IndexedVarHelper, varIdxs []int) (tree.TypedExpr, error) {
 			if len(varIdxs) < 2 {
 				panic("fewer than two final aggregation values passed into final render")
 			}
 			sum := h.IndexedVar(varIdxs[0])
 			count := h.IndexedVar(varIdxs[1])
 
-			expr := &parser.BinaryExpr{
-				Operator: parser.Div,
+			expr := &tree.BinaryExpr{
+				Operator: tree.Div,
 				Left:     sum,
 				Right:    count,
 			}
@@ -221,7 +221,7 @@ var DistAggregationTable = map[distsqlrun.AggregatorSpec_Func]DistAggregationInf
 			// this case. Note that there is a "DECIMAL / INT" operator, so we don't
 			// need the same handling for that case.
 			if sum.ResolvedType().Equivalent(types.Float) {
-				expr.Right = &parser.CastExpr{
+				expr.Right = &tree.CastExpr{
 					Expr: count,
 					Type: coltypes.NewFloat(0 /* prec */, false /* precSpecified */),
 				}
@@ -277,16 +277,16 @@ var DistAggregationTable = map[distsqlrun.AggregatorSpec_Func]DistAggregationInf
 	},
 }
 
-// typeContainer is a helper type that implements parser.IndexedVarContainer; it
+// typeContainer is a helper type that implements tree.IndexedVarContainer; it
 // is intended to be used during planning (to back FinalRendering expressions).
 // It does not support evaluation.
 type typeContainer struct {
 	types []sqlbase.ColumnType
 }
 
-var _ parser.IndexedVarContainer = &typeContainer{}
+var _ tree.IndexedVarContainer = &typeContainer{}
 
-func (tc *typeContainer) IndexedVarEval(idx int, ctx *parser.EvalContext) (parser.Datum, error) {
+func (tc *typeContainer) IndexedVarEval(idx int, ctx *tree.EvalContext) (tree.Datum, error) {
 	panic("no eval allowed in typeContainer")
 }
 
@@ -294,12 +294,12 @@ func (tc *typeContainer) IndexedVarResolvedType(idx int) types.T {
 	return tc.types[idx].ToDatumType()
 }
 
-func (tc *typeContainer) IndexedVarFormat(buf *bytes.Buffer, f parser.FmtFlags, idx int) {
+func (tc *typeContainer) IndexedVarFormat(buf *bytes.Buffer, f tree.FmtFlags, idx int) {
 	fmt.Fprintf(buf, "@%d", idx+1)
 }
 
 // MakeTypeIndexedVarHelper returns an IndexedVarHelper which creates IndexedVars
 // with the given types.
-func MakeTypeIndexedVarHelper(types []sqlbase.ColumnType) parser.IndexedVarHelper {
-	return parser.MakeIndexedVarHelper(&typeContainer{types: types}, len(types))
+func MakeTypeIndexedVarHelper(types []sqlbase.ColumnType) tree.IndexedVarHelper {
+	return tree.MakeIndexedVarHelper(&typeContainer{types: types}, len(types))
 }

@@ -24,7 +24,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/pkg/errors"
@@ -342,8 +342,8 @@ func (p *PhysicalPlan) AddProjection(columns []uint32) {
 // expression is just an IndexedVar.
 //
 // See MakeExpression for a description of indexVarMap.
-func exprColumn(expr parser.TypedExpr, indexVarMap []int) (int, bool) {
-	v, ok := expr.(*parser.IndexedVar)
+func exprColumn(expr tree.TypedExpr, indexVarMap []int) (int, bool) {
+	v, ok := expr.(*tree.IndexedVar)
 	if !ok {
 		return -1, false
 	}
@@ -359,8 +359,8 @@ func exprColumn(expr parser.TypedExpr, indexVarMap []int) (int, bool) {
 //
 // See MakeExpression for a description of indexVarMap.
 func (p *PhysicalPlan) AddRendering(
-	exprs []parser.TypedExpr,
-	evalCtx *parser.EvalContext,
+	exprs []tree.TypedExpr,
+	evalCtx *tree.EvalContext,
 	indexVarMap []int,
 	outTypes []sqlbase.ColumnType,
 ) {
@@ -441,7 +441,7 @@ func (p *PhysicalPlan) AddRendering(
 				if post.Projection {
 					internalColIdx = post.OutputColumns[internalColIdx]
 				}
-				newExpr := MakeExpression(&parser.IndexedVar{Idx: int(internalColIdx)}, evalCtx, nil)
+				newExpr := MakeExpression(&tree.IndexedVar{Idx: int(internalColIdx)}, evalCtx, nil)
 
 				found = len(post.RenderExprs)
 				post.RenderExprs = append(post.RenderExprs, newExpr)
@@ -521,7 +521,7 @@ func reverseProjection(outputColumns []uint32, indexVarMap []int) []int {
 //
 // See MakeExpression for a description of indexVarMap.
 func (p *PhysicalPlan) AddFilter(
-	expr parser.TypedExpr, evalCtx *parser.EvalContext, indexVarMap []int,
+	expr tree.TypedExpr, evalCtx *tree.EvalContext, indexVarMap []int,
 ) {
 	post := p.GetLastStagePost()
 	if len(post.RenderExprs) > 0 || post.Offset != 0 || post.Limit != 0 {

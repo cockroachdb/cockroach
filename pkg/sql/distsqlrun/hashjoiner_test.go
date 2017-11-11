@@ -25,7 +25,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -40,9 +40,9 @@ func TestHashJoiner(t *testing.T) {
 	columnTypeInt := sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_INT}
 	v := [10]sqlbase.EncDatum{}
 	for i := range v {
-		v[i] = sqlbase.DatumToEncDatum(columnTypeInt, parser.NewDInt(parser.DInt(i)))
+		v[i] = sqlbase.DatumToEncDatum(columnTypeInt, tree.NewDInt(tree.DInt(i)))
 	}
-	null := sqlbase.EncDatum{Datum: parser.DNull}
+	null := sqlbase.EncDatum{Datum: tree.DNull}
 
 	testCases := []struct {
 		spec       HashJoinerSpec
@@ -516,7 +516,7 @@ func TestHashJoiner(t *testing.T) {
 	}
 	defer tempEngine.Close()
 
-	evalCtx := parser.MakeTestingEvalContext()
+	evalCtx := tree.MakeTestingEvalContext()
 	defer evalCtx.Stop(ctx)
 	diskMonitor := mon.MakeMonitor(
 		"test-disk",
@@ -641,7 +641,7 @@ func TestHashJoinerDrain(t *testing.T) {
 	columnTypeInt := sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_INT}
 	v := [10]sqlbase.EncDatum{}
 	for i := range v {
-		v[i] = sqlbase.DatumToEncDatum(columnTypeInt, parser.NewDInt(parser.DInt(i)))
+		v[i] = sqlbase.DatumToEncDatum(columnTypeInt, tree.NewDInt(tree.DInt(i)))
 	}
 	spec := HashJoinerSpec{
 		LeftEqColumns:  []uint32{0},
@@ -689,7 +689,7 @@ func TestHashJoinerDrain(t *testing.T) {
 		nil, /* rows */
 		RowBufferArgs{AccumulateRowsWhileDraining: true},
 	)
-	evalCtx := parser.MakeTestingEvalContext()
+	evalCtx := tree.MakeTestingEvalContext()
 	ctx := context.Background()
 	defer evalCtx.Stop(ctx)
 
@@ -741,7 +741,7 @@ func TestHashJoinerDrainAfterBuildPhaseError(t *testing.T) {
 	columnTypeInt := sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_INT}
 	v := [10]sqlbase.EncDatum{}
 	for i := range v {
-		v[i] = sqlbase.DatumToEncDatum(columnTypeInt, parser.NewDInt(parser.DInt(i)))
+		v[i] = sqlbase.DatumToEncDatum(columnTypeInt, tree.NewDInt(tree.DInt(i)))
 	}
 	spec := HashJoinerSpec{
 		LeftEqColumns:  []uint32{0},
@@ -814,7 +814,7 @@ func TestHashJoinerDrainAfterBuildPhaseError(t *testing.T) {
 		nil, /* rows */
 		RowBufferArgs{},
 	)
-	evalCtx := parser.MakeTestingEvalContext()
+	evalCtx := tree.MakeTestingEvalContext()
 	defer evalCtx.Stop(context.Background())
 	flowCtx := FlowCtx{Settings: cluster.MakeTestingClusterSettings(), EvalCtx: evalCtx}
 
@@ -858,7 +858,7 @@ func TestHashJoinerDrainAfterBuildPhaseError(t *testing.T) {
 // TODO(asubiotto): More complex benchmarks.
 func BenchmarkHashJoiner(b *testing.B) {
 	ctx := context.Background()
-	evalCtx := parser.MakeTestingEvalContext()
+	evalCtx := tree.MakeTestingEvalContext()
 	defer evalCtx.Stop(ctx)
 	flowCtx := FlowCtx{
 		Settings: cluster.MakeTestingClusterSettings(),
@@ -887,7 +887,7 @@ func BenchmarkHashJoiner(b *testing.B) {
 				for i := range input {
 					input[i] = make(sqlbase.EncDatumRow, numCols)
 					for j := 0; j < numCols; j++ {
-						input[i][j] = sqlbase.DatumToEncDatum(columnTypeInt, parser.NewDInt(parser.DInt(i+j)))
+						input[i][j] = sqlbase.DatumToEncDatum(columnTypeInt, tree.NewDInt(tree.DInt(i+j)))
 					}
 				}
 				return input

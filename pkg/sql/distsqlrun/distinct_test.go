@@ -18,7 +18,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 
@@ -31,7 +31,7 @@ func TestDistinct(t *testing.T) {
 	v := [15]sqlbase.EncDatum{}
 	for i := range v {
 		v[i] = sqlbase.DatumToEncDatum(sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_INT},
-			parser.NewDInt(parser.DInt(i)))
+			tree.NewDInt(tree.DInt(i)))
 	}
 
 	testCases := []struct {
@@ -138,7 +138,7 @@ func TestDistinct(t *testing.T) {
 			in := NewRowBuffer(twoIntCols, c.input, RowBufferArgs{})
 			out := &RowBuffer{}
 
-			evalCtx := parser.MakeTestingEvalContext()
+			evalCtx := tree.MakeTestingEvalContext()
 			defer evalCtx.Stop(context.Background())
 			flowCtx := FlowCtx{
 				Settings: cluster.MakeTestingClusterSettings(),

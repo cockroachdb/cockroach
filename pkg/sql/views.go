@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -54,7 +55,7 @@ type planDependencies map[sqlbase.ID]planDependencyInfo
 func (d planDependencies) String() string {
 	var buf bytes.Buffer
 	for id, deps := range d {
-		fmt.Fprintf(&buf, "%d (%q):", id, parser.ErrString(parser.Name(deps.desc.Name)))
+		fmt.Fprintf(&buf, "%d (%q):", id, tree.ErrString(tree.Name(deps.desc.Name)))
 		for _, dep := range deps.deps {
 			buf.WriteString(" [")
 			if dep.IndexID != 0 {
@@ -73,7 +74,7 @@ func (d planDependencies) String() string {
 // dependency. The set of columns from the view query's results is
 // also returned.
 func (p *planner) analyzeViewQuery(
-	ctx context.Context, viewSelect *parser.Select,
+	ctx context.Context, viewSelect *tree.Select,
 ) (planDependencies, sqlbase.ResultColumns, error) {
 	// To avoid races with ongoing schema changes to tables that the view
 	// depends on, make sure we use the most recent versions of table

@@ -27,6 +27,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 )
 
@@ -38,7 +39,7 @@ type Parser struct {
 }
 
 // Parse parses the sql and returns a list of statements.
-func (p *Parser) Parse(sql string) (stmts StatementList, err error) {
+func (p *Parser) Parse(sql string) (stmts tree.StatementList, err error) {
 	p.scanner.init(sql)
 	if p.parserImpl.Parse(&p.scanner) != 0 {
 		var err *pgerror.Error
@@ -55,14 +56,14 @@ func (p *Parser) Parse(sql string) (stmts StatementList, err error) {
 }
 
 // Parse parses a sql statement string and returns a list of Statements.
-func Parse(sql string) (StatementList, error) {
+func Parse(sql string) (tree.StatementList, error) {
 	var p Parser
 	return p.Parse(sql)
 }
 
 // ParseOne parses a sql statement string, ensuring that it contains only a
 // single statement, and returns that Statement.
-func ParseOne(sql string) (Statement, error) {
+func ParseOne(sql string) (tree.Statement, error) {
 	stmts, err := Parse(sql)
 	if err != nil {
 		return nil, err
@@ -75,26 +76,26 @@ func ParseOne(sql string) (Statement, error) {
 }
 
 // ParseTableNameWithIndex parses a table name with index.
-func ParseTableNameWithIndex(sql string) (TableNameWithIndex, error) {
+func ParseTableNameWithIndex(sql string) (tree.TableNameWithIndex, error) {
 	stmt, err := ParseOne(fmt.Sprintf("ALTER INDEX %s RENAME TO x", sql))
 	if err != nil {
-		return TableNameWithIndex{}, err
+		return tree.TableNameWithIndex{}, err
 	}
-	rename, ok := stmt.(*RenameIndex)
+	rename, ok := stmt.(*tree.RenameIndex)
 	if !ok {
-		return TableNameWithIndex{}, pgerror.NewErrorf(
+		return tree.TableNameWithIndex{}, pgerror.NewErrorf(
 			pgerror.CodeInternalError, "expected an ALTER INDEX statement, but found %T", stmt)
 	}
 	return *rename.Index, nil
 }
 
 // parseExprs parses one or more sql expressions.
-func parseExprs(exprs []string) (Exprs, error) {
+func parseExprs(exprs []string) (tree.Exprs, error) {
 	stmt, err := ParseOne(fmt.Sprintf("SET ROW (%s)", strings.Join(exprs, ",")))
 	if err != nil {
 		return nil, err
 	}
-	set, ok := stmt.(*SetVar)
+	set, ok := stmt.(*tree.SetVar)
 	if !ok {
 		return nil, pgerror.NewErrorf(pgerror.CodeInternalError, "expected a SET statement, but found %T", stmt)
 	}
@@ -102,15 +103,15 @@ func parseExprs(exprs []string) (Exprs, error) {
 }
 
 // ParseExprs is a short-hand for parseExprs(sql)
-func ParseExprs(sql []string) (Exprs, error) {
+func ParseExprs(sql []string) (tree.Exprs, error) {
 	if len(sql) == 0 {
-		return Exprs{}, nil
+		return tree.Exprs{}, nil
 	}
 	return parseExprs(sql)
 }
 
 // ParseExpr is a short-hand for parseExprs([]string{sql})
-func ParseExpr(sql string) (Expr, error) {
+func ParseExpr(sql string) (tree.Expr, error) {
 	exprs, err := parseExprs([]string{sql})
 	if err != nil {
 		return nil, err
@@ -128,50 +129,50 @@ func ParseType(sql string) (coltypes.CastTargetType, error) {
 		return nil, err
 	}
 
-	cast, ok := expr.(*CastExpr)
+	cast, ok := expr.(*tree.CastExpr)
 	if !ok {
-		return nil, pgerror.NewErrorf(pgerror.CodeInternalError, "expected a CastExpr, but found %T", expr)
+		return nil, pgerror.NewErrorf(pgerror.CodeInternalError, "expected a tree.CastExpr, but found %T", expr)
 	}
 
 	return cast.Type, nil
 }
 
 // ParseStringAs parses s as type t.
-func ParseStringAs(t types.T, s string, evalCtx *EvalContext) (Datum, error) {
-	var d Datum
+func ParseStringAs(t types.T, s string, evalCtx *tree.EvalContext) (tree.Datum, error) {
+	var d tree.Datum
 	var err error
 	switch t {
 	case types.Bool:
-		d, err = ParseDBool(s)
+		d, err = tree.ParseDBool(s)
 	case types.Bytes:
-		d = NewDBytes(DBytes(s))
+		d = tree.NewDBytes(tree.DBytes(s))
 	case types.Date:
-		d, err = ParseDDate(s, evalCtx.GetLocation())
+		d, err = tree.ParseDDate(s, evalCtx.GetLocation())
 	case types.Decimal:
-		d, err = ParseDDecimal(s)
+		d, err = tree.ParseDDecimal(s)
 	case types.Float:
-		d, err = ParseDFloat(s)
+		d, err = tree.ParseDFloat(s)
 	case types.Int:
-		d, err = ParseDInt(s)
+		d, err = tree.ParseDInt(s)
 	case types.Interval:
-		d, err = ParseDInterval(s)
+		d, err = tree.ParseDInterval(s)
 	case types.String:
-		d = NewDString(s)
+		d = tree.NewDString(s)
 	case types.Timestamp:
-		d, err = ParseDTimestamp(s, time.Microsecond)
+		d, err = tree.ParseDTimestamp(s, time.Microsecond)
 	case types.TimestampTZ:
-		d, err = ParseDTimestampTZ(s, evalCtx.GetLocation(), time.Microsecond)
+		d, err = tree.ParseDTimestampTZ(s, evalCtx.GetLocation(), time.Microsecond)
 	case types.UUID:
-		d, err = ParseDUuidFromString(s)
+		d, err = tree.ParseDUuidFromString(s)
 	case types.INet:
-		d, err = ParseDIPAddrFromINetString(s)
+		d, err = tree.ParseDIPAddrFromINetString(s)
 	default:
 		if a, ok := t.(types.TArray); ok {
 			typ, err := coltypes.DatumTypeToColumnType(a.Typ)
 			if err != nil {
 				return nil, err
 			}
-			d, err = ParseDArrayFromString(evalCtx, s, typ)
+			d, err = tree.ParseDArrayFromString(evalCtx, s, typ)
 			if err != nil {
 				return nil, err
 			}

@@ -20,7 +20,7 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
@@ -169,8 +169,8 @@ func (p *planner) makeIndexJoin(
 	if origScan.filter != nil {
 		// Now we split the filter by extracting the part that can be
 		// evaluated using just the index columns.
-		splitFunc := func(expr parser.VariableExpr) (ok bool, newExpr parser.Expr) {
-			colIdx := expr.(*parser.IndexedVar).Idx
+		splitFunc := func(expr tree.VariableExpr) (ok bool, newExpr tree.Expr) {
+			colIdx := expr.(*tree.IndexedVar).Idx
 			if !(primaryKeyColumns[colIdx] || valProvidedIndex[colIdx]) {
 				return false, nil
 			}
@@ -206,7 +206,7 @@ func (p *planner) makeIndexJoin(
 	return node, indexScan
 }
 
-func (n *indexJoinNode) Values() parser.Datums {
+func (n *indexJoinNode) Values() tree.Datums {
 	return n.table.Values()
 }
 

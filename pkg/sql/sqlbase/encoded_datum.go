@@ -18,7 +18,7 @@ import (
 	"bytes"
 	"fmt"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/pkg/errors"
 )
@@ -37,7 +37,7 @@ func EncodingDirToDatumEncoding(dir encoding.Direction) DatumEncoding {
 }
 
 // EncDatum represents a datum that is "backed" by an encoding and/or by a
-// parser.Datum. It allows "passing through" a Datum without decoding and
+// tree.Datum. It allows "passing through" a Datum without decoding and
 // reencoding.
 type EncDatum struct {
 	// Encoding type. Valid only if encoded is not nil.
@@ -47,7 +47,7 @@ type EncDatum struct {
 	encoded []byte
 
 	// Decoded datum.
-	Datum parser.Datum
+	Datum tree.Datum
 }
 
 func (ed *EncDatum) stringWithAlloc(typ *ColumnType, a *DatumAlloc) string {
@@ -114,11 +114,11 @@ func EncDatumFromBuffer(typ *ColumnType, enc DatumEncoding, buf []byte) (EncDatu
 }
 
 // DatumToEncDatum initializes an EncDatum with the given Datum.
-func DatumToEncDatum(ctyp ColumnType, d parser.Datum) EncDatum {
+func DatumToEncDatum(ctyp ColumnType, d tree.Datum) EncDatum {
 	if d == nil {
 		panic("Cannot convert nil datum to EncDatum")
 	}
-	if ptyp := ctyp.ToDatumType(); d != parser.DNull && !ptyp.Equivalent(d.ResolvedType()) {
+	if ptyp := ctyp.ToDatumType(); d != tree.DNull && !ptyp.Equivalent(d.ResolvedType()) {
 		panic(fmt.Sprintf("invalid datum type given: %s, expected %s",
 			d.ResolvedType(), ptyp))
 	}
@@ -141,7 +141,7 @@ func (ed *EncDatum) IsUnset() bool {
 // ed.Datum is DNull after calling EnsureDecoded.
 func (ed *EncDatum) IsNull() bool {
 	if ed.Datum != nil {
-		return ed.Datum == parser.DNull
+		return ed.Datum == tree.DNull
 	}
 	if ed.encoded == nil {
 		panic("IsNull on unset EncDatum")
@@ -234,7 +234,7 @@ func (ed *EncDatum) Encode(
 //    0  if the receiver is equal to rhs,
 //    +1 if the receiver is greater than rhs.
 func (ed *EncDatum) Compare(
-	typ *ColumnType, a *DatumAlloc, evalCtx *parser.EvalContext, rhs *EncDatum,
+	typ *ColumnType, a *DatumAlloc, evalCtx *tree.EvalContext, rhs *EncDatum,
 ) (int, error) {
 	// TODO(radu): if we have both the Datum and a key encoding available, which
 	// one would be faster to use?
@@ -280,7 +280,7 @@ func (r EncDatumRow) String(types []ColumnType) string {
 
 // EncDatumRowToDatums converts a given EncDatumRow to a Datums.
 func EncDatumRowToDatums(
-	types []ColumnType, datums parser.Datums, row EncDatumRow, da *DatumAlloc,
+	types []ColumnType, datums tree.Datums, row EncDatumRow, da *DatumAlloc,
 ) error {
 	if len(types) != len(row) {
 		panic(fmt.Sprintf("mismatched types (%v) and row (%v)", types, row))
@@ -291,7 +291,7 @@ func EncDatumRowToDatums(
 	}
 	for i, encDatum := range row {
 		if encDatum.IsUnset() {
-			datums[i] = parser.DNull
+			datums[i] = tree.DNull
 			continue
 		}
 		err := encDatum.EnsureDecoded(&types[i], da)
@@ -318,7 +318,7 @@ func (r EncDatumRow) Compare(
 	types []ColumnType,
 	a *DatumAlloc,
 	ordering ColumnOrdering,
-	evalCtx *parser.EvalContext,
+	evalCtx *tree.EvalContext,
 	rhs EncDatumRow,
 ) (int, error) {
 	if len(r) != len(types) || len(rhs) != len(types) {
@@ -344,8 +344,8 @@ func (r EncDatumRow) CompareToDatums(
 	types []ColumnType,
 	a *DatumAlloc,
 	ordering ColumnOrdering,
-	evalCtx *parser.EvalContext,
-	rhs parser.Datums,
+	evalCtx *tree.EvalContext,
+	rhs tree.Datums,
 ) (int, error) {
 	for _, c := range ordering {
 		if err := r[c.ColIdx].EnsureDecoded(&types[c.ColIdx], a); err != nil {

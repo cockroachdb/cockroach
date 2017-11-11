@@ -37,7 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -104,8 +104,8 @@ func TestPlanningDuringSplits(t *testing.T) {
 	sqlutils.CreateTable(
 		t, tc.ServerConn(0), "t", "x INT PRIMARY KEY, xsquared INT",
 		n,
-		sqlutils.ToRowFn(sqlutils.RowIdxFn, func(row int) parser.Datum {
-			return parser.NewDInt(parser.DInt(row * row))
+		sqlutils.ToRowFn(sqlutils.RowIdxFn, func(row int) tree.Datum {
+			return tree.NewDInt(tree.DInt(row * row))
 		}),
 	)
 
@@ -244,8 +244,8 @@ func TestDistBackfill(t *testing.T) {
 	sqlutils.CreateTable(
 		t, tc.ServerConn(0), "numtosquare", "x INT PRIMARY KEY, xsquared INT",
 		n,
-		sqlutils.ToRowFn(sqlutils.RowIdxFn, func(row int) parser.Datum {
-			return parser.NewDInt(parser.DInt(row * row))
+		sqlutils.ToRowFn(sqlutils.RowIdxFn, func(row int) tree.Datum {
+			return tree.NewDInt(tree.DInt(row * row))
 		}),
 	)
 

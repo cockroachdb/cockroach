@@ -15,9 +15,8 @@
 package sql
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"golang.org/x/net/context"
-
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 )
 
 // optimizePlan transforms the query plan into its final form.  This
@@ -75,7 +74,7 @@ type subqueryInitializer struct {
 func (i *subqueryInitializer) subqueryNode(ctx context.Context, sq *subquery) error {
 	if sq.plan != nil && !sq.expanded {
 		if sq.execMode == execModeExists || sq.execMode == execModeOneRow {
-			numRows := parser.DInt(1)
+			numRows := tree.DInt(1)
 			if sq.execMode == execModeOneRow {
 				// When using a sub-query in a scalar context, we must
 				// appropriately reject sub-queries that return more than 1
@@ -83,7 +82,7 @@ func (i *subqueryInitializer) subqueryNode(ctx context.Context, sq *subquery) er
 				numRows = 2
 			}
 
-			sq.plan = &limitNode{p: i.p, plan: sq.plan, countExpr: parser.NewDInt(numRows)}
+			sq.plan = &limitNode{p: i.p, plan: sq.plan, countExpr: tree.NewDInt(numRows)}
 		}
 
 		needed := make([]bool, len(planColumns(sq.plan)))

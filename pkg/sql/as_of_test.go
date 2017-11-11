@@ -25,7 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -228,7 +228,7 @@ func TestAsOfRetry(t *testing.T) {
 	}
 	oneTick := apd.New(1, 0)
 	// Set tsVal1 to 1ns before tsVal2.
-	if _, err := parser.ExactCtx.Sub(walltime, walltime, oneTick); err != nil {
+	if _, err := tree.ExactCtx.Sub(walltime, walltime, oneTick); err != nil {
 		t.Fatal(err)
 	}
 	tsVal1 := walltime.Text('f')

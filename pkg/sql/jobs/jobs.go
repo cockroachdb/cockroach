@@ -26,8 +26,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -511,7 +511,7 @@ func (j *Job) insert(ctx context.Context, payload *Payload) error {
 		return nil
 	}
 
-	var row parser.Datums
+	var row tree.Datums
 	if err := j.runInTxn(ctx, func(ctx context.Context, txn *client.Txn) error {
 		payload.ModifiedMicros = timeutil.ToUnixMicros(txn.Proto().OrigTimestamp.GoTime())
 		payloadBytes, err := protoutil.Marshal(payload)
@@ -526,13 +526,14 @@ func (j *Job) insert(ctx context.Context, payload *Payload) error {
 		return err
 	}
 	j.mu.payload = *payload
-	j.id = (*int64)(row[0].(*parser.DInt))
+	j.id = (*int64)(row[0].(*tree.DInt))
 
 	return nil
 }
 
 func (j *Job) update(
-	ctx context.Context, updateFn func(*client.Txn, *Status, *Payload) (doUpdate bool, err error),
+	ctx context.Context,
+	updateFn func(*client.Txn, *Status, *Payload) (doUpdate bool, err error),
 ) error {
 	if j.id == nil {
 		return errors.New("Job: cannot update: job not created")
@@ -545,7 +546,7 @@ func (j *Job) update(
 		if err != nil {
 			return err
 		}
-		statusString, ok := row[0].(*parser.DString)
+		statusString, ok := row[0].(*tree.DString)
 		if !ok {
 			return errors.Errorf("Job: expected string status on job %d, but got %T", *j.id, statusString)
 		}
@@ -675,10 +676,10 @@ func (p *Payload) UnwrapDetails() (Details, error) {
 }
 
 // UnmarshalPayload unmarshals and returns the Payload encoded in the input
-// datum, which should be a parser.DBytes.
-func UnmarshalPayload(datum parser.Datum) (*Payload, error) {
+// datum, which should be a tree.DBytes.
+func UnmarshalPayload(datum tree.Datum) (*Payload, error) {
 	payload := &Payload{}
-	bytes, ok := datum.(*parser.DBytes)
+	bytes, ok := datum.(*tree.DBytes)
 	if !ok {
 		return nil, errors.Errorf(
 			"Job: failed to unmarshal payload as DBytes (was %T)", bytes)

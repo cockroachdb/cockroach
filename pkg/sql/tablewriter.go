@@ -23,7 +23,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -34,7 +34,7 @@ import (
 type expressionCarrier interface {
 	// walkExprs explores all sub-expressions held by this object, if
 	// any.
-	walkExprs(func(desc string, index int, expr parser.TypedExpr))
+	walkExprs(func(desc string, index int, expr tree.TypedExpr))
 }
 
 // tableWriter handles writing kvs and forming table rows.
@@ -65,7 +65,7 @@ type tableWriter interface {
 	// of a Value field on the context because Value access in context.Context
 	// is rather expensive and the tableWriter interface is used on the
 	// inner loop of table accesses.
-	row(ctx context.Context, values parser.Datums, traceKV bool) (parser.Datums, error)
+	row(ctx context.Context, values tree.Datums, traceKV bool) (tree.Datums, error)
 
 	// finalize flushes out any remaining writes. It is called after all calls to
 	// row.  It returns a slice of all Datums not yet returned by calls to `row`.
@@ -100,7 +100,7 @@ type tableInserter struct {
 	b   *client.Batch
 }
 
-func (ti *tableInserter) walkExprs(_ func(desc string, index int, expr parser.TypedExpr)) {}
+func (ti *tableInserter) walkExprs(_ func(desc string, index int, expr tree.TypedExpr)) {}
 
 func (ti *tableInserter) init(txn *client.Txn) error {
 	ti.txn = txn
@@ -109,8 +109,8 @@ func (ti *tableInserter) init(txn *client.Txn) error {
 }
 
 func (ti *tableInserter) row(
-	ctx context.Context, values parser.Datums, traceKV bool,
-) (parser.Datums, error) {
+	ctx context.Context, values tree.Datums, traceKV bool,
+) (tree.Datums, error) {
 	return nil, ti.ri.InsertRow(ctx, ti.b, values, false, traceKV)
 }
 
@@ -151,7 +151,7 @@ type tableUpdater struct {
 
 func (ti *tableInserter) close(_ context.Context) {}
 
-func (tu *tableUpdater) walkExprs(_ func(desc string, index int, expr parser.TypedExpr)) {}
+func (tu *tableUpdater) walkExprs(_ func(desc string, index int, expr tree.TypedExpr)) {}
 
 func (tu *tableUpdater) init(txn *client.Txn) error {
 	tu.txn = txn
@@ -160,8 +160,8 @@ func (tu *tableUpdater) init(txn *client.Txn) error {
 }
 
 func (tu *tableUpdater) row(
-	ctx context.Context, values parser.Datums, traceKV bool,
-) (parser.Datums, error) {
+	ctx context.Context, values tree.Datums, traceKV bool,
+) (tree.Datums, error) {
 	oldValues := values[:len(tu.ru.FetchCols)]
 	updateValues := values[len(tu.ru.FetchCols):]
 	return tu.ru.UpdateRow(ctx, tu.b, oldValues, updateValues, traceKV)
@@ -205,11 +205,11 @@ type tableUpsertEvaler interface {
 
 	// eval returns the values for the update case of an upsert, given the row
 	// that would have been inserted and the existing (conflicting) values.
-	eval(insertRow parser.Datums, existingRow parser.Datums) (parser.Datums, error)
+	eval(insertRow tree.Datums, existingRow tree.Datums) (tree.Datums, error)
 
 	// shouldUpdate returns the result of evaluating the WHERE clause of the
 	// ON CONFLICT ... DO UPDATE clause.
-	shouldUpdate(insertRow parser.Datums, existingRow parser.Datums) (bool, error)
+	shouldUpdate(insertRow tree.Datums, existingRow tree.Datums) (bool, error)
 }
 
 // tableUpserter handles writing kvs and forming table rows for upserts.
@@ -264,7 +264,7 @@ type tableUpserter struct {
 	indexKeyPrefix []byte
 }
 
-func (tu *tableUpserter) walkExprs(walk func(desc string, index int, expr parser.TypedExpr)) {
+func (tu *tableUpserter) walkExprs(walk func(desc string, index int, expr tree.TypedExpr)) {
 	if tu.evaler != nil {
 		tu.evaler.walkExprs(walk)
 	}
@@ -348,8 +348,8 @@ func (tu *tableUpserter) init(txn *client.Txn) error {
 }
 
 func (tu *tableUpserter) row(
-	ctx context.Context, row parser.Datums, traceKV bool,
-) (parser.Datums, error) {
+	ctx context.Context, row tree.Datums, traceKV bool,
+) (tree.Datums, error) {
 	if tu.fastPathBatch != nil {
 		tableDesc := tu.tableDesc()
 		primaryKey, _, err := sqlbase.EncodeIndexKey(
@@ -387,7 +387,7 @@ func (tu *tableUpserter) flush(
 		return nil, err
 	}
 
-	var rowTemplate parser.Datums
+	var rowTemplate tree.Datums
 	if tu.collectRows {
 		tu.rowsUpserted = sqlbase.NewRowContainer(
 			tu.mon.MakeBoundAccount(),
@@ -400,9 +400,9 @@ func (tu *tableUpserter) flush(
 		// to rh, in the correct order; we will use rowTemplate for this. We
 		// also need a table that maps row indices to rowTemplate indices to
 		// fill in the row values; any absent values will be NULLs.
-		rowTemplate = make(parser.Datums, len(tableDesc.Columns))
+		rowTemplate = make(tree.Datums, len(tableDesc.Columns))
 		for i := range rowTemplate {
-			rowTemplate[i] = parser.DNull
+			rowTemplate[i] = tree.DNull
 		}
 	}
 
@@ -550,7 +550,7 @@ func (tu *tableUpserter) upsertRowPKs(ctx context.Context, traceKV bool) ([]roac
 // fetchExisting returns any existing rows in the table that conflict with the
 // ones in tu.insertRows. The returned slice is the same length as tu.insertRows
 // and a nil entry indicates no conflict.
-func (tu *tableUpserter) fetchExisting(ctx context.Context, traceKV bool) ([]parser.Datums, error) {
+func (tu *tableUpserter) fetchExisting(ctx context.Context, traceKV bool) ([]tree.Datums, error) {
 	tableDesc := tu.tableDesc()
 
 	primaryKeys, err := tu.upsertRowPKs(ctx, traceKV)
@@ -571,7 +571,7 @@ func (tu *tableUpserter) fetchExisting(ctx context.Context, traceKV bool) ([]par
 	}
 	if len(pkSpans) == 0 {
 		// Every key was empty, so there's nothing to fetch.
-		return make([]parser.Datums, len(primaryKeys)), nil
+		return make([]tree.Datums, len(primaryKeys)), nil
 	}
 
 	// We don't limit batches here because the spans are unordered.
@@ -579,7 +579,7 @@ func (tu *tableUpserter) fetchExisting(ctx context.Context, traceKV bool) ([]par
 		return nil, err
 	}
 
-	rows := make([]parser.Datums, len(primaryKeys))
+	rows := make([]tree.Datums, len(primaryKeys))
 	for {
 		row, err := tu.fetcher.NextRowDecoded(ctx)
 		if err != nil {
@@ -597,7 +597,7 @@ func (tu *tableUpserter) fetchExisting(ctx context.Context, traceKV bool) ([]par
 
 		// The rows returned by rowFetcher are invalidated after the call to
 		// NextRow, so we have to copy them to save them.
-		rowCopy := make(parser.Datums, len(row))
+		rowCopy := make(tree.Datums, len(row))
 		copy(rowCopy, row)
 		rows[rowIdxForPrimaryKey[string(rowPrimaryKey)]] = rowCopy
 	}
@@ -659,7 +659,7 @@ type tableDeleter struct {
 	b   *client.Batch
 }
 
-func (td *tableDeleter) walkExprs(_ func(desc string, index int, expr parser.TypedExpr)) {}
+func (td *tableDeleter) walkExprs(_ func(desc string, index int, expr tree.TypedExpr)) {}
 
 func (td *tableDeleter) init(txn *client.Txn) error {
 	td.txn = txn
@@ -668,8 +668,8 @@ func (td *tableDeleter) init(txn *client.Txn) error {
 }
 
 func (td *tableDeleter) row(
-	ctx context.Context, values parser.Datums, traceKV bool,
-) (parser.Datums, error) {
+	ctx context.Context, values tree.Datums, traceKV bool,
+) (tree.Datums, error) {
 	return nil, td.rd.DeleteRow(ctx, td.b, values, traceKV)
 }
 
@@ -854,7 +854,11 @@ func (td *tableDeleter) deleteAllRowsScan(
 //
 // limit is a limit on the number of index entries deleted in the operation.
 func (td *tableDeleter) deleteIndex(
-	ctx context.Context, idx *sqlbase.IndexDescriptor, resume roachpb.Span, limit int64, traceKV bool,
+	ctx context.Context,
+	idx *sqlbase.IndexDescriptor,
+	resume roachpb.Span,
+	limit int64,
+	traceKV bool,
 ) (roachpb.Span, error) {
 	if len(idx.Interleave.Ancestors) > 0 || len(idx.InterleavedBy) > 0 {
 		if log.V(2) {
@@ -866,7 +870,11 @@ func (td *tableDeleter) deleteIndex(
 }
 
 func (td *tableDeleter) deleteIndexFast(
-	ctx context.Context, idx *sqlbase.IndexDescriptor, resume roachpb.Span, limit int64, traceKV bool,
+	ctx context.Context,
+	idx *sqlbase.IndexDescriptor,
+	resume roachpb.Span,
+	limit int64,
+	traceKV bool,
 ) (roachpb.Span, error) {
 	if resume.Key == nil {
 		resume = td.rd.Helper.TableDesc.IndexSpan(idx.ID)
@@ -887,7 +895,11 @@ func (td *tableDeleter) deleteIndexFast(
 }
 
 func (td *tableDeleter) deleteIndexScan(
-	ctx context.Context, idx *sqlbase.IndexDescriptor, resume roachpb.Span, limit int64, traceKV bool,
+	ctx context.Context,
+	idx *sqlbase.IndexDescriptor,
+	resume roachpb.Span,
+	limit int64,
+	traceKV bool,
 ) (roachpb.Span, error) {
 	if resume.Key == nil {
 		resume = td.rd.Helper.TableDesc.PrimaryIndexSpan()

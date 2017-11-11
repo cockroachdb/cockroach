@@ -31,7 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/security"
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -98,9 +98,9 @@ func (s *tableVersionState) incRefcountLocked() {
 // The lease expiration stored in the database is of a different type.
 // We've decided that it's too much work to change the type to
 // hlc.Timestamp, so we're using this method to give us the stored
-// type: parser.DTimestamp.
-func (s *tableVersionState) leaseExpiration() parser.DTimestamp {
-	return parser.DTimestamp{Time: timeutil.Unix(0, s.expiration.WallTime).Round(time.Microsecond)}
+// type: tree.DTimestamp.
+func (s *tableVersionState) leaseExpiration() tree.DTimestamp {
+	return tree.DTimestamp{Time: timeutil.Unix(0, s.expiration.WallTime).Round(time.Microsecond)}
 }
 
 // LeaseStore implements the operations for acquiring and releasing leases and
@@ -392,7 +392,10 @@ func (s LeaseStore) Publish(
 // countLeases returns the number of unexpired leases for a particular version
 // of a descriptor.
 func (s LeaseStore) countLeases(
-	ctx context.Context, descID sqlbase.ID, version sqlbase.DescriptorVersion, expiration time.Time,
+	ctx context.Context,
+	descID sqlbase.ID,
+	version sqlbase.DescriptorVersion,
+	expiration time.Time,
 ) (int, error) {
 	var count int
 	err := s.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
@@ -404,7 +407,7 @@ func (s LeaseStore) countLeases(
 		if err != nil {
 			return err
 		}
-		count = int(parser.MustBeDInt(values[0]))
+		count = int(tree.MustBeDInt(values[0]))
 		return nil
 	})
 	return count, err

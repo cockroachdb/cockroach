@@ -23,7 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -43,14 +43,14 @@ func TestTableReader(t *testing.T) {
 	//  |-----------------------------------------------------------------|
 	//  | rowId/10 | rowId%10 | rowId/10 + rowId%10 | IntToEnglish(rowId) |
 
-	aFn := func(row int) parser.Datum {
-		return parser.NewDInt(parser.DInt(row / 10))
+	aFn := func(row int) tree.Datum {
+		return tree.NewDInt(tree.DInt(row / 10))
 	}
-	bFn := func(row int) parser.Datum {
-		return parser.NewDInt(parser.DInt(row % 10))
+	bFn := func(row int) tree.Datum {
+		return tree.NewDInt(tree.DInt(row % 10))
 	}
-	sumFn := func(row int) parser.Datum {
-		return parser.NewDInt(parser.DInt(row/10 + row%10))
+	sumFn := func(row int) tree.Datum {
+		return tree.NewDInt(tree.DInt(row/10 + row%10))
 	}
 
 	sqlutils.CreateTable(t, sqlDB, "t",
@@ -117,7 +117,7 @@ func TestTableReader(t *testing.T) {
 		ts := c.spec
 		ts.Table = *td
 
-		evalCtx := parser.MakeTestingEvalContext()
+		evalCtx := tree.MakeTestingEvalContext()
 		defer evalCtx.Stop(context.Background())
 		flowCtx := FlowCtx{
 			EvalCtx:  evalCtx,
@@ -182,7 +182,7 @@ ALTER TABLE t TESTING_RELOCATE VALUES (ARRAY[2], 1), (ARRAY[1], 2), (ARRAY[3], 3
 	kvDB := tc.Server(0).KVClient().(*client.DB)
 	td := sqlbase.GetTableDescriptor(kvDB, "test", "t")
 
-	evalCtx := parser.MakeTestingEvalContext()
+	evalCtx := tree.MakeTestingEvalContext()
 	defer evalCtx.Stop(context.Background())
 	nodeID := tc.Server(0).NodeID()
 	flowCtx := FlowCtx{

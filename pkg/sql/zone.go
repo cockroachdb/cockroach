@@ -23,15 +23,15 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/pkg/errors"
 )
 
-func zoneSpecifierNotFoundError(zs parser.ZoneSpecifier) error {
+func zoneSpecifierNotFoundError(zs tree.ZoneSpecifier) error {
 	if zs.NamedZone != "" {
 		return pgerror.NewErrorf(
 			pgerror.CodeInvalidCatalogNameError, "zone %q does not exist", zs.NamedZone)
@@ -42,9 +42,7 @@ func zoneSpecifierNotFoundError(zs parser.ZoneSpecifier) error {
 	}
 }
 
-func resolveZone(
-	ctx context.Context, txn *client.Txn, zs *parser.ZoneSpecifier,
-) (sqlbase.ID, error) {
+func resolveZone(ctx context.Context, txn *client.Txn, zs *tree.ZoneSpecifier) (sqlbase.ID, error) {
 	errMissingKey := errors.New("missing key")
 	id, err := config.ResolveZoneSpecifier(zs,
 		func(parentID uint32, name string) (uint32, error) {
@@ -72,7 +70,7 @@ func resolveZone(
 }
 
 func resolveSubzone(
-	ctx context.Context, txn *client.Txn, zs *parser.ZoneSpecifier, targetID sqlbase.ID,
+	ctx context.Context, txn *client.Txn, zs *tree.ZoneSpecifier, targetID sqlbase.ID,
 ) (*sqlbase.TableDescriptor, *sqlbase.IndexDescriptor, string, error) {
 	if !zs.TargetsTable() {
 		return nil, nil, "", nil
@@ -92,7 +90,7 @@ func resolveSubzone(
 		if err != nil {
 			return nil, nil, "", err
 		}
-		zs.TableOrIndex.Index = parser.UnrestrictedName(index.Name)
+		zs.TableOrIndex.Index = tree.UnrestrictedName(index.Name)
 		return table, index, partitionName, nil
 	}
 	return table, nil, "", nil
@@ -110,8 +108,8 @@ func resolveSubzone(
 // TODO(benesch): Teach GetZoneConfig to return the specifier of the zone it
 // finds without impacting performance.
 func ascendZoneSpecifier(
-	zs parser.ZoneSpecifier, resolvedID, actualID uint32, actualSubzone *config.Subzone,
-) (parser.ZoneSpecifier, error) {
+	zs tree.ZoneSpecifier, resolvedID, actualID uint32, actualSubzone *config.Subzone,
+) (tree.ZoneSpecifier, error) {
 	if actualID == keys.RootNamespaceID {
 		// We had to traverse to the top of the hierarchy, so we're showing the
 		// default zone config.
@@ -121,7 +119,7 @@ func ascendZoneSpecifier(
 		// hierarchy, so we're showing the database zone config.
 		tn, err := zs.TableOrIndex.Table.Normalize()
 		if err != nil {
-			return parser.ZoneSpecifier{}, err
+			return tree.ZoneSpecifier{}, err
 		}
 		zs.Database = tn.DatabaseName
 	} else if actualSubzone == nil {
@@ -136,15 +134,15 @@ func ascendZoneSpecifier(
 }
 
 type setZoneConfigNode struct {
-	zoneSpecifier parser.ZoneSpecifier
-	yamlConfig    parser.TypedExpr
+	zoneSpecifier tree.ZoneSpecifier
+	yamlConfig    tree.TypedExpr
 
 	numAffected int
 }
 
-func (p *planner) SetZoneConfig(ctx context.Context, n *parser.SetZoneConfig) (planNode, error) {
+func (p *planner) SetZoneConfig(ctx context.Context, n *tree.SetZoneConfig) (planNode, error) {
 	yamlConfig, err := p.analyzeExpr(
-		ctx, n.YAMLConfig, nil, parser.IndexedVarHelper{}, types.String, false, "configure zone")
+		ctx, n.YAMLConfig, nil, tree.IndexedVarHelper{}, types.String, false, "configure zone")
 	if err != nil {
 		return nil, err
 	}
@@ -161,12 +159,12 @@ func (n *setZoneConfigNode) Start(params runParams) error {
 		return err
 	}
 	switch val := datum.(type) {
-	case *parser.DString:
+	case *tree.DString:
 		yamlConfig = (*string)(val)
-	case *parser.DBytes:
+	case *tree.DBytes:
 		yamlConfig = (*string)(val)
 	default:
-		if datum != parser.DNull {
+		if datum != tree.DNull {
 			return fmt.Errorf("zone config must be of type string or bytes, not %T", val)
 		}
 	}
@@ -274,12 +272,12 @@ func (n *setZoneConfigNode) Start(params runParams) error {
 
 func (n *setZoneConfigNode) Next(runParams) (bool, error) { return false, nil }
 func (*setZoneConfigNode) Close(context.Context)          {}
-func (n *setZoneConfigNode) Values() parser.Datums        { return nil }
+func (n *setZoneConfigNode) Values() tree.Datums          { return nil }
 func (n *setZoneConfigNode) FastPathResults() (int, bool) { return n.numAffected, true }
 
 type showZoneConfigNode struct {
 	optColumnsSlot
-	zoneSpecifier parser.ZoneSpecifier
+	zoneSpecifier tree.ZoneSpecifier
 
 	zoneID       uint32
 	cliSpecifier string
@@ -308,8 +306,8 @@ var showZoneConfigNodeColumns = sqlbase.ResultColumns{
 	},
 }
 
-func (p *planner) ShowZoneConfig(ctx context.Context, n *parser.ShowZoneConfig) (planNode, error) {
-	if n.ZoneSpecifier == (parser.ZoneSpecifier{}) {
+func (p *planner) ShowZoneConfig(ctx context.Context, n *tree.ShowZoneConfig) (planNode, error) {
+	if n.ZoneSpecifier == (tree.ZoneSpecifier{}) {
 		return p.delegateQuery(ctx, "SHOW ZONE CONFIGURATIONS", "TABLE crdb_internal.zones", nil, nil)
 	}
 	return &showZoneConfigNode{
@@ -369,12 +367,12 @@ func (n *showZoneConfigNode) Start(params runParams) error {
 	return err
 }
 
-func (n *showZoneConfigNode) Values() parser.Datums {
-	return parser.Datums{
-		parser.NewDInt(parser.DInt(n.zoneID)),
-		parser.NewDString(n.cliSpecifier),
-		parser.NewDBytes(parser.DBytes(n.yamlConfig)),
-		parser.NewDBytes(parser.DBytes(n.protoConfig)),
+func (n *showZoneConfigNode) Values() tree.Datums {
+	return tree.Datums{
+		tree.NewDInt(tree.DInt(n.zoneID)),
+		tree.NewDString(n.cliSpecifier),
+		tree.NewDBytes(tree.DBytes(n.yamlConfig)),
+		tree.NewDBytes(tree.DBytes(n.protoConfig)),
 	}
 }
 
