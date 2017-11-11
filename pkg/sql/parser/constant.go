@@ -359,6 +359,11 @@ func NewBytesStrVal(s string) *StrVal {
 	return &StrVal{s: s, bytesEsc: true}
 }
 
+// RawString retrieves the underlying string of the StrVal.
+func (expr *StrVal) RawString() string {
+	return expr.s
+}
+
 // Format implements the NodeFormatter interface.
 func (expr *StrVal) Format(buf *bytes.Buffer, f FmtFlags) {
 	if expr.bytesEsc {
