@@ -12,7 +12,7 @@
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
-package parser
+package tests
 
 import (
 	"go/constant"
@@ -27,6 +27,7 @@ import (
 
 	"github.com/cockroachdb/apd"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 )
@@ -358,7 +359,7 @@ type constantLiteralFoldingTestCase struct {
 
 func testConstantLiteralFolding(t *testing.T, testData []constantLiteralFoldingTestCase) {
 	for _, d := range testData {
-		expr, err := ParseExpr(d.expr)
+		expr, err := parser.ParseExpr(d.expr)
 		if err != nil {
 			t.Fatalf("%s: %v", d.expr, err)
 		}

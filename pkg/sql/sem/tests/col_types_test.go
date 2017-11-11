@@ -12,7 +12,7 @@
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
-package parser
+package tests
 
 import (
 	"fmt"
@@ -20,6 +20,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
@@ -72,7 +73,7 @@ func TestParseColumnType(t *testing.T) {
 	}
 	for i, d := range testData {
 		sql := fmt.Sprintf("CREATE TABLE a (b %s)", d.str)
-		stmt, err := ParseOne(sql)
+		stmt, err := parser.ParseOne(sql)
 		if err != nil {
 			t.Errorf("%d: %s", i, err)
 			continue
