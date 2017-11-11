@@ -47,11 +47,21 @@ statement ok
 RESET client_encoding; RESET NAMES
 
 query T
-SET "time zone" = 'Europe/Amsterdam'; SHOW TIME ZONE
+SET timezone = 'Europe/Amsterdam'; SHOW TIMEZONE
 ----
 Europe/Amsterdam
 
 query T
-RESET "time zone"; SHOW TIME ZONE
+RESET timezone; SHOW TIMEZONE
+----
+UTC
+
+query T
+SET time zone 'Europe/Amsterdam'; SHOW TIME ZONE
+----
+Europe/Amsterdam
+
+query T
+RESET time zone; SHOW TIME ZONE
 ----
 UTC
