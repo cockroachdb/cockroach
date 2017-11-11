@@ -12,12 +12,13 @@
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
-package parser
+package tests
 
 import (
 	"fmt"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 )
@@ -46,7 +47,7 @@ func TestNormalizeTableName(t *testing.T) {
 
 	for _, tc := range testCases {
 		tn, err := func() (*tree.TableName, error) {
-			stmt, err := ParseOne(fmt.Sprintf("ALTER TABLE %s RENAME TO x", tc.in))
+			stmt, err := parser.ParseOne(fmt.Sprintf("ALTER TABLE %s RENAME TO x", tc.in))
 			if err != nil {
 				return nil, err
 			}

@@ -12,7 +12,7 @@
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
-package parser
+package tests
 
 import (
 	"math"
@@ -21,12 +21,13 @@ import (
 
 	"golang.org/x/net/context"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 )
 
 func prepareExpr(t *testing.T, datumExpr string) tree.TypedExpr {
-	expr, err := ParseExpr(datumExpr)
+	expr, err := parser.ParseExpr(datumExpr)
 	if err != nil {
 		t.Fatalf("%s: %v", datumExpr, err)
 	}
