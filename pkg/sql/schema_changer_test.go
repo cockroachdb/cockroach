@@ -2689,3 +2689,53 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 		t.Fatalf("columns %q, %q in descriptor", k, x)
 	}
 }
+
+// FIXME(joey): Document.
+func TestSchemaChangerCancel(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	params, _ := createTestServerParams()
+	params.Knobs = base.TestingKnobs{
+		// Do not complete schema changes.
+		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
+			SyncFilter: func(tscc sql.TestingSchemaChangerCollection) {
+				tscc.ClearSchemaChangers()
+			},
+			AsyncExecNotification: asyncSchemaChangerDisabled,
+		},
+	}
+
+	s, sqlDB, _ := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(context.TODO())
+
+	if _, err := sqlDB.Exec(`
+CREATE DATABASE t;
+CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
+`); err != nil {
+		t.Fatal(err)
+	}
+
+	// Bulk insert.
+	const maxValue = 5000
+	if err := bulkInsertIntoTable(sqlDB, maxValue); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := sqlDB.Exec("CREATE INDEX ON t.test (v)"); err != nil {
+		t.Fatal(err)
+	}
+
+	var id int64
+	if err := sqlDB.QueryRow(
+		`SELECT id FROM crdb_internal.jobs ORDER BY created DESC LIMIT 1`,
+	).Scan(&id); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := sqlDB.Exec(`CANCEL JOB $1`, id); err != nil {
+		t.Fatal(err)
+	}
+
+	// FIXME(joey): Assert that the schema change has been reverted,
+	// somehow. Possibly by setting the knob to make schema changes happen
+	// "immediately", possibly also just by checking some state.
+}

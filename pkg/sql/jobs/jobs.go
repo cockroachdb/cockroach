@@ -205,8 +205,11 @@ func (j *Job) Progressed(
 func isControllable(p *Payload, op string) error {
 	switch typ := p.Type(); typ {
 	case TypeSchemaChange:
-		return pgerror.UnimplementedWithIssueErrorf(
-			16018, "schema change jobs do not support %s", op)
+		if op != "CANCEL" {
+			return pgerror.UnimplementedWithIssueErrorf(
+				16018, "schema change jobs do not support %s", op)
+		}
+		return nil
 	case TypeImport:
 		return pgerror.UnimplementedWithIssueErrorf(
 			18139, "import jobs do not support %s", op)
@@ -277,7 +280,7 @@ func (j *Job) Canceled(ctx context.Context) error {
 			return false, fmt.Errorf("job with status %s cannot be canceled", *status)
 		}
 		*status = StatusCanceled
-		if onfail, ok := payload.Details.(onFailer); ok {
+		if onfail, ok := payload.Details.(onFailer); ok && payload.Lease != nil {
 			if err := onfail.onFail(ctx, txn, j); err != nil {
 				return false, err
 			}
@@ -324,9 +327,15 @@ type onFailer interface {
 }
 
 var _ onFailer = &Payload_Restore{}
+var _ onFailer = &Payload_SchemaChange{}
 
 // RestoreFailHook is the func that is run when a RESTORE job has failed.
 var RestoreFailHook func(context.Context, *client.Txn, *cluster.Settings, *RestoreDetails) error
+
+// CancelSchemaChangeHook is the func that is run when a schema change job is canceled.
+var CancelSchemaChangeHook func(
+	context.Context, *client.Txn, *Job, *SchemaChangeDetails,
+) error
 
 func (r *Payload_Restore) onFail(ctx context.Context, txn *client.Txn, job *Job) error {
 	// This is set in the CCL package if RESTOREs are enabled, and so should
@@ -334,6 +343,16 @@ func (r *Payload_Restore) onFail(ctx context.Context, txn *client.Txn, job *Job)
 	// the CCL package, so we do need the test.
 	if RestoreFailHook != nil {
 		return RestoreFailHook(ctx, txn, job.registry.settings, r.Restore)
+	}
+	return nil
+}
+
+func (r *Payload_SchemaChange) onFail(ctx context.Context, txn *client.Txn, job *Job) error {
+	// This is set in the SQL package so should always be non-nil. However
+	// the jobs tests exercise this without importing the SQL package, so
+	// we do need the test. This is separate as it is otherwise a circular dependancy.
+	if CancelSchemaChangeHook != nil {
+		return CancelSchemaChangeHook(ctx, txn, job, r.SchemaChange)
 	}
 	return nil
 }

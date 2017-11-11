@@ -104,7 +104,16 @@ func NewInvalidSchemaDefinitionError(err error) error {
 func IsPermanentSchemaChangeError(err error) bool {
 	return errHasCode(err, pgerror.CodeNotNullViolationError) ||
 		errHasCode(err, pgerror.CodeUniqueViolationError) ||
-		errHasCode(err, pgerror.CodeInvalidSchemaDefinitionError)
+		errHasCode(err, pgerror.CodeInvalidSchemaDefinitionError) ||
+		errHasCode(err, pgerror.CodeQueryCanceledError)
+}
+
+// IsSchemaChangeCancelError returns true if the error is caused by
+// canceling a schema change. FIXME(joey): The use of
+// CodeQueryCanceledError is amgibious with others results. This may
+// need to be a custom error code.
+func IsSchemaChangeCancelError(err error) bool {
+	return errHasCode(err, pgerror.CodeQueryCanceledError)
 }
 
 // NewUndefinedDatabaseError creates an error that represents a missing database.
