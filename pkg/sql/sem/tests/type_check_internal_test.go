@@ -12,7 +12,7 @@
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
-package parser
+package tests
 
 import (
 	"go/constant"
@@ -23,6 +23,7 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -31,7 +32,7 @@ import (
 func BenchmarkTypeCheck(b *testing.B) {
 	// random example from TPCC
 	sql := `CASE 1 >= $1 + 10 WHEN true THEN 1-$1 ELSE (1-$1)+91 END`
-	expr, err := ParseExpr(sql)
+	expr, err := parser.ParseExpr(sql)
 	if err != nil {
 		b.Fatalf("%s: %v", expr, err)
 	}
@@ -56,7 +57,7 @@ func TestTypeCheckNormalize(t *testing.T) {
 	}
 	for _, d := range testData {
 		t.Run(d.expr, func(t *testing.T) {
-			expr, err := ParseExpr(d.expr)
+			expr, err := parser.ParseExpr(d.expr)
 			if err != nil {
 				t.Fatal(err)
 			}
