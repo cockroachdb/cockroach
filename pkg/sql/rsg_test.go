@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/rsg"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -44,7 +45,7 @@ var (
 	flagRSGGoRoutines = flag.Int("rsg-routines", 1, "number of Go routines executing random statements in each RSG test")
 )
 
-func parseStatementList(sql string) (parser.StatementList, error) {
+func parseStatementList(sql string) (tree.StatementList, error) {
 	var p parser.Parser
 	return p.Parse(sql)
 }
@@ -55,12 +56,12 @@ func verifyFormat(sql string) error {
 		// Cannot serialize a statement list without parsing it.
 		return nil
 	}
-	formattedSQL := parser.AsStringWithFlags(stmts, parser.FmtSimpleWithPasswords)
+	formattedSQL := tree.AsStringWithFlags(stmts, tree.FmtSimpleWithPasswords)
 	formattedStmts, err := parseStatementList(formattedSQL)
 	if err != nil {
 		return errors.Wrapf(err, "cannot parse output of Format: sql=%q, formattedSQL=%q", sql, formattedSQL)
 	}
-	formattedFormattedSQL := parser.AsStringWithFlags(formattedStmts, parser.FmtSimpleWithPasswords)
+	formattedFormattedSQL := tree.AsStringWithFlags(formattedStmts, tree.FmtSimpleWithPasswords)
 	if formattedSQL != formattedFormattedSQL {
 		return errors.Errorf("Parse followed by Format is not idempotent: %q -> %q != %q", sql, formattedSQL, formattedFormattedSQL)
 	}
@@ -134,7 +135,7 @@ func TestRandomSyntaxSelect(t *testing.T) {
 
 type namedBuiltin struct {
 	name    string
-	builtin parser.Builtin
+	builtin tree.Builtin
 }
 
 func TestRandomSyntaxFunctions(t *testing.T) {
@@ -165,11 +166,11 @@ func TestRandomSyntaxFunctions(t *testing.T) {
 		nb := <-namedBuiltinChan
 		var args []string
 		switch ft := nb.builtin.Types.(type) {
-		case parser.ArgTypes:
+		case tree.ArgTypes:
 			for _, arg := range ft {
 				args = append(args, r.GenerateRandomArg(arg.Typ))
 			}
-		case parser.HomogeneousType:
+		case tree.HomogeneousType:
 			for i := r.Intn(5); i > 0; i-- {
 				var typ types.T
 				switch r.Intn(4) {
@@ -184,7 +185,7 @@ func TestRandomSyntaxFunctions(t *testing.T) {
 				}
 				args = append(args, r.GenerateRandomArg(typ))
 			}
-		case parser.VariadicType:
+		case tree.VariadicType:
 			for i := r.Intn(5); i > 0; i-- {
 				args = append(args, r.GenerateRandomArg(ft.Typ))
 			}

@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	_ "github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	_ "github.com/cockroachdb/cockroach/pkg/util/log" // for flags
 )
@@ -1263,7 +1264,7 @@ func TestParse2(t *testing.T) {
 			t.Errorf("%s: expected success, but found %s", d.sql, err)
 			continue
 		}
-		s := parser.AsStringWithFlags(stmts, parser.FmtSimpleWithPasswords)
+		s := tree.AsStringWithFlags(stmts, tree.FmtSimpleWithPasswords)
 		if d.expected != s {
 			t.Errorf("%s: expected %s, but found (%d statements): %s", d.sql, d.expected, len(stmts), s)
 		}
@@ -1294,7 +1295,7 @@ func TestParseTree(t *testing.T) {
 			t.Errorf("%s: expected success, but found %s", d.sql, err)
 			continue
 		}
-		s := parser.AsStringWithFlags(stmts, parser.FmtAlwaysGroupExprs)
+		s := tree.AsStringWithFlags(stmts, tree.FmtAlwaysGroupExprs)
 		if d.expected != s {
 			t.Errorf("%s: expected %s, but found (%d statements): %s", d.sql, d.expected, len(stmts), s)
 		}
@@ -1698,145 +1699,145 @@ func TestParsePrecedence(t *testing.T) {
 	//   9: AND
 	//  10: OR
 
-	unary := func(op parser.UnaryOperator, expr parser.Expr) parser.Expr {
-		return &parser.UnaryExpr{Operator: op, Expr: expr}
+	unary := func(op tree.UnaryOperator, expr tree.Expr) tree.Expr {
+		return &tree.UnaryExpr{Operator: op, Expr: expr}
 	}
-	binary := func(op parser.BinaryOperator, left, right parser.Expr) parser.Expr {
-		return &parser.BinaryExpr{Operator: op, Left: left, Right: right}
+	binary := func(op tree.BinaryOperator, left, right tree.Expr) tree.Expr {
+		return &tree.BinaryExpr{Operator: op, Left: left, Right: right}
 	}
-	cmp := func(op parser.ComparisonOperator, left, right parser.Expr) parser.Expr {
-		return &parser.ComparisonExpr{Operator: op, Left: left, Right: right}
+	cmp := func(op tree.ComparisonOperator, left, right tree.Expr) tree.Expr {
+		return &tree.ComparisonExpr{Operator: op, Left: left, Right: right}
 	}
-	not := func(expr parser.Expr) parser.Expr {
-		return &parser.NotExpr{Expr: expr}
+	not := func(expr tree.Expr) tree.Expr {
+		return &tree.NotExpr{Expr: expr}
 	}
-	and := func(left, right parser.Expr) parser.Expr {
-		return &parser.AndExpr{Left: left, Right: right}
+	and := func(left, right tree.Expr) tree.Expr {
+		return &tree.AndExpr{Left: left, Right: right}
 	}
-	or := func(left, right parser.Expr) parser.Expr {
-		return &parser.OrExpr{Left: left, Right: right}
+	or := func(left, right tree.Expr) tree.Expr {
+		return &tree.OrExpr{Left: left, Right: right}
 	}
-	concat := func(left, right parser.Expr) parser.Expr {
-		return &parser.BinaryExpr{Operator: parser.Concat, Left: left, Right: right}
+	concat := func(left, right tree.Expr) tree.Expr {
+		return &tree.BinaryExpr{Operator: tree.Concat, Left: left, Right: right}
 	}
-	regmatch := func(left, right parser.Expr) parser.Expr {
-		return &parser.ComparisonExpr{Operator: parser.RegMatch, Left: left, Right: right}
+	regmatch := func(left, right tree.Expr) tree.Expr {
+		return &tree.ComparisonExpr{Operator: tree.RegMatch, Left: left, Right: right}
 	}
-	regimatch := func(left, right parser.Expr) parser.Expr {
-		return &parser.ComparisonExpr{Operator: parser.RegIMatch, Left: left, Right: right}
+	regimatch := func(left, right tree.Expr) tree.Expr {
+		return &tree.ComparisonExpr{Operator: tree.RegIMatch, Left: left, Right: right}
 	}
 
-	one := &parser.NumVal{Value: constant.MakeInt64(1), OrigString: "1"}
-	two := &parser.NumVal{Value: constant.MakeInt64(2), OrigString: "2"}
-	three := &parser.NumVal{Value: constant.MakeInt64(3), OrigString: "3"}
-	a := parser.NewStrVal("a")
-	b := parser.NewStrVal("b")
-	c := parser.NewStrVal("c")
+	one := &tree.NumVal{Value: constant.MakeInt64(1), OrigString: "1"}
+	two := &tree.NumVal{Value: constant.MakeInt64(2), OrigString: "2"}
+	three := &tree.NumVal{Value: constant.MakeInt64(3), OrigString: "3"}
+	a := tree.NewStrVal("a")
+	b := tree.NewStrVal("b")
+	c := tree.NewStrVal("c")
 
 	testData := []struct {
 		sql      string
-		expected parser.Expr
+		expected tree.Expr
 	}{
 		// Unary plus and complement.
-		{`~-1`, unary(parser.UnaryComplement, unary(parser.UnaryMinus, one))},
-		{`-~1`, unary(parser.UnaryMinus, unary(parser.UnaryComplement, one))},
+		{`~-1`, unary(tree.UnaryComplement, unary(tree.UnaryMinus, one))},
+		{`-~1`, unary(tree.UnaryMinus, unary(tree.UnaryComplement, one))},
 
 		// Mul, div, floordiv, mod combined with higher precedence.
-		{`-1*2`, binary(parser.Mult, unary(parser.UnaryMinus, one), two)},
-		{`1*-2`, binary(parser.Mult, one, unary(parser.UnaryMinus, two))},
-		{`-1/2`, binary(parser.Div, unary(parser.UnaryMinus, one), two)},
-		{`1/-2`, binary(parser.Div, one, unary(parser.UnaryMinus, two))},
-		{`-1//2`, binary(parser.FloorDiv, unary(parser.UnaryMinus, one), two)},
-		{`1//-2`, binary(parser.FloorDiv, one, unary(parser.UnaryMinus, two))},
-		{`-1%2`, binary(parser.Mod, unary(parser.UnaryMinus, one), two)},
-		{`1%-2`, binary(parser.Mod, one, unary(parser.UnaryMinus, two))},
+		{`-1*2`, binary(tree.Mult, unary(tree.UnaryMinus, one), two)},
+		{`1*-2`, binary(tree.Mult, one, unary(tree.UnaryMinus, two))},
+		{`-1/2`, binary(tree.Div, unary(tree.UnaryMinus, one), two)},
+		{`1/-2`, binary(tree.Div, one, unary(tree.UnaryMinus, two))},
+		{`-1//2`, binary(tree.FloorDiv, unary(tree.UnaryMinus, one), two)},
+		{`1//-2`, binary(tree.FloorDiv, one, unary(tree.UnaryMinus, two))},
+		{`-1%2`, binary(tree.Mod, unary(tree.UnaryMinus, one), two)},
+		{`1%-2`, binary(tree.Mod, one, unary(tree.UnaryMinus, two))},
 
 		// Mul, div, floordiv, mod combined with self (left associative).
-		{`1*2*3`, binary(parser.Mult, binary(parser.Mult, one, two), three)},
-		{`1*2/3`, binary(parser.Div, binary(parser.Mult, one, two), three)},
-		{`1/2*3`, binary(parser.Mult, binary(parser.Div, one, two), three)},
-		{`1*2//3`, binary(parser.FloorDiv, binary(parser.Mult, one, two), three)},
-		{`1//2*3`, binary(parser.Mult, binary(parser.FloorDiv, one, two), three)},
-		{`1*2%3`, binary(parser.Mod, binary(parser.Mult, one, two), three)},
-		{`1%2*3`, binary(parser.Mult, binary(parser.Mod, one, two), three)},
-		{`1/2/3`, binary(parser.Div, binary(parser.Div, one, two), three)},
-		{`1/2//3`, binary(parser.FloorDiv, binary(parser.Div, one, two), three)},
-		{`1//2/3`, binary(parser.Div, binary(parser.FloorDiv, one, two), three)},
-		{`1/2%3`, binary(parser.Mod, binary(parser.Div, one, two), three)},
-		{`1%2/3`, binary(parser.Div, binary(parser.Mod, one, two), three)},
-		{`1//2//3`, binary(parser.FloorDiv, binary(parser.FloorDiv, one, two), three)},
-		{`1//2%3`, binary(parser.Mod, binary(parser.FloorDiv, one, two), three)},
-		{`1%2//3`, binary(parser.FloorDiv, binary(parser.Mod, one, two), three)},
-		{`1%2%3`, binary(parser.Mod, binary(parser.Mod, one, two), three)},
+		{`1*2*3`, binary(tree.Mult, binary(tree.Mult, one, two), three)},
+		{`1*2/3`, binary(tree.Div, binary(tree.Mult, one, two), three)},
+		{`1/2*3`, binary(tree.Mult, binary(tree.Div, one, two), three)},
+		{`1*2//3`, binary(tree.FloorDiv, binary(tree.Mult, one, two), three)},
+		{`1//2*3`, binary(tree.Mult, binary(tree.FloorDiv, one, two), three)},
+		{`1*2%3`, binary(tree.Mod, binary(tree.Mult, one, two), three)},
+		{`1%2*3`, binary(tree.Mult, binary(tree.Mod, one, two), three)},
+		{`1/2/3`, binary(tree.Div, binary(tree.Div, one, two), three)},
+		{`1/2//3`, binary(tree.FloorDiv, binary(tree.Div, one, two), three)},
+		{`1//2/3`, binary(tree.Div, binary(tree.FloorDiv, one, two), three)},
+		{`1/2%3`, binary(tree.Mod, binary(tree.Div, one, two), three)},
+		{`1%2/3`, binary(tree.Div, binary(tree.Mod, one, two), three)},
+		{`1//2//3`, binary(tree.FloorDiv, binary(tree.FloorDiv, one, two), three)},
+		{`1//2%3`, binary(tree.Mod, binary(tree.FloorDiv, one, two), three)},
+		{`1%2//3`, binary(tree.FloorDiv, binary(tree.Mod, one, two), three)},
+		{`1%2%3`, binary(tree.Mod, binary(tree.Mod, one, two), three)},
 
 		// Binary plus and minus combined with higher precedence.
-		{`1*2+3`, binary(parser.Plus, binary(parser.Mult, one, two), three)},
-		{`1+2*3`, binary(parser.Plus, one, binary(parser.Mult, two, three))},
-		{`1*2-3`, binary(parser.Minus, binary(parser.Mult, one, two), three)},
-		{`1-2*3`, binary(parser.Minus, one, binary(parser.Mult, two, three))},
+		{`1*2+3`, binary(tree.Plus, binary(tree.Mult, one, two), three)},
+		{`1+2*3`, binary(tree.Plus, one, binary(tree.Mult, two, three))},
+		{`1*2-3`, binary(tree.Minus, binary(tree.Mult, one, two), three)},
+		{`1-2*3`, binary(tree.Minus, one, binary(tree.Mult, two, three))},
 
 		// Binary plus and minus combined with self (left associative).
-		{`1+2-3`, binary(parser.Minus, binary(parser.Plus, one, two), three)},
-		{`1-2+3`, binary(parser.Plus, binary(parser.Minus, one, two), three)},
+		{`1+2-3`, binary(tree.Minus, binary(tree.Plus, one, two), three)},
+		{`1-2+3`, binary(tree.Plus, binary(tree.Minus, one, two), three)},
 
 		// Left and right shift combined with higher precedence.
-		{`1<<2+3`, binary(parser.LShift, one, binary(parser.Plus, two, three))},
-		{`1+2<<3`, binary(parser.LShift, binary(parser.Plus, one, two), three)},
-		{`1>>2+3`, binary(parser.RShift, one, binary(parser.Plus, two, three))},
-		{`1+2>>3`, binary(parser.RShift, binary(parser.Plus, one, two), three)},
+		{`1<<2+3`, binary(tree.LShift, one, binary(tree.Plus, two, three))},
+		{`1+2<<3`, binary(tree.LShift, binary(tree.Plus, one, two), three)},
+		{`1>>2+3`, binary(tree.RShift, one, binary(tree.Plus, two, three))},
+		{`1+2>>3`, binary(tree.RShift, binary(tree.Plus, one, two), three)},
 
 		// Left and right shift combined with self (left associative).
-		{`1<<2<<3`, binary(parser.LShift, binary(parser.LShift, one, two), three)},
-		{`1<<2>>3`, binary(parser.RShift, binary(parser.LShift, one, two), three)},
-		{`1>>2<<3`, binary(parser.LShift, binary(parser.RShift, one, two), three)},
-		{`1>>2>>3`, binary(parser.RShift, binary(parser.RShift, one, two), three)},
+		{`1<<2<<3`, binary(tree.LShift, binary(tree.LShift, one, two), three)},
+		{`1<<2>>3`, binary(tree.RShift, binary(tree.LShift, one, two), three)},
+		{`1>>2<<3`, binary(tree.LShift, binary(tree.RShift, one, two), three)},
+		{`1>>2>>3`, binary(tree.RShift, binary(tree.RShift, one, two), three)},
 
 		// Power combined with lower precedence.
-		{`1*2^3`, binary(parser.Mult, one, binary(parser.Pow, two, three))},
-		{`1^2*3`, binary(parser.Mult, binary(parser.Pow, one, two), three)},
+		{`1*2^3`, binary(tree.Mult, one, binary(tree.Pow, two, three))},
+		{`1^2*3`, binary(tree.Mult, binary(tree.Pow, one, two), three)},
 
 		// Bit-and combined with higher precedence.
-		{`1&2<<3`, binary(parser.Bitand, one, binary(parser.LShift, two, three))},
-		{`1<<2&3`, binary(parser.Bitand, binary(parser.LShift, one, two), three)},
+		{`1&2<<3`, binary(tree.Bitand, one, binary(tree.LShift, two, three))},
+		{`1<<2&3`, binary(tree.Bitand, binary(tree.LShift, one, two), three)},
 
 		// Bit-and combined with self (left associative)
-		{`1&2&3`, binary(parser.Bitand, binary(parser.Bitand, one, two), three)},
+		{`1&2&3`, binary(tree.Bitand, binary(tree.Bitand, one, two), three)},
 
 		// Bit-xor combined with higher precedence.
-		{`1#2&3`, binary(parser.Bitxor, one, binary(parser.Bitand, two, three))},
-		{`1&2#3`, binary(parser.Bitxor, binary(parser.Bitand, one, two), three)},
+		{`1#2&3`, binary(tree.Bitxor, one, binary(tree.Bitand, two, three))},
+		{`1&2#3`, binary(tree.Bitxor, binary(tree.Bitand, one, two), three)},
 
 		// Bit-xor combined with self (left associative)
-		{`1#2#3`, binary(parser.Bitxor, binary(parser.Bitxor, one, two), three)},
+		{`1#2#3`, binary(tree.Bitxor, binary(tree.Bitxor, one, two), three)},
 
 		// Bit-or combined with higher precedence.
-		{`1|2#3`, binary(parser.Bitor, one, binary(parser.Bitxor, two, three))},
-		{`1#2|3`, binary(parser.Bitor, binary(parser.Bitxor, one, two), three)},
+		{`1|2#3`, binary(tree.Bitor, one, binary(tree.Bitxor, two, three))},
+		{`1#2|3`, binary(tree.Bitor, binary(tree.Bitxor, one, two), three)},
 
 		// Bit-or combined with self (left associative)
-		{`1|2|3`, binary(parser.Bitor, binary(parser.Bitor, one, two), three)},
+		{`1|2|3`, binary(tree.Bitor, binary(tree.Bitor, one, two), three)},
 
 		// Equals, not-equals, greater-than, greater-than equals, less-than and
 		// less-than equals combined with higher precedence.
-		{`1 = 2|3`, cmp(parser.EQ, one, binary(parser.Bitor, two, three))},
-		{`1|2 = 3`, cmp(parser.EQ, binary(parser.Bitor, one, two), three)},
-		{`1 != 2|3`, cmp(parser.NE, one, binary(parser.Bitor, two, three))},
-		{`1|2 != 3`, cmp(parser.NE, binary(parser.Bitor, one, two), three)},
-		{`1 > 2|3`, cmp(parser.GT, one, binary(parser.Bitor, two, three))},
-		{`1|2 > 3`, cmp(parser.GT, binary(parser.Bitor, one, two), three)},
-		{`1 >= 2|3`, cmp(parser.GE, one, binary(parser.Bitor, two, three))},
-		{`1|2 >= 3`, cmp(parser.GE, binary(parser.Bitor, one, two), three)},
-		{`1 < 2|3`, cmp(parser.LT, one, binary(parser.Bitor, two, three))},
-		{`1|2 < 3`, cmp(parser.LT, binary(parser.Bitor, one, two), three)},
-		{`1 <= 2|3`, cmp(parser.LE, one, binary(parser.Bitor, two, three))},
-		{`1|2 <= 3`, cmp(parser.LE, binary(parser.Bitor, one, two), three)},
+		{`1 = 2|3`, cmp(tree.EQ, one, binary(tree.Bitor, two, three))},
+		{`1|2 = 3`, cmp(tree.EQ, binary(tree.Bitor, one, two), three)},
+		{`1 != 2|3`, cmp(tree.NE, one, binary(tree.Bitor, two, three))},
+		{`1|2 != 3`, cmp(tree.NE, binary(tree.Bitor, one, two), three)},
+		{`1 > 2|3`, cmp(tree.GT, one, binary(tree.Bitor, two, three))},
+		{`1|2 > 3`, cmp(tree.GT, binary(tree.Bitor, one, two), three)},
+		{`1 >= 2|3`, cmp(tree.GE, one, binary(tree.Bitor, two, three))},
+		{`1|2 >= 3`, cmp(tree.GE, binary(tree.Bitor, one, two), three)},
+		{`1 < 2|3`, cmp(tree.LT, one, binary(tree.Bitor, two, three))},
+		{`1|2 < 3`, cmp(tree.LT, binary(tree.Bitor, one, two), three)},
+		{`1 <= 2|3`, cmp(tree.LE, one, binary(tree.Bitor, two, three))},
+		{`1|2 <= 3`, cmp(tree.LE, binary(tree.Bitor, one, two), three)},
 
 		// NOT combined with higher precedence.
-		{`NOT 1 = 2`, not(cmp(parser.EQ, one, two))},
-		{`NOT 1 = NOT 2 = 3`, not(cmp(parser.EQ, one, not(cmp(parser.EQ, two, three))))},
+		{`NOT 1 = 2`, not(cmp(tree.EQ, one, two))},
+		{`NOT 1 = NOT 2 = 3`, not(cmp(tree.EQ, one, not(cmp(tree.EQ, two, three))))},
 
 		// NOT combined with self.
-		{`NOT NOT 1 = 2`, not(not(cmp(parser.EQ, one, two)))},
+		{`NOT NOT 1 = 2`, not(not(cmp(tree.EQ, one, two)))},
 
 		// AND combined with higher precedence.
 		{`NOT 1 AND 2`, and(not(one), two)},
@@ -1857,7 +1858,7 @@ func TestParsePrecedence(t *testing.T) {
 		{`'a' || 'b' ~* 'c'`, regimatch(concat(a, b), c)},
 
 		// Unary ~ should have highest precedence.
-		{`~1+2`, binary(parser.Plus, unary(parser.UnaryComplement, one), two)},
+		{`~1+2`, binary(tree.Plus, unary(tree.UnaryComplement, one), two)},
 	}
 	for _, d := range testData {
 		expr, err := parser.ParseExpr(d.sql)
@@ -1884,7 +1885,7 @@ func BenchmarkParse(b *testing.B) {
 		if len(st) != 5 {
 			b.Fatal("parsed wrong number of statements: ", len(st))
 		}
-		if _, ok := st[1].(*parser.Update); !ok {
+		if _, ok := st[1].(*tree.Update); !ok {
 			b.Fatalf("unexpected statement type: %T", st[1])
 		}
 	}

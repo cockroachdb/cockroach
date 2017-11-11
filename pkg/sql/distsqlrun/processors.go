@@ -20,7 +20,7 @@ import (
 
 	"golang.org/x/net/context"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -82,7 +82,7 @@ type ProcOutputHelper struct {
 func (h *ProcOutputHelper) Init(
 	post *PostProcessSpec,
 	types []sqlbase.ColumnType,
-	evalCtx *parser.EvalContext,
+	evalCtx *tree.EvalContext,
 	output RowReceiver,
 ) error {
 	if !post.Projection && len(post.OutputColumns) > 0 {

@@ -22,18 +22,18 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/jobs"
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/util/uint128"
 )
 
 type controlJobNode struct {
 	p             *planner
-	jobID         parser.TypedExpr
+	jobID         tree.TypedExpr
 	desiredStatus jobs.Status
 }
 
-func (*controlJobNode) Values() parser.Datums { return nil }
+func (*controlJobNode) Values() tree.Datums { return nil }
 
 func (n *controlJobNode) Start(params runParams) error {
 	jobIDDatum, err := n.jobID.Eval(&n.p.evalCtx)
@@ -41,7 +41,7 @@ func (n *controlJobNode) Start(params runParams) error {
 		return err
 	}
 
-	jobID, ok := parser.AsDInt(jobIDDatum)
+	jobID, ok := tree.AsDInt(jobIDDatum)
 	if !ok {
 		return fmt.Errorf("%s is not a valid job ID", jobIDDatum)
 	}
@@ -69,12 +69,12 @@ func (n *controlJobNode) Next(runParams) (bool, error) {
 	return false, nil
 }
 
-func (p *planner) PauseJob(ctx context.Context, n *parser.PauseJob) (planNode, error) {
+func (p *planner) PauseJob(ctx context.Context, n *tree.PauseJob) (planNode, error) {
 	typedJobID, err := p.analyzeExpr(
 		ctx,
 		n.ID,
 		nil,
-		parser.IndexedVarHelper{},
+		tree.IndexedVarHelper{},
 		types.Int,
 		true, /* requireType */
 		"PAUSE JOB",
@@ -90,12 +90,12 @@ func (p *planner) PauseJob(ctx context.Context, n *parser.PauseJob) (planNode, e
 	}, nil
 }
 
-func (p *planner) ResumeJob(ctx context.Context, n *parser.ResumeJob) (planNode, error) {
+func (p *planner) ResumeJob(ctx context.Context, n *tree.ResumeJob) (planNode, error) {
 	typedJobID, err := p.analyzeExpr(
 		ctx,
 		n.ID,
 		nil,
-		parser.IndexedVarHelper{},
+		tree.IndexedVarHelper{},
 		types.Int,
 		true, /* requireType */
 		"RESUME JOB",
@@ -111,12 +111,12 @@ func (p *planner) ResumeJob(ctx context.Context, n *parser.ResumeJob) (planNode,
 	}, nil
 }
 
-func (p *planner) CancelJob(ctx context.Context, n *parser.CancelJob) (planNode, error) {
+func (p *planner) CancelJob(ctx context.Context, n *tree.CancelJob) (planNode, error) {
 	typedJobID, err := p.analyzeExpr(
 		ctx,
 		n.ID,
 		nil,
-		parser.IndexedVarHelper{},
+		tree.IndexedVarHelper{},
 		types.Int,
 		true, /* requireType */
 		"CANCEL JOB",
@@ -134,10 +134,10 @@ func (p *planner) CancelJob(ctx context.Context, n *parser.CancelJob) (planNode,
 
 type cancelQueryNode struct {
 	p       *planner
-	queryID parser.TypedExpr
+	queryID tree.TypedExpr
 }
 
-func (*cancelQueryNode) Values() parser.Datums { return nil }
+func (*cancelQueryNode) Values() tree.Datums { return nil }
 
 func (n *cancelQueryNode) Start(params runParams) error {
 	statusServer := n.p.session.execCfg.StatusServer
@@ -147,7 +147,7 @@ func (n *cancelQueryNode) Start(params runParams) error {
 		return err
 	}
 
-	queryIDString := parser.AsStringWithFlags(queryIDDatum, parser.FmtBareStrings)
+	queryIDString := tree.AsStringWithFlags(queryIDDatum, tree.FmtBareStrings)
 	queryID, err := uint128.FromString(queryIDString)
 	if err != nil {
 		return errors.Wrapf(err, "invalid query ID '%s'", queryIDString)
@@ -180,13 +180,13 @@ func (n *cancelQueryNode) Next(runParams) (bool, error) {
 	return false, nil
 }
 
-func (p *planner) CancelQuery(ctx context.Context, n *parser.CancelQuery) (planNode, error) {
+func (p *planner) CancelQuery(ctx context.Context, n *tree.CancelQuery) (planNode, error) {
 
 	typedQueryID, err := p.analyzeExpr(
 		ctx,
 		n.ID,
 		nil,
-		parser.IndexedVarHelper{},
+		tree.IndexedVarHelper{},
 		types.String,
 		true, /* requireType */
 		"CANCEL QUERY",

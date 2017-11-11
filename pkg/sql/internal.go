@@ -21,7 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 )
@@ -52,7 +52,7 @@ func (ie InternalExecutor) ExecuteStatementInTransaction(
 // executed as the root user.
 func (ie InternalExecutor) QueryRowInTransaction(
 	ctx context.Context, opName string, txn *client.Txn, statement string, qargs ...interface{},
-) (parser.Datums, error) {
+) (tree.Datums, error) {
 	p := makeInternalPlanner(opName, txn, security.RootUser, ie.LeaseManager.memMetrics)
 	defer finishInternalPlanner(p)
 	ie.initSession(p)
@@ -64,7 +64,7 @@ func (ie InternalExecutor) QueryRowInTransaction(
 // executed as the root user.
 func (ie InternalExecutor) QueryRowsInTransaction(
 	ctx context.Context, opName string, txn *client.Txn, statement string, qargs ...interface{},
-) ([]parser.Datums, error) {
+) ([]tree.Datums, error) {
 	p := makeInternalPlanner(opName, txn, security.RootUser, ie.LeaseManager.memMetrics)
 	defer finishInternalPlanner(p)
 	ie.initSession(p)
@@ -80,7 +80,7 @@ func (ie InternalExecutor) GetTableSpan(
 	defer finishInternalPlanner(p)
 	ie.initSession(p)
 
-	tn := parser.TableName{DatabaseName: parser.Name(dbName), TableName: parser.Name(tableName)}
+	tn := tree.TableName{DatabaseName: tree.Name(dbName), TableName: tree.Name(tableName)}
 	tableID, err := getTableID(ctx, p, &tn)
 	if err != nil {
 		return roachpb.Span{}, err
@@ -99,7 +99,7 @@ func (ie InternalExecutor) initSession(p *planner) {
 }
 
 // getTableID retrieves the table ID for the specified table.
-func getTableID(ctx context.Context, p *planner, tn *parser.TableName) (sqlbase.ID, error) {
+func getTableID(ctx context.Context, p *planner, tn *tree.TableName) (sqlbase.ID, error) {
 	if err := tn.QualifyWithDatabase(p.session.Database); err != nil {
 		return 0, err
 	}

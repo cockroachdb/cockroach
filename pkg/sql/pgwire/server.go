@@ -24,8 +24,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/sql"
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -399,7 +399,7 @@ func (s *Server) ServeConn(ctx context.Context, conn net.Conn) error {
 			return v3conn.sendError(newAdminShutdownErr(errors.New(ErrDraining)))
 		}
 
-		v3conn.sessionArgs.User = parser.Name(v3conn.sessionArgs.User).Normalize()
+		v3conn.sessionArgs.User = tree.Name(v3conn.sessionArgs.User).Normalize()
 		if err := v3conn.handleAuthentication(ctx, s.cfg.Insecure); err != nil {
 			return v3conn.sendError(pgerror.NewError(pgerror.CodeInvalidPasswordError, err.Error()))
 		}

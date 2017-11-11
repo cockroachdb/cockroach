@@ -20,6 +20,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
 func TestParseColumnType(t *testing.T) {
@@ -79,14 +80,14 @@ func TestParseColumnType(t *testing.T) {
 		if sql != stmt.String() {
 			t.Errorf("%d: expected %s, but got %s", i, sql, stmt)
 		}
-		createTable, ok := stmt.(*CreateTable)
+		createTable, ok := stmt.(*tree.CreateTable)
 		if !ok {
-			t.Errorf("%d: expected CreateTable, but got %T", i, stmt)
+			t.Errorf("%d: expected tree.CreateTable, but got %T", i, stmt)
 			continue
 		}
-		columnDef, ok2 := createTable.Defs[0].(*ColumnTableDef)
+		columnDef, ok2 := createTable.Defs[0].(*tree.ColumnTableDef)
 		if !ok2 {
-			t.Errorf("%d: expected ColumnTableDef, but got %T", i, createTable.Defs[0])
+			t.Errorf("%d: expected tree.ColumnTableDef, but got %T", i, createTable.Defs[0])
 			continue
 		}
 		if !reflect.DeepEqual(d.expectedType, columnDef.Type) {

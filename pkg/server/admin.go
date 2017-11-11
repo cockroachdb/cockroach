@@ -42,6 +42,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/jobs"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
@@ -173,7 +174,7 @@ func (s *adminServer) Databases(
 	var resp serverpb.DatabasesResponse
 	for i, nRows := 0, r.ResultList[0].Rows.Len(); i < nRows; i++ {
 		row := r.ResultList[0].Rows.At(i)
-		dbDatum, ok := parser.AsDString(row[0])
+		dbDatum, ok := tree.AsDString(row[0])
 		if !ok {
 			return nil, s.serverErrorf("type assertion failed on db name: %T", row[0])
 		}
@@ -195,7 +196,7 @@ func (s *adminServer) DatabaseDetails(
 	ctx, session := s.NewContextAndSessionForRPC(ctx, args)
 	defer session.Finish(s.server.sqlExecutor)
 
-	escDBName := parser.Name(req.Database).String()
+	escDBName := tree.Name(req.Database).String()
 	if err := s.assertNotVirtualSchema(escDBName); err != nil {
 		return nil, err
 	}
@@ -294,14 +295,14 @@ func (s *adminServer) TableDetails(
 	ctx, session := s.NewContextAndSessionForRPC(ctx, args)
 	defer session.Finish(s.server.sqlExecutor)
 
-	escDBName := parser.Name(req.Database).String()
+	escDBName := tree.Name(req.Database).String()
 	if err := s.assertNotVirtualSchema(escDBName); err != nil {
 		return nil, err
 	}
 
 	// TODO(cdo): Use real placeholders for the table and database names when we've extended our SQL
 	// grammar to allow that.
-	escTableName := parser.Name(req.Table).String()
+	escTableName := tree.Name(req.Table).String()
 	escQualTable := fmt.Sprintf("%s.%s", escDBName, escTableName)
 	query := fmt.Sprintf("SHOW COLUMNS FROM %[1]s; SHOW INDEX FROM %[1]s; SHOW GRANTS ON TABLE %[1]s; SHOW CREATE TABLE %[1]s;",
 		escQualTable)
@@ -503,7 +504,7 @@ func (s *adminServer) TableDetails(
 func (s *adminServer) TableStats(
 	ctx context.Context, req *serverpb.TableStatsRequest,
 ) (*serverpb.TableStatsResponse, error) {
-	escDBName := parser.Name(req.Database).String()
+	escDBName := tree.Name(req.Database).String()
 	if err := s.assertNotVirtualSchema(escDBName); err != nil {
 		return nil, err
 	}
@@ -650,7 +651,7 @@ func (s *adminServer) Users(
 	var resp serverpb.UsersResponse
 	for i, nRows := 0, r.ResultList[0].Rows.Len(); i < nRows; i++ {
 		row := r.ResultList[0].Rows.At(i)
-		resp.Users = append(resp.Users, serverpb.UsersResponse_User{Username: string(parser.MustBeDString(row[0]))})
+		resp.Users = append(resp.Users, serverpb.UsersResponse_User{Username: string(tree.MustBeDString(row[0]))})
 	}
 	return &resp, nil
 }
@@ -678,14 +679,14 @@ func (s *adminServer) Events(
 	q.Append("FROM system.eventlog ")
 	q.Append("WHERE true ") // This simplifies the WHERE clause logic below.
 	if len(req.Type) > 0 {
-		q.Append(`AND "eventType" = $ `, parser.NewDString(req.Type))
+		q.Append(`AND "eventType" = $ `, tree.NewDString(req.Type))
 	}
 	if req.TargetId > 0 {
-		q.Append(`AND "targetID" = $ `, parser.NewDInt(parser.DInt(req.TargetId)))
+		q.Append(`AND "targetID" = $ `, tree.NewDInt(tree.DInt(req.TargetId)))
 	}
 	q.Append("ORDER BY timestamp DESC ")
 	if limit > 0 {
-		q.Append("LIMIT $", parser.NewDInt(parser.DInt(limit)))
+		q.Append("LIMIT $", tree.NewDInt(tree.DInt(limit)))
 	}
 	if len(q.Errors()) > 0 {
 		return nil, s.serverErrors(q.Errors())
@@ -752,12 +753,12 @@ func (s *adminServer) RangeLog(
 	q.Append(`SELECT timestamp, "rangeID", "storeID", "eventType", "otherRangeID", info `)
 	q.Append("FROM system.rangelog ")
 	if req.RangeId > 0 {
-		rangeID := parser.NewDInt(parser.DInt(req.RangeId))
+		rangeID := tree.NewDInt(tree.DInt(req.RangeId))
 		q.Append(`WHERE "rangeID" = $ OR "otherRangeID" = $`, rangeID, rangeID)
 	}
 	if limit > 0 {
 		q.Append("ORDER BY timestamp desc ")
-		q.Append("LIMIT $", parser.NewDInt(parser.DInt(limit)))
+		q.Append("LIMIT $", tree.NewDInt(tree.DInt(limit)))
 	}
 	if len(q.Errors()) > 0 {
 		return nil, s.serverErrors(q.Errors())
@@ -859,7 +860,7 @@ func (s *adminServer) getUIData(
 		if i != 0 {
 			query.Append(",")
 		}
-		query.Append("$", parser.NewDString(key))
+		query.Append("$", tree.NewDString(key))
 	}
 	query.Append(");")
 	if err := query.Errors(); err != nil {
@@ -875,15 +876,15 @@ func (s *adminServer) getUIData(
 	resp := serverpb.GetUIDataResponse{KeyValues: make(map[string]serverpb.GetUIDataResponse_Value)}
 	for i, nRows := 0, r.ResultList[0].Rows.Len(); i < nRows; i++ {
 		row := r.ResultList[0].Rows.At(i)
-		dKey, ok := parser.AsDString(row[0])
+		dKey, ok := tree.AsDString(row[0])
 		if !ok {
 			return nil, s.serverErrorf("unexpected type for UI key: %T", row[0])
 		}
-		dValue, ok := row[1].(*parser.DBytes)
+		dValue, ok := row[1].(*tree.DBytes)
 		if !ok {
 			return nil, s.serverErrorf("unexpected type for UI value: %T", row[1])
 		}
-		dLastUpdated, ok := row[2].(*parser.DTimestamp)
+		dLastUpdated, ok := row[2].(*tree.DTimestamp)
 		if !ok {
 			return nil, s.serverErrorf("unexpected type for UI lastUpdated: %T", row[2])
 		}
@@ -913,9 +914,9 @@ func (s *adminServer) SetUIData(
 		// Do an upsert of the key. We update each key in a separate transaction to
 		// avoid long-running transactions and possible deadlocks.
 		query := `UPSERT INTO system.ui (key, value, "lastUpdated") VALUES ($1, $2, NOW())`
-		qargs := parser.MakePlaceholderInfo()
-		qargs.SetValue(`1`, parser.NewDString(key))
-		qargs.SetValue(`2`, parser.NewDBytes(parser.DBytes(val)))
+		qargs := tree.MakePlaceholderInfo()
+		qargs.SetValue(`1`, tree.NewDString(key))
+		qargs.SetValue(`2`, tree.NewDBytes(tree.DBytes(val)))
 		r, err := s.server.sqlExecutor.ExecuteStatementsBuffered(session, query, &qargs, 1)
 		if err != nil {
 			return nil, s.serverError(err)
@@ -1044,14 +1045,14 @@ func (s *adminServer) Jobs(
        WHERE true
 	`)
 	if req.Status != "" {
-		q.Append(" AND status = $", parser.NewDString(req.Status))
+		q.Append(" AND status = $", tree.NewDString(req.Status))
 	}
 	if req.Type != jobs.TypeUnspecified {
-		q.Append(" AND type = $", parser.NewDString(req.Type.String()))
+		q.Append(" AND type = $", tree.NewDString(req.Type.String()))
 	}
 	q.Append("ORDER BY created DESC")
 	if req.Limit > 0 {
-		q.Append(" LIMIT $", parser.NewDInt(parser.DInt(req.Limit)))
+		q.Append(" LIMIT $", tree.NewDInt(tree.DInt(req.Limit)))
 	}
 	r, err := s.server.sqlExecutor.ExecuteStatementsBuffered(session, q.String(), q.QueryArguments(), 1)
 	if err != nil {
@@ -1116,7 +1117,7 @@ func (s *adminServer) QueryPlan(
 	defer r.Close(ctx)
 
 	row := r.ResultList[0].Rows.At(0)
-	dbDatum, ok := parser.AsDString(row[0])
+	dbDatum, ok := tree.AsDString(row[0])
 	if !ok {
 		return nil, s.serverErrorf("type assertion failed on json: %T", row[0])
 	}
@@ -1267,7 +1268,7 @@ func (s *adminServer) Decommission(
 type sqlQuery struct {
 	buf   bytes.Buffer
 	pidx  int
-	qargs parser.PlaceholderInfo
+	qargs tree.PlaceholderInfo
 	errs  []error
 }
 
@@ -1293,7 +1294,7 @@ func (q *sqlQuery) Errors() []error {
 
 // QueryArguments returns a filled map of placeholders containing all arguments
 // provided to this query through Append.
-func (q *sqlQuery) QueryArguments() *parser.PlaceholderInfo {
+func (q *sqlQuery) QueryArguments() *tree.PlaceholderInfo {
 	return &q.qargs
 }
 
@@ -1314,7 +1315,7 @@ func (q *sqlQuery) QueryArguments() *parser.PlaceholderInfo {
 // Note that this method does NOT return any errors. Instead, we queue up
 // errors, which can later be accessed. Returning an error here would make
 // query construction code exceedingly tedious.
-func (q *sqlQuery) Append(s string, params ...parser.Datum) {
+func (q *sqlQuery) Append(s string, params ...tree.Datum) {
 	var placeholders int
 	firstpidx := q.pidx
 	for _, r := range s {
@@ -1353,16 +1354,16 @@ func makeResultScanner(cols []sqlbase.ResultColumn) resultScanner {
 
 // IsNull returns whether the specified column of the given row contains
 // a SQL NULL value.
-func (rs resultScanner) IsNull(row parser.Datums, col string) (bool, error) {
+func (rs resultScanner) IsNull(row tree.Datums, col string) (bool, error) {
 	idx, ok := rs.colNameToIdx[col]
 	if !ok {
 		return false, errors.Errorf("result is missing column %s", col)
 	}
-	return row[idx] == parser.DNull, nil
+	return row[idx] == tree.DNull, nil
 }
 
 // ScanIndex scans the given column index of the given row into dst.
-func (rs resultScanner) ScanIndex(row parser.Datums, index int, dst interface{}) error {
+func (rs resultScanner) ScanIndex(row tree.Datums, index int, dst interface{}) error {
 	src := row[index]
 
 	if dst == nil {
@@ -1371,40 +1372,40 @@ func (rs resultScanner) ScanIndex(row parser.Datums, index int, dst interface{})
 
 	switch d := dst.(type) {
 	case *string:
-		s, ok := parser.AsDString(src)
+		s, ok := tree.AsDString(src)
 		if !ok {
 			return errors.Errorf("source type assertion failed")
 		}
 		*d = string(s)
 
 	case *bool:
-		s, ok := src.(*parser.DBool)
+		s, ok := src.(*tree.DBool)
 		if !ok {
 			return errors.Errorf("source type assertion failed")
 		}
 		*d = bool(*s)
 
 	case *float32:
-		s, ok := src.(*parser.DFloat)
+		s, ok := src.(*tree.DFloat)
 		if !ok {
 			return errors.Errorf("source type assertion failed")
 		}
 		*d = float32(*s)
 
 	case *int64:
-		s, ok := parser.AsDInt(src)
+		s, ok := tree.AsDInt(src)
 		if !ok {
 			return errors.Errorf("source type assertion failed")
 		}
 		*d = int64(s)
 
 	case *[]sqlbase.ID:
-		s, ok := parser.AsDArray(src)
+		s, ok := tree.AsDArray(src)
 		if !ok {
 			return errors.Errorf("source type assertion failed")
 		}
 		for i := 0; i < s.Len(); i++ {
-			id, ok := parser.AsDInt(s.Array[i])
+			id, ok := tree.AsDInt(s.Array[i])
 			if !ok {
 				return errors.Errorf("source type assertion failed on index %d", i)
 			}
@@ -1412,7 +1413,7 @@ func (rs resultScanner) ScanIndex(row parser.Datums, index int, dst interface{})
 		}
 
 	case *time.Time:
-		s, ok := src.(*parser.DTimestamp)
+		s, ok := src.(*tree.DTimestamp)
 		if !ok {
 			return errors.Errorf("source type assertion failed")
 		}
@@ -1421,9 +1422,9 @@ func (rs resultScanner) ScanIndex(row parser.Datums, index int, dst interface{})
 	// Passing a **time.Time instead of a *time.Time means the source is allowed
 	// to be NULL, in which case nil is stored into *src.
 	case **time.Time:
-		s, ok := src.(*parser.DTimestamp)
+		s, ok := src.(*tree.DTimestamp)
 		if !ok {
-			if src != parser.DNull {
+			if src != tree.DNull {
 				return errors.Errorf("source type assertion failed")
 			}
 			*d = nil
@@ -1432,7 +1433,7 @@ func (rs resultScanner) ScanIndex(row parser.Datums, index int, dst interface{})
 		*d = &s.Time
 
 	case *[]byte:
-		s, ok := src.(*parser.DBytes)
+		s, ok := src.(*tree.DBytes)
 		if !ok {
 			return errors.Errorf("source type assertion failed")
 		}
@@ -1447,7 +1448,7 @@ func (rs resultScanner) ScanIndex(row parser.Datums, index int, dst interface{})
 }
 
 // ScanAll scans all the columns from the given row, in order, into dsts.
-func (rs resultScanner) ScanAll(row parser.Datums, dsts ...interface{}) error {
+func (rs resultScanner) ScanAll(row tree.Datums, dsts ...interface{}) error {
 	if len(row) != len(dsts) {
 		return fmt.Errorf(
 			"ScanAll: row has %d columns but %d dests provided", len(row), len(dsts))
@@ -1461,7 +1462,7 @@ func (rs resultScanner) ScanAll(row parser.Datums, dsts ...interface{}) error {
 }
 
 // Scan scans the column with the given name from the given row into dst.
-func (rs resultScanner) Scan(row parser.Datums, colName string, dst interface{}) error {
+func (rs resultScanner) Scan(row tree.Datums, colName string, dst interface{}) error {
 	idx, ok := rs.colNameToIdx[colName]
 	if !ok {
 		return errors.Errorf("result is missing column %s", colName)
@@ -1485,8 +1486,8 @@ func (s *adminServer) queryZone(
 	ctx context.Context, session *sql.Session, id sqlbase.ID,
 ) (config.ZoneConfig, bool, error) {
 	const query = `SELECT config FROM system.zones WHERE id = $1`
-	params := parser.MakePlaceholderInfo()
-	params.SetValue(`1`, parser.NewDInt(parser.DInt(id)))
+	params := tree.MakePlaceholderInfo()
+	params.SetValue(`1`, tree.NewDInt(tree.DInt(id)))
 	r, err := s.server.sqlExecutor.ExecuteStatementsBuffered(session, query, &params, 1)
 	if err != nil {
 		return config.ZoneConfig{}, false, err
@@ -1533,9 +1534,9 @@ func (s *adminServer) queryNamespaceID(
 	ctx context.Context, session *sql.Session, parentID sqlbase.ID, name string,
 ) (sqlbase.ID, error) {
 	const query = `SELECT id FROM system.namespace WHERE "parentID" = $1 AND name = $2`
-	params := parser.MakePlaceholderInfo()
-	params.SetValue(`1`, parser.NewDInt(parser.DInt(parentID)))
-	params.SetValue(`2`, parser.NewDString(name))
+	params := tree.MakePlaceholderInfo()
+	params.SetValue(`1`, tree.NewDInt(tree.DInt(parentID)))
+	params.SetValue(`2`, tree.NewDString(name))
 	r, err := s.server.sqlExecutor.ExecuteStatementsBuffered(session, query, &params, 1)
 	if err != nil {
 		return 0, err

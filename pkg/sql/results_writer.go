@@ -19,7 +19,7 @@ import (
 
 	"golang.org/x/net/context"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 )
@@ -146,20 +146,20 @@ type ResultsGroup interface {
 type StatementResult interface {
 	// BeginResult should be called prior to any of the other methods.
 	// TODO(andrei): remove BeginResult and SetColumns, and have
-	// NewStatementResult() take in a parser.Statement
-	BeginResult(stmt parser.Statement)
+	// NewStatementResult() take in a tree.Statement
+	BeginResult(stmt tree.Statement)
 	// GetPGTag returns the PGTag of the statement passed into BeginResult.
 	PGTag() string
 	// GetStatementType returns the StatementType that corresponds to the type of
 	// results that should be sent to this interface.
-	StatementType() parser.StatementType
+	StatementType() tree.StatementType
 	// SetColumns should be called after BeginResult and before AddRow if the
-	// StatementType is parser.Rows.
+	// StatementType is tree.Rows.
 	SetColumns(columns sqlbase.ResultColumns)
 	// AddRow takes the passed in row and adds it to the current result.
-	AddRow(ctx context.Context, row parser.Datums) error
+	AddRow(ctx context.Context, row tree.Datums) error
 	// IncrementRowsAffected increments a counter by n. This is used for all
-	// result types other than parser.Rows.
+	// result types other than tree.Rows.
 	IncrementRowsAffected(n int)
 	// RowsAffected returns either the number of times AddRow was called, or the
 	// sum of all n passed into IncrementRowsAffected.
@@ -247,7 +247,7 @@ func (b *bufferedWriter) Reset(ctx context.Context) {
 }
 
 // BeginResult implements the StatementResult interface.
-func (b *bufferedWriter) BeginResult(stmt parser.Statement) {
+func (b *bufferedWriter) BeginResult(stmt tree.Statement) {
 	if b.resultInProgress {
 		panic("can't start new result before ending the previous")
 	}
@@ -267,7 +267,7 @@ func (b *bufferedWriter) SetColumns(columns sqlbase.ResultColumns) {
 	}
 	b.currentResult.Columns = columns
 
-	if b.currentResult.Type == parser.Rows {
+	if b.currentResult.Type == tree.Rows {
 		b.currentResult.Rows = sqlbase.NewRowContainer(
 			b.acc, sqlbase.ColTypeInfoFromResCols(columns), 0,
 		)
@@ -276,7 +276,7 @@ func (b *bufferedWriter) SetColumns(columns sqlbase.ResultColumns) {
 
 // RowsAffected implements the StatementResult interface.
 func (b *bufferedWriter) RowsAffected() int {
-	if b.currentResult.Type == parser.Rows {
+	if b.currentResult.Type == tree.Rows {
 		return b.currentResult.Rows.Len()
 	}
 	return b.currentResult.RowsAffected
@@ -293,7 +293,7 @@ func (b *bufferedWriter) CloseResult() error {
 }
 
 // StatementType implements the StatementResult interface.
-func (b *bufferedWriter) StatementType() parser.StatementType {
+func (b *bufferedWriter) StatementType() tree.StatementType {
 	return b.currentResult.Type
 }
 
@@ -306,7 +306,7 @@ func (b *bufferedWriter) IncrementRowsAffected(n int) {
 }
 
 // AddRow implements the StatementResult interface.
-func (b *bufferedWriter) AddRow(ctx context.Context, row parser.Datums) error {
+func (b *bufferedWriter) AddRow(ctx context.Context, row tree.Datums) error {
 	if !b.resultInProgress {
 		panic("no result in progress")
 	}

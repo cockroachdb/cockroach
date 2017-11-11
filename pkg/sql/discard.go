@@ -17,15 +17,15 @@ package sql
 import (
 	"golang.org/x/net/context"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
 // Discard implements the DISCARD statement.
 // See https://www.postgresql.org/docs/9.6/static/sql-discard.html for details.
-func (p *planner) Discard(ctx context.Context, s *parser.Discard) (planNode, error) {
+func (p *planner) Discard(ctx context.Context, s *tree.Discard) (planNode, error) {
 	switch s.Mode {
-	case parser.DiscardModeAll:
+	case tree.DiscardModeAll:
 		if !p.autoCommit {
 			return nil, pgerror.NewError(pgerror.CodeActiveSQLTransactionError,
 				"DISCARD ALL cannot run inside a transaction block")

@@ -15,23 +15,23 @@
 package transform
 
 import (
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
 // IsAggregateVisitor checks if walked expressions contain aggregate functions.
 type IsAggregateVisitor struct {
 	Aggregated bool
 	// searchPath is used to search for unqualified function names.
-	searchPath parser.SearchPath
+	searchPath tree.SearchPath
 }
 
-var _ parser.Visitor = &IsAggregateVisitor{}
+var _ tree.Visitor = &IsAggregateVisitor{}
 
 // VisitPre satisfies the Visitor interface.
-func (v *IsAggregateVisitor) VisitPre(expr parser.Expr) (recurse bool, newExpr parser.Expr) {
+func (v *IsAggregateVisitor) VisitPre(expr tree.Expr) (recurse bool, newExpr tree.Expr) {
 	switch t := expr.(type) {
-	case *parser.FuncExpr:
+	case *tree.FuncExpr:
 		if t.IsWindowFunctionApplication() {
 			// A window function application of an aggregate builtin is not an
 			// aggregate function, but it can contain aggregate functions.
@@ -45,7 +45,7 @@ func (v *IsAggregateVisitor) VisitPre(expr parser.Expr) (recurse bool, newExpr p
 			v.Aggregated = true
 			return false, expr
 		}
-	case *parser.Subquery:
+	case *tree.Subquery:
 		return false, expr
 	}
 
@@ -53,7 +53,7 @@ func (v *IsAggregateVisitor) VisitPre(expr parser.Expr) (recurse bool, newExpr p
 }
 
 // VisitPost satisfies the Visitor interface.
-func (*IsAggregateVisitor) VisitPost(expr parser.Expr) parser.Expr { return expr }
+func (*IsAggregateVisitor) VisitPost(expr tree.Expr) tree.Expr { return expr }
 
 // Reset clear the IsAggregateVisitor's internal state.
 func (v *IsAggregateVisitor) Reset() {

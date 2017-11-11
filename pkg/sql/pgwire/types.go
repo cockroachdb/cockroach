@@ -28,8 +28,8 @@ import (
 
 	"golang.org/x/net/context"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/ipaddr"
@@ -83,7 +83,7 @@ type pgNumeric struct {
 
 func pgTypeForParserType(t types.T) pgType {
 	size := -1
-	if s, variable := parser.DatumTypeSize(t); !variable {
+	if s, variable := tree.DatumTypeSize(t); !variable {
 		size = int(s)
 	}
 	return pgType{
@@ -94,19 +94,17 @@ func pgTypeForParserType(t types.T) pgType {
 
 const secondsInDay = 24 * 60 * 60
 
-func (b *writeBuffer) writeTextDatum(
-	ctx context.Context, d parser.Datum, sessionLoc *time.Location,
-) {
+func (b *writeBuffer) writeTextDatum(ctx context.Context, d tree.Datum, sessionLoc *time.Location) {
 	if log.V(2) {
 		log.Infof(ctx, "pgwire writing TEXT datum of type: %T, %#v", d, d)
 	}
-	if d == parser.DNull {
+	if d == tree.DNull {
 		// NULL is encoded as -1; all other values have a length prefix.
 		b.putInt32(-1)
 		return
 	}
-	switch v := parser.UnwrapDatum(nil, d).(type) {
-	case *parser.DBool:
+	switch v := tree.UnwrapDatum(nil, d).(type) {
+	case *tree.DBool:
 		b.putInt32(1)
 		if *v {
 			b.writeByte('t')
@@ -114,22 +112,22 @@ func (b *writeBuffer) writeTextDatum(
 			b.writeByte('f')
 		}
 
-	case *parser.DInt:
+	case *tree.DInt:
 		// Start at offset 4 because `putInt32` clobbers the first 4 bytes.
 		s := strconv.AppendInt(b.putbuf[4:4], int64(*v), 10)
 		b.putInt32(int32(len(s)))
 		b.write(s)
 
-	case *parser.DFloat:
+	case *tree.DFloat:
 		// Start at offset 4 because `putInt32` clobbers the first 4 bytes.
 		s := strconv.AppendFloat(b.putbuf[4:4], float64(*v), 'f', -1, 64)
 		b.putInt32(int32(len(s)))
 		b.write(s)
 
-	case *parser.DDecimal:
+	case *tree.DDecimal:
 		b.writeLengthPrefixedDatum(v)
 
-	case *parser.DBytes:
+	case *tree.DBytes:
 		// http://www.postgresql.org/docs/current/static/datatype-binary.html#AEN5667
 		// Code cribbed from github.com/lib/pq.
 		result := make([]byte, 2+hex.EncodedLen(len(*v)))
@@ -140,59 +138,59 @@ func (b *writeBuffer) writeTextDatum(
 		b.putInt32(int32(len(result)))
 		b.write(result)
 
-	case *parser.DUuid:
+	case *tree.DUuid:
 		b.writeLengthPrefixedString(v.UUID.String())
 
-	case *parser.DIPAddr:
+	case *tree.DIPAddr:
 		b.writeLengthPrefixedString(v.IPAddr.String())
 
-	case *parser.DString:
+	case *tree.DString:
 		b.writeLengthPrefixedString(string(*v))
 
-	case *parser.DCollatedString:
+	case *tree.DCollatedString:
 		b.writeLengthPrefixedString(v.Contents)
 
-	case *parser.DDate:
+	case *tree.DDate:
 		t := timeutil.Unix(int64(*v)*secondsInDay, 0)
 		// Start at offset 4 because `putInt32` clobbers the first 4 bytes.
 		s := formatTs(t, nil, b.putbuf[4:4])
 		b.putInt32(int32(len(s)))
 		b.write(s)
 
-	case *parser.DTimestamp:
+	case *tree.DTimestamp:
 		// Start at offset 4 because `putInt32` clobbers the first 4 bytes.
 		s := formatTs(v.Time, nil, b.putbuf[4:4])
 		b.putInt32(int32(len(s)))
 		b.write(s)
 
-	case *parser.DTimestampTZ:
+	case *tree.DTimestampTZ:
 		// Start at offset 4 because `putInt32` clobbers the first 4 bytes.
 		s := formatTs(v.Time, sessionLoc, b.putbuf[4:4])
 		b.putInt32(int32(len(s)))
 		b.write(s)
 
-	case *parser.DInterval:
+	case *tree.DInterval:
 		b.writeLengthPrefixedString(v.ValueAsString())
 
-	case *parser.DJSON:
+	case *tree.DJSON:
 		b.writeLengthPrefixedString(v.String())
 
-	case *parser.DTuple:
+	case *tree.DTuple:
 		b.variablePutbuf.WriteString("(")
 		for i, d := range v.D {
 			if i > 0 {
 				b.variablePutbuf.WriteString(",")
 			}
-			if d == parser.DNull {
+			if d == tree.DNull {
 				// Emit nothing on NULL.
 				continue
 			}
-			parser.FormatNode(&b.variablePutbuf, parser.FmtSimple, d)
+			tree.FormatNode(&b.variablePutbuf, tree.FmtSimple, d)
 		}
 		b.variablePutbuf.WriteString(")")
 		b.writeLengthPrefixedVariablePutbuf()
 
-	case *parser.DArray:
+	case *tree.DArray:
 		// Arrays are serialized as a string of comma-separated values, surrounded
 		// by braces.
 		begin, sep, end := "{", ",", "}"
@@ -208,12 +206,12 @@ func (b *writeBuffer) writeTextDatum(
 				b.variablePutbuf.WriteString(sep)
 			}
 			// TODO(justin): add a test for nested arrays.
-			parser.FormatNode(&b.variablePutbuf, parser.FmtArrays, d)
+			tree.FormatNode(&b.variablePutbuf, tree.FmtArrays, d)
 		}
 		b.variablePutbuf.WriteString(end)
 		b.writeLengthPrefixedVariablePutbuf()
 
-	case *parser.DOid:
+	case *tree.DOid:
 		b.writeLengthPrefixedDatum(v)
 
 	default:
@@ -222,18 +220,18 @@ func (b *writeBuffer) writeTextDatum(
 }
 
 func (b *writeBuffer) writeBinaryDatum(
-	ctx context.Context, d parser.Datum, sessionLoc *time.Location,
+	ctx context.Context, d tree.Datum, sessionLoc *time.Location,
 ) {
 	if log.V(2) {
 		log.Infof(ctx, "pgwire writing BINARY datum of type: %T, %#v", d, d)
 	}
-	if d == parser.DNull {
+	if d == tree.DNull {
 		// NULL is encoded as -1; all other values have a length prefix.
 		b.putInt32(-1)
 		return
 	}
-	switch v := parser.UnwrapDatum(nil, d).(type) {
-	case *parser.DBool:
+	switch v := tree.UnwrapDatum(nil, d).(type) {
+	case *tree.DBool:
 		b.putInt32(1)
 		if *v {
 			b.writeByte(1)
@@ -241,22 +239,22 @@ func (b *writeBuffer) writeBinaryDatum(
 			b.writeByte(0)
 		}
 
-	case *parser.DInt:
+	case *tree.DInt:
 		b.putInt32(8)
 		b.putInt64(int64(*v))
 
-	case *parser.DFloat:
+	case *tree.DFloat:
 		b.putInt32(8)
 		b.putInt64(int64(math.Float64bits(float64(*v))))
 
-	case *parser.DDecimal:
+	case *tree.DDecimal:
 		alloc := struct {
 			pgNum pgNumeric
 
 			bigI big.Int
 		}{
 			pgNum: pgNumeric{
-				// Since we use 2000 as the exponent limits in parser.DecimalCtx, this
+				// Since we use 2000 as the exponent limits in tree.DecimalCtx, this
 				// conversion should not overflow.
 				dscale: int16(-v.Exponent),
 			},
@@ -314,15 +312,15 @@ func (b *writeBuffer) writeBinaryDatum(
 			b.putInt16(nextDigit())
 		}
 
-	case *parser.DBytes:
+	case *tree.DBytes:
 		b.putInt32(int32(len(*v)))
 		b.write([]byte(*v))
 
-	case *parser.DUuid:
+	case *tree.DUuid:
 		b.putInt32(16)
 		b.write(v.GetBytes())
 
-	case *parser.DIPAddr:
+	case *tree.DIPAddr:
 		// We calculate the Postgres binary format for an IPAddr. For the spec see,
 		// https://github.com/postgres/postgres/blob/81c5e46c490e2426db243eada186995da5bb0ba7/src/backend/utils/adt/network.c#L144
 		// The pgBinary encoding is as follows:
@@ -357,25 +355,25 @@ func (b *writeBuffer) writeBinaryDatum(
 			b.setError(errors.Errorf("error encoding inet to pgBinary: %v", v.IPAddr))
 		}
 
-	case *parser.DString:
+	case *tree.DString:
 		b.writeLengthPrefixedString(string(*v))
 
-	case *parser.DCollatedString:
+	case *tree.DCollatedString:
 		b.writeLengthPrefixedString(v.Contents)
 
-	case *parser.DTimestamp:
+	case *tree.DTimestamp:
 		b.putInt32(8)
 		b.putInt64(timeToPgBinary(v.Time, nil))
 
-	case *parser.DTimestampTZ:
+	case *tree.DTimestampTZ:
 		b.putInt32(8)
 		b.putInt64(timeToPgBinary(v.Time, sessionLoc))
 
-	case *parser.DDate:
+	case *tree.DDate:
 		b.putInt32(4)
 		b.putInt32(dateToPgBinary(v))
 
-	case *parser.DArray:
+	case *tree.DArray:
 		if v.ParamTyp.FamilyEqual(types.AnyArray) {
 			b.setError(errors.New("unsupported binary serialization of multidimensional arrays"))
 			return
@@ -396,7 +394,7 @@ func (b *writeBuffer) writeBinaryDatum(
 		}
 		b.variablePutbuf = subWriter.wrapped
 		b.writeLengthPrefixedVariablePutbuf()
-	case *parser.DOid:
+	case *tree.DOid:
 		b.putInt32(4)
 		b.putInt32(int32(v.DInt))
 	default:
@@ -465,16 +463,16 @@ func pgBinaryToTime(i int64) time.Time {
 // dateToPgBinary calculates the Postgres binary format for a date. The date is
 // represented as the number of days between the given date and Jan 1, 2000
 // (dubbed the pgEpochJDate), stored within an int32.
-func dateToPgBinary(d *parser.DDate) int32 {
+func dateToPgBinary(d *tree.DDate) int32 {
 	return int32(*d) - pgEpochJDateFromUnix
 }
 
 // pgBinaryToDate takes an int32 and interprets it as the Postgres binary format
 // for a date. To create a date from this value, it takes the day delta and adds
 // it to pgEpochJDate.
-func pgBinaryToDate(i int32) *parser.DDate {
+func pgBinaryToDate(i int32) *tree.DDate {
 	daysSinceEpoch := pgEpochJDateFromUnix + i
-	return parser.NewDDate(parser.DDate(daysSinceEpoch))
+	return tree.NewDDate(tree.DDate(daysSinceEpoch))
 }
 
 const (
@@ -524,7 +522,7 @@ func pgBinaryToIPAddr(b []byte) (ipaddr.IPAddr, error) {
 
 // decodeOidDatum decodes bytes with specified Oid and format code into
 // a datum.
-func decodeOidDatum(id oid.Oid, code formatCode, b []byte) (parser.Datum, error) {
+func decodeOidDatum(id oid.Oid, code formatCode, b []byte) (tree.Datum, error) {
 	switch code {
 	case formatText:
 		switch id {
@@ -533,27 +531,27 @@ func decodeOidDatum(id oid.Oid, code formatCode, b []byte) (parser.Datum, error)
 			if err != nil {
 				return nil, err
 			}
-			return parser.MakeDBool(parser.DBool(t)), nil
+			return tree.MakeDBool(tree.DBool(t)), nil
 		case oid.T_int2, oid.T_int4, oid.T_int8:
 			i, err := strconv.ParseInt(string(b), 10, 64)
 			if err != nil {
 				return nil, err
 			}
-			return parser.NewDInt(parser.DInt(i)), nil
+			return tree.NewDInt(tree.DInt(i)), nil
 		case oid.T_oid:
 			u, err := strconv.ParseUint(string(b), 10, 32)
 			if err != nil {
 				return nil, err
 			}
-			return parser.NewDOid(parser.DInt(u)), nil
+			return tree.NewDOid(tree.DInt(u)), nil
 		case oid.T_float4, oid.T_float8:
 			f, err := strconv.ParseFloat(string(b), 64)
 			if err != nil {
 				return nil, err
 			}
-			return parser.NewDFloat(parser.DFloat(f)), nil
+			return tree.NewDFloat(tree.DFloat(f)), nil
 		case oid.T_numeric:
-			d, err := parser.ParseDDecimal(string(b))
+			d, err := tree.ParseDDecimal(string(b))
 			if err != nil {
 				return nil, errors.Errorf("could not parse string %q as decimal", b)
 			}
@@ -569,46 +567,46 @@ func decodeOidDatum(id oid.Oid, code formatCode, b []byte) (parser.Datum, error)
 				if _, err := hex.Decode(result, b); err != nil {
 					return nil, err
 				}
-				return parser.NewDBytes(parser.DBytes(result)), nil
+				return tree.NewDBytes(tree.DBytes(result)), nil
 			}
 			return nil, errors.Errorf("unsupported bytea encoding: %q", b)
 		case oid.T_timestamp:
-			d, err := parser.ParseDTimestamp(string(b), time.Microsecond)
+			d, err := tree.ParseDTimestamp(string(b), time.Microsecond)
 			if err != nil {
 				return nil, errors.Errorf("could not parse string %q as timestamp", b)
 			}
 			return d, nil
 		case oid.T_timestamptz:
-			d, err := parser.ParseDTimestampTZ(string(b), time.UTC, time.Microsecond)
+			d, err := tree.ParseDTimestampTZ(string(b), time.UTC, time.Microsecond)
 			if err != nil {
 				return nil, errors.Errorf("could not parse string %q as timestamptz", b)
 			}
 			return d, nil
 		case oid.T_date:
-			ts, err := parser.ParseDTimestamp(string(b), time.Microsecond)
+			ts, err := tree.ParseDTimestamp(string(b), time.Microsecond)
 			if err != nil {
-				res, err := parser.ParseDDate(string(b), time.UTC)
+				res, err := tree.ParseDDate(string(b), time.UTC)
 				if err != nil {
 					return nil, errors.Errorf("could not parse string %q as date", b)
 				}
 				return res, nil
 			}
 			daysSinceEpoch := ts.Unix() / secondsInDay
-			return parser.NewDDate(parser.DDate(daysSinceEpoch)), nil
+			return tree.NewDDate(tree.DDate(daysSinceEpoch)), nil
 		case oid.T_interval:
-			d, err := parser.ParseDInterval(string(b))
+			d, err := tree.ParseDInterval(string(b))
 			if err != nil {
 				return nil, errors.Errorf("could not parse string %q as interval", b)
 			}
 			return d, nil
 		case oid.T_uuid:
-			d, err := parser.ParseDUuidFromString(string(b))
+			d, err := tree.ParseDUuidFromString(string(b))
 			if err != nil {
 				return nil, errors.Errorf("could not parse string %q as uuid", b)
 			}
 			return d, nil
 		case oid.T_inet:
-			d, err := parser.ParseDIPAddrFromINetString(string(b))
+			d, err := tree.ParseDIPAddrFromINetString(string(b))
 			if err != nil {
 				return nil, errors.Errorf("could not parse string %q as inet", b)
 			}
@@ -618,9 +616,9 @@ func decodeOidDatum(id oid.Oid, code formatCode, b []byte) (parser.Datum, error)
 			if err := (&arr).Scan(b); err != nil {
 				return nil, err
 			}
-			out := parser.NewDArray(types.Int)
+			out := tree.NewDArray(types.Int)
 			for _, v := range arr {
-				if err := out.Append(parser.NewDInt(parser.DInt(v))); err != nil {
+				if err := out.Append(tree.NewDInt(tree.DInt(v))); err != nil {
 					return nil, err
 				}
 			}
@@ -630,14 +628,14 @@ func decodeOidDatum(id oid.Oid, code formatCode, b []byte) (parser.Datum, error)
 			if err := (&arr).Scan(b); err != nil {
 				return nil, err
 			}
-			out := parser.NewDArray(types.String)
+			out := tree.NewDArray(types.String)
 			if id == oid.T__name {
 				out.ParamTyp = types.Name
 			}
 			for _, v := range arr {
-				var s parser.Datum = parser.NewDString(v)
+				var s tree.Datum = tree.NewDString(v)
 				if id == oid.T__name {
-					s = parser.NewDNameFromDString(s.(*parser.DString))
+					s = tree.NewDNameFromDString(s.(*tree.DString))
 				}
 				if err := out.Append(s); err != nil {
 					return nil, err
@@ -651,7 +649,7 @@ func decodeOidDatum(id oid.Oid, code formatCode, b []byte) (parser.Datum, error)
 			if err := validateStringBytes(b); err != nil {
 				return nil, err
 			}
-			return parser.NewDString(string(b)), nil
+			return tree.NewDString(string(b)), nil
 		}
 	case formatBinary:
 		switch id {
@@ -659,9 +657,9 @@ func decodeOidDatum(id oid.Oid, code formatCode, b []byte) (parser.Datum, error)
 			if len(b) > 0 {
 				switch b[0] {
 				case 0:
-					return parser.MakeDBool(false), nil
+					return tree.MakeDBool(false), nil
 				case 1:
-					return parser.MakeDBool(true), nil
+					return tree.MakeDBool(true), nil
 				}
 			}
 			return nil, errors.Errorf("unsupported binary bool: %x", b)
@@ -670,37 +668,37 @@ func decodeOidDatum(id oid.Oid, code formatCode, b []byte) (parser.Datum, error)
 				return nil, errors.Errorf("int2 requires 2 bytes for binary format")
 			}
 			i := int16(binary.BigEndian.Uint16(b))
-			return parser.NewDInt(parser.DInt(i)), nil
+			return tree.NewDInt(tree.DInt(i)), nil
 		case oid.T_int4:
 			if len(b) < 4 {
 				return nil, errors.Errorf("int4 requires 4 bytes for binary format")
 			}
 			i := int32(binary.BigEndian.Uint32(b))
-			return parser.NewDInt(parser.DInt(i)), nil
+			return tree.NewDInt(tree.DInt(i)), nil
 		case oid.T_int8:
 			if len(b) < 8 {
 				return nil, errors.Errorf("int8 requires 8 bytes for binary format")
 			}
 			i := int64(binary.BigEndian.Uint64(b))
-			return parser.NewDInt(parser.DInt(i)), nil
+			return tree.NewDInt(tree.DInt(i)), nil
 		case oid.T_oid:
 			if len(b) < 4 {
 				return nil, errors.Errorf("oid requires 4 bytes for binary format")
 			}
 			u := binary.BigEndian.Uint32(b)
-			return parser.NewDOid(parser.DInt(u)), nil
+			return tree.NewDOid(tree.DInt(u)), nil
 		case oid.T_float4:
 			if len(b) < 4 {
 				return nil, errors.Errorf("float4 requires 4 bytes for binary format")
 			}
 			f := math.Float32frombits(binary.BigEndian.Uint32(b))
-			return parser.NewDFloat(parser.DFloat(f)), nil
+			return tree.NewDFloat(tree.DFloat(f)), nil
 		case oid.T_float8:
 			if len(b) < 8 {
 				return nil, errors.Errorf("float8 requires 8 bytes for binary format")
 			}
 			f := math.Float64frombits(binary.BigEndian.Uint64(b))
-			return parser.NewDFloat(parser.DFloat(f)), nil
+			return tree.NewDFloat(tree.DFloat(f)), nil
 		case oid.T_numeric:
 			r := bytes.NewReader(b)
 
@@ -708,7 +706,7 @@ func decodeOidDatum(id oid.Oid, code formatCode, b []byte) (parser.Datum, error)
 				pgNum pgNumeric
 				i16   int16
 
-				dd parser.DDecimal
+				dd tree.DDecimal
 			}{}
 
 			for _, ptr := range []interface{}{
@@ -776,19 +774,19 @@ func decodeOidDatum(id oid.Oid, code formatCode, b []byte) (parser.Datum, error)
 
 			return &alloc.dd, nil
 		case oid.T_bytea:
-			return parser.NewDBytes(parser.DBytes(b)), nil
+			return tree.NewDBytes(tree.DBytes(b)), nil
 		case oid.T_timestamp:
 			if len(b) < 8 {
 				return nil, errors.Errorf("timestamp requires 8 bytes for binary format")
 			}
 			i := int64(binary.BigEndian.Uint64(b))
-			return parser.MakeDTimestamp(pgBinaryToTime(i), time.Microsecond), nil
+			return tree.MakeDTimestamp(pgBinaryToTime(i), time.Microsecond), nil
 		case oid.T_timestamptz:
 			if len(b) < 8 {
 				return nil, errors.Errorf("timestamptz requires 8 bytes for binary format")
 			}
 			i := int64(binary.BigEndian.Uint64(b))
-			return parser.MakeDTimestampTZ(pgBinaryToTime(i), time.Microsecond), nil
+			return tree.MakeDTimestampTZ(pgBinaryToTime(i), time.Microsecond), nil
 		case oid.T_date:
 			if len(b) < 4 {
 				return nil, errors.Errorf("date requires 4 bytes for binary format")
@@ -796,7 +794,7 @@ func decodeOidDatum(id oid.Oid, code formatCode, b []byte) (parser.Datum, error)
 			i := int32(binary.BigEndian.Uint32(b))
 			return pgBinaryToDate(i), nil
 		case oid.T_uuid:
-			u, err := parser.ParseDUuidFromBytes(b)
+			u, err := tree.ParseDUuidFromBytes(b)
 			if err != nil {
 				return nil, err
 			}
@@ -806,7 +804,7 @@ func decodeOidDatum(id oid.Oid, code formatCode, b []byte) (parser.Datum, error)
 			if err != nil {
 				return nil, err
 			}
-			return parser.NewDIPAddr(parser.DIPAddr{IPAddr: ipAddr}), nil
+			return tree.NewDIPAddr(tree.DIPAddr{IPAddr: ipAddr}), nil
 		case oid.T__int2, oid.T__int4, oid.T__int8, oid.T__text, oid.T__name:
 			return decodeBinaryArray(b, code)
 		}
@@ -820,12 +818,12 @@ func decodeOidDatum(id oid.Oid, code formatCode, b []byte) (parser.Datum, error)
 		if err := validateStringBytes(b); err != nil {
 			return nil, err
 		}
-		return parser.NewDString(string(b)), nil
+		return tree.NewDString(string(b)), nil
 	case oid.T_name:
 		if err := validateStringBytes(b); err != nil {
 			return nil, err
 		}
-		return parser.NewDName(string(b)), nil
+		return tree.NewDName(string(b)), nil
 	default:
 		return nil, errors.Errorf("unsupported OID %v with format code %s", id, code)
 	}
@@ -842,7 +840,7 @@ func validateStringBytes(b []byte) error {
 	return nil
 }
 
-func decodeBinaryArray(b []byte, code formatCode) (parser.Datum, error) {
+func decodeBinaryArray(b []byte, code formatCode) (tree.Datum, error) {
 	hdr := struct {
 		Ndims int32
 		// Nullflag
@@ -865,7 +863,7 @@ func decodeBinaryArray(b []byte, code formatCode) (parser.Datum, error) {
 	}
 
 	elemOid := oid.Oid(hdr.ElemOid)
-	arr := parser.NewDArray(types.OidToType[elemOid])
+	arr := tree.NewDArray(types.OidToType[elemOid])
 	var vlen int32
 	for i := int32(0); i < hdr.DimSize; i++ {
 		if err := binary.Read(r, binary.BigEndian, &vlen); err != nil {

@@ -19,8 +19,8 @@ import (
 
 	"github.com/lib/pq/oid"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 )
 
@@ -85,12 +85,12 @@ func initPGBuiltins() {
 
 var errUnimplemented = pgerror.NewError(pgerror.CodeFeatureNotSupportedError, "unimplemented")
 
-func makeTypeIOBuiltin(argTypes parser.TypeList, returnType types.T) []parser.Builtin {
-	return []parser.Builtin{
+func makeTypeIOBuiltin(argTypes tree.TypeList, returnType types.T) []tree.Builtin {
+	return []tree.Builtin{
 		{
 			Types:      argTypes,
-			ReturnType: parser.FixedReturnType(returnType),
-			Fn: func(_ *parser.EvalContext, _ parser.Datums) (parser.Datum, error) {
+			ReturnType: tree.FixedReturnType(returnType),
+			Fn: func(_ *tree.EvalContext, _ tree.Datums) (tree.Datum, error) {
 				return nil, errUnimplemented
 			},
 			Info: notUsableInfo,
@@ -102,18 +102,18 @@ func makeTypeIOBuiltin(argTypes parser.TypeList, returnType types.T) []parser.Bu
 // every type: typein, typeout, typerecv, and typsend. All 4 builtins are no-op,
 // and only supported because ORMs sometimes use their names to form a map for
 // client-side type encoding and decoding. See issue #12526 for more details.
-func makeTypeIOBuiltins(builtinPrefix string, typ types.T) map[string][]parser.Builtin {
+func makeTypeIOBuiltins(builtinPrefix string, typ types.T) map[string][]tree.Builtin {
 	typname := typ.String()
-	return map[string][]parser.Builtin{
-		builtinPrefix + "send": makeTypeIOBuiltin(parser.ArgTypes{{typname, typ}}, types.Bytes),
+	return map[string][]tree.Builtin{
+		builtinPrefix + "send": makeTypeIOBuiltin(tree.ArgTypes{{typname, typ}}, types.Bytes),
 		// Note: PG takes type 2281 "internal" for these builtins, which we don't
 		// provide. We won't implement these functions anyway, so it shouldn't
 		// matter.
-		builtinPrefix + "recv": makeTypeIOBuiltin(parser.ArgTypes{{"input", types.Any}}, typ),
+		builtinPrefix + "recv": makeTypeIOBuiltin(tree.ArgTypes{{"input", types.Any}}, typ),
 		// Note: PG returns 'cstring' for these builtins, but we don't support that.
-		builtinPrefix + "out": makeTypeIOBuiltin(parser.ArgTypes{{typname, typ}}, types.Bytes),
+		builtinPrefix + "out": makeTypeIOBuiltin(tree.ArgTypes{{typname, typ}}, types.Bytes),
 		// Note: PG takes 'cstring' for these builtins, but we don't support that.
-		builtinPrefix + "in": makeTypeIOBuiltin(parser.ArgTypes{{"input", types.Any}}, typ),
+		builtinPrefix + "in": makeTypeIOBuiltin(tree.ArgTypes{{"input", types.Any}}, typ),
 	}
 }
 
@@ -121,20 +121,20 @@ func makeTypeIOBuiltins(builtinPrefix string, typ types.T) map[string][]parser.B
 var (
 	// DatEncodingUTFId is the encoding ID for our only supported database
 	// encoding, UTF8.
-	DatEncodingUTFId = parser.NewDInt(6)
+	DatEncodingUTFId = tree.NewDInt(6)
 	// DatEncodingEnUTF8 is the encoding name for our only supported database
 	// encoding, UTF8.
-	DatEncodingEnUTF8        = parser.NewDString("en_US.utf8")
-	datEncodingUTF8ShortName = parser.NewDString("UTF8")
+	DatEncodingEnUTF8        = tree.NewDString("en_US.utf8")
+	datEncodingUTF8ShortName = tree.NewDString("UTF8")
 )
 
 // Make a pg_get_viewdef function with the given arguments.
-func makePGGetViewDef(argTypes parser.ArgTypes) parser.Builtin {
-	return parser.Builtin{
+func makePGGetViewDef(argTypes tree.ArgTypes) tree.Builtin {
+	return tree.Builtin{
 		Types:            argTypes,
 		DistsqlBlacklist: true,
-		ReturnType:       parser.FixedReturnType(types.String),
-		Fn: func(ctx *parser.EvalContext, args parser.Datums) (parser.Datum, error) {
+		ReturnType:       tree.FixedReturnType(types.String),
+		Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 			r, err := ctx.Planner.QueryRow(
 				ctx.Ctx(), "SELECT definition FROM pg_catalog.pg_views v JOIN pg_catalog.pg_class c ON "+
 					"c.relname=v.viewname WHERE oid=$1", args[0])
@@ -142,7 +142,7 @@ func makePGGetViewDef(argTypes parser.ArgTypes) parser.Builtin {
 				return nil, err
 			}
 			if len(r) == 0 {
-				return parser.DNull, nil
+				return tree.DNull, nil
 			}
 			return r[0], nil
 		},
@@ -150,14 +150,14 @@ func makePGGetViewDef(argTypes parser.ArgTypes) parser.Builtin {
 	}
 }
 
-var pgBuiltins = map[string][]parser.Builtin{
+var pgBuiltins = map[string][]tree.Builtin{
 	// See https://www.postgresql.org/docs/9.6/static/functions-info.html.
 	"pg_backend_pid": {
-		parser.Builtin{
-			Types:      parser.ArgTypes{},
-			ReturnType: parser.FixedReturnType(types.Int),
-			Fn: func(_ *parser.EvalContext, _ parser.Datums) (parser.Datum, error) {
-				return parser.NewDInt(-1), nil
+		tree.Builtin{
+			Types:      tree.ArgTypes{},
+			ReturnType: tree.FixedReturnType(types.Int),
+			Fn: func(_ *tree.EvalContext, _ tree.Datums) (tree.Datum, error) {
+				return tree.NewDInt(-1), nil
 			},
 			Info: notUsableInfo,
 		},
@@ -165,16 +165,16 @@ var pgBuiltins = map[string][]parser.Builtin{
 
 	// See https://www.postgresql.org/docs/9.3/static/catalog-pg-database.html.
 	"pg_encoding_to_char": {
-		parser.Builtin{
-			Types: parser.ArgTypes{
+		tree.Builtin{
+			Types: tree.ArgTypes{
 				{"encoding_id", types.Int},
 			},
-			ReturnType: parser.FixedReturnType(types.String),
-			Fn: func(ctx *parser.EvalContext, args parser.Datums) (parser.Datum, error) {
+			ReturnType: tree.FixedReturnType(types.String),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				if args[0].Compare(ctx, DatEncodingUTFId) == 0 {
 					return datEncodingUTF8ShortName, nil
 				}
-				return parser.DNull, nil
+				return tree.DNull, nil
 			},
 			Info: notUsableInfo,
 		},
@@ -187,25 +187,25 @@ var pgBuiltins = map[string][]parser.Builtin{
 	// return the first argument directly. It also means we can ignore the second and
 	// optional third argument.
 	"pg_get_expr": {
-		parser.Builtin{
-			Types: parser.ArgTypes{
+		tree.Builtin{
+			Types: tree.ArgTypes{
 				{"pg_node_tree", types.String},
 				{"relation_oid", types.Oid},
 			},
-			ReturnType: parser.FixedReturnType(types.String),
-			Fn: func(_ *parser.EvalContext, args parser.Datums) (parser.Datum, error) {
+			ReturnType: tree.FixedReturnType(types.String),
+			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				return args[0], nil
 			},
 			Info: notUsableInfo,
 		},
-		parser.Builtin{
-			Types: parser.ArgTypes{
+		tree.Builtin{
+			Types: tree.ArgTypes{
 				{"pg_node_tree", types.String},
 				{"relation_oid", types.Oid},
 				{"pretty_bool", types.Bool},
 			},
-			ReturnType: parser.FixedReturnType(types.String),
-			Fn: func(_ *parser.EvalContext, args parser.Datums) (parser.Datum, error) {
+			ReturnType: tree.FixedReturnType(types.String),
+			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				return args[0], nil
 			},
 			Info: notUsableInfo,
@@ -215,13 +215,13 @@ var pgBuiltins = map[string][]parser.Builtin{
 	// pg_get_indexdef functions like SHOW CREATE INDEX would if we supported that
 	// statement.
 	"pg_get_indexdef": {
-		parser.Builtin{
-			Types: parser.ArgTypes{
+		tree.Builtin{
+			Types: tree.ArgTypes{
 				{"index_oid", types.Oid},
 			},
 			DistsqlBlacklist: true,
-			ReturnType:       parser.FixedReturnType(types.String),
-			Fn: func(ctx *parser.EvalContext, args parser.Datums) (parser.Datum, error) {
+			ReturnType:       tree.FixedReturnType(types.String),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				r, err := ctx.Planner.QueryRow(
 					ctx.Ctx(), "SELECT indexdef FROM pg_catalog.pg_indexes WHERE crdb_oid=$1", args[0])
 				if err != nil {
@@ -242,30 +242,30 @@ var pgBuiltins = map[string][]parser.Builtin{
 	// pg_get_viewdef functions like SHOW CREATE VIEW but returns the same format as
 	// PostgreSQL leaving out the actual 'CREATE VIEW table_name AS' portion of the statement.
 	"pg_get_viewdef": {
-		makePGGetViewDef(parser.ArgTypes{{"view_oid", types.Oid}}),
-		makePGGetViewDef(parser.ArgTypes{{"view_oid", types.Oid}, {"pretty_bool", types.Bool}}),
+		makePGGetViewDef(tree.ArgTypes{{"view_oid", types.Oid}}),
+		makePGGetViewDef(tree.ArgTypes{{"view_oid", types.Oid}, {"pretty_bool", types.Bool}}),
 	},
 
 	"pg_typeof": {
 		// TODO(knz): This is a proof-of-concept until types.Any works
 		// properly.
-		parser.Builtin{
-			Types:      parser.ArgTypes{{"val", types.Any}},
-			ReturnType: parser.FixedReturnType(types.String),
-			Fn: func(_ *parser.EvalContext, args parser.Datums) (parser.Datum, error) {
-				return parser.NewDString(args[0].ResolvedType().String()), nil
+		tree.Builtin{
+			Types:      tree.ArgTypes{{"val", types.Any}},
+			ReturnType: tree.FixedReturnType(types.String),
+			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				return tree.NewDString(args[0].ResolvedType().String()), nil
 			},
 			Info: notUsableInfo,
 		},
 	},
 	"pg_get_userbyid": {
-		parser.Builtin{
-			Types: parser.ArgTypes{
+		tree.Builtin{
+			Types: tree.ArgTypes{
 				{"role_oid", types.Oid},
 			},
 			DistsqlBlacklist: true,
-			ReturnType:       parser.FixedReturnType(types.String),
-			Fn: func(ctx *parser.EvalContext, args parser.Datums) (parser.Datum, error) {
+			ReturnType:       tree.FixedReturnType(types.String),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				oid := args[0]
 				t, err := ctx.Planner.QueryRow(
 					ctx.Ctx(), "SELECT rolname FROM pg_catalog.pg_roles WHERE oid=$1", oid)
@@ -273,7 +273,7 @@ var pgBuiltins = map[string][]parser.Builtin{
 					return nil, err
 				}
 				if len(t) == 0 {
-					return parser.NewDString(fmt.Sprintf("unknown (OID=%s)", args[0])), nil
+					return tree.NewDString(fmt.Sprintf("unknown (OID=%s)", args[0])), nil
 				}
 				return t[0], nil
 			},
@@ -281,20 +281,20 @@ var pgBuiltins = map[string][]parser.Builtin{
 		},
 	},
 	"format_type": {
-		parser.Builtin{
-			Types:        parser.ArgTypes{{"type_oid", types.Oid}, {"typemod", types.Int}},
-			ReturnType:   parser.FixedReturnType(types.String),
+		tree.Builtin{
+			Types:        tree.ArgTypes{{"type_oid", types.Oid}, {"typemod", types.Int}},
+			ReturnType:   tree.FixedReturnType(types.String),
 			NullableArgs: true,
-			Fn: func(ctx *parser.EvalContext, args parser.Datums) (parser.Datum, error) {
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				oidArg := args[0]
-				if oidArg == parser.DNull {
-					return parser.DNull, nil
+				if oidArg == tree.DNull {
+					return tree.DNull, nil
 				}
-				typ, ok := types.OidToType[oid.Oid(int(oidArg.(*parser.DOid).DInt))]
+				typ, ok := types.OidToType[oid.Oid(int(oidArg.(*tree.DOid).DInt))]
 				if !ok {
-					return parser.NewDString(fmt.Sprintf("unknown (OID=%s)", oidArg)), nil
+					return tree.NewDString(fmt.Sprintf("unknown (OID=%s)", oidArg)), nil
 				}
-				return parser.NewDString(typ.SQLName()), nil
+				return tree.NewDString(typ.SQLName()), nil
 			},
 			Info: "Returns the SQL name of a data type that is " +
 				"identified by its type OID and possibly a type modifier. " +
@@ -302,69 +302,69 @@ var pgBuiltins = map[string][]parser.Builtin{
 		},
 	},
 	"col_description": {
-		parser.Builtin{
-			Types:      parser.ArgTypes{{"table_oid", types.Oid}, {"column_number", types.Int}},
-			ReturnType: parser.FixedReturnType(types.String),
-			Fn: func(_ *parser.EvalContext, _ parser.Datums) (parser.Datum, error) {
-				return parser.DNull, nil
+		tree.Builtin{
+			Types:      tree.ArgTypes{{"table_oid", types.Oid}, {"column_number", types.Int}},
+			ReturnType: tree.FixedReturnType(types.String),
+			Fn: func(_ *tree.EvalContext, _ tree.Datums) (tree.Datum, error) {
+				return tree.DNull, nil
 			},
 			Info: notUsableInfo,
 		},
 	},
 	"obj_description": {
-		parser.Builtin{
-			Types:      parser.ArgTypes{{"object_oid", types.Oid}},
-			ReturnType: parser.FixedReturnType(types.String),
-			Fn: func(_ *parser.EvalContext, _ parser.Datums) (parser.Datum, error) {
-				return parser.DNull, nil
+		tree.Builtin{
+			Types:      tree.ArgTypes{{"object_oid", types.Oid}},
+			ReturnType: tree.FixedReturnType(types.String),
+			Fn: func(_ *tree.EvalContext, _ tree.Datums) (tree.Datum, error) {
+				return tree.DNull, nil
 			},
 			Info: notUsableInfo,
 		},
-		parser.Builtin{
-			Types:      parser.ArgTypes{{"object_oid", types.Oid}, {"catalog_name", types.String}},
-			ReturnType: parser.FixedReturnType(types.String),
-			Fn: func(_ *parser.EvalContext, _ parser.Datums) (parser.Datum, error) {
-				return parser.DNull, nil
+		tree.Builtin{
+			Types:      tree.ArgTypes{{"object_oid", types.Oid}, {"catalog_name", types.String}},
+			ReturnType: tree.FixedReturnType(types.String),
+			Fn: func(_ *tree.EvalContext, _ tree.Datums) (tree.Datum, error) {
+				return tree.DNull, nil
 			},
 			Info: notUsableInfo,
 		},
 	},
 	"oid": {
-		parser.Builtin{
-			Types:      parser.ArgTypes{{"int", types.Int}},
-			ReturnType: parser.FixedReturnType(types.Oid),
-			Fn: func(_ *parser.EvalContext, args parser.Datums) (parser.Datum, error) {
-				return parser.NewDOid(*args[0].(*parser.DInt)), nil
+		tree.Builtin{
+			Types:      tree.ArgTypes{{"int", types.Int}},
+			ReturnType: tree.FixedReturnType(types.Oid),
+			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				return tree.NewDOid(*args[0].(*tree.DInt)), nil
 			},
 			Info: "Converts an integer to an OID.",
 		},
 	},
 	"shobj_description": {
-		parser.Builtin{
-			Types:      parser.ArgTypes{{"object_oid", types.Oid}, {"catalog_name", types.String}},
-			ReturnType: parser.FixedReturnType(types.String),
-			Fn: func(_ *parser.EvalContext, _ parser.Datums) (parser.Datum, error) {
-				return parser.DNull, nil
+		tree.Builtin{
+			Types:      tree.ArgTypes{{"object_oid", types.Oid}, {"catalog_name", types.String}},
+			ReturnType: tree.FixedReturnType(types.String),
+			Fn: func(_ *tree.EvalContext, _ tree.Datums) (tree.Datum, error) {
+				return tree.DNull, nil
 			},
 			Info: notUsableInfo,
 		},
 	},
 	"pg_try_advisory_lock": {
-		parser.Builtin{
-			Types:      parser.ArgTypes{{"int", types.Int}},
-			ReturnType: parser.FixedReturnType(types.Bool),
-			Fn: func(_ *parser.EvalContext, _ parser.Datums) (parser.Datum, error) {
-				return parser.DBoolTrue, nil
+		tree.Builtin{
+			Types:      tree.ArgTypes{{"int", types.Int}},
+			ReturnType: tree.FixedReturnType(types.Bool),
+			Fn: func(_ *tree.EvalContext, _ tree.Datums) (tree.Datum, error) {
+				return tree.DBoolTrue, nil
 			},
 			Info: notUsableInfo,
 		},
 	},
 	"pg_advisory_unlock": {
-		parser.Builtin{
-			Types:      parser.ArgTypes{{"int", types.Int}},
-			ReturnType: parser.FixedReturnType(types.Bool),
-			Fn: func(_ *parser.EvalContext, _ parser.Datums) (parser.Datum, error) {
-				return parser.DBoolTrue, nil
+		tree.Builtin{
+			Types:      tree.ArgTypes{{"int", types.Int}},
+			ReturnType: tree.FixedReturnType(types.Bool),
+			Fn: func(_ *tree.EvalContext, _ tree.Datums) (tree.Datum, error) {
+				return tree.DBoolTrue, nil
 			},
 			Info: notUsableInfo,
 		},
@@ -373,10 +373,10 @@ var pgBuiltins = map[string][]parser.Builtin{
 	// that is part of the databases on the search path.
 	// https://www.postgresql.org/docs/9.6/static/functions-info.html
 	"pg_table_is_visible": {
-		parser.Builtin{
-			Types:      parser.ArgTypes{{"oid", types.Oid}},
-			ReturnType: parser.FixedReturnType(types.Bool),
-			Fn: func(ctx *parser.EvalContext, args parser.Datums) (parser.Datum, error) {
+		tree.Builtin{
+			Types:      tree.ArgTypes{{"oid", types.Oid}},
+			ReturnType: tree.FixedReturnType(types.Bool),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				oid := args[0]
 				t, err := ctx.Planner.QueryRow(ctx.Ctx(),
 					"SELECT nspname FROM pg_catalog.pg_class c JOIN pg_catalog.pg_namespace n ON c.relnamespace=n.oid "+
@@ -384,7 +384,7 @@ var pgBuiltins = map[string][]parser.Builtin{
 				if err != nil {
 					return nil, err
 				}
-				return parser.MakeDBool(parser.DBool(t != nil)), nil
+				return tree.MakeDBool(tree.DBool(t != nil)), nil
 			},
 			Info: notUsableInfo,
 		},

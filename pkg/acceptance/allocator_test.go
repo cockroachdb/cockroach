@@ -34,7 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
@@ -269,7 +269,10 @@ func (at *allocatorTest) runSchemaChanges(
 
 // The validationQueries all return the same result.
 func (at *allocatorTest) runValidationQueries(
-	ctx context.Context, t *testing.T, validationQueries []string, indexValidationQueries []string,
+	ctx context.Context,
+	t *testing.T,
+	validationQueries []string,
+	indexValidationQueries []string,
 ) error {
 	// Sleep for a bit before validating the schema changes to
 	// accommodate for time differences between nodes. Some of the
@@ -335,7 +338,11 @@ type timeSpan struct {
 // Check index inconsistencies over the timeSpan and return true when
 // problems are seen.
 func (at *allocatorTest) checkIndexOverTimeSpan(
-	ctx context.Context, db *gosql.DB, s timeSpan, nowString string, indexValidationQueries []string,
+	ctx context.Context,
+	db *gosql.DB,
+	s timeSpan,
+	nowString string,
+	indexValidationQueries []string,
 ) (bool, error) {
 	var eCount int64
 	q := fmt.Sprintf(indexValidationQueries[0], nowString)
@@ -354,7 +361,11 @@ func (at *allocatorTest) checkIndexOverTimeSpan(
 // Keep splitting the span of time passed and log where index
 // inconsistencies are seen.
 func (at *allocatorTest) findIndexProblem(
-	ctx context.Context, db *gosql.DB, s timeSpan, nowString string, indexValidationQueries []string,
+	ctx context.Context,
+	db *gosql.DB,
+	s timeSpan,
+	nowString string,
+	indexValidationQueries []string,
 ) error {
 	spans := []timeSpan{s}
 	// process all the outstanding time spans.
@@ -430,7 +441,7 @@ func (at *allocatorTest) printRebalanceStats(db *gosql.DB, host string) error {
 		).Scan(&rebalanceIntervalStr); err != nil {
 			return err
 		}
-		rebalanceInterval, err := parser.ParseDInterval(rebalanceIntervalStr)
+		rebalanceInterval, err := tree.ParseDInterval(rebalanceIntervalStr)
 		if err != nil {
 			return err
 		}
@@ -505,7 +516,7 @@ func (at *allocatorTest) allocatorStats(db *gosql.DB) (s replicationStats, err e
 	if err := row.Scan(&elapsedStr, &s.RangeID, &s.StoreID, &s.EventType); err != nil {
 		return replicationStats{}, err
 	}
-	elapsedSinceLastEvent, err := parser.ParseDInterval(elapsedStr)
+	elapsedSinceLastEvent, err := tree.ParseDInterval(elapsedStr)
 	if err != nil {
 		return replicationStats{}, err
 	}

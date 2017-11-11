@@ -17,7 +17,7 @@ package sql
 import (
 	"golang.org/x/net/context"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
@@ -34,8 +34,8 @@ import (
 // a blocking channel, so implementors should be careful to only use blocking
 // sends on it when necessary.
 type planHookFn func(
-	parser.Statement, PlanHookState,
-) (fn func(context.Context, chan<- parser.Datums) error, header sqlbase.ResultColumns, err error)
+	tree.Statement, PlanHookState,
+) (fn func(context.Context, chan<- tree.Datums) error, header sqlbase.ResultColumns, err error)
 
 var planHooks []planHookFn
 
@@ -44,20 +44,20 @@ var planHooks []planHookFn
 // interface as we find we need them, to avoid churn in the planHookFn sig and
 // the hooks that implement it.
 type PlanHookState interface {
-	EvalContext() parser.EvalContext
+	EvalContext() tree.EvalContext
 	ExecCfg() *ExecutorConfig
 	DistLoader() *DistLoader
-	TypeAsString(e parser.Expr, op string) (func() (string, error), error)
-	TypeAsStringArray(e parser.Exprs, op string) (func() ([]string, error), error)
+	TypeAsString(e tree.Expr, op string) (func() (string, error), error)
+	TypeAsStringArray(e tree.Exprs, op string) (func() ([]string, error), error)
 	TypeAsStringOpts(
-		opts parser.KVOptions, valuelessOpts map[string]bool,
+		opts tree.KVOptions, valuelessOpts map[string]bool,
 	) (func() (map[string]string, error), error)
 	User() string
 	AuthorizationAccessor
 }
 
 // AddPlanHook adds a hook used to short-circuit creating a planNode from a
-// parser.Statement. If the func returned by the hook is non-nil, it is used to
+// tree.Statement. If the func returned by the hook is non-nil, it is used to
 // construct a planNode that runs that func in a goroutine during Start.
 func AddPlanHook(f planHookFn) {
 	planHooks = append(planHooks, f)
@@ -67,20 +67,20 @@ func AddPlanHook(f planHookFn) {
 // provided function during Start and serves the results it returns over the
 // channel.
 type hookFnNode struct {
-	f      func(context.Context, chan<- parser.Datums) error
+	f      func(context.Context, chan<- tree.Datums) error
 	header sqlbase.ResultColumns
 
-	resultsCh chan parser.Datums
+	resultsCh chan tree.Datums
 	errCh     chan error
 
-	row parser.Datums
+	row tree.Datums
 }
 
 func (*hookFnNode) Close(context.Context) {}
 
 func (f *hookFnNode) Start(params runParams) error {
 	// TODO(dan): Make sure the resultCollector is set to flush after every row.
-	f.resultsCh = make(chan parser.Datums)
+	f.resultsCh = make(chan tree.Datums)
 	f.errCh = make(chan error)
 	go func() {
 		f.errCh <- f.f(params.ctx, f.resultsCh)
@@ -100,4 +100,4 @@ func (f *hookFnNode) Next(params runParams) (bool, error) {
 		return true, nil
 	}
 }
-func (f *hookFnNode) Values() parser.Datums { return f.row }
+func (f *hookFnNode) Values() tree.Datums { return f.row }

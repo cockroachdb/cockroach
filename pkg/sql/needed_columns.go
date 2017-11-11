@@ -17,7 +17,7 @@ package sql
 import (
 	"fmt"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
@@ -119,7 +119,7 @@ func setNeededColumns(plan planNode, needed []bool) {
 		for i, val := range needed {
 			if !val {
 				// This render is not used, so reduce its expression to NULL.
-				n.render[i] = parser.DNull
+				n.render[i] = tree.DNull
 				continue
 			}
 			n.render[i] = n.ivarHelper.Rebind(n.render[i], false, true)

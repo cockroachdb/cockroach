@@ -14,6 +14,7 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
@@ -67,7 +68,7 @@ func TestMakeCSVTableDescriptorErrors(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			create, ok := stmt.(*parser.CreateTable)
+			create, ok := stmt.(*tree.CreateTable)
 			if !ok {
 				t.Fatal("expected CREATE TABLE statement in table file")
 			}

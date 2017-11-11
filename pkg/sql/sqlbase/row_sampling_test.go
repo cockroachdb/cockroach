@@ -20,7 +20,7 @@ import (
 	"sort"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 )
 
@@ -31,7 +31,7 @@ func runSampleTest(t *testing.T, numSamples int, ranks []int) {
 	var sr SampleReservoir
 	sr.Init(numSamples)
 	for _, r := range ranks {
-		d := DatumToEncDatum(typeInt, parser.NewDInt(parser.DInt(r)))
+		d := DatumToEncDatum(typeInt, tree.NewDInt(tree.DInt(r)))
 		sr.SampleRow(EncDatumRow{d}, uint64(r))
 	}
 	samples := sr.Get()
@@ -39,7 +39,7 @@ func runSampleTest(t *testing.T, numSamples int, ranks []int) {
 
 	// Verify that the row and the ranks weren't mishandled.
 	for i, s := range samples {
-		if *s.Row[0].Datum.(*parser.DInt) != parser.DInt(s.Rank) {
+		if *s.Row[0].Datum.(*tree.DInt) != tree.DInt(s.Rank) {
 			t.Fatalf("mismatch between row %s and rank %d", s.Row.String([]ColumnType{typeInt}), s.Rank)
 		}
 		sampledRanks[i] = int(s.Rank)

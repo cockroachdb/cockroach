@@ -20,7 +20,7 @@ import (
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
@@ -82,24 +82,24 @@ type unionNode struct {
 
 // UnionClause constructs a planNode from a UNION/INTERSECT/EXCEPT expression.
 func (p *planner) UnionClause(
-	ctx context.Context, n *parser.UnionClause, desiredTypes []types.T,
+	ctx context.Context, n *tree.UnionClause, desiredTypes []types.T,
 ) (planNode, error) {
 	var emitAll = false
 	var emit unionNodeEmit
 	switch n.Type {
-	case parser.UnionOp:
+	case tree.UnionOp:
 		if n.All {
 			emitAll = true
 		} else {
 			emit = make(unionNodeEmitDistinct)
 		}
-	case parser.IntersectOp:
+	case tree.IntersectOp:
 		if n.All {
 			emit = make(intersectNodeEmitAll)
 		} else {
 			emit = make(intersectNodeEmitDistinct)
 		}
-	case parser.ExceptOp:
+	case tree.ExceptOp:
 		if n.All {
 			emit = make(exceptNodeEmitAll)
 		} else {
@@ -139,7 +139,7 @@ func (p *planner) UnionClause(
 	}
 
 	inverted := false
-	if n.Type != parser.ExceptOp {
+	if n.Type != tree.ExceptOp {
 		// The logic below reads the rows from the right operand first,
 		// because for EXCEPT in particular this is what we need to match.
 		// However for the other operators (UNION, INTERSECT) it is
@@ -160,7 +160,7 @@ func (p *planner) UnionClause(
 	return node, nil
 }
 
-func (n *unionNode) Values() parser.Datums {
+func (n *unionNode) Values() tree.Datums {
 	if n.right != nil {
 		return n.right.Values()
 	}

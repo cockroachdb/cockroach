@@ -15,6 +15,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -94,7 +95,7 @@ func TestDescriptorsMatchingTargets(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			targets := stmt.(*parser.Grant).Targets
+			targets := stmt.(*tree.Grant).Targets
 
 			matched, dbs, err := descriptorsMatchingTargets(test.sessionDatabase, descriptors, targets)
 			if test.err != "" {

@@ -14,9 +14,9 @@
 
 package transform
 
-import "github.com/cockroachdb/cockroach/pkg/sql/parser"
+import "github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 
-var _ parser.Visitor = &ContainsWindowVisitor{}
+var _ tree.Visitor = &ContainsWindowVisitor{}
 
 // ContainsWindowVisitor checks if walked expressions contain window functions.
 type ContainsWindowVisitor struct {
@@ -24,26 +24,26 @@ type ContainsWindowVisitor struct {
 }
 
 // VisitPre satisfies the Visitor interface.
-func (v *ContainsWindowVisitor) VisitPre(expr parser.Expr) (recurse bool, newExpr parser.Expr) {
+func (v *ContainsWindowVisitor) VisitPre(expr tree.Expr) (recurse bool, newExpr tree.Expr) {
 	switch t := expr.(type) {
-	case *parser.FuncExpr:
+	case *tree.FuncExpr:
 		if t.IsWindowFunctionApplication() {
 			v.sawWindow = true
 			return false, expr
 		}
-	case *parser.Subquery:
+	case *tree.Subquery:
 		return false, expr
 	}
 	return true, expr
 }
 
 // VisitPost satisfies the Visitor interface.
-func (*ContainsWindowVisitor) VisitPost(expr parser.Expr) parser.Expr { return expr }
+func (*ContainsWindowVisitor) VisitPost(expr tree.Expr) tree.Expr { return expr }
 
 // ContainsWindowFunc determines if an Expr contains a window function.
-func (v *ContainsWindowVisitor) ContainsWindowFunc(expr parser.Expr) bool {
+func (v *ContainsWindowVisitor) ContainsWindowFunc(expr tree.Expr) bool {
 	if expr != nil {
-		parser.WalkExprConst(v, expr)
+		tree.WalkExprConst(v, expr)
 		ret := v.sawWindow
 		v.sawWindow = false
 		return ret

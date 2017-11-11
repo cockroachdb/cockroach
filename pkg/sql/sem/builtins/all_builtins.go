@@ -18,7 +18,6 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 )
@@ -35,9 +34,9 @@ func init() {
 	initPGBuiltins()
 
 	AllBuiltinNames = make([]string, 0, len(Builtins))
-	tree.FunDefs = make(map[string]*parser.FunctionDefinition)
+	tree.FunDefs = make(map[string]*tree.FunctionDefinition)
 	for name, def := range Builtins {
-		tree.FunDefs[name] = parser.NewFunctionDefinition(name, def)
+		tree.FunDefs[name] = tree.NewFunctionDefinition(name, def)
 		AllBuiltinNames = append(AllBuiltinNames, name)
 	}
 
@@ -58,10 +57,10 @@ func init() {
 	sort.Strings(AllBuiltinNames)
 }
 
-func getCategory(b parser.Builtin) string {
+func getCategory(b tree.Builtin) string {
 	// If single argument attempt to categorize by the type of the argument.
 	switch typ := b.Types.(type) {
-	case parser.ArgTypes:
+	case tree.ArgTypes:
 		if len(typ) == 1 {
 			return categorizeType(typ[0].Typ)
 		}
@@ -73,8 +72,8 @@ func getCategory(b parser.Builtin) string {
 	return ""
 }
 
-func collectBuiltins(f func(types.T) parser.Builtin, types ...types.T) []parser.Builtin {
-	r := make([]parser.Builtin, len(types))
+func collectBuiltins(f func(types.T) tree.Builtin, types ...types.T) []tree.Builtin {
+	r := make([]tree.Builtin, len(types))
 	for i := range types {
 		r[i] = f(types[i])
 	}

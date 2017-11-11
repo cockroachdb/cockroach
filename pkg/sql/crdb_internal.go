@@ -36,8 +36,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/jobs"
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -84,9 +84,9 @@ CREATE TABLE crdb_internal.node_build_info (
   value   STRING NOT NULL
 );
 `,
-	populate: func(_ context.Context, p *planner, _ string, addRow func(...parser.Datum) error) error {
+	populate: func(_ context.Context, p *planner, _ string, addRow func(...tree.Datum) error) error {
 		execCfg := p.ExecCfg()
-		nodeID := parser.NewDInt(parser.DInt(int64(execCfg.NodeID.Get())))
+		nodeID := tree.NewDInt(tree.DInt(int64(execCfg.NodeID.Get())))
 
 		info := build.GetInfo()
 		for k, v := range map[string]string{
@@ -98,8 +98,8 @@ CREATE TABLE crdb_internal.node_build_info (
 		} {
 			if err := addRow(
 				nodeID,
-				parser.NewDString(k),
-				parser.NewDString(v),
+				tree.NewDString(k),
+				tree.NewDString(v),
 			); err != nil {
 				return err
 			}
@@ -117,14 +117,14 @@ CREATE TABLE crdb_internal.node_runtime_info (
   value     STRING NOT NULL
 );
 `,
-	populate: func(_ context.Context, p *planner, _ string, addRow func(...parser.Datum) error) error {
+	populate: func(_ context.Context, p *planner, _ string, addRow func(...tree.Datum) error) error {
 		if p.session.User != security.RootUser {
 			return errors.New("only root can access the node runtime information")
 		}
 
 		node := p.ExecCfg().NodeInfo
 
-		nodeID := parser.NewDInt(parser.DInt(int64(node.NodeID.Get())))
+		nodeID := tree.NewDInt(tree.DInt(int64(node.NodeID.Get())))
 		dbURL, err := node.PGURL(url.User(security.RootUser))
 		if err != nil {
 			return err
@@ -155,9 +155,9 @@ CREATE TABLE crdb_internal.node_runtime_info (
 				k, v := kv[0], kv[1]
 				if err := addRow(
 					nodeID,
-					parser.NewDString(item.component),
-					parser.NewDString(k),
-					parser.NewDString(v),
+					tree.NewDString(item.component),
+					tree.NewDString(k),
+					tree.NewDString(v),
 				); err != nil {
 					return err
 				}
@@ -183,7 +183,7 @@ CREATE TABLE crdb_internal.tables (
   sc_lease_expiration_time TIMESTAMP
 );
 `,
-	populate: func(ctx context.Context, p *planner, _ string, addRow func(...parser.Datum) error) error {
+	populate: func(ctx context.Context, p *planner, _ string, addRow func(...tree.Datum) error) error {
 		descs, err := getAllDescriptors(ctx, p.txn)
 		if err != nil {
 			return err
@@ -211,24 +211,24 @@ CREATE TABLE crdb_internal.tables (
 				// effectively deleted.
 				dbName = fmt.Sprintf("[%d]", table.GetParentID())
 			}
-			leaseNodeDatum := parser.DNull
-			leaseExpDatum := parser.DNull
+			leaseNodeDatum := tree.DNull
+			leaseExpDatum := tree.DNull
 			if table.Lease != nil {
-				leaseNodeDatum = parser.NewDInt(parser.DInt(int64(table.Lease.NodeID)))
-				leaseExpDatum = parser.MakeDTimestamp(
+				leaseNodeDatum = tree.NewDInt(tree.DInt(int64(table.Lease.NodeID)))
+				leaseExpDatum = tree.MakeDTimestamp(
 					timeutil.Unix(0, table.Lease.ExpirationTime), time.Nanosecond,
 				)
 			}
 			if err := addRow(
-				parser.NewDInt(parser.DInt(int64(table.ID))),
-				parser.NewDInt(parser.DInt(int64(table.GetParentID()))),
-				parser.NewDString(table.Name),
-				parser.NewDString(dbName),
-				parser.NewDInt(parser.DInt(int64(table.Version))),
-				parser.MakeDTimestamp(timeutil.Unix(0, table.ModificationTime.WallTime), time.Microsecond),
-				parser.TimestampToDecimal(table.ModificationTime),
-				parser.NewDString(table.FormatVersion.String()),
-				parser.NewDString(table.State.String()),
+				tree.NewDInt(tree.DInt(int64(table.ID))),
+				tree.NewDInt(tree.DInt(int64(table.GetParentID()))),
+				tree.NewDString(table.Name),
+				tree.NewDString(dbName),
+				tree.NewDInt(tree.DInt(int64(table.Version))),
+				tree.MakeDTimestamp(timeutil.Unix(0, table.ModificationTime.WallTime), time.Microsecond),
+				tree.TimestampToDecimal(table.ModificationTime),
+				tree.NewDString(table.FormatVersion.String()),
+				tree.NewDString(table.State.String()),
 				leaseNodeDatum,
 				leaseExpDatum,
 			); err != nil {
@@ -252,7 +252,7 @@ CREATE TABLE crdb_internal.schema_changes (
   direction     STRING NOT NULL
 );
 `,
-	populate: func(ctx context.Context, p *planner, _ string, addRow func(...parser.Datum) error) error {
+	populate: func(ctx context.Context, p *planner, _ string, addRow func(...tree.Datum) error) error {
 		descs, err := getAllDescriptors(ctx, p.txn)
 		if err != nil {
 			return err
@@ -264,32 +264,32 @@ CREATE TABLE crdb_internal.schema_changes (
 			if !ok || !userCanSeeDescriptor(table, p.session.User) {
 				continue
 			}
-			tableID := parser.NewDInt(parser.DInt(int64(table.ID)))
-			parentID := parser.NewDInt(parser.DInt(int64(table.GetParentID())))
-			tableName := parser.NewDString(table.Name)
+			tableID := tree.NewDInt(tree.DInt(int64(table.ID)))
+			parentID := tree.NewDInt(tree.DInt(int64(table.GetParentID())))
+			tableName := tree.NewDString(table.Name)
 			for _, mut := range table.Mutations {
 				mutType := "UNKNOWN"
-				targetID := parser.DNull
-				targetName := parser.DNull
+				targetID := tree.DNull
+				targetName := tree.DNull
 				switch d := mut.Descriptor_.(type) {
 				case *sqlbase.DescriptorMutation_Column:
 					mutType = "COLUMN"
-					targetID = parser.NewDInt(parser.DInt(int64(d.Column.ID)))
-					targetName = parser.NewDString(d.Column.Name)
+					targetID = tree.NewDInt(tree.DInt(int64(d.Column.ID)))
+					targetName = tree.NewDString(d.Column.Name)
 				case *sqlbase.DescriptorMutation_Index:
 					mutType = "INDEX"
-					targetID = parser.NewDInt(parser.DInt(int64(d.Index.ID)))
-					targetName = parser.NewDString(d.Index.Name)
+					targetID = tree.NewDInt(tree.DInt(int64(d.Index.ID)))
+					targetName = tree.NewDString(d.Index.Name)
 				}
 				if err := addRow(
 					tableID,
 					parentID,
 					tableName,
-					parser.NewDString(mutType),
+					tree.NewDString(mutType),
 					targetID,
 					targetName,
-					parser.NewDString(mut.State.String()),
-					parser.NewDString(mut.Direction.String()),
+					tree.NewDString(mut.State.String()),
+					tree.NewDString(mut.Direction.String()),
 				); err != nil {
 					return err
 				}
@@ -310,21 +310,21 @@ CREATE TABLE crdb_internal.leases (
   deleted     BOOL NOT NULL
 );
 `,
-	populate: func(_ context.Context, p *planner, _ string, addRow func(...parser.Datum) error) error {
+	populate: func(_ context.Context, p *planner, _ string, addRow func(...tree.Datum) error) error {
 		leaseMgr := p.LeaseMgr()
-		nodeID := parser.NewDInt(parser.DInt(int64(leaseMgr.nodeID.Get())))
+		nodeID := tree.NewDInt(tree.DInt(int64(leaseMgr.nodeID.Get())))
 
 		leaseMgr.mu.Lock()
 		defer leaseMgr.mu.Unlock()
 
 		for tid, ts := range leaseMgr.mu.tables {
-			tableID := parser.NewDInt(parser.DInt(int64(tid)))
+			tableID := tree.NewDInt(tree.DInt(int64(tid)))
 
 			adder := func() error {
 				ts.mu.Lock()
 				defer ts.mu.Unlock()
 
-				dropped := parser.MakeDBool(parser.DBool(ts.mu.dropped))
+				dropped := tree.MakeDBool(tree.DBool(ts.mu.dropped))
 
 				for _, state := range ts.mu.active.data {
 					if !userCanSeeDescriptor(&state.TableDescriptor, p.session.User) {
@@ -338,8 +338,8 @@ CREATE TABLE crdb_internal.leases (
 					if err := addRow(
 						nodeID,
 						tableID,
-						parser.NewDString(state.Name),
-						parser.NewDInt(parser.DInt(int64(state.GetParentID()))),
+						tree.NewDString(state.Name),
+						tree.NewDInt(tree.DInt(int64(state.GetParentID()))),
 						&expCopy,
 						dropped,
 					); err != nil {
@@ -375,7 +375,7 @@ CREATE TABLE crdb_internal.jobs (
 	coordinator_id     INT
 );
 `,
-	populate: func(ctx context.Context, p *planner, _ string, addRow func(...parser.Datum) error) error {
+	populate: func(ctx context.Context, p *planner, _ string, addRow func(...tree.Datum) error) error {
 		p = makeInternalPlanner("jobs", p.txn, p.evalCtx.User, p.session.memMetrics)
 		defer finishInternalPlanner(p)
 		rows, err := p.queryRows(ctx, `SELECT id, status, created, payload FROM system.jobs`)
@@ -389,36 +389,36 @@ CREATE TABLE crdb_internal.jobs (
 			if err != nil {
 				return err
 			}
-			tsOrNull := func(micros int64) parser.Datum {
+			tsOrNull := func(micros int64) tree.Datum {
 				if micros == 0 {
-					return parser.DNull
+					return tree.DNull
 				}
 				ts := timeutil.Unix(0, micros*time.Microsecond.Nanoseconds())
-				return parser.MakeDTimestamp(ts, time.Microsecond)
+				return tree.MakeDTimestamp(ts, time.Microsecond)
 			}
-			descriptorIDs := parser.NewDArray(types.Int)
+			descriptorIDs := tree.NewDArray(types.Int)
 			for _, descID := range payload.DescriptorIDs {
-				if err := descriptorIDs.Append(parser.NewDInt(parser.DInt(int(descID)))); err != nil {
+				if err := descriptorIDs.Append(tree.NewDInt(tree.DInt(int(descID)))); err != nil {
 					return err
 				}
 			}
-			leaseNode := parser.DNull
+			leaseNode := tree.DNull
 			if payload.Lease != nil {
-				leaseNode = parser.NewDInt(parser.DInt(payload.Lease.NodeID))
+				leaseNode = tree.NewDInt(tree.DInt(payload.Lease.NodeID))
 			}
 			if err := addRow(
 				id,
-				parser.NewDString(payload.Type().String()),
-				parser.NewDString(payload.Description),
-				parser.NewDString(payload.Username),
+				tree.NewDString(payload.Type().String()),
+				tree.NewDString(payload.Description),
+				tree.NewDString(payload.Username),
 				descriptorIDs,
 				status,
 				created,
 				tsOrNull(payload.StartedMicros),
 				tsOrNull(payload.FinishedMicros),
 				tsOrNull(payload.ModifiedMicros),
-				parser.NewDFloat(parser.DFloat(payload.FractionCompleted)),
-				parser.NewDString(payload.Error),
+				tree.NewDFloat(tree.DFloat(payload.FractionCompleted)),
+				tree.NewDString(payload.Error),
 				leaseNode,
 			); err != nil {
 				return err
@@ -467,7 +467,7 @@ CREATE TABLE crdb_internal.node_statement_statistics (
   overhead_lat_var    FLOAT NOT NULL
 );
 `,
-	populate: func(_ context.Context, p *planner, _ string, addRow func(...parser.Datum) error) error {
+	populate: func(_ context.Context, p *planner, _ string, addRow func(...tree.Datum) error) error {
 		if p.session.User != security.RootUser {
 			return errors.New("only root can access application statistics")
 		}
@@ -478,7 +478,7 @@ CREATE TABLE crdb_internal.node_statement_statistics (
 		}
 
 		leaseMgr := p.LeaseMgr()
-		nodeID := parser.NewDInt(parser.DInt(int64(leaseMgr.nodeID.Get())))
+		nodeID := tree.NewDInt(tree.DInt(int64(leaseMgr.nodeID.Get())))
 
 		// Retrieve the application names and sort them to ensure the
 		// output is deterministic.
@@ -505,41 +505,41 @@ CREATE TABLE crdb_internal.node_statement_statistics (
 
 			// Now retrieve the per-stmt stats proper.
 			for _, stmtKey := range stmtKeys {
-				anonymized := parser.DNull
+				anonymized := tree.DNull
 				anonStr, ok := scrubStmtStatKey(p.session.virtualSchemas, stmtKey.stmt)
 				if ok {
-					anonymized = parser.NewDString(anonStr)
+					anonymized = tree.NewDString(anonStr)
 				}
 
 				s := appStats.getStatsForStmt(stmtKey)
 
 				s.Lock()
-				errString := parser.DNull
+				errString := tree.DNull
 				if s.data.LastErr != "" {
-					errString = parser.NewDString(s.data.LastErr)
+					errString = tree.NewDString(s.data.LastErr)
 				}
 				err := addRow(
 					nodeID,
-					parser.NewDString(appName),
-					parser.NewDString(stmtKey.flags()),
-					parser.NewDString(stmtKey.stmt),
+					tree.NewDString(appName),
+					tree.NewDString(stmtKey.flags()),
+					tree.NewDString(stmtKey.stmt),
 					anonymized,
-					parser.NewDInt(parser.DInt(s.data.Count)),
-					parser.NewDInt(parser.DInt(s.data.FirstAttemptCount)),
-					parser.NewDInt(parser.DInt(s.data.MaxRetries)),
+					tree.NewDInt(tree.DInt(s.data.Count)),
+					tree.NewDInt(tree.DInt(s.data.FirstAttemptCount)),
+					tree.NewDInt(tree.DInt(s.data.MaxRetries)),
 					errString,
-					parser.NewDFloat(parser.DFloat(s.data.NumRows.Mean)),
-					parser.NewDFloat(parser.DFloat(s.data.NumRows.GetVariance(s.data.Count))),
-					parser.NewDFloat(parser.DFloat(s.data.ParseLat.Mean)),
-					parser.NewDFloat(parser.DFloat(s.data.ParseLat.GetVariance(s.data.Count))),
-					parser.NewDFloat(parser.DFloat(s.data.PlanLat.Mean)),
-					parser.NewDFloat(parser.DFloat(s.data.PlanLat.GetVariance(s.data.Count))),
-					parser.NewDFloat(parser.DFloat(s.data.RunLat.Mean)),
-					parser.NewDFloat(parser.DFloat(s.data.RunLat.GetVariance(s.data.Count))),
-					parser.NewDFloat(parser.DFloat(s.data.ServiceLat.Mean)),
-					parser.NewDFloat(parser.DFloat(s.data.ServiceLat.GetVariance(s.data.Count))),
-					parser.NewDFloat(parser.DFloat(s.data.OverheadLat.Mean)),
-					parser.NewDFloat(parser.DFloat(s.data.OverheadLat.GetVariance(s.data.Count))),
+					tree.NewDFloat(tree.DFloat(s.data.NumRows.Mean)),
+					tree.NewDFloat(tree.DFloat(s.data.NumRows.GetVariance(s.data.Count))),
+					tree.NewDFloat(tree.DFloat(s.data.ParseLat.Mean)),
+					tree.NewDFloat(tree.DFloat(s.data.ParseLat.GetVariance(s.data.Count))),
+					tree.NewDFloat(tree.DFloat(s.data.PlanLat.Mean)),
+					tree.NewDFloat(tree.DFloat(s.data.PlanLat.GetVariance(s.data.Count))),
+					tree.NewDFloat(tree.DFloat(s.data.RunLat.Mean)),
+					tree.NewDFloat(tree.DFloat(s.data.RunLat.GetVariance(s.data.Count))),
+					tree.NewDFloat(tree.DFloat(s.data.ServiceLat.Mean)),
+					tree.NewDFloat(tree.DFloat(s.data.ServiceLat.GetVariance(s.data.Count))),
+					tree.NewDFloat(tree.DFloat(s.data.OverheadLat.Mean)),
+					tree.NewDFloat(tree.DFloat(s.data.OverheadLat.GetVariance(s.data.Count))),
 				)
 				s.Unlock()
 				if err != nil {
@@ -572,7 +572,7 @@ CREATE TABLE crdb_internal.session_trace (
   message     STRING NOT NULL      -- The logged message.
 );
 `,
-	populate: func(ctx context.Context, p *planner, _ string, addRow func(...parser.Datum) error) error {
+	populate: func(ctx context.Context, p *planner, _ string, addRow func(...tree.Datum) error) error {
 		rows, err := p.session.Tracing.generateSessionTraceVTable()
 		if err != nil {
 			return err
@@ -597,17 +597,17 @@ CREATE TABLE crdb_internal.cluster_settings (
   description   STRING NOT NULL
 );
 `,
-	populate: func(ctx context.Context, p *planner, _ string, addRow func(...parser.Datum) error) error {
+	populate: func(ctx context.Context, p *planner, _ string, addRow func(...tree.Datum) error) error {
 		if err := p.RequireSuperUser("read crdb_internal.cluster_settings"); err != nil {
 			return err
 		}
 		for _, k := range settings.Keys() {
 			setting, _ := settings.Lookup(k)
 			if err := addRow(
-				parser.NewDString(k),
-				parser.NewDString(setting.String(&p.session.execCfg.Settings.SV)),
-				parser.NewDString(setting.Typ()),
-				parser.NewDString(setting.Description()),
+				tree.NewDString(k),
+				tree.NewDString(setting.String(&p.session.execCfg.Settings.SV)),
+				tree.NewDString(setting.Typ()),
+				tree.NewDString(setting.Description()),
 			); err != nil {
 				return err
 			}
@@ -624,13 +624,13 @@ CREATE TABLE crdb_internal.session_variables (
   value    STRING NOT NULL
 );
 `,
-	populate: func(ctx context.Context, p *planner, _ string, addRow func(...parser.Datum) error) error {
+	populate: func(ctx context.Context, p *planner, _ string, addRow func(...tree.Datum) error) error {
 		for _, vName := range varNames {
 			gen := varGen[vName]
 			value := gen.Get(p.session)
 			if err := addRow(
-				parser.NewDString(vName),
-				parser.NewDString(value),
+				tree.NewDString(vName),
+				tree.NewDString(value),
 			); err != nil {
 				return err
 			}
@@ -657,7 +657,7 @@ CREATE TABLE crdb_internal.%s (
 // on the current node. The results are dependent on the current user.
 var crdbInternalLocalQueriesTable = virtualSchemaTable{
 	schema: fmt.Sprintf(queriesSchemaPattern, "node_queries"),
-	populate: func(ctx context.Context, p *planner, _ string, addRow func(...parser.Datum) error) error {
+	populate: func(ctx context.Context, p *planner, _ string, addRow func(...tree.Datum) error) error {
 		req := serverpb.ListSessionsRequest{Username: p.session.User}
 		response, err := p.session.execCfg.StatusServer.ListLocalSessions(ctx, &req)
 		if err != nil {
@@ -671,7 +671,7 @@ var crdbInternalLocalQueriesTable = virtualSchemaTable{
 // on the entire cluster. The result is dependent on the current user.
 var crdbInternalClusterQueriesTable = virtualSchemaTable{
 	schema: fmt.Sprintf(queriesSchemaPattern, "cluster_queries"),
-	populate: func(ctx context.Context, p *planner, _ string, addRow func(...parser.Datum) error) error {
+	populate: func(ctx context.Context, p *planner, _ string, addRow func(...tree.Datum) error) error {
 		req := serverpb.ListSessionsRequest{Username: p.session.User}
 		response, err := p.session.execCfg.StatusServer.ListSessions(ctx, &req)
 		if err != nil {
@@ -682,28 +682,30 @@ var crdbInternalClusterQueriesTable = virtualSchemaTable{
 }
 
 func populateQueriesTable(
-	ctx context.Context, addRow func(...parser.Datum) error, response *serverpb.ListSessionsResponse,
+	ctx context.Context,
+	addRow func(...tree.Datum) error,
+	response *serverpb.ListSessionsResponse,
 ) error {
 	for _, session := range response.Sessions {
 		for _, query := range session.ActiveQueries {
-			isDistributedDatum := parser.DNull
+			isDistributedDatum := tree.DNull
 			phase := strings.ToLower(query.Phase.String())
 			if phase == "executing" {
-				isDistributedDatum = parser.DBoolFalse
+				isDistributedDatum = tree.DBoolFalse
 				if query.IsDistributed {
-					isDistributedDatum = parser.DBoolTrue
+					isDistributedDatum = tree.DBoolTrue
 				}
 			}
 			if err := addRow(
-				parser.NewDString(query.ID),
-				parser.NewDInt(parser.DInt(session.NodeID)),
-				parser.NewDString(session.Username),
-				parser.MakeDTimestamp(query.Start, time.Microsecond),
-				parser.NewDString(query.Sql),
-				parser.NewDString(session.ClientAddress),
-				parser.NewDString(session.ApplicationName),
+				tree.NewDString(query.ID),
+				tree.NewDInt(tree.DInt(session.NodeID)),
+				tree.NewDString(session.Username),
+				tree.MakeDTimestamp(query.Start, time.Microsecond),
+				tree.NewDString(query.Sql),
+				tree.NewDString(session.ClientAddress),
+				tree.NewDString(session.ApplicationName),
 				isDistributedDatum,
-				parser.NewDString(phase),
+				tree.NewDString(phase),
 			); err != nil {
 				return err
 			}
@@ -715,15 +717,15 @@ func populateQueriesTable(
 		if rpcErr.NodeID != 0 {
 			// Add a row with this node ID, and nulls for all other columns
 			if err := addRow(
-				parser.DNull,
-				parser.NewDInt(parser.DInt(rpcErr.NodeID)),
-				parser.DNull,
-				parser.DNull,
-				parser.DNull,
-				parser.DNull,
-				parser.DNull,
-				parser.DNull,
-				parser.DNull,
+				tree.DNull,
+				tree.NewDInt(tree.DInt(rpcErr.NodeID)),
+				tree.DNull,
+				tree.DNull,
+				tree.DNull,
+				tree.DNull,
+				tree.DNull,
+				tree.DNull,
+				tree.DNull,
 			); err != nil {
 				return err
 			}
@@ -750,7 +752,7 @@ CREATE TABLE crdb_internal.%s (
 // on the current node. The results are dependent on the current user.
 var crdbInternalLocalSessionsTable = virtualSchemaTable{
 	schema: fmt.Sprintf(sessionsSchemaPattern, "node_sessions"),
-	populate: func(ctx context.Context, p *planner, _ string, addRow func(...parser.Datum) error) error {
+	populate: func(ctx context.Context, p *planner, _ string, addRow func(...tree.Datum) error) error {
 		req := serverpb.ListSessionsRequest{Username: p.session.User}
 		response, err := p.session.execCfg.StatusServer.ListLocalSessions(ctx, &req)
 		if err != nil {
@@ -764,7 +766,7 @@ var crdbInternalLocalSessionsTable = virtualSchemaTable{
 // on the entire cluster. The result is dependent on the current user.
 var crdbInternalClusterSessionsTable = virtualSchemaTable{
 	schema: fmt.Sprintf(sessionsSchemaPattern, "cluster_sessions"),
-	populate: func(ctx context.Context, p *planner, _ string, addRow func(...parser.Datum) error) error {
+	populate: func(ctx context.Context, p *planner, _ string, addRow func(...tree.Datum) error) error {
 		req := serverpb.ListSessionsRequest{Username: p.session.User}
 		response, err := p.session.execCfg.StatusServer.ListSessions(ctx, &req)
 		if err != nil {
@@ -775,13 +777,15 @@ var crdbInternalClusterSessionsTable = virtualSchemaTable{
 }
 
 func populateSessionsTable(
-	ctx context.Context, addRow func(...parser.Datum) error, response *serverpb.ListSessionsResponse,
+	ctx context.Context,
+	addRow func(...tree.Datum) error,
+	response *serverpb.ListSessionsResponse,
 ) error {
 	for _, session := range response.Sessions {
 		// Generate active_queries and oldest_query_start
 		var activeQueries bytes.Buffer
 		var oldestStart time.Time
-		var oldestStartDatum parser.Datum
+		var oldestStartDatum tree.Datum
 
 		for idx, query := range session.ActiveQueries {
 			if idx > 0 {
@@ -795,24 +799,24 @@ func populateSessionsTable(
 		}
 
 		if oldestStart.IsZero() {
-			oldestStartDatum = parser.DNull
+			oldestStartDatum = tree.DNull
 		} else {
-			oldestStartDatum = parser.MakeDTimestamp(oldestStart, time.Microsecond)
+			oldestStartDatum = tree.MakeDTimestamp(oldestStart, time.Microsecond)
 		}
 
-		kvTxnIDDatum := parser.DNull
+		kvTxnIDDatum := tree.DNull
 		if session.KvTxnID != nil {
-			kvTxnIDDatum = parser.NewDString(session.KvTxnID.String())
+			kvTxnIDDatum = tree.NewDString(session.KvTxnID.String())
 		}
 
 		if err := addRow(
-			parser.NewDInt(parser.DInt(session.NodeID)),
-			parser.NewDString(session.Username),
-			parser.NewDString(session.ClientAddress),
-			parser.NewDString(session.ApplicationName),
-			parser.NewDString(activeQueries.String()),
-			parser.NewDString(session.LastActiveQuery),
-			parser.MakeDTimestamp(session.Start, time.Microsecond),
+			tree.NewDInt(tree.DInt(session.NodeID)),
+			tree.NewDString(session.Username),
+			tree.NewDString(session.ClientAddress),
+			tree.NewDString(session.ApplicationName),
+			tree.NewDString(activeQueries.String()),
+			tree.NewDString(session.LastActiveQuery),
+			tree.MakeDTimestamp(session.Start, time.Microsecond),
 			oldestStartDatum,
 			kvTxnIDDatum,
 		); err != nil {
@@ -825,15 +829,15 @@ func populateSessionsTable(
 		if rpcErr.NodeID != 0 {
 			// Add a row with this node ID, and nulls for all other columns
 			if err := addRow(
-				parser.NewDInt(parser.DInt(rpcErr.NodeID)),
-				parser.DNull,
-				parser.DNull,
-				parser.DNull,
-				parser.DNull,
-				parser.DNull,
-				parser.DNull,
-				parser.DNull,
-				parser.DNull,
+				tree.NewDInt(tree.DInt(rpcErr.NodeID)),
+				tree.DNull,
+				tree.DNull,
+				tree.DNull,
+				tree.DNull,
+				tree.DNull,
+				tree.DNull,
+				tree.DNull,
+				tree.DNull,
 			); err != nil {
 				return err
 			}
@@ -854,15 +858,15 @@ CREATE TABLE crdb_internal.builtin_functions (
   details   STRING NOT NULL
 );
 `,
-	populate: func(ctx context.Context, _ *planner, _ string, addRow func(...parser.Datum) error) error {
+	populate: func(ctx context.Context, _ *planner, _ string, addRow func(...tree.Datum) error) error {
 		for _, name := range builtins.AllBuiltinNames {
 			overloads := builtins.Builtins[name]
 			for _, f := range overloads {
 				if err := addRow(
-					parser.NewDString(name),
-					parser.NewDString(f.Signature()),
-					parser.NewDString(f.Category),
-					parser.NewDString(f.Info),
+					tree.NewDString(name),
+					tree.NewDString(f.Signature()),
+					tree.NewDString(f.Category),
+					tree.NewDString(f.Info),
 				); err != nil {
 					return err
 				}
@@ -886,41 +890,41 @@ CREATE TABLE crdb_internal.create_statements (
   state            STRING NOT NULL
 )
 `,
-	populate: func(ctx context.Context, p *planner, prefix string, addRow func(...parser.Datum) error) error {
+	populate: func(ctx context.Context, p *planner, prefix string, addRow func(...tree.Datum) error) error {
 		return forEachTableDescAll(ctx, p, prefix,
 			func(db *sqlbase.DatabaseDescriptor, table *sqlbase.TableDescriptor) error {
-				var descType parser.Datum
+				var descType tree.Datum
 				var stmt string
 				var err error
-				var typeView = parser.DString("view")
-				var typeTable = parser.DString("table")
+				var typeView = tree.DString("view")
+				var typeTable = tree.DString("table")
 				if table.IsView() {
 					descType = &typeView
-					stmt, err = p.showCreateView(ctx, parser.Name(table.Name), table)
+					stmt, err = p.showCreateView(ctx, tree.Name(table.Name), table)
 				} else {
 					descType = &typeTable
-					stmt, err = p.showCreateTable(ctx, parser.Name(table.Name), prefix, table)
+					stmt, err = p.showCreateTable(ctx, tree.Name(table.Name), prefix, table)
 				}
 				if err != nil {
 					return err
 				}
 
-				descID := parser.DNull
+				descID := tree.DNull
 				if table.ID != keys.VirtualDescriptorID {
-					descID = parser.NewDInt(parser.DInt(table.ID))
+					descID = tree.NewDInt(tree.DInt(table.ID))
 				}
-				dbDescID := parser.DNull
+				dbDescID := tree.DNull
 				if db.ID != keys.VirtualDescriptorID {
-					dbDescID = parser.NewDInt(parser.DInt(db.ID))
+					dbDescID = tree.NewDInt(tree.DInt(db.ID))
 				}
 				return addRow(
 					dbDescID,
-					parser.NewDString(db.Name),
+					tree.NewDString(db.Name),
 					descID,
 					descType,
-					parser.NewDString(table.Name),
-					parser.NewDString(stmt),
-					parser.NewDString(table.State.String()),
+					tree.NewDString(table.Name),
+					tree.NewDString(stmt),
+					tree.NewDString(table.State.String()),
 				)
 			})
 	},
@@ -940,28 +944,28 @@ CREATE TABLE crdb_internal.table_columns (
   hidden           BOOL NOT NULL
 )
 `,
-	populate: func(ctx context.Context, p *planner, prefix string, addRow func(...parser.Datum) error) error {
+	populate: func(ctx context.Context, p *planner, prefix string, addRow func(...tree.Datum) error) error {
 		return forEachTableDescAll(ctx, p, prefix,
 			func(_ *sqlbase.DatabaseDescriptor, table *sqlbase.TableDescriptor) error {
-				tableID := parser.DNull
+				tableID := tree.DNull
 				if table.ID != keys.VirtualDescriptorID {
-					tableID = parser.NewDInt(parser.DInt(table.ID))
+					tableID = tree.NewDInt(tree.DInt(table.ID))
 				}
-				tableName := parser.NewDString(table.Name)
+				tableName := tree.NewDString(table.Name)
 				for _, col := range table.Columns {
-					defStr := parser.DNull
+					defStr := tree.DNull
 					if col.DefaultExpr != nil {
-						defStr = parser.NewDString(*col.DefaultExpr)
+						defStr = tree.NewDString(*col.DefaultExpr)
 					}
 					if err := addRow(
 						tableID,
 						tableName,
-						parser.NewDInt(parser.DInt(col.ID)),
-						parser.NewDString(col.Name),
-						parser.NewDString(col.Type.String()),
-						parser.MakeDBool(parser.DBool(col.Nullable)),
+						tree.NewDInt(tree.DInt(col.ID)),
+						tree.NewDString(col.Name),
+						tree.NewDString(col.Type.String()),
+						tree.MakeDBool(tree.DBool(col.Nullable)),
 						defStr,
-						parser.MakeDBool(parser.DBool(col.Hidden)),
+						tree.MakeDBool(tree.DBool(col.Hidden)),
 					); err != nil {
 						return err
 					}
@@ -983,23 +987,23 @@ CREATE TABLE crdb_internal.table_indexes (
   is_unique        BOOL NOT NULL
 )
 `,
-	populate: func(ctx context.Context, p *planner, prefix string, addRow func(...parser.Datum) error) error {
-		primary := parser.NewDString("primary")
-		secondary := parser.NewDString("secondary")
+	populate: func(ctx context.Context, p *planner, prefix string, addRow func(...tree.Datum) error) error {
+		primary := tree.NewDString("primary")
+		secondary := tree.NewDString("secondary")
 		return forEachTableDescAll(ctx, p, prefix,
 			func(_ *sqlbase.DatabaseDescriptor, table *sqlbase.TableDescriptor) error {
-				tableID := parser.DNull
+				tableID := tree.DNull
 				if table.ID != keys.VirtualDescriptorID {
-					tableID = parser.NewDInt(parser.DInt(table.ID))
+					tableID = tree.NewDInt(tree.DInt(table.ID))
 				}
-				tableName := parser.NewDString(table.Name)
+				tableName := tree.NewDString(table.Name)
 				if err := addRow(
 					tableID,
 					tableName,
-					parser.NewDInt(parser.DInt(table.PrimaryIndex.ID)),
-					parser.NewDString(table.PrimaryIndex.Name),
+					tree.NewDInt(tree.DInt(table.PrimaryIndex.ID)),
+					tree.NewDString(table.PrimaryIndex.Name),
 					primary,
-					parser.MakeDBool(parser.DBool(table.PrimaryIndex.Unique)),
+					tree.MakeDBool(tree.DBool(table.PrimaryIndex.Unique)),
 				); err != nil {
 					return err
 				}
@@ -1007,10 +1011,10 @@ CREATE TABLE crdb_internal.table_indexes (
 					if err := addRow(
 						tableID,
 						tableName,
-						parser.NewDInt(parser.DInt(idx.ID)),
-						parser.NewDString(idx.Name),
+						tree.NewDInt(tree.DInt(idx.ID)),
+						tree.NewDString(idx.Name),
 						secondary,
-						parser.MakeDBool(parser.DBool(idx.Unique)),
+						tree.MakeDBool(tree.DBool(idx.Unique)),
 					); err != nil {
 						return err
 					}
@@ -1034,30 +1038,30 @@ CREATE TABLE crdb_internal.index_columns (
   column_direction STRING
 )
 `,
-	populate: func(ctx context.Context, p *planner, prefix string, addRow func(...parser.Datum) error) error {
-		key := parser.NewDString("key")
-		storing := parser.NewDString("storing")
-		extra := parser.NewDString("extra")
-		composite := parser.NewDString("composite")
-		idxDirMap := map[sqlbase.IndexDescriptor_Direction]parser.Datum{
-			sqlbase.IndexDescriptor_ASC:  parser.NewDString(sqlbase.IndexDescriptor_ASC.String()),
-			sqlbase.IndexDescriptor_DESC: parser.NewDString(sqlbase.IndexDescriptor_DESC.String()),
+	populate: func(ctx context.Context, p *planner, prefix string, addRow func(...tree.Datum) error) error {
+		key := tree.NewDString("key")
+		storing := tree.NewDString("storing")
+		extra := tree.NewDString("extra")
+		composite := tree.NewDString("composite")
+		idxDirMap := map[sqlbase.IndexDescriptor_Direction]tree.Datum{
+			sqlbase.IndexDescriptor_ASC:  tree.NewDString(sqlbase.IndexDescriptor_ASC.String()),
+			sqlbase.IndexDescriptor_DESC: tree.NewDString(sqlbase.IndexDescriptor_DESC.String()),
 		}
 		return forEachTableDescAll(ctx, p, prefix,
 			func(db *sqlbase.DatabaseDescriptor, table *sqlbase.TableDescriptor) error {
-				tableID := parser.DNull
+				tableID := tree.DNull
 				if table.ID != keys.VirtualDescriptorID {
-					tableID = parser.NewDInt(parser.DInt(table.ID))
+					tableID = tree.NewDInt(tree.DInt(table.ID))
 				}
-				tableName := parser.NewDString(table.Name)
+				tableName := tree.NewDString(table.Name)
 				reportIndex := func(idx *sqlbase.IndexDescriptor) error {
-					idxID := parser.NewDInt(parser.DInt(idx.ID))
-					idxName := parser.NewDString(idx.Name)
+					idxID := tree.NewDInt(tree.DInt(idx.ID))
+					idxName := tree.NewDString(idx.Name)
 
 					// Report the main (key) columns.
 					for i, c := range idx.ColumnIDs {
-						colName := parser.DNull
-						colDir := parser.DNull
+						colName := tree.DNull
+						colDir := tree.DNull
 						if i >= len(idx.ColumnNames) {
 							// We log an error here, instead of reporting an error
 							// to the user, because we really want to see the
@@ -1066,7 +1070,7 @@ CREATE TABLE crdb_internal.index_columns (
 								table.ID, idx.ID, db.Name, table.Name, idx.Name,
 								len(idx.ColumnIDs), len(idx.ColumnNames))
 						} else {
-							colName = parser.NewDString(idx.ColumnNames[i])
+							colName = tree.NewDString(idx.ColumnNames[i])
 						}
 						if i >= len(idx.ColumnDirections) {
 							// See comment above.
@@ -1079,7 +1083,7 @@ CREATE TABLE crdb_internal.index_columns (
 
 						if err := addRow(
 							tableID, tableName, idxID, idxName,
-							key, parser.NewDInt(parser.DInt(c)), colName, colDir,
+							key, tree.NewDInt(tree.DInt(c)), colName, colDir,
 						); err != nil {
 							return err
 						}
@@ -1089,7 +1093,7 @@ CREATE TABLE crdb_internal.index_columns (
 					for _, c := range idx.StoreColumnIDs {
 						if err := addRow(
 							tableID, tableName, idxID, idxName,
-							storing, parser.NewDInt(parser.DInt(c)), parser.DNull, parser.DNull,
+							storing, tree.NewDInt(tree.DInt(c)), tree.DNull, tree.DNull,
 						); err != nil {
 							return err
 						}
@@ -1099,7 +1103,7 @@ CREATE TABLE crdb_internal.index_columns (
 					for _, c := range idx.ExtraColumnIDs {
 						if err := addRow(
 							tableID, tableName, idxID, idxName,
-							extra, parser.NewDInt(parser.DInt(c)), parser.DNull, parser.DNull,
+							extra, tree.NewDInt(tree.DInt(c)), tree.DNull, tree.DNull,
 						); err != nil {
 							return err
 						}
@@ -1109,7 +1113,7 @@ CREATE TABLE crdb_internal.index_columns (
 					for _, c := range idx.CompositeColumnIDs {
 						if err := addRow(
 							tableID, tableName, idxID, idxName,
-							composite, parser.NewDInt(parser.DInt(c)), parser.DNull, parser.DNull,
+							composite, tree.NewDInt(tree.DInt(c)), tree.DNull, tree.DNull,
 						); err != nil {
 							return err
 						}
@@ -1146,30 +1150,30 @@ CREATE TABLE crdb_internal.backward_dependencies (
   dependson_details  STRING
 )
 `,
-	populate: func(ctx context.Context, p *planner, prefix string, addRow func(...parser.Datum) error) error {
-		fkDep := parser.NewDString("fk")
-		viewDep := parser.NewDString("view")
-		interleaveDep := parser.NewDString("interleave")
+	populate: func(ctx context.Context, p *planner, prefix string, addRow func(...tree.Datum) error) error {
+		fkDep := tree.NewDString("fk")
+		viewDep := tree.NewDString("view")
+		interleaveDep := tree.NewDString("interleave")
 		return forEachTableDescAll(ctx, p, prefix,
 			func(_ *sqlbase.DatabaseDescriptor, table *sqlbase.TableDescriptor) error {
-				tableID := parser.DNull
+				tableID := tree.DNull
 				if table.ID != keys.VirtualDescriptorID {
-					tableID = parser.NewDInt(parser.DInt(table.ID))
+					tableID = tree.NewDInt(tree.DInt(table.ID))
 				}
-				tableName := parser.NewDString(table.Name)
+				tableName := tree.NewDString(table.Name)
 
 				reportIdxDeps := func(idx *sqlbase.IndexDescriptor) error {
-					idxID := parser.NewDInt(parser.DInt(idx.ID))
+					idxID := tree.NewDInt(tree.DInt(idx.ID))
 					if idx.ForeignKey.Table != 0 {
 						fkRef := &idx.ForeignKey
 						if err := addRow(
 							tableID, tableName,
 							idxID,
-							parser.NewDInt(parser.DInt(fkRef.Table)),
+							tree.NewDInt(tree.DInt(fkRef.Table)),
 							fkDep,
-							parser.NewDInt(parser.DInt(fkRef.Index)),
-							parser.NewDString(fkRef.Name),
-							parser.NewDString(fmt.Sprintf("SharedPrefixLen: %d", fkRef.SharedPrefixLen)),
+							tree.NewDInt(tree.DInt(fkRef.Index)),
+							tree.NewDString(fkRef.Name),
+							tree.NewDString(fmt.Sprintf("SharedPrefixLen: %d", fkRef.SharedPrefixLen)),
 						); err != nil {
 							return err
 						}
@@ -1179,11 +1183,11 @@ CREATE TABLE crdb_internal.backward_dependencies (
 						if err := addRow(
 							tableID, tableName,
 							idxID,
-							parser.NewDInt(parser.DInt(interleaveParent.TableID)),
+							tree.NewDInt(tree.DInt(interleaveParent.TableID)),
 							interleaveDep,
-							parser.NewDInt(parser.DInt(interleaveParent.IndexID)),
-							parser.DNull,
-							parser.NewDString(fmt.Sprintf("SharedPrefixLen: %d",
+							tree.NewDInt(tree.DInt(interleaveParent.IndexID)),
+							tree.DNull,
+							tree.NewDString(fmt.Sprintf("SharedPrefixLen: %d",
 								interleaveParent.SharedPrefixLen)),
 						); err != nil {
 							return err
@@ -1208,12 +1212,12 @@ CREATE TABLE crdb_internal.backward_dependencies (
 				for _, tIdx := range table.DependsOn {
 					if err := addRow(
 						tableID, tableName,
-						parser.DNull,
-						parser.NewDInt(parser.DInt(tIdx)),
+						tree.DNull,
+						tree.NewDInt(tree.DInt(tIdx)),
 						viewDep,
-						parser.DNull,
-						parser.DNull,
-						parser.DNull,
+						tree.DNull,
+						tree.DNull,
+						tree.DNull,
 					); err != nil {
 						return err
 					}
@@ -1239,29 +1243,29 @@ CREATE TABLE crdb_internal.forward_dependencies (
   dependedonby_details  STRING
 )
 `,
-	populate: func(ctx context.Context, p *planner, prefix string, addRow func(...parser.Datum) error) error {
-		fkDep := parser.NewDString("fk")
-		viewDep := parser.NewDString("view")
-		interleaveDep := parser.NewDString("interleave")
+	populate: func(ctx context.Context, p *planner, prefix string, addRow func(...tree.Datum) error) error {
+		fkDep := tree.NewDString("fk")
+		viewDep := tree.NewDString("view")
+		interleaveDep := tree.NewDString("interleave")
 		return forEachTableDescAll(ctx, p, prefix,
 			func(_ *sqlbase.DatabaseDescriptor, table *sqlbase.TableDescriptor) error {
-				tableID := parser.DNull
+				tableID := tree.DNull
 				if table.ID != keys.VirtualDescriptorID {
-					tableID = parser.NewDInt(parser.DInt(table.ID))
+					tableID = tree.NewDInt(tree.DInt(table.ID))
 				}
-				tableName := parser.NewDString(table.Name)
+				tableName := tree.NewDString(table.Name)
 
 				reportIdxDeps := func(idx *sqlbase.IndexDescriptor) error {
-					idxID := parser.NewDInt(parser.DInt(idx.ID))
+					idxID := tree.NewDInt(tree.DInt(idx.ID))
 					for _, fkRef := range idx.ReferencedBy {
 						if err := addRow(
 							tableID, tableName,
 							idxID,
-							parser.NewDInt(parser.DInt(fkRef.Table)),
+							tree.NewDInt(tree.DInt(fkRef.Table)),
 							fkDep,
-							parser.NewDInt(parser.DInt(fkRef.Index)),
-							parser.NewDString(fkRef.Name),
-							parser.NewDString(fmt.Sprintf("SharedPrefixLen: %d", fkRef.SharedPrefixLen)),
+							tree.NewDInt(tree.DInt(fkRef.Index)),
+							tree.NewDString(fkRef.Name),
+							tree.NewDString(fmt.Sprintf("SharedPrefixLen: %d", fkRef.SharedPrefixLen)),
 						); err != nil {
 							return err
 						}
@@ -1271,11 +1275,11 @@ CREATE TABLE crdb_internal.forward_dependencies (
 						if err := addRow(
 							tableID, tableName,
 							idxID,
-							parser.NewDInt(parser.DInt(interleaveRef.Table)),
+							tree.NewDInt(tree.DInt(interleaveRef.Table)),
 							interleaveDep,
-							parser.NewDInt(parser.DInt(interleaveRef.Index)),
-							parser.DNull,
-							parser.NewDString(fmt.Sprintf("SharedPrefixLen: %d",
+							tree.NewDInt(tree.DInt(interleaveRef.Index)),
+							tree.DNull,
+							tree.NewDString(fmt.Sprintf("SharedPrefixLen: %d",
 								interleaveRef.SharedPrefixLen)),
 						); err != nil {
 							return err
@@ -1300,12 +1304,12 @@ CREATE TABLE crdb_internal.forward_dependencies (
 				for _, dep := range table.DependedOnBy {
 					if err := addRow(
 						tableID, tableName,
-						parser.DNull,
-						parser.NewDInt(parser.DInt(dep.ID)),
+						tree.DNull,
+						tree.NewDInt(tree.DInt(dep.ID)),
 						viewDep,
-						parser.NewDInt(parser.DInt(dep.IndexID)),
-						parser.DNull,
-						parser.NewDString(fmt.Sprintf("Columns: %v", dep.ColumnIDs)),
+						tree.NewDInt(tree.DInt(dep.IndexID)),
+						tree.DNull,
+						tree.NewDString(fmt.Sprintf("Columns: %v", dep.ColumnIDs)),
 					); err != nil {
 						return err
 					}
@@ -1332,7 +1336,7 @@ CREATE TABLE crdb_internal.ranges (
   lease_holder INT NOT NULL
 )
 `,
-	populate: func(ctx context.Context, p *planner, prefix string, addRow func(...parser.Datum) error) error {
+	populate: func(ctx context.Context, p *planner, prefix string, addRow func(...tree.Datum) error) error {
 		if err := p.RequireSuperUser("read crdb_internal.ranges"); err != nil {
 			return err
 		}
@@ -1370,9 +1374,9 @@ CREATE TABLE crdb_internal.ranges (
 			if err := r.ValueProto(&desc); err != nil {
 				return err
 			}
-			arr := parser.NewDArray(types.Int)
+			arr := tree.NewDArray(types.Int)
 			for _, replica := range desc.Replicas {
-				if err := arr.Append(parser.NewDInt(parser.DInt(replica.StoreID))); err != nil {
+				if err := arr.Append(tree.NewDInt(tree.DInt(replica.StoreID))); err != nil {
 					return err
 				}
 			}
@@ -1405,16 +1409,16 @@ CREATE TABLE crdb_internal.ranges (
 			resp := b.RawResponse().Responses[0].GetInner().(*roachpb.LeaseInfoResponse)
 
 			if err := addRow(
-				parser.NewDInt(parser.DInt(desc.RangeID)),
-				parser.NewDBytes(parser.DBytes(desc.StartKey)),
-				parser.NewDString(keys.PrettyPrint(desc.StartKey.AsRawKey())),
-				parser.NewDBytes(parser.DBytes(desc.EndKey)),
-				parser.NewDString(keys.PrettyPrint(desc.EndKey.AsRawKey())),
-				parser.NewDString(dbName),
-				parser.NewDString(tableName),
-				parser.NewDString(indexName),
+				tree.NewDInt(tree.DInt(desc.RangeID)),
+				tree.NewDBytes(tree.DBytes(desc.StartKey)),
+				tree.NewDString(keys.PrettyPrint(desc.StartKey.AsRawKey())),
+				tree.NewDBytes(tree.DBytes(desc.EndKey)),
+				tree.NewDString(keys.PrettyPrint(desc.EndKey.AsRawKey())),
+				tree.NewDString(dbName),
+				tree.NewDString(tableName),
+				tree.NewDString(indexName),
 				arr,
-				parser.NewDInt(parser.DInt(resp.Lease.Replica.StoreID)),
+				tree.NewDInt(tree.DInt(resp.Lease.Replica.StoreID)),
 			); err != nil {
 				return err
 			}
@@ -1434,7 +1438,7 @@ CREATE TABLE crdb_internal.zones (
   config_proto  BYTES NOT NULL
 )
 `,
-	populate: func(ctx context.Context, p *planner, prefix string, addRow func(...parser.Datum) error) error {
+	populate: func(ctx context.Context, p *planner, prefix string, addRow func(...tree.Datum) error) error {
 		namespace, err := p.getAllNames(ctx)
 		if err != nil {
 			return err
@@ -1453,13 +1457,13 @@ CREATE TABLE crdb_internal.zones (
 			return err
 		}
 		for _, r := range rows {
-			id := uint32(parser.MustBeDInt(r[0]))
+			id := uint32(tree.MustBeDInt(r[0]))
 			zs, err := config.ZoneSpecifierFromID(id, resolveID)
 			if err != nil {
 				return err
 			}
 
-			configBytes := []byte(*r[1].(*parser.DBytes))
+			configBytes := []byte(*r[1].(*tree.DBytes))
 			var configProto config.ZoneConfig
 			if err := protoutil.Unmarshal(configBytes, &configProto); err != nil {
 				return err
@@ -1480,9 +1484,9 @@ CREATE TABLE crdb_internal.zones (
 				}
 				if err := addRow(
 					r[0], // id
-					parser.NewDString(config.CLIZoneSpecifier(zs)),
-					parser.NewDBytes(parser.DBytes(configYAML)),
-					parser.NewDBytes(parser.DBytes(configBytes)),
+					tree.NewDString(config.CLIZoneSpecifier(zs)),
+					tree.NewDBytes(tree.DBytes(configYAML)),
+					tree.NewDBytes(tree.DBytes(configBytes)),
 				); err != nil {
 					return err
 				}
@@ -1499,8 +1503,8 @@ CREATE TABLE crdb_internal.zones (
 						return err
 					}
 					zs := zs
-					zs.TableOrIndex.Index = parser.UnrestrictedName(index.Name)
-					zs.Partition = parser.Name(s.PartitionName)
+					zs.TableOrIndex.Index = tree.UnrestrictedName(index.Name)
+					zs.Partition = tree.Name(s.PartitionName)
 					configYAML, err := yaml.Marshal(s.Config)
 					if err != nil {
 						return err
@@ -1511,9 +1515,9 @@ CREATE TABLE crdb_internal.zones (
 					}
 					if err := addRow(
 						r[0], // id
-						parser.NewDString(config.CLIZoneSpecifier(zs)),
-						parser.NewDBytes(parser.DBytes(configYAML)),
-						parser.NewDBytes(parser.DBytes(configBytes)),
+						tree.NewDString(config.CLIZoneSpecifier(zs)),
+						tree.NewDBytes(tree.DBytes(configYAML)),
+						tree.NewDBytes(tree.DBytes(configBytes)),
 					); err != nil {
 						return err
 					}

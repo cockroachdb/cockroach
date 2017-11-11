@@ -24,7 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -63,7 +63,7 @@ type tableInfo struct {
 	keyVals     []EncDatum
 	extraVals   []EncDatum
 	row         EncDatumRow
-	decodedRow  parser.Datums
+	decodedRow  tree.Datums
 }
 
 // RowResponse is returned when NextRow is invoked. It contains the
@@ -78,7 +78,7 @@ type RowResponse struct {
 // DecodedRowResponse returns the decoded Row in terms of Datums as well as the
 // table and index descriptors for the corresponding table/index.
 type DecodedRowResponse struct {
-	Datums parser.Datums
+	Datums tree.Datums
 	Desc   *TableDescriptor
 	Index  *IndexDescriptor
 }
@@ -209,7 +209,7 @@ func (mrf *MultiRowFetcher) Init(
 			isSecondaryIndex: tableArgs.IsSecondaryIndex,
 			cols:             tableArgs.Cols,
 			row:              make([]EncDatum, len(tableArgs.Cols)),
-			decodedRow:       make([]parser.Datum, len(tableArgs.Cols)),
+			decodedRow:       make([]tree.Datum, len(tableArgs.Cols)),
 		}
 
 		// We produce references to every signature's reference.
@@ -551,7 +551,7 @@ func (mrf *MultiRowFetcher) processKV(
 	if table.neededCols.Empty() {
 		// We don't need to decode any values.
 		if mrf.traceKV {
-			prettyValue = parser.DNull.String()
+			prettyValue = tree.DNull.String()
 		}
 		return prettyKey, prettyValue, nil
 	}
@@ -634,7 +634,7 @@ func (mrf *MultiRowFetcher) processKV(
 	}
 
 	if mrf.traceKV && prettyValue == "" {
-		prettyValue = parser.DNull.String()
+		prettyValue = tree.DNull.String()
 	}
 
 	return prettyKey, prettyValue, nil
@@ -831,7 +831,7 @@ func (mrf *MultiRowFetcher) NextRowDecoded(
 
 	for i, encDatum := range resp.Row {
 		if encDatum.IsUnset() {
-			mrf.rowReadyTable.decodedRow[i] = parser.DNull
+			mrf.rowReadyTable.decodedRow[i] = tree.DNull
 			continue
 		}
 		if err := encDatum.EnsureDecoded(&mrf.rowReadyTable.cols[i].Type, mrf.alloc); err != nil {
@@ -857,7 +857,7 @@ func (mrf *MultiRowFetcher) finalizeRow() {
 					table.desc.Name, table.cols[i].Name))
 			}
 			table.row[i] = EncDatum{
-				Datum: parser.DNull,
+				Datum: tree.DNull,
 			}
 		}
 	}

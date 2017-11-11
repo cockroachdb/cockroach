@@ -24,6 +24,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	_ "github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 )
@@ -862,7 +863,7 @@ func TestEval(t *testing.T) {
 		{`'NaN'::decimal::float`, `NaN`},
 		{`'NaN'::float::decimal`, `NaN`},
 	}
-	ctx := parser.NewTestingEvalContext()
+	ctx := tree.NewTestingEvalContext()
 	defer ctx.Mon.Stop(context.Background())
 	defer ctx.ActiveMemAcc.Close(context.Background())
 	for _, d := range testData {
@@ -967,7 +968,7 @@ func TestTimeConversion(t *testing.T) {
 	}
 
 	for _, test := range tests {
-		ctx := parser.NewTestingEvalContext()
+		ctx := tree.NewTestingEvalContext()
 		defer ctx.Mon.Stop(context.Background())
 		exprStr := fmt.Sprintf("experimental_strptime('%s', '%s')", test.start, test.format)
 		expr, err := parser.ParseExpr(exprStr)
@@ -985,7 +986,7 @@ func TestTimeConversion(t *testing.T) {
 			t.Errorf("%s: %v", exprStr, err)
 			continue
 		}
-		ts, ok := r.(*parser.DTimestampTZ)
+		ts, ok := r.(*tree.DTimestampTZ)
 		if !ok {
 			t.Errorf("%s: result not a timestamp: %s", exprStr, r)
 			continue
@@ -1024,7 +1025,7 @@ func TestTimeConversion(t *testing.T) {
 			t.Errorf("%s: %v", exprStr, err)
 			continue
 		}
-		rs, ok := r.(*parser.DString)
+		rs, ok := r.(*tree.DString)
 		if !ok {
 			t.Errorf("%s: result not a string: %s", exprStr, r)
 			continue
@@ -1106,9 +1107,9 @@ func TestEvalError(t *testing.T) {
 		if err != nil {
 			t.Fatalf("%s: %v", d.expr, err)
 		}
-		typedExpr, err := parser.TypeCheck(expr, nil, types.Any)
+		typedExpr, err := tree.TypeCheck(expr, nil, types.Any)
 		if err == nil {
-			evalCtx := parser.NewTestingEvalContext()
+			evalCtx := tree.NewTestingEvalContext()
 			defer evalCtx.Stop(context.Background())
 			_, err = typedExpr.Eval(evalCtx)
 		}

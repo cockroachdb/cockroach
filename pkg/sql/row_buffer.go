@@ -15,7 +15,7 @@
 package sql
 
 import (
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
@@ -29,13 +29,13 @@ import (
 // interface.
 type RowBuffer struct {
 	*sqlbase.RowContainer
-	output parser.Datums
+	output tree.Datums
 }
 
 // Values here is analogous to Values() as defined under planNode.
 //
 // Available after Next(), result only valid until the next call to Next()
-func (rb *RowBuffer) Values() parser.Datums {
+func (rb *RowBuffer) Values() tree.Datums {
 	return rb.output
 }
 

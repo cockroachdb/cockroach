@@ -29,8 +29,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/jobs"
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -74,7 +74,7 @@ func loadBackupDescs(
 }
 
 func selectTargets(
-	p sql.PlanHookState, backupDescs []BackupDescriptor, targets parser.TargetList,
+	p sql.PlanHookState, backupDescs []BackupDescriptor, targets tree.TargetList,
 ) ([]sqlbase.Descriptor, []*sqlbase.DatabaseDescriptor, error) {
 	sessionDatabase := p.EvalContext().Database
 	lastBackupDesc := backupDescs[len(backupDescs)-1]
@@ -90,7 +90,7 @@ func selectTargets(
 		}
 	}
 	if !seenTable {
-		return nil, nil, errors.Errorf("no tables found: %s", parser.AsString(targets))
+		return nil, nil, errors.Errorf("no tables found: %s", tree.AsString(targets))
 	}
 
 	return sqlDescs, dbs, nil
@@ -753,12 +753,12 @@ func restoreTableDescs(
 	return errors.Wrap(err, "restoring table desc and namespace entries")
 }
 
-func restoreJobDescription(restore *parser.Restore, from []string) (string, error) {
-	r := &parser.Restore{
+func restoreJobDescription(restore *tree.Restore, from []string) (string, error) {
+	r := &tree.Restore{
 		AsOf:    restore.AsOf,
 		Options: restore.Options,
 		Targets: restore.Targets,
-		From:    make(parser.Exprs, len(restore.From)),
+		From:    make(tree.Exprs, len(restore.From)),
 	}
 
 	for i, f := range from {
@@ -766,10 +766,10 @@ func restoreJobDescription(restore *parser.Restore, from []string) (string, erro
 		if err != nil {
 			return "", err
 		}
-		r.From[i] = parser.NewDString(sf)
+		r.From[i] = tree.NewDString(sf)
 	}
 
-	return parser.AsStringWithFlags(r, parser.FmtSimpleQualified), nil
+	return tree.AsStringWithFlags(r, tree.FmtSimpleQualified), nil
 }
 
 // restore imports a SQL table (or tables) from sets of non-overlapping sstable
@@ -1027,9 +1027,9 @@ var restoreHeader = sqlbase.ResultColumns{
 }
 
 func restorePlanHook(
-	stmt parser.Statement, p sql.PlanHookState,
-) (func(context.Context, chan<- parser.Datums) error, sqlbase.ResultColumns, error) {
-	restoreStmt, ok := stmt.(*parser.Restore)
+	stmt tree.Statement, p sql.PlanHookState,
+) (func(context.Context, chan<- tree.Datums) error, sqlbase.ResultColumns, error) {
+	restoreStmt, ok := stmt.(*tree.Restore)
 	if !ok {
 		return nil, nil, nil
 	}
@@ -1053,7 +1053,7 @@ func restorePlanHook(
 		return nil, nil, err
 	}
 
-	fn := func(ctx context.Context, resultsCh chan<- parser.Datums) error {
+	fn := func(ctx context.Context, resultsCh chan<- tree.Datums) error {
 		// TODO(dan): Move this span into sql.
 		ctx, span := tracing.ChildSpan(ctx, stmt.StatementTag())
 		defer tracing.FinishSpan(span)
@@ -1084,12 +1084,12 @@ func restorePlanHook(
 
 func doRestorePlan(
 	ctx context.Context,
-	restoreStmt *parser.Restore,
+	restoreStmt *tree.Restore,
 	p sql.PlanHookState,
 	from []string,
 	endTime hlc.Timestamp,
 	opts map[string]string,
-	resultsCh chan<- parser.Datums,
+	resultsCh chan<- tree.Datums,
 ) error {
 	if err := restoreStmt.Targets.NormalizeTablesWithDatabase(p.EvalContext().Database); err != nil {
 		return err
@@ -1142,14 +1142,14 @@ func doRestorePlan(
 		return restoreErr
 	}
 	// TODO(benesch): emit periodic progress updates.
-	resultsCh <- parser.Datums{
-		parser.NewDInt(parser.DInt(*job.ID())),
-		parser.NewDString(string(jobs.StatusSucceeded)),
-		parser.NewDFloat(parser.DFloat(1.0)),
-		parser.NewDInt(parser.DInt(res.Rows)),
-		parser.NewDInt(parser.DInt(res.IndexEntries)),
-		parser.NewDInt(parser.DInt(res.SystemRecords)),
-		parser.NewDInt(parser.DInt(res.DataSize)),
+	resultsCh <- tree.Datums{
+		tree.NewDInt(tree.DInt(*job.ID())),
+		tree.NewDString(string(jobs.StatusSucceeded)),
+		tree.NewDFloat(tree.DFloat(1.0)),
+		tree.NewDInt(tree.DInt(res.Rows)),
+		tree.NewDInt(tree.DInt(res.IndexEntries)),
+		tree.NewDInt(tree.DInt(res.SystemRecords)),
+		tree.NewDInt(tree.DInt(res.DataSize)),
 	}
 	return nil
 }
@@ -1177,7 +1177,10 @@ func loadBackupSQLDescs(
 // in DROP state, which causes the schema change stuff to delete the keys
 // in the background.
 func restoreFailHook(
-	ctx context.Context, txn *client.Txn, settings *cluster.Settings, details *jobs.RestoreDetails,
+	ctx context.Context,
+	txn *client.Txn,
+	settings *cluster.Settings,
+	details *jobs.RestoreDetails,
 ) error {
 	// Needed to trigger the schema change manager.
 	if err := txn.SetSystemConfigTrigger(); err != nil {

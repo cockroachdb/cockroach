@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	readline "github.com/knz/go-libedit"
@@ -555,13 +556,13 @@ func preparePrompts(dbURL string) (promptPrefix, fullPrompt, continuePrompt stri
 // endsWithIncompleteTxn returns true if and only if its
 // argument ends with an incomplete transaction prefix (BEGIN without
 // ROLLBACK/COMMIT).
-func endsWithIncompleteTxn(stmts parser.StatementList) bool {
+func endsWithIncompleteTxn(stmts tree.StatementList) bool {
 	txnStarted := false
 	for _, stmt := range stmts {
 		switch stmt.(type) {
-		case *parser.BeginTransaction:
+		case *tree.BeginTransaction:
 			txnStarted = true
-		case *parser.CommitTransaction, *parser.RollbackTransaction:
+		case *tree.CommitTransaction, *tree.RollbackTransaction:
 			txnStarted = false
 		}
 	}

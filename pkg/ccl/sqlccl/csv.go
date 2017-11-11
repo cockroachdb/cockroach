@@ -39,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/jobs"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/transform"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -275,7 +276,7 @@ const (
 
 func readCreateTableFromStore(
 	ctx context.Context, filename string, settings *cluster.Settings,
-) (*parser.CreateTable, error) {
+) (*tree.CreateTable, error) {
 	store, err := exportStorageFromURI(ctx, filename, settings)
 	if err != nil {
 		return nil, err
@@ -294,7 +295,7 @@ func readCreateTableFromStore(
 	if err != nil {
 		return nil, err
 	}
-	create, ok := stmt.(*parser.CreateTable)
+	create, ok := stmt.(*tree.CreateTable)
 	if !ok {
 		return nil, errors.New("expected CREATE TABLE statement in table file")
 	}
@@ -302,7 +303,7 @@ func readCreateTableFromStore(
 }
 
 func makeCSVTableDescriptor(
-	ctx context.Context, create *parser.CreateTable, parentID, tableID sqlbase.ID, walltime int64,
+	ctx context.Context, create *tree.CreateTable, parentID, tableID sqlbase.ID, walltime int64,
 ) (*sqlbase.TableDescriptor, error) {
 	sql.HoistConstraints(create)
 	if create.IfNotExists {
@@ -316,23 +317,23 @@ func makeCSVTableDescriptor(
 	}
 	for _, def := range create.Defs {
 		switch def := def.(type) {
-		case *parser.CheckConstraintTableDef,
-			*parser.FamilyTableDef,
-			*parser.IndexTableDef,
-			*parser.UniqueConstraintTableDef:
+		case *tree.CheckConstraintTableDef,
+			*tree.FamilyTableDef,
+			*tree.IndexTableDef,
+			*tree.UniqueConstraintTableDef:
 			// ignore
-		case *parser.ColumnTableDef:
+		case *tree.ColumnTableDef:
 			if def.DefaultExpr.Expr != nil {
-				return nil, errors.Errorf("DEFAULT expressions not supported: %s", parser.AsString(def))
+				return nil, errors.Errorf("DEFAULT expressions not supported: %s", tree.AsString(def))
 			}
-		case *parser.ForeignKeyConstraintTableDef:
-			return nil, errors.Errorf("foreign keys not supported: %s", parser.AsString(def))
+		case *tree.ForeignKeyConstraintTableDef:
+			return nil, errors.Errorf("foreign keys not supported: %s", tree.AsString(def))
 		default:
-			return nil, errors.Errorf("unsupported table definition: %s", parser.AsString(def))
+			return nil, errors.Errorf("unsupported table definition: %s", tree.AsString(def))
 		}
 	}
-	semaCtx := parser.SemaContext{}
-	evalCtx := parser.EvalContext{}
+	semaCtx := tree.SemaContext{}
+	evalCtx := tree.EvalContext{}
 	tableDesc, err := sql.MakeTableDesc(
 		ctx,
 		nil, /* txn */
@@ -547,7 +548,7 @@ func convertRecord(
 	}
 
 	var txCtx transform.ExprTransformContext
-	evalCtx := parser.EvalContext{Location: &time.UTC}
+	evalCtx := tree.EvalContext{Location: &time.UTC}
 	// Although we don't yet support DEFAULT expressions on visible columns,
 	// we do on hidden columns (which is only the default _rowid one). This
 	// allows those expressions to run.
@@ -556,7 +557,7 @@ func convertRecord(
 		return errors.Wrap(err, "process default columns")
 	}
 
-	datums := make([]parser.Datum, len(visibleCols))
+	datums := make([]tree.Datum, len(visibleCols))
 	kvBatch := make([]roachpb.KeyValue, 0, kvBatchSize+padding)
 
 	for batch := range recordCh {
@@ -565,7 +566,7 @@ func convertRecord(
 			for i, v := range record {
 				col := visibleCols[i]
 				if nullif != nil && v == *nullif {
-					datums[i] = parser.DNull
+					datums[i] = tree.DNull
 				} else {
 					datums[i], err = parser.ParseStringAs(col.Type.ToDatumType(), v, &evalCtx)
 					if err != nil {
@@ -748,7 +749,10 @@ func makeSSTs(
 // makeBackup writes SST files from contents to es and creates a backup
 // descriptor populated with the written SST files.
 func makeBackup(
-	ctx context.Context, contentCh <-chan sstContent, walltime int64, es storageccl.ExportStorage,
+	ctx context.Context,
+	contentCh <-chan sstContent,
+	walltime int64,
+	es storageccl.ExportStorage,
 ) (*BackupDescriptor, error) {
 	backupDesc := BackupDescriptor{
 		FormatVersion: BackupFormatInitialVersion,
@@ -809,7 +813,7 @@ func finalizeCSVBackup(
 }
 
 func importJobDescription(
-	orig *parser.Import, defs parser.TableDefs, files []string, opts map[string]string,
+	orig *tree.Import, defs tree.TableDefs, files []string, opts map[string]string,
 ) (string, error) {
 	stmt := *orig
 	stmt.CreateFile = nil
@@ -820,7 +824,7 @@ func importJobDescription(
 		if err != nil {
 			return "", err
 		}
-		stmt.Files = append(stmt.Files, parser.NewDString(clean))
+		stmt.Files = append(stmt.Files, tree.NewDString(clean))
 	}
 	stmt.Options = nil
 	hasTransformOnly := false
@@ -837,17 +841,17 @@ func importJobDescription(
 		case restoreOptIntoDB:
 			continue
 		}
-		opt := parser.KVOption{Key: parser.Name(k)}
+		opt := tree.KVOption{Key: tree.Name(k)}
 		if importOptionExpectValues[k] {
-			opt.Value = parser.NewDString(v)
+			opt.Value = tree.NewDString(v)
 		}
 		stmt.Options = append(stmt.Options, opt)
 	}
 	if !hasTransformOnly {
-		stmt.Options = append(stmt.Options, parser.KVOption{Key: importOptionTransformOnly})
+		stmt.Options = append(stmt.Options, tree.KVOption{Key: importOptionTransformOnly})
 	}
 	sort.Slice(stmt.Options, func(i, j int) bool { return stmt.Options[i].Key < stmt.Options[j].Key })
-	return parser.AsStringWithFlags(&stmt, parser.FmtSimpleQualified), nil
+	return tree.AsStringWithFlags(&stmt, tree.FmtSimpleQualified), nil
 }
 
 const importCSVEnabledSetting = "experimental.importcsv.enabled"
@@ -859,9 +863,9 @@ var importCSVEnabled = settings.RegisterBoolSetting(
 )
 
 func importPlanHook(
-	stmt parser.Statement, p sql.PlanHookState,
-) (func(context.Context, chan<- parser.Datums) error, sqlbase.ResultColumns, error) {
-	importStmt, ok := stmt.(*parser.Import)
+	stmt tree.Statement, p sql.PlanHookState,
+) (func(context.Context, chan<- tree.Datums) error, sqlbase.ResultColumns, error) {
+	importStmt, ok := stmt.(*tree.Import)
 	if !ok {
 		return nil, nil, nil
 	}
@@ -904,7 +908,7 @@ func importPlanHook(
 	// plumbing worked out while mjibson works on the new processors and router.
 	// Currently, it "uses" distsql to compute an int and this method returns
 	// it.
-	fn := func(ctx context.Context, resultsCh chan<- parser.Datums) error {
+	fn := func(ctx context.Context, resultsCh chan<- tree.Datums) error {
 		walltime := timeutil.Now().UnixNano()
 
 		// TODO(dan): Move this span into sql.
@@ -996,10 +1000,10 @@ func importPlanHook(
 			sstSize = sz
 		}
 
-		var create *parser.CreateTable
+		var create *tree.CreateTable
 		if importStmt.CreateDefs != nil {
-			normName := parser.NormalizableTableName{TableNameReference: importStmt.Table}
-			create = &parser.CreateTable{Table: normName, Defs: importStmt.CreateDefs}
+			normName := tree.NormalizableTableName{TableNameReference: importStmt.Table}
+			create = &tree.CreateTable{Table: normName, Defs: importStmt.CreateDefs}
 		} else {
 			filename, err := createFileFn()
 			if err != nil {
@@ -1072,23 +1076,23 @@ func importPlanHook(
 		}
 
 		if transformOnly {
-			resultsCh <- parser.Datums{
-				parser.NewDInt(parser.DInt(*job.ID())),
-				parser.NewDString(string(jobs.StatusSucceeded)),
-				parser.NewDFloat(parser.DFloat(1.0)),
-				parser.NewDInt(parser.DInt(0)),
-				parser.NewDInt(parser.DInt(0)),
-				parser.NewDInt(parser.DInt(0)),
-				parser.NewDInt(parser.DInt(0)),
+			resultsCh <- tree.Datums{
+				tree.NewDInt(tree.DInt(*job.ID())),
+				tree.NewDString(string(jobs.StatusSucceeded)),
+				tree.NewDFloat(tree.DFloat(1.0)),
+				tree.NewDInt(tree.DInt(0)),
+				tree.NewDInt(tree.DInt(0)),
+				tree.NewDInt(tree.DInt(0)),
+				tree.NewDInt(tree.DInt(0)),
 			}
 			return nil
 		}
 
-		restore := &parser.Restore{
-			Targets: parser.TargetList{
-				Tables: []parser.TablePattern{&parser.AllTablesSelector{Database: csvDatabaseName}},
+		restore := &tree.Restore{
+			Targets: tree.TargetList{
+				Tables: []tree.TablePattern{&tree.AllTablesSelector{Database: csvDatabaseName}},
 			},
-			From: parser.Exprs{parser.NewDString(temp)},
+			From: tree.Exprs{tree.NewDString(temp)},
 		}
 		from := []string{temp}
 		endTime := hlc.Timestamp{}
@@ -1144,7 +1148,7 @@ func doDistributedCSVTransform(
 		evalCtx,
 		p.ExecCfg().NodeID.Get(),
 		nodes,
-		sql.NewRowResultWriter(parser.Rows, rows),
+		sql.NewRowResultWriter(tree.Rows, rows),
 		tableDesc,
 		files,
 		temp,
@@ -1162,11 +1166,11 @@ func doDistributedCSVTransform(
 	n := rows.Len()
 	for i := 0; i < n; i++ {
 		row := rows.At(i)
-		name := row[0].(*parser.DString)
-		size := row[1].(*parser.DInt)
-		checksum := row[2].(*parser.DBytes)
-		spanStart := row[3].(*parser.DBytes)
-		spanEnd := row[4].(*parser.DBytes)
+		name := row[0].(*tree.DString)
+		size := row[1].(*tree.DInt)
+		checksum := row[2].(*tree.DBytes)
+		spanStart := row[3].(*tree.DBytes)
+		spanEnd := row[4].(*tree.DBytes)
 		backupDesc.EntryCounts.DataSize += int64(*size)
 		backupDesc.Files = append(backupDesc.Files, BackupDescriptor_File{
 			Path: string(*name),
@@ -1287,8 +1291,8 @@ func (cp *readCSVProcessor) Run(ctx context.Context, wg *sync.WaitGroup) {
 			for _, kv := range kvBatch {
 				if fn(kv) {
 					row := sqlbase.EncDatumRow{
-						sqlbase.DatumToEncDatum(typeBytes, parser.NewDBytes(parser.DBytes(kv.Key))),
-						sqlbase.DatumToEncDatum(typeBytes, parser.NewDBytes(parser.DBytes(kv.Value.RawBytes))),
+						sqlbase.DatumToEncDatum(typeBytes, tree.NewDBytes(tree.DBytes(kv.Key))),
+						sqlbase.DatumToEncDatum(typeBytes, tree.NewDBytes(tree.DBytes(kv.Value.RawBytes))),
 					}
 					select {
 					case <-done:
@@ -1425,7 +1429,7 @@ func (sp *sstWriter) Run(ctx context.Context, wg *sync.WaitGroup) {
 				if err := ed.EnsureDecoded(&types[i], alloc); err != nil {
 					return err
 				}
-				datum := ed.Datum.(*parser.DBytes)
+				datum := ed.Datum.(*tree.DBytes)
 				b := []byte(*datum)
 				switch i {
 				case 0:
@@ -1491,23 +1495,23 @@ func (sp *sstWriter) Run(ctx context.Context, wg *sync.WaitGroup) {
 		row := sqlbase.EncDatumRow{
 			sqlbase.DatumToEncDatum(
 				sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_STRING},
-				parser.NewDString(sp.name),
+				tree.NewDString(sp.name),
 			),
 			sqlbase.DatumToEncDatum(
 				sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_INT},
-				parser.NewDInt(parser.DInt(len(data))),
+				tree.NewDInt(tree.DInt(len(data))),
 			),
 			sqlbase.DatumToEncDatum(
 				sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_BYTES},
-				parser.NewDBytes(parser.DBytes(checksum)),
+				tree.NewDBytes(tree.DBytes(checksum)),
 			),
 			sqlbase.DatumToEncDatum(
 				sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_BYTES},
-				parser.NewDBytes(parser.DBytes(firstKey)),
+				tree.NewDBytes(tree.DBytes(firstKey)),
 			),
 			sqlbase.DatumToEncDatum(
 				sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_BYTES},
-				parser.NewDBytes(parser.DBytes(lastKey)),
+				tree.NewDBytes(tree.DBytes(lastKey)),
 			),
 		}
 		cs, err := sp.out.EmitRow(ctx, row)

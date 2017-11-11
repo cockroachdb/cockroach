@@ -40,8 +40,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/ipaddr"
@@ -90,40 +90,40 @@ func categorizeType(t types.T) string {
 var digitNames = []string{"zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine"}
 
 // Builtins contains the built-in functions indexed by name.
-var Builtins = map[string][]parser.Builtin{
+var Builtins = map[string][]tree.Builtin{
 	// TODO(XisiHuang): support encoding, i.e., length(str, encoding).
 	"length": {
-		stringBuiltin1(func(_ *parser.EvalContext, s string) (parser.Datum, error) {
-			return parser.NewDInt(parser.DInt(utf8.RuneCountInString(s))), nil
+		stringBuiltin1(func(_ *tree.EvalContext, s string) (tree.Datum, error) {
+			return tree.NewDInt(tree.DInt(utf8.RuneCountInString(s))), nil
 		}, types.Int, "Calculates the number of characters in `val`."),
-		bytesBuiltin1(func(_ *parser.EvalContext, s string) (parser.Datum, error) {
-			return parser.NewDInt(parser.DInt(len(s))), nil
+		bytesBuiltin1(func(_ *tree.EvalContext, s string) (tree.Datum, error) {
+			return tree.NewDInt(tree.DInt(len(s))), nil
 		}, types.Int, "Calculates the number of bytes in `val`."),
 	},
 
 	"octet_length": {
-		stringBuiltin1(func(_ *parser.EvalContext, s string) (parser.Datum, error) {
-			return parser.NewDInt(parser.DInt(len(s))), nil
+		stringBuiltin1(func(_ *tree.EvalContext, s string) (tree.Datum, error) {
+			return tree.NewDInt(tree.DInt(len(s))), nil
 		}, types.Int, "Calculates the number of bytes used to represent `val`."),
-		bytesBuiltin1(func(_ *parser.EvalContext, s string) (parser.Datum, error) {
-			return parser.NewDInt(parser.DInt(len(s))), nil
+		bytesBuiltin1(func(_ *tree.EvalContext, s string) (tree.Datum, error) {
+			return tree.NewDInt(tree.DInt(len(s))), nil
 		}, types.Int, "Calculates the number of bytes in `val`."),
 	},
 
 	// TODO(pmattis): What string functions should also support types.Bytes?
 
-	"lower": {stringBuiltin1(func(evalCtx *parser.EvalContext, s string) (parser.Datum, error) {
+	"lower": {stringBuiltin1(func(evalCtx *tree.EvalContext, s string) (tree.Datum, error) {
 		if err := evalCtx.ActiveMemAcc.Grow(evalCtx.Ctx(), int64(len(s))); err != nil {
 			return nil, err
 		}
-		return parser.NewDString(strings.ToLower(s)), nil
+		return tree.NewDString(strings.ToLower(s)), nil
 	}, types.String, "Converts all characters in `val` to their lower-case equivalents.")},
 
-	"upper": {stringBuiltin1(func(evalCtx *parser.EvalContext, s string) (parser.Datum, error) {
+	"upper": {stringBuiltin1(func(evalCtx *tree.EvalContext, s string) (tree.Datum, error) {
 		if err := evalCtx.ActiveMemAcc.Grow(evalCtx.Ctx(), int64(len(s))); err != nil {
 			return nil, err
 		}
-		return parser.NewDString(strings.ToUpper(s)), nil
+		return tree.NewDString(strings.ToUpper(s)), nil
 	}, types.String, "Converts all characters in `val` to their to their upper-case equivalents.")},
 
 	"substr":    substringImpls,
@@ -132,48 +132,48 @@ var Builtins = map[string][]parser.Builtin{
 	// concat concatenates the text representations of all the arguments.
 	// NULL arguments are ignored.
 	"concat": {
-		parser.Builtin{
-			Types:        parser.VariadicType{Typ: types.String},
-			ReturnType:   parser.FixedReturnType(types.String),
+		tree.Builtin{
+			Types:        tree.VariadicType{Typ: types.String},
+			ReturnType:   tree.FixedReturnType(types.String),
 			NullableArgs: true,
-			Fn: func(evalCtx *parser.EvalContext, args parser.Datums) (parser.Datum, error) {
+			Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				var buffer bytes.Buffer
 				for _, d := range args {
-					if d == parser.DNull {
+					if d == tree.DNull {
 						continue
 					}
-					nextLength := len(string(parser.MustBeDString(d)))
+					nextLength := len(string(tree.MustBeDString(d)))
 					if err := evalCtx.ActiveMemAcc.Grow(evalCtx.Ctx(), int64(nextLength)); err != nil {
 						return nil, err
 					}
-					buffer.WriteString(string(parser.MustBeDString(d)))
+					buffer.WriteString(string(tree.MustBeDString(d)))
 				}
-				return parser.NewDString(buffer.String()), nil
+				return tree.NewDString(buffer.String()), nil
 			},
 			Info: "Concatenates a comma-separated list of strings.",
 		},
 	},
 
 	"concat_ws": {
-		parser.Builtin{
-			Types:        parser.VariadicType{Typ: types.String},
-			ReturnType:   parser.FixedReturnType(types.String),
+		tree.Builtin{
+			Types:        tree.VariadicType{Typ: types.String},
+			ReturnType:   tree.FixedReturnType(types.String),
 			NullableArgs: true,
-			Fn: func(evalCtx *parser.EvalContext, args parser.Datums) (parser.Datum, error) {
+			Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				if len(args) == 0 {
 					return nil, pgerror.NewErrorf(pgerror.CodeUndefinedFunctionError, errInsufficientArgsFmtString, "concat_ws")
 				}
-				if args[0] == parser.DNull {
-					return parser.DNull, nil
+				if args[0] == tree.DNull {
+					return tree.DNull, nil
 				}
-				sep := string(parser.MustBeDString(args[0]))
+				sep := string(tree.MustBeDString(args[0]))
 				var buf bytes.Buffer
 				prefix := ""
 				for _, d := range args[1:] {
-					if d == parser.DNull {
+					if d == tree.DNull {
 						continue
 					}
-					nextLength := len(prefix) + len(string(parser.MustBeDString(d)))
+					nextLength := len(prefix) + len(string(tree.MustBeDString(d)))
 					if err := evalCtx.ActiveMemAcc.Grow(
 						evalCtx.Ctx(), int64(nextLength)); err != nil {
 						return nil, err
@@ -182,9 +182,9 @@ var Builtins = map[string][]parser.Builtin{
 					// would break when the 2nd argument is NULL.
 					buf.WriteString(prefix)
 					prefix = sep
-					buf.WriteString(string(parser.MustBeDString(d)))
+					buf.WriteString(string(tree.MustBeDString(d)))
 				}
-				return parser.NewDString(buf.String()), nil
+				return tree.NewDString(buf.String()), nil
 			},
 			Info: "Uses the first argument as a separator between the concatenation of the " +
 				"subsequent arguments. \n\nFor example `concat_ws('!','wow','great')` " +
@@ -193,30 +193,30 @@ var Builtins = map[string][]parser.Builtin{
 	},
 
 	"gen_random_uuid": {
-		parser.Builtin{
-			Types:      parser.ArgTypes{},
-			ReturnType: parser.FixedReturnType(types.UUID),
+		tree.Builtin{
+			Types:      tree.ArgTypes{},
+			ReturnType: tree.FixedReturnType(types.UUID),
 			Category:   categoryIDGeneration,
 			Impure:     true,
-			Fn: func(_ *parser.EvalContext, _ parser.Datums) (parser.Datum, error) {
+			Fn: func(_ *tree.EvalContext, _ tree.Datums) (tree.Datum, error) {
 				uv := uuid.MakeV4()
-				return parser.NewDUuid(parser.DUuid{UUID: uv}), nil
+				return tree.NewDUuid(tree.DUuid{UUID: uv}), nil
 			},
 			Info: "Generates a random UUID and returns it as a value of UUID type.",
 		},
 	},
 
 	"to_uuid": {
-		parser.Builtin{
-			Types:      parser.ArgTypes{{"val", types.String}},
-			ReturnType: parser.FixedReturnType(types.Bytes),
-			Fn: func(_ *parser.EvalContext, args parser.Datums) (parser.Datum, error) {
-				s := string(parser.MustBeDString(args[0]))
+		tree.Builtin{
+			Types:      tree.ArgTypes{{"val", types.String}},
+			ReturnType: tree.FixedReturnType(types.Bytes),
+			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				s := string(tree.MustBeDString(args[0]))
 				uv, err := uuid.FromString(s)
 				if err != nil {
 					return nil, err
 				}
-				return parser.NewDBytes(parser.DBytes(uv.GetBytes())), nil
+				return tree.NewDBytes(tree.DBytes(uv.GetBytes())), nil
 			},
 			Info: "Converts the character string representation of a UUID to its byte string " +
 				"representation.",
@@ -224,16 +224,16 @@ var Builtins = map[string][]parser.Builtin{
 	},
 
 	"from_uuid": {
-		parser.Builtin{
-			Types:      parser.ArgTypes{{"val", types.Bytes}},
-			ReturnType: parser.FixedReturnType(types.String),
-			Fn: func(_ *parser.EvalContext, args parser.Datums) (parser.Datum, error) {
-				b := []byte(*args[0].(*parser.DBytes))
+		tree.Builtin{
+			Types:      tree.ArgTypes{{"val", types.Bytes}},
+			ReturnType: tree.FixedReturnType(types.String),
+			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				b := []byte(*args[0].(*tree.DBytes))
 				uv, err := uuid.FromBytes(b)
 				if err != nil {
 					return nil, err
 				}
-				return parser.NewDString(uv.String()), nil
+				return tree.NewDString(uv.String()), nil
 			},
 			Info: "Converts the byte string representation of a UUID to its character string " +
 				"representation.",
@@ -255,12 +255,12 @@ var Builtins = map[string][]parser.Builtin{
 	// - inet_same_family
 
 	"abbrev": {
-		parser.Builtin{
-			Types:      parser.ArgTypes{{"val", types.INet}},
-			ReturnType: parser.FixedReturnType(types.String),
-			Fn: func(_ *parser.EvalContext, args parser.Datums) (parser.Datum, error) {
-				dIPAddr := parser.MustBeDIPAddr(args[0])
-				return parser.NewDString(dIPAddr.IPAddr.String()), nil
+		tree.Builtin{
+			Types:      tree.ArgTypes{{"val", types.INet}},
+			ReturnType: tree.FixedReturnType(types.String),
+			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				dIPAddr := tree.MustBeDIPAddr(args[0])
+				return tree.NewDString(dIPAddr.IPAddr.String()), nil
 			},
 			Info: "Converts the combined IP address and prefix length to an abbreviated display format as text." +
 				"For INET types, this will omit the prefix length if it's not the default (32 or IPv4, 128 for IPv6)" +
@@ -269,13 +269,13 @@ var Builtins = map[string][]parser.Builtin{
 	},
 
 	"broadcast": {
-		parser.Builtin{
-			Types:      parser.ArgTypes{{"val", types.INet}},
-			ReturnType: parser.FixedReturnType(types.INet),
-			Fn: func(_ *parser.EvalContext, args parser.Datums) (parser.Datum, error) {
-				dIPAddr := parser.MustBeDIPAddr(args[0])
+		tree.Builtin{
+			Types:      tree.ArgTypes{{"val", types.INet}},
+			ReturnType: tree.FixedReturnType(types.INet),
+			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				dIPAddr := tree.MustBeDIPAddr(args[0])
 				broadcastIPAddr := dIPAddr.IPAddr.Broadcast()
-				return &parser.DIPAddr{IPAddr: broadcastIPAddr}, nil
+				return &tree.DIPAddr{IPAddr: broadcastIPAddr}, nil
 			},
 			Info: "Gets the broadcast address for the network address represented by the value." +
 				"\n\nFor example, `broadcast('192.168.1.2/24')` returns `'192.168.1.255/24'`",
@@ -283,15 +283,15 @@ var Builtins = map[string][]parser.Builtin{
 	},
 
 	"family": {
-		parser.Builtin{
-			Types:      parser.ArgTypes{{"val", types.INet}},
-			ReturnType: parser.FixedReturnType(types.Int),
-			Fn: func(_ *parser.EvalContext, args parser.Datums) (parser.Datum, error) {
-				dIPAddr := parser.MustBeDIPAddr(args[0])
+		tree.Builtin{
+			Types:      tree.ArgTypes{{"val", types.INet}},
+			ReturnType: tree.FixedReturnType(types.Int),
+			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				dIPAddr := tree.MustBeDIPAddr(args[0])
 				if dIPAddr.Family == ipaddr.IPv4family {
-					return parser.NewDInt(parser.DInt(4)), nil
+					return tree.NewDInt(tree.DInt(4)), nil
 				}
-				return parser.NewDInt(parser.DInt(6)), nil
+				return tree.NewDInt(tree.DInt(6)), nil
 			},
 			Info: "Extracts the IP family of the value; 4 for IPv4, 6 for IPv6." +
 				"\n\nFor example, `family('::1')` returns `6`",
@@ -299,16 +299,16 @@ var Builtins = map[string][]parser.Builtin{
 	},
 
 	"host": {
-		parser.Builtin{
-			Types:      parser.ArgTypes{{"val", types.INet}},
-			ReturnType: parser.FixedReturnType(types.String),
-			Fn: func(_ *parser.EvalContext, args parser.Datums) (parser.Datum, error) {
-				dIPAddr := parser.MustBeDIPAddr(args[0])
+		tree.Builtin{
+			Types:      tree.ArgTypes{{"val", types.INet}},
+			ReturnType: tree.FixedReturnType(types.String),
+			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				dIPAddr := tree.MustBeDIPAddr(args[0])
 				s := dIPAddr.IPAddr.String()
 				if i := strings.IndexByte(s, '/'); i != -1 {
-					return parser.NewDString(s[:i]), nil
+					return tree.NewDString(s[:i]), nil
 				}
-				return parser.NewDString(s), nil
+				return tree.NewDString(s), nil
 			},
 			Info: "Extracts the address part of the combined address/prefixlen value as text." +
 				"\n\nFor example, `host('192.168.1.2/16')` returns `'192.168.1.2'`",
@@ -316,13 +316,13 @@ var Builtins = map[string][]parser.Builtin{
 	},
 
 	"hostmask": {
-		parser.Builtin{
-			Types:      parser.ArgTypes{{"val", types.INet}},
-			ReturnType: parser.FixedReturnType(types.INet),
-			Fn: func(_ *parser.EvalContext, args parser.Datums) (parser.Datum, error) {
-				dIPAddr := parser.MustBeDIPAddr(args[0])
+		tree.Builtin{
+			Types:      tree.ArgTypes{{"val", types.INet}},
+			ReturnType: tree.FixedReturnType(types.INet),
+			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				dIPAddr := tree.MustBeDIPAddr(args[0])
 				ipAddr := dIPAddr.IPAddr.Hostmask()
-				return &parser.DIPAddr{IPAddr: ipAddr}, nil
+				return &tree.DIPAddr{IPAddr: ipAddr}, nil
 			},
 			Info: "Creates an IP host mask corresponding to the prefix length in the value." +
 				"\n\nFor example, `hostmask('192.168.1.2/16')` returns `'0.0.255.255'`",
@@ -330,12 +330,12 @@ var Builtins = map[string][]parser.Builtin{
 	},
 
 	"masklen": {
-		parser.Builtin{
-			Types:      parser.ArgTypes{{"val", types.INet}},
-			ReturnType: parser.FixedReturnType(types.Int),
-			Fn: func(_ *parser.EvalContext, args parser.Datums) (parser.Datum, error) {
-				dIPAddr := parser.MustBeDIPAddr(args[0])
-				return parser.NewDInt(parser.DInt(dIPAddr.Mask)), nil
+		tree.Builtin{
+			Types:      tree.ArgTypes{{"val", types.INet}},
+			ReturnType: tree.FixedReturnType(types.Int),
+			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				dIPAddr := tree.MustBeDIPAddr(args[0])
+				return tree.NewDInt(tree.DInt(dIPAddr.Mask)), nil
 			},
 			Info: "Retrieves the prefix length stored in the value." +
 				"\n\nFor example, `masklen('192.168.1.2/16')` returns `16`",
@@ -343,13 +343,13 @@ var Builtins = map[string][]parser.Builtin{
 	},
 
 	"netmask": {
-		parser.Builtin{
-			Types:      parser.ArgTypes{{"val", types.INet}},
-			ReturnType: parser.FixedReturnType(types.INet),
-			Fn: func(_ *parser.EvalContext, args parser.Datums) (parser.Datum, error) {
-				dIPAddr := parser.MustBeDIPAddr(args[0])
+		tree.Builtin{
+			Types:      tree.ArgTypes{{"val", types.INet}},
+			ReturnType: tree.FixedReturnType(types.INet),
+			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				dIPAddr := tree.MustBeDIPAddr(args[0])
 				ipAddr := dIPAddr.IPAddr.Netmask()
-				return &parser.DIPAddr{IPAddr: ipAddr}, nil
+				return &tree.DIPAddr{IPAddr: ipAddr}, nil
 			},
 			Info: "Creates an IP network mask corresponding to the prefix length in the value." +
 				"\n\nFor example, `netmask('192.168.1.2/16')` returns `'255.255.0.0'`",
@@ -357,21 +357,21 @@ var Builtins = map[string][]parser.Builtin{
 	},
 
 	"set_masklen": {
-		parser.Builtin{
-			Types: parser.ArgTypes{
+		tree.Builtin{
+			Types: tree.ArgTypes{
 				{"val", types.INet},
 				{"prefixlen", types.Int},
 			},
-			ReturnType: parser.FixedReturnType(types.INet),
-			Fn: func(_ *parser.EvalContext, args parser.Datums) (parser.Datum, error) {
-				dIPAddr := parser.MustBeDIPAddr(args[0])
-				mask := int(parser.MustBeDInt(args[1]))
+			ReturnType: tree.FixedReturnType(types.INet),
+			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				dIPAddr := tree.MustBeDIPAddr(args[0])
+				mask := int(tree.MustBeDInt(args[1]))
 
 				if !(dIPAddr.Family == ipaddr.IPv4family && mask >= 0 && mask <= 32) && !(dIPAddr.Family == ipaddr.IPv6family && mask >= 0 && mask <= 128) {
 					return nil, pgerror.NewErrorf(
 						pgerror.CodeInvalidParameterValueError, "invalid mask length: %d", mask)
 				}
-				return &parser.DIPAddr{IPAddr: ipaddr.IPAddr{Family: dIPAddr.Family, Addr: dIPAddr.Addr, Mask: byte(mask)}}, nil
+				return &tree.DIPAddr{IPAddr: ipaddr.IPAddr{Family: dIPAddr.Family, Addr: dIPAddr.Addr, Mask: byte(mask)}}, nil
 			},
 			Info: "Sets the prefix length of `val` to `prefixlen`.\n\n" +
 				"For example, `set_masklen('192.168.1.2', 16)` returns `'192.168.1.2/16'`.",
@@ -379,51 +379,51 @@ var Builtins = map[string][]parser.Builtin{
 	},
 
 	"text": {
-		parser.Builtin{
-			Types:      parser.ArgTypes{{"val", types.INet}},
-			ReturnType: parser.FixedReturnType(types.String),
-			Fn: func(_ *parser.EvalContext, args parser.Datums) (parser.Datum, error) {
-				dIPAddr := parser.MustBeDIPAddr(args[0])
+		tree.Builtin{
+			Types:      tree.ArgTypes{{"val", types.INet}},
+			ReturnType: tree.FixedReturnType(types.String),
+			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				dIPAddr := tree.MustBeDIPAddr(args[0])
 				s := dIPAddr.IPAddr.String()
 				// Ensure the string has a "/mask" suffix.
 				if strings.IndexByte(s, '/') == -1 {
 					s += "/" + strconv.Itoa(int(dIPAddr.Mask))
 				}
-				return parser.NewDString(s), nil
+				return tree.NewDString(s), nil
 			},
 			Info: "Converts the IP address and prefix length to text.",
 		},
 	},
 
 	"inet_same_family": {
-		parser.Builtin{
-			Types: parser.ArgTypes{
+		tree.Builtin{
+			Types: tree.ArgTypes{
 				{"val", types.INet},
 				{"val", types.INet},
 			},
-			ReturnType: parser.FixedReturnType(types.Bool),
-			Fn: func(_ *parser.EvalContext, args parser.Datums) (parser.Datum, error) {
-				first := parser.MustBeDIPAddr(args[0])
-				other := parser.MustBeDIPAddr(args[1])
-				return parser.MakeDBool(parser.DBool(first.Family == other.Family)), nil
+			ReturnType: tree.FixedReturnType(types.Bool),
+			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				first := tree.MustBeDIPAddr(args[0])
+				other := tree.MustBeDIPAddr(args[1])
+				return tree.MakeDBool(tree.DBool(first.Family == other.Family)), nil
 			},
 			Info: "Checks if two IP addresses are of the same IP family.",
 		},
 	},
 
 	"from_ip": {
-		parser.Builtin{
-			Types:      parser.ArgTypes{{"val", types.Bytes}},
-			ReturnType: parser.FixedReturnType(types.String),
-			Fn: func(_ *parser.EvalContext, args parser.Datums) (parser.Datum, error) {
-				ipstr := args[0].(*parser.DBytes)
+		tree.Builtin{
+			Types:      tree.ArgTypes{{"val", types.Bytes}},
+			ReturnType: tree.FixedReturnType(types.String),
+			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				ipstr := args[0].(*tree.DBytes)
 				nboip := net.IP(*ipstr)
 				sv := nboip.String()
 				// if nboip has a length of 0, sv will be "<nil>"
 				if sv == "<nil>" {
 					return nil, errZeroIP
 				}
-				return parser.NewDString(sv), nil
+				return tree.NewDString(sv), nil
 			},
 			Info: "Converts the byte string representation of an IP to its character string " +
 				"representation.",
@@ -431,11 +431,11 @@ var Builtins = map[string][]parser.Builtin{
 	},
 
 	"to_ip": {
-		parser.Builtin{
-			Types:      parser.ArgTypes{{"val", types.String}},
-			ReturnType: parser.FixedReturnType(types.Bytes),
-			Fn: func(_ *parser.EvalContext, args parser.Datums) (parser.Datum, error) {
-				ipdstr := parser.MustBeDString(args[0])
+		tree.Builtin{
+			Types:      tree.ArgTypes{{"val", types.String}},
+			ReturnType: tree.FixedReturnType(types.Bytes),
+			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				ipdstr := tree.MustBeDString(args[0])
 				ip := net.ParseIP(string(ipdstr))
 				// If ipdstr could not be parsed to a valid IP,
 				// ip will be nil.
@@ -443,7 +443,7 @@ var Builtins = map[string][]parser.Builtin{
 					return nil, pgerror.NewErrorf(
 						pgerror.CodeInvalidParameterValueError, "invalid IP format: %s", ipdstr.String())
 				}
-				return parser.NewDBytes(parser.DBytes(ip)), nil
+				return tree.NewDBytes(tree.DBytes(ip)), nil
 			},
 			Info: "Converts the character string representation of an IP to its byte string " +
 				"representation.",
@@ -451,17 +451,17 @@ var Builtins = map[string][]parser.Builtin{
 	},
 
 	"split_part": {
-		parser.Builtin{
-			Types: parser.ArgTypes{
+		tree.Builtin{
+			Types: tree.ArgTypes{
 				{"input", types.String},
 				{"delimiter", types.String},
 				{"return_index_pos", types.Int},
 			},
-			ReturnType: parser.FixedReturnType(types.String),
-			Fn: func(_ *parser.EvalContext, args parser.Datums) (parser.Datum, error) {
-				text := string(parser.MustBeDString(args[0]))
-				sep := string(parser.MustBeDString(args[1]))
-				field := int(parser.MustBeDInt(args[2]))
+			ReturnType: tree.FixedReturnType(types.String),
+			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				text := string(tree.MustBeDString(args[0]))
+				sep := string(tree.MustBeDString(args[1]))
+				field := int(tree.MustBeDInt(args[2]))
 
 				if field <= 0 {
 					return nil, pgerror.NewErrorf(
@@ -470,9 +470,9 @@ var Builtins = map[string][]parser.Builtin{
 
 				splits := strings.Split(text, sep)
 				if field > len(splits) {
-					return parser.NewDString(""), nil
+					return tree.NewDString(""), nil
 				}
-				return parser.NewDString(splits[field-1]), nil
+				return tree.NewDString(splits[field-1]), nil
 			},
 			Info: "Splits `input` on `delimiter` and return the value in the `return_index_pos`  " +
 				"position (starting at 1). \n\nFor example, `split_part('123.456.789.0','.',3)`" +
@@ -481,13 +481,13 @@ var Builtins = map[string][]parser.Builtin{
 	},
 
 	"repeat": {
-		parser.Builtin{
-			Types:            parser.ArgTypes{{"input", types.String}, {"repeat_counter", types.Int}},
+		tree.Builtin{
+			Types:            tree.ArgTypes{{"input", types.String}, {"repeat_counter", types.Int}},
 			DistsqlBlacklist: true,
-			ReturnType:       parser.FixedReturnType(types.String),
-			Fn: func(evalCtx *parser.EvalContext, args parser.Datums) (_ parser.Datum, err error) {
-				s := string(parser.MustBeDString(args[0]))
-				count := int(parser.MustBeDInt(args[1]))
+			ReturnType:       tree.FixedReturnType(types.String),
+			Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (_ tree.Datum, err error) {
+				s := string(tree.MustBeDString(args[0]))
+				count := int(tree.MustBeDInt(args[1]))
 
 				ln := len(s) * count
 				// Use <= here instead of < to prevent a possible divide-by-zero in the next
@@ -504,7 +504,7 @@ var Builtins = map[string][]parser.Builtin{
 				if err := evalCtx.ActiveMemAcc.Grow(evalCtx.Ctx(), int64(ln)); err != nil {
 					return nil, err
 				}
-				return parser.NewDString(strings.Repeat(s, count)), nil
+				return tree.NewDString(strings.Repeat(s, count)), nil
 			},
 			Info: "Concatenates `input` `repeat_counter` number of times.\n\nFor example, " +
 				"`repeat('dog', 2)` returns `dogdog`.",
@@ -513,43 +513,43 @@ var Builtins = map[string][]parser.Builtin{
 
 	// https://www.postgresql.org/docs/10/static/functions-binarystring.html
 	"encode": {
-		parser.Builtin{
-			Types:      parser.ArgTypes{{"data", types.Bytes}, {"format", types.String}},
-			ReturnType: parser.FixedReturnType(types.String),
-			Fn: func(evalCtx *parser.EvalContext, args parser.Datums) (_ parser.Datum, err error) {
-				data, format := string(*args[0].(*parser.DBytes)), string(parser.MustBeDString(args[1]))
+		tree.Builtin{
+			Types:      tree.ArgTypes{{"data", types.Bytes}, {"format", types.String}},
+			ReturnType: tree.FixedReturnType(types.String),
+			Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (_ tree.Datum, err error) {
+				data, format := string(*args[0].(*tree.DBytes)), string(tree.MustBeDString(args[1]))
 				if format != "hex" {
 					return nil, pgerror.NewError(pgerror.CodeInvalidParameterValueError, "only 'hex' format is supported for ENCODE")
 				}
 				if !utf8.ValidString(data) {
 					return nil, pgerror.NewError(pgerror.CodeCharacterNotInRepertoireError, "invalid UTF-8 sequence")
 				}
-				return parser.NewDString(data), nil
+				return tree.NewDString(data), nil
 			},
 			Info: "Encodes `data` in the text format specified by `format` (only \"hex\" is supported).",
 		},
 	},
 
 	"decode": {
-		parser.Builtin{
-			Types:      parser.ArgTypes{{"text", types.String}, {"format", types.String}},
-			ReturnType: parser.FixedReturnType(types.String),
-			Fn: func(evalCtx *parser.EvalContext, args parser.Datums) (_ parser.Datum, err error) {
-				data, format := string(parser.MustBeDString(args[0])), string(parser.MustBeDString(args[1]))
+		tree.Builtin{
+			Types:      tree.ArgTypes{{"text", types.String}, {"format", types.String}},
+			ReturnType: tree.FixedReturnType(types.String),
+			Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (_ tree.Datum, err error) {
+				data, format := string(tree.MustBeDString(args[0])), string(tree.MustBeDString(args[1]))
 				if format != "hex" {
 					return nil, pgerror.NewError(pgerror.CodeInvalidParameterValueError, "only 'hex' format is supported for DECODE")
 				}
 				var buf bytes.Buffer
 				lex.HexEncodeString(&buf, data)
-				return parser.NewDString(buf.String()), nil
+				return tree.NewDString(buf.String()), nil
 			},
 			Info: "Decodes `data` as the format specified by `format` (only \"hex\" is supported).",
 		},
 	},
 
-	"ascii": {stringBuiltin1(func(_ *parser.EvalContext, s string) (parser.Datum, error) {
+	"ascii": {stringBuiltin1(func(_ *tree.EvalContext, s string) (tree.Datum, error) {
 		for _, ch := range s {
-			return parser.NewDInt(parser.DInt(ch)), nil
+			return tree.NewDInt(tree.DInt(ch)), nil
 		}
 		return nil, errEmptyInputString
 	}, types.Int, "Calculates the ASCII value for the first character in `val`.")},
@@ -605,48 +605,48 @@ var Builtins = map[string][]parser.Builtin{
 	),
 
 	"to_hex": {
-		parser.Builtin{
-			Types:      parser.ArgTypes{{"val", types.Int}},
-			ReturnType: parser.FixedReturnType(types.String),
-			Fn: func(_ *parser.EvalContext, args parser.Datums) (parser.Datum, error) {
-				return parser.NewDString(fmt.Sprintf("%x", int64(parser.MustBeDInt(args[0])))), nil
+		tree.Builtin{
+			Types:      tree.ArgTypes{{"val", types.Int}},
+			ReturnType: tree.FixedReturnType(types.String),
+			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				return tree.NewDString(fmt.Sprintf("%x", int64(tree.MustBeDInt(args[0])))), nil
 			},
 			Info: "Converts `val` to its hexadecimal representation.",
 		},
-		parser.Builtin{
-			Types:      parser.ArgTypes{{"val", types.Bytes}},
-			ReturnType: parser.FixedReturnType(types.String),
-			Fn: func(_ *parser.EvalContext, args parser.Datums) (parser.Datum, error) {
-				bytes := *(args[0].(*parser.DBytes))
-				return parser.NewDString(fmt.Sprintf("%x", []byte(bytes))), nil
+		tree.Builtin{
+			Types:      tree.ArgTypes{{"val", types.Bytes}},
+			ReturnType: tree.FixedReturnType(types.String),
+			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				bytes := *(args[0].(*tree.DBytes))
+				return tree.NewDString(fmt.Sprintf("%x", []byte(bytes))), nil
 			},
 			Info: "Converts `val` to its hexadecimal representation.",
 		},
 	},
 
 	// The SQL parser coerces POSITION to STRPOS.
-	"strpos": {stringBuiltin2("input", "find", func(_ *parser.EvalContext, s, substring string) (parser.Datum, error) {
+	"strpos": {stringBuiltin2("input", "find", func(_ *tree.EvalContext, s, substring string) (tree.Datum, error) {
 		index := strings.Index(s, substring)
 		if index < 0 {
-			return parser.DZero, nil
+			return tree.DZero, nil
 		}
 
-		return parser.NewDInt(parser.DInt(utf8.RuneCountInString(s[:index]) + 1)), nil
+		return tree.NewDInt(tree.DInt(utf8.RuneCountInString(s[:index]) + 1)), nil
 	}, types.Int, "Calculates the position where the string `find` begins in `input`. \n\nFor"+
 		" example, `strpos('doggie', 'gie')` returns `4`.")},
 
 	"overlay": {
-		parser.Builtin{
-			Types: parser.ArgTypes{
+		tree.Builtin{
+			Types: tree.ArgTypes{
 				{"input", types.String},
 				{"overlay_val", types.String},
 				{"start_pos", types.Int},
 			},
-			ReturnType: parser.FixedReturnType(types.String),
-			Fn: func(_ *parser.EvalContext, args parser.Datums) (parser.Datum, error) {
-				s := string(parser.MustBeDString(args[0]))
-				to := string(parser.MustBeDString(args[1]))
-				pos := int(parser.MustBeDInt(args[2]))
+			ReturnType: tree.FixedReturnType(types.String),
+			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				s := string(tree.MustBeDString(args[0]))
+				to := string(tree.MustBeDString(args[1]))
+				pos := int(tree.MustBeDInt(args[2]))
 				size := utf8.RuneCountInString(to)
 				return overlay(s, to, pos, size)
 			},
@@ -654,19 +654,19 @@ var Builtins = map[string][]parser.Builtin{
 				"(begins at 1). \n\nFor example, `overlay('doggie', 'CAT', 2)` returns " +
 				"`dCATie`.",
 		},
-		parser.Builtin{
-			Types: parser.ArgTypes{
+		tree.Builtin{
+			Types: tree.ArgTypes{
 				{"input", types.String},
 				{"overlay_val", types.String},
 				{"start_pos", types.Int},
 				{"end_pos", types.Int},
 			},
-			ReturnType: parser.FixedReturnType(types.String),
-			Fn: func(_ *parser.EvalContext, args parser.Datums) (parser.Datum, error) {
-				s := string(parser.MustBeDString(args[0]))
-				to := string(parser.MustBeDString(args[1]))
-				pos := int(parser.MustBeDInt(args[2]))
-				size := int(parser.MustBeDInt(args[3]))
+			ReturnType: tree.FixedReturnType(types.String),
+			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				s := string(tree.MustBeDString(args[0]))
+				to := string(tree.MustBeDString(args[1]))
+				pos := int(tree.MustBeDInt(args[2]))
+				size := int(tree.MustBeDInt(args[3]))
 				return overlay(s, to, pos, size)
 			},
 			Info: "Deletes the characters in `input` between `start_pos` and `end_pos` (count " +
@@ -676,41 +676,41 @@ var Builtins = map[string][]parser.Builtin{
 
 	// The SQL parser coerces TRIM(...) and TRIM(BOTH ...) to BTRIM(...).
 	"btrim": {
-		stringBuiltin2("input", "trim_chars", func(_ *parser.EvalContext, s, chars string) (parser.Datum, error) {
-			return parser.NewDString(strings.Trim(s, chars)), nil
+		stringBuiltin2("input", "trim_chars", func(_ *tree.EvalContext, s, chars string) (tree.Datum, error) {
+			return tree.NewDString(strings.Trim(s, chars)), nil
 		}, types.String, "Removes any characters included in `trim_chars` from the beginning or end"+
 			" of `input` (applies recursively). \n\nFor example, `btrim('doggie', 'eod')` "+
 			"returns `ggi`."),
-		stringBuiltin1(func(_ *parser.EvalContext, s string) (parser.Datum, error) {
-			return parser.NewDString(strings.TrimSpace(s)), nil
+		stringBuiltin1(func(_ *tree.EvalContext, s string) (tree.Datum, error) {
+			return tree.NewDString(strings.TrimSpace(s)), nil
 		}, types.String, "Removes all spaces from the beginning and end of `val`."),
 	},
 
 	// The SQL parser coerces TRIM(LEADING ...) to LTRIM(...).
 	"ltrim": {
-		stringBuiltin2("input", "trim_chars", func(_ *parser.EvalContext, s, chars string) (parser.Datum, error) {
-			return parser.NewDString(strings.TrimLeft(s, chars)), nil
+		stringBuiltin2("input", "trim_chars", func(_ *tree.EvalContext, s, chars string) (tree.Datum, error) {
+			return tree.NewDString(strings.TrimLeft(s, chars)), nil
 		}, types.String, "Removes any characters included in `trim_chars` from the beginning "+
 			"(left-hand side) of `input` (applies recursively). \n\nFor example, "+
 			"`ltrim('doggie', 'od')` returns `ggie`."),
-		stringBuiltin1(func(_ *parser.EvalContext, s string) (parser.Datum, error) {
-			return parser.NewDString(strings.TrimLeftFunc(s, unicode.IsSpace)), nil
+		stringBuiltin1(func(_ *tree.EvalContext, s string) (tree.Datum, error) {
+			return tree.NewDString(strings.TrimLeftFunc(s, unicode.IsSpace)), nil
 		}, types.String, "Removes all spaces from the beginning (left-hand side) of `val`."),
 	},
 
 	// The SQL parser coerces TRIM(TRAILING ...) to RTRIM(...).
 	"rtrim": {
-		stringBuiltin2("input", "trim_chars", func(_ *parser.EvalContext, s, chars string) (parser.Datum, error) {
-			return parser.NewDString(strings.TrimRight(s, chars)), nil
+		stringBuiltin2("input", "trim_chars", func(_ *tree.EvalContext, s, chars string) (tree.Datum, error) {
+			return tree.NewDString(strings.TrimRight(s, chars)), nil
 		}, types.String, "Removes any characters included in `trim_chars` from the end (right-hand "+
 			"side) of `input` (applies recursively). \n\nFor example, `rtrim('doggie', 'ei')` "+
 			"returns `dogg`."),
-		stringBuiltin1(func(_ *parser.EvalContext, s string) (parser.Datum, error) {
-			return parser.NewDString(strings.TrimRightFunc(s, unicode.IsSpace)), nil
+		stringBuiltin1(func(_ *tree.EvalContext, s string) (tree.Datum, error) {
+			return tree.NewDString(strings.TrimRightFunc(s, unicode.IsSpace)), nil
 		}, types.String, "Removes all spaces from the end (right-hand side) of `val`."),
 	},
 
-	"reverse": {stringBuiltin1(func(evalCtx *parser.EvalContext, s string) (parser.Datum, error) {
+	"reverse": {stringBuiltin1(func(evalCtx *tree.EvalContext, s string) (tree.Datum, error) {
 		if err := evalCtx.ActiveMemAcc.Grow(evalCtx.Ctx(), int64(len(s))); err != nil {
 			return nil, err
 		}
@@ -718,17 +718,17 @@ var Builtins = map[string][]parser.Builtin{
 		for i, j := 0, len(runes)-1; i < j; i, j = i+1, j-1 {
 			runes[i], runes[j] = runes[j], runes[i]
 		}
-		return parser.NewDString(string(runes)), nil
+		return tree.NewDString(string(runes)), nil
 	}, types.String, "Reverses the order of the string's characters.")},
 
 	"replace": {stringBuiltin3(
 		"input", "find", "replace",
-		func(evalCtx *parser.EvalContext, input, from, to string) (parser.Datum, error) {
+		func(evalCtx *tree.EvalContext, input, from, to string) (tree.Datum, error) {
 			result := strings.Replace(input, from, to, -1)
 			if err := evalCtx.ActiveMemAcc.Grow(evalCtx.Ctx(), int64(len(result))); err != nil {
 				return nil, err
 			}
-			return parser.NewDString(result), nil
+			return tree.NewDString(result), nil
 		},
 		types.String,
 		"Replaces all occurrences of `find` with `replace` in `input`",
@@ -736,7 +736,7 @@ var Builtins = map[string][]parser.Builtin{
 
 	"translate": {stringBuiltin3(
 		"input", "find", "replace",
-		func(evalCtx *parser.EvalContext, s, from, to string) (parser.Datum, error) {
+		func(evalCtx *tree.EvalContext, s, from, to string) (tree.Datum, error) {
 			if err := evalCtx.ActiveMemAcc.Grow(evalCtx.Ctx(), int64(len(s))); err != nil {
 				return nil, err
 			}
@@ -762,18 +762,18 @@ var Builtins = map[string][]parser.Builtin{
 					runes = append(runes, c)
 				}
 			}
-			return parser.NewDString(string(runes)), nil
+			return tree.NewDString(string(runes)), nil
 		}, types.String, "In `input`, replaces the first character from `find` with the first "+
 			"character in `replace`; repeat for each character in `find`. \n\nFor example, "+
 			"`translate('doggie', 'dog', '123');` returns `1233ie`.")},
 
 	"regexp_extract": {
-		parser.Builtin{
-			Types:      parser.ArgTypes{{"input", types.String}, {"regex", types.String}},
-			ReturnType: parser.FixedReturnType(types.String),
-			Fn: func(ctx *parser.EvalContext, args parser.Datums) (parser.Datum, error) {
-				s := string(parser.MustBeDString(args[0]))
-				pattern := string(parser.MustBeDString(args[1]))
+		tree.Builtin{
+			Types:      tree.ArgTypes{{"input", types.String}, {"regex", types.String}},
+			ReturnType: tree.FixedReturnType(types.String),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				s := string(tree.MustBeDString(args[0]))
+				pattern := string(tree.MustBeDString(args[1]))
 				return regexpExtract(ctx, s, pattern, `\`)
 			},
 			Info: "Returns the first match for the Regular Expression `regex` in `input`.",
@@ -781,22 +781,22 @@ var Builtins = map[string][]parser.Builtin{
 	},
 
 	"regexp_replace": {
-		parser.Builtin{
-			Types: parser.ArgTypes{
+		tree.Builtin{
+			Types: tree.ArgTypes{
 				{"input", types.String},
 				{"regex", types.String},
 				{"replace", types.String},
 			},
-			ReturnType: parser.FixedReturnType(types.String),
-			Fn: func(evalCtx *parser.EvalContext, args parser.Datums) (parser.Datum, error) {
-				s := string(parser.MustBeDString(args[0]))
-				pattern := string(parser.MustBeDString(args[1]))
-				to := string(parser.MustBeDString(args[2]))
+			ReturnType: tree.FixedReturnType(types.String),
+			Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				s := string(tree.MustBeDString(args[0]))
+				pattern := string(tree.MustBeDString(args[1]))
+				to := string(tree.MustBeDString(args[2]))
 				result, err := regexpReplace(evalCtx, s, pattern, to, "")
 				if err != nil {
 					return nil, err
 				}
-				if err := evalCtx.ActiveMemAcc.Grow(evalCtx.Ctx(), int64(len(string(parser.MustBeDString(result))))); err != nil {
+				if err := evalCtx.ActiveMemAcc.Grow(evalCtx.Ctx(), int64(len(string(tree.MustBeDString(result))))); err != nil {
 					return nil, err
 				}
 				return result, nil
@@ -804,24 +804,24 @@ var Builtins = map[string][]parser.Builtin{
 			Info: "Replaces matches for the Regular Expression `regex` in `input` with the " +
 				"Regular Expression `replace`.",
 		},
-		parser.Builtin{
-			Types: parser.ArgTypes{
+		tree.Builtin{
+			Types: tree.ArgTypes{
 				{"input", types.String},
 				{"regex", types.String},
 				{"replace", types.String},
 				{"flags", types.String},
 			},
-			ReturnType: parser.FixedReturnType(types.String),
-			Fn: func(evalCtx *parser.EvalContext, args parser.Datums) (parser.Datum, error) {
-				s := string(parser.MustBeDString(args[0]))
-				pattern := string(parser.MustBeDString(args[1]))
-				to := string(parser.MustBeDString(args[2]))
-				sqlFlags := string(parser.MustBeDString(args[3]))
+			ReturnType: tree.FixedReturnType(types.String),
+			Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				s := string(tree.MustBeDString(args[0]))
+				pattern := string(tree.MustBeDString(args[1]))
+				to := string(tree.MustBeDString(args[2]))
+				sqlFlags := string(tree.MustBeDString(args[3]))
 				result, err := regexpReplace(evalCtx, s, pattern, to, sqlFlags)
 				if err != nil {
 					return nil, err
 				}
-				if err := evalCtx.ActiveMemAcc.Grow(evalCtx.Ctx(), int64(len(string(parser.MustBeDString(result))))); err != nil {
+				if err := evalCtx.ActiveMemAcc.Grow(evalCtx.Ctx(), int64(len(string(tree.MustBeDString(result))))); err != nil {
 					return nil, err
 				}
 				return result, nil
@@ -849,20 +849,20 @@ CockroachDB supports the following flags:
 		},
 	},
 
-	"initcap": {stringBuiltin1(func(evalCtx *parser.EvalContext, s string) (parser.Datum, error) {
+	"initcap": {stringBuiltin1(func(evalCtx *tree.EvalContext, s string) (tree.Datum, error) {
 		if err := evalCtx.ActiveMemAcc.Grow(evalCtx.Ctx(), int64(len(s))); err != nil {
 			return nil, err
 		}
-		return parser.NewDString(strings.Title(strings.ToLower(s))), nil
+		return tree.NewDString(strings.Title(strings.ToLower(s))), nil
 	}, types.String, "Capitalizes the first letter of `val`.")},
 
 	"left": {
-		parser.Builtin{
-			Types:      parser.ArgTypes{{"input", types.Bytes}, {"return_set", types.Int}},
-			ReturnType: parser.FixedReturnType(types.Bytes),
-			Fn: func(_ *parser.EvalContext, args parser.Datums) (parser.Datum, error) {
-				bytes := []byte(*args[0].(*parser.DBytes))
-				n := int(parser.MustBeDInt(args[1]))
+		tree.Builtin{
+			Types:      tree.ArgTypes{{"input", types.Bytes}, {"return_set", types.Int}},
+			ReturnType: tree.FixedReturnType(types.Bytes),
+			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				bytes := []byte(*args[0].(*tree.DBytes))
+				n := int(tree.MustBeDInt(args[1]))
 
 				if n < -len(bytes) {
 					n = 0
@@ -871,16 +871,16 @@ CockroachDB supports the following flags:
 				} else if n > len(bytes) {
 					n = len(bytes)
 				}
-				return parser.NewDBytes(parser.DBytes(bytes[:n])), nil
+				return tree.NewDBytes(tree.DBytes(bytes[:n])), nil
 			},
 			Info: "Returns the first `return_set` bytes from `input`.",
 		},
-		parser.Builtin{
-			Types:      parser.ArgTypes{{"input", types.String}, {"return_set", types.Int}},
-			ReturnType: parser.FixedReturnType(types.String),
-			Fn: func(_ *parser.EvalContext, args parser.Datums) (parser.Datum, error) {
-				runes := []rune(string(parser.MustBeDString(args[0])))
-				n := int(parser.MustBeDInt(args[1]))
+		tree.Builtin{
+			Types:      tree.ArgTypes{{"input", types.String}, {"return_set", types.Int}},
+			ReturnType: tree.FixedReturnType(types.String),
+			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				runes := []rune(string(tree.MustBeDString(args[0])))
+				n := int(tree.MustBeDInt(args[1]))
 
 				if n < -len(runes) {
 					n = 0
@@ -889,19 +889,19 @@ CockroachDB supports the following flags:
 				} else if n > len(runes) {
 					n = len(runes)
 				}
-				return parser.NewDString(string(runes[:n])), nil
+				return tree.NewDString(string(runes[:n])), nil
 			},
 			Info: "Returns the first `return_set` characters from `input`.",
 		},
 	},
 
 	"right": {
-		parser.Builtin{
-			Types:      parser.ArgTypes{{"input", types.Bytes}, {"return_set", types.Int}},
-			ReturnType: parser.FixedReturnType(types.Bytes),
-			Fn: func(_ *parser.EvalContext, args parser.Datums) (parser.Datum, error) {
-				bytes := []byte(*args[0].(*parser.DBytes))
-				n := int(parser.MustBeDInt(args[1]))
+		tree.Builtin{
+			Types:      tree.ArgTypes{{"input", types.Bytes}, {"return_set", types.Int}},
+			ReturnType: tree.FixedReturnType(types.Bytes),
+			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				bytes := []byte(*args[0].(*tree.DBytes))
+				n := int(tree.MustBeDInt(args[1]))
 
 				if n < -len(bytes) {
 					n = 0
@@ -910,16 +910,16 @@ CockroachDB supports the following flags:
 				} else if n > len(bytes) {
 					n = len(bytes)
 				}
-				return parser.NewDBytes(parser.DBytes(bytes[len(bytes)-n:])), nil
+				return tree.NewDBytes(tree.DBytes(bytes[len(bytes)-n:])), nil
 			},
 			Info: "Returns the last `return_set` bytes from `input`.",
 		},
-		parser.Builtin{
-			Types:      parser.ArgTypes{{"input", types.String}, {"return_set", types.Int}},
-			ReturnType: parser.FixedReturnType(types.String),
-			Fn: func(_ *parser.EvalContext, args parser.Datums) (parser.Datum, error) {
-				runes := []rune(string(parser.MustBeDString(args[0])))
-				n := int(parser.MustBeDInt(args[1]))
+		tree.Builtin{
+			Types:      tree.ArgTypes{{"input", types.String}, {"return_set", types.Int}},
+			ReturnType: tree.FixedReturnType(types.String),
+			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				runes := []rune(string(tree.MustBeDString(args[0])))
+				n := int(tree.MustBeDInt(args[1]))
 
 				if n < -len(runes) {
 					n = 0
@@ -928,33 +928,33 @@ CockroachDB supports the following flags:
 				} else if n > len(runes) {
 					n = len(runes)
 				}
-				return parser.NewDString(string(runes[len(runes)-n:])), nil
+				return tree.NewDString(string(runes[len(runes)-n:])), nil
 			},
 			Info: "Returns the last `return_set` characters from `input`.",
 		},
 	},
 
 	"random": {
-		parser.Builtin{
-			Types:                   parser.ArgTypes{},
-			ReturnType:              parser.FixedReturnType(types.Float),
+		tree.Builtin{
+			Types:                   tree.ArgTypes{},
+			ReturnType:              tree.FixedReturnType(types.Float),
 			Impure:                  true,
 			NeedsRepeatedEvaluation: true,
-			Fn: func(_ *parser.EvalContext, args parser.Datums) (parser.Datum, error) {
-				return parser.NewDFloat(parser.DFloat(rand.Float64())), nil
+			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				return tree.NewDFloat(tree.DFloat(rand.Float64())), nil
 			},
 			Info: "Returns a random float between 0 and 1.",
 		},
 	},
 
 	"unique_rowid": {
-		parser.Builtin{
-			Types:      parser.ArgTypes{},
-			ReturnType: parser.FixedReturnType(types.Int),
+		tree.Builtin{
+			Types:      tree.ArgTypes{},
+			ReturnType: tree.FixedReturnType(types.Int),
 			Category:   categoryIDGeneration,
 			Impure:     true,
-			Fn: func(ctx *parser.EvalContext, args parser.Datums) (parser.Datum, error) {
-				return parser.NewDInt(GenerateUniqueInt(ctx.NodeID)), nil
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				return tree.NewDInt(GenerateUniqueInt(ctx.NodeID)), nil
 			},
 			Info: "Returns a unique ID used by CockroachDB to generate unique row IDs if a " +
 				"Primary Key isn't defined for the table. The value is a combination of the " +
@@ -967,25 +967,25 @@ CockroachDB supports the following flags:
 	"uuid_v4":              {uuidV4Impl},
 
 	"greatest": {
-		parser.Builtin{
-			Types:        parser.HomogeneousType{},
-			ReturnType:   parser.IdentityReturnType(0),
+		tree.Builtin{
+			Types:        tree.HomogeneousType{},
+			ReturnType:   tree.IdentityReturnType(0),
 			NullableArgs: true,
 			Category:     categoryComparison,
-			Fn: func(ctx *parser.EvalContext, args parser.Datums) (parser.Datum, error) {
-				return parser.PickFromTuple(ctx, true /* greatest */, args)
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				return tree.PickFromTuple(ctx, true /* greatest */, args)
 			},
 			Info: "Returns the element with the greatest value.",
 		},
 	},
 	"least": {
-		parser.Builtin{
-			Types:        parser.HomogeneousType{},
-			ReturnType:   parser.IdentityReturnType(0),
+		tree.Builtin{
+			Types:        tree.HomogeneousType{},
+			ReturnType:   tree.IdentityReturnType(0),
 			NullableArgs: true,
 			Category:     categoryComparison,
-			Fn: func(ctx *parser.EvalContext, args parser.Datums) (parser.Datum, error) {
-				return parser.PickFromTuple(ctx, false /* greatest */, args)
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				return tree.PickFromTuple(ctx, false /* greatest */, args)
 			},
 			Info: "Returns the element with the lowest value.",
 		},
@@ -994,50 +994,50 @@ CockroachDB supports the following flags:
 	// Timestamp/Date functions.
 
 	"experimental_strftime": {
-		parser.Builtin{
-			Types:      parser.ArgTypes{{"input", types.Timestamp}, {"extract_format", types.String}},
-			ReturnType: parser.FixedReturnType(types.String),
+		tree.Builtin{
+			Types:      tree.ArgTypes{{"input", types.Timestamp}, {"extract_format", types.String}},
+			ReturnType: tree.FixedReturnType(types.String),
 			Category:   categoryDateAndTime,
-			Fn: func(_ *parser.EvalContext, args parser.Datums) (parser.Datum, error) {
-				fromTime := args[0].(*parser.DTimestamp).Time
-				format := string(parser.MustBeDString(args[1]))
+			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				fromTime := args[0].(*tree.DTimestamp).Time
+				format := string(tree.MustBeDString(args[1]))
 				t, err := strtime.Strftime(fromTime, format)
 				if err != nil {
 					return nil, err
 				}
-				return parser.NewDString(t), nil
+				return tree.NewDString(t), nil
 			},
 			Info: "From `input`, extracts and formats the time as identified in `extract_format` " +
 				"using standard `strftime` notation (though not all formatting is supported).",
 		},
-		parser.Builtin{
-			Types:      parser.ArgTypes{{"input", types.Date}, {"extract_format", types.String}},
-			ReturnType: parser.FixedReturnType(types.String),
+		tree.Builtin{
+			Types:      tree.ArgTypes{{"input", types.Date}, {"extract_format", types.String}},
+			ReturnType: tree.FixedReturnType(types.String),
 			Category:   categoryDateAndTime,
-			Fn: func(_ *parser.EvalContext, args parser.Datums) (parser.Datum, error) {
-				fromTime := timeutil.Unix(int64(*args[0].(*parser.DDate))*parser.SecondsInDay, 0)
-				format := string(parser.MustBeDString(args[1]))
+			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				fromTime := timeutil.Unix(int64(*args[0].(*tree.DDate))*tree.SecondsInDay, 0)
+				format := string(tree.MustBeDString(args[1]))
 				t, err := strtime.Strftime(fromTime, format)
 				if err != nil {
 					return nil, err
 				}
-				return parser.NewDString(t), nil
+				return tree.NewDString(t), nil
 			},
 			Info: "From `input`, extracts and formats the time as identified in `extract_format` " +
 				"using standard `strftime` notation (though not all formatting is supported).",
 		},
-		parser.Builtin{
-			Types:      parser.ArgTypes{{"input", types.TimestampTZ}, {"extract_format", types.String}},
-			ReturnType: parser.FixedReturnType(types.String),
+		tree.Builtin{
+			Types:      tree.ArgTypes{{"input", types.TimestampTZ}, {"extract_format", types.String}},
+			ReturnType: tree.FixedReturnType(types.String),
 			Category:   categoryDateAndTime,
-			Fn: func(_ *parser.EvalContext, args parser.Datums) (parser.Datum, error) {
-				fromTime := args[0].(*parser.DTimestampTZ).Time
-				format := string(parser.MustBeDString(args[1]))
+			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				fromTime := args[0].(*tree.DTimestampTZ).Time
+				format := string(tree.MustBeDString(args[1]))
 				t, err := strtime.Strftime(fromTime, format)
 				if err != nil {
 					return nil, err
 				}
-				return parser.NewDString(t), nil
+				return tree.NewDString(t), nil
 			},
 			Info: "From `input`, extracts and formats the time as identified in `extract_format` " +
 				"using standard `strftime` notation (though not all formatting is supported).",
@@ -1045,18 +1045,18 @@ CockroachDB supports the following flags:
 	},
 
 	"experimental_strptime": {
-		parser.Builtin{
-			Types:      parser.ArgTypes{{"input", types.String}, {"format", types.String}},
-			ReturnType: parser.FixedReturnType(types.TimestampTZ),
+		tree.Builtin{
+			Types:      tree.ArgTypes{{"input", types.String}, {"format", types.String}},
+			ReturnType: tree.FixedReturnType(types.TimestampTZ),
 			Category:   categoryDateAndTime,
-			Fn: func(_ *parser.EvalContext, args parser.Datums) (parser.Datum, error) {
-				toParse := string(parser.MustBeDString(args[0]))
-				format := string(parser.MustBeDString(args[1]))
+			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				toParse := string(tree.MustBeDString(args[0]))
+				format := string(tree.MustBeDString(args[1]))
 				t, err := strtime.Strptime(toParse, format)
 				if err != nil {
 					return nil, err
 				}
-				return parser.MakeDTimestampTZ(t.UTC(), time.Microsecond), nil
+				return tree.MakeDTimestampTZ(t.UTC(), time.Microsecond), nil
 			},
 			Info: "Returns `input` as a timestamptz using `format` (which uses standard " +
 				"`strptime` formatting).",
@@ -1064,31 +1064,31 @@ CockroachDB supports the following flags:
 	},
 
 	"age": {
-		parser.Builtin{
-			Types:      parser.ArgTypes{{"val", types.TimestampTZ}},
-			ReturnType: parser.FixedReturnType(types.Interval),
-			Fn: func(ctx *parser.EvalContext, args parser.Datums) (parser.Datum, error) {
-				return parser.TimestampDifference(ctx, ctx.GetTxnTimestamp(time.Microsecond), args[0])
+		tree.Builtin{
+			Types:      tree.ArgTypes{{"val", types.TimestampTZ}},
+			ReturnType: tree.FixedReturnType(types.Interval),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				return tree.TimestampDifference(ctx, ctx.GetTxnTimestamp(time.Microsecond), args[0])
 			},
 			Info: "Calculates the interval between `val` and the current time.",
 		},
-		parser.Builtin{
-			Types:      parser.ArgTypes{{"begin", types.TimestampTZ}, {"end", types.TimestampTZ}},
-			ReturnType: parser.FixedReturnType(types.Interval),
-			Fn: func(ctx *parser.EvalContext, args parser.Datums) (parser.Datum, error) {
-				return parser.TimestampDifference(ctx, args[0], args[1])
+		tree.Builtin{
+			Types:      tree.ArgTypes{{"begin", types.TimestampTZ}, {"end", types.TimestampTZ}},
+			ReturnType: tree.FixedReturnType(types.Interval),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				return tree.TimestampDifference(ctx, args[0], args[1])
 			},
 			Info: "Calculates the interval between `begin` and `end`.",
 		},
 	},
 
 	"current_date": {
-		parser.Builtin{
-			Types:      parser.ArgTypes{},
-			ReturnType: parser.FixedReturnType(types.Date),
-			Fn: func(ctx *parser.EvalContext, args parser.Datums) (parser.Datum, error) {
+		tree.Builtin{
+			Types:      tree.ArgTypes{},
+			ReturnType: tree.FixedReturnType(types.Date),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				t := ctx.GetTxnTimestamp(time.Microsecond).Time
-				return parser.NewDDateFromTime(t, ctx.GetLocation()), nil
+				return tree.NewDDateFromTime(t, ctx.GetLocation()), nil
 			},
 			Info: "Returns the current date.",
 		},
@@ -1099,34 +1099,34 @@ CockroachDB supports the following flags:
 	"transaction_timestamp": txnTSImpl,
 
 	"statement_timestamp": {
-		parser.Builtin{
-			Types:             parser.ArgTypes{},
-			ReturnType:        parser.FixedReturnType(types.TimestampTZ),
+		tree.Builtin{
+			Types:             tree.ArgTypes{},
+			ReturnType:        tree.FixedReturnType(types.TimestampTZ),
 			PreferredOverload: true,
 			Impure:            true,
-			Fn: func(ctx *parser.EvalContext, args parser.Datums) (parser.Datum, error) {
-				return parser.MakeDTimestampTZ(ctx.GetStmtTimestamp(), time.Microsecond), nil
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				return tree.MakeDTimestampTZ(ctx.GetStmtTimestamp(), time.Microsecond), nil
 			},
 			Info: "Returns the current statement's timestamp.",
 		},
-		parser.Builtin{
-			Types:      parser.ArgTypes{},
-			ReturnType: parser.FixedReturnType(types.Timestamp),
+		tree.Builtin{
+			Types:      tree.ArgTypes{},
+			ReturnType: tree.FixedReturnType(types.Timestamp),
 			Impure:     true,
-			Fn: func(ctx *parser.EvalContext, args parser.Datums) (parser.Datum, error) {
-				return parser.MakeDTimestamp(ctx.GetStmtTimestamp(), time.Microsecond), nil
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				return tree.MakeDTimestamp(ctx.GetStmtTimestamp(), time.Microsecond), nil
 			},
 			Info: "Returns the current statement's timestamp.",
 		},
 	},
 
 	"cluster_logical_timestamp": {
-		parser.Builtin{
-			Types:      parser.ArgTypes{},
-			ReturnType: parser.FixedReturnType(types.Decimal),
+		tree.Builtin{
+			Types:      tree.ArgTypes{},
+			ReturnType: tree.FixedReturnType(types.Decimal),
 			Category:   categorySystemInfo,
 			Impure:     true,
-			Fn: func(ctx *parser.EvalContext, args parser.Datums) (parser.Datum, error) {
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				return ctx.GetClusterTimestamp(), nil
 			},
 			Info: "This function is used only by CockroachDB's developers for testing purposes.",
@@ -1134,63 +1134,63 @@ CockroachDB supports the following flags:
 	},
 
 	"clock_timestamp": {
-		parser.Builtin{
-			Types:             parser.ArgTypes{},
-			ReturnType:        parser.FixedReturnType(types.TimestampTZ),
+		tree.Builtin{
+			Types:             tree.ArgTypes{},
+			ReturnType:        tree.FixedReturnType(types.TimestampTZ),
 			PreferredOverload: true,
 			Impure:            true,
-			Fn: func(_ *parser.EvalContext, args parser.Datums) (parser.Datum, error) {
-				return parser.MakeDTimestampTZ(timeutil.Now(), time.Microsecond), nil
+			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				return tree.MakeDTimestampTZ(timeutil.Now(), time.Microsecond), nil
 			},
 			Info: "Returns the current wallclock time.",
 		},
-		parser.Builtin{
-			Types:      parser.ArgTypes{},
-			ReturnType: parser.FixedReturnType(types.Timestamp),
+		tree.Builtin{
+			Types:      tree.ArgTypes{},
+			ReturnType: tree.FixedReturnType(types.Timestamp),
 			Impure:     true,
-			Fn: func(_ *parser.EvalContext, args parser.Datums) (parser.Datum, error) {
-				return parser.MakeDTimestamp(timeutil.Now(), time.Microsecond), nil
+			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				return tree.MakeDTimestamp(timeutil.Now(), time.Microsecond), nil
 			},
 			Info: "Returns the current wallclock time.",
 		},
 	},
 
 	"extract": {
-		parser.Builtin{
-			Types:      parser.ArgTypes{{"element", types.String}, {"input", types.Timestamp}},
-			ReturnType: parser.FixedReturnType(types.Int),
+		tree.Builtin{
+			Types:      tree.ArgTypes{{"element", types.String}, {"input", types.Timestamp}},
+			ReturnType: tree.FixedReturnType(types.Int),
 			Category:   categoryDateAndTime,
-			Fn: func(ctx *parser.EvalContext, args parser.Datums) (parser.Datum, error) {
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				// extract timeSpan fromTime.
-				fromTS := args[1].(*parser.DTimestamp)
-				timeSpan := strings.ToLower(string(parser.MustBeDString(args[0])))
+				fromTS := args[1].(*tree.DTimestamp)
+				timeSpan := strings.ToLower(string(tree.MustBeDString(args[0])))
 				return extractStringFromTimestamp(ctx, fromTS.Time, timeSpan)
 			},
 			Info: "Extracts `element` from `input`.\n\n" +
 				"Compatible elements: year, quarter, month, week, dayofweek, dayofyear,\n" +
 				"hour, minute, second, millisecond, microsecond, epoch",
 		},
-		parser.Builtin{
-			Types:      parser.ArgTypes{{"element", types.String}, {"input", types.Date}},
-			ReturnType: parser.FixedReturnType(types.Int),
+		tree.Builtin{
+			Types:      tree.ArgTypes{{"element", types.String}, {"input", types.Date}},
+			ReturnType: tree.FixedReturnType(types.Int),
 			Category:   categoryDateAndTime,
-			Fn: func(ctx *parser.EvalContext, args parser.Datums) (parser.Datum, error) {
-				timeSpan := strings.ToLower(string(parser.MustBeDString(args[0])))
-				date := args[1].(*parser.DDate)
-				fromTSTZ := parser.MakeDTimestampTZFromDate(ctx.GetLocation(), date)
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				timeSpan := strings.ToLower(string(tree.MustBeDString(args[0])))
+				date := args[1].(*tree.DDate)
+				fromTSTZ := tree.MakeDTimestampTZFromDate(ctx.GetLocation(), date)
 				return extractStringFromTimestamp(ctx, fromTSTZ.Time, timeSpan)
 			},
 			Info: "Extracts `element` from `input`.\n\n" +
 				"Compatible elements: year, quarter, month, week, dayofweek, dayofyear,\n" +
 				"hour, minute, second, millisecond, microsecond, epoch",
 		},
-		parser.Builtin{
-			Types:      parser.ArgTypes{{"element", types.String}, {"input", types.TimestampTZ}},
-			ReturnType: parser.FixedReturnType(types.Int),
+		tree.Builtin{
+			Types:      tree.ArgTypes{{"element", types.String}, {"input", types.TimestampTZ}},
+			ReturnType: tree.FixedReturnType(types.Int),
 			Category:   categoryDateAndTime,
-			Fn: func(ctx *parser.EvalContext, args parser.Datums) (parser.Datum, error) {
-				fromTSTZ := args[1].(*parser.DTimestampTZ)
-				timeSpan := strings.ToLower(string(parser.MustBeDString(args[0])))
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				fromTSTZ := args[1].(*tree.DTimestampTZ)
+				timeSpan := strings.ToLower(string(tree.MustBeDString(args[0])))
 				return extractStringFromTimestamp(ctx, fromTSTZ.Time, timeSpan)
 			},
 			Info: "Extracts `element` from `input`.\n\n" +
@@ -1200,30 +1200,30 @@ CockroachDB supports the following flags:
 	},
 
 	"extract_duration": {
-		parser.Builtin{
-			Types:      parser.ArgTypes{{"element", types.String}, {"input", types.Interval}},
-			ReturnType: parser.FixedReturnType(types.Int),
+		tree.Builtin{
+			Types:      tree.ArgTypes{{"element", types.String}, {"input", types.Interval}},
+			ReturnType: tree.FixedReturnType(types.Int),
 			Category:   categoryDateAndTime,
-			Fn: func(_ *parser.EvalContext, args parser.Datums) (parser.Datum, error) {
+			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				// extract timeSpan fromTime.
-				fromInterval := *args[1].(*parser.DInterval)
-				timeSpan := strings.ToLower(string(parser.MustBeDString(args[0])))
+				fromInterval := *args[1].(*tree.DInterval)
+				timeSpan := strings.ToLower(string(tree.MustBeDString(args[0])))
 				switch timeSpan {
 				case "hour", "hours":
-					return parser.NewDInt(parser.DInt(fromInterval.Nanos / int64(time.Hour))), nil
+					return tree.NewDInt(tree.DInt(fromInterval.Nanos / int64(time.Hour))), nil
 
 				case "minute", "minutes":
-					return parser.NewDInt(parser.DInt(fromInterval.Nanos / int64(time.Minute))), nil
+					return tree.NewDInt(tree.DInt(fromInterval.Nanos / int64(time.Minute))), nil
 
 				case "second", "seconds":
-					return parser.NewDInt(parser.DInt(fromInterval.Nanos / int64(time.Second))), nil
+					return tree.NewDInt(tree.DInt(fromInterval.Nanos / int64(time.Second))), nil
 
 				case "millisecond", "milliseconds":
 					// This a PG extension not supported in MySQL.
-					return parser.NewDInt(parser.DInt(fromInterval.Nanos / int64(time.Millisecond))), nil
+					return tree.NewDInt(tree.DInt(fromInterval.Nanos / int64(time.Millisecond))), nil
 
 				case "microsecond", "microseconds":
-					return parser.NewDInt(parser.DInt(fromInterval.Nanos / int64(time.Microsecond))), nil
+					return tree.NewDInt(tree.DInt(fromInterval.Nanos / int64(time.Microsecond))), nil
 
 				default:
 					return nil, pgerror.NewErrorf(
@@ -1237,14 +1237,14 @@ CockroachDB supports the following flags:
 
 	// https://www.postgresql.org/docs/10/static/functions-datetime.html#functions-datetime-trunc
 	"date_trunc": {
-		parser.Builtin{
-			Types:      parser.ArgTypes{{"element", types.String}, {"input", types.Timestamp}},
-			ReturnType: parser.FixedReturnType(types.Timestamp),
+		tree.Builtin{
+			Types:      tree.ArgTypes{{"element", types.String}, {"input", types.Timestamp}},
+			ReturnType: tree.FixedReturnType(types.Timestamp),
 			Category:   categoryDateAndTime,
-			Fn: func(ctx *parser.EvalContext, args parser.Datums) (parser.Datum, error) {
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				// extract timeSpan fromTime.
-				fromTS := args[1].(*parser.DTimestamp)
-				timeSpan := strings.ToLower(string(parser.MustBeDString(args[0])))
+				fromTS := args[1].(*tree.DTimestamp)
+				timeSpan := strings.ToLower(string(tree.MustBeDString(args[0])))
 				return truncateTimestamp(ctx, fromTS.Time, timeSpan)
 			},
 			Info: "Truncates `input` to precision `element`.  Sets all fields that are less\n" +
@@ -1252,14 +1252,14 @@ CockroachDB supports the following flags:
 				"Compatible elements: year, quarter, month, week, hour, minute, second,\n" +
 				"millisecond, microsecond.",
 		},
-		parser.Builtin{
-			Types:      parser.ArgTypes{{"element", types.String}, {"input", types.Date}},
-			ReturnType: parser.FixedReturnType(types.Date),
+		tree.Builtin{
+			Types:      tree.ArgTypes{{"element", types.String}, {"input", types.Date}},
+			ReturnType: tree.FixedReturnType(types.Date),
 			Category:   categoryDateAndTime,
-			Fn: func(ctx *parser.EvalContext, args parser.Datums) (parser.Datum, error) {
-				timeSpan := strings.ToLower(string(parser.MustBeDString(args[0])))
-				date := args[1].(*parser.DDate)
-				fromTSTZ := parser.MakeDTimestampTZFromDate(ctx.GetLocation(), date)
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				timeSpan := strings.ToLower(string(tree.MustBeDString(args[0])))
+				date := args[1].(*tree.DDate)
+				fromTSTZ := tree.MakeDTimestampTZFromDate(ctx.GetLocation(), date)
 				return truncateTimestamp(ctx, fromTSTZ.Time, timeSpan)
 			},
 			Info: "Truncates `input` to precision `element`.  Sets all fields that are less\n" +
@@ -1267,13 +1267,13 @@ CockroachDB supports the following flags:
 				"Compatible elements: year, quarter, month, week, hour, minute, second,\n" +
 				"millisecond, microsecond.",
 		},
-		parser.Builtin{
-			Types:      parser.ArgTypes{{"element", types.String}, {"input", types.TimestampTZ}},
-			ReturnType: parser.FixedReturnType(types.TimestampTZ),
+		tree.Builtin{
+			Types:      tree.ArgTypes{{"element", types.String}, {"input", types.TimestampTZ}},
+			ReturnType: tree.FixedReturnType(types.TimestampTZ),
 			Category:   categoryDateAndTime,
-			Fn: func(ctx *parser.EvalContext, args parser.Datums) (parser.Datum, error) {
-				fromTSTZ := args[1].(*parser.DTimestampTZ)
-				timeSpan := strings.ToLower(string(parser.MustBeDString(args[0])))
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				fromTSTZ := args[1].(*tree.DTimestampTZ)
+				timeSpan := strings.ToLower(string(tree.MustBeDString(args[0])))
 				return truncateTimestamp(ctx, fromTSTZ.Time, timeSpan)
 			},
 			Info: "Truncates `input` to precision `element`.  Sets all fields that are less\n" +
@@ -1285,24 +1285,24 @@ CockroachDB supports the following flags:
 
 	// Math functions
 	"abs": {
-		floatBuiltin1(func(x float64) (parser.Datum, error) {
-			return parser.NewDFloat(parser.DFloat(math.Abs(x))), nil
+		floatBuiltin1(func(x float64) (tree.Datum, error) {
+			return tree.NewDFloat(tree.DFloat(math.Abs(x))), nil
 		}, "Calculates the absolute value of `val`."),
-		decimalBuiltin1(func(x *apd.Decimal) (parser.Datum, error) {
-			dd := &parser.DDecimal{}
+		decimalBuiltin1(func(x *apd.Decimal) (tree.Datum, error) {
+			dd := &tree.DDecimal{}
 			dd.Abs(x)
 			return dd, nil
 		}, "Calculates the absolute value of `val`."),
-		parser.Builtin{
-			Types:      parser.ArgTypes{{"val", types.Int}},
-			ReturnType: parser.FixedReturnType(types.Int),
-			Fn: func(_ *parser.EvalContext, args parser.Datums) (parser.Datum, error) {
-				x := parser.MustBeDInt(args[0])
+		tree.Builtin{
+			Types:      tree.ArgTypes{{"val", types.Int}},
+			ReturnType: tree.FixedReturnType(types.Int),
+			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				x := tree.MustBeDInt(args[0])
 				switch {
 				case x == math.MinInt64:
 					return nil, errAbsOfMinInt64
 				case x < 0:
-					return parser.NewDInt(-x), nil
+					return tree.NewDInt(-x), nil
 				}
 				return args[0], nil
 			},
@@ -1311,36 +1311,36 @@ CockroachDB supports the following flags:
 	},
 
 	"acos": {
-		floatBuiltin1(func(x float64) (parser.Datum, error) {
-			return parser.NewDFloat(parser.DFloat(math.Acos(x))), nil
+		floatBuiltin1(func(x float64) (tree.Datum, error) {
+			return tree.NewDFloat(tree.DFloat(math.Acos(x))), nil
 		}, "Calculates the inverse cosine of `val`."),
 	},
 
 	"asin": {
-		floatBuiltin1(func(x float64) (parser.Datum, error) {
-			return parser.NewDFloat(parser.DFloat(math.Asin(x))), nil
+		floatBuiltin1(func(x float64) (tree.Datum, error) {
+			return tree.NewDFloat(tree.DFloat(math.Asin(x))), nil
 		}, "Calculates the inverse sine of `val`."),
 	},
 
 	"atan": {
-		floatBuiltin1(func(x float64) (parser.Datum, error) {
-			return parser.NewDFloat(parser.DFloat(math.Atan(x))), nil
+		floatBuiltin1(func(x float64) (tree.Datum, error) {
+			return tree.NewDFloat(tree.DFloat(math.Atan(x))), nil
 		}, "Calculates the inverse tangent of `val`."),
 	},
 
 	"atan2": {
-		floatBuiltin2("x", "y", func(x, y float64) (parser.Datum, error) {
-			return parser.NewDFloat(parser.DFloat(math.Atan2(x, y))), nil
+		floatBuiltin2("x", "y", func(x, y float64) (tree.Datum, error) {
+			return tree.NewDFloat(tree.DFloat(math.Atan2(x, y))), nil
 		}, "Calculates the inverse tangent of `x`/`y`."),
 	},
 
 	"cbrt": {
-		floatBuiltin1(func(x float64) (parser.Datum, error) {
-			return parser.NewDFloat(parser.DFloat(math.Cbrt(x))), nil
+		floatBuiltin1(func(x float64) (tree.Datum, error) {
+			return tree.NewDFloat(tree.DFloat(math.Cbrt(x))), nil
 		}, "Calculates the cube root (∛) of `val`."),
-		decimalBuiltin1(func(x *apd.Decimal) (parser.Datum, error) {
-			dd := &parser.DDecimal{}
-			_, err := parser.DecimalCtx.Cbrt(&dd.Decimal, x)
+		decimalBuiltin1(func(x *apd.Decimal) (tree.Datum, error) {
+			dd := &tree.DDecimal{}
+			_, err := tree.DecimalCtx.Cbrt(&dd.Decimal, x)
 			return dd, err
 		}, "Calculates the cube root (∛) of `val`."),
 	},
@@ -1349,89 +1349,89 @@ CockroachDB supports the following flags:
 	"ceiling": ceilImpl,
 
 	"cos": {
-		floatBuiltin1(func(x float64) (parser.Datum, error) {
-			return parser.NewDFloat(parser.DFloat(math.Cos(x))), nil
+		floatBuiltin1(func(x float64) (tree.Datum, error) {
+			return tree.NewDFloat(tree.DFloat(math.Cos(x))), nil
 		}, "Calculates the cosine of `val`."),
 	},
 
 	"cot": {
-		floatBuiltin1(func(x float64) (parser.Datum, error) {
-			return parser.NewDFloat(parser.DFloat(1 / math.Tan(x))), nil
+		floatBuiltin1(func(x float64) (tree.Datum, error) {
+			return tree.NewDFloat(tree.DFloat(1 / math.Tan(x))), nil
 		}, "Calculates the cotangent of `val`."),
 	},
 
 	"degrees": {
-		floatBuiltin1(func(x float64) (parser.Datum, error) {
-			return parser.NewDFloat(parser.DFloat(180.0 * x / math.Pi)), nil
+		floatBuiltin1(func(x float64) (tree.Datum, error) {
+			return tree.NewDFloat(tree.DFloat(180.0 * x / math.Pi)), nil
 		}, "Converts `val` as a radian value to a degree value."),
 	},
 
 	"div": {
-		floatBuiltin2("x", "y", func(x, y float64) (parser.Datum, error) {
-			return parser.NewDFloat(parser.DFloat(math.Trunc(x / y))), nil
+		floatBuiltin2("x", "y", func(x, y float64) (tree.Datum, error) {
+			return tree.NewDFloat(tree.DFloat(math.Trunc(x / y))), nil
 		}, "Calculates the integer quotient of `x`/`y`."),
-		decimalBuiltin2("x", "y", func(x, y *apd.Decimal) (parser.Datum, error) {
+		decimalBuiltin2("x", "y", func(x, y *apd.Decimal) (tree.Datum, error) {
 			if y.Sign() == 0 {
-				return nil, parser.ErrDivByZero
+				return nil, tree.ErrDivByZero
 			}
-			dd := &parser.DDecimal{}
-			_, err := parser.HighPrecisionCtx.QuoInteger(&dd.Decimal, x, y)
+			dd := &tree.DDecimal{}
+			_, err := tree.HighPrecisionCtx.QuoInteger(&dd.Decimal, x, y)
 			return dd, err
 		}, "Calculates the integer quotient of `x`/`y`."),
 		{
-			Types:      parser.ArgTypes{{"x", types.Int}, {"y", types.Int}},
-			ReturnType: parser.FixedReturnType(types.Int),
-			Fn: func(_ *parser.EvalContext, args parser.Datums) (parser.Datum, error) {
-				y := parser.MustBeDInt(args[1])
+			Types:      tree.ArgTypes{{"x", types.Int}, {"y", types.Int}},
+			ReturnType: tree.FixedReturnType(types.Int),
+			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				y := tree.MustBeDInt(args[1])
 				if y == 0 {
-					return nil, parser.ErrDivByZero
+					return nil, tree.ErrDivByZero
 				}
-				x := parser.MustBeDInt(args[0])
-				return parser.NewDInt(x / y), nil
+				x := tree.MustBeDInt(args[0])
+				return tree.NewDInt(x / y), nil
 			},
 			Info: "Calculates the integer quotient of `x`/`y`.",
 		},
 	},
 
 	"exp": {
-		floatBuiltin1(func(x float64) (parser.Datum, error) {
-			return parser.NewDFloat(parser.DFloat(math.Exp(x))), nil
+		floatBuiltin1(func(x float64) (tree.Datum, error) {
+			return tree.NewDFloat(tree.DFloat(math.Exp(x))), nil
 		}, "Calculates *e* ^ `val`."),
-		decimalBuiltin1(func(x *apd.Decimal) (parser.Datum, error) {
-			dd := &parser.DDecimal{}
-			_, err := parser.DecimalCtx.Exp(&dd.Decimal, x)
+		decimalBuiltin1(func(x *apd.Decimal) (tree.Datum, error) {
+			dd := &tree.DDecimal{}
+			_, err := tree.DecimalCtx.Exp(&dd.Decimal, x)
 			return dd, err
 		}, "Calculates *e* ^ `val`."),
 	},
 
 	"floor": {
-		floatBuiltin1(func(x float64) (parser.Datum, error) {
-			return parser.NewDFloat(parser.DFloat(math.Floor(x))), nil
+		floatBuiltin1(func(x float64) (tree.Datum, error) {
+			return tree.NewDFloat(tree.DFloat(math.Floor(x))), nil
 		}, "Calculates the largest integer not greater than `val`."),
-		decimalBuiltin1(func(x *apd.Decimal) (parser.Datum, error) {
-			dd := &parser.DDecimal{}
-			_, err := parser.ExactCtx.Floor(&dd.Decimal, x)
+		decimalBuiltin1(func(x *apd.Decimal) (tree.Datum, error) {
+			dd := &tree.DDecimal{}
+			_, err := tree.ExactCtx.Floor(&dd.Decimal, x)
 			return dd, err
 		}, "Calculates the largest integer not greater than `val`."),
 	},
 
 	"isnan": {
-		parser.Builtin{
+		tree.Builtin{
 			// Can't use floatBuiltin1 here because this one returns
 			// a boolean.
-			Types:      parser.ArgTypes{{"val", types.Float}},
-			ReturnType: parser.FixedReturnType(types.Bool),
-			Fn: func(_ *parser.EvalContext, args parser.Datums) (parser.Datum, error) {
-				return parser.MakeDBool(parser.DBool(math.IsNaN(float64(*args[0].(*parser.DFloat))))), nil
+			Types:      tree.ArgTypes{{"val", types.Float}},
+			ReturnType: tree.FixedReturnType(types.Bool),
+			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				return tree.MakeDBool(tree.DBool(math.IsNaN(float64(*args[0].(*tree.DFloat))))), nil
 			},
 			Info: "Returns true if `val` is NaN, false otherwise.",
 		},
-		parser.Builtin{
-			Types:      parser.ArgTypes{{"val", types.Decimal}},
-			ReturnType: parser.FixedReturnType(types.Bool),
-			Fn: func(_ *parser.EvalContext, args parser.Datums) (parser.Datum, error) {
-				isNaN := args[0].(*parser.DDecimal).Decimal.Form == apd.NaN
-				return parser.MakeDBool(parser.DBool(isNaN)), nil
+		tree.Builtin{
+			Types:      tree.ArgTypes{{"val", types.Decimal}},
+			ReturnType: tree.FixedReturnType(types.Bool),
+			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				isNaN := args[0].(*tree.DDecimal).Decimal.Form == apd.NaN
+				return tree.MakeDBool(tree.DBool(isNaN)), nil
 			},
 			Info: "Returns true if `val` is NaN, false otherwise.",
 		},
@@ -1443,52 +1443,52 @@ CockroachDB supports the following flags:
 	},
 
 	"ln": {
-		floatBuiltin1(func(x float64) (parser.Datum, error) {
-			return parser.NewDFloat(parser.DFloat(math.Log(x))), nil
+		floatBuiltin1(func(x float64) (tree.Datum, error) {
+			return tree.NewDFloat(tree.DFloat(math.Log(x))), nil
 		}, "Calculates the natural log of `val`."),
-		decimalLogFn(parser.DecimalCtx.Ln, "Calculates the natural log of `val`."),
+		decimalLogFn(tree.DecimalCtx.Ln, "Calculates the natural log of `val`."),
 	},
 
 	"log": {
-		floatBuiltin1(func(x float64) (parser.Datum, error) {
-			return parser.NewDFloat(parser.DFloat(math.Log10(x))), nil
+		floatBuiltin1(func(x float64) (tree.Datum, error) {
+			return tree.NewDFloat(tree.DFloat(math.Log10(x))), nil
 		}, "Calculates the base 10 log of `val`."),
-		decimalLogFn(parser.DecimalCtx.Log10, "Calculates the base 10 log of `val`."),
+		decimalLogFn(tree.DecimalCtx.Log10, "Calculates the base 10 log of `val`."),
 	},
 
 	"mod": {
-		floatBuiltin2("x", "y", func(x, y float64) (parser.Datum, error) {
-			return parser.NewDFloat(parser.DFloat(math.Mod(x, y))), nil
+		floatBuiltin2("x", "y", func(x, y float64) (tree.Datum, error) {
+			return tree.NewDFloat(tree.DFloat(math.Mod(x, y))), nil
 		}, "Calculates `x`%`y`."),
-		decimalBuiltin2("x", "y", func(x, y *apd.Decimal) (parser.Datum, error) {
+		decimalBuiltin2("x", "y", func(x, y *apd.Decimal) (tree.Datum, error) {
 			if y.Sign() == 0 {
-				return nil, parser.ErrZeroModulus
+				return nil, tree.ErrZeroModulus
 			}
-			dd := &parser.DDecimal{}
-			_, err := parser.HighPrecisionCtx.Rem(&dd.Decimal, x, y)
+			dd := &tree.DDecimal{}
+			_, err := tree.HighPrecisionCtx.Rem(&dd.Decimal, x, y)
 			return dd, err
 		}, "Calculates `x`%`y`."),
-		parser.Builtin{
-			Types:      parser.ArgTypes{{"x", types.Int}, {"y", types.Int}},
-			ReturnType: parser.FixedReturnType(types.Int),
-			Fn: func(_ *parser.EvalContext, args parser.Datums) (parser.Datum, error) {
-				y := parser.MustBeDInt(args[1])
+		tree.Builtin{
+			Types:      tree.ArgTypes{{"x", types.Int}, {"y", types.Int}},
+			ReturnType: tree.FixedReturnType(types.Int),
+			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				y := tree.MustBeDInt(args[1])
 				if y == 0 {
-					return nil, parser.ErrZeroModulus
+					return nil, tree.ErrZeroModulus
 				}
-				x := parser.MustBeDInt(args[0])
-				return parser.NewDInt(x % y), nil
+				x := tree.MustBeDInt(args[0])
+				return tree.NewDInt(x % y), nil
 			},
 			Info: "Calculates `x`%`y`.",
 		},
 	},
 
 	"pi": {
-		parser.Builtin{
-			Types:      parser.ArgTypes{},
-			ReturnType: parser.FixedReturnType(types.Float),
-			Fn: func(_ *parser.EvalContext, args parser.Datums) (parser.Datum, error) {
-				return parser.NewDFloat(math.Pi), nil
+		tree.Builtin{
+			Types:      tree.ArgTypes{},
+			ReturnType: tree.FixedReturnType(types.Float),
+			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				return tree.NewDFloat(math.Pi), nil
 			},
 			Info: "Returns the value for pi (3.141592653589793).",
 		},
@@ -1498,24 +1498,24 @@ CockroachDB supports the following flags:
 	"power": powImpls,
 
 	"radians": {
-		floatBuiltin1(func(x float64) (parser.Datum, error) {
-			return parser.NewDFloat(parser.DFloat(x * math.Pi / 180.0)), nil
+		floatBuiltin1(func(x float64) (tree.Datum, error) {
+			return tree.NewDFloat(tree.DFloat(x * math.Pi / 180.0)), nil
 		}, "Converts `val` as a degree value to a radians value."),
 	},
 
 	"round": {
-		floatBuiltin1(func(x float64) (parser.Datum, error) {
-			return parser.NewDFloat(parser.DFloat(round(x))), nil
+		floatBuiltin1(func(x float64) (tree.Datum, error) {
+			return tree.NewDFloat(tree.DFloat(round(x))), nil
 		}, "Rounds `val` to the nearest integer using half to even (banker's) rounding."),
-		decimalBuiltin1(func(x *apd.Decimal) (parser.Datum, error) {
+		decimalBuiltin1(func(x *apd.Decimal) (tree.Datum, error) {
 			return roundDecimal(x, 0)
 		}, "Rounds `val` to the nearest integer, half away from zero: "+
 			"ROUND(+/-2.4) = +/-2, ROUND(+/-2.5) = +/-3."),
-		parser.Builtin{
-			Types:      parser.ArgTypes{{"input", types.Float}, {"decimal_accuracy", types.Int}},
-			ReturnType: parser.FixedReturnType(types.Float),
-			Fn: func(_ *parser.EvalContext, args parser.Datums) (parser.Datum, error) {
-				f := float64(*args[0].(*parser.DFloat))
+		tree.Builtin{
+			Types:      tree.ArgTypes{{"input", types.Float}, {"decimal_accuracy", types.Int}},
+			ReturnType: tree.FixedReturnType(types.Float),
+			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				f := float64(*args[0].(*tree.DFloat))
 				if math.IsInf(f, 0) || math.IsNaN(f) {
 					return args[0], nil
 				}
@@ -1525,10 +1525,10 @@ CockroachDB supports the following flags:
 				}
 
 				// TODO(mjibson): make sure this fits in an int32.
-				scale := int32(parser.MustBeDInt(args[1]))
+				scale := int32(tree.MustBeDInt(args[1]))
 
 				var d apd.Decimal
-				if _, err := parser.RoundCtx.Quantize(&d, &x, -scale); err != nil {
+				if _, err := tree.RoundCtx.Quantize(&d, &x, -scale); err != nil {
 					return nil, err
 				}
 
@@ -1537,18 +1537,18 @@ CockroachDB supports the following flags:
 					return nil, err
 				}
 
-				return parser.NewDFloat(parser.DFloat(f)), nil
+				return tree.NewDFloat(tree.DFloat(f)), nil
 			},
 			Info: "Keeps `decimal_accuracy` number of figures to the right of the zero position " +
 				" in `input` using half to even (banker's) rounding.",
 		},
-		parser.Builtin{
-			Types:      parser.ArgTypes{{"input", types.Decimal}, {"decimal_accuracy", types.Int}},
-			ReturnType: parser.FixedReturnType(types.Decimal),
-			Fn: func(_ *parser.EvalContext, args parser.Datums) (parser.Datum, error) {
+		tree.Builtin{
+			Types:      tree.ArgTypes{{"input", types.Decimal}, {"decimal_accuracy", types.Int}},
+			ReturnType: tree.FixedReturnType(types.Decimal),
+			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				// TODO(mjibson): make sure this fits in an int32.
-				scale := int32(parser.MustBeDInt(args[1]))
-				return roundDecimal(&args[0].(*parser.DDecimal).Decimal, scale)
+				scale := int32(tree.MustBeDInt(args[1]))
+				return roundDecimal(&args[0].(*tree.DDecimal).Decimal, scale)
 			},
 			Info: "Keeps `decimal_accuracy` number of figures to the right of the zero position " +
 				" in `input using half away from zero rounding. If `decimal_accuracy` " +
@@ -1557,40 +1557,40 @@ CockroachDB supports the following flags:
 	},
 
 	"sin": {
-		floatBuiltin1(func(x float64) (parser.Datum, error) {
-			return parser.NewDFloat(parser.DFloat(math.Sin(x))), nil
+		floatBuiltin1(func(x float64) (tree.Datum, error) {
+			return tree.NewDFloat(tree.DFloat(math.Sin(x))), nil
 		}, "Calculates the sine of `val`."),
 	},
 
 	"sign": {
-		floatBuiltin1(func(x float64) (parser.Datum, error) {
+		floatBuiltin1(func(x float64) (tree.Datum, error) {
 			switch {
 			case x < 0:
-				return parser.NewDFloat(-1), nil
+				return tree.NewDFloat(-1), nil
 			case x == 0:
-				return parser.NewDFloat(0), nil
+				return tree.NewDFloat(0), nil
 			}
-			return parser.NewDFloat(1), nil
+			return tree.NewDFloat(1), nil
 		}, "Determines the sign of `val`: **1** for positive; **0** for 0 values; **-1** for "+
 			"negative."),
-		decimalBuiltin1(func(x *apd.Decimal) (parser.Datum, error) {
-			d := &parser.DDecimal{}
+		decimalBuiltin1(func(x *apd.Decimal) (tree.Datum, error) {
+			d := &tree.DDecimal{}
 			d.Decimal.SetCoefficient(int64(x.Sign()))
 			return d, nil
 		}, "Determines the sign of `val`: **1** for positive; **0** for 0 values; **-1** for "+
 			"negative."),
-		parser.Builtin{
-			Types:      parser.ArgTypes{{"val", types.Int}},
-			ReturnType: parser.FixedReturnType(types.Int),
-			Fn: func(_ *parser.EvalContext, args parser.Datums) (parser.Datum, error) {
-				x := parser.MustBeDInt(args[0])
+		tree.Builtin{
+			Types:      tree.ArgTypes{{"val", types.Int}},
+			ReturnType: tree.FixedReturnType(types.Int),
+			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				x := tree.MustBeDInt(args[0])
 				switch {
 				case x < 0:
-					return parser.NewDInt(-1), nil
+					return tree.NewDInt(-1), nil
 				case x == 0:
-					return parser.DZero, nil
+					return tree.DZero, nil
 				}
-				return parser.NewDInt(1), nil
+				return tree.NewDInt(1), nil
 			},
 			Info: "Determines the sign of `val`: **1** for positive; **0** for 0 values; **-1** " +
 				"for negative.",
@@ -1598,46 +1598,46 @@ CockroachDB supports the following flags:
 	},
 
 	"sqrt": {
-		floatBuiltin1(func(x float64) (parser.Datum, error) {
+		floatBuiltin1(func(x float64) (tree.Datum, error) {
 			// TODO(mjibson): see #13642
 			if x < 0 {
 				return nil, errSqrtOfNegNumber
 			}
-			return parser.NewDFloat(parser.DFloat(math.Sqrt(x))), nil
+			return tree.NewDFloat(tree.DFloat(math.Sqrt(x))), nil
 		}, "Calculates the square root of `val`."),
-		decimalBuiltin1(func(x *apd.Decimal) (parser.Datum, error) {
+		decimalBuiltin1(func(x *apd.Decimal) (tree.Datum, error) {
 			if x.Sign() < 0 {
 				return nil, errSqrtOfNegNumber
 			}
-			dd := &parser.DDecimal{}
-			_, err := parser.DecimalCtx.Sqrt(&dd.Decimal, x)
+			dd := &tree.DDecimal{}
+			_, err := tree.DecimalCtx.Sqrt(&dd.Decimal, x)
 			return dd, err
 		}, "Calculates the square root of `val`."),
 	},
 
 	"tan": {
-		floatBuiltin1(func(x float64) (parser.Datum, error) {
-			return parser.NewDFloat(parser.DFloat(math.Tan(x))), nil
+		floatBuiltin1(func(x float64) (tree.Datum, error) {
+			return tree.NewDFloat(tree.DFloat(math.Tan(x))), nil
 		}, "Calculates the tangent of `val`."),
 	},
 
 	"trunc": {
-		floatBuiltin1(func(x float64) (parser.Datum, error) {
-			return parser.NewDFloat(parser.DFloat(math.Trunc(x))), nil
+		floatBuiltin1(func(x float64) (tree.Datum, error) {
+			return tree.NewDFloat(tree.DFloat(math.Trunc(x))), nil
 		}, "Truncates the decimal values of `val`."),
-		decimalBuiltin1(func(x *apd.Decimal) (parser.Datum, error) {
-			dd := &parser.DDecimal{}
+		decimalBuiltin1(func(x *apd.Decimal) (tree.Datum, error) {
+			dd := &tree.DDecimal{}
 			x.Modf(&dd.Decimal, nil)
 			return dd, nil
 		}, "Truncates the decimal values of `val`."),
 	},
 
 	"to_english": {
-		parser.Builtin{
-			Types:      parser.ArgTypes{{"val", types.Int}},
-			ReturnType: parser.FixedReturnType(types.String),
-			Fn: func(_ *parser.EvalContext, args parser.Datums) (parser.Datum, error) {
-				val := int(*args[0].(*parser.DInt))
+		tree.Builtin{
+			Types:      tree.ArgTypes{{"val", types.Int}},
+			ReturnType: tree.FixedReturnType(types.String),
+			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				val := int(*args[0].(*tree.DInt))
 				var buf bytes.Buffer
 				if val < 0 {
 					buf.WriteString("minus-")
@@ -1655,7 +1655,7 @@ CockroachDB supports the following flags:
 					}
 					buf.WriteString(digits[i])
 				}
-				return parser.NewDString(buf.String()), nil
+				return tree.NewDString(buf.String()), nil
 			},
 			Category: categoryString,
 			Info:     "This function enunciates the value of its argument using English cardinals.",
@@ -1665,13 +1665,13 @@ CockroachDB supports the following flags:
 	// Array functions.
 
 	"array_length": {
-		parser.Builtin{
-			Types:      parser.ArgTypes{{"input", types.AnyArray}, {"array_dimension", types.Int}},
-			ReturnType: parser.FixedReturnType(types.Int),
+		tree.Builtin{
+			Types:      tree.ArgTypes{{"input", types.AnyArray}, {"array_dimension", types.Int}},
+			ReturnType: tree.FixedReturnType(types.Int),
 			Category:   categoryArray,
-			Fn: func(_ *parser.EvalContext, args parser.Datums) (parser.Datum, error) {
-				arr := parser.MustBeDArray(args[0])
-				dimen := int64(parser.MustBeDInt(args[1]))
+			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				arr := tree.MustBeDArray(args[0])
+				dimen := int64(tree.MustBeDInt(args[1]))
 				return arrayLength(arr, dimen), nil
 			},
 			Info: "Calculates the length of `input` on the provided `array_dimension`. However, " +
@@ -1681,13 +1681,13 @@ CockroachDB supports the following flags:
 	},
 
 	"array_lower": {
-		parser.Builtin{
-			Types:      parser.ArgTypes{{"input", types.AnyArray}, {"array_dimension", types.Int}},
-			ReturnType: parser.FixedReturnType(types.Int),
+		tree.Builtin{
+			Types:      tree.ArgTypes{{"input", types.AnyArray}, {"array_dimension", types.Int}},
+			ReturnType: tree.FixedReturnType(types.Int),
 			Category:   categoryArray,
-			Fn: func(_ *parser.EvalContext, args parser.Datums) (parser.Datum, error) {
-				arr := parser.MustBeDArray(args[0])
-				dimen := int64(parser.MustBeDInt(args[1]))
+			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				arr := tree.MustBeDArray(args[0])
+				dimen := int64(tree.MustBeDInt(args[1]))
 				return arrayLower(arr, dimen), nil
 			},
 			Info: "Calculates the minimum value of `input` on the provided `array_dimension`. " +
@@ -1697,13 +1697,13 @@ CockroachDB supports the following flags:
 	},
 
 	"array_upper": {
-		parser.Builtin{
-			Types:      parser.ArgTypes{{"input", types.AnyArray}, {"array_dimension", types.Int}},
-			ReturnType: parser.FixedReturnType(types.Int),
+		tree.Builtin{
+			Types:      tree.ArgTypes{{"input", types.AnyArray}, {"array_dimension", types.Int}},
+			ReturnType: tree.FixedReturnType(types.Int),
 			Category:   categoryArray,
-			Fn: func(_ *parser.EvalContext, args parser.Datums) (parser.Datum, error) {
-				arr := parser.MustBeDArray(args[0])
-				dimen := int64(parser.MustBeDInt(args[1]))
+			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				arr := tree.MustBeDArray(args[0])
+				dimen := int64(tree.MustBeDInt(args[1]))
 				return arrayLength(arr, dimen), nil
 			},
 			Info: "Calculates the maximum value of `input` on the provided `array_dimension`. " +
@@ -1712,57 +1712,57 @@ CockroachDB supports the following flags:
 		},
 	},
 
-	"array_append": arrayBuiltin(func(typ types.T) parser.Builtin {
-		return parser.Builtin{
-			Types:        parser.ArgTypes{{"array", types.TArray{Typ: typ}}, {"elem", typ}},
-			ReturnType:   parser.FixedReturnType(types.TArray{Typ: typ}),
+	"array_append": arrayBuiltin(func(typ types.T) tree.Builtin {
+		return tree.Builtin{
+			Types:        tree.ArgTypes{{"array", types.TArray{Typ: typ}}, {"elem", typ}},
+			ReturnType:   tree.FixedReturnType(types.TArray{Typ: typ}),
 			Category:     categoryArray,
 			NullableArgs: true,
-			Fn: func(_ *parser.EvalContext, args parser.Datums) (parser.Datum, error) {
-				return parser.AppendToMaybeNullArray(typ, args[0], args[1])
+			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				return tree.AppendToMaybeNullArray(typ, args[0], args[1])
 			},
 			Info: "Appends `elem` to `array`, returning the result.",
 		}
 	}),
 
-	"array_prepend": arrayBuiltin(func(typ types.T) parser.Builtin {
-		return parser.Builtin{
-			Types:        parser.ArgTypes{{"elem", typ}, {"array", types.TArray{Typ: typ}}},
-			ReturnType:   parser.FixedReturnType(types.TArray{Typ: typ}),
+	"array_prepend": arrayBuiltin(func(typ types.T) tree.Builtin {
+		return tree.Builtin{
+			Types:        tree.ArgTypes{{"elem", typ}, {"array", types.TArray{Typ: typ}}},
+			ReturnType:   tree.FixedReturnType(types.TArray{Typ: typ}),
 			Category:     categoryArray,
 			NullableArgs: true,
-			Fn: func(_ *parser.EvalContext, args parser.Datums) (parser.Datum, error) {
-				return parser.PrependToMaybeNullArray(typ, args[0], args[1])
+			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				return tree.PrependToMaybeNullArray(typ, args[0], args[1])
 			},
 			Info: "Prepends `elem` to `array`, returning the result.",
 		}
 	}),
 
-	"array_cat": arrayBuiltin(func(typ types.T) parser.Builtin {
-		return parser.Builtin{
-			Types:        parser.ArgTypes{{"left", types.TArray{Typ: typ}}, {"right", types.TArray{Typ: typ}}},
-			ReturnType:   parser.FixedReturnType(types.TArray{Typ: typ}),
+	"array_cat": arrayBuiltin(func(typ types.T) tree.Builtin {
+		return tree.Builtin{
+			Types:        tree.ArgTypes{{"left", types.TArray{Typ: typ}}, {"right", types.TArray{Typ: typ}}},
+			ReturnType:   tree.FixedReturnType(types.TArray{Typ: typ}),
 			Category:     categoryArray,
 			NullableArgs: true,
-			Fn: func(_ *parser.EvalContext, args parser.Datums) (parser.Datum, error) {
-				return parser.ConcatArrays(typ, args[0], args[1])
+			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				return tree.ConcatArrays(typ, args[0], args[1])
 			},
 			Info: "Appends two arrays.",
 		}
 	}),
 
-	"array_remove": arrayBuiltin(func(typ types.T) parser.Builtin {
-		return parser.Builtin{
-			Types:        parser.ArgTypes{{"array", types.TArray{Typ: typ}}, {"elem", typ}},
-			ReturnType:   parser.FixedReturnType(types.TArray{Typ: typ}),
+	"array_remove": arrayBuiltin(func(typ types.T) tree.Builtin {
+		return tree.Builtin{
+			Types:        tree.ArgTypes{{"array", types.TArray{Typ: typ}}, {"elem", typ}},
+			ReturnType:   tree.FixedReturnType(types.TArray{Typ: typ}),
 			Category:     categoryArray,
 			NullableArgs: true,
-			Fn: func(ctx *parser.EvalContext, args parser.Datums) (parser.Datum, error) {
-				if args[0] == parser.DNull {
-					return parser.DNull, nil
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				if args[0] == tree.DNull {
+					return tree.DNull, nil
 				}
-				result := parser.NewDArray(typ)
-				for _, e := range parser.MustBeDArray(args[0]).Array {
+				result := tree.NewDArray(typ)
+				for _, e := range tree.MustBeDArray(args[0]).Array {
 					if e.Compare(ctx, args[1]) != 0 {
 						if err := result.Append(e); err != nil {
 							return nil, err
@@ -1775,18 +1775,18 @@ CockroachDB supports the following flags:
 		}
 	}),
 
-	"array_replace": arrayBuiltin(func(typ types.T) parser.Builtin {
-		return parser.Builtin{
-			Types:        parser.ArgTypes{{"array", types.TArray{Typ: typ}}, {"toreplace", typ}, {"replacewith", typ}},
-			ReturnType:   parser.FixedReturnType(types.TArray{Typ: typ}),
+	"array_replace": arrayBuiltin(func(typ types.T) tree.Builtin {
+		return tree.Builtin{
+			Types:        tree.ArgTypes{{"array", types.TArray{Typ: typ}}, {"toreplace", typ}, {"replacewith", typ}},
+			ReturnType:   tree.FixedReturnType(types.TArray{Typ: typ}),
 			Category:     categoryArray,
 			NullableArgs: true,
-			Fn: func(ctx *parser.EvalContext, args parser.Datums) (parser.Datum, error) {
-				if args[0] == parser.DNull {
-					return parser.DNull, nil
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				if args[0] == tree.DNull {
+					return tree.DNull, nil
 				}
-				result := parser.NewDArray(typ)
-				for _, e := range parser.MustBeDArray(args[0]).Array {
+				result := tree.NewDArray(typ)
+				for _, e := range tree.MustBeDArray(args[0]).Array {
 					if e.Compare(ctx, args[1]) == 0 {
 						if err := result.Append(args[2]); err != nil {
 							return nil, err
@@ -1803,41 +1803,41 @@ CockroachDB supports the following flags:
 		}
 	}),
 
-	"array_position": arrayBuiltin(func(typ types.T) parser.Builtin {
-		return parser.Builtin{
-			Types:        parser.ArgTypes{{"array", types.TArray{Typ: typ}}, {"elem", typ}},
-			ReturnType:   parser.FixedReturnType(types.Int),
+	"array_position": arrayBuiltin(func(typ types.T) tree.Builtin {
+		return tree.Builtin{
+			Types:        tree.ArgTypes{{"array", types.TArray{Typ: typ}}, {"elem", typ}},
+			ReturnType:   tree.FixedReturnType(types.Int),
 			Category:     categoryArray,
 			NullableArgs: true,
-			Fn: func(ctx *parser.EvalContext, args parser.Datums) (parser.Datum, error) {
-				if args[0] == parser.DNull {
-					return parser.DNull, nil
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				if args[0] == tree.DNull {
+					return tree.DNull, nil
 				}
-				for i, e := range parser.MustBeDArray(args[0]).Array {
+				for i, e := range tree.MustBeDArray(args[0]).Array {
 					if e.Compare(ctx, args[1]) == 0 {
-						return parser.NewDInt(parser.DInt(i + 1)), nil
+						return tree.NewDInt(tree.DInt(i + 1)), nil
 					}
 				}
-				return parser.DNull, nil
+				return tree.DNull, nil
 			},
 			Info: "Return the index of the first occurrence of `elem` in `array`.",
 		}
 	}),
 
-	"array_positions": arrayBuiltin(func(typ types.T) parser.Builtin {
-		return parser.Builtin{
-			Types:        parser.ArgTypes{{"array", types.TArray{Typ: typ}}, {"elem", typ}},
-			ReturnType:   parser.FixedReturnType(types.TArray{Typ: typ}),
+	"array_positions": arrayBuiltin(func(typ types.T) tree.Builtin {
+		return tree.Builtin{
+			Types:        tree.ArgTypes{{"array", types.TArray{Typ: typ}}, {"elem", typ}},
+			ReturnType:   tree.FixedReturnType(types.TArray{Typ: typ}),
 			Category:     categoryArray,
 			NullableArgs: true,
-			Fn: func(ctx *parser.EvalContext, args parser.Datums) (parser.Datum, error) {
-				if args[0] == parser.DNull {
-					return parser.DNull, nil
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				if args[0] == tree.DNull {
+					return tree.DNull, nil
 				}
-				result := parser.NewDArray(types.Int)
-				for i, e := range parser.MustBeDArray(args[0]).Array {
+				result := tree.NewDArray(types.Int)
+				for i, e := range tree.MustBeDArray(args[0]).Array {
 					if e.Compare(ctx, args[1]) == 0 {
-						if err := result.Append(parser.NewDInt(parser.DInt(i + 1))); err != nil {
+						if err := result.Append(tree.NewDInt(tree.DInt(i + 1))); err != nil {
 							return nil, err
 						}
 					}
@@ -1851,42 +1851,42 @@ CockroachDB supports the following flags:
 	// Metadata functions.
 
 	"version": {
-		parser.Builtin{
-			Types:      parser.ArgTypes{},
-			ReturnType: parser.FixedReturnType(types.String),
+		tree.Builtin{
+			Types:      tree.ArgTypes{},
+			ReturnType: tree.FixedReturnType(types.String),
 			Category:   categorySystemInfo,
-			Fn: func(_ *parser.EvalContext, args parser.Datums) (parser.Datum, error) {
-				return parser.NewDString(build.GetInfo().Short()), nil
+			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				return tree.NewDString(build.GetInfo().Short()), nil
 			},
 			Info: "Returns the node's version of CockroachDB.",
 		},
 	},
 
 	"current_database": {
-		parser.Builtin{
-			Types:      parser.ArgTypes{},
-			ReturnType: parser.FixedReturnType(types.String),
+		tree.Builtin{
+			Types:      tree.ArgTypes{},
+			ReturnType: tree.FixedReturnType(types.String),
 			Category:   categorySystemInfo,
-			Fn: func(ctx *parser.EvalContext, args parser.Datums) (parser.Datum, error) {
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				if len(ctx.Database) == 0 {
-					return parser.DNull, nil
+					return tree.DNull, nil
 				}
-				return parser.NewDString(ctx.Database), nil
+				return tree.NewDString(ctx.Database), nil
 			},
 			Info: "Returns the current database.",
 		},
 	},
 
 	"current_schema": {
-		parser.Builtin{
-			Types:      parser.ArgTypes{},
-			ReturnType: parser.FixedReturnType(types.String),
+		tree.Builtin{
+			Types:      tree.ArgTypes{},
+			ReturnType: tree.FixedReturnType(types.String),
 			Category:   categorySystemInfo,
-			Fn: func(ctx *parser.EvalContext, args parser.Datums) (parser.Datum, error) {
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				if len(ctx.Database) == 0 {
-					return parser.DNull, nil
+					return tree.DNull, nil
 				}
-				return parser.NewDString(ctx.Database), nil
+				return tree.NewDString(ctx.Database), nil
 			},
 			Info: "Returns the current schema. This function is provided for " +
 				"compatibility with PostgreSQL. For a new CockroachDB application, " +
@@ -1898,15 +1898,15 @@ CockroachDB supports the following flags:
 	// returns the current database (if one has been set by the user)
 	// and the session's database search path.
 	"current_schemas": {
-		parser.Builtin{
-			Types:      parser.ArgTypes{{"include_pg_catalog", types.Bool}},
-			ReturnType: parser.FixedReturnType(types.TArray{Typ: types.String}),
+		tree.Builtin{
+			Types:      tree.ArgTypes{{"include_pg_catalog", types.Bool}},
+			ReturnType: tree.FixedReturnType(types.TArray{Typ: types.String}),
 			Category:   categorySystemInfo,
-			Fn: func(ctx *parser.EvalContext, args parser.Datums) (parser.Datum, error) {
-				includePgCatalog := *(args[0].(*parser.DBool))
-				schemas := parser.NewDArray(types.String)
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				includePgCatalog := *(args[0].(*tree.DBool))
+				schemas := tree.NewDArray(types.String)
 				if len(ctx.Database) != 0 {
-					if err := schemas.Append(parser.NewDString(ctx.Database)); err != nil {
+					if err := schemas.Append(tree.NewDString(ctx.Database)); err != nil {
 						return nil, err
 					}
 				}
@@ -1920,7 +1920,7 @@ CockroachDB supports the following flags:
 					if p == ctx.Database {
 						continue
 					}
-					if err := schemas.Append(parser.NewDString(p)); err != nil {
+					if err := schemas.Append(tree.NewDString(p)); err != nil {
 						return nil, err
 					}
 				}
@@ -1931,15 +1931,15 @@ CockroachDB supports the following flags:
 	},
 
 	"current_user": {
-		parser.Builtin{
-			Types:      parser.ArgTypes{},
-			ReturnType: parser.FixedReturnType(types.String),
+		tree.Builtin{
+			Types:      tree.ArgTypes{},
+			ReturnType: tree.FixedReturnType(types.String),
 			Category:   categorySystemInfo,
-			Fn: func(ctx *parser.EvalContext, args parser.Datums) (parser.Datum, error) {
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				if len(ctx.User) == 0 {
-					return parser.DNull, nil
+					return tree.DNull, nil
 				}
-				return parser.NewDString(ctx.User), nil
+				return tree.NewDString(ctx.User), nil
 			},
 			Info: "Returns the current user. This function is provided for " +
 				"compatibility with PostgreSQL.",
@@ -1947,25 +1947,25 @@ CockroachDB supports the following flags:
 	},
 
 	"crdb_internal.cluster_id": {
-		parser.Builtin{
-			Types:      parser.ArgTypes{},
-			ReturnType: parser.FixedReturnType(types.UUID),
+		tree.Builtin{
+			Types:      tree.ArgTypes{},
+			ReturnType: tree.FixedReturnType(types.UUID),
 			Category:   categorySystemInfo,
-			Fn: func(ctx *parser.EvalContext, args parser.Datums) (parser.Datum, error) {
-				return parser.NewDUuid(parser.DUuid{UUID: ctx.ClusterID}), nil
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				return tree.NewDUuid(tree.DUuid{UUID: ctx.ClusterID}), nil
 			},
 			Info: "Returns the cluster ID.",
 		},
 	},
 
 	"crdb_internal.force_error": {
-		parser.Builtin{
-			Types:      parser.ArgTypes{{"errorCode", types.String}, {"msg", types.String}},
-			ReturnType: parser.FixedReturnType(types.Int),
+		tree.Builtin{
+			Types:      tree.ArgTypes{{"errorCode", types.String}, {"msg", types.String}},
+			ReturnType: tree.FixedReturnType(types.Int),
 			Impure:     true,
-			Fn: func(ctx *parser.EvalContext, args parser.Datums) (parser.Datum, error) {
-				errCode := string(*args[0].(*parser.DString))
-				msg := string(*args[1].(*parser.DString))
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				errCode := string(*args[0].(*tree.DString))
+				msg := string(*args[1].(*tree.DString))
 				return nil, pgerror.NewError(errCode, msg)
 			},
 			Category: categorySystemInfo,
@@ -1974,13 +1974,13 @@ CockroachDB supports the following flags:
 	},
 
 	"crdb_internal.force_panic": {
-		parser.Builtin{
-			Types:      parser.ArgTypes{{"msg", types.String}},
-			ReturnType: parser.FixedReturnType(types.Int),
+		tree.Builtin{
+			Types:      tree.ArgTypes{{"msg", types.String}},
+			ReturnType: tree.FixedReturnType(types.Int),
 			Impure:     true,
 			Privileged: true,
-			Fn: func(ctx *parser.EvalContext, args parser.Datums) (parser.Datum, error) {
-				msg := string(*args[0].(*parser.DString))
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				msg := string(*args[0].(*tree.DString))
 				panic(msg)
 			},
 			Category: categorySystemInfo,
@@ -1989,13 +1989,13 @@ CockroachDB supports the following flags:
 	},
 
 	"crdb_internal.force_log_fatal": {
-		parser.Builtin{
-			Types:      parser.ArgTypes{{"msg", types.String}},
-			ReturnType: parser.FixedReturnType(types.Int),
+		tree.Builtin{
+			Types:      tree.ArgTypes{{"msg", types.String}},
+			ReturnType: tree.FixedReturnType(types.Int),
 			Impure:     true,
 			Privileged: true,
-			Fn: func(ctx *parser.EvalContext, args parser.Datums) (parser.Datum, error) {
-				msg := string(*args[0].(*parser.DString))
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				msg := string(*args[0].(*tree.DString))
 				log.Fatal(ctx.Ctx(), msg)
 				return nil, nil
 			},
@@ -2010,33 +2010,33 @@ CockroachDB supports the following flags:
 	// The second version allows one to create an error intended for a transaction
 	// different than the current statement's transaction.
 	"crdb_internal.force_retry": {
-		parser.Builtin{
-			Types:      parser.ArgTypes{{"val", types.Interval}},
-			ReturnType: parser.FixedReturnType(types.Int),
+		tree.Builtin{
+			Types:      tree.ArgTypes{{"val", types.Interval}},
+			ReturnType: tree.FixedReturnType(types.Int),
 			Impure:     true,
 			Privileged: true,
-			Fn: func(ctx *parser.EvalContext, args parser.Datums) (parser.Datum, error) {
-				minDuration := args[0].(*parser.DInterval).Duration
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				minDuration := args[0].(*tree.DInterval).Duration
 				elapsed := duration.Duration{
 					Nanos: int64(ctx.StmtTimestamp.Sub(ctx.TxnTimestamp)),
 				}
 				if elapsed.Compare(minDuration) < 0 {
 					return nil, ctx.Txn.GenerateForcedRetryableError("forced by crdb_internal.force_retry()")
 				}
-				return parser.DZero, nil
+				return tree.DZero, nil
 			},
 			Category: categorySystemInfo,
 			Info:     "This function is used only by CockroachDB's developers for testing purposes.",
 		},
-		parser.Builtin{
-			Types: parser.ArgTypes{
+		tree.Builtin{
+			Types: tree.ArgTypes{
 				{"val", types.Interval},
 				{"txnID", types.String}},
-			ReturnType: parser.FixedReturnType(types.Int),
+			ReturnType: tree.FixedReturnType(types.Int),
 			Impure:     true,
-			Fn: func(ctx *parser.EvalContext, args parser.Datums) (parser.Datum, error) {
-				minDuration := args[0].(*parser.DInterval).Duration
-				txnID := args[1].(*parser.DString)
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				minDuration := args[0].(*tree.DInterval).Duration
+				txnID := args[1].(*tree.DString)
 				elapsed := duration.Duration{
 					Nanos: int64(ctx.StmtTimestamp.Sub(ctx.TxnTimestamp)),
 				}
@@ -2049,7 +2049,7 @@ CockroachDB supports the following flags:
 					err.(*roachpb.HandledRetryableTxnError).TxnID = uuid
 					return nil, err
 				}
-				return parser.DZero, nil
+				return tree.DZero, nil
 			},
 			Category: categorySystemInfo,
 			Info:     "This function is used only by CockroachDB's developers for testing purposes.",
@@ -2058,11 +2058,11 @@ CockroachDB supports the following flags:
 
 	// Identity function which is marked as impure to avoid constant folding.
 	"crdb_internal.no_constant_folding": {
-		parser.Builtin{
-			Types:      parser.ArgTypes{{"input", types.Any}},
-			ReturnType: parser.IdentityReturnType(0),
+		tree.Builtin{
+			Types:      tree.ArgTypes{{"input", types.Any}},
+			ReturnType: tree.IdentityReturnType(0),
 			Impure:     true,
-			Fn: func(_ *parser.EvalContext, args parser.Datums) (parser.Datum, error) {
+			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				return args[0], nil
 			},
 			Category: categorySystemInfo,
@@ -2071,13 +2071,13 @@ CockroachDB supports the following flags:
 	},
 
 	"crdb_internal.set_vmodule": {
-		parser.Builtin{
-			Types:      parser.ArgTypes{{"vmodule_string", types.String}},
-			ReturnType: parser.FixedReturnType(types.Int),
+		tree.Builtin{
+			Types:      tree.ArgTypes{{"vmodule_string", types.String}},
+			ReturnType: tree.FixedReturnType(types.Int),
 			Impure:     true,
 			Privileged: true,
-			Fn: func(ctx *parser.EvalContext, args parser.Datums) (parser.Datum, error) {
-				return parser.DZero, log.SetVModule(string(*args[0].(*parser.DString)))
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				return tree.DZero, log.SetVModule(string(*args[0].(*tree.DString)))
 			},
 			Category: categorySystemInfo,
 			Info: "This function is used for internal debugging purposes. " +
@@ -2086,17 +2086,17 @@ CockroachDB supports the following flags:
 	},
 }
 
-var substringImpls = []parser.Builtin{
+var substringImpls = []tree.Builtin{
 	{
-		Types: parser.ArgTypes{
+		Types: tree.ArgTypes{
 			{"input", types.String},
 			{"substr_pos", types.Int},
 		},
-		ReturnType: parser.FixedReturnType(types.String),
-		Fn: func(_ *parser.EvalContext, args parser.Datums) (parser.Datum, error) {
-			runes := []rune(string(parser.MustBeDString(args[0])))
+		ReturnType: tree.FixedReturnType(types.String),
+		Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			runes := []rune(string(tree.MustBeDString(args[0])))
 			// SQL strings are 1-indexed.
-			start := int(parser.MustBeDInt(args[1])) - 1
+			start := int(tree.MustBeDInt(args[1])) - 1
 
 			if start < 0 {
 				start = 0
@@ -2104,22 +2104,22 @@ var substringImpls = []parser.Builtin{
 				start = len(runes)
 			}
 
-			return parser.NewDString(string(runes[start:])), nil
+			return tree.NewDString(string(runes[start:])), nil
 		},
 		Info: "Returns a substring of `input` starting at `substr_pos` (count starts at 1).",
 	},
 	{
-		Types: parser.ArgTypes{
+		Types: tree.ArgTypes{
 			{"input", types.String},
 			{"start_pos", types.Int},
 			{"end_pos", types.Int},
 		},
-		ReturnType: parser.FixedReturnType(types.String),
-		Fn: func(_ *parser.EvalContext, args parser.Datums) (parser.Datum, error) {
-			runes := []rune(string(parser.MustBeDString(args[0])))
+		ReturnType: tree.FixedReturnType(types.String),
+		Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			runes := []rune(string(tree.MustBeDString(args[0])))
 			// SQL strings are 1-indexed.
-			start := int(parser.MustBeDInt(args[1])) - 1
-			length := int(parser.MustBeDInt(args[2]))
+			start := int(tree.MustBeDInt(args[1])) - 1
+			length := int(tree.MustBeDInt(args[2]))
 
 			if length < 0 {
 				return nil, pgerror.NewErrorf(
@@ -2142,34 +2142,34 @@ var substringImpls = []parser.Builtin{
 				start = len(runes)
 			}
 
-			return parser.NewDString(string(runes[start:end])), nil
+			return tree.NewDString(string(runes[start:end])), nil
 		},
 		Info: "Returns a substring of `input` between `start_pos` and `end_pos` (count starts at 1).",
 	},
 	{
-		Types: parser.ArgTypes{
+		Types: tree.ArgTypes{
 			{"input", types.String},
 			{"regex", types.String},
 		},
-		ReturnType: parser.FixedReturnType(types.String),
-		Fn: func(ctx *parser.EvalContext, args parser.Datums) (parser.Datum, error) {
-			s := string(parser.MustBeDString(args[0]))
-			pattern := string(parser.MustBeDString(args[1]))
+		ReturnType: tree.FixedReturnType(types.String),
+		Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			s := string(tree.MustBeDString(args[0]))
+			pattern := string(tree.MustBeDString(args[1]))
 			return regexpExtract(ctx, s, pattern, `\`)
 		},
 		Info: "Returns a substring of `input` that matches the regular expression `regex`.",
 	},
 	{
-		Types: parser.ArgTypes{
+		Types: tree.ArgTypes{
 			{"input", types.String},
 			{"regex", types.String},
 			{"escape_char", types.String},
 		},
-		ReturnType: parser.FixedReturnType(types.String),
-		Fn: func(ctx *parser.EvalContext, args parser.Datums) (parser.Datum, error) {
-			s := string(parser.MustBeDString(args[0]))
-			pattern := string(parser.MustBeDString(args[1]))
-			escape := string(parser.MustBeDString(args[2]))
+		ReturnType: tree.FixedReturnType(types.String),
+		Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			s := string(tree.MustBeDString(args[0]))
+			pattern := string(tree.MustBeDString(args[1]))
+			escape := string(tree.MustBeDString(args[2]))
 			return regexpExtract(ctx, s, pattern, escape)
 		},
 		Info: "Returns a substring of `input` that matches the regular expression `regex` using " +
@@ -2177,74 +2177,74 @@ var substringImpls = []parser.Builtin{
 	},
 }
 
-var uuidV4Impl = parser.Builtin{
-	Types:      parser.ArgTypes{},
-	ReturnType: parser.FixedReturnType(types.Bytes),
+var uuidV4Impl = tree.Builtin{
+	Types:      tree.ArgTypes{},
+	ReturnType: tree.FixedReturnType(types.Bytes),
 	Category:   categoryIDGeneration,
 	Impure:     true,
-	Fn: func(_ *parser.EvalContext, args parser.Datums) (parser.Datum, error) {
-		return parser.NewDBytes(parser.DBytes(uuid.MakeV4().GetBytes())), nil
+	Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+		return tree.NewDBytes(tree.DBytes(uuid.MakeV4().GetBytes())), nil
 	},
 	Info: "Returns a UUID.",
 }
 
-var ceilImpl = []parser.Builtin{
-	floatBuiltin1(func(x float64) (parser.Datum, error) {
-		return parser.NewDFloat(parser.DFloat(math.Ceil(x))), nil
+var ceilImpl = []tree.Builtin{
+	floatBuiltin1(func(x float64) (tree.Datum, error) {
+		return tree.NewDFloat(tree.DFloat(math.Ceil(x))), nil
 	}, "Calculates the smallest integer greater than `val`."),
-	decimalBuiltin1(func(x *apd.Decimal) (parser.Datum, error) {
-		dd := &parser.DDecimal{}
-		_, err := parser.ExactCtx.Ceil(&dd.Decimal, x)
+	decimalBuiltin1(func(x *apd.Decimal) (tree.Datum, error) {
+		dd := &tree.DDecimal{}
+		_, err := tree.ExactCtx.Ceil(&dd.Decimal, x)
 		return dd, err
 	}, "Calculates the smallest integer greater than `val`."),
 }
 
-var txnTSImpl = []parser.Builtin{
+var txnTSImpl = []tree.Builtin{
 	{
-		Types:             parser.ArgTypes{},
-		ReturnType:        parser.FixedReturnType(types.TimestampTZ),
+		Types:             tree.ArgTypes{},
+		ReturnType:        tree.FixedReturnType(types.TimestampTZ),
 		PreferredOverload: true,
 		Impure:            true,
-		Fn: func(ctx *parser.EvalContext, args parser.Datums) (parser.Datum, error) {
+		Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 			return ctx.GetTxnTimestamp(time.Microsecond), nil
 		},
 		Info: "Returns the current transaction's timestamp.",
 	},
 	{
-		Types:      parser.ArgTypes{},
-		ReturnType: parser.FixedReturnType(types.Timestamp),
+		Types:      tree.ArgTypes{},
+		ReturnType: tree.FixedReturnType(types.Timestamp),
 		Impure:     true,
-		Fn: func(ctx *parser.EvalContext, args parser.Datums) (parser.Datum, error) {
+		Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 			return ctx.GetTxnTimestampNoZone(time.Microsecond), nil
 		},
 		Info: "Returns the current transaction's timestamp.",
 	},
 }
 
-var powImpls = []parser.Builtin{
-	floatBuiltin2("x", "y", func(x, y float64) (parser.Datum, error) {
-		return parser.NewDFloat(parser.DFloat(math.Pow(x, y))), nil
+var powImpls = []tree.Builtin{
+	floatBuiltin2("x", "y", func(x, y float64) (tree.Datum, error) {
+		return tree.NewDFloat(tree.DFloat(math.Pow(x, y))), nil
 	}, "Calculates `x`^`y`."),
-	decimalBuiltin2("x", "y", func(x, y *apd.Decimal) (parser.Datum, error) {
-		dd := &parser.DDecimal{}
-		_, err := parser.DecimalCtx.Pow(&dd.Decimal, x, y)
+	decimalBuiltin2("x", "y", func(x, y *apd.Decimal) (tree.Datum, error) {
+		dd := &tree.DDecimal{}
+		_, err := tree.DecimalCtx.Pow(&dd.Decimal, x, y)
 		return dd, err
 	}, "Calculates `x`^`y`."),
 	{
-		Types: parser.ArgTypes{
+		Types: tree.ArgTypes{
 			{"x", types.Int},
 			{"y", types.Int},
 		},
-		ReturnType: parser.FixedReturnType(types.Int),
-		Fn: func(_ *parser.EvalContext, args parser.Datums) (parser.Datum, error) {
-			return parser.IntPow(parser.MustBeDInt(args[0]), parser.MustBeDInt(args[1]))
+		ReturnType: tree.FixedReturnType(types.Int),
+		Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			return tree.IntPow(tree.MustBeDInt(args[0]), tree.MustBeDInt(args[1]))
 		},
 		Info: "Calculates `x`^`y`.",
 	},
 }
 
-func arrayBuiltin(impl func(types.T) parser.Builtin) []parser.Builtin {
-	result := make([]parser.Builtin, 0, len(types.AnyNonArray))
+func arrayBuiltin(impl func(types.T) tree.Builtin) []tree.Builtin {
+	result := make([]tree.Builtin, 0, len(types.AnyNonArray))
 	for _, typ := range types.AnyNonArray {
 		if types.IsValidArrayElementType(typ) {
 			result = append(result, impl(typ))
@@ -2255,8 +2255,8 @@ func arrayBuiltin(impl func(types.T) parser.Builtin) []parser.Builtin {
 
 func decimalLogFn(
 	logFn func(*apd.Decimal, *apd.Decimal) (apd.Condition, error), info string,
-) parser.Builtin {
-	return decimalBuiltin1(func(x *apd.Decimal) (parser.Datum, error) {
+) tree.Builtin {
+	return decimalBuiltin1(func(x *apd.Decimal) (tree.Datum, error) {
 		// TODO(mjibson): see #13642
 		switch x.Sign() {
 		case -1:
@@ -2264,43 +2264,43 @@ func decimalLogFn(
 		case 0:
 			return nil, errLogOfZero
 		}
-		dd := &parser.DDecimal{}
+		dd := &tree.DDecimal{}
 		_, err := logFn(&dd.Decimal, x)
 		return dd, err
 	}, info)
 }
 
-func floatBuiltin1(f func(float64) (parser.Datum, error), info string) parser.Builtin {
-	return parser.Builtin{
-		Types:      parser.ArgTypes{{"val", types.Float}},
-		ReturnType: parser.FixedReturnType(types.Float),
-		Fn: func(_ *parser.EvalContext, args parser.Datums) (parser.Datum, error) {
-			return f(float64(*args[0].(*parser.DFloat)))
+func floatBuiltin1(f func(float64) (tree.Datum, error), info string) tree.Builtin {
+	return tree.Builtin{
+		Types:      tree.ArgTypes{{"val", types.Float}},
+		ReturnType: tree.FixedReturnType(types.Float),
+		Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			return f(float64(*args[0].(*tree.DFloat)))
 		},
 		Info: info,
 	}
 }
 
 func floatBuiltin2(
-	a, b string, f func(float64, float64) (parser.Datum, error), info string,
-) parser.Builtin {
-	return parser.Builtin{
-		Types:      parser.ArgTypes{{a, types.Float}, {b, types.Float}},
-		ReturnType: parser.FixedReturnType(types.Float),
-		Fn: func(_ *parser.EvalContext, args parser.Datums) (parser.Datum, error) {
-			return f(float64(*args[0].(*parser.DFloat)),
-				float64(*args[1].(*parser.DFloat)))
+	a, b string, f func(float64, float64) (tree.Datum, error), info string,
+) tree.Builtin {
+	return tree.Builtin{
+		Types:      tree.ArgTypes{{a, types.Float}, {b, types.Float}},
+		ReturnType: tree.FixedReturnType(types.Float),
+		Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			return f(float64(*args[0].(*tree.DFloat)),
+				float64(*args[1].(*tree.DFloat)))
 		},
 		Info: info,
 	}
 }
 
-func decimalBuiltin1(f func(*apd.Decimal) (parser.Datum, error), info string) parser.Builtin {
-	return parser.Builtin{
-		Types:      parser.ArgTypes{{"val", types.Decimal}},
-		ReturnType: parser.FixedReturnType(types.Decimal),
-		Fn: func(_ *parser.EvalContext, args parser.Datums) (parser.Datum, error) {
-			dec := &args[0].(*parser.DDecimal).Decimal
+func decimalBuiltin1(f func(*apd.Decimal) (tree.Datum, error), info string) tree.Builtin {
+	return tree.Builtin{
+		Types:      tree.ArgTypes{{"val", types.Decimal}},
+		ReturnType: tree.FixedReturnType(types.Decimal),
+		Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			dec := &args[0].(*tree.DDecimal).Decimal
 			return f(dec)
 		},
 		Info: info,
@@ -2308,14 +2308,14 @@ func decimalBuiltin1(f func(*apd.Decimal) (parser.Datum, error), info string) pa
 }
 
 func decimalBuiltin2(
-	a, b string, f func(*apd.Decimal, *apd.Decimal) (parser.Datum, error), info string,
-) parser.Builtin {
-	return parser.Builtin{
-		Types:      parser.ArgTypes{{a, types.Decimal}, {b, types.Decimal}},
-		ReturnType: parser.FixedReturnType(types.Decimal),
-		Fn: func(_ *parser.EvalContext, args parser.Datums) (parser.Datum, error) {
-			dec1 := &args[0].(*parser.DDecimal).Decimal
-			dec2 := &args[1].(*parser.DDecimal).Decimal
+	a, b string, f func(*apd.Decimal, *apd.Decimal) (tree.Datum, error), info string,
+) tree.Builtin {
+	return tree.Builtin{
+		Types:      tree.ArgTypes{{a, types.Decimal}, {b, types.Decimal}},
+		ReturnType: tree.FixedReturnType(types.Decimal),
+		Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			dec1 := &args[0].(*tree.DDecimal).Decimal
+			dec2 := &args[1].(*tree.DDecimal).Decimal
 			return f(dec1, dec2)
 		},
 		Info: info,
@@ -2323,13 +2323,13 @@ func decimalBuiltin2(
 }
 
 func stringBuiltin1(
-	f func(*parser.EvalContext, string) (parser.Datum, error), returnType types.T, info string,
-) parser.Builtin {
-	return parser.Builtin{
-		Types:      parser.ArgTypes{{"val", types.String}},
-		ReturnType: parser.FixedReturnType(returnType),
-		Fn: func(evalCtx *parser.EvalContext, args parser.Datums) (parser.Datum, error) {
-			return f(evalCtx, string(parser.MustBeDString(args[0])))
+	f func(*tree.EvalContext, string) (tree.Datum, error), returnType types.T, info string,
+) tree.Builtin {
+	return tree.Builtin{
+		Types:      tree.ArgTypes{{"val", types.String}},
+		ReturnType: tree.FixedReturnType(returnType),
+		Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			return f(evalCtx, string(tree.MustBeDString(args[0])))
 		},
 		Info: info,
 	}
@@ -2337,16 +2337,16 @@ func stringBuiltin1(
 
 func stringBuiltin2(
 	a, b string,
-	f func(*parser.EvalContext, string, string) (parser.Datum, error),
+	f func(*tree.EvalContext, string, string) (tree.Datum, error),
 	returnType types.T,
 	info string,
-) parser.Builtin {
-	return parser.Builtin{
-		Types:      parser.ArgTypes{{a, types.String}, {b, types.String}},
-		ReturnType: parser.FixedReturnType(returnType),
+) tree.Builtin {
+	return tree.Builtin{
+		Types:      tree.ArgTypes{{a, types.String}, {b, types.String}},
+		ReturnType: tree.FixedReturnType(returnType),
 		Category:   categorizeType(types.String),
-		Fn: func(evalCtx *parser.EvalContext, args parser.Datums) (parser.Datum, error) {
-			return f(evalCtx, string(parser.MustBeDString(args[0])), string(parser.MustBeDString(args[1])))
+		Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			return f(evalCtx, string(tree.MustBeDString(args[0])), string(tree.MustBeDString(args[1])))
 		},
 		Info: info,
 	}
@@ -2354,43 +2354,43 @@ func stringBuiltin2(
 
 func stringBuiltin3(
 	a, b, c string,
-	f func(*parser.EvalContext, string, string, string) (parser.Datum, error),
+	f func(*tree.EvalContext, string, string, string) (tree.Datum, error),
 	returnType types.T,
 	info string,
-) parser.Builtin {
-	return parser.Builtin{
-		Types:      parser.ArgTypes{{a, types.String}, {b, types.String}, {c, types.String}},
-		ReturnType: parser.FixedReturnType(returnType),
-		Fn: func(evalCtx *parser.EvalContext, args parser.Datums) (parser.Datum, error) {
-			return f(evalCtx, string(parser.MustBeDString(args[0])), string(parser.MustBeDString(args[1])), string(parser.MustBeDString(args[2])))
+) tree.Builtin {
+	return tree.Builtin{
+		Types:      tree.ArgTypes{{a, types.String}, {b, types.String}, {c, types.String}},
+		ReturnType: tree.FixedReturnType(returnType),
+		Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			return f(evalCtx, string(tree.MustBeDString(args[0])), string(tree.MustBeDString(args[1])), string(tree.MustBeDString(args[2])))
 		},
 		Info: info,
 	}
 }
 
 func bytesBuiltin1(
-	f func(*parser.EvalContext, string) (parser.Datum, error), returnType types.T, info string,
-) parser.Builtin {
-	return parser.Builtin{
-		Types:      parser.ArgTypes{{"val", types.Bytes}},
-		ReturnType: parser.FixedReturnType(returnType),
-		Fn: func(evalCtx *parser.EvalContext, args parser.Datums) (parser.Datum, error) {
-			return f(evalCtx, string(*args[0].(*parser.DBytes)))
+	f func(*tree.EvalContext, string) (tree.Datum, error), returnType types.T, info string,
+) tree.Builtin {
+	return tree.Builtin{
+		Types:      tree.ArgTypes{{"val", types.Bytes}},
+		ReturnType: tree.FixedReturnType(returnType),
+		Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			return f(evalCtx, string(*args[0].(*tree.DBytes)))
 		},
 		Info: info,
 	}
 }
 
-func feedHash(h hash.Hash, args parser.Datums) {
+func feedHash(h hash.Hash, args tree.Datums) {
 	for _, datum := range args {
-		if datum == parser.DNull {
+		if datum == tree.DNull {
 			continue
 		}
 		var buf string
-		if d, ok := datum.(*parser.DBytes); ok {
+		if d, ok := datum.(*tree.DBytes); ok {
 			buf = string(*d)
 		} else {
-			buf = string(parser.MustBeDString(datum))
+			buf = string(tree.MustBeDString(datum))
 		}
 		if _, err := h.Write([]byte(buf)); err != nil {
 			panic(errors.Wrap(err, `"It never returns an error." -- https://golang.org/pkg/hash`))
@@ -2398,80 +2398,80 @@ func feedHash(h hash.Hash, args parser.Datums) {
 	}
 }
 
-func hashBuiltin(newHash func() hash.Hash, info string) []parser.Builtin {
-	return []parser.Builtin{
+func hashBuiltin(newHash func() hash.Hash, info string) []tree.Builtin {
+	return []tree.Builtin{
 		{
-			Types:        parser.VariadicType{Typ: types.String},
-			ReturnType:   parser.FixedReturnType(types.String),
+			Types:        tree.VariadicType{Typ: types.String},
+			ReturnType:   tree.FixedReturnType(types.String),
 			NullableArgs: true,
-			Fn: func(_ *parser.EvalContext, args parser.Datums) (parser.Datum, error) {
+			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				h := newHash()
 				feedHash(h, args)
-				return parser.NewDString(fmt.Sprintf("%x", h.Sum(nil))), nil
+				return tree.NewDString(fmt.Sprintf("%x", h.Sum(nil))), nil
 			},
 			Info: info,
 		},
 		{
-			Types:        parser.VariadicType{Typ: types.Bytes},
-			ReturnType:   parser.FixedReturnType(types.String),
+			Types:        tree.VariadicType{Typ: types.Bytes},
+			ReturnType:   tree.FixedReturnType(types.String),
 			NullableArgs: true,
-			Fn: func(_ *parser.EvalContext, args parser.Datums) (parser.Datum, error) {
+			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				h := newHash()
 				feedHash(h, args)
-				return parser.NewDString(fmt.Sprintf("%x", h.Sum(nil))), nil
+				return tree.NewDString(fmt.Sprintf("%x", h.Sum(nil))), nil
 			},
 			Info: info,
 		},
 	}
 }
 
-func hash32Builtin(newHash func() hash.Hash32, info string) []parser.Builtin {
-	return []parser.Builtin{
+func hash32Builtin(newHash func() hash.Hash32, info string) []tree.Builtin {
+	return []tree.Builtin{
 		{
-			Types:        parser.VariadicType{Typ: types.String},
-			ReturnType:   parser.FixedReturnType(types.Int),
+			Types:        tree.VariadicType{Typ: types.String},
+			ReturnType:   tree.FixedReturnType(types.Int),
 			NullableArgs: true,
-			Fn: func(_ *parser.EvalContext, args parser.Datums) (parser.Datum, error) {
+			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				h := newHash()
 				feedHash(h, args)
-				return parser.NewDInt(parser.DInt(h.Sum32())), nil
+				return tree.NewDInt(tree.DInt(h.Sum32())), nil
 			},
 			Info: info,
 		},
 		{
-			Types:        parser.VariadicType{Typ: types.Bytes},
-			ReturnType:   parser.FixedReturnType(types.Int),
+			Types:        tree.VariadicType{Typ: types.Bytes},
+			ReturnType:   tree.FixedReturnType(types.Int),
 			NullableArgs: true,
-			Fn: func(_ *parser.EvalContext, args parser.Datums) (parser.Datum, error) {
+			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				h := newHash()
 				feedHash(h, args)
-				return parser.NewDInt(parser.DInt(h.Sum32())), nil
+				return tree.NewDInt(tree.DInt(h.Sum32())), nil
 			},
 			Info: info,
 		},
 	}
 }
-func hash64Builtin(newHash func() hash.Hash64, info string) []parser.Builtin {
-	return []parser.Builtin{
+func hash64Builtin(newHash func() hash.Hash64, info string) []tree.Builtin {
+	return []tree.Builtin{
 		{
-			Types:        parser.VariadicType{Typ: types.String},
-			ReturnType:   parser.FixedReturnType(types.Int),
+			Types:        tree.VariadicType{Typ: types.String},
+			ReturnType:   tree.FixedReturnType(types.Int),
 			NullableArgs: true,
-			Fn: func(_ *parser.EvalContext, args parser.Datums) (parser.Datum, error) {
+			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				h := newHash()
 				feedHash(h, args)
-				return parser.NewDInt(parser.DInt(h.Sum64())), nil
+				return tree.NewDInt(tree.DInt(h.Sum64())), nil
 			},
 			Info: info,
 		},
 		{
-			Types:        parser.VariadicType{Typ: types.Bytes},
-			ReturnType:   parser.FixedReturnType(types.Int),
+			Types:        tree.VariadicType{Typ: types.Bytes},
+			ReturnType:   tree.FixedReturnType(types.Int),
 			NullableArgs: true,
-			Fn: func(_ *parser.EvalContext, args parser.Datums) (parser.Datum, error) {
+			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				h := newHash()
 				feedHash(h, args)
-				return parser.NewDInt(parser.DInt(h.Sum64())), nil
+				return tree.NewDInt(tree.DInt(h.Sum64())), nil
 			},
 			Info: info,
 		},
@@ -2493,7 +2493,7 @@ func (k regexpEscapeKey) Pattern() (string, error) {
 	return pattern, nil
 }
 
-func regexpExtract(ctx *parser.EvalContext, s, pattern, escape string) (parser.Datum, error) {
+func regexpExtract(ctx *tree.EvalContext, s, pattern, escape string) (tree.Datum, error) {
 	patternRe, err := ctx.ReCache.GetRegexp(regexpEscapeKey{pattern, escape})
 	if err != nil {
 		return nil, err
@@ -2501,13 +2501,13 @@ func regexpExtract(ctx *parser.EvalContext, s, pattern, escape string) (parser.D
 
 	match := patternRe.FindStringSubmatch(s)
 	if match == nil {
-		return parser.DNull, nil
+		return tree.DNull, nil
 	}
 
 	if len(match) > 1 {
-		return parser.NewDString(match[1]), nil
+		return tree.NewDString(match[1]), nil
 	}
-	return parser.NewDString(match[0]), nil
+	return tree.NewDString(match[0]), nil
 }
 
 type regexpFlagKey struct {
@@ -2520,7 +2520,7 @@ func (k regexpFlagKey) Pattern() (string, error) {
 	return regexpEvalFlags(k.sqlPattern, k.sqlFlags)
 }
 
-func regexpReplace(ctx *parser.EvalContext, s, pattern, to, sqlFlags string) (parser.Datum, error) {
+func regexpReplace(ctx *tree.EvalContext, s, pattern, to, sqlFlags string) (tree.Datum, error) {
 	patternRe, err := ctx.ReCache.GetRegexp(regexpFlagKey{pattern, sqlFlags})
 	if err != nil {
 		return nil, err
@@ -2597,7 +2597,7 @@ func regexpReplace(ctx *parser.EvalContext, s, pattern, to, sqlFlags string) (pa
 	// Add the section of s past the final match.
 	newString.WriteString(s[finalIndex:])
 
-	return parser.NewDString(newString.String()), nil
+	return tree.NewDString(newString.String()), nil
 }
 
 var flagToByte = map[syntax.Flags]byte{
@@ -2660,7 +2660,7 @@ func regexpEvalFlags(pattern, sqlFlags string) (string, error) {
 	return fmt.Sprintf("(?%s:%s)", bs, pattern), nil
 }
 
-func overlay(s, to string, pos, size int) (parser.Datum, error) {
+func overlay(s, to string, pos, size int) (tree.Datum, error) {
 	if pos < 1 {
 		return nil, pgerror.NewErrorf(
 			pgerror.CodeInvalidParameterValueError, "non-positive substring length not allowed: %d", pos)
@@ -2677,7 +2677,7 @@ func overlay(s, to string, pos, size int) (parser.Datum, error) {
 	} else if after > len(runes) {
 		after = len(runes)
 	}
-	return parser.NewDString(string(runes[:pos]) + to + string(runes[after:])), nil
+	return tree.NewDString(string(runes[:pos]) + to + string(runes[after:])), nil
 }
 
 // Transcribed from Postgres' src/port/rint.c, with c-style comments preserved
@@ -2748,9 +2748,9 @@ func round(x float64) float64 {
 	return roundFn(x*0.5) * 2.0
 }
 
-func roundDecimal(x *apd.Decimal, n int32) (parser.Datum, error) {
-	dd := &parser.DDecimal{}
-	_, err := parser.HighPrecisionCtx.Quantize(&dd.Decimal, x, -n)
+func roundDecimal(x *apd.Decimal, n int32) (tree.Datum, error) {
+	dd := &tree.DDecimal{}
+	_, err := tree.HighPrecisionCtx.Quantize(&dd.Decimal, x, -n)
 	return dd, err
 }
 
@@ -2774,7 +2774,7 @@ var uniqueIntEpoch = time.Date(2015, time.January, 1, 0, 0, 0, 0, time.UTC).Unix
 // TODO(pmattis): Do we have to worry about persisting the milliseconds value
 // periodically to avoid the clock ever going backwards (e.g. due to NTP
 // adjustment)?
-func GenerateUniqueInt(nodeID roachpb.NodeID) parser.DInt {
+func GenerateUniqueInt(nodeID roachpb.NodeID) tree.DInt {
 	const precision = uint64(10 * time.Microsecond)
 	const nodeIDBits = 15
 
@@ -2795,83 +2795,83 @@ func GenerateUniqueInt(nodeID roachpb.NodeID) parser.DInt {
 	// We xor in the nodeID so that nodeIDs larger than 32K will flip bits in the
 	// timestamp portion of the final value instead of always setting them.
 	id = (id << nodeIDBits) ^ uint64(nodeID)
-	return parser.DInt(id)
+	return tree.DInt(id)
 }
 
-func arrayLength(arr *parser.DArray, dim int64) parser.Datum {
+func arrayLength(arr *tree.DArray, dim int64) tree.Datum {
 	if arr.Len() == 0 || dim < 1 {
-		return parser.DNull
+		return tree.DNull
 	}
 	if dim == 1 {
-		return parser.NewDInt(parser.DInt(arr.Len()))
+		return tree.NewDInt(tree.DInt(arr.Len()))
 	}
-	a, ok := parser.AsDArray(arr.Array[0])
+	a, ok := tree.AsDArray(arr.Array[0])
 	if !ok {
-		return parser.DNull
+		return tree.DNull
 	}
 	return arrayLength(a, dim-1)
 }
 
-var intOne = parser.NewDInt(parser.DInt(1))
+var intOne = tree.NewDInt(tree.DInt(1))
 
-func arrayLower(arr *parser.DArray, dim int64) parser.Datum {
+func arrayLower(arr *tree.DArray, dim int64) tree.Datum {
 	if arr.Len() == 0 || dim < 1 {
-		return parser.DNull
+		return tree.DNull
 	}
 	if dim == 1 {
 		return intOne
 	}
-	a, ok := parser.AsDArray(arr.Array[0])
+	a, ok := tree.AsDArray(arr.Array[0])
 	if !ok {
-		return parser.DNull
+		return tree.DNull
 	}
 	return arrayLower(a, dim-1)
 }
 
 func extractStringFromTimestamp(
-	_ *parser.EvalContext, fromTime time.Time, timeSpan string,
-) (parser.Datum, error) {
+	_ *tree.EvalContext, fromTime time.Time, timeSpan string,
+) (tree.Datum, error) {
 	switch timeSpan {
 	case "year", "years":
-		return parser.NewDInt(parser.DInt(fromTime.Year())), nil
+		return tree.NewDInt(tree.DInt(fromTime.Year())), nil
 
 	case "quarter":
-		return parser.NewDInt(parser.DInt((fromTime.Month()-1)/3 + 1)), nil
+		return tree.NewDInt(tree.DInt((fromTime.Month()-1)/3 + 1)), nil
 
 	case "month", "months":
-		return parser.NewDInt(parser.DInt(fromTime.Month())), nil
+		return tree.NewDInt(tree.DInt(fromTime.Month())), nil
 
 	case "week", "weeks":
 		_, week := fromTime.ISOWeek()
-		return parser.NewDInt(parser.DInt(week)), nil
+		return tree.NewDInt(tree.DInt(week)), nil
 
 	case "day", "days":
-		return parser.NewDInt(parser.DInt(fromTime.Day())), nil
+		return tree.NewDInt(tree.DInt(fromTime.Day())), nil
 
 	case "dayofweek", "dow":
-		return parser.NewDInt(parser.DInt(fromTime.Weekday())), nil
+		return tree.NewDInt(tree.DInt(fromTime.Weekday())), nil
 
 	case "dayofyear", "doy":
-		return parser.NewDInt(parser.DInt(fromTime.YearDay())), nil
+		return tree.NewDInt(tree.DInt(fromTime.YearDay())), nil
 
 	case "hour", "hours":
-		return parser.NewDInt(parser.DInt(fromTime.Hour())), nil
+		return tree.NewDInt(tree.DInt(fromTime.Hour())), nil
 
 	case "minute", "minutes":
-		return parser.NewDInt(parser.DInt(fromTime.Minute())), nil
+		return tree.NewDInt(tree.DInt(fromTime.Minute())), nil
 
 	case "second", "seconds":
-		return parser.NewDInt(parser.DInt(fromTime.Second())), nil
+		return tree.NewDInt(tree.DInt(fromTime.Second())), nil
 
 	case "millisecond", "milliseconds":
 		// This a PG extension not supported in MySQL.
-		return parser.NewDInt(parser.DInt(fromTime.Nanosecond() / int(time.Millisecond))), nil
+		return tree.NewDInt(tree.DInt(fromTime.Nanosecond() / int(time.Millisecond))), nil
 
 	case "microsecond", "microseconds":
-		return parser.NewDInt(parser.DInt(fromTime.Nanosecond() / int(time.Microsecond))), nil
+		return tree.NewDInt(tree.DInt(fromTime.Nanosecond() / int(time.Microsecond))), nil
 
 	case "epoch":
-		return parser.NewDInt(parser.DInt(fromTime.Unix())), nil
+		return tree.NewDInt(tree.DInt(fromTime.Unix())), nil
 
 	default:
 		return nil, pgerror.NewErrorf(pgerror.CodeInvalidParameterValueError, "unsupported timespan: %s", timeSpan)
@@ -2879,8 +2879,8 @@ func extractStringFromTimestamp(
 }
 
 func truncateTimestamp(
-	_ *parser.EvalContext, fromTime time.Time, timeSpan string,
-) (parser.Datum, error) {
+	_ *tree.EvalContext, fromTime time.Time, timeSpan string,
+) (tree.Datum, error) {
 	year := fromTime.Year()
 	month := fromTime.Month()
 	day := fromTime.Day()
@@ -2940,5 +2940,5 @@ func truncateTimestamp(
 	}
 
 	toTime := time.Date(year, month, day, hour, min, sec, nsec, loc)
-	return parser.MakeDTimestampTZ(toTime, time.Microsecond), nil
+	return tree.MakeDTimestampTZ(toTime, time.Microsecond), nil
 }

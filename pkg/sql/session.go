@@ -34,7 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -155,7 +155,7 @@ type queryMeta struct {
 	start time.Time
 
 	// AST of the SQL statement - converted to query string only when necessary.
-	stmt parser.Statement
+	stmt tree.Statement
 
 	// States whether this query is distributed. Note that all queries,
 	// including those that are distributed, have this field set to false until
@@ -205,7 +205,7 @@ type Session struct {
 	// SearchPath is a list of databases that will be searched for a table name
 	// before the database. Currently, this is used only for SELECTs.
 	// Names in the search path must have been normalized already.
-	SearchPath parser.SearchPath
+	SearchPath tree.SearchPath
 	// User is the name of the user logged into the session.
 	User string
 	// SafeUpdates causes errors when the client
@@ -330,7 +330,7 @@ type Session struct {
 
 		// LastActiveQuery contains a reference to the AST of the last
 		// query that ran on this session.
-		LastActiveQuery parser.Statement
+		LastActiveQuery tree.Statement
 	}
 
 	//
@@ -451,7 +451,11 @@ func (r *SessionRegistry) SerializeAll() []serverpb.Session {
 // NewSession creates and initializes a new Session object.
 // remote can be nil.
 func NewSession(
-	ctx context.Context, args SessionArgs, e *Executor, remote net.Addr, memMetrics *MemoryMetrics,
+	ctx context.Context,
+	args SessionArgs,
+	e *Executor,
+	remote net.Addr,
+	memMetrics *MemoryMetrics,
 ) *Session {
 	ctx = e.AnnotateCtx(ctx)
 	distSQLMode := DistSQLExecMode(DistSQLClusterExecMode.Get(&e.cfg.Settings.SV))
@@ -628,7 +632,7 @@ func (s *Session) resetPlanner(p *planner, e *Executor, txn *client.Txn) {
 	p.stmt = nil
 	p.cancelChecker = sqlbase.NewCancelChecker(s.Ctx())
 
-	p.semaCtx = parser.MakeSemaContext(s.User == security.RootUser)
+	p.semaCtx = tree.MakeSemaContext(s.User == security.RootUser)
 	p.semaCtx.Location = &s.Location
 	p.semaCtx.SearchPath = s.SearchPath
 
@@ -675,9 +679,9 @@ func (s *Session) newPlanner(e *Executor, txn *client.Txn) *planner {
 	return p
 }
 
-// evalCtx creates a parser.EvalContext from the Session's current configuration.
-func (s *Session) evalCtx() parser.EvalContext {
-	return parser.EvalContext{
+// evalCtx creates a tree.EvalContext from the Session's current configuration.
+func (s *Session) evalCtx() tree.EvalContext {
+	return tree.EvalContext{
 		Location:    &s.Location,
 		Database:    s.Database,
 		User:        s.User,
@@ -1539,7 +1543,7 @@ func extractMsgFromRecord(rec tracing.RecordedSpan_LogRecord) string {
 	return "<event missing in trace message>"
 }
 
-type traceRow [7]parser.Datum
+type traceRow [7]tree.Datum
 
 // generateSessionTraceVTable generates the rows of said table by using the log
 // messages from the session's trace (i.e. the ongoing trace, if any, or the
@@ -1607,32 +1611,32 @@ func (st *SessionTracing) generateSessionTraceVTable() ([]traceRow, error) {
 	var res []traceRow
 	for _, lrr := range allLogs {
 		// The "operation" column is only set for the first row in span.
-		var operation parser.Datum
+		var operation tree.Datum
 		if lrr.index == 0 {
-			operation = parser.NewDString(lrr.span.Operation)
+			operation = tree.NewDString(lrr.span.Operation)
 		} else {
-			operation = parser.DNull
+			operation = tree.DNull
 		}
-		var dur parser.Datum
+		var dur tree.Datum
 		if lrr.index == 0 && lrr.span.Duration != 0 {
-			dur = &parser.DInterval{
+			dur = &tree.DInterval{
 				Duration: duration.Duration{
 					Nanos: lrr.span.Duration.Nanoseconds(),
 				},
 			}
 		} else {
 			// Span was not finished.
-			dur = parser.DNull
+			dur = tree.DNull
 		}
 
 		row := traceRow{
-			parser.NewDInt(parser.DInt(lrr.span.txnIdx)),            // txn_idx
-			parser.NewDInt(parser.DInt(lrr.span.index)),             // span_idx
-			parser.NewDInt(parser.DInt(lrr.index)),                  // message_idx
-			parser.MakeDTimestampTZ(lrr.timestamp, time.Nanosecond), // timestamp
-			dur,                        // duration
-			operation,                  // operation
-			parser.NewDString(lrr.msg), // message
+			tree.NewDInt(tree.DInt(lrr.span.txnIdx)),              // txn_idx
+			tree.NewDInt(tree.DInt(lrr.span.index)),               // span_idx
+			tree.NewDInt(tree.DInt(lrr.index)),                    // message_idx
+			tree.MakeDTimestampTZ(lrr.timestamp, time.Nanosecond), // timestamp
+			dur,                      // duration
+			operation,                // operation
+			tree.NewDString(lrr.msg), // message
 		}
 		res = append(res, row)
 	}

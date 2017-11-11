@@ -24,7 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -95,7 +95,7 @@ type RowFetcher struct {
 	extraTypes     []ColumnType
 	indexKey       []byte // the index key of the current row
 	row            EncDatumRow
-	decodedRow     parser.Datums
+	decodedRow     tree.Datums
 	prettyValueBuf *bytes.Buffer
 
 	// The current key/value, unless kvEnd is true.
@@ -138,7 +138,7 @@ func (rf *RowFetcher) Init(
 	rf.cols = cols
 	rf.returnRangeInfo = returnRangeInfo
 	rf.row = make([]EncDatum, len(rf.cols))
-	rf.decodedRow = make([]parser.Datum, len(rf.cols))
+	rf.decodedRow = make([]tree.Datum, len(rf.cols))
 	rf.alloc = alloc
 
 	for i, v := range valNeededForCol {
@@ -358,7 +358,7 @@ func (rf *RowFetcher) processKV(
 	if rf.neededCols.Empty() {
 		// We don't need to decode any values.
 		if rf.traceKV {
-			prettyValue = parser.DNull.String()
+			prettyValue = tree.DNull.String()
 		}
 		return prettyKey, prettyValue, nil
 	}
@@ -435,7 +435,7 @@ func (rf *RowFetcher) processKV(
 	}
 
 	if rf.traceKV && prettyValue == "" {
-		prettyValue = parser.DNull.String()
+		prettyValue = tree.DNull.String()
 	}
 
 	return prettyKey, prettyValue, nil
@@ -445,7 +445,10 @@ func (rf *RowFetcher) processKV(
 // family.DefaultColumnID), setting values in the rf.row accordingly. The key is
 // only used for logging.
 func (rf *RowFetcher) processValueSingle(
-	ctx context.Context, family *ColumnFamilyDescriptor, kv roachpb.KeyValue, prettyKeyPrefix string,
+	ctx context.Context,
+	family *ColumnFamilyDescriptor,
+	kv roachpb.KeyValue,
+	prettyKeyPrefix string,
 ) (prettyKey string, prettyValue string, err error) {
 	prettyKey = prettyKeyPrefix
 
@@ -606,7 +609,7 @@ func (rf *RowFetcher) NextRow(ctx context.Context) (EncDatumRow, error) {
 // NextRowDecoded calls NextRow and decodes the EncDatumRow into a Datums.
 // The Datums should not be modified and is only valid until the next call.
 // When there are no more rows, the Datums is nil.
-func (rf *RowFetcher) NextRowDecoded(ctx context.Context) (parser.Datums, error) {
+func (rf *RowFetcher) NextRowDecoded(ctx context.Context) (tree.Datums, error) {
 	encRow, err := rf.NextRow(ctx)
 	if err != nil {
 		return nil, err
@@ -617,7 +620,7 @@ func (rf *RowFetcher) NextRowDecoded(ctx context.Context) (parser.Datums, error)
 
 	for i, encDatum := range encRow {
 		if encDatum.IsUnset() {
-			rf.decodedRow[i] = parser.DNull
+			rf.decodedRow[i] = tree.DNull
 			continue
 		}
 		if err := encDatum.EnsureDecoded(&rf.cols[i].Type, rf.alloc); err != nil {
@@ -637,7 +640,7 @@ func (rf *RowFetcher) finalizeRow() {
 				panic(fmt.Sprintf("Non-nullable column \"%s:%s\" with no value!",
 					rf.desc.Name, rf.cols[i].Name))
 			}
-			rf.row[i] = EncDatum{Datum: parser.DNull}
+			rf.row[i] = EncDatum{Datum: tree.DNull}
 		}
 	}
 }

@@ -22,7 +22,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/rsg/yacc"
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/ipaddr"
@@ -234,11 +234,11 @@ func (r *RSG) GenerateRandomArg(typ types.T) string {
 	case types.Date:
 		i := r.Int63()
 		i -= r.Int63()
-		d := parser.NewDDate(parser.DDate(i))
+		d := tree.NewDDate(tree.DDate(i))
 		v = fmt.Sprintf(`'%s'`, d)
 	case types.Interval:
 		d := duration.Duration{Nanos: r.Int63()}
-		v = fmt.Sprintf(`'%s'`, &parser.DInterval{Duration: d})
+		v = fmt.Sprintf(`'%s'`, &tree.DInterval{Duration: d})
 	case types.UUID:
 		u := uuid.MakeV4()
 		v = fmt.Sprintf(`'%s'`, u)

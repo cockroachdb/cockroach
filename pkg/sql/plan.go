@@ -20,6 +20,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -39,7 +40,7 @@ type planMaker interface {
 	// This method should not be used directly; instead prefer makePlan()
 	// or prepare() below.
 	newPlan(
-		ctx context.Context, stmt parser.Statement, desiredTypes []types.T,
+		ctx context.Context, stmt tree.Statement, desiredTypes []types.T,
 	) (planNode, error)
 
 	// makePlan prepares the query plan for a single SQL statement.  it
@@ -64,7 +65,7 @@ type planMaker interface {
 	// SQL statement and determine types for placeholders. However it is
 	// not appropriate to call optimizePlan(), Next() or Values() on a plan
 	// object created with prepare().
-	prepare(ctx context.Context, stmt parser.Statement) (planNode, error)
+	prepare(ctx context.Context, stmt tree.Statement) (planNode, error)
 }
 
 var _ planMaker = &planner{}
@@ -121,7 +122,7 @@ type planNode interface {
 	// until the next call to Next().
 	//
 	// Available after Next().
-	Values() parser.Datums
+	Values() tree.Datums
 
 	// Close terminates the planNode execution and releases its resources.
 	// This method should be called if the node has been used in any way (any
@@ -234,7 +235,7 @@ func (p *planner) startPlan(ctx context.Context, plan planNode) error {
 	return nil
 }
 
-func (p *planner) maybePlanHook(ctx context.Context, stmt parser.Statement) (planNode, error) {
+func (p *planner) maybePlanHook(ctx context.Context, stmt tree.Statement) (planNode, error) {
 	// TODO(dan): This iteration makes the plan dispatch no longer constant
 	// time. We could fix that with a map of `reflect.Type` but including
 	// reflection in such a primary codepath is unfortunate. Instead, the
@@ -307,7 +308,7 @@ func (p *planner) delegateQuery(
 // newPlan constructs a planNode from a statement. This is used
 // recursively by the various node constructors.
 func (p *planner) newPlan(
-	ctx context.Context, stmt parser.Statement, desiredTypes []types.T,
+	ctx context.Context, stmt tree.Statement, desiredTypes []types.T,
 ) (planNode, error) {
 	tracing.AnnotateTrace()
 
@@ -316,7 +317,7 @@ func (p *planner) newPlan(
 	// `BEGIN; INSERT INTO ...; CREATE TABLE IF NOT EXISTS ...; COMMIT;`
 	// where the table already exists. This will generate some false
 	// refreshes, but that's expected to be quite rare in practice.
-	if stmt.StatementType() == parser.DDL {
+	if stmt.StatementType() == tree.DDL {
 		if err := p.txn.SetSystemConfigTrigger(); err != nil {
 			return nil, errors.Wrap(err,
 				"schema change statement cannot follow a statement that has written in the same transaction")
@@ -328,141 +329,141 @@ func (p *planner) newPlan(
 	}
 
 	switch n := stmt.(type) {
-	case *parser.AlterTable:
+	case *tree.AlterTable:
 		return p.AlterTable(ctx, n)
-	case *parser.AlterUserSetPassword:
+	case *tree.AlterUserSetPassword:
 		return p.AlterUserSetPassword(ctx, n)
-	case *parser.BeginTransaction:
+	case *tree.BeginTransaction:
 		return p.BeginTransaction(n)
-	case *parser.CancelQuery:
+	case *tree.CancelQuery:
 		return p.CancelQuery(ctx, n)
-	case *parser.CancelJob:
+	case *tree.CancelJob:
 		return p.CancelJob(ctx, n)
-	case *parser.Scrub:
+	case *tree.Scrub:
 		return p.Scrub(ctx, n)
 	case CopyDataBlock:
 		return p.CopyData(ctx, n)
-	case *parser.CopyFrom:
+	case *tree.CopyFrom:
 		return p.CopyFrom(ctx, n)
-	case *parser.CreateDatabase:
+	case *tree.CreateDatabase:
 		return p.CreateDatabase(n)
-	case *parser.CreateIndex:
+	case *tree.CreateIndex:
 		return p.CreateIndex(ctx, n)
-	case *parser.CreateTable:
+	case *tree.CreateTable:
 		return p.CreateTable(ctx, n)
-	case *parser.CreateUser:
+	case *tree.CreateUser:
 		return p.CreateUser(ctx, n)
-	case *parser.CreateView:
+	case *tree.CreateView:
 		return p.CreateView(ctx, n)
-	case *parser.Deallocate:
+	case *tree.Deallocate:
 		return p.Deallocate(ctx, n)
-	case *parser.Delete:
+	case *tree.Delete:
 		return p.Delete(ctx, n, desiredTypes)
-	case *parser.Discard:
+	case *tree.Discard:
 		return p.Discard(ctx, n)
-	case *parser.DropDatabase:
+	case *tree.DropDatabase:
 		return p.DropDatabase(ctx, n)
-	case *parser.DropIndex:
+	case *tree.DropIndex:
 		return p.DropIndex(ctx, n)
-	case *parser.DropTable:
+	case *tree.DropTable:
 		return p.DropTable(ctx, n)
-	case *parser.DropView:
+	case *tree.DropView:
 		return p.DropView(ctx, n)
-	case *parser.DropUser:
+	case *tree.DropUser:
 		return p.DropUser(ctx, n)
-	case *parser.Execute:
+	case *tree.Execute:
 		return p.Execute(ctx, n)
-	case *parser.Explain:
+	case *tree.Explain:
 		return p.Explain(ctx, n)
-	case *parser.Grant:
+	case *tree.Grant:
 		return p.Grant(ctx, n)
-	case *parser.Insert:
+	case *tree.Insert:
 		return p.Insert(ctx, n, desiredTypes)
-	case *parser.ParenSelect:
+	case *tree.ParenSelect:
 		return p.newPlan(ctx, n.Select, desiredTypes)
-	case *parser.PauseJob:
+	case *tree.PauseJob:
 		return p.PauseJob(ctx, n)
-	case *parser.TestingRelocate:
+	case *tree.TestingRelocate:
 		return p.TestingRelocate(ctx, n)
-	case *parser.RenameColumn:
+	case *tree.RenameColumn:
 		return p.RenameColumn(ctx, n)
-	case *parser.RenameDatabase:
+	case *tree.RenameDatabase:
 		return p.RenameDatabase(ctx, n)
-	case *parser.RenameIndex:
+	case *tree.RenameIndex:
 		return p.RenameIndex(ctx, n)
-	case *parser.RenameTable:
+	case *tree.RenameTable:
 		return p.RenameTable(ctx, n)
-	case *parser.ResumeJob:
+	case *tree.ResumeJob:
 		return p.ResumeJob(ctx, n)
-	case *parser.Revoke:
+	case *tree.Revoke:
 		return p.Revoke(ctx, n)
-	case *parser.Scatter:
+	case *tree.Scatter:
 		return p.Scatter(ctx, n)
-	case *parser.Select:
+	case *tree.Select:
 		return p.Select(ctx, n, desiredTypes)
-	case *parser.SelectClause:
+	case *tree.SelectClause:
 		return p.SelectClause(ctx, n, nil /* orderBy */, nil /* limit */, false, /* lockForUpdate */
 			desiredTypes, publicColumns)
-	case *parser.SetClusterSetting:
+	case *tree.SetClusterSetting:
 		return p.SetClusterSetting(ctx, n)
-	case *parser.SetZoneConfig:
+	case *tree.SetZoneConfig:
 		return p.SetZoneConfig(ctx, n)
-	case *parser.SetVar:
+	case *tree.SetVar:
 		return p.SetVar(ctx, n)
-	case *parser.SetTransaction:
+	case *tree.SetTransaction:
 		return p.SetTransaction(n)
-	case *parser.SetDefaultIsolation:
+	case *tree.SetDefaultIsolation:
 		return p.SetDefaultIsolation(n)
-	case *parser.ShowClusterSetting:
+	case *tree.ShowClusterSetting:
 		return p.ShowClusterSetting(ctx, n)
-	case *parser.ShowVar:
+	case *tree.ShowVar:
 		return p.ShowVar(ctx, n)
-	case *parser.ShowColumns:
+	case *tree.ShowColumns:
 		return p.ShowColumns(ctx, n)
-	case *parser.ShowConstraints:
+	case *tree.ShowConstraints:
 		return p.ShowConstraints(ctx, n)
-	case *parser.ShowCreateTable:
+	case *tree.ShowCreateTable:
 		return p.ShowCreateTable(ctx, n)
-	case *parser.ShowCreateView:
+	case *tree.ShowCreateView:
 		return p.ShowCreateView(ctx, n)
-	case *parser.ShowDatabases:
+	case *tree.ShowDatabases:
 		return p.ShowDatabases(ctx, n)
-	case *parser.ShowGrants:
+	case *tree.ShowGrants:
 		return p.ShowGrants(ctx, n)
-	case *parser.ShowIndex:
+	case *tree.ShowIndex:
 		return p.ShowIndex(ctx, n)
-	case *parser.ShowQueries:
+	case *tree.ShowQueries:
 		return p.ShowQueries(ctx, n)
-	case *parser.ShowJobs:
+	case *tree.ShowJobs:
 		return p.ShowJobs(ctx, n)
-	case *parser.ShowSessions:
+	case *tree.ShowSessions:
 		return p.ShowSessions(ctx, n)
-	case *parser.ShowTables:
+	case *tree.ShowTables:
 		return p.ShowTables(ctx, n)
-	case *parser.ShowTrace:
+	case *tree.ShowTrace:
 		return p.ShowTrace(ctx, n)
-	case *parser.ShowTransactionStatus:
+	case *tree.ShowTransactionStatus:
 		return p.ShowTransactionStatus(ctx)
-	case *parser.ShowUsers:
+	case *tree.ShowUsers:
 		return p.ShowUsers(ctx, n)
-	case *parser.ShowZoneConfig:
+	case *tree.ShowZoneConfig:
 		return p.ShowZoneConfig(ctx, n)
-	case *parser.ShowRanges:
+	case *tree.ShowRanges:
 		return p.ShowRanges(ctx, n)
-	case *parser.ShowFingerprints:
+	case *tree.ShowFingerprints:
 		return p.ShowFingerprints(ctx, n)
-	case *parser.Split:
+	case *tree.Split:
 		return p.Split(ctx, n)
-	case *parser.Truncate:
+	case *tree.Truncate:
 		if err := p.txn.SetSystemConfigTrigger(); err != nil {
 			return nil, err
 		}
 		return p.Truncate(ctx, n)
-	case *parser.UnionClause:
+	case *tree.UnionClause:
 		return p.UnionClause(ctx, n, desiredTypes)
-	case *parser.Update:
+	case *tree.Update:
 		return p.Update(ctx, n, desiredTypes)
-	case *parser.ValuesClause:
+	case *tree.ValuesClause:
 		return p.ValuesClause(ctx, n, desiredTypes)
 	default:
 		return nil, errors.Errorf("unknown statement type: %T", stmt)
@@ -473,83 +474,83 @@ func (p *planner) newPlan(
 // needed both to type placeholders and to inform pgwire of the types
 // of the result columns. All statements that either support
 // placeholders or have result columns must be handled here.
-func (p *planner) prepare(ctx context.Context, stmt parser.Statement) (planNode, error) {
+func (p *planner) prepare(ctx context.Context, stmt tree.Statement) (planNode, error) {
 	if plan, err := p.maybePlanHook(ctx, stmt); plan != nil || err != nil {
 		return plan, err
 	}
 	p.isPreparing = true
 
 	switch n := stmt.(type) {
-	case *parser.AlterUserSetPassword:
+	case *tree.AlterUserSetPassword:
 		return p.AlterUserSetPassword(ctx, n)
-	case *parser.CancelQuery:
+	case *tree.CancelQuery:
 		return p.CancelQuery(ctx, n)
-	case *parser.CancelJob:
+	case *tree.CancelJob:
 		return p.CancelJob(ctx, n)
-	case *parser.CreateUser:
+	case *tree.CreateUser:
 		return p.CreateUser(ctx, n)
-	case *parser.Delete:
+	case *tree.Delete:
 		return p.Delete(ctx, n, nil)
-	case *parser.DropUser:
+	case *tree.DropUser:
 		return p.DropUser(ctx, n)
-	case *parser.Explain:
+	case *tree.Explain:
 		return p.Explain(ctx, n)
-	case *parser.Insert:
+	case *tree.Insert:
 		return p.Insert(ctx, n, nil)
-	case *parser.PauseJob:
+	case *tree.PauseJob:
 		return p.PauseJob(ctx, n)
-	case *parser.ResumeJob:
+	case *tree.ResumeJob:
 		return p.ResumeJob(ctx, n)
-	case *parser.Select:
+	case *tree.Select:
 		return p.Select(ctx, n, nil)
-	case *parser.SelectClause:
+	case *tree.SelectClause:
 		return p.SelectClause(ctx, n, nil /* orderBy */, nil /* limit */, false, /* lockForUpdate */
 			nil /* desiredTypes */, publicColumns)
-	case *parser.SetClusterSetting:
+	case *tree.SetClusterSetting:
 		return p.SetClusterSetting(ctx, n)
-	case *parser.SetVar:
+	case *tree.SetVar:
 		return p.SetVar(ctx, n)
-	case *parser.ShowClusterSetting:
+	case *tree.ShowClusterSetting:
 		return p.ShowClusterSetting(ctx, n)
-	case *parser.ShowVar:
+	case *tree.ShowVar:
 		return p.ShowVar(ctx, n)
-	case *parser.ShowCreateTable:
+	case *tree.ShowCreateTable:
 		return p.ShowCreateTable(ctx, n)
-	case *parser.ShowCreateView:
+	case *tree.ShowCreateView:
 		return p.ShowCreateView(ctx, n)
-	case *parser.ShowColumns:
+	case *tree.ShowColumns:
 		return p.ShowColumns(ctx, n)
-	case *parser.ShowDatabases:
+	case *tree.ShowDatabases:
 		return p.ShowDatabases(ctx, n)
-	case *parser.ShowGrants:
+	case *tree.ShowGrants:
 		return p.ShowGrants(ctx, n)
-	case *parser.ShowIndex:
+	case *tree.ShowIndex:
 		return p.ShowIndex(ctx, n)
-	case *parser.ShowConstraints:
+	case *tree.ShowConstraints:
 		return p.ShowConstraints(ctx, n)
-	case *parser.ShowQueries:
+	case *tree.ShowQueries:
 		return p.ShowQueries(ctx, n)
-	case *parser.ShowJobs:
+	case *tree.ShowJobs:
 		return p.ShowJobs(ctx, n)
-	case *parser.ShowSessions:
+	case *tree.ShowSessions:
 		return p.ShowSessions(ctx, n)
-	case *parser.ShowTables:
+	case *tree.ShowTables:
 		return p.ShowTables(ctx, n)
-	case *parser.ShowTrace:
+	case *tree.ShowTrace:
 		return p.ShowTrace(ctx, n)
-	case *parser.ShowUsers:
+	case *tree.ShowUsers:
 		return p.ShowUsers(ctx, n)
-	case *parser.ShowTransactionStatus:
+	case *tree.ShowTransactionStatus:
 		return p.ShowTransactionStatus(ctx)
-	case *parser.ShowRanges:
+	case *tree.ShowRanges:
 		return p.ShowRanges(ctx, n)
-	case *parser.Split:
+	case *tree.Split:
 		return p.Split(ctx, n)
-	case *parser.TestingRelocate:
+	case *tree.TestingRelocate:
 		return p.TestingRelocate(ctx, n)
-	case *parser.Scatter:
+	case *tree.Scatter:
 		return p.Scatter(ctx, n)
-	case *parser.Update:
+	case *tree.Update:
 		return p.Update(ctx, n, nil)
 	default:
 		// Other statement types do not have result columns and do not
