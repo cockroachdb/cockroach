@@ -26,7 +26,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/security"
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -37,7 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
 
-func withExecutor(test func(e *Executor, s *Session, evalCtx *parser.EvalContext), t *testing.T) {
+func withExecutor(test func(e *Executor, s *Session, evalCtx *tree.EvalContext), t *testing.T) {
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.TODO())
 
@@ -45,7 +45,7 @@ func withExecutor(test func(e *Executor, s *Session, evalCtx *parser.EvalContext
 	ctx, span := ac.AnnotateCtxWithSpan(context.Background(), "test")
 	defer span.Finish()
 
-	evalCtx := parser.NewTestingEvalContext()
+	evalCtx := tree.NewTestingEvalContext()
 	defer evalCtx.Stop(context.Background())
 
 	e := s.Executor().(*Executor)
@@ -59,7 +59,7 @@ func withExecutor(test func(e *Executor, s *Session, evalCtx *parser.EvalContext
 
 func TestBufferedWriterBasic(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	withExecutor(func(e *Executor, s *Session, evalCtx *parser.EvalContext) {
+	withExecutor(func(e *Executor, s *Session, evalCtx *tree.EvalContext) {
 		query := "SELECT 1; SELECT * FROM generate_series(1,100)"
 		res, err := e.ExecuteStatementsBuffered(s, query, nil, 2)
 		if err != nil {
@@ -77,8 +77,8 @@ func TestBufferedWriterBasic(t *testing.T) {
 		if result.PGTag != "SELECT" {
 			t.Fatal("expected SELECT, got ", result.PGTag)
 		}
-		if result.Type != parser.Rows {
-			t.Fatal("expected result type parser.Rows, got", result.Type)
+		if result.Type != tree.Rows {
+			t.Fatal("expected result type tree.Rows, got", result.Type)
 		}
 		if result.RowsAffected != 0 {
 			t.Fatal("expected 0 rows affected, got", result.RowsAffected)
@@ -94,8 +94,8 @@ func TestBufferedWriterBasic(t *testing.T) {
 		if result.PGTag != "SELECT" {
 			t.Fatal("expected SELECT, got ", result.PGTag)
 		}
-		if result.Type != parser.Rows {
-			t.Fatal("expected result type parser.Rows, got", result.Type)
+		if result.Type != tree.Rows {
+			t.Fatal("expected result type tree.Rows, got", result.Type)
 		}
 		if result.RowsAffected != 0 {
 			t.Fatal("expected 0 rows affected, got", result.RowsAffected)
@@ -113,7 +113,7 @@ func TestBufferedWriterBasic(t *testing.T) {
 
 func TestBufferedWriterError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	withExecutor(func(e *Executor, s *Session, evalCtx *parser.EvalContext) {
+	withExecutor(func(e *Executor, s *Session, evalCtx *tree.EvalContext) {
 		query := "SELECT 1; SELECT 1/(100-x) FROM generate_series(1,100) AS t(x)"
 		res, err := e.ExecuteStatementsBuffered(s, query, nil, 2)
 		if err == nil {
@@ -125,7 +125,7 @@ func TestBufferedWriterError(t *testing.T) {
 
 func TestBufferedWriterIncrementAffected(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	withExecutor(func(e *Executor, s *Session, evalCtx *parser.EvalContext) {
+	withExecutor(func(e *Executor, s *Session, evalCtx *tree.EvalContext) {
 		res, err := e.ExecuteStatementsBuffered(s, "CREATE DATABASE test; CREATE TABLE test.t (i INT)", nil, 2)
 		if err != nil {
 			t.Fatal("expected no error got", err)
@@ -148,8 +148,8 @@ func TestBufferedWriterIncrementAffected(t *testing.T) {
 		if result.PGTag != "INSERT" {
 			t.Fatal("expected INSERT, got ", result.PGTag)
 		}
-		if result.Type != parser.RowsAffected {
-			t.Fatal("expected result type parser.Rows, got", result.Type)
+		if result.Type != tree.RowsAffected {
+			t.Fatal("expected result type tree.Rows, got", result.Type)
 		}
 		if result.RowsAffected != 3 {
 			t.Fatal("expected 3 rows affected, got", result.RowsAffected)
@@ -159,7 +159,7 @@ func TestBufferedWriterIncrementAffected(t *testing.T) {
 
 func TestBufferedWriterRetries(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	withExecutor(func(e *Executor, s *Session, evalCtx *parser.EvalContext) {
+	withExecutor(func(e *Executor, s *Session, evalCtx *tree.EvalContext) {
 		query := "SELECT 1; SELECT CRDB_INTERNAL.FORCE_RETRY('1s':::INTERVAL)"
 		res, err := e.ExecuteStatementsBuffered(s, query, nil, 2)
 		if err != nil {
@@ -191,9 +191,9 @@ func TestBufferedWriterReset(t *testing.T) {
 	writer := newBufferedWriter(acc)
 	gw := writer.NewResultsGroup().(*bufferedWriter)
 	sw := gw.NewStatementResult()
-	sw.BeginResult((*parser.Select)(nil))
+	sw.BeginResult((*tree.Select)(nil))
 	sw.SetColumns(sqlbase.ResultColumns{{Name: "test", Typ: types.String}})
-	if err := sw.AddRow(ctx, parser.Datums{parser.DNull}); err != nil {
+	if err := sw.AddRow(ctx, tree.Datums{tree.DNull}); err != nil {
 		t.Fatal(err)
 	}
 	if err := sw.CloseResult(); err != nil {

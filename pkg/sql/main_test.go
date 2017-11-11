@@ -29,7 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/securitytest"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/sql"
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -200,17 +200,17 @@ func createTestServerParams() (base.TestServerArgs, *CommandFilters) {
 // 'planhook'.
 func init() {
 	testingPlanHook := func(
-		stmt parser.Statement, state sql.PlanHookState,
-	) (func(context.Context, chan<- parser.Datums) error, sqlbase.ResultColumns, error) {
-		show, ok := stmt.(*parser.ShowVar)
+		stmt tree.Statement, state sql.PlanHookState,
+	) (func(context.Context, chan<- tree.Datums) error, sqlbase.ResultColumns, error) {
+		show, ok := stmt.(*tree.ShowVar)
 		if !ok || show.Name != "planhook" {
 			return nil, nil, nil
 		}
 		header := sqlbase.ResultColumns{
 			{Name: "value", Typ: types.String},
 		}
-		return func(_ context.Context, resultsCh chan<- parser.Datums) error {
-			resultsCh <- parser.Datums{parser.NewDString(show.Name)}
+		return func(_ context.Context, resultsCh chan<- tree.Datums) error {
+			resultsCh <- tree.Datums{tree.NewDString(show.Name)}
 			return nil
 		}, header, nil
 	}

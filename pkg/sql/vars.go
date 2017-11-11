@@ -23,7 +23,7 @@ import (
 
 	"golang.org/x/net/context"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -42,7 +42,7 @@ const (
 type sessionVar struct {
 	// Set performs mutations (usually on session) to effect the change
 	// desired by SET commands.
-	Set func(ctx context.Context, session *Session, values []parser.TypedExpr) error
+	Set func(ctx context.Context, session *Session, values []tree.TypedExpr) error
 
 	// Get returns a string representation of a given variable to be used
 	// either by SHOW or in the pg_catalog table.
@@ -57,7 +57,7 @@ type sessionVar struct {
 // drivers which we do not support, but should simply ignore rather than
 // throwing an error when trying to SET or SHOW them.
 var nopVar = sessionVar{
-	Set:   func(context.Context, *Session, []parser.TypedExpr) error { return nil },
+	Set:   func(context.Context, *Session, []tree.TypedExpr) error { return nil },
 	Get:   func(*Session) string { return "" },
 	Reset: func(*Session) error { return nil },
 }
@@ -66,7 +66,7 @@ var nopVar = sessionVar{
 // Note to maintainers: try to keep this sorted in the source code.
 var varGen = map[string]sessionVar{
 	`application_name`: {
-		Set: func(_ context.Context, session *Session, values []parser.TypedExpr) error {
+		Set: func(_ context.Context, session *Session, values []tree.TypedExpr) error {
 			// Set by clients to improve query logging.
 			// See https://www.postgresql.org/docs/9.6/static/runtime-config-logging.html#GUC-APPLICATION-NAME
 			s, err := getStringVal(session, `application_name`, values)
@@ -100,7 +100,7 @@ var varGen = map[string]sessionVar{
 		Get: func(*Session) string {
 			return "UTF8"
 		},
-		Set: func(_ context.Context, session *Session, values []parser.TypedExpr) error {
+		Set: func(_ context.Context, session *Session, values []tree.TypedExpr) error {
 			s, err := getStringVal(session, `client_encoding`, values)
 			if err != nil {
 				return err
@@ -115,7 +115,7 @@ var varGen = map[string]sessionVar{
 	},
 
 	`database`: {
-		Set: func(ctx context.Context, session *Session, values []parser.TypedExpr) error {
+		Set: func(ctx context.Context, session *Session, values []tree.TypedExpr) error {
 			dbName, err := getStringVal(session, `database`, values)
 			if err != nil {
 				return err
@@ -145,7 +145,7 @@ var varGen = map[string]sessionVar{
 		Get: func(*Session) string {
 			return "ISO"
 		},
-		Set: func(_ context.Context, session *Session, values []parser.TypedExpr) error {
+		Set: func(_ context.Context, session *Session, values []tree.TypedExpr) error {
 			s, err := getStringVal(session, `datestyle`, values)
 			if err != nil {
 				return err
@@ -159,7 +159,7 @@ var varGen = map[string]sessionVar{
 	},
 
 	`default_transaction_isolation`: {
-		Set: func(_ context.Context, session *Session, values []parser.TypedExpr) error {
+		Set: func(_ context.Context, session *Session, values []tree.TypedExpr) error {
 			// It's unfortunate that clients want us to support both SET
 			// SESSION CHARACTERISTICS AS TRANSACTION ..., which takes the
 			// isolation level as keywords/identifiers (e.g. JDBC), and SET
@@ -189,7 +189,7 @@ var varGen = map[string]sessionVar{
 	},
 
 	`distsql`: {
-		Set: func(_ context.Context, session *Session, values []parser.TypedExpr) error {
+		Set: func(_ context.Context, session *Session, values []tree.TypedExpr) error {
 			s, err := getStringVal(session, `distsql`, values)
 			if err != nil {
 				return err
@@ -233,18 +233,18 @@ var varGen = map[string]sessionVar{
 
 	`sql_safe_updates`: {
 		Get: func(session *Session) string { return strconv.FormatBool(session.SafeUpdates) },
-		Set: func(_ context.Context, session *Session, values []parser.TypedExpr) error {
+		Set: func(_ context.Context, session *Session, values []tree.TypedExpr) error {
 			b, err := getSingleBool("sql_safe_updates", session, values)
 			if err != nil {
 				return err
 			}
-			session.SafeUpdates = (b == parser.DBoolTrue)
+			session.SafeUpdates = (b == tree.DBoolTrue)
 			return nil
 		},
 	},
 
 	`search_path`: {
-		Set: func(_ context.Context, session *Session, values []parser.TypedExpr) error {
+		Set: func(_ context.Context, session *Session, values []tree.TypedExpr) error {
 			// https://www.postgresql.org/docs/9.6/static/runtime-config-client.html
 			paths := make([]string, len(values))
 			for i, v := range values {
@@ -254,7 +254,7 @@ var varGen = map[string]sessionVar{
 				}
 				paths[i] = s
 			}
-			session.SearchPath = parser.MakeSearchPath(paths)
+			session.SearchPath = tree.MakeSearchPath(paths)
 			return nil
 		},
 		Get: func(session *Session) string { return session.SearchPath.String() },
@@ -278,7 +278,7 @@ var varGen = map[string]sessionVar{
 
 	`standard_conforming_strings`: {
 		// Supported for PG compatibility only.
-		Set: func(_ context.Context, session *Session, values []parser.TypedExpr) error {
+		Set: func(_ context.Context, session *Session, values []tree.TypedExpr) error {
 			// If true, escape backslash literals in strings. We do this by default,
 			// and we do not support the opposite behavior.
 			// See https://www.postgresql.org/docs/9.1/static/runtime-config-compatible.html#GUC-STANDARD-CONFORMING-STRINGS
@@ -362,13 +362,13 @@ var varGen = map[string]sessionVar{
 			}
 			return stopTracing(session)
 		},
-		Set: func(_ context.Context, session *Session, values []parser.TypedExpr) error {
+		Set: func(_ context.Context, session *Session, values []tree.TypedExpr) error {
 			return enableTracing(session, values)
 		},
 	},
 }
 
-func enableTracing(session *Session, values []parser.TypedExpr) error {
+func enableTracing(session *Session, values []tree.TypedExpr) error {
 	traceKV := false
 	recordingType := tracing.SnowballRecording
 	enableMode := true
@@ -416,9 +416,7 @@ var varNames = func() []string {
 	return res
 }()
 
-func getSingleBool(
-	name string, session *Session, values []parser.TypedExpr,
-) (*parser.DBool, error) {
+func getSingleBool(name string, session *Session, values []tree.TypedExpr) (*tree.DBool, error) {
 	if len(values) != 1 {
 		return nil, fmt.Errorf("set %s requires a single argument", name)
 	}
@@ -427,7 +425,7 @@ func getSingleBool(
 	if err != nil {
 		return nil, err
 	}
-	b, ok := val.(*parser.DBool)
+	b, ok := val.(*tree.DBool)
 	if !ok {
 		return nil, fmt.Errorf("set %s requires a boolean value: %s is a %s",
 			name, values[0], val.ResolvedType())

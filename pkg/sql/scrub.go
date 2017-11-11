@@ -23,8 +23,8 @@ import (
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -64,7 +64,7 @@ type checkOperation interface {
 	// returned to the user.
 	//
 	// Next is not called if Done() is false.
-	Next(context.Context, *planner) (parser.Datums, error)
+	Next(context.Context, *planner) (tree.Datums, error)
 
 	// Done indicates when there are no more results to iterate through.
 	Done(context.Context) bool
@@ -76,15 +76,15 @@ type checkOperation interface {
 type scrubNode struct {
 	optColumnsSlot
 
-	n *parser.Scrub
+	n *tree.Scrub
 
 	checkQueue []checkOperation
-	row        parser.Datums
+	row        tree.Datums
 }
 
 // Scrub checks the database.
 // Privileges: security.RootUser user.
-func (p *planner) Scrub(ctx context.Context, n *parser.Scrub) (planNode, error) {
+func (p *planner) Scrub(ctx context.Context, n *tree.Scrub) (planNode, error) {
 	if err := p.RequireSuperUser("SCRUB"); err != nil {
 		return nil, err
 	}
@@ -104,7 +104,7 @@ var scrubColumns = sqlbase.ResultColumns{
 
 func (n *scrubNode) Start(params runParams) error {
 	switch n.n.Typ {
-	case parser.ScrubTable:
+	case tree.ScrubTable:
 		tableName, err := n.n.Table.NormalizeWithDatabaseName(params.p.session.Database)
 		if err != nil {
 			return err
@@ -122,7 +122,7 @@ func (n *scrubNode) Start(params runParams) error {
 		if err := n.startScrubTable(params.ctx, params.p, tableDesc, tableName); err != nil {
 			return err
 		}
-	case parser.ScrubDatabase:
+	case tree.ScrubDatabase:
 		if err := n.startScrubDatabase(params.ctx, params.p, &n.n.Database); err != nil {
 			return err
 		}
@@ -135,7 +135,7 @@ func (n *scrubNode) Start(params runParams) error {
 
 // startScrubDatabase prepares a scrub check for each of the tables in
 // the database. Views are skipped without errors.
-func (n *scrubNode) startScrubDatabase(ctx context.Context, p *planner, name *parser.Name) error {
+func (n *scrubNode) startScrubDatabase(ctx context.Context, p *planner, name *tree.Name) error {
 	// Check that the database exists.
 	database := string(*name)
 	dbDesc, err := MustGetDatabaseDesc(ctx, p.txn, p.getVirtualTabler(), database)
@@ -169,7 +169,7 @@ func (n *scrubNode) startScrubDatabase(ctx context.Context, p *planner, name *pa
 }
 
 func (n *scrubNode) startScrubTable(
-	ctx context.Context, p *planner, tableDesc *sqlbase.TableDescriptor, tableName *parser.TableName,
+	ctx context.Context, p *planner, tableDesc *sqlbase.TableDescriptor, tableName *tree.TableName,
 ) error {
 	// Process SCRUB options. These are only present during a SCRUB TABLE
 	// statement.
@@ -177,7 +177,7 @@ func (n *scrubNode) startScrubTable(
 	var physicalCheckSet bool
 	for _, option := range n.n.Options {
 		switch v := option.(type) {
-		case *parser.ScrubOptionIndex:
+		case *tree.ScrubOptionIndex:
 			if indexesSet {
 				return pgerror.NewErrorf(pgerror.CodeSyntaxError,
 					"cannot specify INDEX option more than once")
@@ -188,7 +188,7 @@ func (n *scrubNode) startScrubTable(
 				return err
 			}
 			n.checkQueue = append(n.checkQueue, indexesToCheck...)
-		case *parser.ScrubOptionPhysical:
+		case *tree.ScrubOptionPhysical:
 			if physicalCheckSet {
 				return pgerror.NewErrorf(pgerror.CodeSyntaxError,
 					"cannot specify PHYSICAL option more than once")
@@ -250,7 +250,7 @@ func (n *scrubNode) Close(ctx context.Context) {
 	}
 }
 
-func (n *scrubNode) Values() parser.Datums {
+func (n *scrubNode) Values() tree.Datums {
 	return n.row
 }
 
@@ -312,7 +312,7 @@ func getPrimaryColIdxs(
 // indexCheckOperation is a check on a secondary index's integrity.
 type indexCheckOperation struct {
 	started   bool
-	tableName *parser.TableName
+	tableName *tree.TableName
 	tableDesc *sqlbase.TableDescriptor
 	indexDesc *sqlbase.IndexDescriptor
 
@@ -325,14 +325,12 @@ type indexCheckOperation struct {
 	// twice this.
 	columns []*sqlbase.ColumnDescriptor
 	// primaryColIdxs maps PrimaryIndex.Columns to the row
-	// indexes in the query result parser.Datums.
+	// indexes in the query result tree.Datums.
 	primaryColIdxs []int
 }
 
 func newIndexCheckOperation(
-	tableName *parser.TableName,
-	tableDesc *sqlbase.TableDescriptor,
-	indexDesc *sqlbase.IndexDescriptor,
+	tableName *tree.TableName, tableDesc *sqlbase.TableDescriptor, indexDesc *sqlbase.IndexDescriptor,
 ) *indexCheckOperation {
 	return &indexCheckOperation{
 		tableName: tableName,
@@ -395,28 +393,28 @@ func (o *indexCheckOperation) Start(ctx context.Context, p *planner) error {
 }
 
 // Next implements the checkOperation interface.
-func (o *indexCheckOperation) Next(ctx context.Context, p *planner) (parser.Datums, error) {
+func (o *indexCheckOperation) Next(ctx context.Context, p *planner) (tree.Datums, error) {
 	row := o.rows.At(o.rowIndex)
 	o.rowIndex++
 
 	// Check if this row has results from the left. See the comment above
 	// createIndexCheckQuery indicating why this is true.
 	var isMissingIndexReferenceError bool
-	if row[o.primaryColIdxs[0]] != parser.DNull {
+	if row[o.primaryColIdxs[0]] != tree.DNull {
 		isMissingIndexReferenceError = true
 	}
 
 	colLen := len(o.columns)
-	var errorType parser.Datum
-	var primaryKeyDatums parser.Datums
+	var errorType tree.Datum
+	var primaryKeyDatums tree.Datums
 	if isMissingIndexReferenceError {
-		errorType = parser.NewDString(ScrubErrorMissingIndexEntry)
+		errorType = tree.NewDString(ScrubErrorMissingIndexEntry)
 		// Fetch the primary index values from the primary index row data.
 		for _, rowIdx := range o.primaryColIdxs {
 			primaryKeyDatums = append(primaryKeyDatums, row[rowIdx])
 		}
 	} else {
-		errorType = parser.NewDString(ScrubErrorDanglingIndexReference)
+		errorType = tree.NewDString(ScrubErrorDanglingIndexReference)
 		// Fetch the primary index values from the secondary index row
 		// data, because no primary index was found. The secondary index columns
 		// are offset by the length of the distinct columns, as the first
@@ -425,8 +423,8 @@ func (o *indexCheckOperation) Next(ctx context.Context, p *planner) (parser.Datu
 			primaryKeyDatums = append(primaryKeyDatums, row[rowIdx+colLen])
 		}
 	}
-	primaryKey := parser.NewDString(primaryKeyDatums.String())
-	timestamp := parser.MakeDTimestamp(
+	primaryKey := tree.NewDString(primaryKeyDatums.String())
+	timestamp := tree.MakeDTimestamp(
 		p.evalCtx.GetStmtTimestamp(), time.Nanosecond)
 
 	details := make(map[string]interface{})
@@ -450,20 +448,20 @@ func (o *indexCheckOperation) Next(ctx context.Context, p *planner) (parser.Datu
 		}
 	}
 
-	detailsJSON, err := parser.MakeDJSON(details)
+	detailsJSON, err := tree.MakeDJSON(details)
 	if err != nil {
 		return nil, err
 	}
 
-	return parser.Datums{
+	return tree.Datums{
 		// TODO(joey): Add the job UUID once the SCRUB command uses jobs.
-		parser.DNull, /* job_uuid */
+		tree.DNull, /* job_uuid */
 		errorType,
-		parser.NewDString(o.tableName.Database()),
-		parser.NewDString(o.tableName.Table()),
+		tree.NewDString(o.tableName.Database()),
+		tree.NewDString(o.tableName.Table()),
 		primaryKey,
 		timestamp,
-		parser.DBoolFalse,
+		tree.DBoolFalse,
 		detailsJSON,
 	}, nil
 }
@@ -596,7 +594,7 @@ func tableColumnsProjection(tableName string, columns []string) string {
 func createIndexCheckQuery(
 	columnNames []string,
 	primaryKeyColumnNames []string,
-	tableName *parser.TableName,
+	tableName *tree.TableName,
 	indexID sqlbase.IndexID,
 ) string {
 	const checkIndexQuery = `
@@ -626,7 +624,7 @@ func createIndexCheckQuery(
 // TableDescriptor.FindIndexByName(), but this will only report the
 // first invalid index.
 func createIndexCheckOperations(
-	indexNames parser.NameList, tableDesc *sqlbase.TableDescriptor, tableName *parser.TableName,
+	indexNames tree.NameList, tableDesc *sqlbase.TableDescriptor, tableName *tree.TableName,
 ) (results []checkOperation, err error) {
 	if indexNames == nil {
 		// Populate results with all secondary indexes of the
@@ -678,7 +676,7 @@ func scrubPlanAndRunDistSQL(
 ) (*sqlbase.RowContainer, error) {
 	ci := sqlbase.ColTypeInfoFromColTypes(columnTypes)
 	rows := sqlbase.NewRowContainer(*p.evalCtx.ActiveMemAcc, ci, 0)
-	rowResultWriter := NewRowResultWriter(parser.Rows, rows)
+	rowResultWriter := NewRowResultWriter(tree.Rows, rows)
 	recv, err := makeDistSQLReceiver(
 		ctx,
 		rowResultWriter,

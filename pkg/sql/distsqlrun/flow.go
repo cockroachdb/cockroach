@@ -26,7 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/jobs"
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
@@ -58,7 +58,7 @@ type FlowCtx struct {
 	// id is a unique identifier for a flow.
 	id FlowID
 	// EvalCtx is used by all the processors in the flow to evaluate expressions.
-	EvalCtx parser.EvalContext
+	EvalCtx tree.EvalContext
 	// rpcCtx is used by the Outboxes that may be present in the flow for
 	// connecting to other nodes.
 	rpcCtx *rpc.Context

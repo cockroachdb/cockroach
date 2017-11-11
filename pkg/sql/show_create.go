@@ -20,24 +20,24 @@ import (
 
 	"golang.org/x/net/context"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
 // showCreateView returns a valid SQL representation of the CREATE
 // VIEW statement used to create the given view.
 func (p *planner) showCreateView(
-	ctx context.Context, tn parser.Name, desc *sqlbase.TableDescriptor,
+	ctx context.Context, tn tree.Name, desc *sqlbase.TableDescriptor,
 ) (string, error) {
 	var buf bytes.Buffer
 	buf.WriteString("CREATE VIEW ")
-	tn.Format(&buf, parser.FmtSimple)
+	tn.Format(&buf, tree.FmtSimple)
 	buf.WriteString(" (")
 	for i, col := range desc.Columns {
 		if i > 0 {
 			buf.WriteString(", ")
 		}
-		parser.Name(col.Name).Format(&buf, parser.FmtSimple)
+		tree.Name(col.Name).Format(&buf, tree.FmtSimple)
 	}
 	fmt.Fprintf(&buf, ") AS %s", desc.ViewQuery)
 	return buf.String(), nil
@@ -52,7 +52,7 @@ func (p *planner) showCreateView(
 // the prefix when the given table references other tables in the
 // current database.
 func (p *planner) showCreateTable(
-	ctx context.Context, tn parser.Name, dbPrefix string, desc *sqlbase.TableDescriptor,
+	ctx context.Context, tn tree.Name, dbPrefix string, desc *sqlbase.TableDescriptor,
 ) (string, error) {
 	var buf bytes.Buffer
 	fmt.Fprintf(&buf, "CREATE TABLE %s (", tn)
@@ -86,13 +86,13 @@ func (p *planner) showCreateTable(
 			if err != nil {
 				return "", err
 			}
-			fkTableName := parser.TableName{
-				DatabaseName:            parser.Name(fkDb.Name),
-				TableName:               parser.Name(fkTable.Name),
+			fkTableName := tree.TableName{
+				DatabaseName:            tree.Name(fkDb.Name),
+				TableName:               tree.Name(fkTable.Name),
 				DBNameOriginallyOmitted: fkDb.Name == dbPrefix,
 			}
 			fmt.Fprintf(&buf, ",\n\tCONSTRAINT %s FOREIGN KEY (%s) REFERENCES %s (%s)",
-				parser.Name(fk.Name),
+				tree.Name(fk.Name),
 				quoteNames(idx.ColumnNames[0:idx.ForeignKey.SharedPrefixLen]...),
 				&fkTableName,
 				quoteNames(fkIdx.ColumnNames...),
@@ -146,11 +146,11 @@ func (p *planner) showCreateTable(
 
 // quoteNames quotes and adds commas between names.
 func quoteNames(names ...string) string {
-	nameList := make(parser.NameList, len(names))
+	nameList := make(tree.NameList, len(names))
 	for i, n := range names {
-		nameList[i] = parser.Name(n)
+		nameList[i] = tree.Name(n)
 	}
-	return parser.AsString(nameList)
+	return tree.AsString(nameList)
 }
 
 // showCreateInterleave returns an INTERLEAVE IN PARENT clause for the specified
@@ -174,9 +174,9 @@ func (p *planner) showCreateInterleave(
 	if err != nil {
 		return err
 	}
-	parentName := parser.TableName{
-		DatabaseName:            parser.Name(parentDbDesc.Name),
-		TableName:               parser.Name(parentTable.Name),
+	parentName := tree.TableName{
+		DatabaseName:            tree.Name(parentDbDesc.Name),
+		TableName:               tree.Name(parentTable.Name),
 		DBNameOriginallyOmitted: parentDbDesc.Name == dbPrefix,
 	}
 	var sharedPrefixLen int

@@ -18,7 +18,8 @@ import (
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
@@ -30,11 +31,11 @@ type valueGenerator struct {
 	// expr holds the function call that needs to be performed,
 	// including its arguments that need evaluation, to obtain the
 	// generator object.
-	expr parser.TypedExpr
+	expr tree.TypedExpr
 
 	// gen is a reference to the generator object that produces the row
 	// for this planNode.
-	gen parser.ValueGenerator
+	gen tree.ValueGenerator
 
 	// columns is the signature of this generator.
 	columns sqlbase.ResultColumns
@@ -42,13 +43,13 @@ type valueGenerator struct {
 
 // makeGenerator creates a valueGenerator instance that wraps a call to a
 // generator function.
-func (p *planner) makeGenerator(ctx context.Context, t *parser.FuncExpr) (planNode, error) {
+func (p *planner) makeGenerator(ctx context.Context, t *tree.FuncExpr) (planNode, error) {
 	if err := p.txCtx.AssertNoAggregationOrWindowing(t, "FROM", p.session.SearchPath); err != nil {
 		return nil, err
 	}
 
 	normalized, err := p.analyzeExpr(
-		ctx, t, multiSourceInfo{}, parser.IndexedVarHelper{}, types.Any, false, "FROM",
+		ctx, t, multiSourceInfo{}, tree.IndexedVarHelper{}, types.Any, false, "FROM",
 	)
 	if err != nil {
 		return nil, err
@@ -76,11 +77,11 @@ func (n *valueGenerator) Start(params runParams) error {
 	if err != nil {
 		return err
 	}
-	var tb *parser.DTable
-	if expr == parser.DNull {
-		tb = parser.EmptyDTable()
+	var tb *tree.DTable
+	if expr == tree.DNull {
+		tb = builtins.EmptyDTable()
 	} else {
-		tb = expr.(*parser.DTable)
+		tb = expr.(*tree.DTable)
 	}
 
 	gen := tb.ValueGenerator
@@ -98,7 +99,7 @@ func (n *valueGenerator) Next(params runParams) (bool, error) {
 	}
 	return n.gen.Next()
 }
-func (n *valueGenerator) Values() parser.Datums { return n.gen.Values() }
+func (n *valueGenerator) Values() tree.Datums { return n.gen.Values() }
 
 func (n *valueGenerator) Close(context.Context) {
 	if n.gen != nil {

@@ -18,7 +18,7 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
 // InternalExecutor is meant to be used by layers below SQL in the system that
@@ -37,12 +37,12 @@ type InternalExecutor interface {
 	// executed as the root user.
 	QueryRowInTransaction(
 		ctx context.Context, opName string, txn *client.Txn, statement string, qargs ...interface{},
-	) (parser.Datums, error)
+	) (tree.Datums, error)
 
 	// QueryRowsInTransaction executes the supplied SQL statement as part of the
 	// supplied transaction and returns the resulting rows. Statements are currently
 	// executed as the root user.
 	QueryRowsInTransaction(
 		ctx context.Context, opName string, txn *client.Txn, statement string, qargs ...interface{},
-	) ([]parser.Datums, error)
+	) ([]tree.Datums, error)
 }

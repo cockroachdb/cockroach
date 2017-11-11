@@ -22,7 +22,7 @@ import (
 	"github.com/axiomhq/hyperloglog"
 	"github.com/pkg/errors"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -180,12 +180,12 @@ func (s *samplerProcessor) mainLoop(ctx context.Context) (earlyExit bool, _ erro
 
 	outRow := make(sqlbase.EncDatumRow, len(s.outTypes))
 	for i := range outRow {
-		outRow[i] = sqlbase.DatumToEncDatum(s.outTypes[i], parser.DNull)
+		outRow[i] = sqlbase.DatumToEncDatum(s.outTypes[i], tree.DNull)
 	}
 	// Emit the sampled rows.
 	for _, sample := range s.sr.Get() {
 		copy(outRow, sample.Row)
-		outRow[s.rankCol] = sqlbase.EncDatum{Datum: parser.NewDInt(parser.DInt(sample.Rank))}
+		outRow[s.rankCol] = sqlbase.EncDatum{Datum: tree.NewDInt(tree.DInt(sample.Rank))}
 		if !emitHelper(ctx, &s.out, outRow, ProducerMetadata{}, s.input) {
 			return true, nil
 		}
@@ -195,18 +195,18 @@ func (s *samplerProcessor) mainLoop(ctx context.Context) (earlyExit bool, _ erro
 
 	// Emit the sketch rows.
 	for i := range outRow {
-		outRow[i] = sqlbase.DatumToEncDatum(s.outTypes[i], parser.DNull)
+		outRow[i] = sqlbase.DatumToEncDatum(s.outTypes[i], tree.DNull)
 	}
 
 	for i := range s.sketchInfo {
-		outRow[s.sketchIdxCol] = sqlbase.EncDatum{Datum: parser.NewDInt(parser.DInt(i))}
-		outRow[s.numRowsCol] = sqlbase.EncDatum{Datum: parser.NewDInt(parser.DInt(numRows))}
-		outRow[s.nullValsCol] = sqlbase.EncDatum{Datum: parser.NewDInt(parser.DInt(numNulls[i]))}
+		outRow[s.sketchIdxCol] = sqlbase.EncDatum{Datum: tree.NewDInt(tree.DInt(i))}
+		outRow[s.numRowsCol] = sqlbase.EncDatum{Datum: tree.NewDInt(tree.DInt(numRows))}
+		outRow[s.nullValsCol] = sqlbase.EncDatum{Datum: tree.NewDInt(tree.DInt(numNulls[i]))}
 		data, err := sketches[i].MarshalBinary()
 		if err != nil {
 			return false, err
 		}
-		outRow[s.sketchCol] = sqlbase.EncDatum{Datum: parser.NewDBytes(parser.DBytes(data))}
+		outRow[s.sketchCol] = sqlbase.EncDatum{Datum: tree.NewDBytes(tree.DBytes(data))}
 		if !emitHelper(ctx, &s.out, outRow, ProducerMetadata{}, s.input) {
 			return true, nil
 		}

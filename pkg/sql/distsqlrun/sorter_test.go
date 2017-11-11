@@ -22,7 +22,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -39,7 +39,7 @@ func TestSorter(t *testing.T) {
 	columnTypeInt := sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_INT}
 	v := [6]sqlbase.EncDatum{}
 	for i := range v {
-		v[i] = sqlbase.DatumToEncDatum(columnTypeInt, parser.NewDInt(parser.DInt(i)))
+		v[i] = sqlbase.DatumToEncDatum(columnTypeInt, tree.NewDInt(tree.DInt(i)))
 	}
 
 	asc := encoding.Ascending
@@ -191,7 +191,7 @@ func TestSorter(t *testing.T) {
 	}
 	defer tempEngine.Close()
 
-	evalCtx := parser.MakeTestingEvalContext()
+	evalCtx := tree.MakeTestingEvalContext()
 	defer evalCtx.Stop(ctx)
 	diskMonitor := mon.MakeMonitor(
 		"test-disk",
@@ -260,7 +260,7 @@ func TestSorter(t *testing.T) {
 // BenchmarkSortAll times how long it takes to sort an input of varying length.
 func BenchmarkSortAll(b *testing.B) {
 	ctx := context.Background()
-	evalCtx := parser.MakeTestingEvalContext()
+	evalCtx := tree.MakeTestingEvalContext()
 	defer evalCtx.Stop(ctx)
 	flowCtx := FlowCtx{
 		Settings: cluster.MakeTestingClusterSettings(),
@@ -282,7 +282,7 @@ func BenchmarkSortAll(b *testing.B) {
 			input := make(sqlbase.EncDatumRows, inputSize)
 			for i := range input {
 				input[i] = sqlbase.EncDatumRow{
-					sqlbase.DatumToEncDatum(columnTypeInt, parser.NewDInt(parser.DInt(rng.Int()))),
+					sqlbase.DatumToEncDatum(columnTypeInt, tree.NewDInt(tree.DInt(rng.Int()))),
 				}
 			}
 			rowSource := NewRepeatableRowSource(types, input)
@@ -303,7 +303,7 @@ func BenchmarkSortAll(b *testing.B) {
 // varying limits.
 func BenchmarkSortLimit(b *testing.B) {
 	ctx := context.Background()
-	evalCtx := parser.MakeTestingEvalContext()
+	evalCtx := tree.MakeTestingEvalContext()
 	defer evalCtx.Stop(ctx)
 	flowCtx := FlowCtx{
 		Settings: cluster.MakeTestingClusterSettings(),
@@ -324,7 +324,7 @@ func BenchmarkSortLimit(b *testing.B) {
 		input := make(sqlbase.EncDatumRows, inputSize)
 		for i := range input {
 			input[i] = sqlbase.EncDatumRow{
-				sqlbase.DatumToEncDatum(columnTypeInt, parser.NewDInt(parser.DInt(rng.Int()))),
+				sqlbase.DatumToEncDatum(columnTypeInt, tree.NewDInt(tree.DInt(rng.Int()))),
 			}
 		}
 		rowSource := NewRepeatableRowSource(types, input)

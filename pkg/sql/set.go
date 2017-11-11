@@ -25,7 +25,7 @@ import (
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
@@ -37,26 +37,26 @@ import (
 type setNode struct {
 	v sessionVar
 	// typedValues == nil means RESET.
-	typedValues []parser.TypedExpr
+	typedValues []tree.TypedExpr
 }
 
 // SetVar sets session variables.
 // Privileges: None.
 //   Notes: postgres/mysql do not require privileges for session variables (some exceptions).
-func (p *planner) SetVar(ctx context.Context, n *parser.SetVar) (planNode, error) {
+func (p *planner) SetVar(ctx context.Context, n *tree.SetVar) (planNode, error) {
 	if n.Name == nil {
 		// A client has sent the reserved internal syntax SET ROW ...
 		// Reject it.
 		return nil, errors.New("invalid statement: SET ROW")
 	}
 
-	name := strings.ToLower(parser.AsStringWithFlags(n.Name, parser.FmtBareIdentifiers))
+	name := strings.ToLower(tree.AsStringWithFlags(n.Name, tree.FmtBareIdentifiers))
 
-	var typedValues []parser.TypedExpr
+	var typedValues []tree.TypedExpr
 	if len(n.Values) > 0 {
 		isReset := false
 		if len(n.Values) == 1 {
-			if _, ok := n.Values[0].(parser.DefaultVal); ok {
+			if _, ok := n.Values[0].(tree.DefaultVal); ok {
 				// "SET var = DEFAULT" means RESET.
 				// In that case, we want typedValues to remain nil, so that
 				// the Start() logic recognizes the RESET too.
@@ -65,15 +65,15 @@ func (p *planner) SetVar(ctx context.Context, n *parser.SetVar) (planNode, error
 		}
 
 		if !isReset {
-			typedValues = make([]parser.TypedExpr, len(n.Values))
+			typedValues = make([]tree.TypedExpr, len(n.Values))
 			for i, expr := range n.Values {
 				// Special rule for SET: because SET doesn't apply in the context
 				// of a table, SET ... = IDENT really means SET ... = 'IDENT'.
-				if s, ok := expr.(parser.UnresolvedName); ok {
-					expr = parser.NewStrVal(parser.AsStringWithFlags(s, parser.FmtBareIdentifiers))
+				if s, ok := expr.(tree.UnresolvedName); ok {
+					expr = tree.NewStrVal(tree.AsStringWithFlags(s, tree.FmtBareIdentifiers))
 				}
 
-				var dummyHelper parser.IndexedVarHelper
+				var dummyHelper tree.IndexedVarHelper
 				typedValue, err := p.analyzeExpr(
 					ctx, expr, nil, dummyHelper, types.String, false, "SET SESSION "+name)
 				if err != nil {
@@ -117,7 +117,7 @@ func (n *setNode) Start(params runParams) error {
 }
 
 func (n *setNode) Next(_ runParams) (bool, error) { return false, nil }
-func (n *setNode) Values() parser.Datums          { return nil }
+func (n *setNode) Values() tree.Datums            { return nil }
 func (n *setNode) Close(_ context.Context)        {}
 
 // setClusterSettingNode represents a SET CLUSTER SETTING statement.
@@ -126,34 +126,34 @@ type setClusterSettingNode struct {
 	st      *cluster.Settings
 	setting settings.Setting
 	// If value is nil, the setting should be reset.
-	value parser.TypedExpr
+	value tree.TypedExpr
 }
 
 // SetClusterSetting sets session variables.
 // Privileges: super user.
 func (p *planner) SetClusterSetting(
-	ctx context.Context, n *parser.SetClusterSetting,
+	ctx context.Context, n *tree.SetClusterSetting,
 ) (planNode, error) {
 	if err := p.RequireSuperUser("SET CLUSTER SETTING"); err != nil {
 		return nil, err
 	}
 
-	name := strings.ToLower(parser.AsStringWithFlags(n.Name, parser.FmtBareIdentifiers))
+	name := strings.ToLower(tree.AsStringWithFlags(n.Name, tree.FmtBareIdentifiers))
 	st := p.session.execCfg.Settings
 	setting, ok := settings.Lookup(name)
 	if !ok {
 		return nil, errors.Errorf("unknown cluster setting '%s'", name)
 	}
 
-	var value parser.TypedExpr
+	var value tree.TypedExpr
 	if n.Value != nil {
 		// For DEFAULT, let the value reference be nil. That's a RESET in disguise.
-		if _, ok := n.Value.(parser.DefaultVal); !ok {
+		if _, ok := n.Value.(tree.DefaultVal); !ok {
 			expr := n.Value
-			if s, ok := expr.(parser.UnresolvedName); ok {
+			if s, ok := expr.(tree.UnresolvedName); ok {
 				// Special rule for SET: because SET doesn't apply in the context
 				// of a table, SET ... = IDENT really means SET ... = 'IDENT'.
-				expr = parser.NewStrVal(parser.AsStringWithFlags(s, parser.FmtBareIdentifiers))
+				expr = tree.NewStrVal(tree.AsStringWithFlags(s, tree.FmtBareIdentifiers))
 			}
 
 			var requiredType types.T
@@ -174,7 +174,7 @@ func (p *planner) SetClusterSetting(
 				return nil, errors.Errorf("unsupported setting type %T", setting)
 			}
 
-			var dummyHelper parser.IndexedVarHelper
+			var dummyHelper tree.IndexedVarHelper
 			typed, err := p.analyzeExpr(
 				ctx, expr, nil, dummyHelper, requiredType, true, "SET CLUSTER SETTING "+name)
 			if err != nil {
@@ -213,7 +213,7 @@ func (n *setClusterSettingNode) Start(params runParams) error {
 		); err != nil {
 			return err
 		}
-		reportedValue = parser.AsStringWithFlags(n.value, parser.FmtBareStrings)
+		reportedValue = tree.AsStringWithFlags(n.value, tree.FmtBareStrings)
 	}
 
 	return MakeEventLogger(params.p.LeaseMgr()).InsertEventRecord(
@@ -231,7 +231,7 @@ func (n *setClusterSettingNode) Start(params runParams) error {
 }
 
 func (n *setClusterSettingNode) Next(_ runParams) (bool, error) { return false, nil }
-func (n *setClusterSettingNode) Values() parser.Datums          { return nil }
+func (n *setClusterSettingNode) Values() tree.Datums            { return nil }
 func (n *setClusterSettingNode) Close(_ context.Context)        {}
 
 func (p *planner) toSettingString(
@@ -240,7 +240,7 @@ func (p *planner) toSettingString(
 	st *cluster.Settings,
 	name string,
 	setting settings.Setting,
-	val parser.TypedExpr,
+	val tree.TypedExpr,
 ) (string, error) {
 	d, err := val.Eval(&p.evalCtx)
 	if err != nil {
@@ -249,7 +249,7 @@ func (p *planner) toSettingString(
 
 	switch setting := setting.(type) {
 	case *settings.StringSetting:
-		if s, ok := d.(*parser.DString); ok {
+		if s, ok := d.(*tree.DString); ok {
 			if err := setting.Validate(string(*s)); err != nil {
 				return "", err
 			}
@@ -257,7 +257,7 @@ func (p *planner) toSettingString(
 		}
 		return "", errors.Errorf("cannot use %s %T value for string setting", d.ResolvedType(), d)
 	case *settings.StateMachineSetting:
-		if s, ok := d.(*parser.DString); ok {
+		if s, ok := d.(*tree.DString); ok {
 			datums, err := ie.QueryRowInTransaction(
 				ctx, "retrieve-prev-setting", p.txn, "SELECT value FROM system.settings WHERE name = $1", name,
 			)
@@ -272,7 +272,7 @@ func (p *planner) toSettingString(
 				return "", errors.New("no persisted cluster version found, please retry later")
 			}
 
-			dStr, ok := datums[0].(*parser.DString)
+			dStr, ok := datums[0].(*tree.DString)
 			if !ok {
 				return "", errors.New("the existing value is not a string")
 			}
@@ -285,12 +285,12 @@ func (p *planner) toSettingString(
 		}
 		return "", errors.Errorf("cannot use %s %T value for string setting", d.ResolvedType(), d)
 	case *settings.BoolSetting:
-		if b, ok := d.(*parser.DBool); ok {
+		if b, ok := d.(*tree.DBool); ok {
 			return settings.EncodeBool(bool(*b)), nil
 		}
 		return "", errors.Errorf("cannot use %s %T value for bool setting", d.ResolvedType(), d)
 	case *settings.IntSetting:
-		if i, ok := d.(*parser.DInt); ok {
+		if i, ok := d.(*tree.DInt); ok {
 			if err := setting.Validate(int64(*i)); err != nil {
 				return "", err
 			}
@@ -298,7 +298,7 @@ func (p *planner) toSettingString(
 		}
 		return "", errors.Errorf("cannot use %s %T value for int setting", d.ResolvedType(), d)
 	case *settings.FloatSetting:
-		if f, ok := d.(*parser.DFloat); ok {
+		if f, ok := d.(*tree.DFloat); ok {
 			if err := setting.Validate(float64(*f)); err != nil {
 				return "", err
 			}
@@ -306,13 +306,13 @@ func (p *planner) toSettingString(
 		}
 		return "", errors.Errorf("cannot use %s %T value for float setting", d.ResolvedType(), d)
 	case *settings.EnumSetting:
-		if i, intOK := d.(*parser.DInt); intOK {
+		if i, intOK := d.(*tree.DInt); intOK {
 			v, ok := setting.ParseEnum(settings.EncodeInt(int64(*i)))
 			if ok {
 				return settings.EncodeInt(v), nil
 			}
 			return "", errors.Errorf("invalid integer value '%d' for enum setting", *i)
-		} else if s, ok := d.(*parser.DString); ok {
+		} else if s, ok := d.(*tree.DString); ok {
 			str := string(*s)
 			v, ok := setting.ParseEnum(str)
 			if ok {
@@ -322,7 +322,7 @@ func (p *planner) toSettingString(
 		}
 		return "", errors.Errorf("cannot use %s %T value for enum setting, must be int or string", d.ResolvedType(), d)
 	case *settings.ByteSizeSetting:
-		if s, ok := d.(*parser.DString); ok {
+		if s, ok := d.(*tree.DString); ok {
 			bytes, err := humanizeutil.ParseBytes(string(*s))
 			if err != nil {
 				return "", err
@@ -334,7 +334,7 @@ func (p *planner) toSettingString(
 		}
 		return "", errors.Errorf("cannot use %s %T value for byte size setting", d.ResolvedType(), d)
 	case *settings.DurationSetting:
-		if f, ok := d.(*parser.DInterval); ok {
+		if f, ok := d.(*tree.DInterval); ok {
 			if f.Duration.Months > 0 || f.Duration.Days > 0 {
 				return "", errors.Errorf("cannot use day or month specifiers: %s", d.String())
 			}
@@ -350,13 +350,13 @@ func (p *planner) toSettingString(
 	}
 }
 
-func datumAsString(session *Session, name string, value parser.TypedExpr) (string, error) {
+func datumAsString(session *Session, name string, value tree.TypedExpr) (string, error) {
 	evalCtx := session.evalCtx()
 	val, err := value.Eval(&evalCtx)
 	if err != nil {
 		return "", err
 	}
-	s, ok := parser.AsDString(val)
+	s, ok := tree.AsDString(val)
 	if !ok {
 		return "", fmt.Errorf("set %s: requires a string value: %s is a %s",
 			name, value, val.ResolvedType())
@@ -364,20 +364,20 @@ func datumAsString(session *Session, name string, value parser.TypedExpr) (strin
 	return string(s), nil
 }
 
-func getStringVal(session *Session, name string, values []parser.TypedExpr) (string, error) {
+func getStringVal(session *Session, name string, values []tree.TypedExpr) (string, error) {
 	if len(values) != 1 {
 		return "", fmt.Errorf("set %s: requires a single string value", name)
 	}
 	return datumAsString(session, name, values[0])
 }
 
-func (p *planner) SetDefaultIsolation(n *parser.SetDefaultIsolation) (planNode, error) {
+func (p *planner) SetDefaultIsolation(n *tree.SetDefaultIsolation) (planNode, error) {
 	// Note: We also support SET DEFAULT_TRANSACTION_ISOLATION TO ' .... ' above.
 	// Ensure both versions stay in sync.
 	switch n.Isolation {
-	case parser.SerializableIsolation:
+	case tree.SerializableIsolation:
 		p.session.DefaultIsolationLevel = enginepb.SERIALIZABLE
-	case parser.SnapshotIsolation:
+	case tree.SnapshotIsolation:
 		p.session.DefaultIsolationLevel = enginepb.SNAPSHOT
 	default:
 		return nil, fmt.Errorf("unsupported default isolation level: %s", n.Isolation)
@@ -385,7 +385,7 @@ func (p *planner) SetDefaultIsolation(n *parser.SetDefaultIsolation) (planNode, 
 	return &zeroNode{}, nil
 }
 
-func setTimeZone(_ context.Context, session *Session, values []parser.TypedExpr) error {
+func setTimeZone(_ context.Context, session *Session, values []tree.TypedExpr) error {
 	if len(values) != 1 {
 		return errors.New("set time zone requires a single argument")
 	}
@@ -397,8 +397,8 @@ func setTimeZone(_ context.Context, session *Session, values []parser.TypedExpr)
 
 	var loc *time.Location
 	var offset int64
-	switch v := parser.UnwrapDatum(&evalCtx, d).(type) {
-	case *parser.DString:
+	switch v := tree.UnwrapDatum(&evalCtx, d).(type) {
+	case *tree.DString:
 		location := string(*v)
 		loc, err = timeutil.LoadLocation(location)
 		if err != nil {
@@ -412,21 +412,21 @@ func setTimeZone(_ context.Context, session *Session, values []parser.TypedExpr)
 			}
 		}
 
-	case *parser.DInterval:
+	case *tree.DInterval:
 		offset, _, _, err = v.Duration.Div(time.Second.Nanoseconds()).Encode()
 		if err != nil {
 			return err
 		}
 
-	case *parser.DInt:
+	case *tree.DInt:
 		offset = int64(*v) * 60 * 60
 
-	case *parser.DFloat:
+	case *tree.DFloat:
 		offset = int64(float64(*v) * 60.0 * 60.0)
 
-	case *parser.DDecimal:
+	case *tree.DDecimal:
 		sixty := apd.New(60, 0)
-		ed := apd.MakeErrDecimal(parser.ExactCtx)
+		ed := apd.MakeErrDecimal(tree.ExactCtx)
 		ed.Mul(sixty, sixty, sixty)
 		ed.Mul(sixty, sixty, &v.Decimal)
 		offset = ed.Int64(sixty)

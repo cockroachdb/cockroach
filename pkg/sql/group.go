@@ -20,8 +20,9 @@ import (
 
 	"golang.org/x/net/context"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -74,7 +75,7 @@ type groupByStrMap map[string]int
 // This function returns both the consumer-side planNode and the main groupNode; if there
 // is no grouping, both are nil.
 func (p *planner) groupBy(
-	ctx context.Context, n *parser.SelectClause, r *renderNode,
+	ctx context.Context, n *tree.SelectClause, r *renderNode,
 ) (planNode, *groupNode, error) {
 	// Determine if aggregation is being performed. This check is done on the raw
 	// Select expressions as simplification might have removed aggregation
@@ -83,7 +84,7 @@ func (p *planner) groupBy(
 		return nil, nil, nil
 	}
 
-	groupByExprs := make([]parser.Expr, len(n.GroupBy))
+	groupByExprs := make([]tree.Expr, len(n.GroupBy))
 
 	// In the construction of the renderNode, when renders are processed (via
 	// computeRender()), the expressions are normalized. In order to compare these
@@ -92,7 +93,7 @@ func (p *planner) groupBy(
 	// aggregation is being performed, because that determination is made during
 	// validation, which will require matching expressions.
 	for i, expr := range n.GroupBy {
-		expr = parser.StripParens(expr)
+		expr = tree.StripParens(expr)
 
 		// Check whether the GROUP BY clause refers to a rendered column
 		// (specified in the original query) by index, e.g. `SELECT a, SUM(b)
@@ -116,13 +117,13 @@ func (p *planner) groupBy(
 			// stars, because this is handled specially by
 			// computeRenderAllowingStars below.
 			skipResolve := false
-			if vName, ok := expr.(parser.VarName); ok {
+			if vName, ok := expr.(tree.VarName); ok {
 				v, err := vName.NormalizeVarName()
 				if err != nil {
 					return nil, nil, err
 				}
 				switch v.(type) {
-				case parser.UnqualifiedStar, *parser.AllColumnsSelector:
+				case tree.UnqualifiedStar, *tree.AllColumnsSelector:
 					skipResolve = true
 				}
 			}
@@ -147,7 +148,7 @@ func (p *planner) groupBy(
 	}
 
 	// Normalize and check the HAVING expression too if it exists.
-	var typedHaving parser.TypedExpr
+	var typedHaving tree.TypedExpr
 	if n.Having != nil {
 		if p.txCtx.WindowFuncInExpr(n.Having.Expr) {
 			return nil, nil, sqlbase.NewWindowingError("HAVING")
@@ -185,7 +186,7 @@ func (p *planner) groupBy(
 	groupStrs := make(groupByStrMap, len(groupByExprs))
 	for _, g := range groupByExprs {
 		cols, exprs, hasStar, err := p.computeRenderAllowingStars(
-			ctx, parser.SelectExpr{Expr: g}, types.Any, r.sourceInfo, r.ivarHelper,
+			ctx, tree.SelectExpr{Expr: g}, types.Any, r.sourceInfo, r.ivarHelper,
 			autoGenerateRenderOutputName)
 		if err != nil {
 			return nil, nil, err
@@ -224,7 +225,7 @@ func (p *planner) groupBy(
 			source: planDataSource{plan: plan, info: &dataSourceInfo{}},
 		}
 		plan = havingNode
-		havingNode.ivarHelper = parser.MakeIndexedVarHelper(havingNode, 0)
+		havingNode.ivarHelper = tree.MakeIndexedVarHelper(havingNode, 0)
 
 		aggVisitor := extractAggregatesVisitor{
 			ctx:        ctx,
@@ -261,7 +262,7 @@ func (p *planner) groupBy(
 
 	// The filterNode and the post renderNode operate on the same schema; append
 	// to the IndexedVars that the filter node created.
-	postRender.ivarHelper = parser.MakeIndexedVarHelper(postRender, len(group.funcs))
+	postRender.ivarHelper = tree.MakeIndexedVarHelper(postRender, len(group.funcs))
 
 	// Extract any aggregate functions from the select expressions, adding renders
 	// to r as needed.
@@ -324,7 +325,7 @@ type groupNode struct {
 	addNullBucketIfEmpty bool
 
 	columns sqlbase.ResultColumns
-	values  parser.Datums
+	values  tree.Datums
 
 	// desiredOrdering is set only if we are aggregating around a single MIN/MAX
 	// function and we can compute the final result using a single row, assuming
@@ -334,7 +335,7 @@ type groupNode struct {
 	gotOneRow       bool
 }
 
-func (n *groupNode) Values() parser.Datums {
+func (n *groupNode) Values() tree.Datums {
 	return n.values
 }
 
@@ -384,11 +385,11 @@ func (n *groupNode) Next(params runParams) (bool, error) {
 
 		// Feed the aggregateFuncHolders for this bucket the non-grouped values.
 		for _, f := range n.funcs {
-			if f.hasFilter && values[f.filterRenderIdx] != parser.DBoolTrue {
+			if f.hasFilter && values[f.filterRenderIdx] != tree.DBoolTrue {
 				continue
 			}
 
-			var value parser.Datum
+			var value tree.Datum
 			if f.argRenderIdx != noRenderIdx {
 				value = values[f.argRenderIdx]
 			}
@@ -434,7 +435,7 @@ func (n *groupNode) setupOutput() {
 	if len(n.buckets) < 1 && n.addNullBucketIfEmpty {
 		n.buckets[""] = struct{}{}
 	}
-	n.values = make(parser.Datums, len(n.funcs))
+	n.values = make(tree.Datums, len(n.funcs))
 }
 
 func (n *groupNode) Close(ctx context.Context) {
@@ -458,19 +459,19 @@ func (n *groupNode) addIsNotNullFilter(where *filterNode, render *renderNode) {
 	if !n.requiresIsNotNullFilter() {
 		panic("IS NOT NULL filter not required")
 	}
-	isNotNull := parser.NewTypedComparisonExpr(
-		parser.IsNot,
+	isNotNull := tree.NewTypedComparisonExpr(
+		tree.IsNot,
 		where.ivarHelper.Rebind(
 			render.render[n.desiredOrdering[0].ColIdx],
 			false, // alsoReset
 			true,  // normalizeToNonNil
 		),
-		parser.DNull,
+		tree.DNull,
 	)
 	if where.filter == nil {
 		where.filter = isNotNull
 	} else {
-		where.filter = parser.NewTypedAndExpr(where.filter, isNotNull)
+		where.filter = tree.NewTypedAndExpr(where.filter, isNotNull)
 	}
 }
 
@@ -490,9 +491,9 @@ func (n *groupNode) desiredAggregateOrdering() sqlbase.ColumnOrdering {
 	f := n.funcs[0]
 	impl := f.create(&n.planner.evalCtx)
 	switch impl.(type) {
-	case *parser.MinAggregate:
+	case *builtins.MinAggregate:
 		return sqlbase.ColumnOrdering{{ColIdx: f.argRenderIdx, Direction: encoding.Ascending}}
-	case *parser.MaxAggregate:
+	case *builtins.MaxAggregate:
 		return sqlbase.ColumnOrdering{{ColIdx: f.argRenderIdx, Direction: encoding.Descending}}
 	}
 	return nil
@@ -511,16 +512,16 @@ type extractAggregatesVisitor struct {
 	preRender *renderNode
 	// ivarHelper is associated with a node above the groupNode, either a
 	// filterNode (for HAVING) or a renderNode.
-	ivarHelper *parser.IndexedVarHelper
+	ivarHelper *tree.IndexedVarHelper
 	groupStrs  groupByStrMap
 	err        error
 }
 
-var _ parser.Visitor = &extractAggregatesVisitor{}
+var _ tree.Visitor = &extractAggregatesVisitor{}
 
 // addAggregation adds an aggregateFuncHolder to the groupNode funcs and returns
 // an IndexedVar that refers to the index of the function.
-func (v *extractAggregatesVisitor) addAggregation(f *aggregateFuncHolder) *parser.IndexedVar {
+func (v *extractAggregatesVisitor) addAggregation(f *aggregateFuncHolder) *tree.IndexedVar {
 	// TODO(radu): we could check for duplicate aggregations here and reuse
 	// them; useful for cases like
 	//   SELECT SUM(x), y FROM t GROUP BY y HAVING SUM(x) > 0
@@ -536,7 +537,7 @@ func (v *extractAggregatesVisitor) addAggregation(f *aggregateFuncHolder) *parse
 	// We care about the name of the groupNode columns as an optimization: we want
 	// them to match the post-render node's columns if the post-render expressions
 	// are trivial (so the renderNode can be elided).
-	colName, err := getRenderColName(v.planner.session.SearchPath, parser.SelectExpr{Expr: f.expr})
+	colName, err := getRenderColName(v.planner.session.SearchPath, tree.SelectExpr{Expr: f.expr})
 	if err != nil {
 		colName = fmt.Sprintf("agg%d", renderIdx)
 	} else if strings.ToLower(colName) == "count_rows()" {
@@ -553,7 +554,7 @@ func (v *extractAggregatesVisitor) addAggregation(f *aggregateFuncHolder) *parse
 	return v.ivarHelper.IndexedVar(renderIdx)
 }
 
-func (v *extractAggregatesVisitor) VisitPre(expr parser.Expr) (recurse bool, newExpr parser.Expr) {
+func (v *extractAggregatesVisitor) VisitPre(expr tree.Expr) (recurse bool, newExpr tree.Expr) {
 	if v.err != nil {
 		return false, expr
 	}
@@ -562,14 +563,14 @@ func (v *extractAggregatesVisitor) VisitPre(expr parser.Expr) (recurse bool, new
 		// This expression is in the GROUP BY; it is already being rendered by the
 		// renderNode.
 		f := v.groupNode.newAggregateFuncHolder(
-			v.preRender.render[groupIdx], groupIdx, true /* ident */, parser.NewIdentAggregate,
+			v.preRender.render[groupIdx], groupIdx, true /* ident */, builtins.NewIdentAggregate,
 		)
 
 		return false, v.addAggregation(f)
 	}
 
 	switch t := expr.(type) {
-	case *parser.FuncExpr:
+	case *tree.FuncExpr:
 		if agg := t.GetAggregateConstructor(); agg != nil {
 			var f *aggregateFuncHolder
 			switch len(t.Exprs) {
@@ -578,7 +579,7 @@ func (v *extractAggregatesVisitor) VisitPre(expr parser.Expr) (recurse bool, new
 				f = v.groupNode.newAggregateFuncHolder(t, noRenderIdx, false /* not ident */, agg)
 
 			case 1:
-				argExpr := t.Exprs[0].(parser.TypedExpr)
+				argExpr := t.Exprs[0].(tree.TypedExpr)
 
 				if err := v.planner.txCtx.AssertNoAggregationOrWindowing(
 					argExpr,
@@ -605,12 +606,12 @@ func (v *extractAggregatesVisitor) VisitPre(expr parser.Expr) (recurse bool, new
 				return false, expr
 			}
 
-			if t.Type == parser.DistinctFuncType {
+			if t.Type == tree.DistinctFuncType {
 				f.setDistinct()
 			}
 
 			if t.Filter != nil {
-				filterExpr := t.Filter.(parser.TypedExpr)
+				filterExpr := t.Filter.(tree.TypedExpr)
 
 				if err := v.planner.txCtx.AssertNoAggregationOrWindowing(
 					filterExpr, "FILTER", v.planner.session.SearchPath,
@@ -621,7 +622,7 @@ func (v *extractAggregatesVisitor) VisitPre(expr parser.Expr) (recurse bool, new
 
 				col, renderExpr, err := v.planner.computeRender(
 					v.ctx,
-					parser.SelectExpr{Expr: filterExpr},
+					tree.SelectExpr{Expr: filterExpr},
 					types.Bool,
 					v.preRender.sourceInfo,
 					v.preRender.ivarHelper,
@@ -638,7 +639,7 @@ func (v *extractAggregatesVisitor) VisitPre(expr parser.Expr) (recurse bool, new
 			return false, v.addAggregation(f)
 		}
 
-	case *parser.IndexedVar:
+	case *tree.IndexedVar:
 		v.err = errors.Errorf(
 			"column \"%s\" must appear in the GROUP BY clause or be used in an aggregate function", t,
 		)
@@ -648,21 +649,21 @@ func (v *extractAggregatesVisitor) VisitPre(expr parser.Expr) (recurse bool, new
 	return true, expr
 }
 
-func (*extractAggregatesVisitor) VisitPost(expr parser.Expr) parser.Expr { return expr }
+func (*extractAggregatesVisitor) VisitPost(expr tree.Expr) tree.Expr { return expr }
 
 // extract aggregateFuncHolders from exprs that use aggregation and add them to
 // the groupNode.
-func (v extractAggregatesVisitor) extract(typedExpr parser.TypedExpr) (parser.TypedExpr, error) {
+func (v extractAggregatesVisitor) extract(typedExpr tree.TypedExpr) (tree.TypedExpr, error) {
 	v.err = nil
-	expr, _ := parser.WalkExpr(&v, typedExpr)
-	return expr.(parser.TypedExpr), v.err
+	expr, _ := tree.WalkExpr(&v, typedExpr)
+	return expr.(tree.TypedExpr), v.err
 }
 
 type aggregateFuncHolder struct {
 	// expr must either contain an aggregation function (SUM, COUNT, etc.) or an
 	// expression that also appears as one of the GROUP BY expressions (v+w in
 	// SELECT v+w FROM kvw GROUP BY v+w).
-	expr parser.TypedExpr
+	expr tree.TypedExpr
 
 	// The argument of the function is a single value produced by the renderNode
 	// underneath.
@@ -674,9 +675,9 @@ type aggregateFuncHolder struct {
 
 	identAggregate bool
 
-	create        func(*parser.EvalContext) parser.AggregateFunc
+	create        func(*tree.EvalContext) tree.AggregateFunc
 	group         *groupNode
-	buckets       map[string]parser.AggregateFunc
+	buckets       map[string]tree.AggregateFunc
 	bucketsMemAcc WrappableMemoryAccount
 	seen          map[string]struct{}
 }
@@ -684,10 +685,10 @@ type aggregateFuncHolder struct {
 const noRenderIdx = -1
 
 func (n *groupNode) newAggregateFuncHolder(
-	expr parser.TypedExpr,
+	expr tree.TypedExpr,
 	argRenderIdx int,
 	identAggregate bool,
-	create func(*parser.EvalContext) parser.AggregateFunc,
+	create func(*tree.EvalContext) tree.AggregateFunc,
 ) *aggregateFuncHolder {
 	res := &aggregateFuncHolder{
 		expr:           expr,
@@ -695,7 +696,7 @@ func (n *groupNode) newAggregateFuncHolder(
 		create:         create,
 		group:          n,
 		identAggregate: identAggregate,
-		buckets:        make(map[string]parser.AggregateFunc),
+		buckets:        make(map[string]tree.AggregateFunc),
 		bucketsMemAcc:  n.planner.session.TxnState.OpenAccount(),
 	}
 	return res
@@ -726,7 +727,7 @@ func (a *aggregateFuncHolder) close(ctx context.Context, s *Session) {
 // add accumulates one more value for a particular bucket into an aggregation
 // function.
 func (a *aggregateFuncHolder) add(
-	ctx context.Context, s *Session, bucket []byte, d parser.Datum,
+	ctx context.Context, s *Session, bucket []byte, d tree.Datum,
 ) error {
 	// NB: the compiler *should* optimize `myMap[string(myBytes)]`. See:
 	// https://github.com/golang/go/commit/f5f5a8b6209f84961687d993b93ea0d397f5d5bf

@@ -20,7 +20,7 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -32,9 +32,9 @@ func TestMergeJoiner(t *testing.T) {
 	columnTypeInt := sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_INT}
 	v := [10]sqlbase.EncDatum{}
 	for i := range v {
-		v[i] = sqlbase.DatumToEncDatum(columnTypeInt, parser.NewDInt(parser.DInt(i)))
+		v[i] = sqlbase.DatumToEncDatum(columnTypeInt, tree.NewDInt(tree.DInt(i)))
 	}
-	null := sqlbase.EncDatum{Datum: parser.DNull}
+	null := sqlbase.EncDatum{Datum: tree.DNull}
 
 	testCases := []struct {
 		spec       MergeJoinerSpec
@@ -356,7 +356,7 @@ func TestMergeJoiner(t *testing.T) {
 			leftInput := NewRowBuffer(c.leftTypes, c.leftInput, RowBufferArgs{})
 			rightInput := NewRowBuffer(c.rightTypes, c.rightInput, RowBufferArgs{})
 			out := &RowBuffer{}
-			evalCtx := parser.MakeTestingEvalContext()
+			evalCtx := tree.MakeTestingEvalContext()
 			defer evalCtx.Stop(context.Background())
 			flowCtx := FlowCtx{Settings: cluster.MakeTestingClusterSettings(), EvalCtx: evalCtx}
 
@@ -397,7 +397,7 @@ func TestConsumerClosed(t *testing.T) {
 	columnTypeInt := sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_INT}
 	v := [10]sqlbase.EncDatum{}
 	for i := range v {
-		v[i] = sqlbase.DatumToEncDatum(columnTypeInt, parser.NewDInt(parser.DInt(i)))
+		v[i] = sqlbase.DatumToEncDatum(columnTypeInt, tree.NewDInt(tree.DInt(i)))
 	}
 
 	spec := MergeJoinerSpec{
@@ -459,7 +459,7 @@ func TestConsumerClosed(t *testing.T) {
 			out := &RowBuffer{}
 			out.ConsumerDone()
 
-			evalCtx := parser.MakeTestingEvalContext()
+			evalCtx := tree.MakeTestingEvalContext()
 			defer evalCtx.Stop(context.Background())
 			flowCtx := FlowCtx{
 				Settings: cluster.MakeTestingClusterSettings(),
