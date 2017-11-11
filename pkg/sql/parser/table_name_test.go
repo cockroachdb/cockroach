@@ -21,7 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 )
 
-func (tn *TableName) resetRepr() {
+func resetRepr(tn *TableName) {
 	tn.DBNameOriginallyOmitted = false
 }
 
@@ -62,7 +62,7 @@ func TestNormalizeTableName(t *testing.T) {
 		if tc.err != "" {
 			continue
 		}
-		tn.resetRepr()
+		resetRepr(tn)
 		if out := tn.String(); tc.out != out {
 			t.Errorf("%s: expected %s, but found %s", tc.in, tc.out, out)
 		}
