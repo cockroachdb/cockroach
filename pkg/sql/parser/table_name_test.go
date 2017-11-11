@@ -18,10 +18,11 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 )
 
-func resetRepr(tn *TableName) {
+func resetRepr(tn *tree.TableName) {
 	tn.DBNameOriginallyOmitted = false
 }
 
@@ -44,12 +45,12 @@ func TestNormalizeTableName(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
-		tn, err := func() (*TableName, error) {
+		tn, err := func() (*tree.TableName, error) {
 			stmt, err := ParseOne(fmt.Sprintf("ALTER TABLE %s RENAME TO x", tc.in))
 			if err != nil {
 				return nil, err
 			}
-			tn, err := stmt.(*RenameTable).Name.Normalize()
+			tn, err := stmt.(*tree.RenameTable).Name.Normalize()
 			if err != nil {
 				return nil, err
 			}

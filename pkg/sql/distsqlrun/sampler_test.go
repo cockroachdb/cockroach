@@ -21,13 +21,13 @@ import (
 
 	"github.com/axiomhq/hyperloglog"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
 func intEncDatum(i int) sqlbase.EncDatum {
-	return sqlbase.EncDatum{Datum: parser.NewDInt(parser.DInt(i))}
+	return sqlbase.EncDatum{Datum: tree.NewDInt(tree.DInt(i))}
 }
 
 // runSampler runs the sampler aggregator on numRows and returns numSamples rows.
@@ -48,7 +48,7 @@ func runSampler(t *testing.T, numRows, numSamples int) []int {
 
 	out := NewRowBuffer(outTypes, nil /* rows */, RowBufferArgs{})
 
-	evalCtx := parser.MakeTestingEvalContext()
+	evalCtx := tree.MakeTestingEvalContext()
 	defer evalCtx.Stop(context.Background())
 	flowCtx := FlowCtx{
 		Settings: cluster.MakeTestingClusterSettings(),
@@ -64,7 +64,7 @@ func runSampler(t *testing.T, numRows, numSamples int) []int {
 
 	// Verify we have numSamples distinct rows.
 	res := make([]int, 0, numSamples)
-	seen := make(map[parser.DInt]bool)
+	seen := make(map[tree.DInt]bool)
 	n := 0
 	for {
 		row := out.NextNoMeta(t)
@@ -76,7 +76,7 @@ func runSampler(t *testing.T, numRows, numSamples int) []int {
 				t.Fatalf("expected NULL on column %d, got %s", i, row[i].Datum)
 			}
 		}
-		v := *row[0].Datum.(*parser.DInt)
+		v := *row[0].Datum.(*tree.DInt)
 		if seen[v] {
 			t.Fatalf("duplicate row %d", v)
 		}
@@ -142,7 +142,7 @@ func TestSamplerSketch(t *testing.T) {
 	for i, inputRow := range inputRows {
 		for _, x := range inputRow {
 			if x == -1 {
-				rows[i] = append(rows[i], sqlbase.EncDatum{Datum: parser.DNull})
+				rows[i] = append(rows[i], sqlbase.EncDatum{Datum: tree.DNull})
 				continue
 			}
 			rows[i] = append(rows[i], intEncDatum(x))
@@ -161,7 +161,7 @@ func TestSamplerSketch(t *testing.T) {
 
 	out := NewRowBuffer(outTypes, nil /* rows */, RowBufferArgs{})
 
-	evalCtx := parser.MakeTestingEvalContext()
+	evalCtx := tree.MakeTestingEvalContext()
 	defer evalCtx.Stop(context.Background())
 	flowCtx := FlowCtx{
 		Settings: cluster.MakeTestingClusterSettings(),
@@ -201,16 +201,16 @@ func TestSamplerSketch(t *testing.T) {
 				t.Errorf("expected NULL on column %d, got %s", i, r[i].Datum)
 			}
 		}
-		if v := int(*r[3].Datum.(*parser.DInt)); v != sketchIdx {
+		if v := int(*r[3].Datum.(*tree.DInt)); v != sketchIdx {
 			t.Errorf("expected sketch index %d, got %d", sketchIdx, v)
 		}
-		if v := int(*r[4].Datum.(*parser.DInt)); v != len(inputRows) {
+		if v := int(*r[4].Datum.(*tree.DInt)); v != len(inputRows) {
 			t.Errorf("expected numRows %d, got %d", len(inputRows), v)
 		}
-		if v := int(*r[5].Datum.(*parser.DInt)); v != numNulls[sketchIdx] {
+		if v := int(*r[5].Datum.(*tree.DInt)); v != numNulls[sketchIdx] {
 			t.Errorf("expected numNulls %d, got %d", numNulls[sketchIdx], v)
 		}
-		data := []byte(*r[6].Datum.(*parser.DBytes))
+		data := []byte(*r[6].Datum.(*tree.DBytes))
 		var s hyperloglog.Sketch
 		if err := s.UnmarshalBinary(data); err != nil {
 			t.Fatal(err)

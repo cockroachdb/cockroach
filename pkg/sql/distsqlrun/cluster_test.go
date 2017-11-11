@@ -26,7 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/batcheval"
@@ -50,13 +50,13 @@ func TestClusterFlow(t *testing.T) {
 	tc := serverutils.StartTestCluster(t, 3, args)
 	defer tc.Stopper().Stop(context.TODO())
 
-	sumDigitsFn := func(row int) parser.Datum {
+	sumDigitsFn := func(row int) tree.Datum {
 		sum := 0
 		for row > 0 {
 			sum += row % 10
 			row /= 10
 		}
-		return parser.NewDInt(parser.DInt(sum))
+		return tree.NewDInt(tree.DInt(sum))
 	}
 
 	sqlutils.CreateTable(t, tc.ServerConn(0), "t",
@@ -262,7 +262,7 @@ func TestClusterFlow(t *testing.T) {
 	var results []string
 	for sum := 1; sum <= 50; sum++ {
 		for i := 1; i <= numRows; i++ {
-			if int(parser.MustBeDInt(sumDigitsFn(i))) == sum {
+			if int(tree.MustBeDInt(sumDigitsFn(i))) == sum {
 				results = append(results, fmt.Sprintf("['%s']", sqlutils.IntToEnglish(i)))
 			}
 		}
@@ -342,7 +342,7 @@ func TestLimitedBufferingDeadlock(t *testing.T) {
 	leftRows := make(sqlbase.EncDatumRows, 20)
 	for i := range leftRows {
 		leftRows[i] = sqlbase.EncDatumRow{
-			sqlbase.DatumToEncDatum(types[0], parser.NewDInt(parser.DInt(i))),
+			sqlbase.DatumToEncDatum(types[0], tree.NewDInt(tree.DInt(i))),
 		}
 	}
 	leftValuesSpec, err := generateValuesSpec(types, leftRows, 10 /* rows per chunk */)
@@ -356,7 +356,7 @@ func TestLimitedBufferingDeadlock(t *testing.T) {
 	for i := 1; i <= 20; i++ {
 		for j := 1; j <= 4*rowChannelBufSize; j++ {
 			rightRows = append(rightRows, sqlbase.EncDatumRow{
-				sqlbase.DatumToEncDatum(types[0], parser.NewDInt(parser.DInt(i))),
+				sqlbase.DatumToEncDatum(types[0], tree.NewDInt(tree.DInt(i))),
 			})
 		}
 	}
@@ -588,9 +588,9 @@ func BenchmarkInfrastructure(b *testing.B) {
 						for j := 0; j < numRows; j++ {
 							row := make(sqlbase.EncDatumRow, 3)
 							lastVal += rng.Intn(10)
-							row[0] = sqlbase.DatumToEncDatum(intType, parser.NewDInt(parser.DInt(lastVal)))
-							row[1] = sqlbase.DatumToEncDatum(intType, parser.NewDInt(parser.DInt(rng.Intn(100000))))
-							row[2] = sqlbase.DatumToEncDatum(intType, parser.NewDInt(parser.DInt(rng.Intn(100000))))
+							row[0] = sqlbase.DatumToEncDatum(intType, tree.NewDInt(tree.DInt(lastVal)))
+							row[1] = sqlbase.DatumToEncDatum(intType, tree.NewDInt(tree.DInt(rng.Intn(100000))))
+							row[2] = sqlbase.DatumToEncDatum(intType, tree.NewDInt(tree.DInt(rng.Intn(100000))))
 							if err := se.AddRow(row); err != nil {
 								b.Fatal(err)
 							}
@@ -747,8 +747,8 @@ func BenchmarkInfrastructure(b *testing.B) {
 								b.Fatal(err)
 							}
 							if i > 0 {
-								last := *rows[i-1][0].Datum.(*parser.DInt)
-								curr := *rows[i][0].Datum.(*parser.DInt)
+								last := *rows[i-1][0].Datum.(*tree.DInt)
+								curr := *rows[i][0].Datum.(*tree.DInt)
 								if last > curr {
 									b.Errorf("rows not ordered correctly (%d after %d, row %d)", curr, last, i)
 									break

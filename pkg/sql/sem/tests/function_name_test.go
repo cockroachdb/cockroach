@@ -19,6 +19,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	_ "github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 )
 
@@ -36,15 +37,15 @@ func TestResolveFunction(t *testing.T) {
 		{`foo.*`, ``, `invalid function name: foo.*`},
 	}
 
-	searchPath := parser.MakeSearchPath([]string{"pg_catalog"})
+	searchPath := tree.MakeSearchPath([]string{"pg_catalog"})
 	for _, tc := range testCases {
 		stmt, err := parser.ParseOne("SELECT " + tc.in + "(1)")
 		if err != nil {
 			t.Fatalf("%s: %v", tc.in, err)
 		}
-		f, ok := stmt.(*parser.Select).Select.(*parser.SelectClause).Exprs[0].Expr.(*parser.FuncExpr)
+		f, ok := stmt.(*tree.Select).Select.(*tree.SelectClause).Exprs[0].Expr.(*tree.FuncExpr)
 		if !ok {
-			t.Fatalf("%s does not parse to a parser.FuncExpr", tc.in)
+			t.Fatalf("%s does not parse to a tree.FuncExpr", tc.in)
 		}
 		q := f.Func
 		_, err = q.Resolve(searchPath)

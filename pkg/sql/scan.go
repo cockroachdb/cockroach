@@ -23,8 +23,8 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -55,7 +55,7 @@ type scanNode struct {
 	resultColumns sqlbase.ResultColumns
 	// Contains values for the current row. There is a 1-1 correspondence
 	// between resultColumns and values in row.
-	row parser.Datums
+	row tree.Datums
 	// For each column in resultColumns, indicates if the value is
 	// needed (used as an optimization when the upper layer doesn't need
 	// all values).
@@ -79,15 +79,15 @@ type scanNode struct {
 	rowIndex int64 // the index of the current row
 
 	// filter that can be evaluated using only this table/index; it contains
-	// parser.IndexedVar leaves generated using filterVars.
-	filter     parser.TypedExpr
-	filterVars parser.IndexedVarHelper
+	// tree.IndexedVar leaves generated using filterVars.
+	filter     tree.TypedExpr
+	filterVars tree.IndexedVarHelper
 
 	// origFilter is the original filtering expression, which might have gotten
 	// simplified during index selection. For example "k > 0" is converted to a
 	// span and the filter is nil. But we still want to deduce not-null columns
 	// from the original filter.
-	origFilter parser.TypedExpr
+	origFilter tree.TypedExpr
 
 	scanInitialized bool
 	fetcher         sqlbase.RowFetcher
@@ -120,7 +120,7 @@ func (p *planner) Scan() *scanNode {
 	return n
 }
 
-func (n *scanNode) Values() parser.Datums {
+func (n *scanNode) Values() tree.Datums {
 	return n.row
 }
 
@@ -201,9 +201,9 @@ func (n *scanNode) Next(params runParams) (bool, error) {
 func (n *scanNode) initTable(
 	p *planner,
 	desc *sqlbase.TableDescriptor,
-	indexHints *parser.IndexHints,
+	indexHints *tree.IndexHints,
 	scanVisibility scanVisibility,
-	wantedColumns []parser.ColumnID,
+	wantedColumns []tree.ColumnID,
 ) error {
 	n.desc = desc
 
@@ -223,7 +223,7 @@ func (n *scanNode) initTable(
 	return n.initDescDefaults(scanVisibility, wantedColumns)
 }
 
-func (n *scanNode) lookupSpecifiedIndex(indexHints *parser.IndexHints) error {
+func (n *scanNode) lookupSpecifiedIndex(indexHints *tree.IndexHints) error {
 	if indexHints.Index != "" {
 		// Search index by name.
 		indexName := string(indexHints.Index)
@@ -238,7 +238,7 @@ func (n *scanNode) lookupSpecifiedIndex(indexHints *parser.IndexHints) error {
 			}
 		}
 		if n.specifiedIndex == nil {
-			return errors.Errorf("index %q not found", parser.ErrString(indexHints.Index))
+			return errors.Errorf("index %q not found", tree.ErrString(indexHints.Index))
 		}
 	} else if indexHints.IndexID != 0 {
 		// Search index by ID.
@@ -261,7 +261,7 @@ func (n *scanNode) lookupSpecifiedIndex(indexHints *parser.IndexHints) error {
 
 // Either pick all columns or just those selected.
 func filterColumns(
-	dst []sqlbase.ColumnDescriptor, wantedColumns []parser.ColumnID, src []sqlbase.ColumnDescriptor,
+	dst []sqlbase.ColumnDescriptor, wantedColumns []tree.ColumnID, src []sqlbase.ColumnDescriptor,
 ) ([]sqlbase.ColumnDescriptor, error) {
 	if wantedColumns == nil {
 		dst = append(dst, src...)
@@ -288,7 +288,7 @@ func filterColumns(
 // from src that are not already listed in wantedColumns. The added
 // columns, if any, are marked "hidden".
 func appendUnselectedColumns(
-	dst []sqlbase.ColumnDescriptor, wantedColumns []parser.ColumnID, src []sqlbase.ColumnDescriptor,
+	dst []sqlbase.ColumnDescriptor, wantedColumns []tree.ColumnID, src []sqlbase.ColumnDescriptor,
 ) []sqlbase.ColumnDescriptor {
 	for _, c := range src {
 		found := false
@@ -310,7 +310,7 @@ func appendUnselectedColumns(
 // Initializes the column structures.
 // An error may be returned only if wantedColumns is set.
 func (n *scanNode) initDescDefaults(
-	scanVisibility scanVisibility, wantedColumns []parser.ColumnID,
+	scanVisibility scanVisibility, wantedColumns []tree.ColumnID,
 ) error {
 	n.scanVisibility = scanVisibility
 	n.index = &n.desc.PrimaryIndex
@@ -372,8 +372,8 @@ func (n *scanNode) initDescDefaults(
 	for i := range n.cols {
 		n.valNeededForCol[i] = true
 	}
-	n.row = make([]parser.Datum, len(n.cols))
-	n.filterVars = parser.MakeIndexedVarHelper(n, len(n.cols))
+	n.row = make([]tree.Datum, len(n.cols))
+	n.filterVars = tree.MakeIndexedVarHelper(n, len(n.cols))
 	return nil
 }
 
@@ -425,10 +425,10 @@ func (n *scanNode) computePhysicalProps(
 	return pp
 }
 
-// scanNode implements parser.IndexedVarContainer.
-var _ parser.IndexedVarContainer = &scanNode{}
+// scanNode implements tree.IndexedVarContainer.
+var _ tree.IndexedVarContainer = &scanNode{}
 
-func (n *scanNode) IndexedVarEval(idx int, ctx *parser.EvalContext) (parser.Datum, error) {
+func (n *scanNode) IndexedVarEval(idx int, ctx *tree.EvalContext) (tree.Datum, error) {
 	return n.row[idx].Eval(ctx)
 }
 
@@ -436,8 +436,8 @@ func (n *scanNode) IndexedVarResolvedType(idx int) types.T {
 	return n.resultColumns[idx].Typ
 }
 
-func (n *scanNode) IndexedVarFormat(buf *bytes.Buffer, f parser.FmtFlags, idx int) {
-	parser.Name(n.resultColumns[idx].Name).Format(buf, f)
+func (n *scanNode) IndexedVarFormat(buf *bytes.Buffer, f tree.FmtFlags, idx int) {
+	tree.Name(n.resultColumns[idx].Name).Format(buf, f)
 }
 
 // scanVisibility represents which table columns should be included in a scan.

@@ -2711,7 +2711,7 @@ func (d *DOid) Min(ctx *EvalContext) (Datum, bool) {
 // The reason the Datum type was introduced was to permit the introduction of Datum
 // types with new Object IDs while maintaining identical behavior to current Datum
 // types. Specifically, it obviates the need to:
-// - define a new parser.Datum type.
+// - define a new tree.Datum type.
 // - define a new types.T type.
 // - support operations and functions for the new types.T.
 // - support mixed-type operations between the new types.T and the old types.T.

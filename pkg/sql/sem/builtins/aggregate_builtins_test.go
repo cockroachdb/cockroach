@@ -21,27 +21,25 @@ import (
 
 	"golang.org/x/net/context"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 )
 
-// testAggregateResultDeepCopy verifies that parser.Datum returned from parser.AggregateFunc's
+// testAggregateResultDeepCopy verifies that tree.Datum returned from tree.AggregateFunc's
 // Result() method are not mutated during future accumulation. It verifies this by
 // printing all values to strings immediately after calling Result(), and later
 // printing all values to strings once the accumulation has finished. If the string
-// slices are not equal, it means that the result parser.Datums were modified during later
+// slices are not equal, it means that the result tree.Datums were modified during later
 // accumulation, which violates the "deep copy of any internal state" condition.
 func testAggregateResultDeepCopy(
-	t *testing.T,
-	aggFunc func([]types.T, *parser.EvalContext) parser.AggregateFunc,
-	vals []parser.Datum,
+	t *testing.T, aggFunc func([]types.T, *tree.EvalContext) tree.AggregateFunc, vals []tree.Datum,
 ) {
-	evalCtx := parser.NewTestingEvalContext()
+	evalCtx := tree.NewTestingEvalContext()
 	defer evalCtx.Stop(context.Background())
 	aggImpl := aggFunc([]types.T{vals[0].ResolvedType()}, evalCtx)
-	runningDatums := make([]parser.Datum, len(vals))
+	runningDatums := make([]tree.Datum, len(vals))
 	runningStrings := make([]string, len(vals))
 	for i := range vals {
 		if err := aggImpl.Add(context.Background(), vals[i]); err != nil {
@@ -164,12 +162,12 @@ func TestStdDevDecimalResultDeepCopy(t *testing.T) {
 	testAggregateResultDeepCopy(t, newDecimalStdDevAggregate, makeDecimalTestDatum(10))
 }
 
-func makeIntTestDatum(count int) []parser.Datum {
+func makeIntTestDatum(count int) []tree.Datum {
 	rng, _ := randutil.NewPseudoRand()
 
-	vals := make([]parser.Datum, count)
+	vals := make([]tree.Datum, count)
 	for i := range vals {
-		vals[i] = parser.NewDInt(parser.DInt(rng.Int63()))
+		vals[i] = tree.NewDInt(tree.DInt(rng.Int63()))
 	}
 	return vals
 }
@@ -179,36 +177,36 @@ func makeIntTestDatum(count int) []parser.Datum {
 // significant part of the test without overflow. This is meant to
 // test the implementation of aggregates that can use an int64 to
 // optimize computations small decimal values.
-func makeSmallIntTestDatum(count int) []parser.Datum {
+func makeSmallIntTestDatum(count int) []tree.Datum {
 	rng, _ := randutil.NewPseudoRand()
 
-	vals := make([]parser.Datum, count)
+	vals := make([]tree.Datum, count)
 	for i := range vals {
 		sign := int32(1)
 		if 0 == rng.Int31()&1 {
 			sign = -1
 		}
-		vals[i] = parser.NewDInt(parser.DInt(rng.Int31() * sign))
+		vals[i] = tree.NewDInt(tree.DInt(rng.Int31() * sign))
 	}
 	return vals
 }
 
-func makeFloatTestDatum(count int) []parser.Datum {
+func makeFloatTestDatum(count int) []tree.Datum {
 	rng, _ := randutil.NewPseudoRand()
 
-	vals := make([]parser.Datum, count)
+	vals := make([]tree.Datum, count)
 	for i := range vals {
-		vals[i] = parser.NewDFloat(parser.DFloat(rng.Float64()))
+		vals[i] = tree.NewDFloat(tree.DFloat(rng.Float64()))
 	}
 	return vals
 }
 
-func makeDecimalTestDatum(count int) []parser.Datum {
+func makeDecimalTestDatum(count int) []tree.Datum {
 	rng, _ := randutil.NewPseudoRand()
 
-	vals := make([]parser.Datum, count)
+	vals := make([]tree.Datum, count)
 	for i := range vals {
-		dd := &parser.DDecimal{}
+		dd := &tree.DDecimal{}
 		if _, err := dd.SetFloat64(rng.Float64()); err != nil {
 			panic(err)
 		}
@@ -217,22 +215,22 @@ func makeDecimalTestDatum(count int) []parser.Datum {
 	return vals
 }
 
-func makeBoolTestDatum(count int) []parser.Datum {
+func makeBoolTestDatum(count int) []tree.Datum {
 	rng, _ := randutil.NewPseudoRand()
 
-	vals := make([]parser.Datum, count)
+	vals := make([]tree.Datum, count)
 	for i := range vals {
-		vals[i] = parser.MakeDBool(parser.DBool(rng.Int31n(2) == 0))
+		vals[i] = tree.MakeDBool(tree.DBool(rng.Int31n(2) == 0))
 	}
 	return vals
 }
 
-func makeIntervalTestDatum(count int) []parser.Datum {
+func makeIntervalTestDatum(count int) []tree.Datum {
 	rng, _ := randutil.NewPseudoRand()
 
-	vals := make([]parser.Datum, count)
+	vals := make([]tree.Datum, count)
 	for i := range vals {
-		vals[i] = &parser.DInterval{Duration: duration.Duration{Months: rng.Int63n(1000),
+		vals[i] = &tree.DInterval{Duration: duration.Duration{Months: rng.Int63n(1000),
 			Days:  rng.Int63n(1000),
 			Nanos: rng.Int63n(1000000),
 		}}
@@ -241,11 +239,9 @@ func makeIntervalTestDatum(count int) []parser.Datum {
 }
 
 func runBenchmarkAggregate(
-	b *testing.B,
-	aggFunc func([]types.T, *parser.EvalContext) parser.AggregateFunc,
-	vals []parser.Datum,
+	b *testing.B, aggFunc func([]types.T, *tree.EvalContext) tree.AggregateFunc, vals []tree.Datum,
 ) {
-	evalCtx := parser.NewTestingEvalContext()
+	evalCtx := tree.NewTestingEvalContext()
 	defer evalCtx.Stop(context.Background())
 	params := []types.T{vals[0].ResolvedType()}
 	b.ResetTimer()

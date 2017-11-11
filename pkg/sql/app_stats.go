@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/pkg/errors"
@@ -106,7 +107,7 @@ func (a *appStats) recordStatement(
 
 	// Some statements like SET, SHOW etc are not useful to collect
 	// stats about. Ignore them.
-	if _, ok := stmt.AST.(parser.HiddenFromStats); ok {
+	if _, ok := stmt.AST.(tree.HiddenFromStats); ok {
 		return
 	}
 
@@ -161,7 +162,7 @@ func (a *appStats) getStatsForStmt(key stmtKey) *stmtStats {
 
 func (a *appStats) getStrForStmt(stmt Statement) string {
 	var buf bytes.Buffer
-	parser.FormatNode(&buf, parser.FmtHideConstants, stmt.AST)
+	tree.FormatNode(&buf, tree.FmtHideConstants, stmt.AST)
 	return buf.String()
 }
 
@@ -266,8 +267,8 @@ func scrubStmtStatKey(vt virtualSchemaHolder, key string) (string, bool) {
 	}
 
 	// Re-format to remove most names.
-	formatter := parser.FmtReformatTableNames(parser.FmtAnonymize,
-		func(t *parser.NormalizableTableName, buf *bytes.Buffer, f parser.FmtFlags) {
+	formatter := tree.FmtReformatTableNames(tree.FmtAnonymize,
+		func(t *tree.NormalizableTableName, buf *bytes.Buffer, f tree.FmtFlags) {
 			tn, err := t.Normalize()
 			if err != nil {
 				buf.WriteByte('_')
@@ -279,9 +280,9 @@ func scrubStmtStatKey(vt virtualSchemaHolder, key string) (string, bool) {
 				return
 			}
 			// Virtual table: we want to keep the name.
-			tn.Format(buf, parser.FmtParsable)
+			tn.Format(buf, tree.FmtParsable)
 		})
-	return parser.AsStringWithFlags(stmt, formatter), true
+	return tree.AsStringWithFlags(stmt, formatter), true
 }
 
 // GetScrubbedStmtStats returns the statement statistics by app, with the

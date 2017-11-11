@@ -15,9 +15,8 @@
 package sql
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"golang.org/x/net/context"
-
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 )
 
 // unaryNode is a planNode with no columns and a single row with empty results
@@ -27,7 +26,7 @@ type unaryNode struct {
 	consumed bool
 }
 
-func (*unaryNode) Values() parser.Datums { return nil }
+func (*unaryNode) Values() tree.Datums   { return nil }
 func (*unaryNode) Start(runParams) error { return nil }
 func (*unaryNode) Close(context.Context) {}
 

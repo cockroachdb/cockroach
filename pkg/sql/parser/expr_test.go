@@ -25,7 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 )
 
-// TestUnresolvedNameString tests the string representation of UnresolvedName and thus Name.
+// TestUnresolvedNameString tests the string representation of tree.UnresolvedName and thus tree.Name.
 func TestUnresolvedNameString(t *testing.T) {
 	testCases := []struct {
 		in, out string
@@ -48,7 +48,7 @@ func TestUnresolvedNameString(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
-		q := UnresolvedName{Name(tc.in)}
+		q := tree.UnresolvedName{tree.Name(tc.in)}
 		if q.String() != tc.out {
 			t.Errorf("expected q.String() == %q, got %q", tc.out, q.String())
 		}
@@ -82,17 +82,17 @@ func TestNormalizeNameInExpr(t *testing.T) {
 		if err != nil {
 			t.Fatalf("%s: %v", tc.in, err)
 		}
-		var vBase VarName
-		startExpr := stmt.(*Select).Select.(*SelectClause).Exprs[0].Expr
+		var vBase tree.VarName
+		startExpr := stmt.(*tree.Select).Select.(*tree.SelectClause).Exprs[0].Expr
 		for {
 			switch e := startExpr.(type) {
-			case VarName:
+			case tree.VarName:
 				vBase = e
-			case *IndirectionExpr:
+			case *tree.IndirectionExpr:
 				startExpr = e.Expr
 				continue
 			default:
-				t.Fatalf("%s does not parse to a VarName or IndirectionExpr", tc.in)
+				t.Fatalf("%s does not parse to a tree.VarName or tree.IndirectionExpr", tc.in)
 			}
 			break
 		}
@@ -115,7 +115,7 @@ func TestNormalizeNameInExpr(t *testing.T) {
 // TestExprString verifies that converting an expression to a string and back
 // doesn't change the (normalized) expression.
 func TestExprString(t *testing.T) {
-	defer MockNameTypes(map[string]types.T{
+	defer tree.MockNameTypes(map[string]types.T{
 		"a": types.Bool,
 		"b": types.Bool,
 		"c": types.Bool,
@@ -159,7 +159,7 @@ func TestExprString(t *testing.T) {
 		if err != nil {
 			t.Fatalf("%s: %v", exprStr, err)
 		}
-		typedExpr, err := TypeCheck(expr, nil, types.Any)
+		typedExpr, err := tree.TypeCheck(expr, nil, types.Any)
 		if err != nil {
 			t.Fatalf("%s: %v", expr, err)
 		}
@@ -169,7 +169,7 @@ func TestExprString(t *testing.T) {
 		if err != nil {
 			t.Fatalf("%s: %v", exprStr, err)
 		}
-		typedExpr2, err := TypeCheck(expr2, nil, types.Any)
+		typedExpr2, err := tree.TypeCheck(expr2, nil, types.Any)
 		if err != nil {
 			t.Fatalf("%s: %v", expr2, err)
 		}
@@ -180,7 +180,7 @@ func TestExprString(t *testing.T) {
 			t.Errorf("Print/parse/print cycle changes the string: `%s` vs `%s`", str, str2)
 		}
 		// Compare the normalized expressions.
-		ctx := NewTestingEvalContext()
+		ctx := tree.NewTestingEvalContext()
 		defer ctx.Mon.Stop(context.Background())
 		normalized, err := ctx.NormalizeExpr(typedExpr)
 		if err != nil {
@@ -215,9 +215,9 @@ func TestStripParens(t *testing.T) {
 		if err != nil {
 			t.Fatalf("%d: %v", i, err)
 		}
-		stripped := StripParens(expr)
+		stripped := tree.StripParens(expr)
 		if str := stripped.String(); str != test.out {
-			t.Fatalf("%d: expected StripParens(%s) = %s, but found %s", i, test.in, test.out, str)
+			t.Fatalf("%d: expected tree.StripParens(%s) = %s, but found %s", i, test.in, test.out, str)
 		}
 	}
 }

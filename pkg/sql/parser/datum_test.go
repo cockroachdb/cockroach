@@ -25,19 +25,19 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 )
 
-func prepareExpr(t *testing.T, datumExpr string) TypedExpr {
+func prepareExpr(t *testing.T, datumExpr string) tree.TypedExpr {
 	expr, err := ParseExpr(datumExpr)
 	if err != nil {
 		t.Fatalf("%s: %v", datumExpr, err)
 	}
 	// Type checking ensures constant folding is performed and type
 	// annotations have come into effect.
-	typedExpr, err := TypeCheck(expr, nil, types.Any)
+	typedExpr, err := tree.TypeCheck(expr, nil, types.Any)
 	if err != nil {
 		t.Fatalf("%s: %v", datumExpr, err)
 	}
 	// Normalization ensures that casts are processed.
-	evalCtx := NewTestingEvalContext()
+	evalCtx := tree.NewTestingEvalContext()
 	defer evalCtx.Stop(context.Background())
 	typedExpr, err = evalCtx.NormalizeExpr(typedExpr)
 	if err != nil {
@@ -210,11 +210,11 @@ func TestDatumOrdering(t *testing.T) {
 		{`row(row(false), ARRAY[true])`, noPrev, `((false), ARRAY[true,NULL])`,
 			`((false), ARRAY[])`, noMax},
 	}
-	ctx := NewTestingEvalContext()
+	ctx := tree.NewTestingEvalContext()
 	for _, td := range testData {
 		expr := prepareExpr(t, td.datumExpr)
 
-		d := expr.(Datum)
+		d := expr.(tree.Datum)
 		prevVal, hasPrev := d.Prev(ctx)
 		nextVal, hasNext := d.Next(ctx)
 		if td.prev == noPrev {
@@ -291,9 +291,9 @@ func TestDatumOrdering(t *testing.T) {
 }
 
 func TestDFloatCompare(t *testing.T) {
-	values := []Datum{DNull}
+	values := []tree.Datum{tree.DNull}
 	for _, x := range []float64{math.NaN(), math.Inf(-1), -1, 0, 1, math.Inf(1)} {
-		values = append(values, NewDFloat(DFloat(x)))
+		values = append(values, tree.NewDFloat(tree.DFloat(x)))
 	}
 	for i, x := range values {
 		for j, y := range values {
@@ -303,7 +303,7 @@ func TestDFloatCompare(t *testing.T) {
 			} else if i > j {
 				expected = 1
 			}
-			evalCtx := NewTestingEvalContext()
+			evalCtx := tree.NewTestingEvalContext()
 			defer evalCtx.Stop(context.Background())
 			got := x.Compare(evalCtx, y)
 			if got != expected {
@@ -314,7 +314,7 @@ func TestDFloatCompare(t *testing.T) {
 }
 
 // TestParseDIntervalWithField tests that the additional features available
-// to ParseDIntervalWithField beyond those in ParseDInterval behave as expected.
+// to tree.ParseDIntervalWithField beyond those in tree.ParseDInterval behave as expected.
 func TestParseDIntervalWithField(t *testing.T) {
 	testData := []struct {
 		str      string
@@ -343,17 +343,17 @@ func TestParseDIntervalWithField(t *testing.T) {
 		{"1-2 3 4:56:07", tree.Year, "1 year"},
 	}
 	for _, td := range testData {
-		actual, err := ParseDIntervalWithField(td.str, td.field)
+		actual, err := tree.ParseDIntervalWithField(td.str, td.field)
 		if err != nil {
 			t.Errorf("unexpected error while parsing INTERVAL %s %d: %s", td.str, td.field, err)
 			continue
 		}
-		expected, err := ParseDInterval(td.expected)
+		expected, err := tree.ParseDInterval(td.expected)
 		if err != nil {
 			t.Errorf("unexpected error while parsing expected value INTERVAL %s: %s", td.expected, err)
 			continue
 		}
-		evalCtx := NewTestingEvalContext()
+		evalCtx := tree.NewTestingEvalContext()
 		defer evalCtx.Stop(context.Background())
 		if expected.Compare(evalCtx, actual) != 0 {
 			t.Errorf("INTERVAL %s %v: got %s, expected %s", td.str, td.field, actual, expected)
@@ -384,17 +384,17 @@ func TestParseDDate(t *testing.T) {
 		{"2017-3-3", "2017-03-03"},
 	}
 	for _, td := range testData {
-		actual, err := ParseDDate(td.str, time.UTC)
+		actual, err := tree.ParseDDate(td.str, time.UTC)
 		if err != nil {
 			t.Errorf("unexpected error while parsing DATE %s: %s", td.str, err)
 			continue
 		}
-		expected, err := ParseDDate(td.expected, time.UTC)
+		expected, err := tree.ParseDDate(td.expected, time.UTC)
 		if err != nil {
 			t.Errorf("unexpected error while parsing expected value DATE %s: %s", td.expected, err)
 			continue
 		}
-		evalCtx := NewTestingEvalContext()
+		evalCtx := tree.NewTestingEvalContext()
 		defer evalCtx.Stop(context.Background())
 		if expected.Compare(evalCtx, actual) != 0 {
 			t.Errorf("DATE %s: got %s, expected %s", td.str, actual, expected)
@@ -442,7 +442,7 @@ func TestParseDTimestamp(t *testing.T) {
 			time.FixedZone("", 3*60*60))},
 	}
 	for _, td := range testData {
-		actual, err := ParseDTimestamp(td.str, time.Nanosecond)
+		actual, err := tree.ParseDTimestamp(td.str, time.Nanosecond)
 		if err != nil {
 			t.Errorf("unexpected error while parsing TIMESTAMP %s: %s", td.str, err)
 			continue
@@ -454,15 +454,15 @@ func TestParseDTimestamp(t *testing.T) {
 }
 
 func TestMakeDJSON(t *testing.T) {
-	j1, err := MakeDJSON(1)
+	j1, err := tree.MakeDJSON(1)
 	if err != nil {
 		t.Fatal(err)
 	}
-	j2, err := MakeDJSON(2)
+	j2, err := tree.MakeDJSON(2)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if j1.Compare(NewTestingEvalContext(), j2) != -1 {
+	if j1.Compare(tree.NewTestingEvalContext(), j2) != -1 {
 		t.Fatal("expected JSON 1 < 2")
 	}
 }
