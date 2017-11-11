@@ -1210,32 +1210,32 @@ alter_table_cmd:
   // ALTER TABLE <name> ADD <coldef>
   ADD column_def
   {
-    $$.val = &AlterTableAddColumn{columnKeyword: false, IfNotExists: false, ColumnDef: $2.colDef()}
+    $$.val = &AlterTableAddColumn{ColumnKeyword: false, IfNotExists: false, ColumnDef: $2.colDef()}
   }
   // ALTER TABLE <name> ADD IF NOT EXISTS <coldef>
 | ADD IF NOT EXISTS column_def
   {
-    $$.val = &AlterTableAddColumn{columnKeyword: false, IfNotExists: true, ColumnDef: $5.colDef()}
+    $$.val = &AlterTableAddColumn{ColumnKeyword: false, IfNotExists: true, ColumnDef: $5.colDef()}
   }
   // ALTER TABLE <name> ADD COLUMN <coldef>
 | ADD COLUMN column_def
   {
-    $$.val = &AlterTableAddColumn{columnKeyword: true, IfNotExists: false, ColumnDef: $3.colDef()}
+    $$.val = &AlterTableAddColumn{ColumnKeyword: true, IfNotExists: false, ColumnDef: $3.colDef()}
   }
   // ALTER TABLE <name> ADD COLUMN IF NOT EXISTS <coldef>
 | ADD COLUMN IF NOT EXISTS column_def
   {
-    $$.val = &AlterTableAddColumn{columnKeyword: true, IfNotExists: true, ColumnDef: $6.colDef()}
+    $$.val = &AlterTableAddColumn{ColumnKeyword: true, IfNotExists: true, ColumnDef: $6.colDef()}
   }
   // ALTER TABLE <name> ALTER [COLUMN] <colname> {SET DEFAULT <expr>|DROP DEFAULT}
 | ALTER opt_column name alter_column_default
   {
-    $$.val = &AlterTableSetDefault{columnKeyword: $2.bool(), Column: Name($3), Default: $4.expr()}
+    $$.val = &AlterTableSetDefault{ColumnKeyword: $2.bool(), Column: Name($3), Default: $4.expr()}
   }
   // ALTER TABLE <name> ALTER [COLUMN] <colname> DROP NOT NULL
 | ALTER opt_column name DROP NOT NULL
   {
-    $$.val = &AlterTableDropNotNull{columnKeyword: $2.bool(), Column: Name($3)}
+    $$.val = &AlterTableDropNotNull{ColumnKeyword: $2.bool(), Column: Name($3)}
   }
   // ALTER TABLE <name> ALTER [COLUMN] <colname> SET NOT NULL
 | ALTER opt_column name SET NOT NULL { return unimplemented(sqllex, "alter set non null") }
@@ -1243,7 +1243,7 @@ alter_table_cmd:
 | DROP opt_column IF EXISTS name opt_drop_behavior
   {
     $$.val = &AlterTableDropColumn{
-      columnKeyword: $2.bool(),
+      ColumnKeyword: $2.bool(),
       IfExists: true,
       Column: Name($5),
       DropBehavior: $6.dropBehavior(),
@@ -1253,7 +1253,7 @@ alter_table_cmd:
 | DROP opt_column name opt_drop_behavior
   {
     $$.val = &AlterTableDropColumn{
-      columnKeyword: $2.bool(),
+      ColumnKeyword: $2.bool(),
       IfExists: false,
       Column: Name($3),
       DropBehavior: $4.dropBehavior(),
