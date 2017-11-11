@@ -26,9 +26,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/transform"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -39,14 +40,14 @@ import (
 )
 
 type createDatabaseNode struct {
-	n *parser.CreateDatabase
+	n *tree.CreateDatabase
 }
 
 // CreateDatabase creates a database.
 // Privileges: security.RootUser user.
 //   Notes: postgres requires superuser or "CREATEDB".
 //          mysql uses the mysqladmin command.
-func (p *planner) CreateDatabase(n *parser.CreateDatabase) (planNode, error) {
+func (p *planner) CreateDatabase(n *tree.CreateDatabase) (planNode, error) {
 	if n.Name == "" {
 		return nil, errEmptyDatabaseName
 	}
@@ -120,10 +121,10 @@ func (n *createDatabaseNode) Start(params runParams) error {
 
 func (*createDatabaseNode) Next(runParams) (bool, error) { return false, nil }
 func (*createDatabaseNode) Close(context.Context)        {}
-func (*createDatabaseNode) Values() parser.Datums        { return parser.Datums{} }
+func (*createDatabaseNode) Values() tree.Datums          { return tree.Datums{} }
 
 type createIndexNode struct {
-	n         *parser.CreateIndex
+	n         *tree.CreateIndex
 	tableDesc *sqlbase.TableDescriptor
 }
 
@@ -131,7 +132,7 @@ type createIndexNode struct {
 // Privileges: CREATE on table.
 //   notes: postgres requires CREATE on the table.
 //          mysql requires INDEX on the table.
-func (p *planner) CreateIndex(ctx context.Context, n *parser.CreateIndex) (planNode, error) {
+func (p *planner) CreateIndex(ctx context.Context, n *tree.CreateIndex) (planNode, error) {
 	tn, err := n.Table.NormalizeWithDatabaseName(p.session.Database)
 	if err != nil {
 		return nil, err
@@ -188,7 +189,7 @@ func (n *createIndexNode) Start(params runParams) error {
 	}
 
 	mutationID, err := params.p.createSchemaChangeJob(params.ctx, n.tableDesc,
-		parser.AsStringWithFlags(n.n, parser.FmtSimpleQualified))
+		tree.AsStringWithFlags(n.n, tree.FmtSimpleQualified))
 	if err != nil {
 		return err
 	}
@@ -222,7 +223,7 @@ func (n *createIndexNode) Start(params runParams) error {
 
 func (*createIndexNode) Next(runParams) (bool, error) { return false, nil }
 func (*createIndexNode) Close(context.Context)        {}
-func (*createIndexNode) Values() parser.Datums        { return parser.Datums{} }
+func (*createIndexNode) Values() tree.Datums          { return tree.Datums{} }
 
 type userAuthInfo struct {
 	name     func() (string, error)
@@ -235,7 +236,7 @@ type createUserNode struct {
 	userAuthInfo
 }
 
-func (p *planner) getUserAuthInfo(nameE, passwordE parser.Expr, ctx string) (userAuthInfo, error) {
+func (p *planner) getUserAuthInfo(nameE, passwordE tree.Expr, ctx string) (userAuthInfo, error) {
 	name, err := p.TypeAsString(nameE, ctx)
 	if err != nil {
 		return userAuthInfo{}, err
@@ -287,8 +288,8 @@ func (ua *userAuthInfo) resolve() (string, []byte, error) {
 // Privileges: INSERT on system.users.
 //   notes: postgres allows the creation of users with an empty password. We do
 //          as well, but disallow password authentication for these users.
-func (p *planner) CreateUser(ctx context.Context, n *parser.CreateUser) (planNode, error) {
-	tDesc, err := getTableDesc(ctx, p.txn, p.getVirtualTabler(), &parser.TableName{DatabaseName: "system", TableName: "users"})
+func (p *planner) CreateUser(ctx context.Context, n *tree.CreateUser) (planNode, error) {
+	tDesc, err := getTableDesc(ctx, p.txn, p.getVirtualTabler(), &tree.TableName{DatabaseName: "system", TableName: "users"})
 	if err != nil {
 		return nil, err
 	}
@@ -320,7 +321,7 @@ var blacklistedUsernames = map[string]struct{}{
 // NormalizeAndValidateUsername case folds the specified username and verifies
 // it validates according to the usernameRE regular expression.
 func NormalizeAndValidateUsername(username string) (string, error) {
-	username = parser.Name(username).Normalize()
+	username = tree.Name(username).Normalize()
 	if !usernameRE.MatchString(username) {
 		return "", errors.Errorf("username %q invalid; %s", username, usernameHelp)
 	}
@@ -375,7 +376,7 @@ func (n *createUserNode) Start(params runParams) error {
 func (n *createUserNode) FastPathResults() (int, bool) { return n.rowsAffected, true }
 func (*createUserNode) Next(runParams) (bool, error)   { return false, nil }
 func (*createUserNode) Close(context.Context)          {}
-func (*createUserNode) Values() parser.Datums          { return parser.Datums{} }
+func (*createUserNode) Values() tree.Datums            { return tree.Datums{} }
 
 // alterUserSetPasswordNode represents an ALTER USER ... WITH PASSWORD statement.
 type alterUserSetPasswordNode struct {
@@ -385,9 +386,9 @@ type alterUserSetPasswordNode struct {
 }
 
 func (p *planner) AlterUserSetPassword(
-	ctx context.Context, n *parser.AlterUserSetPassword,
+	ctx context.Context, n *tree.AlterUserSetPassword,
 ) (planNode, error) {
-	tDesc, err := getTableDesc(ctx, p.txn, p.getVirtualTabler(), &parser.TableName{DatabaseName: "system", TableName: "users"})
+	tDesc, err := getTableDesc(ctx, p.txn, p.getVirtualTabler(), &tree.TableName{DatabaseName: "system", TableName: "users"})
 	if err != nil {
 		return nil, err
 	}
@@ -437,12 +438,12 @@ func (n *alterUserSetPasswordNode) Start(params runParams) error {
 
 func (*alterUserSetPasswordNode) Next(runParams) (bool, error) { return false, nil }
 func (*alterUserSetPasswordNode) Close(context.Context)        {}
-func (*alterUserSetPasswordNode) Values() parser.Datums        { return parser.Datums{} }
+func (*alterUserSetPasswordNode) Values() tree.Datums          { return tree.Datums{} }
 
 // createViewNode represents a CREATE VIEW statement.
 type createViewNode struct {
 	p             *planner
-	n             *parser.CreateView
+	n             *tree.CreateView
 	dbDesc        *sqlbase.DatabaseDescriptor
 	sourceColumns sqlbase.ResultColumns
 	// planDeps tracks which tables and views the view being created
@@ -456,7 +457,7 @@ type createViewNode struct {
 //   notes: postgres requires CREATE on database plus SELECT on all the
 //						selected columns.
 //          mysql requires CREATE VIEW plus SELECT on all the selected columns.
-func (p *planner) CreateView(ctx context.Context, n *parser.CreateView) (planNode, error) {
+func (p *planner) CreateView(ctx context.Context, n *tree.CreateView) (planNode, error) {
 	name, err := n.Name.NormalizeWithDatabaseName(p.session.Database)
 	if err != nil {
 		return nil, err
@@ -473,20 +474,20 @@ func (p *planner) CreateView(ctx context.Context, n *parser.CreateView) (planNod
 
 	// Ensure that all the table names are properly qualified.  The
 	// traversal will update the NormalizableTableNames in-place, so the
-	// changes are persisted in n.AsSource. We use parser.FormatNode
+	// changes are persisted in n.AsSource. We use tree.FormatNode
 	// merely as a traversal method; its output buffer is discarded
 	// immediately after the traversal because it is not needed further.
 	var queryBuf bytes.Buffer
 	var fmtErr error
-	parser.FormatNode(
+	tree.FormatNode(
 		&queryBuf,
-		parser.FmtReformatTableNames(
-			parser.FmtParsable,
-			func(t *parser.NormalizableTableName, buf *bytes.Buffer, f parser.FmtFlags) {
+		tree.FmtReformatTableNames(
+			tree.FmtParsable,
+			func(t *tree.NormalizableTableName, buf *bytes.Buffer, f tree.FmtFlags) {
 				tn, err := p.QualifyWithDatabase(ctx, t)
 				if err != nil {
 					log.Warningf(ctx, "failed to qualify table name %q with database name: %v",
-						parser.ErrString(t), err)
+						tree.ErrString(t), err)
 					fmtErr = err
 					return
 				}
@@ -614,10 +615,10 @@ func (n *createViewNode) Start(params runParams) error {
 func (n *createViewNode) Close(ctx context.Context) {}
 
 func (*createViewNode) Next(runParams) (bool, error) { return false, nil }
-func (*createViewNode) Values() parser.Datums        { return parser.Datums{} }
+func (*createViewNode) Values() tree.Datums          { return tree.Datums{} }
 
 type createTableNode struct {
-	n          *parser.CreateTable
+	n          *tree.CreateTable
 	dbDesc     *sqlbase.DatabaseDescriptor
 	sourcePlan planNode
 	count      int
@@ -626,7 +627,7 @@ type createTableNode struct {
 // CreateTable creates a table.
 // Privileges: CREATE on database.
 //   Notes: postgres/mysql require CREATE on database.
-func (p *planner) CreateTable(ctx context.Context, n *parser.CreateTable) (planNode, error) {
+func (p *planner) CreateTable(ctx context.Context, n *tree.CreateTable) (planNode, error) {
 	tn, err := n.Table.NormalizeWithDatabaseName(p.session.Database)
 	if err != nil {
 		return nil, err
@@ -644,7 +645,7 @@ func (p *planner) CreateTable(ctx context.Context, n *parser.CreateTable) (planN
 	HoistConstraints(n)
 	for _, def := range n.Defs {
 		switch t := def.(type) {
-		case *parser.ForeignKeyConstraintTableDef:
+		case *tree.ForeignKeyConstraintTableDef:
 			if _, err := t.Table.NormalizeWithDatabaseName(p.session.Database); err != nil {
 				return nil, err
 			}
@@ -680,12 +681,12 @@ func (p *planner) CreateTable(ctx context.Context, n *parser.CreateTable) (planN
 // constraint in `CREATE TABLE foo (a INT REFERENCES bar(a))` gets pulled into
 // a top level fk constraint like
 // `CREATE TABLE foo (a int CONSTRAINT .. FOREIGN KEY(a) REFERENCES bar(a)`.
-func HoistConstraints(n *parser.CreateTable) {
+func HoistConstraints(n *tree.CreateTable) {
 	for _, d := range n.Defs {
-		if col, ok := d.(*parser.ColumnTableDef); ok {
+		if col, ok := d.(*tree.ColumnTableDef); ok {
 			for _, checkExpr := range col.CheckExprs {
 				n.Defs = append(n.Defs,
-					&parser.CheckConstraintTableDef{
+					&tree.CheckConstraintTableDef{
 						Expr: checkExpr.Expr,
 						Name: checkExpr.ConstraintName,
 					},
@@ -693,18 +694,18 @@ func HoistConstraints(n *parser.CreateTable) {
 			}
 			col.CheckExprs = nil
 			if col.HasFKConstraint() {
-				var targetCol parser.NameList
+				var targetCol tree.NameList
 				if col.References.Col != "" {
 					targetCol = append(targetCol, col.References.Col)
 				}
-				n.Defs = append(n.Defs, &parser.ForeignKeyConstraintTableDef{
+				n.Defs = append(n.Defs, &tree.ForeignKeyConstraintTableDef{
 					Table:    col.References.Table,
-					FromCols: parser.NameList{col.Name},
+					FromCols: tree.NameList{col.Name},
 					ToCols:   targetCol,
 					Name:     col.References.ConstraintName,
 					Actions:  col.References.Actions,
 				})
-				col.References.Table = parser.NormalizableTableName{}
+				col.References.Table = tree.NormalizableTableName{}
 			}
 		}
 	}
@@ -809,10 +810,10 @@ func (n *createTableNode) Start(params runParams) error {
 		n.sourcePlan.Close(params.ctx)
 		n.sourcePlan = nil
 
-		insert := &parser.Insert{
+		insert := &tree.Insert{
 			Table:     &n.n.Table,
 			Rows:      n.n.AsSource,
-			Returning: parser.AbsentReturningClause,
+			Returning: tree.AbsentReturningClause,
 		}
 		insertPlan, err := params.p.Insert(params.ctx, insert, nil /* desiredTypes */)
 		if err != nil {
@@ -847,7 +848,7 @@ func (n *createTableNode) Close(ctx context.Context) {
 }
 
 func (*createTableNode) Next(runParams) (bool, error) { return false, nil }
-func (*createTableNode) Values() parser.Datums        { return parser.Datums{} }
+func (*createTableNode) Values() tree.Datums          { return tree.Datums{} }
 
 type indexMatch bool
 
@@ -877,7 +878,7 @@ func matchesIndex(
 func (p *planner) resolveFK(
 	ctx context.Context,
 	tbl *sqlbase.TableDescriptor,
-	d *parser.ForeignKeyConstraintTableDef,
+	d *tree.ForeignKeyConstraintTableDef,
 	backrefs map[sqlbase.ID]*sqlbase.TableDescriptor,
 	mode sqlbase.ConstraintValidity,
 ) error {
@@ -897,7 +898,7 @@ func resolveFK(
 	txn *client.Txn,
 	vt VirtualTabler,
 	tbl *sqlbase.TableDescriptor,
-	d *parser.ForeignKeyConstraintTableDef,
+	d *tree.ForeignKeyConstraintTableDef,
 	backrefs map[sqlbase.ID]*sqlbase.TableDescriptor,
 	mode sqlbase.ConstraintValidity,
 ) error {
@@ -949,9 +950,9 @@ func resolveFK(
 	targetColNames := d.ToCols
 	// If no columns are specified, attempt to default to PK.
 	if len(targetColNames) == 0 {
-		targetColNames = make(parser.NameList, len(target.PrimaryIndex.ColumnNames))
+		targetColNames = make(tree.NameList, len(target.PrimaryIndex.ColumnNames))
 		for i, n := range target.PrimaryIndex.ColumnNames {
-			targetColNames[i] = parser.Name(n)
+			targetColNames[i] = tree.Name(n)
 		}
 	}
 
@@ -999,13 +1000,13 @@ func resolveFK(
 		}
 	}
 
-	if d.Actions.Delete != parser.NoAction &&
-		d.Actions.Delete != parser.Restrict {
+	if d.Actions.Delete != tree.NoAction &&
+		d.Actions.Delete != tree.Restrict {
 		feature := fmt.Sprintf("unsupported: ON DELETE %s", d.Actions.Delete)
 		return pgerror.Unimplemented(feature, feature)
 	}
-	if d.Actions.Update != parser.NoAction &&
-		d.Actions.Update != parser.Restrict {
+	if d.Actions.Update != tree.NoAction &&
+		d.Actions.Update != tree.Restrict {
 		feature := fmt.Sprintf("unsupported: ON UPDATE %s", d.Actions.Update)
 		return pgerror.Unimplemented(feature, feature)
 	}
@@ -1131,7 +1132,7 @@ func (p *planner) addInterleave(
 	ctx context.Context,
 	desc *sqlbase.TableDescriptor,
 	index *sqlbase.IndexDescriptor,
-	interleave *parser.InterleaveDef,
+	interleave *tree.InterleaveDef,
 ) error {
 	return addInterleave(ctx, p.txn, &p.session.virtualSchemas, desc, index, interleave, p.session.Database)
 }
@@ -1144,10 +1145,10 @@ func addInterleave(
 	vt VirtualTabler,
 	desc *sqlbase.TableDescriptor,
 	index *sqlbase.IndexDescriptor,
-	interleave *parser.InterleaveDef,
+	interleave *tree.InterleaveDef,
 	sessionDB string,
 ) error {
-	if interleave.DropBehavior != parser.DropDefault {
+	if interleave.DropBehavior != tree.DropDefault {
 		return pgerror.UnimplementedWithIssueErrorf(
 			7854, "unsupported shorthand %s", interleave.DropBehavior)
 	}
@@ -1253,16 +1254,16 @@ func (p *planner) finalizeInterleave(
 // TODO(dan): The typechecking here should be run during plan construction, so
 // we can support placeholders.
 func valueEncodePartitionTuple(
-	typ parser.PartitionByType,
-	evalCtx *parser.EvalContext,
-	maybeTuple parser.Expr,
+	typ tree.PartitionByType,
+	evalCtx *tree.EvalContext,
+	maybeTuple tree.Expr,
 	cols []sqlbase.ColumnDescriptor,
 ) ([]byte, error) {
-	maybeTuple = parser.StripParens(maybeTuple)
-	tuple, ok := maybeTuple.(*parser.Tuple)
+	maybeTuple = tree.StripParens(maybeTuple)
+	tuple, ok := maybeTuple.(*tree.Tuple)
 	if !ok {
 		// If we don't already have a tuple, promote whatever we have to a 1-tuple.
-		tuple = &parser.Tuple{Exprs: []parser.Expr{maybeTuple}}
+		tuple = &tree.Tuple{Exprs: []tree.Expr{maybeTuple}}
 	}
 
 	if len(tuple.Exprs) != len(cols) {
@@ -1273,28 +1274,28 @@ func valueEncodePartitionTuple(
 	var value, scratch []byte
 	for i, expr := range tuple.Exprs {
 		switch expr.(type) {
-		case parser.DefaultVal:
-			if typ != parser.PartitionByList {
+		case tree.DefaultVal:
+			if typ != tree.PartitionByList {
 				return nil, errors.Errorf("%s cannot be used with PARTITION BY %s", expr, typ)
 			}
 			// NOT NULL is used to signal DEFAULT.
 			value = encoding.EncodeNotNullValue(value, encoding.NoColumnID)
 			continue
-		case parser.MaxVal:
-			if typ != parser.PartitionByRange {
+		case tree.MaxVal:
+			if typ != tree.PartitionByRange {
 				return nil, errors.Errorf("%s cannot be used with PARTITION BY %s", expr, typ)
 			}
 			// NOT NULL is used to signal MAXVALUE.
 			value = encoding.EncodeNotNullValue(value, encoding.NoColumnID)
 			continue
-		case *parser.Placeholder:
+		case *tree.Placeholder:
 			return nil, pgerror.UnimplementedWithIssueErrorf(
 				19464, "placeholders are not supported in PARTITION BY")
 		default:
 			// Fall-through.
 		}
 
-		typedExpr, err := parser.TypeCheck(expr, nil, cols[i].Type.ToDatumType())
+		typedExpr, err := tree.TypeCheck(expr, nil, cols[i].Type.ToDatumType())
 		if err != nil {
 			return nil, errors.Wrap(err, expr.String())
 		}
@@ -1319,11 +1320,11 @@ func valueEncodePartitionTuple(
 // addressable by zone configs.
 func addPartitionedBy(
 	ctx context.Context,
-	evalCtx *parser.EvalContext,
+	evalCtx *tree.EvalContext,
 	tableDesc *sqlbase.TableDescriptor,
 	indexDesc *sqlbase.IndexDescriptor,
 	partDesc *sqlbase.PartitioningDescriptor,
-	partBy *parser.PartitionBy,
+	partBy *tree.PartitionBy,
 	colOffset int,
 ) error {
 	partDesc.NumColumns = uint32(len(partBy.Fields))
@@ -1349,7 +1350,7 @@ func addPartitionedBy(
 		}
 		for _, expr := range l.Exprs {
 			encodedTuple, err := valueEncodePartitionTuple(
-				parser.PartitionByList, evalCtx, expr, cols)
+				tree.PartitionByList, evalCtx, expr, cols)
 			if err != nil {
 				return errors.Wrapf(err, "PARTITION %s", p.Name)
 			}
@@ -1370,7 +1371,7 @@ func addPartitionedBy(
 			Name: r.Name.Normalize(),
 		}
 		encodedTuple, err := valueEncodePartitionTuple(
-			parser.PartitionByRange, evalCtx, r.Expr, cols)
+			tree.PartitionByRange, evalCtx, r.Expr, cols)
 		if err != nil {
 			return errors.Wrapf(err, "PARTITION %s", p.Name)
 		}
@@ -1411,21 +1412,21 @@ func initTableDescriptor(
 func (n *createViewNode) makeViewTableDesc(
 	ctx context.Context,
 	viewName string,
-	columnNames parser.NameList,
+	columnNames tree.NameList,
 	parentID sqlbase.ID,
 	id sqlbase.ID,
 	resultColumns []sqlbase.ResultColumn,
 	privileges *sqlbase.PrivilegeDescriptor,
-	evalCtx *parser.EvalContext,
+	evalCtx *tree.EvalContext,
 ) (sqlbase.TableDescriptor, error) {
 	desc := initTableDescriptor(id, parentID, viewName, n.p.txn.OrigTimestamp(), privileges)
-	desc.ViewQuery = parser.AsStringWithFlags(n.n.AsSource, parser.FmtParsable)
+	desc.ViewQuery = tree.AsStringWithFlags(n.n.AsSource, tree.FmtParsable)
 	for i, colRes := range resultColumns {
 		colType, err := coltypes.DatumTypeToColumnType(colRes.Typ)
 		if err != nil {
 			return desc, err
 		}
-		columnTableDef := parser.ColumnTableDef{Name: parser.Name(colRes.Name), Type: colType}
+		columnTableDef := tree.ColumnTableDef{Name: tree.Name(colRes.Name), Type: colType}
 		if len(columnNames) > i {
 			columnTableDef.Name = columnNames[i]
 		}
@@ -1442,13 +1443,13 @@ func (n *createViewNode) makeViewTableDesc(
 // makeTableDescIfAs is the MakeTableDesc method for when we have a table
 // that is created with the CREATE AS format.
 func makeTableDescIfAs(
-	p *parser.CreateTable,
+	p *tree.CreateTable,
 	parentID, id sqlbase.ID,
 	creationTime hlc.Timestamp,
 	resultColumns []sqlbase.ResultColumn,
 	privileges *sqlbase.PrivilegeDescriptor,
-	semaCtx *parser.SemaContext,
-	evalCtx *parser.EvalContext,
+	semaCtx *tree.SemaContext,
+	evalCtx *tree.EvalContext,
 ) (desc sqlbase.TableDescriptor, err error) {
 	tableName, err := p.Table.Normalize()
 	if err != nil {
@@ -1460,8 +1461,8 @@ func makeTableDescIfAs(
 		if err != nil {
 			return desc, err
 		}
-		columnTableDef := parser.ColumnTableDef{Name: parser.Name(colRes.Name), Type: colType}
-		columnTableDef.Nullable.Nullability = parser.SilentNull
+		columnTableDef := tree.ColumnTableDef{Name: tree.Name(colRes.Name), Type: colType}
+		columnTableDef.Nullable.Nullability = tree.SilentNull
 		if len(p.AsColumnNames) > i {
 			columnTableDef.Name = p.AsColumnNames[i]
 		}
@@ -1480,14 +1481,14 @@ func MakeTableDesc(
 	ctx context.Context,
 	txn *client.Txn,
 	vt VirtualTabler,
-	n *parser.CreateTable,
+	n *tree.CreateTable,
 	parentID, id sqlbase.ID,
 	creationTime hlc.Timestamp,
 	privileges *sqlbase.PrivilegeDescriptor,
 	affected map[sqlbase.ID]*sqlbase.TableDescriptor,
 	sessionDB string,
-	semaCtx *parser.SemaContext,
-	evalCtx *parser.EvalContext,
+	semaCtx *tree.SemaContext,
+	evalCtx *tree.EvalContext,
 ) (sqlbase.TableDescriptor, error) {
 	tableName, err := n.Table.Normalize()
 	if err != nil {
@@ -1496,7 +1497,7 @@ func MakeTableDesc(
 	desc := initTableDescriptor(id, parentID, tableName.Table(), creationTime, privileges)
 
 	for _, def := range n.Defs {
-		if d, ok := def.(*parser.ColumnTableDef); ok {
+		if d, ok := def.(*tree.ColumnTableDef); ok {
 			if !desc.IsVirtualTable() {
 				if _, ok := d.Type.(*coltypes.TVector); ok {
 					return desc, pgerror.NewErrorf(
@@ -1531,10 +1532,10 @@ func MakeTableDesc(
 	var primaryIndexColumnSet map[string]struct{}
 	for _, def := range n.Defs {
 		switch d := def.(type) {
-		case *parser.ColumnTableDef:
+		case *tree.ColumnTableDef:
 			// pass, handled above.
 
-		case *parser.IndexTableDef:
+		case *tree.IndexTableDef:
 			idx := sqlbase.IndexDescriptor{
 				Name:             string(d.Name),
 				StoreColumnNames: d.Storing.ToStrings(),
@@ -1548,7 +1549,7 @@ func MakeTableDesc(
 			if d.Interleave != nil {
 				return desc, pgerror.UnimplementedWithIssueError(9148, "use CREATE INDEX to make interleaved indexes")
 			}
-		case *parser.UniqueConstraintTableDef:
+		case *tree.UniqueConstraintTableDef:
 			idx := sqlbase.IndexDescriptor{
 				Name:             string(d.Name),
 				Unique:           true,
@@ -1570,7 +1571,7 @@ func MakeTableDesc(
 				return desc, pgerror.UnimplementedWithIssueError(9148, "use CREATE INDEX to make interleaved indexes")
 			}
 
-		case *parser.CheckConstraintTableDef, *parser.ForeignKeyConstraintTableDef, *parser.FamilyTableDef:
+		case *tree.CheckConstraintTableDef, *tree.ForeignKeyConstraintTableDef, *tree.FamilyTableDef:
 			// pass, handled below.
 
 		default:
@@ -1591,7 +1592,7 @@ func MakeTableDesc(
 	// here, rather than in the constraint pass below since we want to pick up
 	// explicit allocations before AllocateIDs adds implicit ones).
 	for _, def := range n.Defs {
-		if d, ok := def.(*parser.FamilyTableDef); ok {
+		if d, ok := def.(*tree.FamilyTableDef); ok {
 			fam := sqlbase.ColumnFamilyDescriptor{
 				Name:        string(d.Name),
 				ColumnNames: d.Columns.ToStrings(),
@@ -1628,17 +1629,17 @@ func MakeTableDesc(
 	generatedNames := map[string]struct{}{}
 	for _, def := range n.Defs {
 		switch d := def.(type) {
-		case *parser.ColumnTableDef, *parser.IndexTableDef, *parser.UniqueConstraintTableDef, *parser.FamilyTableDef:
+		case *tree.ColumnTableDef, *tree.IndexTableDef, *tree.UniqueConstraintTableDef, *tree.FamilyTableDef:
 			// pass, handled above.
 
-		case *parser.CheckConstraintTableDef:
+		case *tree.CheckConstraintTableDef:
 			ck, err := makeCheckConstraint(desc, d, generatedNames, semaCtx, evalCtx)
 			if err != nil {
 				return desc, err
 			}
 			desc.Checks = append(desc.Checks, ck)
 
-		case *parser.ForeignKeyConstraintTableDef:
+		case *tree.ForeignKeyConstraintTableDef:
 			if err := resolveFK(ctx, txn, vt, &desc, d, affected, sqlbase.ConstraintValidity_Validated); err != nil {
 				return desc, err
 			}
@@ -1672,7 +1673,7 @@ func MakeTableDesc(
 // makeTableDesc creates a table descriptor from a CreateTable statement.
 func (p *planner) makeTableDesc(
 	ctx context.Context,
-	n *parser.CreateTable,
+	n *tree.CreateTable,
 	parentID, id sqlbase.ID,
 	creationTime hlc.Timestamp,
 	privileges *sqlbase.PrivilegeDescriptor,
@@ -1706,24 +1707,22 @@ func (d dummyColumnItem) String() string {
 }
 
 // Format implements the NodeFormatter interface.
-func (d dummyColumnItem) Format(buf *bytes.Buffer, _ parser.FmtFlags) {
+func (d dummyColumnItem) Format(buf *bytes.Buffer, _ tree.FmtFlags) {
 	buf.WriteString(d.String())
 }
 
 // Walk implements the Expr interface.
-func (d dummyColumnItem) Walk(_ parser.Visitor) parser.Expr {
+func (d dummyColumnItem) Walk(_ tree.Visitor) tree.Expr {
 	return d
 }
 
 // TypeCheck implements the Expr interface.
-func (d dummyColumnItem) TypeCheck(
-	_ *parser.SemaContext, desired types.T,
-) (parser.TypedExpr, error) {
+func (d dummyColumnItem) TypeCheck(_ *tree.SemaContext, desired types.T) (tree.TypedExpr, error) {
 	return d, nil
 }
 
 // Eval implements the TypedExpr interface.
-func (dummyColumnItem) Eval(_ *parser.EvalContext) (parser.Datum, error) {
+func (dummyColumnItem) Eval(_ *tree.EvalContext) (tree.Datum, error) {
 	panic("dummyColumnItem.Eval() is undefined")
 }
 
@@ -1734,10 +1733,10 @@ func (d dummyColumnItem) ResolvedType() types.T {
 
 func makeCheckConstraint(
 	desc sqlbase.TableDescriptor,
-	d *parser.CheckConstraintTableDef,
+	d *tree.CheckConstraintTableDef,
 	inuseNames map[string]struct{},
-	semaCtx *parser.SemaContext,
-	evalCtx *parser.EvalContext,
+	semaCtx *tree.SemaContext,
+	evalCtx *tree.EvalContext,
 ) (*sqlbase.TableDescriptor_CheckConstraint, error) {
 	// CHECK expressions seem to vary across databases. Wikipedia's entry on
 	// Check_constraint (https://en.wikipedia.org/wiki/Check_constraint) says
@@ -1755,8 +1754,8 @@ func makeCheckConstraint(
 		nameBuf.WriteString("check")
 	}
 
-	preFn := func(expr parser.Expr) (err error, recurse bool, newExpr parser.Expr) {
-		vBase, ok := expr.(parser.VarName)
+	preFn := func(expr tree.Expr) (err error, recurse bool, newExpr tree.Expr) {
+		vBase, ok := expr.(tree.VarName)
 		if !ok {
 			// Not a VarName, don't do anything to this node.
 			return nil, true, expr
@@ -1767,7 +1766,7 @@ func makeCheckConstraint(
 			return err, false, nil
 		}
 
-		c, ok := v.(*parser.ColumnItem)
+		c, ok := v.(*tree.ColumnItem)
 		if !ok {
 			return nil, true, expr
 		}
@@ -1785,12 +1784,12 @@ func makeCheckConstraint(
 		return nil, false, dummyColumnItem{col.Type.ToDatumType()}
 	}
 
-	expr, err := parser.SimpleVisit(d.Expr, preFn)
+	expr, err := tree.SimpleVisit(d.Expr, preFn)
 	if err != nil {
 		return nil, err
 	}
 
-	var t parser.ExprTransformContext
+	var t transform.ExprTransformContext
 	if err := t.AssertNoAggregationOrWindowing(expr, "CHECK expressions", semaCtx.SearchPath); err != nil {
 		return nil, err
 	}
@@ -1820,5 +1819,5 @@ func makeCheckConstraint(
 			inuseNames[name] = struct{}{}
 		}
 	}
-	return &sqlbase.TableDescriptor_CheckConstraint{Expr: parser.Serialize(d.Expr), Name: name}, nil
+	return &sqlbase.TableDescriptor_CheckConstraint{Expr: tree.Serialize(d.Expr), Name: name}, nil
 }

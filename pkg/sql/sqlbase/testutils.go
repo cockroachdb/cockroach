@@ -24,7 +24,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/ipaddr"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -67,51 +67,51 @@ func GetTableDescriptor(kvDB *client.DB, database string, table string) *TableDe
 // If nullOk is true, the datum can be DNull.
 // Note that if typ.SemanticType is ColumnType_NULL, the datum will always be DNull,
 // regardless of the null flag.
-func RandDatum(rng *rand.Rand, typ ColumnType, nullOk bool) parser.Datum {
+func RandDatum(rng *rand.Rand, typ ColumnType, nullOk bool) tree.Datum {
 	if nullOk && rng.Intn(10) == 0 {
-		return parser.DNull
+		return tree.DNull
 	}
 	switch typ.SemanticType {
 	case ColumnType_BOOL:
-		return parser.MakeDBool(rng.Intn(2) == 1)
+		return tree.MakeDBool(rng.Intn(2) == 1)
 	case ColumnType_INT:
-		return parser.NewDInt(parser.DInt(rng.Int63()))
+		return tree.NewDInt(tree.DInt(rng.Int63()))
 	case ColumnType_FLOAT:
-		return parser.NewDFloat(parser.DFloat(rng.NormFloat64()))
+		return tree.NewDFloat(tree.DFloat(rng.NormFloat64()))
 	case ColumnType_DECIMAL:
-		d := &parser.DDecimal{}
+		d := &tree.DDecimal{}
 		d.Decimal.SetExponent(int32(rng.Intn(40) - 20))
 		d.Decimal.SetCoefficient(rng.Int63())
 		return d
 	case ColumnType_DATE:
-		return parser.NewDDate(parser.DDate(rng.Intn(10000)))
+		return tree.NewDDate(tree.DDate(rng.Intn(10000)))
 	case ColumnType_TIMESTAMP:
-		return &parser.DTimestamp{Time: timeutil.Unix(rng.Int63n(1000000), rng.Int63n(1000000))}
+		return &tree.DTimestamp{Time: timeutil.Unix(rng.Int63n(1000000), rng.Int63n(1000000))}
 	case ColumnType_INTERVAL:
 		sign := 1 - rng.Int63n(2)*2
-		return &parser.DInterval{Duration: duration.Duration{
+		return &tree.DInterval{Duration: duration.Duration{
 			Months: sign * rng.Int63n(1000),
 			Days:   sign * rng.Int63n(1000),
 			Nanos:  sign * rng.Int63n(25*3600*int64(1000000000)),
 		}}
 	case ColumnType_UUID:
-		return parser.NewDUuid(parser.DUuid{UUID: uuid.MakeV4()})
+		return tree.NewDUuid(tree.DUuid{UUID: uuid.MakeV4()})
 	case ColumnType_INET:
 		ipAddr := ipaddr.RandIPAddr(rng)
-		return parser.NewDIPAddr(parser.DIPAddr{IPAddr: ipAddr})
+		return tree.NewDIPAddr(tree.DIPAddr{IPAddr: ipAddr})
 	case ColumnType_STRING:
 		// Generate a random ASCII string.
 		p := make([]byte, rng.Intn(10))
 		for i := range p {
 			p[i] = byte(1 + rng.Intn(127))
 		}
-		return parser.NewDString(string(p))
+		return tree.NewDString(string(p))
 	case ColumnType_BYTES:
 		p := make([]byte, rng.Intn(10))
 		_, _ = rng.Read(p)
-		return parser.NewDBytes(parser.DBytes(p))
+		return tree.NewDBytes(tree.DBytes(p))
 	case ColumnType_TIMESTAMPTZ:
-		return &parser.DTimestampTZ{Time: timeutil.Unix(rng.Int63n(1000000), rng.Int63n(1000000))}
+		return &tree.DTimestampTZ{Time: timeutil.Unix(rng.Int63n(1000000), rng.Int63n(1000000))}
 	case ColumnType_COLLATEDSTRING:
 		if typ.Locale == nil {
 			panic("locale is required for COLLATEDSTRING")
@@ -129,23 +129,23 @@ func RandDatum(rng *rand.Rand, typ ColumnType, nullOk bool) parser.Datum {
 			}
 			buf.WriteRune(r)
 		}
-		return parser.NewDCollatedString(buf.String(), *typ.Locale, &parser.CollationEnvironment{})
+		return tree.NewDCollatedString(buf.String(), *typ.Locale, &tree.CollationEnvironment{})
 	case ColumnType_NAME:
 		// Generate a random ASCII string.
 		p := make([]byte, rng.Intn(10))
 		for i := range p {
 			p[i] = byte(1 + rng.Intn(127))
 		}
-		return parser.NewDName(string(p))
+		return tree.NewDName(string(p))
 	case ColumnType_OID:
-		return parser.NewDOid(parser.DInt(rng.Int63()))
+		return tree.NewDOid(tree.DInt(rng.Int63()))
 	case ColumnType_NULL:
-		return parser.DNull
+		return tree.DNull
 	case ColumnType_ARRAY:
 		// TODO(justin)
-		return parser.DNull
+		return tree.DNull
 	case ColumnType_INT2VECTOR:
-		return parser.DNull
+		return tree.DNull
 	default:
 		panic(fmt.Sprintf("invalid type %s", typ.String()))
 	}

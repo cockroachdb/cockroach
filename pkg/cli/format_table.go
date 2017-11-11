@@ -22,7 +22,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/olekukonko/tablewriter"
 	"github.com/pkg/errors"
@@ -360,7 +360,7 @@ type sqlReporter struct {
 func (p *sqlReporter) describe(w io.Writer, cols []string) error {
 	fmt.Fprint(w, "CREATE TABLE results (\n")
 	for i, col := range cols {
-		s := parser.Name(col)
+		s := tree.Name(col)
 		fmt.Fprintf(w, "  %s STRING", s.String())
 		if i < len(cols)-1 {
 			fmt.Fprint(w, ",")
@@ -380,7 +380,7 @@ func (p *sqlReporter) iter(w io.Writer, _ int, row []string) error {
 
 	fmt.Fprint(w, "INSERT INTO results VALUES (")
 	for i, r := range row {
-		s := parser.DString(r)
+		s := tree.DString(r)
 		fmt.Fprintf(w, "%s", s.String())
 		if i < len(row)-1 {
 			fmt.Fprint(w, ", ")

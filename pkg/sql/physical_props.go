@@ -18,7 +18,7 @@ import (
 	"bytes"
 	"fmt"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -260,7 +260,7 @@ func (pp *physicalProps) Format(buf *bytes.Buffer, columns sqlbase.ResultColumns
 		if columns == nil || colIdx >= len(columns) {
 			fmt.Fprintf(buf, "@%d", colIdx+1)
 		} else {
-			parser.FormatNode(buf, parser.FmtSimple, parser.Name(columns[colIdx].Name))
+			tree.FormatNode(buf, tree.FmtSimple, tree.Name(columns[colIdx].Name))
 		}
 	}
 
@@ -651,16 +651,16 @@ func (pp *physicalProps) trim(desired sqlbase.ColumnOrdering) {
 // true on all rows (e.g. a filter expression) and updates the physicalProps
 // accordingly. Specifically: it might add constant columns and equivalency
 // groups.
-func (pp *physicalProps) applyExpr(evalCtx *parser.EvalContext, expr parser.TypedExpr) {
+func (pp *physicalProps) applyExpr(evalCtx *tree.EvalContext, expr tree.TypedExpr) {
 	if expr == nil {
 		return
 	}
 	andExprs := splitAndExpr(evalCtx, expr, nil)
 	for _, e := range andExprs {
 		// Look for expressions of the form: @x = val or @x = @y.
-		if c, ok := e.(*parser.ComparisonExpr); ok && c.Operator == parser.EQ {
+		if c, ok := e.(*tree.ComparisonExpr); ok && c.Operator == tree.EQ {
 			if ok, leftCol := getColVarIdx(c.Left); ok {
-				if _, ok := c.Right.(parser.Datum); ok {
+				if _, ok := c.Right.(tree.Datum); ok {
 					pp.addConstantColumn(leftCol)
 				} else if ok, rightCol := getColVarIdx(c.Right); ok {
 					pp.addEquivalency(leftCol, rightCol)

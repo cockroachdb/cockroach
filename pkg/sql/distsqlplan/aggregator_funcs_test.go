@@ -24,7 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -38,7 +38,7 @@ var (
 	// local and non-local decimal results to check if they are within
 	// 1ulp. Decimals within 1ulp is acceptable for high-precision
 	// decimal calculations.
-	diffCtx = parser.DecimalCtx.WithPrecision(0)
+	diffCtx = tree.DecimalCtx.WithPrecision(0)
 	// Use to check for 1ulp.
 	bigOne = big.NewInt(1)
 	// floatPrecFmt is the format string with a precision of 3 (after
@@ -308,12 +308,12 @@ func checkDistAggregationInfo(
 			var equiv bool
 			var strDist, strNonDist string
 			switch typedDist := rowDist.Datum.(type) {
-			case *parser.DDecimal:
+			case *tree.DDecimal:
 				// For some decimal operations, non-local and
 				// local computations may differ by the last
 				// digit (by 1 ulp).
 				decDist := &typedDist.Decimal
-				decNonDist := &rowNonDist.Datum.(*parser.DDecimal).Decimal
+				decNonDist := &rowNonDist.Datum.(*tree.DDecimal).Decimal
 				strDist = decDist.String()
 				strNonDist = decNonDist.String()
 				// We first check if they're equivalent, and if
@@ -325,14 +325,14 @@ func checkDistAggregationInfo(
 					}
 					equiv = decNonDist.Coeff.Cmp(bigOne) == 0
 				}
-			case *parser.DFloat:
+			case *tree.DFloat:
 				// Float results are highly variable and
 				// loss of precision between non-local and
 				// local is expected. We reduce the precision
 				// specified by floatPrecFmt and compare
 				// their string representations.
 				floatDist := float64(*typedDist)
-				floatNonDist := float64(*rowNonDist.Datum.(*parser.DFloat))
+				floatNonDist := float64(*rowNonDist.Datum.(*tree.DFloat))
 				strDist = fmt.Sprintf(floatPrecFmt, floatDist)
 				strNonDist = fmt.Sprintf(floatPrecFmt, floatNonDist)
 				equiv = strDist == strNonDist
@@ -373,18 +373,18 @@ func TestDistAggregationTable(t *testing.T) {
 		t, tc.ServerConn(0), "t",
 		"k INT PRIMARY KEY, int1 INT, int2 INT, bool1 BOOL, bool2 BOOL, dec1 DECIMAL, dec2 DECIMAL, float1 FLOAT, float2 FLOAT, b BYTES",
 		numRows,
-		func(row int) []parser.Datum {
-			return []parser.Datum{
-				parser.NewDInt(parser.DInt(row)),
-				parser.NewDInt(parser.DInt(rng.Intn(numRows))),
+		func(row int) []tree.Datum {
+			return []tree.Datum{
+				tree.NewDInt(tree.DInt(row)),
+				tree.NewDInt(tree.DInt(rng.Intn(numRows))),
 				sqlbase.RandDatum(rng, sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_INT}, true),
-				parser.MakeDBool(parser.DBool(rng.Intn(10) == 0)),
-				parser.MakeDBool(parser.DBool(rng.Intn(10) != 0)),
+				tree.MakeDBool(tree.DBool(rng.Intn(10) == 0)),
+				tree.MakeDBool(tree.DBool(rng.Intn(10) != 0)),
 				sqlbase.RandDatum(rng, sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_DECIMAL}, false),
 				sqlbase.RandDatum(rng, sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_DECIMAL}, true),
 				sqlbase.RandDatum(rng, sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_FLOAT}, false),
 				sqlbase.RandDatum(rng, sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_FLOAT}, true),
-				parser.NewDBytes(parser.DBytes(randutil.RandBytes(rng, 10))),
+				tree.NewDBytes(tree.DBytes(randutil.RandBytes(rng, 10))),
 			}
 		},
 	)

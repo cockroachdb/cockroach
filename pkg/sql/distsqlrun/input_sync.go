@@ -22,7 +22,7 @@ import (
 
 	"golang.org/x/net/context"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/pkg/errors"
@@ -63,7 +63,7 @@ const (
 // (intra-stream ordering).
 type orderedSynchronizer struct {
 	ordering sqlbase.ColumnOrdering
-	evalCtx  *parser.EvalContext
+	evalCtx  *tree.EvalContext
 
 	sources []srcInfo
 
@@ -324,7 +324,7 @@ func (s *orderedSynchronizer) consumerStatusChanged(f func(RowSource)) {
 }
 
 func makeOrderedSync(
-	ordering sqlbase.ColumnOrdering, evalCtx *parser.EvalContext, sources []RowSource,
+	ordering sqlbase.ColumnOrdering, evalCtx *tree.EvalContext, sources []RowSource,
 ) (RowSource, error) {
 	if len(sources) < 2 {
 		return nil, errors.Errorf("only %d sources for ordered synchronizer", len(sources))

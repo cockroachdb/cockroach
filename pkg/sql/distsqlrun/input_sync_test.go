@@ -20,7 +20,7 @@ import (
 
 	"golang.org/x/net/context"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -33,7 +33,7 @@ func TestOrderedSync(t *testing.T) {
 	columnTypeInt := &sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_INT}
 	v := [6]sqlbase.EncDatum{}
 	for i := range v {
-		v[i] = sqlbase.DatumToEncDatum(*columnTypeInt, parser.NewDInt(parser.DInt(i)))
+		v[i] = sqlbase.DatumToEncDatum(*columnTypeInt, tree.NewDInt(tree.DInt(i)))
 	}
 
 	asc := encoding.Ascending
@@ -113,7 +113,7 @@ func TestOrderedSync(t *testing.T) {
 			rowBuf := NewRowBuffer(threeIntCols, srcRows, RowBufferArgs{})
 			sources = append(sources, rowBuf)
 		}
-		evalCtx := parser.NewTestingEvalContext()
+		evalCtx := tree.NewTestingEvalContext()
 		defer evalCtx.Stop(context.Background())
 		src, err := makeOrderedSync(c.ordering, evalCtx, sources)
 		if err != nil {
@@ -149,8 +149,8 @@ func TestUnorderedSync(t *testing.T) {
 	for i := 1; i <= 5; i++ {
 		go func(i int) {
 			for j := 1; j <= 100; j++ {
-				a := sqlbase.DatumToEncDatum(columnTypeInt, parser.NewDInt(parser.DInt(i)))
-				b := sqlbase.DatumToEncDatum(columnTypeInt, parser.NewDInt(parser.DInt(j)))
+				a := sqlbase.DatumToEncDatum(columnTypeInt, tree.NewDInt(tree.DInt(i)))
+				b := sqlbase.DatumToEncDatum(columnTypeInt, tree.NewDInt(tree.DInt(j)))
 				row := sqlbase.EncDatumRow{a, b}
 				if status := mrc.Push(row, ProducerMetadata{}); status != NeedMoreRows {
 					producerErr <- errors.Errorf("producer error: unexpected response: %d", status)
@@ -174,8 +174,8 @@ func TestUnorderedSync(t *testing.T) {
 	for i := 1; i <= 5; i++ {
 		j := 1
 		for _, row := range retRows {
-			if int(parser.MustBeDInt(row[0].Datum)) == i {
-				if int(parser.MustBeDInt(row[1].Datum)) != j {
+			if int(tree.MustBeDInt(row[0].Datum)) == i {
+				if int(tree.MustBeDInt(row[1].Datum)) != j {
 					t.Errorf("Expected [%d %d], got %s", i, j, row.String(twoIntCols))
 				}
 				j++
@@ -197,8 +197,8 @@ func TestUnorderedSync(t *testing.T) {
 	for i := 1; i <= 5; i++ {
 		go func(i int) {
 			for j := 1; j <= 100; j++ {
-				a := sqlbase.DatumToEncDatum(columnTypeInt, parser.NewDInt(parser.DInt(i)))
-				b := sqlbase.DatumToEncDatum(columnTypeInt, parser.NewDInt(parser.DInt(j)))
+				a := sqlbase.DatumToEncDatum(columnTypeInt, tree.NewDInt(tree.DInt(i)))
+				b := sqlbase.DatumToEncDatum(columnTypeInt, tree.NewDInt(tree.DInt(j)))
 				row := sqlbase.EncDatumRow{a, b}
 				if status := mrc.Push(row, ProducerMetadata{}); status != NeedMoreRows {
 					producerErr <- errors.Errorf("producer error: unexpected response: %d", status)

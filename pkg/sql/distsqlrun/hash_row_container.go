@@ -20,7 +20,7 @@ import (
 
 	"golang.org/x/net/context"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -412,7 +412,7 @@ func (h *hashDiskRowContainer) Init(
 		// be unmarked.
 		h.scratchEncRow[len(h.scratchEncRow)-1] = sqlbase.DatumToEncDatum(
 			sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_BOOL},
-			parser.MakeDBool(false),
+			tree.MakeDBool(false),
 		)
 	}
 

@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/jobs"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
@@ -761,7 +762,7 @@ func BenchmarkConvertRecord(b *testing.B) {
 	if err != nil {
 		b.Fatal(err)
 	}
-	create := stmt.(*parser.CreateTable)
+	create := stmt.(*tree.CreateTable)
 
 	tableDesc, err := makeCSVTableDescriptor(ctx, create, sqlbase.ID(100), sqlbase.ID(100), 1)
 	if err != nil {

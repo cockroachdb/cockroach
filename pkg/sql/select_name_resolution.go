@@ -20,7 +20,7 @@ package sql
 import (
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 )
 
@@ -28,16 +28,16 @@ import (
 const invalidSrcIdx = -1
 
 // invalidColIdx is the colIdx value returned by findColumn() when there is no match.
-// We reuse the value from parser.InvalidColIdx because its meaning is the same.
-const invalidColIdx = parser.InvalidColIdx
+// We reuse the value from tree.InvalidColIdx because its meaning is the same.
+const invalidColIdx = tree.InvalidColIdx
 
-// nameResolutionVisitor is a parser.Visitor implementation used to
+// nameResolutionVisitor is a tree.Visitor implementation used to
 // resolve the column names in an expression.
 type nameResolutionVisitor struct {
 	err        error
 	sources    multiSourceInfo
-	iVarHelper parser.IndexedVarHelper
-	searchPath parser.SearchPath
+	iVarHelper tree.IndexedVarHelper
+	searchPath tree.SearchPath
 
 	// foundDependentVars is set to true during the analysis if an
 	// expression was found which can change values between rows of the
@@ -49,26 +49,26 @@ type nameResolutionVisitor struct {
 	foundStars bool
 }
 
-var _ parser.Visitor = &nameResolutionVisitor{}
+var _ tree.Visitor = &nameResolutionVisitor{}
 
-func makeUntypedTuple(texprs []parser.TypedExpr) *parser.Tuple {
-	exprs := make(parser.Exprs, len(texprs))
+func makeUntypedTuple(texprs []tree.TypedExpr) *tree.Tuple {
+	exprs := make(tree.Exprs, len(texprs))
 	for i, e := range texprs {
 		exprs[i] = e
 	}
-	return &parser.Tuple{Exprs: exprs}
+	return &tree.Tuple{Exprs: exprs}
 }
 
-func (v *nameResolutionVisitor) VisitPre(expr parser.Expr) (recurse bool, newNode parser.Expr) {
+func (v *nameResolutionVisitor) VisitPre(expr tree.Expr) (recurse bool, newNode tree.Expr) {
 	if v.err != nil {
 		return false, expr
 	}
 
 	switch t := expr.(type) {
-	case parser.UnqualifiedStar:
+	case tree.UnqualifiedStar:
 		v.foundDependentVars = true
 
-	case *parser.AllColumnsSelector:
+	case *tree.AllColumnsSelector:
 		v.foundStars = true
 		// AllColumnsSelector at the top level of a SELECT clause are
 		// replaced when the select's renders are prepared. If we
@@ -96,7 +96,7 @@ func (v *nameResolutionVisitor) VisitPre(expr parser.Expr) (recurse bool, newNod
 		// tuple's type.
 		return false, makeUntypedTuple(exprs)
 
-	case *parser.IndexedVar:
+	case *tree.IndexedVar:
 		// If the indexed var is a standalone ordinal reference, ensure it
 		// becomes a fully bound indexed var.
 		t, v.err = v.iVarHelper.BindIfUnbound(t)
@@ -107,7 +107,7 @@ func (v *nameResolutionVisitor) VisitPre(expr parser.Expr) (recurse bool, newNod
 		v.foundDependentVars = true
 		return false, t
 
-	case parser.UnresolvedName:
+	case tree.UnresolvedName:
 		vn, err := t.NormalizeVarName()
 		if err != nil {
 			v.err = err
@@ -115,7 +115,7 @@ func (v *nameResolutionVisitor) VisitPre(expr parser.Expr) (recurse bool, newNod
 		}
 		return v.VisitPre(vn)
 
-	case *parser.ColumnItem:
+	case *tree.ColumnItem:
 		srcIdx, colIdx, err := v.sources.findColumn(t)
 		if err != nil {
 			v.err = err
@@ -125,7 +125,7 @@ func (v *nameResolutionVisitor) VisitPre(expr parser.Expr) (recurse bool, newNod
 		v.foundDependentVars = true
 		return true, ivar
 
-	case *parser.FuncExpr:
+	case *tree.FuncExpr:
 		fd, err := t.Func.Resolve(v.searchPath)
 		if err != nil {
 			v.err = err
@@ -146,7 +146,7 @@ func (v *nameResolutionVisitor) VisitPre(expr parser.Expr) (recurse bool, newNod
 		if len(t.Exprs) != 1 {
 			break
 		}
-		vn, ok := t.Exprs[0].(parser.VarName)
+		vn, ok := t.Exprs[0].(tree.VarName)
 		if !ok {
 			break
 		}
@@ -158,20 +158,20 @@ func (v *nameResolutionVisitor) VisitPre(expr parser.Expr) (recurse bool, newNod
 		t.Exprs[0] = vn
 
 		if strings.EqualFold(fd.Name, "count") && t.Type == 0 {
-			if _, ok := vn.(parser.UnqualifiedStar); ok {
+			if _, ok := vn.(tree.UnqualifiedStar); ok {
 				// Special case handling for COUNT(*). This is a special construct to
 				// count the number of rows; in this case * does NOT refer to a set of
 				// columns. A * is invalid elsewhere (and will be caught by TypeCheck()).
 				// Replace the function with COUNT_ROWS (which doesn't take any
 				// arguments).
-				e := &parser.FuncExpr{
-					Func: parser.ResolvableFunctionReference{
-						FunctionReference: parser.UnresolvedName{parser.Name("COUNT_ROWS")},
+				e := &tree.FuncExpr{
+					Func: tree.ResolvableFunctionReference{
+						FunctionReference: tree.UnresolvedName{tree.Name("COUNT_ROWS")},
 					},
 				}
 				// We call TypeCheck to fill in FuncExpr internals. This is a fixed
 				// expression; we should not hit an error here.
-				if _, err := e.TypeCheck(&parser.SemaContext{}, types.Any); err != nil {
+				if _, err := e.TypeCheck(&tree.SemaContext{}, types.Any); err != nil {
 					panic(err)
 				}
 				e.Filter = t.Filter
@@ -189,7 +189,7 @@ func (v *nameResolutionVisitor) VisitPre(expr parser.Expr) (recurse bool, newNod
 		//                          SELECT COUNT(DISTINCT t.*) FROM t, u
 		return true, t
 
-	case *parser.Subquery:
+	case *tree.Subquery:
 		// Do not recurse into subqueries.
 		return false, expr
 	}
@@ -197,9 +197,9 @@ func (v *nameResolutionVisitor) VisitPre(expr parser.Expr) (recurse bool, newNod
 	return true, expr
 }
 
-func (*nameResolutionVisitor) VisitPost(expr parser.Expr) parser.Expr { return expr }
+func (*nameResolutionVisitor) VisitPost(expr tree.Expr) tree.Expr { return expr }
 
-func (s *renderNode) resolveNames(expr parser.Expr) (parser.Expr, bool, bool, error) {
+func (s *renderNode) resolveNames(expr tree.Expr) (tree.Expr, bool, bool, error) {
 	return s.planner.resolveNames(expr, s.sourceInfo, s.ivarHelper)
 }
 
@@ -210,8 +210,8 @@ func (s *renderNode) resolveNames(expr parser.Expr) (parser.Expr, bool, bool, er
 // row in a table, the 2nd return value is true.
 // If any star is expanded, the 3rd return value is true.
 func (p *planner) resolveNames(
-	expr parser.Expr, sources multiSourceInfo, ivarHelper parser.IndexedVarHelper,
-) (parser.Expr, bool, bool, error) {
+	expr tree.Expr, sources multiSourceInfo, ivarHelper tree.IndexedVarHelper,
+) (tree.Expr, bool, bool, error) {
 	if expr == nil {
 		return nil, false, false, nil
 	}
@@ -229,6 +229,6 @@ func (p *planner) resolveNames(
 		colOffset += len(s.sourceColumns)
 	}
 
-	expr, _ = parser.WalkExpr(v, expr)
+	expr, _ = tree.WalkExpr(v, expr)
 	return expr, v.foundDependentVars, v.foundStars, v.err
 }

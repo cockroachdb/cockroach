@@ -22,7 +22,7 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
@@ -38,14 +38,14 @@ func TestAggregator(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	v := [15]sqlbase.EncDatum{}
-	null := sqlbase.EncDatum{Datum: parser.DNull}
+	null := sqlbase.EncDatum{Datum: tree.DNull}
 	for i := range v {
-		v[i] = sqlbase.DatumToEncDatum(intType, parser.NewDInt(parser.DInt(i)))
+		v[i] = sqlbase.DatumToEncDatum(intType, tree.NewDInt(tree.DInt(i)))
 	}
 
-	boolTrue := sqlbase.DatumToEncDatum(boolType, parser.DBoolTrue)
-	boolFalse := sqlbase.DatumToEncDatum(boolType, parser.DBoolFalse)
-	boolNULL := sqlbase.DatumToEncDatum(boolType, parser.DNull)
+	boolTrue := sqlbase.DatumToEncDatum(boolType, tree.DBoolTrue)
+	boolFalse := sqlbase.DatumToEncDatum(boolType, tree.DBoolFalse)
+	boolNULL := sqlbase.DatumToEncDatum(boolType, tree.DNull)
 
 	colPtr := func(idx uint32) *uint32 { return &idx }
 
@@ -349,7 +349,7 @@ func TestAggregator(t *testing.T) {
 
 			in := NewRowBuffer(c.inputTypes, c.input, RowBufferArgs{})
 			out := NewRowBuffer(c.outputTypes, nil /* rows */, RowBufferArgs{})
-			evalCtx := parser.MakeTestingEvalContext()
+			evalCtx := tree.MakeTestingEvalContext()
 			defer evalCtx.Stop(context.Background())
 			flowCtx := FlowCtx{
 				Settings: cluster.MakeTestingClusterSettings(),

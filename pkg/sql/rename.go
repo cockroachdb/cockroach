@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
@@ -38,7 +39,7 @@ var (
 // Privileges: security.RootUser user, DROP on source database.
 //   Notes: postgres requires superuser, db owner, or "CREATEDB".
 //          mysql >= 5.1.23 does not allow database renames.
-func (p *planner) RenameDatabase(ctx context.Context, n *parser.RenameDatabase) (planNode, error) {
+func (p *planner) RenameDatabase(ctx context.Context, n *tree.RenameDatabase) (planNode, error) {
 	if n.Name == "" || n.NewName == "" {
 		return nil, errEmptyDatabaseName
 	}
@@ -110,7 +111,7 @@ func (p *planner) RenameDatabase(ctx context.Context, n *parser.RenameDatabase) 
 //   Notes: postgres requires the table owner.
 //          mysql requires ALTER, DROP on the original table, and CREATE, INSERT
 //          on the new table (and does not copy privileges over).
-func (p *planner) RenameTable(ctx context.Context, n *parser.RenameTable) (planNode, error) {
+func (p *planner) RenameTable(ctx context.Context, n *tree.RenameTable) (planNode, error) {
 	oldTn, err := n.Name.NormalizeWithDatabaseName(p.session.Database)
 	if err != nil {
 		return nil, err
@@ -251,7 +252,7 @@ func (p *planner) RenameTable(ctx context.Context, n *parser.RenameTable) (planN
 // Privileges: CREATE on table.
 //   notes: postgres requires CREATE on the table.
 //          mysql requires ALTER, CREATE, INSERT on the table.
-func (p *planner) RenameIndex(ctx context.Context, n *parser.RenameIndex) (planNode, error) {
+func (p *planner) RenameIndex(ctx context.Context, n *tree.RenameIndex) (planNode, error) {
 	tn, err := p.expandIndexName(ctx, n.Index, true /* requireTable */)
 	if err != nil {
 		return nil, err
@@ -317,7 +318,7 @@ func (p *planner) RenameIndex(ctx context.Context, n *parser.RenameIndex) (planN
 // Privileges: CREATE on table.
 //   notes: postgres requires CREATE on the table.
 //          mysql requires ALTER, CREATE, INSERT on the table.
-func (p *planner) RenameColumn(ctx context.Context, n *parser.RenameColumn) (planNode, error) {
+func (p *planner) RenameColumn(ctx context.Context, n *tree.RenameColumn) (planNode, error) {
 	// Check if table exists.
 	tn, err := n.Table.NormalizeWithDatabaseName(p.session.Database)
 	if err != nil {
@@ -372,13 +373,13 @@ func (p *planner) RenameColumn(ctx context.Context, n *parser.RenameColumn) (pla
 		return nil, fmt.Errorf("column name %q already exists", string(n.NewName))
 	}
 
-	preFn := func(expr parser.Expr) (err error, recurse bool, newExpr parser.Expr) {
-		if vBase, ok := expr.(parser.VarName); ok {
+	preFn := func(expr tree.Expr) (err error, recurse bool, newExpr tree.Expr) {
+		if vBase, ok := expr.(tree.VarName); ok {
 			v, err := vBase.NormalizeVarName()
 			if err != nil {
 				return err, false, nil
 			}
-			if c, ok := v.(*parser.ColumnItem); ok {
+			if c, ok := v.(*tree.ColumnItem); ok {
 				if string(c.ColumnName) == string(n.Name) {
 					c.ColumnName = n.NewName
 				}
@@ -398,7 +399,7 @@ func (p *planner) RenameColumn(ctx context.Context, n *parser.RenameColumn) (pla
 	}
 
 	for i := range tableDesc.Checks {
-		expr, err := parser.SimpleVisit(exprs[i], preFn)
+		expr, err := tree.SimpleVisit(exprs[i], preFn)
 		if err != nil {
 			return nil, err
 		}

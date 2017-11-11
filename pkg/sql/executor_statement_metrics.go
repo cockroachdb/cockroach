@@ -17,7 +17,7 @@ package sql
 import (
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
@@ -102,7 +102,7 @@ func (e *Executor) recordStatementSummary(
 
 	if automaticRetryCount == 0 {
 		if distSQLUsed {
-			if _, ok := stmt.AST.(*parser.Select); ok {
+			if _, ok := stmt.AST.(*tree.Select); ok {
 				e.DistSQLSelectCount.Inc(1)
 			}
 			e.DistSQLExecLatency.RecordValue(runLatRaw.Nanoseconds())

@@ -27,7 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -48,61 +48,61 @@ func TestValues(t *testing.T) {
 	vStr := "two furs one cub"
 	vBool := true
 
-	unsupp := &parser.RangeCond{}
+	unsupp := &tree.RangeCond{}
 
-	intVal := func(v int64) *parser.NumVal {
-		return &parser.NumVal{Value: constant.MakeInt64(v)}
+	intVal := func(v int64) *tree.NumVal {
+		return &tree.NumVal{Value: constant.MakeInt64(v)}
 	}
-	floatVal := func(f float64) *parser.CastExpr {
-		return &parser.CastExpr{
-			Expr: &parser.NumVal{Value: constant.MakeFloat64(f)},
+	floatVal := func(f float64) *tree.CastExpr {
+		return &tree.CastExpr{
+			Expr: &tree.NumVal{Value: constant.MakeFloat64(f)},
 			Type: &coltypes.TFloat{},
 		}
 	}
-	asRow := func(datums ...parser.Datum) []parser.Datums {
-		return []parser.Datums{datums}
+	asRow := func(datums ...tree.Datum) []tree.Datums {
+		return []tree.Datums{datums}
 	}
 
-	makeValues := func(tuples ...*parser.Tuple) *parser.ValuesClause {
-		return &parser.ValuesClause{Tuples: tuples}
+	makeValues := func(tuples ...*tree.Tuple) *tree.ValuesClause {
+		return &tree.ValuesClause{Tuples: tuples}
 	}
-	makeTuple := func(exprs ...parser.Expr) *parser.Tuple {
-		return &parser.Tuple{Exprs: exprs}
+	makeTuple := func(exprs ...tree.Expr) *tree.Tuple {
+		return &tree.Tuple{Exprs: exprs}
 	}
 
 	testCases := []struct {
-		stmt *parser.ValuesClause
-		rows []parser.Datums
+		stmt *tree.ValuesClause
+		rows []tree.Datums
 		ok   bool
 	}{
 		{
 			makeValues(makeTuple(intVal(vInt))),
-			asRow(parser.NewDInt(parser.DInt(vInt))),
+			asRow(tree.NewDInt(tree.DInt(vInt))),
 			true,
 		},
 		{
 			makeValues(makeTuple(intVal(vInt), intVal(vInt))),
-			asRow(parser.NewDInt(parser.DInt(vInt)), parser.NewDInt(parser.DInt(vInt))),
+			asRow(tree.NewDInt(tree.DInt(vInt)), tree.NewDInt(tree.DInt(vInt))),
 			true,
 		},
 		{
 			makeValues(makeTuple(floatVal(vNum))),
-			asRow(parser.NewDFloat(parser.DFloat(vNum))),
+			asRow(tree.NewDFloat(tree.DFloat(vNum))),
 			true,
 		},
 		{
-			makeValues(makeTuple(parser.NewDString(vStr))),
-			asRow(parser.NewDString(vStr)),
+			makeValues(makeTuple(tree.NewDString(vStr))),
+			asRow(tree.NewDString(vStr)),
 			true,
 		},
 		{
-			makeValues(makeTuple(parser.NewDBytes(parser.DBytes(vStr)))),
-			asRow(parser.NewDBytes(parser.DBytes(vStr))),
+			makeValues(makeTuple(tree.NewDBytes(tree.DBytes(vStr)))),
+			asRow(tree.NewDBytes(tree.DBytes(vStr))),
 			true,
 		},
 		{
-			makeValues(makeTuple(parser.MakeDBool(parser.DBool(vBool)))),
-			asRow(parser.MakeDBool(parser.DBool(vBool))),
+			makeValues(makeTuple(tree.MakeDBool(tree.DBool(vBool)))),
+			asRow(tree.MakeDBool(tree.DBool(vBool))),
 			true,
 		},
 		{
@@ -136,7 +136,7 @@ func TestValues(t *testing.T) {
 				t.Errorf("%d: unexpected error in Start: %v", i, err)
 				continue
 			}
-			var rows []parser.Datums
+			var rows []tree.Datums
 			next, err := plan.Next(runParams{ctx: ctx})
 			for ; next; next, err = plan.Next(runParams{ctx: ctx}) {
 				rows = append(rows, plan.Values())
@@ -158,7 +158,7 @@ type stringAlias string
 
 func TestGolangQueryArgs(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	// Each test case pairs an arbitrary value and parser.Datum which has the same
+	// Each test case pairs an arbitrary value and tree.Datum which has the same
 	// type
 	testCases := []struct {
 		value        interface{}
@@ -211,7 +211,7 @@ func TestGolangQueryArgs(t *testing.T) {
 		{roachpb.RKey("key"), reflect.TypeOf(types.Bytes)},
 	}
 
-	pinfo := &parser.PlaceholderInfo{}
+	pinfo := &tree.PlaceholderInfo{}
 	for i, tcase := range testCases {
 		golangFillQueryArguments(pinfo, []interface{}{tcase.value})
 		output, valid := pinfo.Type("1", false)

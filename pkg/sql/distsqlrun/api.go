@@ -14,13 +14,11 @@
 
 package distsqlrun
 
-import (
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
-)
+import "github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 
-// MakeEvalContext serializes some of the fields of a parser.EvalContext into a
+// MakeEvalContext serializes some of the fields of a tree.EvalContext into a
 // distsqlrun.EvalContext proto.
-func MakeEvalContext(evalCtx parser.EvalContext) EvalContext {
+func MakeEvalContext(evalCtx tree.EvalContext) EvalContext {
 	return EvalContext{
 		StmtTimestampNanos: evalCtx.GetStmtTimestamp().UnixNano(),
 		TxnTimestampNanos:  evalCtx.GetTxnTimestampRaw().UnixNano(),

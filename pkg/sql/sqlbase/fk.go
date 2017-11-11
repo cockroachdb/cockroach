@@ -22,8 +22,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
@@ -116,7 +116,7 @@ func (f *fkBatchChecker) reset() {
 }
 
 // addCheck adds a check for the given row and baseFKHelper to the batch.
-func (f *fkBatchChecker) addCheck(row parser.Datums, source *baseFKHelper) error {
+func (f *fkBatchChecker) addCheck(row tree.Datums, source *baseFKHelper) error {
 	span, err := source.spanForValues(row)
 	if err != nil {
 		return err
@@ -136,7 +136,7 @@ func (f *fkBatchChecker) addCheck(row parser.Datums, source *baseFKHelper) error
 // is detected, corresponding to the first foreign key that was violated in
 // order of addition.
 func (f *fkBatchChecker) runCheck(
-	ctx context.Context, oldRow parser.Datums, newRow parser.Datums,
+	ctx context.Context, oldRow tree.Datums, newRow tree.Datums,
 ) error {
 	if len(f.batch.Requests) == 0 {
 		return nil
@@ -160,7 +160,7 @@ func (f *fkBatchChecker) runCheck(
 		case CheckInserts:
 			// If we're inserting, then there's a violation if the scan found nothing.
 			if fk.rf.kvEnd {
-				fkValues := make(parser.Datums, fk.prefixLen)
+				fkValues := make(tree.Datums, fk.prefixLen)
 				for valueIdx, colID := range fk.searchIdx.ColumnIDs[:fk.prefixLen] {
 					fkValues[valueIdx] = newRow[fk.ids[colID]]
 				}
@@ -176,7 +176,7 @@ func (f *fkBatchChecker) runCheck(
 						"foreign key violation: non-empty columns %s referenced in table %q",
 						fk.writeIdx.ColumnNames[:fk.prefixLen], fk.searchTable.Name)
 				}
-				fkValues := make(parser.Datums, fk.prefixLen)
+				fkValues := make(tree.Datums, fk.prefixLen)
 				for valueIdx, colID := range fk.searchIdx.ColumnIDs[:fk.prefixLen] {
 					fkValues[valueIdx] = oldRow[fk.ids[colID]]
 				}
@@ -233,7 +233,7 @@ func makeFKInsertHelper(
 	return h, nil
 }
 
-func (h fkInsertHelper) checkAll(ctx context.Context, row parser.Datums) error {
+func (h fkInsertHelper) checkAll(ctx context.Context, row tree.Datums) error {
 	if len(h.fks) == 0 {
 		return nil
 	}
@@ -245,7 +245,7 @@ func (h fkInsertHelper) checkAll(ctx context.Context, row parser.Datums) error {
 	return h.checker.runCheck(ctx, nil, row)
 }
 
-func (h fkInsertHelper) checkIdx(ctx context.Context, idx IndexID, row parser.Datums) error {
+func (h fkInsertHelper) checkIdx(ctx context.Context, idx IndexID, row tree.Datums) error {
 	fks := h.fks
 	for i, fk := range fks[idx] {
 		nulls := true
@@ -254,7 +254,7 @@ func (h fkInsertHelper) checkIdx(ctx context.Context, idx IndexID, row parser.Da
 			if !ok {
 				panic(fmt.Sprintf("fk ids (%v) missing column id %d", fk.ids, colID))
 			}
-			nulls = nulls && row[found] == parser.DNull
+			nulls = nulls && row[found] == tree.DNull
 		}
 		if nulls {
 			continue
@@ -273,7 +273,7 @@ func (h fkInsertHelper) CollectSpans() roachpb.Spans {
 }
 
 // CollectSpansForValues implements the FkSpanCollector interface.
-func (h fkInsertHelper) CollectSpansForValues(values parser.Datums) (roachpb.Spans, error) {
+func (h fkInsertHelper) CollectSpansForValues(values tree.Datums) (roachpb.Spans, error) {
 	return collectSpansForValuesWithFKMap(h.fks, values)
 }
 
@@ -318,7 +318,7 @@ func makeFKDeleteHelper(
 	return h, nil
 }
 
-func (h fkDeleteHelper) checkAll(ctx context.Context, row parser.Datums) error {
+func (h fkDeleteHelper) checkAll(ctx context.Context, row tree.Datums) error {
 	if len(h.fks) == 0 {
 		return nil
 	}
@@ -330,7 +330,7 @@ func (h fkDeleteHelper) checkAll(ctx context.Context, row parser.Datums) error {
 	return h.checker.runCheck(ctx, row, nil /* newRow */)
 }
 
-func (h fkDeleteHelper) checkIdx(ctx context.Context, idx IndexID, row parser.Datums) error {
+func (h fkDeleteHelper) checkIdx(ctx context.Context, idx IndexID, row tree.Datums) error {
 	for i := range h.fks[idx] {
 		if err := h.checker.addCheck(row, &h.fks[idx][i]); err != nil {
 			return err
@@ -345,7 +345,7 @@ func (h fkDeleteHelper) CollectSpans() roachpb.Spans {
 }
 
 // CollectSpansForValues implements the FkSpanCollector interface.
-func (h fkDeleteHelper) CollectSpansForValues(values parser.Datums) (roachpb.Spans, error) {
+func (h fkDeleteHelper) CollectSpansForValues(values tree.Datums) (roachpb.Spans, error) {
 	return collectSpansForValuesWithFKMap(h.fks, values)
 }
 
@@ -375,7 +375,7 @@ func makeFKUpdateHelper(
 }
 
 func (fks fkUpdateHelper) checkIdx(
-	ctx context.Context, idx IndexID, oldValues, newValues parser.Datums,
+	ctx context.Context, idx IndexID, oldValues, newValues tree.Datums,
 ) error {
 	if err := fks.inbound.checkIdx(ctx, idx, oldValues); err != nil {
 		return err
@@ -391,7 +391,7 @@ func (fks fkUpdateHelper) CollectSpans() roachpb.Spans {
 }
 
 // CollectSpansForValues implements the FkSpanCollector interface.
-func (fks fkUpdateHelper) CollectSpansForValues(values parser.Datums) (roachpb.Spans, error) {
+func (fks fkUpdateHelper) CollectSpansForValues(values tree.Datums) (roachpb.Spans, error) {
 	inboundReads, err := fks.inbound.CollectSpansForValues(values)
 	if err != nil {
 		return nil, err
@@ -463,7 +463,7 @@ func makeBaseFKHelper(
 	return b, nil
 }
 
-func (f baseFKHelper) spanForValues(values parser.Datums) (roachpb.Span, error) {
+func (f baseFKHelper) spanForValues(values tree.Datums) (roachpb.Span, error) {
 	var key roachpb.Key
 	if values != nil {
 		keyBytes, _, err := EncodePartialIndexKey(
@@ -486,7 +486,7 @@ func (f baseFKHelper) span() roachpb.Span {
 // FkSpanCollector can collect the spans that foreign key validation will touch.
 type FkSpanCollector interface {
 	CollectSpans() roachpb.Spans
-	CollectSpansForValues(values parser.Datums) (roachpb.Spans, error)
+	CollectSpansForValues(values tree.Datums) (roachpb.Spans, error)
 }
 
 var _ FkSpanCollector = fkInsertHelper{}
@@ -504,7 +504,7 @@ func collectSpansWithFKMap(fks map[IndexID][]baseFKHelper) roachpb.Spans {
 }
 
 func collectSpansForValuesWithFKMap(
-	fks map[IndexID][]baseFKHelper, values parser.Datums,
+	fks map[IndexID][]baseFKHelper, values tree.Datums,
 ) (roachpb.Spans, error) {
 	var reads roachpb.Spans
 	for idx := range fks {

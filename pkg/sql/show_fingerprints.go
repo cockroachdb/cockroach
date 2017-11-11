@@ -20,8 +20,8 @@ import (
 
 	"golang.org/x/net/context"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/pkg/errors"
@@ -44,7 +44,7 @@ import (
 // query can be used:
 //    SELECT * FROM [SHOW EXPERIMENTAL_FINGERPRINTS FROM TABLE foo] AS OF SYSTEM TIME xxx
 func (p *planner) ShowFingerprints(
-	ctx context.Context, n *parser.ShowFingerprints,
+	ctx context.Context, n *tree.ShowFingerprints,
 ) (planNode, error) {
 	tn, err := n.Table.NormalizeWithDatabaseName(p.session.Database)
 	if err != nil {
@@ -75,7 +75,7 @@ type showFingerprintsNode struct {
 
 	rowIdx int
 	// values stores the current row, updated by Next().
-	values []parser.Datum
+	values []tree.Datum
 }
 
 var showFingerprintsColumns = sqlbase.ResultColumns{
@@ -84,10 +84,10 @@ var showFingerprintsColumns = sqlbase.ResultColumns{
 }
 
 func (n *showFingerprintsNode) Start(params runParams) error {
-	n.values = []parser.Datum{parser.DNull, parser.DNull}
+	n.values = []tree.Datum{tree.DNull, tree.DNull}
 	return nil
 }
-func (n *showFingerprintsNode) Values() parser.Datums   { return n.values }
+func (n *showFingerprintsNode) Values() tree.Datums     { return n.values }
 func (n *showFingerprintsNode) Close(_ context.Context) {}
 func (n *showFingerprintsNode) Next(params runParams) (bool, error) {
 	if n.rowIdx >= len(n.indexes) {
@@ -103,9 +103,9 @@ func (n *showFingerprintsNode) Next(params runParams) (bool, error) {
 		// if they're different types.
 		switch col.Type.SemanticType {
 		case sqlbase.ColumnType_BYTES:
-			cols = append(cols, fmt.Sprintf("%s:::bytes", parser.Name(col.Name)))
+			cols = append(cols, fmt.Sprintf("%s:::bytes", tree.Name(col.Name)))
 		default:
-			cols = append(cols, fmt.Sprintf("%s::string::bytes", parser.Name(col.Name)))
+			cols = append(cols, fmt.Sprintf("%s::string::bytes", tree.Name(col.Name)))
 		}
 	}
 
@@ -153,7 +153,7 @@ func (n *showFingerprintsNode) Next(params runParams) (bool, error) {
 	}
 	fingerprint := fingerprintCols[0]
 
-	n.values[0] = parser.NewDString(index.Name)
+	n.values[0] = tree.NewDString(index.Name)
 	n.values[1] = fingerprint
 	n.rowIdx++
 	return true, nil

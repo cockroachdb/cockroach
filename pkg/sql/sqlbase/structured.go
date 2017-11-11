@@ -26,8 +26,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 )
@@ -37,7 +37,7 @@ import (
 // another is expected.
 
 // ID is a custom type for {Database,Table}Descriptor IDs.
-type ID parser.ID
+type ID tree.ID
 
 // InvalidID is the uninitialised descriptor id.
 const InvalidID ID = 0
@@ -57,13 +57,13 @@ func (t TableDescriptors) Less(i, j int) bool { return t[i].ID < t[j].ID }
 func (t TableDescriptors) Swap(i, j int)      { t[i], t[j] = t[j], t[i] }
 
 // ColumnID is a custom type for ColumnDescriptor IDs.
-type ColumnID parser.ColumnID
+type ColumnID tree.ColumnID
 
 // FamilyID is a custom type for ColumnFamilyDescriptor IDs.
 type FamilyID uint32
 
 // IndexID is a custom type for IndexDescriptor IDs.
-type IndexID parser.IndexID
+type IndexID tree.IndexID
 
 // DescriptorVersion is a custom type for TableDescriptor Versions.
 type DescriptorVersion uint32
@@ -212,15 +212,15 @@ func (desc *IndexDescriptor) allocateName(tableDesc *TableDescriptor) {
 }
 
 // FillColumns sets the column names and directions in desc.
-func (desc *IndexDescriptor) FillColumns(elems parser.IndexElemList) error {
+func (desc *IndexDescriptor) FillColumns(elems tree.IndexElemList) error {
 	desc.ColumnNames = make([]string, 0, len(elems))
 	desc.ColumnDirections = make([]IndexDescriptor_Direction, 0, len(elems))
 	for _, c := range elems {
 		desc.ColumnNames = append(desc.ColumnNames, string(c.Column))
 		switch c.Direction {
-		case parser.Ascending, parser.DefaultDirection:
+		case tree.Ascending, tree.DefaultDirection:
 			desc.ColumnDirections = append(desc.ColumnDirections, IndexDescriptor_ASC)
-		case parser.Descending:
+		case tree.Descending:
 			desc.ColumnDirections = append(desc.ColumnDirections, IndexDescriptor_DESC)
 		default:
 			return fmt.Errorf("invalid direction %s for column %s", c.Direction, c.Column)
@@ -281,7 +281,7 @@ func (desc *IndexDescriptor) ColNamesString() string {
 		if i > 0 {
 			buf.WriteString(", ")
 		}
-		fmt.Fprintf(&buf, "%s %s", parser.Name(name), desc.ColumnDirections[i])
+		fmt.Fprintf(&buf, "%s %s", tree.Name(name), desc.ColumnDirections[i])
 	}
 	return buf.String()
 }
@@ -293,11 +293,11 @@ var isUnique = map[bool]string{true: "UNIQUE "}
 func (desc *IndexDescriptor) SQLString(tableName string) string {
 	var storing string
 	if len(desc.StoreColumnNames) > 0 {
-		colNames := make(parser.NameList, len(desc.StoreColumnNames))
+		colNames := make(tree.NameList, len(desc.StoreColumnNames))
 		for i, n := range desc.StoreColumnNames {
-			colNames[i] = parser.Name(n)
+			colNames[i] = tree.Name(n)
 		}
-		storing = fmt.Sprintf(" STORING (%s)", parser.AsString(colNames))
+		storing = fmt.Sprintf(" STORING (%s)", tree.AsString(colNames))
 	}
 	var onTable string
 	if tableName != "" {
@@ -306,7 +306,7 @@ func (desc *IndexDescriptor) SQLString(tableName string) string {
 	return fmt.Sprintf("%sINDEX %s%s (%s)%s",
 		isUnique[desc.Unique],
 		onTable,
-		parser.AsString(parser.Name(desc.Name)),
+		tree.AsString(tree.Name(desc.Name)),
 		desc.ColNamesString(),
 		storing,
 	)
@@ -680,7 +680,7 @@ func (desc *TableDescriptor) allocateIndexIDs(columnNames map[string]ColumnID) e
 			index.ExtraColumnIDs = extraColumnIDs
 
 			for _, colName := range index.StoreColumnNames {
-				col, _, err := desc.FindColumnByName(parser.Name(colName))
+				col, _, err := desc.FindColumnByName(tree.Name(colName))
 				if err != nil {
 					return err
 				}
@@ -1271,13 +1271,13 @@ func TranslateValueEncodingToSpan(
 	idxDesc *IndexDescriptor,
 	partDesc *PartitioningDescriptor,
 	valueEncBuf []byte,
-	prefixDatums []parser.Datum,
-) (parser.Datums, []byte, error) {
+	prefixDatums []tree.Datum,
+) (tree.Datums, []byte, error) {
 	if len(prefixDatums)+int(partDesc.NumColumns) > len(idxDesc.ColumnIDs) {
 		return nil, nil, fmt.Errorf("not enough columns in index for this partitioning")
 	}
 
-	datums := make(parser.Datums, int(partDesc.NumColumns))
+	datums := make(tree.Datums, int(partDesc.NumColumns))
 	specialIdx := -1
 
 	colIDs := idxDesc.ColumnIDs[len(prefixDatums) : len(prefixDatums)+int(partDesc.NumColumns)]
@@ -1348,13 +1348,13 @@ func TranslateValueEncodingToSpan(
 	return datums, key, nil
 }
 
-func printPartitioningPrefix(datums []parser.Datum, s string) string {
+func printPartitioningPrefix(datums []tree.Datum, s string) string {
 	var buf bytes.Buffer
 	for i, v := range datums {
 		if i > 0 {
 			buf.WriteString(", ")
 		}
-		buf.WriteString(parser.AsString(v))
+		buf.WriteString(tree.AsString(v))
 	}
 	if len(datums) > 0 {
 		buf.WriteString(", ")
@@ -1395,9 +1395,9 @@ func (desc *TableDescriptor) validatePartitioningDescriptor(
 	// be the same for all of them. Faking them out with DNull allows us to make
 	// O(list partition) calls to TranslateValueEncodingToSpan instead of O(list
 	// partition entry).
-	fakePrefixDatums := make([]parser.Datum, colOffset)
+	fakePrefixDatums := make([]tree.Datum, colOffset)
 	for i := range fakePrefixDatums {
-		fakePrefixDatums[i] = parser.DNull
+		fakePrefixDatums[i] = tree.DNull
 	}
 
 	if len(partDesc.List) == 0 && len(partDesc.Range) == 0 {
@@ -1435,7 +1435,7 @@ func (desc *TableDescriptor) validatePartitioningDescriptor(
 							printPartitioningPrefix(datums, "DEFAULT"))
 					}
 					return fmt.Errorf("%s cannot be present in more than one partition",
-						parser.AsString(datums))
+						tree.AsString(datums))
 				}
 				listValues[string(keyPrefix)] = struct{}{}
 			}
@@ -1475,7 +1475,7 @@ func (desc *TableDescriptor) validatePartitioningDescriptor(
 						printPartitioningPrefix(datums, "MAXVALUE"))
 				}
 				return fmt.Errorf("%s cannot be present in more than one partition",
-					parser.AsString(datums))
+					tree.AsString(datums))
 			}
 
 			rangeValues[string(endKey)] = struct{}{}
@@ -1765,7 +1765,7 @@ func (desc *TableDescriptor) RenameColumnDescriptor(column ColumnDescriptor, new
 // FindActiveColumnsByNames finds all requested columns (in the requested order)
 // or returns an error.
 func (desc *TableDescriptor) FindActiveColumnsByNames(
-	names parser.NameList,
+	names tree.NameList,
 ) ([]ColumnDescriptor, error) {
 	cols := make([]ColumnDescriptor, len(names))
 	for i := range names {
@@ -1781,7 +1781,7 @@ func (desc *TableDescriptor) FindActiveColumnsByNames(
 // FindColumnByName finds the column with the specified name. It returns
 // an active column or a column from the mutation list. It returns true
 // if the column is being dropped.
-func (desc *TableDescriptor) FindColumnByName(name parser.Name) (ColumnDescriptor, bool, error) {
+func (desc *TableDescriptor) FindColumnByName(name tree.Name) (ColumnDescriptor, bool, error) {
 	for i, c := range desc.Columns {
 		if c.Name == string(name) {
 			return desc.Columns[i], false, nil
@@ -2058,11 +2058,11 @@ func (desc *TableDescriptor) VisibleColumns() []ColumnDescriptor {
 }
 
 // ColumnsSelectors generates Select expressions for cols.
-func ColumnsSelectors(cols []ColumnDescriptor) parser.SelectExprs {
-	exprs := make(parser.SelectExprs, len(cols))
-	colItems := make([]parser.ColumnItem, len(cols))
+func ColumnsSelectors(cols []ColumnDescriptor) tree.SelectExprs {
+	exprs := make(tree.SelectExprs, len(cols))
+	colItems := make([]tree.ColumnItem, len(cols))
 	for i, col := range cols {
-		colItems[i].ColumnName = parser.Name(col.Name)
+		colItems[i].ColumnName = tree.Name(col.Name)
 		exprs[i].Expr = &colItems[i]
 	}
 	return exprs
@@ -2421,7 +2421,7 @@ func (desc TableDescriptor) GetNameMetadataKey() roachpb.Key {
 // SQLString returns the SQL statement describing the column.
 func (desc *ColumnDescriptor) SQLString() string {
 	var buf bytes.Buffer
-	fmt.Fprintf(&buf, "%s %s", parser.AsString(parser.Name(desc.Name)), desc.Type.SQLString())
+	fmt.Fprintf(&buf, "%s %s", tree.AsString(tree.Name(desc.Name)), desc.Type.SQLString())
 	if desc.Nullable {
 		buf.WriteString(" NULL")
 	} else {
@@ -2434,11 +2434,11 @@ func (desc *ColumnDescriptor) SQLString() string {
 }
 
 // ForeignKeyReferenceActionValue allows the conversion between a
-// parser.ReferenceAction and a ForeignKeyReference_Action.
+// tree.ReferenceAction and a ForeignKeyReference_Action.
 var ForeignKeyReferenceActionValue = [...]ForeignKeyReference_Action{
-	parser.NoAction:   ForeignKeyReference_NO_ACTION,
-	parser.Restrict:   ForeignKeyReference_RESTRICT,
-	parser.SetDefault: ForeignKeyReference_SET_DEFAULT,
-	parser.SetNull:    ForeignKeyReference_SET_NULL,
-	parser.Cascade:    ForeignKeyReference_CASCADE,
+	tree.NoAction:   ForeignKeyReference_NO_ACTION,
+	tree.Restrict:   ForeignKeyReference_RESTRICT,
+	tree.SetDefault: ForeignKeyReference_SET_DEFAULT,
+	tree.SetNull:    ForeignKeyReference_SET_NULL,
+	tree.Cascade:    ForeignKeyReference_CASCADE,
 }

@@ -24,7 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
@@ -251,7 +251,7 @@ func getAllDescriptors(ctx context.Context, txn *client.Txn) ([]sqlbase.Descript
 
 // getDescriptorsFromTargetList fetches the descriptors for the targets.
 func getDescriptorsFromTargetList(
-	ctx context.Context, txn *client.Txn, vt VirtualTabler, db string, targets parser.TargetList,
+	ctx context.Context, txn *client.Txn, vt VirtualTabler, db string, targets tree.TargetList,
 ) ([]sqlbase.DescriptorProto, error) {
 	if targets.Databases != nil {
 		if len(targets.Databases) == 0 {
