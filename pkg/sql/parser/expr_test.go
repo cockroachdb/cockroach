@@ -220,28 +220,3 @@ func TestStripParens(t *testing.T) {
 		}
 	}
 }
-
-type stripFuncsVisitor struct{}
-
-func (v stripFuncsVisitor) VisitPre(expr Expr) (recurse bool, newExpr Expr) {
-	switch t := expr.(type) {
-	case *UnaryExpr:
-		t.fn = UnaryOp{}
-	case *BinaryExpr:
-		t.fn = BinOp{}
-	case *ComparisonExpr:
-		t.fn = CmpOp{}
-	case *FuncExpr:
-		t.fn = Builtin{}
-	}
-	return true, expr
-}
-
-func (stripFuncsVisitor) VisitPost(expr Expr) Expr { return expr }
-
-// stripMemoizedFuncs strips memoized function references from expression trees.
-// This is necessary to permit equality checks using reflect.DeepEqual.
-func stripMemoizedFuncs(expr Expr) Expr {
-	expr, _ = WalkExpr(stripFuncsVisitor{}, expr)
-	return expr
-}
