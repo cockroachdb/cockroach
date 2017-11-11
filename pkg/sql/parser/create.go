@@ -146,7 +146,9 @@ type TableDef interface {
 	// Placeholder function to ensure that only desired types (*TableDef) conform
 	// to the TableDef interface.
 	tableDef()
-	setName(name Name)
+
+	// SetName replaces the name of the definition in-place. Used in the parser.
+	SetName(name Name)
 }
 
 func (*ColumnTableDef) tableDef() {}
@@ -311,7 +313,8 @@ func newColumnTableDef(
 	return d, nil
 }
 
-func (node *ColumnTableDef) setName(name Name) {
+// SetName implements the TableDef interface.
+func (node *ColumnTableDef) SetName(name Name) {
 	node.Name = name
 }
 
@@ -465,7 +468,8 @@ type IndexTableDef struct {
 	Interleave *InterleaveDef
 }
 
-func (node *IndexTableDef) setName(name Name) {
+// SetName implements the TableDef interface.
+func (node *IndexTableDef) SetName(name Name) {
 	node.Name = name
 }
 
@@ -607,7 +611,8 @@ func (node *ForeignKeyConstraintTableDef) Format(buf *bytes.Buffer, f FmtFlags) 
 	FormatNode(buf, f, node.Actions)
 }
 
-func (node *ForeignKeyConstraintTableDef) setName(name Name) {
+// SetName implements the TableDef interface.
+func (node *ForeignKeyConstraintTableDef) SetName(name Name) {
 	node.Name = name
 }
 
@@ -624,7 +629,8 @@ type CheckConstraintTableDef struct {
 	Expr Expr
 }
 
-func (node *CheckConstraintTableDef) setName(name Name) {
+// SetName implements the TableDef interface.
+func (node *CheckConstraintTableDef) SetName(name Name) {
 	node.Name = name
 }
 
@@ -647,7 +653,8 @@ type FamilyTableDef struct {
 	Columns NameList
 }
 
-func (node *FamilyTableDef) setName(name Name) {
+// SetName implements the TableDef interface.
+func (node *FamilyTableDef) SetName(name Name) {
 	node.Name = name
 }
 

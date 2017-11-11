@@ -3009,7 +3009,7 @@ table_constraint:
   CONSTRAINT name constraint_elem
   {
     $$.val = $3.constraintDef()
-    $$.val.(ConstraintTableDef).setName(Name($2))
+    $$.val.(ConstraintTableDef).SetName(Name($2))
   }
 | constraint_elem
   {
