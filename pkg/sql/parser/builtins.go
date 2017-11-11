@@ -1140,6 +1140,7 @@ CockroachDB supports the following flags:
 	},
 
 	"experimental_uuid_v4": {uuidV4Impl},
+	"uuid_generate_v4":     {uuidV4Impl},
 	"uuid_v4":              {uuidV4Impl},
 
 	"greatest": {
