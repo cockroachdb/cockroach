@@ -83,7 +83,7 @@ type ColumnMutationCmd interface {
 
 // AlterTableAddColumn represents an ADD COLUMN command.
 type AlterTableAddColumn struct {
-	columnKeyword bool
+	ColumnKeyword bool
 	IfNotExists   bool
 	ColumnDef     *ColumnTableDef
 }
@@ -91,7 +91,7 @@ type AlterTableAddColumn struct {
 // Format implements the NodeFormatter interface.
 func (node *AlterTableAddColumn) Format(buf *bytes.Buffer, f FmtFlags) {
 	buf.WriteString("ADD ")
-	if node.columnKeyword {
+	if node.ColumnKeyword {
 		buf.WriteString("COLUMN ")
 	}
 	if node.IfNotExists {
@@ -127,7 +127,7 @@ func (node *AlterTableAddConstraint) Format(buf *bytes.Buffer, f FmtFlags) {
 
 // AlterTableDropColumn represents a DROP COLUMN command.
 type AlterTableDropColumn struct {
-	columnKeyword bool
+	ColumnKeyword bool
 	IfExists      bool
 	Column        Name
 	DropBehavior  DropBehavior
@@ -136,7 +136,7 @@ type AlterTableDropColumn struct {
 // Format implements the NodeFormatter interface.
 func (node *AlterTableDropColumn) Format(buf *bytes.Buffer, f FmtFlags) {
 	buf.WriteString("DROP ")
-	if node.columnKeyword {
+	if node.ColumnKeyword {
 		buf.WriteString("COLUMN ")
 	}
 	if node.IfExists {
@@ -181,7 +181,7 @@ func (node *AlterTableValidateConstraint) Format(buf *bytes.Buffer, f FmtFlags) 
 // AlterTableSetDefault represents an ALTER COLUMN SET DEFAULT
 // or DROP DEFAULT command.
 type AlterTableSetDefault struct {
-	columnKeyword bool
+	ColumnKeyword bool
 	Column        Name
 	Default       Expr
 }
@@ -194,7 +194,7 @@ func (node *AlterTableSetDefault) GetColumn() Name {
 // Format implements the NodeFormatter interface.
 func (node *AlterTableSetDefault) Format(buf *bytes.Buffer, f FmtFlags) {
 	buf.WriteString("ALTER ")
-	if node.columnKeyword {
+	if node.ColumnKeyword {
 		buf.WriteString("COLUMN ")
 	}
 	FormatNode(buf, f, node.Column)
@@ -209,7 +209,7 @@ func (node *AlterTableSetDefault) Format(buf *bytes.Buffer, f FmtFlags) {
 // AlterTableDropNotNull represents an ALTER COLUMN DROP NOT NULL
 // command.
 type AlterTableDropNotNull struct {
-	columnKeyword bool
+	ColumnKeyword bool
 	Column        Name
 }
 
@@ -221,7 +221,7 @@ func (node *AlterTableDropNotNull) GetColumn() Name {
 // Format implements the NodeFormatter interface.
 func (node *AlterTableDropNotNull) Format(buf *bytes.Buffer, f FmtFlags) {
 	buf.WriteString("ALTER ")
-	if node.columnKeyword {
+	if node.ColumnKeyword {
 		buf.WriteString("COLUMN ")
 	}
 	FormatNode(buf, f, node.Column)
