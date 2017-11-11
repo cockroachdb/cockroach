@@ -4021,7 +4021,7 @@ table_clause:
     $$.val = &SelectClause{
       Exprs:       SelectExprs{starSelectExpr()},
       From:        &From{Tables: TableExprs{$2.tblExpr()}},
-      tableSelect: true,
+      TableSelect: true,
     }
   }
 | TABLE error // SHOW HELP: TABLE

@@ -75,12 +75,12 @@ type SelectClause struct {
 	GroupBy     GroupBy
 	Having      *Where
 	Window      Window
-	tableSelect bool
+	TableSelect bool
 }
 
 // Format implements the NodeFormatter interface.
 func (node *SelectClause) Format(buf *bytes.Buffer, f FmtFlags) {
-	if node.tableSelect {
+	if node.TableSelect {
 		buf.WriteString("TABLE ")
 		FormatNode(buf, f, node.From.Tables[0])
 	} else {
