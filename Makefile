@@ -338,7 +338,7 @@ generate: ## Regenerate generated code.
 .PHONY: lint
 lint: override TAGS += lint
 lint: ## Run all style checkers and linters.
-	@if [ -t 1 ]; then tput setaf 3 2>/dev/null; echo 'NOTE: `make lint` is very slow! Perhaps `make lintshort`?'; tput sgr0 2>/dev/null; fi
+	@if [ -t 1 ]; then echo $$(tput setaf 3 2>/dev/null)'NOTE: `make lint` is very slow! Perhaps `make lintshort`?'$$(tput sgr0 2>/dev/null); fi
 	$(XGO) test ./build -v $(GOFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' -run 'TestStyle/$(TESTS)'
 
 .PHONY: lintshort
