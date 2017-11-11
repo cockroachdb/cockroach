@@ -26,6 +26,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
 const eof = -1
@@ -47,7 +48,7 @@ type Scanner struct {
 		detail               string
 		unimplementedFeature string
 	}
-	stmts       []Statement
+	stmts       []tree.Statement
 	identQuote  int
 	stringQuote int
 
@@ -701,7 +702,7 @@ func (s *Scanner) scanNumber(lval *sqlSymType, ch int) {
 			lval.str = fmt.Sprintf("could not make constant float from literal %q", lval.str)
 			return
 		}
-		lval.union.val = &NumVal{Value: floatConst, OrigString: lval.str}
+		lval.union.val = &tree.NumVal{Value: floatConst, OrigString: lval.str}
 	} else {
 		if isHex && s.pos == start+2 {
 			lval.id = ERROR
@@ -726,7 +727,7 @@ func (s *Scanner) scanNumber(lval *sqlSymType, ch int) {
 			lval.str = fmt.Sprintf("could not make constant int from literal %q", lval.str)
 			return
 		}
-		lval.union.val = &NumVal{Value: intConst, OrigString: lval.str}
+		lval.union.val = &tree.NumVal{Value: intConst, OrigString: lval.str}
 	}
 }
 
@@ -749,7 +750,7 @@ func (s *Scanner) scanPlaceholder(lval *sqlSymType) {
 
 	// uval is now in the range [0, 1<<63]. Casting to an int64 leaves the range
 	// [0, 1<<63 - 1] intact and moves 1<<63 to -1<<63 (a.k.a. math.MinInt64).
-	lval.union.val = &NumVal{Value: constant.MakeUint64(uval)}
+	lval.union.val = &tree.NumVal{Value: constant.MakeUint64(uval)}
 	lval.id = PLACEHOLDER
 }
 

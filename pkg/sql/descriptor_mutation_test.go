@@ -26,7 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -97,7 +97,7 @@ func (mt mutationTest) makeMutationsActive() {
 // writeColumnMutation adds column as a mutation and writes the
 // descriptor to the DB.
 func (mt mutationTest) writeColumnMutation(column string, m sqlbase.DescriptorMutation) {
-	col, _, err := mt.tableDesc.FindColumnByName(parser.Name(column))
+	col, _, err := mt.tableDesc.FindColumnByName(tree.Name(column))
 	if err != nil {
 		mt.Fatal(err)
 	}

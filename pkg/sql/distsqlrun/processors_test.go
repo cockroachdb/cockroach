@@ -21,7 +21,7 @@ import (
 
 	"golang.org/x/net/context"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
@@ -31,7 +31,7 @@ func TestPostProcess(t *testing.T) {
 
 	v := [10]sqlbase.EncDatum{}
 	for i := range v {
-		v[i] = sqlbase.DatumToEncDatum(intType, parser.NewDInt(parser.DInt(i)))
+		v[i] = sqlbase.DatumToEncDatum(intType, tree.NewDInt(tree.DInt(i)))
 	}
 
 	// We run the same input rows through various PostProcessSpecs.
@@ -255,7 +255,7 @@ func TestPostProcess(t *testing.T) {
 			outBuf := &RowBuffer{}
 
 			var out ProcOutputHelper
-			evalCtx := parser.NewTestingEvalContext()
+			evalCtx := tree.NewTestingEvalContext()
 			defer evalCtx.Stop(context.Background())
 			if err := out.Init(&tc.post, inBuf.Types(), evalCtx, outBuf); err != nil {
 				t.Fatal(err)

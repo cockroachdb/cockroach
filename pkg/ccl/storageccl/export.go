@@ -18,7 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl/engineccl"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/storage/batcheval/result"
@@ -207,7 +207,7 @@ func evalExport(
 		return result.Result{}, err
 	}
 
-	filename := fmt.Sprintf("%d.sst", parser.GenerateUniqueInt(cArgs.EvalCtx.NodeID()))
+	filename := fmt.Sprintf("%d.sst", builtins.GenerateUniqueInt(cArgs.EvalCtx.NodeID()))
 	if err := exportStore.WriteFile(ctx, filename, bytes.NewReader(sstContents)); err != nil {
 		return result.Result{}, err
 	}

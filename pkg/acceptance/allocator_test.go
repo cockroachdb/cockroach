@@ -34,7 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
@@ -430,7 +430,7 @@ func (at *allocatorTest) printRebalanceStats(db *gosql.DB, host string) error {
 		).Scan(&rebalanceIntervalStr); err != nil {
 			return err
 		}
-		rebalanceInterval, err := parser.ParseDInterval(rebalanceIntervalStr)
+		rebalanceInterval, err := tree.ParseDInterval(rebalanceIntervalStr)
 		if err != nil {
 			return err
 		}
@@ -505,7 +505,7 @@ func (at *allocatorTest) allocatorStats(db *gosql.DB) (s replicationStats, err e
 	if err := row.Scan(&elapsedStr, &s.RangeID, &s.StoreID, &s.EventType); err != nil {
 		return replicationStats{}, err
 	}
-	elapsedSinceLastEvent, err := parser.ParseDInterval(elapsedStr)
+	elapsedSinceLastEvent, err := tree.ParseDInterval(elapsedStr)
 	if err != nil {
 		return replicationStats{}, err
 	}

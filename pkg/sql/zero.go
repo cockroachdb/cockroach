@@ -15,9 +15,8 @@
 package sql
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"golang.org/x/net/context"
-
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 )
 
 // zeroNode is a planNode with no columns and no rows and is used for nodes that
@@ -32,7 +31,7 @@ type zeroNode struct {
 	_ interface{}
 }
 
-func (*zeroNode) Values() parser.Datums { return nil }
+func (*zeroNode) Values() tree.Datums   { return nil }
 func (*zeroNode) Start(runParams) error { return nil }
 func (*zeroNode) Close(context.Context) {}
 

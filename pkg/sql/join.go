@@ -21,7 +21,7 @@ import (
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -40,7 +40,7 @@ const (
 // columns specified by the join constraints), 'seen' is used to determine if
 // there was a matching row in the opposite stream.
 type bucket struct {
-	rows []parser.Datums
+	rows []tree.Datums
 	seen []bool
 }
 
@@ -48,7 +48,7 @@ func (b *bucket) Seen(i int) bool {
 	return b.seen[i]
 }
 
-func (b *bucket) Rows() []parser.Datums {
+func (b *bucket) Rows() []tree.Datums {
 	return b.rows
 }
 
@@ -56,7 +56,7 @@ func (b *bucket) MarkSeen(i int) {
 	b.seen[i] = true
 }
 
-func (b *bucket) AddRow(row parser.Datums) {
+func (b *bucket) AddRow(row tree.Datums) {
 	b.rows = append(b.rows, row)
 }
 
@@ -70,7 +70,7 @@ func (b *buckets) Buckets() map[string]*bucket {
 }
 
 func (b *buckets) AddRow(
-	ctx context.Context, acc WrappedMemoryAccount, encoding []byte, row parser.Datums,
+	ctx context.Context, acc WrappedMemoryAccount, encoding []byte, row tree.Datums,
 ) error {
 	bk, ok := b.buckets[string(encoding)]
 	if !ok {
@@ -148,7 +148,7 @@ type joinNode struct {
 	columns sqlbase.ResultColumns
 
 	// output contains the last generated row of results from this node.
-	output parser.Datums
+	output tree.Datums
 
 	// buffer is our intermediate row store where we effectively 'stash' a batch
 	// of results at once, this is then used for subsequent calls to Next() and
@@ -160,11 +160,11 @@ type joinNode struct {
 
 	// emptyRight contain tuples of NULL values to use on the right for left and
 	// full outer joins when the on condition fails.
-	emptyRight parser.Datums
+	emptyRight tree.Datums
 
 	// emptyLeft contains tuples of NULL values to use on the left for right and
 	// full outer joins when the on condition fails.
-	emptyLeft parser.Datums
+	emptyLeft tree.Datums
 
 	// finishedOutput indicates that we've finished writing all of the rows for
 	// this join and that we can quit as soon as our buffer is empty.
@@ -173,8 +173,8 @@ type joinNode struct {
 
 // commonColumns returns the names of columns common on the
 // right and left sides, for use by NATURAL JOIN.
-func commonColumns(left, right *dataSourceInfo) parser.NameList {
-	var res parser.NameList
+func commonColumns(left, right *dataSourceInfo) tree.NameList {
+	var res tree.NameList
 	for _, cLeft := range left.sourceColumns {
 		if cLeft.Hidden {
 			continue
@@ -185,7 +185,7 @@ func commonColumns(left, right *dataSourceInfo) parser.NameList {
 			}
 
 			if cLeft.Name == cRight.Name {
-				res = append(res, parser.Name(cLeft.Name))
+				res = append(res, tree.Name(cLeft.Name))
 			}
 		}
 	}
@@ -200,7 +200,7 @@ func (p *planner) makeJoin(
 	astJoinType string,
 	left planDataSource,
 	right planDataSource,
-	cond parser.JoinCond,
+	cond tree.JoinCond,
 ) (planDataSource, error) {
 	var typ joinType
 	switch astJoinType {
@@ -238,20 +238,20 @@ func (p *planner) makeJoin(
 		info          *dataSourceInfo
 		pred          *joinPredicate
 		err           error
-		mergedColumns parser.NameList
+		mergedColumns tree.NameList
 	)
 
 	if cond == nil {
 		pred, info, err = makeCrossPredicate(typ, leftInfo, rightInfo)
 	} else {
 		switch t := cond.(type) {
-		case *parser.OnJoinCond:
+		case *tree.OnJoinCond:
 			pred, info, err = p.makeOnPredicate(ctx, typ, leftInfo, rightInfo, t.Expr)
-		case parser.NaturalJoinCond:
+		case tree.NaturalJoinCond:
 			cols := commonColumns(leftInfo, rightInfo)
 			mergedColumns = cols
 			pred, info, err = makeUsingPredicate(typ, leftInfo, rightInfo, mergedColumns)
-		case *parser.UsingJoinCond:
+		case *tree.UsingJoinCond:
 			mergedColumns = t.Cols
 			pred, info, err = makeUsingPredicate(typ, leftInfo, rightInfo, mergedColumns)
 		}
@@ -351,7 +351,7 @@ func (p *planner) makeJoin(
 		source:     joinDataSource,
 		sourceInfo: multiSourceInfo{info},
 	}
-	r.ivarHelper = parser.MakeIndexedVarHelper(r, len(info.sourceColumns))
+	r.ivarHelper = tree.MakeIndexedVarHelper(r, len(info.sourceColumns))
 	numLeft := len(leftInfo.sourceColumns)
 	numRight := len(rightInfo.sourceColumns)
 	rInfo := &dataSourceInfo{
@@ -373,7 +373,7 @@ func (p *planner) makeJoin(
 		rightCol := n.pred.rightEqualityIndices[i]
 		leftHidden.Add(leftCol)
 		rightHidden.Add(rightCol)
-		var expr parser.TypedExpr
+		var expr tree.TypedExpr
 		if n.joinType == joinTypeInner || n.joinType == joinTypeLeftOuter {
 			// The merged column is the same with the corresponding column from the
 			// left side.
@@ -386,9 +386,9 @@ func (p *planner) makeJoin(
 			expr = r.ivarHelper.IndexedVar(numLeft + rightCol)
 			remapped[numLeft+rightCol] = i
 		} else {
-			c := &parser.CoalesceExpr{
+			c := &tree.CoalesceExpr{
 				Name: "IFNULL",
-				Exprs: []parser.Expr{
+				Exprs: []tree.Expr{
 					r.ivarHelper.IndexedVar(leftCol),
 					r.ivarHelper.IndexedVar(numLeft + rightCol),
 				},
@@ -476,20 +476,20 @@ func (n *joinNode) Start(params runParams) error {
 	}
 
 	// Pre-allocate the space for output rows.
-	n.output = make(parser.Datums, len(n.columns))
+	n.output = make(tree.Datums, len(n.columns))
 
 	// If needed, pre-allocate left and right rows of NULL tuples for when the
 	// join predicate fails to match.
 	if n.joinType == joinTypeLeftOuter || n.joinType == joinTypeFullOuter {
-		n.emptyRight = make(parser.Datums, len(planColumns(n.right.plan)))
+		n.emptyRight = make(tree.Datums, len(planColumns(n.right.plan)))
 		for i := range n.emptyRight {
-			n.emptyRight[i] = parser.DNull
+			n.emptyRight[i] = tree.DNull
 		}
 	}
 	if n.joinType == joinTypeRightOuter || n.joinType == joinTypeFullOuter {
-		n.emptyLeft = make(parser.Datums, len(planColumns(n.left.plan)))
+		n.emptyLeft = make(tree.Datums, len(planColumns(n.left.plan)))
 		for i := range n.emptyLeft {
-			n.emptyLeft[i] = parser.DNull
+			n.emptyLeft[i] = tree.DNull
 		}
 	}
 
@@ -709,7 +709,7 @@ func (n *joinNode) Next(params runParams) (res bool, err error) {
 }
 
 // Values implements the planNode interface.
-func (n *joinNode) Values() parser.Datums {
+func (n *joinNode) Values() tree.Datums {
 	return n.buffer.Values()
 }
 

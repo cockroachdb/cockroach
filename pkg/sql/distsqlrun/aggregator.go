@@ -19,7 +19,8 @@ import (
 	"sync"
 	"unsafe"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -34,7 +35,7 @@ import (
 func GetAggregateInfo(
 	fn AggregatorSpec_Func, inputTypes ...sqlbase.ColumnType,
 ) (
-	aggregateConstructor func(*parser.EvalContext) parser.AggregateFunc,
+	aggregateConstructor func(*tree.EvalContext) tree.AggregateFunc,
 	returnType sqlbase.ColumnType,
 	err error,
 ) {
@@ -42,7 +43,7 @@ func GetAggregateInfo(
 		if len(inputTypes) != 1 {
 			return nil, sqlbase.ColumnType{}, errors.Errorf("ident aggregate needs 1 input")
 		}
-		return parser.NewIdentAggregate, inputTypes[0], nil
+		return builtins.NewIdentAggregate, inputTypes[0], nil
 	}
 
 	datumTypes := make([]types.T, len(inputTypes))
@@ -50,7 +51,7 @@ func GetAggregateInfo(
 		datumTypes[i] = inputTypes[i].ToDatumType()
 	}
 
-	builtins := parser.Aggregates[strings.ToLower(fn.String())]
+	builtins := builtins.Aggregates[strings.ToLower(fn.String())]
 	for _, b := range builtins {
 		types := b.Types.Types()
 		if len(types) != len(inputTypes) {
@@ -65,7 +66,7 @@ func GetAggregateInfo(
 		}
 		if match {
 			// Found!
-			constructAgg := func(evalCtx *parser.EvalContext) parser.AggregateFunc {
+			constructAgg := func(evalCtx *tree.EvalContext) tree.AggregateFunc {
 				return b.AggregateFunc(datumTypes, evalCtx)
 			}
 
@@ -220,7 +221,7 @@ func (ag *aggregator) Run(ctx context.Context, wg *sync.WaitGroup) {
 			if result == nil {
 				// Special case useful when this is a local stage of a distributed
 				// aggregation.
-				result = parser.DNull
+				result = tree.DNull
 			}
 			row[i] = sqlbase.DatumToEncDatum(ag.outputTypes[i], result)
 		}
@@ -296,7 +297,7 @@ func (ag *aggregator) accumulateRows(ctx context.Context) (err error) {
 				if err := row[col].EnsureDecoded(&ag.inputTypes[col], &ag.datumAlloc); err != nil {
 					return err
 				}
-				if row[*a.FilterColIdx].Datum != parser.DBoolTrue {
+				if row[*a.FilterColIdx].Datum != tree.DBoolTrue {
 					// This row doesn't contribute to this aggregation.
 					continue
 				}
@@ -306,10 +307,10 @@ func (ag *aggregator) accumulateRows(ctx context.Context) (err error) {
 			// Most functions require at most one argument thus we separate
 			// the first argument and allocation of (if applicable) a variadic
 			// collection of arguments thereafter.
-			var firstArg parser.Datum
-			var otherArgs parser.Datums
+			var firstArg tree.Datum
+			var otherArgs tree.Datums
 			if len(a.ColIdx) > 1 {
-				otherArgs = make(parser.Datums, len(a.ColIdx)-1)
+				otherArgs = make(tree.Datums, len(a.ColIdx)-1)
 			}
 			isFirstArg := true
 			for j, c := range a.ColIdx {
@@ -333,28 +334,28 @@ func (ag *aggregator) accumulateRows(ctx context.Context) (err error) {
 }
 
 type aggregateFuncHolder struct {
-	create        func(*parser.EvalContext) parser.AggregateFunc
+	create        func(*tree.EvalContext) tree.AggregateFunc
 	group         *aggregator
-	buckets       map[string]parser.AggregateFunc
+	buckets       map[string]tree.AggregateFunc
 	seen          map[string]struct{}
 	bucketsMemAcc *mon.BoundAccount
 }
 
-const sizeOfAggregateFunc = int64(unsafe.Sizeof(parser.AggregateFunc(nil)))
+const sizeOfAggregateFunc = int64(unsafe.Sizeof(tree.AggregateFunc(nil)))
 
 func (ag *aggregator) newAggregateFuncHolder(
-	create func(*parser.EvalContext) parser.AggregateFunc,
+	create func(*tree.EvalContext) tree.AggregateFunc,
 ) *aggregateFuncHolder {
 	return &aggregateFuncHolder{
 		create:        create,
 		group:         ag,
-		buckets:       make(map[string]parser.AggregateFunc),
+		buckets:       make(map[string]tree.AggregateFunc),
 		bucketsMemAcc: &ag.bucketsAcc,
 	}
 }
 
 func (a *aggregateFuncHolder) add(
-	ctx context.Context, bucket []byte, firstArg parser.Datum, otherArgs parser.Datums,
+	ctx context.Context, bucket []byte, firstArg tree.Datum, otherArgs tree.Datums,
 ) error {
 	if a.seen != nil {
 		encoded, err := sqlbase.EncodeDatum(bucket, firstArg)
@@ -397,7 +398,7 @@ func (a *aggregateFuncHolder) add(
 	return impl.Add(ctx, firstArg, otherArgs...)
 }
 
-func (a *aggregateFuncHolder) get(bucket string) (parser.Datum, error) {
+func (a *aggregateFuncHolder) get(bucket string) (tree.Datum, error) {
 	found, ok := a.buckets[bucket]
 	if !ok {
 		found = a.create(&a.group.flowCtx.EvalCtx)

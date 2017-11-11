@@ -22,8 +22,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
 // Cockroach error extensions:
@@ -74,7 +74,7 @@ func NewNonNullViolationError(columnName string) error {
 
 // NewUniquenessConstraintViolationError creates an error that represents a
 // violation of a UNIQUE constraint.
-func NewUniquenessConstraintViolationError(index *IndexDescriptor, vals []parser.Datum) error {
+func NewUniquenessConstraintViolationError(index *IndexDescriptor, vals []tree.Datum) error {
 	valStrs := make([]string, 0, len(vals))
 	for _, val := range vals {
 		valStrs = append(valStrs, val.String())
@@ -124,9 +124,9 @@ func IsUndefinedDatabaseError(err error) bool {
 }
 
 // NewUndefinedRelationError creates an error that represents a missing database table or view.
-func NewUndefinedRelationError(name parser.NodeFormatter) error {
+func NewUndefinedRelationError(name tree.NodeFormatter) error {
 	return pgerror.NewErrorf(pgerror.CodeUndefinedTableError,
-		"relation %q does not exist", parser.ErrString(name))
+		"relation %q does not exist", tree.ErrString(name))
 }
 
 // IsUndefinedRelationError returns true if the error is for an undefined table.
@@ -145,9 +145,9 @@ func NewRelationAlreadyExistsError(name string) error {
 }
 
 // NewWrongObjectTypeError creates a wrong object type error.
-func NewWrongObjectTypeError(name *parser.TableName, desiredObjType string) error {
+func NewWrongObjectTypeError(name *tree.TableName, desiredObjType string) error {
 	return pgerror.NewErrorf(pgerror.CodeWrongObjectTypeError, "%q is not a %s",
-		parser.ErrString(name), desiredObjType)
+		tree.ErrString(name), desiredObjType)
 }
 
 // NewSyntaxError creates a syntax error.

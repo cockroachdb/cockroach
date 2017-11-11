@@ -19,7 +19,7 @@ import (
 
 	"golang.org/x/net/context"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
@@ -29,7 +29,7 @@ func TestEncDatum(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	a := &DatumAlloc{}
-	evalCtx := parser.NewTestingEvalContext()
+	evalCtx := tree.NewTestingEvalContext()
 	defer evalCtx.Stop(context.Background())
 	v := EncDatum{}
 	if !v.IsUnset() {
@@ -41,7 +41,7 @@ func TestEncDatum(t *testing.T) {
 	}
 
 	typeInt := ColumnType{SemanticType: ColumnType_INT}
-	x := DatumToEncDatum(typeInt, parser.NewDInt(5))
+	x := DatumToEncDatum(typeInt, tree.NewDInt(5))
 	if x.IsUnset() {
 		t.Errorf("unset after DatumToEncDatum()")
 	}
@@ -112,7 +112,7 @@ func TestEncDatumNull(t *testing.T) {
 
 	// Verify DNull is null.
 	typeInt := ColumnType{SemanticType: ColumnType_INT}
-	n := DatumToEncDatum(typeInt, parser.DNull)
+	n := DatumToEncDatum(typeInt, tree.DNull)
 	if !n.IsNull() {
 		t.Error("DNull not null")
 	}
@@ -164,7 +164,7 @@ func checkEncDatumCmp(
 
 	dec2 := EncDatumFromEncoded(&typ, enc2, buf2)
 
-	evalCtx := parser.NewTestingEvalContext()
+	evalCtx := tree.NewTestingEvalContext()
 	defer evalCtx.Stop(context.Background())
 	if val, err := dec1.Compare(&typ, a, evalCtx, &dec2); err != nil {
 		t.Fatal(err)
@@ -195,7 +195,7 @@ func TestEncDatumCompare(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	a := &DatumAlloc{}
-	evalCtx := parser.NewTestingEvalContext()
+	evalCtx := tree.NewTestingEvalContext()
 	defer evalCtx.Stop(context.Background())
 	rng, _ := randutil.NewPseudoRand()
 
@@ -210,7 +210,7 @@ func TestEncDatumCompare(t *testing.T) {
 		}
 
 		// Generate two datums d1 < d2
-		var d1, d2 parser.Datum
+		var d1, d2 tree.Datum
 		for {
 			d1 = RandDatum(rng, typ, false)
 			d2 = RandDatum(rng, typ, false)
@@ -256,7 +256,7 @@ func TestEncDatumFromBuffer(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	var alloc DatumAlloc
-	evalCtx := parser.NewTestingEvalContext()
+	evalCtx := tree.NewTestingEvalContext()
 	defer evalCtx.Stop(context.Background())
 	rng, _ := randutil.NewPseudoRand()
 	for test := 0; test < 20; test++ {
@@ -314,7 +314,7 @@ func TestEncDatumRowCompare(t *testing.T) {
 	typeInt := ColumnType{SemanticType: ColumnType_INT}
 	v := [5]EncDatum{}
 	for i := range v {
-		v[i] = DatumToEncDatum(typeInt, parser.NewDInt(parser.DInt(i)))
+		v[i] = DatumToEncDatum(typeInt, tree.NewDInt(tree.DInt(i)))
 	}
 
 	asc := encoding.Ascending
@@ -406,7 +406,7 @@ func TestEncDatumRowCompare(t *testing.T) {
 	}
 
 	a := &DatumAlloc{}
-	evalCtx := parser.NewTestingEvalContext()
+	evalCtx := tree.NewTestingEvalContext()
 	defer evalCtx.Stop(context.Background())
 	for _, c := range testCases {
 		types := make([]ColumnType, len(c.row1))
@@ -428,7 +428,7 @@ func TestEncDatumRowCompare(t *testing.T) {
 func TestEncDatumRowAlloc(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	evalCtx := parser.NewTestingEvalContext()
+	evalCtx := tree.NewTestingEvalContext()
 	defer evalCtx.Stop(context.Background())
 	rng, _ := randutil.NewPseudoRand()
 	for _, cols := range []int{1, 2, 4, 10, 40, 100} {

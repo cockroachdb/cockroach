@@ -19,7 +19,7 @@ import (
 
 	"golang.org/x/net/context"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -81,10 +81,10 @@ type memRowContainer struct {
 	types         []sqlbase.ColumnType
 	invertSorting bool // Inverts the sorting predicate.
 	ordering      sqlbase.ColumnOrdering
-	scratchRow    parser.Datums
+	scratchRow    tree.Datums
 	scratchEncRow sqlbase.EncDatumRow
 
-	evalCtx *parser.EvalContext
+	evalCtx *tree.EvalContext
 
 	datumAlloc sqlbase.DatumAlloc
 }
@@ -95,7 +95,7 @@ var _ sortableRowContainer = &memRowContainer{}
 // init initializes the memRowContainer. The memRowContainer uses evalCtx.Mon
 // to track memory usage.
 func (mc *memRowContainer) init(
-	ordering sqlbase.ColumnOrdering, types []sqlbase.ColumnType, evalCtx *parser.EvalContext,
+	ordering sqlbase.ColumnOrdering, types []sqlbase.ColumnType, evalCtx *tree.EvalContext,
 ) {
 	mc.initWithMon(ordering, types, evalCtx, evalCtx.Mon)
 }
@@ -105,14 +105,14 @@ func (mc *memRowContainer) init(
 func (mc *memRowContainer) initWithMon(
 	ordering sqlbase.ColumnOrdering,
 	types []sqlbase.ColumnType,
-	evalCtx *parser.EvalContext,
+	evalCtx *tree.EvalContext,
 	mon *mon.BytesMonitor,
 ) {
 	acc := mon.MakeBoundAccount()
 	mc.RowContainer.Init(acc, sqlbase.ColTypeInfoFromColTypes(types), 0)
 	mc.types = types
 	mc.ordering = ordering
-	mc.scratchRow = make(parser.Datums, len(types))
+	mc.scratchRow = make(tree.Datums, len(types))
 	mc.scratchEncRow = make(sqlbase.EncDatumRow, len(types))
 	mc.evalCtx = evalCtx
 }

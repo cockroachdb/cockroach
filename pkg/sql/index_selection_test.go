@@ -24,7 +24,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -165,12 +165,12 @@ func makeTestIndexFromStr(
 
 func makeConstraints(
 	t *testing.T,
-	evalCtx *parser.EvalContext,
+	evalCtx *tree.EvalContext,
 	sql string,
 	desc *sqlbase.TableDescriptor,
 	index *sqlbase.IndexDescriptor,
 	sel *renderNode,
-) (orIndexConstraints, parser.TypedExpr) {
+) (orIndexConstraints, tree.TypedExpr) {
 	expr := parseAndNormalizeExpr(t, evalCtx, sql, sel)
 	exprs, equiv := analyzeExpr(evalCtx, expr)
 
@@ -324,7 +324,7 @@ func TestMakeConstraints(t *testing.T) {
 	}
 	for _, d := range testData {
 		t.Run(d.expr+"~"+d.expected, func(t *testing.T) {
-			evalCtx := parser.NewTestingEvalContext()
+			evalCtx := tree.NewTestingEvalContext()
 			defer evalCtx.Stop(context.Background())
 			sel := makeSelectNode(t)
 			desc, index := makeTestIndexFromStr(t, d.columns)
@@ -532,7 +532,7 @@ func TestMakeSpans(t *testing.T) {
 				expected = d.expectedDesc
 			}
 			t.Run(d.expr+"~"+expected, func(t *testing.T) {
-				evalCtx := parser.NewTestingEvalContext()
+				evalCtx := tree.NewTestingEvalContext()
 				defer evalCtx.Stop(context.Background())
 				sel := makeSelectNode(t)
 				columns := strings.Split(d.columns, ",")
@@ -581,7 +581,7 @@ func TestMakeSpans(t *testing.T) {
 	}
 	for _, d := range testData2 {
 		t.Run(d.expr+"~"+d.expected, func(t *testing.T) {
-			evalCtx := parser.NewTestingEvalContext()
+			evalCtx := tree.NewTestingEvalContext()
 			defer evalCtx.Stop(context.Background())
 			sel := makeSelectNode(t)
 			desc, index := makeTestIndexFromStr(t, d.columns)
@@ -672,7 +672,7 @@ func TestExactPrefix(t *testing.T) {
 	}
 	for _, d := range testData {
 		t.Run(fmt.Sprintf("%s~%d", d.expr, d.expected), func(t *testing.T) {
-			evalCtx := parser.NewTestingEvalContext()
+			evalCtx := tree.NewTestingEvalContext()
 			defer evalCtx.Stop(context.Background())
 			sel := makeSelectNode(t)
 			desc, index := makeTestIndexFromStr(t, d.columns)
@@ -749,7 +749,7 @@ func TestApplyConstraints(t *testing.T) {
 	}
 	for _, d := range testData {
 		t.Run(d.expr+"~"+d.expected, func(t *testing.T) {
-			evalCtx := parser.NewTestingEvalContext()
+			evalCtx := tree.NewTestingEvalContext()
 			defer evalCtx.Stop(context.Background())
 			sel := makeSelectNode(t)
 			desc, index := makeTestIndexFromStr(t, d.columns)

@@ -20,7 +20,7 @@ import (
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -61,7 +61,7 @@ func ensureColumnOrderable(c sqlbase.ResultColumn) error {
 // Support this. It will reduce some of the special casing below, but requires a
 // generalization of how to add derived columns to a SelectStatement.
 func (p *planner) orderBy(
-	ctx context.Context, orderBy parser.OrderBy, n planNode,
+	ctx context.Context, orderBy tree.OrderBy, n planNode,
 ) (*sortNode, error) {
 	if orderBy == nil {
 		return nil, nil
@@ -88,12 +88,12 @@ func (p *planner) orderBy(
 
 	for _, o := range orderBy {
 		direction := encoding.Ascending
-		if o.Direction == parser.Descending {
+		if o.Direction == tree.Descending {
 			direction = encoding.Descending
 		}
 
 		// Unwrap parenthesized expressions like "((a))" to "a".
-		expr := parser.StripParens(o.Expr)
+		expr := tree.StripParens(o.Expr)
 
 		// The logical data source for ORDER BY is the list of render
 		// expressions for a SELECT, as specified in the input SQL text
@@ -133,13 +133,13 @@ func (p *planner) orderBy(
 		index := -1
 
 		// First, deal with render aliases.
-		if vBase, ok := expr.(parser.VarName); ok {
+		if vBase, ok := expr.(tree.VarName); ok {
 			v, err := vBase.NormalizeVarName()
 			if err != nil {
 				return nil, err
 			}
 
-			if c, ok := v.(*parser.ColumnItem); ok && c.TableName.Table() == "" {
+			if c, ok := v.(*tree.ColumnItem); ok && c.TableName.Table() == "" {
 				// Look for an output column that matches the name. This
 				// handles cases like:
 				//
@@ -195,7 +195,7 @@ func (p *planner) orderBy(
 		// to fabricate an intermediate renderNode to add the new render.
 		if index == -1 && s != nil {
 			cols, exprs, hasStar, err := p.computeRenderAllowingStars(
-				ctx, parser.SelectExpr{Expr: expr}, types.Any,
+				ctx, tree.SelectExpr{Expr: expr}, types.Any,
 				s.sourceInfo, s.ivarHelper, autoGenerateRenderOutputName)
 			if err != nil {
 				return nil, err
@@ -243,16 +243,16 @@ func (p *planner) orderBy(
 
 // flattenTuples extracts the members of tuples into a list of columns.
 func flattenTuples(
-	cols sqlbase.ResultColumns, exprs []parser.TypedExpr,
-) (sqlbase.ResultColumns, []parser.TypedExpr) {
+	cols sqlbase.ResultColumns, exprs []tree.TypedExpr,
+) (sqlbase.ResultColumns, []tree.TypedExpr) {
 	// We want to avoid allocating new slices unless strictly necessary.
-	var newExprs []parser.TypedExpr
+	var newExprs []tree.TypedExpr
 	var newCols sqlbase.ResultColumns
 	for i, e := range exprs {
-		if t, ok := e.(*parser.Tuple); ok {
+		if t, ok := e.(*tree.Tuple); ok {
 			if newExprs == nil {
 				// All right, it was necessary to allocate the slices after all.
-				newExprs = make([]parser.TypedExpr, i, len(exprs))
+				newExprs = make([]tree.TypedExpr, i, len(exprs))
 				newCols = make(sqlbase.ResultColumns, i, len(cols))
 				copy(newExprs, exprs[:i])
 				copy(newCols, cols[:i])
@@ -272,13 +272,13 @@ func flattenTuples(
 
 // flattenTuple extracts the members of one tuple into a list of columns.
 func flattenTuple(
-	t *parser.Tuple, cols sqlbase.ResultColumns, exprs []parser.TypedExpr,
-) (sqlbase.ResultColumns, []parser.TypedExpr) {
+	t *tree.Tuple, cols sqlbase.ResultColumns, exprs []tree.TypedExpr,
+) (sqlbase.ResultColumns, []tree.TypedExpr) {
 	for _, e := range t.Exprs {
-		if eT, ok := e.(*parser.Tuple); ok {
+		if eT, ok := e.(*tree.Tuple); ok {
 			cols, exprs = flattenTuple(eT, cols, exprs)
 		} else {
-			expr := e.(parser.TypedExpr)
+			expr := e.(tree.TypedExpr)
 			exprs = append(exprs, expr)
 			cols = append(cols, sqlbase.ResultColumn{
 				Name: e.String(),
@@ -300,8 +300,8 @@ func flattenTuple(
 //   ORDER BY INDEX t@foo ASC -> ORDER BY t.a DESC, t.a ASC
 //   ORDER BY INDEX t@foo DESC -> ORDER BY t.a ASC, t.b DESC
 func (p *planner) rewriteIndexOrderings(
-	ctx context.Context, orderBy parser.OrderBy,
-) (parser.OrderBy, error) {
+	ctx context.Context, orderBy tree.OrderBy,
+) (tree.OrderBy, error) {
 	// The loop above *may* allocate a new slice, but this is only
 	// needed if the INDEX / PRIMARY KEY syntax is used. In case the
 	// ORDER BY clause only uses the column syntax, we should reuse the
@@ -310,11 +310,11 @@ func (p *planner) rewriteIndexOrderings(
 	newOrderBy := orderBy[:0]
 	for _, o := range orderBy {
 		switch o.OrderType {
-		case parser.OrderByColumn:
+		case tree.OrderByColumn:
 			// Nothing to do, just propagate the setting.
 			newOrderBy = append(newOrderBy, o)
 
-		case parser.OrderByIndex:
+		case tree.OrderByIndex:
 			tn, err := p.QualifyWithDatabase(ctx, &o.Table)
 			if err != nil {
 				return nil, err
@@ -337,7 +337,7 @@ func (p *planner) rewriteIndexOrderings(
 					}
 				}
 				if idxDesc == nil {
-					return nil, errors.Errorf("index %q not found", parser.ErrString(o.Index))
+					return nil, errors.Errorf("index %q not found", tree.ErrString(o.Index))
 				}
 			}
 
@@ -346,48 +346,48 @@ func (p *planner) rewriteIndexOrderings(
 
 			// First, make the final slice bigger.
 			prevNewOrderBy := newOrderBy
-			newOrderBy = make(parser.OrderBy,
+			newOrderBy = make(tree.OrderBy,
 				len(newOrderBy),
 				cap(newOrderBy)+len(idxDesc.ColumnNames)-1)
 			copy(newOrderBy, prevNewOrderBy)
 
 			// Now expand the clause.
 			for k, colName := range idxDesc.ColumnNames {
-				newOrderBy = append(newOrderBy, &parser.Order{
-					OrderType: parser.OrderByColumn,
-					Expr:      &parser.ColumnItem{TableName: *tn, ColumnName: parser.Name(colName)},
-					Direction: chooseDirection(o.Direction == parser.Descending, idxDesc.ColumnDirections[k]),
+				newOrderBy = append(newOrderBy, &tree.Order{
+					OrderType: tree.OrderByColumn,
+					Expr:      &tree.ColumnItem{TableName: *tn, ColumnName: tree.Name(colName)},
+					Direction: chooseDirection(o.Direction == tree.Descending, idxDesc.ColumnDirections[k]),
 				})
 			}
 
 		default:
-			return nil, errors.Errorf("unknown ORDER BY specification: %s", parser.AsString(orderBy))
+			return nil, errors.Errorf("unknown ORDER BY specification: %s", tree.AsString(orderBy))
 		}
 	}
 
 	if log.V(2) {
-		log.Infof(ctx, "rewritten ORDER BY clause: %s", parser.AsString(newOrderBy))
+		log.Infof(ctx, "rewritten ORDER BY clause: %s", tree.AsString(newOrderBy))
 	}
 	return newOrderBy, nil
 }
 
 // chooseDirection translates the specified IndexDescriptor_Direction
-// into a parser.Direction. If invert is true, the idxDir is inverted.
-func chooseDirection(invert bool, idxDir sqlbase.IndexDescriptor_Direction) parser.Direction {
+// into a tree.Direction. If invert is true, the idxDir is inverted.
+func chooseDirection(invert bool, idxDir sqlbase.IndexDescriptor_Direction) tree.Direction {
 	if (idxDir == sqlbase.IndexDescriptor_ASC) != invert {
-		return parser.Ascending
+		return tree.Ascending
 	}
-	return parser.Descending
+	return tree.Descending
 }
 
 // colIndex takes an expression that refers to a column using an integer, verifies it refers to a
 // valid render target and returns the corresponding column index. For example:
 //    SELECT a from T ORDER by 1
 // Here "1" refers to the first render target "a". The returned index is 0.
-func (p *planner) colIndex(numOriginalCols int, expr parser.Expr, context string) (int, error) {
+func (p *planner) colIndex(numOriginalCols int, expr tree.Expr, context string) (int, error) {
 	ord := int64(-1)
 	switch i := expr.(type) {
-	case *parser.NumVal:
+	case *tree.NumVal:
 		if i.ShouldBeInt64() {
 			val, err := i.AsInt64()
 			if err != nil {
@@ -397,13 +397,13 @@ func (p *planner) colIndex(numOriginalCols int, expr parser.Expr, context string
 		} else {
 			return -1, errors.Errorf("non-integer constant in %s: %s", context, expr)
 		}
-	case *parser.DInt:
+	case *tree.DInt:
 		if *i >= 0 {
 			ord = int64(*i)
 		}
-	case *parser.StrVal:
+	case *tree.StrVal:
 		return -1, errors.Errorf("non-integer constant in %s: %s", context, expr)
-	case parser.Datum:
+	case tree.Datum:
 		return -1, errors.Errorf("non-integer constant in %s: %s", context, expr)
 	}
 	if ord != -1 {
@@ -415,7 +415,7 @@ func (p *planner) colIndex(numOriginalCols int, expr parser.Expr, context string
 	return int(ord), nil
 }
 
-func (n *sortNode) Values() parser.Datums {
+func (n *sortNode) Values() tree.Datums {
 	// If an ordering expression was used the number of columns in each row might
 	// differ from the number of columns requested, so trim the result.
 	return n.valueIter.Values()[:len(n.columns)]
@@ -493,7 +493,7 @@ func (n *sortNode) Close(ctx context.Context) {
 // should conform to the comments expressed in the planNode definition.
 type valueIterator interface {
 	Next(runParams) (bool, error)
-	Values() parser.Datums
+	Values() tree.Datums
 	Close(ctx context.Context)
 }
 
@@ -502,7 +502,7 @@ type sortingStrategy interface {
 	// Add adds a single value to the sortingStrategy. It guarantees that
 	// if it decided to store the provided value, that it will make a deep
 	// copy of it.
-	Add(context.Context, parser.Datums) error
+	Add(context.Context, tree.Datums) error
 	// Finish terminates the sorting strategy, allowing for postprocessing
 	// after all values have been provided to the strategy. The method should
 	// not be called more than once, and should only be called after all Add
@@ -525,7 +525,7 @@ func newSortAllStrategy(vNode *valuesNode) sortingStrategy {
 	}
 }
 
-func (ss *sortAllStrategy) Add(ctx context.Context, values parser.Datums) error {
+func (ss *sortAllStrategy) Add(ctx context.Context, values tree.Datums) error {
 	_, err := ss.vNode.rows.AddRow(ctx, values)
 	return err
 }
@@ -538,7 +538,7 @@ func (ss *sortAllStrategy) Next(params runParams) (bool, error) {
 	return ss.vNode.Next(params)
 }
 
-func (ss *sortAllStrategy) Values() parser.Datums {
+func (ss *sortAllStrategy) Values() tree.Datums {
 	return ss.vNode.Values()
 }
 
@@ -558,7 +558,7 @@ func (ss *sortAllStrategy) Close(ctx context.Context) {
 // need to be sorted, but that most likely not all values need to be sorted.
 type iterativeSortStrategy struct {
 	vNode      *valuesNode
-	lastVal    parser.Datums
+	lastVal    tree.Datums
 	nextRowIdx int
 }
 
@@ -568,7 +568,7 @@ func newIterativeSortStrategy(vNode *valuesNode) sortingStrategy {
 	}
 }
 
-func (ss *iterativeSortStrategy) Add(ctx context.Context, values parser.Datums) error {
+func (ss *iterativeSortStrategy) Add(ctx context.Context, values tree.Datums) error {
 	_, err := ss.vNode.rows.AddRow(ctx, values)
 	return err
 }
@@ -586,7 +586,7 @@ func (ss *iterativeSortStrategy) Next(runParams) (bool, error) {
 	return true, nil
 }
 
-func (ss *iterativeSortStrategy) Values() parser.Datums {
+func (ss *iterativeSortStrategy) Values() tree.Datums {
 	return ss.lastVal
 }
 
@@ -624,7 +624,7 @@ func newSortTopKStrategy(vNode *valuesNode, topK int64) sortingStrategy {
 	return ss
 }
 
-func (ss *sortTopKStrategy) Add(ctx context.Context, values parser.Datums) error {
+func (ss *sortTopKStrategy) Add(ctx context.Context, values tree.Datums) error {
 	switch {
 	case int64(ss.vNode.Len()) < ss.topK:
 		// The first k values all go into the max-heap.
@@ -660,7 +660,7 @@ func (ss *sortTopKStrategy) Next(params runParams) (bool, error) {
 	return ss.vNode.Next(params)
 }
 
-func (ss *sortTopKStrategy) Values() parser.Datums {
+func (ss *sortTopKStrategy) Values() tree.Datums {
 	return ss.vNode.Values()
 }
 

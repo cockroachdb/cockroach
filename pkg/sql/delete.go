@@ -19,9 +19,9 @@ import (
 
 	"golang.org/x/net/context"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -35,7 +35,7 @@ var deleteNodePool = sync.Pool{
 
 type deleteNode struct {
 	editNodeBase
-	n *parser.Delete
+	n *tree.Delete
 	p *planner
 
 	tw tableDeleter
@@ -53,7 +53,7 @@ type deleteNode struct {
 //   Notes: postgres requires DELETE. Also requires SELECT for "USING" and "WHERE" with tables.
 //          mysql requires DELETE. Also requires SELECT if a table is used in the "WHERE" clause.
 func (p *planner) Delete(
-	ctx context.Context, n *parser.Delete, desiredTypes []types.T,
+	ctx context.Context, n *tree.Delete, desiredTypes []types.T,
 ) (planNode, error) {
 	if n.Where == nil && p.session.SafeUpdates {
 		return nil, pgerror.NewDangerousStatementErrorf("DELETE without WHERE clause")
@@ -70,7 +70,7 @@ func (p *planner) Delete(
 	}
 
 	var requestedCols []sqlbase.ColumnDescriptor
-	if _, retExprs := n.Returning.(*parser.ReturningExprs); retExprs {
+	if _, retExprs := n.Returning.(*tree.ReturningExprs); retExprs {
 		// TODO(dan): This could be made tighter, just the rows needed for RETURNING
 		// exprs.
 		requestedCols = en.tableDesc.Columns
@@ -92,9 +92,9 @@ func (p *planner) Delete(
 	// this node's initSelect() method both does type checking and also
 	// performs index selection. We cannot perform index selection
 	// properly until the placeholder values are known.
-	rows, err := p.SelectClause(ctx, &parser.SelectClause{
+	rows, err := p.SelectClause(ctx, &tree.SelectClause{
 		Exprs: sqlbase.ColumnsSelectors(rd.FetchCols),
-		From:  &parser.From{Tables: []parser.TableExpr{n.Table}},
+		From:  &tree.From{Tables: []tree.TableExpr{n.Table}},
 		Where: n.Where,
 	}, nil /* orderBy */, n.Limit, false, /* lockForUpdate */
 		nil /* desiredTypes */, publicAndNonPublicColumns)
@@ -192,12 +192,12 @@ func (d *deleteNode) Next(params runParams) (bool, error) {
 // i.e. if we do not need to know their values for filtering expressions or a
 // RETURNING clause or for updating secondary indexes.
 func canDeleteWithoutScan(
-	ctx context.Context, n *parser.Delete, scan *scanNode, td *tableDeleter,
+	ctx context.Context, n *tree.Delete, scan *scanNode, td *tableDeleter,
 ) bool {
 	if !td.fastPathAvailable(ctx) {
 		return false
 	}
-	if _, ok := n.Returning.(*parser.ReturningExprs); ok {
+	if _, ok := n.Returning.(*tree.ReturningExprs); ok {
 		if log.V(2) {
 			log.Infof(ctx, "delete forced to scan: values required for RETURNING")
 		}
@@ -234,6 +234,6 @@ func (d *deleteNode) fastDelete(ctx context.Context, scan *scanNode) error {
 	return nil
 }
 
-func (d *deleteNode) Values() parser.Datums {
+func (d *deleteNode) Values() tree.Datums {
 	return d.run.resultRow
 }

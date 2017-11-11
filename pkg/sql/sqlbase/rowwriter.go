@@ -25,7 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
@@ -53,7 +53,7 @@ type rowHelper struct {
 // secondaryIndexEntries are only valid until the next call to encodeIndexes or
 // encodeSecondaryIndexes.
 func (rh *rowHelper) encodeIndexes(
-	colIDtoRowIndex map[ColumnID]int, values []parser.Datum,
+	colIDtoRowIndex map[ColumnID]int, values []tree.Datum,
 ) (primaryIndexKey []byte, secondaryIndexEntries []IndexEntry, err error) {
 	if rh.primaryIndexKeyPrefix == nil {
 		rh.primaryIndexKeyPrefix = MakeIndexKeyPrefix(rh.TableDesc,
@@ -75,7 +75,7 @@ func (rh *rowHelper) encodeIndexes(
 // secondaryIndexEntries are only valid until the next call to encodeIndexes or
 // encodeSecondaryIndexes.
 func (rh *rowHelper) encodeSecondaryIndexes(
-	colIDtoRowIndex map[ColumnID]int, values []parser.Datum,
+	colIDtoRowIndex map[ColumnID]int, values []tree.Datum,
 ) (secondaryIndexEntries []IndexEntry, err error) {
 	if len(rh.indexEntries) != len(rh.Indexes) {
 		rh.indexEntries = make([]IndexEntry, len(rh.Indexes))
@@ -94,7 +94,7 @@ func (rh *rowHelper) encodeSecondaryIndexes(
 // TODO(dan): This logic is common and being moved into TableDescriptor (see
 // #6233). Once it is, use the shared one.
 func (rh *rowHelper) skipColumnInPK(
-	colID ColumnID, family FamilyID, value parser.Datum,
+	colID ColumnID, family FamilyID, value tree.Datum,
 ) (bool, error) {
 	if rh.primaryIndexCols == nil {
 		rh.primaryIndexCols = make(map[ColumnID]struct{})
@@ -108,7 +108,7 @@ func (rh *rowHelper) skipColumnInPK(
 	if family != 0 {
 		return false, errors.Errorf("primary index column %d must be in family 0, was %d", colID, family)
 	}
-	if cdatum, ok := value.(parser.CompositeDatum); ok {
+	if cdatum, ok := value.(tree.CompositeDatum); ok {
 		// Composite columns are encoded in both the key and the value.
 		return !cdatum.IsComposite(), nil
 	}
@@ -228,7 +228,7 @@ type putter interface {
 // InsertRow adds to the batch the kv operations necessary to insert a table row
 // with the given values.
 func (ri *RowInserter) InsertRow(
-	ctx context.Context, b putter, values []parser.Datum, ignoreConflicts bool, traceKV bool,
+	ctx context.Context, b putter, values []tree.Datum, ignoreConflicts bool, traceKV bool,
 ) error {
 	if len(values) != len(ri.InsertCols) {
 		return errors.Errorf("got %d values but expected %d", len(values), len(ri.InsertCols))
@@ -303,7 +303,7 @@ func (ri *RowInserter) InsertRow(
 		}
 		for _, colID := range familySortedColumnIDs {
 			idx, ok := ri.InsertColIDtoRowIndex[colID]
-			if !ok || values[idx] == parser.DNull {
+			if !ok || values[idx] == tree.DNull {
 				// Column not being inserted.
 				continue
 			}
@@ -347,7 +347,7 @@ func (ri *RowInserter) InsertRow(
 // secondary index keys. The secondaryIndexEntries are only valid until the next
 // call to EncodeIndexesForRow.
 func (ri *RowInserter) EncodeIndexesForRow(
-	values []parser.Datum,
+	values []tree.Datum,
 ) (primaryIndexKey []byte, secondaryIndexEntries []IndexEntry, err error) {
 	return ri.Helper.encodeIndexes(ri.InsertColIDtoRowIndex, values)
 }
@@ -372,7 +372,7 @@ type RowUpdater struct {
 
 	// For allocation avoidance.
 	marshalled      []roachpb.Value
-	newValues       []parser.Datum
+	newValues       []tree.Datum
 	key             roachpb.Key
 	indexEntriesBuf []IndexEntry
 	valueBuf        []byte
@@ -484,7 +484,7 @@ func MakeRowUpdater(
 		deleteOnlyIndex:       deleteOnlyIndex,
 		primaryKeyColChange:   primaryKeyColChange,
 		marshalled:            make([]roachpb.Value, len(updateCols)),
-		newValues:             make([]parser.Datum, len(tableCols)),
+		newValues:             make([]tree.Datum, len(tableCols)),
 	}
 
 	if primaryKeyColChange {
@@ -563,10 +563,10 @@ func MakeRowUpdater(
 func (ru *RowUpdater) UpdateRow(
 	ctx context.Context,
 	b *client.Batch,
-	oldValues []parser.Datum,
-	updateValues []parser.Datum,
+	oldValues []tree.Datum,
+	updateValues []tree.Datum,
 	traceKV bool,
-) ([]parser.Datum, error) {
+) ([]tree.Datum, error) {
 	if len(oldValues) != len(ru.FetchCols) {
 		return nil, errors.Errorf("got %d values but expected %d", len(oldValues), len(ru.FetchCols))
 	}
@@ -701,7 +701,7 @@ func (ru *RowUpdater) UpdateRow(
 			if !ok {
 				return nil, errors.Errorf("column %d was expected to be fetched, but wasn't", colID)
 			}
-			if ru.newValues[idx] == parser.DNull {
+			if ru.newValues[idx] == tree.DNull {
 				continue
 			}
 
@@ -871,7 +871,7 @@ func MakeRowDeleter(
 // DeleteRow adds to the batch the kv operations necessary to delete a table row
 // with the given values.
 func (rd *RowDeleter) DeleteRow(
-	ctx context.Context, b *client.Batch, values []parser.Datum, traceKV bool,
+	ctx context.Context, b *client.Batch, values []tree.Datum, traceKV bool,
 ) error {
 	if err := rd.Fks.checkAll(ctx, values); err != nil {
 		return err
@@ -904,7 +904,7 @@ func (rd *RowDeleter) DeleteRow(
 // DeleteIndexRow adds to the batch the kv operations necessary to delete a
 // table row from the given index.
 func (rd *RowDeleter) DeleteIndexRow(
-	ctx context.Context, b *client.Batch, idx *IndexDescriptor, values []parser.Datum, traceKV bool,
+	ctx context.Context, b *client.Batch, idx *IndexDescriptor, values []tree.Datum, traceKV bool,
 ) error {
 	if err := rd.Fks.checkAll(ctx, values); err != nil {
 		return err

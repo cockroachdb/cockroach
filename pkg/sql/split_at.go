@@ -22,8 +22,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -33,7 +33,7 @@ import (
 // getRowKey generates a key that corresponds to a row (or prefix of a row) in a table or index.
 // Both tableDesc and index are required (index can be the primary index).
 func getRowKey(
-	tableDesc *sqlbase.TableDescriptor, index *sqlbase.IndexDescriptor, values []parser.Datum,
+	tableDesc *sqlbase.TableDescriptor, index *sqlbase.IndexDescriptor, values []tree.Datum,
 ) ([]byte, error) {
 	colMap := make(map[sqlbase.ColumnID]int)
 	for i := range values {
@@ -51,7 +51,7 @@ func getRowKey(
 
 // Split executes a KV split.
 // Privileges: INSERT on table.
-func (p *planner) Split(ctx context.Context, n *parser.Split) (planNode, error) {
+func (p *planner) Split(ctx context.Context, n *tree.Split) (planNode, error) {
 	tableDesc, index, err := p.getTableAndIndex(ctx, n.Table, n.Index, privilege.INSERT)
 	if err != nil {
 		return nil, err
@@ -132,10 +132,10 @@ func (n *splitNode) Next(params runParams) (bool, error) {
 	return true, nil
 }
 
-func (n *splitNode) Values() parser.Datums {
-	return parser.Datums{
-		parser.NewDBytes(parser.DBytes(n.lastSplitKey)),
-		parser.NewDString(keys.PrettyPrint(n.lastSplitKey)),
+func (n *splitNode) Values() tree.Datums {
+	return tree.Datums{
+		tree.NewDBytes(tree.DBytes(n.lastSplitKey)),
+		tree.NewDString(keys.PrettyPrint(n.lastSplitKey)),
 	}
 }
 
@@ -157,9 +157,7 @@ var splitNodeColumns = sqlbase.ResultColumns{
 // TestingRelocate moves ranges to specific stores
 // (`ALTER TABLE/INDEX ... TESTING_RELOCATE ...` statement)
 // Privileges: INSERT on table.
-func (p *planner) TestingRelocate(
-	ctx context.Context, n *parser.TestingRelocate,
-) (planNode, error) {
+func (p *planner) TestingRelocate(ctx context.Context, n *tree.TestingRelocate) (planNode, error) {
 	tableDesc, index, err := p.getTableAndIndex(ctx, n.Table, n.Index, privilege.INSERT)
 	if err != nil {
 		return nil, err
@@ -270,7 +268,7 @@ func (n *testingRelocateNode) Next(params runParams) (bool, error) {
 			data[0].ResolvedType(),
 		)
 	}
-	relocation := data[0].(*parser.DArray)
+	relocation := data[0].(*tree.DArray)
 	if len(relocation.Array) == 0 {
 		return false, errors.Errorf("empty relocation array for TESTING_RELOCATE")
 	}
@@ -278,7 +276,7 @@ func (n *testingRelocateNode) Next(params runParams) (bool, error) {
 	// Create an array of the desired replication targets.
 	targets := make([]roachpb.ReplicationTarget, len(relocation.Array))
 	for i, d := range relocation.Array {
-		storeID := roachpb.StoreID(*d.(*parser.DInt))
+		storeID := roachpb.StoreID(*d.(*tree.DInt))
 		nodeID, ok := n.storeMap[storeID]
 		if !ok {
 			// Lookup the store in gossip.
@@ -315,10 +313,10 @@ func (n *testingRelocateNode) Next(params runParams) (bool, error) {
 	return true, nil
 }
 
-func (n *testingRelocateNode) Values() parser.Datums {
-	return parser.Datums{
-		parser.NewDBytes(parser.DBytes(n.lastRangeStartKey)),
-		parser.NewDString(keys.PrettyPrint(n.lastRangeStartKey)),
+func (n *testingRelocateNode) Values() tree.Datums {
+	return tree.Datums{
+		tree.NewDBytes(tree.DBytes(n.lastRangeStartKey)),
+		tree.NewDString(keys.PrettyPrint(n.lastRangeStartKey)),
 	}
 }
 
@@ -340,7 +338,7 @@ var relocateNodeColumns = sqlbase.ResultColumns{
 // Scatter moves ranges to random stores
 // (`ALTER TABLE/INDEX ... SCATTER ...` statement)
 // Privileges: INSERT on table.
-func (p *planner) Scatter(ctx context.Context, n *parser.Scatter) (planNode, error) {
+func (p *planner) Scatter(ctx context.Context, n *tree.Scatter) (planNode, error) {
 	tableDesc, index, err := p.getTableAndIndex(ctx, n.Table, n.Index, privilege.INSERT)
 	if err != nil {
 		return nil, err
@@ -373,10 +371,10 @@ func (p *planner) Scatter(ctx context.Context, n *parser.Scatter) (planNode, err
 			}
 			desiredTypes[i] = c.Type.ToDatumType()
 		}
-		fromVals := make([]parser.Datum, len(n.From))
+		fromVals := make([]tree.Datum, len(n.From))
 		for i, expr := range n.From {
 			typedExpr, err := p.analyzeExpr(
-				ctx, expr, nil, parser.IndexedVarHelper{}, desiredTypes[i], true, "SCATTER",
+				ctx, expr, nil, tree.IndexedVarHelper{}, desiredTypes[i], true, "SCATTER",
 			)
 			if err != nil {
 				return nil, err
@@ -386,10 +384,10 @@ func (p *planner) Scatter(ctx context.Context, n *parser.Scatter) (planNode, err
 				return nil, err
 			}
 		}
-		toVals := make([]parser.Datum, len(n.From))
+		toVals := make([]tree.Datum, len(n.From))
 		for i, expr := range n.To {
 			typedExpr, err := p.analyzeExpr(
-				ctx, expr, nil, parser.IndexedVarHelper{}, desiredTypes[i], true, "SCATTER",
+				ctx, expr, nil, tree.IndexedVarHelper{}, desiredTypes[i], true, "SCATTER",
 			)
 			if err != nil {
 				return nil, err
@@ -460,11 +458,11 @@ var scatterNodeColumns = sqlbase.ResultColumns{
 	},
 }
 
-func (n *scatterNode) Values() parser.Datums {
+func (n *scatterNode) Values() tree.Datums {
 	r := n.ranges[n.rangeIdx]
-	return parser.Datums{
-		parser.NewDBytes(parser.DBytes(r.Span.Key)),
-		parser.NewDString(keys.PrettyPrint(r.Span.Key)),
+	return tree.Datums{
+		tree.NewDBytes(tree.DBytes(r.Span.Key)),
+		tree.NewDString(keys.PrettyPrint(r.Span.Key)),
 	}
 }
 

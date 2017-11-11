@@ -22,7 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -57,7 +57,7 @@ func (s *Server) refreshSettings() {
 			if err := nameRow[0].EnsureDecoded(&types[0], a); err != nil {
 				return err
 			}
-			k = string(parser.MustBeDString(nameRow[0].Datum))
+			k = string(tree.MustBeDString(nameRow[0].Datum))
 		}
 
 		// The rest of the columns are stored as a family, packed with diff-encoded
@@ -71,7 +71,7 @@ func (s *Server) refreshSettings() {
 			}
 			var colIDDiff uint32
 			var lastColID sqlbase.ColumnID
-			var res parser.Datum
+			var res tree.Datum
 			for len(bytes) > 0 {
 				_, _, colIDDiff, _, err = encoding.DecodeValueTag(bytes)
 				if err != nil {
@@ -86,9 +86,9 @@ func (s *Server) refreshSettings() {
 					}
 					switch colID {
 					case tbl.Columns[1].ID: // value
-						v = string(parser.MustBeDString(res))
+						v = string(tree.MustBeDString(res))
 					case tbl.Columns[3].ID: // valueType
-						t = string(parser.MustBeDString(res))
+						t = string(tree.MustBeDString(res))
 					case tbl.Columns[2].ID: // lastUpdated
 						// TODO(dt): we could decode just the len and then seek `bytes` past
 						// it, without allocating/decoding the unused timestamp.

@@ -9,7 +9,7 @@
 package sqlccl
 
 import (
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/pkg/errors"
 )
@@ -21,7 +21,7 @@ import (
 // to `foo.bar` or even `foo.*`) are also included in the second list for
 // callers that wish to handle that case differently.
 func descriptorsMatchingTargets(
-	sessionDatabase string, descriptors []sqlbase.Descriptor, targets parser.TargetList,
+	sessionDatabase string, descriptors []sqlbase.Descriptor, targets tree.TargetList,
 ) ([]sqlbase.Descriptor, []*sqlbase.DatabaseDescriptor, error) {
 	// TODO(dan): If the session search path starts including more than virtual
 	// tables (as of 2017-01-12 it's only pg_catalog), then this method will
@@ -56,7 +56,7 @@ func descriptorsMatchingTargets(
 		}
 
 		switch p := pattern.(type) {
-		case *parser.TableName:
+		case *tree.TableName:
 			if sessionDatabase != "" {
 				if err := p.QualifyWithDatabase(sessionDatabase); err != nil {
 					return nil, nil, err
@@ -67,7 +67,7 @@ func descriptorsMatchingTargets(
 				name:     string(p.TableName),
 				validity: maybeValid,
 			})
-		case *parser.AllTablesSelector:
+		case *tree.AllTablesSelector:
 			if sessionDatabase != "" {
 				if err := p.QualifyWithDatabase(sessionDatabase); err != nil {
 					return nil, nil, err

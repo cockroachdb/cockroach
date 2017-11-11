@@ -24,6 +24,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
@@ -43,15 +44,15 @@ import (
 // See: https://www.postgresql.org/docs/9.5/static/sql-copy.html
 type copyNode struct {
 	session       *Session
-	table         parser.TableExpr
-	columns       parser.UnresolvedNames
+	table         tree.TableExpr
+	columns       tree.UnresolvedNames
 	resultColumns sqlbase.ResultColumns
 	buf           bytes.Buffer
-	rows          []*parser.Tuple
+	rows          []*tree.Tuple
 	rowsMemAcc    WrappableMemoryAccount
 }
 
-func (*copyNode) Values() parser.Datums        { return nil }
+func (*copyNode) Values() tree.Datums          { return nil }
 func (*copyNode) Next(runParams) (bool, error) { return false, nil }
 
 func (n *copyNode) Close(ctx context.Context) {
@@ -60,7 +61,7 @@ func (n *copyNode) Close(ctx context.Context) {
 
 // CopyFrom begins a COPY.
 // Privileges: INSERT on table.
-func (p *planner) CopyFrom(ctx context.Context, n *parser.CopyFrom) (planNode, error) {
+func (p *planner) CopyFrom(ctx context.Context, n *tree.CopyFrom) (planNode, error) {
 	cn := &copyNode{
 		table:   &n.Table,
 		columns: n.Columns,
@@ -174,12 +175,12 @@ func (n *copyNode) addRow(ctx context.Context, line []byte) error {
 	if len(parts) != len(n.resultColumns) {
 		return fmt.Errorf("expected %d values, got %d", len(n.resultColumns), len(parts))
 	}
-	exprs := make(parser.Exprs, len(parts))
+	exprs := make(tree.Exprs, len(parts))
 	acc := n.rowsMemAcc.Wsession(n.session)
 	for i, part := range parts {
 		s := string(part)
 		if s == nullString {
-			exprs[i] = parser.DNull
+			exprs[i] = tree.DNull
 			continue
 		}
 		switch t := n.resultColumns[i].Typ; t {
@@ -209,7 +210,7 @@ func (n *copyNode) addRow(ctx context.Context, line []byte) error {
 
 		exprs[i] = d
 	}
-	tuple := &parser.Tuple{Exprs: exprs}
+	tuple := &tree.Tuple{Exprs: exprs}
 	if err := acc.Grow(ctx, int64(unsafe.Sizeof(*tuple))); err != nil {
 		return err
 	}
@@ -325,27 +326,27 @@ func (p *planner) CopyData(ctx context.Context, n CopyDataBlock) (planNode, erro
 		return &zeroNode{}, nil
 	}
 
-	vc := &parser.ValuesClause{Tuples: cf.rows}
+	vc := &tree.ValuesClause{Tuples: cf.rows}
 	// Reuse the same backing array once the Insert is complete.
 	cf.rows = cf.rows[:0]
 	cf.rowsMemAcc.Wsession(p.session).Clear(ctx)
 
-	in := parser.Insert{
+	in := tree.Insert{
 		Table:   cf.table,
 		Columns: cf.columns,
-		Rows: &parser.Select{
+		Rows: &tree.Select{
 			Select: vc,
 		},
-		Returning: parser.AbsentReturningClause,
+		Returning: tree.AbsentReturningClause,
 	}
 	return p.Insert(ctx, &in, nil)
 }
 
 // Format implements the NodeFormatter interface.
-func (CopyDataBlock) Format(buf *bytes.Buffer, f parser.FmtFlags) {}
+func (CopyDataBlock) Format(buf *bytes.Buffer, f tree.FmtFlags) {}
 
 // StatementType implements the Statement interface.
-func (CopyDataBlock) StatementType() parser.StatementType { return parser.RowsAffected }
+func (CopyDataBlock) StatementType() tree.StatementType { return tree.RowsAffected }
 
 // StatementTag returns a short string identifying the type of statement.
 func (CopyDataBlock) StatementTag() string { return "" }

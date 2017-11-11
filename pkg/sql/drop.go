@@ -24,16 +24,16 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 type dropDatabaseNode struct {
-	n      *parser.DropDatabase
+	n      *tree.DropDatabase
 	dbDesc *sqlbase.DatabaseDescriptor
 	td     []*sqlbase.TableDescriptor
 }
@@ -46,7 +46,7 @@ type dropDatabaseNode struct {
 // (cockroach database == postgres schema). the postgres default of not
 // dropping the schema if there are dependent objects is more sensible
 // (see the RESTRICT and CASCADE options).
-func (p *planner) DropDatabase(ctx context.Context, n *parser.DropDatabase) (planNode, error) {
+func (p *planner) DropDatabase(ctx context.Context, n *tree.DropDatabase) (planNode, error) {
 	if n.Name == "" {
 		return nil, errEmptyDatabaseName
 	}
@@ -75,11 +75,11 @@ func (p *planner) DropDatabase(ctx context.Context, n *parser.DropDatabase) (pla
 
 	if len(tbNames) > 0 {
 		switch n.DropBehavior {
-		case parser.DropRestrict:
+		case tree.DropRestrict:
 			return nil, pgerror.NewErrorf(pgerror.CodeDependentObjectsStillExistError,
 				"database %q is not empty and RESTRICT was specified",
-				parser.ErrString(parser.Name(dbDesc.Name)))
-		case parser.DropDefault:
+				tree.ErrString(tree.Name(dbDesc.Name)))
+		case tree.DropDefault:
 			// The default is CASCADE, however be cautious if CASCADE was
 			// not specified explicitly.
 			if p.session.SafeUpdates {
@@ -103,7 +103,7 @@ func (p *planner) DropDatabase(ctx context.Context, n *parser.DropDatabase) (pla
 		// Recursively check permissions on all dependent views, since some may
 		// be in different databases.
 		for _, ref := range tbDesc.DependedOnBy {
-			if err := p.canRemoveDependentView(ctx, tbDesc, ref, parser.DropCascade); err != nil {
+			if err := p.canRemoveDependentView(ctx, tbDesc, ref, tree.DropCascade); err != nil {
 				return nil, err
 			}
 		}
@@ -164,7 +164,7 @@ func (n *dropDatabaseNode) Start(params runParams) error {
 	tbNameStrings := make([]string, 0, len(n.td))
 	for _, tbDesc := range n.td {
 		if tbDesc.IsView() {
-			cascadedViews, err := p.dropViewImpl(ctx, tbDesc, parser.DropCascade)
+			cascadedViews, err := p.dropViewImpl(ctx, tbDesc, tree.DropCascade)
 			if err != nil {
 				return err
 			}
@@ -227,23 +227,23 @@ func (n *dropDatabaseNode) Start(params runParams) error {
 
 func (*dropDatabaseNode) Next(runParams) (bool, error) { return false, nil }
 func (*dropDatabaseNode) Close(context.Context)        {}
-func (*dropDatabaseNode) Values() parser.Datums        { return parser.Datums{} }
+func (*dropDatabaseNode) Values() tree.Datums          { return tree.Datums{} }
 
 type dropIndexNode struct {
-	n        *parser.DropIndex
+	n        *tree.DropIndex
 	idxNames []fullIndexName
 }
 
 type fullIndexName struct {
-	tn      *parser.TableName
-	idxName parser.UnrestrictedName
+	tn      *tree.TableName
+	idxName tree.UnrestrictedName
 }
 
 // DropIndex drops an index.
 // Privileges: CREATE on table.
 //   Notes: postgres allows only the index owner to DROP an index.
 //          mysql requires the INDEX privilege on the table.
-func (p *planner) DropIndex(ctx context.Context, n *parser.DropIndex) (planNode, error) {
+func (p *planner) DropIndex(ctx context.Context, n *tree.DropIndex) (planNode, error) {
 	// Keep a track of the indexes that exist to check. When the IF EXISTS
 	// options are provided, we will simply not include any indexes that
 	// don't exist and continue execution.
@@ -294,7 +294,7 @@ func (n *dropIndexNode) Start(params runParams) error {
 
 		if err := params.p.dropIndexByName(
 			ctx, index.idxName, tableDesc, n.n.IfExists, n.n.DropBehavior, checkOutboundFK,
-			parser.AsStringWithFlags(n.n, parser.FmtSimpleQualified),
+			tree.AsStringWithFlags(n.n, tree.FmtSimpleQualified),
 		); err != nil {
 			return err
 		}
@@ -315,10 +315,10 @@ const (
 
 func (p *planner) dropIndexByName(
 	ctx context.Context,
-	idxName parser.UnrestrictedName,
+	idxName tree.UnrestrictedName,
 	tableDesc *sqlbase.TableDescriptor,
 	ifExists bool,
-	behavior parser.DropBehavior,
+	behavior tree.DropBehavior,
 	outboundFKCheck dropIdxFKCheck,
 	jobDesc string,
 ) error {
@@ -339,7 +339,7 @@ func (p *planner) dropIndexByName(
 	// Queue the mutation.
 	var droppedViews []string
 	if idx.ForeignKey.IsSet() {
-		if behavior != parser.DropCascade && outboundFKCheck != ignoreOutboundFK {
+		if behavior != tree.DropCascade && outboundFKCheck != ignoreOutboundFK {
 			return fmt.Errorf("index %q is in use as a foreign key constraint", idx.Name)
 		}
 		if err := p.removeFKBackReference(ctx, tableDesc, idx); err != nil {
@@ -443,10 +443,10 @@ func (p *planner) dropIndexByName(
 
 func (*dropIndexNode) Next(runParams) (bool, error) { return false, nil }
 func (*dropIndexNode) Close(context.Context)        {}
-func (*dropIndexNode) Values() parser.Datums        { return parser.Datums{} }
+func (*dropIndexNode) Values() tree.Datums          { return tree.Datums{} }
 
 type dropViewNode struct {
-	n  *parser.DropView
+	n  *tree.DropView
 	td []*sqlbase.TableDescriptor
 }
 
@@ -454,7 +454,7 @@ type dropViewNode struct {
 // Privileges: DROP on view.
 //   Notes: postgres allows only the view owner to DROP a view.
 //          mysql requires the DROP privilege on the view.
-func (p *planner) DropView(ctx context.Context, n *parser.DropView) (planNode, error) {
+func (p *planner) DropView(ctx context.Context, n *tree.DropView) (planNode, error) {
 	td := make([]*sqlbase.TableDescriptor, 0, len(n.Names))
 	for _, name := range n.Names {
 		tn, err := name.NormalizeTableName()
@@ -548,10 +548,10 @@ func (n *dropViewNode) Start(params runParams) error {
 
 func (*dropViewNode) Next(runParams) (bool, error) { return false, nil }
 func (*dropViewNode) Close(context.Context)        {}
-func (*dropViewNode) Values() parser.Datums        { return parser.Datums{} }
+func (*dropViewNode) Values() tree.Datums          { return tree.Datums{} }
 
 type dropTableNode struct {
-	n  *parser.DropTable
+	n  *tree.DropTable
 	td []*sqlbase.TableDescriptor
 }
 
@@ -559,7 +559,7 @@ type dropTableNode struct {
 // Privileges: DROP on table.
 //   Notes: postgres allows only the table owner to DROP a table.
 //          mysql requires the DROP privilege on the table.
-func (p *planner) DropTable(ctx context.Context, n *parser.DropTable) (planNode, error) {
+func (p *planner) DropTable(ctx context.Context, n *tree.DropTable) (planNode, error) {
 	td := make([]*sqlbase.TableDescriptor, 0, len(n.Names))
 	for _, name := range n.Names {
 		tn, err := name.NormalizeTableName()
@@ -625,13 +625,13 @@ func (p *planner) DropTable(ctx context.Context, n *parser.DropTable) (planNode,
 }
 
 func (p *planner) canRemoveFK(
-	ctx context.Context, from string, ref sqlbase.ForeignKeyReference, behavior parser.DropBehavior,
+	ctx context.Context, from string, ref sqlbase.ForeignKeyReference, behavior tree.DropBehavior,
 ) (*sqlbase.TableDescriptor, error) {
 	table, err := sqlbase.GetTableDescFromID(ctx, p.txn, ref.Table)
 	if err != nil {
 		return nil, err
 	}
-	if behavior != parser.DropCascade {
+	if behavior != tree.DropCascade {
 		return nil, fmt.Errorf("%q is referenced by foreign key from table %q", from, table.Name)
 	}
 	if err := p.CheckPrivilege(table, privilege.CREATE); err != nil {
@@ -641,7 +641,7 @@ func (p *planner) canRemoveFK(
 }
 
 func (p *planner) canRemoveInterleave(
-	ctx context.Context, from string, ref sqlbase.ForeignKeyReference, behavior parser.DropBehavior,
+	ctx context.Context, from string, ref sqlbase.ForeignKeyReference, behavior tree.DropBehavior,
 ) error {
 	table, err := sqlbase.GetTableDescFromID(ctx, p.txn, ref.Table)
 	if err != nil {
@@ -653,7 +653,7 @@ func (p *planner) canRemoveInterleave(
 	// table's descriptor would have to be kept around in some Dropped but
 	// non-public state for referential integrity of the `InterleaveDescriptor`
 	// pointers.
-	if behavior != parser.DropCascade {
+	if behavior != tree.DropCascade {
 		return pgerror.UnimplementedWithIssueErrorf(
 			8036, "%q is interleaved by table %q", from, table.Name)
 	}
@@ -664,7 +664,7 @@ func (p *planner) canRemoveDependentView(
 	ctx context.Context,
 	from *sqlbase.TableDescriptor,
 	ref sqlbase.TableDescriptor_Reference,
-	behavior parser.DropBehavior,
+	behavior tree.DropBehavior,
 ) error {
 	return p.canRemoveDependentViewGeneric(ctx, from.TypeName(), from.Name, from.ParentID, ref, behavior)
 }
@@ -675,7 +675,7 @@ func (p *planner) canRemoveDependentViewGeneric(
 	objName string,
 	parentID sqlbase.ID,
 	ref sqlbase.TableDescriptor_Reference,
-	behavior parser.DropBehavior,
+	behavior tree.DropBehavior,
 ) error {
 	viewDesc, err := p.getViewDescForCascade(ctx, typeName, objName, parentID, ref.ID, behavior)
 	if err != nil {
@@ -742,7 +742,7 @@ func (p *planner) removeDependentView(
 	// that refer to the view that's being removed.
 	tableDesc.DependedOnBy = removeMatchingReferences(tableDesc.DependedOnBy, viewDesc.ID)
 	// Then proceed to actually drop the view and log an event for it.
-	return p.dropViewImpl(ctx, viewDesc, parser.DropCascade)
+	return p.dropViewImpl(ctx, viewDesc, tree.DropCascade)
 }
 
 func (n *dropTableNode) Start(params runParams) error {
@@ -779,7 +779,7 @@ func (n *dropTableNode) Start(params runParams) error {
 
 func (*dropTableNode) Next(runParams) (bool, error) { return false, nil }
 func (*dropTableNode) Close(context.Context)        {}
-func (*dropTableNode) Values() parser.Datums        { return parser.Datums{} }
+func (*dropTableNode) Values() tree.Datums          { return tree.Datums{} }
 
 // dropTableOrViewPrepare/dropTableImpl is used to drop a single table by
 // name, which can result from either a DROP TABLE or DROP DATABASE
@@ -794,7 +794,7 @@ func (*dropTableNode) Values() parser.Datums        { return parser.Datums{} }
 // new leases for it and existing leases are released).
 // If the table does not exist, this function returns a nil descriptor.
 func (p *planner) dropTableOrViewPrepare(
-	ctx context.Context, name *parser.TableName,
+	ctx context.Context, name *tree.TableName,
 ) (*sqlbase.TableDescriptor, error) {
 	tableDesc, err := getTableOrViewDesc(ctx, p.txn, p.getVirtualTabler(), name)
 	if err != nil {
@@ -847,7 +847,7 @@ func (p *planner) dropTableImpl(
 	// made it to this point if `cascade` wasn't enabled.
 	for _, ref := range tableDesc.DependedOnBy {
 		viewDesc, err := p.getViewDescForCascade(
-			ctx, tableDesc.TypeName(), tableDesc.Name, tableDesc.ParentID, ref.ID, parser.DropCascade,
+			ctx, tableDesc.TypeName(), tableDesc.Name, tableDesc.ParentID, ref.ID, tree.DropCascade,
 		)
 		if err != nil {
 			return droppedViews, err
@@ -856,7 +856,7 @@ func (p *planner) dropTableImpl(
 		if viewDesc.Dropped() {
 			continue
 		}
-		cascadedViews, err := p.dropViewImpl(ctx, viewDesc, parser.DropCascade)
+		cascadedViews, err := p.dropViewImpl(ctx, viewDesc, tree.DropCascade)
 		if err != nil {
 			return droppedViews, err
 		}
@@ -972,7 +972,7 @@ func verifyDropTableMetadata(
 // if `cascade is specified`). Returns the names of any additional views that
 // were also dropped due to `cascade` behavior.
 func (p *planner) dropViewImpl(
-	ctx context.Context, viewDesc *sqlbase.TableDescriptor, behavior parser.DropBehavior,
+	ctx context.Context, viewDesc *sqlbase.TableDescriptor, behavior tree.DropBehavior,
 ) ([]string, error) {
 	var cascadeDroppedViews []string
 
@@ -995,7 +995,7 @@ func (p *planner) dropViewImpl(
 	}
 	viewDesc.DependsOn = nil
 
-	if behavior == parser.DropCascade {
+	if behavior == tree.DropCascade {
 		for _, ref := range viewDesc.DependedOnBy {
 			dependentDesc, err := p.getViewDescForCascade(
 				ctx, viewDesc.TypeName(), viewDesc.Name, viewDesc.ParentID, ref.ID, behavior,
@@ -1041,14 +1041,14 @@ func (p *planner) getViewDescForCascade(
 	typeName string,
 	objName string,
 	parentID, viewID sqlbase.ID,
-	behavior parser.DropBehavior,
+	behavior tree.DropBehavior,
 ) (*sqlbase.TableDescriptor, error) {
 	viewDesc, err := sqlbase.GetTableDescFromID(ctx, p.txn, viewID)
 	if err != nil {
 		log.Warningf(ctx, "unable to retrieve descriptor for view %d: %v", viewID, err)
 		return nil, errors.Wrapf(err, "error resolving dependent view ID %d", viewID)
 	}
-	if behavior != parser.DropCascade {
+	if behavior != tree.DropCascade {
 		viewName := viewDesc.Name
 		if viewDesc.ParentID != parentID {
 			var err error
@@ -1097,7 +1097,7 @@ func (n *dropUserNode) Start(params runParams) error {
 					if usedBy.Len() > 0 {
 						usedBy.WriteString(", ")
 					}
-					parser.Name(db.Name).Format(&usedBy, parser.FmtSimple)
+					tree.Name(db.Name).Format(&usedBy, tree.FmtSimple)
 				}
 			}
 			return nil
@@ -1108,14 +1108,14 @@ func (n *dropUserNode) Start(params runParams) error {
 		func(db *sqlbase.DatabaseDescriptor, table *sqlbase.TableDescriptor) error {
 			for _, u := range table.GetPrivileges().Users {
 				if _, ok := userNames[u.User]; ok {
-					tn := parser.TableName{
-						DatabaseName: parser.Name(db.Name),
-						TableName:    parser.Name(table.Name),
+					tn := tree.TableName{
+						DatabaseName: tree.Name(db.Name),
+						TableName:    tree.Name(table.Name),
 					}
 					if usedBy.Len() > 0 {
 						usedBy.WriteString(", ")
 					}
-					tn.Format(&usedBy, parser.FmtSimple)
+					tn.Format(&usedBy, tree.FmtSimple)
 				}
 			}
 			return nil
@@ -1128,7 +1128,7 @@ func (n *dropUserNode) Start(params runParams) error {
 			if i > 0 {
 				nameList.WriteString(", ")
 			}
-			parser.Name(name).Format(&nameList, parser.FmtSimple)
+			tree.Name(name).Format(&nameList, tree.FmtSimple)
 		}
 		return pgerror.NewErrorf(pgerror.CodeGroupingError,
 			"cannot drop user%s %s: grants still exist on %s",
@@ -1170,13 +1170,13 @@ func (n *dropUserNode) Start(params runParams) error {
 
 func (*dropUserNode) Next(runParams) (bool, error)   { return false, nil }
 func (*dropUserNode) Close(context.Context)          {}
-func (*dropUserNode) Values() parser.Datums          { return parser.Datums{} }
+func (*dropUserNode) Values() tree.Datums            { return tree.Datums{} }
 func (n *dropUserNode) FastPathResults() (int, bool) { return n.numDeleted, true }
 
 // DropUser drops a list of users.
 // Privileges: DELETE on system.users.
-func (p *planner) DropUser(ctx context.Context, n *parser.DropUser) (planNode, error) {
-	tDesc, err := getTableDesc(ctx, p.txn, p.getVirtualTabler(), &parser.TableName{DatabaseName: "system", TableName: "users"})
+func (p *planner) DropUser(ctx context.Context, n *tree.DropUser) (planNode, error) {
+	tDesc, err := getTableDesc(ctx, p.txn, p.getVirtualTabler(), &tree.TableName{DatabaseName: "system", TableName: "users"})
 	if err != nil {
 		return nil, err
 	}

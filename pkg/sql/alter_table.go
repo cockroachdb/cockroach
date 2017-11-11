@@ -21,14 +21,14 @@ import (
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
 type alterTableNode struct {
-	n         *parser.AlterTable
+	n         *tree.AlterTable
 	tableDesc *sqlbase.TableDescriptor
 }
 
@@ -36,7 +36,7 @@ type alterTableNode struct {
 // Privileges: CREATE on table.
 //   notes: postgres requires CREATE on the table.
 //          mysql requires ALTER, CREATE, INSERT on the table.
-func (p *planner) AlterTable(ctx context.Context, n *parser.AlterTable) (planNode, error) {
+func (p *planner) AlterTable(ctx context.Context, n *tree.AlterTable) (planNode, error) {
 	tn, err := n.Table.NormalizeWithDatabaseName(p.session.Database)
 	if err != nil {
 		return nil, err
@@ -69,7 +69,7 @@ func (n *alterTableNode) Start(params runParams) error {
 
 	for _, cmd := range n.n.Cmds {
 		switch t := cmd.(type) {
-		case *parser.AlterTableAddColumn:
+		case *tree.AlterTableAddColumn:
 			d := t.ColumnDef
 			if len(d.CheckExprs) > 0 {
 				return pgerror.Unimplemented(
@@ -119,7 +119,7 @@ func (n *alterTableNode) Start(params runParams) error {
 				}
 			}
 
-		case *parser.AlterTableAddConstraint:
+		case *tree.AlterTableAddConstraint:
 			info, err := n.tableDesc.GetConstraintInfo(params.ctx, nil)
 			if err != nil {
 				return err
@@ -129,7 +129,7 @@ func (n *alterTableNode) Start(params runParams) error {
 				inuseNames[k] = struct{}{}
 			}
 			switch d := t.ConstraintDef.(type) {
-			case *parser.UniqueConstraintTableDef:
+			case *tree.UniqueConstraintTableDef:
 				if d.PrimaryKey {
 					return fmt.Errorf("multiple primary keys for table %q are not allowed", n.tableDesc.Name)
 				}
@@ -151,7 +151,7 @@ func (n *alterTableNode) Start(params runParams) error {
 					return err
 				}
 
-			case *parser.CheckConstraintTableDef:
+			case *tree.CheckConstraintTableDef:
 				ck, err := makeCheckConstraint(*n.tableDesc, d, inuseNames, &params.p.semaCtx, &params.p.evalCtx)
 				if err != nil {
 					return err
@@ -160,7 +160,7 @@ func (n *alterTableNode) Start(params runParams) error {
 				n.tableDesc.Checks = append(n.tableDesc.Checks, ck)
 				descriptorChanged = true
 
-			case *parser.ForeignKeyConstraintTableDef:
+			case *tree.ForeignKeyConstraintTableDef:
 				if _, err := d.Table.NormalizeWithDatabaseName(params.p.session.Database); err != nil {
 					return err
 				}
@@ -180,7 +180,7 @@ func (n *alterTableNode) Start(params runParams) error {
 				return fmt.Errorf("unsupported constraint: %T", t.ConstraintDef)
 			}
 
-		case *parser.AlterTableDropColumn:
+		case *tree.AlterTableDropColumn:
 			if params.p.session.SafeUpdates {
 				return pgerror.NewDangerousStatementErrorf("ALTER TABLE DROP COLUMN will remove all data in that column")
 			}
@@ -284,10 +284,10 @@ func (n *alterTableNode) Start(params runParams) error {
 
 				// Perform the DROP.
 				if containsThisColumn {
-					if containsOnlyThisColumn || t.DropBehavior == parser.DropCascade {
+					if containsOnlyThisColumn || t.DropBehavior == tree.DropCascade {
 						if err := params.p.dropIndexByName(
-							params.ctx, parser.UnrestrictedName(idx.Name), n.tableDesc, false, t.DropBehavior, ignoreOutboundFK,
-							parser.AsStringWithFlags(n.n, parser.FmtSimpleQualified),
+							params.ctx, tree.UnrestrictedName(idx.Name), n.tableDesc, false, t.DropBehavior, ignoreOutboundFK,
+							tree.AsStringWithFlags(n.n, tree.FmtSimpleQualified),
 						); err != nil {
 							return err
 						}
@@ -309,7 +309,7 @@ func (n *alterTableNode) Start(params runParams) error {
 				return fmt.Errorf("column %q in the middle of being added, try again later", t.Column)
 			}
 
-		case *parser.AlterTableDropConstraint:
+		case *tree.AlterTableDropConstraint:
 			info, err := n.tableDesc.GetConstraintInfo(params.ctx, nil)
 			if err != nil {
 				return err
@@ -349,7 +349,7 @@ func (n *alterTableNode) Start(params runParams) error {
 				return errors.Errorf("dropping %s constraint %q unsupported", details.Kind, t.Constraint)
 			}
 
-		case *parser.AlterTableValidateConstraint:
+		case *tree.AlterTableValidateConstraint:
 			info, err := n.tableDesc.GetConstraintInfo(params.ctx, nil)
 			if err != nil {
 				return err
@@ -411,7 +411,7 @@ func (n *alterTableNode) Start(params runParams) error {
 				return errors.Errorf("validating %s constraint %q unsupported", constraint.Kind, t.Constraint)
 			}
 
-		case parser.ColumnMutationCmd:
+		case tree.ColumnMutationCmd:
 			// Column mutations
 			col, dropped, err := n.tableDesc.FindColumnByName(t.GetColumn())
 			if err != nil {
@@ -452,7 +452,7 @@ func (n *alterTableNode) Start(params runParams) error {
 	var err error
 	if addedMutations {
 		mutationID, err = params.p.createSchemaChangeJob(params.ctx, n.tableDesc,
-			parser.AsStringWithFlags(n.n, parser.FmtSimpleQualified))
+			tree.AsStringWithFlags(n.n, tree.FmtSimpleQualified))
 	} else {
 		err = n.tableDesc.SetUpVersion()
 	}
@@ -491,16 +491,16 @@ func (n *alterTableNode) Start(params runParams) error {
 
 func (n *alterTableNode) Next(runParams) (bool, error) { return false, nil }
 func (n *alterTableNode) Close(context.Context)        {}
-func (n *alterTableNode) Values() parser.Datums        { return parser.Datums{} }
+func (n *alterTableNode) Values() tree.Datums          { return tree.Datums{} }
 
 func applyColumnMutation(
 	col *sqlbase.ColumnDescriptor,
-	mut parser.ColumnMutationCmd,
-	semaCtx *parser.SemaContext,
-	evalCtx *parser.EvalContext,
+	mut tree.ColumnMutationCmd,
+	semaCtx *tree.SemaContext,
+	evalCtx *tree.EvalContext,
 ) error {
 	switch t := mut.(type) {
-	case *parser.AlterTableSetDefault:
+	case *tree.AlterTableSetDefault:
 		if t.Default == nil {
 			col.DefaultExpr = nil
 		} else {
@@ -510,17 +510,17 @@ func applyColumnMutation(
 			); err != nil {
 				return err
 			}
-			s := parser.Serialize(t.Default)
+			s := tree.Serialize(t.Default)
 			col.DefaultExpr = &s
 		}
 
-	case *parser.AlterTableDropNotNull:
+	case *tree.AlterTableDropNotNull:
 		col.Nullable = true
 	}
 	return nil
 }
 
-func labeledRowValues(cols []sqlbase.ColumnDescriptor, values parser.Datums) string {
+func labeledRowValues(cols []sqlbase.ColumnDescriptor, values tree.Datums) string {
 	var s bytes.Buffer
 	for i := range cols {
 		if i != 0 {

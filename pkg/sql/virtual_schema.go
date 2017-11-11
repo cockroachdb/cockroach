@@ -24,6 +24,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
@@ -46,7 +47,7 @@ type virtualSchema struct {
 // virtualSchemaTable represents a table within a virtualSchema.
 type virtualSchemaTable struct {
 	schema   string
-	populate func(ctx context.Context, p *planner, prefix string, addRow func(...parser.Datum) error) error
+	populate func(ctx context.Context, p *planner, prefix string, addRow func(...tree.Datum) error) error
 }
 
 // virtualSchemas holds a slice of statically registered virtualSchema objects.
@@ -80,12 +81,12 @@ type virtualSchemaEntry struct {
 	orderedTableNames []string
 }
 
-func (e virtualSchemaEntry) tableNames(dbNameOriginallyOmitted bool) parser.TableNames {
-	var res parser.TableNames
+func (e virtualSchemaEntry) tableNames(dbNameOriginallyOmitted bool) tree.TableNames {
+	var res tree.TableNames
 	for _, tableName := range e.orderedTableNames {
-		tn := parser.TableName{
-			DatabaseName:            parser.Name(e.desc.Name),
-			TableName:               parser.Name(tableName),
+		tn := tree.TableName{
+			DatabaseName:            tree.Name(e.desc.Name),
+			TableName:               tree.Name(tableName),
 			DBNameOriginallyOmitted: dbNameOriginallyOmitted,
 		}
 		res = append(res, tn)
@@ -118,13 +119,13 @@ func (e virtualTableEntry) getPlanInfo(
 	constructor := func(ctx context.Context, p *planner, prefix string) (planNode, error) {
 		v := p.newContainerValuesNode(columns, 0)
 
-		err := e.tableDef.populate(ctx, p, prefix, func(datums ...parser.Datum) error {
+		err := e.tableDef.populate(ctx, p, prefix, func(datums ...tree.Datum) error {
 			if r, c := len(datums), len(v.columns); r != c {
 				panic(fmt.Sprintf("datum row count and column count differ: %d vs %d", r, c))
 			}
 			for i, col := range v.columns {
 				datum := datums[i]
-				if !(datum == parser.DNull || datum.ResolvedType().Equivalent(col.Typ)) {
+				if !(datum == tree.DNull || datum.ResolvedType().Equivalent(col.Typ)) {
 					panic(fmt.Sprintf("datum column %q expected to be type %s; found type %s",
 						col.Name, col.Typ, datum.ResolvedType()))
 				}
@@ -197,7 +198,7 @@ func initVirtualTableDesc(
 	if err != nil {
 		return sqlbase.TableDescriptor{}, err
 	}
-	create := stmt.(*parser.CreateTable)
+	create := stmt.(*tree.CreateTable)
 	return p.makeTableDesc(ctx, create, 0, keys.VirtualDescriptorID, hlc.Timestamp{}, emptyPrivileges, nil)
 }
 
@@ -235,9 +236,7 @@ func (e *Executor) IsVirtualDatabase(name string) bool {
 // pair. The function will return the table's virtual table entry if the name matches
 // a specific table. It will return an error if the name references a virtual database
 // but the table is non-existent.
-func (vs *virtualSchemaHolder) getVirtualTableEntry(
-	tn *parser.TableName,
-) (virtualTableEntry, error) {
+func (vs *virtualSchemaHolder) getVirtualTableEntry(tn *tree.TableName) (virtualTableEntry, error) {
 	if db, ok := vs.getVirtualSchemaEntry(string(tn.DatabaseName)); ok {
 		if t, ok := db.tables[string(tn.TableName)]; ok {
 			return t, nil
@@ -249,7 +248,7 @@ func (vs *virtualSchemaHolder) getVirtualTableEntry(
 
 // VirtualTabler is used to fetch descriptors for virtual tables and databases.
 type VirtualTabler interface {
-	getVirtualTableDesc(tn *parser.TableName) (*sqlbase.TableDescriptor, error)
+	getVirtualTableDesc(tn *tree.TableName) (*sqlbase.TableDescriptor, error)
 	getVirtualDatabaseDesc(name string) *sqlbase.DatabaseDescriptor
 	getVirtualSchemaEntry(name string) (virtualSchemaEntry, bool)
 }
@@ -257,7 +256,7 @@ type VirtualTabler interface {
 // getVirtualTableDesc checks if the provided name matches a virtual database/table
 // pair, and returns its descriptor if it does.
 func (vs *virtualSchemaHolder) getVirtualTableDesc(
-	tn *parser.TableName,
+	tn *tree.TableName,
 ) (*sqlbase.TableDescriptor, error) {
 	t, err := vs.getVirtualTableEntry(tn)
 	if err != nil {
@@ -279,9 +278,7 @@ type nilVirtualTabler struct{}
 
 var _ VirtualTabler = nilVirtualTabler{}
 
-func (nilVirtualTabler) getVirtualTableDesc(
-	tn *parser.TableName,
-) (*sqlbase.TableDescriptor, error) {
+func (nilVirtualTabler) getVirtualTableDesc(tn *tree.TableName) (*sqlbase.TableDescriptor, error) {
 	return nil, nil
 }
 

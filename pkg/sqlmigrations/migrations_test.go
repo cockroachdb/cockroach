@@ -29,7 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -595,8 +595,8 @@ CREATE VIEW v6 AS SELECT x FROM x@y;
 	}
 
 	testDesc := []struct {
-		dbName parser.Name
-		tname  parser.Name
+		dbName tree.Name
+		tname  tree.Name
 		desc   *sqlbase.TableDescriptor
 	}{
 		{"test", "t", nil},
@@ -615,7 +615,7 @@ CREATE VIEW v6 AS SELECT x FROM x@y;
 	if err := kvDB.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
 		for i := range testDesc {
 			desc, err := sql.MustGetTableOrViewDesc(ctx, txn, vt,
-				&parser.TableName{DatabaseName: testDesc[i].dbName, TableName: testDesc[i].tname}, true)
+				&tree.TableName{DatabaseName: testDesc[i].dbName, TableName: testDesc[i].tname}, true)
 			if err != nil {
 				return err
 			}

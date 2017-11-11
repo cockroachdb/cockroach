@@ -20,7 +20,7 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/interval"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
@@ -337,8 +337,8 @@ var orderingFunctions = map[string]struct{}{
 
 func containsOrderingFunction(ctx context.Context, plan planNode) bool {
 	sawOrderingFn := false
-	po := planObserver{expr: func(_, _ string, n int, expr parser.Expr) {
-		if f, ok := expr.(*parser.FuncExpr); ok {
+	po := planObserver{expr: func(_, _ string, n int, expr tree.Expr) {
+		if f, ok := expr.(*tree.FuncExpr); ok {
 			if _, ok := orderingFunctions[f.Func.String()]; ok {
 				sawOrderingFn = true
 			}
@@ -363,16 +363,16 @@ func rangeGroupFromSpans(spans roachpb.Spans) interval.RangeGroup {
 // it should be run asynchronously and in parallel with other statements that
 // are independent.
 func IsStmtParallelized(stmt Statement) bool {
-	parallelizedRetClause := func(ret parser.ReturningClause) bool {
-		_, ok := ret.(*parser.ReturningNothing)
+	parallelizedRetClause := func(ret tree.ReturningClause) bool {
+		_, ok := ret.(*tree.ReturningNothing)
 		return ok
 	}
 	switch s := stmt.AST.(type) {
-	case *parser.Delete:
+	case *tree.Delete:
 		return parallelizedRetClause(s.Returning)
-	case *parser.Insert:
+	case *tree.Insert:
 		return parallelizedRetClause(s.Returning)
-	case *parser.Update:
+	case *tree.Update:
 		return parallelizedRetClause(s.Returning)
 	}
 	return false

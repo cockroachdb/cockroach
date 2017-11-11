@@ -20,7 +20,7 @@ import (
 
 	"golang.org/x/net/context"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -40,10 +40,10 @@ func TestRowContainer(t *testing.T) {
 					context.Background(), "test", mon.MemoryResource, nil, nil, math.MaxInt64,
 				)
 				rc := NewRowContainer(m.MakeBoundAccount(), ColTypeInfoFromResCols(resCol), 0)
-				row := make(parser.Datums, numCols)
+				row := make(tree.Datums, numCols)
 				for i := 0; i < numRows; i++ {
 					for j := range row {
-						row[j] = parser.NewDInt(parser.DInt(i*numCols + j))
+						row[j] = tree.NewDInt(tree.DInt(i*numCols + j))
 					}
 					if _, err := rc.AddRow(context.Background(), row); err != nil {
 						t.Fatal(err)
@@ -64,7 +64,7 @@ func TestRowContainer(t *testing.T) {
 				for i := 0; i < rc.Len(); i++ {
 					row := rc.At(i)
 					for j := range row {
-						dint, ok := parser.AsDInt(row[j])
+						dint, ok := tree.AsDInt(row[j])
 						if !ok || int(dint) != (i+numPops)*numCols+j {
 							t.Fatalf("invalid value %+v on row %d, col %d", row[j], i+numPops, j)
 						}

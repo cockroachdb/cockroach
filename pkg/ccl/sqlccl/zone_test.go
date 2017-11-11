@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -528,9 +529,9 @@ func TestGenerateSubzoneSpans(t *testing.T) {
 				if err != nil {
 					t.Fatalf("%+v", err)
 				}
-				createTable, ok := stmt.(*parser.CreateTable)
+				createTable, ok := stmt.(*tree.CreateTable)
 				if !ok {
-					t.Fatalf("expected *parser.CreateTable got %T", stmt)
+					t.Fatalf("expected *tree.CreateTable got %T", stmt)
 				}
 				const parentID, tableID = keys.MaxReservedDescID + 1, keys.MaxReservedDescID + 2
 				tableDesc, err = makeCSVTableDescriptor(

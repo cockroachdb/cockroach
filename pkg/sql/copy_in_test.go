@@ -25,7 +25,7 @@ import (
 
 	"golang.org/x/net/context"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
@@ -193,7 +193,7 @@ func TestCopyRandom(t *testing.T) {
 		row[1] = d.String()
 		for j, t := range types {
 			d := sqlbase.RandDatum(rng, sqlbase.ColumnType{SemanticType: t}, false)
-			ds := parser.AsStringWithFlags(d, parser.FmtBareStrings)
+			ds := tree.AsStringWithFlags(d, tree.FmtBareStrings)
 			row[j+2] = ds
 		}
 		_, err = stmt.Exec(row...)
@@ -237,8 +237,8 @@ func TestCopyRandom(t *testing.T) {
 			case []byte:
 				ds = string(d)
 			case time.Time:
-				dt := parser.MakeDTimestamp(d, time.Microsecond)
-				ds = parser.AsStringWithFlags(dt, parser.FmtBareStrings)
+				dt := tree.MakeDTimestamp(d, time.Microsecond)
+				ds = tree.AsStringWithFlags(dt, tree.FmtBareStrings)
 			}
 			if !reflect.DeepEqual(in[i], ds) {
 				t.Fatalf("row %v, col %v: got %#v (%T), expected %#v", row, i, ds, d, in[i])

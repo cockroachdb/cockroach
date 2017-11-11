@@ -24,7 +24,7 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -42,7 +42,7 @@ func TestOutbox(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	evalCtx := parser.MakeTestingEvalContext()
+	evalCtx := tree.MakeTestingEvalContext()
 	defer evalCtx.Stop(context.Background())
 	flowCtx := FlowCtx{
 		Settings: cluster.MakeTestingClusterSettings(),
@@ -67,7 +67,7 @@ func TestOutbox(t *testing.T) {
 	go func() {
 		producerC <- func() error {
 			row := sqlbase.EncDatumRow{
-				sqlbase.DatumToEncDatum(intType, parser.NewDInt(parser.DInt(0))),
+				sqlbase.DatumToEncDatum(intType, tree.NewDInt(tree.DInt(0))),
 			}
 			if consumerStatus := outbox.Push(row, ProducerMetadata{}); consumerStatus != NeedMoreRows {
 				return errors.Errorf("expected status: %d, got: %d", NeedMoreRows, consumerStatus)
@@ -76,7 +76,7 @@ func TestOutbox(t *testing.T) {
 			// Send rows until the drain request is observed.
 			for {
 				row = sqlbase.EncDatumRow{
-					sqlbase.DatumToEncDatum(intType, parser.NewDInt(parser.DInt(-1))),
+					sqlbase.DatumToEncDatum(intType, tree.NewDInt(tree.DInt(-1))),
 				}
 				consumerStatus := outbox.Push(row, ProducerMetadata{})
 				if consumerStatus == DrainRequested {
@@ -88,7 +88,7 @@ func TestOutbox(t *testing.T) {
 			}
 
 			// Now send another row that the outbox will discard.
-			row = sqlbase.EncDatumRow{sqlbase.DatumToEncDatum(intType, parser.NewDInt(parser.DInt(2)))}
+			row = sqlbase.EncDatumRow{sqlbase.DatumToEncDatum(intType, tree.NewDInt(tree.DInt(2)))}
 			if consumerStatus := outbox.Push(row, ProducerMetadata{}); consumerStatus != DrainRequested {
 				return errors.Errorf("expected status: %d, got: %d", NeedMoreRows, consumerStatus)
 			}
@@ -192,7 +192,7 @@ func TestOutboxInitializesStreamBeforeRecevingAnyRows(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	evalCtx := parser.MakeTestingEvalContext()
+	evalCtx := tree.MakeTestingEvalContext()
 	defer evalCtx.Stop(context.Background())
 	flowCtx := FlowCtx{
 		Settings: cluster.MakeTestingClusterSettings(),
@@ -260,7 +260,7 @@ func TestOutboxClosesWhenConsumerCloses(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			evalCtx := parser.MakeTestingEvalContext()
+			evalCtx := tree.MakeTestingEvalContext()
 			defer evalCtx.Stop(context.Background())
 			flowCtx := FlowCtx{
 				Settings: cluster.MakeTestingClusterSettings(),
@@ -385,7 +385,7 @@ func TestOutboxCancelsFlowOnError(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	evalCtx := parser.MakeTestingEvalContext()
+	evalCtx := tree.MakeTestingEvalContext()
 	defer evalCtx.Stop(context.Background())
 	flowCtx := FlowCtx{
 		Settings: cluster.MakeTestingClusterSettings(),

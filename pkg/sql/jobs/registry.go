@@ -26,7 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -201,7 +201,7 @@ func AddResumeHook(fn resumeHookFn) {
 }
 
 func (r *Registry) maybeAdoptJob(ctx context.Context, nl nodeLiveness) error {
-	var rows []parser.Datums
+	var rows []tree.Datums
 	if err := r.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
 		var err error
 		const stmt = `SELECT id, payload FROM system.jobs WHERE status IN ($1, $2) ORDER BY created DESC`
@@ -231,7 +231,7 @@ func (r *Registry) maybeAdoptJob(ctx context.Context, nl nodeLiveness) error {
 	}
 
 	for _, row := range rows {
-		id := (*int64)(row[0].(*parser.DInt))
+		id := (*int64)(row[0].(*tree.DInt))
 		payload, err := UnmarshalPayload(row[1])
 		if err != nil {
 			return err

@@ -20,7 +20,7 @@ import (
 
 	"golang.org/x/net/context"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -80,10 +80,7 @@ type ProcOutputHelper struct {
 // Note that the types slice may be stored directly; the caller should not
 // modify it.
 func (h *ProcOutputHelper) Init(
-	post *PostProcessSpec,
-	types []sqlbase.ColumnType,
-	evalCtx *parser.EvalContext,
-	output RowReceiver,
+	post *PostProcessSpec, types []sqlbase.ColumnType, evalCtx *tree.EvalContext, output RowReceiver,
 ) error {
 	if !post.Projection && len(post.OutputColumns) > 0 {
 		return errors.Errorf("post-processing has projection unset but output columns set: %s", post)

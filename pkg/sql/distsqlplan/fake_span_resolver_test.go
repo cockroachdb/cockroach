@@ -24,7 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils/distsqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -42,10 +42,10 @@ func TestFakeSpanResolver(t *testing.T) {
 		t, tc.ServerConn(0), "t",
 		"k INT PRIMARY KEY, v INT",
 		100,
-		func(row int) []parser.Datum {
-			return []parser.Datum{
-				parser.NewDInt(parser.DInt(row)),
-				parser.NewDInt(parser.DInt(row * row)),
+		func(row int) []tree.Datum {
+			return []tree.Datum{
+				tree.NewDInt(tree.DInt(row)),
+				tree.NewDInt(tree.DInt(row * row)),
 			}
 		},
 	)

@@ -20,7 +20,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/security"
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
 // GetUserHashedPassword returns the hashedPassword for the given username if
@@ -28,7 +28,7 @@ import (
 func GetUserHashedPassword(
 	ctx context.Context, executor *Executor, metrics *MemoryMetrics, username string,
 ) (bool, []byte, error) {
-	normalizedUsername := parser.Name(username).Normalize()
+	normalizedUsername := tree.Name(username).Normalize()
 	// The root user is not in system.users.
 	if normalizedUsername == security.RootUser {
 		return true, nil, nil
@@ -49,7 +49,7 @@ func GetUserHashedPassword(
 			return nil
 		}
 		exists = true
-		hashedPassword = []byte(*(values[0].(*parser.DBytes)))
+		hashedPassword = []byte(*(values[0].(*tree.DBytes)))
 		return nil
 	})
 

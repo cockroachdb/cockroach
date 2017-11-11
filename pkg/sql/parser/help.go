@@ -23,6 +23,7 @@ import (
 	"text/tabwriter"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
 // HelpMessage describes a contextual help message.
@@ -86,8 +87,8 @@ func helpWith(sqllex sqlLexer, helpText string) int {
 // helpWithFunction is to be used in parser actions to mark the parser
 // "in error", with the error set to a contextual help message about
 // the current built-in function.
-func helpWithFunction(sqllex sqlLexer, f ResolvableFunctionReference) int {
-	d, err := f.Resolve(SearchPath{})
+func helpWithFunction(sqllex sqlLexer, f tree.ResolvableFunctionReference) int {
+	d, err := f.Resolve(tree.SearchPath{})
 	if err != nil {
 		return 1
 	}
@@ -109,7 +110,7 @@ func helpWithFunction(sqllex sqlLexer, f ResolvableFunctionReference) int {
 	// together.
 	lastInfo := ""
 	for i, overload := range d.Definition {
-		b := overload.(Builtin)
+		b := overload.(tree.Builtin)
 		if b.Info != "" && b.Info != lastInfo {
 			if i > 0 {
 				fmt.Fprintln(w, "---")
@@ -119,7 +120,7 @@ func helpWithFunction(sqllex sqlLexer, f ResolvableFunctionReference) int {
 		}
 		lastInfo = b.Info
 
-		cat := b.Category()
+		cat := b.Category
 		if cat != "" {
 			cat = "[" + cat + "]"
 		}

@@ -18,7 +18,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/pkg/errors"
 )
@@ -158,7 +158,7 @@ func insertNodeWithValuesSpans(
 		return nil, nil, err
 	}
 
-	if err := forEachRow(params, v, func(values parser.Datums) error {
+	if err := forEachRow(params, v, func(values tree.Datums) error {
 		// insertNode uses fillDefaults to fill all defaults if it's data source
 		// is a valuesNode. This is important, because it means that the result
 		// of all DEFAULT expressions will be retained from span collection to

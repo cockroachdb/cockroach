@@ -17,9 +17,8 @@ package sql
 import (
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"golang.org/x/net/context"
-
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 )
 
 // This file contains the functions that perform filter propagation.
@@ -168,14 +167,14 @@ import (
 // case perhaps propagateFilter and propagateOrWrapFilter can merge,
 // but we are not there yet.
 func (p *planner) propagateFilters(
-	ctx context.Context, plan planNode, info *dataSourceInfo, extraFilter parser.TypedExpr,
-) (newPlan planNode, remainingFilter parser.TypedExpr, err error) {
+	ctx context.Context, plan planNode, info *dataSourceInfo, extraFilter tree.TypedExpr,
+) (newPlan planNode, remainingFilter tree.TypedExpr, err error) {
 	remainingFilter = extraFilter
 	switch n := plan.(type) {
 	case *zeroNode:
 		// There is no row (by definition), so all filters
 		// are "already applied". Silently absorb any extra filter.
-		return plan, parser.DBoolTrue, nil
+		return plan, tree.DBoolTrue, nil
 	case *unaryNode:
 		// TODO(knz): We could evaluate the filter here and transform the unaryNode
 		// into an emptyNode, assuming the filter is not "row dependent" (cf.
@@ -186,11 +185,11 @@ func (p *planner) propagateFilters(
 		if err != nil {
 			return plan, extraFilter, err
 		}
-		return newPlan, parser.DBoolTrue, nil
+		return newPlan, tree.DBoolTrue, nil
 
 	case *scanNode:
 		n.filter = mergeConj(n.filter, n.filterVars.Rebind(extraFilter, true, false))
-		return plan, parser.DBoolTrue, nil
+		return plan, tree.DBoolTrue, nil
 
 	case *renderNode:
 		return p.addRenderFilter(ctx, n, extraFilter)
@@ -208,7 +207,7 @@ func (p *planner) propagateFilters(
 		if err != nil {
 			return plan, extraFilter, err
 		}
-		return plan, parser.DBoolTrue, nil
+		return plan, tree.DBoolTrue, nil
 
 	case *sortNode:
 		// A sort node can propagate a filter, and source filtering
@@ -217,7 +216,7 @@ func (p *planner) propagateFilters(
 		if err != nil {
 			return plan, extraFilter, err
 		}
-		return plan, parser.DBoolTrue, nil
+		return plan, tree.DBoolTrue, nil
 
 	case *unionNode:
 		// Filtering is distributive over set operations.
@@ -234,7 +233,7 @@ func (p *planner) propagateFilters(
 
 		n.left = newLeft
 		n.right = newRight
-		return plan, parser.DBoolTrue, nil
+		return plan, tree.DBoolTrue, nil
 
 	case *groupNode:
 		return p.addGroupFilter(ctx, n, info, extraFilter)
@@ -345,7 +344,7 @@ func (p *planner) propagateFilters(
 
 // triggerFilterPropagation initiates filter propagation on the given plan.
 func (p *planner) triggerFilterPropagation(ctx context.Context, plan planNode) (planNode, error) {
-	newPlan, remainingFilter, err := p.propagateFilters(ctx, plan, nil, parser.DBoolTrue)
+	newPlan, remainingFilter, err := p.propagateFilters(ctx, plan, nil, tree.DBoolTrue)
 	if err != nil {
 		return plan, err
 	}
@@ -362,7 +361,7 @@ func (p *planner) triggerFilterPropagation(ctx context.Context, plan planNode) (
 // node, and creates a new filterNode if there is any remaining filter
 // after the propagation.
 func (p *planner) propagateOrWrapFilters(
-	ctx context.Context, plan planNode, info *dataSourceInfo, filter parser.TypedExpr,
+	ctx context.Context, plan planNode, info *dataSourceInfo, filter tree.TypedExpr,
 ) (planNode, error) {
 	newPlan, remainingFilter, err := p.propagateFilters(ctx, plan, info, filter)
 	if err != nil {
@@ -381,7 +380,7 @@ func (p *planner) propagateOrWrapFilters(
 	f := &filterNode{
 		source: planDataSource{plan: newPlan, info: info},
 	}
-	f.ivarHelper = parser.MakeIndexedVarHelper(f, len(info.sourceColumns))
+	f.ivarHelper = tree.MakeIndexedVarHelper(f, len(info.sourceColumns))
 	f.filter = f.ivarHelper.Rebind(remainingFilter,
 		false /* helper is fresh, no reset needed */, false)
 	return f, nil
@@ -391,21 +390,21 @@ func (p *planner) propagateOrWrapFilters(
 // The part of the filter that depends only on GROUP BY expressions is
 // propagated to the source.
 func (p *planner) addGroupFilter(
-	ctx context.Context, g *groupNode, info *dataSourceInfo, extraFilter parser.TypedExpr,
-) (planNode, parser.TypedExpr, error) {
+	ctx context.Context, g *groupNode, info *dataSourceInfo, extraFilter tree.TypedExpr,
+) (planNode, tree.TypedExpr, error) {
 	// innerFilter is the passed-through filter on the source planNode.
-	var innerFilter parser.TypedExpr = parser.DBoolTrue
+	var innerFilter tree.TypedExpr = tree.DBoolTrue
 
 	if !isFilterTrue(extraFilter) {
 		// The filter that's being added refers to the result expressions,
 		// not the groupNode's source node. We need to detect which parts
 		// of the filter refer to passed-through source columns ("IDENT
 		// aggregations"), and renumber the indexed vars accordingly.
-		convFunc := func(v parser.VariableExpr) (bool, parser.Expr) {
-			if iv, ok := v.(*parser.IndexedVar); ok {
+		convFunc := func(v tree.VariableExpr) (bool, tree.Expr) {
+			if iv, ok := v.(*tree.IndexedVar); ok {
 				f := g.funcs[iv.Idx]
 				if f.identAggregate {
-					return true, &parser.IndexedVar{Idx: f.argRenderIdx}
+					return true, &tree.IndexedVar{Idx: f.argRenderIdx}
 				}
 			}
 			return false, v
@@ -433,10 +432,10 @@ func (p *planner) addGroupFilter(
 // using renders that are either simple datums or simple column
 // references to the source.
 func (p *planner) addRenderFilter(
-	ctx context.Context, s *renderNode, extraFilter parser.TypedExpr,
-) (planNode, parser.TypedExpr, error) {
+	ctx context.Context, s *renderNode, extraFilter tree.TypedExpr,
+) (planNode, tree.TypedExpr, error) {
 	// innerFilter is the passed-through filter on the source planNode.
-	var innerFilter parser.TypedExpr = parser.DBoolTrue
+	var innerFilter tree.TypedExpr = tree.DBoolTrue
 
 	if !isFilterTrue(extraFilter) {
 		// The filter that's being added refers to the rendered
@@ -484,14 +483,14 @@ func (p *planner) addRenderFilter(
 		// propagate down or spill upward as remaining filter.
 		// See also the comment for propagateFilters() above.
 		//
-		convFunc := func(v parser.VariableExpr) (bool, parser.Expr) {
-			if iv, ok := v.(*parser.IndexedVar); ok {
+		convFunc := func(v tree.VariableExpr) (bool, tree.Expr) {
+			if iv, ok := v.(*tree.IndexedVar); ok {
 				renderExpr := s.render[iv.Idx]
-				if d, ok := renderExpr.(parser.Datum); ok {
+				if d, ok := renderExpr.(tree.Datum); ok {
 					// A standalone Datum is not complex, so it can be propagated further.
 					return true, d
 				}
-				if rv, ok := renderExpr.(*parser.IndexedVar); ok {
+				if rv, ok := renderExpr.(*tree.IndexedVar); ok {
 					// A naked IndexedVar is not complex, so it can be propagated further.
 					return true, rv
 				}
@@ -536,7 +535,7 @@ func (p *planner) addRenderFilter(
 // function will add `b.x > 10`.
 //
 // The expanded expression can then be split as necessary.
-func expandOnCond(n *joinNode, cond parser.TypedExpr) parser.TypedExpr {
+func expandOnCond(n *joinNode, cond tree.TypedExpr) tree.TypedExpr {
 	if isFilterTrue(cond) || len(n.pred.leftEqualityIndices) == 0 {
 		return cond
 	}
@@ -583,12 +582,12 @@ func expandOnCond(n *joinNode, cond parser.TypedExpr) parser.TypedExpr {
 	// The final result is obtained by merging all the results for each
 	// conjunction.
 
-	var result parser.TypedExpr = parser.DBoolTrue
+	var result tree.TypedExpr = tree.DBoolTrue
 
 	andExprs := splitAndExpr(&n.planner.evalCtx, cond, nil)
 	for _, e := range andExprs {
-		convLeft := func(expr parser.VariableExpr) (bool, parser.Expr) {
-			iv, ok := expr.(*parser.IndexedVar)
+		convLeft := func(expr tree.VariableExpr) (bool, tree.Expr) {
+			iv, ok := expr.(*tree.IndexedVar)
 			if !ok {
 				return false, expr
 			}
@@ -606,8 +605,8 @@ func expandOnCond(n *joinNode, cond parser.TypedExpr) parser.TypedExpr {
 		}
 		leftFilter, leftRemainder := splitFilter(e, convLeft)
 
-		convRight := func(expr parser.VariableExpr) (bool, parser.Expr) {
-			iv, ok := expr.(*parser.IndexedVar)
+		convRight := func(expr tree.VariableExpr) (bool, tree.Expr) {
+			iv, ok := expr.(*tree.IndexedVar)
 			if !ok {
 				return false, expr
 			}
@@ -645,19 +644,19 @@ func expandOnCond(n *joinNode, cond parser.TypedExpr) parser.TypedExpr {
 // rightBegin is the logical index of the first column in
 // the right data source.
 func splitJoinFilter(
-	n *joinNode, rightBegin int, initialPred parser.TypedExpr,
-) (parser.TypedExpr, parser.TypedExpr, parser.TypedExpr) {
+	n *joinNode, rightBegin int, initialPred tree.TypedExpr,
+) (tree.TypedExpr, tree.TypedExpr, tree.TypedExpr) {
 	leftExpr, remainder := splitJoinFilterLeft(n, rightBegin, initialPred)
 	rightExpr, combinedExpr := splitJoinFilterRight(n, rightBegin, remainder)
 	return leftExpr, rightExpr, combinedExpr
 }
 
 func splitJoinFilterLeft(
-	n *joinNode, rightBegin int, initialPred parser.TypedExpr,
-) (parser.TypedExpr, parser.TypedExpr) {
+	n *joinNode, rightBegin int, initialPred tree.TypedExpr,
+) (tree.TypedExpr, tree.TypedExpr) {
 	return splitFilter(initialPred,
-		func(expr parser.VariableExpr) (bool, parser.Expr) {
-			if iv, ok := expr.(*parser.IndexedVar); ok && iv.Idx < rightBegin {
+		func(expr tree.VariableExpr) (bool, tree.Expr) {
+			if iv, ok := expr.(*tree.IndexedVar); ok && iv.Idx < rightBegin {
 				return true, expr
 			}
 			return false, expr
@@ -665,11 +664,11 @@ func splitJoinFilterLeft(
 }
 
 func splitJoinFilterRight(
-	n *joinNode, rightBegin int, initialPred parser.TypedExpr,
-) (parser.TypedExpr, parser.TypedExpr) {
+	n *joinNode, rightBegin int, initialPred tree.TypedExpr,
+) (tree.TypedExpr, tree.TypedExpr) {
 	return splitFilter(initialPred,
-		func(expr parser.VariableExpr) (bool, parser.Expr) {
-			if iv, ok := expr.(*parser.IndexedVar); ok && iv.Idx >= rightBegin {
+		func(expr tree.VariableExpr) (bool, tree.Expr) {
+			if iv, ok := expr.(*tree.IndexedVar); ok && iv.Idx >= rightBegin {
 				return true, n.pred.iVarHelper.IndexedVar(iv.Idx - rightBegin)
 			}
 			return false, expr
@@ -678,8 +677,8 @@ func splitJoinFilterRight(
 
 // addJoinFilter propagates the given filter to a joinNode.
 func (p *planner) addJoinFilter(
-	ctx context.Context, n *joinNode, extraFilter parser.TypedExpr,
-) (planNode, parser.TypedExpr, error) {
+	ctx context.Context, n *joinNode, extraFilter tree.TypedExpr,
+) (planNode, tree.TypedExpr, error) {
 
 	// There are four steps to the transformation below:
 	//  1. For inner joins, incorporate the extra filter into the ON condition.
@@ -700,9 +699,9 @@ func (p *planner) addJoinFilter(
 
 	// Step 2: harvest any equality columns. We want to do this before the
 	// expandOnCond call below, which uses the equality columns information.
-	onCond := parser.TypedExpr(parser.DBoolTrue)
+	onCond := tree.TypedExpr(tree.DBoolTrue)
 	for _, e := range onAndExprs {
-		if e != parser.DBoolTrue && !n.pred.tryAddEqualityFilter(e, n.left.info, n.right.info) {
+		if e != tree.DBoolTrue && !n.pred.tryAddEqualityFilter(e, n.left.info, n.right.info) {
 			onCond = mergeConj(onCond, e)
 		}
 	}
@@ -715,7 +714,7 @@ func (p *planner) addJoinFilter(
 	}
 
 	// Step 4: propagate the filter and ON conditions as allowed by the join type.
-	var propagateLeft, propagateRight, filterRemainder parser.TypedExpr
+	var propagateLeft, propagateRight, filterRemainder tree.TypedExpr
 	switch n.joinType {
 	case joinTypeInner:
 		// We transform:
@@ -779,7 +778,7 @@ func (p *planner) addJoinFilter(
 	// join. The predicates must first be "shifted" i.e. their IndexedVars which
 	// are relative to the join columns must be modified to become relative to the
 	// operand's columns.
-	propagate := func(ctx context.Context, pred parser.TypedExpr, side *planDataSource) error {
+	propagate := func(ctx context.Context, pred tree.TypedExpr, side *planDataSource) error {
 		newPlan, err := p.propagateOrWrapFilters(ctx, side.plan, side.info, pred)
 		if err != nil {
 			return err
@@ -799,9 +798,9 @@ func (p *planner) addJoinFilter(
 }
 
 // mergeConj combines two predicates.
-func mergeConj(left, right parser.TypedExpr) parser.TypedExpr {
+func mergeConj(left, right tree.TypedExpr) tree.TypedExpr {
 	if isFilterTrue(left) {
-		if right == parser.DBoolTrue {
+		if right == tree.DBoolTrue {
 			return nil
 		}
 		return right
@@ -809,9 +808,9 @@ func mergeConj(left, right parser.TypedExpr) parser.TypedExpr {
 	if isFilterTrue(right) {
 		return left
 	}
-	return parser.NewTypedAndExpr(left, right)
+	return tree.NewTypedAndExpr(left, right)
 }
 
-func isFilterTrue(expr parser.TypedExpr) bool {
-	return expr == nil || expr == parser.DBoolTrue
+func isFilterTrue(expr tree.TypedExpr) bool {
+	return expr == nil || expr == tree.DBoolTrue
 }

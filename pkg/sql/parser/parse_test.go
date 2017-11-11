@@ -22,6 +22,8 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	_ "github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	_ "github.com/cockroachdb/cockroach/pkg/util/log" // for flags
 )
@@ -1261,7 +1263,7 @@ func TestParse2(t *testing.T) {
 			t.Errorf("%s: expected success, but found %s", d.sql, err)
 			continue
 		}
-		s := AsStringWithFlags(stmts, FmtSimpleWithPasswords)
+		s := tree.AsStringWithFlags(stmts, tree.FmtSimpleWithPasswords)
 		if d.expected != s {
 			t.Errorf("%s: expected %s, but found (%d statements): %s", d.sql, d.expected, len(stmts), s)
 		}
@@ -1286,14 +1288,13 @@ func TestParseTree(t *testing.T) {
 		{`SELECT 1 = ANY ARRAY[1]:::INT`, `SELECT ((1) = ANY ((ARRAY[(1)]):::INT))`},
 	}
 
-	pfmt := fmtFlags{alwaysParens: true}
 	for _, d := range testData {
 		stmts, err := Parse(d.sql)
 		if err != nil {
 			t.Errorf("%s: expected success, but found %s", d.sql, err)
 			continue
 		}
-		s := AsStringWithFlags(stmts, &pfmt)
+		s := tree.AsStringWithFlags(stmts, tree.FmtAlwaysGroupExprs)
 		if d.expected != s {
 			t.Errorf("%s: expected %s, but found (%d statements): %s", d.sql, d.expected, len(stmts), s)
 		}
@@ -1697,145 +1698,145 @@ func TestParsePrecedence(t *testing.T) {
 	//   9: AND
 	//  10: OR
 
-	unary := func(op UnaryOperator, expr Expr) Expr {
-		return &UnaryExpr{Operator: op, Expr: expr}
+	unary := func(op tree.UnaryOperator, expr tree.Expr) tree.Expr {
+		return &tree.UnaryExpr{Operator: op, Expr: expr}
 	}
-	binary := func(op BinaryOperator, left, right Expr) Expr {
-		return &BinaryExpr{Operator: op, Left: left, Right: right}
+	binary := func(op tree.BinaryOperator, left, right tree.Expr) tree.Expr {
+		return &tree.BinaryExpr{Operator: op, Left: left, Right: right}
 	}
-	cmp := func(op ComparisonOperator, left, right Expr) Expr {
-		return &ComparisonExpr{Operator: op, Left: left, Right: right}
+	cmp := func(op tree.ComparisonOperator, left, right tree.Expr) tree.Expr {
+		return &tree.ComparisonExpr{Operator: op, Left: left, Right: right}
 	}
-	not := func(expr Expr) Expr {
-		return &NotExpr{Expr: expr}
+	not := func(expr tree.Expr) tree.Expr {
+		return &tree.NotExpr{Expr: expr}
 	}
-	and := func(left, right Expr) Expr {
-		return &AndExpr{Left: left, Right: right}
+	and := func(left, right tree.Expr) tree.Expr {
+		return &tree.AndExpr{Left: left, Right: right}
 	}
-	or := func(left, right Expr) Expr {
-		return &OrExpr{Left: left, Right: right}
+	or := func(left, right tree.Expr) tree.Expr {
+		return &tree.OrExpr{Left: left, Right: right}
 	}
-	concat := func(left, right Expr) Expr {
-		return &BinaryExpr{Operator: Concat, Left: left, Right: right}
+	concat := func(left, right tree.Expr) tree.Expr {
+		return &tree.BinaryExpr{Operator: tree.Concat, Left: left, Right: right}
 	}
-	regmatch := func(left, right Expr) Expr {
-		return &ComparisonExpr{Operator: RegMatch, Left: left, Right: right}
+	regmatch := func(left, right tree.Expr) tree.Expr {
+		return &tree.ComparisonExpr{Operator: tree.RegMatch, Left: left, Right: right}
 	}
-	regimatch := func(left, right Expr) Expr {
-		return &ComparisonExpr{Operator: RegIMatch, Left: left, Right: right}
+	regimatch := func(left, right tree.Expr) tree.Expr {
+		return &tree.ComparisonExpr{Operator: tree.RegIMatch, Left: left, Right: right}
 	}
 
-	one := &NumVal{Value: constant.MakeInt64(1), OrigString: "1"}
-	two := &NumVal{Value: constant.MakeInt64(2), OrigString: "2"}
-	three := &NumVal{Value: constant.MakeInt64(3), OrigString: "3"}
-	a := &StrVal{s: "a"}
-	b := &StrVal{s: "b"}
-	c := &StrVal{s: "c"}
+	one := &tree.NumVal{Value: constant.MakeInt64(1), OrigString: "1"}
+	two := &tree.NumVal{Value: constant.MakeInt64(2), OrigString: "2"}
+	three := &tree.NumVal{Value: constant.MakeInt64(3), OrigString: "3"}
+	a := tree.NewStrVal("a")
+	b := tree.NewStrVal("b")
+	c := tree.NewStrVal("c")
 
 	testData := []struct {
 		sql      string
-		expected Expr
+		expected tree.Expr
 	}{
 		// Unary plus and complement.
-		{`~-1`, unary(UnaryComplement, unary(UnaryMinus, one))},
-		{`-~1`, unary(UnaryMinus, unary(UnaryComplement, one))},
+		{`~-1`, unary(tree.UnaryComplement, unary(tree.UnaryMinus, one))},
+		{`-~1`, unary(tree.UnaryMinus, unary(tree.UnaryComplement, one))},
 
 		// Mul, div, floordiv, mod combined with higher precedence.
-		{`-1*2`, binary(Mult, unary(UnaryMinus, one), two)},
-		{`1*-2`, binary(Mult, one, unary(UnaryMinus, two))},
-		{`-1/2`, binary(Div, unary(UnaryMinus, one), two)},
-		{`1/-2`, binary(Div, one, unary(UnaryMinus, two))},
-		{`-1//2`, binary(FloorDiv, unary(UnaryMinus, one), two)},
-		{`1//-2`, binary(FloorDiv, one, unary(UnaryMinus, two))},
-		{`-1%2`, binary(Mod, unary(UnaryMinus, one), two)},
-		{`1%-2`, binary(Mod, one, unary(UnaryMinus, two))},
+		{`-1*2`, binary(tree.Mult, unary(tree.UnaryMinus, one), two)},
+		{`1*-2`, binary(tree.Mult, one, unary(tree.UnaryMinus, two))},
+		{`-1/2`, binary(tree.Div, unary(tree.UnaryMinus, one), two)},
+		{`1/-2`, binary(tree.Div, one, unary(tree.UnaryMinus, two))},
+		{`-1//2`, binary(tree.FloorDiv, unary(tree.UnaryMinus, one), two)},
+		{`1//-2`, binary(tree.FloorDiv, one, unary(tree.UnaryMinus, two))},
+		{`-1%2`, binary(tree.Mod, unary(tree.UnaryMinus, one), two)},
+		{`1%-2`, binary(tree.Mod, one, unary(tree.UnaryMinus, two))},
 
 		// Mul, div, floordiv, mod combined with self (left associative).
-		{`1*2*3`, binary(Mult, binary(Mult, one, two), three)},
-		{`1*2/3`, binary(Div, binary(Mult, one, two), three)},
-		{`1/2*3`, binary(Mult, binary(Div, one, two), three)},
-		{`1*2//3`, binary(FloorDiv, binary(Mult, one, two), three)},
-		{`1//2*3`, binary(Mult, binary(FloorDiv, one, two), three)},
-		{`1*2%3`, binary(Mod, binary(Mult, one, two), three)},
-		{`1%2*3`, binary(Mult, binary(Mod, one, two), three)},
-		{`1/2/3`, binary(Div, binary(Div, one, two), three)},
-		{`1/2//3`, binary(FloorDiv, binary(Div, one, two), three)},
-		{`1//2/3`, binary(Div, binary(FloorDiv, one, two), three)},
-		{`1/2%3`, binary(Mod, binary(Div, one, two), three)},
-		{`1%2/3`, binary(Div, binary(Mod, one, two), three)},
-		{`1//2//3`, binary(FloorDiv, binary(FloorDiv, one, two), three)},
-		{`1//2%3`, binary(Mod, binary(FloorDiv, one, two), three)},
-		{`1%2//3`, binary(FloorDiv, binary(Mod, one, two), three)},
-		{`1%2%3`, binary(Mod, binary(Mod, one, two), three)},
+		{`1*2*3`, binary(tree.Mult, binary(tree.Mult, one, two), three)},
+		{`1*2/3`, binary(tree.Div, binary(tree.Mult, one, two), three)},
+		{`1/2*3`, binary(tree.Mult, binary(tree.Div, one, two), three)},
+		{`1*2//3`, binary(tree.FloorDiv, binary(tree.Mult, one, two), three)},
+		{`1//2*3`, binary(tree.Mult, binary(tree.FloorDiv, one, two), three)},
+		{`1*2%3`, binary(tree.Mod, binary(tree.Mult, one, two), three)},
+		{`1%2*3`, binary(tree.Mult, binary(tree.Mod, one, two), three)},
+		{`1/2/3`, binary(tree.Div, binary(tree.Div, one, two), three)},
+		{`1/2//3`, binary(tree.FloorDiv, binary(tree.Div, one, two), three)},
+		{`1//2/3`, binary(tree.Div, binary(tree.FloorDiv, one, two), three)},
+		{`1/2%3`, binary(tree.Mod, binary(tree.Div, one, two), three)},
+		{`1%2/3`, binary(tree.Div, binary(tree.Mod, one, two), three)},
+		{`1//2//3`, binary(tree.FloorDiv, binary(tree.FloorDiv, one, two), three)},
+		{`1//2%3`, binary(tree.Mod, binary(tree.FloorDiv, one, two), three)},
+		{`1%2//3`, binary(tree.FloorDiv, binary(tree.Mod, one, two), three)},
+		{`1%2%3`, binary(tree.Mod, binary(tree.Mod, one, two), three)},
 
 		// Binary plus and minus combined with higher precedence.
-		{`1*2+3`, binary(Plus, binary(Mult, one, two), three)},
-		{`1+2*3`, binary(Plus, one, binary(Mult, two, three))},
-		{`1*2-3`, binary(Minus, binary(Mult, one, two), three)},
-		{`1-2*3`, binary(Minus, one, binary(Mult, two, three))},
+		{`1*2+3`, binary(tree.Plus, binary(tree.Mult, one, two), three)},
+		{`1+2*3`, binary(tree.Plus, one, binary(tree.Mult, two, three))},
+		{`1*2-3`, binary(tree.Minus, binary(tree.Mult, one, two), three)},
+		{`1-2*3`, binary(tree.Minus, one, binary(tree.Mult, two, three))},
 
 		// Binary plus and minus combined with self (left associative).
-		{`1+2-3`, binary(Minus, binary(Plus, one, two), three)},
-		{`1-2+3`, binary(Plus, binary(Minus, one, two), three)},
+		{`1+2-3`, binary(tree.Minus, binary(tree.Plus, one, two), three)},
+		{`1-2+3`, binary(tree.Plus, binary(tree.Minus, one, two), three)},
 
 		// Left and right shift combined with higher precedence.
-		{`1<<2+3`, binary(LShift, one, binary(Plus, two, three))},
-		{`1+2<<3`, binary(LShift, binary(Plus, one, two), three)},
-		{`1>>2+3`, binary(RShift, one, binary(Plus, two, three))},
-		{`1+2>>3`, binary(RShift, binary(Plus, one, two), three)},
+		{`1<<2+3`, binary(tree.LShift, one, binary(tree.Plus, two, three))},
+		{`1+2<<3`, binary(tree.LShift, binary(tree.Plus, one, two), three)},
+		{`1>>2+3`, binary(tree.RShift, one, binary(tree.Plus, two, three))},
+		{`1+2>>3`, binary(tree.RShift, binary(tree.Plus, one, two), three)},
 
 		// Left and right shift combined with self (left associative).
-		{`1<<2<<3`, binary(LShift, binary(LShift, one, two), three)},
-		{`1<<2>>3`, binary(RShift, binary(LShift, one, two), three)},
-		{`1>>2<<3`, binary(LShift, binary(RShift, one, two), three)},
-		{`1>>2>>3`, binary(RShift, binary(RShift, one, two), three)},
+		{`1<<2<<3`, binary(tree.LShift, binary(tree.LShift, one, two), three)},
+		{`1<<2>>3`, binary(tree.RShift, binary(tree.LShift, one, two), three)},
+		{`1>>2<<3`, binary(tree.LShift, binary(tree.RShift, one, two), three)},
+		{`1>>2>>3`, binary(tree.RShift, binary(tree.RShift, one, two), three)},
 
 		// Power combined with lower precedence.
-		{`1*2^3`, binary(Mult, one, binary(Pow, two, three))},
-		{`1^2*3`, binary(Mult, binary(Pow, one, two), three)},
+		{`1*2^3`, binary(tree.Mult, one, binary(tree.Pow, two, three))},
+		{`1^2*3`, binary(tree.Mult, binary(tree.Pow, one, two), three)},
 
 		// Bit-and combined with higher precedence.
-		{`1&2<<3`, binary(Bitand, one, binary(LShift, two, three))},
-		{`1<<2&3`, binary(Bitand, binary(LShift, one, two), three)},
+		{`1&2<<3`, binary(tree.Bitand, one, binary(tree.LShift, two, three))},
+		{`1<<2&3`, binary(tree.Bitand, binary(tree.LShift, one, two), three)},
 
 		// Bit-and combined with self (left associative)
-		{`1&2&3`, binary(Bitand, binary(Bitand, one, two), three)},
+		{`1&2&3`, binary(tree.Bitand, binary(tree.Bitand, one, two), three)},
 
 		// Bit-xor combined with higher precedence.
-		{`1#2&3`, binary(Bitxor, one, binary(Bitand, two, three))},
-		{`1&2#3`, binary(Bitxor, binary(Bitand, one, two), three)},
+		{`1#2&3`, binary(tree.Bitxor, one, binary(tree.Bitand, two, three))},
+		{`1&2#3`, binary(tree.Bitxor, binary(tree.Bitand, one, two), three)},
 
 		// Bit-xor combined with self (left associative)
-		{`1#2#3`, binary(Bitxor, binary(Bitxor, one, two), three)},
+		{`1#2#3`, binary(tree.Bitxor, binary(tree.Bitxor, one, two), three)},
 
 		// Bit-or combined with higher precedence.
-		{`1|2#3`, binary(Bitor, one, binary(Bitxor, two, three))},
-		{`1#2|3`, binary(Bitor, binary(Bitxor, one, two), three)},
+		{`1|2#3`, binary(tree.Bitor, one, binary(tree.Bitxor, two, three))},
+		{`1#2|3`, binary(tree.Bitor, binary(tree.Bitxor, one, two), three)},
 
 		// Bit-or combined with self (left associative)
-		{`1|2|3`, binary(Bitor, binary(Bitor, one, two), three)},
+		{`1|2|3`, binary(tree.Bitor, binary(tree.Bitor, one, two), three)},
 
 		// Equals, not-equals, greater-than, greater-than equals, less-than and
 		// less-than equals combined with higher precedence.
-		{`1 = 2|3`, cmp(EQ, one, binary(Bitor, two, three))},
-		{`1|2 = 3`, cmp(EQ, binary(Bitor, one, two), three)},
-		{`1 != 2|3`, cmp(NE, one, binary(Bitor, two, three))},
-		{`1|2 != 3`, cmp(NE, binary(Bitor, one, two), three)},
-		{`1 > 2|3`, cmp(GT, one, binary(Bitor, two, three))},
-		{`1|2 > 3`, cmp(GT, binary(Bitor, one, two), three)},
-		{`1 >= 2|3`, cmp(GE, one, binary(Bitor, two, three))},
-		{`1|2 >= 3`, cmp(GE, binary(Bitor, one, two), three)},
-		{`1 < 2|3`, cmp(LT, one, binary(Bitor, two, three))},
-		{`1|2 < 3`, cmp(LT, binary(Bitor, one, two), three)},
-		{`1 <= 2|3`, cmp(LE, one, binary(Bitor, two, three))},
-		{`1|2 <= 3`, cmp(LE, binary(Bitor, one, two), three)},
+		{`1 = 2|3`, cmp(tree.EQ, one, binary(tree.Bitor, two, three))},
+		{`1|2 = 3`, cmp(tree.EQ, binary(tree.Bitor, one, two), three)},
+		{`1 != 2|3`, cmp(tree.NE, one, binary(tree.Bitor, two, three))},
+		{`1|2 != 3`, cmp(tree.NE, binary(tree.Bitor, one, two), three)},
+		{`1 > 2|3`, cmp(tree.GT, one, binary(tree.Bitor, two, three))},
+		{`1|2 > 3`, cmp(tree.GT, binary(tree.Bitor, one, two), three)},
+		{`1 >= 2|3`, cmp(tree.GE, one, binary(tree.Bitor, two, three))},
+		{`1|2 >= 3`, cmp(tree.GE, binary(tree.Bitor, one, two), three)},
+		{`1 < 2|3`, cmp(tree.LT, one, binary(tree.Bitor, two, three))},
+		{`1|2 < 3`, cmp(tree.LT, binary(tree.Bitor, one, two), three)},
+		{`1 <= 2|3`, cmp(tree.LE, one, binary(tree.Bitor, two, three))},
+		{`1|2 <= 3`, cmp(tree.LE, binary(tree.Bitor, one, two), three)},
 
 		// NOT combined with higher precedence.
-		{`NOT 1 = 2`, not(cmp(EQ, one, two))},
-		{`NOT 1 = NOT 2 = 3`, not(cmp(EQ, one, not(cmp(EQ, two, three))))},
+		{`NOT 1 = 2`, not(cmp(tree.EQ, one, two))},
+		{`NOT 1 = NOT 2 = 3`, not(cmp(tree.EQ, one, not(cmp(tree.EQ, two, three))))},
 
 		// NOT combined with self.
-		{`NOT NOT 1 = 2`, not(not(cmp(EQ, one, two)))},
+		{`NOT NOT 1 = 2`, not(not(cmp(tree.EQ, one, two)))},
 
 		// AND combined with higher precedence.
 		{`NOT 1 AND 2`, and(not(one), two)},
@@ -1856,7 +1857,7 @@ func TestParsePrecedence(t *testing.T) {
 		{`'a' || 'b' ~* 'c'`, regimatch(concat(a, b), c)},
 
 		// Unary ~ should have highest precedence.
-		{`~1+2`, binary(Plus, unary(UnaryComplement, one), two)},
+		{`~1+2`, binary(tree.Plus, unary(tree.UnaryComplement, one), two)},
 	}
 	for _, d := range testData {
 		expr, err := ParseExpr(d.sql)
@@ -1883,7 +1884,7 @@ func BenchmarkParse(b *testing.B) {
 		if len(st) != 5 {
 			b.Fatal("parsed wrong number of statements: ", len(st))
 		}
-		if _, ok := st[1].(*Update); !ok {
+		if _, ok := st[1].(*tree.Update); !ok {
 			b.Fatalf("unexpected statement type: %T", st[1])
 		}
 	}

@@ -22,7 +22,7 @@ import (
 
 	"golang.org/x/net/context"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
 )
@@ -37,7 +37,7 @@ type planObserver struct {
 	enterNode func(ctx context.Context, nodeName string, plan planNode) bool
 
 	// expr is invoked for each expression field in each node.
-	expr func(nodeName, fieldName string, n int, expr parser.Expr)
+	expr func(nodeName, fieldName string, n int, expr tree.Expr)
 
 	// attr is invoked for non-expression metadata in each node.
 	attr func(nodeName, fieldName, attr string)
@@ -192,9 +192,9 @@ func (v *planVisitor) visit(plan planNode) {
 			if len(n.pred.leftColNames) > 0 {
 				var buf bytes.Buffer
 				buf.WriteByte('(')
-				parser.FormatNode(&buf, parser.FmtSimple, n.pred.leftColNames)
+				tree.FormatNode(&buf, tree.FmtSimple, n.pred.leftColNames)
 				buf.WriteString(") = (")
-				parser.FormatNode(&buf, parser.FmtSimple, n.pred.rightColNames)
+				tree.FormatNode(&buf, tree.FmtSimple, n.pred.rightColNames)
 				buf.WriteByte(')')
 				v.observer.attr(name, "equality", buf.String())
 			}
@@ -318,7 +318,7 @@ func (v *planVisitor) visit(plan planNode) {
 		for i, rexpr := range n.rh.exprs {
 			subplans = v.expr(name, "returning", i, rexpr, subplans)
 		}
-		n.tw.walkExprs(func(d string, i int, e parser.TypedExpr) {
+		n.tw.walkExprs(func(d string, i int, e tree.TypedExpr) {
 			subplans = v.expr(name, d, i, e, subplans)
 		})
 		v.subqueries(name, subplans)
@@ -342,7 +342,7 @@ func (v *planVisitor) visit(plan planNode) {
 		for i, rexpr := range n.rh.exprs {
 			subplans = v.expr(name, "returning", i, rexpr, subplans)
 		}
-		n.tw.walkExprs(func(d string, i int, e parser.TypedExpr) {
+		n.tw.walkExprs(func(d string, i int, e tree.TypedExpr) {
 			subplans = v.expr(name, d, i, e, subplans)
 		})
 		v.subqueries(name, subplans)
@@ -356,7 +356,7 @@ func (v *planVisitor) visit(plan planNode) {
 		for i, rexpr := range n.rh.exprs {
 			subplans = v.expr(name, "returning", i, rexpr, subplans)
 		}
-		n.tw.walkExprs(func(d string, i int, e parser.TypedExpr) {
+		n.tw.walkExprs(func(d string, i int, e tree.TypedExpr) {
 			subplans = v.expr(name, d, i, e, subplans)
 		})
 		v.subqueries(name, subplans)
@@ -369,7 +369,7 @@ func (v *planVisitor) visit(plan planNode) {
 
 	case *createViewNode:
 		if v.observer.attr != nil {
-			v.observer.attr(name, "query", parser.AsStringWithFlags(n.n.AsSource, parser.FmtParsable))
+			v.observer.attr(name, "query", tree.AsStringWithFlags(n.n.AsSource, tree.FmtParsable))
 		}
 
 	case *setNode:
@@ -435,7 +435,7 @@ func (v *planVisitor) subqueries(nodeName string, subplans []planNode) {
 // expr wraps observer.expr() and provides it with the current node's
 // name. It also collects the plans for the sub-queries.
 func (v *planVisitor) expr(
-	nodeName string, fieldName string, n int, expr parser.Expr, subplans []planNode,
+	nodeName string, fieldName string, n int, expr tree.Expr, subplans []planNode,
 ) []planNode {
 	if v.err != nil {
 		return subplans
@@ -454,7 +454,7 @@ func (v *planVisitor) expr(
 		// is no risk that v.subplans will be clobbered by a recursion
 		// into visit().
 		v.subplans = subplans
-		parser.WalkExprConst(v, expr)
+		tree.WalkExprConst(v, expr)
 		subplans = v.subplans
 		v.subplans = nil
 	}
@@ -463,9 +463,9 @@ func (v *planVisitor) expr(
 
 // planVisitor is also an Expr visitor whose task is to collect
 // sub-query plans for the surrounding planNode.
-var _ parser.Visitor = &planVisitor{}
+var _ tree.Visitor = &planVisitor{}
 
-func (v *planVisitor) VisitPre(expr parser.Expr) (bool, parser.Expr) {
+func (v *planVisitor) VisitPre(expr tree.Expr) (bool, tree.Expr) {
 	if v.err != nil {
 		return false, expr
 	}
@@ -483,7 +483,7 @@ func (v *planVisitor) VisitPre(expr parser.Expr) (bool, parser.Expr) {
 	}
 	return true, expr
 }
-func (v *planVisitor) VisitPost(expr parser.Expr) parser.Expr { return expr }
+func (v *planVisitor) VisitPost(expr tree.Expr) tree.Expr { return expr }
 
 // nodeName returns the name of the given planNode as string.  The
 // node's current state is taken into account, e.g. sortNode has
