@@ -45,11 +45,6 @@ var ParseDIntervalWithField = tree.ParseDIntervalWithField
 // StarExpr is a temporary alias.
 var StarExpr = tree.StarExpr
 
-var newColumnTableDef = tree.NewColumnTableDef
-var newWhere = tree.NewWhere
-var starSelectExpr = tree.StarSelectExpr
-var wrapFunction = tree.WrapFunction
-
 // AliasClause is a temporary alias.
 type AliasClause = tree.AliasClause
 
@@ -1051,47 +1046,6 @@ type ReturnTyper = tree.ReturnTyper
 
 // DArray is a temporary alias.
 type DArray = tree.DArray
-
-const astCrossJoin = tree.AstCrossJoin
-const astFullJoin = tree.AstFullJoin
-const astHaving = tree.AstHaving
-const astInnerJoin = tree.AstInnerJoin
-const astJoin = tree.AstJoin
-const astLeftJoin = tree.AstLeftJoin
-const astRightJoin = tree.AstRightJoin
-const astWhere = tree.AstWhere
-const day = tree.Day
-
-type durationField = tree.DurationField
-
-const hour = tree.Hour
-const minute = tree.Minute
-const month = tree.Month
-
-type operator = tree.Operator
-
-var returningNothingClause = tree.ReturningNothingClause
-
-const second = tree.Second
-const year = tree.Year
-
-const castShort = tree.CastShort
-const annotateShort = tree.AnnotateShort
-const castExplicit = tree.CastExplicit
-const annotateExplicit = tree.AnnotateExplicit
-const castPrepend = tree.CastPrepend
-
-var foldConstantLiterals = tree.FoldConstantLiterals
-
-var numValAvailDecimalNoFraction = tree.NumValAvailDecimalNoFraction
-var numValAvailDecimalWithFraction = tree.NumValAvailDecimalWithFraction
-var numValAvailInteger = tree.NumValAvailInteger
-var strValAvailAllParsable = tree.StrValAvailAllParsable
-var strValAvailBytes = tree.StrValAvailBytes
-var strValAvailBytesString = tree.StrValAvailBytesString
-
-var typeCheckSameTypedExprs = tree.TypeCheckSameTypedExprs
-var stripMemoizedFuncs = tree.StripMemoizedFuncs
 
 // AddWithOverflow is a temporary alias.
 var AddWithOverflow = tree.AddWithOverflow

@@ -23,6 +23,7 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 )
@@ -180,7 +181,7 @@ func attemptTypeCheckSameTypedExprs(t *testing.T, idx int, test sameTypedExprsTe
 		if test.desired != nil {
 			desired = test.desired
 		}
-		_, typ, err := typeCheckSameTypedExprs(&ctx, desired, buildExprs(exprs)...)
+		_, typ, err := tree.TypeCheckSameTypedExprs(&ctx, desired, buildExprs(exprs)...)
 		if err != nil {
 			t.Errorf("%d: unexpected error returned from typeCheckSameTypedExprs: %v", idx, err)
 		} else {
@@ -189,7 +190,7 @@ func attemptTypeCheckSameTypedExprs(t *testing.T, idx int, test sameTypedExprsTe
 					idx, test.expectedType, buildExprs(exprs), typ)
 			}
 			if !reflect.DeepEqual(ctx.Placeholders.Types, test.expectedPTypes) {
-				t.Errorf("%d: expected placeholder types %v after typeCheckSameTypedExprs for %v, found %v", idx, test.expectedPTypes, buildExprs(exprs), ctx.Placeholders.Types)
+				t.Errorf("%d: expected placeholder types %v after TypeCheckSameTypedExprs for %v, found %v", idx, test.expectedPTypes, buildExprs(exprs), ctx.Placeholders.Types)
 			}
 		}
 	})
@@ -320,7 +321,7 @@ func TestTypeCheckSameTypedExprsError(t *testing.T) {
 			desired = d.desired
 		}
 		forEachPerm(d.exprs, 0, func(exprs []copyableExpr) {
-			if _, _, err := typeCheckSameTypedExprs(&ctx, desired, buildExprs(exprs)...); !testutils.IsError(err, d.expectedErr) {
+			if _, _, err := tree.TypeCheckSameTypedExprs(&ctx, desired, buildExprs(exprs)...); !testutils.IsError(err, d.expectedErr) {
 				t.Errorf("%d: expected %s, but found %v", i, d.expectedErr, err)
 			}
 		})

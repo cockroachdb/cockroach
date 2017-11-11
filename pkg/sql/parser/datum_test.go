@@ -21,6 +21,7 @@ import (
 
 	"golang.org/x/net/context"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 )
 
@@ -317,29 +318,29 @@ func TestDFloatCompare(t *testing.T) {
 func TestParseDIntervalWithField(t *testing.T) {
 	testData := []struct {
 		str      string
-		field    durationField
+		field    tree.DurationField
 		expected string
 	}{
 		// Test cases for raw numbers with fields
-		{"5", second, "5s"},
-		{"5.8", second, "5.8s"},
-		{"5", minute, "5m"},
-		{"5.8", minute, "5m"},
-		{"5", hour, "5h"},
-		{"5.8", hour, "5h"},
-		{"5", day, "5 day"},
-		{"5.8", day, "5 day"},
-		{"5", month, "5 month"},
-		{"5.8", month, "5 month"},
-		{"5", year, "5 year"},
-		{"5.8", year, "5 year"},
+		{"5", tree.Second, "5s"},
+		{"5.8", tree.Second, "5.8s"},
+		{"5", tree.Minute, "5m"},
+		{"5.8", tree.Minute, "5m"},
+		{"5", tree.Hour, "5h"},
+		{"5.8", tree.Hour, "5h"},
+		{"5", tree.Day, "5 day"},
+		{"5.8", tree.Day, "5 day"},
+		{"5", tree.Month, "5 month"},
+		{"5.8", tree.Month, "5 month"},
+		{"5", tree.Year, "5 year"},
+		{"5.8", tree.Year, "5 year"},
 		// Test cases for truncation based on fields
-		{"1-2 3 4:56:07", second, "1-2 3 4:56:07"},
-		{"1-2 3 4:56:07", minute, "1-2 3 4:56:00"},
-		{"1-2 3 4:56:07", hour, "1-2 3 4:00:00"},
-		{"1-2 3 4:56:07", day, "1-2 3 0:"},
-		{"1-2 3 4:56:07", month, "1-2 0 0:"},
-		{"1-2 3 4:56:07", year, "1 year"},
+		{"1-2 3 4:56:07", tree.Second, "1-2 3 4:56:07"},
+		{"1-2 3 4:56:07", tree.Minute, "1-2 3 4:56:00"},
+		{"1-2 3 4:56:07", tree.Hour, "1-2 3 4:00:00"},
+		{"1-2 3 4:56:07", tree.Day, "1-2 3 0:"},
+		{"1-2 3 4:56:07", tree.Month, "1-2 0 0:"},
+		{"1-2 3 4:56:07", tree.Year, "1 year"},
 	}
 	for _, td := range testData {
 		actual, err := ParseDIntervalWithField(td.str, td.field)

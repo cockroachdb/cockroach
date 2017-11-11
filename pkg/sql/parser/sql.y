@@ -26,6 +26,7 @@ import (
     "github.com/cockroachdb/cockroach/pkg/sql/coltypes"
     "github.com/cockroachdb/cockroach/pkg/sql/lex"
     "github.com/cockroachdb/cockroach/pkg/sql/privilege"
+    "github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
 // MaxUint is the maximum value of an uint.
@@ -352,14 +353,14 @@ func (u *sqlSymUnion) windowDef() *WindowDef {
 func (u *sqlSymUnion) window() Window {
     return u.val.(Window)
 }
-func (u *sqlSymUnion) op() operator {
-    return u.val.(operator)
+func (u *sqlSymUnion) op() tree.Operator {
+    return u.val.(tree.Operator)
 }
 func (u *sqlSymUnion) cmpOp() ComparisonOperator {
     return u.val.(ComparisonOperator)
 }
-func (u *sqlSymUnion) durationField() durationField {
-    return u.val.(durationField)
+func (u *sqlSymUnion) durationField() tree.DurationField {
+    return u.val.(tree.DurationField)
 }
 func (u *sqlSymUnion) kvOption() KVOption {
     return u.val.(KVOption)
@@ -677,7 +678,7 @@ func (u *sqlSymUnion) scrubOption() ScrubOption {
 %type <str>   name opt_name opt_name_parens opt_to_savepoint
 %type <str>   savepoint_name
 
-%type <operator> subquery_op
+%type <tree.Operator> subquery_op
 %type <FunctionReference> func_name
 %type <empty> opt_collate
 
@@ -688,7 +689,7 @@ func (u *sqlSymUnion) scrubOption() ScrubOption {
 %type <*TableNameWithIndex> table_name_with_index
 %type <TableNameWithIndexList> table_name_with_index_list
 
-%type <operator> math_op
+%type <tree.Operator> math_op
 
 %type <IsolationLevel> iso_level
 %type <UserPriority> user_priority
@@ -739,7 +740,7 @@ func (u *sqlSymUnion) scrubOption() ScrubOption {
 %type <Exprs> substr_list
 %type <Exprs> trim_list
 %type <Exprs> execute_param_clause
-%type <durationField> opt_interval interval_second
+%type <tree.DurationField> opt_interval interval_second
 %type <Expr> overlay_placing
 
 %type <bool> opt_unique opt_column
@@ -1575,7 +1576,7 @@ delete_stmt:
   {
     $$.val = &Delete{
       Table: $4.tblExpr(),
-      Where: newWhere(astWhere, $5.expr()),
+      Where: tree.NewWhere(tree.AstWhere, $5.expr()),
       Limit: $6.limit(),
       Returning: $7.retClause(),
     }
@@ -2881,7 +2882,7 @@ range_partition:
 column_def:
   name typename col_qual_list
   {
-    tableDef, err := newColumnTableDef(Name($1), $2.colType(), $3.colQuals())
+    tableDef, err := tree.NewColumnTableDef(Name($1), $2.colType(), $3.colQuals())
     if err != nil {
       sqllex.Error(err.Error())
       return 1
@@ -3720,7 +3721,7 @@ insert_rest:
 on_conflict:
   ON CONFLICT opt_conf_expr DO UPDATE SET set_clause_list where_clause
   {
-    $$.val = &OnConflict{Columns: $3.nameList(), Exprs: $7.updateExprs(), Where: newWhere(astWhere, $8.expr())}
+    $$.val = &OnConflict{Columns: $3.nameList(), Exprs: $7.updateExprs(), Where: tree.NewWhere(tree.AstWhere, $8.expr())}
   }
 | ON CONFLICT opt_conf_expr DO NOTHING
   {
@@ -3747,7 +3748,7 @@ returning_clause:
   }
 | RETURNING NOTHING
   {
-    $$.val = returningNothingClause
+    $$.val = tree.ReturningNothingClause
   }
 | /* EMPTY */
   {
@@ -3762,7 +3763,7 @@ update_stmt:
   opt_with_clause UPDATE relation_expr_opt_alias
     SET set_clause_list update_from_clause where_clause returning_clause
   {
-    $$.val = &Update{Table: $3.tblExpr(), Exprs: $5.updateExprs(), Where: newWhere(astWhere, $7.expr()), Returning: $8.retClause()}
+    $$.val = &Update{Table: $3.tblExpr(), Exprs: $5.updateExprs(), Where: tree.NewWhere(tree.AstWhere, $7.expr()), Returning: $8.retClause()}
   }
 | opt_with_clause UPDATE error // SHOW HELP: UPDATE
 
@@ -3960,9 +3961,9 @@ simple_select_clause:
     $$.val = &SelectClause{
       Exprs:   $3.selExprs(),
       From:    $4.from(),
-      Where:   newWhere(astWhere, $5.expr()),
+      Where:   tree.NewWhere(tree.AstWhere, $5.expr()),
       GroupBy: $6.groupBy(),
-      Having:  newWhere(astHaving, $7.expr()),
+      Having:  tree.NewWhere(tree.AstHaving, $7.expr()),
       Window:  $8.window(),
     }
   }
@@ -3974,9 +3975,9 @@ simple_select_clause:
       Distinct: $2.bool(),
       Exprs:    $3.selExprs(),
       From:     $4.from(),
-      Where:    newWhere(astWhere, $5.expr()),
+      Where:    tree.NewWhere(tree.AstWhere, $5.expr()),
       GroupBy:  $6.groupBy(),
-      Having:   newWhere(astHaving, $7.expr()),
+      Having:   tree.NewWhere(tree.AstHaving, $7.expr()),
       Window:   $8.window(),
     }
   }
@@ -4019,7 +4020,7 @@ table_clause:
   TABLE table_ref
   {
     $$.val = &SelectClause{
-      Exprs:       SelectExprs{starSelectExpr()},
+      Exprs:       SelectExprs{tree.StarSelectExpr()},
       From:        &From{Tables: TableExprs{$2.tblExpr()}},
       TableSelect: true,
     }
@@ -4518,7 +4519,7 @@ joined_table:
   }
 | table_ref CROSS JOIN table_ref
   {
-    $$.val = &JoinTableExpr{Join: astCrossJoin, Left: $1.tblExpr(), Right: $4.tblExpr()}
+    $$.val = &JoinTableExpr{Join: tree.AstCrossJoin, Left: $1.tblExpr(), Right: $4.tblExpr()}
   }
 | table_ref join_type JOIN table_ref join_qual
   {
@@ -4526,7 +4527,7 @@ joined_table:
   }
 | table_ref JOIN table_ref join_qual
   {
-    $$.val = &JoinTableExpr{Join: astJoin, Left: $1.tblExpr(), Right: $3.tblExpr(), Cond: $4.joinCond()}
+    $$.val = &JoinTableExpr{Join: tree.AstJoin, Left: $1.tblExpr(), Right: $3.tblExpr(), Cond: $4.joinCond()}
   }
 | table_ref NATURAL join_type JOIN table_ref
   {
@@ -4534,7 +4535,7 @@ joined_table:
   }
 | table_ref NATURAL JOIN table_ref
   {
-    $$.val = &JoinTableExpr{Join: astJoin, Left: $1.tblExpr(), Right: $4.tblExpr(), Cond: NaturalJoinCond{}}
+    $$.val = &JoinTableExpr{Join: tree.AstJoin, Left: $1.tblExpr(), Right: $4.tblExpr(), Cond: NaturalJoinCond{}}
   }
 
 alias_clause:
@@ -4575,19 +4576,19 @@ opt_as_of_clause:
 join_type:
   FULL join_outer
   {
-    $$ = astFullJoin
+    $$ = tree.AstFullJoin
   }
 | LEFT join_outer
   {
-    $$ = astLeftJoin
+    $$ = tree.AstLeftJoin
   }
 | RIGHT join_outer
   {
-    $$ = astRightJoin
+    $$ = tree.AstRightJoin
   }
 | INNER
   {
-    $$ = astInnerJoin
+    $$ = tree.AstInnerJoin
   }
 
 // OUTER is just noise...
@@ -5107,23 +5108,23 @@ const_interval:
 opt_interval:
   YEAR
   {
-    $$.val = year
+    $$.val = tree.Year
   }
 | MONTH
   {
-    $$.val = month
+    $$.val = tree.Month
   }
 | DAY
   {
-    $$.val = day
+    $$.val = tree.Day
   }
 | HOUR
   {
-    $$.val = hour
+    $$.val = tree.Hour
   }
 | MINUTE
   {
-    $$.val = minute
+    $$.val = tree.Minute
   }
 | interval_second
   {
@@ -5133,15 +5134,15 @@ opt_interval:
 // https://www.postgresql.org/message-id/20110510040219.GD5617%40tornado.gateway.2wire.net
 | YEAR TO MONTH
   {
-    $$.val = month
+    $$.val = tree.Month
   }
 | DAY TO HOUR
   {
-    $$.val = hour
+    $$.val = tree.Hour
   }
 | DAY TO MINUTE
   {
-    $$.val = minute
+    $$.val = tree.Minute
   }
 | DAY TO interval_second
   {
@@ -5149,7 +5150,7 @@ opt_interval:
   }
 | HOUR TO MINUTE
   {
-    $$.val = minute
+    $$.val = tree.Minute
   }
 | HOUR TO interval_second
   {
@@ -5167,7 +5168,7 @@ opt_interval:
 interval_second:
   SECOND
   {
-    $$.val = second
+    $$.val = tree.Second
   }
 | SECOND '(' ICONST ')' { return unimplemented(sqllex, "interval_second") }
 
@@ -5194,11 +5195,11 @@ a_expr:
   c_expr
 | a_expr TYPECAST cast_target
   {
-    $$.val = &CastExpr{Expr: $1.expr(), Type: $3.castTargetType(), SyntaxMode: castShort}
+    $$.val = &CastExpr{Expr: $1.expr(), Type: $3.castTargetType(), SyntaxMode: tree.CastShort}
   }
 | a_expr TYPEANNOTATE typename
   {
-    $$.val = &AnnotateTypeExpr{Expr: $1.expr(), Type: $3.colType(), SyntaxMode: annotateShort}
+    $$.val = &AnnotateTypeExpr{Expr: $1.expr(), Type: $3.colType(), SyntaxMode: tree.AnnotateShort}
   }
 | a_expr COLLATE unrestricted_name
   {
@@ -5326,7 +5327,7 @@ a_expr:
   }
 | a_expr REMOVE_PATH a_expr
   {
-    $$.val = &FuncExpr{Func: wrapFunction("JSON_REMOVE_PATH"), Exprs: Exprs{$1.expr(), $3.expr()}}
+    $$.val = &FuncExpr{Func: tree.WrapFunction("JSON_REMOVE_PATH"), Exprs: Exprs{$1.expr(), $3.expr()}}
   }
 | a_expr LESS_EQUALS a_expr
   {
@@ -5515,11 +5516,11 @@ b_expr:
   c_expr
 | b_expr TYPECAST cast_target
   {
-    $$.val = &CastExpr{Expr: $1.expr(), Type: $3.castTargetType(), SyntaxMode: castShort}
+    $$.val = &CastExpr{Expr: $1.expr(), Type: $3.castTargetType(), SyntaxMode: tree.CastShort}
   }
 | b_expr TYPEANNOTATE typename
   {
-    $$.val = &AnnotateTypeExpr{Expr: $1.expr(), Type: $3.colType(), SyntaxMode: annotateShort}
+    $$.val = &AnnotateTypeExpr{Expr: $1.expr(), Type: $3.colType(), SyntaxMode: tree.AnnotateShort}
   }
 | '+' b_expr %prec UMINUS
   {
@@ -5761,97 +5762,97 @@ func_expr_common_subexpr:
   COLLATION FOR '(' a_expr ')' { return unimplemented(sqllex, "func_expr_common_subexpr collation") }
 | CURRENT_DATE
   {
-    $$.val = &FuncExpr{Func: wrapFunction($1)}
+    $$.val = &FuncExpr{Func: tree.WrapFunction($1)}
   }
 | CURRENT_DATE '(' ')'
   {
-    $$.val = &FuncExpr{Func: wrapFunction($1)}
+    $$.val = &FuncExpr{Func: tree.WrapFunction($1)}
   }
 | CURRENT_DATE '(' error { return helpWithFunction(sqllex, ResolvableFunctionReference{FunctionReference: UnresolvedName{Name($1)}}) }
 | CURRENT_SCHEMA
   {
-    $$.val = &FuncExpr{Func: wrapFunction($1)}
+    $$.val = &FuncExpr{Func: tree.WrapFunction($1)}
   }
 | CURRENT_SCHEMA '(' ')'
   {
-    $$.val = &FuncExpr{Func: wrapFunction($1)}
+    $$.val = &FuncExpr{Func: tree.WrapFunction($1)}
   }
 | CURRENT_SCHEMA '(' error { return helpWithFunction(sqllex, ResolvableFunctionReference{FunctionReference: UnresolvedName{Name($1)}}) }
 | CURRENT_TIMESTAMP
   {
-    $$.val = &FuncExpr{Func: wrapFunction($1)}
+    $$.val = &FuncExpr{Func: tree.WrapFunction($1)}
   }
 | CURRENT_TIMESTAMP '(' ')'
   {
-    $$.val = &FuncExpr{Func: wrapFunction($1)}
+    $$.val = &FuncExpr{Func: tree.WrapFunction($1)}
   }
 | CURRENT_TIMESTAMP '(' error { return helpWithFunction(sqllex, ResolvableFunctionReference{FunctionReference: UnresolvedName{Name($1)}}) }
 | CURRENT_ROLE { return unimplemented(sqllex, "current role") }
 | CURRENT_USER
   {
-    $$.val = &FuncExpr{Func: wrapFunction($1)}
+    $$.val = &FuncExpr{Func: tree.WrapFunction($1)}
   }
 | CURRENT_USER '(' ')'
   {
-    $$.val = &FuncExpr{Func: wrapFunction($1)}
+    $$.val = &FuncExpr{Func: tree.WrapFunction($1)}
   }
 | CURRENT_USER '(' error { return helpWithFunction(sqllex, ResolvableFunctionReference{FunctionReference: UnresolvedName{Name($1)}}) }
 | SESSION_USER
   {
-    $$.val = &FuncExpr{Func: wrapFunction("current_user")}
+    $$.val = &FuncExpr{Func: tree.WrapFunction("current_user")}
   }
 | USER
   {
-    $$.val = &FuncExpr{Func: wrapFunction("current_user")}
+    $$.val = &FuncExpr{Func: tree.WrapFunction("current_user")}
   }
 | CAST '(' a_expr AS cast_target ')'
   {
-    $$.val = &CastExpr{Expr: $3.expr(), Type: $5.castTargetType(), SyntaxMode: castExplicit}
+    $$.val = &CastExpr{Expr: $3.expr(), Type: $5.castTargetType(), SyntaxMode: tree.CastExplicit}
   }
 | ANNOTATE_TYPE '(' a_expr ',' typename ')'
   {
-    $$.val = &AnnotateTypeExpr{Expr: $3.expr(), Type: $5.colType(), SyntaxMode: annotateExplicit}
+    $$.val = &AnnotateTypeExpr{Expr: $3.expr(), Type: $5.colType(), SyntaxMode: tree.AnnotateExplicit}
   }
 | EXTRACT '(' extract_list ')'
   {
-    $$.val = &FuncExpr{Func: wrapFunction($1), Exprs: $3.exprs()}
+    $$.val = &FuncExpr{Func: tree.WrapFunction($1), Exprs: $3.exprs()}
   }
 | EXTRACT '(' error { return helpWithFunction(sqllex, ResolvableFunctionReference{FunctionReference: UnresolvedName{Name($1)}}) }
 | EXTRACT_DURATION '(' extract_list ')'
   {
-    $$.val = &FuncExpr{Func: wrapFunction($1), Exprs: $3.exprs()}
+    $$.val = &FuncExpr{Func: tree.WrapFunction($1), Exprs: $3.exprs()}
   }
 | EXTRACT_DURATION '(' error { return helpWithFunction(sqllex, ResolvableFunctionReference{FunctionReference: UnresolvedName{Name($1)}}) }
 | OVERLAY '(' overlay_list ')'
   {
-    $$.val = &FuncExpr{Func: wrapFunction($1), Exprs: $3.exprs()}
+    $$.val = &FuncExpr{Func: tree.WrapFunction($1), Exprs: $3.exprs()}
   }
 | OVERLAY '(' error { return helpWithFunction(sqllex, ResolvableFunctionReference{FunctionReference: UnresolvedName{Name($1)}}) }
 | POSITION '(' position_list ')'
   {
-    $$.val = &FuncExpr{Func: wrapFunction("STRPOS"), Exprs: $3.exprs()}
+    $$.val = &FuncExpr{Func: tree.WrapFunction("STRPOS"), Exprs: $3.exprs()}
   }
 | SUBSTRING '(' substr_list ')'
   {
-    $$.val = &FuncExpr{Func: wrapFunction($1), Exprs: $3.exprs()}
+    $$.val = &FuncExpr{Func: tree.WrapFunction($1), Exprs: $3.exprs()}
   }
 | SUBSTRING '(' error { return helpWithFunction(sqllex, ResolvableFunctionReference{FunctionReference: UnresolvedName{Name($1)}}) }
 | TREAT '(' a_expr AS typename ')' { return unimplemented(sqllex, "treat") }
 | TRIM '(' BOTH trim_list ')'
   {
-    $$.val = &FuncExpr{Func: wrapFunction("BTRIM"), Exprs: $4.exprs()}
+    $$.val = &FuncExpr{Func: tree.WrapFunction("BTRIM"), Exprs: $4.exprs()}
   }
 | TRIM '(' LEADING trim_list ')'
   {
-    $$.val = &FuncExpr{Func: wrapFunction("LTRIM"), Exprs: $4.exprs()}
+    $$.val = &FuncExpr{Func: tree.WrapFunction("LTRIM"), Exprs: $4.exprs()}
   }
 | TRIM '(' TRAILING trim_list ')'
   {
-    $$.val = &FuncExpr{Func: wrapFunction("RTRIM"), Exprs: $4.exprs()}
+    $$.val = &FuncExpr{Func: tree.WrapFunction("RTRIM"), Exprs: $4.exprs()}
   }
 | TRIM '(' trim_list ')'
   {
-    $$.val = &FuncExpr{Func: wrapFunction("BTRIM"), Exprs: $3.exprs()}
+    $$.val = &FuncExpr{Func: tree.WrapFunction("BTRIM"), Exprs: $3.exprs()}
   }
 | IF '(' a_expr ',' a_expr ',' a_expr ')'
   {
@@ -5871,12 +5872,12 @@ func_expr_common_subexpr:
   }
 | GREATEST '(' expr_list ')'
   {
-    $$.val = &FuncExpr{Func: wrapFunction($1), Exprs: $3.exprs()}
+    $$.val = &FuncExpr{Func: tree.WrapFunction($1), Exprs: $3.exprs()}
   }
 | GREATEST '(' error { return helpWithFunction(sqllex, ResolvableFunctionReference{FunctionReference: UnresolvedName{Name($1)}}) }
 | LEAST '(' expr_list ')'
   {
-    $$.val = &FuncExpr{Func: wrapFunction($1), Exprs: $3.exprs()}
+    $$.val = &FuncExpr{Func: tree.WrapFunction($1), Exprs: $3.exprs()}
   }
 | LEAST '(' error { return helpWithFunction(sqllex, ResolvableFunctionReference{FunctionReference: UnresolvedName{Name($1)}}) }
 
@@ -6384,7 +6385,7 @@ target_elem:
   }
 | '*'
   {
-    $$.val = starSelectExpr()
+    $$.val = tree.StarSelectExpr()
   }
 
 // Names and constants.
@@ -6523,7 +6524,7 @@ a_expr_const:
 | func_name '(' expr_list opt_sort_clause ')' SCONST { return unimplemented(sqllex, "func const") }
 | const_typename SCONST
   {
-    $$.val = &CastExpr{Expr: NewStrVal($2), Type: $1.colType(), SyntaxMode: castPrepend}
+    $$.val = &CastExpr{Expr: NewStrVal($2), Type: $1.colType(), SyntaxMode: tree.CastPrepend}
   }
 | interval
   {
