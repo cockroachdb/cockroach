@@ -2173,7 +2173,7 @@ set_transaction_stmt:
 | SET SESSION TRANSACTION error // SHOW HELP: SET TRANSACTION
 
 generic_set:
-  var_name TO var_list
+var_name TO var_list
   {
     $$.val = &SetVar{Name: $1.unresolvedName(), Values: $3.exprs()}
   }
@@ -2189,7 +2189,7 @@ set_rest_more:
 | TIME ZONE zone_value
   {
     /* SKIP DOC */
-    $$.val = &SetVar{Name: UnresolvedName{Name("time zone")}, Values: Exprs{$3.expr()}}
+    $$.val = &SetVar{Name: UnresolvedName{Name("timezone")}, Values: Exprs{$3.expr()}}
   }
 | var_name FROM CURRENT { return unimplemented(sqllex, "set from current") }
 | set_names
@@ -2346,7 +2346,7 @@ session_var:
 | NAMES { $$ = "client_encoding" }
 | SESSION_USER
 // TIME ZONE is special: it is two tokens, but is really the identifier "TIME ZONE".
-| TIME ZONE { $$ = "TIME ZONE" }
+| TIME ZONE { $$ = "timezone" }
 | TIME error // SHOW HELP: SHOW SESSION
 
 // %Help: SHOW BACKUP - list backup contents
