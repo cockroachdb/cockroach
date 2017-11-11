@@ -93,7 +93,7 @@ server_version_num             90500
 session_user                   root
 sql_safe_updates               false
 standard_conforming_strings    on
-time zone                      UTC
+timezone                       UTC
 tracing                        off
 transaction isolation level    SERIALIZABLE
 transaction priority           NORMAL
@@ -198,10 +198,28 @@ SELECT name, value FROM system.settings WHERE name = 'testing.str'
 
 # quoted identifiers
 statement ok
-SET "time zone" = 'UTC'
+SET "TIMEZONE" = 'UTC'
 
 query T
-SHOW "time zone"
+SHOW "TIMEZONE"
+----
+UTC
+
+# without quoted identifiers
+statement ok
+SET TIMEZONE = 'UTC'
+
+query T
+SHOW TIMEZONE
+----
+UTC
+
+# TIMEZONE alias - TIME ZONE two words/tokens
+statement ok
+SET TIME ZONE 'UTC'
+
+query T
+SHOW TIME ZONE
 ----
 UTC
 
