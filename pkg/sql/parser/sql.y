@@ -6008,7 +6008,7 @@ frame_bound:
 row:
   ROW '(' opt_expr_list ')'
   {
-    $$.val = &Tuple{Exprs: $3.exprs(), row: true}
+    $$.val = &Tuple{Exprs: $3.exprs(), Row: true}
   }
 | '(' expr_list ',' a_expr ')'
   {
@@ -6018,7 +6018,7 @@ row:
 explicit_row:
   ROW '(' opt_expr_list ')'
   {
-    $$.val = &Tuple{Exprs: $3.exprs(), row: true}
+    $$.val = &Tuple{Exprs: $3.exprs(), Row: true}
   }
 
 implicit_row:
