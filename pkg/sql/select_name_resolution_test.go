@@ -18,6 +18,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
@@ -31,11 +32,11 @@ func testInitDummySelectNode(desc *sqlbase.TableDescriptor) *renderNode {
 
 	sel := &renderNode{planner: p}
 	sel.source.plan = scan
-	testName := parser.TableName{TableName: parser.Name(desc.Name), DatabaseName: parser.Name("test")}
+	testName := tree.TableName{TableName: tree.Name(desc.Name), DatabaseName: tree.Name("test")}
 	cols := planColumns(scan)
 	sel.source.info = newSourceInfoForSingleTable(testName, cols)
 	sel.sourceInfo = multiSourceInfo{sel.source.info}
-	sel.ivarHelper = parser.MakeIndexedVarHelper(sel, len(cols))
+	sel.ivarHelper = tree.MakeIndexedVarHelper(sel, len(cols))
 
 	return sel
 }

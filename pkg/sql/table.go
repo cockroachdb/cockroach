@@ -25,8 +25,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/jobs"
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -58,7 +58,7 @@ func (p *planner) getAllNames(ctx context.Context) (map[sqlbase.ID]namespaceKey,
 		return nil, err
 	}
 	for _, r := range rows {
-		id, parentID, name := parser.MustBeDInt(r[0]), parser.MustBeDInt(r[1]), parser.MustBeDString(r[2])
+		id, parentID, name := tree.MustBeDInt(r[0]), tree.MustBeDInt(r[1]), tree.MustBeDString(r[2])
 		namespace[sqlbase.ID(id)] = namespaceKey{
 			parentID: sqlbase.ID(parentID),
 			name:     string(name),
@@ -119,7 +119,7 @@ func (p *planner) getVirtualTabler() VirtualTabler {
 // getTableOrViewDesc returns a table descriptor for either a table or view,
 // or nil if the descriptor is not found.
 func getTableOrViewDesc(
-	ctx context.Context, txn *client.Txn, vt VirtualTabler, tn *parser.TableName,
+	ctx context.Context, txn *client.Txn, vt VirtualTabler, tn *tree.TableName,
 ) (*sqlbase.TableDescriptor, error) {
 	virtual, err := vt.getVirtualTableDesc(tn)
 	if err != nil || virtual != nil {
@@ -152,7 +152,7 @@ func getTableOrViewDesc(
 // Returns an error if the underlying table descriptor actually
 // represents a view rather than a table.
 func getTableDesc(
-	ctx context.Context, txn *client.Txn, vt VirtualTabler, tn *parser.TableName,
+	ctx context.Context, txn *client.Txn, vt VirtualTabler, tn *tree.TableName,
 ) (*sqlbase.TableDescriptor, error) {
 	desc, err := getTableOrViewDesc(ctx, txn, vt, tn)
 	if err != nil {
@@ -170,7 +170,7 @@ func getTableDesc(
 // Returns an error if the underlying table descriptor actually
 // represents a table rather than a view.
 func getViewDesc(
-	ctx context.Context, txn *client.Txn, vt VirtualTabler, tn *parser.TableName,
+	ctx context.Context, txn *client.Txn, vt VirtualTabler, tn *tree.TableName,
 ) (*sqlbase.TableDescriptor, error) {
 	desc, err := getTableOrViewDesc(ctx, txn, vt, tn)
 	if err != nil {
@@ -186,7 +186,7 @@ func getViewDesc(
 // view, or an error if the descriptor is not found. allowAdding when set allows
 // a table descriptor in the ADD state to also be returned.
 func MustGetTableOrViewDesc(
-	ctx context.Context, txn *client.Txn, vt VirtualTabler, tn *parser.TableName, allowAdding bool,
+	ctx context.Context, txn *client.Txn, vt VirtualTabler, tn *tree.TableName, allowAdding bool,
 ) (*sqlbase.TableDescriptor, error) {
 	desc, err := getTableOrViewDesc(ctx, txn, vt, tn)
 	if err != nil {
@@ -207,7 +207,7 @@ func MustGetTableOrViewDesc(
 // the descriptor is not found. allowAdding when set allows a table descriptor
 // in the ADD state to also be returned.
 func MustGetTableDesc(
-	ctx context.Context, txn *client.Txn, vt VirtualTabler, tn *parser.TableName, allowAdding bool,
+	ctx context.Context, txn *client.Txn, vt VirtualTabler, tn *tree.TableName, allowAdding bool,
 ) (*sqlbase.TableDescriptor, error) {
 	desc, err := getTableDesc(ctx, txn, vt, tn)
 	if err != nil {
@@ -307,7 +307,7 @@ func (tc *TableCollection) resetForTxnRetry(ctx context.Context, txn *client.Txn
 //
 // TODO(vivek): Allow cached descriptors for AS OF SYSTEM TIME queries.
 func (tc *TableCollection) getTableVersion(
-	ctx context.Context, txn *client.Txn, vt VirtualTabler, tn *parser.TableName,
+	ctx context.Context, txn *client.Txn, vt VirtualTabler, tn *tree.TableName,
 ) (*sqlbase.TableDescriptor, error) {
 	if log.V(2) {
 		log.Infof(ctx, "planner acquiring lease on table '%s'", tn)
@@ -413,7 +413,7 @@ func (tc *TableCollection) getTableVersionByID(
 			log.VEventf(ctx, 2, "found uncommitted table %d", tableID)
 			if table.Dropped() {
 				return nil, sqlbase.NewUndefinedRelationError(
-					&parser.TableName{TableName: parser.Name(fmt.Sprintf("<id=%d>", tableID))},
+					&tree.TableName{TableName: tree.Name(fmt.Sprintf("<id=%d>", tableID))},
 				)
 			}
 			return table, nil
@@ -435,7 +435,7 @@ func (tc *TableCollection) getTableVersionByID(
 			// Transform the descriptor error into an error that references the
 			// table's ID.
 			return nil, sqlbase.NewUndefinedRelationError(
-				&parser.TableRef{TableID: int64(tableID)})
+				&tree.TableRef{TableID: int64(tableID)})
 		}
 		return nil, err
 	}
@@ -483,7 +483,7 @@ func (tc *TableCollection) addUncommittedDatabase(name string, id sqlbase.ID, dr
 // getUncommittedDatabaseID returns a database ID for the requested tablename
 // if the requested tablename is for a database modified within the transaction
 // affiliated with the LeaseCollection.
-func (tc *TableCollection) getUncommittedDatabaseID(tn *parser.TableName) (sqlbase.ID, error) {
+func (tc *TableCollection) getUncommittedDatabaseID(tn *tree.TableName) (sqlbase.ID, error) {
 	// Walk latest to earliest.
 	for i := len(tc.uncommittedDatabases) - 1; i >= 0; i-- {
 		db := tc.uncommittedDatabases[i]
@@ -501,7 +501,7 @@ func (tc *TableCollection) getUncommittedDatabaseID(tn *parser.TableName) (sqlba
 // if the requested tablename is for a table modified within the transaction
 // affiliated with the LeaseCollection.
 func (tc *TableCollection) getUncommittedTable(
-	dbID sqlbase.ID, tn *parser.TableName,
+	dbID sqlbase.ID, tn *tree.TableName,
 ) (*sqlbase.TableDescriptor, error) {
 	for _, table := range tc.uncommittedTables {
 		if table.Name == string(tn.TableName) &&
@@ -534,7 +534,7 @@ func getTableNames(
 	vt VirtualTabler,
 	dbDesc *sqlbase.DatabaseDescriptor,
 	dbNameOriginallyOmitted bool,
-) (parser.TableNames, error) {
+) (tree.TableNames, error) {
 	if e, ok := vt.getVirtualSchemaEntry(dbDesc.Name); ok {
 		return e.tableNames(dbNameOriginallyOmitted), nil
 	}
@@ -545,16 +545,16 @@ func getTableNames(
 		return nil, err
 	}
 
-	var tableNames parser.TableNames
+	var tableNames tree.TableNames
 	for _, row := range sr {
 		_, tableName, err := encoding.DecodeUnsafeStringAscending(
 			bytes.TrimPrefix(row.Key, prefix), nil)
 		if err != nil {
 			return nil, err
 		}
-		tn := parser.TableName{
-			DatabaseName:            parser.Name(dbDesc.Name),
-			TableName:               parser.Name(tableName),
+		tn := tree.TableName{
+			DatabaseName:            tree.Name(dbDesc.Name),
+			TableName:               tree.Name(tableName),
 			DBNameOriginallyOmitted: dbNameOriginallyOmitted,
 		}
 		tableNames = append(tableNames, tn)
@@ -562,11 +562,11 @@ func getTableNames(
 	return tableNames, nil
 }
 
-func (p *planner) getAliasedTableName(n parser.TableExpr) (*parser.TableName, error) {
-	if ate, ok := n.(*parser.AliasedTableExpr); ok {
+func (p *planner) getAliasedTableName(n tree.TableExpr) (*tree.TableName, error) {
+	if ate, ok := n.(*tree.AliasedTableExpr); ok {
 		n = ate.Expr
 	}
-	table, ok := n.(*parser.NormalizableTableName)
+	table, ok := n.(*tree.NormalizableTableName)
 	if !ok {
 		return nil, errors.Errorf("TODO(pmattis): unsupported FROM: %s", n)
 	}
@@ -649,22 +649,22 @@ func (p *planner) writeTableDesc(ctx context.Context, tableDesc *sqlbase.TableDe
 }
 
 // expandTableGlob expands pattern into a list of tables represented
-// as a parser.TableNames.
+// as a tree.TableNames.
 func expandTableGlob(
 	ctx context.Context,
 	txn *client.Txn,
 	vt VirtualTabler,
 	database string,
-	pattern parser.TablePattern,
-) (parser.TableNames, error) {
-	if t, ok := pattern.(*parser.TableName); ok {
+	pattern tree.TablePattern,
+) (tree.TableNames, error) {
+	if t, ok := pattern.(*tree.TableName); ok {
 		if err := t.QualifyWithDatabase(database); err != nil {
 			return nil, err
 		}
-		return parser.TableNames{*t}, nil
+		return tree.TableNames{*t}, nil
 	}
 
-	glob := pattern.(*parser.AllTablesSelector)
+	glob := pattern.(*tree.AllTablesSelector)
 
 	if err := glob.QualifyWithDatabase(database); err != nil {
 		return nil, err
@@ -688,7 +688,7 @@ func expandTableGlob(
 // provided TableName is modified in-place in case of success, and
 // left unchanged otherwise.
 // The table name must not be qualified already.
-func (p *planner) searchAndQualifyDatabase(ctx context.Context, tn *parser.TableName) error {
+func (p *planner) searchAndQualifyDatabase(ctx context.Context, tn *tree.TableName) error {
 	t := *tn
 
 	descFunc := p.session.tables.getTableVersion
@@ -701,7 +701,7 @@ func (p *planner) searchAndQualifyDatabase(ctx context.Context, tn *parser.Table
 	}
 
 	if p.session.Database != "" {
-		t.DatabaseName = parser.Name(p.session.Database)
+		t.DatabaseName = tree.Name(p.session.Database)
 		desc, err := descFunc(ctx, p.txn, p.getVirtualTabler(), &t)
 		if err != nil && !sqlbase.IsUndefinedRelationError(err) && !sqlbase.IsUndefinedDatabaseError(err) {
 			return err
@@ -717,7 +717,7 @@ func (p *planner) searchAndQualifyDatabase(ctx context.Context, tn *parser.Table
 	// the search path instead.
 	iter := p.session.SearchPath.Iter()
 	for database, ok := iter(); ok; database, ok = iter() {
-		t.DatabaseName = parser.Name(database)
+		t.DatabaseName = tree.Name(database)
 		desc, err := descFunc(ctx, p.txn, p.getVirtualTabler(), &t)
 		if err != nil && !sqlbase.IsUndefinedRelationError(err) && !sqlbase.IsUndefinedDatabaseError(err) {
 			return err
@@ -741,9 +741,9 @@ func (p *planner) getQualifiedTableName(
 	if err != nil {
 		return "", err
 	}
-	tbName := parser.TableName{
-		DatabaseName: parser.Name(dbDesc.Name),
-		TableName:    parser.Name(desc.Name),
+	tbName := tree.TableName{
+		DatabaseName: tree.Name(dbDesc.Name),
+		TableName:    tree.Name(desc.Name),
 	}
 	return tbName.String(), nil
 }
@@ -757,10 +757,10 @@ func (p *planner) findTableContainingIndex(
 	ctx context.Context,
 	txn *client.Txn,
 	vt VirtualTabler,
-	dbName parser.Name,
-	idxName parser.UnrestrictedName,
+	dbName tree.Name,
+	idxName tree.UnrestrictedName,
 	requireTable bool,
-) (result *parser.TableName, err error) {
+) (result *tree.TableName, err error) {
 	dbDesc, err := MustGetDatabaseDesc(ctx, txn, vt, string(dbName))
 	if err != nil {
 		return nil, err
@@ -802,8 +802,8 @@ func (p *planner) findTableContainingIndex(
 // found and requireTable is true an error will be returned, otherwise
 // the TableName returned will be nil.
 func (p *planner) expandIndexName(
-	ctx context.Context, index *parser.TableNameWithIndex, requireTable bool,
-) (*parser.TableName, error) {
+	ctx context.Context, index *tree.TableNameWithIndex, requireTable bool,
+) (*tree.TableName, error) {
 	tn, err := index.Table.NormalizeWithDatabaseName(p.session.Database)
 	if err != nil {
 		return nil, err
@@ -817,7 +817,7 @@ func (p *planner) expandIndexName(
 		// will generate tn using the new value of index.Table, which
 		// is a table name. Therefore assign index.Index only once.
 		if index.Index == "" {
-			index.Index = parser.UnrestrictedName(tn.TableName)
+			index.Index = tree.UnrestrictedName(tn.TableName)
 		}
 		realTableName, err := p.findTableContainingIndex(
 			ctx,
@@ -846,11 +846,11 @@ func (p *planner) expandIndexName(
 // It can return indexes that are being rolled out.
 func (p *planner) getTableAndIndex(
 	ctx context.Context,
-	table *parser.NormalizableTableName,
-	tableWithIndex *parser.TableNameWithIndex,
+	table *tree.NormalizableTableName,
+	tableWithIndex *tree.TableNameWithIndex,
 	privilege privilege.Kind,
 ) (*sqlbase.TableDescriptor, *sqlbase.IndexDescriptor, error) {
-	var tn *parser.TableName
+	var tn *tree.TableName
 	var err error
 	if tableWithIndex == nil {
 		// Variant: ALTER TABLE
@@ -899,13 +899,13 @@ func resolveTableNameFromID(
 	databases map[sqlbase.ID]*sqlbase.DatabaseDescriptor,
 ) string {
 	table := tables[tableID]
-	tn := parser.TableName{TableName: parser.Name(table.Name)}
+	tn := tree.TableName{TableName: tree.Name(table.Name)}
 	if parentDB, ok := databases[table.ParentID]; ok {
-		tn.DatabaseName = parser.Name(parentDB.Name)
+		tn.DatabaseName = tree.Name(parentDB.Name)
 	} else {
-		tn.DatabaseName = parser.Name(fmt.Sprintf("[%d]", table.ParentID))
+		tn.DatabaseName = tree.Name(fmt.Sprintf("[%d]", table.ParentID))
 		log.Errorf(ctx, "relation [%d] (%q) has no parent database (corrupted schema?)",
-			tableID, parser.ErrString(&tn))
+			tableID, tree.ErrString(&tn))
 	}
-	return parser.ErrString(&tn)
+	return tree.ErrString(&tn)
 }

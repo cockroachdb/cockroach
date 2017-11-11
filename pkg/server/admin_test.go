@@ -42,7 +42,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/jobs"
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -418,8 +418,8 @@ func TestAdminAPITableDetails(t *testing.T) {
 			defer s.Stopper().Stop(context.TODO())
 			ts := s.(*TestServer)
 
-			escDBName := parser.Name(tc.dbName).String()
-			escTblName := parser.Name(tc.tblName).String()
+			escDBName := tree.Name(tc.dbName).String()
+			escTblName := tree.Name(tc.tblName).String()
 
 			ac := log.AmbientContext{Tracer: s.ClusterSettings().Tracer}
 			ctx, span := ac.AnnotateCtxWithSpan(context.Background(), "test")
@@ -628,9 +628,9 @@ func TestAdminAPIZoneDetails(t *testing.T) {
 			t.Fatal(err)
 		}
 		const query = `INSERT INTO system.zones VALUES($1, $2)`
-		params := parser.MakePlaceholderInfo()
-		params.SetValue(`1`, parser.NewDInt(parser.DInt(id)))
-		params.SetValue(`2`, parser.NewDBytes(parser.DBytes(zoneBytes)))
+		params := tree.MakePlaceholderInfo()
+		params.SetValue(`1`, tree.NewDInt(tree.DInt(id)))
+		params.SetValue(`2`, tree.NewDBytes(tree.DBytes(zoneBytes)))
 		res, err := ts.sqlExecutor.ExecuteStatementsBuffered(session, query, &params, 1)
 		if err != nil {
 			t.Fatalf("error executing '%s': %s", query, err)

@@ -24,6 +24,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -31,15 +32,15 @@ import (
 
 // checkHelper validates check constraints on rows, on INSERT and UPDATE.
 type checkHelper struct {
-	exprs        []parser.TypedExpr
+	exprs        []tree.TypedExpr
 	cols         []sqlbase.ColumnDescriptor
 	sourceInfo   *dataSourceInfo
-	ivars        []parser.IndexedVar
-	curSourceRow parser.Datums
+	ivars        []tree.IndexedVar
+	curSourceRow tree.Datums
 }
 
 func (c *checkHelper) init(
-	ctx context.Context, p *planner, tn *parser.TableName, tableDesc *sqlbase.TableDescriptor,
+	ctx context.Context, p *planner, tn *tree.TableName, tableDesc *sqlbase.TableDescriptor,
 ) error {
 	if len(tableDesc.Checks) == 0 {
 		return nil
@@ -50,7 +51,7 @@ func (c *checkHelper) init(
 		*tn, sqlbase.ResultColumnsFromColDescs(tableDesc.Columns),
 	)
 
-	c.exprs = make([]parser.TypedExpr, len(tableDesc.Checks))
+	c.exprs = make([]tree.TypedExpr, len(tableDesc.Checks))
 	exprStrings := make([]string, len(tableDesc.Checks))
 	for i, check := range tableDesc.Checks {
 		exprStrings[i] = check.Expr
@@ -60,7 +61,7 @@ func (c *checkHelper) init(
 		return err
 	}
 
-	ivarHelper := parser.MakeIndexedVarHelper(c, len(c.cols))
+	ivarHelper := tree.MakeIndexedVarHelper(c, len(c.cols))
 	for i, raw := range exprs {
 		typedExpr, err := p.analyzeExpr(ctx, raw, multiSourceInfo{c.sourceInfo}, ivarHelper,
 			types.Bool, false, "")
@@ -70,16 +71,14 @@ func (c *checkHelper) init(
 		c.exprs[i] = typedExpr
 	}
 	c.ivars = ivarHelper.GetIndexedVars()
-	c.curSourceRow = make(parser.Datums, len(c.cols))
+	c.curSourceRow = make(tree.Datums, len(c.cols))
 	return nil
 }
 
 // Set values in the IndexedVars used by the CHECK exprs.
 // Any value not passed is set to NULL, unless `merge` is true, in which
 // case it is left unchanged (allowing updating a subset of a row's values).
-func (c *checkHelper) loadRow(
-	colIdx map[sqlbase.ColumnID]int, row parser.Datums, merge bool,
-) error {
+func (c *checkHelper) loadRow(colIdx map[sqlbase.ColumnID]int, row tree.Datums, merge bool) error {
 	if len(c.exprs) == 0 {
 		return nil
 	}
@@ -90,7 +89,7 @@ func (c *checkHelper) loadRow(
 		}
 		ri, has := colIdx[c.cols[ivar.Idx].ID]
 		if has {
-			if row[ri] != parser.DNull {
+			if row[ri] != tree.DNull {
 				expected, provided := ivar.ResolvedType(), row[ri].ResolvedType()
 				if !expected.Equivalent(provided) {
 					return errors.Errorf("%s value does not match CHECK expr type %s", provided, expected)
@@ -98,34 +97,34 @@ func (c *checkHelper) loadRow(
 			}
 			c.curSourceRow[ivar.Idx] = row[ri]
 		} else if !merge {
-			c.curSourceRow[ivar.Idx] = parser.DNull
+			c.curSourceRow[ivar.Idx] = tree.DNull
 		}
 	}
 	return nil
 }
 
-// IndexedVarEval implements the parser.IndexedVarContainer interface.
-func (c *checkHelper) IndexedVarEval(idx int, ctx *parser.EvalContext) (parser.Datum, error) {
+// IndexedVarEval implements the tree.IndexedVarContainer interface.
+func (c *checkHelper) IndexedVarEval(idx int, ctx *tree.EvalContext) (tree.Datum, error) {
 	return c.curSourceRow[idx].Eval(ctx)
 }
 
-// IndexedVarResolvedType implements the parser.IndexedVarContainer interface.
+// IndexedVarResolvedType implements the tree.IndexedVarContainer interface.
 func (c *checkHelper) IndexedVarResolvedType(idx int) types.T {
 	return c.sourceInfo.sourceColumns[idx].Typ
 }
 
-// IndexedVarFormat implements the parser.IndexedVarContainer interface.
-func (c *checkHelper) IndexedVarFormat(buf *bytes.Buffer, f parser.FmtFlags, idx int) {
+// IndexedVarFormat implements the tree.IndexedVarContainer interface.
+func (c *checkHelper) IndexedVarFormat(buf *bytes.Buffer, f tree.FmtFlags, idx int) {
 	c.sourceInfo.FormatVar(buf, f, idx)
 }
 
-func (c *checkHelper) check(ctx *parser.EvalContext) error {
+func (c *checkHelper) check(ctx *tree.EvalContext) error {
 	for _, expr := range c.exprs {
 		if d, err := expr.Eval(ctx); err != nil {
 			return err
-		} else if res, err := parser.GetBool(d); err != nil {
+		} else if res, err := tree.GetBool(d); err != nil {
 			return err
-		} else if !res && d != parser.DNull {
+		} else if !res && d != tree.DNull {
 			// Failed to satisfy CHECK constraint.
 			return pgerror.NewErrorf(pgerror.CodeCheckViolationError,
 				"failed to satisfy CHECK constraint (%s)", expr)
@@ -135,21 +134,18 @@ func (c *checkHelper) check(ctx *parser.EvalContext) error {
 }
 
 func (p *planner) validateCheckExpr(
-	ctx context.Context,
-	exprStr string,
-	tableName parser.TableExpr,
-	tableDesc *sqlbase.TableDescriptor,
+	ctx context.Context, exprStr string, tableName tree.TableExpr, tableDesc *sqlbase.TableDescriptor,
 ) error {
 	expr, err := parser.ParseExpr(exprStr)
 	if err != nil {
 		return err
 	}
-	sel := &parser.SelectClause{
+	sel := &tree.SelectClause{
 		Exprs: sqlbase.ColumnsSelectors(tableDesc.Columns),
-		From:  &parser.From{Tables: parser.TableExprs{tableName}},
-		Where: &parser.Where{Expr: &parser.NotExpr{Expr: expr}},
+		From:  &tree.From{Tables: tree.TableExprs{tableName}},
+		Where: &tree.Where{Expr: &tree.NotExpr{Expr: expr}},
 	}
-	lim := &parser.Limit{Count: parser.NewDInt(1)}
+	lim := &tree.Limit{Count: tree.NewDInt(1)}
 	// This could potentially use a variant of planner.SelectClause that could
 	// use the tableDesc we have, but this is a rare operation and be benefit
 	// would be marginal compared to the work of the actual query, so the added
@@ -203,7 +199,7 @@ func (p *planner) validateForeignKey(
 	}
 
 	escape := func(s string) string {
-		return parser.Name(s).String()
+		return tree.Name(s).String()
 	}
 
 	prefix := len(srcIdx.ColumnNames)

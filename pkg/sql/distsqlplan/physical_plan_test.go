@@ -25,7 +25,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
@@ -200,11 +200,11 @@ func TestProjectionAndRendering(t *testing.T) {
 
 			action: func(p *PhysicalPlan) {
 				p.AddRendering(
-					[]parser.TypedExpr{
-						&parser.IndexedVar{Idx: 10},
-						&parser.IndexedVar{Idx: 11},
-						&parser.IndexedVar{Idx: 12},
-						&parser.IndexedVar{Idx: 13},
+					[]tree.TypedExpr{
+						&tree.IndexedVar{Idx: 10},
+						&tree.IndexedVar{Idx: 11},
+						&tree.IndexedVar{Idx: 12},
+						&tree.IndexedVar{Idx: 13},
 					},
 					nil,
 					[]int{-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, 0, 1, 2, 3},
@@ -223,10 +223,10 @@ func TestProjectionAndRendering(t *testing.T) {
 
 			action: func(p *PhysicalPlan) {
 				p.AddRendering(
-					[]parser.TypedExpr{
-						&parser.IndexedVar{Idx: 11},
-						&parser.IndexedVar{Idx: 13},
-						&parser.IndexedVar{Idx: 12},
+					[]tree.TypedExpr{
+						&tree.IndexedVar{Idx: 11},
+						&tree.IndexedVar{Idx: 13},
+						&tree.IndexedVar{Idx: 12},
 					},
 					nil,
 					[]int{-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, 0, 1, 2, 3},
@@ -249,11 +249,11 @@ func TestProjectionAndRendering(t *testing.T) {
 
 			action: func(p *PhysicalPlan) {
 				p.AddRendering(
-					[]parser.TypedExpr{
-						&parser.BinaryExpr{
-							Operator: parser.Plus,
-							Left:     &parser.IndexedVar{Idx: 1},
-							Right:    &parser.IndexedVar{Idx: 2},
+					[]tree.TypedExpr{
+						&tree.BinaryExpr{
+							Operator: tree.Plus,
+							Left:     &tree.IndexedVar{Idx: 1},
+							Right:    &tree.IndexedVar{Idx: 2},
 						},
 					},
 					nil,
@@ -280,13 +280,13 @@ func TestProjectionAndRendering(t *testing.T) {
 
 			action: func(p *PhysicalPlan) {
 				p.AddRendering(
-					[]parser.TypedExpr{
-						&parser.BinaryExpr{
-							Operator: parser.Plus,
-							Left:     &parser.IndexedVar{Idx: 11},
-							Right:    &parser.IndexedVar{Idx: 12},
+					[]tree.TypedExpr{
+						&tree.BinaryExpr{
+							Operator: tree.Plus,
+							Left:     &tree.IndexedVar{Idx: 11},
+							Right:    &tree.IndexedVar{Idx: 12},
 						},
-						&parser.IndexedVar{Idx: 10},
+						&tree.IndexedVar{Idx: 10},
 					},
 					nil,
 					[]int{-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, 0, 1, 2},

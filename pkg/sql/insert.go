@@ -21,9 +21,9 @@ import (
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
@@ -49,8 +49,8 @@ var tableUpserterPool = sync.Pool{
 type insertNode struct {
 	// The following fields are populated during makePlan.
 	editNodeBase
-	defaultExprs []parser.TypedExpr
-	n            *parser.Insert
+	defaultExprs []tree.TypedExpr
+	n            *tree.Insert
 	checkHelper  checkHelper
 
 	insertCols            []sqlbase.ColumnDescriptor
@@ -64,7 +64,7 @@ type insertNode struct {
 		editNodeRun
 
 		rowIdxToRetIdx []int
-		rowTemplate    parser.Datums
+		rowTemplate    tree.Datums
 
 		doneUpserting bool
 		rowsUpserted  *sqlbase.RowContainer
@@ -76,7 +76,7 @@ type insertNode struct {
 //   Notes: postgres requires INSERT. No "on duplicate key update" option.
 //          mysql requires INSERT. Also requires UPDATE on "ON DUPLICATE KEY UPDATE".
 func (p *planner) Insert(
-	ctx context.Context, n *parser.Insert, desiredTypes []types.T,
+	ctx context.Context, n *tree.Insert, desiredTypes []types.T,
 ) (planNode, error) {
 	tn, err := p.getAliasedTableName(n.Table)
 	if err != nil {
@@ -94,7 +94,7 @@ func (p *planner) Insert(
 				return nil, err
 			}
 		}
-		if _, ok := n.Returning.(*parser.ReturningExprs); ok {
+		if _, ok := n.Returning.(*tree.ReturningExprs); ok {
 			isUpsertReturning = true
 		}
 	}
@@ -119,7 +119,7 @@ func (p *planner) Insert(
 		return nil, err
 	}
 
-	var insertRows parser.SelectStatement
+	var insertRows tree.SelectStatement
 	if n.DefaultValues() {
 		insertRows = getDefaultValuesClause(defaultExprs, cols)
 	} else {
@@ -158,7 +158,7 @@ func (p *planner) Insert(
 		return nil, err
 	}
 
-	if _, ok := insertRows.(*parser.ValuesClause); !ok {
+	if _, ok := insertRows.(*tree.ValuesClause); !ok {
 		// If the insert source was not a VALUES clause, then we have not
 		// already verified the expression length.
 		numExprs := len(planColumns(rows))
@@ -283,9 +283,9 @@ func (n *insertNode) Start(params runParams) error {
 		// will use rowTemplate for this. We also need a table that maps row indices to rowTemplate indices
 		// to fill in the row values; any absent values will be NULLs.
 
-		n.run.rowTemplate = make(parser.Datums, len(n.tableDesc.Columns))
+		n.run.rowTemplate = make(tree.Datums, len(n.tableDesc.Columns))
 		for i := range n.run.rowTemplate {
-			n.run.rowTemplate[i] = parser.DNull
+			n.run.rowTemplate[i] = tree.DNull
 		}
 
 		colIDToRetIndex := map[sqlbase.ColumnID]int{}
@@ -420,13 +420,13 @@ func (n *insertNode) internalNext(params runParams) (bool, error) {
 // GenerateInsertRow prepares a row tuple for insertion. It fills in default
 // expressions, verifies non-nullable columns, and checks column widths.
 func GenerateInsertRow(
-	defaultExprs []parser.TypedExpr,
+	defaultExprs []tree.TypedExpr,
 	insertColIDtoRowIndex map[sqlbase.ColumnID]int,
 	insertCols []sqlbase.ColumnDescriptor,
-	evalCtx parser.EvalContext,
+	evalCtx tree.EvalContext,
 	tableDesc *sqlbase.TableDescriptor,
-	rowVals parser.Datums,
-) (parser.Datums, error) {
+	rowVals tree.Datums,
+) (tree.Datums, error) {
 	// The values for the row may be shorter than the number of columns being
 	// inserted into. Generate default values for those columns using the
 	// default expressions. This will not happen if the row tuple was produced
@@ -435,12 +435,12 @@ func GenerateInsertRow(
 	if len(rowVals) < len(insertCols) {
 		// It's not cool to append to the slice returned by a node; make a copy.
 		oldVals := rowVals
-		rowVals = make(parser.Datums, len(insertCols))
+		rowVals = make(tree.Datums, len(insertCols))
 		copy(rowVals, oldVals)
 
 		for i := len(oldVals); i < len(insertCols); i++ {
 			if defaultExprs == nil {
-				rowVals[i] = parser.DNull
+				rowVals[i] = tree.DNull
 				continue
 			}
 			d, err := defaultExprs[i].Eval(&evalCtx)
@@ -454,7 +454,7 @@ func GenerateInsertRow(
 	// Check to see if NULL is being inserted into any non-nullable column.
 	for _, col := range tableDesc.Columns {
 		if !col.Nullable {
-			if i, ok := insertColIDtoRowIndex[col.ID]; !ok || rowVals[i] == parser.DNull {
+			if i, ok := insertColIDtoRowIndex[col.ID]; !ok || rowVals[i] == tree.DNull {
 				return nil, sqlbase.NewNonNullViolationError(col.Name)
 			}
 		}
@@ -470,7 +470,7 @@ func GenerateInsertRow(
 }
 
 func (p *planner) processColumns(
-	tableDesc *sqlbase.TableDescriptor, node parser.UnresolvedNames,
+	tableDesc *sqlbase.TableDescriptor, node tree.UnresolvedNames,
 ) ([]sqlbase.ColumnDescriptor, error) {
 	if node == nil {
 		// VisibleColumns is used here to prevent INSERT INTO <table> VALUES (...)
@@ -510,12 +510,12 @@ func (p *planner) processColumns(
 // extractInsertSource removes the parentheses around the data source of an INSERT statement.
 // If the data source is a VALUES clause not further qualified with LIMIT/OFFSET and ORDER BY,
 // the 2nd return value is a pre-casted pointer to the VALUES clause.
-func extractInsertSource(s *parser.Select) (parser.SelectStatement, *parser.ValuesClause, error) {
+func extractInsertSource(s *tree.Select) (tree.SelectStatement, *tree.ValuesClause, error) {
 	wrapped := s.Select
 	limit := s.Limit
 	orderBy := s.OrderBy
 
-	for s, ok := wrapped.(*parser.ParenSelect); ok; s, ok = wrapped.(*parser.ParenSelect) {
+	for s, ok := wrapped.(*tree.ParenSelect); ok; s, ok = wrapped.(*tree.ParenSelect) {
 		wrapped = s.Select.Select
 		if s.Select.OrderBy != nil {
 			if orderBy != nil {
@@ -532,26 +532,26 @@ func extractInsertSource(s *parser.Select) (parser.SelectStatement, *parser.Valu
 	}
 
 	if orderBy == nil && limit == nil {
-		values, _ := wrapped.(*parser.ValuesClause)
+		values, _ := wrapped.(*tree.ValuesClause)
 		return wrapped, values, nil
 	}
-	return &parser.ParenSelect{
-		Select: &parser.Select{Select: wrapped, OrderBy: orderBy, Limit: limit},
+	return &tree.ParenSelect{
+		Select: &tree.Select{Select: wrapped, OrderBy: orderBy, Limit: limit},
 	}, nil, nil
 }
 
 func getDefaultValuesClause(
-	defaultExprs []parser.TypedExpr, cols []sqlbase.ColumnDescriptor,
-) parser.SelectStatement {
-	row := make(parser.Exprs, 0, len(cols))
+	defaultExprs []tree.TypedExpr, cols []sqlbase.ColumnDescriptor,
+) tree.SelectStatement {
+	row := make(tree.Exprs, 0, len(cols))
 	for i := range cols {
 		if defaultExprs == nil {
-			row = append(row, parser.DNull)
+			row = append(row, tree.DNull)
 			continue
 		}
 		row = append(row, defaultExprs[i])
 	}
-	return &parser.ValuesClause{Tuples: []*parser.Tuple{{Exprs: row}}}
+	return &tree.ValuesClause{Tuples: []*tree.Tuple{{Exprs: row}}}
 }
 
 // fillDefaults populates default expressions in the provided ValuesClause,
@@ -566,21 +566,21 @@ func getDefaultValuesClause(
 //
 // The function returns a ValuesClause with defaults filled or an error.
 func fillDefaults(
-	defaultExprs []parser.TypedExpr, cols []sqlbase.ColumnDescriptor, values *parser.ValuesClause,
-) (*parser.ValuesClause, error) {
+	defaultExprs []tree.TypedExpr, cols []sqlbase.ColumnDescriptor, values *tree.ValuesClause,
+) (*tree.ValuesClause, error) {
 	ret := values
 	copyValues := func() {
 		if ret == values {
-			ret = &parser.ValuesClause{Tuples: append([]*parser.Tuple(nil), values.Tuples...)}
+			ret = &tree.ValuesClause{Tuples: append([]*tree.Tuple(nil), values.Tuples...)}
 		}
 	}
 
-	defaultExpr := func(idx int) parser.Expr {
+	defaultExpr := func(idx int) tree.Expr {
 		if defaultExprs == nil || idx >= len(defaultExprs) {
 			// The case where idx is too large for defaultExprs will be
 			// transformed into an error by the check on the number of
 			// columns in Insert().
-			return parser.DNull
+			return tree.DNull
 		}
 		return defaultExprs[idx]
 	}
@@ -595,7 +595,7 @@ func fillDefaults(
 		copyTuple := func() {
 			if !tupleCopied {
 				copyValues()
-				tuple = &parser.Tuple{Exprs: append([]parser.Expr(nil), tuple.Exprs...)}
+				tuple = &tree.Tuple{Exprs: append([]tree.Expr(nil), tuple.Exprs...)}
 				ret.Tuples[tIdx] = tuple
 				tupleCopied = true
 			}
@@ -603,7 +603,7 @@ func fillDefaults(
 
 		for eIdx, val := range tuple.Exprs {
 			switch val.(type) {
-			case parser.DefaultVal:
+			case tree.DefaultVal:
 				copyTuple()
 				tuple.Exprs[eIdx] = defaultExpr(eIdx)
 			}
@@ -635,7 +635,7 @@ func checkNumExprs(numExprs, numCols int, specifiedTargets bool) error {
 	return nil
 }
 
-func (n *insertNode) Values() parser.Datums {
+func (n *insertNode) Values() tree.Datums {
 	if !n.isUpsertReturning {
 		return n.run.resultRow
 	}

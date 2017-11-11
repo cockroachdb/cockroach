@@ -19,8 +19,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -35,7 +35,7 @@ type indexBackfiller struct {
 	colIdxMap map[sqlbase.ColumnID]int
 
 	types   []sqlbase.ColumnType
-	rowVals parser.Datums
+	rowVals tree.Datums
 	da      sqlbase.DatumAlloc
 }
 
@@ -164,7 +164,7 @@ func (ib *indexBackfiller) runChunk(
 				break
 			}
 			if len(ib.rowVals) == 0 {
-				ib.rowVals = make(parser.Datums, len(encRow))
+				ib.rowVals = make(tree.Datums, len(encRow))
 			}
 			if err := sqlbase.EncDatumRowToDatums(ib.types, ib.rowVals, encRow, &ib.da); err != nil {
 				return nil, err

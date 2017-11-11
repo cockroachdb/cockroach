@@ -20,6 +20,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	_ "github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 )
@@ -106,7 +107,7 @@ func TestTypeCheck(t *testing.T) {
 		{`$1:::INT`, `$1:::INT`},
 
 		// These outputs, while bizarre looking, are correct and expected. The
-		// type annotation is caused by the call to parser.Serialize, which formats the
+		// type annotation is caused by the call to tree.Serialize, which formats the
 		// output using the Parseable formatter which inserts type annotations
 		// at the end of all well-typed datums. And the second cast is caused by
 		// the test itself.
@@ -121,11 +122,11 @@ func TestTypeCheck(t *testing.T) {
 			t.Errorf("%s: %v", d.expr, err)
 			continue
 		}
-		ctx := parser.MakeSemaContext(false)
-		typeChecked, err := parser.TypeCheck(expr, &ctx, types.Any)
+		ctx := tree.MakeSemaContext(false)
+		typeChecked, err := tree.TypeCheck(expr, &ctx, types.Any)
 		if err != nil {
 			t.Errorf("%s: unexpected error %s", d.expr, err)
-		} else if s := parser.Serialize(typeChecked); s != d.expected {
+		} else if s := tree.Serialize(typeChecked); s != d.expected {
 			t.Errorf("%s: expected %s, but found %s", d.expr, d.expected, s)
 		}
 	}
@@ -181,7 +182,7 @@ func TestTypeCheckError(t *testing.T) {
 		if err != nil {
 			t.Fatalf("%s: %v", d.expr, err)
 		}
-		if _, err := parser.TypeCheck(expr, nil, types.Any); !testutils.IsError(err, regexp.QuoteMeta(d.expected)) {
+		if _, err := tree.TypeCheck(expr, nil, types.Any); !testutils.IsError(err, regexp.QuoteMeta(d.expected)) {
 			t.Errorf("%s: expected %s, but found %v", d.expr, d.expected, err)
 		}
 	}

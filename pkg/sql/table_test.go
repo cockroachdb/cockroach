@@ -21,6 +21,7 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -42,8 +43,8 @@ func CreateTestTableDescriptor(
 		return sqlbase.TableDescriptor{}, err
 	}
 	p := planner{session: new(Session)}
-	p.evalCtx = parser.MakeTestingEvalContext()
-	return p.makeTableDesc(ctx, stmt.(*parser.CreateTable), parentID, id, hlc.Timestamp{}, privileges, nil)
+	p.evalCtx = tree.MakeTestingEvalContext()
+	return p.makeTableDesc(ctx, stmt.(*tree.CreateTable), parentID, id, hlc.Timestamp{}, privileges, nil)
 }
 
 func TestMakeTableDescColumns(t *testing.T) {

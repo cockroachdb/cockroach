@@ -29,8 +29,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/jobs"
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -277,9 +277,9 @@ func splitAndFilterSpans(
 }
 
 func backupJobDescription(
-	backup *parser.Backup, to string, incrementalFrom []string,
+	backup *tree.Backup, to string, incrementalFrom []string,
 ) (string, error) {
-	b := &parser.Backup{
+	b := &tree.Backup{
 		AsOf:    backup.AsOf,
 		Options: backup.Options,
 		Targets: backup.Targets,
@@ -289,16 +289,16 @@ func backupJobDescription(
 	if err != nil {
 		return "", err
 	}
-	b.To = parser.NewDString(to)
+	b.To = tree.NewDString(to)
 
 	for _, from := range incrementalFrom {
 		sanitizedFrom, err := storageccl.SanitizeExportStorageURI(from)
 		if err != nil {
 			return "", err
 		}
-		b.IncrementalFrom = append(b.IncrementalFrom, parser.NewDString(sanitizedFrom))
+		b.IncrementalFrom = append(b.IncrementalFrom, tree.NewDString(sanitizedFrom))
 	}
-	return parser.AsStringWithFlags(b, parser.FmtSimpleQualified), nil
+	return tree.AsStringWithFlags(b, tree.FmtSimpleQualified), nil
 }
 
 // clusterNodeCount returns the approximate number of nodes in the cluster.
@@ -340,7 +340,7 @@ func writeBackupDescriptor(
 }
 
 func resolveTargetsToDescriptors(
-	ctx context.Context, p sql.PlanHookState, endTime hlc.Timestamp, targets parser.TargetList,
+	ctx context.Context, p sql.PlanHookState, endTime hlc.Timestamp, targets tree.TargetList,
 ) ([]sqlbase.Descriptor, error) {
 	var err error
 	var sqlDescs []sqlbase.Descriptor
@@ -606,9 +606,9 @@ func verifyUsableExportTarget(
 }
 
 func backupPlanHook(
-	stmt parser.Statement, p sql.PlanHookState,
-) (func(context.Context, chan<- parser.Datums) error, sqlbase.ResultColumns, error) {
-	backupStmt, ok := stmt.(*parser.Backup)
+	stmt tree.Statement, p sql.PlanHookState,
+) (func(context.Context, chan<- tree.Datums) error, sqlbase.ResultColumns, error) {
+	backupStmt, ok := stmt.(*tree.Backup)
 	if !ok {
 		return nil, nil, nil
 	}
@@ -646,7 +646,7 @@ func backupPlanHook(
 		{Name: "bytes", Typ: types.Int},
 	}
 
-	fn := func(ctx context.Context, resultsCh chan<- parser.Datums) error {
+	fn := func(ctx context.Context, resultsCh chan<- tree.Datums) error {
 		// TODO(dan): Move this span into sql.
 		ctx, span := tracing.ChildSpan(ctx, stmt.StatementTag())
 		defer tracing.FinishSpan(span)
@@ -771,14 +771,14 @@ func backupPlanHook(
 			return backupErr
 		}
 		// TODO(benesch): emit periodic progress updates.
-		resultsCh <- parser.Datums{
-			parser.NewDInt(parser.DInt(*job.ID())),
-			parser.NewDString(string(jobs.StatusSucceeded)),
-			parser.NewDFloat(parser.DFloat(1.0)),
-			parser.NewDInt(parser.DInt(backupDesc.EntryCounts.Rows)),
-			parser.NewDInt(parser.DInt(backupDesc.EntryCounts.IndexEntries)),
-			parser.NewDInt(parser.DInt(backupDesc.EntryCounts.SystemRecords)),
-			parser.NewDInt(parser.DInt(backupDesc.EntryCounts.DataSize)),
+		resultsCh <- tree.Datums{
+			tree.NewDInt(tree.DInt(*job.ID())),
+			tree.NewDString(string(jobs.StatusSucceeded)),
+			tree.NewDFloat(tree.DFloat(1.0)),
+			tree.NewDInt(tree.DInt(backupDesc.EntryCounts.Rows)),
+			tree.NewDInt(tree.DInt(backupDesc.EntryCounts.IndexEntries)),
+			tree.NewDInt(tree.DInt(backupDesc.EntryCounts.SystemRecords)),
+			tree.NewDInt(tree.DInt(backupDesc.EntryCounts.DataSize)),
 		}
 		return nil
 	}
@@ -861,9 +861,9 @@ func backupResumeHook(
 }
 
 func showBackupPlanHook(
-	stmt parser.Statement, p sql.PlanHookState,
-) (func(context.Context, chan<- parser.Datums) error, sqlbase.ResultColumns, error) {
-	backup, ok := stmt.(*parser.ShowBackup)
+	stmt tree.Statement, p sql.PlanHookState,
+) (func(context.Context, chan<- tree.Datums) error, sqlbase.ResultColumns, error) {
+	backup, ok := stmt.(*tree.ShowBackup)
 	if !ok {
 		return nil, nil, nil
 	}
@@ -890,7 +890,7 @@ func showBackupPlanHook(
 		{Name: "size_bytes", Typ: types.Int},
 		{Name: "rows", Typ: types.Int},
 	}
-	fn := func(ctx context.Context, resultsCh chan<- parser.Datums) error {
+	fn := func(ctx context.Context, resultsCh chan<- tree.Datums) error {
 		// TODO(dan): Move this span into sql.
 		ctx, span := tracing.ChildSpan(ctx, stmt.StatementTag())
 		defer tracing.FinishSpan(span)
@@ -926,20 +926,20 @@ func showBackupPlanHook(
 			s.Add(file.EntryCounts)
 			descSizes[sqlbase.ID(tableID)] = s
 		}
-		start := parser.DNull
+		start := tree.DNull
 		if desc.StartTime.WallTime != 0 {
-			start = parser.MakeDTimestamp(timeutil.Unix(0, desc.StartTime.WallTime), time.Nanosecond)
+			start = tree.MakeDTimestamp(timeutil.Unix(0, desc.StartTime.WallTime), time.Nanosecond)
 		}
 		for _, descriptor := range desc.Descriptors {
 			if table := descriptor.GetTable(); table != nil {
 				dbName := descs[table.ParentID]
-				resultsCh <- parser.Datums{
-					parser.NewDString(dbName),
-					parser.NewDString(table.Name),
+				resultsCh <- tree.Datums{
+					tree.NewDString(dbName),
+					tree.NewDString(table.Name),
 					start,
-					parser.MakeDTimestamp(timeutil.Unix(0, desc.EndTime.WallTime), time.Nanosecond),
-					parser.NewDInt(parser.DInt(descSizes[table.ID].DataSize)),
-					parser.NewDInt(parser.DInt(descSizes[table.ID].Rows)),
+					tree.MakeDTimestamp(timeutil.Unix(0, desc.EndTime.WallTime), time.Nanosecond),
+					tree.NewDInt(tree.DInt(descSizes[table.ID].DataSize)),
+					tree.NewDInt(tree.DInt(descSizes[table.ID].Rows)),
 				}
 			}
 		}

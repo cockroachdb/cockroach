@@ -17,8 +17,8 @@ package distsqlrun
 import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/transform"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -34,7 +34,7 @@ type columnBackfiller struct {
 	dropped []sqlbase.ColumnDescriptor
 	// updateCols is a slice of all column descriptors that are being modified.
 	updateCols  []sqlbase.ColumnDescriptor
-	updateExprs []parser.TypedExpr
+	updateExprs []tree.TypedExpr
 }
 
 var _ Processor = &columnBackfiller{}
@@ -96,16 +96,16 @@ func (cb *columnBackfiller) init() error {
 	cb.updateCols = append(cb.added, cb.dropped...)
 	if len(cb.dropped) > 0 || len(defaultExprs) > 0 {
 		// Populate default values.
-		cb.updateExprs = make([]parser.TypedExpr, len(cb.updateCols))
+		cb.updateExprs = make([]tree.TypedExpr, len(cb.updateCols))
 		for j := range cb.added {
 			if defaultExprs == nil || defaultExprs[j] == nil {
-				cb.updateExprs[j] = parser.DNull
+				cb.updateExprs[j] = tree.DNull
 			} else {
 				cb.updateExprs[j] = defaultExprs[j]
 			}
 		}
 		for j := range cb.dropped {
-			cb.updateExprs[j+len(cb.added)] = parser.DNull
+			cb.updateExprs[j+len(cb.added)] = tree.DNull
 		}
 	}
 
@@ -195,8 +195,8 @@ func (cb *columnBackfiller) runChunk(
 			return err
 		}
 
-		oldValues := make(parser.Datums, len(ru.FetchCols))
-		updateValues := make(parser.Datums, len(cb.updateExprs))
+		oldValues := make(tree.Datums, len(ru.FetchCols))
+		updateValues := make(tree.Datums, len(cb.updateExprs))
 		b := txn.NewBatch()
 		rowLength := 0
 		for i := int64(0); i < chunkSize; i++ {
@@ -214,7 +214,7 @@ func (cb *columnBackfiller) runChunk(
 				if err != nil {
 					return sqlbase.NewInvalidSchemaDefinitionError(err)
 				}
-				if j < len(cb.added) && !cb.added[j].Nullable && val == parser.DNull {
+				if j < len(cb.added) && !cb.added[j].Nullable && val == tree.DNull {
 					return sqlbase.NewNonNullViolationError(cb.added[j].Name)
 				}
 				updateValues[j] = val
@@ -225,7 +225,7 @@ func (cb *columnBackfiller) runChunk(
 			if rowLength != len(row) {
 				rowLength = len(row)
 				for j := rowLength; j < len(oldValues); j++ {
-					oldValues[j] = parser.DNull
+					oldValues[j] = tree.DNull
 				}
 			}
 			if _, err := ru.UpdateRow(ctx, b, oldValues, updateValues, false /* traceKV */); err != nil {

@@ -19,7 +19,7 @@ import (
 
 	"golang.org/x/net/context"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -33,10 +33,10 @@ type returningHelper struct {
 	// Expected columns.
 	columns sqlbase.ResultColumns
 	// Processed copies of expressions from ReturningExprs.
-	exprs        []parser.TypedExpr
+	exprs        []tree.TypedExpr
 	rowCount     int
 	source       *dataSourceInfo
-	curSourceRow parser.Datums
+	curSourceRow tree.Datums
 
 	// This struct must be allocated on the heap and its location stay
 	// stable after construction because it implements
@@ -52,19 +52,19 @@ type returningHelper struct {
 // insert/update node.
 func (p *planner) newReturningHelper(
 	ctx context.Context,
-	r parser.ReturningClause,
+	r tree.ReturningClause,
 	desiredTypes []types.T,
-	tn *parser.TableName,
+	tn *tree.TableName,
 	tablecols []sqlbase.ColumnDescriptor,
 ) (*returningHelper, error) {
 	rh := &returningHelper{
 		p: p,
 	}
-	var rExprs parser.ReturningExprs
+	var rExprs tree.ReturningExprs
 	switch t := r.(type) {
-	case *parser.ReturningExprs:
+	case *tree.ReturningExprs:
 		rExprs = *t
-	case *parser.ReturningNothing, *parser.NoReturningClause:
+	case *tree.ReturningNothing, *tree.NoReturningClause:
 		return rh, nil
 	default:
 		panic(errors.Errorf("unexpected ReturningClause type: %T", t))
@@ -82,8 +82,8 @@ func (p *planner) newReturningHelper(
 	rh.source = newSourceInfoForSingleTable(
 		*tn, sqlbase.ResultColumnsFromColDescs(tablecols),
 	)
-	rh.exprs = make([]parser.TypedExpr, 0, len(rExprs))
-	ivarHelper := parser.MakeIndexedVarHelper(rh, len(tablecols))
+	rh.exprs = make([]tree.TypedExpr, 0, len(rExprs))
+	ivarHelper := tree.MakeIndexedVarHelper(rh, len(tablecols))
 	for _, target := range rExprs {
 		cols, typedExprs, _, err := p.computeRenderAllowingStars(
 			ctx, target, types.Any, multiSourceInfo{rh.source}, ivarHelper,
@@ -99,13 +99,13 @@ func (p *planner) newReturningHelper(
 
 // cookResultRow prepares a row according to the ReturningExprs, with input values
 // from rowVals.
-func (rh *returningHelper) cookResultRow(rowVals parser.Datums) (parser.Datums, error) {
+func (rh *returningHelper) cookResultRow(rowVals tree.Datums) (tree.Datums, error) {
 	if rh.exprs == nil {
 		rh.rowCount++
 		return rowVals, nil
 	}
 	rh.curSourceRow = rowVals
-	resRow := make(parser.Datums, len(rh.exprs))
+	resRow := make(tree.Datums, len(rh.exprs))
 	for i, e := range rh.exprs {
 		d, err := e.Eval(&rh.p.evalCtx)
 		if err != nil {
@@ -116,17 +116,17 @@ func (rh *returningHelper) cookResultRow(rowVals parser.Datums) (parser.Datums, 
 	return resRow, nil
 }
 
-// IndexedVarEval implements the parser.IndexedVarContainer interface.
-func (rh *returningHelper) IndexedVarEval(idx int, ctx *parser.EvalContext) (parser.Datum, error) {
+// IndexedVarEval implements the tree.IndexedVarContainer interface.
+func (rh *returningHelper) IndexedVarEval(idx int, ctx *tree.EvalContext) (tree.Datum, error) {
 	return rh.curSourceRow[idx].Eval(ctx)
 }
 
-// IndexedVarResolvedType implements the parser.IndexedVarContainer interface.
+// IndexedVarResolvedType implements the tree.IndexedVarContainer interface.
 func (rh *returningHelper) IndexedVarResolvedType(idx int) types.T {
 	return rh.source.sourceColumns[idx].Typ
 }
 
-// IndexedVarFormat implements the parser.IndexedVarContainer interface.
-func (rh *returningHelper) IndexedVarFormat(buf *bytes.Buffer, f parser.FmtFlags, idx int) {
+// IndexedVarFormat implements the tree.IndexedVarContainer interface.
+func (rh *returningHelper) IndexedVarFormat(buf *bytes.Buffer, f tree.FmtFlags, idx int) {
 	rh.source.FormatVar(buf, f, idx)
 }

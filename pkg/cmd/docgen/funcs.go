@@ -28,8 +28,8 @@ import (
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
 var functionsCmd = &cobra.Command{
@@ -99,10 +99,10 @@ func (p operations) Less(i, j int) bool {
 
 func generateOperators() []byte {
 	ops := make(map[string]operations)
-	for optyp, overloads := range parser.UnaryOps {
+	for optyp, overloads := range tree.UnaryOps {
 		op := optyp.String()
 		for _, untyped := range overloads {
-			v := untyped.(parser.UnaryOp)
+			v := untyped.(tree.UnaryOp)
 			ops[op] = append(ops[op], operation{
 				left: v.Typ.String(),
 				ret:  v.ReturnType.String(),
@@ -110,10 +110,10 @@ func generateOperators() []byte {
 			})
 		}
 	}
-	for optyp, overloads := range parser.BinOps {
+	for optyp, overloads := range tree.BinOps {
 		op := optyp.String()
 		for _, untyped := range overloads {
-			v := untyped.(parser.BinOp)
+			v := untyped.(tree.BinOp)
 			left := v.LeftType.String()
 			right := v.RightType.String()
 			ops[op] = append(ops[op], operation{
@@ -124,10 +124,10 @@ func generateOperators() []byte {
 			})
 		}
 	}
-	for optyp, overloads := range parser.CmpOps {
+	for optyp, overloads := range tree.CmpOps {
 		op := optyp.String()
 		for _, untyped := range overloads {
-			v := untyped.(parser.CmpOp)
+			v := untyped.(tree.CmpOp)
 			left := v.LeftType.String()
 			right := v.RightType.String()
 			ops[op] = append(ops[op], operation{
@@ -161,7 +161,7 @@ func generateOperators() []byte {
 // TODO(mjibson): use the exported value from sql/parser/pg_builtins.go.
 const notUsableInfo = "Not usable; exposed only for compatibility with PostgreSQL."
 
-func generateFunctions(from map[string][]parser.Builtin, categorize bool) []byte {
+func generateFunctions(from map[string][]tree.Builtin, categorize bool) []byte {
 	functions := make(map[string][]string)
 	seen := make(map[string]struct{})
 	md := markdown.New(markdown.XHTMLOutput(true), markdown.Nofollow(true))

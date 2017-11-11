@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -35,7 +36,7 @@ func TestMakeDatabaseDesc(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	desc := makeDatabaseDesc(stmt.(*parser.CreateDatabase))
+	desc := makeDatabaseDesc(stmt.(*tree.CreateDatabase))
 	if desc.Name != "test" {
 		t.Fatalf("expected Name == test, got %s", desc.Name)
 	}

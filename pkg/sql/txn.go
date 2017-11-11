@@ -16,13 +16,13 @@ package sql
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/pkg/errors"
 )
 
 // BeginTransaction starts a new transaction.
-func (p *planner) BeginTransaction(n *parser.BeginTransaction) (planNode, error) {
+func (p *planner) BeginTransaction(n *tree.BeginTransaction) (planNode, error) {
 	if p.session.TxnState.State() != AutoRetry || p.txn == nil {
 		return nil, errors.Errorf("the server should have already created a transaction. "+
 			"state: %s", p.session.TxnState.State())
@@ -35,11 +35,11 @@ func (p *planner) BeginTransaction(n *parser.BeginTransaction) (planNode, error)
 }
 
 // SetTransaction sets a transaction's isolation level
-func (p *planner) SetTransaction(n *parser.SetTransaction) (planNode, error) {
+func (p *planner) SetTransaction(n *tree.SetTransaction) (planNode, error) {
 	return &zeroNode{}, p.setTransactionModes(n.Modes)
 }
 
-func (p *planner) setTransactionModes(modes parser.TransactionModes) error {
+func (p *planner) setTransactionModes(modes tree.TransactionModes) error {
 	if err := p.setIsolationLevel(modes.Isolation); err != nil {
 		return err
 	}
@@ -49,14 +49,14 @@ func (p *planner) setTransactionModes(modes parser.TransactionModes) error {
 	return p.setReadWriteMode(modes.ReadWriteMode)
 }
 
-func (p *planner) setIsolationLevel(level parser.IsolationLevel) error {
+func (p *planner) setIsolationLevel(level tree.IsolationLevel) error {
 	var iso enginepb.IsolationType
 	switch level {
-	case parser.UnspecifiedIsolation:
+	case tree.UnspecifiedIsolation:
 		return nil
-	case parser.SnapshotIsolation:
+	case tree.SnapshotIsolation:
 		iso = enginepb.SNAPSHOT
-	case parser.SerializableIsolation:
+	case tree.SerializableIsolation:
 		iso = enginepb.SERIALIZABLE
 	default:
 		return errors.Errorf("unknown isolation level: %s", level)
@@ -65,16 +65,16 @@ func (p *planner) setIsolationLevel(level parser.IsolationLevel) error {
 	return p.session.TxnState.setIsolationLevel(iso)
 }
 
-func (p *planner) setUserPriority(userPriority parser.UserPriority) error {
+func (p *planner) setUserPriority(userPriority tree.UserPriority) error {
 	var up roachpb.UserPriority
 	switch userPriority {
-	case parser.UnspecifiedUserPriority:
+	case tree.UnspecifiedUserPriority:
 		return nil
-	case parser.Low:
+	case tree.Low:
 		up = roachpb.MinUserPriority
-	case parser.Normal:
+	case tree.Normal:
 		up = roachpb.NormalUserPriority
-	case parser.High:
+	case tree.High:
 		up = roachpb.MaxUserPriority
 	default:
 		return errors.Errorf("unknown user priority: %s", userPriority)
@@ -85,13 +85,13 @@ func (p *planner) setUserPriority(userPriority parser.UserPriority) error {
 // Note: This setting currently doesn't have any effect and therefor is not
 // persisted anywhere. If this changes, care needs to be taken to restore it
 // when ROLLBACK TO SAVEPOINT starts a new sql transaction.
-func (p *planner) setReadWriteMode(readWriteMode parser.ReadWriteMode) error {
+func (p *planner) setReadWriteMode(readWriteMode tree.ReadWriteMode) error {
 	switch readWriteMode {
-	case parser.UnspecifiedReadWriteMode:
+	case tree.UnspecifiedReadWriteMode:
 		return nil
-	case parser.ReadOnly:
+	case tree.ReadOnly:
 		return errors.New("read only not supported")
-	case parser.ReadWrite:
+	case tree.ReadWrite:
 		return nil
 	default:
 		return errors.Errorf("unknown read mode: %s", readWriteMode)

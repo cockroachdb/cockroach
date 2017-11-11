@@ -22,7 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -199,7 +199,7 @@ func TestNextRowSingle(t *testing.T) {
 				}
 
 				for i, expected := range expectedVals {
-					actual := int64(*resp.Datums[i].(*parser.DInt))
+					actual := int64(*resp.Datums[i].(*tree.DInt))
 					if expected != actual {
 						t.Fatalf("unexpected value for row %d, col %d.\nexpected: %d\nactual: %d", count, i, expected, actual)
 					}
@@ -389,14 +389,14 @@ func TestNextRowSecondaryIndex(t *testing.T) {
 				// Verify that the correct # of values are returned.
 				numVals := 0
 				for _, datum := range resp.Datums {
-					if datum != parser.DNull {
+					if datum != tree.DNull {
 						numVals++
 					}
 				}
 
 				// Some secondary index values can be NULL. We keep track
 				// of how many we encounter.
-				idxNull := resp.Datums[1] == parser.DNull
+				idxNull := resp.Datums[1] == tree.DNull
 				if idxNull {
 					nullCount++
 					// It is okay to bump this up by one since we know
@@ -408,11 +408,11 @@ func TestNextRowSecondaryIndex(t *testing.T) {
 					t.Fatalf("expected %d non-NULL values, got %d", table.nVals, numVals)
 				}
 
-				id := int64(*resp.Datums[0].(*parser.DInt))
+				id := int64(*resp.Datums[0].(*tree.DInt))
 				// Verify the value in the value column is
 				// correct (if it is not NULL).
 				if !idxNull {
-					idx := int64(*resp.Datums[1].(*parser.DInt))
+					idx := int64(*resp.Datums[1].(*tree.DInt))
 					if id%int64(table.modFactor) != idx {
 						t.Fatalf("for row id %d, expected %d value, got %d", id, id%int64(table.modFactor), idx)
 					}
@@ -428,8 +428,8 @@ func TestNextRowSecondaryIndex(t *testing.T) {
 				// We verify that the storing values are
 				// decoded correctly.
 				if tableName == "nonuniquestoring" || tableName == "uniquestoring" {
-					s1 := int64(*resp.Datums[2].(*parser.DInt))
-					s2 := int64(*resp.Datums[3].(*parser.DInt))
+					s1 := int64(*resp.Datums[2].(*tree.DInt))
+					s2 := int64(*resp.Datums[3].(*tree.DInt))
 
 					if id%int64(storingMods[0]) != s1 {
 						t.Fatalf("for row id %d, expected %d for s1 value, got %d", id, id%int64(storingMods[0]), s1)
@@ -760,7 +760,7 @@ func TestNextRowInterleave(t *testing.T) {
 				// Verify that the correct # of values are returned.
 				numVals := 0
 				for _, datum := range resp.Datums {
-					if datum != parser.DNull {
+					if datum != tree.DNull {
 						numVals++
 					}
 				}
@@ -771,8 +771,8 @@ func TestNextRowInterleave(t *testing.T) {
 				// Verify the value in the value column is
 				// correct if it is requested.
 				if entry.nVals == entry.nCols {
-					id := int64(*resp.Datums[entry.nCols-2].(*parser.DInt))
-					val := int64(*resp.Datums[entry.nCols-1].(*parser.DInt))
+					id := int64(*resp.Datums[entry.nCols-2].(*tree.DInt))
+					val := int64(*resp.Datums[entry.nCols-1].(*tree.DInt))
 
 					if id%int64(entry.modFactor) != val {
 						t.Fatalf("for table %s row id %d, expected %d value, got %d", tableIdxName, id, id%int64(entry.modFactor), val)

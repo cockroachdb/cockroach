@@ -19,7 +19,7 @@ import (
 
 	"reflect"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
@@ -27,17 +27,17 @@ func TestTypeAsString(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	p := planner{}
 	testData := []struct {
-		expr        parser.Expr
+		expr        tree.Expr
 		expected    string
 		expectedErr bool
 	}{
-		{expr: parser.NewDString("foo"), expected: "foo"},
+		{expr: tree.NewDString("foo"), expected: "foo"},
 		{
-			expr: &parser.BinaryExpr{
-				Operator: parser.Concat, Left: parser.NewDString("foo"), Right: parser.NewDString("bar")},
+			expr: &tree.BinaryExpr{
+				Operator: tree.Concat, Left: tree.NewDString("foo"), Right: tree.NewDString("bar")},
 			expected: "foobar",
 		},
-		{expr: parser.NewDInt(3), expectedErr: true},
+		{expr: tree.NewDInt(3), expectedErr: true},
 	}
 
 	t.Run("TypeAsString", func(t *testing.T) {
@@ -63,7 +63,7 @@ func TestTypeAsString(t *testing.T) {
 
 	t.Run("TypeAsStringArray", func(t *testing.T) {
 		for _, td := range testData {
-			fn, err := p.TypeAsStringArray([]parser.Expr{td.expr, td.expr}, "test")
+			fn, err := p.TypeAsStringArray([]tree.Expr{td.expr, td.expr}, "test")
 			if err != nil {
 				if !td.expectedErr {
 					t.Fatalf("expected no error; got %v", err)

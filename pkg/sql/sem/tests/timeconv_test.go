@@ -19,8 +19,8 @@ import (
 
 	"golang.org/x/net/context"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	_ "github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
 
@@ -38,7 +38,7 @@ func TestClusterTimestampConversion(t *testing.T) {
 		{9223372036854775807, 2147483647, "9223372036854775807.2147483647"},
 	}
 
-	ctx := parser.NewTestingEvalContext()
+	ctx := tree.NewTestingEvalContext()
 	defer ctx.Mon.Stop(context.Background())
 	ctx.PrepareOnly = true
 	for _, d := range testData {

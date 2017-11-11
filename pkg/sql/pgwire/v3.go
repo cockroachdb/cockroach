@@ -33,8 +33,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql"
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -230,13 +230,13 @@ type streamingState struct {
 
 	pgTag         string
 	columns       sqlbase.ResultColumns
-	statementType parser.StatementType
+	statementType tree.StatementType
 	rowsAffected  int
 	// firstRow is true when we haven't sent a row back in a result of type
-	// parser.Rows. We only want to send the description once per result.
+	// tree.Rows. We only want to send the description once per result.
 	firstRow bool
 	// copyIn is set to true if we are currently copying in so that we do not
-	// send parser.RowsAffected command complete tags.
+	// send tree.RowsAffected command complete tags.
 	copyIn bool
 }
 
@@ -363,7 +363,7 @@ func (c *v3Conn) handleAuthentication(ctx context.Context, insecure bool) error 
 			)
 		} else {
 			// Normalize the username contained in the certificate.
-			tlsState.PeerCertificates[0].Subject.CommonName = parser.Name(
+			tlsState.PeerCertificates[0].Subject.CommonName = tree.Name(
 				tlsState.PeerCertificates[0].Subject.CommonName,
 			).Normalize()
 			var err error
@@ -657,7 +657,7 @@ func (c *v3Conn) handleParse(buf *readBuffer) error {
 	// Prepare the mapping of SQL placeholder names to
 	// types. Pre-populate it with the type hints received from the
 	// client, if any.
-	sqlTypeHints := make(parser.PlaceholderTypes)
+	sqlTypeHints := make(tree.PlaceholderTypes)
 	for i, t := range inTypeHints {
 		if t == 0 {
 			continue
@@ -716,8 +716,8 @@ func (c *v3Conn) handleParse(buf *readBuffer) error {
 
 // stmtHasNoData returns true if describing a result of the input statement
 // type should return NoData.
-func stmtHasNoData(stmt parser.Statement) bool {
-	return stmt == nil || stmt.StatementType() != parser.Rows
+func stmtHasNoData(stmt tree.Statement) bool {
+	return stmt == nil || stmt.StatementType() != tree.Rows
 }
 
 func (c *v3Conn) handleDescribe(ctx context.Context, buf *readBuffer) error {
@@ -853,7 +853,7 @@ func (c *v3Conn) handleBind(ctx context.Context, buf *readBuffer) error {
 	if numValues != numQArgs {
 		return c.sendError(pgerror.NewErrorf(pgerror.CodeProtocolViolationError, "expected %d arguments, got %d", numQArgs, numValues))
 	}
-	qargs := parser.QueryArguments{}
+	qargs := tree.QueryArguments{}
 	for i, t := range stmtMeta.inTypes {
 		plen, err := buf.getUint32()
 		if err != nil {
@@ -862,7 +862,7 @@ func (c *v3Conn) handleBind(ctx context.Context, buf *readBuffer) error {
 		k := strconv.Itoa(i + 1)
 		if int32(plen) == -1 {
 			// The argument is a NULL value.
-			qargs[k] = parser.DNull
+			qargs[k] = tree.DNull
 			continue
 		}
 		b, err := buf.getBytes(int(plen))
@@ -947,7 +947,7 @@ func (c *v3Conn) handleExecute(buf *readBuffer) error {
 
 	stmt := portal.Stmt
 	portalMeta := portal.ProtocolMeta.(preparedPortalMeta)
-	pinfo := &parser.PlaceholderInfo{
+	pinfo := &tree.PlaceholderInfo{
 		TypeHints: stmt.TypeHints,
 		Types:     stmt.Types,
 		Values:    portal.Qargs,
@@ -1197,7 +1197,7 @@ func (c *v3Conn) Flush(ctx context.Context) error {
 }
 
 // BeginResult implements the StatementResult interface.
-func (c *v3Conn) BeginResult(stmt parser.Statement) {
+func (c *v3Conn) BeginResult(stmt tree.Statement) {
 	state := &c.streamingState
 	state.pgTag = stmt.StatementTag()
 	state.statementType = stmt.StatementType()
@@ -1239,7 +1239,7 @@ func (c *v3Conn) CloseResult() error {
 		return err
 	}
 
-	if limit != 0 && state.statementType == parser.Rows && state.rowsAffected > state.limit {
+	if limit != 0 && state.statementType == tree.Rows && state.rowsAffected > state.limit {
 		return c.setError(pgerror.NewErrorf(
 			pgerror.CodeInternalError,
 			"execute row count limits not supported: %d of %d", limit, state.rowsAffected,
@@ -1255,12 +1255,12 @@ func (c *v3Conn) CloseResult() error {
 	tag := append(c.tagBuf[:0], state.pgTag...)
 
 	switch state.statementType {
-	case parser.RowsAffected:
+	case tree.RowsAffected:
 		tag = append(tag, ' ')
 		tag = strconv.AppendInt(tag, int64(state.rowsAffected), 10)
 		return c.sendCommandComplete(tag, &state.buf)
 
-	case parser.Rows:
+	case tree.Rows:
 		if state.firstRow && state.sendDescription {
 			if err := c.sendRowDescription(ctx, state.columns, formatCodes, &state.buf); err != nil {
 				return err
@@ -1271,14 +1271,14 @@ func (c *v3Conn) CloseResult() error {
 		tag = strconv.AppendUint(tag, uint64(state.rowsAffected), 10)
 		return c.sendCommandComplete(tag, &state.buf)
 
-	case parser.Ack, parser.DDL:
+	case tree.Ack, tree.DDL:
 		if state.pgTag == "SELECT" {
 			tag = append(tag, ' ')
 			tag = strconv.AppendInt(tag, int64(state.rowsAffected), 10)
 		}
 		return c.sendCommandComplete(tag, &state.buf)
 
-	case parser.CopyIn:
+	case tree.CopyIn:
 		state.copyIn = true
 		if err := c.beginCopyIn(ctx, state.columns); err != nil {
 			if err := c.setError(err); err != nil {
@@ -1315,7 +1315,7 @@ func (c *v3Conn) setError(err error) error {
 }
 
 // StatementType implements the StatementResult interface.
-func (c *v3Conn) StatementType() parser.StatementType {
+func (c *v3Conn) StatementType() tree.StatementType {
 	return c.streamingState.statementType
 }
 
@@ -1325,13 +1325,13 @@ func (c *v3Conn) IncrementRowsAffected(n int) {
 }
 
 // AddRow implements the StatementResult interface.
-func (c *v3Conn) AddRow(ctx context.Context, row parser.Datums) error {
+func (c *v3Conn) AddRow(ctx context.Context, row tree.Datums) error {
 	state := &c.streamingState
 	if state.err != nil {
 		return state.err
 	}
 
-	if state.statementType != parser.Rows {
+	if state.statementType != tree.Rows {
 		return c.setError(pgerror.NewError(
 			pgerror.CodeInternalError, "cannot use AddRow() with statements that don't return rows"))
 	}

@@ -20,7 +20,7 @@ import (
 
 	"golang.org/x/net/context"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -37,7 +37,7 @@ type joinPredicate struct {
 	// The comparison function to use for each column. We need
 	// different functions because each USING column may have a different
 	// type (and they may be heterogeneous between left and right).
-	cmpFunctions []func(*parser.EvalContext, parser.Datum, parser.Datum) (parser.Datum, error)
+	cmpFunctions []func(*tree.EvalContext, tree.Datum, tree.Datum) (tree.Datum, error)
 
 	// left/rightEqualityIndices give the position of USING columns
 	// on the left and right input row arrays, respectively.
@@ -46,18 +46,18 @@ type joinPredicate struct {
 
 	// The list of names for the columns listed in leftEqualityIndices.
 	// Used mainly for pretty-printing.
-	leftColNames parser.NameList
+	leftColNames tree.NameList
 	// The list of names for the columns listed in rightEqualityIndices.
 	// Used mainly for pretty-printing.
-	rightColNames parser.NameList
+	rightColNames tree.NameList
 
 	// For ON predicates or joins with an added filter expression,
 	// we need an IndexedVarHelper, the dataSourceInfo, a row buffer
 	// and the expression itself.
-	iVarHelper parser.IndexedVarHelper
+	iVarHelper tree.IndexedVarHelper
 	info       *dataSourceInfo
-	curRow     parser.Datums
-	onCond     parser.TypedExpr
+	curRow     tree.Datums
+	onCond     tree.TypedExpr
 
 	// This struct must be allocated on the heap and its location stay
 	// stable after construction because it implements
@@ -78,16 +78,16 @@ func makeCrossPredicate(
 
 // tryAddEqualityFilter attempts to turn the given filter expression into
 // an equality predicate. It returns true iff the transformation succeeds.
-func (p *joinPredicate) tryAddEqualityFilter(filter parser.Expr, left, right *dataSourceInfo) bool {
-	c, ok := filter.(*parser.ComparisonExpr)
-	if !ok || c.Operator != parser.EQ {
+func (p *joinPredicate) tryAddEqualityFilter(filter tree.Expr, left, right *dataSourceInfo) bool {
+	c, ok := filter.(*tree.ComparisonExpr)
+	if !ok || c.Operator != tree.EQ {
 		return false
 	}
-	lhs, ok := c.Left.(*parser.IndexedVar)
+	lhs, ok := c.Left.(*tree.IndexedVar)
 	if !ok {
 		return false
 	}
-	rhs, ok := c.Right.(*parser.IndexedVar)
+	rhs, ok := c.Right.(*tree.IndexedVar)
 	if !ok {
 		return false
 	}
@@ -124,7 +124,7 @@ func (p *joinPredicate) tryAddEqualityFilter(filter parser.Expr, left, right *da
 	// First resolve the comparison function. We can't use the
 	// ComparisonExpr's memoized comparison directly, because we may
 	// have swapped the operands above.
-	fn, found := parser.FindEqualComparisonFunction(lhs.ResolvedType(), rhs.ResolvedType())
+	fn, found := tree.FindEqualComparisonFunction(lhs.ResolvedType(), rhs.ResolvedType())
 	if !found {
 		// This is ... unexpected. This means we have a valid ON
 		// expression of the form "a = b" but the expression "b = a" is
@@ -140,15 +140,15 @@ func (p *joinPredicate) tryAddEqualityFilter(filter parser.Expr, left, right *da
 
 	p.leftEqualityIndices = append(p.leftEqualityIndices, leftColIdx)
 	p.rightEqualityIndices = append(p.rightEqualityIndices, rightColIdx)
-	p.leftColNames = append(p.leftColNames, parser.Name(left.sourceColumns[leftColIdx].Name))
-	p.rightColNames = append(p.rightColNames, parser.Name(right.sourceColumns[rightColIdx].Name))
+	p.leftColNames = append(p.leftColNames, tree.Name(left.sourceColumns[leftColIdx].Name))
+	p.rightColNames = append(p.rightColNames, tree.Name(right.sourceColumns[rightColIdx].Name))
 
 	return true
 }
 
 // makeOnPredicate constructs a joinPredicate object for joins with a ON clause.
 func (p *planner) makeOnPredicate(
-	ctx context.Context, typ joinType, left, right *dataSourceInfo, expr parser.Expr,
+	ctx context.Context, typ joinType, left, right *dataSourceInfo, expr tree.Expr,
 ) (*joinPredicate, *dataSourceInfo, error) {
 	pred, info, err := makeEqualityPredicate(typ, left, right, nil /*leftColNames*/, nil /*rightColNames*/)
 	if err != nil {
@@ -167,7 +167,7 @@ func (p *planner) makeOnPredicate(
 // makeUsingPredicate constructs a joinPredicate object for joins with
 // a USING clause.
 func makeUsingPredicate(
-	typ joinType, left, right *dataSourceInfo, usingCols parser.NameList,
+	typ joinType, left, right *dataSourceInfo, usingCols tree.NameList,
 ) (*joinPredicate, *dataSourceInfo, error) {
 	seenNames := make(map[string]struct{})
 
@@ -187,7 +187,7 @@ func makeUsingPredicate(
 // condition includes equality between the columns specified by leftColNames and
 // rightColNames.
 func makeEqualityPredicate(
-	typ joinType, left, right *dataSourceInfo, leftColNames, rightColNames parser.NameList,
+	typ joinType, left, right *dataSourceInfo, leftColNames, rightColNames tree.NameList,
 ) (resPred *joinPredicate, info *dataSourceInfo, err error) {
 	if len(leftColNames) != len(rightColNames) {
 		panic(fmt.Errorf("left columns' length %q doesn't match right columns' length %q in EqualityPredicate",
@@ -195,7 +195,7 @@ func makeEqualityPredicate(
 	}
 
 	// Prepare the arrays populated below.
-	cmpOps := make([]func(*parser.EvalContext, parser.Datum, parser.Datum) (parser.Datum, error), len(leftColNames))
+	cmpOps := make([]func(*tree.EvalContext, tree.Datum, tree.Datum) (tree.Datum, error), len(leftColNames))
 	leftEqualityIndices := make([]int, len(leftColNames))
 	rightEqualityIndices := make([]int, len(rightColNames))
 
@@ -221,7 +221,7 @@ func makeEqualityPredicate(
 		rightEqualityIndices[i] = rightIdx
 
 		// Memoize the comparison function.
-		fn, found := parser.FindEqualComparisonFunction(leftType, rightType)
+		fn, found := tree.FindEqualComparisonFunction(leftType, rightType)
 		if !found {
 			return nil, nil, fmt.Errorf("JOIN/USING types %s for left column %s and %s for right column %s cannot be matched",
 				leftType, leftColName, rightType, rightColName)
@@ -285,22 +285,22 @@ func makeEqualityPredicate(
 	// We must initialize the indexed var helper in all cases, even when
 	// there is no on condition, so that getNeededColumns() does not get
 	// confused.
-	pred.iVarHelper = parser.MakeIndexedVarHelper(pred, len(columns))
+	pred.iVarHelper = tree.MakeIndexedVarHelper(pred, len(columns))
 	return pred, info, nil
 }
 
-// IndexedVarEval implements the parser.IndexedVarContainer interface.
-func (p *joinPredicate) IndexedVarEval(idx int, ctx *parser.EvalContext) (parser.Datum, error) {
+// IndexedVarEval implements the tree.IndexedVarContainer interface.
+func (p *joinPredicate) IndexedVarEval(idx int, ctx *tree.EvalContext) (tree.Datum, error) {
 	return p.curRow[idx].Eval(ctx)
 }
 
-// IndexedVarResolvedType implements the parser.IndexedVarContainer interface.
+// IndexedVarResolvedType implements the tree.IndexedVarContainer interface.
 func (p *joinPredicate) IndexedVarResolvedType(idx int) types.T {
 	return p.info.sourceColumns[idx].Typ
 }
 
-// IndexedVarFormat implements the parser.IndexedVarContainer interface.
-func (p *joinPredicate) IndexedVarFormat(buf *bytes.Buffer, f parser.FmtFlags, idx int) {
+// IndexedVarFormat implements the tree.IndexedVarContainer interface.
+func (p *joinPredicate) IndexedVarFormat(buf *bytes.Buffer, f tree.FmtFlags, idx int) {
 	p.info.FormatVar(buf, f, idx)
 }
 
@@ -310,7 +310,7 @@ func (p *joinPredicate) IndexedVarFormat(buf *bytes.Buffer, f parser.FmtFlags, i
 // Returns true if there is no on condition or the on condition accepts the
 // row.
 func (p *joinPredicate) eval(
-	ctx *parser.EvalContext, result, leftRow, rightRow parser.Datums,
+	ctx *tree.EvalContext, result, leftRow, rightRow tree.Datums,
 ) (bool, error) {
 	if p.onCond != nil {
 		p.curRow = result
@@ -349,18 +349,18 @@ func (p *joinPredicate) getNeededColumns(neededJoined []bool) ([]bool, []bool) {
 
 // prepareRow prepares the output row by combining values from the
 // input data sources.
-func (p *joinPredicate) prepareRow(result, leftRow, rightRow parser.Datums) {
+func (p *joinPredicate) prepareRow(result, leftRow, rightRow tree.Datums) {
 	copy(result[:len(leftRow)], leftRow)
 	copy(result[len(leftRow):], rightRow)
 }
 
 // encode returns the encoding of a row from a given side (left or right),
 // according to the columns specified by the equality constraints.
-func (p *joinPredicate) encode(b []byte, row parser.Datums, cols []int) ([]byte, bool, error) {
+func (p *joinPredicate) encode(b []byte, row tree.Datums, cols []int) ([]byte, bool, error) {
 	var err error
 	containsNull := false
 	for _, colIdx := range cols {
-		if row[colIdx] == parser.DNull {
+		if row[colIdx] == tree.DNull {
 			containsNull = true
 		}
 		b, err = sqlbase.EncodeDatum(b, row[colIdx])

@@ -19,7 +19,7 @@ import (
 
 	"golang.org/x/net/context"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -48,9 +48,9 @@ type traceNode struct {
 	recording bool
 }
 
-var sessionTraceTableName = parser.TableName{
-	DatabaseName: parser.Name("crdb_internal"),
-	TableName:    parser.Name("session_trace"),
+var sessionTraceTableName = tree.TableName{
+	DatabaseName: tree.Name("crdb_internal"),
+	TableName:    tree.Name("session_trace"),
 }
 
 // makeTraceNode creates a new traceNode.
@@ -168,6 +168,6 @@ func (n *traceNode) Next(params runParams) (bool, error) {
 	return true, nil
 }
 
-func (n *traceNode) Values() parser.Datums {
+func (n *traceNode) Values() tree.Datums {
 	return n.traceRows[n.curRow-1][:]
 }

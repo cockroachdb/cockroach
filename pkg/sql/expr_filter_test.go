@@ -21,7 +21,7 @@ import (
 
 	"golang.org/x/net/context"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
@@ -30,24 +30,24 @@ type countVarsVisitor struct {
 	numNames, numValues int
 }
 
-func (v *countVarsVisitor) VisitPre(expr parser.Expr) (recurse bool, newExpr parser.Expr) {
+func (v *countVarsVisitor) VisitPre(expr tree.Expr) (recurse bool, newExpr tree.Expr) {
 	switch expr.(type) {
-	case *parser.IndexedVar:
+	case *tree.IndexedVar:
 		v.numValues++
-	case *parser.ColumnItem:
+	case *tree.ColumnItem:
 		v.numNames++
 	}
 
 	return true, expr
 }
 
-func (*countVarsVisitor) VisitPost(expr parser.Expr) parser.Expr { return expr }
+func (*countVarsVisitor) VisitPost(expr tree.Expr) tree.Expr { return expr }
 
 // countVars counts how many *ColumnItems and *IndexedVar nodes are in an expression.
-func countVars(expr parser.Expr) (numNames, numValues int) {
+func countVars(expr tree.Expr) (numNames, numValues int) {
 	v := countVarsVisitor{}
 	if expr != nil {
-		parser.WalkExprConst(&v, expr)
+		tree.WalkExprConst(&v, expr)
 	}
 	return v.numNames, v.numValues
 }
@@ -120,18 +120,18 @@ func TestSplitFilter(t *testing.T) {
 
 	for _, d := range testData {
 		t.Run(fmt.Sprintf("%s~(%s, %s)", d.expr, d.expectedRes, d.expectedRem), func(t *testing.T) {
-			evalCtx := parser.NewTestingEvalContext()
+			evalCtx := tree.NewTestingEvalContext()
 			defer evalCtx.Stop(context.Background())
 			sel := makeSelectNode(t)
 			// A function that "converts" only vars in the list.
-			conv := func(expr parser.VariableExpr) (bool, parser.Expr) {
-				iv := expr.(*parser.IndexedVar)
+			conv := func(expr tree.VariableExpr) (bool, tree.Expr) {
+				iv := expr.(*tree.IndexedVar)
 				colName := iv.String()
 				for _, col := range d.vars {
 					if colName == col {
 						// Convert to a VarName (to check that conversion happens correctly). It
 						// will print the same.
-						return true, parser.UnresolvedName{parser.Name(colName)}
+						return true, tree.UnresolvedName{tree.Name(colName)}
 					}
 				}
 				return false, nil
@@ -202,7 +202,7 @@ func TestExtractNotNullConstraints(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.expr, func(t *testing.T) {
-			evalCtx := parser.NewTestingEvalContext()
+			evalCtx := tree.NewTestingEvalContext()
 			defer evalCtx.Stop(context.Background())
 
 			sel := makeSelectNode(t)

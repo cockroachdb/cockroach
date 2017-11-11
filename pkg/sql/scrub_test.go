@@ -24,7 +24,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/sql"
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -92,7 +92,7 @@ INSERT INTO t.test VALUES (10, 20);
 	}
 
 	// Construct datums for our row values (k, v).
-	values := []parser.Datum{parser.NewDInt(10), parser.NewDInt(20)}
+	values := []tree.Datum{tree.NewDInt(10), tree.NewDInt(20)}
 	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "test")
 	secondaryIndex := &tableDesc.Indexes[0]
 
@@ -170,7 +170,7 @@ CREATE INDEX secondary ON t.test (v);
 	colIDtoRowIndex[tableDesc.Columns[1].ID] = 1
 
 	// Construct datums and secondary k/v for our row values (k, v).
-	values := []parser.Datum{parser.NewDInt(10), parser.NewDInt(314)}
+	values := []tree.Datum{tree.NewDInt(10), tree.NewDInt(314)}
 	secondaryIndex, err := sqlbase.EncodeSecondaryIndex(
 		tableDesc, secondaryIndexDesc, colIDtoRowIndex, values)
 	if err != nil {
@@ -261,7 +261,7 @@ INSERT INTO t.test VALUES (10, 20, 1337);
 	colIDtoRowIndex[tableDesc.Columns[2].ID] = 2
 
 	// Generate the existing secondary index key.
-	values := []parser.Datum{parser.NewDInt(10), parser.NewDInt(20), parser.NewDInt(1337)}
+	values := []tree.Datum{tree.NewDInt(10), tree.NewDInt(20), tree.NewDInt(1337)}
 	secondaryIndex, err := sqlbase.EncodeSecondaryIndex(
 		tableDesc, secondaryIndexDesc, colIDtoRowIndex, values)
 	if err != nil {
@@ -273,7 +273,7 @@ INSERT INTO t.test VALUES (10, 20, 1337);
 	}
 
 	// Generate a secondary index k/v that has a different value.
-	values = []parser.Datum{parser.NewDInt(10), parser.NewDInt(20), parser.NewDInt(314)}
+	values = []tree.Datum{tree.NewDInt(10), tree.NewDInt(20), tree.NewDInt(314)}
 	secondaryIndex, err = sqlbase.EncodeSecondaryIndex(
 		tableDesc, secondaryIndexDesc, colIDtoRowIndex, values)
 	if err != nil {

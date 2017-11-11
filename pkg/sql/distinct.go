@@ -19,7 +19,7 @@ import (
 
 	"golang.org/x/net/context"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
@@ -41,7 +41,7 @@ type distinctNode struct {
 }
 
 // distinct constructs a distinctNode.
-func (p *planner) Distinct(n *parser.SelectClause) *distinctNode {
+func (p *planner) Distinct(n *tree.SelectClause) *distinctNode {
 	if !n.Distinct {
 		return nil
 	}
@@ -56,7 +56,7 @@ func (n *distinctNode) Start(params runParams) error {
 	return n.plan.Start(params)
 }
 
-func (n *distinctNode) Values() parser.Datums { return n.plan.Values() }
+func (n *distinctNode) Values() tree.Datums { return n.plan.Values() }
 
 func (n *distinctNode) addSuffixSeen(
 	ctx context.Context, acc WrappedMemoryAccount, sKey string,
@@ -125,8 +125,8 @@ func (n *distinctNode) Next(params runParams) (bool, error) {
 }
 
 // TODO(irfansharif): This can be refactored away to use
-// sqlbase.EncodeDatums([]byte, parser.Datums)
-func (n *distinctNode) encodeValues(values parser.Datums) ([]byte, []byte, error) {
+// sqlbase.EncodeDatums([]byte, tree.Datums)
+func (n *distinctNode) encodeValues(values tree.Datums) ([]byte, []byte, error) {
 	var prefix, suffix []byte
 	var err error
 	for i, val := range values {

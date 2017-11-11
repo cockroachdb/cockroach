@@ -20,7 +20,7 @@ import (
 
 	"golang.org/x/net/context"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -36,7 +36,7 @@ func TestRowContainerReplaceMax(t *testing.T) {
 	ctx := context.Background()
 	rng, _ := randutil.NewPseudoRand()
 
-	evalCtx := parser.NewTestingEvalContext()
+	evalCtx := tree.NewTestingEvalContext()
 	defer evalCtx.Stop(ctx)
 
 	typeInt := sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_INT}
@@ -48,8 +48,8 @@ func TestRowContainerReplaceMax(t *testing.T) {
 			b = append(b, 'a')
 		}
 		return sqlbase.EncDatumRow{
-			sqlbase.DatumToEncDatum(typeInt, parser.NewDInt(parser.DInt(intVal))),
-			sqlbase.DatumToEncDatum(typeStr, parser.NewDString(string(b))),
+			sqlbase.DatumToEncDatum(typeInt, tree.NewDInt(tree.DInt(intVal))),
+			sqlbase.DatumToEncDatum(typeStr, tree.NewDString(string(b))),
 		}
 	}
 

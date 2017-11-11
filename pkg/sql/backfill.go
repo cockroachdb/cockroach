@@ -26,7 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/jobs"
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -96,7 +96,7 @@ func (sc *SchemaChanger) getChunkSize(chunkSize int64) int64 {
 
 // runBackfill runs the backfill for the schema changer.
 func (sc *SchemaChanger) runBackfill(
-	ctx context.Context, lease *sqlbase.TableDescriptor_SchemaChangeLease, evalCtx parser.EvalContext,
+	ctx context.Context, lease *sqlbase.TableDescriptor_SchemaChangeLease, evalCtx tree.EvalContext,
 ) error {
 	if sc.testingKnobs.RunBeforeBackfill != nil {
 		if err := sc.testingKnobs.RunBeforeBackfill(); err != nil {
@@ -446,7 +446,7 @@ func (sc *SchemaChanger) nRanges(
 // MutationFilter.
 func (sc *SchemaChanger) distBackfill(
 	ctx context.Context,
-	evalCtx parser.EvalContext,
+	evalCtx tree.EvalContext,
 	lease *sqlbase.TableDescriptor_SchemaChangeLease,
 	version sqlbase.DescriptorVersion,
 	backfillType backfillType,
@@ -570,7 +570,7 @@ func (sc *SchemaChanger) distBackfill(
 
 func (sc *SchemaChanger) backfillIndexes(
 	ctx context.Context,
-	evalCtx parser.EvalContext,
+	evalCtx tree.EvalContext,
 	lease *sqlbase.TableDescriptor_SchemaChangeLease,
 	version sqlbase.DescriptorVersion,
 ) error {
@@ -602,7 +602,7 @@ func (sc *SchemaChanger) backfillIndexes(
 
 func (sc *SchemaChanger) truncateAndBackfillColumns(
 	ctx context.Context,
-	evalCtx parser.EvalContext,
+	evalCtx tree.EvalContext,
 	lease *sqlbase.TableDescriptor_SchemaChangeLease,
 	version sqlbase.DescriptorVersion,
 ) error {

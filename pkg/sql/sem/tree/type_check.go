@@ -111,7 +111,7 @@ func decorateTypeCheckError(err error, format string, a ...interface{}) error {
 // desired.
 func TypeCheck(expr Expr, ctx *SemaContext, desired types.T) (TypedExpr, error) {
 	if desired == nil {
-		panic("the desired type for parser.TypeCheck cannot be nil, use types.Any instead")
+		panic("the desired type for tree.TypeCheck cannot be nil, use types.Any instead")
 	}
 
 	expr, err := FoldConstantLiterals(expr)

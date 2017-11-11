@@ -17,7 +17,7 @@ package distsqlrun
 import (
 	"golang.org/x/net/context"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
@@ -62,12 +62,12 @@ func (jb *joinerBase) init(
 	leftTypes := leftSource.Types()
 	jb.emptyLeft = make(sqlbase.EncDatumRow, len(leftTypes))
 	for i := range jb.emptyLeft {
-		jb.emptyLeft[i] = sqlbase.DatumToEncDatum(leftTypes[i], parser.DNull)
+		jb.emptyLeft[i] = sqlbase.DatumToEncDatum(leftTypes[i], tree.DNull)
 	}
 	rightTypes := rightSource.Types()
 	jb.emptyRight = make(sqlbase.EncDatumRow, len(rightTypes))
 	for i := range jb.emptyRight {
-		jb.emptyRight[i] = sqlbase.DatumToEncDatum(rightTypes[i], parser.DNull)
+		jb.emptyRight[i] = sqlbase.DatumToEncDatum(rightTypes[i], tree.DNull)
 	}
 
 	jb.eqCols[leftSide] = columns(leftEqColumns)

@@ -15,7 +15,7 @@
 package distsqlrun
 
 import (
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/pkg/errors"
@@ -101,7 +101,7 @@ func CompareEncDatumRowForMerge(
 	}
 
 	// TODO(radu): plumb EvalContext
-	evalCtx := &parser.EvalContext{}
+	evalCtx := &tree.EvalContext{}
 
 	for i, ord := range leftOrdering {
 		lIdx := ord.ColIdx

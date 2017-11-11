@@ -21,11 +21,12 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	_ "github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 )
 
 func TestNormalizeExpr(t *testing.T) {
-	defer parser.MockNameTypes(map[string]types.T{
+	defer tree.MockNameTypes(map[string]types.T{
 		"a": types.Int,
 		"b": types.Int,
 		"c": types.Int,
@@ -202,7 +203,7 @@ func TestNormalizeExpr(t *testing.T) {
 			t.Fatalf("%s: %v", d.expr, err)
 		}
 		rOrig := typedExpr.String()
-		ctx := parser.NewTestingEvalContext()
+		ctx := tree.NewTestingEvalContext()
 		defer ctx.Mon.Stop(context.Background())
 		defer ctx.ActiveMemAcc.Close(context.Background())
 		r, err := ctx.NormalizeExpr(typedExpr)

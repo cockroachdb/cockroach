@@ -23,7 +23,7 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 )
 
@@ -47,11 +47,11 @@ import (
 // to the originals. This occurs for expressions which are currently not
 // handled by simplification (they are replaced by "true").
 func analyzeExpr(
-	evalCtx *parser.EvalContext, e parser.TypedExpr,
-) (exprs []parser.TypedExprs, equivalent bool) {
+	evalCtx *tree.EvalContext, e tree.TypedExpr,
+) (exprs []tree.TypedExprs, equivalent bool) {
 	e, equivalent = simplifyExpr(evalCtx, e)
 	orExprs := splitOrExpr(evalCtx, e, nil)
-	results := make([]parser.TypedExprs, len(orExprs))
+	results := make([]tree.TypedExprs, len(orExprs))
 	for i := range orExprs {
 		results[i] = splitAndExpr(evalCtx, orExprs[i], nil)
 	}
@@ -64,10 +64,10 @@ func analyzeExpr(
 //
 //   a OR b OR c OR d -> [a, b, c, d]
 func splitOrExpr(
-	evalCtx *parser.EvalContext, e parser.TypedExpr, exprs parser.TypedExprs,
-) parser.TypedExprs {
+	evalCtx *tree.EvalContext, e tree.TypedExpr, exprs tree.TypedExprs,
+) tree.TypedExprs {
 	switch t := e.(type) {
-	case *parser.OrExpr:
+	case *tree.OrExpr:
 		return splitOrExpr(evalCtx, t.TypedRight(), splitOrExpr(evalCtx, t.TypedLeft(), exprs))
 	}
 	return append(exprs, e)
@@ -79,10 +79,10 @@ func splitOrExpr(
 //
 //   a AND b AND c AND d -> [a, b, c, d]
 func splitAndExpr(
-	evalCtx *parser.EvalContext, e parser.TypedExpr, exprs parser.TypedExprs,
-) parser.TypedExprs {
+	evalCtx *tree.EvalContext, e tree.TypedExpr, exprs tree.TypedExprs,
+) tree.TypedExprs {
 	switch t := e.(type) {
-	case *parser.AndExpr:
+	case *tree.AndExpr:
 		return splitAndExpr(evalCtx, t.TypedRight(), splitAndExpr(evalCtx, t.TypedLeft(), exprs))
 	}
 	return append(exprs, e)
@@ -90,23 +90,23 @@ func splitAndExpr(
 
 // joinOrExprs performs the inverse operation of splitOrExpr, joining
 // together the individual expressions using OrExpr nodes.
-func joinOrExprs(exprs parser.TypedExprs) parser.TypedExpr {
-	return joinExprs(exprs, func(left, right parser.TypedExpr) parser.TypedExpr {
-		return parser.NewTypedOrExpr(left, right)
+func joinOrExprs(exprs tree.TypedExprs) tree.TypedExpr {
+	return joinExprs(exprs, func(left, right tree.TypedExpr) tree.TypedExpr {
+		return tree.NewTypedOrExpr(left, right)
 	})
 }
 
 // joinAndExprs performs the inverse operation of splitAndExpr, joining
 // together the individual expressions using AndExpr nodes.
-func joinAndExprs(exprs parser.TypedExprs) parser.TypedExpr {
-	return joinExprs(exprs, func(left, right parser.TypedExpr) parser.TypedExpr {
-		return parser.NewTypedAndExpr(left, right)
+func joinAndExprs(exprs tree.TypedExprs) tree.TypedExpr {
+	return joinExprs(exprs, func(left, right tree.TypedExpr) tree.TypedExpr {
+		return tree.NewTypedAndExpr(left, right)
 	})
 }
 
 func joinExprs(
-	exprs parser.TypedExprs, joinExprsFn func(left, right parser.TypedExpr) parser.TypedExpr,
-) parser.TypedExpr {
+	exprs tree.TypedExprs, joinExprsFn func(left, right tree.TypedExpr) tree.TypedExpr,
+) tree.TypedExpr {
 	switch len(exprs) {
 	case 0:
 		return nil
@@ -144,135 +144,135 @@ func joinExprs(
 // to the original. This occurs for expressions which are currently not handled
 // by simplification.
 func simplifyExpr(
-	evalCtx *parser.EvalContext, e parser.TypedExpr,
-) (simplified parser.TypedExpr, equivalent bool) {
-	if e == parser.DNull {
+	evalCtx *tree.EvalContext, e tree.TypedExpr,
+) (simplified tree.TypedExpr, equivalent bool) {
+	if e == tree.DNull {
 		return e, true
 	}
 	switch t := e.(type) {
-	case *parser.NotExpr:
+	case *tree.NotExpr:
 		return simplifyNotExpr(evalCtx, t)
-	case *parser.AndExpr:
+	case *tree.AndExpr:
 		return simplifyAndExpr(evalCtx, t)
-	case *parser.OrExpr:
+	case *tree.OrExpr:
 		return simplifyOrExpr(evalCtx, t)
-	case *parser.ComparisonExpr:
+	case *tree.ComparisonExpr:
 		return simplifyComparisonExpr(evalCtx, t)
-	case *parser.IndexedVar:
+	case *tree.IndexedVar:
 		return simplifyBoolVar(evalCtx, t)
-	case *parser.DBool:
+	case *tree.DBool:
 		return t, true
 	}
 	// We don't know how to simplify expressions that fall through to here, so
 	// consider this part of the expression true.
-	return parser.MakeDBool(true), false
+	return tree.MakeDBool(true), false
 }
 
-func simplifyNotExpr(evalCtx *parser.EvalContext, n *parser.NotExpr) (parser.TypedExpr, bool) {
-	if n.Expr == parser.DNull {
-		return parser.DNull, true
+func simplifyNotExpr(evalCtx *tree.EvalContext, n *tree.NotExpr) (tree.TypedExpr, bool) {
+	if n.Expr == tree.DNull {
+		return tree.DNull, true
 	}
 	switch t := n.Expr.(type) {
-	case *parser.NotExpr:
+	case *tree.NotExpr:
 		return simplifyExpr(evalCtx, t.TypedInnerExpr())
-	case *parser.ComparisonExpr:
+	case *tree.ComparisonExpr:
 		op := t.Operator
 		switch op {
-		case parser.EQ:
-			op = parser.NE
-		case parser.NE:
-			op = parser.EQ
-		case parser.GT:
-			op = parser.LE
-		case parser.GE:
-			op = parser.LT
-		case parser.LT:
-			op = parser.GE
-		case parser.LE:
-			op = parser.GT
-		case parser.In:
-			op = parser.NotIn
-		case parser.NotIn:
-			op = parser.In
-		case parser.Like:
-			op = parser.NotLike
-		case parser.NotLike:
-			op = parser.Like
-		case parser.ILike:
-			op = parser.NotILike
-		case parser.NotILike:
-			op = parser.ILike
-		case parser.SimilarTo:
-			op = parser.NotSimilarTo
-		case parser.NotSimilarTo:
-			op = parser.SimilarTo
-		case parser.RegMatch:
-			op = parser.NotRegMatch
-		case parser.NotRegMatch:
-			op = parser.RegMatch
-		case parser.RegIMatch:
-			op = parser.NotRegIMatch
-		case parser.NotRegIMatch:
-			op = parser.RegIMatch
-		case parser.IsDistinctFrom:
-			op = parser.IsNotDistinctFrom
-		case parser.IsNotDistinctFrom:
-			op = parser.IsDistinctFrom
-		case parser.Is:
-			op = parser.IsNot
-		case parser.IsNot:
-			op = parser.Is
+		case tree.EQ:
+			op = tree.NE
+		case tree.NE:
+			op = tree.EQ
+		case tree.GT:
+			op = tree.LE
+		case tree.GE:
+			op = tree.LT
+		case tree.LT:
+			op = tree.GE
+		case tree.LE:
+			op = tree.GT
+		case tree.In:
+			op = tree.NotIn
+		case tree.NotIn:
+			op = tree.In
+		case tree.Like:
+			op = tree.NotLike
+		case tree.NotLike:
+			op = tree.Like
+		case tree.ILike:
+			op = tree.NotILike
+		case tree.NotILike:
+			op = tree.ILike
+		case tree.SimilarTo:
+			op = tree.NotSimilarTo
+		case tree.NotSimilarTo:
+			op = tree.SimilarTo
+		case tree.RegMatch:
+			op = tree.NotRegMatch
+		case tree.NotRegMatch:
+			op = tree.RegMatch
+		case tree.RegIMatch:
+			op = tree.NotRegIMatch
+		case tree.NotRegIMatch:
+			op = tree.RegIMatch
+		case tree.IsDistinctFrom:
+			op = tree.IsNotDistinctFrom
+		case tree.IsNotDistinctFrom:
+			op = tree.IsDistinctFrom
+		case tree.Is:
+			op = tree.IsNot
+		case tree.IsNot:
+			op = tree.Is
 		default:
-			return parser.MakeDBool(true), false
+			return tree.MakeDBool(true), false
 		}
-		return simplifyExpr(evalCtx, parser.NewTypedComparisonExpr(
+		return simplifyExpr(evalCtx, tree.NewTypedComparisonExpr(
 			op,
 			t.TypedLeft(),
 			t.TypedRight(),
 		))
 
-	case *parser.AndExpr:
+	case *tree.AndExpr:
 		// De Morgan's Law: NOT (a AND b) -> (NOT a) OR (NOT b)
-		return simplifyExpr(evalCtx, parser.NewTypedOrExpr(
-			parser.NewTypedNotExpr(t.TypedLeft()),
-			parser.NewTypedNotExpr(t.TypedRight()),
+		return simplifyExpr(evalCtx, tree.NewTypedOrExpr(
+			tree.NewTypedNotExpr(t.TypedLeft()),
+			tree.NewTypedNotExpr(t.TypedRight()),
 		))
 
-	case *parser.OrExpr:
+	case *tree.OrExpr:
 		// De Morgan's Law: NOT (a OR b) -> (NOT a) AND (NOT b)
-		return simplifyExpr(evalCtx, parser.NewTypedAndExpr(
-			parser.NewTypedNotExpr(t.TypedLeft()),
-			parser.NewTypedNotExpr(t.TypedRight()),
+		return simplifyExpr(evalCtx, tree.NewTypedAndExpr(
+			tree.NewTypedNotExpr(t.TypedLeft()),
+			tree.NewTypedNotExpr(t.TypedRight()),
 		))
-	case *parser.IndexedVar:
-		return simplifyExpr(evalCtx, parser.NewTypedNotExpr(
+	case *tree.IndexedVar:
+		return simplifyExpr(evalCtx, tree.NewTypedNotExpr(
 			boolVarToComparison(t),
 		))
 	}
-	return parser.MakeDBool(true), false
+	return tree.MakeDBool(true), false
 }
 
-func isKnownTrue(e parser.TypedExpr) bool {
-	if e == parser.DNull {
+func isKnownTrue(e tree.TypedExpr) bool {
+	if e == tree.DNull {
 		return false
 	}
-	if b, ok := e.(*parser.DBool); ok {
+	if b, ok := e.(*tree.DBool); ok {
 		return bool(*b)
 	}
 	return false
 }
 
-func isKnownFalseOrNull(e parser.TypedExpr) bool {
-	if e == parser.DNull {
+func isKnownFalseOrNull(e tree.TypedExpr) bool {
+	if e == tree.DNull {
 		return true
 	}
-	if b, ok := e.(*parser.DBool); ok {
+	if b, ok := e.(*tree.DBool); ok {
 		return !bool(*b)
 	}
 	return false
 }
 
-func simplifyAndExpr(evalCtx *parser.EvalContext, n *parser.AndExpr) (parser.TypedExpr, bool) {
+func simplifyAndExpr(evalCtx *tree.EvalContext, n *tree.AndExpr) (tree.TypedExpr, bool) {
 	// a AND b AND c AND d -> [a, b, c, d]
 	equivalent := true
 	exprs := splitAndExpr(evalCtx, n, nil)
@@ -283,7 +283,7 @@ func simplifyAndExpr(evalCtx *parser.EvalContext, n *parser.AndExpr) (parser.Typ
 			equivalent = false
 		}
 		if isKnownFalseOrNull(exprs[i]) {
-			return parser.MakeDBool(false), equivalent
+			return tree.MakeDBool(false), equivalent
 		}
 	}
 	// Simplifying exprs might have transformed one of the elements into an AND
@@ -327,50 +327,50 @@ outer:
 }
 
 func simplifyOneAndExpr(
-	evalCtx *parser.EvalContext, left, right parser.TypedExpr,
-) (parser.TypedExpr, parser.TypedExpr, bool) {
-	lcmp, ok := left.(*parser.ComparisonExpr)
+	evalCtx *tree.EvalContext, left, right tree.TypedExpr,
+) (tree.TypedExpr, tree.TypedExpr, bool) {
+	lcmp, ok := left.(*tree.ComparisonExpr)
 	if !ok {
 		return left, right, true
 	}
-	rcmp, ok := right.(*parser.ComparisonExpr)
+	rcmp, ok := right.(*tree.ComparisonExpr)
 	if !ok {
 		return left, right, true
 	}
 	lcmpLeft, lcmpRight := lcmp.TypedLeft(), lcmp.TypedRight()
 	rcmpLeft, rcmpRight := rcmp.TypedLeft(), rcmp.TypedRight()
 	if !isDatum(lcmpRight) || !isDatum(rcmpRight) {
-		return parser.MakeDBool(true), nil, false
+		return tree.MakeDBool(true), nil, false
 	}
 	if !varEqual(lcmpLeft, rcmpLeft) {
 		return left, right, true
 	}
 
-	if lcmp.Operator == parser.IsNot || rcmp.Operator == parser.IsNot {
+	if lcmp.Operator == tree.IsNot || rcmp.Operator == tree.IsNot {
 		switch lcmp.Operator {
-		case parser.EQ, parser.GT, parser.GE, parser.LT, parser.LE, parser.In:
-			if rcmpRight == parser.DNull {
+		case tree.EQ, tree.GT, tree.GE, tree.LT, tree.LE, tree.In:
+			if rcmpRight == tree.DNull {
 				// a <cmp> x AND a IS NOT NULL
 				return left, nil, true
 			}
-		case parser.Is:
-			if lcmpRight == parser.DNull && rcmpRight == parser.DNull {
+		case tree.Is:
+			if lcmpRight == tree.DNull && rcmpRight == tree.DNull {
 				// a IS NULL AND a IS NOT NULL
-				return parser.MakeDBool(false), nil, true
+				return tree.MakeDBool(false), nil, true
 			}
-		case parser.IsNot:
-			if lcmpRight == parser.DNull {
+		case tree.IsNot:
+			if lcmpRight == tree.DNull {
 				switch rcmp.Operator {
-				case parser.EQ, parser.GT, parser.GE, parser.LT, parser.LE, parser.In:
+				case tree.EQ, tree.GT, tree.GE, tree.LT, tree.LE, tree.In:
 					// a IS NOT NULL AND a <cmp> x
 					return right, nil, true
-				case parser.Is:
-					if rcmpRight == parser.DNull {
+				case tree.Is:
+					if rcmpRight == tree.DNull {
 						// a IS NOT NULL AND a IS NULL
-						return parser.MakeDBool(false), nil, true
+						return tree.MakeDBool(false), nil, true
 					}
-				case parser.IsNot:
-					if rcmpRight == parser.DNull {
+				case tree.IsNot:
+					if rcmpRight == tree.DNull {
 						// a IS NOT NULL AND a IS NOT NULL
 						return left, nil, true
 					}
@@ -380,7 +380,7 @@ func simplifyOneAndExpr(
 		return left, right, true
 	}
 
-	if lcmp.Operator == parser.In || rcmp.Operator == parser.In {
+	if lcmp.Operator == tree.In || rcmp.Operator == tree.In {
 		left, right = simplifyOneAndInExpr(evalCtx, lcmp, rcmp)
 		return left, right, true
 	}
@@ -388,21 +388,21 @@ func simplifyOneAndExpr(
 	if reflect.TypeOf(lcmpRight) != reflect.TypeOf(rcmpRight) {
 		allowCmp := false
 		switch lcmp.Operator {
-		case parser.EQ, parser.NE, parser.GT, parser.GE, parser.LT, parser.LE:
+		case tree.EQ, tree.NE, tree.GT, tree.GE, tree.LT, tree.LE:
 			switch rcmp.Operator {
-			case parser.EQ, parser.NE, parser.GT, parser.GE, parser.LT, parser.LE:
+			case tree.EQ, tree.NE, tree.GT, tree.GE, tree.LT, tree.LE:
 				// Break, permitting heterogeneous comparison.
 				allowCmp = true
 			}
 		}
 		if !allowCmp {
-			if lcmp.Operator == parser.Is && lcmpRight == parser.DNull {
+			if lcmp.Operator == tree.Is && lcmpRight == tree.DNull {
 				// a IS NULL AND a <cmp> x
-				return parser.MakeDBool(false), nil, true
+				return tree.MakeDBool(false), nil, true
 			}
-			if rcmp.Operator == parser.Is && rcmpRight == parser.DNull {
+			if rcmp.Operator == tree.Is && rcmpRight == tree.DNull {
 				// a <cmp> x AND a IS NULL
-				return parser.MakeDBool(false), nil, true
+				return tree.MakeDBool(false), nil, true
 			}
 			// Note that "a IS NULL and a IS NULL" cannot happen here because
 			// "reflect.TypeOf(NULL) == reflect.TypeOf(NULL)".
@@ -410,8 +410,8 @@ func simplifyOneAndExpr(
 		}
 	}
 
-	ldatum := lcmpRight.(parser.Datum)
-	rdatum := rcmpRight.(parser.Datum)
+	ldatum := lcmpRight.(tree.Datum)
+	rdatum := rcmpRight.(tree.Datum)
 	cmp := ldatum.Compare(evalCtx, rdatum)
 
 	// Determine which expression to use when either expression (left or right)
@@ -421,7 +421,7 @@ func simplifyOneAndExpr(
 	either := lcmp
 	if !ldatum.ResolvedType().Equivalent(rdatum.ResolvedType()) {
 		switch ta := lcmpLeft.(type) {
-		case *parser.IndexedVar:
+		case *tree.IndexedVar:
 			if ta.ResolvedType().Equivalent(rdatum.ResolvedType()) {
 				either = rcmp
 			}
@@ -430,78 +430,78 @@ func simplifyOneAndExpr(
 
 	// TODO(pmattis): Figure out how to generate this logic.
 	switch lcmp.Operator {
-	case parser.EQ:
+	case tree.EQ:
 		switch rcmp.Operator {
-		case parser.EQ:
+		case tree.EQ:
 			// a = x AND a = y
 			if cmp == 0 {
 				// x = y
 				return either, nil, true
 			}
-			return parser.MakeDBool(false), nil, true
-		case parser.NE:
+			return tree.MakeDBool(false), nil, true
+		case tree.NE:
 			// a = x AND a != y
 			if cmp == 0 {
 				// x = y
-				return parser.MakeDBool(false), nil, true
+				return tree.MakeDBool(false), nil, true
 			}
 			return left, nil, true
-		case parser.GT, parser.GE:
+		case tree.GT, tree.GE:
 			// a = x AND (a > y OR a >= y)
-			if cmp == -1 || (cmp == 0 && rcmp.Operator == parser.GT) {
+			if cmp == -1 || (cmp == 0 && rcmp.Operator == tree.GT) {
 				// x < y OR x = y
-				return parser.MakeDBool(false), nil, true
+				return tree.MakeDBool(false), nil, true
 			}
 			return left, nil, true
-		case parser.LT, parser.LE:
+		case tree.LT, tree.LE:
 			// a = x AND (a < y OR a <= y)
-			if cmp == 1 || (cmp == 0 && rcmp.Operator == parser.LT) {
+			if cmp == 1 || (cmp == 0 && rcmp.Operator == tree.LT) {
 				// x > y OR x = y
-				return parser.MakeDBool(false), nil, true
+				return tree.MakeDBool(false), nil, true
 			}
 			return left, nil, true
 		}
 
-	case parser.NE:
+	case tree.NE:
 		switch rcmp.Operator {
-		case parser.EQ:
+		case tree.EQ:
 			// a != x AND a = y
 			if cmp == 0 {
 				// x = y
-				return parser.MakeDBool(false), nil, true
+				return tree.MakeDBool(false), nil, true
 			}
 			return right, nil, true
-		case parser.NE:
+		case tree.NE:
 			// a != x AND a != y
 			if cmp == 0 {
 				// x = y
 				return either, nil, true
 			}
 			return left, right, true
-		case parser.GT:
+		case tree.GT:
 			// a != x AND a > y
 			return right, nil, cmp <= 0
-		case parser.LT:
+		case tree.LT:
 			// a != x AND a < y
 			return right, nil, cmp >= 0
-		case parser.GE:
+		case tree.GE:
 			// a != x AND a >= y
 			if cmp == 0 {
 				// x = y
-				return parser.NewTypedComparisonExpr(
-					parser.GT,
+				return tree.NewTypedComparisonExpr(
+					tree.GT,
 					rcmpLeft,
 					either.TypedRight(),
 				), nil, true
 			}
 			// x != y
 			return right, nil, cmp == -1
-		case parser.LE:
+		case tree.LE:
 			// a != x AND a <= y
 			if cmp == 0 {
 				// x = y
-				return parser.NewTypedComparisonExpr(
-					parser.LT,
+				return tree.NewTypedComparisonExpr(
+					tree.LT,
 					rcmpLeft,
 					either.TypedRight(),
 				), nil, true
@@ -510,20 +510,20 @@ func simplifyOneAndExpr(
 			return right, nil, cmp == +1
 		}
 
-	case parser.GT:
+	case tree.GT:
 		switch rcmp.Operator {
-		case parser.EQ:
+		case tree.EQ:
 			// a > x AND a = y
 			if cmp != -1 {
 				// x >= y
-				return parser.MakeDBool(false), nil, true
+				return tree.MakeDBool(false), nil, true
 			}
 			// x < y
 			return right, nil, true
-		case parser.NE:
+		case tree.NE:
 			// a > x AND a != y
 			return left, nil, cmp >= 0
-		case parser.GT, parser.GE:
+		case tree.GT, tree.GE:
 			// a > x AND (a > y OR a >= y)
 			if cmp != -1 {
 				// x >= y
@@ -531,93 +531,93 @@ func simplifyOneAndExpr(
 			}
 			// x < y
 			return right, nil, true
-		case parser.LT, parser.LE:
+		case tree.LT, tree.LE:
 			// a > x AND (a < y OR a <= y)
 			if cmp == -1 {
 				// x < y
 				return left, right, true
 			}
 			// x >= y
-			return parser.MakeDBool(false), nil, true
+			return tree.MakeDBool(false), nil, true
 		}
 
-	case parser.GE:
+	case tree.GE:
 		switch rcmp.Operator {
-		case parser.EQ:
+		case tree.EQ:
 			// a >= x AND a = y
 			if cmp == 1 {
 				// x > y
-				return parser.MakeDBool(false), nil, true
+				return tree.MakeDBool(false), nil, true
 			}
 			// x <= y
 			return right, nil, true
-		case parser.NE:
+		case tree.NE:
 			// a >= x AND x != y
 			if cmp == 0 {
 				// x = y
-				return parser.NewTypedComparisonExpr(
-					parser.GT,
+				return tree.NewTypedComparisonExpr(
+					tree.GT,
 					lcmpLeft,
 					either.TypedRight(),
 				), nil, true
 			}
 			// x != y
 			return left, nil, cmp == +1
-		case parser.GT, parser.GE:
+		case tree.GT, tree.GE:
 			// a >= x AND (a > y OR a >= y)
-			if cmp == -1 || (cmp == 0 && rcmp.Operator == parser.GT) {
+			if cmp == -1 || (cmp == 0 && rcmp.Operator == tree.GT) {
 				// x < y
 				return right, nil, true
 			}
 			// x >= y
 			return left, nil, true
-		case parser.LT:
+		case tree.LT:
 			// a >= x AND a < y
 			if cmp == -1 {
 				// x < y
 				return left, right, true
 			}
 			// x >= y
-			return parser.MakeDBool(false), nil, true
-		case parser.LE:
+			return tree.MakeDBool(false), nil, true
+		case tree.LE:
 			// a >= x AND a <= y
 			if cmp == -1 {
 				// x < y
 				return left, right, true
 			} else if cmp == 0 {
 				// x = y
-				return parser.NewTypedComparisonExpr(
-					parser.EQ,
+				return tree.NewTypedComparisonExpr(
+					tree.EQ,
 					lcmpLeft,
 					either.TypedRight(),
 				), nil, true
 			}
 			// x > y
-			return parser.MakeDBool(false), nil, true
+			return tree.MakeDBool(false), nil, true
 		}
 
-	case parser.LT:
+	case tree.LT:
 		switch rcmp.Operator {
-		case parser.EQ:
+		case tree.EQ:
 			// a < x AND a = y
 			if cmp != 1 {
 				// x <= y
-				return parser.MakeDBool(false), nil, true
+				return tree.MakeDBool(false), nil, true
 			}
 			// x > y
 			return right, nil, true
-		case parser.NE:
+		case tree.NE:
 			// a < x AND a != y
 			return left, nil, cmp <= 0
-		case parser.GT, parser.GE:
+		case tree.GT, tree.GE:
 			// a < x AND (a > y OR a >= y)
 			if cmp == 1 {
 				// x > y
 				return left, right, true
 			}
 			// x <= y
-			return parser.MakeDBool(false), nil, true
-		case parser.LT, parser.LE:
+			return tree.MakeDBool(false), nil, true
+		case tree.LT, tree.LE:
 			// a < x AND (a < y OR a <= y)
 			if cmp != 1 {
 				// x <= y
@@ -627,53 +627,53 @@ func simplifyOneAndExpr(
 			return right, nil, true
 		}
 
-	case parser.LE:
+	case tree.LE:
 		switch rcmp.Operator {
-		case parser.EQ:
+		case tree.EQ:
 			// a <= x AND a = y
 			if cmp == -1 {
 				// x < y
-				return parser.MakeDBool(false), nil, true
+				return tree.MakeDBool(false), nil, true
 			}
 			// x >= y
 			return right, nil, true
-		case parser.NE:
+		case tree.NE:
 			// a <= x AND a != y
 			if cmp == 0 {
 				// x = y
-				return parser.NewTypedComparisonExpr(
-					parser.LT,
+				return tree.NewTypedComparisonExpr(
+					tree.LT,
 					lcmpLeft,
 					either.TypedRight(),
 				), nil, true
 			}
 			// x != y
 			return left, nil, cmp == -1
-		case parser.GT:
+		case tree.GT:
 			// a <= x AND a > y
 			if cmp == 1 {
 				// x > y
 				return left, right, true
 			}
-			return parser.MakeDBool(false), nil, true
-		case parser.GE:
+			return tree.MakeDBool(false), nil, true
+		case tree.GE:
 			// a <= x AND a >= y
 			if cmp == +1 {
 				// x > y
 				return left, right, true
 			} else if cmp == 0 {
 				// x = y
-				return parser.NewTypedComparisonExpr(
-					parser.EQ,
+				return tree.NewTypedComparisonExpr(
+					tree.EQ,
 					lcmpLeft,
 					either.TypedRight(),
 				), nil, true
 			}
 			// x < y
-			return parser.MakeDBool(false), nil, true
-		case parser.LT, parser.LE:
+			return tree.MakeDBool(false), nil, true
+		case tree.LT, tree.LE:
 			// a <= x AND (a > y OR a >= y)
-			if cmp == 1 || (cmp == 0 && rcmp.Operator == parser.LT) {
+			if cmp == 1 || (cmp == 0 && rcmp.Operator == tree.LT) {
 				// x > y
 				return right, nil, true
 			}
@@ -681,75 +681,75 @@ func simplifyOneAndExpr(
 			return left, nil, true
 		}
 
-	case parser.Is:
+	case tree.Is:
 		switch rcmp.Operator {
-		case parser.Is:
-			if lcmpRight == parser.DNull && rcmpRight == parser.DNull {
+		case tree.Is:
+			if lcmpRight == tree.DNull && rcmpRight == tree.DNull {
 				// a IS NULL AND a IS NULL
 				return left, nil, true
 			}
 		}
 	}
 
-	return parser.MakeDBool(true), nil, false
+	return tree.MakeDBool(true), nil, false
 }
 
 func simplifyOneAndInExpr(
-	evalCtx *parser.EvalContext, left, right *parser.ComparisonExpr,
-) (parser.TypedExpr, parser.TypedExpr) {
-	if left.Operator != parser.In && right.Operator != parser.In {
+	evalCtx *tree.EvalContext, left, right *tree.ComparisonExpr,
+) (tree.TypedExpr, tree.TypedExpr) {
+	if left.Operator != tree.In && right.Operator != tree.In {
 		panic(fmt.Sprintf("IN expression required: %s vs %s", left, right))
 	}
 
 	origLeft, origRight := left, right
 
 	switch left.Operator {
-	case parser.EQ, parser.NE, parser.GT, parser.GE, parser.LT, parser.LE, parser.Is:
+	case tree.EQ, tree.NE, tree.GT, tree.GE, tree.LT, tree.LE, tree.Is:
 		switch right.Operator {
-		case parser.In:
+		case tree.In:
 			left, right = right, left
 		}
 		fallthrough
 
-	case parser.In:
-		ltuple := left.Right.(*parser.DTuple)
+	case tree.In:
+		ltuple := left.Right.(*tree.DTuple)
 		ltuple.AssertSorted()
 
 		values := ltuple.D
 
 		switch right.Operator {
-		case parser.Is:
-			if right.Right == parser.DNull {
-				return parser.MakeDBool(false), nil
+		case tree.Is:
+			if right.Right == tree.DNull {
+				return tree.MakeDBool(false), nil
 			}
 
-		case parser.EQ, parser.NE, parser.GT, parser.GE, parser.LT, parser.LE:
+		case tree.EQ, tree.NE, tree.GT, tree.GE, tree.LT, tree.LE:
 			// Our tuple will be sorted (see simplifyComparisonExpr). Binary search
 			// for the right datum.
-			datum := right.Right.(parser.Datum)
+			datum := right.Right.(tree.Datum)
 			i, found := ltuple.SearchSorted(evalCtx, datum)
 
 			switch right.Operator {
-			case parser.EQ:
+			case tree.EQ:
 				if found {
 					return right, nil
 				}
-				return parser.MakeDBool(false), nil
+				return tree.MakeDBool(false), nil
 
-			case parser.NE:
+			case tree.NE:
 				if found {
 					if len(values) < 2 {
-						return parser.MakeDBool(false), nil
+						return tree.MakeDBool(false), nil
 					}
 					values = remove(values, i)
 				}
-				return parser.NewTypedComparisonExpr(
-					parser.In,
+				return tree.NewTypedComparisonExpr(
+					tree.In,
 					left.TypedLeft(),
-					parser.NewDTuple(values...).SetSorted(),
+					tree.NewDTuple(values...).SetSorted(),
 				), nil
 
-			case parser.GT:
+			case tree.GT:
 				if i < len(values) {
 					if found {
 						values = values[i+1:]
@@ -757,71 +757,71 @@ func simplifyOneAndInExpr(
 						values = values[i:]
 					}
 					if len(values) > 0 {
-						return parser.NewTypedComparisonExpr(
-							parser.In,
+						return tree.NewTypedComparisonExpr(
+							tree.In,
 							left.TypedLeft(),
-							parser.NewDTuple(values...).SetSorted(),
+							tree.NewDTuple(values...).SetSorted(),
 						), nil
 					}
 				}
-				return parser.MakeDBool(false), nil
+				return tree.MakeDBool(false), nil
 
-			case parser.GE:
+			case tree.GE:
 				if i < len(values) {
 					values = values[i:]
 					if len(values) > 0 {
-						return parser.NewTypedComparisonExpr(
-							parser.In,
+						return tree.NewTypedComparisonExpr(
+							tree.In,
 							left.TypedLeft(),
-							parser.NewDTuple(values...).SetSorted(),
+							tree.NewDTuple(values...).SetSorted(),
 						), nil
 					}
 				}
-				return parser.MakeDBool(false), nil
+				return tree.MakeDBool(false), nil
 
-			case parser.LT:
+			case tree.LT:
 				if i < len(values) {
 					if i == 0 {
-						return parser.MakeDBool(false), nil
+						return tree.MakeDBool(false), nil
 					}
 					values = values[:i]
-					return parser.NewTypedComparisonExpr(
-						parser.In,
+					return tree.NewTypedComparisonExpr(
+						tree.In,
 						left.TypedLeft(),
-						parser.NewDTuple(values...).SetSorted(),
+						tree.NewDTuple(values...).SetSorted(),
 					), nil
 				}
 				return left, nil
 
-			case parser.LE:
+			case tree.LE:
 				if i < len(values) {
 					if found {
 						i++
 					}
 					if i == 0 {
-						return parser.MakeDBool(false), nil
+						return tree.MakeDBool(false), nil
 					}
 					values = values[:i]
-					return parser.NewTypedComparisonExpr(
-						parser.In,
+					return tree.NewTypedComparisonExpr(
+						tree.In,
 						left.TypedLeft(),
-						parser.NewDTuple(values...).SetSorted(),
+						tree.NewDTuple(values...).SetSorted(),
 					), nil
 				}
 				return left, nil
 			}
 
-		case parser.In:
+		case tree.In:
 			// Both of our tuples are sorted. Intersect the lists.
-			rtuple := right.Right.(*parser.DTuple)
+			rtuple := right.Right.(*tree.DTuple)
 			intersection := intersectSorted(evalCtx, values, rtuple.D)
 			if len(intersection) == 0 {
-				return parser.MakeDBool(false), nil
+				return tree.MakeDBool(false), nil
 			}
-			return parser.NewTypedComparisonExpr(
-				parser.In,
+			return tree.NewTypedComparisonExpr(
+				tree.In,
 				left.TypedLeft(),
-				parser.NewDTuple(intersection...).SetSorted(),
+				tree.NewDTuple(intersection...).SetSorted(),
 			), nil
 		}
 	}
@@ -829,7 +829,7 @@ func simplifyOneAndInExpr(
 	return origLeft, origRight
 }
 
-func simplifyOrExpr(evalCtx *parser.EvalContext, n *parser.OrExpr) (parser.TypedExpr, bool) {
+func simplifyOrExpr(evalCtx *tree.EvalContext, n *tree.OrExpr) (tree.TypedExpr, bool) {
 	// a OR b OR c OR d -> [a, b, c, d]
 	equivalent := true
 	exprs := splitOrExpr(evalCtx, n, nil)
@@ -884,42 +884,42 @@ outer:
 }
 
 func simplifyOneOrExpr(
-	evalCtx *parser.EvalContext, left, right parser.TypedExpr,
-) (parser.TypedExpr, parser.TypedExpr, bool) {
-	lcmp, ok := left.(*parser.ComparisonExpr)
+	evalCtx *tree.EvalContext, left, right tree.TypedExpr,
+) (tree.TypedExpr, tree.TypedExpr, bool) {
+	lcmp, ok := left.(*tree.ComparisonExpr)
 	if !ok {
 		return left, right, true
 	}
-	rcmp, ok := right.(*parser.ComparisonExpr)
+	rcmp, ok := right.(*tree.ComparisonExpr)
 	if !ok {
 		return left, right, true
 	}
 	lcmpLeft, lcmpRight := lcmp.TypedLeft(), lcmp.TypedRight()
 	rcmpLeft, rcmpRight := rcmp.TypedLeft(), rcmp.TypedRight()
 	if !isDatum(lcmpRight) || !isDatum(rcmpRight) {
-		return parser.MakeDBool(true), nil, false
+		return tree.MakeDBool(true), nil, false
 	}
 	if !varEqual(lcmpLeft, rcmpLeft) {
 		return left, right, true
 	}
 
-	if lcmp.Operator == parser.IsNot || rcmp.Operator == parser.IsNot {
+	if lcmp.Operator == tree.IsNot || rcmp.Operator == tree.IsNot {
 		switch lcmp.Operator {
-		case parser.Is:
-			if lcmpRight == parser.DNull && rcmpRight == parser.DNull {
+		case tree.Is:
+			if lcmpRight == tree.DNull && rcmpRight == tree.DNull {
 				// a IS NULL OR a IS NOT NULL
-				return parser.MakeDBool(true), nil, true
+				return tree.MakeDBool(true), nil, true
 			}
-		case parser.IsNot:
-			if lcmpRight == parser.DNull {
+		case tree.IsNot:
+			if lcmpRight == tree.DNull {
 				switch rcmp.Operator {
-				case parser.Is:
-					if rcmpRight == parser.DNull {
+				case tree.Is:
+					if rcmpRight == tree.DNull {
 						// a IS NOT NULL OR a IS NULL
-						return parser.MakeDBool(true), nil, true
+						return tree.MakeDBool(true), nil, true
 					}
-				case parser.IsNot:
-					if rcmpRight == parser.DNull {
+				case tree.IsNot:
+					if rcmpRight == tree.DNull {
 						// a IS NOT NULL OR a IS NOT NULL
 						return left, nil, true
 					}
@@ -929,7 +929,7 @@ func simplifyOneOrExpr(
 		return left, right, true
 	}
 
-	if lcmp.Operator == parser.In || rcmp.Operator == parser.In {
+	if lcmp.Operator == tree.In || rcmp.Operator == tree.In {
 		left, right = simplifyOneOrInExpr(evalCtx, lcmp, rcmp)
 		return left, right, true
 	}
@@ -937,9 +937,9 @@ func simplifyOneOrExpr(
 	if reflect.TypeOf(lcmpRight) != reflect.TypeOf(rcmpRight) {
 		allowCmp := false
 		switch lcmp.Operator {
-		case parser.EQ, parser.NE, parser.GT, parser.GE, parser.LT, parser.LE:
+		case tree.EQ, tree.NE, tree.GT, tree.GE, tree.LT, tree.LE:
 			switch rcmp.Operator {
-			case parser.EQ, parser.NE, parser.GT, parser.GE, parser.LT, parser.LE:
+			case tree.EQ, tree.NE, tree.GT, tree.GE, tree.LT, tree.LE:
 				// Break, permitting heterogeneous comparison.
 				allowCmp = true
 			}
@@ -951,8 +951,8 @@ func simplifyOneOrExpr(
 		}
 	}
 
-	ldatum := lcmpRight.(parser.Datum)
-	rdatum := rcmpRight.(parser.Datum)
+	ldatum := lcmpRight.(tree.Datum)
+	rdatum := rcmpRight.(tree.Datum)
 	cmp := ldatum.Compare(evalCtx, rdatum)
 
 	// Determine which expression to use when either expression (left or right)
@@ -962,7 +962,7 @@ func simplifyOneOrExpr(
 	either := lcmp
 	if !ldatum.ResolvedType().Equivalent(rdatum.ResolvedType()) {
 		switch ta := lcmpLeft.(type) {
-		case *parser.IndexedVar:
+		case *tree.IndexedVar:
 			if ta.ResolvedType().Equivalent(rdatum.ResolvedType()) {
 				either = rcmp
 			}
@@ -971,9 +971,9 @@ func simplifyOneOrExpr(
 
 	// TODO(pmattis): Figure out how to generate this logic.
 	switch lcmp.Operator {
-	case parser.EQ:
+	case tree.EQ:
 		switch rcmp.Operator {
-		case parser.EQ:
+		case tree.EQ:
 			// a = x OR a = y
 			if cmp == 0 {
 				// x = y
@@ -982,52 +982,52 @@ func simplifyOneOrExpr(
 				// x > y
 				ldatum, rdatum = rdatum, ldatum
 			}
-			return parser.NewTypedComparisonExpr(
-				parser.In,
+			return tree.NewTypedComparisonExpr(
+				tree.In,
 				lcmpLeft,
-				parser.NewDTuple(ldatum, rdatum).SetSorted(),
+				tree.NewDTuple(ldatum, rdatum).SetSorted(),
 			), nil, true
-		case parser.NE:
+		case tree.NE:
 			// a = x OR a != y
 			if cmp == 0 {
 				// x = y
 				return makeIsNotNull(lcmpLeft), nil, true
 			}
 			return right, nil, true
-		case parser.GT:
+		case tree.GT:
 			// a = x OR a > y
 			if cmp == 1 {
 				// x > y OR x = y
 				return right, nil, true
 			} else if cmp == 0 {
-				return parser.NewTypedComparisonExpr(
-					parser.GE,
+				return tree.NewTypedComparisonExpr(
+					tree.GE,
 					lcmpLeft,
 					either.TypedRight(),
 				), nil, true
 			}
 			return left, right, true
-		case parser.GE:
+		case tree.GE:
 			// a = x OR a >= y
 			if cmp != -1 {
 				// x >= y
 				return right, nil, true
 			}
 			return left, right, true
-		case parser.LT:
+		case tree.LT:
 			// a = x OR a < y
 			if cmp == -1 {
 				// x < y OR x = y
 				return right, nil, true
 			} else if cmp == 0 {
-				return parser.NewTypedComparisonExpr(
-					parser.LE,
+				return tree.NewTypedComparisonExpr(
+					tree.LE,
 					lcmpLeft,
 					either.TypedRight(),
 				), nil, true
 			}
 			return left, right, true
-		case parser.LE:
+		case tree.LE:
 			// a = x OR a <= y
 			if cmp != 1 {
 				// x <= y
@@ -1036,9 +1036,9 @@ func simplifyOneOrExpr(
 			return left, right, true
 		}
 
-	case parser.NE:
+	case tree.NE:
 		switch rcmp.Operator {
-		case parser.EQ:
+		case tree.EQ:
 			// a != x OR a = y
 			if cmp == 0 {
 				// x = y
@@ -1046,7 +1046,7 @@ func simplifyOneOrExpr(
 			}
 			// x != y
 			return left, nil, true
-		case parser.NE:
+		case tree.NE:
 			// a != x OR a != y
 			if cmp == 0 {
 				// x = y
@@ -1054,7 +1054,7 @@ func simplifyOneOrExpr(
 			}
 			// x != y
 			return makeIsNotNull(lcmpLeft), nil, true
-		case parser.GT:
+		case tree.GT:
 			// a != x OR a > y
 			if cmp == 1 {
 				// x > y
@@ -1062,7 +1062,7 @@ func simplifyOneOrExpr(
 			}
 			// x <= y
 			return left, nil, true
-		case parser.GE:
+		case tree.GE:
 			// a != x OR a >= y
 			if cmp != -1 {
 				// x >= y
@@ -1070,7 +1070,7 @@ func simplifyOneOrExpr(
 			}
 			// x < y
 			return left, nil, true
-		case parser.LT:
+		case tree.LT:
 			// a != x OR a < y
 			if cmp == -1 {
 				// x < y
@@ -1078,7 +1078,7 @@ func simplifyOneOrExpr(
 			}
 			// x >= y
 			return left, nil, true
-		case parser.LE:
+		case tree.LE:
 			// a != x OR a <= y
 			if cmp != 1 {
 				// x <= y
@@ -1088,23 +1088,23 @@ func simplifyOneOrExpr(
 			return left, nil, true
 		}
 
-	case parser.GT:
+	case tree.GT:
 		switch rcmp.Operator {
-		case parser.EQ:
+		case tree.EQ:
 			// a > x OR a = y
 			if cmp == -1 {
 				// x < y
 				return left, nil, true
 			} else if cmp == 0 {
-				return parser.NewTypedComparisonExpr(
-					parser.GE,
+				return tree.NewTypedComparisonExpr(
+					tree.GE,
 					lcmpLeft,
 					either.TypedRight(),
 				), nil, true
 			}
 			// x > y
 			return left, right, true
-		case parser.NE:
+		case tree.NE:
 			// a > x OR a != y
 			if cmp == -1 {
 				// x < y
@@ -1112,18 +1112,18 @@ func simplifyOneOrExpr(
 			}
 			// x >= y
 			return right, nil, true
-		case parser.GT, parser.GE:
+		case tree.GT, tree.GE:
 			// a > x OR (a > y OR a >= y)
 			if cmp == -1 {
 				return left, nil, true
 			}
 			return right, nil, true
-		case parser.LT:
+		case tree.LT:
 			// a > x OR a < y
 			if cmp == 0 {
 				// x = y
-				return parser.NewTypedComparisonExpr(
-					parser.NE,
+				return tree.NewTypedComparisonExpr(
+					tree.NE,
 					lcmpLeft,
 					either.TypedRight(),
 				), nil, true
@@ -1132,7 +1132,7 @@ func simplifyOneOrExpr(
 			}
 			// x != y
 			return left, right, true
-		case parser.LE:
+		case tree.LE:
 			// a > x OR a <= y
 			if cmp != 1 {
 				// x = y
@@ -1142,9 +1142,9 @@ func simplifyOneOrExpr(
 			return left, right, true
 		}
 
-	case parser.GE:
+	case tree.GE:
 		switch rcmp.Operator {
-		case parser.EQ:
+		case tree.EQ:
 			// a >= x OR a = y
 			if cmp != 1 {
 				// x >. y
@@ -1152,7 +1152,7 @@ func simplifyOneOrExpr(
 			}
 			// x < y
 			return left, right, true
-		case parser.NE:
+		case tree.NE:
 			// a >= x OR a != y
 			if cmp != 1 {
 				// x <= y
@@ -1160,7 +1160,7 @@ func simplifyOneOrExpr(
 			}
 			// x > y
 			return right, nil, true
-		case parser.GT:
+		case tree.GT:
 			// a >= x OR a > y
 			if cmp != 1 {
 				// x <= y
@@ -1168,7 +1168,7 @@ func simplifyOneOrExpr(
 			}
 			// x > y
 			return right, nil, true
-		case parser.GE:
+		case tree.GE:
 			// a >= x OR a >= y
 			if cmp == -1 {
 				// x < y
@@ -1176,7 +1176,7 @@ func simplifyOneOrExpr(
 			}
 			// x >= y
 			return right, nil, true
-		case parser.LT, parser.LE:
+		case tree.LT, tree.LE:
 			// a >= x OR a < y
 			if cmp != 1 {
 				// x <= y
@@ -1186,14 +1186,14 @@ func simplifyOneOrExpr(
 			return left, right, true
 		}
 
-	case parser.LT:
+	case tree.LT:
 		switch rcmp.Operator {
-		case parser.EQ:
+		case tree.EQ:
 			// a < x OR a = y
 			if cmp == 0 {
 				// x = y
-				return parser.NewTypedComparisonExpr(
-					parser.LE,
+				return tree.NewTypedComparisonExpr(
+					tree.LE,
 					lcmpLeft,
 					either.TypedRight(),
 				), nil, true
@@ -1203,18 +1203,18 @@ func simplifyOneOrExpr(
 			}
 			// x < y
 			return left, right, true
-		case parser.NE:
+		case tree.NE:
 			// a < x OR a != y
 			if cmp == 1 {
 				return makeIsNotNull(lcmpLeft), nil, true
 			}
 			return right, nil, true
-		case parser.GT:
+		case tree.GT:
 			// a < x OR a > y
 			if cmp == 0 {
 				// x = y
-				return parser.NewTypedComparisonExpr(
-					parser.NE,
+				return tree.NewTypedComparisonExpr(
+					tree.NE,
 					lcmpLeft,
 					either.TypedRight(),
 				), nil, true
@@ -1223,7 +1223,7 @@ func simplifyOneOrExpr(
 				return makeIsNotNull(lcmpLeft), nil, true
 			}
 			return left, right, true
-		case parser.GE:
+		case tree.GE:
 			// a < x OR a >= y
 			if cmp == -1 {
 				// x < y
@@ -1231,7 +1231,7 @@ func simplifyOneOrExpr(
 			}
 			// x >= y
 			return makeIsNotNull(lcmpLeft), nil, true
-		case parser.LT, parser.LE:
+		case tree.LT, tree.LE:
 			// a < x OR (a < y OR a <= y)
 			if cmp == 1 {
 				// x > y
@@ -1241,9 +1241,9 @@ func simplifyOneOrExpr(
 			return right, nil, true
 		}
 
-	case parser.LE:
+	case tree.LE:
 		switch rcmp.Operator {
-		case parser.EQ:
+		case tree.EQ:
 			// a <= x OR a = y
 			if cmp == -1 {
 				// x < y
@@ -1251,7 +1251,7 @@ func simplifyOneOrExpr(
 			}
 			// x >= y
 			return left, nil, true
-		case parser.NE:
+		case tree.NE:
 			// a <= x OR a != y
 			if cmp != -1 {
 				// x >= y
@@ -1259,7 +1259,7 @@ func simplifyOneOrExpr(
 			}
 			// x < y
 			return right, nil, true
-		case parser.GT, parser.GE:
+		case tree.GT, tree.GE:
 			// a <= x OR (a > y OR a >= y)
 			if cmp != -1 {
 				// x >= y
@@ -1267,7 +1267,7 @@ func simplifyOneOrExpr(
 			}
 			// x < y
 			return left, right, true
-		case parser.LT, parser.LE:
+		case tree.LT, tree.LE:
 			// a <= x OR a < y
 			if cmp == -1 {
 				// x < y
@@ -1277,82 +1277,82 @@ func simplifyOneOrExpr(
 			return left, nil, true
 		}
 
-	case parser.Is:
+	case tree.Is:
 		switch rcmp.Operator {
-		case parser.Is:
-			if lcmpRight == parser.DNull && rcmpRight == parser.DNull {
+		case tree.Is:
+			if lcmpRight == tree.DNull && rcmpRight == tree.DNull {
 				// a IS NULL OR a IS NULL
 				return left, nil, true
 			}
 		}
 	}
 
-	return parser.MakeDBool(true), nil, false
+	return tree.MakeDBool(true), nil, false
 }
 
 func simplifyOneOrInExpr(
-	evalCtx *parser.EvalContext, left, right *parser.ComparisonExpr,
-) (parser.TypedExpr, parser.TypedExpr) {
-	if left.Operator != parser.In && right.Operator != parser.In {
+	evalCtx *tree.EvalContext, left, right *tree.ComparisonExpr,
+) (tree.TypedExpr, tree.TypedExpr) {
+	if left.Operator != tree.In && right.Operator != tree.In {
 		panic(fmt.Sprintf("IN expression required: %s vs %s", left, right))
 	}
 
 	origLeft, origRight := left, right
 
 	switch left.Operator {
-	case parser.EQ, parser.NE, parser.GT, parser.GE, parser.LT, parser.LE:
+	case tree.EQ, tree.NE, tree.GT, tree.GE, tree.LT, tree.LE:
 		switch right.Operator {
-		case parser.In:
+		case tree.In:
 			left, right = right, left
 		}
 		fallthrough
 
-	case parser.In:
-		ltuple := left.Right.(*parser.DTuple)
+	case tree.In:
+		ltuple := left.Right.(*tree.DTuple)
 		ltuple.AssertSorted()
 
 		switch right.Operator {
-		case parser.EQ:
-			datum := right.Right.(parser.Datum)
+		case tree.EQ:
+			datum := right.Right.(tree.Datum)
 			// We keep the tuples for an IN expression in sorted order. So now we just
 			// merge the two sorted lists.
-			merged := mergeSorted(evalCtx, ltuple.D, parser.Datums{datum})
-			return parser.NewTypedComparisonExpr(
-				parser.In,
+			merged := mergeSorted(evalCtx, ltuple.D, tree.Datums{datum})
+			return tree.NewTypedComparisonExpr(
+				tree.In,
 				left.TypedLeft(),
-				parser.NewDTuple(merged...).SetSorted(),
+				tree.NewDTuple(merged...).SetSorted(),
 			), nil
 
-		case parser.NE, parser.GT, parser.GE, parser.LT, parser.LE:
-			datum := right.Right.(parser.Datum)
+		case tree.NE, tree.GT, tree.GE, tree.LT, tree.LE:
+			datum := right.Right.(tree.Datum)
 			i, found := ltuple.SearchSorted(evalCtx, datum)
 
 			switch right.Operator {
-			case parser.NE:
+			case tree.NE:
 				if found {
 					return makeIsNotNull(right.TypedLeft()), nil
 				}
 				return right, nil
 
-			case parser.GT:
+			case tree.GT:
 				if i == 0 {
 					// datum >= ltuple.D[0]
 					if found {
 						// datum == ltuple.D[0]
-						return parser.NewTypedComparisonExpr(
-							parser.GE,
+						return tree.NewTypedComparisonExpr(
+							tree.GE,
 							left.TypedLeft(),
 							datum,
 						), nil
 					}
 					return right, nil
 				}
-			case parser.GE:
+			case tree.GE:
 				if i == 0 {
 					// datum >= ltuple.D[0]
 					return right, nil
 				}
-			case parser.LT:
+			case tree.LT:
 				if i == len(ltuple.D) {
 					// datum > ltuple.D[len(ltuple.D)-1]
 					return right, nil
@@ -1360,14 +1360,14 @@ func simplifyOneOrInExpr(
 					// datum >= ltuple.D[len(ltuple.D)-1]
 					if found {
 						// datum == ltuple.D[len(ltuple.D)-1]
-						return parser.NewTypedComparisonExpr(
-							parser.LE,
+						return tree.NewTypedComparisonExpr(
+							tree.LE,
 							left.TypedLeft(),
 							datum,
 						), nil
 					}
 				}
-			case parser.LE:
+			case tree.LE:
 				if i == len(ltuple.D) ||
 					(i == len(ltuple.D)-1 && ltuple.D[i].Compare(evalCtx, datum) == 0) {
 					// datum >= ltuple.D[len(ltuple.D)-1]
@@ -1375,14 +1375,14 @@ func simplifyOneOrInExpr(
 				}
 			}
 
-		case parser.In:
+		case tree.In:
 			// We keep the tuples for an IN expression in sorted order. So now we
 			// just merge the two sorted lists.
-			merged := mergeSorted(evalCtx, ltuple.D, right.Right.(*parser.DTuple).D)
-			return parser.NewTypedComparisonExpr(
-				parser.In,
+			merged := mergeSorted(evalCtx, ltuple.D, right.Right.(*tree.DTuple).D)
+			return tree.NewTypedComparisonExpr(
+				tree.In,
 				left.TypedLeft(),
-				parser.NewDTuple(merged...).SetSorted(),
+				tree.NewDTuple(merged...).SetSorted(),
 			), nil
 		}
 	}
@@ -1391,38 +1391,38 @@ func simplifyOneOrInExpr(
 }
 
 func simplifyComparisonExpr(
-	evalCtx *parser.EvalContext, n *parser.ComparisonExpr,
-) (parser.TypedExpr, bool) {
+	evalCtx *tree.EvalContext, n *tree.ComparisonExpr,
+) (tree.TypedExpr, bool) {
 	// NormalizeExpr will have left comparisons in the form "<var> <op>
 	// <datum>" unless they could not be simplified further in which case
 	// simplifyExpr cannot handle them. For example, "lower(a) = 'foo'"
 	left, right := n.TypedLeft(), n.TypedRight()
 	if isVar(left) && isDatum(right) {
-		if right == parser.DNull {
+		if right == tree.DNull {
 			switch n.Operator {
-			case parser.IsNotDistinctFrom:
+			case tree.IsNotDistinctFrom:
 				switch left.(type) {
-				case *parser.IndexedVar:
+				case *tree.IndexedVar:
 					// Transform "a IS NOT DISTINCT FROM NULL" into "a IS NULL".
-					return parser.NewTypedComparisonExpr(
-						parser.Is,
+					return tree.NewTypedComparisonExpr(
+						tree.Is,
 						left,
 						right,
 					), true
 				}
-			case parser.IsDistinctFrom:
+			case tree.IsDistinctFrom:
 				switch left.(type) {
-				case *parser.IndexedVar:
+				case *tree.IndexedVar:
 					// Transform "a IS DISTINCT FROM NULL" into "a IS NOT NULL".
-					return parser.NewTypedComparisonExpr(
-						parser.IsNot,
+					return tree.NewTypedComparisonExpr(
+						tree.IsNot,
 						left,
 						right,
 					), true
 				}
-			case parser.Is, parser.IsNot:
+			case tree.Is, tree.IsNot:
 				switch left.(type) {
-				case *parser.IndexedVar:
+				case *tree.IndexedVar:
 					// "a IS {,NOT} NULL" can be used during index selection to restrict
 					// the range of scanned keys.
 					return n, true
@@ -1432,136 +1432,134 @@ func simplifyComparisonExpr(
 				// comparing to NULL they evaluate to NULL (see evalComparisonOp). NULL is
 				// not the same as false, but in the context of a WHERE clause, NULL is
 				// considered not-true which is the same as false.
-				return parser.MakeDBool(false), true
+				return tree.MakeDBool(false), true
 			}
 		}
 
 		switch n.Operator {
-		case parser.EQ:
+		case tree.EQ:
 			// Translate "(a, b) = (1, 2)" to "(a, b) IN ((1, 2))".
 			switch left.(type) {
-			case *parser.Tuple:
-				return parser.NewTypedComparisonExpr(
-					parser.In,
+			case *tree.Tuple:
+				return tree.NewTypedComparisonExpr(
+					tree.In,
 					left,
-					parser.NewDTuple(right.(parser.Datum)).SetSorted(),
+					tree.NewDTuple(right.(tree.Datum)).SetSorted(),
 				), true
 			}
 			return n, true
-		case parser.NE:
+		case tree.NE:
 			// Translate "a != MAX" to "a < MAX" and "a != MIN" to "a > MIN".
 			// These inequalities can be more easily used for index selection.
 			// For datum types with large domains, this isn't particularly
 			// useful. However, for types like BOOL, this is important because
 			// it means we can use an index constraint for queries like
 			// `SELECT * FROM t WHERE b != true`.
-			if right.(parser.Datum).IsMax(evalCtx) {
-				return parser.NewTypedComparisonExpr(
-					parser.LT,
+			if right.(tree.Datum).IsMax(evalCtx) {
+				return tree.NewTypedComparisonExpr(
+					tree.LT,
 					left,
 					right,
 				), true
-			} else if right.(parser.Datum).IsMin(evalCtx) {
-				return parser.NewTypedComparisonExpr(
-					parser.GT,
+			} else if right.(tree.Datum).IsMin(evalCtx) {
+				return tree.NewTypedComparisonExpr(
+					tree.GT,
 					left,
 					right,
 				), true
 			}
 			return n, true
-		case parser.GE, parser.LE:
+		case tree.GE, tree.LE:
 			return n, true
-		case parser.GT:
+		case tree.GT:
 			// This simplification is necessary so that subsequent transformation of
 			// > constraint to >= can use Datum.Next without concern about whether a
 			// next value exists. Note that if the variable (n.Left) is NULL, this
 			// comparison would evaluate to NULL which is equivalent to false for a
 			// boolean expression.
-			if right.(parser.Datum).IsMax(evalCtx) {
-				return parser.MakeDBool(false), true
+			if right.(tree.Datum).IsMax(evalCtx) {
+				return tree.MakeDBool(false), true
 			}
 			return n, true
-		case parser.LT:
+		case tree.LT:
 			// Note that if the variable is NULL, this would evaluate to NULL which
 			// would equivalent to false for a boolean expression.
-			if right.(parser.Datum).IsMin(evalCtx) {
-				return parser.MakeDBool(false), true
+			if right.(tree.Datum).IsMin(evalCtx) {
+				return tree.MakeDBool(false), true
 			}
 			return n, true
-		case parser.In, parser.NotIn:
-			tuple := right.(*parser.DTuple).D
+		case tree.In, tree.NotIn:
+			tuple := right.(*tree.DTuple).D
 			if len(tuple) == 0 {
-				return parser.MakeDBool(false), true
+				return tree.MakeDBool(false), true
 			}
 			return n, true
-		case parser.Like:
+		case tree.Like:
 			// a LIKE 'foo%' -> a >= "foo" AND a < "fop"
-			if s, ok := parser.AsDString(right); ok {
+			if s, ok := tree.AsDString(right); ok {
 				if i := strings.IndexAny(string(s), "_%"); i >= 0 {
 					return makePrefixRange(s[:i], left, false), false
 				}
 				return makePrefixRange(s, left, true), false
 			}
-			// TODO(pmattis): Support parser.DBytes?
-		case parser.SimilarTo:
+			// TODO(pmattis): Support tree.DBytes?
+		case tree.SimilarTo:
 			// a SIMILAR TO "foo.*" -> a >= "foo" AND a < "fop"
-			if s, ok := parser.AsDString(right); ok {
-				pattern := parser.SimilarEscape(string(s))
+			if s, ok := tree.AsDString(right); ok {
+				pattern := tree.SimilarEscape(string(s))
 				if re, err := regexp.Compile(pattern); err == nil {
 					prefix, complete := re.LiteralPrefix()
-					return makePrefixRange(parser.DString(prefix), left, complete), false
+					return makePrefixRange(tree.DString(prefix), left, complete), false
 				}
 			}
-			// TODO(pmattis): Support parser.DBytes?
+			// TODO(pmattis): Support tree.DBytes?
 		}
 	}
-	return parser.MakeDBool(true), false
+	return tree.MakeDBool(true), false
 }
 
 // simplifyBoolVar transforms a boolean IndexedVar into a ComparisonExpr
 // (e.g. WHERE b -> WHERE b = true) This is so index selection only needs
 // to work on ComparisonExprs.
-func simplifyBoolVar(evalCtx *parser.EvalContext, n *parser.IndexedVar) (parser.TypedExpr, bool) {
+func simplifyBoolVar(evalCtx *tree.EvalContext, n *tree.IndexedVar) (tree.TypedExpr, bool) {
 	return simplifyExpr(evalCtx, boolVarToComparison(n))
 }
 
-func boolVarToComparison(n *parser.IndexedVar) parser.TypedExpr {
-	return parser.NewTypedComparisonExpr(
-		parser.EQ,
+func boolVarToComparison(n *tree.IndexedVar) tree.TypedExpr {
+	return tree.NewTypedComparisonExpr(
+		tree.EQ,
 		n,
-		parser.MakeDBool(true),
+		tree.MakeDBool(true),
 	)
 }
 
-func makePrefixRange(
-	prefix parser.DString, datum parser.TypedExpr, complete bool,
-) parser.TypedExpr {
+func makePrefixRange(prefix tree.DString, datum tree.TypedExpr, complete bool) tree.TypedExpr {
 	if complete {
-		return parser.NewTypedComparisonExpr(
-			parser.EQ,
+		return tree.NewTypedComparisonExpr(
+			tree.EQ,
 			datum,
 			&prefix,
 		)
 	}
 	if len(prefix) == 0 {
-		return parser.MakeDBool(true)
+		return tree.MakeDBool(true)
 	}
-	return parser.NewTypedAndExpr(
-		parser.NewTypedComparisonExpr(
-			parser.GE,
+	return tree.NewTypedAndExpr(
+		tree.NewTypedComparisonExpr(
+			tree.GE,
 			datum,
 			&prefix,
 		),
-		parser.NewTypedComparisonExpr(
-			parser.LT,
+		tree.NewTypedComparisonExpr(
+			tree.LT,
 			datum,
-			parser.NewDString(string(roachpb.Key(prefix).PrefixEnd())),
+			tree.NewDString(string(roachpb.Key(prefix).PrefixEnd())),
 		),
 	)
 }
 
-func mergeSorted(evalCtx *parser.EvalContext, a, b parser.Datums) parser.Datums {
-	r := make(parser.Datums, 0, len(a)+len(b))
+func mergeSorted(evalCtx *tree.EvalContext, a, b tree.Datums) tree.Datums {
+	r := make(tree.Datums, 0, len(a)+len(b))
 	for len(a) > 0 || len(b) > 0 {
 		if len(a) == 0 {
 			r = append(r, b...)
@@ -1587,12 +1585,12 @@ func mergeSorted(evalCtx *parser.EvalContext, a, b parser.Datums) parser.Datums 
 	return r
 }
 
-func intersectSorted(evalCtx *parser.EvalContext, a, b parser.Datums) parser.Datums {
+func intersectSorted(evalCtx *tree.EvalContext, a, b tree.Datums) tree.Datums {
 	n := len(a)
 	if n > len(b) {
 		n = len(b)
 	}
-	r := make(parser.Datums, 0, n)
+	r := make(tree.Datums, 0, n)
 	for len(a) > 0 && len(b) > 0 {
 		switch a[0].Compare(evalCtx, b[0]) {
 		case -1:
@@ -1608,28 +1606,28 @@ func intersectSorted(evalCtx *parser.EvalContext, a, b parser.Datums) parser.Dat
 	return r
 }
 
-func remove(a parser.Datums, i int) parser.Datums {
-	r := make(parser.Datums, len(a)-1)
+func remove(a tree.Datums, i int) tree.Datums {
+	r := make(tree.Datums, len(a)-1)
 	copy(r, a[:i])
 	copy(r[i:], a[i+1:])
 	return r
 }
 
-func isDatum(e parser.TypedExpr) bool {
-	_, ok := e.(parser.Datum)
+func isDatum(e tree.TypedExpr) bool {
+	_, ok := e.(tree.Datum)
 	return ok
 }
 
 // isVar returns true if the expression is an ivar or a tuple composed of
 // ivars.
-func isVar(e parser.TypedExpr) bool {
+func isVar(e tree.TypedExpr) bool {
 	switch t := e.(type) {
-	case *parser.IndexedVar:
+	case *tree.IndexedVar:
 		return true
 
-	case *parser.Tuple:
+	case *tree.Tuple:
 		for _, v := range t.Exprs {
-			if !isVar(v.(parser.TypedExpr)) {
+			if !isVar(v.(tree.TypedExpr)) {
 				return false
 			}
 		}
@@ -1642,20 +1640,20 @@ func isVar(e parser.TypedExpr) bool {
 // varEqual returns true if the two expressions are both IndexedVars pointing to
 // the same column or are both tuples composed of IndexedVars pointing at the same
 // columns.
-func varEqual(a, b parser.TypedExpr) bool {
+func varEqual(a, b tree.TypedExpr) bool {
 	switch ta := a.(type) {
-	case *parser.IndexedVar:
+	case *tree.IndexedVar:
 		switch tb := b.(type) {
-		case *parser.IndexedVar:
+		case *tree.IndexedVar:
 			return ta.Idx == tb.Idx
 		}
 
-	case *parser.Tuple:
+	case *tree.Tuple:
 		switch tb := b.(type) {
-		case *parser.Tuple:
+		case *tree.Tuple:
 			if len(ta.Exprs) == len(tb.Exprs) {
 				for i := range ta.Exprs {
-					if !varEqual(ta.Exprs[i].(parser.TypedExpr), tb.Exprs[i].(parser.TypedExpr)) {
+					if !varEqual(ta.Exprs[i].(tree.TypedExpr), tb.Exprs[i].(tree.TypedExpr)) {
 						return false
 					}
 				}
@@ -1667,11 +1665,11 @@ func varEqual(a, b parser.TypedExpr) bool {
 	return false
 }
 
-func makeIsNotNull(left parser.TypedExpr) parser.TypedExpr {
-	return parser.NewTypedComparisonExpr(
-		parser.IsNot,
+func makeIsNotNull(left tree.TypedExpr) tree.TypedExpr {
+	return tree.NewTypedComparisonExpr(
+		tree.IsNot,
 		left,
-		parser.DNull,
+		tree.DNull,
 	)
 }
 
@@ -1685,13 +1683,13 @@ func makeIsNotNull(left parser.TypedExpr) parser.TypedExpr {
 // as a result.
 func (p *planner) analyzeExpr(
 	ctx context.Context,
-	raw parser.Expr,
+	raw tree.Expr,
 	sources multiSourceInfo,
-	iVarHelper parser.IndexedVarHelper,
+	iVarHelper tree.IndexedVarHelper,
 	expectedType types.T,
 	requireType bool,
 	typingContext string,
-) (parser.TypedExpr, error) {
+) (tree.TypedExpr, error) {
 	// Replace the sub-queries.
 	// In all contexts that analyze a single expression, a single value
 	// is expected. Tell this to replaceSubqueries.  (See UPDATE for a
@@ -1703,7 +1701,7 @@ func (p *planner) analyzeExpr(
 	}
 
 	// Perform optional name resolution.
-	var resolved parser.Expr
+	var resolved tree.Expr
 	if sources == nil {
 		resolved = replaced
 	} else {
@@ -1716,12 +1714,12 @@ func (p *planner) analyzeExpr(
 	}
 
 	// Type check.
-	var typedExpr parser.TypedExpr
+	var typedExpr tree.TypedExpr
 	if requireType {
-		typedExpr, err = parser.TypeCheckAndRequire(resolved, &p.semaCtx,
+		typedExpr, err = tree.TypeCheckAndRequire(resolved, &p.semaCtx,
 			expectedType, typingContext)
 	} else {
-		typedExpr, err = parser.TypeCheck(resolved, &p.semaCtx, expectedType)
+		typedExpr, err = tree.TypeCheck(resolved, &p.semaCtx, expectedType)
 	}
 	if err != nil {
 		return nil, err

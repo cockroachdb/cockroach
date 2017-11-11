@@ -24,7 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -76,7 +76,7 @@ func (dc *databaseCache) setID(name string, id sqlbase.ID) {
 	dc.databases[name] = id
 }
 
-func makeDatabaseDesc(p *parser.CreateDatabase) sqlbase.DatabaseDescriptor {
+func makeDatabaseDesc(p *tree.CreateDatabase) sqlbase.DatabaseDescriptor {
 	return sqlbase.DatabaseDescriptor{
 		Name:       string(p.Name),
 		Privileges: sqlbase.NewDefaultPrivilegeDescriptor(),

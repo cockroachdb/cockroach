@@ -20,7 +20,7 @@ import (
 
 	"golang.org/x/net/context"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -48,14 +48,14 @@ func TestDesiredAggregateOrder(t *testing.T) {
 	}
 	p := makeTestPlanner()
 	for _, d := range testData {
-		evalCtx := parser.NewTestingEvalContext()
+		evalCtx := tree.NewTestingEvalContext()
 		defer evalCtx.Stop(context.Background())
 		sel := makeSelectNode(t)
 		expr := parseAndNormalizeExpr(t, &p.evalCtx, d.expr, sel)
 		group := &groupNode{planner: p}
 		render := &renderNode{planner: p}
 		postRender := &renderNode{planner: p}
-		postRender.ivarHelper = parser.MakeIndexedVarHelper(postRender, len(group.funcs))
+		postRender.ivarHelper = tree.MakeIndexedVarHelper(postRender, len(group.funcs))
 		v := extractAggregatesVisitor{
 			ctx:        context.TODO(),
 			groupNode:  group,

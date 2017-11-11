@@ -24,6 +24,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -134,7 +135,7 @@ func (p *planner) selectIndex(
 
 		// Check to see if the filter simplified to a constant.
 		if len(exprs) == 1 && len(exprs[0]) == 1 {
-			if d, ok := exprs[0][0].(*parser.DBool); ok && bool(!*d) {
+			if d, ok := exprs[0][0].(*tree.DBool); ok && bool(!*d) {
 				// The expression simplified to false.
 				return &zeroNode{}, nil
 			}
@@ -234,10 +235,10 @@ func (p *planner) selectIndex(
 		if err != nil {
 			return nil, err
 		}
-		if s.filter == parser.DBoolFalse {
+		if s.filter == tree.DBoolFalse {
 			return &zeroNode{}, nil
 		}
-		if s.filter == parser.DBoolTrue {
+		if s.filter == tree.DBoolTrue {
 			s.filter = nil
 		}
 	}
@@ -267,8 +268,8 @@ func (p *planner) selectIndex(
 }
 
 type indexConstraint struct {
-	start *parser.ComparisonExpr
-	end   *parser.ComparisonExpr
+	start *tree.ComparisonExpr
+	end   *tree.ComparisonExpr
 	// tupleMap is an ordering of the tuples within a tuple comparison such that
 	// they match the ordering within the index. For example, an index on the
 	// columns (a, b) and a tuple comparison "(b, a) = (1, 2)" would have a
@@ -368,7 +369,7 @@ func (v *indexInfo) init(s *scanNode) {
 
 // analyzeExprs examines the range map to determine the cost of using the
 // index.
-func (v *indexInfo) analyzeExprs(evalCtx *parser.EvalContext, exprs []parser.TypedExprs) {
+func (v *indexInfo) analyzeExprs(evalCtx *tree.EvalContext, exprs []tree.TypedExprs) {
 	if err := v.makeOrConstraints(evalCtx, exprs); err != nil {
 		panic(err)
 	}
@@ -453,9 +454,9 @@ func (v *indexInfo) analyzeOrdering(
 // reference to a column or index variable. In this case it returns
 // the index of that column's in the descriptor's []Column array.
 // Used by indexInfo.makeIndexConstraints().
-func getColVarIdx(expr parser.Expr) (ok bool, colIdx int) {
+func getColVarIdx(expr tree.Expr) (ok bool, colIdx int) {
 	switch q := expr.(type) {
-	case *parser.IndexedVar:
+	case *tree.IndexedVar:
 		return true, q.Idx
 	}
 	return false, -1
@@ -464,9 +465,7 @@ func getColVarIdx(expr parser.Expr) (ok bool, colIdx int) {
 // makeOrConstraints populates the indexInfo.constraints field based on the
 // analyzed expressions. Each element of constraints corresponds to one
 // of the top-level disjunctions and is generated using makeIndexConstraint.
-func (v *indexInfo) makeOrConstraints(
-	evalCtx *parser.EvalContext, orExprs []parser.TypedExprs,
-) error {
+func (v *indexInfo) makeOrConstraints(evalCtx *tree.EvalContext, orExprs []tree.TypedExprs) error {
 	constraints := make(orIndexConstraints, len(orExprs))
 	for i, e := range orExprs {
 		var err error
@@ -527,7 +526,7 @@ func (v *indexInfo) makeOrConstraints(
 // simplify to "a < 1 OR a >= 2" which is also the same as "a != 1", but not so
 // obvious based on comparisons of the constants.
 func (v *indexInfo) makeIndexConstraints(
-	evalCtx *parser.EvalContext, andExprs parser.TypedExprs,
+	evalCtx *tree.EvalContext, andExprs tree.TypedExprs,
 ) (indexConstraints, error) {
 	var constraints indexConstraints
 
@@ -564,7 +563,7 @@ func (v *indexInfo) makeIndexConstraints(
 
 	exprLoop:
 		for _, e := range andExprs {
-			if c, ok := e.(*parser.ComparisonExpr); ok {
+			if c, ok := e.(*tree.ComparisonExpr); ok {
 				var tupleMap []int
 
 				if ok, colIdx := getColVarIdx(c.Left); ok && v.desc.Columns[colIdx].ID != colID {
@@ -573,11 +572,11 @@ func (v *indexInfo) makeIndexConstraints(
 					continue
 				}
 
-				if _, ok := c.Right.(parser.Datum); !ok {
+				if _, ok := c.Right.(tree.Datum); !ok {
 					continue
 				}
 
-				if t, ok := c.Left.(*parser.Tuple); ok {
+				if t, ok := c.Left.(*tree.Tuple); ok {
 					// If we have a tuple comparison we need to rearrange the comparison
 					// so that the order of the columns in the tuple matches the order in
 					// the index. For example, for an index on (a, b), the tuple
@@ -605,7 +604,7 @@ func (v *indexInfo) makeIndexConstraints(
 					}
 					// Skip all the next columns covered by this tuple.
 					i += (len(tupleMap) - 1)
-					if c.Operator != parser.In {
+					if c.Operator != tree.In {
 						// Make sure all columns specified in the tuple are in the index.
 						// TODO(mjibson): support prefixes: (a,b,c) > (1,2,3) -> (a,b) >= (1,2)
 						if len(t.Exprs) > len(tupleMap) {
@@ -634,7 +633,7 @@ func (v *indexInfo) makeIndexConstraints(
 				preStart := *startExpr
 				preEnd := *endExpr
 				switch c.Operator {
-				case parser.EQ:
+				case tree.EQ:
 					// An equality constraint will overwrite any other type
 					// of constraint.
 					if !*startDone {
@@ -643,7 +642,7 @@ func (v *indexInfo) makeIndexConstraints(
 					if !*endDone {
 						*endExpr = c
 					}
-				case parser.NE:
+				case tree.NE:
 					// We rewrite "a != x" to "a IS NOT NULL", since this is all that
 					// makeSpans() cares about.
 					// We don't simplify "a != x" to "a IS NOT NULL" in
@@ -651,84 +650,84 @@ func (v *indexInfo) makeIndexConstraints(
 					if *startDone || *startExpr != nil {
 						continue
 					}
-					*startExpr = parser.NewTypedComparisonExpr(
-						parser.IsNot,
+					*startExpr = tree.NewTypedComparisonExpr(
+						tree.IsNot,
 						c.TypedLeft(),
-						parser.DNull,
+						tree.DNull,
 					)
-				case parser.In:
+				case tree.In:
 					// Only allow the IN constraint if the previous constraints are all
 					// EQ. This is necessary to prevent overlapping spans from being
 					// generated. Consider the constraints [a >= 1, a <= 2, b IN (1,
 					// 2)]. This would turn into the spans /1/1-/3/2 and /1/2-/3/3.
 					ok := true
 					for _, c := range constraints {
-						ok = ok && (c.start == c.end) && (c.start.Operator == parser.EQ)
+						ok = ok && (c.start == c.end) && (c.start.Operator == tree.EQ)
 					}
 					if !ok {
 						continue
 					}
 
-					if !*startDone && (*startExpr == nil || (*startExpr).Operator != parser.EQ) {
+					if !*startDone && (*startExpr == nil || (*startExpr).Operator != tree.EQ) {
 						*startExpr = c
 					}
-					if !*endDone && (*endExpr == nil || (*endExpr).Operator != parser.EQ) {
+					if !*endDone && (*endExpr == nil || (*endExpr).Operator != tree.EQ) {
 						*endExpr = c
 					}
-				case parser.GE:
+				case tree.GE:
 					if !*startDone && *startExpr == nil {
 						*startExpr = c
 					}
-				case parser.GT:
+				case tree.GT:
 					// Transform ">" into ">=".
 					if *startDone || (*startExpr != nil) {
 						continue
 					}
-					if c.Right.(parser.Datum).IsMax(evalCtx) {
-						*startExpr = parser.NewTypedComparisonExpr(
-							parser.EQ,
+					if c.Right.(tree.Datum).IsMax(evalCtx) {
+						*startExpr = tree.NewTypedComparisonExpr(
+							tree.EQ,
 							c.TypedLeft(),
 							c.TypedRight(),
 						)
-					} else if nextRightVal, hasNext := c.Right.(parser.Datum).Next(evalCtx); hasNext {
-						*startExpr = parser.NewTypedComparisonExpr(
-							parser.GE,
+					} else if nextRightVal, hasNext := c.Right.(tree.Datum).Next(evalCtx); hasNext {
+						*startExpr = tree.NewTypedComparisonExpr(
+							tree.GE,
 							c.TypedLeft(),
 							nextRightVal,
 						)
 					} else {
 						*startExpr = c
 					}
-				case parser.LT:
+				case tree.LT:
 					if *endDone || (*endExpr != nil) {
 						continue
 					}
 					// Transform "<" into "<=".
-					if c.Right.(parser.Datum).IsMin(evalCtx) {
-						*endExpr = parser.NewTypedComparisonExpr(
-							parser.EQ,
+					if c.Right.(tree.Datum).IsMin(evalCtx) {
+						*endExpr = tree.NewTypedComparisonExpr(
+							tree.EQ,
 							c.TypedLeft(),
 							c.TypedRight(),
 						)
-					} else if prevRightVal, hasPrev := c.Right.(parser.Datum).Prev(evalCtx); hasPrev {
-						*endExpr = parser.NewTypedComparisonExpr(
-							parser.LE,
+					} else if prevRightVal, hasPrev := c.Right.(tree.Datum).Prev(evalCtx); hasPrev {
+						*endExpr = tree.NewTypedComparisonExpr(
+							tree.LE,
 							c.TypedLeft(),
 							prevRightVal,
 						)
 					} else {
 						*endExpr = c
 					}
-				case parser.LE:
+				case tree.LE:
 					if !*endDone && *endExpr == nil {
 						*endExpr = c
 					}
-				case parser.Is:
-					if c.Right == parser.DNull && !*endDone {
+				case tree.Is:
+					if c.Right == tree.DNull && !*endDone {
 						*endExpr = c
 					}
-				case parser.IsNot:
-					if c.Right == parser.DNull && !*startDone && (*startExpr == nil) {
+				case tree.IsNot:
+					if c.Right == tree.DNull && !*startDone && (*startExpr == nil) {
 						*startExpr = c
 					}
 				}
@@ -749,24 +748,24 @@ func (v *indexInfo) makeIndexConstraints(
 			}
 		}
 
-		if *endExpr != nil && (*endExpr).Operator == parser.LT {
+		if *endExpr != nil && (*endExpr).Operator == tree.LT {
 			*endDone = true
 		}
 
 		if !*startDone && *startExpr == nil {
 			// Add an IS NOT NULL constraint if there's an end constraint.
 			if (*endExpr != nil) &&
-				!((*endExpr).Operator == parser.Is && (*endExpr).Right == parser.DNull) {
-				*startExpr = parser.NewTypedComparisonExpr(
-					parser.IsNot,
+				!((*endExpr).Operator == tree.Is && (*endExpr).Right == tree.DNull) {
+				*startExpr = tree.NewTypedComparisonExpr(
+					tree.IsNot,
 					(*endExpr).TypedLeft(),
-					parser.DNull,
+					tree.DNull,
 				)
 			}
 		}
 
 		if (*startExpr == nil) ||
-			(((*startExpr).Operator == parser.IsNot) && ((*startExpr).Right == parser.DNull)) {
+			(((*startExpr).Operator == tree.IsNot) && ((*startExpr).Right == tree.DNull)) {
 			// There's no point in allowing future start constraints after an IS NOT NULL
 			// one; since NOT NULL is not actually a value present in an index,
 			// values encoded after an NOT NULL don't matter.
@@ -828,104 +827,104 @@ func (v indexInfoByCost) Sort() {
 	sort.Sort(v)
 }
 
-func encodeStartConstraintAscending(c *parser.ComparisonExpr) logicalKeyPart {
+func encodeStartConstraintAscending(c *tree.ComparisonExpr) logicalKeyPart {
 	switch c.Operator {
-	case parser.IsNot:
+	case tree.IsNot:
 		// A IS NOT NULL expression allows us to constrain the start of
 		// the range to not include NULL.
-		if c.Right != parser.DNull {
+		if c.Right != tree.DNull {
 			panic(fmt.Sprintf("expected NULL operand for IS NOT operator, found %v", c.Right))
 		}
 		return logicalKeyPart{
-			val:       parser.DNull,
+			val:       tree.DNull,
 			dir:       encoding.Ascending,
 			inclusive: false,
 		}
-	case parser.NE:
+	case tree.NE:
 		panic("'!=' operators should have been transformed to 'IS NOT NULL'")
-	case parser.GE, parser.EQ, parser.GT:
+	case tree.GE, tree.EQ, tree.GT:
 		return logicalKeyPart{
-			val:       c.Right.(parser.Datum),
+			val:       c.Right.(tree.Datum),
 			dir:       encoding.Ascending,
-			inclusive: c.Operator != parser.GT,
+			inclusive: c.Operator != tree.GT,
 		}
 	default:
 		panic(fmt.Sprintf("unexpected operator: %s", c))
 	}
 }
 
-func encodeStartConstraintDescending(c *parser.ComparisonExpr) logicalKeyPart {
+func encodeStartConstraintDescending(c *tree.ComparisonExpr) logicalKeyPart {
 	switch c.Operator {
-	case parser.Is:
+	case tree.Is:
 		// An IS NULL expressions allows us to constrain the start of the range
 		// to begin at NULL.
-		if c.Right != parser.DNull {
+		if c.Right != tree.DNull {
 			panic(fmt.Sprintf("expected NULL operand for IS operator, found %v", c.Right))
 		}
 		return logicalKeyPart{
-			val:       parser.DNull,
+			val:       tree.DNull,
 			dir:       encoding.Descending,
 			inclusive: true,
 		}
-	case parser.NE:
+	case tree.NE:
 		panic("'!=' operators should have been transformed to 'IS NOT NULL'")
-	case parser.LE, parser.EQ, parser.LT:
+	case tree.LE, tree.EQ, tree.LT:
 		return logicalKeyPart{
-			val:       c.Right.(parser.Datum),
+			val:       c.Right.(tree.Datum),
 			dir:       encoding.Descending,
-			inclusive: c.Operator != parser.LT,
+			inclusive: c.Operator != tree.LT,
 		}
 	default:
 		panic(fmt.Sprintf("unexpected operator: %s", c))
 	}
 }
 
-func encodeEndConstraintAscending(c *parser.ComparisonExpr) logicalKeyPart {
+func encodeEndConstraintAscending(c *tree.ComparisonExpr) logicalKeyPart {
 	switch c.Operator {
-	case parser.Is:
+	case tree.Is:
 		// An IS NULL expressions allows us to constrain the end of the range
 		// to stop at NULL.
-		if c.Right != parser.DNull {
+		if c.Right != tree.DNull {
 			panic(fmt.Sprintf("expected NULL operand for IS operator, found %v", c.Right))
 		}
 		return logicalKeyPart{
-			val:       parser.DNull,
+			val:       tree.DNull,
 			dir:       encoding.Ascending,
 			inclusive: true,
 		}
-	case parser.NE:
+	case tree.NE:
 		panic("'!=' operators should have been transformed to 'IS NOT NULL'")
-	case parser.LE, parser.EQ, parser.LT:
+	case tree.LE, tree.EQ, tree.LT:
 		return logicalKeyPart{
-			val:       c.Right.(parser.Datum),
+			val:       c.Right.(tree.Datum),
 			dir:       encoding.Ascending,
-			inclusive: c.Operator != parser.LT,
+			inclusive: c.Operator != tree.LT,
 		}
 	default:
 		panic(fmt.Sprintf("unexpected operator: %s", c))
 	}
 }
 
-func encodeEndConstraintDescending(c *parser.ComparisonExpr) logicalKeyPart {
+func encodeEndConstraintDescending(c *tree.ComparisonExpr) logicalKeyPart {
 	switch c.Operator {
-	case parser.IsNot:
+	case tree.IsNot:
 		// An IS NOT NULL expressions allows us to constrain the end of the range
 		// to stop at NULL.
-		if c.Right != parser.DNull {
+		if c.Right != tree.DNull {
 			panic(fmt.Sprintf("expected NULL operand for IS NOT operator, found %v", c.Right))
 		}
 		return logicalKeyPart{
-			val:       parser.DNull,
+			val:       tree.DNull,
 			dir:       encoding.Descending,
 			inclusive: false,
 		}
-	case parser.NE:
+	case tree.NE:
 		panic("'!=' operators should have been transformed to 'IS NOT NULL'")
-	case parser.GE, parser.EQ, parser.GT:
+	case tree.GE, tree.EQ, tree.GT:
 		return logicalKeyPart{
-			val:       c.Right.(parser.Datum),
+			val:       c.Right.(tree.Datum),
 			dir:       encoding.Descending,
-			inclusive: c.Operator != parser.GT,
+			inclusive: c.Operator != tree.GT,
 		}
 	default:
 		panic(fmt.Sprintf("unexpected operator: %s", c))
@@ -942,16 +941,16 @@ func encodeEndConstraintDescending(c *parser.ComparisonExpr) logicalKeyPart {
 func applyInConstraint(
 	spans []logicalSpan, c indexConstraint, firstCol int, index *sqlbase.IndexDescriptor,
 ) ([]logicalSpan, error) {
-	var e *parser.ComparisonExpr
+	var e *tree.ComparisonExpr
 	// It might be that the IN constraint is a start constraint, an
 	// end constraint, or both, depending on how whether we had
 	// start and end constraints for all the previous index cols.
-	if c.start != nil && c.start.Operator == parser.In {
+	if c.start != nil && c.start.Operator == tree.In {
 		e = c.start
 	} else {
 		e = c.end
 	}
-	tuple := e.Right.(*parser.DTuple).D
+	tuple := e.Right.(*tree.DTuple).D
 	existingSpans := spans
 	spans = make([]logicalSpan, 0, len(existingSpans)*len(tuple))
 	for _, datum := range tuple {
@@ -959,7 +958,7 @@ func applyInConstraint(
 		// tuple.
 		var parts []logicalKeyPart
 		switch t := datum.(type) {
-		case *parser.DTuple:
+		case *tree.DTuple:
 			// The constraint is a tuple of tuples, meaning something like
 			// (...) IN ((1,2),(3,4)).
 			for j, tupleIdx := range c.tupleMap {
@@ -1024,7 +1023,7 @@ func (a spanEvents) Less(i, j int) bool {
 // merging the spans for the disjunctions (top-level OR branches). The resulting
 // spans are non-overlapping and ordered.
 func makeSpans(
-	evalCtx *parser.EvalContext,
+	evalCtx *tree.EvalContext,
 	constraints orIndexConstraints,
 	tableDesc *sqlbase.TableDescriptor,
 	index *sqlbase.IndexDescriptor,
@@ -1056,13 +1055,13 @@ type logicalSpan struct {
 }
 
 type logicalKeyPart struct {
-	val       parser.Datum
+	val       tree.Datum
 	dir       encoding.Direction
 	inclusive bool
 }
 
 func spansFromLogicalSpans(
-	evalCtx *parser.EvalContext,
+	evalCtx *tree.EvalContext,
 	logicalSpans []logicalSpan,
 	tableDesc *sqlbase.TableDescriptor,
 	index *sqlbase.IndexDescriptor,
@@ -1103,7 +1102,7 @@ func spansFromLogicalSpans(
 // interstices[i] is inserted right before the ith key part. The last element of
 // interstices is inserted at the end (if all key parts are present).
 func spanFromLogicalSpan(
-	evalCtx *parser.EvalContext, ls logicalSpan, interstices [][]byte,
+	evalCtx *tree.EvalContext, ls logicalSpan, interstices [][]byte,
 ) (roachpb.Span, error) {
 	var s roachpb.Span
 	for i := 0; ; i++ {
@@ -1122,7 +1121,7 @@ func spanFromLogicalSpan(
 				return roachpb.Span{}, errors.New("exclusive start constraint must be last")
 			}
 			// NotNull is already exclusive.
-			if part.val != parser.DNull {
+			if part.val != tree.DNull {
 				s.Key = s.Key.PrefixEnd()
 			}
 			break
@@ -1165,9 +1164,9 @@ func spanFromLogicalSpan(
 }
 
 func encodeLogicalKeyPart(
-	evalCtx *parser.EvalContext, b []byte, part logicalKeyPart,
+	evalCtx *tree.EvalContext, b []byte, part logicalKeyPart,
 ) ([]byte, error) {
-	if part.val == parser.DNull && !part.inclusive {
+	if part.val == tree.DNull && !part.inclusive {
 		if part.dir == encoding.Ascending {
 			return encoding.EncodeNotNullAscending(b), nil
 		}
@@ -1181,8 +1180,8 @@ func encodeLogicalKeyPart(
 }
 
 func nextInDirection(
-	evalCtx *parser.EvalContext, val parser.Datum, dir encoding.Direction,
-) (parser.Datum, bool) {
+	evalCtx *tree.EvalContext, val tree.Datum, dir encoding.Direction,
+) (tree.Datum, bool) {
 	if dir == encoding.Ascending {
 		if val.IsMax(evalCtx) {
 			return nil, false
@@ -1257,8 +1256,8 @@ func makeLogicalSpansForIndexConstraints(
 	colIdx := 0
 	for _, c := range constraints {
 		// IN is handled separately.
-		if (c.start != nil && c.start.Operator == parser.In) ||
-			(c.end != nil && c.end.Operator == parser.In) {
+		if (c.start != nil && c.start.Operator == tree.In) ||
+			(c.end != nil && c.end.Operator == tree.In) {
 			var err error
 			resultSpans, err = applyInConstraint(resultSpans, c, colIdx, index)
 			if err != nil {
@@ -1309,16 +1308,16 @@ func (ic indexConstraints) exactPrefix() int {
 			return prefix
 		}
 		switch c.start.Operator {
-		case parser.EQ:
+		case tree.EQ:
 			prefix++
-		case parser.In:
-			if tuple, ok := c.start.Right.(*parser.DTuple); !ok || len(tuple.D) != 1 {
+		case tree.In:
+			if tuple, ok := c.start.Right.(*tree.DTuple); !ok || len(tuple.D) != 1 {
 				// TODO(radu): we may still have an exact prefix if the first
 				// value in each tuple is the same, e.g.
 				// `(a, b) IN ((1, 2), (1, 3))`
 				return prefix
 			}
-			if _, ok := c.start.Left.(*parser.Tuple); ok {
+			if _, ok := c.start.Left.(*tree.Tuple); ok {
 				prefix += len(c.tupleMap)
 			} else {
 				prefix++
@@ -1333,23 +1332,23 @@ func (ic indexConstraints) exactPrefix() int {
 
 // exactPrefixDatums returns the first num exact prefix values as Datums; num
 // must be at most ic.exactPrefix()
-func (ic indexConstraints) exactPrefixDatums(num int) []parser.Datum {
+func (ic indexConstraints) exactPrefixDatums(num int) []tree.Datum {
 	if num == 0 {
 		return nil
 	}
-	datums := make([]parser.Datum, 0, num)
+	datums := make([]tree.Datum, 0, num)
 	for _, c := range ic {
 		if c.start == nil || c.end == nil || c.start != c.end {
 			break
 		}
 		switch c.start.Operator {
-		case parser.EQ:
-			datums = append(datums, c.start.Right.(parser.Datum))
-		case parser.In:
-			right := c.start.Right.(*parser.DTuple).D[0]
-			if _, ok := c.start.Left.(*parser.Tuple); ok {
+		case tree.EQ:
+			datums = append(datums, c.start.Right.(tree.Datum))
+		case tree.In:
+			right := c.start.Right.(*tree.DTuple).D[0]
+			if _, ok := c.start.Left.(*tree.Tuple); ok {
 				// We have something like `(a,b,c) IN (1,2,3)`
-				rtuple := right.(*parser.DTuple)
+				rtuple := right.(*tree.DTuple)
 				for _, tupleIdx := range c.tupleMap {
 					datums = append(datums, rtuple.D[tupleIdx])
 					if len(datums) == num {
@@ -1383,7 +1382,7 @@ func (ic indexConstraints) exactPrefixDatums(num int) []parser.Datum {
 //    |  (a, b) = (1, 2) OR a = 1                  |      1      |
 //    |  (a, b) = (1, 2) OR a = 2                  |      0      |
 //    |----------------------------------------------------------|
-func (oic orIndexConstraints) exactPrefix(evalCtx *parser.EvalContext) int {
+func (oic orIndexConstraints) exactPrefix(evalCtx *tree.EvalContext) int {
 	if len(oic) == 0 {
 		return 0
 	}
@@ -1430,25 +1429,25 @@ func (oic orIndexConstraints) exactPrefix(evalCtx *parser.EvalContext) int {
 //
 // Note that applyConstraints currently only handles simple cases.
 func applyIndexConstraints(
-	evalCtx *parser.EvalContext, typedExpr parser.TypedExpr, constraints orIndexConstraints,
-) parser.TypedExpr {
+	evalCtx *tree.EvalContext, typedExpr tree.TypedExpr, constraints orIndexConstraints,
+) tree.TypedExpr {
 	if len(constraints) != 1 {
 		// We only support simplifying the expressions if there aren't multiple
 		// disjunctions (top-level OR branches).
 		return typedExpr
 	}
 	v := &applyConstraintsVisitor{evalCtx: evalCtx}
-	expr := typedExpr.(parser.Expr)
+	expr := typedExpr.(tree.Expr)
 	for _, c := range constraints[0] {
 		// Apply the start constraint.
 		v.constraints = expandConstraint(v.constraints, c.start, c.tupleMap)
-		expr, _ = parser.WalkExpr(v, expr)
+		expr, _ = tree.WalkExpr(v, expr)
 
 		if c.start != c.end {
 			// If there is a range (x >= 3 AND x <= 10), apply the
 			// end-of-range constraint as well.
 			v.constraints = expandConstraint(v.constraints, c.end, c.tupleMap)
-			expr, _ = parser.WalkExpr(v, expr)
+			expr, _ = tree.WalkExpr(v, expr)
 		}
 
 		// We can only continue to apply the constraints if the constraints we have
@@ -1457,21 +1456,21 @@ func applyIndexConstraints(
 		if c.start == c.end {
 			// The first is that both the start and end constraints are
 			// equality.
-			if c.start.Operator == parser.EQ {
+			if c.start.Operator == tree.EQ {
 				continue
 			}
 			// The second case is that both the start and end constraint are an IN
 			// operator with only a single value.
-			if c.start.Operator == parser.In && len(c.start.Right.(*parser.DTuple).D) == 1 {
+			if c.start.Operator == tree.In && len(c.start.Right.(*tree.DTuple).D) == 1 {
 				continue
 			}
 		}
 		break
 	}
-	if expr == parser.DBoolTrue {
+	if expr == tree.DBoolTrue {
 		return nil
 	}
-	return expr.(parser.TypedExpr)
+	return expr.(tree.TypedExpr)
 }
 
 // expandConstraint transforms a potentially complex constraint
@@ -1485,49 +1484,49 @@ func applyIndexConstraints(
 //                           of the tuple (a,b,c) that was matched by the index.
 // - (a,b,c) IS TRUE, (a,b,c) IS NULL, etc -> constraint ignored
 func expandConstraint(
-	a []*parser.ComparisonExpr, c *parser.ComparisonExpr, tupleMap []int,
-) []*parser.ComparisonExpr {
+	a []*tree.ComparisonExpr, c *tree.ComparisonExpr, tupleMap []int,
+) []*tree.ComparisonExpr {
 	if c == nil {
 		return a
 	}
-	if vars, ok := c.Left.(*parser.Tuple); ok {
-		if c.Operator == parser.Is || c.Operator == parser.IsNot {
+	if vars, ok := c.Left.(*tree.Tuple); ok {
+		if c.Operator == tree.Is || c.Operator == tree.IsNot {
 			// The syntax <tuple> IS <val> or <tuple> IS NOT <val> is
 			// always false.
 			return a
 		}
-		vals := *c.Right.(*parser.DTuple)
+		vals := *c.Right.(*tree.DTuple)
 
 		switch c.Operator {
-		case parser.NE, parser.EQ:
+		case tree.NE, tree.EQ:
 			// (a,b,c) != (x,y,z)  ->  [a!=x, b!=y, c!=z]
 			// (a,b,c) = (x,y,z)   ->  [a=x, b=y, c=z]
 			for i, v := range vars.Exprs {
-				a = append(a, &parser.ComparisonExpr{Operator: c.Operator, Left: v, Right: vals.D[i]})
+				a = append(a, &tree.ComparisonExpr{Operator: c.Operator, Left: v, Right: vals.D[i]})
 			}
 
-		case parser.LT:
+		case tree.LT:
 			// (a,b,c) < (x,y,z)  -> [a<=x]
 			a = append(a,
-				&parser.ComparisonExpr{Operator: parser.LE, Left: vars.Exprs[0], Right: vals.D[0]})
-		case parser.GT:
+				&tree.ComparisonExpr{Operator: tree.LE, Left: vars.Exprs[0], Right: vals.D[0]})
+		case tree.GT:
 			// (a,b,c) > (x,y,z)  -> [a>=x]
 			a = append(a,
-				&parser.ComparisonExpr{Operator: parser.GE, Left: vars.Exprs[0], Right: vals.D[0]})
-		case parser.LE, parser.GE:
+				&tree.ComparisonExpr{Operator: tree.GE, Left: vars.Exprs[0], Right: vals.D[0]})
+		case tree.LE, tree.GE:
 			// (a,b,c) <= (x,y,z)  -> [a<=x]
 			a = append(a,
-				&parser.ComparisonExpr{Operator: c.Operator, Left: vars.Exprs[0], Right: vals.D[0]})
+				&tree.ComparisonExpr{Operator: c.Operator, Left: vars.Exprs[0], Right: vals.D[0]})
 
-		case parser.In:
+		case tree.In:
 			// (a,b,c) IN ((x,y,z)) -> [a=x, b=y, c=z]
 			// But beware of which part of the tuple has been matched by the index.
 			if len(vals.D) == 1 {
-				if oneTuplep, ok := vals.D[0].(*parser.DTuple); ok {
+				if oneTuplep, ok := vals.D[0].(*tree.DTuple); ok {
 					oneTuple := *oneTuplep
 					for i := range tupleMap {
 						a = append(a,
-							&parser.ComparisonExpr{Operator: parser.EQ, Left: vars.Exprs[i], Right: oneTuple.D[i]})
+							&tree.ComparisonExpr{Operator: tree.EQ, Left: vars.Exprs[i], Right: oneTuple.D[i]})
 					}
 				}
 			}
@@ -1539,21 +1538,21 @@ func expandConstraint(
 }
 
 type applyConstraintsVisitor struct {
-	evalCtx     *parser.EvalContext
-	constraints []*parser.ComparisonExpr
+	evalCtx     *tree.EvalContext
+	constraints []*tree.ComparisonExpr
 }
 
-func (v *applyConstraintsVisitor) VisitPre(expr parser.Expr) (recurse bool, newExpr parser.Expr) {
-	if t, ok := expr.(*parser.ComparisonExpr); ok {
+func (v *applyConstraintsVisitor) VisitPre(expr tree.Expr) (recurse bool, newExpr tree.Expr) {
+	if t, ok := expr.(*tree.ComparisonExpr); ok {
 
 		// If looking at an expression of the form (a,b,c) IN ((x,y,z)), decompose it.
-		if tLeft, ok2 := t.Left.(*parser.Tuple); ok2 {
-			if tRight, ok3 := t.Right.(*parser.DTuple); ok3 && len(tRight.D) == 1 {
-				if vRight, ok4 := tRight.D[0].(*parser.DTuple); ok4 {
-					andExprs := make([]parser.TypedExpr, len(vRight.D))
+		if tLeft, ok2 := t.Left.(*tree.Tuple); ok2 {
+			if tRight, ok3 := t.Right.(*tree.DTuple); ok3 && len(tRight.D) == 1 {
+				if vRight, ok4 := tRight.D[0].(*tree.DTuple); ok4 {
+					andExprs := make([]tree.TypedExpr, len(vRight.D))
 					for i, v := range tLeft.Exprs {
-						tv := v.(parser.TypedExpr)
-						andExprs[i] = parser.NewTypedComparisonExpr(parser.EQ, tv, vRight.D[i])
+						tv := v.(tree.TypedExpr)
+						andExprs[i] = tree.NewTypedComparisonExpr(tree.EQ, tv, vRight.D[i])
 					}
 					return true, joinAndExprs(andExprs)
 				}
@@ -1562,7 +1561,7 @@ func (v *applyConstraintsVisitor) VisitPre(expr parser.Expr) (recurse bool, newE
 
 		for _, c := range v.constraints {
 			expr = applyConstraint(v.evalCtx, t, c)
-			t, ok = expr.(*parser.ComparisonExpr)
+			t, ok = expr.(*tree.ComparisonExpr)
 			if !ok {
 				break
 			}
@@ -1571,14 +1570,14 @@ func (v *applyConstraintsVisitor) VisitPre(expr parser.Expr) (recurse bool, newE
 	return true, expr
 }
 
-func (v *applyConstraintsVisitor) VisitPost(expr parser.Expr) parser.Expr {
+func (v *applyConstraintsVisitor) VisitPost(expr tree.Expr) tree.Expr {
 	switch t := expr.(type) {
-	case *parser.AndExpr:
-		if t.Left == parser.DBoolTrue && t.Right == parser.DBoolTrue {
-			return parser.DBoolTrue
-		} else if t.Left == parser.DBoolTrue {
+	case *tree.AndExpr:
+		if t.Left == tree.DBoolTrue && t.Right == tree.DBoolTrue {
+			return tree.DBoolTrue
+		} else if t.Left == tree.DBoolTrue {
 			return t.Right
-		} else if t.Right == parser.DBoolTrue {
+		} else if t.Right == tree.DBoolTrue {
 			return t.Left
 		}
 	}
@@ -1589,49 +1588,49 @@ func (v *applyConstraintsVisitor) VisitPost(expr parser.Expr) parser.Expr {
 // assuming that the expression c on the right (the constraint) is
 // true.
 func applyConstraint(
-	evalCtx *parser.EvalContext, t *parser.ComparisonExpr, c *parser.ComparisonExpr,
-) parser.Expr {
+	evalCtx *tree.EvalContext, t *tree.ComparisonExpr, c *tree.ComparisonExpr,
+) tree.Expr {
 	// Check that both expressions have the same variable on the left.
 	// It is always true for the constraint, and
 	// simplifyExpr() has ensured this is true in most sub-expressions of t.
-	varLeft := c.Left.(*parser.IndexedVar)
-	if varRight, ok := t.Left.(*parser.IndexedVar); !ok || varLeft.Idx != varRight.Idx {
+	varLeft := c.Left.(*tree.IndexedVar)
+	if varRight, ok := t.Left.(*tree.IndexedVar); !ok || varLeft.Idx != varRight.Idx {
 		return t
 	}
 
 	// applyConstraint() is only defined over comparisons that
 	// have a Datum on the right side.
-	datum, ok := t.Right.(parser.Datum)
+	datum, ok := t.Right.(tree.Datum)
 	if !ok {
 		return t
 	}
-	cdatum := c.Right.(parser.Datum)
+	cdatum := c.Right.(tree.Datum)
 
 	switch c.Operator {
-	case parser.IsNot:
-		if cdatum == parser.DNull {
+	case tree.IsNot:
+		if cdatum == tree.DNull {
 			switch t.Operator {
-			case parser.Is:
-				return parser.MakeDBool(datum != parser.DNull)
-			case parser.IsNot:
-				return parser.MakeDBool(datum == parser.DNull)
+			case tree.Is:
+				return tree.MakeDBool(datum != tree.DNull)
+			case tree.IsNot:
+				return tree.MakeDBool(datum == tree.DNull)
 			}
 		} else {
-			return applyConstraintFlat(evalCtx, t, datum, parser.NE, cdatum)
+			return applyConstraintFlat(evalCtx, t, datum, tree.NE, cdatum)
 		}
-	case parser.Is:
-		if cdatum == parser.DNull {
+	case tree.Is:
+		if cdatum == tree.DNull {
 			switch t.Operator {
-			case parser.Is:
-				return parser.MakeDBool(datum == parser.DNull)
-			case parser.IsNot:
-				return parser.MakeDBool(datum != parser.DNull)
+			case tree.Is:
+				return tree.MakeDBool(datum == tree.DNull)
+			case tree.IsNot:
+				return tree.MakeDBool(datum != tree.DNull)
 			default:
 				// A NULL var compared to anything is always false.
-				return parser.DBoolFalse
+				return tree.DBoolFalse
 			}
 		} else {
-			return applyConstraintFlat(evalCtx, t, datum, parser.EQ, cdatum)
+			return applyConstraintFlat(evalCtx, t, datum, tree.EQ, cdatum)
 		}
 	default:
 		return applyConstraintFlat(evalCtx, t, datum, c.Operator, cdatum)
@@ -1644,16 +1643,16 @@ func applyConstraint(
 // [x OP datum] assuming that the expression [x cOp cdatum] (the
 // constraint) is true.
 func applyConstraintFlat(
-	evalCtx *parser.EvalContext,
-	t *parser.ComparisonExpr,
-	datum parser.Datum,
-	cOp parser.ComparisonOperator,
-	cdatum parser.Datum,
-) parser.Expr {
+	evalCtx *tree.EvalContext,
+	t *tree.ComparisonExpr,
+	datum tree.Datum,
+	cOp tree.ComparisonOperator,
+	cdatum tree.Datum,
+) tree.Expr {
 	// Special casing: expression queries IS NULL or IS NOT NULL.
-	if (t.Operator == parser.Is || t.Operator == parser.IsNot) && datum == parser.DNull {
+	if (t.Operator == tree.Is || t.Operator == tree.IsNot) && datum == tree.DNull {
 		switch cOp {
-		case parser.EQ, parser.GE, parser.GT, parser.IN:
+		case tree.EQ, tree.GE, tree.GT, parser.IN:
 			// If the constraint says the value is equal to something, it
 			// cannot be NULL.
 			// If the constraint says the value is greater to something, it
@@ -1661,20 +1660,20 @@ func applyConstraintFlat(
 			// If the constraint says the value is smaller than something,
 			// then we don't know, because NULL is smaller than everything
 			// else too.
-			// That's why the cases for parser.LE and parser.LT are missing
+			// That's why the cases for tree.LE and tree.LT are missing
 			// above.
 			// This may need to be revisited once NULL
 			// ordering becomes configurable.
-			return parser.MakeDBool(t.Operator == parser.IsNot)
+			return tree.MakeDBool(t.Operator == tree.IsNot)
 		}
 		return t
 	}
 
 	// Additional special casing.
 	switch t.Operator {
-	case parser.LE, parser.LT, parser.GE,
-		parser.GT, parser.NE, parser.IsNot:
-		if cOp == parser.In {
+	case tree.LE, tree.LT, tree.GE,
+		tree.GT, tree.NE, tree.IsNot:
+		if cOp == tree.In {
 			// The general case only handles range constraints.
 			// Stop here.
 
@@ -1686,89 +1685,89 @@ func applyConstraintFlat(
 		// Otherwise, the general case below knows about all these
 		// cases. Go forward.
 
-	case parser.Is, parser.EQ:
+	case tree.Is, tree.EQ:
 		// (Expr IS ...) / (Expr = ...)
 
-		if cOp == parser.In {
+		if cOp == tree.In {
 			// constraint says "a IN (x, y, z...)"
 			// Expr asks "= Cst" or IS TRUE / IS FALSE: check whether the
 			// value is in the IN set. If it is not, we're sure it never
 			// matches. Otherwise we don't know.
-			ctuple := cdatum.(*parser.DTuple)
+			ctuple := cdatum.(*tree.DTuple)
 			i := sort.Search(len(ctuple.D), func(i int) bool {
-				return ctuple.D[i].(parser.Datum).Compare(evalCtx, datum) >= 0
+				return ctuple.D[i].(tree.Datum).Compare(evalCtx, datum) >= 0
 			})
 			if i == len(ctuple.D) || ctuple.D[i].Compare(evalCtx, datum) != 0 {
-				return parser.DBoolFalse
+				return tree.DBoolFalse
 			}
 			return t
 		}
 		// Continue to the general case below.
 
-	case parser.In:
+	case tree.In:
 		// Expr: "a IN (t, u, v, ...)"
 
 		switch cOp {
-		case parser.In:
+		case tree.In:
 			// constraint says "a IN (x, y, z...)"
 			// true if (x, y, z, ...) is a subset of (t, u, v, ...)
 			// unknown otherwise
-			if ttuple, ok := datum.(*parser.DTuple); ok {
+			if ttuple, ok := datum.(*tree.DTuple); ok {
 				// Note: A is a subset of B iff A \ B == empty.
-				ctuple := cdatum.(*parser.DTuple)
+				ctuple := cdatum.(*tree.DTuple)
 				diff := ctuple.SortedDifference(evalCtx, ttuple)
 				if len(diff.D) == 0 {
-					return parser.DBoolTrue
+					return tree.DBoolTrue
 				}
 			}
 
-		case parser.EQ:
+		case tree.EQ:
 			// constraint says "a = Cst"
 			// true if the known value is in the IN set, false otherwise.
-			if tuple, ok := datum.(*parser.DTuple); ok {
+			if tuple, ok := datum.(*tree.DTuple); ok {
 				i := sort.Search(len(tuple.D), func(i int) bool {
-					return tuple.D[i].(parser.Datum).Compare(evalCtx, cdatum) >= 0
+					return tuple.D[i].(tree.Datum).Compare(evalCtx, cdatum) >= 0
 				})
 				if i < len(tuple.D) && tuple.D[i].Compare(evalCtx, cdatum) == 0 {
-					return parser.DBoolTrue
+					return tree.DBoolTrue
 				}
 			}
-			return parser.DBoolFalse
+			return tree.DBoolFalse
 		}
 
 		// The general case below doesn't know about
 		// IN expressions. Can't go further.
 		return t
 
-	case parser.NotIn:
+	case tree.NotIn:
 		// Expr: "a NOT IN (t, u, v, ...)"
 
 		switch cOp {
-		case parser.In:
+		case tree.In:
 			// constraint says "a IN (x, y, z...)"
 			// True if none of the values in (x, y, z...) are in (t, u, v, ...)
 			// unknown otherwise
-			if ttuple, ok := datum.(*parser.DTuple); ok {
+			if ttuple, ok := datum.(*tree.DTuple); ok {
 				// Note: A inter B is empty iff A \ B == A
-				ctuple := cdatum.(*parser.DTuple)
+				ctuple := cdatum.(*tree.DTuple)
 				diff := ctuple.SortedDifference(evalCtx, ttuple)
 				if len(diff.D) < len(ctuple.D) {
-					return parser.DBoolTrue
+					return tree.DBoolTrue
 				}
 			}
 
-		case parser.EQ:
+		case tree.EQ:
 			// constraint says "a = Cst"
 			// false if the known value is in the NOT IN set, true otherwise.
-			if tuple, ok := datum.(*parser.DTuple); ok {
+			if tuple, ok := datum.(*tree.DTuple); ok {
 				i := sort.Search(len(tuple.D), func(i int) bool {
-					return tuple.D[i].(parser.Datum).Compare(evalCtx, cdatum) >= 0
+					return tuple.D[i].(tree.Datum).Compare(evalCtx, cdatum) >= 0
 				})
 				if i < len(tuple.D) && tuple.D[i].Compare(evalCtx, cdatum) == 0 {
-					return parser.DBoolFalse
+					return tree.DBoolFalse
 				}
 			}
-			return parser.DBoolTrue
+			return tree.DBoolTrue
 		}
 
 		// The general case below doesn't know about
@@ -1818,10 +1817,10 @@ func applyConstraintFlat(
 
 	if tOk && cOk {
 		if disjoint {
-			return parser.DBoolFalse
+			return tree.DBoolFalse
 		}
 		if overlapping {
-			return parser.DBoolTrue
+			return tree.DBoolTrue
 		}
 		return t
 	}
@@ -1830,8 +1829,8 @@ func applyConstraintFlat(
 	// If the constraint is an interval and the expression is NE/IsNot,
 	// we can till use the intervals (hence the NE case in
 	// makeInterval).
-	if cOk && (t.Operator == parser.NE || t.Operator == parser.IsNot) && disjoint {
-		return parser.DBoolTrue
+	if cOk && (t.Operator == tree.NE || t.Operator == tree.IsNot) && disjoint {
+		return tree.DBoolTrue
 	}
 	return t
 }
@@ -1840,24 +1839,24 @@ func applyConstraintFlat(
 // See the comment at the point of call for more details.
 // The boolean return value indicates whether the comparison actually
 // defines a range.
-func makeComparisonInterval(op parser.ComparisonOperator, largerDatum bool) (int, int, bool) {
+func makeComparisonInterval(op tree.ComparisonOperator, largerDatum bool) (int, int, bool) {
 	x := 0
 	if largerDatum {
 		x = 10
 	}
 
 	switch op {
-	case parser.EQ, parser.Is:
+	case tree.EQ, tree.Is:
 		return x, x, true
-	case parser.LE:
+	case tree.LE:
 		return -100, x, true
-	case parser.LT:
+	case tree.LT:
 		return -100, x - 1, true
-	case parser.GE:
+	case tree.GE:
 		return x, 100, true
-	case parser.GT:
+	case tree.GT:
 		return x + 1, 100, true
-	case parser.NE, parser.IsNot:
+	case tree.NE, tree.IsNot:
 		return x, x, false
 	default:
 		return 0, 0, false

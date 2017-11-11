@@ -33,7 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/jobs"
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -360,9 +360,7 @@ func (sc *SchemaChanger) maybeAddDropRename(
 // Execute the entire schema change in steps.
 // inSession is set to false when this is called from the asynchronous
 // schema change execution path.
-func (sc *SchemaChanger) exec(
-	ctx context.Context, inSession bool, evalCtx parser.EvalContext,
-) error {
+func (sc *SchemaChanger) exec(ctx context.Context, inSession bool, evalCtx tree.EvalContext) error {
 	// Acquire lease.
 	lease, err := sc.AcquireLease(ctx)
 	if err != nil {
@@ -464,7 +462,7 @@ func (sc *SchemaChanger) rollbackSchemaChange(
 	ctx context.Context,
 	err error,
 	lease *sqlbase.TableDescriptor_SchemaChangeLease,
-	evalCtx parser.EvalContext,
+	evalCtx tree.EvalContext,
 ) error {
 	log.Warningf(ctx, "reversing schema change %d due to irrecoverable error: %s", *sc.job.ID(), err)
 	sc.job.Failed(ctx, err)
@@ -663,7 +661,7 @@ func (sc *SchemaChanger) notFirstInLine(ctx context.Context) (bool, error) {
 func (sc *SchemaChanger) runStateMachineAndBackfill(
 	ctx context.Context,
 	lease *sqlbase.TableDescriptor_SchemaChangeLease,
-	evalCtx parser.EvalContext,
+	evalCtx tree.EvalContext,
 	isRollback bool,
 ) error {
 	if fn := sc.testingKnobs.RunBeforePublishWriteAndDelete; fn != nil {
@@ -1117,9 +1115,9 @@ func (s *SchemaChangeManager) Start(stopper *stop.Stopper) {
 //
 // TODO(andrei): This EvalContext will be broken for backfills trying to use
 // functions marked with distsqlBlacklist.
-func createSchemaChangeEvalCtx(ts hlc.Timestamp) parser.EvalContext {
+func createSchemaChangeEvalCtx(ts hlc.Timestamp) tree.EvalContext {
 	dummyLocation := time.UTC
-	evalCtx := parser.EvalContext{
+	evalCtx := tree.EvalContext{
 		SearchPath: sqlbase.DefaultSearchPath,
 		Location:   &dummyLocation,
 		// The database is not supposed to be needed in schema changes, as there
