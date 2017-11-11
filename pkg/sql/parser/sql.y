@@ -5194,11 +5194,11 @@ a_expr:
   c_expr
 | a_expr TYPECAST cast_target
   {
-    $$.val = &CastExpr{Expr: $1.expr(), Type: $3.castTargetType(), syntaxMode: castShort}
+    $$.val = &CastExpr{Expr: $1.expr(), Type: $3.castTargetType(), SyntaxMode: castShort}
   }
 | a_expr TYPEANNOTATE typename
   {
-    $$.val = &AnnotateTypeExpr{Expr: $1.expr(), Type: $3.colType(), syntaxMode: annotateShort}
+    $$.val = &AnnotateTypeExpr{Expr: $1.expr(), Type: $3.colType(), SyntaxMode: annotateShort}
   }
 | a_expr COLLATE unrestricted_name
   {
@@ -5515,11 +5515,11 @@ b_expr:
   c_expr
 | b_expr TYPECAST cast_target
   {
-    $$.val = &CastExpr{Expr: $1.expr(), Type: $3.castTargetType(), syntaxMode: castShort}
+    $$.val = &CastExpr{Expr: $1.expr(), Type: $3.castTargetType(), SyntaxMode: castShort}
   }
 | b_expr TYPEANNOTATE typename
   {
-    $$.val = &AnnotateTypeExpr{Expr: $1.expr(), Type: $3.colType(), syntaxMode: annotateShort}
+    $$.val = &AnnotateTypeExpr{Expr: $1.expr(), Type: $3.colType(), SyntaxMode: annotateShort}
   }
 | '+' b_expr %prec UMINUS
   {
@@ -5806,11 +5806,11 @@ func_expr_common_subexpr:
   }
 | CAST '(' a_expr AS cast_target ')'
   {
-    $$.val = &CastExpr{Expr: $3.expr(), Type: $5.castTargetType(), syntaxMode: castExplicit}
+    $$.val = &CastExpr{Expr: $3.expr(), Type: $5.castTargetType(), SyntaxMode: castExplicit}
   }
 | ANNOTATE_TYPE '(' a_expr ',' typename ')'
   {
-    $$.val = &AnnotateTypeExpr{Expr: $3.expr(), Type: $5.colType(), syntaxMode: annotateExplicit}
+    $$.val = &AnnotateTypeExpr{Expr: $3.expr(), Type: $5.colType(), SyntaxMode: annotateExplicit}
   }
 | EXTRACT '(' extract_list ')'
   {
@@ -6523,7 +6523,7 @@ a_expr_const:
 | func_name '(' expr_list opt_sort_clause ')' SCONST { return unimplemented(sqllex, "func const") }
 | const_typename SCONST
   {
-    $$.val = &CastExpr{Expr: NewStrVal($2), Type: $1.colType(), syntaxMode: castPrepend}
+    $$.val = &CastExpr{Expr: NewStrVal($2), Type: $1.colType(), SyntaxMode: castPrepend}
   }
 | interval
   {

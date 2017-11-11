@@ -36,7 +36,7 @@ func TestCastToCollatedString(t *testing.T) {
 	}
 	for _, cas := range cases {
 		t.Run("", func(t *testing.T) {
-			expr := &CastExpr{Expr: NewDString("test"), Type: &cas.typ, syntaxMode: castShort}
+			expr := &CastExpr{Expr: NewDString("test"), Type: &cas.typ, SyntaxMode: castShort}
 			typedexpr, err := expr.TypeCheck(&SemaContext{}, types.Any)
 			if err != nil {
 				t.Fatal(err)
