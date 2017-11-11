@@ -27,6 +27,7 @@ import (
 
 	"github.com/cockroachdb/apd"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 )
 
@@ -34,9 +35,9 @@ import (
 // all return expected available type sets, and that attempting to resolve the NumVals
 // as each of these types will all succeed with an expected Datum result.
 func TestNumericConstantVerifyAndResolveAvailableTypes(t *testing.T) {
-	wantInt := numValAvailInteger
-	wantDecButCanBeInt := numValAvailDecimalNoFraction
-	wantDec := numValAvailDecimalWithFraction
+	wantInt := tree.NumValAvailInteger
+	wantDecButCanBeInt := tree.NumValAvailDecimalNoFraction
+	wantDec := tree.NumValAvailDecimalWithFraction
 
 	testCases := []struct {
 		str   string
@@ -138,9 +139,9 @@ func TestNumericConstantVerifyAndResolveAvailableTypes(t *testing.T) {
 // return expected available type sets, and that attempting to resolve the StrVals
 // as each of these types will either succeed or return a parse error.
 func TestStringConstantVerifyAvailableTypes(t *testing.T) {
-	wantStringButCanBeAll := strValAvailAllParsable
-	wantBytesButCanBeString := strValAvailBytesString
-	wantBytes := strValAvailBytes
+	wantStringButCanBeAll := tree.StrValAvailAllParsable
+	wantBytesButCanBeString := tree.StrValAvailBytesString
+	wantBytes := tree.StrValAvailBytes
 
 	testCases := []struct {
 		c     *StrVal
@@ -362,7 +363,7 @@ func testConstantLiteralFolding(t *testing.T, testData []constantLiteralFoldingT
 			t.Fatalf("%s: %v", d.expr, err)
 		}
 		rOrig := expr.String()
-		r, err := foldConstantLiterals(expr)
+		r, err := tree.FoldConstantLiterals(expr)
 		if err != nil {
 			t.Fatalf("%s: %v", d.expr, err)
 		}
@@ -370,7 +371,7 @@ func testConstantLiteralFolding(t *testing.T, testData []constantLiteralFoldingT
 			t.Errorf("%s: expected %s, but found %s", d.expr, d.expected, s)
 		}
 		// Folding again should be a no-op.
-		r2, err := foldConstantLiterals(r)
+		r2, err := tree.FoldConstantLiterals(r)
 		if err != nil {
 			t.Fatalf("%s: %v", d.expr, err)
 		}

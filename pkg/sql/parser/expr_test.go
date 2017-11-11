@@ -20,6 +20,7 @@ import (
 
 	"golang.org/x/net/context"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 )
@@ -189,7 +190,7 @@ func TestExprString(t *testing.T) {
 		if err != nil {
 			t.Fatalf("%s: %v", exprStr, err)
 		}
-		if !reflect.DeepEqual(stripMemoizedFuncs(normalized), stripMemoizedFuncs(normalized2)) {
+		if !reflect.DeepEqual(tree.StripMemoizedFuncs(normalized), tree.StripMemoizedFuncs(normalized2)) {
 			t.Errorf("normalized expressions differ\n"+
 				"original:     %s\n"+
 				"intermediate: %s\n"+
