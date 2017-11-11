@@ -146,17 +146,17 @@ func TestStringConstantVerifyAvailableTypes(t *testing.T) {
 		c     *StrVal
 		avail []types.T
 	}{
-		{&StrVal{s: "abc 世界", bytesEsc: false}, wantStringButCanBeAll},
-		{&StrVal{s: "t", bytesEsc: false}, wantStringButCanBeAll},
-		{&StrVal{s: "2010-09-28", bytesEsc: false}, wantStringButCanBeAll},
-		{&StrVal{s: "2010-09-28 12:00:00.1", bytesEsc: false}, wantStringButCanBeAll},
-		{&StrVal{s: "PT12H2M", bytesEsc: false}, wantStringButCanBeAll},
-		{&StrVal{s: "abc 世界", bytesEsc: true}, wantBytesButCanBeString},
-		{&StrVal{s: "t", bytesEsc: true}, wantBytesButCanBeString},
-		{&StrVal{s: "2010-09-28", bytesEsc: true}, wantBytesButCanBeString},
-		{&StrVal{s: "2010-09-28 12:00:00.1", bytesEsc: true}, wantBytesButCanBeString},
-		{&StrVal{s: "PT12H2M", bytesEsc: true}, wantBytesButCanBeString},
-		{&StrVal{s: string([]byte{0xff, 0xfe, 0xfd}), bytesEsc: true}, wantBytes},
+		{NewStrVal("abc 世界"), wantStringButCanBeAll},
+		{NewStrVal("t"), wantStringButCanBeAll},
+		{NewStrVal("2010-09-28"), wantStringButCanBeAll},
+		{NewStrVal("2010-09-28 12:00:00.1"), wantStringButCanBeAll},
+		{NewStrVal("PT12H2M"), wantStringButCanBeAll},
+		{NewBytesStrVal("abc 世界"), wantBytesButCanBeString},
+		{NewBytesStrVal("t"), wantBytesButCanBeString},
+		{NewBytesStrVal("2010-09-28"), wantBytesButCanBeString},
+		{NewBytesStrVal("2010-09-28 12:00:00.1"), wantBytesButCanBeString},
+		{NewBytesStrVal("PT12H2M"), wantBytesButCanBeString},
+		{NewBytesStrVal(string([]byte{0xff, 0xfe, 0xfd})), wantBytes},
 	}
 
 	for i, test := range testCases {
@@ -256,55 +256,55 @@ func TestStringConstantResolveAvailableTypes(t *testing.T) {
 		parseOptions map[types.T]struct{}
 	}{
 		{
-			c:            &StrVal{s: "abc 世界", bytesEsc: false},
+			c:            NewStrVal("abc 世界"),
 			parseOptions: typeSet(types.String, types.Bytes),
 		},
 		{
-			c:            &StrVal{s: "true", bytesEsc: false},
+			c:            NewStrVal("true"),
 			parseOptions: typeSet(types.String, types.Bytes, types.Bool, types.JSON),
 		},
 		{
-			c:            &StrVal{s: "2010-09-28", bytesEsc: false},
+			c:            NewStrVal("2010-09-28"),
 			parseOptions: typeSet(types.String, types.Bytes, types.Date, types.Timestamp, types.TimestampTZ),
 		},
 		{
-			c:            &StrVal{s: "2010-09-28 12:00:00.1", bytesEsc: false},
+			c:            NewStrVal("2010-09-28 12:00:00.1"),
 			parseOptions: typeSet(types.String, types.Bytes, types.Timestamp, types.TimestampTZ, types.Date),
 		},
 		{
-			c:            &StrVal{s: "2006-07-08T00:00:00.000000123Z", bytesEsc: false},
+			c:            NewStrVal("2006-07-08T00:00:00.000000123Z"),
 			parseOptions: typeSet(types.String, types.Bytes, types.Timestamp, types.TimestampTZ, types.Date),
 		},
 		{
-			c:            &StrVal{s: "PT12H2M", bytesEsc: false},
+			c:            NewStrVal("PT12H2M"),
 			parseOptions: typeSet(types.String, types.Bytes, types.Interval),
 		},
 		{
-			c:            &StrVal{s: "abc 世界", bytesEsc: true},
+			c:            NewBytesStrVal("abc 世界"),
 			parseOptions: typeSet(types.String, types.Bytes),
 		},
 		{
-			c:            &StrVal{s: "true", bytesEsc: true},
+			c:            NewBytesStrVal("true"),
 			parseOptions: typeSet(types.String, types.Bytes),
 		},
 		{
-			c:            &StrVal{s: "2010-09-28", bytesEsc: true},
+			c:            NewBytesStrVal("2010-09-28"),
 			parseOptions: typeSet(types.String, types.Bytes),
 		},
 		{
-			c:            &StrVal{s: "2010-09-28 12:00:00.1", bytesEsc: true},
+			c:            NewBytesStrVal("2010-09-28 12:00:00.1"),
 			parseOptions: typeSet(types.String, types.Bytes),
 		},
 		{
-			c:            &StrVal{s: "PT12H2M", bytesEsc: true},
+			c:            NewBytesStrVal("PT12H2M"),
 			parseOptions: typeSet(types.String, types.Bytes),
 		},
 		{
-			c:            &StrVal{s: `{"a": 1}`, bytesEsc: false},
+			c:            NewStrVal(`{"a": 1}`),
 			parseOptions: typeSet(types.String, types.Bytes, types.JSON),
 		},
 		{
-			c:            &StrVal{s: string([]byte{0xff, 0xfe, 0xfd}), bytesEsc: true},
+			c:            NewBytesStrVal(string([]byte{0xff, 0xfe, 0xfd})),
 			parseOptions: typeSet(types.Bytes),
 		},
 	}
@@ -331,7 +331,7 @@ func TestStringConstantResolveAvailableTypes(t *testing.T) {
 				t.Errorf("%d: type %s not expected to be resolvable from the StrVal %v, found %v",
 					i, availType, test.c, res)
 			} else {
-				expectedDatum := parseFuncs[availType](t, test.c.s)
+				expectedDatum := parseFuncs[availType](t, test.c.RawString())
 				evalCtx := NewTestingEvalContext()
 				defer evalCtx.Stop(context.Background())
 				if res.Compare(evalCtx, expectedDatum) != 0 {
