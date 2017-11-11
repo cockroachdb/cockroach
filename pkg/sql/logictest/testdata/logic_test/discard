@@ -17,7 +17,17 @@ SHOW SEARCH_PATH
 ·
 
 query T
-SET "time zone" = 'Europe/Amsterdam'; SHOW TIME ZONE
+SET timezone = 'Europe/Amsterdam'; SHOW TIMEZONE
+----
+Europe/Amsterdam
+
+query T
+DISCARD ALL; SHOW TIMEZONE
+----
+UTC
+
+query T
+SET TIME ZONE 'Europe/Amsterdam'; SHOW TIME ZONE
 ----
 Europe/Amsterdam
 

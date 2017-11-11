@@ -296,7 +296,7 @@ var varGen = map[string]sessionVar{
 		Reset: func(*Session) error { return nil },
 	},
 
-	`time zone`: {
+	`timezone`: {
 		Get: func(session *Session) string {
 			// If the time zone is a "fixed offset" one, initialized from an offset
 			// and not a standard name, then we use a magic format in the Location's

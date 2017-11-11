@@ -38,7 +38,7 @@ server_version_num             90500
 session_user                   root
 sql_safe_updates               false
 standard_conforming_strings    on
-time zone                      UTC
+timezone                       UTC
 tracing                        off
 transaction isolation level    SERIALIZABLE
 transaction priority           NORMAL
@@ -181,9 +181,16 @@ foo
 
 
 query T colnames
+SELECT * FROM [SHOW TIMEZONE]
+----
+timezone
+UTC
+
+
+query T colnames
 SELECT * FROM [SHOW TIME ZONE]
 ----
-time zone
+timezone
 UTC
 
 
