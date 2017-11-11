@@ -278,7 +278,7 @@ func typeCheckOverloadedExprs(
 			if len(overloads) > 1 {
 				panic("only one overload can have HomogeneousType parameters")
 			}
-			typedExprs, _, err := typeCheckSameTypedExprs(ctx, desired, exprs...)
+			typedExprs, _, err := TypeCheckSameTypedExprs(ctx, desired, exprs...)
 			if err != nil {
 				return nil, nil, err
 			}

@@ -114,7 +114,7 @@ func TypeCheck(expr Expr, ctx *SemaContext, desired types.T) (TypedExpr, error) 
 		panic("the desired type for parser.TypeCheck cannot be nil, use types.Any instead")
 	}
 
-	expr, err := foldConstantLiterals(expr)
+	expr, err := FoldConstantLiterals(expr)
 	if err != nil {
 		return nil, err
 	}
@@ -220,7 +220,7 @@ func (expr *CaseExpr) TypeCheck(ctx *SemaContext, desired types.T) (TypedExpr, e
 			tmpExprs = append(tmpExprs, when.Cond)
 		}
 
-		typedSubExprs, _, err := typeCheckSameTypedExprs(ctx, types.Any, tmpExprs...)
+		typedSubExprs, _, err := TypeCheckSameTypedExprs(ctx, types.Any, tmpExprs...)
 		if err != nil {
 			return nil, decorateTypeCheckError(err, "incompatible condition type:")
 		}
@@ -246,7 +246,7 @@ func (expr *CaseExpr) TypeCheck(ctx *SemaContext, desired types.T) (TypedExpr, e
 	if expr.Else != nil {
 		tmpExprs = append(tmpExprs, expr.Else)
 	}
-	typedSubExprs, retType, err := typeCheckSameTypedExprs(ctx, desired, tmpExprs...)
+	typedSubExprs, retType, err := TypeCheckSameTypedExprs(ctx, desired, tmpExprs...)
 	if err != nil {
 		return nil, decorateTypeCheckError(err, "incompatible value type:")
 	}
@@ -373,7 +373,7 @@ func (expr *CollateExpr) TypeCheck(ctx *SemaContext, desired types.T) (TypedExpr
 
 // TypeCheck implements the Expr interface.
 func (expr *CoalesceExpr) TypeCheck(ctx *SemaContext, desired types.T) (TypedExpr, error) {
-	typedSubExprs, retType, err := typeCheckSameTypedExprs(ctx, desired, expr.Exprs...)
+	typedSubExprs, retType, err := TypeCheckSameTypedExprs(ctx, desired, expr.Exprs...)
 	if err != nil {
 		return nil, decorateTypeCheckError(err, fmt.Sprintf("incompatible %s expressions", expr.Name))
 	}
@@ -586,7 +586,7 @@ func (expr *IfExpr) TypeCheck(ctx *SemaContext, desired types.T) (TypedExpr, err
 		return nil, err
 	}
 
-	typedSubExprs, retType, err := typeCheckSameTypedExprs(ctx, desired, expr.True, expr.Else)
+	typedSubExprs, retType, err := TypeCheckSameTypedExprs(ctx, desired, expr.True, expr.Else)
 	if err != nil {
 		return nil, decorateTypeCheckError(err, "incompatible IF expressions")
 	}
@@ -621,7 +621,7 @@ func (expr *NotExpr) TypeCheck(ctx *SemaContext, desired types.T) (TypedExpr, er
 
 // TypeCheck implements the Expr interface.
 func (expr *NullIfExpr) TypeCheck(ctx *SemaContext, desired types.T) (TypedExpr, error) {
-	typedSubExprs, retType, err := typeCheckSameTypedExprs(ctx, desired, expr.Expr1, expr.Expr2)
+	typedSubExprs, retType, err := TypeCheckSameTypedExprs(ctx, desired, expr.Expr1, expr.Expr2)
 	if err != nil {
 		return nil, decorateTypeCheckError(err, "incompatible NULLIF expressions")
 	}
@@ -808,7 +808,7 @@ func (expr *Array) TypeCheck(ctx *SemaContext, desired types.T) (TypedExpr, erro
 		return expr, nil
 	}
 
-	typedSubExprs, typ, err := typeCheckSameTypedExprs(ctx, desiredParam, expr.Exprs...)
+	typedSubExprs, typ, err := TypeCheckSameTypedExprs(ctx, desiredParam, expr.Exprs...)
 	if err != nil {
 		return nil, err
 	}
@@ -1031,7 +1031,7 @@ func typeCheckComparisonOpWithSubOperator(
 		sameTypeExprs[0] = left
 		copy(sameTypeExprs[1:], array.Exprs)
 
-		typedSubExprs, retType, err := typeCheckSameTypedExprs(ctx, types.Any, sameTypeExprs...)
+		typedSubExprs, retType, err := TypeCheckSameTypedExprs(ctx, types.Any, sameTypeExprs...)
 		if err != nil {
 			sigWithErr := fmt.Sprintf(compExprsWithSubOpFmt, left, subOp, op, right, err)
 			return nil, nil, CmpOp{},
@@ -1159,7 +1159,7 @@ func typeCheckComparisonOp(
 		sameTypeExprs[0] = foldedLeft
 		copy(sameTypeExprs[1:], rightTuple.Exprs)
 
-		typedSubExprs, retType, err := typeCheckSameTypedExprs(ctx, types.Any, sameTypeExprs...)
+		typedSubExprs, retType, err := TypeCheckSameTypedExprs(ctx, types.Any, sameTypeExprs...)
 		if err != nil {
 			sigWithErr := fmt.Sprintf(compExprsFmt, left, op, right, err)
 			return nil, nil, CmpOp{},
@@ -1259,10 +1259,10 @@ type typeCheckExprsState struct {
 	resolvableIdxs  []int // index into exprs/typedExprs
 }
 
-// typeCheckSameTypedExprs type checks a list of expressions, asserting that all
+// TypeCheckSameTypedExprs type checks a list of expressions, asserting that all
 // resolved TypeExprs have the same type. An optional desired type can be provided,
 // which will hint that type which the expressions should resolve to, if possible.
-func typeCheckSameTypedExprs(
+func TypeCheckSameTypedExprs(
 	ctx *SemaContext, desired types.T, exprs ...Expr,
 ) ([]TypedExpr, types.T, error) {
 	switch len(exprs) {
@@ -1537,7 +1537,7 @@ func typeCheckSameTypedTupleExprs(
 		if len(desiredTuple) > elemIdx {
 			desiredElem = desiredTuple[elemIdx]
 		}
-		typedSubExprs, resType, err := typeCheckSameTypedExprs(ctx, desiredElem, sameTypeExprs...)
+		typedSubExprs, resType, err := TypeCheckSameTypedExprs(ctx, desiredElem, sameTypeExprs...)
 		if err != nil {
 			return nil, nil, pgerror.NewErrorf(pgerror.CodeDatatypeMismatchError, "tuples %s are not the same type: %v", Exprs(exprs), err)
 		}
@@ -1693,10 +1693,10 @@ func (p PlaceholderTypes) ProcessPlaceholderAnnotations(stmt Statement) error {
 	return nil
 }
 
-// stripMemoizedFuncs strips memoized function references from expression trees.
+// StripMemoizedFuncs strips memoized function references from expression trees.
 // This is necessary to permit equality checks using reflect.DeepEqual.
 // Used in testing.
-func stripMemoizedFuncs(expr Expr) Expr {
+func StripMemoizedFuncs(expr Expr) Expr {
 	expr, _ = WalkExpr(stripFuncsVisitor{}, expr)
 	return expr
 }

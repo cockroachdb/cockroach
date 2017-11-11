@@ -237,7 +237,8 @@ func processCollationOnType(name Name, typ coltypes.T, c ColumnCollation) (colty
 	}
 }
 
-func newColumnTableDef(
+// NewColumnTableDef constructs a column definition for a CreateTable statement.
+func NewColumnTableDef(
 	name Name, typ coltypes.T, qualifications []NamedColumnQualification,
 ) (*ColumnTableDef, error) {
 	d := &ColumnTableDef{

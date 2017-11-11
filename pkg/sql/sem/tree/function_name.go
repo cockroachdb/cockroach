@@ -63,9 +63,9 @@ func (fn *ResolvableFunctionReference) Resolve(searchPath SearchPath) (*Function
 	}
 }
 
-// wrapFunction creates a new ResolvableFunctionReference
+// WrapFunction creates a new ResolvableFunctionReference
 // holding a pre-resolved function. Helper for grammar rules.
-func wrapFunction(n string) ResolvableFunctionReference {
+func WrapFunction(n string) ResolvableFunctionReference {
 	fd, ok := FunDefs[n]
 	if !ok {
 		panic(fmt.Sprintf("function %s() not defined", n))

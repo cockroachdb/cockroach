@@ -208,9 +208,12 @@ var (
 	intLikeTypes     = []types.T{types.Int, types.Oid}
 	decimalLikeTypes = []types.T{types.Decimal, types.Float}
 
-	numValAvailInteger             = append(intLikeTypes, decimalLikeTypes...)
-	numValAvailDecimalNoFraction   = append(decimalLikeTypes, intLikeTypes...)
-	numValAvailDecimalWithFraction = decimalLikeTypes
+	// NumValAvailInteger is the set of available integer types.
+	NumValAvailInteger = append(intLikeTypes, decimalLikeTypes...)
+	// NumValAvailDecimalNoFraction is the set of available integral numeric types.
+	NumValAvailDecimalNoFraction = append(decimalLikeTypes, intLikeTypes...)
+	// NumValAvailDecimalWithFraction is the set of available fractional numeric types.
+	NumValAvailDecimalWithFraction = decimalLikeTypes
 )
 
 // AvailableTypes implements the Constant interface.
@@ -218,20 +221,20 @@ func (expr *NumVal) AvailableTypes() []types.T {
 	switch {
 	case expr.canBeInt64():
 		if expr.Kind() == constant.Int {
-			return numValAvailInteger
+			return NumValAvailInteger
 		}
-		return numValAvailDecimalNoFraction
+		return NumValAvailDecimalNoFraction
 	default:
-		return numValAvailDecimalWithFraction
+		return NumValAvailDecimalWithFraction
 	}
 }
 
 // DesirableTypes implements the Constant interface.
 func (expr *NumVal) DesirableTypes() []types.T {
 	if expr.ShouldBeInt64() {
-		return numValAvailInteger
+		return NumValAvailInteger
 	}
-	return numValAvailDecimalWithFraction
+	return NumValAvailDecimalWithFraction
 }
 
 // ResolveAsType implements the Constant interface.
@@ -374,7 +377,8 @@ func (expr *StrVal) Format(buf *bytes.Buffer, f FmtFlags) {
 }
 
 var (
-	strValAvailAllParsable = []types.T{
+	// StrValAvailAllParsable is the set of parsable string types.
+	StrValAvailAllParsable = []types.T{
 		types.String,
 		types.Bytes,
 		types.Bool,
@@ -389,8 +393,11 @@ var (
 		types.INet,
 		types.JSON,
 	}
-	strValAvailBytesString = []types.T{types.Bytes, types.String, types.UUID, types.INet}
-	strValAvailBytes       = []types.T{types.Bytes, types.UUID}
+	// StrValAvailBytesString is the set of types convertible to either
+	// byte array or string.
+	StrValAvailBytesString = []types.T{types.Bytes, types.String, types.UUID, types.INet}
+	// StrValAvailBytes is the set of types convertible to byte array.
+	StrValAvailBytes = []types.T{types.Bytes, types.UUID}
 )
 
 // AvailableTypes implements the Constant interface.
@@ -398,7 +405,7 @@ var (
 // To fully take advantage of literal type inference, this method would
 // determine exactly which types are available for a given string. This would
 // entail attempting to parse the literal string as a date, a timestamp, an
-// interval, etc. and having more fine-grained results than strValAvailAllParsable.
+// interval, etc. and having more fine-grained results than StrValAvailAllParsable.
 // However, this is not feasible in practice because of the associated parsing
 // overhead.
 //
@@ -424,12 +431,12 @@ var (
 // concretely avoid the issue of unpredictable inference behavior.
 func (expr *StrVal) AvailableTypes() []types.T {
 	if !expr.bytesEsc {
-		return strValAvailAllParsable
+		return StrValAvailAllParsable
 	}
 	if utf8.ValidString(expr.s) {
-		return strValAvailBytesString
+		return StrValAvailBytesString
 	}
-	return strValAvailBytes
+	return StrValAvailBytes
 }
 
 // DesirableTypes implements the Constant interface.
@@ -619,12 +626,12 @@ func (constantFolderVisitor) VisitPost(expr Expr) (retExpr Expr) {
 	return expr
 }
 
-// foldConstantLiterals folds all constant literals using exact arithmetic.
+// FoldConstantLiterals folds all constant literals using exact arithmetic.
 //
 // TODO(nvanbenschoten): Can this visitor be preallocated (like normalizeVisitor)?
 // TODO(nvanbenschoten): Investigate normalizing associative operations to group
 //     constants together and permit further numeric constant folding.
-func foldConstantLiterals(expr Expr) (Expr, error) {
+func FoldConstantLiterals(expr Expr) (Expr, error) {
 	v := constantFolderVisitor{}
 	expr, _ = WalkExpr(v, expr)
 	return expr, nil

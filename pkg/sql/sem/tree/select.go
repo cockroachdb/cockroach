@@ -131,9 +131,9 @@ func (node *SelectExpr) NormalizeTopLevelVarName() error {
 	return nil
 }
 
-// starSelectExpr is a convenience function that represents an unqualified "*"
+// StarSelectExpr is a convenience function that represents an unqualified "*"
 // in a select expression.
-func starSelectExpr() SelectExpr {
+func StarSelectExpr() SelectExpr {
 	return SelectExpr{Expr: StarExpr()}
 }
 
@@ -317,12 +317,12 @@ type JoinTableExpr struct {
 
 // JoinTableExpr.Join
 const (
-	astJoin      = "JOIN"
-	astFullJoin  = "FULL JOIN"
-	astLeftJoin  = "LEFT JOIN"
-	astRightJoin = "RIGHT JOIN"
-	astCrossJoin = "CROSS JOIN"
-	astInnerJoin = "INNER JOIN"
+	AstJoin      = "JOIN"
+	AstFullJoin  = "FULL JOIN"
+	AstLeftJoin  = "LEFT JOIN"
+	AstRightJoin = "RIGHT JOIN"
+	AstCrossJoin = "CROSS JOIN"
+	AstInnerJoin = "INNER JOIN"
 )
 
 // Format implements the NodeFormatter interface.
@@ -396,13 +396,13 @@ type Where struct {
 
 // Where.Type
 const (
-	astWhere  = "WHERE"
-	astHaving = "HAVING"
+	AstWhere  = "WHERE"
+	AstHaving = "HAVING"
 )
 
-// newWhere creates a WHERE or HAVING clause out of an Expr. If the expression
+// NewWhere creates a WHERE or HAVING clause out of an Expr. If the expression
 // is nil, it returns nil.
-func newWhere(typ string, expr Expr) *Where {
+func NewWhere(typ string, expr Expr) *Where {
 	if expr == nil {
 		return nil
 	}

@@ -1313,8 +1313,8 @@ func NewDDate(d DDate) *DDate {
 
 // NewDDateFromTime constructs a *DDate from a time.Time in the provided time zone.
 func NewDDateFromTime(t time.Time, loc *time.Location) *DDate {
-	year, month, day := t.In(loc).Date()
-	secs := time.Date(year, month, day, 0, 0, 0, 0, time.UTC).Unix()
+	Year, Month, Day := t.In(loc).Date()
+	secs := time.Date(Year, Month, Day, 0, 0, 0, 0, time.UTC).Unix()
 	return NewDDate(DDate(secs / SecondsInDay))
 }
 
@@ -1747,42 +1747,43 @@ type DInterval struct {
 
 // DurationField is the type of a postgres duration field.
 // https://www.postgresql.org/docs/9.6/static/datatype-datetime.html
-type durationField int
+type DurationField int
 
+// These constants designate the various time parts of an interval.
 const (
-	_ durationField = iota
-	year
-	month
-	day
-	hour
-	minute
-	second
+	_ DurationField = iota
+	Year
+	Month
+	Day
+	Hour
+	Minute
+	Second
 )
 
 // ParseDInterval parses and returns the *DInterval Datum value represented by the provided
 // string, or an error if parsing is unsuccessful.
 func ParseDInterval(s string) (*DInterval, error) {
-	return parseDInterval(s, second)
+	return parseDInterval(s, Second)
 }
 
 // truncateDInterval truncates the input DInterval downward to the nearest
 // interval quantity specified by the DurationField input.
-func truncateDInterval(d *DInterval, field durationField) {
+func truncateDInterval(d *DInterval, field DurationField) {
 	switch field {
-	case year:
+	case Year:
 		d.Duration.Months = d.Duration.Months - d.Duration.Months%12
 		d.Duration.Days = 0
 		d.Duration.Nanos = 0
-	case month:
+	case Month:
 		d.Duration.Days = 0
 		d.Duration.Nanos = 0
-	case day:
+	case Day:
 		d.Duration.Nanos = 0
-	case hour:
+	case Hour:
 		d.Duration.Nanos = d.Duration.Nanos - d.Duration.Nanos%time.Hour.Nanoseconds()
-	case minute:
+	case Minute:
 		d.Duration.Nanos = d.Duration.Nanos - d.Duration.Nanos%time.Minute.Nanoseconds()
-	case second:
+	case Second:
 		// Postgres doesn't truncate to whole seconds.
 	}
 }
@@ -1792,7 +1793,7 @@ func truncateDInterval(d *DInterval, field durationField) {
 // and also specifies the precision of the interval. Any precision in the input
 // interval that's higher than the DurationField value will be truncated
 // downward.
-func ParseDIntervalWithField(s string, field durationField) (*DInterval, error) {
+func ParseDIntervalWithField(s string, field DurationField) (*DInterval, error) {
 	d, err := parseDInterval(s, field)
 	if err != nil {
 		return nil, err
@@ -1801,7 +1802,7 @@ func ParseDIntervalWithField(s string, field durationField) (*DInterval, error) 
 	return d, nil
 }
 
-func parseDInterval(s string, field durationField) (*DInterval, error) {
+func parseDInterval(s string, field DurationField) (*DInterval, error) {
 	// At this time the only supported interval formats are:
 	// - SQL standard.
 	// - Postgres compatible.
@@ -1826,17 +1827,17 @@ func parseDInterval(s string, field durationField) (*DInterval, error) {
 		// All numbers are rounded down unless the precision is SECOND.
 		ret := &DInterval{Duration: duration.Duration{}}
 		switch field {
-		case year:
+		case Year:
 			ret.Months = int64(f) * 12
-		case month:
+		case Month:
 			ret.Months = int64(f)
-		case day:
+		case Day:
 			ret.Days = int64(f)
-		case hour:
+		case Hour:
 			ret.Nanos = time.Hour.Nanoseconds() * int64(f)
-		case minute:
+		case Minute:
 			ret.Nanos = time.Minute.Nanoseconds() * int64(f)
-		case second:
+		case Second:
 			ret.Nanos = int64(float64(time.Second.Nanoseconds()) * f)
 		default:
 			panic(fmt.Sprintf("unhandled DurationField constant %d", field))

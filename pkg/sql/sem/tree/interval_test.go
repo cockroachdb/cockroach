@@ -101,7 +101,7 @@ func TestValidSQLIntervalSyntax(t *testing.T) {
 		}
 
 		// Test that a Datum recognizes the format.
-		di, err := parseDInterval(test.input, second)
+		di, err := parseDInterval(test.input, Second)
 		if err != nil {
 			t.Errorf(`%d: %q: unrecognized as datum: %v`, i, test.input, err)
 			continue
@@ -158,7 +158,7 @@ func TestInvalidSQLIntervalSyntax(t *testing.T) {
 		}
 
 		// Test that a Datum recognizes the format.
-		di, err := parseDInterval(test.input, second)
+		di, err := parseDInterval(test.input, Second)
 		if err != nil {
 			t.Errorf(`%d: %q: unrecognized as datum: %v`, i, test.input, err)
 			continue
@@ -323,7 +323,7 @@ func TestPGIntervalSyntax(t *testing.T) {
 		}
 
 		// Test that a Datum recognizes the format.
-		di, err := parseDInterval(test.input, second)
+		di, err := parseDInterval(test.input, Second)
 		if err != nil {
 			t.Errorf(`%d: %q: unrecognized as datum: %v`, i, test.input, err)
 			continue
