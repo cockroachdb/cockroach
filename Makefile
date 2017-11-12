@@ -39,7 +39,7 @@ endif
 PKG          := ./pkg/...## Which package to run tests against, e.g. "./pkg/storage".
 TAGS         :=
 TESTS        := .## Tests to run for use with `make test`.
-BENCHES      := -## Benchmarks to run for use with `make bench`.
+BENCHES      :=## Benchmarks to run for use with `make bench`.
 FILES        :=## Space delimited list of logic test files to run, for make testlogic.
 TESTTIMEOUT  := 4m## Test timeout to use for regular tests.
 RACETIMEOUT  := 25m## Test timeout to use for race tests.
