@@ -12,7 +12,7 @@
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
-package sqlbase
+package stats
 
 import (
 	"fmt"
@@ -21,18 +21,19 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 )
 
 // runSampleTest feeds rows with the given ranks through a reservoir
 // of a given size and verifies the results are correct.
 func runSampleTest(t *testing.T, numSamples int, ranks []int) {
-	typeInt := ColumnType{SemanticType: ColumnType_INT}
+	typeInt := sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_INT}
 	var sr SampleReservoir
 	sr.Init(numSamples)
 	for _, r := range ranks {
-		d := DatumToEncDatum(typeInt, tree.NewDInt(tree.DInt(r)))
-		sr.SampleRow(EncDatumRow{d}, uint64(r))
+		d := sqlbase.DatumToEncDatum(typeInt, tree.NewDInt(tree.DInt(r)))
+		sr.SampleRow(sqlbase.EncDatumRow{d}, uint64(r))
 	}
 	samples := sr.Get()
 	sampledRanks := make([]int, len(samples))
@@ -40,7 +41,9 @@ func runSampleTest(t *testing.T, numSamples int, ranks []int) {
 	// Verify that the row and the ranks weren't mishandled.
 	for i, s := range samples {
 		if *s.Row[0].Datum.(*tree.DInt) != tree.DInt(s.Rank) {
-			t.Fatalf("mismatch between row %s and rank %d", s.Row.String([]ColumnType{typeInt}), s.Rank)
+			t.Fatalf(
+				"mismatch between row %s and rank %d", s.Row.String([]sqlbase.ColumnType{typeInt}), s.Rank,
+			)
 		}
 		sampledRanks[i] = int(s.Rank)
 	}

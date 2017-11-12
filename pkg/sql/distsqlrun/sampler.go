@@ -24,6 +24,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
@@ -39,7 +40,7 @@ type samplerProcessor struct {
 
 	flowCtx    *FlowCtx
 	input      RowSource
-	sr         sqlbase.SampleReservoir
+	sr         stats.SampleReservoir
 	sketchInfo []SamplerSpec_SketchInfo
 	outTypes   []sqlbase.ColumnType
 	// Output column indices for special columns.
@@ -191,7 +192,7 @@ func (s *samplerProcessor) mainLoop(ctx context.Context) (earlyExit bool, _ erro
 		}
 	}
 	// Release the memory for the sampled rows.
-	s.sr = sqlbase.SampleReservoir{}
+	s.sr = stats.SampleReservoir{}
 
 	// Emit the sketch rows.
 	for i := range outRow {
