@@ -54,7 +54,8 @@ func doRandomJSON(complexity int, rng *rand.Rand) interface{} {
 		}
 	}
 	complexity--
-	if rng.Intn(2) == 0 {
+	switch rng.Intn(2) {
+	case 0:
 		result := make([]interface{}, 0)
 		for complexity > 0 {
 			amount := 1 + rng.Intn(complexity)
@@ -62,12 +63,13 @@ func doRandomJSON(complexity int, rng *rand.Rand) interface{} {
 			result = append(result, doRandomJSON(amount, rng))
 		}
 		return result
+	default:
+		result := make(map[string]interface{})
+		for complexity > 0 {
+			amount := 1 + rng.Intn(complexity)
+			complexity -= amount
+			result[randomJSONString(rng).(string)] = doRandomJSON(amount, rng)
+		}
+		return result
 	}
-	result := make(map[string]interface{})
-	for complexity > 0 {
-		amount := 1 + rng.Intn(complexity)
-		complexity -= amount
-		result[randomJSONString(rng).(string)] = doRandomJSON(amount, rng)
-	}
-	return result
 }

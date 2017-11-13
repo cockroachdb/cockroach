@@ -144,8 +144,8 @@ func (j jsonObject) encode(appendTo []byte) (jEntry uint32, b []byte, err error)
 
 // EncodeJSON encodes a JSON value as a sequence of bytes.
 func EncodeJSON(appendTo []byte, j JSON) ([]byte, error) {
-	switch j.(type) {
-	case jsonArray, jsonObject:
+	switch j.Type() {
+	case ArrayJSONType, ObjectJSONType:
 		// We just discard the JEntry in these cases.
 		var err error
 		_, appendTo, err = j.encode(appendTo)
@@ -265,6 +265,14 @@ func decodeJSONObject(containerHeader uint32, b []byte) ([]byte, JSON, error) {
 	return b, result, nil
 }
 
+func decodeJSONNumber(b []byte) ([]byte, JSON, error) {
+	b, d, err := encoding.DecodeUntaggedDecimalValue(b)
+	if err != nil {
+		return b, nil, err
+	}
+	return b, jsonNumber(d), nil
+}
+
 func decodeJSONValue(jEntry uint32, b []byte) ([]byte, JSON, error) {
 	switch jEntry & jEntryTypeMask {
 	case trueTag:
@@ -277,13 +285,7 @@ func decodeJSONValue(jEntry uint32, b []byte) ([]byte, JSON, error) {
 		length := jEntry & jEntryOffLenMask
 		return b[length:], jsonString(b[:length]), nil
 	case numberTag:
-		var d apd.Decimal
-		var err error
-		b, d, err = encoding.DecodeUntaggedDecimalValue(b)
-		if err != nil {
-			return b, nil, err
-		}
-		return b, jsonNumber(d), nil
+		return decodeJSONNumber(b)
 	case containerTag:
 		return DecodeJSON(b)
 	}
