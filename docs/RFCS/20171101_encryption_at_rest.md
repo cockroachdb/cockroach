@@ -608,6 +608,8 @@ Ordering does not matter, the key with highest ID is always the active encryptio
 Notice the use of a `PLAIN` cipher. This is to be able to pass the concept of "do not encrypt" through
 key specification.
 
+**For alternate store key formats, see [Alternatives](#store-key-format).**
+
 ### Loading store keys
 
 Store keys are stored in a plaintext file provided by the user.
@@ -899,6 +901,26 @@ Pros:
 
 Cons:
 * it's not possible to specify a different cipher for store keys
+
+### Store key format
+
+Instead of requiring explicit keyID, timestamp, and cipher for the store keys, we could allow the user
+to specify two files: the old key, and the new key. eg:
+* `old_key=/path/to/old.key`
+* `key=/path/to/current.key`
+
+With possible values:
+* empty string (default): no key specified. Fails if encryption is currently enabled.
+* `plain`: switch to plaintext.
+* `filename`: file containing the raw key data.
+
+We can keep track of known store keys in the data keys file (will need a better name if we do that) using:
+* ID: hash of the key
+* timestamp: time of the first time we see a key
+* cipher: always AES. The variant depends on the key size.
+
+This makes it a bit less clear how to indicate which key is active, but store key rotation should take place as
+soon as we notice the flag change.
 
 ## Unresolved questions
 
