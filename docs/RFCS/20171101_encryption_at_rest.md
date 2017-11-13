@@ -764,16 +764,19 @@ Any other uses of rocksdb to store raw or processed data will use the same encry
 This applies to the restore phase of backup/restore and temporary disk storage for query processing.
 
 We identify three separate cases:
-1. written through a temporary instance of rocksdb, no file-level interaction with a store rocksdb:
-if encryption is enabled on any of the stores of the node, we enable it on the temporary rocksdb instance.
-Data keys are generated and kept in-memory. This data will not survive node restarts.
-1. written through a custom instance of rocksdb but passed to a store rocksdb (eg: `IngestExternalFile`):
-We must change the code to use the store's instance of rocksdb so that we may encrypt/decrypt the file
-with keys that will survive restarts.
+1. written through a temporary instance of rocksdb, no file-level interaction with a store rocksdb: eg: distSQL
+temporary storage engine using a standalone instance of rocksdb. If encryption is enabled on any of the stores
+of the node, we enable it on the temporary rocksdb instance. Data keys are generated and kept in-memory.
+This data will not survive node restarts.
+1. written through rocksdb (static code, or independent instance) but passed to a store rocksdb: eg: restoring
+backups using a local sstable, then writing it to both raft and the local rocksdb instance. We must change
+the code to use the store's instance of rocksdb so that we may encrypt/decrypt the file with keys that will
+survive restarts.
 1. written through a store's instance of rocksdb: use as usual.
 
-Preamble data format support should not be a problem as both cases involve temporary data: we can delete all
-existing data and re-create the rocksdb instance with preamble support.
+We should also investigate ways to ensure that future uses of local storage through rocksdb encrypts all data
+written to local disk when encryption is enabled. Reducing the number of entry points into rocksdb would make this
+easier to do.
 
 Documentation must mention the same restriction about key and data colocation: the store keys should not be on the
 same disk as the temporary data.
