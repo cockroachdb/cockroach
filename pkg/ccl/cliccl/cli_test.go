@@ -69,8 +69,8 @@ func Example_cclzone() {
   c1 STRING PRIMARY KEY,
   c2 STRING
 ) PARTITION BY LIST (c1) (
-  PARTITION p0 VALUES ('a'),
-  PARTITION p1 VALUES (DEFAULT)
+  PARTITION p0 VALUES IN ('a'),
+  PARTITION p1 VALUES IN (DEFAULT)
 )`})
 	c.runWithArgs([]string{"sql", "-e", "CREATE INDEX ON db.t (c2)"})
 	c.run("zone set db.t@nonexistent --file=./../../cli/testdata/zone_attrs.yaml")
@@ -99,8 +99,8 @@ func Example_cclzone() {
 	//   c1 STRING PRIMARY KEY,
 	//   c2 STRING
 	// ) PARTITION BY LIST (c1) (
-	//   PARTITION p0 VALUES ('a'),
-	//   PARTITION p1 VALUES (DEFAULT)
+	//   PARTITION p0 VALUES IN ('a'),
+	//   PARTITION p1 VALUES IN (DEFAULT)
 	// )
 	// CREATE TABLE
 	// sql -e CREATE INDEX ON db.t (c2)
