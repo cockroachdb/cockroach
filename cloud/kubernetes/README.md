@@ -165,7 +165,7 @@ certificatesigningrequest "default.node.cockroachdb-0" denied
 
 Once all the pods have started, to initialize the cluster run:
 ```shell
-kubectl create -f cluster_init_secure.yaml
+kubectl create -f cluster-init-secure.yaml
 ```
 
 This will create a CSR called "default.client.root", which you can approve by
@@ -199,10 +199,10 @@ $ kubectl run cockroachdb -it --image=cockroachdb/cockroach --rm --restart=Never
     -- sql --insecure --host=cockroachdb-public
 ```
 
-In secure mode, use our `cockroachdb-client-secure.yaml` config to launch a pod that runs indefinitely with the `cockroach` binary inside it:
+In secure mode, use our `client-secure.yaml` config to launch a pod that runs indefinitely with the `cockroach` binary inside it:
 
 ```shell
-kubectl create -f cockroachdb-client-secure.yaml
+kubectl create -f client-secure.yaml
 ```
 
 Check and approve the CSR for the pod as described above, and then get a shell to the pod and run:
@@ -235,12 +235,12 @@ This directory contains the configuration to launch a simple load generator with
 
 If you created an insecure cockroach cluster, run:
 ```shell
-kubectl create -f example_app.yaml
+kubectl create -f example-app.yaml
 ```
 
 If you created a secure cockroach cluster, run:
 ```shell
-kubectl create -f example_app_secure.yaml
+kubectl create -f example-app-secure.yaml
 ```
 
 When the first pod is being initialized, you will need to approve its client certificate request:
