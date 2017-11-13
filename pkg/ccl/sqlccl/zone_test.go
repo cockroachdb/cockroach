@@ -80,6 +80,11 @@ func TestValidIndexPartitionSetShowZones(t *testing.T) {
 		CLISpecifier: "d.t.p0",
 		Config:       zoneOverride,
 	}
+	p1Row := sqlutils.ZoneRow{
+		ID:           keys.MaxReservedDescID + 2,
+		CLISpecifier: "d.t.p1",
+		Config:       zoneOverride,
+	}
 
 	// Ensure the default is reported for all zones at first.
 	sqlutils.VerifyAllZoneConfigs(sqlDB, defaultRow)
@@ -183,6 +188,14 @@ func TestValidIndexPartitionSetShowZones(t *testing.T) {
 	sqlutils.VerifyZoneConfigForTarget(sqlDB, "INDEX d.t@primary", defaultRow)
 	sqlutils.VerifyZoneConfigForTarget(sqlDB, "TABLE d.t PARTITION p0", defaultRow)
 	sqlutils.VerifyZoneConfigForTarget(sqlDB, "TABLE d.t PARTITION p1", defaultRow)
+
+	// Ensure subzones can be created even when no table zone exists.
+	sqlutils.SetZoneConfig(sqlDB, "TABLE d.t PARTITION p0", yamlOverride)
+	sqlutils.SetZoneConfig(sqlDB, "TABLE d.t PARTITION p1", yamlOverride)
+	sqlutils.VerifyAllZoneConfigs(sqlDB, defaultRow, p0Row, p1Row)
+	sqlutils.VerifyZoneConfigForTarget(sqlDB, "TABLE d.t", defaultRow)
+	sqlutils.VerifyZoneConfigForTarget(sqlDB, "TABLE d.t PARTITION p0", p0Row)
+	sqlutils.VerifyZoneConfigForTarget(sqlDB, "TABLE d.t PARTITION p1", p1Row)
 
 	// Ensure the shorthand index syntax works.
 	sqlutils.SetZoneConfig(sqlDB, `INDEX "primary"`, yamlOverride)
