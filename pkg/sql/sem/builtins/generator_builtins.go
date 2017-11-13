@@ -417,7 +417,11 @@ func (g *jsonArrayGenerator) Close() {}
 // Next implements the tree.ValueGenerator interface.
 func (g *jsonArrayGenerator) Next() (bool, error) {
 	g.nextIndex++
-	return g.json.FetchValIdx(g.nextIndex) != nil, nil
+	next, err := g.json.FetchValIdx(g.nextIndex)
+	if err != nil {
+		return false, err
+	}
+	return next != nil, nil
 }
 
 // Values implements the tree.ValueGenerator interface.

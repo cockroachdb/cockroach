@@ -29,21 +29,38 @@ type containsTester interface {
 	subdocument(isRoot bool, rng *rand.Rand) JSON
 }
 
-func (j jsonNull) slowContains(other JSON) bool   { return j.Compare(other) == 0 }
-func (j jsonTrue) slowContains(other JSON) bool   { return j.Compare(other) == 0 }
-func (j jsonFalse) slowContains(other JSON) bool  { return j.Compare(other) == 0 }
-func (j jsonNumber) slowContains(other JSON) bool { return j.Compare(other) == 0 }
-func (j jsonString) slowContains(other JSON) bool { return j.Compare(other) == 0 }
+func (j jsonNull) slowContains(other JSON) bool {
+	c, _ := j.Compare(other)
+	return c == 0
+}
+func (j jsonTrue) slowContains(other JSON) bool {
+	c, _ := j.Compare(other)
+	return c == 0
+}
+func (j jsonFalse) slowContains(other JSON) bool {
+	c, _ := j.Compare(other)
+	return c == 0
+}
+func (j jsonNumber) slowContains(other JSON) bool {
+	c, _ := j.Compare(other)
+	return c == 0
+}
+func (j jsonString) slowContains(other JSON) bool {
+	c, _ := j.Compare(other)
+	return c == 0
+}
 
 func (j jsonArray) slowContains(other JSON) bool {
 	if other.isScalar() {
 		for i := 0; i < len(j); i++ {
-			if j[i].Compare(other) == 0 {
+			c, _ := j[i].Compare(other)
+			if c == 0 {
 				return true
 			}
 		}
 	}
 
+	other = other.maybeDecode()
 	if ary, ok := other.(jsonArray); ok {
 		for i := 0; i < len(ary); i++ {
 			found := false
@@ -63,9 +80,10 @@ func (j jsonArray) slowContains(other JSON) bool {
 }
 
 func (j jsonObject) slowContains(other JSON) bool {
+	other = other.maybeDecode()
 	if obj, ok := other.(jsonObject); ok {
 		for i := 0; i < len(obj); i++ {
-			leftVal := j.FetchValKey(string(obj[i].k))
+			leftVal, _ := j.FetchValKey(string(obj[i].k))
 			if leftVal == nil || !leftVal.(containsTester).slowContains(obj[i].v) {
 				return false
 			}
