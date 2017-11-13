@@ -24,7 +24,6 @@ case ${1-} in
     "$(dirname "${0}")/travis_retry.sh" gcloud compute ssh "${NAME}" --command=true
 
     gcloud compute copy-files "$(dirname "${0}")/../build/bootstrap" "${NAME}:bootstrap"
-    gcloud compute copy-files "$(dirname "${0}")/../build/parallelbuilds-"* "${NAME}:bootstrap"
     gcloud compute ssh "${NAME}" --ssh-flag="-A" --command="./bootstrap/bootstrap-debian.sh"
 
     # Install automatic shutdown after ten minutes of operation without a
