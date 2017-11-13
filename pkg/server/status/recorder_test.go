@@ -28,6 +28,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -148,7 +149,8 @@ func TestMetricsRecorder(t *testing.T) {
 		registry: metric.NewRegistry(),
 	}
 	manual := hlc.NewManualClock(100)
-	recorder := NewMetricsRecorder(hlc.NewClock(manual.UnixNano, time.Nanosecond), nil, nil, nil)
+	st := cluster.MakeTestingClusterSettings()
+	recorder := NewMetricsRecorder(hlc.NewClock(manual.UnixNano, time.Nanosecond), nil, nil, nil, st)
 	recorder.AddStore(store1)
 	recorder.AddStore(store2)
 	recorder.AddNode(reg1, nodeDesc, 50, "foo:26257", "foo:26258")
@@ -358,6 +360,7 @@ func TestMetricsRecorder(t *testing.T) {
 	}
 	nodeSummary.Args = nil
 	nodeSummary.Env = nil
+	nodeSummary.Activity = nil
 	nodeSummary.Latencies = nil
 
 	sort.Sort(byStoreDescID(nodeSummary.StoreStatuses))

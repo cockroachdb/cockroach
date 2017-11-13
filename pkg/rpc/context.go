@@ -127,6 +127,8 @@ func NewServerWithInterceptor(
 			MinTime:             time.Nanosecond,
 			PermitWithoutStream: true,
 		}),
+		// A stats handler to measure server network stats.
+		grpc.StatsHandler(&ctx.stats),
 	}
 	// Compression is enabled separately from decompression to allow staged
 	// rollout.
@@ -240,6 +242,8 @@ type Context struct {
 
 	conns syncmap.Map
 
+	stats StatsHandler
+
 	// For unittesting.
 	BreakerFactory func() *circuit.Breaker
 }
@@ -288,6 +292,13 @@ func NewContext(
 	})
 
 	return ctx
+}
+
+// GetStatsMap returns a map of network statistics maintained by the
+// internal stats handler. The map is from the remote network address
+// (in string form) to an rpc.Stats object.
+func (ctx *Context) GetStatsMap() *syncmap.Map {
+	return &ctx.stats.stats
 }
 
 // GetLocalInternalServerForAddr returns the context's internal batch server
@@ -365,6 +376,7 @@ func (ctx *Context) GRPCDialOptions() ([]grpc.DialOption, error) {
 		)
 		dialOpts = append(dialOpts, grpc.WithUnaryInterceptor(interceptor))
 	}
+
 	return dialOpts, nil
 }
 
@@ -384,6 +396,9 @@ func (ctx *Context) GRPCDial(target string, opts ...grpc.DialOption) (*grpc.Clie
 			meta.dialErr = err
 			return
 		}
+
+		// Add a stats handler to measure client network stats.
+		dialOpts = append(dialOpts, grpc.WithStatsHandler(ctx.stats.newClient(target)))
 
 		dialOpts = append(dialOpts, grpc.WithBackoffMaxDelay(maxBackoff))
 		dialOpts = append(dialOpts, grpc.WithKeepaliveParams(keepalive.ClientParameters{

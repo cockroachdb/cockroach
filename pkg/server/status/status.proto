@@ -36,9 +36,24 @@ message NodeStatus {
   repeated StoreStatus store_statuses = 6 [(gogoproto.nullable) = false];
   repeated string args = 7;
   repeated string env = 8;
-  // latencies is a map of nodeIDs to nanoseconds which is the latency between
-  // this node and the other node.
+  // latencies is a map of nodeIDs to nanoseconds which is the latency
+  // between this node and the other node.
+  //
+  // NOTE: this is deprecated and is only set if the min supported
+  //       cluster version is >= VersionRPCNetworkStats.
   map<int32, int64> latencies = 9 [
+    (gogoproto.nullable) = false,
+    (gogoproto.castkey) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"
+  ];
+
+  message NetworkActivity {
+    int64 incoming = 1; // in bytes
+    int64 outgoing = 2; // in bytes
+    int64 latency = 3;  // in nanoseconds
+  }
+  // activity is a map of nodeIDs to network statistics from this node
+  // to other nodes.
+  map<int32, NetworkActivity> activity = 10 [
     (gogoproto.nullable) = false,
     (gogoproto.castkey) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"
   ];
