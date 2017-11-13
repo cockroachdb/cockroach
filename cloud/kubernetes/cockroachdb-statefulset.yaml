@@ -115,6 +115,8 @@ spec:
       - name: datadir
         persistentVolumeClaim:
           claimName: datadir
+  updateStrategy:
+    type: RollingUpdate
   volumeClaimTemplates:
   - metadata:
       name: datadir

@@ -152,6 +152,8 @@ spec:
           claimName: datadir
       - name: certs
         emptyDir: {}
+  updateStrategy:
+    type: RollingUpdate
   volumeClaimTemplates:
   - metadata:
       name: datadir

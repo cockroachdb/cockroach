@@ -279,6 +279,25 @@ Scale the StatefulSet by running
 kubectl scale statefulset cockroachdb --replicas=4
 ```
 
+## Doing a rolling upgrade to a different CockroachDB version
+
+Open up the StatefulSet's current configuration in your default text editor
+using the command below, find the line specifying the `cockroachdb/cockroach`
+image being used, change the version tag to the new one, save the file, and
+quit.
+
+```shell
+kubectl edit statefulset cockroachdb
+```
+
+Kubernetes will then automatically replace the pods in your StatefulSet one by
+one to run on the newly specified image. For more details on upgrading
+CockroachDB, see [our
+docs](https://www.cockroachlabs.com/docs/stable/upgrade-cockroach-version.html).
+For how to use alternative rolling update commands such as `kubectl patch` and
+`kubectl replace`, see the [Kubernetes
+docs](https://kubernetes.io/docs/tutorials/stateful-application/basic-stateful-set/#rolling-update).
+
 ## Cleaning up when you're done
 
 Because all of the resources in this example have been tagged with the label `app=cockroachdb`,
