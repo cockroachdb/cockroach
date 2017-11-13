@@ -455,16 +455,11 @@ func sendAndFill(ctx context.Context, send SenderFunc, b *Batch) error {
 	ba.Requests = b.reqs
 	ba.Header = b.Header
 	b.response, b.pErr = send(ctx, ba)
-	if b.pErr != nil {
-		// Discard errors from fillResults.
-		_ = b.fillResults(ctx)
-		return b.pErr.GoError()
+	b.fillResults(ctx)
+	if b.pErr == nil {
+		b.pErr = roachpb.NewError(b.resultErr())
 	}
-	if err := b.fillResults(ctx); err != nil {
-		b.pErr = roachpb.NewError(err)
-		return err
-	}
-	return nil
+	return b.pErr.GoError()
 }
 
 // Run executes the operations queued up within a batch. Before executing any
