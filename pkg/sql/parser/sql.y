@@ -725,7 +725,7 @@ func (u *sqlSymUnion) scrubOption() tree.ScrubOption {
 %type <tree.UnresolvedName> qname_indirection
 %type <tree.NamePart> name_indirection_elem
 %type <tree.GroupBy> group_clause
-%type <*tree.Limit> select_limit opt_select_limit
+%type <*tree.Limit> select_limit
 %type <tree.TableNameReferences> relation_expr_list
 %type <tree.ReturningClause> returning_clause
 
@@ -748,7 +748,6 @@ func (u *sqlSymUnion) scrubOption() tree.ScrubOption {
 %type <empty> opt_set_data
 
 %type <*tree.Limit> limit_clause offset_clause opt_limit_clause
-%type <bool> for_locking_clause opt_for_locking_clause
 %type <tree.Expr>  select_limit_value
 %type <tree.Expr> opt_select_fetch_first_value
 %type <empty> row_or_rows
@@ -3869,13 +3868,9 @@ select_no_parens:
   {
     $$.val = &tree.Select{Select: $1.selectStmt(), OrderBy: $2.orderBy()}
   }
-| select_clause opt_sort_clause for_locking_clause opt_select_limit
+| select_clause opt_sort_clause select_limit
   {
-    $$.val = &tree.Select{Select: $1.selectStmt(), OrderBy: $2.orderBy(), LockForUpdate: $3.bool(), Limit: $4.limit()}
-  }
-| select_clause opt_sort_clause select_limit opt_for_locking_clause
-  {
-    $$.val = &tree.Select{Select: $1.selectStmt(), OrderBy: $2.orderBy(), Limit: $3.limit(), LockForUpdate: $4.bool()}
+    $$.val = &tree.Select{Select: $1.selectStmt(), OrderBy: $2.orderBy(), Limit: $3.limit()}
   }
 | with_clause select_clause
   {
@@ -3885,13 +3880,9 @@ select_no_parens:
   {
     $$.val = &tree.Select{Select: $2.selectStmt(), OrderBy: $3.orderBy()}
   }
-| with_clause select_clause opt_sort_clause for_locking_clause opt_select_limit
+| with_clause select_clause opt_sort_clause select_limit
   {
-    $$.val = &tree.Select{Select: $2.selectStmt(), OrderBy: $3.orderBy(), LockForUpdate: $4.bool(), Limit: $5.limit()}
-  }
-| with_clause select_clause opt_sort_clause select_limit opt_for_locking_clause
-  {
-    $$.val = &tree.Select{Select: $2.selectStmt(), OrderBy: $3.orderBy(), Limit: $4.limit(), LockForUpdate: $5.bool()}
+    $$.val = &tree.Select{Select: $2.selectStmt(), OrderBy: $3.orderBy(), Limit: $4.limit()}
   }
 
 select_clause:
@@ -3951,7 +3942,6 @@ simple_select:
 //        [ ORDER BY <expr> [ ASC | DESC ] [, ...] ]
 //        [ LIMIT { <expr> | ALL } ]
 //        [ OFFSET <expr> [ ROW | ROWS ] ]
-//        [ FOR UPDATE ]
 // %SeeAlso: WEBDOCS/select.html
 simple_select_clause:
   SELECT opt_all_clause target_list
@@ -4126,13 +4116,6 @@ sortby:
 // TODO(pmattis): Support ordering using arbitrary math ops?
 // | a_expr USING math_op {}
 
-opt_select_limit:
-  select_limit
-| /* EMPTY */
-  {
-    $$.val = (*tree.Limit)(nil)
-  }
-
 select_limit:
   limit_clause offset_clause
   {
@@ -4254,19 +4237,6 @@ having_clause:
 | /* EMPTY */
   {
     $$.val = tree.Expr(nil)
-  }
-
-opt_for_locking_clause:
-  for_locking_clause
-| /* EMPTY */
-  {
-    $$.val = false
-  }
-
-for_locking_clause:
-  FOR UPDATE
-  {
-    $$.val = true
   }
 
 // Given "VALUES (a, b)" in a table expression context, we have to

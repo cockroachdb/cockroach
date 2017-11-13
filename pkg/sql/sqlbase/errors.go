@@ -271,7 +271,7 @@ func ConvertBatchError(ctx context.Context, tableDesc *TableDescriptor, b *clien
 			cols[i] = *col
 			valNeededForCol[i] = true
 		}
-		if err := rf.Init(tableDesc, colIdxMap, index, false /* reverse */, false, /* lockForUpdate */
+		if err := rf.Init(tableDesc, colIdxMap, index, false, /* reverse */
 			indexID != tableDesc.PrimaryIndex.ID /* isSecondaryIndex */, cols, valNeededForCol,
 			false /* returnRangeInfo */, &DatumAlloc{}); err != nil {
 			return err

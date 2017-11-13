@@ -274,8 +274,7 @@ func (p *planner) Update(
 		Exprs: sqlbase.ColumnsSelectors(ru.FetchCols),
 		From:  &tree.From{Tables: []tree.TableExpr{n.Table}},
 		Where: n.Where,
-	}, nil /* orderBy */, nil /* limit */, false, /* lockForUpdate */
-		nil /* desiredTypes */, publicAndNonPublicColumns)
+	}, nil, nil, nil, publicAndNonPublicColumns)
 	if err != nil {
 		return nil, err
 	}
