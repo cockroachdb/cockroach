@@ -220,6 +220,7 @@ func TestPutHttp(t *testing.T) {
 					return
 				}
 				files++
+				w.WriteHeader(201)
 			case "GET":
 				http.ServeFile(w, r, localfile)
 			case "DELETE":
@@ -227,6 +228,7 @@ func TestPutHttp(t *testing.T) {
 					http.Error(w, err.Error(), 500)
 					return
 				}
+				w.WriteHeader(204)
 			default:
 				http.Error(w, "unsupported method "+r.Method, 400)
 			}
