@@ -2989,8 +2989,9 @@ func (r *Replica) propose(
 
 	r.mu.Lock()
 	if !r.mu.destroyStatus.IsAlive() {
+		err := r.mu.destroyStatus.err
 		r.mu.Unlock()
-		return nil, nil, noop, roachpb.NewError(r.mu.destroyStatus.err)
+		return nil, nil, noop, roachpb.NewError(err)
 	}
 	r.mu.Unlock()
 
