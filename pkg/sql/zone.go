@@ -133,6 +133,26 @@ func ascendZoneSpecifier(
 	return zs, nil
 }
 
+// getZoneConfigRaw looks up the zone config with the given ID. Unlike
+// getZoneConfig, it does not attempt to ascend the zone config hierarchy. If no
+// zone config exists for the given ID, it returns an empty zone config.
+func getZoneConfigRaw(
+	ctx context.Context, txn *client.Txn, id sqlbase.ID,
+) (config.ZoneConfig, error) {
+	kv, err := txn.Get(ctx, config.MakeZoneKey(uint32(id)))
+	if err != nil {
+		return config.ZoneConfig{}, err
+	}
+	if kv.Value == nil {
+		return config.ZoneConfig{}, nil
+	}
+	var zone config.ZoneConfig
+	if err := kv.ValueProto(&zone); err != nil {
+		return config.ZoneConfig{}, err
+	}
+	return zone, nil
+}
+
 type setZoneConfigNode struct {
 	zoneSpecifier tree.ZoneSpecifier
 	yamlConfig    tree.TypedExpr
@@ -195,7 +215,7 @@ func (n *setZoneConfigNode) Start(params runParams) error {
 		return err
 	}
 
-	zoneID, zone, subzone, err := GetZoneConfigInTxn(params.ctx, params.p.txn,
+	_, zone, subzone, err := GetZoneConfigInTxn(params.ctx, params.p.txn,
 		uint32(targetID), index, partition)
 	if err == errNoZoneConfigApplies {
 		// TODO(benesch): This shouldn't be the caller's responsibility;
@@ -228,10 +248,12 @@ func (n *setZoneConfigNode) Start(params runParams) error {
 		if index == nil {
 			zone = newZone
 		} else {
-			if uint32(targetID) != zoneID {
-				// If the table containing this subzone didn't have its own zone entry,
-				// create an empty subzone placeholder.
-				zone = config.ZoneConfig{}
+			// If the zone config for targetID was a subzone placeholder, it'll have
+			// been skipped over by GetZoneConfigInTxn. We need to load it regardless
+			// to avoid blowing away other subzones.
+			zone, err = getZoneConfigRaw(params.ctx, params.p.txn, targetID)
+			if err != nil {
+				return err
 			}
 			zone.SetSubzone(config.Subzone{
 				IndexID:       uint32(index.ID),
