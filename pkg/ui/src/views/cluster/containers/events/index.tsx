@@ -3,7 +3,6 @@ import { Link } from "react-router";
 import _ from "lodash";
 import { connect } from "react-redux";
 import moment from "moment";
-import * as protobuf from "protobufjs/minimal";
 
 import "./events.styl";
 
@@ -11,9 +10,10 @@ import * as protos from "src/js/protos";
 
 import { AdminUIState } from "src/redux/state";
 import { refreshEvents } from "src/redux/apiReducers";
+import { eventsSelector, eventsValidSelector } from "src/redux/events";
 import { LocalSetting } from "src/redux/localsettings";
 import { TimestampToMoment } from "src/util/convert";
-import * as eventTypes from "src/util/eventTypes";
+import { getEventDescription } from "src/util/events";
 import { SortSetting } from "src/views/shared/components/sortabletable";
 import { SortedTable } from "src/views/shared/components/sortedtable";
 
@@ -45,91 +45,12 @@ export interface EventRowProps {
   event: Event$Properties;
 }
 
-const s = (v: {}) => JSON.stringify(v, undefined, 2);
-
 export function getEventInfo(e: Event$Properties): SimplifiedEvent {
-  const info: {
-    DatabaseName: string,
-    DroppedTables: string[],
-    IndexName: string,
-    MutationID: string,
-    TableName: string,
-    User: string,
-    ViewName: string,
-    SettingName: string,
-    Value: string,
-  } = protobuf.util.isset(e, "info") ? JSON.parse(e.info) : {};
-  const targetId: number = e.target_id ? e.target_id.toNumber() : null;
-  let content: React.ReactNode;
-
-  switch (e.event_type) {
-    case eventTypes.CREATE_DATABASE:
-      content = <span>Database Created: User {info.User} created database {info.DatabaseName}</span>;
-      break;
-    case eventTypes.DROP_DATABASE:
-      info.DroppedTables = info.DroppedTables || [];
-      let tableDropText: string = `${info.DroppedTables.length} tables were dropped: ${info.DroppedTables.join(", ")}`;
-      if (info.DroppedTables.length === 0) {
-        tableDropText = "No tables were dropped.";
-      } else if (info.DroppedTables.length === 1) {
-        tableDropText = `1 table was dropped: ${info.DroppedTables[0]}`;
-      }
-      content = <span>Database Dropped: User {info.User} dropped database {info.DatabaseName}.{tableDropText}</span>;
-      break;
-    case eventTypes.CREATE_TABLE:
-      content = <span>Table Created: User {info.User} created table {info.TableName}</span>;
-      break;
-    case eventTypes.DROP_TABLE:
-      content = <span>Table Dropped: User {info.User} dropped table {info.TableName}</span>;
-      break;
-    case eventTypes.ALTER_TABLE:
-      content = <span>Schema Change: User {info.User} began a schema change to alter table {info.TableName} with ID {info.MutationID}</span>;
-      break;
-    case eventTypes.CREATE_INDEX:
-      content = <span>Schema Change: User {info.User} began a schema change to create an index {info.IndexName} on table {info.TableName} with ID {info.MutationID}</span>;
-      break;
-    case eventTypes.DROP_INDEX:
-      content = <span>Schema Change: User {info.User} began a schema change to drop index {info.IndexName} on table {info.TableName} with ID {info.MutationID}</span>;
-      break;
-    case eventTypes.CREATE_VIEW:
-      content = <span>View Created: User {info.User} created view {info.ViewName}</span>;
-      break;
-    case eventTypes.DROP_VIEW:
-      content = <span>View Dropped: User {info.User} dropped view {info.ViewName}</span>;
-      break;
-    case eventTypes.REVERSE_SCHEMA_CHANGE:
-      content = <span>Schema Change Reversed: Schema change with ID {info.MutationID} was reversed.</span>;
-      break;
-    case eventTypes.FINISH_SCHEMA_CHANGE:
-      content = <span>Schema Change Completed: Schema change with ID {info.MutationID} was completed.</span>;
-      break;
-    case eventTypes.FINISH_SCHEMA_CHANGE_ROLLBACK:
-      content = <span>Schema Change Rollback Completed: Rollback of schema change with ID {info.MutationID} was completed.</span>;
-      break;
-    case eventTypes.NODE_JOIN:
-      content = <span>Node Joined: Node {targetId} joined the cluster</span>;
-      break;
-    case eventTypes.NODE_DECOMMISSIONED:
-      content = <span>Node Decommissioned: Node {targetId} was decommissioned</span>;
-      break;
-    case eventTypes.NODE_RECOMMISSIONED:
-      content = <span>Node Recommissioned: Node {targetId} was recommissioned</span>;
-      break;
-    case eventTypes.NODE_RESTART:
-      content = <span>Node Rejoined: Node {targetId} rejoined the cluster</span>;
-      break;
-    case eventTypes.SET_CLUSTER_SETTING:
-      content = <span>Cluster Setting Changed: User {info.User} set {info.SettingName} to {info.Value}</span>;
-      break;
-    default:
-      content = <span>Unknown Event Type: {e.event_type}, content: {s(info)}</span>;
-  }
-
   return {
     fromNowString: TimestampToMoment(e.timestamp).fromNow()
       .replace("second", "sec")
       .replace("minute", "min"),
-    content,
+    content: <span>{ getEventDescription(e) }</span>,
     sortableTimestamp: TimestampToMoment(e.timestamp),
   };
 }
@@ -242,14 +163,6 @@ export class EventPageUnconnected extends React.Component<EventPageProps, {}> {
     </div>;
   }
 }
-
-const eventsSelector = (state: AdminUIState) => {
-  return state.cachedData.events.data && state.cachedData.events.data.events;
-};
-
-const eventsValidSelector = (state: AdminUIState) => {
-  return state.cachedData.events.valid;
-};
 
 // Connect the EventsList class with our redux store.
 const eventBoxConnected = connect(
