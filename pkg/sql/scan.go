@@ -73,7 +73,6 @@ type scanNode struct {
 	spans            []roachpb.Span
 	isSecondaryIndex bool
 	reverse          bool
-	lockForUpdate    bool
 	props            physicalProps
 
 	rowIndex int64 // the index of the current row
@@ -133,8 +132,8 @@ func (n *scanNode) disableBatchLimit() {
 }
 
 func (n *scanNode) Start(runParams) error {
-	return n.fetcher.Init(n.desc, n.colIdxMap, n.index, n.reverse, n.lockForUpdate, n.isSecondaryIndex,
-		n.cols, n.valNeededForCol, false /* returnRangeInfo */, &n.p.alloc)
+	return n.fetcher.Init(n.desc, n.colIdxMap, n.index, n.reverse, n.isSecondaryIndex, n.cols,
+		n.valNeededForCol, false /* returnRangeInfo */, &n.p.alloc)
 }
 
 func (n *scanNode) Close(context.Context) {

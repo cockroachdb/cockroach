@@ -441,7 +441,7 @@ func makeBaseFKHelper(
 	ids := ColIDtoRowIndexFromCols(b.searchTable.Columns)
 	isSecondary := b.searchTable.PrimaryIndex.ID != searchIdx.ID
 	err = b.rf.Init(b.searchTable, ids, searchIdx, false, /* reverse */
-		false /* lockForUpdate */, isSecondary, b.searchTable.Columns, nil, /* valNeededForCol */
+		isSecondary, b.searchTable.Columns, nil,
 		false /* returnRangeInfo */, alloc)
 	if err != nil {
 		return b, err
