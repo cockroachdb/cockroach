@@ -335,6 +335,17 @@ func (d directions) get(i int) (encoding.Direction, error) {
 	return encoding.Ascending, nil
 }
 
+// Return the value corresponding to the column. If the column isn't
+// present return a NULL value.
+func findColumnValue(column ColumnID, colMap map[ColumnID]int, values []tree.Datum) tree.Datum {
+	if i, ok := colMap[column]; ok {
+		// TODO(pmattis): Need to convert the values[i] value to the type
+		// expected by the column.
+		return values[i]
+	}
+	return tree.DNull
+}
+
 // EncodeColumns is a version of EncodePartialIndexKey that takes ColumnIDs and
 // directions explicitly. WARNING: unlike EncodePartialIndexKey, EncodeColumns
 // appends directly to keyPrefix.
@@ -347,15 +358,7 @@ func EncodeColumns(
 ) (key []byte, containsNull bool, err error) {
 	key = keyPrefix
 	for colIdx, id := range columnIDs {
-		var val tree.Datum
-		if i, ok := colMap[id]; ok {
-			// TODO(pmattis): Need to convert the values[i] value to the type
-			// expected by the column.
-			val = values[i]
-		} else {
-			val = tree.DNull
-		}
-
+		val := findColumnValue(id, colMap, values)
 		if val == tree.DNull {
 			containsNull = true
 		}
@@ -1542,7 +1545,7 @@ func EncodeSecondaryIndex(
 	var lastColID ColumnID
 	// Composite columns have their contents at the end of the value.
 	for _, col := range cols {
-		val := values[colMap[col.id]]
+		val := findColumnValue(col.id, colMap, values)
 		if val == tree.DNull || (col.isComposite && !val.(tree.CompositeDatum).IsComposite()) {
 			continue
 		}

@@ -250,6 +250,9 @@ func TestIndexKey(t *testing.T) {
 	}
 }
 
+
+
+
 type arrayEncodingTest struct {
 	name     string
 	datum    tree.DArray

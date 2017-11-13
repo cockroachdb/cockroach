@@ -209,3 +209,16 @@ SELECT a, b FROM t14601a ORDER BY a
 a  false
 b  false
 c  false
+
+# Test that unspecified storing values are treated like NULL values.
+statement ok
+INSERT INTO t (a) VALUES (2)
+
+query T
+SELECT message FROM [SHOW KV TRACE FOR SELECT * FROM t@b_idx]
+ WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
+----
+fetched: /t/b_idx/NULL/2 -> NULL
+output row: [2 NULL NULL NULL]
+fetched: /t/b_idx/2/1/c/d -> /3/4
+output row: [1 2 3 4]
