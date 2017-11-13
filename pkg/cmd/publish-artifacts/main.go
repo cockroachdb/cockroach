@@ -136,46 +136,6 @@ func main() {
 
 	noCache := "no-cache"
 
-	if *isRelease {
-		for _, releaseVersionStr := range releaseVersionStrs {
-			archiveBase := fmt.Sprintf("cockroach-%s", releaseVersionStr)
-			srcArchive := fmt.Sprintf("%s.%s", archiveBase, "src.tgz")
-			cmd := exec.Command(
-				"make",
-				"archive",
-				fmt.Sprintf("ARCHIVE_BASE=%s", archiveBase),
-				fmt.Sprintf("ARCHIVE=%s", srcArchive),
-			)
-			cmd.Dir = pkg.Dir
-			cmd.Stdout = os.Stdout
-			cmd.Stderr = os.Stderr
-			log.Printf("%s %s", cmd.Env, cmd.Args)
-			if err := cmd.Run(); err != nil {
-				log.Fatalf("%s: %s", cmd.Args, err)
-			}
-
-			absoluteSrcArchivePath := filepath.Join(pkg.Dir, srcArchive)
-			f, err := os.Open(absoluteSrcArchivePath)
-			if err != nil {
-				log.Fatalf("os.Open(%s): %s", absoluteSrcArchivePath, err)
-			}
-			putObjectInput := s3.PutObjectInput{
-				Bucket: &bucketName,
-				Key:    &srcArchive,
-				Body:   f,
-			}
-			if releaseVersionStr == latestStr {
-				putObjectInput.CacheControl = &noCache
-			}
-			if _, err := svc.PutObject(&putObjectInput); err != nil {
-				log.Fatalf("s3 upload %s: %s", absoluteSrcArchivePath, err)
-			}
-			if err := f.Close(); err != nil {
-				log.Fatal(err)
-			}
-		}
-	}
-
 	for _, target := range []struct {
 		buildType  string
 		baseSuffix string
