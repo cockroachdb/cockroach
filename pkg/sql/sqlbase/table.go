@@ -1507,7 +1507,11 @@ func EncodeSecondaryIndex(
 	var lastColID ColumnID
 	// Composite columns have their contents at the end of the value.
 	for _, col := range cols {
-		val := values[colMap[col.id]]
+		valIdx, isSet := colMap[col.id]
+		if !isSet {
+			continue
+		}
+		val := values[valIdx]
 		if val == tree.DNull || (col.isComposite && !val.(tree.CompositeDatum).IsComposite()) {
 			continue
 		}
