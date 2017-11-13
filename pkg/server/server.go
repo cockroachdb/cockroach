@@ -706,6 +706,7 @@ func (s *Server) Start(ctx context.Context) error {
 	})
 
 	pgL := m.Match(pgwire.Match)
+	crpcL := m.Match(rpc.CRPCMatch)
 	anyL := m.Match(cmux.Any())
 
 	httpLn, err := net.Listen("tcp", s.cfg.HTTPAddr)
@@ -768,6 +769,20 @@ func (s *Server) Start(ctx context.Context) error {
 			// A cmux can't gracefully shut down without Serve being called on it.
 			netutil.FatalIfUnexpected(m.Serve())
 		})
+	})
+
+	s.stopper.RunWorker(workersCtx, func(context.Context) {
+		netutil.FatalIfUnexpected(rpc.CRPCServe(crpcL,
+			func(data []byte) (protoutil.Message, error) {
+				req := &roachpb.BatchRequest{}
+				if err := protoutil.Unmarshal(data, req); err != nil {
+					return nil, err
+				}
+				return req, nil
+			},
+			func(req protoutil.Message) (protoutil.Message, error) {
+				return s.node.Batch(context.TODO(), req.(*roachpb.BatchRequest))
+			}))
 	})
 
 	s.stopper.RunWorker(workersCtx, func(context.Context) {
