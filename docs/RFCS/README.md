@@ -48,7 +48,22 @@ conditions apply:
    alternatives. You should be mindful of this when it happens and
    attempt to compensate by a serious review of alternatives.**
 
-3. Go through the PR review. When the dust on the PR review has settled,
+3. Go through the PR review. This process can last anywhere from a
+   couple of days to several weeks, depending on the complexity of the
+   proposal. See [How Complex is Your Project](
+   https://www.cockroachlabs.com/docs/stable/contribute-to-cockroachdb.html#how-complex-is-your-project)
+   to determine whether your proposal is low, medium, or high complexity.
+
+   - Low complexity projects: Authors can begin the final comment period (FCP)
+     as soon as they receive one LGTM.
+   - Medium complexity projects: The PR must remain open for at least one week,
+     including the FCP, to allow collaborators sufficient time to review the RFC.
+   - High complexity projects: The PR must remain open for at least two weeks,
+     including the FCP, to allow collaborators sufficient time to review the RFC.
+     The two-week timeframe gives those who are out
+     of office for part of the review period a chance to join the discussion.
+
+   When the dust on the PR review has settled,
    and if there is consensus to proceed with the project, begin the
    final comment period (FCP) by (1) posting a comment on the PR and
    (2) posting an announcement on the persistent public communication
@@ -66,7 +81,9 @@ conditions apply:
 
    If the project is rejected, either abandon the PR or merge it
    with a status of `rejected` (depending on whether the document and
-   discussion are worth preserving for posterity).
+   discussion are worth preserving for posterity). The project may
+   receive a status of `postponed` rather than `rejected` if
+   it is likely to be implemented in the future.
 
    Note that it is possible for an RFC to receive discussion after it
    has been approved and its PR merged, e.g. during implementation.
@@ -90,8 +107,8 @@ During its lifetime an RFC can have the following status:
 - Draft
 
   A newly minted RFC has this status, until either the proposal is
-  accepted (next possible status: in-progress) or that it is DOA (next
-  possible status: rejected).
+  accepted (next possible status: in-progress), deferred (next possible
+  status: postponed) or that it is DOA (next possible status: rejected).
 
 - Rejected
 
@@ -121,3 +138,13 @@ During its lifetime an RFC can have the following status:
 
   A RFC receives this status when the described feature has been
   superseded.
+
+- Postponed
+
+  A RFC receives this status when the PR discussions have concluded that
+  due to implementation complexity, lack of customer demand, or other
+  issues with the proposal, the work should be postponed to a later date.
+
+  Next possible status: draft (the decision has been made to reconsider
+  this proposal), rejected (proposal not implemented/implementable after all),
+  obsolete (some subsequent work removes the need for the feature).
