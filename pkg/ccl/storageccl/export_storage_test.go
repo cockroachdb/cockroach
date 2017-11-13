@@ -268,6 +268,7 @@ func TestPutHttp(t *testing.T) {
 					return
 				}
 				files++
+				w.WriteHeader(201)
 			case "GET", "HEAD":
 				if filepath.Base(localfile) == badHeadResponse {
 					http.Error(w, "HEAD not implemented", 500)
@@ -279,6 +280,7 @@ func TestPutHttp(t *testing.T) {
 					http.Error(w, err.Error(), 500)
 					return
 				}
+				w.WriteHeader(204)
 			default:
 				http.Error(w, "unsupported method "+r.Method, 400)
 			}
