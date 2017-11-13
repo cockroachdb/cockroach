@@ -1052,7 +1052,7 @@ server_version_num             90500         NULL      NULL        NULL        s
 session_user                   root          NULL      NULL        NULL        string
 sql_safe_updates               false         NULL      NULL        NULL        string
 standard_conforming_strings    on            NULL      NULL        NULL        string
-time zone                      UTC           NULL      NULL        NULL        string
+timezone                       UTC           NULL      NULL        NULL        string
 tracing                        off           NULL      NULL        NULL        string
 transaction isolation level    SERIALIZABLE  NULL      NULL        NULL        string
 transaction priority           NORMAL        NULL      NULL        NULL        string
@@ -1079,7 +1079,7 @@ server_version_num             90500         NULL  user     NULL      90500     
 session_user                   root          NULL  user     NULL      root          root
 sql_safe_updates               false         NULL  user     NULL      false         false
 standard_conforming_strings    on            NULL  user     NULL      on            on
-time zone                      UTC           NULL  user     NULL      UTC           UTC
+timezone                       UTC           NULL  user     NULL      UTC           UTC
 tracing                        off           NULL  user     NULL      off           off
 transaction isolation level    SERIALIZABLE  NULL  user     NULL      SERIALIZABLE  SERIALIZABLE
 transaction priority           NORMAL        NULL  user     NULL      NORMAL        NORMAL
@@ -1106,7 +1106,7 @@ server_version_num             NULL    NULL     NULL     NULL        NULL
 session_user                   NULL    NULL     NULL     NULL        NULL
 sql_safe_updates               NULL    NULL     NULL     NULL        NULL
 standard_conforming_strings    NULL    NULL     NULL     NULL        NULL
-time zone                      NULL    NULL     NULL     NULL        NULL
+timezone                       NULL    NULL     NULL     NULL        NULL
 tracing                        NULL    NULL     NULL     NULL        NULL
 transaction isolation level    NULL    NULL     NULL     NULL        NULL
 transaction priority           NULL    NULL     NULL     NULL        NULL
