@@ -213,13 +213,6 @@ func MakeColumnDefDescs(
 		if typedExpr, err = t.NormalizeExpr(evalCtx, typedExpr); err != nil {
 			return nil, nil, err
 		}
-		// Try to evaluate once. If it is aimed to succeed during a
-		// backfill, it must succeed here too. This tries to ensure that
-		// we don't end up failing the evaluation during the schema change
-		// proper.
-		if _, err := typedExpr.Eval(evalCtx); err != nil {
-			return nil, nil, err
-		}
 		d.DefaultExpr.Expr = typedExpr
 
 		s := tree.Serialize(d.DefaultExpr.Expr)
