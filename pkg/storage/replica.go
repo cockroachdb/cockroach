@@ -2337,7 +2337,9 @@ func (r *Replica) removeCmdsFromCommandQueue(cmds batchCmdSet) {
 // timestamp cache. When the write returns, the updated timestamp
 // will inform the batch response timestamp or batch response txn
 // timestamp.
-func (r *Replica) applyTimestampCache(ba *roachpb.BatchRequest) (bool, *roachpb.Error) {
+func (r *Replica) applyTimestampCache(
+	ctx context.Context, ba *roachpb.BatchRequest,
+) (bool, *roachpb.Error) {
 	span, err := keys.RangeMatchingPred(*ba, roachpb.ConsultsTimestampCache)
 	if err != nil {
 		return false, roachpb.NewError(err)
@@ -2364,26 +2366,36 @@ func (r *Replica) applyTimestampCache(ba *roachpb.BatchRequest) (bool, *roachpb.
 			// has already been finalized, in which case this is a replay.
 			if _, ok := args.(*roachpb.BeginTransactionRequest); ok {
 				key := keys.TransactionKey(header.Key, ba.Txn.ID)
-				wTS, _, wOK := r.store.tsCacheMu.cache.GetMaxWrite(key, nil)
-				if wOK {
+				wTS, wTxnID := r.store.tsCacheMu.cache.GetMaxWrite(key, nil)
+				// GetMaxWrite will only find a timestamp interval with an
+				// associated txnID on the TransactionKey if an EndTxnReq has
+				// been processed. All other timestamp intervals will have no
+				// associated txnID and will be due to the low-water mark.
+				switch wTxnID {
+				case ba.Txn.ID:
 					return bumped, roachpb.NewError(roachpb.NewTransactionReplayError())
-				} else if !wTS.Less(ba.Txn.Timestamp) {
-					// This is a crucial bit of code. The timestamp cache is
-					// reset with the current time as the low-water
-					// mark, so if this replica recently obtained the lease,
-					// this case will be true for new txns, even if they're not
-					// a replay. We move the timestamp forward and return retry.
-					// If it's really a replay, it won't retry.
-					txn := ba.Txn.Clone()
-					bumped = txn.Timestamp.Forward(wTS.Next()) || bumped
-					err = roachpb.NewTransactionRetryError(roachpb.RETRY_POSSIBLE_REPLAY)
-					return bumped, roachpb.NewErrorWithTxn(err, &txn)
+				case uuid.UUID{} /* noTxnID */ :
+					if !wTS.Less(ba.Txn.Timestamp) {
+						// This is a crucial bit of code. The timestamp cache is
+						// reset with the current time as the low-water mark, so
+						// if this replica recently obtained the lease, this
+						// case will be true for new txns, even if they're not a
+						// replay. We move the timestamp forward and return
+						// retry. If it's really a replay, it won't retry.
+						txn := ba.Txn.Clone()
+						bumped = txn.Timestamp.Forward(wTS.Next()) || bumped
+						err = roachpb.NewTransactionRetryError(roachpb.RETRY_POSSIBLE_REPLAY)
+						return bumped, roachpb.NewErrorWithTxn(err, &txn)
+					}
+				default:
+					log.Fatalf(ctx, "unexpected tscache interval (%s,%s) on TxnKey %s",
+						wTS, wTxnID, key)
 				}
 				continue
 			}
 
 			// Forward the timestamp if there's been a more recent read (by someone else).
-			rTS, rTxnID, _ := r.store.tsCacheMu.cache.GetMaxRead(header.Key, header.EndKey)
+			rTS, rTxnID := r.store.tsCacheMu.cache.GetMaxRead(header.Key, header.EndKey)
 			if ba.Txn != nil {
 				if ba.Txn.ID != rTxnID {
 					nextTS := rTS.Next()
@@ -2401,7 +2413,7 @@ func (r *Replica) applyTimestampCache(ba *roachpb.BatchRequest) (bool, *roachpb.
 			// write too old boolean for transactions. Note that currently
 			// only EndTransaction and DeleteRange requests update the
 			// write timestamp cache.
-			wTS, wTxnID, _ := r.store.tsCacheMu.cache.GetMaxWrite(header.Key, header.EndKey)
+			wTS, wTxnID := r.store.tsCacheMu.cache.GetMaxWrite(header.Key, header.EndKey)
 			if ba.Txn != nil {
 				if ba.Txn.ID != wTxnID {
 					if !wTS.Less(ba.Txn.Timestamp) {
@@ -2728,7 +2740,7 @@ func (r *Replica) tryExecuteWriteBatch(
 	// commands which require this command to move its timestamp
 	// forward. Or, in the case of a transactional write, the txn
 	// timestamp and possible write-too-old bool.
-	if bumped, pErr := r.applyTimestampCache(&ba); pErr != nil {
+	if bumped, pErr := r.applyTimestampCache(ctx, &ba); pErr != nil {
 		return nil, pErr, proposalNoRetry
 	} else if bumped {
 		// If we bump the transaction's timestamp, we must absolutely
