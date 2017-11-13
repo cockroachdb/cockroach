@@ -110,6 +110,38 @@ func (*internalServer) Batch(
 	return nil, nil
 }
 
+// TestInternalServerAddress verifies that RPCContext uses AdvertiseAddr, not Addr, to
+// determine whether the apply the local server optimization.
+//
+// Prevents regression of https://github.com/cockroachdb/cockroach/issues/19991.
+func TestInternalServerAddress(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	stopper := stop.NewStopper()
+	defer stopper.Stop(context.TODO())
+
+	// Can't be zero because that'd be an empty offset.
+	clock := hlc.NewClock(timeutil.Unix(0, 1).UnixNano, time.Nanosecond)
+
+	baseCtx := testutils.NewNodeTestBaseContext()
+
+	baseCtx.Addr = "127.0.0.1:9999"
+	baseCtx.AdvertiseAddr = "127.0.0.1:8888"
+
+	serverCtx := NewContext(log.AmbientContext{Tracer: tracing.NewTracer()}, baseCtx, clock, stopper)
+
+	internal := &internalServer{}
+	serverCtx.SetLocalInternalServer(internal)
+
+	if is := serverCtx.GetLocalInternalServerForAddr(baseCtx.Addr); is != nil {
+		t.Fatalf("expected nil, got %+v", is)
+	}
+
+	if is := serverCtx.GetLocalInternalServerForAddr(baseCtx.AdvertiseAddr); is != internal {
+		t.Fatalf("expected %+v, got %+v", internal, is)
+	}
+}
+
 // TestHeartbeatHealth verifies that the health status changes after
 // heartbeats succeed or fail.
 func TestHeartbeatHealth(t *testing.T) {
@@ -139,7 +171,8 @@ func TestHeartbeatHealth(t *testing.T) {
 	remoteAddr := ln.Addr().String()
 
 	clientCtx := NewContext(log.AmbientContext{Tracer: tracing.NewTracer()}, testutils.NewNodeTestBaseContext(), clock, stopper)
-	clientCtx.Addr = "localserver"
+	clientCtx.Addr = "notlocalserver"
+	clientCtx.AdvertiseAddr = "localserver"
 	// Make the interval shorter to speed up the test.
 	clientCtx.heartbeatInterval = 1 * time.Millisecond
 	if _, err := clientCtx.GRPCDial(remoteAddr); err != nil {
@@ -215,7 +248,10 @@ func TestHeartbeatHealth(t *testing.T) {
 
 	clientCtx.SetLocalInternalServer(&internalServer{})
 
-	if err := clientCtx.ConnHealth(clientCtx.Addr); err != nil {
+	if err := clientCtx.ConnHealth(clientCtx.Addr); err != ErrNotConnected {
+		t.Error(err)
+	}
+	if err := clientCtx.ConnHealth(clientCtx.AdvertiseAddr); err != nil {
 		t.Error(err)
 	}
 }
