@@ -55,7 +55,6 @@ case ${1-} in
     "$(dirname "${0}")/travis_retry.sh" ssh -o StrictHostKeyChecking=no "${USER}@${FQDN}" true
 
     rsync -az "$(dirname "${0}")/../build/bootstrap/" "${USER}@${FQDN}:bootstrap/"
-    rsync -az "$(dirname "${0}")/../build/parallelbuilds-"* "${USER}@${FQDN}:bootstrap/"
     rsync -az "$(dirname "${0}")/../build/disable-hyperv-timesync.sh" "${USER}@${FQDN}:bootstrap/"
     ssh -A "${USER}@${FQDN}" ./bootstrap/bootstrap-debian.sh
     ssh -A "${USER}@${FQDN}" ./bootstrap/disable-hyperv-timesync.sh
