@@ -374,11 +374,11 @@ $(ARCHIVE): $(ARCHIVE).tmp
 # instead of scripts/ls-files.sh once Git v2.11 is widely deployed.
 .INTERMEDIATE: $(ARCHIVE).tmp
 $(ARCHIVE).tmp: ARCHIVE_BASE = cockroach-$(shell cat .buildinfo/tag)
-$(ARCHIVE).tmp: .buildinfo/tag .buildinfo/rev .buildinfo/basebranch
+$(ARCHIVE).tmp: $(GOBINDATA_TARGET) $(SQLPARSER_TARGETS) .buildinfo/tag .buildinfo/rev .buildinfo/basebranch
 	scripts/ls-files.sh | $(TAR) -cf $@ -T - $(TAR_XFORM_FLAG),^,$(ARCHIVE_BASE)/src/github.com/cockroachdb/cockroach/, $^
-	$(TAR) -rf $@ pkg/ui/embedded.go
-	$(TAR) -rf $@ pkg/sql/lex/keywords.go pkg/sql/lex/reserved_keywords.go pkg/sql/lex/tokens.go
-	$(TAR) -rf $@ pkg/sql/parser/sql.go pkg/sql/parser/help_messages.go pkg/sql/parser/helpmap_test.go
+	$(TAR) -rf $@ $(TAR_XFORM_FLAG),^,$(ARCHIVE_BASE)/src/github.com/cockroachdb/cockroach/, pkg/ui/embedded.go
+	$(TAR) -rf $@ $(TAR_XFORM_FLAG),^,$(ARCHIVE_BASE)/src/github.com/cockroachdb/cockroach/, pkg/sql/lex/keywords.go pkg/sql/lex/reserved_keywords.go pkg/sql/lex/tokens.go
+	$(TAR) -rf $@ $(TAR_XFORM_FLAG),^,$(ARCHIVE_BASE)/src/github.com/cockroachdb/cockroach/, pkg/sql/parser/sql.go pkg/sql/parser/help_messages.go pkg/sql/parser/helpmap_test.go
 	(cd build/archive/contents && $(TAR) -rf ../../../$@ $(TAR_XFORM_FLAG),^,$(ARCHIVE_BASE)/, *)
 
 .buildinfo:
