@@ -97,7 +97,7 @@ func (b *Batch) initResult(calls, numRows int, raw bool, err error) {
 	}
 	// TODO(tschottdorf): assert that calls is 0 or 1?
 	r := Result{calls: calls, Err: err}
-	if numRows > 0 {
+	if numRows > 0 && !b.raw {
 		if b.rowsStaticIdx+numRows <= len(b.rowsStaticBuf) {
 			r.Rows = b.rowsStaticBuf[b.rowsStaticIdx : b.rowsStaticIdx+numRows]
 			b.rowsStaticIdx += numRows
@@ -134,7 +134,12 @@ func (b *Batch) initResult(calls, numRows int, raw bool, err error) {
 
 // fillResults walks through the results and updates them either with the
 // data or error which was the result of running the batch previously.
-func (b *Batch) fillResults(ctx context.Context) error {
+func (b *Batch) fillResults(ctx context.Context) {
+	// No-op if Batch is raw.
+	if b.raw {
+		return
+	}
+
 	offset := 0
 	for i := range b.Results {
 		result := &b.Results[i]
@@ -278,11 +283,14 @@ func (b *Batch) fillResults(ctx context.Context) error {
 		}
 		offset += result.calls
 	}
+}
 
+// resultErr walks through the result slice and returns the first error found,
+// if one exists.
+func (b *Batch) resultErr() error {
 	for i := range b.Results {
-		result := &b.Results[i]
-		if result.Err != nil {
-			return result.Err
+		if err := b.Results[i].Err; err != nil {
+			return err
 		}
 	}
 	return nil
