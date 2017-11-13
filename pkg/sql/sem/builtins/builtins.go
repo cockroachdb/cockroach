@@ -47,6 +47,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/ipaddr"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeofday"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/pkg/errors"
@@ -1197,6 +1198,18 @@ CockroachDB supports the following flags:
 				"Compatible elements: year, quarter, month, week, dayofweek, dayofyear,\n" +
 				"hour, minute, second, millisecond, microsecond, epoch",
 		},
+		tree.Builtin{
+			Types:      tree.ArgTypes{{"element", types.String}, {"input", types.Time}},
+			ReturnType: tree.FixedReturnType(types.Int),
+			Category:   categoryDateAndTime,
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				fromTime := args[1].(*tree.DTime)
+				timeSpan := strings.ToLower(string(tree.MustBeDString(args[0])))
+				return extractStringFromTime(fromTime, timeSpan)
+			},
+			Info: "Extracts `element` from `input`.\n\n" +
+				"Compatible elements: hour, minute, second, millisecond, microsecond, epoch",
+		},
 	},
 
 	"extract_duration": {
@@ -1266,6 +1279,19 @@ CockroachDB supports the following flags:
 				"significant than `element` to zero (or one, for day and month)\n\n" +
 				"Compatible elements: year, quarter, month, week, hour, minute, second,\n" +
 				"millisecond, microsecond.",
+		},
+		tree.Builtin{
+			Types:      tree.ArgTypes{{"element", types.String}, {"input", types.Time}},
+			ReturnType: tree.FixedReturnType(types.Time),
+			Category:   categoryDateAndTime,
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				timeSpan := strings.ToLower(string(tree.MustBeDString(args[0])))
+				fromTime := args[1].(*tree.DTime)
+				return truncateTime(fromTime, timeSpan)
+			},
+			Info: "Truncates `input` to precision `element`.  Sets all fields that are less\n" +
+				"significant than `element` to zero.\n\n" +
+				"Compatible elements: hour, minute, second, millisecond, microsecond.",
 		},
 		tree.Builtin{
 			Types:      tree.ArgTypes{{"element", types.String}, {"input", types.TimestampTZ}},
@@ -2828,6 +2854,30 @@ func arrayLower(arr *tree.DArray, dim int64) tree.Datum {
 	return arrayLower(a, dim-1)
 }
 
+const microsPerMilli = 1000
+
+func extractStringFromTime(fromTime *tree.DTime, timeSpan string) (tree.Datum, error) {
+	t := timeofday.TimeOfDay(*fromTime)
+	switch timeSpan {
+	case "hour", "hours":
+		return tree.NewDInt(tree.DInt(t.Hour())), nil
+	case "minute", "minutes":
+		return tree.NewDInt(tree.DInt(t.Minute())), nil
+	case "second", "seconds":
+		return tree.NewDInt(tree.DInt(t.Second())), nil
+	case "millisecond", "milliseconds":
+		return tree.NewDInt(tree.DInt(t.Microsecond() / microsPerMilli)), nil
+	case "microsecond", "microseconds":
+		return tree.NewDInt(tree.DInt(t.Microsecond())), nil
+	case "epoch":
+		seconds := time.Duration(t) * time.Microsecond / time.Second
+		return tree.NewDInt(tree.DInt(int64(seconds))), nil
+	default:
+		return nil, pgerror.NewErrorf(
+			pgerror.CodeInvalidParameterValueError, "unsupported timespan: %s", timeSpan)
+	}
+}
+
 func extractStringFromTimestamp(
 	_ *tree.EvalContext, fromTime time.Time, timeSpan string,
 ) (tree.Datum, error) {
@@ -2876,6 +2926,35 @@ func extractStringFromTimestamp(
 	default:
 		return nil, pgerror.NewErrorf(pgerror.CodeInvalidParameterValueError, "unsupported timespan: %s", timeSpan)
 	}
+}
+
+func truncateTime(fromTime *tree.DTime, timeSpan string) (tree.Datum, error) {
+	t := timeofday.TimeOfDay(*fromTime)
+	hour := t.Hour()
+	min := t.Minute()
+	sec := t.Second()
+	micro := t.Microsecond()
+
+	minTrunc := 0
+	secTrunc := 0
+	microTrunc := 0
+
+	switch timeSpan {
+	case "hour", "hours":
+		min, sec, micro = minTrunc, secTrunc, microTrunc
+	case "minute", "minutes":
+		sec, micro = secTrunc, microTrunc
+	case "second", "seconds":
+		micro = microTrunc
+	case "millisecond", "milliseconds":
+		// This a PG extension not supported in MySQL.
+		micro = (micro / microsPerMilli) * microsPerMilli
+	case "microsecond", "microseconds":
+	default:
+		return nil, pgerror.NewErrorf(pgerror.CodeInvalidParameterValueError, "unsupported timespan: %s", timeSpan)
+	}
+
+	return tree.MakeDTime(timeofday.New(hour, min, sec, micro)), nil
 }
 
 func truncateTimestamp(

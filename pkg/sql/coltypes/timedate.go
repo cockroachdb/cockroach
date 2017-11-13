@@ -28,6 +28,14 @@ func (node *TDate) Format(buf *bytes.Buffer, f lex.EncodeFlags) {
 	buf.WriteString("DATE")
 }
 
+// TTime represents a TIME type.
+type TTime struct{}
+
+// Format implements the ColTypeFormatter interface.
+func (node *TTime) Format(buf *bytes.Buffer, f lex.EncodeFlags) {
+	buf.WriteString("TIME")
+}
+
 // TTimestamp represents a TIMESTAMP type.
 type TTimestamp struct{}
 
