@@ -293,7 +293,7 @@ func NewContext(
 // GetLocalInternalServerForAddr returns the context's internal batch server
 // for target, if it exists.
 func (ctx *Context) GetLocalInternalServerForAddr(target string) roachpb.InternalServer {
-	if target == ctx.Addr {
+	if target == ctx.AdvertiseAddr {
 		return ctx.localInternalServer
 	}
 	return nil
