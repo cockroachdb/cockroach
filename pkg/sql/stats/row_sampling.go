@@ -12,13 +12,17 @@
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
-package sqlbase
+package stats
 
-import "container/heap"
+import (
+	"container/heap"
+
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+)
 
 // SampledRow is a row that was sampled.
 type SampledRow struct {
-	Row  EncDatumRow
+	Row  sqlbase.EncDatumRow
 	Rank uint64
 }
 
@@ -71,7 +75,7 @@ func (sr *SampleReservoir) Push(x interface{}) { panic("unimplemented") }
 func (sr *SampleReservoir) Pop() interface{} { panic("unimplemented") }
 
 // SampleRow looks at a row and either drops it or adds it to the reservoir.
-func (sr *SampleReservoir) SampleRow(row EncDatumRow, rank uint64) {
+func (sr *SampleReservoir) SampleRow(row sqlbase.EncDatumRow, rank uint64) {
 	if len(sr.samples) < cap(sr.samples) {
 		// We haven't accumulated enough rows yet, just append.
 		sr.samples = append(sr.samples, SampledRow{Row: row, Rank: rank})
