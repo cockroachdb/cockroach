@@ -43,15 +43,6 @@ var clientConnHost, clientConnPort string
 var tempDir string
 var externalIODir string
 
-// InitCLIDefaults is used for testing.
-func InitCLIDefaults() {
-	cliCtx.tableDisplayFormat = tableDisplayTSV
-	cliCtx.showTimes = false
-	dumpCtx.dumpMode = dumpBoth
-	dumpCtx.asOf = ""
-	sqlCtx.echo = false
-}
-
 const usageIndentation = 8
 const wrapWidth = 79 - usageIndentation
 
