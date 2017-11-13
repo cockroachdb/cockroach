@@ -807,7 +807,7 @@ func Example_sql_column_labels() {
 	// ܈85	INT	true	NULL	{}
 	// # 6 rows
 	// sql -e select * from t.u
-	// """foo"	\foo	"""foo\nbar"""	κόσμε	a|b	܈85
+	// """foo"	\foo	foo\nbar	κόσμε	a|b	܈85
 	// 0	0	0	0	0	0
 	// # 1 row
 	// sql --format=pretty -e show columns from t.u
@@ -824,25 +824,25 @@ func Example_sql_column_labels() {
 	// +---------+------+------+---------+---------+
 	// (6 rows)
 	// sql --format=pretty -e select * from t.u
-	// +------+------+------------+-------+-----+-----+
-	// | "foo | \foo | "foo\nbar" | κόσμε | a|b | ܈85 |
-	// +------+------+------------+-------+-----+-----+
-	// |    0 |    0 |          0 |     0 |   0 |   0 |
-	// +------+------+------------+-------+-----+-----+
+	// +------+------+----------+-------+-----+-----+
+	// | "foo | \foo | foo\nbar | κόσμε | a|b | ܈85 |
+	// +------+------+----------+-------+-----+-----+
+	// |    0 |    0 |        0 |     0 |   0 |   0 |
+	// +------+------+----------+-------+-----+-----+
 	// (1 row)
 	// sql --format=tsv -e select * from t.u
-	// """foo"	\foo	"""foo\nbar"""	κόσμε	a|b	܈85
+	// """foo"	\foo	foo\nbar	κόσμε	a|b	܈85
 	// 0	0	0	0	0	0
 	// # 1 row
 	// sql --format=csv -e select * from t.u
-	// """foo",\foo,"""foo\nbar""",κόσμε,a|b,܈85
+	// """foo",\foo,foo\nbar,κόσμε,a|b,܈85
 	// 0,0,0,0,0,0
 	// # 1 row
 	// sql --format=sql -e select * from t.u
 	// CREATE TABLE results (
 	//   """foo" STRING,
 	//   "\foo" STRING,
-	//   """foo\nbar""" STRING,
+	//   "foo\nbar" STRING,
 	//   "κόσμε" STRING,
 	//   "a|b" STRING,
 	//   ܈85 STRING
@@ -851,19 +851,19 @@ func Example_sql_column_labels() {
 	// INSERT INTO results VALUES ('0', '0', '0', '0', '0', '0');
 	// sql --format=html -e select * from t.u
 	// <table>
-	// <thead><tr><th>row</th><th>&#34;foo</th><th>\foo</th><th>&#34;foo\nbar&#34;</th><th>κόσμε</th><th>a|b</th><th>܈85</th></tr></head>
+	// <thead><tr><th>row</th><th>&#34;foo</th><th>\foo</th><th>foo\nbar</th><th>κόσμε</th><th>a|b</th><th>܈85</th></tr></head>
 	// <tbody>
 	// <tr><td>1</td><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td></tr>
 	// </tbody>
 	// <tfoot><tr><td colspan=7>1 row</td></tr></tfoot></table>
 	// sql --format=records -e select * from t.u
 	// -[ RECORD 1 ]
-	// "foo       | 0
-	// \foo       | 0
-	// "foo\nbar" | 0
-	// κόσμε      | 0
-	// a|b        | 0
-	// ܈85        | 0
+	// "foo     | 0
+	// \foo     | 0
+	// foo\nbar | 0
+	// κόσμε    | 0
+	// a|b      | 0
+	// ܈85      | 0
 }
 
 func Example_sql_empty_table() {
@@ -996,6 +996,13 @@ func Example_sql_table() {
 	c.RunWithArgs([]string{"sql", "--format=html", "-e", "select * from t.t"})
 	c.RunWithArgs([]string{"sql", "--format=raw", "-e", "select * from t.t"})
 	c.RunWithArgs([]string{"sql", "--format=records", "-e", "select * from t.t"})
+	c.RunWithArgs([]string{"sql", "--escape-non-ascii", "--format=pretty", "-e", "select * from t.t"})
+	c.RunWithArgs([]string{"sql", "--escape-non-ascii", "--format=tsv", "-e", "select * from t.t"})
+	c.RunWithArgs([]string{"sql", "--escape-non-ascii", "--format=csv", "-e", "select * from t.t"})
+	c.RunWithArgs([]string{"sql", "--escape-non-ascii", "--format=sql", "-e", "select * from t.t"})
+	c.RunWithArgs([]string{"sql", "--escape-non-ascii", "--format=html", "-e", "select * from t.t"})
+	c.RunWithArgs([]string{"sql", "--escape-non-ascii", "--format=raw", "-e", "select * from t.t"})
+	c.RunWithArgs([]string{"sql", "--escape-non-ascii", "--format=records", "-e", "select * from t.t"})
 	c.RunWithArgs([]string{"sql", "--format=pretty", "-e", "select '  hai' as x"})
 	c.RunWithArgs([]string{"sql", "--format=pretty", "-e", "explain(indent) select s from t.t union all select s from t.t"})
 
@@ -1035,7 +1042,7 @@ func Example_sql_table() {
 	// bar"	non-printable ASCII
 	// κόσμε	printable UTF8
 	// ñ	printable UTF8 using escapes
-	// """\x01"""	non-printable UTF8 string
+	// \x01	non-printable UTF8 string
 	// ܈85	UTF8 string with RTL char
 	// "a	b	c
 	// 12	123123213	12313"	tabs
@@ -1051,7 +1058,7 @@ func Example_sql_table() {
 	// | bar                            |                                |
 	// | κόσμε                          | printable UTF8                 |
 	// | ñ                              | printable UTF8 using escapes   |
-	// | "\x01"                         | non-printable UTF8 string      |
+	// | \x01                           | non-printable UTF8 string      |
 	// | ܈85                            | UTF8 string with RTL char      |
 	// | a   b         c␤               | tabs                           |
 	// | 12  123123213 12313            |                                |
@@ -1066,7 +1073,7 @@ func Example_sql_table() {
 	// bar"	non-printable ASCII
 	// κόσμε	printable UTF8
 	// ñ	printable UTF8 using escapes
-	// """\x01"""	non-printable UTF8 string
+	// \x01	non-printable UTF8 string
 	// ܈85	UTF8 string with RTL char
 	// "a	b	c
 	// 12	123123213	12313"	tabs
@@ -1080,7 +1087,7 @@ func Example_sql_table() {
 	// bar",non-printable ASCII
 	// κόσμε,printable UTF8
 	// ñ,printable UTF8 using escapes
-	// """\x01""",non-printable UTF8 string
+	// \x01,non-printable UTF8 string
 	// ܈85,UTF8 string with RTL char
 	// "a	b	c
 	// 12	123123213	12313",tabs
@@ -1097,7 +1104,7 @@ func Example_sql_table() {
 	// INSERT INTO results VALUES (e'foo\nbar', 'non-printable ASCII');
 	// INSERT INTO results VALUES (e'\u03BA\U00001F79\u03C3\u03BC\u03B5', 'printable UTF8');
 	// INSERT INTO results VALUES (e'\u00F1', 'printable UTF8 using escapes');
-	// INSERT INTO results VALUES (e'"\\x01"', 'non-printable UTF8 string');
+	// INSERT INTO results VALUES (e'\\x01', 'non-printable UTF8 string');
 	// INSERT INTO results VALUES (e'\u070885', 'UTF8 string with RTL char');
 	// INSERT INTO results VALUES (e'a\tb\tc\n12\t123123213\t12313', 'tabs');
 	// sql --format=html -e select * from t.t
@@ -1110,7 +1117,7 @@ func Example_sql_table() {
 	// <tr><td>4</td><td>foo<br/>bar</td><td>non-printable ASCII</td></tr>
 	// <tr><td>5</td><td>κόσμε</td><td>printable UTF8</td></tr>
 	// <tr><td>6</td><td>ñ</td><td>printable UTF8 using escapes</td></tr>
-	// <tr><td>7</td><td>&#34;\x01&#34;</td><td>non-printable UTF8 string</td></tr>
+	// <tr><td>7</td><td>\x01</td><td>non-printable UTF8 string</td></tr>
 	// <tr><td>8</td><td>܈85</td><td>UTF8 string with RTL char</td></tr>
 	// <tr><td>9</td><td>a	b	c<br/>12	123123213	12313</td><td>tabs</td></tr>
 	// </tbody>
@@ -1149,8 +1156,8 @@ func Example_sql_table() {
 	// ## 28
 	// printable UTF8 using escapes
 	// # row 7
-	// ## 6
-	// "\x01"
+	// ## 4
+	// \x01
 	// ## 25
 	// non-printable UTF8 string
 	// # row 8
@@ -1186,7 +1193,7 @@ func Example_sql_table() {
 	// s | ñ
 	// d | printable UTF8 using escapes
 	// -[ RECORD 7 ]
-	// s | "\x01"
+	// s | \x01
 	// d | non-printable UTF8 string
 	// -[ RECORD 8 ]
 	// s | ܈85
@@ -1194,6 +1201,151 @@ func Example_sql_table() {
 	// -[ RECORD 9 ]
 	// s | a	b	c
 	//   | 12	123123213	12313
+	// d | tabs
+	// sql --escape-non-ascii --format=pretty -e select * from t.t
+	// +--------------------------------+--------------------------------+
+	// |               s                |               d                |
+	// +--------------------------------+--------------------------------+
+	// | foo                            | printable ASCII                |
+	// | \"foo                          | printable ASCII with quotes    |
+	// | \\foo                          | printable ASCII with backslash |
+	// | foo\nbar                       | non-printable ASCII            |
+	// | \u03ba\u1f79\u03c3\u03bc\u03b5 | printable UTF8                 |
+	// | \u00f1                         | printable UTF8 using escapes   |
+	// | \x01                           | non-printable UTF8 string      |
+	// | \u070885                       | UTF8 string with RTL char      |
+	// | a\tb\tc\n12\t123123213\t12313  | tabs                           |
+	// +--------------------------------+--------------------------------+
+	// (9 rows)
+	// sql --escape-non-ascii --format=tsv -e select * from t.t
+	// s	d
+	// foo	printable ASCII
+	// "\""foo"	printable ASCII with quotes
+	// \\foo	printable ASCII with backslash
+	// foo\nbar	non-printable ASCII
+	// \u03ba\u1f79\u03c3\u03bc\u03b5	printable UTF8
+	// \u00f1	printable UTF8 using escapes
+	// \x01	non-printable UTF8 string
+	// \u070885	UTF8 string with RTL char
+	// a\tb\tc\n12\t123123213\t12313	tabs
+	// # 9 rows
+	// sql --escape-non-ascii --format=csv -e select * from t.t
+	// s,d
+	// foo,printable ASCII
+	// "\""foo",printable ASCII with quotes
+	// \\foo,printable ASCII with backslash
+	// foo\nbar,non-printable ASCII
+	// \u03ba\u1f79\u03c3\u03bc\u03b5,printable UTF8
+	// \u00f1,printable UTF8 using escapes
+	// \x01,non-printable UTF8 string
+	// \u070885,UTF8 string with RTL char
+	// a\tb\tc\n12\t123123213\t12313,tabs
+	// # 9 rows
+	// sql --escape-non-ascii --format=sql -e select * from t.t
+	// CREATE TABLE results (
+	//   s STRING,
+	//   d STRING
+	// );
+	//
+	// INSERT INTO results VALUES ('foo', 'printable ASCII');
+	// INSERT INTO results VALUES (e'\\"foo', 'printable ASCII with quotes');
+	// INSERT INTO results VALUES (e'\\\\foo', 'printable ASCII with backslash');
+	// INSERT INTO results VALUES (e'foo\\nbar', 'non-printable ASCII');
+	// INSERT INTO results VALUES (e'\\u03ba\\u1f79\\u03c3\\u03bc\\u03b5', 'printable UTF8');
+	// INSERT INTO results VALUES (e'\\u00f1', 'printable UTF8 using escapes');
+	// INSERT INTO results VALUES (e'\\x01', 'non-printable UTF8 string');
+	// INSERT INTO results VALUES (e'\\u070885', 'UTF8 string with RTL char');
+	// INSERT INTO results VALUES (e'a\\tb\\tc\\n12\\t123123213\\t12313', 'tabs');
+	// sql --escape-non-ascii --format=html -e select * from t.t
+	// <table>
+	// <thead><tr><th>row</th><th>s</th><th>d</th></tr></head>
+	// <tbody>
+	// <tr><td>1</td><td>foo</td><td>printable ASCII</td></tr>
+	// <tr><td>2</td><td>\&#34;foo</td><td>printable ASCII with quotes</td></tr>
+	// <tr><td>3</td><td>\\foo</td><td>printable ASCII with backslash</td></tr>
+	// <tr><td>4</td><td>foo\nbar</td><td>non-printable ASCII</td></tr>
+	// <tr><td>5</td><td>\u03ba\u1f79\u03c3\u03bc\u03b5</td><td>printable UTF8</td></tr>
+	// <tr><td>6</td><td>\u00f1</td><td>printable UTF8 using escapes</td></tr>
+	// <tr><td>7</td><td>\x01</td><td>non-printable UTF8 string</td></tr>
+	// <tr><td>8</td><td>\u070885</td><td>UTF8 string with RTL char</td></tr>
+	// <tr><td>9</td><td>a\tb\tc\n12\t123123213\t12313</td><td>tabs</td></tr>
+	// </tbody>
+	// <tfoot><tr><td colspan=3>9 rows</td></tr></tfoot></table>
+	// sql --escape-non-ascii --format=raw -e select * from t.t
+	// # 2 columns
+	// # row 1
+	// ## 3
+	// foo
+	// ## 15
+	// printable ASCII
+	// # row 2
+	// ## 5
+	// \"foo
+	// ## 27
+	// printable ASCII with quotes
+	// # row 3
+	// ## 5
+	// \\foo
+	// ## 30
+	// printable ASCII with backslash
+	// # row 4
+	// ## 8
+	// foo\nbar
+	// ## 19
+	// non-printable ASCII
+	// # row 5
+	// ## 30
+	// \u03ba\u1f79\u03c3\u03bc\u03b5
+	// ## 14
+	// printable UTF8
+	// # row 6
+	// ## 6
+	// \u00f1
+	// ## 28
+	// printable UTF8 using escapes
+	// # row 7
+	// ## 4
+	// \x01
+	// ## 25
+	// non-printable UTF8 string
+	// # row 8
+	// ## 8
+	// \u070885
+	// ## 25
+	// UTF8 string with RTL char
+	// # row 9
+	// ## 29
+	// a\tb\tc\n12\t123123213\t12313
+	// ## 4
+	// tabs
+	// # 9 rows
+	// sql --escape-non-ascii --format=records -e select * from t.t
+	// -[ RECORD 1 ]
+	// s | foo
+	// d | printable ASCII
+	// -[ RECORD 2 ]
+	// s | \"foo
+	// d | printable ASCII with quotes
+	// -[ RECORD 3 ]
+	// s | \\foo
+	// d | printable ASCII with backslash
+	// -[ RECORD 4 ]
+	// s | foo\nbar
+	// d | non-printable ASCII
+	// -[ RECORD 5 ]
+	// s | \u03ba\u1f79\u03c3\u03bc\u03b5
+	// d | printable UTF8
+	// -[ RECORD 6 ]
+	// s | \u00f1
+	// d | printable UTF8 using escapes
+	// -[ RECORD 7 ]
+	// s | \x01
+	// d | non-printable UTF8 string
+	// -[ RECORD 8 ]
+	// s | \u070885
+	// d | UTF8 string with RTL char
+	// -[ RECORD 9 ]
+	// s | a\tb\tc\n12\t123123213\t12313
 	// d | tabs
 	// sql --format=pretty -e select '  hai' as x
 	// +-------+

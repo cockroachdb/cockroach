@@ -47,6 +47,7 @@ var externalIODir string
 func InitCLIDefaults() {
 	cliCtx.tableDisplayFormat = tableDisplayTSV
 	cliCtx.showTimes = false
+	cliCtx.escapeNonASCII = false
 	dumpCtx.dumpMode = dumpBoth
 	dumpCtx.asOf = ""
 	sqlCtx.echo = false
@@ -345,6 +346,7 @@ func init() {
 	for _, cmd := range sqlCmds {
 		f := cmd.PersistentFlags()
 		boolFlag(f, &sqlCtx.echo, cliflags.EchoSQL, false)
+		boolFlag(f, &sqlCtx.escapeNonASCII, cliflags.EscapeNonASCII, false)
 		stringFlag(f, &sqlConnURL, cliflags.URL, "")
 		stringFlag(f, &sqlConnUser, cliflags.User, security.RootUser)
 
