@@ -143,7 +143,6 @@ func (p *planner) Select(
 	wrapped := n.Select
 	limit := n.Limit
 	orderBy := n.OrderBy
-	lockForUpdate := n.LockForUpdate
 
 	for s, ok := wrapped.(*tree.ParenSelect); ok; s, ok = wrapped.(*tree.ParenSelect) {
 		wrapped = s.Select.Select
@@ -159,16 +158,13 @@ func (p *planner) Select(
 			}
 			limit = s.Select.Limit
 		}
-		if s.Select.LockForUpdate {
-			lockForUpdate = s.Select.LockForUpdate
-		}
 	}
 
 	switch s := wrapped.(type) {
 	case *tree.SelectClause:
 		// Select can potentially optimize index selection if it's being ordered,
 		// so we allow it to do its own sorting.
-		return p.SelectClause(ctx, s, orderBy, limit, lockForUpdate, desiredTypes, publicColumns)
+		return p.SelectClause(ctx, s, orderBy, limit, desiredTypes, publicColumns)
 
 	// TODO(dan): Union can also do optimizations when it has an ORDER BY, but
 	// currently expects the ordering to be done externally, so we let it fall
@@ -219,13 +215,12 @@ func (p *planner) SelectClause(
 	parsed *tree.SelectClause,
 	orderBy tree.OrderBy,
 	limit *tree.Limit,
-	lockForUpdate bool,
 	desiredTypes []types.T,
 	scanVisibility scanVisibility,
 ) (planNode, error) {
 	r := &renderNode{planner: p}
 
-	if err := r.initFrom(ctx, parsed, scanVisibility, lockForUpdate); err != nil {
+	if err := r.initFrom(ctx, parsed, scanVisibility); err != nil {
 		return nil, err
 	}
 
@@ -302,13 +297,13 @@ func (p *planner) SelectClause(
 
 // initFrom initializes the table node, given the parsed select expression
 func (r *renderNode) initFrom(
-	ctx context.Context, parsed *tree.SelectClause, scanVisibility scanVisibility, lockForUpdate bool,
+	ctx context.Context, parsed *tree.SelectClause, scanVisibility scanVisibility,
 ) error {
 	// AS OF expressions should be handled by the executor.
 	if parsed.From.AsOf.Expr != nil && !r.planner.avoidCachedDescriptors {
 		return fmt.Errorf("unexpected AS OF SYSTEM TIME")
 	}
-	src, err := r.planner.getSources(ctx, parsed.From.Tables, scanVisibility, lockForUpdate)
+	src, err := r.planner.getSources(ctx, parsed.From.Tables, scanVisibility)
 	if err != nil {
 		return err
 	}
