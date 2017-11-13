@@ -107,7 +107,7 @@ kubectl create -f cockroachdb-statefulset.yaml
 
 Then, to initialize the cluster, run:
 ```shell
-kubectl run cockroachdb -it --image=cockroachdb/cockroach --rm --restart=Never -- init --insecure --host=cockroachdb-0.cockroachdb
+kubectl create -f cluster-init.yaml
 ```
 
 ### Secure mode
