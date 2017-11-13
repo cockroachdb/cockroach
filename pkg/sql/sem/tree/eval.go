@@ -345,18 +345,21 @@ func AddWithOverflow(a, b int64) (r int64, ok bool) {
 }
 
 // getJSONPath is used for the #> and #>> operators.
-func getJSONPath(j DJSON, ary DArray) Datum {
+func getJSONPath(j DJSON, ary DArray) (Datum, error) {
 	// TODO(justin): this is slightly annoying because we have to allocate
 	// a new array since the JSON package isn't aware of DArray.
 	path := make([]string, len(ary.Array))
 	for i, v := range ary.Array {
 		path[i] = string(MustBeDString(v))
 	}
-	result := json.FetchPath(j.JSON, path)
-	if result == nil {
-		return DNull
+	result, err := json.FetchPath(j.JSON, path)
+	if err != nil {
+		return nil, err
 	}
-	return &DJSON{result}
+	if result == nil {
+		return DNull, nil
+	}
+	return &DJSON{result}, nil
 }
 
 // BinOps contains the binary operations indexed by operation type.
@@ -1196,7 +1199,10 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			RightType:  types.String,
 			ReturnType: types.JSON,
 			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
-				j := left.(*DJSON).JSON.FetchValKey(string(MustBeDString(right)))
+				j, err := left.(*DJSON).JSON.FetchValKey(string(MustBeDString(right)))
+				if err != nil {
+					return nil, err
+				}
 				if j == nil {
 					return DNull, nil
 				}
@@ -1208,7 +1214,10 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			RightType:  types.Int,
 			ReturnType: types.JSON,
 			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
-				j := left.(*DJSON).JSON.FetchValIdx(int(MustBeDInt(right)))
+				j, err := left.(*DJSON).JSON.FetchValIdx(int(MustBeDInt(right)))
+				if err != nil {
+					return nil, err
+				}
 				if j == nil {
 					return DNull, nil
 				}
@@ -1223,7 +1232,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			RightType:  types.TArray{Typ: types.String},
 			ReturnType: types.JSON,
 			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
-				return getJSONPath(*left.(*DJSON), *MustBeDArray(right)), nil
+				return getJSONPath(*left.(*DJSON), *MustBeDArray(right))
 			},
 		},
 	},
@@ -1234,11 +1243,17 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			RightType:  types.String,
 			ReturnType: types.String,
 			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
-				res := left.(*DJSON).JSON.FetchValKey(string(MustBeDString(right)))
+				res, err := left.(*DJSON).JSON.FetchValKey(string(MustBeDString(right)))
+				if err != nil {
+					return nil, err
+				}
 				if res == nil {
 					return DNull, nil
 				}
-				text := res.AsText()
+				text, err := res.AsText()
+				if err != nil {
+					return nil, err
+				}
 				if text == nil {
 					return DNull, nil
 				}
@@ -1250,11 +1265,17 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			RightType:  types.Int,
 			ReturnType: types.String,
 			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
-				res := left.(*DJSON).JSON.FetchValIdx(int(MustBeDInt(right)))
+				res, err := left.(*DJSON).JSON.FetchValIdx(int(MustBeDInt(right)))
+				if err != nil {
+					return nil, err
+				}
 				if res == nil {
 					return DNull, nil
 				}
-				text := res.AsText()
+				text, err := res.AsText()
+				if err != nil {
+					return nil, err
+				}
 				if text == nil {
 					return DNull, nil
 				}
@@ -1269,11 +1290,17 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			RightType:  types.TArray{Typ: types.String},
 			ReturnType: types.JSON,
 			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
-				res := getJSONPath(*left.(*DJSON), *MustBeDArray(right))
+				res, err := getJSONPath(*left.(*DJSON), *MustBeDArray(right))
+				if err != nil {
+					return nil, err
+				}
 				if res == DNull {
 					return DNull, nil
 				}
-				text := res.(*DJSON).JSON.AsText()
+				text, err := res.(*DJSON).JSON.AsText()
+				if err != nil {
+					return nil, err
+				}
 				if text == nil {
 					return DNull, nil
 				}
@@ -1588,7 +1615,11 @@ var CmpOps = map[ComparisonOperator]cmpOpOverload{
 			LeftType:  types.JSON,
 			RightType: types.String,
 			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
-				if left.(*DJSON).JSON.Exists(string(MustBeDString(right))) {
+				e, err := left.(*DJSON).JSON.Exists(string(MustBeDString(right)))
+				if err != nil {
+					return nil, err
+				}
+				if e {
 					return DBoolTrue, nil
 				}
 				return DBoolFalse, nil
@@ -1601,8 +1632,13 @@ var CmpOps = map[ComparisonOperator]cmpOpOverload{
 			LeftType:  types.JSON,
 			RightType: types.TArray{Typ: types.String},
 			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
+				// TODO(justin): this can be optimized.
 				for _, k := range MustBeDArray(right).Array {
-					if left.(*DJSON).JSON.Exists(string(MustBeDString(k))) {
+					e, err := left.(*DJSON).JSON.Exists(string(MustBeDString(k)))
+					if err != nil {
+						return nil, err
+					}
+					if e {
 						return DBoolTrue, nil
 					}
 				}
@@ -1616,8 +1652,13 @@ var CmpOps = map[ComparisonOperator]cmpOpOverload{
 			LeftType:  types.JSON,
 			RightType: types.TArray{Typ: types.String},
 			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
+				// TODO(justin): this can be optimized.
 				for _, k := range MustBeDArray(right).Array {
-					if !left.(*DJSON).JSON.Exists(string(MustBeDString(k))) {
+					e, err := left.(*DJSON).JSON.Exists(string(MustBeDString(k)))
+					if err != nil {
+						return nil, err
+					}
+					if !e {
 						return DBoolFalse, nil
 					}
 				}
@@ -1631,7 +1672,11 @@ var CmpOps = map[ComparisonOperator]cmpOpOverload{
 			LeftType:  types.JSON,
 			RightType: types.JSON,
 			fn: func(ctx *EvalContext, left Datum, right Datum) (Datum, error) {
-				return MakeDBool(DBool(json.Contains(left.(*DJSON).JSON, right.(*DJSON).JSON))), nil
+				c, err := json.Contains(left.(*DJSON).JSON, right.(*DJSON).JSON)
+				if err != nil {
+					return nil, err
+				}
+				return MakeDBool(DBool(c)), nil
 			},
 		},
 	},
@@ -1641,7 +1686,11 @@ var CmpOps = map[ComparisonOperator]cmpOpOverload{
 			LeftType:  types.JSON,
 			RightType: types.JSON,
 			fn: func(ctx *EvalContext, left Datum, right Datum) (Datum, error) {
-				return MakeDBool(DBool(json.Contains(right.(*DJSON).JSON, left.(*DJSON).JSON))), nil
+				c, err := json.Contains(right.(*DJSON).JSON, left.(*DJSON).JSON)
+				if err != nil {
+					return nil, err
+				}
+				return MakeDBool(DBool(c)), nil
 			},
 		},
 	},

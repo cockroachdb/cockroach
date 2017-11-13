@@ -49,7 +49,7 @@ const (
 type JSON interface {
 	fmt.Stringer
 
-	Compare(JSON) int
+	Compare(JSON) (int, error)
 	// Type returns the JSON type.
 	Type() Type
 	// Format writes out the JSON document to the specified buffer.
@@ -59,20 +59,20 @@ type JSON interface {
 
 	// EncodeInvertedIndexKeys takes in a key prefix and returns a slice of inverted index keys,
 	// one per path through the receiver.
-	EncodeInvertedIndexKeys(b []byte) [][]byte
+	EncodeInvertedIndexKeys(b []byte) ([][]byte, error)
 
 	// FetchValKey implements the `->` operator for strings, returning nil if the
 	// key is not found.
-	FetchValKey(key string) JSON
+	FetchValKey(key string) (JSON, error)
 
-	// FetchValKey implements the `->` operator for ints, returning nil if the
+	// FetchValIdx implements the `->` operator for ints, returning nil if the
 	// key is not found.
-	FetchValIdx(idx int) JSON
+	FetchValIdx(idx int) (JSON, error)
 
 	// FetchValKeyOrIdx is used for path access, if obj is an object, it tries to
 	// access the given field. If it's an array, it interprets the key as an int
 	// and tries to access the given index.
-	FetchValKeyOrIdx(key string) JSON
+	FetchValKeyOrIdx(key string) (JSON, error)
 
 	// RemoveKey implements the `-` operator for strings.
 	RemoveKey(key string) (JSON, error)
@@ -81,10 +81,10 @@ type JSON interface {
 	RemoveIndex(idx int) (JSON, error)
 
 	// AsText returns the JSON document as a string, with quotes around strings removed, and null as nil.
-	AsText() *string
+	AsText() (*string, error)
 
 	// Exists implements the `?` operator.
-	Exists(string) bool
+	Exists(string) (bool, error)
 
 	// isScalar returns whether the JSON document is null, true, false, a string,
 	// or a number.
@@ -92,13 +92,16 @@ type JSON interface {
 
 	// preprocessForContains converts a JSON document to an internal interface
 	// which is used to efficiently implement the @> operator.
-	preprocessForContains() containsable
+	preprocessForContains() (containsable, error)
 
 	// encode appends the encoding of the JSON document to appendTo, returning
 	// the result alongside the JEntry for the document. Note that some values
 	// (true/false/null) are encoded with 0 bytes and are purely defined by their
 	// JEntry.
 	encode(appendTo []byte) (jEntry uint32, b []byte, err error)
+
+	// MaybeDecode returns an equivalent JSON which is not a jsonEncoded.
+	MaybeDecode() JSON
 }
 
 type jsonTrue struct{}
@@ -138,6 +141,14 @@ func (jsonString) Type() Type { return StringJSONType }
 func (jsonArray) Type() Type  { return ArrayJSONType }
 func (jsonObject) Type() Type { return ObjectJSONType }
 
+func (j jsonNull) MaybeDecode() JSON   { return j }
+func (j jsonFalse) MaybeDecode() JSON  { return j }
+func (j jsonTrue) MaybeDecode() JSON   { return j }
+func (j jsonNumber) MaybeDecode() JSON { return j }
+func (j jsonString) MaybeDecode() JSON { return j }
+func (j jsonArray) MaybeDecode() JSON  { return j }
+func (j jsonObject) MaybeDecode() JSON { return j }
+
 func cmpJSONTypes(a Type, b Type) int {
 	if b > a {
 		return -1
@@ -148,79 +159,118 @@ func cmpJSONTypes(a Type, b Type) int {
 	return 0
 }
 
-func (j jsonNull) Compare(other JSON) int  { return cmpJSONTypes(j.Type(), other.Type()) }
-func (j jsonFalse) Compare(other JSON) int { return cmpJSONTypes(j.Type(), other.Type()) }
-func (j jsonTrue) Compare(other JSON) int  { return cmpJSONTypes(j.Type(), other.Type()) }
+func (j jsonNull) Compare(other JSON) (int, error)  { return cmpJSONTypes(j.Type(), other.Type()), nil }
+func (j jsonFalse) Compare(other JSON) (int, error) { return cmpJSONTypes(j.Type(), other.Type()), nil }
+func (j jsonTrue) Compare(other JSON) (int, error)  { return cmpJSONTypes(j.Type(), other.Type()), nil }
 
-func (j jsonNumber) Compare(other JSON) int {
+func decodeIfNeeded(j JSON) (JSON, error) {
+	if enc, ok := j.(*jsonEncoded); ok {
+		var err error
+		j, err = enc.decode()
+		if err != nil {
+			return nil, err
+		}
+	}
+	return j, nil
+}
+
+func (j jsonNumber) Compare(other JSON) (int, error) {
 	cmp := cmpJSONTypes(j.Type(), other.Type())
 	if cmp != 0 {
-		return cmp
+		return cmp, nil
+	}
+	var err error
+	if other, err = decodeIfNeeded(other); err != nil {
+		return 0, err
 	}
 	dec := apd.Decimal(j)
 	o := apd.Decimal(other.(jsonNumber))
-	return dec.Cmp(&o)
+	return dec.Cmp(&o), nil
 }
 
-func (j jsonString) Compare(other JSON) int {
+func (j jsonString) Compare(other JSON) (int, error) {
 	cmp := cmpJSONTypes(j.Type(), other.Type())
 	if cmp != 0 {
-		return cmp
+		return cmp, nil
+	}
+	// TODO(justin): we should optimize this, we don't have to decode the whole thing.
+	var err error
+	if other, err = decodeIfNeeded(other); err != nil {
+		return 0, err
 	}
 	o := other.(jsonString)
 	if o > j {
-		return -1
+		return -1, nil
 	}
 	if o < j {
-		return 1
+		return 1, nil
 	}
-	return 0
+	return 0, nil
 }
 
-func (j jsonArray) Compare(other JSON) int {
+func (j jsonArray) Compare(other JSON) (int, error) {
 	cmp := cmpJSONTypes(j.Type(), other.Type())
 	if cmp != 0 {
-		return cmp
+		return cmp, nil
+	}
+	// TODO(justin): we should optimize this, we don't have to decode the whole thing.
+	var err error
+	if other, err = decodeIfNeeded(other); err != nil {
+		return 0, err
 	}
 	o := other.(jsonArray)
 	if len(j) < len(o) {
-		return -1
+		return -1, nil
 	}
 	if len(j) > len(o) {
-		return 1
+		return 1, nil
 	}
 	for i := 0; i < len(j); i++ {
-		cmp := j[i].Compare(o[i])
+		cmp, err := j[i].Compare(o[i])
+		if err != nil {
+			return 0, err
+		}
 		if cmp != 0 {
-			return cmp
+			return cmp, nil
 		}
 	}
-	return 0
+	return 0, nil
 }
 
-func (j jsonObject) Compare(other JSON) int {
+func (j jsonObject) Compare(other JSON) (int, error) {
 	cmp := cmpJSONTypes(j.Type(), other.Type())
 	if cmp != 0 {
-		return cmp
+		return cmp, nil
+	}
+	// TODO(justin): we should optimize this, we don't have to decode the whole thing.
+	var err error
+	if other, err = decodeIfNeeded(other); err != nil {
+		return 0, err
 	}
 	o := other.(jsonObject)
 	if len(j) < len(o) {
-		return -1
+		return -1, nil
 	}
 	if len(j) > len(o) {
-		return 1
+		return 1, nil
 	}
 	for i := 0; i < len(j); i++ {
-		cmpKey := j[i].k.Compare(o[i].k)
-		if cmpKey != 0 {
-			return cmpKey
+		cmpKey, err := j[i].k.Compare(o[i].k)
+		if err != nil {
+			return 0, err
 		}
-		cmpVal := j[i].v.Compare(o[i].v)
+		if cmpKey != 0 {
+			return cmpKey, nil
+		}
+		cmpVal, err := j[i].v.Compare(o[i].v)
+		if err != nil {
+			return 0, err
+		}
 		if cmpVal != 0 {
-			return cmpVal
+			return cmpVal, nil
 		}
 	}
-	return 0
+	return 0, nil
 }
 
 var errTrailingCharacters = pgerror.NewError(pgerror.CodeInvalidTextRepresentationError, "trailing characters after JSON document")
@@ -394,39 +444,47 @@ func ParseJSON(s string) (JSON, error) {
 	return MakeJSON(result)
 }
 
-func (j jsonNull) EncodeInvertedIndexKeys(b []byte) [][]byte {
-	return [][]byte{encoding.EncodeNullAscending(b)}
+func (j jsonNull) EncodeInvertedIndexKeys(b []byte) ([][]byte, error) {
+	return [][]byte{encoding.EncodeNullAscending(b)}, nil
 }
-func (jsonTrue) EncodeInvertedIndexKeys(b []byte) [][]byte {
-	return [][]byte{encoding.EncodeTrueAscending(b)}
+func (jsonTrue) EncodeInvertedIndexKeys(b []byte) ([][]byte, error) {
+	return [][]byte{encoding.EncodeTrueAscending(b)}, nil
 }
-func (jsonFalse) EncodeInvertedIndexKeys(b []byte) [][]byte {
-	return [][]byte{encoding.EncodeFalseAscending(b)}
+func (jsonFalse) EncodeInvertedIndexKeys(b []byte) ([][]byte, error) {
+	return [][]byte{encoding.EncodeFalseAscending(b)}, nil
 }
-func (j jsonString) EncodeInvertedIndexKeys(b []byte) [][]byte {
-	return [][]byte{encoding.EncodeStringAscending(b, string(j))}
+func (j jsonString) EncodeInvertedIndexKeys(b []byte) ([][]byte, error) {
+	return [][]byte{encoding.EncodeStringAscending(b, string(j))}, nil
 }
-func (j jsonNumber) EncodeInvertedIndexKeys(b []byte) [][]byte {
+func (j jsonNumber) EncodeInvertedIndexKeys(b []byte) ([][]byte, error) {
 	var dec = apd.Decimal(j)
-	return [][]byte{encoding.EncodeDecimalAscending(b, &dec)}
+	return [][]byte{encoding.EncodeDecimalAscending(b, &dec)}, nil
 }
-func (j jsonArray) EncodeInvertedIndexKeys(b []byte) [][]byte {
+func (j jsonArray) EncodeInvertedIndexKeys(b []byte) ([][]byte, error) {
 	var outKeys [][]byte
 
 	for i := range j {
-		for _, childBytes := range j[i].EncodeInvertedIndexKeys(nil) {
+		children, err := j[i].EncodeInvertedIndexKeys(nil)
+		if err != nil {
+			return nil, err
+		}
+		for _, childBytes := range children {
 			encodedKey := bytes.Join([][]byte{b, encoding.EncodeArrayAscending(nil), childBytes}, nil)
 			outKeys = append(outKeys, encodedKey)
 		}
 	}
 
-	return outKeys
+	return outKeys, nil
 }
 
-func (j jsonObject) EncodeInvertedIndexKeys(b []byte) [][]byte {
+func (j jsonObject) EncodeInvertedIndexKeys(b []byte) ([][]byte, error) {
 	var outKeys [][]byte
 	for i := range j {
-		for _, childBytes := range j[i].v.EncodeInvertedIndexKeys(nil) {
+		children, err := j[i].v.EncodeInvertedIndexKeys(nil)
+		if err != nil {
+			return nil, err
+		}
+		for _, childBytes := range children {
 			encodedKey := bytes.Join([][]byte{b,
 				encoding.EncodeNotNullAscending(nil),
 				encoding.EncodeStringAscending(nil, string(j[i].k)),
@@ -436,7 +494,7 @@ func (j jsonObject) EncodeInvertedIndexKeys(b []byte) [][]byte {
 		}
 	}
 
-	return outKeys
+	return outKeys, nil
 }
 
 // MakeJSON returns a JSON value given a Go-style representation of JSON.
@@ -513,6 +571,11 @@ func MakeJSON(d interface{}) (JSON, error) {
 		}
 		return jsonNumber(dec), nil
 	}
+	// If we get passed a JSON, just accept it. This is useful in cases like the
+	// random JSON generator.
+	if j, ok := d.(JSON); ok {
+		return j, nil
+	}
 	return nil, pgerror.NewError("invalid value %s passed to MakeJSON", d.(fmt.Stringer).String())
 }
 
@@ -520,82 +583,89 @@ func MakeJSON(d interface{}) (JSON, error) {
 // place to start doing binary search over a linear scan.
 const bsearchCutoff = 20
 
-func (j jsonObject) FetchValKey(key string) JSON {
+func (j jsonObject) FetchValKey(key string) (JSON, error) {
 	// For small objects, the overhead of binary search is significant and so
 	// it's faster to just do a linear scan.
 	if len(j) < bsearchCutoff {
 		for i := range j {
 			if string(j[i].k) == key {
-				return j[i].v
+				return j[i].v, nil
 			}
 			if string(j[i].k) > key {
 				break
 			}
 		}
-		return nil
+		return nil, nil
 	}
 
 	i := sort.Search(len(j), func(i int) bool { return string(j[i].k) >= key })
 	if i < len(j) && string(j[i].k) == key {
-		return j[i].v
+		return j[i].v, nil
 	}
-	return nil
+	return nil, nil
 }
 
-func (jsonNull) FetchValKey(string) JSON   { return nil }
-func (jsonTrue) FetchValKey(string) JSON   { return nil }
-func (jsonFalse) FetchValKey(string) JSON  { return nil }
-func (jsonString) FetchValKey(string) JSON { return nil }
-func (jsonNumber) FetchValKey(string) JSON { return nil }
-func (jsonArray) FetchValKey(string) JSON  { return nil }
+func (jsonNull) FetchValKey(string) (JSON, error)   { return nil, nil }
+func (jsonTrue) FetchValKey(string) (JSON, error)   { return nil, nil }
+func (jsonFalse) FetchValKey(string) (JSON, error)  { return nil, nil }
+func (jsonString) FetchValKey(string) (JSON, error) { return nil, nil }
+func (jsonNumber) FetchValKey(string) (JSON, error) { return nil, nil }
+func (jsonArray) FetchValKey(string) (JSON, error)  { return nil, nil }
 
-func (j jsonArray) FetchValIdx(idx int) JSON {
+func (j jsonArray) FetchValIdx(idx int) (JSON, error) {
 	if idx < 0 {
 		idx = len(j) + idx
 	}
 	if idx >= 0 && idx < len(j) {
-		return j[idx]
+		return j[idx], nil
 	}
-	return nil
+	return nil, nil
 }
 
-func (jsonNull) FetchValIdx(int) JSON   { return nil }
-func (jsonTrue) FetchValIdx(int) JSON   { return nil }
-func (jsonFalse) FetchValIdx(int) JSON  { return nil }
-func (jsonString) FetchValIdx(int) JSON { return nil }
-func (jsonNumber) FetchValIdx(int) JSON { return nil }
-func (jsonObject) FetchValIdx(int) JSON { return nil }
+func (jsonNull) FetchValIdx(int) (JSON, error)   { return nil, nil }
+func (jsonTrue) FetchValIdx(int) (JSON, error)   { return nil, nil }
+func (jsonFalse) FetchValIdx(int) (JSON, error)  { return nil, nil }
+func (jsonString) FetchValIdx(int) (JSON, error) { return nil, nil }
+func (jsonNumber) FetchValIdx(int) (JSON, error) { return nil, nil }
+func (jsonObject) FetchValIdx(int) (JSON, error) { return nil, nil }
 
 // FetchPath implements the #> operator.
-func FetchPath(j JSON, path []string) JSON {
+func FetchPath(j JSON, path []string) (JSON, error) {
 	var next JSON
+	var err error
 	for _, v := range path {
-		next = j.FetchValKeyOrIdx(v)
+		next, err = j.FetchValKeyOrIdx(v)
 		if next == nil {
-			return nil
+			return nil, nil
+		}
+		if err != nil {
+			return nil, err
 		}
 		j = next
 	}
-	return j
+	return j, nil
 }
 
-func (j jsonObject) FetchValKeyOrIdx(key string) JSON {
+func (j jsonObject) FetchValKeyOrIdx(key string) (JSON, error) {
 	return j.FetchValKey(key)
 }
 
-func (j jsonArray) FetchValKeyOrIdx(key string) JSON {
+func (j jsonArray) FetchValKeyOrIdx(key string) (JSON, error) {
 	idx, err := strconv.Atoi(key)
 	if err != nil {
-		return nil
+		// We shouldn't return this error because it means we couldn't parse the
+		// number, meaning it was a string and that just means we can't find the
+		// value in an array.
+		return nil, nil
 	}
 	return j.FetchValIdx(idx)
 }
 
-func (jsonNull) FetchValKeyOrIdx(string) JSON   { return nil }
-func (jsonTrue) FetchValKeyOrIdx(string) JSON   { return nil }
-func (jsonFalse) FetchValKeyOrIdx(string) JSON  { return nil }
-func (jsonString) FetchValKeyOrIdx(string) JSON { return nil }
-func (jsonNumber) FetchValKeyOrIdx(string) JSON { return nil }
+func (jsonNull) FetchValKeyOrIdx(string) (JSON, error)   { return nil, nil }
+func (jsonTrue) FetchValKeyOrIdx(string) (JSON, error)   { return nil, nil }
+func (jsonFalse) FetchValKeyOrIdx(string) (JSON, error)  { return nil, nil }
+func (jsonString) FetchValKeyOrIdx(string) (JSON, error) { return nil, nil }
+func (jsonNumber) FetchValKeyOrIdx(string) (JSON, error) { return nil, nil }
 
 var errCannotDeleteFromScalar = pgerror.NewError(pgerror.CodeInvalidParameterValueError, "cannot delete from scalar")
 var errCannotDeleteFromObject = pgerror.NewError(pgerror.CodeInvalidParameterValueError, "cannot delete from object using integer index")
@@ -647,47 +717,51 @@ func (jsonFalse) RemoveIndex(int) (JSON, error)  { return nil, errCannotDeleteFr
 func (jsonString) RemoveIndex(int) (JSON, error) { return nil, errCannotDeleteFromScalar }
 func (jsonNumber) RemoveIndex(int) (JSON, error) { return nil, errCannotDeleteFromScalar }
 
-func (j jsonString) AsText() *string {
+func (j jsonString) AsText() (*string, error) {
 	s := string(j)
-	return &s
+	return &s, nil
 }
-func (j jsonNull) AsText() *string { return nil }
-func (j jsonTrue) AsText() *string {
+func (j jsonNull) AsText() (*string, error) { return nil, nil }
+func (j jsonTrue) AsText() (*string, error) {
 	s := j.String()
-	return &s
+	return &s, nil
 }
-func (j jsonFalse) AsText() *string {
+func (j jsonFalse) AsText() (*string, error) {
 	s := j.String()
-	return &s
+	return &s, nil
 }
-func (j jsonNumber) AsText() *string {
+func (j jsonNumber) AsText() (*string, error) {
 	s := j.String()
-	return &s
+	return &s, nil
 }
-func (j jsonArray) AsText() *string {
+func (j jsonArray) AsText() (*string, error) {
 	s := j.String()
-	return &s
+	return &s, nil
 }
-func (j jsonObject) AsText() *string {
+func (j jsonObject) AsText() (*string, error) {
 	s := j.String()
-	return &s
+	return &s, nil
 }
 
-func (jsonNull) Exists(string) bool   { return false }
-func (jsonTrue) Exists(string) bool   { return false }
-func (jsonFalse) Exists(string) bool  { return false }
-func (jsonNumber) Exists(string) bool { return false }
-func (jsonString) Exists(string) bool { return false }
-func (j jsonArray) Exists(s string) bool {
+func (jsonNull) Exists(string) (bool, error)   { return false, nil }
+func (jsonTrue) Exists(string) (bool, error)   { return false, nil }
+func (jsonFalse) Exists(string) (bool, error)  { return false, nil }
+func (jsonNumber) Exists(string) (bool, error) { return false, nil }
+func (jsonString) Exists(string) (bool, error) { return false, nil }
+func (j jsonArray) Exists(s string) (bool, error) {
 	for i := 0; i < len(j); i++ {
 		if elem, ok := j[i].(jsonString); ok && string(elem) == s {
-			return true
+			return true, nil
 		}
 	}
-	return false
+	return false, nil
 }
-func (j jsonObject) Exists(s string) bool {
-	return j.FetchValKey(s) != nil
+func (j jsonObject) Exists(s string) (bool, error) {
+	v, err := j.FetchValKey(s)
+	if err != nil {
+		return false, err
+	}
+	return v != nil, nil
 }
 
 func (jsonNull) isScalar() bool   { return true }

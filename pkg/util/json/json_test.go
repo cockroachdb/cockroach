@@ -29,6 +29,37 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
+func eachPair(a, b JSON, f func(a, b JSON)) {
+	f(a, a)
+	f(a, b)
+	f(b, a)
+	f(b, b)
+}
+
+func eachComparison(a, b JSON, c, d JSON, f func(a, b JSON)) {
+	f(a, c)
+	f(a, d)
+	f(b, c)
+	f(b, d)
+}
+
+func runDecodedAndEncoded(t *testing.T, testName string, j JSON, f func(t *testing.T, j JSON)) {
+	t.Run(testName, func(t *testing.T) {
+		f(t, j)
+	})
+	t.Run(testName+` (encoded)`, func(t *testing.T) {
+		encoding, err := EncodeJSON(nil, j)
+		if err != nil {
+			t.Fatal(err)
+		}
+		encoded, err := newEncodedFromRoot(encoding)
+		if err != nil {
+			t.Fatal(err)
+		}
+		f(t, encoded)
+	})
+}
+
 func TestJSONOrdering(t *testing.T) {
 	// We test here that every element in order sorts before every one that comes
 	// after it, and is equal to itself.
@@ -65,24 +96,51 @@ func TestJSONOrdering(t *testing.T) {
 		`{"a": 3, "b": 3}`,
 	}
 	jsons := make([]JSON, len(sources))
+	encJSONs := make([]JSON, len(sources))
 	for i := range sources {
 		j, err := ParseJSON(sources[i])
 		if err != nil {
 			t.Fatal(err)
 		}
 		jsons[i] = j
+		b, err := EncodeJSON(nil, j)
+		if err != nil {
+			t.Fatal(err)
+		}
+		encJSONs[i], err = newEncodedFromRoot(b)
+		if err != nil {
+			t.Fatal(err)
+		}
 	}
 	for i := range jsons {
-		if jsons[i].Compare(jsons[i]) != 0 {
-			t.Errorf("%s not equal to itself", jsons[i])
-		}
+		eachPair(jsons[i], encJSONs[i], func(a, b JSON) {
+			c, err := a.Compare(b)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if c != 0 {
+				t.Errorf("%s not equal to %s", a, b)
+			}
+		})
 		for j := i + 1; j < len(jsons); j++ {
-			if jsons[i].Compare(jsons[j]) != -1 {
-				t.Errorf("expected %s < %s", jsons[i], jsons[j])
-			}
-			if jsons[j].Compare(jsons[i]) != 1 {
-				t.Errorf("expected %s > %s", jsons[j], jsons[i])
-			}
+			eachComparison(jsons[i], encJSONs[i], jsons[j], encJSONs[j], func(a, b JSON) {
+				c, err := a.Compare(b)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if c != -1 {
+					t.Errorf("expected %s < %s", a, b)
+				}
+			})
+			eachComparison(jsons[j], encJSONs[j], jsons[i], encJSONs[i], func(a, b JSON) {
+				c, err := a.Compare(b)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if c != 1 {
+					t.Errorf("expected %s > %s", a, b)
+				}
+			})
 		}
 	}
 }
@@ -158,18 +216,22 @@ func TestJSONRoundTrip(t *testing.T) {
 		string([]byte{'"', 0xa7, '"'}),
 	}
 	for _, tc := range testCases {
-		t.Run(tc, func(t *testing.T) {
-			j, err := ParseJSON(tc)
-			if err != nil {
-				t.Fatal(err)
-			}
+		j, err := ParseJSON(tc)
+		if err != nil {
+			t.Fatal(err)
+		}
+		runDecodedAndEncoded(t, tc, j, func(t *testing.T, j JSON) {
 			s := j.String()
 
 			j2, err := ParseJSON(s)
 			if err != nil {
 				t.Fatalf("error while parsing %v: %s", s, err)
 			}
-			if j.Compare(j2) != 0 {
+			c, err := j.Compare(j2)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if c != 0 {
 				t.Fatalf("%v should equal %v", tc, s)
 			}
 			s2 := j2.String()
@@ -270,7 +332,11 @@ func TestMakeJSON(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			if result.Compare(expectedResult) != 0 {
+			c, err := result.Compare(expectedResult)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if c != 0 {
 				t.Fatalf("expected %v to equal %v", result, expectedResult)
 			}
 		})
@@ -278,7 +344,10 @@ func TestMakeJSON(t *testing.T) {
 }
 
 func jsonTestShorthand(s string) JSON {
-	j, _ := ParseJSON(s)
+	j, err := ParseJSON(s)
+	if err != nil {
+		panic(fmt.Sprintf("bad json: %s", s))
+	}
 	return j
 }
 
@@ -299,6 +368,12 @@ func TestJSONFetch(t *testing.T) {
 			{`bar`, json(`"baz"`)},
 			{`baz`, nil},
 		},
+		`{"foo": [1, 2, 3], "bar": {"a": "b"}}`: {
+			{``, nil},
+			{`foo`, json(`[1, 2, 3]`)},
+			{`bar`, json(`{"a": "b"}`)},
+			{`baz`, nil},
+		},
 		`["a"]`: {{``, nil}, {`0`, nil}, {`a`, nil}},
 		`"a"`:   {{``, nil}, {`0`, nil}, {`a`, nil}},
 		`1`:     {{``, nil}, {`0`, nil}, {`a`, nil}},
@@ -312,15 +387,22 @@ func TestJSONFetch(t *testing.T) {
 		}
 
 		for _, tc := range tests {
-			t.Run(k+`->`+tc.key, func(t *testing.T) {
-				result := left.FetchValKey(tc.key)
+			runDecodedAndEncoded(t, k+`->`+tc.key, left, func(t *testing.T, j JSON) {
+				result, err := j.FetchValKey(tc.key)
+				if err != nil {
+					t.Fatal(err)
+				}
 				if result == nil || tc.expected == nil {
 					if result == tc.expected {
 						return
 					}
 					t.Fatalf("expected %s, got %s", tc.expected, result)
 				}
-				if result.Compare(tc.expected) != 0 {
+				c, err := result.Compare(tc.expected)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if c != 0 {
 					t.Fatalf("expected %s, got %s", tc.expected, result)
 				}
 			})
@@ -339,8 +421,15 @@ func TestJSONRandomFetch(t *testing.T) {
 		if obj, ok := j.(jsonObject); ok {
 			// Pick a key:
 			idx := rand.Intn(len(obj))
-			result := obj.FetchValKey(string(obj[idx].k))
-			if result.Compare(obj[idx].v) != 0 {
+			result, err := obj.FetchValKey(string(obj[idx].k))
+			if err != nil {
+				t.Fatal(err)
+			}
+			c, err := result.Compare(obj[idx].v)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if c != 0 {
 				t.Fatalf("%s: expected fetching %s to give %s got %s", obj, obj[idx].k, obj[idx].v, result)
 			}
 		}
@@ -367,6 +456,11 @@ func TestJSONFetchIdx(t *testing.T) {
 			{2, json(`"c"`)},
 			{3, nil},
 		},
+		`[1, 2, {"foo":"bar"}]`: {
+			{0, json(`1`)},
+			{1, json(`2`)},
+			{2, json(`{"foo":"bar"}`)},
+		},
 	}
 
 	for k, tests := range cases {
@@ -376,16 +470,95 @@ func TestJSONFetchIdx(t *testing.T) {
 		}
 
 		for _, tc := range tests {
-			t.Run(fmt.Sprintf("%s->%d", k, tc.idx), func(t *testing.T) {
-				result := left.FetchValIdx(tc.idx)
+			runDecodedAndEncoded(t, fmt.Sprintf("%s->%d", k, tc.idx), left, func(t *testing.T, j JSON) {
+				result, err := j.FetchValIdx(tc.idx)
+				if err != nil {
+					t.Fatal(err)
+				}
 				if result == nil || tc.expected == nil {
 					if result == tc.expected {
 						return
 					}
 					t.Fatalf("expected %s, got %s", tc.expected, result)
 				}
-				if result.Compare(tc.expected) != 0 {
+				c, err := result.Compare(tc.expected)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if c != 0 {
 					t.Fatalf("expected %s, got %s", tc.expected, result)
+				}
+			})
+		}
+	}
+}
+
+func TestJSONExists(t *testing.T) {
+	cases := map[string][]struct {
+		key    string
+		exists bool
+	}{
+		`{}`: {
+			{``, false},
+			{`foo`, false},
+		},
+		`{"foo": 1, "bar": "baz"}`: {
+			{``, false},
+			{`foo`, true},
+			{`bar`, true},
+			{`baz`, false},
+		},
+		`{"foo": [1, 2, 3], "bar": {"a": "b"}}`: {
+			{``, false},
+			{`foo`, true},
+			{`bar`, true},
+			{`baz`, false},
+		},
+		`["a"]`: {{``, false}, {`0`, false}, {`a`, true}},
+		`"a"`:   {{``, false}, {`0`, false}, {`a`, false}},
+		`1`:     {{``, false}, {`0`, false}, {`a`, false}},
+		`true`:  {{``, false}, {`0`, false}, {`a`, false}},
+	}
+
+	for k, tests := range cases {
+		left, err := ParseJSON(k)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		for _, tc := range tests {
+			t.Run(k+` ? `+tc.key, func(t *testing.T) {
+				result, err := left.Exists(tc.key)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if result != tc.exists {
+					if tc.exists {
+						t.Fatalf("expected %s ? %s", left, tc.key)
+					}
+					t.Fatalf("expected %s to NOT ? %s", left, tc.key)
+				}
+			})
+
+			t.Run(k+` ? `+tc.key+` (encoded)`, func(t *testing.T) {
+				encoding, err := EncodeJSON(nil, left)
+				if err != nil {
+					t.Fatal(err)
+				}
+				encoded, err := newEncodedFromRoot(encoding)
+				if err != nil {
+					t.Fatal(err)
+				}
+
+				result, err := encoded.Exists(tc.key)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if result != tc.exists {
+					if tc.exists {
+						t.Fatalf("expected %s ? %s", encoded, tc.key)
+					}
+					t.Fatalf("expected %s to NOT ? %s", encoded, tc.key)
 				}
 			})
 		}
@@ -443,14 +616,51 @@ func TestJSONFetchPath(t *testing.T) {
 
 		for _, tc := range tests {
 			t.Run(fmt.Sprintf("%s#>%v", k, tc.path), func(t *testing.T) {
-				result := FetchPath(left, tc.path)
+				result, err := FetchPath(left, tc.path)
+				if err != nil {
+					t.Fatal(err)
+				}
 				if result == nil || tc.expected == nil {
 					if result == tc.expected {
 						return
 					}
 					t.Fatalf("expected %s, got %s", tc.expected, result)
 				}
-				if result.Compare(tc.expected) != 0 {
+				c, err := result.Compare(tc.expected)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if c != 0 {
+					t.Fatalf("expected %s, got %s", tc.expected, result)
+				}
+			})
+		}
+
+		for _, tc := range tests {
+			t.Run(fmt.Sprintf("%s#>%v (encoded)", k, tc.path), func(t *testing.T) {
+				encoding, err := EncodeJSON(nil, left)
+				if err != nil {
+					t.Fatal(err)
+				}
+				encoded, err := newEncodedFromRoot(encoding)
+				if err != nil {
+					t.Fatal(err)
+				}
+				result, err := FetchPath(encoded, tc.path)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if result == nil || tc.expected == nil {
+					if result == tc.expected {
+						return
+					}
+					t.Fatalf("expected %s, got %s", tc.expected, result)
+				}
+				c, err := result.Compare(tc.expected)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if c != 0 {
 					t.Fatalf("expected %s, got %s", tc.expected, result)
 				}
 			})
@@ -497,8 +707,8 @@ func TestJSONRemoveKey(t *testing.T) {
 		}
 
 		for _, tc := range tests {
-			t.Run(k+`-`+tc.key, func(t *testing.T) {
-				result, err := left.RemoveKey(tc.key)
+			runDecodedAndEncoded(t, k+`-`+tc.key, left, func(t *testing.T, j JSON) {
+				result, err := j.RemoveKey(tc.key)
 				if tc.errMsg != "" {
 					if err == nil {
 						t.Fatal("expected error")
@@ -510,7 +720,11 @@ func TestJSONRemoveKey(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				if result.Compare(tc.expected) != 0 {
+				c, err := result.Compare(tc.expected)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if c != 0 {
 					t.Fatalf("expected %s, got %s", tc.expected, result)
 				}
 			})
@@ -538,6 +752,11 @@ func TestJSONRemoveIndex(t *testing.T) {
 			{idx: 2, expected: json(`["a", "b"]`)},
 			{idx: 3, expected: json(`["a", "b", "c"]`)},
 		},
+		`[{}, {"a":"b"}, {"c":"d"}]`: {
+			{idx: 0, expected: json(`[{"a":"b"},{"c":"d"}]`)},
+			{idx: 1, expected: json(`[{},{"c":"d"}]`)},
+			{idx: 2, expected: json(`[{},{"a":"b"}]`)},
+		},
 		`[]`: {
 			{idx: -1, expected: json(`[]`)},
 			{idx: 0, expected: json(`[]`)},
@@ -557,8 +776,8 @@ func TestJSONRemoveIndex(t *testing.T) {
 		}
 
 		for _, tc := range tests {
-			t.Run(fmt.Sprintf("%s-%d", k, tc.idx), func(t *testing.T) {
-				result, err := left.RemoveIndex(tc.idx)
+			runDecodedAndEncoded(t, fmt.Sprintf("%s-%d", k, tc.idx), left, func(t *testing.T, j JSON) {
+				result, err := j.RemoveIndex(tc.idx)
 				if tc.errMsg != "" {
 					if err == nil {
 						t.Fatal("expected error")
@@ -570,7 +789,11 @@ func TestJSONRemoveIndex(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				if result.Compare(tc.expected) != 0 {
+				c, err := result.Compare(tc.expected)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if c != 0 {
 					t.Fatalf("expected %s, got %s", tc.expected, result)
 				}
 			})
@@ -643,14 +866,16 @@ func TestEncodeDecodeJSONInvertedIndex(t *testing.T) {
 	}
 
 	for _, c := range testCases {
-		enc := jsonTestShorthand(c.value).EncodeInvertedIndexKeys(bytePrefix)
+		enc, err := jsonTestShorthand(c.value).EncodeInvertedIndexKeys(bytePrefix)
+		if err != nil {
+			t.Fatal(err)
+		}
 		for j, path := range enc {
 			if !bytes.Equal(path, c.expEnc[j]) {
 				t.Errorf("unexpected encoding mismatch for %v. expected [%#v], got [%#v]",
 					c.value, c.expEnc[j], path)
 			}
 		}
-
 	}
 }
 
@@ -665,7 +890,11 @@ func TestJSONRandomRoundTrip(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if j.Compare(j2) != 0 {
+		c, err := j.Compare(j2)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if c != 0 {
 			t.Fatalf("%s did not round-trip, got %s", j.String(), j2.String())
 		}
 	}
@@ -773,6 +1002,9 @@ func TestJSONContains(t *testing.T) {
 			{`["hello", {"a": 1}, "hello", []]`, true},
 			{`["hello", {"a": 1, "b": 2}, "hello", []]`, false},
 		},
+		`[{"Ck@P":{"7RZ2\"mZBH":null,"|__v":[1.685483]},"EM%&":{"I{TH":[],"}p@]7sIKC\\$":[]},"f}?#z~":{"#e9>m\"v75'&+":false,"F;,+&r9":{}}},[{}],false,0.498401]`: {
+			{`[false,{}]`, true},
+		},
 	}
 
 	for k, tests := range cases {
@@ -787,7 +1019,10 @@ func TestJSONContains(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				result := Contains(left, other)
+				result, err := Contains(left, other)
+				if err != nil {
+					t.Fatal(err)
+				}
 
 				checkResult := left.(containsTester).slowContains(other)
 				if result != checkResult {
@@ -816,7 +1051,11 @@ func TestPositiveRandomJSONContains(t *testing.T) {
 
 		subdoc := j.(containsTester).subdocument(true /* isRoot */, rng)
 
-		if !Contains(j, subdoc) {
+		c, err := Contains(j, subdoc)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !c {
 			t.Fatal(fmt.Sprintf("%s should contain %s", j, subdoc))
 		}
 		if !j.(containsTester).slowContains(subdoc) {
@@ -839,9 +1078,13 @@ func TestNegativeRandomJSONContains(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		realResult := Contains(j1, j2)
+		realResult, err := Contains(j1, j2)
+		if err != nil {
+			t.Fatal(err)
+		}
 		slowResult := j1.(containsTester).slowContains(j2)
 		if realResult != slowResult {
+			fmt.Println("realResult=", realResult)
 			t.Fatal("mismatch for document " + j1.String() + " @> " + j2.String())
 		}
 	}
@@ -863,10 +1106,57 @@ func BenchmarkFetchKey(b *testing.B) {
 				b.Fatal(err)
 			}
 
-			// TODO(justin): add benchmarks for fetching from still-encoded objects.
 			b.Run("fetch key", func(b *testing.B) {
 				for i := 0; i < b.N; i++ {
-					j.FetchValKey(keys[rand.Intn(len(keys))])
+					_, _ = j.FetchValKey(keys[rand.Intn(len(keys))])
+				}
+			})
+
+			encoding, err := EncodeJSON(nil, j)
+			if err != nil {
+				b.Fatal(err)
+			}
+
+			encoded, err := newEncodedFromRoot(encoding)
+			if err != nil {
+				b.Fatal(err)
+			}
+
+			b.Run("fetch key by decoding and then reading", func(b *testing.B) {
+				for i := 0; i < b.N; i++ {
+					decoded, err := encoded.shallowDecode()
+					if err != nil {
+						b.Fatal(err)
+					}
+					_, _ = decoded.FetchValKey(keys[rand.Intn(len(keys))])
+				}
+			})
+
+			b.Run("fetch key encoded", func(b *testing.B) {
+				for i := 0; i < b.N; i++ {
+					b.StopTimer()
+					encoded, err := newEncodedFromRoot(encoding)
+					if err != nil {
+						b.Fatal(err)
+					}
+					b.StartTimer()
+
+					_, _ = encoded.FetchValKey(keys[rand.Intn(len(keys))])
+				}
+			})
+
+			b.Run("repeated fetch key encoded", func(b *testing.B) {
+				for i := 0; i < b.N; i++ {
+					b.StopTimer()
+					encoded, err := newEncodedFromRoot(encoding)
+					if err != nil {
+						b.Fatal(err)
+					}
+					b.StartTimer()
+
+					key := keys[rand.Intn(len(keys))]
+					_, _ = encoded.FetchValKey(key)
+					_, _ = encoded.FetchValKey(key)
 				}
 			})
 		})
