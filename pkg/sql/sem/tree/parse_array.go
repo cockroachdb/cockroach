@@ -169,6 +169,8 @@ func StringToColType(s string) (coltypes.T, error) {
 		return coltypes.INet, nil
 	case "DATE":
 		return coltypes.Date, nil
+	case "TIME":
+		return coltypes.Time, nil
 	case "STRING":
 		return coltypes.String, nil
 	case "NAME":

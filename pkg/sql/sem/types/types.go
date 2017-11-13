@@ -62,6 +62,8 @@ var (
 	Bytes T = tBytes{}
 	// Date is the type of a DDate. Can be compared with ==.
 	Date T = tDate{}
+	// Time is the type of a DTime. Can be compared with ==.
+	Time T = tTime{}
 	// Timestamp is the type of a DTimestamp. Can be compared with ==.
 	Timestamp T = tTimestamp{}
 	// TimestampTZ is the type of a DTimestampTZ. Can be compared with ==.
@@ -89,6 +91,7 @@ var (
 		String,
 		Bytes,
 		Date,
+		Time,
 		Timestamp,
 		TimestampTZ,
 		Interval,
@@ -227,6 +230,15 @@ func (tDate) FamilyEqual(other T) bool { return UnwrapType(other) == Date }
 func (tDate) Oid() oid.Oid             { return oid.T_date }
 func (tDate) SQLName() string          { return "date" }
 func (tDate) IsAmbiguous() bool        { return false }
+
+type tTime struct{}
+
+func (tTime) String() string           { return "time" }
+func (tTime) Equivalent(other T) bool  { return UnwrapType(other) == Time || other == Any }
+func (tTime) FamilyEqual(other T) bool { return UnwrapType(other) == Time }
+func (tTime) Oid() oid.Oid             { return oid.T_time }
+func (tTime) SQLName() string          { return "time" }
+func (tTime) IsAmbiguous() bool        { return false }
 
 type tTimestamp struct{}
 

@@ -53,7 +53,8 @@ func TestDumpRow(t *testing.T) {
 		s string,
 		b bytes,
 		d date,
-		t timestamp,
+		t time,
+		ts timestamp,
 		n interval,
 		o bool,
 		e decimal,
@@ -64,7 +65,7 @@ func TestDumpRow(t *testing.T) {
 		e1 decimal(2),
 		e2 decimal(2, 1),
 		s1 string(1),
-		FAMILY "primary" (i, f, d, t, n, o, u, ip, ary, tz, e1, e2, s1, rowid),
+		FAMILY "primary" (i, f, d, t, ts, n, o, u, ip, ary, tz, e1, e2, s1, rowid),
 		FAMILY fam_1_s (s),
 		FAMILY fam_2_b (b),
 		FAMILY fam_3_e (e)
@@ -73,7 +74,10 @@ func TestDumpRow(t *testing.T) {
 		1,
 		2.3,
 		'striiing',
-		'\x613162326333', '2016-03-26', '2016-01-25 10:10:10' ,
+		'\x613162326333',
+		'2016-03-26',
+		'01:02:03.456',
+		'2016-01-25 10:10:10',
 		'2h30m30s',
 		true,
 		1.2345,
@@ -109,7 +113,8 @@ CREATE TABLE t (
 	s STRING NULL,
 	b BYTES NULL,
 	d DATE NULL,
-	t TIMESTAMP NULL,
+	t TIME NULL,
+	ts TIMESTAMP NULL,
 	n INTERVAL NULL,
 	o BOOL NULL,
 	e DECIMAL NULL,
@@ -120,18 +125,18 @@ CREATE TABLE t (
 	e1 DECIMAL(2) NULL,
 	e2 DECIMAL(2,1) NULL,
 	s1 STRING(1) NULL,
-	FAMILY "primary" (i, f, d, t, n, o, u, ip, ary, tz, e1, e2, s1, rowid),
+	FAMILY "primary" (i, f, d, t, ts, n, o, u, ip, ary, tz, e1, e2, s1, rowid),
 	FAMILY fam_1_s (s),
 	FAMILY fam_2_b (b),
 	FAMILY fam_3_e (e)
 );
 
-INSERT INTO t (i, f, s, b, d, t, n, o, e, u, ip, ary, tz, e1, e2, s1) VALUES
-	(1, 2.3, 'striiing', '\x613162326333', '2016-03-26', '2016-01-25 10:10:10+00:00', '2h30m30s', true, 1.2345, 'e9716c74-2638-443d-90ed-ffde7bea7d1d', '192.168.0.1', ARRAY['hello':::STRING,'world':::STRING], '2016-01-25 10:10:10+00:00', 3, 4.5, 's'),
-	(NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL),
-	(NULL, '+Inf', NULL, NULL, NULL, NULL, NULL, NULL, 'Infinity', NULL, NULL, NULL, NULL, NULL, NULL, NULL),
-	(NULL, '-Inf', NULL, NULL, NULL, NULL, NULL, NULL, '-Infinity', NULL, NULL, NULL, NULL, NULL, NULL, NULL),
-	(NULL, 'NaN', NULL, NULL, NULL, NULL, NULL, NULL, 'NaN', NULL, NULL, NULL, NULL, NULL, NULL, NULL);
+INSERT INTO t (i, f, s, b, d, t, ts, n, o, e, u, ip, ary, tz, e1, e2, s1) VALUES
+	(1, 2.3, 'striiing', '\x613162326333', '2016-03-26', '01:02:03.456', '2016-01-25 10:10:10+00:00', '2h30m30s', true, 1.2345, 'e9716c74-2638-443d-90ed-ffde7bea7d1d', '192.168.0.1', ARRAY['hello':::STRING,'world':::STRING], '2016-01-25 10:10:10+00:00', 3, 4.5, 's'),
+	(NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL),
+	(NULL, '+Inf', NULL, NULL, NULL, NULL, NULL, NULL, NULL, 'Infinity', NULL, NULL, NULL, NULL, NULL, NULL, NULL),
+	(NULL, '-Inf', NULL, NULL, NULL, NULL, NULL, NULL, NULL, '-Infinity', NULL, NULL, NULL, NULL, NULL, NULL, NULL),
+	(NULL, 'NaN', NULL, NULL, NULL, NULL, NULL, NULL, NULL, 'NaN', NULL, NULL, NULL, NULL, NULL, NULL, NULL);
 `
 
 	if out != expect {

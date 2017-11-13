@@ -142,6 +142,7 @@ func MakeColumnDefDescs(
 				col.Type.Width, col.Type.Precision)
 		}
 	case *coltypes.TDate:
+	case *coltypes.TTime:
 	case *coltypes.TTimestamp:
 	case *coltypes.TTimestampTZ:
 	case *coltypes.TInterval:
@@ -526,6 +527,11 @@ func EncodeTableKey(b []byte, val tree.Datum, dir encoding.Direction) ([]byte, e
 			return encoding.EncodeVarintAscending(b, int64(*t)), nil
 		}
 		return encoding.EncodeVarintDescending(b, int64(*t)), nil
+	case *tree.DTime:
+		if dir == encoding.Ascending {
+			return encoding.EncodeVarintAscending(b, int64(*t)), nil
+		}
+		return encoding.EncodeVarintDescending(b, int64(*t)), nil
 	case *tree.DTimestamp:
 		if dir == encoding.Ascending {
 			return encoding.EncodeTimeAscending(b, t.Time), nil
@@ -609,6 +615,8 @@ func EncodeTableValue(
 	case *tree.DBytes:
 		return encoding.EncodeBytesValue(appendTo, uint32(colID), []byte(*t)), nil
 	case *tree.DDate:
+		return encoding.EncodeIntValue(appendTo, uint32(colID), int64(*t)), nil
+	case *tree.DTime:
 		return encoding.EncodeIntValue(appendTo, uint32(colID), int64(*t)), nil
 	case *tree.DTimestamp:
 		return encoding.EncodeTimeValue(appendTo, uint32(colID), t.Time), nil
@@ -934,6 +942,7 @@ type DatumAlloc struct {
 	dbytesAlloc       []tree.DBytes
 	ddecimalAlloc     []tree.DDecimal
 	ddateAlloc        []tree.DDate
+	dtimeAlloc        []tree.DTime
 	dtimestampAlloc   []tree.DTimestamp
 	dtimestampTzAlloc []tree.DTimestampTZ
 	dintervalAlloc    []tree.DInterval
@@ -1014,6 +1023,18 @@ func (a *DatumAlloc) NewDDate(v tree.DDate) *tree.DDate {
 	buf := &a.ddateAlloc
 	if len(*buf) == 0 {
 		*buf = make([]tree.DDate, datumAllocSize)
+	}
+	r := &(*buf)[0]
+	*r = v
+	*buf = (*buf)[1:]
+	return r
+}
+
+// NewDTime allocates a DTime.
+func (a *DatumAlloc) NewDTime(v tree.DTime) *tree.DTime {
+	buf := &a.dtimeAlloc
+	if len(*buf) == 0 {
+		*buf = make([]tree.DTime, datumAllocSize)
 	}
 	r := &(*buf)[0]
 	*r = v
@@ -1174,6 +1195,14 @@ func DecodeTableKey(
 			rkey, t, err = encoding.DecodeVarintDescending(key)
 		}
 		return a.NewDDate(tree.DDate(t)), rkey, err
+	case types.Time:
+		var t int64
+		if dir == encoding.Ascending {
+			rkey, t, err = encoding.DecodeVarintAscending(key)
+		} else {
+			rkey, t, err = encoding.DecodeVarintDescending(key)
+		}
+		return a.NewDTime(tree.DTime(t)), rkey, err
 	case types.Timestamp:
 		var t time.Time
 		if dir == encoding.Ascending {
@@ -1389,6 +1418,12 @@ func decodeUntaggedDatum(a *DatumAlloc, t types.T, buf []byte) (tree.Datum, []by
 			return nil, b, err
 		}
 		return a.NewDDate(tree.DDate(data)), b, nil
+	case types.Time:
+		b, data, err := encoding.DecodeUntaggedIntValue(buf)
+		if err != nil {
+			return nil, b, err
+		}
+		return a.NewDTime(tree.DTime(data)), b, nil
 	case types.Timestamp:
 		b, data, err := encoding.DecodeUntaggedTimeValue(buf)
 		if err != nil {
@@ -1635,6 +1670,11 @@ func MarshalColumnValue(col ColumnDescriptor, val tree.Datum) (roachpb.Value, er
 			r.SetInt(int64(*v))
 			return r, nil
 		}
+	case ColumnType_TIME:
+		if v, ok := val.(*tree.DTime); ok {
+			r.SetInt(int64(*v))
+			return r, nil
+		}
 	case ColumnType_TIMESTAMP:
 		if v, ok := val.(*tree.DTimestamp); ok {
 			r.SetTime(v.Time)
@@ -1776,6 +1816,8 @@ func parserTypeToEncodingType(t types.T) (encoding.Type, error) {
 		return encoding.Bytes, nil
 	case types.Timestamp, types.TimestampTZ, types.Date:
 		return encoding.Time, nil
+	case types.Time:
+		return encoding.Int, nil
 	case types.Interval:
 		return encoding.Duration, nil
 	case types.Bool:
@@ -1811,6 +1853,8 @@ func encodeArrayElement(b []byte, d tree.Datum) ([]byte, error) {
 	case *tree.DDecimal:
 		return encoding.EncodeUntaggedDecimalValue(b, &t.Decimal), nil
 	case *tree.DDate:
+		return encoding.EncodeUntaggedIntValue(b, int64(*t)), nil
+	case *tree.DTime:
 		return encoding.EncodeUntaggedIntValue(b, int64(*t)), nil
 	case *tree.DTimestamp:
 		return encoding.EncodeUntaggedTimeValue(b, t.Time), nil
@@ -1882,6 +1926,12 @@ func UnmarshalColumnValue(a *DatumAlloc, typ ColumnType, value roachpb.Value) (t
 			return nil, err
 		}
 		return a.NewDDate(tree.DDate(v)), nil
+	case ColumnType_TIME:
+		v, err := value.GetInt()
+		if err != nil {
+			return nil, err
+		}
+		return a.NewDTime(tree.DTime(v)), nil
 	case ColumnType_TIMESTAMP:
 		v, err := value.GetTime()
 		if err != nil {

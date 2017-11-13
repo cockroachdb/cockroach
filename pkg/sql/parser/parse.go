@@ -158,6 +158,8 @@ func ParseStringAs(t types.T, s string, evalCtx *tree.EvalContext) (tree.Datum, 
 		d, err = tree.ParseDInterval(s)
 	case types.String:
 		d = tree.NewDString(s)
+	case types.Time:
+		d, err = tree.ParseDTime(s)
 	case types.Timestamp:
 		d, err = tree.ParseDTimestamp(s, time.Microsecond)
 	case types.TimestampTZ:
