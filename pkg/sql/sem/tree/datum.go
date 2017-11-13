@@ -2113,7 +2113,14 @@ func (d *DJSON) Compare(ctx *EvalContext, other Datum) int {
 	if !ok {
 		panic(makeUnsupportedComparisonMessage(d, other))
 	}
-	return d.JSON.Compare(v.JSON)
+	// No avenue for us to pass up this error here at the moment, but Compare
+	// only errors for invalid encoded data.
+	// TODO(justin): modify Compare to allow passing up errors.
+	c, err := d.JSON.Compare(v.JSON)
+	if err != nil {
+		panic(err)
+	}
+	return c
 }
 
 // Prev implements the Datum interface.

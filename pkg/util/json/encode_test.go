@@ -44,7 +44,11 @@ func assertEncodeRoundTrip(t *testing.T, j JSON) {
 		t.Fatal(err)
 	}
 
-	if j.Compare(decoded) != 0 {
+	c, err := j.Compare(decoded)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c != 0 {
 		t.Fatalf("expected %s, got %s (encoding %v)", j, decoded, encoded)
 	}
 }

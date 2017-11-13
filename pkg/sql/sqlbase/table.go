@@ -1486,8 +1486,11 @@ func decodeUntaggedDatum(a *DatumAlloc, t types.T, buf []byte) (tree.Datum, []by
 		if err != nil {
 			return nil, b, err
 		}
-		_, j, err := json.DecodeJSON(data)
-		return a.NewDJSON(tree.DJSON{JSON: j}), b, err
+		j, err := json.FromEncoding(data)
+		if err != nil {
+			return nil, b, err
+		}
+		return a.NewDJSON(tree.DJSON{JSON: j}), b, nil
 	case types.Oid:
 		b, data, err := encoding.DecodeUntaggedIntValue(buf)
 		return a.NewDOid(tree.MakeDOid(tree.DInt(data))), b, err
