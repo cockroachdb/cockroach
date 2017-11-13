@@ -238,6 +238,7 @@ func (f *txnKVFetcher) fetch(ctx context.Context) error {
 	// Reset spans in preparation for adding resume-spans below.
 	f.spans = f.spans[:0]
 
+	// Here we send a BatchRequest.
 	br, err := f.txn.Send(ctx, ba)
 	if err != nil {
 		return err.GoError()
@@ -280,6 +281,10 @@ func (f *txnKVFetcher) fetch(ctx context.Context) error {
 	// call to fetch(). We can use a pool of workers to issue the KV ops which will also limit the
 	// total number of fetches that happen in parallel (and thus the amount of resources we use).
 	return nil
+}
+
+func (f *txnKVFetcher) NextKV(ctx context.Context) (bool, roachpb.KeyValue, error) {
+	return f.nextKV(ctx)
 }
 
 // nextKV returns the next key/value (initiating fetches as necessary). When

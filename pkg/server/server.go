@@ -1106,6 +1106,11 @@ If problems persist, please see ` + base.DocsURL("cluster-setup-troubleshooting.
 	s.sqlExecutor.Start(ctx, &s.adminMemMetrics, distSQLPlanner)
 	s.distSQLServer.Start()
 
+	if len(s.engines) > 1 {
+		panic("use only one engine")
+	}
+	s.distSQLServer.ServerConfig.Engine = s.engines[0]
+
 	atomic.StoreInt32(&s.serveNonGossip, 1)
 
 	s.mux.Handle(adminPrefix, authHandler)

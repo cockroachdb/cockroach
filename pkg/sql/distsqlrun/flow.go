@@ -53,6 +53,9 @@ type FlowCtx struct {
 
 	Settings *cluster.Settings
 
+	// Used for testing.
+	Engine engine.Engine
+
 	stopper *stop.Stopper
 
 	// id is a unique identifier for a flow.
