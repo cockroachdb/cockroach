@@ -91,10 +91,11 @@ func (jb *joinerBase) init(
 	types = append(types, leftTypes...)
 	types = append(types, rightTypes...)
 
-	if err := jb.onCond.init(onExpr, types, &flowCtx.EvalCtx); err != nil {
+	evalCtx := flowCtx.NewEvalCtx()
+	if err := jb.onCond.init(onExpr, types, evalCtx); err != nil {
 		return err
 	}
-	return jb.out.Init(post, types, &flowCtx.EvalCtx, output)
+	return jb.out.Init(post, types, evalCtx, output)
 }
 
 type joinSide uint8
@@ -187,9 +188,11 @@ func (jb *joinerBase) render(lrow, rrow sqlbase.EncDatumRow) (sqlbase.EncDatumRo
 	}
 	jb.combinedRow = append(jb.combinedRow, lrow...)
 	jb.combinedRow = append(jb.combinedRow, rrow...)
-	res, err := jb.onCond.evalFilter(jb.combinedRow)
-	if !res || err != nil {
-		return nil, err
+	if jb.onCond.expr != nil {
+		res, err := jb.onCond.evalFilter(jb.combinedRow)
+		if !res || err != nil {
+			return nil, err
+		}
 	}
 	return jb.combinedRow, nil
 }

@@ -921,21 +921,32 @@ func (src *dataSourceInfo) findTableAlias(colIdx int) (tree.TableName, bool) {
 	return anonymousTable, false
 }
 
-func (src *dataSourceInfo) FormatVar(buf *bytes.Buffer, f tree.FmtFlags, colIdx int) {
-	if f.ShowTableAliases {
-		tableAlias, found := src.findTableAlias(colIdx)
-		if found {
-			if tableAlias.TableName != "" {
-				if tableAlias.DatabaseName != "" {
-					tree.FormatNode(buf, f, tableAlias.DatabaseName)
-					buf.WriteByte('.')
-				}
-				tree.FormatNode(buf, f, tableAlias.TableName)
-				buf.WriteByte('.')
-			}
-		} else {
-			buf.WriteString("_.")
+type varFormatter struct {
+	TableName  tree.TableName
+	ColumnName tree.Name
+}
+
+// Format implements the NodeFormatter interface.
+func (c *varFormatter) Format(buf *bytes.Buffer, f tree.FmtFlags) {
+	if f.ShowTableAliases && c.TableName.TableName != "" {
+		if c.TableName.DatabaseName != "" {
+			tree.FormatNode(buf, f, c.TableName.DatabaseName)
+			buf.WriteByte('.')
 		}
+
+		tree.FormatNode(buf, f, c.TableName.TableName)
+		buf.WriteByte('.')
 	}
-	tree.Name(src.sourceColumns[colIdx].Name).Format(buf, f)
+	tree.FormatNode(buf, f, c.ColumnName)
+}
+
+// NodeFormatter returns a tree.NodeFormatter that, when formatted,
+// represents the object at the input column index.
+func (src *dataSourceInfo) NodeFormatter(colIdx int) tree.NodeFormatter {
+	var ret varFormatter
+	ret.ColumnName = tree.Name(src.sourceColumns[colIdx].Name)
+	if tableAlias, found := src.findTableAlias(colIdx); found {
+		ret.TableName = tableAlias
+	}
+	return &ret
 }

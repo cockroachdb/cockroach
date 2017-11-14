@@ -194,7 +194,7 @@ func (p *planner) groupBy(
 		p.hasStar = p.hasStar || hasStar
 
 		// GROUP BY (a, b) -> GROUP BY a, b
-		cols, exprs = flattenTuples(cols, exprs)
+		cols, exprs = flattenTuples(cols, exprs, &r.ivarHelper)
 
 		colIdxs := r.addOrReuseRenders(cols, exprs, true /* reuseExistingRender */)
 		if len(colIdxs) == 1 {
@@ -285,6 +285,8 @@ func (p *planner) groupBy(
 	postRender.source.info = newSourceInfoForSingleTable(anonymousTable, group.columns)
 	postRender.sourceInfo = multiSourceInfo{postRender.source.info}
 
+	group.preRender = r
+
 	// Queries like `SELECT MAX(n) FROM t` expect a row of NULLs if nothing was aggregated.
 	group.addNullBucketIfEmpty = len(groupByExprs) == 0
 
@@ -310,6 +312,8 @@ type groupNode struct {
 
 	// The source node (which returns values that feed into the aggregation).
 	plan planNode
+
+	preRender *renderNode
 
 	// The group-by columns are the first numGroupCols columns of
 	// the source plan.
@@ -537,7 +541,7 @@ func (v *extractAggregatesVisitor) addAggregation(f *aggregateFuncHolder) *tree.
 	// We care about the name of the groupNode columns as an optimization: we want
 	// them to match the post-render node's columns if the post-render expressions
 	// are trivial (so the renderNode can be elided).
-	colName, err := getRenderColName(v.planner.session.SearchPath, tree.SelectExpr{Expr: f.expr})
+	colName, err := getRenderColName(v.planner.session.SearchPath, tree.SelectExpr{Expr: f.expr}, &v.preRender.ivarHelper)
 	if err != nil {
 		colName = fmt.Sprintf("agg%d", renderIdx)
 	} else if strings.ToLower(colName) == "count_rows()" {
@@ -547,11 +551,12 @@ func (v *extractAggregatesVisitor) addAggregation(f *aggregateFuncHolder) *tree.
 		// TODO(radu): remove this if #16535 is resolved.
 		colName = "count(*)"
 	}
+	typ := f.expr.ResolvedType()
 	v.groupNode.columns = append(v.groupNode.columns, sqlbase.ResultColumn{
 		Name: colName,
-		Typ:  f.expr.ResolvedType(),
+		Typ:  typ,
 	})
-	return v.ivarHelper.IndexedVar(renderIdx)
+	return v.ivarHelper.IndexedVarWithType(renderIdx, typ)
 }
 
 func (v *extractAggregatesVisitor) VisitPre(expr tree.Expr) (recurse bool, newExpr tree.Expr) {
@@ -641,8 +646,8 @@ func (v *extractAggregatesVisitor) VisitPre(expr tree.Expr) (recurse bool, newEx
 
 	case *tree.IndexedVar:
 		v.err = errors.Errorf(
-			"column \"%s\" must appear in the GROUP BY clause or be used in an aggregate function", t,
-		)
+			"column \"%s\" must appear in the GROUP BY clause or be used in an aggregate function",
+			t)
 		return false, expr
 	}
 

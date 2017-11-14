@@ -88,7 +88,7 @@ func (cb *columnBackfiller) init() error {
 		}
 	}
 	defaultExprs, err := sqlbase.MakeDefaultExprs(
-		cb.added, &transform.ExprTransformContext{}, &cb.flowCtx.EvalCtx,
+		cb.added, &transform.ExprTransformContext{}, cb.flowCtx.NewEvalCtx(),
 	)
 	if err != nil {
 		return err
@@ -216,7 +216,7 @@ func (cb *columnBackfiller) runChunk(
 			// Evaluate the new values. This must be done separately for
 			// each row so as to handle impure functions correctly.
 			for j, e := range cb.updateExprs {
-				val, err := e.Eval(&cb.flowCtx.EvalCtx)
+				val, err := e.Eval(cb.flowCtx.NewEvalCtx())
 				if err != nil {
 					return sqlbase.NewInvalidSchemaDefinitionError(err)
 				}

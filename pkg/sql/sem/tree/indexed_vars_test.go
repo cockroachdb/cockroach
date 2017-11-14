@@ -34,12 +34,17 @@ func (d testVarContainer) IndexedVarResolvedType(idx int) types.T {
 	return d[idx].ResolvedType()
 }
 
-func (d testVarContainer) IndexedVarFormat(buf *bytes.Buffer, _ FmtFlags, idx int) {
-	fmt.Fprintf(buf, "var%d", idx)
+func (d testVarContainer) IndexedVarNodeFormatter(idx int) NodeFormatter {
+	return Name(fmt.Sprintf("var%d", idx))
 }
 
 func TestIndexedVars(t *testing.T) {
 	c := make(testVarContainer, 4)
+	c[0] = NewDInt(3)
+	c[1] = NewDInt(5)
+	c[2] = NewDInt(6)
+	c[3] = NewDInt(0)
+
 	h := MakeIndexedVarHelper(c, 4)
 
 	// We use only the first three variables.
@@ -57,12 +62,9 @@ func TestIndexedVars(t *testing.T) {
 	}
 	expr := binary(Plus, v0, binary(Mult, v1, v2))
 
-	// Set values for the variables and verify the expression evaluates
-	// correctly.
-	c[0] = NewDInt(3)
-	c[1] = NewDInt(5)
-	c[2] = NewDInt(6)
-	typedExpr, err := expr.TypeCheck(nil, types.Any)
+	// Verify the expression evaluates correctly.
+	semaContext := &SemaContext{IVarHelper: &IndexedVarHelper{container: c}}
+	typedExpr, err := expr.TypeCheck(semaContext, types.Any)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -79,7 +81,7 @@ func TestIndexedVars(t *testing.T) {
 		&buf,
 		FmtIndexedVarFormat(
 			FmtSimple,
-			func(buf *bytes.Buffer, _ FmtFlags, _ IndexedVarContainer, idx int) {
+			func(buf *bytes.Buffer, idx int) {
 				fmt.Fprintf(buf, "customVar%d", idx)
 			},
 		),
@@ -97,6 +99,7 @@ func TestIndexedVars(t *testing.T) {
 	}
 	evalCtx := NewTestingEvalContext()
 	defer evalCtx.Stop(context.Background())
+	evalCtx.IVarHelper = semaContext.IVarHelper
 	d, err := typedExpr.Eval(evalCtx)
 	if err != nil {
 		t.Fatal(err)

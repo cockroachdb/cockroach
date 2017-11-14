@@ -96,7 +96,7 @@ func newTableReader(
 	for i := range types {
 		types[i] = spec.Table.Columns[i].Type
 	}
-	if err := tr.out.Init(post, types, &flowCtx.EvalCtx, output); err != nil {
+	if err := tr.init(post, types, flowCtx, output); err != nil {
 		return nil, err
 	}
 

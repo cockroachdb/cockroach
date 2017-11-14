@@ -1715,12 +1715,14 @@ func (p *planner) analyzeExpr(
 
 	// Type check.
 	var typedExpr tree.TypedExpr
+	p.semaCtx.IVarHelper = &iVarHelper
 	if requireType {
 		typedExpr, err = tree.TypeCheckAndRequire(resolved, &p.semaCtx,
 			expectedType, typingContext)
 	} else {
 		typedExpr, err = tree.TypeCheck(resolved, &p.semaCtx, expectedType)
 	}
+	p.semaCtx.IVarHelper = nil
 	if err != nil {
 		return nil, err
 	}
