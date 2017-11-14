@@ -166,9 +166,11 @@ func TestOperationsWithColumnMutation(t *testing.T) {
 
 	// Fix the column families so the key counts below don't change if the
 	// family heuristics are updated.
+	// Add an index so that we test adding a column when a table has an index.
 	if _, err := sqlDB.Exec(`
 CREATE DATABASE t;
 CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR, i CHAR DEFAULT 'i', FAMILY (k), FAMILY (v), FAMILY (i));
+CREATE INDEX allidx ON t.test (k, v);
 `); err != nil {
 		t.Fatal(err)
 	}
@@ -249,7 +251,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR, i CHAR DEFAULT 'i', FAMILY (k),
 				afterPKUpdate = [][]string{{"a", "u", "q"}, {"d", "x", "NULL"}}
 				// Delete also deletes column "i".
 				afterDelete = [][]string{{"d", "x", "NULL"}}
-				afterDeleteKeys = 2
+				afterDeleteKeys = 3
 			} else {
 				// The default value of "i" for column "i" is written.
 				afterInsert = [][]string{{"a", "z", "q"}, {"c", "x", "i"}}
@@ -265,7 +267,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR, i CHAR DEFAULT 'i', FAMILY (k),
 				}
 				// Delete also deletes column "i".
 				afterDelete = [][]string{{"d", "x", "i"}}
-				afterDeleteKeys = 3
+				afterDeleteKeys = 4
 			}
 			// Make column "i" a mutation.
 			mTest.writeColumnMutation("i", sqlbase.DescriptorMutation{State: state})
@@ -542,9 +544,11 @@ func TestOperationsWithColumnAndIndexMutation(t *testing.T) {
 	// Create a table with column i and an index on v and i. Fix the column
 	// families so the key counts below don't change if the family heuristics
 	// are updated.
+	// Add an index so that we test adding a column when a table has an index.
 	if _, err := sqlDB.Exec(`
 CREATE DATABASE t;
 CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR, i CHAR, INDEX foo (i, v), FAMILY (k), FAMILY (v), FAMILY (i));
+CREATE INDEX allidx ON t.test (k, v);
 `); err != nil {
 		t.Fatal(err)
 	}
@@ -665,7 +669,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR, i CHAR, INDEX foo (i, v), FAMIL
 				mTest.CheckQueryResults(starQuery, [][]string{{"a", "u", "q"}, {"c", "x", "NULL"}})
 				// numKVs is the number of expected key-values. We start with the number
 				// of non-NULL values above.
-				numKVs := 5
+				numKVs := 7
 				if idxState == sqlbase.DescriptorMutation_DELETE_ONLY {
 					// Index entry for row "b" is deleted.
 					mTest.CheckQueryResults(indexQuery, [][]string{})
