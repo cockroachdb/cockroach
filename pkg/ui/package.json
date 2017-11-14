@@ -9,6 +9,8 @@
     "classnames": "^2.2.5",
     "codemirror": "^5.25.2",
     "combokeys": "^2.4.6",
+    "d3-path": "^1.0.5",
+    "d3-shape": "^1.2.0",
     "highlight.js": "^9.10.0",
     "lodash": "^4.17.4",
     "moment": "^2.18.1",
