@@ -24,7 +24,11 @@ kubectl run cockroachdb --image=cockroachdb/cockroach --restart=Never -- start
 
 ### Kubernetes version
 
-The minimum kubernetes version to successfully run the examples in this directory is `1.6`.
+The minimum kubernetes version to successfully run the examples in this
+directory without modification is `1.7`. If you want to run the examples on
+Kubernetes version `1.6`, you can do so by removing the `PodDisruptionBudget`
+resource from `cockroachdb-statefulset.yaml` and/or
+`cockroachdb-statefulset-secure.yaml`, depending on which you're using.
 
 For secure mode, the controller must enable `certificatesigningrequests`.
 You can check if this is enabled by looking at the controller logs:
