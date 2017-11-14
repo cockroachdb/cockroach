@@ -1130,20 +1130,6 @@ func spanFromLogicalSpan(
 			break
 		}
 	}
-	// Since the end of a span is exclusive, if the last constraint is an
-	// inclusive one, we might need to make the key exclusive by applying a
-	// PrefixEnd(). We normally avoid doing this by transforming "a = x" to "a =
-	// x±1" for the last end constraint, depending on the encoding direction
-	// (since this keeps the key nice and pretty-printable). However, we might not
-	// be able to do the ±1.
-	if n := len(ls.end); n > 0 && ls.end[n-1].inclusive {
-		last := &ls.end[n-1]
-		nextVal, hasNext := nextInDirection(evalCtx, last.val, last.dir)
-		if hasNext {
-			last.val = nextVal
-			last.inclusive = false
-		}
-	}
 	for i := 0; ; i++ {
 		s.EndKey = append(s.EndKey, interstices[i]...)
 		if i >= len(ls.end) {
@@ -1180,21 +1166,6 @@ func encodeLogicalKeyPart(
 		return nil, err
 	}
 	return sqlbase.EncodeTableKey(b, d, part.dir)
-}
-
-func nextInDirection(
-	evalCtx *tree.EvalContext, val tree.Datum, dir encoding.Direction,
-) (tree.Datum, bool) {
-	if dir == encoding.Ascending {
-		if val.IsMax(evalCtx) {
-			return nil, false
-		}
-		return val.Next(evalCtx)
-	}
-	if val.IsMin(evalCtx) {
-		return nil, false
-	}
-	return val.Prev(evalCtx)
 }
 
 // mergeAndSortSpans is used to merge a set of potentially overlapping spans
