@@ -142,6 +142,17 @@ func TestPartitioning(t *testing.T) {
 			)`,
 			scans: []testScan{{"a = 'A'", "n2"}, {"a = 'a'", "n3"}, {"a = 'ab'", "n3"}},
 		},
+		{
+			name: "index",
+			table: `CREATE TABLE %s (
+				a INT PRIMARY KEY, b INT,
+				INDEX (b) PARTITION BY LIST (b) (
+				  PARTITION dc1 VALUES IN (10),
+				  PARTITION dc2 VALUES IN (20)
+				)
+			)`,
+			scans: []testScan{{"b = 10", "n2"}, {"b = 20", "n3"}},
+		},
 	}
 
 	if _, err := tc.Conns[0].Exec(`CREATE DATABASE data`); err != nil {

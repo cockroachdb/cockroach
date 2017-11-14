@@ -106,8 +106,9 @@ type CreateIndex struct {
 	Columns     IndexElemList
 	// Extra columns to be stored together with the indexed ones as an optimization
 	// for improved reading performance.
-	Storing    NameList
-	Interleave *InterleaveDef
+	Storing     NameList
+	Interleave  *InterleaveDef
+	PartitionBy *PartitionBy
 }
 
 // Format implements the NodeFormatter interface.
@@ -136,6 +137,9 @@ func (node *CreateIndex) Format(buf *bytes.Buffer, f FmtFlags) {
 	}
 	if node.Interleave != nil {
 		FormatNode(buf, f, node.Interleave)
+	}
+	if node.PartitionBy != nil {
+		FormatNode(buf, f, node.PartitionBy)
 	}
 }
 
@@ -463,10 +467,11 @@ type ColumnFamilyConstraint struct {
 // IndexTableDef represents an index definition within a CREATE TABLE
 // statement.
 type IndexTableDef struct {
-	Name       Name
-	Columns    IndexElemList
-	Storing    NameList
-	Interleave *InterleaveDef
+	Name        Name
+	Columns     IndexElemList
+	Storing     NameList
+	Interleave  *InterleaveDef
+	PartitionBy *PartitionBy
 }
 
 // SetName implements the TableDef interface.
@@ -491,6 +496,9 @@ func (node *IndexTableDef) Format(buf *bytes.Buffer, f FmtFlags) {
 	}
 	if node.Interleave != nil {
 		FormatNode(buf, f, node.Interleave)
+	}
+	if node.PartitionBy != nil {
+		FormatNode(buf, f, node.PartitionBy)
 	}
 }
 
@@ -534,6 +542,9 @@ func (node *UniqueConstraintTableDef) Format(buf *bytes.Buffer, f FmtFlags) {
 	}
 	if node.Interleave != nil {
 		FormatNode(buf, f, node.Interleave)
+	}
+	if node.PartitionBy != nil {
+		FormatNode(buf, f, node.PartitionBy)
 	}
 }
 
