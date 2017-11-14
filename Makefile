@@ -92,7 +92,7 @@ help: ## Print help for targets with comments.
 	@awk 'BEGIN { FS = ":=" } /^## /{x = substr($$0, 4); getline; if (NF >= 2) printf "  $(cyan)%-30s$(term-reset) %s\n", $$1, x}' $(MAKEFILE_LIST) | sort
 	@echo ""
 	@echo "Typical usage:"
-	@printf "  $(cyan)%-45s$(term-reset) %s\n" \
+	@printf "  $(cyan)%s$(term-reset)\n    %s\n\n" \
 		"make test" "Run all unit tests." \
 		"make test PKG=./pkg/sql" "Run all unit tests in the ./pkg/sql package" \
 		"make test PKG=./pkg/sql TESTS=TestParse" "Run the TestParse test in the ./pkg/sql package." \
