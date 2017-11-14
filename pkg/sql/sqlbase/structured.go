@@ -2089,8 +2089,19 @@ func ColumnsSelectors(cols []ColumnDescriptor) tree.SelectExprs {
 	return exprs
 }
 
-func colTypeSQLString(c *ColumnType, semType ColumnType_SemanticType) string {
-	switch semType {
+func (c *ColumnType) elementColumnType() *ColumnType {
+	if c.SemanticType != ColumnType_ARRAY {
+		return nil
+	}
+	result := *c
+	result.SemanticType = *c.ArrayContents
+	result.ArrayContents = nil
+	return &result
+}
+
+// SQLString returns the SQL string corresponding to the type.
+func (c *ColumnType) SQLString() string {
+	switch c.SemanticType {
 	case ColumnType_INT:
 		if c.Width > 0 && c.VisibleType == ColumnType_BIT {
 			// A non-zero width indicates a bit array. The syntax "INT(N)"
@@ -2099,11 +2110,11 @@ func colTypeSQLString(c *ColumnType, semType ColumnType_SemanticType) string {
 		}
 	case ColumnType_STRING:
 		if c.Width > 0 {
-			return fmt.Sprintf("%s(%d)", semType.String(), c.Width)
+			return fmt.Sprintf("%s(%d)", c.SemanticType.String(), c.Width)
 		}
 	case ColumnType_FLOAT:
 		if c.Precision > 0 {
-			return fmt.Sprintf("%s(%d)", semType.String(), c.Precision)
+			return fmt.Sprintf("%s(%d)", c.SemanticType.String(), c.Precision)
 		}
 		if c.VisibleType == ColumnType_DOUBLE_PRECISON {
 			return "DOUBLE PRECISION"
@@ -2111,9 +2122,9 @@ func colTypeSQLString(c *ColumnType, semType ColumnType_SemanticType) string {
 	case ColumnType_DECIMAL:
 		if c.Precision > 0 {
 			if c.Width > 0 {
-				return fmt.Sprintf("%s(%d,%d)", semType.String(), c.Precision, c.Width)
+				return fmt.Sprintf("%s(%d,%d)", c.SemanticType.String(), c.Precision, c.Width)
 			}
-			return fmt.Sprintf("%s(%d)", semType.String(), c.Precision)
+			return fmt.Sprintf("%s(%d)", c.SemanticType.String(), c.Precision)
 		}
 	case ColumnType_TIMESTAMPTZ:
 		return "TIMESTAMP WITH TIME ZONE"
@@ -2126,17 +2137,12 @@ func colTypeSQLString(c *ColumnType, semType ColumnType_SemanticType) string {
 		}
 		return fmt.Sprintf("%s COLLATE %s", ColumnType_STRING.String(), *c.Locale)
 	case ColumnType_ARRAY:
-		return colTypeSQLString(c, *c.ArrayContents) + "[]"
+		return c.elementColumnType().SQLString() + "[]"
 	}
 	if c.VisibleType != ColumnType_NONE {
 		return c.VisibleType.String()
 	}
-	return semType.String()
-}
-
-// SQLString returns the SQL string corresponding to the type.
-func (c *ColumnType) SQLString() string {
-	return colTypeSQLString(c, c.SemanticType)
+	return c.SemanticType.String()
 }
 
 // MaxCharacterLength returns the declared maximum length of characters if the
