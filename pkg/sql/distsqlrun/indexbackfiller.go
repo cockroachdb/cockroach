@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -92,7 +93,7 @@ func (ib *indexBackfiller) init() error {
 		ib.colIdxMap[c.ID] = i
 	}
 
-	valNeededForCol := make([]bool, len(cols))
+	var valNeededForCol util.FastIntSet
 	mutationID := desc.Mutations[0].MutationID
 	for _, m := range desc.Mutations {
 		if m.MutationID != mutationID {
@@ -101,14 +102,22 @@ func (ib *indexBackfiller) init() error {
 		if IndexMutationFilter(m) {
 			idx := m.GetIndex()
 			for i, col := range cols {
-				valNeededForCol[i] = valNeededForCol[i] || idx.ContainsColumnID(col.ID)
+				if idx.ContainsColumnID(col.ID) {
+					valNeededForCol.Add(i)
+				}
 			}
 		}
 	}
 
+	tableArgs := sqlbase.MultiRowFetcherTableArgs{
+		Desc:            &desc,
+		Index:           &desc.PrimaryIndex,
+		ColIdxMap:       ib.colIdxMap,
+		Cols:            cols,
+		ValNeededForCol: valNeededForCol,
+	}
 	return ib.fetcher.Init(
-		&desc, ib.colIdxMap, &desc.PrimaryIndex, false, false, cols,
-		valNeededForCol, false, &ib.alloc,
+		false /* reverse */, false /* returnRangeInfo */, &ib.alloc, tableArgs,
 	)
 }
 
@@ -156,7 +165,7 @@ func (ib *indexBackfiller) runChunk(
 		}
 
 		for i := int64(0); i < chunkSize; i++ {
-			encRow, err := ib.fetcher.NextRow(ctx)
+			encRow, _, _, err := ib.fetcher.NextRow(ctx)
 			if err != nil {
 				return nil, err
 			}
