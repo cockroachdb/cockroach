@@ -293,7 +293,9 @@ func (mr *MetricsRecorder) getNetworkActivity(
 		for nodeID, alive := range isLiveMap {
 			address, err := mr.gossip.GetNodeIDAddress(nodeID)
 			if err != nil {
-				log.Warning(ctx, err.Error())
+				if alive {
+					log.Warning(ctx, err.Error())
+				}
 				continue
 			}
 			na := NodeStatus_NetworkActivity{}
