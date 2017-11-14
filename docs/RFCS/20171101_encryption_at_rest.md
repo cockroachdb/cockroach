@@ -42,7 +42,7 @@ Table of Contents
          * [Generating data keys](#generating-data-keys)
          * [Rotating data keys](#rotating-data-keys)
          * [Reporting encryption status](#reporting-encryption-status)
-         * [Other uses of rocksdb](#other-uses-of-rocksdb)
+         * [Other uses of local disk](#other-uses-of-local-disk)
          * [Enterprise enforcement](#enterprise-enforcement)
       * [Drawbacks](#drawbacks)
       * [Rationale and Alternatives](#rationale-and-alternatives)
@@ -314,7 +314,7 @@ The need for encryption entails a few recommended changes in production configur
 
 #### Flag changes for the cockroach binary
 
-* `format=preamble``: field in the `--store` flag. Enable the preamble format on a specific store. This cannot be changed once the store has been created. Cannot be applied to in-memory stores. Default value: `classic`.
+* `format=preamble`: field in the `--store` flag. Enable the preamble format on a specific store. This cannot be changed once the store has been created. Cannot be applied to in-memory stores. Default value: `classic`.
 * `--enterprise-encryption=path=<path to store>,keys=<key path>,rotation_period=<duration>`: enables encryption a given store and specifies the store keys file (required) and data keys rotation period (optional, default one week).
 The flag can be specified multiple times, once for each store.
 
@@ -337,7 +337,7 @@ ERROR: cockroach data directory using classic format, cannot be converted to pre
 
 Attempting to use encryption without the preamble format also fails:
 ```
-cockroach start <regular options> --store=path/mnt/data --enterprise-encryption=path=/mnt/data,keys=/path/to/cockroach.keys
+cockroach start <regular options> --store=path=/mnt/data --enterprise-encryption=path=/mnt/data,keys=/path/to/cockroach.keys
 ERROR: cockroach data directory using classic format, cannot use encryption.
 ```
 
@@ -345,7 +345,7 @@ ERROR: cockroach data directory using classic format, cannot use encryption.
 
 Creating a new cockroach node with preamble format, but no encryption:
 ```
-cockroach start <regular options> --store=path/mnt/data,format=preamble
+cockroach start <regular options> --store=path=/mnt/data,format=preamble
 SUCCESS
 ```
 
@@ -361,7 +361,7 @@ $ cat cockroach.keys
 1;1509715352;AES256;67cceefb7319d98b88464f81c5a7786d78ab42600008f117be2884821df7636a
 # Tell cockroach to use a AES128 cipher for data encryption.
 $ cockroach start <regular options> \
-    --store=path/mnt/data,format=preamble \
+    --store=path=/mnt/data,format=preamble \
     --enterprise-encryption=path=/mnt/data,keys=/path/to/cockroach.keys
 ```
 
@@ -384,7 +384,7 @@ $ cat cockroach.keys
 2;1509715953;AES256;05ea263650495760de8e517c25ce2e430710b3251624268c0ee923fb1886e64d
 # Tell cockroach to use a AES128 cipher for data encryption.
 $ cockroach start <regular options> \
-    --store=path/mnt/data,format=preamble \
+    --store=path=/mnt/data,format=preamble \
     --enterprise-encryption=path=/mnt/data,keys=/path/to/cockroach.keys
 ```
 
@@ -404,7 +404,7 @@ $ cat cockroach.keys
 3;1509716141;PLAIN;
 # Tell cockroach to use a PLAIN cipher for data encryption.
 $ cockroach start <regular options> \
-    --store=path/mnt/data,format=preamble \
+    --store=path=/mnt/data,format=preamble \
     --enterprise-encryption=path=/mnt/data,keys=/path/to/cockroach.keys
 ```
 
@@ -757,29 +757,28 @@ Reading each file preamble means reading the first 4KiB of each file. To avoid p
 frequently, we can cache results. We must take particular care with files being overwritten (eg: `CURRENT`) and
 using a new key/cipher.
 
-### Other uses of rocksdb
+### Other uses of local disk
 
-Any other uses of rocksdb to store raw or processed data will use the same encryption setting as the node.
+**Note: logs encryption is currently [Out of scope](#out-of-scope)**
 
-This applies to the restore phase of backup/restore and temporary disk storage for query processing.
+All existing uses of local disk to process data must apply the desired encryption status.
 
-We identify three separate cases:
-1. written through a temporary instance of rocksdb, no file-level interaction with a store rocksdb: eg: distSQL
-temporary storage engine using a standalone instance of rocksdb. If encryption is enabled on any of the stores
-of the node, we enable it on the temporary rocksdb instance. Data keys are generated and kept in-memory.
-This data will not survive node restarts.
-1. written through rocksdb (static code, or independent instance) but passed to a store rocksdb: eg: restoring
-backups using a local sstable, then writing it to both raft and the local rocksdb instance. We must change
-the code to use the store's instance of rocksdb so that we may encrypt/decrypt the file with keys that will
-survive restarts.
-1. written through a store's instance of rocksdb: use as usual.
+Data tied to a specific store should use the store's rocksdb instance for encryption.
+Data not necessarily tied to a store should be encrypted if any of the stores on the node is encrypted.
 
-We should also investigate ways to ensure that future uses of local storage through rocksdb encrypts all data
-written to local disk when encryption is enabled. Reducing the number of entry points into rocksdb would make this
-easier to do.
+We identify some existing uses of local disk:
+TODO(mberhault, mjibson, dan): make sure we don't miss anything.
 
-Documentation must mention the same restriction about key and data colocation: the store keys should not be on the
-same disk as the temporary data.
+1. temporary work space for dist SQL: written through a temporary instance of rocksdb. This data does not need
+to be used by another rocksdb instance and does not survive node restart. We propose to use dynamically-generated
+keys to encrypt the temporary rocksdb instance.
+1. sideloading for restore. Local SSTables are generated using an in-memory rocksdb instance then written in go
+to local disk. We must change this to either be written directly by rocksdb, or move encryption to Go. The former
+is probably preferable.
+
+In addition to making sure we cover all existing use cases, we should:
+1. document that any other directories must **NOT** reside on the same disk as any keys used
+1. reduce the number of entry points into rocksdb to make it harder to miss encryption setup
 
 ### Enterprise enforcement
 
