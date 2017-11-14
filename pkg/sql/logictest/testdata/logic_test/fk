@@ -871,3 +871,18 @@ pkref_b  CREATE TABLE pkref_b (
         CONSTRAINT fk_b_ref_pkref_a FOREIGN KEY (b) REFERENCES pkref_a (a) ON DELETE RESTRICT,
         FAMILY "primary" (b)
 )
+
+# See https://github.com/cockroachdb/cockroach/issues/20045
+statement ok
+CREATE TABLE self_x2 (
+  x STRING PRIMARY KEY
+ ,y STRING UNIQUE REFERENCES self_x2(x)
+ ,z STRING REFERENCES self_x2(y)
+ ,INDEX(z)
+);
+
+statement ok
+INSERT INTO self_x2 (x, y, z) VALUES ('pk1', NULL, NULL);
+
+statement ok
+DELETE FROM self_x2 WHERE x = 'pk1';
