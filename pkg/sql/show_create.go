@@ -17,11 +17,13 @@ package sql
 import (
 	"bytes"
 	"fmt"
+	"strings"
 
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/pkg/errors"
 )
 
 // showCreateView returns a valid SQL representation of the CREATE
@@ -54,6 +56,8 @@ func (p *planner) showCreateView(
 func (p *planner) showCreateTable(
 	ctx context.Context, tn tree.Name, dbPrefix string, desc *sqlbase.TableDescriptor,
 ) (string, error) {
+	a := &sqlbase.DatumAlloc{}
+
 	var buf bytes.Buffer
 	fmt.Fprintf(&buf, "CREATE TABLE %s (", tn)
 	var primary string
@@ -140,6 +144,11 @@ func (p *planner) showCreateTable(
 	if err := p.showCreateInterleave(ctx, &desc.PrimaryIndex, &buf, dbPrefix); err != nil {
 		return "", err
 	}
+	if err := showCreatePartitioning(
+		a, desc, &desc.PrimaryIndex, &desc.PrimaryIndex.Partitioning, &buf, 0 /* indent */, 0, /* colOffset */
+	); err != nil {
+		return "", err
+	}
 
 	return buf.String(), nil
 }
@@ -185,5 +194,94 @@ func (p *planner) showCreateInterleave(
 	}
 	interleavedColumnNames := quoteNames(idx.ColumnNames[:sharedPrefixLen]...)
 	fmt.Fprintf(buf, " INTERLEAVE IN PARENT %s (%s)", &parentName, interleavedColumnNames)
+	return nil
+}
+
+// showCreatePartitioning returns a PARTITION BY clause for the specified
+// index, if applicable.
+func showCreatePartitioning(
+	a *sqlbase.DatumAlloc,
+	tableDesc *sqlbase.TableDescriptor,
+	idxDesc *sqlbase.IndexDescriptor,
+	partDesc *sqlbase.PartitioningDescriptor,
+	buf *bytes.Buffer,
+	indent int,
+	colOffset int,
+) error {
+	if partDesc.NumColumns == 0 {
+		return nil
+	}
+
+	// We don't need real prefixes in the TranslateValueEncodingToSpan calls
+	// because we only use the tree.Datums part of the output.
+	fakePrefixDatums := make([]tree.Datum, colOffset)
+	for i := range fakePrefixDatums {
+		fakePrefixDatums[i] = tree.DNull
+	}
+
+	indentStr := strings.Repeat("\t", indent)
+	buf.WriteString(` PARTITION BY `)
+	if len(partDesc.List) > 0 {
+		buf.WriteString(`LIST`)
+	} else if len(partDesc.Range) > 0 {
+		buf.WriteString(`RANGE`)
+	} else {
+		return errors.Errorf(`invalid partition descriptor: %v`, partDesc)
+	}
+	buf.WriteString(` (`)
+	for i := 0; i < int(partDesc.NumColumns); i++ {
+		if i != 0 {
+			fmt.Printf(", ")
+		}
+		fmt.Fprintf(buf, idxDesc.ColumnNames[colOffset+i])
+	}
+	buf.WriteString(`) (`)
+	for i, part := range partDesc.List {
+		if i != 0 {
+			buf.WriteString(`, `)
+		}
+		fmt.Fprintf(buf, "\n%s\tPARTITION ", indentStr)
+		fmt.Fprintf(buf, part.Name)
+		buf.WriteString(` VALUES IN (`)
+		for j, values := range part.Values {
+			if j != 0 {
+				buf.WriteString(`, `)
+			}
+			datums, _, err := sqlbase.TranslateValueEncodingToSpan(
+				a, tableDesc, idxDesc, partDesc, values, fakePrefixDatums,
+			)
+			if err != nil {
+				return err
+			}
+			buf.WriteString(`(`)
+			sqlbase.PrintPartitioningTuple(buf, datums, int(partDesc.NumColumns), "DEFAULT")
+			buf.WriteString(`)`)
+		}
+		buf.WriteString(`)`)
+		if err := showCreatePartitioning(
+			a, tableDesc, idxDesc, &part.Subpartitioning, buf, indent+1,
+			colOffset+int(partDesc.NumColumns),
+		); err != nil {
+			return err
+		}
+	}
+	for i, part := range partDesc.Range {
+		if i != 0 {
+			buf.WriteString(`, `)
+		}
+		fmt.Fprintf(buf, "\n%s\tPARTITION ", indentStr)
+		fmt.Fprintf(buf, part.Name)
+		buf.WriteString(` VALUES < `)
+		datums, _, err := sqlbase.TranslateValueEncodingToSpan(
+			a, tableDesc, idxDesc, partDesc, part.UpperBound, fakePrefixDatums,
+		)
+		if err != nil {
+			return err
+		}
+		buf.WriteString(`(`)
+		sqlbase.PrintPartitioningTuple(buf, datums, int(partDesc.NumColumns), "MAXVALUE")
+		buf.WriteString(`)`)
+	}
+	fmt.Fprintf(buf, "\n%s)", indentStr)
 	return nil
 }
