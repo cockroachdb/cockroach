@@ -961,17 +961,29 @@ func PeekLength(b []byte) (int, error) {
 // PrettyPrintValue returns the string representation of all contiguous decodable
 // values in the provided byte slice, separated by a provided separator.
 func PrettyPrintValue(b []byte, sep string) string {
+	s, allDecoded := prettyPrintValueImpl(b, sep)
+	if !allDecoded {
+		if s, allDecoded := prettyPrintValueImpl(undoPrefixEnd(b), sep); allDecoded {
+			return s + sep + "PrefixEnd"
+		}
+	}
+	return s
+}
+
+func prettyPrintValueImpl(b []byte, sep string) (string, bool) {
+	allDecoded := true
 	var buf bytes.Buffer
 	for len(b) > 0 {
 		bb, s, err := prettyPrintFirstValue(b)
 		if err != nil {
+			allDecoded = false
 			fmt.Fprintf(&buf, "%s???", sep)
 		} else {
 			fmt.Fprintf(&buf, "%s%s", sep, s)
 		}
 		b = bb
 	}
-	return buf.String()
+	return buf.String(), allDecoded
 }
 
 // prettyPrintFirstValue returns a string representation of the first decodable
@@ -1039,6 +1051,20 @@ func prettyPrintFirstValue(b []byte) ([]byte, string, error) {
 		// This shouldn't ever happen, but if it does, return an empty slice.
 		return nil, strconv.Quote(string(b)), nil
 	}
+}
+
+func undoPrefixEnd(b []byte) []byte {
+	out := append([]byte{}, b...)
+	for i := len(out) - 1; i >= 0; i-- {
+		out[i] = out[i] - 1
+		if out[i] != 0xff {
+			return out
+		}
+	}
+	// At this point, out has wrapped around to the maximal possible prefix. That
+	// means we were provided a minimal prefix (i.e., all zero bytes), so return
+	// it unchanged.
+	return b
 }
 
 // NonsortingVarintMaxLen is the maximum length of an EncodeNonsortingVarint
