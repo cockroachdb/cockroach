@@ -27,10 +27,8 @@ import (
 	"math"
 	"math/rand"
 	"net"
-	"regexp"
 	"regexp/syntax"
 	"sort"
-	"strconv"
 	"strings"
 	"time"
 	"unicode"
@@ -2404,8 +2402,6 @@ func (k regexpFlagKey) pattern() (string, error) {
 	return regexpEvalFlags(k.sqlPattern, k.sqlFlags)
 }
 
-var replaceSubRe = regexp.MustCompile(`\\[&1-9]`)
-
 func regexpReplace(ctx *EvalContext, s, pattern, to, sqlFlags string) (Datum, error) {
 	patternRe, err := ctx.ReCache.GetRegexp(regexpFlagKey{pattern, sqlFlags})
 	if err != nil {
@@ -2417,7 +2413,7 @@ func regexpReplace(ctx *EvalContext, s, pattern, to, sqlFlags string) (Datum, er
 		matchCount = -1
 	}
 
-	replaceIndex := 0
+	finalIndex := 0
 	var newString bytes.Buffer
 
 	// regexp.ReplaceAllStringFunc cannot be used here because it does not provide
@@ -2434,42 +2430,54 @@ func regexpReplace(ctx *EvalContext, s, pattern, to, sqlFlags string) (Datum, er
 	// and so on) represent the start and end index in s of matched subexpressions within the
 	// pattern.
 	for _, matchIndex := range patternRe.FindAllStringSubmatchIndex(s, matchCount) {
-		start := matchIndex[0]
-		end := matchIndex[1]
+		// matchStart and matchEnd are the boundaries of the current regexp match
+		// in the searched text.
+		matchStart := matchIndex[0]
+		matchEnd := matchIndex[1]
 
 		// Add sections of s either before the first match or between matches.
-		preMatch := s[replaceIndex:start]
+		preMatch := s[finalIndex:matchStart]
 		newString.WriteString(preMatch)
 
-		// Add the replacement string for the current match.
-		match := s[start:end]
-		matchTo := replaceSubRe.ReplaceAllStringFunc(to, func(repl string) string {
-			subRef := repl[len(repl)-1]
-			if subRef == '&' {
-				return match
+		// We write out `to` into `newString` in chunks, flushing out the next chunk
+		// when we hit a `\\` or a backreference.
+		// chunkStart is the start of the next chunk we will flush out.
+		chunkStart := 0
+		// i is the current position in the replacement text that we are scanning
+		// through.
+		i := 0
+		for i < len(to) {
+			if to[i] == '\\' && i+1 < len(to) {
+				i++
+				if to[i] == '\\' {
+					// `\\` is special in regexpReplace to insert a literal backslash.
+					newString.WriteString(to[chunkStart:i])
+					chunkStart = i + 1
+				} else if ('0' <= to[i] && to[i] <= '9') || to[i] == '&' {
+					newString.WriteString(to[chunkStart : i-1])
+					chunkStart = i + 1
+					if to[i] == '&' {
+						// & refers to the entire match.
+						newString.WriteString(s[matchStart:matchEnd])
+					} else {
+						idx := int(to[i] - '0')
+						// regexpReplace expects references to "out-of-bounds" capture groups
+						// to be ignored.
+						if 2*idx < len(matchIndex) {
+							newString.WriteString(s[matchIndex[2*idx]:matchIndex[2*idx+1]])
+						}
+					}
+				}
 			}
+			i++
+		}
+		newString.WriteString(to[chunkStart:])
 
-			sub, err := strconv.Atoi(string(subRef))
-			if err != nil {
-				panic(fmt.Sprintf("invalid integer submatch reference seen: %v", err))
-			}
-			if 2*sub >= len(matchIndex) {
-				// regexpReplace expects references to "out-of-bounds" capture groups
-				// to be ignored, so replace with an empty string.
-				return ""
-			}
-
-			subStart := matchIndex[2*sub]
-			subEnd := matchIndex[2*sub+1]
-			return s[subStart:subEnd]
-		})
-		newString.WriteString(matchTo)
-
-		replaceIndex = end
+		finalIndex = matchEnd
 	}
 
 	// Add the section of s past the final match.
-	newString.WriteString(s[replaceIndex:])
+	newString.WriteString(s[finalIndex:])
 
 	return NewDString(newString.String()), nil
 }
