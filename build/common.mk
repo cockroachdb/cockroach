@@ -16,9 +16,6 @@
 # project. The including Makefile must define REPO_ROOT to the relative path to
 # the root of the repository before including this file.
 
-# Variables to control executable names. These can be overridden in the
-# environment or on the command line, e.g.
-#   GOFLAGS=-msan make build     OR     make build GOFLAGS=-msan
 GO      ?= go
 GOFLAGS ?=
 XGO     ?= xgo
