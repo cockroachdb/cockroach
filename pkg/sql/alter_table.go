@@ -141,6 +141,14 @@ func (n *alterTableNode) Start(params runParams) error {
 				if err := idx.FillColumns(d.Columns); err != nil {
 					return err
 				}
+				if d.PartitionBy != nil {
+					if err := addPartitionedBy(
+						params.ctx, &params.p.evalCtx, n.tableDesc, &idx, &idx.Partitioning,
+						d.PartitionBy, 0, /* colOffset */
+					); err != nil {
+						return err
+					}
+				}
 				_, dropped, err := n.tableDesc.FindIndexByName(string(d.Name))
 				if err == nil {
 					if dropped {
