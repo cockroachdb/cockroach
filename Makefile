@@ -95,7 +95,7 @@ help: ## Print help for targets with comments.
 	@printf "  $(cyan)%s$(term-reset)\n    %s\n\n" \
 		"make test" "Run all unit tests." \
 		"make test PKG=./pkg/sql" "Run all unit tests in the ./pkg/sql package" \
-		"make test PKG=./pkg/sql TESTS=TestParse" "Run the TestParse test in the ./pkg/sql package." \
+		"make test PKG=./pkg/sql/parser TESTS=TestParse" "Run the TestParse test in the ./pkg/sql/parser package." \
 		"make bench PKG=./pkg/sql/parser BENCHES=BenchmarkParse" "Run the BenchmarkParse benchmark in the ./pkg/sql/parser package." \
 		"make testlogic" "Run all SQL Logic Tests." \
 		"make testlogic FILES=prepare" "Run the logic test with filename prepare."
