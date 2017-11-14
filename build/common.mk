@@ -20,6 +20,7 @@ GO      ?= go
 GOFLAGS ?=
 XGO     ?= xgo
 TAR     ?= tar
+INSTALL ?= install
 
 # Convenience variables for important paths.
 ORG_ROOT       := $(REPO_ROOT)/..

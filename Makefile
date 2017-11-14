@@ -35,48 +35,6 @@ $(if $(subst -,,$(BENCHES)),$(error BENCHES must be specified with PKG (e.g. PKG
 endif
 endif
 
-## Which package to run tests against, e.g. "./pkg/storage".
-PKG := ./pkg/...
-
-## Tests to run for use with `make test`.
-TESTS := .
-
-## Benchmarks to run for use with `make bench`.
-BENCHES :=
-
-## Space delimited list of logic test files to run, for make testlogic.
-FILES :=
-
-## Test timeout to use for regular tests.
-TESTTIMEOUT := 4m
-
-## Test timeout to use for race tests.
-RACETIMEOUT := 25m
-
-## Test timeout to use for acceptance tests.
-ACCEPTANCETIMEOUT := 30m
-
-## Test timeout to use for benchmarks.
-BENCHTIMEOUT := 5m
-
-## Extra flags to pass to the go test runner, e.g. "-v --vmodule=raft=1"
-TESTFLAGS :=
-
-## Extra flags to pass to `stress` during `make stress`.
-STRESSFLAGS :=
-
-DUPLFLAGS    := -t 100
-GOFLAGS      :=
-TAGS         :=
-ARCHIVE      := cockroach.src.tgz
-STARTFLAGS   := -s type=mem,size=1GiB --logtostderr
-BUILDMODE    := install
-BUILDTARGET  := .
-SUFFIX       :=
-INSTALL      := install
-prefix       := /usr/local
-bindir       := $(prefix)/bin
-
 REPO_ROOT := .
 MAKEFLAGS += $(shell $(REPO_ROOT)/build/jflag.sh)
 
@@ -116,6 +74,8 @@ TYPE :=
 # toolchain.
 LINKFLAGS ?=
 
+TAGS :=
+SUFFIX :=
 BUILD_TYPE := development
 ifeq ($(TYPE),)
 else ifeq ($(TYPE),msan)
@@ -230,6 +190,9 @@ $(COCKROACH) build buildoss go-install gotestdashi generate lint lintshort: over
 	-X "github.com/cockroachdb/cockroach/pkg/build.rev=$(shell cat .buildinfo/rev)" \
 	-X "github.com/cockroachdb/cockroach/pkg/build.baseBranch=$(shell cat .buildinfo/basebranch)"
 
+BUILDMODE := install
+BUILDTARGET := .
+
 # Note: We pass `-v` to `go build` and `go test -i` so that warnings
 # from the linker aren't suppressed. The usage of `-v` also shows when
 # dependencies are rebuilt which is useful when switching between
@@ -240,16 +203,24 @@ buildoss: ## Build the CockroachDB binary without any CCL-licensed code.
 $(COCKROACH) build buildoss go-install:
 	 $(XGO) $(BUILDMODE) -v $(GOFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' $(BUILDTARGET)
 
+prefix       := /usr/local
+bindir       := $(prefix)/bin
+
 .PHONY: install
 install: ## Install the CockroachDB binary.
 install: $(COCKROACH)
 	$(INSTALL) -d -m 755 $(DESTDIR)$(bindir)
 	$(INSTALL) -m 755 $(COCKROACH) $(DESTDIR)$(bindir)/cockroach
 
+STARTFLAGS := -s type=mem,size=1GiB --logtostderr
+
 .PHONY: start
 start: $(COCKROACH)
 start:
 	$(COCKROACH) start $(STARTFLAGS)
+
+## Which package to run tests against, e.g. "./pkg/storage".
+PKG := ./pkg/...
 
 # Build, but do not run the tests.
 # PKG is expanded and all packages are built and moved to their directory.
@@ -264,6 +235,9 @@ gotestdashi:
 	$(XGO) test -v $(GOFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' -i $(PKG)
 
 testshort: override TESTFLAGS += -short
+
+## Test timeout to use for race tests.
+RACETIMEOUT := 25m
 
 testrace: ## Run tests with the Go race detector enabled.
 testrace: override GOFLAGS += -race
@@ -280,15 +254,33 @@ bin/logictest.test: main.go $(shell $(FIND_RELEVANT) ! -name 'zcgo_flags.go' -na
 	$(MAKE) gotestdashi GOFLAGS='$(GOFLAGS)' TAGS='$(TAGS)' LINKFLAGS='$(LINKFLAGS)' PKG='$(PKG)'
 	$(XGO) test $(GOFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' -c -o bin/logictest.test $(PKG)
 
+## Benchmarks to run for use with `make bench`.
+BENCHES :=
+
+## Test timeout to use for benchmarks.
+BENCHTIMEOUT := 5m
+
 bench: ## Run benchmarks.
 bench: TESTS := -
 bench: BENCHES := .
 bench: TESTTIMEOUT := $(BENCHTIMEOUT)
 
+## Tests to run for use with `make test`.
+TESTS := .
+
+## Test timeout to use for regular tests.
+TESTTIMEOUT := 4m
+
+## Extra flags to pass to the go test runner, e.g. "-v --vmodule=raft=1"
+TESTFLAGS :=
+
 .PHONY: check test testshort testrace testlogic bench
 test: ## Run tests.
 check test testshort testrace bench: gotestdashi
 	$(XGO) test $(GOFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' -run "$(TESTS)" $(if $(BENCHES),-bench "$(BENCHES)") -timeout $(TESTTIMEOUT) $(PKG) $(TESTFLAGS)
+
+## Space delimited list of logic test files to run, for make testlogic.
+FILES :=
 
 # Run make testlogic to run all of the logic tests. Specify test files to run
 # with make testlogic FILES="foo bar".
@@ -305,6 +297,9 @@ testraceslow: TESTTIMEOUT := $(RACETIMEOUT)
 testslow testraceslow: override TESTFLAGS += -v
 testslow testraceslow: gotestdashi
 	$(XGO) test $(GOFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' -run "$(TESTS)" $(if $(BENCHES),-bench "$(BENCHES)") -timeout $(TESTTIMEOUT) $(PKG) $(TESTFLAGS) | grep -F ': Test' | sed -E 's/(--- PASS: |\(|\))//g' | awk '{ print $$2, $$1 }' | sort -rn | head -n 10
+
+## Extra flags to pass to `stress` during `make stress`.
+STRESSFLAGS :=
 
 stressrace: override GOFLAGS += -race
 stressrace: TESTTIMEOUT := $(RACETIMEOUT)
@@ -330,11 +325,16 @@ upload-coverage: $(BOOTSTRAP_TARGET)
 	$(GO) install $(REPO_ROOT)/vendor/github.com/mattn/goveralls
 	@build/upload-coverage.sh
 
+## Test timeout to use for acceptance tests.
+ACCEPTANCETIMEOUT := 30m
+
 .PHONY: acceptance
 acceptance: TESTTIMEOUT := $(ACCEPTANCETIMEOUT)
 acceptance: export TESTTIMEOUT := $(TESTTIMEOUT)
 acceptance: ## Run acceptance tests.
 	@pkg/acceptance/run.sh
+
+DUPLFLAGS    := -t 100
 
 .PHONY: dupl
 dupl: $(BOOTSTRAP_TARGET)
@@ -375,6 +375,8 @@ pre-push: ## Run generate, lint, and test.
 pre-push: generate lint test
 	$(MAKE) -C $(REPO_ROOT)/pkg/ui lint test
 	! git status --porcelain | read || (git status; git --no-pager diff -a 1>&2; exit 1)
+
+ARCHIVE := cockroach.src.tgz
 
 # archive builds a source tarball out of this repository. Files in the special
 # directory build/archive/contents are inserted directly into $(ARCHIVE_BASE).
