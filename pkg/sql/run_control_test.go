@@ -17,6 +17,8 @@ package sql_test
 import (
 	gosql "database/sql"
 	"errors"
+	"fmt"
+	"math/rand"
 	"strings"
 	"testing"
 	"time"
@@ -26,9 +28,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
 func TestCancelSelectQuery(t *testing.T) {
@@ -175,15 +179,20 @@ func TestCancelParallelQuery(t *testing.T) {
 	}
 }
 
-// Cancel a distSQL query pre-execution (before any streams have been established)
+// TestCancelDistSQLQuery runs a distsql query and cancels it randomly at
+// various points of execution.
 func TestCancelDistSQLQuery(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	const queryToCancel = "SELECT * FROM nums ORDER BY num DESC"
+	const queryToCancel = "SELECT * FROM nums ORDER BY num"
+	cancelQuery := fmt.Sprintf("CANCEL QUERY (SELECT query_id FROM [SHOW CLUSTER QUERIES] WHERE query = '%s')", queryToCancel)
 
 	// conn1 is used for the query above. conn2 is solely for the CANCEL statement.
 	var conn1 *gosql.DB
 	var conn2 *gosql.DB
 
+	var queryLatency *time.Duration
+	sem := make(chan struct{})
+	rng := rand.New(rand.NewSource(timeutil.Now().UnixNano()))
 	tc := serverutils.StartTestCluster(t, 2, /* numNodes */
 		base.TestClusterArgs{
 			ReplicationMode: base.ReplicationManual,
@@ -191,14 +200,15 @@ func TestCancelDistSQLQuery(t *testing.T) {
 				UseDatabase: "test",
 				Knobs: base.TestingKnobs{
 					SQLExecutor: &sql.ExecutorTestingKnobs{
-						BeforeExecute: func(ctx context.Context, stmt string, _ /* isParallel */ bool) {
-							// if queryToCancel
-							if strings.Contains(stmt, "ORDER BY num") {
-								// Cancel it
-								const cancelQuery = "CANCEL QUERY (SELECT query_id FROM [SHOW CLUSTER QUERIES] WHERE node_id = 1)"
-								if _, err := conn2.Exec(cancelQuery); err != nil {
-									t.Fatal(err)
-								}
+						BeforeExecute: func(_ context.Context, stmt string, _ /* isParallel */ bool) {
+							if strings.HasPrefix(stmt, queryToCancel) {
+								// Wait for the race to start.
+								<-sem
+							} else if strings.HasPrefix(stmt, cancelQuery) {
+								// Signal to start the race.
+								sleepTime := time.Duration(rng.Int63n(int64(*queryLatency)))
+								sem <- struct{}{}
+								time.Sleep(sleepTime)
 							}
 						},
 					},
@@ -211,15 +221,49 @@ func TestCancelDistSQLQuery(t *testing.T) {
 	conn2 = tc.ServerConn(1)
 
 	sqlutils.CreateTable(t, conn1, "nums", "num INT", 0, nil)
-	_, err := conn1.Exec("INSERT INTO nums SELECT generate_series(1,10)")
-	if err != nil {
+	if _, err := conn1.Exec("INSERT INTO nums SELECT generate_series(1,100)"); err != nil {
 		t.Fatal(err)
 	}
 
-	_, err = conn1.Exec(queryToCancel)
-	if err != nil && !sqlbase.IsQueryCanceledError(err) {
+	if _, err := conn1.Exec("ALTER TABLE nums SPLIT AT VALUES (50)"); err != nil {
 		t.Fatal(err)
-	} else if err == nil {
-		t.Fatal("didn't get an error from query that should have been canceled")
+	}
+	// Make the second node the leaseholder for the first range to distribute
+	// the query.
+	if _, err := conn1.Exec(fmt.Sprintf(
+		"ALTER TABLE nums TESTING_RELOCATE VALUES (ARRAY[%d], 1)",
+		tc.Server(1).GetFirstStoreID(),
+	)); err != nil {
+		t.Fatal(err)
+	}
+
+	// Run queryToCancel to be able to get an estimate of how long it should
+	// take. The goroutine in charge of cancellation will sleep a random
+	// amount of time within this bound. Signal sem so that it can run
+	// unhindered.
+	go func() {
+		sem <- struct{}{}
+	}()
+	start := timeutil.Now()
+	if _, err := conn1.Exec(queryToCancel); err != nil {
+		t.Fatal(err)
+	}
+	execTime := timeutil.Since(start)
+	queryLatency = &execTime
+
+	errChan := make(chan error)
+	go func() {
+		_, err := conn1.Exec(queryToCancel)
+		errChan <- err
+	}()
+	_, err := conn2.Exec(cancelQuery)
+	if err != nil && !testutils.IsError(err, "query ID") {
+		t.Fatal(err)
+	}
+	// Successful cancellation.
+	// Note the err != nil check. It exists because a successful cancellation
+	// does not imply that the query was canceled.
+	if err := <-errChan; err != nil && !sqlbase.IsQueryCanceledError(err) {
+		t.Fatal(err)
 	}
 }

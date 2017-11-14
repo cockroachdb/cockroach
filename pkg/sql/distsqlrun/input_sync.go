@@ -131,17 +131,25 @@ func (s *orderedSynchronizer) Pop() interface{} {
 	return nil
 }
 
-// initHeap grabs a row from each source and initializes the heap.
+// initHeap grabs a row from each source and initializes the heap. Any given
+// source will be on the heap (even if an error was encountered while reading
+// from it) unless there are no more rows to read from it.
 func (s *orderedSynchronizer) initHeap() error {
+	// consumeErr is the last error encountered while consuming metadata.
+	var consumeErr error
 	for i := range s.sources {
 		src := &s.sources[i]
-		if err := s.consumeMetadata(src, stopOnRowOrError); err != nil {
-			return err
+		err := s.consumeMetadata(src, stopOnRowOrError)
+		if err != nil {
+			consumeErr = err
 		}
-		if src.row != nil {
+		if src.row != nil || err != nil {
 			// Add to the heap array (it won't be a heap until we call heap.Init).
 			s.heap = append(s.heap, srcIdx(i))
 		}
+	}
+	if consumeErr != nil {
+		return consumeErr
 	}
 	heap.Init(s)
 	// heap operations might set s.err (see Less)
@@ -292,8 +300,7 @@ func (s *orderedSynchronizer) Next() (sqlbase.EncDatumRow, ProducerMetadata) {
 func (s *orderedSynchronizer) ConsumerDone() {
 	// We're entering draining mode. Only metadata will be forwarded from now on.
 	if s.state != draining {
-		s.state = draining
-		s.consumerStatusChanged(RowSource.ConsumerDone)
+		s.consumerStatusChanged(draining, RowSource.ConsumerDone)
 	}
 }
 
@@ -301,26 +308,28 @@ func (s *orderedSynchronizer) ConsumerDone() {
 func (s *orderedSynchronizer) ConsumerClosed() {
 	// The state should matter, as no further methods should be called, but we'll
 	// set it to something other than the default.
-	s.state = drainBuffered
-	s.consumerStatusChanged(RowSource.ConsumerClosed)
+	s.consumerStatusChanged(drainBuffered, RowSource.ConsumerClosed)
 }
 
 // consumerStatusChanged calls a RowSource method on all the non-exhausted
 // sources.
-func (s *orderedSynchronizer) consumerStatusChanged(f func(RowSource)) {
+func (s *orderedSynchronizer) consumerStatusChanged(
+	newState orderedSynchronizerState, f func(RowSource),
+) {
 	if s.state == notInitialized {
 		for i := range s.sources {
 			f(s.sources[i].src)
 		}
 	} else {
-		// The sources that are not in the heap have been consumed already. It would
-		// be ok to call ConsumerDone()/ConsumerClosed() on them too, but avoiding
-		// the call may be a bit faster (in most cases there should be no sources
-		// left).
+		// The sources that are not in the heap have been consumed already. It
+		// would be ok to call ConsumerDone()/ConsumerClosed() on them too, but
+		// avoiding the call may be a bit faster (in most cases there should be
+		// no sources left).
 		for _, sIdx := range s.heap {
 			f(s.sources[sIdx].src)
 		}
 	}
+	s.state = newState
 }
 
 func makeOrderedSync(
