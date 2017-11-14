@@ -619,7 +619,7 @@ EXPLAIN SELECT * FROM test2 WHERE k <= '100' ORDER BY k DESC LIMIT 20
 1  index-join  ·      ·
 2  revscan     ·      ·
 2  ·           table  test2@test2_k_key
-2  ·           spans  /#-/"100\x00"
+2  ·           spans  /#-/"100"/PrefixEnd
 2  ·           limit  20
 2  scan        ·      ·
 2  ·           table  test2@primary
