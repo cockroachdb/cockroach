@@ -990,9 +990,17 @@ func applyInConstraint(
 		}
 		for _, s := range existingSpans {
 			if c.start != nil {
+				// Don't append directly to the existing slice, or we
+				// may introduce unwanted aliasing (see #20035).
+				old := s.start
+				s.start = make([]logicalKeyPart, 0, len(old)+len(parts))
+				s.start = append(s.start, old...)
 				s.start = append(s.start, parts...)
 			}
 			if c.end != nil {
+				old := s.end
+				s.end = make([]logicalKeyPart, 0, len(old)+len(parts))
+				s.end = append(s.end, old...)
 				s.end = append(s.end, parts...)
 			}
 			spans = append(spans, s)
