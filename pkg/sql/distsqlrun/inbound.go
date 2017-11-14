@@ -35,12 +35,9 @@ func ProcessInboundStream(
 	dst RowReceiver,
 	f *Flow,
 ) error {
-
-	err := processInboundStreamHelper(ctx, stream, firstMsg, dst, f)
-
 	// err, if set, will also be propagated to the producer
 	// as the last record that the producer gets.
-	if err != nil {
+	if err := processInboundStreamHelper(ctx, stream, firstMsg, dst, f); err != nil {
 		log.VEventf(ctx, 1, "inbound stream error: %s", err)
 		dst.Push(nil, ProducerMetadata{Err: err})
 		dst.ProducerDone()

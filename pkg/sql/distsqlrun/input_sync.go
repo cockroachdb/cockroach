@@ -267,6 +267,10 @@ func (s *orderedSynchronizer) Next() (sqlbase.EncDatumRow, ProducerMetadata) {
 		// ConsumerDone(), or an error, has put us in draining mode. All subsequent
 		// Next() calls will return metadata records.
 		s.drainSources()
+		// Call ConsumerClosed to primarily take care of sources that were not
+		// added to the heap due to an initialization error (see
+		// https://github.com/cockroachdb/cockroach/issues/19951).
+		s.ConsumerClosed()
 		s.state = drainBuffered
 		s.heap = nil
 	}
@@ -292,8 +296,7 @@ func (s *orderedSynchronizer) Next() (sqlbase.EncDatumRow, ProducerMetadata) {
 func (s *orderedSynchronizer) ConsumerDone() {
 	// We're entering draining mode. Only metadata will be forwarded from now on.
 	if s.state != draining {
-		s.state = draining
-		s.consumerStatusChanged(RowSource.ConsumerDone)
+		s.consumerStatusChange(draining, RowSource.ConsumerDone)
 	}
 }
 
@@ -301,26 +304,18 @@ func (s *orderedSynchronizer) ConsumerDone() {
 func (s *orderedSynchronizer) ConsumerClosed() {
 	// The state should matter, as no further methods should be called, but we'll
 	// set it to something other than the default.
-	s.state = drainBuffered
-	s.consumerStatusChanged(RowSource.ConsumerClosed)
+	s.consumerStatusChange(drainBuffered, RowSource.ConsumerClosed)
 }
 
 // consumerStatusChanged calls a RowSource method on all the non-exhausted
 // sources.
-func (s *orderedSynchronizer) consumerStatusChanged(f func(RowSource)) {
-	if s.state == notInitialized {
-		for i := range s.sources {
-			f(s.sources[i].src)
-		}
-	} else {
-		// The sources that are not in the heap have been consumed already. It would
-		// be ok to call ConsumerDone()/ConsumerClosed() on them too, but avoiding
-		// the call may be a bit faster (in most cases there should be no sources
-		// left).
-		for _, sIdx := range s.heap {
-			f(s.sources[sIdx].src)
-		}
+func (s *orderedSynchronizer) consumerStatusChange(
+	newState orderedSynchronizerState, f func(RowSource),
+) {
+	for i := range s.sources {
+		f(s.sources[i].src)
 	}
+	s.state = newState
 }
 
 func makeOrderedSync(
