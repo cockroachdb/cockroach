@@ -14,18 +14,49 @@ import (
 	"github.com/pkg/errors"
 )
 
+type descriptorsMatched struct {
+	// all tables that match targets plus their parent databases.
+	descs []sqlbase.Descriptor
+
+	// the databases from which all tables were matched (eg a.* or DATABASE a).
+	expandedDB []sqlbase.ID
+
+	// explicitly requested DBs (e.g. DATABASE a).
+	requestedDBs []*sqlbase.DatabaseDescriptor
+}
+
+func (d descriptorsMatched) checkExpansions(coveredDBs []sqlbase.ID) error {
+	covered := make(map[sqlbase.ID]bool)
+	for _, i := range coveredDBs {
+		covered[i] = true
+	}
+	for _, i := range d.requestedDBs {
+		if !covered[i.ID] {
+			return errors.Errorf("cannot RESTORE DATABASE from a backup of individual tables (use SHOW BACKUP to determine available tables)")
+		}
+	}
+	for _, i := range d.expandedDB {
+		if !covered[i] {
+			return errors.Errorf("cannot RESTORE <database>.* from a backup of individual tables (use SHOW BACKUP to determine available tables)")
+		}
+	}
+	return nil
+}
+
 // descriptorsMatchingTargets returns the descriptors that match the targets. A
 // database descriptor is included in this set if it matches the targets (or the
-// session database) or if one of its tables matches the targets. Those
-// databases that are explicitly mentioned (e.g. as `DATABASE foo`, as opposed
-// to `foo.bar` or even `foo.*`) are also included in the second list for
-// callers that wish to handle that case differently.
+// session database) or if one of its tables matches the targets. All expanded
+// DBs, via either `foo.*` or `DATABASE foo` are noted, as are those explicitly
+// named as DBs (e.g. with `DATABASE foo`, not `foo.*`). These distinctions are
+// used e.g. by RESTORE.
 func descriptorsMatchingTargets(
 	sessionDatabase string, descriptors []sqlbase.Descriptor, targets tree.TargetList,
-) ([]sqlbase.Descriptor, []*sqlbase.DatabaseDescriptor, error) {
+) (descriptorsMatched, error) {
 	// TODO(dan): If the session search path starts including more than virtual
 	// tables (as of 2017-01-12 it's only pg_catalog), then this method will
 	// need to support it.
+
+	ret := descriptorsMatched{}
 
 	type validity int
 	const (
@@ -34,7 +65,6 @@ func descriptorsMatchingTargets(
 	)
 
 	explicitlyNamedDBs := map[string]struct{}{}
-	var retDBs []*sqlbase.DatabaseDescriptor
 
 	starByDatabase := make(map[string]validity, len(targets.Databases))
 	for _, d := range targets.Databases {
@@ -52,14 +82,14 @@ func descriptorsMatchingTargets(
 		var err error
 		pattern, err = pattern.NormalizeTablePattern()
 		if err != nil {
-			return nil, nil, err
+			return ret, err
 		}
 
 		switch p := pattern.(type) {
 		case *tree.TableName:
 			if sessionDatabase != "" {
 				if err := p.QualifyWithDatabase(sessionDatabase); err != nil {
-					return nil, nil, err
+					return ret, err
 				}
 			}
 			db := string(p.DatabaseName)
@@ -70,30 +100,30 @@ func descriptorsMatchingTargets(
 		case *tree.AllTablesSelector:
 			if sessionDatabase != "" {
 				if err := p.QualifyWithDatabase(sessionDatabase); err != nil {
-					return nil, nil, err
+					return ret, err
 				}
 			}
 			starByDatabase[string(p.Database)] = maybeValid
 		default:
-			return nil, nil, errors.Errorf("unknown pattern %T: %+v", pattern, pattern)
+			return ret, errors.Errorf("unknown pattern %T: %+v", pattern, pattern)
 		}
 	}
 
 	databasesByID := make(map[sqlbase.ID]*sqlbase.DatabaseDescriptor, len(descriptors))
-	var ret []sqlbase.Descriptor
 
 	for _, desc := range descriptors {
 		if dbDesc := desc.GetDatabase(); dbDesc != nil {
 			databasesByID[dbDesc.ID] = dbDesc
 			normalizedDBName := dbDesc.Name
 			if _, ok := explicitlyNamedDBs[normalizedDBName]; ok {
-				retDBs = append(retDBs, dbDesc)
+				ret.requestedDBs = append(ret.requestedDBs, dbDesc)
 			}
 			if _, ok := starByDatabase[normalizedDBName]; ok {
 				starByDatabase[normalizedDBName] = valid
-				ret = append(ret, desc)
+				ret.expandedDB = append(ret.expandedDB, dbDesc.ID)
+				ret.descs = append(ret.descs, desc)
 			} else if _, ok := tablesByDatabase[normalizedDBName]; ok {
-				ret = append(ret, desc)
+				ret.descs = append(ret.descs, desc)
 			}
 		}
 	}
@@ -105,19 +135,19 @@ func descriptorsMatchingTargets(
 			}
 			dbDesc, ok := databasesByID[tableDesc.ParentID]
 			if !ok {
-				return nil, nil, errors.Errorf("unknown ParentID: %d", tableDesc.ParentID)
+				return ret, errors.Errorf("unknown ParentID: %d", tableDesc.ParentID)
 			}
 			normalizedDBName := dbDesc.Name
 			if tables, ok := tablesByDatabase[normalizedDBName]; ok {
 				for i := range tables {
 					if tables[i].name == tableDesc.Name {
 						tables[i].validity = valid
-						ret = append(ret, desc)
+						ret.descs = append(ret.descs, desc)
 						break
 					}
 				}
 			} else if _, ok := starByDatabase[normalizedDBName]; ok {
-				ret = append(ret, desc)
+				ret.descs = append(ret.descs, desc)
 			}
 		}
 	}
@@ -125,9 +155,9 @@ func descriptorsMatchingTargets(
 	for dbName, validity := range starByDatabase {
 		if validity != valid {
 			if dbName == "" {
-				return nil, nil, errors.Errorf("no database specified for wildcard")
+				return ret, errors.Errorf("no database specified for wildcard")
 			}
-			return nil, nil, errors.Errorf(`database "%s" does not exist`, dbName)
+			return ret, errors.Errorf(`database "%s" does not exist`, dbName)
 		}
 	}
 
@@ -136,10 +166,10 @@ func descriptorsMatchingTargets(
 	for _, tables := range tablesByDatabase {
 		for _, table := range tables {
 			if table.validity != valid {
-				return nil, nil, errors.Errorf(`table "%s" does not exist`, table.name)
+				return ret, errors.Errorf(`table "%s" does not exist`, table.name)
 			}
 		}
 	}
 
-	return ret, retDBs, nil
+	return ret, nil
 }
