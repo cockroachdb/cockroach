@@ -138,6 +138,9 @@ define VALID_VARS
   XHOST_TRIPLE
   YARN_INSTALLED_TARGET
   bindir
+  cyan
   prefix
+  sgr0
   space
+  yellow
 endef
