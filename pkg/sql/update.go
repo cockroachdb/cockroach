@@ -438,7 +438,7 @@ func (u *updateNode) Next(params runParams) (bool, error) {
 
 	// Ensure that the values honor the specified column widths.
 	for i := range updateValues {
-		if err := sqlbase.CheckValueWidth(u.tw.ru.UpdateCols[i], updateValues[i]); err != nil {
+		if err := sqlbase.CheckValueWidth(u.tw.ru.UpdateCols[i].Type, updateValues[i], u.tw.ru.UpdateCols[i].Name); err != nil {
 			return false, err
 		}
 	}
