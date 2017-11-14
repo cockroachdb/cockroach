@@ -1251,7 +1251,9 @@ func (m *LeaseManager) AcquireByName(
 					// Start the renewal. When it finishes, it will reset t.renewalInProgress.
 					if err := t.stopper.RunAsyncTask(context.Background(),
 						"lease renewal", func(ctx context.Context) {
-							ctx, _ = tracing.EnsureContext(ctx, m.ambientCtx.Tracer, "lease renewal")
+							var cleanup func()
+							ctx, cleanup = tracing.EnsureContext(ctx, m.ambientCtx.Tracer, "lease renewal")
+							defer cleanup()
 							t.startLeaseRenewal(ctx, m, tableVersion)
 						}); err != nil {
 						return &tableVersion.TableDescriptor, tableVersion.expiration, err
