@@ -17,6 +17,7 @@ package sqlbase
 import (
 	"bytes"
 	"fmt"
+	"strings"
 
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
@@ -830,8 +831,14 @@ func (mrf *MultiRowFetcher) finalizeRow() {
 	for i := range table.cols {
 		if table.neededCols.Contains(int(table.cols[i].ID)) && table.row[i].IsUnset() {
 			if !table.cols[i].Nullable {
-				panic(fmt.Sprintf("Non-nullable column \"%s:%s\" with no value!",
-					table.desc.Name, table.cols[i].Name))
+				var indexColValues []string
+				for i := range table.indexColIdx {
+					indexColValues = append(indexColValues, table.row[i].String(&table.cols[i].Type))
+				}
+				panic(fmt.Sprintf(
+					"Non-nullable column \"%s:%s\" with no value! Index scanned was %q with the index key columns (%s) and the values (%s)",
+					table.desc.Name, table.cols[i].Name, table.index.Name,
+					strings.Join(table.index.ColumnNames, ","), strings.Join(indexColValues, ",")))
 			}
 			table.row[i] = EncDatum{
 				Datum: tree.DNull,
