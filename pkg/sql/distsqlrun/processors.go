@@ -322,6 +322,12 @@ func (pb *processorBase) OutputTypes() []sqlbase.ColumnType {
 	return pb.out.outputTypes
 }
 
+func (pb *processorBase) init(
+	post *PostProcessSpec, types []sqlbase.ColumnType, flowCtx *FlowCtx, output RowReceiver,
+) error {
+	return pb.out.Init(post, types, flowCtx.NewEvalCtx(), output)
+}
+
 // noopProcessor is a processor that simply passes rows through from the
 // synchronizer to the post-processing stage. It can be useful for its
 // post-processing or in the last stage of a computation, where we may only
@@ -339,7 +345,7 @@ func newNoopProcessor(
 	flowCtx *FlowCtx, input RowSource, post *PostProcessSpec, output RowReceiver,
 ) (*noopProcessor, error) {
 	n := &noopProcessor{flowCtx: flowCtx, input: input}
-	if err := n.out.Init(post, input.Types(), &flowCtx.EvalCtx, output); err != nil {
+	if err := n.init(post, input.Types(), flowCtx, output); err != nil {
 		return nil, err
 	}
 	return n, nil

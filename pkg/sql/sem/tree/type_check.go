@@ -33,6 +33,8 @@ type SemaContext struct {
 	// Placeholders relates placeholder names to their type and, later, value.
 	Placeholders PlaceholderInfo
 
+	IVarHelper *IndexedVarHelper
+
 	// Location references the *Location on the current Session.
 	Location **time.Location
 

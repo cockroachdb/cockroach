@@ -1212,7 +1212,7 @@ func newReadCSVProcessor(
 		output:     output,
 		settings:   flowCtx.Settings,
 	}
-	if err := cp.out.Init(&distsqlrun.PostProcessSpec{}, csvOutputTypes, &flowCtx.EvalCtx, output); err != nil {
+	if err := cp.out.Init(&distsqlrun.PostProcessSpec{}, csvOutputTypes, flowCtx.NewEvalCtx(), output); err != nil {
 		return nil, err
 	}
 	return cp, nil
@@ -1367,7 +1367,7 @@ func newSSTWriterProcessor(
 		tempStorage:   flowCtx.TempStorage,
 		settings:      flowCtx.Settings,
 	}
-	if err := sp.out.Init(&distsqlrun.PostProcessSpec{}, sstOutputTypes, &flowCtx.EvalCtx, output); err != nil {
+	if err := sp.out.Init(&distsqlrun.PostProcessSpec{}, sstOutputTypes, flowCtx.NewEvalCtx(), output); err != nil {
 		return nil, err
 	}
 	return sp, nil
