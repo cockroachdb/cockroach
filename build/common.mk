@@ -16,9 +16,6 @@
 # project. The including Makefile must define REPO_ROOT to the relative path to
 # the root of the repository before including this file.
 
-# Variables to control executable names. These can be overridden in the
-# environment or on the command line, e.g.
-#   GOFLAGS=-msan make build     OR     make build GOFLAGS=-msan
 GO      ?= go
 GOFLAGS ?=
 XGO     ?= xgo
@@ -90,6 +87,14 @@ $(call make-lazy,SED_INPLACE)
 
 # This is how you get a literal space into a Makefile.
 space := $(eval) $(eval)
+
+# Color support.
+yellow = $(shell tput setaf 3 2>/dev/null)
+cyan = $(shell tput setaf 6 2>/dev/null)
+term-reset = $(shell tput sgr0)
+$(call make-lazy,yellow)
+$(call make-lazy,cyan)
+$(call make-lazy,term-reset)
 
 # We used to check the Go version in a .PHONY .go-version target, but the error
 # message, if any, would get mixed in with noise from other targets if Make was

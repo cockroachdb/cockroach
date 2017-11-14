@@ -12,6 +12,14 @@
 # implied. See the License for the specific language governing
 # permissions and limitations under the License.
 
+# WARNING: This Makefile is not easily understood. If you're here looking for
+# typical Make invocations to build the project and run tests, you'll be better
+# served by running `make help`.
+#
+# Maintainers: the output of `make help` is automatically generated from the
+# double-hash (##) comments throughout this Makefile. Please submit
+# improvements!
+
 ifeq "$(findstring bench,$(MAKECMDGOALS))" "bench"
 $(if $(TESTS),$(error TESTS cannot be specified with `make bench` (did you mean BENCHES?)))
 else
@@ -27,28 +35,39 @@ $(if $(subst -,,$(BENCHES)),$(error BENCHES must be specified with PKG (e.g. PKG
 endif
 endif
 
-# Comments starting with a double-hash (##) are for self-documentation, see the
-# `help` target. They look a bit awkward in the variable declarations below
-# since any whitespace added would become part of the variable's default value.
+## Which package to run tests against, e.g. "./pkg/storage".
+PKG := ./pkg/...
 
-# Variables to be overridden on the command line only, e.g.
-#
-#   make test PKG=./pkg/storage TESTFLAGS=--vmodule=raft=1
-#
-# Note that environment variable overrides are intentionally ignored.
-PKG          := ./pkg/...## Which package to run tests against, e.g. "./pkg/storage".
-TAGS         :=
-TESTS        := .## Tests to run for use with `make test`.
-BENCHES      :=## Benchmarks to run for use with `make bench`.
-FILES        :=## Space delimited list of logic test files to run, for make testlogic.
-TESTTIMEOUT  := 4m## Test timeout to use for regular tests.
-RACETIMEOUT  := 25m## Test timeout to use for race tests.
-ACCEPTANCETIMEOUT := 30m## Test timeout to use for acceptance tests.
-BENCHTIMEOUT := 5m## Test timeout to use for benchmarks.
-TESTFLAGS    :=## Extra flags to pass to the go test runner, e.g. "-v --vmodule=raft=1"
-STRESSFLAGS  :=## Extra flags to pass to `stress` during `make stress`.
+## Tests to run for use with `make test`.
+TESTS := .
+
+## Benchmarks to run for use with `make bench`.
+BENCHES :=
+
+## Space delimited list of logic test files to run, for make testlogic.
+FILES :=
+
+## Test timeout to use for regular tests.
+TESTTIMEOUT := 4m
+
+## Test timeout to use for race tests.
+RACETIMEOUT := 25m
+
+## Test timeout to use for acceptance tests.
+ACCEPTANCETIMEOUT := 30m
+
+## Test timeout to use for benchmarks.
+BENCHTIMEOUT := 5m
+
+## Extra flags to pass to the go test runner, e.g. "-v --vmodule=raft=1"
+TESTFLAGS :=
+
+## Extra flags to pass to `stress` during `make stress`.
+STRESSFLAGS :=
+
 DUPLFLAGS    := -t 100
 GOFLAGS      :=
+TAGS         :=
 ARCHIVE      := cockroach.src.tgz
 STARTFLAGS   := -s type=mem,size=1GiB --logtostderr
 BUILDMODE    := install
@@ -66,20 +85,19 @@ help: ## Print help for targets with comments.
 	@echo "  make [target...] [VAR=foo VAR2=bar...]"
 	@echo ""
 	@echo "Useful commands:"
-	@grep -Eh '^[a-zA-Z._-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "  $(shell tput setaf 6 2>/dev/null)%-30s$(shell tput sgr0 2>/dev/null) %s\n", $$1, $$2}'
+	@grep -Eh '^[a-zA-Z._-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "  $(cyan)%-30s$(term-reset) %s\n", $$1, $$2}'
 	@echo ""
 	@echo "Useful variables:"
-	@grep -Eh '^[a-zA-Z._-]+ *:=.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":=.*?## "}; {printf "  $(shell tput setaf 6 2>/dev/null)%-30s$(shell tput sgr0 2>/dev/null) %s\n", $$1, $$2}'
+	@awk 'BEGIN { FS = ":=" } /^## /{x = substr($$0, 4); getline; if (NF >= 2) printf "  $(cyan)%-30s$(term-reset) %s\n", $$1, x}' $(MAKEFILE_LIST) | sort
 	@echo ""
 	@echo "Typical usage:"
-	@grep -Eh '^## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = "##"}; {printf "  $(shell tput setaf 6 2>/dev/null)%-45s$(shell tput sgr0 2>/dev/null) %s\n", $$2, $$3}'
-
-## make test ## Run all unit tests.
-## make test PKG=./pkg/sql ## Run all unit tests in the ./pkg/sql package
-## make test PKG=./pkg/sql TESTS=TestParse ## Run the TestParse test in the ./pkg/sql package.
-## make bench PKG=./pkg/sql/parser BENCHES=BenchmarkParse ## Run the BenchmarkParse benchmark in the ./pkg/sql/parser package.
-## make testlogic ## Run all SQL Logic Tests.
-## make testlogic FILES=prepare ## Run the logic test with filename prepare.
+	@printf "  $(cyan)%s$(term-reset)\n    %s\n\n" \
+		"make test" "Run all unit tests." \
+		"make test PKG=./pkg/sql" "Run all unit tests in the ./pkg/sql package" \
+		"make test PKG=./pkg/sql/parser TESTS=TestParse" "Run the TestParse test in the ./pkg/sql/parser package." \
+		"make bench PKG=./pkg/sql/parser BENCHES=BenchmarkParse" "Run the BenchmarkParse benchmark in the ./pkg/sql/parser package." \
+		"make testlogic" "Run all SQL Logic Tests." \
+		"make testlogic FILES=prepare" "Run the logic test with filename prepare."
 
 # Possible values:
 # <empty>: use the default toolchain
@@ -338,7 +356,7 @@ generate: ## Regenerate generated code.
 .PHONY: lint
 lint: override TAGS += lint
 lint: ## Run all style checkers and linters.
-	@if [ -t 1 ]; then echo $$(tput setaf 3 2>/dev/null)'NOTE: `make lint` is very slow! Perhaps `make lintshort`?'$$(tput sgr0 2>/dev/null); fi
+	@if [ -t 1 ]; then echo '$(yellow)NOTE: `make lint` is very slow! Perhaps `make lintshort`?$(term-reset)'; fi
 	$(XGO) test ./build -v $(GOFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' -run 'TestStyle/$(TESTS)'
 
 .PHONY: lintshort
