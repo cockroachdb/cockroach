@@ -66,13 +66,13 @@ help: ## Print help for targets with comments.
 	@echo "  make [target...] [VAR=foo VAR2=bar...]"
 	@echo ""
 	@echo "Useful commands:"
-	@grep -Eh '^[a-zA-Z._-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "  $(shell tput setaf 6 2>/dev/null)%-30s$(shell tput sgr0 2>/dev/null) %s\n", $$1, $$2}'
+	@grep -Eh '^[a-zA-Z._-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "  $(cyan)%-30s$(term-reset) %s\n", $$1, $$2}'
 	@echo ""
 	@echo "Useful variables:"
-	@grep -Eh '^[a-zA-Z._-]+ *:=.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":=.*?## "}; {printf "  $(shell tput setaf 6 2>/dev/null)%-30s$(shell tput sgr0 2>/dev/null) %s\n", $$1, $$2}'
+	@grep -Eh '^[a-zA-Z._-]+ *:=.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":=.*?## "}; {printf "  $(cyan)%-30s$(term-reset) %s\n", $$1, $$2}'
 	@echo ""
 	@echo "Typical usage:"
-	@grep -Eh '^## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = "##"}; {printf "  $(shell tput setaf 6 2>/dev/null)%-45s$(shell tput sgr0 2>/dev/null) %s\n", $$2, $$3}'
+	@grep -Eh '^## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = "##"}; {printf "  $(cyan)%-45s$(term-reset) %s\n", $$2, $$3}'
 
 ## make test ## Run all unit tests.
 ## make test PKG=./pkg/sql ## Run all unit tests in the ./pkg/sql package
@@ -338,7 +338,7 @@ generate: ## Regenerate generated code.
 .PHONY: lint
 lint: override TAGS += lint
 lint: ## Run all style checkers and linters.
-	@if [ -t 1 ]; then echo $$(tput setaf 3 2>/dev/null)'NOTE: `make lint` is very slow! Perhaps `make lintshort`?'$$(tput sgr0 2>/dev/null); fi
+	@if [ -t 1 ]; then echo '$(yellow)NOTE: `make lint` is very slow! Perhaps `make lintshort`?$(term-reset)'; fi
 	$(XGO) test ./build -v $(GOFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' -run 'TestStyle/$(TESTS)'
 
 .PHONY: lintshort

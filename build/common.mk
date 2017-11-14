@@ -91,6 +91,14 @@ $(call make-lazy,SED_INPLACE)
 # This is how you get a literal space into a Makefile.
 space := $(eval) $(eval)
 
+# Color support.
+yellow = $(shell tput setaf 3 2>/dev/null)
+cyan = $(shell tput setaf 6 2>/dev/null)
+term-reset = $(shell tput sgr0)
+$(call make-lazy,yellow)
+$(call make-lazy,cyan)
+$(call make-lazy,term-reset)
+
 # We used to check the Go version in a .PHONY .go-version target, but the error
 # message, if any, would get mixed in with noise from other targets if Make was
 # executed in parallel job mode. This check, by contrast, is guaranteed to print
