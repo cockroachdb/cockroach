@@ -12,6 +12,14 @@
 # implied. See the License for the specific language governing
 # permissions and limitations under the License.
 
+# WARNING: This Makefile is not easily understood. If you're here looking for
+# typical Make invocations to build the project and run tests, you'll be better
+# served by running `make help`.
+#
+# Maintainers: the output of `make help` is automatically generated from the
+# double-hash (##) comments throughout this Makefile. Please submit
+# improvements!
+
 ifeq "$(findstring bench,$(MAKECMDGOALS))" "bench"
 $(if $(TESTS),$(error TESTS cannot be specified with `make bench` (did you mean BENCHES?)))
 else
@@ -26,15 +34,6 @@ $(if $(subst -,,$(TESTS)),$(error TESTS must be specified with PKG (e.g. PKG=./p
 $(if $(subst -,,$(BENCHES)),$(error BENCHES must be specified with PKG (e.g. PKG=./pkg/sql)))
 endif
 endif
-
-# Comments starting with a double-hash (##) are for self-documentation, see the
-# `help` target.
-
-# Variables to be overridden on the command line only, e.g.
-#
-#   make test PKG=./pkg/storage TESTFLAGS=--vmodule=raft=1
-#
-# Note that environment variable overrides are intentionally ignored.
 
 ## Which package to run tests against, e.g. "./pkg/storage".
 PKG := ./pkg/...
