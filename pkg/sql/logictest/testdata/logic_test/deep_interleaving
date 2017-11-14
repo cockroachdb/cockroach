@@ -102,12 +102,16 @@ SELECT * FROM level4
 3  30  200
 3  30  300
 
+# The span below ends at the end of the first index of table 53, and is not
+# constraining the value of k2 or k3. This is confusing on first glance because
+# the second interleave in the hierarchy doesn't contain any new primary key
+# columns on top of the first interleave.
 query ITTT
 EXPLAIN SELECT * FROM level4 WHERE k1 > 1 AND k1 < 3
 ----
 0  scan  ·      ·
 0  ·     table  level4@primary
-0  ·     spans  /2/#/52/1/#/53/1-/3
+0  ·     spans  /2/#/52/1/#/53/1-/2/#/52/1/#/53/2
 
 query III rowsort
 SELECT * FROM level4 WHERE k1 > 1 AND k1 < 3
@@ -141,7 +145,7 @@ EXPLAIN SELECT * FROM level4 WHERE k1 = 2 AND k2 = 20 AND k3 > 100 AND k3 < 300
 ----
 0  scan  ·      ·
 0  ·     table  level4@primary
-0  ·     spans  /2/#/52/1/#/53/1/20/101/#/54/1-/2/#/52/1/#/53/1/20/300
+0  ·     spans  /2/#/52/1/#/53/1/20/101/#/54/1-/2/#/52/1/#/53/1/20/299/#/54/2
 
 query III
 SELECT * FROM level4 WHERE k1 = 2 AND k2 = 20 AND k3 > 100 AND k3 < 300
@@ -153,7 +157,7 @@ EXPLAIN SELECT * FROM level4 WHERE k1 = 2 AND k2 = 20 AND k3 = 200
 ----
 0  scan  ·      ·
 0  ·     table  level4@primary
-0  ·     spans  /2/#/52/1/#/53/1/20/200/#/54/1-/2/#/52/1/#/53/1/20/201
+0  ·     spans  /2/#/52/1/#/53/1/20/200/#/54/1-/2/#/52/1/#/53/1/20/200/#/54/2
 
 query III
 SELECT * FROM level4 WHERE k1 = 2 AND k2 = 20 AND k3 = 200
