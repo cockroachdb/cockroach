@@ -1350,17 +1350,24 @@ func TranslateValueEncodingToSpan(
 
 func printPartitioningPrefix(datums []tree.Datum, s string) string {
 	var buf bytes.Buffer
-	for i, v := range datums {
+	PrintPartitioningTuple(&buf, datums, len(datums)+1, s)
+	return buf.String()
+}
+
+// PrintPartitioningTuple prints the first `numColumns` datums in a partitioning
+// tuple to `buf`. If `numColumns >= len(datums)`, then `s` (which is expected
+// to be DEFAULT or MAXVALUE) is used to fill.
+func PrintPartitioningTuple(buf *bytes.Buffer, datums []tree.Datum, numColumns int, s string) {
+	for i := 0; i < numColumns; i++ {
 		if i > 0 {
 			buf.WriteString(", ")
 		}
-		buf.WriteString(tree.AsString(v))
+		if i < len(datums) {
+			buf.WriteString(tree.AsString(datums[i]))
+		} else {
+			buf.WriteString(s)
+		}
 	}
-	if len(datums) > 0 {
-		buf.WriteString(", ")
-	}
-	buf.WriteString(s)
-	return buf.String()
 }
 
 // validatePartitioningDescriptor validates that a PartitioningDescriptor, which
