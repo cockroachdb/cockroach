@@ -17,10 +17,12 @@ package json
 import (
 	"encoding/json"
 	"fmt"
+	"math/rand"
 	"strings"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
 func TestJSONOrdering(t *testing.T) {
@@ -549,6 +551,23 @@ func TestJSONRemoveIndex(t *testing.T) {
 					t.Fatalf("expected %s, got %s", tc.expected, result)
 				}
 			})
+		}
+	}
+}
+
+func TestJSONRandomRoundTrip(t *testing.T) {
+	rng := rand.New(rand.NewSource(timeutil.Now().Unix()))
+	for i := 0; i < 1000; i++ {
+		j, err := Random(20, rng)
+		if err != nil {
+			t.Fatal(err)
+		}
+		j2, err := ParseJSON(j.String())
+		if err != nil {
+			t.Fatal(err)
+		}
+		if j.Compare(j2) != 0 {
+			t.Fatalf("%s did not round-trip, got %s", j.String(), j2.String())
 		}
 	}
 }
