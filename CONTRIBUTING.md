@@ -112,27 +112,29 @@ following guidelines:
   to indicate their reach.
 
 - We publish detailed [release notes](https://www.cockroachlabs.com/docs/releases/)
-  describing most non-test changes. To facilitate this, at least one commit in every
-  PR (preferably the PR message/merge commit) should contain a brief description of
-  the change in terms that a user would recognize. This description should be prefixed
-  with "Release note (category):", where the "category" is one of the following:
-  - cli change
-  - sql change
-  - admin ui change
-  - performance improvement
-  - bug fix
-  - general change (e.g., change of required Go version)
-  - build change (e.g., compatibility with older CPUs)
-  - enterprise change (e.g., change to backup/restore)
-  - backwards-incompatible change
+  describing most non-test changes. To facilitate this, every commit should contain
+  a brief release note description.
+  - If the change is not noteworthy, use "Release note: none".
+  - If the change is noteworthy, use "Release note (category):" followed by a
+  brief description of the change in terms that a user would recognize. For "category",
+  use one of the following:
+    - cli change
+    - sql change
+    - admin ui change
+    - performance improvement
+    - bug fix
+    - general change (e.g., change of required Go version)
+    - build change (e.g., compatibility with older CPUs)
+    - enterprise change (e.g., change to backup/restore)
+    - backwards-incompatible change
 
-  For example, a commit like ["distsql: pre-reserve memory needed
-  to mark rows in HashJoiner build phase"](https://github.com/cockroachdb/cockroach/pull/18975)
-  might say, "Release note (bug fix): Fixed a panic in queries with `JOIN` using the
-  distributed SQL engine."
+    For example, a commit like ["distsql: pre-reserve memory needed to mark rows in
+    HashJoiner build phase"](https://github.com/cockroachdb/cockroach/pull/18975)
+    might say, "Release note (bug fix): Fixed a panic in queries with `JOIN` using the
+    distributed SQL engine."
 
-  When a commit falls into more than one category, choose the category that matches best
-  or is most affected from a user's perspective.
+    When a commit falls into more than one category, choose the category that matches
+    best or is most affected from a user's perspective.
 
 ## Code Review Workflow
 
