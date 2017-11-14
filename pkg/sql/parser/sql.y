@@ -2744,9 +2744,17 @@ create_table_stmt:
       PartitionBy: $8.partitionBy(),
     }
   }
-| CREATE TABLE IF NOT EXISTS any_name '(' opt_table_elem_list ')' opt_interleave
+| CREATE TABLE IF NOT EXISTS any_name '(' opt_table_elem_list ')' opt_interleave opt_partition_by
   {
-    $$.val = &tree.CreateTable{Table: $6.normalizableTableName(), IfNotExists: true, Interleave: $10.interleave(), Defs: $8.tblDefs(), AsSource: nil, AsColumnNames: nil}
+    $$.val = &tree.CreateTable{
+      Table: $6.normalizableTableName(),
+      IfNotExists: true,
+      Interleave: $10.interleave(),
+      Defs: $8.tblDefs(),
+      AsSource: nil,
+      AsColumnNames: nil,
+      PartitionBy: $11.partitionBy(),
+    }
   }
 
 create_table_as_stmt:
@@ -2989,16 +2997,17 @@ col_qualification_elem:
  }
 
 index_def:
-  INDEX opt_name '(' index_params ')' opt_storing opt_interleave
+  INDEX opt_name '(' index_params ')' opt_storing opt_interleave opt_partition_by
   {
     $$.val = &tree.IndexTableDef{
       Name:    tree.Name($2),
       Columns: $4.idxElems(),
       Storing: $6.nameList(),
       Interleave: $7.interleave(),
+      PartitionBy: $8.partitionBy(),
     }
   }
-| UNIQUE INDEX opt_name '(' index_params ')' opt_storing opt_interleave
+| UNIQUE INDEX opt_name '(' index_params ')' opt_storing opt_interleave opt_partition_by
   {
     $$.val = &tree.UniqueConstraintTableDef{
       IndexTableDef: tree.IndexTableDef {
@@ -3006,6 +3015,7 @@ index_def:
         Columns: $5.idxElems(),
         Storing: $7.nameList(),
         Interleave: $8.interleave(),
+        PartitionBy: $9.partitionBy(),
       },
     }
   }
@@ -3040,13 +3050,14 @@ constraint_elem:
       Expr: $3.expr(),
     }
   }
-| UNIQUE '(' index_params ')' opt_storing opt_interleave
+| UNIQUE '(' index_params ')' opt_storing opt_interleave opt_partition_by
   {
     $$.val = &tree.UniqueConstraintTableDef{
       IndexTableDef: tree.IndexTableDef{
         Columns: $3.idxElems(),
         Storing: $5.nameList(),
         Interleave: $6.interleave(),
+        PartitionBy: $7.partitionBy(),
       },
     }
   }
@@ -3310,7 +3321,7 @@ create_view_stmt:
 // %SeeAlso: CREATE TABLE, SHOW INDEXES, SHOW CREATE INDEX,
 // WEBDOCS/create-index.html
 create_index_stmt:
-  CREATE opt_unique INDEX opt_name ON qualified_name '(' index_params ')' opt_storing opt_interleave
+  CREATE opt_unique INDEX opt_name ON qualified_name '(' index_params ')' opt_storing opt_interleave opt_partition_by
   {
     $$.val = &tree.CreateIndex{
       Name:    tree.Name($4),
@@ -3319,9 +3330,10 @@ create_index_stmt:
       Columns: $8.idxElems(),
       Storing: $10.nameList(),
       Interleave: $11.interleave(),
+      PartitionBy: $12.partitionBy(),
     }
   }
-| CREATE opt_unique INDEX IF NOT EXISTS name ON qualified_name '(' index_params ')' opt_storing opt_interleave
+| CREATE opt_unique INDEX IF NOT EXISTS name ON qualified_name '(' index_params ')' opt_storing opt_interleave opt_partition_by
   {
     $$.val = &tree.CreateIndex{
       Name:        tree.Name($7),
@@ -3331,6 +3343,7 @@ create_index_stmt:
       Columns:     $11.idxElems(),
       Storing:     $13.nameList(),
       Interleave: $14.interleave(),
+      PartitionBy: $15.partitionBy(),
     }
   }
 | CREATE opt_unique INDEX error // SHOW HELP: CREATE INDEX

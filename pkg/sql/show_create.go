@@ -111,8 +111,14 @@ func (p *planner) showCreateTable(
 		if idx.ID != desc.PrimaryIndex.ID {
 			// Showing the primary index is handled above.
 			fmt.Fprintf(&buf, ",\n\t%s", idx.SQLString(""))
-			// Showing the INTERLEAVE for the primary index is handled last.
+			// Showing the INTERLEAVE and PARTITION BY for the primary index are
+			// handled last.
 			if err := p.showCreateInterleave(ctx, &idx, &buf, dbPrefix); err != nil {
+				return "", err
+			}
+			if err := showCreatePartitioning(
+				a, desc, &idx, &idx.Partitioning, &buf, 1 /* indent */, 0, /* colOffset */
+			); err != nil {
 				return "", err
 			}
 		}
