@@ -405,7 +405,7 @@ func (fks fkUpdateHelper) CollectSpansForValues(values tree.Datums) (roachpb.Spa
 
 type baseFKHelper struct {
 	txn          *client.Txn
-	rf           RowFetcher
+	rf           MultiRowFetcher
 	searchTable  *TableDescriptor // the table being searched (for err msg)
 	searchIdx    *IndexDescriptor // the index that must (not) contain a value
 	prefixLen    int
@@ -438,11 +438,14 @@ func makeBaseFKHelper(
 		b.prefixLen = len(writeIdx.ColumnIDs)
 	}
 	b.searchIdx = searchIdx
-	ids := ColIDtoRowIndexFromCols(b.searchTable.Columns)
-	isSecondary := b.searchTable.PrimaryIndex.ID != searchIdx.ID
-	err = b.rf.Init(b.searchTable, ids, searchIdx, false, /* reverse */
-		isSecondary, b.searchTable.Columns, nil,
-		false /* returnRangeInfo */, alloc)
+	tableArgs := MultiRowFetcherTableArgs{
+		Desc:             b.searchTable,
+		Index:            b.searchIdx,
+		ColIdxMap:        ColIDtoRowIndexFromCols(b.searchTable.Columns),
+		IsSecondaryIndex: b.searchIdx.ID != b.searchTable.PrimaryIndex.ID,
+		Cols:             b.searchTable.Columns,
+	}
+	err = b.rf.Init(false /* reverse */, false /* returnRangeInfo */, alloc, tableArgs)
 	if err != nil {
 		return b, err
 	}

@@ -65,7 +65,7 @@ type scanNode struct {
 	// tables with wide rows) by reading only certain columns from KV
 	// using point lookups instead of a single range lookup for the
 	// entire row.
-	valNeededForCol []bool
+	valNeededForCol util.FastIntSet
 
 	// Map used to get the index for columns in cols.
 	colIdxMap map[sqlbase.ColumnID]int
@@ -89,7 +89,7 @@ type scanNode struct {
 	origFilter tree.TypedExpr
 
 	scanInitialized bool
-	fetcher         sqlbase.RowFetcher
+	fetcher         sqlbase.MultiRowFetcher
 
 	// if non-zero, hardLimit indicates that the scanNode only needs to provide
 	// this many rows (after applying any filter). It is a "hard" guarantee that
@@ -132,8 +132,15 @@ func (n *scanNode) disableBatchLimit() {
 }
 
 func (n *scanNode) Start(runParams) error {
-	return n.fetcher.Init(n.desc, n.colIdxMap, n.index, n.reverse, n.isSecondaryIndex, n.cols,
-		n.valNeededForCol, false /* returnRangeInfo */, &n.p.alloc)
+	tableArgs := sqlbase.MultiRowFetcherTableArgs{
+		Desc:             n.desc,
+		Index:            n.index,
+		ColIdxMap:        n.colIdxMap,
+		IsSecondaryIndex: n.isSecondaryIndex,
+		Cols:             n.cols,
+		ValNeededForCol:  n.valNeededForCol.Copy(),
+	}
+	return n.fetcher.Init(n.reverse, false /* returnRangeInfo */, &n.p.alloc, tableArgs)
 }
 
 func (n *scanNode) Close(context.Context) {
@@ -180,7 +187,7 @@ func (n *scanNode) Next(params runParams) (bool, error) {
 	// We fetch one row at a time until we find one that passes the filter.
 	for n.hardLimit == 0 || n.rowIndex < n.hardLimit {
 		var err error
-		n.row, err = n.fetcher.NextRowDecoded(params.ctx)
+		n.row, _, _, err = n.fetcher.NextRowDecoded(params.ctx)
 		if err != nil || n.row == nil {
 			return false, err
 		}
@@ -367,10 +374,8 @@ func (n *scanNode) initDescDefaults(
 	for i, c := range n.cols {
 		n.colIdxMap[c.ID] = i
 	}
-	n.valNeededForCol = make([]bool, len(n.cols))
-	for i := range n.cols {
-		n.valNeededForCol[i] = true
-	}
+	n.valNeededForCol = util.FastIntSet{}
+	n.valNeededForCol.AddRange(0, len(n.cols)-1)
 	n.row = make([]tree.Datum, len(n.cols))
 	n.filterVars = tree.MakeIndexedVarHelper(n, len(n.cols))
 	return nil
