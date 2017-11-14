@@ -91,18 +91,10 @@ which is focused on the collection of basic statistics.
   reservoir sampling), sorting it and then using the one-pass
   algorithm on the sorted data.
 
-* Density: defined as 1 / "number of distinct values".
+* Cardinality: the number of distinct values (on a single column, or
+  on a group of columns).
 
-* Density vector: stores density information for column groups; used
-  to estimate the output of "GROUP BY" operations or to estimate
-  selectivity of equality predicates where a value is unknown (as in
-  the case of prepared queries). The density vector contains density
-  information for all prefixes of a group of columns. For example, for
-  a column group A,B,C the density vector allows us to estimate the
-  number of distinct values of A, the number of distinct pairs (A,B),
-  and the number of distinct tuples (A,B,C).
-
-* Sketch: Used in density estimation. Algorithms such as
+* Sketch: Used for cardinality estimation. Algorithms such as
   [HyperLogLog](http://algo.inria.fr/flajolet/Publications/FlFuGaMe07.pdf)
   use a hash of the value to estimate the number of distinct values.
   Sketches can be merged allowing for parallel computation. For
@@ -124,7 +116,7 @@ which is focused on the collection of basic statistics.
 
 * The desired statistics to collect are:
     - a histogram for a given column
-    - a density vector for a given set of columns
+    - a cardinality for a given set of columns
 
 * The count of distinct values for a column or group of columns can be
   computed using a sketch algorithm such as
@@ -186,8 +178,8 @@ CREATE TABLE system.table_statistics (
   column_ids []INT,
   created_at TIMESTAMP,
   rows INT,
-  density []FLOAT,
-  null_fraction FLOAT,
+  cardinality INT,
+  null_values FLOAT,
   histogram BYTES,
   PRIMARY KEY (table_id, statistic_id)
 )
@@ -203,14 +195,11 @@ corresponding to the histograms maintained for the table.
   is generated.
 * `created_at` is the time at which the statistic was generated.
 * `row_count` is the total number of rows in the table.
-* `density` is the density vector, with one value for each prefix of
-  `column_ids`. E.g. if the statistic is on columns A,B,C there are
-  three density values - one for A, one for (A,B), and one for
-  (A,B,C). Only set if the
-* `null_fraction` is the fraction of the rows that have a NULL on the
-  first column (`column_ids[0]`).
-* `histogram` for `column_ids[0]` (optional). It encodes a proto
-  defined as:
+* `cardinality` is the estimated cardinality (on all columns).
+* `null_values` is only set if there is a single column; it is the
+  number of rows that have a NULL on that column.
+* `histogram` is optional and can only be set if there is a single
+  column; it encodes a proto defined as:
 
 ```
 message HistogramData {
