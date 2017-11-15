@@ -557,25 +557,34 @@ func inspectEngines(
 ) (
 	bootstrappedEngines []engine.Engine,
 	emptyEngines []engine.Engine,
+	clusterID uuid.UUID,
 	_ cluster.ClusterVersion,
 	_ error,
 ) {
 	for _, engine := range engines {
-		_, err := storage.ReadStoreIdent(ctx, engine)
+		storeIdent, err := storage.ReadStoreIdent(ctx, engine)
+		if storeIdent.ClusterID != uuid.Nil {
+			if clusterID == uuid.Nil {
+				clusterID = storeIdent.ClusterID
+			} else if storeIdent.ClusterID != clusterID {
+				return nil, nil, uuid.Nil, cluster.ClusterVersion{},
+					errors.Errorf("conflicting engine cluster IDs: %s, %s", storeIdent.ClusterID, clusterID)
+			}
+		}
 		if _, notBootstrapped := err.(*storage.NotBootstrappedError); notBootstrapped {
 			emptyEngines = append(emptyEngines, engine)
 			continue
 		} else if err != nil {
-			return nil, nil, cluster.ClusterVersion{}, err
+			return nil, nil, uuid.Nil, cluster.ClusterVersion{}, err
 		}
 		bootstrappedEngines = append(bootstrappedEngines, engine)
 	}
 
 	cv, err := storage.SynthesizeClusterVersionFromEngines(ctx, bootstrappedEngines, minVersion, serverVersion)
 	if err != nil {
-		return nil, nil, cluster.ClusterVersion{}, err
+		return nil, nil, uuid.Nil, cluster.ClusterVersion{}, err
 	}
-	return bootstrappedEngines, emptyEngines, cv, nil
+	return bootstrappedEngines, emptyEngines, clusterID, cv, nil
 }
 
 // listenerInfo is a helper used to write files containing various listener
@@ -833,12 +842,6 @@ func (s *Server) Start(ctx context.Context) error {
 		AssetInfo: ui.AssetInfo,
 	}))
 
-	// Filter the gossip bootstrap resolvers based on the listen and
-	// advertise addresses.
-	filtered := s.cfg.FilterGossipBootstrapResolvers(ctx, unresolvedListenAddr, unresolvedAdvertAddr)
-	s.gossip.Start(unresolvedAdvertAddr, filtered)
-	log.Event(ctx, "started gossip")
-
 	s.engines, err = s.cfg.CreateEngines(ctx)
 	if err != nil {
 		return errors.Wrap(err, "failed to create engines")
@@ -864,9 +867,20 @@ func (s *Server) Start(ctx context.Context) error {
 		}
 	}
 
-	if bootstrappedEngines, _, _, err := inspectEngines(ctx, s.engines, s.cfg.Settings.Version.MinSupportedVersion, s.cfg.Settings.Version.ServerVersion); err != nil {
+	bootstrappedEngines, _, clusterID, _, err := inspectEngines(
+		ctx, s.engines, s.cfg.Settings.Version.MinSupportedVersion, s.cfg.Settings.Version.ServerVersion)
+	if err != nil {
 		return errors.Wrap(err, "inspecting engines")
-	} else if len(bootstrappedEngines) > 0 {
+	}
+	s.rpcContext.ClusterID = clusterID
+
+	// Filter the gossip bootstrap resolvers based on the listen and
+	// advertise addresses.
+	filtered := s.cfg.FilterGossipBootstrapResolvers(ctx, unresolvedListenAddr, unresolvedAdvertAddr)
+	s.gossip.Start(unresolvedAdvertAddr, filtered)
+	log.Event(ctx, "started gossip")
+
+	if len(bootstrappedEngines) > 0 {
 		// We might have to sleep a bit to protect against this node producing non-
 		// monotonic timestamps. Before restarting, its clock might have been driven
 		// by other nodes' fast clocks, but when we restarted, we lost all this
@@ -934,7 +948,8 @@ func (s *Server) Start(ctx context.Context) error {
 
 	// We ran this before, but might've bootstrapped in the meantime. This time
 	// we'll get the actual list of bootstrapped and empty engines.
-	bootstrappedEngines, emptyEngines, cv, err := inspectEngines(ctx, s.engines, s.cfg.Settings.Version.MinSupportedVersion, s.cfg.Settings.Version.ServerVersion)
+	bootstrappedEngines, emptyEngines, clusterID, cv, err := inspectEngines(
+		ctx, s.engines, s.cfg.Settings.Version.MinSupportedVersion, s.cfg.Settings.Version.ServerVersion)
 	if err != nil {
 		return errors.Wrap(err, "inspecting engines")
 	}
@@ -1036,6 +1051,14 @@ If problems persist, please see ` + base.DocsURL("cluster-setup-troubleshooting.
 		return err
 	}
 	log.Event(ctx, "started node")
+
+	// ClusterID may have been determined via gossip. Update RPC context.
+	if s.rpcContext.ClusterID == uuid.Nil {
+		s.rpcContext.ClusterID = s.node.ClusterID
+	} else if s.rpcContext.ClusterID != s.node.ClusterID {
+		return errors.Errorf("conflicting cluster IDs. rpcContext.ClusterID: %s. node.ClusterID: %s",
+			s.rpcContext.ClusterID, s.node.ClusterID)
+	}
 
 	s.refreshSettings()
 

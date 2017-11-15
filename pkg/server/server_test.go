@@ -39,12 +39,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/gogo/protobuf/jsonpb"
 	"github.com/pkg/errors"
 )
@@ -60,6 +62,10 @@ func TestSelfBootstrap(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer s.Stopper().Stop(context.TODO())
+
+	if s.RPCContext().ClusterID == uuid.Nil {
+		t.Error("cluster ID failed to be set on the RPC context")
+	}
 }
 
 // TestServerStartClock tests that a server's clock is not pushed out of thin
@@ -630,4 +636,32 @@ func TestHeartbeatCallbackForDecommissioning(t *testing.T) {
 		}
 		return nil
 	})
+}
+
+func TestClusterIDMismatch(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	engines := make([]engine.Engine, 2)
+	for i := range engines {
+		e := engine.NewInMem(roachpb.Attributes{}, 1<<20)
+		defer e.Close()
+
+		sIdent := roachpb.StoreIdent{
+			ClusterID: uuid.MakeV4(),
+			NodeID:    roachpb.NodeID(i),
+			StoreID:   roachpb.StoreID(i),
+		}
+		if err := engine.MVCCPutProto(
+			context.Background(), e, nil, keys.StoreIdentKey(), hlc.Timestamp{}, nil, &sIdent); err != nil {
+
+			t.Fatal(err)
+		}
+		engines[i] = e
+	}
+
+	_, _, _, _, err := inspectEngines(context.TODO(), engines, roachpb.Version{}, roachpb.Version{})
+	expected := "conflicting engine cluster IDs"
+	if !testutils.IsError(err, expected) {
+		t.Fatalf("expected %s error, got %v", expected, err)
+	}
 }
