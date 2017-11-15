@@ -1,4 +1,4 @@
-- Feature Name: Leaseholder Locality ("Leases follow the user")
+- Feature Name: Leaseholder Locality ("Leases follow the workload")
 - Status: completed
 - Start Date: 2017-01-25
 - Authors: Alex Robinson
@@ -41,7 +41,7 @@ receiving most of the requests. As time passes, more of the requests will start
 to originate from Europe, and later on from the Americas. If the leaseholder for
 a range is always in an Asian data center, then the latency of accessing that
 range will be much worse when most of its requests come from elsewhere. This is
-where the idea of the lease "following the user" or "following the sun" comes
+where the idea of the lease "following the workload" or "following the sun" comes
 from.
 
 Finally, it's worth noting that this goal is somewhat at odds with our desire
@@ -62,7 +62,7 @@ Given that a lease transfer mechanism already exists, the remaining difficulty
 lies in deciding when to transfer leases. We [already have
 logic](20161026_leaseholder_rebalancing.md) that decides when to transfer leases
 with the goal of ensuring each node has approximately the same number of leases.
-Anything we add to make leases follow the user will need to play nicely with
+Anything we add to make leases follow the workload will need to play nicely with
 that existing goal.
 
 ## Tracking request origins

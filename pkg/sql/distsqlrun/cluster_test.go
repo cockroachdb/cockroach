@@ -501,7 +501,7 @@ func TestLimitedBufferingDeadlock(t *testing.T) {
 
 // Test that DistSQL reads fill the BatchRequest.Header.GatewayNodeID field with
 // the ID of the gateway (as opposed to the ID of the node that created the
-// batch). Important to lease follow-the-user transfers.
+// batch). Important to lease follow-the-workload transfers.
 func TestDistSQLReadsFillGatewayID(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
