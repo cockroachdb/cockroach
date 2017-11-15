@@ -140,6 +140,25 @@ CREATE TABLE system.web_sessions (
 	INDEX("createdAt"),
 	FAMILY(id, "hashedSecret", username, "createdAt", "expiresAt", "revokedAt", "lastUsedAt", "auditInfo")
 );`
+
+	// table_statistics is used to track statistics collected about individual columns
+	// or groups of columns from every table in the database. Each row contains the
+	// cardinality of the column group and (optionally) a histogram if there is only one
+	// column in columnIDs.
+	//
+	// Design outlined in /docs/RFCS/20170908_sql_optimizer_statistics.md
+	TableStatisticsTableSchema = `
+CREATE TABLE system.table_statistics (
+	"tableID"     INT        NOT NULL,
+	"statisticID" INT        NOT NULL,
+	"columnIDs"   INT[]      NOT NULL,
+	"createdAt"   TIMESTAMP  NOT NULL DEFAULT now(),
+	"rowCount"    INT        NOT NULL,
+	cardinality   INT        NOT NULL,
+	"nullValues"  INT        NOT NULL,
+	histogram     BYTES,
+	PRIMARY KEY ("tableID", "statisticID")
+);`
 )
 
 func pk(name string) IndexDescriptor {
@@ -191,8 +210,9 @@ var SystemAllowedPrivileges = map[ID]privilege.Lists{
 	// users will be able to modify system tables' schemas at will. CREATE and
 	// DROP privileges are allowed on the above system tables for backwards
 	// compatibility reasons only!
-	keys.JobsTableID:        {privilege.ReadWriteData},
-	keys.WebSessionsTableID: {privilege.ReadWriteData},
+	keys.JobsTableID:            {privilege.ReadWriteData},
+	keys.WebSessionsTableID:     {privilege.ReadWriteData},
+	keys.TableStatisticsTableID: {privilege.ReadWriteData},
 }
 
 // SystemDesiredPrivileges returns the desired privilege list (i.e., the
@@ -210,8 +230,10 @@ var (
 	colTypeString    = ColumnType{SemanticType: ColumnType_STRING}
 	colTypeBytes     = ColumnType{SemanticType: ColumnType_BYTES}
 	colTypeTimestamp = ColumnType{SemanticType: ColumnType_TIMESTAMP}
-	singleASC        = []IndexDescriptor_Direction{IndexDescriptor_ASC}
-	singleID1        = []ColumnID{1}
+	colTypeIntArray  = ColumnType{SemanticType: ColumnType_ARRAY, ArrayContents: &colTypeInt.SemanticType,
+		ArrayDimensions: []int32{-1}}
+	singleASC = []IndexDescriptor_Direction{IndexDescriptor_ASC}
+	singleID1 = []ColumnID{1}
 )
 
 // These system config TableDescriptor literals should match the descriptor
@@ -612,6 +634,47 @@ var (
 		},
 		NextMutationID: 1,
 		FormatVersion:  3,
+	}
+
+	// TableStatistics table to hold statistics about columns and column groups.
+	TableStatisticsTable = TableDescriptor{
+		Name:     "table_statistics",
+		ID:       keys.TableStatisticsTableID,
+		ParentID: 1,
+		Version:  1,
+		Columns: []ColumnDescriptor{
+			{Name: "tableID", ID: 1, Type: colTypeInt},
+			{Name: "statisticID", ID: 2, Type: colTypeInt},
+			{Name: "columnIDs", ID: 3, Type: colTypeIntArray},
+			{Name: "createdAt", ID: 4, Type: colTypeTimestamp, DefaultExpr: &nowString},
+			{Name: "rowCount", ID: 5, Type: colTypeInt},
+			{Name: "cardinality", ID: 6, Type: colTypeInt},
+			{Name: "nullValues", ID: 7, Type: colTypeInt},
+			{Name: "histogram", ID: 8, Type: colTypeBytes, Nullable: true},
+		},
+		NextColumnID: 9,
+		Families: []ColumnFamilyDescriptor{
+			{Name: "primary", ID: 0, ColumnNames: []string{"tableID", "statisticID"}, ColumnIDs: []ColumnID{1, 2}},
+			{Name: "fam_3_columnIDs", ID: 3, ColumnNames: []string{"columnIDs"}, ColumnIDs: []ColumnID{3}, DefaultColumnID: 3},
+			{Name: "fam_4_createdAt", ID: 4, ColumnNames: []string{"createdAt"}, ColumnIDs: []ColumnID{4}, DefaultColumnID: 4},
+			{Name: "fam_5_rowCount", ID: 5, ColumnNames: []string{"rowCount"}, ColumnIDs: []ColumnID{5}, DefaultColumnID: 5},
+			{Name: "fam_6_cardinality", ID: 6, ColumnNames: []string{"cardinality"}, ColumnIDs: []ColumnID{6}, DefaultColumnID: 6},
+			{Name: "fam_7_nullValues", ID: 7, ColumnNames: []string{"nullValues"}, ColumnIDs: []ColumnID{7}, DefaultColumnID: 7},
+			{Name: "fam_8_histogram", ID: 8, ColumnNames: []string{"histogram"}, ColumnIDs: []ColumnID{8}, DefaultColumnID: 8},
+		},
+		NextFamilyID: 9,
+		PrimaryIndex: IndexDescriptor{
+			Name:             "primary",
+			ID:               1,
+			Unique:           true,
+			ColumnNames:      []string{"tableID", "statisticID"},
+			ColumnDirections: []IndexDescriptor_Direction{IndexDescriptor_ASC, IndexDescriptor_ASC},
+			ColumnIDs:        []ColumnID{1, 2},
+		},
+		NextIndexID:    2,
+		Privileges:     NewPrivilegeDescriptor(security.RootUser, SystemDesiredPrivileges(keys.TableStatisticsTableID)),
+		FormatVersion:  InterleavedFormatVersion,
+		NextMutationID: 1,
 	}
 )
 
