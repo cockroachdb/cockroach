@@ -506,15 +506,12 @@ func TestMakeSpans(t *testing.T) {
 		{`(a = 5) OR (a, b) IN ((1, 1), (3, 3))`, `a,b`,
 			`/1/1-/1/2 /3/3-/3/4 /5-/6`, `/5-/4 /3/3-/3/2 /1/1-/1/0`},
 
-		// When encoding an end constraint for a maximal datum, we use
-		// bytes.PrefixEnd() to go beyond the normal encodings of that datatype.
-		// This is the reason for the "???" suffix of the pretty-printed spans.
 		{fmt.Sprintf(`a = %d`, math.MaxInt64), `a`,
-			`/9223372036854775807-/???`,
+			`/9223372036854775807-/9223372036854775807/PrefixEnd`,
 			`/9223372036854775807-/9223372036854775806`},
 		{fmt.Sprintf(`a = %d`, math.MinInt64), `a`,
 			`/-9223372036854775808-/-9223372036854775807`,
-			`/-9223372036854775808-/???`},
+			`/-9223372036854775808-/-9223372036854775808/PrefixEnd`},
 
 		{`(a, b) >= (1, 4)`, `a,b`, `/1/4-`, `-/1/3`},
 		{`(a, b) > (1, 4)`, `a,b`, `/1/5-`, `-/1/4`},
@@ -566,7 +563,7 @@ func TestMakeSpans(t *testing.T) {
 			`/7/3/0-/7/3/1 /7/2/0-/7/2/1 /7/1/0-/7/1/1`},
 		// Test different directions for te columns inside a tuple.
 		{`(a,b,j) IN ((1,2,3), (4,5,6))`, `a-,b,j-`, `/4/5/6-/4/5/5 /1/2/3-/1/2/2`},
-		{`k = b'\xff'`, `k`, `/"\xff"-/"\xff\x00"`},
+		{`k = b'\xff'`, `k`, `/"\xff"-/"\xff"/PrefixEnd`},
 		// Test that limits on bytes work correctly: when encoding a descending limit for bytes,
 		// we need to go outside the bytes encoding.
 		// "\xaa" is encoded as [bytesDescMarker, ^0xaa, <term escape sequence>]

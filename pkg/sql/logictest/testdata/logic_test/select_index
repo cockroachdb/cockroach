@@ -619,7 +619,7 @@ EXPLAIN SELECT * FROM test2 WHERE k <= '100' ORDER BY k DESC LIMIT 20
 1  index-join  ·      ·
 2  revscan     ·      ·
 2  ·           table  test2@test2_k_key
-2  ·           spans  /#-/"100\x00"
+2  ·           spans  /#-/"100"/PrefixEnd
 2  ·           limit  20
 2  scan        ·      ·
 2  ·           table  test2@primary
@@ -726,7 +726,7 @@ ORDER BY total DESC
 2  render  ·         ·
 3  scan    ·         ·
 3  ·       table     favourites@favourites_glob_fav_idx
-3  ·       spans     /"GAME"/"web"/"MT"/"xxx"/"en_GB"/"ts"-/"GAME"/"web"/"MT"/"xxx"/"en_GB"/"ts\x00" /"GAME"/"web"/"MT"/"xxx"/"en_GB"/"ts2"-/"GAME"/"web"/"MT"/"xxx"/"en_GB"/"ts2\x00" /"GAME"/"web"/"MT"/"xxx"/"en_GB"/"ts3"-/"GAME"/"web"/"MT"/"xxx"/"en_GB"/"ts3\x00"
+3  ·       spans     /"GAME"/"web"/"MT"/"xxx"/"en_GB"/"ts"-/"GAME"/"web"/"MT"/"xxx"/"en_GB"/"ts"/PrefixEnd /"GAME"/"web"/"MT"/"xxx"/"en_GB"/"ts2"-/"GAME"/"web"/"MT"/"xxx"/"en_GB"/"ts2"/PrefixEnd /"GAME"/"web"/"MT"/"xxx"/"en_GB"/"ts3"-/"GAME"/"web"/"MT"/"xxx"/"en_GB"/"ts3"/PrefixEnd
 
 query TI rowsort
 SELECT

@@ -976,17 +976,30 @@ func PeekLength(b []byte) (int, error) {
 // PrettyPrintValue returns the string representation of all contiguous decodable
 // values in the provided byte slice, separated by a provided separator.
 func PrettyPrintValue(b []byte, sep string) string {
+	s1, allDecoded := prettyPrintValueImpl(b, sep)
+	if allDecoded {
+		return s1
+	}
+	if s2, allDecoded := prettyPrintValueImpl(UndoPrefixEnd(b), sep); allDecoded {
+		return s2 + sep + "PrefixEnd"
+	}
+	return s1
+}
+
+func prettyPrintValueImpl(b []byte, sep string) (string, bool) {
+	allDecoded := true
 	var buf bytes.Buffer
 	for len(b) > 0 {
 		bb, s, err := prettyPrintFirstValue(b)
 		if err != nil {
+			allDecoded = false
 			fmt.Fprintf(&buf, "%s???", sep)
 		} else {
 			fmt.Fprintf(&buf, "%s%s", sep, s)
 		}
 		b = bb
 	}
-	return buf.String()
+	return buf.String(), allDecoded
 }
 
 // prettyPrintFirstValue returns a string representation of the first decodable
@@ -1054,6 +1067,41 @@ func prettyPrintFirstValue(b []byte) ([]byte, string, error) {
 		// This shouldn't ever happen, but if it does, return an empty slice.
 		return nil, strconv.Quote(string(b)), nil
 	}
+}
+
+// UndoPrefixEnd is a partial inverse for roachpb.Key.PrefixEnd.
+//
+// Specifically, calling UndoPrefixEnd will reverse the effects of calling a
+// PrefixEnd on a byte sequence, except when the byte sequence represents a
+// maximal prefix (i.e., 0xff...). This is because PrefixEnd is a lossy
+// operation: PrefixEnd(0xff) returns 0xff rather than wrapping around to the
+// minimal prefix 0x00. For consistency, UndoPrefixEnd is also lossy:
+// UndoPrefixEnd(0x00) returns 0x00 rather than wrapping around to the maximal
+// prefix 0xff.
+//
+// Formally:
+//
+//     PrefixEnd(UndoPrefixEnd(p)) = p for all non-minimal prefixes p
+//     UndoPrefixEnd(PrefixEnd(p)) = p for all non-maximal prefixes p
+//
+// A minimal prefix is any prefix that consists only of one or more 0x00 bytes;
+// analogously, a maximal prefix is any prefix that consists only of one or more
+// 0xff bytes.
+//
+// UndoPrefixEnd is implemented here to avoid a circular dependency on roachpb,
+// but arguably belongs in a byte-manipulation utility package.
+func UndoPrefixEnd(b []byte) []byte {
+	out := append([]byte(nil), b...)
+	for i := len(out) - 1; i >= 0; i-- {
+		out[i] = out[i] - 1
+		if out[i] != 0xff {
+			return out
+		}
+	}
+	// At this point, out has wrapped around to the maximal possible prefix. That
+	// means we were provided a minimal prefix (i.e., all zero bytes), so return
+	// it unchanged.
+	return b
 }
 
 // NonsortingVarintMaxLen is the maximum length of an EncodeNonsortingVarint
