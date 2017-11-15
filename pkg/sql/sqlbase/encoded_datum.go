@@ -95,9 +95,19 @@ func EncDatumFromBuffer(typ *ColumnType, enc DatumEncoding, buf []byte) (EncDatu
 	}
 	switch enc {
 	case DatumEncoding_ASCENDING_KEY, DatumEncoding_DESCENDING_KEY:
-		encLen, err := encoding.PeekLength(buf)
-		if err != nil {
-			return EncDatum{}, nil, err
+		var encLen int
+		var err error
+		if typ.SemanticType == ColumnType_JSON {
+			encLen, err = encoding.GetJSONInvertedIndexKeyLength(buf)
+			if err != nil {
+				return EncDatum{}, nil, err
+			}
+		} else {
+			var err error
+			encLen, err = encoding.PeekLength(buf)
+			if err != nil {
+				return EncDatum{}, nil, err
+			}
 		}
 		ed := EncDatumFromEncoded(typ, enc, buf[:encLen])
 		return ed, buf[encLen:], nil

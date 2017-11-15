@@ -103,7 +103,7 @@ func (rh *rowHelper) encodeSecondaryIndexes(
 	if len(rh.indexEntries) != len(rh.Indexes) {
 		rh.indexEntries = make([]IndexEntry, len(rh.Indexes))
 	}
-	err = EncodeSecondaryIndexes(
+	rh.indexEntries, err = EncodeSecondaryIndexes(
 		rh.TableDesc, rh.Indexes, colIDtoRowIndex, values, rh.indexEntries)
 	if err != nil {
 		return nil, err
@@ -980,9 +980,12 @@ func (rd *RowDeleter) DeleteIndexRow(
 		return err
 	}
 	if traceKV {
-		log.VEventf(ctx, 2, "Del %s", keys.PrettyPrint(IndexKeyValDirs(idx), secondaryIndexEntry.Key))
+		log.VEventf(ctx, 2, "Del %s", secondaryIndexEntry[0].Key)
 	}
-	b.Del(secondaryIndexEntry.Key)
+
+	for _, entry := range secondaryIndexEntry {
+		b.Del(entry.Key)
+	}
 	return nil
 }
 

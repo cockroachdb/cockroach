@@ -244,7 +244,6 @@ func (n *indexJoinNode) Next(params runParams) (bool, error) {
 				}
 				break
 			}
-
 			vals := n.index.Values()
 			primaryIndexKey, _, err := sqlbase.EncodeIndexKey(
 				n.table.desc, n.table.index, n.run.colIDtoRowIndex, vals, n.run.primaryKeyPrefix)

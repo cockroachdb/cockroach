@@ -956,6 +956,12 @@ func PeekType(b []byte) Type {
 			return BytesDesc
 		case m == timeMarker:
 			return Time
+		case m == byte(Array):
+			return Array
+		case m == byte(True):
+			return True
+		case m == byte(False):
+			return False
 		case m == durationBigNegMarker, m == durationMarker, m == durationBigPosMarker:
 			return Duration
 		case m >= IntMin && m <= IntMax:
@@ -1006,7 +1012,7 @@ func PeekLength(b []byte) (int, error) {
 	m := b[0]
 	switch m {
 	case encodedNull, encodedNullDesc, encodedNotNull, encodedNotNullDesc,
-		floatNaN, floatNaNDesc, floatZero, decimalZero:
+		floatNaN, floatNaNDesc, floatZero, decimalZero, byte(True), byte(False):
 		// interleavedSentinel also falls into this path. Since it
 		// contains the same byte value as encodedNotNullDesc, it
 		// cannot be included explicitly in the case statement.
@@ -1121,6 +1127,12 @@ func prettyPrintFirstValue(dir Direction, b []byte) ([]byte, string, error) {
 	case Null:
 		b, _ = DecodeIfNull(b)
 		return b, "NULL", nil
+	case True:
+		return b[1:], "True", nil
+	case False:
+		return b[1:], "False", nil
+	case Array:
+		return b[1:], "Arr", nil
 	case NotNull:
 		// The tag can be either encodedNotNull or encodedNotNullDesc. The
 		// latter can be an interleaved sentinel.
@@ -1973,4 +1985,91 @@ func DecomposeKeyTokens(b []byte) (tokens [][]byte, containsNull bool, err error
 	}
 
 	return out, containsNull, nil
+}
+
+func GetJSONInvertedIndexKeyLength(buf []byte) (int, error) {
+	typ := PeekType(buf)
+
+	if typ == Array {
+		offset, err := getOffsetJSONArray(buf[1:])
+		if err != nil {
+			return 0, err
+		}
+		return 1 + offset, nil
+	}
+
+	if typ == NotNull {
+		offset, err := getOffsetJSONObject(buf[1:])
+		if err != nil {
+			return 0, err
+		}
+		return 1 + offset, nil
+	}
+
+	return 0, nil
+}
+
+func getOffsetJSONObject(buf []byte) (int, error) {
+	typ := PeekType(buf)
+	offset := 0
+	if typ != Bytes {
+		return 0, errors.New("Unexpected JSON key encoding")
+	}
+
+	len, err := PeekLength(buf)
+	if err != nil {
+		return 0, err
+	}
+
+	offset += len
+
+	value := buf[len:]
+	typ = PeekType(value)
+
+	switch typ {
+	case Array:
+		ret, err := getOffsetJSONArray(value[1:])
+		if err != nil {
+			return 0, err
+		}
+		return ret + 1 + offset, nil
+	case NotNull:
+		ret, err := getOffsetJSONObject(value[1:])
+		if err != nil {
+			return 0, err
+		}
+		return ret + 1 + offset, nil
+	default:
+		len, err = PeekLength(value)
+		if err != nil {
+			return 0, err
+		}
+		return offset + len, nil
+	}
+}
+
+func getOffsetJSONArray(buf []byte) (int, error) {
+	typ := PeekType(buf)
+	offset := 0
+
+	switch typ {
+	case Array:
+		ret, err := getOffsetJSONArray(buf[1:])
+		if err != nil {
+			return 0, err
+		}
+		return ret + 1 + offset, nil
+	case NotNull:
+		ret, err := getOffsetJSONObject(buf[1:])
+		if err != nil {
+			return 0, err
+		}
+		return ret + 1 + offset, nil
+	default:
+		len, err := PeekLength(buf)
+		if err != nil {
+			return 0, err
+		}
+		return offset + len, nil
+	}
 }
