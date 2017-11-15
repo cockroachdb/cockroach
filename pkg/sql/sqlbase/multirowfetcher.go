@@ -992,6 +992,10 @@ func (mrf *MultiRowFetcher) checkPrimaryIndexDatumEncodings(ctx context.Context)
 // secondary index datums.
 func (mrf *MultiRowFetcher) checkSecondaryIndexDatumEncodings(ctx context.Context) error {
 	table := mrf.rowReadyTable
+	// TODO(joey): Add round-trip encoding checks for inverted indexes.
+	if table.index.Type == IndexDescriptor_INVERTED {
+		return nil
+	}
 	colToEncDatum := make(map[ColumnID]EncDatum, len(table.row))
 	values := make(tree.Datums, len(table.row))
 	for i, col := range table.cols {
@@ -1006,14 +1010,14 @@ func (mrf *MultiRowFetcher) checkSecondaryIndexDatumEncodings(ctx context.Contex
 
 	// We ignore the first 4 bytes of the values. These bytes are a
 	// checksum which are not set by EncodeSecondaryIndex.
-	if !indexEntry.Key.Equal(mrf.rowReadyTable.lastKV.Key) {
+	if !indexEntry[0].Key.Equal(mrf.rowReadyTable.lastKV.Key) {
 		return scrub.WrapError(scrub.IndexKeyDecodingError, errors.Errorf(
 			"secondary index key failed to round-trip encode. expected %#v, got: %#v",
-			mrf.rowReadyTable.lastKV.Key, indexEntry.Key))
-	} else if !bytes.Equal(indexEntry.Value.RawBytes[4:], table.lastKV.Value.RawBytes[4:]) {
+			mrf.rowReadyTable.lastKV.Key, indexEntry[0].Key))
+	} else if !bytes.Equal(indexEntry[0].Value.RawBytes[4:], table.lastKV.Value.RawBytes[4:]) {
 		return scrub.WrapError(scrub.IndexValueDecodingError, errors.Errorf(
 			"secondary index value failed to round-trip encode. expected %#v, got: %#v",
-			mrf.rowReadyTable.lastKV.Value.RawBytes[4:], indexEntry.Value.RawBytes[4:]))
+			mrf.rowReadyTable.lastKV.Value.RawBytes[4:], indexEntry[0].Value.RawBytes[4:]))
 	}
 	return nil
 }
