@@ -964,6 +964,33 @@ CockroachDB supports the following flags:
 		},
 	},
 
+	"nextval": {
+		tree.Builtin{
+			Types:      tree.ArgTypes{{"sequence_name", types.String}},
+			ReturnType: tree.FixedReturnType(types.Int),
+			Category:   categoryIDGeneration,
+			Impure:     true,
+			Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				name := tree.MustBeDString(args[0])
+				parsedNameWithIndex, err := evalCtx.Planner.ParseTableNameWithIndex(string(name))
+				if err != nil {
+					return nil, err
+				}
+				parsedName := parsedNameWithIndex.Table
+				qualifiedName, err := evalCtx.Planner.QualifyWithDatabase(evalCtx.Ctx(), &parsedName)
+				if err != nil {
+					return nil, err
+				}
+				res, err := evalCtx.Planner.IncrementSequence(evalCtx.Ctx(), qualifiedName)
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDInt(tree.DInt(res)), nil
+			},
+			Info: "Advances the given sequence and returns its new value.",
+		},
+	},
+
 	"experimental_uuid_v4": {uuidV4Impl},
 	"uuid_v4":              {uuidV4Impl},
 
