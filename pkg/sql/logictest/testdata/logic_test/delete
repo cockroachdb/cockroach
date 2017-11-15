@@ -174,6 +174,34 @@ CREATE TABLE indexed (id int primary key, value int, other int, index (value))
 statement ok
 DELETE FROM indexed WHERE value = 5
 
+# Check DELETE with ORDER BY clause (MySQL extension)
+
+statement ok
+INSERT INTO unindexed VALUES (1, 9), (8, 2), (3, 7), (6, 4)
+
+query ITTT
+EXPLAIN DELETE FROM unindexed WHERE v = 7 ORDER BY v
+----
+0  delete  ·      ·
+0  ·       from   unindexed
+1  nosort  ·      ·
+1  ·       order  +v
+2  scan    ·      ·
+2  ·       table  unindexed@primary
+2  ·       spans  ALL
+
+query II
+DELETE FROM unindexed WHERE k > 1 AND v < 7 ORDER BY v DESC RETURNING v,k
+----
+4  6
+2  8
+
+query II
+DELETE FROM unindexed ORDER BY v RETURNING k,v
+----
+3  7
+1  9
+
 # Check DELETE with LIMIT clause (MySQL extension)
 
 statement ok
