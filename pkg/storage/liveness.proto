@@ -37,3 +37,19 @@ message Liveness {
   bool draining = 4;
   bool decommissioning = 5;
 }
+
+// NodeLivenessStatus describes the status of a node from the perspective of the
+// liveness system.
+enum NodeLivenessStatus {
+  UNKNOWN = 0;
+  // DEAD indicates the node is considered dead.
+  DEAD = 1;
+  // UNAVAILABLE indicates that the node is unavailable - it has not updated its
+  // liveness record recently enough to be considered live, but has not been
+  // unavailable long enough to be considered dead.
+  UNAVAILABLE = 2;
+  // LIVE indicates a live node.
+  LIVE = 3;
+  // DECOMMISSIONING indicates a node that is in the decommissioning process.
+  DECOMMISSIONING = 5;
+}

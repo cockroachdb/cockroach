@@ -195,7 +195,7 @@ func createTestAllocator(
 	deterministic bool,
 ) (*stop.Stopper, *gossip.Gossip, *StorePool, Allocator, *hlc.ManualClock) {
 	stopper, g, manual, storePool, _ := createTestStorePool(
-		TestTimeUntilStoreDeadOff, deterministic, nodeStatusLive)
+		TestTimeUntilStoreDeadOff, deterministic, NodeLivenessStatus_LIVE)
 	a := MakeAllocator(storePool, func(string) (time.Duration, bool) {
 		return 0, true
 	})
@@ -213,10 +213,10 @@ func mockStorePool(
 	storePool.detailsMu.Lock()
 	defer storePool.detailsMu.Unlock()
 
-	liveNodeSet := map[roachpb.NodeID]nodeStatus{}
+	liveNodeSet := map[roachpb.NodeID]NodeLivenessStatus{}
 	storePool.detailsMu.storeDetails = map[roachpb.StoreID]*storeDetail{}
 	for _, storeID := range aliveStoreIDs {
-		liveNodeSet[roachpb.NodeID(storeID)] = nodeStatusLive
+		liveNodeSet[roachpb.NodeID(storeID)] = NodeLivenessStatus_LIVE
 		detail := storePool.getStoreDetailLocked(storeID)
 		detail.desc = &roachpb.StoreDescriptor{
 			StoreID: storeID,
@@ -224,7 +224,7 @@ func mockStorePool(
 		}
 	}
 	for _, storeID := range deadStoreIDs {
-		liveNodeSet[roachpb.NodeID(storeID)] = nodeStatusDead
+		liveNodeSet[roachpb.NodeID(storeID)] = NodeLivenessStatus_DEAD
 		detail := storePool.getStoreDetailLocked(storeID)
 		detail.desc = &roachpb.StoreDescriptor{
 			StoreID: storeID,
@@ -232,7 +232,7 @@ func mockStorePool(
 		}
 	}
 	for _, storeID := range decommissioningStoreIDs {
-		liveNodeSet[roachpb.NodeID(storeID)] = nodeStatusDecommissioning
+		liveNodeSet[roachpb.NodeID(storeID)] = NodeLivenessStatus_DECOMMISSIONING
 		detail := storePool.getStoreDetailLocked(storeID)
 		detail.desc = &roachpb.StoreDescriptor{
 			StoreID: storeID,
@@ -250,11 +250,11 @@ func mockStorePool(
 
 	// Set the node liveness function using the set we constructed.
 	storePool.nodeLivenessFn =
-		func(nodeID roachpb.NodeID, now time.Time, threshold time.Duration) nodeStatus {
+		func(nodeID roachpb.NodeID, now time.Time, threshold time.Duration) NodeLivenessStatus {
 			if status, ok := liveNodeSet[nodeID]; ok {
 				return status
 			}
-			return nodeStatusUnknown
+			return NodeLivenessStatus_UNAVAILABLE
 		}
 }
 
@@ -1298,7 +1298,7 @@ func TestAllocatorTransferLeaseTargetLoadBased(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	stopper, g, _, storePool, _ := createTestStorePool(
-		TestTimeUntilStoreDeadOff, true /* deterministic */, nodeStatusLive)
+		TestTimeUntilStoreDeadOff, true /* deterministic */, NodeLivenessStatus_LIVE)
 	defer stopper.Stop(context.Background())
 
 	// 3 stores where the lease count for each store is equal to 10x the store ID.
@@ -2869,7 +2869,7 @@ func Example_rebalancing() {
 		st,
 		g,
 		clock,
-		newMockNodeLiveness(nodeStatusLive).nodeLivenessFunc,
+		newMockNodeLiveness(NodeLivenessStatus_LIVE).nodeLivenessFunc,
 		/* deterministic */ true,
 	)
 	alloc := MakeAllocator(sp, func(string) (time.Duration, bool) {
