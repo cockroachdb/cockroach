@@ -212,12 +212,16 @@ func TestIndexKey(t *testing.T) {
 
 		secondaryIndexEntry, err := EncodeSecondaryIndex(
 			&tableDesc, &tableDesc.Indexes[0], colMap, testValues)
+
+		if len(secondaryIndexEntry) != 1 {
+			t.Fatalf("expected 1 index entry, got %d. got %#v", len(secondaryIndexEntry), secondaryIndexEntry)
+		}
 		if err != nil {
 			t.Fatal(err)
 		}
 		secondaryIndexKV := client.KeyValue{
-			Key:   secondaryIndexEntry.Key,
-			Value: &secondaryIndexEntry.Value,
+			Key:   secondaryIndexEntry[0].Key,
+			Value: &secondaryIndexEntry[0].Value,
 		}
 
 		checkEntry := func(index *IndexDescriptor, entry client.KeyValue) {

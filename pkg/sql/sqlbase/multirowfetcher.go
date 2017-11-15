@@ -1004,16 +1004,20 @@ func (mrf *MultiRowFetcher) checkSecondaryIndexDatumEncodings(ctx context.Contex
 		return err
 	}
 
+	if len(indexEntry) > 1 {
+		return nil
+	}
+
 	// We ignore the first 4 bytes of the values. These bytes are a
 	// checksum which are not set by EncodeSecondaryIndex.
-	if !indexEntry.Key.Equal(mrf.rowReadyTable.lastKV.Key) {
+	if !indexEntry[0].Key.Equal(mrf.rowReadyTable.lastKV.Key) {
 		return scrub.WrapError(scrub.IndexKeyDecodingError, errors.Errorf(
 			"secondary index key failed to round-trip encode. expected %#v, got: %#v",
-			mrf.rowReadyTable.lastKV.Key, indexEntry.Key))
-	} else if !bytes.Equal(indexEntry.Value.RawBytes[4:], table.lastKV.Value.RawBytes[4:]) {
+			mrf.rowReadyTable.lastKV.Key, indexEntry[0].Key))
+	} else if !bytes.Equal(indexEntry[0].Value.RawBytes[4:], table.lastKV.Value.RawBytes[4:]) {
 		return scrub.WrapError(scrub.IndexValueDecodingError, errors.Errorf(
 			"secondary index value failed to round-trip encode. expected %#v, got: %#v",
-			mrf.rowReadyTable.lastKV.Value.RawBytes[4:], indexEntry.Value.RawBytes[4:]))
+			mrf.rowReadyTable.lastKV.Value.RawBytes[4:], indexEntry[0].Value.RawBytes[4:]))
 	}
 	return nil
 }
