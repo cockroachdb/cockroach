@@ -78,8 +78,8 @@ type JSON interface {
 	// RemoveIndex implements the `-` operator for ints.
 	RemoveIndex(idx int) (JSON, error)
 
-	// AsText returns the JSON document as a string, with quotes around strings removed.
-	AsText() string
+	// AsText returns the JSON document as a string, with quotes around strings removed, and null as nil.
+	AsText() *string
 
 	// Exists implements the `?` operator.
 	Exists(string) bool
@@ -631,13 +631,31 @@ func (jsonFalse) RemoveIndex(int) (JSON, error)  { return nil, errCannotDeleteFr
 func (jsonString) RemoveIndex(int) (JSON, error) { return nil, errCannotDeleteFromScalar }
 func (jsonNumber) RemoveIndex(int) (JSON, error) { return nil, errCannotDeleteFromScalar }
 
-func (j jsonString) AsText() string { return string(j) }
-func (j jsonNull) AsText() string   { return j.String() }
-func (j jsonTrue) AsText() string   { return j.String() }
-func (j jsonFalse) AsText() string  { return j.String() }
-func (j jsonNumber) AsText() string { return j.String() }
-func (j jsonArray) AsText() string  { return j.String() }
-func (j jsonObject) AsText() string { return j.String() }
+func (j jsonString) AsText() *string {
+	s := string(j)
+	return &s
+}
+func (j jsonNull) AsText() *string { return nil }
+func (j jsonTrue) AsText() *string {
+	s := j.String()
+	return &s
+}
+func (j jsonFalse) AsText() *string {
+	s := j.String()
+	return &s
+}
+func (j jsonNumber) AsText() *string {
+	s := j.String()
+	return &s
+}
+func (j jsonArray) AsText() *string {
+	s := j.String()
+	return &s
+}
+func (j jsonObject) AsText() *string {
+	s := j.String()
+	return &s
+}
 
 func (jsonNull) Exists(string) bool   { return false }
 func (jsonTrue) Exists(string) bool   { return false }
