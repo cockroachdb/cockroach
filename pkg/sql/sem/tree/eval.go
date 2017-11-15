@@ -1895,6 +1895,26 @@ var CmpOps = map[ComparisonOperator]cmpOpOverload{
 			},
 		},
 	},
+
+	Contains: {
+		CmpOp{
+			LeftType:  types.JSON,
+			RightType: types.JSON,
+			fn: func(ctx *EvalContext, left Datum, right Datum) (Datum, error) {
+				return MakeDBool(DBool(json.Contains(left.(*DJSON).JSON, right.(*DJSON).JSON))), nil
+			},
+		},
+	},
+
+	ContainedBy: {
+		CmpOp{
+			LeftType:  types.JSON,
+			RightType: types.JSON,
+			fn: func(ctx *EvalContext, left Datum, right Datum) (Datum, error) {
+				return MakeDBool(DBool(json.Contains(right.(*DJSON).JSON, left.(*DJSON).JSON))), nil
+			},
+		},
+	},
 }
 
 func boolFromCmp(cmp int, op ComparisonOperator) *DBool {
