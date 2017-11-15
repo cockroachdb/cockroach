@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/transform"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
@@ -1213,6 +1214,8 @@ func DecodeTableKey(
 			rkey, r, err = encoding.DecodeUnsafeStringDescending(key, nil)
 		}
 		return a.NewDName(tree.DString(r)), rkey, err
+	case types.JSON:
+		return tree.DNull, []byte{}, nil
 	case types.Bytes:
 		var r []byte
 		if dir == encoding.Ascending {
@@ -1527,19 +1530,63 @@ func (a byID) Len() int           { return len(a) }
 func (a byID) Swap(i, j int)      { a[i], a[j] = a[j], a[i] }
 func (a byID) Less(i, j int) bool { return a[i].id < a[j].id }
 
+// EncodeInvertedIndexKeys creates a list of inverted index keys
+// by concatenating keyPrefix with the encodings of the column in the index.
+//
+// Returns the key and whether any of the encoded values were NULLs.
+func EncodeInvertedIndexKeys(tableDesc *TableDescriptor, index *IndexDescriptor, colMap map[ColumnID]int,
+	values []tree.Datum, keyPrefix []byte) (key [][]byte, err error) {
+	if len(index.ColumnIDs) > 1 {
+		return nil, pgerror.NewError(pgerror.CodeInternalError,
+			"trying to apply inverted index to more than one column")
+	}
+
+	var val tree.Datum
+	if i, ok := colMap[index.ColumnIDs[0]]; ok {
+		val = values[i]
+	} else {
+		val = tree.DNull
+	}
+
+	return EncodeInvertedIndexTableKeys(val, keyPrefix)
+}
+
+// EncodeInvertedIndexTableKeys encodes the paths in a JSON `val` and concatenates it with `inKey`and returns
+// a list of buffers per path. The encoded values is guaranteed to be lexicographically sortable, but not
+// guaranteed to be round-trippable during decoding.
+func EncodeInvertedIndexTableKeys(val tree.Datum, inKey []byte) (key [][]byte, err error) {
+	switch t := tree.UnwrapDatum(nil, val).(type) {
+	case *tree.DJSON:
+		return (t.JSON).EncodeInvertedIndexKeys(inKey)
+	}
+	return nil, pgerror.NewError(pgerror.CodeInternalError, "trying to apply inverted index to non JSON type")
+}
+
 // EncodeSecondaryIndex encodes key/values for a secondary index. colMap maps
-// ColumnIDs to indices in `values`.
+// ColumnIDs to indices in `values`. This returns a slice of IndexEntry. Forward
+// indexes will return one value, while inverted indicies can return multiple values.
 func EncodeSecondaryIndex(
 	tableDesc *TableDescriptor,
 	secondaryIndex *IndexDescriptor,
 	colMap map[ColumnID]int,
 	values []tree.Datum,
-) (IndexEntry, error) {
+) ([]IndexEntry, error) {
 	secondaryIndexKeyPrefix := MakeIndexKeyPrefix(tableDesc, secondaryIndex.ID)
-	secondaryIndexKey, containsNull, err := EncodeIndexKey(
-		tableDesc, secondaryIndex, colMap, values, secondaryIndexKeyPrefix)
+
+	var containsNull = false
+	var secondaryKeys [][]byte
+	var err error
+	if secondaryIndex.Type == IndexDescriptor_INVERTED {
+		secondaryKeys, err = EncodeInvertedIndexKeys(tableDesc, secondaryIndex, colMap, values, secondaryIndexKeyPrefix)
+	} else {
+		var secondaryIndexKey []byte
+		secondaryIndexKey, containsNull, err = EncodeIndexKey(
+			tableDesc, secondaryIndex, colMap, values, secondaryIndexKeyPrefix)
+
+		secondaryKeys = [][]byte{secondaryIndexKey}
+	}
 	if err != nil {
-		return IndexEntry{}, err
+		return []IndexEntry{}, err
 	}
 
 	// Add the extra columns - they are encoded in ascending order which is done
@@ -1547,64 +1594,68 @@ func EncodeSecondaryIndex(
 	extraKey, _, err := EncodeColumns(secondaryIndex.ExtraColumnIDs, nil,
 		colMap, values, nil)
 	if err != nil {
-		return IndexEntry{}, err
+		return []IndexEntry{}, err
 	}
 
-	entry := IndexEntry{Key: secondaryIndexKey}
+	var entries = make([]IndexEntry, len(secondaryKeys))
+	for i, key := range secondaryKeys {
+		entry := IndexEntry{Key: key}
 
-	if !secondaryIndex.Unique || containsNull {
-		// If the index is not unique or it contains a NULL value, append
-		// extraKey to the key in order to make it unique.
-		entry.Key = append(entry.Key, extraKey...)
-	}
-
-	// Index keys are considered "sentinel" keys in that they do not have a
-	// column ID suffix.
-	entry.Key = keys.MakeFamilyKey(entry.Key, 0)
-
-	var entryValue []byte
-	if secondaryIndex.Unique {
-		// Note that a unique secondary index that contains a NULL column value
-		// will have extraKey appended to the key and stored in the value. We
-		// require extraKey to be appended to the key in order to make the key
-		// unique. We could potentially get rid of the duplication here but at
-		// the expense of complicating scanNode when dealing with unique
-		// secondary indexes.
-		entryValue = extraKey
-	} else {
-		// The zero value for an index-key is a 0-length bytes value.
-		entryValue = []byte{}
-	}
-
-	var cols []valueEncodedColumn
-	for _, id := range secondaryIndex.StoreColumnIDs {
-		cols = append(cols, valueEncodedColumn{id: id, isComposite: false})
-	}
-	for _, id := range secondaryIndex.CompositeColumnIDs {
-		cols = append(cols, valueEncodedColumn{id: id, isComposite: true})
-	}
-	sort.Sort(byID(cols))
-
-	var lastColID ColumnID
-	// Composite columns have their contents at the end of the value.
-	for _, col := range cols {
-		val := findColumnValue(col.id, colMap, values)
-		if val == tree.DNull || (col.isComposite && !val.(tree.CompositeDatum).IsComposite()) {
-			continue
+		if !secondaryIndex.Unique || containsNull {
+			// If the index is not unique or it contains a NULL value, append
+			// extraKey to the key in order to make it unique.
+			entry.Key = append(entry.Key, extraKey...)
 		}
-		if lastColID > col.id {
-			panic(fmt.Errorf("cannot write column id %d after %d", col.id, lastColID))
-		}
-		colIDDiff := col.id - lastColID
-		lastColID = col.id
-		entryValue, err = EncodeTableValue(entryValue, colIDDiff, val, nil)
-		if err != nil {
-			return IndexEntry{}, err
-		}
-	}
-	entry.Value.SetBytes(entryValue)
 
-	return entry, nil
+		// Index keys are considered "sentinel" keys in that they do not have a
+		// column ID suffix.
+		entry.Key = keys.MakeFamilyKey(entry.Key, 0)
+
+		var entryValue []byte
+		if secondaryIndex.Unique {
+			// Note that a unique secondary index that contains a NULL column value
+			// will have extraKey appended to the key and stored in the value. We
+			// require extraKey to be appended to the key in order to make the key
+			// unique. We could potentially get rid of the duplication here but at
+			// the expense of complicating scanNode when dealing with unique
+			// secondary indexes.
+			entryValue = extraKey
+		} else {
+			// The zero value for an index-key is a 0-length bytes value.
+			entryValue = []byte{}
+		}
+
+		var cols []valueEncodedColumn
+		for _, id := range secondaryIndex.StoreColumnIDs {
+			cols = append(cols, valueEncodedColumn{id: id, isComposite: false})
+		}
+		for _, id := range secondaryIndex.CompositeColumnIDs {
+			cols = append(cols, valueEncodedColumn{id: id, isComposite: true})
+		}
+		sort.Sort(byID(cols))
+
+		var lastColID ColumnID
+		// Composite columns have their contents at the end of the value.
+		for _, col := range cols {
+			val := findColumnValue(col.id, colMap, values)
+			if val == tree.DNull || (col.isComposite && !val.(tree.CompositeDatum).IsComposite()) {
+				continue
+			}
+			if lastColID > col.id {
+				panic(fmt.Errorf("cannot write column id %d after %d", col.id, lastColID))
+			}
+			colIDDiff := col.id - lastColID
+			lastColID = col.id
+			entryValue, err = EncodeTableValue(entryValue, colIDDiff, val, nil)
+			if err != nil {
+				return []IndexEntry{}, err
+			}
+		}
+		entry.Value.SetBytes(entryValue)
+		entries[i] = entry
+	}
+
+	return entries, nil
 }
 
 // EncodeSecondaryIndexes encodes key/values for the secondary indexes. colMap
@@ -1617,15 +1668,20 @@ func EncodeSecondaryIndexes(
 	colMap map[ColumnID]int,
 	values []tree.Datum,
 	secondaryIndexEntries []IndexEntry,
-) error {
+) ([]IndexEntry, error) {
 	for i := range indexes {
-		var err error
-		secondaryIndexEntries[i], err = EncodeSecondaryIndex(tableDesc, &indexes[i], colMap, values)
+		entries, err := EncodeSecondaryIndex(tableDesc, &indexes[i], colMap, values)
 		if err != nil {
-			return err
+			return secondaryIndexEntries, err
+		}
+		if len(entries) > 1 {
+			secondaryIndexEntries = append(secondaryIndexEntries, entries[1:]...)
+		}
+		if len(entries) > 0 {
+			secondaryIndexEntries[i] = entries[0]
 		}
 	}
-	return nil
+	return secondaryIndexEntries, nil
 }
 
 // CheckColumnType verifies that a given value is compatible
@@ -2562,6 +2618,10 @@ func AdjustStartKeyForInterleave(index *IndexDescriptor, start roachpb.Key) (roa
 func AdjustEndKeyForInterleave(
 	table *TableDescriptor, index *IndexDescriptor, end roachpb.Key, inclusive bool,
 ) (roachpb.Key, error) {
+	if index.Type == IndexDescriptor_INVERTED {
+		return end.PrefixEnd(), nil
+	}
+
 	// To illustrate, suppose we have the interleaved hierarchy
 	//    parent
 	//	child
