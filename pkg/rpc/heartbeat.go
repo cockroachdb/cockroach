@@ -18,11 +18,12 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/security"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
 var _ security.RequestWithUser = &PingRequest{}
@@ -47,11 +48,7 @@ func (r RemoteOffset) String() string {
 // clock to return the server time every heartbeat. It also keeps track of
 // remote clocks sent to it by storing them in the remoteClockMonitor.
 type HeartbeatService struct {
-	// Provides the nanosecond unix epoch timestamp of the processor.
-	clock *hlc.Clock
-	// A pointer to the RemoteClockMonitor configured in the RPC Context,
-	// shared by rpc clients, to keep track of remote clock measurements.
-	remoteClockMonitor *RemoteClockMonitor
+	rpcContext *Context
 }
 
 // Ping echos the contents of the request to the response, and returns the
@@ -62,7 +59,7 @@ func (hs *HeartbeatService) Ping(ctx context.Context, args *PingRequest) (*PingR
 	// Enforce that clock max offsets are identical between nodes.
 	// Commit suicide in the event that this is ever untrue.
 	// This check is ignored if either offset is set to 0 (for unittests).
-	mo, amo := hs.clock.MaxOffset(), time.Duration(args.MaxOffsetNanos)
+	mo, amo := hs.rpcContext.LocalClock.MaxOffset(), time.Duration(args.MaxOffsetNanos)
 	if mo != 0 && amo != 0 &&
 		mo != timeutil.ClocklessMaxOffset && amo != timeutil.ClocklessMaxOffset &&
 		mo != amo {
@@ -70,12 +67,18 @@ func (hs *HeartbeatService) Ping(ctx context.Context, args *PingRequest) (*PingR
 		panic(fmt.Sprintf("locally configured maximum clock offset (%s) "+
 			"does not match that of node %s (%s)", mo, args.Addr, amo))
 	}
+	if args.ClusterID != uuid.Nil && hs.rpcContext.ClusterID != uuid.Nil &&
+		args.ClusterID != hs.rpcContext.ClusterID {
+
+		return nil, errors.Errorf("client cluster ID %s doesn't match server cluster ID %s",
+			args.ClusterID, hs.rpcContext.ClusterID)
+	}
 	serverOffset := args.Offset
 	// The server offset should be the opposite of the client offset.
 	serverOffset.Offset = -serverOffset.Offset
-	hs.remoteClockMonitor.UpdateOffset(ctx, args.Addr, serverOffset, 0 /* roundTripLatency */)
+	hs.rpcContext.RemoteClocks.UpdateOffset(ctx, args.Addr, serverOffset, 0 /* roundTripLatency */)
 	return &PingResponse{
 		Pong:       args.Ping,
-		ServerTime: hs.clock.PhysicalNow(),
+		ServerTime: hs.rpcContext.LocalClock.PhysicalNow(),
 	}, nil
 }

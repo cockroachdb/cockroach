@@ -931,10 +931,12 @@ func getClientGRPCConn() (*grpc.ClientConn, *hlc.Clock, *stop.Stopper, error) {
 	)
 	addr, err := addrWithDefaultHost(serverCfg.AdvertiseAddr)
 	if err != nil {
+		stopper.Stop(stopperContext(stopper))
 		return nil, nil, nil, err
 	}
 	conn, err := rpcContext.GRPCDial(addr)
 	if err != nil {
+		stopper.Stop(stopperContext(stopper))
 		return nil, nil, nil, err
 	}
 	return conn, clock, stopper, nil
@@ -943,7 +945,7 @@ func getClientGRPCConn() (*grpc.ClientConn, *hlc.Clock, *stop.Stopper, error) {
 func getAdminClient() (serverpb.AdminClient, *stop.Stopper, error) {
 	conn, _, stopper, err := getClientGRPCConn()
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, errors.Wrap(err, "Failed to connect to the node")
 	}
 	return serverpb.NewAdminClient(conn), stopper, nil
 }
