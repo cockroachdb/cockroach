@@ -138,22 +138,22 @@ func (bt *benchmarkTest) Start(ctx context.Context) {
 		bt.b.Fatal(err)
 	}
 	defer sqlDBRaw.Close()
-	sqlDB := sqlutils.MakeSQLRunner(bt.b, sqlDBRaw)
-	sqlDB.Exec(`SET CLUSTER SETTING cluster.organization = "Cockroach Labs - Production Testing"`)
-	sqlDB.Exec(fmt.Sprintf(`SET CLUSTER SETTING enterprise.license = "%s"`, licenseKey))
-	sqlDB.Exec(`SET CLUSTER SETTING trace.debug.enable = 'true'`)
-	sqlDB.Exec(`SET CLUSTER SETTING server.remote_debugging.mode = 'any'`)
+	sqlDB := sqlutils.MakeSQLRunner(sqlDBRaw)
+	sqlDB.Exec(bt.b, `SET CLUSTER SETTING cluster.organization = "Cockroach Labs - Production Testing"`)
+	sqlDB.Exec(bt.b, fmt.Sprintf(`SET CLUSTER SETTING enterprise.license = "%s"`, licenseKey))
+	sqlDB.Exec(bt.b, `SET CLUSTER SETTING trace.debug.enable = 'true'`)
+	sqlDB.Exec(bt.b, `SET CLUSTER SETTING server.remote_debugging.mode = 'any'`)
 	// On Azure, if we don't limit our disk throughput, we'll quickly cause node
 	// liveness failures. This limit was determined experimentally on
 	// Standard_D3_v2 instances.
-	sqlDB.Exec(`SET CLUSTER SETTING kv.bulk_io_write.max_rate = '30MB'`)
+	sqlDB.Exec(bt.b, `SET CLUSTER SETTING kv.bulk_io_write.max_rate = '30MB'`)
 	// Stats-based replica and lease rebalancing interacts badly with restore's
 	// splits and scatters.
 	//
 	// TODO(benesch): Remove these settings when #17671 is fixed, or document the
 	// necessity of these settings as 1.1 known limitation.
-	sqlDB.Exec(`SET CLUSTER SETTING kv.allocator.stat_based_rebalancing.enabled = false`)
-	sqlDB.Exec(`SET CLUSTER SETTING kv.allocator.load_based_lease_rebalancing.enabled = false`)
+	sqlDB.Exec(bt.b, `SET CLUSTER SETTING kv.allocator.stat_based_rebalancing.enabled = false`)
+	sqlDB.Exec(bt.b, `SET CLUSTER SETTING kv.allocator.load_based_lease_rebalancing.enabled = false`)
 
 	log.Info(ctx, "initial cluster is up")
 }
@@ -232,9 +232,9 @@ func BenchmarkRestoreBig(b *testing.B) {
 	}
 	defer sqlDB.Close()
 
-	r := sqlutils.MakeSQLRunner(b, sqlDB)
+	r := sqlutils.MakeSQLRunner(sqlDB)
 
-	r.Exec(bankCreateDatabase)
+	r.Exec(b, bankCreateDatabase)
 
 	// (mis-)Use a sub benchmark to avoid running the setup code more than once.
 	b.Run("", func(b *testing.B) {
@@ -255,11 +255,11 @@ func BenchmarkRestoreBig(b *testing.B) {
 		}
 
 		dbName := fmt.Sprintf("bank %d", b.N)
-		r.Exec(fmt.Sprintf("CREATE DATABASE %s", dbName))
+		r.Exec(b, fmt.Sprintf("CREATE DATABASE %s", dbName))
 
 		b.ResetTimer()
 		log.Infof(ctx, "starting restore to %s", dbName)
-		r.Exec(fmt.Sprintf(`RESTORE TABLE data.* FROM $1 WITH OPTIONS ('into_db'='%s')`, dbName), restoreURI)
+		r.Exec(b, fmt.Sprintf(`RESTORE TABLE data.* FROM $1 WITH OPTIONS ('into_db'='%s')`, dbName), restoreURI)
 		b.SetBytes(desc.EntryCounts.DataSize / int64(b.N))
 		log.Infof(ctx, "restored %s", humanizeutil.IBytes(desc.EntryCounts.DataSize))
 		b.StopTimer()

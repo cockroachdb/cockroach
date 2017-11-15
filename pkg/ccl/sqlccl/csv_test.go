@@ -604,9 +604,9 @@ func TestImportStmt(t *testing.T) {
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			sqlDB := sqlutils.MakeSQLRunner(t, conn)
-			sqlDB.Exec(fmt.Sprintf(`CREATE DATABASE csv%d`, i))
-			sqlDB.Exec(fmt.Sprintf(`SET DATABASE = csv%d`, i))
+			sqlDB := sqlutils.MakeSQLRunner(conn)
+			sqlDB.Exec(t, fmt.Sprintf(`CREATE DATABASE csv%d`, i))
+			sqlDB.Exec(t, fmt.Sprintf(`SET DATABASE = csv%d`, i))
 
 			var unused string
 			var restored struct {
@@ -630,7 +630,7 @@ func TestImportStmt(t *testing.T) {
 			}
 
 			const jobPrefix = `IMPORT TABLE t (a INT PRIMARY KEY, b STRING, INDEX (b), INDEX (a, b)) CSV DATA (%s) `
-			if err := jobutils.VerifySystemJob(sqlDB, i*2, jobs.TypeImport, jobs.Record{
+			if err := jobutils.VerifySystemJob(t, sqlDB, i*2, jobs.TypeImport, jobs.Record{
 				Username:    security.RootUser,
 				Description: fmt.Sprintf(jobPrefix+tc.jobOpts, strings.Join(tc.files, ", "), `'`+backupPath+`'`),
 			}); err != nil {
@@ -656,7 +656,7 @@ func TestImportStmt(t *testing.T) {
 			}
 
 			if len(tc.files) == 1 && tc.files[0] == empty[0] {
-				sqlDB.QueryRow(`SELECT count(*) FROM t`).Scan(&result)
+				sqlDB.QueryRow(t, `SELECT count(*) FROM t`).Scan(&result)
 				if expect := 0; result != expect {
 					t.Fatalf("expected %d rows, got %d", expect, result)
 				}
@@ -668,13 +668,13 @@ func TestImportStmt(t *testing.T) {
 			}
 
 			// Verify correct number of rows via COUNT.
-			sqlDB.QueryRow(`SELECT count(*) FROM t`).Scan(&result)
+			sqlDB.QueryRow(t, `SELECT count(*) FROM t`).Scan(&result)
 			if expect := expectedRows; result != expect {
 				t.Fatalf("expected %d rows, got %d", expect, result)
 			}
 
 			// Verify correct number of NULLs via COUNT.
-			sqlDB.QueryRow(`SELECT count(*) FROM t WHERE b IS NULL`).Scan(&result)
+			sqlDB.QueryRow(t, `SELECT count(*) FROM t WHERE b IS NULL`).Scan(&result)
 			expectedNulls := 0
 			if strings.Contains(tc.query, "nullif") {
 				expectedNulls = expectedRows / 4
@@ -694,9 +694,9 @@ func BenchmarkImport(b *testing.B) {
 	ctx := context.Background()
 	tc := testcluster.StartTestCluster(b, nodes, base.TestClusterArgs{})
 	defer tc.Stopper().Stop(ctx)
-	sqlDB := sqlutils.MakeSQLRunner(b, tc.Conns[0])
+	sqlDB := sqlutils.MakeSQLRunner(tc.Conns[0])
 
-	sqlDB.Exec(`SET CLUSTER SETTING experimental.importcsv.enabled = true`)
+	sqlDB.Exec(b, `SET CLUSTER SETTING experimental.importcsv.enabled = true`)
 
 	dir, cleanup := testutils.TempDir(b)
 	defer cleanup()
@@ -705,7 +705,7 @@ func BenchmarkImport(b *testing.B) {
 
 	b.ResetTimer()
 
-	sqlDB.Exec(
+	sqlDB.Exec(b,
 		fmt.Sprintf(
 			`IMPORT TABLE t (a INT PRIMARY KEY, b STRING, INDEX (b), INDEX (a, b))
 			CSV DATA (%s) WITH temp = $1, distributed, transform_only`,

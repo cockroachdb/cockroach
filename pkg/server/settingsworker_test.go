@@ -75,7 +75,7 @@ func TestSettingsRefresh(t *testing.T) {
 	s, rawDB, _ := serverutils.StartServer(t, base.TestServerArgs{Settings: st})
 	defer s.Stopper().Stop(context.TODO())
 
-	db := sqlutils.MakeSQLRunner(t, rawDB)
+	db := sqlutils.MakeSQLRunner(rawDB)
 
 	insertQ := `UPSERT INTO system.settings (name, value, "lastUpdated", "valueType")
 		VALUES ($1, $2, NOW(), $3)`
@@ -89,8 +89,8 @@ func TestSettingsRefresh(t *testing.T) {
 	}
 
 	// Inserting a new setting is reflected in cache.
-	db.Exec(insertQ, strKey, "foo", "s")
-	db.Exec(insertQ, intKey, settings.EncodeInt(2), "i")
+	db.Exec(t, insertQ, strKey, "foo", "s")
+	db.Exec(t, insertQ, intKey, settings.EncodeInt(2), "i")
 	// Wait until we observe the gossip-driven update propagating to cache.
 	testutils.SucceedsSoon(t, func() error {
 		if expected, actual := "foo", strA.Get(&st.SV); expected != actual {
@@ -103,7 +103,7 @@ func TestSettingsRefresh(t *testing.T) {
 	})
 
 	// Setting to empty also works.
-	db.Exec(insertQ, strKey, "", "s")
+	db.Exec(t, insertQ, strKey, "", "s")
 	testutils.SucceedsSoon(t, func() error {
 		if expected, actual := "", strA.Get(&st.SV); expected != actual {
 			return errors.Errorf("expected %v, got %v", expected, actual)
@@ -112,8 +112,8 @@ func TestSettingsRefresh(t *testing.T) {
 	})
 
 	// An unknown value doesn't block updates to a known one.
-	db.Exec(insertQ, "dne", "???", "s")
-	db.Exec(insertQ, strKey, "qux", "s")
+	db.Exec(t, insertQ, "dne", "???", "s")
+	db.Exec(t, insertQ, strKey, "qux", "s")
 
 	testutils.SucceedsSoon(t, func() error {
 		if expected, actual := "qux", strA.Get(&st.SV); expected != actual {
@@ -126,9 +126,9 @@ func TestSettingsRefresh(t *testing.T) {
 	})
 
 	// A malformed value doesn't revert previous set or block other changes.
-	db.Exec(deleteQ, "dne")
-	db.Exec(insertQ, intKey, "invalid", "i")
-	db.Exec(insertQ, strKey, "after-invalid", "s")
+	db.Exec(t, deleteQ, "dne")
+	db.Exec(t, insertQ, intKey, "invalid", "i")
+	db.Exec(t, insertQ, strKey, "after-invalid", "s")
 
 	testutils.SucceedsSoon(t, func() error {
 		if expected, actual := int64(2), intA.Get(&st.SV); expected != actual {
@@ -141,8 +141,8 @@ func TestSettingsRefresh(t *testing.T) {
 	})
 
 	// A mis-typed value doesn't revert a previous set or block other changes.
-	db.Exec(insertQ, intKey, settings.EncodeInt(7), "b")
-	db.Exec(insertQ, strKey, "after-mistype", "s")
+	db.Exec(t, insertQ, intKey, settings.EncodeInt(7), "b")
+	db.Exec(t, insertQ, strKey, "after-mistype", "s")
 
 	testutils.SucceedsSoon(t, func() error {
 		if expected, actual := int64(2), intA.Get(&st.SV); expected != actual {
@@ -159,10 +159,10 @@ func TestSettingsRefresh(t *testing.T) {
 	prevIntA := intA.Get(&st.SV)
 	prevDurationA := durationA.Get(&st.SV)
 	prevByteSizeA := byteSizeA.Get(&st.SV)
-	db.Exec(insertQ, strKey, "this is too big for this setting", "s")
-	db.Exec(insertQ, intKey, settings.EncodeInt(-1), "i")
-	db.Exec(insertQ, durationKey, settings.EncodeDuration(-time.Minute), "d")
-	db.Exec(insertQ, byteSizeKey, settings.EncodeInt(-1), "z")
+	db.Exec(t, insertQ, strKey, "this is too big for this setting", "s")
+	db.Exec(t, insertQ, intKey, settings.EncodeInt(-1), "i")
+	db.Exec(t, insertQ, durationKey, settings.EncodeDuration(-time.Minute), "d")
+	db.Exec(t, insertQ, byteSizeKey, settings.EncodeInt(-1), "z")
 
 	testutils.SucceedsSoon(t, func() error {
 		if expected, actual := prevStrA, strA.Get(&st.SV); expected != actual {
@@ -181,7 +181,7 @@ func TestSettingsRefresh(t *testing.T) {
 	})
 
 	// Deleting a value reverts to default.
-	db.Exec(deleteQ, strKey)
+	db.Exec(t, deleteQ, strKey)
 	testutils.SucceedsSoon(t, func() error {
 		if expected, actual := "<default>", strA.Get(&st.SV); expected != actual {
 			return errors.Errorf("expected %v, got %v", expected, actual)
@@ -199,53 +199,53 @@ func TestSettingsSetAndShow(t *testing.T) {
 	s, rawDB, _ := serverutils.StartServer(t, base.TestServerArgs{Settings: st})
 	defer s.Stopper().Stop(context.TODO())
 
-	db := sqlutils.MakeSQLRunner(t, rawDB)
+	db := sqlutils.MakeSQLRunner(rawDB)
 
 	// TODO(dt): add placeholder support to SET and SHOW.
 	setQ := `SET CLUSTER SETTING "%s" = %s`
 	showQ := `SHOW CLUSTER SETTING "%s"`
 
-	db.Exec(fmt.Sprintf(setQ, strKey, "'via-set'"))
+	db.Exec(t, fmt.Sprintf(setQ, strKey, "'via-set'"))
 	testutils.SucceedsSoon(t, func() error {
-		if expected, actual := "via-set", db.QueryStr(fmt.Sprintf(showQ, strKey))[0][0]; expected != actual {
+		if expected, actual := "via-set", db.QueryStr(t, fmt.Sprintf(showQ, strKey))[0][0]; expected != actual {
 			return errors.Errorf("expected %v, got %v", expected, actual)
 		}
 		return nil
 	})
 
-	db.Exec(fmt.Sprintf(setQ, intKey, "5"))
+	db.Exec(t, fmt.Sprintf(setQ, intKey, "5"))
 	testutils.SucceedsSoon(t, func() error {
-		if expected, actual := "5", db.QueryStr(fmt.Sprintf(showQ, intKey))[0][0]; expected != actual {
+		if expected, actual := "5", db.QueryStr(t, fmt.Sprintf(showQ, intKey))[0][0]; expected != actual {
 			return errors.Errorf("expected %v, got %v", expected, actual)
 		}
 		return nil
 	})
 
-	db.Exec(fmt.Sprintf(setQ, durationKey, "'2h'"))
+	db.Exec(t, fmt.Sprintf(setQ, durationKey, "'2h'"))
 	testutils.SucceedsSoon(t, func() error {
 		if expected, actual := time.Hour*2, durationA.Get(&st.SV); expected != actual {
 			return errors.Errorf("expected %v, got %v", expected, actual)
 		}
-		if expected, actual := "2h", db.QueryStr(fmt.Sprintf(showQ, durationKey))[0][0]; expected != actual {
+		if expected, actual := "2h", db.QueryStr(t, fmt.Sprintf(showQ, durationKey))[0][0]; expected != actual {
 			return errors.Errorf("expected %v, got %v", expected, actual)
 		}
 		return nil
 	})
 
-	db.Exec(fmt.Sprintf(setQ, byteSizeKey, "'1500MB'"))
+	db.Exec(t, fmt.Sprintf(setQ, byteSizeKey, "'1500MB'"))
 	testutils.SucceedsSoon(t, func() error {
 		if expected, actual := int64(1500000000), byteSizeA.Get(&st.SV); expected != actual {
 			return errors.Errorf("expected %v, got %v", expected, actual)
 		}
-		if expected, actual := "1.4 GiB", db.QueryStr(fmt.Sprintf(showQ, byteSizeKey))[0][0]; expected != actual {
+		if expected, actual := "1.4 GiB", db.QueryStr(t, fmt.Sprintf(showQ, byteSizeKey))[0][0]; expected != actual {
 			return errors.Errorf("expected %v, got %v", expected, actual)
 		}
 		return nil
 	})
 
-	db.Exec(fmt.Sprintf(setQ, byteSizeKey, "'1450MB'"))
+	db.Exec(t, fmt.Sprintf(setQ, byteSizeKey, "'1450MB'"))
 	testutils.SucceedsSoon(t, func() error {
-		if expected, actual := "1.4 GiB", db.QueryStr(fmt.Sprintf(showQ, byteSizeKey))[0][0]; expected != actual {
+		if expected, actual := "1.4 GiB", db.QueryStr(t, fmt.Sprintf(showQ, byteSizeKey))[0][0]; expected != actual {
 			return errors.Errorf("expected %v, got %v", expected, actual)
 		}
 		return nil
@@ -257,23 +257,23 @@ func TestSettingsSetAndShow(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	db.Exec(fmt.Sprintf(setQ, enumKey, "2"))
+	db.Exec(t, fmt.Sprintf(setQ, enumKey, "2"))
 	testutils.SucceedsSoon(t, func() error {
 		if expected, actual := int64(2), enumA.Get(&st.SV); expected != actual {
 			return errors.Errorf("expected %v, got %v", expected, actual)
 		}
-		if expected, actual := "2", db.QueryStr(fmt.Sprintf(showQ, enumKey))[0][0]; expected != actual {
+		if expected, actual := "2", db.QueryStr(t, fmt.Sprintf(showQ, enumKey))[0][0]; expected != actual {
 			return errors.Errorf("expected %v, got %v", expected, actual)
 		}
 		return nil
 	})
 
-	db.Exec(fmt.Sprintf(setQ, enumKey, "'foo'"))
+	db.Exec(t, fmt.Sprintf(setQ, enumKey, "'foo'"))
 	testutils.SucceedsSoon(t, func() error {
 		if expected, actual := int64(1), enumA.Get(&st.SV); expected != actual {
 			return errors.Errorf("expected %v, got %v", expected, actual)
 		}
-		if expected, actual := "1", db.QueryStr(fmt.Sprintf(showQ, enumKey))[0][0]; expected != actual {
+		if expected, actual := "1", db.QueryStr(t, fmt.Sprintf(showQ, enumKey))[0][0]; expected != actual {
 			return errors.Errorf("expected %v, got %v", expected, actual)
 		}
 		return nil
@@ -291,7 +291,7 @@ func TestSettingsSetAndShow(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	db.Exec(`CREATE USER testuser`)
+	db.Exec(t, `CREATE USER testuser`)
 	pgURL, cleanupFunc := sqlutils.PGUrl(t, s.ServingAddr(), t.Name(), url.User("testuser"))
 	defer cleanupFunc()
 	testuser, err := gosql.Open("postgres", pgURL.String())
@@ -332,9 +332,9 @@ func TestSettingsShowAll(t *testing.T) {
 	s, rawDB, _ := serverutils.StartServer(t, base.TestServerArgs{Settings: st})
 	defer s.Stopper().Stop(context.TODO())
 
-	db := sqlutils.MakeSQLRunner(t, rawDB)
+	db := sqlutils.MakeSQLRunner(rawDB)
 
-	rows := db.QueryStr("SHOW ALL CLUSTER SETTINGS")
+	rows := db.QueryStr(t, "SHOW ALL CLUSTER SETTINGS")
 	if len(rows) < 2 {
 		t.Fatalf("show all returned too few rows (%d)", len(rows))
 	}

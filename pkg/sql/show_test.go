@@ -471,7 +471,7 @@ func TestShowJobs(t *testing.T) {
 
 	params, _ := createTestServerParams()
 	s, rawSQLDB, _ := serverutils.StartServer(t, params)
-	sqlDB := sqlutils.MakeSQLRunner(t, rawSQLDB)
+	sqlDB := sqlutils.MakeSQLRunner(rawSQLDB)
 	defer s.Stopper().Stop(context.TODO())
 
 	// row represents a row returned from crdb_internal.jobs, but
@@ -527,13 +527,13 @@ func TestShowJobs(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	sqlDB.Exec(
+	sqlDB.Exec(t,
 		`INSERT INTO system.jobs (id, status, created, payload) VALUES ($1, $2, $3, $4)`,
 		in.id, in.status, in.created, inPayload,
 	)
 
 	var out row
-	sqlDB.QueryRow(`
+	sqlDB.QueryRow(t, `
       SELECT id, type, status, created, description, started, finished, modified,
              fraction_completed, username, error, coordinator_id
         FROM crdb_internal.jobs`).Scan(

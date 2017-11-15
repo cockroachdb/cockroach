@@ -41,11 +41,11 @@ func TestServer(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	r := sqlutils.MakeSQLRunner(t, sqlDB)
+	r := sqlutils.MakeSQLRunner(sqlDB)
 
-	r.Exec(`CREATE DATABASE test`)
-	r.Exec(`CREATE TABLE test.t (a INT PRIMARY KEY, b INT)`)
-	r.Exec(`INSERT INTO test.t VALUES (1, 10), (2, 20), (3, 30)`)
+	r.Exec(t, `CREATE DATABASE test`)
+	r.Exec(t, `CREATE TABLE test.t (a INT PRIMARY KEY, b INT)`)
+	r.Exec(t, `INSERT INTO test.t VALUES (1, 10), (2, 20), (3, 30)`)
 
 	td := sqlbase.GetTableDescriptor(kvDB, "test", "t")
 
