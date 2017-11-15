@@ -225,10 +225,13 @@ func TestParse(t *testing.T) {
 		{`DELETE FROM a.b`},
 		{`DELETE FROM a WHERE a = b`},
 		{`DELETE FROM a WHERE a = b LIMIT c`},
+		{`DELETE FROM a WHERE a = b ORDER BY c`},
+		{`DELETE FROM a WHERE a = b ORDER BY c LIMIT d`},
 		{`DELETE FROM a WHERE a = b RETURNING a, b`},
 		{`DELETE FROM a WHERE a = b RETURNING 1, 2`},
 		{`DELETE FROM a WHERE a = b RETURNING a + b`},
 		{`DELETE FROM a WHERE a = b RETURNING NOTHING`},
+		{`DELETE FROM a WHERE a = b ORDER BY c LIMIT d RETURNING e`},
 
 		{`DISCARD ALL`},
 
