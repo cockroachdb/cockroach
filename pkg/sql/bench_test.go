@@ -332,6 +332,39 @@ func runBenchmarkInsertFK(b *testing.B, db *gosql.DB, count int) {
 	}
 }
 
+// runBenchmarkInsertSecondaryIndex benchmarks inserting count rows into a table with a
+// secondary index.
+func runBenchmarkInsertSecondaryIndex(b *testing.B, db *gosql.DB, count int) {
+	defer func() {
+		if _, err := db.Exec(`DROP TABLE IF EXISTS bench.insert`); err != nil {
+			b.Fatal(err)
+		}
+	}()
+
+	if _, err := db.Exec(`CREATE TABLE bench.insert (k INT PRIMARY KEY, v INT , INDEX(v))`); err != nil {
+		b.Fatal(err)
+	}
+
+	b.ResetTimer()
+	var buf bytes.Buffer
+	val := 0
+	for i := 0; i < b.N; i++ {
+		buf.Reset()
+		buf.WriteString(`INSERT INTO bench.insert VALUES `)
+		for j := 0; j < count; j++ {
+			if j > 0 {
+				buf.WriteString(", ")
+			}
+			fmt.Fprintf(&buf, "(%d, %d)", val, val)
+			val++
+		}
+		if _, err := db.Exec(buf.String()); err != nil {
+			b.Fatal(err)
+		}
+	}
+	b.StopTimer()
+}
+
 func BenchmarkSQL(b *testing.B) {
 	forEachDB(b, func(b *testing.B, db *gosql.DB) {
 		for _, runFn := range []func(*testing.B, *gosql.DB, int){
@@ -343,6 +376,7 @@ func BenchmarkSQL(b *testing.B) {
 			runBenchmarkTrackChoices,
 			runBenchmarkUpdate,
 			runBenchmarkUpsert,
+			runBenchmarkInsertSecondaryIndex,
 		} {
 			fnName := runtime.FuncForPC(reflect.ValueOf(runFn).Pointer()).Name()
 			fnName = strings.TrimPrefix(fnName, "github.com/cockroachdb/cockroach/pkg/sql_test.runBenchmark")
