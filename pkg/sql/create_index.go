@@ -68,6 +68,26 @@ func (n *createIndexNode) startExec(params runParams) error {
 		Unique:           n.n.Unique,
 		StoreColumnNames: n.n.Storing.ToStrings(),
 	}
+
+	if n.n.Inverted {
+		if n.n.Interleave != nil {
+			return pgerror.NewError(pgerror.CodeInvalidSQLStatementNameError, "inverted indexes don't support interleaved tables")
+		}
+
+		if n.n.PartitionBy != nil {
+			return pgerror.NewError(pgerror.CodeInvalidSQLStatementNameError, "inverted indexes don't support partitioning")
+		}
+
+		if len(indexDesc.StoreColumnNames) > 0 {
+			return pgerror.NewError(pgerror.CodeInvalidSQLStatementNameError, "inverted indexes don't support stored columns")
+		}
+
+		if n.n.Unique {
+			return pgerror.NewError(pgerror.CodeInvalidSQLStatementNameError, "inverted indexes can't be unique")
+		}
+		indexDesc.Type = sqlbase.IndexDescriptor_INVERTED
+	}
+
 	if err := indexDesc.FillColumns(n.n.Columns); err != nil {
 		return err
 	}
@@ -96,25 +116,6 @@ func (n *createIndexNode) startExec(params runParams) error {
 		if err := params.p.finalizeInterleave(params.ctx, n.tableDesc, *index); err != nil {
 			return err
 		}
-	}
-
-	if n.n.Inverted {
-		if n.n.Interleave != nil {
-			return pgerror.NewError(pgerror.CodeInvalidSQLStatementNameError, "inverted indexes don't support interleaved columns")
-		}
-
-		if n.n.PartitionBy != nil {
-			return pgerror.NewError(pgerror.CodeInvalidSQLStatementNameError, "inverted indexes don't support partitioning")
-		}
-
-		if len(indexDesc.StoreColumnNames) > 0 {
-			return pgerror.NewError(pgerror.CodeInvalidSQLStatementNameError, "inverted indexes don't support stored columns.")
-		}
-
-		if n.n.Unique {
-			return pgerror.NewError(pgerror.CodeInvalidSQLStatementNameError, "inverted indexes can't be unique")
-		}
-		return pgerror.NewError(pgerror.CodeFeatureNotSupportedError, "inverted indexes are not supported yet")
 	}
 
 	mutationID, err := params.p.createSchemaChangeJob(params.ctx, n.tableDesc,

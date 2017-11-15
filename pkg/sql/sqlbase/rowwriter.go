@@ -941,9 +941,12 @@ func (rd *RowDeleter) DeleteIndexRow(
 		return err
 	}
 	if traceKV {
-		log.VEventf(ctx, 2, "Del %s", keys.PrettyPrint(IndexKeyValDirs(idx), secondaryIndexEntry.Key))
+		log.VEventf(ctx, 2, "Del %s", secondaryIndexEntry[0].Key)
 	}
-	b.Del(secondaryIndexEntry.Key)
+
+	for _, entry := range secondaryIndexEntry {
+		b.Del(entry.Key)
+	}
 	return nil
 }
 

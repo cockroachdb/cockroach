@@ -519,15 +519,18 @@ func (tu *tableUpserter) upsertRowPKs(ctx context.Context, traceKV bool) ([]roac
 	b := tu.txn.NewBatch()
 	for i := 0; i < tu.insertRows.Len(); i++ {
 		insertRow := tu.insertRows.At(i)
-		entry, err := sqlbase.EncodeSecondaryIndex(
+		entries, err := sqlbase.EncodeSecondaryIndex(
 			tableDesc, &tu.conflictIndex, tu.ri.InsertColIDtoRowIndex, insertRow)
 		if err != nil {
 			return nil, err
 		}
-		if traceKV {
-			log.VEventf(ctx, 2, "Get %s", entry.Key)
+
+		for _, entry := range entries {
+			if traceKV {
+				log.VEventf(ctx, 2, "Get %s", entry.Key)
+			}
+			b.Get(entry.Key)
 		}
-		b.Get(entry.Key)
 	}
 
 	if err := tu.txn.Run(ctx, b); err != nil {

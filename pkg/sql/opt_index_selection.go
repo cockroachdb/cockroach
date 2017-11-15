@@ -24,6 +24,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	pgerror "github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -671,6 +672,15 @@ func (v *indexInfo) makeIndexConstraints(
 					if !*endDone {
 						*endExpr = c
 					}
+				case tree.ContainedBy:
+					// An equality constraint will overwrite any other type
+					// of constraint.
+					if !*startDone {
+						*startExpr = c
+					}
+					if !*endDone {
+						*endExpr = c
+					}
 				case tree.NE:
 					// We rewrite "a != x" to "a IS DISTINCT FROM NULL", since this is all that
 					// makeSpans() cares about.
@@ -1164,7 +1174,7 @@ func spansFromLogicalSpans(
 	for i, ls := range logicalSpans {
 		var s roachpb.Span
 		var err error
-		if s, err = spanFromLogicalSpan(evalCtx, tableDesc, index, ls, interstices); err != nil {
+		if s, err = spanFromLogicalSpan(evalCtx, tableDesc, index, ls, interstices, index.Type); err != nil {
 			return nil, err
 		}
 		spans[i] = s
@@ -1180,6 +1190,7 @@ func spanFromLogicalSpan(
 	index *sqlbase.IndexDescriptor,
 	ls logicalSpan,
 	interstices [][]byte,
+	descriptor_type sqlbase.IndexDescriptor_Type,
 ) (roachpb.Span, error) {
 	var s roachpb.Span
 	var err error
@@ -1190,7 +1201,9 @@ func spanFromLogicalSpan(
 			break
 		}
 		part := ls.start[i]
-		s.Key, err = encodeLogicalKeyPart(evalCtx, s.Key, part)
+
+		s.Key, err = encodeLogicalKeyPart(evalCtx, s.Key, part, descriptor_type)
+
 		if err != nil {
 			return roachpb.Span{}, err
 		}
@@ -1216,8 +1229,8 @@ func spanFromLogicalSpan(
 			break
 		}
 		part := ls.end[i]
-		var err error
-		s.EndKey, err = encodeLogicalKeyPart(evalCtx, s.EndKey, part)
+
+		s.EndKey, err = encodeLogicalKeyPart(evalCtx, s.EndKey, part, descriptor_type)
 		if err != nil {
 			return roachpb.Span{}, err
 		}
@@ -1238,12 +1251,24 @@ func spanFromLogicalSpan(
 }
 
 func encodeLogicalKeyPart(
-	evalCtx *tree.EvalContext, b []byte, part logicalKeyPart,
+	evalCtx *tree.EvalContext, b []byte, part logicalKeyPart, desc_type sqlbase.IndexDescriptor_Type,
 ) ([]byte, error) {
 	d, err := part.val.Eval(evalCtx)
 	if err != nil {
 		return nil, err
 	}
+	if desc_type == sqlbase.IndexDescriptor_INVERTED {
+		keys, err := sqlbase.EncodeInvertedIndexTableKeys(d, b)
+		if err != nil {
+			return nil, err
+		}
+		if len(keys) > 1 {
+			return nil, pgerror.NewError(pgerror.CodeInternalError, "trying to use multiple keys in index lookup")
+		}
+
+		return keys[0], nil
+	}
+
 	return sqlbase.EncodeTableKey(b, d, part.dir)
 }
 

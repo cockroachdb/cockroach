@@ -108,8 +108,12 @@ INSERT INTO t.test VALUES (10, 20);
 		t.Fatalf("unexpected error: %s", err)
 	}
 
+	if len(secondaryIndexKey) != 1 {
+		t.Fatalf("expected 1 index entry, got %d. got %#v", len(secondaryIndexKey), secondaryIndexKey)
+	}
+
 	// Delete the entry.
-	if err := kvDB.Del(context.TODO(), secondaryIndexKey.Key); err != nil {
+	if err := kvDB.Del(context.TODO(), secondaryIndexKey[0].Key); err != nil {
 		t.Fatalf("unexpected error: %s", err)
 	}
 
@@ -177,8 +181,12 @@ CREATE INDEX secondary ON t.test (v);
 		t.Fatalf("unexpected error: %s", err)
 	}
 
+	if len(secondaryIndex) != 1 {
+		t.Fatalf("expected 1 index entry, got %d. got %#v", len(secondaryIndex), secondaryIndex)
+	}
+
 	// Put the new secondary k/v into the database.
-	if err := kvDB.Put(context.TODO(), secondaryIndex.Key, &secondaryIndex.Value); err != nil {
+	if err := kvDB.Put(context.TODO(), secondaryIndex[0].Key, &secondaryIndex[0].Value); err != nil {
 		t.Fatalf("unexpected error: %s", err)
 	}
 
@@ -263,11 +271,16 @@ INSERT INTO t.test VALUES (10, 20, 1337);
 	values := []tree.Datum{tree.NewDInt(10), tree.NewDInt(20), tree.NewDInt(1337)}
 	secondaryIndex, err := sqlbase.EncodeSecondaryIndex(
 		tableDesc, secondaryIndexDesc, colIDtoRowIndex, values)
+
+	if len(secondaryIndex) != 1 {
+		t.Fatalf("expected 1 index entry, got %d. got %#v", len(secondaryIndex), secondaryIndex)
+	}
+
 	if err != nil {
 		t.Fatalf("unexpected error: %s", err)
 	}
 	// Delete the existing secondary k/v.
-	if err := kvDB.Del(context.TODO(), secondaryIndex.Key); err != nil {
+	if err := kvDB.Del(context.TODO(), secondaryIndex[0].Key); err != nil {
 		t.Fatalf("unexpected error: %s", err)
 	}
 
@@ -279,7 +292,7 @@ INSERT INTO t.test VALUES (10, 20, 1337);
 		t.Fatalf("unexpected error: %s", err)
 	}
 	// Put the incorrect secondary k/v.
-	if err := kvDB.Put(context.TODO(), secondaryIndex.Key, &secondaryIndex.Value); err != nil {
+	if err := kvDB.Put(context.TODO(), secondaryIndex[0].Key, &secondaryIndex[0].Value); err != nil {
 		t.Fatalf("unexpected error: %s", err)
 	}
 
@@ -481,9 +494,13 @@ INSERT INTO t.child VALUES (10, 314);
 		t.Fatalf("unexpected error: %s", err)
 	}
 
+	if len(secondaryIndexKey) != 1 {
+		t.Fatalf("expected 1 index entry, got %d. got %#v", len(secondaryIndexKey), secondaryIndexKey)
+	}
+
 	// Delete the existing secondary key entry, as we will later replace
 	// it.
-	if err := kvDB.Del(context.TODO(), secondaryIndexKey.Key); err != nil {
+	if err := kvDB.Del(context.TODO(), secondaryIndexKey[0].Key); err != nil {
 		t.Fatalf("unexpected error: %s", err)
 	}
 
@@ -497,8 +514,12 @@ INSERT INTO t.child VALUES (10, 314);
 		t.Fatalf("unexpected error: %s", err)
 	}
 
+	if len(secondaryIndexKey) != 1 {
+		t.Fatalf("expected 1 index entry, got %d. got %#v", len(secondaryIndexKey), secondaryIndexKey)
+	}
+
 	// Add the new, replacement secondary index entry.
-	if err := kvDB.Put(context.TODO(), secondaryIndexKey.Key, &secondaryIndexKey.Value); err != nil {
+	if err := kvDB.Put(context.TODO(), secondaryIndexKey[0].Key, &secondaryIndexKey[0].Value); err != nil {
 		t.Fatalf("unexpected error: %s", err)
 	}
 
@@ -586,8 +607,12 @@ INSERT INTO t.child VALUES (11, 1337, 300);
 		t.Fatalf("unexpected error: %s", err)
 	}
 
+	if len(secondaryIndexEntry) != 1 {
+		t.Fatalf("expected 1 index entry, got %d. got %#v", len(secondaryIndexEntry), secondaryIndexEntry)
+	}
+
 	// Delete the entry.
-	if err := kvDB.Del(context.TODO(), secondaryIndexEntry.Key); err != nil {
+	if err := kvDB.Del(context.TODO(), secondaryIndexEntry[0].Key); err != nil {
 		t.Fatalf("unexpected error: %s", err)
 	}
 
@@ -601,8 +626,8 @@ INSERT INTO t.child VALUES (11, 1337, 300);
 
 	// Add the entry, essentially replacing the index entry with (11, 1337, NULL).
 	// This will be a foreign key violation.
-	if err := kvDB.Put(context.TODO(), secondaryIndexEntry.Key,
-		&secondaryIndexEntry.Value); err != nil {
+	if err := kvDB.Put(context.TODO(), secondaryIndexEntry[0].Key,
+		&secondaryIndexEntry[0].Value); err != nil {
 		t.Fatalf("unexpected error: %s", err)
 	}
 
