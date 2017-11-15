@@ -279,6 +279,12 @@ message IndexDescriptor {
     DESC = 1;
   }
 
+  // The direction of a column in the index.
+  enum Type {
+    FORWARD = 0;
+    INVERTED = 1;
+  }
+
   optional string name = 1 [(gogoproto.nullable) = false];
   optional uint32 id = 2 [(gogoproto.nullable) = false,
       (gogoproto.customname) = "ID", (gogoproto.casttype) = "IndexID"];
@@ -348,6 +354,8 @@ message IndexDescriptor {
   // Partitioning, if it's not the zero value, describes how this index's data
   // is partitioned into spans of keys each addressable by zone configs.
   optional PartitioningDescriptor partitioning = 15 [(gogoproto.nullable) = false];
+
+  optional Type type = 16 [(gogoproto.nullable)=false];
 }
 
 // A DescriptorMutation represents a column or an index that

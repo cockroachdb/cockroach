@@ -614,6 +614,7 @@ func (p *planner) createSchemaChangeJob(
 		DescriptorIDs: sqlbase.IDs{tableDesc.GetID()},
 		Details:       jobs.SchemaChangeDetails{ResumeSpanList: spanList},
 	}
+	log.Infof(ctx, "%s", p.txn)
 	job := p.ExecCfg().JobRegistry.NewJob(jobRecord)
 	if err := job.WithTxn(p.txn).Created(ctx); err != nil {
 		return sqlbase.InvalidMutationID, nil

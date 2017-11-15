@@ -1527,6 +1527,32 @@ func (a byID) Len() int           { return len(a) }
 func (a byID) Swap(i, j int)      { a[i], a[j] = a[j], a[i] }
 func (a byID) Less(i, j int) bool { return a[i].id < a[j].id }
 
+func EncodeInvertedIndexKeys(tableDesc *TableDescriptor, index *IndexDescriptor, colMap map[ColumnID]int,
+	values []tree.Datum, keyPrefix []byte) (key [][]byte, err error) {
+	if len(index.ColumnIDs) > 1 {
+		return nil, errors.New("trying to apply inverted index to more than one column")
+	}
+
+	var val tree.Datum
+	if i, ok := colMap[index.ColumnIDs[0]]; ok {
+		val = values[i]
+	} else {
+		val = tree.DNull
+	}
+
+	return EncodeInvertedIndexTableKeys(val, keyPrefix)
+}
+
+func EncodeInvertedIndexTableKeys(val tree.Datum, inKey []byte) (key [][]byte, err error) {
+	switch t := tree.UnwrapDatum(nil, val).(type) {
+	case *tree.DJSON:
+		return (t.JSON).EncodeInvertedIndexKeys(inKey)
+	}
+	return nil, errors.New("trying to apply inverted index to non JSON type")
+
+	return key, nil
+}
+
 // EncodeSecondaryIndex encodes key/values for a secondary index. colMap maps
 // ColumnIDs to indices in `values`.
 func EncodeSecondaryIndex(
@@ -1534,12 +1560,23 @@ func EncodeSecondaryIndex(
 	secondaryIndex *IndexDescriptor,
 	colMap map[ColumnID]int,
 	values []tree.Datum,
-) (IndexEntry, error) {
+) ([]IndexEntry, error) {
 	secondaryIndexKeyPrefix := MakeIndexKeyPrefix(tableDesc, secondaryIndex.ID)
-	secondaryIndexKey, containsNull, err := EncodeIndexKey(
-		tableDesc, secondaryIndex, colMap, values, secondaryIndexKeyPrefix)
+
+	var containsNull = false
+	var secondaryKeys [][]byte
+	var err error
+	if secondaryIndex.Type == IndexDescriptor_INVERTED {
+		secondaryKeys, err = EncodeInvertedIndexKeys(tableDesc, secondaryIndex, colMap, values, secondaryIndexKeyPrefix)
+	} else {
+		var secondaryIndexKey []byte
+		secondaryIndexKey, containsNull, err = EncodeIndexKey(
+			tableDesc, secondaryIndex, colMap, values, secondaryIndexKeyPrefix)
+
+		secondaryKeys = [][]byte{secondaryIndexKey}
+	}
 	if err != nil {
-		return IndexEntry{}, err
+		return []IndexEntry{}, err
 	}
 
 	// Add the extra columns - they are encoded ascendingly which is done by
@@ -1547,10 +1584,17 @@ func EncodeSecondaryIndex(
 	extraKey, _, err := EncodeColumns(secondaryIndex.ExtraColumnIDs, nil,
 		colMap, values, nil)
 	if err != nil {
-		return IndexEntry{}, err
+		return []IndexEntry{}, err
 	}
+	if len(secondaryKeys) > 1 {
+		var entries = make([]IndexEntry, len(secondaryKeys))
+		for i, key := range secondaryKeys {
+			entries[i] = IndexEntry{Key: key}
+		}
 
-	entry := IndexEntry{Key: secondaryIndexKey}
+		return entries, nil
+	}
+	entry := IndexEntry{Key: secondaryKeys[0]}
 
 	if !secondaryIndex.Unique || containsNull {
 		// If the index is not unique or it contains a NULL value, append
@@ -1599,12 +1643,12 @@ func EncodeSecondaryIndex(
 		lastColID = col.id
 		entryValue, err = EncodeTableValue(entryValue, colIDDiff, val, nil)
 		if err != nil {
-			return IndexEntry{}, err
+			return []IndexEntry{}, err
 		}
 	}
 	entry.Value.SetBytes(entryValue)
 
-	return entry, nil
+	return []IndexEntry{entry}, nil
 }
 
 // EncodeSecondaryIndexes encodes key/values for the secondary indexes. colMap
@@ -1619,11 +1663,16 @@ func EncodeSecondaryIndexes(
 	secondaryIndexEntries []IndexEntry,
 ) error {
 	for i := range indexes {
+		var entries []IndexEntry
 		var err error
-		secondaryIndexEntries[i], err = EncodeSecondaryIndex(tableDesc, &indexes[i], colMap, values)
+		entries, err = EncodeSecondaryIndex(tableDesc, &indexes[i], colMap, values)
 		if err != nil {
 			return err
 		}
+		if len(entries) > 1 {
+			secondaryIndexEntries = append(secondaryIndexEntries, entries[1:]...)
+		}
+		secondaryIndexEntries[i] = entries[0]
 	}
 	return nil
 }
