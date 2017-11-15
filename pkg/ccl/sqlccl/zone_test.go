@@ -36,8 +36,8 @@ func TestValidIndexPartitionSetShowZones(t *testing.T) {
 	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.TODO())
 
-	sqlDB := sqlutils.MakeSQLRunner(t, db)
-	sqlDB.Exec(`
+	sqlDB := sqlutils.MakeSQLRunner(db)
+	sqlDB.Exec(t, `
 		CREATE DATABASE d;
 		USE d;
 		CREATE TABLE t (c STRING PRIMARY KEY) PARTITION BY LIST (c) (
@@ -87,119 +87,119 @@ func TestValidIndexPartitionSetShowZones(t *testing.T) {
 	}
 
 	// Ensure the default is reported for all zones at first.
-	sqlutils.VerifyAllZoneConfigs(sqlDB, defaultRow)
-	sqlutils.VerifyZoneConfigForTarget(sqlDB, "RANGE default", defaultRow)
-	sqlutils.VerifyZoneConfigForTarget(sqlDB, "DATABASE d", defaultRow)
-	sqlutils.VerifyZoneConfigForTarget(sqlDB, "TABLE d.t", defaultRow)
-	sqlutils.VerifyZoneConfigForTarget(sqlDB, "INDEX d.t@primary", defaultRow)
-	sqlutils.VerifyZoneConfigForTarget(sqlDB, "TABLE d.t PARTITION p0", defaultRow)
-	sqlutils.VerifyZoneConfigForTarget(sqlDB, "TABLE d.t PARTITION p1", defaultRow)
+	sqlutils.VerifyAllZoneConfigs(t, sqlDB, defaultRow)
+	sqlutils.VerifyZoneConfigForTarget(t, sqlDB, "RANGE default", defaultRow)
+	sqlutils.VerifyZoneConfigForTarget(t, sqlDB, "DATABASE d", defaultRow)
+	sqlutils.VerifyZoneConfigForTarget(t, sqlDB, "TABLE d.t", defaultRow)
+	sqlutils.VerifyZoneConfigForTarget(t, sqlDB, "INDEX d.t@primary", defaultRow)
+	sqlutils.VerifyZoneConfigForTarget(t, sqlDB, "TABLE d.t PARTITION p0", defaultRow)
+	sqlutils.VerifyZoneConfigForTarget(t, sqlDB, "TABLE d.t PARTITION p1", defaultRow)
 
 	// Ensure a database zone config applies to that database, its tables, and its
 	// tables' indices and partitions.
-	sqlutils.SetZoneConfig(sqlDB, "DATABASE d", yamlOverride)
-	sqlutils.VerifyAllZoneConfigs(sqlDB, defaultRow, dbRow)
-	sqlutils.VerifyZoneConfigForTarget(sqlDB, "DATABASE d", dbRow)
-	sqlutils.VerifyZoneConfigForTarget(sqlDB, "TABLE d.t", dbRow)
-	sqlutils.VerifyZoneConfigForTarget(sqlDB, "INDEX d.t@primary", dbRow)
-	sqlutils.VerifyZoneConfigForTarget(sqlDB, "TABLE d.t PARTITION p0", dbRow)
-	sqlutils.VerifyZoneConfigForTarget(sqlDB, "TABLE d.t PARTITION p1", dbRow)
+	sqlutils.SetZoneConfig(t, sqlDB, "DATABASE d", yamlOverride)
+	sqlutils.VerifyAllZoneConfigs(t, sqlDB, defaultRow, dbRow)
+	sqlutils.VerifyZoneConfigForTarget(t, sqlDB, "DATABASE d", dbRow)
+	sqlutils.VerifyZoneConfigForTarget(t, sqlDB, "TABLE d.t", dbRow)
+	sqlutils.VerifyZoneConfigForTarget(t, sqlDB, "INDEX d.t@primary", dbRow)
+	sqlutils.VerifyZoneConfigForTarget(t, sqlDB, "TABLE d.t PARTITION p0", dbRow)
+	sqlutils.VerifyZoneConfigForTarget(t, sqlDB, "TABLE d.t PARTITION p1", dbRow)
 
 	// Ensure a table zone config applies to that table and its indices and
 	// partitions, but no other zones.
-	sqlutils.SetZoneConfig(sqlDB, "TABLE d.t", yamlOverride)
-	sqlutils.VerifyAllZoneConfigs(sqlDB, defaultRow, dbRow, tableRow)
-	sqlutils.VerifyZoneConfigForTarget(sqlDB, "DATABASE d", dbRow)
-	sqlutils.VerifyZoneConfigForTarget(sqlDB, "TABLE d.t", tableRow)
-	sqlutils.VerifyZoneConfigForTarget(sqlDB, "INDEX d.t@primary", tableRow)
-	sqlutils.VerifyZoneConfigForTarget(sqlDB, "TABLE d.t PARTITION p0", tableRow)
-	sqlutils.VerifyZoneConfigForTarget(sqlDB, "TABLE d.t PARTITION p1", tableRow)
+	sqlutils.SetZoneConfig(t, sqlDB, "TABLE d.t", yamlOverride)
+	sqlutils.VerifyAllZoneConfigs(t, sqlDB, defaultRow, dbRow, tableRow)
+	sqlutils.VerifyZoneConfigForTarget(t, sqlDB, "DATABASE d", dbRow)
+	sqlutils.VerifyZoneConfigForTarget(t, sqlDB, "TABLE d.t", tableRow)
+	sqlutils.VerifyZoneConfigForTarget(t, sqlDB, "INDEX d.t@primary", tableRow)
+	sqlutils.VerifyZoneConfigForTarget(t, sqlDB, "TABLE d.t PARTITION p0", tableRow)
+	sqlutils.VerifyZoneConfigForTarget(t, sqlDB, "TABLE d.t PARTITION p1", tableRow)
 
 	// Ensure an index zone config applies to that index and its partitions, but
 	// no other zones.
-	sqlutils.SetZoneConfig(sqlDB, "INDEX d.t@primary", yamlOverride)
-	sqlutils.VerifyAllZoneConfigs(sqlDB, defaultRow, dbRow, tableRow, primaryRow)
-	sqlutils.VerifyZoneConfigForTarget(sqlDB, "DATABASE d", dbRow)
-	sqlutils.VerifyZoneConfigForTarget(sqlDB, "TABLE d.t", tableRow)
-	sqlutils.VerifyZoneConfigForTarget(sqlDB, "INDEX d.t@primary", primaryRow)
-	sqlutils.VerifyZoneConfigForTarget(sqlDB, "TABLE d.t PARTITION p0", primaryRow)
-	sqlutils.VerifyZoneConfigForTarget(sqlDB, "TABLE d.t PARTITION p1", primaryRow)
+	sqlutils.SetZoneConfig(t, sqlDB, "INDEX d.t@primary", yamlOverride)
+	sqlutils.VerifyAllZoneConfigs(t, sqlDB, defaultRow, dbRow, tableRow, primaryRow)
+	sqlutils.VerifyZoneConfigForTarget(t, sqlDB, "DATABASE d", dbRow)
+	sqlutils.VerifyZoneConfigForTarget(t, sqlDB, "TABLE d.t", tableRow)
+	sqlutils.VerifyZoneConfigForTarget(t, sqlDB, "INDEX d.t@primary", primaryRow)
+	sqlutils.VerifyZoneConfigForTarget(t, sqlDB, "TABLE d.t PARTITION p0", primaryRow)
+	sqlutils.VerifyZoneConfigForTarget(t, sqlDB, "TABLE d.t PARTITION p1", primaryRow)
 
 	// Ensure a partition zone config applies to that partition, but no other
 	// zones.
-	sqlutils.SetZoneConfig(sqlDB, "TABLE d.t PARTITION p0", yamlOverride)
-	sqlutils.VerifyAllZoneConfigs(sqlDB, defaultRow, dbRow, tableRow, primaryRow, p0Row)
-	sqlutils.VerifyZoneConfigForTarget(sqlDB, "DATABASE d", dbRow)
-	sqlutils.VerifyZoneConfigForTarget(sqlDB, "TABLE d.t", tableRow)
-	sqlutils.VerifyZoneConfigForTarget(sqlDB, "INDEX d.t@primary", primaryRow)
-	sqlutils.VerifyZoneConfigForTarget(sqlDB, "TABLE d.t PARTITION p0", p0Row)
-	sqlutils.VerifyZoneConfigForTarget(sqlDB, "TABLE d.t PARTITION p1", primaryRow)
+	sqlutils.SetZoneConfig(t, sqlDB, "TABLE d.t PARTITION p0", yamlOverride)
+	sqlutils.VerifyAllZoneConfigs(t, sqlDB, defaultRow, dbRow, tableRow, primaryRow, p0Row)
+	sqlutils.VerifyZoneConfigForTarget(t, sqlDB, "DATABASE d", dbRow)
+	sqlutils.VerifyZoneConfigForTarget(t, sqlDB, "TABLE d.t", tableRow)
+	sqlutils.VerifyZoneConfigForTarget(t, sqlDB, "INDEX d.t@primary", primaryRow)
+	sqlutils.VerifyZoneConfigForTarget(t, sqlDB, "TABLE d.t PARTITION p0", p0Row)
+	sqlutils.VerifyZoneConfigForTarget(t, sqlDB, "TABLE d.t PARTITION p1", primaryRow)
 
 	// Ensure updating the default zone propagates to zones without an override,
 	// but not to those with overrides.
-	sqlutils.SetZoneConfig(sqlDB, "RANGE default", yamlOverride)
-	sqlutils.VerifyAllZoneConfigs(sqlDB, defaultOverrideRow, dbRow, tableRow, primaryRow, p0Row)
-	sqlutils.VerifyZoneConfigForTarget(sqlDB, "DATABASE d", dbRow)
-	sqlutils.VerifyZoneConfigForTarget(sqlDB, "TABLE d.t", tableRow)
-	sqlutils.VerifyZoneConfigForTarget(sqlDB, "INDEX d.t@primary", primaryRow)
-	sqlutils.VerifyZoneConfigForTarget(sqlDB, "TABLE d.t PARTITION p0", p0Row)
-	sqlutils.VerifyZoneConfigForTarget(sqlDB, "TABLE d.t PARTITION p1", primaryRow)
+	sqlutils.SetZoneConfig(t, sqlDB, "RANGE default", yamlOverride)
+	sqlutils.VerifyAllZoneConfigs(t, sqlDB, defaultOverrideRow, dbRow, tableRow, primaryRow, p0Row)
+	sqlutils.VerifyZoneConfigForTarget(t, sqlDB, "DATABASE d", dbRow)
+	sqlutils.VerifyZoneConfigForTarget(t, sqlDB, "TABLE d.t", tableRow)
+	sqlutils.VerifyZoneConfigForTarget(t, sqlDB, "INDEX d.t@primary", primaryRow)
+	sqlutils.VerifyZoneConfigForTarget(t, sqlDB, "TABLE d.t PARTITION p0", p0Row)
+	sqlutils.VerifyZoneConfigForTarget(t, sqlDB, "TABLE d.t PARTITION p1", primaryRow)
 
 	// Ensure deleting a database zone leaves child overrides in place.
-	sqlutils.DeleteZoneConfig(sqlDB, "DATABASE d")
-	sqlutils.VerifyAllZoneConfigs(sqlDB, defaultOverrideRow, tableRow, primaryRow, p0Row)
-	sqlutils.VerifyZoneConfigForTarget(sqlDB, "DATABASE d", defaultOverrideRow)
-	sqlutils.VerifyZoneConfigForTarget(sqlDB, "TABLE d.t", tableRow)
-	sqlutils.VerifyZoneConfigForTarget(sqlDB, "INDEX d.t@primary", primaryRow)
-	sqlutils.VerifyZoneConfigForTarget(sqlDB, "TABLE d.t PARTITION p0", p0Row)
-	sqlutils.VerifyZoneConfigForTarget(sqlDB, "TABLE d.t PARTITION p1", primaryRow)
+	sqlutils.DeleteZoneConfig(t, sqlDB, "DATABASE d")
+	sqlutils.VerifyAllZoneConfigs(t, sqlDB, defaultOverrideRow, tableRow, primaryRow, p0Row)
+	sqlutils.VerifyZoneConfigForTarget(t, sqlDB, "DATABASE d", defaultOverrideRow)
+	sqlutils.VerifyZoneConfigForTarget(t, sqlDB, "TABLE d.t", tableRow)
+	sqlutils.VerifyZoneConfigForTarget(t, sqlDB, "INDEX d.t@primary", primaryRow)
+	sqlutils.VerifyZoneConfigForTarget(t, sqlDB, "TABLE d.t PARTITION p0", p0Row)
+	sqlutils.VerifyZoneConfigForTarget(t, sqlDB, "TABLE d.t PARTITION p1", primaryRow)
 
 	// Ensure deleting a table zone leaves child overrides in place.
-	sqlutils.DeleteZoneConfig(sqlDB, "TABLE d.t")
-	sqlutils.VerifyAllZoneConfigs(sqlDB, defaultOverrideRow, primaryRow, p0Row)
-	sqlutils.VerifyZoneConfigForTarget(sqlDB, "TABLE d.t", defaultOverrideRow)
-	sqlutils.VerifyZoneConfigForTarget(sqlDB, "INDEX d.t@primary", primaryRow)
-	sqlutils.VerifyZoneConfigForTarget(sqlDB, "TABLE d.t PARTITION p0", p0Row)
-	sqlutils.VerifyZoneConfigForTarget(sqlDB, "TABLE d.t PARTITION p1", primaryRow)
+	sqlutils.DeleteZoneConfig(t, sqlDB, "TABLE d.t")
+	sqlutils.VerifyAllZoneConfigs(t, sqlDB, defaultOverrideRow, primaryRow, p0Row)
+	sqlutils.VerifyZoneConfigForTarget(t, sqlDB, "TABLE d.t", defaultOverrideRow)
+	sqlutils.VerifyZoneConfigForTarget(t, sqlDB, "INDEX d.t@primary", primaryRow)
+	sqlutils.VerifyZoneConfigForTarget(t, sqlDB, "TABLE d.t PARTITION p0", p0Row)
+	sqlutils.VerifyZoneConfigForTarget(t, sqlDB, "TABLE d.t PARTITION p1", primaryRow)
 
 	// Ensure deleting an index zone leaves child overrides in place.
-	sqlutils.DeleteZoneConfig(sqlDB, "INDEX d.t@primary")
-	sqlutils.VerifyAllZoneConfigs(sqlDB, defaultOverrideRow, p0Row)
-	sqlutils.VerifyZoneConfigForTarget(sqlDB, "INDEX d.t@primary", defaultOverrideRow)
-	sqlutils.VerifyZoneConfigForTarget(sqlDB, "TABLE d.t PARTITION p0", p0Row)
+	sqlutils.DeleteZoneConfig(t, sqlDB, "INDEX d.t@primary")
+	sqlutils.VerifyAllZoneConfigs(t, sqlDB, defaultOverrideRow, p0Row)
+	sqlutils.VerifyZoneConfigForTarget(t, sqlDB, "INDEX d.t@primary", defaultOverrideRow)
+	sqlutils.VerifyZoneConfigForTarget(t, sqlDB, "TABLE d.t PARTITION p0", p0Row)
 
 	// Ensure deleting a partition zone works.
-	sqlutils.DeleteZoneConfig(sqlDB, "TABLE d.t PARTITION p0")
-	sqlutils.VerifyAllZoneConfigs(sqlDB, defaultOverrideRow)
-	sqlutils.VerifyZoneConfigForTarget(sqlDB, "TABLE d.t PARTITION p0", defaultOverrideRow)
+	sqlutils.DeleteZoneConfig(t, sqlDB, "TABLE d.t PARTITION p0")
+	sqlutils.VerifyAllZoneConfigs(t, sqlDB, defaultOverrideRow)
+	sqlutils.VerifyZoneConfigForTarget(t, sqlDB, "TABLE d.t PARTITION p0", defaultOverrideRow)
 
 	// Ensure deleting non-overridden zones is not an error.
-	sqlutils.DeleteZoneConfig(sqlDB, "DATABASE d")
-	sqlutils.DeleteZoneConfig(sqlDB, "TABLE d.t")
-	sqlutils.DeleteZoneConfig(sqlDB, "TABLE d.t PARTITION p1")
+	sqlutils.DeleteZoneConfig(t, sqlDB, "DATABASE d")
+	sqlutils.DeleteZoneConfig(t, sqlDB, "TABLE d.t")
+	sqlutils.DeleteZoneConfig(t, sqlDB, "TABLE d.t PARTITION p1")
 
 	// Ensure updating the default zone config applies to zones that have had
 	// overrides added and removed.
-	sqlutils.SetZoneConfig(sqlDB, "RANGE default", yamlDefault)
-	sqlutils.VerifyAllZoneConfigs(sqlDB, defaultRow)
-	sqlutils.VerifyZoneConfigForTarget(sqlDB, "RANGE default", defaultRow)
-	sqlutils.VerifyZoneConfigForTarget(sqlDB, "DATABASE d", defaultRow)
-	sqlutils.VerifyZoneConfigForTarget(sqlDB, "TABLE d.t", defaultRow)
-	sqlutils.VerifyZoneConfigForTarget(sqlDB, "INDEX d.t@primary", defaultRow)
-	sqlutils.VerifyZoneConfigForTarget(sqlDB, "TABLE d.t PARTITION p0", defaultRow)
-	sqlutils.VerifyZoneConfigForTarget(sqlDB, "TABLE d.t PARTITION p1", defaultRow)
+	sqlutils.SetZoneConfig(t, sqlDB, "RANGE default", yamlDefault)
+	sqlutils.VerifyAllZoneConfigs(t, sqlDB, defaultRow)
+	sqlutils.VerifyZoneConfigForTarget(t, sqlDB, "RANGE default", defaultRow)
+	sqlutils.VerifyZoneConfigForTarget(t, sqlDB, "DATABASE d", defaultRow)
+	sqlutils.VerifyZoneConfigForTarget(t, sqlDB, "TABLE d.t", defaultRow)
+	sqlutils.VerifyZoneConfigForTarget(t, sqlDB, "INDEX d.t@primary", defaultRow)
+	sqlutils.VerifyZoneConfigForTarget(t, sqlDB, "TABLE d.t PARTITION p0", defaultRow)
+	sqlutils.VerifyZoneConfigForTarget(t, sqlDB, "TABLE d.t PARTITION p1", defaultRow)
 
 	// Ensure subzones can be created even when no table zone exists.
-	sqlutils.SetZoneConfig(sqlDB, "TABLE d.t PARTITION p0", yamlOverride)
-	sqlutils.SetZoneConfig(sqlDB, "TABLE d.t PARTITION p1", yamlOverride)
-	sqlutils.VerifyAllZoneConfigs(sqlDB, defaultRow, p0Row, p1Row)
-	sqlutils.VerifyZoneConfigForTarget(sqlDB, "TABLE d.t", defaultRow)
-	sqlutils.VerifyZoneConfigForTarget(sqlDB, "TABLE d.t PARTITION p0", p0Row)
-	sqlutils.VerifyZoneConfigForTarget(sqlDB, "TABLE d.t PARTITION p1", p1Row)
+	sqlutils.SetZoneConfig(t, sqlDB, "TABLE d.t PARTITION p0", yamlOverride)
+	sqlutils.SetZoneConfig(t, sqlDB, "TABLE d.t PARTITION p1", yamlOverride)
+	sqlutils.VerifyAllZoneConfigs(t, sqlDB, defaultRow, p0Row, p1Row)
+	sqlutils.VerifyZoneConfigForTarget(t, sqlDB, "TABLE d.t", defaultRow)
+	sqlutils.VerifyZoneConfigForTarget(t, sqlDB, "TABLE d.t PARTITION p0", p0Row)
+	sqlutils.VerifyZoneConfigForTarget(t, sqlDB, "TABLE d.t PARTITION p1", p1Row)
 
 	// Ensure the shorthand index syntax works.
-	sqlutils.SetZoneConfig(sqlDB, `INDEX "primary"`, yamlOverride)
-	sqlutils.VerifyZoneConfigForTarget(sqlDB, `INDEX "primary"`, primaryRow)
+	sqlutils.SetZoneConfig(t, sqlDB, `INDEX "primary"`, yamlOverride)
+	sqlutils.VerifyZoneConfigForTarget(t, sqlDB, `INDEX "primary"`, primaryRow)
 }
 
 func TestInvalidIndexPartitionSetShowZones(t *testing.T) {

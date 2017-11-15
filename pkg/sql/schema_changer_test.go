@@ -368,7 +368,7 @@ CREATE INDEX foo ON t.test (v)
 	// Ensure that the indexes have been created.
 	mTest := makeMutationTest(t, kvDB, sqlDB, tableDesc)
 	indexQuery := `SELECT v FROM t.test@foo`
-	mTest.CheckQueryResults(indexQuery, [][]string{{"b"}, {"d"}})
+	mTest.CheckQueryResults(t, indexQuery, [][]string{{"b"}, {"d"}})
 
 	// Ensure that the version has been incremented.
 	tableDesc = sqlbase.GetTableDescriptor(kvDB, "t", "test")
@@ -380,7 +380,7 @@ CREATE INDEX foo ON t.test (v)
 	// Apply a schema change that only sets the UpVersion bit.
 	expectedVersion = newVersion + 1
 
-	mTest.Exec(`ALTER INDEX t.test@foo RENAME TO ufo`)
+	mTest.Exec(t, `ALTER INDEX t.test@foo RENAME TO ufo`)
 
 	for r := retry.Start(retryOpts); r.Next(); {
 		// Ensure that the version gets incremented.
@@ -399,7 +399,7 @@ CREATE INDEX foo ON t.test (v)
 	// that they all get executed.
 	count := 5
 	for i := 0; i < count; i++ {
-		mTest.Exec(fmt.Sprintf(`CREATE INDEX foo%d ON t.test (v)`, i))
+		mTest.Exec(t, fmt.Sprintf(`CREATE INDEX foo%d ON t.test (v)`, i))
 	}
 	// Wait until indexes are created.
 	for r := retry.Start(retryOpts); r.Next(); {
@@ -410,7 +410,7 @@ CREATE INDEX foo ON t.test (v)
 	}
 	for i := 0; i < count; i++ {
 		indexQuery := fmt.Sprintf(`SELECT v FROM t.test@foo%d`, i)
-		mTest.CheckQueryResults(indexQuery, [][]string{{"b"}, {"d"}})
+		mTest.CheckQueryResults(t, indexQuery, [][]string{{"b"}, {"d"}})
 	}
 }
 

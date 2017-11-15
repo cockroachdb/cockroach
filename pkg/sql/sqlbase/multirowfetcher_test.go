@@ -279,7 +279,7 @@ func TestNextRowSecondaryIndex(t *testing.T) {
 		sqlutils.RowModuloFn(storingMods[1]),
 	)
 
-	r := sqlutils.MakeSQLRunner(t, sqlDB)
+	r := sqlutils.MakeSQLRunner(sqlDB)
 	// Initialize tables first.
 	for tableName, table := range tables {
 		sqlutils.CreateTable(
@@ -293,7 +293,7 @@ func TestNextRowSecondaryIndex(t *testing.T) {
 		// we're properly decoding (UNIQUE) secondary index keys
 		// properly).
 		for i := 1; i <= nNulls; i++ {
-			r.Exec(fmt.Sprintf(
+			r.Exec(t, fmt.Sprintf(
 				`INSERT INTO test.%s VALUES (%d, NULL, %d, %d);`,
 				tableName,
 				table.nRows+i,
@@ -615,8 +615,8 @@ func TestNextRowInterleave(t *testing.T) {
 	for _, table := range interleaveEntries {
 		if table.indexSchema != "" {
 			// Create interleaved secondary indexes.
-			r := sqlutils.MakeSQLRunner(t, sqlDB)
-			r.Exec(table.indexSchema)
+			r := sqlutils.MakeSQLRunner(sqlDB)
+			r.Exec(t, table.indexSchema)
 		} else {
 			// Create tables (primary indexes).
 			sqlutils.CreateTableInterleave(

@@ -38,9 +38,9 @@ func TestSplitAtTableBoundary(t *testing.T) {
 	tc := testcluster.StartTestCluster(t, 3, testClusterArgs)
 	defer tc.Stopper().Stop(context.TODO())
 
-	runner := sqlutils.MakeSQLRunner(t, tc.Conns[0])
-	runner.Exec(`CREATE DATABASE test`)
-	runner.Exec(`CREATE TABLE test.t (k SERIAL PRIMARY KEY, v INT)`)
+	runner := sqlutils.MakeSQLRunner(tc.Conns[0])
+	runner.Exec(t, `CREATE DATABASE test`)
+	runner.Exec(t, `CREATE TABLE test.t (k SERIAL PRIMARY KEY, v INT)`)
 
 	const tableIDQuery = `
 SELECT tables.id FROM system.namespace tables
@@ -48,7 +48,7 @@ SELECT tables.id FROM system.namespace tables
   WHERE dbs.name = $1 AND tables.name = $2
 `
 	var tableID uint32
-	runner.QueryRow(tableIDQuery, "test", "t").Scan(&tableID)
+	runner.QueryRow(t, tableIDQuery, "test", "t").Scan(&tableID)
 	tableStartKey := keys.MakeTablePrefix(tableID)
 
 	// Wait for new table to split.

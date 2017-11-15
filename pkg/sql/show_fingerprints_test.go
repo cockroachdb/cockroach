@@ -37,27 +37,27 @@ func TestShowFingerprintsAsOfSystemTime(t *testing.T) {
 	tc := serverutils.StartTestCluster(t, 1, base.TestClusterArgs{})
 	defer tc.Stopper().Stop(ctx)
 
-	sqlDB := sqlutils.MakeSQLRunner(t, tc.ServerConn(0))
-	sqlDB.Exec(`CREATE DATABASE d`)
-	sqlDB.Exec(`CREATE TABLE d.t (a INT PRIMARY KEY, b INT, INDEX b_idx (b))`)
-	sqlDB.Exec(`INSERT INTO d.t VALUES (1, 2)`)
+	sqlDB := sqlutils.MakeSQLRunner(tc.ServerConn(0))
+	sqlDB.Exec(t, `CREATE DATABASE d`)
+	sqlDB.Exec(t, `CREATE TABLE d.t (a INT PRIMARY KEY, b INT, INDEX b_idx (b))`)
+	sqlDB.Exec(t, `INSERT INTO d.t VALUES (1, 2)`)
 
 	const fprintQuery = `SHOW EXPERIMENTAL_FINGERPRINTS FROM TABLE d.t`
-	fprint1 := sqlDB.QueryStr(fprintQuery)
+	fprint1 := sqlDB.QueryStr(t, fprintQuery)
 
 	var ts string
-	sqlDB.QueryRow(`SELECT now()`).Scan(&ts)
+	sqlDB.QueryRow(t, `SELECT now()`).Scan(&ts)
 
-	sqlDB.Exec(`INSERT INTO d.t VALUES (3, 4)`)
-	sqlDB.Exec(`DROP INDEX d.t@b_idx`)
+	sqlDB.Exec(t, `INSERT INTO d.t VALUES (3, 4)`)
+	sqlDB.Exec(t, `DROP INDEX d.t@b_idx`)
 
-	fprint2 := sqlDB.QueryStr(fprintQuery)
+	fprint2 := sqlDB.QueryStr(t, fprintQuery)
 	if reflect.DeepEqual(fprint1, fprint2) {
 		t.Errorf("expected different fingerprints: %v vs %v", fprint1, fprint2)
 	}
 
 	fprint3Query := fmt.Sprintf(`SELECT * FROM [%s] AS OF SYSTEM TIME '%s'`, fprintQuery, ts)
-	sqlDB.CheckQueryResults(fprint3Query, fprint1)
+	sqlDB.CheckQueryResults(t, fprint3Query, fprint1)
 }
 
 func TestShowFingerprintsColumnNames(t *testing.T) {
@@ -67,9 +67,9 @@ func TestShowFingerprintsColumnNames(t *testing.T) {
 	tc := serverutils.StartTestCluster(t, 1, base.TestClusterArgs{})
 	defer tc.Stopper().Stop(ctx)
 
-	sqlDB := sqlutils.MakeSQLRunner(t, tc.ServerConn(0))
-	sqlDB.Exec(`CREATE DATABASE d`)
-	sqlDB.Exec(`CREATE TABLE d.t (
+	sqlDB := sqlutils.MakeSQLRunner(tc.ServerConn(0))
+	sqlDB.Exec(t, `CREATE DATABASE d`)
+	sqlDB.Exec(t, `CREATE TABLE d.t (
 		lowercase INT PRIMARY KEY,
 		"cApiTaLInT" INT,
 		"cApiTaLByTEs" BYTES,
@@ -77,12 +77,12 @@ func TestShowFingerprintsColumnNames(t *testing.T) {
 		INDEX capital_bytes_idx ("cApiTaLByTEs")
 	)`)
 
-	sqlDB.Exec(`INSERT INTO d.t VALUES (1, 2, 'a')`)
-	fprint1 := sqlDB.QueryStr(`SHOW EXPERIMENTAL_FINGERPRINTS FROM TABLE d.t`)
+	sqlDB.Exec(t, `INSERT INTO d.t VALUES (1, 2, 'a')`)
+	fprint1 := sqlDB.QueryStr(t, `SHOW EXPERIMENTAL_FINGERPRINTS FROM TABLE d.t`)
 
-	sqlDB.Exec(`TRUNCATE TABLE d.t`)
-	sqlDB.Exec(`INSERT INTO d.t VALUES (3, 4, 'b')`)
-	fprint2 := sqlDB.QueryStr(`SHOW EXPERIMENTAL_FINGERPRINTS FROM TABLE d.t`)
+	sqlDB.Exec(t, `TRUNCATE TABLE d.t`)
+	sqlDB.Exec(t, `INSERT INTO d.t VALUES (3, 4, 'b')`)
+	fprint2 := sqlDB.QueryStr(t, `SHOW EXPERIMENTAL_FINGERPRINTS FROM TABLE d.t`)
 
 	if reflect.DeepEqual(fprint1, fprint2) {
 		t.Errorf("expected different fingerprints: %v vs %v", fprint1, fprint2)
