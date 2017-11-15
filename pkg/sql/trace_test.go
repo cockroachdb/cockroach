@@ -365,3 +365,59 @@ func TestKVTraceWithCountStar(t *testing.T) {
 	r.Exec("INSERT INTO test.a VALUES (1,1), (2,2)")
 	r.Exec("SHOW KV TRACE FOR SELECT COUNT(*) FROM test.a")
 }
+
+// Test that spans are collected from RPC that returned (structured) errors, in
+// addition to the spans from the successful retry of the RPC.
+func TestTraceFromErrorReplica(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	// We're going to set up a scenario in which a node is not aware of the
+	// leaseholder for a range: the replicas are on n1,n2,n3 with the lease on n2.
+	// A query originating from n4 will initially contact n1, which will redirect
+	// to n2. We test that we have collected the spans from n1.
+
+	const numNodes = 4
+	cluster := serverutils.StartTestCluster(t, numNodes, base.TestClusterArgs{
+		ReplicationMode: base.ReplicationManual,
+		ServerArgs: base.TestServerArgs{
+			UseDatabase: "test",
+		},
+	})
+	defer cluster.Stopper().Stop(context.TODO())
+	clusterDB := cluster.ServerConn(0)
+	n4 := cluster.ServerConn(3)
+
+	if _, err := clusterDB.Exec(`
+		CREATE DATABASE test;
+		CREATE TABLE test.foo (id INT PRIMARY KEY);
+	`); err != nil {
+		t.Fatal(err)
+	}
+
+	// Do a read on the table through n4 so that it populates its lease cache.
+	if _, err := n4.Exec("SELECT * FROM foo"); err != nil {
+		t.Fatal(err)
+	}
+
+	// Replicate foo on n1,n2,n3 with the lease on n2.
+	if _, err := clusterDB.Exec(`
+		ALTER TABLE test.foo TESTING_RELOCATE VALUES (ARRAY[2,1,3], 1);
+	`); err != nil {
+		t.Fatal(err)
+	}
+
+	// Query through n4 and look for a redirect log message from n1.
+	rows, err := n4.Query(
+		`SELECT context, message
+			 FROM [SHOW TRACE FOR SELECT * FROM test.foo]
+				WHERE context LIKE '%n1%' AND
+						 message LIKE '%NotLeaseHolderError%'
+		`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rows.Close()
+	if !rows.Next() {
+		t.Fatal("no redirect message from n1 found")
+	}
+}

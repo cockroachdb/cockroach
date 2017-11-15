@@ -30,7 +30,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/opentracing/opentracing-go"
+	"github.com/pkg/errors"
 )
 
 // A SendOptions structure describes the algorithm for sending RPCs to one or
@@ -85,6 +87,9 @@ type Transport interface {
 	// replica. May panic if the transport is exhausted. Should not
 	// block; the transport is responsible for starting other goroutines
 	// as needed.
+	//
+	// SendNext is also in charge of importing the remotely collected spans (if
+	// any) into the local trace.
 	SendNext(context.Context, chan<- BatchCall)
 
 	// NextReplica returns the replica descriptor of the replica to be tried in
@@ -237,6 +242,17 @@ func (gt *grpcTransport) send(
 					log.Error(ctx, err)
 				}
 			}
+			// Import the remotely collected spans, if any.
+			if len(reply.CollectedSpans) != 0 {
+				span := opentracing.SpanFromContext(ctx)
+				if span == nil {
+					return nil, errors.Errorf(
+						"trying to ingest remote spans but there is no recording span set up")
+				}
+				if err := tracing.ImportRemoteSpans(span, reply.CollectedSpans); err != nil {
+					return nil, errors.Wrap(err, "error ingesting remote spans")
+				}
+			}
 		}
 		return reply, err
 	}()
@@ -384,6 +400,18 @@ func (s *senderTransport) SendNext(ctx context.Context, done chan<- BatchCall) {
 	if pErr != nil {
 		log.Event(ctx, "error: "+pErr.String())
 	}
+
+	// Import the remotely collected spans, if any.
+	if len(br.CollectedSpans) != 0 {
+		span := opentracing.SpanFromContext(ctx)
+		if span == nil {
+			panic("trying to ingest remote spans but there is no recording span set up")
+		}
+		if err := tracing.ImportRemoteSpans(span, br.CollectedSpans); err != nil {
+			panic(err)
+		}
+	}
+
 	done <- BatchCall{Reply: br}
 }
 
