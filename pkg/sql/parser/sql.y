@@ -597,6 +597,7 @@ func (u *sqlSymUnion) scrubOption() tree.ScrubOption {
 %type <tree.Statement> drop_table_stmt
 %type <tree.Statement> drop_user_stmt
 %type <tree.Statement> drop_view_stmt
+%type <tree.Statement> drop_sequence_stmt
 
 %type <tree.Statement> explain_stmt
 %type <tree.Statement> prepare_stmt
@@ -1615,7 +1616,7 @@ discard_stmt:
 
 // %Help: DROP
 // %Category: Group
-// %Text: DROP DATABASE, DROP INDEX, DROP TABLE, DROP VIEW, DROP USER
+// %Text: DROP DATABASE, DROP INDEX, DROP TABLE, DROP VIEW, DROP SEQUENCE, DROP USER
 drop_stmt:
   drop_ddl_stmt      // help texts in sub-rule
 | drop_user_stmt     // EXTEND WITH HELP: DROP USER
@@ -1626,6 +1627,7 @@ drop_ddl_stmt:
 | drop_index_stmt    // EXTEND WITH HELP: DROP INDEX
 | drop_table_stmt    // EXTEND WITH HELP: DROP TABLE
 | drop_view_stmt     // EXTEND WITH HELP: DROP VIEW
+| drop_sequence_stmt // EXTEND WITH HELP: DROP SEQUENCE
 
 // %Help: DROP VIEW - remove a view
 // %Category: DDL
@@ -1641,6 +1643,21 @@ drop_view_stmt:
     $$.val = &tree.DropView{Names: $5.tableNameReferences(), IfExists: true, DropBehavior: $6.dropBehavior()}
   }
 | DROP VIEW error // SHOW HELP: DROP VIEW
+
+// %Help: DROP SEQUENCE - remove a sequence
+// %Category: DDL
+// %Text: DROP SEQUENCE [IF EXISTS] <sequenceName> [, ...] [CASCADE | RESTRICT]
+// %SeeAlso: DROP
+drop_sequence_stmt:
+  DROP SEQUENCE table_name_list opt_drop_behavior
+  {
+    $$.val = &tree.DropSequence{Names: $3.tableNameReferences(), IfExists: false, DropBehavior: $4.dropBehavior()}
+  }
+| DROP SEQUENCE IF EXISTS table_name_list opt_drop_behavior
+  {
+    $$.val = &tree.DropSequence{Names: $5.tableNameReferences(), IfExists: true, DropBehavior: $6.dropBehavior()}
+  }
+| DROP SEQUENCE error // SHOW HELP: DROP VIEW
 
 // %Help: DROP TABLE - remove a table
 // %Category: DDL

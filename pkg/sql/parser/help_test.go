@@ -128,6 +128,10 @@ func TestContextualHelp(t *testing.T) {
 		{`DROP INDEX blah, ??`, `DROP INDEX`},
 		{`DROP INDEX blah@blih ??`, `DROP INDEX`},
 
+		{`DROP SEQUENCE blah ??`, `DROP SEQUENCE`},
+		{`DROP SEQUENCE IF ??`, `DROP SEQUENCE`},
+		{`DROP SEQUENCE IF EXISTS blih, bloh ??`, `DROP SEQUENCE`},
+
 		{`DROP TABLE blah ??`, `DROP TABLE`},
 		{`DROP TABLE IF ??`, `DROP TABLE`},
 		{`DROP TABLE IF EXISTS blih, bloh ??`, `DROP TABLE`},
