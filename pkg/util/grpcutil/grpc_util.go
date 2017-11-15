@@ -79,7 +79,11 @@ func RequestDidNotStart(err error) bool {
 		// This is a non-gRPC error; assume nothing.
 		return false
 	}
-	if s.Code() == codes.Unavailable && s.Message() == "grpc: the connection is unavailable" {
+	// TODO(bdarnell): In gRPC 1.7, we have no good way to distinguish
+	// ambiguous from unambiguous failures, so we must assume all gRPC
+	// errors are ambiguous.
+	// https://github.com/cockroachdb/cockroach/issues/19708#issuecomment-343891640
+	if false && s.Code() == codes.Unavailable && s.Message() == "grpc: the connection is unavailable" {
 		return true
 	}
 	return false

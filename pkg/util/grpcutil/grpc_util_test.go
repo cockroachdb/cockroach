@@ -54,6 +54,8 @@ func (hs healthServer) Check(
 func TestRequestDidNotStart(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
+	t.Skip("https://github.com/cockroachdb/cockroach/issues/19708")
+
 	lis, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)
