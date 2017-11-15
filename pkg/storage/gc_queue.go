@@ -375,6 +375,8 @@ func processLocalKeyRange(
 
 	var gcKeys []roachpb.GCRequest_GCKey
 
+	const maxIntentHack = 800
+
 	handleOneTransaction := func(kv roachpb.KeyValue) error {
 		var txn roachpb.Transaction
 		if err := kv.Value.GetProto(&txn); err != nil {
@@ -407,6 +409,11 @@ func processLocalKeyRange(
 			// persisted, though they still might exist in the system.
 			infoMu.TransactionSpanGCAborted++
 			if err := func() error {
+				// Simply don't resolve these intents. We don't have to and don't want to get bogged down
+				// trying to do so.
+				if len(txn.Intents) > maxIntentHack {
+					return nil
+				}
 				infoMu.Unlock() // intentional
 				defer infoMu.Lock()
 				return resolveIntentsFn(roachpb.AsIntents(txn.Intents, &txn),
@@ -425,6 +432,11 @@ func processLocalKeyRange(
 			if err := func() error {
 				infoMu.Unlock() // intentional
 				defer infoMu.Lock()
+
+				if len(txn.Intents) > maxIntentHack {
+					// Return an error so that we leave this transaction alone. Don't try to resolve its intents.
+					return errors.Errorf("cannot GC transaction with %d intents", len(txn.Intents))
+				}
 				return resolveIntentsFn(roachpb.AsIntents(txn.Intents, &txn), ResolveOptions{Wait: true, Poison: false})
 			}(); err != nil {
 				// Returning the error here would abort the whole GC run, and
