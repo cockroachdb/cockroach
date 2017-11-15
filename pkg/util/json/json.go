@@ -91,6 +91,12 @@ type JSON interface {
 	// preprocessForContains converts a JSON document to an internal interface
 	// which is used to efficiently implement the @> operator.
 	preprocessForContains() containsable
+
+	// encode appends the encoding of the JSON document to appendTo, returning
+	// the result alongside the JEntry for the document. Note that some values
+	// (true/false/null) are encoded with 0 bytes and are purely defined by their
+	// JEntry.
+	encode(appendTo []byte) (jEntry uint32, b []byte, err error)
 }
 
 type jsonTrue struct{}
