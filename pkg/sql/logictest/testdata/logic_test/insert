@@ -578,27 +578,66 @@ INSERT INTO kv (k.*) VALUES ('hello')
 statement error compound types not supported yet: "k.v"
 INSERT INTO kv (k.v) VALUES ('hello')
 
-# Test INSERT INTO ... SELECT FROM ... LIMIT 1
-statement ok
-CREATE TABLE insert_t (x INT,v INT,PRIMARY KEY (x))
+
 
 statement ok
-CREATE TABLE select_t (x INT,v INT,PRIMARY KEY (x))
+CREATE TABLE insert_t (x INT, v INT)
 
 statement ok
-INSERT INTO select_t VALUES(1, 2),(2,3),(3,4)
+CREATE TABLE select_t (x INT, v INT)
+
+statement ok
+INSERT INTO select_t VALUES (1, 9), (8, 2), (3, 7), (6, 4)
+
+# Check that INSERT supports ORDER BY (MySQL extension)
+
+query ITTT
+EXPLAIN (PLAN,EXPRS) INSERT INTO insert_t TABLE select_t ORDER BY v DESC
+----
+0  insert  ·          ·
+0  ·       into       insert_t(x, v, rowid)
+0  ·       default 0  NULL
+0  ·       default 1  NULL
+0  ·       default 2  unique_rowid()
+1  sort    ·          ·
+1  ·       order      -v
+2  render  ·          ·
+2  ·       render 0   x
+2  ·       render 1   v
+3  scan    ·          ·
+3  ·       table      select_t@primary
+3  ·       spans      ALL
+
+query II
+INSERT INTO insert_t TABLE select_t ORDER BY v DESC RETURNING x, v
+----
+1  9
+3  7
+6  4
+8  2
+
+# Check that INSERT supports LIMIT (MySQL extension)
+
+statement ok
+TRUNCATE TABLE insert_t
 
 query ITTT
 EXPLAIN (PLAN,EXPRS) INSERT INTO insert_t SELECT * FROM select_t LIMIT 1
 ----
-0  insert  ·      ·
-0  ·       into   insert_t(x, v)
-1  limit   ·      ·
-1  ·       count  1
-2  scan    ·      ·
-2  ·       table  select_t@primary
-2  ·       spans  ALL
-2  ·       limit  1
+0  insert  ·          ·
+0  ·       into       insert_t(x, v, rowid)
+0  ·       default 0  NULL
+0  ·       default 1  NULL
+0  ·       default 2  unique_rowid()
+1  limit   ·          ·
+1  ·       count      1
+2  render  ·          ·
+2  ·       render 0   x
+2  ·       render 1   v
+3  scan    ·          ·
+3  ·       table      select_t@primary
+3  ·       spans      ALL
+3  ·       limit      1
 
 statement ok
 INSERT INTO insert_t SELECT * FROM select_t LIMIT 1
@@ -606,7 +645,7 @@ INSERT INTO insert_t SELECT * FROM select_t LIMIT 1
 query II
 SELECT * FROM insert_t
 ----
-1  2
+1  9
 
 statement ok
 TRUNCATE TABLE insert_t
@@ -617,43 +656,68 @@ INSERT INTO insert_t (SELECT * FROM select_t LIMIT 1)
 query II
 SELECT * FROM insert_t
 ----
-1  2
+1  9
+
+# Check the grouping of LIMIT and ORDER BY
 
 query ITTT
-EXPLAIN (PLAN) INSERT INTO insert_t VALUES(1,1),(2,2) LIMIT 1
+EXPLAIN (PLAN) INSERT INTO insert_t VALUES (1,1), (2,2) LIMIT 1
 ----
 0  insert  ·     ·
-0  ·       into  insert_t(x, v)
+0  ·       into  insert_t(x, v, rowid)
 1  limit   ·     ·
 2  values  ·     ·
 2  ·       size  2 columns, 2 rows
 
 query ITTT
-EXPLAIN (PLAN) INSERT INTO insert_t (VALUES(1,1),(2,2)) LIMIT 1
+EXPLAIN (PLAN) INSERT INTO insert_t VALUES (1,1), (2,2) ORDER BY 2 LIMIT 1
 ----
-0  insert  ·     ·
-0  ·       into  insert_t(x, v)
-1  limit   ·     ·
-2  values  ·     ·
-2  ·       size  2 columns, 2 rows
+0  insert  ·         ·
+0  ·       into      insert_t(x, v, rowid)
+1  limit   ·         ·
+2  sort    ·         ·
+2  ·       order     +column2
+2  ·       strategy  top 1
+3  values  ·         ·
+3  ·       size      2 columns, 2 rows
 
 query ITTT
-EXPLAIN (PLAN) INSERT INTO insert_t (VALUES(1,1),(2,2) LIMIT 1)
+EXPLAIN (PLAN) INSERT INTO insert_t (VALUES (1,1), (2,2) ORDER BY 2) LIMIT 1
 ----
-0  insert  ·     ·
-0  ·       into  insert_t(x, v)
-1  limit   ·     ·
-2  values  ·     ·
-2  ·       size  2 columns, 2 rows
+0  insert  ·         ·
+0  ·       into      insert_t(x, v, rowid)
+1  limit   ·         ·
+2  sort    ·         ·
+2  ·       order     +column2
+2  ·       strategy  top 1
+3  values  ·         ·
+3  ·       size      2 columns, 2 rows
+
+query ITTT
+EXPLAIN (PLAN) INSERT INTO insert_t (VALUES (1,1), (2,2) ORDER BY 2 LIMIT 1)
+----
+0  insert  ·         ·
+0  ·       into      insert_t(x, v, rowid)
+1  limit   ·         ·
+2  sort    ·         ·
+2  ·       order     +column2
+2  ·       strategy  top 1
+3  values  ·         ·
+3  ·       size      2 columns, 2 rows
 
 statement error pq: multiple LIMIT clauses not allowed
-EXPLAIN (PLAN) INSERT INTO insert_t (VALUES(1,1),(2,2) LIMIT 1) LIMIT 1
+EXPLAIN (PLAN) INSERT INTO insert_t (VALUES (1,1), (2,2) LIMIT 1) LIMIT 1
+
+statement error pq: multiple ORDER BY clauses not allowed
+EXPLAIN (PLAN) INSERT INTO insert_t (VALUES (1,1), (2,2) ORDER BY 2) ORDER BY 2
 
 statement error DEFAULT can only appear in a VALUES list within INSERT or on the right side of a SET
-INSERT INTO insert_t (VALUES(1, DEFAULT),(2,'BBB') LIMIT 1)
+INSERT INTO insert_t (VALUES (1, DEFAULT), (2,'BBB') LIMIT 1)
 
 statement error DEFAULT can only appear in a VALUES list within INSERT or on the right side of a SET
-INSERT INTO insert_t (VALUES(1, DEFAULT),(2,'BBB')) LIMIT 1
+INSERT INTO insert_t (VALUES (1, DEFAULT), (2,'BBB')) LIMIT 1
+
+# Check string/bytes type conflicts during insertions.
 
 statement ok
 CREATE TABLE bytes_t (
