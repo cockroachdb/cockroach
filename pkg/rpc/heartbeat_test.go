@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
 func TestRemoteOffsetString(t *testing.T) {
@@ -44,10 +45,11 @@ func TestHeartbeatReply(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	manual := hlc.NewManualClock(5)
 	clock := hlc.NewClock(manual.UnixNano, time.Nanosecond)
-	heartbeat := &HeartbeatService{
-		clock:              clock,
-		remoteClockMonitor: newRemoteClockMonitor(clock, time.Hour, 0),
+	rpcContext := &Context{
+		LocalClock:   clock,
+		RemoteClocks: newRemoteClockMonitor(clock, time.Hour, 0),
 	}
+	heartbeat := &HeartbeatService{rpcContext}
 
 	request := &PingRequest{
 		Ping: "testPing",
@@ -88,10 +90,11 @@ func (mhs *ManualHeartbeatService) Ping(
 		return nil, ctx.Err()
 	case <-mhs.stopper.ShouldStop():
 	}
-	hs := HeartbeatService{
-		clock:              mhs.clock,
-		remoteClockMonitor: mhs.remoteClockMonitor,
+	rpcContext := &Context{
+		LocalClock:   mhs.clock,
+		RemoteClocks: mhs.remoteClockMonitor,
 	}
+	hs := HeartbeatService{rpcContext}
 	return hs.Ping(ctx, args)
 }
 
@@ -104,10 +107,10 @@ func TestManualHeartbeat(t *testing.T) {
 		remoteClockMonitor: newRemoteClockMonitor(clock, time.Hour, 0),
 		ready:              make(chan error, 1),
 	}
-	regularHeartbeat := &HeartbeatService{
-		clock:              clock,
-		remoteClockMonitor: newRemoteClockMonitor(clock, time.Hour, 0),
-	}
+	regularHeartbeat := &HeartbeatService{&Context{
+		LocalClock:   clock,
+		RemoteClocks: newRemoteClockMonitor(clock, time.Hour, 0),
+	}}
 
 	request := &PingRequest{
 		Ping: "testManual",
@@ -146,10 +149,11 @@ func TestClockOffsetMismatch(t *testing.T) {
 	}()
 
 	clock := hlc.NewClock(hlc.UnixNano, 250*time.Millisecond)
-	hs := &HeartbeatService{
-		clock:              clock,
-		remoteClockMonitor: newRemoteClockMonitor(clock, time.Hour, 0),
+	rpcContext := &Context{
+		LocalClock:   clock,
+		RemoteClocks: newRemoteClockMonitor(clock, time.Hour, 0),
 	}
+	hs := &HeartbeatService{rpcContext}
 
 	request := &PingRequest{
 		Ping:           "testManual",
@@ -158,4 +162,46 @@ func TestClockOffsetMismatch(t *testing.T) {
 	}
 	response, err := hs.Ping(context.Background(), request)
 	t.Fatalf("should not have reached but got response=%v err=%v", response, err)
+}
+
+func TestClusterIDCompare(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	uuid1, uuid2 := uuid.MakeV4(), uuid.MakeV4()
+	testData := []struct {
+		name            string
+		serverClusterID uuid.UUID
+		clientClusterID uuid.UUID
+		expectError     bool
+	}{
+		{"cluster IDs match", uuid1, uuid1, false},
+		{"their cluster ID missing", uuid1, uuid.Nil, false},
+		{"our cluster ID missing", uuid.Nil, uuid1, false},
+		{"both cluster IDs missing", uuid.Nil, uuid.Nil, false},
+		{"cluster ID mismatch", uuid1, uuid2, true},
+	}
+
+	manual := hlc.NewManualClock(5)
+	clock := hlc.NewClock(manual.UnixNano, time.Nanosecond)
+	rpcContext := &Context{
+		LocalClock:   clock,
+		RemoteClocks: newRemoteClockMonitor(clock, time.Hour, 0),
+	}
+	heartbeat := &HeartbeatService{rpcContext}
+
+	for _, td := range testData {
+		t.Run(td.name, func(t *testing.T) {
+			rpcContext.ClusterID = td.serverClusterID
+			request := &PingRequest{
+				Ping:      "testPing",
+				ClusterID: td.clientClusterID,
+			}
+			_, err := heartbeat.Ping(context.Background(), request)
+			if td.expectError && err == nil {
+				t.Error("expected cluster ID mismatch error")
+			}
+			if !td.expectError && err != nil {
+				t.Errorf("unexpected error: %s", err)
+			}
+		})
+	}
 }

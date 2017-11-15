@@ -41,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
 func init() {
@@ -201,10 +202,7 @@ func NewServerWithInterceptor(
 	}
 
 	s := grpc.NewServer(opts...)
-	RegisterHeartbeatServer(s, &HeartbeatService{
-		clock:              ctx.LocalClock,
-		remoteClockMonitor: ctx.RemoteClocks,
-	})
+	RegisterHeartbeatServer(s, &HeartbeatService{ctx})
 	return s
 }
 
@@ -217,6 +215,7 @@ type errValue struct {
 type connMeta struct {
 	sync.Once
 	conn         *grpc.ClientConn
+	validated    atomic.Value // bool. true if the heartbeat has ever succeeded
 	dialErr      error
 	heartbeatErr atomic.Value
 }
@@ -243,6 +242,8 @@ type Context struct {
 	conns syncmap.Map
 
 	stats StatsHandler
+
+	ClusterID uuid.UUID
 
 	// For unittesting.
 	BreakerFactory func() *circuit.Breaker
@@ -433,11 +434,20 @@ func (ctx *Context) GRPCDial(target string, opts ...grpc.DialOption) (*grpc.Clie
 			log.Infof(ctx.masterCtx, "dialing %s", target)
 		}
 		meta.conn, meta.dialErr = grpc.DialContext(ctx.masterCtx, target, dialOpts...)
-		if ctx.GetLocalInternalServerForAddr(target) == nil && meta.dialErr == nil {
+
+		if ctx.GetLocalInternalServerForAddr(target) != nil {
+			meta.validated.Store(true)
+			return
+		}
+
+		if meta.dialErr == nil {
+			// Run an initial heartbeat to validate the connection.
+			ctx.runHeartbeat(meta, target)
+
 			if err := ctx.Stopper.RunTask(
 				ctx.masterCtx, "rpc.Context: grpc heartbeat", func(masterCtx context.Context) {
 					ctx.Stopper.RunWorker(masterCtx, func(masterCtx context.Context) {
-						err := ctx.runHeartbeat(meta, target)
+						err := ctx.runHeartbeatTimer(meta, target)
 						if err != nil && !grpcutil.IsClosedConnection(err) {
 							log.Errorf(masterCtx, "removing connection to %s due to error: %s", target, err)
 						}
@@ -454,6 +464,11 @@ func (ctx *Context) GRPCDial(target string, opts ...grpc.DialOption) (*grpc.Clie
 		}
 	})
 
+	if meta.dialErr == nil && !meta.validated.Load().(bool) {
+		if err := meta.heartbeatErr.Load().(errValue).error; err != nil {
+			return nil, errors.Wrap(err, "initial connection heartbeat failed")
+		}
+	}
 	return meta.conn, meta.dialErr
 }
 
@@ -488,15 +503,62 @@ func (ctx *Context) ConnHealth(target string) error {
 	return ErrNotConnected
 }
 
-func (ctx *Context) runHeartbeat(meta *connMeta, target string) error {
+func (ctx *Context) runHeartbeat(meta *connMeta, target string) {
 	maxOffset := ctx.LocalClock.MaxOffset()
 
 	request := PingRequest{
 		Addr:           ctx.Addr,
 		MaxOffsetNanos: maxOffset.Nanoseconds(),
+		ClusterID:      ctx.ClusterID,
 	}
 	heartbeatClient := NewHeartbeatClient(meta.conn)
 
+	goCtx := ctx.masterCtx
+	var cancel context.CancelFunc
+	if hbTimeout := ctx.heartbeatTimeout; hbTimeout > 0 {
+		goCtx, cancel = context.WithTimeout(goCtx, hbTimeout)
+	}
+	sendTime := ctx.LocalClock.PhysicalTime()
+	// NB: We want the request to fail-fast (the default), otherwise we won't
+	// be notified of transport failures.
+	response, err := heartbeatClient.Ping(goCtx, &request)
+	if cancel != nil {
+		cancel()
+	}
+	meta.heartbeatErr.Store(errValue{err})
+
+	if err == nil {
+		meta.validated.Store(true)
+		receiveTime := ctx.LocalClock.PhysicalTime()
+
+		// Only update the clock offset measurement if we actually got a
+		// successful response from the server.
+		pingDuration := receiveTime.Sub(sendTime)
+		maxOffset := ctx.LocalClock.MaxOffset()
+		if maxOffset != timeutil.ClocklessMaxOffset &&
+			pingDuration > maximumPingDurationMult*maxOffset {
+
+			request.Offset.Reset()
+		} else {
+			// Offset and error are measured using the remote clock reading
+			// technique described in
+			// http://se.inf.tu-dresden.de/pubs/papers/SRDS1994.pdf, page 6.
+			// However, we assume that drift and min message delay are 0, for
+			// now.
+			request.Offset.MeasuredAt = receiveTime.UnixNano()
+			request.Offset.Uncertainty = (pingDuration / 2).Nanoseconds()
+			remoteTimeNow := timeutil.Unix(0, response.ServerTime).Add(pingDuration / 2)
+			request.Offset.Offset = remoteTimeNow.Sub(receiveTime).Nanoseconds()
+		}
+		ctx.RemoteClocks.UpdateOffset(ctx.masterCtx, target, request.Offset, pingDuration)
+
+		if cb := ctx.HeartbeatCB; cb != nil {
+			cb()
+		}
+	}
+}
+
+func (ctx *Context) runHeartbeatTimer(meta *connMeta, target string) error {
 	var heartbeatTimer timeutil.Timer
 	defer heartbeatTimer.Stop()
 
@@ -509,49 +571,7 @@ func (ctx *Context) runHeartbeat(meta *connMeta, target string) error {
 		case <-heartbeatTimer.C:
 			heartbeatTimer.Read = true
 		}
-
-		goCtx := ctx.masterCtx
-		var cancel context.CancelFunc
-		if hbTimeout := ctx.heartbeatTimeout; hbTimeout > 0 {
-			goCtx, cancel = context.WithTimeout(goCtx, hbTimeout)
-		}
-		sendTime := ctx.LocalClock.PhysicalTime()
-		// NB: We want the request to fail-fast (the default), otherwise we won't
-		// be notified of transport failures.
-		response, err := heartbeatClient.Ping(goCtx, &request)
-		if cancel != nil {
-			cancel()
-		}
-		meta.heartbeatErr.Store(errValue{err})
-
-		if err == nil {
-			receiveTime := ctx.LocalClock.PhysicalTime()
-
-			// Only update the clock offset measurement if we actually got a
-			// successful response from the server.
-			pingDuration := receiveTime.Sub(sendTime)
-			maxOffset := ctx.LocalClock.MaxOffset()
-			if maxOffset != timeutil.ClocklessMaxOffset &&
-				pingDuration > maximumPingDurationMult*maxOffset {
-
-				request.Offset.Reset()
-			} else {
-				// Offset and error are measured using the remote clock reading
-				// technique described in
-				// http://se.inf.tu-dresden.de/pubs/papers/SRDS1994.pdf, page 6.
-				// However, we assume that drift and min message delay are 0, for
-				// now.
-				request.Offset.MeasuredAt = receiveTime.UnixNano()
-				request.Offset.Uncertainty = (pingDuration / 2).Nanoseconds()
-				remoteTimeNow := timeutil.Unix(0, response.ServerTime).Add(pingDuration / 2)
-				request.Offset.Offset = remoteTimeNow.Sub(receiveTime).Nanoseconds()
-			}
-			ctx.RemoteClocks.UpdateOffset(ctx.masterCtx, target, request.Offset, pingDuration)
-
-			if cb := ctx.HeartbeatCB; cb != nil {
-				cb()
-			}
-		}
+		ctx.runHeartbeat(meta, target)
 
 		heartbeatTimer.Reset(ctx.heartbeatInterval)
 	}
