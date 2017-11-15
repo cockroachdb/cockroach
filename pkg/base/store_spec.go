@@ -47,10 +47,11 @@ type StoreSpec struct {
 	// SizeInBytes is used for calculating free space and making rebalancing
 	// decisions. Zero indicates that there is no maximum size. This value is not
 	// actually used by the engine and thus not enforced.
-	SizeInBytes int64
-	SizePercent float64
-	InMemory    bool
-	Attributes  roachpb.Attributes
+	SizeInBytes    int64
+	SizePercent    float64
+	InMemory       bool
+	Attributes     roachpb.Attributes
+	PreambleFormat bool
 }
 
 // String returns a fully parsable version of the store spec.
@@ -67,6 +68,9 @@ func (ss StoreSpec) String() string {
 	}
 	if ss.SizePercent > 0 {
 		fmt.Fprintf(&buffer, "size=%s%%,", humanize.Ftoa(ss.SizePercent))
+	}
+	if ss.PreambleFormat {
+		fmt.Fprintf(&buffer, "format=preamble,")
 	}
 	if len(ss.Attributes.Attrs) > 0 {
 		fmt.Fprint(&buffer, "attrs=")
@@ -209,6 +213,12 @@ func NewStoreSpec(value string) (StoreSpec, error) {
 			} else {
 				return StoreSpec{}, fmt.Errorf("%s is not a valid store type", value)
 			}
+		case "format":
+			if value == "preamble" {
+				ss.PreambleFormat = true
+			} else if value != "classic" {
+				return StoreSpec{}, fmt.Errorf("%s is not a valid store format", value)
+			}
 		default:
 			return StoreSpec{}, fmt.Errorf("%s is not a valid store field", field)
 		}
@@ -220,6 +230,9 @@ func NewStoreSpec(value string) (StoreSpec, error) {
 		}
 		if ss.SizePercent == 0 && ss.SizeInBytes == 0 {
 			return StoreSpec{}, fmt.Errorf("size must be specified for an in memory store")
+		}
+		if ss.PreambleFormat {
+			return StoreSpec{}, fmt.Errorf("format must be set to classic for an in memory store")
 		}
 	} else if ss.Path == "" {
 		return StoreSpec{}, fmt.Errorf("no path specified")

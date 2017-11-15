@@ -20,6 +20,7 @@ import (
 	"io/ioutil"
 	"math/rand"
 	"os"
+	"reflect"
 	"sort"
 	"strconv"
 	"testing"
@@ -217,29 +218,52 @@ func benchmarkIterOnReadWriter(
 func TestRocksDBOpenWithVersions(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
+	// Versions we can end up with after NewRocksDB() rewrites them.
+	classicVersion := Version{Version: versionBeta20160331, Format: formatClassic}
+	preambleVersion := Version{Version: versionCurrent, Format: formatPreamble}
+
 	testCases := []struct {
-		hasFile     bool
-		ver         Version
-		expectedErr string
+		hasFile      bool
+		ver          Version
+		wantPreamble bool // Whether preamble format is requested.
+		expectedErr  string
+		expectedVer  Version // The expected version file after opening the DB. Not checked on errors.
 	}{
-		{false, Version{}, ""},
-		{true, Version{versionCurrent}, ""},
-		{true, Version{versionMinimum}, ""},
-		{true, Version{-1}, "incompatible rocksdb data version, current:1, on disk:-1, minimum:0"},
-		{true, Version{2}, "incompatible rocksdb data version, current:1, on disk:2, minimum:0"},
+		{false, Version{}, false, "", classicVersion},
+		{true, Version{Version: versionCurrent}, false, "", classicVersion},
+		{true, Version{Version: versionMinimum}, false, "", classicVersion},
+		{true, Version{Version: -1}, false, "incompatible rocksdb data version, current:2, on disk:-1, minimum:0", Version{}},
+		{true, Version{Version: 3}, false, "incompatible rocksdb data version, current:2, on disk:3, minimum:0", Version{}},
+		// Test preamble format.
+		{false, Version{}, true, "", preambleVersion},
+		{true, Version{Version: versionBeta20160331}, true, "incompatible rocksdb data format", Version{}},
+		{true, Version{Version: versionBeta20160331, Format: formatClassic}, true, "incompatible rocksdb data format", Version{}},
+		{true, Version{Version: versionBeta20160331, Format: formatClassic}, false, "", classicVersion},
+		{true, Version{Version: versionBeta20160331, Format: formatPreamble}, true, "", preambleVersion},
+		{true, Version{Version: versionBeta20160331, Format: formatPreamble}, false, "incompatible rocksdb data format", Version{}},
+		{true, Version{Version: versionCurrent, Format: formatClassic}, true, "incompatible rocksdb data format", Version{}},
+		{true, Version{Version: versionCurrent, Format: formatPreamble}, false, "incompatible rocksdb data format", Version{}},
+		{true, Version{Version: versionCurrent, Format: formatClassic}, false, "", classicVersion},
+		{true, Version{Version: versionCurrent, Format: formatPreamble}, true, "", preambleVersion},
 	}
 
 	for i, testCase := range testCases {
-		err := openRocksDBWithVersion(t, testCase.hasFile, testCase.ver)
+		newVersion, err := openRocksDBWithVersion(t, testCase.hasFile, testCase.ver, testCase.wantPreamble)
 		if !testutils.IsError(err, testCase.expectedErr) {
 			t.Errorf("%d: expected error '%s', actual '%v'", i, testCase.expectedErr, err)
+		}
+		if err != nil {
+			continue
+		}
+		if !reflect.DeepEqual(newVersion, testCase.expectedVer) {
+			t.Errorf("%d: expected new version file %+v, actual %+v", i, testCase.expectedVer, newVersion)
 		}
 	}
 }
 
 // openRocksDBWithVersion attempts to open a rocks db instance, optionally with
 // the supplied Version struct.
-func openRocksDBWithVersion(t *testing.T, hasVersionFile bool, ver Version) error {
+func openRocksDBWithVersion(t *testing.T, hasVersionFile bool, ver Version, wantPreambleFormat bool) (Version, error) {
 	dir, err := ioutil.TempDir("", "testing")
 	if err != nil {
 		t.Fatal(err)
@@ -262,15 +286,29 @@ func openRocksDBWithVersion(t *testing.T, hasVersionFile bool, ver Version) erro
 
 	rocksdb, err := NewRocksDB(
 		RocksDBConfig{
-			Settings: cluster.MakeTestingClusterSettings(),
-			Dir:      dir,
+			Settings:       cluster.MakeTestingClusterSettings(),
+			Dir:            dir,
+			PreambleFormat: wantPreambleFormat,
 		},
 		RocksDBCache{},
 	)
 	if err == nil {
 		rocksdb.Close()
+	} else {
+		// Return early on errors.
+		return Version{}, err
 	}
-	return err
+
+	// Reread version file to check rewritten fields.
+	b, err := ioutil.ReadFile(getVersionFilename(dir))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var retVer Version
+	if err := json.Unmarshal(b, &retVer); err != nil {
+		t.Fatal(err)
+	}
+	return retVer, nil
 }
 
 func TestSSTableInfosString(t *testing.T) {
