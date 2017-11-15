@@ -20,7 +20,9 @@
 
 package tree
 
-import "bytes"
+import (
+	"bytes"
+)
 
 // DropBehavior represents options for dropping schema elements.
 type DropBehavior int

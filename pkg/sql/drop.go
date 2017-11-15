@@ -550,6 +550,85 @@ func (*dropViewNode) Next(runParams) (bool, error) { return false, nil }
 func (*dropViewNode) Close(context.Context)        {}
 func (*dropViewNode) Values() tree.Datums          { return tree.Datums{} }
 
+type dropSequenceNode struct {
+	n  *tree.DropSequence
+	td []*sqlbase.TableDescriptor
+}
+
+func (p *planner) DropSequence(ctx context.Context, n *tree.DropSequence) (planNode, error) {
+	td := make([]*sqlbase.TableDescriptor, 0, len(n.Names))
+	for _, name := range n.Names {
+		tn, err := name.NormalizeTableName()
+		if err != nil {
+			return nil, err
+		}
+		if err := tn.QualifyWithDatabase(p.session.Database); err != nil {
+			return nil, err
+		}
+
+		droppedDesc, err := p.dropTableOrViewPrepare(ctx, tn)
+		if err != nil {
+			return nil, err
+		}
+		if droppedDesc == nil {
+			if n.IfExists {
+				continue
+			}
+			// Sequence does not exist, but we want it to: error out.
+			return nil, sqlbase.NewUndefinedRelationError(tn)
+		}
+		if !droppedDesc.IsSequence() {
+			return nil, sqlbase.NewWrongObjectTypeError(tn, "sequence")
+		}
+
+		td = append(td, droppedDesc)
+	}
+
+	if len(td) == 0 {
+		return &zeroNode{}, nil
+	}
+
+	return &dropSequenceNode{
+		n:  n,
+		td: td,
+	}, nil
+}
+
+func (n *dropSequenceNode) Start(params runParams) error {
+	ctx := params.ctx
+	for _, droppedDesc := range n.td {
+		if droppedDesc == nil {
+			continue
+		}
+		err := params.p.dropSequenceImpl(ctx, droppedDesc, n.n.DropBehavior)
+		if err != nil {
+			return err
+		}
+		// Log a Drop Sequence event for this table. This is an auditable log event
+		// and is recorded in the same transaction as the table descriptor
+		// update.
+		if err := MakeEventLogger(params.p.LeaseMgr()).InsertEventRecord(
+			ctx,
+			params.p.txn,
+			EventLogDropSequence,
+			int32(droppedDesc.ID),
+			int32(params.p.evalCtx.NodeID),
+			struct {
+				SequenceName string
+				Statement    string
+				User         string
+			}{droppedDesc.Name, n.n.String(), params.p.session.User},
+		); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (*dropSequenceNode) Next(runParams) (bool, error) { return false, nil }
+func (*dropSequenceNode) Values() tree.Datums          { return tree.Datums{} }
+func (*dropSequenceNode) Close(context.Context)        {}
+
 type dropTableNode struct {
 	n  *tree.DropTable
 	td []*sqlbase.TableDescriptor
@@ -782,10 +861,10 @@ func (*dropTableNode) Close(context.Context)        {}
 func (*dropTableNode) Values() tree.Datums          { return tree.Datums{} }
 
 // dropTableOrViewPrepare/dropTableImpl is used to drop a single table by
-// name, which can result from either a DROP TABLE or DROP DATABASE
-// statement. This method returns the dropped table descriptor, to be
-// used for the purpose of logging the event.  The table is not
-// actually truncated or deleted synchronously. Instead, it is marked
+// name, which can result from a DROP TABLE, DROP VIEW, DROP SEQUENCE,
+// or DROP DATABASE statement. This method returns the dropped table
+// descriptor, to be used for the purpose of logging the event.  The table
+// is not actually truncated or deleted synchronously. Instead, it is marked
 // as deleted (meaning up_version is set and deleted is set) and the
 // actual deletion happens async in a schema changer. Note that,
 // courtesy of up_version, the actual truncation and dropping will
@@ -1020,6 +1099,21 @@ func (p *planner) dropViewImpl(
 		return verifyDropTableMetadata(systemConfig, viewDesc.ID, "view")
 	})
 	return cascadeDroppedViews, nil
+}
+
+func (p *planner) dropSequenceImpl(
+	ctx context.Context, seqDesc *sqlbase.TableDescriptor, behavior tree.DropBehavior,
+) error {
+	err := p.initiateDropTable(ctx, seqDesc)
+	if err != nil {
+		return err
+	}
+
+	p.session.setTestingVerifyMetadata(func(systemConfig config.SystemConfig) error {
+		return verifyDropTableMetadata(systemConfig, seqDesc.ID, "sequence")
+	})
+
+	return nil
 }
 
 // removeMatchingReferences removes all refs from the provided slice that

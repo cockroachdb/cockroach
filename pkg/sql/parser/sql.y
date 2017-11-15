@@ -1647,13 +1647,13 @@ drop_view_stmt:
 // %Text: DROP SEQUENCE [IF EXISTS] <sequenceName> [, ...] [CASCADE | RESTRICT]
 drop_sequence_stmt:
   DROP SEQUENCE table_name_list opt_drop_behavior
-	{
-		$$.val = &tree.DropSequence{Names: $3.tableNameReferences(), IfExists: false, DropBehavior: $4.dropBehavior()}
-	}
+  {
+    $$.val = &tree.DropSequence{Names: $3.tableNameReferences(), IfExists: false, DropBehavior: $4.dropBehavior()}
+  }
 | DROP SEQUENCE IF EXISTS table_name_list opt_drop_behavior
-	{
-		$$.val = &tree.DropSequence{Names: $5.tableNameReferences(), IfExists: true, DropBehavior: $6.dropBehavior()}
-	}
+  {
+    $$.val = &tree.DropSequence{Names: $5.tableNameReferences(), IfExists: true, DropBehavior: $6.dropBehavior()}
+  }
 | DROP SEQUENCE error // SHOW HELP: DROP VIEW
 
 // %Help: DROP TABLE - remove a table
