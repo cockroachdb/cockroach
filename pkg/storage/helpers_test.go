@@ -233,8 +233,8 @@ func NewTestStorePool(cfg StoreConfig) *StorePool {
 		cfg.Settings,
 		cfg.Gossip,
 		cfg.Clock,
-		func(roachpb.NodeID, time.Time, time.Duration) nodeStatus {
-			return nodeStatusLive
+		func(roachpb.NodeID, time.Time, time.Duration) NodeLivenessStatus {
+			return NodeLivenessStatus_LIVE
 		},
 		/* deterministic */ false,
 	)
