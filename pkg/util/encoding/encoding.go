@@ -956,6 +956,12 @@ func PeekType(b []byte) Type {
 			return BytesDesc
 		case m == timeMarker:
 			return Time
+		case m == byte(Array):
+			return Array
+		case m == byte(True):
+			return True
+		case m == byte(False):
+			return False
 		case m == durationBigNegMarker, m == durationMarker, m == durationBigPosMarker:
 			return Duration
 		case m >= IntMin && m <= IntMax:
@@ -1006,7 +1012,7 @@ func PeekLength(b []byte) (int, error) {
 	m := b[0]
 	switch m {
 	case encodedNull, encodedNullDesc, encodedNotNull, encodedNotNullDesc,
-		floatNaN, floatNaNDesc, floatZero, decimalZero:
+		floatNaN, floatNaNDesc, floatZero, decimalZero, byte(True), byte(False):
 		// interleavedSentinel also falls into this path. Since it
 		// contains the same byte value as encodedNotNullDesc, it
 		// cannot be included explicitly in the case statement.
@@ -1121,6 +1127,12 @@ func prettyPrintFirstValue(dir Direction, b []byte) ([]byte, string, error) {
 	case Null:
 		b, _ = DecodeIfNull(b)
 		return b, "NULL", nil
+	case True:
+		return b[1:], "True", nil
+	case False:
+		return b[1:], "False", nil
+	case Array:
+		return b[1:], "Arr", nil
 	case NotNull:
 		// The tag can be either encodedNotNull or encodedNotNullDesc. The
 		// latter can be an interleaved sentinel.
@@ -1982,4 +1994,31 @@ func DecomposeKeyTokens(b []byte) (tokens [][]byte, containsNull bool, err error
 	}
 
 	return out, containsNull, nil
+}
+
+// GetJSONInvertedIndexKeyLength returns the length of encoded JSON inverted index
+// key at the start of b.
+func GetJSONInvertedIndexKeyLength(buf []byte) (int, error) {
+	offset := 0
+	for {
+		typ := PeekType(buf)
+		switch typ {
+		case Array:
+			offset++
+			buf = buf[1:]
+		case NotNull:
+			len, err := PeekLength(buf[1:])
+			if err != nil {
+				return 0, err
+			}
+			offset += len + 1
+			buf = buf[len+1:]
+		default:
+			len, err := PeekLength(buf)
+			if err != nil {
+				return 0, err
+			}
+			return offset + len, nil
+		}
+	}
 }

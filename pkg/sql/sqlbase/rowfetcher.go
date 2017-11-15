@@ -796,12 +796,8 @@ func (rf *RowFetcher) processValueBytes(
 		}
 
 		var encValue EncDatum
-<<<<<<< HEAD
-		encValue, valueBytes, err = EncDatumValueFromBufferWithOffsetsAndType(valueBytes, typeOffset, dataOffset, typ)
-=======
-		encValue, valueBytes, err =
-			EncDatumFromBuffer(&table.cols[idx].Type, DatumEncoding_VALUE, valueBytes)
->>>>>>> parent of e3a90b586... sqlbase: remove unused param of EncDatumFromBuffer
+		encValue, valueBytes, err = EncDatumValueFromBufferWithOffsetsAndType(valueBytes, typeOffset,
+			dataOffset, typ)
 		if err != nil {
 			return "", "", err
 		}
@@ -1030,21 +1026,23 @@ func (rf *RowFetcher) checkSecondaryIndexDatumEncodings(ctx context.Context) err
 		values[i] = table.row[i].Datum
 	}
 
-	indexEntry, err := EncodeSecondaryIndex(table.desc, table.index, table.colIdxMap, values)
+	indexEntries, err := EncodeSecondaryIndex(table.desc, table.index, table.colIdxMap, values)
 	if err != nil {
 		return err
 	}
 
-	// We ignore the first 4 bytes of the values. These bytes are a
-	// checksum which are not set by EncodeSecondaryIndex.
-	if !indexEntry.Key.Equal(rf.rowReadyTable.lastKV.Key) {
-		return scrub.WrapError(scrub.IndexKeyDecodingError, errors.Errorf(
-			"secondary index key failed to round-trip encode. expected %#v, got: %#v",
-			rf.rowReadyTable.lastKV.Key, indexEntry.Key))
-	} else if !bytes.Equal(indexEntry.Value.RawBytes[4:], table.lastKV.Value.RawBytes[4:]) {
-		return scrub.WrapError(scrub.IndexValueDecodingError, errors.Errorf(
-			"secondary index value failed to round-trip encode. expected %#v, got: %#v",
-			rf.rowReadyTable.lastKV.Value.RawBytes[4:], indexEntry.Value.RawBytes[4:]))
+	for _, indexEntry := range indexEntries {
+		// We ignore the first 4 bytes of the values. These bytes are a
+		// checksum which are not set by EncodeSecondaryIndex.
+		if !indexEntry.Key.Equal(rf.rowReadyTable.lastKV.Key) {
+			return scrub.WrapError(scrub.IndexKeyDecodingError, errors.Errorf(
+				"secondary index key failed to round-trip encode. expected %#v, got: %#v",
+				rf.rowReadyTable.lastKV.Key, indexEntry.Key))
+		} else if !bytes.Equal(indexEntry.Value.RawBytes[4:], table.lastKV.Value.RawBytes[4:]) {
+			return scrub.WrapError(scrub.IndexValueDecodingError, errors.Errorf(
+				"secondary index value failed to round-trip encode. expected %#v, got: %#v",
+				rf.rowReadyTable.lastKV.Value.RawBytes[4:], indexEntry.Value.RawBytes[4:]))
+		}
 	}
 	return nil
 }

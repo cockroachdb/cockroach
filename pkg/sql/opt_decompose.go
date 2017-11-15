@@ -1421,6 +1421,8 @@ func simplifyComparisonExpr(
 				), true
 			}
 			return n, true
+		case tree.Contains:
+			return n, true
 		case tree.NE:
 			// Translate "a != MAX" to "a < MAX" and "a != MIN" to "a > MIN".
 			// These inequalities can be more easily used for index selection.
