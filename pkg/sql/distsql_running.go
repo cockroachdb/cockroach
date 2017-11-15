@@ -398,6 +398,11 @@ func (r *distSQLReceiver) ProducerDone() {
 	r.closed = true
 }
 
+// IsCancelled returns whether the distSQLReceiver is cancelled.
+func (r *distSQLReceiver) IsCancelled() bool {
+	return atomic.LoadInt32(&r.cancelled) == 1
+}
+
 // SetCancelled is part of the CancellableRowReceiver interface.
 func (r *distSQLReceiver) SetCancelled() {
 	atomic.StoreInt32(&r.cancelled, 1)

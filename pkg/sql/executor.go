@@ -50,6 +50,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -1950,25 +1951,58 @@ func (e *Executor) execDistSQL(
 	planner *planner, tree planNode, rowResultWriter StatementResult,
 ) error {
 	ctx := planner.session.Ctx()
-	recv, err := makeDistSQLReceiver(
-		ctx, rowResultWriter,
-		e.cfg.RangeDescriptorCache, e.cfg.LeaseHolderCache,
-		planner.txn,
-		func(ts hlc.Timestamp) {
-			_ = e.cfg.Clock.Update(ts)
-		},
-	)
-	if err != nil {
-		return err
+
+	// shouldRetry checks the given error for known errors that indicate that
+	// a distsql query should be retried.
+	// TODO(asubiotto): We need to create a more robust error system that
+	// categorizes retriable errors at creation time and doesn't mess with error
+	// types when `Wrap`ping. We should also have finer-grained retries.
+	shouldRetry := func(err error) bool {
+		// These checks are string matching due to error wrapping.
+		return err != nil &&
+			(strings.Contains(err.Error(), "communication error") ||
+				strings.Contains(err.Error(), "Unavailable"))
 	}
-	err = e.distSQLPlanner.PlanAndRun(ctx, planner.txn, tree, &recv, planner.evalCtx)
-	if err != nil {
-		return err
+	// TODO(asubiotto): It would be great to have access to the RaftConfig to
+	// set a max backoff related to a range's active lease duration.
+	var lastErr error
+	for r := retry.StartWithCtx(ctx, base.DefaultRetryOptions()); r.Next(); {
+		recv, err := makeDistSQLReceiver(
+			ctx, rowResultWriter,
+			e.cfg.RangeDescriptorCache, e.cfg.LeaseHolderCache,
+			planner.txn,
+			func(ts hlc.Timestamp) {
+				_ = e.cfg.Clock.Update(ts)
+			},
+		)
+		if err != nil {
+			return err
+		}
+
+		err = e.distSQLPlanner.PlanAndRun(ctx, planner.txn, tree, &recv, planner.evalCtx)
+		// If the receiver wasn't canceled, the query was not canceled.
+		// TODO(asubiotto): Is this true? It seems that a test is failing because
+		// of this. We might need to check the ctx for cancellation.
+		if !recv.IsCancelled() && shouldRetry(err) {
+			log.Infof(ctx, "retrying distsql query due to %s", err)
+			lastErr = err
+			continue
+		} else if err != nil {
+			return err
+		}
+		if !recv.IsCancelled() && shouldRetry(recv.err) {
+			log.Infof(ctx, "retrying distsql query due to %s", recv.err)
+			lastErr = recv.err
+			continue
+		} else if recv.err != nil {
+			return recv.err
+		}
+		return nil
 	}
-	if recv.err != nil {
-		return recv.err
-	}
-	return nil
+	// TODO(asubiotto): What to do if these retries have failed? How do I return
+	// a retriable error? If the last error encountered was a context canceled
+	// error, a higher layer will wrap it in "query execution canceled".
+	return lastErr
 }
 
 // execClassic runs a plan using the classic (non-distributed) SQL
