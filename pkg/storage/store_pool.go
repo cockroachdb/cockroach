@@ -65,48 +65,33 @@ var TimeUntilStoreDead = settings.RegisterNonNegativeDurationSetting(
 	5*time.Minute,
 )
 
-type nodeStatus int
-
-const (
-	_ nodeStatus = iota
-	// The node has not heartbeat the node liveness for longer than the
-	// time until store dead threshold.
-	nodeStatusDead
-	// The node liveness either couldn't be consulted or the node is draining.
-	nodeStatusUnknown
-	// The node is considered live.
-	nodeStatusLive
-	// The node is decommissioning.
-	nodeStatusDecommissioning
-)
-
 // A NodeLivenessFunc accepts a node ID, current time and threshold before
 // a node is considered dead and returns whether or not the node is live.
-type NodeLivenessFunc func(roachpb.NodeID, time.Time, time.Duration) nodeStatus
+type NodeLivenessFunc func(roachpb.NodeID, time.Time, time.Duration) NodeLivenessStatus
 
 // MakeStorePoolNodeLivenessFunc returns a function which determines
 // the status of a node based on information provided by the specified
 // NodeLiveness.
 func MakeStorePoolNodeLivenessFunc(nodeLiveness *NodeLiveness) NodeLivenessFunc {
-	return func(nodeID roachpb.NodeID, now time.Time, threshold time.Duration) nodeStatus {
+	return func(nodeID roachpb.NodeID, now time.Time, threshold time.Duration) NodeLivenessStatus {
 		liveness, err := nodeLiveness.GetLiveness(nodeID)
 		if err != nil {
-			return nodeStatusUnknown
+			return NodeLivenessStatus_UNAVAILABLE
 		}
 		deadAsOf := hlc.Timestamp(liveness.Expiration).GoTime().Add(threshold)
 		if !now.Before(deadAsOf) {
-			return nodeStatusDead
+			return NodeLivenessStatus_DEAD
 		}
 		if liveness.Decommissioning {
-			return nodeStatusDecommissioning
+			return NodeLivenessStatus_DECOMMISSIONING
 		}
 		if liveness.Draining {
-			return nodeStatusUnknown
+			return NodeLivenessStatus_UNAVAILABLE
 		}
 		if liveness.IsLive(hlc.Timestamp{WallTime: now.UnixNano()}, nodeLiveness.clock.MaxOffset()) {
-			return nodeStatusLive
+			return NodeLivenessStatus_LIVE
 		}
-		return nodeStatusUnknown
+		return NodeLivenessStatus_UNAVAILABLE
 	}
 }
 
@@ -173,11 +158,11 @@ func (sd *storeDetail) status(
 	// Even if the store has been updated via gossip, we still rely on
 	// the node liveness to determine whether it is considered live.
 	switch nl(sd.desc.Node.NodeID, now, threshold) {
-	case nodeStatusDead:
+	case NodeLivenessStatus_DEAD:
 		return storeStatusDead
-	case nodeStatusDecommissioning:
+	case NodeLivenessStatus_DECOMMISSIONING:
 		return storeStatusDecommissioning
-	case nodeStatusUnknown:
+	case NodeLivenessStatus_UNKNOWN, NodeLivenessStatus_UNAVAILABLE:
 		return storeStatusUnknown
 	}
 
