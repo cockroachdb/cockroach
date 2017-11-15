@@ -357,6 +357,26 @@ func (r *renderNode) initTargets(
 	return nil
 }
 
+// insertRender creates a new renderNode that renders exactly its
+// source plan.
+func (p *planner) insertRender(
+	ctx context.Context, plan planNode, tn *tree.TableName,
+) (*renderNode, error) {
+	src := planDataSource{info: newSourceInfoForSingleTable(*tn, planColumns(plan)), plan: plan}
+	render := &renderNode{
+		planner:    p,
+		source:     src,
+		sourceInfo: multiSourceInfo{src.info},
+	}
+	render.ivarHelper = tree.MakeIndexedVarHelper(render, len(src.info.sourceColumns))
+	if err := render.initTargets(ctx,
+		tree.SelectExprs{tree.SelectExpr{Expr: &tree.AllColumnsSelector{}}},
+		nil /*desiredTypes*/); err != nil {
+		return nil, err
+	}
+	return render, nil
+}
+
 // makeTupleRender creates a new renderNode which makes a single tuple
 // columns from all the columns in its source. Used by
 // getDataSourceAsOneColumn().
