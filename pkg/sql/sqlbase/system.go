@@ -140,6 +140,27 @@ CREATE TABLE system.web_sessions (
 	INDEX("createdAt"),
 	FAMILY(id, "hashedSecret", username, "createdAt", "expiresAt", "revokedAt", "lastUsedAt", "auditInfo")
 );`
+
+	// table_statistics is used to track statistics collected about individual columns
+	// or groups of columns from every table in the database. Each row contains the
+	// number of distinct values of the column group and (optionally) a histogram if there
+	// is only one column in columnIDs.
+	//
+	// Design outlined in /docs/RFCS/20170908_sql_optimizer_statistics.md
+	TableStatisticsTableSchema = `
+CREATE TABLE system.table_statistics (
+	"tableID"       INT        NOT NULL,
+	"statisticID"   INT        NOT NULL,
+	name            STRING,
+	"columnIDs"     INT[]      NOT NULL,
+	"createdAt"     TIMESTAMP  NOT NULL DEFAULT now(),
+	"rowCount"      INT        NOT NULL,
+	"distinctCount" INT        NOT NULL,
+	"nullCount"     INT        NOT NULL,
+	histogram       BYTES,
+	PRIMARY KEY ("tableID", "statisticID"),
+	FAMILY("tableID", "statisticID", name, "columnIDs", "createdAt", "rowCount", "distinctCount", "nullCount", histogram)
+);`
 )
 
 func pk(name string) IndexDescriptor {
@@ -191,8 +212,9 @@ var SystemAllowedPrivileges = map[ID]privilege.Lists{
 	// users will be able to modify system tables' schemas at will. CREATE and
 	// DROP privileges are allowed on the above system tables for backwards
 	// compatibility reasons only!
-	keys.JobsTableID:        {privilege.ReadWriteData},
-	keys.WebSessionsTableID: {privilege.ReadWriteData},
+	keys.JobsTableID:            {privilege.ReadWriteData},
+	keys.WebSessionsTableID:     {privilege.ReadWriteData},
+	keys.TableStatisticsTableID: {privilege.ReadWriteData},
 }
 
 // SystemDesiredPrivileges returns the desired privilege list (i.e., the
@@ -210,8 +232,10 @@ var (
 	colTypeString    = ColumnType{SemanticType: ColumnType_STRING}
 	colTypeBytes     = ColumnType{SemanticType: ColumnType_BYTES}
 	colTypeTimestamp = ColumnType{SemanticType: ColumnType_TIMESTAMP}
-	singleASC        = []IndexDescriptor_Direction{IndexDescriptor_ASC}
-	singleID1        = []ColumnID{1}
+	colTypeIntArray  = ColumnType{SemanticType: ColumnType_ARRAY, ArrayContents: &colTypeInt.SemanticType,
+		ArrayDimensions: []int32{-1}}
+	singleASC = []IndexDescriptor_Direction{IndexDescriptor_ASC}
+	singleID1 = []ColumnID{1}
 )
 
 // These system config TableDescriptor literals should match the descriptor
@@ -612,6 +636,57 @@ var (
 		},
 		NextMutationID: 1,
 		FormatVersion:  3,
+	}
+
+	// TableStatistics table to hold statistics about columns and column groups.
+	TableStatisticsTable = TableDescriptor{
+		Name:     "table_statistics",
+		ID:       keys.TableStatisticsTableID,
+		ParentID: 1,
+		Version:  1,
+		Columns: []ColumnDescriptor{
+			{Name: "tableID", ID: 1, Type: colTypeInt},
+			{Name: "statisticID", ID: 2, Type: colTypeInt},
+			{Name: "name", ID: 3, Type: colTypeString, Nullable: true},
+			{Name: "columnIDs", ID: 4, Type: colTypeIntArray},
+			{Name: "createdAt", ID: 5, Type: colTypeTimestamp, DefaultExpr: &nowString},
+			{Name: "rowCount", ID: 6, Type: colTypeInt},
+			{Name: "distinctCount", ID: 7, Type: colTypeInt},
+			{Name: "nullCount", ID: 8, Type: colTypeInt},
+			{Name: "histogram", ID: 9, Type: colTypeBytes, Nullable: true},
+		},
+		NextColumnID: 10,
+		Families: []ColumnFamilyDescriptor{
+			{
+				Name: "fam_0_tableID_statisticID_name_columnIDs_createdAt_rowCount_distinctCount_nullCount_histogram",
+				ID:   0,
+				ColumnNames: []string{
+					"tableID",
+					"statisticID",
+					"name",
+					"columnIDs",
+					"createdAt",
+					"rowCount",
+					"distinctCount",
+					"nullCount",
+					"histogram",
+				},
+				ColumnIDs: []ColumnID{1, 2, 3, 4, 5, 6, 7, 8, 9},
+			},
+		},
+		NextFamilyID: 1,
+		PrimaryIndex: IndexDescriptor{
+			Name:             "primary",
+			ID:               1,
+			Unique:           true,
+			ColumnNames:      []string{"tableID", "statisticID"},
+			ColumnDirections: []IndexDescriptor_Direction{IndexDescriptor_ASC, IndexDescriptor_ASC},
+			ColumnIDs:        []ColumnID{1, 2},
+		},
+		NextIndexID:    2,
+		Privileges:     NewPrivilegeDescriptor(security.RootUser, SystemDesiredPrivileges(keys.TableStatisticsTableID)),
+		FormatVersion:  InterleavedFormatVersion,
+		NextMutationID: 1,
 	}
 )
 

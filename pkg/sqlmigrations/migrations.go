@@ -89,6 +89,12 @@ var backwardCompatibleMigrations = []migrationDescriptor{
 		name:   "persist trace.debug.enable = 'false'",
 		workFn: disableNetTrace,
 	},
+	{
+		name:           "create system.table_statistics table",
+		workFn:         createTableStatisticsTable,
+		newDescriptors: 1,
+		newRanges:      1,
+	},
 }
 
 // migrationDescriptor describes a single migration hook that's used to modify
@@ -364,6 +370,10 @@ func createSettingsTable(ctx context.Context, r runner) error {
 
 func createWebSessionsTable(ctx context.Context, r runner) error {
 	return createSystemTable(ctx, r, sqlbase.WebSessionsTable)
+}
+
+func createTableStatisticsTable(ctx context.Context, r runner) error {
+	return createSystemTable(ctx, r, sqlbase.TableStatisticsTable)
 }
 
 func createSystemTable(ctx context.Context, r runner, desc sqlbase.TableDescriptor) error {
