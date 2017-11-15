@@ -464,6 +464,7 @@ indexrelid  indrelid    indnatts  indisunique  indisprimary  indisexclusion
 2557995824  780323485   2         false        false         false
 3505585425  2199392917  2         true         true          false
 3491800018  3270885600  2         true         true          false
+3501101122  3640657984  2         true         true          false
 
 query OBBBBB colnames
 SELECT indexrelid, indimmediate, indisclustered, indisvalid, indcheckxmin, indisready
@@ -477,6 +478,7 @@ indexrelid  indimmediate  indisclustered  indisvalid  indcheckxmin  indisready
 2557995824  false         false           true        false         false
 3505585425  true          false           true        false         false
 3491800018  true          false           true        false         false
+3501101122  true          false           true        false         false
 
 query OOBBTIIITT colnames
 SELECT indexrelid, indrelid, indislive, indisreplident, indkey, indcollation, indclass, indoption, indexprs, indpred
@@ -490,6 +492,7 @@ indexrelid  indrelid    indislive  indisreplident  indkey  indcollation  indclas
 2557995824  780323485   true       false           2 3     0             0         0          NULL      NULL
 3505585425  2199392917  true       false           1 2     0             0         0          NULL      NULL
 3491800018  3270885600  true       false           1 7     0             0         0          NULL      NULL
+3501101122  3640657984  true       false           1 2     0             0         0          NULL      NULL
 
 ## pg_catalog.pg_collation
 

@@ -305,13 +305,14 @@ const (
 	// to "Ranges" instead of a Table - these IDs are needed to store custom
 	// configuration for non-table ranges (e.g. Zone Configs).
 	// NOTE: IDs must be <= MaxReservedDescID.
-	LeaseTableID       = 11
-	EventLogTableID    = 12
-	RangeEventTableID  = 13
-	UITableID          = 14
-	JobsTableID        = 15
-	MetaRangesID       = 16
-	SystemRangesID     = 17
-	TimeseriesRangesID = 18
-	WebSessionsTableID = 19
+	LeaseTableID           = 11
+	EventLogTableID        = 12
+	RangeEventTableID      = 13
+	UITableID              = 14
+	JobsTableID            = 15
+	MetaRangesID           = 16
+	SystemRangesID         = 17
+	TimeseriesRangesID     = 18
+	WebSessionsTableID     = 19
+	TableStatisticsTableID = 20
 )
