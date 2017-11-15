@@ -96,8 +96,10 @@ def post_issue(issue):
 
 
 if __name__ == '__main__':
-    build_id = os.environ['TC_BUILD_ID']
-    failed_tests = list(collect_build_results(build_id))
-    if failed_tests:
-        issue = create_issue(build_id, failed_tests)
-        post_issue(issue)
+    branch = os.environ['TC_BUILD_BRANCH']
+    if branch == 'master' or branch.startswith('release-'):
+        build_id = os.environ['TC_BUILD_ID']
+        failed_tests = list(collect_build_results(build_id))
+        if failed_tests:
+            issue = create_issue(build_id, failed_tests)
+            post_issue(issue)
