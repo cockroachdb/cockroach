@@ -150,7 +150,7 @@ func createAndStartTestNode(
 	t *testing.T,
 ) (*grpc.Server, net.Addr, *Node, *stop.Stopper) {
 	grpcServer, addr, cfg, node, stopper := createTestNode(addr, engines, gossipBS, t)
-	bootstrappedEngines, newEngines, cv, err := inspectEngines(context.TODO(), engines, cfg.Settings.Version.MinSupportedVersion, cfg.Settings.Version.ServerVersion)
+	bootstrappedEngines, newEngines, _, cv, err := inspectEngines(context.TODO(), engines, cfg.Settings.Version.MinSupportedVersion, cfg.Settings.Version.ServerVersion)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -388,7 +388,7 @@ func TestCorruptedClusterID(t *testing.T) {
 	engines := []engine.Engine{e}
 	_, serverAddr, cfg, node, stopper := createTestNode(util.TestAddr, engines, nil, t)
 	stopper.Stop(context.TODO())
-	bootstrappedEngines, newEngines, cv, err := inspectEngines(context.TODO(), engines, cfg.Settings.Version.MinSupportedVersion, cfg.Settings.Version.ServerVersion)
+	bootstrappedEngines, newEngines, _, cv, err := inspectEngines(context.TODO(), engines, cfg.Settings.Version.MinSupportedVersion, cfg.Settings.Version.ServerVersion)
 	if err != nil {
 		t.Fatal(err)
 	}

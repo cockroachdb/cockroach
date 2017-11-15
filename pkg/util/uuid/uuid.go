@@ -28,6 +28,9 @@ type UUID struct {
 	uuid.UUID
 }
 
+// Nil is the empty UUID with all 128 bits set to zero.
+var Nil = UUID{uuid.Nil}
+
 // Short returns the first eight characters of the output of String().
 func (u UUID) Short() string {
 	return u.String()[:8]

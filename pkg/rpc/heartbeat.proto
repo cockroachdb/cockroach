@@ -48,6 +48,10 @@ message PingRequest {
   optional string addr = 3 [(gogoproto.nullable) = false];
   // The configured maximum clock offset (in nanoseconds) on the server.
   optional int64 max_offset_nanos = 4 [(gogoproto.nullable) = false];
+  // Cluster ID to prevent illegal connections.
+  optional bytes cluster_id = 9 [(gogoproto.nullable) = false,
+    (gogoproto.customname) = "ClusterID",
+    (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID"];
 }
 
 // A PingResponse contains the echoed ping request string.

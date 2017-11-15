@@ -935,6 +935,7 @@ func getClientGRPCConn() (*grpc.ClientConn, *hlc.Clock, *stop.Stopper, error) {
 	}
 	conn, err := rpcContext.GRPCDial(addr)
 	if err != nil {
+		stopper.Stop(stopperContext(stopper))
 		return nil, nil, nil, err
 	}
 	return conn, clock, stopper, nil
