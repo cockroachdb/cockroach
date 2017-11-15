@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/ipaddr"
+	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeofday"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -102,6 +103,12 @@ func RandDatum(rng *rand.Rand, typ ColumnType, nullOk bool) tree.Datum {
 	case ColumnType_INET:
 		ipAddr := ipaddr.RandIPAddr(rng)
 		return tree.NewDIPAddr(tree.DIPAddr{IPAddr: ipAddr})
+	case ColumnType_JSON:
+		j, err := json.Random(20, rng)
+		if err != nil {
+			return nil
+		}
+		return &tree.DJSON{JSON: j}
 	case ColumnType_STRING:
 		// Generate a random ASCII string.
 		p := make([]byte, rng.Intn(10))
@@ -187,11 +194,30 @@ func RandColumnType(rng *rand.Rand) ColumnType {
 	return typ
 }
 
-// RandColumnTypes returns a slice of numCols random ColumnType value.
+// RandSortingColumnType returns a column type which can be key-encoded.
+func RandSortingColumnType(rng *rand.Rand) ColumnType {
+	typ := RandColumnType(rng)
+	for MustBeValueEncoded(typ.SemanticType) {
+		typ = RandColumnType(rng)
+	}
+	return typ
+}
+
+// RandColumnTypes returns a slice of numCols random ColumnType values.
 func RandColumnTypes(rng *rand.Rand, numCols int) []ColumnType {
 	types := make([]ColumnType, numCols)
 	for i := range types {
 		types[i] = RandColumnType(rng)
+	}
+	return types
+}
+
+// RandSortingColumnTypes returns a slice of numCols random ColumnType values
+// which are key-encodable.
+func RandSortingColumnTypes(rng *rand.Rand, numCols int) []ColumnType {
+	types := make([]ColumnType, numCols)
+	for i := range types {
+		types[i] = RandSortingColumnType(rng)
 	}
 	return types
 }
@@ -208,10 +234,10 @@ func RandEncDatum(rng *rand.Rand) (EncDatum, ColumnType) {
 	return DatumToEncDatum(typ, datum), typ
 }
 
-// RandEncDatumSlice generates a slice of random EncDatum values of the same random
-// type.
-func RandEncDatumSlice(rng *rand.Rand, numVals int) ([]EncDatum, ColumnType) {
-	typ := RandColumnType(rng)
+// RandSortingEncDatumSlice generates a slice of random EncDatum values of the
+// same random type which is key-encodable.
+func RandSortingEncDatumSlice(rng *rand.Rand, numVals int) ([]EncDatum, ColumnType) {
+	typ := RandSortingColumnType(rng)
 	vals := make([]EncDatum, numVals)
 	for i := range vals {
 		vals[i] = DatumToEncDatum(typ, RandDatum(rng, typ, true))
@@ -219,13 +245,15 @@ func RandEncDatumSlice(rng *rand.Rand, numVals int) ([]EncDatum, ColumnType) {
 	return vals, typ
 }
 
-// RandEncDatumSlices generates EncDatum slices, each slice with values of the same
-// random type.
-func RandEncDatumSlices(rng *rand.Rand, numSets, numValsPerSet int) ([][]EncDatum, []ColumnType) {
+// RandSortingEncDatumSlices generates EncDatum slices, each slice with values of the same
+// random type which is key-encodable.
+func RandSortingEncDatumSlices(
+	rng *rand.Rand, numSets, numValsPerSet int,
+) ([][]EncDatum, []ColumnType) {
 	vals := make([][]EncDatum, numSets)
 	types := make([]ColumnType, numSets)
 	for i := range vals {
-		vals[i], types[i] = RandEncDatumSlice(rng, numValsPerSet)
+		vals[i], types[i] = RandSortingEncDatumSlice(rng, numValsPerSet)
 	}
 	return vals, types
 }

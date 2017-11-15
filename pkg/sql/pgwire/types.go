@@ -180,7 +180,7 @@ func (b *writeBuffer) writeTextDatum(ctx context.Context, d tree.Datum, sessionL
 		b.writeLengthPrefixedString(v.ValueAsString())
 
 	case *tree.DJSON:
-		b.writeLengthPrefixedString(v.String())
+		b.writeLengthPrefixedString(v.JSON.String())
 
 	case *tree.DTuple:
 		b.variablePutbuf.WriteString("(")

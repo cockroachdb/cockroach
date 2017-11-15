@@ -1238,7 +1238,11 @@ var BinOps = map[BinaryOperator]binOpOverload{
 				if res == nil {
 					return DNull, nil
 				}
-				return NewDString(res.AsText()), nil
+				text := res.AsText()
+				if text == nil {
+					return DNull, nil
+				}
+				return NewDString(*text), nil
 			},
 		},
 		BinOp{
@@ -1250,7 +1254,11 @@ var BinOps = map[BinaryOperator]binOpOverload{
 				if res == nil {
 					return DNull, nil
 				}
-				return NewDString(res.AsText()), nil
+				text := res.AsText()
+				if text == nil {
+					return DNull, nil
+				}
+				return NewDString(*text), nil
 			},
 		},
 	},
@@ -1265,7 +1273,11 @@ var BinOps = map[BinaryOperator]binOpOverload{
 				if res == DNull {
 					return DNull, nil
 				}
-				return NewDString(res.(*DJSON).JSON.AsText()), nil
+				text := res.(*DJSON).JSON.AsText()
+				if text == nil {
+					return DNull, nil
+				}
+				return NewDString(*text), nil
 			},
 		},
 	},

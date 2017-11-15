@@ -19,10 +19,31 @@ const rejectsWithPGError = require('./rejects-with-pg-error');
         `{"foo": 123}`,
       ];
 
+      before(() => {
+        return client.query(`CREATE TABLE x (j ${t})`);
+      });
+
+      after(() => {
+        return client.query(`DROP TABLE x`);
+      });
+
       cases.forEach(json => {
-        it(`${json}`, () => {
-          return client.query(`SELECT '${json}'::${t} j`).then(results => {
-            assert.deepStrictEqual(results.rows[0].j, JSON.parse(json));
+        describe(json, () => {
+          beforeEach(() => {
+            return client.query(`DELETE FROM x`);
+          });
+          it(`can be selected directly`, () => {
+            return client.query(`SELECT $1::${t} j`, [json]).then(results => {
+              assert.deepStrictEqual(results.rows[0].j, JSON.parse(json));
+            });
+          });
+
+          it(`can be inserted into a table and then retrieved`, () => {
+            return client.query(`INSERT INTO x VALUES ($1)`, [json])
+              .then(() => client.query(`SELECT j FROM x`))
+              .then(results => {
+                assert.deepStrictEqual(results.rows[0].j, JSON.parse(json));
+              })
           });
         });
       });

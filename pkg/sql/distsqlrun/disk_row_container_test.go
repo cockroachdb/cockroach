@@ -120,7 +120,7 @@ func TestDiskRowContainer(t *testing.T) {
 			for _, ordering := range orderings {
 				types := make([]sqlbase.ColumnType, numCols)
 				for i := range types {
-					types[i] = sqlbase.RandColumnType(rng)
+					types[i] = sqlbase.RandSortingColumnType(rng)
 				}
 				row := sqlbase.RandEncDatumRowOfTypes(rng, types)
 				func() {
@@ -171,7 +171,7 @@ func TestDiskRowContainer(t *testing.T) {
 		numRows := 1024
 		for _, ordering := range orderings {
 			// numRows rows with numCols columns of random types.
-			types := sqlbase.RandColumnTypes(rng, numCols)
+			types := sqlbase.RandSortingColumnTypes(rng, numCols)
 			rows := sqlbase.RandEncDatumRowsOfTypes(rng, numRows, types)
 			func() {
 				d := makeDiskRowContainer(ctx, &diskMonitor, types, ordering, tempEngine)

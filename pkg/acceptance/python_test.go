@@ -68,4 +68,11 @@ cur.execute("SELECT ARRAY['foo','bar','baz']")
 v = cur.fetchall()
 d = v[0][0]
 assert d == ["foo","bar","baz"]
+
+# Verify JSON values come through properly.
+cur = conn.cursor()
+cur.execute("SELECT '{\"a\":\"b\"}'::JSONB")
+v = cur.fetchall()
+d = v[0][0]
+assert d == {"a": "b"}
 `

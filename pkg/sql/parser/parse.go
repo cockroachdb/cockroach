@@ -168,6 +168,8 @@ func ParseStringAs(t types.T, s string, evalCtx *tree.EvalContext) (tree.Datum, 
 		d, err = tree.ParseDUuidFromString(s)
 	case types.INet:
 		d, err = tree.ParseDIPAddrFromINetString(s)
+	case types.JSON:
+		d, err = tree.ParseDJSON(s)
 	default:
 		if a, ok := t.(types.TArray); ok {
 			typ, err := coltypes.DatumTypeToColumnType(a.Typ)
