@@ -155,6 +155,7 @@ var _ planNode = &dropDatabaseNode{}
 var _ planNode = &dropIndexNode{}
 var _ planNode = &dropTableNode{}
 var _ planNode = &dropViewNode{}
+var _ planNode = &dropSequenceNode{}
 var _ planNode = &zeroNode{}
 var _ planNode = &unaryNode{}
 var _ planNode = &explainDistSQLNode{}
@@ -371,6 +372,8 @@ func (p *planner) newPlan(
 		return p.DropTable(ctx, n)
 	case *tree.DropView:
 		return p.DropView(ctx, n)
+	case *tree.DropSequence:
+		return p.DropSequence(ctx, n)
 	case *tree.DropUser:
 		return p.DropUser(ctx, n)
 	case *tree.Execute:
