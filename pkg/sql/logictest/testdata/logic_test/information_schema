@@ -271,6 +271,7 @@ system              lease
 system              namespace
 system              rangelog
 system              settings
+system              table_statistics
 system              ui
 system              users
 system              web_sessions
@@ -350,6 +351,7 @@ user_privileges
 ui
 tables
 tables
+table_statistics
 table_privileges
 table_indexes
 table_constraints
@@ -428,6 +430,7 @@ def            system              lease                      BASE TABLE   1
 def            system              namespace                  BASE TABLE   1
 def            system              rangelog                   BASE TABLE   1
 def            system              settings                   BASE TABLE   1
+def            system              table_statistics           BASE TABLE   1
 def            system              ui                         BASE TABLE   1
 def            system              users                      BASE TABLE   1
 def            system              web_sessions               BASE TABLE   1
@@ -483,18 +486,19 @@ SELECT *
 FROM information_schema.table_constraints
 ORDER BY TABLE_NAME, CONSTRAINT_TYPE, CONSTRAINT_NAME
 ----
-constraint_catalog  constraint_schema  constraint_name  table_catalog  table_schema  table_name    constraint_type  is_deferrable  initially_deferred
-def                 system             primary          def            system        descriptor    PRIMARY KEY      NO             NO
-def                 system             primary          def            system        eventlog      PRIMARY KEY      NO             NO
-def                 system             primary          def            system        jobs          PRIMARY KEY      NO             NO
-def                 system             primary          def            system        lease         PRIMARY KEY      NO             NO
-def                 system             primary          def            system        namespace     PRIMARY KEY      NO             NO
-def                 system             primary          def            system        rangelog      PRIMARY KEY      NO             NO
-def                 system             primary          def            system        settings      PRIMARY KEY      NO             NO
-def                 system             primary          def            system        ui            PRIMARY KEY      NO             NO
-def                 system             primary          def            system        users         PRIMARY KEY      NO             NO
-def                 system             primary          def            system        web_sessions  PRIMARY KEY      NO             NO
-def                 system             primary          def            system        zones         PRIMARY KEY      NO             NO
+constraint_catalog  constraint_schema  constraint_name  table_catalog  table_schema  table_name        constraint_type  is_deferrable  initially_deferred
+def                 system             primary          def            system        descriptor        PRIMARY KEY      NO             NO
+def                 system             primary          def            system        eventlog          PRIMARY KEY      NO             NO
+def                 system             primary          def            system        jobs              PRIMARY KEY      NO             NO
+def                 system             primary          def            system        lease             PRIMARY KEY      NO             NO
+def                 system             primary          def            system        namespace         PRIMARY KEY      NO             NO
+def                 system             primary          def            system        rangelog          PRIMARY KEY      NO             NO
+def                 system             primary          def            system        settings          PRIMARY KEY      NO             NO
+def                 system             primary          def            system        table_statistics  PRIMARY KEY      NO             NO
+def                 system             primary          def            system        ui                PRIMARY KEY      NO             NO
+def                 system             primary          def            system        users             PRIMARY KEY      NO             NO
+def                 system             primary          def            system        web_sessions      PRIMARY KEY      NO             NO
+def                 system             primary          def            system        zones             PRIMARY KEY      NO             NO
 
 statement ok
 CREATE DATABASE constraint_db
@@ -539,52 +543,61 @@ SELECT table_catalog, table_schema, table_name, column_name, ordinal_position
 FROM information_schema.columns
 WHERE table_schema != 'information_schema' AND table_schema != 'pg_catalog' AND table_schema != 'crdb_internal'
 ----
-table_catalog  table_schema  table_name    column_name     ordinal_position  
-def            system        descriptor    id              1                 
-def            system        descriptor    descriptor      2                 
-def            system        eventlog      timestamp       1                 
-def            system        eventlog      eventType       2                 
-def            system        eventlog      targetID        3                 
-def            system        eventlog      reportingID     4                 
-def            system        eventlog      info            5                 
-def            system        eventlog      uniqueID        6                 
-def            system        jobs          id              1                 
-def            system        jobs          status          2                 
-def            system        jobs          created         3                 
-def            system        jobs          payload         4                 
-def            system        lease         descID          1                 
-def            system        lease         version         2                 
-def            system        lease         nodeID          3                 
-def            system        lease         expiration      4                 
-def            system        namespace     parentID        1                 
-def            system        namespace     name            2                 
-def            system        namespace     id              3                 
-def            system        rangelog      timestamp       1                 
-def            system        rangelog      rangeID         2                 
-def            system        rangelog      storeID         3                 
-def            system        rangelog      eventType       4                 
-def            system        rangelog      otherRangeID    5                 
-def            system        rangelog      info            6                 
-def            system        rangelog      uniqueID        7                 
-def            system        settings      name            1                 
-def            system        settings      value           2                 
-def            system        settings      lastUpdated     3                 
-def            system        settings      valueType       4                 
-def            system        ui            key             1                 
-def            system        ui            value           2                 
-def            system        ui            lastUpdated     3                 
-def            system        users         username        1                 
-def            system        users         hashedPassword  2                 
-def            system        web_sessions  id              1                 
-def            system        web_sessions  hashedSecret    2                 
-def            system        web_sessions  username        3                 
-def            system        web_sessions  createdAt       4                 
-def            system        web_sessions  expiresAt       5                 
-def            system        web_sessions  revokedAt       6                 
-def            system        web_sessions  lastUsedAt      7                 
-def            system        web_sessions  auditInfo       8                 
-def            system        zones         id              1                 
-def            system        zones         config          2
+table_catalog  table_schema  table_name        column_name     ordinal_position
+def            system        descriptor        id              1
+def            system        descriptor        descriptor      2
+def            system        eventlog          timestamp       1
+def            system        eventlog          eventType       2
+def            system        eventlog          targetID        3
+def            system        eventlog          reportingID     4
+def            system        eventlog          info            5
+def            system        eventlog          uniqueID        6
+def            system        jobs              id              1
+def            system        jobs              status          2
+def            system        jobs              created         3
+def            system        jobs              payload         4
+def            system        lease             descID          1
+def            system        lease             version         2
+def            system        lease             nodeID          3
+def            system        lease             expiration      4
+def            system        namespace         parentID        1
+def            system        namespace         name            2
+def            system        namespace         id              3
+def            system        rangelog          timestamp       1
+def            system        rangelog          rangeID         2
+def            system        rangelog          storeID         3
+def            system        rangelog          eventType       4
+def            system        rangelog          otherRangeID    5
+def            system        rangelog          info            6
+def            system        rangelog          uniqueID        7
+def            system        settings          name            1
+def            system        settings          value           2
+def            system        settings          lastUpdated     3
+def            system        settings          valueType       4
+def            system        table_statistics  tableID         1
+def            system        table_statistics  statisticID     2
+def            system        table_statistics  name            3
+def            system        table_statistics  columnIDs       4
+def            system        table_statistics  createdAt       5
+def            system        table_statistics  rowCount        6
+def            system        table_statistics  distinctCount   7
+def            system        table_statistics  nullValues      8
+def            system        table_statistics  histogram       9
+def            system        ui                key             1
+def            system        ui                value           2
+def            system        ui                lastUpdated     3
+def            system        users             username        1
+def            system        users             hashedPassword  2
+def            system        web_sessions      id              1
+def            system        web_sessions      hashedSecret    2
+def            system        web_sessions      username        3
+def            system        web_sessions      createdAt       4
+def            system        web_sessions      expiresAt       5
+def            system        web_sessions      revokedAt       6
+def            system        web_sessions      lastUsedAt      7
+def            system        web_sessions      auditInfo       8
+def            system        zones             id              1
+def            system        zones             config          2
 
 statement ok
 SET DATABASE = test
@@ -762,56 +775,61 @@ root      def            test          ALL             NULL
 query TTTTTTTT colnames
 SELECT * FROM information_schema.table_privileges
 ----
-grantor  grantee  table_catalog  table_schema  table_name    privilege_type  is_grantable  with_hierarchy  
-NULL     root     def            system        descriptor    GRANT           NULL          NULL            
-NULL     root     def            system        descriptor    SELECT          NULL          NULL            
-NULL     root     def            system        eventlog      DELETE          NULL          NULL            
-NULL     root     def            system        eventlog      GRANT           NULL          NULL            
-NULL     root     def            system        eventlog      INSERT          NULL          NULL            
-NULL     root     def            system        eventlog      SELECT          NULL          NULL            
-NULL     root     def            system        eventlog      UPDATE          NULL          NULL            
-NULL     root     def            system        jobs          DELETE          NULL          NULL            
-NULL     root     def            system        jobs          GRANT           NULL          NULL            
-NULL     root     def            system        jobs          INSERT          NULL          NULL            
-NULL     root     def            system        jobs          SELECT          NULL          NULL            
-NULL     root     def            system        jobs          UPDATE          NULL          NULL            
-NULL     root     def            system        lease         DELETE          NULL          NULL            
-NULL     root     def            system        lease         GRANT           NULL          NULL            
-NULL     root     def            system        lease         INSERT          NULL          NULL            
-NULL     root     def            system        lease         SELECT          NULL          NULL            
-NULL     root     def            system        lease         UPDATE          NULL          NULL            
-NULL     root     def            system        namespace     GRANT           NULL          NULL            
-NULL     root     def            system        namespace     SELECT          NULL          NULL            
-NULL     root     def            system        rangelog      DELETE          NULL          NULL            
-NULL     root     def            system        rangelog      GRANT           NULL          NULL            
-NULL     root     def            system        rangelog      INSERT          NULL          NULL            
-NULL     root     def            system        rangelog      SELECT          NULL          NULL            
-NULL     root     def            system        rangelog      UPDATE          NULL          NULL            
-NULL     root     def            system        settings      DELETE          NULL          NULL            
-NULL     root     def            system        settings      GRANT           NULL          NULL            
-NULL     root     def            system        settings      INSERT          NULL          NULL            
-NULL     root     def            system        settings      SELECT          NULL          NULL            
-NULL     root     def            system        settings      UPDATE          NULL          NULL            
-NULL     root     def            system        ui            DELETE          NULL          NULL            
-NULL     root     def            system        ui            GRANT           NULL          NULL            
-NULL     root     def            system        ui            INSERT          NULL          NULL            
-NULL     root     def            system        ui            SELECT          NULL          NULL            
-NULL     root     def            system        ui            UPDATE          NULL          NULL            
-NULL     root     def            system        users         DELETE          NULL          NULL            
-NULL     root     def            system        users         GRANT           NULL          NULL            
-NULL     root     def            system        users         INSERT          NULL          NULL            
-NULL     root     def            system        users         SELECT          NULL          NULL            
-NULL     root     def            system        users         UPDATE          NULL          NULL            
-NULL     root     def            system        web_sessions  DELETE          NULL          NULL            
-NULL     root     def            system        web_sessions  GRANT           NULL          NULL            
-NULL     root     def            system        web_sessions  INSERT          NULL          NULL            
-NULL     root     def            system        web_sessions  SELECT          NULL          NULL            
-NULL     root     def            system        web_sessions  UPDATE          NULL          NULL            
-NULL     root     def            system        zones         DELETE          NULL          NULL            
-NULL     root     def            system        zones         GRANT           NULL          NULL            
-NULL     root     def            system        zones         INSERT          NULL          NULL            
-NULL     root     def            system        zones         SELECT          NULL          NULL            
-NULL     root     def            system        zones         UPDATE          NULL          NULL
+grantor  grantee  table_catalog  table_schema  table_name        privilege_type  is_grantable  with_hierarchy
+NULL     root     def            system        descriptor        GRANT           NULL          NULL
+NULL     root     def            system        descriptor        SELECT          NULL          NULL
+NULL     root     def            system        eventlog          DELETE          NULL          NULL
+NULL     root     def            system        eventlog          GRANT           NULL          NULL
+NULL     root     def            system        eventlog          INSERT          NULL          NULL
+NULL     root     def            system        eventlog          SELECT          NULL          NULL
+NULL     root     def            system        eventlog          UPDATE          NULL          NULL
+NULL     root     def            system        jobs              DELETE          NULL          NULL
+NULL     root     def            system        jobs              GRANT           NULL          NULL
+NULL     root     def            system        jobs              INSERT          NULL          NULL
+NULL     root     def            system        jobs              SELECT          NULL          NULL
+NULL     root     def            system        jobs              UPDATE          NULL          NULL
+NULL     root     def            system        lease             DELETE          NULL          NULL
+NULL     root     def            system        lease             GRANT           NULL          NULL
+NULL     root     def            system        lease             INSERT          NULL          NULL
+NULL     root     def            system        lease             SELECT          NULL          NULL
+NULL     root     def            system        lease             UPDATE          NULL          NULL
+NULL     root     def            system        namespace         GRANT           NULL          NULL
+NULL     root     def            system        namespace         SELECT          NULL          NULL
+NULL     root     def            system        rangelog          DELETE          NULL          NULL
+NULL     root     def            system        rangelog          GRANT           NULL          NULL
+NULL     root     def            system        rangelog          INSERT          NULL          NULL
+NULL     root     def            system        rangelog          SELECT          NULL          NULL
+NULL     root     def            system        rangelog          UPDATE          NULL          NULL
+NULL     root     def            system        settings          DELETE          NULL          NULL
+NULL     root     def            system        settings          GRANT           NULL          NULL
+NULL     root     def            system        settings          INSERT          NULL          NULL
+NULL     root     def            system        settings          SELECT          NULL          NULL
+NULL     root     def            system        settings          UPDATE          NULL          NULL
+NULL     root     def            system        table_statistics  DELETE          NULL          NULL
+NULL     root     def            system        table_statistics  GRANT           NULL          NULL
+NULL     root     def            system        table_statistics  INSERT          NULL          NULL
+NULL     root     def            system        table_statistics  SELECT          NULL          NULL
+NULL     root     def            system        table_statistics  UPDATE          NULL          NULL
+NULL     root     def            system        ui                DELETE          NULL          NULL
+NULL     root     def            system        ui                GRANT           NULL          NULL
+NULL     root     def            system        ui                INSERT          NULL          NULL
+NULL     root     def            system        ui                SELECT          NULL          NULL
+NULL     root     def            system        ui                UPDATE          NULL          NULL
+NULL     root     def            system        users             DELETE          NULL          NULL
+NULL     root     def            system        users             GRANT           NULL          NULL
+NULL     root     def            system        users             INSERT          NULL          NULL
+NULL     root     def            system        users             SELECT          NULL          NULL
+NULL     root     def            system        users             UPDATE          NULL          NULL
+NULL     root     def            system        web_sessions      DELETE          NULL          NULL
+NULL     root     def            system        web_sessions      GRANT           NULL          NULL
+NULL     root     def            system        web_sessions      INSERT          NULL          NULL
+NULL     root     def            system        web_sessions      SELECT          NULL          NULL
+NULL     root     def            system        web_sessions      UPDATE          NULL          NULL
+NULL     root     def            system        zones             DELETE          NULL          NULL
+NULL     root     def            system        zones             GRANT           NULL          NULL
+NULL     root     def            system        zones             INSERT          NULL          NULL
+NULL     root     def            system        zones             SELECT          NULL          NULL
+NULL     root     def            system        zones             UPDATE          NULL          NULL
 
 statement ok
 CREATE TABLE other_db.xyz (i INT)
