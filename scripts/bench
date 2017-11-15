@@ -1,6 +1,7 @@
-#!/bin/sh
+#!/bin/bash
 set -euo pipefail
 
+cd "$(dirname $0)/.."
 if [ $# -ne 2 ]; then
   cat 1>&2 <<EOF
 Usage: BENCHES=regexp PKG=./pkg/yourpkg $0 oldbranch newbranch
