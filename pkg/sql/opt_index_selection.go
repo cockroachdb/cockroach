@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -289,7 +290,7 @@ func (p *planner) selectIndex(
 	s.reverse = c.reverse
 
 	var plan planNode
-	if c.covering {
+	if c.covering && c.index.Type != sqlbase.IndexDescriptor_INVERTED {
 		s.initOrdering(c.exactPrefix, &p.evalCtx)
 		plan = s
 	} else {
@@ -1985,6 +1986,13 @@ func (v *indexInfo) makeIndexConstraintsExperimental(
 	numIndexCols := len(v.index.ColumnIDs)
 	numExtraCols := len(v.index.ExtraColumnIDs)
 
+	isInverted := (v.index.Type == sqlbase.IndexDescriptor_INVERTED)
+	if isInverted {
+		// TODO(radu): we currently don't support index constraints on PK
+		// columns on an inverted index.
+		numExtraCols = 0
+	}
+
 	colIdxMap := make(map[sqlbase.ColumnID]int, len(v.desc.Columns))
 	for i := range v.desc.Columns {
 		colIdxMap[v.desc.Columns[i].ID] = i
@@ -2026,7 +2034,7 @@ func (v *indexInfo) makeIndexConstraintsExperimental(
 	var spans opt.LogicalSpans
 	var ok bool
 	if filter != nil {
-		v.ic.Init(filter, colInfos, false /* isInverted */, evalCtx)
+		v.ic.Init(filter, colInfos, isInverted, evalCtx)
 		spans, ok = v.ic.Spans()
 	}
 	if !ok {
@@ -2086,6 +2094,7 @@ func (v *indexInfo) spansFromLogicalSpansExperimental(
 
 	logicalSpans, ok := v.ic.Spans()
 	if !ok {
+		// Encode a full span.
 		sp, err := spanFromLogicalSpanExperimental(tableDesc, index, opt.MakeFullSpan(), interstices)
 		if err != nil {
 			return nil, err
@@ -2104,6 +2113,48 @@ func (v *indexInfo) spansFromLogicalSpansExperimental(
 	return spans, nil
 }
 
+// encodeLogicalKeyExperimental encodes each logical part of a key into a
+// roachpb.Key; interstices[i] is inserted before the i-th value.
+func encodeLogicalKeyExperimental(
+	index *sqlbase.IndexDescriptor, vals tree.Datums, interstices [][]byte,
+) (roachpb.Key, error) {
+	var key roachpb.Key
+	for i, val := range vals {
+		key = append(key, interstices[i]...)
+
+		var err error
+		// For extra columns (like implicit columns), the direction
+		// is ascending.
+		dir := encoding.Ascending
+		if i < len(index.ColumnDirections) {
+			dir, err = index.ColumnDirections[i].ToEncodingDirection()
+			if err != nil {
+				return nil, err
+			}
+		}
+
+		if index.Type == sqlbase.IndexDescriptor_INVERTED {
+			keys, err := sqlbase.EncodeInvertedIndexTableKeys(val, key)
+			if err != nil {
+				return nil, err
+			}
+			if len(keys) > 1 {
+				err := pgerror.NewError(
+					pgerror.CodeInternalError, "trying to use multiple keys in index lookup",
+				)
+				return nil, err
+			}
+			key = keys[0]
+		} else {
+			key, err = sqlbase.EncodeTableKey(key, val, dir)
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	return key, nil
+}
+
 // spanFromLogicalSpanExperimental converts an opt.LogicalSpan to a
 // roachpb.Span.
 func spanFromLogicalSpanExperimental(
@@ -2114,22 +2165,10 @@ func spanFromLogicalSpanExperimental(
 ) (roachpb.Span, error) {
 	var s roachpb.Span
 	var err error
-	// Encode each logical part of the start key for span.(start)Key.
-	for i, val := range ls.Start.Vals {
-		s.Key = append(s.Key, interstices[i]...)
-		// For extra columns (like implicit columns), the direction
-		// is ascending.
-		dir := encoding.Ascending
-		if i < len(index.ColumnDirections) {
-			dir, err = index.ColumnDirections[i].ToEncodingDirection()
-			if err != nil {
-				return roachpb.Span{}, err
-			}
-		}
-		s.Key, err = sqlbase.EncodeTableKey(s.Key, val, dir)
-		if err != nil {
-			return roachpb.Span{}, err
-		}
+	// Encode each logical part of the start key.
+	s.Key, err = encodeLogicalKeyExperimental(index, ls.Start.Vals, interstices)
+	if err != nil {
+		return roachpb.Span{}, err
 	}
 	if ls.Start.Inclusive {
 		s.Key = append(s.Key, interstices[len(ls.Start.Vals)]...)
@@ -2137,21 +2176,10 @@ func spanFromLogicalSpanExperimental(
 		// We need to exclude the value this logical part refers to.
 		s.Key = s.Key.PrefixEnd()
 	}
-
-	// Encode each logical part of the end key as span.EndKey.
-	for i, val := range ls.End.Vals {
-		s.EndKey = append(s.EndKey, interstices[i]...)
-		dir := encoding.Ascending
-		if i < len(index.ColumnDirections) {
-			dir, err = index.ColumnDirections[i].ToEncodingDirection()
-			if err != nil {
-				return roachpb.Span{}, err
-			}
-		}
-		s.EndKey, err = sqlbase.EncodeTableKey(s.EndKey, val, dir)
-		if err != nil {
-			return roachpb.Span{}, err
-		}
+	// Encode each logical part of the end key.
+	s.EndKey, err = encodeLogicalKeyExperimental(index, ls.End.Vals, interstices)
+	if err != nil {
+		return roachpb.Span{}, err
 	}
 	s.EndKey = append(s.EndKey, interstices[len(ls.End.Vals)]...)
 

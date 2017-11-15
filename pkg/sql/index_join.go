@@ -141,13 +141,16 @@ func (p *planner) makeIndexJoin(
 	// Then, in case the index-specific part, post-split, actually
 	// refers to any additional column, we also need to prepare the
 	// mapping for these columns in colIDtoRowIndex.
-	for _, colID := range indexScan.index.ColumnIDs {
-		idx, ok := indexScan.colIdxMap[colID]
-		if !ok {
-			panic(fmt.Sprintf("Unknown column %d in index!", colID))
+	if indexScan.index.Type == sqlbase.IndexDescriptor_FORWARD {
+		for _, colID := range indexScan.index.ColumnIDs {
+			idx, ok := indexScan.colIdxMap[colID]
+			if !ok {
+				panic(fmt.Sprintf("Unknown column %d in index!", colID))
+			}
+			valProvidedIndex[idx] = true
+			colIDtoRowIndex[colID] = idx
 		}
-		valProvidedIndex[idx] = true
-		colIDtoRowIndex[colID] = idx
+
 	}
 
 	if origScan.filter != nil {
@@ -244,7 +247,6 @@ func (n *indexJoinNode) Next(params runParams) (bool, error) {
 				}
 				break
 			}
-
 			vals := n.index.Values()
 			primaryIndexKey, _, err := sqlbase.EncodeIndexKey(
 				n.table.desc, n.table.index, n.run.colIDtoRowIndex, vals, n.run.primaryKeyPrefix)
