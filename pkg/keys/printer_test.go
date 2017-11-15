@@ -146,6 +146,9 @@ func TestPrettyPrint(t *testing.T) {
 			roachpb.RKey(durationDesc)),
 			"/Table/42/-2mon-2d743h59m58s999ms999µs999ns"},
 
+		// sequence
+		{MakeSequenceKey(55), `/Table/55/"seqval"`},
+
 		// others
 		{makeKey([]byte("")), "/Min"},
 		{Meta1KeyMax, "/Meta1/Max"},

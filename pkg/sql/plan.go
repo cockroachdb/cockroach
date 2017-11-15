@@ -355,6 +355,8 @@ func (p *planner) newPlan(
 		return p.CreateUser(ctx, n)
 	case *tree.CreateView:
 		return p.CreateView(ctx, n)
+	case *tree.CreateSequence:
+		return p.CreateSequence(ctx, n)
 	case *tree.Deallocate:
 		return p.Deallocate(ctx, n)
 	case *tree.Delete:

@@ -1,0 +1,180 @@
+# LogicTest: default distsql parallel-stmts
+
+# SEQUENCE CREATION
+
+statement ok
+CREATE SEQUENCE foo
+
+# A sequence with the same name can't be created again.
+statement error pgcode 42P07 relation "foo" already exists
+CREATE SEQUENCE foo
+
+statement ok
+CREATE SEQUENCE IF NOT EXISTS foo
+
+statement error pgcode 42601 conflicting or redundant options
+CREATE SEQUENCE bar INCREMENT 5 MAXVALUE 1000 INCREMENT 2
+
+# Sequences are in the same namespace as tables.
+statement error pgcode 42P07 relation "foo" already exists
+CREATE TABLE foo (k BYTES PRIMARY KEY, v BYTES)
+
+# You can't create with 0 increment.
+statement error pgcode 22023 INCREMENT must not be zero
+CREATE SEQUENCE zero_test INCREMENT 0
+
+# Test unimplemented syntax.
+statement error pq: unimplemented at or near "EOF"
+CREATE SEQUENCE err_test AS INT2
+
+statement error pq: unimplemented at or near "EOF"
+CREATE SEQUENCE err_test OWNED BY someuser
+
+# DML & DDL ERRORS
+
+statement error pgcode 42809 cannot run INSERT on sequence "foo" - sequences are not updateable
+INSERT INTO foo VALUES (1, 2, 3)
+
+statement error pgcode 42809 cannot run UPDATE on sequence "foo" - sequences are not updateable
+UPDATE foo SET value = 5
+
+statement error pgcode 42809 cannot run DELETE on sequence "foo" - sequences are not updateable
+DELETE FROM foo
+
+statement error pgcode 42809 cannot run TRUNCATE on sequence "foo" - sequences are not updateable
+TRUNCATE foo
+
+# Drop table on sequences doesn't work; you have to use DROP SEQUENCE.
+statement error pgcode 42809 "foo" is not a table
+DROP TABLE foo
+
+# USING THE nextval() FUNCTION
+
+# `select * from foo` currently returns 0 columns & 0 rows;
+# testing against that is a Test-Script syntax error.
+
+query I
+SELECT nextval('foo')
+----
+1
+
+query I
+SELECT nextval('foo')
+----
+2
+
+# You can create a sequence with different increment.
+
+statement ok
+CREATE SEQUENCE bar INCREMENT 5
+
+query I
+SELECT nextval('bar')
+----
+1
+
+query I
+SELECT nextval('bar')
+----
+6
+
+# You can create a sequence with different start and increment.
+
+statement ok
+CREATE SEQUENCE baz START 2 INCREMENT 5
+
+query I
+SELECT nextval('baz')
+----
+2
+
+query I
+SELECT nextval('baz')
+----
+7
+
+# You can create and use a sequence with special characters.
+
+statement ok
+CREATE SEQUENCE spécial
+
+query I
+SELECT nextval('spécial')
+----
+1
+
+# You can't call nextval on a table.
+
+statement ok
+CREATE TABLE kv (k bytes primary key, v bytes)
+
+statement error pgcode 42809 "kv" is not a sequence
+SELECT nextval('kv')
+
+# Parse errors in the argument to nextval are handled.
+statement error pq: nextval\(\): syntax error at or near "@"
+SELECT nextval('@#%@!324234')
+
+# You can create and find sequences from other databases.
+
+statement ok
+CREATE DATABASE other_db
+
+statement ok
+SET DATABASE = other_db
+
+statement ok
+CREATE SEQUENCE other_db_test
+
+statement ok
+SET DATABASE = test
+
+# Sequence names are resolved based on the search path.
+
+statement ok
+CREATE DATABASE foo
+
+statement ok
+CREATE DATABASE bar
+
+statement ok
+CREATE SEQUENCE foo.x
+
+statement ok
+SET DATABASE = bar
+
+statement ok
+SET SEARCH_PATH = foo
+
+query I
+SELECT nextval('x')
+----
+1
+
+query I
+SELECT nextval('other_db.other_db_test')
+----
+1
+
+# USE WITH TABLES
+
+# You can use a sequence in a DEFAULT expression to create an auto-incrementing primary key.
+
+statement ok
+CREATE SEQUENCE blog_posts_id_seq
+
+statement ok
+CREATE TABLE blog_posts (id INT PRIMARY KEY DEFAULT nextval('blog_posts_id_seq'), title text)
+
+statement ok
+INSERT INTO blog_posts (title) values ('foo')
+
+statement ok
+INSERT INTO blog_posts (title) values ('bar')
+
+# TODO(vilterp) change this to [1, 2] once initial-evaluation bug has been fixed
+query I
+SELECT id FROM blog_posts ORDER BY id
+----
+2
+3
