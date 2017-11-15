@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/ipaddr"
+	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeofday"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -102,6 +103,12 @@ func RandDatum(rng *rand.Rand, typ ColumnType, nullOk bool) tree.Datum {
 	case ColumnType_INET:
 		ipAddr := ipaddr.RandIPAddr(rng)
 		return tree.NewDIPAddr(tree.DIPAddr{IPAddr: ipAddr})
+	case ColumnType_JSON:
+		j, err := json.Random(20, rng)
+		if err != nil {
+			return nil
+		}
+		return &tree.DJSON{JSON: j}
 	case ColumnType_STRING:
 		// Generate a random ASCII string.
 		p := make([]byte, rng.Intn(10))
@@ -187,11 +194,30 @@ func RandColumnType(rng *rand.Rand) ColumnType {
 	return typ
 }
 
-// RandColumnTypes returns a slice of numCols random ColumnType value.
+// RandSortingColumnType returns a column type which can be key-encoded.
+func RandSortingColumnType(rng *rand.Rand) ColumnType {
+	typ := RandColumnType(rng)
+	for MustBeValueEncoded(typ.SemanticType) {
+		typ = RandColumnType(rng)
+	}
+	return typ
+}
+
+// RandColumnTypes returns a slice of numCols random ColumnType values.
 func RandColumnTypes(rng *rand.Rand, numCols int) []ColumnType {
 	types := make([]ColumnType, numCols)
 	for i := range types {
 		types[i] = RandColumnType(rng)
+	}
+	return types
+}
+
+// RandSortingColumnTypes returns a slice of numCols random ColumnType values
+// which are key-encodable.
+func RandSortingColumnTypes(rng *rand.Rand, numCols int) []ColumnType {
+	types := make([]ColumnType, numCols)
+	for i := range types {
+		types[i] = RandSortingColumnType(rng)
 	}
 	return types
 }

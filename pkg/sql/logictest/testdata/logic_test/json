@@ -82,9 +82,76 @@ SELECT ARRAY['"hello"'::JSON]
 statement error arrays of JSONB not allowed
 SELECT '{}'::JSONB[]
 
-# TODO(justin)
-statement error unsupported result type: json
+statement error arrays of JSONB not allowed
+CREATE TABLE x (y JSONB[])
+
+statement ok
 CREATE TABLE foo (bar JSON)
+
+statement ok
+INSERT INTO foo VALUES
+  ('{"a": "b"}'),
+  ('[1, 2, 3]'),
+  ('"hello"'),
+  ('1.000'),
+  ('true'),
+  ('false'),
+  (NULL)
+
+query T rowsort
+SELECT bar FROM foo
+----
+{"a":"b"}
+[1,2,3]
+"hello"
+1.000
+true
+false
+NULL
+
+statement error pgcode 0A000 can't order by column type jsonb
+SELECT bar FROM foo ORDER BY bar
+
+statement error pgcode 0A000 column k is of type JSON and thus is not indexable
+CREATE TABLE pk (k JSON PRIMARY KEY)
+
+query T rowsort
+SELECT bar->'a' FROM foo
+----
+"b"
+NULL
+NULL
+NULL
+NULL
+NULL
+NULL
+
+statement ok
+DELETE FROM foo
+
+statement ok
+INSERT INTO foo VALUES ('{"a": {"c": "d"}}');
+
+query TT
+SELECT bar->'a'->'c', bar->'a'->>'c' FROM foo
+----
+"d" d
+
+statement ok
+CREATE TABLE multiple (a JSON, b JSON)
+
+statement ok
+INSERT INTO multiple VALUES ('{"a":"b"}', '[1,2,3,4,"foo"]')
+
+query T
+SELECT a FROM multiple
+----
+{"a":"b"}
+
+query T
+SELECT b FROM multiple
+----
+[1,2,3,4,"foo"]
 
 ## Comparisons
 
