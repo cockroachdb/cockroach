@@ -40,7 +40,7 @@ done
 
 # Merge coverage profiles and remove lines that match our ignore filter.
 gocovmerge $coverage_dir/*.cover | \
-  grep -vE "$prefix/(acceptance|cmd|ui/embedded|sql/pgbench|.*\.pb(\.gw)?\.go)" > $coverage_profile
+  grep -vE "$prefix/(acceptance|cmd|ui/embedded|bench|.*\.pb(\.gw)?\.go)" > $coverage_profile
 
 # Upload profiles to coveralls.io.
 goveralls \

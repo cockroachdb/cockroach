@@ -12,7 +12,7 @@
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
-package sql_test
+package bench
 
 import (
 	gosql "database/sql"
@@ -28,7 +28,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/security"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgbench"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
@@ -37,14 +36,14 @@ import (
 // Tests a batch of queries very similar to those that that PGBench runs
 // in its TPC-B(ish) mode.
 func BenchmarkPgbenchQuery(b *testing.B) {
-	forEachDB(b, func(b *testing.B, db *gosql.DB) {
-		if err := pgbench.SetupBenchDB(db, 20000, true /*quiet*/); err != nil {
+	ForEachDB(b, func(b *testing.B, db *gosql.DB) {
+		if err := SetupBenchDB(db, 20000, true /*quiet*/); err != nil {
 			b.Fatal(err)
 		}
 		src := rand.New(rand.NewSource(5432))
 		b.ResetTimer()
 		for i := 0; i < b.N; i++ {
-			if err := pgbench.RunOne(db, src, 20000); err != nil {
+			if err := RunOne(db, src, 20000); err != nil {
 				b.Fatal(err)
 			}
 		}
@@ -55,8 +54,8 @@ func BenchmarkPgbenchQuery(b *testing.B) {
 // Tests a batch of queries very similar to those that that PGBench runs
 // in its TPC-B(ish) mode.
 func BenchmarkPgbenchQueryParallel(b *testing.B) {
-	forEachDB(b, func(b *testing.B, db *gosql.DB) {
-		if err := pgbench.SetupBenchDB(db, 20000, true /*quiet*/); err != nil {
+	ForEachDB(b, func(b *testing.B, db *gosql.DB) {
+		if err := SetupBenchDB(db, 20000, true /*quiet*/); err != nil {
 			b.Fatal(err)
 		}
 
@@ -74,7 +73,7 @@ func BenchmarkPgbenchQueryParallel(b *testing.B) {
 			for pb.Next() {
 				r.Reset()
 				for r.Next() {
-					err = pgbench.RunOne(db, src, 20000)
+					err = RunOne(db, src, 20000)
 					if err == nil {
 						break
 					}
@@ -92,7 +91,7 @@ func execPgbench(b *testing.B, pgURL url.URL) {
 	if _, err := exec.LookPath("pgbench"); err != nil {
 		b.Skip("pgbench is not available on PATH")
 	}
-	c, err := pgbench.SetupExec(pgURL, "bench", 20000, b.N)
+	c, err := SetupExec(pgURL, "bench", 20000, b.N)
 	if err != nil {
 		b.Fatal(err)
 	}
