@@ -143,6 +143,7 @@ type planNodeFastPath interface {
 }
 
 var _ planNode = &alterTableNode{}
+var _ planNode = &alterSequenceNode{}
 var _ planNode = &copyNode{}
 var _ planNode = &createDatabaseNode{}
 var _ planNode = &createIndexNode{}
@@ -332,6 +333,8 @@ func (p *planner) newPlan(
 	switch n := stmt.(type) {
 	case *tree.AlterTable:
 		return p.AlterTable(ctx, n)
+	case *tree.AlterSequence:
+		return p.AlterSequence(ctx, n)
 	case *tree.AlterUserSetPassword:
 		return p.AlterUserSetPassword(ctx, n)
 	case *tree.BeginTransaction:

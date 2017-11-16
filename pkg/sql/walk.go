@@ -519,6 +519,7 @@ func nodeName(plan planNode) string {
 // be changed without changing the output of "EXPLAIN".
 var planNodeNames = map[reflect.Type]string{
 	reflect.TypeOf(&alterTableNode{}):           "alter table",
+	reflect.TypeOf(&alterSequenceNode{}):        "alter sequence",
 	reflect.TypeOf(&alterUserSetPasswordNode{}): "alter user",
 	reflect.TypeOf(&cancelQueryNode{}):          "cancel query",
 	reflect.TypeOf(&controlJobNode{}):           "control job",

@@ -17,7 +17,6 @@ package sql
 import (
 	"bytes"
 	"fmt"
-	"math"
 	"regexp"
 	"strings"
 
@@ -1453,62 +1452,12 @@ func (n *createSequenceNode) makeSequenceTableDesc(
 	// Fill in options, starting with defaults then overriding.
 
 	opts := &sqlbase.TableDescriptor_SequenceOpts{
-		Cycle: false,
+		Cycle:     false,
+		Increment: 1,
 	}
-
-	// All other defaults are dependent on the value of increment,
-	// i.e. whether the sequence is ascending or descending.
-	opts.Increment = 1
-	for _, option := range n.n.Options {
-		if option.Name == tree.SeqOptIncrement {
-			opts.Increment = *option.IntVal
-		}
-	}
-	if opts.Increment == 0 {
-		return desc, pgerror.NewError(
-			pgerror.CodeInvalidParameterValueError, "INCREMENT must not be zero")
-	}
-	isAscending := opts.Increment > 0
-
-	// Set increment-dependent defaults.
-	if isAscending {
-		opts.MinValue = 1
-		opts.MaxValue = math.MaxInt64
-		opts.Start = opts.MinValue
-	} else {
-		opts.MinValue = math.MinInt64
-		opts.MaxValue = -1
-		opts.Start = opts.MaxValue
-	}
-
-	// Fill in all other options.
-	settingsSeen := map[string]bool{}
-	for _, option := range n.n.Options {
-		// Error on duplicate options.
-		_, seenBefore := settingsSeen[option.Name]
-		if seenBefore {
-			return desc, pgerror.NewError(pgerror.CodeSyntaxError, "conflicting or redundant options")
-		}
-		settingsSeen[option.Name] = true
-
-		switch option.Name {
-		case tree.SeqOptIncrement:
-			// Do nothing; this has already been set.
-		case tree.SeqOptMinValue:
-			// A value of nil represents the user explicitly saying `NO MINVALUE`.
-			if option.IntVal != nil {
-				opts.MinValue = *option.IntVal
-			}
-		case tree.SeqOptMaxValue:
-			// A value of nil represents the user explicitly saying `NO MAXVALUE`.
-			if option.IntVal != nil {
-				opts.MaxValue = *option.IntVal
-			}
-		case tree.SeqOptStart:
-			opts.Start = *option.IntVal
-		case tree.SeqOptCycle:
-			opts.Cycle = option.BoolVal
-		}
+	err := assignSequenceOptions(opts, n.n.Options, true /* setDefaults */)
+	if err != nil {
+		return desc, err
 	}
 	desc.SequenceOpts = opts
 
