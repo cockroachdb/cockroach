@@ -26,10 +26,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
-func intEncDatum(i int) sqlbase.EncDatum {
-	return sqlbase.EncDatum{Datum: tree.NewDInt(tree.DInt(i))}
-}
-
 // runSampler runs the sampler aggregator on numRows and returns numSamples rows.
 func runSampler(t *testing.T, numRows, numSamples int) []int {
 	rows := make([]sqlbase.EncDatumRow, numRows)
@@ -138,16 +134,7 @@ func TestSamplerSketch(t *testing.T) {
 	cardinalities := []int{2, 8}
 	numNulls := []int{2, 1}
 
-	rows := make(sqlbase.EncDatumRows, len(inputRows))
-	for i, inputRow := range inputRows {
-		for _, x := range inputRow {
-			if x == -1 {
-				rows[i] = append(rows[i], sqlbase.EncDatum{Datum: tree.DNull})
-				continue
-			}
-			rows[i] = append(rows[i], intEncDatum(x))
-		}
-	}
+	rows := genEncDatumRowsInt(inputRows)
 	in := NewRowBuffer(twoIntCols, rows, RowBufferArgs{})
 	outTypes := []sqlbase.ColumnType{
 		intType, // original column
@@ -170,7 +157,7 @@ func TestSamplerSketch(t *testing.T) {
 
 	spec := &SamplerSpec{
 		SampleSize: uint32(1),
-		Sketches: []SamplerSpec_SketchInfo{
+		Sketches: []SketchSpec{
 			{
 				SketchType: SketchType_HLL_PLUS_PLUS_V1,
 				Columns:    []uint32{0},

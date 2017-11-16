@@ -21,6 +21,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -127,6 +128,30 @@ var strType = sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_STRING}
 var oneIntCol = []sqlbase.ColumnType{intType}
 var twoIntCols = []sqlbase.ColumnType{intType, intType}
 var threeIntCols = []sqlbase.ColumnType{intType, intType, intType}
+
+func intEncDatum(i int) sqlbase.EncDatum {
+	return sqlbase.EncDatum{Datum: tree.NewDInt(tree.DInt(i))}
+}
+
+func nullEncDatum() sqlbase.EncDatum {
+	return sqlbase.EncDatum{Datum: tree.DNull}
+}
+
+// genEncDatumRowsInt converts rows of ints to rows of EncDatum DInts.
+// If an int is negative, the corresponding value is NULL.
+func genEncDatumRowsInt(inputRows [][]int) sqlbase.EncDatumRows {
+	rows := make(sqlbase.EncDatumRows, len(inputRows))
+	for i, inputRow := range inputRows {
+		for _, x := range inputRow {
+			if x < 0 {
+				rows[i] = append(rows[i], nullEncDatum())
+			} else {
+				rows[i] = append(rows[i], intEncDatum(x))
+			}
+		}
+	}
+	return rows
+}
 
 // startMockDistSQLServer starts a MockDistSQLServer and returns the address on
 // which it's listening.

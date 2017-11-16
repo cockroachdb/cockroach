@@ -29,8 +29,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
 
-// TODO(radu): for now just force the import.
-var _ hyperloglog.Sketch
+// sketchInfo contains the specification and run-time state for each sketch.
+type sketchInfo struct {
+	spec     SketchSpec
+	sketch   *hyperloglog.Sketch
+	numNulls int64
+	numRows  int64
+}
 
 // A sampler processor returns a random sample of rows, as well as "global"
 // statistics (including cardinality estimation sketch data). See SamplerSpec
@@ -38,16 +43,16 @@ var _ hyperloglog.Sketch
 type samplerProcessor struct {
 	processorBase
 
-	flowCtx    *FlowCtx
-	input      RowSource
-	sr         stats.SampleReservoir
-	sketchInfo []SamplerSpec_SketchInfo
-	outTypes   []sqlbase.ColumnType
+	flowCtx  *FlowCtx
+	input    RowSource
+	sr       stats.SampleReservoir
+	sketches []sketchInfo
+	outTypes []sqlbase.ColumnType
 	// Output column indices for special columns.
 	rankCol      int
 	sketchIdxCol int
 	numRowsCol   int
-	nullValsCol  int
+	numNullsCol  int
 	sketchCol    int
 }
 
@@ -72,9 +77,17 @@ func newSamplerProcessor(
 	}
 
 	s := &samplerProcessor{
-		flowCtx:    flowCtx,
-		input:      input,
-		sketchInfo: spec.Sketches,
+		flowCtx:  flowCtx,
+		input:    input,
+		sketches: make([]sketchInfo, len(spec.Sketches)),
+	}
+	for i := range spec.Sketches {
+		s.sketches[i] = sketchInfo{
+			spec:     spec.Sketches[i],
+			sketch:   hyperloglog.New14(),
+			numNulls: 0,
+			numRows:  0,
+		}
 	}
 
 	s.sr.Init(int(spec.SampleSize))
@@ -99,7 +112,7 @@ func newSamplerProcessor(
 
 	// An INT column indicating the number of NULL values on the first column
 	// of the sketch.
-	s.nullValsCol = len(outTypes)
+	s.numNullsCol = len(outTypes)
 	outTypes = append(outTypes, sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_INT})
 
 	// A BYTES column with the sketch data.
@@ -132,14 +145,6 @@ func (s *samplerProcessor) Run(ctx context.Context, wg *sync.WaitGroup) {
 }
 
 func (s *samplerProcessor) mainLoop(ctx context.Context) (earlyExit bool, _ error) {
-	sketches := make([]*hyperloglog.Sketch, len(s.sketchInfo))
-	for i := range sketches {
-		sketches[i] = hyperloglog.New14()
-	}
-
-	var numRows int64
-	numNulls := make([]int64, len(s.sketchInfo))
-
 	rng, _ := randutil.NewPseudoRand()
 	var da sqlbase.DatumAlloc
 	var buf []byte
@@ -155,12 +160,12 @@ func (s *samplerProcessor) mainLoop(ctx context.Context) (earlyExit bool, _ erro
 		if row == nil {
 			break
 		}
-		numRows++
 
-		for i := range s.sketchInfo {
-			col := s.sketchInfo[i].Columns[0]
+		for i := range s.sketches {
+			col := s.sketches[i].spec.Columns[0]
+			s.sketches[i].numRows++
 			if row[col].IsNull() {
-				numNulls[i]++
+				s.sketches[i].numNulls++
 				continue
 			}
 			// We need to use a KEY encoding because equal values should have the same
@@ -171,7 +176,7 @@ func (s *samplerProcessor) mainLoop(ctx context.Context) (earlyExit bool, _ erro
 			if err != nil {
 				return false, err
 			}
-			sketches[i].Insert(buf)
+			s.sketches[i].sketch.Insert(buf)
 		}
 
 		// Use Int63 so we don't have headaches converting to DInt.
@@ -199,11 +204,11 @@ func (s *samplerProcessor) mainLoop(ctx context.Context) (earlyExit bool, _ erro
 		outRow[i] = sqlbase.DatumToEncDatum(s.outTypes[i], tree.DNull)
 	}
 
-	for i := range s.sketchInfo {
+	for i, si := range s.sketches {
 		outRow[s.sketchIdxCol] = sqlbase.EncDatum{Datum: tree.NewDInt(tree.DInt(i))}
-		outRow[s.numRowsCol] = sqlbase.EncDatum{Datum: tree.NewDInt(tree.DInt(numRows))}
-		outRow[s.nullValsCol] = sqlbase.EncDatum{Datum: tree.NewDInt(tree.DInt(numNulls[i]))}
-		data, err := sketches[i].MarshalBinary()
+		outRow[s.numRowsCol] = sqlbase.EncDatum{Datum: tree.NewDInt(tree.DInt(si.numRows))}
+		outRow[s.numNullsCol] = sqlbase.EncDatum{Datum: tree.NewDInt(tree.DInt(si.numNulls))}
+		data, err := si.sketch.MarshalBinary()
 		if err != nil {
 			return false, err
 		}
