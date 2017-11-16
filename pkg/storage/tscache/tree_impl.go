@@ -29,15 +29,14 @@ import (
 )
 
 const (
-	// defaultCacheSize is the default size in bytes for a store's timestamp
+	// defaultTreeImplSize is the default size in bytes for a treeImpl timestamp
 	// cache. Note that the timestamp cache can use more memory than this
 	// because it holds on to all entries that are younger than
 	// MinRetentionWindow.
-	defaultCacheSize = 64 << 20 // 64 MB
+	defaultTreeImplSize = 64 << 20 // 64 MB
 
 	// Max entries in each btree node.
-	// TODO(peter): Not yet tuned.
-	btreeDegree = 64
+	treeImplBtreeDegree = 64
 )
 
 func makeCacheEntry(key cache.IntervalKey, value cacheValue) *cache.Entry {
@@ -99,7 +98,7 @@ func newTreeImpl(clock *hlc.Clock) *treeImpl {
 	tc := &treeImpl{
 		rCache:   cache.NewIntervalCache(cache.Config{Policy: cache.CacheFIFO}),
 		wCache:   cache.NewIntervalCache(cache.Config{Policy: cache.CacheFIFO}),
-		maxBytes: uint64(defaultCacheSize),
+		maxBytes: uint64(defaultTreeImplSize),
 	}
 	tc.clear(clock.Now())
 	tc.rCache.Config.ShouldEvict = tc.shouldEvict
@@ -109,9 +108,12 @@ func newTreeImpl(clock *hlc.Clock) *treeImpl {
 	return tc
 }
 
+// ThreadSafe implements the Cache interface.
+func (*treeImpl) ThreadSafe() bool { return false }
+
 // clear clears the cache and resets the low-water mark.
 func (tc *treeImpl) clear(lowWater hlc.Timestamp) {
-	tc.requests = btree.New(btreeDegree)
+	tc.requests = btree.New(treeImplBtreeDegree)
 	tc.rCache.Clear()
 	tc.wCache.Clear()
 	tc.lowWater = lowWater
