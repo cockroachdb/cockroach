@@ -265,3 +265,31 @@ func TestFastIntSetAddRange(t *testing.T) {
 		}
 	}
 }
+
+func TestFastIntSetString(t *testing.T) {
+	testCases := []struct {
+		vals []int
+		exp  string
+	}{
+		{
+			vals: []int{},
+			exp:  "()",
+		},
+		{
+			vals: []int{-5, -3, -2, -1, 0, 1, 2, 3, 4, 5},
+			exp:  "(-5,-3,-2,-1,0-5)",
+		},
+		{
+			vals: []int{0, 1, 3, 4, 5},
+			exp:  "(0,1,3-5)",
+		},
+	}
+	for i, tc := range testCases {
+		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
+			s := MakeFastIntSet(tc.vals...)
+			if str := s.String(); str != tc.exp {
+				t.Errorf("expected %s, got %s", tc.exp, str)
+			}
+		})
+	}
+}
