@@ -1718,3 +1718,19 @@ NULL  NULL  NULL  3  1  31
 NULL  NULL  NULL  3  3  33
 NULL  NULL  NULL  5  5  55
 NULL  NULL  NULL  2  2  2
+
+# Test that the distSQL MergeJoiner follows SQL NULL semantics for ON predicate equivilance.
+
+statement ok
+CREATE TABLE distsql_mj_test (k INT, v INT)
+
+statement ok
+INSERT INTO distsql_mj_test VALUES (0, NULL), (0, 1), (2, 4), (NULL, 4)
+
+# If SQL NULL semantics are not followed, NULL = NULL is truthy. This makes the rows with NULL also appear in the inner join.
+
+query IIII rowsort
+SELECT l.k, l.v, r.k, r.v FROM (SELECT * FROM distsql_mj_test ORDER BY k, v) l INNER JOIN (SELECT * FROM distsql_mj_test ORDER BY k, v) r ON l.k = r.k AND l.v = r.v
+----
+0  1  0  1
+2  4  2  4
