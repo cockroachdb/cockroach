@@ -106,6 +106,13 @@ func CompareEncDatumRowForMerge(
 	for i, ord := range leftOrdering {
 		lIdx := ord.ColIdx
 		rIdx := rightOrdering[i].ColIdx
+		// If both datums are NULL, we need to follow SQL semantics where
+		// they are not equal. This differs from our datum semantics where
+		// they are equal.
+		if lhs[lIdx].IsNull() && rhs[rIdx].IsNull() {
+			// We can return either -1 or 1, it does not change the behavior.
+			return -1, nil
+		}
 		cmp, err := lhs[lIdx].Compare(&lhsTypes[lIdx], da, evalCtx, &rhs[rIdx])
 		if err != nil {
 			return 0, err
