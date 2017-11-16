@@ -263,6 +263,10 @@ message MergeJoinerSpec {
 
   optional JoinType type = 6 [(gogoproto.nullable) = false];
 
+  // NullEquality indicates that NULL = NULL should be considered true.
+  // This allows OUTER JOINs to consider NULL values meaningfully. An
+  // example of this is during SCRUB checks on secondary indexes.
+  optional bool null_equality = 7 [(gogoproto.nullable) = false];
 }
 
 // HashJoinerSpec is the specification for a hash join processor. The processor
