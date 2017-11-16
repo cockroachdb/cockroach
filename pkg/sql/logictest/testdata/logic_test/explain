@@ -48,15 +48,15 @@ EXPLAIN (PLAN,UNKNOWN) SELECT 1
 query ITTTTT
 EXPLAIN (METADATA) SHOW TRACE FOR SELECT 1
 ----
-0  sort            ·      ·             ("timestamp", age, message, context, operation, span)                             +"timestamp"
-0  ·               order  +"timestamp"  ·                                                                                 ·
-1  window          ·      ·             ("timestamp", age, message, context, operation, span)                             ·
-2  render          ·      ·             ("timestamp", """timestamp""", message, context, operation, span)                 "timestamp"="""timestamp"""
-3  window          ·      ·             ("timestamp", message, context, operation, span)                                  ·
-4  render          ·      ·             ("timestamp", message, context, operation, span, txn_idx, span_idx, message_idx)  ·
-5  show trace for  ·      ·             (txn_idx, span_idx, message_idx, "timestamp", duration, operation, message)       ·
-6  render          ·      ·             ("1")                                                                             "1"=CONST
-7  emptyrow        ·      ·             ()                                                                                ·
+0  sort            ·      ·             ("timestamp", age, message, tag, loc, operation, span)                                 +"timestamp"
+0  ·               order  +"timestamp"  ·                                                                                      ·
+1  window          ·      ·             ("timestamp", age, message, tag, loc, operation, span)                                 ·
+2  render          ·      ·             ("timestamp", """timestamp""", message, tag, loc, operation, span)                     "timestamp"="""timestamp"""
+3  window          ·      ·             ("timestamp", message, tag, loc, operation, span)                                      ·
+4  render          ·      ·             ("timestamp", message, tag, loc, operation, span, txn_idx, span_idx, message_idx)      ·
+5  show trace for  ·      ·             (txn_idx, span_idx, message_idx, "timestamp", duration, operation, loc, tag, message)  ·
+6  render          ·      ·             ("1")                                                                                  "1"=CONST
+7  emptyrow        ·      ·             ()                                                                                     ·
 
 # Ensure that all relevant statement types can be explained
 query ITTT
@@ -194,7 +194,7 @@ EXPLAIN SHOW COLUMNS FROM foo
 5  render  ·         ·
 6  filter  ·         ·
 7  values  ·         ·
-7  ·       size      13 columns, 607 rows
+7  ·       size      13 columns, 609 rows
 5  render  ·         ·
 6  filter  ·         ·
 7  values  ·         ·

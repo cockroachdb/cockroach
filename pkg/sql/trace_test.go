@@ -285,7 +285,9 @@ func TestTrace(t *testing.T) {
 	}
 }
 
-func TestBracketInTracetags(t *testing.T) {
+// TestTraceFieldDecomposition checks that SHOW TRACE is able to decompose
+// the parts of a trace/log message into different columns properly.
+func TestTraceFieldDecomposition(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	query := "SELECT 42"
@@ -295,8 +297,13 @@ func TestBracketInTracetags(t *testing.T) {
 			SQLExecutor: &sql.ExecutorTestingKnobs{
 				BeforeExecute: func(ctx context.Context, stmt string, isParallel bool) {
 					if strings.Contains(stmt, query) {
+						// We need to check a tag containing brackets (e.g. an
+						// IPv6 address).  See #18558.
 						taggedCtx := log.WithLogTag(ctx, "hello", "[::666]")
-						log.Event(taggedCtx, "world")
+						// We use log.Infof here (instead of log.Event) to ensure
+						// the trace message contains also a file name prefix. See
+						// #19453/#20085.
+						log.Infof(taggedCtx, "world")
 					}
 				},
 			},
@@ -319,7 +326,7 @@ func TestBracketInTracetags(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	rows, err := sqlDB.Query(`SELECT message, context FROM [SHOW TRACE FOR SESSION];`)
+	rows, err := sqlDB.Query(`SELECT message, tag, loc FROM [SHOW TRACE FOR SESSION];`)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -327,14 +334,15 @@ func TestBracketInTracetags(t *testing.T) {
 
 	ok := false
 	for rows.Next() {
-		var msg, ct []byte
-		if err := rows.Scan(&msg, &ct); err != nil {
+		var msg, ct, loc []byte
+		if err := rows.Scan(&msg, &ct, &loc); err != nil {
 			t.Fatal(err)
 		}
-		t.Logf("received trace: %q // %q", msg, ct)
+		t.Logf("received trace: %q // %q // %q", msg, ct, loc)
+		// Check that brackets are properly balanced.
 		if len(ct) > 0 && ct[0] == '[' {
 			if ct[len(ct)-1] != ']' {
-				t.Errorf("context starts with open bracket but does not close it: %q", ct)
+				t.Errorf("tag starts with open bracket but does not close it: %q", ct)
 			}
 		}
 		c1 := strings.Count(string(ct), "[")
@@ -342,8 +350,17 @@ func TestBracketInTracetags(t *testing.T) {
 		if c1 != c2 {
 			t.Errorf("mismatched brackets: %q", ct)
 		}
-		if string(msg) == "world" && strings.Contains(string(ct), "hello=[::666]") {
+		// Check that the expected message was received.
+		if string(msg) == "world" &&
+			strings.Contains(string(ct), "hello=[::666]") &&
+			strings.Contains(string(loc), ".go") {
 			ok = true
+		}
+		// Check that the fields don't have heading or trailing whitespaces.
+		for _, b := range [][]byte{msg, ct, loc} {
+			if len(b) > 0 && (b[0] == ' ' || b[len(b)-1] == ' ') {
+				t.Errorf("unexpected whitespace: %q", b)
+			}
 		}
 	}
 	if !ok {
@@ -408,9 +425,9 @@ func TestTraceFromErrorReplica(t *testing.T) {
 
 	// Query through n4 and look for a redirect log message from n1.
 	rows, err := n4.Query(
-		`SELECT context, message
+		`SELECT tag, message
 			 FROM [SHOW TRACE FOR SELECT * FROM test.foo]
-				WHERE context LIKE '%n1%' AND
+				WHERE tag LIKE '%n1%' AND
 						 message LIKE '%NotLeaseHolderError%'
 		`)
 	if err != nil {
