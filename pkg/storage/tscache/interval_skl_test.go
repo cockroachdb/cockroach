@@ -15,10 +15,11 @@
 package tscache
 
 import (
+	"bytes"
 	"fmt"
+	"math"
 	"math/rand"
 	"runtime"
-	"strconv"
 	"sync"
 	"testing"
 	"time"
@@ -183,50 +184,77 @@ func TestIntervalSklSingleRange(t *testing.T) {
 	require.Equal(t, val3, s.LookupTimestamp([]byte("watermelon")))
 }
 
-func TestIntervalSklOpenRanges(t *testing.T) {
+func TestIntervalSklKeyBoundaries(t *testing.T) {
 	val1 := makeVal(makeTS(200, 200), "1")
 	val2 := makeVal(makeTS(200, 201), "2")
 	val3 := makeVal(makeTS(300, 0), "3")
 	val4 := makeVal(makeTS(400, 0), "4")
+	val5 := makeVal(makeTS(500, 0), "5")
 
 	s := newIntervalSkl(nil /* clock */, 0 /* minRet */, pageSize)
 	s.floorTS = floorTS
 
-	// Range extending to infinity. excludeTo doesn't make a difference.
-	// val1:  [b----------->
-	s.AddRange([]byte("banana"), nil, 0, val1)
-	require.Equal(t, floorVal, s.LookupTimestamp([]byte("apple")))
-	require.Equal(t, val1, s.LookupTimestamp([]byte("banana")))
-	require.Equal(t, val1, s.LookupTimestamp([]byte("orange")))
+	// Can't insert a key at infinity.
+	require.Panics(t, func() { s.Add([]byte(nil), val1) })
+	require.Panics(t, func() { s.AddRange([]byte(nil), []byte(nil), 0, val1) })
+	require.Panics(t, func() { s.AddRange([]byte(nil), []byte(nil), excludeFrom, val1) })
+	require.Panics(t, func() { s.AddRange([]byte(nil), []byte(nil), excludeTo, val1) })
+	require.Panics(t, func() { s.AddRange([]byte(nil), []byte(nil), excludeFrom|excludeTo, val1) })
 
-	// val1:  [b----------->
-	// val2:  [b----------->
+	// Can't lookup a key at infinity.
+	require.Panics(t, func() { s.LookupTimestamp([]byte(nil)) })
+	require.Panics(t, func() { s.LookupTimestampRange([]byte(nil), []byte(nil), 0) })
+	require.Panics(t, func() { s.LookupTimestampRange([]byte(nil), []byte(nil), excludeFrom) })
+	require.Panics(t, func() { s.LookupTimestampRange([]byte(nil), []byte(nil), excludeTo) })
+	require.Panics(t, func() { s.LookupTimestampRange([]byte(nil), []byte(nil), excludeFrom|excludeTo) })
+
+	// Single timestamp at minimum key.
+	// val1:  [""]
+	s.Add([]byte(""), val1)
+	require.Equal(t, val1, s.LookupTimestamp([]byte("")))
+	require.Equal(t, floorVal, s.LookupTimestamp([]byte("apple")))
+
+	// Range extending to infinity. excludeTo doesn't make a difference because
+	// the boundary is open.
+	// val1:  [""]
+	// val2:       [b----------->
 	s.AddRange([]byte("banana"), nil, excludeTo, val2)
+	require.Equal(t, val1, s.LookupTimestamp([]byte("")))
 	require.Equal(t, floorVal, s.LookupTimestamp([]byte("apple")))
 	require.Equal(t, val2, s.LookupTimestamp([]byte("banana")))
 	require.Equal(t, val2, s.LookupTimestamp([]byte("orange")))
 
-	// Range starting at the minimum key. excludeFrom doesn't make a difference.
-	// val1:       [b----------->
+	// val1:  [""]
 	// val2:       [b----------->
-	// val3:  <----------k]
-	s.AddRange([]byte(""), []byte("kiwi"), 0, val3)
-	require.Equal(t, val3, s.LookupTimestamp(nil))
-	require.Equal(t, val3, s.LookupTimestamp([]byte("")))
+	// val3:       [b----------->
+	s.AddRange([]byte("banana"), nil, 0, val3)
+	require.Equal(t, val1, s.LookupTimestamp([]byte("")))
+	require.Equal(t, floorVal, s.LookupTimestamp([]byte("apple")))
 	require.Equal(t, val3, s.LookupTimestamp([]byte("banana")))
-	require.Equal(t, val3, s.LookupTimestamp([]byte("kiwi")))
-	require.Equal(t, val2, s.LookupTimestamp([]byte("orange")))
+	require.Equal(t, val3, s.LookupTimestamp([]byte("orange")))
 
-	// val1:       [b----------->
+	// Range starting at the minimum key. excludeFrom makes a difference because
+	// the boundary is closed.
+	// val1:  [""]
 	// val2:       [b----------->
-	// val3:  <----------k]
-	// val4:  <----------k]
+	// val3:       [b----------->
+	// val4:  (""----------k]
 	s.AddRange([]byte(""), []byte("kiwi"), excludeFrom, val4)
-	require.Equal(t, val4, s.LookupTimestamp(nil))
-	require.Equal(t, val4, s.LookupTimestamp([]byte("")))
+	require.Equal(t, val1, s.LookupTimestamp([]byte("")))
 	require.Equal(t, val4, s.LookupTimestamp([]byte("banana")))
 	require.Equal(t, val4, s.LookupTimestamp([]byte("kiwi")))
-	require.Equal(t, val2, s.LookupTimestamp([]byte("orange")))
+	require.Equal(t, val3, s.LookupTimestamp([]byte("orange")))
+
+	// val1:  [""]
+	// val2:       [b----------->
+	// val3:       [b----------->
+	// val4:  (""----------k]
+	// val5:  [""----------k]
+	s.AddRange([]byte(""), []byte("kiwi"), 0, val5)
+	require.Equal(t, val5, s.LookupTimestamp([]byte("")))
+	require.Equal(t, val5, s.LookupTimestamp([]byte("banana")))
+	require.Equal(t, val5, s.LookupTimestamp([]byte("kiwi")))
+	require.Equal(t, val3, s.LookupTimestamp([]byte("orange")))
 }
 
 func TestIntervalSklSupersetRange(t *testing.T) {
@@ -407,16 +435,10 @@ func TestIntervalSklOverlappingRanges(t *testing.T) {
 	require.Equal(t, val4, s.LookupTimestamp([]byte("raspberry")))
 }
 
-func TestIntervalSklBoundaryRange(t *testing.T) {
+func TestIntervalSklSingleKeyRanges(t *testing.T) {
 	val1 := makeVal(makeTS(100, 100), "1")
 
 	s := newIntervalSkl(nil /* clock */, 0 /* minRet */, pageSize)
-
-	// Don't allow nil from and to keys.
-	require.Panics(t, func() { s.AddRange([]byte(nil), []byte(nil), 0, val1) })
-	require.Panics(t, func() { s.AddRange([]byte(nil), []byte(nil), excludeFrom, val1) })
-	require.Panics(t, func() { s.AddRange([]byte(nil), []byte(nil), excludeTo, val1) })
-	require.Panics(t, func() { s.AddRange([]byte(nil), []byte(nil), excludeFrom|excludeTo, val1) })
 
 	// Don't allow inverted ranges.
 	require.Panics(t, func() { s.AddRange([]byte("kiwi"), []byte("apple"), 0, val1) })
@@ -876,31 +898,30 @@ func TestIntervalSklConcurrency(t *testing.T) {
 	}{
 		// Test concurrency with a small page size in order to force lots of
 		// page rotations.
-		{name: "Rotates", pageSize: 2048},
+		{name: "Rotates", pageSize: 4096},
 		// Test concurrency with a small page size and a large number of pages
 		// in order to force lots of page growth.
-		{name: "Pages", pageSize: 2048, minPages: 16},
+		{name: "Pages", pageSize: 4096, minPages: 16},
 		// Test concurrency with a larger page size in order to test slot
 		// concurrency without the added complication of page rotations.
 		{name: "Slots", pageSize: pageSize},
 	}
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			// Run one subtest using a real clock to generate timestampts and
-			// one subtest using a fake clock to generate timestamps. The former
-			// is good for simulating real conditions while the latter is good
-			// for testing timestamp collisions.
+			// Run one subtest using a real clock to generate timestamps and one
+			// subtest using a fake clock to generate timestamps. The former is
+			// good for simulating real conditions while the latter is good for
+			// testing timestamp collisions.
 			testutils.RunTrueAndFalse(t, "useClock", func(t *testing.T, useClock bool) {
-				const n = 10000
-
-				var wg sync.WaitGroup
 				clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
-
 				s := newIntervalSkl(clock, 0 /* minRet */, tc.pageSize)
 				if tc.minPages != 0 {
 					s.setMinPages(tc.minPages)
 				}
 
+				// We run a goroutine for each slot. Goroutines insert new value
+				// over random intervals, but verify that the value in their
+				// slot always ratchets.
 				slots := 4 * runtime.NumCPU()
 				if util.RaceEnabled {
 					// We add in a lot of preemption points when race detection
@@ -909,6 +930,7 @@ func TestIntervalSklConcurrency(t *testing.T) {
 					slots /= 2
 				}
 
+				var wg sync.WaitGroup
 				for i := 0; i < slots; i++ {
 					wg.Add(1)
 
@@ -919,29 +941,21 @@ func TestIntervalSklConcurrency(t *testing.T) {
 
 						rng := rand.New(rand.NewSource(timeutil.Now().UnixNano()))
 						key := []byte(fmt.Sprintf("%05d", i))
-						txnID := strconv.Itoa(i)
+						txnID := uuid.MakeV4()
 						maxVal := cacheValue{}
 
+						const n = 1000
 						for j := 0; j < n; j++ {
 							// Choose a random range.
-							fromNum := rng.Intn(slots)
-							toNum := rng.Intn(slots)
-							if fromNum > toNum {
-								fromNum, toNum = toNum, fromNum
-							}
-
-							from := []byte(fmt.Sprintf("%05d", fromNum))
-							to := []byte(fmt.Sprintf("%05d", toNum))
-
-							// Choose random range options.
-							opt := rangeOptions(rng.Intn(int(excludeFrom|excludeTo) + 1))
+							from, middle, to := randRange(rng, slots)
+							opt := randRangeOpt(rng)
 
 							// Add a new value to the range.
 							ts := hlc.Timestamp{WallTime: int64(j)}
 							if useClock {
 								ts = clock.Now()
 							}
-							nowVal := makeVal(ts, txnID)
+							nowVal := cacheValue{ts: ts, txnID: txnID}
 							s.AddRange(from, to, opt, nowVal)
 
 							// Test single-key lookup at from, if possible.
@@ -951,8 +965,7 @@ func TestIntervalSklConcurrency(t *testing.T) {
 							}
 
 							// Test single-key lookup between from and to, if possible.
-							if middleNum := fromNum + 1; middleNum < toNum {
-								middle := []byte(fmt.Sprintf("%05d", middleNum))
+							if middle != nil {
 								val := s.LookupTimestamp(middle)
 								assertRatchet(t, nowVal, val)
 							}
@@ -964,7 +977,7 @@ func TestIntervalSklConcurrency(t *testing.T) {
 							}
 
 							// Test range lookup between from and to, if possible.
-							if !(fromNum == toNum && opt == (excludeFrom|excludeTo)) {
+							if !(bytes.Equal(from, to) && opt == (excludeFrom|excludeTo)) {
 								val := s.LookupTimestampRange(from, to, opt)
 								assertRatchet(t, nowVal, val)
 							}
@@ -981,6 +994,120 @@ func TestIntervalSklConcurrency(t *testing.T) {
 			})
 		})
 	}
+}
+
+func TestIntervalSklConcurrentVsSequential(t *testing.T) {
+	// Run one subtest using a real clock to generate timestamps and one subtest
+	// using a fake clock to generate timestamps. The former is good for
+	// simulating real conditions while the latter is good for testing timestamp
+	// collisions.
+	testutils.RunTrueAndFalse(t, "useClock", func(t *testing.T, useClock bool) {
+		rng := rand.New(rand.NewSource(timeutil.Now().UnixNano()))
+		clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
+
+		const smallPageSize = 32 * 1024 // 32 KB
+		const retainForever = math.MaxInt64
+		sequentialS := newIntervalSkl(clock, retainForever, smallPageSize)
+		concurrentS := newIntervalSkl(clock, retainForever, smallPageSize)
+
+		// We run a goroutine for each slot. Goroutines insert new value
+		// over random intervals, but verify that the value in their
+		// slot always ratchets.
+		slots := 4 * runtime.NumCPU()
+		if util.RaceEnabled {
+			// We add in a lot of preemption points when race detection
+			// is enabled, so things will already be very slow. Reduce
+			// the concurrency to that we don't time out.
+			slots /= 2
+		}
+
+		txnIDs := make([]uuid.UUID, slots)
+		for i := range txnIDs {
+			txnIDs[i] = uuid.MakeV4()
+		}
+
+		const n = 1000
+		for j := 0; j < n; j++ {
+			t.Logf("round %d", j)
+
+			// Create a set of actions to perform.
+			type action struct {
+				from, middle, to []byte
+				opt              rangeOptions
+				val              cacheValue
+			}
+			actions := make([]action, slots)
+			for i := range actions {
+				var a action
+				a.from, a.middle, a.to = randRange(rng, slots)
+				a.opt = randRangeOpt(rng)
+
+				ts := hlc.Timestamp{WallTime: int64(j)}
+				if useClock {
+					ts = clock.Now()
+				}
+				a.val = cacheValue{ts: ts, txnID: txnIDs[i]}
+
+				t.Logf("action (%s,%s)[%d] = %s", string(a.from), string(a.to), a.opt, a.val)
+				actions[i] = a
+			}
+
+			// Perform each action, first in order on the "sequential"
+			// intervalSkl, then in parallel on the "concurrent" intervalSkl.
+			t.Log("sequential actions")
+			for _, a := range actions {
+				sequentialS.AddRange(a.from, a.to, a.opt, a.val)
+			}
+
+			t.Log("concurrent actions")
+			var wg sync.WaitGroup
+			for _, a := range actions {
+				wg.Add(1)
+				go func(a action) {
+					concurrentS.AddRange(a.from, a.to, a.opt, a.val)
+					wg.Done()
+				}(a)
+			}
+			wg.Wait()
+
+			// Ask each intervalSkl the same questions. We should get the same
+			// answers.
+			for _, a := range actions {
+				// Test single-key lookup at from, if possible.
+				if (a.opt & excludeFrom) == 0 {
+					valS := sequentialS.LookupTimestamp(a.from)
+					valC := concurrentS.LookupTimestamp(a.from)
+					require.Equal(t, valS, valC, "key=%s", string(a.from))
+					assertRatchet(t, a.val, valS)
+				}
+
+				// Test single-key lookup between from and to, if possible.
+				if a.middle != nil {
+					valS := sequentialS.LookupTimestamp(a.middle)
+					valC := concurrentS.LookupTimestamp(a.middle)
+					require.Equal(t, valS, valC, "key=%s", string(a.middle))
+					assertRatchet(t, a.val, valS)
+				}
+
+				// Test single-key lookup at to, if possible.
+				if (a.opt & excludeTo) == 0 {
+					valS := sequentialS.LookupTimestamp(a.to)
+					valC := concurrentS.LookupTimestamp(a.to)
+					require.Equal(t, valS, valC, "key=%s", string(a.to))
+					assertRatchet(t, a.val, valS)
+				}
+
+				// Test range lookup between from and to, if possible.
+				if !(bytes.Equal(a.from, a.to) && a.opt == (excludeFrom|excludeTo)) {
+					valS := sequentialS.LookupTimestampRange(a.from, a.to, a.opt)
+					valC := concurrentS.LookupTimestampRange(a.from, a.to, a.opt)
+					require.Equal(t, valS, valC, "range=(%s,%s)[%d]",
+						string(a.from), string(a.to), a.opt)
+					assertRatchet(t, a.val, valS)
+				}
+			}
+		}
+	})
 }
 
 // assertRatchet asserts that it would be possible for the first cacheValue
@@ -1094,4 +1221,25 @@ func makeRange(start int32) (from, to []byte) {
 	from = []byte(fmt.Sprintf("%020d", start))
 	to = []byte(fmt.Sprintf("%020d", end))
 	return
+}
+
+// randRange creates a random range with keys within the specified number of
+// slots. The function also returns a middle key, if one exists.
+func randRange(rng *rand.Rand, slots int) (from, middle, to []byte) {
+	fromNum := rng.Intn(slots)
+	toNum := rng.Intn(slots)
+	if fromNum > toNum {
+		fromNum, toNum = toNum, fromNum
+	}
+
+	from = []byte(fmt.Sprintf("%05d", fromNum))
+	to = []byte(fmt.Sprintf("%05d", toNum))
+	if middleNum := fromNum + 1; middleNum < toNum {
+		middle = []byte(fmt.Sprintf("%05d", middleNum))
+	}
+	return
+}
+
+func randRangeOpt(rng *rand.Rand) rangeOptions {
+	return rangeOptions(rng.Intn(int(excludeFrom|excludeTo) + 1))
 }
