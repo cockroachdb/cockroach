@@ -75,6 +75,11 @@ func TestContextualHelp(t *testing.T) {
 		{`ALTER VIEW blah RENAME ??`, `ALTER VIEW`},
 		{`ALTER VIEW blah RENAME TO blih ??`, `ALTER VIEW`},
 
+		{`ALTER SEQUENCE IF ??`, `ALTER SEQUENCE`},
+		{`ALTER SEQUENCE blah ??`, `ALTER SEQUENCE`},
+		{`ALTER SEQUENCE blah RENAME ??`, `ALTER SEQUENCE`},
+		{`ALTER SEQUENCE blah RENAME TO blih ??`, `ALTER SEQUENCE`},
+
 		{`ALTER USER IF ??`, `ALTER USER`},
 		{`ALTER USER foo WITH PASSWORD ??`, `ALTER USER`},
 
