@@ -59,3 +59,15 @@ INSERT INTO test.xyz (x, y) VALUES (8, 2), (9, 2);
 query TTTTTTBT
 EXPERIMENTAL SCRUB TABLE xyz WITH OPTIONS INDEX ALL
 -----
+
+# Test that scrub checks work when a table has an implicit rowid primary key.
+
+statement ok
+CREATE TABLE test.xz (
+  y INT,
+  z INT,
+  INDEX foo (z, y)
+)
+
+statement ok
+EXPERIMENTAL SCRUB TABLE xz
