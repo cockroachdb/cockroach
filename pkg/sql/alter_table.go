@@ -306,7 +306,12 @@ func (n *alterTableNode) Start(params runParams) error {
 				}
 			}
 			if !found {
-				return fmt.Errorf("column %q in the middle of being added, try again later", t.Column)
+				for _, mutation := range n.tableDesc.Mutations {
+					if mutation.GetColumn().ID == col.ID {
+						params.p.removeSchemaChangerForMutation(mutation.MutationID)
+						break
+					}
+				}
 			}
 
 		case *tree.AlterTableDropConstraint:

@@ -402,7 +402,12 @@ func (p *planner) dropIndexByName(
 		}
 	}
 	if !found {
-		return fmt.Errorf("index %q in the middle of being added, try again later", idxName)
+		for _, mutation := range tableDesc.Mutations {
+			if mutation.GetIndex().ID == idx.ID {
+				p.removeSchemaChangerForMutation(mutation.MutationID)
+				break
+			}
+		}
 	}
 
 	if err := tableDesc.Validate(ctx, p.txn); err != nil {
