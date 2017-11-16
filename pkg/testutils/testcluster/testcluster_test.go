@@ -45,21 +45,21 @@ func TestManualReplication(t *testing.T) {
 		})
 	defer tc.Stopper().Stop(context.TODO())
 
-	s0 := sqlutils.MakeSQLRunner(t, tc.Conns[0])
-	s1 := sqlutils.MakeSQLRunner(t, tc.Conns[1])
-	s2 := sqlutils.MakeSQLRunner(t, tc.Conns[2])
+	s0 := sqlutils.MakeSQLRunner(tc.Conns[0])
+	s1 := sqlutils.MakeSQLRunner(tc.Conns[1])
+	s2 := sqlutils.MakeSQLRunner(tc.Conns[2])
 
-	s0.Exec(`CREATE DATABASE t`)
-	s0.Exec(`CREATE TABLE test (k INT PRIMARY KEY, v INT)`)
-	s0.Exec(`INSERT INTO test VALUES (5, 1), (4, 2), (1, 2)`)
+	s0.Exec(t, `CREATE DATABASE t`)
+	s0.Exec(t, `CREATE TABLE test (k INT PRIMARY KEY, v INT)`)
+	s0.Exec(t, `INSERT INTO test VALUES (5, 1), (4, 2), (1, 2)`)
 
-	if r := s1.Query(`SELECT * FROM test WHERE k = 5`); !r.Next() {
+	if r := s1.Query(t, `SELECT * FROM test WHERE k = 5`); !r.Next() {
 		t.Fatal("no rows")
 	} else {
 		r.Close()
 	}
 
-	s2.ExecRowsAffected(3, `DELETE FROM test`)
+	s2.ExecRowsAffected(t, 3, `DELETE FROM test`)
 
 	// Split the table to a new range.
 	kvDB := tc.Servers[0].DB()

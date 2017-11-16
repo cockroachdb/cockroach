@@ -46,19 +46,19 @@ func TestInsertBatched(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(fmt.Sprintf("rows=%d/batch=%d", test.rows, test.batchSize), func(t *testing.T) {
-			sqlDB := sqlutils.MakeSQLRunner(t, db)
+			sqlDB := sqlutils.MakeSQLRunner(db)
 
 			data := Bank(test.rows, 0, bankConfigDefault)
-			sqlDB.Exec(`CREATE DATABASE IF NOT EXISTS data`)
-			sqlDB.Exec(fmt.Sprintf(`DROP TABLE IF EXISTS %s`, data.Name()))
-			sqlDB.Exec(fmt.Sprintf(`CREATE TABLE %s %s`, data.Name(), data.Schema()))
+			sqlDB.Exec(t, `CREATE DATABASE IF NOT EXISTS data`)
+			sqlDB.Exec(t, fmt.Sprintf(`DROP TABLE IF EXISTS %s`, data.Name()))
+			sqlDB.Exec(t, fmt.Sprintf(`CREATE TABLE %s %s`, data.Name(), data.Schema()))
 
 			if err := InsertBatched(sqlDB.DB, data, test.batchSize); err != nil {
 				t.Fatalf("%+v", err)
 			}
 
 			var rowCount int
-			sqlDB.QueryRow(fmt.Sprintf(`SELECT COUNT(*) FROM %s`, data.Name())).Scan(&rowCount)
+			sqlDB.QueryRow(t, fmt.Sprintf(`SELECT COUNT(*) FROM %s`, data.Name())).Scan(&rowCount)
 			if rowCount != test.rows {
 				t.Errorf("got %d rows expected %d", rowCount, test.rows)
 			}
@@ -87,19 +87,19 @@ func TestSplit(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(fmt.Sprintf("rows=%d/ranges=%d", test.rows, test.ranges), func(t *testing.T) {
-			sqlDB := sqlutils.MakeSQLRunner(t, db)
+			sqlDB := sqlutils.MakeSQLRunner(db)
 
 			data := Bank(test.rows, bankConfigDefault, test.ranges)
-			sqlDB.Exec(`CREATE DATABASE IF NOT EXISTS data`)
-			sqlDB.Exec(fmt.Sprintf(`DROP TABLE IF EXISTS %s`, data.Name()))
-			sqlDB.Exec(fmt.Sprintf(`CREATE TABLE %s %s`, data.Name(), data.Schema()))
+			sqlDB.Exec(t, `CREATE DATABASE IF NOT EXISTS data`)
+			sqlDB.Exec(t, fmt.Sprintf(`DROP TABLE IF EXISTS %s`, data.Name()))
+			sqlDB.Exec(t, fmt.Sprintf(`CREATE TABLE %s %s`, data.Name(), data.Schema()))
 
 			if err := Split(sqlDB.DB, data); err != nil {
 				t.Fatalf("%+v", err)
 			}
 
 			var rangeCount int
-			sqlDB.QueryRow(
+			sqlDB.QueryRow(t,
 				fmt.Sprintf(`SELECT COUNT(*) FROM [SHOW TESTING_RANGES FROM TABLE %s]`, data.Name()),
 			).Scan(&rangeCount)
 			if rangeCount != test.expectedRanges {
@@ -136,13 +136,13 @@ func TestToBackup(t *testing.T) {
 				}
 
 				t.Run("Restore", func(t *testing.T) {
-					sqlDB := sqlutils.MakeSQLRunner(t, db)
-					sqlDB.Exec(`DROP DATABASE IF EXISTS data CASCADE`)
-					sqlDB.Exec(`CREATE DATABASE data`)
-					sqlDB.Exec(`RESTORE data.* FROM $1`, `nodelocal:///`+dir)
+					sqlDB := sqlutils.MakeSQLRunner(db)
+					sqlDB.Exec(t, `DROP DATABASE IF EXISTS data CASCADE`)
+					sqlDB.Exec(t, `CREATE DATABASE data`)
+					sqlDB.Exec(t, `RESTORE data.* FROM $1`, `nodelocal:///`+dir)
 
 					var rowCount int
-					sqlDB.QueryRow(fmt.Sprintf(`SELECT COUNT(*) FROM %s`, data.Name())).Scan(&rowCount)
+					sqlDB.QueryRow(t, fmt.Sprintf(`SELECT COUNT(*) FROM %s`, data.Name())).Scan(&rowCount)
 					if rowCount != rows {
 						t.Errorf("got %d rows expected %d", rowCount, rows)
 					}

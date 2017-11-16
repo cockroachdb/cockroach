@@ -24,45 +24,46 @@ import (
 // SQLRunner wraps a testing.TB and *gosql.DB connection and provides
 // convenience functions to run SQL statements and fail the test on any errors.
 type SQLRunner struct {
-	testing.TB
 	DB *gosql.DB
 }
 
 // MakeSQLRunner returns a SQLRunner for the given database connection.
-func MakeSQLRunner(tb testing.TB, db *gosql.DB) *SQLRunner {
-	return &SQLRunner{TB: tb, DB: db}
+func MakeSQLRunner(db *gosql.DB) *SQLRunner {
+	return &SQLRunner{DB: db}
 }
 
 // Exec is a wrapper around gosql.Exec that kills the test on error.
-func (sr *SQLRunner) Exec(query string, args ...interface{}) gosql.Result {
-	sr.Helper()
+func (sr *SQLRunner) Exec(t testing.TB, query string, args ...interface{}) gosql.Result {
+	t.Helper()
 	r, err := sr.DB.Exec(query, args...)
 	if err != nil {
-		sr.Fatalf("error executing '%s': %s", query, err)
+		t.Fatalf("error executing '%s': %s", query, err)
 	}
 	return r
 }
 
 // ExecRowsAffected executes the statement and verifies that RowsAffected()
 // matches the expected value. It kills the test on errors.
-func (sr *SQLRunner) ExecRowsAffected(expRowsAffected int, query string, args ...interface{}) {
-	sr.Helper()
-	r := sr.Exec(query, args...)
+func (sr *SQLRunner) ExecRowsAffected(
+	t testing.TB, expRowsAffected int, query string, args ...interface{},
+) {
+	t.Helper()
+	r := sr.Exec(t, query, args...)
 	numRows, err := r.RowsAffected()
 	if err != nil {
-		sr.Fatal(err)
+		t.Fatal(err)
 	}
 	if numRows != int64(expRowsAffected) {
-		sr.Fatalf("expected %d affected rows, got %d on '%s'", expRowsAffected, numRows, query)
+		t.Fatalf("expected %d affected rows, got %d on '%s'", expRowsAffected, numRows, query)
 	}
 }
 
 // Query is a wrapper around gosql.Query that kills the test on error.
-func (sr *SQLRunner) Query(query string, args ...interface{}) *gosql.Rows {
-	sr.Helper()
+func (sr *SQLRunner) Query(t testing.TB, query string, args ...interface{}) *gosql.Rows {
+	t.Helper()
 	r, err := sr.DB.Query(query, args...)
 	if err != nil {
-		sr.Fatalf("error executing '%s': %s", query, err)
+		t.Fatalf("error executing '%s': %s", query, err)
 	}
 	return r
 }
@@ -82,19 +83,19 @@ func (r *Row) Scan(dest ...interface{}) {
 }
 
 // QueryRow is a wrapper around gosql.QueryRow that kills the test on error.
-func (sr *SQLRunner) QueryRow(query string, args ...interface{}) *Row {
-	sr.Helper()
-	return &Row{sr.TB, sr.DB.QueryRow(query, args...)}
+func (sr *SQLRunner) QueryRow(t testing.TB, query string, args ...interface{}) *Row {
+	t.Helper()
+	return &Row{t, sr.DB.QueryRow(query, args...)}
 }
 
 // QueryStr runs a Query and converts the result using RowsToStrMatrix. Kills
 // the test on errors.
-func (sr *SQLRunner) QueryStr(query string, args ...interface{}) [][]string {
-	sr.Helper()
-	rows := sr.Query(query, args...)
+func (sr *SQLRunner) QueryStr(t testing.TB, query string, args ...interface{}) [][]string {
+	t.Helper()
+	rows := sr.Query(t, query, args...)
 	r, err := RowsToStrMatrix(rows)
 	if err != nil {
-		sr.Fatal(err)
+		t.Fatal(err)
 	}
 	return r
 }
@@ -136,10 +137,10 @@ func RowsToStrMatrix(rows *gosql.Rows) ([][]string, error) {
 
 // CheckQueryResults checks that the rows returned by a query match the expected
 // response.
-func (sr *SQLRunner) CheckQueryResults(query string, expected [][]string) {
-	sr.Helper()
-	res := sr.QueryStr(query)
+func (sr *SQLRunner) CheckQueryResults(t testing.TB, query string, expected [][]string) {
+	t.Helper()
+	res := sr.QueryStr(t, query)
 	if !reflect.DeepEqual(res, expected) {
-		sr.Errorf("query '%s': expected:\n%v\ngot:%v\n", query, expected, res)
+		t.Errorf("query '%s': expected:\n%v\ngot:%v\n", query, expected, res)
 	}
 }

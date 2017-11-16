@@ -97,7 +97,7 @@ func (t *parallelTest) getClient(nodeIdx, clientIdx int) *gosql.DB {
 		if err != nil {
 			t.Fatal(err)
 		}
-		sqlutils.MakeSQLRunner(t, db).Exec("SET DATABASE = test")
+		sqlutils.MakeSQLRunner(db).Exec(t, "SET DATABASE = test")
 		t.cluster.Stopper().AddCloser(
 			stop.CloserFn(func() {
 				_ = db.Close()
@@ -207,7 +207,7 @@ func (t *parallelTest) setup(spec *parTestSpec) {
 	for i := range t.clients {
 		t.clients[i] = append(t.clients[i], t.cluster.ServerConn(i))
 	}
-	r0 := sqlutils.MakeSQLRunner(t, t.clients[0][0])
+	r0 := sqlutils.MakeSQLRunner(t.clients[0][0])
 
 	if spec.RangeSplitSize != 0 {
 		if testing.Verbose() || log.V(1) {
@@ -221,16 +221,16 @@ func (t *parallelTest) setup(spec *parTestSpec) {
 			t.Fatal(err)
 		}
 		objID := keys.RootNamespaceID
-		r0.Exec(`UPDATE system.zones SET config = $2 WHERE id = $1`, objID, buf)
+		r0.Exec(t, `UPDATE system.zones SET config = $2 WHERE id = $1`, objID, buf)
 	}
 
 	if testing.Verbose() || log.V(1) {
 		log.Infof(t.ctx, "Creating database")
 	}
 
-	r0.Exec("CREATE DATABASE test")
+	r0.Exec(t, "CREATE DATABASE test")
 	for i := range t.clients {
-		sqlutils.MakeSQLRunner(t, t.clients[i][0]).Exec("SET DATABASE = test")
+		sqlutils.MakeSQLRunner(t.clients[i][0]).Exec(t, "SET DATABASE = test")
 	}
 
 	if testing.Verbose() || log.V(1) {

@@ -42,14 +42,14 @@ func BenchmarkClusterBackup(b *testing.B) {
 
 	_, _, sqlDB, dir, cleanupFn := backupRestoreTestSetup(b, multiNode, 0, initNone)
 	defer cleanupFn()
-	sqlDB.Exec(`DROP TABLE data.bank`)
+	sqlDB.Exec(b, `DROP TABLE data.bank`)
 
 	bankData := sampledataccl.BankRows(b.N)
 	loadDir := filepath.Join(dir, "load")
 	if _, err := sampledataccl.ToBackup(b, bankData, loadDir); err != nil {
 		b.Fatalf("%+v", err)
 	}
-	sqlDB.Exec(fmt.Sprintf(`RESTORE data.* FROM '%s'`, loadDir))
+	sqlDB.Exec(b, fmt.Sprintf(`RESTORE data.* FROM '%s'`, loadDir))
 
 	// TODO(dan): Ideally, this would split and rebalance the ranges in a more
 	// controlled way. A previous version of this code did it manually with
@@ -61,7 +61,7 @@ func BenchmarkClusterBackup(b *testing.B) {
 	b.ResetTimer()
 	var unused string
 	var dataSize int64
-	sqlDB.QueryRow(fmt.Sprintf(`BACKUP DATABASE data TO '%s'`, dir)).Scan(
+	sqlDB.QueryRow(b, fmt.Sprintf(`BACKUP DATABASE data TO '%s'`, dir)).Scan(
 		&unused, &unused, &unused, &unused, &unused, &unused, &dataSize,
 	)
 	b.StopTimer()
@@ -75,7 +75,7 @@ func BenchmarkClusterRestore(b *testing.B) {
 
 	_, _, sqlDB, dir, cleanup := backupRestoreTestSetup(b, multiNode, 0, initNone)
 	defer cleanup()
-	sqlDB.Exec(`DROP TABLE data.bank`)
+	sqlDB.Exec(b, `DROP TABLE data.bank`)
 
 	bankData := sampledataccl.BankRows(b.N)
 	backup, err := sampledataccl.ToBackup(b, bankData, dir)
@@ -85,7 +85,7 @@ func BenchmarkClusterRestore(b *testing.B) {
 	b.SetBytes(backup.Desc.EntryCounts.DataSize / int64(b.N))
 
 	b.ResetTimer()
-	sqlDB.Exec(fmt.Sprintf(`RESTORE data.* FROM '%s'`, dir))
+	sqlDB.Exec(b, fmt.Sprintf(`RESTORE data.* FROM '%s'`, dir))
 	b.StopTimer()
 }
 
@@ -96,7 +96,7 @@ func BenchmarkLoadRestore(b *testing.B) {
 
 	ctx, _, sqlDB, dir, cleanup := backupRestoreTestSetup(b, multiNode, 0, initNone)
 	defer cleanup()
-	sqlDB.Exec(`DROP TABLE data.bank`)
+	sqlDB.Exec(b, `DROP TABLE data.bank`)
 
 	buf := bankBuf(b.N)
 	b.SetBytes(int64(buf.Len() / b.N))
@@ -105,7 +105,7 @@ func BenchmarkLoadRestore(b *testing.B) {
 	if _, err := sqlccl.Load(ctx, sqlDB.DB, buf, "data", dir, ts, 0, dir); err != nil {
 		b.Fatalf("%+v", err)
 	}
-	sqlDB.Exec(fmt.Sprintf(`RESTORE data.* FROM '%s'`, dir))
+	sqlDB.Exec(b, fmt.Sprintf(`RESTORE data.* FROM '%s'`, dir))
 	b.StopTimer()
 }
 
@@ -115,7 +115,7 @@ func BenchmarkLoadSQL(b *testing.B) {
 	// but this is not a pattern to cargo-cult.
 	_, _, sqlDB, _, cleanup := backupRestoreTestSetup(b, multiNode, 0, initNone)
 	defer cleanup()
-	sqlDB.Exec(`DROP TABLE data.bank`)
+	sqlDB.Exec(b, `DROP TABLE data.bank`)
 
 	buf := bankBuf(b.N)
 	b.SetBytes(int64(buf.Len() / b.N))
@@ -132,7 +132,7 @@ func BenchmarkLoadSQL(b *testing.B) {
 
 	b.ResetTimer()
 	for _, line := range lines {
-		sqlDB.Exec(line)
+		sqlDB.Exec(b, line)
 	}
 	b.StopTimer()
 }
@@ -151,12 +151,12 @@ func BenchmarkClusterEmptyIncrementalBackup(b *testing.B) {
 	if err != nil {
 		b.Fatalf("%+v", err)
 	}
-	sqlDB.Exec(`DROP TABLE data.bank`)
-	sqlDB.Exec(`RESTORE data.* FROM $1`, restoreDir)
+	sqlDB.Exec(b, `DROP TABLE data.bank`)
+	sqlDB.Exec(b, `RESTORE data.* FROM $1`, restoreDir)
 
 	var unused string
 	var dataSize int64
-	sqlDB.QueryRow(`BACKUP DATABASE data TO $1`, fullDir).Scan(
+	sqlDB.QueryRow(b, `BACKUP DATABASE data TO $1`, fullDir).Scan(
 		&unused, &unused, &unused, &unused, &unused, &unused, &dataSize,
 	)
 
@@ -166,7 +166,7 @@ func BenchmarkClusterEmptyIncrementalBackup(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		incrementalDir := filepath.Join(localFoo, fmt.Sprintf("incremental%d", i))
-		sqlDB.Exec(`BACKUP DATABASE data TO $1 INCREMENTAL FROM $2`, incrementalDir, fullDir)
+		sqlDB.Exec(b, `BACKUP DATABASE data TO $1 INCREMENTAL FROM $2`, incrementalDir, fullDir)
 	}
 	b.StopTimer()
 

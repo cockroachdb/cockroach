@@ -150,12 +150,12 @@ func TestPartitioning(t *testing.T) {
 
 	for _, testCase := range testCases {
 		t.Run(testCase.name, func(t *testing.T) {
-			sqlDB := sqlutils.MakeSQLRunner(t, tc.Conns[0])
+			sqlDB := sqlutils.MakeSQLRunner(tc.Conns[0])
 			tableName := fmt.Sprintf("data.%q", testCase.name)
-			sqlDB.Exec(fmt.Sprintf(testCase.table, tableName))
-			sqlDB.Exec(fmt.Sprintf(
+			sqlDB.Exec(t, fmt.Sprintf(testCase.table, tableName))
+			sqlDB.Exec(t, fmt.Sprintf(
 				`ALTER TABLE %s PARTITION dc1 EXPERIMENTAL CONFIGURE ZONE 'constraints: [+dc1]'`, tableName))
-			sqlDB.Exec(fmt.Sprintf(
+			sqlDB.Exec(t, fmt.Sprintf(
 				`ALTER TABLE %s PARTITION dc2 EXPERIMENTAL CONFIGURE ZONE 'constraints: [+dc2]'`, tableName))
 			testutils.SucceedsSoon(t, func() error {
 				for _, scan := range testCase.scans {
