@@ -19,7 +19,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
@@ -102,10 +101,7 @@ type Cache interface {
 
 // New returns a new timestamp cache with the supplied hybrid clock.
 func New(clock *hlc.Clock) Cache {
-	if envutil.EnvOrDefaultBool("COCKROACH_USE_SKL_TSCACHE", false) {
-		return newSklImpl(clock)
-	}
-	return newTreeImpl(clock)
+	return newSklImpl(clock)
 }
 
 // cacheValue combines a timestamp with an optional txnID. It is shared between

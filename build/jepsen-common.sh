@@ -51,13 +51,13 @@ nemeses=(
 )
 
 tests=(
-    "bank"
-    "bank-multitable"
+    #"bank"
+    #"bank-multitable"
     # The comments test is expected to fail because it requires linearizability.
     #"comments"
-    "g2"
-    "monotonic"
-    "register"
+    #"g2"
+    #"monotonic"
+    #"register"
     "sequential"
     "sets"
 )
