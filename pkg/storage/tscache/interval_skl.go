@@ -196,9 +196,15 @@ func (s *intervalSkl) Add(key []byte, val cacheValue) {
 // "from" and "to". It is also illegal for "from" > "to", which would be an
 // inverted range.
 //
+// intervalSkl defines the domain of possible keys to span ["", nil). A range
+// with a starting key of []byte("") is treated as a closed range beginning at
+// the minimum key. A range with an ending key of []byte(nil) is treated as an
+// open range extending to infinity (as such, excludeTo has not effect on it). A
+// range starting at []byte("") and ending at []byte(nil) will span all keys.
+//
 // If some or all of the range was previously read at a higher timestamp, then
 // the range is split into sub-ranges that are each marked with the maximum read
-// timestamp for that sub-range.  Once AddRange completes, future lookups at any
+// timestamp for that sub-range. Once AddRange completes, future lookups at any
 // point in the range are guaranteed to return an equal or greater timestamp.
 func (s *intervalSkl) AddRange(from, to []byte, opt rangeOptions, val cacheValue) {
 	if from == nil && to == nil {
@@ -288,7 +294,7 @@ func (s *intervalSkl) addRange(from, to []byte, opt rangeOptions, val cacheValue
 	}
 
 	// Ensure that the starting node has been created.
-	if (opt&excludeFrom) == 0 || len(from) == 0 {
+	if (opt & excludeFrom) == 0 {
 		err = fp.addNode(&it, from, val, hasKey|hasGap, false /* mustInit */)
 	} else {
 		err = fp.addNode(&it, from, val, hasGap, false /* mustInit */)
@@ -792,7 +798,7 @@ func (p *sklPage) ratchetValueSet(
 		}
 
 		if updateVals {
-			// If we're updateing the values (and maybe the init flag) then we
+			// If we're updating the values (and maybe the init flag) then we
 			// need to call it.Set. This can return an ErrArenaFull, which we
 			// must handle with care.
 

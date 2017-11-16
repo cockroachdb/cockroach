@@ -184,50 +184,68 @@ func TestIntervalSklSingleRange(t *testing.T) {
 	require.Equal(t, val3, s.LookupTimestamp([]byte("watermelon")))
 }
 
-func TestIntervalSklOpenRanges(t *testing.T) {
+func TestIntervalSklRangeBoundaries(t *testing.T) {
 	val1 := makeVal(makeTS(200, 200), "1")
 	val2 := makeVal(makeTS(200, 201), "2")
 	val3 := makeVal(makeTS(300, 0), "3")
 	val4 := makeVal(makeTS(400, 0), "4")
+	val5 := makeVal(makeTS(500, 0), "5")
 
 	s := newIntervalSkl(nil /* clock */, 0 /* minRet */, pageSize)
 	s.floorTS = floorTS
 
-	// Range extending to infinity. excludeTo doesn't make a difference.
-	// val1:  [b----------->
-	s.AddRange([]byte("banana"), nil, 0, val1)
-	require.Equal(t, floorVal, s.LookupTimestamp([]byte("apple")))
-	require.Equal(t, val1, s.LookupTimestamp([]byte("banana")))
-	require.Equal(t, val1, s.LookupTimestamp([]byte("orange")))
+	// Can't insert a key at infinity.
+	require.Panics(t, func() { s.Add([]byte(nil), val1) })
 
-	// val1:  [b----------->
-	// val2:  [b----------->
+	// Single timestamp at minimum key.
+	// val1:  [""]
+	s.Add([]byte(""), val1)
+	require.Equal(t, val1, s.LookupTimestamp([]byte("")))
+	require.Equal(t, floorVal, s.LookupTimestamp([]byte("apple")))
+
+	// Range extending to infinity. excludeTo doesn't make a difference because
+	// the boundary is open.
+	// val1:  [""]
+	// val2:       [b----------->
 	s.AddRange([]byte("banana"), nil, excludeTo, val2)
+	require.Equal(t, val1, s.LookupTimestamp([]byte("")))
 	require.Equal(t, floorVal, s.LookupTimestamp([]byte("apple")))
 	require.Equal(t, val2, s.LookupTimestamp([]byte("banana")))
 	require.Equal(t, val2, s.LookupTimestamp([]byte("orange")))
 
-	// Range starting at the minimum key. excludeFrom doesn't make a difference.
-	// val1:       [b----------->
+	// val1:  [""]
 	// val2:       [b----------->
-	// val3:  <----------k]
-	s.AddRange([]byte(""), []byte("kiwi"), 0, val3)
-	require.Equal(t, val3, s.LookupTimestamp([]byte("")))
+	// val3:       [b----------->
+	s.AddRange([]byte("banana"), nil, 0, val3)
+	require.Equal(t, val1, s.LookupTimestamp([]byte("")))
+	require.Equal(t, floorVal, s.LookupTimestamp([]byte("apple")))
 	require.Equal(t, val3, s.LookupTimestamp([]byte("banana")))
-	require.Equal(t, val3, s.LookupTimestamp([]byte("kiwi")))
-	require.Equal(t, val2, s.LookupTimestamp([]byte("orange")))
-	require.Equal(t, val2, s.LookupTimestamp(nil))
+	require.Equal(t, val3, s.LookupTimestamp([]byte("orange")))
 
-	// val1:       [b----------->
+	// Range starting at the minimum key. excludeFrom makes a difference because
+	// the boundary is closed.
+	// val1:  [""]
 	// val2:       [b----------->
-	// val3:  <----------k]
-	// val4:  <----------k]
+	// val3:       [b----------->
+	// val4:  (""----------k]
 	s.AddRange([]byte(""), []byte("kiwi"), excludeFrom, val4)
-	require.Equal(t, val4, s.LookupTimestamp([]byte("")))
+	require.Equal(t, val1, s.LookupTimestamp([]byte("")))
 	require.Equal(t, val4, s.LookupTimestamp([]byte("banana")))
 	require.Equal(t, val4, s.LookupTimestamp([]byte("kiwi")))
-	require.Equal(t, val2, s.LookupTimestamp([]byte("orange")))
-	require.Equal(t, val2, s.LookupTimestamp(nil))
+	require.Equal(t, val3, s.LookupTimestamp([]byte("orange")))
+	require.Equal(t, val3, s.LookupTimestamp(nil))
+
+	// val1:  [""]
+	// val2:       [b----------->
+	// val3:       [b----------->
+	// val4:  (""----------k]
+	// val5:  [""----------k]
+	s.AddRange([]byte(""), []byte("kiwi"), 0, val5)
+	require.Equal(t, val5, s.LookupTimestamp([]byte("")))
+	require.Equal(t, val5, s.LookupTimestamp([]byte("banana")))
+	require.Equal(t, val5, s.LookupTimestamp([]byte("kiwi")))
+	require.Equal(t, val3, s.LookupTimestamp([]byte("orange")))
+	require.Equal(t, val3, s.LookupTimestamp(nil))
 }
 
 func TestIntervalSklSupersetRange(t *testing.T) {
@@ -887,10 +905,10 @@ func TestIntervalSklConcurrency(t *testing.T) {
 	}
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			// Run one subtest using a real clock to generate timestampts and
-			// one subtest using a fake clock to generate timestamps. The former
-			// is good for simulating real conditions while the latter is good
-			// for testing timestamp collisions.
+			// Run one subtest using a real clock to generate timestamps and one
+			// subtest using a fake clock to generate timestamps. The former is
+			// good for simulating real conditions while the latter is good for
+			// testing timestamp collisions.
 			testutils.RunTrueAndFalse(t, "useClock", func(t *testing.T, useClock bool) {
 				clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 				s := newIntervalSkl(clock, 0 /* minRet */, tc.pageSize)
@@ -976,10 +994,10 @@ func TestIntervalSklConcurrency(t *testing.T) {
 }
 
 func TestIntervalSklConcurrentVsSequential(t *testing.T) {
-	// Run one subtest using a real clock to generate timestampts and
-	// one subtest using a fake clock to generate timestamps. The former
-	// is good for simulating real conditions while the latter is good
-	// for testing timestamp collisions.
+	// Run one subtest using a real clock to generate timestamps and one subtest
+	// using a fake clock to generate timestamps. The former is good for
+	// simulating real conditions while the latter is good for testing timestamp
+	// collisions.
 	testutils.RunTrueAndFalse(t, "useClock", func(t *testing.T, useClock bool) {
 		rng := rand.New(rand.NewSource(timeutil.Now().UnixNano()))
 		clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
