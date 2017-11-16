@@ -30,11 +30,11 @@ try {
 }
 
 // tslint:disable:object-literal-sort-keys
-module.exports = {
+module.exports = (distDir, ...additionalRoots) => ({
   entry: ["./src/index.tsx"],
   output: {
     filename: "bundle.js",
-    path: path.resolve(__dirname, "dist"),
+    path: path.resolve(__dirname, distDir),
   },
 
   resolve: {
@@ -46,7 +46,12 @@ module.exports = {
     // the resolution behavior used by node.js for "node_modules", which checks
     // for a "node_modules" child directory located in either the current
     // directory *or in any parent directory*.
-    modules: [path.resolve(__dirname), path.resolve(__dirname, "node_modules")],
+    modules: [
+      ...additionalRoots,
+      path.resolve(__dirname),
+      path.resolve(__dirname, "node_modules"),
+    ],
+    alias: {oss: path.resolve(__dirname)},
   },
 
   module: {
@@ -76,12 +81,12 @@ module.exports = {
       { test: /\.html$/, loader: "file-loader" },
       {
         test: /\.js$/,
-        include: [path.resolve(__dirname, "src")],
+        include: [...additionalRoots, path.resolve(__dirname, "src")],
         use: ["cache-loader", "babel-loader"],
       },
       {
         test: /\.tsx?$/,
-        include: [path.resolve(__dirname, "src")],
+        include: [...additionalRoots, path.resolve(__dirname, "src")],
         use: [
           "cache-loader",
           "babel-loader",
@@ -121,11 +126,11 @@ module.exports = {
   },
 
   devServer: {
-    contentBase: path.join(__dirname, "dist"),
+    contentBase: path.join(__dirname, distDir),
     proxy: [{
       context: ["/_admin", "/_status", "/ts"],
       secure: false,
       target: process.env.TARGET,
     }],
   },
-};
+});
