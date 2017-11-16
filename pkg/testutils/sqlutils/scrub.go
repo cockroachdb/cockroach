@@ -16,7 +16,11 @@ package sqlutils
 
 import (
 	gosql "database/sql"
+	"fmt"
+	"testing"
 	"time"
+
+	"github.com/pkg/errors"
 )
 
 // ScrubResult is the go struct for the row results for an
@@ -61,4 +65,23 @@ func GetScrubResultRows(rows *gosql.Rows) (results []ScrubResult, err error) {
 	}
 
 	return results, nil
+}
+
+// RunScrub will run execute an exhaustive scrub check for a database.
+func RunScrub(t *testing.T, sqlDB *gosql.DB, database string, table string) error {
+	rows, err := sqlDB.Query(fmt.Sprintf(`EXPERIMENTAL SCRUB TABLE %s.%s`,
+		database, table))
+	if err != nil {
+		t.Fatalf("unexpected error: %s", err)
+	}
+
+	results, err := GetScrubResultRows(rows)
+	if err != nil {
+		t.Fatalf("unexpected error: %s", err)
+	}
+
+	if len(results) > 0 {
+		return errors.Errorf("expected no scrub results instead got: %#v", results)
+	}
+	return nil
 }
