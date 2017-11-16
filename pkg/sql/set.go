@@ -27,7 +27,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -438,7 +437,7 @@ func setTimeZone(_ context.Context, session *Session, values []tree.TypedExpr) e
 		return fmt.Errorf("bad time zone value: %s", d.String())
 	}
 	if loc == nil {
-		loc = sqlbase.FixedOffsetTimeZoneToLocation(int(offset), d.String())
+		loc = timeutil.FixedOffsetTimeZoneToLocation(int(offset), d.String())
 	}
 	session.Location = loc
 	return nil
