@@ -394,7 +394,7 @@ func Example_ranges() {
 	//	0: node-id=1 store-id=1
 	///System/"tse"-"ranges3" [6]
 	//	0: node-id=1 store-id=1
-	//"ranges3"-/Table/SystemConfigSpan/Start [17]
+	//"ranges3"-/Table/SystemConfigSpan/Start [18]
 	//	0: node-id=1 store-id=1
 	///Table/SystemConfigSpan/Start-/Table/11 [7]
 	//	0: node-id=1 store-id=1
@@ -414,9 +414,11 @@ func Example_ranges() {
 	//	0: node-id=1 store-id=1
 	///Table/18-/Table/19 [15]
 	//	0: node-id=1 store-id=1
-	///Table/19-/Max [16]
+	///Table/19-/Table/20 [16]
 	//	0: node-id=1 store-id=1
-	//17 result(s)
+	///Table/20-/Max [17]
+	//	0: node-id=1 store-id=1
+	//18 result(s)
 
 }
 
@@ -1815,6 +1817,7 @@ writing ` + os.DevNull + `
   debug/nodes/1/ranges/14
   debug/nodes/1/ranges/15
   debug/nodes/1/ranges/16
+  debug/nodes/1/ranges/17
   debug/schema/system@details
   debug/schema/system/descriptor
   debug/schema/system/eventlog
@@ -1823,6 +1826,7 @@ writing ` + os.DevNull + `
   debug/schema/system/namespace
   debug/schema/system/rangelog
   debug/schema/system/settings
+  debug/schema/system/table_statistics
   debug/schema/system/ui
   debug/schema/system/users
   debug/schema/system/web_sessions

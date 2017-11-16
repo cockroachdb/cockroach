@@ -155,6 +155,7 @@ lease
 namespace
 rangelog
 settings
+table_statistics
 ui
 users
 web_sessions
