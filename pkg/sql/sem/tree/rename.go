@@ -40,18 +40,22 @@ func (node *RenameDatabase) Format(buf *bytes.Buffer, f FmtFlags) {
 // Whether the user has asked to rename a table or view is indicated
 // by the IsView field.
 type RenameTable struct {
-	Name     NormalizableTableName
-	NewName  NormalizableTableName
-	IfExists bool
-	IsView   bool
+	Name       NormalizableTableName
+	NewName    NormalizableTableName
+	IfExists   bool
+	IsView     bool
+	IsSequence bool
 }
 
 // Format implements the NodeFormatter interface.
 func (node *RenameTable) Format(buf *bytes.Buffer, f FmtFlags) {
+	buf.WriteString("ALTER ")
 	if node.IsView {
-		buf.WriteString("ALTER VIEW ")
+		buf.WriteString("VIEW ")
+	} else if node.IsSequence {
+		buf.WriteString("SEQUENCE ")
 	} else {
-		buf.WriteString("ALTER TABLE ")
+		buf.WriteString("TABLE ")
 	}
 	if node.IfExists {
 		buf.WriteString("IF EXISTS ")
