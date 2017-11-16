@@ -67,10 +67,10 @@ func CreateTableInterleave(
 		interleaveSchema = fmt.Sprintf(`INTERLEAVE IN PARENT %s`, interleaveSchema)
 	}
 
-	r := MakeSQLRunner(tb, sqlDB)
+	r := MakeSQLRunner(sqlDB)
 	stmt := `CREATE DATABASE IF NOT EXISTS test;`
 	stmt += fmt.Sprintf(`CREATE TABLE test.%s (%s) %s;`, tableName, schema, interleaveSchema)
-	r.Exec(stmt)
+	r.Exec(tb, stmt)
 	for i := 1; i <= numRows; {
 		var buf bytes.Buffer
 		fmt.Fprintf(&buf, `INSERT INTO test.%s VALUES `, tableName)
@@ -80,7 +80,7 @@ func CreateTableInterleave(
 		}
 		genValues(&buf, i, batchEnd, fn)
 
-		r.Exec(buf.String())
+		r.Exec(tb, buf.String())
 		i = batchEnd + 1
 	}
 }

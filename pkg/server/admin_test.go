@@ -1117,7 +1117,7 @@ func TestAdminAPIJobs(t *testing.T) {
 
 	s, conn, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.TODO())
-	sqlDB := sqlutils.MakeSQLRunner(t, conn)
+	sqlDB := sqlutils.MakeSQLRunner(conn)
 
 	testJobs := []struct {
 		id      int64
@@ -1134,7 +1134,7 @@ func TestAdminAPIJobs(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		sqlDB.Exec(
+		sqlDB.Exec(t,
 			`INSERT INTO system.jobs (id, status, payload) VALUES ($1, $2, $3)`,
 			job.id, job.status, payloadBytes,
 		)
@@ -1177,11 +1177,11 @@ func TestAdminAPIQueryPlan(t *testing.T) {
 
 	s, conn, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.TODO())
-	sqlDB := sqlutils.MakeSQLRunner(t, conn)
+	sqlDB := sqlutils.MakeSQLRunner(conn)
 
-	sqlDB.Exec(`CREATE DATABASE api_test`)
-	sqlDB.Exec(`CREATE TABLE api_test.t1 (id int primary key, name string)`)
-	sqlDB.Exec(`CREATE TABLE api_test.t2 (id int primary key, name string)`)
+	sqlDB.Exec(t, `CREATE DATABASE api_test`)
+	sqlDB.Exec(t, `CREATE TABLE api_test.t1 (id int primary key, name string)`)
+	sqlDB.Exec(t, `CREATE TABLE api_test.t2 (id int primary key, name string)`)
 
 	testCases := []struct {
 		query string

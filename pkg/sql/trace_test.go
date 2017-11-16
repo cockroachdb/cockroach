@@ -359,9 +359,9 @@ func TestKVTraceWithCountStar(t *testing.T) {
 	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.TODO())
 
-	r := sqlutils.MakeSQLRunner(t, db)
-	r.Exec("CREATE DATABASE test")
-	r.Exec("CREATE TABLE test.a (a INT PRIMARY KEY, b INT)")
-	r.Exec("INSERT INTO test.a VALUES (1,1), (2,2)")
-	r.Exec("SHOW KV TRACE FOR SELECT COUNT(*) FROM test.a")
+	r := sqlutils.MakeSQLRunner(db)
+	r.Exec(t, "CREATE DATABASE test")
+	r.Exec(t, "CREATE TABLE test.a (a INT PRIMARY KEY, b INT)")
+	r.Exec(t, "INSERT INTO test.a VALUES (1,1), (2,2)")
+	r.Exec(t, "SHOW KV TRACE FOR SELECT COUNT(*) FROM test.a")
 }

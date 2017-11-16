@@ -18,6 +18,7 @@ import (
 	"reflect"
 	"sort"
 	"strings"
+	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/jobs"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -29,7 +30,7 @@ import (
 
 // VerifySystemJob checks that that job records are created as expected.
 func VerifySystemJob(
-	db *sqlutils.SQLRunner, offset int, expectedType jobs.Type, expected jobs.Record,
+	t testing.TB, db *sqlutils.SQLRunner, offset int, expectedType jobs.Type, expected jobs.Record,
 ) error {
 	var actual jobs.Record
 	var rawDescriptorIDs pq.Int64Array
@@ -38,7 +39,7 @@ func VerifySystemJob(
 	// We have to query for the nth job created rather than filtering by ID,
 	// because job-generating SQL queries (e.g. BACKUP) do not currently return
 	// the job ID.
-	db.QueryRow(`
+	db.QueryRow(t, `
 		SELECT type, description, username, descriptor_ids, status
 		FROM crdb_internal.jobs ORDER BY created LIMIT 1 OFFSET $1`,
 		offset,

@@ -204,7 +204,7 @@ func TestRegistryResumeActiveLease(t *testing.T) {
 	}
 
 	var id int64
-	sqlutils.MakeSQLRunner(t, sqlDB).QueryRow(
+	sqlutils.MakeSQLRunner(sqlDB).QueryRow(t,
 		`INSERT INTO system.jobs (status, payload) VALUES ($1, $2) RETURNING id`,
 		jobs.StatusRunning, payload).Scan(&id)
 

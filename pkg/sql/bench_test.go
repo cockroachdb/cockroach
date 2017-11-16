@@ -1013,9 +1013,9 @@ func BenchmarkPlanning(b *testing.B) {
 	s, db, _ := serverutils.StartServer(b, base.TestServerArgs{UseDatabase: "bench"})
 	defer s.Stopper().Stop(context.TODO())
 
-	sr := sqlutils.MakeSQLRunner(b, db)
-	sr.Exec(`CREATE DATABASE bench`)
-	sr.Exec(`CREATE TABLE abc (a INT PRIMARY KEY, b INT, c INT, INDEX(b), UNIQUE INDEX(c))`)
+	sr := sqlutils.MakeSQLRunner(db)
+	sr.Exec(b, `CREATE DATABASE bench`)
+	sr.Exec(b, `CREATE TABLE abc (a INT PRIMARY KEY, b INT, c INT, INDEX(b), UNIQUE INDEX(c))`)
 
 	queries := []string{
 		`SELECT * FROM abc`,
@@ -1028,7 +1028,7 @@ func BenchmarkPlanning(b *testing.B) {
 	for _, q := range queries {
 		b.Run(q, func(b *testing.B) {
 			for i := 0; i < b.N; i++ {
-				sr.Exec(q)
+				sr.Exec(b, q)
 			}
 		})
 	}
