@@ -90,11 +90,23 @@ func RecoverAndReportPanic(ctx context.Context, sv *settings.Values) {
 	}
 }
 
+// SafeMessager is implemented by objects which have a way of representing
+// themselves suitably redacted for anonymized reporting.
+type SafeMessager interface {
+	SafeMessage() string
+}
+
 // A SafeType panic can be reported verbatim, i.e. does not leak information.
-//
-// TODO(dt): flesh out, see #15892.
+// A nil `*SafeType` is not valid for use and may cause panics.
 type SafeType struct {
 	V interface{}
+}
+
+var _ SafeMessager = SafeType{}
+
+// SafeMessage implements SafeMessager.
+func (st SafeType) SafeMessage() string {
+	return fmt.Sprintf("%v", st.V)
 }
 
 // Safe constructs a SafeType.
@@ -190,9 +202,6 @@ func (e *safeError) Error() string {
 // redact returns a redacted version of the supplied item that is safe to use in
 // anonymized reporting.
 func redact(r interface{}) string {
-	handleSafeType := func(v *SafeType) string {
-		return fmt.Sprintf("%+v", v.V)
-	}
 	typAnd := func(i interface{}, text string) string {
 		type stackTracer interface {
 			StackTrace() errors.StackTrace
@@ -219,10 +228,8 @@ func redact(r interface{}) string {
 
 	handle := func(r interface{}) string {
 		switch t := r.(type) {
-		case *SafeType:
-			return handleSafeType(t)
-		case SafeType:
-			return handleSafeType(&t)
+		case SafeMessager:
+			return t.SafeMessage()
 		case error:
 			// continue below
 		default:
