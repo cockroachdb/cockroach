@@ -15,6 +15,8 @@
 package json
 
 import (
+	"flag"
+	"fmt"
 	"io/ioutil"
 	"math/rand"
 	"path/filepath"
@@ -23,6 +25,13 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+)
+
+var rewriteResultsInTestfiles = flag.Bool(
+	"rewrite-results-in-testfiles", false,
+	"ignore the expected results and rewrite the test files with the actual results from this "+
+		"run. Used to update tests when a change affects many cases; please verify the testfile "+
+		"diffs carefully!",
 )
 
 func assertEncodeRoundTrip(t *testing.T, j JSON) {
@@ -52,30 +61,33 @@ func TestJSONRandomEncodeRoundTrip(t *testing.T) {
 	}
 }
 
-func TestFilesEncodeRoundTrip(t *testing.T) {
+func TestFilesEncode(t *testing.T) {
 	_, fname, _, ok := runtime.Caller(0)
 	if !ok {
 		t.Fatal("couldn't get directory")
 	}
-	dir := filepath.Join(filepath.Dir(fname), "/testdata")
+	dir := filepath.Join(filepath.Dir(fname), "testdata", "raw")
 	dirContents, err := ioutil.ReadDir(dir)
 	if err != nil {
 		t.Fatal(err)
 	}
 
+	numFilesRan := 0
+
 	for _, tc := range dirContents {
+		if !strings.HasSuffix(tc.Name(), ".json") {
+			continue
+		}
 		t.Run(tc.Name(), func(t *testing.T) {
-			if !strings.HasSuffix(tc.Name(), ".json") {
-				return
-			}
+			numFilesRan++
 			path := filepath.Join(dir, tc.Name())
 			contents, err := ioutil.ReadFile(path)
 			if err != nil {
 				t.Fatal(err)
 			}
-			tc := string(contents)
+			jsonString := string(contents)
 
-			j, err := ParseJSON(tc)
+			j, err := ParseJSON(jsonString)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -85,17 +97,50 @@ func TestFilesEncodeRoundTrip(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			_, decoded, err := DecodeJSON(encoded)
-			if err != nil {
-				t.Fatal(err)
-			}
+			t.Run(`round trip`, func(t *testing.T) {
+				_, decoded, err := DecodeJSON(encoded)
+				if err != nil {
+					t.Fatal(err)
+				}
 
-			// We also check with these that they re-stringify properly.
-			newStr := decoded.String()
-			if newStr != j.String() {
-				t.Fatalf("expected %s, got %s", tc, newStr)
-			}
+				newStr := decoded.String()
+				if newStr != j.String() {
+					t.Fatalf("expected %s, got %s", jsonString, newStr)
+				}
+			})
+
+			// If this test is failing because you changed the encoding of JSON values,
+			// rerun with -rewrite-results-in-testfiles.
+			t.Run(`explicit encoding`, func(t *testing.T) {
+				stringifiedEncoding := fmt.Sprintf("%v", encoded)
+				fixtureFilename := filepath.Join(
+					filepath.Dir(fname),
+					"testdata", "encoded",
+					tc.Name()+".bytes",
+				)
+
+				if *rewriteResultsInTestfiles {
+					err := ioutil.WriteFile(fixtureFilename, []byte(stringifiedEncoding), 0644)
+					if err != nil {
+						t.Fatal(err)
+					}
+				}
+
+				expected, err := ioutil.ReadFile(fixtureFilename)
+				if err != nil {
+					t.Fatal(err)
+				}
+
+				if string(expected) != stringifiedEncoding {
+					t.Fatalf("expected %s, got %s", string(expected), stringifiedEncoding)
+				}
+			})
 		})
+	}
+
+	// Sanity check.
+	if numFilesRan == 0 {
+		t.Fatal("didn't find any test files!")
 	}
 }
 
