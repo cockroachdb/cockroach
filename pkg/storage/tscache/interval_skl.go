@@ -449,6 +449,13 @@ func (s *intervalSkl) LookupTimestampRange(from, to []byte, opt rangeOptions) ca
 	return val
 }
 
+// FloorTS returns the receiver's floor timestamp.
+func (s *intervalSkl) FloorTS() hlc.Timestamp {
+	s.rotMutex.RLock()
+	defer s.rotMutex.RUnlock()
+	return s.floorTS
+}
+
 // sklPage maintains a skiplist based on a fixed-size arena. When the arena has
 // filled up, it returns arenaskl.ErrArenaFull. At that point, a new fixed page
 // must be allocated and used instead.
