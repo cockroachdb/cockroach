@@ -298,7 +298,7 @@ type Replica struct {
 	//
 	// TODO(peter): evaluate runtime overhead of the timed mutex.
 	raftMu struct {
-		timedMutex
+		syncutil.Mutex
 
 		// Note that there are two StateLoaders, in raftMu and mu,
 		// depending on which lock is being held.
@@ -642,15 +642,6 @@ func newReplica(rangeID roachpb.RangeID, store *Store) *Replica {
 	// Add replica pointer value. NB: this was historically useful for debugging
 	// replica GC issues, but is a distraction at the moment.
 	// r.AmbientContext.AddLogTagStr("@", fmt.Sprintf("%x", unsafe.Pointer(r)))
-
-	raftMuLogger := thresholdLogger(
-		r.AnnotateCtx(context.Background()),
-		defaultReplicaRaftMuWarnThreshold,
-		func(ctx context.Context, msg string, args ...interface{}) {
-			log.Warningf(ctx, "raftMu: "+msg, args...)
-		},
-	)
-	r.raftMu.timedMutex = makeTimedMutex(raftMuLogger)
 	r.raftMu.stateLoader = stateloader.Make(r.store.cfg.Settings, rangeID)
 	return r
 }
