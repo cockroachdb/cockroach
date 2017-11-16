@@ -85,7 +85,7 @@ $(call make-lazy,TAR_XFORM_FLAG)
 SED_INPLACE = sed $(shell sed --version 2>&1 | grep -q GNU && echo -i || echo "-i ''")
 $(call make-lazy,SED_INPLACE)
 
-# This is how you get a literal space into a Makefile.
+# This is how you get a literal space and newline into a Makefile.
 space := $(eval) $(eval)
 
 # Color support.

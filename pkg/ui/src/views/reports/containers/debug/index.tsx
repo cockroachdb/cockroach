@@ -1,6 +1,8 @@
 import _ from "lodash";
 import React from "react";
 
+import LicenseType from "src/views/shared/components/licenseType";
+
 function DebugTableLink(props: { name: string, url: string, note?: string }) {
   return (
     <tr className="debug-inner-table__row">
@@ -209,6 +211,7 @@ export default function Debug() {
           />
         </DebugTableRow>
       </DebugTable>
+      <LicenseType />
     </div>
   );
 }
