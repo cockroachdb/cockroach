@@ -190,9 +190,8 @@ INSERT INTO blog_posts (title) values ('foo')
 statement ok
 INSERT INTO blog_posts (title) values ('bar')
 
-# TODO(vilterp) change this to [1, 2] once initial-evaluation bug has been fixed
 query I
 SELECT id FROM blog_posts ORDER BY id
 ----
+1
 2
-3
