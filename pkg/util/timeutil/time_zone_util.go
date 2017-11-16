@@ -12,15 +12,13 @@
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
-package sqlbase
+package timeutil
 
 import (
 	"fmt"
 	"strconv"
 	"strings"
 	"time"
-
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
 const fixedOffsetPrefix string = "fixed offset:"
@@ -41,7 +39,7 @@ func TimeZoneStringToLocation(location string) (*time.Location, error) {
 	if parsed {
 		return FixedOffsetTimeZoneToLocation(offset, origRepr), nil
 	}
-	return timeutil.LoadLocation(location)
+	return LoadLocation(location)
 }
 
 // ParseFixedOffsetTimeZone takes the string representation of a time.Location

@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/pkg/errors"
 )
@@ -302,7 +303,7 @@ var varGen = map[string]sessionVar{
 			// and not a standard name, then we use a magic format in the Location's
 			// name. We attempt to parse that here and retrieve the original offset
 			// specified by the user.
-			_, origRepr, parsed := sqlbase.ParseFixedOffsetTimeZone(session.Location.String())
+			_, origRepr, parsed := timeutil.ParseFixedOffsetTimeZone(session.Location.String())
 			if parsed {
 				return origRepr
 			}

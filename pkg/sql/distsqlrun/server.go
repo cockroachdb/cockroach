@@ -30,7 +30,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/jobs"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
@@ -251,7 +250,7 @@ func (ds *ServerImpl) setupFlow(
 	// by the TxnCoordSender.
 	txn.AcceptUnhandledRetryableErrors()
 
-	location, err := sqlbase.TimeZoneStringToLocation(req.EvalContext.Location)
+	location, err := timeutil.TimeZoneStringToLocation(req.EvalContext.Location)
 	if err != nil {
 		tracing.FinishSpan(sp)
 		return ctx, nil, err
