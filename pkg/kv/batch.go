@@ -60,7 +60,7 @@ func truncate(ba roachpb.BatchRequest, rs roachpb.RSpan) (roachpb.BatchRequest, 
 		if err != nil {
 			return false, emptySpan, err
 		}
-		if l, r := !keyAddr.Equal(header.Key), !endKeyAddr.Equal(header.EndKey); l || r {
+		if l, r := keys.IsLocal(header.Key), keys.IsLocal(header.EndKey); l || r {
 			if !l || !r {
 				return false, emptySpan, errors.Errorf("local key mixed with global key in range")
 			}
@@ -219,6 +219,10 @@ func next(ba roachpb.BatchRequest, k roachpb.RKey) (roachpb.RKey, error) {
 			return nil, err
 		}
 		if addr.Less(k) {
+			if len(h.EndKey) == 0 {
+				// Affects only [KeyMin,k).
+				continue
+			}
 			eAddr, err := keys.AddrUpperBound(h.EndKey)
 			if err != nil {
 				return nil, err
