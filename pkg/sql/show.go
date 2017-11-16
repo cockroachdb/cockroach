@@ -285,12 +285,14 @@ func (p *planner) ShowTrace(ctx context.Context, n *tree.ShowTrace) (planNode, e
 SELECT timestamp,
        timestamp-first_value(timestamp) OVER (ORDER BY timestamp) AS age,
        message,
-       context,
+       tag,
+       loc,
        operation,
        span
   FROM (SELECT timestamp,
-               regexp_replace(message, e'^\\[(?:[^][]|\\[[^]]*\\])*\\] ', '') AS message,
-               regexp_extract(message, e'^\\[(?:[^][]|\\[[^]]*\\])*\\]') AS context,
+               message,
+               tag,
+               loc,
                first_value(operation) OVER (PARTITION BY txn_idx, span_idx ORDER BY message_idx) as operation,
                (txn_idx, span_idx) AS span
           FROM crdb_internal.session_trace)

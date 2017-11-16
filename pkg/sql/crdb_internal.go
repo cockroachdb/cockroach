@@ -569,6 +569,8 @@ CREATE TABLE crdb_internal.session_trace (
                                    -- the trace has been collected.
   operation   STRING NULL,         -- The span's operation. Set only on
                                    -- the first (dummy) message in a span.
+  loc         STRING NOT NULL,     -- The file name / line number prefix, if any.
+  tag         STRING NOT NULL,     -- The logging tag, if any.
   message     STRING NOT NULL      -- The logged message.
 );
 `,

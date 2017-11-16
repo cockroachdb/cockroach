@@ -17,6 +17,7 @@ package sql
 import (
 	"fmt"
 	"net"
+	"regexp"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -1539,7 +1540,28 @@ func extractMsgFromRecord(rec tracing.RecordedSpan_LogRecord) string {
 	return "<event missing in trace message>"
 }
 
-type traceRow [7]tree.Datum
+// traceRow is the type of a single row in the session_trace vtable.
+// The columns are as follows:
+// - txn_idx
+// - span_idx
+// - message_idx
+// - timestamp
+// - duration
+// - operation
+// - location
+// - tag
+// - message
+type traceRow [9]tree.Datum
+
+// A regular expression to split log messages.
+// It has three parts:
+// - the (optional) code location, with at least one forward slash and a period
+//   in the file name:
+//   ((?:[^][ :]+/[^][ :]+\.[^][ :]+:[0-9]+)?)
+// - the (optional) tag: ((?:\[(?:[^][]|\[[^]]*\])*\])?)
+// - the message itself: the rest.
+var logMessageRE = regexp.MustCompile(
+	`(?s:^((?:[^][ :]+/[^][ :]+\.[^][ :]+:[0-9]+)?) *((?:\[(?:[^][]|\[[^]]*\])*\])?) *(.*))`)
 
 // generateSessionTraceVTable generates the rows of said table by using the log
 // messages from the session's trace (i.e. the ongoing trace, if any, or the
@@ -1625,14 +1647,27 @@ func (st *SessionTracing) generateSessionTraceVTable() ([]traceRow, error) {
 			dur = tree.DNull
 		}
 
+		// Split the message into component parts.
+		//
+		// The result of FindStringSubmatchIndex is a 1D array of pairs
+		// [start, end) of positions in the input string.  The first pair
+		// identifies the entire match; the 2nd pair corresponds to the
+		// 1st parenthetized expression in the regexp, and so on.
+		loc := logMessageRE.FindStringSubmatchIndex(lrr.msg)
+		if loc == nil {
+			return nil, fmt.Errorf("unable to split trace message: %q", lrr.msg)
+		}
+
 		row := traceRow{
 			tree.NewDInt(tree.DInt(lrr.span.txnIdx)),              // txn_idx
 			tree.NewDInt(tree.DInt(lrr.span.index)),               // span_idx
 			tree.NewDInt(tree.DInt(lrr.index)),                    // message_idx
 			tree.MakeDTimestampTZ(lrr.timestamp, time.Nanosecond), // timestamp
-			dur,                      // duration
-			operation,                // operation
-			tree.NewDString(lrr.msg), // message
+			dur,       // duration
+			operation, // operation
+			tree.NewDString(lrr.msg[loc[2]:loc[3]]), // location
+			tree.NewDString(lrr.msg[loc[4]:loc[5]]), // tag
+			tree.NewDString(lrr.msg[loc[6]:loc[7]]), // message
 		}
 		res = append(res, row)
 	}
