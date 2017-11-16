@@ -57,6 +57,8 @@ const (
 	EventLogCreateSequence EventLogType = "create_sequence"
 	// EventLogDropSequence is recorded when a sequence is dropped.
 	EventLogDropSequence EventLogType = "drop_sequence"
+	// EventLogAlterSequenceis recorded when a sequence is altered.
+	EventLogAlterSequence EventLogType = "alter_sequence"
 
 	// EventLogReverseSchemaChange is recorded when an in-progress schema change
 	// encounters a problem and is reversed.
