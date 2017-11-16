@@ -24,6 +24,7 @@ import (
 	"runtime"
 	"runtime/debug"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 	"unsafe"
@@ -441,7 +442,7 @@ func (r *RocksDB) open() error {
 			max_open_files:  C.int(maxOpenFiles),
 		})
 	if err := statusToError(status); err != nil {
-		return errors.Errorf("could not open rocksdb instance: %s", err)
+		return errors.Wrap(err, "could not open rocksdb instance")
 	}
 
 	// Update or add the version file if needed.
@@ -1855,11 +1856,35 @@ func goToCTimestamp(ts hlc.Timestamp) C.DBTimestamp {
 	}
 }
 
+// A RocksDBError wraps an error returned from a RocksDB operation.
+type RocksDBError struct {
+	msg string
+}
+
+var _ log.SafeMessager = (*RocksDBError)(nil)
+
+// Error implements the error interface.
+func (err *RocksDBError) Error() string {
+	return err.msg
+}
+
+// SafeMessage implements log.SafeMessager.
+func (err *RocksDBError) SafeMessage() string {
+	// RocksDB errors are of format
+	// <Error Type>: [<Suberror type>] [State]
+	// We extract only the `<Error Type>` part.
+	ps := strings.SplitN(err.msg, ":", 2)
+	if len(ps) < 2 {
+		return "<unknown>"
+	}
+	return ps[0]
+}
+
 func statusToError(s C.DBStatus) error {
 	if s.data == nil {
 		return nil
 	}
-	return errors.New(cStringToGoString(s))
+	return &RocksDBError{msg: cStringToGoString(s)}
 }
 
 // goMerge takes existing and update byte slices that are expected to
