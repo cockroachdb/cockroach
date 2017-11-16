@@ -281,16 +281,24 @@ func (p *planner) ShowCreateView(ctx context.Context, n *tree.ShowCreateView) (p
 // ShowTrace shows the current stored session trace.
 // Privileges: None.
 func (p *planner) ShowTrace(ctx context.Context, n *tree.ShowTrace) (planNode, error) {
+	// A regular expression for log messages.
+	// It has three parts:
+	// - the (optional) code location: ((?:[^ :]+:[0-9]+ )?)
+	// - the (optional) tag: ((?:\\[(?:[^][]|\\[[^]]*\\])*\\])?)
+	// - the message itself: the rest.
+	const logMessageRE = `^((?:[^ :]+:[0-9]+ )?) *((?:\\[(?:[^][]|\\[[^]]*\\])*\\])?) *(.*)`
 	const traceClause = `
 SELECT timestamp,
        timestamp-first_value(timestamp) OVER (ORDER BY timestamp) AS age,
        message,
        context,
+       loc,
        operation,
        span
   FROM (SELECT timestamp,
-               regexp_replace(message, e'^\\[(?:[^][]|\\[[^]]*\\])*\\] ', '') AS message,
-               regexp_extract(message, e'^\\[(?:[^][]|\\[[^]]*\\])*\\]') AS context,
+               regexp_replace(message, e'` + logMessageRE + `', '\3') AS message,
+               regexp_replace(message, e'` + logMessageRE + `', '\2') AS context,
+               regexp_replace(message, e'` + logMessageRE + `', '\1') AS loc,
                first_value(operation) OVER (PARTITION BY txn_idx, span_idx ORDER BY message_idx) as operation,
                (txn_idx, span_idx) AS span
           FROM crdb_internal.session_trace)

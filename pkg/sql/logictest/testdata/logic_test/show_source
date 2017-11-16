@@ -256,12 +256,12 @@ NULL       NULL     1         {1}       1
 query TTTTTT colnames
 SELECT * FROM [SHOW TRACE FOR SESSION]
 ----
-timestamp age message context operation span
+timestamp age message context loc operation span
 
 query TTTTTT colnames
 SELECT * FROM [SHOW TRACE FOR SELECT 1] LIMIT 0
 ----
-timestamp age message context operation span
+timestamp age message context loc operation span
 
 query ITTTTTTTTRTI colnames
 SELECT * FROM [SHOW JOBS] LIMIT 0
