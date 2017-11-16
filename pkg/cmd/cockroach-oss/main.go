@@ -12,10 +12,13 @@
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
+// cockroach-oss is an entry point for a CockroachDB binary that excludes all
+// CCL-licensed code.
 package main
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/cli"
+	_ "github.com/cockroachdb/cockroach/pkg/ui/distoss" // web UI init hooks
 )
 
 func main() {
