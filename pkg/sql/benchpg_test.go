@@ -28,23 +28,23 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/security"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgbench"
+	"github.com/cockroachdb/cockroach/pkg/sql/benchpg"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 )
 
-// Tests a batch of queries very similar to those that that PGBench runs
+// Tests a batch of queries very similar to those that that Benchpg runs
 // in its TPC-B(ish) mode.
-func BenchmarkPgbenchQuery(b *testing.B) {
+func BenchmarkBenchPGQuery(b *testing.B) {
 	forEachDB(b, func(b *testing.B, db *gosql.DB) {
-		if err := pgbench.SetupBenchDB(db, 20000, true /*quiet*/); err != nil {
+		if err := benchpg.SetupBenchDB(db, 20000, true /*quiet*/); err != nil {
 			b.Fatal(err)
 		}
 		src := rand.New(rand.NewSource(5432))
 		b.ResetTimer()
 		for i := 0; i < b.N; i++ {
-			if err := pgbench.RunOne(db, src, 20000); err != nil {
+			if err := benchpg.RunOne(db, src, 20000); err != nil {
 				b.Fatal(err)
 			}
 		}
@@ -52,11 +52,11 @@ func BenchmarkPgbenchQuery(b *testing.B) {
 	})
 }
 
-// Tests a batch of queries very similar to those that that PGBench runs
+// Tests a batch of queries very similar to those that that Benchpg runs
 // in its TPC-B(ish) mode.
-func BenchmarkPgbenchQueryParallel(b *testing.B) {
+func BenchmarkBenchPGQueryParallel(b *testing.B) {
 	forEachDB(b, func(b *testing.B, db *gosql.DB) {
-		if err := pgbench.SetupBenchDB(db, 20000, true /*quiet*/); err != nil {
+		if err := benchpg.SetupBenchDB(db, 20000, true /*quiet*/); err != nil {
 			b.Fatal(err)
 		}
 
@@ -74,7 +74,7 @@ func BenchmarkPgbenchQueryParallel(b *testing.B) {
 			for pb.Next() {
 				r.Reset()
 				for r.Next() {
-					err = pgbench.RunOne(db, src, 20000)
+					err = benchpg.RunOne(db, src, 20000)
 					if err == nil {
 						break
 					}
@@ -88,11 +88,11 @@ func BenchmarkPgbenchQueryParallel(b *testing.B) {
 	})
 }
 
-func execPgbench(b *testing.B, pgURL url.URL) {
-	if _, err := exec.LookPath("pgbench"); err != nil {
-		b.Skip("pgbench is not available on PATH")
+func execBenchPG(b *testing.B, pgURL url.URL) {
+	if _, err := exec.LookPath("benchpg"); err != nil {
+		b.Skip("benchpg is not available on PATH")
 	}
-	c, err := pgbench.SetupExec(pgURL, "bench", 20000, b.N)
+	c, err := benchpg.SetupExec(pgURL, "bench", 20000, b.N)
 	if err != nil {
 		b.Fatal(err)
 	}
@@ -109,7 +109,7 @@ func execPgbench(b *testing.B, pgURL url.URL) {
 	b.StopTimer()
 }
 
-func BenchmarkPgbenchExec(b *testing.B) {
+func BenchmarkBenchPGExec(b *testing.B) {
 	b.Run("Cockroach", func(b *testing.B) {
 		s, _, _ := serverutils.StartServer(b, base.TestServerArgs{Insecure: true})
 		defer s.Stopper().Stop(context.TODO())
@@ -119,7 +119,7 @@ func BenchmarkPgbenchExec(b *testing.B) {
 		pgURL.RawQuery = "sslmode=disable"
 		defer cleanupFn()
 
-		execPgbench(b, pgURL)
+		execBenchPG(b, pgURL)
 	})
 
 	b.Run("Postgres", func(b *testing.B) {
@@ -133,6 +133,6 @@ func BenchmarkPgbenchExec(b *testing.B) {
 		} else {
 			conn.Close()
 		}
-		execPgbench(b, pgURL)
+		execBenchPG(b, pgURL)
 	})
 }

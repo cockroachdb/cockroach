@@ -12,7 +12,7 @@
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
-package pgbench
+package benchpg
 
 import (
 	"bytes"
@@ -87,7 +87,7 @@ func CreateAndConnect(pgURL url.URL, name string) (*gosql.DB, error) {
 	return db, nil
 }
 
-// SetupExec creates and fills a DB and prepares a `pgbench` command
+// SetupExec creates and fills a DB and prepares a `benchpg` command
 // to be run against it.
 func SetupExec(pgURL url.URL, name string, accounts, transactions int) (*exec.Cmd, error) {
 	db, err := CreateAndConnect(pgURL, name)
@@ -103,11 +103,11 @@ func SetupExec(pgURL url.URL, name string, accounts, transactions int) (*exec.Cm
 	return ExecPgbench(pgURL, name, transactions)
 }
 
-// SetupBenchDB sets up a db with the schema and initial data used by `pgbench`.
-// The `-i` flag to `pgbench` is usually used to do this when testing postgres
+// SetupBenchDB sets up a db with the schema and initial data used by `benchpg`.
+// The `-i` flag to `benchpg` is usually used to do this when testing postgres
 // but the statements it generates use postgres-specific flags that cockroach does
 // not support. The queries this script runs are based on a dump of a db created
-// by `pgbench -i`, but sticking to the compatible subset that both cockroach and
+// by `benchpg -i`, but sticking to the compatible subset that both cockroach and
 // postgres support.
 func SetupBenchDB(db *gosql.DB, accounts int, quiet bool) error {
 	if _, err := db.Exec(schema); err != nil {
@@ -128,7 +128,7 @@ func populateDB(db *gosql.DB, accounts int, quiet bool) error {
 		fmt.Printf("Inserted %d branch records\n", x)
 	}
 
-	// Various magic numbers came from `pg_dump` of a `pgbench` created DB.
+	// Various magic numbers came from `pg_dump` of a `benchpg` created DB.
 	tellers := `INSERT INTO pgbench_tellers VALUES (1, 1, 0, NULL),
 	(2, 1, 955, NULL),
 	(3, 1, -3338, NULL),

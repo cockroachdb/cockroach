@@ -21,12 +21,12 @@ import (
 	"net/url"
 	"os"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/pgbench"
+	"github.com/cockroachdb/cockroach/pkg/sql/benchpg"
 	_ "github.com/lib/pq"
 )
 
 var usage = func() {
-	fmt.Fprintln(os.Stderr, "Creates the schema and initial data used by the `pgbench` tool")
+	fmt.Fprintln(os.Stderr, "Creates the schema and initial data used by the `benchpg` tool")
 	fmt.Fprintf(os.Stderr, "\nUsage: %s <db URL>\n", os.Args[0])
 	flag.PrintDefaults()
 }
@@ -57,7 +57,7 @@ func main() {
 			name = parsed.Path[1:]
 		}
 
-		db, err = pgbench.CreateAndConnect(*parsed, name)
+		db, err = benchpg.CreateAndConnect(*parsed, name)
 	} else {
 		db, err = gosql.Open("postgres", flag.Arg(0))
 	}
@@ -67,7 +67,7 @@ func main() {
 
 	defer db.Close()
 
-	if err := pgbench.SetupBenchDB(db, *accounts, false); err != nil {
+	if err := benchpg.SetupBenchDB(db, *accounts, false); err != nil {
 		panic(err)
 	}
 }
