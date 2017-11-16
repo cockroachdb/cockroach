@@ -118,6 +118,12 @@ func (*AlterTable) StatementTag() string { return "ALTER TABLE" }
 func (*AlterTable) hiddenFromShowQueries() {}
 
 // StatementType implements the Statement interface.
+func (*AlterSequence) StatementType() StatementType { return DDL }
+
+// StatementTag returns a short string identifying the type of statement.
+func (*AlterSequence) StatementTag() string { return "ALTER SEQUENCE" }
+
+// StatementType implements the Statement interface.
 func (*AlterUserSetPassword) StatementType() StatementType { return RowsAffected }
 
 // StatementTag returns a short string identifying the type of statement.
@@ -359,6 +365,8 @@ func (*RenameTable) StatementType() StatementType { return DDL }
 func (n *RenameTable) StatementTag() string {
 	if n.IsView {
 		return "RENAME VIEW"
+	} else if n.IsSequence {
+		return "RENAME SEQUENCE"
 	}
 	return "RENAME TABLE"
 }
@@ -686,6 +694,7 @@ func (n *AlterTableDropConstraint) String() string { return AsString(n) }
 func (n *AlterTableDropNotNull) String() string    { return AsString(n) }
 func (n *AlterTableSetDefault) String() string     { return AsString(n) }
 func (n *AlterUserSetPassword) String() string     { return AsString(n) }
+func (n *AlterSequence) String() string            { return AsString(n) }
 func (n *Backup) String() string                   { return AsString(n) }
 func (n *BeginTransaction) String() string         { return AsString(n) }
 func (n *CancelJob) String() string                { return AsString(n) }

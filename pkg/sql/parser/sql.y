@@ -529,6 +529,7 @@ func (u *sqlSymUnion) scrubOption() tree.ScrubOption {
 %type <tree.Statement> alter_table_stmt
 %type <tree.Statement> alter_index_stmt
 %type <tree.Statement> alter_view_stmt
+%type <tree.Statement> alter_sequence_stmt
 %type <tree.Statement> alter_database_stmt
 %type <tree.Statement> alter_user_stmt
 %type <tree.Statement> alter_range_stmt
@@ -560,6 +561,10 @@ func (u *sqlSymUnion) scrubOption() tree.ScrubOption {
 
 // ALTER VIEW
 %type <tree.Statement> alter_rename_view_stmt
+
+// ALTER SEQUENCE
+%type <tree.Statement> alter_rename_sequence_stmt
+%type <tree.Statement> alter_sequence_options_stmt
 
 %type <tree.Statement> backup_stmt
 %type <tree.Statement> begin_stmt
@@ -1015,6 +1020,7 @@ alter_ddl_stmt:
   alter_table_stmt    // EXTEND WITH HELP: ALTER TABLE
 | alter_index_stmt    // EXTEND WITH HELP: ALTER INDEX
 | alter_view_stmt     // EXTEND WITH HELP: ALTER VIEW
+| alter_sequence_stmt // EXTEND WITH HELP: ALTER SEQUENCE
 | alter_database_stmt // EXTEND WITH HELP: ALTER DATABASE
 | alter_range_stmt
 
@@ -1064,6 +1070,31 @@ alter_view_stmt:
 // ALTER VIEW has its error help token here because the ALTER VIEW
 // prefix is spread over multiple non-terminals.
 | ALTER VIEW error // SHOW HELP: ALTER VIEW
+
+// %Help: ALTER SEQUENCE - change the definition of a sequence
+// %Category: DDL
+// %Text:
+// ALTER SEQUENCE [IF EXISTS] <name>
+//   [INCREMENT <increment>]
+//   [MINVALUE <minvalue> | NO MINVALUE]
+//   [MAXVALUE <maxvalue> | NO MAXVALUE]
+//   [START <start>]
+//   [[NO] CYCLE]
+// ALTER SEQUENCE [IF EXISTS] <name> RENAME TO <newname>
+alter_sequence_stmt:
+  alter_rename_sequence_stmt
+| alter_sequence_options_stmt
+| ALTER SEQUENCE error // SHOW HELP: ALTER SEQUENCE
+
+alter_sequence_options_stmt:
+  ALTER SEQUENCE relation_expr sequence_option_list
+  {
+    $$.val = &tree.AlterSequence{Name: $3.normalizableTableName(), Options: $4.seqOpts(), IfExists: false}
+  }
+| ALTER SEQUENCE IF EXISTS relation_expr sequence_option_list
+  {
+    $$.val = &tree.AlterSequence{Name: $5.normalizableTableName(), Options: $6.seqOpts(), IfExists: true}
+  }
 
 // %Help: ALTER USER - change user properties
 // %Category: Priv
@@ -3445,6 +3476,16 @@ alter_rename_view_stmt:
 | ALTER VIEW IF EXISTS relation_expr RENAME TO qualified_name
   {
     $$.val = &tree.RenameTable{Name: $5.normalizableTableName(), NewName: $8.normalizableTableName(), IfExists: true, IsView: true}
+  }
+
+alter_rename_sequence_stmt:
+  ALTER SEQUENCE relation_expr RENAME TO qualified_name
+  {
+    $$.val = &tree.RenameTable{Name: $3.normalizableTableName(), NewName: $6.normalizableTableName(), IfExists: false, IsSequence: true}
+  }
+| ALTER SEQUENCE IF EXISTS relation_expr RENAME TO qualified_name
+  {
+    $$.val = &tree.RenameTable{Name: $5.normalizableTableName(), NewName: $8.normalizableTableName(), IfExists: true, IsSequence: true}
   }
 
 alter_rename_index_stmt:

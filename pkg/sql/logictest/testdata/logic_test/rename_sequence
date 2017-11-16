@@ -1,0 +1,19 @@
+# LogicTest: default distsql parallel-stmts
+
+# see also file `sequences`
+
+statement ok
+CREATE SEQUENCE alter_test
+
+statement ok
+ALTER SEQUENCE alter_test RENAME TO renamed_alter_test
+
+# alter_test no longer there
+statement ok
+ALTER SEQUENCE IF EXISTS alter_test RENAME TO something
+
+statement ok
+ALTER SEQUENCE IF EXISTS renamed_alter_test RENAME TO renamed_again_alter_test
+
+statement ok
+DROP SEQUENCE renamed_again_alter_test

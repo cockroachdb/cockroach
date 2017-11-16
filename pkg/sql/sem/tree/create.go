@@ -826,7 +826,7 @@ func (node *CreateTable) Format(buf *bytes.Buffer, f FmtFlags) {
 type CreateSequence struct {
 	IfNotExists bool
 	Name        NormalizableTableName
-	Options     []SequenceOption
+	Options     SequenceOptions
 }
 
 // Format implements the NodeFormatter interface.
@@ -836,7 +836,14 @@ func (node *CreateSequence) Format(buf *bytes.Buffer, f FmtFlags) {
 		buf.WriteString("IF NOT EXISTS ")
 	}
 	FormatNode(buf, f, &node.Name)
-	for _, option := range node.Options {
+	FormatNode(buf, f, node.Options)
+}
+
+// SequenceOptions represents a list of sequence options.
+type SequenceOptions []SequenceOption
+
+func (node SequenceOptions) Format(buf *bytes.Buffer, f FmtFlags) {
+	for _, option := range node {
 		buf.WriteByte(' ')
 		switch option.Name {
 		case SeqOptMaxValue, SeqOptMinValue:
