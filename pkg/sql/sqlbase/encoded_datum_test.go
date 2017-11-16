@@ -42,12 +42,21 @@ func TestEncDatum(t *testing.T) {
 
 	typeInt := ColumnType{SemanticType: ColumnType_INT}
 	x := DatumToEncDatum(typeInt, tree.NewDInt(5))
-	if x.IsUnset() {
-		t.Errorf("unset after DatumToEncDatum()")
+
+	check := func(x EncDatum) {
+		if x.IsUnset() {
+			t.Errorf("unset after DatumToEncDatum()")
+		}
+		if x.IsNull() {
+			t.Errorf("null after DatumToEncDatum()")
+		}
+		if val, err := x.GetInt(); err != nil {
+			t.Fatal(err)
+		} else if val != 5 {
+			t.Errorf("GetInt returned %d", val)
+		}
 	}
-	if x.IsNull() {
-		t.Errorf("null after DatumToEncDatum()")
-	}
+	check(x)
 
 	encoded, err := x.Encode(&typeInt, a, DatumEncoding_ASCENDING_KEY, nil)
 	if err != nil {
@@ -55,13 +64,8 @@ func TestEncDatum(t *testing.T) {
 	}
 
 	y := EncDatumFromEncoded(&typeInt, DatumEncoding_ASCENDING_KEY, encoded)
+	check(y)
 
-	if y.IsUnset() {
-		t.Errorf("unset after EncDatumFromEncoded")
-	}
-	if y.IsNull() {
-		t.Errorf("null after EncDatumFromEncoded")
-	}
 	if enc, ok := y.Encoding(); !ok {
 		t.Error("no encoding after EncDatumFromEncoded")
 	} else if enc != DatumEncoding_ASCENDING_KEY {
@@ -91,9 +95,8 @@ func TestEncDatum(t *testing.T) {
 	} else if enc != DatumEncoding_DESCENDING_KEY {
 		t.Errorf("invalid encoding %d", enc)
 	}
-	if z.IsNull() {
-		t.Errorf("null after EncDatumFromEncoded")
-	}
+	check(z)
+
 	err = z.EnsureDecoded(&typeInt, a)
 	if err != nil {
 		t.Fatal(err)
