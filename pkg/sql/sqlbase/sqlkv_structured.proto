@@ -18,7 +18,7 @@ package cockroach.sql.sqlbase;
 option go_package = "sqlbase";
 
 import "util/hlc/timestamp.proto";
-import "sql/sqlbase/privilege.proto";
+import "sql/sqlbase/sqlkv_privilege.proto";
 import "gogoproto/gogo.proto";
 
 message ColumnType {
