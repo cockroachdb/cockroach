@@ -277,7 +277,7 @@ func (p *planner) Update(
 		Exprs: sqlbase.ColumnsSelectors(ru.FetchCols),
 		From:  &tree.From{Tables: []tree.TableExpr{n.Table}},
 		Where: n.Where,
-	}, nil, nil, nil, publicAndNonPublicColumns)
+	}, n.OrderBy, n.Limit, nil /*desiredTypes*/, publicAndNonPublicColumns)
 	if err != nil {
 		return nil, err
 	}
@@ -288,7 +288,21 @@ func (p *planner) Update(
 	// currentUpdateIdx is the index of the first column descriptor in updateCols
 	// that is assigned to by the current setExpr.
 	currentUpdateIdx := 0
-	render := rows.(*renderNode)
+
+	// We need to add renders below, for the RHS of each
+	// assignment. Where can we do this? If we already have a
+	// renderNode, then use that. Otherwise, add one.
+	var render *renderNode
+	if r, ok := rows.(*renderNode); ok {
+		render = r
+	} else {
+		render, err = p.insertRender(ctx, rows, tn)
+		if err != nil {
+			return nil, err
+		}
+		// The new renderNode is also the new data source for the update.
+		rows = render
+	}
 
 	for _, setExpr := range setExprs {
 		if setExpr.Tuple {
@@ -353,9 +367,8 @@ func (p *planner) Update(
 	// types are inferred. For the simpler case ("SET a = $1"), populate them
 	// using checkColumnType. This step also verifies that the expression
 	// types match the column types.
-	sel := rows.(*renderNode)
 	for _, sourceSlot := range sourceSlots {
-		if err := sourceSlot.checkColumnTypes(sel.render, &p.semaCtx.Placeholders); err != nil {
+		if err := sourceSlot.checkColumnTypes(render.render, &p.semaCtx.Placeholders); err != nil {
 			return nil, err
 		}
 	}

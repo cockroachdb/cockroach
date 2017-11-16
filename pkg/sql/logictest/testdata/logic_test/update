@@ -432,3 +432,70 @@ SELECT message FROM [SHOW KV TRACE FOR SELECT * FROM pks WHERE k1 = 2]
 fetched: /pks/primary/2/2 -> NULL
 fetched: /pks/primary/2/2/v -> 3
 output row: [2 2 3]
+
+# Check that UPDATE properly supports ORDER BY (MySQL extension)
+
+statement ok
+TRUNCATE kv
+
+statement ok
+INSERT INTO kv VALUES (1, 9), (8, 2), (3, 7), (6, 4)
+
+query ITTT
+EXPLAIN UPDATE kv SET v = v + 1 ORDER BY v DESC
+----
+0  update  ·      ·
+0  ·       table  kv
+0  ·       set    v
+1  render  ·      ·
+2  sort    ·      ·
+2  ·       order  -v
+3  scan    ·      ·
+3  ·       table  kv@primary
+3  ·       spans  ALL
+
+query II
+UPDATE kv SET v = v + 1 ORDER BY v DESC RETURNING k,v
+----
+1  10
+3  8
+6  5
+8  3
+
+# Use case for UPDATE ... ORDER BY: renumbering a PK without unique violation.
+
+statement error duplicate key value \(k\)=\(6\) violates unique constraint "primary"
+UPDATE kv SET k = k * 2
+
+statement ok
+UPDATE kv SET k = k * 2 ORDER BY k DESC
+
+# Check that UPDATE properly supports LIMIT (MySQL extension)
+
+statement ok
+TRUNCATE kv; INSERT INTO kv VALUES (1, 2), (2, 3), (3, 4)
+
+query ITTT
+EXPLAIN UPDATE kv SET v = v - 1 WHERE k < 3 LIMIT 1
+----
+0  update  ·      ·
+0  ·       table  kv
+0  ·       set    v
+1  render  ·      ·
+2  limit   ·      ·
+3  scan    ·      ·
+3  ·       table  kv@primary
+3  ·       spans  /#-/3
+3  ·       limit  1
+
+query II
+UPDATE kv SET v = v - 1 WHERE k < 10 ORDER BY k LIMIT 1 RETURNING k, v
+----
+1  1
+
+query II
+SELECT * FROM kv
+----
+1  1
+2  3
+3  4

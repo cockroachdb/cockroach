@@ -1582,17 +1582,19 @@ create_ddl_stmt:
 // %Help: DELETE - delete rows from a table
 // %Category: DML
 // %Text: DELETE FROM <tablename> [WHERE <expr>]
+//               [ORDER BY <exprs...>]
 //               [LIMIT <expr>]
 //               [RETURNING <exprs...>]
 // %SeeAlso: WEBDOCS/delete.html
 delete_stmt:
-  opt_with_clause DELETE FROM relation_expr_opt_alias where_clause opt_limit_clause returning_clause
+  opt_with_clause DELETE FROM relation_expr_opt_alias where_clause opt_sort_clause opt_limit_clause returning_clause
   {
     $$.val = &tree.Delete{
       Table: $4.tblExpr(),
       Where: tree.NewWhere(tree.AstWhere, $5.expr()),
-      Limit: $6.limit(),
-      Returning: $7.retClause(),
+      OrderBy: $6.orderBy(),
+      Limit: $7.limit(),
+      Returning: $8.retClause(),
     }
   }
 | opt_with_clause DELETE error // SHOW HELP: DELETE
@@ -3831,13 +3833,26 @@ returning_clause:
 
 // %Help: UPDATE - update rows of a table
 // %Category: DML
-// %Text: UPDATE <tablename> [[AS] <name>] SET ... [WHERE <expr>] [RETURNING <exprs...>]
+// %Text:
+// UPDATE <tablename> [[AS] <name>]
+//        SET ...
+//        [WHERE <expr>]
+//        [ORDER BY <exprs...>]
+//        [LIMIT <expr>]
+//        [RETURNING <exprs...>]
 // %SeeAlso: INSERT, UPSERT, DELETE, WEBDOCS/update.html
 update_stmt:
   opt_with_clause UPDATE relation_expr_opt_alias
-    SET set_clause_list update_from_clause where_clause returning_clause
+    SET set_clause_list update_from_clause where_clause opt_sort_clause opt_limit_clause returning_clause
   {
-    $$.val = &tree.Update{Table: $3.tblExpr(), Exprs: $5.updateExprs(), Where: tree.NewWhere(tree.AstWhere, $7.expr()), Returning: $8.retClause()}
+    $$.val = &tree.Update{
+      Table: $3.tblExpr(),
+      Exprs: $5.updateExprs(),
+      Where: tree.NewWhere(tree.AstWhere, $7.expr()),
+      OrderBy: $8.orderBy(),
+      Limit: $9.limit(),
+      Returning: $10.retClause(),
+    }
   }
 | opt_with_clause UPDATE error // SHOW HELP: UPDATE
 
