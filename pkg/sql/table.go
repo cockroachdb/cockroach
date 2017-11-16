@@ -182,6 +182,19 @@ func getViewDesc(
 	return desc, nil
 }
 
+func getSequenceDesc(
+	ctx context.Context, txn *client.Txn, vt VirtualTabler, tn *tree.TableName,
+) (*sqlbase.TableDescriptor, error) {
+	desc, err := getTableOrViewDesc(ctx, txn, vt, tn)
+	if err != nil {
+		return desc, err
+	}
+	if desc != nil && !desc.IsSequence() {
+		return nil, sqlbase.NewWrongObjectTypeError(tn, "sequence")
+	}
+	return desc, nil
+}
+
 // MustGetTableOrViewDesc returns a table descriptor for either a table or
 // view, or an error if the descriptor is not found. allowAdding when set allows
 // a table descriptor in the ADD state to also be returned.
