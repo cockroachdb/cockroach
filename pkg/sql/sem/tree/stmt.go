@@ -118,6 +118,12 @@ func (*AlterTable) StatementTag() string { return "ALTER TABLE" }
 func (*AlterTable) hiddenFromShowQueries() {}
 
 // StatementType implements the Statement interface.
+func (*AlterSequence) StatementType() StatementType { return DDL }
+
+// StatementTag returns a short string identifying the type of statement.
+func (*AlterSequence) StatementTag() string { return "ALTER SEQUENCE" }
+
+// StatementType implements the Statement interface.
 func (*AlterUserSetPassword) StatementType() StatementType { return RowsAffected }
 
 // StatementTag returns a short string identifying the type of statement.
@@ -261,6 +267,12 @@ func (*DropView) StatementType() StatementType { return DDL }
 func (*DropView) StatementTag() string { return "DROP VIEW" }
 
 // StatementType implements the Statement interface.
+func (*DropSequence) StatementType() StatementType { return DDL }
+
+// StatementTag returns a short string identifying the type of statement.
+func (*DropSequence) StatementTag() string { return "DROP SEQUENCE" }
+
+// StatementType implements the Statement interface.
 func (*DropUser) StatementType() StatementType { return RowsAffected }
 
 // StatementTag returns a short string identifying the type of statement.
@@ -353,6 +365,8 @@ func (*RenameTable) StatementType() StatementType { return DDL }
 func (n *RenameTable) StatementTag() string {
 	if n.IsView {
 		return "RENAME VIEW"
+	} else if n.IsSequence {
+		return "RENAME SEQUENCE"
 	}
 	return "RENAME TABLE"
 }
@@ -680,6 +694,7 @@ func (n *AlterTableDropConstraint) String() string { return AsString(n) }
 func (n *AlterTableDropNotNull) String() string    { return AsString(n) }
 func (n *AlterTableSetDefault) String() string     { return AsString(n) }
 func (n *AlterUserSetPassword) String() string     { return AsString(n) }
+func (n *AlterSequence) String() string            { return AsString(n) }
 func (n *Backup) String() string                   { return AsString(n) }
 func (n *BeginTransaction) String() string         { return AsString(n) }
 func (n *CancelJob) String() string                { return AsString(n) }
@@ -698,6 +713,7 @@ func (n *DropDatabase) String() string             { return AsString(n) }
 func (n *DropIndex) String() string                { return AsString(n) }
 func (n *DropTable) String() string                { return AsString(n) }
 func (n *DropView) String() string                 { return AsString(n) }
+func (n *DropSequence) String() string             { return AsString(n) }
 func (n *DropUser) String() string                 { return AsString(n) }
 func (n *Execute) String() string                  { return AsString(n) }
 func (n *Explain) String() string                  { return AsString(n) }

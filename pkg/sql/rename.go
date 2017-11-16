@@ -106,8 +106,8 @@ func (p *planner) RenameDatabase(ctx context.Context, n *tree.RenameDatabase) (p
 	return &zeroNode{}, nil
 }
 
-// RenameTable renames the table or view.
-// Privileges: DROP on source table/view, CREATE on destination database.
+// RenameTable renames the table, view or sequence.
+// Privileges: DROP on source table/view/sequence, CREATE on destination database.
 //   Notes: postgres requires the table owner.
 //          mysql requires ALTER, DROP on the original table, and CREATE, INSERT
 //          on the new table (and does not copy privileges over).
@@ -126,7 +126,7 @@ func (p *planner) RenameTable(ctx context.Context, n *tree.RenameTable) (planNod
 		return nil, err
 	}
 
-	// Check if source table or view exists.
+	// Check if source table, view or sequence exists.
 	// Note that Postgres's behavior here is a little lenient - it'll let you
 	// modify views by running ALTER TABLE, but won't let you modify tables
 	// by running ALTER VIEW. Our behavior is strict for now, but can be
@@ -137,33 +137,28 @@ func (p *planner) RenameTable(ctx context.Context, n *tree.RenameTable) (planNod
 		if err != nil {
 			return nil, err
 		}
-		if tableDesc == nil {
-			if n.IfExists {
-				// Noop.
-				return &zeroNode{}, nil
-			}
-			// Key does not exist, but we want it to: error out.
-			return nil, sqlbase.NewUndefinedRelationError(oldTn)
-		}
-		if tableDesc.State != sqlbase.TableDescriptor_PUBLIC {
-			return nil, sqlbase.NewUndefinedRelationError(oldTn)
+	} else if n.IsSequence {
+		tableDesc, err = getSequenceDesc(ctx, p.txn, p.getVirtualTabler(), oldTn)
+		if err != nil {
+			return nil, err
 		}
 	} else {
 		tableDesc, err = getTableDesc(ctx, p.txn, p.getVirtualTabler(), oldTn)
 		if err != nil {
 			return nil, err
 		}
-		if tableDesc == nil {
-			if n.IfExists {
-				// Noop.
-				return &zeroNode{}, nil
-			}
-			// Key does not exist, but we want it to: error out.
-			return nil, sqlbase.NewUndefinedRelationError(oldTn)
+	}
+
+	if tableDesc == nil {
+		if n.IfExists {
+			// Noop.
+			return &zeroNode{}, nil
 		}
-		if tableDesc.State != sqlbase.TableDescriptor_PUBLIC {
-			return nil, sqlbase.NewUndefinedRelationError(oldTn)
-		}
+		// Key does not exist, but we want it to: error out.
+		return nil, sqlbase.NewUndefinedRelationError(oldTn)
+	}
+	if tableDesc.State != sqlbase.TableDescriptor_PUBLIC {
+		return nil, sqlbase.NewUndefinedRelationError(oldTn)
 	}
 
 	if err := p.CheckPrivilege(tableDesc, privilege.DROP); err != nil {

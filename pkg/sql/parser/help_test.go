@@ -75,6 +75,11 @@ func TestContextualHelp(t *testing.T) {
 		{`ALTER VIEW blah RENAME ??`, `ALTER VIEW`},
 		{`ALTER VIEW blah RENAME TO blih ??`, `ALTER VIEW`},
 
+		{`ALTER SEQUENCE IF ??`, `ALTER SEQUENCE`},
+		{`ALTER SEQUENCE blah ??`, `ALTER SEQUENCE`},
+		{`ALTER SEQUENCE blah RENAME ??`, `ALTER SEQUENCE`},
+		{`ALTER SEQUENCE blah RENAME TO blih ??`, `ALTER SEQUENCE`},
+
 		{`ALTER USER IF ??`, `ALTER USER`},
 		{`ALTER USER foo WITH PASSWORD ??`, `ALTER USER`},
 
@@ -127,6 +132,10 @@ func TestContextualHelp(t *testing.T) {
 
 		{`DROP INDEX blah, ??`, `DROP INDEX`},
 		{`DROP INDEX blah@blih ??`, `DROP INDEX`},
+
+		{`DROP SEQUENCE blah ??`, `DROP SEQUENCE`},
+		{`DROP SEQUENCE IF ??`, `DROP SEQUENCE`},
+		{`DROP SEQUENCE IF EXISTS blih, bloh ??`, `DROP SEQUENCE`},
 
 		{`DROP TABLE blah ??`, `DROP TABLE`},
 		{`DROP TABLE IF ??`, `DROP TABLE`},
