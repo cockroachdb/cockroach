@@ -130,6 +130,14 @@ func (s *FastIntSet) Empty() bool {
 	return s.small == 0 && (s.large == nil || s.large.IsEmpty())
 }
 
+// Len returns the number of the elements in the set.
+func (s *FastIntSet) Len() int {
+	if s.large == nil {
+		return bits.OnesCount64(s.small)
+	}
+	return s.large.Len()
+}
+
 // Next returns the first value in the set which is >= startVal. If there is no
 // value, the second return value is false.
 func (s *FastIntSet) Next(startVal int) (int, bool) {
@@ -177,15 +185,15 @@ func (s *FastIntSet) Ordered() []int {
 	if s.large != nil {
 		return s.large.AppendTo([]int(nil))
 	}
-	result := make([]int, 0, bits.OnesCount64(s.small))
+	result := make([]int, 0, s.Len())
 	s.ForEach(func(i int) {
 		result = append(result, i)
 	})
 	return result
 }
 
-// Copy makes an copy of a FastIntSet which can be modified independently.
-func (s *FastIntSet) Copy() FastIntSet {
+// Copy returns a copy of s which can be modified independently.
+func (s FastIntSet) Copy() FastIntSet {
 	var c FastIntSet
 	if s.large != nil {
 		c.large = new(intsets.Sparse)
@@ -211,6 +219,13 @@ func (s *FastIntSet) UnionWith(rhs FastIntSet) {
 	s.large.UnionWith(rhs.toLarge())
 }
 
+// Union returns the intersection of s and rhs as a new set.
+func (s FastIntSet) Union(rhs FastIntSet) FastIntSet {
+	r := s.Copy()
+	r.UnionWith(rhs)
+	return r
+}
+
 // IntersectionWith removes any elements not in rhs from this set.
 func (s *FastIntSet) IntersectionWith(rhs FastIntSet) {
 	if s.large == nil {
@@ -228,8 +243,53 @@ func (s *FastIntSet) IntersectionWith(rhs FastIntSet) {
 	s.large.IntersectionWith(rhs.toLarge())
 }
 
+// Intersection returns the intersection of s and rhs as a new set.
+func (s FastIntSet) Intersection(rhs FastIntSet) FastIntSet {
+	r := s.Copy()
+	r.IntersectionWith(rhs)
+	return r
+}
+
+// Intersects returns true if s has any elements in common with rhs.
+func (s FastIntSet) Intersects(rhs FastIntSet) bool {
+	if s.large == nil {
+		// Fast path
+		other := rhs.small
+		if rhs.large != nil {
+			// If the other set is large, we can ignore any values outside of the
+			// small range.
+			other, _ = rhs.largeToSmall()
+		}
+		return (s.small & other) != 0
+	}
+	return s.large.Intersects(rhs.toLarge())
+}
+
+// DifferenceWith removes any elements in rhs from this set.
+func (s *FastIntSet) DifferenceWith(rhs FastIntSet) {
+	if s.large == nil {
+		// Fast path
+		other := rhs.small
+		if rhs.large != nil {
+			// If the other set is large, we can ignore any values outside of the
+			// small range.
+			other, _ = rhs.largeToSmall()
+		}
+		s.small &^= other
+		return
+	}
+	s.large.DifferenceWith(rhs.toLarge())
+}
+
+// Difference returns the elements of s that are not in rhs as a new set.
+func (s FastIntSet) Difference(rhs FastIntSet) FastIntSet {
+	r := s.Copy()
+	r.DifferenceWith(rhs)
+	return r
+}
+
 // Equals returns true if the two sets are identical.
-func (s *FastIntSet) Equals(rhs FastIntSet) bool {
+func (s FastIntSet) Equals(rhs FastIntSet) bool {
 	if s.large == nil && rhs.large == nil {
 		return s.small == rhs.small
 	}
@@ -250,7 +310,7 @@ func (s *FastIntSet) Equals(rhs FastIntSet) bool {
 }
 
 // SubsetOf returns true if rhs contains all the elements in s.
-func (s *FastIntSet) SubsetOf(rhs FastIntSet) bool {
+func (s FastIntSet) SubsetOf(rhs FastIntSet) bool {
 	if s.large == nil && rhs.large == nil {
 		return (s.small & rhs.small) == s.small
 	}

@@ -162,6 +162,10 @@ func TestFastIntSetTwoSetOps(t *testing.T) {
 
 							u := s1.Copy()
 							u.UnionWith(s2)
+
+							if !u.Equals(s1.Union(s2)) {
+								t.Errorf("inconsistency between UnionWith and Union on %s %s\n", s1, s2)
+							}
 							// Verify all elements from m1 and m2 are in u.
 							for _, m := range []map[int]bool{m1, m2} {
 								for x := range m {
@@ -182,6 +186,13 @@ func TestFastIntSetTwoSetOps(t *testing.T) {
 							// Test intersection.
 							u = s1.Copy()
 							u.IntersectionWith(s2)
+							if s1.Intersects(s2) != !u.Empty() ||
+								s2.Intersects(s1) != !u.Empty() {
+								t.Errorf("inconsistency between IntersectionWith and Intersect on %s %s\n", s1, s2)
+							}
+							if !u.Equals(s1.Intersection(s2)) {
+								t.Errorf("inconsistency between IntersectionWith and Intersection on %s %s\n", s1, s2)
+							}
 							// Verify all elements from m1 and m2 are in u.
 							for x := range m1 {
 								if m2[x] && !u.Contains(x) {
@@ -193,6 +204,29 @@ func TestFastIntSetTwoSetOps(t *testing.T) {
 							for x, ok := u.Next(minVal); ok; x, ok = u.Next(x + 1) {
 								if !(m1[x] && m2[x]) {
 									t.Errorf("incorrect intersection result %s intersect %s = %s", &s1, &s2, &u)
+									break
+								}
+							}
+
+							// Test difference.
+							u = s1.Copy()
+							u.DifferenceWith(s2)
+
+							if !u.Equals(s1.Difference(s2)) {
+								t.Errorf("inconsistency between DifferenceWith and Difference on %s %s\n", s1, s2)
+							}
+
+							// Verify all elements in m1 but not in m2 are in u.
+							for x := range m1 {
+								if !m2[x] && !u.Contains(x) {
+									t.Errorf("incorrect difference result %s \\ %s = %s  x=%d", &s1, &s2, &u, x)
+									break
+								}
+							}
+							// Verify all elements from u are in m1.
+							for x, ok := u.Next(minVal); ok; x, ok = u.Next(x + 1) {
+								if !m1[x] {
+									t.Errorf("incorrect difference result %s \\ %s = %s", &s1, &s2, &u)
 									break
 								}
 							}
