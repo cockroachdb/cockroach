@@ -18,7 +18,7 @@ option go_package = "diagnosticspb";
 
 import "gogoproto/gogo.proto";
 import "roachpb/app_stats.proto";
-import "sql/sqlbase/structured.proto";
+import "sql/sqlbase/sqlkv_structured.proto";
 
 message DiagnosticReport {
   NodeInfo node = 1 [(gogoproto.nullable) = false];
