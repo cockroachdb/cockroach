@@ -529,6 +529,7 @@ func (u *sqlSymUnion) scrubOption() tree.ScrubOption {
 %type <tree.Statement> alter_table_stmt
 %type <tree.Statement> alter_index_stmt
 %type <tree.Statement> alter_view_stmt
+%type <tree.Statement> alter_sequence_stmt
 %type <tree.Statement> alter_database_stmt
 %type <tree.Statement> alter_user_stmt
 %type <tree.Statement> alter_range_stmt
@@ -560,6 +561,10 @@ func (u *sqlSymUnion) scrubOption() tree.ScrubOption {
 
 // ALTER VIEW
 %type <tree.Statement> alter_rename_view_stmt
+
+// ALTER SEQUENCE
+%type <tree.Statement> alter_rename_sequence_stmt
+%type <tree.Statement> alter_sequence_options_stmt
 
 %type <tree.Statement> backup_stmt
 %type <tree.Statement> begin_stmt
@@ -597,6 +602,7 @@ func (u *sqlSymUnion) scrubOption() tree.ScrubOption {
 %type <tree.Statement> drop_table_stmt
 %type <tree.Statement> drop_user_stmt
 %type <tree.Statement> drop_view_stmt
+%type <tree.Statement> drop_sequence_stmt
 
 %type <tree.Statement> explain_stmt
 %type <tree.Statement> prepare_stmt
@@ -1004,7 +1010,7 @@ stmt:
 
 // %Help: ALTER
 // %Category: Group
-// %Text: ALTER TABLE, ALTER INDEX, ALTER VIEW, ALTER DATABASE, ALTER USER
+// %Text: ALTER TABLE, ALTER INDEX, ALTER VIEW, ALTER SEQUENCE, ALTER DATABASE, ALTER USER
 alter_stmt:
   alter_ddl_stmt      // help texts in sub-rule
 | alter_user_stmt     // EXTEND WITH HELP: ALTER USER
@@ -1014,6 +1020,7 @@ alter_ddl_stmt:
   alter_table_stmt    // EXTEND WITH HELP: ALTER TABLE
 | alter_index_stmt    // EXTEND WITH HELP: ALTER INDEX
 | alter_view_stmt     // EXTEND WITH HELP: ALTER VIEW
+| alter_sequence_stmt // EXTEND WITH HELP: ALTER SEQUENCE
 | alter_database_stmt // EXTEND WITH HELP: ALTER DATABASE
 | alter_range_stmt
 
@@ -1063,6 +1070,31 @@ alter_view_stmt:
 // ALTER VIEW has its error help token here because the ALTER VIEW
 // prefix is spread over multiple non-terminals.
 | ALTER VIEW error // SHOW HELP: ALTER VIEW
+
+// %Help: ALTER SEQUENCE - change the definition of a sequence
+// %Category: DDL
+// %Text:
+// ALTER SEQUENCE [IF EXISTS] <name>
+//   [INCREMENT <increment>]
+//   [MINVALUE <minvalue> | NO MINVALUE]
+//   [MAXVALUE <maxvalue> | NO MAXVALUE]
+//   [START <start>]
+//   [[NO] CYCLE]
+// ALTER SEQUENCE [IF EXISTS] <name> RENAME TO <newname>
+alter_sequence_stmt:
+  alter_rename_sequence_stmt
+| alter_sequence_options_stmt
+| ALTER SEQUENCE error // SHOW HELP: ALTER SEQUENCE
+
+alter_sequence_options_stmt:
+  ALTER SEQUENCE relation_expr sequence_option_list
+  {
+    $$.val = &tree.AlterSequence{Name: $3.normalizableTableName(), Options: $4.seqOpts(), IfExists: false}
+  }
+| ALTER SEQUENCE IF EXISTS relation_expr sequence_option_list
+  {
+    $$.val = &tree.AlterSequence{Name: $5.normalizableTableName(), Options: $6.seqOpts(), IfExists: true}
+  }
 
 // %Help: ALTER USER - change user properties
 // %Category: Priv
@@ -1615,7 +1647,7 @@ discard_stmt:
 
 // %Help: DROP
 // %Category: Group
-// %Text: DROP DATABASE, DROP INDEX, DROP TABLE, DROP VIEW, DROP USER
+// %Text: DROP DATABASE, DROP INDEX, DROP TABLE, DROP VIEW, DROP SEQUENCE, DROP USER
 drop_stmt:
   drop_ddl_stmt      // help texts in sub-rule
 | drop_user_stmt     // EXTEND WITH HELP: DROP USER
@@ -1626,6 +1658,7 @@ drop_ddl_stmt:
 | drop_index_stmt    // EXTEND WITH HELP: DROP INDEX
 | drop_table_stmt    // EXTEND WITH HELP: DROP TABLE
 | drop_view_stmt     // EXTEND WITH HELP: DROP VIEW
+| drop_sequence_stmt // EXTEND WITH HELP: DROP SEQUENCE
 
 // %Help: DROP VIEW - remove a view
 // %Category: DDL
@@ -1641,6 +1674,21 @@ drop_view_stmt:
     $$.val = &tree.DropView{Names: $5.tableNameReferences(), IfExists: true, DropBehavior: $6.dropBehavior()}
   }
 | DROP VIEW error // SHOW HELP: DROP VIEW
+
+// %Help: DROP SEQUENCE - remove a sequence
+// %Category: DDL
+// %Text: DROP SEQUENCE [IF EXISTS] <sequenceName> [, ...] [CASCADE | RESTRICT]
+// %SeeAlso: DROP
+drop_sequence_stmt:
+  DROP SEQUENCE table_name_list opt_drop_behavior
+  {
+    $$.val = &tree.DropSequence{Names: $3.tableNameReferences(), IfExists: false, DropBehavior: $4.dropBehavior()}
+  }
+| DROP SEQUENCE IF EXISTS table_name_list opt_drop_behavior
+  {
+    $$.val = &tree.DropSequence{Names: $5.tableNameReferences(), IfExists: true, DropBehavior: $6.dropBehavior()}
+  }
+| DROP SEQUENCE error // SHOW HELP: DROP VIEW
 
 // %Help: DROP TABLE - remove a table
 // %Category: DDL
@@ -3205,14 +3253,14 @@ create_sequence_stmt:
     $$.val = node
   }
 | CREATE SEQUENCE IF NOT EXISTS any_name opt_sequence_option_list
-	{
-		node := &tree.CreateSequence{
-			Name: $6.normalizableTableName(),
-			Options: $7.seqOpts(),
-			IfNotExists: true,
-		}
-		$$.val = node
-	}
+  {
+    node := &tree.CreateSequence{
+      Name: $6.normalizableTableName(),
+      Options: $7.seqOpts(),
+      IfNotExists: true,
+    }
+    $$.val = node
+  }
 | CREATE SEQUENCE error // SHOW HELP: CREATE SEQUENCE
 
 opt_sequence_option_list:
@@ -3431,6 +3479,16 @@ alter_rename_view_stmt:
 | ALTER VIEW IF EXISTS relation_expr RENAME TO qualified_name
   {
     $$.val = &tree.RenameTable{Name: $5.normalizableTableName(), NewName: $8.normalizableTableName(), IfExists: true, IsView: true}
+  }
+
+alter_rename_sequence_stmt:
+  ALTER SEQUENCE relation_expr RENAME TO qualified_name
+  {
+    $$.val = &tree.RenameTable{Name: $3.normalizableTableName(), NewName: $6.normalizableTableName(), IfExists: false, IsSequence: true}
+  }
+| ALTER SEQUENCE IF EXISTS relation_expr RENAME TO qualified_name
+  {
+    $$.val = &tree.RenameTable{Name: $5.normalizableTableName(), NewName: $8.normalizableTableName(), IfExists: true, IsSequence: true}
   }
 
 alter_rename_index_stmt:

@@ -1,0 +1,24 @@
+# LogicTest: default parallel-stmts distsql
+
+# see also file `sequences`
+
+statement ok
+CREATE SEQUENCE foo
+
+query I
+SELECT nextval('foo')
+----
+1
+
+query I
+SELECT nextval('foo')
+----
+2
+
+statement ok
+ALTER SEQUENCE foo INCREMENT BY 5
+
+query I
+SELECT nextval('foo')
+----
+7

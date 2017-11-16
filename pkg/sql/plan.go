@@ -143,11 +143,13 @@ type planNodeFastPath interface {
 }
 
 var _ planNode = &alterTableNode{}
+var _ planNode = &alterSequenceNode{}
 var _ planNode = &copyNode{}
 var _ planNode = &createDatabaseNode{}
 var _ planNode = &createIndexNode{}
 var _ planNode = &createTableNode{}
 var _ planNode = &createViewNode{}
+var _ planNode = &createSequenceNode{}
 var _ planNode = &delayedNode{}
 var _ planNode = &deleteNode{}
 var _ planNode = &distinctNode{}
@@ -155,6 +157,7 @@ var _ planNode = &dropDatabaseNode{}
 var _ planNode = &dropIndexNode{}
 var _ planNode = &dropTableNode{}
 var _ planNode = &dropViewNode{}
+var _ planNode = &dropSequenceNode{}
 var _ planNode = &zeroNode{}
 var _ planNode = &unaryNode{}
 var _ planNode = &explainDistSQLNode{}
@@ -331,6 +334,8 @@ func (p *planner) newPlan(
 	switch n := stmt.(type) {
 	case *tree.AlterTable:
 		return p.AlterTable(ctx, n)
+	case *tree.AlterSequence:
+		return p.AlterSequence(ctx, n)
 	case *tree.AlterUserSetPassword:
 		return p.AlterUserSetPassword(ctx, n)
 	case *tree.BeginTransaction:
@@ -371,6 +376,8 @@ func (p *planner) newPlan(
 		return p.DropTable(ctx, n)
 	case *tree.DropView:
 		return p.DropView(ctx, n)
+	case *tree.DropSequence:
+		return p.DropSequence(ctx, n)
 	case *tree.DropUser:
 		return p.DropUser(ctx, n)
 	case *tree.Execute:

@@ -122,6 +122,26 @@ func (node *DropView) Format(buf *bytes.Buffer, f FmtFlags) {
 	}
 }
 
+// DropSequence represents a DROP SEQUENCE statement.
+type DropSequence struct {
+	Names        TableNameReferences
+	IfExists     bool
+	DropBehavior DropBehavior
+}
+
+// Format implements the NodeFormatter interface.
+func (node *DropSequence) Format(buf *bytes.Buffer, f FmtFlags) {
+	buf.WriteString("DROP SEQUENCE ")
+	if node.IfExists {
+		buf.WriteString("IF EXISTS ")
+	}
+	FormatNode(buf, f, node.Names)
+	if node.DropBehavior != DropDefault {
+		buf.WriteByte(' ')
+		buf.WriteString(node.DropBehavior.String())
+	}
+}
+
 // DropUser represents a DROP USER statement
 type DropUser struct {
 	Names    Exprs

@@ -188,6 +188,7 @@ func setNeededColumns(plan planNode, needed []bool) {
 		setNeededColumns(n.rows, allColumns(n.rows))
 
 	case *alterTableNode:
+	case *alterSequenceNode:
 	case *alterUserSetPasswordNode:
 	case *cancelQueryNode:
 	case *controlJobNode:
@@ -202,6 +203,7 @@ func setNeededColumns(plan planNode, needed []bool) {
 	case *dropIndexNode:
 	case *dropTableNode:
 	case *dropViewNode:
+	case *dropSequenceNode:
 	case *dropUserNode:
 	case *zeroNode:
 	case *unaryNode:

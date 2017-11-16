@@ -164,6 +164,7 @@ func applyLimit(plan planNode, numRows int64, soft bool) {
 
 	case *valuesNode:
 	case *alterTableNode:
+	case *alterSequenceNode:
 	case *alterUserSetPasswordNode:
 	case *cancelQueryNode:
 	case *scrubNode:
@@ -178,6 +179,7 @@ func applyLimit(plan planNode, numRows int64, soft bool) {
 	case *dropIndexNode:
 	case *dropTableNode:
 	case *dropViewNode:
+	case *dropSequenceNode:
 	case *dropUserNode:
 	case *zeroNode:
 	case *unaryNode:
