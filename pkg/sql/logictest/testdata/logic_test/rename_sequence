@@ -17,3 +17,14 @@ ALTER SEQUENCE IF EXISTS renamed_alter_test RENAME TO renamed_again_alter_test
 
 statement ok
 DROP SEQUENCE renamed_again_alter_test
+
+# You can't rename a sequence with ALTER TABLE or ALTER VIEW.
+
+statement OK
+CREATE SEQUENCE foo
+
+statement error pgcode 42809 "foo" is not a table
+ALTER TABLE foo RENAME TO bar
+
+statement error pgcode 42809 "foo" is not a view
+ALTER VIEW foo RENAME TO bar
