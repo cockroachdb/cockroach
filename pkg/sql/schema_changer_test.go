@@ -39,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -413,6 +414,10 @@ CREATE INDEX foo ON t.test (v)
 		indexQuery := fmt.Sprintf(`SELECT v FROM t.test@foo%d`, i)
 		mTest.CheckQueryResults(t, indexQuery, [][]string{{"b"}, {"d"}})
 	}
+
+	if err := sqlutils.RunScrub(t, sqlDB, "t", "test"); err != nil {
+		t.Fatal(err)
+	}
 }
 
 // checkTableKeyCount returns the number of KVs in the DB, the multiple should be the
@@ -518,6 +523,9 @@ func runSchemaChangeWithOperations(
 	if err := checkTableKeyCount(ctx, kvDB, keyMultiple, maxValue+numInserts); err != nil {
 		t.Fatal(err)
 	}
+	if err := sqlutils.RunScrub(t, sqlDB, "t", "test"); err != nil {
+		t.Fatal(err)
+	}
 
 	// Delete the rows inserted.
 	for i := 0; i < numInserts; i++ {
@@ -617,6 +625,9 @@ CREATE UNIQUE INDEX vidx ON t.test (v);
 	// number of keys == 2 * number of rows; 1 column family and 1 index entry
 	// for each row.
 	if err := checkTableKeyCount(ctx, kvDB, 2, maxValue); err != nil {
+		t.Fatal(err)
+	}
+	if err := sqlutils.RunScrub(t, sqlDB, "t", "test"); err != nil {
 		t.Fatal(err)
 	}
 
@@ -776,6 +787,9 @@ CREATE UNIQUE INDEX vidx ON t.test (v);
 	// number of keys == 2 * number of rows; 1 column family and 1 index entry
 	// for each row.
 	if err := checkTableKeyCount(ctx, kvDB, 2, maxValue); err != nil {
+		t.Fatal(err)
+	}
+	if err := sqlutils.RunScrub(t, sqlDB, "t", "test"); err != nil {
 		t.Fatal(err)
 	}
 
@@ -1095,6 +1109,10 @@ COMMIT;
 			if err := checkTableKeyCount(
 				ctx, kvDB, testCase.expectedNumKeysPerRow, maxValue,
 			); err != nil {
+				t.Fatal(err)
+			}
+
+			if err := sqlutils.RunScrub(t, sqlDB, "t", "test"); err != nil {
 				t.Fatal(err)
 			}
 		})
@@ -1503,6 +1521,10 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 		t.Fatal(err)
 	}
 
+	if err := sqlutils.RunScrub(t, sqlDB, "t", "test"); err != nil {
+		t.Fatal(err)
+	}
+
 	// Enable async schema change processing to ensure that it cleans up the
 	// above garbage left behind.
 	atomic.StoreUint32(&enableAsyncSchemaChanges, 1)
@@ -1707,6 +1729,10 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 	if err := checkTableKeyCount(ctx, kvDB, 2, maxValue); err != nil {
 		t.Fatal(err)
 	}
+
+	if err := sqlutils.RunScrub(t, sqlDB, "t", "test"); err != nil {
+		t.Fatal(err)
+	}
 }
 
 // This test checks backward compatibility with old data that contains
@@ -1783,6 +1809,10 @@ CREATE TABLE t.test (
 	const setKey = 5
 	const setVal = maxValue - setKey
 	if _, err := sqlDB.Exec(`UPDATE t.test SET v = $1 WHERE k = $2`, setVal, setKey); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := sqlutils.RunScrub(t, sqlDB, "t", "test"); err != nil {
 		t.Fatal(err)
 	}
 
@@ -1874,6 +1904,10 @@ CREATE TABLE t.test (
 
 	close(continueBackfillNotification)
 	wg.Wait()
+
+	if err := sqlutils.RunScrub(t, sqlDB, "t", "test"); err != nil {
+		t.Fatal(err)
+	}
 }
 
 // Test an UPDATE using a primary and a secondary index in the middle
@@ -1941,6 +1975,10 @@ INSERT INTO t.test (k, v, length) VALUES (0, 1, 1);
 	close(continueBackfillNotification)
 
 	wg.Wait()
+
+	if err := sqlutils.RunScrub(t, sqlDB, "t", "test"); err != nil {
+		t.Fatal(err)
+	}
 }
 
 // Test that a schema change backfill that completes on a
@@ -2021,6 +2059,10 @@ func TestBackfillCompletesOnChunkBoundary(t *testing.T) {
 			if err := checkTableKeyCount(ctx, kvDB, tc.numKeysPerRow, maxValue); err != nil {
 				t.Fatal(err)
 			}
+
+			if err := sqlutils.RunScrub(t, sqlDB, "t", "test"); err != nil {
+				t.Fatal(err)
+			}
 		})
 	}
 }
@@ -2094,6 +2136,10 @@ INSERT INTO t.kv VALUES ('a', 'b');
 					t.Fatal(err)
 				}
 				if err := tx.Commit(); err != nil {
+					t.Fatal(err)
+				}
+
+				if err := sqlutils.RunScrub(t, sqlDB, "t", "test"); err != nil {
 					t.Fatal(err)
 				}
 			}
@@ -2205,6 +2251,10 @@ CREATE TABLE d.t (
 				t.Error(err)
 			} else if count != 1 {
 				t.Errorf("expected one row but read %d", count)
+			}
+
+			if err := sqlutils.RunScrub(t, sqlDB, "t", "test"); err != nil {
+				t.Fatal(err)
 			}
 		}
 	}
@@ -2332,6 +2382,9 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 	if err := checkTableKeyCount(ctx, kvDB, 1, maxValue); err != nil {
 		t.Fatal(err)
 	}
+	if err := sqlutils.RunScrub(t, sqlDB, "t", "test"); err != nil {
+		t.Fatal(err)
+	}
 
 	// Do not execute the first schema change so that the second schema
 	// change gets queued up behind it. The second schema change will be
@@ -2372,6 +2425,17 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 	if err := checkTableKeyCount(ctx, kvDB, 3, maxValue); err != nil {
 		t.Fatal(err)
 	}
+
+	// The notify schema change channel must be nil-ed out, or else
+	// running scrub will cause it to trigger again on an already closed
+	// channel.
+	// FIXME(joey): It seems odd that we need to do this. As far as I
+	// know, the knob is getting run because a new transaction is make
+	// when running the following statement. Does this seem correct?
+	notifySchemaChange = nil
+	if err := sqlutils.RunScrub(t, sqlDB, "t", "test"); err != nil {
+		t.Fatal(err)
+	}
 }
 
 // Test that a table TRUNCATE leaves the database in the correct state
@@ -2409,6 +2473,9 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT, pi DECIMAL DEFAULT (DECIMAL '3.14
 	if err := checkTableKeyCount(ctx, kvDB, 1, maxValue); err != nil {
 		t.Fatal(err)
 	}
+	if err := sqlutils.RunScrub(t, sqlDB, "t", "test"); err != nil {
+		t.Fatal(err)
+	}
 
 	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "test")
 
@@ -2432,6 +2499,9 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT, pi DECIMAL DEFAULT (DECIMAL '3.14
 
 	// Check that SQL thinks the table is empty.
 	if err := checkTableKeyCount(ctx, kvDB, 0, 0); err != nil {
+		t.Fatal(err)
+	}
+	if err := sqlutils.RunScrub(t, sqlDB, "t", "test"); err != nil {
 		t.Fatal(err)
 	}
 
@@ -2504,6 +2574,9 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT, pi DECIMAL REFERENCES t.pi (d) DE
 	if err := checkTableKeyCount(ctx, kvDB, 2, maxValue); err != nil {
 		t.Fatal(err)
 	}
+	if err := sqlutils.RunScrub(t, sqlDB, "t", "test"); err != nil {
+		t.Fatal(err)
+	}
 
 	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "test")
 
@@ -2536,6 +2609,9 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT, pi DECIMAL REFERENCES t.pi (d) DE
 	}
 
 	if err := checkTableKeyCount(ctx, kvDB, 2, maxValue); err != nil {
+		t.Fatal(err)
+	}
+	if err := sqlutils.RunScrub(t, sqlDB, "t", "test"); err != nil {
 		t.Fatal(err)
 	}
 
