@@ -640,13 +640,11 @@ func TestRangeTransferLease(t *testing.T) {
 
 		// We'd like to verify the timestamp cache's low water mark, but this is
 		// impossible to determine precisely in all cases because it may have
-		// been subsumed by future tscache accesses. However, we know that there
-		// were no tscache accesses since we executed the transfer lease
-		// request, which means that the low water mark will still be equal to
-		// the high water mark. So instead of checking the low water mark, we
-		// make sure that the high water mark is set to the new lease start
-		// time, which is less than the previous lease's expiration time.
-		if highWater := replica1.GetTSCacheHighWater(); highWater != replica1Lease.Start {
+		// been subsumed by future tscache accesses. So instead of checking the
+		// low water mark, we make sure that the high water mark is equal to or
+		// greater than the new lease start time, which is less than the
+		// previous lease's expiration time.
+		if highWater := replica1.GetTSCacheHighWater(); highWater.Less(replica1Lease.Start) {
 			t.Fatalf("expected timestamp cache high water %s, but found %s",
 				replica1Lease.Start, highWater)
 		}
