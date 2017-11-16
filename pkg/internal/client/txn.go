@@ -17,7 +17,6 @@ package client
 import (
 	"fmt"
 
-	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
@@ -1020,17 +1019,6 @@ func (txn *Txn) Send(
 		}
 		if br.Txn != nil && br.Txn.ID != txn.mu.Proto.ID {
 			return nil, roachpb.NewError(&roachpb.TxnPrevAttemptError{})
-		}
-		if len(br.CollectedSpans) != 0 {
-			span := opentracing.SpanFromContext(ctx)
-			if span == nil {
-				return nil, roachpb.NewErrorf(
-					"trying to ingest remote spans but there is no recording span set up",
-				)
-			}
-			if err := tracing.ImportRemoteSpans(span, br.CollectedSpans); err != nil {
-				return nil, roachpb.NewErrorf("error ingesting remote spans: %s", err)
-			}
 		}
 
 		// Only successful requests can carry an updated Txn in their response
