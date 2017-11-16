@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/pkg/errors"
 )
 
 const testCacheSize = 1 << 30 // 1 GB
@@ -567,6 +568,44 @@ func BenchmarkRocksDBSstFileReader(b *testing.B) {
 		if count >= b.N {
 			break
 		}
+	}
+}
+
+// TestRocksDBErrorSafeMessage verifies that RocksDB errors have a chance of
+// being reported safely.
+func TestRocksDBErrorSafeMessage(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	dir, dirCleanup := testutils.TempDir(t)
+	defer dirCleanup()
+
+	open := func() (*RocksDB, error) {
+		return NewRocksDB(
+			RocksDBConfig{
+				Settings: cluster.MakeTestingClusterSettings(),
+				Dir:      dir,
+			},
+			RocksDBCache{},
+		)
+	}
+
+	// Provoke a RocksDB error by opening two instances for the same directory.
+	r1, err := open()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer r1.Close()
+	r2, err := open()
+	if err == nil {
+		defer r2.Close()
+		t.Fatal("expected error")
+	}
+	rErr, ok := errors.Cause(err).(*RocksDBError)
+	if !ok {
+		t.Fatalf("unexpected error of cause %T: %s", errors.Cause(err), err)
+	}
+	const exp = "IO error" // from `rocksdb::Status::ToString()`
+	if act := rErr.SafeMessage(); act != exp {
+		t.Fatalf("expected %q, got %q", exp, act)
 	}
 }
 
