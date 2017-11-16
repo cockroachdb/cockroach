@@ -107,6 +107,13 @@ func CompareEncDatumRowForMerge(
 		lIdx := ord.ColIdx
 		rIdx := rightOrdering[i].ColIdx
 		cmp, err := lhs[lIdx].Compare(&lhsTypes[lIdx], da, evalCtx, &rhs[rIdx])
+		// If the datums are both DNull, we need to follow SQL semantics
+		// where they are not equal. This differs from our datum semantics
+		// where they are equal.
+		if lhs[lIdx].Datum == tree.DNull && rhs[rIdx].Datum == tree.DNull {
+			// We can return either -1 or 1, it does not change the behavior.
+			return -1, nil
+		}
 		if err != nil {
 			return 0, err
 		}
