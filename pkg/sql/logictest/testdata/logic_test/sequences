@@ -95,6 +95,22 @@ SELECT nextval('baz')
 ----
 7
 
+# You can create a sequence that goes down.
+
+statement ok
+CREATE SEQUENCE down_test INCREMENT BY -1 START 10
+
+query I
+SELECT nextval('down_test')
+----
+10
+
+query I
+SELECT nextval('down_test')
+----
+9
+
+
 # You can create and use a sequence with special characters.
 
 statement ok

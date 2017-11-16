@@ -3253,14 +3253,14 @@ create_sequence_stmt:
     $$.val = node
   }
 | CREATE SEQUENCE IF NOT EXISTS any_name opt_sequence_option_list
-	{
-		node := &tree.CreateSequence{
-			Name: $6.normalizableTableName(),
-			Options: $7.seqOpts(),
-			IfNotExists: true,
-		}
-		$$.val = node
-	}
+  {
+    node := &tree.CreateSequence{
+      Name: $6.normalizableTableName(),
+      Options: $7.seqOpts(),
+      IfNotExists: true,
+    }
+    $$.val = node
+  }
 | CREATE SEQUENCE error // SHOW HELP: CREATE SEQUENCE
 
 opt_sequence_option_list:
