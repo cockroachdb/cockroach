@@ -818,7 +818,7 @@ func (u *sqlSymUnion) scrubOption() tree.ScrubOption {
 %type <*tree.NumVal> opt_float
 %type <coltypes.T> character const_character
 %type <coltypes.T> character_with_length character_without_length
-%type <coltypes.T> const_datetime const_interval
+%type <coltypes.T> const_datetime const_interval const_json
 %type <coltypes.T> bit const_bit bit_with_length bit_without_length
 %type <coltypes.T> character_base
 %type <coltypes.CastTargetType> postgres_oid
@@ -4770,6 +4770,16 @@ opt_array_bounds:
   }
 | /* EMPTY */ { $$.val = []int32(nil) }
 
+const_json:
+  JSON
+  {
+    $$.val = coltypes.JSON
+  }
+| JSONB
+  {
+    $$.val = coltypes.JSONB
+  }
+
 simple_typename:
   numeric
 | bit
@@ -4777,6 +4787,7 @@ simple_typename:
 | const_datetime
 | const_interval opt_interval // TODO(pmattis): Support opt_interval?
 | const_interval '(' ICONST ')' { return unimplemented(sqllex, "simple_type const_interval") }
+| const_json
 | BLOB
   {
     $$.val = coltypes.Blob
@@ -4788,14 +4799,6 @@ simple_typename:
 | BYTEA
   {
     $$.val = coltypes.Bytea
-  }
-| JSONB
-  {
-    $$.val = coltypes.JSONB
-  }
-| JSON
-  {
-    $$.val = coltypes.JSON
   }
 | TEXT
   {
@@ -4862,6 +4865,7 @@ const_typename:
 | const_bit
 | const_character
 | const_datetime
+| const_json
 
 opt_numeric_modifiers:
   '(' iconst64 ')'

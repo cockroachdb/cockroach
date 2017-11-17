@@ -529,6 +529,8 @@ func TestParse(t *testing.T) {
 		{`SELECT TIMESTAMP WITH TIME ZONE 'foo'`},
 		{`SELECT CHAR 'foo'`},
 
+		{`SELECT JSON 'foo'`},
+
 		{`SELECT '192.168.0.1':::INET`},
 		{`SELECT '192.168.0.1'::INET`},
 
