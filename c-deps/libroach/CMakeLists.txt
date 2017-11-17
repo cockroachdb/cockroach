@@ -27,6 +27,7 @@ add_library(roach
   protos/roachpb/data.pb.cc
   protos/roachpb/internal.pb.cc
   protos/roachpb/metadata.pb.cc
+  protos/storage/preamble.pb.cc
   protos/storage/engine/enginepb/mvcc.pb.cc
   protos/storage/engine/enginepb/mvcc3.pb.cc
   protos/storage/engine/enginepb/rocksdb.pb.cc

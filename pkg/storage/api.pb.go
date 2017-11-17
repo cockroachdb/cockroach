@@ -9,6 +9,7 @@
 		storage/lease_status.proto
 		storage/liveness.proto
 		storage/log.proto
+		storage/preamble.proto
 		storage/raft.proto
 
 	It has these top-level messages:
@@ -18,6 +19,7 @@
 		LeaseStatus
 		Liveness
 		RangeLogEvent
+		Preamble
 		RaftHeartbeat
 		RaftMessageRequest
 		RaftMessageRequestBatch
