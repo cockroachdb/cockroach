@@ -195,8 +195,6 @@ XGO := $(strip $(if $(XGOOS),GOOS=$(XGOOS)) $(if $(XGOARCH),GOARCH=$(XGOARCH)) $
 
 COCKROACH := ./cockroach$(SUFFIX)$(shell $(XGO) env GOEXE)
 
-GOBINDATA_TARGET = $(UI_ROOT)/embedded.go
-
 SQLPARSER_TARGETS = \
 	$(SQLPARSER_ROOT)/sql.go \
 	$(SQLPARSER_ROOT)/helpmap_test.go \
@@ -213,18 +211,22 @@ CPP_PROTOS_TARGET := $(LOCAL_BIN)/.cpp_protobuf_sources
 all: $(COCKROACH)
 
 buildoss: BUILDTARGET = ./pkg/cmd/cockroach-oss
-buildoss: $(C_LIBS_OSS)
+buildoss: $(C_LIBS_OSS) $(UI_ROOT)/distoss/bindata.go
+
+buildshort: BUILDTARGET = ./pkg/cmd/cockroach-short
+buildshort: $(C_LIBS_CCL)
 
 $(COCKROACH) build go-install gotestdashi generate lint lintshort: $(C_LIBS_CCL)
+$(COCKROACH) build go-install generate lint lintshort: $(UI_ROOT)/distccl/bindata.go
 
-$(COCKROACH) build buildoss: BUILDMODE = build -i -o $(COCKROACH)
+$(COCKROACH) build buildoss buildshort: BUILDMODE = build -i -o $(COCKROACH)
 
 BUILDINFO = .buildinfo/tag .buildinfo/rev .buildinfo/basebranch
 
 # The build.utcTime format must remain in sync with TimeFormat in pkg/build/info.go.
-$(COCKROACH) build buildoss go-install gotestdashi generate lint lintshort: \
-	$(CGO_FLAGS_FILES) $(BOOTSTRAP_TARGET) $(GOBINDATA_TARGET) $(SQLPARSER_TARGETS) $(BUILDINFO)
-$(COCKROACH) build buildoss go-install gotestdashi generate lint lintshort: override LINKFLAGS += \
+$(COCKROACH) build buildoss buildshort go-install gotestdashi generate lint lintshort: \
+	$(CGO_FLAGS_FILES) $(BOOTSTRAP_TARGET) $(SQLPARSER_TARGETS) $(BUILDINFO)
+$(COCKROACH) build buildoss buildshort go-install gotestdashi generate lint lintshort: override LINKFLAGS += \
 	-X "github.com/cockroachdb/cockroach/pkg/build.tag=$(shell cat .buildinfo/tag)" \
 	-X "github.com/cockroachdb/cockroach/pkg/build.utcTime=$(shell date -u '+%Y/%m/%d %H:%M:%S')" \
 	-X "github.com/cockroachdb/cockroach/pkg/build.rev=$(shell cat .buildinfo/rev)" \
@@ -234,10 +236,10 @@ $(COCKROACH) build buildoss go-install gotestdashi generate lint lintshort: over
 # from the linker aren't suppressed. The usage of `-v` also shows when
 # dependencies are rebuilt which is useful when switching between
 # normal and race test builds.
-.PHONY: build buildoss install
+.PHONY: build buildoss buildshort install
 build: ## Build the CockroachDB binary.
 buildoss: ## Build the CockroachDB binary without any CCL-licensed code.
-$(COCKROACH) build buildoss go-install:
+$(COCKROACH) build buildoss buildshort go-install:
 	 $(XGO) $(BUILDMODE) -v $(GOFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' $(BUILDTARGET)
 
 .PHONY: install
@@ -342,7 +344,7 @@ dupl: $(BOOTSTRAP_TARGET)
 	       -name '*.go'             \
 	       -not -name '*.pb.go'     \
 	       -not -name '*.pb.gw.go'  \
-	       -not -name 'embedded.go' \
+	       -not -name 'bindata.go' \
 	       -not -name '*_string.go' \
 	       -not -name 'sql.go'      \
 	       -not -name 'irgen.go'    \
@@ -392,9 +394,9 @@ $(ARCHIVE): $(ARCHIVE).tmp
 # instead of scripts/ls-files.sh once Git v2.11 is widely deployed.
 .INTERMEDIATE: $(ARCHIVE).tmp
 $(ARCHIVE).tmp: ARCHIVE_BASE = cockroach-$(shell cat .buildinfo/tag)
-$(ARCHIVE).tmp: $(GOBINDATA_TARGET) $(SQLPARSER_TARGETS) $(BUILDINFO)
+$(ARCHIVE).tmp: $(UI_ROOT)/distoss/bindata.go $(UI_ROOT)/distccl/bindata.go $(SQLPARSER_TARGETS) $(BUILDINFO)
 	scripts/ls-files.sh | $(TAR) -cf $@ -T - $(TAR_XFORM_FLAG),^,$(ARCHIVE_BASE)/src/github.com/cockroachdb/cockroach/, $^
-	$(TAR) -rf $@ $(TAR_XFORM_FLAG),^,$(ARCHIVE_BASE)/src/github.com/cockroachdb/cockroach/, pkg/ui/embedded.go
+	$(TAR) -rf $@ $(TAR_XFORM_FLAG),^,$(ARCHIVE_BASE)/src/github.com/cockroachdb/cockroach/, pkg/ui/distccl/bindata.go pkg/ui/distoss/bindata.go
 	$(TAR) -rf $@ $(TAR_XFORM_FLAG),^,$(ARCHIVE_BASE)/src/github.com/cockroachdb/cockroach/, pkg/sql/lex/keywords.go pkg/sql/lex/reserved_keywords.go pkg/sql/lex/tokens.go
 	$(TAR) -rf $@ $(TAR_XFORM_FLAG),^,$(ARCHIVE_BASE)/src/github.com/cockroachdb/cockroach/, pkg/sql/parser/sql.go pkg/sql/parser/help_messages.go pkg/sql/parser/helpmap_test.go
 	(cd build/archive/contents && $(TAR) -rf ../../../$@ $(TAR_XFORM_FLAG),^,$(ARCHIVE_BASE)/, *)
@@ -511,10 +513,10 @@ WEBPACK_DEV_SERVER := ./node_modules/.bin/webpack-dev-server
 WEBPACK_DASHBOARD  := ./opt/node_modules/.bin/webpack-dashboard
 
 .PHONY: ui-generate
-ui-generate: $(GOBINDATA_TARGET)
+ui-generate: $(UI_ROOT)/distccl/bindata.go
 
 .PHONY: ui-lint
-ui-lint: | $(UI_PROTOS)
+ui-lint: $(UI_PROTOS)
 	$(NODE_RUN) -C $(UI_ROOT) $(STYLINT) -c .stylintrc styl
 	$(NODE_RUN) -C $(UI_ROOT) $(TSLINT) -c tslint.json -p tsconfig.json --type-check
 	@# TODO(benesch): Invoke tslint just once when palantir/tslint#2827 is fixed.
@@ -523,36 +525,42 @@ ui-lint: | $(UI_PROTOS)
 
 # DLLs are Webpack bundles, not Windows shared libraries. See "DLLs for speedy
 # builds" in the UI README for details.
-UI_DLLS := \
-	$(UI_ROOT)/dist/protos.dll.js \
-	$(UI_ROOT)/dist/vendor.dll.js \
-	$(UI_ROOT)/protos-manifest.json \
-	$(UI_ROOT)/vendor-manifest.json
-
-.PHONY: ui-test
-ui-test: $(UI_DLLS)
-	$(NODE_RUN) -C $(UI_ROOT) $(KARMA) start
-
-.PHONY: ui-test-watch
-ui-test-watch: $(UI_DLLS)
-	$(NODE_RUN) -C $(UI_ROOT) $(KARMA) start --no-single-run --auto-watch
+UI_DLLS := $(UI_ROOT)/dist/protos.dll.js $(UI_ROOT)/dist/vendor.dll.js
+UI_MANIFESTS := $(UI_ROOT)/protos-manifest.json $(UI_ROOT)/vendor-manifest.json
 
 # (Ab)use a pattern rule to teach Make that this one command produces two files.
 # Normally, it would run the recipe twice if dist/FOO.js and FOO-manifest.js
-# were both out-of-date.
+# were both out-of-date. [0]
 #
-# See: https://stackoverflow.com/a/3077254/1122351
-$(UI_ROOT)/dist/%.dll.js $(UI_ROOT)/%-manifest.json: $(UI_ROOT)/webpack.%.js | $(UI_PROTOS)
+# XXX: Ideally we'd scope the dependency on $(UI_PROTOS) to the protos DLL, but
+# Make v3.81 has a bug that causes the dependency to be ignored [1]. We're stuck
+# with this workaround until Apple decides to update the version of Make they
+# ship with macOS or we require a newer version of Make. Such a requirement
+# would need to be strictly enforced, as the way this fails is extremely subtle
+# and doesn't present until the web UI is loaded in the browser.
+#
+# [0]: https://stackoverflow.com/a/3077254/1122351
+# [1]: http://savannah.gnu.org/bugs/?19108
+$(UI_ROOT)/dist/%.dll.js $(UI_ROOT)/%-manifest.json: $(UI_ROOT)/webpack.%.js $(YARN_INSTALLED_TARGET) $(UI_PROTOS)
 	$(NODE_RUN) -C $(UI_ROOT) $(WEBPACK) -p --config webpack.$*.js
 
-$(GOBINDATA_TARGET): $(UI_ROOT)/webpack.app.js $(UI_DLLS) $(shell find $(UI_ROOT)/src $(UI_ROOT)/styl)
-	find $(UI_ROOT)/dist -mindepth 1 -not -name '*.dll.js' -delete
-	$(NODE_RUN) -C $(UI_ROOT) $(WEBPACK) --config webpack.app.js
-	go-bindata -nometadata -pkg ui -o $@ -prefix $(UI_ROOT)/dist $(UI_ROOT)/dist/...
-	# Add comment recognized by reviewable.
-	echo '// GENERATED FILE DO NOT EDIT' >> $@
+.PHONY: ui-test
+ui-test: $(UI_DLLS) $(UI_MANIFESTS)
+	$(NODE_RUN) -C $(UI_ROOT) $(KARMA) start
+
+.PHONY: ui-test-watch
+ui-test-watch: $(UI_DLLS) $(UI_MANIFESTS)
+	$(NODE_RUN) -C $(UI_ROOT) $(KARMA) start --no-single-run --auto-watch
+
+$(UI_ROOT)/dist%/bindata.go: $(UI_ROOT)/webpack.%.js $(UI_DLLS) $(UI_MANIFESTS) $(shell find $(UI_ROOT)/src $(UI_ROOT)/styl)
+	@# TODO(benesch): remove references to embedded.go once sufficient time has passed.
+	rm -f $(UI_ROOT)/embedded.go
+	find $(UI_ROOT)/dist$* -mindepth 1 -not -name dist$*.go -delete
+	set -e; for dll in $(notdir $(UI_DLLS)); do ln -s ../dist/$$dll $(UI_ROOT)/dist$*/$$dll; done
+	$(NODE_RUN) -C $(UI_ROOT) $(WEBPACK) --config webpack.$*.js
+	go-bindata -nometadata -pkg dist$* -o $@ -prefix $(UI_ROOT)/dist$* $(UI_ROOT)/dist$*/...
+	$(SED_INPLACE) -f $(UI_ROOT)/process-bindata.sed $@
 	gofmt -s -w $@
-	goimports -w $@
 
 $(UI_ROOT)/yarn.opt.installed:
 	$(NODE_RUN) -C $(UI_ROOT)/opt yarn install
@@ -562,7 +570,7 @@ $(UI_ROOT)/yarn.opt.installed:
 ui-watch: export TARGET := http://localhost:8080
 ui-watch: PORT := 3000
 ui-watch: $(UI_DLLS) $(UI_ROOT)/yarn.opt.installed
-	cd $(UI_ROOT) && $(WEBPACK_DASHBOARD) -- $(WEBPACK_DEV_SERVER) --config webpack.app.js --port $(PORT)
+	cd $(UI_ROOT) && $(WEBPACK_DASHBOARD) -- $(WEBPACK_DEV_SERVER) --config webpack.ccl.js --port $(PORT)
 
 $(SQLPARSER_ROOT)/gen/sql.go.tmp: $(SQLPARSER_ROOT)/gen/sql.y $(BOOTSTRAP_TARGET)
 	set -euo pipefail; \
@@ -659,7 +667,8 @@ clean: clean-c-deps
 .PHONY: maintainer-clean
 maintainer-clean: ## Like clean, but also remove some auto-generated source code.
 maintainer-clean: clean
-	rm -rf $(UI_ROOT)/dist $(UI_ROOT)/node_modules $(UI_DLLS) $(GOBINDATA_TARGET) $(YARN_INSTALLED_TARGET)
+	find $(UI_ROOT)/dist* -mindepth 1 -not -name dist*.go -delete
+	rm -rf $(UI_ROOT)/node_modules $(UI_DLLS) $(YARN_INSTALLED_TARGET)
 	rm -f $(SQLPARSER_TARGETS) $(UI_PROTOS)
 
 .PHONY: unsafe-clean

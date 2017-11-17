@@ -18,7 +18,9 @@
     "target": "es6",
     "baseUrl": ".",
     "paths": {
+      "oss/*": ["*"],
       "*": [
+        "ccl/*",
         "*",
         "node_modules/*"
       ]
