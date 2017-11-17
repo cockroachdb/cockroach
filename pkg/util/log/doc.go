@@ -1,7 +1,5 @@
-// Copyright 2015 Cockroach Labs.
 // Copyright 2013 Google Inc. All Rights Reserved.
-//
-// Go support for leveled logs, analogous to https://code.google.com/p/google-glog/
+// Copyright 2015 Cockroach Labs.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -14,9 +12,8 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-//
-// Original version (c) Google.
-// Author (fork from https://github.com/golang/glog): Tobias Schottdorf
+
+// This code originated in the github.com/golang/glog package.
 
 // Package log implements logging analogous to the Google-internal C++ INFO/ERROR/V setup.
 // It provides functions Info, Warning, Error, Fatal, plus formatting variants such as
