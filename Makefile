@@ -374,8 +374,7 @@ protobuf: ## Regenerate generated code for protobuf definitions.
 # the acceptance tests.
 .PHONY: pre-push
 pre-push: ## Run generate, lint, and test.
-pre-push: generate lint test
-	$(MAKE) -C $(REPO_ROOT)/pkg/ui lint test
+pre-push: generate lint test ui-lint ui-test
 	! git status --porcelain | read || (git status; git --no-pager diff -a 1>&2; exit 1)
 
 # archive builds a source tarball out of this repository. Files in the special
