@@ -39,25 +39,25 @@ function progress {
 
 nemeses=(
     "--nemesis majority-ring"
-    "--nemesis split"
-    "--nemesis start-kill-2"
-    "--nemesis start-stop-2"
-    "--nemesis strobe-skews"
-    "--nemesis subcritical-skews"
-    "--nemesis majority-ring --nemesis2 subcritical-skews"
-    "--nemesis subcritical-skews --nemesis2 start-kill-2"
-    "--nemesis majority-ring --nemesis2 start-kill-2"
-    "--nemesis parts --nemesis2 start-kill-2"
+    #"--nemesis split"
+    #"--nemesis start-kill-2"
+    #"--nemesis start-stop-2"
+    #"--nemesis strobe-skews"
+    #"--nemesis subcritical-skews"
+    #"--nemesis majority-ring --nemesis2 subcritical-skews"
+    #"--nemesis subcritical-skews --nemesis2 start-kill-2"
+    #"--nemesis majority-ring --nemesis2 start-kill-2"
+    #"--nemesis parts --nemesis2 start-kill-2"
 )
 
 tests=(
     "bank"
-    "bank-multitable"
+    #"bank-multitable"
     # The comments test is expected to fail because it requires linearizability.
     #"comments"
-    "g2"
-    "monotonic"
+    #"g2"
+    #"monotonic"
     "register"
-    "sequential"
-    "sets"
+    #"sequential"
+    #"sets"
 )
