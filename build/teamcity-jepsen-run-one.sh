@@ -21,7 +21,7 @@ controller=$(terraform output controller-ip)
 testcmd="cd jepsen/cockroachdb && set -eo pipefail && \
  stdbuf -oL -eL \
  ~/lein run test \
-   --tarball file:///home/ubuntu/cockroach.tgz \
+   --package-url file:///home/ubuntu/cockroach.tgz \
    --username ubuntu \
    --ssh-private-key ~/.ssh/id_rsa \
    --nodes-file ~/nodes \
