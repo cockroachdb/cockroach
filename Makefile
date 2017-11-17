@@ -28,7 +28,7 @@ endif
 
 # Prevent invoking make with a specific test name without a constraining
 # package.
-ifneq "$(filter-out acceptance lint,$(MAKECMDGOALS))" ""
+ifneq "$(filter bench% test% stress%,$(MAKECMDGOALS))" ""
 ifeq "$(PKG)" ""
 $(if $(subst -,,$(TESTS)),$(error TESTS must be specified with PKG (e.g. PKG=./pkg/sql)))
 $(if $(subst -,,$(BENCHES)),$(error BENCHES must be specified with PKG (e.g. PKG=./pkg/sql)))
