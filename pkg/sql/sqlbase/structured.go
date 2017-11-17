@@ -624,7 +624,7 @@ func DatumTypeHasCompositeKeyEncoding(typ types.T) bool {
 // MustBeValueEncoded returns true if columns of the given kind can only be value
 // encoded.
 func MustBeValueEncoded(semanticType ColumnType_SemanticType) bool {
-	return semanticType == ColumnType_ARRAY
+	return semanticType == ColumnType_ARRAY || semanticType == ColumnType_JSON
 }
 
 // HasOldStoredColumns returns whether the index has stored columns in the old
@@ -2274,6 +2274,8 @@ func DatumTypeToColumnSemanticType(ptyp types.T) (ColumnType_SemanticType, error
 		return ColumnType_NULL, nil
 	case types.IntVector:
 		return ColumnType_INT2VECTOR, nil
+	case types.JSON:
+		return ColumnType_JSON, nil
 	default:
 		if ptyp.FamilyEqual(types.FamCollatedString) {
 			return ColumnType_COLLATEDSTRING, nil
@@ -2338,6 +2340,8 @@ func columnSemanticTypeToDatumType(c *ColumnType, k ColumnType_SemanticType) typ
 		return types.UUID
 	case ColumnType_INET:
 		return types.INet
+	case ColumnType_JSON:
+		return types.JSON
 	case ColumnType_COLLATEDSTRING:
 		if c.Locale == nil {
 			panic("locale is required for COLLATEDSTRING")

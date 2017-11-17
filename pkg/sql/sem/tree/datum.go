@@ -2126,8 +2126,11 @@ func (d *DJSON) Min(_ *EvalContext) (Datum, bool) {
 func (*DJSON) AmbiguousFormat() bool { return true }
 
 // Format implements the NodeFormatter interface.
-func (d *DJSON) Format(buf *bytes.Buffer, _ FmtFlags) {
-	d.JSON.Format(buf)
+func (d *DJSON) Format(buf *bytes.Buffer, f FmtFlags) {
+	// TODO(justin): ideally the JSON string encoder should know it needs to
+	// escape things to be inside SQL strings in order to avoid this allocation.
+	s := d.JSON.String()
+	lex.EncodeSQLStringWithFlags(buf, s, f.encodeFlags)
 }
 
 // Size implements the Datum interface.

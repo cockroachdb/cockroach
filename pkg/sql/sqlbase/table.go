@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/ipaddr"
+	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
@@ -125,6 +126,7 @@ func populateTypeAttrs(
 	case *coltypes.TInterval:
 	case *coltypes.TUUID:
 	case *coltypes.TIPAddr:
+	case *coltypes.TJSON:
 	case *coltypes.TString:
 		base.Width = int32(t.N)
 	case *coltypes.TName:
@@ -596,7 +598,6 @@ func EncodeTableKey(b []byte, val tree.Datum, dir encoding.Direction) ([]byte, e
 		return b, nil
 	case *tree.DOid:
 		if dir == encoding.Ascending {
-
 			return encoding.EncodeVarintAscending(b, int64(t.DInt)), nil
 		}
 		return encoding.EncodeVarintDescending(b, int64(t.DInt)), nil
@@ -641,6 +642,12 @@ func EncodeTableValue(
 		return encoding.EncodeUUIDValue(appendTo, uint32(colID), t.UUID), nil
 	case *tree.DIPAddr:
 		return encoding.EncodeIPAddrValue(appendTo, uint32(colID), t.IPAddr), nil
+	case *tree.DJSON:
+		encoded, err := json.EncodeJSON(scratch, t.JSON)
+		if err != nil {
+			return nil, err
+		}
+		return encoding.EncodeJSONValue(appendTo, uint32(colID), encoded), nil
 	case *tree.DArray:
 		a, err := encodeArray(t, scratch)
 		if err != nil {
@@ -961,6 +968,7 @@ type DatumAlloc struct {
 	dintervalAlloc    []tree.DInterval
 	duuidAlloc        []tree.DUuid
 	dipnetAlloc       []tree.DIPAddr
+	djsonAlloc        []tree.DJSON
 	doidAlloc         []tree.DOid
 	scratch           []byte
 	env               tree.CollationEnvironment
@@ -1108,6 +1116,18 @@ func (a *DatumAlloc) NewDIPAddr(v tree.DIPAddr) *tree.DIPAddr {
 	buf := &a.dipnetAlloc
 	if len(*buf) == 0 {
 		*buf = make([]tree.DIPAddr, datumAllocSize)
+	}
+	r := &(*buf)[0]
+	*r = v
+	*buf = (*buf)[1:]
+	return r
+}
+
+// NewDJSON allocates a DJSON.
+func (a *DatumAlloc) NewDJSON(v tree.DJSON) *tree.DJSON {
+	buf := &a.djsonAlloc
+	if len(*buf) == 0 {
+		*buf = make([]tree.DJSON, datumAllocSize)
 	}
 	r := &(*buf)[0]
 	*r = v
@@ -1458,6 +1478,13 @@ func decodeUntaggedDatum(a *DatumAlloc, t types.T, buf []byte) (tree.Datum, []by
 	case types.INet:
 		b, data, err := encoding.DecodeUntaggedIPAddrValue(buf)
 		return a.NewDIPAddr(tree.DIPAddr{IPAddr: data}), b, err
+	case types.JSON:
+		b, data, err := encoding.DecodeUntaggedBytesValue(buf)
+		if err != nil {
+			return nil, b, err
+		}
+		_, j, err := json.DecodeJSON(data)
+		return a.NewDJSON(tree.DJSON{JSON: j}), b, err
 	case types.Oid:
 		b, data, err := encoding.DecodeUntaggedIntValue(buf)
 		return a.NewDOid(tree.MakeDOid(tree.DInt(data))), b, err
@@ -1711,6 +1738,15 @@ func MarshalColumnValue(col ColumnDescriptor, val tree.Datum) (roachpb.Value, er
 	case ColumnType_INET:
 		if v, ok := val.(*tree.DIPAddr); ok {
 			data := v.ToBuffer(nil)
+			r.SetBytes(data)
+			return r, nil
+		}
+	case ColumnType_JSON:
+		if v, ok := val.(*tree.DJSON); ok {
+			data, err := json.EncodeJSON(nil, v.JSON)
+			if err != nil {
+				return r, err
+			}
 			r.SetBytes(data)
 			return r, nil
 		}
