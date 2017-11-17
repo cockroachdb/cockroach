@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
+	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -235,7 +236,7 @@ func testRandomSyntax(
 		t.Skip("enable with '-rsg <duration>'")
 	}
 
-	params, _ := createTestServerParams()
+	params, _ := tests.CreateTestServerParams()
 	params.UseDatabase = "ident"
 	// Use a low memory limit to quickly halt runaway functions.
 	params.SQLMemoryPoolSize = 3 * 1024 * 1024 // 3MB
