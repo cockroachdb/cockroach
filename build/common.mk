@@ -22,16 +22,16 @@ XGO     ?= xgo
 TAR     ?= tar
 
 # Convenience variables for important paths.
-ORG_ROOT       := $(REPO_ROOT)/..
 PKG_ROOT       := $(REPO_ROOT)/pkg
 UI_ROOT        := $(PKG_ROOT)/ui
 SQLPARSER_ROOT := $(PKG_ROOT)/sql/parser
 
 # Ensure we have an unambiguous GOPATH.
-export GOPATH := $(realpath $(ORG_ROOT)/../../..)
-#                                       ^  ^  ^~ GOPATH
-#                                       |  |~ GOPATH/src
-#                                       |~ GOPATH/src/github.com
+export GOPATH := $(realpath ../../../..)
+#                           ^  ^  ^  ^~ GOPATH
+#                           |  |  |~ GOPATH/src
+#                           |  |~ GOPATH/src/github.com
+#                           |~ GOPATH/src/github.com/cockroachdb
 
 # Avoid printing twice if Make restarts (because a Makefile was changed) or is
 # called recursively from another Makefile.
