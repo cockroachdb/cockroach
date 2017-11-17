@@ -198,33 +198,36 @@ func (mrf *MultiRowFetcher) Init(
 			decodedRow:       make([]tree.Datum, len(tableArgs.Cols)),
 		}
 
-		// We produce references to every signature's reference.
-		equivSignatures, err := TableEquivSignatures(table.desc, table.index)
-		if err != nil {
-			return err
-		}
-		for i, sig := range equivSignatures {
-			// We always map the table's equivalence signature (last
-			// 'sig' in 'equivSignatures') to its tableIdx.
-			// This allows us to overwrite previous "ancestor
-			// signatures" (see below).
-			if i == len(equivSignatures)-1 {
-				mrf.allEquivSignatures[string(sig)] = tableIdx
-				break
+		var err error
+		if len(tables) > 1 {
+			// We produce references to every signature's reference.
+			equivSignatures, err := TableEquivSignatures(table.desc, table.index)
+			if err != nil {
+				return err
 			}
-			// Map each table's ancestors' signatures to -1 so
-			// we know during ReadIndexKey if the parsed index
-			// key belongs to ancestor or one of our tables.
-			// We must check if the signature has already been set
-			// since it's possible for a later 'table' to have an
-			// ancestor that is a previous 'table', and we do not
-			// want to overwrite the previous table's tableIdx.
-			if _, exists := mrf.allEquivSignatures[string(sig)]; !exists {
-				mrf.allEquivSignatures[string(sig)] = -1
+			for i, sig := range equivSignatures {
+				// We always map the table's equivalence signature (last
+				// 'sig' in 'equivSignatures') to its tableIdx.
+				// This allows us to overwrite previous "ancestor
+				// signatures" (see below).
+				if i == len(equivSignatures)-1 {
+					mrf.allEquivSignatures[string(sig)] = tableIdx
+					break
+				}
+				// Map each table's ancestors' signatures to -1 so
+				// we know during ReadIndexKey if the parsed index
+				// key belongs to ancestor or one of our tables.
+				// We must check if the signature has already been set
+				// since it's possible for a later 'table' to have an
+				// ancestor that is a previous 'table', and we do not
+				// want to overwrite the previous table's tableIdx.
+				if _, exists := mrf.allEquivSignatures[string(sig)]; !exists {
+					mrf.allEquivSignatures[string(sig)] = -1
+				}
 			}
+			// The last signature is the given table's equivalence signature.
+			table.equivSignature = equivSignatures[len(equivSignatures)-1]
 		}
-		// The last signature is the given table's equivalence signature.
-		table.equivSignature = equivSignatures[len(equivSignatures)-1]
 
 		// Scan through the entire columns map to see which columns are
 		// required.
