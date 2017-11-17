@@ -21,6 +21,7 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
@@ -28,7 +29,7 @@ import (
 func TestTableRefs(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	params, _ := createTestServerParams()
+	params, _ := tests.CreateTestServerParams()
 	s, db, kvDB := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.TODO())
 

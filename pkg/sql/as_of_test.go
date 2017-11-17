@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -36,7 +37,7 @@ import (
 func TestAsOfTime(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	params, _ := createTestServerParams()
+	params, _ := tests.CreateTestServerParams()
 	params.Knobs.SQLSchemaChanger = &sql.SchemaChangerTestingKnobs{
 		AsyncExecNotification: asyncSchemaChangerDisabled,
 	}
@@ -194,7 +195,7 @@ func TestAsOfTime(t *testing.T) {
 func TestAsOfRetry(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	params, cmdFilters := createTestServerParams()
+	params, cmdFilters := tests.CreateTestServerParams()
 	// Disable one phase commits because they cannot be restarted.
 	params.Knobs.Store.(*storage.StoreTestingKnobs).DisableOptional1PC = true
 	s, sqlDB, _ := serverutils.StartServer(t, params)

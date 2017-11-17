@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -83,7 +84,7 @@ func descExists(sqlDB *gosql.DB, exists bool, id sqlbase.ID) error {
 
 func TestDropDatabase(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	params, _ := createTestServerParams()
+	params, _ := tests.CreateTestServerParams()
 	params.Knobs = base.TestingKnobs{
 		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
 			// Disable the asynchronous path so that the table data left
@@ -208,7 +209,7 @@ INSERT INTO t.kv VALUES ('c', 'e'), ('a', 'c'), ('b', 'd');
 // Test that a dropped database's data gets deleted properly.
 func TestDropDatabaseDeleteData(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	params, _ := createTestServerParams()
+	params, _ := tests.CreateTestServerParams()
 	params.Knobs = base.TestingKnobs{
 		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
 			// Turn on quick garbage collection.
@@ -314,7 +315,7 @@ INSERT INTO t.kv VALUES ('c', 'e'), ('a', 'c'), ('b', 'd');
 // during the time the underlying tables are still being deleted.
 func TestShowTablesAfterRecreateDatabase(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	params, _ := createTestServerParams()
+	params, _ := tests.CreateTestServerParams()
 	// Turn off the application of schema changes so that tables do not
 	// get completely dropped.
 	params.Knobs = base.TestingKnobs{
@@ -392,7 +393,7 @@ CREATE INDEX foo on t.kv (v);
 func TestDropIndex(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	const chunkSize = 200
-	params, _ := createTestServerParams()
+	params, _ := tests.CreateTestServerParams()
 	params.Knobs = base.TestingKnobs{
 		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
 			BackfillChunkSize: chunkSize,
@@ -467,7 +468,7 @@ CREATE INDEX intlv_idx ON intlv (k, n) INTERLEAVE IN PARENT kv (k);
 func TestDropIndexInterleaved(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	const chunkSize = 200
-	params, _ := createTestServerParams()
+	params, _ := tests.CreateTestServerParams()
 	params.Knobs = base.TestingKnobs{
 		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
 			BackfillChunkSize: chunkSize,
@@ -500,7 +501,7 @@ func TestDropIndexInterleaved(t *testing.T) {
 // via the synchronous path.
 func TestDropTable(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	params, _ := createTestServerParams()
+	params, _ := tests.CreateTestServerParams()
 	params.Knobs = base.TestingKnobs{
 		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
 			// Disable the asynchronous path so that the table data left
@@ -585,7 +586,7 @@ func TestDropTable(t *testing.T) {
 // Test that after a DROP TABLE the table eventually gets deleted.
 func TestDropTableDeleteData(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	params, _ := createTestServerParams()
+	params, _ := tests.CreateTestServerParams()
 	params.Knobs = base.TestingKnobs{
 		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
 			// Turn on quick garbage collection.
@@ -646,7 +647,7 @@ func TestDropTableDeleteData(t *testing.T) {
 // another table.
 func TestDropTableInterleavedDeleteData(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	params, _ := createTestServerParams()
+	params, _ := tests.CreateTestServerParams()
 	params.Knobs = base.TestingKnobs{
 		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
 			// Turn on quick garbage collection.
@@ -685,7 +686,7 @@ func TestDropTableInterleavedDeleteData(t *testing.T) {
 
 func TestDropTableInTxn(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	params, _ := createTestServerParams()
+	params, _ := tests.CreateTestServerParams()
 	s, sqlDB, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.TODO())
 
@@ -721,7 +722,7 @@ CREATE TABLE t.kv (k CHAR PRIMARY KEY, v CHAR);
 
 func TestDropAndCreateTable(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	params, _ := createTestServerParams()
+	params, _ := tests.CreateTestServerParams()
 	params.UseDatabase = "test"
 	s, db, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.TODO())
@@ -747,7 +748,7 @@ func TestDropAndCreateTable(t *testing.T) {
 func TestCommandsWhileTableBeingDropped(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	params, _ := createTestServerParams()
+	params, _ := tests.CreateTestServerParams()
 	// Block schema changers so that the table we're about to DROP is not
 	// actually dropped; it will be left in the "deleted" state.
 	params.Knobs = base.TestingKnobs{

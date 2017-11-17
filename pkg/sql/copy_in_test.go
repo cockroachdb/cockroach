@@ -27,6 +27,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/timeofday"
@@ -36,7 +37,7 @@ import (
 func TestCopyNullInfNaN(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	params, _ := createTestServerParams()
+	params, _ := tests.CreateTestServerParams()
 	s, db, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.TODO())
 
@@ -130,7 +131,7 @@ func TestCopyNullInfNaN(t *testing.T) {
 func TestCopyRandom(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	params, _ := createTestServerParams()
+	params, _ := tests.CreateTestServerParams()
 	s, db, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.TODO())
 
@@ -256,7 +257,7 @@ func TestCopyRandom(t *testing.T) {
 func TestCopyError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	params, _ := createTestServerParams()
+	params, _ := tests.CreateTestServerParams()
 	s, db, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.TODO())
 
@@ -311,7 +312,7 @@ func TestCopyOne(t *testing.T) {
 
 	t.Skip("#18352")
 
-	params, _ := createTestServerParams()
+	params, _ := tests.CreateTestServerParams()
 	s, db, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.TODO())
 
@@ -345,7 +346,7 @@ func TestCopyInProgress(t *testing.T) {
 
 	t.Skip("#18352")
 
-	params, _ := createTestServerParams()
+	params, _ := tests.CreateTestServerParams()
 	s, db, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.TODO())
 
@@ -378,7 +379,7 @@ func TestCopyInProgress(t *testing.T) {
 func TestCopyTransaction(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	params, _ := createTestServerParams()
+	params, _ := tests.CreateTestServerParams()
 	s, db, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.TODO())
 

@@ -1,4 +1,4 @@
-// Copyright 2015 The Cockroach Authors.
+// Copyright 2017 The Cockroach Authors.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,7 +12,7 @@
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
-package sql_test
+package tests_test
 
 import (
 	"os"
@@ -26,7 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 )
 
-//go:generate ../util/leaktest/add-leaktest.sh *_test.go
+//go:generate ../../util/leaktest/add-leaktest.sh *_test.go
 
 func TestMain(m *testing.M) {
 	security.SetAssetLoader(securitytest.EmbeddedAssets)
