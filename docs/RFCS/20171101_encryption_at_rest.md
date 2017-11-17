@@ -34,8 +34,7 @@ Table of Contents
          * [Enabling the preamble format](#enabling-the-preamble-format)
          * [Key levels](#key-levels)
          * [Key status](#key-status)
-         * [Store keys file format](#store-keys-file-format)
-         * [Loading store keys](#loading-store-keys)
+         * [Store keys files](#store-keys-files)
          * [Rotating store keys](#rotating-store-keys)
          * [Data keys file format](#data-keys-file-format)
          * [Loading data keys](#loading-data-keys)
@@ -45,9 +44,12 @@ Table of Contents
          * [Other uses of local disk](#other-uses-of-local-disk)
          * [Enterprise enforcement](#enterprise-enforcement)
       * [Drawbacks](#drawbacks)
+         * [Directs us towards rocksdb-level encryption](#directs-us-towards-rocksdb-level-encryption)
+         * [Cannot migrate to/from preamble data format](#cannot-migrate-tofrom-preamble-data-format)
+         * [Lack of correctness testing of rocksdb encryption layer](#lack-of-correctness-testing-of-rocksdb-encryption-layer)
+         * [Complexity of configuration and monitoring](#complexity-of-configuration-and-monitoring)
       * [Rationale and Alternatives](#rationale-and-alternatives)
       * [Unresolved questions](#unresolved-questions)
-         * [Nail down store keys file format](#nail-down-store-keys-file-format)
          * [Non-live rocksdb files](#non-live-rocksdb-files)
          * [Encryption flags](#encryption-flags)
          * [Instruction set support](#instruction-set-support)
@@ -189,6 +191,13 @@ This imposes two limits:
 
 These limits should be sufficient for our needs.
 
+### Safety of symmetric key hashes
+
+Given a reasonably safe hashing algorithm, exposing the hash of the store keys should not be an issue.
+
+Indeed, finding collisions in `sha256` is not currently easier than cracking `aes128`. Should better collision
+methods be found, this is still not the key itself.
+
 ### Memory safety
 
 We need to provide safety for the keys while held in memory.
@@ -249,43 +258,14 @@ The store key is a symmetric key provided by the user. It has the following prop
 * available only to the cockroach process on the node
 * not stored on the same disk as the cockroach data
 
-Each store key on a store must have a unique ID and a creation timestamp associated.
-Store keys are stored in a plaintext file with one line per key:
+Store keys are stored in raw format in files (one file per key).
+eg: to generate a 128-bit key: `openssl rand 16`
 
-A user can create a key as follows:
-1. key ID: 1 higher than the current highest key ID on this store. First key has ID 1.
-1. cipher: the cipher used. Choice of `PLAIN`, `AES128`, `AES192`, `AES256`.
-1. timestamp: the current time in seconds since epoch (eg: `date +%s`)
-1. key: a key in hexadecimal format (eg: `openssl rand -hex 32`)
+Specifying store keys is done through the `--enterprise-encryption` flag. There are two fields in this flag:
+* `key`: path to the active store key, or `plain` for plaintext (default).
+* `old_key`: path to the previous store key, or `plain` for plaintext (default).
 
-The timestamp should be approximately the time at which we start using the key. This value
-is used to compute and report the age of a key.
-
-The cipher is used to encrypt the list of data keys. It is also the same cipher used to encrypt
-the data files (eg: if you use a 128 bit store key, data keys will be 128 bits).
-
-An example file with the first key for this store would look like:
-```
-1;1509649195;AES256;7acff104117d59ae1a6f997a7cd0d2f348b038d09a47ae8cbaaa6288999fef10
-```
-
-After adding additional keys, the file may look like:
-```
-1;1509649195;AES256;7acff104117d59ae1a6f997a7cd0d2f348b038d09a47ae8cbaaa6288999fef10
-2;1509767342;AES128;a4b5a9160208a6af8477de25b10809a3
-3;1510289457;AES256;9238e4168d41a8e862ad74df5c3a5ca39884c3b080863a8d337990a05bde3bb7
-4;1512412094;PLAIN;
-```
-
-This sample file shows the progression of keys and ciphers used:
-1. AES256 encryption
-1. AES128 encryption
-1. AES256 encryption
-1. No encryption (this effectively removes encryption from the entire data directory)
-
-We will call this file `cockroach.keys` and make it available only to the cockroach user.
-
-The store key with highest ID is the active store key.
+When a new `key` is specified, we must tell cockroach what the previous active key was through `old_key`.
 
 ### Data keys
 
@@ -315,7 +295,7 @@ The need for encryption entails a few recommended changes in production configur
 #### Flag changes for the cockroach binary
 
 * `format=preamble`: field in the `--store` flag. Enable the preamble format on a specific store. This cannot be changed once the store has been created. Cannot be applied to in-memory stores. Default value: `classic`.
-* `--enterprise-encryption=path=<path to store>,keys=<key path>,rotation_period=<duration>`: enables encryption a given store and specifies the store keys file (required) and data keys rotation period (optional, default one week).
+* `--enterprise-encryption=path=<path to store>,key=<path to key file>,old_key=<path to old key file>,rotation_period=<duration>`: enables encryption a given store, specifies the store keys files, and data keys rotation period (optional, default one week).
 The flag can be specified multiple times, once for each store.
 
 The encryption flags can specify different encryption states for different stores (eg: one encrypted one plain,
@@ -337,7 +317,7 @@ ERROR: cockroach data directory using classic format, cannot be converted to pre
 
 Attempting to use encryption without the preamble format also fails:
 ```
-cockroach start <regular options> --store=path=/mnt/data --enterprise-encryption=path=/mnt/data,keys=/path/to/cockroach.keys
+cockroach start <regular options> --store=path=/mnt/data --enterprise-encryption=path=/mnt/data,key=/path/to/cockroach.key
 ERROR: cockroach data directory using classic format, cannot use encryption.
 ```
 
@@ -355,60 +335,51 @@ Turning on encryption for a node with preamble format. This can be done when ini
 (start with encryption on), or on a non-encrypted node with preamble format (turning on encryption).
 
 ```
-# Create a 256 bit key with ID 1. Use AES256 cipher.
-$ echo "1;$(date +%s);AES256;$(openssl rand -hex 32)" > cockroach.keys
-$ cat cockroach.keys
-1;1509715352;AES256;67cceefb7319d98b88464f81c5a7786d78ab42600008f117be2884821df7636a
-# Tell cockroach to use a AES128 cipher for data encryption.
+# Ensure your key file exists and have valid key data (correct size)
+# For example, to generate a key for AES-128:
+$ openssl rand 16 > /path/to/cockroach.key
+# Tell cockroach to use the preamble format and specity the encryption flags.
 $ cockroach start <regular options> \
     --store=path=/mnt/data,format=preamble \
-    --enterprise-encryption=path=/mnt/data,keys=/path/to/cockroach.keys
+    --enterprise-encryption=path=/mnt/data,key=/path/to/cockroach.key
 ```
 
 The node will generate a 128 bit data key, encrypt the list of data keys with the store key, and use AES128
 encryption for all new files.
 
-Examine the logs or node debug pages to see that store key 1 is in use.
-
-Examine logs and debug pages to see progress of data encryption. This may take some time.
+Examine the logs or node debug pages to see that encryption is now enabled and see its progress.
 
 #### Rotating the store key.
 
 Given the previous configuration, we can add a new key to the file and restart the node to change the store key.
 
 ```
-# Create a 256 bit key with ID 2 (higher than the current highest key in the file). Use AES256 cipher.
-$ echo "2;$(date +%s);AES256;$(openssl rand -hex 32)" >> cockroach.keys
-$ cat cockroach.keys
-1;1509715352;AES256;67cceefb7319d98b88464f81c5a7786d78ab42600008f117be2884821df7636a
-2;1509715953;AES256;05ea263650495760de8e517c25ce2e430710b3251624268c0ee923fb1886e64d
-# Tell cockroach to use a AES128 cipher for data encryption.
+# Create a new 128 bit key.
+$ openssl rand 16 > /path/to/cockroach.new.key
+# Tell cockroach about the new key, and pass the old key (/path/to/cockroach.key)
 $ cockroach start <regular options> \
     --store=path=/mnt/data,format=preamble \
-    --enterprise-encryption=path=/mnt/data,keys=/path/to/cockroach.keys
+    --enterprise-encryption=path=/mnt/data,key=/path/to/cockroach.new.key,old_key=/path/to/cockroach.key
 ```
 
-Examine the logs or node debug pages to see that key 2 is now in use. It is now safe to delete key 1 from the file.
+Examine the logs or node debug pages to see that the new key is now in use.
+It is now safe to delete the old key file.
 
 #### Disabling encryption
 
 To disable encryption on a currently-encrypted node, we need to rewrite the list of data keys in plaintext.
-We still need to specify the path to the store keys to properly decrypt the data keys.
+We tell cockroach to switch to plaintext by passing `plain` as the value of the `key` field.
+We still need to specify the old key to decrypt the data keys file.
 
 ```
-# Add a key with cipher "PLAIN" in the key file. This means plaintext.
-$ echo "3;$(date +%s);PLAIN;" >> cockroach.keys
-$ cat cockroach.keys
-1;1509715352;AES256;67cceefb7319d98b88464f81c5a7786d78ab42600008f117be2884821df7636a
-2;1509715953;AES256;05ea263650495760de8e517c25ce2e430710b3251624268c0ee923fb1886e64d
-3;1509716141;PLAIN;
-# Tell cockroach to use a PLAIN cipher for data encryption.
+# Instead of a key file, use "plain" as the argument.
+# Pass the old key to allow decrypting existing data.
 $ cockroach start <regular options> \
     --store=path=/mnt/data,format=preamble \
-    --enterprise-encryption=path=/mnt/data,keys=/path/to/cockroach.keys
+    --enterprise-encryption=path=/mnt/data,key=plain,old_key=/path/to/cockroach.new.keys
 ```
 
-Examine the logs or node debug pages to see that the node encryption status is now plaintext. It is now safe to delete key 2 from the file.
+Examine the logs or node debug pages to see that the node encryption status is now plaintext. It is now safe to delete the old key file.
 
 Examine logs and debug pages to see progress of data encryption. This may take some time.
 
@@ -471,7 +442,7 @@ file is first written, and are available on subsequent file operations.
 
 The encryption provider has access to the list of data keys and knows which is the active data key.
 There are two instances of the encryption provider:
-* storee encryption provider: holds the store keys, used on the file storing the data keys
+* store encryption provider: holds the store keys, used on the file storing the data keys
 * data encryption provider: holds the data keys, used on all other data written through rocksdb
 
 Some specific details of the encryption provider:
@@ -517,8 +488,8 @@ enum EncryptionType {
 message EncryptionDescriptor {
   // The type of encryption applied.
   EncryptionType type = 1;
-  // ID of the key in use, if any.
-  optional uint64 key_id = 2;
+  // ID (hash) of the key in use, if any.
+  optional bytes key_id = 2;
   // Initialization vector, of size 96 bits (12 bytes) for AES.
   optional bytes nonce = 3;
   // Counter, allowing 2^32 blocks per file, so 64GiB.
@@ -569,7 +540,6 @@ We introduce two levels of encryption with their corresponding keys:
 * store keys:
 	* used to encrypt the list of data keys
 	* provided by the user
-	* plaintext
 	* should be stored on a separate disk
 	* should only be accessible to the cockroach process
 
@@ -580,57 +550,34 @@ We have three distinct status for keys:
 * in-use: key is still needed to read some data but is not being used for new data
 * inactive: there is no remaining data encrypted with this key
 
-### Store keys file format
+### Store keys files
 
-Store keys are specified in a single file. See [Nail down store key file format](#nail-down-store-keys-file-format) for alternatives.
+Store keys consist of exactly two keys: the active key, and the previous key.
 
-Support for other store key sources is out of scope for this RFC. Such methods would replace this file.
+They are stored in separate files containing the raw key data (no encoding).
 
-The file format proposed here has the following properties:
-* easy to work with without special tools
-* easy to parse/generate at the C++ level
-* contains all needed information
+Specifying the keys in use is done through the encryption flag fields:
+* `key`: path to the active key, or `plain` for plaintext. If not specified, `plain` is the default.
+* `old_key`: path to the previous key, or `plain` for plaintext. If not specified, `plain` is the default.
 
-The file may be empty, contain a single key, or contain multiple keys.
-```
-keyid;timestamp;cipher;key
-```
+The size of the raw key in the file dictates the cipher variant to use. Keys can be 16, 24, or 32 bytes long
+corresponding to AES-128, AES-192, AES-256 respectively.
 
-| Field | Type | Description |
-| --- | --- | --- |
-| keyid | ascii number (uint64) | key ID, greater than zero |
-| timestamp | ascii number (time_t) | key creation time in seconds since epoch |
-| cipher | string | cipher for this key. one of: `PLAIN`, `AES128`, `AES192`, `AES256` |
-| key | hexadecimal string | hexadecimal key. empty if cipher is `PLAIN` |
-
-Ordering does not matter, the key with highest ID is always the active encryption key.
-
-Notice the use of a `PLAIN` cipher. This is to be able to pass the concept of "do not encrypt" through
-key specification.
-
-**For alternate store key formats, see [Alternatives](#store-key-format).**
-
-### Loading store keys
-
-Store keys are stored in a plaintext file provided by the user.
-At no point does cockroach modify the file.
-
-It can be specified with `--enterprise-encryption=path=<store data dir>,keys=/path/to/file.keys`
-
-The following **should** be true:
-* the file is only accessibly to the cockroach process (or user running the process)
-* the file should not be on the same disk as the cockroach data
-
-If no key file is present, a "fake" PLAIN key with ID 0 is used indicating the lack of encryption.
+Key files are opened in read-only mode by cockroach.
 
 ### Rotating store keys
 
-The store keys file is read at startup (or other mechanisms, see [Reloading store keys](#reloading-store-keys)).
+Rotating the store keys consists of specifying:
+* `key` points to a new key file, or `plain` to switch to plaintext.
+* `old_key` points to the key file previously used.
 
-Upon opening and decrypting the data keys file if the key ID used is not the active store key, we
-write a new data keys file encrypted with the active store key.
+Upon starting (or other signal), cockroach decrypts the data keys file and re-encrypts it with the new key.
+If rotation is done through a flag (as opposed to other signal), this is done before starting rocksdb.
 
-Any changes in active store key (actual key, cipher, key size) triggers a data key rotation.
+An ID is computed for each key by taking the hash (`sha-256`) of the raw key. This key ID is stored in plaintext
+to indicate which store key is used to decode the data keys file.
+
+Any changes in active store key (actual key, key size) triggers a data key rotation.
 
 ### Data keys file format
 
@@ -651,18 +598,20 @@ enum EncryptionType {
 }
 
 message DataKey {
-  // The ID of this key.
-  optional uint64 key_id = 1;
+  // The ID (hash) of this key.
+  optional bytes key_id = 1;
+  // Whether this is the active (latest) key.
+  optional bool active = 2;
   // EncryptionType is the type of encryption (aka: cipher) used with this key.
-  EncryptionType encryption_type = 2;
+  EncryptionType encryption_type = 3;
   // Creation time is the time at which the key was created (in seconds since epoch).
-  optional int43 creation_time = 3;
+  optional int43 creation_time = 4;
   // Key is the raw key.
-  optional bytes key = 4;
+  optional bytes key = 5;
   // Was exposed is true if we ever wrote the data keys file in plaintext.
-  optional bool was_exposed = 5;
+  optional bool was_exposed = 6;
   // ID of the active store key at creation time.
-  optional uint64 creator_store_key_id = 6;
+  optional bytes creator_store_key_id = 7;
 }
 ```
 
@@ -684,7 +633,7 @@ The file is encrypted using the currently-active store key. It has a preamble co
 ### Generating data keys
 
 To generate a new data key, we look up the following:
-* current maximum key ID
+* current active key
 * current timestamp
 * desired cipher (eg: `AES128`)
 * current store key ID
@@ -692,10 +641,10 @@ To generate a new data key, we look up the following:
 If the cipher is other than `PLAIN`, we generate a key of the desired length using the pseudorandom `CryptoPP::OS_GenerateRandomBlock(blocking=false`) (see [Random number generator](#random-number-generator) for alternatives).
 
 We then generate the following new key entry:
-* **key_id**: current max key ID + 1
+* **key_id**: the hash (`sha256`) of the raw key
 * **creation_time**: current time
 * **encryption_type**: as specified
-* **key**: hexadecimal representation of the created random bytes
+* **key**: raw key data
 * **create_store_key_id**: the ID of the active store key
 * **was_exposed**: true if the current store encryption type is `PLAIN`
 
@@ -904,38 +853,9 @@ Pros:
 Cons:
 * it's not possible to specify a different cipher for store keys
 
-### Store key format
-
-Instead of requiring explicit keyID, timestamp, and cipher for the store keys, we could allow the user
-to specify two files: the old key, and the new key. eg:
-* `old_key=/path/to/old.key`
-* `key=/path/to/current.key`
-
-With possible values:
-* empty string (default): no key specified. Fails if encryption is currently enabled.
-* `plain`: switch to plaintext.
-* `filename`: file containing the raw key data.
-
-We can keep track of known store keys in the data keys file (will need a better name if we do that) using:
-* ID: hash of the key
-* timestamp: time of the first time we see a key
-* cipher: always AES. The variant depends on the key size.
-
-This makes it a bit less clear how to indicate which key is active, but store key rotation should take place as
-soon as we notice the flag change.
-
 ## Unresolved questions
 
 Before this RFC can be marked as approved, we have a few open questions (in no particular order):
-
-### Nail down store keys file format
-
-The format for the store keys described in here is rather arbitrary.
-We should study alternate ways of specifying the store keys.
-
-More research is needed into existing solutions, but some options include:
-* two flags: one each for the old and new key.
-* json file format
 
 ### Non-live rocksdb files
 
