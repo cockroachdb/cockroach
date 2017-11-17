@@ -3,7 +3,7 @@
 
 "use strict";
 
-const webpackConfig = require("./webpack.app");
+const webpackConfig = require("./webpack.ccl");
 
 module.exports = function(config) {
   config.set({
