@@ -35,6 +35,7 @@
 #include "encoding.h"
 #include "eventlistener.h"
 #include "keys.h"
+#include "preamble.h"
 
 extern "C" {
 static void __attribute__((noreturn)) die_missing_symbol(const char* name) {
@@ -89,6 +90,7 @@ struct DBEngine {
 };
 
 struct DBImpl : public DBEngine {
+  std::unique_ptr<PreambleHandler> preamble_handler;
   std::unique_ptr<rocksdb::Env> memenv;
   std::unique_ptr<rocksdb::DB> rep_deleter;
   std::shared_ptr<rocksdb::Cache> block_cache;
@@ -98,8 +100,9 @@ struct DBImpl : public DBEngine {
   // and Env will be deleted when the DBImpl is deleted. It is ok to
   // pass NULL for the Env.
   DBImpl(rocksdb::DB* r, rocksdb::Env* m, std::shared_ptr<rocksdb::Cache> bc,
-    std::shared_ptr<DBEventListener> event_listener)
+    std::shared_ptr<DBEventListener> event_listener, PreambleHandler* preamble)
       : DBEngine(r),
+        preamble_handler(preamble),
         memenv(m),
         rep_deleter(r),
         block_cache(bc),
@@ -1697,6 +1700,14 @@ DBStatus DBOpen(DBEngine **db, DBSlice dir, DBOptions db_opts) {
     options.env = memenv.get();
   }
 
+  PreambleHandler* preamble;
+  if (db_opts.use_preamble) {
+    // The caller makes sure we're not an in-memory DB.
+    assert(dir.len != 0);
+    preamble = new PreambleHandler();
+    options.env = preamble->GetEnv(options.env);
+  }
+
   rocksdb::DB *db_ptr;
   rocksdb::Status status = rocksdb::DB::Open(options, ToString(dir), &db_ptr);
   if (!status.ok()) {
@@ -1704,7 +1715,7 @@ DBStatus DBOpen(DBEngine **db, DBSlice dir, DBOptions db_opts) {
   }
   *db = new DBImpl(db_ptr, memenv.release(),
       db_opts.cache != nullptr ? db_opts.cache->rep : nullptr,
-      event_listener);
+      event_listener, preamble);
   return kSuccess;
 }
 
