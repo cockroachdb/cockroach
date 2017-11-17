@@ -217,7 +217,7 @@ buildshort: BUILDTARGET = ./pkg/cmd/cockroach-short
 buildshort: $(C_LIBS_CCL)
 
 $(COCKROACH) build go-install gotestdashi generate lint lintshort: $(C_LIBS_CCL)
-$(COCKROACH) build go-install generate lint lintshort: $(UI_ROOT)/distccl/bindata.go
+$(COCKROACH) build go-install generate: $(UI_ROOT)/distccl/bindata.go
 
 $(COCKROACH) build buildoss buildshort: BUILDMODE = build -i -o $(COCKROACH)
 
