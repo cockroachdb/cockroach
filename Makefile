@@ -71,7 +71,6 @@ TAGS         :=
 ARCHIVE      := cockroach.src.tgz
 STARTFLAGS   := -s type=mem,size=1GiB --logtostderr
 BUILDMODE    := install
-BUILDTARGET  := .
 SUFFIX       :=
 INSTALL      := install
 prefix       := /usr/local
@@ -212,10 +211,10 @@ CPP_PROTOS_TARGET := $(LOCAL_BIN)/.cpp_protobuf_sources
 .DEFAULT_GOAL := all
 all: $(COCKROACH)
 
-buildoss: BUILDTARGET = ./pkg/cmd/cockroach-oss
 buildoss: $(C_LIBS_OSS)
 
 $(COCKROACH) build go-install gotestdashi generate lint lintshort: $(C_LIBS_CCL)
+$(COCKROACH) build go-install gotestdashi generate lint lintshort: TAGS += ccl
 
 $(COCKROACH) build buildoss: BUILDMODE = build -i -o $(COCKROACH)
 
@@ -238,7 +237,7 @@ $(COCKROACH) build buildoss go-install gotestdashi generate lint lintshort: over
 build: ## Build the CockroachDB binary.
 buildoss: ## Build the CockroachDB binary without any CCL-licensed code.
 $(COCKROACH) build buildoss go-install:
-	 $(XGO) $(BUILDMODE) -v $(GOFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' $(BUILDTARGET)
+	 $(XGO) $(BUILDMODE) -v $(GOFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)'
 
 .PHONY: install
 install: ## Install the CockroachDB binary.

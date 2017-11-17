@@ -1,4 +1,4 @@
-// Copyright 2017 The Cockroach Authors.
+// Copyright 2014 The Cockroach Authors.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,22 +12,13 @@
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
+// +build ccl
+
 package main
 
+// The ccl hook import below means building this will produce CCL'ed binaries.
+// This file itself remains Apache2 to preserve the organization of ccl code
+// under the /pkg/ccl subtree, but is unused for pure FLOSS builds.
 import (
-	"testing"
-
-	"github.com/cockroachdb/cockroach/pkg/testutils/buildutil"
-	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	_ "github.com/cockroachdb/cockroach/pkg/ccl" // ccl init hooks
 )
-
-func TestNoLinkForbidden(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	// Verify that the cockroach floss binary doesn't depend on certain packages.
-	buildutil.VerifyNoImports(t,
-		"github.com/cockroachdb/cockroach/pkg/cmd/cockroach-oss",
-		true,
-		nil,
-		[]string{"github.com/cockroachdb/cockroach/pkg/ccl"},
-	)
-}
