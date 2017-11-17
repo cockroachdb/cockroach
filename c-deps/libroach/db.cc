@@ -1700,7 +1700,7 @@ DBStatus DBOpen(DBEngine **db, DBSlice dir, DBOptions db_opts) {
     options.env = memenv.get();
   }
 
-  PreambleHandler* preamble;
+  PreambleHandler* preamble = nullptr;
   if (db_opts.use_preamble) {
     // The caller makes sure we're not an in-memory DB.
     assert(dir.len != 0);

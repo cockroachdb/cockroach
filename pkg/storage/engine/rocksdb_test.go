@@ -263,7 +263,9 @@ func TestRocksDBOpenWithVersions(t *testing.T) {
 
 // openRocksDBWithVersion attempts to open a rocks db instance, optionally with
 // the supplied Version struct.
-func openRocksDBWithVersion(t *testing.T, hasVersionFile bool, ver Version, wantPreambleFormat bool) (Version, error) {
+func openRocksDBWithVersion(
+	t *testing.T, hasVersionFile bool, ver Version, wantPreambleFormat bool,
+) (Version, error) {
 	dir, err := ioutil.TempDir("", "testing")
 	if err != nil {
 		t.Fatal(err)

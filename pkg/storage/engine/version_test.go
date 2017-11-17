@@ -50,7 +50,7 @@ func TestVersions(t *testing.T) {
 
 	// Write the same version to the file: not allowed.
 	if err := writeVersionFile(dir, ver); !testutils.IsError(err, "writing version 0 is not allowed") {
-		t.Errorf("expected error '%s', got '%v'", "writing version 0 is not allowed")
+		t.Errorf("expected error '%s', got '%v'", "writing version 0 is not allowed", err)
 	}
 
 	// Try again with current version.
