@@ -470,7 +470,10 @@ The two lower-level block access streams are:
 
 The preamble is a 4KiB block of data containing encryption context about a specific file.
 
-The preamble is an encoded protocol buffer plus padding (zeros) to reach an exact size of 4KiB.
+The preamble is made of three parts:
+* length of serialized protobuf: `uint16_t`
+* serialized protobuf
+* zero-filled padding for the rest of the preamble
 
 The protocol buffer consists of:
 ```
