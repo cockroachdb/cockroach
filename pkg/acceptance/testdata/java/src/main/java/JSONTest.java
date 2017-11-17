@@ -15,4 +15,17 @@ public class JSONTest extends CockroachDBTest {
         rs.next();
         Assert.assertEquals("123", rs.getString(1));
     }
+
+    @Test
+    public void testInsertAndSelectJSON() throws Exception {
+        PreparedStatement stmt = conn.prepareStatement("CREATE TABLE x (j JSON)");
+        stmt.executeUpdate();
+        stmt = conn.prepareStatement("INSERT INTO x VALUES (?)");
+        stmt.setString(1, "{\"a\":\"b\"}");
+        stmt.executeUpdate();
+        stmt = conn.prepareStatement("SELECT j FROM x");
+        ResultSet rs = stmt.executeQuery();
+        rs.next();
+        Assert.assertEquals("{\"a\":\"b\"}", rs.getString(1));
+    }
 }

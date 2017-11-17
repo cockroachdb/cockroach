@@ -110,6 +110,10 @@ func TestEncDatum(t *testing.T) {
 	}
 }
 
+func columnTypeCompatibleWithEncoding(typ ColumnType, enc DatumEncoding) bool {
+	return enc == DatumEncoding_VALUE || columnTypeIsIndexable(typ)
+}
+
 func TestEncDatumNull(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
@@ -129,6 +133,9 @@ func TestEncDatumNull(t *testing.T) {
 		a, typ := RandEncDatum(rng)
 
 		for enc := range DatumEncoding_name {
+			if !columnTypeCompatibleWithEncoding(typ, DatumEncoding(enc)) {
+				continue
+			}
 			encoded, err := a.Encode(&typ, &alloc, DatumEncoding(enc), nil)
 			if err != nil {
 				t.Fatal(err)
@@ -204,7 +211,7 @@ func TestEncDatumCompare(t *testing.T) {
 
 	for kind := range ColumnType_SemanticType_name {
 		kind := ColumnType_SemanticType(kind)
-		if kind == ColumnType_NULL || kind == ColumnType_ARRAY || kind == ColumnType_INT2VECTOR {
+		if kind == ColumnType_NULL || kind == ColumnType_ARRAY || kind == ColumnType_INT2VECTOR || kind == ColumnType_JSON {
 			continue
 		}
 		typ := ColumnType{SemanticType: kind}
@@ -280,6 +287,9 @@ func TestEncDatumFromBuffer(t *testing.T) {
 				enc[i] = DatumEncoding_VALUE
 			} else {
 				enc[i] = RandDatumEncoding(rng)
+				for !columnTypeCompatibleWithEncoding(types[i], enc[i]) {
+					enc[i] = RandDatumEncoding(rng)
+				}
 			}
 			buf, err = ed[i].Encode(&types[i], &alloc, enc[i], buf)
 			if err != nil {

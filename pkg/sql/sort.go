@@ -20,6 +20,7 @@ import (
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -41,8 +42,8 @@ type sortNode struct {
 }
 
 func ensureColumnOrderable(c sqlbase.ResultColumn) error {
-	if _, ok := c.Typ.(types.TArray); ok {
-		return errors.Errorf("can't order by column type %s", c.Typ)
+	if _, ok := c.Typ.(types.TArray); ok || c.Typ == types.JSON {
+		return pgerror.NewErrorf(pgerror.CodeFeatureNotSupportedError, "can't order by column type %s", c.Typ)
 	}
 	return nil
 }

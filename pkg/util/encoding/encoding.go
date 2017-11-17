@@ -894,6 +894,7 @@ const (
 	// Do not change SentinelType from 15. This value is specifically used for bit
 	// manipulation in EncodeValueTag.
 	SentinelType Type = 15 // Used in the Value encoding.
+	JSON
 )
 
 // PeekType peeks at the type of the value encoded at the start of b.
@@ -1397,6 +1398,14 @@ func EncodeUntaggedIPAddrValue(appendTo []byte, u ipaddr.IPAddr) []byte {
 	return u.ToBuffer(appendTo)
 }
 
+// EncodeJSONValue encodes an already-byte-encoded JSON value with no value tag
+// but with a length prefix, appends it to the supplied buffer, and returns the
+// final buffer.
+func EncodeJSONValue(appendTo []byte, colID uint32, data []byte) []byte {
+	appendTo = EncodeValueTag(appendTo, colID, JSON)
+	return EncodeUntaggedBytesValue(appendTo, data)
+}
+
 // DecodeValueTag decodes a value encoded by EncodeValueTag, used as a prefix in
 // each of the other EncodeFooValue methods.
 //
@@ -1664,7 +1673,7 @@ func PeekValueLength(b []byte) (typeOffset int, length int, err error) {
 		return typeOffset, dataOffset + n, err
 	case Float:
 		return typeOffset, dataOffset + floatValueEncodedLength, nil
-	case Bytes, Array:
+	case Bytes, Array, JSON:
 		_, n, i, err := DecodeNonsortingUvarint(b)
 		return typeOffset, dataOffset + n + int(i), err
 	case Decimal:

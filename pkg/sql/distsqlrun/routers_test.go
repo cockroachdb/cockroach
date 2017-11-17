@@ -70,7 +70,7 @@ func TestRouters(t *testing.T) {
 
 	// Generate tables of possible values for each column; we have fewer possible
 	// values than rows to guarantee many occurrences of each value.
-	vals, types := sqlbase.RandEncDatumSlices(rng, numCols, numRows/10)
+	vals, types := sqlbase.RandSortingEncDatumSlices(rng, numCols, numRows/10)
 
 	testCases := []struct {
 		spec       OutputRouterSpec

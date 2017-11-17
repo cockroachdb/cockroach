@@ -21,20 +21,13 @@ const client = new pg.Client(config);
 before(() => {
   client.connect();
   client.query('DROP DATABASE IF EXISTS node_test');
-});
-
-beforeEach(() => {
   client.query('CREATE DATABASE node_test');
   client.query('USE node_test');
 });
 
-afterEach(() => {
-  // We don't care if these error.
+after(() => {
   client.query('DROP DATABASE IF EXISTS node_test').catch(() => {});
   client.query('USE ""').catch(() => {});
-});
-
-after(() => {
   client.end();
 });
 
