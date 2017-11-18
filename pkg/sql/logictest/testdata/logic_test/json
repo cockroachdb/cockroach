@@ -8,6 +8,16 @@ SELECT '1'::JSONB, '2'::JSON
 1 2
 
 query T
+SELECT pg_typeof(JSON '1')
+----
+jsonb
+
+query T
+SELECT pg_typeof(JSONB '1')
+----
+jsonb
+
+query T
 SELECT '1.00'::JSON
 ----
 1.00
