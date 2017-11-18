@@ -590,6 +590,7 @@ The data keys file is an encoded protocol buffer:
 message DataKeysRegistry {
   // Ordering does not matter.
   repeated DataKey data_keys = 1;
+  repeated MasterKey master_keys = 2;
 }
 
 // EncryptionType is shared with the Preamble EncryptionType.
@@ -600,6 +601,17 @@ enum EncryptionType {
   AES_CTR = 1;
 }
 
+// Information about the master key, but not the key itself.
+message MasterKey {
+  // The ID (hash) of this key.
+  optional bytes key_id = 1;
+  // Whether this is the active (latest key).
+  optional bool active = 2;
+  // First time this key was seen (in seconds since epoch).
+  optional int32 creation_time = 3;
+}
+
+// Actual data keys and related information.
 message DataKey {
   // The ID (hash) of this key.
   optional bytes key_id = 1;
@@ -608,7 +620,7 @@ message DataKey {
   // EncryptionType is the type of encryption (aka: cipher) used with this key.
   EncryptionType encryption_type = 3;
   // Creation time is the time at which the key was created (in seconds since epoch).
-  optional int43 creation_time = 4;
+  optional int32 creation_time = 4;
   // Key is the raw key.
   optional bytes key = 5;
   // Was exposed is true if we ever wrote the data keys file in plaintext.
@@ -617,6 +629,12 @@ message DataKey {
   optional bytes creator_store_key_id = 7;
 }
 ```
+
+The `master_keys` field is needed to keep track of master key ages and statuses. We only need to keep the
+active key but may keep previous keys for history.
+
+The `data_keys` field contains all in-use (data encrypted with those keys is still live) keys and all information
+needed to determine ciphers, ages, related master keys, etc...
 
 `was_exposed` indicates whether the key was even written to disk as plaintext (encryption was disabled at the
 store level). This will be surfaced in encryption status reports. Data encrypted by an exposed key is securely
