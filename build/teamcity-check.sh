@@ -19,7 +19,14 @@ build/builder.sh make lint 2>&1 | tee artifacts/lint.log | go-test-teamcity
 curl https://edge-binaries.cockroachdb.com/tools/Railroad.jar.enc | openssl aes-256-cbc -d -out build/Railroad.jar -k "$RAILROAD_JAR_KEY"
 
 build/builder.sh env COCKROACH_REQUIRE_RAILROAD=true make generate PKG="./pkg/... ./docs/..."
-build/builder.sh /bin/bash -c '! git status --porcelain | read || (git status; git diff -a 1>&2; exit 1)'
+
+# The workspace is clean iff `git status --porcelain` produces no output. Any
+# output is either an error message or a listing of an untracked/dirty file.
+if [[ "$(git status --porcelain 2>&1)" != "" ]]; then
+  git status >&2 || true
+  git diff -a >&2 || true
+  exit 1
+fi
 
 # Run the UI tests. This logically belongs in teamcity-test.sh, but we do it
 # here to minimize total build time since the rest of this script completes
