@@ -827,3 +827,32 @@ func TestNegativeRandomJSONContains(t *testing.T) {
 		}
 	}
 }
+
+func BenchmarkFetchKey(b *testing.B) {
+	for _, objectSize := range []int{1, 10, 100, 1000} {
+		b.Run(fmt.Sprintf("object size %d", objectSize), func(b *testing.B) {
+			var lastKey string
+
+			obj := make(map[string]interface{})
+			for i := 0; i < objectSize; i++ {
+				key := fmt.Sprintf("key%d", i)
+				obj[key] = i
+				if lastKey == "" || key > lastKey {
+					lastKey = key
+				}
+			}
+			j, err := MakeJSON(obj)
+			if err != nil {
+				b.Fatal(err)
+			}
+
+			// This will eventually also include benchmarks for fetching from a
+			// still-encoded JSON object.
+			b.Run("fetch key", func(b *testing.B) {
+				for i := 0; i < b.N; i++ {
+					j.FetchValKey(lastKey)
+				}
+			})
+		})
+	}
+}
