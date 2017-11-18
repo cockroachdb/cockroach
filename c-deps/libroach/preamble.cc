@@ -16,8 +16,47 @@
 #include "preamble.h"
 #include "protos/storage/preamble.pb.h"
 
+// Preamble length.
+// WARNING: changing this will result in incompatible on-disk format.
+// The preamble length must fit in a uint16_t.
+const static size_t kPreambleLength = 4096;
+
+// Blocksize for the plaintext cipher stream.
+// TODO(mberhault): we need to benchmark this for a good value, but for now we use the AES::BlockSize.
+const static size_t kPlaintextBlockSize = 16;
+
+// PlaintextCipherStream implements BlockAccessCipherStream with
+// no-op encrypt/decrypt operations.
+class PlaintextCipherStream final : public rocksdb::BlockAccessCipherStream {
+ public:
+  PlaintextCipherStream() {}
+  virtual ~PlaintextCipherStream() {}
+
+  // BlockSize returns the size of each block supported by this cipher stream.
+  virtual size_t BlockSize() override { return kPlaintextBlockSize; }
+
+  // Encrypt blocks of data. This is a noop.
+  virtual rocksdb::Status Encrypt(uint64_t fileOffset, char *data, size_t dataSize) override {
+    return rocksdb::Status::OK();
+  }
+
+  // Decrypt blocks of data. This is a noop.
+  virtual rocksdb::Status Decrypt(uint64_t fileOffset, char *data, size_t dataSize) override {
+    return rocksdb::Status::OK();
+  }
+ protected:
+  // No-op required methods.
+  virtual void AllocateScratch(std::string&) override {}
+  virtual rocksdb::Status EncryptBlock(uint64_t blockIndex, char *data, char* scratch) override {
+    return rocksdb::Status::OK();
+  }
+  virtual rocksdb::Status DecryptBlock(uint64_t blockIndex, char *data, char* scratch) override {
+    return rocksdb::Status::OK();
+  }
+};
+
 size_t PreambleHandler::GetPrefixLength() {
-  return defaultPreambleLength;
+  return kPreambleLength;
 }
 
 rocksdb::Env* PreambleHandler::GetEnv(rocksdb::Env* base_env) {
@@ -37,18 +76,16 @@ rocksdb::Status PreambleHandler::CreateNewPrefix(const std::string& fname, char 
   int byte_size = preamble.ByteSize();
 
   // Determine the serialized length and size of the length prefix.
-  // TODO(mberhault): protobuf encoding is little-endian, so this is a little weird.
   assert(byte_size < UINT16_MAX);
-  uint16_t message_size = htons(byte_size);
-  auto num_length_bytes = sizeof(message_size);
+  uint16_t encoded_size = htons(byte_size);
+  auto num_length_bytes = sizeof(encoded_size);
 
   if ((byte_size + num_length_bytes) > prefixLength ) {
-    // TODO(mberhault): is NoSpace the right thing? Nothing really fits.
-    return rocksdb::Status::NoSpace("new preamble exceeds max preamble length");
+    return rocksdb::Status::Corruption("new preamble exceeds max preamble length");
   }
 
   // Write length prefix.
-  memcpy(prefix, &message_size, num_length_bytes);
+  memcpy(prefix, &encoded_size, num_length_bytes);
 
   // Write it to the prefix.
   if (!preamble.SerializeToArray(prefix + num_length_bytes, byte_size)) {
@@ -60,12 +97,12 @@ rocksdb::Status PreambleHandler::CreateNewPrefix(const std::string& fname, char 
 
 rocksdb::Status PreambleHandler::CreateCipherStream(const std::string& fname, const rocksdb::EnvOptions& options, rocksdb::Slice &prefix, std::unique_ptr<rocksdb::BlockAccessCipherStream>* result) {
   // Read length prefix.
-  uint16_t message_size;
-  auto num_length_bytes = sizeof(message_size);
-  memcpy(&message_size, prefix.data(), num_length_bytes);
+  uint16_t encoded_size;
+  auto num_length_bytes = sizeof(encoded_size);
+  memcpy(&encoded_size, prefix.data(), num_length_bytes);
 
   // Convert length prefix from network byte order.
-  int byte_size = ntohs(message_size);
+  int byte_size = ntohs(encoded_size);
 
   // Parse prefix
   cockroach::storage::Preamble preamble;

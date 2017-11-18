@@ -18,11 +18,6 @@
 #include <rocksdb/env.h>
 #include <rocksdb/env_encryption.h>
 
-// Preamble length.
-// WARNING: changing this will result in incompatible on-disk format.
-// The preamble length must fit in a uint16_t.
-const static size_t defaultPreambleLength = 4096;
-
 class PreambleHandler : rocksdb::EncryptionProvider {
  public:
 
@@ -41,46 +36,6 @@ class PreambleHandler : rocksdb::EncryptionProvider {
   // CreateCipherStream creates a block access cipher stream for a file given name and options.
   virtual rocksdb::Status CreateCipherStream(const std::string& fname, const rocksdb::EnvOptions& options,
     rocksdb::Slice& prefix, std::unique_ptr<rocksdb::BlockAccessCipherStream>* result) override;
-};
-
-// Blocksize for the plaintext cipher stream.
-// TODO(mberhault): we can pick anything we like. What's good?
-const static size_t plaintextBlockSize = 4096;
-
-// PlaintextCipherStream implements BlockAccessCipherStream with
-// no-op encrypt/decrypt operations.
-class PlaintextCipherStream final : public rocksdb::BlockAccessCipherStream {
- public:
-  PlaintextCipherStream() {}
-  virtual ~PlaintextCipherStream() {}
-
-  // BlockSize returns the size of each block supported by this cipher stream.
-  virtual size_t BlockSize() override { return plaintextBlockSize; }
-
-  // Encrypt blocks of data. This is a noop.
-  virtual rocksdb::Status Encrypt(uint64_t fileOffset, char *data, size_t dataSize) override {
-    return rocksdb::Status::OK();
-  }
-
-  // Decrypt blocks of data. This is a noop.
-  virtual rocksdb::Status Decrypt(uint64_t fileOffset, char *data, size_t dataSize) override {
-    return rocksdb::Status::OK();
-  }
- protected:
-  // Allocate scratch space which is passed to EncryptBlock/DecryptBlock.
-  virtual void AllocateScratch(std::string&) override {}
-
-  // Encrypt a block of data at the given block index.
-  // Length of data is equal to BlockSize();
-  virtual rocksdb::Status EncryptBlock(uint64_t blockIndex, char *data, char* scratch) override {
-		return rocksdb::Status::OK();
-  }
-
-  // Decrypt a block of data at the given block index.
-  // Length of data is equal to BlockSize();
-  virtual rocksdb::Status DecryptBlock(uint64_t blockIndex, char *data, char* scratch) override {
-		return rocksdb::Status::OK();
-  }
 };
 
 #endif // ROACHLIB_PREAMBLE_H
