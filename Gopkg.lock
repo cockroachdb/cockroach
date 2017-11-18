@@ -485,9 +485,9 @@
 
 [[projects]]
   name = "github.com/knz/go-libedit"
-  packages = [".","common","other","unix"]
-  revision = "aafda877029e573c3bc5e352d000a41076e3d973"
-  version = "v1.6.1"
+  packages = [".","common","other","unix","unix/sigtramp"]
+  revision = "bdc4cc84b6e78fc3d66eb6da428f9a96a7a9cf16"
+  version = "v1.6.2"
 
 [[projects]]
   branch = "master"
