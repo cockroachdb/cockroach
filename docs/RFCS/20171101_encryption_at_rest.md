@@ -874,6 +874,41 @@ Pros:
 Cons:
 * it's not possible to specify a different cipher for store keys
 
+### Custom env for encryption state
+
+Use of the preamble format through the existing `rocksdb::EncryptedEnv` has a few issues:
+* no possible migration from/to preamble format
+* `EncryptedEnv` introduces some overhead for plaintext (small block processing, still using preamble)
+
+An alternative would be to introduce our own wrapper `rocksdb::Env` that would contain two envs:
+* `EncryptedEnv` for encrypted files
+* `Env::Default` for plaintext files
+
+This new env could keep track of the state of each file and redirect file operations to the appropriate underlying
+env.
+All stores created with old binaries would be considered plaintext. A binary aware of the new env could enable
+encryption on an existing store by writing new files with the `EncryptedEnv` when encryption is desired.
+
+The "file registry" that keeps track of encryption status could also contain the data currently stored in the
+preamble (key ID, nonce, counter).
+Care would need to be taken when writing this file, returning success for file creation only after the registry
+has been persisted to disk (otherwise we would not be able to read the file again). This is similar to rockdb's
+`MANIFEST`.
+
+The most glaring pros and cons of this approach are:
+Pros:
+* migration from "old" stores to encrypted stores (and back) is possible
+* plaintext option has no extra overhead
+* more user friendly: no need for a separate format
+Cons:
+* additional code complexity
+* much less leverage of existing code, this adds a fair amount of work
+
+Some variations on the theme:
+* use a suffix (eg: `.encrypted`) for encrypted file and switch between envs based on that. The encryption settings
+would remain in the preamble.
+* use either a zero-length preamble, or copy-and-modify `env_encryption` (some other optimizations may be possible. eg: use cryptopp's `ProcessAndXORBlocks` which performed the AES encryption **and** the XOR.
+
 ## Unresolved questions
 
 Before this RFC can be marked as approved, we have a few open questions (in no particular order):
