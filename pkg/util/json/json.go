@@ -515,13 +515,22 @@ func MakeJSON(d interface{}) (JSON, error) {
 }
 
 func (j jsonObject) FetchValKey(key string) JSON {
-	for i := range j {
-		if string(j[i].k) == key {
-			return j[i].v
+	// Do linear scan in this case!
+	if len(j) < 16 {
+		for i := range j {
+			if string(j[i].k) == key {
+				return j[i].v
+			}
+			if string(j[i].k) > key {
+				break
+			}
 		}
-		if string(j[i].k) > key {
-			break
-		}
+		return nil
+	}
+
+	i := sort.Search(len(j), func(i int) bool { return string(j[i].k) >= key })
+	if i < len(j) && string(j[i].k) == key {
+		return j[i].v
 	}
 	return nil
 }

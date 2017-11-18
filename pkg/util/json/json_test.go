@@ -328,6 +328,25 @@ func TestJSONFetch(t *testing.T) {
 	}
 }
 
+func TestJSONRandomFetch(t *testing.T) {
+	rng := rand.New(rand.NewSource(timeutil.Now().Unix()))
+	for i := 0; i < 1000; i++ {
+		// We want a big object to trigger the binary search behaviour in FetchValKey.
+		j, err := Random(1000, rng)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if obj, ok := j.(jsonObject); ok {
+			// Pick a key:
+			idx := rand.Intn(len(obj))
+			result := obj.FetchValKey(string(obj[idx].k))
+			if result.Compare(obj[idx].v) != 0 {
+				t.Fatalf("%s: expected fetching %s to give %s got %s", obj, obj[idx].k, obj[idx].v, result)
+			}
+		}
+	}
+}
+
 func TestJSONFetchIdx(t *testing.T) {
 	json := jsonTestShorthand
 	cases := map[string][]struct {
@@ -825,5 +844,32 @@ func TestNegativeRandomJSONContains(t *testing.T) {
 		if realResult != slowResult {
 			t.Fatal("mismatch for document " + j1.String() + " @> " + j2.String())
 		}
+	}
+}
+
+func BenchmarkFetchKey(b *testing.B) {
+	for _, objectSize := range []int{1, 10, 100, 1000} {
+		b.Run(fmt.Sprintf("object size %d", objectSize), func(b *testing.B) {
+			keys := make([]string, objectSize)
+
+			obj := make(map[string]interface{})
+			for i := 0; i < objectSize; i++ {
+				key := fmt.Sprintf("key%d", i)
+				keys = append(keys, key)
+				obj[key] = i
+			}
+			j, err := MakeJSON(obj)
+			if err != nil {
+				b.Fatal(err)
+			}
+
+			// TODO(justin): this will eventually also include benchmarks for
+			// fetching from a still-encoded JSON object.
+			b.Run("fetch key", func(b *testing.B) {
+				for i := 0; i < b.N; i++ {
+					j.FetchValKey(keys[rand.Intn(len(keys))])
+				}
+			})
+		})
 	}
 }
