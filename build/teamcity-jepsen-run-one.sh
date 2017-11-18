@@ -52,14 +52,20 @@ if timeout 20m ssh "${SSH_OPTIONS[@]}" "ubuntu@${controller}" "${testcmd}" \
            # with an excerpt from the jepsen log.
            prevsecs=0
            while true; do
-               # Fail if no jepsen logging message within 60 seconds.
+               # Fail if no jepsen logging message within 600 seconds.
                # Note that jepsen sleeps for the --recovery-time
                # parameter above at the end of the test, so this
                # timeout must be greater than that value.
                # Additionally, jepsen uses some hard-coded 30s timeouts
                # internally, so setting this too low may interfere with
                # jepsen's own error reporting.
-               read -t 60 x
+               # TODO(bdarnell): This was raised from 60s to 600s when we
+               # added the disk nemesis, which spends the first 5 minutes
+               # of the first run building thrift with no output.
+               # Is this "silent too long" detection even useful any more?
+               # Need to figure out how to pre-build thrift instead of
+               # doing it during the test.
+               read -t 600 x
                status=$?
                if [ $status -gt 128 ]; then
                    progress "Jepsen test was silent for too long, aborting"

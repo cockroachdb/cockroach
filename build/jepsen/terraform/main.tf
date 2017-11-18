@@ -143,7 +143,7 @@ FILE
       "cat /home/ubuntu/nodes | xargs -n1 ssh-keyscan -t rsa >> ~/.ssh/known_hosts",
       "curl https://raw.githubusercontent.com/technomancy/leiningen/stable/bin/lein > /home/ubuntu/lein",
       "chmod +x /home/ubuntu/lein",
-      "cd /home/ubuntu && git clone -q https://github.com/cockroachdb/jepsen && cd jepsen && git checkout tc-nightly",
+      "cd /home/ubuntu && git clone -q https://github.com/cockroachdb/jepsen && cd jepsen && git checkout cockroach-charybdefs",
     ]
   }
 }

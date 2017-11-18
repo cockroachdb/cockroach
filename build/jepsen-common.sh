@@ -40,6 +40,7 @@ function progress {
 }
 
 nemeses=(
+    "--nemesis disk"
     "--nemesis majority-ring"
     "--nemesis split"
     "--nemesis start-kill-2"
