@@ -1,4 +1,4 @@
-- Feature Name: Role based access control
+- Feature Name: Role-based access control
 - Status: draft
 - Start Date: 2017-11-18
 - Authors: Marc Berhault
@@ -16,6 +16,15 @@ Table of Contents
    * [Guide-level explanation](#guide-level-explanation)
       * [Terminology](#terminology)
       * [User-level explanation](#user-level-explanation)
+         * [Role basics](#role-basics)
+         * [Creating a role](#creating-a-role)
+         * [Granting and revoking privileges for a role](#granting-and-revoking-privileges-for-a-role)
+         * [Manipulating role membership](#manipulating-role-membership)
+         * [Dropping a role](#dropping-a-role)
+         * [Listing roles](#listing-roles)
+         * [Listing role memberships](#listing-role-memberships)
+         * [Administrators](#administrators)
+         * [Non-enterprise users](#non-enterprise-users)
       * [Contributor impact](#contributor-impact)
    * [Reference-level explanation](#reference-level-explanation)
       * [Detailed design](#detailed-design)
@@ -26,29 +35,21 @@ Table of Contents
          * [Admin role](#admin-role)
          * [Migrations and backwards compatibility](#migrations-and-backwards-compatibility)
          * [Non-enterprise functionality](#non-enterprise-functionality)
+         * [Virtual tables](#virtual-tables)
       * [Drawbacks](#drawbacks)
-         * [Cost of lookup](#cost-of-lookup)
       * [Rationale and Alternatives](#rationale-and-alternatives)
-         * [Internal representation of memberships](#internal-representation-of-memberships)
       * [Unresolved questions](#unresolved-questions)
-         * [Inheritance of role admin](#inheritance-of-role-admin)
-         * [Adding and removing admin setting](#adding-and-removing-admin-setting)
-         * [Listing expanded role memberships](#listing-expanded-role-memberships)
-         * [Caching memberships](#caching-memberships)
       * [Future improvements](#future-improvements)
-         * [Role attributes](#role-attributes)
-         * [Superuser attribute](#superuser-attribute)
-         * [Inheritance](#inheritance)
-         * [Convenience statements](#convenience-statements)
-
 
 # Summary
 
-This feature is enterprise.
+Role-based access control is an enterprise feature.
 
 We propose the addition of SQL roles to facilitate user management.
 
-A role can be seen as a group containing one or more user or role.
+A role can be seen as a group containing any number of "entities" as members. An entity can be a user or
+another role.
+
 Roles can have privileges on SQL objects. Any member of the role (directly a member,
 or indirectly by being a member-of-a-member) inherits all privileges of the role.
 
@@ -67,6 +68,9 @@ By granting database/table privileges to a role, users of a team can be more
 easily added to the system and granted all necessary privileges by simply adding them as members
 of the corresponding roles. The alternative would be granting privileges for all necessary objects,
 making it likely to forget some.
+
+Managing privileges on a given object becomes easier: by changing the privileges granted to the role,
+all members of the role are updated implicitly.
 
 # Related resources
 
@@ -123,6 +127,7 @@ Roles and users follow a small set of rules:
 * only the admin role can create/drop roles
 * role admins (members with the `ADMIN OPTION`) can modify role memberships
 * a role cannot be dropped if it still has privileges
+* there is no limit (minimum or maximum) to the number of members of a role (except for the `admin` role)
 
 ### Creating a role
 
@@ -228,7 +233,8 @@ Before this RFC, there is a single administrative user in a cockroach cluster: t
 We propose to add a default role: `admin` with a single user: `root`.
 `root` will have admin privileges on the `admin` role, allowing addition/removal of other users.
 
-The `admin` role cannot be deleted, and cannot be empty.
+The `admin` role cannot be deleted, and cannot be empty. The specicial `root` user cannot be removed as a member
+of the `admin` role.
 
 All operations that previously checked for the `root` user will now check for membership in the `admin` role.
 
@@ -466,6 +472,77 @@ in the path of data-access SQL queries.
 
 This makes the enterprise license check relatively painless.
 
+### Virtual tables
+
+We must populate some virtual tables with role information.
+
+#### pg_catalog.pg_roles
+
+See [PostgresSQL doc](https://www.postgresql.org/docs/current/static/view-pg-roles.html)
+
+The existing `pg_roles` table is currently populated for all users:
+```
+h.UserOid(username),         // oid
+tree.NewDName(username),     // rolname
+tree.MakeDBool(isRoot),      // rolsuper
+tree.MakeDBool(false),       // rolinherit
+tree.MakeDBool(isRoot),      // rolcreaterole
+tree.MakeDBool(isRoot),      // rolcreatedb
+tree.MakeDBool(false),       // rolcatupdate
+tree.MakeDBool(true),        // rolcanlogin
+negOneVal,                   // rolconnlimit
+tree.NewDString("********"), // rolpassword
+tree.DNull,                  // rolvaliduntil
+tree.NewDString("{}"),       // rolconfig
+```
+
+A similar entry must be created for each existing role with the following changes:
+* `isRoot` is replaced with the condition `rolename == admin`
+* `rolcanlogin` is always false
+
+**TODO(mberhault)**: determine if members that inherit superuser roles are listed here with the inherited attributes
+(eg: if `marc ∈ admin`, does `marc` have `rolsuper` set to true?).
+
+#### pg_catalog.pg_auth_members
+
+See [PostgresSQL doc](https://www.postgresql.org/docs/current/static/catalog-pg-auth-members.html)
+
+The new virtual table `pg_auth_members` must be added. It describes role memberships:
+```
+CREATE TABLE pg_catalog.pg_auth_members (
+  roleid           OID,   ; ID of the role that has a member
+  member           OID,   ; ID of the member
+  grantor          OID,   ; ID of the role that granted this membership
+  admin_options    BOOL   ; true if member can grant membership in roleid to others
+)
+```
+
+The `grantor` may or may not be a bogus value.
+
+**TODO(mberhault)**: determine PostgreSQL logic for grantor (especially if original OID is dropped).
+
+#### pg_catalog.pg_authid
+
+See [PostgreSQL doc](https://www.postgresql.org/docs/current/static/catalog-pg-authid.html).
+
+The `pg_authid` virtual table is not currently implemented in Cockroach.
+It contains sensitive information (passwords) and PostgreSQL clearly states:
+```
+Since this catalog contains passwords, it must not be publicly readable. pg_roles is a publicly readable view on pg_authid that blanks out the password field.
+```
+
+We propose to keep in unimplemented, users should query `pg_roles` and `pg_auth_members` instead.
+
+#### information_schema
+
+There are multiple relevant tables in `information_schema` that must be changed or added.
+* `administrable_role_authorizations`: roles the current user has the `ADMIN OPTION` on.
+* `applicable_roles`: roles whose privileges the current user can use.
+* `enabled_roles`: roles the current use is a member of (direct or indirect).
+* `role_table_grants`: similar to the existing `table_privileges`.
+
+**TODO(mberhault)**: determine exactly which are needed and flesh out details.
+
 ## Drawbacks
 
 ### Cost of lookup
@@ -499,6 +576,13 @@ Expanding role membership into the roles table (each role contains the list of a
 Expanding role membership into database/table descriptors (descriptor contains all users with privileges):
 * **Pros**: regular SQL operations only require the user and descriptor
 * **Cons**: more complex manipulation of roles, increased cost for every large roles
+
+Dual tables: one for direct role membership information, one for expanded membership information:
+* the direct membership table would include the `ADMIN OPTION` field and would be queried for role manipulation
+* permission checking only requires lookups in the expanded table
+* the expanded table can use an index on the user or even an array type for the list of roles
+* **Pros**: fast lookup of a users's memberships
+* **Cons**: slightly more complex role manipulation
 
 ## Unresolved questions
 
@@ -552,12 +636,17 @@ Role memberships may change at any time and yet are required for all SQL operati
 
 Performing full lookups (discovering all roles a user is a member of) for every statement is most
 likely prohibitively expensive.
+Even if the expanded role memberships are stored in a more accessible way (see the alternate
+[Internal representation of memberships](internal-representation-of-memberships)), this would add at least
+one lookup per operation.
 
-However, caching methods will run into problems if role manipulation (or privileges changes for roles)
-is done during a transaction.
+Caching can be used to reduce the number role lookups but run into multiple problems:
+* caching and transactions generally don't play well together.
+* table privileges are currently propagated through the descriptor lease mechanism.
 
-TODO(mberhault): do we care about those within transactions? Do current privileges/user deletion
-work properly with transactions?
+**TODO(mberhault)**: this section is still very vague. Some points to clarify:
+* do we care about those within transactions? Do current privileges/user deletion work properly with transactions?
+* how do descriptor leases work? Can we piggy-back onto those?
 
 Some possible options include:
 
@@ -572,6 +661,10 @@ Similar as above but with periodic refresh:
 Gossiping role memberships:
 * **Pros**: near-instantaneous responsiveness to membership changes
 * **Cons**: massive increase in complexity
+
+### Virtual table details
+
+The [Virtual tables](#virtual-tables) section has a few TODOs to clarify PostgreSQL behavior.
 
 ## Future improvements
 
@@ -617,3 +710,10 @@ Adding members `firstadmin` and `secondadmin` to the new role `myrole` with the 
 ```
 CREATE ROLE myrole ADMIN firstadmin, secondadmin
 ```
+
+### UI visibility and management
+
+At the very least, the admin UI should show role information (privileges on objects, memberships, etc...).
+Manipulation of roles may be a UI event.
+
+Changing roles through the admin UI should be possible, but is currently gated on admin UI authentication.
