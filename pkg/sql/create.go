@@ -442,7 +442,6 @@ func (*alterUserSetPasswordNode) Values() tree.Datums          { return tree.Dat
 
 // createViewNode represents a CREATE VIEW statement.
 type createViewNode struct {
-	p             *planner
 	n             *tree.CreateView
 	dbDesc        *sqlbase.DatabaseDescriptor
 	sourceColumns sqlbase.ResultColumns
@@ -518,7 +517,6 @@ func (p *planner) CreateView(ctx context.Context, n *tree.CreateView) (planNode,
 	log.VEventf(ctx, 2, "collected view dependencies:\n%s", planDeps.String())
 
 	return &createViewNode{
-		p:             p,
 		n:             n,
 		dbDesc:        dbDesc,
 		sourceColumns: sourceColumns,
@@ -530,14 +528,14 @@ func (n *createViewNode) Start(params runParams) error {
 	viewName := n.n.Name.TableName().Table()
 	tKey := tableKey{parentID: n.dbDesc.ID, name: viewName}
 	key := tKey.Key()
-	if exists, err := descExists(params.ctx, n.p.txn, key); err == nil && exists {
+	if exists, err := descExists(params.ctx, params.p.txn, key); err == nil && exists {
 		// TODO(a-robinson): Support CREATE OR REPLACE commands.
 		return sqlbase.NewRelationAlreadyExistsError(tKey.Name())
 	} else if err != nil {
 		return err
 	}
 
-	id, err := GenerateUniqueDescID(params.ctx, n.p.session.execCfg.DB)
+	id, err := GenerateUniqueDescID(params.ctx, params.p.session.execCfg.DB)
 	if err != nil {
 		return nil
 	}
@@ -546,14 +544,13 @@ func (n *createViewNode) Start(params runParams) error {
 	privs := n.dbDesc.GetPrivileges()
 
 	desc, err := n.makeViewTableDesc(
-		params.ctx,
+		params,
 		viewName,
 		n.n.ColumnNames,
 		n.dbDesc.ID,
 		id,
 		n.sourceColumns,
 		privs,
-		&n.p.evalCtx,
 	)
 	if err != nil {
 		return err
@@ -568,7 +565,7 @@ func (n *createViewNode) Start(params runParams) error {
 		desc.DependsOn = append(desc.DependsOn, backrefID)
 	}
 
-	if err = n.p.createDescriptorWithID(params.ctx, key, id, &desc); err != nil {
+	if err = params.p.createDescriptorWithID(params.ctx, key, id, &desc); err != nil {
 		return err
 	}
 
@@ -584,31 +581,31 @@ func (n *createViewNode) Start(params runParams) error {
 			dep.ID = desc.ID
 			backrefDesc.DependedOnBy = append(backrefDesc.DependedOnBy, dep)
 		}
-		if err := n.p.saveNonmutationAndNotify(params.ctx, &backrefDesc); err != nil {
+		if err := params.p.saveNonmutationAndNotify(params.ctx, &backrefDesc); err != nil {
 			return err
 		}
 	}
 
 	if desc.Adding() {
-		n.p.notifySchemaChange(&desc, sqlbase.InvalidMutationID)
+		params.p.notifySchemaChange(&desc, sqlbase.InvalidMutationID)
 	}
-	if err := desc.Validate(params.ctx, n.p.txn); err != nil {
+	if err := desc.Validate(params.ctx, params.p.txn); err != nil {
 		return err
 	}
 
 	// Log Create View event. This is an auditable log event and is
 	// recorded in the same transaction as the table descriptor update.
-	return MakeEventLogger(n.p.LeaseMgr()).InsertEventRecord(
+	return MakeEventLogger(params.p.LeaseMgr()).InsertEventRecord(
 		params.ctx,
-		n.p.txn,
+		params.p.txn,
 		EventLogCreateView,
 		int32(desc.ID),
-		int32(n.p.evalCtx.NodeID),
+		int32(params.p.evalCtx.NodeID),
 		struct {
 			ViewName  string
 			Statement string
 			User      string
-		}{n.n.Name.String(), n.n.String(), n.p.session.User},
+		}{n.n.Name.String(), n.n.String(), params.p.session.User},
 	)
 }
 
@@ -1410,16 +1407,15 @@ func initTableDescriptor(
 // doesn't matter if reads/writes use a cached descriptor that doesn't
 // include the back-references.
 func (n *createViewNode) makeViewTableDesc(
-	ctx context.Context,
+	params runParams,
 	viewName string,
 	columnNames tree.NameList,
 	parentID sqlbase.ID,
 	id sqlbase.ID,
 	resultColumns []sqlbase.ResultColumn,
 	privileges *sqlbase.PrivilegeDescriptor,
-	evalCtx *tree.EvalContext,
 ) (sqlbase.TableDescriptor, error) {
-	desc := initTableDescriptor(id, parentID, viewName, n.p.txn.OrigTimestamp(), privileges)
+	desc := initTableDescriptor(id, parentID, viewName, params.p.txn.OrigTimestamp(), privileges)
 	desc.ViewQuery = tree.AsStringWithFlags(n.n.AsSource, tree.FmtParsable)
 	for i, colRes := range resultColumns {
 		colType, err := coltypes.DatumTypeToColumnType(colRes.Typ)
@@ -1430,7 +1426,7 @@ func (n *createViewNode) makeViewTableDesc(
 		if len(columnNames) > i {
 			columnTableDef.Name = columnNames[i]
 		}
-		col, _, err := sqlbase.MakeColumnDefDescs(&columnTableDef, &n.p.semaCtx, evalCtx)
+		col, _, err := sqlbase.MakeColumnDefDescs(&columnTableDef, &params.p.semaCtx, &params.p.evalCtx)
 		if err != nil {
 			return desc, err
 		}
