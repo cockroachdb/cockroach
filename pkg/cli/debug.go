@@ -92,7 +92,7 @@ func openStore(cmd *cobra.Command, dir string, stopper *stop.Stopper) (*engine.R
 }
 
 func printKey(kv engine.MVCCKeyValue) (bool, error) {
-	fmt.Printf("%s", kv.Key)
+	fmt.Printf("%s %s: ", kv.Key.Timestamp, kv.Key.Key)
 	if debugCtx.sizes {
 		fmt.Printf(" %d %d", len(kv.Key.Key), len(kv.Value))
 	}
@@ -101,11 +101,8 @@ func printKey(kv engine.MVCCKeyValue) (bool, error) {
 }
 
 func printKeyValue(kv engine.MVCCKeyValue) (bool, error) {
-	if kv.Key.Timestamp != (hlc.Timestamp{}) {
-		fmt.Printf("%s %s: ", kv.Key.Timestamp, kv.Key.Key)
-	} else {
-		fmt.Printf("%s: ", kv.Key.Key)
-	}
+	fmt.Printf("%s %s: ", kv.Key.Timestamp, kv.Key.Key)
+
 	if debugCtx.sizes {
 		fmt.Printf("%d %d: ", len(kv.Key.Key), len(kv.Value))
 	}
