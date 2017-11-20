@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 )
 
 // window constructs a windowNode according to window function applications. This may
@@ -76,7 +77,6 @@ func (p *planner) window(
 	}
 
 	window := &windowNode{
-		planner:      p,
 		values:       valuesNode{columns: s.columns},
 		windowRender: make([]tree.TypedExpr, len(s.render)),
 	}
@@ -96,7 +96,8 @@ func (p *planner) window(
 	window.wrappedRenderVals = sqlbase.NewRowContainer(
 		acc, sqlbase.ColTypeInfoFromResCols(s.columns), 0,
 	)
-	window.windowsAcc = p.session.TxnState.OpenAccount()
+	// TODO(knz): this account should probably not be opened before Start() is called.
+	window.windowsAcc = p.session.TxnState.makeBoundAccount()
 
 	return window, nil
 }
@@ -415,8 +416,6 @@ func (n *windowNode) replaceIndexVarsAndAggFuncs(s *renderNode) {
 // A windowNode implements the planNode interface and handles windowing logic.
 // It "wraps" a planNode which is used to retrieve the un-windowed results.
 type windowNode struct {
-	planner *planner
-
 	// The "wrapped" node (which returns un-windowed results).
 	plan planNode
 
@@ -460,7 +459,7 @@ type windowNode struct {
 	aggContainer windowNodeAggContainer
 	ivarHelper   *tree.IndexedVarHelper
 
-	windowsAcc WrappableMemoryAccount
+	windowsAcc mon.BoundAccount
 }
 
 func (n *windowNode) Values() tree.Datums {
@@ -481,10 +480,15 @@ func (n *windowNode) Next(params runParams) (bool, error) {
 		}
 		if !next {
 			n.populated = true
-			if err := n.computeWindows(params.ctx); err != nil {
+			if err := n.computeWindows(params.ctx, &params.p.evalCtx); err != nil {
 				return false, err
 			}
-			if err := n.populateValues(params.ctx); err != nil {
+			n.values.rows = sqlbase.NewRowContainer(
+				params.p.session.TxnState.makeBoundAccount(),
+				sqlbase.ColTypeInfoFromResCols(n.values.columns),
+				n.wrappedRenderVals.Len(),
+			)
+			if err := n.populateValues(params.ctx, &params.p.evalCtx); err != nil {
 				return false, err
 			}
 			break
@@ -557,18 +561,17 @@ type peerGroupChecker interface {
 //     for each partition
 //       sort partition
 //       evaluate window frame over partition per cell, keeping track of peer groups
-func (n *windowNode) computeWindows(ctx context.Context) error {
+func (n *windowNode) computeWindows(ctx context.Context, evalCtx *tree.EvalContext) error {
 	rowCount := n.wrappedRenderVals.Len()
 	if rowCount == 0 {
 		return nil
 	}
 
 	windowCount := len(n.funcs)
-	acc := n.windowsAcc.Wtxn(n.planner.session)
 
 	winValSz := uintptr(rowCount) * unsafe.Sizeof([]tree.Datum{})
 	winAllocSz := uintptr(rowCount*windowCount) * unsafe.Sizeof(tree.Datum(nil))
-	if err := acc.Grow(ctx, int64(winValSz+winAllocSz)); err != nil {
+	if err := n.windowsAcc.Grow(ctx, int64(winValSz+winAllocSz)); err != nil {
 		return err
 	}
 
@@ -587,20 +590,20 @@ func (n *windowNode) computeWindows(ctx context.Context) error {
 			// If no partition indexes are included for the window function, all
 			// rows are added to the same partition, which need to be pre-allocated.
 			sz := int64(uintptr(rowCount) * unsafe.Sizeof(tree.IndexedRow{}))
-			if err := acc.Grow(ctx, sz); err != nil {
+			if err := n.windowsAcc.Grow(ctx, sz); err != nil {
 				return err
 			}
 			partitions[""] = make([]tree.IndexedRow, rowCount)
 		}
 
-		if n := len(windowFn.partitionIdxs); n > cap(scratchDatum) {
-			sz := int64(uintptr(n) * unsafe.Sizeof(tree.Datum(nil)))
-			if err := acc.Grow(ctx, sz); err != nil {
+		if num := len(windowFn.partitionIdxs); num > cap(scratchDatum) {
+			sz := int64(uintptr(num) * unsafe.Sizeof(tree.Datum(nil)))
+			if err := n.windowsAcc.Grow(ctx, sz); err != nil {
 				return err
 			}
-			scratchDatum = make([]tree.Datum, n)
+			scratchDatum = make([]tree.Datum, num)
 		} else {
-			scratchDatum = scratchDatum[:n]
+			scratchDatum = scratchDatum[:num]
 		}
 
 		// Partition rows into separate partitions based on hash values of the
@@ -630,7 +633,7 @@ func (n *windowNode) computeWindows(ctx context.Context) error {
 				}
 
 				sz := int64(uintptr(len(encoded)) + unsafe.Sizeof(entry))
-				if err := acc.Grow(ctx, sz); err != nil {
+				if err := n.windowsAcc.Grow(ctx, sz); err != nil {
 					return err
 				}
 				partitions[string(encoded)] = append(partitions[string(encoded)], entry)
@@ -655,8 +658,8 @@ func (n *windowNode) computeWindows(ctx context.Context) error {
 			// peer. Without ORDER BY, all rows of the partition are included in the window frame,
 			// since all rows become peers of the current row. Once we add better framing support,
 			// we should flesh this logic out more.
-			builtin := windowFn.expr.GetWindowConstructor()(&n.planner.evalCtx)
-			defer builtin.Close(ctx, &n.planner.evalCtx)
+			builtin := windowFn.expr.GetWindowConstructor()(evalCtx)
+			defer builtin.Close(ctx, evalCtx)
 
 			// Since we only support two types of window frames (see TODO above), we only
 			// need two possible types of peerGroupChecker's to help determine peer groups
@@ -666,7 +669,7 @@ func (n *windowNode) computeWindows(ctx context.Context) error {
 				// If an ORDER BY clause is provided, order the partition and use the
 				// sorter as our peerGroupChecker.
 				sorter := &partitionSorter{
-					evalCtx:       &n.planner.evalCtx,
+					evalCtx:       evalCtx,
 					rows:          partition,
 					windowDefVals: n.wrappedRenderVals,
 					ordering:      windowFn.columnOrdering,
@@ -704,14 +707,14 @@ func (n *windowNode) computeWindows(ctx context.Context) error {
 
 				// Perform calculations on each row in the current peer group.
 				for ; frame.RowIdx < frame.FirstPeerIdx+frame.PeerRowCount; frame.RowIdx++ {
-					res, err := builtin.Compute(ctx, &n.planner.evalCtx, frame)
+					res, err := builtin.Compute(ctx, evalCtx, frame)
 					if err != nil {
 						return err
 					}
 
 					// This may overestimate, because WindowFuncs may perform internal caching.
 					sz := res.Size()
-					if err := acc.Grow(ctx, int64(sz)); err != nil {
+					if err := n.windowsAcc.Grow(ctx, int64(sz)); err != nil {
 						return err
 					}
 
@@ -727,15 +730,8 @@ func (n *windowNode) computeWindows(ctx context.Context) error {
 
 // populateValues populates n.values with final datum values after computing
 // window result values in n.windowValues.
-func (n *windowNode) populateValues(ctx context.Context) error {
-	acc := n.windowsAcc.Wtxn(n.planner.session)
+func (n *windowNode) populateValues(ctx context.Context, evalCtx *tree.EvalContext) error {
 	rowCount := n.wrappedRenderVals.Len()
-	n.values.rows = sqlbase.NewRowContainer(
-		n.planner.session.TxnState.makeBoundAccount(),
-		sqlbase.ColTypeInfoFromResCols(n.values.columns),
-		rowCount,
-	)
-
 	row := make(tree.Datums, len(n.windowRender))
 	for i := 0; i < rowCount; i++ {
 		wrappedRow := n.wrappedRenderVals.At(i)
@@ -765,9 +761,9 @@ func (n *windowNode) populateValues(ctx context.Context) error {
 				}
 				// Instead, we evaluate the current window render, which depends on at least
 				// one window function, at the given row.
-				n.planner.evalCtx.IVarHelper = n.ivarHelper
-				res, err := curWindowRender.Eval(&n.planner.evalCtx)
-				n.planner.evalCtx.IVarHelper = nil
+				evalCtx.IVarHelper = n.ivarHelper
+				res, err := curWindowRender.Eval(evalCtx)
+				evalCtx.IVarHelper = nil
 				if err != nil {
 					return err
 				}
@@ -785,7 +781,7 @@ func (n *windowNode) populateValues(ctx context.Context) error {
 	n.wrappedRenderVals.Close(ctx)
 	n.wrappedRenderVals = nil
 	n.windowValues = nil
-	acc.Close(ctx)
+	n.windowsAcc.Close(ctx)
 
 	return nil
 }
@@ -798,7 +794,7 @@ func (n *windowNode) Close(ctx context.Context) {
 	}
 	if n.windowValues != nil {
 		n.windowValues = nil
-		n.windowsAcc.Wtxn(n.planner.session).Close(ctx)
+		n.windowsAcc.Close(ctx)
 	}
 	n.values.Close(ctx)
 }
