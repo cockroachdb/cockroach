@@ -80,7 +80,7 @@ func parseAndNormalizeExpr(
 		t.Fatalf("%s: %v", sql, err)
 	}
 
-	// Perform name resolution because {analyze,simplify}Expr want
+	// Perform name resolution because {decompose,simplify}Expr want
 	// expressions containing IndexedVars.
 	if expr, _, _, err = sel.resolveNames(expr); err != nil {
 		t.Fatalf("%s: %v", sql, err)

@@ -128,7 +128,7 @@ func (p *planner) selectIndex(
 	if s.filter != nil {
 		// Analyze the filter expression, simplifying it and splitting it up into
 		// possibly overlapping ranges.
-		exprs, equivalent := analyzeExpr(&p.evalCtx, s.filter)
+		exprs, equivalent := decomposeExpr(&p.evalCtx, s.filter)
 		if log.V(2) {
 			log.Infof(ctx, "analyzeExpr: %s -> %s [equivalent=%v]", s.filter, exprs, equivalent)
 		}
