@@ -514,14 +514,28 @@ func MakeJSON(d interface{}) (JSON, error) {
 	return nil, pgerror.NewError("invalid value %s passed to MakeJSON", d.(fmt.Stringer).String())
 }
 
+// This value was determined through some rough experimental results as a good
+// place to start doing binary search over a linear scan.
+const bsearchCutoff = 20
+
 func (j jsonObject) FetchValKey(key string) JSON {
-	for i := range j {
-		if string(j[i].k) == key {
-			return j[i].v
+	// For small objects, the overhead of binary search is significant and so
+	// it's faster to just do a linear scan.
+	if len(j) < bsearchCutoff {
+		for i := range j {
+			if string(j[i].k) == key {
+				return j[i].v
+			}
+			if string(j[i].k) > key {
+				break
+			}
 		}
-		if string(j[i].k) > key {
-			break
-		}
+		return nil
+	}
+
+	i := sort.Search(len(j), func(i int) bool { return string(j[i].k) >= key })
+	if i < len(j) && string(j[i].k) == key {
+		return j[i].v
 	}
 	return nil
 }
