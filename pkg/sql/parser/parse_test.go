@@ -84,6 +84,8 @@ func TestParse(t *testing.T) {
 		{`CREATE UNIQUE INDEX a ON b (c) INTERLEAVE IN PARENT d (e, f)`},
 		{`CREATE UNIQUE INDEX a ON b (c) INTERLEAVE IN PARENT d.e (f, g)`},
 		{`CREATE UNIQUE INDEX a ON b.c (d)`},
+		{`CREATE INVERTED INDEX a ON b (c)`},
+		{`CREATE INVERTED INDEX a ON b.c (d)`},
 
 		{`CREATE TABLE a ()`},
 		{`CREATE TABLE a (b INT)`},
@@ -1298,6 +1300,10 @@ func TestParse2(t *testing.T) {
 		{
 			`CREATE TABLE a (b INT, FOREIGN KEY (b) REFERENCES other ON UPDATE SET DEFAULT ON DELETE RESTRICT)`,
 			`CREATE TABLE a (b INT, FOREIGN KEY (b) REFERENCES other ON DELETE RESTRICT ON UPDATE SET DEFAULT)`,
+		},
+		{
+			`CREATE INVERTED INDEX a ON b (c) USING GIN`,
+			`CREATE INVERTED INDEX a ON b (c)`,
 		},
 	}
 	for _, d := range testData {
