@@ -27,7 +27,6 @@ import (
 // limitNode represents a node that limits the number of rows
 // returned or only return them past a given number (offset).
 type limitNode struct {
-	p          *planner
 	plan       planNode
 	countExpr  tree.TypedExpr
 	offsetExpr tree.TypedExpr
@@ -44,7 +43,7 @@ func (p *planner) Limit(ctx context.Context, n *tree.Limit) (*limitNode, error) 
 		return nil, nil
 	}
 
-	res := limitNode{p: p}
+	res := limitNode{}
 
 	data := []struct {
 		name string
@@ -78,7 +77,7 @@ func (n *limitNode) Start(params runParams) error {
 		return err
 	}
 
-	return n.evalLimit()
+	return n.evalLimit(&params.p.evalCtx)
 }
 
 // estimateLimit pre-computes the count and offset fields if they are constants,
@@ -107,7 +106,7 @@ func (n *limitNode) estimateLimit() {
 
 // evalLimit evaluates the Count and Offset fields. If Count is missing, the
 // value is MaxInt64. If Offset is missing, the value is 0
-func (n *limitNode) evalLimit() error {
+func (n *limitNode) evalLimit(evalCtx *tree.EvalContext) error {
 	n.count = math.MaxInt64
 	n.offset = 0
 
@@ -122,7 +121,7 @@ func (n *limitNode) evalLimit() error {
 
 	for _, datum := range data {
 		if datum.src != nil {
-			dstDatum, err := datum.src.Eval(&n.p.evalCtx)
+			dstDatum, err := datum.src.Eval(evalCtx)
 			if err != nil {
 				return err
 			}

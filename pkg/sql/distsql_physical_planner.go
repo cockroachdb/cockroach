@@ -2210,7 +2210,7 @@ func (dsp *DistSQLPlanner) createPlanForNode(
 		if err != nil {
 			return physicalPlan{}, err
 		}
-		if err := n.evalLimit(); err != nil {
+		if err := n.evalLimit(planCtx.evalCtx); err != nil {
 			return physicalPlan{}, err
 		}
 		if err := plan.AddLimit(n.count, n.offset, dsp.nodeDesc.NodeID); err != nil {
