@@ -112,6 +112,7 @@ func printKeyValue(kv engine.MVCCKeyValue) (bool, error) {
 		tryMeta,
 		tryTxn,
 		tryRangeIDKey,
+		tryIntent,
 	}
 	for _, decoder := range decoders {
 		out, err := decoder(kv)
@@ -353,6 +354,21 @@ func printRangeDescriptor(kv engine.MVCCKeyValue) (bool, error) {
 		fmt.Printf("%s %q: %s\n", kv.Key.Timestamp, kv.Key.Key, out)
 	}
 	return false, nil
+}
+
+func tryIntent(kv engine.MVCCKeyValue) (string, error) {
+	if len(kv.Value) == 0 {
+		return "", errors.New("empty")
+	}
+	var meta enginepb.MVCCMetadata
+	if err := protoutil.Unmarshal(kv.Value, &meta); err != nil {
+		return "", err
+	}
+	s := fmt.Sprintf("%+v", meta)
+	if meta.Txn != nil {
+		s = meta.Txn.Timestamp.String() + " " + s
+	}
+	return s, nil
 }
 
 func getProtoValue(data []byte, msg protoutil.Message) error {
