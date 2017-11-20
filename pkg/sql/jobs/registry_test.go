@@ -26,9 +26,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
-	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 )
 
@@ -42,7 +42,7 @@ func TestRegistryCancelation(t *testing.T) {
 	var ex sqlutil.InternalExecutor
 	var gossip *gossip.Gossip
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
-	registry := MakeRegistry(clock, db, ex, gossip, FakeNodeID, FakeClusterID, cluster.NoSettings)
+	registry := MakeRegistry(log.AmbientContext{}, clock, db, ex, gossip, FakeNodeID, FakeClusterID, cluster.NoSettings)
 
 	const nodeCount = 1
 	nodeLiveness := NewFakeNodeLiveness(clock, nodeCount)
@@ -68,20 +68,20 @@ func TestRegistryCancelation(t *testing.T) {
 	cancelCount := 0
 
 	register := func(id int64) {
-		job := Job{cancelFn: func() { cancelCount++ }}
-		if err := registry.register(id, &job); err != nil {
-			t.Fatal(err)
-		}
+		registry.register(id, func() { cancelCount++ })
+	}
+	unregister := func(id int64) {
+		registry.unregister(id)
 	}
 
 	const nodeID = roachpb.NodeID(1)
 
-	// Jobs that complete while the node is live should not be canceled.
+	// Jobs that complete while the node is live should be canceled once.
 	register(1)
 	wait()
-	registry.unregister(1)
+	unregister(1)
 	wait()
-	if e, a := 0, cancelCount; e != a {
+	if e, a := 1, cancelCount; e != a {
 		t.Fatalf("expected cancelCount of %d, but got %d", e, a)
 	}
 
@@ -90,17 +90,17 @@ func TestRegistryCancelation(t *testing.T) {
 	register(2)
 	nodeLiveness.FakeIncrementEpoch(nodeID)
 	wait()
-	if e, a := 1, cancelCount; e != a {
+	if e, a := 2, cancelCount; e != a {
 		t.Fatalf("expected cancelCount of %d, but got %d", e, a)
 	}
 
 	// Jobs started in the new epoch that complete while the new epoch is live
-	// should not be canceled.
+	// should be canceled once.
 	register(3)
 	wait()
-	registry.unregister(3)
+	unregister(3)
 	wait()
-	if e, a := 1, cancelCount; e != a {
+	if e, a := 3, cancelCount; e != a {
 		t.Fatalf("expected cancelCount of %d, but got %d", e, a)
 	}
 
@@ -109,7 +109,7 @@ func TestRegistryCancelation(t *testing.T) {
 	register(4)
 	nodeLiveness.FakeSetExpiration(nodeID, hlc.MinTimestamp)
 	wait()
-	if e, a := 2, cancelCount; e != a {
+	if e, a := 4, cancelCount; e != a {
 		t.Fatalf("expected cancelCount of %d, but got %d", e, a)
 	}
 
@@ -117,29 +117,7 @@ func TestRegistryCancelation(t *testing.T) {
 	// canceled.
 	register(5)
 	wait()
-	if e, a := 3, cancelCount; e != a {
+	if e, a := 5, cancelCount; e != a {
 		t.Fatalf("expected cancelCount of %d, but got %d", e, a)
 	}
-}
-
-func TestRegistryRegister(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-
-	var db *client.DB
-	var ex sqlutil.InternalExecutor
-	var gossip *gossip.Gossip
-	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
-	registry := MakeRegistry(clock, db, ex, gossip, FakeNodeID, FakeClusterID, cluster.NoSettings)
-
-	if err := registry.register(42, &Job{}); err != nil {
-		t.Fatal(err)
-	}
-
-	if err := registry.register(42, &Job{}); !testutils.IsError(err, "job 42 is already registered") {
-		t.Fatalf("expected 'already tracking job ID', but got '%s'", err)
-	}
-
-	// Unregistering the same ID multiple times is not an error.
-	registry.unregister(42)
-	registry.unregister(42)
 }

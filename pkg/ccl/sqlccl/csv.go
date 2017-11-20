@@ -1040,7 +1040,7 @@ func importPlanHook(
 				}},
 			},
 		})
-		if err := job.Created(ctx, jobs.WithoutCancel); err != nil {
+		if err := job.Created(ctx); err != nil {
 			return err
 		}
 		if err := job.Started(ctx); err != nil {
@@ -1066,8 +1066,14 @@ func importPlanHook(
 		if err := tempStorage.Delete(ctx, BackupDescriptorCheckpointName); err != nil {
 			log.Warningf(ctx, "unable to delete checkpointed backup descriptor: %+v", err)
 		}
-		if err := job.FinishedWith(ctx, importErr); err != nil {
-			return err
+		if importErr != nil {
+			if err := job.Failed(ctx, importErr, nil); err != nil {
+				return err
+			}
+		} else {
+			if err := job.Succeeded(ctx, nil); err != nil {
+				return err
+			}
 		}
 		if importErr != nil {
 			return importErr

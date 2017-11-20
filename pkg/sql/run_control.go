@@ -46,18 +46,14 @@ func (n *controlJobNode) Start(params runParams) error {
 		return fmt.Errorf("%s is not a valid job ID", jobIDDatum)
 	}
 
-	job, err := params.p.ExecCfg().JobRegistry.LoadJob(params.ctx, int64(jobID))
-	if err != nil {
-		return err
-	}
-
+	reg := params.p.ExecCfg().JobRegistry
 	switch n.desiredStatus {
 	case jobs.StatusPaused:
-		return job.Paused(params.ctx)
+		return reg.Pause(params.ctx, params.p.txn, int64(jobID))
 	case jobs.StatusRunning:
-		return job.Resumed(params.ctx)
+		return reg.Resume(params.ctx, params.p.txn, int64(jobID))
 	case jobs.StatusCanceled:
-		return job.Canceled(params.ctx)
+		return reg.Cancel(params.ctx, params.p.txn, int64(jobID))
 	default:
 		panic("unreachable")
 	}
