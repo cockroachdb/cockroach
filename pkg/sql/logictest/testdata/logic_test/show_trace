@@ -713,3 +713,10 @@ fetched: /abc/primary/1/'one' -> NULL
 fetched: /abc/primary/1/'one'/c -> 1.1
 fetched: /abc/primary/2/'two' -> NULL
 fetched: /abc/primary/3/'three' -> NULL
+
+# Test that SHOW TRACE FOR works with AS OF SYSTEM time. This here test doesn't
+# prove much; it only shows that we get to planning. The table did not exist at
+# the requested timestamp, hence the error. (Except ideally SHOW TRACE FOR would
+# not return the error, see #20157).
+statement error pq: database "t" does not exist
+SHOW TRACE FOR SELECT * FROM t.abc AS OF SYSTEM TIME '2017-01-01'

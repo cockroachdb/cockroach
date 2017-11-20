@@ -168,8 +168,10 @@ func TestAsOfTime(t *testing.T) {
 	}
 
 	// Subqueries shouldn't work.
-	if _, err := db.Query(fmt.Sprintf("SELECT (SELECT a FROM d.t AS OF SYSTEM TIME %s)", tsVal1)); !testutils.IsError(err, "pq: unexpected AS OF SYSTEM TIME") {
-		t.Fatal(err)
+	_, err := db.Query(
+		fmt.Sprintf("SELECT (SELECT a FROM d.t AS OF SYSTEM TIME %s)", tsVal1))
+	if !testutils.IsError(err, "pq: AS OF SYSTEM TIME not supported") {
+		t.Fatalf("expected not supported, got: %v", err)
 	}
 
 	// Verify that we can read columns in the past that are dropped in the future.
@@ -183,8 +185,10 @@ func TestAsOfTime(t *testing.T) {
 	}
 
 	// Can't use in a transaction.
-	if _, err := db.Query(fmt.Sprintf("BEGIN; SELECT a FROM d.t AS OF SYSTEM TIME %s; COMMIT;", tsVal1)); !testutils.IsError(err, "pq: unexpected AS OF SYSTEM TIME") {
-		t.Fatal(err)
+	_, err = db.Query(
+		fmt.Sprintf("BEGIN; SELECT a FROM d.t AS OF SYSTEM TIME %s; COMMIT;", tsVal1))
+	if !testutils.IsError(err, "pq: AS OF SYSTEM TIME not supported") {
+		t.Fatalf("expected not supported, got: %v", err)
 	}
 }
 
