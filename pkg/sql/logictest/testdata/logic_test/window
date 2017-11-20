@@ -68,16 +68,15 @@ SELECT avg(k) OVER (PARTITION BY v) FROM kv ORDER BY 1
 5.5
 5.5
 
-# Not working until #12482 is fixed.
-#query R
-#SELECT avg(k) OVER (PARTITION BY kv.*) FROM kv ORDER BY 1
-#----
-#1
-#3
-#5
-#6
-#7
-#8
+query R
+SELECT avg(k) OVER (PARTITION BY kv.*) FROM kv ORDER BY 1
+----
+1
+3
+5
+6
+7
+8
 
 query R
 SELECT avg(k) OVER (ORDER BY w) FROM kv ORDER BY 1
@@ -90,6 +89,26 @@ SELECT avg(k) OVER (ORDER BY w) FROM kv ORDER BY 1
 7.5
 
 query R
+SELECT avg(k) OVER (ORDER BY b) FROM kv ORDER BY 1
+----
+5
+5
+5
+5
+6.5
+6.5
+
+query R
+SELECT avg(k) OVER (ORDER BY w, b) FROM kv ORDER BY 1
+----
+5
+5.4
+5.5
+5.5
+7.5
+8
+
+query R
 SELECT avg(k) OVER (ORDER BY 1-w) FROM kv ORDER BY 1
 ----
 3.75
@@ -99,16 +118,15 @@ SELECT avg(k) OVER (ORDER BY 1-w) FROM kv ORDER BY 1
 5
 5
 
-# Not working until #12482 is fixed.
-#query R
-#SELECT avg(k) OVER (ORDER BY kv.*) FROM kv ORDER BY 1
-#----
-#1
-#2
-#3
-#3.75
-#4.4
-#5
+query R
+SELECT avg(k) OVER (ORDER BY kv.*) FROM kv ORDER BY 1
+----
+1
+2
+3
+3.75
+4.4
+5
 
 query R
 SELECT avg(k) OVER (ORDER BY w DESC) FROM kv ORDER BY 1
