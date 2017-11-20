@@ -27,7 +27,7 @@ EXPLAIN SELECT * FROM abcd WHERE a >= 20 AND a <= 30
 ----
 0  scan  ·      ·
 0  ·     table  abcd@primary
-0  ·     spans  /20-/31
+0  ·     spans  /20-/30/#
 
 # Force primary
 
@@ -42,7 +42,7 @@ EXPLAIN SELECT * FROM abcd@primary WHERE a >= 20 AND a <= 30
 ----
 0  scan  ·      ·
 0  ·     table  abcd@primary
-0  ·     spans  /20-/31
+0  ·     spans  /20-/30/#
 
 # Force index b
 

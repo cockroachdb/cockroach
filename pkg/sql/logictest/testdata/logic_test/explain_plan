@@ -41,7 +41,7 @@ EXPLAIN SELECT * FROM t WHERE k = 1 OR k = 3
 ----
 0  scan  ·      ·
 0  ·     table  t@primary
-0  ·     spans  /1-/2 /3-/4
+0  ·     spans  /1-/1/# /3-/3/#
 
 query ITTTTT
 EXPLAIN (VERBOSE) SELECT * FROM t WHERE k % 2 = 0

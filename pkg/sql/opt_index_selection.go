@@ -1103,10 +1103,11 @@ func spansFromLogicalSpans(
 		interstices[sharedPrefixLen] =
 			encoding.EncodeUvarintAscending(interstices[sharedPrefixLen], uint64(index.ID))
 	}
+
 	for i, ls := range logicalSpans {
 		var s roachpb.Span
 		var err error
-		if s, err = spanFromLogicalSpan(evalCtx, ls, interstices); err != nil {
+		if s, err = spanFromLogicalSpan(evalCtx, tableDesc, index, ls, interstices); err != nil {
 			return nil, err
 		}
 		spans[i] = s
@@ -1117,20 +1118,26 @@ func spansFromLogicalSpans(
 // interstices[i] is inserted right before the ith key part. The last element of
 // interstices is inserted at the end (if all key parts are present).
 func spanFromLogicalSpan(
-	evalCtx *tree.EvalContext, ls logicalSpan, interstices [][]byte,
+	evalCtx *tree.EvalContext,
+	tableDesc *sqlbase.TableDescriptor,
+	index *sqlbase.IndexDescriptor,
+	ls logicalSpan,
+	interstices [][]byte,
 ) (roachpb.Span, error) {
 	var s roachpb.Span
+	var err error
+	// Encode each logical part of the start key for span.(start)Key.
 	for i := 0; ; i++ {
 		s.Key = append(s.Key, interstices[i]...)
 		if i >= len(ls.start) {
 			break
 		}
 		part := ls.start[i]
-		var err error
 		s.Key, err = encodeLogicalKeyPart(evalCtx, s.Key, part)
 		if err != nil {
 			return roachpb.Span{}, err
 		}
+		// We need to exclude the value this logical part refers to.
 		if !part.inclusive {
 			if i != len(ls.start)-1 {
 				return roachpb.Span{}, errors.New("exclusive start constraint must be last")
@@ -1142,6 +1149,13 @@ func spanFromLogicalSpan(
 			break
 		}
 	}
+
+	// TightenStartKey is not needed here (unlike TightenEndKey) since
+	// start keys at this point cannot be generated with interleaved
+	// keys.
+
+	lastPartInclusive := true
+	// Encode each logical part of the end key as span.EndKey.
 	for i := 0; ; i++ {
 		s.EndKey = append(s.EndKey, interstices[i]...)
 		if i >= len(ls.end) {
@@ -1153,15 +1167,21 @@ func spanFromLogicalSpan(
 		if err != nil {
 			return roachpb.Span{}, err
 		}
+
 		if !part.inclusive {
 			if i != len(ls.end)-1 {
 				return roachpb.Span{}, errors.New("exclusive end constraint must be last")
 			}
-			return s, nil
+
+			lastPartInclusive = false
 		}
 	}
-	s.EndKey = s.EndKey.PrefixEnd()
-	return s, nil
+
+	// We tighten the end key to prevent reading interleaved children
+	// after the last parent key.
+	s.EndKey, err = sqlbase.TightenEndKey(tableDesc, index, s.EndKey, lastPartInclusive)
+
+	return s, err
 }
 
 func encodeLogicalKeyPart(
