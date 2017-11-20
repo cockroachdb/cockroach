@@ -33,7 +33,6 @@ type traceNode struct {
 	// plan is the wrapped execution plan that will be traced.
 	plan    planNode
 	columns sqlbase.ResultColumns
-	p       *planner
 
 	execDone bool
 
@@ -43,9 +42,9 @@ type traceNode struct {
 	// around the interaction of SQL with KV. Some of the messages are per-row.
 	kvTracingEnabled bool
 
-	// recording is set if this node started tracing on the session. If it did,
-	// then Close() needs to stop the recording.
-	recording bool
+	// stopTracing is set is set if this node started tracing on the
+	// session. If it did, then Close() must close it.
+	stopTracing func() error
 }
 
 var sessionTraceTableName = tree.TableName{
@@ -67,7 +66,6 @@ func (p *planner) makeTraceNode(plan planNode, kvTracingEnabled bool) (planNode,
 	}
 	return &traceNode{
 		plan:             plan,
-		p:                p,
 		columns:          sqlbase.ResultColumnsFromColDescs(desc.Columns),
 		kvTracingEnabled: kvTracingEnabled,
 	}, nil
@@ -78,15 +76,15 @@ var errTracingAlreadyEnabled = errors.New(
 		" - did you mean SHOW TRACE FOR SESSION?")
 
 func (n *traceNode) Start(params runParams) error {
-	if n.p.session.Tracing.Enabled() {
+	if params.p.session.Tracing.Enabled() {
 		return errTracingAlreadyEnabled
 	}
-	if err := n.p.session.Tracing.StartTracing(
+	if err := params.p.session.Tracing.StartTracing(
 		tracing.SnowballRecording, n.kvTracingEnabled,
 	); err != nil {
 		return err
 	}
-	n.recording = true
+	n.stopTracing = func() error { return stopTracing(params.p.session) }
 
 	startCtx, sp := tracing.ChildSpan(params.ctx, "starting plan")
 	defer sp.Finish()
@@ -99,8 +97,8 @@ func (n *traceNode) Close(ctx context.Context) {
 		n.plan.Close(ctx)
 	}
 	n.traceRows = nil
-	if n.recording {
-		if err := stopTracing(n.p.session); err != nil {
+	if n.stopTracing != nil {
+		if err := n.stopTracing(); err != nil {
 			log.Errorf(ctx, "error stopping tracing at end of SHOW TRACE FOR: %v", err)
 		}
 	}
@@ -148,13 +146,13 @@ func (n *traceNode) Next(params runParams) (bool, error) {
 			log.VEventf(consumeCtx, 2, "resources released, stopping trace")
 		}()
 
-		n.recording = false
-		if err := stopTracing(n.p.session); err != nil {
+		if err := stopTracing(params.p.session); err != nil {
 			return false, err
 		}
+		n.stopTracing = nil
 
 		var err error
-		n.traceRows, err = n.p.session.Tracing.generateSessionTraceVTable()
+		n.traceRows, err = params.p.session.Tracing.generateSessionTraceVTable()
 		if err != nil {
 			return false, err
 		}
