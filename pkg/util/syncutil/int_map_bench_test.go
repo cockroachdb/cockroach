@@ -2,6 +2,8 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in licenses/BSD-golang.txt.
 
+// This code originated in Go's sync package.
+
 package syncutil
 
 import (

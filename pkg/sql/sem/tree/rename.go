@@ -1,4 +1,11 @@
-// Copyright 2014 The Cockroach Authors.
+// Copyright 2012, Google Inc. All rights reserved.
+// Use of this source code is governed by a BSD-style
+// license that can be found in licenses/BSD-vitess.txt.
+
+// Portions of this file are additionally subject to the following
+// license and copyright.
+//
+// Copyright 2015 The Cockroach Authors.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -13,10 +20,6 @@
 // permissions and limitations under the License.
 
 // This code was derived from https://github.com/youtube/vitess.
-//
-// Copyright 2012, Google Inc. All rights reserved.
-// Use of this source code is governed by a BSD-style
-// license that can be found in licenses/BSD-vitess.txt.
 
 package tree
 
