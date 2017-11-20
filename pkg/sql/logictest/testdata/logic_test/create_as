@@ -30,7 +30,7 @@ forks blue
 forks red
 forks green
 
-statement error pq: unexpected AS OF SYSTEM TIME
+statement error pq: AS OF SYSTEM TIME not supported in this context
 CREATE TABLE t AS SELECT * FROM stock AS OF SYSTEM TIME '2016-01-01'
 
 statement error pgcode 42601 CREATE TABLE specifies 3 column names, but data source has 2 columns

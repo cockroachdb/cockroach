@@ -22,6 +22,7 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/apd"
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -106,13 +107,25 @@ func TestAsOfTime(t *testing.T) {
 	} else if i != val2 {
 		t.Fatalf("expected %v, got %v", val2, i)
 	}
-	if err := db.QueryRow(fmt.Sprintf("SELECT a, c FROM d.t, d.j AS OF SYSTEM TIME %s", tsVal1)).Scan(&i, &j); err != nil {
-		t.Fatal(err)
-	} else if i != val1 {
-		t.Fatalf("expected %v, got %v", val1, i)
-	} else if j != val2 {
-		t.Fatalf("expected %v, got %v", val2, j)
-	}
+
+	// Test a simple query, and do it with and without wrapping parens to check
+	// that parens don't matter.
+	testutils.RunTrueAndFalse(t, "parens", func(t *testing.T, useParens bool) {
+		openParens := ""
+		closeParens := ""
+		if useParens {
+			openParens = "(("
+			closeParens = "))"
+		}
+		query := fmt.Sprintf("%sSELECT a, c FROM d.t, d.j AS OF SYSTEM TIME %s%s", openParens, tsVal1, closeParens)
+		if err := db.QueryRow(query).Scan(&i, &j); err != nil {
+			t.Fatal(err)
+		} else if i != val1 {
+			t.Fatalf("expected %v, got %v", val1, i)
+		} else if j != val2 {
+			t.Fatalf("expected %v, got %v", val2, j)
+		}
+	})
 
 	// Future queries shouldn't work.
 	if err := db.QueryRow("SELECT a FROM d.t AS OF SYSTEM TIME '2200-01-01'").Scan(&i); !testutils.IsError(err, "pq: AS OF SYSTEM TIME: cannot specify timestamp in the future") {
@@ -169,8 +182,10 @@ func TestAsOfTime(t *testing.T) {
 	}
 
 	// Subqueries shouldn't work.
-	if _, err := db.Query(fmt.Sprintf("SELECT (SELECT a FROM d.t AS OF SYSTEM TIME %s)", tsVal1)); !testutils.IsError(err, "pq: unexpected AS OF SYSTEM TIME") {
-		t.Fatal(err)
+	_, err := db.Query(
+		fmt.Sprintf("SELECT (SELECT a FROM d.t AS OF SYSTEM TIME %s)", tsVal1))
+	if !testutils.IsError(err, "pq: AS OF SYSTEM TIME not supported in this context") {
+		t.Fatalf("expected not supported, got: %v", err)
 	}
 
 	// Verify that we can read columns in the past that are dropped in the future.
@@ -184,8 +199,10 @@ func TestAsOfTime(t *testing.T) {
 	}
 
 	// Can't use in a transaction.
-	if _, err := db.Query(fmt.Sprintf("BEGIN; SELECT a FROM d.t AS OF SYSTEM TIME %s; COMMIT;", tsVal1)); !testutils.IsError(err, "pq: unexpected AS OF SYSTEM TIME") {
-		t.Fatal(err)
+	_, err = db.Query(
+		fmt.Sprintf("BEGIN; SELECT a FROM d.t AS OF SYSTEM TIME %s; COMMIT;", tsVal1))
+	if !testutils.IsError(err, "pq: AS OF SYSTEM TIME not supported in this context") {
+		t.Fatalf("expected not supported, got: %v", err)
 	}
 }
 
@@ -287,5 +304,62 @@ func TestAsOfRetry(t *testing.T) {
 		t.Fatal(err)
 	} else if i != val2 {
 		t.Fatalf("unexpected val: %v", i)
+	}
+}
+
+// Test that SHOW TRACE FOR SELECT ... AS OF SYSTEM TIME works.
+// AS OF SYSTEM TIME is generally only accepted at the topmost level of a query,
+// but SHOW TRACE FOR is a special case.
+func TestShowTraceAsOfTime(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(context.TODO())
+
+	const val1 = 456
+	const val2 = 789
+
+	if _, err := db.Exec(`
+		CREATE DATABASE test;
+		CREATE TABLE test.t (x INT);
+	`); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := db.Exec("INSERT INTO test.t (x) VALUES ($1)", val1); err != nil {
+		t.Fatal(err)
+	}
+	var tsVal1 string
+	var i int
+	err := db.QueryRow("SELECT x, cluster_logical_timestamp() FROM test.t").Scan(
+		&i, &tsVal1)
+	if err != nil {
+		t.Fatal(err)
+	} else if i != val1 {
+		t.Fatalf("expected %d, got %v", val1, i)
+	}
+	if _, err := db.Exec("UPDATE test.t SET x = $1", val2); err != nil {
+		t.Fatal(err)
+	}
+
+	// We now run a traced historical query and expect to see val1 instead of the
+	// more recent val2. We play some tricks for testing this; we run a SHOW KV
+	// TRACE so that rows like "output row: [<foo>]" are part of the results. And
+	// then we look for a particular such row. Unfortunately we can't easily do
+	// this on the original query because SELECT ... FROM [SHOW TRACE FOR ... AS
+	// OF SYSTEM TIME ... ) WHERE ...  is not supported because of AS OF SYSTEM
+	// TIME limitations. So, we cheat and we use a subsequent SHOW TRACE FOR
+	// SESSION, which will present the results recorded by the first query.
+	query := fmt.Sprintf("SHOW KV TRACE FOR SELECT x FROM test.t AS OF SYSTEM TIME %s", tsVal1)
+	if _, err := db.Exec(query); err != nil {
+		t.Fatal(err)
+	}
+
+	query = fmt.Sprintf("select count(1) from [show kv trace for session] "+
+		"where message = 'output row: [%d]'", val1)
+	if err := db.QueryRow(query).Scan(&i); err != nil {
+		t.Fatal(err)
+	} else if i != 1 {
+		t.Fatalf("expected to find one matching row, got %v", i)
 	}
 }
