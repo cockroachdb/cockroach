@@ -81,8 +81,9 @@ func (node *ShowDatabases) Format(buf *bytes.Buffer, f FmtFlags) {
 	buf.WriteString("SHOW DATABASES")
 }
 
-// ShowTrace represents a SHOW TRACE FOR SESSION statement.
+// ShowTrace represents a SHOW TRACE FOR <stmt>/SESSION statement.
 type ShowTrace struct {
+	// If statement is nil, this is asking for the session trace.
 	Statement   Statement
 	OnlyKVTrace bool
 }
