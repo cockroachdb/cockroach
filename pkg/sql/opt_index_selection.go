@@ -85,15 +85,15 @@ func (p *planner) selectIndex(
 ) (planNode, error) {
 	if s.desc.IsEmpty() {
 		// No table.
-		s.initOrdering(0)
+		s.initOrdering(0, &p.evalCtx)
 		return s, nil
 	}
 
 	if s.filter == nil && analyzeOrdering == nil && s.specifiedIndex == nil {
 		// No where-clause, no ordering, and no specified index.
-		s.initOrdering(0)
+		s.initOrdering(0, &p.evalCtx)
 		var err error
-		s.spans, err = makeSpans(&s.p.evalCtx, nil /* constraints */, s.desc, s.index)
+		s.spans, err = makeSpans(&p.evalCtx, nil /* constraints */, s.desc, s.index)
 		if err != nil {
 			return nil, errors.Wrapf(err, "table ID = %d, index ID = %d", s.desc.ID, s.index.ID)
 		}
@@ -164,7 +164,7 @@ func (p *planner) selectIndex(
 		// use.
 
 		for _, c := range candidates {
-			c.analyzeExprs(&s.p.evalCtx, exprs)
+			c.analyzeExprs(&p.evalCtx, exprs)
 		}
 	}
 
@@ -193,9 +193,9 @@ func (p *planner) selectIndex(
 	for _, c := range candidates {
 		// Compute the prefix of the index for which we have exact constraints. This
 		// prefix is inconsequential for ordering because the values are identical.
-		c.exactPrefix = c.constraints.exactPrefix(&s.p.evalCtx)
+		c.exactPrefix = c.constraints.exactPrefix(&p.evalCtx)
 		if analyzeOrdering != nil {
-			c.analyzeOrdering(ctx, s, analyzeOrdering, preferOrderMatching)
+			c.analyzeOrdering(ctx, s, analyzeOrdering, preferOrderMatching, &p.evalCtx)
 		}
 	}
 
@@ -215,7 +215,7 @@ func (p *planner) selectIndex(
 	s.specifiedIndex = nil
 	s.isSecondaryIndex = (c.index != &s.desc.PrimaryIndex)
 	var err error
-	s.spans, err = makeSpans(&s.p.evalCtx, c.constraints, c.desc, c.index)
+	s.spans, err = makeSpans(&p.evalCtx, c.constraints, c.desc, c.index)
 	if err != nil {
 		return nil, errors.Wrapf(err, "constraints = %v, table ID = %d, index ID = %d",
 			c.constraints, s.desc.ID, s.index.ID)
@@ -248,13 +248,13 @@ func (p *planner) selectIndex(
 
 	var plan planNode
 	if c.covering {
-		s.initOrdering(c.exactPrefix)
+		s.initOrdering(c.exactPrefix, &p.evalCtx)
 		plan = s
 	} else {
 		// Note: makeIndexJoin destroys s and returns a new index scan
 		// node. The filter in that node may be different from the
 		// original table filter.
-		plan, s = s.p.makeIndexJoin(s, c.exactPrefix)
+		plan, s = p.makeIndexJoin(s, c.exactPrefix)
 	}
 
 	if log.V(3) {
@@ -411,11 +411,15 @@ func (v *indexInfo) analyzeExprs(evalCtx *tree.EvalContext, exprs []tree.TypedEx
 // If preferOrderMatching is true, we prefer an index that matches the desired
 // ordering completely, even if it is not a covering index.
 func (v *indexInfo) analyzeOrdering(
-	ctx context.Context, scan *scanNode, analyzeOrdering analyzeOrderingFn, preferOrderMatching bool,
+	ctx context.Context,
+	scan *scanNode,
+	analyzeOrdering analyzeOrderingFn,
+	preferOrderMatching bool,
+	evalCtx *tree.EvalContext,
 ) {
 	// Analyze the ordering provided by the index (either forward or reverse).
-	fwdIndexProps := scan.computePhysicalProps(v.index, v.exactPrefix, false)
-	revIndexProps := scan.computePhysicalProps(v.index, v.exactPrefix, true)
+	fwdIndexProps := scan.computePhysicalProps(v.index, v.exactPrefix, false, evalCtx)
+	revIndexProps := scan.computePhysicalProps(v.index, v.exactPrefix, true, evalCtx)
 	fwdMatch, fwdOrderCols := analyzeOrdering(fwdIndexProps)
 	revMatch, revOrderCols := analyzeOrdering(revIndexProps)
 
