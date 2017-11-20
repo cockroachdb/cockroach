@@ -88,6 +88,7 @@ The following are not in scope but should not be hindered by implementation of t
 * role auditing
 * multiple "admin" (or superuser) roles
 * admin UI manipulation of roles
+* new privileges (eg: admin UI related)
 
 See [Future improvements](#future-improvements) for discussion of some of these.
 
