@@ -36,7 +36,6 @@ var deleteNodePool = sync.Pool{
 type deleteNode struct {
 	editNodeBase
 	n *tree.Delete
-	p *planner
 
 	tw tableDeleter
 
@@ -104,7 +103,6 @@ func (p *planner) Delete(
 	dn := deleteNodePool.Get().(*deleteNode)
 	*dn = deleteNode{
 		n:            n,
-		p:            p,
 		editNodeBase: en,
 		tw:           tw,
 	}
@@ -132,7 +130,7 @@ func (d *deleteNode) Start(params runParams) error {
 	}
 	if scan, ok := maybeScan.(*scanNode); ok && canDeleteWithoutScan(params.ctx, d.n, scan, &d.tw) {
 		d.run.fastPath = true
-		return d.fastDelete(params.ctx, scan)
+		return d.fastDelete(params, scan)
 	}
 
 	return d.run.tw.init(d.p.txn)
@@ -214,18 +212,18 @@ func canDeleteWithoutScan(
 // `fastDelete` skips the scan of rows and just deletes the ranges that
 // `rows` would scan. Should only be used if `canDeleteWithoutScan` indicates
 // that it is safe to do so.
-func (d *deleteNode) fastDelete(ctx context.Context, scan *scanNode) error {
-	if err := scan.initScan(ctx); err != nil {
+func (d *deleteNode) fastDelete(params runParams, scan *scanNode) error {
+	if err := scan.initScan(params); err != nil {
 		return err
 	}
 
-	if err := d.tw.init(d.p.txn); err != nil {
+	if err := d.tw.init(params.p.txn); err != nil {
 		return err
 	}
-	if err := d.p.cancelChecker.Check(); err != nil {
+	if err := params.p.cancelChecker.Check(); err != nil {
 		return err
 	}
-	rowCount, err := d.tw.fastDelete(ctx, scan, d.p.session.Tracing.KVTracingEnabled())
+	rowCount, err := d.tw.fastDelete(params.ctx, scan, params.p.session.Tracing.KVTracingEnabled())
 	if err != nil {
 		return err
 	}

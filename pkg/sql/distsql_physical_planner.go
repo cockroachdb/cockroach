@@ -652,7 +652,7 @@ func (dsp *DistSQLPlanner) nodeVersionIsCompatible(
 // initTableReaderSpec initializes a TableReaderSpec/PostProcessSpec that
 // corresponds to a scanNode, except for the Spans and OutputColumns.
 func initTableReaderSpec(
-	n *scanNode,
+	n *scanNode, evalCtx *tree.EvalContext,
 ) (distsqlrun.TableReaderSpec, distsqlrun.PostProcessSpec, error) {
 	s := distsqlrun.TableReaderSpec{
 		Table:   *n.desc,
@@ -673,7 +673,7 @@ func initTableReaderSpec(
 	}
 
 	post := distsqlrun.PostProcessSpec{
-		Filter: distsqlplan.MakeExpression(n.filter, &n.p.evalCtx, nil),
+		Filter: distsqlplan.MakeExpression(n.filter, evalCtx, nil),
 	}
 
 	if n.hardLimit != 0 {
@@ -740,7 +740,7 @@ func (dsp *DistSQLPlanner) convertOrdering(
 func (dsp *DistSQLPlanner) createTableReaders(
 	planCtx *planningCtx, n *scanNode, overrideResultColumns []uint32,
 ) (physicalPlan, error) {
-	spec, post, err := initTableReaderSpec(n)
+	spec, post, err := initTableReaderSpec(n, planCtx.evalCtx)
 	if err != nil {
 		return physicalPlan{}, err
 	}
