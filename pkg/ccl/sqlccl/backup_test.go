@@ -864,6 +864,37 @@ func TestBackupRestoreControlJob(t *testing.T) {
 		return jobID, <-errCh
 	}
 
+	t.Run("foreign", func(t *testing.T) {
+		foreignDir := filepath.Join(dir, "foreign")
+		sqlDB.Exec(`CREATE DATABASE orig_fkdb`)
+		sqlDB.Exec(`CREATE DATABASE restore_fkdb`)
+		sqlDB.Exec(`CREATE TABLE orig_fkdb.fk (i INT REFERENCES data.bank)`)
+		// Generate some FK data with splits so backup/restore block correctly.
+		for i := 0; i < 10; i++ {
+			sqlDB.Exec(`INSERT INTO orig_fkdb.fk (i) VALUES ($1)`, i)
+			sqlDB.Exec(`ALTER TABLE orig_fkdb.fk SPLIT AT VALUES ($1)`, i)
+		}
+
+		for i, query := range []string{
+			`BACKUP orig_fkdb.fk TO $1`,
+			`RESTORE orig_fkdb.fk FROM $1 WITH OPTIONS ('skip_missing_foreign_keys', 'into_db'='restore_fkdb')`,
+		} {
+			jobID, err := run("PAUSE", query, foreignDir)
+			if !testutils.IsError(err, "job paused") {
+				t.Fatalf("%d: expected 'job paused' error, but got %+v", i, err)
+			}
+			sqlDB.Exec(fmt.Sprintf(`RESUME JOB %d`, jobID))
+			if err := waitForJob(sqlDB.DB, jobID); err != nil {
+				t.Fatal(err)
+			}
+		}
+
+		sqlDB.CheckQueryResults(
+			`SHOW EXPERIMENTAL_FINGERPRINTS FROM TABLE orig_fkdb.fk`,
+			sqlDB.QueryStr(`SHOW EXPERIMENTAL_FINGERPRINTS FROM TABLE restore_fkdb.fk`),
+		)
+	})
+
 	t.Run("pause", func(t *testing.T) {
 		pauseDir := filepath.Join(dir, "pause")
 		sqlDB.Exec(`CREATE DATABASE pause`)
