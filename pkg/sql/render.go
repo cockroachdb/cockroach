@@ -30,8 +30,6 @@ import (
 // renderNode encapsulates the render logic of a select statement:
 // expressing new values using expressions over source values.
 type renderNode struct {
-	planner *planner
-
 	// source describes where the data is coming from.
 	// populated initially by initFrom().
 	// potentially modified by index selection.
@@ -112,7 +110,7 @@ func (r *renderNode) Next(params runParams) (bool, error) {
 
 	r.curSourceRow = r.source.plan.Values()
 
-	err := r.renderRow()
+	err := r.renderRow(&params.p.evalCtx)
 	return err == nil, err
 }
 
@@ -217,16 +215,16 @@ func (p *planner) SelectClause(
 	desiredTypes []types.T,
 	scanVisibility scanVisibility,
 ) (planNode, error) {
-	r := &renderNode{planner: p}
+	r := &renderNode{}
 
-	if err := r.initFrom(ctx, parsed, scanVisibility); err != nil {
+	if err := p.initFrom(ctx, r, parsed, scanVisibility); err != nil {
 		return nil, err
 	}
 
 	var where *filterNode
 	if parsed.Where != nil {
 		var err error
-		where, err = r.initWhere(ctx, parsed.Where.Expr)
+		where, err = p.initWhere(ctx, r, parsed.Where.Expr)
 		if err != nil {
 			return nil, err
 		}
@@ -234,7 +232,7 @@ func (p *planner) SelectClause(
 
 	r.ivarHelper = tree.MakeIndexedVarHelper(r, len(r.sourceInfo[0].sourceColumns))
 
-	if err := r.initTargets(ctx, parsed.Exprs, desiredTypes); err != nil {
+	if err := p.initTargets(ctx, r, parsed.Exprs, desiredTypes); err != nil {
 		return nil, err
 	}
 
@@ -256,7 +254,7 @@ func (p *planner) SelectClause(
 	if group != nil && group.requiresIsNotNullFilter() {
 		if where == nil {
 			var err error
-			where, err = r.initWhere(ctx, nil)
+			where, err = p.initWhere(ctx, r, nil)
 			if err != nil {
 				return nil, err
 			}
@@ -295,14 +293,14 @@ func (p *planner) SelectClause(
 }
 
 // initFrom initializes the table node, given the parsed select expression
-func (r *renderNode) initFrom(
-	ctx context.Context, parsed *tree.SelectClause, scanVisibility scanVisibility,
+func (p *planner) initFrom(
+	ctx context.Context, r *renderNode, parsed *tree.SelectClause, scanVisibility scanVisibility,
 ) error {
 	// AS OF expressions should be handled by the executor.
-	if parsed.From.AsOf.Expr != nil && !r.planner.avoidCachedDescriptors {
+	if parsed.From.AsOf.Expr != nil && !p.avoidCachedDescriptors {
 		return fmt.Errorf("unexpected AS OF SYSTEM TIME")
 	}
-	src, err := r.planner.getSources(ctx, parsed.From.Tables, scanVisibility)
+	src, err := p.getSources(ctx, parsed.From.Tables, scanVisibility)
 	if err != nil {
 		return err
 	}
@@ -311,8 +309,8 @@ func (r *renderNode) initFrom(
 	return nil
 }
 
-func (r *renderNode) initTargets(
-	ctx context.Context, targets tree.SelectExprs, desiredTypes []types.T,
+func (p *planner) initTargets(
+	ctx context.Context, r *renderNode, targets tree.SelectExprs, desiredTypes []types.T,
 ) error {
 	// Loop over the select expressions and expand them into the expressions
 	// we're going to use to generate the returned column set and the names for
@@ -325,7 +323,7 @@ func (r *renderNode) initTargets(
 
 		// Output column names should exactly match the original expression, so we
 		// have to determine the output column name before we rewrite SRFs below.
-		outputName, err := getRenderColName(r.planner.session.SearchPath, target, &r.ivarHelper)
+		outputName, err := getRenderColName(p.session.SearchPath, target, &r.ivarHelper)
 		if err != nil {
 			return err
 		}
@@ -333,18 +331,18 @@ func (r *renderNode) initTargets(
 		// If the current expression contains a set-returning function, we need to
 		// move it up to the sources list as a cross join and add a render for the
 		// function's column in the join.
-		newTarget, err := r.rewriteSRFs(ctx, target)
+		newTarget, err := p.rewriteSRFs(ctx, r, target)
 		if err != nil {
 			return err
 		}
 
-		cols, exprs, hasStar, err := r.planner.computeRenderAllowingStars(ctx, newTarget, desiredType,
+		cols, exprs, hasStar, err := p.computeRenderAllowingStars(ctx, newTarget, desiredType,
 			r.sourceInfo, r.ivarHelper, outputName)
 		if err != nil {
 			return err
 		}
 
-		r.planner.hasStar = r.planner.hasStar || hasStar
+		p.hasStar = p.hasStar || hasStar
 		_ = r.addOrReuseRenders(cols, exprs, false)
 	}
 	// `groupBy` or `orderBy` may internally add additional columns which we
@@ -364,12 +362,11 @@ func (p *planner) insertRender(
 ) (*renderNode, error) {
 	src := planDataSource{info: newSourceInfoForSingleTable(*tn, planColumns(plan)), plan: plan}
 	render := &renderNode{
-		planner:    p,
 		source:     src,
 		sourceInfo: multiSourceInfo{src.info},
 	}
 	render.ivarHelper = tree.MakeIndexedVarHelper(render, len(src.info.sourceColumns))
-	if err := render.initTargets(ctx,
+	if err := p.initTargets(ctx, render,
 		tree.SelectExprs{tree.SelectExpr{Expr: &tree.AllColumnsSelector{}}},
 		nil /*desiredTypes*/); err != nil {
 		return nil, err
@@ -386,7 +383,6 @@ func (p *planner) makeTupleRender(
 	// Make a simple renderNode that renders all the columns in its
 	// source.
 	r := &renderNode{
-		planner:    p,
 		source:     src,
 		sourceInfo: multiSourceInfo{src.info},
 	}
@@ -398,7 +394,7 @@ func (p *planner) makeTupleRender(
 	for i := range src.info.sourceColumns {
 		tExpr.Exprs[i] = r.ivarHelper.IndexedVar(i)
 	}
-	if err := r.initTargets(ctx,
+	if err := p.initTargets(ctx, r,
 		tree.SelectExprs{tree.SelectExpr{Expr: tExpr}}, nil); err != nil {
 		return nil, err
 	}
@@ -456,16 +452,16 @@ func (v *srfExtractionVisitor) VisitPost(expr tree.Expr) tree.Expr {
 // Expressions with more than one SRF require lateral correlated subqueries,
 // which are not yet supported. For now, this function returns an error if more
 // than one SRF is present in the render expression.
-func (r *renderNode) rewriteSRFs(
-	ctx context.Context, target tree.SelectExpr,
+func (p *planner) rewriteSRFs(
+	ctx context.Context, r *renderNode, target tree.SelectExpr,
 ) (tree.SelectExpr, error) {
 	// Walk the render expression looking for SRFs.
-	v := &r.planner.srfExtractionVisitor
+	v := &p.srfExtractionVisitor
 	*v = srfExtractionVisitor{
 		err:        nil,
 		srf:        nil,
 		ivarHelper: &r.ivarHelper,
-		searchPath: r.planner.session.SearchPath,
+		searchPath: p.session.SearchPath,
 	}
 	expr, _ := tree.WalkExpr(v, target.Expr)
 	if v.err != nil {
@@ -480,14 +476,14 @@ func (r *renderNode) rewriteSRFs(
 
 	// We rewrote exactly one SRF; cross-join it with our sources and return the
 	// new render expression.
-	src, err := r.planner.getDataSourceAsOneColumn(ctx, v.srf)
+	src, err := p.getDataSourceAsOneColumn(ctx, v.srf)
 	if err != nil {
 		return target, err
 	}
 
 	if !isUnarySource(r.source) {
 		// The FROM clause specifies something. Replace with a cross-join.
-		src, err = r.planner.makeJoin(ctx, "CROSS JOIN", r.source, src, nil)
+		src, err = p.makeJoin(ctx, "CROSS JOIN", r.source, src, nil)
 		if err != nil {
 			return target, err
 		}
@@ -506,13 +502,15 @@ func isUnarySource(src planDataSource) bool {
 	return ok && len(src.info.sourceColumns) == 0
 }
 
-func (r *renderNode) initWhere(ctx context.Context, whereExpr tree.Expr) (*filterNode, error) {
+func (p *planner) initWhere(
+	ctx context.Context, r *renderNode, whereExpr tree.Expr,
+) (*filterNode, error) {
 	f := &filterNode{source: r.source}
 	f.ivarHelper = tree.MakeIndexedVarHelper(f, len(r.sourceInfo[0].sourceColumns))
 
 	if whereExpr != nil {
 		var err error
-		f.filter, err = r.planner.analyzeExpr(ctx, whereExpr, r.sourceInfo, f.ivarHelper,
+		f.filter, err = p.analyzeExpr(ctx, whereExpr, r.sourceInfo, f.ivarHelper,
 			types.Bool, true, "WHERE")
 		if err != nil {
 			return nil, err
@@ -520,8 +518,8 @@ func (r *renderNode) initWhere(ctx context.Context, whereExpr tree.Expr) (*filte
 
 		// Make sure there are no aggregation/window functions in the filter
 		// (after subqueries have been expanded).
-		if err := r.planner.txCtx.AssertNoAggregationOrWindowing(
-			f.filter, "WHERE", r.planner.session.SearchPath,
+		if err := p.txCtx.AssertNoAggregationOrWindowing(
+			f.filter, "WHERE", p.session.SearchPath,
 		); err != nil {
 			return nil, err
 		}
@@ -605,14 +603,14 @@ func (r *renderNode) resetRenderColumns(exprs []tree.TypedExpr, cols sqlbase.Res
 }
 
 // renderRow renders the row by evaluating the render expressions.
-func (r *renderNode) renderRow() error {
+func (r *renderNode) renderRow(evalCtx *tree.EvalContext) error {
 	if r.row == nil {
 		r.row = make([]tree.Datum, len(r.render))
 	}
 	for i, e := range r.render {
 		var err error
-		r.planner.evalCtx.IVarHelper = &r.ivarHelper
-		r.row[i], err = e.Eval(&r.planner.evalCtx)
+		evalCtx.IVarHelper = &r.ivarHelper
+		r.row[i], err = e.Eval(evalCtx)
 		if err != nil {
 			return err
 		}
@@ -620,8 +618,8 @@ func (r *renderNode) renderRow() error {
 	return nil
 }
 
-// Computes ordering information for the render node, given ordering information for the "from"
-// node.
+// computePhysicalPropsForRender computes ordering information for the
+// render node, given ordering information for the "from" node.
 //
 //    SELECT a, b FROM t@abc ...
 //      the ordering is: first by column 0 (a), then by column 1 (b).
@@ -645,7 +643,9 @@ func (r *renderNode) renderRow() error {
 //    SELECT a, b, a FROM t@abc ...
 //      we have an equivalency group between columns 0 and 2 and the ordering is
 //      first by column 0 (a), then by column 1.
-func (r *renderNode) computePhysicalProps(fromOrder physicalProps) {
+//
+// The planner is necessary to perform name resolution while detecting constant columns.
+func (p *planner) computePhysicalPropsForRender(r *renderNode, fromOrder physicalProps) {
 	// See physicalProps.project for a description of the projection map.
 	projMap := make([]int, len(r.render))
 	for i, expr := range r.render {
@@ -660,7 +660,7 @@ func (r *renderNode) computePhysicalProps(fromOrder physicalProps) {
 
 	// Detect constants.
 	for col, expr := range r.render {
-		_, hasRowDependentValues, _, err := r.resolveNames(expr)
+		_, hasRowDependentValues, _, err := p.resolveNamesForRender(expr, r)
 		if err != nil {
 			// If we get an error here, the expression must contain an unresolved name
 			// or invalid indexed var; ignore.

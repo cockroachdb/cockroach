@@ -118,11 +118,12 @@ func TestSplitFilter(t *testing.T) {
 		{`a IN (1, b) AND c`, []string{"c"}, `c`, `a IN (1, b)`},
 	}
 
+	p := makeTestPlanner()
 	for _, d := range testData {
 		t.Run(fmt.Sprintf("%s~(%s, %s)", d.expr, d.expectedRes, d.expectedRem), func(t *testing.T) {
-			evalCtx := tree.NewTestingEvalContext()
-			defer evalCtx.Stop(context.Background())
-			sel := makeSelectNode(t, evalCtx)
+			p.evalCtx = tree.MakeTestingEvalContext()
+			defer p.evalCtx.Stop(context.Background())
+			sel := makeSelectNode(t, p)
 			// A function that "converts" only vars in the list.
 			conv := func(expr tree.VariableExpr) (bool, tree.Expr) {
 				iv := expr.(*tree.IndexedVar)
@@ -136,7 +137,7 @@ func TestSplitFilter(t *testing.T) {
 				}
 				return false, nil
 			}
-			expr := parseAndNormalizeExpr(t, evalCtx, d.expr, sel)
+			expr := parseAndNormalizeExpr(t, p, d.expr, sel)
 			exprStr := expr.String()
 			res, rem := splitFilter(expr, conv)
 			// We use Sprint to handle the 'nil' case correctly.
@@ -200,13 +201,14 @@ func TestExtractNotNullConstraints(t *testing.T) {
 		{`(a + b, 1 + j) IN ((1, 2), (3, 4))`, []int{0, 1, 9}},
 	}
 
+	p := makeTestPlanner()
 	for _, tc := range testCases {
 		t.Run(tc.expr, func(t *testing.T) {
-			evalCtx := tree.NewTestingEvalContext()
-			defer evalCtx.Stop(context.Background())
+			p.evalCtx = tree.MakeTestingEvalContext()
+			defer p.evalCtx.Stop(context.Background())
 
-			sel := makeSelectNode(t, evalCtx)
-			expr := parseAndNormalizeExpr(t, evalCtx, tc.expr, sel)
+			sel := makeSelectNode(t, p)
+			expr := parseAndNormalizeExpr(t, p, tc.expr, sel)
 			result := extractNotNullConstraints(expr)
 			var expected util.FastIntSet
 			for _, v := range tc.notNullVars {

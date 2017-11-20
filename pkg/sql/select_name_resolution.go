@@ -198,8 +198,12 @@ func (v *nameResolutionVisitor) VisitPre(expr tree.Expr) (recurse bool, newNode 
 
 func (*nameResolutionVisitor) VisitPost(expr tree.Expr) tree.Expr { return expr }
 
-func (s *renderNode) resolveNames(expr tree.Expr) (tree.Expr, bool, bool, error) {
-	return s.planner.resolveNames(expr, s.sourceInfo, s.ivarHelper)
+// resolveNamesForRender resolves the names in expr using the naming
+// context of the given renderNode (FROM clause).
+func (p *planner) resolveNamesForRender(
+	expr tree.Expr, s *renderNode,
+) (tree.Expr, bool, bool, error) {
+	return p.resolveNames(expr, s.sourceInfo, s.ivarHelper)
 }
 
 // resolveNames walks the provided expression and resolves all names
