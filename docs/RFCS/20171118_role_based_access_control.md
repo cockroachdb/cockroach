@@ -717,3 +717,8 @@ At the very least, the admin UI should show role information (privileges on obje
 Manipulation of roles may be a UI event.
 
 Changing roles through the admin UI should be possible, but is currently gated on admin UI authentication.
+
+### Backup/restore of privileges/users/roles
+
+Backup/restore currently does not restore privileges or users.
+Should it start doing so, roles must be restored as well.
