@@ -298,9 +298,10 @@ func (p *planner) SelectClause(
 func (r *renderNode) initFrom(
 	ctx context.Context, parsed *tree.SelectClause, scanVisibility scanVisibility,
 ) error {
-	// AS OF expressions should be handled by the executor.
+	// AS OF expressions are either not supported in this context (e.g. in a view
+	// definition), or they should have been handled by the executor.
 	if parsed.From.AsOf.Expr != nil && !r.planner.avoidCachedDescriptors {
-		return fmt.Errorf("unexpected AS OF SYSTEM TIME")
+		return fmt.Errorf("AS OF SYSTEM TIME not supported in this context")
 	}
 	src, err := r.planner.getSources(ctx, parsed.From.Tables, scanVisibility)
 	if err != nil {
