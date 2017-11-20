@@ -106,13 +106,25 @@ func TestAsOfTime(t *testing.T) {
 	} else if i != val2 {
 		t.Fatalf("expected %v, got %v", val2, i)
 	}
-	if err := db.QueryRow(fmt.Sprintf("SELECT a, c FROM d.t, d.j AS OF SYSTEM TIME %s", tsVal1)).Scan(&i, &j); err != nil {
-		t.Fatal(err)
-	} else if i != val1 {
-		t.Fatalf("expected %v, got %v", val1, i)
-	} else if j != val2 {
-		t.Fatalf("expected %v, got %v", val2, j)
-	}
+
+	// Test a simple query, and do it with and without wrapping parens to check
+	// that parens don't matter.
+	testutils.RunTrueAndFalse(t, "parens", func(t *testing.T, useParens bool) {
+		openParens := ""
+		closeParens := ""
+		if useParens {
+			openParens = "(("
+			closeParens = "))"
+		}
+		query := fmt.Sprintf("%sSELECT a, c FROM d.t, d.j AS OF SYSTEM TIME %s%s", openParens, tsVal1, closeParens)
+		if err := db.QueryRow(query).Scan(&i, &j); err != nil {
+			t.Fatal(err)
+		} else if i != val1 {
+			t.Fatalf("expected %v, got %v", val1, i)
+		} else if j != val2 {
+			t.Fatalf("expected %v, got %v", val2, j)
+		}
+	})
 
 	// Future queries shouldn't work.
 	if err := db.QueryRow("SELECT a FROM d.t AS OF SYSTEM TIME '2200-01-01'").Scan(&i); !testutils.IsError(err, "pq: AS OF SYSTEM TIME: cannot specify timestamp in the future") {
