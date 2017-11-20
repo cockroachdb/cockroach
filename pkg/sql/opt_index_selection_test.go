@@ -172,7 +172,7 @@ func makeConstraints(
 	sel *renderNode,
 ) (orIndexConstraints, tree.TypedExpr) {
 	expr := parseAndNormalizeExpr(t, evalCtx, sql, sel)
-	exprs, equiv := analyzeExpr(evalCtx, expr)
+	exprs, equiv := decomposeExpr(evalCtx, expr)
 
 	c := &indexInfo{
 		desc:     desc,
