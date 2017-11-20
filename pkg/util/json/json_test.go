@@ -243,6 +243,61 @@ func TestJSONSize(t *testing.T) {
 	}
 }
 
+func TestJsonLength(t *testing.T) {
+	testCases := []struct {
+		input  string
+		length int
+	}{
+		{`true`, -1},
+		{`null`, -1},
+		{`"hello"`, 5},
+		{`["hello","goodbye"]`, 2},
+		{`[]`, 0},
+		{`[1, [1, 2]]`, 2},
+		{`{"a":"b"}`, -1},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.input, func(t *testing.T) {
+			j, err := ParseJSON(tc.input)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if j.Length() != tc.length {
+				t.Fatalf("expected %v to have length %d but had length %d", j, tc.length, j.Length())
+			}
+		})
+	}
+}
+
+func TestJsonIsArray(t *testing.T) {
+	testCases := []struct {
+		input   string
+		isArray bool
+	}{
+		{`true`, false},
+		{`null`, false},
+		{`"hello"`, false},
+		{`["hello","goodbye"]`, true},
+		{`{"a":"b"}`, false},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.input, func(t *testing.T) {
+			j, err := ParseJSON(tc.input)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if j.IsArray() != tc.isArray {
+				if tc.isArray {
+					t.Fatalf("expected %v to be an array", j)
+				
+				} else {
+					t.Fatalf("expected %v to not be an array", j)
+				}
+			}
+		})
+	}
+}
+
 func TestMakeJSON(t *testing.T) {
 	testCases := []struct {
 		input    interface{}
