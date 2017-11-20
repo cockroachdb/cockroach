@@ -27,6 +27,9 @@ import (
 
 const rowsPerInsert = 100
 
+// TestDB is the name of the database created for test tables.
+const TestDB = "test"
+
 // GenRowFn is a function that takes a (1-based) row index and returns a row of
 // Datums that will be converted to strings to form part of an INSERT statement.
 type GenRowFn func(row int) []tree.Datum
@@ -64,16 +67,16 @@ func CreateTableInterleaved(
 	fn GenRowFn,
 ) {
 	if interleaveSchema != "" {
-		interleaveSchema = fmt.Sprintf(`INTERLEAVE IN PARENT %s`, interleaveSchema)
+		interleaveSchema = fmt.Sprintf(`INTERLEAVE IN PARENT %s.%s`, TestDB, interleaveSchema)
 	}
 
 	r := MakeSQLRunner(sqlDB)
 	stmt := `CREATE DATABASE IF NOT EXISTS test;`
-	stmt += fmt.Sprintf(`CREATE TABLE test.%s (%s) %s;`, tableName, schema, interleaveSchema)
+	stmt += fmt.Sprintf(`CREATE TABLE %s.%s (%s) %s;`, TestDB, tableName, schema, interleaveSchema)
 	r.Exec(tb, stmt)
 	for i := 1; i <= numRows; {
 		var buf bytes.Buffer
-		fmt.Fprintf(&buf, `INSERT INTO test.%s VALUES `, tableName)
+		fmt.Fprintf(&buf, `INSERT INTO %s.%s VALUES `, TestDB, tableName)
 		batchEnd := i + rowsPerInsert
 		if batchEnd > numRows {
 			batchEnd = numRows
@@ -83,6 +86,66 @@ func CreateTableInterleaved(
 		r.Exec(tb, buf.String())
 		i = batchEnd + 1
 	}
+}
+
+// CreateTestInterleavedHierarchy generates the following interleaved hierarchy
+// for testing:
+//   <table>		  <primary index/interleave prefix>   <nrows>
+//   parent1		  (pid1)			      100
+//     child1		  (pid1, cid1, cid2)		      250
+//       grandchild1	  (pid1, cid1, cid2, gcid1)	      1000
+//     child2		  (pid1, cid3, cid4)		      50
+//   parent2		  (pid1)			      20
+func CreateTestInterleavedHierarchy(t *testing.T, sqlDB *gosql.DB) {
+	vMod := 42
+	CreateTable(t, sqlDB, "parent1",
+		"pid1 INT PRIMARY KEY, v INT",
+		100,
+		ToRowFn(RowIdxFn, RowModuloFn(vMod)),
+	)
+
+	CreateTableInterleaved(t, sqlDB, "child1",
+		"pid1 INT, cid1 INT, cid2 INT, v INT, PRIMARY KEY (pid1, cid1, cid2)",
+		"parent1 (pid1)",
+		250,
+		ToRowFn(
+			RowModuloShiftedFn(100),
+			RowIdxFn,
+			RowIdxFn,
+			RowModuloFn(vMod),
+		),
+	)
+
+	CreateTableInterleaved(t, sqlDB, "grandchild1",
+		"pid1 INT, cid1 INT, cid2 INT, gcid1 INT, v INT, PRIMARY KEY (pid1, cid1, cid2, gcid1)",
+		"child1 (pid1, cid1, cid2)",
+		1000,
+		ToRowFn(
+			RowModuloShiftedFn(250, 100),
+			RowModuloShiftedFn(250),
+			RowModuloShiftedFn(250),
+			RowIdxFn,
+			RowModuloFn(vMod),
+		),
+	)
+
+	CreateTableInterleaved(t, sqlDB, "child2",
+		"pid1 INT, cid3 INT, cid4 INT, v INT, PRIMARY KEY (pid1, cid3, cid4)",
+		"parent1 (pid1)",
+		50,
+		ToRowFn(
+			RowModuloShiftedFn(100),
+			RowIdxFn,
+			RowIdxFn,
+			RowModuloFn(vMod),
+		),
+	)
+
+	CreateTable(t, sqlDB, "parent2",
+		"pid1 INT PRIMARY KEY, v INT",
+		20,
+		ToRowFn(RowIdxFn, RowModuloFn(vMod)),
+	)
 }
 
 // GenValueFn is a function that takes a (1-based) row index and returns a Datum

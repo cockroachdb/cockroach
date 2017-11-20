@@ -142,7 +142,7 @@ EXPLAIN (METADATA) DELETE FROM kv WHERE k = 3
 1  render  ·      ·           (k)              k=CONST; key()
 2  scan    ·      ·           (k, v[omitted])  k=CONST; key()
 2  ·       table  kv@primary  ·                ·
-2  ·       spans  /3-/4       ·                ·
+2  ·       spans  /3-/3/#     ·                ·
 
 # Ensure that propagations through a render node removes the renders
 # and properly propagates the remaining needed columns.
