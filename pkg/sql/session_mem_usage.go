@@ -88,11 +88,6 @@ func (w WrappedMemoryAccount) Clear(ctx context.Context) {
 	w.mon.ClearAccount(ctx, w.acc)
 }
 
-// ResizeItem interfaces between Session and mon.MemoryMonitor.
-func (w WrappedMemoryAccount) ResizeItem(ctx context.Context, oldSize, newSize int64) error {
-	return w.mon.ResizeItem(ctx, w.acc, oldSize, newSize)
-}
-
 // noteworthyMemoryUsageBytes is the minimum size tracked by a
 // transaction or session monitor before the monitor starts explicitly
 // logging overall usage growth in the log.
