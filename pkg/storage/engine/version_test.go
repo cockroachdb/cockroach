@@ -48,7 +48,7 @@ func TestVersions(t *testing.T) {
 	}
 
 	// Write the current versions to the file.
-	if err := writeVersionFile(dir); err != nil {
+	if err := writeVersionFile(dir, versionCurrent); err != nil {
 		t.Fatal(err)
 	}
 	ver, err = getVersion(dir)

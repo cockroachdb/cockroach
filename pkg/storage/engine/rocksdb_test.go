@@ -225,8 +225,8 @@ func TestRocksDBOpenWithVersions(t *testing.T) {
 		{false, Version{}, ""},
 		{true, Version{versionCurrent}, ""},
 		{true, Version{versionMinimum}, ""},
-		{true, Version{-1}, "incompatible rocksdb data version, current:1, on disk:-1, minimum:0"},
-		{true, Version{2}, "incompatible rocksdb data version, current:1, on disk:2, minimum:0"},
+		{true, Version{-1}, "incompatible rocksdb data version, current:2, on disk:-1, minimum:0"},
+		{true, Version{3}, "incompatible rocksdb data version, current:2, on disk:3, minimum:0"},
 	}
 
 	for i, testCase := range testCases {

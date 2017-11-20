@@ -23,6 +23,7 @@ project(roachlib)
 add_library(roach
   db.cc
   encoding.cc
+  env_switching.cc
   eventlistener.cc
   protos/roachpb/data.pb.cc
   protos/roachpb/internal.pb.cc
