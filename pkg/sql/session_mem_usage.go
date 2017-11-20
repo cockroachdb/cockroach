@@ -30,15 +30,8 @@ func (s *Session) OpenAccount() WrappableMemoryAccount {
 	return res
 }
 
-// OpenAccount interfaces between TxnState and mon.MemoryMonitor.
-func (ts *txnState) OpenAccount() WrappableMemoryAccount {
-	res := WrappableMemoryAccount{}
-	ts.mon.OpenAccount(&res.acc)
-	return res
-}
-
 // WrappableMemoryAccount encapsulates a MemoryAccount to
-// give it the Wsession()/Wtxn() method below.
+// give it the Wsession() method below.
 type WrappableMemoryAccount struct {
 	acc mon.BytesAccount
 }
@@ -49,15 +42,6 @@ func (w *WrappableMemoryAccount) Wsession(s *Session) WrappedMemoryAccount {
 	return WrappedMemoryAccount{
 		acc: &w.acc,
 		mon: &s.sessionMon,
-	}
-}
-
-// Wtxn captures the current txn-specific monitor pointer so it can be provided
-// transparently to the other Account APIs below.
-func (w *WrappableMemoryAccount) Wtxn(s *Session) WrappedMemoryAccount {
-	return WrappedMemoryAccount{
-		acc: &w.acc,
-		mon: &s.TxnState.mon,
 	}
 }
 

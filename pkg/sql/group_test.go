@@ -53,7 +53,7 @@ func TestDesiredAggregateOrder(t *testing.T) {
 			defer p.evalCtx.Stop(context.Background())
 			sel := makeSelectNode(t, p)
 			expr := parseAndNormalizeExpr(t, p, d.expr, sel)
-			group := &groupNode{planner: p}
+			group := &groupNode{}
 			render := &renderNode{}
 			postRender := &renderNode{}
 			postRender.ivarHelper = tree.MakeIndexedVarHelper(postRender, len(group.funcs))
@@ -67,13 +67,13 @@ func TestDesiredAggregateOrder(t *testing.T) {
 			if _, err := v.extract(expr); err != nil {
 				t.Fatal(err)
 			}
-			ordering := group.desiredAggregateOrdering()
+			ordering := group.desiredAggregateOrdering(&p.evalCtx)
 			if !reflect.DeepEqual(d.ordering, ordering) {
 				t.Fatalf("%s: expected %v, but found %v", d.expr, d.ordering, ordering)
 			}
 			// Verify we never have a desired ordering if there is a GROUP BY.
 			group.numGroupCols = 1
-			ordering = group.desiredAggregateOrdering()
+			ordering = group.desiredAggregateOrdering(&p.evalCtx)
 			if len(ordering) > 0 {
 				t.Fatalf("%s: expected no ordering when there is a GROUP BY, found %v", d.expr, ordering)
 			}
