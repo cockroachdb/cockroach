@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 )
 
 type joinType int
@@ -70,7 +71,7 @@ func (b *buckets) Buckets() map[string]*bucket {
 }
 
 func (b *buckets) AddRow(
-	ctx context.Context, acc WrappedMemoryAccount, encoding []byte, row tree.Datums,
+	ctx context.Context, acc *mon.BoundAccount, encoding []byte, row tree.Datums,
 ) error {
 	bk, ok := b.buckets[string(encoding)]
 	if !ok {
@@ -97,7 +98,7 @@ const sizeOfBool = unsafe.Sizeof(true)
 
 // InitSeen initializes the seen array for each of the buckets. It must be run
 // before the buckets' seen state is used.
-func (b *buckets) InitSeen(ctx context.Context, acc WrappedMemoryAccount) error {
+func (b *buckets) InitSeen(ctx context.Context, acc *mon.BoundAccount) error {
 	for _, bucket := range b.buckets {
 		if err := acc.Grow(
 			ctx, int64(sizeOfBoolSlice+uintptr(len(bucket.rows))*sizeOfBool),
@@ -123,7 +124,6 @@ func (b *buckets) Fetch(encoding []byte) (*bucket, bool) {
 // joinNode is a planNode whose rows are the result of an inner or
 // left/right outer join.
 type joinNode struct {
-	planner  *planner
 	joinType joinType
 
 	// The data sources.
@@ -156,7 +156,7 @@ type joinNode struct {
 	buffer *RowBuffer
 
 	buckets       buckets
-	bucketsMemAcc WrappableMemoryAccount
+	bucketsMemAcc mon.BoundAccount
 
 	// emptyRight contain tuples of NULL values to use on the right for left and
 	// full outer joins when the on condition fails.
@@ -261,7 +261,6 @@ func (p *planner) makeJoin(
 	}
 
 	n := &joinNode{
-		planner:  p,
 		left:     left,
 		right:    right,
 		joinType: typ,
@@ -275,7 +274,7 @@ func (p *planner) makeJoin(
 		),
 	}
 
-	n.bucketsMemAcc = p.session.TxnState.OpenAccount()
+	n.bucketsMemAcc = p.session.TxnState.mon.MakeBoundAccount()
 	n.buckets = buckets{
 		buckets: make(map[string]*bucket),
 		rowContainer: sqlbase.NewRowContainer(
@@ -501,7 +500,6 @@ func (n *joinNode) Start(params runParams) error {
 func (n *joinNode) hashJoinStart(params runParams) error {
 	var scratch []byte
 	// Load all the rows from the right side and build our hashmap.
-	acc := n.bucketsMemAcc.Wtxn(n.planner.session)
 	ctx := params.ctx
 	for {
 		hasRow, err := n.right.plan.Next(params)
@@ -517,14 +515,14 @@ func (n *joinNode) hashJoinStart(params runParams) error {
 			return err
 		}
 
-		if err := n.buckets.AddRow(ctx, acc, encoding, row); err != nil {
+		if err := n.buckets.AddRow(ctx, &n.bucketsMemAcc, encoding, row); err != nil {
 			return err
 		}
 
 		scratch = encoding[:0]
 	}
 	if n.joinType == joinTypeFullOuter || n.joinType == joinTypeRightOuter {
-		return n.buckets.InitSeen(ctx, acc)
+		return n.buckets.InitSeen(ctx, &n.bucketsMemAcc)
 	}
 	return nil
 }
@@ -652,7 +650,7 @@ func (n *joinNode) Next(params runParams) (res bool, err error) {
 		// on condition, if the on condition passes we add it to the buffer.
 		foundMatch := false
 		for idx, rrow := range b.Rows() {
-			passesOnCond, err := n.pred.eval(&n.planner.evalCtx, n.output, lrow, rrow)
+			passesOnCond, err := n.pred.eval(&params.p.evalCtx, n.output, lrow, rrow)
 			if err != nil {
 				return false, err
 			}
@@ -720,7 +718,7 @@ func (n *joinNode) Close(ctx context.Context) {
 	n.buffer.Close(ctx)
 	n.buffer = nil
 	n.buckets.Close(ctx)
-	n.bucketsMemAcc.Wtxn(n.planner.session).Close(ctx)
+	n.bucketsMemAcc.Close(ctx)
 
 	n.right.plan.Close(ctx)
 	n.left.plan.Close(ctx)
