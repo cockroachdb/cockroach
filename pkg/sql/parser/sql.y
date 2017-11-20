@@ -1,3 +1,8 @@
+// Portions Copyright (c) 1996-2015, PostgreSQL Global Development Group
+// Portions Copyright (c) 1994, Regents of the University of California
+
+// Portions of this file are additionally subject to the following
+// license and copyright.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -10,9 +15,6 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
-
-// Portions Copyright (c) 1996-2015, PostgreSQL Global Development Group
-// Portions Copyright (c) 1994, Regents of the University of California
 
 %{
 package parser
