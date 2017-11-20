@@ -13,10 +13,10 @@ query TTT
 SELECT span, message, operation FROM [SHOW TRACE FOR SESSION] WHERE message NOT LIKE e'%\n%'
 ----
 (0,0)  === SPAN START: sql txn implicit ===  sql txn implicit
-(1,0)  === SPAN START: sql txn ===           sql txn implicit
-(1,0)  executing 1/5: BEGIN TRANSACTION      sql txn implicit
-(1,0)  executing 2/5: SELECT 1               sql txn implicit
-(1,0)  executing 3/5: COMMIT TRANSACTION     sql txn implicit
+(1,0)  === SPAN START: sql txn ===           sql txn
+(1,0)  executing 1/5: BEGIN TRANSACTION      sql txn
+(1,0)  executing 2/5: SELECT 1               sql txn
+(1,0)  executing 3/5: COMMIT TRANSACTION     sql txn
 (2,0)  === SPAN START: sql txn implicit ===  sql txn implicit
 (2,0)  executing 1/1: SELECT 2               sql txn implicit
 (3,0)  === SPAN START: sql txn implicit ===  sql txn implicit
