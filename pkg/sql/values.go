@@ -15,7 +15,6 @@
 package sql
 
 import (
-	"container/heap"
 	"fmt"
 	"strconv"
 
@@ -34,12 +33,10 @@ func newValuesListLenErr(exp, got int) error {
 }
 
 type valuesNode struct {
-	n        *tree.ValuesClause
-	p        *planner
-	columns  sqlbase.ResultColumns
-	ordering sqlbase.ColumnOrdering
-	tuples   [][]tree.TypedExpr
-	rows     *sqlbase.RowContainer
+	n       *tree.ValuesClause
+	columns sqlbase.ResultColumns
+	tuples  [][]tree.TypedExpr
+	rows    *sqlbase.RowContainer
 
 	// isConst is set if the valuesNode only contains constant expressions (no
 	// subqueries). In this case, rows will be evaluated during the first call
@@ -47,18 +44,11 @@ type valuesNode struct {
 	// isConst = true can serve its values multiple times. See valuesNode.Reset.
 	isConst bool
 
-	// rowsPopped is used for heaps, it indicates the number of rows that were
-	// "popped". These rows are still part of the underlying sqlbase.RowContainer, in the
-	// range [rows.Len()-n.rowsPopped, rows.Len).
-	rowsPopped int
-
-	nextRow       int  // The index of the next row.
-	invertSorting bool // Inverts the sorting predicate.
+	nextRow int // The index of the next row.
 }
 
 func (p *planner) newContainerValuesNode(columns sqlbase.ResultColumns, capacity int) *valuesNode {
 	return &valuesNode{
-		p:       p,
 		columns: columns,
 		rows: sqlbase.NewRowContainer(
 			p.session.TxnState.makeBoundAccount(), sqlbase.ColTypeInfoFromResCols(columns), capacity,
@@ -71,7 +61,6 @@ func (p *planner) ValuesClause(
 	ctx context.Context, n *tree.ValuesClause, desiredTypes []types.T,
 ) (planNode, error) {
 	v := &valuesNode{
-		p:       p,
 		n:       n,
 		isConst: true,
 	}
@@ -151,7 +140,7 @@ func (n *valuesNode) Start(params runParams) error {
 	// from other planNodes), so its expressions need evaluting.
 	// This may run subqueries.
 	n.rows = sqlbase.NewRowContainer(
-		n.p.session.TxnState.makeBoundAccount(),
+		params.p.session.TxnState.makeBoundAccount(),
 		sqlbase.ColTypeInfoFromResCols(n.columns),
 		len(n.n.Tuples),
 	)
@@ -163,7 +152,7 @@ func (n *valuesNode) Start(params runParams) error {
 				row[i] = tree.DNull
 			} else {
 				var err error
-				row[i], err = typedExpr.Eval(&n.p.evalCtx)
+				row[i], err = typedExpr.Eval(&params.p.evalCtx)
 				if err != nil {
 					return err
 				}
@@ -204,84 +193,4 @@ func (n *valuesNode) Close(ctx context.Context) {
 		n.rows.Close(ctx)
 		n.rows = nil
 	}
-}
-
-func (n *valuesNode) Len() int {
-	return n.rows.Len() - n.rowsPopped
-}
-
-func (n *valuesNode) Less(i, j int) bool {
-	// TODO(pmattis): An alternative to this type of field-based comparison would
-	// be to construct a sort-key per row using encodeTableKey(). Using a
-	// sort-key approach would likely fit better with a disk-based sort.
-	ra, rb := n.rows.At(i), n.rows.At(j)
-	return n.invertSorting != n.ValuesLess(ra, rb)
-}
-
-// ValuesLess returns the comparison result between the two provided Datums slices
-// in the context of the valuesNode ordering.
-func (n *valuesNode) ValuesLess(ra, rb tree.Datums) bool {
-	return sqlbase.CompareDatums(n.ordering, &n.p.evalCtx, ra, rb) < 0
-}
-
-func (n *valuesNode) Swap(i, j int) {
-	n.rows.Swap(i, j)
-}
-
-var _ heap.Interface = (*valuesNode)(nil)
-
-// Push implements the heap.Interface interface.
-func (n *valuesNode) Push(x interface{}) {
-}
-
-// PushValues pushes the given Datums value into the heap representation
-// of the valuesNode.
-func (n *valuesNode) PushValues(ctx context.Context, values tree.Datums) error {
-	_, err := n.rows.AddRow(ctx, values)
-	heap.Push(n, nil)
-	return err
-}
-
-// Pop implements the heap.Interface interface.
-func (n *valuesNode) Pop() interface{} {
-	if n.rowsPopped >= n.rows.Len() {
-		panic("no more rows to pop")
-	}
-	n.rowsPopped++
-	// Returning a Datums as an interface{} involves an allocation. Luckily, the
-	// value of Pop is only used for the return value of heap.Pop, which we can
-	// avoid using.
-	return nil
-}
-
-// PopValues pops the top Datums value off the heap representation
-// of the valuesNode.
-func (n *valuesNode) PopValues() tree.Datums {
-	heap.Pop(n)
-	// Return the last popped row.
-	return n.rows.At(n.rows.Len() - n.rowsPopped)
-}
-
-// ResetLen resets the length to that of the underlying row container. This
-// resets the effect that popping values had on the valuesNode's visible length.
-func (n *valuesNode) ResetLen() {
-	n.rowsPopped = 0
-}
-
-// SortAll sorts all values in the valuesNode.rows slice.
-func (n *valuesNode) SortAll(cancelChecker *sqlbase.CancelChecker) {
-	n.invertSorting = false
-	sqlbase.Sort(n, cancelChecker)
-}
-
-// InitMaxHeap initializes the valuesNode.rows slice as a max-heap.
-func (n *valuesNode) InitMaxHeap() {
-	n.invertSorting = true
-	heap.Init(n)
-}
-
-// InitMinHeap initializes the valuesNode.rows slice as a min-heap.
-func (n *valuesNode) InitMinHeap() {
-	n.invertSorting = false
-	heap.Init(n)
 }

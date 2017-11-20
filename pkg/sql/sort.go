@@ -16,6 +16,7 @@ package sql
 
 import (
 	"container/heap"
+	"sort"
 
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
@@ -434,14 +435,17 @@ func (n *sortNode) Next(params runParams) (bool, error) {
 	for n.needSort {
 		if v, ok := n.plan.(*valuesNode); ok {
 			// The plan we wrap is already a values node. Just sort it.
-			v.ordering = n.ordering
+			v := &sortValues{
+				ordering: n.ordering,
+				rows:     v.rows,
+				evalCtx:  &params.p.evalCtx,
+			}
 			n.sortStrategy = newSortAllStrategy(v)
 			n.sortStrategy.Finish(params.ctx, cancelChecker)
 			n.needSort = false
 			break
 		} else if n.sortStrategy == nil {
-			v := params.p.newContainerValuesNode(planColumns(n.plan), 0)
-			v.ordering = n.ordering
+			v := params.p.newSortValues(n.ordering, planColumns(n.plan), 0 /*capacity*/)
 			n.sortStrategy = newSortAllStrategy(v)
 		}
 
@@ -519,10 +523,10 @@ type sortingStrategy interface {
 //
 // The strategy is intended to be used when all values need to be sorted.
 type sortAllStrategy struct {
-	vNode *valuesNode
+	vNode *sortValues
 }
 
-func newSortAllStrategy(vNode *valuesNode) sortingStrategy {
+func newSortAllStrategy(vNode *sortValues) sortingStrategy {
 	return &sortAllStrategy{
 		vNode: vNode,
 	}
@@ -549,7 +553,7 @@ func (ss *sortAllStrategy) Close(ctx context.Context) {
 	ss.vNode.Close(ctx)
 }
 
-// iterativeSortStrategy reads in all values into the wrapped valuesNode
+// iterativeSortStrategy reads in all values into the wrapped sortValues
 // and turns the underlying slice into a min-heap. It then pops a value
 // off of the heap for each call to Next, meaning that it only needs to
 // sort the number of values needed, instead of the entire slice. If the
@@ -560,12 +564,12 @@ func (ss *sortAllStrategy) Close(ctx context.Context) {
 // The strategy is intended to be used when an unknown number of values
 // need to be sorted, but that most likely not all values need to be sorted.
 type iterativeSortStrategy struct {
-	vNode      *valuesNode
+	vNode      *sortValues
 	lastVal    tree.Datums
 	nextRowIdx int
 }
 
-func newIterativeSortStrategy(vNode *valuesNode) sortingStrategy {
+func newIterativeSortStrategy(vNode *sortValues) sortingStrategy {
 	return &iterativeSortStrategy{
 		vNode: vNode,
 	}
@@ -597,7 +601,7 @@ func (ss *iterativeSortStrategy) Close(ctx context.Context) {
 	ss.vNode.Close(ctx)
 }
 
-// sortTopKStrategy creates a max-heap in its wrapped valuesNode and keeps
+// sortTopKStrategy creates a max-heap in its wrapped sortValues and keeps
 // this heap populated with only the top k values seen. It accomplishes this
 // by comparing new values (before the deep copy) with the top of the heap.
 // If the new value is less than the current top, the top will be replaced
@@ -614,11 +618,11 @@ func (ss *iterativeSortStrategy) Close(ctx context.Context) {
 // a worst-case space complexity of O(k). For instance, the top k can be found
 // in linear time, and then this can be sorted in linearithmic time.
 type sortTopKStrategy struct {
-	vNode *valuesNode
+	vNode *sortValues
 	topK  int64
 }
 
-func newSortTopKStrategy(vNode *valuesNode, topK int64) sortingStrategy {
+func newSortTopKStrategy(vNode *sortValues, topK int64) sortingStrategy {
 	ss := &sortTopKStrategy{
 		vNode: vNode,
 		topK:  topK,
@@ -677,3 +681,153 @@ func (ss *sortTopKStrategy) Close(ctx context.Context) {
 // the client we should revisit.
 //
 // type onDiskSortStrategy struct{}
+
+// sortValues is a reduced form of valuesNode for use in a sortStrategy.
+type sortValues struct {
+	// invertSorting inverts the sorting predicate.
+	invertSorting bool
+	// ordering indicates the desired ordering of each column in the rows
+	ordering sqlbase.ColumnOrdering
+	// rows contains the columns during sorting.
+	rows *sqlbase.RowContainer
+
+	// evalCtx is needed because we use datum.Compare() which needs it,
+	// and the sort.Interface and heap.Interface do not allow
+	// introducing extra parameters into the Less() method.
+	evalCtx *tree.EvalContext
+
+	// rowsPopped is used for heaps, it indicates the number of rows
+	// that were "popped". These rows are still part of the underlying
+	// sqlbase.RowContainer, in the range [rows.Len()-n.rowsPopped,
+	// rows.Len).
+	rowsPopped int
+
+	// nextRow is used while iterating.
+	nextRow int
+}
+
+var _ valueIterator = &sortValues{}
+var _ sort.Interface = &sortValues{}
+var _ heap.Interface = &sortValues{}
+
+func (p *planner) newSortValues(
+	ordering sqlbase.ColumnOrdering, columns sqlbase.ResultColumns, capacity int,
+) *sortValues {
+	return &sortValues{
+		ordering: ordering,
+		rows: sqlbase.NewRowContainer(
+			p.session.TxnState.makeBoundAccount(),
+			sqlbase.ColTypeInfoFromResCols(columns),
+			capacity,
+		),
+		evalCtx: &p.evalCtx,
+	}
+}
+
+// Values implement the valuesIterator interface.
+func (n *sortValues) Values() tree.Datums {
+	return n.rows.At(n.nextRow - 1)
+}
+
+// Next implements the valuesIterator interface.
+func (n *sortValues) Next(runParams) (bool, error) {
+	if n.nextRow >= n.rows.Len() {
+		return false, nil
+	}
+	n.nextRow++
+	return true, nil
+}
+
+// Close implements the valuesIterator interface.
+func (n *sortValues) Close(ctx context.Context) {
+	n.rows.Close(ctx)
+}
+
+// Len implements the sort.Interface interface.
+func (n *sortValues) Len() int {
+	return n.rows.Len() - n.rowsPopped
+}
+
+// ValuesLess returns the comparison result between the two provided
+// Datums slices in the context of the sortValues ordering.
+func (n *sortValues) ValuesLess(ra, rb tree.Datums) bool {
+	return sqlbase.CompareDatums(n.ordering, n.evalCtx, ra, rb) < 0
+}
+
+// Less implements the sort.Interface interface.
+func (n *sortValues) Less(i, j int) bool {
+	// TODO(pmattis): An alternative to this type of field-based comparison would
+	// be to construct a sort-key per row using encodeTableKey(). Using a
+	// sort-key approach would likely fit better with a disk-based sort.
+	ra, rb := n.rows.At(i), n.rows.At(j)
+	return n.invertSorting != n.ValuesLess(ra, rb)
+}
+
+// Swap implements the sort.Interface interface.
+func (n *sortValues) Swap(i, j int) {
+	n.rows.Swap(i, j)
+}
+
+// Push implements the heap.Interface interface.
+func (n *sortValues) Push(x interface{}) {
+	// We can't push to the heap via heap.Push because that doesn't
+	// allow us to return an error. Instead we use PushValues(), which
+	// adds the value *then* calls heap.Push.  By the time control
+	// arrives here, the value is already added, so there is nothing
+	// left to do.
+}
+
+// PushValues pushes the given Datums value into the heap
+// representation of the sortValues.
+func (n *sortValues) PushValues(ctx context.Context, values tree.Datums) error {
+	_, err := n.rows.AddRow(ctx, values)
+	// We still need to call heap.Push() to sort the heap.
+	heap.Push(n, nil)
+	return err
+}
+
+// Pop implements the heap.Interface interface.
+func (n *sortValues) Pop() interface{} {
+	if n.rowsPopped >= n.rows.Len() {
+		panic("no more rows to pop")
+	}
+	n.rowsPopped++
+	// Returning a Datums as an interface{} involves an allocation. Luckily, the
+	// value of Pop is only used for the return value of heap.Pop, which we can
+	// avoid using.
+	return nil
+}
+
+// PopValues pops the top Datums value off the heap representation
+// of the sortValues. We avoid using heap.Pop() directly to
+// avoid allocating an interface{}.
+func (n *sortValues) PopValues() tree.Datums {
+	heap.Pop(n)
+	// Return the last popped row.
+	return n.rows.At(n.rows.Len() - n.rowsPopped)
+}
+
+// ResetLen resets the length to that of the underlying row
+// container. This resets the effect that popping values had on the
+// sortValues's visible length.
+func (n *sortValues) ResetLen() {
+	n.rowsPopped = 0
+}
+
+// SortAll sorts all values in the sortValues.rows slice.
+func (n *sortValues) SortAll(cancelChecker *sqlbase.CancelChecker) {
+	n.invertSorting = false
+	sqlbase.Sort(n, cancelChecker)
+}
+
+// InitMaxHeap initializes the sortValues.rows slice as a max-heap.
+func (n *sortValues) InitMaxHeap() {
+	n.invertSorting = true
+	heap.Init(n)
+}
+
+// InitMinHeap initializes the sortValues.rows slice as a min-heap.
+func (n *sortValues) InitMinHeap() {
+	n.invertSorting = false
+	heap.Init(n)
+}
