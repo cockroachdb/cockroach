@@ -2085,7 +2085,7 @@ func (e *Executor) shouldUseDistSQL(planner *planner, plan planNode) (bool, erro
 		err = errors.New("writing txn")
 	} else {
 		// Trigger limit propagation.
-		setUnlimited(plan)
+		planner.setUnlimited(plan)
 		distribute, err = e.distSQLPlanner.CheckSupport(plan)
 	}
 

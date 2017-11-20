@@ -40,7 +40,7 @@ import (
 // limitNode may have a hard limit locally which is larger than the
 // soft limit propagated up by nodes downstream. We may want to
 // improve this API to pass both the soft and hard limit.
-func applyLimit(plan planNode, numRows int64, soft bool) {
+func (p *planner) applyLimit(plan planNode, numRows int64, soft bool) {
 	switch n := plan.(type) {
 	case *scanNode:
 		// Either a limitNode or EXPLAIN is pushing a limit down onto this
@@ -70,11 +70,11 @@ func applyLimit(plan planNode, numRows int64, soft bool) {
 		if !soft && numRows < count {
 			count = numRows
 		}
-		applyLimit(n.plan, getLimit(count, n.offset), false /* soft */)
+		p.applyLimit(n.plan, getLimit(count, n.offset), false /* soft */)
 
 	case *sortNode:
 		if n.needSort && numRows != math.MaxInt64 {
-			v := n.p.newContainerValuesNode(planColumns(n.plan), int(numRows))
+			v := p.newContainerValuesNode(planColumns(n.plan), int(numRows))
 			v.ordering = n.ordering
 			if soft {
 				n.sortStrategy = newIterativeSortStrategy(v)
@@ -88,79 +88,79 @@ func applyLimit(plan planNode, numRows int64, soft bool) {
 			numRows = math.MaxInt64
 			soft = true
 		}
-		applyLimit(n.plan, numRows, soft)
+		p.applyLimit(n.plan, numRows, soft)
 
 	case *groupNode:
 		if n.needOnlyOneRow {
 			// We have a single MIN/MAX function and the underlying plan's
 			// ordering matches the function. We only need to retrieve one row.
-			applyLimit(n.plan, 1, false /* soft */)
+			p.applyLimit(n.plan, 1, false /* soft */)
 		} else {
-			setUnlimited(n.plan)
+			p.setUnlimited(n.plan)
 		}
 
 	case *indexJoinNode:
 		// If we have a limit in the table node (i.e. post-index-join), the
 		// limit in the index is soft.
-		applyLimit(n.index, numRows, soft || !isFilterTrue(n.table.filter))
-		setUnlimited(n.table)
+		p.applyLimit(n.index, numRows, soft || !isFilterTrue(n.table.filter))
+		p.setUnlimited(n.table)
 
 	case *unionNode:
 		if n.right != nil {
-			applyLimit(n.right, numRows, true)
+			p.applyLimit(n.right, numRows, true)
 		}
 		if n.left != nil {
-			applyLimit(n.left, numRows, true)
+			p.applyLimit(n.left, numRows, true)
 		}
 
 	case *distinctNode:
-		applyLimit(n.plan, numRows, true)
+		p.applyLimit(n.plan, numRows, true)
 
 	case *filterNode:
-		applyLimit(n.source.plan, numRows, soft || !isFilterTrue(n.filter))
+		p.applyLimit(n.source.plan, numRows, soft || !isFilterTrue(n.filter))
 
 	case *renderNode:
-		applyLimit(n.source.plan, numRows, soft)
+		p.applyLimit(n.source.plan, numRows, soft)
 
 	case *windowNode:
-		setUnlimited(n.plan)
+		p.setUnlimited(n.plan)
 
 	case *joinNode:
-		setUnlimited(n.left.plan)
-		setUnlimited(n.right.plan)
+		p.setUnlimited(n.left.plan)
+		p.setUnlimited(n.right.plan)
 
 	case *ordinalityNode:
-		applyLimit(n.source, numRows, soft)
+		p.applyLimit(n.source, numRows, soft)
 
 	case *delayedNode:
 		if n.plan != nil {
-			applyLimit(n.plan, numRows, soft)
+			p.applyLimit(n.plan, numRows, soft)
 		}
 
 	case *deleteNode:
-		setUnlimited(n.run.rows)
+		p.setUnlimited(n.run.rows)
 	case *updateNode:
-		setUnlimited(n.run.rows)
+		p.setUnlimited(n.run.rows)
 	case *insertNode:
-		setUnlimited(n.run.rows)
+		p.setUnlimited(n.run.rows)
 	case *createTableNode:
 		if n.sourcePlan != nil {
-			applyLimit(n.sourcePlan, numRows, soft)
+			p.applyLimit(n.sourcePlan, numRows, soft)
 		}
 	case *explainDistSQLNode:
-		setUnlimited(n.plan)
+		p.setUnlimited(n.plan)
 	case *traceNode:
-		setUnlimited(n.plan)
+		p.setUnlimited(n.plan)
 	case *explainPlanNode:
 		if n.expanded {
-			setUnlimited(n.plan)
+			p.setUnlimited(n.plan)
 		}
 
 	case *splitNode:
-		setUnlimited(n.rows)
+		p.setUnlimited(n.rows)
 
 	case *testingRelocateNode:
-		setUnlimited(n.rows)
+		p.setUnlimited(n.rows)
 
 	case *valuesNode:
 	case *alterTableNode:
@@ -198,8 +198,8 @@ func applyLimit(plan planNode, numRows int64, soft bool) {
 	}
 }
 
-func setUnlimited(plan planNode) {
-	applyLimit(plan, math.MaxInt64, true)
+func (p *planner) setUnlimited(plan planNode) {
+	p.applyLimit(plan, math.MaxInt64, true)
 }
 
 // getLimit computes the actual number of rows to request from the
