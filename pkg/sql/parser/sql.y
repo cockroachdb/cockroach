@@ -451,7 +451,7 @@ func (u *sqlSymUnion) scrubOption() tree.ScrubOption {
 %token <str>   IMPORT INCREMENT INCREMENTAL IF IFNULL ILIKE IN INET INTERLEAVE
 %token <str>   INDEX INDEXES INITIALLY
 %token <str>   INNER INSERT INT INT2VECTOR INT2 INT4 INT8 INT64 INTEGER
-%token <str>   INTERSECT INTERVAL INTO IS ISOLATION
+%token <str>   INTERSECT INTERVAL INTO INVERTED IS ISOLATION
 
 %token <str>   JOB JOBS JOIN JSON JSONB
 
@@ -2706,7 +2706,7 @@ pause_stmt:
 //
 // Table elements:
 //    <name> <type> [<qualifiers...>]
-//    [UNIQUE] INDEX [<name>] ( <colname> [ASC | DESC] [, ...] )
+//    [UNIQUE | INVERTED] INDEX [<name>] ( <colname> [ASC | DESC] [, ...] )
 //                            [STORING ( <colnames...> )] [<interleave>]
 //    FAMILY [<name>] ( <colnames...> )
 //    [CONSTRAINT <name>] <constraint>
@@ -3007,6 +3007,17 @@ index_def:
       },
     }
   }
+| INVERTED INDEX opt_name '(' index_params ')' opt_storing opt_interleave
+   {
+     $$.val = &tree.InvertedConstraintTableDef{
+       IndexTableDef: tree.IndexTableDef {
+         Name:    tree.Name($3),
+         Columns: $5.idxElems(),
+         Storing: $7.nameList(),
+         Interleave: $8.interleave(),
+       },
+     }
+   }
 
 family_def:
   FAMILY opt_name '(' name_list ')'
@@ -3298,7 +3309,7 @@ create_view_stmt:
 // %Help: CREATE INDEX - create a new index
 // %Category: DDL
 // %Text:
-// CREATE [UNIQUE] INDEX [IF NOT EXISTS] [<idxname>]
+// CREATE [UNIQUE | INVERTED] INDEX [IF NOT EXISTS] [<idxname>]
 //        ON <tablename> ( <colname> [ASC | DESC] [, ...] )
 //        [STORING ( <colnames...> )] [<interleave>]
 //
@@ -3325,6 +3336,29 @@ create_index_stmt:
       Name:        tree.Name($7),
       Table:       $9.normalizableTableName(),
       Unique:      $2.bool(),
+      IfNotExists: true,
+      Columns:     $11.idxElems(),
+      Storing:     $13.nameList(),
+      Interleave: $14.interleave(),
+    }
+  }
+| CREATE INVERTED INDEX opt_name ON qualified_name '(' index_params ')' opt_storing opt_interleave
+  {
+    $$.val = &tree.CreateIndex{
+      Name:       tree.Name($4),
+      Table:      $6.normalizableTableName(),
+      Inverted:   true,
+      Columns:    $8.idxElems(),
+      Storing:    $10.nameList(),
+      Interleave: $11.interleave(),
+    }
+  }
+| CREATE INVERTED INDEX IF NOT EXISTS name ON qualified_name '(' index_params ')' opt_storing opt_interleave
+  {
+    $$.val = &tree.CreateIndex{
+      Name:        tree.Name($7),
+      Table:       $9.normalizableTableName(),
+      Inverted:    true,
       IfNotExists: true,
       Columns:     $11.idxElems(),
       Storing:     $13.nameList(),
@@ -6728,6 +6762,7 @@ unreserved_keyword:
 | INSERT
 | INT2VECTOR
 | INTERLEAVE
+| INVERTED
 | ISOLATION
 | JOB
 | JOBS

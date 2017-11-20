@@ -1,0 +1,16 @@
+statement ok
+CREATE TABLE t (
+  a INT PRIMARY KEY,
+  b INT,
+  FAMILY (a),
+  FAMILY (b)
+)
+
+statement ok
+INSERT INTO t VALUES (1,1)
+
+statement ok
+CREATE INDEX foo ON t (b)
+
+statement error pq: inverted indexes are not supported yet
+CREATE INVERTED INDEX fooInv ON t (b)

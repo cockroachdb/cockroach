@@ -189,6 +189,10 @@ func (n *createIndexNode) Start(params runParams) error {
 		}
 	}
 
+	if n.n.Inverted == true {
+		return errors.New("inverted indexes are not supported yet")
+	}
+
 	mutationID, err := params.p.createSchemaChangeJob(params.ctx, n.tableDesc,
 		tree.AsStringWithFlags(n.n, tree.FmtSimpleQualified))
 	if err != nil {
