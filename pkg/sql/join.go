@@ -346,7 +346,6 @@ func (p *planner) makeJoin(
 	//    8: right.y             @6
 
 	r := &renderNode{
-		planner:    p,
 		source:     joinDataSource,
 		sourceInfo: multiSourceInfo{info},
 	}

@@ -86,7 +86,7 @@ func (p *planner) window(
 	}
 	window.sourceCols = len(s.columns)
 
-	if err := window.constructWindowDefinitions(ctx, n, s); err != nil {
+	if err := p.constructWindowDefinitions(ctx, window, n, s); err != nil {
 		return nil, err
 	}
 
@@ -151,8 +151,8 @@ func (n *windowNode) extractWindowFunctions(s *renderNode) error {
 // function application by combining specific window definition from a
 // given window function application with referenced window specifications
 // on the SelectClause.
-func (n *windowNode) constructWindowDefinitions(
-	ctx context.Context, sc *tree.SelectClause, s *renderNode,
+func (p *planner) constructWindowDefinitions(
+	ctx context.Context, n *windowNode, sc *tree.SelectClause, s *renderNode,
 ) error {
 	// Process each named window specification on the select clause.
 	namedWindowSpecs := make(map[string]*tree.WindowDef, len(sc.Window))
@@ -173,7 +173,7 @@ func (n *windowNode) constructWindowDefinitions(
 
 		// Validate PARTITION BY clause.
 		for _, partition := range windowDef.Partitions {
-			cols, exprs, _, err := s.planner.computeRenderAllowingStars(ctx,
+			cols, exprs, _, err := p.computeRenderAllowingStars(ctx,
 				tree.SelectExpr{Expr: partition}, types.Any, s.sourceInfo, s.ivarHelper,
 				autoGenerateRenderOutputName)
 			if err != nil {
@@ -186,7 +186,7 @@ func (n *windowNode) constructWindowDefinitions(
 
 		// Validate ORDER BY clause.
 		for _, orderBy := range windowDef.OrderBy {
-			cols, exprs, _, err := s.planner.computeRenderAllowingStars(ctx,
+			cols, exprs, _, err := p.computeRenderAllowingStars(ctx,
 				tree.SelectExpr{Expr: orderBy.Expr}, types.Any, s.sourceInfo, s.ivarHelper,
 				autoGenerateRenderOutputName)
 			if err != nil {
