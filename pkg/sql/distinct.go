@@ -21,23 +21,23 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 )
 
 // distinctNode de-duplicates rows returned by a wrapped planNode.
 type distinctNode struct {
 	plan planNode
-	p    *planner
 	// All the columns that are part of the Sort. Set to nil if no-sort, or
 	// sort used an expression that was not part of the requested column set.
 	columnsInOrder []bool
 	// Encoding of the columnsInOrder columns for the previous row.
 	prefixSeen   []byte
-	prefixMemAcc WrappableMemoryAccount
+	prefixMemAcc mon.BoundAccount
 
 	// Encoding of the non-columnInOrder columns for rows sharing the same
 	// prefixSeen value.
 	suffixSeen   map[string]struct{}
-	suffixMemAcc WrappableMemoryAccount
+	suffixMemAcc mon.BoundAccount
 }
 
 // distinct constructs a distinctNode.
@@ -45,9 +45,10 @@ func (p *planner) Distinct(n *tree.SelectClause) *distinctNode {
 	if !n.Distinct {
 		return nil
 	}
-	d := &distinctNode{p: p}
-	d.prefixMemAcc = p.session.TxnState.OpenAccount()
-	d.suffixMemAcc = p.session.TxnState.OpenAccount()
+	d := &distinctNode{
+		prefixMemAcc: p.session.TxnState.mon.MakeBoundAccount(),
+		suffixMemAcc: p.session.TxnState.mon.MakeBoundAccount(),
+	}
 	return d
 }
 
@@ -59,7 +60,7 @@ func (n *distinctNode) Start(params runParams) error {
 func (n *distinctNode) Values() tree.Datums { return n.plan.Values() }
 
 func (n *distinctNode) addSuffixSeen(
-	ctx context.Context, acc WrappedMemoryAccount, sKey string,
+	ctx context.Context, acc *mon.BoundAccount, sKey string,
 ) error {
 	sz := int64(len(sKey))
 	if err := acc.Grow(ctx, sz); err != nil {
@@ -71,9 +72,6 @@ func (n *distinctNode) addSuffixSeen(
 
 func (n *distinctNode) Next(params runParams) (bool, error) {
 	ctx := params.ctx
-
-	prefixMemAcc := n.prefixMemAcc.Wtxn(n.p.session)
-	suffixMemAcc := n.suffixMemAcc.Wtxn(n.p.session)
 
 	for {
 		if err := params.p.cancelChecker.Check(); err != nil {
@@ -95,15 +93,15 @@ func (n *distinctNode) Next(params runParams) (bool, error) {
 			// The prefix of the row which is ordered differs from the last row;
 			// reset our seen set.
 			if len(n.suffixSeen) > 0 {
-				suffixMemAcc.Clear(ctx)
+				n.suffixMemAcc.Clear(ctx)
 				n.suffixSeen = make(map[string]struct{})
 			}
-			if err := prefixMemAcc.ResizeItem(ctx, int64(len(n.prefixSeen)), int64(len(prefix))); err != nil {
+			if err := n.prefixMemAcc.ResizeItem(ctx, int64(len(n.prefixSeen)), int64(len(prefix))); err != nil {
 				return false, err
 			}
 			n.prefixSeen = prefix
 			if suffix != nil {
-				if err := n.addSuffixSeen(ctx, suffixMemAcc, string(suffix)); err != nil {
+				if err := n.addSuffixSeen(ctx, &n.suffixMemAcc, string(suffix)); err != nil {
 					return false, err
 				}
 			}
@@ -115,7 +113,7 @@ func (n *distinctNode) Next(params runParams) (bool, error) {
 		if suffix != nil {
 			sKey := string(suffix)
 			if _, ok := n.suffixSeen[sKey]; !ok {
-				if err := n.addSuffixSeen(ctx, suffixMemAcc, sKey); err != nil {
+				if err := n.addSuffixSeen(ctx, &n.suffixMemAcc, sKey); err != nil {
 					return false, err
 				}
 				return true, nil
@@ -151,7 +149,7 @@ func (n *distinctNode) encodeValues(values tree.Datums) ([]byte, []byte, error) 
 func (n *distinctNode) Close(ctx context.Context) {
 	n.plan.Close(ctx)
 	n.prefixSeen = nil
-	n.prefixMemAcc.Wtxn(n.p.session).Close(ctx)
+	n.prefixMemAcc.Close(ctx)
 	n.suffixSeen = nil
-	n.suffixMemAcc.Wtxn(n.p.session).Close(ctx)
+	n.suffixMemAcc.Close(ctx)
 }
