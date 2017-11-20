@@ -142,12 +142,12 @@ func (n *alterTableNode) Start(params runParams) error {
 					return err
 				}
 				if d.PartitionBy != nil {
-					if err := addPartitionedBy(
-						params.ctx, params.evalCtx, n.tableDesc, &idx, &idx.Partitioning,
-						d.PartitionBy, 0, /* colOffset */
-					); err != nil {
+					partitioning, err := createPartitionedBy(
+						params.ctx, params.evalCtx, n.tableDesc, &idx, d.PartitionBy, 0 /* colOffset */)
+					if err != nil {
 						return err
 					}
+					idx.Partitioning = partitioning
 				}
 				_, dropped, err := n.tableDesc.FindIndexByName(string(d.Name))
 				if err == nil {
