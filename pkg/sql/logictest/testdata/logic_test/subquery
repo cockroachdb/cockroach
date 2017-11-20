@@ -375,7 +375,7 @@ EXPLAIN SELECT col0 FROM tab4 WHERE (col0 <= 0 AND col4 <= 5.38) OR (col4 IN (SE
 1  index-join  ·           ·
 2  scan        ·           ·
 2  ·           table       tab4@idx_tab4_0
-2  ·           spans       /#-/5.38/1
+2  ·           spans       /#-/5.38/0/#
 2  ·           subqueries  1
 3  render      ·           ·
 4  scan        ·           ·

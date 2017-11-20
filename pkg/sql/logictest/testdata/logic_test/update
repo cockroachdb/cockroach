@@ -485,7 +485,7 @@ EXPLAIN UPDATE kv SET v = v - 1 WHERE k < 3 LIMIT 1
 2  limit   ·      ·
 3  scan    ·      ·
 3  ·       table  kv@primary
-3  ·       spans  /#-/3
+3  ·       spans  /#-/2/#
 3  ·       limit  1
 
 query II

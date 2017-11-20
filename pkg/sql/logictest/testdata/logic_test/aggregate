@@ -674,7 +674,7 @@ EXPLAIN (EXPRS) SELECT MIN(x) FROM xyz WHERE x in (0, 4, 7)
 1  ·       render 0     x
 2  scan    ·            ·
 2  ·       table        xyz@xy
-2  ·       spans        /0-/1 /4-/5 /7-/8
+2  ·       spans        /0-/0/# /4-/4/# /7-/7/#
 2  ·       limit        1
 
 query I
@@ -708,7 +708,7 @@ EXPLAIN (EXPRS) SELECT MIN(y) FROM xyz WHERE x = 1
 1  ·       render 0     y
 2  scan    ·            ·
 2  ·       table        xyz@xy
-2  ·       spans        /1/#-/2
+2  ·       spans        /1/#-/1/#
 2  ·       limit        1
 
 query I
@@ -716,6 +716,9 @@ SELECT MAX(y) FROM xyz WHERE x = 1
 ----
 2
 
+# The span looks off because NULLASC (the first '#') and
+# NULLDESC/interleavedSentinel (the last '#') have the same pretty-print
+# symbol.
 query ITTT
 EXPLAIN (EXPRS) SELECT MAX(y) FROM xyz WHERE x = 1
 ----
@@ -725,7 +728,7 @@ EXPLAIN (EXPRS) SELECT MAX(y) FROM xyz WHERE x = 1
 1  ·        render 0     y
 2  revscan  ·            ·
 2  ·        table        xyz@xy
-2  ·        spans        /1/#-/2
+2  ·        spans        /1/#-/1/#
 2  ·        limit        1
 
 query I
@@ -742,7 +745,7 @@ EXPLAIN (EXPRS) SELECT MIN(y) FROM xyz WHERE x = 7
 1  ·       render 0     y
 2  scan    ·            ·
 2  ·       table        xyz@xy
-2  ·       spans        /7/#-/8
+2  ·       spans        /7/#-/7/#
 2  ·       limit        1
 
 query I
@@ -759,7 +762,7 @@ EXPLAIN (EXPRS) SELECT MAX(y) FROM xyz WHERE x = 7
 1  ·        render 0     y
 2  revscan  ·            ·
 2  ·        table        xyz@xy
-2  ·        spans        /7/#-/8
+2  ·        spans        /7/#-/7/#
 2  ·        limit        1
 
 query I
@@ -776,7 +779,7 @@ EXPLAIN (EXPRS) SELECT MIN(x) FROM xyz WHERE (y, z) = (2, 3.0)
 1  ·       render 0     x
 2  scan    ·            ·
 2  ·       table        xyz@zyx
-2  ·       spans        /3/2/#-/3/3
+2  ·       spans        /3/2/#-/3/2/#
 2  ·       limit        1
 
 query T
@@ -800,7 +803,7 @@ EXPLAIN (EXPRS) SELECT MAX(x) FROM xyz WHERE (z, y) = (3.0, 2)
 1  ·        render 0     x
 2  revscan  ·            ·
 2  ·        table        xyz@zyx
-2  ·        spans        /3/2/#-/3/3
+2  ·        spans        /3/2/#-/3/2/#
 2  ·        limit        1
 
 # VARIANCE/STDDEV
@@ -843,7 +846,7 @@ EXPLAIN (EXPRS) SELECT VARIANCE(x) FROM xyz WHERE x = 1
 1  ·       render 0     x
 2  scan    ·            ·
 2  ·       table        xyz@xy
-2  ·       spans        /1-/2
+2  ·       spans        /1-/1/#
 
 query RRR
 SELECT STDDEV(x), STDDEV(y::decimal), round(STDDEV(z), 14) FROM xyz

@@ -41,7 +41,7 @@ EXPLAIN SELECT * FROM t WHERE k = 1 OR k = 3
 ----
 0  scan  ·      ·
 0  ·     table  t@primary
-0  ·     spans  /1-/2 /3-/4
+0  ·     spans  /1-/1/# /3-/3/#
 
 query ITTTTT
 EXPLAIN (VERBOSE) SELECT * FROM t WHERE k % 2 = 0
@@ -138,6 +138,6 @@ EXPLAIN (METADATA) SELECT * FROM tc WHERE a = 10 ORDER BY b
 2  index-join  ·      ·           (a, b, rowid[hidden,omitted])            a=CONST; rowid!=NULL; key(rowid)
 3  scan        ·      ·           (a[omitted], b[omitted], rowid[hidden])  a=CONST; rowid!=NULL; key(rowid)
 3  ·           table  tc@c        ·                                        ·
-3  ·           spans  /10-/11     ·                                        ·
+3  ·           spans  /10-/10/#   ·                                        ·
 3  scan        ·      ·           (a, b, rowid[hidden,omitted])            ·
 3  ·           table  tc@primary  ·                                        ·

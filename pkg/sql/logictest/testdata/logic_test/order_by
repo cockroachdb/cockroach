@@ -597,7 +597,7 @@ EXPLAIN SELECT c FROM abc WHERE b = 2 ORDER BY c
 0  render  ·      ·
 1  scan    ·      ·
 1  ·       table  abc@bc
-1  ·       spans  /2-/3
+1  ·       spans  /2-/2/#
 
 query ITTT
 EXPLAIN SELECT c FROM abc WHERE b = 2 ORDER BY c DESC
@@ -605,7 +605,7 @@ EXPLAIN SELECT c FROM abc WHERE b = 2 ORDER BY c DESC
 0  render   ·      ·
 1  revscan  ·      ·
 1  ·        table  abc@bc
-1  ·        spans  /2-/3
+1  ·        spans  /2-/2/#
 
 # Verify that the ordering of the primary index is still used for the outer sort.
 query ITTTTT
@@ -616,7 +616,7 @@ EXPLAIN (METADATA) SELECT * FROM (SELECT b, c FROM abc WHERE a=1 ORDER BY a,b) O
 1  render  ·      ·            (b, c, a[omitted])              a=CONST; b!=NULL; c!=NULL; key(b,c); +b,+c
 2  scan    ·      ·            (a[omitted], b, c, d[omitted])  a=CONST; b!=NULL; c!=NULL; key(b,c); +b,+c
 2  ·       table  abc@primary  ·                               ·
-2  ·       spans  /1-/2        ·                               ·
+2  ·       spans  /1-/1/#      ·                               ·
 
 statement ok
 CREATE TABLE bar (id INT PRIMARY KEY, baz STRING, UNIQUE INDEX i_bar (baz))
@@ -662,7 +662,7 @@ EXPLAIN SELECT a, b, c FROM abcd@abc WHERE (a, b) = (1, 4) ORDER BY c
 0  render  ·      ·
 1  scan    ·      ·
 1  ·       table  abcd@abc
-1  ·       spans  /1/4-/1/5
+1  ·       spans  /1/4-/1/4/#
 
 query ITTT
 EXPLAIN SELECT a, b, c FROM abcd@abc WHERE (a, b) = (1, 4) ORDER BY c, b, a
@@ -670,7 +670,7 @@ EXPLAIN SELECT a, b, c FROM abcd@abc WHERE (a, b) = (1, 4) ORDER BY c, b, a
 0  render  ·      ·
 1  scan    ·      ·
 1  ·       table  abcd@abc
-1  ·       spans  /1/4-/1/5
+1  ·       spans  /1/4-/1/4/#
 
 query ITTT
 EXPLAIN SELECT a, b, c FROM abcd@abc WHERE (a, b) = (1, 4) ORDER BY b, a, c
@@ -678,7 +678,7 @@ EXPLAIN SELECT a, b, c FROM abcd@abc WHERE (a, b) = (1, 4) ORDER BY b, a, c
 0  render  ·      ·
 1  scan    ·      ·
 1  ·       table  abcd@abc
-1  ·       spans  /1/4-/1/5
+1  ·       spans  /1/4-/1/4/#
 
 query ITTT
 EXPLAIN SELECT a, b, c FROM abcd@abc WHERE (a, b) = (1, 4) ORDER BY b, c, a
@@ -686,7 +686,7 @@ EXPLAIN SELECT a, b, c FROM abcd@abc WHERE (a, b) = (1, 4) ORDER BY b, c, a
 0  render  ·      ·
 1  scan    ·      ·
 1  ·       table  abcd@abc
-1  ·       spans  /1/4-/1/5
+1  ·       spans  /1/4-/1/4/#
 
 statement ok
 CREATE TABLE nan (id INT PRIMARY KEY, x REAL)
@@ -758,7 +758,7 @@ EXPLAIN (METADATA) DELETE FROM t WHERE a = 3 RETURNING b
 0  ·       from   t          ·          ·
 1  scan    ·      ·          (a, b, c)  a=CONST; key()
 1  ·       table  t@primary  ·          ·
-1  ·       spans  /3-/4      ·          ·
+1  ·       spans  /3-/3/#    ·          ·
 
 query ITTTTT
 EXPLAIN (METADATA) UPDATE t SET c = TRUE RETURNING b
@@ -791,7 +791,7 @@ EXPLAIN (METADATA) SELECT * FROM (SELECT y, w, x FROM uvwxyz WHERE y = 1 ORDER B
 0  render  ·      ·            (y, w, x)                                                             y=CONST; +w,+x
 1  scan    ·      ·            (u[omitted], v[omitted], w, x, y, z[omitted], rowid[hidden,omitted])  y=CONST; rowid!=NULL; weak-key(u,v,w,x,z,rowid); +w,+x
 1  ·       table  uvwxyz@ywxz  ·                                                                     ·
-1  ·       spans  /1-/2        ·                                                                     ·
+1  ·       spans  /1-/1/#      ·                                                                     ·
 
 
 statement ok

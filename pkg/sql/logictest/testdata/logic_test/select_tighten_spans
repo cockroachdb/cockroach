@@ -1,0 +1,757 @@
+# LogicTest: 5node-distsql
+
+# This test verifies that we correctly tighten spans during index selection as
+# well as after partitioning spans in distsql.
+
+################
+# Schema setup #
+################
+
+statement ok
+CREATE TABLE t (
+  a INT PRIMARY KEY,
+  b INT NOT NULL,
+  c INT,
+  INDEX notnull_asc (b),
+  INDEX notnull_desc (b DESC),
+  INDEX null_asc (c),
+  INDEX null_desc (c DESC),
+  INDEX nullable_desc (b, c DESC),
+  INDEX notnullable_desc (c, b DESC)
+)
+
+statement ok
+CREATE TABLE c1 (
+  a INT PRIMARY KEY
+) INTERLEAVE IN PARENT t (a)
+
+#######################
+# Insert dummy values #
+#######################
+
+statement ok
+INSERT INTO t VALUES
+  (1,1,NULL),
+  (2,1,NULL),
+  (3,1,3),
+  (4,1,2),
+  (5,1,1),
+  (6,8,3),
+  (7,7,7),
+  (8,3,NULL),
+  (9,3,4),
+  (10,2,2)
+
+############################
+# Split ranges for distsql #
+############################
+
+# Perform some splits to exercise distsql partitioning as well.
+
+# Create split points at X = 2 for each index.
+# We split at the "beginning" of each secondary index too (0 for ASC, 100 for
+# DESC).
+
+# Primary index.
+statement ok
+ALTER TABLE t SPLIT AT VALUES(2)
+
+# Create a split at /3/#
+statement ok
+ALTER TABLE c1 SPLIT AT VALUES(2)
+
+# NOTNULL x ASC
+statement ok
+ALTER INDEX notnull_asc SPLIT AT VALUES(0)
+
+statement ok
+ALTER INDEX notnull_asc SPLIT AT VALUES(2)
+
+# NOTNULL x DESC
+statement ok
+ALTER INDEX notnull_desc SPLIT AT VALUES(100)
+
+statement ok
+ALTER INDEX notnull_desc SPLIT AT VALUES(2)
+
+# NULL x ASC
+statement ok
+ALTER INDEX null_asc SPLIT AT VALUES(0)
+
+statement ok
+ALTER INDEX null_asc SPLIT AT VALUES(2)
+
+# NULL x DESC
+statement ok
+ALTER INDEX null_desc SPLIT AT VALUES(100)
+
+statement ok
+ALTER INDEX null_desc SPLIT AT VALUES(2)
+
+#####################
+# Distribute ranges #
+#####################
+
+# Distribute our ranges across the first 3 (for primary index) and 2 (for
+# seconary indexes) nodes.
+
+statement ok
+ALTER TABLE t TESTING_RELOCATE SELECT ARRAY[i], i FROM generate_series(1,3) AS g(i)
+
+# NOTNULL x (ASC|DESC)
+
+statement ok
+ALTER INDEX notnull_asc TESTING_RELOCATE SELECT ARRAY[i], i FROM generate_series(1,2) AS g(i)
+
+statement ok
+ALTER INDEX notnull_desc TESTING_RELOCATE SELECT ARRAY[i], i FROM generate_series(1,2) AS g(i)
+
+# NULL x (ASC|DESC)
+
+statement ok
+ALTER INDEX null_asc TESTING_RELOCATE SELECT ARRAY[i], i FROM generate_series(1,2) AS g(i)
+
+statement ok
+ALTER INDEX null_desc TESTING_RELOCATE SELECT ARRAY[i], i FROM generate_series(1,2) AS g(i)
+
+
+#############################
+# Verify range distribution #
+#############################
+
+query TTITI colnames
+SHOW TESTING_RANGES FROM TABLE t
+----
+Start Key  End Key    Range ID  Replicas  Lease Holder
+NULL       /2         1         {1}       1
+/2         /2/#/52/1  2         {2}       2
+/2/#/52/1  NULL       3         {3}       3
+
+# NOTNULL x (ASC | DESC)
+
+query TTITI colnames
+SHOW TESTING_RANGES FROM INDEX notnull_asc
+----
+Start Key  End Key  Range ID  Replicas  Lease Holder
+NULL       /0       3         {3}       3
+/0         /2       4         {1}       1
+/2         NULL     5         {2}       2
+
+query TTITI colnames
+SHOW TESTING_RANGES FROM INDEX notnull_desc
+----
+Start Key  End Key  Range ID  Replicas  Lease Holder
+NULL       /-101    5         {2}       2
+/-101      /-3      6         {1}       1
+/-3        NULL     7         {2}       2
+
+# NULL x (ASC | DESC)
+
+query TTITI colnames
+SHOW TESTING_RANGES FROM INDEX null_asc
+----
+Start Key  End Key  Range ID  Replicas  Lease Holder
+NULL       /0       7         {2}       2
+/0         /2       8         {1}       1
+/2         NULL     9         {2}       2
+
+query TTITI colnames
+SHOW TESTING_RANGES FROM INDEX null_desc
+----
+Start Key  End Key  Range ID  Replicas  Lease Holder
+NULL       /-101    9         {2}       2
+/-101      /-3      10        {1}       1
+/-3        NULL     11        {2}       2
+
+###############
+# Query tests #
+###############
+
+# Primary index
+
+query ITTT
+EXPLAIN SELECT * FROM t WHERE a <= 4
+----
+0  scan  ·      ·
+0  ·     table  t@primary
+0  ·     spans  /#-/4/#
+
+query T
+SELECT "URL" FROM [EXPLAIN (DISTSQL) SELECT * FROM t WHERE a <= 4]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html?eJzMkTFr9DAMhvfvV3y8swpx0slT1lvuytGtZHBjcQRyUZAdaDny30vs4ZojLS0d2tGSHj2ydMEgnvfuzAH2CQaEEoQKDWFUaTkE0SWVC3f-BbYgdMM4xSXcEFpRhr0gdrFnWDy6556P7DwrCJ6j6_rUfNTu7PS1jiAcpmj_14bqkuoKzUyQKV57huhODGtm-sB71U2DqGdlv5I188Zke7mT8aZsW1yuxOaXPlz-gUVveI8cRhkCf2mTxXII9ifOVwsyacsPKm3S5OchcSngOcScNfmxG1IqDfgeNp_C9yu4uIXLn5irb8HN_O8tAAD__8RJHKE=
+
+query III rowsort
+SELECT * FROM t WHERE a <= 4
+----
+1 1 NULL
+2 1 NULL
+3 1 3
+4 1 2
+
+# Start key is close to split point at /2/#
+query ITTT
+EXPLAIN SELECT * FROM t WHERE a >= 2 AND a <= 4
+----
+0  scan  ·      ·
+0  ·     table  t@primary
+0  ·     spans  /2-/4/#
+
+query III rowsort
+SELECT * FROM t WHERE a >= 2 AND a <= 4
+----
+2 1 NULL
+3 1 3
+4 1 2
+
+# Edge cases.
+
+query ITTT
+EXPLAIN SELECT * FROM t WHERE a <= 0
+----
+0  scan  ·      ·
+0  ·     table  t@primary
+0  ·     spans  /#-/0/#
+
+query ITTT
+EXPLAIN SELECT * FROM t WHERE a <= -1
+----
+0  scan  ·      ·
+0  ·     table  t@primary
+0  ·     spans  /#-/-1/#
+
+query ITTT
+EXPLAIN SELECT * FROM t WHERE a <= -9223372036854775808
+----
+0  scan  ·      ·
+0  ·     table  t@primary
+0  ·     spans  /#-/-9223372036854775808/#
+
+query ITTT
+EXPLAIN SELECT * FROM t WHERE a <= 9223372036854775807
+----
+0  scan  ·      ·
+0  ·     table  t@primary
+0  ·     spans  /#-/9223372036854775807/#
+
+### NOTNULL x (ASC | DESC)
+
+# Bounds on both ends (b >= 2 AND b <= 4)
+query ITTT
+EXPLAIN SELECT * FROM t@notnull_asc WHERE b >= 2 AND b <= 4
+----
+0  index-join  ·      ·
+1  scan        ·      ·
+1  ·           table  t@notnull_asc
+1  ·           spans  /2-/4/#
+1  scan        ·      ·
+1  ·           table  t@primary
+
+# Note the span is reversed because of #20203.
+query ITTT
+EXPLAIN SELECT * FROM t@notnull_desc WHERE b >= 2 AND b <= 4
+----
+0  index-join  ·      ·
+1  scan        ·      ·
+1  ·           table  t@notnull_desc
+1  ·           spans  /-5-/-3/#
+1  scan        ·      ·
+1  ·           table  t@primary
+
+query T
+SELECT "URL" FROM [EXPLAIN (DISTSQL) SELECT * FROM t@notnull_asc WHERE b >= 2 AND b <= 4]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html?eJyUkU1LxDAQhu_-CnnPI_TjllOv62FXFm9SJDbDUuhmSjIBZel_lzYHu-JWPc7H8z5hcoEXx3t75gjzghKECi1hDNJxjBLmdl7auXeYgtD7MencbgmdBIa5QHsdGAZ7eZARBMdq-2FZmgiS9AuJak8MU0-0ii23Y5_t28BHto7DVTi8qE_D8Gpj1ygIh6Tmvilxy1r-x_oovf9JOob-bMPHWkhNRU19U1tdaX-54ZHjKD7yn85YTC2B3YnzP0VJoeOnIN2iyeVh4ZaG46h5Wudi5_NofuAaLjfhahuuNuHiG9xOd58BAAD__-o11OU=
+
+query T
+SELECT "URL" FROM [EXPLAIN (DISTSQL) SELECT * FROM t@notnull_desc WHERE b >= 2 AND b <= 4]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html?eJzEkT1r8zAQx_fnUzz8ZxUiO100eU2HpIRuxRTVOoLB0Rm9QEvwdy-2hsTBUdOlHe_ld7_j7gTLhrb6SB7qFRICBWqB3nFD3rMb06lpYz6gVgKt7WMY07VAw46gTght6AgKL_q9oz1pQw4ChoJuu2mw5WBj170Z8k0VILCLQf2vJOpBgGM4j_RBHwhKDuJ-7RO3dsnau_ao3eelUFSFqMqb2uKm9myLlp0hR2Ymq4eFxbb8wP1V27K4nInl35z5G-1vnHlBuyffs_V01x1X4xvIHCj9zHN0DT07biZNCncTNyUM-ZCqMgUbm0rjgpewzMLFDJbXcJGFH_PmMguv8_D6R2vXw7-vAAAA__8UOlgM
+
+query III rowsort
+SELECT * FROM t@notnull_asc WHERE b >= 2 AND b <= 4
+----
+10  2  2
+8   3  NULL
+9   3  4
+
+query III rowsort
+SELECT * FROM t@notnull_desc WHERE b >= 2 AND b <= 4
+----
+10  2  2
+8   3  NULL
+9   3  4
+
+# Bounds on left end (b >= 2)
+
+query ITTT
+EXPLAIN SELECT * FROM t@notnull_asc WHERE b >= 2
+----
+0  index-join  ·      ·
+1  scan        ·      ·
+1  ·           table  t@notnull_asc
+1  ·           spans  /2-
+1  scan        ·      ·
+1  ·           table  t@primary
+
+# Note the span is reversed because of #20203.
+query ITTT
+EXPLAIN SELECT * FROM t@notnull_desc WHERE b >= 2
+----
+0  index-join  ·      ·
+1  scan        ·      ·
+1  ·           table  t@notnull_desc
+1  ·           spans  -/-3/#
+1  scan        ·      ·
+1  ·           table  t@primary
+
+query T
+SELECT "URL" FROM [EXPLAIN (DISTSQL) SELECT * FROM t@notnull_asc WHERE b >= 2]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html?eJyUkU1LxDAQhu_-CnnPI_TjllOv62FXFm9SJDbDUuhmSjIBZel_lzYHu-JWPc7H8z5hcoEXx3t75gjzghKECi1hDNJxjBLmdl7auXeYgtD7MencbgmdBIa5QHsdGAZ7eZARBMdq-2FZmgiS9AuJak8MU0-0ii23Y5_t28BHto7DVTi8qE_D8Gpj1ygIh6Tmvilxy1r-x_oovf9JOob-bMPHWkhNRU19U1tdaX-54ZHjKD7yn85YTC2B3YnzP0VJoeOnIN2iyeVh4ZaG46h5Wudi5_NofuAaLjfhahuuNuHiG9xOd58BAAD__-o11OU=
+
+query T
+SELECT "URL" FROM [EXPLAIN (DISTSQL) SELECT * FROM t@notnull_desc WHERE b >= 2]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html?eJzEkT1r8zAQx_fnUzz8ZxUiO100eU2HpIRuxRTVOoLB0Rm9QEvwdy-2hsTBUdOlHe_ld7_j7gTLhrb6SB7qFRICBWqB3nFD3rMb06lpYz6gVgKt7WMY07VAw46gTght6AgKL_q9oz1pQw4ChoJuu2mw5WBj170Z8k0VILCLQf2vJOpBgGM4j_RBHwhKDuJ-7RO3dsnau_ao3eelUFSFqMqb2uKm9myLlp0hR2Ymq4eFxbb8wP1V27K4nInl35z5G-1vnHlBuyffs_V01x1X4xvIHCj9zHN0DT07biZNCncTNyUM-ZCqMgUbm0rjgpewzMLFDJbXcJGFH_PmMguv8_D6R2vXw7-vAAAA__8UOlgM
+
+query III rowsort
+SELECT * FROM t@notnull_asc WHERE b >= 2
+----
+6   8  3
+7   7  7
+8   3  NULL
+9   3  4
+10  2  2
+
+query III rowsort
+SELECT * FROM t@notnull_desc WHERE b >= 2
+----
+6   8  3
+7   7  7
+8   3  NULL
+9   3  4
+10  2  2
+
+# Bounds on right end (b >= 4)
+
+query ITTT
+EXPLAIN SELECT * FROM t@notnull_asc WHERE b <= 4
+----
+0  index-join  ·      ·
+1  scan        ·      ·
+1  ·           table  t@notnull_asc
+1  ·           spans  /#-/4/#
+1  scan        ·      ·
+1  ·           table  t@primary
+
+# Note the span is reversed because of #20203.
+query ITTT
+EXPLAIN SELECT * FROM t@notnull_desc WHERE b <= 4
+----
+0  index-join  ·      ·
+1  scan        ·      ·
+1  ·           table  t@notnull_desc
+1  ·           spans  /-5-/#
+1  scan        ·      ·
+1  ·           table  t@primary
+
+query T
+SELECT "URL" FROM [EXPLAIN (DISTSQL) SELECT * FROM t@notnull_asc WHERE b <= 4]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html?eJzEkrFqwzAQhvc-RflnFSI7TcGT13RISuhWTFGtIxgcnZFkaAl-92JrSBwcJaW0GaXTd9_p-PcwrGmlduSQvUFCIIFAikKgsVySc2z7Uni41J_IZgKVaVrfXxcCJVtCtoevfE3I8Ko-atqQ0mQhoMmrqh6aG_amret35crcQ2Dd-uw-lyg6AW79oaPzakvIZCeutz5zZaakja12yn4dC0WeiDw9q03Oag-21rDVZEmPZEU3MdiKH7g5eTYtTkdieZMtX7D-1ZaTm3z2gvU_IjWh3ZBr2Di6KjOzPnKktxTy6bi1Jb1YLgdNOK4HbrjQ5HyoynBYmlDqBzyGZRRORrA8hZMo_BQ3p1F4Hofnvxn7MQov4ubFj8xFd_cdAAD__yguzkM=
+
+query T
+SELECT "URL" FROM [EXPLAIN (DISTSQL) SELECT * FROM t@notnull_desc WHERE b <= 4]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html?eJzEkT1r8zAQx_fnUzz8ZxUiO100eU2HpIRuxRTVOoLB0Rm9QEvwdy-2hsTBUdOlHe_ld7_j7gTLhrb6SB7qFRICBWqB3nFD3rMb06lpYz6gVgKt7WMY07VAw46gTght6AgKL_q9oz1pQw4ChoJuu2mw5WBj170Z8k0VILCLQf2vJOpBgGM4j_RBHwhKDuJ-7RO3dsnau_ao3eelUFSFqMqb2uKm9myLlp0hR2Ymq4eFxbb8wP1V27K4nInl35z5G-1vnHlBuyffs_V01x1X4xvIHCj9zHN0DT07biZNCncTNyUM-ZCqMgUbm0rjgpewzMLFDJbXcJGFH_PmMguv8_D6R2vXw7-vAAAA__8UOlgM
+
+query III rowsort
+SELECT * FROM t@notnull_asc WHERE b <= 4
+----
+1   1  NULL
+2   1  NULL
+3   1  3
+4   1  2
+5   1  1
+8   3  NULL
+9   3  4
+10  2  2
+
+query III rowsort
+SELECT * FROM t@notnull_desc WHERE b <= 4
+----
+1   1  NULL
+2   1  NULL
+3   1  3
+4   1  2
+5   1  1
+8   3  NULL
+9   3  4
+10  2  2
+
+# IS (NOT) NULL
+
+query ITTT
+EXPLAIN SELECT * FROM t@notnull_asc WHERE b IS NULL
+----
+0  index-join  ·      ·
+1  scan        ·      ·
+1  ·           table  t@notnull_asc
+1  ·           spans  -/NULL/#
+1  scan        ·      ·
+1  ·           table  t@primary
+
+query ITTT
+EXPLAIN SELECT * FROM t@notnull_desc WHERE b IS NULL
+----
+0  index-join  ·      ·
+1  scan        ·      ·
+1  ·           table  t@notnull_desc
+1  ·           spans  /NULL-
+1  scan        ·      ·
+1  ·           table  t@primary
+
+query III rowsort
+SELECT * FROM t@notnull_asc WHERE b IS NULL
+----
+
+query III rowsort
+SELECT * FROM t@notnull_desc WHERE b IS NULL
+----
+
+query ITTT
+EXPLAIN SELECT * FROM t@notnull_asc WHERE b IS NOT NULL AND b <= 2
+----
+0  index-join  ·      ·
+1  scan        ·      ·
+1  ·           table  t@notnull_asc
+1  ·           spans  /#-/2/#
+1  scan        ·      ·
+1  ·           table  t@primary
+
+# Note the span is reversed because of #20203.
+query ITTT
+EXPLAIN SELECT * FROM t@notnull_desc WHERE b IS NOT NULL AND b >= 2
+----
+0  index-join  ·      ·
+1  scan        ·      ·
+1  ·           table  t@notnull_desc
+1  ·           spans  -/-3/#
+1  scan        ·      ·
+1  ·           table  t@primary
+
+query III rowsort
+SELECT * FROM t@notnull_asc WHERE b IS NOT NULL AND b <= 2
+----
+1  1  NULL
+2  1  NULL
+3  1  3
+4  1  2
+5  1  1
+10 2  2
+
+query III rowsort
+SELECT * FROM t@notnull_desc WHERE b IS NOT NULL AND b >= 2
+----
+6   8  3
+7   7  7
+8   3  NULL
+9   3  4
+10  2  2
+
+### NULL x (ASC | DESC)
+
+# Bounds on both ends (c >= 2 AND c <= 4)
+query ITTT
+EXPLAIN SELECT * FROM t@null_asc WHERE c >= 2 AND c <= 4
+----
+0  index-join  ·      ·
+1  scan        ·      ·
+1  ·           table  t@null_asc
+1  ·           spans  /2-/4/#
+1  scan        ·      ·
+1  ·           table  t@primary
+
+# Note the span is reversed because of #20203.
+query ITTT
+EXPLAIN SELECT * FROM t@null_desc WHERE c >= 2 AND c <= 4
+----
+0  index-join  ·      ·
+1  scan        ·      ·
+1  ·           table  t@null_desc
+1  ·           spans  /-5-/-3/#
+1  scan        ·      ·
+1  ·           table  t@primary
+
+query T
+SELECT "URL" FROM [EXPLAIN (DISTSQL) SELECT * FROM t@null_asc WHERE c >= 2 AND c <= 4]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html?eJyUkU1LxDAQhu_-CnnPI_TjllOv62FXFm9SJDbDUshmQj5AWfrfpc3BrrhVj_PxvE-YXODE8F6fOUK9oAahQU_wQQaOUcLcLks78w5VEUbnc5rbPWGQwFAXpDFZhsJeHsSDYDjp0S5LE0Fy-kJi0ieGaidaxdbbsc_6zfKRteFwFQ6XrX3VcegSCIec1H1X45ay_o_yUUb3k9GH8azDx1pIXUNde1PbXGl_OeCRoxcX-U83rKaewObE5ZOi5DDwU5Bh0ZTysHBLw3BMZdqWYufKaH7gGq434WYbbjbh6hvcT3efAQAA___aUNOU
+
+query T
+SELECT "URL" FROM [EXPLAIN (DISTSQL) SELECT * FROM t@null_desc WHERE c >= 2 AND c <= 4]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html?eJzEkT1r8zAQx_fnUzz8ZxUiO100eU2HpIRuxRTVOoLB0Rm9QEvwdy-2hsTBUdOlHe_ld7_j7gTLhrb6SB7qFRICBWqB3nFD3rMb06lpYz6gVgKt7WMY07VAw46gTght6AgKL_q9oz1pQw4ChoJuu2mwjV33Zsg3VYDALgb1v5KoBwGO4TzPB30gKDmI-51P3NolZe_ao3afl0JRFaIqb2qLm9qzLVp2hhyZmaweFhbb8gP3V23L4nImln9w42-cv3HjBe2efM_W011HXI0_IHOg9DDP0TX07LiZNCncTdyUMORDqsoUbGwqjQtewjILFzNYXsNFFn7Mm8ssvM7D6x-tXQ__vgIAAP__JPBVag==
+
+query III rowsort
+SELECT * FROM t@null_asc WHERE c >= 2 AND c <= 4
+----
+3   1  3
+4   1  2
+6   8  3
+9   3  4
+10  2  2
+
+query III rowsort
+SELECT * FROM t@null_desc WHERE c >= 2 AND c <= 4
+----
+3   1  3
+4   1  2
+6   8  3
+9   3  4
+10  2  2
+
+# Bounds on left end (c >= 2)
+
+query ITTT
+EXPLAIN SELECT * FROM t@null_asc WHERE c >= 2
+----
+0  index-join  ·      ·
+1  scan        ·      ·
+1  ·           table  t@null_asc
+1  ·           spans  /2-
+1  scan        ·      ·
+1  ·           table  t@primary
+
+# Note the span is reversed because of #20203.
+query ITTT
+EXPLAIN SELECT * FROM t@null_desc WHERE c >= 2
+----
+0  index-join  ·      ·
+1  scan        ·      ·
+1  ·           table  t@null_desc
+1  ·           spans  -/-3/#
+1  scan        ·      ·
+1  ·           table  t@primary
+
+query T
+SELECT "URL" FROM [EXPLAIN (DISTSQL) SELECT * FROM t@null_asc WHERE c >= 2]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html?eJyUkU1LxDAQhu_-CnnPI_TjllOv62FXFm9SJDbDUshmQj5AWfrfpc3BrrhVj_PxvE-YXODE8F6fOUK9oAahQU_wQQaOUcLcLks78w5VEUbnc5rbPWGQwFAXpDFZhsJeHsSDYDjp0S5LE0Fy-kJi0ieGaidaxdbbsc_6zfKRteFwFQ6XrX3VcegSCIec1H1X45ay_o_yUUb3k9GH8azDx1pIXUNde1PbXGl_OeCRoxcX-U83rKaewObE5ZOi5DDwU5Bh0ZTysHBLw3BMZdqWYufKaH7gGq434WYbbjbh6hvcT3efAQAA___aUNOU
+
+query T
+SELECT "URL" FROM [EXPLAIN (DISTSQL) SELECT * FROM t@null_desc WHERE c >= 2]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html?eJzEkT1r8zAQx_fnUzz8ZxUiO100eU2HpIRuxRTVOoLB0Rm9QEvwdy-2hsTBUdOlHe_ld7_j7gTLhrb6SB7qFRICBWqB3nFD3rMb06lpYz6gVgKt7WMY07VAw46gTght6AgKL_q9oz1pQw4ChoJuu2mwjV33Zsg3VYDALgb1v5KoBwGO4TzPB30gKDmI-51P3NolZe_ao3afl0JRFaIqb2qLm9qzLVp2hhyZmaweFhbb8gP3V23L4nImln9w42-cv3HjBe2efM_W011HXI0_IHOg9DDP0TX07LiZNCncTdyUMORDqsoUbGwqjQtewjILFzNYXsNFFn7Mm8ssvM7D6x-tXQ__vgIAAP__JPBVag==
+
+query III rowsort
+SELECT * FROM t@null_asc WHERE c >= 2
+----
+3   1  3
+4   1  2
+6   8  3
+7   7  7
+9   3  4
+10  2  2
+
+
+query III rowsort
+SELECT * FROM t@null_desc WHERE c >= 2
+----
+3   1  3
+4   1  2
+6   8  3
+7   7  7
+9   3  4
+10  2  2
+
+# Bounds on right end (c >= 4)
+
+query ITTT
+EXPLAIN SELECT * FROM t@null_asc WHERE c <= 4
+----
+0  index-join  ·      ·
+1  scan        ·      ·
+1  ·           table  t@null_asc
+1  ·           spans  /#-/4/#
+1  scan        ·      ·
+1  ·           table  t@primary
+
+# Note the span is reversed because of #20203.
+query ITTT
+EXPLAIN SELECT * FROM t@null_desc WHERE c <= 4
+----
+0  index-join  ·      ·
+1  scan        ·      ·
+1  ·           table  t@null_desc
+1  ·           spans  /-5-/#
+1  scan        ·      ·
+1  ·           table  t@primary
+
+query T
+SELECT "URL" FROM [EXPLAIN (DISTSQL) SELECT * FROM t@null_asc WHERE c <= 4]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html?eJy8kT1r8zAQx_fnUzz8ZxUiO100eU2HpIRuxRTVOoLB0Rm9QEvwdy-2hsTBUdMl47387nfcnWDZ0FYfyUO9Q0KgQC3QO27Ie3ZjOjVtzBfUSqC1fQxjuhZo2BHUCaENHUHhTX92tCdtyEHAUNBtNw22ses-tG-qAIFdDOp_JVEPAhzDeZwP-kBQchD3K1-4tUvG3rVH7b4vhaIqRFXe1BY3tWdbtOwMOTIzWT0sLLblJ-6v2pbF5UwsH3_iX5SPOPGCdk--Z-vprhuuxheQOVD6l-foGnp13EyaFO4mbkoY8iFVZQo2NpXGBS9hmYWLGSyv4SILP-fNZRZe5-H1n9auh38_AQAA__8JklSa
+
+query T
+SELECT "URL" FROM [EXPLAIN (DISTSQL) SELECT * FROM t@null_desc WHERE c <= 4]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html?eJzEkT1r8zAQx_fnUzz8ZxUiO100eU2HpIRuxRTVOoLB0Rm9QEvwdy-2hsTBUdOlHe_ld7_j7gTLhrb6SB7qFRICBWqB3nFD3rMb06lpYz6gVgKt7WMY07VAw46gTght6AgKL_q9oz1pQw4ChoJuu2mwjV33Zsg3VYDALgb1v5KoBwGO4TzPB30gKDmI-51P3NolZe_ao3afl0JRFaIqb2qLm9qzLVp2hhyZmaweFhbb8gP3V23L4nImln9w42-cv3HjBe2efM_W011HXI0_IHOg9DDP0TX07LiZNCncTdyUMORDqsoUbGwqjQtewjILFzNYXsNFFn7Mm8ssvM7D6x-tXQ__vgIAAP__JPBVag==
+
+query III rowsort
+SELECT * FROM t@null_asc WHERE c <= 4
+----
+3   1  3
+4   1  2
+5   1  1
+6   8  3
+9   3  4
+10  2  2
+
+query III rowsort
+SELECT * FROM t@null_desc WHERE c <= 4
+----
+3   1  3
+4   1  2
+5   1  1
+6   8  3
+9   3  4
+10  2  2
+
+# IS (NOT) NULL
+
+query ITTT
+EXPLAIN SELECT * FROM t@null_asc WHERE c IS NULL
+----
+0  index-join  ·      ·
+1  scan        ·      ·
+1  ·           table  t@null_asc
+1  ·           spans  -/NULL/#
+1  scan        ·      ·
+1  ·           table  t@primary
+
+query ITTT
+EXPLAIN SELECT * FROM t@null_desc WHERE c IS NULL
+----
+0  index-join  ·      ·
+1  scan        ·      ·
+1  ·           table  t@null_desc
+1  ·           spans  /NULL-
+1  scan        ·      ·
+1  ·           table  t@primary
+
+query III rowsort
+SELECT * FROM t@null_asc WHERE c IS NULL
+----
+1 1 NULL
+2 1 NULL
+8 3 NULL
+
+query III rowsort
+SELECT * FROM t@null_desc WHERE c IS NULL
+----
+1 1 NULL
+2 1 NULL
+8 3 NULL
+
+query ITTT
+EXPLAIN SELECT * FROM t@null_asc WHERE c IS NOT NULL AND c <= 2
+----
+0  index-join  ·      ·
+1  scan        ·      ·
+1  ·           table  t@null_asc
+1  ·           spans  /#-/2/#
+1  scan        ·      ·
+1  ·           table  t@primary
+
+# Note the span is reversed because of #20203.
+query ITTT
+EXPLAIN SELECT * FROM t@null_desc WHERE c IS NOT NULL AND c >= 2
+----
+0  index-join  ·      ·
+1  scan        ·      ·
+1  ·           table  t@null_desc
+1  ·           spans  -/-3/#
+1  scan        ·      ·
+1  ·           table  t@primary
+
+query III rowsort
+SELECT * FROM t@null_asc WHERE c IS NOT NULL AND c <= 2
+----
+4   1  2
+5   1  1
+10  2  2
+
+query III rowsort
+SELECT * FROM t@null_desc WHERE c IS NOT NULL AND c >= 2
+----
+3   1  3
+4   1  2
+6   8  3
+7   7  7
+9   3  4
+10  2  2
+
+# In some cases, we cannot tighten the span if the subsequent column is
+# in DESC order and is NULLable.
+# If we had tightened this to /1-/1/#, then /1/NULL would be omitted.
+query ITTT
+EXPLAIN SELECT * FROM t@nullable_desc WHERE b = 1
+----
+0  scan  ·      ·
+0  ·     table  t@nullable_desc
+0  ·     spans  /1-/2
+
+query III rowsort
+SELECT * FROM t@nullable_desc WHERE b = 1
+----
+1  1  NULL
+2  1  NULL
+3  1  3
+4  1  2
+5  1  1
+
+# Note the span is reversed because of #20203.
+# We can tighten the end key since there are no index columns after c and thus
+# no NULLable DESC columns after.
+query ITTT
+EXPLAIN SELECT * FROM t@nullable_desc WHERE b = 1 AND c >= 2
+----
+0  scan  ·      ·
+0  ·     table  t@nullable_desc
+0  ·     spans  /1-/1/-3/#
+
+query III rowsort
+SELECT * FROM t@nullable_desc WHERE b = 1 AND c >= 2
+----
+3  1  3
+4  1  2
+
+# Note the span is reversed because of #20203.
+query ITTT
+EXPLAIN SELECT * FROM t@nullable_desc WHERE b = 1 AND c <= 2
+----
+0  scan  ·      ·
+0  ·     table  t@nullable_desc
+0  ·     spans  /1/-3-/1/#
+
+query III rowsort
+SELECT * FROM t@nullable_desc WHERE b = 1 AND c <= 2
+----
+4  1  2
+5  1  1
+
+# Even though the next index column is DESC, it is NOT NULLable and thus
+# we can tighten the end key.
+query ITTT
+EXPLAIN SELECT * FROM t@notnullable_desc WHERE c = 1
+----
+0  scan  ·      ·
+0  ·     table  t@notnullable_desc
+0  ·     spans  /1-/1/#
+
+query III rowsort
+SELECT * FROM t@nullable_desc WHERE c = 1
+----
+5  1  1

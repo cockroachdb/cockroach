@@ -122,7 +122,7 @@ EXPLAIN SELECT * FROM t2 WHERE d IS NaN and v IS NaN
 ----
 0  scan  ·      ·
 0  ·     table  t2@primary
-0  ·     spans  /NaN/NaN-/NaN/-Infinity
+0  ·     spans  /NaN/NaN-/NaN/NaN/#
 
 query RR
 SELECT * FROM t2 WHERE d IS NaN and v IS NaN
@@ -135,7 +135,7 @@ EXPLAIN SELECT * FROM t2 WHERE d = 'Infinity' and v = 'Infinity'
 ----
 0  scan  ·      ·
 0  ·     table  t2@primary
-0  ·     spans  /Infinity/Infinity-/Infinity/NaN
+0  ·     spans  /Infinity/Infinity-/Infinity/Infinity/#
 
 query RR
 SELECT * FROM t2 WHERE d = 'Infinity' and v = 'Infinity'
@@ -147,7 +147,7 @@ EXPLAIN SELECT * FROM t2 WHERE d = '-Infinity' and v = '-Infinity'
 ----
 0  scan  ·      ·
 0  ·     table  t2@primary
-0  ·     spans  /-Infinity/-Infinity-/-Infinity/-Infinity/PrefixEnd
+0  ·     spans  /-Infinity/-Infinity-/-Infinity/-Infinity/#
 
 query RR
 SELECT * FROM t2 WHERE d = '-Infinity' and v = '-Infinity'
@@ -210,7 +210,7 @@ EXPLAIN SELECT * FROM s WHERE d IS NaN
 0  render  ·      ·
 1  scan    ·      ·
 1  ·       table  s@s_d_idx
-1  ·       spans  /NaN-/-Infinity
+1  ·       spans  /NaN-/NaN/#
 
 query ITTT
 EXPLAIN SELECT * FROM s WHERE d = 'NaN'
@@ -218,7 +218,7 @@ EXPLAIN SELECT * FROM s WHERE d = 'NaN'
 0  render  ·      ·
 1  scan    ·      ·
 1  ·       table  s@s_d_idx
-1  ·       spans  /NaN-/-Infinity
+1  ·       spans  /NaN-/NaN/#
 
 query ITTT
 EXPLAIN SELECT * FROM s WHERE isnan(d)

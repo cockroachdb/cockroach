@@ -1088,7 +1088,7 @@ SELECT *
 3  ·       filter    b > 1
 3  scan    ·         ·
 3  ·       table     square@primary
-3  ·       spans     /#-/6
+3  ·       spans     /#-/5/#
 
 query IIII rowsort
 SELECT *
@@ -1147,7 +1147,7 @@ SELECT *
 2  ·       filter    ((a > 1) AND ((a IS NULL) OR (a > 2))) AND ((a IS NULL) OR (a < b))
 2  scan    ·         ·
 2  ·       table     square@primary
-2  ·       spans     /2-/6
+2  ·       spans     /2-/5/#
 
 
 statement ok
@@ -1642,10 +1642,10 @@ EXPLAIN (VERBOSE) SELECT * FROM xyu INNER JOIN xyv ON xyu.x = xyv.x AND xyu.y = 
 0  ·     mergeJoinOrder  +"(x=x)",+"(y=y)"  ·                   ·
 1  scan  ·               ·                  (x, y, u)           x=CONST; y!=NULL; u!=NULL; key(y,u); +y
 1  ·     table           xyu@primary        ·                   ·
-1  ·     spans           /1/#-/1/10         ·                   ·
+1  ·     spans           /1/#-/1/9/#        ·                   ·
 1  scan  ·               ·                  (x, y, v)           x=CONST; y!=NULL; v!=NULL; key(y,v); +y
 1  ·     table           xyv@primary        ·                   ·
-1  ·     spans           /1/#-/1/10         ·                   ·
+1  ·     spans           /1/#-/1/9/#        ·                   ·
 
 query IIIIII
 SELECT * FROM xyu INNER JOIN xyv ON xyu.x = xyv.x AND xyu.y = xyv.y WHERE xyu.x = 1 AND xyu.y < 10
@@ -1661,10 +1661,10 @@ EXPLAIN (VERBOSE) SELECT * FROM xyu INNER JOIN xyv ON xyu.x = xyv.x AND xyu.y = 
 0  ·     mergeJoinOrder  +"(x=x)",+"(y=y)"  ·                   ·
 1  scan  ·               ·                  (x, y, u)           x=CONST; y!=NULL; u!=NULL; key(y,u); +y
 1  ·     table           xyu@primary        ·                   ·
-1  ·     spans           /1/#-/1/10         ·                   ·
+1  ·     spans           /1/#-/1/9/#        ·                   ·
 1  scan  ·               ·                  (x, y, v)           x=CONST; y!=NULL; v!=NULL; key(y,v); +y
 1  ·     table           xyv@primary        ·                   ·
-1  ·     spans           /1/#-/1/10         ·                   ·
+1  ·     spans           /1/#-/1/9/#        ·                   ·
 
 query IIIIII
 SELECT * FROM xyu INNER JOIN xyv ON xyu.x = xyv.x AND xyu.y = xyv.y AND xyu.x = 1 AND xyu.y < 10
@@ -1684,7 +1684,7 @@ EXPLAIN (VERBOSE) SELECT * FROM xyu LEFT OUTER JOIN xyv ON xyu.x = xyv.x AND xyu
 1  ·     spans           ALL                                     ·                   ·
 1  scan  ·               ·                                       (x, y, v)           x=CONST; y!=NULL; v!=NULL; key(y,v); +y
 1  ·     table           xyv@primary                             ·                   ·
-1  ·     spans           /1/#-/1/10                              ·                   ·
+1  ·     spans           /1/#-/1/9/#                             ·                   ·
 
 query IIIIII rowsort
 SELECT * FROM xyu LEFT OUTER JOIN xyv ON xyu.x = xyv.x AND xyu.y = xyv.y AND xyu.x = 1 AND xyu.y < 10
@@ -1705,7 +1705,7 @@ EXPLAIN (VERBOSE) SELECT * FROM xyu RIGHT OUTER JOIN xyv ON xyu.x = xyv.x AND xy
 0  ·     pred            (test.xyv.x = 1) AND (test.xyv.y < 10)  ·                   ·
 1  scan  ·               ·                                       (x, y, u)           x=CONST; y!=NULL; u!=NULL; key(y,u); +y
 1  ·     table           xyu@primary                             ·                   ·
-1  ·     spans           /1/#-/1/10                              ·                   ·
+1  ·     spans           /1/#-/1/9/#                             ·                   ·
 1  scan  ·               ·                                       (x, y, v)           x!=NULL; y!=NULL; v!=NULL; key(x,y,v); +x,+y
 1  ·     table           xyv@primary                             ·                   ·
 1  ·     spans           ALL                                     ·                   ·

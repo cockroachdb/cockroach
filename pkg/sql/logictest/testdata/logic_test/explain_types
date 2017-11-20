@@ -259,7 +259,7 @@ EXPLAIN (TYPES) SELECT * FROM tt WHERE x < 10 AND y > 10
 1  index-join  ·         ·                             (x int, y int, rowid[hidden,omitted] int)            x!=NULL; y!=NULL; rowid!=NULL; key(x,rowid)
 2  scan        ·         ·                             (x[omitted] int, y[omitted] int, rowid[hidden] int)  x!=NULL; y!=NULL; rowid!=NULL; key(x,rowid)
 2  ·           table     tt@a                          ·                                                    ·
-2  ·           spans     /#-/10                        ·                                                    ·
+2  ·           spans     /#-/9/#                       ·                                                    ·
 2  scan        ·         ·                             (x int, y int, rowid[hidden,omitted] int)            ·
 2  ·           table     tt@primary                    ·                                                    ·
 2  ·           filter    ((y)[int] > (10)[int])[bool]  ·                                                    ·

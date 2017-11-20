@@ -23,7 +23,7 @@ EXPLAIN SELECT * FROM t WHERE b = 2
 0  index-join  ·      ·
 1  scan        ·      ·
 1  ·           table  t@b
-1  ·           spans  /2-/3
+1  ·           spans  /2-/2/#
 1  scan        ·      ·
 1  ·           table  t@primary
 
@@ -49,7 +49,7 @@ EXPLAIN SELECT * FROM t WHERE c = 6
 0  index-join  ·      ·
 1  scan        ·      ·
 1  ·           table  t@c
-1  ·           spans  /6-/7
+1  ·           spans  /6-/6/#
 1  scan        ·      ·
 1  ·           table  t@primary
 

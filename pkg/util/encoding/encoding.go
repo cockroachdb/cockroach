@@ -80,6 +80,8 @@ const (
 	IntMax = 0xfd // 253
 
 	// Nulls come last when encoded descendingly.
+	// This value is not actually ever present in a stored key, but
+	// it's used in keys used as span boundaries for index scans.
 	encodedNotNullDesc = 0xfe
 	// interleavedSentinel uses the same byte as encodedNotNullDesc.
 	// It is used in the key encoding of interleaved index keys in order
@@ -741,20 +743,29 @@ func DecodeIfNotNull(b []byte) ([]byte, bool) {
 	return b, false
 }
 
+// DecodeIfNotNullDescending decodes encodedNotNullDesc from the input buffer
+// and returns the remaining buffer without the sentinel if encodedNotNullDesc
+// is the first byte.
+// Otherwise, the buffer is returned unchanged and false is returned.
+func DecodeIfNotNullDescending(b []byte) ([]byte, bool) {
+	if len(b) == 0 {
+		return b, false
+	}
+
+	if b[0] == encodedNotNullDesc {
+		return b[1:], true
+	}
+
+	return b, false
+}
+
 // DecodeIfInterleavedSentinel decodes the interleavedSentinel from the input
 // buffer and returns the remaining buffer without the sentinel if the
 // interleavedSentinel is the first byte.
 // Otherwise, the buffer is returned unchanged and false is returned.
 func DecodeIfInterleavedSentinel(b []byte) ([]byte, bool) {
-	if len(b) == 0 {
-		return b, false
-	}
-
-	if b[0] == interleavedSentinel {
-		return b[1:], true
-	}
-
-	return b, false
+	// The interleavedSentinel is equivalent to encodedNotNullDesc
+	return DecodeIfNotNullDescending(b)
 }
 
 // EncodeTimeAscending encodes a time value, appends it to the supplied buffer,
@@ -1849,4 +1860,22 @@ func PrettyPrintValueEncoded(b []byte) ([]byte, string, error) {
 	default:
 		return b, "", errors.Errorf("unknown type %s", typ)
 	}
+}
+
+// DecomposeKeyTokens breaks apart a key into its individual key-encoded values
+// and returns a slice of byte slices, one for each key-encoded value.
+func DecomposeKeyTokens(b []byte) ([][]byte, error) {
+	var out [][]byte
+
+	for len(b) > 0 {
+		tokenLen, err := PeekLength(b)
+		if err != nil {
+			return nil, err
+		}
+
+		out = append(out, b[:tokenLen])
+		b = b[tokenLen:]
+	}
+
+	return out, nil
 }

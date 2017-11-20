@@ -361,7 +361,7 @@ EXPLAIN SELECT a FROM t WHERE c < 1 AND b < 5
 0  render  ·      ·
 1  scan    ·      ·
 1  ·       table  t@bc
-1  ·       spans  /#-/4/1
+1  ·       spans  /#-/4/0/#
 
 query ITTT
 EXPLAIN SELECT a FROM t WHERE c > 1.0
@@ -385,7 +385,7 @@ EXPLAIN SELECT a FROM t WHERE c > 1.0 AND b < 5
 0  render  ·      ·
 1  scan    ·      ·
 1  ·       table  t@bc
-1  ·       spans  /#-/5
+1  ·       spans  /#-/4/#
 
 query ITTT
 EXPLAIN SELECT a FROM t WHERE b < 5.0 AND c < 1
@@ -393,7 +393,7 @@ EXPLAIN SELECT a FROM t WHERE b < 5.0 AND c < 1
 0  render  ·      ·
 1  scan    ·      ·
 1  ·       table  t@bc
-1  ·       spans  /#-/4/1
+1  ·       spans  /#-/4/0/#
 
 query ITTT
 EXPLAIN SELECT a FROM t WHERE (b, c) = (5, 1)
@@ -401,7 +401,7 @@ EXPLAIN SELECT a FROM t WHERE (b, c) = (5, 1)
 0  render  ·      ·
 1  scan    ·      ·
 1  ·       table  t@bc
-1  ·       spans  /5/1-/5/2
+1  ·       spans  /5/1-/5/1/#
 
 query ITTT
 EXPLAIN SELECT a FROM t WHERE (b, c) = (5.0, 1)
@@ -409,7 +409,7 @@ EXPLAIN SELECT a FROM t WHERE (b, c) = (5.0, 1)
 0  render  ·      ·
 1  scan    ·      ·
 1  ·       table  t@bc
-1  ·       spans  /5/1-/5/2
+1  ·       spans  /5/1-/5/1/#
 
 query ITTT
 EXPLAIN SELECT a FROM t WHERE (b, c) = (5.1, 1)
@@ -419,13 +419,14 @@ EXPLAIN SELECT a FROM t WHERE (b, c) = (5.1, 1)
 1  ·       table  t@bc
 1  ·       spans  ALL
 
+# Note the span is reversed because of #20203.
 query ITTT
 EXPLAIN SELECT a FROM t WHERE b IN (5.0, 1)
 ----
 0  render  ·      ·
 1  scan    ·      ·
 1  ·       table  t@b_desc
-1  ·       spans  /-6-/-5 /-2-/-1
+1  ·       spans  /-6-/-6/# /-2-/-2/#
 
 statement ok
 CREATE TABLE abcd (
@@ -445,7 +446,7 @@ EXPLAIN SELECT b FROM abcd WHERE (a, b) = (1, 4)
 0  render  ·      ·
 1  scan    ·      ·
 1  ·       table  abcd@abcd
-1  ·       spans  /1/4-/1/5
+1  ·       spans  /1/4-/1/4/#
 
 query ITTT
 EXPLAIN SELECT b FROM abcd WHERE (a, b) IN ((1, 4), (2, 9))
@@ -453,7 +454,7 @@ EXPLAIN SELECT b FROM abcd WHERE (a, b) IN ((1, 4), (2, 9))
 0  render  ·      ·
 1  scan    ·      ·
 1  ·       table  abcd@abcd
-1  ·       spans  /1/4-/1/5 /2/9-/2/10
+1  ·       spans  /1/4-/1/4/# /2/9-/2/9/#
 
 statement ok
 CREATE TABLE ab (
@@ -619,7 +620,7 @@ EXPLAIN SELECT * FROM test2 WHERE k <= '100' ORDER BY k DESC LIMIT 20
 1  index-join  ·      ·
 2  revscan     ·      ·
 2  ·           table  test2@test2_k_key
-2  ·           spans  /#-/"100"/PrefixEnd
+2  ·           spans  /#-/"100"/#
 2  ·           limit  20
 2  scan        ·      ·
 2  ·           table  test2@primary
@@ -726,7 +727,7 @@ ORDER BY total DESC
 2  render  ·         ·
 3  scan    ·         ·
 3  ·       table     favourites@favourites_glob_fav_idx
-3  ·       spans     /"GAME"/"web"/"MT"/"xxx"/"en_GB"/"ts"-/"GAME"/"web"/"MT"/"xxx"/"en_GB"/"ts"/PrefixEnd /"GAME"/"web"/"MT"/"xxx"/"en_GB"/"ts2"-/"GAME"/"web"/"MT"/"xxx"/"en_GB"/"ts2"/PrefixEnd /"GAME"/"web"/"MT"/"xxx"/"en_GB"/"ts3"-/"GAME"/"web"/"MT"/"xxx"/"en_GB"/"ts3"/PrefixEnd
+3  ·       spans     /"GAME"/"web"/"MT"/"xxx"/"en_GB"/"ts"-/"GAME"/"web"/"MT"/"xxx"/"en_GB"/"ts"/# /"GAME"/"web"/"MT"/"xxx"/"en_GB"/"ts2"-/"GAME"/"web"/"MT"/"xxx"/"en_GB"/"ts2"/# /"GAME"/"web"/"MT"/"xxx"/"en_GB"/"ts3"-/"GAME"/"web"/"MT"/"xxx"/"en_GB"/"ts3"/#
 
 query TI rowsort
 SELECT

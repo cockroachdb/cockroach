@@ -242,7 +242,7 @@ EXPLAIN DELETE FROM indexed WHERE value = 5 LIMIT 10
 2  render  ·      ·
 3  scan    ·      ·
 3  ·       table  indexed@indexed_value_idx
-3  ·       spans  /5-/6
+3  ·       spans  /5-/5/#
 3  ·       limit  10
 
 query ITTT
@@ -266,7 +266,7 @@ EXPLAIN DELETE FROM indexed WHERE value = 5 LIMIT 10 RETURNING id
 2  index-join  ·      ·
 3  scan        ·      ·
 3  ·           table  indexed@indexed_value_idx
-3  ·           spans  /5-/6
+3  ·           spans  /5-/5/#
 3  ·           limit  10
 3  scan        ·      ·
 3  ·           table  indexed@primary

@@ -24,7 +24,7 @@ EXPLAIN SELECT * FROM p WHERE f IS NaN
 0  render  ·      ·
 1  scan    ·      ·
 1  ·       table  p@p_f_key
-1  ·       spans  /NaN-/NaN/PrefixEnd
+1  ·       spans  /NaN-/NaN/#
 
 query ITTT
 EXPLAIN SELECT * FROM p WHERE f = 'NaN'
@@ -32,7 +32,7 @@ EXPLAIN SELECT * FROM p WHERE f = 'NaN'
 0  render  ·      ·
 1  scan    ·      ·
 1  ·       table  p@p_f_key
-1  ·       spans  /NaN-/NaN/PrefixEnd
+1  ·       spans  /NaN-/NaN/#
 
 query ITTT
 EXPLAIN SELECT * FROM p WHERE isnan(f)

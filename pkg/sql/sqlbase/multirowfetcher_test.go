@@ -619,7 +619,7 @@ func TestNextRowInterleave(t *testing.T) {
 			r.Exec(t, table.indexSchema)
 		} else {
 			// Create tables (primary indexes).
-			sqlutils.CreateTableInterleave(
+			sqlutils.CreateTableInterleaved(
 				t, sqlDB, table.tableName,
 				table.schema,
 				table.interleaveSchema,

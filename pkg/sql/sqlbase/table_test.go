@@ -16,17 +16,22 @@ package sqlbase
 
 import (
 	"bytes"
+	"fmt"
 	"reflect"
+	"strconv"
 	"testing"
 	"time"
 
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
+	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
@@ -810,6 +815,497 @@ func TestEquivSignature(t *testing.T) {
 				}
 			}
 
+		})
+	}
+}
+
+func TestTightenStartKey(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(context.Background())
+
+	sqlutils.CreateTestInterleavedHierarchy(t, sqlDB)
+
+	// The interleaved hierarchy is as follows:
+	//    parent		(pid1)
+	//	child		(pid1, cid1, cid2)
+	//	  grandchild	(pid1, cid1, cid2, gcid1)
+	parent := GetTableDescriptor(kvDB, sqlutils.TestDB, "parent1")
+	child := GetTableDescriptor(kvDB, sqlutils.TestDB, "child1")
+	grandchild := GetTableDescriptor(kvDB, sqlutils.TestDB, "grandchild1")
+
+	// Create DESC indexes for testing.
+	r := sqlutils.MakeSQLRunner(sqlDB)
+	r.Exec(t, fmt.Sprintf(`CREATE INDEX pid1_desc ON %s.parent1 (pid1 DESC)`, sqlutils.TestDB))
+	parentDescIdx := GetTableDescriptor(kvDB, sqlutils.TestDB, "parent1").Indexes[0]
+	r.Exec(t, fmt.Sprintf(`CREATE INDEX child_desc ON %s.child1 (pid1, cid1, cid2 DESC) INTERLEAVE IN PARENT %s.parent1 (pid1)`, sqlutils.TestDB, sqlutils.TestDB))
+	childDescIdx := GetTableDescriptor(kvDB, sqlutils.TestDB, "child1").Indexes[0]
+	r.Exec(t, fmt.Sprintf(`CREATE INDEX grandchild_desc ON %s.grandchild1 (pid1, cid1, cid2, gcid1 DESC) INTERLEAVE IN PARENT %s.child1(pid1, cid1, cid2)`, sqlutils.TestDB, sqlutils.TestDB))
+	grandchildDescIdx := GetTableDescriptor(kvDB, sqlutils.TestDB, "grandchild1").Indexes[0]
+
+	testCases := []struct {
+		index    *IndexDescriptor
+		input    roachpb.Key
+		expected roachpb.Key
+	}{
+		// encodedNotNull(Asc) can appear at the end of a start key for
+		// constraint IS NOT NULL on an ASC index (NULLs sorted first,
+		// span starts (start key) on the first non-NULL).
+		// See encodeStartConstraintAscending.
+		// Expect: no change.
+		{
+			index:    &parent.PrimaryIndex,
+			input:    encoding.EncodeNotNullAscending(EncodeTestKey(t, kvDB, ShortToLongKeyFmt("/"))),
+			expected: encoding.EncodeNotNullAscending(EncodeTestKey(t, kvDB, ShortToLongKeyFmt("/"))),
+		},
+
+		// Same as previous test but with a child table.
+		{
+			index:    &child.PrimaryIndex,
+			input:    encoding.EncodeNotNullAscending(EncodeTestKey(t, kvDB, ShortToLongKeyFmt("/1/#/2"))),
+			expected: encoding.EncodeNotNullAscending(EncodeTestKey(t, kvDB, ShortToLongKeyFmt("/1/#/2"))),
+		},
+
+		// Same as previous test but with the IS NOT NULL on cid1.
+		{
+			index:    &child.PrimaryIndex,
+			input:    encoding.EncodeNotNullAscending(EncodeTestKey(t, kvDB, ShortToLongKeyFmt("/1/#/"))),
+			expected: encoding.EncodeNotNullAscending(EncodeTestKey(t, kvDB, ShortToLongKeyFmt("/1/#/"))),
+		},
+
+		// Same as previous test but with a grandchild table.
+		{
+			index:    &grandchild.PrimaryIndex,
+			input:    encoding.EncodeNotNullAscending(EncodeTestKey(t, kvDB, ShortToLongKeyFmt("/1/#/2/3/#/"))),
+			expected: encoding.EncodeNotNullAscending(EncodeTestKey(t, kvDB, ShortToLongKeyFmt("/1/#/2/3/#/"))),
+		},
+
+		// Same as previous test (with grandchild table but with
+		// a child start key with IS NULL on cid2).
+		{
+			index:    &grandchild.PrimaryIndex,
+			input:    encoding.EncodeNotNullAscending(EncodeTestKey(t, kvDB, ShortToLongKeyFmt("/1/#/2"))),
+			expected: encoding.EncodeNotNullAscending(EncodeTestKey(t, kvDB, ShortToLongKeyFmt("/1/#/2"))),
+		},
+
+		// encodedNullDesc can appear at the end of a start key for
+		// constraint IS NULL on a DESC index (NULLs sorted last,
+		// span starts (start key) on the first NULLs).
+		// See encodeStartConstraintDescending.
+		// Expect: no change.
+		{
+			index:    &parentDescIdx,
+			input:    encoding.EncodeNullDescending(EncodeTestKey(t, kvDB, ShortToLongKeyFmt("/"))),
+			expected: encoding.EncodeNullDescending(EncodeTestKey(t, kvDB, ShortToLongKeyFmt("/"))),
+		},
+
+		// Same as previous test but with child table.
+		{
+			index:    &childDescIdx,
+			input:    encoding.EncodeNullDescending(EncodeTestKey(t, kvDB, ShortToLongKeyFmt("/1/#/2"))),
+			expected: encoding.EncodeNullDescending(EncodeTestKey(t, kvDB, ShortToLongKeyFmt("/1/#/2"))),
+		},
+
+		// Same as previous test but with IS NULL on cid1.
+		{
+			index:    &childDescIdx,
+			input:    encoding.EncodeNullDescending(EncodeTestKey(t, kvDB, ShortToLongKeyFmt("/1/#/"))),
+			expected: encoding.EncodeNullDescending(EncodeTestKey(t, kvDB, ShortToLongKeyFmt("/1/#/"))),
+		},
+
+		// Same as previous test but with grandchild table.
+		{
+			index:    &grandchildDescIdx,
+			input:    encoding.EncodeNullDescending(EncodeTestKey(t, kvDB, ShortToLongKeyFmt("/1/#/2/3/#/"))),
+			expected: encoding.EncodeNullDescending(EncodeTestKey(t, kvDB, ShortToLongKeyFmt("/1/#/2/3/#/"))),
+		},
+
+		// Same as previous test (with grandchild table but with
+		// a child start key with IS NOT NULL on cid2).
+		{
+			index:    &grandchildDescIdx,
+			input:    encoding.EncodeNullDescending(EncodeTestKey(t, kvDB, ShortToLongKeyFmt("/1/#/2"))),
+			expected: encoding.EncodeNullDescending(EncodeTestKey(t, kvDB, ShortToLongKeyFmt("/1/#/2"))),
+		},
+
+		// Parent start key wrt parent index does not change.
+		{
+			index:    &parent.PrimaryIndex,
+			input:    EncodeTestKey(t, kvDB, ShortToLongKeyFmt("/1")),
+			expected: EncodeTestKey(t, kvDB, ShortToLongKeyFmt("/1")),
+		},
+
+		// Child start key wrt parent index should be tightened to the
+		// next parent key.
+		{
+			index:    &parent.PrimaryIndex,
+			input:    EncodeTestKey(t, kvDB, ShortToLongKeyFmt("/1/#/2/3")),
+			expected: EncodeTestKey(t, kvDB, ShortToLongKeyFmt("/2")),
+		},
+
+		// Parent start key wrt child index does not change.
+		{
+			index:    &child.PrimaryIndex,
+			input:    EncodeTestKey(t, kvDB, ShortToLongKeyFmt("/1")),
+			expected: EncodeTestKey(t, kvDB, ShortToLongKeyFmt("/1")),
+		},
+
+		// Child start key wrt child index does not change.
+		{
+			index:    &child.PrimaryIndex,
+			input:    EncodeTestKey(t, kvDB, ShortToLongKeyFmt("/1/#/2/3")),
+			expected: EncodeTestKey(t, kvDB, ShortToLongKeyFmt("/1/#/2/3")),
+		},
+
+		// Grandchild start key wrt child index is tightened to the
+		// next child row.
+		{
+			index:    &child.PrimaryIndex,
+			input:    EncodeTestKey(t, kvDB, ShortToLongKeyFmt("/1/#/2/3/#/4")),
+			expected: EncodeTestKey(t, kvDB, ShortToLongKeyFmt("/1/#/2/4")),
+		},
+	}
+
+	for i, tc := range testCases {
+		t.Run(strconv.Itoa(i), func(t *testing.T) {
+			actual, err := TightenStartKey(tc.index, tc.input)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			if !tc.expected.Equal(actual) {
+				t.Errorf("expected tightened start key %s, got %s", tc.expected, actual)
+			}
+		})
+	}
+}
+
+func TestTightenEndKey(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(context.Background())
+
+	sqlutils.CreateTestInterleavedHierarchy(t, sqlDB)
+
+	// Create DESC indexes for testing.
+	r := sqlutils.MakeSQLRunner(sqlDB)
+	r.Exec(t, fmt.Sprintf(`CREATE INDEX pid1_desc ON %s.parent1 (pid1 DESC)`, sqlutils.TestDB))
+	r.Exec(t, fmt.Sprintf(`CREATE INDEX child_desc ON %s.child1 (pid1, cid1, cid2 DESC) INTERLEAVE IN PARENT %s.parent1 (pid1)`, sqlutils.TestDB, sqlutils.TestDB))
+	r.Exec(t, fmt.Sprintf(`CREATE INDEX grandchild_desc ON %s.grandchild1 (pid1, cid1, cid2, gcid1 DESC) INTERLEAVE IN PARENT %s.child1(pid1, cid1, cid2)`, sqlutils.TestDB, sqlutils.TestDB))
+	sqlutils.CreateTable(
+		t,
+		sqlDB,
+		"nullabledesc",
+		"a INT PRIMARY KEY, b INT, INDEX ab (a, b DESC)",
+		1,
+		sqlutils.ToRowFn(sqlutils.RowIdxFn, sqlutils.RowIdxFn),
+	)
+
+	// The interleaved hierarchy is as follows:
+	//    parent		(pid1)
+	//	child		(pid1, cid1, cid2)
+	//	  grandchild	(pid1, cid1, cid2, gcid1)
+	parent := GetTableDescriptor(kvDB, sqlutils.TestDB, "parent1")
+	child := GetTableDescriptor(kvDB, sqlutils.TestDB, "child1")
+	grandchild := GetTableDescriptor(kvDB, sqlutils.TestDB, "grandchild1")
+	nullableDescTable := GetTableDescriptor(kvDB, sqlutils.TestDB, "nullabledesc")
+
+	parentDescIdx := parent.Indexes[0]
+	childDescIdx := child.Indexes[0]
+	grandchildDescIdx := grandchild.Indexes[0]
+	nullableDescIdx := nullableDescTable.Indexes[0]
+
+	testCases := []struct {
+		table *TableDescriptor
+		index *IndexDescriptor
+		// See ShortToLongKeyFmt for how to represent a key.
+		input string
+		// If the end key is assumed to be inclusive when passed to
+		// to TightenEndKey.
+		inclusive bool
+		expected  string
+	}{
+		// NOTNULLASC can appear at the end of an end key for
+		// constraint IS NULL on an ASC index (NULLs sorted first,
+		// span ends (end key) right before the first non-NULL).
+		// See encodeEndConstraintAscending.
+
+		// Parent end key wrt parent index and NOTNULLASC suffix.
+		{
+			table:    parent,
+			index:    &parent.PrimaryIndex,
+			input:    "/NOTNULLASC",
+			expected: "/NULLASC/#",
+		},
+
+		// Same as previous test but with a child table.
+		{
+			table:    child,
+			index:    &child.PrimaryIndex,
+			input:    "/1/#/2/NOTNULLASC",
+			expected: "/1/#/2/NULLASC/#",
+		},
+
+		// Partial child end key with the IS NULL on cid1 (no change).
+		{
+			table:    child,
+			index:    &child.PrimaryIndex,
+			input:    "/1/#/NOTNULLASC",
+			expected: "/1/#/NULLASC/#",
+		},
+
+		// Same as previous-previous test but with a grandchild table.
+		{
+			table:    grandchild,
+			index:    &grandchild.PrimaryIndex,
+			input:    "/1/#/2/3/#/NOTNULLASC",
+			expected: "/1/#/2/3/#/NULLASC/#",
+		},
+
+		// Child key with trailing NOTNULLASC wrt grandchild index does
+		// not chnage.
+		{
+			table:    grandchild,
+			index:    &grandchild.PrimaryIndex,
+			input:    "/1/#/2/NOTNULLASC",
+			expected: "/1/#/2/NOTNULLASC",
+		},
+
+		// NOTNULLDESC can appear at the end of a start key for
+		// constraint IS NOT NULL on a DESC index (NULLs sorted last,
+		// span ends (end key) right after the last non-NULL).
+		// See encodeEndConstraintDescending.
+
+		// Parent end key wrt parent index and NOTNULLDESC suffix.
+		{
+			table:    parent,
+			index:    &parentDescIdx,
+			input:    "/NOTNULLDESC",
+			expected: "/NOTNULLDESC",
+		},
+
+		// Same as previous test but with child table.
+		{
+			table:    child,
+			index:    &childDescIdx,
+			input:    "/1/#/2/NOTNULLDESC",
+			expected: "/1/#/2/NOTNULLDESC",
+		},
+
+		// Same as previous test but with IS NOT NULL on cid1.
+		{
+			table: child,
+			index: &childDescIdx,
+			input: "/1/#/NOTNULLDESC",
+			// Contrary to the ASC case, we CANNOT convert this to
+			//    /1/#/<IntMax>/#
+			// Since NULLDESC sort after '#' and this would exclude
+			//    /1/#/<IntMax>/NULLDESC
+			// where cid2 = NULL.
+			expected: "/1/#/NOTNULLDESC",
+		},
+
+		// Same as previous-previous test but with grandchild table.
+		{
+			table:    grandchild,
+			index:    &grandchildDescIdx,
+			input:    "/1/#/2/3/#/NOTNULLDESC",
+			expected: "/1/#/2/3/#/NOTNULLDESC",
+		},
+
+		// Same as previous test (with grandchild table but with
+		// a child start key with IS NOT NULL on cid2).
+		// Expect no change.
+		{
+			table:    grandchild,
+			index:    &grandchildDescIdx,
+			input:    "/1/#/2/NOTNULLDESC",
+			expected: "/1/#/2/NOTNULLDESC",
+		},
+
+		// Parent end key wrt parent index should be tightened to
+		// the last parent key for the last parent row (pid1 = 0).
+		{
+			table:    parent,
+			index:    &parent.PrimaryIndex,
+			input:    "/1",
+			expected: "/0/#",
+		},
+
+		{
+			table: parent,
+			index: &parent.PrimaryIndex,
+			// This could be from a previous TightenEndKey.
+			input: "/1/#",
+			// TightenEndKey is idempotent.
+			expected: "/1/#",
+		},
+
+		// Child end key wrt parent index should be tightened to read
+		// up to the last parent key for the last parent row.
+		{
+			table:    parent,
+			index:    &parent.PrimaryIndex,
+			input:    "/1/#/2/3",
+			expected: "/1/#",
+		},
+
+		// Parent end key wrt child index does not change.
+		{
+			table:    child,
+			index:    &child.PrimaryIndex,
+			input:    "/1",
+			expected: "/1",
+		},
+
+		{
+			index: &child.PrimaryIndex,
+			// This could be from a previous TightenEndKey.
+			input: "/1/#",
+			// TightenEndKey is idempotent.
+			expected: "/1/#",
+		},
+
+		// Child end key wrt child index should be tightened to read
+		// up to the last child key for the last child row (cid2 = 2).
+		{
+			table:    child,
+			index:    &child.PrimaryIndex,
+			input:    "/1/#/2/3",
+			expected: "/1/#/2/2/#",
+		},
+
+		{
+			table: child,
+			index: &child.PrimaryIndex,
+			// This could be from a previous TightenEndKey.
+			input: "/1/#/2/2/#",
+			// TightenEndKey is idempotent.
+			expected: "/1/#/2/2/#",
+		},
+
+		// Grandchild end key wrt child index should be tightened to
+		// read up to the last child key for the last child row (cid =
+		// 3).
+		{
+			table:    child,
+			index:    &child.PrimaryIndex,
+			input:    "/1/#/2/3/#/4",
+			expected: "/1/#/2/3/#",
+		},
+
+		// Partial child key can be tightened.
+		{
+			table:    child,
+			index:    &child.PrimaryIndex,
+			input:    "/1/#/2",
+			expected: "/1/#/1/#",
+		},
+
+		// No DESC columns after the last column, tighten.
+		{
+			table:    child,
+			index:    &childDescIdx,
+			input:    "/1/#/2/3",
+			expected: "/1/#/2/2/#",
+		},
+
+		// Even though cid2 is DESC, it is NON-NULLABLE since it is
+		// part of the primary key.
+		// Can indeed tighten.
+		{
+			table:    child,
+			index:    &childDescIdx,
+			input:    "/1/#/2",
+			expected: "/1/#/1/#",
+		},
+
+		// This can be tightened since there is no third index column.
+		{
+			table:    nullableDescTable,
+			index:    &nullableDescIdx,
+			input:    "/1/2",
+			expected: "/1/1/#",
+		},
+
+		// Since the key is inclusive, we need only append the
+		// interleaved prefix.
+		{
+			table:     nullableDescTable,
+			index:     &nullableDescIdx,
+			input:     "/1/2",
+			inclusive: true,
+			expected:  "/1/2/#",
+		},
+
+		{
+			table:    nullableDescTable,
+			index:    &nullableDescIdx,
+			input:    "/1/NULLDESC",
+			expected: "/1/NOTNULLDESC/#",
+		},
+
+		// This cannot be tightened the second index column is
+		// NULLABLE and has DESC direction.
+		{
+			table:    nullableDescTable,
+			index:    &nullableDescIdx,
+			input:    "/1",
+			expected: "/1",
+		},
+
+		// If this end key is inclusive, we need to make it exclusive
+		// by applying a PrefixEnd.
+		{
+			table:     nullableDescTable,
+			index:     &nullableDescIdx,
+			input:     "/1",
+			inclusive: true,
+			expected:  "/2",
+		},
+
+		// Inclusive parent end key wrt parent index should only see
+		// interleave sentinel appended.
+		{
+			table:     parent,
+			index:     &parent.PrimaryIndex,
+			input:     "/1",
+			inclusive: true,
+			expected:  "/1/#",
+		},
+
+		// Inclusive parent end key wrt parent index should only see
+		// interleave sentinel appended.
+		{
+			table:     parent,
+			index:     &parent.PrimaryIndex,
+			input:     "/1",
+			inclusive: true,
+			expected:  "/1/#",
+		},
+
+		{
+			table:     parent,
+			index:     &parent.PrimaryIndex,
+			input:     "/NULLASC",
+			inclusive: true,
+			expected:  "/NULLASC/#",
+		},
+	}
+
+	for i, tc := range testCases {
+		t.Run(strconv.Itoa(i), func(t *testing.T) {
+			actual, err := TightenEndKey(tc.table, tc.index, EncodeTestKey(t, kvDB, ShortToLongKeyFmt(tc.input)), tc.inclusive)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			expected := EncodeTestKey(t, kvDB, ShortToLongKeyFmt(tc.expected))
+			if !expected.Equal(actual) {
+				t.Errorf("expected tightened end key %s, got %s", expected, actual)
+			}
 		})
 	}
 }
