@@ -1,0 +1,45 @@
+# LogicTest: default distsql parallel-stmts
+
+statement ok
+CREATE TABLE t (
+  a INT PRIMARY KEY,
+  b INT,
+  c INT,
+  FAMILY (a),
+  FAMILY (b)
+)
+
+statement ok
+INSERT INTO t VALUES (1,1,1)
+
+statement ok
+CREATE INDEX foo ON t (b)
+
+statement error pq: inverted indexes are not supported yet
+CREATE INVERTED INDEX foo_inv ON t(b)
+
+statement error pq: inverted indexes are not supported yet
+CREATE INDEX foo_inv2 ON t(b) USING GIN
+
+statement error pq: syntax error at or near "inverted"
+CREATE UNIQUE INVERTED INDEX foo_inv ON t(b)
+
+statement error pq: syntax error at or near "index"
+CREATE TABLE c (
+  id INT PRIMARY KEY,
+  foo INT,
+  bar INT,
+  INVERTED INDEX (foo)
+)
+
+statement ok
+CREATE TABLE t1 (id1 INT PRIMARY KEY, id2 INT, id3 INT);
+
+statement error pq: inverted indexes don't support interleaved columns
+CREATE INDEX c on t1 (id2)
+   STORING (id1,id3)
+   INTERLEAVE in PARENT t1 (id2) USING GIN;
+
+
+statement error pq: inverted indexes can't be unique
+CREATE UNIQUE INDEX foo_inv2 ON t(b) USING GIN

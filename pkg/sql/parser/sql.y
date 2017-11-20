@@ -446,14 +446,14 @@ func (u *sqlSymUnion) scrubOption() tree.ScrubOption {
 %token <str>   FALSE FAMILY FETCH FETCHVAL FETCHTEXT FETCHVAL_PATH FETCHTEXT_PATH FILTER
 %token <str>   FIRST FLOAT FLOAT4 FLOAT8 FLOORDIV FOLLOWING FOR FORCE_INDEX FOREIGN FROM FULL
 
-%token <str>   GRANT GRANTS GREATEST GROUP GROUPING
+%token <str>   GIN GRANT GRANTS GREATEST GROUP GROUPING
 
 %token <str>   HAVING HELP HIGH HOUR
 
 %token <str>   IMPORT INCREMENT INCREMENTAL IF IFNULL ILIKE IN INET INTERLEAVE
 %token <str>   INDEX INDEXES INITIALLY
 %token <str>   INNER INSERT INT INT2VECTOR INT2 INT4 INT8 INT64 INTEGER
-%token <str>   INTERSECT INTERVAL INTO IS ISOLATION
+%token <str>   INTERSECT INTERVAL INTO INVERTED IS ISOLATION
 
 %token <str>   JOB JOBS JOIN JSON JSONB
 
@@ -765,6 +765,7 @@ func (u *sqlSymUnion) scrubOption() tree.ScrubOption {
 %type <tree.Expr> overlay_placing
 
 %type <bool> opt_unique opt_column
+%type <bool> opt_using_gin
 
 %type <empty> opt_set_data
 
@@ -2780,7 +2781,7 @@ pause_stmt:
 //
 // Table elements:
 //    <name> <type> [<qualifiers...>]
-//    [UNIQUE] INDEX [<name>] ( <colname> [ASC | DESC] [, ...] )
+//    [UNIQUE | INVERTED] INDEX [<name>] ( <colname> [ASC | DESC] [, ...] )
 //                            [STORING ( <colnames...> )] [<interleave>]
 //    FAMILY [<name>] ( <colnames...> )
 //    [CONSTRAINT <name>] <constraint>
@@ -3383,7 +3384,7 @@ create_view_stmt:
 // %Help: CREATE INDEX - create a new index
 // %Category: DDL
 // %Text:
-// CREATE [UNIQUE] INDEX [IF NOT EXISTS] [<idxname>]
+// CREATE [UNIQUE | INVERTED] INDEX [IF NOT EXISTS] [<idxname>]
 //        ON <tablename> ( <colname> [ASC | DESC] [, ...] )
 //        [STORING ( <colnames...> )] [<interleave>]
 //
@@ -3393,7 +3394,7 @@ create_view_stmt:
 // %SeeAlso: CREATE TABLE, SHOW INDEXES, SHOW CREATE INDEX,
 // WEBDOCS/create-index.html
 create_index_stmt:
-  CREATE opt_unique INDEX opt_name ON qualified_name '(' index_params ')' opt_storing opt_interleave opt_partition_by
+  CREATE opt_unique INDEX opt_name ON qualified_name '(' index_params ')' opt_storing opt_interleave opt_partition_by opt_using_gin
   {
     $$.val = &tree.CreateIndex{
       Name:    tree.Name($4),
@@ -3403,9 +3404,10 @@ create_index_stmt:
       Storing: $10.nameList(),
       Interleave: $11.interleave(),
       PartitionBy: $12.partitionBy(),
+      Inverted: $13.bool(),
     }
   }
-| CREATE opt_unique INDEX IF NOT EXISTS name ON qualified_name '(' index_params ')' opt_storing opt_interleave opt_partition_by
+| CREATE opt_unique INDEX IF NOT EXISTS name ON qualified_name '(' index_params ')' opt_storing opt_interleave opt_partition_by opt_using_gin
   {
     $$.val = &tree.CreateIndex{
       Name:        tree.Name($7),
@@ -3416,9 +3418,40 @@ create_index_stmt:
       Storing:     $13.nameList(),
       Interleave: $14.interleave(),
       PartitionBy: $15.partitionBy(),
+      Inverted: $16.bool(),
+    }
+  }
+| CREATE INVERTED INDEX opt_name ON qualified_name '(' index_params ')'
+  {
+    $$.val = &tree.CreateIndex{
+      Name:       tree.Name($4),
+      Table:      $6.normalizableTableName(),
+      Inverted:   true,
+      Columns:    $8.idxElems(),
+    }
+  }
+| CREATE INVERTED INDEX IF NOT EXISTS name ON qualified_name '(' index_params ')'
+  {
+    $$.val = &tree.CreateIndex{
+      Name:        tree.Name($7),
+      Table:       $9.normalizableTableName(),
+      Inverted:    true,
+      IfNotExists: true,
+      Columns:     $11.idxElems(),
     }
   }
 | CREATE opt_unique INDEX error // SHOW HELP: CREATE INDEX
+
+
+opt_using_gin:
+  USING GIN
+  {
+    $$.val = true
+  }
+| /* EMPTY */
+  {
+    $$.val = false
+  }
 
 opt_unique:
   UNIQUE
@@ -6835,6 +6868,7 @@ unreserved_keyword:
 | FIRST
 | FOLLOWING
 | FORCE_INDEX
+| GIN
 | GRANTS
 | HIGH
 | HOUR
@@ -6845,6 +6879,7 @@ unreserved_keyword:
 | INSERT
 | INT2VECTOR
 | INTERLEAVE
+| INVERTED
 | ISOLATION
 | JOB
 | JOBS
