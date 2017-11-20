@@ -1,5 +1,5 @@
 - Feature Name: SCRUB index and physical check implementation
-- Status: draft
+- Status: in-progress
 - Start Date: 2017-10-11
 - Authors: Joey Pereira
 - RFC PR: [#19327](https://github.com/cockroachdb/cockroach/pull/19327)
