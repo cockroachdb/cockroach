@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -86,7 +87,7 @@ func waitForConfigChange(t testing.TB, s *server.TestServer) config.SystemConfig
 // TestGetZoneConfig exercises config.GetZoneConfig and the sql hook for it.
 func TestGetZoneConfig(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	params, _ := createTestServerParams()
+	params, _ := tests.CreateTestServerParams()
 	srv, sqlDB, _ := serverutils.StartServer(t, params)
 	defer srv.Stopper().Stop(context.TODO())
 	s := srv.(*server.TestServer)
@@ -312,7 +313,7 @@ func TestGetZoneConfig(t *testing.T) {
 func BenchmarkGetZoneConfig(b *testing.B) {
 	defer leaktest.AfterTest(b)()
 
-	params, _ := createTestServerParams()
+	params, _ := tests.CreateTestServerParams()
 	srv, _, _ := serverutils.StartServer(b, params)
 	defer srv.Stopper().Stop(context.TODO())
 	s := srv.(*server.TestServer)
