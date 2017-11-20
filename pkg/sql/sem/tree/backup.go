@@ -64,7 +64,7 @@ func (node *Restore) Format(buf *bytes.Buffer, f FmtFlags) {
 	buf.WriteString(" FROM ")
 	FormatNode(buf, f, node.From)
 	if node.AsOf.Expr != nil {
-		buf.WriteString(" ")
+		buf.WriteString(" EXPERIMENTAL ")
 		FormatNode(buf, f, node.AsOf)
 	}
 	if node.Options != nil {
