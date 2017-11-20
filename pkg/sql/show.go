@@ -592,7 +592,6 @@ func (p *planner) ShowConstraints(ctx context.Context, n *tree.ShowConstraints) 
 
 			// Sort the results by constraint name.
 			return &sortNode{
-				p:    p,
 				plan: v,
 				ordering: sqlbase.ColumnOrdering{
 					{ColIdx: 0, Direction: encoding.Ascending},

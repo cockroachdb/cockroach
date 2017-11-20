@@ -31,7 +31,6 @@ import (
 // sortNode represents a node that sorts the rows returned by its
 // sub-node.
 type sortNode struct {
-	p        *planner
 	plan     planNode
 	columns  sqlbase.ResultColumns
 	ordering sqlbase.ColumnOrdering
@@ -239,7 +238,7 @@ func (p *planner) orderBy(
 		// No ordering; simply drop the sort node.
 		return nil, nil
 	}
-	return &sortNode{p: p, columns: columns, ordering: ordering}, nil
+	return &sortNode{columns: columns, ordering: ordering}, nil
 }
 
 // flattenTuples extracts the members of tuples into a list of columns.
@@ -441,7 +440,7 @@ func (n *sortNode) Next(params runParams) (bool, error) {
 			n.needSort = false
 			break
 		} else if n.sortStrategy == nil {
-			v := n.p.newContainerValuesNode(planColumns(n.plan), 0)
+			v := params.p.newContainerValuesNode(planColumns(n.plan), 0)
 			v.ordering = n.ordering
 			n.sortStrategy = newSortAllStrategy(v)
 		}
