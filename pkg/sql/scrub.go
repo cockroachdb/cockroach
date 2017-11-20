@@ -228,6 +228,10 @@ func (n *scrubNode) startScrubTable(
 				return pgerror.NewErrorf(pgerror.CodeSyntaxError,
 					"cannot specify INDEX option more than once")
 			}
+			if n.n.AsOf.Expr != nil {
+				return pgerror.NewErrorf(pgerror.CodeSyntaxError,
+					"cannot use AS OF SYSTEM TIME with INDEX option")
+			}
 			indexesSet = true
 			indexesToCheck, err := createIndexCheckOperations(v.IndexNames, tableDesc, tableName)
 			if err != nil {
@@ -238,6 +242,10 @@ func (n *scrubNode) startScrubTable(
 			if physicalCheckSet {
 				return pgerror.NewErrorf(pgerror.CodeSyntaxError,
 					"cannot specify PHYSICAL option more than once")
+			}
+			if n.n.AsOf.Expr != nil {
+				return pgerror.NewErrorf(pgerror.CodeSyntaxError,
+					"cannot use AS OF SYSTEM TIME with PHYSICAL option")
 			}
 			physicalCheckSet = true
 			// TODO(joey): Initialize physical index to check.

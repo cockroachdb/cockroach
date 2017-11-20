@@ -37,6 +37,7 @@ type Scrub struct {
 	Table NormalizableTableName
 	// Database is only set during SCRUB DATABASE statements.
 	Database Name
+	AsOf     AsOfClause
 }
 
 // Format implements the NodeFormatter interface.
@@ -56,6 +57,11 @@ func (n *Scrub) Format(buf *bytes.Buffer, f FmtFlags) {
 	if len(n.Options) > 0 {
 		buf.WriteString(" WITH OPTIONS ")
 		n.Options.Format(buf, f)
+	}
+
+	if n.AsOf.Expr != nil {
+		buf.WriteByte(' ')
+		FormatNode(buf, f, n.AsOf)
 	}
 }
 
