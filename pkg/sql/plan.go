@@ -234,7 +234,7 @@ func (p *planner) startPlan(ctx context.Context, plan planNode) error {
 		return err
 	}
 	// Trigger limit propagation through the plan and sub-queries.
-	setUnlimited(plan)
+	p.setUnlimited(plan)
 	return nil
 }
 
