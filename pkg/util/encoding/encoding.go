@@ -81,7 +81,16 @@ const (
 
 	// Nulls come last when encoded descendingly.
 	encodedNotNullDesc = 0xfe
-	encodedNullDesc    = 0xff
+	// interleavedSentinel uses the same byte as encodedNotNullDesc.
+	// It is used in the key encoding of interleaved index keys in order
+	// to coerce the key to sort after its respective parent and ancestors'
+	// index keys.
+	// The byte for NotNullDesc was chosen over NullDesc since NotNullDesc
+	// is never used in actual encoded keys.
+	// This allowed the key pretty printer for interleaved keys to work
+	// without table descriptors.
+	interleavedSentinel = 0xfe
+	encodedNullDesc     = 0xff
 )
 
 const (
@@ -694,6 +703,14 @@ func EncodeNotNullDescending(b []byte) []byte {
 	return append(b, encodedNotNullDesc)
 }
 
+// EncodeInterleavedSentinel encodes an interleavedSentinel that is necessary
+// for interleaved indexes and their index keys.
+// The interleavedSentinel has a byte value 0xfe and is equivalent to
+// encodedNotNullDesc.
+func EncodeInterleavedSentinel(b []byte) []byte {
+	return append(b, interleavedSentinel)
+}
+
 // DecodeIfNull decodes a NULL value from the input buffer. If the input buffer
 // contains a null at the start of the buffer then it is removed from the
 // buffer and true is returned for the second result. Otherwise, the buffer is
@@ -721,6 +738,22 @@ func DecodeIfNotNull(b []byte) ([]byte, bool) {
 	if PeekType(b) == NotNull {
 		return b[1:], true
 	}
+	return b, false
+}
+
+// DecodeIfInterleavedSentinel decodes the interleavedSentinel from the input
+// buffer and returns the remaining buffer without the sentinel if the
+// interleavedSentinel is the first byte.
+// Otherwise, the buffer is returned unchanged and false is returned.
+func DecodeIfInterleavedSentinel(b []byte) ([]byte, bool) {
+	if len(b) == 0 {
+		return b, false
+	}
+
+	if b[0] == interleavedSentinel {
+		return b[1:], true
+	}
+
 	return b, false
 }
 
@@ -963,6 +996,9 @@ func PeekLength(b []byte) (int, error) {
 	switch m {
 	case encodedNull, encodedNullDesc, encodedNotNull, encodedNotNullDesc,
 		floatNaN, floatNaNDesc, floatZero, decimalZero:
+		// interleavedSentinel also falls into this path. Since it
+		// contains the same byte value as encodedNotNullDesc, it
+		// cannot be included explicitly in the case statement.
 		return 1, nil
 	case bytesMarker:
 		return getBytesLength(b, ascendingEscapes)

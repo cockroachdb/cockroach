@@ -173,8 +173,8 @@ func (kr *KeyRewriter) RewriteKey(key []byte) ([]byte, bool, error) {
 		}
 		k = k[n:]
 	}
-	// If we get a NotNULL, it's interleaved.
-	k, ok = encoding.DecodeIfNotNull(k)
+	// We might have an interleaved key.
+	k, ok = encoding.DecodeIfInterleavedSentinel(k)
 	if !ok {
 		return key, true, nil
 	}
