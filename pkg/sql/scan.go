@@ -39,7 +39,6 @@ var scanNodePool = sync.Pool{
 // A scanNode handles scanning over the key/value pairs for a table and
 // reconstructing them into rows.
 type scanNode struct {
-	p     *planner
 	desc  *sqlbase.TableDescriptor
 	index *sqlbase.IndexDescriptor
 
@@ -114,7 +113,6 @@ type scanNode struct {
 
 func (p *planner) Scan() *scanNode {
 	n := scanNodePool.Get().(*scanNode)
-	n.p = p
 	return n
 }
 
@@ -130,7 +128,7 @@ func (n *scanNode) disableBatchLimit() {
 	n.softLimit = 0
 }
 
-func (n *scanNode) Start(runParams) error {
+func (n *scanNode) Start(params runParams) error {
 	tableArgs := sqlbase.MultiRowFetcherTableArgs{
 		Desc:             n.desc,
 		Index:            n.index,
@@ -139,7 +137,7 @@ func (n *scanNode) Start(runParams) error {
 		Cols:             n.cols,
 		ValNeededForCol:  n.valNeededForCol.Copy(),
 	}
-	return n.fetcher.Init(n.reverse, false /* returnRangeInfo */, &n.p.alloc, tableArgs)
+	return n.fetcher.Init(n.reverse, false /* returnRangeInfo */, &params.p.alloc, tableArgs)
 }
 
 func (n *scanNode) Close(context.Context) {
@@ -148,9 +146,16 @@ func (n *scanNode) Close(context.Context) {
 }
 
 // initScan sets up the rowFetcher and starts a scan.
-func (n *scanNode) initScan(ctx context.Context) error {
+func (n *scanNode) initScan(params runParams) error {
 	limitHint := n.limitHint()
-	if err := n.fetcher.StartScan(ctx, n.p.txn, n.spans, !n.disableBatchLimits, limitHint, n.p.session.Tracing.KVTracingEnabled()); err != nil {
+	if err := n.fetcher.StartScan(
+		params.ctx,
+		params.p.txn,
+		n.spans,
+		!n.disableBatchLimits,
+		limitHint,
+		params.p.session.Tracing.KVTracingEnabled(),
+	); err != nil {
 		return err
 	}
 	n.scanInitialized = true
@@ -178,7 +183,7 @@ func (n *scanNode) limitHint() int64 {
 func (n *scanNode) Next(params runParams) (bool, error) {
 	tracing.AnnotateTrace()
 	if !n.scanInitialized {
-		if err := n.initScan(params.ctx); err != nil {
+		if err := n.initScan(params); err != nil {
 			return false, err
 		}
 	}
@@ -190,8 +195,8 @@ func (n *scanNode) Next(params runParams) (bool, error) {
 		if err != nil || n.row == nil {
 			return false, err
 		}
-		n.p.evalCtx.IVarHelper = &n.filterVars
-		passesFilter, err := sqlbase.RunFilter(n.filter, &n.p.evalCtx)
+		params.p.evalCtx.IVarHelper = &n.filterVars
+		passesFilter, err := sqlbase.RunFilter(n.filter, &params.p.evalCtx)
 		if err != nil {
 			return false, err
 		}
@@ -226,7 +231,7 @@ func (n *scanNode) initTable(
 	}
 
 	n.noIndexJoin = (indexHints != nil && indexHints.NoIndexJoin)
-	return n.initDescDefaults(scanVisibility, wantedColumns)
+	return n.initDescDefaults(p.planDeps, scanVisibility, wantedColumns)
 }
 
 func (n *scanNode) lookupSpecifiedIndex(indexHints *tree.IndexHints) error {
@@ -316,7 +321,7 @@ func appendUnselectedColumns(
 // Initializes the column structures.
 // An error may be returned only if wantedColumns is set.
 func (n *scanNode) initDescDefaults(
-	scanVisibility scanVisibility, wantedColumns []tree.ColumnID,
+	planDeps planDependencies, scanVisibility scanVisibility, wantedColumns []tree.ColumnID,
 ) error {
 	n.scanVisibility = scanVisibility
 	n.index = &n.desc.PrimaryIndex
@@ -328,7 +333,7 @@ func (n *scanNode) initDescDefaults(
 	}
 
 	// Register the dependency to the planner, if requested.
-	if n.p.planDeps != nil {
+	if planDeps != nil {
 		indexID := sqlbase.IndexID(0)
 		if n.specifiedIndex != nil {
 			indexID = n.specifiedIndex.ID
@@ -345,13 +350,13 @@ func (n *scanNode) initDescDefaults(
 				usedColumns[i] = sqlbase.ColumnID(c)
 			}
 		}
-		deps := n.p.planDeps[n.desc.ID]
+		deps := planDeps[n.desc.ID]
 		deps.desc = n.desc
 		deps.deps = append(deps.deps, sqlbase.TableDescriptor_Reference{
 			IndexID:   indexID,
 			ColumnIDs: usedColumns,
 		})
-		n.p.planDeps[n.desc.ID] = deps
+		planDeps[n.desc.ID] = deps
 	}
 
 	// Set up the rest of the scanNode.
@@ -383,11 +388,11 @@ func (n *scanNode) initDescDefaults(
 
 // initOrdering initializes the ordering info using the selected index. This
 // must be called after index selection is performed.
-func (n *scanNode) initOrdering(exactPrefix int) {
+func (n *scanNode) initOrdering(exactPrefix int, evalCtx *tree.EvalContext) {
 	if n.index == nil {
 		return
 	}
-	n.props = n.computePhysicalProps(n.index, exactPrefix, n.reverse)
+	n.props = n.computePhysicalProps(n.index, exactPrefix, n.reverse, evalCtx)
 }
 
 // computePhysicalProps calculates ordering information for table columns
@@ -396,7 +401,7 @@ func (n *scanNode) initOrdering(exactPrefix int) {
 //   - the first `exactPrefix` columns of the index each have a constant value
 //     (see physicalProps).
 func (n *scanNode) computePhysicalProps(
-	index *sqlbase.IndexDescriptor, exactPrefix int, reverse bool,
+	index *sqlbase.IndexDescriptor, exactPrefix int, reverse bool, evalCtx *tree.EvalContext,
 ) physicalProps {
 	var pp physicalProps
 
@@ -422,10 +427,11 @@ func (n *scanNode) computePhysicalProps(
 		}
 		keySet.Add(idx)
 	}
+
 	// We included any implicit columns, so the columns form a (possibly weak)
 	// key.
 	pp.addWeakKey(keySet)
-	pp.applyExpr(&n.p.evalCtx, n.origFilter)
+	pp.applyExpr(evalCtx, n.origFilter)
 	return pp
 }
 
