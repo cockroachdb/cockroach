@@ -171,10 +171,6 @@ func (n *windowNode) constructWindowDefinitions(
 			return err
 		}
 
-		// TODO(nvanbenschoten): below we add renders to the renderNode for each
-		// partition and order expression. We should handle cases where the expression
-		// is already referenced by the query like sortNode does.
-
 		// Validate PARTITION BY clause.
 		for _, partition := range windowDef.Partitions {
 			cols, exprs, _, err := s.planner.computeRenderAllowingStars(ctx,
@@ -183,7 +179,9 @@ func (n *windowNode) constructWindowDefinitions(
 			if err != nil {
 				return err
 			}
-			windowFn.partitionIdxs = s.addOrReuseRenders(cols, exprs, true)
+
+			colIdxs := s.addOrReuseRenders(cols, exprs, true)
+			windowFn.partitionIdxs = append(windowFn.partitionIdxs, colIdxs...)
 		}
 
 		// Validate ORDER BY clause.
