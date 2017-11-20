@@ -28,7 +28,6 @@ import (
 )
 
 type controlJobNode struct {
-	p             *planner
 	jobID         tree.TypedExpr
 	desiredStatus jobs.Status
 }
@@ -36,7 +35,7 @@ type controlJobNode struct {
 func (*controlJobNode) Values() tree.Datums { return nil }
 
 func (n *controlJobNode) Start(params runParams) error {
-	jobIDDatum, err := n.jobID.Eval(&n.p.evalCtx)
+	jobIDDatum, err := n.jobID.Eval(&params.p.evalCtx)
 	if err != nil {
 		return err
 	}
@@ -84,7 +83,6 @@ func (p *planner) PauseJob(ctx context.Context, n *tree.PauseJob) (planNode, err
 	}
 
 	return &controlJobNode{
-		p:             p,
 		jobID:         typedJobID,
 		desiredStatus: jobs.StatusPaused,
 	}, nil
@@ -105,7 +103,6 @@ func (p *planner) ResumeJob(ctx context.Context, n *tree.ResumeJob) (planNode, e
 	}
 
 	return &controlJobNode{
-		p:             p,
 		jobID:         typedJobID,
 		desiredStatus: jobs.StatusRunning,
 	}, nil
@@ -126,23 +123,21 @@ func (p *planner) CancelJob(ctx context.Context, n *tree.CancelJob) (planNode, e
 	}
 
 	return &controlJobNode{
-		p:             p,
 		jobID:         typedJobID,
 		desiredStatus: jobs.StatusCanceled,
 	}, nil
 }
 
 type cancelQueryNode struct {
-	p       *planner
 	queryID tree.TypedExpr
 }
 
 func (*cancelQueryNode) Values() tree.Datums { return nil }
 
 func (n *cancelQueryNode) Start(params runParams) error {
-	statusServer := n.p.session.execCfg.StatusServer
+	statusServer := params.p.session.execCfg.StatusServer
 
-	queryIDDatum, err := n.queryID.Eval(&n.p.evalCtx)
+	queryIDDatum, err := n.queryID.Eval(&params.p.evalCtx)
 	if err != nil {
 		return err
 	}
@@ -159,7 +154,7 @@ func (n *cancelQueryNode) Start(params runParams) error {
 	request := &serverpb.CancelQueryRequest{
 		NodeId:   fmt.Sprintf("%d", nodeID),
 		QueryID:  queryIDString,
-		Username: n.p.session.User,
+		Username: params.p.session.User,
 	}
 
 	response, err := statusServer.CancelQuery(params.ctx, request)
@@ -181,7 +176,6 @@ func (n *cancelQueryNode) Next(runParams) (bool, error) {
 }
 
 func (p *planner) CancelQuery(ctx context.Context, n *tree.CancelQuery) (planNode, error) {
-
 	typedQueryID, err := p.analyzeExpr(
 		ctx,
 		n.ID,
@@ -196,7 +190,6 @@ func (p *planner) CancelQuery(ctx context.Context, n *tree.CancelQuery) (planNod
 	}
 
 	return &cancelQueryNode{
-		p:       p,
 		queryID: typedQueryID,
 	}, nil
 }
