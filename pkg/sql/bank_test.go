@@ -20,6 +20,8 @@ import (
 	"fmt"
 	"math/rand"
 	"testing"
+
+	"github.com/cockroachdb/cockroach/pkg/bench"
 )
 
 // maxTransfer is the maximum amount to transfer in one transaction.
@@ -82,7 +84,7 @@ UPDATE bench.bank
 }
 
 func BenchmarkBank(b *testing.B) {
-	forEachDB(b, func(b *testing.B, db *gosql.DB) {
+	bench.ForEachDB(b, func(b *testing.B, db *gosql.DB) {
 		for _, numAccounts := range []int{2, 4, 8, 32, 64} {
 			b.Run(fmt.Sprintf("numAccounts=%d", numAccounts), func(b *testing.B) {
 				runBenchmarkBank(b, db, numAccounts)

@@ -12,15 +12,13 @@
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
-package sql_test
+package bench
 
 import (
 	"bytes"
 	gosql "database/sql"
 	"fmt"
 	"math/rand"
-	"net"
-	"net/url"
 	"reflect"
 	"runtime"
 	"strings"
@@ -35,122 +33,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 )
-
-func benchmarkCockroach(b *testing.B, f func(b *testing.B, db *gosql.DB)) {
-	s, db, _ := serverutils.StartServer(
-		b, base.TestServerArgs{UseDatabase: "bench"})
-	defer s.Stopper().Stop(context.TODO())
-
-	if _, err := db.Exec(`CREATE DATABASE bench`); err != nil {
-		b.Fatal(err)
-	}
-
-	f(b, db)
-}
-
-func benchmarkMultinodeCockroach(b *testing.B, f func(b *testing.B, db *gosql.DB)) {
-	tc := testcluster.StartTestCluster(b, 3,
-		base.TestClusterArgs{
-			ReplicationMode: base.ReplicationAuto,
-			ServerArgs: base.TestServerArgs{
-				UseDatabase: "bench",
-			},
-		})
-	if _, err := tc.Conns[0].Exec(`CREATE DATABASE bench`); err != nil {
-		b.Fatal(err)
-	}
-	defer tc.Stopper().Stop(context.TODO())
-
-	f(b, tc.Conns[0])
-}
-
-func benchmarkPostgres(b *testing.B, f func(b *testing.B, db *gosql.DB)) {
-	// Note: the following uses SSL. To run this, make sure your local
-	// Postgres server has SSL enabled. To use Cockroach's checked-in
-	// testing certificates for Postgres' SSL, first determine the
-	// location of your Postgres server's configuration file:
-	// ```
-	// $ psql -h localhost -p 5432 -c 'SHOW config_file'
-	//                config_file
-	// -----------------------------------------
-	//  /usr/local/var/postgres/postgresql.conf
-	// (1 row)
-	//```
-	//
-	// Now open this file and set the following values:
-	// ```
-	// $ grep ^ssl /usr/local/var/postgres/postgresql.conf
-	// ssl = on # (change requires restart)
-	// ssl_cert_file = '$GOPATH/src/github.com/cockroachdb/cockroach/pkg/security/securitytest/test_certs/node.crt' # (change requires restart)
-	// ssl_key_file = '$GOPATH/src/github.com/cockroachdb/cockroach/pkg/security/securitytest/test_certs/node.key' # (change requires restart)
-	// ssl_ca_file = '$GOPATH/src/github.com/cockroachdb/cockroach/pkg/security/securitytest/test_certs/ca.crt' # (change requires restart)
-	// ```
-	// Where `$GOPATH/src/github.com/cockroachdb/cockroach`
-	// is replaced with your local Cockroach source directory.
-	// Be sure to restart Postgres for this to take effect.
-
-	pgURL := url.URL{
-		Scheme:   "postgres",
-		Host:     "localhost:5432",
-		RawQuery: "sslmode=require&dbname=postgres",
-	}
-	if conn, err := net.Dial("tcp", pgURL.Host); err != nil {
-		b.Skipf("unable to connect to postgres server on %s: %s", pgURL.Host, err)
-	} else {
-		conn.Close()
-	}
-
-	db, err := gosql.Open("postgres", pgURL.String())
-	if err != nil {
-		b.Fatal(err)
-	}
-	defer db.Close()
-
-	if _, err := db.Exec(`CREATE SCHEMA IF NOT EXISTS bench`); err != nil {
-		b.Fatal(err)
-	}
-
-	f(b, db)
-}
-
-func benchmarkMySQL(b *testing.B, f func(b *testing.B, db *gosql.DB)) {
-	const addr = "localhost:3306"
-	if conn, err := net.Dial("tcp", addr); err != nil {
-		b.Skipf("unable to connect to mysql server on %s: %s", addr, err)
-	} else {
-		conn.Close()
-	}
-
-	db, err := gosql.Open("mysql", fmt.Sprintf("root@tcp(%s)/", addr))
-	if err != nil {
-		b.Fatal(err)
-	}
-	defer db.Close()
-
-	if _, err := db.Exec(`CREATE DATABASE IF NOT EXISTS bench`); err != nil {
-		b.Fatal(err)
-	}
-
-	f(b, db)
-}
-
-func forEachDB(b *testing.B, fn func(*testing.B, *gosql.DB)) {
-	for _, dbFn := range []func(*testing.B, func(*testing.B, *gosql.DB)){
-		benchmarkCockroach,
-		benchmarkMultinodeCockroach,
-		benchmarkPostgres,
-		benchmarkMySQL,
-	} {
-		dbName := runtime.FuncForPC(reflect.ValueOf(dbFn).Pointer()).Name()
-		dbName = strings.TrimPrefix(dbName, "github.com/cockroachdb/cockroach/pkg/sql_test.benchmark")
-		b.Run(dbName, func(b *testing.B) {
-			dbFn(b, fn)
-		})
-	}
-}
 
 func runBenchmarkSelect1(b *testing.B, db *gosql.DB) {
 	b.ResetTimer()
@@ -165,7 +49,7 @@ func runBenchmarkSelect1(b *testing.B, db *gosql.DB) {
 }
 
 func BenchmarkSelect1(b *testing.B) {
-	forEachDB(b, runBenchmarkSelect1)
+	ForEachDB(b, runBenchmarkSelect1)
 }
 
 func runBenchmarkSelectWithTargetsAndFilter(
@@ -224,7 +108,7 @@ func runBenchmarkSelect2(b *testing.B, db *gosql.DB) {
 }
 
 func BenchmarkSelect2(b *testing.B) {
-	forEachDB(b, runBenchmarkSelect2)
+	ForEachDB(b, runBenchmarkSelect2)
 }
 
 // runBenchmarkSelect3 runs a SELECT query with non-trivial expressions. The main purpose is to
@@ -237,7 +121,7 @@ func runBenchmarkSelect3(b *testing.B, db *gosql.DB) {
 }
 
 func BenchmarkSelect3(b *testing.B) {
-	forEachDB(b, runBenchmarkSelect3)
+	ForEachDB(b, runBenchmarkSelect3)
 }
 
 // runBenchmarkInsert benchmarks inserting count rows into a table.
@@ -372,7 +256,7 @@ func runBenchmarkInsertSecondaryIndex(b *testing.B, db *gosql.DB, count int) {
 }
 
 func BenchmarkSQL(b *testing.B) {
-	forEachDB(b, func(b *testing.B, db *gosql.DB) {
+	ForEachDB(b, func(b *testing.B, db *gosql.DB) {
 		for _, runFn := range []func(*testing.B, *gosql.DB, int){
 			runBenchmarkDelete,
 			runBenchmarkInsert,
@@ -593,7 +477,7 @@ func runBenchmarkScan(b *testing.B, db *gosql.DB, count int, limit int) {
 }
 
 func BenchmarkScan(b *testing.B) {
-	forEachDB(b, func(b *testing.B, db *gosql.DB) {
+	ForEachDB(b, func(b *testing.B, db *gosql.DB) {
 		for _, count := range []int{1, 10, 100, 1000, 10000} {
 			b.Run(fmt.Sprintf("count=%d", count), func(b *testing.B) {
 				for _, limit := range []int{0, 1, 10, 100} {
@@ -660,7 +544,7 @@ func runBenchmarkScanFilter(
 func BenchmarkScanFilter(b *testing.B) {
 	const count1 = 25
 	const count2 = 400
-	forEachDB(b, func(b *testing.B, db *gosql.DB) {
+	ForEachDB(b, func(b *testing.B, db *gosql.DB) {
 		b.Run(fmt.Sprintf("count1=%d", count1), func(b *testing.B) {
 			b.Run(fmt.Sprintf("count2=%d", count2), func(b *testing.B) {
 				for _, limit := range []int{1, 10, 50} {
@@ -804,7 +688,7 @@ func runBenchmarkOrderBy(b *testing.B, db *gosql.DB, count int, limit int, disti
 func BenchmarkOrderBy(b *testing.B) {
 	const count = 100000
 	const limit = 10
-	forEachDB(b, func(b *testing.B, db *gosql.DB) {
+	ForEachDB(b, func(b *testing.B, db *gosql.DB) {
 		b.Run(fmt.Sprintf("count=%d", count), func(b *testing.B) {
 			b.Run(fmt.Sprintf("limit=%d", limit), func(b *testing.B) {
 				for _, distinct := range []bool{false, true} {
@@ -1036,7 +920,7 @@ func runBenchmarkWideTable(b *testing.B, db *gosql.DB, count int, bigColumnBytes
 
 func BenchmarkWideTable(b *testing.B) {
 	const count = 10
-	forEachDB(b, func(b *testing.B, db *gosql.DB) {
+	ForEachDB(b, func(b *testing.B, db *gosql.DB) {
 		b.Run(fmt.Sprintf("count=%d", count), func(b *testing.B) {
 			for _, bigColumnBytes := range []int{10, 100, 1000, 10000, 100000, 1000000} {
 				b.Run(fmt.Sprintf("bigColumnBytes=%d", bigColumnBytes), func(b *testing.B) {

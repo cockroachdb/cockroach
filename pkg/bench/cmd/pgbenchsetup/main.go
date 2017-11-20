@@ -21,7 +21,7 @@ import (
 	"net/url"
 	"os"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/pgbench"
+	"github.com/cockroachdb/cockroach/pkg/bench"
 	_ "github.com/lib/pq"
 )
 
@@ -57,7 +57,7 @@ func main() {
 			name = parsed.Path[1:]
 		}
 
-		db, err = pgbench.CreateAndConnect(*parsed, name)
+		db, err = bench.CreateAndConnect(*parsed, name)
 	} else {
 		db, err = gosql.Open("postgres", flag.Arg(0))
 	}
@@ -67,7 +67,7 @@ func main() {
 
 	defer db.Close()
 
-	if err := pgbench.SetupBenchDB(db, *accounts, false); err != nil {
+	if err := bench.SetupBenchDB(db, *accounts, false); err != nil {
 		panic(err)
 	}
 }
