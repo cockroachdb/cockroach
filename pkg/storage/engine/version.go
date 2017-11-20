@@ -27,13 +27,14 @@ type storageVersion int
 const (
 	versionNoFile storageVersion = iota
 	versionBeta20160331
+	versionSwitchingEnv
 )
 
 const (
 	versionFilename     = "COCKROACHDB_VERSION"
 	versionFilenameTemp = "COCKROACHDB_VERSION_TEMP"
 	versionMinimum      = versionNoFile
-	versionCurrent      = versionBeta20160331
+	versionCurrent      = versionSwitchingEnv
 )
 
 // Version stores all the version information for all stores and is used as
@@ -67,11 +68,11 @@ func getVersion(dir string) (storageVersion, error) {
 	return ver.Version, nil
 }
 
-// writeVersionFile overwrites the version file to contain the latest version.
-func writeVersionFile(dir string) error {
+// writeVersionFile overwrites the version file to contain the specified version.
+func writeVersionFile(dir string, ver storageVersion) error {
 	tempFilename := filepath.Join(dir, versionFilenameTemp)
 	filename := getVersionFilename(dir)
-	b, err := json.Marshal(Version{versionCurrent})
+	b, err := json.Marshal(Version{ver})
 	if err != nil {
 		return err
 	}

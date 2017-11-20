@@ -33,6 +33,7 @@
 #include "protos/storage/engine/enginepb/mvcc.pb.h"
 #include "db.h"
 #include "encoding.h"
+#include "env_switching.h"
 #include "eventlistener.h"
 #include "keys.h"
 
@@ -89,17 +90,19 @@ struct DBEngine {
 };
 
 struct DBImpl : public DBEngine {
+  std::unique_ptr<rocksdb::Env> switching_env;
   std::unique_ptr<rocksdb::Env> memenv;
   std::unique_ptr<rocksdb::DB> rep_deleter;
   std::shared_ptr<rocksdb::Cache> block_cache;
   std::shared_ptr<DBEventListener> event_listener;
 
-  // Construct a new DBImpl from the specified DB and Env. Both the DB
-  // and Env will be deleted when the DBImpl is deleted. It is ok to
-  // pass NULL for the Env.
+  // Construct a new DBImpl from the specified DB.
+  // The DB and passed Envs will be deleted when the DBImpl is deleted.
+  // Either env can be NULL.
   DBImpl(rocksdb::DB* r, rocksdb::Env* m, std::shared_ptr<rocksdb::Cache> bc,
-    std::shared_ptr<DBEventListener> event_listener)
+    std::shared_ptr<DBEventListener> event_listener, rocksdb::Env* s_env)
       : DBEngine(r),
+        switching_env(s_env),
         memenv(m),
         rep_deleter(r),
         block_cache(bc),
@@ -1691,10 +1694,19 @@ DBStatus DBOpen(DBEngine **db, DBSlice dir, DBOptions db_opts) {
   std::shared_ptr<DBEventListener> event_listener(new DBEventListener);
   options.listeners.emplace_back(event_listener);
 
+  // TODO(mberhault): we shouldn't need two separate env objects,
+  // options.env should be sufficient with SwitchingEnv owning any
+  // underlying Env.
   std::unique_ptr<rocksdb::Env> memenv;
   if (dir.len == 0) {
     memenv.reset(rocksdb::NewMemEnv(rocksdb::Env::Default()));
     options.env = memenv.get();
+  }
+
+  std::unique_ptr<rocksdb::Env> switching_env;
+  if (db_opts.use_switching_env) {
+    switching_env.reset(NewSwitchingEnv(options.env, options.info_log));
+    options.env = switching_env.get();
   }
 
   rocksdb::DB *db_ptr;
@@ -1704,7 +1716,7 @@ DBStatus DBOpen(DBEngine **db, DBSlice dir, DBOptions db_opts) {
   }
   *db = new DBImpl(db_ptr, memenv.release(),
       db_opts.cache != nullptr ? db_opts.cache->rep : nullptr,
-      event_listener);
+      event_listener, switching_env.release());
   return kSuccess;
 }
 

@@ -27,6 +27,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/spf13/pflag"
 
+	"github.com/cockroachdb/cockroach/pkg/cli/cliflags"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 )
@@ -40,6 +41,21 @@ import (
 // hard coded to 640MiB.
 const MinimumStoreSize = 10 * 64 << 20
 
+// GetAbsoluteStorePath takes a (possibly relative) and returns the absolute path.
+// Returns an error if the path begins with '~' or Abs fails.
+// 'fieldName' is used in error strings.
+func GetAbsoluteStorePath(fieldName string, p string) (string, error) {
+	if p[0] == '~' {
+		return "", fmt.Errorf("%s cannot start with '~': %s", fieldName, p)
+	}
+
+	ret, err := filepath.Abs(p)
+	if err != nil {
+		return "", errors.Wrapf(err, "could not find absolute path for %s %s", fieldName, p)
+	}
+	return ret, nil
+}
+
 // StoreSpec contains the details that can be specified in the cli pertaining
 // to the --store flag.
 type StoreSpec struct {
@@ -51,6 +67,9 @@ type StoreSpec struct {
 	SizePercent float64
 	InMemory    bool
 	Attributes  roachpb.Attributes
+	// UseSwitchingEnv is true if the "switching env" store version is desired.
+	// This is set by CCL code when encryption-at-rest is in use.
+	UseSwitchingEnv bool
 }
 
 // String returns a fully parsable version of the store spec.
@@ -117,6 +136,7 @@ var fractionRegex = regexp.MustCompile(`^([0-9]+\.[0-9]*|[0-9]*\.[0-9]+|[0-9]+(\
 // - attrs=xxx:yyy:zzz A colon separated list of optional attributes.
 // Note that commas are forbidden within any field name or value.
 func NewStoreSpec(value string) (StoreSpec, error) {
+	const pathField = "path"
 	if len(value) == 0 {
 		return StoreSpec{}, fmt.Errorf("no value specified")
 	}
@@ -130,7 +150,7 @@ func NewStoreSpec(value string) (StoreSpec, error) {
 		var field string
 		var value string
 		if len(subSplits) == 1 {
-			field = "path"
+			field = pathField
 			value = subSplits[0]
 		} else {
 			field = strings.ToLower(subSplits[0])
@@ -149,18 +169,11 @@ func NewStoreSpec(value string) (StoreSpec, error) {
 		}
 
 		switch field {
-		case "path":
-			if value[0] == '~' {
-				return StoreSpec{}, fmt.Errorf("store path cannot start with '~': %s", value)
-			}
-			// Ensure that the store paths are absolute. This will clarify the
-			// output of the startup messages and ensure that logging doesn't
-			// get confused if the current working directory were to change for
-			// any reason.
+		case pathField:
 			var err error
-			ss.Path, err = filepath.Abs(value)
+			ss.Path, err = GetAbsoluteStorePath(pathField, value)
 			if err != nil {
-				return StoreSpec{}, errors.Wrapf(err, "could not find absolute path for %s", value)
+				return StoreSpec{}, err
 			}
 		case "size":
 			if fractionRegex.MatchString(value) {
@@ -241,7 +254,7 @@ var _ pflag.Value = &StoreSpecList{}
 func (ssl StoreSpecList) String() string {
 	var buffer bytes.Buffer
 	for _, ss := range ssl.Specs {
-		fmt.Fprintf(&buffer, "--store=%s ", ss)
+		fmt.Fprintf(&buffer, "--%s=%s ", cliflags.Store.Name, ss)
 	}
 	// Trim the extra space from the end if it exists.
 	if l := buffer.Len(); l > 0 {
