@@ -105,6 +105,7 @@ type CreateIndex struct {
 	Name        Name
 	Table       NormalizableTableName
 	Unique      bool
+	Inverted    bool
 	IfNotExists bool
 	Columns     IndexElemList
 	// Extra columns to be stored together with the indexed ones as an optimization
@@ -119,6 +120,9 @@ func (node *CreateIndex) Format(buf *bytes.Buffer, f FmtFlags) {
 	buf.WriteString("CREATE ")
 	if node.Unique {
 		buf.WriteString("UNIQUE ")
+	}
+	if node.Inverted {
+		buf.WriteString("INVERTED ")
 	}
 	buf.WriteString("INDEX ")
 	if node.IfNotExists {
@@ -474,6 +478,7 @@ type IndexTableDef struct {
 	Columns     IndexElemList
 	Storing     NameList
 	Interleave  *InterleaveDef
+	Inverted    bool
 	PartitionBy *PartitionBy
 }
 
@@ -500,6 +505,9 @@ func (node *IndexTableDef) Format(buf *bytes.Buffer, f FmtFlags) {
 	if node.Interleave != nil {
 		FormatNode(buf, f, node.Interleave)
 	}
+	if node.Inverted {
+		buf.WriteString("INVERTED ")
+	}
 	if node.PartitionBy != nil {
 		FormatNode(buf, f, node.PartitionBy)
 	}
@@ -519,6 +527,13 @@ func (*UniqueConstraintTableDef) constraintTableDef() {}
 // UniqueConstraintTableDef represents a unique constraint within a CREATE
 // TABLE statement.
 type UniqueConstraintTableDef struct {
+	IndexTableDef
+	PrimaryKey bool
+}
+
+// InvertedConstraintTableDef represents an inverted constraint within a CREATE
+// TABLE statement.
+type InvertedConstraintTableDef struct {
 	IndexTableDef
 	PrimaryKey bool
 }
