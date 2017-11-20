@@ -174,7 +174,7 @@ var explainDistSQLColumns = sqlbase.ResultColumns{
 
 func (n *explainDistSQLNode) Start(params runParams) error {
 	// Trigger limit propagation.
-	setUnlimited(n.plan)
+	params.p.setUnlimited(n.plan)
 
 	distSQLPlanner := params.p.session.distSQLPlanner
 

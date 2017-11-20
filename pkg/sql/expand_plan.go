@@ -87,7 +87,7 @@ func doExpandPlan(
 			// during the plan's Start() phase. This may trigger additional
 			// optimizations (eg. in sortNode) which the user of EXPLAIN will be
 			// interested in.
-			setUnlimited(n.plan)
+			p.setUnlimited(n.plan)
 		}
 
 	case *indexJoinNode:
