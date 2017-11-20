@@ -35,7 +35,7 @@ func randomJSONString(rng *rand.Rand) interface{} {
 }
 
 func randomJSONNumber(rng *rand.Rand) interface{} {
-	return json.Number(fmt.Sprintf("%f", rand.ExpFloat64()))
+	return json.Number(fmt.Sprintf("%v", rand.ExpFloat64()))
 }
 
 func doRandomJSON(complexity int, rng *rand.Rand) interface{} {
