@@ -2485,7 +2485,14 @@ func isAsOf(session *Session, stmt tree.Statement, max hlc.Timestamp) (*hlc.Time
 	if !ok {
 		return nil, nil
 	}
-	sc, ok := s.Select.(*tree.SelectClause)
+
+	selStmt := s.Select
+	var parenSel *tree.ParenSelect
+	for parenSel, ok = selStmt.(*tree.ParenSelect); ok; parenSel, ok = selStmt.(*tree.ParenSelect) {
+		selStmt = parenSel.Select.Select
+	}
+
+	sc, ok := selStmt.(*tree.SelectClause)
 	if !ok {
 		return nil, nil
 	}
