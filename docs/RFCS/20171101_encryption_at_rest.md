@@ -878,7 +878,7 @@ Cons:
 
 Use of the preamble format through the existing `rocksdb::EncryptedEnv` has a few issues:
 * no possible migration from/to preamble format
-* `EncryptedEnv` introduces some overhead for plaintext-when-using-preamble
+* `EncryptedEnv` introduces some overhead for plaintext (small block processing, still using preamble)
 
 An alternative would be to introduce our own wrapper `rocksdb::Env` that would contain two envs:
 * `EncryptedEnv` for encrypted files
@@ -886,22 +886,28 @@ An alternative would be to introduce our own wrapper `rocksdb::Env` that would c
 
 This new env could keep track of the state of each file and redirect file operations to the appropriate underlying
 env.
-All store created with old binaries would be considered plaintext. A binary aware of the new env could enable
+All stores created with old binaries would be considered plaintext. A binary aware of the new env could enable
 encryption on an existing store by writing new files with the `EncryptedEnv` when encryption is desired.
 
 The "file registry" that keeps track of encryption status could also contain the data currently stored in the
 preamble (key ID, nonce, counter).
 Care would need to be taken when writing this file, returning success for file creation only after the registry
-has been persisted to disk (otherwise we would not be able to read the file again). To avoid expensive operations,
-this could use a standard log + compaction method.
+has been persisted to disk (otherwise we would not be able to read the file again). This is similar to rockdb's
+`MANIFEST`.
 
 The most glaring pros and cons of this approach are:
 Pros:
 * migration from "old" stores to encrypted stores (and back) is possible
 * plaintext option has no extra overhead
+* more user friendly: no need for a separate format
 Cons:
-* registry handling must be robust, probably requiring a complex log + compaction method
+* additional code complexity
 * much less leverage of existing code, this adds a fair amount of work
+
+Some variations on the theme:
+* use a suffix (eg: `.encrypted`) for encrypted file and switch between envs based on that. The encryption settings
+would remain in the preamble.
+* use either a zero-length preamble, or copy-and-modify `env_encryption` (some other optimizations may be possible. eg: use cryptopp's `ProcessAndXORBlocks` which performed the AES encryption **and** the XOR.
 
 ## Unresolved questions
 
