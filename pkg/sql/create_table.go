@@ -791,20 +791,19 @@ func valueEncodePartitionTuple(
 	return value, nil
 }
 
-// addPartitionedBy marks an index as one that is partitioned into ranges, each
-// addressable by zone configs.
-func addPartitionedBy(
+// createPartitionedBy constructs the partitioning descriptor for an index that
+// is partitioned into ranges, each addressable by zone configs.
+func createPartitionedBy(
 	ctx context.Context,
 	evalCtx *tree.EvalContext,
 	tableDesc *sqlbase.TableDescriptor,
 	indexDesc *sqlbase.IndexDescriptor,
-	partDesc *sqlbase.PartitioningDescriptor,
 	partBy *tree.PartitionBy,
 	colOffset int,
-) error {
-	*partDesc = sqlbase.PartitioningDescriptor{}
+) (sqlbase.PartitioningDescriptor, error) {
+	partDesc := sqlbase.PartitioningDescriptor{}
 	if partBy == nil {
-		return nil
+		return partDesc, nil
 	}
 	partDesc.NumColumns = uint32(len(partBy.Fields))
 
@@ -823,17 +822,17 @@ func addPartitionedBy(
 	var cols []sqlbase.ColumnDescriptor
 	for i := 0; i < len(partBy.Fields); i++ {
 		if colOffset+i >= len(indexDesc.ColumnNames) {
-			return colMismatchErr()
+			return partDesc, colMismatchErr()
 		}
 		// Search by name because some callsites of this method have not
 		// allocated ids yet (so they are still all the 0 value).
 		col, err := tableDesc.FindActiveColumnByName(indexDesc.ColumnNames[colOffset+i])
 		if err != nil {
-			return err
+			return partDesc, err
 		}
 		cols = append(cols, col)
 		if string(partBy.Fields[i]) != col.Name {
-			return colMismatchErr()
+			return partDesc, colMismatchErr()
 		}
 	}
 
@@ -845,17 +844,18 @@ func addPartitionedBy(
 			encodedTuple, err := valueEncodePartitionTuple(
 				tree.PartitionByList, evalCtx, expr, cols)
 			if err != nil {
-				return errors.Wrapf(err, "PARTITION %s", p.Name)
+				return partDesc, errors.Wrapf(err, "PARTITION %s", p.Name)
 			}
 			p.Values = append(p.Values, encodedTuple)
 		}
 		if l.Subpartition != nil {
 			newColOffset := colOffset + int(partDesc.NumColumns)
-			if err := addPartitionedBy(
-				ctx, evalCtx, tableDesc, indexDesc, &p.Subpartitioning, l.Subpartition, newColOffset,
-			); err != nil {
-				return err
+			subpartitioning, err := createPartitionedBy(
+				ctx, evalCtx, tableDesc, indexDesc, l.Subpartition, newColOffset)
+			if err != nil {
+				return partDesc, err
 			}
+			p.Subpartitioning = subpartitioning
 		}
 		partDesc.List = append(partDesc.List, p)
 	}
@@ -866,16 +866,16 @@ func addPartitionedBy(
 		encodedTuple, err := valueEncodePartitionTuple(
 			tree.PartitionByRange, evalCtx, r.Expr, cols)
 		if err != nil {
-			return errors.Wrapf(err, "PARTITION %s", p.Name)
+			return partDesc, errors.Wrapf(err, "PARTITION %s", p.Name)
 		}
 		if r.Subpartition != nil {
-			return errors.Errorf("PARTITION %s: cannot subpartition a range partition", p.Name)
+			return partDesc, errors.Errorf("PARTITION %s: cannot subpartition a range partition", p.Name)
 		}
 		p.UpperBound = encodedTuple
 		partDesc.Range = append(partDesc.Range, p)
 	}
 
-	return nil
+	return partDesc, nil
 }
 
 // RepartitioningFastPathAvailable returns true when the schema change to
@@ -1016,11 +1016,12 @@ func MakeTableDesc(
 				return desc, err
 			}
 			if d.PartitionBy != nil {
-				if err := addPartitionedBy(
-					ctx, evalCtx, &desc, &idx, &idx.Partitioning, d.PartitionBy, 0, /* colOffset */
-				); err != nil {
+				partitioning, err := createPartitionedBy(
+					ctx, evalCtx, &desc, &idx, d.PartitionBy, 0 /* colOffset */)
+				if err != nil {
 					return desc, err
 				}
+				idx.Partitioning = partitioning
 			}
 			if err := desc.AddIndex(idx, false); err != nil {
 				return desc, err
@@ -1038,11 +1039,12 @@ func MakeTableDesc(
 				return desc, err
 			}
 			if d.PartitionBy != nil {
-				if err := addPartitionedBy(
-					ctx, evalCtx, &desc, &idx, &idx.Partitioning, d.PartitionBy, 0, /* colOffset */
-				); err != nil {
+				partitioning, err := createPartitionedBy(
+					ctx, evalCtx, &desc, &idx, d.PartitionBy, 0 /* colOffset */)
+				if err != nil {
 					return desc, err
 				}
+				idx.Partitioning = partitioning
 			}
 			if err := desc.AddIndex(idx, d.PrimaryKey); err != nil {
 				return desc, err
@@ -1098,12 +1100,12 @@ func MakeTableDesc(
 	}
 
 	if n.PartitionBy != nil {
-		if err := addPartitionedBy(
-			ctx, evalCtx, &desc, &desc.PrimaryIndex, &desc.PrimaryIndex.Partitioning, n.PartitionBy,
-			0, /* colOffset */
-		); err != nil {
+		partitioning, err := createPartitionedBy(
+			ctx, evalCtx, &desc, &desc.PrimaryIndex, n.PartitionBy, 0 /* colOffset */)
+		if err != nil {
 			return desc, err
 		}
+		desc.PrimaryIndex.Partitioning = partitioning
 	}
 
 	// With all structural elements in place and IDs allocated, we can resolve the

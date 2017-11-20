@@ -143,12 +143,12 @@ func (n *alterTableNode) startExec(params runParams) error {
 					return err
 				}
 				if d.PartitionBy != nil {
-					if err := addPartitionedBy(
-						params.ctx, params.evalCtx, n.tableDesc, &idx, &idx.Partitioning,
-						d.PartitionBy, 0, /* colOffset */
-					); err != nil {
+					partitioning, err := createPartitionedBy(
+						params.ctx, params.evalCtx, n.tableDesc, &idx, d.PartitionBy, 0 /* colOffset */)
+					if err != nil {
 						return err
 					}
+					idx.Partitioning = partitioning
 				}
 				_, dropped, err := n.tableDesc.FindIndexByName(string(d.Name))
 				if err == nil {
@@ -439,12 +439,12 @@ func (n *alterTableNode) startExec(params runParams) error {
 
 		case *tree.AlterTablePartitionBy:
 			previousTableDesc := *n.tableDesc
-			if err := addPartitionedBy(
-				params.ctx, &params.p.evalCtx, n.tableDesc, &n.tableDesc.PrimaryIndex,
-				&n.tableDesc.PrimaryIndex.Partitioning, t.PartitionBy, 0, /* colOffset */
-			); err != nil {
+			partitioning, err := createPartitionedBy(params.ctx, &params.p.evalCtx, n.tableDesc,
+				&n.tableDesc.PrimaryIndex, t.PartitionBy, 0 /* colOffset */)
+			if err != nil {
 				return err
 			}
+			n.tableDesc.PrimaryIndex.Partitioning = partitioning
 			// TODO(dan): This checks TableDescriptors instead of
 			// PartitioningDescriptors to mirror the fast path check. Of course,
 			// RepartitioningFastPathAvailable could also be acting on
