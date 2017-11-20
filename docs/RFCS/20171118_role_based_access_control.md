@@ -1,4 +1,4 @@
-- Feature Name: Role based access control
+- Feature Name: Role-based access control
 - Status: draft
 - Start Date: 2017-11-18
 - Authors: Marc Berhault
@@ -43,11 +43,13 @@ Table of Contents
 
 # Summary
 
-This feature is enterprise.
+Role-based access control is an enterprise feature.
 
 We propose the addition of SQL roles to facilitate user management.
 
-A role can be seen as a group containing one or more user or role.
+A role can be seen as a group containing any number of "entities" as members. An entity can be a user or
+another role.
+
 Roles can have privileges on SQL objects. Any member of the role (directly a member,
 or indirectly by being a member-of-a-member) inherits all privileges of the role.
 
@@ -66,6 +68,9 @@ By granting database/table privileges to a role, users of a team can be more
 easily added to the system and granted all necessary privileges by simply adding them as members
 of the corresponding roles. The alternative would be granting privileges for all necessary objects,
 making it likely to forget some.
+
+Managing privileges on a given object becomes easier: by changing the privileges granted to the role,
+all members of the role are updated implicitly.
 
 # Related resources
 
@@ -122,6 +127,7 @@ Roles and users follow a small set of rules:
 * only the admin role can create/drop roles
 * role admins (members with the `ADMIN OPTION`) can modify role memberships
 * a role cannot be dropped if it still has privileges
+* there is no limit (minimum or maximum) to the number of members of a role (except for the `admin` role)
 
 ### Creating a role
 
@@ -227,7 +233,8 @@ Before this RFC, there is a single administrative user in a cockroach cluster: t
 We propose to add a default role: `admin` with a single user: `root`.
 `root` will have admin privileges on the `admin` role, allowing addition/removal of other users.
 
-The `admin` role cannot be deleted, and cannot be empty.
+The `admin` role cannot be deleted, and cannot be empty. The specicial `root` user cannot be removed as a member
+of the `admin` role.
 
 All operations that previously checked for the `root` user will now check for membership in the `admin` role.
 
@@ -703,3 +710,10 @@ Adding members `firstadmin` and `secondadmin` to the new role `myrole` with the 
 ```
 CREATE ROLE myrole ADMIN firstadmin, secondadmin
 ```
+
+### UI visibility and management
+
+At the very least, the admin UI should show role information (privileges on objects, memberships, etc...).
+Manipulation of roles may be a UI event.
+
+Changing roles through the admin UI should be possible, but is currently gated on admin UI authentication.
