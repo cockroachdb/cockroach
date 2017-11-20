@@ -2482,11 +2482,22 @@ func decimalToHLC(d *apd.Decimal) (hlc.Timestamp, error) {
 // max is a lower bound on what the transaction's timestamp will be. Used to
 // check that the user didn't specify a timestamp in the future.
 func isAsOf(session *Session, stmt tree.Statement, max hlc.Timestamp) (*hlc.Timestamp, error) {
+	if ts, err := isShowTraceForAsOf(session, stmt, max); ts != nil || err != nil {
+		return ts, err
+	}
+
 	s, ok := stmt.(*tree.Select)
 	if !ok {
 		return nil, nil
 	}
-	sc, ok := s.Select.(*tree.SelectClause)
+
+	selStmt := s.Select
+	var parenSel *tree.ParenSelect
+	for parenSel, ok = selStmt.(*tree.ParenSelect); ok; parenSel, ok = selStmt.(*tree.ParenSelect) {
+		selStmt = parenSel.Select.Select
+	}
+
+	sc, ok := selStmt.(*tree.SelectClause)
 	if !ok {
 		return nil, nil
 	}
@@ -2497,6 +2508,16 @@ func isAsOf(session *Session, stmt tree.Statement, max hlc.Timestamp) (*hlc.Time
 	evalCtx := session.evalCtx()
 	ts, err := EvalAsOfTimestamp(&evalCtx, sc.From.AsOf, max)
 	return &ts, err
+}
+
+func isShowTraceForAsOf(
+	session *Session, stmt tree.Statement, max hlc.Timestamp,
+) (*hlc.Timestamp, error) {
+	stf, ok := stmt.(*tree.ShowTrace)
+	if !ok {
+		return nil, nil
+	}
+	return isAsOf(session, stf.Statement, max)
 }
 
 // isSavepoint returns true if stmt is a SAVEPOINT statement.
