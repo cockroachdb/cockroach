@@ -619,18 +619,32 @@ func TestBackupRestoreCheckpointing(t *testing.T) {
 }
 
 func waitForJob(db *gosql.DB, jobID int64) error {
-	return retry.ForDuration(testutils.DefaultSucceedsSoonDuration, func() error {
+	var jobFailedErr error
+	err := retry.ForDuration(testutils.DefaultSucceedsSoonDuration, func() error {
 		var status string
+		var payloadBytes []byte
 		if err := db.QueryRow(
-			`SELECT status FROM system.jobs WHERE id = $1`, jobID,
-		).Scan(&status); err != nil {
+			`SELECT status, payload FROM system.jobs WHERE id = $1`, jobID,
+		).Scan(&status, &payloadBytes); err != nil {
 			return err
+		}
+		if jobs.Status(status) == jobs.StatusFailed {
+			jobFailedErr = errors.New("job failed")
+			payload := &jobs.Payload{}
+			if err := protoutil.Unmarshal(payloadBytes, payload); err == nil {
+				jobFailedErr = errors.Errorf("job failed: %s", payload.Error)
+			}
+			return nil
 		}
 		if e, a := jobs.StatusSucceeded, jobs.Status(status); e != a {
 			return errors.Errorf("expected backup status %s, but got %s", e, a)
 		}
 		return nil
 	})
+	if jobFailedErr != nil {
+		return jobFailedErr
+	}
+	return err
 }
 
 func createAndWaitForJob(db *gosql.DB, descriptorIDs []sqlbase.ID, details jobs.Details) error {
@@ -830,13 +844,49 @@ func TestBackupRestoreControlJob(t *testing.T) {
 			_, err := sqlDB.DB.Exec(query, args...)
 			errCh <- err
 		}()
-		allowResponse <- struct{}{}
+		select {
+		case allowResponse <- struct{}{}:
+		case err := <-errCh:
+			return 0, errors.Wrapf(err, "query returned before expected: %s", query)
+		}
 		var jobID int64
 		sqlDB.QueryRow(t, `SELECT id FROM system.jobs ORDER BY created DESC LIMIT 1`).Scan(&jobID)
 		sqlDB.Exec(t, fmt.Sprintf("%s JOB %d", op, jobID))
 		close(allowResponse)
 		return jobID, <-errCh
 	}
+
+	t.Run("foreign", func(t *testing.T) {
+		sqlDB := sqlutils.MakeSQLRunner(outerDB.DB)
+		foreignDir := "nodelocal:///foreign"
+		sqlDB.Exec(t, `CREATE DATABASE orig_fkdb`)
+		sqlDB.Exec(t, `CREATE DATABASE restore_fkdb`)
+		sqlDB.Exec(t, `CREATE TABLE orig_fkdb.fk (i INT REFERENCES data.bank)`)
+		// Generate some FK data with splits so backup/restore block correctly.
+		for i := 0; i < 10; i++ {
+			sqlDB.Exec(t, `INSERT INTO orig_fkdb.fk (i) VALUES ($1)`, i)
+			sqlDB.Exec(t, `ALTER TABLE orig_fkdb.fk SPLIT AT VALUES ($1)`, i)
+		}
+
+		for i, query := range []string{
+			`BACKUP orig_fkdb.fk TO $1`,
+			`RESTORE orig_fkdb.fk FROM $1 WITH OPTIONS ('skip_missing_foreign_keys', 'into_db'='restore_fkdb')`,
+		} {
+			jobID, err := run(t, "PAUSE", query, foreignDir)
+			if !testutils.IsError(err, "job paused") {
+				t.Fatalf("%d: expected 'job paused' error, but got %+v", i, err)
+			}
+			sqlDB.Exec(t, fmt.Sprintf(`RESUME JOB %d`, jobID))
+			if err := waitForJob(sqlDB.DB, jobID); err != nil {
+				t.Fatal(err)
+			}
+		}
+
+		sqlDB.CheckQueryResults(t,
+			`SHOW EXPERIMENTAL_FINGERPRINTS FROM TABLE orig_fkdb.fk`,
+			sqlDB.QueryStr(t, `SHOW EXPERIMENTAL_FINGERPRINTS FROM TABLE restore_fkdb.fk`),
+		)
+	})
 
 	t.Run("pause", func(t *testing.T) {
 		sqlDB := sqlutils.MakeSQLRunner(outerDB.DB)

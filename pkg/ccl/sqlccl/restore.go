@@ -151,9 +151,7 @@ func allocateTableRewrites(
 			if index.ForeignKey.IsSet() {
 				to := index.ForeignKey.Table
 				if _, ok := tablesByID[to]; !ok {
-					if _, ok := opts[restoreOptSkipMissingFKs]; ok {
-						index.ForeignKey = sqlbase.ForeignKeyReference{}
-					} else {
+					if _, ok := opts[restoreOptSkipMissingFKs]; !ok {
 						return errors.Errorf(
 							"cannot restore table %q without referenced table %d (or %q option)",
 							table.Name, to, restoreOptSkipMissingFKs,
@@ -333,10 +331,12 @@ func rewriteTableDescs(tables []*sqlbase.TableDescriptor, tableRewrites tableRew
 				to := index.ForeignKey.Table
 				if indexRewrite, ok := tableRewrites[to]; ok {
 					index.ForeignKey.Table = indexRewrite.TableID
+				} else {
+					// If indexRewrite doesn't exist, the user has specified
+					// restoreOptSkipMissingFKs. Error checking in the case the user hasn't has
+					// already been done in allocateTableRewrites.
+					index.ForeignKey = sqlbase.ForeignKeyReference{}
 				}
-				// If indexRewrite doesn't exist, either the user has specified
-				// restoreOptSkipMissingFKs, or we've already errored in
-				// allocateTableRewrites. Move on.
 
 				// TODO(dt): if there is an existing (i.e. non-restoring) table with
 				// a db and name matching the one the FK pointed to at backup, should
