@@ -1164,12 +1164,21 @@ func addInterleave(
 	}
 	parentIndex := parentTable.PrimaryIndex
 
+	// typeOfIndex is used to give more informative error messages.
+	var typeOfIndex string
+	if index.ID == desc.PrimaryIndex.ID {
+		typeOfIndex = "primary key"
+	} else {
+		typeOfIndex = "index"
+	}
+
 	if len(interleave.Fields) != len(parentIndex.ColumnIDs) {
-		return fmt.Errorf("interleaved columns must match parent")
+		return fmt.Errorf("declared interleaved columns [%v] must match the parent's primary index %v", interleave.Fields, parentIndex.ColumnNames)
 	}
 	if len(interleave.Fields) > len(index.ColumnIDs) {
-		return fmt.Errorf("declared columns must match index being interleaved")
+		return fmt.Errorf("declared interleaved columns [%v] must be a prefix of the %s columns being interleaved %v", interleave.Fields, typeOfIndex, index.ColumnNames)
 	}
+
 	for i, targetColID := range parentIndex.ColumnIDs {
 		targetCol, err := parentTable.FindColumnByID(targetColID)
 		if err != nil {
@@ -1180,10 +1189,10 @@ func addInterleave(
 			return err
 		}
 		if string(interleave.Fields[i]) != col.Name {
-			return fmt.Errorf("declared columns must match index being interleaved")
+			return fmt.Errorf("declared interleaved columns [%v] must refer to a prefix of the %s column names being interleaved %v", interleave.Fields, typeOfIndex, index.ColumnNames)
 		}
 		if !col.Type.Equal(targetCol.Type) || index.ColumnDirections[i] != parentIndex.ColumnDirections[i] {
-			return fmt.Errorf("interleaved columns must match parent")
+			return fmt.Errorf("declared interleaved columns [%v] must match type and sort direction of the parent's primary index %v", interleave.Fields, parentIndex.ColumnNames)
 		}
 	}
 
