@@ -1207,7 +1207,12 @@ func runTxnAttempt(
 	// statements. We also want future ResultsSentToClient() calls to return
 	// false.
 	if err := txnState.txnResults.Flush(session.Ctx()); err != nil {
-		err = txnState.updateStateAndCleanupOnErr(err, e)
+		// If there's a KV txn open, we have to roll it back.
+		// If there isn't, there's nothing to do. The state of the session doesn't
+		// matter any more after a communication error.
+		if txnState.state.kvTxnIsOpen() {
+			err = txnState.updateStateAndCleanupOnErr(err, e)
+		}
 		return nil, false, err
 	}
 
