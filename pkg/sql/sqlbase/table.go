@@ -252,9 +252,9 @@ func MakeIndexKeyPrefix(desc *TableDescriptor, indexID IndexID) []byte {
 // EncodeIndexKey creates a key by concatenating keyPrefix with the encodings of
 // the columns in the index.
 //
-// If a table or index is interleaved, `encoding.encodedNullDesc` is used in
-// place of the family id (a varint) to signal the next component of the key.
-// An example of one level of interleaving (a parent):
+// If a table or index is interleaved, `encoding.interleavedSentinel` is used
+// in place of the family id (a varint) to signal the next component of the
+// key.  An example of one level of interleaving (a parent):
 // /<parent_table_id>/<parent_index_id>/<field_1>/<field_2>/NullDesc/<table_id>/<index_id>/<field_3>/<family>
 //
 // Returns the key and whether any of the encoded values were NULLs.
@@ -322,8 +322,9 @@ func EncodePartialIndexKey(
 				return key, containsNull, nil
 			}
 			colIDs, dirs = colIDs[length:], dirs[length:]
-			// We reuse NotNullDescending (0xfe) as the interleave sentinel.
-			key = encoding.EncodeNotNullDescending(key)
+			// Each ancestor is separated by an interleaved
+			// sentinel.
+			key = encoding.EncodeInterleavedSentinel(key)
 		}
 
 		key = encoding.EncodeUvarintAscending(key, uint64(tableDesc.ID))
@@ -410,9 +411,9 @@ func appendEncDatumsToKey(
 // encodings of the given EncDatum values. The values correspond to
 // index.ColumnIDs.
 //
-// If a table or index is interleaved, `encoding.encodedNullDesc` is used in
-// place of the family id (a varint) to signal the next component of the key.
-// An example of one level of interleaving (a parent):
+// If a table or index is interleaved, `encoding.interleavedSentinel` is used
+// in place of the family id (a varint) to signal the next component of the
+// key.  An example of one level of interleaving (a parent):
 // /<parent_table_id>/<parent_index_id>/<field_1>/<field_2>/NullDesc/<table_id>/<index_id>/<field_3>/<family>
 //
 // Note that ExtraColumnIDs are not encoded, so the result isn't always a
@@ -453,8 +454,9 @@ func MakeKeyFromEncDatums(
 			}
 			types, values, dirs = types[length:], values[length:], dirs[length:]
 
-			// We reuse NotNullDescending (0xfe) as the interleave sentinel.
-			key = encoding.EncodeNotNullDescending(key)
+			// Each ancestor is separated by an interleaved
+			// sentinel.
+			key = encoding.EncodeInterleavedSentinel(key)
 		}
 
 		key = encoding.EncodeUvarintAscending(key, uint64(tableDesc.ID))
@@ -736,9 +738,9 @@ func DecodeIndexKeyPrefix(
 			key = key[l:]
 		}
 
-		// We reuse NotNullDescending as the interleave sentinel, consume it.
+		// Consume the interleaved sentinel.
 		var ok bool
-		key, ok = encoding.DecodeIfNotNull(key)
+		key, ok = encoding.DecodeIfInterleavedSentinel(key)
 		if !ok {
 			return 0, nil, errors.Errorf("invalid interleave key")
 		}
@@ -784,9 +786,9 @@ func DecodeIndexKey(
 			}
 			types, vals, colDirs = types[length:], vals[length:], colDirs[length:]
 
-			// We reuse NotNullDescending as the interleave sentinel, consume it.
+			// Consume the interleaved sentinel.
 			var ok bool
-			key, ok = encoding.DecodeIfNotNull(key)
+			key, ok = encoding.DecodeIfInterleavedSentinel(key)
 			if !ok {
 				return nil, false, nil
 			}
@@ -806,9 +808,10 @@ func DecodeIndexKey(
 		return nil, false, err
 	}
 
-	// We're expecting a column family id next (a varint). If descNotNull is
-	// actually next, then this key is for a child table.
-	if _, ok := encoding.DecodeIfNotNull(key); ok {
+	// We're expecting a column family id next (a varint). If
+	// interleavedSentinel is actually next, then this key is for a child
+	// table.
+	if _, ok := encoding.DecodeIfInterleavedSentinel(key); ok {
 		return nil, false, nil
 	}
 
@@ -2344,7 +2347,7 @@ func IndexKeyEquivSignature(
 		var isSentinel bool
 		// Peek and discard encoded index values.
 		for {
-			key, isSentinel = encoding.DecodeIfNotNull(key)
+			key, isSentinel = encoding.DecodeIfInterleavedSentinel(key)
 			// We stop once the key is empty or if we encounter a
 			// sentinel for the next TableID-IndexID pair.
 			if len(key) == 0 || isSentinel {
@@ -2371,7 +2374,7 @@ func IndexKeyEquivSignature(
 		// descendant(s).
 		// We insert an interleave sentinel and continue extracting the
 		// next descendant's IDs.
-		signatureBuf = encoding.EncodeNotNullDescending(signatureBuf)
+		signatureBuf = encoding.EncodeInterleavedSentinel(signatureBuf)
 	}
 }
 
@@ -2400,7 +2403,7 @@ func TableEquivSignatures(
 		// signature.
 		signatures[i] = fullSignature
 		// Append Interleave sentinel after every ancestor.
-		fullSignature = encoding.EncodeNotNullDescending(fullSignature)
+		fullSignature = encoding.EncodeInterleavedSentinel(fullSignature)
 	}
 
 	// Encode the table's table and index IDs.

@@ -1092,7 +1092,7 @@ func spansFromLogicalSpans(
 					encoding.EncodeUvarintAscending(interstices[sharedPrefixLen], uint64(ancestor.IndexID))
 			}
 			sharedPrefixLen += int(ancestor.SharedPrefixLen)
-			interstices[sharedPrefixLen] = encoding.EncodeNotNullDescending(interstices[sharedPrefixLen])
+			interstices[sharedPrefixLen] = encoding.EncodeInterleavedSentinel(interstices[sharedPrefixLen])
 		}
 		interstices[sharedPrefixLen] =
 			encoding.EncodeUvarintAscending(interstices[sharedPrefixLen], uint64(tableDesc.ID))
