@@ -2107,31 +2107,48 @@ set_stmt:
 | use_stmt             { /* SKIP DOC */ }
 | SET LOCAL error { return unimplemented(sqllex, "set local") }
 
-// SCRUB
+// %Help: SCRUB - run checks against databases or tables
+// %Category: Experimental
+// %Text:
+// EXPERIMENTAL SCRUB TABLE <table> ...
+// EXPERIMENTAL SCRUB DATABASE <database>
+//
+// The various checks that ca be run with SCRUB includes:
+//   - Physical table data (encoding)
+//   - Secondary index integrity
+//   - Constraint integrity (NOT NULL, CHECK, FOREIGN KEY, UNIQUE)
+// %SeeAlso: SCRUB TABLE, SCRUB DATABASE
 scrub_stmt:
   scrub_table_stmt
 | scrub_database_stmt
+| EXPERIMENTAL SCRUB error // SHOW HELP: SCRUB
 
-// %Help: SCRUB DATABASE - run a scrub check on a database
-// %Category: Misc
+// %Help: SCRUB DATABASE - run scrub checks on a database
+// %Category: Experimental
 // %Text:
-// SCRUB DATABASE <databasename>
+// EXPERIMENTAL SCRUB DATABASE <database>
+// All scrub checks will be run on the database. This includes:
+//   - Physical table data (encoding)
+//   - Secondary index integrity
+//   - Constraint integrity (NOT NULL, CHECK, FOREIGN KEY, UNIQUE)
+// %SeeAlso: SCRUB TABLE, SCRUB
 scrub_database_stmt:
   EXPERIMENTAL SCRUB DATABASE name
   {
     $$.val = &tree.Scrub{Typ: tree.ScrubDatabase, Database: tree.Name($4)}
   }
+| EXPERIMENTAL SCRUB DATABASE error // SHOW HELP: SCRUB DATABASE
 
-// %Help: SCRUB TABLE - run a scrub check on a table
-// %Category: Misc
+// %Help: SCRUB TABLE - run scrub checks on a table
+// %Category: Experimental
 // %Text:
-// SCRUB TABLE <tablename> [WITH <option> [, ...]]
+// SCRUB TABLE <tablename> [WITH OPTIONS <option> [, ...]]
 //
 // Options:
-//   SCRUB TABLE ... WITH OPTIONS INDEX ALL
-//   SCRUB TABLE ... WITH OPTIONS INDEX (<index>...)
-//   SCRUB TABLE ... WITH OPTIONS PHYSICAL
-//
+//   EXPERIMENTAL SCRUB TABLE ... WITH OPTIONS INDEX ALL
+//   EXPERIMENTAL SCRUB TABLE ... WITH OPTIONS INDEX (<index>...)
+//   EXPERIMENTAL SCRUB TABLE ... WITH OPTIONS PHYSICAL
+// %SeeAlso: SCRUB DATABASE, SRUB
 scrub_table_stmt:
   EXPERIMENTAL SCRUB TABLE qualified_name
   {
@@ -2141,6 +2158,7 @@ scrub_table_stmt:
   {
     $$.val = &tree.Scrub{Typ: tree.ScrubTable, Table: $4.normalizableTableName(), Options: $7.scrubOptions()}
   }
+| EXPERIMENTAL SCRUB TABLE error // SHOW HELP: SCRUB TABLE
 
 scrub_option_list:
   scrub_option
