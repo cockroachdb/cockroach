@@ -245,7 +245,7 @@ func (p *planner) groupBy(
 		// also be updated (for IndexedVarResolvedType to work).
 		havingNode.source.info = newSourceInfoForSingleTable(anonymousTable, group.columns)
 
-		havingNode.filter, err = r.planner.analyzeExpr(
+		havingNode.filter, err = p.analyzeExpr(
 			ctx, havingExpr, nil /* no source info */, havingNode.ivarHelper,
 			types.Bool, true /* require type */, "HAVING",
 		)
@@ -255,8 +255,7 @@ func (p *planner) groupBy(
 	}
 
 	postRender := &renderNode{
-		planner: r.planner,
-		source:  planDataSource{plan: plan},
+		source: planDataSource{plan: plan},
 	}
 	plan = postRender
 

@@ -380,7 +380,7 @@ func expandRenderNode(
 		}
 	}
 
-	r.computePhysicalProps(planPhysicalProps(r.source.plan))
+	p.computePhysicalPropsForRender(r, planPhysicalProps(r.source.plan))
 	return r, nil
 }
 
@@ -570,7 +570,7 @@ func (p *planner) simplifyOrderings(plan planNode, usefulOrdering sqlbase.Column
 		// TODO(radu): in some cases there may be multiple possible n.orderings for
 		// a given source plan ordering; we should pass usefulOrdering to help make
 		// that choice (#13709).
-		n.computePhysicalProps(planPhysicalProps(n.source.plan))
+		p.computePhysicalPropsForRender(n, planPhysicalProps(n.source.plan))
 
 	case *delayedNode:
 		n.plan = p.simplifyOrderings(n.plan, usefulOrdering)

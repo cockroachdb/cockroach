@@ -1198,7 +1198,9 @@ func (l *DistLoader) LoadCSV(
 // the select data source (a n.source) and updates it to produce results
 // corresponding to the render node itself. An evaluator stage is added if the
 // render node has any expressions which are not just simple column references.
-func (dsp *DistSQLPlanner) selectRenders(p *physicalPlan, n *renderNode) {
+func (dsp *DistSQLPlanner) selectRenders(
+	p *physicalPlan, n *renderNode, evalCtx *tree.EvalContext,
+) {
 	// We want to skip any unused renders.
 	planToStreamColMap := makePlanToStreamColMap(len(n.render))
 	renders := make([]tree.TypedExpr, 0, len(n.render))
@@ -1209,7 +1211,7 @@ func (dsp *DistSQLPlanner) selectRenders(p *physicalPlan, n *renderNode) {
 		}
 	}
 
-	p.AddRendering(renders, &n.planner.evalCtx, p.planToStreamColMap, getTypesForPlanResult(n, planToStreamColMap))
+	p.AddRendering(renders, evalCtx, p.planToStreamColMap, getTypesForPlanResult(n, planToStreamColMap))
 	p.planToStreamColMap = planToStreamColMap
 }
 
@@ -2170,7 +2172,7 @@ func (dsp *DistSQLPlanner) createPlanForNode(
 		if err != nil {
 			return physicalPlan{}, err
 		}
-		dsp.selectRenders(&plan, n)
+		dsp.selectRenders(&plan, n, planCtx.evalCtx)
 		return plan, nil
 
 	case *groupNode:
