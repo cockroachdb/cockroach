@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -159,7 +160,7 @@ func TestOperationsWithColumnMutation(t *testing.T) {
 	// so disable leases on tables.
 	defer sql.TestDisableTableLeases()()
 	// Disable external processing of mutations.
-	params, _ := createTestServerParams()
+	params, _ := tests.CreateTestServerParams()
 	params.Knobs.SQLSchemaChanger = &sql.SchemaChangerTestingKnobs{
 		AsyncExecNotification: asyncSchemaChangerDisabled,
 	}
@@ -391,7 +392,7 @@ func TestOperationsWithIndexMutation(t *testing.T) {
 	// The descriptor changes made must have an immediate effect.
 	defer sql.TestDisableTableLeases()()
 	// Disable external processing of mutations.
-	params, _ := createTestServerParams()
+	params, _ := tests.CreateTestServerParams()
 	params.Knobs.SQLSchemaChanger = &sql.SchemaChangerTestingKnobs{
 		AsyncExecNotification: asyncSchemaChangerDisabled,
 	}
@@ -536,7 +537,7 @@ func TestOperationsWithColumnAndIndexMutation(t *testing.T) {
 	// so disable leases on tables.
 	defer sql.TestDisableTableLeases()()
 	// Disable external processing of mutations.
-	params, _ := createTestServerParams()
+	params, _ := tests.CreateTestServerParams()
 	params.Knobs.SQLSchemaChanger = &sql.SchemaChangerTestingKnobs{
 		AsyncExecNotification: asyncSchemaChangerDisabled,
 	}
@@ -699,7 +700,7 @@ func TestSchemaChangeCommandsWithPendingMutations(t *testing.T) {
 	// so disable leases on tables.
 	defer sql.TestDisableTableLeases()()
 	// Disable external processing of mutations.
-	params, _ := createTestServerParams()
+	params, _ := tests.CreateTestServerParams()
 	params.Knobs.SQLSchemaChanger = &sql.SchemaChangerTestingKnobs{
 		SyncFilter:            sql.TestingSchemaChangerCollection.ClearSchemaChangers,
 		AsyncExecNotification: asyncSchemaChangerDisabled,
@@ -903,7 +904,7 @@ func TestTableMutationQueue(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	// Disable synchronous and asynchronous schema change processing so that
 	// the mutations get queued up.
-	params, _ := createTestServerParams()
+	params, _ := tests.CreateTestServerParams()
 	params.Knobs = base.TestingKnobs{
 		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
 			SyncFilter: func(tscc sql.TestingSchemaChangerCollection) {
@@ -1006,7 +1007,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR UNIQUE);
 func TestAddingFKs(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	params, _ := createTestServerParams()
+	params, _ := tests.CreateTestServerParams()
 	s, sqlDB, kvDB := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.TODO())
 

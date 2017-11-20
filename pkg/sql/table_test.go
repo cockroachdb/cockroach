@@ -20,32 +20,10 @@ import (
 
 	"golang.org/x/net/context"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
-
-// CreateTestTableDescriptor converts a SQL string to a table for test purposes.
-// Will fail on complex tables where that operation requires e.g. looking up
-// other tables or otherwise utilizing a planner, since the planner used here is
-// just a zero value placeholder.
-func CreateTestTableDescriptor(
-	ctx context.Context,
-	parentID, id sqlbase.ID,
-	schema string,
-	privileges *sqlbase.PrivilegeDescriptor,
-) (sqlbase.TableDescriptor, error) {
-	stmt, err := parser.ParseOne(schema)
-	if err != nil {
-		return sqlbase.TableDescriptor{}, err
-	}
-	p := planner{session: new(Session)}
-	p.evalCtx = tree.MakeTestingEvalContext()
-	return p.makeTableDesc(ctx, stmt.(*tree.CreateTable), parentID, id, hlc.Timestamp{}, privileges, nil)
-}
 
 func TestMakeTableDescColumns(t *testing.T) {
 	defer leaktest.AfterTest(t)()
