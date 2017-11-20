@@ -31,7 +31,7 @@ import (
 func TestInitInsecure(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	f := startCmd.Flags()
+	f := StartCmd.Flags()
 
 	testCases := []struct {
 		args     []string
@@ -76,7 +76,7 @@ func TestInitInsecure(t *testing.T) {
 func TestStartArgChecking(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	f := startCmd.Flags()
+	f := StartCmd.Flags()
 
 	testCases := []struct {
 		args     []string
@@ -86,7 +86,7 @@ func TestStartArgChecking(t *testing.T) {
 		{[]string{`--insecure=blu`}, `parsing "blu": invalid syntax`},
 		{[]string{`--store=path=`}, `no value specified`},
 		{[]string{`--store=path=blah,path=blih`}, `field was used twice`},
-		{[]string{`--store=path=~/blah`}, `store path cannot start with '~'`},
+		{[]string{`--store=path=~/blah`}, `path cannot start with '~': ~/blah`},
 		{[]string{`--store=path=./~/blah`}, ``},
 		{[]string{`--store=size=blih`}, `could not parse store size`},
 		{[]string{`--store=size=0.005`}, `store size \(0.005\) must be between 1% and 100%`},

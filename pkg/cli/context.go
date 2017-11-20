@@ -65,6 +65,14 @@ var serverCfg = func() server.Config {
 	return server.MakeConfig(context.Background(), st)
 }()
 
+// GetServerCfgStores provides direct public access to the StoreSpecList inside
+// serverCfg. This is used by CCL code to populate some fields.
+//
+// WARNING: consider very carefully whether you should be using this.
+func GetServerCfgStores() base.StoreSpecList {
+	return serverCfg.Stores
+}
+
 var baseCfg = serverCfg.Config
 var cliCtx = cliContext{Config: baseCfg}
 

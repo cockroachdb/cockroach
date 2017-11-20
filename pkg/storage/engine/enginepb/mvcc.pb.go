@@ -7,6 +7,7 @@
 	It is generated from these files:
 		storage/engine/enginepb/mvcc.proto
 		storage/engine/enginepb/mvcc3.proto
+		storage/engine/enginepb/registry.proto
 		storage/engine/enginepb/rocksdb.proto
 
 	It has these top-level messages:
@@ -14,6 +15,8 @@
 		MVCCStats
 		TxnMeta
 		MVCCNetworkStats
+		Registry
+		FileEntry
 		SSTUserProperties
 		SSTUserPropertiesCollection
 */

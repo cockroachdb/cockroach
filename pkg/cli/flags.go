@@ -55,6 +55,28 @@ func cmdTimeoutContext(ctx context.Context) (context.Context, func()) {
 	return context.WithCancel(ctx)
 }
 
+// AddPersistentPreRunE add 'fn' as a persistent pre-run function to 'cmd'.
+// If the command has an existing pre-run function, it is saved and will be called
+// at the beginning of 'fn'.
+// This allows an arbitrary number of pre-run functions with ordering based
+// on the order in which AddPersistentPreRunE is called (usually package init order).
+func AddPersistentPreRunE(cmd *cobra.Command, fn func(*cobra.Command, []string) error) {
+	// Save any existing hooks.
+	wrapped := cmd.PersistentPreRunE
+
+	cmd.PersistentPreRunE = func(cmd *cobra.Command, args []string) error {
+		// Run the previous hook if it exists.
+		if wrapped != nil {
+			if err := wrapped(cmd, args); err != nil {
+				return err
+			}
+		}
+
+		// Now we can call the new function.
+		return fn(cmd, args)
+	}
+}
+
 const usageIndentation = 8
 const wrapWidth = 79 - usageIndentation
 
@@ -171,11 +193,11 @@ func init() {
 		return setDefaultStderrVerbosity(cmd, log.Severity_WARNING)
 	}
 
-	// The following only runs for `start`.
-	startCmd.PersistentPreRunE = func(cmd *cobra.Command, _ []string) error {
+	// Add a pre-run command for `start`.
+	AddPersistentPreRunE(StartCmd, func(cmd *cobra.Command, _ []string) error {
 		extraServerFlagInit()
 		return setDefaultStderrVerbosity(cmd, log.Severity_INFO)
-	}
+	})
 
 	// Map any flags registered in the standard "flag" package into the
 	// top-level cockroach command.
@@ -212,7 +234,7 @@ func init() {
 	// Security flags.
 
 	{
-		f := startCmd.Flags()
+		f := StartCmd.Flags()
 
 		// Server flags.
 		stringFlag(f, &serverConnHost, cliflags.ServerHost, "")
@@ -298,7 +320,7 @@ func init() {
 		genHAProxyCmd,
 		quitCmd,
 		sqlShellCmd,
-		/* startCmd is covered above */
+		/* StartCmd is covered above */
 	}
 	clientCmds = append(clientCmds, rangeCmds...)
 	clientCmds = append(clientCmds, userCmds...)
