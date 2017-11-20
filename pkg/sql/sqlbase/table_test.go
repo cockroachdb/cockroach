@@ -597,7 +597,7 @@ func equivSignatures(
 		copy(info.equivSig, curParent)
 		signatures = append(signatures, info.equivSig)
 		if len(info.children) > 0 {
-			curParent = encoding.EncodeNotNullDescending(curParent)
+			curParent = encoding.EncodeInterleavedSentinel(curParent)
 			signatures = equivSignatures(info.children, curParent, signatures)
 		}
 	}
