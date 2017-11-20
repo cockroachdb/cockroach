@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/pkg/errors"
 )
 
@@ -162,8 +163,7 @@ func (p *planner) groupBy(
 	}
 
 	group := &groupNode{
-		planner: p,
-		plan:    r,
+		plan: r,
 	}
 
 	// We replace the columns in the underlying renderNode with what the
@@ -299,7 +299,7 @@ func (p *planner) groupBy(
 		log.Infof(ctx, "Group: %s", strings.Join(strs, ", "))
 	}
 
-	group.desiredOrdering = group.desiredAggregateOrdering()
+	group.desiredOrdering = group.desiredAggregateOrdering(&p.evalCtx)
 
 	return plan, group, nil
 }
@@ -307,8 +307,6 @@ func (p *planner) groupBy(
 // A groupNode implements the planNode interface and handles the grouping logic.
 // It "wraps" a planNode which is used to retrieve the ungrouped results.
 type groupNode struct {
-	planner *planner
-
 	// The source node (which returns values that feed into the aggregation).
 	plan planNode
 
@@ -397,7 +395,7 @@ func (n *groupNode) Next(params runParams) (bool, error) {
 				value = values[f.argRenderIdx]
 			}
 
-			if err := f.add(params.ctx, n.planner.session, bucket, value); err != nil {
+			if err := f.add(params.ctx, &params.p.evalCtx, bucket, value); err != nil {
 				return false, err
 			}
 		}
@@ -421,7 +419,7 @@ func (n *groupNode) Next(params runParams) (bool, error) {
 			// No input for this bucket (possible if f has a FILTER).
 			// In most cases the result is NULL but there are exceptions
 			// (like COUNT).
-			aggregateFunc = f.create(&n.planner.evalCtx)
+			aggregateFunc = f.create(&params.p.evalCtx)
 		}
 		var err error
 		n.values[i], err = aggregateFunc.Result()
@@ -444,7 +442,7 @@ func (n *groupNode) setupOutput() {
 func (n *groupNode) Close(ctx context.Context) {
 	n.plan.Close(ctx)
 	for _, f := range n.funcs {
-		f.close(ctx, n.planner.session)
+		f.close(ctx)
 	}
 	n.buckets = nil
 }
@@ -483,7 +481,12 @@ func (n *groupNode) addIsNotNullFilter(where *filterNode, render *renderNode) {
 //
 // We only have a desired ordering if we have a single MIN or MAX aggregation
 // with a simple column argument and there is no GROUP BY.
-func (n *groupNode) desiredAggregateOrdering() sqlbase.ColumnOrdering {
+//
+// TODO(knz/radu): it's expensive to instantiate the aggregate
+// function here just to determine whether it's a min or max. We could
+// instead have another variable (e.g. from the AST) tell us what type
+// of aggregation we're dealing with, and test that here.
+func (n *groupNode) desiredAggregateOrdering(evalCtx *tree.EvalContext) sqlbase.ColumnOrdering {
 	if n.numGroupCols > 0 {
 		return nil
 	}
@@ -492,7 +495,7 @@ func (n *groupNode) desiredAggregateOrdering() sqlbase.ColumnOrdering {
 		return nil
 	}
 	f := n.funcs[0]
-	impl := f.create(&n.planner.evalCtx)
+	impl := f.create(evalCtx)
 	switch impl.(type) {
 	case *builtins.MinAggregate:
 		return sqlbase.ColumnOrdering{{ColIdx: f.argRenderIdx, Direction: encoding.Ascending}}
@@ -567,7 +570,11 @@ func (v *extractAggregatesVisitor) VisitPre(expr tree.Expr) (recurse bool, newEx
 		// This expression is in the GROUP BY; it is already being rendered by the
 		// renderNode.
 		f := v.groupNode.newAggregateFuncHolder(
-			v.preRender.render[groupIdx], groupIdx, true /* ident */, builtins.NewIdentAggregate,
+			v.preRender.render[groupIdx],
+			groupIdx,
+			true, /* ident */
+			builtins.NewIdentAggregate,
+			v.planner.session.TxnState.makeBoundAccount(),
 		)
 
 		return false, v.addAggregation(f)
@@ -580,7 +587,13 @@ func (v *extractAggregatesVisitor) VisitPre(expr tree.Expr) (recurse bool, newEx
 			switch len(t.Exprs) {
 			case 0:
 				// COUNT_ROWS has no arguments.
-				f = v.groupNode.newAggregateFuncHolder(t, noRenderIdx, false /* not ident */, agg)
+				f = v.groupNode.newAggregateFuncHolder(
+					t,
+					noRenderIdx,
+					false, /* not ident */
+					agg,
+					v.planner.session.TxnState.makeBoundAccount(),
+				)
 
 			case 1:
 				argExpr := t.Exprs[0].(tree.TypedExpr)
@@ -602,7 +615,13 @@ func (v *extractAggregatesVisitor) VisitPre(expr tree.Expr) (recurse bool, newEx
 
 				argRenderIdx := v.preRender.addOrReuseRender(col, argExpr, true /* reuse */)
 
-				f = v.groupNode.newAggregateFuncHolder(t, argRenderIdx, false /* not ident */, agg)
+				f = v.groupNode.newAggregateFuncHolder(
+					t,
+					argRenderIdx,
+					false, /* not ident */
+					agg,
+					v.planner.session.TxnState.makeBoundAccount(),
+				)
 
 			default:
 				// TODO: #10495
@@ -682,7 +701,7 @@ type aggregateFuncHolder struct {
 	create        func(*tree.EvalContext) tree.AggregateFunc
 	group         *groupNode
 	buckets       map[string]tree.AggregateFunc
-	bucketsMemAcc WrappableMemoryAccount
+	bucketsMemAcc mon.BoundAccount
 	seen          map[string]struct{}
 }
 
@@ -693,6 +712,7 @@ func (n *groupNode) newAggregateFuncHolder(
 	argRenderIdx int,
 	identAggregate bool,
 	create func(*tree.EvalContext) tree.AggregateFunc,
+	acc mon.BoundAccount,
 ) *aggregateFuncHolder {
 	res := &aggregateFuncHolder{
 		expr:           expr,
@@ -701,7 +721,7 @@ func (n *groupNode) newAggregateFuncHolder(
 		group:          n,
 		identAggregate: identAggregate,
 		buckets:        make(map[string]tree.AggregateFunc),
-		bucketsMemAcc:  n.planner.session.TxnState.OpenAccount(),
+		bucketsMemAcc:  acc,
 	}
 	return res
 }
@@ -716,7 +736,7 @@ func (a *aggregateFuncHolder) setDistinct() {
 	a.seen = make(map[string]struct{})
 }
 
-func (a *aggregateFuncHolder) close(ctx context.Context, s *Session) {
+func (a *aggregateFuncHolder) close(ctx context.Context) {
 	for _, aggFunc := range a.buckets {
 		aggFunc.Close(ctx)
 	}
@@ -725,13 +745,13 @@ func (a *aggregateFuncHolder) close(ctx context.Context, s *Session) {
 	a.seen = nil
 	a.group = nil
 
-	a.bucketsMemAcc.Wtxn(s).Close(ctx)
+	a.bucketsMemAcc.Close(ctx)
 }
 
 // add accumulates one more value for a particular bucket into an aggregation
 // function.
 func (a *aggregateFuncHolder) add(
-	ctx context.Context, s *Session, bucket []byte, d tree.Datum,
+	ctx context.Context, evalCtx *tree.EvalContext, bucket []byte, d tree.Datum,
 ) error {
 	// NB: the compiler *should* optimize `myMap[string(myBytes)]`. See:
 	// https://github.com/golang/go/commit/f5f5a8b6209f84961687d993b93ea0d397f5d5bf
@@ -745,7 +765,7 @@ func (a *aggregateFuncHolder) add(
 			// skip
 			return nil
 		}
-		if err := a.bucketsMemAcc.Wtxn(s).Grow(ctx, int64(len(encoded))); err != nil {
+		if err := a.bucketsMemAcc.Grow(ctx, int64(len(encoded))); err != nil {
 			return err
 		}
 		a.seen[string(encoded)] = struct{}{}
@@ -753,7 +773,7 @@ func (a *aggregateFuncHolder) add(
 
 	impl, ok := a.buckets[string(bucket)]
 	if !ok {
-		impl = a.create(&a.group.planner.evalCtx)
+		impl = a.create(evalCtx)
 		a.buckets[string(bucket)] = impl
 	}
 
