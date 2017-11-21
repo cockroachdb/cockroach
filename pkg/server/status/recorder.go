@@ -15,6 +15,7 @@
 package status
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -221,7 +222,20 @@ func (mr *MetricsRecorder) scrapePrometheusLocked() {
 }
 
 // PrintAsText writes the current metrics values as plain-text to the writer.
+// We write metrics to a temporary buffer which is then copied to the writer.
+// This is to avoid hanging requests from holding the lock.
 func (mr *MetricsRecorder) PrintAsText(w io.Writer) error {
+	var buf bytes.Buffer
+	if err := mr.lockAndPrintAsText(&buf); err != nil {
+		return err
+	}
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+// lockAndPrintAsText grabs the recorder lock and generates the prometheus
+// metrics page.
+func (mr *MetricsRecorder) lockAndPrintAsText(w io.Writer) error {
 	mr.mu.Lock()
 	defer mr.mu.Unlock()
 	mr.scrapePrometheusLocked()
