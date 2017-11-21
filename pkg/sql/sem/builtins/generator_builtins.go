@@ -388,7 +388,7 @@ func makeJSONArrayAsTextGenerator(
 
 func makeJSONArrayGenerator(args tree.Datums, asText bool) (tree.ValueGenerator, error) {
 	target := tree.MustBeDJSON(args[0])
-	if target.JSONType() != json.ArrayJSONType {
+	if target.Type() != json.ArrayJSONType {
 		return nil, errJSONCallOnNonArray
 	}
 	return &jsonArrayGenerator{
