@@ -1486,7 +1486,7 @@ func decodeUntaggedDatum(a *DatumAlloc, t types.T, buf []byte) (tree.Datum, []by
 		if err != nil {
 			return nil, b, err
 		}
-		_, j, err := json.DecodeJSON(data)
+		j, err := json.FromEncoding(data)
 		if err != nil {
 			return nil, b, err
 		}
