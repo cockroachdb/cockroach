@@ -17,6 +17,7 @@ package sql
 import (
 	"bytes"
 	"fmt"
+	"math"
 	"sort"
 
 	"github.com/pkg/errors"
@@ -31,6 +32,7 @@ import (
 )
 
 const nonCoveringIndexPenalty = 10
+const nonMatchingCostFactor = 2
 
 // analyzeOrderingFn is the interface through which the index selection code
 // discovers how useful is the ordering provided by a certain index. The higher
@@ -437,7 +439,13 @@ func (v *indexInfo) analyzeOrdering(
 		v.reverse = true
 	}
 	weight := float64(orderCols+1) / float64(match+1)
-	v.cost *= weight
+
+	// This is largely arbitrary - we up the priority of this slightly so that it
+	// overcomes the cost of having an index with a large number of columns.
+	// See #15649 for a case where this was an issue.
+	// This uses Pow to be consistent with the other cost modifications which are
+	// all multiplicative.
+	v.cost *= math.Pow(weight, nonMatchingCostFactor)
 
 	if match == orderCols && preferOrderMatching {
 		// Offset the non-covering index cost penalty.

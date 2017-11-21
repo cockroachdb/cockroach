@@ -597,6 +597,38 @@ SELECT * FROM t12022@i WHERE (c1, c2) < (2, true) ORDER BY (c1, c2);
 1  true
 2  false
 
+# Regression tests for #15649.
+
+statement ok
+CREATE TABLE test15649 (
+  id INT NOT NULL,
+  midname STRING NULL,
+  name STRING NULL,
+  CONSTRAINT "primary" PRIMARY KEY (id ASC),
+  INDEX test_name_idx (name ASC),
+  FAMILY "primary" (id, midname, name)
+)
+
+query ITTT
+EXPLAIN SELECT id FROM test15649 ORDER BY id asc LIMIT 10 offset 100;
+----
+0  limit   ·      ·
+1  render  ·      ·
+2  scan    ·      ·
+2  ·       table  test15649@primary
+2  ·       spans  ALL
+2  ·       limit  110
+
+query ITTT
+EXPLAIN SELECT id FROM test15649 ORDER BY id asc LIMIT 10 offset 10000;
+----
+0  limit   ·      ·
+1  render  ·      ·
+2  scan    ·      ·
+2  ·       table  test15649@primary
+2  ·       spans  ALL
+2  ·       limit  10010
+
 # Check that no extraneous rows are fetched due to excessive batching (#15910)
 # The test is composed of three parts: populate a table, check
 # that the problematic plan is properly derived from the test query,
