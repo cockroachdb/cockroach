@@ -1683,7 +1683,7 @@ func TestRestoreAsOfSystemTime(t *testing.T) {
 
 	fullBackup, latestBackup := filepath.Join(dir, "full"), filepath.Join(dir, "latest")
 	sqlDB.Exec(t,
-		fmt.Sprintf(`BACKUP DATABASE data TO $1 AS OF SYSTEM TIME %s WITH revision_history`, ts[2]),
+		fmt.Sprintf(`BACKUP DATABASE data TO $1 AS OF SYSTEM TIME %s WITH experimental_revision_history`, ts[2]),
 		fullBackup,
 	)
 	sqlDB.Exec(t,
@@ -1706,7 +1706,7 @@ func TestRestoreAsOfSystemTime(t *testing.T) {
 
 	incBackup := filepath.Join(dir, "inc")
 	sqlDB.Exec(t,
-		`BACKUP DATABASE data TO $1 INCREMENTAL FROM $2 WITH revision_history`,
+		`BACKUP DATABASE data TO $1 INCREMENTAL FROM $2 WITH experimental_revision_history`,
 		incBackup, fullBackup,
 	)
 
@@ -1717,7 +1717,7 @@ func TestRestoreAsOfSystemTime(t *testing.T) {
 			sqlDB.Exec(t, fmt.Sprintf(`CREATE DATABASE %s`, name))
 			rowCount := sqlDB.QueryStr(t,
 				fmt.Sprintf(
-					`SELECT rows FROM [RESTORE data.* FROM $1, $2 AS OF SYSTEM TIME %s WITH into_db='%s']`,
+					`SELECT rows FROM [RESTORE data.* FROM $1, $2 EXPERIMENTAL AS OF SYSTEM TIME %s WITH into_db='%s']`,
 					timestamp, name,
 				),
 				fullBackup, incBackup,
@@ -1736,7 +1736,7 @@ func TestRestoreAsOfSystemTime(t *testing.T) {
 		// to times in the middle.
 		sqlDB.Exec(t, `CREATE DATABASE err`)
 		_, err := sqlDB.DB.Exec(
-			fmt.Sprintf(`RESTORE data.* FROM $1 AS OF SYSTEM TIME %s WITH into_db='err'`, ts[1]),
+			fmt.Sprintf(`RESTORE data.* FROM $1 EXPERIMENTAL AS OF SYSTEM TIME %s WITH into_db='err'`, ts[1]),
 			latestBackup,
 		)
 		if !testutils.IsError(err, "incompatible RESTORE timestamp") {

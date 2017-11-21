@@ -816,7 +816,7 @@ func (u *sqlSymUnion) scrubOption() tree.ScrubOption {
 %type <tree.TableExpr> relation_expr_opt_alias
 %type <tree.SelectExpr> target_elem
 %type <*tree.UpdateExpr> single_set_clause
-%type <tree.AsOfClause> opt_as_of_clause
+%type <tree.AsOfClause> as_of_clause opt_as_of_clause
 
 %type <str> explain_option_name
 %type <[]string> explain_option_list
@@ -1436,9 +1436,13 @@ backup_stmt:
 //
 // %SeeAlso: BACKUP, WEBDOCS/restore.html
 restore_stmt:
-  RESTORE targets FROM string_or_placeholder_list opt_as_of_clause opt_with_options
+  RESTORE targets FROM string_or_placeholder_list opt_with_options
   {
-    $$.val = &tree.Restore{Targets: $2.targetList(), From: $4.exprs(), AsOf: $5.asOfClause(), Options: $6.kvOptions()}
+    $$.val = &tree.Restore{Targets: $2.targetList(), From: $4.exprs(), Options: $5.kvOptions()}
+  }
+| RESTORE targets FROM string_or_placeholder_list EXPERIMENTAL as_of_clause opt_with_options
+  {
+    $$.val = &tree.Restore{Targets: $2.targetList(), From: $4.exprs(), AsOf: $6.asOfClause(), Options: $7.kvOptions()}
   }
 | RESTORE error // SHOW HELP: RESTORE
 
@@ -4701,11 +4705,14 @@ opt_alias_clause:
     $$.val = tree.AliasClause{}
   }
 
-opt_as_of_clause:
+  as_of_clause:
   AS_LA OF SYSTEM TIME a_expr_const
   {
     $$.val = tree.AsOfClause{Expr: $5.expr()}
   }
+
+opt_as_of_clause:
+  as_of_clause
 | /* EMPTY */
   {
     $$.val = tree.AsOfClause{}
