@@ -201,7 +201,7 @@ func (txn *Txn) SetUserPriority(userPriority roachpb.UserPriority) error {
 		return errors.Errorf("cannot change the user priority of a running transaction")
 	}
 	if userPriority < roachpb.MinUserPriority || userPriority > roachpb.MaxUserPriority {
-		return errors.Errorf("the given user priority %f is out of the allowed range [%f, %d]",
+		return errors.Errorf("the given user priority %f is out of the allowed range [%f, %f]",
 			userPriority, roachpb.MinUserPriority, roachpb.MaxUserPriority)
 	}
 	txn.mu.UserPriority = userPriority
