@@ -293,34 +293,9 @@ func (r *renderNode) Close(ctx context.Context) { r.source.plan.Close(ctx) }
 func (p *planner) initFrom(
 	ctx context.Context, r *renderNode, parsed *tree.SelectClause, scanVisibility scanVisibility,
 ) error {
-	if parsed.From.AsOf.Expr != nil {
-		// If AS OF SYSTEM TIME is specified in any part of the query,
-		// then it must be consistent with what is known to the
-		// Executor.
-
-		// At this point, the executor only knows how to recognize AS OF
-		// SYSTEM TIME at the top level. When it finds it there,
-		// p.asOfSystemTime is set. If AS OF SYSTEM TIME wasn't found
-		// there, we cannot accept it anywhere else either.
-		// TODO(anyone): this restriction might be lifted if we support
-		// table readers at arbitrary timestamps, and each FROM clause
-		// can have its own timestamp. In that case, the timestamp
-		// would not be set globally for the entire txn.
-		if !p.asOfSystemTime {
-			return fmt.Errorf("AS OF SYSTEM TIME must be provided on a top level SELECT statement")
-		}
-
-		// The Executor found an AS OF SYSTEM TIME clause at the top
-		// level. We accept AS OF SYSTEM TIME in multiple places (e.g. in
-		// subqueries or view queries) but they must all point to the same
-		// timestamp.
-		ts, err := EvalAsOfTimestamp(&p.evalCtx, parsed.From.AsOf, hlc.MaxTimestamp)
-		if err != nil {
-			return err
-		}
-		if ts != p.txn.OrigTimestamp() {
-			return fmt.Errorf("cannot specify AS OF SYSTEM TIME with different timestamps")
-		}
+	_, err := p.getTimestamp(parsed.From.AsOf)
+	if err != nil {
+		return err
 	}
 
 	src, err := p.getSources(ctx, parsed.From.Tables, scanVisibility)
@@ -422,6 +397,40 @@ func (p *planner) makeTupleRender(
 		return nil, err
 	}
 	return r, nil
+}
+
+// getTimestamp will get the timestamp for an AS OF clause. It will also
+// verify the timestamp against the transaction . If AS OF SYSTEM TIME
+// is specified in any part of the query, then it must be consistent
+// with what is known to the Executor.
+func (p *planner) getTimestamp(asOf tree.AsOfClause) (hlc.Timestamp, error) {
+	if asOf.Expr != nil {
+		// At this point, the executor only knows how to recognize AS OF
+		// SYSTEM TIME at the top level. When it finds it there,
+		// p.asOfSystemTime is set. If AS OF SYSTEM TIME wasn't found
+		// there, we cannot accept it anywhere else either.
+		// TODO(anyone): this restriction might be lifted if we support
+		// table readers at arbitrary timestamps, and each FROM clause
+		// can have its own timestamp. In that case, the timestamp
+		// would not be set globally for the entire txn.
+		if !p.asOfSystemTime {
+			return hlc.MaxTimestamp, fmt.Errorf("AS OF SYSTEM TIME must be provided on a top-level statement")
+		}
+
+		// The Executor found an AS OF SYSTEM TIME clause at the top
+		// level. We accept AS OF SYSTEM TIME in multiple places (e.g. in
+		// subqueries or view queries) but they must all point to the same
+		// timestamp.
+		ts, err := EvalAsOfTimestamp(&p.evalCtx, asOf, hlc.MaxTimestamp)
+		if err != nil {
+			return hlc.MaxTimestamp, err
+		}
+		if ts != p.txn.OrigTimestamp() {
+			return hlc.MaxTimestamp, fmt.Errorf("cannot specify AS OF SYSTEM TIME with different timestamps")
+		}
+		return ts, nil
+	}
+	return hlc.MaxTimestamp, nil
 }
 
 // srfExtractionVisitor replaces the innermost set-returning function in an

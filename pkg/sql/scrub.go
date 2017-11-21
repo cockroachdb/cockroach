@@ -217,6 +217,10 @@ func (n *scrubNode) startScrubDatabase(ctx context.Context, p *planner, name *tr
 func (n *scrubNode) startScrubTable(
 	ctx context.Context, p *planner, tableDesc *sqlbase.TableDescriptor, tableName *tree.TableName,
 ) error {
+	ts, err := p.getTimestamp(n.n.AsOf)
+	if err != nil {
+		return err
+	}
 	// Process SCRUB options. These are only present during a SCRUB TABLE
 	// statement.
 	var indexesSet bool
@@ -229,12 +233,8 @@ func (n *scrubNode) startScrubTable(
 				return pgerror.NewErrorf(pgerror.CodeSyntaxError,
 					"cannot specify INDEX option more than once")
 			}
-			if n.n.AsOf.Expr != nil {
-				return pgerror.NewErrorf(pgerror.CodeSyntaxError,
-					"cannot use AS OF SYSTEM TIME with INDEX option")
-			}
 			indexesSet = true
-			indexesToCheck, err := createIndexCheckOperations(v.IndexNames, tableDesc, tableName)
+			indexesToCheck, err := createIndexCheckOperations(v.IndexNames, tableDesc, tableName, ts)
 			if err != nil {
 				return err
 			}
@@ -244,7 +244,7 @@ func (n *scrubNode) startScrubTable(
 				return pgerror.NewErrorf(pgerror.CodeSyntaxError,
 					"cannot specify PHYSICAL option more than once")
 			}
-			if n.n.AsOf.Expr != nil {
+			if ts != hlc.MaxTimestamp {
 				return pgerror.NewErrorf(pgerror.CodeSyntaxError,
 					"cannot use AS OF SYSTEM TIME with PHYSICAL option")
 			}
@@ -255,7 +255,7 @@ func (n *scrubNode) startScrubTable(
 				return pgerror.NewErrorf(pgerror.CodeSyntaxError,
 					"cannot specify CONSTRAINT option more than once")
 			}
-			if n.n.AsOf.Expr != nil {
+			if ts != hlc.MaxTimestamp {
 				return pgerror.NewErrorf(pgerror.CodeSyntaxError,
 					"cannot use AS OF SYSTEM TIME with CONSTRAINT option")
 			}
@@ -274,7 +274,8 @@ func (n *scrubNode) startScrubTable(
 	// When no options are provided the default behavior is to run
 	// exhaustive checks.
 	if len(n.n.Options) == 0 {
-		indexesToCheck, err := createIndexCheckOperations(nil /* indexNames */, tableDesc, tableName)
+		indexesToCheck, err := createIndexCheckOperations(nil /* indexNames */, tableDesc, tableName,
+			ts)
 		if err != nil {
 			return err
 		}
@@ -289,7 +290,6 @@ func (n *scrubNode) startScrubTable(
 
 		// TODO(joey): Initialize physical index to check.
 	}
-
 	return nil
 }
 
@@ -353,6 +353,7 @@ type indexCheckOperation struct {
 	tableName *tree.TableName
 	tableDesc *sqlbase.TableDescriptor
 	indexDesc *sqlbase.IndexDescriptor
+	asOf      hlc.Timestamp
 
 	// columns is a list of the columns returned by one side of the
 	// queries join. The actual resulting rows from the RowContainer is
@@ -375,12 +376,16 @@ type indexCheckRun struct {
 }
 
 func newIndexCheckOperation(
-	tableName *tree.TableName, tableDesc *sqlbase.TableDescriptor, indexDesc *sqlbase.IndexDescriptor,
+	tableName *tree.TableName,
+	tableDesc *sqlbase.TableDescriptor,
+	indexDesc *sqlbase.IndexDescriptor,
+	asOf hlc.Timestamp,
 ) *indexCheckOperation {
 	return &indexCheckOperation{
 		tableName: tableName,
 		tableDesc: tableDesc,
 		indexDesc: indexDesc,
+		asOf:      asOf,
 	}
 }
 
@@ -402,10 +407,11 @@ func (o *indexCheckOperation) Start(params runParams) error {
 		return err
 	}
 
-	checkQuery := createIndexCheckQuery(columnNames, o.tableDesc, o.tableName, o.indexDesc)
+	checkQuery := createIndexCheckQuery(columnNames, o.tableDesc, o.tableName, o.indexDesc, o.asOf)
 	plan, err := params.p.delegateQuery(ctx, "SCRUB TABLE ... WITH OPTIONS INDEX", checkQuery, nil, nil)
 	if err != nil {
-		return err
+		log.Errorf(ctx, "failed to create query plan for query: %s", checkQuery)
+		return errors.Wrapf(err, "could not create query plan")
 	}
 
 	// All columns projected in the plan generated from the query are
@@ -627,8 +633,8 @@ func tableColumnsProjection(tableName string, columns []string) string {
 }
 
 // createIndexCheckQuery will make the index check query for a given
-// table and secondary index.
-// For example, given the following table schema:
+// table and secondary index. It will also take into account an AS OF
+// SYSTEM TIME clause. For example, given the following table schema:
 //
 //   CREATE TABLE test (
 //     k INT, s INT, v INT, misc INT,
@@ -676,16 +682,24 @@ func createIndexCheckQuery(
 	tableDesc *sqlbase.TableDescriptor,
 	tableName *tree.TableName,
 	indexDesc *sqlbase.IndexDescriptor,
+	asOf hlc.Timestamp,
 ) string {
+	var asOfClauseStr string
+	// If SCRUB is called with AS OF SYSTEM TIME <expr> the
+	// checkIndexQuery will also include the as of clause.
+	if asOf != hlc.MaxTimestamp {
+		asOfClauseStr = fmt.Sprintf("AS OF SYSTEM TIME %d", asOf.WallTime)
+	}
+
 	// We need to make sure we can handle the non-public column `rowid`
 	// that is created for implicit primary keys. In order to do so, the
 	// rendered columns need to explicit in the inner selects.
 	const checkIndexQuery = `
 				SELECT %[1]s, %[2]s
 				FROM
-					(SELECT %[9]s FROM %[3]s@{FORCE_INDEX=[1],NO_INDEX_JOIN} ORDER BY %[5]s) AS leftside
+					(SELECT %[9]s FROM %[3]s@{FORCE_INDEX=[1],NO_INDEX_JOIN} %[10]s ORDER BY %[5]s) AS leftside
 				FULL OUTER JOIN
-					(SELECT %[9]s FROM %[3]s@{FORCE_INDEX=[%[4]d],NO_INDEX_JOIN} ORDER BY %[5]s) AS rightside
+					(SELECT %[9]s FROM %[3]s@{FORCE_INDEX=[%[4]d],NO_INDEX_JOIN} %[10]s ORDER BY %[5]s) AS rightside
 					ON %[6]s
 				WHERE (%[7]s) OR
 							(%[8]s)`
@@ -699,6 +713,7 @@ func createIndexCheckQuery(
 		tableColumnsIsNullPredicate("leftside", tableDesc.PrimaryIndex.ColumnNames, "AND", true /* isNull */),  // 7
 		tableColumnsIsNullPredicate("rightside", tableDesc.PrimaryIndex.ColumnNames, "AND", true /* isNull */), // 8
 		strings.Join(columnNames, ","),                                                                         // 9
+		asOfClauseStr,                                                                                          // 10
 	)
 }
 
@@ -708,7 +723,10 @@ func createIndexCheckQuery(
 // TableDescriptor.FindIndexByName(), but this will only report the
 // first invalid index.
 func createIndexCheckOperations(
-	indexNames tree.NameList, tableDesc *sqlbase.TableDescriptor, tableName *tree.TableName,
+	indexNames tree.NameList,
+	tableDesc *sqlbase.TableDescriptor,
+	tableName *tree.TableName,
+	asOf hlc.Timestamp,
 ) (results []checkOperation, err error) {
 	if indexNames == nil {
 		// Populate results with all secondary indexes of the
@@ -718,6 +736,7 @@ func createIndexCheckOperations(
 				tableName,
 				tableDesc,
 				&tableDesc.Indexes[i],
+				asOf,
 			))
 		}
 		return results, nil
@@ -734,6 +753,7 @@ func createIndexCheckOperations(
 				tableName,
 				tableDesc,
 				&tableDesc.Indexes[i],
+				asOf,
 			))
 			delete(names, tableDesc.Indexes[i].Name)
 		}
