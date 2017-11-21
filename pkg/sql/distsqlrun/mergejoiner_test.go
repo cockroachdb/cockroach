@@ -345,6 +345,44 @@ func TestMergeJoiner(t *testing.T) {
 				{null, v[5], v[1]},
 			},
 		},
+		{
+			spec: MergeJoinerSpec{
+				LeftOrdering: convertToSpecOrdering(
+					sqlbase.ColumnOrdering{
+						{ColIdx: 0, Direction: encoding.Ascending},
+						{ColIdx: 1, Direction: encoding.Ascending},
+					}),
+				RightOrdering: convertToSpecOrdering(
+					sqlbase.ColumnOrdering{
+						{ColIdx: 0, Direction: encoding.Ascending},
+						{ColIdx: 1, Direction: encoding.Ascending},
+					}),
+				Type: JoinType_FULL_OUTER,
+			},
+			outCols: []uint32{0, 1, 2, 3},
+			inputs: []sqlbase.EncDatumRows{
+				{
+					{null, v[4]},
+					{v[0], null},
+					{v[0], v[1]},
+					{v[2], v[4]},
+				},
+				{
+					{null, v[4]},
+					{v[0], null},
+					{v[0], v[1]},
+					{v[2], v[4]},
+				},
+			},
+			expected: sqlbase.EncDatumRows{
+				{null, v[4], null, null},
+				{null, null, null, v[4]},
+				{v[0], null, null, null},
+				{null, null, v[0], null},
+				{v[0], v[1], v[0], v[1]},
+				{v[2], v[4], v[2], v[4]},
+			},
+		},
 	}
 
 	for _, c := range testCases {
