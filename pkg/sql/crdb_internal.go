@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
+	"github.com/cockroachdb/cockroach/pkg/server/status"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/jobs"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
@@ -74,6 +75,7 @@ var crdbInternal = virtualSchema{
 		crdbInternalTableIndexesTable,
 		crdbInternalTablesTable,
 		crdbInternalZonesTable,
+		crdbInternalNodesTable,
 	},
 }
 
@@ -1566,6 +1568,58 @@ CREATE TABLE crdb_internal.zones (
 						return err
 					}
 				}
+			}
+		}
+		return nil
+	},
+}
+
+var crdbInternalNodesTable = virtualSchemaTable{
+	schema: `CREATE TABLE crdb_internal.nodes (
+	id INT NOT NULL,
+	address TEXT NOT NULL,
+	attrs STRING[] NOT NULL,
+	locality JSONB NOT NULL,
+	version TEXT NOT NULL
+)`,
+	populate: func(ctx context.Context, p *planner, prefix string, addRow func(...tree.Datum) error) error {
+		startKey := keys.StatusNodePrefix
+		endKey := startKey.PrefixEnd()
+
+		b := &client.Batch{}
+		b.Scan(startKey, endKey)
+		if err := p.txn.Run(ctx, b); err != nil {
+			return err
+		}
+		rows := b.Results[0].Rows
+
+		for _, row := range rows {
+			var nodeStatus status.NodeStatus
+			if err := row.ValueProto(&nodeStatus); err != nil {
+				return err
+			}
+			// construct locality json
+			locality := map[string]interface{}{}
+			for _, tier := range nodeStatus.Desc.Locality.Tiers {
+				locality[tier.Key] = tier.Value
+			}
+			localityJson, err := tree.MakeDJSON(locality)
+			if err != nil {
+				return err
+			}
+			// construct attrs array
+			attrsArr := tree.NewDArray(types.String)
+			for _, attr := range nodeStatus.Desc.Attrs.Attrs {
+				attrsArr.Append(tree.NewDString(attr))
+			}
+			if err := addRow(
+				tree.NewDInt(tree.DInt(int32(nodeStatus.Desc.NodeID))),
+				tree.NewDString(nodeStatus.Desc.Address.String()),
+				attrsArr,
+				localityJson,
+				tree.NewDString(nodeStatus.Desc.ServerVersion.String()),
+			); err != nil {
+				return err
 			}
 		}
 		return nil
