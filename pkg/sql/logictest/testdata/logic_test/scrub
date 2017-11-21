@@ -107,8 +107,8 @@ EXPERIMENTAL SCRUB TABLE test.fk_parent WITH OPTIONS CONSTRAINT (fkey)
 
 # Test AS OF SYSTEM TIME
 
-statement error cannot use AS OF SYSTEM TIME with PHYSICAL option
+statement error database "test" does not exist
 EXPERIMENTAL SCRUB TABLE xz AS OF SYSTEM TIME '2017' WITH OPTIONS PHYSICAL
 
-statement error cannot use AS OF SYSTEM TIME with INDEX option
+statement error database "test" does not exist
 EXPERIMENTAL SCRUB TABLE xz AS OF SYSTEM TIME '2017' WITH OPTIONS INDEX ALL
