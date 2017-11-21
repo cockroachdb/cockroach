@@ -583,6 +583,7 @@ func (u *sqlSymUnion) scrubOption() tree.ScrubOption {
 %type <tree.Statement> scrub_stmt
 %type <tree.Statement> scrub_database_stmt
 %type <tree.Statement> scrub_table_stmt
+%type <tree.ScrubOptions> opt_scrub_options_clause
 %type <tree.ScrubOptions> scrub_option_list
 %type <tree.ScrubOption> scrub_option
 
@@ -2181,15 +2182,21 @@ scrub_database_stmt:
 //   EXPERIMENTAL SCRUB TABLE ... WITH OPTIONS PHYSICAL
 // %SeeAlso: SCRUB DATABASE, SRUB
 scrub_table_stmt:
-  EXPERIMENTAL SCRUB TABLE qualified_name
+  EXPERIMENTAL SCRUB TABLE qualified_name opt_scrub_options_clause
   {
-    $$.val = &tree.Scrub{Typ: tree.ScrubTable, Table: $4.normalizableTableName()}
-  }
-| EXPERIMENTAL SCRUB TABLE qualified_name WITH OPTIONS scrub_option_list
-  {
-    $$.val = &tree.Scrub{Typ: tree.ScrubTable, Table: $4.normalizableTableName(), Options: $7.scrubOptions()}
+    $$.val = &tree.Scrub{Typ: tree.ScrubTable, Table: $4.normalizableTableName(), Options: $5.scrubOptions()}
   }
 | EXPERIMENTAL SCRUB TABLE error // SHOW HELP: SCRUB TABLE
+
+opt_scrub_options_clause:
+  WITH OPTIONS scrub_option_list
+  {
+    $$.val = $3.scrubOptions()
+  }
+| /* EMPTY */
+  {
+    $$.val = tree.ScrubOptions{}
+  }
 
 scrub_option_list:
   scrub_option
