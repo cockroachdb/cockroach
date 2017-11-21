@@ -71,3 +71,80 @@ query T
 SELECT jsonb_typeof('null'::JSON)
 ----
 null
+
+
+## json_array_elements and jsonb_array_elements
+
+query T
+SELECT json_array_elements('[1, 2, 3]'::JSON)
+----
+1
+2
+3
+
+query T
+SELECT jsonb_array_elements('[1, 2, 3]'::JSON)
+----
+1
+2
+3
+
+query T
+SELECT json_array_elements('[1, true, null, "text", -1.234, {"2": 3, "4": "5"}, [1, 2, 3]]'::JSON)
+----
+1
+true
+null
+"text"
+-1.234
+{"2":3,"4":"5"}
+[1,2,3]
+
+query T
+SELECT json_array_elements('[]'::JSON)
+----
+
+
+query error pq: json_array_elements\(\): cannot be called on a non-array
+SELECT json_array_elements('{"1": 2}'::JSON)
+
+query error pq: jsonb_array_elements\(\): cannot be called on a non-array
+SELECT jsonb_array_elements('{"1": 2}'::JSON)
+
+
+## json_array_elements_text and jsonb_array_elements_text
+
+query T
+SELECT json_array_elements_text('[1, 2, 3]'::JSON)
+----
+1
+2
+3
+
+query T
+SELECT json_array_elements_text('[1, 2, 3]'::JSON)
+----
+1
+2
+3
+
+query T
+SELECT json_array_elements_text('[1, true, null, "text", -1.234, {"2": 3, "4": "5"}, [1, 2, 3]]'::JSON)
+----
+1
+true
+NULL
+text
+-1.234
+{"2":3,"4":"5"}
+[1,2,3]
+
+query T
+SELECT json_array_elements('[]'::JSON)
+----
+
+query error pq: json_array_elements_text\(\): cannot be called on a non-array
+SELECT json_array_elements_text('{"1": 2}'::JSON)
+
+query error pq: jsonb_array_elements_text\(\): cannot be called on a non-array
+SELECT jsonb_array_elements_text('{"1": 2}'::JSON)
