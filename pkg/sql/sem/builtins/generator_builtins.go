@@ -105,6 +105,8 @@ var Generators = map[string][]tree.Builtin{
 	"jsonb_array_elements":      {jsonArrayElementsImpl},
 	"json_array_elements_text":  {jsonArrayElementsTextImpl},
 	"jsonb_array_elements_text": {jsonArrayElementsTextImpl},
+	"json_object_keys":          {jsonObjectKeysImpl},
+	"jsonb_object_keys":         {jsonObjectKeysImpl},
 }
 
 func makeGeneratorBuiltin(
@@ -439,4 +441,66 @@ func (g *jsonArrayGenerator) Values() tree.Datums {
 			JSON: val,
 		},
 	}
+}
+
+// jsonObjectKeysImpl is a key generator of a JSON object.
+var jsonObjectKeysImpl = makeGeneratorBuiltin(
+	tree.ArgTypes{{"input", types.JSON}},
+	jsonObjectKeysGeneratorType,
+	makeJSONObjectKeysGenerator,
+	"Returns sorted set of keys in the outermost JSON object.",
+)
+
+var jsonObjectKeysGeneratorType = types.TTable{
+	Cols:   types.TTuple{types.String},
+	Labels: []string{"json_object_keys"},
+}
+
+type jsonObjectKeysGenerator struct {
+	json      tree.DJSON
+	nextIndex int
+}
+
+var errJSONCallOnNonObject = pgerror.NewError(pgerror.CodeInvalidParameterValueError,
+	"cannot be called on a non-object")
+
+func makeJSONObjectKeysGenerator(
+	_ *tree.EvalContext, args tree.Datums,
+) (tree.ValueGenerator, error) {
+	target := tree.MustBeDJSON(args[0])
+	if target.Type() != json.ObjectJSONType {
+		return nil, errJSONCallOnNonObject
+	}
+	return &jsonObjectKeysGenerator{
+		json: target,
+	}, nil
+}
+
+// ResolvedType implements the tree.ValueGenerator interface.
+func (g *jsonObjectKeysGenerator) ResolvedType() types.TTable {
+	return jsonObjectKeysGeneratorType
+}
+
+// Start implements the tree.ValueGenerator interface.
+func (g *jsonObjectKeysGenerator) Start() error {
+	g.nextIndex = -1
+	return nil
+}
+
+// Close implements the tree.ValueGenerator interface.
+func (g *jsonObjectKeysGenerator) Close() {}
+
+// Next implements the tree.ValueGenerator interface.
+func (g *jsonObjectKeysGenerator) Next() (bool, error) {
+	g.nextIndex++
+	return g.json.FetchKeyIdx(g.nextIndex) != nil, nil
+}
+
+// Values implements the tree.ValueGenerator interface.
+func (g *jsonObjectKeysGenerator) Values() tree.Datums {
+	text := g.json.FetchKeyIdx(g.nextIndex).AsText()
+	if text == nil {
+		return tree.Datums{tree.DNull}
+	}
+	return tree.Datums{tree.NewDString(*text)}
 }

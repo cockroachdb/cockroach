@@ -74,6 +74,10 @@ type JSON interface {
 	// and tries to access the given index.
 	FetchValKeyOrIdx(key string) JSON
 
+	// FetchKeyIdx is used for accessing keys of an object, and it returns nil if the key
+	// is not found or obj is not an object.
+	FetchKeyIdx(idx int) JSON
+
 	// RemoveKey implements the `-` operator for strings.
 	RemoveKey(key string) (JSON, error)
 
@@ -599,6 +603,20 @@ func (jsonTrue) FetchValKeyOrIdx(string) JSON   { return nil }
 func (jsonFalse) FetchValKeyOrIdx(string) JSON  { return nil }
 func (jsonString) FetchValKeyOrIdx(string) JSON { return nil }
 func (jsonNumber) FetchValKeyOrIdx(string) JSON { return nil }
+
+func (jsonNull) FetchKeyIdx(int) JSON   { return nil }
+func (jsonTrue) FetchKeyIdx(int) JSON   { return nil }
+func (jsonFalse) FetchKeyIdx(int) JSON  { return nil }
+func (jsonString) FetchKeyIdx(int) JSON { return nil }
+func (jsonNumber) FetchKeyIdx(int) JSON { return nil }
+func (jsonArray) FetchKeyIdx(int) JSON  { return nil }
+
+func (j jsonObject) FetchKeyIdx(idx int) JSON {
+	if idx >= len(j) {
+		return nil
+	}
+	return j[idx].k
+}
 
 var errCannotDeleteFromScalar = pgerror.NewError(pgerror.CodeInvalidParameterValueError, "cannot delete from scalar")
 var errCannotDeleteFromObject = pgerror.NewError(pgerror.CodeInvalidParameterValueError, "cannot delete from object using integer index")
