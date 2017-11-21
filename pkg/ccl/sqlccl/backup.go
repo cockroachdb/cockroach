@@ -168,6 +168,36 @@ func allSQLDescriptors(ctx context.Context, txn *client.Txn) ([]sqlbase.Descript
 	return sqlDescs, nil
 }
 
+func ensureInterleavesIncluded(tables []*sqlbase.TableDescriptor) error {
+	inBackup := make(map[sqlbase.ID]bool, len(tables))
+	for _, t := range tables {
+		inBackup[t.ID] = true
+	}
+
+	for _, table := range tables {
+		if err := table.ForeachNonDropIndex(func(index *sqlbase.IndexDescriptor) error {
+			for _, a := range index.Interleave.Ancestors {
+				if !inBackup[a.TableID] {
+					return errors.Errorf(
+						"cannot backup table %q without interleave parent (ID %d)", table.Name, a.TableID,
+					)
+				}
+			}
+			for _, c := range index.InterleavedBy {
+				if !inBackup[c.Table] {
+					return errors.Errorf(
+						"cannot backup table %q without interleave child table (ID %d)", table.Name, c.Table,
+					)
+				}
+			}
+			return nil
+		}); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func allRangeDescriptors(ctx context.Context, txn *client.Txn) ([]roachpb.RangeDescriptor, error) {
 	rows, err := txn.Scan(ctx, keys.Meta2Prefix, keys.MetaMax, 0)
 	if err != nil {
@@ -695,6 +725,10 @@ func backupPlanHook(
 				}
 				tables = append(tables, tableDesc)
 			}
+		}
+
+		if err := ensureInterleavesIncluded(tables); err != nil {
+			return err
 		}
 
 		spans := spansForAllTableIndexes(tables)
