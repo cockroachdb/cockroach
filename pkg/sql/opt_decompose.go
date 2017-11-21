@@ -20,14 +20,11 @@ import (
 	"regexp"
 	"strings"
 
-	"golang.org/x/net/context"
-
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 )
 
-// analyzeExpr analyzes and simplifies an expression, returning a list of
+// decomposeExpr analyzes and simplifies an expression, returning a list of
 // expressions of a list of expressions. The top-level list contains
 // disjunctions (a.k.a OR expressions). The second-level contains conjunctions
 // (a.k.a. AND expressions). For example:
@@ -41,12 +38,12 @@ import (
 // of WHERE clauses where we care about not-true for filtering
 // purposes. Additionally, expressions that analysis does not handle will be
 // transformed into true. The caller is required to use the original expression
-// (which will be unchanged by analyzeExpr) for filtering.
+// (which will be unchanged by decomposeExpr) for filtering.
 //
 // Returns false for equivalent if the resulting expressions are not equivalent
 // to the originals. This occurs for expressions which are currently not
 // handled by simplification (they are replaced by "true").
-func analyzeExpr(
+func decomposeExpr(
 	evalCtx *tree.EvalContext, e tree.TypedExpr,
 ) (exprs []tree.TypedExprs, equivalent bool) {
 	e, equivalent = simplifyExpr(evalCtx, e)
@@ -1671,62 +1668,4 @@ func makeIsNotNull(left tree.TypedExpr) tree.TypedExpr {
 		left,
 		tree.DNull,
 	)
-}
-
-// analyzeExpr performs semantic analysis of an expression, including:
-// - replacing sub-queries by a sql.subquery node;
-// - resolving names (optional);
-// - type checking (with optional type enforcement);
-// - normalization.
-// The parameters sources and IndexedVars, if both are non-nil, indicate
-// name resolution should be performed. The IndexedVars map will be filled
-// as a result.
-func (p *planner) analyzeExpr(
-	ctx context.Context,
-	raw tree.Expr,
-	sources multiSourceInfo,
-	iVarHelper tree.IndexedVarHelper,
-	expectedType types.T,
-	requireType bool,
-	typingContext string,
-) (tree.TypedExpr, error) {
-	// Replace the sub-queries.
-	// In all contexts that analyze a single expression, a single value
-	// is expected. Tell this to replaceSubqueries.  (See UPDATE for a
-	// counter-example; cases where a subquery is an operand of a
-	// comparison are handled specially in the subqueryVisitor already.)
-	replaced, err := p.replaceSubqueries(ctx, raw, 1 /* one value expected */)
-	if err != nil {
-		return nil, err
-	}
-
-	// Perform optional name resolution.
-	var resolved tree.Expr
-	if sources == nil {
-		resolved = replaced
-	} else {
-		var hasStar bool
-		resolved, _, hasStar, err = p.resolveNames(replaced, sources, iVarHelper)
-		if err != nil {
-			return nil, err
-		}
-		p.hasStar = p.hasStar || hasStar
-	}
-
-	// Type check.
-	var typedExpr tree.TypedExpr
-	p.semaCtx.IVarHelper = &iVarHelper
-	if requireType {
-		typedExpr, err = tree.TypeCheckAndRequire(resolved, &p.semaCtx,
-			expectedType, typingContext)
-	} else {
-		typedExpr, err = tree.TypeCheck(resolved, &p.semaCtx, expectedType)
-	}
-	p.semaCtx.IVarHelper = nil
-	if err != nil {
-		return nil, err
-	}
-
-	// Normalize.
-	return p.txCtx.NormalizeExpr(&p.evalCtx, typedExpr)
 }
