@@ -1,0 +1,64 @@
+// Copyright 2017 The Cockroach Authors.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
+// implied. See the License for the specific language governing
+// permissions and limitations under the License.
+
+syntax = "proto3";
+package cockroach.sql.stats;
+option go_package = "stats";
+
+import "sql/stats/histogram.proto";
+import "gogoproto/gogo.proto";
+import "google/protobuf/timestamp.proto";
+
+// Stats encodes the statistics stored in system.table_statistics
+message Stats {
+    // The ID of the table.
+    uint32 table_id = 1 [
+      (gogoproto.customname) = "TableID",
+      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sqlbase.ID"
+    ];
+
+    // The ID for this statistic.  It need not be globally unique,
+    // but must be unique for this table.
+    uint32 statistic_id = 2 [
+      (gogoproto.customname) = "StatisticID"
+    ];
+
+    // Optional user-defined name for the statistic.
+    string name = 3 [(gogoproto.nullable) = true];
+
+    // The column ID(s) for which this statistic is generated.
+    repeated uint32 column_ids = 4 [
+      (gogoproto.customname) = "ColumnIDs",
+      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sqlbase.ColumnID"
+    ];
+
+    // The time at which the statistic was created.
+    google.protobuf.Timestamp created_at = 5 [
+      (gogoproto.nullable) = false,
+      (gogoproto.stdtime) = true
+    ];
+
+    // The total number of rows in the table.
+    uint32 row_count = 6;
+
+    // The estimated number of distinct values of the columns in column_ids.
+    uint32 distinct_count = 7;
+
+    // The number of rows that have a NULL in any of the columns in column_ids.
+    uint32 null_count = 8;
+
+    // Optional, and can only be set if there is a single column in column_ids.
+    // Defines a histogram of the distribution of values in the column.
+    HistogramData histogram = 9 [(gogoproto.nullable) = true];
+}

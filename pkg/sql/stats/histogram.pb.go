@@ -6,9 +6,11 @@
 
 	It is generated from these files:
 		sql/stats/histogram.proto
+		sql/stats/stats.proto
 
 	It has these top-level messages:
 		HistogramData
+		Stats
 */
 package stats
 
