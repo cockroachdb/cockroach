@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
+	"github.com/cockroachdb/cockroach/pkg/util/json"
 )
 
 // See the comments at the start of generators.go for details about
@@ -100,6 +101,10 @@ var Generators = map[string][]tree.Builtin{
 				"This function is used only by CockroachDB's developers for testing purposes.",
 		),
 	},
+	"json_array_elements":       {jsonArrayElementsImpl},
+	"jsonb_array_elements":      {jsonArrayElementsImpl},
+	"json_array_elements_text":  {jsonArrayElementsTextImpl},
+	"jsonb_array_elements_text": {jsonArrayElementsTextImpl},
 }
 
 func makeGeneratorBuiltin(
@@ -335,3 +340,103 @@ func (s *unaryValueGenerator) Next() (bool, error) {
 
 // Values implements the tree.ValueGenerator interface.
 func (s *unaryValueGenerator) Values() tree.Datums { return tree.Datums{} }
+
+var jsonArrayElementsImpl = makeGeneratorBuiltin(
+	tree.ArgTypes{{"input", types.JSON}},
+	jsonArrayGeneratorType,
+	makeJSONArrayAsJSONGenerator,
+	"Expands a JSON array to a set of JSON values.",
+)
+
+var jsonArrayElementsTextImpl = makeGeneratorBuiltin(
+	tree.ArgTypes{{"input", types.JSON}},
+	jsonArrayTextGeneratorType,
+	makeJSONArrayAsTextGenerator,
+	"Expands a JSON array to a set of text values.",
+)
+
+var jsonArrayGeneratorType = types.TTable{
+	Cols:   types.TTuple{types.JSON},
+	Labels: []string{"value"},
+}
+
+var jsonArrayTextGeneratorType = types.TTable{
+	Cols:   types.TTuple{types.String},
+	Labels: []string{"value"},
+}
+
+type jsonArrayGenerator struct {
+	json      tree.DJSON
+	nextIndex int
+	asText    bool
+}
+
+var errJSONCallOnNonArray = pgerror.NewError(pgerror.CodeInvalidParameterValueError,
+	"cannot be called on a non-array")
+
+func makeJSONArrayAsJSONGenerator(
+	_ *tree.EvalContext, args tree.Datums,
+) (tree.ValueGenerator, error) {
+	return makeJSONArrayGenerator(args, false)
+}
+
+func makeJSONArrayAsTextGenerator(
+	_ *tree.EvalContext, args tree.Datums,
+) (tree.ValueGenerator, error) {
+	return makeJSONArrayGenerator(args, true)
+}
+
+func makeJSONArrayGenerator(args tree.Datums, asText bool) (tree.ValueGenerator, error) {
+	target := tree.MustBeDJSON(args[0])
+	if target.Type() != json.ArrayJSONType {
+		return nil, errJSONCallOnNonArray
+	}
+	return &jsonArrayGenerator{
+		json:   target,
+		asText: asText,
+	}, nil
+}
+
+// ResolvedType implements the tree.ValueGenerator interface.
+func (g *jsonArrayGenerator) ResolvedType() types.TTable {
+	if g.asText {
+		return jsonArrayTextGeneratorType
+	}
+	return jsonArrayGeneratorType
+}
+
+// Start implements the tree.ValueGenerator interface.
+func (g *jsonArrayGenerator) Start() error {
+	g.nextIndex = -1
+	return nil
+}
+
+// Close implements the tree.ValueGenerator interface.
+func (g *jsonArrayGenerator) Close() {}
+
+// Next implements the tree.ValueGenerator interface.
+func (g *jsonArrayGenerator) Next() (bool, error) {
+	g.nextIndex++
+	return g.json.FetchValIdx(g.nextIndex) != nil, nil
+}
+
+// Values implements the tree.ValueGenerator interface.
+func (g *jsonArrayGenerator) Values() tree.Datums {
+	val := g.json.FetchValIdx(g.nextIndex)
+	if g.asText {
+		text := val.AsText()
+		if text == nil {
+			return tree.Datums{
+				tree.DNull,
+			}
+		}
+		return tree.Datums{
+			tree.NewDString(*text),
+		}
+	}
+	return tree.Datums{
+		&tree.DJSON{
+			JSON: val,
+		},
+	}
+}
