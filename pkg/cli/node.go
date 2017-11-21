@@ -81,6 +81,7 @@ var baseNodeColumnHeaders = []string{
 	"build",
 	"updated_at",
 	"started_at",
+	"is_live",
 }
 
 var statusNodesColumnHeadersForRanges = []string{
@@ -100,7 +101,6 @@ var statusNodesColumnHeadersForStats = []string{
 }
 
 var statusNodesColumnHeadersForDecommission = []string{
-	"is_live",
 	"gossiped_replicas",
 	"is_decommissioning",
 	"is_draining",
@@ -210,8 +210,6 @@ func runStatusNodeInner(
 		sort.Slice(nodeStatuses, func(i, j int) bool {
 			return nodeStatuses[i].Desc.NodeID < nodeStatuses[j].Desc.NodeID
 		})
-		// Hide the decommissioning status response from the output table.
-		decommissionStatusResp = nil
 	}
 	return nodeStatuses, decommissionStatusResp, nil
 }
@@ -257,7 +255,8 @@ func nodeStatusesToRows(
 			hostPort,
 			build,
 			updatedAtStr,
-			startedAtStr}
+			startedAtStr,
+			strconv.FormatBool(decomStatus.Status[i].IsLive)}
 
 		if nodeCtx.statusShowAll || nodeCtx.statusShowRanges {
 			row = append(row,
@@ -278,7 +277,7 @@ func nodeStatusesToRows(
 			)
 		}
 		if nodeCtx.statusShowAll || nodeCtx.statusShowDecommission {
-			row = append(row, decommissionResponseValueToRows(decomStatus.Status)[i][1:]...)
+			row = append(row, decommissionResponseValueToRows(decomStatus.Status)[i][2:]...)
 		}
 		rows = append(rows, row)
 	}
