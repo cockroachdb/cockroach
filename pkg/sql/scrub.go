@@ -127,6 +127,8 @@ func (n *scrubNode) Start(params runParams) error {
 		return pgerror.NewErrorf(pgerror.CodeInternalError,
 			"unexpected SCRUB type received, got: %v", n.n.Typ)
 	}
+	// TODO(joey): Check the GC threshold in relation to the AS OF SYSTEM
+	// TIME clause.
 	return nil
 }
 
@@ -233,7 +235,7 @@ func (n *scrubNode) startScrubTable(
 					"cannot use AS OF SYSTEM TIME with INDEX option")
 			}
 			indexesSet = true
-			indexesToCheck, err := createIndexCheckOperations(v.IndexNames, tableDesc, tableName)
+			indexesToCheck, err := createIndexCheckOperations(v.IndexNames, tableDesc, tableName, &n.n.AsOf)
 			if err != nil {
 				return err
 			}
@@ -257,13 +259,20 @@ func (n *scrubNode) startScrubTable(
 	// When no options are provided the default behavior is to run
 	// exhaustive checks.
 	if len(n.n.Options) == 0 {
-		indexesToCheck, err := createIndexCheckOperations(nil /* indexNames */, tableDesc, tableName)
+		indexesToCheck, err := createIndexCheckOperations(nil /* indexNames */, tableDesc, tableName, &n.n.AsOf)
 		if err != nil {
 			return err
 		}
 		n.run.checkQueue = append(n.run.checkQueue, indexesToCheck...)
 		// TODO(joey): Initialize physical index to check.
 	}
+
+	// TODO(joey): Check for when the indexes are public in relation to
+	// the AS OF SYSTEM TIME clause. If they are not readable at the
+	// timestamp, do not check it.
+	// FIXME(joey): Currently, backfilling will fail to backfill
+	// historical secondary index keys, so using the AS OF SYSTEM TIME
+	// clause should not be allowed with secondary indexes.
 
 	return nil
 }
@@ -328,6 +337,7 @@ type indexCheckOperation struct {
 	tableName *tree.TableName
 	tableDesc *sqlbase.TableDescriptor
 	indexDesc *sqlbase.IndexDescriptor
+	asOf      *tree.AsOfClause
 
 	// columns is a list of the columns returned by one side of the
 	// queries join. The actual resulting rows from the RowContainer is
@@ -350,12 +360,16 @@ type indexCheckRun struct {
 }
 
 func newIndexCheckOperation(
-	tableName *tree.TableName, tableDesc *sqlbase.TableDescriptor, indexDesc *sqlbase.IndexDescriptor,
+	tableName *tree.TableName,
+	tableDesc *sqlbase.TableDescriptor,
+	indexDesc *sqlbase.IndexDescriptor,
+	asOf *tree.AsOfClause,
 ) *indexCheckOperation {
 	return &indexCheckOperation{
 		tableName: tableName,
 		tableDesc: tableDesc,
 		indexDesc: indexDesc,
+		asOf:      asOf,
 	}
 }
 
@@ -375,10 +389,11 @@ func (o *indexCheckOperation) Start(ctx context.Context, p *planner) error {
 		return err
 	}
 
-	checkQuery := createIndexCheckQuery(columnNames, o.tableDesc, o.tableName, o.indexDesc)
+	checkQuery := createIndexCheckQuery(columnNames, o.tableDesc, o.tableName, o.indexDesc, o.asOf)
 	plan, err := p.delegateQuery(ctx, "SCRUB TABLE ... WITH OPTIONS INDEX", checkQuery, nil, nil)
 	if err != nil {
-		return err
+		log.Errorf(ctx, "failed to create query plan for query: %s", checkQuery)
+		return errors.Wrapf(err, "could not create query plan")
 	}
 
 	// All columns projected in the plan generated from the query are
@@ -584,8 +599,8 @@ func tableColumnsProjection(tableName string, columns []string) string {
 }
 
 // createIndexCheckQuery will make the index check query for a given
-// table and secondary index.
-// For example, given the following table schema:
+// table and secondary index. It will also take into account an AS OF
+// SYSTEM TIME clause. For example, given the following table schema:
 //
 //   CREATE TABLE test (
 //     k INT, s INT, v INT, misc INT,
@@ -635,16 +650,26 @@ func createIndexCheckQuery(
 	tableDesc *sqlbase.TableDescriptor,
 	tableName *tree.TableName,
 	indexDesc *sqlbase.IndexDescriptor,
+	asOf *tree.AsOfClause,
 ) string {
+	var asOfClauseStr string
+	// If SCRUB is called with AS OF SYSTEM TIME <expr> the
+	// checkIndexQuery will also include the as of clause.
+	if asOf.Expr != nil {
+		var buf bytes.Buffer
+		asOf.Format(&buf, tree.FmtSimple)
+		asOfClauseStr = buf.String()
+	}
+
 	// We need to make sure we can handle the non-public column `rowid`
 	// that is created for implicit primary keys. In order to do so, the
 	// rendered columns need to explicit in the inner selects.
 	const checkIndexQuery = `
 				SELECT %[1]s, %[2]s
 				FROM
-					(SELECT %[9]s FROM %[3]s@{FORCE_INDEX=[1],NO_INDEX_JOIN} ORDER BY %[5]s) AS leftside
+					(SELECT %[9]s FROM %[3]s@{FORCE_INDEX=[1],NO_INDEX_JOIN} %[10]s ORDER BY %[5]s) AS leftside
 				FULL OUTER JOIN
-					(SELECT %[9]s FROM %[3]s@{FORCE_INDEX=[%[4]d],NO_INDEX_JOIN} ORDER BY %[5]s) AS rightside
+					(SELECT %[9]s FROM %[3]s@{FORCE_INDEX=[%[4]d],NO_INDEX_JOIN} %[10]s ORDER BY %[5]s) AS rightside
 					ON %[6]s
 				WHERE (%[7]s) OR
 							(%[8]s)`
@@ -658,6 +683,7 @@ func createIndexCheckQuery(
 		tableColumnsIsNullPredicate("leftside", tableDesc.PrimaryIndex.ColumnNames, true /* isNull */),  // 7
 		tableColumnsIsNullPredicate("rightside", tableDesc.PrimaryIndex.ColumnNames, true /* isNull */), // 8
 		strings.Join(columnNames, ","),                                                                  // 9
+		asOfClauseStr,                                                                                   // 10
 	)
 }
 
@@ -667,7 +693,10 @@ func createIndexCheckQuery(
 // TableDescriptor.FindIndexByName(), but this will only report the
 // first invalid index.
 func createIndexCheckOperations(
-	indexNames tree.NameList, tableDesc *sqlbase.TableDescriptor, tableName *tree.TableName,
+	indexNames tree.NameList,
+	tableDesc *sqlbase.TableDescriptor,
+	tableName *tree.TableName,
+	asOf *tree.AsOfClause,
 ) (results []checkOperation, err error) {
 	if indexNames == nil {
 		// Populate results with all secondary indexes of the
@@ -677,6 +706,7 @@ func createIndexCheckOperations(
 				tableName,
 				tableDesc,
 				&tableDesc.Indexes[i],
+				asOf,
 			))
 		}
 		return results, nil
@@ -693,6 +723,7 @@ func createIndexCheckOperations(
 				tableName,
 				tableDesc,
 				&tableDesc.Indexes[i],
+				asOf,
 			))
 			delete(names, tableDesc.Indexes[i].Name)
 		}
