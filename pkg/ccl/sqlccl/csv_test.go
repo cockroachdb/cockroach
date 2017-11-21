@@ -439,10 +439,9 @@ func TestImportStmt(t *testing.T) {
 	tc := testcluster.StartTestCluster(t, nodes, base.TestClusterArgs{ServerArgs: base.TestServerArgs{ExternalIODir: dir}})
 	defer tc.Stopper().Stop(ctx)
 	conn := tc.Conns[0]
+	sqlDB := sqlutils.MakeSQLRunner(conn)
 
-	if _, err := conn.Exec(`SET CLUSTER SETTING experimental.importcsv.enabled = true`); err != nil {
-		t.Fatal(err)
-	}
+	sqlDB.Exec(t, `SET CLUSTER SETTING experimental.importcsv.enabled = true`)
 
 	tablePath := filepath.Join(dir, "table")
 	if err := ioutil.WriteFile(tablePath, []byte(`
@@ -604,7 +603,6 @@ func TestImportStmt(t *testing.T) {
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			sqlDB := sqlutils.MakeSQLRunner(conn)
 			sqlDB.Exec(t, fmt.Sprintf(`CREATE DATABASE csv%d`, i))
 			sqlDB.Exec(t, fmt.Sprintf(`SET DATABASE = csv%d`, i))
 
@@ -684,6 +682,18 @@ func TestImportStmt(t *testing.T) {
 			}
 		})
 	}
+
+	// Verify a failed IMPORT won't prevent a second IMPORT.
+	t.Run("checkpoint-leftover", func(t *testing.T) {
+		nodetmp := "nodelocal:///tmp"
+		// Specify wrong number of columns.
+		_, err := conn.Exec(fmt.Sprintf(`IMPORT TABLE t (a INT) CSV DATA (%s) WITH temp = $1, transform_only`, files[0]), nodetmp)
+		if !testutils.IsError(err, "expected 1 fields, got 2") {
+			t.Fatalf("unexpected: %v", err)
+		}
+		// Expect it to succeed with correct columns.
+		sqlDB.Exec(t, fmt.Sprintf(`IMPORT TABLE t (a INT, b STRING) CSV DATA (%s) WITH temp = $1, transform_only`, files[0]), nodetmp)
+	})
 }
 
 func BenchmarkImport(b *testing.B) {
