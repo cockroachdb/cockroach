@@ -42,15 +42,15 @@ func (up UserPriority) String() string {
 
 const (
 	// MinUserPriority is the minimum allowed user priority.
-	MinUserPriority = 0.001
+	MinUserPriority UserPriority = 0.001
 	// UnspecifiedUserPriority means NormalUserPriority.
-	UnspecifiedUserPriority = 0
+	UnspecifiedUserPriority UserPriority = 0
 	// NormalUserPriority is set to 1, meaning ops run through the database
 	// are all given equal weight when a random priority is chosen. This can
 	// be set specifically via client.NewDBWithPriority().
-	NormalUserPriority = 1
+	NormalUserPriority UserPriority = 1
 	// MaxUserPriority is the maximum allowed user priority.
-	MaxUserPriority = 1000
+	MaxUserPriority UserPriority = 1000
 )
 
 // A RangeID is a unique ID associated to a Raft consensus group.
