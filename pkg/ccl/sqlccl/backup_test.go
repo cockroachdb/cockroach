@@ -1059,26 +1059,29 @@ func TestBackupRestoreInterleaved(t *testing.T) {
 	})
 
 	t.Run("interleaved table without parent", func(t *testing.T) {
+		if _, err := sqlDB.DB.Exec(`BACKUP data.i0 TO $1`, localFoo); !testutils.IsError(err, "without interleave parent") {
+			t.Fatalf("expected 'without interleave parent' error but got: %+v", err)
+		}
 
 		tcRestore := testcluster.StartTestCluster(t, singleNode, base.TestClusterArgs{ServerArgs: args})
 		defer tcRestore.Stopper().Stop(context.TODO())
 		sqlDBRestore := sqlutils.MakeSQLRunner(tcRestore.Conns[0])
 		sqlDBRestore.Exec(t, `CREATE DATABASE data`)
-
-		_, err := sqlDBRestore.DB.Exec(`RESTORE TABLE data.i0 FROM $1`, localFoo)
-		if !testutils.IsError(err, "without interleave parent") {
+		if _, err := sqlDBRestore.DB.Exec(`RESTORE TABLE data.i0 FROM $1`, localFoo); !testutils.IsError(err, "without interleave parent") {
 			t.Fatalf("expected 'without interleave parent' error but got: %+v", err)
 		}
 	})
 
 	t.Run("interleaved table without child", func(t *testing.T) {
+		if _, err := sqlDB.DB.Exec(`BACKUP data.bank TO $1`, localFoo); !testutils.IsError(err, "without interleave child") {
+			t.Fatalf("expected 'without interleave child' error but got: %+v", err)
+		}
+
 		tcRestore := testcluster.StartTestCluster(t, singleNode, base.TestClusterArgs{ServerArgs: args})
 		defer tcRestore.Stopper().Stop(context.TODO())
 		sqlDBRestore := sqlutils.MakeSQLRunner(tcRestore.Conns[0])
 		sqlDBRestore.Exec(t, `CREATE DATABASE data`)
-
-		_, err := sqlDBRestore.DB.Exec(`RESTORE TABLE data.bank FROM $1`, localFoo)
-		if !testutils.IsError(err, "without interleave child") {
+		if _, err := sqlDBRestore.DB.Exec(`RESTORE TABLE data.bank FROM $1`, localFoo); !testutils.IsError(err, "without interleave child") {
 			t.Fatalf("expected 'without interleave child' error but got: %+v", err)
 		}
 	})
