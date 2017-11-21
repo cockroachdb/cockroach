@@ -2074,6 +2074,30 @@ func MakeDJSON(d interface{}) (Datum, error) {
 	return &DJSON{j}, nil
 }
 
+// AsDJSON attempts to retrieve a *DJSON from an Expr, returning a *DJSON and
+// a flag signifying whether the assertion was successful. The function should
+// be used instead of direct type assertions wherever a *DJSON wrapped by a
+// *DJSON is possible.
+func AsDJSON(e Expr) (*DJSON, bool) {
+	switch t := e.(type) {
+	case *DJSON:
+		return t, true
+	case *DOidWrapper:
+		return AsDJSON(t.Wrapped)
+	}
+	return nil, false
+}
+
+// MustBeDJSON attempts to retrieve a DJSON from an Expr, panicking if the
+// assertion fails.
+func MustBeDJSON(e Expr) DJSON {
+	i, ok := AsDJSON(e)
+	if !ok {
+		panic(pgerror.NewErrorf(pgerror.CodeInternalError, "expected *DJSON, found %T", e))
+	}
+	return *i
+}
+
 // ResolvedType implements the TypedExpr interface.
 func (*DJSON) ResolvedType() types.T {
 	return types.JSON

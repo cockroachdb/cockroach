@@ -355,6 +355,17 @@ Compatible elements: hour, minute, second, millisecond, microsecond.</p>
 </span></td></tr></tbody>
 </table>
 
+### JSONB Functions
+
+<table>
+<thead><tr><th>Function &rarr; Returns</th><th>Description</th></tr></thead>
+<tbody>
+<tr><td><code>json_typeof(val: jsonb) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the type of the outermost JSON value as a text string.</p>
+</span></td></tr>
+<tr><td><code>jsonb_typeof(val: jsonb) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the type of the outermost JSON value as a text string.</p>
+</span></td></tr></tbody>
+</table>
+
 ### Math and Numeric Functions
 
 <table>
