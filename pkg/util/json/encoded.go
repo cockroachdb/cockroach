@@ -1,8 +1,23 @@
+// Copyright 2017 The Cockroach Authors.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
+// implied. See the License for the specific language governing
+// permissions and limitations under the License.
+
 package json
 
 import (
 	"bytes"
 	"fmt"
+	"strconv"
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -123,24 +138,207 @@ func getUint32At(v []byte, idx int) (uint32, error) {
 		uint32(v[idx+3]), nil
 }
 
-func (j jsonEncoded) getUint32At(idx int) (uint32, error) {
-	return getUint32At(j.value, idx)
+type encodedArrayIterator struct {
+	curDataIdx int
+	idx        int
+	len        int
+	data       []byte
+}
+
+func (e *encodedArrayIterator) nextEncoded() (ok bool, nextJEntry uint32, next []byte, err error) {
+	if e.idx >= e.len {
+		return false, 0, nil, nil
+	}
+
+	nextJEntry, err = getUint32At(e.data, 4+e.idx*4)
+	if err != nil {
+		return false, 0, nil, err
+	}
+	nextLen := int(nextJEntry & jEntryOffLenMask)
+	nextData := e.data[e.curDataIdx : e.curDataIdx+nextLen]
+	e.idx++
+	e.curDataIdx += nextLen
+	return true, nextJEntry, nextData, nil
+}
+
+// iterArrayValues iterates through all the values of an encoded array without
+// requiring decoding of all of them.
+func (j jsonEncoded) iterArrayValues() encodedArrayIterator {
+	if j.typ != ArrayJSONType {
+		panic("can only iterate through the array values of an array")
+	}
+
+	return encodedArrayIterator{
+		curDataIdx: 4 + j.containerLen*4,
+		len:        j.containerLen,
+		idx:        0,
+		data:       j.value,
+	}
+}
+
+type encodedObjectIterator struct {
+	curKeyIdx   int
+	curValueIdx int
+	idx         int
+	len         int
+	data        []byte
+}
+
+func (e *encodedObjectIterator) nextEncoded() (ok bool, nextKey []byte, nextJEntry uint32, nextVal []byte, err error) {
+	if e.idx >= e.len {
+		return false, nil, 0, nil, nil
+	}
+
+	nextKeyJEntry, err := getUint32At(e.data, 4+e.idx*4)
+	if err != nil {
+		return false, nil, 0, nil, err
+	}
+	nextKeyLen := int(nextKeyJEntry & jEntryOffLenMask)
+	nextKeyData := e.data[e.curKeyIdx : e.curKeyIdx+nextKeyLen]
+
+	nextValueJEntry, err := getUint32At(e.data, 4+(e.idx+e.len)*4)
+	if err != nil {
+		return false, nil, 0, nil, err
+	}
+	nextValueLen := int(nextValueJEntry & jEntryOffLenMask)
+	nextValueData := e.data[e.curValueIdx : e.curValueIdx+nextValueLen]
+
+	e.idx++
+	e.curKeyIdx += nextKeyLen
+	e.curValueIdx += nextValueLen
+	return true, nextKeyData, nextValueJEntry, nextValueData, nil
+}
+
+// iterObject iterates through all the keys and values of an encoded object
+// without requiring decoding of all of them.
+func (j jsonEncoded) iterObject() (encodedObjectIterator, error) {
+	if j.typ != ObjectJSONType {
+		panic("can only iterate through the object values of an object")
+	}
+
+	curKeyIdx := 4 + j.containerLen*4*2
+	curValueIdx := curKeyIdx
+
+	// We have to seek to the start of the value data.
+	for i := 0; i < j.containerLen; i++ {
+		jEntry, err := getUint32At(j.value, 4+i*4)
+		if err != nil {
+			return encodedObjectIterator{}, err
+		}
+		nextLen := int(jEntry & jEntryOffLenMask)
+		curValueIdx += nextLen
+	}
+
+	return encodedObjectIterator{
+		curKeyIdx:   curKeyIdx,
+		curValueIdx: curValueIdx,
+		len:         j.containerLen,
+		idx:         0,
+		data:        j.value,
+	}, nil
 }
 
 func (j jsonEncoded) FetchValIdx(idx int) (JSON, error) {
-	decoded, err := j.decode()
-	if err != nil {
-		return nil, err
+	if j.Type() == ArrayJSONType {
+		if idx < 0 {
+			idx = j.containerLen + idx
+		}
+		if idx < 0 || idx >= j.containerLen {
+			return nil, nil
+		}
+		iter := j.iterArrayValues()
+		_, resultJEntry, resultData, err := iter.nextEncoded()
+		if err != nil {
+			return nil, err
+		}
+		for i := 0; i < idx; i++ {
+			_, resultJEntry, resultData, err = iter.nextEncoded()
+			if err != nil {
+				return nil, err
+			}
+		}
+		return newEncoded(resultJEntry, resultData)
 	}
-	return decoded.FetchValIdx(idx)
+	return nil, nil
 }
 
+// TODO(justin): this is quite slow as it requires a linear scan - implement the length/offset distinction in
+// order to make this fast.
 func (j jsonEncoded) FetchValKey(key string) (JSON, error) {
+	if j.Type() == ObjectJSONType {
+		iter, err := j.iterObject()
+		if err != nil {
+			return nil, err
+		}
+		for {
+			ok, nextKey, jEntry, nextValue, err := iter.nextEncoded()
+			if err != nil {
+				return nil, err
+			}
+			if !ok {
+				return nil, nil
+			}
+			if string(nextKey) == key {
+				return newEncoded(jEntry, nextValue)
+			}
+		}
+	}
+	return nil, nil
+}
+
+// shallowDecode decodes only the keys of an object, and doesn't decode any
+// elements of an array. It can be used to save a decode-encode cycle for
+// certain operations (say, key deletion).
+func (j jsonEncoded) shallowDecode() (JSON, error) {
+	switch j.typ {
+	case NumberJSONType, StringJSONType, TrueJSONType, FalseJSONType, NullJSONType:
+		return j.decode()
+	case ArrayJSONType:
+		iter := j.iterArrayValues()
+		result := make(jsonArray, j.containerLen)
+		for i := 0; i < j.containerLen; i++ {
+			_, jEntry, next, err := iter.nextEncoded()
+			if err != nil {
+				return nil, err
+			}
+			result[i], err = newEncoded(jEntry, next)
+			if err != nil {
+				return nil, err
+			}
+		}
+		return result, nil
+	case ObjectJSONType:
+		iter, err := j.iterObject()
+		if err != nil {
+			return nil, err
+		}
+		result := make(jsonObject, j.containerLen)
+		for i := 0; i < j.containerLen; i++ {
+			_, nextKey, jEntry, nextValue, err := iter.nextEncoded()
+			if err != nil {
+				return nil, err
+			}
+			v, err := newEncoded(jEntry, nextValue)
+			if err != nil {
+				return nil, err
+			}
+			result[i] = jsonKeyValuePair{
+				k: jsonString(nextKey),
+				v: v,
+			}
+		}
+		return result, nil
+	default:
+		return nil, pgerror.NewErrorf(pgerror.CodeInternalError, "unknown type %v", j.typ)
+	}
+}
+
+func (j jsonEncoded) mustDecode() JSON {
 	decoded, err := j.decode()
 	if err != nil {
-		return nil, err
+		panic(fmt.Sprintf("invalid JSON data: %s, %v", err.Error(), j.value))
 	}
-	return decoded.FetchValKey(key)
+	return decoded
 }
 
 // decode should be used in cases where you will definitely have to use the
@@ -191,27 +389,69 @@ func (j jsonEncoded) AsText() (*string, error) {
 }
 
 func (j jsonEncoded) Compare(other JSON) (int, error) {
-	decoded, err := j.decode()
+	// TODO(justin): this can be optimized in some cases. We don't necessarily
+	// need to decode all of an array or every object key.
+	dec, err := j.shallowDecode()
 	if err != nil {
 		return 0, err
 	}
-	return decoded.Compare(other)
+	return dec.Compare(other)
 }
 
 func (j jsonEncoded) Exists(key string) (bool, error) {
-	decoded, err := j.decode()
-	if err != nil {
-		return false, err
+	switch j.typ {
+	case ObjectJSONType:
+		v, err := j.FetchValKey(key)
+		if err != nil {
+			return false, err
+		}
+		return v != nil, nil
+	case ArrayJSONType:
+		iter := j.iterArrayValues()
+		for {
+			ok, nextJEntry, data, err := iter.nextEncoded()
+			if err != nil {
+				return false, err
+			}
+			if !ok {
+				return false, nil
+			}
+			next, err := newEncoded(nextJEntry, data)
+			if err != nil {
+				return false, err
+			}
+			// This is a minor optimization - we know that newEncoded always returns a
+			// jsonEncoded if it's decoding a string, and we can save actually
+			// allocating that string for this check by not forcing a decode into a
+			// jsonString.  This operates on two major assumptions:
+			// 1. newEncoded returns a jsonEncoded (and not a jsonString) for string
+			// types and
+			// 2. the `value` field on such a jsonEncoded directly corresponds to the string.
+			// This is tested sufficiently that if either of those assumptions is
+			// broken it will be caught.
+			if next.Type() == StringJSONType && string(next.(jsonEncoded).value) == key {
+				return true, nil
+			}
+		}
 	}
-	return decoded.Exists(key)
+	return false, nil
 }
 
 func (j jsonEncoded) FetchValKeyOrIdx(key string) (JSON, error) {
-	decoded, err := j.decode()
-	if err != nil {
-		return nil, err
+	switch j.typ {
+	case ObjectJSONType:
+		return j.FetchValKey(key)
+	case ArrayJSONType:
+		idx, err := strconv.Atoi(key)
+		if err != nil {
+			// We shouldn't return this error because it means we couldn't parse the
+			// number, meaning it was a string and that just means we can't find the
+			// value in an array.
+			return nil, nil
+		}
+		return j.FetchValIdx(idx)
 	}
-	return decoded.FetchValKeyOrIdx(key)
+	return nil, nil
 }
 
 func (j jsonEncoded) Format(buf *bytes.Buffer) {
@@ -226,7 +466,7 @@ func (j jsonEncoded) Format(buf *bytes.Buffer) {
 }
 
 func (j jsonEncoded) RemoveIndex(idx int) (JSON, error) {
-	decoded, err := j.decode()
+	decoded, err := j.shallowDecode()
 	if err != nil {
 		return nil, err
 	}
@@ -234,7 +474,7 @@ func (j jsonEncoded) RemoveIndex(idx int) (JSON, error) {
 }
 
 func (j jsonEncoded) RemoveKey(key string) (JSON, error) {
-	decoded, err := j.decode()
+	decoded, err := j.shallowDecode()
 	if err != nil {
 		return nil, err
 	}
@@ -256,6 +496,7 @@ func (j jsonEncoded) isScalar() bool {
 }
 
 func (j jsonEncoded) EncodeInvertedIndexKeys(b []byte) ([][]byte, error) {
+	// TODO(justin): this could possibly be optimized.
 	decoded, err := j.decode()
 	if err != nil {
 		return nil, err
@@ -293,14 +534,6 @@ func (j jsonEncoded) jEntry() uint32 {
 
 func (j jsonEncoded) encode(appendTo []byte) (jEntry uint32, b []byte, err error) {
 	return j.jEntry(), append(appendTo, j.value...), nil
-}
-
-func (j jsonEncoded) mustDecode() JSON {
-	decoded, err := j.decode()
-	if err != nil {
-		panic(fmt.Sprintf("invalid JSON data: %s, %v", err.Error(), j.value))
-	}
-	return decoded
 }
 
 // maybeDecode implements the JSON interface.

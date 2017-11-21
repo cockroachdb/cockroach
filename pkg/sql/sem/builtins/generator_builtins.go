@@ -417,6 +417,9 @@ func (g *jsonArrayGenerator) Close() {}
 // Next implements the tree.ValueGenerator interface.
 func (g *jsonArrayGenerator) Next() (bool, error) {
 	g.nextIndex++
+	// TODO(justin): with the introduction of encoded data, this is now very
+	// slow.  Need to figure out the right abstraction to make this fast.
+	// We should probably expose some kind of array iterator.
 	next, err := g.json.FetchValIdx(g.nextIndex)
 	if err != nil {
 		return false, err
@@ -426,9 +429,17 @@ func (g *jsonArrayGenerator) Next() (bool, error) {
 
 // Values implements the tree.ValueGenerator interface.
 func (g *jsonArrayGenerator) Values() tree.Datums {
-	val := g.json.FetchValIdx(g.nextIndex)
+	val, err := g.json.FetchValIdx(g.nextIndex)
+	if err != nil {
+		// TODO(justin): propagate this error.
+		panic("unexpected JSON error")
+	}
 	if g.asText {
-		text := val.AsText()
+		text, err := val.AsText()
+		if err != nil {
+			// TODO(justin): propagate this error.
+			panic("unexpected JSON error")
+		}
 		if text == nil {
 			return tree.Datums{
 				tree.DNull,
