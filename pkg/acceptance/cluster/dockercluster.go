@@ -47,6 +47,7 @@ import (
 	roachClient "github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logflags"
@@ -811,7 +812,7 @@ func (l *DockerCluster) NewClient(ctx context.Context, i int) (*roachClient.DB, 
 	rpcContext := rpc.NewContext(log.AmbientContext{Tracer: tracing.NewTracer()}, &base.Config{
 		User:        security.NodeUser,
 		SSLCertsDir: l.CertsDir,
-	}, clock, l.stopper)
+	}, clock, l.stopper, &cluster.MakeTestingClusterSettings().Version)
 	conn, err := rpcContext.GRPCDial(l.Nodes[i].Addr(ctx, DefaultTCP).String()).Connect(ctx)
 	if err != nil {
 		return nil, err

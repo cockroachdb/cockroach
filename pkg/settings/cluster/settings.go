@@ -124,6 +124,12 @@ type ExposedClusterVersion struct {
 	cb                  func(ClusterVersion)
 }
 
+// IsInitialized returns true if the cluster version has been initialized and is
+// ready for use.
+func (ecv *ExposedClusterVersion) IsInitialized() bool {
+	return *ecv.baseVersion.Load().(*ClusterVersion) != ClusterVersion{}
+}
+
 // OnChange registers (a single) callback that will be invoked whenever the
 // cluster version changes. The new cluster version will only become "visible"
 // after the callback has returned.
