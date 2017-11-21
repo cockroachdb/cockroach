@@ -48,7 +48,7 @@ func (j jsonArray) slowContains(other JSON) bool {
 		for i := 0; i < len(ary); i++ {
 			found := false
 			for k := 0; k < len(j); k++ {
-				if j[k].jsonType() == ary[i].jsonType() && j[k].(containsTester).slowContains(ary[i]) {
+				if j[k].JSONType() == ary[i].JSONType() && j[k].(containsTester).slowContains(ary[i]) {
 					found = true
 					break
 				}

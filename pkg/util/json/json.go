@@ -30,18 +30,19 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 )
 
-type jsonType int
+// JSONType represents a JSON type.
+type JSONType int
 
 // This enum defines the ordering of types. It should not be reordered.
 const (
-	_ jsonType = iota
-	nullJSONType
-	stringJSONType
-	numberJSONType
-	falseJSONType
-	trueJSONType
-	arrayJSONType
-	objectJSONType
+	_ JSONType = iota
+	NullJSONType
+	StringJSONType
+	NumberJSONType
+	FalseJSONType
+	TrueJSONType
+	ArrayJSONType
+	ObjectJSONType
 )
 
 // JSON represents a JSON value.
@@ -49,7 +50,8 @@ type JSON interface {
 	fmt.Stringer
 
 	Compare(JSON) int
-	jsonType() jsonType
+	// JSONType returns the JSON type.
+	JSONType() JSONType
 	// Format writes out the JSON document to the specified buffer.
 	Format(buf *bytes.Buffer)
 	// Size returns the size of the JSON document in bytes.
@@ -131,15 +133,15 @@ type jsonKeyValuePair struct {
 // pairs, which are unique by key.
 type jsonObject []jsonKeyValuePair
 
-func (jsonNull) jsonType() jsonType   { return nullJSONType }
-func (jsonFalse) jsonType() jsonType  { return falseJSONType }
-func (jsonTrue) jsonType() jsonType   { return trueJSONType }
-func (jsonNumber) jsonType() jsonType { return numberJSONType }
-func (jsonString) jsonType() jsonType { return stringJSONType }
-func (jsonArray) jsonType() jsonType  { return arrayJSONType }
-func (jsonObject) jsonType() jsonType { return objectJSONType }
+func (jsonNull) JSONType() JSONType   { return NullJSONType }
+func (jsonFalse) JSONType() JSONType  { return FalseJSONType }
+func (jsonTrue) JSONType() JSONType   { return TrueJSONType }
+func (jsonNumber) JSONType() JSONType { return NumberJSONType }
+func (jsonString) JSONType() JSONType { return StringJSONType }
+func (jsonArray) JSONType() JSONType  { return ArrayJSONType }
+func (jsonObject) JSONType() JSONType { return ObjectJSONType }
 
-func cmpJSONTypes(a jsonType, b jsonType) int {
+func cmpJSONTypes(a JSONType, b JSONType) int {
 	if b > a {
 		return -1
 	}
@@ -149,12 +151,12 @@ func cmpJSONTypes(a jsonType, b jsonType) int {
 	return 0
 }
 
-func (j jsonNull) Compare(other JSON) int  { return cmpJSONTypes(j.jsonType(), other.jsonType()) }
-func (j jsonFalse) Compare(other JSON) int { return cmpJSONTypes(j.jsonType(), other.jsonType()) }
-func (j jsonTrue) Compare(other JSON) int  { return cmpJSONTypes(j.jsonType(), other.jsonType()) }
+func (j jsonNull) Compare(other JSON) int  { return cmpJSONTypes(j.JSONType(), other.JSONType()) }
+func (j jsonFalse) Compare(other JSON) int { return cmpJSONTypes(j.JSONType(), other.JSONType()) }
+func (j jsonTrue) Compare(other JSON) int  { return cmpJSONTypes(j.JSONType(), other.JSONType()) }
 
 func (j jsonNumber) Compare(other JSON) int {
-	cmp := cmpJSONTypes(j.jsonType(), other.jsonType())
+	cmp := cmpJSONTypes(j.JSONType(), other.JSONType())
 	if cmp != 0 {
 		return cmp
 	}
@@ -164,7 +166,7 @@ func (j jsonNumber) Compare(other JSON) int {
 }
 
 func (j jsonString) Compare(other JSON) int {
-	cmp := cmpJSONTypes(j.jsonType(), other.jsonType())
+	cmp := cmpJSONTypes(j.JSONType(), other.JSONType())
 	if cmp != 0 {
 		return cmp
 	}
@@ -179,7 +181,7 @@ func (j jsonString) Compare(other JSON) int {
 }
 
 func (j jsonArray) Compare(other JSON) int {
-	cmp := cmpJSONTypes(j.jsonType(), other.jsonType())
+	cmp := cmpJSONTypes(j.JSONType(), other.JSONType())
 	if cmp != 0 {
 		return cmp
 	}
@@ -200,7 +202,7 @@ func (j jsonArray) Compare(other JSON) int {
 }
 
 func (j jsonObject) Compare(other JSON) int {
-	cmp := cmpJSONTypes(j.jsonType(), other.jsonType())
+	cmp := cmpJSONTypes(j.JSONType(), other.JSONType())
 	if cmp != 0 {
 		return cmp
 	}
