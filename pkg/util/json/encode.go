@@ -193,6 +193,11 @@ func DecodeJSON(b []byte) ([]byte, JSON, error) {
 	return b, nil, pgerror.NewError(pgerror.CodeInternalError, "error decoding JSON value")
 }
 
+// FromEncoding returns a JSON value which is lazily decoded.
+func FromEncoding(b []byte) (JSON, error) {
+	return newEncodedFromRoot(b)
+}
+
 func decodeJSONArray(containerHeader uint32, b []byte) ([]byte, JSON, error) {
 	length := containerHeader & containerHeaderLenMask
 	b, jEntries, err := decodeJEntries(length, b)
