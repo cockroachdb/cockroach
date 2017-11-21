@@ -142,12 +142,14 @@ func (n *alterTableNode) Start(params runParams) error {
 					return err
 				}
 				if d.PartitionBy != nil {
-					partitioning, err := createPartitionedBy(
-						params.ctx, params.evalCtx, n.tableDesc, &idx, d.PartitionBy, 0 /* colOffset */)
+					partitioning, _, err := createPartitionedBy(
+						params.ctx, params.evalCtx, n.tableDesc, &idx, d.PartitionBy)
 					if err != nil {
 						return err
 					}
 					idx.Partitioning = partitioning
+					// TODO(benesch): install CHECK constraint to exclude rows that do not
+					// belong to any partition of the index.
 				}
 				_, dropped, err := n.tableDesc.FindIndexByName(string(d.Name))
 				if err == nil {
@@ -338,6 +340,9 @@ func (n *alterTableNode) Start(params runParams) error {
 			case sqlbase.ConstraintTypeCheck:
 				for i := range n.tableDesc.Checks {
 					if n.tableDesc.Checks[i].Name == name {
+						if n.tableDesc.Checks[i].Derived {
+							return fmt.Errorf("cannot drop derived constraint %q", name)
+						}
 						n.tableDesc.Checks = append(n.tableDesc.Checks[:i], n.tableDesc.Checks[i+1:]...)
 						descriptorChanged = true
 						break

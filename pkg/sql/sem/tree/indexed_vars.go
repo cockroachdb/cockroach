@@ -110,6 +110,12 @@ func NewOrdinalReference(r int) *IndexedVar {
 	return &IndexedVar{Idx: r}
 }
 
+// NewTypedOrdinalReference returns a new IndexedVar with the given index value
+// that is verified to be well-typed.
+func NewTypedOrdinalReference(r int, typ types.T) *IndexedVar {
+	return &IndexedVar{Idx: r, typeAnnotation: typeAnnotation{typ: typ}}
+}
+
 // NewIndexedVar is a helper routine to create a standalone Indexedvar
 // with the given index value. This needs to undergo BindIfUnbound()
 // below before it can be fully used. The difference with ordinal

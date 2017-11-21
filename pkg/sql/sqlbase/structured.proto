@@ -535,6 +535,12 @@ message TableDescriptor {
     optional string expr = 1 [(gogoproto.nullable) = false];
     optional string name = 2 [(gogoproto.nullable) = false];
     optional ConstraintValidity validity = 3 [(gogoproto.nullable) = false];
+
+    // Derived constraints are created as a result of other configuration, like
+    // partitioning. They cannot be explicitly dropped by the user and are
+    // hidden from the output of SHOW CREATE TABLE, though they appear in the
+    // output of SHOW CONSTRAINTS.
+    optional bool derived = 4 [(gogoproto.nullable) = false];
   }
 
   repeated CheckConstraint checks = 20;
