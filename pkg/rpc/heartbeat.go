@@ -22,7 +22,9 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -56,6 +58,30 @@ type HeartbeatService struct {
 	// shared by rpc clients, to keep track of remote clock measurements.
 	remoteClockMonitor *RemoteClockMonitor
 	clusterID          *base.ClusterIDContainer
+	version            *cluster.ExposedClusterVersion
+}
+
+func checkVersion(
+	clusterVersion *cluster.ExposedClusterVersion, serverVersion roachpb.Version,
+) error {
+	if !clusterVersion.IsInitialized() {
+		// Cluster version has not yet been determined.
+		return nil
+	}
+	if !clusterVersion.IsActive(cluster.VersionRPCVersionCheck) {
+		// Cluster version predates this version check.
+		return nil
+	}
+	minVersion := clusterVersion.Version().MinimumVersion
+	if serverVersion == (roachpb.Version{}) {
+		return errors.Errorf(
+			"cluster requires at least version %s, but peer did not provide a version", minVersion)
+	}
+	if serverVersion.Less(minVersion) {
+		return errors.Errorf(
+			"cluster requires at least version %s, but peer has version %s", minVersion, serverVersion)
+	}
+	return nil
 }
 
 // Ping echos the contents of the request to the response, and returns the
@@ -74,18 +100,27 @@ func (hs *HeartbeatService) Ping(ctx context.Context, args *PingRequest) (*PingR
 		panic(fmt.Sprintf("locally configured maximum clock offset (%s) "+
 			"does not match that of node %s (%s)", mo, args.Addr, amo))
 	}
+
+	// Check that cluster IDs match.
 	clusterID := hs.clusterID.Get()
 	if args.ClusterID != nil && *args.ClusterID != uuid.Nil && clusterID != uuid.Nil &&
 		*args.ClusterID != clusterID {
 		return nil, errors.Errorf(
 			"client cluster ID %q doesn't match server cluster ID %q", args.ClusterID, clusterID)
 	}
+
+	// Check version compatibility.
+	if err := checkVersion(hs.version, args.ServerVersion); err != nil {
+		return nil, err
+	}
+
 	serverOffset := args.Offset
 	// The server offset should be the opposite of the client offset.
 	serverOffset.Offset = -serverOffset.Offset
 	hs.remoteClockMonitor.UpdateOffset(ctx, args.Addr, serverOffset, 0 /* roundTripLatency */)
 	return &PingResponse{
-		Pong:       args.Ping,
-		ServerTime: hs.clock.PhysicalNow(),
+		Pong:          args.Ping,
+		ServerTime:    hs.clock.PhysicalNow(),
+		ServerVersion: hs.version.ServerVersion,
 	}, nil
 }

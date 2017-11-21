@@ -31,6 +31,7 @@ import (
 	"google.golang.org/grpc/keepalive"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
@@ -61,6 +62,16 @@ func newTestServer(t testing.TB, ctx *Context, compression bool) *grpc.Server {
 	return grpc.NewServer(opts...)
 }
 
+func newTestContext(clock *hlc.Clock, stopper *stop.Stopper) *Context {
+	return NewContext(
+		log.AmbientContext{Tracer: tracing.NewTracer()},
+		testutils.NewNodeTestBaseContext(),
+		clock,
+		stopper,
+		&cluster.MakeTestingClusterSettings().Version,
+	)
+}
+
 func TestHeartbeatCB(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
@@ -69,13 +80,14 @@ func TestHeartbeatCB(t *testing.T) {
 		defer stopper.Stop(context.TODO())
 
 		clock := hlc.NewClock(timeutil.Unix(0, 20).UnixNano, time.Nanosecond)
-		serverCtx := NewContext(log.AmbientContext{Tracer: tracing.NewTracer()}, testutils.NewNodeTestBaseContext(), clock, stopper)
+		serverCtx := newTestContext(clock, stopper)
 		serverCtx.rpcCompression = compression
 		s := newTestServer(t, serverCtx, true)
 		RegisterHeartbeatServer(s, &HeartbeatService{
 			clock:              clock,
 			remoteClockMonitor: serverCtx.RemoteClocks,
 			clusterID:          &serverCtx.ClusterID,
+			version:            serverCtx.version,
 		})
 
 		ln, err := netutil.ListenAndServeGRPC(serverCtx.Stopper, s, util.TestAddr)
@@ -85,7 +97,7 @@ func TestHeartbeatCB(t *testing.T) {
 		remoteAddr := ln.Addr().String()
 
 		// Clocks don't matter in this test.
-		clientCtx := NewContext(log.AmbientContext{Tracer: tracing.NewTracer()}, testutils.NewNodeTestBaseContext(), clock, stopper)
+		clientCtx := newTestContext(clock, stopper)
 		clientCtx.rpcCompression = compression
 
 		var once sync.Once
@@ -126,17 +138,14 @@ func TestInternalServerAddress(t *testing.T) {
 	// Can't be zero because that'd be an empty offset.
 	clock := hlc.NewClock(timeutil.Unix(0, 1).UnixNano, time.Nanosecond)
 
-	baseCtx := testutils.NewNodeTestBaseContext()
-
-	baseCtx.Addr = "127.0.0.1:9999"
-	baseCtx.AdvertiseAddr = "127.0.0.1:8888"
-
-	serverCtx := NewContext(log.AmbientContext{Tracer: tracing.NewTracer()}, baseCtx, clock, stopper)
+	serverCtx := newTestContext(clock, stopper)
+	serverCtx.Config.Addr = "127.0.0.1:9999"
+	serverCtx.Config.AdvertiseAddr = "127.0.0.1:8888"
 
 	internal := &internalServer{}
 	serverCtx.SetLocalInternalServer(internal)
 
-	if is := serverCtx.GetLocalInternalServerForAddr(baseCtx.AdvertiseAddr); is != internal {
+	if is := serverCtx.GetLocalInternalServerForAddr(serverCtx.Config.AdvertiseAddr); is != internal {
 		t.Fatalf("expected %+v, got %+v", internal, is)
 	}
 }
@@ -152,7 +161,7 @@ func TestHeartbeatHealth(t *testing.T) {
 	// Can't be zero because that'd be an empty offset.
 	clock := hlc.NewClock(timeutil.Unix(0, 1).UnixNano, time.Nanosecond)
 
-	serverCtx := NewContext(log.AmbientContext{Tracer: tracing.NewTracer()}, testutils.NewNodeTestBaseContext(), clock, stopper)
+	serverCtx := newTestContext(clock, stopper)
 	s := newTestServer(t, serverCtx, true)
 
 	heartbeat := &ManualHeartbeatService{
@@ -160,6 +169,7 @@ func TestHeartbeatHealth(t *testing.T) {
 		stopper:            stopper,
 		clock:              clock,
 		remoteClockMonitor: serverCtx.RemoteClocks,
+		version:            serverCtx.version,
 	}
 	RegisterHeartbeatServer(s, heartbeat)
 
@@ -189,7 +199,7 @@ func TestHeartbeatHealth(t *testing.T) {
 		}
 	}()
 
-	clientCtx := NewContext(log.AmbientContext{Tracer: tracing.NewTracer()}, testutils.NewNodeTestBaseContext(), clock, stopper)
+	clientCtx := newTestContext(clock, stopper)
 	clientCtx.Addr = "notlocalserver"
 	clientCtx.AdvertiseAddr = "localserver"
 	// Make the interval shorter to speed up the test.
@@ -285,7 +295,7 @@ func TestHeartbeatHealthTransport(t *testing.T) {
 	// Can't be zero because that'd be an empty offset.
 	clock := hlc.NewClock(timeutil.Unix(0, 1).UnixNano, time.Nanosecond)
 
-	serverCtx := NewContext(log.AmbientContext{Tracer: tracing.NewTracer()}, testutils.NewNodeTestBaseContext(), clock, stopper)
+	serverCtx := newTestContext(clock, stopper)
 	// newTestServer with a custom listener.
 	tlsConfig, err := serverCtx.GetServerTLSConfig()
 	if err != nil {
@@ -297,6 +307,7 @@ func TestHeartbeatHealthTransport(t *testing.T) {
 		clock:              clock,
 		remoteClockMonitor: serverCtx.RemoteClocks,
 		clusterID:          &serverCtx.ClusterID,
+		version:            serverCtx.version,
 	})
 
 	mu := struct {
@@ -335,7 +346,7 @@ func TestHeartbeatHealthTransport(t *testing.T) {
 
 	remoteAddr := ln.Addr().String()
 
-	clientCtx := NewContext(log.AmbientContext{Tracer: tracing.NewTracer()}, testutils.NewNodeTestBaseContext(), clock, stopper)
+	clientCtx := newTestContext(clock, stopper)
 	// Make the interval shorter to speed up the test.
 	clientCtx.heartbeatInterval = 1 * time.Millisecond
 	if _, err := clientCtx.GRPCDial(remoteAddr).Connect(context.Background()); err != nil {
@@ -453,12 +464,13 @@ func TestOffsetMeasurement(t *testing.T) {
 
 	serverTime := timeutil.Unix(0, 20)
 	serverClock := hlc.NewClock(serverTime.UnixNano, time.Nanosecond)
-	serverCtx := NewContext(log.AmbientContext{Tracer: tracing.NewTracer()}, testutils.NewNodeTestBaseContext(), serverClock, stopper)
+	serverCtx := newTestContext(serverClock, stopper)
 	s := newTestServer(t, serverCtx, true)
 	RegisterHeartbeatServer(s, &HeartbeatService{
 		clock:              serverClock,
 		remoteClockMonitor: serverCtx.RemoteClocks,
 		clusterID:          &serverCtx.ClusterID,
+		version:            serverCtx.version,
 	})
 
 	ln, err := netutil.ListenAndServeGRPC(serverCtx.Stopper, s, util.TestAddr)
@@ -470,7 +482,7 @@ func TestOffsetMeasurement(t *testing.T) {
 	// Create a client clock that is behind the server clock.
 	clientAdvancing := AdvancingClock{time: timeutil.Unix(0, 10)}
 	clientClock := hlc.NewClock(clientAdvancing.UnixNano, time.Nanosecond)
-	clientCtx := NewContext(log.AmbientContext{Tracer: tracing.NewTracer()}, testutils.NewNodeTestBaseContext(), clientClock, stopper)
+	clientCtx := newTestContext(clientClock, stopper)
 	// Make the interval shorter to speed up the test.
 	clientCtx.heartbeatInterval = 1 * time.Millisecond
 	clientCtx.RemoteClocks.offsetTTL = 5 * clientAdvancing.getAdvancementInterval()
@@ -516,13 +528,14 @@ func TestFailedOffsetMeasurement(t *testing.T) {
 	// Can't be zero because that'd be an empty offset.
 	clock := hlc.NewClock(timeutil.Unix(0, 1).UnixNano, time.Nanosecond)
 
-	serverCtx := NewContext(log.AmbientContext{Tracer: tracing.NewTracer()}, testutils.NewNodeTestBaseContext(), clock, stopper)
+	serverCtx := newTestContext(clock, stopper)
 	s := newTestServer(t, serverCtx, true)
 	heartbeat := &ManualHeartbeatService{
 		clock:              clock,
 		remoteClockMonitor: serverCtx.RemoteClocks,
 		ready:              make(chan error),
 		stopper:            stopper,
+		version:            serverCtx.version,
 	}
 	RegisterHeartbeatServer(s, heartbeat)
 
@@ -533,7 +546,7 @@ func TestFailedOffsetMeasurement(t *testing.T) {
 	remoteAddr := ln.Addr().String()
 
 	// Create a client that never receives a heartbeat after the first.
-	clientCtx := NewContext(log.AmbientContext{Tracer: tracing.NewTracer()}, testutils.NewNodeTestBaseContext(), clock, stopper)
+	clientCtx := newTestContext(clock, stopper)
 	// Remove the timeout so that failure arises from exceeding the maximum
 	// clock reading delay, not the timeout.
 	clientCtx.heartbeatTimeout = 0
@@ -616,7 +629,7 @@ func TestRemoteOffsetUnhealthy(t *testing.T) {
 	for i := range nodeCtxs {
 		clock := hlc.NewClock(start.Add(nodeCtxs[i].offset).UnixNano, maxOffset)
 		nodeCtxs[i].errChan = make(chan error, 1)
-		nodeCtxs[i].ctx = NewContext(log.AmbientContext{Tracer: tracing.NewTracer()}, testutils.NewNodeTestBaseContext(), clock, stopper)
+		nodeCtxs[i].ctx = newTestContext(clock, stopper)
 		nodeCtxs[i].ctx.heartbeatInterval = maxOffset
 
 		s := newTestServer(t, nodeCtxs[i].ctx, true)
@@ -624,6 +637,7 @@ func TestRemoteOffsetUnhealthy(t *testing.T) {
 			clock:              clock,
 			remoteClockMonitor: nodeCtxs[i].ctx.RemoteClocks,
 			clusterID:          &nodeCtxs[i].ctx.ClusterID,
+			version:            nodeCtxs[i].ctx.version,
 		})
 		ln, err := netutil.ListenAndServeGRPC(nodeCtxs[i].ctx.Stopper, s, util.TestAddr)
 		if err != nil {
@@ -685,17 +699,13 @@ func TestGRPCKeepaliveFailureFailsInflightRPCs(t *testing.T) {
 	defer stopper.Stop(context.TODO())
 
 	clock := hlc.NewClock(timeutil.Unix(0, 20).UnixNano, time.Nanosecond)
-	serverCtx := NewContext(
-		log.AmbientContext{Tracer: tracing.NewTracer()},
-		testutils.NewNodeTestBaseContext(),
-		clock,
-		stopper,
-	)
+	serverCtx := newTestContext(clock, stopper)
 	s := newTestServer(t, serverCtx, true)
 	RegisterHeartbeatServer(s, &HeartbeatService{
 		clock:              clock,
 		remoteClockMonitor: serverCtx.RemoteClocks,
 		clusterID:          &serverCtx.ClusterID,
+		version:            serverCtx.version,
 	})
 
 	ln, err := netutil.ListenAndServeGRPC(serverCtx.Stopper, s, util.TestAddr)
@@ -704,8 +714,7 @@ func TestGRPCKeepaliveFailureFailsInflightRPCs(t *testing.T) {
 	}
 	remoteAddr := ln.Addr().String()
 
-	clientCtx := NewContext(
-		log.AmbientContext{Tracer: tracing.NewTracer()}, testutils.NewNodeTestBaseContext(), clock, stopper)
+	clientCtx := newTestContext(clock, stopper)
 	// Disable automatic heartbeats. We'll send them by hand.
 	clientCtx.heartbeatInterval = math.MaxInt64
 
@@ -756,7 +765,7 @@ func TestGRPCKeepaliveFailureFailsInflightRPCs(t *testing.T) {
 	// rely on that - it's possible that the RPC call could return earlier due to
 	// its transport connection being closed because of heartbeats timing out.
 	heartbeatClient := NewHeartbeatClient(conn)
-	request := PingRequest{}
+	request := PingRequest{ServerVersion: clientCtx.version.ServerVersion}
 	if _, err := heartbeatClient.Ping(context.TODO(), &request); err != nil {
 		if !grpcutil.IsClosedConnection(err) {
 			t.Fatal(err)
@@ -801,14 +810,14 @@ func TestClusterIDMismatch(t *testing.T) {
 	defer stopper.Stop(context.TODO())
 
 	clock := hlc.NewClock(timeutil.Unix(0, 20).UnixNano, time.Nanosecond)
-	serverCtx := NewContext(
-		log.AmbientContext{Tracer: tracing.NewTracer()}, testutils.NewNodeTestBaseContext(), clock, stopper)
+	serverCtx := newTestContext(clock, stopper)
 	serverCtx.ClusterID.Set(context.TODO(), uuid.MakeV4())
 	s := newTestServer(t, serverCtx, true)
 	RegisterHeartbeatServer(s, &HeartbeatService{
 		clock:              clock,
 		remoteClockMonitor: serverCtx.RemoteClocks,
 		clusterID:          &serverCtx.ClusterID,
+		version:            serverCtx.version,
 	})
 
 	ln, err := netutil.ListenAndServeGRPC(serverCtx.Stopper, s, util.TestAddr)
@@ -817,8 +826,7 @@ func TestClusterIDMismatch(t *testing.T) {
 	}
 	remoteAddr := ln.Addr().String()
 
-	clientCtx := NewContext(
-		log.AmbientContext{Tracer: tracing.NewTracer()}, testutils.NewNodeTestBaseContext(), clock, stopper)
+	clientCtx := newTestContext(clock, stopper)
 	// Set client ClusterID differently from server.
 	clientCtx.ClusterID.Set(context.TODO(), uuid.MakeV4())
 
@@ -837,12 +845,83 @@ func TestClusterIDMismatch(t *testing.T) {
 	wg.Wait()
 }
 
+func setVersion(c *Context, v roachpb.Version) error {
+	settings := cluster.MakeClusterSettings(v, v)
+	cv := cluster.ClusterVersion{MinimumVersion: v, UseVersion: v}
+	if err := settings.InitializeVersion(cv); err != nil {
+		return err
+	}
+	c.version = &settings.Version
+	return nil
+}
+
+func TestVersionCompatibility(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	v1 := cluster.VersionByKey(cluster.VersionRPCNetworkStats)
+	v2 := cluster.VersionByKey(cluster.VersionRPCVersionCheck)
+
+	testData := []struct {
+		name          string
+		serverVersion roachpb.Version
+		clientVersion roachpb.Version
+		expectError   bool
+	}{
+		{"serverVersion == clientVersion", v1, v1, false},
+		{"serverVersion < clientVersion", v1, v2, true},
+		{"serverVersion > clientVersion", v2, v1, true},
+	}
+
+	for _, td := range testData {
+		t.Run(td.name, func(t *testing.T) {
+			stopper := stop.NewStopper()
+			defer stopper.Stop(context.TODO())
+
+			clock := hlc.NewClock(timeutil.Unix(0, 20).UnixNano, time.Nanosecond)
+			serverCtx := newTestContext(clock, stopper)
+			serverCtx.ClusterID.Set(context.TODO(), uuid.MakeV4())
+			if err := setVersion(serverCtx, td.serverVersion); err != nil {
+				t.Fatal(err)
+			}
+			s := newTestServer(t, serverCtx, true)
+			RegisterHeartbeatServer(s, &HeartbeatService{
+				clock:              clock,
+				remoteClockMonitor: serverCtx.RemoteClocks,
+				clusterID:          &serverCtx.ClusterID,
+				version:            serverCtx.version,
+			})
+
+			ln, err := netutil.ListenAndServeGRPC(serverCtx.Stopper, s, util.TestAddr)
+			if err != nil {
+				t.Fatal(err)
+			}
+			remoteAddr := ln.Addr().String()
+
+			clientCtx := newTestContext(clock, stopper)
+			if err := setVersion(clientCtx, td.clientVersion); err != nil {
+				t.Fatal(err)
+			}
+
+			_, err = clientCtx.GRPCDial(remoteAddr).Connect(context.Background())
+
+			if td.expectError {
+				expected := "initial connection heartbeat failed.*cluster requires at least version"
+				if !testutils.IsError(err, expected) {
+					t.Errorf("expected %s error, got %v", expected, err)
+				}
+			} else if err != nil {
+				t.Errorf("unexpected error: %s", err)
+			}
+		})
+	}
+}
+
 func BenchmarkGRPCDial(b *testing.B) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.TODO())
 
 	clock := hlc.NewClock(hlc.UnixNano, 250*time.Millisecond)
-	ctx := NewContext(log.AmbientContext{Tracer: tracing.NewTracer()}, testutils.NewNodeTestBaseContext(), clock, stopper)
+	ctx := newTestContext(clock, stopper)
 
 	s := newTestServer(b, ctx, false)
 	ln, err := netutil.ListenAndServeGRPC(ctx.Stopper, s, util.TestAddr)

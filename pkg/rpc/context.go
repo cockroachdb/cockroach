@@ -34,6 +34,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -205,6 +206,7 @@ func NewServerWithInterceptor(
 		clock:              ctx.LocalClock,
 		remoteClockMonitor: ctx.RemoteClocks,
 		clusterID:          &ctx.ClusterID,
+		version:            ctx.version,
 	})
 	return s
 }
@@ -290,6 +292,7 @@ type Context struct {
 	stats StatsHandler
 
 	ClusterID base.ClusterIDContainer
+	version   *cluster.ExposedClusterVersion
 
 	// For unittesting.
 	BreakerFactory func() *circuit.Breaker
@@ -297,7 +300,11 @@ type Context struct {
 
 // NewContext creates an rpc Context with the supplied values.
 func NewContext(
-	ambient log.AmbientContext, baseCtx *base.Config, hlcClock *hlc.Clock, stopper *stop.Stopper,
+	ambient log.AmbientContext,
+	baseCtx *base.Config,
+	hlcClock *hlc.Clock,
+	stopper *stop.Stopper,
+	version *cluster.ExposedClusterVersion,
 ) *Context {
 	if hlcClock == nil {
 		panic("nil clock is forbidden")
@@ -310,6 +317,7 @@ func NewContext(
 			clock: hlcClock,
 		},
 		rpcCompression: enableRPCCompression,
+		version:        version,
 	}
 	var cancel context.CancelFunc
 	ctx.masterCtx, cancel = context.WithCancel(ambient.AnnotateCtx(context.Background()))
@@ -542,6 +550,7 @@ func (ctx *Context) runHeartbeat(conn *Connection, target string) error {
 		Addr:           ctx.Addr,
 		MaxOffsetNanos: maxOffset.Nanoseconds(),
 		ClusterID:      &clusterID,
+		ServerVersion:  ctx.version.ServerVersion,
 	}
 	heartbeatClient := NewHeartbeatClient(conn.grpcConn)
 
@@ -570,6 +579,10 @@ func (ctx *Context) runHeartbeat(conn *Connection, target string) error {
 		response, err := heartbeatClient.Ping(goCtx, &request)
 		if cancel != nil {
 			cancel()
+		}
+
+		if err == nil {
+			err = checkVersion(ctx.version, response.ServerVersion)
 		}
 
 		if err == nil {

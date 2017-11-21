@@ -126,7 +126,9 @@ func createTestClientForUser(
 	}
 	testutils.FillCerts(cfg)
 
-	rpcContext := rpc.NewContext(log.AmbientContext{Tracer: s.ClusterSettings().Tracer}, cfg, s.Clock(), s.Stopper())
+	rpcContext := rpc.NewContext(
+		log.AmbientContext{Tracer: s.ClusterSettings().Tracer}, cfg, s.Clock(), s.Stopper(),
+		&s.ClusterSettings().Version)
 	conn, err := rpcContext.GRPCDial(s.ServingAddr()).Connect(context.Background())
 	if err != nil {
 		t.Fatal(err)
