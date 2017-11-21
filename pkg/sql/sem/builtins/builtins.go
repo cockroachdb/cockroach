@@ -45,7 +45,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/ipaddr"
-	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeofday"
@@ -1496,21 +1495,9 @@ CockroachDB supports the following flags:
 	// implemented.
 	},
 
-	"json_typeof": {
-		tree.Builtin{
-			Types:      tree.ArgTypes{{"val", types.String}},
-			ReturnType: tree.FixedReturnType(types.String),
-			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
-				str := string(tree.MustBeDString(args[0]))
-				json, err := json.ParseJSON(str)
-				if err != nil {
-					return nil, err
-				}
-				return tree.NewDString(*json.TypeAsText()), nil
-			},
-			Info: "Returns the type of the outermost JSON value as a text string.",
-		},
-	},
+	"json_typeof": {jsonTypeOfImpl},
+
+	"jsonb_typeof": {jsonTypeOfImpl},
 
 	"ln": {
 		floatBuiltin1(func(x float64) (tree.Datum, error) {
@@ -2311,6 +2298,16 @@ var powImpls = []tree.Builtin{
 		},
 		Info: "Calculates `x`^`y`.",
 	},
+}
+
+var jsonTypeOfImpl = tree.Builtin{
+	Types:      tree.ArgTypes{{"val", types.JSON}},
+	ReturnType: tree.FixedReturnType(types.String),
+	Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+		json := tree.MustBeDJSON(args[0])
+		return tree.NewDString(json.TypeAsText()), nil
+	},
+	Info: "Returns the type of the outermost JSON value as a text string.",
 }
 
 func arrayBuiltin(impl func(types.T) tree.Builtin) []tree.Builtin {

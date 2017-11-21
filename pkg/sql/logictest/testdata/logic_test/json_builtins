@@ -1,38 +1,73 @@
 # LogicTest: default distsql parallel-stmts
 
-## json_typeof
+## json_typeof and jsonb_typeof
 
 query T
-SELECT json_typeof('-123.4')
+SELECT json_typeof('-123.4'::JSON)
 ----
 number
 
 query T
-SELECT json_typeof('"-123.4"')
+SELECT jsonb_typeof('-123.4'::JSON)
+----
+number
+
+query T
+SELECT json_typeof('"-123.4"'::JSON)
 ----
 string
 
 query T
-SELECT json_typeof('{"1": {"2": 3}}')
+SELECT jsonb_typeof('"-123.4"'::JSON)
+----
+string
+
+query T
+SELECT json_typeof('{"1": {"2": 3}}'::JSON)
 ----
 object
 
 query T
-SELECT json_typeof('[1, 2, [3]]')
+SELECT jsonb_typeof('{"1": {"2": 3}}'::JSON)
+----
+object
+
+query T
+SELECT json_typeof('[1, 2, [3]]'::JSON)
 ----
 array
 
 query T
-SELECT json_typeof('true')
+SELECT jsonb_typeof('[1, 2, [3]]'::JSON)
+----
+array
+
+query T
+SELECT json_typeof('true'::JSON)
 ----
 true
 
 query T
-SELECT json_typeof('false')
+SELECT jsonb_typeof('true'::JSON)
+----
+true
+
+query T
+SELECT json_typeof('false'::JSON)
 ----
 false
 
 query T
-SELECT json_typeof('null')
+SELECT jsonb_typeof('false'::JSON)
+----
+false
+
+query T
+SELECT json_typeof('null'::JSON)
+----
+null
+
+query T
+SELECT jsonb_typeof('null'::JSON)
 ----
 null
