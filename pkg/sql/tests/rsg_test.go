@@ -251,7 +251,7 @@ func testRandomSyntax(
 		}
 	}
 
-	yBytes, err := ioutil.ReadFile(filepath.Join("parser", "sql.y"))
+	yBytes, err := ioutil.ReadFile(filepath.Join("..", "parser", "sql.y"))
 	if err != nil {
 		t.Fatal(err)
 	}
