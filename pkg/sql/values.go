@@ -33,7 +33,6 @@ func newValuesListLenErr(exp, got int) error {
 }
 
 type valuesNode struct {
-	p	*planner
 	n       *tree.ValuesClause
 	columns sqlbase.ResultColumns
 	tuples  [][]tree.TypedExpr
@@ -50,7 +49,6 @@ type valuesNode struct {
 
 func (p *planner) newContainerValuesNode(columns sqlbase.ResultColumns, capacity int) *valuesNode {
 	return &valuesNode{
-		p:       p,
 		columns: columns,
 		rows: sqlbase.NewRowContainer(
 			p.session.TxnState.makeBoundAccount(), sqlbase.ColTypeInfoFromResCols(columns), capacity,
@@ -63,7 +61,6 @@ func (p *planner) ValuesClause(
 	ctx context.Context, n *tree.ValuesClause, desiredTypes []types.T,
 ) (planNode, error) {
 	v := &valuesNode{
-		p:       p,
 		n:       n,
 		isConst: true,
 	}
@@ -155,7 +152,7 @@ func (n *valuesNode) Start(params runParams) error {
 				row[i] = tree.DNull
 			} else {
 				var err error
-				row[i], err = typedExpr.Eval(&n.p.evalCtx)
+				row[i], err = typedExpr.Eval(params.evalCtx)
 				if err != nil {
 					return err
 				}
