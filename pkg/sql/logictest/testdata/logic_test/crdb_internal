@@ -222,6 +222,11 @@ node_id  component  field   value
 1        UI         Port    <port>
 1        UI         URI     /
 
+query T
+select replicas from crdb_internal.ranges;
+----
+[{"NodeID":1,"ReplicaID":1,"StoreID":1}]
+
 # Check that privileged builtins are only allowed for 'root'
 user testuser
 
