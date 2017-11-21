@@ -15,6 +15,7 @@
 package acceptance
 
 import (
+	"fmt"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -22,8 +23,8 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/acceptance/cluster"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/docker/docker/api/types/container"
 )
 
 const testGlob = "../cli/interactive_tests/test*.tcl"
@@ -40,10 +41,9 @@ func TestDockerCLI(t *testing.T) {
 	s := log.Scope(t)
 	defer s.Close(t)
 
-	containerConfig := container.Config{
-		Image: postgresTestImage,
-		Cmd:   []string{"stat", cluster.CockroachBinaryInContainer},
-	}
+	containerConfig := defaultContainerConfig()
+	containerConfig.Cmd = []string{"stat", cluster.CockroachBinaryInContainer}
+	containerConfig.Env = []string{fmt.Sprintf("PGUSER=%s", security.RootUser)}
 	ctx := context.Background()
 	if err := testDockerOneShot(ctx, t, "cli_test", containerConfig); err != nil {
 		t.Skipf(`TODO(dt): No binary in one-shot container, see #6086: %s`, err)
@@ -94,10 +94,8 @@ func TestDockerStartFlags(t *testing.T) {
 	s := log.Scope(t)
 	defer s.Close(t)
 
-	containerConfig := container.Config{
-		Image: postgresTestImage,
-		Cmd:   []string{"stat", cluster.CockroachBinaryInContainer},
-	}
+	containerConfig := defaultContainerConfig()
+	containerConfig.Cmd = []string{"stat", cluster.CockroachBinaryInContainer}
 	ctx := context.Background()
 	if err := testDockerOneShot(ctx, t, "start_flags_test", containerConfig); err != nil {
 		t.Skipf(`TODO(dt): No binary in one-shot container, see #6086: %s`, err)

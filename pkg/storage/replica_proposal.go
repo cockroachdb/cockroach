@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/storage/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
@@ -36,17 +37,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-)
-
-// leaseMetricsType is used to distinguish between various lease
-// operations and potentially outcomes.
-type leaseMetricsType int
-
-const (
-	leaseRequestSuccess leaseMetricsType = iota
-	leaseRequestError
-	leaseTransferSuccess
-	leaseTransferError
 )
 
 // ProposalData is data about a command which allows it to be
@@ -85,7 +75,7 @@ type ProposalData struct {
 	// Local contains the results of evaluating the request
 	// tying the upstream evaluation of the request to the
 	// downstream application of the command.
-	Local *LocalEvalResult
+	Local *result.LocalResult
 
 	// Request is the client's original BatchRequest.
 	// TODO(tschottdorf): tests which use TestingCommandFilter use this.
@@ -121,276 +111,6 @@ func (proposal *ProposalData) finishRaftApplication(pr proposalResult) {
 	}
 	proposal.doneCh <- pr
 	close(proposal.doneCh)
-}
-
-// LocalEvalResult is data belonging to an evaluated command that is
-// only used on the node on which the command was proposed. Note that
-// the proposing node may die before the local results are processed,
-// so any side effects here are only best-effort.
-type LocalEvalResult struct {
-	// The error resulting from the proposal. Most failing proposals will
-	// fail-fast, i.e. will return an error to the client above Raft. However,
-	// some proposals need to commit data even on error, and in that case we
-	// treat the proposal like a successful one, except that the error stored
-	// here will be sent to the client when the associated batch commits. In
-	// the common case, this field is nil.
-	Err   *roachpb.Error
-	Reply *roachpb.BatchResponse
-
-	// intentsAlways stores any intents encountered but not conflicted with.
-	// They should be handed off to asynchronous intent processing on the
-	// proposer, so that an attempt to resolve them is made. In particular, this
-	// is the pathway used by EndTransaction to communicate its non-local
-	// intents up the stack.
-	//
-	// This is a pointer to allow the zero (and as an unwelcome side effect,
-	// all) values to be compared.
-	intentsAlways *[]intentsWithArg
-	// Like intentsAlways, but specifies intents that must be left alone if the
-	// corresponding command/proposal didn't succeed. For example, resolving
-	// intents of a committing txn should not happen if the commit fails, or
-	// we may accidentally make uncommitted values live.
-	intents *[]intentsWithArg
-	// Whether we successfully or non-successfully requested a lease.
-	//
-	// TODO(tschottdorf): Update this counter correctly with prop-eval'ed KV
-	// in the following case:
-	// - proposal does not fail fast and goes through Raft
-	// - downstream-of-Raft logic identifies a conflict and returns an error
-	// The downstream-of-Raft logic does not exist at time of writing.
-	leaseMetricsResult *leaseMetricsType
-
-	// When set (in which case we better be the first range), call
-	// gossipFirstRange if the Replica holds the lease.
-	gossipFirstRange bool
-	// Call maybeGossipSystemConfig.
-	maybeGossipSystemConfig bool
-	// Call maybeAddToSplitQueue.
-	maybeAddToSplitQueue bool
-	// Call maybeGossipNodeLiveness with the specified Span, if set.
-	maybeGossipNodeLiveness *roachpb.Span
-
-	// Set when a transaction record is updated, after a call to
-	// EndTransaction or PushTxn.
-	updatedTxn *roachpb.Transaction
-}
-
-// detachIntents returns (and removes) those intents from the LocalEvalResult
-// which are supposed to be handled. When hasError is false, returns all
-// intents. When it is true, returns only a subset of intents for which it is
-// known that it is safe to handle them even if the command that discovered them
-// has failed (e.g. omitting intents associated to a committing EndTransaction).
-func (lResult *LocalEvalResult) detachIntents(hasError bool) []intentsWithArg {
-	if lResult == nil {
-		return nil
-	}
-	var r []intentsWithArg
-	if !hasError && lResult.intents != nil {
-		r = *lResult.intents
-	}
-	if lResult.intentsAlways != nil {
-		if r == nil {
-			r = *lResult.intentsAlways
-		} else {
-			r = append(r, *lResult.intentsAlways...)
-		}
-	}
-	lResult.intents, lResult.intentsAlways = nil, nil
-	return r
-}
-
-// EvalResult is the result of evaluating a KV request. That is, the
-// proposer (which holds the lease, at least in the case in which the command
-// will complete successfully) has evaluated the request and is holding on to:
-//
-// a) changes to be written to disk when applying the command
-// b) changes to the state which may require special handling (i.e. code
-//    execution) on all Replicas
-// c) data which isn't sent to the followers but the proposer needs for tasks
-//    it must run when the command has applied (such as resolving intents).
-type EvalResult struct {
-	Local      LocalEvalResult
-	Replicated storagebase.ReplicatedEvalResult
-	WriteBatch *storagebase.WriteBatch
-}
-
-// IsZero reports whether p is the zero value.
-func (p *EvalResult) IsZero() bool {
-	if p.Local != (LocalEvalResult{}) {
-		return false
-	}
-	if !p.Replicated.Equal(storagebase.ReplicatedEvalResult{}) {
-		return false
-	}
-	if p.WriteBatch != nil {
-		return false
-	}
-	return true
-}
-
-// coalesceBool ORs rhs into lhs and then zeroes rhs.
-func coalesceBool(lhs *bool, rhs *bool) {
-	*lhs = *lhs || *rhs
-	*rhs = false
-}
-
-// MergeAndDestroy absorbs the supplied EvalResult while validating that the
-// resulting EvalResult makes sense. For example, it is forbidden to absorb
-// two lease updates or log truncations, or multiple splits and/or merges.
-//
-// The passed EvalResult must not be used once passed to Merge.
-func (p *EvalResult) MergeAndDestroy(q EvalResult) error {
-	if q.Replicated.State != nil {
-		if q.Replicated.State.RaftAppliedIndex != 0 {
-			return errors.New("must not specify RaftApplyIndex")
-		}
-		if q.Replicated.State.LeaseAppliedIndex != 0 {
-			return errors.New("must not specify RaftApplyIndex")
-		}
-		if p.Replicated.State == nil {
-			p.Replicated.State = &storagebase.ReplicaState{}
-		}
-		if p.Replicated.State.Desc == nil {
-			p.Replicated.State.Desc = q.Replicated.State.Desc
-		} else if q.Replicated.State.Desc != nil {
-			return errors.New("conflicting RangeDescriptor")
-		}
-		q.Replicated.State.Desc = nil
-
-		if p.Replicated.State.Lease == nil {
-			p.Replicated.State.Lease = q.Replicated.State.Lease
-		} else if q.Replicated.State.Lease != nil {
-			return errors.New("conflicting Lease")
-		}
-		q.Replicated.State.Lease = nil
-
-		if p.Replicated.State.TruncatedState == nil {
-			p.Replicated.State.TruncatedState = q.Replicated.State.TruncatedState
-		} else if q.Replicated.State.TruncatedState != nil {
-			return errors.New("conflicting TruncatedState")
-		}
-		q.Replicated.State.TruncatedState = nil
-
-		if q.Replicated.State.GCThreshold != nil {
-			if p.Replicated.State.GCThreshold == nil {
-				p.Replicated.State.GCThreshold = q.Replicated.State.GCThreshold
-			} else {
-				p.Replicated.State.GCThreshold.Forward(*q.Replicated.State.GCThreshold)
-			}
-			q.Replicated.State.GCThreshold = nil
-		}
-		if q.Replicated.State.TxnSpanGCThreshold != nil {
-			if p.Replicated.State.TxnSpanGCThreshold == nil {
-				p.Replicated.State.TxnSpanGCThreshold = q.Replicated.State.TxnSpanGCThreshold
-			} else {
-				p.Replicated.State.TxnSpanGCThreshold.Forward(*q.Replicated.State.TxnSpanGCThreshold)
-			}
-			q.Replicated.State.TxnSpanGCThreshold = nil
-		}
-
-		if q.Replicated.State.Stats != nil {
-			return errors.New("must not specify Stats")
-		}
-		if (*q.Replicated.State != storagebase.ReplicaState{}) {
-			log.Fatalf(context.TODO(), "unhandled EvalResult: %s",
-				pretty.Diff(*q.Replicated.State, storagebase.ReplicaState{}))
-		}
-		q.Replicated.State = nil
-	}
-
-	p.Replicated.BlockReads = p.Replicated.BlockReads || q.Replicated.BlockReads
-	q.Replicated.BlockReads = false
-
-	if p.Replicated.Split == nil {
-		p.Replicated.Split = q.Replicated.Split
-	} else if q.Replicated.Split != nil {
-		return errors.New("conflicting Split")
-	}
-	q.Replicated.Split = nil
-
-	if p.Replicated.Merge == nil {
-		p.Replicated.Merge = q.Replicated.Merge
-	} else if q.Replicated.Merge != nil {
-		return errors.New("conflicting Merge")
-	}
-	q.Replicated.Merge = nil
-
-	if p.Replicated.ChangeReplicas == nil {
-		p.Replicated.ChangeReplicas = q.Replicated.ChangeReplicas
-	} else if q.Replicated.ChangeReplicas != nil {
-		return errors.New("conflicting ChangeReplicas")
-	}
-	q.Replicated.ChangeReplicas = nil
-
-	if p.Replicated.ComputeChecksum == nil {
-		p.Replicated.ComputeChecksum = q.Replicated.ComputeChecksum
-	} else if q.Replicated.ComputeChecksum != nil {
-		return errors.New("conflicting ComputeChecksum")
-	}
-	q.Replicated.ComputeChecksum = nil
-
-	if p.Replicated.RaftLogDelta == 0 {
-		p.Replicated.RaftLogDelta = q.Replicated.RaftLogDelta
-	} else if q.Replicated.RaftLogDelta != 0 {
-		return errors.New("conflicting RaftLogDelta")
-	}
-	q.Replicated.RaftLogDelta = 0
-
-	if p.Replicated.AddSSTable == nil {
-		p.Replicated.AddSSTable = q.Replicated.AddSSTable
-	} else if q.Replicated.AddSSTable != nil {
-		return errors.New("conflicting AddSSTable")
-	}
-	q.Replicated.AddSSTable = nil
-
-	if q.Local.intentsAlways != nil {
-		if p.Local.intentsAlways == nil {
-			p.Local.intentsAlways = q.Local.intentsAlways
-		} else {
-			*p.Local.intentsAlways = append(*p.Local.intentsAlways, *q.Local.intentsAlways...)
-		}
-	}
-	q.Local.intentsAlways = nil
-
-	if q.Local.intents != nil {
-		if p.Local.intents == nil {
-			p.Local.intents = q.Local.intents
-		} else {
-			*p.Local.intents = append(*p.Local.intents, *q.Local.intents...)
-		}
-	}
-	q.Local.intents = nil
-
-	if p.Local.leaseMetricsResult == nil {
-		p.Local.leaseMetricsResult = q.Local.leaseMetricsResult
-	} else if q.Local.leaseMetricsResult != nil {
-		return errors.New("conflicting leaseMetricsResult")
-	}
-	q.Local.leaseMetricsResult = nil
-
-	if p.Local.maybeGossipNodeLiveness == nil {
-		p.Local.maybeGossipNodeLiveness = q.Local.maybeGossipNodeLiveness
-	} else if q.Local.maybeGossipNodeLiveness != nil {
-		return errors.New("conflicting maybeGossipNodeLiveness")
-	}
-	q.Local.maybeGossipNodeLiveness = nil
-
-	coalesceBool(&p.Local.gossipFirstRange, &q.Local.gossipFirstRange)
-	coalesceBool(&p.Local.maybeGossipSystemConfig, &q.Local.maybeGossipSystemConfig)
-	coalesceBool(&p.Local.maybeAddToSplitQueue, &q.Local.maybeAddToSplitQueue)
-
-	if p.Local.updatedTxn == nil {
-		p.Local.updatedTxn = q.Local.updatedTxn
-	} else if q.Local.updatedTxn != nil {
-		return errors.New("conflicting updatedTxn")
-	}
-	q.Local.updatedTxn = nil
-
-	if !q.IsZero() {
-		log.Fatalf(context.TODO(), "unhandled EvalResult: %s", pretty.Diff(q, EvalResult{}))
-	}
-
-	return nil
 }
 
 // TODO(tschottdorf): we should find new homes for the checksum, lease
@@ -429,7 +149,7 @@ func (r *Replica) computeChecksumPostApply(
 	r.gcOldChecksumEntriesLocked(now)
 
 	// Create an entry with checksum == nil and gcTimestamp unset.
-	r.mu.checksums[id] = replicaChecksum{started: true, notify: notify}
+	r.mu.checksums[id] = ReplicaChecksum{started: true, notify: notify}
 	desc := *r.mu.state.Desc
 	r.mu.Unlock()
 	// Caller is holding raftMu, so an engine snapshot is automatically
@@ -552,10 +272,10 @@ func (r *Replica) leasePostApply(ctx context.Context, newLease roachpb.Lease) {
 	// will be gossiped rarely because it falls on a range with an epoch-based
 	// range lease that is only reacquired extremely infrequently.
 	if iAmTheLeaseHolder {
-		if err := r.maybeGossipSystemConfig(ctx); err != nil {
+		if err := r.MaybeGossipSystemConfig(ctx); err != nil {
 			log.Error(ctx, err)
 		}
-		if err := r.maybeGossipNodeLiveness(ctx, keys.NodeLivenessSpan); err != nil {
+		if err := r.MaybeGossipNodeLiveness(ctx, keys.NodeLivenessSpan); err != nil {
 			log.Error(ctx, err)
 		}
 		// Make sure the push transaction queue is enabled.
@@ -921,7 +641,7 @@ func (r *Replica) handleReplicatedEvalResult(
 	return shouldAssert
 }
 
-func (r *Replica) handleLocalEvalResult(ctx context.Context, lResult LocalEvalResult) {
+func (r *Replica) handleLocalEvalResult(ctx context.Context, lResult result.LocalResult) {
 	// Enqueue failed push transactions on the txnWaitQueue.
 	if !r.store.cfg.DontRetryPushTxnFailures {
 		if tpErr, ok := lResult.Err.GetDetail().(*roachpb.TransactionPushError); ok {
@@ -942,14 +662,14 @@ func (r *Replica) handleLocalEvalResult(ctx context.Context, lResult LocalEvalRe
 	// ======================
 
 	// The caller is required to detach and handle intents.
-	if lResult.intentsAlways != nil {
-		log.Fatalf(ctx, "LocalEvalResult.intentsAlways should be nil: %+v", lResult.intentsAlways)
+	if lResult.IntentsAlways != nil {
+		log.Fatalf(ctx, "LocalEvalResult.IntentsAlways should be nil: %+v", lResult.IntentsAlways)
 	}
-	if lResult.intents != nil {
-		log.Fatalf(ctx, "LocalEvalResult.intents should be nil: %+v", lResult.intents)
+	if lResult.Intents != nil {
+		log.Fatalf(ctx, "LocalEvalResult.intents should be nil: %+v", lResult.Intents)
 	}
 
-	if lResult.gossipFirstRange {
+	if lResult.GossipFirstRange {
 		// We need to run the gossip in an async task because gossiping requires
 		// the range lease and we'll deadlock if we try to acquire it while
 		// holding processRaftMu. Specifically, Replica.redirectOnOrAcquireLease
@@ -970,50 +690,50 @@ func (r *Replica) handleLocalEvalResult(ctx context.Context, lResult LocalEvalRe
 			}); err != nil {
 			log.Infof(ctx, "unable to gossip first range: %s", err)
 		}
-		lResult.gossipFirstRange = false
+		lResult.GossipFirstRange = false
 	}
 
-	if lResult.maybeAddToSplitQueue {
+	if lResult.MaybeAddToSplitQueue {
 		r.store.splitQueue.MaybeAdd(r, r.store.Clock().Now())
-		lResult.maybeAddToSplitQueue = false
+		lResult.MaybeAddToSplitQueue = false
 	}
 
-	if lResult.maybeGossipSystemConfig {
-		if err := r.maybeGossipSystemConfig(ctx); err != nil {
+	if lResult.MaybeGossipSystemConfig {
+		if err := r.MaybeGossipSystemConfig(ctx); err != nil {
 			log.Error(ctx, err)
 		}
-		lResult.maybeGossipSystemConfig = false
+		lResult.MaybeGossipSystemConfig = false
 	}
-	if lResult.maybeGossipNodeLiveness != nil {
-		if err := r.maybeGossipNodeLiveness(ctx, *lResult.maybeGossipNodeLiveness); err != nil {
+	if lResult.MaybeGossipNodeLiveness != nil {
+		if err := r.MaybeGossipNodeLiveness(ctx, *lResult.MaybeGossipNodeLiveness); err != nil {
 			log.Error(ctx, err)
 		}
-		lResult.maybeGossipNodeLiveness = nil
+		lResult.MaybeGossipNodeLiveness = nil
 	}
 
-	if lResult.leaseMetricsResult != nil {
-		switch metric := *lResult.leaseMetricsResult; metric {
-		case leaseRequestSuccess, leaseRequestError:
-			r.store.metrics.leaseRequestComplete(metric == leaseRequestSuccess)
-		case leaseTransferSuccess, leaseTransferError:
-			r.store.metrics.leaseTransferComplete(metric == leaseTransferSuccess)
+	if lResult.LeaseMetricsResult != nil {
+		switch metric := *lResult.LeaseMetricsResult; metric {
+		case result.LeaseRequestSuccess, result.LeaseRequestError:
+			r.store.metrics.leaseRequestComplete(metric == result.LeaseRequestSuccess)
+		case result.LeaseTransferSuccess, result.LeaseTransferError:
+			r.store.metrics.leaseTransferComplete(metric == result.LeaseTransferSuccess)
 		}
-		lResult.leaseMetricsResult = nil
+		lResult.LeaseMetricsResult = nil
 	}
 
-	if lResult.updatedTxn != nil {
-		r.txnWaitQueue.UpdateTxn(ctx, lResult.updatedTxn)
-		lResult.updatedTxn = nil
+	if lResult.UpdatedTxn != nil {
+		r.txnWaitQueue.UpdateTxn(ctx, lResult.UpdatedTxn)
+		lResult.UpdatedTxn = nil
 	}
 
-	if (lResult != LocalEvalResult{}) {
-		log.Fatalf(ctx, "unhandled field in LocalEvalResult: %s", pretty.Diff(lResult, LocalEvalResult{}))
+	if (lResult != result.LocalResult{}) {
+		log.Fatalf(ctx, "unhandled field in LocalEvalResult: %s", pretty.Diff(lResult, result.LocalResult{}))
 	}
 }
 
 func (r *Replica) handleEvalResultRaftMuLocked(
 	ctx context.Context,
-	lResult *LocalEvalResult,
+	lResult *result.LocalResult,
 	rResult storagebase.ReplicatedEvalResult,
 	raftAppliedIndex, leaseAppliedIndex uint64,
 ) {

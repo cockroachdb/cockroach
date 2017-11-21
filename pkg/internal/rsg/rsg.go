@@ -22,10 +22,13 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/rsg/yacc"
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/ipaddr"
+	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeofday"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
@@ -129,6 +132,14 @@ func (r *RSG) generate(root string, depth int) []string {
 	return ret
 }
 
+// Int63n returns a random int64 in [0,n).
+func (r *RSG) Int63n(n int64) int64 {
+	r.lock.Lock()
+	v := r.src.Int63n(n)
+	r.lock.Unlock()
+	return v
+}
+
 // Intn returns a random int.
 func (r *RSG) Intn(n int) int {
 	r.lock.Lock()
@@ -211,55 +222,67 @@ func (r *RSG) Float64() float64 {
 
 // GenerateRandomArg generates a random, valid, SQL function argument of
 // the specified type.
-func (r *RSG) GenerateRandomArg(typ parser.Type) string {
+func (r *RSG) GenerateRandomArg(typ types.T) string {
 	if r.Intn(10) == 0 {
 		return "NULL"
 	}
 	var v interface{}
-	switch parser.UnwrapType(typ) {
-	case parser.TypeInt:
+	switch types.UnwrapType(typ) {
+	case types.Int:
 		v = r.Int()
-	case parser.TypeFloat, parser.TypeDecimal:
+	case types.Float, types.Decimal:
 		v = r.Float64()
-	case parser.TypeString:
+	case types.String:
 		v = stringArgs[r.Intn(len(stringArgs))]
-	case parser.TypeBytes:
+	case types.Bytes:
 		v = fmt.Sprintf("b%s", stringArgs[r.Intn(len(stringArgs))])
-	case parser.TypeTimestamp, parser.TypeTimestampTZ:
+	case types.Timestamp, types.TimestampTZ:
 		t := timeutil.Unix(0, r.Int63())
 		v = fmt.Sprintf(`'%s'`, t.Format(time.RFC3339Nano))
-	case parser.TypeBool:
+	case types.Bool:
 		v = boolArgs[r.Intn(2)]
-	case parser.TypeDate:
+	case types.Date:
 		i := r.Int63()
 		i -= r.Int63()
-		d := parser.NewDDate(parser.DDate(i))
+		d := tree.NewDDate(tree.DDate(i))
 		v = fmt.Sprintf(`'%s'`, d)
-	case parser.TypeInterval:
+	case types.Time:
+		i := r.Int63n(int64(timeofday.Max))
+		d := tree.MakeDTime(timeofday.FromInt(i))
+		v = fmt.Sprintf(`'%s'`, d)
+	case types.Interval:
 		d := duration.Duration{Nanos: r.Int63()}
-		v = fmt.Sprintf(`'%s'`, &parser.DInterval{Duration: d})
-	case parser.TypeUUID:
+		v = fmt.Sprintf(`'%s'`, &tree.DInterval{Duration: d})
+	case types.UUID:
 		u := uuid.MakeV4()
 		v = fmt.Sprintf(`'%s'`, u)
-	case parser.TypeINet:
+	case types.INet:
 		r.lock.Lock()
 		ipAddr := ipaddr.RandIPAddr(r.src)
 		r.lock.Unlock()
 		v = fmt.Sprintf(`'%s'`, ipAddr)
-	case parser.TypeOid,
-		parser.TypeRegClass,
-		parser.TypeRegNamespace,
-		parser.TypeRegProc,
-		parser.TypeRegProcedure,
-		parser.TypeRegType,
-		parser.TypeAnyArray,
-		parser.TypeAny:
+	case types.Oid,
+		types.RegClass,
+		types.RegNamespace,
+		types.RegProc,
+		types.RegProcedure,
+		types.RegType,
+		types.AnyArray,
+		types.Any:
 		v = "NULL"
+	case types.JSON:
+		r.lock.Lock()
+		j, err := json.Random(20, r.src)
+		r.lock.Unlock()
+		if err != nil {
+			panic(err)
+		}
+		v = fmt.Sprintf(`'%s'`, tree.DJSON{JSON: j})
 	default:
 		// Check types that can't be compared using equality
-		switch parser.UnwrapType(typ).(type) {
-		case parser.TTuple,
-			parser.TArray:
+		switch types.UnwrapType(typ).(type) {
+		case types.TTuple,
+			types.TArray:
 			v = "NULL"
 		default:
 			panic(fmt.Errorf("unknown arg type: %s (%T)", typ, typ))

@@ -17,11 +17,12 @@ package sqlutils
 import (
 	gosql "database/sql"
 	"fmt"
+	"testing"
 
 	yaml "gopkg.in/yaml.v2"
 
 	"github.com/cockroachdb/cockroach/pkg/config"
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 )
 
@@ -50,52 +51,52 @@ func (row ZoneRow) sqlRowString() ([]string, error) {
 }
 
 // DeleteZoneConfig deletes the specified zone config through the SQL interface.
-func DeleteZoneConfig(sqlDB *SQLRunner, target string) {
-	sqlDB.Helper()
-	sqlDB.Exec(fmt.Sprintf("ALTER %s EXPERIMENTAL CONFIGURE ZONE NULL", target))
+func DeleteZoneConfig(t testing.TB, sqlDB *SQLRunner, target string) {
+	t.Helper()
+	sqlDB.Exec(t, fmt.Sprintf("ALTER %s EXPERIMENTAL CONFIGURE ZONE NULL", target))
 }
 
 // SetZoneConfig updates the specified zone config through the SQL interface.
-func SetZoneConfig(sqlDB *SQLRunner, target string, config string) {
-	sqlDB.Helper()
-	sqlDB.Exec(fmt.Sprintf("ALTER %s EXPERIMENTAL CONFIGURE ZONE %s",
-		target, parser.EscapeSQLString(config)))
+func SetZoneConfig(t testing.TB, sqlDB *SQLRunner, target string, config string) {
+	t.Helper()
+	sqlDB.Exec(t, fmt.Sprintf("ALTER %s EXPERIMENTAL CONFIGURE ZONE %s",
+		target, lex.EscapeSQLString(config)))
 }
 
 // TxnSetZoneConfig updates the specified zone config through the SQL interface
 // using the provided transaction.
-func TxnSetZoneConfig(sqlDB *SQLRunner, txn *gosql.Tx, target string, config string) {
-	sqlDB.Helper()
+func TxnSetZoneConfig(t testing.TB, sqlDB *SQLRunner, txn *gosql.Tx, target string, config string) {
+	t.Helper()
 	_, err := txn.Exec(fmt.Sprintf("ALTER %s EXPERIMENTAL CONFIGURE ZONE %s",
-		target, parser.EscapeSQLString(config)))
+		target, lex.EscapeSQLString(config)))
 	if err != nil {
-		sqlDB.Fatal(err)
+		t.Fatal(err)
 	}
 }
 
 // VerifyZoneConfigForTarget verifies that the specified zone matches the specified
 // ZoneRow.
-func VerifyZoneConfigForTarget(sqlDB *SQLRunner, target string, row ZoneRow) {
-	sqlDB.Helper()
+func VerifyZoneConfigForTarget(t testing.TB, sqlDB *SQLRunner, target string, row ZoneRow) {
+	t.Helper()
 	sqlRow, err := row.sqlRowString()
 	if err != nil {
-		sqlDB.Fatal(err)
+		t.Fatal(err)
 	}
-	sqlDB.CheckQueryResults(fmt.Sprintf("EXPERIMENTAL SHOW ZONE CONFIGURATION FOR %s", target),
+	sqlDB.CheckQueryResults(t, fmt.Sprintf("EXPERIMENTAL SHOW ZONE CONFIGURATION FOR %s", target),
 		[][]string{sqlRow})
 }
 
 // VerifyAllZoneConfigs verifies that the specified ZoneRows exactly match the
 // list of active zone configs.
-func VerifyAllZoneConfigs(sqlDB *SQLRunner, rows ...ZoneRow) {
-	sqlDB.Helper()
+func VerifyAllZoneConfigs(t testing.TB, sqlDB *SQLRunner, rows ...ZoneRow) {
+	t.Helper()
 	expected := make([][]string, len(rows))
 	for i, row := range rows {
 		var err error
 		expected[i], err = row.sqlRowString()
 		if err != nil {
-			sqlDB.Fatal(err)
+			t.Fatal(err)
 		}
 	}
-	sqlDB.CheckQueryResults("EXPERIMENTAL SHOW ALL ZONE CONFIGURATIONS", expected)
+	sqlDB.CheckQueryResults(t, "EXPERIMENTAL SHOW ALL ZONE CONFIGURATIONS", expected)
 }

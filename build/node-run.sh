@@ -36,7 +36,16 @@
 # [2]: https://jdebp.eu/FGA/dont-set-shared-file-descriptors-to-non-blocking-mode.html
 # [3]: https://github.com/nodejs/node/issues/14752
 
+set -euo pipefail
 
-[[ "$1" ]] || { echo "usage: $0 COMMAND [ARGS...]" >&2; exit 1; }
+[[ "${1-}" ]] || { echo "usage: $0 [-C CWD] COMMAND [ARGS...]" >&2; exit 1; }
+
+while getopts "C:" opt; do
+  case $opt in
+     C) cd "$OPTARG" ;;
+    \?) exit 1;
+  esac
+done
+shift $((OPTIND-1))
 
 "$@" > >(cat) 2> >(cat >&2)

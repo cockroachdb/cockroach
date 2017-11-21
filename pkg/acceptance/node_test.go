@@ -34,10 +34,10 @@ func TestDockerNodeJS(t *testing.T) {
 
 const nodeJS = `
 set -e
-cd /testdata/node
+cd /mnt/data/node
 
 export SHOULD_FAIL=%v
 # Get access to globally installed node modules.
-export NODE_PATH=$NODE_PATH:/usr/lib/node_modules/
-mocha .
+export NODE_PATH=$NODE_PATH:/usr/lib/node
+/usr/lib/node/.bin/mocha .
 `

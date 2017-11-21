@@ -178,6 +178,9 @@ resource "null_resource" "cockroach-runner" {
       "sudo apt-get -qqy upgrade -o Dpkg::Options::='--force-confold' >/dev/null",
       # Allow access to the cockroach instances from the Jepsen controller.
       "sudo cp ~/.ssh/authorized_keys2 /root/.ssh/authorized_keys2",
+      # The Jepsen controller does a lot of separate ssh commands which can
+      # trigger sshguard. Disable it.
+      "sudo service sshguard stop",
       # Download cockroach binary, zip so that Jepsen understands it
       "mkdir -p /tmp/cockroach",
       "[ $(stat --format=%s cockroach) -ne 0 ] || curl -sfSL https://edge-binaries.cockroachdb.com/cockroach/cockroach.linux-gnu-amd64.${var.cockroach_sha} -o cockroach",

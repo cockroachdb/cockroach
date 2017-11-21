@@ -29,6 +29,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage/batcheval"
+	"github.com/cockroachdb/cockroach/pkg/storage/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
@@ -231,8 +233,8 @@ func NewTestStorePool(cfg StoreConfig) *StorePool {
 		cfg.Settings,
 		cfg.Gossip,
 		cfg.Clock,
-		func(roachpb.NodeID, time.Time, time.Duration) nodeStatus {
-			return nodeStatusLive
+		func(roachpb.NodeID, time.Time, time.Duration) NodeLivenessStatus {
+			return NodeLivenessStatus_LIVE
 		},
 		/* deterministic */ false,
 	)
@@ -307,18 +309,16 @@ func (r *Replica) CommandSizesLen() int {
 	return len(r.mu.commandSizes)
 }
 
-// GetTimestampCacheLowWater returns the timestamp cache low water mark.
-func (r *Replica) GetTimestampCacheLowWater() hlc.Timestamp {
+// GetTSCacheHighWater returns the high water mark of the replica's timestamp
+// cache.
+func (r *Replica) GetTSCacheHighWater() hlc.Timestamp {
 	r.store.tsCacheMu.Lock()
 	defer r.store.tsCacheMu.Unlock()
-	t := r.store.tsCacheMu.cache.GlobalLowWater()
-	// Bump the per-Store low-water mark using the per-range read and write info.
+
 	start := roachpb.Key(r.Desc().StartKey)
 	end := roachpb.Key(r.Desc().EndKey)
-	if r, _, ok := r.store.tsCacheMu.cache.GetMaxRead(start, end); !ok && t.Less(r) {
-		t = r
-	}
-	if w, _, ok := r.store.tsCacheMu.cache.GetMaxWrite(start, end); !ok && t.Less(w) {
+	t, _ := r.store.tsCacheMu.cache.GetMaxRead(start, end)
+	if w, _ := r.store.tsCacheMu.cache.GetMaxWrite(start, end); t.Less(w) {
 		t = w
 	}
 	return t
@@ -442,12 +442,12 @@ func SetMockAddSSTable() (undo func()) {
 	// TODO(tschottdorf): this already does nontrivial work. Worth open-sourcing the relevant
 	// subparts of the real evalAddSSTable to make this test less likely to rot.
 	evalAddSSTable := func(
-		ctx context.Context, batch engine.ReadWriter, cArgs CommandArgs, _ roachpb.Response,
-	) (EvalResult, error) {
+		ctx context.Context, batch engine.ReadWriter, cArgs batcheval.CommandArgs, _ roachpb.Response,
+	) (result.Result, error) {
 		log.Event(ctx, "evaluated testing-only AddSSTable mock")
 		args := cArgs.Args.(*roachpb.AddSSTableRequest)
 
-		return EvalResult{
+		return result.Result{
 			Replicated: storagebase.ReplicatedEvalResult{
 				AddSSTable: &storagebase.ReplicatedEvalResult_AddSSTable{
 					Data:  args.Data,
@@ -458,7 +458,7 @@ func SetMockAddSSTable() (undo func()) {
 	}
 
 	SetAddSSTableCmd(Command{
-		DeclareKeys: DefaultDeclareKeys,
+		DeclareKeys: batcheval.DefaultDeclareKeys,
 		Eval:        evalAddSSTable,
 	})
 	return func() {

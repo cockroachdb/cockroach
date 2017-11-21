@@ -20,8 +20,9 @@ import (
 
 	"golang.org/x/net/context"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	opentracing "github.com/opentracing/opentracing-go"
@@ -80,10 +81,7 @@ type ProcOutputHelper struct {
 // Note that the types slice may be stored directly; the caller should not
 // modify it.
 func (h *ProcOutputHelper) Init(
-	post *PostProcessSpec,
-	types []sqlbase.ColumnType,
-	evalCtx *parser.EvalContext,
-	output RowReceiver,
+	post *PostProcessSpec, types []sqlbase.ColumnType, evalCtx *tree.EvalContext, output RowReceiver,
 ) error {
 	if !post.Projection && len(post.OutputColumns) > 0 {
 		return errors.Errorf("post-processing has projection unset but output columns set: %s", post)
@@ -143,38 +141,37 @@ func (h *ProcOutputHelper) Init(
 
 // neededColumns calculates the set of internal processor columns that are
 // actually used by the post-processing stage.
-func (h *ProcOutputHelper) neededColumns() []bool {
-	needed := make([]bool, h.numInternalCols)
+func (h *ProcOutputHelper) neededColumns() (colIdxs util.FastIntSet) {
 	if h.outputCols == nil && h.renderExprs == nil {
 		// No projection or rendering; all columns are needed.
-		for i := range needed {
-			needed[i] = true
-		}
-		return needed
+		colIdxs.AddRange(0, h.numInternalCols-1)
+		return colIdxs
 	}
+
+	// Add all explicit output columns.
 	for _, c := range h.outputCols {
-		needed[c] = true
+		colIdxs.Add(int(c))
 	}
-	if h.filter != nil {
-		for i := range needed {
-			if !needed[i] {
-				needed[i] = h.filter.vars.IndexedVarUsed(i)
-			}
+
+	for i := 0; i < h.numInternalCols; i++ {
+		// See if filter requires this column.
+		if h.filter != nil && h.filter.vars.IndexedVarUsed(i) {
+			colIdxs.Add(i)
+			continue
 		}
-	}
-	if h.renderExprs != nil {
-		for i := range needed {
-			if !needed[i] {
-				for j := range h.renderExprs {
-					if h.renderExprs[j].vars.IndexedVarUsed(i) {
-						needed[i] = true
-						break
-					}
+
+		// See if render expressions require this column.
+		if h.renderExprs != nil {
+			for j := range h.renderExprs {
+				if h.renderExprs[j].vars.IndexedVarUsed(i) {
+					colIdxs.Add(i)
+					break
 				}
 			}
 		}
 	}
-	return needed
+
+	return colIdxs
 }
 
 // emitHelper is a utility wrapper on top of ProcOutputHelper.EmitRow().
@@ -325,6 +322,12 @@ func (pb *processorBase) OutputTypes() []sqlbase.ColumnType {
 	return pb.out.outputTypes
 }
 
+func (pb *processorBase) init(
+	post *PostProcessSpec, types []sqlbase.ColumnType, flowCtx *FlowCtx, output RowReceiver,
+) error {
+	return pb.out.Init(post, types, flowCtx.NewEvalCtx(), output)
+}
+
 // noopProcessor is a processor that simply passes rows through from the
 // synchronizer to the post-processing stage. It can be useful for its
 // post-processing or in the last stage of a computation, where we may only
@@ -342,7 +345,7 @@ func newNoopProcessor(
 	flowCtx *FlowCtx, input RowSource, post *PostProcessSpec, output RowReceiver,
 ) (*noopProcessor, error) {
 	n := &noopProcessor{flowCtx: flowCtx, input: input}
-	if err := n.out.Init(post, input.Types(), &flowCtx.EvalCtx, output); err != nil {
+	if err := n.init(post, input.Types(), flowCtx, output); err != nil {
 		return nil, err
 	}
 	return n, nil
@@ -459,6 +462,12 @@ func newProcessor(
 			return nil, err
 		}
 		return newAlgebraicSetOp(flowCtx, core.SetOp, inputs[0], inputs[1], post, outputs[0])
+	}
+	if core.Sampler != nil {
+		if err := checkNumInOut(inputs, outputs, 1, 1); err != nil {
+			return nil, err
+		}
+		return newSamplerProcessor(flowCtx, core.Sampler, inputs[0], post, outputs[0])
 	}
 	if core.ReadCSV != nil {
 		if err := checkNumInOut(inputs, outputs, 0, 1); err != nil {

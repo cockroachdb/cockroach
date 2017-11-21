@@ -22,8 +22,9 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/util"
 )
 
 // Cockroach error extensions:
@@ -74,7 +75,7 @@ func NewNonNullViolationError(columnName string) error {
 
 // NewUniquenessConstraintViolationError creates an error that represents a
 // violation of a UNIQUE constraint.
-func NewUniquenessConstraintViolationError(index *IndexDescriptor, vals []parser.Datum) error {
+func NewUniquenessConstraintViolationError(index *IndexDescriptor, vals []tree.Datum) error {
 	valStrs := make([]string, 0, len(vals))
 	for _, val := range vals {
 		valStrs = append(valStrs, val.String())
@@ -124,9 +125,9 @@ func IsUndefinedDatabaseError(err error) bool {
 }
 
 // NewUndefinedRelationError creates an error that represents a missing database table or view.
-func NewUndefinedRelationError(name parser.NodeFormatter) error {
+func NewUndefinedRelationError(name tree.NodeFormatter) error {
 	return pgerror.NewErrorf(pgerror.CodeUndefinedTableError,
-		"relation %q does not exist", parser.ErrString(name))
+		"relation %q does not exist", tree.ErrString(name))
 }
 
 // IsUndefinedRelationError returns true if the error is for an undefined table.
@@ -145,9 +146,9 @@ func NewRelationAlreadyExistsError(name string) error {
 }
 
 // NewWrongObjectTypeError creates a wrong object type error.
-func NewWrongObjectTypeError(name *parser.TableName, desiredObjType string) error {
+func NewWrongObjectTypeError(name *tree.TableName, desiredObjType string) error {
 	return pgerror.NewErrorf(pgerror.CodeWrongObjectTypeError, "%q is not a %s",
-		parser.ErrString(name), desiredObjType)
+		tree.ErrString(name), desiredObjType)
 }
 
 // NewSyntaxError creates a syntax error.
@@ -258,10 +259,13 @@ func ConvertBatchError(ctx context.Context, tableDesc *TableDescriptor, b *clien
 		if err != nil {
 			return err
 		}
-		var rf RowFetcher
+		var rf MultiRowFetcher
+
+		var valNeededForCol util.FastIntSet
+		valNeededForCol.AddRange(0, len(index.ColumnIDs)-1)
+
 		colIdxMap := make(map[ColumnID]int, len(index.ColumnIDs))
 		cols := make([]ColumnDescriptor, len(index.ColumnIDs))
-		valNeededForCol := make([]bool, len(index.ColumnIDs))
 		for i, colID := range index.ColumnIDs {
 			colIdxMap[colID] = i
 			col, err := tableDesc.FindColumnByID(colID)
@@ -269,11 +273,19 @@ func ConvertBatchError(ctx context.Context, tableDesc *TableDescriptor, b *clien
 				return err
 			}
 			cols[i] = *col
-			valNeededForCol[i] = true
 		}
-		if err := rf.Init(tableDesc, colIdxMap, index, false /* reverse */, false, /* lockForUpdate */
-			indexID != tableDesc.PrimaryIndex.ID /* isSecondaryIndex */, cols, valNeededForCol,
-			false /* returnRangeInfo */, &DatumAlloc{}); err != nil {
+
+		tableArgs := MultiRowFetcherTableArgs{
+			Desc:             tableDesc,
+			Index:            index,
+			ColIdxMap:        colIdxMap,
+			IsSecondaryIndex: indexID != tableDesc.PrimaryIndex.ID,
+			Cols:             cols,
+			ValNeededForCol:  valNeededForCol,
+		}
+		if err := rf.Init(
+			false /* reverse */, false /* returnRangeInfo */, &DatumAlloc{}, tableArgs,
+		); err != nil {
 			return err
 		}
 		f := singleKVFetcher{kv: roachpb.KeyValue{Key: key}}
@@ -285,11 +297,11 @@ func ConvertBatchError(ctx context.Context, tableDesc *TableDescriptor, b *clien
 		if err := rf.StartScanFrom(ctx, &f); err != nil {
 			return err
 		}
-		decodedVals, err := rf.NextRowDecoded(ctx)
+		datums, _, _, err := rf.NextRowDecoded(ctx)
 		if err != nil {
 			return err
 		}
-		return NewUniquenessConstraintViolationError(index, decodedVals)
+		return NewUniquenessConstraintViolationError(index, datums)
 	}
 	return origPErr.GoError()
 }

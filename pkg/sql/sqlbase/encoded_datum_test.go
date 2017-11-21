@@ -19,7 +19,7 @@ import (
 
 	"golang.org/x/net/context"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
@@ -29,7 +29,7 @@ func TestEncDatum(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	a := &DatumAlloc{}
-	evalCtx := parser.NewTestingEvalContext()
+	evalCtx := tree.NewTestingEvalContext()
 	defer evalCtx.Stop(context.Background())
 	v := EncDatum{}
 	if !v.IsUnset() {
@@ -41,13 +41,22 @@ func TestEncDatum(t *testing.T) {
 	}
 
 	typeInt := ColumnType{SemanticType: ColumnType_INT}
-	x := DatumToEncDatum(typeInt, parser.NewDInt(5))
-	if x.IsUnset() {
-		t.Errorf("unset after DatumToEncDatum()")
+	x := DatumToEncDatum(typeInt, tree.NewDInt(5))
+
+	check := func(x EncDatum) {
+		if x.IsUnset() {
+			t.Errorf("unset after DatumToEncDatum()")
+		}
+		if x.IsNull() {
+			t.Errorf("null after DatumToEncDatum()")
+		}
+		if val, err := x.GetInt(); err != nil {
+			t.Fatal(err)
+		} else if val != 5 {
+			t.Errorf("GetInt returned %d", val)
+		}
 	}
-	if x.IsNull() {
-		t.Errorf("null after DatumToEncDatum()")
-	}
+	check(x)
 
 	encoded, err := x.Encode(&typeInt, a, DatumEncoding_ASCENDING_KEY, nil)
 	if err != nil {
@@ -55,13 +64,8 @@ func TestEncDatum(t *testing.T) {
 	}
 
 	y := EncDatumFromEncoded(&typeInt, DatumEncoding_ASCENDING_KEY, encoded)
+	check(y)
 
-	if y.IsUnset() {
-		t.Errorf("unset after EncDatumFromEncoded")
-	}
-	if y.IsNull() {
-		t.Errorf("null after EncDatumFromEncoded")
-	}
 	if enc, ok := y.Encoding(); !ok {
 		t.Error("no encoding after EncDatumFromEncoded")
 	} else if enc != DatumEncoding_ASCENDING_KEY {
@@ -91,9 +95,8 @@ func TestEncDatum(t *testing.T) {
 	} else if enc != DatumEncoding_DESCENDING_KEY {
 		t.Errorf("invalid encoding %d", enc)
 	}
-	if z.IsNull() {
-		t.Errorf("null after EncDatumFromEncoded")
-	}
+	check(z)
+
 	err = z.EnsureDecoded(&typeInt, a)
 	if err != nil {
 		t.Fatal(err)
@@ -107,12 +110,16 @@ func TestEncDatum(t *testing.T) {
 	}
 }
 
+func columnTypeCompatibleWithEncoding(typ ColumnType, enc DatumEncoding) bool {
+	return enc == DatumEncoding_VALUE || columnTypeIsIndexable(typ)
+}
+
 func TestEncDatumNull(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	// Verify DNull is null.
 	typeInt := ColumnType{SemanticType: ColumnType_INT}
-	n := DatumToEncDatum(typeInt, parser.DNull)
+	n := DatumToEncDatum(typeInt, tree.DNull)
 	if !n.IsNull() {
 		t.Error("DNull not null")
 	}
@@ -126,6 +133,9 @@ func TestEncDatumNull(t *testing.T) {
 		a, typ := RandEncDatum(rng)
 
 		for enc := range DatumEncoding_name {
+			if !columnTypeCompatibleWithEncoding(typ, DatumEncoding(enc)) {
+				continue
+			}
 			encoded, err := a.Encode(&typ, &alloc, DatumEncoding(enc), nil)
 			if err != nil {
 				t.Fatal(err)
@@ -164,7 +174,7 @@ func checkEncDatumCmp(
 
 	dec2 := EncDatumFromEncoded(&typ, enc2, buf2)
 
-	evalCtx := parser.NewTestingEvalContext()
+	evalCtx := tree.NewTestingEvalContext()
 	defer evalCtx.Stop(context.Background())
 	if val, err := dec1.Compare(&typ, a, evalCtx, &dec2); err != nil {
 		t.Fatal(err)
@@ -195,13 +205,13 @@ func TestEncDatumCompare(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	a := &DatumAlloc{}
-	evalCtx := parser.NewTestingEvalContext()
+	evalCtx := tree.NewTestingEvalContext()
 	defer evalCtx.Stop(context.Background())
 	rng, _ := randutil.NewPseudoRand()
 
 	for kind := range ColumnType_SemanticType_name {
 		kind := ColumnType_SemanticType(kind)
-		if kind == ColumnType_NULL || kind == ColumnType_ARRAY || kind == ColumnType_INT2VECTOR {
+		if kind == ColumnType_NULL || kind == ColumnType_ARRAY || kind == ColumnType_INT2VECTOR || kind == ColumnType_JSON {
 			continue
 		}
 		typ := ColumnType{SemanticType: kind}
@@ -210,7 +220,7 @@ func TestEncDatumCompare(t *testing.T) {
 		}
 
 		// Generate two datums d1 < d2
-		var d1, d2 parser.Datum
+		var d1, d2 tree.Datum
 		for {
 			d1 = RandDatum(rng, typ, false)
 			d2 = RandDatum(rng, typ, false)
@@ -256,7 +266,7 @@ func TestEncDatumFromBuffer(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	var alloc DatumAlloc
-	evalCtx := parser.NewTestingEvalContext()
+	evalCtx := tree.NewTestingEvalContext()
 	defer evalCtx.Stop(context.Background())
 	rng, _ := randutil.NewPseudoRand()
 	for test := 0; test < 20; test++ {
@@ -277,6 +287,9 @@ func TestEncDatumFromBuffer(t *testing.T) {
 				enc[i] = DatumEncoding_VALUE
 			} else {
 				enc[i] = RandDatumEncoding(rng)
+				for !columnTypeCompatibleWithEncoding(types[i], enc[i]) {
+					enc[i] = RandDatumEncoding(rng)
+				}
 			}
 			buf, err = ed[i].Encode(&types[i], &alloc, enc[i], buf)
 			if err != nil {
@@ -314,7 +327,7 @@ func TestEncDatumRowCompare(t *testing.T) {
 	typeInt := ColumnType{SemanticType: ColumnType_INT}
 	v := [5]EncDatum{}
 	for i := range v {
-		v[i] = DatumToEncDatum(typeInt, parser.NewDInt(parser.DInt(i)))
+		v[i] = DatumToEncDatum(typeInt, tree.NewDInt(tree.DInt(i)))
 	}
 
 	asc := encoding.Ascending
@@ -406,7 +419,7 @@ func TestEncDatumRowCompare(t *testing.T) {
 	}
 
 	a := &DatumAlloc{}
-	evalCtx := parser.NewTestingEvalContext()
+	evalCtx := tree.NewTestingEvalContext()
 	defer evalCtx.Stop(context.Background())
 	for _, c := range testCases {
 		types := make([]ColumnType, len(c.row1))
@@ -428,7 +441,7 @@ func TestEncDatumRowCompare(t *testing.T) {
 func TestEncDatumRowAlloc(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	evalCtx := parser.NewTestingEvalContext()
+	evalCtx := tree.NewTestingEvalContext()
 	defer evalCtx.Stop(context.Background())
 	rng, _ := randutil.NewPseudoRand()
 	for _, cols := range []int{1, 2, 4, 10, 40, 100} {

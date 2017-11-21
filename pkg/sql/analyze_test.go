@@ -21,6 +21,8 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
@@ -57,21 +59,22 @@ func testTableDesc() *sqlbase.TableDescriptor {
 	}
 }
 
-func makeSelectNode(t *testing.T) *renderNode {
+func makeSelectNode(t *testing.T, evalCtx *tree.EvalContext) *renderNode {
 	desc := testTableDesc()
 	sel := testInitDummySelectNode(desc)
 	if err := desc.AllocateIDs(); err != nil {
 		t.Fatal(err)
 	}
 	numColumns := len(sel.sourceInfo[0].sourceColumns)
-	sel.ivarHelper = parser.MakeIndexedVarHelper(sel, numColumns)
-	sel.curSourceRow = make(parser.Datums, numColumns)
+	sel.ivarHelper = tree.MakeIndexedVarHelper(sel, numColumns)
+	evalCtx.IVarHelper = &sel.ivarHelper
+	sel.curSourceRow = make(tree.Datums, numColumns)
 	return sel
 }
 
 func parseAndNormalizeExpr(
-	t *testing.T, evalCtx *parser.EvalContext, sql string, sel *renderNode,
-) parser.TypedExpr {
+	t *testing.T, evalCtx *tree.EvalContext, sql string, sel *renderNode,
+) tree.TypedExpr {
 	expr, err := parser.ParseExpr(sql)
 	if err != nil {
 		t.Fatalf("%s: %v", sql, err)
@@ -82,7 +85,8 @@ func parseAndNormalizeExpr(
 	if expr, _, _, err = sel.resolveNames(expr); err != nil {
 		t.Fatalf("%s: %v", sql, err)
 	}
-	typedExpr, err := parser.TypeCheck(expr, nil, parser.TypeAny)
+	semaCtx := tree.SemaContext{IVarHelper: evalCtx.IVarHelper}
+	typedExpr, err := tree.TypeCheck(expr, &semaCtx, types.Any)
 	if err != nil {
 		t.Fatalf("%s: %v", sql, err)
 	}
@@ -92,16 +96,16 @@ func parseAndNormalizeExpr(
 	return typedExpr
 }
 
-func checkEquivExpr(evalCtx *parser.EvalContext, a, b parser.TypedExpr, sel *renderNode) error {
+func checkEquivExpr(evalCtx *tree.EvalContext, a, b tree.TypedExpr, sel *renderNode) error {
 	// The expressions above only use the values 1 and 2. Verify that the
 	// simplified expressions evaluate to the same value as the original
 	// expression for interesting values.
-	for _, v := range []parser.Datum{
-		parser.NewDInt(0),
-		parser.NewDInt(1),
-		parser.NewDInt(2),
-		parser.NewDInt(3),
-		parser.DNull,
+	for _, v := range []tree.Datum{
+		tree.NewDInt(0),
+		tree.NewDInt(1),
+		tree.NewDInt(2),
+		tree.NewDInt(3),
+		tree.DNull,
 	} {
 		for i := range sel.curSourceRow {
 			sel.curSourceRow[i] = v
@@ -117,7 +121,7 @@ func checkEquivExpr(evalCtx *parser.EvalContext, a, b parser.TypedExpr, sel *ren
 		// This is tricky: we don't require the expressions to produce identical
 		// results, but to either both return true or both return not true (either
 		// false or NULL).
-		if (da == parser.DBoolTrue) != (db == parser.DBoolTrue) {
+		if (da == tree.DBoolTrue) != (db == tree.DBoolTrue) {
 			return fmt.Errorf("%s: %s: expected %s, but found %s", a, v, da, db)
 		}
 	}
@@ -138,9 +142,9 @@ func TestSplitOrExpr(t *testing.T) {
 	}
 	for _, d := range testData {
 		t.Run(d.expr+"~"+d.expected, func(t *testing.T) {
-			evalCtx := parser.NewTestingEvalContext()
+			evalCtx := tree.NewTestingEvalContext()
 			defer evalCtx.Stop(context.Background())
-			sel := makeSelectNode(t)
+			sel := makeSelectNode(t, evalCtx)
 			expr := parseAndNormalizeExpr(t, evalCtx, d.expr, sel)
 			exprs := splitOrExpr(evalCtx, expr, nil)
 			if s := exprs.String(); d.expected != s {
@@ -164,9 +168,9 @@ func TestSplitAndExpr(t *testing.T) {
 	}
 	for _, d := range testData {
 		t.Run(d.expr+"~"+d.expected, func(t *testing.T) {
-			evalCtx := parser.NewTestingEvalContext()
+			evalCtx := tree.NewTestingEvalContext()
 			defer evalCtx.Stop(context.Background())
-			sel := makeSelectNode(t)
+			sel := makeSelectNode(t, evalCtx)
 			expr := parseAndNormalizeExpr(t, evalCtx, d.expr, sel)
 			exprs := splitAndExpr(evalCtx, expr, nil)
 			if s := exprs.String(); d.expected != s {
@@ -291,12 +295,13 @@ func TestSimplifyExpr(t *testing.T) {
 	}
 	for _, d := range testData {
 		t.Run(d.expr+"~"+d.expected, func(t *testing.T) {
-			evalCtx := parser.NewTestingEvalContext()
+			evalCtx := tree.NewTestingEvalContext()
 			defer evalCtx.Stop(context.Background())
-			sel := makeSelectNode(t)
+			sel := makeSelectNode(t, evalCtx)
 			// We need to manually close this memory account because we're doing the
 			// evals ourselves here.
 			defer evalCtx.ActiveMemAcc.Close(context.Background())
+			evalCtx.IVarHelper = &sel.ivarHelper
 			expr := parseAndNormalizeExpr(t, evalCtx, d.expr, sel)
 			expr, equiv := simplifyExpr(evalCtx, expr)
 			if s := expr.String(); d.expected != s {
@@ -347,9 +352,9 @@ func TestSimplifyNotExpr(t *testing.T) {
 	}
 	for _, d := range testData {
 		t.Run(d.expr+"~"+d.expected, func(t *testing.T) {
-			evalCtx := parser.NewTestingEvalContext()
+			evalCtx := tree.NewTestingEvalContext()
 			defer evalCtx.Stop(context.Background())
-			sel := makeSelectNode(t)
+			sel := makeSelectNode(t, evalCtx)
 			expr1 := parseAndNormalizeExpr(t, evalCtx, d.expr, sel)
 			expr2, equiv := simplifyExpr(evalCtx, expr1)
 			if s := expr2.String(); d.expected != s {
@@ -384,9 +389,9 @@ func TestSimplifyAndExpr(t *testing.T) {
 	}
 	for _, d := range testData {
 		t.Run(d.expr+"~"+d.expected, func(t *testing.T) {
-			evalCtx := parser.NewTestingEvalContext()
+			evalCtx := tree.NewTestingEvalContext()
 			defer evalCtx.Stop(context.Background())
-			sel := makeSelectNode(t)
+			sel := makeSelectNode(t, evalCtx)
 			expr1 := parseAndNormalizeExpr(t, evalCtx, d.expr, sel)
 			expr2, equiv := simplifyExpr(evalCtx, expr1)
 			if s := expr2.String(); d.expected != s {
@@ -589,9 +594,9 @@ func TestSimplifyAndExprCheck(t *testing.T) {
 	}
 	for _, d := range testData {
 		t.Run(d.expr+"~"+d.expected, func(t *testing.T) {
-			evalCtx := parser.NewTestingEvalContext()
+			evalCtx := tree.NewTestingEvalContext()
 			defer evalCtx.Stop(context.Background())
-			sel := makeSelectNode(t)
+			sel := makeSelectNode(t, evalCtx)
 			expr1 := parseAndNormalizeExpr(t, evalCtx, d.expr, sel)
 			expr2, equiv := simplifyExpr(evalCtx, expr1)
 			if s := expr2.String(); d.expected != s {
@@ -609,11 +614,11 @@ func TestSimplifyAndExprCheck(t *testing.T) {
 				return
 			}
 
-			if _, ok := expr2.(*parser.AndExpr); !ok {
+			if _, ok := expr2.(*tree.AndExpr); !ok {
 				// The result was not an AND expression. Re-parse to re-resolve names
 				// and verify that the analysis is commutative.
 				expr1 = parseAndNormalizeExpr(t, evalCtx, d.expr, sel)
-				andExpr := expr1.(*parser.AndExpr)
+				andExpr := expr1.(*tree.AndExpr)
 				andExpr.Left, andExpr.Right = andExpr.Right, andExpr.Left
 				expr3, equiv := simplifyExpr(evalCtx, andExpr)
 				if s := expr3.String(); d.expected != s {
@@ -641,9 +646,9 @@ func TestSimplifyOrExpr(t *testing.T) {
 	}
 	for _, d := range testData {
 		t.Run(d.expr+"~"+d.expected, func(t *testing.T) {
-			evalCtx := parser.NewTestingEvalContext()
+			evalCtx := tree.NewTestingEvalContext()
 			defer evalCtx.Stop(context.Background())
-			sel := makeSelectNode(t)
+			sel := makeSelectNode(t, evalCtx)
 			expr1 := parseAndNormalizeExpr(t, evalCtx, d.expr, sel)
 			expr2, _ := simplifyExpr(evalCtx, expr1)
 			if s := expr2.String(); d.expected != s {
@@ -816,9 +821,9 @@ func TestSimplifyOrExprCheck(t *testing.T) {
 	}
 	for _, d := range testData {
 		t.Run(d.expr+"~"+d.expected, func(t *testing.T) {
-			evalCtx := parser.NewTestingEvalContext()
+			evalCtx := tree.NewTestingEvalContext()
 			defer evalCtx.Stop(context.Background())
-			sel := makeSelectNode(t)
+			sel := makeSelectNode(t, evalCtx)
 			expr1 := parseAndNormalizeExpr(t, evalCtx, d.expr, sel)
 			expr2, equiv := simplifyExpr(evalCtx, expr1)
 			if s := expr2.String(); d.expected != s {
@@ -833,11 +838,11 @@ func TestSimplifyOrExprCheck(t *testing.T) {
 				return
 			}
 
-			if _, ok := expr2.(*parser.OrExpr); !ok {
+			if _, ok := expr2.(*tree.OrExpr); !ok {
 				// The result was not an OR expression. Re-parse to re-resolve names
 				// and verify that the analysis is commutative.
 				expr1 = parseAndNormalizeExpr(t, evalCtx, d.expr, sel)
-				orExpr := expr1.(*parser.OrExpr)
+				orExpr := expr1.(*tree.OrExpr)
 				orExpr.Left, orExpr.Right = orExpr.Right, orExpr.Left
 				expr3, equiv := simplifyExpr(evalCtx, orExpr)
 				if s := expr3.String(); d.expected != s {

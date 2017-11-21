@@ -22,7 +22,8 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 )
@@ -33,13 +34,13 @@ import (
 // the point the query starts execution / evaluation.
 type subquery struct {
 	planner  *planner
-	typ      parser.Type
-	subquery *parser.Subquery
+	typ      types.T
+	subquery *tree.Subquery
 	execMode subqueryExecMode
 	expanded bool
 	started  bool
 	plan     planNode
-	result   parser.Datum
+	result   tree.Datum
 }
 
 type subqueryExecMode int
@@ -64,10 +65,10 @@ const (
 	execModeOneRow
 )
 
-var _ parser.TypedExpr = &subquery{}
-var _ parser.VariableExpr = &subquery{}
+var _ tree.TypedExpr = &subquery{}
+var _ tree.VariableExpr = &subquery{}
 
-func (s *subquery) Format(buf *bytes.Buffer, f parser.FmtFlags) {
+func (s *subquery) Format(buf *bytes.Buffer, f tree.FmtFlags) {
 	if s.execMode == execModeExists {
 		buf.WriteString("EXISTS ")
 	}
@@ -75,18 +76,18 @@ func (s *subquery) Format(buf *bytes.Buffer, f parser.FmtFlags) {
 	// be printed in a context where type resolution has not occurred
 	// yet. We do not use FmtSimple directly however, in case the
 	// caller wants to use other flags (e.g. to anonymize identifiers).
-	parser.FormatNode(buf, parser.StripTypeFormatting(f), s.subquery)
+	tree.FormatNode(buf, tree.StripTypeFormatting(f), s.subquery)
 }
 
-func (s *subquery) String() string { return parser.AsString(s) }
+func (s *subquery) String() string { return tree.AsString(s) }
 
-func (s *subquery) Walk(v parser.Visitor) parser.Expr {
+func (s *subquery) Walk(v tree.Visitor) tree.Expr {
 	return s
 }
 
 func (s *subquery) Variable() {}
 
-func (s *subquery) TypeCheck(_ *parser.SemaContext, desired parser.Type) (parser.TypedExpr, error) {
+func (s *subquery) TypeCheck(_ *tree.SemaContext, desired types.T) (tree.TypedExpr, error) {
 	// TODO(knz): if/when type checking can be extracted from the
 	// newPlan recursion, we can propagate the desired type to the
 	// sub-query. For now, the type is simply derived during the subquery node
@@ -98,16 +99,16 @@ func (s *subquery) TypeCheck(_ *parser.SemaContext, desired parser.Type) (parser
 	return s, nil
 }
 
-func (s *subquery) ResolvedType() parser.Type { return s.typ }
+func (s *subquery) ResolvedType() types.T { return s.typ }
 
-func (s *subquery) Eval(_ *parser.EvalContext) (parser.Datum, error) {
+func (s *subquery) Eval(_ *tree.EvalContext) (tree.Datum, error) {
 	if s.result == nil {
 		panic("subquery was not pre-evaluated properly")
 	}
 	return s.result, nil
 }
 
-func (s *subquery) doEval(ctx context.Context) (result parser.Datum, err error) {
+func (s *subquery) doEval(ctx context.Context) (result tree.Datum, err error) {
 	// After evaluation, there is no plan remaining.
 	defer func() { s.plan.Close(ctx); s.plan = nil }()
 
@@ -124,14 +125,14 @@ func (s *subquery) doEval(ctx context.Context) (result parser.Datum, err error) 
 			return result, err
 		}
 		if next {
-			result = parser.MakeDBool(true)
+			result = tree.MakeDBool(true)
 		}
 		if result == nil {
-			result = parser.MakeDBool(false)
+			result = tree.MakeDBool(false)
 		}
 
 	case execModeAllRows, execModeAllRowsNormalized:
-		var rows parser.DTuple
+		var rows tree.DTuple
 		next, err := s.plan.Next(params)
 		for ; next; next, err = s.plan.Next(params) {
 			values := s.plan.Values()
@@ -145,7 +146,7 @@ func (s *subquery) doEval(ctx context.Context) (result parser.Datum, err error) 
 			default:
 				// The result from plan.Values() is only valid until the next call to
 				// plan.Next(), so make a copy.
-				valuesCopy := parser.NewDTupleWithLen(len(values))
+				valuesCopy := tree.NewDTupleWithLen(len(values))
 				copy(valuesCopy.D, values)
 				rows.D = append(rows.D, valuesCopy)
 			}
@@ -166,7 +167,7 @@ func (s *subquery) doEval(ctx context.Context) (result parser.Datum, err error) 
 		result = &rows
 
 	case execModeOneRow:
-		result = parser.DNull
+		result = tree.DNull
 		hasRow, err := s.plan.Next(params)
 		if err != nil {
 			return result, err
@@ -177,7 +178,7 @@ func (s *subquery) doEval(ctx context.Context) (result parser.Datum, err error) 
 			case 1:
 				result = values[0]
 			default:
-				valuesCopy := parser.NewDTupleWithLen(len(values))
+				valuesCopy := tree.NewDTupleWithLen(len(values))
 				copy(valuesCopy.D, values)
 				result = valuesCopy
 			}
@@ -307,23 +308,23 @@ func collectSubquerySpans(params runParams, plan planNode) (roachpb.Spans, error
 	return v.reads, nil
 }
 
-// subqueryVisitor replaces parser.Subquery syntax nodes by a
+// subqueryVisitor replaces tree.Subquery syntax nodes by a
 // sql.subquery node and an initial query plan for running the
 // sub-query.
 type subqueryVisitor struct {
 	*planner
 	columns int
-	path    []parser.Expr // parent expressions
-	pathBuf [4]parser.Expr
+	path    []tree.Expr // parent expressions
+	pathBuf [4]tree.Expr
 	err     error
 
-	// TODO(andrei): plumb the context through the parser.Visitor.
+	// TODO(andrei): plumb the context through the tree.Visitor.
 	ctx context.Context
 }
 
-var _ parser.Visitor = &subqueryVisitor{}
+var _ tree.Visitor = &subqueryVisitor{}
 
-func (v *subqueryVisitor) VisitPre(expr parser.Expr) (recurse bool, newExpr parser.Expr) {
+func (v *subqueryVisitor) VisitPre(expr tree.Expr) (recurse bool, newExpr tree.Expr) {
 	if v.err != nil {
 		return false, expr
 	}
@@ -335,14 +336,14 @@ func (v *subqueryVisitor) VisitPre(expr parser.Expr) (recurse bool, newExpr pars
 
 	v.path = append(v.path, expr)
 
-	var exists *parser.ExistsExpr
-	sq, ok := expr.(*parser.Subquery)
+	var exists *tree.ExistsExpr
+	sq, ok := expr.(*tree.Subquery)
 	if !ok {
-		exists, ok = expr.(*parser.ExistsExpr)
+		exists, ok = expr.(*tree.ExistsExpr)
 		if !ok {
 			return true, expr
 		}
-		sq, ok = exists.Subquery.(*parser.Subquery)
+		sq, ok = exists.Subquery.(*tree.Subquery)
 		if !ok {
 			return true, expr
 		}
@@ -364,7 +365,7 @@ func (v *subqueryVisitor) VisitPre(expr parser.Expr) (recurse bool, newExpr pars
 
 	if exists != nil {
 		result.execMode = execModeExists
-		result.typ = parser.TypeBool
+		result.typ = types.Bool
 	} else {
 		wantedNumColumns, execMode := v.getSubqueryContext()
 		result.execMode = execMode
@@ -390,7 +391,7 @@ func (v *subqueryVisitor) VisitPre(expr parser.Expr) (recurse bool, newExpr pars
 			// a single value against a tuple.
 			result.typ = cols[0].Typ
 		} else {
-			colTypes := make(parser.TTuple, wantedNumColumns)
+			colTypes := make(types.TTuple, wantedNumColumns)
 			for i, col := range cols {
 				colTypes[i] = col.Typ
 			}
@@ -401,7 +402,7 @@ func (v *subqueryVisitor) VisitPre(expr parser.Expr) (recurse bool, newExpr pars
 	return false, result
 }
 
-func (v *subqueryVisitor) VisitPost(expr parser.Expr) parser.Expr {
+func (v *subqueryVisitor) VisitPost(expr tree.Expr) tree.Expr {
 	if v.err == nil {
 		v.path = v.path[:len(v.path)-1]
 	}
@@ -409,11 +410,11 @@ func (v *subqueryVisitor) VisitPost(expr parser.Expr) parser.Expr {
 }
 
 func (p *planner) replaceSubqueries(
-	ctx context.Context, expr parser.Expr, columns int,
-) (parser.Expr, error) {
+	ctx context.Context, expr tree.Expr, columns int,
+) (tree.Expr, error) {
 	p.subqueryVisitor = subqueryVisitor{planner: p, columns: columns, ctx: ctx}
 	p.subqueryVisitor.path = p.subqueryVisitor.pathBuf[:0]
-	expr, _ = parser.WalkExpr(&p.subqueryVisitor, expr)
+	expr, _ = tree.WalkExpr(&p.subqueryVisitor, expr)
 	return expr, p.subqueryVisitor.err
 }
 
@@ -423,19 +424,19 @@ func (p *planner) replaceSubqueries(
 func (v *subqueryVisitor) getSubqueryContext() (columns int, execMode subqueryExecMode) {
 	for i := len(v.path) - 1; i >= 0; i-- {
 		switch e := v.path[i].(type) {
-		case *parser.ExistsExpr:
+		case *tree.ExistsExpr:
 			continue
-		case *parser.Subquery:
+		case *tree.Subquery:
 			continue
-		case *parser.ParenExpr:
+		case *tree.ParenExpr:
 			continue
 
-		case *parser.ArrayFlatten:
+		case *tree.ArrayFlatten:
 			// If the subquery is inside of an ARRAY constructor, it must return a
 			// single-column, multi-row result.
 			return 1, execModeAllRows
 
-		case *parser.ComparisonExpr:
+		case *tree.ComparisonExpr:
 			// The subquery must occur on the right hand side of the comparison.
 			//
 			// TODO(pmattis): Figure out a way to lift this restriction so that we
@@ -444,15 +445,15 @@ func (v *subqueryVisitor) getSubqueryContext() (columns int, execMode subqueryEx
 			//   SELECT (SELECT 1, 2) = (SELECT 1, 2)
 			columns = 1
 			switch t := e.Left.(type) {
-			case *parser.Tuple:
+			case *tree.Tuple:
 				columns = len(t.Exprs)
-			case *parser.DTuple:
+			case *tree.DTuple:
 				columns = len(t.D)
 			}
 
 			execMode = execModeOneRow
 			switch e.Operator {
-			case parser.In, parser.NotIn, parser.Any, parser.Some, parser.All:
+			case tree.In, tree.NotIn, tree.Any, tree.Some, tree.All:
 				execMode = execModeAllRowsNormalized
 			}
 

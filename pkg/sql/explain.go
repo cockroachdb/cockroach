@@ -22,7 +22,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
@@ -46,7 +47,7 @@ var explainStrings = map[explainMode]string{
 // info about the wrapped statement.
 //
 // Privileges: the same privileges as the statement being explained.
-func (p *planner) Explain(ctx context.Context, n *parser.Explain) (planNode, error) {
+func (p *planner) Explain(ctx context.Context, n *tree.Explain) (planNode, error) {
 	mode := explainNone
 
 	optimized := true
@@ -162,7 +163,7 @@ type explainDistSQLNode struct {
 	txn *client.Txn
 
 	// The single row returned by the node.
-	values parser.Datums
+	values tree.Datums
 
 	// done is set if Next() was called.
 	done bool
@@ -173,9 +174,9 @@ func (n *explainDistSQLNode) Close(ctx context.Context) {
 }
 
 var explainDistSQLColumns = sqlbase.ResultColumns{
-	{Name: "Automatic", Typ: parser.TypeBool},
-	{Name: "URL", Typ: parser.TypeString},
-	{Name: "JSON", Typ: parser.TypeString, Hidden: true},
+	{Name: "Automatic", Typ: types.Bool},
+	{Name: "URL", Typ: types.String},
+	{Name: "JSON", Typ: types.String, Hidden: true},
 }
 
 func (n *explainDistSQLNode) Start(params runParams) error {
@@ -199,10 +200,10 @@ func (n *explainDistSQLNode) Start(params runParams) error {
 		return err
 	}
 
-	n.values = parser.Datums{
-		parser.MakeDBool(parser.DBool(auto)),
-		parser.NewDString(planURL.String()),
-		parser.NewDString(planJSON),
+	n.values = tree.Datums{
+		tree.MakeDBool(tree.DBool(auto)),
+		tree.NewDString(planURL.String()),
+		tree.NewDString(planJSON),
 	}
 	return nil
 }
@@ -215,6 +216,6 @@ func (n *explainDistSQLNode) Next(runParams) (bool, error) {
 	return true, nil
 }
 
-func (n *explainDistSQLNode) Values() parser.Datums {
+func (n *explainDistSQLNode) Values() tree.Datums {
 	return n.values
 }

@@ -66,6 +66,12 @@ var (
 	// startTime records when the process started so that crash reports can
 	// include the server's uptime as an extra tag.
 	startTime = timeutil.Now()
+
+	// ReportSensitiveDetails enables reporting of unanonymized data.
+	//
+	// This should not be used by anyone unwilling to share the whole cluster
+	// data with Cockroach Labs and various cloud services.
+	ReportSensitiveDetails = envutil.EnvOrDefaultBool("COCKROACH_REPORT_SENSITIVE_DETAILS", false)
 )
 
 // RecoverAndReportPanic can be invoked on goroutines that run with
@@ -84,11 +90,23 @@ func RecoverAndReportPanic(ctx context.Context, sv *settings.Values) {
 	}
 }
 
+// SafeMessager is implemented by objects which have a way of representing
+// themselves suitably redacted for anonymized reporting.
+type SafeMessager interface {
+	SafeMessage() string
+}
+
 // A SafeType panic can be reported verbatim, i.e. does not leak information.
-//
-// TODO(dt): flesh out, see #15892.
+// A nil `*SafeType` is not valid for use and may cause panics.
 type SafeType struct {
 	V interface{}
+}
+
+var _ SafeMessager = SafeType{}
+
+// SafeMessage implements SafeMessager.
+func (st SafeType) SafeMessage() string {
+	return fmt.Sprintf("%v", st.V)
 }
 
 // Safe constructs a SafeType.
@@ -181,14 +199,9 @@ func (e *safeError) Error() string {
 	return e.message
 }
 
-// redact returns the redacted string and a boolean indicating whether the
-// supplied item is considered safe. That is, if the returned `bool` is true,
-// then the caller may choose to report the item verbatim (which might have been
-// scrubbed internally), discarding the returned string.
-func redact(r interface{}) (string, bool) {
-	handleSafeType := func(v *SafeType) string {
-		return fmt.Sprintf("%+v", v.V)
-	}
+// redact returns a redacted version of the supplied item that is safe to use in
+// anonymized reporting.
+func redact(r interface{}) string {
 	typAnd := func(i interface{}, text string) string {
 		type stackTracer interface {
 			StackTrace() errors.StackTrace
@@ -213,16 +226,14 @@ func redact(r interface{}) (string, bool) {
 		return typ + ": " + text
 	}
 
-	handle := func(r interface{}) (string, bool) {
+	handle := func(r interface{}) string {
 		switch t := r.(type) {
-		case *SafeType:
-			return handleSafeType(t), false
-		case SafeType:
-			return handleSafeType(&t), false
+		case SafeMessager:
+			return t.SafeMessage()
 		case error:
 			// continue below
 		default:
-			return typAnd(r, ""), false
+			return typAnd(r, "")
 		}
 
 		// Now that we're looking at an error, see if it's one we can
@@ -230,18 +241,25 @@ func redact(r interface{}) (string, bool) {
 		// block above ensures that the types below actually implement `error`.
 		switch t := r.(error).(type) {
 		case runtime.Error:
-			return typAnd(t, t.Error()), true
+			return typAnd(t, t.Error())
 		case syscall.Errno:
-			return typAnd(t, t.Error()), true
+			return typAnd(t, t.Error())
 		case *os.SyscallError:
-			s, safe := redact(t.Err)
-			return typAnd(t, fmt.Sprintf("%s: %s", t.Syscall, s)), safe
+			s := redact(t.Err)
+			return typAnd(t, fmt.Sprintf("%s: %s", t.Syscall, s))
 		case *os.PathError:
+			// It hardly matters, but avoid mutating the original.
+			cpy := *t
+			t = &cpy
 			t.Path = "<redacted>"
-			return typAnd(t, t.Error()), true
+			return typAnd(t, t.Error())
 		case *os.LinkError:
+			// It hardly matters, but avoid mutating the original.
+			cpy := *t
+			t = &cpy
+
 			t.Old, t.New = "<redacted>", "<redacted>"
-			return typAnd(t, t.Error()), true
+			return typAnd(t, t.Error())
 		default:
 		}
 
@@ -257,26 +275,21 @@ func redact(r interface{}) (string, bool) {
 		case os.ErrClosed:
 		default:
 			// Not a whitelisted sentinel error.
-			return typAnd(r, ""), false
+			return typAnd(r, "")
 		}
 		// Whitelisted sentinel error.
-		return typAnd(r, r.(error).Error()), true
+		return typAnd(r, r.(error).Error())
 	}
 
 	type causer interface {
 		Cause() error
 	}
 
-	reportable, safe := handle(r)
+	reportable := handle(r)
 	if c, ok := r.(causer); ok {
-		if reportable == "" {
-			reportable += "<redacted>"
-		}
-		sub, subSafe := redact(c.Cause())
-		reportable += ": caused by " + sub
-		safe = safe && subSafe
+		reportable += ": caused by " + redact(c.Cause())
 	}
-	return reportable, safe
+	return reportable
 }
 
 func reportablesToSafeError(depth int, format string, reportables []interface{}) error {
@@ -290,22 +303,9 @@ func reportablesToSafeError(depth int, format string, reportables []interface{})
 		file, line, _ = caller.Lookup(depth)
 	}
 
-	if e, ok := reportables[0].(error); ok && len(reportables) == 1 && format == "" {
-		// Special case so that `panic(err)` for a safe `err` returns `err` (and
-		// doesn't wrap it in a `safeError`). In fact, we go further and also try
-		// the errors.Cause() similarly. The effect is that something like
-		// `errors.Wrap(someSafeErr, "gibberish")` can report `someSafeErr` verbatim.
-		for _, err := range []error{e, errors.Cause(e)} {
-			if _, safe := redact(err); safe {
-				return err
-			}
-		}
-	}
-
 	redacted := make([]string, 0, len(reportables))
 	for i := range reportables {
-		s, _ := redact(reportables[i])
-		redacted = append(redacted, s)
+		redacted = append(redacted, redact(reportables[i]))
 	}
 	reportables = nil
 
@@ -354,10 +354,12 @@ func SendCrashReport(
 
 	ex := raven.NewException(err, raven.NewStacktrace(depth+1, contextLines, crdbPaths))
 	packet := raven.NewPacket(err.Error(), ex)
-	// Avoid leaking the machine's hostname by injecting the literal "<redacted>".
-	// Otherwise, raven.Client.Capture will see an empty ServerName field and
-	// automatically fill in the machine's hostname.
-	packet.ServerName = "<redacted>"
+	if !ReportSensitiveDetails {
+		// Avoid leaking the machine's hostname by injecting the literal "<redacted>".
+		// Otherwise, raven.Client.Capture will see an empty ServerName field and
+		// automatically fill in the machine's hostname.
+		packet.ServerName = "<redacted>"
+	}
 	tags := map[string]string{
 		"uptime": uptimeTag(timeutil.Now()),
 	}

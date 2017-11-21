@@ -386,8 +386,11 @@ DROP INDEX products@products_upc_key
 statement error "products_upc_key" is referenced by foreign key from table "delivery"
 DROP INDEX products@products_upc_key RESTRICT
 
+statement error "products_upc_key" is referenced by foreign key from table "delivery"
+ALTER TABLE products DROP COLUMN upc
+
 statement ok
-DROP TABLE delivery
+ALTER TABLE delivery DROP COLUMN "item"
 
 statement ok
 DROP INDEX products@products_upc_key
@@ -406,6 +409,13 @@ DROP TABLE products RESTRICT
 
 statement error referenced by foreign key from table "customer reviews"
 DROP TABLE orders
+
+# reviews has a multi-col FK in which dropping one col is not allowed.
+statement error column "order" is referenced by existing index "customer reviews_auto_index_orderfk"
+ALTER TABLE "user content"."customer reviews" DROP COLUMN "order"
+
+statement ok
+ALTER TABLE "user content"."customer reviews" DROP COLUMN "order" CASCADE
 
 statement ok
 DROP TABLE "user content"."customer reviews"
@@ -861,3 +871,18 @@ pkref_b  CREATE TABLE pkref_b (
         CONSTRAINT fk_b_ref_pkref_a FOREIGN KEY (b) REFERENCES pkref_a (a) ON DELETE RESTRICT,
         FAMILY "primary" (b)
 )
+
+# See https://github.com/cockroachdb/cockroach/issues/20045
+statement ok
+CREATE TABLE self_x2 (
+  x STRING PRIMARY KEY
+ ,y STRING UNIQUE REFERENCES self_x2(x)
+ ,z STRING REFERENCES self_x2(y)
+ ,INDEX(z)
+);
+
+statement ok
+INSERT INTO self_x2 (x, y, z) VALUES ('pk1', NULL, NULL);
+
+statement ok
+DELETE FROM self_x2 WHERE x = 'pk1';

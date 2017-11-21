@@ -16,10 +16,8 @@ package parser
 
 import (
 	"bytes"
-	"regexp"
 	"strings"
 	"testing"
-	"unicode"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/urlcheck/lib/urlcheck"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -77,6 +75,11 @@ func TestContextualHelp(t *testing.T) {
 		{`ALTER VIEW blah RENAME ??`, `ALTER VIEW`},
 		{`ALTER VIEW blah RENAME TO blih ??`, `ALTER VIEW`},
 
+		{`ALTER SEQUENCE IF ??`, `ALTER SEQUENCE`},
+		{`ALTER SEQUENCE blah ??`, `ALTER SEQUENCE`},
+		{`ALTER SEQUENCE blah RENAME ??`, `ALTER SEQUENCE`},
+		{`ALTER SEQUENCE blah RENAME TO blih ??`, `ALTER SEQUENCE`},
+
 		{`ALTER USER IF ??`, `ALTER USER`},
 		{`ALTER USER foo WITH PASSWORD ??`, `ALTER USER`},
 
@@ -104,6 +107,8 @@ func TestContextualHelp(t *testing.T) {
 		{`CREATE VIEW blah AS SELECT c FROM x ??`, `SELECT`},
 		{`CREATE VIEW blah AS (??`, `<SELECTCLAUSE>`},
 
+		{`CREATE SEQUENCE ??`, `CREATE SEQUENCE`},
+
 		{`CREATE TABLE blah (??`, `CREATE TABLE`},
 		{`CREATE TABLE IF NOT ??`, `CREATE TABLE`},
 		{`CREATE TABLE blah (x, y) AS ??`, `CREATE TABLE`},
@@ -127,6 +132,10 @@ func TestContextualHelp(t *testing.T) {
 
 		{`DROP INDEX blah, ??`, `DROP INDEX`},
 		{`DROP INDEX blah@blih ??`, `DROP INDEX`},
+
+		{`DROP SEQUENCE blah ??`, `DROP SEQUENCE`},
+		{`DROP SEQUENCE IF ??`, `DROP SEQUENCE`},
+		{`DROP SEQUENCE IF EXISTS blih, bloh ??`, `DROP SEQUENCE`},
 
 		{`DROP TABLE blah ??`, `DROP TABLE`},
 		{`DROP TABLE IF ??`, `DROP TABLE`},
@@ -314,6 +323,10 @@ func TestContextualHelp(t *testing.T) {
 		{`RELEASE blah ??`, `RELEASE`},
 		{`RELEASE SAVEPOINT blah ??`, `RELEASE`},
 
+		{`EXPERIMENTAL SCRUB ??`, `SCRUB`},
+		{`EXPERIMENTAL SCRUB TABLE ??`, `SCRUB TABLE`},
+		{`EXPERIMENTAL SCRUB DATABASE ??`, `SCRUB DATABASE`},
+
 		{`BACKUP foo TO 'bar' ??`, `BACKUP`},
 		{`BACKUP DATABASE ??`, `BACKUP`},
 		{`BACKUP foo TO 'bar' AS OF ??`, `BACKUP`},
@@ -361,42 +374,6 @@ func TestContextualHelp(t *testing.T) {
 			expected := msg.String()
 			if help != expected {
 				t.Errorf("unexpected help message: got:\n%s\nexpected:\n%s", help, expected)
-			}
-		})
-	}
-}
-
-func TestHelpFunctions(t *testing.T) {
-	// This test checks that all the built-in functions receive contextual help.
-	for f := range Builtins {
-		if unicode.IsUpper(rune(f[0])) {
-			continue
-		}
-		t.Run(f, func(t *testing.T) {
-			_, err := Parse("select " + f + "(??")
-			if err == nil {
-				t.Errorf("parser didn't trigger error")
-				return
-			}
-			if err.Error() != "help token in input" {
-				t.Fatal(err)
-			}
-			pgerr, ok := pgerror.GetPGCause(err)
-			if !ok {
-				t.Fatalf("expected pg error, got %v", err)
-			}
-			if !strings.HasPrefix(pgerr.Hint, "help:\n") {
-				t.Errorf("expected 'help: ' prefix, got %q", pgerr.Hint)
-				return
-			}
-			help := pgerr.Hint[6:]
-			pattern := "Function:\\s+" + f + "\n"
-			if m, err := regexp.MatchString(pattern, help); err != nil || !m {
-				if err != nil {
-					t.Errorf("pattern match failure: %v", err)
-					return
-				}
-				t.Errorf("help text didn't match %q:\n%s", pattern, help)
 			}
 		})
 	}

@@ -26,8 +26,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 )
 
@@ -36,7 +37,7 @@ import (
 // another is expected.
 
 // ID is a custom type for {Database,Table}Descriptor IDs.
-type ID parser.ID
+type ID tree.ID
 
 // InvalidID is the uninitialised descriptor id.
 const InvalidID ID = 0
@@ -56,13 +57,13 @@ func (t TableDescriptors) Less(i, j int) bool { return t[i].ID < t[j].ID }
 func (t TableDescriptors) Swap(i, j int)      { t[i], t[j] = t[j], t[i] }
 
 // ColumnID is a custom type for ColumnDescriptor IDs.
-type ColumnID parser.ColumnID
+type ColumnID tree.ColumnID
 
 // FamilyID is a custom type for ColumnFamilyDescriptor IDs.
 type FamilyID uint32
 
 // IndexID is a custom type for IndexDescriptor IDs.
-type IndexID parser.IndexID
+type IndexID tree.IndexID
 
 // DescriptorVersion is a custom type for TableDescriptor Versions.
 type DescriptorVersion uint32
@@ -211,15 +212,15 @@ func (desc *IndexDescriptor) allocateName(tableDesc *TableDescriptor) {
 }
 
 // FillColumns sets the column names and directions in desc.
-func (desc *IndexDescriptor) FillColumns(elems parser.IndexElemList) error {
+func (desc *IndexDescriptor) FillColumns(elems tree.IndexElemList) error {
 	desc.ColumnNames = make([]string, 0, len(elems))
 	desc.ColumnDirections = make([]IndexDescriptor_Direction, 0, len(elems))
 	for _, c := range elems {
 		desc.ColumnNames = append(desc.ColumnNames, string(c.Column))
 		switch c.Direction {
-		case parser.Ascending, parser.DefaultDirection:
+		case tree.Ascending, tree.DefaultDirection:
 			desc.ColumnDirections = append(desc.ColumnDirections, IndexDescriptor_ASC)
-		case parser.Descending:
+		case tree.Descending:
 			desc.ColumnDirections = append(desc.ColumnDirections, IndexDescriptor_DESC)
 		default:
 			return fmt.Errorf("invalid direction %s for column %s", c.Direction, c.Column)
@@ -280,7 +281,7 @@ func (desc *IndexDescriptor) ColNamesString() string {
 		if i > 0 {
 			buf.WriteString(", ")
 		}
-		fmt.Fprintf(&buf, "%s %s", parser.Name(name), desc.ColumnDirections[i])
+		fmt.Fprintf(&buf, "%s %s", tree.Name(name), desc.ColumnDirections[i])
 	}
 	return buf.String()
 }
@@ -292,11 +293,11 @@ var isUnique = map[bool]string{true: "UNIQUE "}
 func (desc *IndexDescriptor) SQLString(tableName string) string {
 	var storing string
 	if len(desc.StoreColumnNames) > 0 {
-		colNames := make(parser.NameList, len(desc.StoreColumnNames))
+		colNames := make(tree.NameList, len(desc.StoreColumnNames))
 		for i, n := range desc.StoreColumnNames {
-			colNames[i] = parser.Name(n)
+			colNames[i] = tree.Name(n)
 		}
-		storing = fmt.Sprintf(" STORING (%s)", parser.AsString(colNames))
+		storing = fmt.Sprintf(" STORING (%s)", tree.AsString(colNames))
 	}
 	var onTable string
 	if tableName != "" {
@@ -305,7 +306,7 @@ func (desc *IndexDescriptor) SQLString(tableName string) string {
 	return fmt.Sprintf("%sINDEX %s%s (%s)%s",
 		isUnique[desc.Unique],
 		onTable,
-		parser.AsString(parser.Name(desc.Name)),
+		tree.AsString(tree.Name(desc.Name)),
 		desc.ColNamesString(),
 		storing,
 	)
@@ -319,6 +320,20 @@ func (desc *TableDescriptor) SetID(id ID) {
 // TypeName returns the plain type of this descriptor.
 func (desc *TableDescriptor) TypeName() string {
 	return "relation"
+}
+
+// Kind returns what kind of database object this descriptor describes.
+func (desc *TableDescriptor) Kind() string {
+	switch {
+	case desc.IsTable():
+		return "table"
+	case desc.IsView():
+		return "view"
+	case desc.IsSequence():
+		return "sequence"
+	default:
+		panic("unknown descriptor type")
+	}
 }
 
 // SetName implements the DescriptorProto interface.
@@ -335,13 +350,19 @@ func (desc *TableDescriptor) IsEmpty() bool {
 // IsTable returns true if the TableDescriptor actually describes a
 // Table resource, as opposed to a different resource (like a View).
 func (desc *TableDescriptor) IsTable() bool {
-	return !desc.IsView()
+	return !desc.IsView() && !desc.IsSequence()
 }
 
 // IsView returns true if the TableDescriptor actually describes a
 // View resource rather than a Table.
 func (desc *TableDescriptor) IsView() bool {
 	return desc.ViewQuery != ""
+}
+
+// IsSequence returns true if the TableDescriptor actually describes a
+// Sequence resource rather than a Table.
+func (desc *TableDescriptor) IsSequence() bool {
+	return desc.SequenceOpts != nil
 }
 
 // IsVirtualTable returns true if the TableDescriptor describes a
@@ -595,7 +616,7 @@ func HasCompositeKeyEncoding(semanticType ColumnType_SemanticType) bool {
 
 // DatumTypeHasCompositeKeyEncoding is a version of HasCompositeKeyEncoding
 // which works on datum types.
-func DatumTypeHasCompositeKeyEncoding(typ parser.Type) bool {
+func DatumTypeHasCompositeKeyEncoding(typ types.T) bool {
 	colType, err := DatumTypeToColumnSemanticType(typ)
 	return err == nil && HasCompositeKeyEncoding(colType)
 }
@@ -603,7 +624,7 @@ func DatumTypeHasCompositeKeyEncoding(typ parser.Type) bool {
 // MustBeValueEncoded returns true if columns of the given kind can only be value
 // encoded.
 func MustBeValueEncoded(semanticType ColumnType_SemanticType) bool {
-	return semanticType == ColumnType_ARRAY
+	return semanticType == ColumnType_ARRAY || semanticType == ColumnType_JSON
 }
 
 // HasOldStoredColumns returns whether the index has stored columns in the old
@@ -679,7 +700,7 @@ func (desc *TableDescriptor) allocateIndexIDs(columnNames map[string]ColumnID) e
 			index.ExtraColumnIDs = extraColumnIDs
 
 			for _, colName := range index.StoreColumnNames {
-				col, _, err := desc.FindColumnByName(parser.Name(colName))
+				col, _, err := desc.FindColumnByName(tree.Name(colName))
 				if err != nil {
 					return err
 				}
@@ -988,6 +1009,10 @@ func (desc *TableDescriptor) ValidateTable() error {
 		return nil
 	}
 
+	if desc.IsSequence() {
+		return nil
+	}
+
 	// ParentID is the ID of the database holding this table.
 	// It is often < ID, except when a table gets moved across databases.
 	if desc.ParentID == 0 {
@@ -1270,13 +1295,13 @@ func TranslateValueEncodingToSpan(
 	idxDesc *IndexDescriptor,
 	partDesc *PartitioningDescriptor,
 	valueEncBuf []byte,
-	prefixDatums []parser.Datum,
-) (parser.Datums, []byte, error) {
+	prefixDatums []tree.Datum,
+) (tree.Datums, []byte, error) {
 	if len(prefixDatums)+int(partDesc.NumColumns) > len(idxDesc.ColumnIDs) {
 		return nil, nil, fmt.Errorf("not enough columns in index for this partitioning")
 	}
 
-	datums := make(parser.Datums, int(partDesc.NumColumns))
+	datums := make(tree.Datums, int(partDesc.NumColumns))
 	specialIdx := -1
 
 	colIDs := idxDesc.ColumnIDs[len(prefixDatums) : len(prefixDatums)+int(partDesc.NumColumns)]
@@ -1347,19 +1372,26 @@ func TranslateValueEncodingToSpan(
 	return datums, key, nil
 }
 
-func printPartitioningPrefix(datums []parser.Datum, s string) string {
+func printPartitioningPrefix(datums []tree.Datum, s string) string {
 	var buf bytes.Buffer
-	for i, v := range datums {
+	PrintPartitioningTuple(&buf, datums, len(datums)+1, s)
+	return buf.String()
+}
+
+// PrintPartitioningTuple prints the first `numColumns` datums in a partitioning
+// tuple to `buf`. If `numColumns >= len(datums)`, then `s` (which is expected
+// to be DEFAULT or MAXVALUE) is used to fill.
+func PrintPartitioningTuple(buf *bytes.Buffer, datums []tree.Datum, numColumns int, s string) {
+	for i := 0; i < numColumns; i++ {
 		if i > 0 {
 			buf.WriteString(", ")
 		}
-		buf.WriteString(parser.AsString(v))
+		if i < len(datums) {
+			buf.WriteString(tree.AsString(datums[i]))
+		} else {
+			buf.WriteString(s)
+		}
 	}
-	if len(datums) > 0 {
-		buf.WriteString(", ")
-	}
-	buf.WriteString(s)
-	return buf.String()
 }
 
 // validatePartitioningDescriptor validates that a PartitioningDescriptor, which
@@ -1394,9 +1426,9 @@ func (desc *TableDescriptor) validatePartitioningDescriptor(
 	// be the same for all of them. Faking them out with DNull allows us to make
 	// O(list partition) calls to TranslateValueEncodingToSpan instead of O(list
 	// partition entry).
-	fakePrefixDatums := make([]parser.Datum, colOffset)
+	fakePrefixDatums := make([]tree.Datum, colOffset)
 	for i := range fakePrefixDatums {
-		fakePrefixDatums[i] = parser.DNull
+		fakePrefixDatums[i] = tree.DNull
 	}
 
 	if len(partDesc.List) == 0 && len(partDesc.Range) == 0 {
@@ -1434,7 +1466,7 @@ func (desc *TableDescriptor) validatePartitioningDescriptor(
 							printPartitioningPrefix(datums, "DEFAULT"))
 					}
 					return fmt.Errorf("%s cannot be present in more than one partition",
-						parser.AsString(datums))
+						tree.AsString(datums))
 				}
 				listValues[string(keyPrefix)] = struct{}{}
 			}
@@ -1474,7 +1506,7 @@ func (desc *TableDescriptor) validatePartitioningDescriptor(
 						printPartitioningPrefix(datums, "MAXVALUE"))
 				}
 				return fmt.Errorf("%s cannot be present in more than one partition",
-					parser.AsString(datums))
+					tree.AsString(datums))
 			}
 
 			rangeValues[string(endKey)] = struct{}{}
@@ -1486,6 +1518,37 @@ func (desc *TableDescriptor) validatePartitioningDescriptor(
 	}
 
 	return nil
+}
+
+// FindNonDropPartitionByName returns the PartitionDescriptor and the
+// IndexDescriptor that the partition with the specified name belongs to. If no
+// such partition exists, an error is returned.
+func (desc *TableDescriptor) FindNonDropPartitionByName(
+	name string,
+) (*PartitioningDescriptor, *IndexDescriptor, error) {
+	var find func(p PartitioningDescriptor) *PartitioningDescriptor
+	find = func(p PartitioningDescriptor) *PartitioningDescriptor {
+		for _, l := range p.List {
+			if l.Name == name {
+				return &p
+			}
+			if s := find(l.Subpartitioning); s != nil {
+				return s
+			}
+		}
+		for _, r := range p.Range {
+			if r.Name == name {
+				return &p
+			}
+		}
+		return nil
+	}
+	for _, idx := range desc.AllNonDropIndexes() {
+		if p := find(idx.Partitioning); p != nil {
+			return p, &idx, nil
+		}
+	}
+	return nil, nil, fmt.Errorf("partition %q does not exist", name)
 }
 
 // validatePartitioning validates that any PartitioningDescriptors contained in
@@ -1513,7 +1576,7 @@ func upperBoundColumnValueEncodedSize(col ColumnDescriptor) (int, bool) {
 	switch col.Type.SemanticType {
 	case ColumnType_BOOL:
 		typ = encoding.True
-	case ColumnType_INT, ColumnType_DATE, ColumnType_TIMESTAMP,
+	case ColumnType_INT, ColumnType_DATE, ColumnType_TIME, ColumnType_TIMESTAMP,
 		ColumnType_TIMESTAMPTZ, ColumnType_OID:
 		typ, size = encoding.Int, int(col.Type.Width)
 	case ColumnType_FLOAT:
@@ -1733,7 +1796,7 @@ func (desc *TableDescriptor) RenameColumnDescriptor(column ColumnDescriptor, new
 // FindActiveColumnsByNames finds all requested columns (in the requested order)
 // or returns an error.
 func (desc *TableDescriptor) FindActiveColumnsByNames(
-	names parser.NameList,
+	names tree.NameList,
 ) ([]ColumnDescriptor, error) {
 	cols := make([]ColumnDescriptor, len(names))
 	for i := range names {
@@ -1749,7 +1812,7 @@ func (desc *TableDescriptor) FindActiveColumnsByNames(
 // FindColumnByName finds the column with the specified name. It returns
 // an active column or a column from the mutation list. It returns true
 // if the column is being dropped.
-func (desc *TableDescriptor) FindColumnByName(name parser.Name) (ColumnDescriptor, bool, error) {
+func (desc *TableDescriptor) FindColumnByName(name tree.Name) (ColumnDescriptor, bool, error) {
 	for i, c := range desc.Columns {
 		if c.Name == string(name) {
 			return desc.Columns[i], false, nil
@@ -1889,6 +1952,27 @@ func (desc *TableDescriptor) FindIndexByID(id IndexID) (*IndexDescriptor, error)
 	return nil, fmt.Errorf("index-id \"%d\" does not exist", id)
 }
 
+// FindIndexByIndexIdx returns an active index with the specified
+// index's index which has a domain of [0, # of secondary indexes] and whether
+// the index is a secondary index.
+// The primary index has an index of 0 and the first secondary index (if it exists)
+// has an index of 1.
+func (desc *TableDescriptor) FindIndexByIndexIdx(
+	indexIdx int,
+) (index *IndexDescriptor, isSecondary bool, err error) {
+	// indexIdx is 0 for the primary index, or 1 to <num-indexes> for a
+	// secondary index.
+	if indexIdx < 0 || indexIdx > len(desc.Indexes) {
+		return nil, false, errors.Errorf("invalid indexIdx %d", indexIdx)
+	}
+
+	if indexIdx > 0 {
+		return &desc.Indexes[indexIdx-1], true, nil
+	}
+
+	return &desc.PrimaryIndex, false, nil
+}
+
 // GetIndexMutationCapabilities returns:
 // 1. Whether the index is a mutation
 // 2. if so, is it in state DELETE_AND_WRITE_ONLY
@@ -2026,18 +2110,29 @@ func (desc *TableDescriptor) VisibleColumns() []ColumnDescriptor {
 }
 
 // ColumnsSelectors generates Select expressions for cols.
-func ColumnsSelectors(cols []ColumnDescriptor) parser.SelectExprs {
-	exprs := make(parser.SelectExprs, len(cols))
-	colItems := make([]parser.ColumnItem, len(cols))
+func ColumnsSelectors(cols []ColumnDescriptor) tree.SelectExprs {
+	exprs := make(tree.SelectExprs, len(cols))
+	colItems := make([]tree.ColumnItem, len(cols))
 	for i, col := range cols {
-		colItems[i].ColumnName = parser.Name(col.Name)
+		colItems[i].ColumnName = tree.Name(col.Name)
 		exprs[i].Expr = &colItems[i]
 	}
 	return exprs
 }
 
-func colTypeSQLString(c *ColumnType, semType ColumnType_SemanticType) string {
-	switch semType {
+func (c *ColumnType) elementColumnType() *ColumnType {
+	if c.SemanticType != ColumnType_ARRAY {
+		return nil
+	}
+	result := *c
+	result.SemanticType = *c.ArrayContents
+	result.ArrayContents = nil
+	return &result
+}
+
+// SQLString returns the SQL string corresponding to the type.
+func (c *ColumnType) SQLString() string {
+	switch c.SemanticType {
 	case ColumnType_INT:
 		if c.Width > 0 && c.VisibleType == ColumnType_BIT {
 			// A non-zero width indicates a bit array. The syntax "INT(N)"
@@ -2046,11 +2141,11 @@ func colTypeSQLString(c *ColumnType, semType ColumnType_SemanticType) string {
 		}
 	case ColumnType_STRING:
 		if c.Width > 0 {
-			return fmt.Sprintf("%s(%d)", semType.String(), c.Width)
+			return fmt.Sprintf("%s(%d)", c.SemanticType.String(), c.Width)
 		}
 	case ColumnType_FLOAT:
 		if c.Precision > 0 {
-			return fmt.Sprintf("%s(%d)", semType.String(), c.Precision)
+			return fmt.Sprintf("%s(%d)", c.SemanticType.String(), c.Precision)
 		}
 		if c.VisibleType == ColumnType_DOUBLE_PRECISON {
 			return "DOUBLE PRECISION"
@@ -2058,9 +2153,9 @@ func colTypeSQLString(c *ColumnType, semType ColumnType_SemanticType) string {
 	case ColumnType_DECIMAL:
 		if c.Precision > 0 {
 			if c.Width > 0 {
-				return fmt.Sprintf("%s(%d,%d)", semType.String(), c.Precision, c.Width)
+				return fmt.Sprintf("%s(%d,%d)", c.SemanticType.String(), c.Precision, c.Width)
 			}
-			return fmt.Sprintf("%s(%d)", semType.String(), c.Precision)
+			return fmt.Sprintf("%s(%d)", c.SemanticType.String(), c.Precision)
 		}
 	case ColumnType_TIMESTAMPTZ:
 		return "TIMESTAMP WITH TIME ZONE"
@@ -2073,17 +2168,12 @@ func colTypeSQLString(c *ColumnType, semType ColumnType_SemanticType) string {
 		}
 		return fmt.Sprintf("%s COLLATE %s", ColumnType_STRING.String(), *c.Locale)
 	case ColumnType_ARRAY:
-		return colTypeSQLString(c, *c.ArrayContents) + "[]"
+		return c.elementColumnType().SQLString() + "[]"
 	}
 	if c.VisibleType != ColumnType_NONE {
 		return c.VisibleType.String()
 	}
-	return semType.String()
-}
-
-// SQLString returns the SQL string corresponding to the type.
-func (c *ColumnType) SQLString() string {
-	return colTypeSQLString(c, c.SemanticType)
+	return c.SemanticType.String()
 }
 
 // MaxCharacterLength returns the declared maximum length of characters if the
@@ -2147,43 +2237,47 @@ func (c *ColumnType) NumericScale() (int32, bool) {
 	return 0, false
 }
 
-// DatumTypeToColumnSemanticType converts a parser.Type to a SemanticType.
-func DatumTypeToColumnSemanticType(ptyp parser.Type) (ColumnType_SemanticType, error) {
+// DatumTypeToColumnSemanticType converts a types.T to a SemanticType.
+func DatumTypeToColumnSemanticType(ptyp types.T) (ColumnType_SemanticType, error) {
 	switch ptyp {
-	case parser.TypeBool:
+	case types.Bool:
 		return ColumnType_BOOL, nil
-	case parser.TypeInt:
+	case types.Int:
 		return ColumnType_INT, nil
-	case parser.TypeFloat:
+	case types.Float:
 		return ColumnType_FLOAT, nil
-	case parser.TypeDecimal:
+	case types.Decimal:
 		return ColumnType_DECIMAL, nil
-	case parser.TypeBytes:
+	case types.Bytes:
 		return ColumnType_BYTES, nil
-	case parser.TypeString:
+	case types.String:
 		return ColumnType_STRING, nil
-	case parser.TypeName:
+	case types.Name:
 		return ColumnType_NAME, nil
-	case parser.TypeDate:
+	case types.Date:
 		return ColumnType_DATE, nil
-	case parser.TypeTimestamp:
+	case types.Time:
+		return ColumnType_TIME, nil
+	case types.Timestamp:
 		return ColumnType_TIMESTAMP, nil
-	case parser.TypeTimestampTZ:
+	case types.TimestampTZ:
 		return ColumnType_TIMESTAMPTZ, nil
-	case parser.TypeInterval:
+	case types.Interval:
 		return ColumnType_INTERVAL, nil
-	case parser.TypeUUID:
+	case types.UUID:
 		return ColumnType_UUID, nil
-	case parser.TypeINet:
+	case types.INet:
 		return ColumnType_INET, nil
-	case parser.TypeOid:
+	case types.Oid:
 		return ColumnType_OID, nil
-	case parser.TypeNull:
+	case types.Null:
 		return ColumnType_NULL, nil
-	case parser.TypeIntVector:
+	case types.IntVector:
 		return ColumnType_INT2VECTOR, nil
+	case types.JSON:
+		return ColumnType_JSON, nil
 	default:
-		if ptyp.FamilyEqual(parser.TypeCollatedString) {
+		if ptyp.FamilyEqual(types.FamCollatedString) {
 			return ColumnType_COLLATEDSTRING, nil
 		}
 		return -1, pgerror.NewErrorf(pgerror.CodeFeatureNotSupportedError, "unsupported result type: %s", ptyp)
@@ -2191,21 +2285,21 @@ func DatumTypeToColumnSemanticType(ptyp parser.Type) (ColumnType_SemanticType, e
 }
 
 // DatumTypeToColumnType converts a parser Type to a ColumnType.
-func DatumTypeToColumnType(ptyp parser.Type) (ColumnType, error) {
+func DatumTypeToColumnType(ptyp types.T) (ColumnType, error) {
 	var ctyp ColumnType
 	switch t := ptyp.(type) {
-	case parser.TCollatedString:
+	case types.TCollatedString:
 		ctyp.SemanticType = ColumnType_COLLATEDSTRING
 		ctyp.Locale = &t.Locale
-	case parser.TArray:
+	case types.TArray:
 		ctyp.SemanticType = ColumnType_ARRAY
 		contents, err := DatumTypeToColumnSemanticType(t.Typ)
 		if err != nil {
 			return ColumnType{}, err
 		}
 		ctyp.ArrayContents = &contents
-		if t.Typ.FamilyEqual(parser.TypeCollatedString) {
-			cs := t.Typ.(parser.TCollatedString)
+		if t.Typ.FamilyEqual(types.FamCollatedString) {
+			cs := t.Typ.(types.TCollatedString)
 			ctyp.Locale = &cs.Locale
 		}
 	default:
@@ -2218,55 +2312,59 @@ func DatumTypeToColumnType(ptyp parser.Type) (ColumnType, error) {
 	return ctyp, nil
 }
 
-func columnSemanticTypeToDatumType(c *ColumnType, k ColumnType_SemanticType) parser.Type {
+func columnSemanticTypeToDatumType(c *ColumnType, k ColumnType_SemanticType) types.T {
 	switch k {
 	case ColumnType_BOOL:
-		return parser.TypeBool
+		return types.Bool
 	case ColumnType_INT:
-		return parser.TypeInt
+		return types.Int
 	case ColumnType_FLOAT:
-		return parser.TypeFloat
+		return types.Float
 	case ColumnType_DECIMAL:
-		return parser.TypeDecimal
+		return types.Decimal
 	case ColumnType_STRING:
-		return parser.TypeString
+		return types.String
 	case ColumnType_BYTES:
-		return parser.TypeBytes
+		return types.Bytes
 	case ColumnType_DATE:
-		return parser.TypeDate
+		return types.Date
+	case ColumnType_TIME:
+		return types.Time
 	case ColumnType_TIMESTAMP:
-		return parser.TypeTimestamp
+		return types.Timestamp
 	case ColumnType_TIMESTAMPTZ:
-		return parser.TypeTimestampTZ
+		return types.TimestampTZ
 	case ColumnType_INTERVAL:
-		return parser.TypeInterval
+		return types.Interval
 	case ColumnType_UUID:
-		return parser.TypeUUID
+		return types.UUID
 	case ColumnType_INET:
-		return parser.TypeINet
+		return types.INet
+	case ColumnType_JSON:
+		return types.JSON
 	case ColumnType_COLLATEDSTRING:
 		if c.Locale == nil {
 			panic("locale is required for COLLATEDSTRING")
 		}
-		return parser.TCollatedString{Locale: *c.Locale}
+		return types.TCollatedString{Locale: *c.Locale}
 	case ColumnType_NAME:
-		return parser.TypeName
+		return types.Name
 	case ColumnType_OID:
-		return parser.TypeOid
+		return types.Oid
 	case ColumnType_NULL:
-		return parser.TypeNull
+		return types.Null
 	case ColumnType_INT2VECTOR:
-		return parser.TypeIntVector
+		return types.IntVector
 	}
 	return nil
 }
 
 // ToDatumType converts the ColumnType to the correct type, or nil if there is
 // no correspondence.
-func (c *ColumnType) ToDatumType() parser.Type {
+func (c *ColumnType) ToDatumType() types.T {
 	switch c.SemanticType {
 	case ColumnType_ARRAY:
-		return parser.TArray{Typ: columnSemanticTypeToDatumType(c, *c.ArrayContents)}
+		return types.TArray{Typ: columnSemanticTypeToDatumType(c, *c.ArrayContents)}
 	default:
 		return columnSemanticTypeToDatumType(c, c.SemanticType)
 	}
@@ -2389,7 +2487,7 @@ func (desc TableDescriptor) GetNameMetadataKey() roachpb.Key {
 // SQLString returns the SQL statement describing the column.
 func (desc *ColumnDescriptor) SQLString() string {
 	var buf bytes.Buffer
-	fmt.Fprintf(&buf, "%s %s", parser.AsString(parser.Name(desc.Name)), desc.Type.SQLString())
+	fmt.Fprintf(&buf, "%s %s", tree.AsString(tree.Name(desc.Name)), desc.Type.SQLString())
 	if desc.Nullable {
 		buf.WriteString(" NULL")
 	} else {
@@ -2402,11 +2500,11 @@ func (desc *ColumnDescriptor) SQLString() string {
 }
 
 // ForeignKeyReferenceActionValue allows the conversion between a
-// parser.ReferenceAction and a ForeignKeyReference_Action.
+// tree.ReferenceAction and a ForeignKeyReference_Action.
 var ForeignKeyReferenceActionValue = [...]ForeignKeyReference_Action{
-	parser.NoAction:   ForeignKeyReference_NO_ACTION,
-	parser.Restrict:   ForeignKeyReference_RESTRICT,
-	parser.SetDefault: ForeignKeyReference_SET_DEFAULT,
-	parser.SetNull:    ForeignKeyReference_SET_NULL,
-	parser.Cascade:    ForeignKeyReference_CASCADE,
+	tree.NoAction:   ForeignKeyReference_NO_ACTION,
+	tree.Restrict:   ForeignKeyReference_RESTRICT,
+	tree.SetDefault: ForeignKeyReference_SET_DEFAULT,
+	tree.SetNull:    ForeignKeyReference_SET_NULL,
+	tree.Cascade:    ForeignKeyReference_CASCADE,
 }

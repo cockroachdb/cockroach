@@ -17,7 +17,7 @@ package sql
 import (
 	"golang.org/x/net/context"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
@@ -42,4 +42,4 @@ func (d *delayedNode) Close(ctx context.Context) {
 
 func (d *delayedNode) Start(params runParams) error        { return d.plan.Start(params) }
 func (d *delayedNode) Next(params runParams) (bool, error) { return d.plan.Next(params) }
-func (d *delayedNode) Values() parser.Datums               { return d.plan.Values() }
+func (d *delayedNode) Values() tree.Datums                 { return d.plan.Values() }

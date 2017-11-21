@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/pkg/errors"
 	yaml "gopkg.in/yaml.v2"
 )
@@ -54,76 +55,107 @@ var NamedZonesByID = func() map[uint32]string {
 	return out
 }()
 
-// ZoneSpecifierFromID creates a parser.ZoneSpecifier for the zone with the
+// ZoneSpecifierFromID creates a tree.ZoneSpecifier for the zone with the
 // given ID.
 func ZoneSpecifierFromID(
 	id uint32, resolveID func(id uint32) (parentID uint32, name string, err error),
-) (parser.ZoneSpecifier, error) {
+) (tree.ZoneSpecifier, error) {
 	if name, ok := NamedZonesByID[id]; ok {
-		return parser.ZoneSpecifier{NamedZone: parser.UnrestrictedName(name)}, nil
+		return tree.ZoneSpecifier{NamedZone: tree.UnrestrictedName(name)}, nil
 	}
 	parentID, name, err := resolveID(id)
 	if err != nil {
-		return parser.ZoneSpecifier{}, err
+		return tree.ZoneSpecifier{}, err
 	}
 	if parentID == keys.RootNamespaceID {
-		return parser.ZoneSpecifier{Database: parser.Name(name)}, nil
+		return tree.ZoneSpecifier{Database: tree.Name(name)}, nil
 	}
 	_, db, err := resolveID(parentID)
 	if err != nil {
-		return parser.ZoneSpecifier{}, err
+		return tree.ZoneSpecifier{}, err
 	}
-	tn := &parser.TableName{DatabaseName: parser.Name(db), TableName: parser.Name(name)}
-	return parser.ZoneSpecifier{
-		Table: parser.NormalizableTableName{TableNameReference: tn},
+	tn := &tree.TableName{DatabaseName: tree.Name(db), TableName: tree.Name(name)}
+	return tree.ZoneSpecifier{
+		TableOrIndex: tree.TableNameWithIndex{
+			Table: tree.NormalizableTableName{TableNameReference: tn},
+		},
 	}, nil
 }
 
 // ParseCLIZoneSpecifier converts a single string s identifying a zone, as would
 // be used to name a zone on the command line, to a ZoneSpecifier. A valid CLI
 // zone specifier is either 1) a database or table reference of the form
-// DATABASE[.TABLE], or 2) a special named zone of the form [.NAME].
-func ParseCLIZoneSpecifier(s string) (parser.ZoneSpecifier, error) {
+// DATABASE[.TABLE[.PARTITION|@INDEX]], or 2) a special named zone of the form
+// .NAME.
+func ParseCLIZoneSpecifier(s string) (tree.ZoneSpecifier, error) {
 	if len(s) > 0 && s[0] == '.' {
 		name := s[1:]
 		if name == "" {
-			return parser.ZoneSpecifier{}, errors.New("missing zone name")
+			return tree.ZoneSpecifier{}, errors.New("missing zone name")
 		}
-		return parser.ZoneSpecifier{NamedZone: parser.UnrestrictedName(name)}, nil
+		return tree.ZoneSpecifier{NamedZone: tree.UnrestrictedName(name)}, nil
 	}
-	// ParseTableName is not vulnerable to SQL injection, so passing s directly
-	// is safe. See #8389 for details.
-	tn, err := parser.ParseTableName(s)
+	// ParseTableNameWithIndex is not vulnerable to SQL injection, so passing s
+	// directly is safe. See #8389 for details.
+	parsed, err := parser.ParseTableNameWithIndex(s)
 	if err != nil {
-		return parser.ZoneSpecifier{}, fmt.Errorf("malformed name: %q", s)
+		return tree.ZoneSpecifier{}, fmt.Errorf("malformed name: %q", s)
 	}
-	db := tn.Database()
-	if db == "" {
-		// No database was specified, so interpret the table name as the database.
-		db = tn.Table()
-		return parser.ZoneSpecifier{Database: parser.Name(db)}, nil
+	parsed.SearchTable = false
+	var partition tree.Name
+	if un := parsed.Table.TableNameReference.(tree.UnresolvedName); len(un) == 1 {
+		// Unlike in SQL, where a name with one part indicates a table in the
+		// current database, if a CLI specifier has just one name part, it indicates
+		// a database.
+		return tree.ZoneSpecifier{Database: un[0].(tree.Name)}, nil
+	} else if len(un) == 3 {
+		// If a CLI specifier has three name parts, the last name is a partition.
+		// Pop it off so TableNameReference.Normalize sees only the table name
+		// below.
+		partition = un[2].(tree.Name)
+		parsed.Table.TableNameReference = un[:2]
 	}
-	return parser.ZoneSpecifier{
-		Table: parser.NormalizableTableName{TableNameReference: tn},
+	// We've handled the special cases for named zones, databases and partitions;
+	// have TableNameReference.Normalize tell us whether what remains is a valid
+	// table or index name.
+	if _, err = parsed.Table.Normalize(); err != nil {
+		return tree.ZoneSpecifier{}, err
+	}
+	if parsed.Index != "" && partition != "" {
+		return tree.ZoneSpecifier{}, fmt.Errorf(
+			"index and partition cannot be specified simultaneously: %q", s)
+	}
+	return tree.ZoneSpecifier{
+		TableOrIndex: parsed,
+		Partition:    partition,
 	}, nil
 }
 
-// CLIZoneSpecifier converts a parser.ZoneSpecifier to a CLI zone specifier as
+// CLIZoneSpecifier converts a tree.ZoneSpecifier to a CLI zone specifier as
 // described in ParseCLIZoneSpecifier.
-func CLIZoneSpecifier(zs parser.ZoneSpecifier) string {
+func CLIZoneSpecifier(zs tree.ZoneSpecifier) string {
 	if zs.NamedZone != "" {
 		return "." + string(zs.NamedZone)
 	}
 	if zs.Database != "" {
 		return zs.Database.String()
 	}
-	return zs.Table.String()
+	ti := zs.TableOrIndex
+	if zs.Partition != "" {
+		tn := ti.Table.TableName()
+		ti.Table = tree.NormalizableTableName{
+			TableNameReference: tree.UnresolvedName{tn.DatabaseName, tn.TableName, zs.Partition},
+		}
+		// The index is redundant when the partition is specified, so omit it.
+		ti.Index = ""
+	}
+	return ti.String()
 }
 
 // ResolveZoneSpecifier converts a zone specifier to the ID of most specific
 // zone whose config applies.
 func ResolveZoneSpecifier(
-	zs parser.ZoneSpecifier, resolveName func(parentID uint32, name string) (id uint32, err error),
+	zs *tree.ZoneSpecifier, resolveName func(parentID uint32, name string) (id uint32, err error),
 ) (uint32, error) {
 	if zs.NamedZone != "" {
 		if zs.NamedZone == DefaultZoneName {
@@ -139,7 +171,7 @@ func ResolveZoneSpecifier(
 		return resolveName(keys.RootNamespaceID, string(zs.Database))
 	}
 
-	tn, err := zs.Table.NormalizeTableName()
+	tn, err := zs.TableOrIndex.Table.Normalize()
 	if err != nil {
 		return 0, err
 	}

@@ -18,25 +18,28 @@ import (
 	"bytes"
 	"reflect"
 	"testing"
+	"time"
 
+	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
-	"github.com/pkg/errors"
-
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeofday"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
 type indexKeyTest struct {
 	tableID              ID
 	primaryInterleaves   []ID
 	secondaryInterleaves []ID
-	primaryValues        []parser.Datum // len must be at least primaryInterleaveComponents+1
-	secondaryValues      []parser.Datum // len must be at least secondaryInterleaveComponents+1
+	primaryValues        []tree.Datum // len must be at least primaryInterleaveComponents+1
+	secondaryValues      []tree.Datum // len must be at least secondaryInterleaveComponents+1
 }
 
 func makeTableDescForTest(test indexKeyTest) (TableDescriptor, map[ColumnID]int) {
@@ -92,7 +95,7 @@ func makeTableDescForTest(test indexKeyTest) (TableDescriptor, map[ColumnID]int)
 
 func decodeIndex(
 	tableDesc *TableDescriptor, index *IndexDescriptor, key []byte,
-) ([]parser.Datum, error) {
+) ([]tree.Datum, error) {
 	types, err := GetColumnTypes(tableDesc, index.ColumnIDs)
 	if err != nil {
 		return nil, err
@@ -113,7 +116,7 @@ func decodeIndex(
 		return nil, errors.Errorf("key did not match descriptor")
 	}
 
-	decodedValues := make([]parser.Datum, len(values))
+	decodedValues := make([]tree.Datum, len(values))
 	var da DatumAlloc
 	for i, value := range values {
 		err := value.EnsureDecoded(&types[i], &da)
@@ -132,32 +135,32 @@ func TestIndexKey(t *testing.T) {
 
 	tests := []indexKeyTest{
 		{50, nil, nil,
-			[]parser.Datum{parser.NewDInt(10)},
-			[]parser.Datum{parser.NewDInt(20)},
+			[]tree.Datum{tree.NewDInt(10)},
+			[]tree.Datum{tree.NewDInt(20)},
 		},
 		{50, []ID{100}, nil,
-			[]parser.Datum{parser.NewDInt(10), parser.NewDInt(11)},
-			[]parser.Datum{parser.NewDInt(20)},
+			[]tree.Datum{tree.NewDInt(10), tree.NewDInt(11)},
+			[]tree.Datum{tree.NewDInt(20)},
 		},
 		{50, []ID{100, 200}, nil,
-			[]parser.Datum{parser.NewDInt(10), parser.NewDInt(11), parser.NewDInt(12)},
-			[]parser.Datum{parser.NewDInt(20)},
+			[]tree.Datum{tree.NewDInt(10), tree.NewDInt(11), tree.NewDInt(12)},
+			[]tree.Datum{tree.NewDInt(20)},
 		},
 		{50, nil, []ID{100},
-			[]parser.Datum{parser.NewDInt(10)},
-			[]parser.Datum{parser.NewDInt(20), parser.NewDInt(21)},
+			[]tree.Datum{tree.NewDInt(10)},
+			[]tree.Datum{tree.NewDInt(20), tree.NewDInt(21)},
 		},
 		{50, []ID{100}, []ID{100},
-			[]parser.Datum{parser.NewDInt(10), parser.NewDInt(11)},
-			[]parser.Datum{parser.NewDInt(20), parser.NewDInt(21)},
+			[]tree.Datum{tree.NewDInt(10), tree.NewDInt(11)},
+			[]tree.Datum{tree.NewDInt(20), tree.NewDInt(21)},
 		},
 		{50, []ID{100}, []ID{200},
-			[]parser.Datum{parser.NewDInt(10), parser.NewDInt(11)},
-			[]parser.Datum{parser.NewDInt(20), parser.NewDInt(21)},
+			[]tree.Datum{tree.NewDInt(10), tree.NewDInt(11)},
+			[]tree.Datum{tree.NewDInt(20), tree.NewDInt(21)},
 		},
 		{50, []ID{100, 200}, []ID{100, 300},
-			[]parser.Datum{parser.NewDInt(10), parser.NewDInt(11), parser.NewDInt(12)},
-			[]parser.Datum{parser.NewDInt(20), parser.NewDInt(21), parser.NewDInt(22)},
+			[]tree.Datum{tree.NewDInt(10), tree.NewDInt(11), tree.NewDInt(12)},
+			[]tree.Datum{tree.NewDInt(20), tree.NewDInt(21), tree.NewDInt(22)},
 		},
 	}
 
@@ -169,7 +172,7 @@ func TestIndexKey(t *testing.T) {
 			t.primaryInterleaves[j] = ID(1 + rng.Intn(10))
 		}
 		valuesLen := randutil.RandIntInRange(rng, len(t.primaryInterleaves)+1, len(t.primaryInterleaves)+10)
-		t.primaryValues = make([]parser.Datum, valuesLen)
+		t.primaryValues = make([]tree.Datum, valuesLen)
 		for j := range t.primaryValues {
 			t.primaryValues[j] = RandDatum(rng, ColumnType{SemanticType: ColumnType_INT}, true)
 		}
@@ -179,7 +182,7 @@ func TestIndexKey(t *testing.T) {
 			t.secondaryInterleaves[j] = ID(1 + rng.Intn(10))
 		}
 		valuesLen = randutil.RandIntInRange(rng, len(t.secondaryInterleaves)+1, len(t.secondaryInterleaves)+10)
-		t.secondaryValues = make([]parser.Datum, valuesLen)
+		t.secondaryValues = make([]tree.Datum, valuesLen)
 		for j := range t.secondaryValues {
 			t.secondaryValues[j] = RandDatum(rng, ColumnType{SemanticType: ColumnType_INT}, true)
 		}
@@ -188,7 +191,7 @@ func TestIndexKey(t *testing.T) {
 	}
 
 	for i, test := range tests {
-		evalCtx := parser.NewTestingEvalContext()
+		evalCtx := tree.NewTestingEvalContext()
 		defer evalCtx.Stop(context.Background())
 		tableDesc, colMap := makeTableDescForTest(test)
 		testValues := append(test.primaryValues, test.secondaryValues...)
@@ -249,7 +252,7 @@ func TestIndexKey(t *testing.T) {
 
 type arrayEncodingTest struct {
 	name     string
-	datum    parser.DArray
+	datum    tree.DArray
 	encoding []byte
 }
 
@@ -257,73 +260,73 @@ func TestArrayEncoding(t *testing.T) {
 	tests := []arrayEncodingTest{
 		{
 			"empty int array",
-			parser.DArray{
-				ParamTyp: parser.TypeInt,
-				Array:    parser.Datums{},
+			tree.DArray{
+				ParamTyp: types.Int,
+				Array:    tree.Datums{},
 			},
 			[]byte{1, 3, 0},
 		}, {
 			"single int array",
-			parser.DArray{
-				ParamTyp: parser.TypeInt,
-				Array:    parser.Datums{parser.NewDInt(1)},
+			tree.DArray{
+				ParamTyp: types.Int,
+				Array:    tree.Datums{tree.NewDInt(1)},
 			},
 			[]byte{1, 3, 1, 2},
 		}, {
 			"multiple int array",
-			parser.DArray{
-				ParamTyp: parser.TypeInt,
-				Array:    parser.Datums{parser.NewDInt(1), parser.NewDInt(2), parser.NewDInt(3)},
+			tree.DArray{
+				ParamTyp: types.Int,
+				Array:    tree.Datums{tree.NewDInt(1), tree.NewDInt(2), tree.NewDInt(3)},
 			},
 			[]byte{1, 3, 3, 2, 4, 6},
 		}, {
 			"string array",
-			parser.DArray{
-				ParamTyp: parser.TypeString,
-				Array:    parser.Datums{parser.NewDString("foo"), parser.NewDString("bar"), parser.NewDString("baz")},
+			tree.DArray{
+				ParamTyp: types.String,
+				Array:    tree.Datums{tree.NewDString("foo"), tree.NewDString("bar"), tree.NewDString("baz")},
 			},
 			[]byte{1, 6, 3, 3, 102, 111, 111, 3, 98, 97, 114, 3, 98, 97, 122},
 		}, {
 			"bool array",
-			parser.DArray{
-				ParamTyp: parser.TypeBool,
-				Array:    parser.Datums{parser.MakeDBool(true), parser.MakeDBool(false)},
+			tree.DArray{
+				ParamTyp: types.Bool,
+				Array:    tree.Datums{tree.MakeDBool(true), tree.MakeDBool(false)},
 			},
 			[]byte{1, 10, 2, 10, 11},
 		}, {
 			"array containing a single null",
-			parser.DArray{
-				ParamTyp: parser.TypeInt,
-				Array:    parser.Datums{parser.DNull},
+			tree.DArray{
+				ParamTyp: types.Int,
+				Array:    tree.Datums{tree.DNull},
 				HasNulls: true,
 			},
 			[]byte{17, 3, 1, 1},
 		}, {
 			"array containing multiple nulls",
-			parser.DArray{
-				ParamTyp: parser.TypeInt,
-				Array:    parser.Datums{parser.NewDInt(1), parser.DNull, parser.DNull},
+			tree.DArray{
+				ParamTyp: types.Int,
+				Array:    tree.Datums{tree.NewDInt(1), tree.DNull, tree.DNull},
 				HasNulls: true,
 			},
 			[]byte{17, 3, 3, 6, 2},
 		}, {
 			"array whose NULL bitmap spans exactly one byte",
-			parser.DArray{
-				ParamTyp: parser.TypeInt,
-				Array: parser.Datums{
-					parser.NewDInt(1), parser.DNull, parser.DNull, parser.NewDInt(2), parser.NewDInt(3),
-					parser.NewDInt(4), parser.NewDInt(5), parser.NewDInt(6),
+			tree.DArray{
+				ParamTyp: types.Int,
+				Array: tree.Datums{
+					tree.NewDInt(1), tree.DNull, tree.DNull, tree.NewDInt(2), tree.NewDInt(3),
+					tree.NewDInt(4), tree.NewDInt(5), tree.NewDInt(6),
 				},
 				HasNulls: true,
 			},
 			[]byte{17, 3, 8, 6, 2, 4, 6, 8, 10, 12},
 		}, {
 			"array whose NULL bitmap spans more than one byte",
-			parser.DArray{
-				ParamTyp: parser.TypeInt,
-				Array: parser.Datums{
-					parser.NewDInt(1), parser.DNull, parser.DNull, parser.NewDInt(2), parser.NewDInt(3),
-					parser.NewDInt(4), parser.NewDInt(5), parser.NewDInt(6), parser.DNull,
+			tree.DArray{
+				ParamTyp: types.Int,
+				Array: tree.Datums{
+					tree.NewDInt(1), tree.DNull, tree.DNull, tree.NewDInt(2), tree.NewDInt(3),
+					tree.NewDInt(4), tree.NewDInt(5), tree.NewDInt(6), tree.DNull,
 				},
 				HasNulls: true,
 			},
@@ -350,7 +353,7 @@ func TestArrayEncoding(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if d.Compare(parser.NewTestingEvalContext(), &test.datum) != 0 {
+			if d.Compare(tree.NewTestingEvalContext(), &test.datum) != 0 {
 				t.Fatalf("expected %v to decode to %s, got %s", enc, test.datum.String(), d.String())
 			}
 		})
@@ -358,9 +361,9 @@ func TestArrayEncoding(t *testing.T) {
 }
 
 func BenchmarkArrayEncoding(b *testing.B) {
-	ary := parser.DArray{ParamTyp: parser.TypeInt, Array: parser.Datums{}}
+	ary := tree.DArray{ParamTyp: types.Int, Array: tree.Datums{}}
 	for i := 0; i < 10000; i++ {
-		_ = ary.Append(parser.NewDInt(1))
+		_ = ary.Append(tree.NewDInt(1))
 	}
 
 	b.ResetTimer()
@@ -374,40 +377,40 @@ func TestMarshalColumnValue(t *testing.T) {
 
 	tests := []struct {
 		kind  ColumnType_SemanticType
-		datum parser.Datum
+		datum tree.Datum
 		exp   roachpb.Value
 	}{
 		{
 			kind:  ColumnType_BOOL,
-			datum: parser.MakeDBool(true),
+			datum: tree.MakeDBool(true),
 			exp:   func() (v roachpb.Value) { v.SetBool(true); return }(),
 		},
 		{
 			kind:  ColumnType_BOOL,
-			datum: parser.MakeDBool(false),
+			datum: tree.MakeDBool(false),
 			exp:   func() (v roachpb.Value) { v.SetBool(false); return }(),
 		},
 		{
 			kind:  ColumnType_INT,
-			datum: parser.NewDInt(314159),
+			datum: tree.NewDInt(314159),
 			exp:   func() (v roachpb.Value) { v.SetInt(314159); return }(),
 		},
 		{
 			kind:  ColumnType_FLOAT,
-			datum: parser.NewDFloat(3.14159),
+			datum: tree.NewDFloat(3.14159),
 			exp:   func() (v roachpb.Value) { v.SetFloat(3.14159); return }(),
 		},
 		{
 			kind: ColumnType_DECIMAL,
-			datum: func() (v parser.Datum) {
-				v, err := parser.ParseDDecimal("1234567890.123456890")
+			datum: func() (v tree.Datum) {
+				v, err := tree.ParseDDecimal("1234567890.123456890")
 				if err != nil {
 					t.Fatalf("Unexpected error while creating expected value: %s", err)
 				}
 				return
 			}(),
 			exp: func() (v roachpb.Value) {
-				dDecimal, err := parser.ParseDDecimal("1234567890.123456890")
+				dDecimal, err := tree.ParseDDecimal("1234567890.123456890")
 				if err != nil {
 					t.Fatalf("Unexpected error while creating expected value: %s", err)
 				}
@@ -419,31 +422,51 @@ func TestMarshalColumnValue(t *testing.T) {
 			}(),
 		},
 		{
+			kind:  ColumnType_DATE,
+			datum: tree.NewDDate(314159),
+			exp:   func() (v roachpb.Value) { v.SetInt(314159); return }(),
+		},
+		{
+			kind:  ColumnType_TIME,
+			datum: tree.MakeDTime(timeofday.FromInt(314159)),
+			exp:   func() (v roachpb.Value) { v.SetInt(314159); return }(),
+		},
+		{
+			kind:  ColumnType_TIMESTAMP,
+			datum: tree.MakeDTimestamp(timeutil.Unix(314159, 1000), time.Microsecond),
+			exp:   func() (v roachpb.Value) { v.SetTime(timeutil.Unix(314159, 1000)); return }(),
+		},
+		{
+			kind:  ColumnType_TIMESTAMPTZ,
+			datum: tree.MakeDTimestampTZ(timeutil.Unix(314159, 1000), time.Microsecond),
+			exp:   func() (v roachpb.Value) { v.SetTime(timeutil.Unix(314159, 1000)); return }(),
+		},
+		{
 			kind:  ColumnType_STRING,
-			datum: parser.NewDString("testing123"),
+			datum: tree.NewDString("testing123"),
 			exp:   func() (v roachpb.Value) { v.SetString("testing123"); return }(),
 		},
 		{
 			kind:  ColumnType_NAME,
-			datum: parser.NewDName("testingname123"),
+			datum: tree.NewDName("testingname123"),
 			exp:   func() (v roachpb.Value) { v.SetString("testingname123"); return }(),
 		},
 		{
 			kind:  ColumnType_BYTES,
-			datum: parser.NewDBytes(parser.DBytes([]byte{0x31, 0x41, 0x59})),
+			datum: tree.NewDBytes(tree.DBytes([]byte{0x31, 0x41, 0x59})),
 			exp:   func() (v roachpb.Value) { v.SetBytes([]byte{0x31, 0x41, 0x59}); return }(),
 		},
 		{
 			kind: ColumnType_UUID,
-			datum: func() (v parser.Datum) {
-				v, err := parser.ParseDUuidFromString("63616665-6630-3064-6465-616462656562")
+			datum: func() (v tree.Datum) {
+				v, err := tree.ParseDUuidFromString("63616665-6630-3064-6465-616462656562")
 				if err != nil {
 					t.Fatalf("Unexpected error while creating expected value: %s", err)
 				}
 				return
 			}(),
 			exp: func() (v roachpb.Value) {
-				dUUID, err := parser.ParseDUuidFromString("63616665-6630-3064-6465-616462656562")
+				dUUID, err := tree.ParseDUuidFromString("63616665-6630-3064-6465-616462656562")
 				if err != nil {
 					t.Fatalf("Unexpected error while creating expected value: %s", err)
 				}
@@ -453,15 +476,15 @@ func TestMarshalColumnValue(t *testing.T) {
 		},
 		{
 			kind: ColumnType_INET,
-			datum: func() (v parser.Datum) {
-				v, err := parser.ParseDIPAddrFromINetString("192.168.0.1")
+			datum: func() (v tree.Datum) {
+				v, err := tree.ParseDIPAddrFromINetString("192.168.0.1")
 				if err != nil {
 					t.Fatalf("Unexpected error while creating expected value: %s", err)
 				}
 				return
 			}(),
 			exp: func() (v roachpb.Value) {
-				ipAddr, err := parser.ParseDIPAddrFromINetString("192.168.0.1")
+				ipAddr, err := tree.ParseDIPAddrFromINetString("192.168.0.1")
 				if err != nil {
 					t.Fatalf("Unexpected error while creating expected value: %s", err)
 				}
@@ -486,12 +509,12 @@ func TestMarshalColumnValue(t *testing.T) {
 
 type interleaveTableArgs struct {
 	indexKeyArgs indexKeyTest
-	values       []parser.Datum
+	values       []tree.Datum
 }
 
 type interleaveInfo struct {
 	tableID  uint64
-	values   []parser.Datum
+	values   []tree.Datum
 	equivSig []byte
 	children map[string]*interleaveInfo
 }
@@ -500,19 +523,19 @@ func createHierarchy() map[string]*interleaveInfo {
 	return map[string]*interleaveInfo{
 		"t1": {
 			tableID: 50,
-			values:  []parser.Datum{parser.NewDInt(10)},
+			values:  []tree.Datum{tree.NewDInt(10)},
 			children: map[string]*interleaveInfo{
 				"t2": {
 					tableID: 100,
-					values:  []parser.Datum{parser.NewDInt(10), parser.NewDInt(15)},
+					values:  []tree.Datum{tree.NewDInt(10), tree.NewDInt(15)},
 				},
 				"t3": {
 					tableID: 150,
-					values:  []parser.Datum{parser.NewDInt(10), parser.NewDInt(20)},
+					values:  []tree.Datum{tree.NewDInt(10), tree.NewDInt(20)},
 					children: map[string]*interleaveInfo{
 						"t4": {
 							tableID: 20,
-							values:  []parser.Datum{parser.NewDInt(10), parser.NewDInt(30)},
+							values:  []tree.Datum{tree.NewDInt(10), tree.NewDInt(30)},
 						},
 					},
 				},
@@ -533,7 +556,7 @@ func createEquivTCs(hierarchy map[string]*interleaveInfo) []equivSigTestCases {
 			name: "NoAncestors",
 			table: interleaveTableArgs{
 				indexKeyArgs: indexKeyTest{tableID: 50},
-				values:       []parser.Datum{parser.NewDInt(10)},
+				values:       []tree.Datum{tree.NewDInt(10)},
 			},
 			expected: [][]byte{hierarchy["t1"].equivSig},
 		},
@@ -542,7 +565,7 @@ func createEquivTCs(hierarchy map[string]*interleaveInfo) []equivSigTestCases {
 			name: "OneAncestor",
 			table: interleaveTableArgs{
 				indexKeyArgs: indexKeyTest{tableID: 100, primaryInterleaves: []ID{50}},
-				values:       []parser.Datum{parser.NewDInt(10), parser.NewDInt(20)},
+				values:       []tree.Datum{tree.NewDInt(10), tree.NewDInt(20)},
 			},
 			expected: [][]byte{hierarchy["t1"].equivSig, hierarchy["t1"].children["t2"].equivSig},
 		},
@@ -551,7 +574,7 @@ func createEquivTCs(hierarchy map[string]*interleaveInfo) []equivSigTestCases {
 			name: "TwoAncestors",
 			table: interleaveTableArgs{
 				indexKeyArgs: indexKeyTest{tableID: 20, primaryInterleaves: []ID{50, 150}},
-				values:       []parser.Datum{parser.NewDInt(10), parser.NewDInt(20), parser.NewDInt(30)},
+				values:       []tree.Datum{tree.NewDInt(10), tree.NewDInt(20), tree.NewDInt(30)},
 			},
 			expected: [][]byte{hierarchy["t1"].equivSig, hierarchy["t1"].children["t3"].equivSig, hierarchy["t1"].children["t3"].children["t4"].equivSig},
 		},
@@ -574,7 +597,7 @@ func equivSignatures(
 		copy(info.equivSig, curParent)
 		signatures = append(signatures, info.equivSig)
 		if len(info.children) > 0 {
-			curParent = encoding.EncodeNotNullDescending(curParent)
+			curParent = encoding.EncodeInterleavedSentinel(curParent)
 			signatures = equivSignatures(info.children, curParent, signatures)
 		}
 	}
@@ -689,11 +712,11 @@ func TestEquivSignature(t *testing.T) {
 			tables: []interleaveTableArgs{
 				{
 					indexKeyArgs: indexKeyTest{tableID: 50},
-					values:       []parser.Datum{parser.NewDInt(10)},
+					values:       []tree.Datum{tree.NewDInt(10)},
 				},
 				{
 					indexKeyArgs: indexKeyTest{tableID: 51},
-					values:       []parser.Datum{parser.NewDInt(20)},
+					values:       []tree.Datum{tree.NewDInt(20)},
 				},
 			},
 		},
@@ -703,11 +726,11 @@ func TestEquivSignature(t *testing.T) {
 			tables: []interleaveTableArgs{
 				{
 					indexKeyArgs: indexKeyTest{tableID: 50},
-					values:       []parser.Datum{parser.NewDInt(10)},
+					values:       []tree.Datum{tree.NewDInt(10)},
 				},
 				{
 					indexKeyArgs: indexKeyTest{tableID: 51, primaryInterleaves: []ID{50}},
-					values:       []parser.Datum{parser.NewDInt(10), parser.NewDInt(20)},
+					values:       []tree.Datum{tree.NewDInt(10), tree.NewDInt(20)},
 				},
 			},
 		},
@@ -717,15 +740,15 @@ func TestEquivSignature(t *testing.T) {
 			tables: []interleaveTableArgs{
 				{
 					indexKeyArgs: indexKeyTest{tableID: 50},
-					values:       []parser.Datum{parser.NewDInt(10)},
+					values:       []tree.Datum{tree.NewDInt(10)},
 				},
 				{
 					indexKeyArgs: indexKeyTest{tableID: 51, primaryInterleaves: []ID{50}},
-					values:       []parser.Datum{parser.NewDInt(10), parser.NewDInt(20)},
+					values:       []tree.Datum{tree.NewDInt(10), tree.NewDInt(20)},
 				},
 				{
 					indexKeyArgs: indexKeyTest{tableID: 52, primaryInterleaves: []ID{50}},
-					values:       []parser.Datum{parser.NewDInt(30), parser.NewDInt(40)},
+					values:       []tree.Datum{tree.NewDInt(30), tree.NewDInt(40)},
 				},
 			},
 		},

@@ -15,27 +15,29 @@
 package distsqlrun
 
 import (
-	"bytes"
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/transform"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/pkg/errors"
 )
 
-// ivarBinder is a parser.Visitor that binds ordinal references
+// ivarBinder is a tree.Visitor that binds ordinal references
 // (IndexedVars represented by @1, @2, ...) to an IndexedVarContainer.
 type ivarBinder struct {
-	h   *parser.IndexedVarHelper
+	h   *tree.IndexedVarHelper
 	err error
 }
 
-func (v *ivarBinder) VisitPre(expr parser.Expr) (recurse bool, newExpr parser.Expr) {
+func (v *ivarBinder) VisitPre(expr tree.Expr) (recurse bool, newExpr tree.Expr) {
 	if v.err != nil {
 		return false, expr
 	}
-	if ivar, ok := expr.(*parser.IndexedVar); ok {
+	if ivar, ok := expr.(*tree.IndexedVar); ok {
 		newVar, err := v.h.BindIfUnbound(ivar)
 		if err != nil {
 			v.err = err
@@ -46,11 +48,11 @@ func (v *ivarBinder) VisitPre(expr parser.Expr) (recurse bool, newExpr parser.Ex
 	return true, expr
 }
 
-func (*ivarBinder) VisitPost(expr parser.Expr) parser.Expr { return expr }
+func (*ivarBinder) VisitPost(expr tree.Expr) tree.Expr { return expr }
 
 // processExpression parses the string expression inside an Expression,
 // and associates ordinal references (@1, @2, etc) with the given helper.
-func processExpression(exprSpec Expression, h *parser.IndexedVarHelper) (parser.TypedExpr, error) {
+func processExpression(exprSpec Expression, h *tree.IndexedVarHelper) (tree.TypedExpr, error) {
 	if exprSpec.Expr == "" {
 		return nil, nil
 	}
@@ -61,13 +63,13 @@ func processExpression(exprSpec Expression, h *parser.IndexedVarHelper) (parser.
 
 	// Bind IndexedVars to our eh.vars.
 	v := ivarBinder{h: h, err: nil}
-	expr, _ = parser.WalkExpr(&v, expr)
+	expr, _ = tree.WalkExpr(&v, expr)
 	if v.err != nil {
 		return nil, v.err
 	}
 
 	// Convert to a fully typed expression.
-	typedExpr, err := parser.TypeCheck(expr, nil, parser.TypeAny)
+	typedExpr, err := tree.TypeCheck(expr, &tree.SemaContext{IVarHelper: h}, types.Any)
 	if err != nil {
 		return nil, errors.Wrap(err, expr.String())
 	}
@@ -81,12 +83,12 @@ type exprHelper struct {
 	//lint:ignore U1000 this marker prevents by-value copies.
 	noCopy util.NoCopy
 
-	expr parser.TypedExpr
+	expr tree.TypedExpr
 	// vars is used to generate IndexedVars that are "backed" by the values in
 	// `row`.
-	vars parser.IndexedVarHelper
+	vars tree.IndexedVarHelper
 
-	evalCtx *parser.EvalContext
+	evalCtx *tree.EvalContext
 
 	types      []sqlbase.ColumnType
 	row        sqlbase.EncDatumRow
@@ -100,16 +102,16 @@ func (eh *exprHelper) String() string {
 	return eh.expr.String()
 }
 
-// exprHelper implements parser.IndexedVarContainer.
-var _ parser.IndexedVarContainer = &exprHelper{}
+// exprHelper implements tree.IndexedVarContainer.
+var _ tree.IndexedVarContainer = &exprHelper{}
 
-// IndexedVarResolvedType is part of the parser.IndexedVarContainer interface.
-func (eh *exprHelper) IndexedVarResolvedType(idx int) parser.Type {
+// IndexedVarResolvedType is part of the tree.IndexedVarContainer interface.
+func (eh *exprHelper) IndexedVarResolvedType(idx int) types.T {
 	return eh.types[idx].ToDatumType()
 }
 
-// IndexedVarEval is part of the parser.IndexedVarContainer interface.
-func (eh *exprHelper) IndexedVarEval(idx int, ctx *parser.EvalContext) (parser.Datum, error) {
+// IndexedVarEval is part of the tree.IndexedVarContainer interface.
+func (eh *exprHelper) IndexedVarEval(idx int, ctx *tree.EvalContext) (tree.Datum, error) {
 	err := eh.row[idx].EnsureDecoded(&eh.types[idx], &eh.datumAlloc)
 	if err != nil {
 		return nil, err
@@ -117,27 +119,27 @@ func (eh *exprHelper) IndexedVarEval(idx int, ctx *parser.EvalContext) (parser.D
 	return eh.row[idx].Datum.Eval(ctx)
 }
 
-// IndexedVarString is part of the parser.IndexedVarContainer interface.
-func (eh *exprHelper) IndexedVarFormat(buf *bytes.Buffer, _ parser.FmtFlags, idx int) {
-	fmt.Fprintf(buf, "$%d", idx)
+// IndexedVarNodeFormatter is part of the parser.IndexedVarContainer interface.
+func (eh *exprHelper) IndexedVarNodeFormatter(idx int) tree.NodeFormatter {
+	return tree.Name(fmt.Sprintf("$%d", idx))
 }
 
 func (eh *exprHelper) init(
-	expr Expression, types []sqlbase.ColumnType, evalCtx *parser.EvalContext,
+	expr Expression, types []sqlbase.ColumnType, evalCtx *tree.EvalContext,
 ) error {
+	eh.evalCtx = evalCtx
 	if expr.Expr == "" {
 		return nil
 	}
 	eh.types = types
-	eh.evalCtx = evalCtx
-	eh.vars = parser.MakeIndexedVarHelper(eh, len(types))
+	eh.vars = tree.MakeIndexedVarHelper(eh, len(types))
 	var err error
 	eh.expr, err = processExpression(expr, &eh.vars)
 	if err != nil {
 		return err
 	}
-	var p parser.Parser
-	if p.AggregateInExpr(eh.expr, evalCtx.SearchPath) {
+	var t transform.ExprTransformContext
+	if t.AggregateInExpr(eh.expr, evalCtx.SearchPath) {
 		return errors.Errorf("expression '%s' has aggregate", eh.expr)
 	}
 	return nil
@@ -147,7 +149,10 @@ func (eh *exprHelper) init(
 // returns whether the filter passes.
 func (eh *exprHelper) evalFilter(row sqlbase.EncDatumRow) (bool, error) {
 	eh.row = row
-	return sqlbase.RunFilter(eh.expr, eh.evalCtx)
+	eh.evalCtx.IVarHelper = &eh.vars
+	pass, err := sqlbase.RunFilter(eh.expr, eh.evalCtx)
+	eh.evalCtx.IVarHelper = nil
+	return pass, err
 }
 
 // Given a row, eval evaluates the wrapped expression and returns the
@@ -156,8 +161,11 @@ func (eh *exprHelper) evalFilter(row sqlbase.EncDatumRow) (bool, error) {
 //  '@2 + @5' would return '7'
 //  '@1' would return '1'
 //  '@2 + 10' would return '12'
-func (eh *exprHelper) eval(row sqlbase.EncDatumRow) (parser.Datum, error) {
+func (eh *exprHelper) eval(row sqlbase.EncDatumRow) (tree.Datum, error) {
 	eh.row = row
 
-	return eh.expr.Eval(eh.evalCtx)
+	eh.evalCtx.IVarHelper = &eh.vars
+	d, err := eh.expr.Eval(eh.evalCtx)
+	eh.evalCtx.IVarHelper = nil
+	return d, err
 }

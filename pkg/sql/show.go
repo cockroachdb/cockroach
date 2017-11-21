@@ -23,8 +23,10 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/settings"
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -39,7 +41,7 @@ func checkDBExists(ctx context.Context, p *planner, db string) error {
 }
 
 // checkTableExists checks if the table exists by using the security.RootUser.
-func checkTableExists(ctx context.Context, p *planner, tn *parser.TableName) error {
+func checkTableExists(ctx context.Context, p *planner, tn *tree.TableName) error {
 	if _, err := MustGetTableOrViewDesc(ctx, p.txn, p.getVirtualTabler(), tn, true /*allowAdding*/); err != nil {
 		return sqlbase.NewUndefinedRelationError(tn)
 	}
@@ -47,7 +49,7 @@ func checkTableExists(ctx context.Context, p *planner, tn *parser.TableName) err
 }
 
 func (p *planner) ShowClusterSetting(
-	ctx context.Context, n *parser.ShowClusterSetting,
+	ctx context.Context, n *tree.ShowClusterSetting,
 ) (planNode, error) {
 
 	if err := p.RequireSuperUser("SHOW CLUSTER SETTINGS"); err != nil {
@@ -66,18 +68,18 @@ func (p *planner) ShowClusterSetting(
 	if !ok {
 		return nil, errors.Errorf("unknown setting: %q", name)
 	}
-	var dType parser.Type
+	var dType types.T
 	switch val.(type) {
 	case *settings.IntSetting, *settings.EnumSetting:
-		dType = parser.TypeInt
+		dType = types.Int
 	case *settings.StringSetting, *settings.ByteSizeSetting, *settings.StateMachineSetting:
-		dType = parser.TypeString
+		dType = types.String
 	case *settings.BoolSetting:
-		dType = parser.TypeBool
+		dType = types.Bool
 	case *settings.FloatSetting:
-		dType = parser.TypeFloat
+		dType = types.Float
 	case *settings.DurationSetting:
-		dType = parser.TypeInterval
+		dType = types.Interval
 	default:
 		return nil, errors.Errorf("unknown setting type for %s: %s", name, val.Typ())
 	}
@@ -87,12 +89,12 @@ func (p *planner) ShowClusterSetting(
 		name:    "SHOW CLUSTER SETTING " + name,
 		columns: columns,
 		constructor: func(ctx context.Context, p *planner) (planNode, error) {
-			d := parser.DNull
+			d := tree.DNull
 			switch s := val.(type) {
 			case *settings.IntSetting:
-				d = parser.NewDInt(parser.DInt(s.Get(&st.SV)))
+				d = tree.NewDInt(tree.DInt(s.Get(&st.SV)))
 			case *settings.StringSetting:
-				d = parser.NewDString(s.String(&st.SV))
+				d = tree.NewDString(s.String(&st.SV))
 			case *settings.StateMachineSetting:
 				// Show consistent values for statemachine settings. This isn't necessary
 				// for correctness, but helpful for testability.
@@ -107,7 +109,7 @@ func (p *planner) ShowClusterSetting(
 				}
 				var prevRawVal []byte
 				if len(datums) != 0 {
-					dStr, ok := datums[0].(*parser.DString)
+					dStr, ok := datums[0].(*tree.DString)
 					if !ok {
 						return nil, errors.New("the existing value is not a string")
 					}
@@ -124,21 +126,21 @@ func (p *planner) ShowClusterSetting(
 				if err != nil {
 					return nil, errors.Errorf("unable to read existing value: %s", err)
 				}
-				d = parser.NewDString(obj.(fmt.Stringer).String())
+				d = tree.NewDString(obj.(fmt.Stringer).String())
 			case *settings.BoolSetting:
-				d = parser.MakeDBool(parser.DBool(s.Get(&st.SV)))
+				d = tree.MakeDBool(tree.DBool(s.Get(&st.SV)))
 			case *settings.FloatSetting:
-				d = parser.NewDFloat(parser.DFloat(s.Get(&st.SV)))
+				d = tree.NewDFloat(tree.DFloat(s.Get(&st.SV)))
 			case *settings.DurationSetting:
-				d = &parser.DInterval{Duration: duration.Duration{Nanos: s.Get(&st.SV).Nanoseconds()}}
+				d = &tree.DInterval{Duration: duration.Duration{Nanos: s.Get(&st.SV).Nanoseconds()}}
 			case *settings.EnumSetting:
-				d = parser.NewDInt(parser.DInt(s.Get(&st.SV)))
+				d = tree.NewDInt(tree.DInt(s.Get(&st.SV)))
 			case *settings.ByteSizeSetting:
-				d = parser.NewDString(s.String(&st.SV))
+				d = tree.NewDString(s.String(&st.SV))
 			}
 
 			v := p.newContainerValuesNode(columns, 0)
-			if _, err := v.rows.AddRow(ctx, parser.Datums{d}); err != nil {
+			if _, err := v.rows.AddRow(ctx, tree.Datums{d}); err != nil {
 				v.rows.Close(ctx)
 				return nil, err
 			}
@@ -148,7 +150,7 @@ func (p *planner) ShowClusterSetting(
 }
 
 // Show a session-local variable name.
-func (p *planner) ShowVar(ctx context.Context, n *parser.ShowVar) (planNode, error) {
+func (p *planner) ShowVar(ctx context.Context, n *tree.ShowVar) (planNode, error) {
 	origName := n.Name
 	name := strings.ToLower(n.Name)
 
@@ -161,12 +163,12 @@ func (p *planner) ShowVar(ctx context.Context, n *parser.ShowVar) (planNode, err
 		return nil, fmt.Errorf("unknown variable: %q", origName)
 	}
 
-	varName := parser.EscapeSQLString(name)
+	varName := lex.EscapeSQLString(name)
 	return p.delegateQuery(ctx, "SHOW "+varName,
 		fmt.Sprintf(
 			`SELECT value AS %[1]s FROM crdb_internal.session_variables `+
 				`WHERE variable = %[2]s`,
-			parser.Name(name).String(), varName),
+			tree.Name(name).String(), varName),
 		nil, nil)
 }
 
@@ -174,7 +176,7 @@ func (p *planner) ShowVar(ctx context.Context, n *parser.ShowVar) (planNode, err
 // Privileges: Any privilege on table.
 //   Notes: postgres does not have a SHOW COLUMNS statement.
 //          mysql only returns columns you have privileges on.
-func (p *planner) ShowColumns(ctx context.Context, n *parser.ShowColumns) (planNode, error) {
+func (p *planner) ShowColumns(ctx context.Context, n *tree.ShowColumns) (planNode, error) {
 	const getColumnsQuery = `
 				SELECT
 					COLUMN_NAME AS "Field",
@@ -208,7 +210,7 @@ func (p *planner) ShowColumns(ctx context.Context, n *parser.ShowColumns) (planN
 // %[3]s the given table name as SQL string literal.
 // %[4]s the database name as SQL identifier.
 func (p *planner) showTableDetails(
-	ctx context.Context, showType string, t parser.NormalizableTableName, query string,
+	ctx context.Context, showType string, t tree.NormalizableTableName, query string,
 ) (planNode, error) {
 	tn, err := t.NormalizeWithDatabaseName(p.session.Database)
 	if err != nil {
@@ -229,18 +231,16 @@ func (p *planner) showTableDetails(
 
 	return p.delegateQuery(ctx, showType,
 		fmt.Sprintf(query,
-			parser.EscapeSQLString(db),
-			parser.EscapeSQLString(tn.Table()),
-			parser.EscapeSQLString(tn.String()),
+			lex.EscapeSQLString(db),
+			lex.EscapeSQLString(tn.Table()),
+			lex.EscapeSQLString(tn.String()),
 			tn.DatabaseName.String()),
 		initialCheck, nil)
 }
 
 // ShowCreateTable returns a CREATE TABLE statement for the specified table.
 // Privileges: Any privilege on table.
-func (p *planner) ShowCreateTable(
-	ctx context.Context, n *parser.ShowCreateTable,
-) (planNode, error) {
+func (p *planner) ShowCreateTable(ctx context.Context, n *tree.ShowCreateTable) (planNode, error) {
 	// We make the check whether the name points to a table or not in
 	// SQL, so as to avoid a double lookup (a first one to check if the
 	// descriptor is of the right type, another to populate the
@@ -260,7 +260,7 @@ func (p *planner) ShowCreateTable(
 
 // ShowCreateView returns a CREATE VIEW statement for the specified view.
 // Privileges: Any privilege on view.
-func (p *planner) ShowCreateView(ctx context.Context, n *parser.ShowCreateView) (planNode, error) {
+func (p *planner) ShowCreateView(ctx context.Context, n *tree.ShowCreateView) (planNode, error) {
 	// We make the check whether the name points to a view or not in
 	// SQL, so as to avoid a double lookup (a first one to check if the
 	// descriptor is of the right type, another to populate the
@@ -280,7 +280,7 @@ func (p *planner) ShowCreateView(ctx context.Context, n *parser.ShowCreateView) 
 
 // ShowTrace shows the current stored session trace.
 // Privileges: None.
-func (p *planner) ShowTrace(ctx context.Context, n *parser.ShowTrace) (planNode, error) {
+func (p *planner) ShowTrace(ctx context.Context, n *tree.ShowTrace) (planNode, error) {
 	const traceClause = `
 SELECT timestamp,
        timestamp-first_value(timestamp) OVER (ORDER BY timestamp) AS age,
@@ -392,7 +392,7 @@ WHERE message LIKE 'fetched: %'
 // Privileges: None.
 //   Notes: postgres does not have a "show databases"
 //          mysql has a "SHOW DATABASES" permission, but we have no system-level permissions.
-func (p *planner) ShowDatabases(ctx context.Context, n *parser.ShowDatabases) (planNode, error) {
+func (p *planner) ShowDatabases(ctx context.Context, n *tree.ShowDatabases) (planNode, error) {
 	return p.delegateQuery(ctx, "SHOW DATABASES",
 		`SELECT SCHEMA_NAME AS "Database" FROM information_schema.schemata ORDER BY "Database"`,
 		nil, nil)
@@ -402,7 +402,7 @@ func (p *planner) ShowDatabases(ctx context.Context, n *parser.ShowDatabases) (p
 // Privileges: None.
 //   Notes: postgres does not have a SHOW GRANTS statement.
 //          mysql only returns the user's privileges.
-func (p *planner) ShowGrants(ctx context.Context, n *parser.ShowGrants) (planNode, error) {
+func (p *planner) ShowGrants(ctx context.Context, n *tree.ShowGrants) (planNode, error) {
 	var params []string
 	var initCheck func(context.Context) error
 
@@ -430,7 +430,7 @@ func (p *planner) ShowGrants(ctx context.Context, n *parser.ShowGrants) (planNod
 		}
 
 		for _, db := range dbNames {
-			params = append(params, parser.EscapeSQLString(db))
+			params = append(params, lex.EscapeSQLString(db))
 		}
 
 		fmt.Fprint(&source, dbPrivQuery)
@@ -449,7 +449,7 @@ func (p *planner) ShowGrants(ctx context.Context, n *parser.ShowGrants) (planNod
 		if n.Targets != nil {
 			// Get grants of table from information_schema.table_privileges
 			// if the type of target is table.
-			var allTables parser.TableNames
+			var allTables tree.TableNames
 
 			for _, tableTarget := range n.Targets.Tables {
 				tableGlob, err := tableTarget.NormalizeTablePattern()
@@ -475,8 +475,8 @@ func (p *planner) ShowGrants(ctx context.Context, n *parser.ShowGrants) (planNod
 
 			for i := range allTables {
 				params = append(params, fmt.Sprintf("(%s,%s)",
-					parser.EscapeSQLString(allTables[i].Database()),
-					parser.EscapeSQLString(allTables[i].Table())))
+					lex.EscapeSQLString(allTables[i].Database()),
+					lex.EscapeSQLString(allTables[i].Table())))
 			}
 
 			if len(params) == 0 {
@@ -499,7 +499,7 @@ func (p *planner) ShowGrants(ctx context.Context, n *parser.ShowGrants) (planNod
 	if n.Grantees != nil {
 		params = params[:0]
 		for _, grantee := range n.Grantees.ToStrings() {
-			params = append(params, parser.EscapeSQLString(grantee))
+			params = append(params, lex.EscapeSQLString(grantee))
 		}
 		fmt.Fprintf(&cond, ` AND "User" IN (%s)`, strings.Join(params, ","))
 	}
@@ -512,7 +512,7 @@ func (p *planner) ShowGrants(ctx context.Context, n *parser.ShowGrants) (planNod
 // Privileges: Any privilege on table.
 //   Notes: postgres does not have a SHOW INDEXES statement.
 //          mysql requires some privilege for any column.
-func (p *planner) ShowIndex(ctx context.Context, n *parser.ShowIndex) (planNode, error) {
+func (p *planner) ShowIndex(ctx context.Context, n *tree.ShowIndex) (planNode, error) {
 	const getIndexes = `
 				SELECT
 					TABLE_NAME AS "Table",
@@ -532,9 +532,7 @@ func (p *planner) ShowIndex(ctx context.Context, n *parser.ShowIndex) (planNode,
 // Privileges: Any privilege on table.
 //   Notes: postgres does not have a SHOW CONSTRAINTS statement.
 //          mysql requires some privilege for any column.
-func (p *planner) ShowConstraints(
-	ctx context.Context, n *parser.ShowConstraints,
-) (planNode, error) {
+func (p *planner) ShowConstraints(ctx context.Context, n *tree.ShowConstraints) (planNode, error) {
 	tn, err := n.Table.NormalizeWithDatabaseName(p.session.Database)
 	if err != nil {
 		return nil, err
@@ -549,11 +547,11 @@ func (p *planner) ShowConstraints(
 	}
 
 	columns := sqlbase.ResultColumns{
-		{Name: "Table", Typ: parser.TypeString},
-		{Name: "Name", Typ: parser.TypeString},
-		{Name: "Type", Typ: parser.TypeString},
-		{Name: "Column(s)", Typ: parser.TypeString},
-		{Name: "Details", Typ: parser.TypeString},
+		{Name: "Table", Typ: types.String},
+		{Name: "Name", Typ: types.String},
+		{Name: "Type", Typ: types.String},
+		{Name: "Column(s)", Typ: types.String},
+		{Name: "Details", Typ: types.String},
 	}
 
 	return &delayedNode{
@@ -567,22 +565,22 @@ func (p *planner) ShowConstraints(
 				return nil, err
 			}
 			for name, c := range info {
-				detailsDatum := parser.DNull
+				detailsDatum := tree.DNull
 				if c.Details != "" {
-					detailsDatum = parser.NewDString(c.Details)
+					detailsDatum = tree.NewDString(c.Details)
 				}
-				columnsDatum := parser.DNull
+				columnsDatum := tree.DNull
 				if c.Columns != nil {
-					columnsDatum = parser.NewDString(strings.Join(c.Columns, ", "))
+					columnsDatum = tree.NewDString(strings.Join(c.Columns, ", "))
 				}
 				kind := string(c.Kind)
 				if c.Unvalidated {
 					kind += " (UNVALIDATED)"
 				}
-				newRow := []parser.Datum{
-					parser.NewDString(tn.Table()),
-					parser.NewDString(name),
-					parser.NewDString(kind),
+				newRow := []tree.Datum{
+					tree.NewDString(tn.Table()),
+					tree.NewDString(name),
+					tree.NewDString(kind),
 					columnsDatum,
 					detailsDatum,
 				}
@@ -606,7 +604,7 @@ func (p *planner) ShowConstraints(
 	}, nil
 }
 
-func (p *planner) ShowQueries(ctx context.Context, n *parser.ShowQueries) (planNode, error) {
+func (p *planner) ShowQueries(ctx context.Context, n *tree.ShowQueries) (planNode, error) {
 	query := `TABLE crdb_internal.node_queries`
 	if n.Cluster {
 		query = `TABLE crdb_internal.cluster_queries`
@@ -616,7 +614,7 @@ func (p *planner) ShowQueries(ctx context.Context, n *parser.ShowQueries) (planN
 
 // ShowJobs returns all the jobs.
 // Privileges: None.
-func (p *planner) ShowJobs(ctx context.Context, n *parser.ShowJobs) (planNode, error) {
+func (p *planner) ShowJobs(ctx context.Context, n *tree.ShowJobs) (planNode, error) {
 	return p.delegateQuery(ctx, "SHOW JOBS",
 		`SELECT id, type, description, username, status, created, started, finished, modified,
             fraction_completed, error, coordinator_id
@@ -624,7 +622,7 @@ func (p *planner) ShowJobs(ctx context.Context, n *parser.ShowJobs) (planNode, e
 		nil, nil)
 }
 
-func (p *planner) ShowSessions(ctx context.Context, n *parser.ShowSessions) (planNode, error) {
+func (p *planner) ShowSessions(ctx context.Context, n *tree.ShowSessions) (planNode, error) {
 	query := `TABLE crdb_internal.node_sessions`
 	if n.Cluster {
 		query = `TABLE crdb_internal.cluster_sessions`
@@ -636,7 +634,7 @@ func (p *planner) ShowSessions(ctx context.Context, n *parser.ShowSessions) (pla
 // Privileges: None.
 //   Notes: postgres does not have a SHOW TABLES statement.
 //          mysql only returns tables you have privileges on.
-func (p *planner) ShowTables(ctx context.Context, n *parser.ShowTables) (planNode, error) {
+func (p *planner) ShowTables(ctx context.Context, n *tree.ShowTables) (planNode, error) {
 	name := p.session.Database
 	if n.Database != "" {
 		name = string(n.Database)
@@ -655,7 +653,7 @@ func (p *planner) ShowTables(ctx context.Context, n *parser.ShowTables) (planNod
 				ORDER BY tables.TABLE_NAME`
 
 	return p.delegateQuery(ctx, "SHOW TABLES",
-		fmt.Sprintf(getTablesQuery, parser.EscapeSQLString(name)),
+		fmt.Sprintf(getTablesQuery, lex.EscapeSQLString(name)),
 		initialCheck, nil)
 }
 
@@ -663,12 +661,12 @@ func (p *planner) ShowTables(ctx context.Context, n *parser.ShowTables) (planNod
 // This statement is usually handled as a special case in Executor,
 // but for FROM [SHOW TRANSACTION STATUS] we will arrive here too.
 func (p *planner) ShowTransactionStatus(ctx context.Context) (planNode, error) {
-	return p.ShowVar(ctx, &parser.ShowVar{Name: "transaction status"})
+	return p.ShowVar(ctx, &tree.ShowVar{Name: "transaction status"})
 }
 
 // ShowUsers returns all the users.
 // Privileges: SELECT on system.users.
-func (p *planner) ShowUsers(ctx context.Context, n *parser.ShowUsers) (planNode, error) {
+func (p *planner) ShowUsers(ctx context.Context, n *tree.ShowUsers) (planNode, error) {
 	return p.delegateQuery(ctx, "SHOW USERS",
 		`SELECT username FROM system.users ORDER BY 1`, nil, nil)
 }

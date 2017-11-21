@@ -27,7 +27,7 @@ export default function (props: GraphDashboardProps) {
         `The total amount of SQL client network traffic in bytes per second ${tooltipSelection}.`
       }
     >
-      <Axis units={AxisUnits.Bytes}>
+      <Axis units={AxisUnits.Bytes} label="byte traffic">
         <Metric name="cr.node.sql.bytesin" title="Bytes In" nonNegativeRate />
         <Metric name="cr.node.sql.bytesout" title="Bytes Out" nonNegativeRate />
       </Axis>

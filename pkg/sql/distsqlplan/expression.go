@@ -24,32 +24,22 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 // exprFmtFlagsBase produces FmtFlags used for serializing expressions; a proper
 // IndexedVar formatting function needs to be added on. It replaces placeholders
 // with their values.
-func exprFmtFlagsBase(evalCtx *parser.EvalContext) parser.FmtFlags {
-	return parser.FmtPlaceholderFormat(
-		parser.FmtParsable,
-		func(buf *bytes.Buffer, flags parser.FmtFlags, p *parser.Placeholder) {
+func exprFmtFlagsBase(evalCtx *tree.EvalContext) tree.FmtFlags {
+	return tree.FmtPlaceholderFormat(
+		tree.FmtCheckEquivalence,
+		func(buf *bytes.Buffer, flags tree.FmtFlags, p *tree.Placeholder) {
 			d, err := p.Eval(evalCtx)
 			if err != nil {
 				panic(fmt.Sprintf("failed to serialize placeholder: %s", err))
 			}
 			d.Format(buf, flags)
-		})
-}
-
-// exprFmtFlagsNoMap produces FmtFlags used for serializing expressions that
-// don't need to remap IndexedVars.
-func exprFmtFlagsNoMap(evalCtx *parser.EvalContext) parser.FmtFlags {
-	return parser.FmtIndexedVarFormat(
-		exprFmtFlagsBase(evalCtx),
-		func(buf *bytes.Buffer, _ parser.FmtFlags, _ parser.IndexedVarContainer, idx int) {
-			fmt.Fprintf(buf, "@%d", idx+1)
 		})
 }
 
@@ -62,20 +52,20 @@ func exprFmtFlagsNoMap(evalCtx *parser.EvalContext) parser.FmtFlags {
 // remap these columns by passing an indexVarMap: an IndexedVar with index i
 // becomes column indexVarMap[i].
 func MakeExpression(
-	expr parser.TypedExpr, evalCtx *parser.EvalContext, indexVarMap []int,
+	expr tree.TypedExpr, evalCtx *tree.EvalContext, indexVarMap []int,
 ) distsqlrun.Expression {
 	if expr == nil {
 		return distsqlrun.Expression{}
 	}
 
 	// We format the expression using the IndexedVar and Placeholder formatting interceptors.
-	var f parser.FmtFlags
+	var f tree.FmtFlags
 	if indexVarMap == nil {
-		f = exprFmtFlagsNoMap(evalCtx)
+		f = exprFmtFlagsBase(evalCtx)
 	} else {
-		f = parser.FmtIndexedVarFormat(
+		f = tree.FmtIndexedVarFormat(
 			exprFmtFlagsBase(evalCtx),
-			func(buf *bytes.Buffer, _ parser.FmtFlags, _ parser.IndexedVarContainer, idx int) {
+			func(buf *bytes.Buffer, idx int) {
 				remappedIdx := indexVarMap[idx]
 				if remappedIdx < 0 {
 					panic(fmt.Sprintf("unmapped index %d", idx))
@@ -85,9 +75,9 @@ func MakeExpression(
 		)
 	}
 	var buf bytes.Buffer
-	parser.FormatNode(&buf, f, expr)
+	tree.FormatNode(&buf, f, expr)
 	if log.V(1) {
-		log.Infof(context.TODO(), "Expr %s:\n%s", buf.String(), parser.ExprDebugString(expr))
+		log.Infof(context.TODO(), "Expr %s:\n%s", buf.String(), tree.ExprDebugString(expr))
 	}
 	return distsqlrun.Expression{Expr: buf.String()}
 }

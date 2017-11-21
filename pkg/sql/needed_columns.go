@@ -17,8 +17,9 @@ package sql
 import (
 	"fmt"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/util"
 )
 
 // setNeededColumns informs the node about which columns are
@@ -86,14 +87,17 @@ func setNeededColumns(plan planNode, needed []bool) {
 		markOmitted(n.columns, needed)
 
 	case *scanNode:
-		copy(n.valNeededForCol, needed)
-		for i := range needed {
+		// Reset the needed columns set.
+		n.valNeededForCol = util.FastIntSet{}
+		for i, colNeeded := range needed {
 			// All the values involved in the filter expression are needed too.
-			if n.filterVars.IndexedVarUsed(i) {
-				n.valNeededForCol[i] = true
+			if colNeeded || n.filterVars.IndexedVarUsed(i) {
+				n.valNeededForCol.Add(i)
+				n.resultColumns[i].Omitted = false
+			} else {
+				n.resultColumns[i].Omitted = true
 			}
 		}
-		markOmitted(n.resultColumns, n.valNeededForCol)
 
 	case *distinctNode:
 		// Distinct needs values for every input column.
@@ -119,7 +123,7 @@ func setNeededColumns(plan planNode, needed []bool) {
 		for i, val := range needed {
 			if !val {
 				// This render is not used, so reduce its expression to NULL.
-				n.render[i] = parser.DNull
+				n.render[i] = tree.DNull
 				continue
 			}
 			n.render[i] = n.ivarHelper.Rebind(n.render[i], false, true)
@@ -184,6 +188,7 @@ func setNeededColumns(plan planNode, needed []bool) {
 		setNeededColumns(n.rows, allColumns(n.rows))
 
 	case *alterTableNode:
+	case *alterSequenceNode:
 	case *alterUserSetPasswordNode:
 	case *cancelQueryNode:
 	case *controlJobNode:
@@ -193,10 +198,12 @@ func setNeededColumns(plan planNode, needed []bool) {
 	case *createIndexNode:
 	case *createUserNode:
 	case *createViewNode:
+	case *createSequenceNode:
 	case *dropDatabaseNode:
 	case *dropIndexNode:
 	case *dropTableNode:
 	case *dropViewNode:
+	case *dropSequenceNode:
 	case *dropUserNode:
 	case *zeroNode:
 	case *unaryNode:

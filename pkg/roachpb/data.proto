@@ -330,8 +330,6 @@ message Intent {
 // Lease contains information about range leases including the
 // expiration and lease holder.
 message Lease {
-  option (gogoproto.equal) = true;
-
   option (gogoproto.goproto_stringer) = false;
   option (gogoproto.populate) = true;
 

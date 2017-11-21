@@ -5,7 +5,6 @@ import "codemirror/theme/neat.css";
 import "nvd3/build/nv.d3.min.css";
 import "react-select/dist/react-select.css";
 import "styl/app.styl";
-import "src/js/sim/style.css";
 
 import "src/polyfills";
 
@@ -34,6 +33,7 @@ import TableDetails from "src/views/databases/containers/tableDetails";
 
 import JobsPage from "src/views/jobs";
 
+import ClusterOverview from "src/views/cluster/containers/clusterOverview";
 import NodesOverview from "src/views/cluster/containers/nodesOverview";
 import NodeOverview from "src/views/cluster/containers/nodeOverview";
 import NodeGraphs from "src/views/cluster/containers/nodeGraphs";
@@ -43,7 +43,6 @@ import { EventPage } from "src/views/cluster/containers/events";
 import Raft from "src/views/devtools/containers/raft";
 import RaftRanges from "src/views/devtools/containers/raftRanges";
 import RaftMessages from "src/views/devtools/containers/raftMessages";
-import ClusterViz from "src/views/devtools/containers/clusterViz";
 import ProblemRanges from "src/views/reports/containers/problemRanges";
 import Network from "src/views/reports/containers/network";
 import Nodes from "src/views/reports/containers/nodes";
@@ -67,7 +66,10 @@ ReactDOM.render(
   <Provider store={store}>
     <Router history={history}>
       <Route path="/" component={Layout}>
-        <IndexRedirect to="cluster" />
+        <IndexRedirect to="overview" />
+        <Route path="overview">
+          <IndexRoute component={ClusterOverview} />
+        </Route>
         <Route path="cluster">
           <IndexRedirect to="all/overview" />
           <Route path={`all/:${dashboardNameAttr}`} component={NodeGraphs} />
@@ -94,7 +96,6 @@ ReactDOM.render(
           <Route path="messages/all" component={ RaftMessages } />
           <Route path={`messages/node/:${nodeIDAttr}`} component={ RaftMessages } />
         </Route>
-        <Route path="clusterviz" component={ ClusterViz } />
         <Route path="debug" component={ Debug } />
         <Route path="reports">
           <Route path="problemranges" component={ ProblemRanges }>

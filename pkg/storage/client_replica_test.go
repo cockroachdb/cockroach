@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
@@ -196,7 +197,7 @@ func TestTxnPutOutOfOrder(t *testing.T) {
 	// and trying to handle that complicates the test without providing any
 	// added benefit.
 	cfg.TestingKnobs.DisableSplitQueue = true
-	cfg.TestingKnobs.TestingEvalFilter =
+	cfg.TestingKnobs.EvalKnobs.TestingEvalFilter =
 		func(filterArgs storagebase.FilterArgs) *roachpb.Error {
 			if _, ok := filterArgs.Req.(*roachpb.GetRequest); ok &&
 				filterArgs.Req.Header().Key.Equal(roachpb.Key(key)) &&
@@ -473,7 +474,7 @@ func TestRangeTransferLease(t *testing.T) {
 		float64((9 * time.Second) / cfg.RaftElectionTimeout())
 	var filterMu syncutil.Mutex
 	var filter func(filterArgs storagebase.FilterArgs) *roachpb.Error
-	cfg.TestingKnobs.TestingEvalFilter =
+	cfg.TestingKnobs.EvalKnobs.TestingEvalFilter =
 		func(filterArgs storagebase.FilterArgs) *roachpb.Error {
 			filterMu.Lock()
 			filterCopy := filter
@@ -637,12 +638,17 @@ func TestRangeTransferLease(t *testing.T) {
 
 		replica1Lease, _ := replica1.GetLease()
 
-		// Verify the timestamp cache low water. Because we executed a transfer lease
-		// request, the low water should be set to the new lease start time which is
-		// less than the previous lease's expiration time.
-		if lowWater := replica1.GetTimestampCacheLowWater(); lowWater != replica1Lease.Start {
-			t.Fatalf("expected timestamp cache low water %s, but found %s",
-				replica1Lease.Start, lowWater)
+		// We'd like to verify the timestamp cache's low water mark, but this is
+		// impossible to determine precisely in all cases because it may have
+		// been subsumed by future tscache accesses. However, we know that there
+		// were no tscache accesses since we executed the transfer lease
+		// request, which means that the low water mark will still be equal to
+		// the high water mark. So instead of checking the low water mark, we
+		// make sure that the high water mark is set to the new lease start
+		// time, which is less than the previous lease's expiration time.
+		if highWater := replica1.GetTSCacheHighWater(); highWater != replica1Lease.Start {
+			t.Fatalf("expected timestamp cache high water %s, but found %s",
+				replica1Lease.Start, highWater)
 		}
 	})
 
@@ -781,7 +787,7 @@ func TestLeaseMetricsOnSplitAndTransfer(t *testing.T) {
 	var injectLeaseTransferError atomic.Value
 	sc := storage.TestStoreConfig(nil)
 	sc.TestingKnobs.DisableSplitQueue = true
-	sc.TestingKnobs.TestingEvalFilter =
+	sc.TestingKnobs.EvalKnobs.TestingEvalFilter =
 		func(filterArgs storagebase.FilterArgs) *roachpb.Error {
 			if args, ok := filterArgs.Req.(*roachpb.TransferLeaseRequest); ok {
 				if val := injectLeaseTransferError.Load(); val != nil && val.(bool) {
@@ -955,7 +961,9 @@ func TestLeaseExtensionNotBlockedByRead(t *testing.T) {
 		base.TestServerArgs{
 			Knobs: base.TestingKnobs{
 				Store: &storage.StoreTestingKnobs{
-					TestingEvalFilter: cmdFilter,
+					EvalKnobs: batcheval.TestingKnobs{
+						TestingEvalFilter: cmdFilter,
+					},
 				},
 			},
 		})
@@ -1142,7 +1150,9 @@ func TestErrorHandlingForNonKVCommand(t *testing.T) {
 		base.TestServerArgs{
 			Knobs: base.TestingKnobs{
 				Store: &storage.StoreTestingKnobs{
-					TestingEvalFilter: cmdFilter,
+					EvalKnobs: batcheval.TestingKnobs{
+						TestingEvalFilter: cmdFilter,
+					},
 				},
 			},
 		})

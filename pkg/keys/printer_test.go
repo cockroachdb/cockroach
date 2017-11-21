@@ -146,11 +146,17 @@ func TestPrettyPrint(t *testing.T) {
 			roachpb.RKey(durationDesc)),
 			"/Table/42/-2mon-2d743h59m58s999ms999µs999ns"},
 
+		// sequence
+		{MakeSequenceKey(55), `/Table/55/"seqval"`},
+
 		// others
 		{makeKey([]byte("")), "/Min"},
 		{Meta1KeyMax, "/Meta1/Max"},
 		{Meta2KeyMax, "/Meta2/Max"},
-		{makeKey(MakeTablePrefix(42), roachpb.RKey([]byte{0x12, 'a', 0x00, 0x02})), "/Table/42/???"},
+		{makeKey(MakeTablePrefix(42), roachpb.RKey([]byte{0xf6})), `/Table/42/109/PrefixEnd`},
+		{makeKey(MakeTablePrefix(42), roachpb.RKey([]byte{0xf7})), `/Table/42/???`},
+		{makeKey(MakeTablePrefix(42), roachpb.RKey([]byte{0x12, 'a', 0x00, 0x02})), `/Table/42/"a"/PrefixEnd`},
+		{makeKey(MakeTablePrefix(42), roachpb.RKey([]byte{0x12, 'a', 0x00, 0x03})), `/Table/42/???`},
 	}
 	for i, test := range testCases {
 		keyInfo := MassagePrettyPrintedSpanForTest(PrettyPrint(test.key), nil)

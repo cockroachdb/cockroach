@@ -32,7 +32,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/jobs"
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -143,24 +144,24 @@ func (dsp *DistSQLPlanner) setSpanResolver(spanResolver distsqlplan.SpanResolver
 	dsp.spanResolver = spanResolver
 }
 
-// distSQLExprCheckVisitor is a parser.Visitor that checks if expressions
+// distSQLExprCheckVisitor is a tree.Visitor that checks if expressions
 // contain things not supported by distSQL (like subqueries).
 type distSQLExprCheckVisitor struct {
 	err error
 }
 
-var _ parser.Visitor = &distSQLExprCheckVisitor{}
+var _ tree.Visitor = &distSQLExprCheckVisitor{}
 
-func (v *distSQLExprCheckVisitor) VisitPre(expr parser.Expr) (recurse bool, newExpr parser.Expr) {
+func (v *distSQLExprCheckVisitor) VisitPre(expr tree.Expr) (recurse bool, newExpr tree.Expr) {
 	if v.err != nil {
 		return false, expr
 	}
 	switch t := expr.(type) {
-	case *subquery, *parser.Subquery:
+	case *subquery, *tree.Subquery:
 		v.err = newQueryNotSupportedError("subqueries not supported yet")
 		return false, expr
 
-	case *parser.FuncExpr:
+	case *tree.FuncExpr:
 		if t.IsDistSQLBlacklist() {
 			v.err = newQueryNotSupportedErrorf("function %s cannot be executed with distsql", t)
 			return false, expr
@@ -169,16 +170,16 @@ func (v *distSQLExprCheckVisitor) VisitPre(expr parser.Expr) (recurse bool, newE
 	return true, expr
 }
 
-func (v *distSQLExprCheckVisitor) VisitPost(expr parser.Expr) parser.Expr { return expr }
+func (v *distSQLExprCheckVisitor) VisitPost(expr tree.Expr) tree.Expr { return expr }
 
 // checkExpr verifies that an expression doesn't contain things that are not yet
 // supported by distSQL, like subqueries.
-func (dsp *DistSQLPlanner) checkExpr(expr parser.Expr) error {
+func (dsp *DistSQLPlanner) checkExpr(expr tree.Expr) error {
 	if expr == nil {
 		return nil
 	}
 	v := distSQLExprCheckVisitor{}
-	parser.WalkExprConst(&v, expr)
+	tree.WalkExprConst(&v, expr)
 	return v.err
 }
 
@@ -244,8 +245,8 @@ var setNotSupportedError = newQueryNotSupportedError("SET / SET CLUSTER SETTING 
 
 // leafType returns the element type if the given type is an array, and the type
 // itself otherwise.
-func leafType(t parser.Type) parser.Type {
-	if a, ok := t.(parser.TArray); ok {
+func leafType(t types.T) types.T {
+	if a, ok := t.(types.TArray); ok {
 		return leafType(a.Typ)
 	}
 	return t
@@ -265,7 +266,7 @@ func (dsp *DistSQLPlanner) checkSupportForNode(node planNode) (distRecommendatio
 	case *renderNode:
 		for i, e := range n.render {
 			typ := n.columns[i].Typ
-			if leafType(typ).FamilyEqual(parser.TypeTuple) {
+			if leafType(typ).FamilyEqual(types.FamTuple) {
 				return 0, newQueryNotSupportedErrorf("unsupported render type %s", typ)
 			}
 			if err := dsp.checkExpr(e); err != nil {
@@ -314,9 +315,6 @@ func (dsp *DistSQLPlanner) checkSupportForNode(node planNode) (distRecommendatio
 			// ranges at a time.
 			rec = shouldNotDistribute
 		}
-		if n.lockForUpdate {
-			return 0, newQueryNotSupportedError("explicit locking with FOR UPDATE is not yet supported")
-		}
 		// We recommend running scans distributed if we have a filtering
 		// expression or if we have a full table scan.
 		if n.filter != nil {
@@ -341,7 +339,7 @@ func (dsp *DistSQLPlanner) checkSupportForNode(node planNode) (distRecommendatio
 
 	case *groupNode:
 		for _, fholder := range n.funcs {
-			if f, ok := fholder.expr.(*parser.FuncExpr); ok {
+			if f, ok := fholder.expr.(*tree.FuncExpr); ok {
 				if strings.ToUpper(f.Func.FunctionReference.String()) == "ARRAY_AGG" {
 					return 0, newQueryNotSupportedError("ARRAY_AGG aggregation not supported yet")
 				}
@@ -397,7 +395,7 @@ func (dsp *DistSQLPlanner) checkSupportForNode(node planNode) (distRecommendatio
 // a single query.
 type planningCtx struct {
 	ctx      context.Context
-	evalCtx  *parser.EvalContext
+	evalCtx  *tree.EvalContext
 	spanIter distsqlplan.SpanResolverIterator
 	// nodeAddresses contains addresses for all NodeIDs that are referenced by any
 	// physicalPlan we generate with this context.
@@ -689,23 +687,13 @@ func initTableReaderSpec(
 // getOutputColumnsFromScanNode returns the indices of the columns that are
 // returned by a scanNode.
 func getOutputColumnsFromScanNode(n *scanNode) []uint32 {
-	num := 0
-	for i := range n.resultColumns {
-		if n.valNeededForCol[i] {
-			num++
-		}
-	}
-	outputColumns := make([]uint32, num)
-	idx := 0
-	for i := range n.resultColumns {
-		// TODO(radu): if we have a scan with a filter, valNeededForCol will include
-		// the columns needed for the filter, even if they aren't needed for the
-		// next stage.
-		if n.valNeededForCol[i] {
-			outputColumns[idx] = uint32(i)
-			idx++
-		}
-	}
+	var outputColumns []uint32
+	// TODO(radu): if we have a scan with a filter, valNeededForCol will include
+	// the columns needed for the filter, even if they aren't needed for the
+	// next stage.
+	n.valNeededForCol.ForEach(func(i int) {
+		outputColumns = append(outputColumns, uint32(i))
+	})
 	return outputColumns
 }
 
@@ -899,20 +887,20 @@ type DistLoader struct {
 
 // RowResultWriter is a thin wrapper around a RowContainer.
 type RowResultWriter struct {
-	statementType parser.StatementType
+	statementType tree.StatementType
 	rowContainer  *sqlbase.RowContainer
 	rowsAffected  int
 }
 
 // NewRowResultWriter creates a new RowResultWriter.
 func NewRowResultWriter(
-	statementType parser.StatementType, rowContainer *sqlbase.RowContainer,
+	statementType tree.StatementType, rowContainer *sqlbase.RowContainer,
 ) *RowResultWriter {
 	return &RowResultWriter{statementType: statementType, rowContainer: rowContainer}
 }
 
 // StatementType implements the rowResultWriter interface.
-func (b *RowResultWriter) StatementType() parser.StatementType {
+func (b *RowResultWriter) StatementType() tree.StatementType {
 	return b.statementType
 }
 
@@ -922,7 +910,7 @@ func (b *RowResultWriter) IncrementRowsAffected(n int) {
 }
 
 // AddRow implements the rowResultWriter interface.
-func (b *RowResultWriter) AddRow(ctx context.Context, row parser.Datums) error {
+func (b *RowResultWriter) AddRow(ctx context.Context, row tree.Datums) error {
 	_, err := b.rowContainer.AddRow(ctx, row)
 	return err
 }
@@ -933,7 +921,7 @@ func (l *DistLoader) LoadCSV(
 	ctx context.Context,
 	job *jobs.Job,
 	db *client.DB,
-	evalCtx parser.EvalContext,
+	evalCtx tree.EvalContext,
 	thisNode roachpb.NodeID,
 	nodes []roachpb.NodeDescriptor,
 	resultRows *RowResultWriter,
@@ -1019,7 +1007,7 @@ func (l *DistLoader) LoadCSV(
 
 	ci := sqlbase.ColTypeInfoFromColTypes([]sqlbase.ColumnType{colTypeBytes})
 	rowContainer := sqlbase.NewRowContainer(*evalCtx.ActiveMemAcc, ci, 0)
-	rowResultWriter := NewRowResultWriter(parser.Rows, rowContainer)
+	rowResultWriter := NewRowResultWriter(tree.Rows, rowContainer)
 
 	planCtx := l.distSQLPlanner.newPlanningCtx(ctx, &evalCtx, nil)
 	// Because we're not going through the normal pathways, we have to set up
@@ -1064,7 +1052,7 @@ func (l *DistLoader) LoadCSV(
 	}
 	for i := oversample - 1; i < n; i += oversample {
 		row := rowContainer.At(i)
-		b := row[0].(*parser.DBytes)
+		b := row[0].(*tree.DBytes)
 		k, err := keys.EnsureSafeSplitKey(roachpb.Key(*b))
 		if err != nil {
 			return err
@@ -1091,7 +1079,7 @@ func (l *DistLoader) LoadCSV(
 	}
 
 	log.VEventf(ctx, 1, "generated %d splits; begin routing for job %s", len(spans), job.Record.Description)
-	if err := job.Progressed(ctx, 1.0/3.0, jobs.Noop); err != nil {
+	if err := job.Progressed(ctx, 1.0/10.0, jobs.Noop); err != nil {
 		log.Warningf(ctx, "failed to update job progress: %s", err)
 	}
 
@@ -1213,7 +1201,7 @@ func (l *DistLoader) LoadCSV(
 func (dsp *DistSQLPlanner) selectRenders(p *physicalPlan, n *renderNode) {
 	// We want to skip any unused renders.
 	planToStreamColMap := makePlanToStreamColMap(len(n.render))
-	renders := make([]parser.TypedExpr, 0, len(n.render))
+	renders := make([]tree.TypedExpr, 0, len(n.render))
 	for i, r := range n.render {
 		if !n.columns[i].Omitted {
 			planToStreamColMap[i] = len(renders)
@@ -1303,7 +1291,7 @@ func (dsp *DistSQLPlanner) addAggregators(
 	for i, fholder := range n.funcs {
 		// An aggregateFuncHolder either contains an aggregation function or an
 		// expression that also appears as one of the GROUP BY expressions.
-		f, ok := fholder.expr.(*parser.FuncExpr)
+		f, ok := fholder.expr.(*tree.FuncExpr)
 		if !ok || f.GetAggregateConstructor() == nil {
 			aggregations[i].Func = distsqlrun.AggregatorSpec_IDENT
 		} else {
@@ -1315,7 +1303,7 @@ func (dsp *DistSQLPlanner) addAggregators(
 				return errors.Errorf("unknown aggregate %s", funcStr)
 			}
 			aggregations[i].Func = distsqlrun.AggregatorSpec_Func(funcIdx)
-			aggregations[i].Distinct = (f.Type == parser.DistinctFuncType)
+			aggregations[i].Distinct = (f.Type == tree.DistinctFuncType)
 		}
 		if fholder.argRenderIdx != noRenderIdx {
 			aggregations[i].ColIdx = []uint32{uint32(p.planToStreamColMap[fholder.argRenderIdx])}
@@ -2354,7 +2342,7 @@ func (dsp *DistSQLPlanner) createPlanForDistinct(
 }
 
 func (dsp *DistSQLPlanner) newPlanningCtx(
-	ctx context.Context, evalCtx *parser.EvalContext, txn *client.Txn,
+	ctx context.Context, evalCtx *tree.EvalContext, txn *client.Txn,
 ) planningCtx {
 	planCtx := planningCtx{
 		ctx:           ctx,

@@ -4,7 +4,7 @@
 // License (the "License"); you may not use this file except in compliance with
 // the License. You may obtain a copy of the License at
 //
-//     https://github.com/cockroachdb/cockroach/blob/master/LICENSE
+//     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
 
 package storageccl
 
@@ -46,6 +46,10 @@ const (
 	S3AccessKeyParam = "AWS_ACCESS_KEY_ID"
 	// S3SecretParam is the query parameter for the 'secret' in an S3 URI.
 	S3SecretParam = "AWS_SECRET_ACCESS_KEY"
+	// S3EndpointParam is the query parameter for the 'endpoint' in an S3 URI.
+	S3EndpointParam = "AWS_ENDPOINT"
+	// S3RegionParam is the query parameter for the 'endpoint' in an S3 URI.
+	S3RegionParam = "AWS_REGION"
 
 	// AzureAccountNameParam is the query parameter for account_name in an azure URI.
 	AzureAccountNameParam = "AZURE_ACCOUNT_NAME"
@@ -81,6 +85,8 @@ func ExportStorageConfFromURI(path string) (roachpb.ExportStorage, error) {
 			Prefix:    uri.Path,
 			AccessKey: uri.Query().Get(S3AccessKeyParam),
 			Secret:    uri.Query().Get(S3SecretParam),
+			Endpoint:  uri.Query().Get(S3EndpointParam),
+			Region:    uri.Query().Get(S3RegionParam),
 		}
 		if conf.S3Config.AccessKey == "" {
 			return conf, errors.Errorf("s3 uri missing %q parameter", S3AccessKeyParam)
@@ -146,7 +152,7 @@ func MakeExportStorage(
 ) (ExportStorage, error) {
 	switch dest.Provider {
 	case roachpb.ExportStorageProvider_LocalFile:
-		return makeLocalStorage(dest.LocalFile.Path)
+		return makeLocalStorage(dest.LocalFile.Path, settings)
 	case roachpb.ExportStorageProvider_Http:
 		return makeHTTPStorage(dest.HttpPath.BaseUri)
 	case roachpb.ExportStorageProvider_S3:
@@ -199,7 +205,8 @@ var (
 )
 
 type localFileStorage struct {
-	base string
+	rawBase string // un-prefixed base -- DO NOT use for I/O ops.
+	base    string // the prefixed base, for I/O ops on this node.
 }
 
 var _ ExportStorage = &localFileStorage{}
@@ -214,18 +221,32 @@ func MakeLocalStorageURI(path string) (string, error) {
 	return fmt.Sprintf("nodelocal://%s", path), nil
 }
 
-func makeLocalStorage(base string) (ExportStorage, error) {
+func makeLocalStorage(base string, settings *cluster.Settings) (ExportStorage, error) {
 	if base == "" {
 		return nil, errors.Errorf("Local storage requested but path not provided")
 	}
-	return &localFileStorage{base: base}, nil
+
+	localBase := base
+	// In non-server execution we have no settings and no restriction on local IO.
+	if settings != nil {
+		if settings.ExternalIODir == "" {
+			return nil, errors.Errorf("local file access is disabled")
+		}
+		// we prefix with the IO dir
+		localBase = filepath.Clean(filepath.Join(settings.ExternalIODir, localBase))
+		// ... and make sure we didn't ../ our way back out.
+		if !strings.HasPrefix(localBase, settings.ExternalIODir) {
+			return nil, errors.Errorf("local file access to paths outside of external-io-dir is not allowed")
+		}
+	}
+	return &localFileStorage{base: localBase, rawBase: base}, nil
 }
 
 func (l *localFileStorage) Conf() roachpb.ExportStorage {
 	return roachpb.ExportStorage{
 		Provider: roachpb.ExportStorageProvider_LocalFile,
 		LocalFile: roachpb.ExportStorage_LocalFilePath{
-			Path: l.base,
+			Path: l.rawBase,
 		},
 	}
 }
@@ -307,17 +328,17 @@ func (h *httpStorage) ReadFile(_ context.Context, basename string) (io.ReadClose
 }
 
 func (h *httpStorage) WriteFile(_ context.Context, basename string, content io.ReadSeeker) error {
-	_, err := h.req("PUT", basename, content)
+	_, err := h.reqNoBody("PUT", basename, content)
 	return err
 }
 
 func (h *httpStorage) Delete(_ context.Context, basename string) error {
-	_, err := h.req("DELETE", basename, nil)
+	_, err := h.reqNoBody("DELETE", basename, nil)
 	return err
 }
 
 func (h *httpStorage) Size(_ context.Context, basename string) (int64, error) {
-	resp, err := h.req("HEAD", basename, nil)
+	resp, err := h.reqNoBody("HEAD", basename, nil)
 	if err != nil {
 		return 0, err
 	}
@@ -329,6 +350,15 @@ func (h *httpStorage) Size(_ context.Context, basename string) (int64, error) {
 
 func (h *httpStorage) Close() error {
 	return nil
+}
+
+// reqNoBody is like req but it closes the response body.
+func (h *httpStorage) reqNoBody(method, file string, body io.Reader) (*http.Response, error) {
+	resp, err := h.req(method, file, body)
+	if resp != nil {
+		resp.Body.Close()
+	}
+	return resp, err
 }
 
 func (h *httpStorage) req(method, file string, body io.Reader) (*http.Response, error) {
@@ -353,7 +383,10 @@ func (h *httpStorage) req(method, file string, body io.Reader) (*http.Response, 
 	if err != nil {
 		return nil, errors.Wrapf(err, "error exeucting request %s %q", method, url)
 	}
-	if resp.StatusCode != 200 {
+	switch resp.StatusCode {
+	case 200, 201, 204:
+		// ignore
+	default:
 		body, _ := ioutil.ReadAll(resp.Body)
 		_ = resp.Body.Close()
 		return nil, errors.Errorf("error response from server: %s %q", resp.Status, body)
@@ -393,18 +426,27 @@ func makeS3Storage(ctx context.Context, conf *roachpb.ExportStorage_S3) (ExportS
 	if conf == nil {
 		return nil, errors.Errorf("s3 upload requested but info missing")
 	}
-	sess, err := session.NewSession(conf.Keys())
+	region := conf.Region
+	config := conf.Keys()
+	if conf.Endpoint != "" {
+		config.Endpoint = &conf.Endpoint
+		if conf.Region == "" {
+			return nil, errors.New("s3 region must be specified when using custom endpoints")
+		}
+	}
+	sess, err := session.NewSession(config)
 	if err != nil {
 		return nil, errors.Wrap(err, "new aws session")
 	}
-	var region string
-	err = s3Retry(ctx, func() error {
-		var err error
-		region, err = s3manager.GetBucketRegion(ctx, sess, conf.Bucket, "us-east-1")
-		return err
-	})
-	if err != nil {
-		return nil, errors.Wrap(err, "could not find s3 bucket's region")
+	if region == "" {
+		err = s3Retry(ctx, func() error {
+			var err error
+			region, err = s3manager.GetBucketRegion(ctx, sess, conf.Bucket, "us-east-1")
+			return err
+		})
+		if err != nil {
+			return nil, errors.Wrap(err, "could not find s3 bucket's region")
+		}
 	}
 	sess.Config.Region = aws.String(region)
 	return &s3Storage{

@@ -17,8 +17,10 @@ package distsqlrun
 import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/transform"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/pkg/errors"
@@ -33,7 +35,7 @@ type columnBackfiller struct {
 	dropped []sqlbase.ColumnDescriptor
 	// updateCols is a slice of all column descriptors that are being modified.
 	updateCols  []sqlbase.ColumnDescriptor
-	updateExprs []parser.TypedExpr
+	updateExprs []tree.TypedExpr
 }
 
 var _ Processor = &columnBackfiller{}
@@ -85,7 +87,9 @@ func (cb *columnBackfiller) init() error {
 			}
 		}
 	}
-	defaultExprs, err := sqlbase.MakeDefaultExprs(cb.added, &parser.Parser{}, &cb.flowCtx.EvalCtx)
+	defaultExprs, err := sqlbase.MakeDefaultExprs(
+		cb.added, &transform.ExprTransformContext{}, cb.flowCtx.NewEvalCtx(),
+	)
 	if err != nil {
 		return err
 	}
@@ -93,32 +97,37 @@ func (cb *columnBackfiller) init() error {
 	cb.updateCols = append(cb.added, cb.dropped...)
 	if len(cb.dropped) > 0 || len(defaultExprs) > 0 {
 		// Populate default values.
-		cb.updateExprs = make([]parser.TypedExpr, len(cb.updateCols))
+		cb.updateExprs = make([]tree.TypedExpr, len(cb.updateCols))
 		for j := range cb.added {
 			if defaultExprs == nil || defaultExprs[j] == nil {
-				cb.updateExprs[j] = parser.DNull
+				cb.updateExprs[j] = tree.DNull
 			} else {
 				cb.updateExprs[j] = defaultExprs[j]
 			}
 		}
 		for j := range cb.dropped {
-			cb.updateExprs[j+len(cb.added)] = parser.DNull
+			cb.updateExprs[j+len(cb.added)] = tree.DNull
 		}
 	}
 
 	// We need all the columns.
-	valNeededForCol := make([]bool, len(desc.Columns))
-	for i := range valNeededForCol {
-		valNeededForCol[i] = true
-	}
+	var valNeededForCol util.FastIntSet
+	valNeededForCol.AddRange(0, len(desc.Columns)-1)
 
 	colIdxMap = make(map[sqlbase.ColumnID]int, len(desc.Columns))
 	for i, c := range desc.Columns {
 		colIdxMap[c.ID] = i
 	}
+
+	tableArgs := sqlbase.MultiRowFetcherTableArgs{
+		Desc:            &desc,
+		Index:           &desc.PrimaryIndex,
+		ColIdxMap:       colIdxMap,
+		Cols:            desc.Columns,
+		ValNeededForCol: valNeededForCol,
+	}
 	return cb.fetcher.Init(
-		&desc, colIdxMap, &desc.PrimaryIndex, false /* reverse */, false, /* lockForUpdate */
-		false /* isSecondaryIndex */, desc.Columns, valNeededForCol, false /* returnRangeInfo */, &cb.alloc,
+		false /* reverse */, false /* returnRangeInfo */, &cb.alloc, tableArgs,
 	)
 }
 
@@ -192,37 +201,37 @@ func (cb *columnBackfiller) runChunk(
 			return err
 		}
 
-		oldValues := make(parser.Datums, len(ru.FetchCols))
-		updateValues := make(parser.Datums, len(cb.updateExprs))
+		oldValues := make(tree.Datums, len(ru.FetchCols))
+		updateValues := make(tree.Datums, len(cb.updateExprs))
 		b := txn.NewBatch()
 		rowLength := 0
 		for i := int64(0); i < chunkSize; i++ {
-			row, err := cb.fetcher.NextRowDecoded(ctx)
+			datums, _, _, err := cb.fetcher.NextRowDecoded(ctx)
 			if err != nil {
 				return err
 			}
-			if row == nil {
+			if datums == nil {
 				break
 			}
 			// Evaluate the new values. This must be done separately for
 			// each row so as to handle impure functions correctly.
 			for j, e := range cb.updateExprs {
-				val, err := e.Eval(&cb.flowCtx.EvalCtx)
+				val, err := e.Eval(cb.flowCtx.NewEvalCtx())
 				if err != nil {
 					return sqlbase.NewInvalidSchemaDefinitionError(err)
 				}
-				if j < len(cb.added) && !cb.added[j].Nullable && val == parser.DNull {
+				if j < len(cb.added) && !cb.added[j].Nullable && val == tree.DNull {
 					return sqlbase.NewNonNullViolationError(cb.added[j].Name)
 				}
 				updateValues[j] = val
 			}
-			copy(oldValues, row)
+			copy(oldValues, datums)
 			// Update oldValues with NULL values where values weren't found;
 			// only update when necessary.
-			if rowLength != len(row) {
-				rowLength = len(row)
+			if rowLength != len(datums) {
+				rowLength = len(datums)
 				for j := rowLength; j < len(oldValues); j++ {
-					oldValues[j] = parser.DNull
+					oldValues[j] = tree.DNull
 				}
 			}
 			if _, err := ru.UpdateRow(ctx, b, oldValues, updateValues, false /* traceKV */); err != nil {

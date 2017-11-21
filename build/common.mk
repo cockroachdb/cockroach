@@ -16,18 +16,16 @@
 # project. The including Makefile must define REPO_ROOT to the relative path to
 # the root of the repository before including this file.
 
-# Variables to control executable names. These can be overridden in the
-# environment or on the command line, e.g.
-#   GOFLAGS=-msan make build     OR     make build GOFLAGS=-msan
 GO      ?= go
 GOFLAGS ?=
 XGO     ?= xgo
 TAR     ?= tar
 
 # Convenience variables for important paths.
-ORG_ROOT := $(REPO_ROOT)/..
-PKG_ROOT := $(REPO_ROOT)/pkg
-UI_ROOT  := $(PKG_ROOT)/ui
+ORG_ROOT       := $(REPO_ROOT)/..
+PKG_ROOT       := $(REPO_ROOT)/pkg
+UI_ROOT        := $(PKG_ROOT)/ui
+SQLPARSER_ROOT := $(PKG_ROOT)/sql/parser
 
 # Ensure we have an unambiguous GOPATH.
 export GOPATH := $(realpath $(ORG_ROOT)/../../..)
@@ -68,8 +66,6 @@ GIT_DIR := $(shell git rev-parse --git-dir 2> /dev/null)
 # comments within node-run.sh for rationale.
 NODE_RUN := $(REPO_ROOT)/build/node-run.sh
 
-YARN := $(NODE_RUN) yarn
-
 # make-lazy converts a recursive variable, which is evaluated every time it's
 # referenced, to a lazy variable, which is evaluated only the first time it's
 # used. See: http://blog.jgc.org/2016/07/lazy-gnu-make-variables.html
@@ -91,6 +87,14 @@ $(call make-lazy,SED_INPLACE)
 
 # This is how you get a literal space into a Makefile.
 space := $(eval) $(eval)
+
+# Color support.
+yellow = $(shell tput setaf 3 2>/dev/null)
+cyan = $(shell tput setaf 6 2>/dev/null)
+term-reset = $(shell tput sgr0)
+$(call make-lazy,yellow)
+$(call make-lazy,cyan)
+$(call make-lazy,term-reset)
 
 # We used to check the Go version in a .PHONY .go-version target, but the error
 # message, if any, would get mixed in with noise from other targets if Make was
@@ -125,10 +129,6 @@ $(foreach v,$(filter-out $(strip $(VALID_VARS)),$(.VARIABLES)),\
 .ALWAYS_REBUILD:
 .PHONY: .ALWAYS_REBUILD
 
-.PHONY: ui
-ui: libprotobuf
-	$(MAKE) -C $(UI_ROOT) generate
-
 ifneq ($(GIT_DIR),)
 # If we're in a git worktree, the git hooks directory may not be in our root,
 # so we ask git for the location.
@@ -151,14 +151,14 @@ endif
 YARN_INSTALLED_TARGET := $(UI_ROOT)/yarn.installed
 
 $(YARN_INSTALLED_TARGET): $(BOOTSTRAP_TARGET) $(UI_ROOT)/package.json $(UI_ROOT)/yarn.lock
-	$(YARN) install --cwd $(UI_ROOT)
+	$(NODE_RUN) -C $(UI_ROOT) yarn install
 	# Prevent ProtobufJS from trying to install its own packages because a) the
 	# the feature is buggy, and b) it introduces an unnecessary dependency on NPM.
 	# Additionally pin a known-good version of jsdoc.
 	# See: https://github.com/dcodeIO/protobuf.js/issues/716.
 	cp $(UI_ROOT)/node_modules/protobufjs/cli/{package.standalone.json,package.json}
-	$(YARN) add jsdoc@3.4.3 --cwd $(UI_ROOT)/node_modules/protobufjs/cli
-	$(YARN) install --cwd $(UI_ROOT)/node_modules/protobufjs/cli
+	$(NODE_RUN) -C $(UI_ROOT)/node_modules/protobufjs/cli yarn add jsdoc@3.4.3
+	$(NODE_RUN) -C $(UI_ROOT)/node_modules/protobufjs/cli yarn install
 	@# We remove this broken dependency again in pkg/ui/webpack.config.js.
 	@# See the comment there for details.
 	rm -rf $(UI_ROOT)/node_modules/@types/node
@@ -170,9 +170,11 @@ $(YARN_INSTALLED_TARGET): $(BOOTSTRAP_TARGET) $(UI_ROOT)/package.json $(UI_ROOT)
 # extracted into a variable for the same reasons as YARN_INSTALLED_TARGET.
 BOOTSTRAP_TARGET := $(LOCAL_BIN)/.bootstrap
 
+SUBMODULES_TARGET := $(LOCAL_BIN)/.submodules-initialized
+
 # Update the git hooks and install commands from dependencies whenever they
 # change.
-$(BOOTSTRAP_TARGET): $(GITHOOKS) $(REPO_ROOT)/Gopkg.lock $(LOCAL_BIN)/returncheck | submodules
+$(BOOTSTRAP_TARGET): $(GITHOOKS) $(REPO_ROOT)/Gopkg.lock $(LOCAL_BIN)/returncheck | $(SUBMODULES_TARGET)
 	@$(GO_INSTALL) -v \
 		$(REPO_ROOT)/vendor/github.com/golang/dep/cmd/dep \
 		$(REPO_ROOT)/vendor/github.com/client9/misspell/cmd/misspell \
@@ -192,11 +194,11 @@ $(BOOTSTRAP_TARGET): $(GITHOOKS) $(REPO_ROOT)/Gopkg.lock $(LOCAL_BIN)/returnchec
 		$(REPO_ROOT)/vendor/golang.org/x/tools/cmd/stringer
 	touch $@
 
-.PHONY: submodules
-submodules:
+$(SUBMODULES_TARGET):
 ifneq ($(GIT_DIR),)
 	git submodule update --init
 endif
+	mkdir -p $(@D) touch $@
 
 # Make doesn't expose a list of the variables declared in a given file, so we
 # resort to sed magic. Roughly, this sed command prints VARIABLE in lines of the
@@ -246,6 +248,9 @@ CMAKE_FLAGS := $(if $(MINGW),-G 'MSYS Makefiles')
 # TAGS=stdmalloc; without TAGS=stdmalloc, Go will still try to link jemalloc.
 override USE_STDMALLOC := $(findstring stdmalloc,$(TAGS))
 STDMALLOC_SUFFIX := $(if $(USE_STDMALLOC),_stdmalloc)
+
+# TODO(benesch): Give TYPE clearer semantics to avoid this spaghetti.
+PORTABLE := $(or $(findstring portable,$(TYPE)),$(findstring release,$(TYPE)))
 
 ENABLE_ROCKSDB_ASSERTIONS := $(findstring race,$(TAGS))
 
@@ -407,7 +412,7 @@ $(ROCKSDB_DIR)/Makefile: $(C_DEPS_DIR)/rocksdb-rebuild $(BOOTSTRAP_TARGET) | lib
 	@# NOTE: If you change the CMake flags below, bump the version in
 	@# $(C_DEPS_DIR)/rocksdb-rebuild. See above for rationale.
 	cd $(ROCKSDB_DIR) && cmake $(CMAKE_FLAGS) $(ROCKSDB_SRC_DIR) \
-	  -DWITH_$(if $(findstring mingw,$(TARGET_TRIPLE)),AVX2,SSE42)=OFF \
+	  $(if $(PORTABLE),-DPORTABLE=ON) \
 	  -DSNAPPY_LIBRARIES=$(SNAPPY_DIR)/libsnappy.a -DSNAPPY_INCLUDE_DIR="$(SNAPPY_SRC_DIR);$(SNAPPY_DIR)" -DWITH_SNAPPY=ON \
 	  $(if $(USE_STDMALLOC),,-DJEMALLOC_LIBRARIES=$(JEMALLOC_DIR)/lib/libjemalloc.a -DJEMALLOC_INCLUDE_DIR=$(JEMALLOC_DIR)/include -DWITH_JEMALLOC=ON) \
 	  -DCMAKE_CXX_FLAGS="$(if $(findstring x86_64,$(TARGET_TRIPLE)),-msse3) $(if $(ENABLE_ROCKSDB_ASSERTIONS),,-DNDEBUG)"
@@ -434,7 +439,7 @@ $(LIBROACH_DIR)/Makefile: $(C_DEPS_DIR)/libroach-rebuild $(BOOTSTRAP_TARGET)
 # .PHONY and .ALWAYS_REBUILD). We don't have the targets' prerequisites here,
 # and we certainly don't want to duplicate them.
 
-$(PROTOC): $(PROTOC_DIR)/Makefile .ALWAYS_REBUILD
+$(PROTOC): $(PROTOC_DIR)/Makefile .ALWAYS_REBUILD | libprotobuf
 	@$(MAKE) --no-print-directory -C $(PROTOC_DIR) protoc
 
 .PHONY: libjemalloc
@@ -453,13 +458,8 @@ libsnappy: $(SNAPPY_DIR)/Makefile
 librocksdb: $(ROCKSDB_DIR)/Makefile
 	@$(MAKE) --no-print-directory -C $(ROCKSDB_DIR) rocksdb
 
-# libroach depends on ui because generating the UI indirectly updates the
-# timestamps on the generated C++ protobufs that libroach depends on.
-#
-# TODO(benesch): merge the protobuf, UI, and top-level Makefile so this
-# dependency can be clearly expressed.
 .PHONY: libroach
-libroach: $(LIBROACH_DIR)/Makefile | ui
+libroach: $(LIBROACH_DIR)/Makefile $(CPP_PROTOS_TARGET)
 	@$(MAKE) --no-print-directory -C $(LIBROACH_DIR) roach
 
 .PHONY: libroachccl
@@ -481,5 +481,5 @@ unsafe-clean-c-deps:
 	git -C $(SNAPPY_SRC_DIR)   clean -dxf
 
 .SECONDEXPANSION:
-$(LOCAL_BIN)/%: $$(shell find $(PKG_ROOT)/cmd/$$*) | submodules
+$(LOCAL_BIN)/%: $$(shell find $(PKG_ROOT)/cmd/$$*) | $(SUBMODULES_TARGET)
 	@$(GO_INSTALL) -v $(PKG_ROOT)/cmd/$*

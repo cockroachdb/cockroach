@@ -21,7 +21,7 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
@@ -84,10 +84,7 @@ func TestValues(t *testing.T) {
 
 					var res sqlbase.EncDatumRows
 					for {
-						row, meta := out.Next()
-						if !meta.Empty() {
-							t.Fatalf("unexpected metadata: %v", meta)
-						}
+						row := out.NextNoMeta(t)
 						if row == nil {
 							break
 						}
@@ -98,7 +95,7 @@ func TestValues(t *testing.T) {
 						t.Fatalf("incorrect number of rows %d, expected %d", len(res), numRows)
 					}
 
-					evalCtx := parser.NewTestingEvalContext()
+					evalCtx := tree.NewTestingEvalContext()
 					defer evalCtx.Stop(context.Background())
 					var a sqlbase.DatumAlloc
 					for i := 0; i < numRows; i++ {

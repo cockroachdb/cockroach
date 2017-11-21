@@ -22,7 +22,8 @@ import (
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
@@ -33,11 +34,11 @@ func newValuesListLenErr(exp, got int) error {
 }
 
 type valuesNode struct {
-	n        *parser.ValuesClause
+	n        *tree.ValuesClause
 	p        *planner
 	columns  sqlbase.ResultColumns
 	ordering sqlbase.ColumnOrdering
-	tuples   [][]parser.TypedExpr
+	tuples   [][]tree.TypedExpr
 	rows     *sqlbase.RowContainer
 
 	// isConst is set if the valuesNode only contains constant expressions (no
@@ -67,7 +68,7 @@ func (p *planner) newContainerValuesNode(columns sqlbase.ResultColumns, capacity
 }
 
 func (p *planner) ValuesClause(
-	ctx context.Context, n *parser.ValuesClause, desiredTypes []parser.Type,
+	ctx context.Context, n *tree.ValuesClause, desiredTypes []types.T,
 ) (planNode, error) {
 	v := &valuesNode{
 		p:       p,
@@ -80,8 +81,8 @@ func (p *planner) ValuesClause(
 
 	numCols := len(n.Tuples[0].Exprs)
 
-	v.tuples = make([][]parser.TypedExpr, 0, len(n.Tuples))
-	tupleBuf := make([]parser.TypedExpr, len(n.Tuples)*numCols)
+	v.tuples = make([][]tree.TypedExpr, 0, len(n.Tuples))
+	tupleBuf := make([]tree.TypedExpr, len(n.Tuples)*numCols)
 
 	v.columns = make(sqlbase.ResultColumns, 0, numCols)
 
@@ -98,17 +99,17 @@ func (p *planner) ValuesClause(
 		tupleBuf = tupleBuf[numCols:]
 
 		for i, expr := range tuple.Exprs {
-			if err := p.parser.AssertNoAggregationOrWindowing(
+			if err := p.txCtx.AssertNoAggregationOrWindowing(
 				expr, "VALUES", p.session.SearchPath,
 			); err != nil {
 				return nil, err
 			}
 
-			desired := parser.TypeAny
+			desired := types.Any
 			if len(desiredTypes) > i {
 				desired = desiredTypes[i]
 			}
-			typedExpr, err := p.analyzeExpr(ctx, expr, nil, parser.IndexedVarHelper{}, desired, false, "")
+			typedExpr, err := p.analyzeExpr(ctx, expr, nil, tree.IndexedVarHelper{}, desired, false, "")
 			if err != nil {
 				return nil, err
 			}
@@ -116,9 +117,9 @@ func (p *planner) ValuesClause(
 			typ := typedExpr.ResolvedType()
 			if num == 0 {
 				v.columns = append(v.columns, sqlbase.ResultColumn{Name: "column" + strconv.Itoa(i+1), Typ: typ})
-			} else if v.columns[i].Typ == parser.TypeNull {
+			} else if v.columns[i].Typ == types.Null {
 				v.columns[i].Typ = typ
-			} else if typ != parser.TypeNull && !typ.Equivalent(v.columns[i].Typ) {
+			} else if typ != types.Null && !typ.Equivalent(v.columns[i].Typ) {
 				return nil, fmt.Errorf("VALUES list type mismatch, %s for %s", typ, v.columns[i].Typ)
 			}
 
@@ -155,11 +156,11 @@ func (n *valuesNode) Start(params runParams) error {
 		len(n.n.Tuples),
 	)
 
-	row := make([]parser.Datum, len(n.columns))
+	row := make([]tree.Datum, len(n.columns))
 	for _, tupleRow := range n.tuples {
 		for i, typedExpr := range tupleRow {
 			if n.columns[i].Omitted {
-				row[i] = parser.DNull
+				row[i] = tree.DNull
 			} else {
 				var err error
 				row[i], err = typedExpr.Eval(&n.p.evalCtx)
@@ -176,7 +177,7 @@ func (n *valuesNode) Start(params runParams) error {
 	return nil
 }
 
-func (n *valuesNode) Values() parser.Datums {
+func (n *valuesNode) Values() tree.Datums {
 	return n.rows.At(n.nextRow - 1)
 }
 
@@ -219,7 +220,7 @@ func (n *valuesNode) Less(i, j int) bool {
 
 // ValuesLess returns the comparison result between the two provided Datums slices
 // in the context of the valuesNode ordering.
-func (n *valuesNode) ValuesLess(ra, rb parser.Datums) bool {
+func (n *valuesNode) ValuesLess(ra, rb tree.Datums) bool {
 	return sqlbase.CompareDatums(n.ordering, &n.p.evalCtx, ra, rb) < 0
 }
 
@@ -235,7 +236,7 @@ func (n *valuesNode) Push(x interface{}) {
 
 // PushValues pushes the given Datums value into the heap representation
 // of the valuesNode.
-func (n *valuesNode) PushValues(ctx context.Context, values parser.Datums) error {
+func (n *valuesNode) PushValues(ctx context.Context, values tree.Datums) error {
 	_, err := n.rows.AddRow(ctx, values)
 	heap.Push(n, nil)
 	return err
@@ -255,7 +256,7 @@ func (n *valuesNode) Pop() interface{} {
 
 // PopValues pops the top Datums value off the heap representation
 // of the valuesNode.
-func (n *valuesNode) PopValues() parser.Datums {
+func (n *valuesNode) PopValues() tree.Datums {
 	heap.Pop(n)
 	// Return the last popped row.
 	return n.rows.At(n.rows.Len() - n.rowsPopped)

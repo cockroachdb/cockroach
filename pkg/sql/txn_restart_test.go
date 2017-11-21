@@ -37,7 +37,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -209,7 +211,7 @@ func checkRestarts(t *testing.T, magicVals *filterVals) {
 //		defer leaktest.AfterTest(t)()
 //		aborter := NewTxnAborter()
 //		defer aborter.Close(t)
-//		params, cmdFilters := createTestServerParams()
+//		params, cmdFilters := tests.CreateTestServerParams()
 //		params.Knobs.SQLExecutor = aborter.executorKnobs()
 //		s, sqlDB, _ := serverutils.StartServer(t, params)
 //		defer s.Stopper().Stop(context.TODO())
@@ -443,7 +445,7 @@ func TestTxnAutoRetry(t *testing.T) {
 
 	aborter := NewTxnAborter()
 	defer aborter.Close(t)
-	params, cmdFilters := createTestServerParams()
+	params, cmdFilters := tests.CreateTestServerParams()
 	params.Knobs.SQLExecutor = aborter.executorKnobs()
 	// Disable one phase commits because they cannot be restarted.
 	params.Knobs.Store.(*storage.StoreTestingKnobs).DisableOptional1PC = true
@@ -608,7 +610,7 @@ BEGIN;
 func TestTxnAutoRetryParallelStmts(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	params, cmdFilters := createTestServerParams()
+	params, cmdFilters := tests.CreateTestServerParams()
 	// Disable one phase commits because they cannot be restarted.
 	params.Knobs.Store.(*storage.StoreTestingKnobs).DisableOptional1PC = true
 	s, sqlDB, _ := serverutils.StartServer(t, params)
@@ -749,7 +751,7 @@ func TestAbortedTxnOnlyRetriedOnce(t *testing.T) {
 
 	aborter := NewTxnAborter()
 	defer aborter.Close(t)
-	params, _ := createTestServerParams()
+	params, _ := tests.CreateTestServerParams()
 	params.Knobs.SQLExecutor = aborter.executorKnobs()
 	// Disable one phase commits because they cannot be restarted.
 	params.Knobs.Store.(*storage.StoreTestingKnobs).DisableOptional1PC = true
@@ -884,7 +886,7 @@ func TestTxnUserRestart(t *testing.T) {
 
 	aborter := NewTxnAborter()
 	defer aborter.Close(t)
-	params, cmdFilters := createTestServerParams()
+	params, cmdFilters := tests.CreateTestServerParams()
 	params.Knobs.SQLExecutor = aborter.executorKnobs()
 	s, sqlDB, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.TODO())
@@ -989,7 +991,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v TEXT);
 func TestCommitWaitState(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	params, _ := createTestServerParams()
+	params, _ := tests.CreateTestServerParams()
 	s, sqlDB, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.TODO())
 	if _, err := sqlDB.Exec(`
@@ -1024,7 +1026,7 @@ func TestErrorOnCommitFinalizesTxn(t *testing.T) {
 
 	aborter := NewTxnAborter()
 	defer aborter.Close(t)
-	params, _ := createTestServerParams()
+	params, _ := tests.CreateTestServerParams()
 	params.Knobs.SQLExecutor = aborter.executorKnobs()
 	s, sqlDB, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.TODO())
@@ -1110,7 +1112,7 @@ func TestRollbackInRestartWait(t *testing.T) {
 
 	aborter := NewTxnAborter()
 	defer aborter.Close(t)
-	params, _ := createTestServerParams()
+	params, _ := tests.CreateTestServerParams()
 	params.Knobs.SQLExecutor = aborter.executorKnobs()
 	s, sqlDB, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.TODO())
@@ -1170,7 +1172,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v TEXT);
 func TestUnexpectedStatementInRestartWait(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	params, _ := createTestServerParams()
+	params, _ := tests.CreateTestServerParams()
 	s, sqlDB, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.TODO())
 
@@ -1221,7 +1223,7 @@ func TestUnexpectedStatementInRestartWait(t *testing.T) {
 func TestNonRetryableError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	params, cmdFilters := createTestServerParams()
+	params, cmdFilters := tests.CreateTestServerParams()
 	s, sqlDB, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.TODO())
 
@@ -1265,13 +1267,15 @@ func TestReacquireLeaseOnRestart(t *testing.T) {
 
 	advancement := 2 * base.DefaultTableDescriptorLeaseDuration
 
-	var cmdFilters CommandFilters
-	cmdFilters.AppendFilter(checkEndTransactionTrigger, true)
+	var cmdFilters tests.CommandFilters
+	cmdFilters.AppendFilter(tests.CheckEndTransactionTrigger, true)
 
 	var clockUpdate int32
 	testKey := []byte("test_key")
 	testingKnobs := &storage.StoreTestingKnobs{
-		TestingEvalFilter:     cmdFilters.runFilters,
+		EvalKnobs: batcheval.TestingKnobs{
+			TestingEvalFilter: cmdFilters.RunFilters,
+		},
 		DisableMaxOffsetCheck: true,
 		ClockBeforeSend: func(c *hlc.Clock, ba roachpb.BatchRequest) {
 			if atomic.LoadInt32(&clockUpdate) > 0 {
@@ -1293,7 +1297,7 @@ func TestReacquireLeaseOnRestart(t *testing.T) {
 		},
 	}
 
-	params, _ := createTestServerParams()
+	params, _ := tests.CreateTestServerParams()
 	params.Knobs.Store = testingKnobs
 	s, sqlDB, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.TODO())
@@ -1352,14 +1356,16 @@ SELECT * from t.test WHERE k = 'test_key';
 func TestFlushUncommitedDescriptorCacheOnRestart(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	var cmdFilters CommandFilters
-	cmdFilters.AppendFilter(checkEndTransactionTrigger, true)
+	var cmdFilters tests.CommandFilters
+	cmdFilters.AppendFilter(tests.CheckEndTransactionTrigger, true)
 	testKey := []byte("test_key")
 	testingKnobs := &storage.StoreTestingKnobs{
-		TestingEvalFilter: cmdFilters.runFilters,
+		EvalKnobs: batcheval.TestingKnobs{
+			TestingEvalFilter: cmdFilters.RunFilters,
+		},
 	}
 
-	params, _ := createTestServerParams()
+	params, _ := tests.CreateTestServerParams()
 	params.Knobs.Store = testingKnobs
 	s, sqlDB, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.TODO())
@@ -1418,7 +1424,7 @@ func TestRetryableErrorForWrongTxn(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	bogusTxnID := "deadb33f-baaa-aaaa-aaaa-aaaaaaaaaaad"
 
-	params, _ := createTestServerParams()
+	params, _ := tests.CreateTestServerParams()
 	s, sqlDB, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.TODO())
 	if _, err := sqlDB.Exec(`
@@ -1464,21 +1470,23 @@ func TestDistSQLRetryableError(t *testing.T) {
 				UseDatabase: "test",
 				Knobs: base.TestingKnobs{
 					Store: &storage.StoreTestingKnobs{
-						TestingEvalFilter: func(fArgs storagebase.FilterArgs) *roachpb.Error {
-							_, ok := fArgs.Req.(*roachpb.ScanRequest)
-							if ok && fArgs.Req.Header().Key.Equal(targetKey) && fArgs.Hdr.Txn.Epoch == 0 {
-								restarted = true
-								err := roachpb.NewReadWithinUncertaintyIntervalError(
-									fArgs.Hdr.Timestamp, /* readTS */
-									hlc.Timestamp{})
-								errTxn := fArgs.Hdr.Txn.Clone()
-								errTxn.UpdateObservedTimestamp(roachpb.NodeID(2), hlc.Timestamp{})
-								pErr := roachpb.NewErrorWithTxn(err, &errTxn)
-								pErr.OriginNode = 2
-								return pErr
-							}
+						EvalKnobs: batcheval.TestingKnobs{
+							TestingEvalFilter: func(fArgs storagebase.FilterArgs) *roachpb.Error {
+								_, ok := fArgs.Req.(*roachpb.ScanRequest)
+								if ok && fArgs.Req.Header().Key.Equal(targetKey) && fArgs.Hdr.Txn.Epoch == 0 {
+									restarted = true
+									err := roachpb.NewReadWithinUncertaintyIntervalError(
+										fArgs.Hdr.Timestamp, /* readTS */
+										hlc.Timestamp{})
+									errTxn := fArgs.Hdr.Txn.Clone()
+									errTxn.UpdateObservedTimestamp(roachpb.NodeID(2), hlc.Timestamp{})
+									pErr := roachpb.NewErrorWithTxn(err, &errTxn)
+									pErr.OriginNode = 2
+									return pErr
+								}
 
-							return nil
+								return nil
+							},
 						},
 					},
 				},
@@ -1563,7 +1571,7 @@ func TestDistSQLRetryableError(t *testing.T) {
 func TestRollbackToSavepointFromUnusualStates(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	params, _ := createTestServerParams()
+	params, _ := tests.CreateTestServerParams()
 	s, sqlDB, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.TODO())
 
@@ -1648,7 +1656,7 @@ func TestPushedTxnDetection(t *testing.T) {
 	var injectRead int64
 	var sqlDB *gosql.DB
 	var s serverutils.TestServerInterface
-	params, _ := createTestServerParams()
+	params, _ := tests.CreateTestServerParams()
 	params.Knobs.SQLExecutor = &sql.ExecutorTestingKnobs{
 		StatementFilter: func(ctx context.Context, stmt string, r sql.ResultsWriter, err error) error {
 			if atomic.LoadInt64(&injectRead) == 0 {
@@ -1736,7 +1744,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY);
 func TestTxnAutoRetriesDisabledAfterResultsHaveBeenSentToClient(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	params, _ := createTestServerParams()
+	params, _ := tests.CreateTestServerParams()
 	s, sqlDB, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.TODO())
 

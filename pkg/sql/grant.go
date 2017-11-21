@@ -17,15 +17,15 @@ package sql
 import (
 	"golang.org/x/net/context"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
 func (p *planner) changePrivileges(
 	ctx context.Context,
-	targets parser.TargetList,
-	grantees parser.NameList,
+	targets tree.TargetList,
+	grantees tree.NameList,
 	changePrivilege func(*sqlbase.PrivilegeDescriptor, string),
 ) (planNode, error) {
 	descriptors, err := getDescriptorsFromTargetList(ctx, p.txn, p.getVirtualTabler(), p.session.Database, targets)
@@ -79,7 +79,7 @@ func (p *planner) changePrivileges(
 // Privileges: GRANT on database/table/view.
 //   Notes: postgres requires the object owner.
 //          mysql requires the "grant option" and the same privileges, and sometimes superuser.
-func (p *planner) Grant(ctx context.Context, n *parser.Grant) (planNode, error) {
+func (p *planner) Grant(ctx context.Context, n *tree.Grant) (planNode, error) {
 	return p.changePrivileges(ctx, n.Targets, n.Grantees, func(privDesc *sqlbase.PrivilegeDescriptor, grantee string) {
 		privDesc.Grant(grantee, n.Privileges)
 	})
@@ -94,7 +94,7 @@ func (p *planner) Grant(ctx context.Context, n *parser.Grant) (planNode, error) 
 // Privileges: GRANT on database/table/view.
 //   Notes: postgres requires the object owner.
 //          mysql requires the "grant option" and the same privileges, and sometimes superuser.
-func (p *planner) Revoke(ctx context.Context, n *parser.Revoke) (planNode, error) {
+func (p *planner) Revoke(ctx context.Context, n *tree.Revoke) (planNode, error) {
 	return p.changePrivileges(ctx, n.Targets, n.Grantees, func(privDesc *sqlbase.PrivilegeDescriptor, grantee string) {
 		privDesc.Revoke(grantee, n.Privileges)
 	})

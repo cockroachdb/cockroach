@@ -24,10 +24,12 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/ipaddr"
+	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/timeofday"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
@@ -67,51 +69,59 @@ func GetTableDescriptor(kvDB *client.DB, database string, table string) *TableDe
 // If nullOk is true, the datum can be DNull.
 // Note that if typ.SemanticType is ColumnType_NULL, the datum will always be DNull,
 // regardless of the null flag.
-func RandDatum(rng *rand.Rand, typ ColumnType, nullOk bool) parser.Datum {
+func RandDatum(rng *rand.Rand, typ ColumnType, nullOk bool) tree.Datum {
 	if nullOk && rng.Intn(10) == 0 {
-		return parser.DNull
+		return tree.DNull
 	}
 	switch typ.SemanticType {
 	case ColumnType_BOOL:
-		return parser.MakeDBool(rng.Intn(2) == 1)
+		return tree.MakeDBool(rng.Intn(2) == 1)
 	case ColumnType_INT:
-		return parser.NewDInt(parser.DInt(rng.Int63()))
+		return tree.NewDInt(tree.DInt(rng.Int63()))
 	case ColumnType_FLOAT:
-		return parser.NewDFloat(parser.DFloat(rng.NormFloat64()))
+		return tree.NewDFloat(tree.DFloat(rng.NormFloat64()))
 	case ColumnType_DECIMAL:
-		d := &parser.DDecimal{}
+		d := &tree.DDecimal{}
 		d.Decimal.SetExponent(int32(rng.Intn(40) - 20))
 		d.Decimal.SetCoefficient(rng.Int63())
 		return d
 	case ColumnType_DATE:
-		return parser.NewDDate(parser.DDate(rng.Intn(10000)))
+		return tree.NewDDate(tree.DDate(rng.Intn(10000)))
+	case ColumnType_TIME:
+		return tree.MakeDTime(timeofday.Random(rng))
 	case ColumnType_TIMESTAMP:
-		return &parser.DTimestamp{Time: timeutil.Unix(rng.Int63n(1000000), rng.Int63n(1000000))}
+		return &tree.DTimestamp{Time: timeutil.Unix(rng.Int63n(1000000), rng.Int63n(1000000))}
 	case ColumnType_INTERVAL:
 		sign := 1 - rng.Int63n(2)*2
-		return &parser.DInterval{Duration: duration.Duration{
+		return &tree.DInterval{Duration: duration.Duration{
 			Months: sign * rng.Int63n(1000),
 			Days:   sign * rng.Int63n(1000),
 			Nanos:  sign * rng.Int63n(25*3600*int64(1000000000)),
 		}}
 	case ColumnType_UUID:
-		return parser.NewDUuid(parser.DUuid{UUID: uuid.MakeV4()})
+		return tree.NewDUuid(tree.DUuid{UUID: uuid.MakeV4()})
 	case ColumnType_INET:
 		ipAddr := ipaddr.RandIPAddr(rng)
-		return parser.NewDIPAddr(parser.DIPAddr{IPAddr: ipAddr})
+		return tree.NewDIPAddr(tree.DIPAddr{IPAddr: ipAddr})
+	case ColumnType_JSON:
+		j, err := json.Random(20, rng)
+		if err != nil {
+			return nil
+		}
+		return &tree.DJSON{JSON: j}
 	case ColumnType_STRING:
 		// Generate a random ASCII string.
 		p := make([]byte, rng.Intn(10))
 		for i := range p {
 			p[i] = byte(1 + rng.Intn(127))
 		}
-		return parser.NewDString(string(p))
+		return tree.NewDString(string(p))
 	case ColumnType_BYTES:
 		p := make([]byte, rng.Intn(10))
 		_, _ = rng.Read(p)
-		return parser.NewDBytes(parser.DBytes(p))
+		return tree.NewDBytes(tree.DBytes(p))
 	case ColumnType_TIMESTAMPTZ:
-		return &parser.DTimestampTZ{Time: timeutil.Unix(rng.Int63n(1000000), rng.Int63n(1000000))}
+		return &tree.DTimestampTZ{Time: timeutil.Unix(rng.Int63n(1000000), rng.Int63n(1000000))}
 	case ColumnType_COLLATEDSTRING:
 		if typ.Locale == nil {
 			panic("locale is required for COLLATEDSTRING")
@@ -129,23 +139,23 @@ func RandDatum(rng *rand.Rand, typ ColumnType, nullOk bool) parser.Datum {
 			}
 			buf.WriteRune(r)
 		}
-		return parser.NewDCollatedString(buf.String(), *typ.Locale, &parser.CollationEnvironment{})
+		return tree.NewDCollatedString(buf.String(), *typ.Locale, &tree.CollationEnvironment{})
 	case ColumnType_NAME:
 		// Generate a random ASCII string.
 		p := make([]byte, rng.Intn(10))
 		for i := range p {
 			p[i] = byte(1 + rng.Intn(127))
 		}
-		return parser.NewDName(string(p))
+		return tree.NewDName(string(p))
 	case ColumnType_OID:
-		return parser.NewDOid(parser.DInt(rng.Int63()))
+		return tree.NewDOid(tree.DInt(rng.Int63()))
 	case ColumnType_NULL:
-		return parser.DNull
+		return tree.DNull
 	case ColumnType_ARRAY:
 		// TODO(justin)
-		return parser.DNull
+		return tree.DNull
 	case ColumnType_INT2VECTOR:
-		return parser.DNull
+		return tree.DNull
 	default:
 		panic(fmt.Sprintf("invalid type %s", typ.String()))
 	}
@@ -184,11 +194,30 @@ func RandColumnType(rng *rand.Rand) ColumnType {
 	return typ
 }
 
-// RandColumnTypes returns a slice of numCols random ColumnType value.
+// RandSortingColumnType returns a column type which can be key-encoded.
+func RandSortingColumnType(rng *rand.Rand) ColumnType {
+	typ := RandColumnType(rng)
+	for MustBeValueEncoded(typ.SemanticType) {
+		typ = RandColumnType(rng)
+	}
+	return typ
+}
+
+// RandColumnTypes returns a slice of numCols random ColumnType values.
 func RandColumnTypes(rng *rand.Rand, numCols int) []ColumnType {
 	types := make([]ColumnType, numCols)
 	for i := range types {
 		types[i] = RandColumnType(rng)
+	}
+	return types
+}
+
+// RandSortingColumnTypes returns a slice of numCols random ColumnType values
+// which are key-encodable.
+func RandSortingColumnTypes(rng *rand.Rand, numCols int) []ColumnType {
+	types := make([]ColumnType, numCols)
+	for i := range types {
+		types[i] = RandSortingColumnType(rng)
 	}
 	return types
 }
@@ -205,10 +234,10 @@ func RandEncDatum(rng *rand.Rand) (EncDatum, ColumnType) {
 	return DatumToEncDatum(typ, datum), typ
 }
 
-// RandEncDatumSlice generates a slice of random EncDatum values of the same random
-// type.
-func RandEncDatumSlice(rng *rand.Rand, numVals int) ([]EncDatum, ColumnType) {
-	typ := RandColumnType(rng)
+// RandSortingEncDatumSlice generates a slice of random EncDatum values of the
+// same random type which is key-encodable.
+func RandSortingEncDatumSlice(rng *rand.Rand, numVals int) ([]EncDatum, ColumnType) {
+	typ := RandSortingColumnType(rng)
 	vals := make([]EncDatum, numVals)
 	for i := range vals {
 		vals[i] = DatumToEncDatum(typ, RandDatum(rng, typ, true))
@@ -216,13 +245,15 @@ func RandEncDatumSlice(rng *rand.Rand, numVals int) ([]EncDatum, ColumnType) {
 	return vals, typ
 }
 
-// RandEncDatumSlices generates EncDatum slices, each slice with values of the same
-// random type.
-func RandEncDatumSlices(rng *rand.Rand, numSets, numValsPerSet int) ([][]EncDatum, []ColumnType) {
+// RandSortingEncDatumSlices generates EncDatum slices, each slice with values of the same
+// random type which is key-encodable.
+func RandSortingEncDatumSlices(
+	rng *rand.Rand, numSets, numValsPerSet int,
+) ([][]EncDatum, []ColumnType) {
 	vals := make([][]EncDatum, numSets)
 	types := make([]ColumnType, numSets)
 	for i := range vals {
-		vals[i], types[i] = RandEncDatumSlice(rng, numValsPerSet)
+		vals[i], types[i] = RandSortingEncDatumSlice(rng, numValsPerSet)
 	}
 	return vals, types
 }

@@ -22,7 +22,8 @@ import (
 
 	"github.com/lib/pq/oid"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 )
@@ -44,7 +45,7 @@ func TestParseTs(t *testing.T) {
 	}
 
 	for i, test := range parseTsTests {
-		parsed, err := parser.ParseDTimestamp(test.strTimestamp, time.Nanosecond)
+		parsed, err := tree.ParseDTimestamp(test.strTimestamp, time.Nanosecond)
 		if err != nil {
 			t.Errorf("%d could not parse [%s]: %v", i, test.strTimestamp, err)
 			continue
@@ -60,7 +61,7 @@ func TestTimestampRoundtrip(t *testing.T) {
 	ts := time.Date(2006, 7, 8, 0, 0, 0, 123000, time.FixedZone("UTC", 0))
 
 	parse := func(encoded []byte) time.Time {
-		decoded, err := parser.ParseDTimestamp(string(encoded), time.Nanosecond)
+		decoded, err := tree.ParseDTimestamp(string(encoded), time.Nanosecond)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -86,9 +87,9 @@ func TestIntArrayRoundTrip(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	buf := writeBuffer{bytecount: metric.NewCounter(metric.Metadata{})}
-	d := parser.NewDArray(parser.TypeInt)
+	d := tree.NewDArray(types.Int)
 	for i := 0; i < 10; i++ {
-		if err := d.Append(parser.NewDInt(parser.DInt(i))); err != nil {
+		if err := d.Append(tree.NewDInt(tree.DInt(i))); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -101,14 +102,14 @@ func TestIntArrayRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	evalCtx := parser.NewTestingEvalContext()
+	evalCtx := tree.NewTestingEvalContext()
 	defer evalCtx.Stop(context.Background())
 	if got.Compare(evalCtx, d) != 0 {
 		t.Fatalf("expected %s, got %s", d, got)
 	}
 }
 
-func benchmarkWriteType(b *testing.B, d parser.Datum, format formatCode) {
+func benchmarkWriteType(b *testing.B, d tree.Datum, format formatCode) {
 	ctx := context.Background()
 
 	buf := writeBuffer{bytecount: metric.NewCounter(metric.Metadata{Name: ""})}
@@ -133,19 +134,19 @@ func benchmarkWriteType(b *testing.B, d parser.Datum, format formatCode) {
 }
 
 func benchmarkWriteBool(b *testing.B, format formatCode) {
-	benchmarkWriteType(b, parser.DBoolTrue, format)
+	benchmarkWriteType(b, tree.DBoolTrue, format)
 }
 
 func benchmarkWriteInt(b *testing.B, format formatCode) {
-	benchmarkWriteType(b, parser.NewDInt(1234), format)
+	benchmarkWriteType(b, tree.NewDInt(1234), format)
 }
 
 func benchmarkWriteFloat(b *testing.B, format formatCode) {
-	benchmarkWriteType(b, parser.NewDFloat(12.34), format)
+	benchmarkWriteType(b, tree.NewDFloat(12.34), format)
 }
 
 func benchmarkWriteDecimal(b *testing.B, format formatCode) {
-	dec := new(parser.DDecimal)
+	dec := new(tree.DDecimal)
 	s := "-1728718718271827121233.1212121212"
 	if err := dec.SetString(s); err != nil {
 		b.Fatalf("could not set %q on decimal", format)
@@ -154,15 +155,15 @@ func benchmarkWriteDecimal(b *testing.B, format formatCode) {
 }
 
 func benchmarkWriteBytes(b *testing.B, format formatCode) {
-	benchmarkWriteType(b, parser.NewDBytes("testing"), format)
+	benchmarkWriteType(b, tree.NewDBytes("testing"), format)
 }
 
 func benchmarkWriteString(b *testing.B, format formatCode) {
-	benchmarkWriteType(b, parser.NewDString("testing"), format)
+	benchmarkWriteType(b, tree.NewDString("testing"), format)
 }
 
 func benchmarkWriteDate(b *testing.B, format formatCode) {
-	d, err := parser.ParseDDate("2010-09-28", time.UTC)
+	d, err := tree.ParseDDate("2010-09-28", time.UTC)
 	if err != nil {
 		b.Fatal(err)
 	}
@@ -170,7 +171,7 @@ func benchmarkWriteDate(b *testing.B, format formatCode) {
 }
 
 func benchmarkWriteTimestamp(b *testing.B, format formatCode) {
-	ts, err := parser.ParseDTimestamp("2010-09-28 12:00:00.1", time.Microsecond)
+	ts, err := tree.ParseDTimestamp("2010-09-28 12:00:00.1", time.Microsecond)
 	if err != nil {
 		b.Fatal(err)
 	}
@@ -178,7 +179,7 @@ func benchmarkWriteTimestamp(b *testing.B, format formatCode) {
 }
 
 func benchmarkWriteTimestampTZ(b *testing.B, format formatCode) {
-	tstz, err := parser.ParseDTimestampTZ("2010-09-28 12:00:00.1", time.UTC, time.Microsecond)
+	tstz, err := tree.ParseDTimestampTZ("2010-09-28 12:00:00.1", time.UTC, time.Microsecond)
 	if err != nil {
 		b.Fatal(err)
 	}
@@ -186,7 +187,7 @@ func benchmarkWriteTimestampTZ(b *testing.B, format formatCode) {
 }
 
 func benchmarkWriteInterval(b *testing.B, format formatCode) {
-	i, err := parser.ParseDInterval("PT12H2M")
+	i, err := tree.ParseDInterval("PT12H2M")
 	if err != nil {
 		b.Fatal(err)
 	}
@@ -194,17 +195,17 @@ func benchmarkWriteInterval(b *testing.B, format formatCode) {
 }
 
 func benchmarkWriteTuple(b *testing.B, format formatCode) {
-	i := parser.NewDInt(1234)
-	f := parser.NewDFloat(12.34)
-	s := parser.NewDString("testing")
-	t := parser.NewDTuple(i, f, s)
+	i := tree.NewDInt(1234)
+	f := tree.NewDFloat(12.34)
+	s := tree.NewDString("testing")
+	t := tree.NewDTuple(i, f, s)
 	benchmarkWriteType(b, t, format)
 }
 
 func benchmarkWriteArray(b *testing.B, format formatCode) {
-	a := parser.NewDArray(parser.TypeInt)
+	a := tree.NewDArray(types.Int)
 	for i := 0; i < 3; i++ {
-		if err := a.Append(parser.NewDInt(parser.DInt(1234))); err != nil {
+		if err := a.Append(tree.NewDInt(tree.DInt(1234))); err != nil {
 			b.Fatal(err)
 		}
 	}
@@ -289,7 +290,7 @@ func BenchmarkWriteTextArray(b *testing.B) {
 func BenchmarkDecodeBinaryDecimal(b *testing.B) {
 	wbuf := writeBuffer{bytecount: metric.NewCounter(metric.Metadata{Name: ""})}
 
-	expected := new(parser.DDecimal)
+	expected := new(tree.DDecimal)
 	s := "-1728718718271827121233.1212121212"
 	if err := expected.SetString(s); err != nil {
 		b.Fatalf("could not set %q on decimal", s)
@@ -312,7 +313,7 @@ func BenchmarkDecodeBinaryDecimal(b *testing.B) {
 		b.StartTimer()
 		got, err := decodeOidDatum(oid.T_numeric, formatBinary, bytes)
 		b.StopTimer()
-		evalCtx := parser.NewTestingEvalContext()
+		evalCtx := tree.NewTestingEvalContext()
 		defer evalCtx.Stop(context.Background())
 		if err != nil {
 			b.Fatal(err)

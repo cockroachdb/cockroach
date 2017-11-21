@@ -17,7 +17,8 @@ package sql
 import (
 	"golang.org/x/net/context"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -42,7 +43,7 @@ type ordinalityNode struct {
 	source  planNode
 	props   physicalProps
 	columns sqlbase.ResultColumns
-	row     parser.Datums
+	row     tree.Datums
 	curCnt  int64
 }
 
@@ -53,7 +54,7 @@ func (p *planner) wrapOrdinality(ds planDataSource) planDataSource {
 	res := &ordinalityNode{
 		source: src,
 		props:  planPhysicalProps(src),
-		row:    make(parser.Datums, len(srcColumns)+1),
+		row:    make(tree.Datums, len(srcColumns)+1),
 		curCnt: 1,
 	}
 
@@ -63,7 +64,7 @@ func (p *planner) wrapOrdinality(ds planDataSource) planDataSource {
 	newColIdx := len(res.columns) - 1
 	res.columns[newColIdx] = sqlbase.ResultColumn{
 		Name: "ordinality",
-		Typ:  parser.TypeInt,
+		Typ:  types.Int,
 	}
 
 	// Extend the dataSourceInfo with information about the
@@ -92,12 +93,12 @@ func (o *ordinalityNode) Next(params runParams) (bool, error) {
 	copy(o.row, o.source.Values())
 	// o.row was allocated one spot larger than o.source.Values().
 	// Store the ordinality value there.
-	o.row[len(o.row)-1] = parser.NewDInt(parser.DInt(o.curCnt))
+	o.row[len(o.row)-1] = tree.NewDInt(tree.DInt(o.curCnt))
 	o.curCnt++
 	return true, nil
 }
 
-func (o *ordinalityNode) Values() parser.Datums        { return o.row }
+func (o *ordinalityNode) Values() tree.Datums          { return o.row }
 func (o *ordinalityNode) Start(params runParams) error { return o.source.Start(params) }
 func (o *ordinalityNode) Close(ctx context.Context)    { o.source.Close(ctx) }
 

@@ -4,7 +4,7 @@
 // License (the "License"); you may not use this file except in compliance with
 // the License. You may obtain a copy of the License at
 //
-//     https://github.com/cockroachdb/cockroach/blob/master/LICENSE
+//     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
 
 package sqlccl
 
@@ -13,17 +13,235 @@ import (
 	"strings"
 	"testing"
 
+	"golang.org/x/net/context"
+
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-
-	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
-	"golang.org/x/net/context"
 )
+
+func TestValidIndexPartitionSetShowZones(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(context.TODO())
+
+	sqlDB := sqlutils.MakeSQLRunner(db)
+	sqlDB.Exec(t, `
+		CREATE DATABASE d;
+		USE d;
+		CREATE TABLE t (c STRING PRIMARY KEY) PARTITION BY LIST (c) (
+			PARTITION p0 VALUES IN ('a'),
+			PARTITION p1 VALUES IN (DEFAULT)
+		)`)
+
+	yamlDefault := fmt.Sprintf("gc: {ttlseconds: %d}", config.DefaultZoneConfig().GC.TTLSeconds)
+	yamlOverride := "gc: {ttlseconds: 42}"
+	zoneOverride := config.DefaultZoneConfig()
+	zoneOverride.GC.TTLSeconds = 42
+
+	defaultRow := sqlutils.ZoneRow{
+		ID:           keys.RootNamespaceID,
+		CLISpecifier: ".default",
+		Config:       config.DefaultZoneConfig(),
+	}
+	defaultOverrideRow := sqlutils.ZoneRow{
+		ID:           keys.RootNamespaceID,
+		CLISpecifier: ".default",
+		Config:       zoneOverride,
+	}
+	dbRow := sqlutils.ZoneRow{
+		ID:           keys.MaxReservedDescID + 1,
+		CLISpecifier: "d",
+		Config:       zoneOverride,
+	}
+	tableRow := sqlutils.ZoneRow{
+		ID:           keys.MaxReservedDescID + 2,
+		CLISpecifier: "d.t",
+		Config:       zoneOverride,
+	}
+	primaryRow := sqlutils.ZoneRow{
+		ID:           keys.MaxReservedDescID + 2,
+		CLISpecifier: "d.t@primary",
+		Config:       zoneOverride,
+	}
+	p0Row := sqlutils.ZoneRow{
+		ID:           keys.MaxReservedDescID + 2,
+		CLISpecifier: "d.t.p0",
+		Config:       zoneOverride,
+	}
+	p1Row := sqlutils.ZoneRow{
+		ID:           keys.MaxReservedDescID + 2,
+		CLISpecifier: "d.t.p1",
+		Config:       zoneOverride,
+	}
+
+	// Ensure the default is reported for all zones at first.
+	sqlutils.VerifyAllZoneConfigs(t, sqlDB, defaultRow)
+	sqlutils.VerifyZoneConfigForTarget(t, sqlDB, "RANGE default", defaultRow)
+	sqlutils.VerifyZoneConfigForTarget(t, sqlDB, "DATABASE d", defaultRow)
+	sqlutils.VerifyZoneConfigForTarget(t, sqlDB, "TABLE d.t", defaultRow)
+	sqlutils.VerifyZoneConfigForTarget(t, sqlDB, "INDEX d.t@primary", defaultRow)
+	sqlutils.VerifyZoneConfigForTarget(t, sqlDB, "TABLE d.t PARTITION p0", defaultRow)
+	sqlutils.VerifyZoneConfigForTarget(t, sqlDB, "TABLE d.t PARTITION p1", defaultRow)
+
+	// Ensure a database zone config applies to that database, its tables, and its
+	// tables' indices and partitions.
+	sqlutils.SetZoneConfig(t, sqlDB, "DATABASE d", yamlOverride)
+	sqlutils.VerifyAllZoneConfigs(t, sqlDB, defaultRow, dbRow)
+	sqlutils.VerifyZoneConfigForTarget(t, sqlDB, "DATABASE d", dbRow)
+	sqlutils.VerifyZoneConfigForTarget(t, sqlDB, "TABLE d.t", dbRow)
+	sqlutils.VerifyZoneConfigForTarget(t, sqlDB, "INDEX d.t@primary", dbRow)
+	sqlutils.VerifyZoneConfigForTarget(t, sqlDB, "TABLE d.t PARTITION p0", dbRow)
+	sqlutils.VerifyZoneConfigForTarget(t, sqlDB, "TABLE d.t PARTITION p1", dbRow)
+
+	// Ensure a table zone config applies to that table and its indices and
+	// partitions, but no other zones.
+	sqlutils.SetZoneConfig(t, sqlDB, "TABLE d.t", yamlOverride)
+	sqlutils.VerifyAllZoneConfigs(t, sqlDB, defaultRow, dbRow, tableRow)
+	sqlutils.VerifyZoneConfigForTarget(t, sqlDB, "DATABASE d", dbRow)
+	sqlutils.VerifyZoneConfigForTarget(t, sqlDB, "TABLE d.t", tableRow)
+	sqlutils.VerifyZoneConfigForTarget(t, sqlDB, "INDEX d.t@primary", tableRow)
+	sqlutils.VerifyZoneConfigForTarget(t, sqlDB, "TABLE d.t PARTITION p0", tableRow)
+	sqlutils.VerifyZoneConfigForTarget(t, sqlDB, "TABLE d.t PARTITION p1", tableRow)
+
+	// Ensure an index zone config applies to that index and its partitions, but
+	// no other zones.
+	sqlutils.SetZoneConfig(t, sqlDB, "INDEX d.t@primary", yamlOverride)
+	sqlutils.VerifyAllZoneConfigs(t, sqlDB, defaultRow, dbRow, tableRow, primaryRow)
+	sqlutils.VerifyZoneConfigForTarget(t, sqlDB, "DATABASE d", dbRow)
+	sqlutils.VerifyZoneConfigForTarget(t, sqlDB, "TABLE d.t", tableRow)
+	sqlutils.VerifyZoneConfigForTarget(t, sqlDB, "INDEX d.t@primary", primaryRow)
+	sqlutils.VerifyZoneConfigForTarget(t, sqlDB, "TABLE d.t PARTITION p0", primaryRow)
+	sqlutils.VerifyZoneConfigForTarget(t, sqlDB, "TABLE d.t PARTITION p1", primaryRow)
+
+	// Ensure a partition zone config applies to that partition, but no other
+	// zones.
+	sqlutils.SetZoneConfig(t, sqlDB, "TABLE d.t PARTITION p0", yamlOverride)
+	sqlutils.VerifyAllZoneConfigs(t, sqlDB, defaultRow, dbRow, tableRow, primaryRow, p0Row)
+	sqlutils.VerifyZoneConfigForTarget(t, sqlDB, "DATABASE d", dbRow)
+	sqlutils.VerifyZoneConfigForTarget(t, sqlDB, "TABLE d.t", tableRow)
+	sqlutils.VerifyZoneConfigForTarget(t, sqlDB, "INDEX d.t@primary", primaryRow)
+	sqlutils.VerifyZoneConfigForTarget(t, sqlDB, "TABLE d.t PARTITION p0", p0Row)
+	sqlutils.VerifyZoneConfigForTarget(t, sqlDB, "TABLE d.t PARTITION p1", primaryRow)
+
+	// Ensure updating the default zone propagates to zones without an override,
+	// but not to those with overrides.
+	sqlutils.SetZoneConfig(t, sqlDB, "RANGE default", yamlOverride)
+	sqlutils.VerifyAllZoneConfigs(t, sqlDB, defaultOverrideRow, dbRow, tableRow, primaryRow, p0Row)
+	sqlutils.VerifyZoneConfigForTarget(t, sqlDB, "DATABASE d", dbRow)
+	sqlutils.VerifyZoneConfigForTarget(t, sqlDB, "TABLE d.t", tableRow)
+	sqlutils.VerifyZoneConfigForTarget(t, sqlDB, "INDEX d.t@primary", primaryRow)
+	sqlutils.VerifyZoneConfigForTarget(t, sqlDB, "TABLE d.t PARTITION p0", p0Row)
+	sqlutils.VerifyZoneConfigForTarget(t, sqlDB, "TABLE d.t PARTITION p1", primaryRow)
+
+	// Ensure deleting a database zone leaves child overrides in place.
+	sqlutils.DeleteZoneConfig(t, sqlDB, "DATABASE d")
+	sqlutils.VerifyAllZoneConfigs(t, sqlDB, defaultOverrideRow, tableRow, primaryRow, p0Row)
+	sqlutils.VerifyZoneConfigForTarget(t, sqlDB, "DATABASE d", defaultOverrideRow)
+	sqlutils.VerifyZoneConfigForTarget(t, sqlDB, "TABLE d.t", tableRow)
+	sqlutils.VerifyZoneConfigForTarget(t, sqlDB, "INDEX d.t@primary", primaryRow)
+	sqlutils.VerifyZoneConfigForTarget(t, sqlDB, "TABLE d.t PARTITION p0", p0Row)
+	sqlutils.VerifyZoneConfigForTarget(t, sqlDB, "TABLE d.t PARTITION p1", primaryRow)
+
+	// Ensure deleting a table zone leaves child overrides in place.
+	sqlutils.DeleteZoneConfig(t, sqlDB, "TABLE d.t")
+	sqlutils.VerifyAllZoneConfigs(t, sqlDB, defaultOverrideRow, primaryRow, p0Row)
+	sqlutils.VerifyZoneConfigForTarget(t, sqlDB, "TABLE d.t", defaultOverrideRow)
+	sqlutils.VerifyZoneConfigForTarget(t, sqlDB, "INDEX d.t@primary", primaryRow)
+	sqlutils.VerifyZoneConfigForTarget(t, sqlDB, "TABLE d.t PARTITION p0", p0Row)
+	sqlutils.VerifyZoneConfigForTarget(t, sqlDB, "TABLE d.t PARTITION p1", primaryRow)
+
+	// Ensure deleting an index zone leaves child overrides in place.
+	sqlutils.DeleteZoneConfig(t, sqlDB, "INDEX d.t@primary")
+	sqlutils.VerifyAllZoneConfigs(t, sqlDB, defaultOverrideRow, p0Row)
+	sqlutils.VerifyZoneConfigForTarget(t, sqlDB, "INDEX d.t@primary", defaultOverrideRow)
+	sqlutils.VerifyZoneConfigForTarget(t, sqlDB, "TABLE d.t PARTITION p0", p0Row)
+
+	// Ensure deleting a partition zone works.
+	sqlutils.DeleteZoneConfig(t, sqlDB, "TABLE d.t PARTITION p0")
+	sqlutils.VerifyAllZoneConfigs(t, sqlDB, defaultOverrideRow)
+	sqlutils.VerifyZoneConfigForTarget(t, sqlDB, "TABLE d.t PARTITION p0", defaultOverrideRow)
+
+	// Ensure deleting non-overridden zones is not an error.
+	sqlutils.DeleteZoneConfig(t, sqlDB, "DATABASE d")
+	sqlutils.DeleteZoneConfig(t, sqlDB, "TABLE d.t")
+	sqlutils.DeleteZoneConfig(t, sqlDB, "TABLE d.t PARTITION p1")
+
+	// Ensure updating the default zone config applies to zones that have had
+	// overrides added and removed.
+	sqlutils.SetZoneConfig(t, sqlDB, "RANGE default", yamlDefault)
+	sqlutils.VerifyAllZoneConfigs(t, sqlDB, defaultRow)
+	sqlutils.VerifyZoneConfigForTarget(t, sqlDB, "RANGE default", defaultRow)
+	sqlutils.VerifyZoneConfigForTarget(t, sqlDB, "DATABASE d", defaultRow)
+	sqlutils.VerifyZoneConfigForTarget(t, sqlDB, "TABLE d.t", defaultRow)
+	sqlutils.VerifyZoneConfigForTarget(t, sqlDB, "INDEX d.t@primary", defaultRow)
+	sqlutils.VerifyZoneConfigForTarget(t, sqlDB, "TABLE d.t PARTITION p0", defaultRow)
+	sqlutils.VerifyZoneConfigForTarget(t, sqlDB, "TABLE d.t PARTITION p1", defaultRow)
+
+	// Ensure subzones can be created even when no table zone exists.
+	sqlutils.SetZoneConfig(t, sqlDB, "TABLE d.t PARTITION p0", yamlOverride)
+	sqlutils.SetZoneConfig(t, sqlDB, "TABLE d.t PARTITION p1", yamlOverride)
+	sqlutils.VerifyAllZoneConfigs(t, sqlDB, defaultRow, p0Row, p1Row)
+	sqlutils.VerifyZoneConfigForTarget(t, sqlDB, "TABLE d.t", defaultRow)
+	sqlutils.VerifyZoneConfigForTarget(t, sqlDB, "TABLE d.t PARTITION p0", p0Row)
+	sqlutils.VerifyZoneConfigForTarget(t, sqlDB, "TABLE d.t PARTITION p1", p1Row)
+
+	// Ensure the shorthand index syntax works.
+	sqlutils.SetZoneConfig(t, sqlDB, `INDEX "primary"`, yamlOverride)
+	sqlutils.VerifyZoneConfigForTarget(t, sqlDB, `INDEX "primary"`, primaryRow)
+}
+
+func TestInvalidIndexPartitionSetShowZones(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(context.TODO())
+
+	for i, tc := range []struct {
+		query string
+		err   string
+	}{
+		{
+			"ALTER INDEX foo EXPERIMENTAL CONFIGURE ZONE ''",
+			`no database specified: "foo"`,
+		},
+		{
+			"EXPERIMENTAL SHOW ZONE CONFIGURATION FOR INDEX foo",
+			`no database specified: "foo"`,
+		},
+		{
+			"USE system; ALTER INDEX foo EXPERIMENTAL CONFIGURE ZONE ''",
+			`index "foo" not in any of the tables`,
+		},
+		{
+			"USE system; EXPERIMENTAL SHOW ZONE CONFIGURATION FOR INDEX foo",
+			`index "foo" not in any of the tables`,
+		},
+		{
+			"ALTER TABLE system.jobs PARTITION p0 EXPERIMENTAL CONFIGURE ZONE 'foo'",
+			`partition "p0" does not exist`,
+		},
+		{
+			"EXPERIMENTAL SHOW ZONE CONFIGURATION FOR TABLE system.jobs PARTITION p0",
+			`partition "p0" does not exist`,
+		},
+	} {
+		if _, err := db.Exec(tc.query); !testutils.IsError(err, tc.err) {
+			t.Errorf("#%d: expected error matching %q, but got %v", i, tc.err, err)
+		}
+	}
+}
 
 func TestGenerateSubzoneSpans(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -76,8 +294,8 @@ func TestGenerateSubzoneSpans(t *testing.T) {
 		{
 			name: `single col list partitioning`,
 			schema: `CREATE TABLE t (a INT PRIMARY KEY) PARTITION BY LIST (a) (
-				PARTITION p3 VALUES (3),
-				PARTITION p4 VALUES (4)
+				PARTITION p3 VALUES IN (3),
+				PARTITION p4 VALUES IN (4)
 			)`,
 			subzones: []string{`@primary`, `.p3`, `.p4`},
 			expected: []string{
@@ -90,9 +308,9 @@ func TestGenerateSubzoneSpans(t *testing.T) {
 		{
 			name: `single col list partitioning - DEFAULT`,
 			schema: `CREATE TABLE t (a INT PRIMARY KEY) PARTITION BY LIST (a) (
-				PARTITION p3 VALUES (3),
-				PARTITION p4 VALUES (4),
-				PARTITION pd VALUES (DEFAULT)
+				PARTITION p3 VALUES IN (3),
+				PARTITION p4 VALUES IN (4),
+				PARTITION pd VALUES IN (DEFAULT)
 			)`,
 			subzones: []string{`@primary`, `.p3`, `.p4`, `.pd`},
 			expected: []string{
@@ -105,9 +323,9 @@ func TestGenerateSubzoneSpans(t *testing.T) {
 		{
 			name: `multi col list partitioning`,
 			schema: `CREATE TABLE t (a INT, b INT, PRIMARY KEY (a, b)) PARTITION BY LIST (a, b) (
-				PARTITION p34 VALUES (3, 4),
-				PARTITION p56 VALUES (5, 6),
-				PARTITION p57 VALUES (5, 7)
+				PARTITION p34 VALUES IN ((3, 4)),
+				PARTITION p56 VALUES IN ((5, 6)),
+				PARTITION p57 VALUES IN ((5, 7))
 			)`,
 			subzones: []string{`@primary`, `.p34`, `.p56`, `.p57`},
 			expected: []string{
@@ -122,11 +340,11 @@ func TestGenerateSubzoneSpans(t *testing.T) {
 		{
 			name: `multi col list partitioning - DEFAULT`,
 			schema: `CREATE TABLE t (a INT, b INT, PRIMARY KEY (a, b)) PARTITION BY LIST (a, b) (
-				PARTITION p34 VALUES (3, 4),
-				PARTITION p56 VALUES (5, 6),
-				PARTITION p57 VALUES (5, 7),
-				PARTITION p5d VALUES (5, DEFAULT),
-				PARTITION pd VALUES (DEFAULT, DEFAULT)
+				PARTITION p34 VALUES IN ((3, 4)),
+				PARTITION p56 VALUES IN ((5, 6)),
+				PARTITION p57 VALUES IN ((5, 7)),
+				PARTITION p5d VALUES IN ((5, DEFAULT)),
+				PARTITION pd VALUES IN ((DEFAULT, DEFAULT))
 			)`,
 			subzones: []string{`@primary`, `.p34`, `.p56`, `.p57`, `.p5d`, `.pd`},
 			expected: []string{
@@ -144,8 +362,8 @@ func TestGenerateSubzoneSpans(t *testing.T) {
 		{
 			name: `single col range partitioning`,
 			schema: `CREATE TABLE t (a INT PRIMARY KEY) PARTITION BY RANGE (a) (
-				PARTITION p3 VALUES LESS THAN (3),
-				PARTITION p4 VALUES LESS THAN (4)
+				PARTITION p3 VALUES < 3,
+				PARTITION p4 VALUES < 4
 			)`,
 			subzones: []string{`@primary`, `.p3`, `.p4`},
 			expected: []string{
@@ -157,9 +375,9 @@ func TestGenerateSubzoneSpans(t *testing.T) {
 		{
 			name: `single col range partitioning - MAXVALUE`,
 			schema: `CREATE TABLE t (a INT PRIMARY KEY) PARTITION BY RANGE (a) (
-				PARTITION p3 VALUES LESS THAN (3),
-				PARTITION p4 VALUES LESS THAN (4),
-				PARTITION pm VALUES LESS THAN (MAXVALUE)
+				PARTITION p3 VALUES < 3,
+				PARTITION p4 VALUES < 4,
+				PARTITION pm VALUES < MAXVALUE
 			)`,
 			subzones: []string{`@primary`, `.p3`, `.p4`, `.pm`},
 			expected: []string{
@@ -171,9 +389,9 @@ func TestGenerateSubzoneSpans(t *testing.T) {
 		{
 			name: `multi col range partitioning`,
 			schema: `CREATE TABLE t (a INT, b INT, PRIMARY KEY (a, b)) PARTITION BY RANGE (a, b) (
-				PARTITION p34 VALUES LESS THAN (3, 4),
-				PARTITION p56 VALUES LESS THAN (5, 6),
-				PARTITION p57 VALUES LESS THAN (5, 7)
+				PARTITION p34 VALUES < (3, 4),
+				PARTITION p56 VALUES < (5, 6),
+				PARTITION p57 VALUES < (5, 7)
 			)`,
 			subzones: []string{`@primary`, `.p34`, `.p56`, `.p57`},
 			expected: []string{
@@ -186,11 +404,11 @@ func TestGenerateSubzoneSpans(t *testing.T) {
 		{
 			name: `multi col range partitioning - MAXVALUE`,
 			schema: `CREATE TABLE t (a INT, b INT, PRIMARY KEY (a, b)) PARTITION BY RANGE (a, b) (
-				PARTITION p34 VALUES LESS THAN (3, 4),
-				PARTITION p3m VALUES LESS THAN (3, MAXVALUE),
-				PARTITION p56 VALUES LESS THAN (5, 6),
-				PARTITION p57 VALUES LESS THAN (5, 7),
-				PARTITION pm VALUES LESS THAN (MAXVALUE, MAXVALUE)
+				PARTITION p34 VALUES < (3, 4),
+				PARTITION p3m VALUES < (3, MAXVALUE),
+				PARTITION p56 VALUES < (5, 6),
+				PARTITION p57 VALUES < (5, 7),
+				PARTITION pm VALUES < (MAXVALUE, MAXVALUE)
 			)`,
 			subzones: []string{`@primary`, `.p34`, `.p3m`, `.p56`, `.p57`, `.pm`},
 			expected: []string{
@@ -205,14 +423,14 @@ func TestGenerateSubzoneSpans(t *testing.T) {
 		{
 			name: `list-list partitioning`,
 			schema: `CREATE TABLE t (a INT, b INT, PRIMARY KEY (a, b)) PARTITION BY LIST (a) (
-				PARTITION p3 VALUES (3) PARTITION BY LIST (b) (
-					PARTITION p34 VALUES (4)
+				PARTITION p3 VALUES IN (3) PARTITION BY LIST (b) (
+					PARTITION p34 VALUES IN (4)
 				),
-				PARTITION p5 VALUES (5) PARTITION BY LIST (b) (
-					PARTITION p56 VALUES (6),
-					PARTITION p5d VALUES (DEFAULT)
+				PARTITION p5 VALUES IN (5) PARTITION BY LIST (b) (
+					PARTITION p56 VALUES IN (6),
+					PARTITION p5d VALUES IN (DEFAULT)
 				),
-				PARTITION pd VALUES (DEFAULT)
+				PARTITION pd VALUES IN (DEFAULT)
 			)`,
 			subzones: []string{`@primary`, `.p3`, `.p34`, `.p5`, `.p56`, `.p5d`, `.pd`},
 			expected: []string{
@@ -230,14 +448,14 @@ func TestGenerateSubzoneSpans(t *testing.T) {
 		{
 			name: `list-range partitioning`,
 			schema: `CREATE TABLE t (a INT, b INT, PRIMARY KEY (a, b)) PARTITION BY LIST (a) (
-				PARTITION p3 VALUES (3) PARTITION BY RANGE (b) (
-					PARTITION p34 VALUES LESS THAN (4)
+				PARTITION p3 VALUES IN (3) PARTITION BY RANGE (b) (
+					PARTITION p34 VALUES < 4
 				),
-				PARTITION p5 VALUES (5) PARTITION BY RANGE (b) (
-					PARTITION p56 VALUES LESS THAN (6),
-					PARTITION p5d VALUES LESS THAN (MAXVALUE)
+				PARTITION p5 VALUES IN (5) PARTITION BY RANGE (b) (
+					PARTITION p56 VALUES < 6,
+					PARTITION p5d VALUES < MAXVALUE
 				),
-				PARTITION pd VALUES (DEFAULT)
+				PARTITION pd VALUES IN (DEFAULT)
 			)`,
 			subzones: []string{`@primary`, `.p3`, `.p34`, `.p5`, `.p56`, `.p5d`, `.pd`},
 			expected: []string{
@@ -254,7 +472,7 @@ func TestGenerateSubzoneSpans(t *testing.T) {
 		{
 			name: `inheritance - index`,
 			schema: `CREATE TABLE t (a INT PRIMARY KEY) PARTITION BY LIST (a) (
-				PARTITION pd VALUES (DEFAULT)
+				PARTITION pd VALUES IN (DEFAULT)
 			)`,
 			subzones: []string{`@primary`},
 			expected: []string{`@primary /1-/2`},
@@ -262,8 +480,8 @@ func TestGenerateSubzoneSpans(t *testing.T) {
 		{
 			name: `inheritance - single col default`,
 			schema: `CREATE TABLE t (a INT PRIMARY KEY) PARTITION BY LIST (a) (
-				PARTITION p3 VALUES (3),
-				PARTITION pd VALUES (DEFAULT)
+				PARTITION p3 VALUES IN (3),
+				PARTITION pd VALUES IN (DEFAULT)
 			)`,
 			subzones: []string{`@primary`, `.pd`},
 			expected: []string{`.pd /1-/2`},
@@ -271,10 +489,10 @@ func TestGenerateSubzoneSpans(t *testing.T) {
 		{
 			name: `inheritance - multi col default`,
 			schema: `CREATE TABLE t (a INT, b INT, PRIMARY KEY (a, b)) PARTITION BY LIST (a, b) (
-				PARTITION p34 VALUES (3, 4),
-				PARTITION p3d VALUES (3, DEFAULT),
-				PARTITION p56 VALUES (5, 6),
-				PARTITION p5d VALUES (5, DEFAULT)
+				PARTITION p34 VALUES IN ((3, 4)),
+				PARTITION p3d VALUES IN ((3, DEFAULT)),
+				PARTITION p56 VALUES IN ((5, 6)),
+				PARTITION p5d VALUES IN ((5, DEFAULT))
 			)`,
 			subzones: []string{`@primary`, `.p3d`, `.p56`},
 			expected: []string{
@@ -288,17 +506,17 @@ func TestGenerateSubzoneSpans(t *testing.T) {
 		{
 			name: `inheritance - subpartitioning`,
 			schema: `CREATE TABLE t (a INT, b INT, PRIMARY KEY (a, b)) PARTITION BY LIST (a) (
-				PARTITION p3 VALUES (3) PARTITION BY LIST (b) (
-					PARTITION p34 VALUES (4),
-					PARTITION p3d VALUES (DEFAULT)
+				PARTITION p3 VALUES IN (3) PARTITION BY LIST (b) (
+					PARTITION p34 VALUES IN (4),
+					PARTITION p3d VALUES IN (DEFAULT)
 				),
-				PARTITION p5 VALUES (5) PARTITION BY LIST (b) (
-					PARTITION p56 VALUES (6),
-					PARTITION p5d VALUES (DEFAULT)
+				PARTITION p5 VALUES IN (5) PARTITION BY LIST (b) (
+					PARTITION p56 VALUES IN (6),
+					PARTITION p5d VALUES IN (DEFAULT)
 				),
-				PARTITION p7 VALUES (7) PARTITION BY LIST (b) (
-					PARTITION p78 VALUES (8),
-					PARTITION p7d VALUES (DEFAULT)
+				PARTITION p7 VALUES IN (7) PARTITION BY LIST (b) (
+					PARTITION p78 VALUES IN (8),
+					PARTITION p7d VALUES IN (DEFAULT)
 				)
 			)`,
 			subzones: []string{`@primary`, `.p3d`, `.p56`, `.p7`},
@@ -324,9 +542,9 @@ func TestGenerateSubzoneSpans(t *testing.T) {
 				if err != nil {
 					t.Fatalf("%+v", err)
 				}
-				createTable, ok := stmt.(*parser.CreateTable)
+				createTable, ok := stmt.(*tree.CreateTable)
 				if !ok {
-					t.Fatalf("expected *parser.CreateTable got %T", stmt)
+					t.Fatalf("expected *tree.CreateTable got %T", stmt)
 				}
 				const parentID, tableID = keys.MaxReservedDescID + 1, keys.MaxReservedDescID + 2
 				tableDesc, err = makeCSVTableDescriptor(

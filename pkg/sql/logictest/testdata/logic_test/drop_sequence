@@ -1,0 +1,18 @@
+# LogicTest: default parallel-stmts distsql
+
+# see also file `sequences`
+
+statement ok
+CREATE SEQUENCE drop_test
+
+statement ok
+DROP SEQUENCE drop_test
+
+statement ok
+DROP SEQUENCE IF EXISTS nonexistent
+
+statement ok
+CREATE SEQUENCE drop_if_exists_test
+
+statement ok
+DROP SEQUENCE IF EXISTS drop_if_exists_test

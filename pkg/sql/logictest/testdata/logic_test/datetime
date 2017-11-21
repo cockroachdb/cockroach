@@ -703,6 +703,43 @@ SELECT '2015-08-25 05:45:45-01:00'::timestamptz
 ----
 2015-08-25 07:45:45 +0100 +0100
 
+# alias test: TIMEZONE instead of TIME ZONE
+statement ok
+SET TIMEZONE = +2
+
+query error unknown zone "CET"
+SELECT '2015-08-25 05:45:45.53453 CET'::timestamptz WHERE false
+
+query T
+SELECT '2015-08-25 05:45:45.53453'::timestamp
+----
+2015-08-25 05:45:45.53453 +0000 +0000
+
+query T
+SELECT '2015-08-25 05:45:45.53453'::timestamptz
+----
+2015-08-25 05:45:45.53453 +0200 +0200
+
+query T
+SELECT '2015-08-25 05:45:45-01:00'::timestamp
+----
+2015-08-25 05:45:45 +0000 +0000
+
+query T
+SELECT '2015-08-25 05:45:45-01:00'::timestamp::timestamptz
+----
+2015-08-25 05:45:45 +0200 +0200
+
+query T
+SELECT '2015-08-25 05:45:45-01:00'::timestamptz::timestamp
+----
+2015-08-25 08:45:45 +0000 +0000
+
+query T
+SELECT '2015-08-25 05:45:45-01:00'::timestamptz
+----
+2015-08-25 08:45:45 +0200 +0200
+
 statement ok
 SET TIME ZONE -5
 
@@ -774,7 +811,6 @@ query T
 SELECT '2015-08-25 05:45:45-01:00'::timestamptz::timestamp
 ----
 2015-08-25 02:45:45 +0000 +0000
-
 
 
 statement error cannot find time zone "foobar": timezone data cannot be found
@@ -976,6 +1012,23 @@ query T
 SELECT '2015-08-24 21:45:45.53453'::timestamptz
 ----
 2015-08-24 21:45:45.53453 -0400 -0400
+
+# alias test: TIMEZONE instead of TIME ZONE
+statement ok
+SET TIMEZONE TO INTERVAL '+05:00' HOUR TO MINUTE
+
+query T
+SELECT '2015-08-24 21:45:45.53453'::timestamptz
+----
+2015-08-24 21:45:45.53453 +0500 +0500
+
+statement ok
+SET TIMEZONE TO INTERVAL '-05:00' MINUTE TO SECOND
+
+query T
+SELECT '2015-08-24 21:45:45.53453'::timestamptz
+----
+2015-08-24 21:45:45.53453 -0500 -0500
 
 statement ok
 SET TIME ZONE 0

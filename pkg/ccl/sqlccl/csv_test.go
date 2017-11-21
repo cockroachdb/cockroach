@@ -4,7 +4,7 @@
 // License (the "License"); you may not use this file except in compliance with
 // the License. You may obtain a copy of the License at
 //
-//     https://github.com/cockroachdb/cockroach/blob/master/LICENSE
+//     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
 
 package sqlccl
 
@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/jobs"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
@@ -35,16 +36,17 @@ import (
 )
 
 const testSSTMaxSize = 1024 * 1024 * 50
+const localFoo = "nodelocal:///foo" // matches the sqlccl_test symbol.
 
 func TestLoadCSV(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	ctx := context.Background()
-	defer s.Stopper().Stop(ctx)
-
 	tmp, tmpCleanup := testutils.TempDir(t)
 	defer tmpCleanup()
+
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{ExternalIODir: tmp})
+	ctx := context.Background()
+	defer s.Stopper().Stop(ctx)
 
 	const (
 		tableName   = "t"
@@ -91,14 +93,14 @@ func TestLoadCSV(t *testing.T) {
 	}
 
 	null := ""
-	if _, _, _, err := LoadCSV(ctx, tablePath, []string{dataPath}, tmp, 0 /* comma */, 0 /* comment */, &null, testSSTMaxSize, tmp); err != nil {
+	if _, _, _, err := LoadCSV(ctx, tablePath, []string{dataPath}, filepath.Join(tmp, "foo"), 0 /* comma */, 0 /* comment */, &null, testSSTMaxSize, tmp); err != nil {
 		t.Fatal(err)
 	}
 
 	if _, err := db.Exec("CREATE DATABASE csv"); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := db.Exec(`RESTORE csv.* FROM $1`, fmt.Sprintf("nodelocal://%s", tmp)); err != nil {
+	if _, err := db.Exec(`RESTORE csv.* FROM $1`, localFoo); err != nil {
 		t.Fatal(err)
 	}
 
@@ -366,23 +368,22 @@ func TestLoadCSVSplit(t *testing.T) {
 func makeCSVData(
 	t testing.TB, in string, numFiles, rowsPerFile int,
 ) (files []string, filesWithOpts []string, filesWithDups []string) {
-	csvPath := filepath.Join(in, "csv")
-	if err := os.Mkdir(csvPath, 0777); err != nil {
+	if err := os.Mkdir(filepath.Join(in, "csv"), 0777); err != nil {
 		t.Fatal(err)
 	}
 	for fn := 0; fn < numFiles; fn++ {
-		path := filepath.Join(csvPath, fmt.Sprintf("data-%d", fn))
-		f, err := os.Create(path)
+		path := filepath.Join("csv", fmt.Sprintf("data-%d", fn))
+		f, err := os.Create(filepath.Join(in, path))
 		if err != nil {
 			t.Fatal(err)
 		}
-		pathWithOpts := filepath.Join(csvPath, fmt.Sprintf("data-%d-opts", fn))
-		fWithOpts, err := os.Create(pathWithOpts)
+		pathWithOpts := filepath.Join("csv", fmt.Sprintf("data-%d-opts", fn))
+		fWithOpts, err := os.Create(filepath.Join(in, pathWithOpts))
 		if err != nil {
 			t.Fatal(err)
 		}
-		pathDup := filepath.Join(csvPath, fmt.Sprintf("data-%d-dup", fn))
-		fDup, err := os.Create(pathDup)
+		pathDup := filepath.Join("csv", fmt.Sprintf("data-%d-dup", fn))
+		fDup, err := os.Create(filepath.Join(in, pathDup))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -416,9 +417,9 @@ func makeCSVData(
 		if err := fWithOpts.Close(); err != nil {
 			t.Fatal(err)
 		}
-		files = append(files, fmt.Sprintf(`'nodelocal://%s'`, path))
-		filesWithOpts = append(filesWithOpts, fmt.Sprintf(`'nodelocal://%s'`, pathWithOpts))
-		filesWithDups = append(filesWithDups, fmt.Sprintf(`'nodelocal://%s'`, pathDup))
+		files = append(files, fmt.Sprintf(`'nodelocal:///%s'`, path))
+		filesWithOpts = append(filesWithOpts, fmt.Sprintf(`'nodelocal:///%s'`, pathWithOpts))
+		filesWithDups = append(filesWithDups, fmt.Sprintf(`'nodelocal:///%s'`, pathDup))
 	}
 	return files, filesWithOpts, filesWithDups
 }
@@ -432,7 +433,10 @@ func TestImportStmt(t *testing.T) {
 		rowsPerFile = 1000
 	)
 	ctx := context.Background()
-	tc := testcluster.StartTestCluster(t, nodes, base.TestClusterArgs{})
+	dir, cleanup := testutils.TempDir(t)
+	defer cleanup()
+
+	tc := testcluster.StartTestCluster(t, nodes, base.TestClusterArgs{ServerArgs: base.TestServerArgs{ExternalIODir: dir}})
 	defer tc.Stopper().Stop(ctx)
 	conn := tc.Conns[0]
 
@@ -440,8 +444,6 @@ func TestImportStmt(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	dir, cleanup := testutils.TempDir(t)
-	defer cleanup()
 	tablePath := filepath.Join(dir, "table")
 	if err := ioutil.WriteFile(tablePath, []byte(`
 		CREATE TABLE t (
@@ -453,6 +455,12 @@ func TestImportStmt(t *testing.T) {
 	`), 0666); err != nil {
 		t.Fatal(err)
 	}
+
+	if err := ioutil.WriteFile(filepath.Join(dir, "empty.csv"), nil, 0666); err != nil {
+		t.Fatal(err)
+	}
+	empty := []string{"'nodelocal:///empty.csv'"}
+	schema := []interface{}{"nodelocal:///table"}
 
 	files, filesWithOpts, dups := makeCSVData(t, dir, numFiles, rowsPerFile)
 	expectedRows := numFiles * rowsPerFile
@@ -468,7 +476,7 @@ func TestImportStmt(t *testing.T) {
 		{
 			"schema-in-file",
 			`IMPORT TABLE t CREATE USING $1 CSV DATA (%s) WITH temp = $2`,
-			[]interface{}{fmt.Sprintf("nodelocal://%s", tablePath)},
+			schema,
 			files,
 			`WITH temp = %s, transform_only`,
 			"",
@@ -476,7 +484,7 @@ func TestImportStmt(t *testing.T) {
 		{
 			"schema-in-file-intodb",
 			`IMPORT TABLE t CREATE USING $1 CSV DATA (%s) WITH temp = $2, into_db = 'csv1'`,
-			[]interface{}{fmt.Sprintf("nodelocal://%s", tablePath)},
+			schema,
 			files,
 			`WITH temp = %s, transform_only`,
 			"",
@@ -500,7 +508,7 @@ func TestImportStmt(t *testing.T) {
 		{
 			"schema-in-file-dist",
 			`IMPORT TABLE t CREATE USING $1 CSV DATA (%s) WITH temp = $2, distributed`,
-			[]interface{}{fmt.Sprintf("nodelocal://%s", tablePath)},
+			schema,
 			files,
 			`WITH distributed, temp = %s, transform_only`,
 			"",
@@ -527,6 +535,22 @@ func TestImportStmt(t *testing.T) {
 			nil,
 			filesWithOpts,
 			`WITH comment = '#', delimiter = '|', distributed, "nullif" = '', temp = %s, transform_only`,
+			"",
+		},
+		{
+			"empty-file",
+			`IMPORT TABLE t CREATE USING $1 CSV DATA (%s) WITH temp = $2`,
+			schema,
+			empty,
+			`WITH temp = %s, transform_only`,
+			"",
+		},
+		{
+			"empty-with-files",
+			`IMPORT TABLE t CREATE USING $1 CSV DATA (%s) WITH temp = $2`,
+			schema,
+			append(empty, files...),
+			`WITH temp = %s, transform_only`,
 			"",
 		},
 		// NB: successes above, failures below, because we check the i-th job.
@@ -565,7 +589,7 @@ func TestImportStmt(t *testing.T) {
 		{
 			"primary-key-dup",
 			`IMPORT TABLE t CREATE USING $1 CSV DATA (%s) WITH temp = $2, distributed`,
-			[]interface{}{fmt.Sprintf("nodelocal://%s", tablePath)},
+			schema,
 			dups,
 			``,
 			"primary or unique index has duplicate keys",
@@ -573,41 +597,40 @@ func TestImportStmt(t *testing.T) {
 		{
 			"no-database",
 			`IMPORT TABLE t CREATE USING $1 CSV DATA (%s) WITH temp = $2, into_db = 'nonexistent'`,
-			[]interface{}{fmt.Sprintf("nodelocal://%s", tablePath)},
+			schema,
 			files,
 			``,
 			`database does not exist: "nonexistent"`,
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			sqlDB := sqlutils.MakeSQLRunner(t, conn)
-			sqlDB.Exec(fmt.Sprintf(`CREATE DATABASE csv%d`, i))
-			sqlDB.Exec(fmt.Sprintf(`SET DATABASE = csv%d`, i))
+			sqlDB := sqlutils.MakeSQLRunner(conn)
+			sqlDB.Exec(t, fmt.Sprintf(`CREATE DATABASE csv%d`, i))
+			sqlDB.Exec(t, fmt.Sprintf(`SET DATABASE = csv%d`, i))
 
 			var unused string
 			var restored struct {
 				rows, idx, sys, bytes int
 			}
 
-			backupPath := fmt.Sprintf("nodelocal://%s", filepath.Join(dir, t.Name()))
+			backupPath := fmt.Sprintf("nodelocal:///%d", i)
 			if strings.Contains(tc.query, "temp = $") {
 				tc.args = append(tc.args, backupPath)
 			}
 
 			var result int
-			if err := sqlDB.DB.QueryRow(
-				fmt.Sprintf(tc.query, strings.Join(tc.files, ", ")), tc.args...,
-			).Scan(
+			query := fmt.Sprintf(tc.query, strings.Join(tc.files, ", "))
+			if err := sqlDB.DB.QueryRow(query, tc.args...).Scan(
 				&unused, &unused, &unused, &restored.rows, &restored.idx, &restored.sys, &restored.bytes,
 			); err != nil {
 				if !testutils.IsError(err, tc.err) {
-					t.Fatal(err)
+					t.Fatalf("%s: %v", query, err)
 				}
 				return
 			}
 
 			const jobPrefix = `IMPORT TABLE t (a INT PRIMARY KEY, b STRING, INDEX (b), INDEX (a, b)) CSV DATA (%s) `
-			if err := jobutils.VerifySystemJob(sqlDB, i*2, jobs.TypeImport, jobs.Record{
+			if err := jobutils.VerifySystemJob(t, sqlDB, i*2, jobs.TypeImport, jobs.Record{
 				Username:    security.RootUser,
 				Description: fmt.Sprintf(jobPrefix+tc.jobOpts, strings.Join(tc.files, ", "), `'`+backupPath+`'`),
 			}); err != nil {
@@ -632,18 +655,26 @@ func TestImportStmt(t *testing.T) {
 				}
 			}
 
+			if len(tc.files) == 1 && tc.files[0] == empty[0] {
+				sqlDB.QueryRow(t, `SELECT count(*) FROM t`).Scan(&result)
+				if expect := 0; result != expect {
+					t.Fatalf("expected %d rows, got %d", expect, result)
+				}
+				return
+			}
+
 			if expected, actual := expectedRows, restored.rows; expected != actual {
 				t.Fatalf("expected %d rows, got %d", expected, actual)
 			}
 
 			// Verify correct number of rows via COUNT.
-			sqlDB.QueryRow(`SELECT count(*) FROM t`).Scan(&result)
+			sqlDB.QueryRow(t, `SELECT count(*) FROM t`).Scan(&result)
 			if expect := expectedRows; result != expect {
 				t.Fatalf("expected %d rows, got %d", expect, result)
 			}
 
 			// Verify correct number of NULLs via COUNT.
-			sqlDB.QueryRow(`SELECT count(*) FROM t WHERE b IS NULL`).Scan(&result)
+			sqlDB.QueryRow(t, `SELECT count(*) FROM t WHERE b IS NULL`).Scan(&result)
 			expectedNulls := 0
 			if strings.Contains(tc.query, "nullif") {
 				expectedNulls = expectedRows / 4
@@ -663,9 +694,9 @@ func BenchmarkImport(b *testing.B) {
 	ctx := context.Background()
 	tc := testcluster.StartTestCluster(b, nodes, base.TestClusterArgs{})
 	defer tc.Stopper().Stop(ctx)
-	sqlDB := sqlutils.MakeSQLRunner(b, tc.Conns[0])
+	sqlDB := sqlutils.MakeSQLRunner(tc.Conns[0])
 
-	sqlDB.Exec(`SET CLUSTER SETTING experimental.importcsv.enabled = true`)
+	sqlDB.Exec(b, `SET CLUSTER SETTING experimental.importcsv.enabled = true`)
 
 	dir, cleanup := testutils.TempDir(b)
 	defer cleanup()
@@ -674,7 +705,7 @@ func BenchmarkImport(b *testing.B) {
 
 	b.ResetTimer()
 
-	sqlDB.Exec(
+	sqlDB.Exec(b,
 		fmt.Sprintf(
 			`IMPORT TABLE t (a INT PRIMARY KEY, b STRING, INDEX (b), INDEX (a, b))
 			CSV DATA (%s) WITH temp = $1, distributed, transform_only`,
@@ -731,7 +762,7 @@ func BenchmarkConvertRecord(b *testing.B) {
 	if err != nil {
 		b.Fatal(err)
 	}
-	create := stmt.(*parser.CreateTable)
+	create := stmt.(*tree.CreateTable)
 
 	tableDesc, err := makeCSVTableDescriptor(ctx, create, sqlbase.ID(100), sqlbase.ID(100), 1)
 	if err != nil {

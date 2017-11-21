@@ -4,7 +4,7 @@
 // License (the "License"); you may not use this file except in compliance with
 // the License. You may obtain a copy of the License at
 //
-//     https://github.com/cockroachdb/cockroach/blob/master/LICENSE
+//     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
 
 package storageccl
 
@@ -15,6 +15,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/batcheval"
+	"github.com/cockroachdb/cockroach/pkg/storage/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
@@ -25,14 +27,14 @@ import (
 
 func init() {
 	storage.SetAddSSTableCmd(storage.Command{
-		DeclareKeys: storage.DefaultDeclareKeys,
+		DeclareKeys: batcheval.DefaultDeclareKeys,
 		Eval:        evalAddSSTable,
 	})
 }
 
 func evalAddSSTable(
-	ctx context.Context, batch engine.ReadWriter, cArgs storage.CommandArgs, _ roachpb.Response,
-) (storage.EvalResult, error) {
+	ctx context.Context, batch engine.ReadWriter, cArgs batcheval.CommandArgs, _ roachpb.Response,
+) (result.Result, error) {
 	args := cArgs.Args.(*roachpb.AddSSTableRequest)
 	h := cArgs.Header
 	ms := cArgs.Stats
@@ -52,14 +54,14 @@ func evalAddSSTable(
 	defer existingIter.Close()
 	existingIter.Seek(mvccStartKey)
 	if ok, err := existingIter.Valid(); err != nil {
-		return storage.EvalResult{}, errors.Wrap(err, "computing existing stats")
+		return result.Result{}, errors.Wrap(err, "computing existing stats")
 	} else if ok && existingIter.UnsafeKey().Less(mvccEndKey) {
 		log.Eventf(ctx, "target key range not empty, will merge existing data with sstable")
 	}
 	// This ComputeStats is cheap if the span is empty.
 	existingStats, err := existingIter.ComputeStats(mvccStartKey, mvccEndKey, h.Timestamp.WallTime)
 	if err != nil {
-		return storage.EvalResult{}, errors.Wrap(err, "computing existing stats")
+		return result.Result{}, errors.Wrap(err, "computing existing stats")
 	}
 	ms.Subtract(existingStats)
 
@@ -69,11 +71,11 @@ func evalAddSSTable(
 	stats, err := verifySSTable(
 		existingIter, args.Data, mvccStartKey, mvccEndKey, h.Timestamp.WallTime)
 	if err != nil {
-		return storage.EvalResult{}, errors.Wrap(err, "verifying sstable data")
+		return result.Result{}, errors.Wrap(err, "verifying sstable data")
 	}
 	ms.Add(stats)
 
-	return storage.EvalResult{
+	return result.Result{
 		Replicated: storagebase.ReplicatedEvalResult{
 			AddSSTable: &storagebase.ReplicatedEvalResult_AddSSTable{
 				Data:  args.Data,

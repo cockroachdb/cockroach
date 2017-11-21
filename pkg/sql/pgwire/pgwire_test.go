@@ -689,7 +689,7 @@ func TestPGPreparedQuery(t *testing.T) {
 			baseTest.Results("users", "primary", true, 1, "username", "ASC", false, false),
 		},
 		"SHOW TABLES FROM system": {
-			baseTest.Results("descriptor").Others(10),
+			baseTest.Results("descriptor").Others(11),
 		},
 		"SHOW CONSTRAINTS FROM system.users": {
 			baseTest.Results("users", "primary", "PRIMARY KEY", "username", gosql.NullString{}),
@@ -857,6 +857,9 @@ func TestPGPreparedQuery(t *testing.T) {
 		},
 		"SELECT $1::INET": {
 			baseTest.SetArgs("192.168.0.1/32").Results("192.168.0.1"),
+		},
+		"SELECT $1::TIME": {
+			baseTest.SetArgs("12:00:00").Results("0000-01-01T12:00:00Z"),
 		},
 		"SELECT $1:::FLOAT[]": {
 			baseTest.SetArgs("{}").Results("{}"),

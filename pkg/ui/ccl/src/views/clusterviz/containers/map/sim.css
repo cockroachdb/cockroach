@@ -1,0 +1,255 @@
+/* Copyright 2017 The Cockroach Authors.
+ *
+ * Licensed under the Cockroach Community Licence (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
+ */
+@import
+url('https://fonts.googleapis.com/css?family=Lato:400,700');
+
+.map-background {
+    width: 100%;
+    height: 100%;
+    fill: lavender;
+}
+
+.btn-addnode {
+}
+
+.btn-addapp {
+}
+
+.btn-restart {
+    float: right;
+}
+
+.range {
+    stroke: #f00;
+    stroke-width: 0px;
+}
+
+.node {
+    stroke: #333;
+    stroke-width: 1px;
+}
+
+.backoff {
+    stroke: #f00;
+    stroke-dasharray: 3,3;
+}
+
+.locality {
+    stroke: #66a;
+    stroke-width: 1.5px;
+    fill: #fff;
+    fill-opacity: 0.6;
+}
+
+.locality-label {
+    fill: white;
+    stroke-width: 0px;
+    font-size: 10px;
+    font-weight: bold;
+    alignment-baseline: middle;
+    text-anchor: middle;
+    pointer-events: none;
+}
+
+.locality-label-background {
+    fill: #595f6c;
+    stroke-width: 0px;
+}
+
+.current-locality {
+    fill: black;
+    font-size: 24px;
+    font-weight: bold;
+}
+
+.status-ring {
+    fill: none;
+    stroke-width: 2px;
+}
+
+.status-ring.available {
+    opacity: 0;
+    visibility: hidden;
+    stroke: #82cc00;
+}
+
+.status-ring.mixed {
+    opacity: 0.5;
+    visibility: visible;
+    stroke: #d9cc4f;
+}
+
+.status-ring.unavailable {
+    opacity: 0.5;
+    visibility: visible;
+    stroke: #d95d4f;
+}
+
+.capacity-background {
+    fill: #daeefa;
+    stroke: #51bbfd;
+    stroke-width: 0.25px;
+}
+
+.capacity-used {
+    fill: #51bbfd;
+    stroke: #daeefa;
+    stroke-width: 0.25px;
+}
+
+.capacity-used.detail {
+    fill: #daeefa;
+    stroke: #51bbfd;
+    stroke-width: 0.5px;
+}
+
+.capacity-used.detail.highlight {
+    fill: #51bbfd;
+    stroke: #daeefa;
+}
+
+.arc-label .guide {
+    stroke: #000;
+    stroke-width: 0.5px;
+}
+
+.arc-label text {
+    fill: #152849;
+    stroke-width: 0px;
+    font-size: 8px;
+    font-weight: bold;
+    text-anchor: middle;
+}
+
+.capacity-label {
+    fill: #5abbfd;
+    stroke-width: 0px;
+    font-size: 8px;
+    font-weight: bold;
+    text-anchor: start;
+}
+
+.capacity-used-label {
+    fill: #51bbfd;
+    stroke-width: 0px;
+    font-size: 8px;
+    font-weight: bold;
+}
+
+.capacity-used-pct-label {
+    fill: #51bbfd;
+    stroke-width: 0px;
+    font-size: 24px;
+    font-weight: medium;
+    alignment-baseline: middle;
+    text-anchor: middle;
+}
+
+.capacity-used-text {
+    fill: #595f6c;
+    stroke-width: 0px;
+    font-size: 7px;
+    font-weight: bold;
+    alignmnent-baseline: middle;
+    text-anchor: middle;
+}
+
+.client-activity {
+    stroke: #d95d4f;
+    stroke-linecap: round;
+    stroke-width: 4px;
+}
+
+.client-activity-label {
+    fill: #d95d4f;
+    stroke-width: 0px;
+    font-size: 8px;
+    font-weight: bold;
+    dominant-baseline: central;
+}
+
+.network-activity {
+    stroke: #152849;
+    stroke-linecap: round;
+    stroke-width: 4px;
+}
+
+.network-activity-label {
+    fill: #152849;
+    stroke-width: 0px;
+    font-size: 8px;
+    font-weight: bold;
+    dominant-baseline: central;
+}
+
+.locality-link {
+    stroke: #ccc;
+    stroke-width: 1.5px;
+    fill-opacity: 0;
+}
+
+.incoming-throughput-label {
+    fill: #8833cc;
+    stroke-width: 0px;
+    font-size: 8px;
+    text-anchor: end;
+}
+
+.outgoing-throughput-label {
+    fill: #82cc00;
+    stroke-width: 0px;
+    font-size: 8px;
+    text-anchor: end;
+    alignment-baseline: hanging;
+}
+
+.rtt-label {
+    fill: #152849;
+    stroke-width: 0px;
+    font-size: 8px;
+    text-anchor: start;
+    alignment-baseline: middle;
+}
+
+.expand-label {
+    fill: #595f6c;
+    stroke-width: 0px;
+    font-size: 10px;
+    font-weight: bold;
+    text-anchor: middle;
+}
+
+.node-unreachable {
+    fill: #f00;
+    fill-opacity: 0.1;
+}
+
+.node-full {
+    fill: #f00;
+    fill-opacity: 0.2;
+}
+
+.request {
+}
+
+.link {
+    stroke: #ccc;
+    stroke-width: 0px;
+}
+
+.route {
+    stroke: #ccc;
+    stroke-width: 0px;
+}
+
+.geopath {
+    fill: #f7f7ff;
+    stroke: #ccc;
+    stroke-width: .5px;
+}

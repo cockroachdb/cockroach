@@ -71,6 +71,7 @@ type Settings struct {
 
 	Tracer             *tracing.Tracer
 	BulkIOWriteLimiter *rate.Limiter
+	ExternalIODir      string
 
 	Initialized bool
 }

@@ -4,7 +4,7 @@
 // License (the "License"); you may not use this file except in compliance with
 // the License. You may obtain a copy of the License at
 //
-//     https://github.com/cockroachdb/cockroach/blob/master/LICENSE
+//     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
 
 package sqlccl
 
@@ -29,8 +29,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/jobs"
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
@@ -73,26 +74,33 @@ func loadBackupDescs(
 }
 
 func selectTargets(
-	p sql.PlanHookState, backupDescs []BackupDescriptor, targets parser.TargetList,
+	p sql.PlanHookState, backupDescs []BackupDescriptor, targets tree.TargetList,
 ) ([]sqlbase.Descriptor, []*sqlbase.DatabaseDescriptor, error) {
 	sessionDatabase := p.EvalContext().Database
 	lastBackupDesc := backupDescs[len(backupDescs)-1]
-	sqlDescs, dbs, err := descriptorsMatchingTargets(sessionDatabase, lastBackupDesc.Descriptors, targets)
+	matched, err := descriptorsMatchingTargets(sessionDatabase, lastBackupDesc.Descriptors, targets)
 	if err != nil {
 		return nil, nil, err
 	}
 
 	seenTable := false
-	for _, desc := range sqlDescs {
+	for _, desc := range matched.descs {
 		if desc.GetTable() != nil {
 			seenTable = true
+			break
 		}
 	}
 	if !seenTable {
-		return nil, nil, errors.Errorf("no tables found: %s", parser.AsString(targets))
+		return nil, nil, errors.Errorf("no tables found: %s", tree.AsString(targets))
 	}
 
-	return sqlDescs, dbs, nil
+	if lastBackupDesc.FormatVersion >= BackupFormatDescriptorTrackingVersion {
+		if err := matched.checkExpansions(lastBackupDesc.CompleteDbs); err != nil {
+			return nil, nil, err
+		}
+	}
+
+	return matched.descs, matched.requestedDBs, nil
 }
 
 // allocateTableRewrites determines the new ID and parentID (a "TableRewrite")
@@ -143,9 +151,7 @@ func allocateTableRewrites(
 			if index.ForeignKey.IsSet() {
 				to := index.ForeignKey.Table
 				if _, ok := tablesByID[to]; !ok {
-					if _, ok := opts[restoreOptSkipMissingFKs]; ok {
-						index.ForeignKey = sqlbase.ForeignKeyReference{}
-					} else {
+					if _, ok := opts[restoreOptSkipMissingFKs]; !ok {
 						return errors.Errorf(
 							"cannot restore table %q without referenced table %d (or %q option)",
 							table.Name, to, restoreOptSkipMissingFKs,
@@ -325,10 +331,12 @@ func rewriteTableDescs(tables []*sqlbase.TableDescriptor, tableRewrites tableRew
 				to := index.ForeignKey.Table
 				if indexRewrite, ok := tableRewrites[to]; ok {
 					index.ForeignKey.Table = indexRewrite.TableID
+				} else {
+					// If indexRewrite doesn't exist, the user has specified
+					// restoreOptSkipMissingFKs. Error checking in the case the user hasn't has
+					// already been done in allocateTableRewrites.
+					index.ForeignKey = sqlbase.ForeignKeyReference{}
 				}
-				// If indexRewrite doesn't exist, either the user has specified
-				// restoreOptSkipMissingFKs, or we've already errored in
-				// allocateTableRewrites. Move on.
 
 				// TODO(dt): if there is an existing (i.e. non-restoring) table with
 				// a db and name matching the one the FK pointed to at backup, should
@@ -752,12 +760,12 @@ func restoreTableDescs(
 	return errors.Wrap(err, "restoring table desc and namespace entries")
 }
 
-func restoreJobDescription(restore *parser.Restore, from []string) (string, error) {
-	r := &parser.Restore{
+func restoreJobDescription(restore *tree.Restore, from []string) (string, error) {
+	r := &tree.Restore{
 		AsOf:    restore.AsOf,
 		Options: restore.Options,
 		Targets: restore.Targets,
-		From:    make(parser.Exprs, len(restore.From)),
+		From:    make(tree.Exprs, len(restore.From)),
 	}
 
 	for i, f := range from {
@@ -765,10 +773,10 @@ func restoreJobDescription(restore *parser.Restore, from []string) (string, erro
 		if err != nil {
 			return "", err
 		}
-		r.From[i] = parser.NewDString(sf)
+		r.From[i] = tree.NewDString(sf)
 	}
 
-	return parser.AsStringWithFlags(r, parser.FmtSimpleQualified), nil
+	return tree.AsStringWithFlags(r, tree.FmtSimpleQualified), nil
 }
 
 // restore imports a SQL table (or tables) from sets of non-overlapping sstable
@@ -1016,19 +1024,19 @@ func restore(
 }
 
 var restoreHeader = sqlbase.ResultColumns{
-	{Name: "job_id", Typ: parser.TypeInt},
-	{Name: "status", Typ: parser.TypeString},
-	{Name: "fraction_completed", Typ: parser.TypeFloat},
-	{Name: "rows", Typ: parser.TypeInt},
-	{Name: "index_entries", Typ: parser.TypeInt},
-	{Name: "system_records", Typ: parser.TypeInt},
-	{Name: "bytes", Typ: parser.TypeInt},
+	{Name: "job_id", Typ: types.Int},
+	{Name: "status", Typ: types.String},
+	{Name: "fraction_completed", Typ: types.Float},
+	{Name: "rows", Typ: types.Int},
+	{Name: "index_entries", Typ: types.Int},
+	{Name: "system_records", Typ: types.Int},
+	{Name: "bytes", Typ: types.Int},
 }
 
 func restorePlanHook(
-	stmt parser.Statement, p sql.PlanHookState,
-) (func(context.Context, chan<- parser.Datums) error, sqlbase.ResultColumns, error) {
-	restoreStmt, ok := stmt.(*parser.Restore)
+	stmt tree.Statement, p sql.PlanHookState,
+) (func(context.Context, chan<- tree.Datums) error, sqlbase.ResultColumns, error) {
+	restoreStmt, ok := stmt.(*tree.Restore)
 	if !ok {
 		return nil, nil, nil
 	}
@@ -1052,7 +1060,7 @@ func restorePlanHook(
 		return nil, nil, err
 	}
 
-	fn := func(ctx context.Context, resultsCh chan<- parser.Datums) error {
+	fn := func(ctx context.Context, resultsCh chan<- tree.Datums) error {
 		// TODO(dan): Move this span into sql.
 		ctx, span := tracing.ChildSpan(ctx, stmt.StatementTag())
 		defer tracing.FinishSpan(span)
@@ -1083,12 +1091,12 @@ func restorePlanHook(
 
 func doRestorePlan(
 	ctx context.Context,
-	restoreStmt *parser.Restore,
+	restoreStmt *tree.Restore,
 	p sql.PlanHookState,
 	from []string,
 	endTime hlc.Timestamp,
 	opts map[string]string,
-	resultsCh chan<- parser.Datums,
+	resultsCh chan<- tree.Datums,
 ) error {
 	if err := restoreStmt.Targets.NormalizeTablesWithDatabase(p.EvalContext().Database); err != nil {
 		return err
@@ -1101,6 +1109,7 @@ func doRestorePlan(
 	if err != nil {
 		return err
 	}
+
 	tableRewrites, err := allocateTableRewrites(ctx, p, sqlDescs, restoreDBs, opts)
 	if err != nil {
 		return err
@@ -1141,14 +1150,14 @@ func doRestorePlan(
 		return restoreErr
 	}
 	// TODO(benesch): emit periodic progress updates.
-	resultsCh <- parser.Datums{
-		parser.NewDInt(parser.DInt(*job.ID())),
-		parser.NewDString(string(jobs.StatusSucceeded)),
-		parser.NewDFloat(parser.DFloat(1.0)),
-		parser.NewDInt(parser.DInt(res.Rows)),
-		parser.NewDInt(parser.DInt(res.IndexEntries)),
-		parser.NewDInt(parser.DInt(res.SystemRecords)),
-		parser.NewDInt(parser.DInt(res.DataSize)),
+	resultsCh <- tree.Datums{
+		tree.NewDInt(tree.DInt(*job.ID())),
+		tree.NewDString(string(jobs.StatusSucceeded)),
+		tree.NewDFloat(tree.DFloat(1.0)),
+		tree.NewDInt(tree.DInt(res.Rows)),
+		tree.NewDInt(tree.DInt(res.IndexEntries)),
+		tree.NewDInt(tree.DInt(res.SystemRecords)),
+		tree.NewDInt(tree.DInt(res.DataSize)),
 	}
 	return nil
 }

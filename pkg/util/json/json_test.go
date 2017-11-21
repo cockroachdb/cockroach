@@ -17,10 +17,16 @@ package json
 import (
 	"encoding/json"
 	"fmt"
+	"math/rand"
 	"strings"
 	"testing"
 
+	"bytes"
+
+	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/util/encoding"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
 func TestJSONOrdering(t *testing.T) {
@@ -111,6 +117,41 @@ func TestJSONRoundTrip(t *testing.T) {
 		`{"a": "b", "b": 1, "c": [1, 2, {"a": 3}]}`,
 		`"🤔"`,
 		`{"🤔": "🤔"}`,
+		`"\u0000"`,
+		`"\u0001"`,
+		`"\u0002"`,
+		`"\u0003"`,
+		`"\u0004"`,
+		`"\u0005"`,
+		`"\u0006"`,
+		`"\u0007"`,
+		`"\u0008"`,
+		`"\t"`,
+		`"\n"`,
+		`"\u000b"`,
+		`"\u000c"`,
+		`"\r"`,
+		`"\u000e"`,
+		`"\u000f"`,
+		`"\u0010"`,
+		`"\u0011"`,
+		`"\u0012"`,
+		`"\u0013"`,
+		`"\u0014"`,
+		`"\u0015"`,
+		`"\u0016"`,
+		`"\u0017"`,
+		`"\u0018"`,
+		`"\u0019"`,
+		`"\u001a"`,
+		`"\u001b"`,
+		`"\u001c"`,
+		`"\u001d"`,
+		`"\u001e"`,
+		`"\u001f"`,
+		`"\uffff"`,
+		`"\\"`,
+		`"\""`,
 		// We don't expect to get any invalid UTF8, but check one anyway. We could do
 		// a validation that the input is valid UTF8, but that seems wasteful when it
 		// should be checked higher up.
@@ -283,6 +324,25 @@ func TestJSONFetch(t *testing.T) {
 					t.Fatalf("expected %s, got %s", tc.expected, result)
 				}
 			})
+		}
+	}
+}
+
+func TestJSONRandomFetch(t *testing.T) {
+	rng := rand.New(rand.NewSource(timeutil.Now().Unix()))
+	for i := 0; i < 1000; i++ {
+		// We want a big object to trigger the binary search behaviour in FetchValKey.
+		j, err := Random(1000, rng)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if obj, ok := j.(jsonObject); ok {
+			// Pick a key:
+			idx := rand.Intn(len(obj))
+			result := obj.FetchValKey(string(obj[idx].k))
+			if result.Compare(obj[idx].v) != 0 {
+				t.Fatalf("%s: expected fetching %s to give %s got %s", obj, obj[idx].k, obj[idx].v, result)
+			}
 		}
 	}
 }
@@ -515,5 +575,300 @@ func TestJSONRemoveIndex(t *testing.T) {
 				}
 			})
 		}
+	}
+}
+
+func getApdEncoding(num float64) *apd.Decimal {
+	dec := &apd.Decimal{}
+	dec, _ = dec.SetFloat64(num)
+	return dec
+}
+
+func arraySeparator(b []byte) []byte {
+	return encoding.EncodeArrayAscending(b)
+}
+
+func keyPrefix(b []byte) []byte {
+	return encoding.EncodeNotNullAscending(b)
+}
+
+func TestEncodeDecodeJSONInvertedIndex(t *testing.T) {
+	bytePrefix := make([]byte, 1, 100)
+	bytePrefix[0] = 0x0f
+
+	testCases := []struct {
+		value  string
+		expEnc [][]byte
+	}{
+		{`{"a":"b"}`, [][]byte{bytes.Join([][]byte{keyPrefix(bytePrefix),
+			encoding.EncodeStringAscending(nil, "a"), encoding.EncodeStringAscending(nil, "b")}, nil)}},
+		{`["a", "b"]`, [][]byte{bytes.Join([][]byte{arraySeparator(bytePrefix),
+			encoding.EncodeStringAscending(nil, "a")}, nil),
+			bytes.Join([][]byte{arraySeparator(bytePrefix),
+				encoding.EncodeStringAscending(nil, "b")}, nil)}},
+		{`null`, [][]byte{encoding.EncodeNullAscending(bytePrefix)}},
+		{`false`, [][]byte{encoding.EncodeFalseAscending(bytePrefix)}},
+		{`true`, [][]byte{encoding.EncodeTrueAscending(bytePrefix)}},
+		{`1.23`, [][]byte{encoding.EncodeDecimalAscending(bytePrefix, getApdEncoding(1.23))}},
+		{`"a"`, [][]byte{encoding.EncodeStringAscending(bytePrefix, "a")}},
+		{`["c", {"a":"b"}]`, [][]byte{bytes.Join([][]byte{arraySeparator(bytePrefix),
+			encoding.EncodeStringAscending(nil, "c")}, nil),
+			bytes.Join([][]byte{arraySeparator(bytePrefix),
+				keyPrefix(nil),
+				encoding.EncodeStringAscending(nil, "a"),
+				encoding.EncodeStringAscending(nil, "b")}, nil)}},
+		{`["c", {"a":["c","d"]}]`, [][]byte{bytes.Join([][]byte{
+			arraySeparator(bytePrefix),
+			encoding.EncodeStringAscending(nil, "c")}, nil),
+
+			bytes.Join([][]byte{arraySeparator(bytePrefix),
+				keyPrefix(nil),
+				encoding.EncodeStringAscending(nil, "a"),
+				arraySeparator(nil),
+				encoding.EncodeStringAscending(nil, "c")}, nil),
+
+			bytes.Join([][]byte{arraySeparator(bytePrefix),
+				keyPrefix(nil),
+				encoding.EncodeStringAscending(nil, "a"),
+				arraySeparator(nil),
+				encoding.EncodeStringAscending(nil, "d")}, nil)}},
+
+		{`{"a":"b","e":"f"}`, [][]byte{
+			bytes.Join([][]byte{keyPrefix(bytePrefix),
+				encoding.EncodeStringAscending(nil, "a"), encoding.EncodeStringAscending(nil, "b")}, nil),
+
+			bytes.Join([][]byte{keyPrefix(bytePrefix),
+				encoding.EncodeStringAscending(nil, "e"), encoding.EncodeStringAscending(nil, "f")}, nil),
+		}},
+	}
+
+	for _, c := range testCases {
+		enc := jsonTestShorthand(c.value).EncodeInvertedIndexKeys(bytePrefix)
+		for j, path := range enc {
+			if !bytes.Equal(path, c.expEnc[j]) {
+				t.Errorf("unexpected encoding mismatch for %v. expected [%#v], got [%#v]",
+					c.value, c.expEnc[j], path)
+			}
+		}
+
+	}
+}
+
+func TestJSONRandomRoundTrip(t *testing.T) {
+	rng := rand.New(rand.NewSource(timeutil.Now().Unix()))
+	for i := 0; i < 1000; i++ {
+		j, err := Random(20, rng)
+		if err != nil {
+			t.Fatal(err)
+		}
+		j2, err := ParseJSON(j.String())
+		if err != nil {
+			t.Fatal(err)
+		}
+		if j.Compare(j2) != 0 {
+			t.Fatalf("%s did not round-trip, got %s", j.String(), j2.String())
+		}
+	}
+}
+
+func TestJSONContains(t *testing.T) {
+	cases := map[string][]struct {
+		other    string
+		expected bool
+	}{
+		`10`: {
+			{`10`, true},
+			{`9`, false},
+		},
+		`[1, 2, 3]`: {
+			{`{}`, false},
+			{`[]`, true},
+			{`[1]`, true},
+			{`[1.0]`, true},
+			{`[1.00]`, true},
+			{`[1, 2]`, true},
+			{`[1, 2, 2]`, true},
+			{`[2, 1]`, true},
+			{`[1, 4]`, false},
+			{`[4, 1]`, false},
+			{`[4]`, false},
+			// This is a unique, special case that only applies to arrays and
+			// scalars.
+			{`1`, true},
+			{`2`, true},
+			{`3`, true},
+			{`4`, false},
+		},
+		`[[1, 2], 3]`: {
+			{`[1, 2]`, false},
+			{`[[1, 2]]`, true},
+			{`[[2, 1]]`, true},
+			{`[3, [1, 2]]`, true},
+			{`[[1, 2], 3]`, true},
+			{`[[1], [2], 3]`, true},
+			{`[[1], 3]`, true},
+			{`[[2]]`, true},
+			{`[[3]]`, false},
+		},
+		`[]`: {
+			{`[]`, true},
+			{`[1]`, false},
+			{`1`, false},
+			{`{}`, false},
+		},
+		`{}`: {
+			{`{}`, true},
+			{`1`, false},
+			{`{"a":"b"}`, false},
+			{`{"":""}`, false},
+		},
+		`[[1, 2], [3, 4]]`: {
+			{`[[1, 2]]`, true},
+			{`[[3, 4]]`, true},
+			{`[[3, 4, 5]]`, false},
+			{`[[1, 3]]`, false},
+			{`[[2, 4]]`, false},
+			{`[1]`, false},
+			{`[1, 2]`, false},
+		},
+		`{"a": "b", "c": "d"}`: {
+			{`{}`, true},
+			{`{"a": "b"}`, true},
+			{`{"c": "d"}`, true},
+			{`{"a": "b", "c": "d"}`, true},
+			{`{"a": "x"}`, false},
+			{`{"c": "x"}`, false},
+			{`{"y": "x"}`, false},
+			{`{"a": "b", "c": "x"}`, false},
+			{`{"a": "x", "c": "y"}`, false},
+		},
+		`{"a": [1, 2, 3], "c": {"foo": "bar"}}`: {
+			{`{}`, true},
+			{`{"a": [1, 2, 3], "c": {"foo": "bar"}}`, true},
+			{`{"a": [1, 2]}`, true},
+			{`{"a": [2, 1]}`, true},
+			{`{"a": []}`, true},
+			{`{"a": [4]}`, false},
+			{`{"a": [3], "c": {}}`, true},
+			{`{"a": [4], "c": {}}`, false},
+			{`{"a": [3], "c": {"foo": "gup"}}`, false},
+		},
+		`[{"a": 1}, {"b": 2, "c": 3}, [1], true, false, null, "hello"]`: {
+			{`[]`, true},
+			{`{}`, false},
+			{`{"a": 1}`, false},
+			{`[{"a": 1}]`, true},
+			{`[{"b": 2}]`, true},
+			{`[{"b": 2, "d": 4}]`, false},
+			{`[{"b": 2, "c": 3}]`, true},
+			{`[{"a": 1}, {"b": 2}, {"c": 3}]`, true},
+			{`[{}]`, true},
+			{`[true]`, true},
+			{`[true, false]`, true},
+			{`[false, true]`, true},
+			{`[[1]]`, true},
+			{`[[]]`, true},
+			{`[null, "hello"]`, true},
+			{`["hello", "hello", []]`, true},
+			{`["hello", {"a": 1}, "hello", []]`, true},
+			{`["hello", {"a": 1, "b": 2}, "hello", []]`, false},
+		},
+	}
+
+	for k, tests := range cases {
+		left, err := ParseJSON(k)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		for _, tc := range tests {
+			t.Run(fmt.Sprintf("%s @> %s", k, tc.other), func(t *testing.T) {
+				other, err := ParseJSON(tc.other)
+				if err != nil {
+					t.Fatal(err)
+				}
+				result := Contains(left, other)
+
+				checkResult := left.(containsTester).slowContains(other)
+				if result != checkResult {
+					t.Fatal("mismatch between actual contains and slowContains")
+				}
+
+				if tc.expected && !result {
+					t.Fatalf("expected %s @> %s", left, other)
+				} else if !tc.expected && result {
+					t.Fatalf("expected %s to not @> %s", left, other)
+				}
+			})
+		}
+	}
+}
+
+// TestPositiveRandomJSONContains randomly generates a JSON document, generates
+// a subdocument of it, then verifies that it matches under contains.
+func TestPositiveRandomJSONContains(t *testing.T) {
+	rng := rand.New(rand.NewSource(timeutil.Now().Unix()))
+	for i := 0; i < 1000; i++ {
+		j, err := Random(20, rng)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		subdoc := j.(containsTester).subdocument(true /* isRoot */, rng)
+
+		if !Contains(j, subdoc) {
+			t.Fatal(fmt.Sprintf("%s should contain %s", j, subdoc))
+		}
+		if !j.(containsTester).slowContains(subdoc) {
+			t.Fatal(fmt.Sprintf("%s should slowContains %s", j, subdoc))
+		}
+	}
+}
+
+// We expect that this almost always results in a non-contained pair..
+func TestNegativeRandomJSONContains(t *testing.T) {
+	rng := rand.New(rand.NewSource(timeutil.Now().Unix()))
+	for i := 0; i < 1000; i++ {
+		j1, err := Random(20, rng)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		j2, err := Random(20, rng)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		realResult := Contains(j1, j2)
+		slowResult := j1.(containsTester).slowContains(j2)
+		if realResult != slowResult {
+			t.Fatal("mismatch for document " + j1.String() + " @> " + j2.String())
+		}
+	}
+}
+
+func BenchmarkFetchKey(b *testing.B) {
+	for _, objectSize := range []int{1, 10, 100, 1000} {
+		b.Run(fmt.Sprintf("object size %d", objectSize), func(b *testing.B) {
+			keys := make([]string, objectSize)
+
+			obj := make(map[string]interface{})
+			for i := 0; i < objectSize; i++ {
+				key := fmt.Sprintf("key%d", i)
+				keys = append(keys, key)
+				obj[key] = i
+			}
+			j, err := MakeJSON(obj)
+			if err != nil {
+				b.Fatal(err)
+			}
+
+			// TODO(justin): add benchmarks for fetching from still-encoded objects.
+			b.Run("fetch key", func(b *testing.B) {
+				for i := 0; i < b.N; i++ {
+					j.FetchValKey(keys[rand.Intn(len(keys))])
+				}
+			})
+		})
 	}
 }

@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/ipaddr"
+	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -53,18 +54,20 @@ func TestDumpRow(t *testing.T) {
 		s string,
 		b bytes,
 		d date,
-		t timestamp,
+		t time,
+		ts timestamp,
 		n interval,
 		o bool,
 		e decimal,
 		u uuid,
 		ip inet,
+		j JSON,
 		ary string[],
 		tz timestamptz,
 		e1 decimal(2),
 		e2 decimal(2, 1),
 		s1 string(1),
-		FAMILY "primary" (i, f, d, t, n, o, u, ip, ary, tz, e1, e2, s1, rowid),
+		FAMILY "primary" (i, f, d, t, ts, n, o, u, ip, j, ary, tz, e1, e2, s1, rowid),
 		FAMILY fam_1_s (s),
 		FAMILY fam_2_b (b),
 		FAMILY fam_3_e (e)
@@ -73,12 +76,16 @@ func TestDumpRow(t *testing.T) {
 		1,
 		2.3,
 		'striiing',
-		'\x613162326333', '2016-03-26', '2016-01-25 10:10:10' ,
+		'\x613162326333',
+		'2016-03-26',
+		'01:02:03.456',
+		'2016-01-25 10:10:10',
 		'2h30m30s',
 		true,
 		1.2345,
 		'e9716c74-2638-443d-90ed-ffde7bea7d1d',
 		'192.168.0.1',
+		'{"a":"b"}',
 		ARRAY['hello','world'],
 		'2016-01-25 10:10:10',
 		3.4,
@@ -109,29 +116,31 @@ CREATE TABLE t (
 	s STRING NULL,
 	b BYTES NULL,
 	d DATE NULL,
-	t TIMESTAMP NULL,
+	t TIME NULL,
+	ts TIMESTAMP NULL,
 	n INTERVAL NULL,
 	o BOOL NULL,
 	e DECIMAL NULL,
 	u UUID NULL,
 	ip INET NULL,
+	j JSON NULL,
 	ary STRING[] NULL,
 	tz TIMESTAMP WITH TIME ZONE NULL,
 	e1 DECIMAL(2) NULL,
 	e2 DECIMAL(2,1) NULL,
 	s1 STRING(1) NULL,
-	FAMILY "primary" (i, f, d, t, n, o, u, ip, ary, tz, e1, e2, s1, rowid),
+	FAMILY "primary" (i, f, d, t, ts, n, o, u, ip, j, ary, tz, e1, e2, s1, rowid),
 	FAMILY fam_1_s (s),
 	FAMILY fam_2_b (b),
 	FAMILY fam_3_e (e)
 );
 
-INSERT INTO t (i, f, s, b, d, t, n, o, e, u, ip, ary, tz, e1, e2, s1) VALUES
-	(1, 2.3, 'striiing', '\x613162326333', '2016-03-26', '2016-01-25 10:10:10+00:00', '2h30m30s', true, 1.2345, 'e9716c74-2638-443d-90ed-ffde7bea7d1d', '192.168.0.1', ARRAY['hello':::STRING,'world':::STRING], '2016-01-25 10:10:10+00:00', 3, 4.5, 's'),
-	(NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL),
-	(NULL, '+Inf', NULL, NULL, NULL, NULL, NULL, NULL, 'Infinity', NULL, NULL, NULL, NULL, NULL, NULL, NULL),
-	(NULL, '-Inf', NULL, NULL, NULL, NULL, NULL, NULL, '-Infinity', NULL, NULL, NULL, NULL, NULL, NULL, NULL),
-	(NULL, 'NaN', NULL, NULL, NULL, NULL, NULL, NULL, 'NaN', NULL, NULL, NULL, NULL, NULL, NULL, NULL);
+INSERT INTO t (i, f, s, b, d, t, ts, n, o, e, u, ip, j, ary, tz, e1, e2, s1) VALUES
+	(1, 2.3, 'striiing', '\x613162326333', '2016-03-26', '01:02:03.456', '2016-01-25 10:10:10+00:00', '2h30m30s', true, 1.2345, 'e9716c74-2638-443d-90ed-ffde7bea7d1d', '192.168.0.1', '{"a":"b"}', ARRAY['hello':::STRING,'world':::STRING], '2016-01-25 10:10:10+00:00', 3, 4.5, 's'),
+	(NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL),
+	(NULL, '+Inf', NULL, NULL, NULL, NULL, NULL, NULL, NULL, 'Infinity', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL),
+	(NULL, '-Inf', NULL, NULL, NULL, NULL, NULL, NULL, NULL, '-Infinity', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL),
+	(NULL, 'NaN', NULL, NULL, NULL, NULL, NULL, NULL, NULL, 'NaN', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL);
 `
 
 	if out != expect {
@@ -363,6 +372,7 @@ func TestDumpRandom(t *testing.T) {
 			b bytes,
 			u uuid,
 			ip inet,
+			j json,
 			PRIMARY KEY (rowid, i, f, d, m, n, o, e, s, b, u, ip)
 		);
 	`, nil); err != nil {
@@ -423,6 +433,10 @@ func TestDumpRandom(t *testing.T) {
 			}
 
 			ip := ipaddr.RandIPAddr(rnd)
+			j, err := json.Random(20, rnd)
+			if err != nil {
+				t.Fatal(err)
+			}
 
 			vals := []driver.Value{
 				_i,
@@ -437,15 +451,16 @@ func TestDumpRandom(t *testing.T) {
 				b,
 				[]byte(u.String()),
 				[]byte(ip.String()),
+				[]byte(j.String()),
 			}
-			if err := conn.Exec("INSERT INTO d.t VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)", vals); err != nil {
+			if err := conn.Exec("INSERT INTO d.t VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)", vals); err != nil {
 				t.Fatal(err)
 			}
 			generatedRows = append(generatedRows, vals[1:])
 		}
 
 		check := func(table string) {
-			q := fmt.Sprintf("SELECT i, f, d, m, n, o, e, s, b, u, ip FROM %s ORDER BY rowid", table)
+			q := fmt.Sprintf("SELECT i, f, d, m, n, o, e, s, b, u, ip, j FROM %s ORDER BY rowid", table)
 			nrows, err := conn.Query(q, nil)
 			if err != nil {
 				t.Fatal(err)

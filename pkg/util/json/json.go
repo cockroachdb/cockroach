@@ -22,12 +22,12 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-	"unicode"
+	"unicode/utf8"
 	"unsafe"
 
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-	"github.com/cockroachdb/cockroach/pkg/util/stringencoding"
+	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 )
 
 type jsonType int
@@ -55,6 +55,10 @@ type JSON interface {
 	// Size returns the size of the JSON document in bytes.
 	Size() uintptr
 
+	// EncodeInvertedIndexKeys takes in a key prefix and returns a slice of inverted index keys,
+	// one per path through the receiver.
+	EncodeInvertedIndexKeys(b []byte) [][]byte
+
 	// FetchValKey implements the `->` operator for strings, returning nil if the
 	// key is not found.
 	FetchValKey(key string) JSON
@@ -74,11 +78,25 @@ type JSON interface {
 	// RemoveIndex implements the `-` operator for ints.
 	RemoveIndex(idx int) (JSON, error)
 
-	// AsText returns the JSON document as a string, with quotes around strings removed.
-	AsText() string
+	// AsText returns the JSON document as a string, with quotes around strings removed, and null as nil.
+	AsText() *string
 
 	// Exists implements the `?` operator.
 	Exists(string) bool
+
+	// isScalar returns whether the JSON document is null, true, false, a string,
+	// or a number.
+	isScalar() bool
+
+	// preprocessForContains converts a JSON document to an internal interface
+	// which is used to efficiently implement the @> operator.
+	preprocessForContains() containsable
+
+	// encode appends the encoding of the JSON document to appendTo, returning
+	// the result alongside the JEntry for the document. Note that some values
+	// (true/false/null) are encoded with 0 bytes and are purely defined by their
+	// JEntry.
+	encode(appendTo []byte) (jEntry uint32, b []byte, err error)
 }
 
 type jsonTrue struct{}
@@ -105,6 +123,9 @@ type jsonKeyValuePair struct {
 	k jsonString
 	v JSON
 }
+
+// jsonObject represents a JSON object as a sorted-by-key list of key-value
+// pairs, which are unique by key.
 type jsonObject []jsonKeyValuePair
 
 func (jsonNull) jsonType() jsonType   { return nullJSONType }
@@ -231,22 +252,64 @@ func (j jsonNumber) String() string { return asString(j) }
 func (j jsonArray) String() string  { return asString(j) }
 func (j jsonObject) String() string { return asString(j) }
 
-// encodeJSONString writes a string literal to buf as a JSON string.
-// Very similar to encodeSQLStringInsideArray. Primary difference is that it is
-// legal to directly print out unicode characters.
-func encodeJSONString(buf *bytes.Buffer, in string) {
-	buf.WriteByte('"')
-	// Loop through each unicode code point.
-	for i, r := range in {
-		ch := byte(r)
-		if unicode.IsPrint(r) && !stringencoding.NeedEscape(ch) && ch != '"' {
-			// Character is printable doesn't need escaping - just print it out.
-			buf.WriteRune(r)
-		} else {
-			stringencoding.EncodeEscapedChar(buf, in, r, ch, i, '"')
-		}
-	}
+const hexAlphabet = "0123456789abcdef"
 
+// encodeJSONString writes a string literal to buf as a JSON string.
+// Cribbed from https://github.com/golang/go/blob/7badae85f20f1bce4cc344f9202447618d45d414/src/encoding/json/encode.go.
+func encodeJSONString(buf *bytes.Buffer, s string) {
+	buf.WriteByte('"')
+	start := 0
+	for i := 0; i < len(s); {
+		if b := s[i]; b < utf8.RuneSelf {
+			if safeSet[b] {
+				i++
+				continue
+			}
+			if start < i {
+				buf.WriteString(s[start:i])
+			}
+			switch b {
+			case '\\', '"':
+				buf.WriteByte('\\')
+				buf.WriteByte(b)
+			case '\n':
+				buf.WriteByte('\\')
+				buf.WriteByte('n')
+			case '\r':
+				buf.WriteByte('\\')
+				buf.WriteByte('r')
+			case '\t':
+				buf.WriteByte('\\')
+				buf.WriteByte('t')
+			default:
+				// This encodes bytes < 0x20 except for \t, \n and \r.
+				// If escapeHTML is set, it also escapes <, >, and &
+				// because they can lead to security holes when
+				// user-controlled strings are rendered into JSON
+				// and served to some browsers.
+				buf.WriteString(`\u00`)
+				buf.WriteByte(hexAlphabet[b>>4])
+				buf.WriteByte(hexAlphabet[b&0xF])
+			}
+			i++
+			start = i
+			continue
+		}
+		c, size := utf8.DecodeRuneInString(s[i:])
+		if c == utf8.RuneError && size == 1 {
+			if start < i {
+				buf.WriteString(s[start:i])
+			}
+			buf.WriteString(`\ufffd`)
+			i += size
+			start = i
+			continue
+		}
+		i += size
+	}
+	if start < len(s) {
+		buf.WriteString(s[start:])
+	}
 	buf.WriteByte('"')
 }
 
@@ -329,6 +392,51 @@ func ParseJSON(s string) (JSON, error) {
 	return MakeJSON(result)
 }
 
+func (j jsonNull) EncodeInvertedIndexKeys(b []byte) [][]byte {
+	return [][]byte{encoding.EncodeNullAscending(b)}
+}
+func (jsonTrue) EncodeInvertedIndexKeys(b []byte) [][]byte {
+	return [][]byte{encoding.EncodeTrueAscending(b)}
+}
+func (jsonFalse) EncodeInvertedIndexKeys(b []byte) [][]byte {
+	return [][]byte{encoding.EncodeFalseAscending(b)}
+}
+func (j jsonString) EncodeInvertedIndexKeys(b []byte) [][]byte {
+	return [][]byte{encoding.EncodeStringAscending(b, string(j))}
+}
+func (j jsonNumber) EncodeInvertedIndexKeys(b []byte) [][]byte {
+	var dec = apd.Decimal(j)
+	return [][]byte{encoding.EncodeDecimalAscending(b, &dec)}
+}
+func (j jsonArray) EncodeInvertedIndexKeys(b []byte) [][]byte {
+	var outKeys [][]byte
+
+	for i := range j {
+		for _, childBytes := range j[i].EncodeInvertedIndexKeys(nil) {
+			encodedKey := bytes.Join([][]byte{b, encoding.EncodeArrayAscending(nil), childBytes}, nil)
+			outKeys = append(outKeys, encodedKey)
+		}
+	}
+
+	return outKeys
+}
+
+func (j jsonObject) EncodeInvertedIndexKeys(b []byte) [][]byte {
+	var outKeys [][]byte
+	for i := range j {
+		for _, childBytes := range j[i].v.EncodeInvertedIndexKeys(nil) {
+			encodedKey := bytes.Join([][]byte{b,
+				encoding.EncodeNotNullAscending(nil),
+				encoding.EncodeStringAscending(nil, string(j[i].k)),
+				childBytes}, nil)
+
+			outKeys = append(outKeys, encodedKey)
+		}
+	}
+
+	return outKeys
+}
+
 // MakeJSON returns a JSON value given a Go-style representation of JSON.
 // * JSON null is Go `nil`,
 // * JSON true is Go `true`,
@@ -385,7 +493,7 @@ func MakeJSON(d interface{}) (JSON, error) {
 			}
 		}
 		return jsonObject(result), nil
-		// The below are not used by ParseDJSON, but are provided for ease-of-use when
+		// The below are not used by ParseJSON, but are provided for ease-of-use when
 		// constructing Datums.
 	case int:
 		dec := apd.Decimal{}
@@ -406,14 +514,28 @@ func MakeJSON(d interface{}) (JSON, error) {
 	return nil, pgerror.NewError("invalid value %s passed to MakeJSON", d.(fmt.Stringer).String())
 }
 
+// This value was determined through some rough experimental results as a good
+// place to start doing binary search over a linear scan.
+const bsearchCutoff = 20
+
 func (j jsonObject) FetchValKey(key string) JSON {
-	for i := range j {
-		if string(j[i].k) == key {
-			return j[i].v
+	// For small objects, the overhead of binary search is significant and so
+	// it's faster to just do a linear scan.
+	if len(j) < bsearchCutoff {
+		for i := range j {
+			if string(j[i].k) == key {
+				return j[i].v
+			}
+			if string(j[i].k) > key {
+				break
+			}
 		}
-		if string(j[i].k) > key {
-			break
-		}
+		return nil
+	}
+
+	i := sort.Search(len(j), func(i int) bool { return string(j[i].k) >= key })
+	if i < len(j) && string(j[i].k) == key {
+		return j[i].v
 	}
 	return nil
 }
@@ -523,13 +645,31 @@ func (jsonFalse) RemoveIndex(int) (JSON, error)  { return nil, errCannotDeleteFr
 func (jsonString) RemoveIndex(int) (JSON, error) { return nil, errCannotDeleteFromScalar }
 func (jsonNumber) RemoveIndex(int) (JSON, error) { return nil, errCannotDeleteFromScalar }
 
-func (j jsonString) AsText() string { return string(j) }
-func (j jsonNull) AsText() string   { return j.String() }
-func (j jsonTrue) AsText() string   { return j.String() }
-func (j jsonFalse) AsText() string  { return j.String() }
-func (j jsonNumber) AsText() string { return j.String() }
-func (j jsonArray) AsText() string  { return j.String() }
-func (j jsonObject) AsText() string { return j.String() }
+func (j jsonString) AsText() *string {
+	s := string(j)
+	return &s
+}
+func (j jsonNull) AsText() *string { return nil }
+func (j jsonTrue) AsText() *string {
+	s := j.String()
+	return &s
+}
+func (j jsonFalse) AsText() *string {
+	s := j.String()
+	return &s
+}
+func (j jsonNumber) AsText() *string {
+	s := j.String()
+	return &s
+}
+func (j jsonArray) AsText() *string {
+	s := j.String()
+	return &s
+}
+func (j jsonObject) AsText() *string {
+	s := j.String()
+	return &s
+}
 
 func (jsonNull) Exists(string) bool   { return false }
 func (jsonTrue) Exists(string) bool   { return false }
@@ -547,3 +687,11 @@ func (j jsonArray) Exists(s string) bool {
 func (j jsonObject) Exists(s string) bool {
 	return j.FetchValKey(s) != nil
 }
+
+func (jsonNull) isScalar() bool   { return true }
+func (jsonFalse) isScalar() bool  { return true }
+func (jsonTrue) isScalar() bool   { return true }
+func (jsonNumber) isScalar() bool { return true }
+func (jsonString) isScalar() bool { return true }
+func (jsonArray) isScalar() bool  { return false }
+func (jsonObject) isScalar() bool { return false }

@@ -18,7 +18,7 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 )
 
 func TestResultColumnsTypesEqual(t *testing.T) {
@@ -27,38 +27,38 @@ func TestResultColumnsTypesEqual(t *testing.T) {
 		equal bool
 	}{
 		{
-			r:     ResultColumns{{Typ: parser.TypeInt}},
-			o:     ResultColumns{{Typ: parser.TypeInt}},
+			r:     ResultColumns{{Typ: types.Int}},
+			o:     ResultColumns{{Typ: types.Int}},
 			equal: true,
 		},
 		{
-			r:     ResultColumns{{Typ: parser.TypeInt}},
-			o:     ResultColumns{{Typ: parser.TypeString}},
+			r:     ResultColumns{{Typ: types.Int}},
+			o:     ResultColumns{{Typ: types.String}},
 			equal: false,
 		},
 		{
-			r:     ResultColumns{{Typ: parser.TypeNull}},
-			o:     ResultColumns{{Typ: parser.TypeInt}},
+			r:     ResultColumns{{Typ: types.Null}},
+			o:     ResultColumns{{Typ: types.Int}},
 			equal: false,
 		},
 		{
-			r:     ResultColumns{{Typ: parser.TypeInt}},
-			o:     ResultColumns{{Typ: parser.TypeNull}},
+			r:     ResultColumns{{Typ: types.Int}},
+			o:     ResultColumns{{Typ: types.Null}},
 			equal: true,
 		},
 		{
-			r:     ResultColumns{{Typ: parser.TypeNull}},
-			o:     ResultColumns{{Typ: parser.TypeNull}},
+			r:     ResultColumns{{Typ: types.Null}},
+			o:     ResultColumns{{Typ: types.Null}},
 			equal: true,
 		},
 		{
-			r:     ResultColumns{{Typ: parser.TypeInt}, {Typ: parser.TypeInt}},
-			o:     ResultColumns{{Typ: parser.TypeInt}},
+			r:     ResultColumns{{Typ: types.Int}, {Typ: types.Int}},
+			o:     ResultColumns{{Typ: types.Int}},
 			equal: false,
 		},
 		{
 			r:     ResultColumns{},
-			o:     ResultColumns{{Typ: parser.TypeNull}},
+			o:     ResultColumns{{Typ: types.Null}},
 			equal: false,
 		},
 	}

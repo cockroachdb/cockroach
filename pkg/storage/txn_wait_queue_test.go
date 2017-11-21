@@ -314,7 +314,7 @@ func TestTxnWaitQueuePusheeExpires(t *testing.T) {
 
 	tc := testContext{}
 	tsc := TestStoreConfig(clock)
-	tsc.TestingKnobs.TestingEvalFilter =
+	tsc.TestingKnobs.EvalKnobs.TestingEvalFilter =
 		func(filterArgs storagebase.FilterArgs) *roachpb.Error {
 			if qtReq, ok := filterArgs.Req.(*roachpb.QueryTxnRequest); ok && bytes.Equal(qtReq.Txn.Key, txn.Key) {
 				atomic.AddInt32(&queryTxnCount, 1)

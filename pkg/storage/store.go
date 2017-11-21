@@ -43,8 +43,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
+	"github.com/cockroachdb/cockroach/pkg/storage/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/spanset"
 	"github.com/cockroachdb/cockroach/pkg/storage/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/storage/tscache"
@@ -312,10 +314,10 @@ func (rs *storeReplicaVisitor) Visit(visitor func(*Replica) bool) {
 		// can still happen with this code.
 		rs.visited++
 		repl.mu.RLock()
-		destroyed := repl.mu.destroyed
+		destroyed := repl.mu.destroyStatus
 		initialized := repl.isInitializedRLocked()
 		repl.mu.RUnlock()
-		if initialized && destroyed == nil && !visitor(repl) {
+		if initialized && (destroyed.IsAlive() || destroyed.reason == destroyReasonRemovalPending) && !visitor(repl) {
 			break
 		}
 	}
@@ -645,20 +647,10 @@ type StoreConfig struct {
 // particular point is reached) or to change the behavior by returning
 // an error (which aborts all further processing for the command).
 type StoreTestingKnobs struct {
+	EvalKnobs batcheval.TestingKnobs
+
 	// TestingProposalFilter is called before proposing each command.
 	TestingProposalFilter storagebase.ReplicaProposalFilter
-
-	// TestingEvalFilter is called before evaluating each command. The
-	// number of times this callback is run depends on the propEvalKV
-	// setting, and it is therefore deprecated in favor of either
-	// TestingProposalFilter (which runs only on the lease holder) or
-	// TestingApplyFilter (which runs on each replica). If your filter is
-	// not idempotent, consider wrapping it in a
-	// ReplayProtectionFilterWrapper.
-	// TODO(bdarnell,tschottdorf): Migrate existing tests which use this
-	// to one of the other filters. See #10493
-	// TODO(andrei): Provide guidance on what to use instead for trapping reads.
-	TestingEvalFilter storagebase.ReplicaCommandFilter
 
 	// TestingApplyFilter is called before applying the results of a
 	// command on each replica. If it returns an error, the command will
@@ -755,9 +747,6 @@ type StoreTestingKnobs struct {
 	// process ranges that need to be split, for use in tests that use
 	// the replication queue but disable the split queue.
 	ReplicateQueueAcceptsUnsplit bool
-	// NumKeysEvaluatedForRangeIntentResolution is set by the stores to the
-	// number of keys evaluated for range intent resolution.
-	NumKeysEvaluatedForRangeIntentResolution *int64
 	// SkipMinSizeCheck, if set, makes the store creation process skip the check
 	// for a minimum size.
 	SkipMinSizeCheck bool
@@ -1239,7 +1228,7 @@ var errPeriodicGossipsDisabled = errors.New("periodic gossip is disabled")
 func (s *Store) startGossip() {
 	wakeReplica := func(ctx context.Context, repl *Replica) error {
 		// Acquire the range lease, which in turn triggers system data gossip
-		// functions (e.g. maybeGossipSystemConfig or maybeGossipNodeLiveness).
+		// functions (e.g. MaybeGossipSystemConfig or MaybeGossipNodeLiveness).
 		_, pErr := repl.getLeaseForGossip(ctx)
 		return pErr.GoError()
 	}
@@ -2156,7 +2145,6 @@ func (s *Store) RemoveReplica(
 			<-s.snapshotApplySem
 		}()
 	}
-
 	rep.raftMu.Lock()
 	defer rep.raftMu.Unlock()
 	return s.removeReplicaImpl(ctx, rep, consistentDesc, destroy)
@@ -2216,7 +2204,7 @@ func (s *Store) removeReplicaImpl(
 	rep.mu.Lock()
 	rep.cancelPendingCommandsLocked()
 	rep.mu.internalRaftGroup = nil
-	rep.mu.destroyed = roachpb.NewRangeNotFoundError(rep.RangeID)
+	rep.mu.destroyStatus.Set(roachpb.NewRangeNotFoundError(rep.RangeID), destroyReasonRemoved)
 	rep.mu.Unlock()
 	rep.readOnlyCmdMu.Unlock()
 
@@ -2240,6 +2228,7 @@ func (s *Store) removeReplicaImpl(
 	// TODO(peter): Could release s.mu.Lock() here.
 	s.maybeGossipOnCapacityChange(ctx, rangeChangeEvent)
 	s.scanner.RemoveReplica(rep)
+
 	return nil
 }
 
@@ -2391,7 +2380,7 @@ func (s *Store) deadReplicas() roachpb.StoreDeadReplicas {
 	s.mu.replicas.Range(func(k int64, v unsafe.Pointer) bool {
 		r := (*Replica)(v)
 		r.mu.RLock()
-		corrupted := r.mu.corrupted
+		corrupted := r.mu.destroyStatus.reason == destroyReasonCorrupted
 		desc := r.mu.state.Desc
 		r.mu.RUnlock()
 		replicaDesc, ok := desc.GetReplicaDescriptor(s.Ident.StoreID)
@@ -2577,7 +2566,6 @@ func (s *Store) Send(
 		if br, pErr = s.maybeWaitForPushee(ctx, &ba, repl); br != nil || pErr != nil {
 			return br, pErr
 		}
-
 		br, pErr = repl.Send(ctx, ba)
 		if pErr == nil {
 			return br, nil
@@ -2835,7 +2823,6 @@ func (s *Store) HandleSnapshot(
 			if header.RaftMessageRequest.ToReplica.ReplicaID == 0 {
 				inSnap.snapType = snapTypePreemptive
 			}
-
 			if err := s.processRaftSnapshotRequest(ctx, &header.RaftMessageRequest, inSnap); err != nil {
 				return sendSnapError(errors.Wrap(err.GoError(), "failed to apply snapshot"))
 			}
@@ -3289,6 +3276,16 @@ func (s *Store) HandleRaftResponse(ctx context.Context, resp *RaftMessageRespons
 			if err != nil {
 				log.Errorf(ctx, "unable to add to replica GC queue: %s", err)
 			} else if added {
+				repl.mu.Lock()
+				// The replica will be garbage collected soon (we are sure
+				// since our replicaID is definitely too old), but in the meantime we
+				// already want to bounce all traffic from it. Note that the replica
+				// could be re-added with a higher replicaID, in which this error is
+				// cleared in setReplicaIDRaftMuLockedMuLocked.
+				if repl.mu.destroyStatus.IsAlive() {
+					repl.mu.destroyStatus.Set(roachpb.NewRangeNotFoundError(repl.RangeID), destroyReasonRemovalPending)
+				}
+				repl.mu.Unlock()
 				log.Infof(ctx, "added to replica GC queue (peer suggestion)")
 			}
 		case *roachpb.StoreNotFoundError:
@@ -3915,14 +3912,15 @@ func (s *Store) tryGetOrCreateReplica(
 
 		repl.raftMu.Lock()
 		repl.mu.RLock()
-		destroyed, corrupted := repl.mu.destroyed, repl.mu.corrupted
+		destroyed := repl.mu.destroyStatus
 		repl.mu.RUnlock()
-		if destroyed != nil {
+		if destroyed.reason == destroyReasonRemoved {
 			repl.raftMu.Unlock()
-			if corrupted {
-				return nil, false, destroyed
-			}
 			return nil, false, errRetry
+		}
+		if destroyed.reason == destroyReasonCorrupted {
+			repl.raftMu.Unlock()
+			return nil, false, destroyed.err
 		}
 		repl.mu.Lock()
 		if err := repl.setReplicaIDRaftMuLockedMuLocked(replicaID); err != nil {
@@ -3984,7 +3982,7 @@ func (s *Store) tryGetOrCreateReplica(
 	if err := repl.initRaftMuLockedReplicaMuLocked(desc, s.Clock(), replicaID); err != nil {
 		// Mark the replica as destroyed and remove it from the replicas maps to
 		// ensure nobody tries to use it
-		repl.mu.destroyed = errors.Wrapf(err, "%s: failed to initialize", repl)
+		repl.mu.destroyStatus.Set(errors.Wrapf(err, "%s: failed to initialize", repl), destroyReasonRemoved)
 		repl.mu.Unlock()
 		s.mu.Lock()
 		s.mu.replicas.Delete(int64(rangeID))
@@ -4191,21 +4189,21 @@ func (s *Store) updateCommandQueueGauges() error {
 	newStoreReplicaVisitor(s).Visit(func(rep *Replica) bool {
 		rep.cmdQMu.Lock()
 
-		writes := rep.cmdQMu.queues[spanGlobal].localMetrics.writeCommands
-		writes += rep.cmdQMu.queues[spanLocal].localMetrics.writeCommands
+		writes := rep.cmdQMu.queues[spanset.SpanGlobal].localMetrics.writeCommands
+		writes += rep.cmdQMu.queues[spanset.SpanLocal].localMetrics.writeCommands
 
-		reads := rep.cmdQMu.queues[spanGlobal].localMetrics.readCommands
-		reads += rep.cmdQMu.queues[spanLocal].localMetrics.readCommands
+		reads := rep.cmdQMu.queues[spanset.SpanGlobal].localMetrics.readCommands
+		reads += rep.cmdQMu.queues[spanset.SpanLocal].localMetrics.readCommands
 
-		treeSize := int64(rep.cmdQMu.queues[spanGlobal].treeSize())
-		treeSize += int64(rep.cmdQMu.queues[spanLocal].treeSize())
+		treeSize := int64(rep.cmdQMu.queues[spanset.SpanGlobal].treeSize())
+		treeSize += int64(rep.cmdQMu.queues[spanset.SpanLocal].treeSize())
 
-		maxOverlaps := rep.cmdQMu.queues[spanGlobal].localMetrics.maxOverlapsSeen
-		if locMax := rep.cmdQMu.queues[spanLocal].localMetrics.maxOverlapsSeen; locMax > maxOverlaps {
+		maxOverlaps := rep.cmdQMu.queues[spanset.SpanGlobal].localMetrics.maxOverlapsSeen
+		if locMax := rep.cmdQMu.queues[spanset.SpanLocal].localMetrics.maxOverlapsSeen; locMax > maxOverlaps {
 			maxOverlaps = locMax
 		}
-		rep.cmdQMu.queues[spanGlobal].localMetrics.maxOverlapsSeen = 0
-		rep.cmdQMu.queues[spanLocal].localMetrics.maxOverlapsSeen = 0
+		rep.cmdQMu.queues[spanset.SpanGlobal].localMetrics.maxOverlapsSeen = 0
+		rep.cmdQMu.queues[spanset.SpanLocal].localMetrics.maxOverlapsSeen = 0
 		rep.cmdQMu.Unlock()
 
 		cqSize := writes + reads

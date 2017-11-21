@@ -243,6 +243,9 @@ var (
 	// TimeseriesPrefix is the key prefix for all timeseries data.
 	TimeseriesPrefix = roachpb.Key(makeKey(SystemPrefix, roachpb.RKey("tsd")))
 
+	// SequenceSuffix is used in the key which stores the value of a user-created SQL sequence.
+	SequenceSuffix = roachpb.RKey("seqval")
+
 	// TableDataMin is the start of the range of table data keys.
 	TableDataMin = roachpb.Key(encoding.EncodeVarintAscending(nil, 0))
 	// TableDataMin is the end of the range of table data keys.
@@ -302,13 +305,14 @@ const (
 	// to "Ranges" instead of a Table - these IDs are needed to store custom
 	// configuration for non-table ranges (e.g. Zone Configs).
 	// NOTE: IDs must be <= MaxReservedDescID.
-	LeaseTableID       = 11
-	EventLogTableID    = 12
-	RangeEventTableID  = 13
-	UITableID          = 14
-	JobsTableID        = 15
-	MetaRangesID       = 16
-	SystemRangesID     = 17
-	TimeseriesRangesID = 18
-	WebSessionsTableID = 19
+	LeaseTableID           = 11
+	EventLogTableID        = 12
+	RangeEventTableID      = 13
+	UITableID              = 14
+	JobsTableID            = 15
+	MetaRangesID           = 16
+	SystemRangesID         = 17
+	TimeseriesRangesID     = 18
+	WebSessionsTableID     = 19
+	TableStatisticsTableID = 20
 )

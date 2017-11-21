@@ -177,7 +177,7 @@ func TestStoreRecoverWithErrors(t *testing.T) {
 		defer stopper.Stop(context.TODO())
 		keyA := roachpb.Key("a")
 		storeCfg := storeCfg // copy
-		storeCfg.TestingKnobs.TestingEvalFilter =
+		storeCfg.TestingKnobs.EvalKnobs.TestingEvalFilter =
 			func(filterArgs storagebase.FilterArgs) *roachpb.Error {
 				_, ok := filterArgs.Req.(*roachpb.IncrementRequest)
 				if ok && filterArgs.Req.Header().Key.Equal(keyA) {
@@ -412,7 +412,7 @@ func TestFailedReplicaChange(t *testing.T) {
 	runFilter.Store(true)
 
 	sc := storage.TestStoreConfig(nil)
-	sc.TestingKnobs.TestingEvalFilter = func(filterArgs storagebase.FilterArgs) *roachpb.Error {
+	sc.TestingKnobs.EvalKnobs.TestingEvalFilter = func(filterArgs storagebase.FilterArgs) *roachpb.Error {
 		if runFilter.Load().(bool) {
 			if et, ok := filterArgs.Req.(*roachpb.EndTransactionRequest); ok && et.Commit {
 				return roachpb.NewErrorWithTxn(errors.Errorf("boom"), filterArgs.Hdr.Txn)

@@ -1152,6 +1152,69 @@ func (l Lease) GetExpiration() hlc.Timestamp {
 	return *l.Expiration
 }
 
+// equivalentTimestamps compares two timestamps for equality and also considers
+// the nil timestamp equal to the zero timestamp.
+func equivalentTimestamps(a, b *hlc.Timestamp) bool {
+	if a == nil {
+		if b == nil {
+			return true
+		}
+		if (*b == hlc.Timestamp{}) {
+			return true
+		}
+	} else if b == nil {
+		if (*a == hlc.Timestamp{}) {
+			return true
+		}
+	}
+	return a.Equal(b)
+}
+
+// Equal implements the gogoproto Equal interface. This implementation is
+// forked from the gogoproto generated code to allow l.Expiration == nil and
+// l.Expiration == &hlc.Timestamp{} to compare equal. Ditto for
+// DeprecatedStartStasis.
+func (l *Lease) Equal(that interface{}) bool {
+	if that == nil {
+		return l == nil
+	}
+
+	that1, ok := that.(*Lease)
+	if !ok {
+		that2, ok := that.(Lease)
+		if ok {
+			that1 = &that2
+		} else {
+			return false
+		}
+	}
+	if that1 == nil {
+		return l == nil
+	} else if l == nil {
+		return false
+	}
+
+	if !l.Start.Equal(&that1.Start) {
+		return false
+	}
+	if !equivalentTimestamps(l.Expiration, that1.Expiration) {
+		return false
+	}
+	if !l.Replica.Equal(&that1.Replica) {
+		return false
+	}
+	if !equivalentTimestamps(l.DeprecatedStartStasis, that1.DeprecatedStartStasis) {
+		return false
+	}
+	if !l.ProposedTS.Equal(that1.ProposedTS) {
+		return false
+	}
+	if l.Epoch != that1.Epoch {
+		return false
+	}
+	return true
+}
+
 // AsIntents takes a slice of spans and returns it as a slice of intents for
 // the given transaction.
 func AsIntents(spans []Span, txn *Transaction) []Intent {

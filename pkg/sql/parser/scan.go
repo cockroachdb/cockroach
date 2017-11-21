@@ -24,7 +24,9 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
 const eof = -1
@@ -46,7 +48,7 @@ type Scanner struct {
 		detail               string
 		unimplementedFeature string
 	}
-	stmts       []Statement
+	stmts       []tree.Statement
 	identQuote  int
 	stringQuote int
 
@@ -219,7 +221,7 @@ func (s *Scanner) scan(lval *sqlSymType) {
 	switch ch {
 	case '$':
 		// placeholder? $[0-9]+
-		if isDigit(s.peek()) {
+		if lex.IsDigit(s.peek()) {
 			s.scanPlaceholder(lval)
 			return
 		}
@@ -295,7 +297,7 @@ func (s *Scanner) scan(lval *sqlSymType) {
 			s.pos++
 			lval.id = DOT_DOT
 			return
-		case isDigit(t):
+		case lex.IsDigit(t):
 			s.scanNumber(lval, ch)
 			return
 		}
@@ -457,11 +459,11 @@ func (s *Scanner) scan(lval *sqlSymType) {
 		return
 
 	default:
-		if isDigit(ch) {
+		if lex.IsDigit(ch) {
 			s.scanNumber(lval, ch)
 			return
 		}
-		if isIdentStart(ch) {
+		if lex.IsIdentStart(ch) {
 			s.scanIdent(lval)
 			return
 		}
@@ -598,7 +600,7 @@ func (s *Scanner) scanIdent(lval *sqlSymType) {
 			isLower = false
 		}
 
-		if !isIdentMiddle(ch) {
+		if !lex.IsIdentMiddle(ch) {
 			break
 		}
 
@@ -622,10 +624,10 @@ func (s *Scanner) scanIdent(lval *sqlSymType) {
 		lval.str = string(b)
 	} else {
 		// The string has unicode in it. No choice but to run Normalize.
-		lval.str = Name(s.in[start:s.pos]).Normalize()
+		lval.str = lex.NormalizeName(s.in[start:s.pos])
 	}
-	if id, ok := keywords[lval.str]; ok {
-		lval.id = id.tok
+	if id, ok := lex.Keywords[lval.str]; ok {
+		lval.id = id.Tok
 	} else {
 		lval.id = IDENT
 	}
@@ -639,7 +641,7 @@ func (s *Scanner) scanNumber(lval *sqlSymType, ch int) {
 
 	for {
 		ch := s.peek()
-		if isHex && isHexDigit(ch) || isDigit(ch) {
+		if isHex && lex.IsHexDigit(ch) || lex.IsDigit(ch) {
 			s.pos++
 			continue
 		}
@@ -681,7 +683,7 @@ func (s *Scanner) scanNumber(lval *sqlSymType, ch int) {
 				s.pos++
 			}
 			ch = s.peek()
-			if !isDigit(ch) {
+			if !lex.IsDigit(ch) {
 				lval.id = ERROR
 				lval.str = "invalid floating point literal"
 				return
@@ -700,7 +702,7 @@ func (s *Scanner) scanNumber(lval *sqlSymType, ch int) {
 			lval.str = fmt.Sprintf("could not make constant float from literal %q", lval.str)
 			return
 		}
-		lval.union.val = &NumVal{Value: floatConst, OrigString: lval.str}
+		lval.union.val = &tree.NumVal{Value: floatConst, OrigString: lval.str}
 	} else {
 		if isHex && s.pos == start+2 {
 			lval.id = ERROR
@@ -725,13 +727,13 @@ func (s *Scanner) scanNumber(lval *sqlSymType, ch int) {
 			lval.str = fmt.Sprintf("could not make constant int from literal %q", lval.str)
 			return
 		}
-		lval.union.val = &NumVal{Value: intConst, OrigString: lval.str}
+		lval.union.val = &tree.NumVal{Value: intConst, OrigString: lval.str}
 	}
 }
 
 func (s *Scanner) scanPlaceholder(lval *sqlSymType) {
 	start := s.pos
-	for isDigit(s.peek()) {
+	for lex.IsDigit(s.peek()) {
 		s.pos++
 	}
 	lval.str = s.in[start:s.pos]
@@ -748,7 +750,7 @@ func (s *Scanner) scanPlaceholder(lval *sqlSymType) {
 
 	// uval is now in the range [0, 1<<63]. Casting to an int64 leaves the range
 	// [0, 1<<63 - 1] intact and moves 1<<63 to -1<<63 (a.k.a. math.MinInt64).
-	lval.union.val = &NumVal{Value: constant.MakeUint64(uval)}
+	lval.union.val = &tree.NumVal{Value: constant.MakeUint64(uval)}
 	lval.id = PLACEHOLDER
 }
 
@@ -866,71 +868,4 @@ outer:
 
 	lval.str = string(buf)
 	return true
-}
-
-func isDigit(ch int) bool {
-	return ch >= '0' && ch <= '9'
-}
-
-func isHexDigit(ch int) bool {
-	return (ch >= '0' && ch <= '9') ||
-		(ch >= 'a' && ch <= 'f') ||
-		(ch >= 'A' && ch <= 'F')
-}
-
-var lookaheadKeywords = map[string]struct{}{
-	"between":    {},
-	"ilike":      {},
-	"in":         {},
-	"like":       {},
-	"of":         {},
-	"ordinality": {},
-	"similar":    {},
-	"time":       {},
-}
-
-func isReservedKeyword(s string) bool {
-	if _, ok := reservedKeywords[s]; ok {
-		return true
-	}
-	if _, ok := lookaheadKeywords[s]; ok {
-		return true
-	}
-	return false
-}
-
-// isBareIdentifier returns true if the input string is a permissible bare SQL
-// identifier.
-func isBareIdentifier(s string) bool {
-	if len(s) == 0 || !isIdentStart(int(s[0])) || (s[0] >= 'A' && s[0] <= 'Z') {
-		return false
-	}
-	// Keep track of whether the input string is all ASCII. If it is, we don't
-	// have to bother running the full Normalize() function at the end, which is
-	// quite expensive.
-	isASCII := s[0] < utf8.RuneSelf
-	for i := 1; i < len(s); i++ {
-		if !isIdentMiddle(int(s[i])) {
-			return false
-		}
-		if s[i] >= 'A' && s[i] <= 'Z' {
-			// Non-lowercase identifiers aren't permissible.
-			return false
-		}
-		if s[i] >= utf8.RuneSelf {
-			isASCII = false
-		}
-	}
-	return isASCII || Name(s).Normalize() == s
-}
-
-func isIdentStart(ch int) bool {
-	return (ch >= 'A' && ch <= 'Z') ||
-		(ch >= 'a' && ch <= 'z') ||
-		(ch >= 128 && ch <= 255) ||
-		(ch == '_')
-}
-
-func isIdentMiddle(ch int) bool {
-	return isIdentStart(ch) || isDigit(ch) || ch == '$'
 }

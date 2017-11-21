@@ -6,11 +6,20 @@ import java.sql.Array;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
 public class MainTest extends CockroachDBTest {
+    @Test
+    public void testNoOp() throws Exception {
+      // This is a test we can target when building the Docker image to ensure
+      // Maven downloads all packages necessary for testing before we enter
+      // offline mode. (Maven dependency:go-offline is not bulletproof, and
+      // leaves out surefire-junit.)
+    }
+
     @Test
     public void testSimpleTable() throws Exception {
         PreparedStatement stmt = conn.prepareStatement("CREATE TABLE f (x INT, ts TIMESTAMP)");
@@ -120,6 +129,15 @@ public class MainTest extends CockroachDBTest {
     }
 
     @Test
+    public void testTime() throws Exception {
+        PreparedStatement stmt = conn.prepareStatement("SELECT '01:02:03.456'::TIME");
+        ResultSet rs = stmt.executeQuery();
+        rs.next();
+        String actual = new SimpleDateFormat("HH:mm:ss.SSS").format(rs.getTime(1));
+        Assert.assertEquals("01:02:03.456", actual);
+    }
+
+    @Test
     public void testUUID() throws Exception {
         UUID uuid = UUID.randomUUID();
         PreparedStatement stmt = conn.prepareStatement("SELECT ?");
@@ -142,11 +160,43 @@ public class MainTest extends CockroachDBTest {
     }
 
     @Test
+    public void testArrayWithProps() throws Exception {
+        PreparedStatement stmt = conn.prepareStatement("CREATE TABLE x (a SMALLINT[])");
+        stmt.execute();
+        stmt = conn.prepareStatement("INSERT INTO x VALUES (ARRAY[123])");
+        stmt.execute();
+        stmt = conn.prepareStatement("SELECT a FROM x");
+        ResultSet rs = stmt.executeQuery();
+        rs.next();
+
+        Array ar = rs.getArray(1);
+        Long[] fs = (Long[]) ar.getArray();
+        Assert.assertArrayEquals(new Long[]{123L}, fs);
+    }
+
+    @Test
     public void testStringArray() throws Exception {
         PreparedStatement stmt = conn.prepareStatement("SELECT '{123,\"hello\",\"\\\"hello\\\"\"}'::STRING[]");
         ResultSet rs = stmt.executeQuery();
         rs.next();
         String[] result = (String[])rs.getArray(1).getArray();
         Assert.assertArrayEquals(new String[]{"123", "hello", "\"hello\""}, result);
+    }
+
+    @Test
+    public void testSequence() throws Exception {
+        PreparedStatement createSeq = conn.prepareStatement("CREATE SEQUENCE foo");
+        int res = createSeq.executeUpdate();
+        Assert.assertEquals(res, 0);
+
+        PreparedStatement getNextVal = conn.prepareStatement("SELECT nextval('foo')");
+
+        ResultSet rs = getNextVal.executeQuery();
+        rs.next();
+        Assert.assertEquals(rs.getInt(1), 1);
+
+        rs = getNextVal.executeQuery();
+        rs.next();
+        Assert.assertEquals(rs.getInt(1), 2);
     }
 }

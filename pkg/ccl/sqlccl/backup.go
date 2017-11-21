@@ -4,7 +4,7 @@
 // License (the "License"); you may not use this file except in compliance with
 // the License. You may obtain a copy of the License at
 //
-//     https://github.com/cockroachdb/cockroach/blob/master/LICENSE
+//     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
 
 package sqlccl
 
@@ -29,8 +29,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/jobs"
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -51,6 +52,8 @@ const (
 	BackupDescriptorCheckpointName = "BACKUP-CHECKPOINT"
 	// BackupFormatInitialVersion is the first version of backup and its files.
 	BackupFormatInitialVersion uint32 = 0
+	// BackupFormatDescriptorTrackingVersion added tracking of complete DBs.
+	BackupFormatDescriptorTrackingVersion uint32 = 1
 )
 
 const (
@@ -64,14 +67,6 @@ var backupOptionExpectValues = map[string]bool{
 // BackupCheckpointInterval is the interval at which backup progress is saved
 // to durable storage.
 var BackupCheckpointInterval = time.Minute
-
-// BackupImplicitSQLDescriptors are descriptors for tables that are implicitly
-// included in every backup, plus their parent database descriptors.
-var BackupImplicitSQLDescriptors = []sqlbase.Descriptor{
-	*sqlbase.WrapDescriptor(&sqlbase.SystemDB),
-	*sqlbase.WrapDescriptor(&sqlbase.DescriptorTable),
-	*sqlbase.WrapDescriptor(&sqlbase.UsersTable),
-}
 
 // exportStorageFromURI returns an ExportStorage for the given URI.
 func exportStorageFromURI(
@@ -276,9 +271,9 @@ func splitAndFilterSpans(
 }
 
 func backupJobDescription(
-	backup *parser.Backup, to string, incrementalFrom []string,
+	backup *tree.Backup, to string, incrementalFrom []string,
 ) (string, error) {
-	b := &parser.Backup{
+	b := &tree.Backup{
 		AsOf:    backup.AsOf,
 		Options: backup.Options,
 		Targets: backup.Targets,
@@ -288,16 +283,16 @@ func backupJobDescription(
 	if err != nil {
 		return "", err
 	}
-	b.To = parser.NewDString(to)
+	b.To = tree.NewDString(to)
 
 	for _, from := range incrementalFrom {
 		sanitizedFrom, err := storageccl.SanitizeExportStorageURI(from)
 		if err != nil {
 			return "", err
 		}
-		b.IncrementalFrom = append(b.IncrementalFrom, parser.NewDString(sanitizedFrom))
+		b.IncrementalFrom = append(b.IncrementalFrom, tree.NewDString(sanitizedFrom))
 	}
-	return parser.AsStringWithFlags(b, parser.FmtSimpleQualified), nil
+	return tree.AsStringWithFlags(b, tree.FmtSimpleQualified), nil
 }
 
 // clusterNodeCount returns the approximate number of nodes in the cluster.
@@ -339,13 +334,13 @@ func writeBackupDescriptor(
 }
 
 func resolveTargetsToDescriptors(
-	ctx context.Context, p sql.PlanHookState, endTime hlc.Timestamp, targets parser.TargetList,
-) ([]sqlbase.Descriptor, error) {
+	ctx context.Context, p sql.PlanHookState, endTime hlc.Timestamp, targets tree.TargetList,
+) ([]sqlbase.Descriptor, []sqlbase.ID, error) {
 	var err error
-	var sqlDescs []sqlbase.Descriptor
 
 	db := p.ExecCfg().DB
 
+	var allDescs []sqlbase.Descriptor
 	{
 		// TODO(andrei): Plumb a gatewayNodeID in here and also find a way to
 		// express that whatever this txn does should not count towards lease
@@ -355,37 +350,37 @@ func resolveTargetsToDescriptors(
 		err := txn.Exec(ctx, opt, func(ctx context.Context, txn *client.Txn, opt *client.TxnExecOptions) error {
 			var err error
 			txn.SetFixedTimestamp(ctx, endTime)
-			sqlDescs, err = allSQLDescriptors(ctx, txn)
+			allDescs, err = allSQLDescriptors(ctx, txn)
 			return err
 		})
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 	}
 
 	sessionDatabase := p.EvalContext().Database
-	if sqlDescs, _, err = descriptorsMatchingTargets(sessionDatabase, sqlDescs, targets); err != nil {
-		return nil, err
-	}
 
-	sqlDescs = append(sqlDescs, BackupImplicitSQLDescriptors...)
+	var matched descriptorsMatched
+	if matched, err = descriptorsMatchingTargets(sessionDatabase, allDescs, targets); err != nil {
+		return nil, nil, err
+	}
 
 	// Dedupe. Duplicate descriptors will cause restore to fail.
 	{
-		descsByID := make(map[sqlbase.ID]sqlbase.Descriptor)
-		for _, sqlDesc := range sqlDescs {
+		descsByID := make(map[sqlbase.ID]sqlbase.Descriptor, len(matched.descs))
+		for _, sqlDesc := range matched.descs {
 			descsByID[sqlDesc.GetID()] = sqlDesc
 		}
-		sqlDescs = sqlDescs[:0]
+		matched.descs = matched.descs[:0]
 		for _, sqlDesc := range descsByID {
-			sqlDescs = append(sqlDescs, sqlDesc)
+			matched.descs = append(matched.descs, sqlDesc)
 		}
 	}
 
 	// Ensure interleaved tables appear after their parent. Since parents must be
 	// created before their children, simply sorting by ID accomplishes this.
-	sort.Slice(sqlDescs, func(i, j int) bool { return sqlDescs[i].GetID() < sqlDescs[j].GetID() })
-	return sqlDescs, nil
+	sort.Slice(matched.descs, func(i, j int) bool { return matched.descs[i].GetID() < matched.descs[j].GetID() })
+	return matched.descs, matched.expandedDB, nil
 }
 
 // backup exports a snapshot of every kv entry into ranged sstables.
@@ -605,9 +600,9 @@ func verifyUsableExportTarget(
 }
 
 func backupPlanHook(
-	stmt parser.Statement, p sql.PlanHookState,
-) (func(context.Context, chan<- parser.Datums) error, sqlbase.ResultColumns, error) {
-	backupStmt, ok := stmt.(*parser.Backup)
+	stmt tree.Statement, p sql.PlanHookState,
+) (func(context.Context, chan<- tree.Datums) error, sqlbase.ResultColumns, error) {
+	backupStmt, ok := stmt.(*tree.Backup)
 	if !ok {
 		return nil, nil, nil
 	}
@@ -636,16 +631,16 @@ func backupPlanHook(
 	}
 
 	header := sqlbase.ResultColumns{
-		{Name: "job_id", Typ: parser.TypeInt},
-		{Name: "status", Typ: parser.TypeString},
-		{Name: "fraction_completed", Typ: parser.TypeFloat},
-		{Name: "rows", Typ: parser.TypeInt},
-		{Name: "index_entries", Typ: parser.TypeInt},
-		{Name: "system_records", Typ: parser.TypeInt},
-		{Name: "bytes", Typ: parser.TypeInt},
+		{Name: "job_id", Typ: types.Int},
+		{Name: "status", Typ: types.String},
+		{Name: "fraction_completed", Typ: types.Float},
+		{Name: "rows", Typ: types.Int},
+		{Name: "index_entries", Typ: types.Int},
+		{Name: "system_records", Typ: types.Int},
+		{Name: "bytes", Typ: types.Int},
 	}
 
-	fn := func(ctx context.Context, resultsCh chan<- parser.Datums) error {
+	fn := func(ctx context.Context, resultsCh chan<- tree.Datums) error {
 		// TODO(dan): Move this span into sql.
 		ctx, span := tracing.ChildSpan(ctx, stmt.StatementTag())
 		defer tracing.FinishSpan(span)
@@ -682,7 +677,7 @@ func backupPlanHook(
 			return err
 		}
 
-		targetDescs, err := resolveTargetsToDescriptors(ctx, p, endTime, backupStmt.Targets)
+		targetDescs, completeDBs, err := resolveTargetsToDescriptors(ctx, p, endTime, backupStmt.Targets)
 		if err != nil {
 			return err
 		}
@@ -723,8 +718,9 @@ func backupPlanHook(
 			EndTime:       endTime,
 			MVCCFilter:    mvccFilter,
 			Descriptors:   targetDescs,
+			CompleteDbs:   completeDBs,
 			Spans:         spans,
-			FormatVersion: BackupFormatInitialVersion,
+			FormatVersion: BackupFormatDescriptorTrackingVersion,
 			BuildInfo:     build.GetInfo(),
 			NodeID:        p.ExecCfg().NodeID.Get(),
 			ClusterID:     p.ExecCfg().ClusterID(),
@@ -770,14 +766,14 @@ func backupPlanHook(
 			return backupErr
 		}
 		// TODO(benesch): emit periodic progress updates.
-		resultsCh <- parser.Datums{
-			parser.NewDInt(parser.DInt(*job.ID())),
-			parser.NewDString(string(jobs.StatusSucceeded)),
-			parser.NewDFloat(parser.DFloat(1.0)),
-			parser.NewDInt(parser.DInt(backupDesc.EntryCounts.Rows)),
-			parser.NewDInt(parser.DInt(backupDesc.EntryCounts.IndexEntries)),
-			parser.NewDInt(parser.DInt(backupDesc.EntryCounts.SystemRecords)),
-			parser.NewDInt(parser.DInt(backupDesc.EntryCounts.DataSize)),
+		resultsCh <- tree.Datums{
+			tree.NewDInt(tree.DInt(*job.ID())),
+			tree.NewDString(string(jobs.StatusSucceeded)),
+			tree.NewDFloat(tree.DFloat(1.0)),
+			tree.NewDInt(tree.DInt(backupDesc.EntryCounts.Rows)),
+			tree.NewDInt(tree.DInt(backupDesc.EntryCounts.IndexEntries)),
+			tree.NewDInt(tree.DInt(backupDesc.EntryCounts.SystemRecords)),
+			tree.NewDInt(tree.DInt(backupDesc.EntryCounts.DataSize)),
 		}
 		return nil
 	}
@@ -860,9 +856,9 @@ func backupResumeHook(
 }
 
 func showBackupPlanHook(
-	stmt parser.Statement, p sql.PlanHookState,
-) (func(context.Context, chan<- parser.Datums) error, sqlbase.ResultColumns, error) {
-	backup, ok := stmt.(*parser.ShowBackup)
+	stmt tree.Statement, p sql.PlanHookState,
+) (func(context.Context, chan<- tree.Datums) error, sqlbase.ResultColumns, error) {
+	backup, ok := stmt.(*tree.ShowBackup)
 	if !ok {
 		return nil, nil, nil
 	}
@@ -882,14 +878,14 @@ func showBackupPlanHook(
 		return nil, nil, err
 	}
 	header := sqlbase.ResultColumns{
-		{Name: "database", Typ: parser.TypeString},
-		{Name: "table", Typ: parser.TypeString},
-		{Name: "start_time", Typ: parser.TypeTimestamp},
-		{Name: "end_time", Typ: parser.TypeTimestamp},
-		{Name: "size_bytes", Typ: parser.TypeInt},
-		{Name: "rows", Typ: parser.TypeInt},
+		{Name: "database", Typ: types.String},
+		{Name: "table", Typ: types.String},
+		{Name: "start_time", Typ: types.Timestamp},
+		{Name: "end_time", Typ: types.Timestamp},
+		{Name: "size_bytes", Typ: types.Int},
+		{Name: "rows", Typ: types.Int},
 	}
-	fn := func(ctx context.Context, resultsCh chan<- parser.Datums) error {
+	fn := func(ctx context.Context, resultsCh chan<- tree.Datums) error {
 		// TODO(dan): Move this span into sql.
 		ctx, span := tracing.ChildSpan(ctx, stmt.StatementTag())
 		defer tracing.FinishSpan(span)
@@ -925,20 +921,20 @@ func showBackupPlanHook(
 			s.Add(file.EntryCounts)
 			descSizes[sqlbase.ID(tableID)] = s
 		}
-		start := parser.DNull
+		start := tree.DNull
 		if desc.StartTime.WallTime != 0 {
-			start = parser.MakeDTimestamp(timeutil.Unix(0, desc.StartTime.WallTime), time.Nanosecond)
+			start = tree.MakeDTimestamp(timeutil.Unix(0, desc.StartTime.WallTime), time.Nanosecond)
 		}
 		for _, descriptor := range desc.Descriptors {
 			if table := descriptor.GetTable(); table != nil {
 				dbName := descs[table.ParentID]
-				resultsCh <- parser.Datums{
-					parser.NewDString(dbName),
-					parser.NewDString(table.Name),
+				resultsCh <- tree.Datums{
+					tree.NewDString(dbName),
+					tree.NewDString(table.Name),
 					start,
-					parser.MakeDTimestamp(timeutil.Unix(0, desc.EndTime.WallTime), time.Nanosecond),
-					parser.NewDInt(parser.DInt(descSizes[table.ID].DataSize)),
-					parser.NewDInt(parser.DInt(descSizes[table.ID].Rows)),
+					tree.MakeDTimestamp(timeutil.Unix(0, desc.EndTime.WallTime), time.Nanosecond),
+					tree.NewDInt(tree.DInt(descSizes[table.ID].DataSize)),
+					tree.NewDInt(tree.DInt(descSizes[table.ID].Rows)),
 				}
 			}
 		}

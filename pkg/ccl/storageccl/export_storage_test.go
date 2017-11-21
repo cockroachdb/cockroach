@@ -4,7 +4,7 @@
 // License (the "License"); you may not use this file except in compliance with
 // the License. You may obtain a copy of the License at
 //
-//     https://github.com/cockroachdb/cockroach/blob/master/LICENSE
+//     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
 
 package storageccl
 
@@ -71,6 +71,7 @@ func testExportStore(t *testing.T, storeURI string, skipSingleFile bool) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	// Setup a sink for the given args.
 	s, err := MakeExportStorage(ctx, conf, testSettings)
 	if err != nil {
@@ -213,12 +214,33 @@ func TestPutLocal(t *testing.T) {
 	p, cleanupFn := testutils.TempDir(t)
 	defer cleanupFn()
 
+	testSettings.ExternalIODir = p
 	dest, err := MakeLocalStorageURI(p)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	testExportStore(t, dest, false)
+}
+
+func TestLocalIOLimits(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.TODO()
+	const allowed = "/allowed"
+	testSettings.ExternalIODir = allowed
+
+	for dest, expected := range map[string]string{allowed: "", "/../../blah": "not allowed"} {
+		u := fmt.Sprintf("nodelocal://%s", dest)
+
+		conf, err := ExportStorageConfFromURI(u)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := MakeExportStorage(ctx, conf, testSettings); !testutils.IsError(err, expected) {
+			t.Fatal(err)
+		}
+	}
 }
 
 func TestPutHttp(t *testing.T) {
@@ -246,6 +268,7 @@ func TestPutHttp(t *testing.T) {
 					return
 				}
 				files++
+				w.WriteHeader(201)
 			case "GET", "HEAD":
 				if filepath.Base(localfile) == badHeadResponse {
 					http.Error(w, "HEAD not implemented", 500)
@@ -257,6 +280,7 @@ func TestPutHttp(t *testing.T) {
 					http.Error(w, err.Error(), 500)
 					return
 				}
+				w.WriteHeader(204)
 			default:
 				http.Error(w, "unsupported method "+r.Method, 400)
 			}
@@ -365,6 +389,42 @@ func TestPutS3(t *testing.T) {
 		),
 		false,
 	)
+}
+
+func TestPutS3Endpoint(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	q := make(url.Values)
+	expect := map[string]string{
+		"AWS_S3_ENDPOINT":        S3EndpointParam,
+		"AWS_S3_ENDPOINT_KEY":    S3AccessKeyParam,
+		"AWS_S3_ENDPOINT_REGION": S3RegionParam,
+		"AWS_S3_ENDPOINT_SECRET": S3SecretParam,
+	}
+	for env, param := range expect {
+		v := os.Getenv(env)
+		if v == "" {
+			t.Skipf("%s env var must be set", env)
+		}
+		q.Add(param, v)
+	}
+
+	bucket := os.Getenv("AWS_S3_ENDPOINT_BUCKET")
+	if bucket == "" {
+		t.Skip("AWS_S3_ENDPOINT_BUCKET env var must be set")
+	}
+
+	// TODO(dt): this prevents leaking an http conn goroutine.
+	http.DefaultTransport.(*http.Transport).DisableKeepAlives = true
+
+	u := url.URL{
+		Scheme:   "s3",
+		Host:     bucket,
+		Path:     "backup-test",
+		RawQuery: q.Encode(),
+	}
+
+	testExportStore(t, u.String(), false)
 }
 
 func TestPutGoogleCloud(t *testing.T) {

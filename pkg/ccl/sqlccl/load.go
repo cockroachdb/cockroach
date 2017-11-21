@@ -4,7 +4,7 @@
 // License (the "License"); you may not use this file except in compliance with
 // the License. You may obtain a copy of the License at
 //
-//     https://github.com/cockroachdb/cockroach/blob/master/LICENSE
+//     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
 
 package sqlccl
 
@@ -27,6 +27,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/transform"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -54,9 +56,9 @@ func Load(
 		loadChunkBytes = config.DefaultZoneConfig().RangeMaxBytes / 2
 	}
 
-	parse := parser.Parser{}
+	var txCtx transform.ExprTransformContext
 	curTime := timeutil.Unix(0, ts.WallTime)
-	evalCtx := parser.EvalContext{}
+	evalCtx := tree.EvalContext{}
 	evalCtx.SetTxnTimestamp(curTime)
 	evalCtx.SetStmtTimestamp(curTime)
 
@@ -95,7 +97,7 @@ func Load(
 	var currentCmd bytes.Buffer
 	scanner := bufio.NewReader(r)
 	var ri sqlbase.RowInserter
-	var defaultExprs []parser.TypedExpr
+	var defaultExprs []tree.TypedExpr
 	var cols []sqlbase.ColumnDescriptor
 	var tableDesc *sqlbase.TableDescriptor
 	var tableName string
@@ -127,7 +129,7 @@ func Load(
 			return BackupDescriptor{}, errors.Wrapf(err, "parsing: %q", cmd)
 		}
 		switch s := stmt.(type) {
-		case *parser.CreateTable:
+		case *tree.CreateTable:
 			if tableDesc != nil {
 				if err := writeSST(ctx, &backup, dir, tempPrefix, kvs, ts); err != nil {
 					return BackupDescriptor{}, errors.Wrap(err, "writeSST")
@@ -167,13 +169,13 @@ func Load(
 				return BackupDescriptor{}, errors.Wrap(err, "make row inserter")
 			}
 			cols, defaultExprs, err =
-				sqlbase.ProcessDefaultColumns(tableDesc.Columns, tableDesc, &parse, &evalCtx)
+				sqlbase.ProcessDefaultColumns(tableDesc.Columns, tableDesc, &txCtx, &evalCtx)
 			if err != nil {
 				return BackupDescriptor{}, errors.Wrap(err, "process default columns")
 			}
 
-		case *parser.Insert:
-			name := parser.AsString(s.Table)
+		case *tree.Insert:
+			name := tree.AsString(s.Table)
 			if tableDesc == nil {
 				return BackupDescriptor{}, errors.Errorf("expected previous CREATE TABLE %s statement", name)
 			}
@@ -233,17 +235,17 @@ func Load(
 func insertStmtToKVs(
 	ctx context.Context,
 	tableDesc *sqlbase.TableDescriptor,
-	defaultExprs []parser.TypedExpr,
+	defaultExprs []tree.TypedExpr,
 	cols []sqlbase.ColumnDescriptor,
-	evalCtx parser.EvalContext,
+	evalCtx tree.EvalContext,
 	ri sqlbase.RowInserter,
-	stmt *parser.Insert,
+	stmt *tree.Insert,
 	f func(roachpb.KeyValue),
 ) error {
 	if stmt.OnConflict != nil {
 		return errors.Errorf("load insert: ON CONFLICT not supported: %q", stmt)
 	}
-	if parser.HasReturningClause(stmt.Returning) {
+	if tree.HasReturningClause(stmt.Returning) {
 		return errors.Errorf("load insert: RETURNING not supported: %q", stmt)
 	}
 	if len(stmt.Columns) > 0 {
@@ -262,20 +264,20 @@ func insertStmtToKVs(
 	if stmt.Rows.OrderBy != nil {
 		return errors.Errorf("load insert: ORDER BY not supported: %q", stmt)
 	}
-	values, ok := stmt.Rows.Select.(*parser.ValuesClause)
+	values, ok := stmt.Rows.Select.(*tree.ValuesClause)
 	if !ok {
 		return errors.Errorf("load insert: expected VALUES clause: %q", stmt)
 	}
 
 	b := inserter(f)
 	for _, tuple := range values.Tuples {
-		row := make([]parser.Datum, len(tuple.Exprs))
+		row := make([]tree.Datum, len(tuple.Exprs))
 		for i, expr := range tuple.Exprs {
-			if expr == parser.DNull {
-				row[i] = parser.DNull
+			if expr == tree.DNull {
+				row[i] = tree.DNull
 				continue
 			}
-			c, ok := expr.(parser.Constant)
+			c, ok := expr.(tree.Constant)
 			if !ok {
 				return errors.Errorf("unsupported expr: %q", expr)
 			}

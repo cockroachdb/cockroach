@@ -23,6 +23,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
@@ -40,7 +41,7 @@ type tableReader struct {
 	spans     roachpb.Spans
 	limitHint int64
 
-	fetcher sqlbase.RowFetcher
+	fetcher sqlbase.MultiRowFetcher
 	alloc   sqlbase.DatumAlloc
 }
 
@@ -95,7 +96,7 @@ func newTableReader(
 	for i := range types {
 		types[i] = spec.Table.Columns[i].Type
 	}
-	if err := tr.out.Init(post, types, &flowCtx.EvalCtx, output); err != nil {
+	if err := tr.init(post, types, flowCtx, output); err != nil {
 		return nil, err
 	}
 
@@ -115,36 +116,37 @@ func newTableReader(
 }
 
 func initRowFetcher(
-	fetcher *sqlbase.RowFetcher,
+	fetcher *sqlbase.MultiRowFetcher,
 	desc *sqlbase.TableDescriptor,
 	indexIdx int,
 	reverseScan bool,
-	valNeededForCol []bool,
+	valNeededForCol util.FastIntSet,
 	alloc *sqlbase.DatumAlloc,
 ) (index *sqlbase.IndexDescriptor, isSecondaryIndex bool, err error) {
-	// indexIdx is 0 for the primary index, or 1 to <num-indexes> for a
-	// secondary index.
-	if indexIdx < 0 || indexIdx > len(desc.Indexes) {
-		return nil, false, errors.Errorf("invalid indexIdx %d", indexIdx)
-	}
-
-	if indexIdx > 0 {
-		index = &desc.Indexes[indexIdx-1]
-		isSecondaryIndex = true
-	} else {
-		index = &desc.PrimaryIndex
+	index, isSecondaryIndex, err = desc.FindIndexByIndexIdx(indexIdx)
+	if err != nil {
+		return nil, false, err
 	}
 
 	colIdxMap := make(map[sqlbase.ColumnID]int, len(desc.Columns))
 	for i, c := range desc.Columns {
 		colIdxMap[c.ID] = i
 	}
+
+	tableArgs := sqlbase.MultiRowFetcherTableArgs{
+		Desc:             desc,
+		Index:            index,
+		ColIdxMap:        colIdxMap,
+		IsSecondaryIndex: isSecondaryIndex,
+		Cols:             desc.Columns,
+		ValNeededForCol:  valNeededForCol,
+	}
 	if err := fetcher.Init(
-		desc, colIdxMap, index, reverseScan, false /* lockForUpdate */, isSecondaryIndex,
-		desc.Columns, valNeededForCol, true /* returnRangeInfo */, alloc,
+		reverseScan, true /* returnRangeInfo */, alloc, tableArgs,
 	); err != nil {
 		return nil, false, err
 	}
+
 	return index, isSecondaryIndex, nil
 }
 
@@ -203,15 +205,15 @@ func (tr *tableReader) Run(ctx context.Context, wg *sync.WaitGroup) {
 	}
 
 	for {
-		fetcherRow, err := tr.fetcher.NextRow(ctx)
-		if err != nil || fetcherRow == nil {
+		row, _, _, err := tr.fetcher.NextRow(ctx)
+		if err != nil || row == nil {
 			if err != nil {
 				tr.out.output.Push(nil /* row */, ProducerMetadata{Err: err})
 			}
 			break
 		}
 		// Emit the row; stop if no more rows are needed.
-		consumerStatus, err := tr.out.EmitRow(ctx, fetcherRow)
+		consumerStatus, err := tr.out.EmitRow(ctx, row)
 		if err != nil || consumerStatus != NeedMoreRows {
 			if err != nil {
 				tr.out.output.Push(nil /* row */, ProducerMetadata{Err: err})

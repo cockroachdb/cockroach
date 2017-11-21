@@ -20,7 +20,7 @@ import (
 
 	"golang.org/x/net/context"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
@@ -253,6 +253,7 @@ func doExpandPlan(
 
 	case *valuesNode:
 	case *alterTableNode:
+	case *alterSequenceNode:
 	case *alterUserSetPasswordNode:
 	case *cancelQueryNode:
 	case *scrubNode:
@@ -262,10 +263,12 @@ func doExpandPlan(
 	case *createIndexNode:
 	case *createUserNode:
 	case *createViewNode:
+	case *createSequenceNode:
 	case *dropDatabaseNode:
 	case *dropIndexNode:
 	case *dropTableNode:
 	case *dropViewNode:
+	case *dropSequenceNode:
 	case *dropUserNode:
 	case *zeroNode:
 	case *unaryNode:
@@ -351,7 +354,7 @@ func expandRenderNode(
 			if r.columns[i].Omitted {
 				continue
 			}
-			if iv, ok := e.(*parser.IndexedVar); ok && i < len(sourceCols) && iv.Idx == i {
+			if iv, ok := e.(*tree.IndexedVar); ok && i < len(sourceCols) && iv.Idx == i {
 				if sourceCols[i].Name != r.columns[i].Name {
 					// Pass-through with rename: SELECT k AS x, v AS y FROM kv ...
 					// We'll want to push the demanded names "x" and "y" to the
@@ -392,11 +395,11 @@ func translateOrdering(desiredDown sqlbase.ColumnOrdering, r *renderNode) sqlbas
 
 	for _, colOrder := range desiredDown {
 		rendered := r.render[colOrder.ColIdx]
-		if _, ok := rendered.(parser.Datum); ok {
+		if _, ok := rendered.(tree.Datum); ok {
 			// Simple constants do not participate in ordering. Just ignore.
 			continue
 		}
-		if v, ok := rendered.(*parser.IndexedVar); ok {
+		if v, ok := rendered.(*tree.IndexedVar); ok {
 			// This is a simple render, so we can propagate the desired ordering.
 			// However take care of avoiding duplicate ordering requests in
 			// case there is more than one render for the same source column.
@@ -580,6 +583,7 @@ func (p *planner) simplifyOrderings(plan planNode, usefulOrdering sqlbase.Column
 
 	case *valuesNode:
 	case *alterTableNode:
+	case *alterSequenceNode:
 	case *alterUserSetPasswordNode:
 	case *cancelQueryNode:
 	case *scrubNode:
@@ -589,10 +593,12 @@ func (p *planner) simplifyOrderings(plan planNode, usefulOrdering sqlbase.Column
 	case *createIndexNode:
 	case *createUserNode:
 	case *createViewNode:
+	case *createSequenceNode:
 	case *dropDatabaseNode:
 	case *dropIndexNode:
 	case *dropTableNode:
 	case *dropViewNode:
+	case *dropSequenceNode:
 	case *dropUserNode:
 	case *zeroNode:
 	case *unaryNode:

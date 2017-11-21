@@ -42,7 +42,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/jobs"
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -418,8 +418,8 @@ func TestAdminAPITableDetails(t *testing.T) {
 			defer s.Stopper().Stop(context.TODO())
 			ts := s.(*TestServer)
 
-			escDBName := parser.Name(tc.dbName).String()
-			escTblName := parser.Name(tc.tblName).String()
+			escDBName := tree.Name(tc.dbName).String()
+			escTblName := tree.Name(tc.tblName).String()
 
 			ac := log.AmbientContext{Tracer: s.ClusterSettings().Tracer}
 			ctx, span := ac.AnnotateCtxWithSpan(context.Background(), "test")
@@ -628,9 +628,9 @@ func TestAdminAPIZoneDetails(t *testing.T) {
 			t.Fatal(err)
 		}
 		const query = `INSERT INTO system.zones VALUES($1, $2)`
-		params := parser.MakePlaceholderInfo()
-		params.SetValue(`1`, parser.NewDInt(parser.DInt(id)))
-		params.SetValue(`2`, parser.NewDBytes(parser.DBytes(zoneBytes)))
+		params := tree.MakePlaceholderInfo()
+		params.SetValue(`1`, tree.NewDInt(tree.DInt(id)))
+		params.SetValue(`2`, tree.NewDBytes(tree.DBytes(zoneBytes)))
 		res, err := ts.sqlExecutor.ExecuteStatementsBuffered(session, query, &params, 1)
 		if err != nil {
 			t.Fatalf("error executing '%s': %s", query, err)
@@ -1117,7 +1117,7 @@ func TestAdminAPIJobs(t *testing.T) {
 
 	s, conn, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.TODO())
-	sqlDB := sqlutils.MakeSQLRunner(t, conn)
+	sqlDB := sqlutils.MakeSQLRunner(conn)
 
 	testJobs := []struct {
 		id      int64
@@ -1134,7 +1134,7 @@ func TestAdminAPIJobs(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		sqlDB.Exec(
+		sqlDB.Exec(t,
 			`INSERT INTO system.jobs (id, status, payload) VALUES ($1, $2, $3)`,
 			job.id, job.status, payloadBytes,
 		)
@@ -1177,11 +1177,11 @@ func TestAdminAPIQueryPlan(t *testing.T) {
 
 	s, conn, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.TODO())
-	sqlDB := sqlutils.MakeSQLRunner(t, conn)
+	sqlDB := sqlutils.MakeSQLRunner(conn)
 
-	sqlDB.Exec(`CREATE DATABASE api_test`)
-	sqlDB.Exec(`CREATE TABLE api_test.t1 (id int primary key, name string)`)
-	sqlDB.Exec(`CREATE TABLE api_test.t2 (id int primary key, name string)`)
+	sqlDB.Exec(t, `CREATE DATABASE api_test`)
+	sqlDB.Exec(t, `CREATE TABLE api_test.t1 (id int primary key, name string)`)
+	sqlDB.Exec(t, `CREATE TABLE api_test.t2 (id int primary key, name string)`)
 
 	testCases := []struct {
 		query string

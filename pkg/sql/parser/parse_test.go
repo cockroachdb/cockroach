@@ -15,16 +15,15 @@
 package parser
 
 import (
-	"bytes"
-	"fmt"
 	"go/constant"
 	"reflect"
 	"regexp"
 	"strings"
 	"testing"
-	"unicode/utf8"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	_ "github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	_ "github.com/cockroachdb/cockroach/pkg/util/log" // for flags
 )
@@ -99,6 +98,7 @@ func TestParse(t *testing.T) {
 		{`CREATE TABLE a (b SERIAL)`},
 		{`CREATE TABLE a (b SMALLSERIAL)`},
 		{`CREATE TABLE a (b BIGSERIAL)`},
+		{`CREATE TABLE a (b TIME)`},
 		{`CREATE TABLE a (b UUID)`},
 		{`CREATE TABLE a (b INET)`},
 		{`CREATE TABLE a (b INT NULL)`},
@@ -179,18 +179,18 @@ func TestParse(t *testing.T) {
 		{`CREATE TABLE a.b (b INT)`},
 		{`CREATE TABLE IF NOT EXISTS a (b INT)`},
 
-		{`CREATE TABLE a (b INT) PARTITION BY LIST (b) (PARTITION p1 VALUES (1, DEFAULT), PARTITION p2 VALUES (2), (3))`},
-		{`CREATE TABLE a (b INT) PARTITION BY RANGE (b) (PARTITION p1 VALUES LESS THAN (1), PARTITION p2 VALUES LESS THAN (2, 3), PARTITION p3 VALUES LESS THAN (MAXVALUE))`},
-		// This montrosity was added on the assumption that it's more readable
+		{`CREATE TABLE a (b INT) PARTITION BY LIST (b) (PARTITION p1 VALUES IN (1, DEFAULT), PARTITION p2 VALUES IN ((1, 2), (3, 4)))`},
+		{`CREATE TABLE a (b INT) PARTITION BY RANGE (b) (PARTITION p1 VALUES < 1, PARTITION p2 VALUES < (2, MAXVALUE), PARTITION p3 VALUES < MAXVALUE)`},
+		// This monstrosity was added on the assumption that it's more readable
 		// than all on one line. Feel free to rip it out if you come across it
 		// and disagree.
 		{regexp.MustCompile(`\n\s*`).ReplaceAllLiteralString(
 			`CREATE TABLE a (b INT, c INT, d INT) PARTITION BY LIST (b) (
-				PARTITION p1 VALUES (1) PARTITION BY LIST (c) (
-					PARTITION p1_1 VALUES (3), PARTITION p1_2 VALUES (4, 5)
-				), PARTITION p2 VALUES (6) PARTITION BY RANGE (c) (
-					PARTITION p2_1 VALUES LESS THAN (7) PARTITION BY LIST (d) (
-						PARTITION p2_1_1 VALUES (8)
+				PARTITION p1 VALUES IN (1) PARTITION BY LIST (c) (
+					PARTITION p1_1 VALUES IN (3), PARTITION p1_2 VALUES IN (4, 5)
+				), PARTITION p2 VALUES IN (6) PARTITION BY RANGE (c) (
+					PARTITION p2_1 VALUES < 7 PARTITION BY LIST (d) (
+						PARTITION p2_1_1 VALUES IN (8)
 					)
 				)
 			)`, ``),
@@ -221,14 +221,31 @@ func TestParse(t *testing.T) {
 		{`CREATE VIEW a (x, y) AS VALUES (1, 'one'), (2, 'two')`},
 		{`CREATE VIEW a AS TABLE b`},
 
+		{`CREATE SEQUENCE a`},
+		{`CREATE SEQUENCE IF NOT EXISTS a`},
+		{`CREATE SEQUENCE a INCREMENT 5`},
+		{`CREATE SEQUENCE a INCREMENT BY 5`},
+		{`CREATE SEQUENCE a NO MAXVALUE`},
+		{`CREATE SEQUENCE a MAXVALUE 1000`},
+		{`CREATE SEQUENCE a NO MINVALUE`},
+		{`CREATE SEQUENCE a MINVALUE 1000`},
+		{`CREATE SEQUENCE a START 1000`},
+		{`CREATE SEQUENCE a START WITH 1000`},
+		{`CREATE SEQUENCE a CYCLE`},
+		{`CREATE SEQUENCE a NO CYCLE`},
+		{`CREATE SEQUENCE a INCREMENT 5 NO MAXVALUE MINVALUE 1 START 3 NO CYCLE`},
+
 		{`DELETE FROM a`},
 		{`DELETE FROM a.b`},
 		{`DELETE FROM a WHERE a = b`},
 		{`DELETE FROM a WHERE a = b LIMIT c`},
+		{`DELETE FROM a WHERE a = b ORDER BY c`},
+		{`DELETE FROM a WHERE a = b ORDER BY c LIMIT d`},
 		{`DELETE FROM a WHERE a = b RETURNING a, b`},
 		{`DELETE FROM a WHERE a = b RETURNING 1, 2`},
 		{`DELETE FROM a WHERE a = b RETURNING a + b`},
 		{`DELETE FROM a WHERE a = b RETURNING NOTHING`},
+		{`DELETE FROM a WHERE a = b ORDER BY c LIMIT d RETURNING e`},
 
 		{`DISCARD ALL`},
 
@@ -264,6 +281,14 @@ func TestParse(t *testing.T) {
 		{`DROP VIEW IF EXISTS a, b RESTRICT`},
 		{`DROP VIEW a.b CASCADE`},
 		{`DROP VIEW a, b CASCADE`},
+		{`DROP SEQUENCE a`},
+		{`DROP SEQUENCE a.b`},
+		{`DROP SEQUENCE a, b`},
+		{`DROP SEQUENCE IF EXISTS a`},
+		{`DROP SEQUENCE a RESTRICT`},
+		{`DROP SEQUENCE IF EXISTS a, b RESTRICT`},
+		{`DROP SEQUENCE a.b CASCADE`},
+		{`DROP SEQUENCE a, b CASCADE`},
 
 		{`CANCEL JOB a`},
 		{`CANCEL QUERY a`},
@@ -278,7 +303,7 @@ func TestParse(t *testing.T) {
 
 		{`SHOW barfoo`},
 		{`SHOW database`},
-		{`SHOW TIME ZONE`},
+		{`SHOW timezone`},
 
 		{`SHOW CLUSTER SETTING a`},
 		{`SHOW CLUSTER SETTING all`},
@@ -316,7 +341,15 @@ func TestParse(t *testing.T) {
 		{`EXPERIMENTAL SHOW ZONE CONFIGURATION FOR RANGE meta`},
 		{`EXPERIMENTAL SHOW ZONE CONFIGURATION FOR DATABASE db`},
 		{`EXPERIMENTAL SHOW ZONE CONFIGURATION FOR TABLE db.t`},
+		{`EXPERIMENTAL SHOW ZONE CONFIGURATION FOR TABLE db.t PARTITION p`},
 		{`EXPERIMENTAL SHOW ZONE CONFIGURATION FOR TABLE t`},
+		{`EXPERIMENTAL SHOW ZONE CONFIGURATION FOR TABLE t PARTITION p`},
+		{`EXPERIMENTAL SHOW ZONE CONFIGURATION FOR INDEX db.t@i`},
+		{`EXPERIMENTAL SHOW ZONE CONFIGURATION FOR INDEX db.t@i PARTITION p`},
+		{`EXPERIMENTAL SHOW ZONE CONFIGURATION FOR INDEX t@i`},
+		{`EXPERIMENTAL SHOW ZONE CONFIGURATION FOR INDEX t@i PARTITION p`},
+		{`EXPERIMENTAL SHOW ZONE CONFIGURATION FOR INDEX i`},
+		{`EXPERIMENTAL SHOW ZONE CONFIGURATION FOR INDEX i PARTITION p`},
 
 		// Tables are the default, but can also be specified with
 		// GRANT x ON TABLE y. However, the stringer does not output TABLE.
@@ -502,9 +535,13 @@ func TestParse(t *testing.T) {
 		{`SELECT REAL 'foo'`},
 		{`SELECT DECIMAL 'foo'`},
 		{`SELECT DATE 'foo'`},
+		{`SELECT TIME 'foo'`},
 		{`SELECT TIMESTAMP 'foo'`},
 		{`SELECT TIMESTAMP WITH TIME ZONE 'foo'`},
 		{`SELECT CHAR 'foo'`},
+
+		{`SELECT JSON 'foo'`},
+		{`SELECT JSONB 'foo'`},
 
 		{`SELECT '192.168.0.1':::INET`},
 		{`SELECT '192.168.0.1'::INET`},
@@ -671,8 +708,6 @@ func TestParse(t *testing.T) {
 		{`SELECT a FROM t LIMIT a`},
 		{`SELECT a FROM t OFFSET b`},
 		{`SELECT a FROM t LIMIT a OFFSET b`},
-		{`SELECT a FROM t FOR UPDATE`},
-		{`SELECT a FROM t LIMIT a OFFSET b FOR UPDATE`},
 		{`SELECT DISTINCT * FROM t`},
 		{`SELECT DISTINCT a, b FROM t`},
 		{`SET a = 3`},
@@ -724,10 +759,14 @@ func TestParse(t *testing.T) {
 		{`UPDATE a SET (b, c) = (3, DEFAULT)`},
 		{`UPDATE a SET (b, c) = (SELECT 3, 4)`},
 		{`UPDATE a SET b = 3 WHERE a = b`},
+		{`UPDATE a SET b = 3 WHERE a = b LIMIT c`},
+		{`UPDATE a SET b = 3 WHERE a = b ORDER BY c`},
+		{`UPDATE a SET b = 3 WHERE a = b ORDER BY c LIMIT d`},
 		{`UPDATE a SET b = 3 WHERE a = b RETURNING a`},
 		{`UPDATE a SET b = 3 WHERE a = b RETURNING 1, 2`},
 		{`UPDATE a SET b = 3 WHERE a = b RETURNING a, a + b`},
 		{`UPDATE a SET b = 3 WHERE a = b RETURNING NOTHING`},
+		{`UPDATE a SET b = 3 WHERE a = b ORDER BY c LIMIT d RETURNING e`},
 
 		{`UPDATE t AS "0" SET k = ''`},                 // "0" lost its quotes
 		{`SELECT * FROM "0" JOIN "0" USING (id, "0")`}, // last "0" lost its quotes.
@@ -801,13 +840,30 @@ func TestParse(t *testing.T) {
 		{`ALTER RANGE meta EXPERIMENTAL CONFIGURE ZONE 'foo'`},
 		{`ALTER DATABASE db EXPERIMENTAL CONFIGURE ZONE 'foo'`},
 		{`ALTER TABLE db.t EXPERIMENTAL CONFIGURE ZONE 'foo'`},
+		{`ALTER TABLE db.t PARTITION p EXPERIMENTAL CONFIGURE ZONE 'foo'`},
 		{`ALTER TABLE t EXPERIMENTAL CONFIGURE ZONE 'foo'`},
+		{`ALTER TABLE t PARTITION p EXPERIMENTAL CONFIGURE ZONE 'foo'`},
+		{`ALTER INDEX db.t@i EXPERIMENTAL CONFIGURE ZONE 'foo'`},
+		{`ALTER INDEX db.t@i PARTITION p EXPERIMENTAL CONFIGURE ZONE 'foo'`},
+		{`ALTER INDEX t@i EXPERIMENTAL CONFIGURE ZONE 'foo'`},
+		{`ALTER INDEX t@i PARTITION p EXPERIMENTAL CONFIGURE ZONE 'foo'`},
+		{`ALTER INDEX i EXPERIMENTAL CONFIGURE ZONE 'foo'`},
+		{`ALTER INDEX i PARTITION p EXPERIMENTAL CONFIGURE ZONE 'foo'`},
 		{`ALTER TABLE t EXPERIMENTAL CONFIGURE ZONE b'foo'`},
 		{`ALTER TABLE t EXPERIMENTAL CONFIGURE ZONE NULL`},
 
+		{`ALTER SEQUENCE a RENAME TO b`},
+		{`ALTER SEQUENCE IF EXISTS a RENAME TO b`},
+		{`ALTER SEQUENCE a INCREMENT BY 5 START WITH 1000`},
+		{`ALTER SEQUENCE IF EXISTS a INCREMENT BY 5 START WITH 1000`},
+
+		{`EXPERIMENTAL SCRUB DATABASE x`},
 		{`EXPERIMENTAL SCRUB TABLE x`},
 		{`EXPERIMENTAL SCRUB TABLE x WITH OPTIONS INDEX ALL`},
 		{`EXPERIMENTAL SCRUB TABLE x WITH OPTIONS INDEX (index_name)`},
+		{`EXPERIMENTAL SCRUB TABLE x WITH OPTIONS PHYSICAL`},
+		{`EXPERIMENTAL SCRUB TABLE x WITH OPTIONS PHYSICAL, INDEX (index_name)`},
+		{`EXPERIMENTAL SCRUB TABLE x WITH OPTIONS PHYSICAL, INDEX ALL`},
 
 		{`BACKUP foo TO 'bar'`},
 		{`BACKUP foo.foo, baz.baz TO 'bar'`},
@@ -970,9 +1026,6 @@ func TestParse2(t *testing.T) {
 		// We allow OFFSET before LIMIT, but always output LIMIT first.
 		{`SELECT a FROM t OFFSET a LIMIT b`,
 			`SELECT a FROM t LIMIT b OFFSET a`},
-		// We allow FOR UPDATE before LIMIT, but always output LIMIT first.
-		{`SELECT a FROM t FOR UPDATE LIMIT b`,
-			`SELECT a FROM t LIMIT b FOR UPDATE`},
 		// FETCH FIRST ... is alternative syntax for LIMIT.
 		{`SELECT a FROM t FETCH FIRST 3 ROWS ONLY`,
 			`SELECT a FROM t LIMIT 3`},
@@ -1015,25 +1068,25 @@ func TestParse2(t *testing.T) {
 			`SELECT "family"(x)`},
 
 		{`SET TIME ZONE 'pst8pdt'`,
-			`SET "time zone" = 'pst8pdt'`},
+			`SET timezone = 'pst8pdt'`},
 		{`SET TIME ZONE 'Europe/Rome'`,
-			`SET "time zone" = 'Europe/Rome'`},
+			`SET timezone = 'Europe/Rome'`},
 		{`SET TIME ZONE -7`,
-			`SET "time zone" = -7`},
+			`SET timezone = -7`},
 		{`SET TIME ZONE -7.3`,
-			`SET "time zone" = -7.3`},
+			`SET timezone = -7.3`},
 		{`SET TIME ZONE DEFAULT`,
-			`SET "time zone" = DEFAULT`},
+			`SET timezone = DEFAULT`},
 		{`SET TIME ZONE LOCAL`,
-			`SET "time zone" = 'local'`},
+			`SET timezone = 'local'`},
 		{`SET TIME ZONE pst8pdt`,
-			`SET "time zone" = 'pst8pdt'`},
+			`SET timezone = 'pst8pdt'`},
 		{`SET TIME ZONE "Europe/Rome"`,
-			`SET "time zone" = 'Europe/Rome'`},
+			`SET timezone = 'Europe/Rome'`},
 		{`SET TIME ZONE INTERVAL '-7h'`,
-			`SET "time zone" = '-7h'`},
+			`SET timezone = '-7h'`},
 		{`SET TIME ZONE INTERVAL '-7h0m5s' HOUR TO MINUTE`,
-			`SET "time zone" = '-6h-59m'`},
+			`SET timezone = '-6h-59m'`},
 		{`SET CLUSTER SETTING a = on`,
 			`SET CLUSTER SETTING a = "on"`},
 		{`SET a = on`,
@@ -1100,7 +1153,8 @@ func TestParse2(t *testing.T) {
 			`SHOW INDEXES FROM t`},
 		{`SHOW SESSION barfoo`, `SHOW barfoo`},
 		{`SHOW SESSION database`, `SHOW database`},
-		{`SHOW SESSION TIME ZONE`, `SHOW TIME ZONE`},
+		{`SHOW SESSION TIME ZONE`, `SHOW timezone`},
+		{`SHOW SESSION TIMEZONE`, `SHOW timezone`},
 		{`EXPERIMENTAL SHOW ALL ZONE CONFIGURATIONS`, `EXPERIMENTAL SHOW ZONE CONFIGURATIONS`},
 		{`BEGIN`,
 			`BEGIN TRANSACTION`},
@@ -1244,7 +1298,7 @@ func TestParse2(t *testing.T) {
 			t.Errorf("%s: expected success, but found %s", d.sql, err)
 			continue
 		}
-		s := AsStringWithFlags(stmts, FmtSimpleWithPasswords)
+		s := tree.AsStringWithFlags(stmts, tree.FmtSimpleWithPasswords)
 		if d.expected != s {
 			t.Errorf("%s: expected %s, but found (%d statements): %s", d.sql, d.expected, len(stmts), s)
 		}
@@ -1269,14 +1323,13 @@ func TestParseTree(t *testing.T) {
 		{`SELECT 1 = ANY ARRAY[1]:::INT`, `SELECT ((1) = ANY ((ARRAY[(1)]):::INT))`},
 	}
 
-	pfmt := fmtFlags{alwaysParens: true}
 	for _, d := range testData {
 		stmts, err := Parse(d.sql)
 		if err != nil {
 			t.Errorf("%s: expected success, but found %s", d.sql, err)
 			continue
 		}
-		s := AsStringWithFlags(stmts, &pfmt)
+		s := tree.AsStringWithFlags(stmts, tree.FmtAlwaysGroupExprs)
 		if d.expected != s {
 			t.Errorf("%s: expected %s, but found (%d statements): %s", d.sql, d.expected, len(stmts), s)
 		}
@@ -1680,145 +1733,145 @@ func TestParsePrecedence(t *testing.T) {
 	//   9: AND
 	//  10: OR
 
-	unary := func(op UnaryOperator, expr Expr) Expr {
-		return &UnaryExpr{Operator: op, Expr: expr}
+	unary := func(op tree.UnaryOperator, expr tree.Expr) tree.Expr {
+		return &tree.UnaryExpr{Operator: op, Expr: expr}
 	}
-	binary := func(op BinaryOperator, left, right Expr) Expr {
-		return &BinaryExpr{Operator: op, Left: left, Right: right}
+	binary := func(op tree.BinaryOperator, left, right tree.Expr) tree.Expr {
+		return &tree.BinaryExpr{Operator: op, Left: left, Right: right}
 	}
-	cmp := func(op ComparisonOperator, left, right Expr) Expr {
-		return &ComparisonExpr{Operator: op, Left: left, Right: right}
+	cmp := func(op tree.ComparisonOperator, left, right tree.Expr) tree.Expr {
+		return &tree.ComparisonExpr{Operator: op, Left: left, Right: right}
 	}
-	not := func(expr Expr) Expr {
-		return &NotExpr{Expr: expr}
+	not := func(expr tree.Expr) tree.Expr {
+		return &tree.NotExpr{Expr: expr}
 	}
-	and := func(left, right Expr) Expr {
-		return &AndExpr{Left: left, Right: right}
+	and := func(left, right tree.Expr) tree.Expr {
+		return &tree.AndExpr{Left: left, Right: right}
 	}
-	or := func(left, right Expr) Expr {
-		return &OrExpr{Left: left, Right: right}
+	or := func(left, right tree.Expr) tree.Expr {
+		return &tree.OrExpr{Left: left, Right: right}
 	}
-	concat := func(left, right Expr) Expr {
-		return &BinaryExpr{Operator: Concat, Left: left, Right: right}
+	concat := func(left, right tree.Expr) tree.Expr {
+		return &tree.BinaryExpr{Operator: tree.Concat, Left: left, Right: right}
 	}
-	regmatch := func(left, right Expr) Expr {
-		return &ComparisonExpr{Operator: RegMatch, Left: left, Right: right}
+	regmatch := func(left, right tree.Expr) tree.Expr {
+		return &tree.ComparisonExpr{Operator: tree.RegMatch, Left: left, Right: right}
 	}
-	regimatch := func(left, right Expr) Expr {
-		return &ComparisonExpr{Operator: RegIMatch, Left: left, Right: right}
+	regimatch := func(left, right tree.Expr) tree.Expr {
+		return &tree.ComparisonExpr{Operator: tree.RegIMatch, Left: left, Right: right}
 	}
 
-	one := &NumVal{Value: constant.MakeInt64(1), OrigString: "1"}
-	two := &NumVal{Value: constant.MakeInt64(2), OrigString: "2"}
-	three := &NumVal{Value: constant.MakeInt64(3), OrigString: "3"}
-	a := &StrVal{s: "a"}
-	b := &StrVal{s: "b"}
-	c := &StrVal{s: "c"}
+	one := &tree.NumVal{Value: constant.MakeInt64(1), OrigString: "1"}
+	two := &tree.NumVal{Value: constant.MakeInt64(2), OrigString: "2"}
+	three := &tree.NumVal{Value: constant.MakeInt64(3), OrigString: "3"}
+	a := tree.NewStrVal("a")
+	b := tree.NewStrVal("b")
+	c := tree.NewStrVal("c")
 
 	testData := []struct {
 		sql      string
-		expected Expr
+		expected tree.Expr
 	}{
 		// Unary plus and complement.
-		{`~-1`, unary(UnaryComplement, unary(UnaryMinus, one))},
-		{`-~1`, unary(UnaryMinus, unary(UnaryComplement, one))},
+		{`~-1`, unary(tree.UnaryComplement, unary(tree.UnaryMinus, one))},
+		{`-~1`, unary(tree.UnaryMinus, unary(tree.UnaryComplement, one))},
 
 		// Mul, div, floordiv, mod combined with higher precedence.
-		{`-1*2`, binary(Mult, unary(UnaryMinus, one), two)},
-		{`1*-2`, binary(Mult, one, unary(UnaryMinus, two))},
-		{`-1/2`, binary(Div, unary(UnaryMinus, one), two)},
-		{`1/-2`, binary(Div, one, unary(UnaryMinus, two))},
-		{`-1//2`, binary(FloorDiv, unary(UnaryMinus, one), two)},
-		{`1//-2`, binary(FloorDiv, one, unary(UnaryMinus, two))},
-		{`-1%2`, binary(Mod, unary(UnaryMinus, one), two)},
-		{`1%-2`, binary(Mod, one, unary(UnaryMinus, two))},
+		{`-1*2`, binary(tree.Mult, unary(tree.UnaryMinus, one), two)},
+		{`1*-2`, binary(tree.Mult, one, unary(tree.UnaryMinus, two))},
+		{`-1/2`, binary(tree.Div, unary(tree.UnaryMinus, one), two)},
+		{`1/-2`, binary(tree.Div, one, unary(tree.UnaryMinus, two))},
+		{`-1//2`, binary(tree.FloorDiv, unary(tree.UnaryMinus, one), two)},
+		{`1//-2`, binary(tree.FloorDiv, one, unary(tree.UnaryMinus, two))},
+		{`-1%2`, binary(tree.Mod, unary(tree.UnaryMinus, one), two)},
+		{`1%-2`, binary(tree.Mod, one, unary(tree.UnaryMinus, two))},
 
 		// Mul, div, floordiv, mod combined with self (left associative).
-		{`1*2*3`, binary(Mult, binary(Mult, one, two), three)},
-		{`1*2/3`, binary(Div, binary(Mult, one, two), three)},
-		{`1/2*3`, binary(Mult, binary(Div, one, two), three)},
-		{`1*2//3`, binary(FloorDiv, binary(Mult, one, two), three)},
-		{`1//2*3`, binary(Mult, binary(FloorDiv, one, two), three)},
-		{`1*2%3`, binary(Mod, binary(Mult, one, two), three)},
-		{`1%2*3`, binary(Mult, binary(Mod, one, two), three)},
-		{`1/2/3`, binary(Div, binary(Div, one, two), three)},
-		{`1/2//3`, binary(FloorDiv, binary(Div, one, two), three)},
-		{`1//2/3`, binary(Div, binary(FloorDiv, one, two), three)},
-		{`1/2%3`, binary(Mod, binary(Div, one, two), three)},
-		{`1%2/3`, binary(Div, binary(Mod, one, two), three)},
-		{`1//2//3`, binary(FloorDiv, binary(FloorDiv, one, two), three)},
-		{`1//2%3`, binary(Mod, binary(FloorDiv, one, two), three)},
-		{`1%2//3`, binary(FloorDiv, binary(Mod, one, two), three)},
-		{`1%2%3`, binary(Mod, binary(Mod, one, two), three)},
+		{`1*2*3`, binary(tree.Mult, binary(tree.Mult, one, two), three)},
+		{`1*2/3`, binary(tree.Div, binary(tree.Mult, one, two), three)},
+		{`1/2*3`, binary(tree.Mult, binary(tree.Div, one, two), three)},
+		{`1*2//3`, binary(tree.FloorDiv, binary(tree.Mult, one, two), three)},
+		{`1//2*3`, binary(tree.Mult, binary(tree.FloorDiv, one, two), three)},
+		{`1*2%3`, binary(tree.Mod, binary(tree.Mult, one, two), three)},
+		{`1%2*3`, binary(tree.Mult, binary(tree.Mod, one, two), three)},
+		{`1/2/3`, binary(tree.Div, binary(tree.Div, one, two), three)},
+		{`1/2//3`, binary(tree.FloorDiv, binary(tree.Div, one, two), three)},
+		{`1//2/3`, binary(tree.Div, binary(tree.FloorDiv, one, two), three)},
+		{`1/2%3`, binary(tree.Mod, binary(tree.Div, one, two), three)},
+		{`1%2/3`, binary(tree.Div, binary(tree.Mod, one, two), three)},
+		{`1//2//3`, binary(tree.FloorDiv, binary(tree.FloorDiv, one, two), three)},
+		{`1//2%3`, binary(tree.Mod, binary(tree.FloorDiv, one, two), three)},
+		{`1%2//3`, binary(tree.FloorDiv, binary(tree.Mod, one, two), three)},
+		{`1%2%3`, binary(tree.Mod, binary(tree.Mod, one, two), three)},
 
 		// Binary plus and minus combined with higher precedence.
-		{`1*2+3`, binary(Plus, binary(Mult, one, two), three)},
-		{`1+2*3`, binary(Plus, one, binary(Mult, two, three))},
-		{`1*2-3`, binary(Minus, binary(Mult, one, two), three)},
-		{`1-2*3`, binary(Minus, one, binary(Mult, two, three))},
+		{`1*2+3`, binary(tree.Plus, binary(tree.Mult, one, two), three)},
+		{`1+2*3`, binary(tree.Plus, one, binary(tree.Mult, two, three))},
+		{`1*2-3`, binary(tree.Minus, binary(tree.Mult, one, two), three)},
+		{`1-2*3`, binary(tree.Minus, one, binary(tree.Mult, two, three))},
 
 		// Binary plus and minus combined with self (left associative).
-		{`1+2-3`, binary(Minus, binary(Plus, one, two), three)},
-		{`1-2+3`, binary(Plus, binary(Minus, one, two), three)},
+		{`1+2-3`, binary(tree.Minus, binary(tree.Plus, one, two), three)},
+		{`1-2+3`, binary(tree.Plus, binary(tree.Minus, one, two), three)},
 
 		// Left and right shift combined with higher precedence.
-		{`1<<2+3`, binary(LShift, one, binary(Plus, two, three))},
-		{`1+2<<3`, binary(LShift, binary(Plus, one, two), three)},
-		{`1>>2+3`, binary(RShift, one, binary(Plus, two, three))},
-		{`1+2>>3`, binary(RShift, binary(Plus, one, two), three)},
+		{`1<<2+3`, binary(tree.LShift, one, binary(tree.Plus, two, three))},
+		{`1+2<<3`, binary(tree.LShift, binary(tree.Plus, one, two), three)},
+		{`1>>2+3`, binary(tree.RShift, one, binary(tree.Plus, two, three))},
+		{`1+2>>3`, binary(tree.RShift, binary(tree.Plus, one, two), three)},
 
 		// Left and right shift combined with self (left associative).
-		{`1<<2<<3`, binary(LShift, binary(LShift, one, two), three)},
-		{`1<<2>>3`, binary(RShift, binary(LShift, one, two), three)},
-		{`1>>2<<3`, binary(LShift, binary(RShift, one, two), three)},
-		{`1>>2>>3`, binary(RShift, binary(RShift, one, two), three)},
+		{`1<<2<<3`, binary(tree.LShift, binary(tree.LShift, one, two), three)},
+		{`1<<2>>3`, binary(tree.RShift, binary(tree.LShift, one, two), three)},
+		{`1>>2<<3`, binary(tree.LShift, binary(tree.RShift, one, two), three)},
+		{`1>>2>>3`, binary(tree.RShift, binary(tree.RShift, one, two), three)},
 
 		// Power combined with lower precedence.
-		{`1*2^3`, binary(Mult, one, binary(Pow, two, three))},
-		{`1^2*3`, binary(Mult, binary(Pow, one, two), three)},
+		{`1*2^3`, binary(tree.Mult, one, binary(tree.Pow, two, three))},
+		{`1^2*3`, binary(tree.Mult, binary(tree.Pow, one, two), three)},
 
 		// Bit-and combined with higher precedence.
-		{`1&2<<3`, binary(Bitand, one, binary(LShift, two, three))},
-		{`1<<2&3`, binary(Bitand, binary(LShift, one, two), three)},
+		{`1&2<<3`, binary(tree.Bitand, one, binary(tree.LShift, two, three))},
+		{`1<<2&3`, binary(tree.Bitand, binary(tree.LShift, one, two), three)},
 
 		// Bit-and combined with self (left associative)
-		{`1&2&3`, binary(Bitand, binary(Bitand, one, two), three)},
+		{`1&2&3`, binary(tree.Bitand, binary(tree.Bitand, one, two), three)},
 
 		// Bit-xor combined with higher precedence.
-		{`1#2&3`, binary(Bitxor, one, binary(Bitand, two, three))},
-		{`1&2#3`, binary(Bitxor, binary(Bitand, one, two), three)},
+		{`1#2&3`, binary(tree.Bitxor, one, binary(tree.Bitand, two, three))},
+		{`1&2#3`, binary(tree.Bitxor, binary(tree.Bitand, one, two), three)},
 
 		// Bit-xor combined with self (left associative)
-		{`1#2#3`, binary(Bitxor, binary(Bitxor, one, two), three)},
+		{`1#2#3`, binary(tree.Bitxor, binary(tree.Bitxor, one, two), three)},
 
 		// Bit-or combined with higher precedence.
-		{`1|2#3`, binary(Bitor, one, binary(Bitxor, two, three))},
-		{`1#2|3`, binary(Bitor, binary(Bitxor, one, two), three)},
+		{`1|2#3`, binary(tree.Bitor, one, binary(tree.Bitxor, two, three))},
+		{`1#2|3`, binary(tree.Bitor, binary(tree.Bitxor, one, two), three)},
 
 		// Bit-or combined with self (left associative)
-		{`1|2|3`, binary(Bitor, binary(Bitor, one, two), three)},
+		{`1|2|3`, binary(tree.Bitor, binary(tree.Bitor, one, two), three)},
 
 		// Equals, not-equals, greater-than, greater-than equals, less-than and
 		// less-than equals combined with higher precedence.
-		{`1 = 2|3`, cmp(EQ, one, binary(Bitor, two, three))},
-		{`1|2 = 3`, cmp(EQ, binary(Bitor, one, two), three)},
-		{`1 != 2|3`, cmp(NE, one, binary(Bitor, two, three))},
-		{`1|2 != 3`, cmp(NE, binary(Bitor, one, two), three)},
-		{`1 > 2|3`, cmp(GT, one, binary(Bitor, two, three))},
-		{`1|2 > 3`, cmp(GT, binary(Bitor, one, two), three)},
-		{`1 >= 2|3`, cmp(GE, one, binary(Bitor, two, three))},
-		{`1|2 >= 3`, cmp(GE, binary(Bitor, one, two), three)},
-		{`1 < 2|3`, cmp(LT, one, binary(Bitor, two, three))},
-		{`1|2 < 3`, cmp(LT, binary(Bitor, one, two), three)},
-		{`1 <= 2|3`, cmp(LE, one, binary(Bitor, two, three))},
-		{`1|2 <= 3`, cmp(LE, binary(Bitor, one, two), three)},
+		{`1 = 2|3`, cmp(tree.EQ, one, binary(tree.Bitor, two, three))},
+		{`1|2 = 3`, cmp(tree.EQ, binary(tree.Bitor, one, two), three)},
+		{`1 != 2|3`, cmp(tree.NE, one, binary(tree.Bitor, two, three))},
+		{`1|2 != 3`, cmp(tree.NE, binary(tree.Bitor, one, two), three)},
+		{`1 > 2|3`, cmp(tree.GT, one, binary(tree.Bitor, two, three))},
+		{`1|2 > 3`, cmp(tree.GT, binary(tree.Bitor, one, two), three)},
+		{`1 >= 2|3`, cmp(tree.GE, one, binary(tree.Bitor, two, three))},
+		{`1|2 >= 3`, cmp(tree.GE, binary(tree.Bitor, one, two), three)},
+		{`1 < 2|3`, cmp(tree.LT, one, binary(tree.Bitor, two, three))},
+		{`1|2 < 3`, cmp(tree.LT, binary(tree.Bitor, one, two), three)},
+		{`1 <= 2|3`, cmp(tree.LE, one, binary(tree.Bitor, two, three))},
+		{`1|2 <= 3`, cmp(tree.LE, binary(tree.Bitor, one, two), three)},
 
 		// NOT combined with higher precedence.
-		{`NOT 1 = 2`, not(cmp(EQ, one, two))},
-		{`NOT 1 = NOT 2 = 3`, not(cmp(EQ, one, not(cmp(EQ, two, three))))},
+		{`NOT 1 = 2`, not(cmp(tree.EQ, one, two))},
+		{`NOT 1 = NOT 2 = 3`, not(cmp(tree.EQ, one, not(cmp(tree.EQ, two, three))))},
 
 		// NOT combined with self.
-		{`NOT NOT 1 = 2`, not(not(cmp(EQ, one, two)))},
+		{`NOT NOT 1 = 2`, not(not(cmp(tree.EQ, one, two)))},
 
 		// AND combined with higher precedence.
 		{`NOT 1 AND 2`, and(not(one), two)},
@@ -1839,7 +1892,7 @@ func TestParsePrecedence(t *testing.T) {
 		{`'a' || 'b' ~* 'c'`, regimatch(concat(a, b), c)},
 
 		// Unary ~ should have highest precedence.
-		{`~1+2`, binary(Plus, unary(UnaryComplement, one), two)},
+		{`~1+2`, binary(tree.Plus, unary(tree.UnaryComplement, one), two)},
 	}
 	for _, d := range testData {
 		expr, err := ParseExpr(d.sql)
@@ -1866,80 +1919,8 @@ func BenchmarkParse(b *testing.B) {
 		if len(st) != 5 {
 			b.Fatal("parsed wrong number of statements: ", len(st))
 		}
-		if _, ok := st[1].(*Update); !ok {
+		if _, ok := st[1].(*tree.Update); !ok {
 			b.Fatalf("unexpected statement type: %T", st[1])
 		}
 	}
-}
-
-func TestEncodeSQLBytes(t *testing.T) {
-	testEncodeSQL(t, encodeSQLBytes, false)
-}
-
-func TestEncodeSQLString(t *testing.T) {
-	testEncodeSQL(t, encodeSQLString, true)
-}
-
-func testEncodeSQL(t *testing.T, encode func(*bytes.Buffer, string), forceUTF8 bool) {
-	type entry struct{ i, j int }
-	seen := make(map[string]entry)
-	for i := 0; i < 256; i++ {
-		for j := 0; j < 256; j++ {
-			bytepair := []byte{byte(i), byte(j)}
-			if forceUTF8 && !utf8.Valid(bytepair) {
-				continue
-			}
-			stmt := testEncodeString(t, bytepair, encode)
-			if e, ok := seen[stmt]; ok {
-				t.Fatalf("duplicate entry: %s, from %v, currently at %v, %v", stmt, e, i, j)
-			}
-			seen[stmt] = entry{i, j}
-		}
-	}
-}
-
-func TestEncodeSQLStringSpecial(t *testing.T) {
-	tests := [][]byte{
-		// UTF8 replacement character
-		{0xEF, 0xBF, 0xBD},
-	}
-	for _, tc := range tests {
-		testEncodeString(t, tc, encodeSQLString)
-	}
-}
-
-func testEncodeString(t *testing.T, input []byte, encode func(*bytes.Buffer, string)) string {
-	s := string(input)
-	var buf bytes.Buffer
-	encode(&buf, s)
-	sql := fmt.Sprintf("SELECT %s", buf.String())
-	for n := 0; n < len(sql); n++ {
-		ch := sql[n]
-		if ch < 0x20 || ch >= 0x7F {
-			t.Fatalf("unprintable character: %v (%v): %s %v", ch, input, sql, []byte(sql))
-		}
-	}
-	stmts, err := Parse(sql)
-	if err != nil {
-		t.Fatalf("%s: expected success, but found %s", sql, err)
-	}
-	stmt := stmts.String()
-	if sql != stmt {
-		t.Fatalf("expected %s, but found %s", sql, stmt)
-	}
-	return stmt
-}
-
-func BenchmarkEncodeSQLString(b *testing.B) {
-	str := strings.Repeat("foo", 10000)
-	b.Run("old version", func(b *testing.B) {
-		for i := 0; i < b.N; i++ {
-			encodeSQLStringWithFlags(bytes.NewBuffer(nil), str, FmtBareStrings)
-		}
-	})
-	b.Run("new version", func(b *testing.B) {
-		for i := 0; i < b.N; i++ {
-			encodeSQLStringInsideArray(bytes.NewBuffer(nil), str)
-		}
-	})
 }

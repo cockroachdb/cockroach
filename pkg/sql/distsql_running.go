@@ -26,7 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -109,7 +109,7 @@ func (dsp *DistSQLPlanner) Run(
 	txn *client.Txn,
 	plan *physicalPlan,
 	recv *distSQLReceiver,
-	evalCtx parser.EvalContext,
+	evalCtx tree.EvalContext,
 ) error {
 	ctx := planCtx.ctx
 
@@ -247,7 +247,7 @@ type distSQLReceiver struct {
 	// value, and ConsumerClosed is the ConsumerStatus.
 	cancelled int32
 
-	row    parser.Datums
+	row    tree.Datums
 	status distsqlrun.ConsumerStatus
 	alloc  sqlbase.DatumAlloc
 	closed bool
@@ -270,13 +270,13 @@ type distSQLReceiver struct {
 // distSQLReceiver. It's implemented by RowResultWriter.
 type rowResultWriter interface {
 	// AddRow takes the passed in row and adds it to the current result.
-	AddRow(ctx context.Context, row parser.Datums) error
+	AddRow(ctx context.Context, row tree.Datums) error
 	// IncrementRowsAffected increments a counter by n. This is used for all
-	// result types other than parser.Rows.
+	// result types other than tree.Rows.
 	IncrementRowsAffected(n int)
 	// GetStatementType returns the StatementType that corresponds to the type of
 	// results that should be sent to this interface.
-	StatementType() parser.StatementType
+	StatementType() tree.StatementType
 }
 
 var _ distsqlrun.RowReceiver = &distSQLReceiver{}
@@ -361,13 +361,13 @@ func (r *distSQLReceiver) Push(
 		return r.status
 	}
 
-	if r.resultWriter.StatementType() != parser.Rows {
+	if r.resultWriter.StatementType() != tree.Rows {
 		// We only need the row count.
 		r.resultWriter.IncrementRowsAffected(1)
 		return r.status
 	}
 	if r.row == nil {
-		r.row = make(parser.Datums, len(r.resultToStreamColMap))
+		r.row = make(tree.Datums, len(r.resultToStreamColMap))
 	}
 	for i, resIdx := range r.resultToStreamColMap {
 		err := row[resIdx].EnsureDecoded(&r.outputTypes[resIdx], &r.alloc)
@@ -437,7 +437,7 @@ func (dsp *DistSQLPlanner) PlanAndRun(
 	txn *client.Txn,
 	tree planNode,
 	recv *distSQLReceiver,
-	evalCtx parser.EvalContext,
+	evalCtx tree.EvalContext,
 ) error {
 	planCtx := dsp.newPlanningCtx(ctx, &evalCtx, txn)
 

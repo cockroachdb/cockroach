@@ -15,13 +15,14 @@
 package sql
 
 import (
-	"bytes"
 	"errors"
 	"fmt"
 
 	"golang.org/x/net/context"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
 )
@@ -45,7 +46,7 @@ type renderNode struct {
 	// Helper for indexed vars. This holds the actual instances of
 	// IndexedVars replaced in Exprs. The indexed vars contain indices
 	// to the array of source columns.
-	ivarHelper parser.IndexedVarHelper
+	ivarHelper tree.IndexedVarHelper
 
 	// Rendering expressions for rows and corresponding output columns.
 	// populated by addOrReuseRenders()
@@ -55,7 +56,7 @@ type renderNode struct {
 	// groupNode copies/extends the render array defined by initTargets() and
 	// will add extra renderNode renders for the aggregation sources.
 	// windowNode also adds additional renders for the window functions.
-	render []parser.TypedExpr
+	render []tree.TypedExpr
 
 	// renderStrings stores the symbolic representations of the expressions in
 	// render, in the same order. It's used to prevent recomputation of the
@@ -80,11 +81,11 @@ type renderNode struct {
 
 	// The current source row, with one value per source column.
 	// populated by Next(), used by renderRow().
-	curSourceRow parser.Datums
+	curSourceRow tree.Datums
 
 	// The rendered row, with one value for each render expression.
 	// populated by Next().
-	row parser.Datums
+	row tree.Datums
 
 	// This struct must be allocated on the heap and its location stay
 	// stable after construction because it implements
@@ -96,7 +97,7 @@ type renderNode struct {
 	noCopy util.NoCopy
 }
 
-func (r *renderNode) Values() parser.Datums {
+func (r *renderNode) Values() tree.Datums {
 	return r.row
 }
 
@@ -119,31 +120,30 @@ func (r *renderNode) Close(ctx context.Context) {
 	r.source.plan.Close(ctx)
 }
 
-// IndexedVarEval implements the parser.IndexedVarContainer interface.
-func (r *renderNode) IndexedVarEval(idx int, ctx *parser.EvalContext) (parser.Datum, error) {
+// IndexedVarEval implements the tree.IndexedVarContainer interface.
+func (r *renderNode) IndexedVarEval(idx int, ctx *tree.EvalContext) (tree.Datum, error) {
 	return r.curSourceRow[idx].Eval(ctx)
 }
 
-// IndexedVarResolvedType implements the parser.IndexedVarContainer interface.
-func (r *renderNode) IndexedVarResolvedType(idx int) parser.Type {
+// IndexedVarResolvedType implements the tree.IndexedVarContainer interface.
+func (r *renderNode) IndexedVarResolvedType(idx int) types.T {
 	return r.sourceInfo[0].sourceColumns[idx].Typ
 }
 
-// IndexedVarString implements the parser.IndexedVarContainer interface.
-func (r *renderNode) IndexedVarFormat(buf *bytes.Buffer, f parser.FmtFlags, idx int) {
-	r.sourceInfo[0].FormatVar(buf, f, idx)
+// IndexedVarNodeFormatter implements the tree.IndexedVarContainer interface.
+func (r *renderNode) IndexedVarNodeFormatter(idx int) tree.NodeFormatter {
+	return r.sourceInfo[0].NodeFormatter(idx)
 }
 
 // Select selects rows from a SELECT/UNION/VALUES, ordering and/or limiting them.
 func (p *planner) Select(
-	ctx context.Context, n *parser.Select, desiredTypes []parser.Type,
+	ctx context.Context, n *tree.Select, desiredTypes []types.T,
 ) (planNode, error) {
 	wrapped := n.Select
 	limit := n.Limit
 	orderBy := n.OrderBy
-	lockForUpdate := n.LockForUpdate
 
-	for s, ok := wrapped.(*parser.ParenSelect); ok; s, ok = wrapped.(*parser.ParenSelect) {
+	for s, ok := wrapped.(*tree.ParenSelect); ok; s, ok = wrapped.(*tree.ParenSelect) {
 		wrapped = s.Select.Select
 		if s.Select.OrderBy != nil {
 			if orderBy != nil {
@@ -157,16 +157,13 @@ func (p *planner) Select(
 			}
 			limit = s.Select.Limit
 		}
-		if s.Select.LockForUpdate {
-			lockForUpdate = s.Select.LockForUpdate
-		}
 	}
 
 	switch s := wrapped.(type) {
-	case *parser.SelectClause:
+	case *tree.SelectClause:
 		// Select can potentially optimize index selection if it's being ordered,
 		// so we allow it to do its own sorting.
-		return p.SelectClause(ctx, s, orderBy, limit, lockForUpdate, desiredTypes, publicColumns)
+		return p.SelectClause(ctx, s, orderBy, limit, desiredTypes, publicColumns)
 
 	// TODO(dan): Union can also do optimizations when it has an ORDER BY, but
 	// currently expects the ordering to be done externally, so we let it fall
@@ -206,24 +203,23 @@ func (p *planner) Select(
 // visible to the select.
 //
 // NB: This is passed directly to planNode only when there is no ORDER BY,
-// LIMIT, or parenthesis in the parsed SELECT. See `sql/parser.Select` and
-// `sql/parser.SelectStatement`.
+// LIMIT, or parenthesis in the parsed SELECT. See `sql/tree.Select` and
+// `sql/tree.SelectStatement`.
 //
 // Privileges: SELECT on table
 //   Notes: postgres requires SELECT. Also requires UPDATE on "FOR UPDATE".
 //          mysql requires SELECT.
 func (p *planner) SelectClause(
 	ctx context.Context,
-	parsed *parser.SelectClause,
-	orderBy parser.OrderBy,
-	limit *parser.Limit,
-	lockForUpdate bool,
-	desiredTypes []parser.Type,
+	parsed *tree.SelectClause,
+	orderBy tree.OrderBy,
+	limit *tree.Limit,
+	desiredTypes []types.T,
 	scanVisibility scanVisibility,
 ) (planNode, error) {
 	r := &renderNode{planner: p}
 
-	if err := r.initFrom(ctx, parsed, scanVisibility, lockForUpdate); err != nil {
+	if err := r.initFrom(ctx, parsed, scanVisibility); err != nil {
 		return nil, err
 	}
 
@@ -236,7 +232,7 @@ func (p *planner) SelectClause(
 		}
 	}
 
-	r.ivarHelper = parser.MakeIndexedVarHelper(r, len(r.sourceInfo[0].sourceColumns))
+	r.ivarHelper = tree.MakeIndexedVarHelper(r, len(r.sourceInfo[0].sourceColumns))
 
 	if err := r.initTargets(ctx, parsed.Exprs, desiredTypes); err != nil {
 		return nil, err
@@ -300,16 +296,14 @@ func (p *planner) SelectClause(
 
 // initFrom initializes the table node, given the parsed select expression
 func (r *renderNode) initFrom(
-	ctx context.Context,
-	parsed *parser.SelectClause,
-	scanVisibility scanVisibility,
-	lockForUpdate bool,
+	ctx context.Context, parsed *tree.SelectClause, scanVisibility scanVisibility,
 ) error {
-	// AS OF expressions should be handled by the executor.
+	// AS OF expressions are either not supported in this context (e.g. in a view
+	// definition), or they should have been handled by the executor.
 	if parsed.From.AsOf.Expr != nil && !r.planner.avoidCachedDescriptors {
-		return fmt.Errorf("unexpected AS OF SYSTEM TIME")
+		return fmt.Errorf("AS OF SYSTEM TIME not supported in this context")
 	}
-	src, err := r.planner.getSources(ctx, parsed.From.Tables, scanVisibility, lockForUpdate)
+	src, err := r.planner.getSources(ctx, parsed.From.Tables, scanVisibility)
 	if err != nil {
 		return err
 	}
@@ -319,20 +313,20 @@ func (r *renderNode) initFrom(
 }
 
 func (r *renderNode) initTargets(
-	ctx context.Context, targets parser.SelectExprs, desiredTypes []parser.Type,
+	ctx context.Context, targets tree.SelectExprs, desiredTypes []types.T,
 ) error {
 	// Loop over the select expressions and expand them into the expressions
 	// we're going to use to generate the returned column set and the names for
 	// those columns.
 	for i, target := range targets {
-		desiredType := parser.TypeAny
+		desiredType := types.Any
 		if len(desiredTypes) > i {
 			desiredType = desiredTypes[i]
 		}
 
 		// Output column names should exactly match the original expression, so we
 		// have to determine the output column name before we rewrite SRFs below.
-		outputName, err := getRenderColName(r.planner.session.SearchPath, target)
+		outputName, err := getRenderColName(r.planner.session.SearchPath, target, &r.ivarHelper)
 		if err != nil {
 			return err
 		}
@@ -364,6 +358,26 @@ func (r *renderNode) initTargets(
 	return nil
 }
 
+// insertRender creates a new renderNode that renders exactly its
+// source plan.
+func (p *planner) insertRender(
+	ctx context.Context, plan planNode, tn *tree.TableName,
+) (*renderNode, error) {
+	src := planDataSource{info: newSourceInfoForSingleTable(*tn, planColumns(plan)), plan: plan}
+	render := &renderNode{
+		planner:    p,
+		source:     src,
+		sourceInfo: multiSourceInfo{src.info},
+	}
+	render.ivarHelper = tree.MakeIndexedVarHelper(render, len(src.info.sourceColumns))
+	if err := render.initTargets(ctx,
+		tree.SelectExprs{tree.SelectExpr{Expr: &tree.AllColumnsSelector{}}},
+		nil /*desiredTypes*/); err != nil {
+		return nil, err
+	}
+	return render, nil
+}
+
 // makeTupleRender creates a new renderNode which makes a single tuple
 // columns from all the columns in its source. Used by
 // getDataSourceAsOneColumn().
@@ -377,16 +391,16 @@ func (p *planner) makeTupleRender(
 		source:     src,
 		sourceInfo: multiSourceInfo{src.info},
 	}
-	r.ivarHelper = parser.MakeIndexedVarHelper(r, len(src.info.sourceColumns))
+	r.ivarHelper = tree.MakeIndexedVarHelper(r, len(src.info.sourceColumns))
 
-	tExpr := &parser.Tuple{
-		Exprs: make(parser.Exprs, len(src.info.sourceColumns)),
+	tExpr := &tree.Tuple{
+		Exprs: make(tree.Exprs, len(src.info.sourceColumns)),
 	}
 	for i := range src.info.sourceColumns {
 		tExpr.Exprs[i] = r.ivarHelper.IndexedVar(i)
 	}
 	if err := r.initTargets(ctx,
-		parser.SelectExprs{parser.SelectExpr{Expr: tExpr}}, nil); err != nil {
+		tree.SelectExprs{tree.SelectExpr{Expr: tExpr}}, nil); err != nil {
 		return nil, err
 	}
 	return r, nil
@@ -400,33 +414,35 @@ func (p *planner) makeTupleRender(
 // don't support lateral correlated subqueries.
 type srfExtractionVisitor struct {
 	err        error
-	srf        *parser.FuncExpr
-	ivarHelper *parser.IndexedVarHelper
-	searchPath parser.SearchPath
+	srf        *tree.FuncExpr
+	ivarHelper *tree.IndexedVarHelper
+	searchPath tree.SearchPath
 }
 
-var _ parser.Visitor = &srfExtractionVisitor{}
+var _ tree.Visitor = &srfExtractionVisitor{}
 
-func (v *srfExtractionVisitor) VisitPre(expr parser.Expr) (recurse bool, newNode parser.Expr) {
-	_, isSubquery := expr.(*parser.Subquery)
+func (v *srfExtractionVisitor) VisitPre(expr tree.Expr) (recurse bool, newNode tree.Expr) {
+	_, isSubquery := expr.(*tree.Subquery)
 	return !isSubquery, expr
 }
 
-func (v *srfExtractionVisitor) VisitPost(expr parser.Expr) parser.Expr {
+func (v *srfExtractionVisitor) VisitPost(expr tree.Expr) tree.Expr {
 	switch t := expr.(type) {
-	case *parser.FuncExpr:
+	case *tree.FuncExpr:
 		fd, err := t.Func.Resolve(v.searchPath)
 		if err != nil {
 			v.err = err
 			return expr
 		}
-		if _, ok := parser.Generators[fd.Name]; ok {
+		if _, ok := builtins.Generators[fd.Name]; ok {
 			if v.srf != nil {
 				v.err = errors.New("cannot specify two set-returning functions in the same SELECT expression")
 				return expr
 			}
 			v.srf = t
-			return v.ivarHelper.IndexedVar(v.ivarHelper.AppendSlot())
+			// We'll fill in the type later once the generator function has been
+			// analyzed.
+			return v.ivarHelper.IndexedVarWithType(v.ivarHelper.AppendSlot(), types.TTable{})
 		}
 	}
 	return expr
@@ -442,8 +458,8 @@ func (v *srfExtractionVisitor) VisitPost(expr parser.Expr) parser.Expr {
 // which are not yet supported. For now, this function returns an error if more
 // than one SRF is present in the render expression.
 func (r *renderNode) rewriteSRFs(
-	ctx context.Context, target parser.SelectExpr,
-) (parser.SelectExpr, error) {
+	ctx context.Context, target tree.SelectExpr,
+) (tree.SelectExpr, error) {
 	// Walk the render expression looking for SRFs.
 	v := &r.planner.srfExtractionVisitor
 	*v = srfExtractionVisitor{
@@ -452,7 +468,7 @@ func (r *renderNode) rewriteSRFs(
 		ivarHelper: &r.ivarHelper,
 		searchPath: r.planner.session.SearchPath,
 	}
-	expr, _ := parser.WalkExpr(v, target.Expr)
+	expr, _ := tree.WalkExpr(v, target.Expr)
 	if v.err != nil {
 		return target, v.err
 	}
@@ -481,7 +497,7 @@ func (r *renderNode) rewriteSRFs(
 	r.source = src
 	r.sourceInfo = multiSourceInfo{r.source.info}
 
-	return parser.SelectExpr{Expr: expr}, nil
+	return tree.SelectExpr{Expr: expr}, nil
 }
 
 // A unary source is the special source used with empty FROM clauses:
@@ -491,21 +507,21 @@ func isUnarySource(src planDataSource) bool {
 	return ok && len(src.info.sourceColumns) == 0
 }
 
-func (r *renderNode) initWhere(ctx context.Context, whereExpr parser.Expr) (*filterNode, error) {
+func (r *renderNode) initWhere(ctx context.Context, whereExpr tree.Expr) (*filterNode, error) {
 	f := &filterNode{source: r.source}
-	f.ivarHelper = parser.MakeIndexedVarHelper(f, len(r.sourceInfo[0].sourceColumns))
+	f.ivarHelper = tree.MakeIndexedVarHelper(f, len(r.sourceInfo[0].sourceColumns))
 
 	if whereExpr != nil {
 		var err error
 		f.filter, err = r.planner.analyzeExpr(ctx, whereExpr, r.sourceInfo, f.ivarHelper,
-			parser.TypeBool, true, "WHERE")
+			types.Bool, true, "WHERE")
 		if err != nil {
 			return nil, err
 		}
 
 		// Make sure there are no aggregation/window functions in the filter
 		// (after subqueries have been expanded).
-		if err := r.planner.parser.AssertNoAggregationOrWindowing(
+		if err := r.planner.txCtx.AssertNoAggregationOrWindowing(
 			f.filter, "WHERE", r.planner.session.SearchPath,
 		); err != nil {
 			return nil, err
@@ -521,7 +537,9 @@ func (r *renderNode) initWhere(ctx context.Context, whereExpr parser.Expr) (*fil
 }
 
 // getRenderColName returns the output column name for a render expression.
-func getRenderColName(searchPath parser.SearchPath, target parser.SelectExpr) (string, error) {
+func getRenderColName(
+	searchPath tree.SearchPath, target tree.SelectExpr, helper *tree.IndexedVarHelper,
+) (string, error) {
 	if target.As != "" {
 		return string(target.As), nil
 	}
@@ -540,7 +558,7 @@ func getRenderColName(searchPath parser.SearchPath, target parser.SelectExpr) (s
 	exprStr := target.Expr.String()
 
 	switch t := target.Expr.(type) {
-	case *parser.ColumnItem:
+	case *tree.ColumnItem:
 		// We only shorten the name of the result column to become the
 		// unqualified column part of this expr name if there is
 		// no additional subscript on the column.
@@ -550,12 +568,12 @@ func getRenderColName(searchPath parser.SearchPath, target parser.SelectExpr) (s
 
 	// For compatibility with Postgres, a render expression rooted by a
 	// set-returning function is named after that SRF.
-	case *parser.FuncExpr:
+	case *tree.FuncExpr:
 		fd, err := t.Func.Resolve(searchPath)
 		if err != nil {
 			return "", err
 		}
-		if _, ok := parser.Generators[fd.Name]; ok {
+		if _, ok := builtins.Generators[fd.Name]; ok {
 			return fd.Name, nil
 		}
 	}
@@ -566,7 +584,7 @@ func getRenderColName(searchPath parser.SearchPath, target parser.SelectExpr) (s
 // appendRenderColumn adds a new render expression at the end of the current list.
 // The expression must be normalized already.
 func (r *renderNode) addRenderColumn(
-	expr parser.TypedExpr, exprStr string, col sqlbase.ResultColumn,
+	expr tree.TypedExpr, exprStr string, col sqlbase.ResultColumn,
 ) {
 	r.render = append(r.render, expr)
 	r.renderStrings = append(r.renderStrings, exprStr)
@@ -576,7 +594,7 @@ func (r *renderNode) addRenderColumn(
 // resetRenderColumns resets all the render expressions. This is used e.g. by
 // aggregation and windowing (see group.go / window.go). The method also
 // asserts that both the render and columns array have the same size.
-func (r *renderNode) resetRenderColumns(exprs []parser.TypedExpr, cols sqlbase.ResultColumns) {
+func (r *renderNode) resetRenderColumns(exprs []tree.TypedExpr, cols sqlbase.ResultColumns) {
 	if len(exprs) != len(cols) {
 		panic(fmt.Sprintf("resetRenderColumns used with arrays of different sizes: %d != %d", len(exprs), len(cols)))
 	}
@@ -590,10 +608,11 @@ func (r *renderNode) resetRenderColumns(exprs []parser.TypedExpr, cols sqlbase.R
 // renderRow renders the row by evaluating the render expressions.
 func (r *renderNode) renderRow() error {
 	if r.row == nil {
-		r.row = make([]parser.Datum, len(r.render))
+		r.row = make([]tree.Datum, len(r.render))
 	}
 	for i, e := range r.render {
 		var err error
+		r.planner.evalCtx.IVarHelper = &r.ivarHelper
 		r.row[i], err = e.Eval(&r.planner.evalCtx)
 		if err != nil {
 			return err
@@ -631,7 +650,7 @@ func (r *renderNode) computePhysicalProps(fromOrder physicalProps) {
 	// See physicalProps.project for a description of the projection map.
 	projMap := make([]int, len(r.render))
 	for i, expr := range r.render {
-		if ivar, ok := expr.(*parser.IndexedVar); ok {
+		if ivar, ok := expr.(*tree.IndexedVar); ok {
 			// Column ivar.Idx of the source becomes column i of the render node.
 			projMap[i] = ivar.Idx
 		} else {

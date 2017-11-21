@@ -17,6 +17,7 @@ package sqlbase
 import (
 	"bytes"
 	"fmt"
+	"strings"
 
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
@@ -24,11 +25,20 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
+
+// debugRowFetch can be used to turn on some low-level debugging logs. We use
+// this to avoid using log.V in the hot path.
+const debugRowFetch = false
+
+type kvFetcher interface {
+	nextKV(ctx context.Context) (bool, roachpb.KeyValue, error)
+	getRangesInfo() []roachpb.RangeInfo
+}
 
 type tableInfo struct {
 	// -- Fields initialized once --
@@ -63,42 +73,23 @@ type tableInfo struct {
 	keyVals     []EncDatum
 	extraVals   []EncDatum
 	row         EncDatumRow
-	decodedRow  parser.Datums
-}
-
-// RowResponse is returned when NextRow is invoked. It contains the
-// EncDatumRow as well as the table and index descriptors for the corresponding
-// table/index.
-type RowResponse struct {
-	Row   EncDatumRow
-	Desc  *TableDescriptor
-	Index *IndexDescriptor
-}
-
-// DecodedRowResponse returns the decoded Row in terms of Datums as well as the
-// table and index descriptors for the corresponding table/index.
-type DecodedRowResponse struct {
-	Datums parser.Datums
-	Desc   *TableDescriptor
-	Index  *IndexDescriptor
+	decodedRow  tree.Datums
 }
 
 // MultiRowFetcherTableArgs are the arguments passed to MultiRowFetcher.Init
-// for a given table that includes descriptors and row information
+// for a given table that includes descriptors and row information.
 type MultiRowFetcherTableArgs struct {
 	Desc             *TableDescriptor
 	Index            *IndexDescriptor
 	ColIdxMap        map[ColumnID]int
 	IsSecondaryIndex bool
 	Cols             []ColumnDescriptor
-	ValNeededForCol  []bool
+	// The indexes (0 to # of columns - 1) of the columns to return.
+	ValNeededForCol util.FastIntSet
 }
 
 // MultiRowFetcher handles fetching kvs and forming table rows for an
 // arbitrary number of tables.
-// MultiRowFetcher should be used in lieu of RowFetcher if for a given
-// set of spans, rows from multiple tables are interleaved (i.e. interleaved
-// tables).
 // Usage:
 //   var mrf MultiRowFetcher
 //   err := mrf.Init(..)
@@ -132,8 +123,6 @@ type MultiRowFetcher struct {
 	// reverse denotes whether or not the spans should be read in reverse
 	// or not when StartScan is invoked.
 	reverse bool
-
-	lockForUpdate bool
 
 	// maxKeysPerRow memoizes the maximum number of keys per row
 	// out of all the tables. This is used to calculate the kvFetcher's
@@ -179,19 +168,16 @@ type MultiRowFetcher struct {
 }
 
 // Init sets up a MultiRowFetcher for a given table and index. If we are using a
-// non-primary index, valNeededForCol can only be true for the columns in the
+// non-primary index, tables.ValNeededForCol can only refer to columns in the
 // index.
 func (mrf *MultiRowFetcher) Init(
-	tables []MultiRowFetcherTableArgs,
-	reverse, lockForUpdate, returnRangeInfo bool,
-	alloc *DatumAlloc,
+	reverse, returnRangeInfo bool, alloc *DatumAlloc, tables ...MultiRowFetcherTableArgs,
 ) error {
 	if len(tables) == 0 {
 		panic("no tables to fetch from")
 	}
 
 	mrf.reverse = reverse
-	mrf.lockForUpdate = lockForUpdate
 	mrf.returnRangeInfo = returnRangeInfo
 	mrf.alloc = alloc
 	mrf.allEquivSignatures = make(map[string]int, len(tables))
@@ -209,48 +195,46 @@ func (mrf *MultiRowFetcher) Init(
 			isSecondaryIndex: tableArgs.IsSecondaryIndex,
 			cols:             tableArgs.Cols,
 			row:              make([]EncDatum, len(tableArgs.Cols)),
-			decodedRow:       make([]parser.Datum, len(tableArgs.Cols)),
+			decodedRow:       make([]tree.Datum, len(tableArgs.Cols)),
 		}
 
-		// We produce references to every signature's reference.
-		equivSignatures, err := TableEquivSignatures(table.desc, table.index)
-		if err != nil {
-			return err
-		}
-		for i, sig := range equivSignatures {
-			// We always map the table's equivalence signature (last
-			// 'sig' in 'equivSignatures') to its tableIdx.
-			// This allows us to overwrite previous "ancestor
-			// signatures" (see below).
-			if i == len(equivSignatures)-1 {
-				mrf.allEquivSignatures[string(sig)] = tableIdx
-				break
+		var err error
+		if len(tables) > 1 {
+			// We produce references to every signature's reference.
+			equivSignatures, err := TableEquivSignatures(table.desc, table.index)
+			if err != nil {
+				return err
 			}
-			// Map each table's ancestors' signatures to -1 so
-			// we know during ReadIndexKey if the parsed index
-			// key belongs to ancestor or one of our tables.
-			// We must check if the signature has already been set
-			// since it's possible for a later 'table' to have an
-			// ancestor that is a previous 'table', and we do not
-			// want to overwrite the previous table's tableIdx.
-			if _, exists := mrf.allEquivSignatures[string(sig)]; !exists {
-				mrf.allEquivSignatures[string(sig)] = -1
-			}
-		}
-		// The last signature is the given table's equivalence signature.
-		table.equivSignature = equivSignatures[len(equivSignatures)-1]
-
-		for i, v := range tableArgs.ValNeededForCol {
-			if !v {
-				continue
-			}
-			// The i-th column is required. Search the colIdxMap to find the
-			// corresponding ColumnID.
-			for col, idx := range table.colIdxMap {
-				if idx == i {
-					table.neededCols.Add(int(col))
+			for i, sig := range equivSignatures {
+				// We always map the table's equivalence signature (last
+				// 'sig' in 'equivSignatures') to its tableIdx.
+				// This allows us to overwrite previous "ancestor
+				// signatures" (see below).
+				if i == len(equivSignatures)-1 {
+					mrf.allEquivSignatures[string(sig)] = tableIdx
 					break
 				}
+				// Map each table's ancestors' signatures to -1 so
+				// we know during ReadIndexKey if the parsed index
+				// key belongs to ancestor or one of our tables.
+				// We must check if the signature has already been set
+				// since it's possible for a later 'table' to have an
+				// ancestor that is a previous 'table', and we do not
+				// want to overwrite the previous table's tableIdx.
+				if _, exists := mrf.allEquivSignatures[string(sig)]; !exists {
+					mrf.allEquivSignatures[string(sig)] = -1
+				}
+			}
+			// The last signature is the given table's equivalence signature.
+			table.equivSignature = equivSignatures[len(equivSignatures)-1]
+		}
+
+		// Scan through the entire columns map to see which columns are
+		// required.
+		for col, idx := range table.colIdxMap {
+			if tableArgs.ValNeededForCol.Contains(idx) {
+				// The idx-th column is required.
+				table.neededCols.Add(int(col))
 			}
 		}
 
@@ -355,7 +339,7 @@ func (mrf *MultiRowFetcher) StartScan(
 		firstBatchLimit++
 	}
 
-	f, err := makeKVFetcher(txn, spans, mrf.reverse, mrf.lockForUpdate, limitBatches, firstBatchLimit, mrf.returnRangeInfo)
+	f, err := makeKVFetcher(txn, spans, mrf.reverse, limitBatches, firstBatchLimit, mrf.returnRangeInfo)
 	if err != nil {
 		return err
 	}
@@ -551,7 +535,7 @@ func (mrf *MultiRowFetcher) processKV(
 	if table.neededCols.Empty() {
 		// We don't need to decode any values.
 		if mrf.traceKV {
-			prettyValue = parser.DNull.String()
+			prettyValue = tree.DNull.String()
 		}
 		return prettyKey, prettyValue, nil
 	}
@@ -634,7 +618,7 @@ func (mrf *MultiRowFetcher) processKV(
 	}
 
 	if mrf.traceKV && prettyValue == "" {
-		prettyValue = parser.DNull.String()
+		prettyValue = tree.DNull.String()
 	}
 
 	return prettyKey, prettyValue, nil
@@ -777,13 +761,16 @@ func (mrf *MultiRowFetcher) processValueTuple(
 
 // NextRow processes keys until we complete one row, which is returned as an
 // EncDatumRow. The row contains one value per table column, regardless of the
-// index used; values that are not needed (as per valNeededForCol) are nil. The
+// index used; values that are not needed (as per neededCols) are nil. The
 // EncDatumRow should not be modified and is only valid until the next call.
-// The
 // When there are no more rows, the EncDatumRow is nil.
-func (mrf *MultiRowFetcher) NextRow(ctx context.Context) (RowResponse, error) {
+// It also returns the table and index descriptor associated with the row
+// (relevant when more than one table is specified during initialization).
+func (mrf *MultiRowFetcher) NextRow(
+	ctx context.Context,
+) (row EncDatumRow, table *TableDescriptor, index *IndexDescriptor, err error) {
 	if mrf.kvEnd {
-		return RowResponse{}, nil
+		return nil, nil, nil, nil
 	}
 
 	// All of the columns for a particular row will be grouped together. We
@@ -795,22 +782,18 @@ func (mrf *MultiRowFetcher) NextRow(ctx context.Context) (RowResponse, error) {
 	for {
 		prettyKey, prettyVal, err := mrf.processKV(ctx, mrf.kv)
 		if err != nil {
-			return RowResponse{}, err
+			return nil, nil, nil, err
 		}
 		if mrf.traceKV {
 			log.VEventf(ctx, 2, "fetched: %s -> %s", prettyKey, prettyVal)
 		}
 		rowDone, err := mrf.NextKey(ctx)
 		if err != nil {
-			return RowResponse{}, err
+			return nil, nil, nil, err
 		}
 		if rowDone {
 			mrf.finalizeRow()
-			return RowResponse{
-				Row:   mrf.rowReadyTable.row,
-				Desc:  mrf.rowReadyTable.desc,
-				Index: mrf.rowReadyTable.index,
-			}, nil
+			return mrf.rowReadyTable.row, mrf.rowReadyTable.desc, mrf.rowReadyTable.index, nil
 		}
 	}
 }
@@ -818,33 +801,31 @@ func (mrf *MultiRowFetcher) NextRow(ctx context.Context) (RowResponse, error) {
 // NextRowDecoded calls NextRow and decodes the EncDatumRow into a Datums.
 // The Datums should not be modified and is only valid until the next call.
 // When there are no more rows, the Datums is nil.
+// It also returns the table and index descriptor associated with the row
+// (relevant when more than one table is specified during initialization).
 func (mrf *MultiRowFetcher) NextRowDecoded(
-	ctx context.Context, traceKV bool,
-) (DecodedRowResponse, error) {
-	resp, err := mrf.NextRow(ctx)
+	ctx context.Context,
+) (datums tree.Datums, table *TableDescriptor, index *IndexDescriptor, err error) {
+	row, table, index, err := mrf.NextRow(ctx)
 	if err != nil {
-		return DecodedRowResponse{}, err
+		return nil, nil, nil, err
 	}
-	if resp.Row == nil {
-		return DecodedRowResponse{}, nil
+	if row == nil {
+		return nil, nil, nil, nil
 	}
 
-	for i, encDatum := range resp.Row {
+	for i, encDatum := range row {
 		if encDatum.IsUnset() {
-			mrf.rowReadyTable.decodedRow[i] = parser.DNull
+			mrf.rowReadyTable.decodedRow[i] = tree.DNull
 			continue
 		}
 		if err := encDatum.EnsureDecoded(&mrf.rowReadyTable.cols[i].Type, mrf.alloc); err != nil {
-			return DecodedRowResponse{}, err
+			return nil, nil, nil, err
 		}
 		mrf.rowReadyTable.decodedRow[i] = encDatum.Datum
 	}
 
-	return DecodedRowResponse{
-		Datums: mrf.rowReadyTable.decodedRow,
-		Desc:   resp.Desc,
-		Index:  resp.Index,
-	}, nil
+	return mrf.rowReadyTable.decodedRow, table, index, nil
 }
 
 func (mrf *MultiRowFetcher) finalizeRow() {
@@ -853,11 +834,17 @@ func (mrf *MultiRowFetcher) finalizeRow() {
 	for i := range table.cols {
 		if table.neededCols.Contains(int(table.cols[i].ID)) && table.row[i].IsUnset() {
 			if !table.cols[i].Nullable {
-				panic(fmt.Sprintf("Non-nullable column \"%s:%s\" with no value!",
-					table.desc.Name, table.cols[i].Name))
+				var indexColValues []string
+				for i := range table.indexColIdx {
+					indexColValues = append(indexColValues, table.row[i].String(&table.cols[i].Type))
+				}
+				panic(fmt.Sprintf(
+					"Non-nullable column \"%s:%s\" with no value! Index scanned was %q with the index key columns (%s) and the values (%s)",
+					table.desc.Name, table.cols[i].Name, table.index.Name,
+					strings.Join(table.index.ColumnNames, ","), strings.Join(indexColValues, ",")))
 			}
 			table.row[i] = EncDatum{
-				Datum: parser.DNull,
+				Datum: tree.DNull,
 			}
 		}
 	}
@@ -865,17 +852,15 @@ func (mrf *MultiRowFetcher) finalizeRow() {
 
 // Key returns the next key (the key that follows the last returned row).
 // Key returns nil when there are no more rows.
-// TODO(richardwu): uncomment this when RowFetcher refactored to MultiRowFetcher.
-// func (mrf *MultiRowFetcher) Key() roachpb.Key {
-// 	return mrf.kv.Key
-// }
+func (mrf *MultiRowFetcher) Key() roachpb.Key {
+	return mrf.kv.Key
+}
 
 // GetRangeInfo returns information about the ranges where the rows came from.
 // The RangeInfo's are deduped and not ordered.
-// TODO(richardwu): uncomment this when RowFetcher refactored to MultiRowFetcher.
-// func (mrf *MultiRowFetcher) GetRangeInfo() []roachpb.RangeInfo {
-// 	return mrf.kvFetcher.getRangesInfo()
-// }
+func (mrf *MultiRowFetcher) GetRangeInfo() []roachpb.RangeInfo {
+	return mrf.kvFetcher.getRangesInfo()
+}
 
 // Only unique secondary indexes have extra columns to decode (namely the
 // primary index columns).

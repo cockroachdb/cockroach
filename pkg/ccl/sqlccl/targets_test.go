@@ -4,7 +4,7 @@
 // License (the "License"); you may not use this file except in compliance with
 // the License. You may obtain a copy of the License at
 //
-//     https://github.com/cockroachdb/cockroach/blob/master/LICENSE
+//     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
 
 package sqlccl
 
@@ -15,6 +15,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -94,9 +95,9 @@ func TestDescriptorsMatchingTargets(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			targets := stmt.(*parser.Grant).Targets
+			targets := stmt.(*tree.Grant).Targets
 
-			matched, dbs, err := descriptorsMatchingTargets(test.sessionDatabase, descriptors, targets)
+			matched, err := descriptorsMatchingTargets(test.sessionDatabase, descriptors, targets)
 			if test.err != "" {
 				if !testutils.IsError(err, test.err) {
 					t.Fatalf("expected error matching '%v', but got '%v'", test.err, err)
@@ -105,11 +106,11 @@ func TestDescriptorsMatchingTargets(t *testing.T) {
 				t.Fatal(err)
 			} else {
 				var matchedNames []string
-				for _, m := range matched {
+				for _, m := range matched.descs {
 					matchedNames = append(matchedNames, m.GetName())
 				}
 				var matchedDBNames []string
-				for _, m := range dbs {
+				for _, m := range matched.requestedDBs {
 					matchedDBNames = append(matchedDBNames, m.GetName())
 				}
 				sort.Strings(test.expected)

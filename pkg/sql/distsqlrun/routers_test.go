@@ -28,7 +28,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -40,7 +40,7 @@ import (
 // that tracks the lifetime of the background router goroutines.
 func setupRouter(
 	t *testing.T,
-	evalCtx *parser.EvalContext,
+	evalCtx *tree.EvalContext,
 	spec OutputRouterSpec,
 	inputTypes []sqlbase.ColumnType,
 	streams []RowReceiver,
@@ -65,12 +65,12 @@ func TestRouters(t *testing.T) {
 
 	rng, _ := randutil.NewPseudoRand()
 	alloc := &sqlbase.DatumAlloc{}
-	evalCtx := parser.NewTestingEvalContext()
+	evalCtx := tree.NewTestingEvalContext()
 	defer evalCtx.Stop(context.Background())
 
 	// Generate tables of possible values for each column; we have fewer possible
 	// values than rows to guarantee many occurrences of each value.
-	vals, types := sqlbase.RandEncDatumSlices(rng, numCols, numRows/10)
+	vals, types := sqlbase.RandSortingEncDatumSlices(rng, numCols, numRows/10)
 
 	testCases := []struct {
 		spec       OutputRouterSpec
@@ -146,7 +146,7 @@ func TestRouters(t *testing.T) {
 				if !b.ProducerClosed {
 					t.Fatalf("bucket not closed: %d", i)
 				}
-				rows[i] = getRowsFromBuffer(t, b)
+				rows[i] = b.GetRowsNoMeta(t)
 			}
 
 			switch tc.spec.Type {
@@ -240,21 +240,6 @@ func TestRouters(t *testing.T) {
 	}
 }
 
-func getRowsFromBuffer(t *testing.T, buf *RowBuffer) sqlbase.EncDatumRows {
-	var res sqlbase.EncDatumRows
-	for {
-		row, meta := buf.Next()
-		if !meta.Empty() {
-			t.Fatalf("unexpected metadata: %v", meta)
-		}
-		if row == nil {
-			break
-		}
-		res = append(res, row)
-	}
-	return res
-}
-
 const testRangeRouterSpanBreak byte = (encoding.IntMax + encoding.IntMin) / 2
 
 var (
@@ -285,7 +270,7 @@ var (
 func TestConsumerStatus(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	evalCtx := parser.NewTestingEvalContext()
+	evalCtx := tree.NewTestingEvalContext()
 	defer evalCtx.Stop(context.Background())
 
 	testCases := []struct {
@@ -334,9 +319,9 @@ func TestConsumerStatus(t *testing.T) {
 				}
 			case *rangeRouter:
 				// Use 0 and MaxInt32 to route rows based on testRangeRouterSpec's spans.
-				d := parser.NewDInt(0)
+				d := tree.NewDInt(0)
 				row0 = sqlbase.EncDatumRow{sqlbase.DatumToEncDatum(colTypes[0], d)}
-				d = parser.NewDInt(math.MaxInt32)
+				d = tree.NewDInt(math.MaxInt32)
 				row1 = sqlbase.EncDatumRow{sqlbase.DatumToEncDatum(colTypes[0], d)}
 			default:
 				rng, _ := randutil.NewPseudoRand()
@@ -435,7 +420,7 @@ func preimageAttack(
 func TestMetadataIsForwarded(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	evalCtx := parser.NewTestingEvalContext()
+	evalCtx := tree.NewTestingEvalContext()
 	defer evalCtx.Stop(context.Background())
 
 	testCases := []struct {
@@ -585,7 +570,7 @@ func TestRouterBlocks(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			flowCtx := FlowCtx{Settings: cluster.MakeTestingClusterSettings(), EvalCtx: parser.MakeTestingEvalContext()}
+			flowCtx := FlowCtx{Settings: cluster.MakeTestingClusterSettings(), EvalCtx: tree.MakeTestingEvalContext()}
 			router.init(&flowCtx, colTypes)
 			var wg sync.WaitGroup
 			router.start(context.TODO(), &wg, nil /* ctxCancel */)

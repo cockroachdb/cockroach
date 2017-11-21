@@ -23,7 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -43,14 +43,14 @@ func TestTableReader(t *testing.T) {
 	//  |-----------------------------------------------------------------|
 	//  | rowId/10 | rowId%10 | rowId/10 + rowId%10 | IntToEnglish(rowId) |
 
-	aFn := func(row int) parser.Datum {
-		return parser.NewDInt(parser.DInt(row / 10))
+	aFn := func(row int) tree.Datum {
+		return tree.NewDInt(tree.DInt(row / 10))
 	}
-	bFn := func(row int) parser.Datum {
-		return parser.NewDInt(parser.DInt(row % 10))
+	bFn := func(row int) tree.Datum {
+		return tree.NewDInt(tree.DInt(row % 10))
 	}
-	sumFn := func(row int) parser.Datum {
-		return parser.NewDInt(parser.DInt(row/10 + row%10))
+	sumFn := func(row int) tree.Datum {
+		return tree.NewDInt(tree.DInt(row/10 + row%10))
 	}
 
 	sqlutils.CreateTable(t, sqlDB, "t",
@@ -117,7 +117,7 @@ func TestTableReader(t *testing.T) {
 		ts := c.spec
 		ts.Table = *td
 
-		evalCtx := parser.MakeTestingEvalContext()
+		evalCtx := tree.MakeTestingEvalContext()
 		defer evalCtx.Stop(context.Background())
 		flowCtx := FlowCtx{
 			EvalCtx:  evalCtx,
@@ -139,10 +139,7 @@ func TestTableReader(t *testing.T) {
 
 		var res sqlbase.EncDatumRows
 		for {
-			row, meta := out.Next()
-			if !meta.Empty() {
-				t.Fatalf("unexpected metadata: %+v", meta)
-			}
+			row := out.NextNoMeta(t)
 			if row == nil {
 				break
 			}
@@ -185,7 +182,7 @@ ALTER TABLE t TESTING_RELOCATE VALUES (ARRAY[2], 1), (ARRAY[1], 2), (ARRAY[3], 3
 	kvDB := tc.Server(0).KVClient().(*client.DB)
 	td := sqlbase.GetTableDescriptor(kvDB, "test", "t")
 
-	evalCtx := parser.MakeTestingEvalContext()
+	evalCtx := tree.MakeTestingEvalContext()
 	defer evalCtx.Stop(context.Background())
 	nodeID := tc.Server(0).NodeID()
 	flowCtx := FlowCtx{
@@ -245,5 +242,55 @@ ALTER TABLE t TESTING_RELOCATE VALUES (ARRAY[2], 1), (ARRAY[1], 2), (ARRAY[3], 3
 	if misplannedRanges[0].Lease.Replica.NodeID != 2 ||
 		misplannedRanges[1].Lease.Replica.NodeID != 3 {
 		t.Fatalf("expected misplanned ranges from nodes 2 and 3, got: %+v", metas[0])
+	}
+}
+
+func BenchmarkTableReader(b *testing.B) {
+	s, sqlDB, kvDB := serverutils.StartServer(b, base.TestServerArgs{})
+	defer s.Stopper().Stop(context.Background())
+
+	sqlutils.CreateTable(
+		b, sqlDB, "t",
+		"k INT PRIMARY KEY, v INT",
+		10000,
+		sqlutils.ToRowFn(sqlutils.RowIdxFn, sqlutils.RowModuloFn(42)),
+	)
+
+	tableDesc := sqlbase.GetTableDescriptor(kvDB, "test", "t")
+
+	evalCtx := tree.MakeTestingEvalContext()
+	defer evalCtx.Stop(context.Background())
+	flowCtx := FlowCtx{
+		EvalCtx:  evalCtx,
+		Settings: s.ClusterSettings(),
+		// Pass a DB without a TxnCoordSender.
+		txn:    client.NewTxn(client.NewDB(s.DistSender(), s.Clock()), s.NodeID()),
+		nodeID: s.NodeID(),
+	}
+	spec := TableReaderSpec{
+		Spans: []TableReaderSpan{{Span: tableDesc.PrimaryIndexSpan()}},
+	}
+	post := PostProcessSpec{}
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		out := &RowBuffer{}
+		tr, err := newTableReader(&flowCtx, &spec, &post, out)
+		if err != nil {
+			b.Fatal(err)
+		}
+		tr.Run(context.Background(), nil)
+		if !out.ProducerClosed {
+			b.Fatalf("output RowReceiver not closed")
+		}
+
+		for {
+			row, meta := out.Next()
+			if !meta.Empty() {
+				b.Fatalf("unexpected metadata: %+v", meta)
+			}
+			if row == nil {
+				break
+			}
+		}
 	}
 }

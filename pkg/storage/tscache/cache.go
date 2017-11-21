@@ -15,6 +15,7 @@
 package tscache
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -62,17 +63,16 @@ type Cache interface {
 	GlobalLowWater() hlc.Timestamp
 
 	// GetMaxRead returns the maximum read timestamp which overlaps the interval
-	// spanning from start to end. If that timestamp belongs to a single
-	// transaction, that transaction's ID is returned. If no part of the
-	// specified range is overlapped by timestamps from different transactions
-	// in the cache, the low water timestamp is returned for the read
-	// timestamps. Also returns an "ok" bool, indicating whether an explicit
-	// match of the interval was found in the cache (as opposed to using the
-	// low-water mark).
-	GetMaxRead(start, end roachpb.Key) (hlc.Timestamp, uuid.UUID, bool)
+	// spanning from start to end. If that maximum timestamp belongs to a single
+	// transaction, that transaction's ID is returned. Otherwise, if that
+	// maximum is shared between multiple transactions, no transaction ID is
+	// returned. Finally, if no part of the specified range is overlapped by
+	// timestamp intervals from any transactions in the cache, the low water
+	// timestamp is returned for the read timestamps.
+	GetMaxRead(start, end roachpb.Key) (hlc.Timestamp, uuid.UUID)
 	// GetMaxWrite behaves like GetMaxRead, but returns the maximum write
 	// timestamp which overlaps the interval spanning from start to end.
-	GetMaxWrite(start, end roachpb.Key) (hlc.Timestamp, uuid.UUID, bool)
+	GetMaxWrite(start, end roachpb.Key) (hlc.Timestamp, uuid.UUID)
 
 	// The following methods are used for testing within this package:
 	//
@@ -98,18 +98,37 @@ type cacheValue struct {
 // noTxnID is used when a cacheValue has no corresponding TxnID.
 var noTxnID uuid.UUID
 
-// lowWaterTxnIDMarker is a special txn ID that identifies a cache entry as a
-// low water mark. It is specified when a lease is acquired to clear the
-// timestamp cache for a range. Also see Cache.getMax where this txn ID is
-// checked in order to return whether the max read/write timestamp came from a
-// regular entry or one of these low water mark entries.
-var lowWaterTxnIDMarker = func() uuid.UUID {
-	// The specific txn ID used here isn't important. We use something that is:
-	// a) non-zero
-	// b) obvious
-	u, err := uuid.FromString("11111111-1111-1111-1111-111111111111")
-	if err != nil {
-		panic(err)
+func (v cacheValue) String() string {
+	var txnIDStr string
+	switch v.txnID {
+	case noTxnID:
+		txnIDStr = "none"
+	default:
+		txnIDStr = v.txnID.String()
 	}
-	return u
-}()
+	return fmt.Sprintf("{ts: %s, txnID: %s}", v.ts, txnIDStr)
+}
+
+// ratchetValue returns the cacheValue that results from ratcheting the provided
+// old and new cacheValues. It also returns flags reflecting whether the value
+// was updated.
+//
+// This ratcheting policy is shared across all Cache implementations, even if
+// they do not use this function directly.
+func ratchetValue(old, new cacheValue) (cacheValue, bool) {
+	if old.ts.Less(new.ts) {
+		// Ratchet to new value.
+		return new, true
+	} else if new.ts.Less(old.ts) {
+		// Nothing to update.
+		return old, false
+	} else if new.txnID != old.txnID {
+		// old.ts == new.ts but the values have different txnIDs. Remove the
+		// transaction ID from the value so that it is no longer owned by any
+		// transaction.
+		new.txnID = noTxnID
+		return new, old.txnID != noTxnID
+	}
+	// old == new.
+	return old, false
+}

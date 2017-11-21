@@ -82,6 +82,12 @@
 
 [[projects]]
   branch = "master"
+  name = "github.com/andy-kimball/arenaskl"
+  packages = ["."]
+  revision = "1b13f9a73da39445e8106e6cdc1af59f06ea6c20"
+
+[[projects]]
+  branch = "master"
   name = "github.com/andybalholm/cascadia"
   packages = ["."]
   revision = "349dd0209470eabd9514242c688c403c0926d266"
@@ -103,6 +109,12 @@
   packages = ["aws","aws/awserr","aws/awsutil","aws/client","aws/client/metadata","aws/corehandlers","aws/credentials","aws/credentials/ec2rolecreds","aws/credentials/endpointcreds","aws/credentials/stscreds","aws/defaults","aws/ec2metadata","aws/endpoints","aws/request","aws/session","aws/signer/v4","internal/shareddefaults","private/protocol","private/protocol/query","private/protocol/query/queryutil","private/protocol/rest","private/protocol/restxml","private/protocol/xml/xmlutil","service/s3","service/s3/s3iface","service/s3/s3manager","service/sts"]
   revision = "ee1f179877b2daf2aaabf71fa900773bf8842253"
   version = "v1.12.19"
+
+[[projects]]
+  branch = "master"
+  name = "github.com/axiomhq/hyperloglog"
+  packages = ["."]
+  revision = "730eea1500d5c665305c6717138f62f269c2bf79"
 
 [[projects]]
   branch = "master"
@@ -208,6 +220,18 @@
 
 [[projects]]
   branch = "master"
+  name = "github.com/dgryski/go-bits"
+  packages = ["."]
+  revision = "2ad8d707cc05b1815ce6ff2543bb5e8d8f9298ef"
+
+[[projects]]
+  branch = "master"
+  name = "github.com/dgryski/go-metro"
+  packages = ["."]
+  revision = "0f6473574cdfd7be3962c41fb23dc4768b1f7deb"
+
+[[projects]]
+  branch = "master"
   name = "github.com/docker/distribution"
   packages = ["digestset","reference"]
   revision = "3800056b8832cf6075e78b282ac010131d8687bc"
@@ -298,10 +322,10 @@
   version = "v0.3.0"
 
 [[projects]]
+  branch = "master"
   name = "github.com/go-ole/go-ole"
   packages = [".","oleutil"]
   revision = "2ecd927eaf828c4fc088fae349b28eed1480ff56"
-  version = "v0.0.1"
 
 [[projects]]
   branch = "master"
@@ -461,9 +485,9 @@
 
 [[projects]]
   name = "github.com/knz/go-libedit"
-  packages = [".","common","other","unix"]
-  revision = "aafda877029e573c3bc5e352d000a41076e3d973"
-  version = "v1.6.1"
+  packages = [".","common","other","unix","unix/sigtramp"]
+  revision = "7be5ed21ea38120269a1976f06dfd2570e41386f"
+  version = "v1.6.3"
 
 [[projects]]
   branch = "master"
@@ -640,6 +664,12 @@
   version = "1.0.0"
 
 [[projects]]
+  name = "github.com/pmezard/go-difflib"
+  packages = ["difflib"]
+  revision = "792786c7400a136282c1664665ae0a8db921c6c2"
+  version = "v1.0.0"
+
+[[projects]]
   branch = "master"
   name = "github.com/prometheus/client_model"
   packages = ["go"]
@@ -710,6 +740,12 @@
   packages = ["."]
   revision = "e57e3eeb33f795204c1ca35f56c44f83227c6e66"
   version = "v1.0.0"
+
+[[projects]]
+  name = "github.com/stretchr/testify"
+  packages = ["assert","require"]
+  revision = "69483b4bd14f5845b5a1e55bca19e954e827f1d0"
+  version = "v1.1.4"
 
 [[projects]]
   name = "github.com/tebeka/go2xunit"
@@ -815,6 +851,6 @@
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "107aefc02632222ca74fa3741b47c2e237af328f83854dc521a119664b361ce6"
+  inputs-digest = "5f57e78f95e9fa88c5f4069ebdc6abba51e480d57b8b0808ad283378c8d845e1"
   solver-name = "gps-cdcl"
   solver-version = 1

@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/abortspan"
+	"github.com/cockroachdb/cockroach/pkg/storage/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/stateloader"
@@ -120,10 +121,6 @@ func (r *Replica) ClusterSettings() *cluster.Settings {
 	return r.store.cfg.Settings
 }
 
-func makeReplicaStateLoader(rec ReplicaEvalContext) stateloader.StateLoader {
-	return stateloader.Make(rec.ClusterSettings(), rec.GetRangeID())
-}
-
 // In-memory state, immutable fields, and debugging methods are accessed directly.
 
 // StoreID returns the Replica's StoreID.
@@ -131,9 +128,9 @@ func (r *Replica) StoreID() roachpb.StoreID {
 	return r.store.StoreID()
 }
 
-// StoreTestingKnobs returns the Replica's StoreTestingKnobs.
-func (r *Replica) StoreTestingKnobs() StoreTestingKnobs {
-	return r.store.cfg.TestingKnobs
+// EvalKnobs returns the EvalContext's Knobs.
+func (r *Replica) EvalKnobs() batcheval.TestingKnobs {
+	return r.store.cfg.TestingKnobs.EvalKnobs
 }
 
 // Tracer returns the Replica's Tracer.

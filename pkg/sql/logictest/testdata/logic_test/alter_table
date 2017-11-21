@@ -663,3 +663,22 @@ query I
 SELECT COUNT(*) FROM crdb_internal.jobs WHERE status = 'pending' OR status = 'started'
 ----
 0
+
+# Verify that ALTER TABLE statements are rolled back properly when a DEFAULT expression returns
+# an error.
+
+statement ok
+CREATE TABLE default_err_test (foo text)
+
+statement ok
+INSERT INTO default_err_test VALUES ('foo'), ('bar'), ('baz')
+
+statement error some_msg
+ALTER TABLE default_err_test ADD COLUMN id int DEFAULT crdb_internal.force_error('foo', 'some_msg')
+
+query T
+SELECT * from default_err_test ORDER BY foo
+----
+bar
+baz
+foo

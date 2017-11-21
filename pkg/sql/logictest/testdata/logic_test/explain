@@ -137,7 +137,7 @@ EXPLAIN SHOW TABLES
 1  render  ·      ·
 2  filter  ·      ·
 3  values  ·      ·
-3  ·       size   5 columns, 71 rows
+3  ·       size   5 columns, 72 rows
 
 query ITTT
 EXPLAIN SHOW DATABASE
@@ -145,7 +145,7 @@ EXPLAIN SHOW DATABASE
 0  render  ·     ·
 1  filter  ·     ·
 2  values  ·     ·
-2  ·       size  2 columns, 21 rows
+2  ·       size  2 columns, 22 rows
 
 query ITTT
 EXPLAIN SHOW TIME ZONE
@@ -153,7 +153,7 @@ EXPLAIN SHOW TIME ZONE
 0  render  ·     ·
 1  filter  ·     ·
 2  values  ·     ·
-2  ·       size  2 columns, 21 rows
+2  ·       size  2 columns, 22 rows
 
 query ITTT
 EXPLAIN SHOW DEFAULT_TRANSACTION_ISOLATION
@@ -161,7 +161,7 @@ EXPLAIN SHOW DEFAULT_TRANSACTION_ISOLATION
 0  render  ·     ·
 1  filter  ·     ·
 2  values  ·     ·
-2  ·       size  2 columns, 21 rows
+2  ·       size  2 columns, 22 rows
 
 query ITTT
 EXPLAIN SHOW TRANSACTION ISOLATION LEVEL
@@ -169,7 +169,7 @@ EXPLAIN SHOW TRANSACTION ISOLATION LEVEL
 0  render  ·     ·
 1  filter  ·     ·
 2  values  ·     ·
-2  ·       size  2 columns, 21 rows
+2  ·       size  2 columns, 22 rows
 
 query ITTT
 EXPLAIN SHOW TRANSACTION PRIORITY
@@ -177,7 +177,7 @@ EXPLAIN SHOW TRANSACTION PRIORITY
 0  render  ·     ·
 1  filter  ·     ·
 2  values  ·     ·
-2  ·       size  2 columns, 21 rows
+2  ·       size  2 columns, 22 rows
 
 query ITTT
 EXPLAIN SHOW COLUMNS FROM foo
@@ -194,11 +194,11 @@ EXPLAIN SHOW COLUMNS FROM foo
 5  render  ·         ·
 6  filter  ·         ·
 7  values  ·         ·
-7  ·       size      13 columns, 598 rows
+7  ·       size      13 columns, 607 rows
 5  render  ·         ·
 6  filter  ·         ·
 7  values  ·         ·
-7  ·       size      13 columns, 27 rows
+7  ·       size      13 columns, 29 rows
 
 query ITTT
 EXPLAIN SHOW GRANTS ON foo
@@ -208,7 +208,7 @@ EXPLAIN SHOW GRANTS ON foo
 1  render  ·      ·
 2  filter  ·      ·
 3  values  ·      ·
-3  ·       size   8 columns, 50 rows
+3  ·       size   8 columns, 55 rows
 
 
 query ITTT
@@ -217,7 +217,7 @@ EXPLAIN SHOW INDEX FROM foo
 0  render  ·     ·
 1  filter  ·     ·
 2  values  ·     ·
-2  ·       size  13 columns, 27 rows
+2  ·       size  13 columns, 29 rows
 
 query ITTT
 EXPLAIN SHOW CONSTRAINTS FROM foo

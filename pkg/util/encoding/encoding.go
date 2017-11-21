@@ -81,7 +81,16 @@ const (
 
 	// Nulls come last when encoded descendingly.
 	encodedNotNullDesc = 0xfe
-	encodedNullDesc    = 0xff
+	// interleavedSentinel uses the same byte as encodedNotNullDesc.
+	// It is used in the key encoding of interleaved index keys in order
+	// to coerce the key to sort after its respective parent and ancestors'
+	// index keys.
+	// The byte for NotNullDesc was chosen over NullDesc since NotNullDesc
+	// is never used in actual encoded keys.
+	// This allowed the key pretty printer for interleaved keys to work
+	// without table descriptors.
+	interleavedSentinel = 0xfe
+	encodedNullDesc     = 0xff
 )
 
 const (
@@ -114,11 +123,25 @@ func (d Direction) Reverse() Direction {
 	}
 }
 
-// EncodeUint32Ascending encodes the uint32 value using a big-endian 8 byte
+// EncodeUint32Ascending encodes the uint32 value using a big-endian 4 byte
 // representation. The bytes are appended to the supplied buffer and
 // the final buffer is returned.
 func EncodeUint32Ascending(b []byte, v uint32) []byte {
 	return append(b, byte(v>>24), byte(v>>16), byte(v>>8), byte(v))
+}
+
+// PutUint32Ascending encodes the uint32 value using a big-endian 4 byte
+// representation at the specified index, lengthening the input slice if
+// necessary.
+func PutUint32Ascending(b []byte, v uint32, idx int) []byte {
+	for len(b) < idx+4 {
+		b = append(b, 0)
+	}
+	b[idx] = byte(v >> 24)
+	b[idx+1] = byte(v >> 16)
+	b[idx+2] = byte(v >> 8)
+	b[idx+3] = byte(v)
+	return b
 }
 
 // EncodeUint32Descending encodes the uint32 value so that it sorts in
@@ -660,9 +683,32 @@ func EncodeNotNullAscending(b []byte) []byte {
 	return append(b, encodedNotNull)
 }
 
+// EncodeArrayAscending encodes a value used to signify membership of an array for JSON objects.
+func EncodeArrayAscending(b []byte) []byte {
+	return append(b, byte(Array))
+}
+
+// EncodeTrueAscending encodes the boolean value true for use with JSON inverted indexes.
+func EncodeTrueAscending(b []byte) []byte {
+	return append(b, byte(True))
+}
+
+// EncodeFalseAscending encodes the boolean value false for use with JSON inverted indexes.
+func EncodeFalseAscending(b []byte) []byte {
+	return append(b, byte(False))
+}
+
 // EncodeNotNullDescending is the descending equivalent of EncodeNotNullAscending.
 func EncodeNotNullDescending(b []byte) []byte {
 	return append(b, encodedNotNullDesc)
+}
+
+// EncodeInterleavedSentinel encodes an interleavedSentinel that is necessary
+// for interleaved indexes and their index keys.
+// The interleavedSentinel has a byte value 0xfe and is equivalent to
+// encodedNotNullDesc.
+func EncodeInterleavedSentinel(b []byte) []byte {
+	return append(b, interleavedSentinel)
 }
 
 // DecodeIfNull decodes a NULL value from the input buffer. If the input buffer
@@ -692,6 +738,22 @@ func DecodeIfNotNull(b []byte) ([]byte, bool) {
 	if PeekType(b) == NotNull {
 		return b[1:], true
 	}
+	return b, false
+}
+
+// DecodeIfInterleavedSentinel decodes the interleavedSentinel from the input
+// buffer and returns the remaining buffer without the sentinel if the
+// interleavedSentinel is the first byte.
+// Otherwise, the buffer is returned unchanged and false is returned.
+func DecodeIfInterleavedSentinel(b []byte) ([]byte, bool) {
+	if len(b) == 0 {
+		return b, false
+	}
+
+	if b[0] == interleavedSentinel {
+		return b[1:], true
+	}
+
 	return b, false
 }
 
@@ -865,6 +927,7 @@ const (
 	// Do not change SentinelType from 15. This value is specifically used for bit
 	// manipulation in EncodeValueTag.
 	SentinelType Type = 15 // Used in the Value encoding.
+	JSON
 )
 
 // PeekType peeks at the type of the value encoded at the start of b.
@@ -933,6 +996,9 @@ func PeekLength(b []byte) (int, error) {
 	switch m {
 	case encodedNull, encodedNullDesc, encodedNotNull, encodedNotNullDesc,
 		floatNaN, floatNaNDesc, floatZero, decimalZero:
+		// interleavedSentinel also falls into this path. Since it
+		// contains the same byte value as encodedNotNullDesc, it
+		// cannot be included explicitly in the case statement.
 		return 1, nil
 	case bytesMarker:
 		return getBytesLength(b, ascendingEscapes)
@@ -961,17 +1027,30 @@ func PeekLength(b []byte) (int, error) {
 // PrettyPrintValue returns the string representation of all contiguous decodable
 // values in the provided byte slice, separated by a provided separator.
 func PrettyPrintValue(b []byte, sep string) string {
+	s1, allDecoded := prettyPrintValueImpl(b, sep)
+	if allDecoded {
+		return s1
+	}
+	if s2, allDecoded := prettyPrintValueImpl(UndoPrefixEnd(b), sep); allDecoded {
+		return s2 + sep + "PrefixEnd"
+	}
+	return s1
+}
+
+func prettyPrintValueImpl(b []byte, sep string) (string, bool) {
+	allDecoded := true
 	var buf bytes.Buffer
 	for len(b) > 0 {
 		bb, s, err := prettyPrintFirstValue(b)
 		if err != nil {
+			allDecoded = false
 			fmt.Fprintf(&buf, "%s???", sep)
 		} else {
 			fmt.Fprintf(&buf, "%s%s", sep, s)
 		}
 		b = bb
 	}
-	return buf.String()
+	return buf.String(), allDecoded
 }
 
 // prettyPrintFirstValue returns a string representation of the first decodable
@@ -1039,6 +1118,41 @@ func prettyPrintFirstValue(b []byte) ([]byte, string, error) {
 		// This shouldn't ever happen, but if it does, return an empty slice.
 		return nil, strconv.Quote(string(b)), nil
 	}
+}
+
+// UndoPrefixEnd is a partial inverse for roachpb.Key.PrefixEnd.
+//
+// Specifically, calling UndoPrefixEnd will reverse the effects of calling a
+// PrefixEnd on a byte sequence, except when the byte sequence represents a
+// maximal prefix (i.e., 0xff...). This is because PrefixEnd is a lossy
+// operation: PrefixEnd(0xff) returns 0xff rather than wrapping around to the
+// minimal prefix 0x00. For consistency, UndoPrefixEnd is also lossy:
+// UndoPrefixEnd(0x00) returns 0x00 rather than wrapping around to the maximal
+// prefix 0xff.
+//
+// Formally:
+//
+//     PrefixEnd(UndoPrefixEnd(p)) = p for all non-minimal prefixes p
+//     UndoPrefixEnd(PrefixEnd(p)) = p for all non-maximal prefixes p
+//
+// A minimal prefix is any prefix that consists only of one or more 0x00 bytes;
+// analogously, a maximal prefix is any prefix that consists only of one or more
+// 0xff bytes.
+//
+// UndoPrefixEnd is implemented here to avoid a circular dependency on roachpb,
+// but arguably belongs in a byte-manipulation utility package.
+func UndoPrefixEnd(b []byte) []byte {
+	out := append([]byte(nil), b...)
+	for i := len(out) - 1; i >= 0; i-- {
+		out[i] = out[i] - 1
+		if out[i] != 0xff {
+			return out
+		}
+	}
+	// At this point, out has wrapped around to the maximal possible prefix. That
+	// means we were provided a minimal prefix (i.e., all zero bytes), so return
+	// it unchanged.
+	return b
 }
 
 // NonsortingVarintMaxLen is the maximum length of an EncodeNonsortingVarint
@@ -1320,6 +1434,14 @@ func EncodeUntaggedIPAddrValue(appendTo []byte, u ipaddr.IPAddr) []byte {
 	return u.ToBuffer(appendTo)
 }
 
+// EncodeJSONValue encodes an already-byte-encoded JSON value with no value tag
+// but with a length prefix, appends it to the supplied buffer, and returns the
+// final buffer.
+func EncodeJSONValue(appendTo []byte, colID uint32, data []byte) []byte {
+	appendTo = EncodeValueTag(appendTo, colID, JSON)
+	return EncodeUntaggedBytesValue(appendTo, data)
+}
+
 // DecodeValueTag decodes a value encoded by EncodeValueTag, used as a prefix in
 // each of the other EncodeFooValue methods.
 //
@@ -1587,7 +1709,7 @@ func PeekValueLength(b []byte) (typeOffset int, length int, err error) {
 		return typeOffset, dataOffset + n, err
 	case Float:
 		return typeOffset, dataOffset + floatValueEncodedLength, nil
-	case Bytes, Array:
+	case Bytes, Array, JSON:
 		_, n, i, err := DecodeNonsortingUvarint(b)
 		return typeOffset, dataOffset + n + int(i), err
 	case Decimal:

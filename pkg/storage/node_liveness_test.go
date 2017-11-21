@@ -698,7 +698,7 @@ func TestNodeLivenessRetryAmbiguousResultError(t *testing.T) {
 
 	injectError.Store(true)
 	storeCfg := storage.TestStoreConfig(nil)
-	storeCfg.TestingKnobs.TestingEvalFilter = func(args storagebase.FilterArgs) *roachpb.Error {
+	storeCfg.TestingKnobs.EvalKnobs.TestingEvalFilter = func(args storagebase.FilterArgs) *roachpb.Error {
 		if _, ok := args.Req.(*roachpb.ConditionalPutRequest); !ok {
 			return nil
 		}

@@ -16,14 +16,16 @@ package sqlbase
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/transform"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
 // MakeDefaultExprs returns a slice of the default expressions for the slice
 // of input column descriptors, or nil if none of the input column descriptors
 // have default expressions.
 func MakeDefaultExprs(
-	cols []ColumnDescriptor, parse *parser.Parser, evalCtx *parser.EvalContext,
-) ([]parser.TypedExpr, error) {
+	cols []ColumnDescriptor, txCtx *transform.ExprTransformContext, evalCtx *tree.EvalContext,
+) ([]tree.TypedExpr, error) {
 	// Check to see if any of the columns have DEFAULT expressions. If there
 	// are no DEFAULT expressions, we don't bother with constructing the
 	// defaults map as the defaults are all NULL.
@@ -39,7 +41,7 @@ func MakeDefaultExprs(
 	}
 
 	// Build the default expressions map from the parsed SELECT statement.
-	defaultExprs := make([]parser.TypedExpr, 0, len(cols))
+	defaultExprs := make([]tree.TypedExpr, 0, len(cols))
 	exprStrings := make([]string, 0, len(cols))
 	for _, col := range cols {
 		if col.DefaultExpr != nil {
@@ -54,15 +56,15 @@ func MakeDefaultExprs(
 	defExprIdx := 0
 	for _, col := range cols {
 		if col.DefaultExpr == nil {
-			defaultExprs = append(defaultExprs, parser.DNull)
+			defaultExprs = append(defaultExprs, tree.DNull)
 			continue
 		}
 		expr := exprs[defExprIdx]
-		typedExpr, err := parser.TypeCheck(expr, nil, col.Type.ToDatumType())
+		typedExpr, err := tree.TypeCheck(expr, nil, col.Type.ToDatumType())
 		if err != nil {
 			return nil, err
 		}
-		if typedExpr, err = parse.NormalizeExpr(evalCtx, typedExpr); err != nil {
+		if typedExpr, err = txCtx.NormalizeExpr(evalCtx, typedExpr); err != nil {
 			return nil, err
 		}
 		defaultExprs = append(defaultExprs, typedExpr)
@@ -76,9 +78,9 @@ func MakeDefaultExprs(
 func ProcessDefaultColumns(
 	cols []ColumnDescriptor,
 	tableDesc *TableDescriptor,
-	parse *parser.Parser,
-	evalCtx *parser.EvalContext,
-) ([]ColumnDescriptor, []parser.TypedExpr, error) {
+	txCtx *transform.ExprTransformContext,
+	evalCtx *tree.EvalContext,
+) ([]ColumnDescriptor, []tree.TypedExpr, error) {
 	colIDSet := make(map[ColumnID]struct{}, len(cols))
 	for _, col := range cols {
 		colIDSet[col.ID] = struct{}{}
@@ -107,6 +109,6 @@ func ProcessDefaultColumns(
 		}
 	}
 
-	defaultExprs, err := MakeDefaultExprs(cols, parse, evalCtx)
+	defaultExprs, err := MakeDefaultExprs(cols, txCtx, evalCtx)
 	return cols, defaultExprs, err
 }

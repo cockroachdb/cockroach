@@ -45,7 +45,7 @@ $result = pg_query_params('SELECT 1, 2 > $1, $1', [%v])
 $arr = pg_fetch_row($result);
 ($arr === ['1', 'f', '3']) or kill('Unexpected: ' . print_r($arr, true));
 
-$dbh = new PDO('pgsql:','', null, array(PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION));
+$dbh = new PDO('pgsql:','root', null, array(PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION));
 $dbh->exec('CREATE database bank');
 $dbh->exec('CREATE table bank.accounts (id INT PRIMARY KEY, balance INT)');
 $dbh->exec('INSERT INTO bank.accounts (id, balance) VALUES (1, 1000), (2, 250)');

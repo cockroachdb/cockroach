@@ -26,7 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/jobs"
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
@@ -58,7 +58,10 @@ type FlowCtx struct {
 	// id is a unique identifier for a flow.
 	id FlowID
 	// EvalCtx is used by all the processors in the flow to evaluate expressions.
-	EvalCtx parser.EvalContext
+	// Processors that intend to evaluate expressions with this EvalCtx should
+	// get a copy with NewEvalCtx instead of storing a pointer to this one
+	// directly.
+	EvalCtx tree.EvalContext
 	// rpcCtx is used by the Outboxes that may be present in the flow for
 	// connecting to other nodes.
 	rpcCtx *rpc.Context
@@ -83,6 +86,18 @@ type FlowCtx struct {
 
 	// JobRegistry is used during backfill to load jobs which keep state.
 	JobRegistry *jobs.Registry
+}
+
+// NewEvalCtx returns a modifiable copy of the FlowCtx's EvalContext.
+// Processors should use this method any time they need to store a pointer to
+// the EvalContext, since processors may mutate the EvalContext. Specifically,
+// every processor that runs ProcOutputHelper.Init must pass in a modifiable
+// EvalContext, since it stores that EvalContext in its exprHelpers and mutates
+// them at runtime to ensure expressions are evaluated with the correct indexed
+// var context.
+func (ctx *FlowCtx) NewEvalCtx() *tree.EvalContext {
+	evalCtx := ctx.EvalCtx
+	return &evalCtx
 }
 
 type flowStatus int

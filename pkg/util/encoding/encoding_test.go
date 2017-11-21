@@ -681,6 +681,28 @@ func TestEncodeDecodeNull(t *testing.T) {
 	}
 }
 
+func TestEncodeDecodeInterleavedSentinel(t *testing.T) {
+	const hello = "hello"
+
+	buf := EncodeInterleavedSentinel([]byte(hello))
+	expected := []byte(hello + "\xfe")
+	if !bytes.Equal(expected, buf) {
+		t.Fatalf("expected %q, but found %q", expected, buf)
+	}
+
+	if remaining, isSentinel := DecodeIfInterleavedSentinel([]byte(hello)); isSentinel {
+		t.Fatalf("expected isSentinel=false, but found isSentinel=%v", isSentinel)
+	} else if hello != string(remaining) {
+		t.Fatalf("expected %q, but found %q", hello, remaining)
+	}
+
+	if remaining, isSentinel := DecodeIfNull([]byte("\x00" + hello)); !isSentinel {
+		t.Fatalf("expected isSentinel=true, but found isSentinel=%v", isSentinel)
+	} else if hello != string(remaining) {
+		t.Fatalf("expected %q, but found %q", hello, remaining)
+	}
+}
+
 func TestEncodeDecodeTime(t *testing.T) {
 	zeroTime := timeutil.Unix(0, 0)
 
@@ -850,6 +872,7 @@ func TestPeekType(t *testing.T) {
 		{EncodeNotNullAscending(nil), NotNull},
 		{EncodeNullDescending(nil), Null},
 		{EncodeNotNullDescending(nil), NotNull},
+		{EncodeInterleavedSentinel(nil), NotNull},
 		{EncodeVarintAscending(nil, 0), Int},
 		{EncodeVarintDescending(nil, 0), Int},
 		{EncodeUvarintAscending(nil, 0), Int},

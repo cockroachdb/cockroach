@@ -20,7 +20,7 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
@@ -122,7 +122,6 @@ func (p *planner) makeIndexJoin(
 	// Create a new scanNode that will be used with the primary index.
 	table := p.Scan()
 	table.desc = origScan.desc
-	table.lockForUpdate = origScan.lockForUpdate
 	// Note: initDescDefaults can only error out if its 2nd argument is not nil.
 	_ = table.initDescDefaults(origScan.scanVisibility, nil)
 	table.initOrdering(0)
@@ -134,7 +133,7 @@ func (p *planner) makeIndexJoin(
 	// field in the indexJoinNode, and to determine which columns are
 	// provided by this index for the purpose of splitting the WHERE
 	// filter into an index-specific part and a "rest" part.
-	primaryKeyColumns := make([]bool, len(origScan.valNeededForCol))
+	primaryKeyColumns := make([]bool, len(origScan.cols))
 	for _, colID := range table.desc.PrimaryIndex.ColumnIDs {
 		// All the PK columns from the table scanNode must
 		// be fetched in the index scanNode.
@@ -152,7 +151,7 @@ func (p *planner) makeIndexJoin(
 	// contains the PK columns of the indexed table, we also need to
 	// gather here which additional columns are indexed. This is done in
 	// valProvidedIndex.
-	valProvidedIndex := make([]bool, len(origScan.valNeededForCol))
+	valProvidedIndex := make([]bool, len(origScan.cols))
 
 	// Then, in case the index-specific part, post-split, actually
 	// refers to any additional column, we also need to prepare the
@@ -169,8 +168,8 @@ func (p *planner) makeIndexJoin(
 	if origScan.filter != nil {
 		// Now we split the filter by extracting the part that can be
 		// evaluated using just the index columns.
-		splitFunc := func(expr parser.VariableExpr) (ok bool, newExpr parser.Expr) {
-			colIdx := expr.(*parser.IndexedVar).Idx
+		splitFunc := func(expr tree.VariableExpr) (ok bool, newExpr tree.Expr) {
+			colIdx := expr.(*tree.IndexedVar).Idx
 			if !(primaryKeyColumns[colIdx] || valProvidedIndex[colIdx]) {
 				return false, nil
 			}
@@ -206,7 +205,7 @@ func (p *planner) makeIndexJoin(
 	return node, indexScan
 }
 
-func (n *indexJoinNode) Values() parser.Datums {
+func (n *indexJoinNode) Values() tree.Datums {
 	return n.table.Values()
 }
 

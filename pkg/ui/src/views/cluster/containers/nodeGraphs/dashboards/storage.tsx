@@ -30,7 +30,7 @@ export default function (props: GraphDashboardProps) {
            CockroachDB system ${tooltipSelection}. This excludes historical and deleted data.`
       }
     >
-      <Axis units={AxisUnits.Bytes}>
+      <Axis units={AxisUnits.Bytes} label="live bytes">
         <Metric name="cr.store.livebytes" title="Live" />
         <Metric name="cr.store.sysbytes" title="System" />
       </Axis>

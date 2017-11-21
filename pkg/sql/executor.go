@@ -43,6 +43,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/jobs"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -175,7 +177,7 @@ func (rl ResultList) Close(ctx context.Context) {
 type Result struct {
 	Err error
 	// The type of statement that the result is for.
-	Type parser.StatementType
+	Type tree.StatementType
 	// The tag of the statement that the result is for.
 	PGTag string
 	// RowsAffected will be populated if the statement type is "RowsAffected".
@@ -205,7 +207,7 @@ func (r *Result) Close(ctx context.Context) {
 type Executor struct {
 	cfg            ExecutorConfig
 	stopper        *stop.Stopper
-	reCache        *parser.RegexpCache
+	reCache        *tree.RegexpCache
 	virtualSchemas virtualSchemaHolder
 
 	// Transient stats.
@@ -373,7 +375,7 @@ func NewExecutor(cfg ExecutorConfig, stopper *stop.Stopper) *Executor {
 	return &Executor{
 		cfg:     cfg,
 		stopper: stopper,
-		reCache: parser.NewRegexpCache(512),
+		reCache: tree.NewRegexpCache(512),
 
 		TxnBeginCount:      metric.NewCounter(MetaTxnBegin),
 		TxnCommitCount:     metric.NewCounter(MetaTxnCommit),
@@ -473,7 +475,7 @@ func (e *Executor) getDatabaseCache() *databaseCache {
 // populate the missing types. The PreparedStatement is returned (or
 // nil if there are no results).
 func (e *Executor) Prepare(
-	stmt Statement, stmtStr string, session *Session, placeholderHints parser.PlaceholderTypes,
+	stmt Statement, stmtStr string, session *Session, placeholderHints tree.PlaceholderTypes,
 ) (res *PreparedStatement, err error) {
 	session.resetForBatch(e)
 	sessionEventf(session, "preparing: %s", stmtStr)
@@ -570,7 +572,7 @@ func (e *Executor) Prepare(
 // If no error is returned, the caller has to call Close() on the returned
 // StatementResults.
 func (e *Executor) ExecuteStatementsBuffered(
-	session *Session, stmts string, pinfo *parser.PlaceholderInfo, expectedNumResults int,
+	session *Session, stmts string, pinfo *tree.PlaceholderInfo, expectedNumResults int,
 ) (StatementResults, error) {
 	b := newBufferedWriter(session.makeBoundAccount())
 	session.ResultsWriter = b
@@ -597,7 +599,7 @@ func (e *Executor) ExecuteStatementsBuffered(
 
 // ExecuteStatements executes the given statement(s).
 func (e *Executor) ExecuteStatements(
-	session *Session, stmts string, pinfo *parser.PlaceholderInfo,
+	session *Session, stmts string, pinfo *tree.PlaceholderInfo,
 ) error {
 	session.resetForBatch(e)
 	session.phaseTimes[sessionStartBatch] = timeutil.Now()
@@ -631,7 +633,7 @@ func (e *Executor) ExecuteStatements(
 
 // ExecutePreparedStatement executes the given statement and returns a response.
 func (e *Executor) ExecutePreparedStatement(
-	session *Session, stmt *PreparedStatement, pinfo *parser.PlaceholderInfo,
+	session *Session, stmt *PreparedStatement, pinfo *tree.PlaceholderInfo,
 ) error {
 	defer session.maybeRecover("executing", stmt.Str)
 
@@ -658,7 +660,7 @@ func (e *Executor) ExecutePreparedStatement(
 // is more than 1 result or the returned types differ from the prepared
 // return types.
 func (e *Executor) execPrepared(
-	session *Session, stmt *PreparedStatement, pinfo *parser.PlaceholderInfo,
+	session *Session, stmt *PreparedStatement, pinfo *tree.PlaceholderInfo,
 ) error {
 	if log.V(2) || logStatementsExecuteEnabled.Get(&e.cfg.Settings.SV) {
 		log.Infof(session.Ctx(), "execPrepared: %s", stmt.Str)
@@ -707,7 +709,7 @@ func (s *Session) CopyEnd(ctx context.Context) {
 // execution of statements in the context of a KV txn is delegated to
 // runTxnAttempt().
 func (e *Executor) execRequest(
-	session *Session, sql string, pinfo *parser.PlaceholderInfo, copymsg copyMsg,
+	session *Session, sql string, pinfo *tree.PlaceholderInfo, copymsg copyMsg,
 ) error {
 	var stmts StatementList
 	var err error
@@ -723,7 +725,7 @@ func (e *Executor) execRequest(
 	} else if copymsg != copyMsgNone {
 		err = fmt.Errorf("unexpected copy command")
 	} else {
-		var sl parser.StatementList
+		var sl tree.StatementList
 		sl, err = parser.Parse(sql)
 		stmts = NewStatementList(sl)
 	}
@@ -761,7 +763,7 @@ func (e *Executor) RecordError(err error) {
 // execParsed executes a batch of statements received as a unit from the client
 // and returns query execution errors and communication errors.
 func (e *Executor) execParsed(
-	session *Session, stmts StatementList, pinfo *parser.PlaceholderInfo, copymsg copyMsg,
+	session *Session, stmts StatementList, pinfo *tree.PlaceholderInfo, copymsg copyMsg,
 ) error {
 	var avoidCachedDescriptors bool
 	txnState := &session.TxnState
@@ -794,7 +796,7 @@ func (e *Executor) execParsed(
 		// reset.
 		if !inTxn {
 			// Detect implicit transactions - they need to be autocommitted.
-			if _, isBegin := stmts[0].AST.(*parser.BeginTransaction); !isBegin {
+			if _, isBegin := stmts[0].AST.(*tree.BeginTransaction); !isBegin {
 				autoCommit = true
 				stmtsToExec = stmtsToExec[:1]
 				// Check for AS OF SYSTEM TIME. If it is present but not detected here,
@@ -969,7 +971,7 @@ func runWithAutoRetry(
 	txnPrefix bool,
 	autoCommit bool,
 	protoTS *hlc.Timestamp,
-	pinfo *parser.PlaceholderInfo,
+	pinfo *tree.PlaceholderInfo,
 	avoidCachedDescriptors bool,
 ) (remainingStmts StatementList, transitionToOpen bool, _ error) {
 
@@ -1027,7 +1029,7 @@ func runWithAutoRetry(
 				// SHOW TRANSACTION STATUS statements are always allowed regardless of
 				// the transaction state.
 				if len(stmtsToExec) > 0 {
-					if _, ok := stmtsToExec[0].AST.(*parser.ShowTransactionStatus); ok {
+					if _, ok := stmtsToExec[0].AST.(*tree.ShowTransactionStatus); ok {
 						crash = false
 					}
 				}
@@ -1147,7 +1149,7 @@ func runTxnAttempt(
 	e *Executor,
 	session *Session,
 	stmts StatementList,
-	pinfo *parser.PlaceholderInfo,
+	pinfo *tree.PlaceholderInfo,
 	origState TxnStateEnum,
 	txnPrefix bool,
 	avoidCachedDescriptors bool,
@@ -1205,7 +1207,12 @@ func runTxnAttempt(
 	// statements. We also want future ResultsSentToClient() calls to return
 	// false.
 	if err := txnState.txnResults.Flush(session.Ctx()); err != nil {
-		err = txnState.updateStateAndCleanupOnErr(err, e)
+		// If there's a KV txn open, we have to roll it back.
+		// If there isn't, there's nothing to do. The state of the session doesn't
+		// matter any more after a communication error.
+		if txnState.state.kvTxnIsOpen() {
+			err = txnState.updateStateAndCleanupOnErr(err, e)
+		}
 		return nil, false, err
 	}
 
@@ -1246,7 +1253,7 @@ func runTxnAttempt(
 func (e *Executor) execSingleStatement(
 	session *Session,
 	stmt Statement,
-	pinfo *parser.PlaceholderInfo,
+	pinfo *tree.PlaceholderInfo,
 	firstInTxn bool,
 	avoidCachedDescriptors bool,
 	automaticRetryCount int,
@@ -1283,7 +1290,7 @@ func (e *Executor) execSingleStatement(
 	// using CANCEL QUERY. Jobs have their own run control statements (CANCEL JOB,
 	// PAUSE JOB, etc). We implement this ignore by not registering queryMeta in
 	// session.mu.ActiveQueries.
-	if _, ok := stmt.AST.(parser.HiddenFromShowQueries); !ok {
+	if _, ok := stmt.AST.(tree.HiddenFromShowQueries); !ok {
 		// For parallel/async queries, we deregister queryMeta from these registries
 		// after execution finishes in the parallelizeQueue. For all other
 		// (synchronous) queries, we deregister these in session.FinishPlan when
@@ -1306,7 +1313,7 @@ func (e *Executor) execSingleStatement(
 	var err error
 	// Run SHOW TRANSACTION STATUS in a separate code path so it is
 	// always guaranteed to execute regardless of the current transaction state.
-	if _, ok := stmt.AST.(*parser.ShowTransactionStatus); ok {
+	if _, ok := stmt.AST.(*tree.ShowTransactionStatus); ok {
 		err = runShowTransactionState(session, res)
 	} else {
 		switch txnState.State() {
@@ -1370,11 +1377,11 @@ func getTransactionState(txnState *txnState) string {
 
 // runShowTransactionState returns the state of current transaction.
 func runShowTransactionState(session *Session, res StatementResult) error {
-	res.BeginResult((*parser.ShowTransactionStatus)(nil))
-	res.SetColumns(sqlbase.ResultColumns{{Name: "TRANSACTION STATUS", Typ: parser.TypeString}})
+	res.BeginResult((*tree.ShowTransactionStatus)(nil))
+	res.SetColumns(sqlbase.ResultColumns{{Name: "TRANSACTION STATUS", Typ: types.String}})
 
 	state := getTransactionState(&session.TxnState)
-	if err := res.AddRow(session.Ctx(), parser.Datums{parser.NewDString(state)}); err != nil {
+	if err := res.AddRow(session.Ctx(), tree.Datums{tree.NewDString(state)}); err != nil {
 		return err
 	}
 	return res.CloseResult()
@@ -1394,7 +1401,7 @@ func (e *Executor) execStmtInAbortedTxn(
 	}
 	// TODO(andrei/cuongdo): Figure out what statements to count here.
 	switch s := stmt.AST.(type) {
-	case *parser.CommitTransaction, *parser.RollbackTransaction:
+	case *tree.CommitTransaction, *tree.RollbackTransaction:
 		if txnState.State() == RestartWait {
 			transition := rollbackSQLTransaction(txnState, res)
 			if transition.transitionDependentOnErrType {
@@ -1408,36 +1415,36 @@ func (e *Executor) execStmtInAbortedTxn(
 		// The KV txn has already been rolled back when we entered the Aborted state.
 		// Note: postgres replies to COMMIT of failed txn with "ROLLBACK" too.
 		txnState.resetStateAndTxn(NoTxn)
-		res.BeginResult((*parser.RollbackTransaction)(nil))
+		res.BeginResult((*tree.RollbackTransaction)(nil))
 		return res.CloseResult()
-	case *parser.RollbackToSavepoint, *parser.Savepoint:
+	case *tree.RollbackToSavepoint, *tree.Savepoint:
 		// We accept both the "ROLLBACK TO SAVEPOINT cockroach_restart" and the
 		// "SAVEPOINT cockroach_restart" commands to indicate client intent to
 		// retry a transaction in a RestartWait state.
 		var spName string
 		switch n := s.(type) {
-		case *parser.RollbackToSavepoint:
+		case *tree.RollbackToSavepoint:
 			spName = n.Savepoint
-		case *parser.Savepoint:
+		case *tree.Savepoint:
 			spName = n.Name
 		default:
 			panic("unreachable")
 		}
-		if err := parser.ValidateRestartCheckpoint(spName); err != nil {
+		if err := tree.ValidateRestartCheckpoint(spName); err != nil {
 			if txnState.State() == RestartWait {
 				err = txnState.updateStateAndCleanupOnErr(err, e)
 			}
 			return err
 		}
 		if !txnState.retryIntent {
-			err := fmt.Errorf("SAVEPOINT %s has not been used", parser.RestartSavepointName)
+			err := fmt.Errorf("SAVEPOINT %s has not been used", tree.RestartSavepointName)
 			if txnState.State() == RestartWait {
 				err = txnState.updateStateAndCleanupOnErr(err, e)
 			}
 			return err
 		}
 
-		res.BeginResult((*parser.RollbackToSavepoint)(nil))
+		res.BeginResult((*tree.RollbackToSavepoint)(nil))
 		if err := res.CloseResult(); err != nil {
 			return err
 		}
@@ -1488,10 +1495,10 @@ func (e *Executor) execStmtInCommitWaitTxn(
 	}
 	e.updateStmtCounts(stmt)
 	switch stmt.AST.(type) {
-	case *parser.CommitTransaction, *parser.RollbackTransaction:
+	case *tree.CommitTransaction, *tree.RollbackTransaction:
 		// Reset the state to allow new transactions to start.
 		txnState.resetStateAndTxn(NoTxn)
-		res.BeginResult((*parser.CommitTransaction)(nil))
+		res.BeginResult((*tree.CommitTransaction)(nil))
 		return res.CloseResult()
 	default:
 		err := sqlbase.NewTransactionCommittedError()
@@ -1534,7 +1541,7 @@ func sessionEventf(session *Session, format string, args ...interface{}) {
 func (e *Executor) execStmtInOpenTxn(
 	session *Session,
 	stmt Statement,
-	pinfo *parser.PlaceholderInfo,
+	pinfo *tree.PlaceholderInfo,
 	firstInTxn bool,
 	avoidCachedDescriptors bool,
 	automaticRetryCount int,
@@ -1646,7 +1653,7 @@ func (e *Executor) execStmtInOpenTxn(
 	// execution. If neither of these cases are true, we need to synchronize
 	// parallel execution by letting it drain before we can begin executing ourselves.
 	parallelize := IsStmtParallelized(stmt)
-	_, independentFromParallelStmts := stmt.AST.(parser.IndependentFromParallelizedPriors)
+	_, independentFromParallelStmts := stmt.AST.(tree.IndependentFromParallelizedPriors)
 	if !(parallelize || independentFromParallelStmts) {
 		if err := session.synchronizeParallelStmts(session.Ctx()); err != nil {
 			return err
@@ -1658,20 +1665,20 @@ func (e *Executor) execStmtInOpenTxn(
 	}
 
 	switch s := stmt.AST.(type) {
-	case *parser.BeginTransaction:
+	case *tree.BeginTransaction:
 		if !firstInTxn {
 			return errTransactionInProgress
 		}
 
-	case *parser.CommitTransaction:
+	case *tree.CommitTransaction:
 		// CommitTransaction is executed fully here; there's no planNode for it
 		// and a planner is not involved at all.
 		transition = commitSQLTransaction(txnState, commit, res)
 		explicitStateTransition = true
 		return nil
 
-	case *parser.ReleaseSavepoint:
-		if err := parser.ValidateRestartCheckpoint(s.Savepoint); err != nil {
+	case *tree.ReleaseSavepoint:
+		if err := tree.ValidateRestartCheckpoint(s.Savepoint); err != nil {
 			return err
 		}
 		// ReleaseSavepoint is executed fully here; there's no planNode for it
@@ -1680,7 +1687,7 @@ func (e *Executor) execStmtInOpenTxn(
 		explicitStateTransition = true
 		return nil
 
-	case *parser.RollbackTransaction:
+	case *tree.RollbackTransaction:
 		// Turn off test verification of metadata changes made by the
 		// transaction.
 		session.testingVerifyMetadataFn = nil
@@ -1690,8 +1697,8 @@ func (e *Executor) execStmtInOpenTxn(
 		explicitStateTransition = true
 		return nil
 
-	case *parser.Savepoint:
-		if err := parser.ValidateRestartCheckpoint(s.Name); err != nil {
+	case *tree.Savepoint:
+		if err := tree.ValidateRestartCheckpoint(s.Name); err != nil {
 			return err
 		}
 		// We want to disallow SAVEPOINTs to be issued after a transaction has
@@ -1699,24 +1706,24 @@ func (e *Executor) execStmtInOpenTxn(
 		// statements have been executed as part of this transaction.
 		if txnState.mu.txn.CommandCount() > 0 {
 			return errors.Errorf("SAVEPOINT %s needs to be the first statement in a "+
-				"transaction", parser.RestartSavepointName)
+				"transaction", tree.RestartSavepointName)
 		}
 		// Note that Savepoint doesn't have a corresponding plan node.
 		// This here is all the execution there is.
 		txnState.retryIntent = true
-		res.BeginResult((*parser.Savepoint)(nil))
+		res.BeginResult((*tree.Savepoint)(nil))
 		return res.CloseResult()
 
-	case *parser.RollbackToSavepoint:
-		if err := parser.ValidateRestartCheckpoint(s.Savepoint); err != nil {
+	case *tree.RollbackToSavepoint:
+		if err := tree.ValidateRestartCheckpoint(s.Savepoint); err != nil {
 			return err
 		}
 		if !txnState.retryIntent {
-			err := fmt.Errorf("SAVEPOINT %s has not been used", parser.RestartSavepointName)
+			err := fmt.Errorf("SAVEPOINT %s has not been used", tree.RestartSavepointName)
 			return err
 		}
 
-		res.BeginResult((*parser.Savepoint)(nil))
+		res.BeginResult((*tree.Savepoint)(nil))
 		if err := res.CloseResult(); err != nil {
 			return err
 		}
@@ -1733,16 +1740,16 @@ func (e *Executor) execStmtInOpenTxn(
 		}
 		return nil
 
-	case *parser.Prepare:
+	case *tree.Prepare:
 		// This must be handled here instead of the common path below
 		// because we need to use the Executor reference.
 		if err := e.PrepareStmt(session, s); err != nil {
 			return err
 		}
-		res.BeginResult((*parser.Prepare)(nil))
+		res.BeginResult((*tree.Prepare)(nil))
 		return res.CloseResult()
 
-	case *parser.Execute:
+	case *tree.Execute:
 		// Substitute the placeholder information and actual statement with that of
 		// the saved prepared statement and pass control back to the ordinary
 		// execute path.
@@ -1811,7 +1818,7 @@ func (e *Executor) execStmtInOpenTxn(
 
 	tResult := &traceResult{tag: res.PGTag(), count: -1}
 	switch res.StatementType() {
-	case parser.RowsAffected, parser.Rows:
+	case tree.RowsAffected, tree.Rows:
 		tResult.count = res.RowsAffected()
 	}
 	sessionEventf(session, "%s done", tResult)
@@ -1822,11 +1829,11 @@ func (e *Executor) execStmtInOpenTxn(
 // implicit transaction or not.
 func stmtAllowedInImplicitTxn(stmt Statement) bool {
 	switch stmt.AST.(type) {
-	case *parser.CommitTransaction:
-	case *parser.ReleaseSavepoint:
-	case *parser.RollbackTransaction:
-	case *parser.SetTransaction:
-	case *parser.Savepoint:
+	case *tree.CommitTransaction:
+	case *tree.ReleaseSavepoint:
+	case *tree.RollbackTransaction:
+	case *tree.SetTransaction:
+	case *tree.Savepoint:
 	default:
 		return true
 	}
@@ -1871,7 +1878,7 @@ func rollbackSQLTransaction(txnState *txnState, res StatementResult) stateTransi
 		log.Warningf(txnState.Ctx, "txn rollback failed: %s", err)
 	}
 	// We're done with this txn.
-	res.BeginResult((*parser.RollbackTransaction)(nil))
+	res.BeginResult((*tree.RollbackTransaction)(nil))
 	if closeErr := res.CloseResult(); closeErr != nil {
 		return stateTransition{
 			targetState: Aborted,
@@ -1925,7 +1932,7 @@ func commitSQLTransaction(
 		transition.targetState = NoTxn
 	}
 
-	res.BeginResult((*parser.CommitTransaction)(nil))
+	res.BeginResult((*tree.CommitTransaction)(nil))
 	if err := res.CloseResult(); err != nil {
 		transition = stateTransition{
 			err: err,
@@ -1991,15 +1998,15 @@ func (e *Executor) execClassic(
 	}
 
 	switch rowResultWriter.StatementType() {
-	case parser.RowsAffected:
+	case tree.RowsAffected:
 		count, err := countRowsAffected(params, plan)
 		if err != nil {
 			return err
 		}
 		rowResultWriter.IncrementRowsAffected(count)
 
-	case parser.Rows:
-		err := forEachRow(params, plan, func(values parser.Datums) error {
+	case tree.Rows:
+		err := forEachRow(params, plan, func(values tree.Datums) error {
 			for _, val := range values {
 				if err := checkResultType(val.ResolvedType()); err != nil {
 					return err
@@ -2010,7 +2017,7 @@ func (e *Executor) execClassic(
 		if err != nil {
 			return err
 		}
-	case parser.DDL:
+	case tree.DDL:
 		if n, ok := plan.(*createTableNode); ok && n.n.As() {
 			rowResultWriter.IncrementRowsAffected(n.count)
 		}
@@ -2021,7 +2028,7 @@ func (e *Executor) execClassic(
 // forEachRow calls the provided closure for each successful call to
 // planNode.Next with planNode.Values, making sure to properly track memory
 // usage.
-func forEachRow(params runParams, p planNode, f func(parser.Datums) error) error {
+func forEachRow(params runParams, p planNode, f func(tree.Datums) error) error {
 	next, err := p.Next(params)
 	for ; next; next, err = p.Next(params) {
 		// If we're tracking memory, clear the previous row's memory account.
@@ -2046,7 +2053,7 @@ func countRowsAffected(params runParams, p planNode) (int, error) {
 	}
 
 	count := 0
-	err := forEachRow(params, p, func(_ parser.Datums) error {
+	err := forEachRow(params, p, func(_ tree.Datums) error {
 		count++
 		return nil
 	})
@@ -2105,7 +2112,7 @@ func (e *Executor) shouldUseDistSQL(planner *planner, plan planNode) (bool, erro
 func initStatementResult(res StatementResult, stmt Statement, plan planNode) error {
 	stmtAst := stmt.AST
 	res.BeginResult(stmtAst)
-	if stmtAst.StatementType() == parser.Rows {
+	if stmtAst.StatementType() == tree.Rows {
 		columns := planColumns(plan)
 		res.SetColumns(columns)
 		for _, c := range columns {
@@ -2171,8 +2178,8 @@ func (e *Executor) execStmt(
 // execStmtInParallel executes the statement asynchronously and writes mocked
 // out results to res. These mocked out results will be the "zero value"
 // of the statement's result type:
-// - parser.Rows -> an empty set of rows
-// - parser.RowsAffected -> zero rows affected
+// - tree.Rows -> an empty set of rows
+// - tree.RowsAffected -> zero rows affected
 //
 // TODO(nvanbenschoten): We do not currently support parallelizing distributed SQL
 // queries, so this method can only be used with classical SQL.
@@ -2238,22 +2245,22 @@ func (e *Executor) execStmtInParallel(
 func (e *Executor) updateStmtCounts(stmt Statement) {
 	e.QueryCount.Inc(1)
 	switch stmt.AST.(type) {
-	case *parser.BeginTransaction:
+	case *tree.BeginTransaction:
 		e.TxnBeginCount.Inc(1)
-	case *parser.Select:
+	case *tree.Select:
 		e.SelectCount.Inc(1)
-	case *parser.Update:
+	case *tree.Update:
 		e.UpdateCount.Inc(1)
-	case *parser.Insert:
+	case *tree.Insert:
 		e.InsertCount.Inc(1)
-	case *parser.Delete:
+	case *tree.Delete:
 		e.DeleteCount.Inc(1)
-	case *parser.CommitTransaction:
+	case *tree.CommitTransaction:
 		e.TxnCommitCount.Inc(1)
-	case *parser.RollbackTransaction:
+	case *tree.RollbackTransaction:
 		e.TxnRollbackCount.Inc(1)
 	default:
-		if stmt.AST.StatementType() == parser.DDL {
+		if stmt.AST.StatementType() == tree.DDL {
 			e.DdlCount.Inc(1)
 		} else {
 			e.MiscCount.Inc(1)
@@ -2277,29 +2284,29 @@ func (e *Executor) generateQueryID() uint128.Uint128 {
 // TODO: This does not support arguments of the SQL 'Date' type, as there is not
 // an equivalent type in Go's standard library. It's not currently needed by any
 // of our internal tables.
-func golangFillQueryArguments(pinfo *parser.PlaceholderInfo, args []interface{}) {
+func golangFillQueryArguments(pinfo *tree.PlaceholderInfo, args []interface{}) {
 	pinfo.Clear()
 
 	for i, arg := range args {
 		k := strconv.Itoa(i + 1)
 		if arg == nil {
-			pinfo.SetValue(k, parser.DNull)
+			pinfo.SetValue(k, tree.DNull)
 			continue
 		}
 
 		// A type switch to handle a few explicit types with special semantics:
 		// - Datums are passed along as is.
 		// - Time datatypes get special representation in the database.
-		var d parser.Datum
+		var d tree.Datum
 		switch t := arg.(type) {
-		case parser.Datum:
+		case tree.Datum:
 			d = t
 		case time.Time:
-			d = parser.MakeDTimestamp(t, time.Microsecond)
+			d = tree.MakeDTimestamp(t, time.Microsecond)
 		case time.Duration:
-			d = &parser.DInterval{Duration: duration.Duration{Nanos: t.Nanoseconds()}}
+			d = &tree.DInterval{Duration: duration.Duration{Nanos: t.Nanoseconds()}}
 		case *apd.Decimal:
-			dd := &parser.DDecimal{}
+			dd := &tree.DDecimal{}
 			dd.Set(t)
 			d = dd
 		}
@@ -2312,19 +2319,19 @@ func golangFillQueryArguments(pinfo *parser.PlaceholderInfo, args []interface{})
 			val := reflect.ValueOf(arg)
 			switch val.Kind() {
 			case reflect.Bool:
-				d = parser.MakeDBool(parser.DBool(val.Bool()))
+				d = tree.MakeDBool(tree.DBool(val.Bool()))
 			case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-				d = parser.NewDInt(parser.DInt(val.Int()))
+				d = tree.NewDInt(tree.DInt(val.Int()))
 			case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
-				d = parser.NewDInt(parser.DInt(val.Uint()))
+				d = tree.NewDInt(tree.DInt(val.Uint()))
 			case reflect.Float32, reflect.Float64:
-				d = parser.NewDFloat(parser.DFloat(val.Float()))
+				d = tree.NewDFloat(tree.DFloat(val.Float()))
 			case reflect.String:
-				d = parser.NewDString(val.String())
+				d = tree.NewDString(val.String())
 			case reflect.Slice:
 				// Handle byte slices.
 				if val.Type().Elem().Kind() == reflect.Uint8 {
-					d = parser.NewDBytes(parser.DBytes(val.Bytes()))
+					d = tree.NewDBytes(tree.DBytes(val.Bytes()))
 				}
 			}
 			if d == nil {
@@ -2335,41 +2342,42 @@ func golangFillQueryArguments(pinfo *parser.PlaceholderInfo, args []interface{})
 	}
 }
 
-func checkResultType(typ parser.Type) error {
+func checkResultType(typ types.T) error {
 	// Compare all types that can rely on == equality.
-	switch parser.UnwrapType(typ) {
-	case parser.TypeNull:
-	case parser.TypeBool:
-	case parser.TypeInt:
-	case parser.TypeFloat:
-	case parser.TypeDecimal:
-	case parser.TypeBytes:
-	case parser.TypeString:
-	case parser.TypeDate:
-	case parser.TypeTimestamp:
-	case parser.TypeTimestampTZ:
-	case parser.TypeInterval:
-	case parser.TypeJSON:
-	case parser.TypeUUID:
-	case parser.TypeINet:
-	case parser.TypeNameArray:
-	case parser.TypeOid:
-	case parser.TypeRegClass:
-	case parser.TypeRegNamespace:
-	case parser.TypeRegProc:
-	case parser.TypeRegProcedure:
-	case parser.TypeRegType:
+	switch types.UnwrapType(typ) {
+	case types.Null:
+	case types.Bool:
+	case types.Int:
+	case types.Float:
+	case types.Decimal:
+	case types.Bytes:
+	case types.String:
+	case types.Date:
+	case types.Time:
+	case types.Timestamp:
+	case types.TimestampTZ:
+	case types.Interval:
+	case types.JSON:
+	case types.UUID:
+	case types.INet:
+	case types.NameArray:
+	case types.Oid:
+	case types.RegClass:
+	case types.RegNamespace:
+	case types.RegProc:
+	case types.RegProcedure:
+	case types.RegType:
 	default:
 		// Compare all types that cannot rely on == equality.
 		istype := typ.FamilyEqual
 		switch {
-		case istype(parser.TypeArray):
-			if istype(parser.UnwrapType(typ).(parser.TArray).Typ) {
+		case istype(types.FamArray):
+			if istype(types.UnwrapType(typ).(types.TArray).Typ) {
 				return pgerror.Unimplemented("nested arrays", "arrays cannot have arrays as element type")
 			}
-		case istype(parser.TypeCollatedString):
-		case istype(parser.TypeTuple):
-		case istype(parser.TypePlaceholder):
+		case istype(types.FamCollatedString):
+		case istype(types.FamTuple):
+		case istype(types.FamPlaceholder):
 			return errors.Errorf("could not determine data type of %s", typ)
 		default:
 			return errors.Errorf("unsupported result type: %s", typ)
@@ -2381,9 +2389,9 @@ func checkResultType(typ parser.Type) error {
 // EvalAsOfTimestamp evaluates and returns the timestamp from an AS OF SYSTEM
 // TIME clause.
 func EvalAsOfTimestamp(
-	evalCtx *parser.EvalContext, asOf parser.AsOfClause, max hlc.Timestamp,
+	evalCtx *tree.EvalContext, asOf tree.AsOfClause, max hlc.Timestamp,
 ) (hlc.Timestamp, error) {
-	te, err := asOf.Expr.TypeCheck(nil, parser.TypeString)
+	te, err := asOf.Expr.TypeCheck(nil, types.String)
 	if err != nil {
 		return hlc.Timestamp{}, err
 	}
@@ -2396,11 +2404,11 @@ func EvalAsOfTimestamp(
 	var convErr error
 
 	switch d := d.(type) {
-	case *parser.DString:
+	case *tree.DString:
 		s := string(*d)
 		// Allow nanosecond precision because the timestamp is only used by the
 		// system and won't be returned to the user over pgwire.
-		if dt, err := parser.ParseDTimestamp(s, time.Nanosecond); err == nil {
+		if dt, err := tree.ParseDTimestamp(s, time.Nanosecond); err == nil {
 			ts.WallTime = dt.Time.UnixNano()
 			break
 		}
@@ -2413,9 +2421,9 @@ func EvalAsOfTimestamp(
 		} else {
 			ts, convErr = decimalToHLC(dec)
 		}
-	case *parser.DInt:
+	case *tree.DInt:
 		ts.WallTime = int64(*d)
-	case *parser.DDecimal:
+	case *tree.DDecimal:
 		ts, convErr = decimalToHLC(&d.Decimal)
 	default:
 		convErr = errors.Errorf("AS OF SYSTEM TIME: expected timestamp, got %s (%T)", d.ResolvedType(), d)
@@ -2473,12 +2481,23 @@ func decimalToHLC(d *apd.Decimal) (hlc.Timestamp, error) {
 //
 // max is a lower bound on what the transaction's timestamp will be. Used to
 // check that the user didn't specify a timestamp in the future.
-func isAsOf(session *Session, stmt parser.Statement, max hlc.Timestamp) (*hlc.Timestamp, error) {
-	s, ok := stmt.(*parser.Select)
+func isAsOf(session *Session, stmt tree.Statement, max hlc.Timestamp) (*hlc.Timestamp, error) {
+	if ts, err := isShowTraceForAsOf(session, stmt, max); ts != nil || err != nil {
+		return ts, err
+	}
+
+	s, ok := stmt.(*tree.Select)
 	if !ok {
 		return nil, nil
 	}
-	sc, ok := s.Select.(*parser.SelectClause)
+
+	selStmt := s.Select
+	var parenSel *tree.ParenSelect
+	for parenSel, ok = selStmt.(*tree.ParenSelect); ok; parenSel, ok = selStmt.(*tree.ParenSelect) {
+		selStmt = parenSel.Select.Select
+	}
+
+	sc, ok := selStmt.(*tree.SelectClause)
 	if !ok {
 		return nil, nil
 	}
@@ -2491,28 +2510,38 @@ func isAsOf(session *Session, stmt parser.Statement, max hlc.Timestamp) (*hlc.Ti
 	return &ts, err
 }
 
+func isShowTraceForAsOf(
+	session *Session, stmt tree.Statement, max hlc.Timestamp,
+) (*hlc.Timestamp, error) {
+	stf, ok := stmt.(*tree.ShowTrace)
+	if !ok {
+		return nil, nil
+	}
+	return isAsOf(session, stf.Statement, max)
+}
+
 // isSavepoint returns true if stmt is a SAVEPOINT statement.
 func isSavepoint(stmt Statement) bool {
-	_, isSavepoint := stmt.AST.(*parser.Savepoint)
+	_, isSavepoint := stmt.AST.(*tree.Savepoint)
 	return isSavepoint
 }
 
 // isBegin returns true if stmt is a BEGIN statement.
 func isBegin(stmt Statement) bool {
-	_, isBegin := stmt.AST.(*parser.BeginTransaction)
+	_, isBegin := stmt.AST.(*tree.BeginTransaction)
 	return isBegin
 }
 
 // isSetTransaction returns true if stmt is a "SET TRANSACTION ..." statement.
 func isSetTransaction(stmt Statement) bool {
-	_, isSet := stmt.AST.(*parser.SetTransaction)
+	_, isSet := stmt.AST.(*tree.SetTransaction)
 	return isSet
 }
 
 // isRollbackToSavepoint returns true if stmt is a "ROLLBACK TO SAVEPOINT"
 // statement.
 func isRollbackToSavepoint(stmt Statement) bool {
-	_, isSet := stmt.AST.(*parser.RollbackToSavepoint)
+	_, isSet := stmt.AST.(*tree.RollbackToSavepoint)
 	return isSet
 }
 

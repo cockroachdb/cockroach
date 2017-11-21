@@ -15,7 +15,7 @@
 package distsqlrun
 
 import (
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/pkg/errors"
 )
@@ -78,7 +78,7 @@ func (s *streamGroupAccumulator) advanceGroup() ([]sqlbase.EncDatumRow, error) {
 		return nil, nil
 	}
 	// TODO(radu): plumb EvalContext
-	evalCtx := &parser.EvalContext{}
+	evalCtx := &tree.EvalContext{}
 
 	for {
 		row, err := s.src.NextRow()

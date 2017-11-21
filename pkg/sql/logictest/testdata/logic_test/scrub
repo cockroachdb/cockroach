@@ -12,6 +12,10 @@ EXPERIMENTAL SCRUB TABLE t
 -----
 
 query TTTTTTTT
+EXPERIMENTAL SCRUB TABLE t WITH OPTIONS PHYSICAL
+-----
+
+query TTTTTTTT
 EXPERIMENTAL SCRUB TABLE t WITH OPTIONS INDEX ALL
 -----
 
@@ -19,8 +23,39 @@ statement ok
 CREATE INDEX name_idx ON t (name)
 
 query TTTTTTTT
-EXPERIMENTAL SCRUB TABLE t WITH OPTIONS INDEX (name_idx)
+EXPERIMENTAL SCRUB TABLE t WITH OPTIONS PHYSICAL, INDEX (name_idx)
 -----
 
 statement error specified indexes to check that do not exist on table "t": not_an_index, also_not
 EXPERIMENTAL SCRUB TABLE t WITH OPTIONS INDEX (not_an_index, also_not, name_idx)
+
+# test views
+
+statement ok
+CREATE VIEW v1 AS select id, name from t
+
+statement error "v1" is not a table
+EXPERIMENTAL SCRUB TABLE v1
+
+# scrub database will skip views so it does not raise an error
+
+query TTTTTTTT
+EXPERIMENTAL SCRUB DATABASE test
+-----
+
+# make sure there are no errors when values in the index are NULL
+
+statement ok
+CREATE TABLE test.xyz (
+  x INT PRIMARY KEY,
+  y INT,
+  z INT,
+  INDEX foo (z, y)
+)
+
+statement ok
+INSERT INTO test.xyz (x, y) VALUES (8, 2), (9, 2);
+
+query TTTTTTBT
+EXPERIMENTAL SCRUB TABLE xyz WITH OPTIONS INDEX ALL
+-----

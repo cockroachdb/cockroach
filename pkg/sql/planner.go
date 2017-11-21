@@ -19,7 +19,12 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/transform"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -47,8 +52,8 @@ type planner struct {
 	stmt *Statement
 
 	// Contexts for different stages of planning and execution.
-	semaCtx parser.SemaContext
-	evalCtx parser.EvalContext
+	semaCtx tree.SemaContext
+	evalCtx tree.EvalContext
 
 	// avoidCachedDescriptors, when true, instructs all code that
 	// accesses table/view descriptors to force reading the descriptors
@@ -104,6 +109,7 @@ type planner struct {
 
 	// Avoid allocations by embedding commonly used objects and visitors.
 	parser                parser.Parser
+	txCtx                 transform.ExprTransformContext
 	subqueryVisitor       subqueryVisitor
 	subqueryPlanVisitor   subqueryPlanVisitor
 	nameResolutionVisitor nameResolutionVisitor
@@ -192,7 +198,7 @@ func (p *planner) User() string {
 	return p.session.User
 }
 
-func (p *planner) EvalContext() parser.EvalContext {
+func (p *planner) EvalContext() tree.EvalContext {
 	return p.evalCtx
 }
 
@@ -243,10 +249,22 @@ func (p *planner) makeInternalPlan(
 	return p.makePlan(ctx, Statement{AST: stmt})
 }
 
+// ParseType implements the parser.EvalPlanner interface.
+// We define this here to break the dependency from eval.go to the parser.
+func (p *planner) ParseType(sql string) (coltypes.CastTargetType, error) {
+	return parser.ParseType(sql)
+}
+
+// ParseTableNameWithIndex implements the parser.EvalPlanner interface.
+// We define this here to break the dependency from builtins.go to the parser.
+func (p *planner) ParseTableNameWithIndex(sql string) (tree.TableNameWithIndex, error) {
+	return parser.ParseTableNameWithIndex(sql)
+}
+
 // QueryRow implements the parser.EvalPlanner interface.
 func (p *planner) QueryRow(
 	ctx context.Context, sql string, args ...interface{},
-) (parser.Datums, error) {
+) (tree.Datums, error) {
 	rows, err := p.queryRows(ctx, sql, args...)
 	if err != nil {
 		return nil, err
@@ -257,14 +275,25 @@ func (p *planner) QueryRow(
 	case 1:
 		return rows[0], nil
 	default:
-		return nil, &parser.MultipleResultsError{SQL: sql}
+		return nil, &tree.MultipleResultsError{SQL: sql}
 	}
+}
+
+// IncrementSequence implements the parser.EvalPlanner interface.
+func (p *planner) IncrementSequence(ctx context.Context, seqName *tree.TableName) (int64, error) {
+	descriptor, err := getSequenceDesc(ctx, p.txn, p.getVirtualTabler(), seqName)
+	if err != nil {
+		return 0, err
+	}
+	seqValueKey := keys.MakeSequenceKey(uint32(descriptor.ID))
+	return client.IncrementValRetryable(
+		ctx, p.txn.DB(), seqValueKey, descriptor.SequenceOpts.Increment)
 }
 
 // queryRows executes a SQL query string where multiple result rows are returned.
 func (p *planner) queryRows(
 	ctx context.Context, sql string, args ...interface{},
-) ([]parser.Datums, error) {
+) ([]tree.Datums, error) {
 	oldPlaceholders := p.semaCtx.Placeholders
 	defer func() { p.semaCtx.Placeholders = oldPlaceholders }()
 
@@ -280,10 +309,10 @@ func (p *planner) queryRows(
 		ctx: ctx,
 		p:   p,
 	}
-	var rows []parser.Datums
-	if err = forEachRow(params, plan, func(values parser.Datums) error {
+	var rows []tree.Datums
+	if err = forEachRow(params, plan, func(values tree.Datums) error {
 		if values != nil {
-			valCopy := append(parser.Datums(nil), values...)
+			valCopy := append(tree.Datums(nil), values...)
 			rows = append(rows, valCopy)
 		}
 		return nil
@@ -347,8 +376,8 @@ func isDatabaseVisible(dbName, prefix, user string) bool {
 // TypeAsString enforces (not hints) that the given expression typechecks as a
 // string and returns a function that can be called to get the string value
 // during (planNode).Start.
-func (p *planner) TypeAsString(e parser.Expr, op string) (func() (string, error), error) {
-	typedE, err := parser.TypeCheckAndRequire(e, &p.semaCtx, parser.TypeString, op)
+func (p *planner) TypeAsString(e tree.Expr, op string) (func() (string, error), error) {
+	typedE, err := tree.TypeCheckAndRequire(e, &p.semaCtx, types.String, op)
 	if err != nil {
 		return nil, err
 	}
@@ -357,7 +386,7 @@ func (p *planner) TypeAsString(e parser.Expr, op string) (func() (string, error)
 		if err != nil {
 			return "", err
 		}
-		str, ok := d.(*parser.DString)
+		str, ok := d.(*tree.DString)
 		if !ok {
 			return "", errors.Errorf("failed to cast %T to string", d)
 		}
@@ -370,9 +399,9 @@ func (p *planner) TypeAsString(e parser.Expr, op string) (func() (string, error)
 // typecheck as strings, and returns a function that can be called to
 // get the string value during (planNode).Start.
 func (p *planner) TypeAsStringOpts(
-	opts parser.KVOptions, expectValues map[string]bool,
+	opts tree.KVOptions, expectValues map[string]bool,
 ) (func() (map[string]string, error), error) {
-	typed := make(map[string]parser.TypedExpr, len(opts))
+	typed := make(map[string]tree.TypedExpr, len(opts))
 	for _, opt := range opts {
 		k := string(opt.Key)
 		takesValue, ok := expectValues[k]
@@ -390,7 +419,7 @@ func (p *planner) TypeAsStringOpts(
 		if !takesValue {
 			return nil, errors.Errorf("option %q does not take a value", k)
 		}
-		r, err := parser.TypeCheckAndRequire(opt.Value, &p.semaCtx, parser.TypeString, k)
+		r, err := tree.TypeCheckAndRequire(opt.Value, &p.semaCtx, types.String, k)
 		if err != nil {
 			return nil, err
 		}
@@ -407,7 +436,7 @@ func (p *planner) TypeAsStringOpts(
 			if err != nil {
 				return nil, err
 			}
-			str, ok := d.(*parser.DString)
+			str, ok := d.(*tree.DString)
 			if !ok {
 				return res, errors.Errorf("failed to cast %T to string", d)
 			}
@@ -421,12 +450,10 @@ func (p *planner) TypeAsStringOpts(
 // TypeAsStringArray enforces (not hints) that the given expressions all typecheck as
 // strings and returns a function that can be called to get the string values
 // during (planNode).Start.
-func (p *planner) TypeAsStringArray(
-	exprs parser.Exprs, op string,
-) (func() ([]string, error), error) {
-	typedExprs := make([]parser.TypedExpr, len(exprs))
+func (p *planner) TypeAsStringArray(exprs tree.Exprs, op string) (func() ([]string, error), error) {
+	typedExprs := make([]tree.TypedExpr, len(exprs))
 	for i := range exprs {
-		typedE, err := parser.TypeCheckAndRequire(exprs[i], &p.semaCtx, parser.TypeString, op)
+		typedE, err := tree.TypeCheckAndRequire(exprs[i], &p.semaCtx, types.String, op)
 		if err != nil {
 			return nil, err
 		}
@@ -439,7 +466,7 @@ func (p *planner) TypeAsStringArray(
 			if err != nil {
 				return nil, err
 			}
-			str, ok := d.(*parser.DString)
+			str, ok := d.(*tree.DString)
 			if !ok {
 				return strs, errors.Errorf("failed to cast %T to string", d)
 			}

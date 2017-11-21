@@ -1326,13 +1326,13 @@ func TestKeysPerRow(t *testing.T) {
 
 	for i, test := range tests {
 		t.Run(fmt.Sprintf("%s - %d", test.createTable, test.indexID), func(t *testing.T) {
-			sqlDB := sqlutils.MakeSQLRunner(t, conn)
+			sqlDB := sqlutils.MakeSQLRunner(conn)
 			tableName := fmt.Sprintf("t%d", i)
-			sqlDB.Exec(fmt.Sprintf(`CREATE TABLE d.%s %s`, tableName, test.createTable))
+			sqlDB.Exec(t, fmt.Sprintf(`CREATE TABLE d.%s %s`, tableName, test.createTable))
 
 			var descBytes []byte
 			// Grab the most recently created descriptor.
-			row := sqlDB.QueryRow(
+			row := sqlDB.QueryRow(t,
 				`SELECT descriptor FROM system.descriptor ORDER BY id DESC LIMIT 1`)
 			row.Scan(&descBytes)
 			var desc Descriptor

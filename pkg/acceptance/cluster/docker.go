@@ -22,6 +22,7 @@ import (
 	"net"
 	"net/url"
 	"os"
+	"os/user"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -151,6 +152,13 @@ func pullImage(
 	return nil
 }
 
+// splitBindSpec splits a Docker bind specification into its host and container
+// paths.
+func splitBindSpec(bind string) (hostPath string, containerPath string) {
+	s := strings.SplitN(bind, ":", 2)
+	return s[0], s[1]
+}
+
 // createContainer creates a new container using the specified
 // options. Per the docker API, the created container is not running
 // and must be started explicitly. Note that the passed-in hostConfig
@@ -167,6 +175,27 @@ func createContainer(
 	// Disable DNS search under the host machine's domain. This can
 	// catch upstream wildcard DNS matching and result in odd behavior.
 	hostConfig.DNSSearch = []string{"."}
+
+	// Run the container as the current user to avoid creating root-owned files
+	// and directories from within the container.
+	user, err := user.Current()
+	if err != nil {
+		maybePanic(err)
+	}
+	containerConfig.User = fmt.Sprintf("%s:%s", user.Uid, user.Gid)
+
+	// Additionally ensure that the host side of every bind exists. Otherwise, the
+	// Docker daemon will create the host directory as root before running the
+	// container.
+	for _, bind := range hostConfig.Binds {
+		hostPath, _ := splitBindSpec(bind)
+		if _, err := os.Stat(hostPath); os.IsNotExist(err) {
+			maybePanic(os.MkdirAll(hostPath, 0755))
+		} else {
+			maybePanic(err)
+		}
+	}
+
 	resp, err := l.client.ContainerCreate(ctx, &containerConfig, &hostConfig, nil, containerName)
 	if err != nil {
 		return nil, err
@@ -262,7 +291,7 @@ func (c *Container) Wait(ctx context.Context, condition container.WaitCondition)
 	case err := <-errCh:
 		return err
 	case waitOKBody := <-waitOKBodyCh:
-		outputLog := filepath.Join(c.cluster.logDir, "console-output.log")
+		outputLog := filepath.Join(c.cluster.volumesDir, "logs", "console-output.log")
 		cmdLog, err := os.Create(outputLog)
 		if err != nil {
 			return err
@@ -277,7 +306,7 @@ func (c *Container) Wait(ctx context.Context, condition container.WaitCondition)
 		if exitCode := waitOKBody.StatusCode; exitCode != 0 {
 			err = errors.Errorf("non-zero exit code: %d", exitCode)
 			fmt.Fprintln(out, err.Error())
-			log.Shout(ctx, log.Severity_INFO, "command left-over files in ", c.cluster.logDir)
+			log.Shout(ctx, log.Severity_INFO, "command left-over files in ", c.cluster.volumesDir)
 		}
 
 		return err

@@ -41,15 +41,7 @@ var serverConnHost, serverConnPort, serverAdvertiseHost, serverAdvertisePort str
 var serverHTTPHost, serverHTTPPort string
 var clientConnHost, clientConnPort string
 var tempDir string
-
-// InitCLIDefaults is used for testing.
-func InitCLIDefaults() {
-	cliCtx.tableDisplayFormat = tableDisplayTSV
-	cliCtx.showTimes = false
-	dumpCtx.dumpMode = dumpBoth
-	dumpCtx.asOf = ""
-	sqlCtx.echo = false
-}
+var externalIODir string
 
 const usageIndentation = 8
 const wrapWidth = 79 - usageIndentation
@@ -255,6 +247,7 @@ func init() {
 		// refers to becomes known.
 		varFlag(f, diskTempStorageSizeValue, cliflags.SQLTempStorage)
 		stringFlag(f, &tempDir, cliflags.TempDir, "")
+		stringFlag(f, &externalIODir, cliflags.ExternalIODir, "")
 	}
 
 	for _, cmd := range certCmds {

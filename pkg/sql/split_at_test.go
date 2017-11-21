@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -33,20 +34,20 @@ import (
 func TestSplitAt(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	params, _ := createTestServerParams()
+	params, _ := tests.CreateTestServerParams()
 	s, db, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.TODO())
 
-	r := sqlutils.MakeSQLRunner(t, db)
+	r := sqlutils.MakeSQLRunner(db)
 
-	r.Exec("CREATE DATABASE d")
-	r.Exec(`CREATE TABLE d.t (
+	r.Exec(t, "CREATE DATABASE d")
+	r.Exec(t, `CREATE TABLE d.t (
 		i INT,
 		s STRING,
 		PRIMARY KEY (i, s),
 		INDEX s_idx (s)
 	)`)
-	r.Exec(`CREATE TABLE d.i (k INT PRIMARY KEY)`)
+	r.Exec(t, `CREATE TABLE d.i (k INT PRIMARY KEY)`)
 
 	tests := []struct {
 		in    string
@@ -155,14 +156,14 @@ func TestScatter(t *testing.T) {
 		sqlutils.ToRowFn(sqlutils.RowIdxFn, sqlutils.RowModuloFn(10)),
 	)
 
-	r := sqlutils.MakeSQLRunner(t, tc.ServerConn(0))
+	r := sqlutils.MakeSQLRunner(tc.ServerConn(0))
 
 	// Introduce 99 splits to get 100 ranges.
-	r.Exec("ALTER TABLE test.t SPLIT AT (SELECT i*10 FROM generate_series(1, 99) AS g(i))")
+	r.Exec(t, "ALTER TABLE test.t SPLIT AT (SELECT i*10 FROM generate_series(1, 99) AS g(i))")
 
 	// Ensure that scattering leaves each node with at least 20% of the leases.
-	r.Exec("ALTER TABLE test.t SCATTER")
-	rows := r.Query("SHOW TESTING_RANGES FROM TABLE test.t")
+	r.Exec(t, "ALTER TABLE test.t SCATTER")
+	rows := r.Query(t, "SHOW TESTING_RANGES FROM TABLE test.t")
 	// See showRangesColumns for the schema.
 	if cols, err := rows.Columns(); err != nil {
 		t.Fatal(err)
@@ -221,9 +222,9 @@ func TestScatterResponse(t *testing.T) {
 	)
 	tableDesc := sqlbase.GetTableDescriptor(kvDB, "test", "t")
 
-	r := sqlutils.MakeSQLRunner(t, sqlDB)
-	r.Exec("ALTER TABLE test.t SPLIT AT (SELECT i*10 FROM generate_series(1, 99) AS g(i))")
-	rows := r.Query("ALTER TABLE test.t SCATTER")
+	r := sqlutils.MakeSQLRunner(sqlDB)
+	r.Exec(t, "ALTER TABLE test.t SPLIT AT (SELECT i*10 FROM generate_series(1, 99) AS g(i))")
+	rows := r.Query(t, "ALTER TABLE test.t SCATTER")
 
 	i := 0
 	for ; rows.Next(); i++ {

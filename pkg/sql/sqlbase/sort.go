@@ -1,5 +1,11 @@
+// Copyright 2009 The Go Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style
+// license that can be found in licenses/BSD-golang.txt.
+
+// Portions of this file are additionally subject to the following
+// license and copyright.
+//
 // Copyright 2017 The Cockroach Authors.
-// Copyright 2009 The Go Authors (portions).
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.

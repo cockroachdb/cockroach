@@ -27,10 +27,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/transform"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/ipaddr"
+	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
@@ -48,13 +52,11 @@ var nameToVisibleTypeMap = map[string]ColumnType_VisibleType{
 	"DOUBLE PRECISON": ColumnType_DOUBLE_PRECISON,
 }
 
-func exprContainsVarsError(context string, Expr parser.Expr) error {
+func exprContainsVarsError(context string, Expr tree.Expr) error {
 	return fmt.Errorf("%s expression '%s' may not contain variable sub-expressions", context, Expr)
 }
 
-func incompatibleExprTypeError(
-	context string, expectedType parser.Type, actualType parser.Type,
-) error {
+func incompatibleExprTypeError(context string, expectedType types.T, actualType types.T) error {
 	return fmt.Errorf("incompatible type for %s expression: %s vs %s",
 		context, expectedType, actualType)
 }
@@ -63,21 +65,21 @@ func incompatibleExprTypeError(
 // type and contains no variable expressions. It returns the type-checked and
 // constant-folded expression.
 func SanitizeVarFreeExpr(
-	expr parser.Expr,
-	expectedType parser.Type,
+	expr tree.Expr,
+	expectedType types.T,
 	context string,
-	semaCtx *parser.SemaContext,
-	evalCtx *parser.EvalContext,
-) (parser.TypedExpr, error) {
-	if parser.ContainsVars(evalCtx, expr) {
+	semaCtx *tree.SemaContext,
+	evalCtx *tree.EvalContext,
+) (tree.TypedExpr, error) {
+	if tree.ContainsVars(evalCtx, expr) {
 		return nil, exprContainsVarsError(context, expr)
 	}
-	typedExpr, err := parser.TypeCheck(expr, semaCtx, expectedType)
+	typedExpr, err := tree.TypeCheck(expr, semaCtx, expectedType)
 	if err != nil {
 		return nil, err
 	}
 	defaultType := typedExpr.ResolvedType()
-	if !expectedType.Equivalent(defaultType) && typedExpr != parser.DNull {
+	if !expectedType.Equivalent(defaultType) && typedExpr != tree.DNull {
 		// The DEFAULT expression must match the column type exactly unless it is a
 		// constant NULL value.
 		return nil, incompatibleExprTypeError(context, expectedType, defaultType)
@@ -85,93 +87,101 @@ func SanitizeVarFreeExpr(
 	return typedExpr, nil
 }
 
+func populateTypeAttrs(
+	base ColumnType, typ coltypes.T, semaCtx *tree.SemaContext,
+) (ColumnType, error) {
+	// Set other attributes of col.Type and perform type-specific verification.
+	switch t := typ.(type) {
+	case *coltypes.TBool:
+	case *coltypes.TInt:
+		base.Width = int32(t.Width)
+		if val, present := nameToVisibleTypeMap[t.Name]; present {
+			base.VisibleType = val
+		}
+	case *coltypes.TFloat:
+		// If the precision for this float col was intentionally specified as 0, return an error.
+		if t.Prec == 0 && t.PrecSpecified {
+			return ColumnType{}, errors.New("precision for type float must be at least 1 bit")
+		}
+		base.Precision = int32(t.Prec)
+		if val, present := nameToVisibleTypeMap[t.Name]; present {
+			base.VisibleType = val
+		}
+	case *coltypes.TDecimal:
+		base.Width = int32(t.Scale)
+		base.Precision = int32(t.Prec)
+
+		switch {
+		case base.Precision == 0 && base.Width > 0:
+			// TODO (seif): Find right range for error message.
+			return ColumnType{}, errors.New("invalid NUMERIC precision 0")
+		case base.Precision < base.Width:
+			return ColumnType{}, fmt.Errorf("NUMERIC scale %d must be between 0 and precision %d",
+				base.Width, base.Precision)
+		}
+	case *coltypes.TDate:
+	case *coltypes.TTime:
+	case *coltypes.TTimestamp:
+	case *coltypes.TTimestampTZ:
+	case *coltypes.TInterval:
+	case *coltypes.TUUID:
+	case *coltypes.TIPAddr:
+	case *coltypes.TJSON:
+	case *coltypes.TString:
+		base.Width = int32(t.N)
+	case *coltypes.TName:
+	case *coltypes.TBytes:
+	case *coltypes.TCollatedString:
+		base.Width = int32(t.N)
+	case *coltypes.TArray:
+		base.ArrayDimensions = t.Bounds
+		var err error
+		base, err = populateTypeAttrs(base, t.ParamType, semaCtx)
+		if err != nil {
+			return ColumnType{}, err
+		}
+	case *coltypes.TVector:
+		if _, ok := t.ParamType.(*coltypes.TInt); !ok {
+			return ColumnType{}, errors.Errorf("vectors of type %s are unsupported", t.ParamType)
+		}
+	case *coltypes.TOid:
+	default:
+		return ColumnType{}, errors.Errorf("unexpected type %T", t)
+	}
+	return base, nil
+}
+
 // MakeColumnDefDescs creates the column descriptor for a column, as well as the
 // index descriptor if the column is a primary key or unique.
 // The search path is used for name resolution for DEFAULT expressions.
 func MakeColumnDefDescs(
-	d *parser.ColumnTableDef, semaCtx *parser.SemaContext, evalCtx *parser.EvalContext,
+	d *tree.ColumnTableDef, semaCtx *tree.SemaContext, evalCtx *tree.EvalContext,
 ) (*ColumnDescriptor, *IndexDescriptor, error) {
 	col := &ColumnDescriptor{
 		Name:     string(d.Name),
-		Nullable: d.Nullable.Nullability != parser.NotNull && !d.PrimaryKey,
+		Nullable: d.Nullable.Nullability != tree.NotNull && !d.PrimaryKey,
 	}
 
 	// Set Type.SemanticType and Type.Locale.
-	colDatumType := parser.CastTargetToDatumType(d.Type)
+	colDatumType := coltypes.CastTargetToDatumType(d.Type)
 	colTyp, err := DatumTypeToColumnType(colDatumType)
 	if err != nil {
 		return nil, nil, err
 	}
-	col.Type = colTyp
 
-	// Set other attributes of col.Type and perform type-specific verification.
-	switch t := d.Type.(type) {
-	case *parser.BoolColType:
-	case *parser.IntColType:
-		col.Type.Width = int32(t.Width)
+	col.Type, err = populateTypeAttrs(colTyp, d.Type, semaCtx)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	if t, ok := d.Type.(*coltypes.TInt); ok {
 		if t.IsSerial() {
 			if d.HasDefaultExpr() {
-				return nil, nil, fmt.Errorf("SERIAL column %q cannot have a default value", col.Name)
+				return nil, nil, fmt.Errorf("SERIAL column %q cannot have a default value", d.Name)
 			}
 			s := "unique_rowid()"
 			col.DefaultExpr = &s
 		}
-		if val, present := nameToVisibleTypeMap[t.Name]; present {
-			col.Type.VisibleType = val
-		}
-	case *parser.FloatColType:
-		// If the precision for this float col was intentionally specified as 0, return an error.
-		if t.Prec == 0 && t.PrecSpecified {
-			return nil, nil, errors.New("precision for type float must be at least 1 bit")
-		}
-		col.Type.Precision = int32(t.Prec)
-		if val, present := nameToVisibleTypeMap[t.Name]; present {
-			col.Type.VisibleType = val
-		}
-	case *parser.DecimalColType:
-		col.Type.Width = int32(t.Scale)
-		col.Type.Precision = int32(t.Prec)
-
-		switch {
-		case col.Type.Precision == 0 && col.Type.Width > 0:
-			// TODO (seif): Find right range for error message.
-			return nil, nil, errors.New("invalid NUMERIC precision 0")
-		case col.Type.Precision < col.Type.Width:
-			return nil, nil, fmt.Errorf("NUMERIC scale %d must be between 0 and precision %d",
-				col.Type.Width, col.Type.Precision)
-		}
-	case *parser.DateColType:
-	case *parser.TimestampColType:
-	case *parser.TimestampTZColType:
-	case *parser.IntervalColType:
-	case *parser.UUIDColType:
-	case *parser.IPAddrColType:
-	case *parser.StringColType:
-		col.Type.Width = int32(t.N)
-	case *parser.NameColType:
-	case *parser.BytesColType:
-	case *parser.CollatedStringColType:
-		col.Type.Width = int32(t.N)
-	case *parser.ArrayColType:
-		for i, e := range t.BoundsExprs {
-			te, err := parser.TypeCheckAndRequire(e, semaCtx, parser.TypeInt, "array bounds")
-			if err != nil {
-				return nil, nil, errors.Wrapf(err, "couldn't get bound %d", i)
-			}
-			d, err := te.Eval(nil)
-			if err != nil {
-				return nil, nil, errors.Wrapf(err, "couldn't Eval bound %d", i)
-			}
-			b := parser.MustBeDInt(d)
-			col.Type.ArrayDimensions = append(col.Type.ArrayDimensions, int32(b))
-		}
-	case *parser.VectorColType:
-		if _, ok := t.ParamType.(*parser.IntColType); !ok {
-			return nil, nil, errors.Errorf("vectors of type %s are unsupported", t.ParamType)
-		}
-	case *parser.OidColType:
-	default:
-		return nil, nil, errors.Errorf("unexpected type %T", t)
 	}
 
 	if len(d.CheckExprs) > 0 {
@@ -190,31 +200,24 @@ func MakeColumnDefDescs(
 		); err != nil {
 			return nil, nil, err
 		}
-		var p parser.Parser
-		if err := p.AssertNoAggregationOrWindowing(
+		var t transform.ExprTransformContext
+		if err := t.AssertNoAggregationOrWindowing(
 			d.DefaultExpr.Expr, "DEFAULT expressions", semaCtx.SearchPath,
 		); err != nil {
 			return nil, nil, err
 		}
 
 		// Type check and simplify: this performs constant folding and reduces the expression.
-		typedExpr, err := parser.TypeCheck(d.DefaultExpr.Expr, semaCtx, col.Type.ToDatumType())
+		typedExpr, err := tree.TypeCheck(d.DefaultExpr.Expr, semaCtx, col.Type.ToDatumType())
 		if err != nil {
 			return nil, nil, err
 		}
-		if typedExpr, err = p.NormalizeExpr(evalCtx, typedExpr); err != nil {
-			return nil, nil, err
-		}
-		// Try to evaluate once. If it is aimed to succeed during a
-		// backfill, it must succeed here too. This tries to ensure that
-		// we don't end up failing the evaluation during the schema change
-		// proper.
-		if _, err := typedExpr.Eval(evalCtx); err != nil {
+		if typedExpr, err = t.NormalizeExpr(evalCtx, typedExpr); err != nil {
 			return nil, nil, err
 		}
 		d.DefaultExpr.Expr = typedExpr
 
-		s := parser.Serialize(d.DefaultExpr.Expr)
+		s := tree.Serialize(d.DefaultExpr.Expr)
 		col.DefaultExpr = &s
 	}
 
@@ -251,9 +254,9 @@ func MakeIndexKeyPrefix(desc *TableDescriptor, indexID IndexID) []byte {
 // EncodeIndexKey creates a key by concatenating keyPrefix with the encodings of
 // the columns in the index.
 //
-// If a table or index is interleaved, `encoding.encodedNullDesc` is used in
-// place of the family id (a varint) to signal the next component of the key.
-// An example of one level of interleaving (a parent):
+// If a table or index is interleaved, `encoding.interleavedSentinel` is used
+// in place of the family id (a varint) to signal the next component of the
+// key.  An example of one level of interleaving (a parent):
 // /<parent_table_id>/<parent_index_id>/<field_1>/<field_2>/NullDesc/<table_id>/<index_id>/<field_3>/<family>
 //
 // Returns the key and whether any of the encoded values were NULLs.
@@ -264,7 +267,7 @@ func EncodeIndexKey(
 	tableDesc *TableDescriptor,
 	index *IndexDescriptor,
 	colMap map[ColumnID]int,
-	values []parser.Datum,
+	values []tree.Datum,
 	keyPrefix []byte,
 ) (key []byte, containsNull bool, err error) {
 	return EncodePartialIndexKey(
@@ -284,7 +287,7 @@ func EncodePartialIndexKey(
 	index *IndexDescriptor,
 	numCols int,
 	colMap map[ColumnID]int,
-	values []parser.Datum,
+	values []tree.Datum,
 	keyPrefix []byte,
 ) (key []byte, containsNull bool, err error) {
 	colIDs := index.ColumnIDs[:numCols]
@@ -321,8 +324,9 @@ func EncodePartialIndexKey(
 				return key, containsNull, nil
 			}
 			colIDs, dirs = colIDs[length:], dirs[length:]
-			// We reuse NotNullDescending (0xfe) as the interleave sentinel.
-			key = encoding.EncodeNotNullDescending(key)
+			// Each ancestor is separated by an interleaved
+			// sentinel (0xfe).
+			key = encoding.EncodeInterleavedSentinel(key)
 		}
 
 		key = encoding.EncodeUvarintAscending(key, uint64(tableDesc.ID))
@@ -344,6 +348,17 @@ func (d directions) get(i int) (encoding.Direction, error) {
 	return encoding.Ascending, nil
 }
 
+// Return the value corresponding to the column. If the column isn't
+// present return a NULL value.
+func findColumnValue(column ColumnID, colMap map[ColumnID]int, values []tree.Datum) tree.Datum {
+	if i, ok := colMap[column]; ok {
+		// TODO(pmattis): Need to convert the values[i] value to the type
+		// expected by the column.
+		return values[i]
+	}
+	return tree.DNull
+}
+
 // EncodeColumns is a version of EncodePartialIndexKey that takes ColumnIDs and
 // directions explicitly. WARNING: unlike EncodePartialIndexKey, EncodeColumns
 // appends directly to keyPrefix.
@@ -351,21 +366,13 @@ func EncodeColumns(
 	columnIDs []ColumnID,
 	directions directions,
 	colMap map[ColumnID]int,
-	values []parser.Datum,
+	values []tree.Datum,
 	keyPrefix []byte,
 ) (key []byte, containsNull bool, err error) {
 	key = keyPrefix
 	for colIdx, id := range columnIDs {
-		var val parser.Datum
-		if i, ok := colMap[id]; ok {
-			// TODO(pmattis): Need to convert the values[i] value to the type
-			// expected by the column.
-			val = values[i]
-		} else {
-			val = parser.DNull
-		}
-
-		if val == parser.DNull {
+		val := findColumnValue(id, colMap, values)
+		if val == tree.DNull {
 			containsNull = true
 		}
 
@@ -406,9 +413,9 @@ func appendEncDatumsToKey(
 // encodings of the given EncDatum values. The values correspond to
 // index.ColumnIDs.
 //
-// If a table or index is interleaved, `encoding.encodedNullDesc` is used in
-// place of the family id (a varint) to signal the next component of the key.
-// An example of one level of interleaving (a parent):
+// If a table or index is interleaved, `encoding.interleavedSentinel` is used
+// in place of the family id (a varint) to signal the next component of the
+// key.  An example of one level of interleaving (a parent):
 // /<parent_table_id>/<parent_index_id>/<field_1>/<field_2>/NullDesc/<table_id>/<index_id>/<field_3>/<family>
 //
 // Note that ExtraColumnIDs are not encoded, so the result isn't always a
@@ -449,8 +456,9 @@ func MakeKeyFromEncDatums(
 			}
 			types, values, dirs = types[length:], values[length:], dirs[length:]
 
-			// We reuse NotNullDescending (0xfe) as the interleave sentinel.
-			key = encoding.EncodeNotNullDescending(key)
+			// Each ancestor is separated by an interleaved
+			// sentinel (0xfe).
+			key = encoding.EncodeInterleavedSentinel(key)
 		}
 
 		key = encoding.EncodeUvarintAscending(key, uint64(tableDesc.ID))
@@ -460,15 +468,15 @@ func MakeKeyFromEncDatums(
 }
 
 // EncodeDatum encodes a datum (order-preserving encoding, suitable for keys).
-func EncodeDatum(b []byte, d parser.Datum) ([]byte, error) {
-	if values, ok := d.(*parser.DTuple); ok {
+func EncodeDatum(b []byte, d tree.Datum) ([]byte, error) {
+	if values, ok := d.(*tree.DTuple); ok {
 		return EncodeDatums(b, values.D)
 	}
 	return EncodeTableKey(b, d, encoding.Ascending)
 }
 
 // EncodeDatums encodes a Datums (order-preserving).
-func EncodeDatums(b []byte, d parser.Datums) ([]byte, error) {
+func EncodeDatums(b []byte, d tree.Datums) ([]byte, error) {
 	for _, val := range d {
 		var err error
 		b, err = EncodeDatum(b, val)
@@ -482,20 +490,20 @@ func EncodeDatums(b []byte, d parser.Datums) ([]byte, error) {
 // EncodeTableKey encodes `val` into `b` and returns the new buffer. The
 // encoded value is guaranteed to be lexicographically sortable, but not
 // guaranteed to be round-trippable during decoding.
-func EncodeTableKey(b []byte, val parser.Datum, dir encoding.Direction) ([]byte, error) {
+func EncodeTableKey(b []byte, val tree.Datum, dir encoding.Direction) ([]byte, error) {
 	if (dir != encoding.Ascending) && (dir != encoding.Descending) {
 		return nil, errors.Errorf("invalid direction: %d", dir)
 	}
 
-	if val == parser.DNull {
+	if val == tree.DNull {
 		if dir == encoding.Ascending {
 			return encoding.EncodeNullAscending(b), nil
 		}
 		return encoding.EncodeNullDescending(b), nil
 	}
 
-	switch t := parser.UnwrapDatum(nil, val).(type) {
-	case *parser.DBool:
+	switch t := tree.UnwrapDatum(nil, val).(type) {
+	case *tree.DBool:
 		var x int64
 		if *t {
 			x = 1
@@ -506,63 +514,68 @@ func EncodeTableKey(b []byte, val parser.Datum, dir encoding.Direction) ([]byte,
 			return encoding.EncodeVarintAscending(b, x), nil
 		}
 		return encoding.EncodeVarintDescending(b, x), nil
-	case *parser.DInt:
+	case *tree.DInt:
 		if dir == encoding.Ascending {
 			return encoding.EncodeVarintAscending(b, int64(*t)), nil
 		}
 		return encoding.EncodeVarintDescending(b, int64(*t)), nil
-	case *parser.DFloat:
+	case *tree.DFloat:
 		if dir == encoding.Ascending {
 			return encoding.EncodeFloatAscending(b, float64(*t)), nil
 		}
 		return encoding.EncodeFloatDescending(b, float64(*t)), nil
-	case *parser.DDecimal:
+	case *tree.DDecimal:
 		if dir == encoding.Ascending {
 			return encoding.EncodeDecimalAscending(b, &t.Decimal), nil
 		}
 		return encoding.EncodeDecimalDescending(b, &t.Decimal), nil
-	case *parser.DString:
+	case *tree.DString:
 		if dir == encoding.Ascending {
 			return encoding.EncodeStringAscending(b, string(*t)), nil
 		}
 		return encoding.EncodeStringDescending(b, string(*t)), nil
-	case *parser.DBytes:
+	case *tree.DBytes:
 		if dir == encoding.Ascending {
 			return encoding.EncodeStringAscending(b, string(*t)), nil
 		}
 		return encoding.EncodeStringDescending(b, string(*t)), nil
-	case *parser.DDate:
+	case *tree.DDate:
 		if dir == encoding.Ascending {
 			return encoding.EncodeVarintAscending(b, int64(*t)), nil
 		}
 		return encoding.EncodeVarintDescending(b, int64(*t)), nil
-	case *parser.DTimestamp:
+	case *tree.DTime:
+		if dir == encoding.Ascending {
+			return encoding.EncodeVarintAscending(b, int64(*t)), nil
+		}
+		return encoding.EncodeVarintDescending(b, int64(*t)), nil
+	case *tree.DTimestamp:
 		if dir == encoding.Ascending {
 			return encoding.EncodeTimeAscending(b, t.Time), nil
 		}
 		return encoding.EncodeTimeDescending(b, t.Time), nil
-	case *parser.DTimestampTZ:
+	case *tree.DTimestampTZ:
 		if dir == encoding.Ascending {
 			return encoding.EncodeTimeAscending(b, t.Time), nil
 		}
 		return encoding.EncodeTimeDescending(b, t.Time), nil
-	case *parser.DInterval:
+	case *tree.DInterval:
 		if dir == encoding.Ascending {
 			return encoding.EncodeDurationAscending(b, t.Duration)
 		}
 		return encoding.EncodeDurationDescending(b, t.Duration)
-	case *parser.DUuid:
+	case *tree.DUuid:
 		if dir == encoding.Ascending {
 			return encoding.EncodeBytesAscending(b, t.GetBytes()), nil
 		}
 		return encoding.EncodeBytesDescending(b, t.GetBytes()), nil
-	case *parser.DIPAddr:
+	case *tree.DIPAddr:
 		data := t.ToBuffer(nil)
 		if dir == encoding.Ascending {
 			return encoding.EncodeBytesAscending(b, data), nil
 		}
 		return encoding.EncodeBytesDescending(b, data), nil
-	case *parser.DTuple:
+	case *tree.DTuple:
 		for _, datum := range t.D {
 			var err error
 			b, err = EncodeTableKey(b, datum, dir)
@@ -571,12 +584,12 @@ func EncodeTableKey(b []byte, val parser.Datum, dir encoding.Direction) ([]byte,
 			}
 		}
 		return b, nil
-	case *parser.DCollatedString:
+	case *tree.DCollatedString:
 		if dir == encoding.Ascending {
 			return encoding.EncodeBytesAscending(b, t.Key), nil
 		}
 		return encoding.EncodeBytesDescending(b, t.Key), nil
-	case *parser.DArray:
+	case *tree.DArray:
 		for _, datum := range t.Array {
 			var err error
 			b, err = EncodeTableKey(b, datum, dir)
@@ -585,9 +598,8 @@ func EncodeTableKey(b []byte, val parser.Datum, dir encoding.Direction) ([]byte,
 			}
 		}
 		return b, nil
-	case *parser.DOid:
+	case *tree.DOid:
 		if dir == encoding.Ascending {
-
 			return encoding.EncodeVarintAscending(b, int64(t.DInt)), nil
 		}
 		return encoding.EncodeVarintDescending(b, int64(t.DInt)), nil
@@ -600,45 +612,53 @@ func EncodeTableKey(b []byte, val parser.Datum, dir encoding.Direction) ([]byte,
 // trip and decode exactly to its input, but is not guaranteed to be
 // lexicographically sortable.
 func EncodeTableValue(
-	appendTo []byte, colID ColumnID, val parser.Datum, scratch []byte,
+	appendTo []byte, colID ColumnID, val tree.Datum, scratch []byte,
 ) ([]byte, error) {
-	if val == parser.DNull {
+	if val == tree.DNull {
 		return encoding.EncodeNullValue(appendTo, uint32(colID)), nil
 	}
-	switch t := parser.UnwrapDatum(nil, val).(type) {
-	case *parser.DBool:
+	switch t := tree.UnwrapDatum(nil, val).(type) {
+	case *tree.DBool:
 		return encoding.EncodeBoolValue(appendTo, uint32(colID), bool(*t)), nil
-	case *parser.DInt:
+	case *tree.DInt:
 		return encoding.EncodeIntValue(appendTo, uint32(colID), int64(*t)), nil
-	case *parser.DFloat:
+	case *tree.DFloat:
 		return encoding.EncodeFloatValue(appendTo, uint32(colID), float64(*t)), nil
-	case *parser.DDecimal:
+	case *tree.DDecimal:
 		return encoding.EncodeDecimalValue(appendTo, uint32(colID), &t.Decimal), nil
-	case *parser.DString:
+	case *tree.DString:
 		return encoding.EncodeBytesValue(appendTo, uint32(colID), []byte(*t)), nil
-	case *parser.DBytes:
+	case *tree.DBytes:
 		return encoding.EncodeBytesValue(appendTo, uint32(colID), []byte(*t)), nil
-	case *parser.DDate:
+	case *tree.DDate:
 		return encoding.EncodeIntValue(appendTo, uint32(colID), int64(*t)), nil
-	case *parser.DTimestamp:
+	case *tree.DTime:
+		return encoding.EncodeIntValue(appendTo, uint32(colID), int64(*t)), nil
+	case *tree.DTimestamp:
 		return encoding.EncodeTimeValue(appendTo, uint32(colID), t.Time), nil
-	case *parser.DTimestampTZ:
+	case *tree.DTimestampTZ:
 		return encoding.EncodeTimeValue(appendTo, uint32(colID), t.Time), nil
-	case *parser.DInterval:
+	case *tree.DInterval:
 		return encoding.EncodeDurationValue(appendTo, uint32(colID), t.Duration), nil
-	case *parser.DUuid:
+	case *tree.DUuid:
 		return encoding.EncodeUUIDValue(appendTo, uint32(colID), t.UUID), nil
-	case *parser.DIPAddr:
+	case *tree.DIPAddr:
 		return encoding.EncodeIPAddrValue(appendTo, uint32(colID), t.IPAddr), nil
-	case *parser.DArray:
+	case *tree.DJSON:
+		encoded, err := json.EncodeJSON(scratch, t.JSON)
+		if err != nil {
+			return nil, err
+		}
+		return encoding.EncodeJSONValue(appendTo, uint32(colID), encoded), nil
+	case *tree.DArray:
 		a, err := encodeArray(t, scratch)
 		if err != nil {
 			return nil, err
 		}
 		return encoding.EncodeArrayValue(appendTo, uint32(colID), a), nil
-	case *parser.DCollatedString:
+	case *tree.DCollatedString:
 		return encoding.EncodeBytesValue(appendTo, uint32(colID), []byte(t.Contents)), nil
-	case *parser.DOid:
+	case *tree.DOid:
 		return encoding.EncodeIntValue(appendTo, uint32(colID), int64(t.DInt)), nil
 	}
 	return nil, errors.Errorf("unable to encode table value: %T", val)
@@ -725,9 +745,9 @@ func DecodeIndexKeyPrefix(
 			key = key[l:]
 		}
 
-		// We reuse NotNullDescending as the interleave sentinel, consume it.
+		// Consume the interleaved sentinel.
 		var ok bool
-		key, ok = encoding.DecodeIfNotNull(key)
+		key, ok = encoding.DecodeIfInterleavedSentinel(key)
 		if !ok {
 			return 0, nil, errors.Errorf("invalid interleave key")
 		}
@@ -773,9 +793,9 @@ func DecodeIndexKey(
 			}
 			types, vals, colDirs = types[length:], vals[length:], colDirs[length:]
 
-			// We reuse NotNullDescending as the interleave sentinel, consume it.
+			// Consume the interleaved sentinel.
 			var ok bool
-			key, ok = encoding.DecodeIfNotNull(key)
+			key, ok = encoding.DecodeIfInterleavedSentinel(key)
 			if !ok {
 				return nil, false, nil
 			}
@@ -795,9 +815,10 @@ func DecodeIndexKey(
 		return nil, false, err
 	}
 
-	// We're expecting a column family id next (a varint). If descNotNull is
-	// actually next, then this key is for a child table.
-	if _, ok := encoding.DecodeIfNotNull(key); ok {
+	// We're expecting a column family id next (a varint). If
+	// interleavedSentinel is actually next, then this key is for a child
+	// table.
+	if _, ok := encoding.DecodeIfInterleavedSentinel(key); ok {
 		return nil, false, nil
 	}
 
@@ -913,7 +934,7 @@ func ExtractIndexKey(
 	}
 	indexKeyPrefix := MakeIndexKeyPrefix(tableDesc, tableDesc.PrimaryIndex.ID)
 
-	decodedValues := make([]parser.Datum, len(values)+len(extraValues))
+	decodedValues := make([]tree.Datum, len(values)+len(extraValues))
 	for i, value := range values {
 		err := value.EnsureDecoded(&indexTypes[i], a)
 		if err != nil {
@@ -938,27 +959,29 @@ const datumAllocSize = 16 // Arbitrary, could be tuned.
 // DatumAlloc provides batch allocation of datum pointers, amortizing the cost
 // of the allocations.
 type DatumAlloc struct {
-	dintAlloc         []parser.DInt
-	dfloatAlloc       []parser.DFloat
-	dstringAlloc      []parser.DString
-	dbytesAlloc       []parser.DBytes
-	ddecimalAlloc     []parser.DDecimal
-	ddateAlloc        []parser.DDate
-	dtimestampAlloc   []parser.DTimestamp
-	dtimestampTzAlloc []parser.DTimestampTZ
-	dintervalAlloc    []parser.DInterval
-	duuidAlloc        []parser.DUuid
-	dipnetAlloc       []parser.DIPAddr
-	doidAlloc         []parser.DOid
+	dintAlloc         []tree.DInt
+	dfloatAlloc       []tree.DFloat
+	dstringAlloc      []tree.DString
+	dbytesAlloc       []tree.DBytes
+	ddecimalAlloc     []tree.DDecimal
+	ddateAlloc        []tree.DDate
+	dtimeAlloc        []tree.DTime
+	dtimestampAlloc   []tree.DTimestamp
+	dtimestampTzAlloc []tree.DTimestampTZ
+	dintervalAlloc    []tree.DInterval
+	duuidAlloc        []tree.DUuid
+	dipnetAlloc       []tree.DIPAddr
+	djsonAlloc        []tree.DJSON
+	doidAlloc         []tree.DOid
 	scratch           []byte
-	env               parser.CollationEnvironment
+	env               tree.CollationEnvironment
 }
 
 // NewDInt allocates a DInt.
-func (a *DatumAlloc) NewDInt(v parser.DInt) *parser.DInt {
+func (a *DatumAlloc) NewDInt(v tree.DInt) *tree.DInt {
 	buf := &a.dintAlloc
 	if len(*buf) == 0 {
-		*buf = make([]parser.DInt, datumAllocSize)
+		*buf = make([]tree.DInt, datumAllocSize)
 	}
 	r := &(*buf)[0]
 	*r = v
@@ -967,10 +990,10 @@ func (a *DatumAlloc) NewDInt(v parser.DInt) *parser.DInt {
 }
 
 // NewDFloat allocates a DFloat.
-func (a *DatumAlloc) NewDFloat(v parser.DFloat) *parser.DFloat {
+func (a *DatumAlloc) NewDFloat(v tree.DFloat) *tree.DFloat {
 	buf := &a.dfloatAlloc
 	if len(*buf) == 0 {
-		*buf = make([]parser.DFloat, datumAllocSize)
+		*buf = make([]tree.DFloat, datumAllocSize)
 	}
 	r := &(*buf)[0]
 	*r = v
@@ -979,10 +1002,10 @@ func (a *DatumAlloc) NewDFloat(v parser.DFloat) *parser.DFloat {
 }
 
 // NewDString allocates a DString.
-func (a *DatumAlloc) NewDString(v parser.DString) *parser.DString {
+func (a *DatumAlloc) NewDString(v tree.DString) *tree.DString {
 	buf := &a.dstringAlloc
 	if len(*buf) == 0 {
-		*buf = make([]parser.DString, datumAllocSize)
+		*buf = make([]tree.DString, datumAllocSize)
 	}
 	r := &(*buf)[0]
 	*r = v
@@ -991,15 +1014,15 @@ func (a *DatumAlloc) NewDString(v parser.DString) *parser.DString {
 }
 
 // NewDName allocates a DName.
-func (a *DatumAlloc) NewDName(v parser.DString) parser.Datum {
-	return parser.NewDNameFromDString(a.NewDString(v))
+func (a *DatumAlloc) NewDName(v tree.DString) tree.Datum {
+	return tree.NewDNameFromDString(a.NewDString(v))
 }
 
 // NewDBytes allocates a DBytes.
-func (a *DatumAlloc) NewDBytes(v parser.DBytes) *parser.DBytes {
+func (a *DatumAlloc) NewDBytes(v tree.DBytes) *tree.DBytes {
 	buf := &a.dbytesAlloc
 	if len(*buf) == 0 {
-		*buf = make([]parser.DBytes, datumAllocSize)
+		*buf = make([]tree.DBytes, datumAllocSize)
 	}
 	r := &(*buf)[0]
 	*r = v
@@ -1008,10 +1031,10 @@ func (a *DatumAlloc) NewDBytes(v parser.DBytes) *parser.DBytes {
 }
 
 // NewDDecimal allocates a DDecimal.
-func (a *DatumAlloc) NewDDecimal(v parser.DDecimal) *parser.DDecimal {
+func (a *DatumAlloc) NewDDecimal(v tree.DDecimal) *tree.DDecimal {
 	buf := &a.ddecimalAlloc
 	if len(*buf) == 0 {
-		*buf = make([]parser.DDecimal, datumAllocSize)
+		*buf = make([]tree.DDecimal, datumAllocSize)
 	}
 	r := &(*buf)[0]
 	*r = v
@@ -1020,10 +1043,22 @@ func (a *DatumAlloc) NewDDecimal(v parser.DDecimal) *parser.DDecimal {
 }
 
 // NewDDate allocates a DDate.
-func (a *DatumAlloc) NewDDate(v parser.DDate) *parser.DDate {
+func (a *DatumAlloc) NewDDate(v tree.DDate) *tree.DDate {
 	buf := &a.ddateAlloc
 	if len(*buf) == 0 {
-		*buf = make([]parser.DDate, datumAllocSize)
+		*buf = make([]tree.DDate, datumAllocSize)
+	}
+	r := &(*buf)[0]
+	*r = v
+	*buf = (*buf)[1:]
+	return r
+}
+
+// NewDTime allocates a DTime.
+func (a *DatumAlloc) NewDTime(v tree.DTime) *tree.DTime {
+	buf := &a.dtimeAlloc
+	if len(*buf) == 0 {
+		*buf = make([]tree.DTime, datumAllocSize)
 	}
 	r := &(*buf)[0]
 	*r = v
@@ -1032,10 +1067,10 @@ func (a *DatumAlloc) NewDDate(v parser.DDate) *parser.DDate {
 }
 
 // NewDTimestamp allocates a DTimestamp.
-func (a *DatumAlloc) NewDTimestamp(v parser.DTimestamp) *parser.DTimestamp {
+func (a *DatumAlloc) NewDTimestamp(v tree.DTimestamp) *tree.DTimestamp {
 	buf := &a.dtimestampAlloc
 	if len(*buf) == 0 {
-		*buf = make([]parser.DTimestamp, datumAllocSize)
+		*buf = make([]tree.DTimestamp, datumAllocSize)
 	}
 	r := &(*buf)[0]
 	*r = v
@@ -1044,10 +1079,10 @@ func (a *DatumAlloc) NewDTimestamp(v parser.DTimestamp) *parser.DTimestamp {
 }
 
 // NewDTimestampTZ allocates a DTimestampTZ.
-func (a *DatumAlloc) NewDTimestampTZ(v parser.DTimestampTZ) *parser.DTimestampTZ {
+func (a *DatumAlloc) NewDTimestampTZ(v tree.DTimestampTZ) *tree.DTimestampTZ {
 	buf := &a.dtimestampTzAlloc
 	if len(*buf) == 0 {
-		*buf = make([]parser.DTimestampTZ, datumAllocSize)
+		*buf = make([]tree.DTimestampTZ, datumAllocSize)
 	}
 	r := &(*buf)[0]
 	*r = v
@@ -1056,10 +1091,10 @@ func (a *DatumAlloc) NewDTimestampTZ(v parser.DTimestampTZ) *parser.DTimestampTZ
 }
 
 // NewDInterval allocates a DInterval.
-func (a *DatumAlloc) NewDInterval(v parser.DInterval) *parser.DInterval {
+func (a *DatumAlloc) NewDInterval(v tree.DInterval) *tree.DInterval {
 	buf := &a.dintervalAlloc
 	if len(*buf) == 0 {
-		*buf = make([]parser.DInterval, datumAllocSize)
+		*buf = make([]tree.DInterval, datumAllocSize)
 	}
 	r := &(*buf)[0]
 	*r = v
@@ -1068,10 +1103,10 @@ func (a *DatumAlloc) NewDInterval(v parser.DInterval) *parser.DInterval {
 }
 
 // NewDUuid allocates a DUuid.
-func (a *DatumAlloc) NewDUuid(v parser.DUuid) *parser.DUuid {
+func (a *DatumAlloc) NewDUuid(v tree.DUuid) *tree.DUuid {
 	buf := &a.duuidAlloc
 	if len(*buf) == 0 {
-		*buf = make([]parser.DUuid, datumAllocSize)
+		*buf = make([]tree.DUuid, datumAllocSize)
 	}
 	r := &(*buf)[0]
 	*r = v
@@ -1080,10 +1115,22 @@ func (a *DatumAlloc) NewDUuid(v parser.DUuid) *parser.DUuid {
 }
 
 // NewDIPAddr allocates a DIPAddr.
-func (a *DatumAlloc) NewDIPAddr(v parser.DIPAddr) *parser.DIPAddr {
+func (a *DatumAlloc) NewDIPAddr(v tree.DIPAddr) *tree.DIPAddr {
 	buf := &a.dipnetAlloc
 	if len(*buf) == 0 {
-		*buf = make([]parser.DIPAddr, datumAllocSize)
+		*buf = make([]tree.DIPAddr, datumAllocSize)
+	}
+	r := &(*buf)[0]
+	*r = v
+	*buf = (*buf)[1:]
+	return r
+}
+
+// NewDJSON allocates a DJSON.
+func (a *DatumAlloc) NewDJSON(v tree.DJSON) *tree.DJSON {
+	buf := &a.djsonAlloc
+	if len(*buf) == 0 {
+		*buf = make([]tree.DJSON, datumAllocSize)
 	}
 	r := &(*buf)[0]
 	*r = v
@@ -1092,10 +1139,10 @@ func (a *DatumAlloc) NewDIPAddr(v parser.DIPAddr) *parser.DIPAddr {
 }
 
 // NewDOid allocates a DOid.
-func (a *DatumAlloc) NewDOid(v parser.DOid) parser.Datum {
+func (a *DatumAlloc) NewDOid(v tree.DOid) tree.Datum {
 	buf := &a.doidAlloc
 	if len(*buf) == 0 {
-		*buf = make([]parser.DOid, datumAllocSize)
+		*buf = make([]tree.DOid, datumAllocSize)
 	}
 	r := &(*buf)[0]
 	*r = v
@@ -1105,19 +1152,19 @@ func (a *DatumAlloc) NewDOid(v parser.DOid) parser.Datum {
 
 // DecodeTableKey decodes a table key/value.
 func DecodeTableKey(
-	a *DatumAlloc, valType parser.Type, key []byte, dir encoding.Direction,
-) (parser.Datum, []byte, error) {
+	a *DatumAlloc, valType types.T, key []byte, dir encoding.Direction,
+) (tree.Datum, []byte, error) {
 	if (dir != encoding.Ascending) && (dir != encoding.Descending) {
 		return nil, nil, errors.Errorf("invalid direction: %d", dir)
 	}
 	var isNull bool
 	if key, isNull = encoding.DecodeIfNull(key); isNull {
-		return parser.DNull, key, nil
+		return tree.DNull, key, nil
 	}
 	var rkey []byte
 	var err error
 	switch valType {
-	case parser.TypeBool:
+	case types.Bool:
 		var i int64
 		if dir == encoding.Ascending {
 			rkey, i, err = encoding.DecodeVarintAscending(key)
@@ -1125,90 +1172,98 @@ func DecodeTableKey(
 			rkey, i, err = encoding.DecodeVarintDescending(key)
 		}
 		// No need to chunk allocate DBool as MakeDBool returns either
-		// parser.DBoolTrue or parser.DBoolFalse.
-		return parser.MakeDBool(parser.DBool(i != 0)), rkey, err
-	case parser.TypeInt:
+		// tree.DBoolTrue or tree.DBoolFalse.
+		return tree.MakeDBool(tree.DBool(i != 0)), rkey, err
+	case types.Int:
 		var i int64
 		if dir == encoding.Ascending {
 			rkey, i, err = encoding.DecodeVarintAscending(key)
 		} else {
 			rkey, i, err = encoding.DecodeVarintDescending(key)
 		}
-		return a.NewDInt(parser.DInt(i)), rkey, err
-	case parser.TypeFloat:
+		return a.NewDInt(tree.DInt(i)), rkey, err
+	case types.Float:
 		var f float64
 		if dir == encoding.Ascending {
 			rkey, f, err = encoding.DecodeFloatAscending(key)
 		} else {
 			rkey, f, err = encoding.DecodeFloatDescending(key)
 		}
-		return a.NewDFloat(parser.DFloat(f)), rkey, err
-	case parser.TypeDecimal:
+		return a.NewDFloat(tree.DFloat(f)), rkey, err
+	case types.Decimal:
 		var d apd.Decimal
 		if dir == encoding.Ascending {
 			rkey, d, err = encoding.DecodeDecimalAscending(key, nil)
 		} else {
 			rkey, d, err = encoding.DecodeDecimalDescending(key, nil)
 		}
-		dd := a.NewDDecimal(parser.DDecimal{Decimal: d})
+		dd := a.NewDDecimal(tree.DDecimal{Decimal: d})
 		return dd, rkey, err
-	case parser.TypeString:
+	case types.String:
 		var r string
 		if dir == encoding.Ascending {
 			rkey, r, err = encoding.DecodeUnsafeStringAscending(key, nil)
 		} else {
 			rkey, r, err = encoding.DecodeUnsafeStringDescending(key, nil)
 		}
-		return a.NewDString(parser.DString(r)), rkey, err
-	case parser.TypeName:
+		return a.NewDString(tree.DString(r)), rkey, err
+	case types.Name:
 		var r string
 		if dir == encoding.Ascending {
 			rkey, r, err = encoding.DecodeUnsafeStringAscending(key, nil)
 		} else {
 			rkey, r, err = encoding.DecodeUnsafeStringDescending(key, nil)
 		}
-		return a.NewDName(parser.DString(r)), rkey, err
-	case parser.TypeBytes:
+		return a.NewDName(tree.DString(r)), rkey, err
+	case types.Bytes:
 		var r []byte
 		if dir == encoding.Ascending {
 			rkey, r, err = encoding.DecodeBytesAscending(key, nil)
 		} else {
 			rkey, r, err = encoding.DecodeBytesDescending(key, nil)
 		}
-		return a.NewDBytes(parser.DBytes(r)), rkey, err
-	case parser.TypeDate:
+		return a.NewDBytes(tree.DBytes(r)), rkey, err
+	case types.Date:
 		var t int64
 		if dir == encoding.Ascending {
 			rkey, t, err = encoding.DecodeVarintAscending(key)
 		} else {
 			rkey, t, err = encoding.DecodeVarintDescending(key)
 		}
-		return a.NewDDate(parser.DDate(t)), rkey, err
-	case parser.TypeTimestamp:
+		return a.NewDDate(tree.DDate(t)), rkey, err
+	case types.Time:
+		var t int64
+		if dir == encoding.Ascending {
+			rkey, t, err = encoding.DecodeVarintAscending(key)
+		} else {
+			rkey, t, err = encoding.DecodeVarintDescending(key)
+		}
+		return a.NewDTime(tree.DTime(t)), rkey, err
+	case types.Timestamp:
 		var t time.Time
 		if dir == encoding.Ascending {
 			rkey, t, err = encoding.DecodeTimeAscending(key)
 		} else {
 			rkey, t, err = encoding.DecodeTimeDescending(key)
 		}
-		return a.NewDTimestamp(parser.DTimestamp{Time: t}), rkey, err
-	case parser.TypeTimestampTZ:
+		return a.NewDTimestamp(tree.DTimestamp{Time: t}), rkey, err
+	case types.TimestampTZ:
 		var t time.Time
 		if dir == encoding.Ascending {
 			rkey, t, err = encoding.DecodeTimeAscending(key)
 		} else {
 			rkey, t, err = encoding.DecodeTimeDescending(key)
 		}
-		return a.NewDTimestampTZ(parser.DTimestampTZ{Time: t}), rkey, err
-	case parser.TypeInterval:
+		return a.NewDTimestampTZ(tree.DTimestampTZ{Time: t}), rkey, err
+	case types.Interval:
 		var d duration.Duration
 		if dir == encoding.Ascending {
 			rkey, d, err = encoding.DecodeDurationAscending(key)
 		} else {
 			rkey, d, err = encoding.DecodeDurationDescending(key)
 		}
-		return a.NewDInterval(parser.DInterval{Duration: d}), rkey, err
-	case parser.TypeUUID:
+		return a.NewDInterval(tree.DInterval{Duration: d}), rkey, err
+	case types.UUID:
 		var r []byte
 		if dir == encoding.Ascending {
 			rkey, r, err = encoding.DecodeBytesAscending(key, nil)
@@ -1219,8 +1274,8 @@ func DecodeTableKey(
 			return nil, nil, err
 		}
 		u, err := uuid.FromBytes(r)
-		return a.NewDUuid(parser.DUuid{UUID: u}), rkey, err
-	case parser.TypeINet:
+		return a.NewDUuid(tree.DUuid{UUID: u}), rkey, err
+	case types.INet:
 		var r []byte
 		if dir == encoding.Ascending {
 			rkey, r, err = encoding.DecodeBytesAscending(key, nil)
@@ -1232,17 +1287,17 @@ func DecodeTableKey(
 		}
 		var ipAddr ipaddr.IPAddr
 		_, err := ipAddr.FromBuffer(r)
-		return a.NewDIPAddr(parser.DIPAddr{IPAddr: ipAddr}), rkey, err
-	case parser.TypeOid:
+		return a.NewDIPAddr(tree.DIPAddr{IPAddr: ipAddr}), rkey, err
+	case types.Oid:
 		var i int64
 		if dir == encoding.Ascending {
 			rkey, i, err = encoding.DecodeVarintAscending(key)
 		} else {
 			rkey, i, err = encoding.DecodeVarintDescending(key)
 		}
-		return a.NewDOid(parser.MakeDOid(parser.DInt(i))), rkey, err
+		return a.NewDOid(tree.MakeDOid(tree.DInt(i))), rkey, err
 	default:
-		if _, ok := valType.(parser.TCollatedString); ok {
+		if _, ok := valType.(types.TCollatedString); ok {
 			var r string
 			_, r, err = encoding.DecodeUnsafeStringAscending(key, nil)
 			if err != nil {
@@ -1255,18 +1310,18 @@ func DecodeTableKey(
 }
 
 // DecodeTableValue decodes a value encoded by EncodeTableValue.
-func DecodeTableValue(a *DatumAlloc, valType parser.Type, b []byte) (parser.Datum, []byte, error) {
+func DecodeTableValue(a *DatumAlloc, valType types.T, b []byte) (tree.Datum, []byte, error) {
 	_, dataOffset, _, typ, err := encoding.DecodeValueTag(b)
 	if err != nil {
 		return nil, b, err
 	}
 	// NULL, true, and false are special, because their values are fully encoded by their value tag.
 	if typ == encoding.Null {
-		return parser.DNull, b[dataOffset:], nil
+		return tree.DNull, b[dataOffset:], nil
 	} else if typ == encoding.True {
-		return parser.MakeDBool(parser.DBool(true)), b[dataOffset:], nil
+		return tree.MakeDBool(tree.DBool(true)), b[dataOffset:], nil
 	} else if typ == encoding.False {
-		return parser.MakeDBool(parser.DBool(false)), b[dataOffset:], nil
+		return tree.MakeDBool(tree.DBool(false)), b[dataOffset:], nil
 	}
 	return decodeUntaggedDatum(a, valType, b[dataOffset:])
 }
@@ -1321,7 +1376,7 @@ func decodeArrayHeader(b []byte) (arrayHeader, []byte, error) {
 	}, b, nil
 }
 
-func decodeArray(a *DatumAlloc, elementType parser.Type, b []byte) (parser.Datum, []byte, error) {
+func decodeArray(a *DatumAlloc, elementType types.T, b []byte) (tree.Datum, []byte, error) {
 	b, _, _, err := encoding.DecodeNonsortingUvarint(b)
 	if err != nil {
 		return nil, b, err
@@ -1330,14 +1385,14 @@ func decodeArray(a *DatumAlloc, elementType parser.Type, b []byte) (parser.Datum
 	if err != nil {
 		return nil, b, err
 	}
-	result := parser.DArray{
-		Array:    make(parser.Datums, header.length),
+	result := tree.DArray{
+		Array:    make(tree.Datums, header.length),
 		ParamTyp: elementType,
 	}
-	var val parser.Datum
+	var val tree.Datum
 	for i := uint64(0); i < header.length; i++ {
 		if header.isNull(i) {
-			result.Array[i] = parser.DNull
+			result.Array[i] = tree.DNull
 		} else {
 			val, b, err = decodeUntaggedDatum(a, elementType, b)
 			if err != nil {
@@ -1352,83 +1407,96 @@ func decodeArray(a *DatumAlloc, elementType parser.Type, b []byte) (parser.Datum
 // decodeUntaggedDatum is used to decode a Datum whose type is known, and which
 // doesn't have a value tag (either due to it having been consumed already or
 // not having one in the first place).
-func decodeUntaggedDatum(a *DatumAlloc, t parser.Type, buf []byte) (parser.Datum, []byte, error) {
+func decodeUntaggedDatum(a *DatumAlloc, t types.T, buf []byte) (tree.Datum, []byte, error) {
 	switch t {
-	case parser.TypeInt:
+	case types.Int:
 		b, i, err := encoding.DecodeUntaggedIntValue(buf)
 		if err != nil {
 			return nil, b, err
 		}
-		return a.NewDInt(parser.DInt(i)), b, nil
-	case parser.TypeString, parser.TypeName:
+		return a.NewDInt(tree.DInt(i)), b, nil
+	case types.String, types.Name:
 		b, data, err := encoding.DecodeUntaggedBytesValue(buf)
 		if err != nil {
 			return nil, b, err
 		}
-		return a.NewDString(parser.DString(data)), b, nil
-	case parser.TypeBool:
+		return a.NewDString(tree.DString(data)), b, nil
+	case types.Bool:
 		// The value of booleans are encoded in their tag, so we don't have an
 		// "Untagged" version of this function.
 		b, data, err := encoding.DecodeBoolValue(buf)
 		if err != nil {
 			return nil, b, err
 		}
-		d := parser.DBool(data)
+		d := tree.DBool(data)
 		return &d, b, nil
-	case parser.TypeFloat:
+	case types.Float:
 		b, data, err := encoding.DecodeUntaggedFloatValue(buf)
 		if err != nil {
 			return nil, b, err
 		}
-		return a.NewDFloat(parser.DFloat(data)), b, nil
-	case parser.TypeDecimal:
+		return a.NewDFloat(tree.DFloat(data)), b, nil
+	case types.Decimal:
 		b, data, err := encoding.DecodeUntaggedDecimalValue(buf)
 		if err != nil {
 			return nil, b, err
 		}
-		return a.NewDDecimal(parser.DDecimal{Decimal: data}), b, nil
-	case parser.TypeBytes:
+		return a.NewDDecimal(tree.DDecimal{Decimal: data}), b, nil
+	case types.Bytes:
 		b, data, err := encoding.DecodeUntaggedBytesValue(buf)
 		if err != nil {
 			return nil, b, err
 		}
-		return a.NewDBytes(parser.DBytes(data)), b, nil
-	case parser.TypeDate:
+		return a.NewDBytes(tree.DBytes(data)), b, nil
+	case types.Date:
 		b, data, err := encoding.DecodeUntaggedIntValue(buf)
 		if err != nil {
 			return nil, b, err
 		}
-		return a.NewDDate(parser.DDate(data)), b, nil
-	case parser.TypeTimestamp:
+		return a.NewDDate(tree.DDate(data)), b, nil
+	case types.Time:
+		b, data, err := encoding.DecodeUntaggedIntValue(buf)
+		if err != nil {
+			return nil, b, err
+		}
+		return a.NewDTime(tree.DTime(data)), b, nil
+	case types.Timestamp:
 		b, data, err := encoding.DecodeUntaggedTimeValue(buf)
 		if err != nil {
 			return nil, b, err
 		}
-		return a.NewDTimestamp(parser.DTimestamp{Time: data}), b, nil
-	case parser.TypeTimestampTZ:
+		return a.NewDTimestamp(tree.DTimestamp{Time: data}), b, nil
+	case types.TimestampTZ:
 		b, data, err := encoding.DecodeUntaggedTimeValue(buf)
 		if err != nil {
 			return nil, b, err
 		}
-		return a.NewDTimestampTZ(parser.DTimestampTZ{Time: data}), b, nil
-	case parser.TypeInterval:
+		return a.NewDTimestampTZ(tree.DTimestampTZ{Time: data}), b, nil
+	case types.Interval:
 		b, data, err := encoding.DecodeUntaggedDurationValue(buf)
-		return a.NewDInterval(parser.DInterval{Duration: data}), b, err
-	case parser.TypeUUID:
+		return a.NewDInterval(tree.DInterval{Duration: data}), b, err
+	case types.UUID:
 		b, data, err := encoding.DecodeUntaggedUUIDValue(buf)
-		return a.NewDUuid(parser.DUuid{UUID: data}), b, err
-	case parser.TypeINet:
+		return a.NewDUuid(tree.DUuid{UUID: data}), b, err
+	case types.INet:
 		b, data, err := encoding.DecodeUntaggedIPAddrValue(buf)
-		return a.NewDIPAddr(parser.DIPAddr{IPAddr: data}), b, err
-	case parser.TypeOid:
+		return a.NewDIPAddr(tree.DIPAddr{IPAddr: data}), b, err
+	case types.JSON:
+		b, data, err := encoding.DecodeUntaggedBytesValue(buf)
+		if err != nil {
+			return nil, b, err
+		}
+		_, j, err := json.DecodeJSON(data)
+		return a.NewDJSON(tree.DJSON{JSON: j}), b, err
+	case types.Oid:
 		b, data, err := encoding.DecodeUntaggedIntValue(buf)
-		return a.NewDOid(parser.MakeDOid(parser.DInt(data))), b, err
+		return a.NewDOid(tree.MakeDOid(tree.DInt(data))), b, err
 	default:
 		switch typ := t.(type) {
-		case parser.TCollatedString:
+		case types.TCollatedString:
 			b, data, err := encoding.DecodeUntaggedBytesValue(buf)
-			return parser.NewDCollatedString(string(data), typ.Locale, &a.env), b, err
-		case parser.TArray:
+			return tree.NewDCollatedString(string(data), typ.Locale, &a.env), b, err
+		case types.TArray:
 			return decodeArray(a, typ.Typ, buf)
 		}
 		return nil, buf, errors.Errorf("couldn't decode type %s", t)
@@ -1462,7 +1530,7 @@ func EncodeSecondaryIndex(
 	tableDesc *TableDescriptor,
 	secondaryIndex *IndexDescriptor,
 	colMap map[ColumnID]int,
-	values []parser.Datum,
+	values []tree.Datum,
 ) (IndexEntry, error) {
 	secondaryIndexKeyPrefix := MakeIndexKeyPrefix(tableDesc, secondaryIndex.ID)
 	secondaryIndexKey, containsNull, err := EncodeIndexKey(
@@ -1517,8 +1585,8 @@ func EncodeSecondaryIndex(
 	var lastColID ColumnID
 	// Composite columns have their contents at the end of the value.
 	for _, col := range cols {
-		val := values[colMap[col.id]]
-		if val == parser.DNull || (col.isComposite && !val.(parser.CompositeDatum).IsComposite()) {
+		val := findColumnValue(col.id, colMap, values)
+		if val == tree.DNull || (col.isComposite && !val.(tree.CompositeDatum).IsComposite()) {
 			continue
 		}
 		if lastColID > col.id {
@@ -1544,7 +1612,7 @@ func EncodeSecondaryIndexes(
 	tableDesc *TableDescriptor,
 	indexes []IndexDescriptor,
 	colMap map[ColumnID]int,
-	values []parser.Datum,
+	values []tree.Datum,
 	secondaryIndexEntries []IndexEntry,
 ) error {
 	for i := range indexes {
@@ -1560,15 +1628,15 @@ func EncodeSecondaryIndexes(
 // CheckColumnType verifies that a given value is compatible
 // with the type requested by the column. If the value is a
 // placeholder, the type of the placeholder gets populated.
-func CheckColumnType(col ColumnDescriptor, typ parser.Type, pmap *parser.PlaceholderInfo) error {
-	if typ == parser.TypeNull {
+func CheckColumnType(col ColumnDescriptor, typ types.T, pmap *tree.PlaceholderInfo) error {
+	if typ == types.Null {
 		return nil
 	}
 
 	// If the value is a placeholder, then the column check above has
 	// populated 'colTyp' with a type to assign to it.
 	colTyp := col.Type.ToDatumType()
-	if p, pok := typ.(parser.TPlaceholder); pok {
+	if p, pok := typ.(types.TPlaceholder); pok {
 		if err := pmap.SetType(p.Name, colTyp); err != nil {
 			return fmt.Errorf("cannot infer type for placeholder %s from column %q: %s",
 				p.Name, col.Name, err)
@@ -1581,7 +1649,7 @@ func CheckColumnType(col ColumnDescriptor, typ parser.Type, pmap *parser.Placeho
 	return nil
 }
 
-func checkElementType(paramType parser.Type, columnType ColumnType) error {
+func checkElementType(paramType types.T, columnType ColumnType) error {
 	semanticType, err := DatumTypeToColumnSemanticType(paramType)
 	if err != nil {
 		return err
@@ -1590,7 +1658,7 @@ func checkElementType(paramType parser.Type, columnType ColumnType) error {
 		return errors.Errorf("type of array contents %s doesn't match column type %s",
 			paramType, columnType.ArrayContents)
 	}
-	if cs, ok := paramType.(parser.TCollatedString); ok {
+	if cs, ok := paramType.(types.TCollatedString); ok {
 		if cs.Locale != *columnType.Locale {
 			return errors.Errorf("locale of collated string array being inserted (%s) doesn't match locale of column type (%s)",
 				cs.Locale, *columnType.Locale)
@@ -1602,77 +1670,91 @@ func checkElementType(paramType parser.Type, columnType ColumnType) error {
 // MarshalColumnValue returns a Go primitive value equivalent of val, of the
 // type expected by col. If val's type is incompatible with col, or if
 // col's type is not yet implemented, an error is returned.
-func MarshalColumnValue(col ColumnDescriptor, val parser.Datum) (roachpb.Value, error) {
+func MarshalColumnValue(col ColumnDescriptor, val tree.Datum) (roachpb.Value, error) {
 	var r roachpb.Value
 
-	if val == parser.DNull {
+	if val == tree.DNull {
 		return r, nil
 	}
 
 	switch col.Type.SemanticType {
 	case ColumnType_BOOL:
-		if v, ok := val.(*parser.DBool); ok {
+		if v, ok := val.(*tree.DBool); ok {
 			r.SetBool(bool(*v))
 			return r, nil
 		}
 	case ColumnType_INT:
-		if v, ok := parser.AsDInt(val); ok {
+		if v, ok := tree.AsDInt(val); ok {
 			r.SetInt(int64(v))
 			return r, nil
 		}
 	case ColumnType_FLOAT:
-		if v, ok := val.(*parser.DFloat); ok {
+		if v, ok := val.(*tree.DFloat); ok {
 			r.SetFloat(float64(*v))
 			return r, nil
 		}
 	case ColumnType_DECIMAL:
-		if v, ok := val.(*parser.DDecimal); ok {
+		if v, ok := val.(*tree.DDecimal); ok {
 			err := r.SetDecimal(&v.Decimal)
 			return r, err
 		}
 	case ColumnType_STRING, ColumnType_NAME:
-		if v, ok := parser.AsDString(val); ok {
+		if v, ok := tree.AsDString(val); ok {
 			r.SetString(string(v))
 			return r, nil
 		}
 	case ColumnType_BYTES:
-		if v, ok := val.(*parser.DBytes); ok {
+		if v, ok := val.(*tree.DBytes); ok {
 			r.SetString(string(*v))
 			return r, nil
 		}
 	case ColumnType_DATE:
-		if v, ok := val.(*parser.DDate); ok {
+		if v, ok := val.(*tree.DDate); ok {
+			r.SetInt(int64(*v))
+			return r, nil
+		}
+	case ColumnType_TIME:
+		if v, ok := val.(*tree.DTime); ok {
 			r.SetInt(int64(*v))
 			return r, nil
 		}
 	case ColumnType_TIMESTAMP:
-		if v, ok := val.(*parser.DTimestamp); ok {
+		if v, ok := val.(*tree.DTimestamp); ok {
 			r.SetTime(v.Time)
 			return r, nil
 		}
 	case ColumnType_TIMESTAMPTZ:
-		if v, ok := val.(*parser.DTimestampTZ); ok {
+		if v, ok := val.(*tree.DTimestampTZ); ok {
 			r.SetTime(v.Time)
 			return r, nil
 		}
 	case ColumnType_INTERVAL:
-		if v, ok := val.(*parser.DInterval); ok {
+		if v, ok := val.(*tree.DInterval); ok {
 			err := r.SetDuration(v.Duration)
 			return r, err
 		}
 	case ColumnType_UUID:
-		if v, ok := val.(*parser.DUuid); ok {
+		if v, ok := val.(*tree.DUuid); ok {
 			r.SetBytes(v.GetBytes())
 			return r, nil
 		}
 	case ColumnType_INET:
-		if v, ok := val.(*parser.DIPAddr); ok {
+		if v, ok := val.(*tree.DIPAddr); ok {
 			data := v.ToBuffer(nil)
 			r.SetBytes(data)
 			return r, nil
 		}
+	case ColumnType_JSON:
+		if v, ok := val.(*tree.DJSON); ok {
+			data, err := json.EncodeJSON(nil, v.JSON)
+			if err != nil {
+				return r, err
+			}
+			r.SetBytes(data)
+			return r, nil
+		}
 	case ColumnType_ARRAY:
-		if v, ok := val.(*parser.DArray); ok {
+		if v, ok := val.(*tree.DArray); ok {
 			if err := checkElementType(v.ParamTyp, col.Type); err != nil {
 				return r, err
 			}
@@ -1687,7 +1769,7 @@ func MarshalColumnValue(col ColumnDescriptor, val parser.Datum) (roachpb.Value, 
 		if col.Type.Locale == nil {
 			panic("locale is required for COLLATEDSTRING")
 		}
-		if v, ok := val.(*parser.DCollatedString); ok {
+		if v, ok := val.(*tree.DCollatedString); ok {
 			if v.Locale == *col.Type.Locale {
 				r.SetString(v.Contents)
 				return r, nil
@@ -1696,7 +1778,7 @@ func MarshalColumnValue(col ColumnDescriptor, val parser.Datum) (roachpb.Value, 
 				v.Locale, *col.Type.Locale, col.Name)
 		}
 	case ColumnType_OID:
-		if v, ok := val.(*parser.DOid); ok {
+		if v, ok := val.(*tree.DOid); ok {
 			r.SetInt(int64(v.DInt))
 			return r, nil
 		}
@@ -1730,7 +1812,7 @@ func setBit(bitmap []byte, idx int) {
 	bitmap[idx/8] = bitmap[idx/8] | (1 << uint(idx%8))
 }
 
-func encodeArray(d *parser.DArray, scratch []byte) ([]byte, error) {
+func encodeArray(d *tree.DArray, scratch []byte) ([]byte, error) {
 	if err := d.Validate(); err != nil {
 		return scratch, err
 	}
@@ -1760,7 +1842,7 @@ func encodeArray(d *parser.DArray, scratch []byte) ([]byte, error) {
 	}
 	for i, e := range d.Array {
 		var err error
-		if d.HasNulls && e == parser.DNull {
+		if d.HasNulls && e == tree.DNull {
 			setBit(scratch[nullBitmapStart:], i)
 		} else {
 			scratch, err = encodeArrayElement(scratch, e)
@@ -1772,69 +1854,73 @@ func encodeArray(d *parser.DArray, scratch []byte) ([]byte, error) {
 	return scratch, nil
 }
 
-func parserTypeToEncodingType(t parser.Type) (encoding.Type, error) {
+func parserTypeToEncodingType(t types.T) (encoding.Type, error) {
 	switch t {
-	case parser.TypeInt:
+	case types.Int:
 		return encoding.Int, nil
-	case parser.TypeOid:
+	case types.Oid:
 		return encoding.Int, nil
-	case parser.TypeFloat:
+	case types.Float:
 		return encoding.Float, nil
-	case parser.TypeDecimal:
+	case types.Decimal:
 		return encoding.Decimal, nil
-	case parser.TypeBytes, parser.TypeString, parser.TypeName:
+	case types.Bytes, types.String, types.Name:
 		return encoding.Bytes, nil
-	case parser.TypeTimestamp, parser.TypeTimestampTZ, parser.TypeDate:
+	case types.Timestamp, types.TimestampTZ, types.Date:
 		return encoding.Time, nil
-	case parser.TypeInterval:
+	case types.Time:
+		return encoding.Int, nil
+	case types.Interval:
 		return encoding.Duration, nil
-	case parser.TypeBool:
+	case types.Bool:
 		return encoding.True, nil
-	case parser.TypeUUID:
+	case types.UUID:
 		return encoding.UUID, nil
-	case parser.TypeINet:
+	case types.INet:
 		return encoding.IPAddr, nil
 	default:
-		if t.FamilyEqual(parser.TypeCollatedString) {
+		if t.FamilyEqual(types.FamCollatedString) {
 			return encoding.Bytes, nil
 		}
 		return 0, errors.Errorf("Don't know encoding type for %s", t)
 	}
 }
 
-func encodeArrayElement(b []byte, d parser.Datum) ([]byte, error) {
+func encodeArrayElement(b []byte, d tree.Datum) ([]byte, error) {
 	switch t := d.(type) {
-	case *parser.DInt:
+	case *tree.DInt:
 		return encoding.EncodeUntaggedIntValue(b, int64(*t)), nil
-	case *parser.DString:
+	case *tree.DString:
 		bytes := []byte(*t)
 		b = encoding.EncodeUntaggedBytesValue(b, bytes)
 		return b, nil
-	case *parser.DBytes:
+	case *tree.DBytes:
 		bytes := []byte(*t)
 		b = encoding.EncodeUntaggedBytesValue(b, bytes)
 		return b, nil
-	case *parser.DFloat:
+	case *tree.DFloat:
 		return encoding.EncodeUntaggedFloatValue(b, float64(*t)), nil
-	case *parser.DBool:
+	case *tree.DBool:
 		return encoding.EncodeBoolValue(b, encoding.NoColumnID, bool(*t)), nil
-	case *parser.DDecimal:
+	case *tree.DDecimal:
 		return encoding.EncodeUntaggedDecimalValue(b, &t.Decimal), nil
-	case *parser.DDate:
+	case *tree.DDate:
 		return encoding.EncodeUntaggedIntValue(b, int64(*t)), nil
-	case *parser.DTimestamp:
+	case *tree.DTime:
+		return encoding.EncodeUntaggedIntValue(b, int64(*t)), nil
+	case *tree.DTimestamp:
 		return encoding.EncodeUntaggedTimeValue(b, t.Time), nil
-	case *parser.DTimestampTZ:
+	case *tree.DTimestampTZ:
 		return encoding.EncodeUntaggedTimeValue(b, t.Time), nil
-	case *parser.DInterval:
+	case *tree.DInterval:
 		return encoding.EncodeUntaggedDurationValue(b, t.Duration), nil
-	case *parser.DUuid:
+	case *tree.DUuid:
 		return encoding.EncodeUntaggedUUIDValue(b, t.UUID), nil
-	case *parser.DIPAddr:
+	case *tree.DIPAddr:
 		return encoding.EncodeUntaggedIPAddrValue(b, t.IPAddr), nil
-	case *parser.DOid:
+	case *tree.DOid:
 		return encoding.EncodeUntaggedIntValue(b, int64(t.DInt)), nil
-	case *parser.DCollatedString:
+	case *tree.DCollatedString:
 		return encoding.EncodeUntaggedBytesValue(b, []byte(t.Contents)), nil
 	}
 	return nil, errors.Errorf("don't know how to encode %s", d)
@@ -1843,11 +1929,9 @@ func encodeArrayElement(b []byte, d parser.Datum) ([]byte, error) {
 // UnmarshalColumnValue decodes the value from a key-value pair using the type
 // expected by the column. An error is returned if the value's type does not
 // match the column's type.
-func UnmarshalColumnValue(
-	a *DatumAlloc, typ ColumnType, value roachpb.Value,
-) (parser.Datum, error) {
+func UnmarshalColumnValue(a *DatumAlloc, typ ColumnType, value roachpb.Value) (tree.Datum, error) {
 	if value.RawBytes == nil {
-		return parser.DNull, nil
+		return tree.DNull, nil
 	}
 
 	switch typ.SemanticType {
@@ -1856,68 +1940,74 @@ func UnmarshalColumnValue(
 		if err != nil {
 			return nil, err
 		}
-		return parser.MakeDBool(parser.DBool(v)), nil
+		return tree.MakeDBool(tree.DBool(v)), nil
 	case ColumnType_INT:
 		v, err := value.GetInt()
 		if err != nil {
 			return nil, err
 		}
-		return a.NewDInt(parser.DInt(v)), nil
+		return a.NewDInt(tree.DInt(v)), nil
 	case ColumnType_FLOAT:
 		v, err := value.GetFloat()
 		if err != nil {
 			return nil, err
 		}
-		return a.NewDFloat(parser.DFloat(v)), nil
+		return a.NewDFloat(tree.DFloat(v)), nil
 	case ColumnType_DECIMAL:
 		v, err := value.GetDecimal()
 		if err != nil {
 			return nil, err
 		}
-		dd := a.NewDDecimal(parser.DDecimal{Decimal: v})
+		dd := a.NewDDecimal(tree.DDecimal{Decimal: v})
 		return dd, nil
 	case ColumnType_STRING:
 		v, err := value.GetBytes()
 		if err != nil {
 			return nil, err
 		}
-		return a.NewDString(parser.DString(v)), nil
+		return a.NewDString(tree.DString(v)), nil
 	case ColumnType_BYTES:
 		v, err := value.GetBytes()
 		if err != nil {
 			return nil, err
 		}
-		return a.NewDBytes(parser.DBytes(v)), nil
+		return a.NewDBytes(tree.DBytes(v)), nil
 	case ColumnType_DATE:
 		v, err := value.GetInt()
 		if err != nil {
 			return nil, err
 		}
-		return a.NewDDate(parser.DDate(v)), nil
+		return a.NewDDate(tree.DDate(v)), nil
+	case ColumnType_TIME:
+		v, err := value.GetInt()
+		if err != nil {
+			return nil, err
+		}
+		return a.NewDTime(tree.DTime(v)), nil
 	case ColumnType_TIMESTAMP:
 		v, err := value.GetTime()
 		if err != nil {
 			return nil, err
 		}
-		return a.NewDTimestamp(parser.DTimestamp{Time: v}), nil
+		return a.NewDTimestamp(tree.DTimestamp{Time: v}), nil
 	case ColumnType_TIMESTAMPTZ:
 		v, err := value.GetTime()
 		if err != nil {
 			return nil, err
 		}
-		return a.NewDTimestampTZ(parser.DTimestampTZ{Time: v}), nil
+		return a.NewDTimestampTZ(tree.DTimestampTZ{Time: v}), nil
 	case ColumnType_INTERVAL:
 		d, err := value.GetDuration()
 		if err != nil {
 			return nil, err
 		}
-		return a.NewDInterval(parser.DInterval{Duration: d}), nil
+		return a.NewDInterval(tree.DInterval{Duration: d}), nil
 	case ColumnType_COLLATEDSTRING:
 		v, err := value.GetBytes()
 		if err != nil {
 			return nil, err
 		}
-		return parser.NewDCollatedString(string(v), *typ.Locale, &a.env), nil
+		return tree.NewDCollatedString(string(v), *typ.Locale, &a.env), nil
 	case ColumnType_UUID:
 		v, err := value.GetBytes()
 		if err != nil {
@@ -1927,7 +2017,7 @@ func UnmarshalColumnValue(
 		if err != nil {
 			return nil, err
 		}
-		return a.NewDUuid(parser.DUuid{UUID: u}), nil
+		return a.NewDUuid(tree.DUuid{UUID: u}), nil
 	case ColumnType_INET:
 		v, err := value.GetBytes()
 		if err != nil {
@@ -1938,19 +2028,19 @@ func UnmarshalColumnValue(
 		if err != nil {
 			return nil, err
 		}
-		return a.NewDIPAddr(parser.DIPAddr{IPAddr: ipAddr}), nil
+		return a.NewDIPAddr(tree.DIPAddr{IPAddr: ipAddr}), nil
 	case ColumnType_NAME:
 		v, err := value.GetBytes()
 		if err != nil {
 			return nil, err
 		}
-		return a.NewDName(parser.DString(v)), nil
+		return a.NewDName(tree.DString(v)), nil
 	case ColumnType_OID:
 		v, err := value.GetInt()
 		if err != nil {
 			return nil, err
 		}
-		return a.NewDOid(parser.MakeDOid(parser.DInt(v))), nil
+		return a.NewDOid(tree.MakeDOid(tree.DInt(v))), nil
 	default:
 		return nil, errors.Errorf("unsupported column type: %s", typ.SemanticType)
 	}
@@ -1959,21 +2049,21 @@ func UnmarshalColumnValue(
 // CheckValueWidth checks that the width (for strings, byte arrays, and
 // bit string) and scale (for decimals) of the value fits the specified
 // column type. Used by INSERT and UPDATE.
-func CheckValueWidth(col ColumnDescriptor, val parser.Datum) error {
-	switch col.Type.SemanticType {
+func CheckValueWidth(typ ColumnType, val tree.Datum, name string) error {
+	switch typ.SemanticType {
 	case ColumnType_STRING:
-		if v, ok := parser.AsDString(val); ok {
-			if col.Type.Width > 0 && utf8.RuneCountInString(string(v)) > int(col.Type.Width) {
+		if v, ok := tree.AsDString(val); ok {
+			if typ.Width > 0 && utf8.RuneCountInString(string(v)) > int(typ.Width) {
 				return fmt.Errorf("value too long for type %s (column %q)",
-					col.Type.SQLString(), col.Name)
+					typ.SQLString(), name)
 			}
 		}
 	case ColumnType_INT:
-		if v, ok := parser.AsDInt(val); ok {
-			if col.Type.Width > 0 {
+		if v, ok := tree.AsDInt(val); ok {
+			if typ.Width > 0 {
 
 				// Width is defined in bits.
-				width := uint(col.Type.Width - 1)
+				width := uint(typ.Width - 1)
 
 				// https://www.postgresql.org/docs/9.5/static/datatype-bit.html
 				// "bit type data must match the length n exactly; it is an error
@@ -1982,21 +2072,30 @@ func CheckValueWidth(col ColumnDescriptor, val parser.Datum) error {
 				// strings will be rejected." Bits are unsigned, so we need to
 				// increase the width for the type check below.
 				// TODO(nvanbenschoten): Because we do not propagate the "varying"
-				if col.Type.VisibleType == ColumnType_BIT {
-					width = uint(col.Type.Width)
+				if typ.VisibleType == ColumnType_BIT {
+					width = uint(typ.Width)
 				}
 
 				// We're performing bounds checks inline with Go's implementation of min and max ints in Math.go.
 				shifted := v >> width
 				if (v >= 0 && shifted > 0) || (v < 0 && shifted < -1) {
-					return fmt.Errorf("integer out of range for type %s (column %q)", col.Type.VisibleType, col.Name)
+					return fmt.Errorf("integer out of range for type %s (column %q)", typ.VisibleType, name)
 				}
 			}
 		}
 	case ColumnType_DECIMAL:
-		if v, ok := val.(*parser.DDecimal); ok {
-			if err := parser.LimitDecimalWidth(&v.Decimal, int(col.Type.Precision), int(col.Type.Width)); err != nil {
-				return errors.Wrapf(err, "type %s (column %q)", col.Type.SQLString(), col.Name)
+		if v, ok := val.(*tree.DDecimal); ok {
+			if err := tree.LimitDecimalWidth(&v.Decimal, int(typ.Precision), int(typ.Width)); err != nil {
+				return errors.Wrapf(err, "type %s (column %q)", typ.SQLString(), name)
+			}
+		}
+	case ColumnType_ARRAY:
+		if v, ok := val.(*tree.DArray); ok {
+			elementType := *typ.elementColumnType()
+			for i := range v.Array {
+				if err := CheckValueWidth(elementType, v.Array[i], name); err != nil {
+					return err
+				}
 			}
 		}
 	}
@@ -2177,16 +2276,16 @@ func MakePrimaryIndexKey(desc *TableDescriptor, vals ...interface{}) (roachpb.Ke
 	if len(vals) > len(index.ColumnIDs) {
 		return nil, errors.Errorf("got %d values, PK has %d columns", len(vals), len(index.ColumnIDs))
 	}
-	datums := make([]parser.Datum, len(vals))
+	datums := make([]tree.Datum, len(vals))
 	for i, v := range vals {
 		switch v := v.(type) {
 		case bool:
-			datums[i] = parser.MakeDBool(parser.DBool(v))
+			datums[i] = tree.MakeDBool(tree.DBool(v))
 		case int:
-			datums[i] = parser.NewDInt(parser.DInt(v))
+			datums[i] = tree.NewDInt(tree.DInt(v))
 		case string:
-			datums[i] = parser.NewDString(v)
-		case parser.Datum:
+			datums[i] = tree.NewDString(v)
+		case tree.Datum:
 			datums[i] = v
 		default:
 			return nil, errors.Errorf("unexpected value type %T", v)
@@ -2284,7 +2383,7 @@ func IndexKeyEquivSignature(
 		var isSentinel bool
 		// Peek and discard encoded index values.
 		for {
-			key, isSentinel = encoding.DecodeIfNotNull(key)
+			key, isSentinel = encoding.DecodeIfInterleavedSentinel(key)
 			// We stop once the key is empty or if we encounter a
 			// sentinel for the next TableID-IndexID pair.
 			if len(key) == 0 || isSentinel {
@@ -2311,7 +2410,7 @@ func IndexKeyEquivSignature(
 		// descendant(s).
 		// We insert an interleave sentinel and continue extracting the
 		// next descendant's IDs.
-		signatureBuf = encoding.EncodeNotNullDescending(signatureBuf)
+		signatureBuf = encoding.EncodeInterleavedSentinel(signatureBuf)
 	}
 }
 
@@ -2340,7 +2439,7 @@ func TableEquivSignatures(
 		// signature.
 		signatures[i] = fullSignature
 		// Append Interleave sentinel after every ancestor.
-		fullSignature = encoding.EncodeNotNullDescending(fullSignature)
+		fullSignature = encoding.EncodeInterleavedSentinel(fullSignature)
 	}
 
 	// Encode the table's table and index IDs.

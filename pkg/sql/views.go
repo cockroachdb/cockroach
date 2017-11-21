@@ -23,6 +23,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
@@ -53,7 +55,7 @@ type planDependencies map[sqlbase.ID]planDependencyInfo
 func (d planDependencies) String() string {
 	var buf bytes.Buffer
 	for id, deps := range d {
-		fmt.Fprintf(&buf, "%d (%q):", id, parser.ErrString(parser.Name(deps.desc.Name)))
+		fmt.Fprintf(&buf, "%d (%q):", id, tree.ErrString(tree.Name(deps.desc.Name)))
 		for _, dep := range deps.deps {
 			buf.WriteString(" [")
 			if dep.IndexID != 0 {
@@ -72,7 +74,7 @@ func (d planDependencies) String() string {
 // dependency. The set of columns from the view query's results is
 // also returned.
 func (p *planner) analyzeViewQuery(
-	ctx context.Context, viewSelect *parser.Select,
+	ctx context.Context, viewSelect *tree.Select,
 ) (planDependencies, sqlbase.ResultColumns, error) {
 	// To avoid races with ongoing schema changes to tables that the view
 	// depends on, make sure we use the most recent versions of table
@@ -89,7 +91,7 @@ func (p *planner) analyzeViewQuery(
 	p.hasStar = false
 
 	// Now generate the source plan.
-	sourcePlan, err := p.Select(ctx, viewSelect, []parser.Type{})
+	sourcePlan, err := p.Select(ctx, viewSelect, []types.T{})
 	if err != nil {
 		return nil, nil, err
 	}
@@ -166,7 +168,7 @@ func RecomputeViewDependencies(ctx context.Context, txn *client.Txn, e *Executor
 		// Request dependency tracking and generate the source plan
 		// to collect the dependencies.
 		p.planDeps = make(planDependencies)
-		sourcePlan, err := p.newPlan(ctx, stmt, []parser.Type{})
+		sourcePlan, err := p.newPlan(ctx, stmt, []types.T{})
 		if err != nil {
 			log.Errorf(ctx, "view [%d] (%q) has broken query %q: %v",
 				tableID, tn, table.ViewQuery, err)

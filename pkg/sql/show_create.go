@@ -17,27 +17,29 @@ package sql
 import (
 	"bytes"
 	"fmt"
+	"strings"
 
 	"golang.org/x/net/context"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/pkg/errors"
 )
 
 // showCreateView returns a valid SQL representation of the CREATE
 // VIEW statement used to create the given view.
 func (p *planner) showCreateView(
-	ctx context.Context, tn parser.Name, desc *sqlbase.TableDescriptor,
+	ctx context.Context, tn tree.Name, desc *sqlbase.TableDescriptor,
 ) (string, error) {
 	var buf bytes.Buffer
 	buf.WriteString("CREATE VIEW ")
-	tn.Format(&buf, parser.FmtSimple)
+	tn.Format(&buf, tree.FmtSimple)
 	buf.WriteString(" (")
 	for i, col := range desc.Columns {
 		if i > 0 {
 			buf.WriteString(", ")
 		}
-		parser.Name(col.Name).Format(&buf, parser.FmtSimple)
+		tree.Name(col.Name).Format(&buf, tree.FmtSimple)
 	}
 	fmt.Fprintf(&buf, ") AS %s", desc.ViewQuery)
 	return buf.String(), nil
@@ -52,8 +54,10 @@ func (p *planner) showCreateView(
 // the prefix when the given table references other tables in the
 // current database.
 func (p *planner) showCreateTable(
-	ctx context.Context, tn parser.Name, dbPrefix string, desc *sqlbase.TableDescriptor,
+	ctx context.Context, tn tree.Name, dbPrefix string, desc *sqlbase.TableDescriptor,
 ) (string, error) {
+	a := &sqlbase.DatumAlloc{}
+
 	var buf bytes.Buffer
 	fmt.Fprintf(&buf, "CREATE TABLE %s (", tn)
 	var primary string
@@ -86,13 +90,13 @@ func (p *planner) showCreateTable(
 			if err != nil {
 				return "", err
 			}
-			fkTableName := parser.TableName{
-				DatabaseName:            parser.Name(fkDb.Name),
-				TableName:               parser.Name(fkTable.Name),
+			fkTableName := tree.TableName{
+				DatabaseName:            tree.Name(fkDb.Name),
+				TableName:               tree.Name(fkTable.Name),
 				DBNameOriginallyOmitted: fkDb.Name == dbPrefix,
 			}
 			fmt.Fprintf(&buf, ",\n\tCONSTRAINT %s FOREIGN KEY (%s) REFERENCES %s (%s)",
-				parser.Name(fk.Name),
+				tree.Name(fk.Name),
 				quoteNames(idx.ColumnNames[0:idx.ForeignKey.SharedPrefixLen]...),
 				&fkTableName,
 				quoteNames(fkIdx.ColumnNames...),
@@ -140,17 +144,22 @@ func (p *planner) showCreateTable(
 	if err := p.showCreateInterleave(ctx, &desc.PrimaryIndex, &buf, dbPrefix); err != nil {
 		return "", err
 	}
+	if err := showCreatePartitioning(
+		a, desc, &desc.PrimaryIndex, &desc.PrimaryIndex.Partitioning, &buf, 0 /* indent */, 0, /* colOffset */
+	); err != nil {
+		return "", err
+	}
 
 	return buf.String(), nil
 }
 
 // quoteNames quotes and adds commas between names.
 func quoteNames(names ...string) string {
-	nameList := make(parser.NameList, len(names))
+	nameList := make(tree.NameList, len(names))
 	for i, n := range names {
-		nameList[i] = parser.Name(n)
+		nameList[i] = tree.Name(n)
 	}
-	return parser.AsString(nameList)
+	return tree.AsString(nameList)
 }
 
 // showCreateInterleave returns an INTERLEAVE IN PARENT clause for the specified
@@ -174,9 +183,9 @@ func (p *planner) showCreateInterleave(
 	if err != nil {
 		return err
 	}
-	parentName := parser.TableName{
-		DatabaseName:            parser.Name(parentDbDesc.Name),
-		TableName:               parser.Name(parentTable.Name),
+	parentName := tree.TableName{
+		DatabaseName:            tree.Name(parentDbDesc.Name),
+		TableName:               tree.Name(parentTable.Name),
 		DBNameOriginallyOmitted: parentDbDesc.Name == dbPrefix,
 	}
 	var sharedPrefixLen int
@@ -185,5 +194,94 @@ func (p *planner) showCreateInterleave(
 	}
 	interleavedColumnNames := quoteNames(idx.ColumnNames[:sharedPrefixLen]...)
 	fmt.Fprintf(buf, " INTERLEAVE IN PARENT %s (%s)", &parentName, interleavedColumnNames)
+	return nil
+}
+
+// showCreatePartitioning returns a PARTITION BY clause for the specified
+// index, if applicable.
+func showCreatePartitioning(
+	a *sqlbase.DatumAlloc,
+	tableDesc *sqlbase.TableDescriptor,
+	idxDesc *sqlbase.IndexDescriptor,
+	partDesc *sqlbase.PartitioningDescriptor,
+	buf *bytes.Buffer,
+	indent int,
+	colOffset int,
+) error {
+	if partDesc.NumColumns == 0 {
+		return nil
+	}
+
+	// We don't need real prefixes in the TranslateValueEncodingToSpan calls
+	// because we only use the tree.Datums part of the output.
+	fakePrefixDatums := make([]tree.Datum, colOffset)
+	for i := range fakePrefixDatums {
+		fakePrefixDatums[i] = tree.DNull
+	}
+
+	indentStr := strings.Repeat("\t", indent)
+	buf.WriteString(` PARTITION BY `)
+	if len(partDesc.List) > 0 {
+		buf.WriteString(`LIST`)
+	} else if len(partDesc.Range) > 0 {
+		buf.WriteString(`RANGE`)
+	} else {
+		return errors.Errorf(`invalid partition descriptor: %v`, partDesc)
+	}
+	buf.WriteString(` (`)
+	for i := 0; i < int(partDesc.NumColumns); i++ {
+		if i != 0 {
+			fmt.Printf(", ")
+		}
+		fmt.Fprintf(buf, idxDesc.ColumnNames[colOffset+i])
+	}
+	buf.WriteString(`) (`)
+	for i, part := range partDesc.List {
+		if i != 0 {
+			buf.WriteString(`, `)
+		}
+		fmt.Fprintf(buf, "\n%s\tPARTITION ", indentStr)
+		fmt.Fprintf(buf, part.Name)
+		buf.WriteString(` VALUES IN (`)
+		for j, values := range part.Values {
+			if j != 0 {
+				buf.WriteString(`, `)
+			}
+			datums, _, err := sqlbase.TranslateValueEncodingToSpan(
+				a, tableDesc, idxDesc, partDesc, values, fakePrefixDatums,
+			)
+			if err != nil {
+				return err
+			}
+			buf.WriteString(`(`)
+			sqlbase.PrintPartitioningTuple(buf, datums, int(partDesc.NumColumns), "DEFAULT")
+			buf.WriteString(`)`)
+		}
+		buf.WriteString(`)`)
+		if err := showCreatePartitioning(
+			a, tableDesc, idxDesc, &part.Subpartitioning, buf, indent+1,
+			colOffset+int(partDesc.NumColumns),
+		); err != nil {
+			return err
+		}
+	}
+	for i, part := range partDesc.Range {
+		if i != 0 {
+			buf.WriteString(`, `)
+		}
+		fmt.Fprintf(buf, "\n%s\tPARTITION ", indentStr)
+		fmt.Fprintf(buf, part.Name)
+		buf.WriteString(` VALUES < `)
+		datums, _, err := sqlbase.TranslateValueEncodingToSpan(
+			a, tableDesc, idxDesc, partDesc, part.UpperBound, fakePrefixDatums,
+		)
+		if err != nil {
+			return err
+		}
+		buf.WriteString(`(`)
+		sqlbase.PrintPartitioningTuple(buf, datums, int(partDesc.NumColumns), "MAXVALUE")
+		buf.WriteString(`)`)
+	}
+	fmt.Fprintf(buf, "\n%s)", indentStr)
 	return nil
 }

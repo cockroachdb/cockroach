@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -53,18 +54,20 @@ func TestUpsertFastPath(t *testing.T) {
 
 	s, conn, _ := serverutils.StartServer(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{Store: &storage.StoreTestingKnobs{
-			TestingEvalFilter: filter,
+			EvalKnobs: batcheval.TestingKnobs{
+				TestingEvalFilter: filter,
+			},
 		}},
 	})
 	defer s.Stopper().Stop(context.TODO())
-	sqlDB := sqlutils.MakeSQLRunner(t, conn)
-	sqlDB.Exec(`CREATE DATABASE d`)
-	sqlDB.Exec(`CREATE TABLE d.kv (k INT PRIMARY KEY, v INT)`)
+	sqlDB := sqlutils.MakeSQLRunner(conn)
+	sqlDB.Exec(t, `CREATE DATABASE d`)
+	sqlDB.Exec(t, `CREATE TABLE d.kv (k INT PRIMARY KEY, v INT)`)
 
 	// This should hit the fast path.
 	atomic.StoreUint64(&scans, 0)
 	atomic.StoreUint64(&beginTxn, 0)
-	sqlDB.Exec(`UPSERT INTO d.kv VALUES (1, 1)`)
+	sqlDB.Exec(t, `UPSERT INTO d.kv VALUES (1, 1)`)
 	if s := atomic.LoadUint64(&scans); s != 0 {
 		t.Errorf("expected no scans (the upsert fast path) but got %d", s)
 	}
@@ -75,7 +78,7 @@ func TestUpsertFastPath(t *testing.T) {
 	// This could hit the fast path, but doesn't right now because of #14482.
 	atomic.StoreUint64(&scans, 0)
 	atomic.StoreUint64(&beginTxn, 0)
-	sqlDB.Exec(`INSERT INTO d.kv VALUES (1, 1) ON CONFLICT (k) DO UPDATE SET v=excluded.v`)
+	sqlDB.Exec(t, `INSERT INTO d.kv VALUES (1, 1) ON CONFLICT (k) DO UPDATE SET v=excluded.v`)
 	if s := atomic.LoadUint64(&scans); s != 1 {
 		t.Errorf("expected 1 scans (no upsert fast path) but got %d", s)
 	}
@@ -86,7 +89,7 @@ func TestUpsertFastPath(t *testing.T) {
 	// This should not hit the fast path because it doesn't set every column.
 	atomic.StoreUint64(&scans, 0)
 	atomic.StoreUint64(&beginTxn, 0)
-	sqlDB.Exec(`UPSERT INTO d.kv (k) VALUES (1)`)
+	sqlDB.Exec(t, `UPSERT INTO d.kv (k) VALUES (1)`)
 	if s := atomic.LoadUint64(&scans); s != 1 {
 		t.Errorf("expected 1 scans (no upsert fast path) but got %d", s)
 	}
@@ -116,10 +119,10 @@ func TestUpsertFastPath(t *testing.T) {
 	}
 
 	// This should not hit the fast path because kv has a secondary index.
-	sqlDB.Exec(`CREATE INDEX vidx ON d.kv (v)`)
+	sqlDB.Exec(t, `CREATE INDEX vidx ON d.kv (v)`)
 	atomic.StoreUint64(&scans, 0)
 	atomic.StoreUint64(&beginTxn, 0)
-	sqlDB.Exec(`UPSERT INTO d.kv VALUES (1, 1)`)
+	sqlDB.Exec(t, `UPSERT INTO d.kv VALUES (1, 1)`)
 	if s := atomic.LoadUint64(&scans); s != 1 {
 		t.Errorf("expected 1 scans (no upsert fast path) but got %d", s)
 	}
@@ -133,11 +136,11 @@ func TestConcurrentUpsertWithSnapshotIsolation(t *testing.T) {
 
 	s, conn, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.TODO())
-	sqlDB := sqlutils.MakeSQLRunner(t, conn)
+	sqlDB := sqlutils.MakeSQLRunner(conn)
 
-	sqlDB.Exec(`CREATE DATABASE d`)
-	sqlDB.Exec(`CREATE TABLE d.t (a INT PRIMARY KEY, b INT, INDEX b_idx (b))`)
-	sqlDB.Exec(`SET DEFAULT_TRANSACTION_ISOLATION TO SNAPSHOT`)
+	sqlDB.Exec(t, `CREATE DATABASE d`)
+	sqlDB.Exec(t, `CREATE TABLE d.t (a INT PRIMARY KEY, b INT, INDEX b_idx (b))`)
+	sqlDB.Exec(t, `SET DEFAULT_TRANSACTION_ISOLATION TO SNAPSHOT`)
 
 	testCases := []struct {
 		name       string
@@ -178,8 +181,8 @@ SELECT * FROM d.t@primary = %s
 SELECT * FROM d.t@b_idx   = %s
 `,
 					err,
-					sqlDB.QueryStr(`SELECT * FROM d.t@primary`),
-					sqlDB.QueryStr(`SELECT * FROM d.t@b_idx`),
+					sqlDB.QueryStr(t, `SELECT * FROM d.t@primary`),
+					sqlDB.QueryStr(t, `SELECT * FROM d.t@b_idx`),
 				)
 			}
 		})

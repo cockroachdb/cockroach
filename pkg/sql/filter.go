@@ -15,11 +15,10 @@
 package sql
 
 import (
-	"bytes"
-
 	"golang.org/x/net/context"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
@@ -28,29 +27,29 @@ import (
 // blown selectTopNode/renderNode pair.
 type filterNode struct {
 	source     planDataSource
-	filter     parser.TypedExpr
-	ivarHelper parser.IndexedVarHelper
+	filter     tree.TypedExpr
+	ivarHelper tree.IndexedVarHelper
 	props      physicalProps
 }
 
-func (f *filterNode) computePhysicalProps(evalCtx *parser.EvalContext) {
+func (f *filterNode) computePhysicalProps(evalCtx *tree.EvalContext) {
 	f.props = planPhysicalProps(f.source.plan)
 	f.props.applyExpr(evalCtx, f.filter)
 }
 
-// IndexedVarEval implements the parser.IndexedVarContainer interface.
-func (f *filterNode) IndexedVarEval(idx int, ctx *parser.EvalContext) (parser.Datum, error) {
+// IndexedVarEval implements the tree.IndexedVarContainer interface.
+func (f *filterNode) IndexedVarEval(idx int, ctx *tree.EvalContext) (tree.Datum, error) {
 	return f.source.plan.Values()[idx].Eval(ctx)
 }
 
-// IndexedVarResolvedType implements the parser.IndexedVarContainer interface.
-func (f *filterNode) IndexedVarResolvedType(idx int) parser.Type {
+// IndexedVarResolvedType implements the tree.IndexedVarContainer interface.
+func (f *filterNode) IndexedVarResolvedType(idx int) types.T {
 	return f.source.info.sourceColumns[idx].Typ
 }
 
-// IndexedVarFormat implements the parser.IndexedVarContainer interface.
-func (f *filterNode) IndexedVarFormat(buf *bytes.Buffer, fl parser.FmtFlags, idx int) {
-	f.source.info.FormatVar(buf, fl, idx)
+// IndexedVarNodeFormatter implements the tree.IndexedVarContainer interface.
+func (f *filterNode) IndexedVarNodeFormatter(idx int) tree.NodeFormatter {
+	return f.source.info.NodeFormatter(idx)
 }
 
 // Start implements the planNode interface.
@@ -65,7 +64,9 @@ func (f *filterNode) Next(params runParams) (bool, error) {
 			return false, err
 		}
 
+		params.p.evalCtx.IVarHelper = &f.ivarHelper
 		passesFilter, err := sqlbase.RunFilter(f.filter, &params.p.evalCtx)
+		params.p.evalCtx.IVarHelper = nil
 		if err != nil {
 			return false, err
 		}
@@ -80,4 +81,4 @@ func (f *filterNode) Next(params runParams) (bool, error) {
 func (f *filterNode) Close(ctx context.Context) {
 	f.source.plan.Close(ctx)
 }
-func (f *filterNode) Values() parser.Datums { return f.source.plan.Values() }
+func (f *filterNode) Values() tree.Datums { return f.source.plan.Values() }

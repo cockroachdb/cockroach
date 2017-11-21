@@ -31,7 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/security"
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -98,9 +98,9 @@ func (s *tableVersionState) incRefcountLocked() {
 // The lease expiration stored in the database is of a different type.
 // We've decided that it's too much work to change the type to
 // hlc.Timestamp, so we're using this method to give us the stored
-// type: parser.DTimestamp.
-func (s *tableVersionState) leaseExpiration() parser.DTimestamp {
-	return parser.DTimestamp{Time: timeutil.Unix(0, s.expiration.WallTime).Round(time.Microsecond)}
+// type: tree.DTimestamp.
+func (s *tableVersionState) leaseExpiration() tree.DTimestamp {
+	return tree.DTimestamp{Time: timeutil.Unix(0, s.expiration.WallTime).Round(time.Microsecond)}
 }
 
 // LeaseStore implements the operations for acquiring and releasing leases and
@@ -404,7 +404,7 @@ func (s LeaseStore) countLeases(
 		if err != nil {
 			return err
 		}
-		count = int(parser.MustBeDInt(values[0]))
+		count = int(tree.MustBeDInt(values[0]))
 		return nil
 	})
 	return count, err
@@ -1251,7 +1251,9 @@ func (m *LeaseManager) AcquireByName(
 					// Start the renewal. When it finishes, it will reset t.renewalInProgress.
 					if err := t.stopper.RunAsyncTask(context.Background(),
 						"lease renewal", func(ctx context.Context) {
-							ctx, _ = tracing.EnsureContext(ctx, m.ambientCtx.Tracer, "lease renewal")
+							var cleanup func()
+							ctx, cleanup = tracing.EnsureContext(ctx, m.ambientCtx.Tracer, "lease renewal")
+							defer cleanup()
 							t.startLeaseRenewal(ctx, m, tableVersion)
 						}); err != nil {
 						return &tableVersion.TableDescriptor, tableVersion.expiration, err

@@ -29,7 +29,8 @@ import (
 
 	"golang.org/x/net/context"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
@@ -41,7 +42,7 @@ type binaryTest struct {
 	Expect []byte
 }
 
-func testBinaryDatumType(t *testing.T, typ string, datumConstructor func(val string) parser.Datum) {
+func testBinaryDatumType(t *testing.T, typ string, datumConstructor func(val string) tree.Datum) {
 	var tests []binaryTest
 
 	f, err := os.Open(filepath.Join("testdata", fmt.Sprintf("%s_test.json", typ)))
@@ -70,7 +71,7 @@ func testBinaryDatumType(t *testing.T, typ string, datumConstructor func(val str
 			if buf.err != nil {
 				t.Fatal(buf.err)
 			}
-			evalCtx := parser.NewTestingEvalContext()
+			evalCtx := tree.NewTestingEvalContext()
 			defer evalCtx.Stop(context.Background())
 			if got := buf.wrapped.Bytes(); !bytes.Equal(got, test.Expect) {
 				t.Errorf("%q:\n\t%v found,\n\t%v expected", test.In, got, test.Expect)
@@ -85,8 +86,8 @@ func testBinaryDatumType(t *testing.T, typ string, datumConstructor func(val str
 
 func TestBinaryDecimal(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	testBinaryDatumType(t, "decimal", func(val string) parser.Datum {
-		dec := new(parser.DDecimal)
+	testBinaryDatumType(t, "decimal", func(val string) tree.Datum {
+		dec := new(tree.DDecimal)
 		if err := dec.SetString(val); err != nil {
 			t.Fatalf("could not set %q on decimal", val)
 		}
@@ -96,8 +97,8 @@ func TestBinaryDecimal(t *testing.T) {
 
 func TestBinaryTimestamp(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	testBinaryDatumType(t, "timestamp", func(val string) parser.Datum {
-		ts, err := parser.ParseDTimestamp(val, time.Microsecond)
+	testBinaryDatumType(t, "timestamp", func(val string) tree.Datum {
+		ts, err := tree.ParseDTimestamp(val, time.Microsecond)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -107,8 +108,8 @@ func TestBinaryTimestamp(t *testing.T) {
 
 func TestBinaryTimestampTZ(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	testBinaryDatumType(t, "timestamptz", func(val string) parser.Datum {
-		tstz, err := parser.ParseDTimestampTZ(val, time.UTC, time.Microsecond)
+	testBinaryDatumType(t, "timestamptz", func(val string) tree.Datum {
+		tstz, err := tree.ParseDTimestampTZ(val, time.UTC, time.Microsecond)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -118,8 +119,8 @@ func TestBinaryTimestampTZ(t *testing.T) {
 
 func TestBinaryDate(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	testBinaryDatumType(t, "date", func(val string) parser.Datum {
-		d, err := parser.ParseDDate(val, time.UTC)
+	testBinaryDatumType(t, "date", func(val string) tree.Datum {
+		d, err := tree.ParseDDate(val, time.UTC)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -127,12 +128,45 @@ func TestBinaryDate(t *testing.T) {
 	})
 }
 
+func TestBinaryTime(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	testBinaryDatumType(t, "time", func(val string) tree.Datum {
+		d, err := tree.ParseDTime(val)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return d
+	})
+}
+
+func TestBinaryUuid(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	testBinaryDatumType(t, "uuid", func(val string) tree.Datum {
+		u, err := tree.ParseDUuidFromString(val)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return u
+	})
+}
+
+func TestBinaryInet(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	testBinaryDatumType(t, "inet", func(val string) tree.Datum {
+		ipAddr, err := tree.ParseDIPAddrFromINetString(val)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return ipAddr
+	})
+}
+
 func TestBinaryIntArray(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	buf := writeBuffer{bytecount: metric.NewCounter(metric.Metadata{})}
-	d := parser.NewDArray(parser.TypeInt)
+	d := tree.NewDArray(types.Int)
 	for i := 0; i < 10; i++ {
-		if err := d.Append(parser.NewDInt(parser.DInt(i))); err != nil {
+		if err := d.Append(tree.NewDInt(tree.DInt(i))); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -144,7 +178,7 @@ func TestBinaryIntArray(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	evalCtx := parser.NewTestingEvalContext()
+	evalCtx := tree.NewTestingEvalContext()
 	defer evalCtx.Stop(context.Background())
 	if got.Compare(evalCtx, d) != 0 {
 		t.Fatalf("expected %s, got %s", d, got)
@@ -199,7 +233,7 @@ func TestRandomBinaryDecimal(t *testing.T) {
 		test := tests[0]
 
 		buf := writeBuffer{bytecount: metric.NewCounter(metric.Metadata{})}
-		dec := new(parser.DDecimal)
+		dec := new(tree.DDecimal)
 
 		if err := dec.SetString(test.In); err != nil {
 			t.Fatalf("could not set %q on decimal", test.In)
@@ -208,7 +242,7 @@ func TestRandomBinaryDecimal(t *testing.T) {
 		if buf.err != nil {
 			t.Fatal(buf.err)
 		}
-		evalCtx := parser.NewTestingEvalContext()
+		evalCtx := tree.NewTestingEvalContext()
 		if got := buf.wrapped.Bytes(); !bytes.Equal(got, test.Expect) {
 			t.Errorf("%q:\n\t%v found,\n\t%v expected", test.In, got, test.Expect)
 		} else if datum, err := decodeOidDatum(oid.T_numeric, formatBinary, got[4:]); err != nil {
@@ -218,26 +252,4 @@ func TestRandomBinaryDecimal(t *testing.T) {
 		}
 		evalCtx.Stop(context.Background())
 	}
-}
-
-func TestBinaryUuid(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	testBinaryDatumType(t, "uuid", func(val string) parser.Datum {
-		u, err := parser.ParseDUuidFromString(val)
-		if err != nil {
-			t.Fatal(err)
-		}
-		return u
-	})
-}
-
-func TestBinaryInet(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	testBinaryDatumType(t, "inet", func(val string) parser.Datum {
-		ipAddr, err := parser.ParseDIPAddrFromINetString(val)
-		if err != nil {
-			t.Fatal(err)
-		}
-		return ipAddr
-	})
 }

@@ -464,6 +464,7 @@ indexrelid  indrelid    indnatts  indisunique  indisprimary  indisexclusion
 2557995824  780323485   2         false        false         false
 3505585425  2199392917  2         true         true          false
 3491800018  3270885600  2         true         true          false
+3501101122  3640657984  2         true         true          false
 
 query OBBBBB colnames
 SELECT indexrelid, indimmediate, indisclustered, indisvalid, indcheckxmin, indisready
@@ -477,6 +478,7 @@ indexrelid  indimmediate  indisclustered  indisvalid  indcheckxmin  indisready
 2557995824  false         false           true        false         false
 3505585425  true          false           true        false         false
 3491800018  true          false           true        false         false
+3501101122  true          false           true        false         false
 
 query OOBBTIIITT colnames
 SELECT indexrelid, indrelid, indislive, indisreplident, indkey, indcollation, indclass, indoption, indexprs, indpred
@@ -490,6 +492,7 @@ indexrelid  indrelid    indislive  indisreplident  indkey  indcollation  indclas
 2557995824  780323485   true       false           2 3     0             0         0          NULL      NULL
 3505585425  2199392917  true       false           1 2     0             0         0          NULL      NULL
 3491800018  3270885600  true       false           1 7     0             0         0          NULL      NULL
+3501101122  3640657984  true       false           1 2     0             0         0          NULL      NULL
 
 ## pg_catalog.pg_collation
 
@@ -689,9 +692,11 @@ oid   typname       typnamespace  typowner  typlen  typbyval  typtype
 1041  _inet         1782195457    NULL      -1      false     b
 1043  varchar       1782195457    NULL      -1      false     b
 1082  date          1782195457    NULL      8       true      b
+1083  time          1782195457    NULL      8       true      b
 1114  timestamp     1782195457    NULL      24      true      b
 1115  _timestamp    1782195457    NULL      -1      false     b
 1182  _date         1782195457    NULL      -1      false     b
+1183  _time         1782195457    NULL      -1      false     b
 1184  timestamptz   1782195457    NULL      24      true      b
 1185  _timestamptz  1782195457    NULL      -1      false     b
 1186  interval      1782195457    NULL      24      true      b
@@ -741,9 +746,11 @@ oid   typname       typcategory  typispreferred  typisdefined  typdelim  typreli
 1041  _inet         A            false           true          ,         0         869      0
 1043  varchar       S            false           true          ,         0         0        1015
 1082  date          D            false           true          ,         0         0        1182
+1083  time          D            false           true          ,         0         0        1183
 1114  timestamp     D            false           true          ,         0         0        1115
 1115  _timestamp    A            false           true          ,         0         1114     0
 1182  _date         A            false           true          ,         0         1082     0
+1183  _time         A            false           true          ,         0         1083     0
 1184  timestamptz   D            false           true          ,         0         0        1185
 1185  _timestamptz  A            false           true          ,         0         1184     0
 1186  interval      T            false           true          ,         0         0        1187
@@ -793,9 +800,11 @@ oid   typname       typinput        typoutput        typreceive        typsend  
 1041  _inet         array_in        array_out        array_recv        array_send        0         0          0
 1043  varchar       varcharin       varcharout       varcharrecv       varcharsend       0         0          0
 1082  date          date_in         date_out         date_recv         date_send         0         0          0
+1083  time          time_in         time_out         time_recv         time_send         0         0          0
 1114  timestamp     timestamp_in    timestamp_out    timestamp_recv    timestamp_send    0         0          0
 1115  _timestamp    array_in        array_out        array_recv        array_send        0         0          0
 1182  _date         array_in        array_out        array_recv        array_send        0         0          0
+1183  _time         array_in        array_out        array_recv        array_send        0         0          0
 1184  timestamptz   timestamptz_in  timestamptz_out  timestamptz_recv  timestamptz_send  0         0          0
 1185  _timestamptz  array_in        array_out        array_recv        array_send        0         0          0
 1186  interval      interval_in     interval_out     interval_recv     interval_send     0         0          0
@@ -845,9 +854,11 @@ oid   typname       typalign  typstorage  typnotnull  typbasetype  typtypmod
 1041  _inet         NULL      NULL        false       0            -1
 1043  varchar       NULL      NULL        false       0            -1
 1082  date          NULL      NULL        false       0            -1
+1083  time          NULL      NULL        false       0            -1
 1114  timestamp     NULL      NULL        false       0            -1
 1115  _timestamp    NULL      NULL        false       0            -1
 1182  _date         NULL      NULL        false       0            -1
+1183  _time         NULL      NULL        false       0            -1
 1184  timestamptz   NULL      NULL        false       0            -1
 1185  _timestamptz  NULL      NULL        false       0            -1
 1186  interval      NULL      NULL        false       0            -1
@@ -897,9 +908,11 @@ oid   typname       typndims  typcollation  typdefaultbin  typdefault  typacl
 1041  _inet         0         0             NULL           NULL        NULL
 1043  varchar       0         1661428263    NULL           NULL        NULL
 1082  date          0         0             NULL           NULL        NULL
+1083  time          0         0             NULL           NULL        NULL
 1114  timestamp     0         0             NULL           NULL        NULL
 1115  _timestamp    0         0             NULL           NULL        NULL
 1182  _date         0         0             NULL           NULL        NULL
+1183  _time         0         0             NULL           NULL        NULL
 1184  timestamptz   0         0             NULL           NULL        NULL
 1185  _timestamptz  0         0             NULL           NULL        NULL
 1186  interval      0         0             NULL           NULL        NULL
@@ -1052,11 +1065,12 @@ server_version_num             90500         NULL      NULL        NULL        s
 session_user                   root          NULL      NULL        NULL        string
 sql_safe_updates               false         NULL      NULL        NULL        string
 standard_conforming_strings    on            NULL      NULL        NULL        string
-time zone                      UTC           NULL      NULL        NULL        string
+timezone                       UTC           NULL      NULL        NULL        string
 tracing                        off           NULL      NULL        NULL        string
 transaction isolation level    SERIALIZABLE  NULL      NULL        NULL        string
 transaction priority           NORMAL        NULL      NULL        NULL        string
 transaction status             NoTxn         NULL      NULL        NULL        string
+transaction_read_only          off           NULL      NULL        NULL        string
 
 query TTTTTTT colnames
 SELECT name, setting, unit, context, enumvals, boot_val, reset_val FROM pg_catalog.pg_settings
@@ -1078,11 +1092,12 @@ server_version_num             90500         NULL  user     NULL      90500     
 session_user                   root          NULL  user     NULL      root          root
 sql_safe_updates               false         NULL  user     NULL      false         false
 standard_conforming_strings    on            NULL  user     NULL      on            on
-time zone                      UTC           NULL  user     NULL      UTC           UTC
+timezone                       UTC           NULL  user     NULL      UTC           UTC
 tracing                        off           NULL  user     NULL      off           off
 transaction isolation level    SERIALIZABLE  NULL  user     NULL      SERIALIZABLE  SERIALIZABLE
 transaction priority           NORMAL        NULL  user     NULL      NORMAL        NORMAL
 transaction status             NoTxn         NULL  user     NULL      NoTxn         NoTxn
+transaction_read_only          off           NULL  user     NULL      off           off
 
 query TTTTTT colnames
 SELECT name, source, min_val, max_val, sourcefile, sourceline FROM pg_catalog.pg_settings
@@ -1104,12 +1119,12 @@ server_version_num             NULL    NULL     NULL     NULL        NULL
 session_user                   NULL    NULL     NULL     NULL        NULL
 sql_safe_updates               NULL    NULL     NULL     NULL        NULL
 standard_conforming_strings    NULL    NULL     NULL     NULL        NULL
-time zone                      NULL    NULL     NULL     NULL        NULL
+timezone                       NULL    NULL     NULL     NULL        NULL
 tracing                        NULL    NULL     NULL     NULL        NULL
 transaction isolation level    NULL    NULL     NULL     NULL        NULL
 transaction priority           NULL    NULL     NULL     NULL        NULL
 transaction status             NULL    NULL     NULL     NULL        NULL
-
+transaction_read_only          NULL    NULL     NULL     NULL        NULL
 
 # Verify proper functionality of system information functions.
 

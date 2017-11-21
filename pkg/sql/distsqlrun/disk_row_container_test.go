@@ -22,8 +22,8 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -39,7 +39,7 @@ import (
 func compareRows(
 	lTypes []sqlbase.ColumnType,
 	l, r sqlbase.EncDatumRow,
-	e *parser.EvalContext,
+	e *tree.EvalContext,
 	d *sqlbase.DatumAlloc,
 	ordering sqlbase.ColumnOrdering,
 ) (int, error) {
@@ -102,7 +102,7 @@ func TestDiskRowContainer(t *testing.T) {
 
 	rng := rand.New(rand.NewSource(timeutil.Now().UnixNano()))
 
-	evalCtx := parser.MakeTestingEvalContext()
+	evalCtx := tree.MakeTestingEvalContext()
 	diskMonitor := mon.MakeMonitor(
 		"test-disk",
 		mon.DiskResource,
@@ -120,7 +120,7 @@ func TestDiskRowContainer(t *testing.T) {
 			for _, ordering := range orderings {
 				types := make([]sqlbase.ColumnType, numCols)
 				for i := range types {
-					types[i] = sqlbase.RandColumnType(rng)
+					types[i] = sqlbase.RandSortingColumnType(rng)
 				}
 				row := sqlbase.RandEncDatumRowOfTypes(rng, types)
 				func() {
@@ -171,7 +171,7 @@ func TestDiskRowContainer(t *testing.T) {
 		numRows := 1024
 		for _, ordering := range orderings {
 			// numRows rows with numCols columns of random types.
-			types := sqlbase.RandColumnTypes(rng, numCols)
+			types := sqlbase.RandSortingColumnTypes(rng, numCols)
 			rows := sqlbase.RandEncDatumRowsOfTypes(rng, numRows, types)
 			func() {
 				d := makeDiskRowContainer(ctx, &diskMonitor, types, ordering, tempEngine)
@@ -270,7 +270,7 @@ func TestDiskRowContainerDiskFull(t *testing.T) {
 	)
 	defer d.Close(ctx)
 
-	row := sqlbase.EncDatumRow{sqlbase.DatumToEncDatum(columnTypeInt, parser.NewDInt(parser.DInt(1)))}
+	row := sqlbase.EncDatumRow{sqlbase.DatumToEncDatum(columnTypeInt, tree.NewDInt(tree.DInt(1)))}
 	err = d.AddRow(ctx, row)
 	if pgErr, ok := pgerror.GetPGCause(err); !(ok && pgErr.Code == pgerror.CodeDiskFullError) {
 		t.Fatalf("unexpected error: %v", err)

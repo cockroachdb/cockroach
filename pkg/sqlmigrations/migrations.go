@@ -27,7 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -88,6 +88,12 @@ var backwardCompatibleMigrations = []migrationDescriptor{
 	{
 		name:   "persist trace.debug.enable = 'false'",
 		workFn: disableNetTrace,
+	},
+	{
+		name:           "create system.table_statistics table",
+		workFn:         createTableStatisticsTable,
+		newDescriptors: 1,
+		newRanges:      1,
 	},
 }
 
@@ -366,6 +372,10 @@ func createWebSessionsTable(ctx context.Context, r runner) error {
 	return createSystemTable(ctx, r, sqlbase.WebSessionsTable)
 }
 
+func createTableStatisticsTable(ctx context.Context, r runner) error {
+	return createSystemTable(ctx, r, sqlbase.TableStatisticsTable)
+}
+
 func createSystemTable(ctx context.Context, r runner, desc sqlbase.TableDescriptor) error {
 	// We install the table at the KV layer so that we can choose a known ID in
 	// the reserved ID space. (The SQL layer doesn't allow this.)
@@ -462,8 +472,8 @@ func populateVersionSetting(ctx context.Context, r runner) error {
 		return err
 	}
 
-	pl := parser.MakePlaceholderInfo()
-	pl.SetValue("1", parser.NewDString(v.String()))
+	pl := tree.MakePlaceholderInfo()
+	pl.SetValue("1", tree.NewDString(v.String()))
 	if res, err := r.sqlExecutor.ExecuteStatementsBuffered(
 		session, "SET CLUSTER SETTING version = $1", &pl, 1); err == nil {
 		res.Close(ctx)

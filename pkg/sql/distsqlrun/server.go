@@ -29,8 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/jobs"
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
@@ -144,7 +143,7 @@ type ServerImpl struct {
 	flowRegistry  *flowRegistry
 	flowScheduler *flowScheduler
 	memMonitor    mon.BytesMonitor
-	regexpCache   *parser.RegexpCache
+	regexpCache   *tree.RegexpCache
 }
 
 var _ DistSQLServer = &ServerImpl{}
@@ -153,7 +152,7 @@ var _ DistSQLServer = &ServerImpl{}
 func NewServer(ctx context.Context, cfg ServerConfig) *ServerImpl {
 	ds := &ServerImpl{
 		ServerConfig:  cfg,
-		regexpCache:   parser.NewRegexpCache(512),
+		regexpCache:   tree.NewRegexpCache(512),
 		flowRegistry:  makeFlowRegistry(cfg.NodeID.Get()),
 		flowScheduler: newFlowScheduler(cfg.AmbientContext, cfg.Stopper, cfg.Metrics),
 		memMonitor: mon.MakeMonitor(
@@ -251,16 +250,16 @@ func (ds *ServerImpl) setupFlow(
 	// by the TxnCoordSender.
 	txn.AcceptUnhandledRetryableErrors()
 
-	location, err := sqlbase.TimeZoneStringToLocation(req.EvalContext.Location)
+	location, err := timeutil.TimeZoneStringToLocation(req.EvalContext.Location)
 	if err != nil {
 		tracing.FinishSpan(sp)
 		return ctx, nil, err
 	}
-	evalCtx := parser.EvalContext{
+	evalCtx := tree.EvalContext{
 		Location:     &location,
 		Database:     req.EvalContext.Database,
 		User:         req.EvalContext.User,
-		SearchPath:   parser.MakeSearchPath(req.EvalContext.SearchPath),
+		SearchPath:   tree.MakeSearchPath(req.EvalContext.SearchPath),
 		ClusterID:    ds.ServerConfig.ClusterID,
 		NodeID:       nodeID,
 		ReCache:      ds.regexpCache,

@@ -21,8 +21,11 @@ import (
 
 	"golang.org/x/net/context"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/transform"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/uint128"
@@ -41,15 +44,15 @@ type PreparedStatement struct {
 	AnonymizedStr string
 	// Statement is the parsed, prepared SQL statement. It may be nil if the
 	// prepared statement is empty.
-	Statement parser.Statement
+	Statement tree.Statement
 	// TypeHints contains the types of the placeholders set by the client. It
 	// dictates how input parameters for those placeholders will be parsed. If a
 	// placeholder has no type hint, it will be populated during type checking.
-	TypeHints parser.PlaceholderTypes
+	TypeHints tree.PlaceholderTypes
 	// Types contains the final types of the placeholders, after type checking.
 	// These may differ from the types in TypeHints, if a user provides an
 	// imprecise type hint like sending an int for an oid comparison.
-	Types       parser.PlaceholderTypes
+	Types       tree.PlaceholderTypes
 	Columns     sqlbase.ResultColumns
 	portalNames map[string]struct{}
 
@@ -68,7 +71,7 @@ func (p *PreparedStatement) close(ctx context.Context, s *Session) {
 
 // Statement contains a statement with optional expected result columns and metadata.
 type Statement struct {
-	AST           parser.Statement
+	AST           tree.Statement
 	ExpectedTypes sqlbase.ResultColumns
 	AnonymizedStr string
 	queryID       uint128.Uint128
@@ -82,8 +85,8 @@ func (s Statement) String() string {
 // StatementList is a list of statements.
 type StatementList []Statement
 
-// NewStatementList creates a StatementList from a parser.StatementList.
-func NewStatementList(stmts parser.StatementList) StatementList {
+// NewStatementList creates a StatementList from a tree.StatementList.
+func NewStatementList(stmts tree.StatementList) StatementList {
 	sl := make(StatementList, len(stmts))
 	for i, s := range stmts {
 		sl[i] = Statement{AST: s}
@@ -91,15 +94,15 @@ func NewStatementList(stmts parser.StatementList) StatementList {
 	return sl
 }
 
-func (l StatementList) String() string { return parser.AsString(l) }
+func (l StatementList) String() string { return tree.AsString(l) }
 
 // Format implements the NodeFormatter interface.
-func (l StatementList) Format(buf *bytes.Buffer, f parser.FmtFlags) {
+func (l StatementList) Format(buf *bytes.Buffer, f tree.FmtFlags) {
 	for i, s := range l {
 		if i > 0 {
 			buf.WriteString("; ")
 		}
-		parser.FormatNode(buf, f, s.AST)
+		tree.FormatNode(buf, f, s.AST)
 	}
 }
 
@@ -135,7 +138,7 @@ func (ps PreparedStatements) Exists(name string) bool {
 //
 // ps.session.Ctx() is used as the logging context for the prepare operation.
 func (ps PreparedStatements) NewFromString(
-	e *Executor, name, query string, placeholderHints parser.PlaceholderTypes,
+	e *Executor, name, query string, placeholderHints tree.PlaceholderTypes,
 ) (*PreparedStatement, error) {
 	sessionEventf(ps.session, "parsing: %s", query)
 
@@ -163,11 +166,7 @@ func (ps PreparedStatements) NewFromString(
 //
 // ps.session.Ctx() is used as the logging context for the prepare operation.
 func (ps PreparedStatements) New(
-	e *Executor,
-	name string,
-	stmt Statement,
-	stmtStr string,
-	placeholderHints parser.PlaceholderTypes,
+	e *Executor, name string, stmt Statement, stmtStr string, placeholderHints tree.PlaceholderTypes,
 ) (*PreparedStatement, error) {
 	// Prepare the query. This completes the typing of placeholders.
 	pStmt, err := e.Prepare(stmt, stmtStr, ps.session, placeholderHints)
@@ -242,7 +241,7 @@ func (ps *PreparedStatements) DeleteAll(ctx context.Context) {
 // PreparedPortal is a PreparedStatement that has been bound with query arguments.
 type PreparedPortal struct {
 	Stmt  *PreparedStatement
-	Qargs parser.QueryArguments
+	Qargs tree.QueryArguments
 
 	ProtocolMeta interface{} // a field for protocol implementations to hang metadata off of.
 
@@ -278,7 +277,7 @@ func (pp PreparedPortals) Exists(name string) bool {
 // New creates a new PreparedPortal with the provided name and corresponding
 // PreparedStatement, binding the statement using the given QueryArguments.
 func (pp PreparedPortals) New(
-	ctx context.Context, name string, stmt *PreparedStatement, qargs parser.QueryArguments,
+	ctx context.Context, name string, stmt *PreparedStatement, qargs tree.QueryArguments,
 ) (*PreparedPortal, error) {
 	portal := &PreparedPortal{
 		Stmt:  stmt,
@@ -313,15 +312,15 @@ func (pp PreparedPortals) Delete(ctx context.Context, name string) bool {
 
 // PrepareStmt implements the PREPARE statement.
 // See https://www.postgresql.org/docs/current/static/sql-prepare.html for details.
-func (e *Executor) PrepareStmt(session *Session, s *parser.Prepare) error {
+func (e *Executor) PrepareStmt(session *Session, s *tree.Prepare) error {
 	name := s.Name.String()
 	if session.PreparedStatements.Exists(name) {
 		return pgerror.NewErrorf(pgerror.CodeDuplicatePreparedStatementError,
 			"prepared statement %q already exists", name)
 	}
-	typeHints := make(parser.PlaceholderTypes, len(s.Types))
+	typeHints := make(tree.PlaceholderTypes, len(s.Types))
 	for i, t := range s.Types {
-		typeHints[strconv.Itoa(i+1)] = parser.CastTargetToDatumType(t)
+		typeHints[strconv.Itoa(i+1)] = coltypes.CastTargetToDatumType(t)
 	}
 	_, err := session.PreparedStatements.New(
 		e, name, Statement{AST: s.Statement}, s.Statement.String(), typeHints,
@@ -334,8 +333,8 @@ func (e *Executor) PrepareStmt(session *Session, s *parser.Prepare) error {
 // placeholder info.
 // See https://www.postgresql.org/docs/current/static/sql-execute.html for details.
 func getPreparedStatementForExecute(
-	session *Session, s *parser.Execute,
-) (ps *PreparedStatement, pInfo *parser.PlaceholderInfo, err error) {
+	session *Session, s *tree.Execute,
+) (ps *PreparedStatement, pInfo *tree.PlaceholderInfo, err error) {
 	name := s.Name.String()
 	prepared, ok := session.PreparedStatements.Get(name)
 	if !ok {
@@ -349,25 +348,25 @@ func getPreparedStatementForExecute(
 			name, len(prepared.TypeHints), len(s.Params))
 	}
 
-	qArgs := make(parser.QueryArguments, len(s.Params))
-	var p parser.Parser
+	qArgs := make(tree.QueryArguments, len(s.Params))
+	var t transform.ExprTransformContext
 	for i, e := range s.Params {
 		idx := strconv.Itoa(i + 1)
 		typedExpr, err := sqlbase.SanitizeVarFreeExpr(e, prepared.TypeHints[idx], "EXECUTE parameter", nil /* semaCtx */, nil /* evalCtx */)
 		if err != nil {
 			return ps, pInfo, pgerror.NewError(pgerror.CodeWrongObjectTypeError, err.Error())
 		}
-		if err := p.AssertNoAggregationOrWindowing(typedExpr, "EXECUTE parameters", session.SearchPath); err != nil {
+		if err := t.AssertNoAggregationOrWindowing(typedExpr, "EXECUTE parameters", session.SearchPath); err != nil {
 			return ps, pInfo, err
 		}
 		qArgs[idx] = typedExpr
 	}
-	return prepared, &parser.PlaceholderInfo{Values: qArgs, TypeHints: prepared.TypeHints, Types: prepared.Types}, nil
+	return prepared, &tree.PlaceholderInfo{Values: qArgs, TypeHints: prepared.TypeHints, Types: prepared.Types}, nil
 }
 
 // Deallocate implements the DEALLOCATE statement.
 // See https://www.postgresql.org/docs/current/static/sql-deallocate.html for details.
-func (p *planner) Deallocate(ctx context.Context, s *parser.Deallocate) (planNode, error) {
+func (p *planner) Deallocate(ctx context.Context, s *tree.Deallocate) (planNode, error) {
 	if s.Name == "" {
 		p.session.PreparedStatements.DeleteAll(ctx)
 	} else {
@@ -383,7 +382,7 @@ func (p *planner) Deallocate(ctx context.Context, s *parser.Deallocate) (planNod
 // the prepared statement. This is not called in normal circumstances by
 // the executor - it merely exists to enable explains and traces for execute
 // statements.
-func (p *planner) Execute(ctx context.Context, n *parser.Execute) (planNode, error) {
+func (p *planner) Execute(ctx context.Context, n *tree.Execute) (planNode, error) {
 	if p.isPreparing {
 		return nil, pgerror.NewErrorf(pgerror.CodeInvalidPreparedStatementDefinitionError,
 			"can't prepare an EXECUTE statement")

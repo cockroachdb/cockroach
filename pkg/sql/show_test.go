@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/jobs"
+	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -40,7 +41,7 @@ import (
 func TestShowCreateTable(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	params, _ := createTestServerParams()
+	params, _ := tests.CreateTestServerParams()
 	s, sqlDB, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.TODO())
 
@@ -277,7 +278,7 @@ func TestShowCreateTable(t *testing.T) {
 func TestShowCreateView(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	params, _ := createTestServerParams()
+	params, _ := tests.CreateTestServerParams()
 	s, sqlDB, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.TODO())
 
@@ -469,9 +470,9 @@ func TestShowQueries(t *testing.T) {
 func TestShowJobs(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	params, _ := createTestServerParams()
+	params, _ := tests.CreateTestServerParams()
 	s, rawSQLDB, _ := serverutils.StartServer(t, params)
-	sqlDB := sqlutils.MakeSQLRunner(t, rawSQLDB)
+	sqlDB := sqlutils.MakeSQLRunner(rawSQLDB)
 	defer s.Stopper().Stop(context.TODO())
 
 	// row represents a row returned from crdb_internal.jobs, but
@@ -527,13 +528,13 @@ func TestShowJobs(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	sqlDB.Exec(
+	sqlDB.Exec(t,
 		`INSERT INTO system.jobs (id, status, created, payload) VALUES ($1, $2, $3, $4)`,
 		in.id, in.status, in.created, inPayload,
 	)
 
 	var out row
-	sqlDB.QueryRow(`
+	sqlDB.QueryRow(t, `
       SELECT id, type, status, created, description, started, finished, modified,
              fraction_completed, username, error, coordinator_id
         FROM crdb_internal.jobs`).Scan(

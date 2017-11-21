@@ -28,7 +28,8 @@ import (
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
 var functionsCmd = &cobra.Command{
@@ -47,12 +48,12 @@ var functionsCmd = &cobra.Command{
 		}
 
 		if err := ioutil.WriteFile(
-			filepath.Join(outDir, "functions.md"), generateFunctions(parser.Builtins, true), 0644,
+			filepath.Join(outDir, "functions.md"), generateFunctions(builtins.Builtins, true), 0644,
 		); err != nil {
 			return err
 		}
 		if err := ioutil.WriteFile(
-			filepath.Join(outDir, "aggregates.md"), generateFunctions(parser.Aggregates, false), 0644,
+			filepath.Join(outDir, "aggregates.md"), generateFunctions(builtins.Aggregates, false), 0644,
 		); err != nil {
 			return err
 		}
@@ -98,10 +99,10 @@ func (p operations) Less(i, j int) bool {
 
 func generateOperators() []byte {
 	ops := make(map[string]operations)
-	for optyp, overloads := range parser.UnaryOps {
+	for optyp, overloads := range tree.UnaryOps {
 		op := optyp.String()
 		for _, untyped := range overloads {
-			v := untyped.(parser.UnaryOp)
+			v := untyped.(tree.UnaryOp)
 			ops[op] = append(ops[op], operation{
 				left: v.Typ.String(),
 				ret:  v.ReturnType.String(),
@@ -109,10 +110,10 @@ func generateOperators() []byte {
 			})
 		}
 	}
-	for optyp, overloads := range parser.BinOps {
+	for optyp, overloads := range tree.BinOps {
 		op := optyp.String()
 		for _, untyped := range overloads {
-			v := untyped.(parser.BinOp)
+			v := untyped.(tree.BinOp)
 			left := v.LeftType.String()
 			right := v.RightType.String()
 			ops[op] = append(ops[op], operation{
@@ -123,10 +124,10 @@ func generateOperators() []byte {
 			})
 		}
 	}
-	for optyp, overloads := range parser.CmpOps {
+	for optyp, overloads := range tree.CmpOps {
 		op := optyp.String()
 		for _, untyped := range overloads {
-			v := untyped.(parser.CmpOp)
+			v := untyped.(tree.CmpOp)
 			left := v.LeftType.String()
 			right := v.RightType.String()
 			ops[op] = append(ops[op], operation{
@@ -160,7 +161,7 @@ func generateOperators() []byte {
 // TODO(mjibson): use the exported value from sql/parser/pg_builtins.go.
 const notUsableInfo = "Not usable; exposed only for compatibility with PostgreSQL."
 
-func generateFunctions(from map[string][]parser.Builtin, categorize bool) []byte {
+func generateFunctions(from map[string][]tree.Builtin, categorize bool) []byte {
 	functions := make(map[string][]string)
 	seen := make(map[string]struct{})
 	md := markdown.New(markdown.XHTMLOutput(true), markdown.Nofollow(true))
@@ -182,7 +183,7 @@ func generateFunctions(from map[string][]parser.Builtin, categorize bool) []byte
 			args := fn.Types.String()
 			ret := fn.FixedReturnType().String()
 			cat := ret
-			if c := fn.Category(); c != "" {
+			if c := fn.Category; c != "" {
 				cat = c
 			}
 			if !categorize {
@@ -253,7 +254,7 @@ func linkTypeName(s string) string {
 	s = strings.TrimSuffix(s, "[]")
 	switch s {
 	case "int", "decimal", "float", "bool", "date", "timestamp", "interval", "string", "bytes",
-		"inet", "uuid", "collatedstring":
+		"inet", "uuid", "collatedstring", "time":
 		s = fmt.Sprintf("<a href=\"%s.html\">%s</a>", s, name)
 	}
 	return s

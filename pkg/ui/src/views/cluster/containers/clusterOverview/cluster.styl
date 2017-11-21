@@ -1,0 +1,147 @@
+@require "~styl/base/palette.styl"
+@require "~styl/layout/layout.styl"
+
+.cluster-overview
+  /* TODO(couchand): Update the layout styles to get rid of this hack. */
+  margin-top -1 * $page-padding-top
+  border-bottom 1px solid $table-border-color
+
+  .cluster-ticker
+    padding-top 0
+    padding-bottom 0
+
+  .cluster-summary
+    background-color white
+    padding-top $page-padding-top
+    padding-bottom $page-padding-top
+    padding-left 20px
+    color gray
+    display grid
+    align-items end
+    grid-template-columns 0.8fr 3fr 1fr 1fr 1fr 1fr 0.5fr 1fr 1.2fr 1fr 0.5fr
+    grid-template-rows repeat(3, auto)
+    grid-template-areas "cap-t cap-t . live-t live-t live-t . rep-t rep-t rep-t ." "cap-m cap-c . live-a live-b live-c . rep-a rep-b rep-c ." "cap-a cap-a . live-1 live-2 live-3 . rep-1 rep-2 rep-3 ."
+
+    .capacity-usage
+      &.cluster-summary__title
+          grid-area cap-t
+
+      &.cluster-summary__chart
+          grid-area cap-c
+
+      &.cluster-summary__metric
+          grid-area cap-m
+
+      &.cluster-summary__aside
+          grid-area cap-a
+
+    .node-liveness
+      &.cluster-summary__title
+          grid-area live-t
+
+      &.cluster-summary__metric.live-nodes
+          grid-area live-a
+
+      &.cluster-summary__metric.suspect-nodes
+          grid-area live-b
+
+      &.cluster-summary__metric.dead-nodes
+          grid-area live-c
+
+      &.cluster-summary__label.live-nodes
+          grid-area live-1
+
+      &.cluster-summary__label.suspect-nodes
+          grid-area live-2
+
+      &.cluster-summary__label.dead-nodes
+          grid-area live-3
+
+    .replication-status
+      &.cluster-summary__title
+          grid-area rep-t
+
+      &.cluster-summary__metric.total-ranges
+          grid-area rep-a
+
+      &.cluster-summary__metric.under-replicated-ranges
+          grid-area rep-b
+
+      &.cluster-summary__metric.unavailable-ranges
+          grid-area rep-c
+
+      &.cluster-summary__label.total-ranges
+          grid-area rep-1
+
+      &.cluster-summary__label.under-replicated-ranges
+          grid-area rep-2
+
+      &.cluster-summary__label.unavailable-ranges
+          grid-area rep-3
+
+    &__title
+      font-weight 400
+      margin-bottom 20px
+
+    &__metric
+      align-self start
+      font-size 30px
+      line-height 48px
+      color $link-color
+
+
+      &.warning
+        color $warning-color
+
+      &.alert
+        color $alert-color
+
+    &__label
+      font-size 11px
+      line-height 14px
+      padding-top 7px
+      text-transform uppercase
+
+    &__aside
+      .label
+        text-transform uppercase
+        margin-right 14px
+
+      .value
+        color $link-color
+
+      .label, .value
+        font-size 11px
+
+  .capacity-usage.cluster-summary__chart
+    align-self start
+    position relative
+
+    svg
+      position absolute
+      shape-rendering crispEdges
+
+    .axis path
+      fill none
+      stroke none
+
+    .axis line
+      fill none
+      stroke gray
+      shape-rendering crispEdges
+
+    .axis text
+      font-size 12px
+      fill gray
+
+    .axis .tick:nth-child(2n) text
+      display none
+
+    rect
+      shape-rendering crispEdges
+
+      &.bg
+        fill lightgray
+
+      &.bar
+        fill $link-color

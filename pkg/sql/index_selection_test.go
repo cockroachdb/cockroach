@@ -24,7 +24,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -165,12 +165,12 @@ func makeTestIndexFromStr(
 
 func makeConstraints(
 	t *testing.T,
-	evalCtx *parser.EvalContext,
+	evalCtx *tree.EvalContext,
 	sql string,
 	desc *sqlbase.TableDescriptor,
 	index *sqlbase.IndexDescriptor,
 	sel *renderNode,
-) (orIndexConstraints, parser.TypedExpr) {
+) (orIndexConstraints, tree.TypedExpr) {
 	expr := parseAndNormalizeExpr(t, evalCtx, sql, sel)
 	exprs, equiv := analyzeExpr(evalCtx, expr)
 
@@ -324,9 +324,9 @@ func TestMakeConstraints(t *testing.T) {
 	}
 	for _, d := range testData {
 		t.Run(d.expr+"~"+d.expected, func(t *testing.T) {
-			evalCtx := parser.NewTestingEvalContext()
+			evalCtx := tree.NewTestingEvalContext()
 			defer evalCtx.Stop(context.Background())
-			sel := makeSelectNode(t)
+			sel := makeSelectNode(t, evalCtx)
 			desc, index := makeTestIndexFromStr(t, d.columns)
 			constraints, _ := makeConstraints(t, evalCtx, d.expr, desc, index, sel)
 			if s := constraints.String(); d.expected != s {
@@ -506,15 +506,12 @@ func TestMakeSpans(t *testing.T) {
 		{`(a = 5) OR (a, b) IN ((1, 1), (3, 3))`, `a,b`,
 			`/1/1-/1/2 /3/3-/3/4 /5-/6`, `/5-/4 /3/3-/3/2 /1/1-/1/0`},
 
-		// When encoding an end constraint for a maximal datum, we use
-		// bytes.PrefixEnd() to go beyond the normal encodings of that datatype.
-		// This is the reason for the "???" suffix of the pretty-printed spans.
 		{fmt.Sprintf(`a = %d`, math.MaxInt64), `a`,
-			`/9223372036854775807-/???`,
+			`/9223372036854775807-/9223372036854775807/PrefixEnd`,
 			`/9223372036854775807-/9223372036854775806`},
 		{fmt.Sprintf(`a = %d`, math.MinInt64), `a`,
 			`/-9223372036854775808-/-9223372036854775807`,
-			`/-9223372036854775808-/???`},
+			`/-9223372036854775808-/-9223372036854775808/PrefixEnd`},
 
 		{`(a, b) >= (1, 4)`, `a,b`, `/1/4-`, `-/1/3`},
 		{`(a, b) > (1, 4)`, `a,b`, `/1/5-`, `-/1/4`},
@@ -532,9 +529,9 @@ func TestMakeSpans(t *testing.T) {
 				expected = d.expectedDesc
 			}
 			t.Run(d.expr+"~"+expected, func(t *testing.T) {
-				evalCtx := parser.NewTestingEvalContext()
+				evalCtx := tree.NewTestingEvalContext()
 				defer evalCtx.Stop(context.Background())
-				sel := makeSelectNode(t)
+				sel := makeSelectNode(t, evalCtx)
 				columns := strings.Split(d.columns, ",")
 				dirs := make([]encoding.Direction, 0, len(columns))
 				for range columns {
@@ -566,7 +563,7 @@ func TestMakeSpans(t *testing.T) {
 			`/7/3/0-/7/3/1 /7/2/0-/7/2/1 /7/1/0-/7/1/1`},
 		// Test different directions for te columns inside a tuple.
 		{`(a,b,j) IN ((1,2,3), (4,5,6))`, `a-,b,j-`, `/4/5/6-/4/5/5 /1/2/3-/1/2/2`},
-		{`k = b'\xff'`, `k`, `/"\xff"-/"\xff\x00"`},
+		{`k = b'\xff'`, `k`, `/"\xff"-/"\xff"/PrefixEnd`},
 		// Test that limits on bytes work correctly: when encoding a descending limit for bytes,
 		// we need to go outside the bytes encoding.
 		// "\xaa" is encoded as [bytesDescMarker, ^0xaa, <term escape sequence>]
@@ -581,9 +578,9 @@ func TestMakeSpans(t *testing.T) {
 	}
 	for _, d := range testData2 {
 		t.Run(d.expr+"~"+d.expected, func(t *testing.T) {
-			evalCtx := parser.NewTestingEvalContext()
+			evalCtx := tree.NewTestingEvalContext()
 			defer evalCtx.Stop(context.Background())
-			sel := makeSelectNode(t)
+			sel := makeSelectNode(t, evalCtx)
 			desc, index := makeTestIndexFromStr(t, d.columns)
 			constraints, _ := makeConstraints(t, evalCtx, d.expr, desc, index, sel)
 			spans, err := makeSpans(evalCtx, constraints, desc, index)
@@ -672,9 +669,9 @@ func TestExactPrefix(t *testing.T) {
 	}
 	for _, d := range testData {
 		t.Run(fmt.Sprintf("%s~%d", d.expr, d.expected), func(t *testing.T) {
-			evalCtx := parser.NewTestingEvalContext()
+			evalCtx := tree.NewTestingEvalContext()
 			defer evalCtx.Stop(context.Background())
-			sel := makeSelectNode(t)
+			sel := makeSelectNode(t, evalCtx)
 			desc, index := makeTestIndexFromStr(t, d.columns)
 			constraints, _ := makeConstraints(t, evalCtx, d.expr, desc, index, sel)
 			prefix := constraints.exactPrefix(evalCtx)
@@ -749,9 +746,9 @@ func TestApplyConstraints(t *testing.T) {
 	}
 	for _, d := range testData {
 		t.Run(d.expr+"~"+d.expected, func(t *testing.T) {
-			evalCtx := parser.NewTestingEvalContext()
+			evalCtx := tree.NewTestingEvalContext()
 			defer evalCtx.Stop(context.Background())
-			sel := makeSelectNode(t)
+			sel := makeSelectNode(t, evalCtx)
 			desc, index := makeTestIndexFromStr(t, d.columns)
 			constraints, expr := makeConstraints(t, evalCtx, d.expr, desc, index, sel)
 			expr2 := applyIndexConstraints(evalCtx, expr, constraints)

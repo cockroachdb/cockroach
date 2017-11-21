@@ -27,7 +27,8 @@ import (
 	"golang.org/x/net/context"
 	"golang.org/x/sync/errgroup"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/util/timeofday"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 )
@@ -137,7 +138,7 @@ func collect(tid int64, byID map[int64]tableMetadata, seen map[int64]bool, colle
 // tableMetadata describes one table to dump.
 type tableMetadata struct {
 	ID          int64
-	name        *parser.TableName
+	name        *tree.TableName
 	columnNames string
 	columnTypes map[string]string
 	createStmt  string
@@ -159,7 +160,7 @@ func getDumpMetadata(
 		clusterTS = string(vals[0].([]byte))
 	} else {
 		// Validate the timestamp. This prevents SQL injection.
-		if _, err := parser.ParseDTimestamp(asOf, time.Nanosecond); err != nil {
+		if _, err := tree.ParseDTimestamp(asOf, time.Nanosecond); err != nil {
 			return nil, "", err
 		}
 		clusterTS = asOf
@@ -221,7 +222,7 @@ func getTableNames(conn *sqlConn, dbName string, ts string) (tableNames []string
 func getMetadataForTable(
 	conn *sqlConn, dbName, tableName string, ts string,
 ) (tableMetadata, error) {
-	name := &parser.TableName{DatabaseName: parser.Name(dbName), TableName: parser.Name(tableName)}
+	name := &tree.TableName{DatabaseName: tree.Name(dbName), TableName: tree.Name(tableName)}
 
 	// Fetch table ID.
 	vals, err := conn.QueryRow(fmt.Sprintf(`
@@ -230,7 +231,7 @@ func getMetadataForTable(
 		AS OF SYSTEM TIME '%s'
 		WHERE DATABASE_NAME = $1
 			AND NAME = $2
-		`, parser.Name(dbName).String(), ts), []driver.Value{dbName, tableName})
+		`, tree.Name(dbName).String(), ts), []driver.Value{dbName, tableName})
 	if err != nil {
 		if err == io.EOF {
 			return tableMetadata{}, errors.Errorf("relation %s does not exist", name)
@@ -272,7 +273,7 @@ func getMetadataForTable(
 		if colnames.Len() > 0 {
 			colnames.WriteString(", ")
 		}
-		parser.FormatNode(&colnames, parser.FmtSimple, parser.Name(name))
+		tree.FormatNode(&colnames, tree.FmtSimple, tree.Name(name))
 	}
 	if err := rows.Close(); err != nil {
 		return tableMetadata{}, err
@@ -284,7 +285,7 @@ func getMetadataForTable(
 		AS OF SYSTEM TIME '%s'
 		WHERE descriptor_name = $1
 			AND database_name = $2
-		`, parser.Name(dbName).String(), ts), []driver.Value{tableName, dbName})
+		`, tree.Name(dbName).String(), ts), []driver.Value{tableName, dbName})
 	if err != nil {
 		return tableMetadata{}, err
 	}
@@ -296,7 +297,7 @@ func getMetadataForTable(
 		FROM %s.crdb_internal.backward_dependencies
 		AS OF SYSTEM TIME '%s'
 		WHERE descriptor_id = $1
-		`, parser.Name(dbName).String(), ts), []driver.Value{tableID})
+		`, tree.Name(dbName).String(), ts), []driver.Value{tableID})
 	if err != nil {
 		return tableMetadata{}, err
 	}
@@ -399,34 +400,39 @@ func dumpTableData(w io.Writer, conn *sqlConn, clusterTS string, md tableMetadat
 				if si > 0 {
 					ivals.WriteString(", ")
 				}
-				var d parser.Datum
+				var d tree.Datum
 				switch t := sv.(type) {
 				case nil:
-					d = parser.DNull
+					d = tree.DNull
 				case bool:
-					d = parser.MakeDBool(parser.DBool(t))
+					d = tree.MakeDBool(tree.DBool(t))
 				case int64:
-					d = parser.NewDInt(parser.DInt(t))
+					d = tree.NewDInt(tree.DInt(t))
 				case float64:
-					d = parser.NewDFloat(parser.DFloat(t))
+					d = tree.NewDFloat(tree.DFloat(t))
 				case string:
-					d = parser.NewDString(t)
+					d = tree.NewDString(t)
 				case []byte:
 					switch ct := md.columnTypes[cols[si]]; ct {
 					case "INTERVAL":
-						d, err = parser.ParseDInterval(string(t))
+						d, err = tree.ParseDInterval(string(t))
 						if err != nil {
 							return err
 						}
 					case "BYTES":
-						d = parser.NewDBytes(parser.DBytes(t))
+						d = tree.NewDBytes(tree.DBytes(t))
 					case "UUID":
-						d, err = parser.ParseDUuidFromString(string(t))
+						d, err = tree.ParseDUuidFromString(string(t))
 						if err != nil {
 							return err
 						}
 					case "INET":
-						d, err = parser.ParseDIPAddrFromINetString(string(t))
+						d, err = tree.ParseDIPAddrFromINetString(string(t))
+						if err != nil {
+							return err
+						}
+					case "JSON":
+						d, err = tree.ParseDJSON(string(t))
 						if err != nil {
 							return err
 						}
@@ -436,18 +442,18 @@ func dumpTableData(w io.Writer, conn *sqlConn, clusterTS string, md tableMetadat
 						// In addition, we can only observe ARRAY types by their [] suffix.
 						if strings.HasSuffix(md.columnTypes[cols[si]], "[]") {
 							typ := strings.TrimRight(md.columnTypes[cols[si]], "[]")
-							elemType, err := parser.StringToColType(typ)
+							elemType, err := tree.StringToColType(typ)
 							if err != nil {
 								return err
 							}
-							d, err = parser.ParseDArrayFromString(parser.NewTestingEvalContext(), string(t), elemType)
+							d, err = tree.ParseDArrayFromString(tree.NewTestingEvalContext(), string(t), elemType)
 							if err != nil {
 								return err
 							}
 						} else if strings.HasPrefix(md.columnTypes[cols[si]], "STRING") {
-							d = parser.NewDString(string(t))
+							d = tree.NewDString(string(t))
 						} else if strings.HasPrefix(md.columnTypes[cols[si]], "DECIMAL") {
-							d, err = parser.ParseDDecimal(string(t))
+							d, err = tree.ParseDDecimal(string(t))
 							if err != nil {
 								return err
 							}
@@ -459,18 +465,21 @@ func dumpTableData(w io.Writer, conn *sqlConn, clusterTS string, md tableMetadat
 					ct := md.columnTypes[cols[si]]
 					switch ct {
 					case "DATE":
-						d = parser.NewDDateFromTime(t, time.UTC)
+						d = tree.NewDDateFromTime(t, time.UTC)
+					case "TIME":
+						// pq awkwardly represents TIME as a time.Time with date 0000-01-01.
+						d = tree.MakeDTime(timeofday.FromTime(t))
 					case "TIMESTAMP":
-						d = parser.MakeDTimestamp(t, time.Nanosecond)
+						d = tree.MakeDTimestamp(t, time.Nanosecond)
 					case "TIMESTAMP WITH TIME ZONE":
-						d = parser.MakeDTimestampTZ(t, time.Nanosecond)
+						d = tree.MakeDTimestampTZ(t, time.Nanosecond)
 					default:
 						return errors.Errorf("unknown timestamp type: %s, %v: %s", t, cols[si], md.columnTypes[cols[si]])
 					}
 				default:
 					return errors.Errorf("unknown field type: %T (%s)", t, cols[si])
 				}
-				d.Format(&ivals, parser.FmtParsable)
+				d.Format(&ivals, tree.FmtParsable)
 			}
 			select {
 			case <-done:

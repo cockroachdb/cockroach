@@ -28,7 +28,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql"
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	gwruntime "github.com/grpc-ecosystem/grpc-gateway/runtime"
 	"github.com/pkg/errors"
@@ -191,18 +192,18 @@ WHERE id = $1`
 			return nil
 		}
 		if datum.Len() != 4 ||
-			datum[0].ResolvedType() != parser.TypeBytes ||
-			datum[1].ResolvedType() != parser.TypeString ||
-			datum[2].ResolvedType() != parser.TypeTimestamp {
+			datum[0].ResolvedType() != types.Bytes ||
+			datum[1].ResolvedType() != types.String ||
+			datum[2].ResolvedType() != types.Timestamp {
 			return errors.Errorf("values returned from auth session lookup do not match expectation")
 		}
 
 		// Extract datum values.
 		sessionFound = true
-		hashedSecret = []byte(*datum[0].(*parser.DBytes))
-		username = string(*datum[1].(*parser.DString))
-		expiresAt = datum[2].(*parser.DTimestamp).Time
-		isRevoked = datum[3].ResolvedType() != parser.TypeNull
+		hashedSecret = []byte(*datum[0].(*tree.DBytes))
+		username = string(*datum[1].(*tree.DString))
+		expiresAt = datum[2].(*tree.DTimestamp).Time
+		isRevoked = datum[3].ResolvedType() != types.Null
 		return nil
 	}); err != nil {
 		return false, "", err
@@ -282,7 +283,7 @@ RETURNING id
 		if err != nil {
 			return err
 		}
-		if datum.Len() != 1 || datum[0].ResolvedType() != parser.TypeInt {
+		if datum.Len() != 1 || datum[0].ResolvedType() != types.Int {
 			return errors.Errorf(
 				"expected create auth session statement to return exactly one integer, returned %v",
 				datum,
@@ -290,7 +291,7 @@ RETURNING id
 		}
 
 		// Extract integer value from single datum.
-		id = int64(*datum[0].(*parser.DInt))
+		id = int64(*datum[0].(*tree.DInt))
 		return nil
 	}); err != nil {
 		return 0, nil, err

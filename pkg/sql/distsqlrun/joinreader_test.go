@@ -23,7 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -42,14 +42,14 @@ func TestJoinReader(t *testing.T) {
 	//  |-----------------------------------------------------------------|
 	//  | rowId/10 | rowId%10 | rowId/10 + rowId%10 | IntToEnglish(rowId) |
 
-	aFn := func(row int) parser.Datum {
-		return parser.NewDInt(parser.DInt(row / 10))
+	aFn := func(row int) tree.Datum {
+		return tree.NewDInt(tree.DInt(row / 10))
 	}
-	bFn := func(row int) parser.Datum {
-		return parser.NewDInt(parser.DInt(row % 10))
+	bFn := func(row int) tree.Datum {
+		return tree.NewDInt(tree.DInt(row % 10))
 	}
-	sumFn := func(row int) parser.Datum {
-		return parser.NewDInt(parser.DInt(row/10 + row%10))
+	sumFn := func(row int) tree.Datum {
+		return tree.NewDInt(tree.DInt(row/10 + row%10))
 	}
 
 	sqlutils.CreateTable(t, sqlDB, "t",
@@ -61,7 +61,7 @@ func TestJoinReader(t *testing.T) {
 
 	testCases := []struct {
 		post        PostProcessSpec
-		input       [][]parser.Datum
+		input       [][]tree.Datum
 		outputTypes []sqlbase.ColumnType
 		expected    string
 	}{
@@ -70,7 +70,7 @@ func TestJoinReader(t *testing.T) {
 				Projection:    true,
 				OutputColumns: []uint32{0, 1, 2},
 			},
-			input: [][]parser.Datum{
+			input: [][]tree.Datum{
 				{aFn(2), bFn(2)},
 				{aFn(5), bFn(5)},
 				{aFn(10), bFn(10)},
@@ -85,7 +85,7 @@ func TestJoinReader(t *testing.T) {
 				Projection:    true,
 				OutputColumns: []uint32{3},
 			},
-			input: [][]parser.Datum{
+			input: [][]tree.Datum{
 				{aFn(1), bFn(1)},
 				{aFn(25), bFn(25)},
 				{aFn(5), bFn(5)},
@@ -101,7 +101,7 @@ func TestJoinReader(t *testing.T) {
 	}
 	for _, c := range testCases {
 		t.Run("", func(t *testing.T) {
-			evalCtx := parser.MakeTestingEvalContext()
+			evalCtx := tree.MakeTestingEvalContext()
 			defer evalCtx.Stop(context.Background())
 			flowCtx := FlowCtx{
 				EvalCtx:  evalCtx,
@@ -137,10 +137,7 @@ func TestJoinReader(t *testing.T) {
 
 			var res sqlbase.EncDatumRows
 			for {
-				row, meta := out.Next()
-				if !meta.Empty() {
-					t.Fatalf("unexpected metadata: %v", meta)
-				}
+				row := out.NextNoMeta(t)
 				if row == nil {
 					break
 				}
@@ -172,7 +169,7 @@ func TestJoinReaderDrain(t *testing.T) {
 	)
 	td := sqlbase.GetTableDescriptor(kvDB, "test", "t")
 
-	evalCtx := parser.MakeTestingEvalContext()
+	evalCtx := tree.MakeTestingEvalContext()
 	defer evalCtx.Stop(context.Background())
 	flowCtx := FlowCtx{
 		EvalCtx:  evalCtx,
@@ -182,7 +179,7 @@ func TestJoinReaderDrain(t *testing.T) {
 	}
 
 	encRow := make(sqlbase.EncDatumRow, 1)
-	encRow[0] = sqlbase.DatumToEncDatum(intType, parser.NewDInt(1))
+	encRow[0] = sqlbase.DatumToEncDatum(intType, tree.NewDInt(1))
 
 	ctx := context.Background()
 

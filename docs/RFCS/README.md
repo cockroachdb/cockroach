@@ -48,16 +48,48 @@ conditions apply:
    alternatives. You should be mindful of this when it happens and
    attempt to compensate by a serious review of alternatives.**
 
-3. Go through the PR review. When the dust on the PR review has settled,
-   and if there is consensus to proceed with the project, begin the
+3. Go through the PR review, iterating on the RFC to answer questions
+   and concerns from the reviewer(s). This process can last anywhere
+   from a couple of days to several weeks, depending on the complexity
+   of the proposal.
+
+   If the scope of the RFC is
+   [large](https://www.cockroachlabs.com/docs/stable/contribute-to-cockroachdb.html),
+   there should be at least two designated reviewers from the RFC's
+   expertise area.
+
+   During the review, the author(s) can, if they wish, nominate a
+   review coordinator who can help them channel the different concerns
+   and move the discussion along.
+
+4. At some point, the author(s) and/or review coordinator will seek to
+   decide that the "dust has settled".
+
+   The author(s) and/or review coordinator can move this process along
+   by pushing to conclude open discussions one way or another. This
+   includes, but is not limited to:
+
+   - answering unanswered questions themselves,
+   - seeking participation from other engineers to answer open questions,
+   - reducing the scope of the RFC so that open questions become out of scope,
+   - postponing a decision or answer to a later implementation phase,
+   - organize a plenary session where open concerns are discussed orally,
+   - postponing/cancelling the work altogether.
+
+   In either case, the process to push for conclusion should seek
+   approval to conclude from the reviewer(s) who have opened the
+   discussions so far, allowing sufficient time for them to evaluate
+   the proposed conclusion.
+
+5. At the point where the author(s) and/or review coordinator
+   estimate there is consensus to proceed with the project, begin the
    final comment period (FCP) by (1) posting a comment on the PR and
    (2) posting an announcement on the persistent public communication
    channel du jour (https://forum.cockroachlabs.com/ at the time of
-   this writing).
-   The FCP should last a minimum of two working days to allow
-   collaborators to voice any last-minute concerns.
+   this writing).  The FCP should last a minimum of two working days
+   to allow collaborators to voice any last-minute concerns.
 
-4. If there is still consensus to proceed after the FCP:
+6. If there is still consensus to proceed after the FCP:
 
    - change the `Status` field of the document to `in-progress`;
    - rename the RFC document to prefix it with the current date (`YYYYMMDD_`);
@@ -66,7 +98,9 @@ conditions apply:
 
    If the project is rejected, either abandon the PR or merge it
    with a status of `rejected` (depending on whether the document and
-   discussion are worth preserving for posterity).
+   discussion are worth preserving for posterity). The project may
+   receive a status of `postponed` rather than `rejected` if
+   it is likely to be implemented in the future.
 
    Note that it is possible for an RFC to receive discussion after it
    has been approved and its PR merged, e.g. during implementation.
@@ -76,12 +110,24 @@ conditions apply:
    expert is not available during the initial review (e.g. because she
    is on vacation).
 
-4. Once the changes described in the RFC have been made, change the
+7. Once the changes described in the RFC have been made, change the
    status of the PR from `in-progress` to `completed`. If subsequent
    developments render an RFC obsolete, set its status to `obsolete`.
 
 When you mark a RFC as obsolete, ensure that its text references the
 other RFCs or PRs that make it obsolete.
+
+# Rationale about minimum delays and process complexity
+
+There is a trade-off in every organisation between the impetus to make
+more time for decision-making and consensus-reaching, mandating
+minimum wait times to let every participants evaluate the work, and
+the impetus to move fast and sometimes discover/fix problems later.
+
+At the time of this writing (2017), Cockroach Labs is biased towards
+the second end of this spectrum, and this RFC process correspondingly
+does not spell out minimum wait delays in the RFC process other than
+the 1-2 working day FCP.
 
 # RFC Status
 
@@ -90,8 +136,8 @@ During its lifetime an RFC can have the following status:
 - Draft
 
   A newly minted RFC has this status, until either the proposal is
-  accepted (next possible status: in-progress) or that it is DOA (next
-  possible status: rejected).
+  accepted (next possible status: in-progress), deferred (next possible
+  status: postponed) or that it is DOA (next possible status: rejected).
 
 - Rejected
 
@@ -121,3 +167,13 @@ During its lifetime an RFC can have the following status:
 
   A RFC receives this status when the described feature has been
   superseded.
+
+- Postponed
+
+  A RFC receives this status when the PR discussions have concluded that
+  due to implementation complexity, lack of customer demand, or other
+  issues with the proposal, the work should be postponed to a later date.
+
+  Next possible status: draft (the decision has been made to reconsider
+  this proposal), rejected (proposal not implemented/implementable after all),
+  obsolete (some subsequent work removes the need for the feature).

@@ -85,12 +85,21 @@ def post_issue(issue):
         'https://api.github.com/repos/cockroachdb/cockroach/issues',
         data=json.dumps(issue).encode('utf-8'),
         headers={'Authorization': 'token {0}'.format(os.environ['GITHUB_API_TOKEN'])})
-    opener.open(req).read()
+    try:
+        opener.open(req).read()
+    except urllib.error.HTTPError as e:
+        # Github's error response bodies include useful information, so print them.
+        print('Posting to github failed with error code {0}'.format(e.code))
+        print('Error response body: {0}'.format(e.read()))
+        print('Request body: {0}'.format(issue))
+        raise
 
 
 if __name__ == '__main__':
-    build_id = os.environ['TC_BUILD_ID']
-    failed_tests = list(collect_build_results(build_id))
-    if failed_tests:
-        issue = create_issue(build_id, failed_tests)
-        post_issue(issue)
+    branch = os.environ['TC_BUILD_BRANCH']
+    if branch == 'master' or branch.startswith('release-'):
+        build_id = os.environ['TC_BUILD_ID']
+        failed_tests = list(collect_build_results(build_id))
+        if failed_tests:
+            issue = create_issue(build_id, failed_tests)
+            post_issue(issue)

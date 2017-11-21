@@ -22,14 +22,11 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/acceptance/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/docker/docker/api/types/container"
 )
 
 func runReferenceTestWithScript(ctx context.Context, t *testing.T, script string) {
-	containerConfig := container.Config{
-		Image: postgresTestImage,
-		Cmd:   []string{"stat", cluster.CockroachBinaryInContainer},
-	}
+	containerConfig := defaultContainerConfig()
+	containerConfig.Cmd = []string{"stat", cluster.CockroachBinaryInContainer}
 	if err := testDockerOneShot(ctx, t, "reference", containerConfig); err != nil {
 		t.Skipf(`TODO(dt): No binary in one-shot container, see #6086: %s`, err)
 	}
@@ -45,8 +42,8 @@ func runReadWriteReferenceTest(
 ) {
 	referenceTestScript := fmt.Sprintf(`
 set -xe
-mkdir /old
-cd /old
+mkdir old
+cd old
 
 touch oldout newout
 function finish() {
@@ -59,7 +56,7 @@ export PGPORT=""
 export COCKROACH_SKIP_UPDATE_CHECK=1
 export COCKROACH_CERTS_DIR=/certs/
 
-bin=/%s/cockroach
+bin=/opt/%s/cockroach
 echo "TODO(marc): specify --certs-dir=/certs/ once the binary is upgraded"
 $bin start --background --logtostderr &> oldout
 
@@ -91,7 +88,7 @@ $bin quit
 sleep 1
 
 echo "Read the modified data using the reference binary again."
-bin=/%s/cockroach
+bin=/opt/%s/cockroach
 %s
 `, referenceBinPath, referenceBinPath, backwardReferenceTest)
 	runReferenceTestWithScript(ctx, t, referenceTestScript)

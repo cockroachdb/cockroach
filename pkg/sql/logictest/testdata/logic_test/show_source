@@ -38,11 +38,12 @@ server_version_num             90500
 session_user                   root
 sql_safe_updates               false
 standard_conforming_strings    on
-time zone                      UTC
+timezone                       UTC
 tracing                        off
 transaction isolation level    SERIALIZABLE
 transaction priority           NORMAL
 transaction status             NoTxn
+transaction_read_only          off
 
 query I colnames
 SELECT * FROM [SHOW CLUSTER SETTING sql.defaults.distsql]
@@ -94,7 +95,7 @@ timeseries.resolution_10s.storage_duration         720h0m0s       d     the amou
 trace.debug.enable                                 false          b     if set, traces for recent requests can be seen in the /debug page
 trace.lightstep.token                              ·              s     if set, traces go to Lightstep using this token
 trace.zipkin.collector                             ·              s     if set, traces go to the given Zipkin instance (example: '127.0.0.1:9411'); ignored if trace.lightstep.token is set.
-version                                            1.1-3          m     set the active cluster version in the format '<major>.<minor>'.
+version                                            1.1-4          m     set the active cluster version in the format '<major>.<minor>'.
 
 query T colnames
 SELECT * FROM [SHOW SESSION_USER]
@@ -154,6 +155,7 @@ lease
 namespace
 rangelog
 settings
+table_statistics
 ui
 users
 web_sessions
@@ -180,9 +182,16 @@ foo
 
 
 query T colnames
+SELECT * FROM [SHOW TIMEZONE]
+----
+timezone
+UTC
+
+
+query T colnames
 SELECT * FROM [SHOW TIME ZONE]
 ----
-time zone
+timezone
 UTC
 
 

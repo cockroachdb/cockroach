@@ -20,6 +20,7 @@ package main
 import (
 	_ "github.com/cockroachdb/cockroach/pkg/ccl" // ccl init hooks
 	"github.com/cockroachdb/cockroach/pkg/cli"
+	_ "github.com/cockroachdb/cockroach/pkg/ui/distccl" // ccl web UI init hook
 )
 
 func main() {

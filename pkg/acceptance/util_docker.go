@@ -24,18 +24,21 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/acceptance/cluster"
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
 )
 
 func defaultContainerConfig() container.Config {
 	return container.Config{
-		Image: postgresTestImage,
+		Image: acceptanceImage,
 		Env: []string{
+			fmt.Sprintf("PGUSER=%s", security.RootUser),
 			fmt.Sprintf("PGPORT=%s", base.DefaultPort),
 			"PGSSLCERT=/certs/node.crt",
 			"PGSSLKEY=/certs/node.key",
 		},
+		Entrypoint: []string{"autouseradd", "-u", "roach", "-C", "/home/roach", "--"},
 	}
 }
 
@@ -59,8 +62,8 @@ func testDockerSuccess(ctx context.Context, t *testing.T, name string, cmd []str
 
 const (
 	// Iterating against a locally built version of the docker image can be done
-	// by changing postgresTestImage to the hash of the container.
-	postgresTestImage = "docker.io/cockroachdb/postgres-test:20171019-1337"
+	// by changing acceptanceImage to the hash of the container.
+	acceptanceImage = "docker.io/cockroachdb/acceptance:20171109-044311"
 )
 
 func testDocker(
@@ -88,15 +91,13 @@ func testDocker(
 		}
 		hostConfig := container.HostConfig{
 			NetworkMode: "host",
-			Binds:       []string{filepath.Join(pwd, "testdata") + ":/testdata"},
+			Binds:       []string{filepath.Join(pwd, "testdata") + ":/mnt/data"},
 		}
 		err = l.OneShot(
-			ctx, postgresTestImage, types.ImagePullOptions{}, containerConfig, hostConfig, "docker-"+name,
+			ctx, acceptanceImage, types.ImagePullOptions{}, containerConfig, hostConfig, "docker-"+name,
 		)
-		if err == nil {
-			// Clean up the log files if the run was successful.
-			l.Cleanup(ctx)
-		}
+		preserveLogs := err != nil
+		l.Cleanup(ctx, preserveLogs)
 	})
 	return err
 }

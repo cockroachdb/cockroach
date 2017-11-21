@@ -69,6 +69,9 @@ type TestServerArgs struct {
 	// If not initialized, will default to DefaultTestTempStorageConfig.
 	TempStorageConfig TempStorageConfig
 
+	// ExternalIODir is used to initialize field in cluster.Settings.
+	ExternalIODir string
+
 	// Fields copied to the server.Config.
 	Insecure                 bool
 	RetryOptions             retry.Options

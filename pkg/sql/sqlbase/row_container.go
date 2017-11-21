@@ -20,7 +20,8 @@ import (
 
 	"golang.org/x/net/context"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 )
@@ -29,9 +30,9 @@ const (
 	// targetChunkSize is the target number of Datums in a RowContainer chunk.
 	targetChunkSize = 64
 	// SizeOfDatum is the memory size of a Datum reference.
-	SizeOfDatum = int64(unsafe.Sizeof(parser.Datum(nil)))
+	SizeOfDatum = int64(unsafe.Sizeof(tree.Datum(nil)))
 	// SizeOfDatums is the memory size of a Datum slice.
-	SizeOfDatums = int64(unsafe.Sizeof(parser.Datums(nil)))
+	SizeOfDatums = int64(unsafe.Sizeof(tree.Datums(nil)))
 )
 
 // RowContainer is a container for rows of Datums which tracks the
@@ -50,7 +51,7 @@ type RowContainer struct {
 	// preallocChunks is the number of chunks we allocate upfront (on the first
 	// AddRow call).
 	preallocChunks int
-	chunks         [][]parser.Datum
+	chunks         [][]tree.Datum
 	numRows        int
 
 	// chunkMemSize is the memory used by a chunk.
@@ -114,7 +115,7 @@ func (ti ColTypeInfo) NumColumns() int {
 }
 
 // Type returns the datum type of the i-th column.
-func (ti ColTypeInfo) Type(idx int) parser.Type {
+func (ti ColTypeInfo) Type(idx int) types.T {
 	if ti.resCols != nil {
 		return ti.resCols[idx].Typ
 	}
@@ -165,7 +166,7 @@ func (c *RowContainer) Init(acc mon.BoundAccount, ti ColTypeInfo, rowCapacity in
 	}
 
 	for i := 0; i < nCols; i++ {
-		sz, variable := ti.Type(i).Size()
+		sz, variable := tree.DatumTypeSize(ti.Type(i))
 		if variable {
 			if c.varSizedColumns == nil {
 				// Only allocate varSizedColumns if necessary.
@@ -207,10 +208,10 @@ func (c *RowContainer) allocChunks(ctx context.Context, numChunks int) error {
 	}
 
 	if c.chunks == nil {
-		c.chunks = make([][]parser.Datum, 0, numChunks)
+		c.chunks = make([][]tree.Datum, 0, numChunks)
 	}
 
-	datums := make([]parser.Datum, numChunks*datumsPerChunk)
+	datums := make([]tree.Datum, numChunks*datumsPerChunk)
 	for i, pos := 0, 0; i < numChunks; i++ {
 		c.chunks = append(c.chunks, datums[pos:pos+datumsPerChunk])
 		pos += datumsPerChunk
@@ -219,7 +220,7 @@ func (c *RowContainer) allocChunks(ctx context.Context, numChunks int) error {
 }
 
 // rowSize computes the size of a single row.
-func (c *RowContainer) rowSize(row parser.Datums) int64 {
+func (c *RowContainer) rowSize(row tree.Datums) int64 {
 	rsz := c.fixedColsSize
 	for _, i := range c.varSizedColumns {
 		rsz += int64(row[i].Size())
@@ -239,7 +240,7 @@ func (c *RowContainer) getChunkAndPos(rowIdx int) (chunk int, pos int) {
 // AddRow attempts to insert a new row in the RowContainer. The row slice is not
 // used directly: the Datum values inside the Datums are copied to internal storage.
 // Returns an error if the allocation was denied by the MemoryMonitor.
-func (c *RowContainer) AddRow(ctx context.Context, row parser.Datums) (parser.Datums, error) {
+func (c *RowContainer) AddRow(ctx context.Context, row tree.Datums) (tree.Datums, error) {
 	if len(row) != c.numCols {
 		panic(fmt.Sprintf("invalid row length %d, expected %d", len(row), c.numCols))
 	}
@@ -272,7 +273,7 @@ func (c *RowContainer) Len() int {
 }
 
 // At accesses a row at a specific index.
-func (c *RowContainer) At(i int) parser.Datums {
+func (c *RowContainer) At(i int) tree.Datums {
 	if i < 0 || i >= c.numRows {
 		panic(fmt.Sprintf("row index %d out of range", i))
 	}
@@ -280,7 +281,7 @@ func (c *RowContainer) At(i int) parser.Datums {
 		// We don't want to return nil, as in some contexts nil is used as a special
 		// value to indicate that there are no more rows. Note that this doesn't
 		// actually allocate anything.
-		return make(parser.Datums, 0)
+		return make(tree.Datums, 0)
 	}
 	chunk, pos := c.getChunkAndPos(i)
 	return c.chunks[chunk][pos : pos+c.numCols : pos+c.numCols]
@@ -325,7 +326,7 @@ func (c *RowContainer) PopFirst() {
 // Replace substitutes one row for another. This does query the
 // MemoryMonitor to determine whether the new row fits the
 // allowance.
-func (c *RowContainer) Replace(ctx context.Context, i int, newRow parser.Datums) error {
+func (c *RowContainer) Replace(ctx context.Context, i int, newRow tree.Datums) error {
 	newSz := c.rowSize(newRow)
 	row := c.At(i)
 	oldSz := c.rowSize(row)

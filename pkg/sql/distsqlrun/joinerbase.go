@@ -17,7 +17,7 @@ package distsqlrun
 import (
 	"golang.org/x/net/context"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
@@ -62,12 +62,12 @@ func (jb *joinerBase) init(
 	leftTypes := leftSource.Types()
 	jb.emptyLeft = make(sqlbase.EncDatumRow, len(leftTypes))
 	for i := range jb.emptyLeft {
-		jb.emptyLeft[i] = sqlbase.DatumToEncDatum(leftTypes[i], parser.DNull)
+		jb.emptyLeft[i] = sqlbase.DatumToEncDatum(leftTypes[i], tree.DNull)
 	}
 	rightTypes := rightSource.Types()
 	jb.emptyRight = make(sqlbase.EncDatumRow, len(rightTypes))
 	for i := range jb.emptyRight {
-		jb.emptyRight[i] = sqlbase.DatumToEncDatum(rightTypes[i], parser.DNull)
+		jb.emptyRight[i] = sqlbase.DatumToEncDatum(rightTypes[i], tree.DNull)
 	}
 
 	jb.eqCols[leftSide] = columns(leftEqColumns)
@@ -91,10 +91,11 @@ func (jb *joinerBase) init(
 	types = append(types, leftTypes...)
 	types = append(types, rightTypes...)
 
-	if err := jb.onCond.init(onExpr, types, &flowCtx.EvalCtx); err != nil {
+	evalCtx := flowCtx.NewEvalCtx()
+	if err := jb.onCond.init(onExpr, types, evalCtx); err != nil {
 		return err
 	}
-	return jb.out.Init(post, types, &flowCtx.EvalCtx, output)
+	return jb.out.Init(post, types, evalCtx, output)
 }
 
 type joinSide uint8
@@ -187,9 +188,11 @@ func (jb *joinerBase) render(lrow, rrow sqlbase.EncDatumRow) (sqlbase.EncDatumRo
 	}
 	jb.combinedRow = append(jb.combinedRow, lrow...)
 	jb.combinedRow = append(jb.combinedRow, rrow...)
-	res, err := jb.onCond.evalFilter(jb.combinedRow)
-	if !res || err != nil {
-		return nil, err
+	if jb.onCond.expr != nil {
+		res, err := jb.onCond.evalFilter(jb.combinedRow)
+		if !res || err != nil {
+			return nil, err
+		}
 	}
 	return jb.combinedRow, nil
 }

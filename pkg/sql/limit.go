@@ -20,7 +20,8 @@ import (
 
 	"golang.org/x/net/context"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 )
 
 // limitNode represents a node that limits the number of rows
@@ -28,8 +29,8 @@ import (
 type limitNode struct {
 	p          *planner
 	plan       planNode
-	countExpr  parser.TypedExpr
-	offsetExpr parser.TypedExpr
+	countExpr  tree.TypedExpr
+	offsetExpr tree.TypedExpr
 	evaluated  bool
 	count      int64
 	offset     int64
@@ -37,7 +38,7 @@ type limitNode struct {
 }
 
 // limit constructs a limitNode based on the LIMIT and OFFSET clauses.
-func (p *planner) Limit(ctx context.Context, n *parser.Limit) (*limitNode, error) {
+func (p *planner) Limit(ctx context.Context, n *tree.Limit) (*limitNode, error) {
 	if n == nil || (n.Count == nil && n.Offset == nil) {
 		// No LIMIT nor OFFSET; there is nothing special to do.
 		return nil, nil
@@ -47,8 +48,8 @@ func (p *planner) Limit(ctx context.Context, n *parser.Limit) (*limitNode, error
 
 	data := []struct {
 		name string
-		src  parser.Expr
-		dst  *parser.TypedExpr
+		src  tree.Expr
+		dst  *tree.TypedExpr
 	}{
 		{"LIMIT", n.Count, &res.countExpr},
 		{"OFFSET", n.Offset, &res.offsetExpr},
@@ -56,13 +57,13 @@ func (p *planner) Limit(ctx context.Context, n *parser.Limit) (*limitNode, error
 
 	for _, datum := range data {
 		if datum.src != nil {
-			if err := p.parser.AssertNoAggregationOrWindowing(
+			if err := p.txCtx.AssertNoAggregationOrWindowing(
 				datum.src, datum.name, p.session.SearchPath,
 			); err != nil {
 				return nil, err
 			}
 
-			normalized, err := p.analyzeExpr(ctx, datum.src, nil, parser.IndexedVarHelper{}, parser.TypeInt, true, datum.name)
+			normalized, err := p.analyzeExpr(ctx, datum.src, nil, tree.IndexedVarHelper{}, types.Int, true, datum.name)
 			if err != nil {
 				return nil, err
 			}
@@ -93,12 +94,12 @@ func (n *limitNode) estimateLimit() {
 	// folding prior to type checking.
 
 	if n.countExpr != nil {
-		if i, ok := parser.AsDInt(n.countExpr); ok {
+		if i, ok := tree.AsDInt(n.countExpr); ok {
 			n.count = int64(i)
 		}
 	}
 	if n.offsetExpr != nil {
-		if i, ok := parser.AsDInt(n.offsetExpr); ok {
+		if i, ok := tree.AsDInt(n.offsetExpr); ok {
 			n.offset = int64(i)
 		}
 	}
@@ -112,7 +113,7 @@ func (n *limitNode) evalLimit() error {
 
 	data := []struct {
 		name string
-		src  parser.TypedExpr
+		src  tree.TypedExpr
 		dst  *int64
 	}{
 		{"LIMIT", n.countExpr, &n.count},
@@ -126,12 +127,12 @@ func (n *limitNode) evalLimit() error {
 				return err
 			}
 
-			if dstDatum == parser.DNull {
+			if dstDatum == tree.DNull {
 				// Use the default value.
 				continue
 			}
 
-			dstDInt := parser.MustBeDInt(dstDatum)
+			dstDInt := tree.MustBeDInt(dstDatum)
 			val := int64(dstDInt)
 			if val < 0 {
 				return fmt.Errorf("negative value for %s", datum.name)
@@ -143,7 +144,7 @@ func (n *limitNode) evalLimit() error {
 	return nil
 }
 
-func (n *limitNode) Values() parser.Datums { return n.plan.Values() }
+func (n *limitNode) Values() tree.Datums { return n.plan.Values() }
 
 func (n *limitNode) Next(params runParams) (bool, error) {
 	// n.rowIndex is the 0-based index of the next row.

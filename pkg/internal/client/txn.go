@@ -17,7 +17,6 @@ package client
 import (
 	"fmt"
 
-	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
@@ -132,6 +131,11 @@ func NewTxnWithProto(db *DB, gatewayNodeID roachpb.NodeID, proto roachpb.Transac
 	txn := &Txn{db: db, gatewayNodeID: gatewayNodeID}
 	txn.mu.Proto = proto
 	return txn
+}
+
+// DB returns a transaction's DB.
+func (txn *Txn) DB() *DB {
+	return txn.db
 }
 
 // ID returns the current ID of the transaction.
@@ -571,7 +575,8 @@ func (txn *Txn) CommitInBatch(ctx context.Context, b *Batch) error {
 	if txn != b.txn {
 		return errors.Errorf("a batch b can only be committed by b.txn")
 	}
-	b.AddRawRequest(endTxnReq(true /* commit */, txn.deadline, txn.systemConfigTrigger))
+	b.appendReqs(endTxnReq(true /* commit */, txn.deadline, txn.systemConfigTrigger))
+	b.initResult(1 /* calls */, 0, b.raw, nil)
 	return txn.Run(ctx, b)
 }
 
@@ -1014,17 +1019,6 @@ func (txn *Txn) Send(
 		}
 		if br.Txn != nil && br.Txn.ID != txn.mu.Proto.ID {
 			return nil, roachpb.NewError(&roachpb.TxnPrevAttemptError{})
-		}
-		if len(br.CollectedSpans) != 0 {
-			span := opentracing.SpanFromContext(ctx)
-			if span == nil {
-				return nil, roachpb.NewErrorf(
-					"trying to ingest remote spans but there is no recording span set up",
-				)
-			}
-			if err := tracing.ImportRemoteSpans(span, br.CollectedSpans); err != nil {
-				return nil, roachpb.NewErrorf("error ingesting remote spans: %s", err)
-			}
 		}
 
 		// Only successful requests can carry an updated Txn in their response

@@ -76,7 +76,7 @@ func newAlgebraicSetOp(
 	}
 
 	e.types = lt
-	err := e.out.Init(post, e.types, &flowCtx.EvalCtx, output)
+	err := e.init(post, e.types, flowCtx, output)
 	if err != nil {
 		return nil, err
 	}

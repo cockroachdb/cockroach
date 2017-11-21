@@ -4,7 +4,7 @@
 // License (the "License"); you may not use this file except in compliance with
 // the License. You may obtain a copy of the License at
 //
-//     https://github.com/cockroachdb/cockroach/blob/master/LICENSE
+//     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
 
 package storageccl
 
@@ -173,8 +173,8 @@ func (kr *KeyRewriter) RewriteKey(key []byte) ([]byte, bool, error) {
 		}
 		k = k[n:]
 	}
-	// If we get a NotNULL, it's interleaved.
-	k, ok = encoding.DecodeIfNotNull(k)
+	// We might have an interleaved key.
+	k, ok = encoding.DecodeIfInterleavedSentinel(k)
 	if !ok {
 		return key, true, nil
 	}

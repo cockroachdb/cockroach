@@ -20,9 +20,10 @@ import (
 
 	"golang.org/x/net/context"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/pkg/errors"
@@ -46,16 +47,19 @@ type editNodeBase struct {
 }
 
 func (p *planner) makeEditNode(
-	ctx context.Context, tn *parser.TableName, priv privilege.Kind,
+	ctx context.Context, tn *tree.TableName, priv privilege.Kind,
 ) (editNodeBase, error) {
 	tableDesc, err := p.session.tables.getTableVersion(ctx, p.txn, p.getVirtualTabler(), tn)
 	if err != nil {
 		return editNodeBase{}, err
 	}
-	// We don't support update on views, only real tables.
+	// We don't support update on views or sequences, only real tables.
 	if !tableDesc.IsTable() {
 		return editNodeBase{},
-			errors.Errorf("cannot run %s on view %q - views are not updateable", priv, tn)
+			pgerror.NewErrorf(
+				pgerror.CodeWrongObjectTypeError,
+				"cannot run %s on %s %q - %ss are not updateable",
+				priv, tableDesc.Kind(), tn, tableDesc.Kind())
 	}
 
 	if err := p.CheckPrivilege(tableDesc, priv); err != nil {
@@ -73,7 +77,7 @@ func (p *planner) makeEditNode(
 type editNodeRun struct {
 	rows      planNode
 	tw        tableWriter
-	resultRow parser.Datums
+	resultRow tree.Datums
 }
 
 func (r *editNodeRun) initEditNode(
@@ -81,9 +85,9 @@ func (r *editNodeRun) initEditNode(
 	en *editNodeBase,
 	rows planNode,
 	tw tableWriter,
-	tn *parser.TableName,
-	re parser.ReturningClause,
-	desiredTypes []parser.Type,
+	tn *tree.TableName,
+	re tree.ReturningClause,
+	desiredTypes []types.T,
 ) error {
 	r.rows = rows
 	r.tw = tw
@@ -111,7 +115,7 @@ func (r *editNodeRun) startEditNode(params runParams, en *editNodeBase) error {
 type updateNode struct {
 	// The following fields are populated during makePlan.
 	editNodeBase
-	n             *parser.Update
+	n             *tree.Update
 	updateCols    []sqlbase.ColumnDescriptor
 	updateColsIdx map[sqlbase.ColumnID]int // index in updateCols slice
 	tw            tableUpdater
@@ -134,11 +138,11 @@ type updateNode struct {
 type sourceSlot interface {
 	// extractValues returns a slice of the values this slot is responsible for,
 	// as extracted from the row of results.
-	extractValues(resultRow parser.Datums) parser.Datums
+	extractValues(resultRow tree.Datums) tree.Datums
 	// checkColumnTypes compares the types of the results that this slot refers to to the types of
 	// the columns those values will be assigned to. It returns an error if those types don't match up.
 	// It also populates the types of any placeholders by way of calling into sqlbase.CheckColumnType.
-	checkColumnTypes(row []parser.TypedExpr, pmap *parser.PlaceholderInfo) error
+	checkColumnTypes(row []tree.TypedExpr, pmap *tree.PlaceholderInfo) error
 }
 
 type tupleSlot struct {
@@ -146,13 +150,13 @@ type tupleSlot struct {
 	sourceIndex int
 }
 
-func (ts tupleSlot) extractValues(row parser.Datums) parser.Datums {
-	return row[ts.sourceIndex].(*parser.DTuple).D
+func (ts tupleSlot) extractValues(row tree.Datums) tree.Datums {
+	return row[ts.sourceIndex].(*tree.DTuple).D
 }
 
-func (ts tupleSlot) checkColumnTypes(row []parser.TypedExpr, pmap *parser.PlaceholderInfo) error {
+func (ts tupleSlot) checkColumnTypes(row []tree.TypedExpr, pmap *tree.PlaceholderInfo) error {
 	renderedResult := row[ts.sourceIndex]
-	for i, typ := range renderedResult.ResolvedType().(parser.TTuple) {
+	for i, typ := range renderedResult.ResolvedType().(types.TTuple) {
 		if err := sqlbase.CheckColumnType(ts.columns[i], typ, pmap); err != nil {
 			return err
 		}
@@ -165,11 +169,11 @@ type scalarSlot struct {
 	sourceIndex int
 }
 
-func (ss scalarSlot) extractValues(row parser.Datums) parser.Datums {
+func (ss scalarSlot) extractValues(row tree.Datums) tree.Datums {
 	return row[ss.sourceIndex : ss.sourceIndex+1]
 }
 
-func (ss scalarSlot) checkColumnTypes(row []parser.TypedExpr, pmap *parser.PlaceholderInfo) error {
+func (ss scalarSlot) checkColumnTypes(row []tree.TypedExpr, pmap *tree.PlaceholderInfo) error {
 	renderedResult := row[ss.sourceIndex]
 	typ := renderedResult.ResolvedType()
 	return sqlbase.CheckColumnType(ss.column, typ, pmap)
@@ -180,14 +184,14 @@ func (ss scalarSlot) checkColumnTypes(row []parser.TypedExpr, pmap *parser.Place
 // column index at which the rendered value can be accessed.
 func addOrMergeExpr(
 	ctx context.Context,
-	e parser.Expr,
+	e tree.Expr,
 	currentUpdateIdx int,
 	updateCols []sqlbase.ColumnDescriptor,
-	defaultExprs []parser.TypedExpr,
+	defaultExprs []tree.TypedExpr,
 	render *renderNode,
 ) (colIdx int, err error) {
 	e = fillDefault(e, currentUpdateIdx, defaultExprs)
-	selectExpr := parser.SelectExpr{Expr: e}
+	selectExpr := tree.SelectExpr{Expr: e}
 	typ := updateCols[currentUpdateIdx].Type.ToDatumType()
 	col, expr, err := render.planner.computeRender(ctx, selectExpr, typ,
 		render.sourceInfo, render.ivarHelper, autoGenerateRenderOutputName)
@@ -203,7 +207,7 @@ func addOrMergeExpr(
 //   Notes: postgres requires UPDATE. Requires SELECT with WHERE clause with table.
 //          mysql requires UPDATE. Also requires SELECT with WHERE clause with table.
 func (p *planner) Update(
-	ctx context.Context, n *parser.Update, desiredTypes []parser.Type,
+	ctx context.Context, n *tree.Update, desiredTypes []types.T,
 ) (planNode, error) {
 	if n.Where == nil && p.session.SafeUpdates {
 		return nil, pgerror.NewDangerousStatementErrorf("UPDATE without WHERE clause")
@@ -221,14 +225,14 @@ func (p *planner) Update(
 		return nil, err
 	}
 
-	setExprs := make([]*parser.UpdateExpr, len(n.Exprs))
+	setExprs := make([]*tree.UpdateExpr, len(n.Exprs))
 	for i, expr := range n.Exprs {
 		// Replace the sub-query nodes.
 		newExpr, err := p.replaceSubqueries(ctx, expr.Expr, len(expr.Names))
 		if err != nil {
 			return nil, err
 		}
-		setExprs[i] = &parser.UpdateExpr{Tuple: expr.Tuple, Expr: newExpr, Names: expr.Names}
+		setExprs[i] = &tree.UpdateExpr{Tuple: expr.Tuple, Expr: newExpr, Names: expr.Names}
 	}
 
 	// Determine which columns we're inserting into.
@@ -242,13 +246,13 @@ func (p *planner) Update(
 		return nil, err
 	}
 
-	defaultExprs, err := sqlbase.MakeDefaultExprs(updateCols, &p.parser, &p.evalCtx)
+	defaultExprs, err := sqlbase.MakeDefaultExprs(updateCols, &p.txCtx, &p.evalCtx)
 	if err != nil {
 		return nil, err
 	}
 
 	var requestedCols []sqlbase.ColumnDescriptor
-	if _, retExprs := n.Returning.(*parser.ReturningExprs); retExprs || len(en.tableDesc.Checks) > 0 {
+	if _, retExprs := n.Returning.(*tree.ReturningExprs); retExprs || len(en.tableDesc.Checks) > 0 {
 		// TODO(dan): This could be made tighter, just the rows needed for RETURNING
 		// exprs.
 		requestedCols = en.tableDesc.Columns
@@ -269,12 +273,11 @@ func (p *planner) Update(
 
 	// We construct a query containing the columns being updated, and then later merge the values
 	// they are being updated with into that renderNode to ideally reuse some of the queries.
-	rows, err := p.SelectClause(ctx, &parser.SelectClause{
+	rows, err := p.SelectClause(ctx, &tree.SelectClause{
 		Exprs: sqlbase.ColumnsSelectors(ru.FetchCols),
-		From:  &parser.From{Tables: []parser.TableExpr{n.Table}},
+		From:  &tree.From{Tables: []tree.TableExpr{n.Table}},
 		Where: n.Where,
-	}, nil /* orderBy */, nil /* limit */, false, /* lockForUpdate */
-		nil /* desiredTypes */, publicAndNonPublicColumns)
+	}, n.OrderBy, n.Limit, nil /*desiredTypes*/, publicAndNonPublicColumns)
 	if err != nil {
 		return nil, err
 	}
@@ -285,12 +288,26 @@ func (p *planner) Update(
 	// currentUpdateIdx is the index of the first column descriptor in updateCols
 	// that is assigned to by the current setExpr.
 	currentUpdateIdx := 0
-	render := rows.(*renderNode)
+
+	// We need to add renders below, for the RHS of each
+	// assignment. Where can we do this? If we already have a
+	// renderNode, then use that. Otherwise, add one.
+	var render *renderNode
+	if r, ok := rows.(*renderNode); ok {
+		render = r
+	} else {
+		render, err = p.insertRender(ctx, rows, tn)
+		if err != nil {
+			return nil, err
+		}
+		// The new renderNode is also the new data source for the update.
+		rows = render
+	}
 
 	for _, setExpr := range setExprs {
 		if setExpr.Tuple {
 			switch t := setExpr.Expr.(type) {
-			case *parser.Tuple:
+			case *tree.Tuple:
 				// The user assigned an explicit set of values to the columns. We can't
 				// treat this case the same as when we have a subquery (and just evaluate
 				// the tuple) because when assigning a literal tuple like this it's valid
@@ -309,8 +326,8 @@ func (p *planner) Update(
 					currentUpdateIdx++
 				}
 			case *subquery:
-				selectExpr := parser.SelectExpr{Expr: t}
-				desiredTupleType := make(parser.TTuple, len(setExpr.Names))
+				selectExpr := tree.SelectExpr{Expr: t}
+				desiredTupleType := make(types.TTuple, len(setExpr.Names))
 				for i := range setExpr.Names {
 					desiredTupleType[i] = updateCols[currentUpdateIdx+i].Type.ToDatumType()
 				}
@@ -350,9 +367,8 @@ func (p *planner) Update(
 	// types are inferred. For the simpler case ("SET a = $1"), populate them
 	// using checkColumnType. This step also verifies that the expression
 	// types match the column types.
-	sel := rows.(*renderNode)
 	for _, sourceSlot := range sourceSlots {
-		if err := sourceSlot.checkColumnTypes(sel.render, &p.semaCtx.Placeholders); err != nil {
+		if err := sourceSlot.checkColumnTypes(render.render, &p.semaCtx.Placeholders); err != nil {
 			return nil, err
 		}
 	}
@@ -416,7 +432,7 @@ func (u *updateNode) Next(params runParams) (bool, error) {
 	// columns in the output.
 	oldValues := entireRow[:len(u.tw.ru.FetchCols)]
 
-	updateValues := make(parser.Datums, len(u.tw.ru.UpdateCols))
+	updateValues := make(tree.Datums, len(u.tw.ru.UpdateCols))
 	valueIdx := 0
 
 	for _, slot := range u.sourceSlots {
@@ -438,14 +454,14 @@ func (u *updateNode) Next(params runParams) (bool, error) {
 
 	// Ensure that the values honor the specified column widths.
 	for i := range updateValues {
-		if err := sqlbase.CheckValueWidth(u.tw.ru.UpdateCols[i], updateValues[i]); err != nil {
+		if err := sqlbase.CheckValueWidth(u.tw.ru.UpdateCols[i].Type, updateValues[i], u.tw.ru.UpdateCols[i].Name); err != nil {
 			return false, err
 		}
 	}
 
 	for i, col := range u.tw.ru.UpdateCols {
 		val := updateValues[i]
-		if !col.Nullable && val == parser.DNull {
+		if !col.Nullable && val == tree.DNull {
 			return false, sqlbase.NewNonNullViolationError(col.Name)
 		}
 	}
@@ -468,19 +484,19 @@ func (u *updateNode) Next(params runParams) (bool, error) {
 }
 
 // namesForExprs expands names in the tuples and subqueries in exprs.
-func (p *planner) namesForExprs(exprs parser.UpdateExprs) (parser.UnresolvedNames, error) {
-	var names parser.UnresolvedNames
+func (p *planner) namesForExprs(exprs tree.UpdateExprs) (tree.UnresolvedNames, error) {
+	var names tree.UnresolvedNames
 	for _, expr := range exprs {
 		if expr.Tuple {
 			n := -1
 			switch t := expr.Expr.(type) {
 			case *subquery:
-				if tup, ok := t.typ.(parser.TTuple); ok {
+				if tup, ok := t.typ.(types.TTuple); ok {
 					n = len(tup)
 				}
-			case *parser.Tuple:
+			case *tree.Tuple:
 				n = len(t.Exprs)
-			case *parser.DTuple:
+			case *tree.DTuple:
 				n = len(t.D)
 			}
 			if n < 0 {
@@ -496,17 +512,17 @@ func (p *planner) namesForExprs(exprs parser.UpdateExprs) (parser.UnresolvedName
 	return names, nil
 }
 
-func fillDefault(expr parser.Expr, index int, defaultExprs []parser.TypedExpr) parser.Expr {
+func fillDefault(expr tree.Expr, index int, defaultExprs []tree.TypedExpr) tree.Expr {
 	switch expr.(type) {
-	case parser.DefaultVal:
+	case tree.DefaultVal:
 		if defaultExprs == nil {
-			return parser.DNull
+			return tree.DNull
 		}
 		return defaultExprs[index]
 	}
 	return expr
 }
 
-func (u *updateNode) Values() parser.Datums {
+func (u *updateNode) Values() tree.Datums {
 	return u.run.resultRow
 }

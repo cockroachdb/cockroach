@@ -4,13 +4,14 @@
 // License (the "License"); you may not use this file except in compliance with
 // the License. You may obtain a copy of the License at
 //
-//     https://github.com/cockroachdb/cockroach/blob/master/LICENSE
+//     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
 
 package storageccl
 
 import (
 	"fmt"
 	"io/ioutil"
+	"os"
 	"path/filepath"
 	"reflect"
 	"strconv"
@@ -27,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -150,6 +152,10 @@ func runTestImport(t *testing.T, init func(*cluster.Settings)) {
 	dir, dirCleanupFn := testutils.TempDir(t)
 	defer dirCleanupFn()
 
+	if err := os.Mkdir(filepath.Join(dir, "foo"), 0755); err != nil {
+		t.Fatal(err)
+	}
+
 	writeSST := func(keys ...[]byte) string {
 		path := strconv.FormatInt(hlc.UnixNano(), 10)
 
@@ -172,7 +178,7 @@ func runTestImport(t *testing.T, init func(*cluster.Settings)) {
 		if err != nil {
 			t.Fatalf("%+v", err)
 		}
-		if err := ioutil.WriteFile(filepath.Join(dir, path), sstContents, 0644); err != nil {
+		if err := ioutil.WriteFile(filepath.Join(dir, "foo", path), sstContents, 0644); err != nil {
 			t.Fatalf("%+v", err)
 		}
 		return path
@@ -228,23 +234,25 @@ func runTestImport(t *testing.T, init func(*cluster.Settings)) {
 	const initialAmbiguousSubReqs = 3
 	remainingAmbiguousSubReqs := int64(initialAmbiguousSubReqs)
 	knobs := base.TestingKnobs{Store: &storage.StoreTestingKnobs{
-		TestingEvalFilter: func(filterArgs storagebase.FilterArgs) *roachpb.Error {
-			switch filterArgs.Req.(type) {
-			case *roachpb.WriteBatchRequest, *roachpb.AddSSTableRequest:
-			// No-op.
-			default:
-				return nil
-			}
-			r := atomic.AddInt64(&remainingAmbiguousSubReqs, -1)
-			if r < 0 {
-				return nil
-			}
-			return roachpb.NewError(roachpb.NewAmbiguousResultError(strconv.Itoa(int(r))))
+		EvalKnobs: batcheval.TestingKnobs{
+			TestingEvalFilter: func(filterArgs storagebase.FilterArgs) *roachpb.Error {
+				switch filterArgs.Req.(type) {
+				case *roachpb.WriteBatchRequest, *roachpb.AddSSTableRequest:
+				// No-op.
+				default:
+					return nil
+				}
+				r := atomic.AddInt64(&remainingAmbiguousSubReqs, -1)
+				if r < 0 {
+					return nil
+				}
+				return roachpb.NewError(roachpb.NewAmbiguousResultError(strconv.Itoa(int(r))))
+			},
 		},
 	}}
 
 	ctx := context.Background()
-	args := base.TestServerArgs{Knobs: knobs}
+	args := base.TestServerArgs{Knobs: knobs, ExternalIODir: dir}
 	// TODO(dan): This currently doesn't work with AddSSTable on in-memory
 	// stores because RocksDB's InMemoryEnv doesn't support NewRandomRWFile
 	// (which breaks the global-seqno rewrite used when the added sstable
@@ -255,7 +263,7 @@ func runTestImport(t *testing.T, init func(*cluster.Settings)) {
 
 	init(s.ClusterSettings())
 
-	storage, err := ExportStorageConfFromURI("nodelocal://" + dir)
+	storage, err := ExportStorageConfFromURI("nodelocal:///foo")
 	if err != nil {
 		t.Fatalf("%+v", err)
 	}
@@ -273,7 +281,7 @@ func runTestImport(t *testing.T, init func(*cluster.Settings)) {
 			for _, f := range files[:i] {
 				req.Files = append(req.Files, roachpb.ImportRequest_File{Dir: storage, Path: f})
 			}
-			expectedKVs := slurpSSTablesLatestKey(t, dir, files[:i], kr)
+			expectedKVs := slurpSSTablesLatestKey(t, filepath.Join(dir, "foo"), files[:i], kr)
 
 			// Import may be retried by DistSender if it takes too long to return, so
 			// make sure it's idempotent.
