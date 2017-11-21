@@ -169,6 +169,14 @@ func (n *createIndexNode) Start(params runParams) error {
 	if err := indexDesc.FillColumns(n.n.Columns); err != nil {
 		return err
 	}
+	if n.n.PartitionBy != nil {
+		if err := addPartitionedBy(
+			params.ctx, &params.p.evalCtx, n.tableDesc, &indexDesc, &indexDesc.Partitioning,
+			n.n.PartitionBy, 0, /* colOffset */
+		); err != nil {
+			return err
+		}
+	}
 
 	mutationIdx := len(n.tableDesc.Mutations)
 	if err := n.tableDesc.AddIndexMutation(indexDesc, sqlbase.DescriptorMutation_ADD); err != nil {
@@ -1331,14 +1339,16 @@ func addPartitionedBy(
 
 	var cols []sqlbase.ColumnDescriptor
 	for i := 0; i < len(partBy.Fields); i++ {
-		if colOffset+i >= len(indexDesc.ColumnIDs) {
+		if colOffset+i >= len(indexDesc.ColumnNames) {
 			return errors.New("declared partition columns must match index being partitioned")
 		}
-		col, err := tableDesc.FindActiveColumnByID(indexDesc.ColumnIDs[colOffset+i])
+		// Search by name because some callsites of this method have not
+		// allocated ids yet (so they are still all the 0 value).
+		col, err := tableDesc.FindActiveColumnByName(indexDesc.ColumnNames[colOffset+i])
 		if err != nil {
 			return err
 		}
-		cols = append(cols, *col)
+		cols = append(cols, col)
 		if string(partBy.Fields[i]) != col.Name {
 			return errors.New("declared partition columns must match index being partitioned")
 		}
@@ -1567,6 +1577,13 @@ func MakeTableDesc(
 			if err := idx.FillColumns(d.Columns); err != nil {
 				return desc, err
 			}
+			if d.PartitionBy != nil {
+				if err := addPartitionedBy(
+					ctx, evalCtx, &desc, &idx, &idx.Partitioning, d.PartitionBy, 0, /* colOffset */
+				); err != nil {
+					return desc, err
+				}
+			}
 			if err := desc.AddIndex(idx, false); err != nil {
 				return desc, err
 			}
@@ -1581,6 +1598,13 @@ func MakeTableDesc(
 			}
 			if err := idx.FillColumns(d.Columns); err != nil {
 				return desc, err
+			}
+			if d.PartitionBy != nil {
+				if err := addPartitionedBy(
+					ctx, evalCtx, &desc, &idx, &idx.Partitioning, d.PartitionBy, 0, /* colOffset */
+				); err != nil {
+					return desc, err
+				}
 			}
 			if err := desc.AddIndex(idx, d.PrimaryKey); err != nil {
 				return desc, err

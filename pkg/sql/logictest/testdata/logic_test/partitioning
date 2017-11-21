@@ -499,6 +499,27 @@ ok11  CREATE TABLE ok11 (
    )
 )
 
+statement ok
+CREATE TABLE IF NOT EXISTS ok12 (a INT, b INT, c INT, PRIMARY KEY (a, b)) PARTITION BY LIST (a) (
+    PARTITION p1 VALUES IN (1),
+    PARTITION p2 VALUES IN (2)
+)
+
+
+query TT
+SHOW CREATE TABLE ok12
+----
+ok12  CREATE TABLE ok12 (
+      a INT NOT NULL,
+      b INT NOT NULL,
+      c INT NULL,
+      CONSTRAINT "primary" PRIMARY KEY (a ASC, b ASC),
+      FAMILY "primary" (a, b, c)
+) PARTITION BY LIST (a) (
+   PARTITION p1 VALUES IN ((1)),
+   PARTITION p2 VALUES IN ((2))
+)
+
 # TODO(dan): Partition names should follow the same foldings and uniqueness
 # rules as table names. Add some more tests to the `case_sensitive_names` logic
 # test.
