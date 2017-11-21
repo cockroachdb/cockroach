@@ -2857,6 +2857,7 @@ func Example_rebalancing() {
 		&base.Config{Insecure: true},
 		clock,
 		stopper,
+		&st.Version,
 	)
 	server := rpc.NewServer(rpcContext) // never started
 	g := gossip.NewTest(1, rpcContext, server, stopper, metric.NewRegistry())

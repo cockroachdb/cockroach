@@ -26,11 +26,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/netutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
 
 func TestStatsHandlerBasic(t *testing.T) {
@@ -102,7 +100,7 @@ func TestStatsHandlerWithHeartbeats(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.TODO())
 
-	serverCtx := NewContext(log.AmbientContext{Tracer: tracing.NewTracer()}, testutils.NewNodeTestBaseContext(), clock, stopper)
+	serverCtx := newTestContext(clock, stopper)
 	s := newTestServer(t, serverCtx, true)
 
 	heartbeat := &ManualHeartbeatService{
@@ -110,6 +108,7 @@ func TestStatsHandlerWithHeartbeats(t *testing.T) {
 		stopper:            stopper,
 		clock:              clock,
 		remoteClockMonitor: serverCtx.RemoteClocks,
+		version:            serverCtx.version,
 	}
 	RegisterHeartbeatServer(s, heartbeat)
 
@@ -119,7 +118,7 @@ func TestStatsHandlerWithHeartbeats(t *testing.T) {
 	}
 	remoteAddr := ln.Addr().String()
 
-	clientCtx := NewContext(log.AmbientContext{Tracer: tracing.NewTracer()}, testutils.NewNodeTestBaseContext(), clock, stopper)
+	clientCtx := newTestContext(clock, stopper)
 	// Make the interval shorter to speed up the test.
 	clientCtx.heartbeatInterval = 1 * time.Millisecond
 	go func() { heartbeat.ready <- nil }()

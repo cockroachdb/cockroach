@@ -25,6 +25,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -59,6 +60,7 @@ func TestSendToOneClient(t *testing.T) {
 		testutils.NewNodeTestBaseContext(),
 		hlc.NewClock(hlc.UnixNano, time.Nanosecond),
 		stopper,
+		&cluster.MakeTestingClusterSettings().Version,
 	)
 	s := rpc.NewServer(rpcContext)
 	roachpb.RegisterInternalServer(s, Node(0))
@@ -127,6 +129,7 @@ func TestComplexScenarios(t *testing.T) {
 		testutils.NewNodeTestBaseContext(),
 		hlc.NewClock(hlc.UnixNano, time.Nanosecond),
 		stopper,
+		&cluster.MakeTestingClusterSettings().Version,
 	)
 
 	// TODO(bdarnell): the retryable flag is no longer used for RPC errors.

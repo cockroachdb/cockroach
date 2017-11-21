@@ -64,7 +64,9 @@ func createTestNode(
 	st := cfg.Settings
 
 	stopper := stop.NewStopper()
-	nodeRPCContext := rpc.NewContext(log.AmbientContext{Tracer: cfg.Settings.Tracer}, nodeTestBaseContext, cfg.Clock, stopper)
+	nodeRPCContext := rpc.NewContext(
+		log.AmbientContext{Tracer: cfg.Settings.Tracer}, nodeTestBaseContext, cfg.Clock, stopper,
+		&cfg.Settings.Version)
 	cfg.ScanInterval = 10 * time.Hour
 	grpcServer := rpc.NewServer(nodeRPCContext)
 	cfg.Gossip = gossip.NewTest(

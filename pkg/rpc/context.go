@@ -34,6 +34,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -205,6 +206,7 @@ func NewServerWithInterceptor(
 		clock:              ctx.LocalClock,
 		remoteClockMonitor: ctx.RemoteClocks,
 		clusterID:          &ctx.ClusterID,
+		version:            ctx.version,
 	})
 	return s
 }
@@ -290,6 +292,7 @@ type Context struct {
 	stats StatsHandler
 
 	ClusterID base.ClusterIDContainer
+	version   *cluster.ExposedClusterVersion
 
 	// For unittesting.
 	BreakerFactory func() *circuit.Breaker
@@ -297,7 +300,11 @@ type Context struct {
 
 // NewContext creates an rpc Context with the supplied values.
 func NewContext(
-	ambient log.AmbientContext, baseCtx *base.Config, hlcClock *hlc.Clock, stopper *stop.Stopper,
+	ambient log.AmbientContext,
+	baseCtx *base.Config,
+	hlcClock *hlc.Clock,
+	stopper *stop.Stopper,
+	version *cluster.ExposedClusterVersion,
 ) *Context {
 	if hlcClock == nil {
 		panic("nil clock is forbidden")
@@ -310,6 +317,7 @@ func NewContext(
 			clock: hlcClock,
 		},
 		rpcCompression: enableRPCCompression,
+		version:        version,
 	}
 	var cancel context.CancelFunc
 	ctx.masterCtx, cancel = context.WithCancel(ambient.AnnotateCtx(context.Background()))
@@ -427,6 +435,53 @@ func (ctx *Context) GRPCDialOptions() ([]grpc.DialOption, error) {
 	return dialOpts, nil
 }
 
+// GRPCDialRaw calls grpc.Dial with the options appropriate for the context.
+// Unlike GRPCDial, it does not start an RPC heartbeat to validate the
+// connection.
+func (ctx *Context) GRPCDialRaw(target string, opts ...grpc.DialOption) (*grpc.ClientConn, error) {
+	dialOpts, err := ctx.GRPCDialOptions()
+	if err != nil {
+		return nil, err
+	}
+
+	// Add a stats handler to measure client network stats.
+	dialOpts = append(dialOpts, grpc.WithStatsHandler(ctx.stats.newClient(target)))
+
+	dialOpts = append(dialOpts, grpc.WithBackoffMaxDelay(maxBackoff))
+	dialOpts = append(dialOpts, grpc.WithKeepaliveParams(keepalive.ClientParameters{
+		// Send periodic pings on the connection.
+		Time: base.NetworkTimeout,
+		// If the pings don't get a response within the timeout, we might be
+		// experiencing a network partition. gRPC will close the transport-level
+		// connection and all the pending RPCs (which may not have timeouts) will
+		// fail eagerly. gRPC will then reconnect the transport transparently.
+		Timeout: base.NetworkTimeout,
+		// Do the pings even when there are no ongoing RPCs.
+		PermitWithoutStream: true,
+	}))
+	dialOpts = append(dialOpts,
+		grpc.WithInitialWindowSize(initialWindowSize),
+		grpc.WithInitialConnWindowSize(initialConnWindowSize))
+	dialOpts = append(dialOpts, opts...)
+
+	if sourceAddr != nil {
+		dialOpts = append(dialOpts, grpc.WithDialer(
+			func(addr string, timeout time.Duration) (net.Conn, error) {
+				dialer := net.Dialer{
+					Timeout:   timeout,
+					LocalAddr: sourceAddr,
+				}
+				return dialer.Dial("tcp", addr)
+			},
+		))
+	}
+
+	if log.V(1) {
+		log.Infof(ctx.masterCtx, "dialing %s", target)
+	}
+	return grpc.DialContext(ctx.masterCtx, target, dialOpts...)
+}
+
 // GRPCDial calls grpc.Dial with the options appropriate for the context.
 func (ctx *Context) GRPCDial(target string, opts ...grpc.DialOption) *Connection {
 	value, ok := ctx.conns.Load(target)
@@ -436,48 +491,7 @@ func (ctx *Context) GRPCDial(target string, opts ...grpc.DialOption) *Connection
 
 	conn := value.(*Connection)
 	conn.initOnce.Do(func() {
-		dialOpts, err := ctx.GRPCDialOptions()
-		if err != nil {
-			conn.dialErr = err
-			return
-		}
-
-		// Add a stats handler to measure client network stats.
-		dialOpts = append(dialOpts, grpc.WithStatsHandler(ctx.stats.newClient(target)))
-
-		dialOpts = append(dialOpts, grpc.WithBackoffMaxDelay(maxBackoff))
-		dialOpts = append(dialOpts, grpc.WithKeepaliveParams(keepalive.ClientParameters{
-			// Send periodic pings on the connection.
-			Time: base.NetworkTimeout,
-			// If the pings don't get a response within the timeout, we might be
-			// experiencing a network partition. gRPC will close the transport-level
-			// connection and all the pending RPCs (which may not have timeouts) will
-			// fail eagerly. gRPC will then reconnect the transport transparently.
-			Timeout: base.NetworkTimeout,
-			// Do the pings even when there are no ongoing RPCs.
-			PermitWithoutStream: true,
-		}))
-		dialOpts = append(dialOpts,
-			grpc.WithInitialWindowSize(initialWindowSize),
-			grpc.WithInitialConnWindowSize(initialConnWindowSize))
-		dialOpts = append(dialOpts, opts...)
-
-		if sourceAddr != nil {
-			dialOpts = append(dialOpts, grpc.WithDialer(
-				func(addr string, timeout time.Duration) (net.Conn, error) {
-					dialer := net.Dialer{
-						Timeout:   timeout,
-						LocalAddr: sourceAddr,
-					}
-					return dialer.Dial("tcp", addr)
-				},
-			))
-		}
-
-		if log.V(1) {
-			log.Infof(ctx.masterCtx, "dialing %s", target)
-		}
-		conn.grpcConn, conn.dialErr = grpc.DialContext(ctx.masterCtx, target, dialOpts...)
+		conn.grpcConn, conn.dialErr = ctx.GRPCDialRaw(target, opts...)
 		if ctx.GetLocalInternalServerForAddr(target) != nil {
 			conn.heartbeatResult.Store(heartbeatResult{err: nil, everSucceeded: true})
 			conn.setInitialHeartbeatDone()
@@ -542,6 +556,7 @@ func (ctx *Context) runHeartbeat(conn *Connection, target string) error {
 		Addr:           ctx.Addr,
 		MaxOffsetNanos: maxOffset.Nanoseconds(),
 		ClusterID:      &clusterID,
+		ServerVersion:  ctx.version.ServerVersion,
 	}
 	heartbeatClient := NewHeartbeatClient(conn.grpcConn)
 
@@ -570,6 +585,12 @@ func (ctx *Context) runHeartbeat(conn *Connection, target string) error {
 		response, err := heartbeatClient.Ping(goCtx, &request)
 		if cancel != nil {
 			cancel()
+		}
+
+		if err == nil {
+			err = errors.Wrap(
+				checkVersion(ctx.version, response.ServerVersion),
+				"version compatibility check failed on ping response")
 		}
 
 		if err == nil {
