@@ -345,7 +345,7 @@ func (sc *SchemaChanger) maybeAddDropRename(
 		}
 	}
 
-	if table.Renamed() {
+	if table.HasDrainingNames() {
 		if err := sc.ExtendLease(ctx, lease); err != nil {
 			return false, err
 		}
@@ -362,8 +362,8 @@ func (sc *SchemaChanger) maybeAddDropRename(
 		// Free up the old name(s).
 		if err := sc.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
 			b := txn.NewBatch()
-			for _, renameDetails := range table.Renames {
-				tbKey := tableKey{renameDetails.OldParentID, renameDetails.OldName}.Key()
+			for _, drain := range table.DrainingNames {
+				tbKey := tableKey{drain.ParentID, drain.Name}.Key()
 				b.Del(tbKey)
 			}
 			if err := txn.SetSystemConfigTrigger(); err != nil {
@@ -376,7 +376,7 @@ func (sc *SchemaChanger) maybeAddDropRename(
 
 		// Clean up - clear the descriptor's state.
 		if _, err := sc.leaseMgr.Publish(ctx, sc.tableID, func(desc *sqlbase.TableDescriptor) error {
-			desc.Renames = nil
+			desc.DrainingNames = nil
 			return nil
 		}, nil); err != nil {
 			return false, err
@@ -1047,7 +1047,7 @@ func (s *SchemaChangeManager) Start(stopper *stop.Stopper) {
 						// unsetting UpVersion, and we still want to process
 						// outstanding mutations. Similar with a table marked for deletion.
 						if table.UpVersion || table.Dropped() || table.Adding() ||
-							table.Renamed() || len(table.Mutations) > 0 {
+							table.HasDrainingNames() || len(table.Mutations) > 0 {
 							if log.V(2) {
 								log.Infof(ctx, "%s: queue up pending schema change; table: %d, version: %d",
 									kv.Key, table.ID, table.Version)

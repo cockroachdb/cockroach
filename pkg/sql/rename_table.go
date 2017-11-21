@@ -127,10 +127,10 @@ func (p *planner) RenameTable(ctx context.Context, n *tree.RenameTable) (planNod
 	if err := tableDesc.SetUpVersion(); err != nil {
 		return nil, err
 	}
-	renameDetails := sqlbase.TableDescriptor_RenameInfo{
-		OldParentID: dbDesc.ID,
-		OldName:     oldTn.Table()}
-	tableDesc.Renames = append(tableDesc.Renames, renameDetails)
+	renameDetails := sqlbase.TableDescriptor_NameInfo{
+		ParentID: dbDesc.ID,
+		Name:     oldTn.Table()}
+	tableDesc.DrainingNames = append(tableDesc.DrainingNames, renameDetails)
 	if err := p.writeTableDesc(ctx, tableDesc); err != nil {
 		return nil, err
 	}
