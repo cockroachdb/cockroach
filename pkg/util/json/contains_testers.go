@@ -60,7 +60,7 @@ func (j jsonArray) slowContains(other JSON) bool {
 		}
 	}
 
-	other = other.maybeDecode()
+	other = other.MaybeDecode()
 	if ary, ok := other.(jsonArray); ok {
 		for i := 0; i < len(ary); i++ {
 			found := false
@@ -80,7 +80,7 @@ func (j jsonArray) slowContains(other JSON) bool {
 }
 
 func (j jsonObject) slowContains(other JSON) bool {
-	other = other.maybeDecode()
+	other = other.MaybeDecode()
 	if obj, ok := other.(jsonObject); ok {
 		for i := 0; i < len(obj); i++ {
 			leftVal, _ := j.FetchValKey(string(obj[i].k))

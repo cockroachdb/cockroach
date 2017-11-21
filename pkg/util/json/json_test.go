@@ -1108,7 +1108,7 @@ func BenchmarkFetchKey(b *testing.B) {
 
 			b.Run("fetch key", func(b *testing.B) {
 				for i := 0; i < b.N; i++ {
-					j.FetchValKey(keys[rand.Intn(len(keys))])
+					_, _ = j.FetchValKey(keys[rand.Intn(len(keys))])
 				}
 			})
 
@@ -1122,9 +1122,27 @@ func BenchmarkFetchKey(b *testing.B) {
 				b.Fatal(err)
 			}
 
+			b.Run("fetch key by decoding and then reading", func(b *testing.B) {
+				for i := 0; i < b.N; i++ {
+					decoded, err := encoded.shallowDecode()
+					if err != nil {
+						b.Fatal(err)
+					}
+					_, _ = decoded.FetchValKey(keys[rand.Intn(len(keys))])
+				}
+			})
+
 			b.Run("fetch key encoded", func(b *testing.B) {
 				for i := 0; i < b.N; i++ {
-					encoded.FetchValKey(keys[rand.Intn(len(keys))])
+					_, _ = encoded.FetchValKey(keys[rand.Intn(len(keys))])
+				}
+			})
+
+			b.Run("repeated fetch key encoded", func(b *testing.B) {
+				for i := 0; i < b.N; i++ {
+					key := keys[rand.Intn(len(keys))]
+					_, _ = encoded.FetchValKey(key)
+					_, _ = encoded.FetchValKey(key)
 				}
 			})
 		})

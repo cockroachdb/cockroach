@@ -41,6 +41,9 @@ const containerHeaderLenMask = 0x1FFFFFFF
 
 const maxByteLength = int(jEntryOffLenMask)
 
+const containerHeaderLen = 4
+const jEntryLen = 4
+
 // checkLength ensures that an encoded value is not too long to fit into the
 // JEntry header. This should never come up, since it would require a ~250MB
 // JSON value, but check it just to be safe.

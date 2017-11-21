@@ -100,7 +100,8 @@ type JSON interface {
 	// JEntry.
 	encode(appendTo []byte) (jEntry uint32, b []byte, err error)
 
-	maybeDecode() JSON
+	// MaybeDecode returns an equivalent JSON which is not a jsonEncoded.
+	MaybeDecode() JSON
 }
 
 type jsonTrue struct{}
@@ -140,13 +141,13 @@ func (jsonString) Type() Type { return StringJSONType }
 func (jsonArray) Type() Type  { return ArrayJSONType }
 func (jsonObject) Type() Type { return ObjectJSONType }
 
-func (j jsonNull) maybeDecode() JSON   { return j }
-func (j jsonFalse) maybeDecode() JSON  { return j }
-func (j jsonTrue) maybeDecode() JSON   { return j }
-func (j jsonNumber) maybeDecode() JSON { return j }
-func (j jsonString) maybeDecode() JSON { return j }
-func (j jsonArray) maybeDecode() JSON  { return j }
-func (j jsonObject) maybeDecode() JSON { return j }
+func (j jsonNull) MaybeDecode() JSON   { return j }
+func (j jsonFalse) MaybeDecode() JSON  { return j }
+func (j jsonTrue) MaybeDecode() JSON   { return j }
+func (j jsonNumber) MaybeDecode() JSON { return j }
+func (j jsonString) MaybeDecode() JSON { return j }
+func (j jsonArray) MaybeDecode() JSON  { return j }
+func (j jsonObject) MaybeDecode() JSON { return j }
 
 func cmpJSONTypes(a Type, b Type) int {
 	if b > a {
