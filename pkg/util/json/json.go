@@ -78,6 +78,9 @@ type JSON interface {
 	// RemoveIndex implements the `-` operator for ints.
 	RemoveIndex(idx int) (JSON, error)
 
+	// TypeAsText returns the type of JSON document as a string.
+	TypeAsText() *string
+
 	// AsText returns the JSON document as a string, with quotes around strings removed, and null as nil.
 	AsText() *string
 
@@ -144,6 +147,26 @@ func cmpJSONTypes(a jsonType, b jsonType) int {
 		return 1
 	}
 	return 0
+}
+
+func (j jsonType) String() string {
+	switch j {
+	case nullJSONType:
+		return "null"
+	case stringJSONType:
+		return "string"
+	case numberJSONType:
+		return "number"
+	case falseJSONType:
+		return "false"
+	case trueJSONType:
+		return "true"
+	case arrayJSONType:
+		return "array"
+	case objectJSONType:
+		return "object"
+	}
+	return ""
 }
 
 func (j jsonNull) Compare(other JSON) int  { return cmpJSONTypes(j.jsonType(), other.jsonType()) }
@@ -644,6 +667,41 @@ func (jsonTrue) RemoveIndex(int) (JSON, error)   { return nil, errCannotDeleteFr
 func (jsonFalse) RemoveIndex(int) (JSON, error)  { return nil, errCannotDeleteFromScalar }
 func (jsonString) RemoveIndex(int) (JSON, error) { return nil, errCannotDeleteFromScalar }
 func (jsonNumber) RemoveIndex(int) (JSON, error) { return nil, errCannotDeleteFromScalar }
+
+func (j jsonString) TypeAsText() *string {
+	s := j.jsonType().String()
+	return &s
+}
+
+func (j jsonNull) TypeAsText() *string {
+	s := j.jsonType().String()
+	return &s
+}
+
+func (j jsonTrue) TypeAsText() *string {
+	s := j.jsonType().String()
+	return &s
+}
+
+func (j jsonFalse) TypeAsText() *string {
+	s := j.jsonType().String()
+	return &s
+}
+
+func (j jsonNumber) TypeAsText() *string {
+	s := j.jsonType().String()
+	return &s
+}
+
+func (j jsonArray) TypeAsText() *string {
+	s := j.jsonType().String()
+	return &s
+}
+
+func (j jsonObject) TypeAsText() *string {
+	s := j.jsonType().String()
+	return &s
+}
 
 func (j jsonString) AsText() *string {
 	s := string(j)

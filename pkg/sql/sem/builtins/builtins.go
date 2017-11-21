@@ -45,6 +45,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/ipaddr"
+	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeofday"
@@ -1493,6 +1494,22 @@ CockroachDB supports the following flags:
 	"json_remove_path": {
 	// TODO(justin): added here so #- can be desugared into it, still needs to be
 	// implemented.
+	},
+
+	"json_typeof": {
+		tree.Builtin{
+			Types:      tree.ArgTypes{{"val", types.String}},
+			ReturnType: tree.FixedReturnType(types.String),
+			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				str := string(tree.MustBeDString(args[0]))
+				json, err := json.ParseJSON(str)
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDString(*json.TypeAsText()), nil
+			},
+			Info: "Returns the type of the outermost JSON value as a text string.",
+		},
 	},
 
 	"ln": {

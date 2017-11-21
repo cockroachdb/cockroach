@@ -1,0 +1,38 @@
+# LogicTest: default distsql parallel-stmts
+
+## json_typeof
+
+query T
+SELECT json_typeof('-123.4')
+----
+number
+
+query T
+SELECT json_typeof('"-123.4"')
+----
+string
+
+query T
+SELECT json_typeof('{"1": {"2": 3}}')
+----
+object
+
+query T
+SELECT json_typeof('[1, 2, [3]]')
+----
+array
+
+query T
+SELECT json_typeof('true')
+----
+true
+
+query T
+SELECT json_typeof('false')
+----
+false
+
+query T
+SELECT json_typeof('null')
+----
+null
