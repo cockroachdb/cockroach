@@ -128,7 +128,7 @@ func TestPartitioning(t *testing.T) {
 				a INT, b INT, PRIMARY KEY (a, b)
 			) PARTITION BY RANGE (a) (
 				PARTITION dc1 VALUES < 4,
-				PARTITION dc2 VALUES < 8
+				PARTITION dc2 VALUES < MAXVALUE
 			)`,
 			scans: []testScan{{"a = 3", "n2"}, {"a = 4", "n3"}, {"a = 7", "n3"}},
 		},
@@ -138,7 +138,7 @@ func TestPartitioning(t *testing.T) {
 				a STRING, b STRING, PRIMARY KEY (a, b)
 			) PARTITION BY RANGE (a) (
 				PARTITION dc1 VALUES < 'a',
-				PARTITION dc2 VALUES < 'ac'
+				PARTITION dc2 VALUES < MAXVALUE
 			)`,
 			scans: []testScan{{"a = 'A'", "n2"}, {"a = 'a'", "n3"}, {"a = 'ab'", "n3"}},
 		},

@@ -1483,7 +1483,7 @@ func (desc *TableDescriptor) validatePartitioningDescriptor(
 	if len(partDesc.Range) > 0 {
 		var lastEndKey []byte
 		rangeValues := make(map[string]struct{}, len(partDesc.Range))
-		for _, p := range partDesc.Range {
+		for i, p := range partDesc.Range {
 			if len(p.Name) == 0 {
 				return fmt.Errorf("partition name must be non-empty")
 			}
@@ -1512,6 +1512,8 @@ func (desc *TableDescriptor) validatePartitioningDescriptor(
 			rangeValues[string(endKey)] = struct{}{}
 			if bytes.Compare(lastEndKey, endKey) >= 0 {
 				return fmt.Errorf("values must be strictly increasing: %s vs %s", roachpb.Key(lastEndKey), roachpb.Key(endKey))
+			} else if i == len(partDesc.Range)-1 && len(datums) > 0 {
+				return fmt.Errorf("last range partition (%s) does not extend to maximum value", p.Name)
 			}
 			lastEndKey = endKey
 		}

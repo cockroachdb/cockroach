@@ -171,6 +171,33 @@ CREATE TABLE t (a INT, b INT, PRIMARY KEY (a, b)) PARTITION BY RANGE (a, b) (
     PARTITION p1 VALUES < (MAXVALUE, 1)
 )
 
+statement error last range partition \(p1\) does not extend to maximum value
+CREATE TABLE t (a INT PRIMARY KEY) PARTITION BY RANGE (a) (
+    PARTITION p1 VALUES < 1
+)
+
+statement error last range partition \(pfoo\) does not extend to maximum value
+CREATE TABLE t (a INT, b INT, PRIMARY KEY (a, b)) PARTITION BY RANGE (a, b) (
+    PARTITION pfoo VALUES < (1, 2)
+)
+
+statement error last range partition \(oops\) does not extend to maximum value
+CREATE TABLE t (a INT, b INT, PRIMARY KEY (a, b)) PARTITION BY RANGE (a, b) (
+    PARTITION oops VALUES < (1, MAXVALUE)
+)
+
+statement error last range partition \(p3_2\) does not extend to maximum value
+CREATE TABLE t (a INT, b INT, PRIMARY KEY (a, b)) PARTITION BY LIST (a) (
+    PARTITION p1 VALUES IN (1),
+    PARTITION p2 VALUES IN (2) PARTITION BY RANGE (b) (
+      PARTITION p2_1 VALUES < MAXVALUE
+    ),
+    PARTITION p3 VALUES IN (3) PARTITION BY RANGE (b) (
+      PARTITION p3_1 VALUES < 100,
+      PARTITION p3_2 VALUES < 200
+    )
+)
+
 statement error values must be strictly increasing
 CREATE TABLE t (a STRING COLLATE da PRIMARY KEY) PARTITION BY RANGE (a) (
     PARTITION p1 VALUES < ('ü' COLLATE da),
@@ -180,19 +207,22 @@ CREATE TABLE t (a STRING COLLATE da PRIMARY KEY) PARTITION BY RANGE (a) (
 statement ok
 CREATE TABLE collate_da (a STRING COLLATE da PRIMARY KEY) PARTITION BY RANGE (a) (
     PARTITION p1 VALUES < ('x' COLLATE da),
-    PARTITION p2 VALUES < ('ü' COLLATE da)
+    PARTITION p2 VALUES < ('ü' COLLATE da),
+    PARTITION p3 VALUES < MAXVALUE
 )
 
 statement error values must be strictly increasing
 CREATE TABLE t (a STRING COLLATE de PRIMARY KEY) PARTITION BY RANGE (a) (
     PARTITION p1 VALUES < ('x' COLLATE de),
-    PARTITION p2 VALUES < ('ü' COLLATE de)
+    PARTITION p2 VALUES < ('ü' COLLATE de),
+    PARTITION p3 VALUES < MAXVALUE
 )
 
 statement ok
 CREATE TABLE collate_de (a STRING COLLATE de PRIMARY KEY) PARTITION BY RANGE (a) (
     PARTITION p1 VALUES < ('ü' COLLATE de),
-    PARTITION p2 VALUES < ('x' COLLATE de)
+    PARTITION p2 VALUES < ('x' COLLATE de),
+    PARTITION p3 VALUES < MAXVALUE
 )
 
 statement error value type decimal doesn't match type INT of column "a"
@@ -356,7 +386,8 @@ ok5  CREATE TABLE ok5 (
 statement ok
 CREATE TABLE ok6 (a INT, b INT, c INT, PRIMARY KEY (a, b)) PARTITION BY RANGE (a) (
     PARTITION p1 VALUES < 1,
-    PARTITION p2 VALUES < 2
+    PARTITION p2 VALUES < 2,
+    PARTITION p3 VALUES < MAXVALUE
 )
 
 query TT
@@ -370,13 +401,15 @@ ok6  CREATE TABLE ok6 (
      FAMILY "primary" (a, b, c)
 ) PARTITION BY RANGE (a) (
    PARTITION p1 VALUES < (1),
-   PARTITION p2 VALUES < (2)
+   PARTITION p2 VALUES < (2),
+   PARTITION p3 VALUES < (MAXVALUE)
 )
 
 statement ok
 CREATE TABLE ok7 (a INT, b INT, c INT, PRIMARY KEY (a, b)) PARTITION BY RANGE (a) (
     PARTITION p1 VALUES < ((1)),
-    PARTITION p2 VALUES < (((2)))
+    PARTITION p2 VALUES < (((2))),
+    PARTITION p3 VALUES < ((((MAXVALUE))))
 )
 
 query TT
@@ -390,7 +423,8 @@ ok7  CREATE TABLE ok7 (
      FAMILY "primary" (a, b, c)
 ) PARTITION BY RANGE (a) (
    PARTITION p1 VALUES < (1),
-   PARTITION p2 VALUES < (2)
+   PARTITION p2 VALUES < (2),
+   PARTITION p3 VALUES < (MAXVALUE)
 )
 
 statement ok

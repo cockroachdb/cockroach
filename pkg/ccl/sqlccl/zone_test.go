@@ -360,19 +360,6 @@ func TestGenerateSubzoneSpans(t *testing.T) {
 		},
 
 		{
-			name: `single col range partitioning`,
-			schema: `CREATE TABLE t (a INT PRIMARY KEY) PARTITION BY RANGE (a) (
-				PARTITION p3 VALUES < 3,
-				PARTITION p4 VALUES < 4
-			)`,
-			subzones: []string{`@primary`, `.p3`, `.p4`},
-			expected: []string{
-				`     .p3 /1-/1/3`,
-				`     .p4 /1/3-/1/4`,
-				`@primary /1/4-/2`,
-			},
-		},
-		{
 			name: `single col range partitioning - MAXVALUE`,
 			schema: `CREATE TABLE t (a INT PRIMARY KEY) PARTITION BY RANGE (a) (
 				PARTITION p3 VALUES < 3,
@@ -384,21 +371,6 @@ func TestGenerateSubzoneSpans(t *testing.T) {
 				`.p3 /1-/1/3`,
 				`.p4 /1/3-/1/4`,
 				`.pm /1/4-/2`,
-			},
-		},
-		{
-			name: `multi col range partitioning`,
-			schema: `CREATE TABLE t (a INT, b INT, PRIMARY KEY (a, b)) PARTITION BY RANGE (a, b) (
-				PARTITION p34 VALUES < (3, 4),
-				PARTITION p56 VALUES < (5, 6),
-				PARTITION p57 VALUES < (5, 7)
-			)`,
-			subzones: []string{`@primary`, `.p34`, `.p56`, `.p57`},
-			expected: []string{
-				`    .p34 /1-/1/3/4`,
-				`    .p56 /1/3/4-/1/5/6`,
-				`    .p57 /1/5/6-/1/5/7`,
-				`@primary /1/5/7-/2`,
 			},
 		},
 		{
@@ -449,7 +421,8 @@ func TestGenerateSubzoneSpans(t *testing.T) {
 			name: `list-range partitioning`,
 			schema: `CREATE TABLE t (a INT, b INT, PRIMARY KEY (a, b)) PARTITION BY LIST (a) (
 				PARTITION p3 VALUES IN (3) PARTITION BY RANGE (b) (
-					PARTITION p34 VALUES < 4
+					PARTITION p34 VALUES < 4,
+					PARTITION p3m VALUES < MAXVALUE
 				),
 				PARTITION p5 VALUES IN (5) PARTITION BY RANGE (b) (
 					PARTITION p56 VALUES < 6,
