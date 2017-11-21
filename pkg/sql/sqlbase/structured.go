@@ -2085,9 +2085,9 @@ func (desc *TableDescriptor) Adding() bool {
 	return desc.State == TableDescriptor_ADD
 }
 
-// Renamed returns true if the table is being renamed.
-func (desc *TableDescriptor) Renamed() bool {
-	return len(desc.Renames) > 0
+// HasDroppedNameMap returns true if a dropped name map exists.
+func (desc *TableDescriptor) HasDroppedNameMap() bool {
+	return len(desc.DroppedNameMap) > 0
 }
 
 // SetUpVersion sets the up_version marker on the table descriptor (see the proto

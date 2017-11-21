@@ -529,9 +529,9 @@ func (tc *TableCollection) getUncommittedTable(
 		// to disallow the use of the old name in this transaction because the other
 		// transaction has already committed and this transaction is seeing the
 		// effect of it.
-		for _, rename := range table.GetRenames() {
-			if rename.OldName == string(tn.TableName) &&
-				rename.OldParentID == dbID {
+		for _, dropped := range table.DroppedNameMap {
+			if dropped.Name == string(tn.TableName) &&
+				dropped.ParentID == dbID {
 				return nil, sqlbase.NewUndefinedRelationError(tn)
 			}
 		}
