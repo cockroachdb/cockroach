@@ -72,6 +72,7 @@ var crdbInternal = virtualSchema{
 		crdbInternalLocalSessionsTable,
 		crdbInternalPartitionsTable,
 		crdbInternalRangesTable,
+		crdbInternalReplicasTable,
 		crdbInternalRuntimeInfoTable,
 		crdbInternalSchemaChangesTable,
 		crdbInternalSessionTraceTable,
@@ -1486,6 +1487,44 @@ CREATE TABLE crdb_internal.ranges (
 				tree.NewDInt(tree.DInt(resp.Lease.Replica.StoreID)),
 			); err != nil {
 				return err
+			}
+		}
+		return nil
+	},
+}
+
+var crdbInternalReplicasTable = virtualSchemaTable{
+	schema: `
+CREATE TABLE crdb_internal.replicas (
+	range_id INT NOT NULL,
+	replica_id INT NOT NULL,
+	node_id INT NOT NULL,
+	store_id INT NOT NULL
+)
+`,
+	populate: func(ctx context.Context, p *planner, _ *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		ranges, err := scanMetaKVs(ctx, p.txn, roachpb.Span{
+			Key:    keys.MinKey,
+			EndKey: keys.MaxKey,
+		})
+		if err != nil {
+			return err
+		}
+		var desc roachpb.RangeDescriptor
+		for _, r := range ranges {
+			if err := r.ValueProto(&desc); err != nil {
+				return err
+			}
+			// TODO(vilterp): find out & include which one is the leaseholder & which is raft leader
+			for _, replica := range desc.Replicas {
+				if err := addRow(
+					tree.NewDInt(tree.DInt(desc.RangeID)),
+					tree.NewDInt(tree.DInt(int32(replica.ReplicaID))),
+					tree.NewDInt(tree.DInt(int32(replica.NodeID))),
+					tree.NewDInt(tree.DInt(int32(replica.StoreID))),
+				); err != nil {
+					return err
+				}
 			}
 		}
 		return nil

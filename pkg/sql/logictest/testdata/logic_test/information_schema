@@ -202,6 +202,7 @@ crdb_internal       node_sessions
 crdb_internal       node_statement_statistics
 crdb_internal       partitions
 crdb_internal       ranges
+crdb_internal       replicas
 crdb_internal       schema_changes
 crdb_internal       session_trace
 crdb_internal       session_variables
@@ -316,6 +317,7 @@ node_sessions
 node_statement_statistics
 partitions
 ranges
+replicas
 schema_changes
 session_trace
 session_variables
@@ -437,6 +439,7 @@ system         crdb_internal       node_sessions                      SYSTEM VIE
 system         crdb_internal       node_statement_statistics          SYSTEM VIEW  1
 system         crdb_internal       partitions                         SYSTEM VIEW  1
 system         crdb_internal       ranges                             SYSTEM VIEW  1
+system         crdb_internal       replicas                           SYSTEM VIEW  1
 system         crdb_internal       schema_changes                     SYSTEM VIEW  1
 system         crdb_internal       session_trace                      SYSTEM VIEW  1
 system         crdb_internal       session_variables                  SYSTEM VIEW  1
