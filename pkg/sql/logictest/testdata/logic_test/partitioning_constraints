@@ -1,0 +1,145 @@
+# LogicTest: default
+
+statement ok
+CREATE TABLE ok1 (a INT PRIMARY KEY) PARTITION BY LIST (a) (
+    PARTITION p1 VALUES IN (1),
+    PARTITION p2 VALUES IN (2)
+)
+
+query T
+SELECT "Details" FROM [SHOW CONSTRAINTS FROM ok1] WHERE "Name" = 'partition_primary'
+----
+(a) IN ((1:::INT), (2:::INT)) 
+
+statement ok
+INSERT INTO ok1 VALUES (1), (2)
+
+statement error failed to satisfy CHECK constraint
+INSERT INTO ok1 VALUES (3)
+
+statement ok
+CREATE TABLE ok2 (a INT PRIMARY KEY) PARTITION BY RANGE (a) (
+    PARTITION p1 VALUES < 1,
+    PARTITION p2 VALUES < MAXVALUE
+)
+
+query T
+SELECT "Details" FROM [SHOW CONSTRAINTS FROM ok2] WHERE "Name" = 'partition_primary'
+----
+
+statement ok
+INSERT INTO ok2 VALUES (1), (2)
+
+statement ok
+----
+CREATE TABLE ok3 (a INT, b INT, c INT, PRIMARY KEY (a, b)) PARTITION BY LIST (a, b) (
+    PARTITION p1 VALUES IN ((1, 3), (2, 4)),
+    PARTITION p2 VALUES IN ((1, 5), (2, DEFAULT))
+)
+
+query T
+SELECT "Details" FROM [SHOW CONSTRAINTS FROM ok3] WHERE "Name" = 'partition_primary'
+----
+((a) IN ((2:::INT))) OR ((a, b) IN ((1:::INT, 3:::INT), (1:::INT, 5:::INT), (2:::INT, 4:::INT)))
+
+statement ok
+INSERT INTO ok3 VALUES (1, 3, 1), (1, 5, 1), (2, 4, 1), (2, 444444, 1)
+
+statement error failed to satisfy CHECK constraint
+INSERT INTO ok3 VALUES (1, 1, 1)
+
+statement error failed to satisfy CHECK constraint
+INSERT INTO ok3 VALUES (3, 1, 1)
+
+statement ok
+----
+CREATE TABLE ok4 (a INT, b INT, c INT, PRIMARY KEY (a, b)) PARTITION BY LIST (a, b) (
+    PARTITION p1 VALUES IN ((1, 3), (2, 4)),
+    PARTITION p2 VALUES IN ((1, 5), (2, DEFAULT))
+)
+
+query T
+SELECT "Details" FROM [SHOW CONSTRAINTS FROM ok4] WHERE "Name" = 'partition_primary'
+----
+((a) IN ((2:::INT))) OR ((a, b) IN ((1:::INT, 3:::INT), (1:::INT, 5:::INT), (2:::INT, 4:::INT)))
+
+statement ok
+INSERT INTO ok4 VALUES (1, 3, 1), (1, 5, 1), (2, 4, 1)
+
+statement ok
+INSERT INTO ok4 VALUES (2, 444444, 1)
+
+statement error failed to satisfy CHECK constraint
+INSERT INTO ok4 VALUES (1, 1, 1)
+
+statement error failed to satisfy CHECK constraint
+INSERT INTO ok4 VALUES (3, 1, 1)
+
+statement ok
+CREATE TABLE ok5 (a DECIMAL, b DECIMAL, c DECIMAL, PRIMARY KEY (a, b, c)) PARTITION BY LIST (a) (
+    PARTITION p1 VALUES IN (1, 2) PARTITION BY LIST (b) (
+        PARTITION p1_1 VALUES IN (3) PARTITION BY LIST (c) (
+            PARTITION p1_1_1 VALUES IN (8)
+        ),
+        PARTITION p1_2 VALUES IN (4)
+    ),
+    PARTITION p2 VALUES IN (6) PARTITION BY RANGE (b) (
+        PARTITION p2_1 VALUES < 7,
+        PARTITION p2_2 VALUES < MAXVALUE
+    ),
+    PARTITION p3 VALUES IN (7) PARTITION BY LIST (b, c) (
+      PARTITION p3_1 VALUES IN ((5, 6)),
+      PARTITION p3_2 VALUES IN ((DEFAULT, DEFAULT))
+    )
+)
+
+query T
+SELECT "Details" FROM [SHOW CONSTRAINTS FROM ok5] WHERE "Name" = 'partition_primary'
+----
+(((a) IN ((1:::DECIMAL), (2:::DECIMAL))) AND ((((b) IN ((3:::DECIMAL))) AND ((c) IN ((8:::DECIMAL)))) OR ((b) IN ((4:::DECIMAL))))) OR (((a) IN ((7:::DECIMAL))) OR ((a) IN ((6:::DECIMAL)))) 
+
+statement ok
+INSERT INTO ok5 VALUES (1, 3, 8), (2, 3, 8), (1, 4, -70.234), (1, 4, 4444), (6, 6, 6), (6, 4444, 4444), (7, 7, 7), (7, 4444, 4444)
+
+statement error failed to satisfy CHECK constraint
+INSERT INTO ok5 VALUES (3, 7, 4.2)
+
+statement error failed to satisfy CHECK constraint
+INSERT INTO ok5 VALUES (1, 3, 8888)
+
+statement error failed to satisfy CHECK constraint
+INSERT INTO ok5 VALUES (1, 5, 4444)
+
+statement error failed to satisfy CHECK constraint
+INSERT INTO ok5 VALUES (4444, 4444, 4444)
+
+statement ok
+CREATE TABLE ok6 (
+    a INT PRIMARY KEY,
+    CHECK (true), CHECK (true)
+) PARTITION BY LIST (a) (
+    PARTITION p1 VALUES IN (1),
+    PARTITION p2 VALUES IN (2)
+)
+
+query T rowsort
+SELECT "Name" FROM [SHOW CONSTRAINTS FROM ok6]
+----
+primary
+partition_primary
+check
+check1
+
+statement error cannot drop derived constraint "partition_primary"
+ALTER TABLE ok6 DROP CONSTRAINT partition_primary
+
+# This error is consistent with with the error generated when a constraint with
+# an auto-generated name clashes with a constraint with an explicit name.
+statement error duplicate constraint name
+CREATE TABLE err (
+    a INT PRIMARY KEY,
+    CONSTRAINT partition_primary CHECK (true)
+) PARTITION BY LIST (a) (
+    PARTITION p1 VALUES IN (1),
+    PARTITION p2 VALUES IN (2)
+)

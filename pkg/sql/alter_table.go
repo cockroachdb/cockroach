@@ -338,6 +338,9 @@ func (n *alterTableNode) Start(params runParams) error {
 			case sqlbase.ConstraintTypeCheck:
 				for i := range n.tableDesc.Checks {
 					if n.tableDesc.Checks[i].Name == name {
+						if n.tableDesc.Checks[i].Derived {
+							return fmt.Errorf("cannot drop derived constraint %q", name)
+						}
 						n.tableDesc.Checks = append(n.tableDesc.Checks[:i], n.tableDesc.Checks[i+1:]...)
 						descriptorChanged = true
 						break
