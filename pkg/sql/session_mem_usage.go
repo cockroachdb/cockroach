@@ -23,13 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 )
 
-// OpenAccount interfaces between Session and mon.MemoryMonitor.
-func (s *Session) OpenAccount() WrappableMemoryAccount {
-	res := WrappableMemoryAccount{}
-	s.mon.OpenAccount(&res.acc)
-	return res
-}
-
 // WrappableMemoryAccount encapsulates a MemoryAccount to
 // give it the Wsession() method below.
 type WrappableMemoryAccount struct {
@@ -57,19 +50,9 @@ func (w WrappedMemoryAccount) OpenAndInit(ctx context.Context, initialAllocation
 	return w.mon.OpenAndInitAccount(ctx, w.acc, initialAllocation)
 }
 
-// Grow interfaces between Session and mon.MemoryMonitor.
-func (w WrappedMemoryAccount) Grow(ctx context.Context, extraSize int64) error {
-	return w.mon.GrowAccount(ctx, w.acc, extraSize)
-}
-
 // Close interfaces between Session and mon.MemoryMonitor.
 func (w WrappedMemoryAccount) Close(ctx context.Context) {
 	w.mon.CloseAccount(ctx, w.acc)
-}
-
-// Clear interfaces between Session and mon.MemoryMonitor.
-func (w WrappedMemoryAccount) Clear(ctx context.Context) {
-	w.mon.ClearAccount(ctx, w.acc)
 }
 
 // noteworthyMemoryUsageBytes is the minimum size tracked by a

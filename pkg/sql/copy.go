@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 )
 
 // COPY FROM is not a usual planNode. After a COPY FROM is executed as a
@@ -43,20 +44,19 @@ import (
 //
 // See: https://www.postgresql.org/docs/9.5/static/sql-copy.html
 type copyNode struct {
-	session       *Session
 	table         tree.TableExpr
 	columns       tree.UnresolvedNames
 	resultColumns sqlbase.ResultColumns
 	buf           bytes.Buffer
 	rows          []*tree.Tuple
-	rowsMemAcc    WrappableMemoryAccount
+	rowsMemAcc    mon.BoundAccount
 }
 
 func (*copyNode) Values() tree.Datums          { return nil }
 func (*copyNode) Next(runParams) (bool, error) { return false, nil }
 
 func (n *copyNode) Close(ctx context.Context) {
-	n.rowsMemAcc.Wsession(n.session).Close(ctx)
+	n.rowsMemAcc.Close(ctx)
 }
 
 // CopyFrom begins a COPY.
@@ -83,19 +83,18 @@ func (p *planner) CopyFrom(ctx context.Context, n *tree.CopyFrom) (planNode, err
 	for i, c := range cols {
 		cn.resultColumns[i] = sqlbase.ResultColumn{Typ: c.Type.ToDatumType()}
 	}
-	cn.session = p.session
-	cn.rowsMemAcc = p.session.OpenAccount()
+	cn.rowsMemAcc = p.session.mon.MakeBoundAccount()
 	return cn, nil
 }
 
 // Start implements the planNode interface.
-func (n *copyNode) Start(runParams) error {
+func (n *copyNode) Start(params runParams) error {
 	// Should never happen because the executor prevents non-COPY messages during
 	// a COPY.
-	if n.session.copyFrom != nil {
+	if params.p.session.copyFrom != nil {
 		return fmt.Errorf("COPY already in progress")
 	}
-	n.session.copyFrom = n
+	params.p.session.copyFrom = n
 	return nil
 }
 
@@ -130,6 +129,8 @@ func (s *Session) ProcessCopyData(
 	cf := s.copyFrom
 	buf := cf.buf
 
+	evalCtx := s.evalCtx()
+
 	switch msg {
 	case copyMsgData:
 		// ignore
@@ -137,7 +138,7 @@ func (s *Session) ProcessCopyData(
 		var err error
 		// If there's a line in the buffer without \n at EOL, add it here.
 		if buf.Len() > 0 {
-			err = cf.addRow(ctx, buf.Bytes())
+			err = cf.addRow(ctx, buf.Bytes(), &evalCtx)
 		}
 		return StatementList{{AST: CopyDataBlock{Done: true}}}, err
 	default:
@@ -162,21 +163,20 @@ func (s *Session) ProcessCopyData(
 		if buf.Len() == 0 && bytes.Equal(line, []byte(`\.`)) {
 			break
 		}
-		if err := cf.addRow(ctx, line); err != nil {
+		if err := cf.addRow(ctx, line, &evalCtx); err != nil {
 			return nil, err
 		}
 	}
 	return StatementList{{AST: CopyDataBlock{}}}, nil
 }
 
-func (n *copyNode) addRow(ctx context.Context, line []byte) error {
+func (n *copyNode) addRow(ctx context.Context, line []byte, evalCtx *tree.EvalContext) error {
 	var err error
 	parts := bytes.Split(line, fieldDelim)
 	if len(parts) != len(n.resultColumns) {
 		return fmt.Errorf("expected %d values, got %d", len(n.resultColumns), len(parts))
 	}
 	exprs := make(tree.Exprs, len(parts))
-	acc := n.rowsMemAcc.Wsession(n.session)
 	for i, part := range parts {
 		s := string(part)
 		if s == nullString {
@@ -197,21 +197,20 @@ func (n *copyNode) addRow(ctx context.Context, line []byte) error {
 				return err
 			}
 		}
-		evalCtx := n.session.evalCtx()
-		d, err := parser.ParseStringAs(n.resultColumns[i].Typ, s, &evalCtx)
+		d, err := parser.ParseStringAs(n.resultColumns[i].Typ, s, evalCtx)
 		if err != nil {
 			return err
 		}
 
 		sz := d.Size()
-		if err := acc.Grow(ctx, int64(sz)); err != nil {
+		if err := n.rowsMemAcc.Grow(ctx, int64(sz)); err != nil {
 			return err
 		}
 
 		exprs[i] = d
 	}
 	tuple := &tree.Tuple{Exprs: exprs}
-	if err := acc.Grow(ctx, int64(unsafe.Sizeof(*tuple))); err != nil {
+	if err := n.rowsMemAcc.Grow(ctx, int64(unsafe.Sizeof(*tuple))); err != nil {
 		return err
 	}
 
@@ -329,7 +328,7 @@ func (p *planner) CopyData(ctx context.Context, n CopyDataBlock) (planNode, erro
 	vc := &tree.ValuesClause{Tuples: cf.rows}
 	// Reuse the same backing array once the Insert is complete.
 	cf.rows = cf.rows[:0]
-	cf.rowsMemAcc.Wsession(p.session).Clear(ctx)
+	cf.rowsMemAcc.Clear(ctx)
 
 	in := tree.Insert{
 		Table:   cf.table,
