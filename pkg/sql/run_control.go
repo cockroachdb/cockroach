@@ -35,7 +35,7 @@ type controlJobNode struct {
 func (*controlJobNode) Values() tree.Datums { return nil }
 
 func (n *controlJobNode) Start(params runParams) error {
-	jobIDDatum, err := n.jobID.Eval(&params.p.evalCtx)
+	jobIDDatum, err := n.jobID.Eval(params.evalCtx)
 	if err != nil {
 		return err
 	}
@@ -137,7 +137,7 @@ func (*cancelQueryNode) Values() tree.Datums { return nil }
 func (n *cancelQueryNode) Start(params runParams) error {
 	statusServer := params.p.session.execCfg.StatusServer
 
-	queryIDDatum, err := n.queryID.Eval(&params.p.evalCtx)
+	queryIDDatum, err := n.queryID.Eval(params.evalCtx)
 	if err != nil {
 		return err
 	}

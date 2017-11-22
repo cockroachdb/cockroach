@@ -110,7 +110,7 @@ func (r *renderNode) Next(params runParams) (bool, error) {
 
 	r.curSourceRow = r.source.plan.Values()
 
-	err := r.renderRow(&params.p.evalCtx)
+	err := r.renderRow(params.evalCtx)
 	return err == nil, err
 }
 

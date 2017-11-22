@@ -143,7 +143,7 @@ func (n *valuesNode) Start(params runParams) error {
 	// from other planNodes), so its expressions need evaluting.
 	// This may run subqueries.
 	n.rows = sqlbase.NewRowContainer(
-		n.p.session.TxnState.makeBoundAccount(),
+		params.evalCtx.Mon.MakeBoundAccount(),
 		sqlbase.ColTypeInfoFromResCols(n.columns),
 		len(n.n.Tuples),
 	)

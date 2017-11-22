@@ -164,8 +164,9 @@ func (p *planner) validateCheckExpr(
 		return err
 	}
 	next, err := rows.Next(runParams{
-		ctx: ctx,
-		p:   p,
+		ctx:     ctx,
+		evalCtx: &p.evalCtx,
+		p:       p,
 	})
 	if err != nil {
 		return err

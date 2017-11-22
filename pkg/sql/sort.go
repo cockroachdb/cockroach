@@ -438,7 +438,7 @@ func (n *sortNode) Next(params runParams) (bool, error) {
 			v := &sortValues{
 				ordering: n.ordering,
 				rows:     vn.rows,
-				evalCtx:  &params.p.evalCtx,
+				evalCtx:  params.evalCtx,
 			}
 			n.sortStrategy = newSortAllStrategy(v)
 			n.sortStrategy.Finish(params.ctx, cancelChecker)

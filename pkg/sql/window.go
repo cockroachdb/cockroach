@@ -480,7 +480,7 @@ func (n *windowNode) Next(params runParams) (bool, error) {
 		}
 		if !next {
 			n.populated = true
-			if err := n.computeWindows(params.ctx, &params.p.evalCtx); err != nil {
+			if err := n.computeWindows(params.ctx, params.evalCtx); err != nil {
 				return false, err
 			}
 			n.values.rows = sqlbase.NewRowContainer(
@@ -488,7 +488,7 @@ func (n *windowNode) Next(params runParams) (bool, error) {
 				sqlbase.ColTypeInfoFromResCols(n.values.columns),
 				n.wrappedRenderVals.Len(),
 			)
-			if err := n.populateValues(params.ctx, &params.p.evalCtx); err != nil {
+			if err := n.populateValues(params.ctx, params.evalCtx); err != nil {
 				return false, err
 			}
 			break

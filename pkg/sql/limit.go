@@ -77,7 +77,7 @@ func (n *limitNode) Start(params runParams) error {
 		return err
 	}
 
-	return n.evalLimit(&params.p.evalCtx)
+	return n.evalLimit(params.evalCtx)
 }
 
 // estimateLimit pre-computes the count and offset fields if they are constants,

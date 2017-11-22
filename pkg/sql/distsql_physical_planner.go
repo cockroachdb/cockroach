@@ -2253,8 +2253,9 @@ func (dsp *DistSQLPlanner) createPlanForValues(
 
 	var a sqlbase.DatumAlloc
 	params := runParams{
-		ctx: planCtx.ctx,
-		p:   nil,
+		ctx:     planCtx.ctx,
+		evalCtx: planCtx.evalCtx,
+		p:       nil,
 	}
 	if err := n.Start(params); err != nil {
 		return physicalPlan{}, err
