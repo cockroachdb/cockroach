@@ -45,6 +45,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/ipaddr"
+	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeofday"
@@ -2300,12 +2301,35 @@ var powImpls = []tree.Builtin{
 	},
 }
 
+var (
+	jsonNullDString    = tree.NewDString("null")
+	jsonStringDString  = tree.NewDString("string")
+	jsonNumberDString  = tree.NewDString("number")
+	jsonBooleanDString = tree.NewDString("boolean")
+	jsonArrayDString   = tree.NewDString("array")
+	jsonObjectDString  = tree.NewDString("object")
+)
+
 var jsonTypeOfImpl = tree.Builtin{
 	Types:      tree.ArgTypes{{"val", types.JSON}},
 	ReturnType: tree.FixedReturnType(types.String),
 	Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
-		json := tree.MustBeDJSON(args[0])
-		return tree.NewDString(json.TypeAsText()), nil
+		t := tree.MustBeDJSON(args[0]).JSON.Type()
+		switch t {
+		case json.NullJSONType:
+			return jsonNullDString, nil
+		case json.StringJSONType:
+			return jsonStringDString, nil
+		case json.NumberJSONType:
+			return jsonNumberDString, nil
+		case json.FalseJSONType, json.TrueJSONType:
+			return jsonBooleanDString, nil
+		case json.ArrayJSONType:
+			return jsonArrayDString, nil
+		case json.ObjectJSONType:
+			return jsonObjectDString, nil
+		}
+		return nil, pgerror.NewErrorf(pgerror.CodeInternalError, "unexpected JSON type %d", t)
 	},
 	Info: "Returns the type of the outermost JSON value as a text string.",
 }
