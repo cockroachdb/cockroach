@@ -24,6 +24,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/config"
@@ -37,7 +38,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/pkg/errors"
 )
 
 // AddReplica adds the replica to the store's replica map and to the sorted
@@ -312,8 +312,10 @@ func (r *Replica) CommandSizesLen() int {
 // GetTSCacheHighWater returns the high water mark of the replica's timestamp
 // cache.
 func (r *Replica) GetTSCacheHighWater() hlc.Timestamp {
-	r.store.tsCacheMu.Lock()
-	defer r.store.tsCacheMu.Unlock()
+	if !r.store.tsCacheMu.cache.ThreadSafe() {
+		r.store.tsCacheMu.Lock()
+		defer r.store.tsCacheMu.Unlock()
+	}
 
 	start := roachpb.Key(r.Desc().StartKey)
 	end := roachpb.Key(r.Desc().EndKey)

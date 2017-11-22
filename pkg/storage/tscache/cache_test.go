@@ -15,24 +15,37 @@
 package tscache
 
 import (
+	"bytes"
 	"fmt"
+	"math/rand"
 	"reflect"
+	"runtime"
 	"testing"
 	"time"
 
+	"github.com/pkg/errors"
+	"golang.org/x/net/context"
+	"golang.org/x/sync/errgroup"
+
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
+
+var cacheImplConstrs = []func(clock *hlc.Clock) Cache{
+	func(clock *hlc.Clock) Cache { return newTreeImpl(clock) },
+	func(clock *hlc.Clock) Cache { return newSklImpl(clock) },
+}
 
 func forEachCacheImpl(
 	t *testing.T, fn func(t *testing.T, tc Cache, clock *hlc.Clock, manual *hlc.ManualClock),
 ) {
-	for _, constr := range []func(*hlc.Clock) Cache{
-		func(clock *hlc.Clock) Cache { return newTreeImpl(clock) },
-	} {
+	for _, constr := range cacheImplConstrs {
 		const baseTS = 100
 		manual := hlc.NewManualClock(baseTS)
 		clock := hlc.NewClock(manual.UnixNano, time.Nanosecond)
@@ -232,7 +245,7 @@ var layeredIntervalTestCase3 = layeredIntervalTestCase{
 
 		assertTS(t, tc, roachpb.Key("a"), nil, acTx.ts, acTx.id)
 		assertTS(t, tc, roachpb.Key("b"), nil, bcTx.ts, zeroIfSimul(txns, bcTx.id))
-		assertTS(t, tc, roachpb.Key("c"), nil, tc.GlobalLowWater(), noTxnID)
+		assertTS(t, tc, roachpb.Key("c"), nil, tc.getLowWater(true /* readCache */), noTxnID)
 		assertTS(t, tc, roachpb.Key("a"), roachpb.Key("c"), bcTx.ts, zeroIfSimul(txns, bcTx.id))
 		assertTS(t, tc, roachpb.Key("a"), roachpb.Key("b"), acTx.ts, acTx.id)
 		assertTS(t, tc, roachpb.Key("b"), roachpb.Key("c"), bcTx.ts, zeroIfSimul(txns, bcTx.id))
@@ -256,7 +269,7 @@ var layeredIntervalTestCase4 = layeredIntervalTestCase{
 
 		assertTS(t, tc, roachpb.Key("a"), nil, abTx.ts, zeroIfSimul(txns, abTx.id))
 		assertTS(t, tc, roachpb.Key("b"), nil, acTx.ts, acTx.id)
-		assertTS(t, tc, roachpb.Key("c"), nil, tc.GlobalLowWater(), noTxnID)
+		assertTS(t, tc, roachpb.Key("c"), nil, tc.getLowWater(true /* readCache */), noTxnID)
 		assertTS(t, tc, roachpb.Key("a"), roachpb.Key("c"), abTx.ts, zeroIfSimul(txns, abTx.id))
 		assertTS(t, tc, roachpb.Key("a"), roachpb.Key("b"), abTx.ts, zeroIfSimul(txns, abTx.id))
 		assertTS(t, tc, roachpb.Key("b"), roachpb.Key("c"), acTx.ts, acTx.id)
@@ -444,14 +457,259 @@ func TestTimestampCacheEqualTimestamps(t *testing.T) {
 	})
 }
 
+// lockedCache wraps non-thread safe Cache implementations in Mutex to make them
+// thread safe.
+//
+// TODO(nvanbenschoten): remove when we remove Cache.ThreadSafe.
+type lockedCache struct {
+	syncutil.Mutex
+	c Cache
+}
+
+func makeThreadSafe(c Cache) Cache {
+	if !c.ThreadSafe() {
+		return &lockedCache{c: c}
+	}
+	return c
+}
+
+func unwrapCache(c Cache) Cache {
+	if lc, ok := c.(*lockedCache); ok {
+		return unwrapCache(lc.c)
+	}
+	return c
+}
+
+func (lc *lockedCache) ThreadSafe() bool { return true }
+func (lc *lockedCache) GetMaxRead(start, end roachpb.Key) (hlc.Timestamp, uuid.UUID) {
+	lc.Lock()
+	defer lc.Unlock()
+	return lc.c.GetMaxRead(start, end)
+}
+func (lc *lockedCache) add(
+	start, end roachpb.Key, ts hlc.Timestamp, txnID uuid.UUID, readCache bool,
+) {
+	lc.Lock()
+	lc.c.add(start, end, ts, txnID, readCache)
+	lc.Unlock()
+}
+func (lc *lockedCache) clear(lowWater hlc.Timestamp) {
+	lc.Lock()
+	lc.c.clear(lowWater)
+	lc.Unlock()
+}
+
+// Implement if needed.
+func (*lockedCache) AddRequest(_ *Request)                                   { panic("unimplemented") }
+func (*lockedCache) ExpandRequests(_ roachpb.RSpan, _ hlc.Timestamp)         { panic("unimplemented") }
+func (*lockedCache) SetLowWater(_, _ roachpb.Key, _ hlc.Timestamp)           { panic("unimplemented") }
+func (*lockedCache) GetMaxWrite(_, _ roachpb.Key) (hlc.Timestamp, uuid.UUID) { panic("unimplemented") }
+func (*lockedCache) getLowWater(_ bool) hlc.Timestamp                        { panic("unimplemented") }
+
+// TestTimestampCacheImplsIdentical verifies that all timestamp cache
+// implementations return the same results for the same inputs, even under
+// concurrent load.
+func TestTimestampCacheImplsIdentical(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	// Run one subtest using a real clock to generate timestamps and one subtest
+	// using a fake clock to generate timestamps. The former is good for
+	// simulating real conditions while the latter is good for testing timestamp
+	// collisions.
+	testutils.RunTrueAndFalse(t, "useClock", func(t *testing.T, useClock bool) {
+		clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
+		caches := make([]Cache, len(cacheImplConstrs))
+		start := clock.Now()
+		for i, constr := range cacheImplConstrs {
+			c := makeThreadSafe(constr(clock))
+			c.clear(start) // set low water mark
+			caches[i] = c
+		}
+
+		// Context cancellations are used to shutdown goroutines and prevent
+		// deadlocks once any test failures are found. errgroup.WithContext will
+		// cancel the context either when any goroutine returns an error or when
+		// all goroutines finish and Wait returns.
+		doneWG, ctx := errgroup.WithContext(context.Background())
+
+		// We run a goroutine for each slot. Goroutines insert new value over
+		// random intervals, but verify that the value in their slot always
+		// ratchets.
+		slots := 4 * runtime.NumCPU()
+		if util.RaceEnabled {
+			// We add in a lot of preemption points when race detection
+			// is enabled, so things will already be very slow. Reduce
+			// the concurrency to that we don't time out.
+			slots /= 2
+		}
+
+		// semC and retC force all goroutines to work in lockstep, first adding
+		// intervals to all caches together, then reading from all caches
+		// together.
+		semC, retC := make(chan struct{}), make(chan struct{})
+		go func() {
+			populate := func() {
+				for i := 0; i < slots; i++ {
+					select {
+					case semC <- struct{}{}:
+					case <-ctx.Done():
+						return
+					}
+				}
+			}
+			populate()
+
+			left := slots
+			for {
+				select {
+				case <-retC:
+					left--
+					if left == 0 {
+						// Reset left count and populate.
+						left = slots
+						populate()
+					}
+				case <-ctx.Done():
+					return
+				}
+			}
+		}()
+
+		for i := 0; i < slots; i++ {
+			i := i
+			doneWG.Go(func() error {
+				rng := rand.New(rand.NewSource(timeutil.Now().UnixNano()))
+				slotKey := []byte(fmt.Sprintf("%05d", i))
+				txnID := uuid.MakeV4()
+				maxVal := cacheValue{}
+
+				const n = 1000
+				for j := 0; j < n; j++ {
+					t.Logf("goroutine %d at iter %d", i, j)
+
+					// Wait for all goroutines to synchronize.
+					select {
+					case <-semC:
+					case <-ctx.Done():
+						return nil
+					}
+
+					// Add the same random range to each cache.
+					from, middle, to := randRange(rng, slots+1)
+					if bytes.Equal(from, to) {
+						to = nil
+					}
+
+					ts := start.Add(int64(j), 100)
+					if useClock {
+						ts = clock.Now()
+					}
+
+					newVal := cacheValue{ts: ts, txnID: txnID}
+					for _, c := range caches {
+						t.Logf("adding (%T) [%s,%s) = %s", unwrapCache(c), string(from), string(to), newVal)
+						c.add(from, to, ts, txnID, true /* readCache */)
+					}
+
+					// Return semaphore.
+					select {
+					case retC <- struct{}{}:
+					case <-ctx.Done():
+						return nil
+					}
+
+					// Wait for all goroutines to synchronize.
+					select {
+					case <-semC:
+					case <-ctx.Done():
+						return nil
+					}
+
+					// Check the value for the newly added interval. Should be
+					// equal across all caches and be a ratcheted version of the
+					// interval added above.
+					var err error
+					if _, err = identicalAndRatcheted(caches, from, to, newVal); err != nil {
+						return errors.Wrapf(err, "interval=[%s,%s)", string(from), string(to))
+					}
+
+					// Check the value for the start key of the newly added
+					// interval. Should be equal across all caches and be a
+					// ratcheted version of the interval added above.
+					if _, err = identicalAndRatcheted(caches, from, nil, newVal); err != nil {
+						return errors.Wrapf(err, "startKey=%s", string(from))
+					}
+
+					// Check the value right after the start key of the newly
+					// added interval, if possible. Should be equal across all
+					// caches and be a ratcheted version of the interval added
+					// above.
+					if middle != nil {
+						if _, err = identicalAndRatcheted(caches, middle, nil, newVal); err != nil {
+							return errors.Wrapf(err, "middleKey=%s", string(middle))
+						}
+					}
+
+					// Check the value for the goroutine's slot. Should be equal
+					// across all caches and be a ratcheted version of the
+					// maximum value we've seen in the slot.
+					if maxVal, err = identicalAndRatcheted(caches, slotKey, nil, maxVal); err != nil {
+						return errors.Wrapf(err, "slotKey=%s", string(slotKey))
+					}
+
+					// Return semaphore.
+					select {
+					case retC <- struct{}{}:
+					case <-ctx.Done():
+						return nil
+					}
+				}
+				return nil
+			})
+		}
+		if err := doneWG.Wait(); err != nil {
+			t.Fatal(err)
+		}
+	})
+}
+
+// identicalAndRatcheted asserts that all caches have identical values for the
+// specified range and that the value is a ratcheted version of previous value.
+// It returns an error if the assertion fails and the value found if it doesn't.
+func identicalAndRatcheted(
+	caches []Cache, from, to roachpb.Key, prevVal cacheValue,
+) (cacheValue, error) {
+	var vals []cacheValue
+	for _, c := range caches {
+		keyTS, keyTxnID := c.GetMaxRead(from, to)
+		vals = append(vals, cacheValue{ts: keyTS, txnID: keyTxnID})
+	}
+
+	// Assert same values for each cache.
+	firstVal := vals[0]
+	firstCache := unwrapCache(caches[0])
+	for i := 1; i < len(caches); i++ {
+		if !reflect.DeepEqual(firstVal, vals[i]) {
+			return firstVal, errors.Errorf("expected %s (%T) and %s (%T) to be equal",
+				firstVal, firstCache, vals[i], unwrapCache(caches[i]))
+		}
+	}
+
+	// Assert that the value is a ratcheted version of prevVal.
+	// See assertRatchet.
+	if _, ratchet := ratchetValue(firstVal, prevVal); ratchet {
+		return firstVal, errors.Errorf("ratchet inversion from %s to %s", prevVal, firstVal)
+	}
+
+	return firstVal, nil
+}
+
 func BenchmarkTimestampCacheInsertion(b *testing.B) {
 	manual := hlc.NewManualClock(123)
 	clock := hlc.NewClock(manual.UnixNano, time.Nanosecond)
 	tc := New(clock)
 
 	for i := 0; i < b.N; i++ {
-		tc.clear(clock.Now())
-
 		cdTS := clock.Now()
 		tc.add(roachpb.Key("c"), roachpb.Key("d"), cdTS, noTxnID, true)
 

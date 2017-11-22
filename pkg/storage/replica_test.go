@@ -1963,8 +1963,10 @@ func TestReplicaUpdateTSCache(t *testing.T) {
 		t.Error(pErr)
 	}
 	// Verify the timestamp cache has rTS=1s and wTS=0s for "a".
-	tc.repl.store.tsCacheMu.Lock()
-	defer tc.repl.store.tsCacheMu.Unlock()
+	if !tc.repl.store.tsCacheMu.cache.ThreadSafe() {
+		tc.repl.store.tsCacheMu.Lock()
+		defer tc.repl.store.tsCacheMu.Unlock()
+	}
 	tc.repl.store.tsCacheMu.cache.ExpandRequests(tc.repl.Desc().RSpan(), hlc.Timestamp{})
 	noID := uuid.UUID{}
 	rTS, rTxnID := tc.repl.store.tsCacheMu.cache.GetMaxRead(roachpb.Key("a"), nil)
