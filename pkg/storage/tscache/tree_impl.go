@@ -18,7 +18,6 @@ import (
 	"fmt"
 	"unsafe"
 
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/cache"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -112,41 +111,28 @@ func (tc *treeImpl) len() int {
 	return tc.rCache.Len() + tc.wCache.Len()
 }
 
-// add the specified timestamp to the cache covering the range of keys from
-// start to end. If end is nil, the range covers the start key only. txnID is
-// nil for no transaction. readCache specifies whether the command adding this
-// timestamp should update the read timestamp; false to update the write
-// timestamp cache.
-func (tc *treeImpl) add(
-	start, end roachpb.Key, timestamp hlc.Timestamp, txnID uuid.UUID, readCache bool,
-) {
-	tc.Lock()
-	tc.addLocked(start, end, timestamp, txnID, readCache)
-	tc.Unlock()
-}
-
-// addLocked is like add, but requires the treeImpl's write lock to be held.
-//
-// TODO(nvanbenschoten): remove when add is exported.
-func (tc *treeImpl) addLocked(
-	start, end roachpb.Key, timestamp hlc.Timestamp, txnID uuid.UUID, readCache bool,
-) {
+// Add implements the Cache interface.
+func (tc *treeImpl) Add(start, end roachpb.Key, ts hlc.Timestamp, txnID uuid.UUID, readCache bool) {
 	// This gives us a memory-efficient end key if end is empty.
 	if len(end) == 0 {
 		end = start.Next()
 		start = end[:len(start)]
 	}
-	tc.latest.Forward(timestamp)
+
+	tc.Lock()
+	defer tc.Unlock()
+	tc.latest.Forward(ts)
+
 	// Only add to the cache if the timestamp is more recent than the
 	// low water mark.
-	if tc.lowWater.Less(timestamp) {
+	if tc.lowWater.Less(ts) {
 		tcache := tc.wCache
 		if readCache {
 			tcache = tc.rCache
 		}
 
 		addRange := func(r interval.Range) {
-			value := cacheValue{ts: timestamp, txnID: txnID}
+			value := cacheValue{ts: ts, txnID: txnID}
 			key := tcache.MakeKey(r.Start, r.End)
 			entry := makeCacheEntry(key, value)
 			tc.bytes += cacheEntrySize(r.Start, r.End)
@@ -177,7 +163,7 @@ func (tc *treeImpl) addLocked(
 			// compute the current size of the entry and then use the new size at the
 			// end of this iteration to update Cache.bytes.
 			oldSize := cacheEntrySize(key.Start, key.End)
-			if cv.ts.Less(timestamp) {
+			if cv.ts.Less(ts) {
 				// The existing interval has a timestamp less than the new
 				// interval. Compare interval ranges to determine how to
 				// modify existing interval.
@@ -190,7 +176,7 @@ func (tc *treeImpl) addLocked(
 					//
 					// New: ------------
 					// Old:
-					*cv = cacheValue{ts: timestamp, txnID: txnID}
+					*cv = cacheValue{ts: ts, txnID: txnID}
 					tcache.MoveToEnd(entry)
 					return
 				case sCmp <= 0 && eCmp >= 0:
@@ -238,7 +224,7 @@ func (tc *treeImpl) addLocked(
 				default:
 					panic(fmt.Sprintf("no overlap between %v and %v", key.Range, r))
 				}
-			} else if timestamp.Less(cv.ts) {
+			} else if ts.Less(cv.ts) {
 				// The existing interval has a timestamp greater than the new interval.
 				// Compare interval ranges to determine how to modify new interval before
 				// adding it to the timestamp cache.
@@ -385,7 +371,7 @@ func (tc *treeImpl) addLocked(
 					cv.txnID = noTxnID
 
 					newKey := tcache.MakeKey(r.Start, key.Start)
-					newEntry := makeCacheEntry(newKey, cacheValue{ts: timestamp, txnID: txnID})
+					newEntry := makeCacheEntry(newKey, cacheValue{ts: ts, txnID: txnID})
 					addEntryAfter(newEntry, entry)
 					r.Start = key.End
 				case sCmp > 0 && eCmp < 0:
@@ -470,45 +456,10 @@ func (tc *treeImpl) addLocked(
 	}
 }
 
-// AddRequest implements the Cache interface.
-func (tc *treeImpl) AddRequest(req *Request) {
-	tc.Lock()
-	defer tc.Unlock()
-
-	if len(req.Reads) == 0 && len(req.Writes) == 0 && req.Txn.Key == nil {
-		// The request didn't contain any spans for the timestamp cache.
-		return
-	}
-
-	if !tc.lowWater.Less(req.Timestamp) {
-		// Request too old to be added.
-		return
-	}
-
-	tc.latest.Forward(req.Timestamp)
-	for _, sp := range req.Reads {
-		tc.addLocked(sp.Key, sp.EndKey, req.Timestamp, req.TxnID, true /* readCache */)
-	}
-	for _, sp := range req.Writes {
-		tc.addLocked(sp.Key, sp.EndKey, req.Timestamp, req.TxnID, false /* readCache */)
-	}
-	if req.Txn.Key != nil {
-		// Make the transaction key from the request key. We're guaranteed
-		// req.TxnID != nil because we only hit this code path for
-		// EndTransactionRequests.
-		key := keys.TransactionKey(req.Txn.Key, req.TxnID)
-		tc.addLocked(key, nil, req.Timestamp, req.TxnID, false /* readCache */)
-	}
-	req.release()
-}
-
-// ExpandRequests implements the Cache interface.
-func (tc *treeImpl) ExpandRequests(span roachpb.RSpan, ts hlc.Timestamp) { /* no-op */ }
-
 // SetLowWater implements the Cache interface.
 func (tc *treeImpl) SetLowWater(start, end roachpb.Key, ts hlc.Timestamp) {
-	tc.add(start, end, ts, noTxnID, false)
-	tc.add(start, end, ts, noTxnID, true)
+	tc.Add(start, end, ts, noTxnID, false)
+	tc.Add(start, end, ts, noTxnID, true)
 }
 
 // getLowWater implements the Cache interface.

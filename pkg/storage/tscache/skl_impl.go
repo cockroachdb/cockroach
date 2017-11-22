@@ -15,7 +15,6 @@
 package tscache
 
 import (
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -73,12 +72,8 @@ func (tc *sklImpl) getSkl(readCache bool) *intervalSkl {
 	return tc.wCache
 }
 
-// add the specified timestamp to the cache covering the range of keys from
-// start to end. If end is nil, the range covers the start key only. txnID is
-// nil for no transaction. readCache specifies whether the command adding this
-// timestamp should update the read timestamp; false to update the write
-// timestamp cache.
-func (tc *sklImpl) add(start, end roachpb.Key, ts hlc.Timestamp, txnID uuid.UUID, readCache bool) {
+// Add implements the Cache interface.
+func (tc *sklImpl) Add(start, end roachpb.Key, ts hlc.Timestamp, txnID uuid.UUID, readCache bool) {
 	skl := tc.getSkl(readCache)
 
 	val := cacheValue{ts: ts, txnID: txnID}
@@ -89,31 +84,10 @@ func (tc *sklImpl) add(start, end roachpb.Key, ts hlc.Timestamp, txnID uuid.UUID
 	}
 }
 
-// AddRequest implements the Cache interface.
-func (tc *sklImpl) AddRequest(req *Request) {
-	for _, sp := range req.Reads {
-		tc.add(sp.Key, sp.EndKey, req.Timestamp, req.TxnID, true /* readCache */)
-	}
-	for _, sp := range req.Writes {
-		tc.add(sp.Key, sp.EndKey, req.Timestamp, req.TxnID, false /* readCache */)
-	}
-	if req.Txn.Key != nil {
-		// Make the transaction key from the request key. We're guaranteed
-		// req.TxnID != nil because we only hit this code path for
-		// EndTransactionRequests.
-		key := keys.TransactionKey(req.Txn.Key, req.TxnID)
-		tc.add(key, nil, req.Timestamp, req.TxnID, false /* readCache */)
-	}
-	req.release()
-}
-
-// ExpandRequests implements the Cache interface.
-func (tc *sklImpl) ExpandRequests(span roachpb.RSpan, ts hlc.Timestamp) { /* no-op */ }
-
 // SetLowWater implements the Cache interface.
 func (tc *sklImpl) SetLowWater(start, end roachpb.Key, ts hlc.Timestamp) {
-	tc.add(start, end, ts, noTxnID, false /* readCache */)
-	tc.add(start, end, ts, noTxnID, true /* readCache */)
+	tc.Add(start, end, ts, noTxnID, false /* readCache */)
+	tc.Add(start, end, ts, noTxnID, true /* readCache */)
 }
 
 // getLowWater implements the Cache interface.
