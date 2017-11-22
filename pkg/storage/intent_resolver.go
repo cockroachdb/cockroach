@@ -18,7 +18,6 @@ package storage
 import (
 	"fmt"
 	"sort"
-	"sync"
 	"time"
 
 	"golang.org/x/net/context"
@@ -32,8 +31,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
-	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/pkg/errors"
 )
 
 const (
@@ -277,9 +276,9 @@ func (ir *intentResolver) maybePushTransactions(
 // but combining them simplifies the plumbing necessary in Replica.
 func (ir *intentResolver) processIntentsAsync(
 	ctx context.Context, r *Replica, intents []result.IntentsWithArg, allowSyncProcessing bool,
-) {
+) error {
 	if r.store.TestingKnobs().DisableAsyncIntentResolution {
-		return
+		return errors.New("intents not processed as async resolution is disabled")
 	}
 	now := r.store.Clock().Now()
 	stopper := r.store.Stopper()
@@ -301,25 +300,21 @@ func (ir *intentResolver) processIntentsAsync(
 				// reuse the current goroutine.
 				ir.processIntents(ctx, r, item, now)
 			} else {
-				log.Warningf(ctx, "failed to resolve intents: %s", err)
-				return
+				return errors.Wrap(err, "intents not asynchonously processed as there "+
+					"is no available async processing bandwidth")
 			}
 		}
 	}
+
+	return nil
 }
 
 func (ir *intentResolver) processIntents(
 	ctx context.Context, r *Replica, item result.IntentsWithArg, now hlc.Timestamp,
 ) {
-	// Everything here is best effort; so give the context a timeout to avoid
-	// waiting too long. This may be a larger timeout than the context already
-	// has, in which case we'll respect the existing timeout.
-	ctxWithTimeout, cancel := context.WithTimeout(ctx, intentResolverTimeout)
-	defer cancel()
-
 	if item.Arg.Method() != roachpb.EndTransaction {
 		h := roachpb.Header{Timestamp: now}
-		resolveIntents, pushErr := ir.maybePushTransactions(ctxWithTimeout,
+		resolveIntents, pushErr := ir.maybePushTransactions(ctx,
 			item.Intents, h, roachpb.PUSH_TOUCH, true /* skipInFlight */)
 
 		// resolveIntents with poison=true because we're resolving
@@ -341,7 +336,7 @@ func (ir *intentResolver) processIntents(
 		//   same situation as above.
 		//
 		// Thus, we must poison.
-		if err := ir.resolveIntents(ctxWithTimeout, resolveIntents,
+		if err := ir.resolveIntents(ctx, resolveIntents,
 			ResolveOptions{Wait: true, Poison: true}); err != nil {
 			log.Warningf(ctx, "%s: failed to resolve intents: %s", r, err)
 			return
@@ -359,7 +354,7 @@ func (ir *intentResolver) processIntents(
 		// example, an attempt to explicitly rollback the transaction
 		// may succeed (triggering this code path), but the result may
 		// not make it back to the client.
-		if err := ir.resolveIntents(ctxWithTimeout, item.Intents,
+		if err := ir.resolveIntents(ctx, item.Intents,
 			ResolveOptions{Wait: true, Poison: false}); err != nil {
 			log.Warningf(ctx, "%s: failed to resolve intents: %s", r, err)
 			return
@@ -419,6 +414,9 @@ type ResolveOptions struct {
 	// been *proposed* but not yet committed or executed. This ensures that
 	// if a waiting client retries immediately after calling this function,
 	// it will not hit the same intents again.
+	//
+	// TODO(bdarnell): Note that this functionality has been removed and
+	// will be ignored, pending resolution of #8360.
 	Wait   bool
 	Poison bool
 }
@@ -426,9 +424,6 @@ type ResolveOptions struct {
 func (ir *intentResolver) resolveIntents(
 	ctx context.Context, intents []roachpb.Intent, opts ResolveOptions,
 ) error {
-	// TODO(bdarnell): Restore the wait=false optimization when/if #8360 is
-	// fixed.
-	opts.Wait = true
 	if len(intents) == 0 {
 		return nil
 	}
@@ -437,9 +432,6 @@ func (ir *intentResolver) resolveIntents(
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	// We're doing async stuff below; those need new traces.
-	ctx, cleanup := tracing.EnsureContext(ctx, ir.store.Tracer(), "resolve intents")
-	defer cleanup()
 	log.Eventf(ctx, "resolving intents [wait=%t]", opts.Wait)
 
 	var reqs []roachpb.Request
@@ -472,14 +464,10 @@ func (ir *intentResolver) resolveIntents(
 		return reqs[i].Header().Key.Compare(reqs[j].Header().Key) < 0
 	})
 
-	// Resolve all of the intents.
-	var wg sync.WaitGroup
-	var errCh chan error
-	if opts.Wait {
-		// If the caller is waiting, use this channel to collect the first
-		// non-nil error (if any) from the async tasks.
-		errCh = make(chan error, 1)
-	}
+	// Resolve all of the intents in batches of size intentResolverBatchSize.
+	// The maximum timeout is intentResolverTimeout, and this is applied to
+	// each batch to ensure forward progress is made. A large set of intents
+	// might require more time than a single timeout allows.
 	for len(reqs) > 0 {
 		b := &client.Batch{}
 		if len(reqs) > intentResolverBatchSize {
@@ -489,48 +477,16 @@ func (ir *intentResolver) resolveIntents(
 			b.AddRawRequest(reqs...)
 			reqs = nil
 		}
-		wg.Add(1)
-		action := func(ctx context.Context) error {
-			return ir.store.DB().Run(ctx, b)
-		}
-		// NB: Don't wait for an async task slot as we might be configured with an
-		// insufficient number (i.e. 0 or 1).
-		if ir.store.Stopper().RunLimitedAsyncTask(
-			ctx, "storage.intentResolve: resolving intents", ir.sem, false, /* wait */
-			func(ctx context.Context) {
-				defer wg.Done()
 
-				if err := action(ctx); err != nil {
-					// If we have a waiting caller, pass the first non-nil
-					// error out on the channel.
-					select {
-					case errCh <- err:
-						return
-					default:
-					}
-					// No caller waiting or channel full, so just log the error.
-					log.Warningf(ctx, "unable to resolve external intents: %s", err)
-				}
-			}) != nil {
-			wg.Done()
-			// Try async to not keep the caller waiting, but when draining
-			// just go ahead and do it synchronously. See #1684.
-			// TODO(tschottdorf): This is ripe for removal.
-			if err := action(ctx); err != nil {
-				return err
-			}
-		}
-	}
-
-	if opts.Wait {
-		// Wait for all resolutions to complete. We don't want to return
-		// as soon as the first one fails because of issue #8360 (see
-		// comment at the top of this method)
-		wg.Wait()
-		select {
-		case err := <-errCh:
+		// Everything here is best effort; so give the context a timeout to avoid
+		// waiting too long. This may be a larger timeout than the context already
+		// has, in which case we'll respect the existing timeout.
+		ctxWithTimeout, cancel := context.WithTimeout(ctx, intentResolverTimeout)
+		err := ir.store.DB().Run(ctxWithTimeout, b)
+		cancel()
+		if err != nil {
+			// Bail out on the first error.
 			return err
-		default:
 		}
 	}
 
