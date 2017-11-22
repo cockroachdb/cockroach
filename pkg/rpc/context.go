@@ -445,11 +445,7 @@ func (ctx *Context) GRPCDial(target string, opts ...grpc.DialOption) (*grpc.Clie
 					})
 				}); err != nil {
 				meta.dialErr = err
-				// removeConn and ctx's cleanup worker both lock ctx.conns. However,
-				// to avoid racing with meta's initialization, the cleanup worker
-				// blocks on meta.Do while holding ctx.conns. Invoke removeConn
-				// asynchronously to avoid deadlock.
-				go ctx.removeConn(target, meta)
+				ctx.removeConn(target, meta)
 			}
 		}
 	})
