@@ -77,8 +77,7 @@ INSTALL      := install
 prefix       := /usr/local
 bindir       := $(prefix)/bin
 
-REPO_ROOT := .
-MAKEFLAGS += $(shell $(REPO_ROOT)/build/jflag.sh)
+MAKEFLAGS += $(shell build/jflag.sh)
 
 help: ## Print help for targets with comments.
 	@echo "Usage:"
@@ -176,7 +175,7 @@ endif
 
 override LINKFLAGS += -X github.com/cockroachdb/cockroach/pkg/build.typ=$(BUILD_TYPE)
 
-include $(REPO_ROOT)/build/common.mk
+include build/common.mk
 override TAGS += make $(NATIVE_SPECIFIER_TAG)
 
 # On macOS 10.11, XCode SDK v8.1 (and possibly others) indicate the presence of
@@ -328,8 +327,8 @@ stress stressrace: gotestdashi
 
 .PHONY: upload-coverage
 upload-coverage: $(BOOTSTRAP_TARGET)
-	$(GO) install $(REPO_ROOT)/vendor/github.com/wadey/gocovmerge
-	$(GO) install $(REPO_ROOT)/vendor/github.com/mattn/goveralls
+	$(GO) install ./vendor/github.com/wadey/gocovmerge
+	$(GO) install ./vendor/github.com/mattn/goveralls
 	@build/upload-coverage.sh
 
 .PHONY: acceptance
@@ -374,8 +373,7 @@ protobuf: ## Regenerate generated code for protobuf definitions.
 # the acceptance tests.
 .PHONY: pre-push
 pre-push: ## Run generate, lint, and test.
-pre-push: generate lint test
-	$(MAKE) -C $(REPO_ROOT)/pkg/ui lint test
+pre-push: generate lint test ui-lint ui-test
 	! git status --porcelain | read || (git status; git --no-pager diff -a 1>&2; exit 1)
 
 # archive builds a source tarball out of this repository. Files in the special
@@ -431,17 +429,17 @@ endif
 
 CPP_PROTO_ROOT := $(LIBROACH_SRC_DIR)/protos
 
-GOGO_PROTOBUF_PATH := $(REPO_ROOT)/vendor/github.com/gogo/protobuf
+GOGO_PROTOBUF_PATH := ./vendor/github.com/gogo/protobuf
 PROTOBUF_PATH  := $(GOGO_PROTOBUF_PATH)/protobuf
 
 PROTOC_PLUGIN   := $(LOCAL_BIN)/protoc-gen-gogoroach
 GOGOPROTO_PROTO := $(GOGO_PROTOBUF_PATH)/gogoproto/gogo.proto
 
-COREOS_PATH := $(REPO_ROOT)/vendor/github.com/coreos
+COREOS_PATH := ./vendor/github.com/coreos
 COREOS_RAFT_PROTOS := $(addprefix $(COREOS_PATH)/etcd/raft/, $(sort $(shell git -C $(COREOS_PATH)/etcd/raft ls-files --exclude-standard --cached --others -- '*.proto')))
 
 GRPC_GATEWAY_GOOGLEAPIS_PACKAGE := github.com/grpc-ecosystem/grpc-gateway/third_party/googleapis
-GRPC_GATEWAY_GOOGLEAPIS_PATH := $(REPO_ROOT)/vendor/$(GRPC_GATEWAY_GOOGLEAPIS_PACKAGE)
+GRPC_GATEWAY_GOOGLEAPIS_PATH := ./vendor/$(GRPC_GATEWAY_GOOGLEAPIS_PACKAGE)
 
 # Map protobuf includes to the Go package containing the generated Go code.
 PROTO_MAPPINGS :=
@@ -454,7 +452,7 @@ GW_TS_PROTOS := $(PKG_ROOT)/ts/tspb/timeseries.proto
 GW_PROTOS  := $(GW_SERVER_PROTOS) $(GW_TS_PROTOS)
 GW_SOURCES := $(GW_PROTOS:%.proto=%.pb.gw.go)
 
-GO_PROTOS := $(addprefix $(REPO_ROOT)/, $(sort $(shell git -C $(REPO_ROOT) ls-files --exclude-standard --cached --others -- '*.proto')))
+GO_PROTOS := $(addprefix ./,$(sort $(shell git ls-files --exclude-standard --cached --others -- '*.proto')))
 GO_SOURCES := $(GO_PROTOS:%.proto=%.pb.go)
 
 PBJS := $(NODE_RUN) $(UI_ROOT)/node_modules/.bin/pbjs
@@ -471,7 +469,7 @@ CPP_SOURCES := $(subst $(PKG_ROOT),$(CPP_PROTO_ROOT),$(CPP_PROTOS:%.proto=%.pb.c
 UI_PROTOS := $(UI_JS) $(UI_TS)
 
 $(GO_PROTOS_TARGET): $(PROTOC) $(PROTOC_PLUGIN) $(GO_PROTOS) $(GOGOPROTO_PROTO)
-	(cd $(REPO_ROOT) && git ls-files --exclude-standard --cached --others -- '*.pb.go' | xargs rm -f)
+	git ls-files --exclude-standard --cached --others -- '*.pb.go' | xargs rm -f
 	for dir in $(sort $(dir $(GO_PROTOS))); do \
 	  $(PROTOC) -I$(PKG_ROOT):$(GOGO_PROTOBUF_PATH):$(PROTOBUF_PATH):$(COREOS_PATH):$(GRPC_GATEWAY_GOOGLEAPIS_PATH) --plugin=$(PROTOC_PLUGIN) --gogoroach_out=$(PROTO_MAPPINGS),plugins=grpc,import_prefix=github.com/cockroachdb/cockroach/pkg/:$(PKG_ROOT) $$dir/*.proto; \
 	done
@@ -483,13 +481,13 @@ $(GO_PROTOS_TARGET): $(PROTOC) $(PROTOC_PLUGIN) $(GO_PROTOS) $(GOGOPROTO_PROTO)
 	touch $@
 
 $(GW_PROTOS_TARGET): $(PROTOC) $(GW_SERVER_PROTOS) $(GW_TS_PROTOS) $(GO_PROTOS) $(GOGOPROTO_PROTO)
-	(cd $(REPO_ROOT) && git ls-files --exclude-standard --cached --others -- '*.pb.gw.go' | xargs rm -f)
+	git ls-files --exclude-standard --cached --others -- '*.pb.gw.go' | xargs rm -f
 	$(PROTOC) -I$(PKG_ROOT):$(GOGO_PROTOBUF_PATH):$(PROTOBUF_PATH):$(COREOS_PATH):$(GRPC_GATEWAY_GOOGLEAPIS_PATH) --grpc-gateway_out=logtostderr=true,request_context=true:$(PKG_ROOT) $(GW_SERVER_PROTOS)
 	$(PROTOC) -I$(PKG_ROOT):$(GOGO_PROTOBUF_PATH):$(PROTOBUF_PATH):$(COREOS_PATH):$(GRPC_GATEWAY_GOOGLEAPIS_PATH) --grpc-gateway_out=logtostderr=true,request_context=true:$(PKG_ROOT) $(GW_TS_PROTOS)
 	touch $@
 
 $(CPP_PROTOS_TARGET): $(PROTOC) $(CPP_PROTOS)
-	(cd $(REPO_ROOT) && git ls-files --exclude-standard --cached --others -- '*.pb.h' '*.pb.cc' | xargs rm -f)
+	git ls-files --exclude-standard --cached --others -- '*.pb.h' '*.pb.cc' | xargs rm -f
 	mkdir -p $(CPP_PROTO_ROOT)
 	$(PROTOC) -I$(PKG_ROOT):$(GOGO_PROTOBUF_PATH):$(PROTOBUF_PATH) --cpp_out=lite:$(CPP_PROTO_ROOT) $(CPP_PROTOS)
 	$(SED_INPLACE) -E '/gogoproto/d' $(CPP_HEADERS) $(CPP_SOURCES)
