@@ -14,7 +14,7 @@
 
 // +build lint
 
-package build_test
+package lint
 
 import (
 	"bufio"
@@ -61,7 +61,7 @@ func dirCmd(
 	return cmd, stderr, stream.ReadLines(stdout), nil
 }
 
-func TestStyle(t *testing.T) {
+func TestLint(t *testing.T) {
 	pkg, err := build.Import(cockroachDB, "", build.FindOnly)
 	if err != nil {
 		t.Skip(err)
@@ -150,11 +150,11 @@ func TestStyle(t *testing.T) {
 				re: `\bos\.(Getenv|LookupEnv)\(`,
 				excludes: []string{
 					":!acceptance",
-					":!build/style_test.go",
 					":!ccl/acceptanceccl/backup_test.go",
 					":!ccl/sqlccl/backup_cloud_test.go",
 					":!ccl/storageccl/export_storage_test.go",
 					":!cmd",
+					":!testutils/lint",
 					":!util/envutil/env.go",
 					":!util/log/clog.go",
 					":!util/log/color.go",
@@ -789,6 +789,7 @@ func TestStyle(t *testing.T) {
 			stream.Uniq(),
 			stream.Grep(`^`+settingsPkgPrefix+`: | `+grepBuf.String()),
 			stream.GrepNot(`cockroach/pkg/cmd/`),
+			stream.GrepNot(`cockroach/pkg/testutils/lint: log$`),
 			stream.GrepNot(`cockroach/pkg/(cli|security): syscall$`),
 			stream.GrepNot(`cockroach/pkg/(base|security|util/(log|randutil|stop)): log$`),
 			stream.GrepNot(`cockroach/pkg/(server/serverpb|ts/tspb): github\.com/golang/protobuf/proto$`),
@@ -832,12 +833,16 @@ func TestStyle(t *testing.T) {
 		if testing.Short() {
 			t.Skip("short flag")
 		}
+		excludesPath, err := filepath.Abs(filepath.Join("testdata", "errcheck_excludes.txt"))
+		if err != nil {
+			t.Fatal(err)
+		}
 		// errcheck uses 1GB of ram (as of 2017-02-18), so don't parallelize it.
 		cmd, stderr, filter, err := dirCmd(
 			pkg.Dir,
 			"errcheck",
 			"-exclude",
-			filepath.Join(filepath.Dir(pkg.Dir), "build", "errcheck_excludes.txt"),
+			excludesPath,
 			pkgScope,
 		)
 		if err != nil {
