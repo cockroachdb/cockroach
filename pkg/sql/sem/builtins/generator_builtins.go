@@ -457,8 +457,8 @@ var jsonObjectKeysGeneratorType = types.TTable{
 }
 
 type jsonObjectKeysGenerator struct {
-	json      tree.DJSON
-	nextIndex int
+	iter    <-chan json.JSON
+	nextVal json.JSON
 }
 
 var errJSONCallOnNonObject = pgerror.NewError(pgerror.CodeInvalidParameterValueError,
@@ -472,7 +472,7 @@ func makeJSONObjectKeysGenerator(
 		return nil, errJSONCallOnNonObject
 	}
 	return &jsonObjectKeysGenerator{
-		json: target,
+		iter: target.ObjectKeyIterator(),
 	}, nil
 }
 
@@ -482,23 +482,21 @@ func (g *jsonObjectKeysGenerator) ResolvedType() types.TTable {
 }
 
 // Start implements the tree.ValueGenerator interface.
-func (g *jsonObjectKeysGenerator) Start() error {
-	g.nextIndex = -1
-	return nil
-}
+func (g *jsonObjectKeysGenerator) Start() error { return nil }
 
 // Close implements the tree.ValueGenerator interface.
 func (g *jsonObjectKeysGenerator) Close() {}
 
 // Next implements the tree.ValueGenerator interface.
 func (g *jsonObjectKeysGenerator) Next() (bool, error) {
-	g.nextIndex++
-	return g.json.FetchKeyIdx(g.nextIndex) != nil, nil
+	val, ok := <-g.iter
+	g.nextVal = val
+	return ok, nil
 }
 
 // Values implements the tree.ValueGenerator interface.
 func (g *jsonObjectKeysGenerator) Values() tree.Datums {
-	text := g.json.FetchKeyIdx(g.nextIndex).AsText()
+	text := g.nextVal.AsText()
 	if text == nil {
 		return tree.Datums{tree.DNull}
 	}

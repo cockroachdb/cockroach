@@ -93,6 +93,10 @@ type JSON interface {
 	// Exists implements the `?` operator.
 	Exists(string) bool
 
+	// ObjectKeyIterator is an iterator to access the keys of an object, and it returns nil if the obj
+	// is not an object.
+	ObjectKeyIterator() <-chan JSON
+
 	// isScalar returns whether the JSON document is null, true, false, a string,
 	// or a number.
 	isScalar() bool
@@ -717,6 +721,23 @@ func (j jsonArray) Exists(s string) bool {
 }
 func (j jsonObject) Exists(s string) bool {
 	return j.FetchValKey(s) != nil
+}
+
+func (jsonNull) ObjectKeyIterator() <-chan JSON   { return nil }
+func (jsonTrue) ObjectKeyIterator() <-chan JSON   { return nil }
+func (jsonFalse) ObjectKeyIterator() <-chan JSON  { return nil }
+func (jsonNumber) ObjectKeyIterator() <-chan JSON { return nil }
+func (jsonString) ObjectKeyIterator() <-chan JSON { return nil }
+func (jsonArray) ObjectKeyIterator() <-chan JSON  { return nil }
+func (j jsonObject) ObjectKeyIterator() <-chan JSON {
+	ch := make(chan JSON)
+	go func() {
+		for idx := 0; idx < len(j); idx++ {
+			ch <- j[idx].k
+		}
+		close(ch)
+	}()
+	return ch
 }
 
 func (jsonNull) isScalar() bool   { return true }
