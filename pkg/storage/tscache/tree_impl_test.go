@@ -81,33 +81,3 @@ func TestTreeImplNoEviction(t *testing.T) {
 		t.Errorf("expected %d entries to remain, got %d", want, l)
 	}
 }
-
-func TestTreeImplExpandRequests(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	manual := hlc.NewManualClock(123)
-	clock := hlc.NewClock(manual.UnixNano, time.Nanosecond)
-	tc := newTreeImpl(clock)
-	defer tc.clear(clock.Now())
-
-	ab := roachpb.RSpan{Key: roachpb.RKey("a"), EndKey: roachpb.RKey("b")}
-	bc := roachpb.RSpan{Key: roachpb.RKey("b"), EndKey: roachpb.RKey("c")}
-
-	// Increment time to the low water mark + 1.
-	start := clock.Now()
-	manual.Increment(1)
-	tc.AddRequest(&Request{
-		Span:      ab,
-		Reads:     []roachpb.Span{{Key: roachpb.Key("a")}},
-		Timestamp: clock.Now(),
-	})
-
-	tc.ExpandRequests(bc, start)
-	if tc.requests.Len() != 1 {
-		t.Fatalf("expected 1 cached request, but found %d", tc.requests.Len())
-	}
-
-	tc.ExpandRequests(ab, start)
-	if tc.requests.Len() != 0 {
-		t.Fatalf("expected 0 cached requests, but found %d", tc.requests.Len())
-	}
-}
