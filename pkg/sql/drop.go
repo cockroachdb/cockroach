@@ -1164,6 +1164,12 @@ func (p *planner) getViewDescForCascade(
 type dropUserNode struct {
 	ifExists bool
 	names    func() ([]string, error)
+
+	run dropUserRun
+}
+
+// dropUserRun contains the run-time state of dropUserNode during local execution.
+type dropUserRun struct {
 	// The number of users deleted.
 	numDeleted int
 }
@@ -1257,7 +1263,7 @@ func (n *dropUserNode) Start(params runParams) error {
 		numDeleted += rowsAffected
 	}
 
-	n.numDeleted = numDeleted
+	n.run.numDeleted = numDeleted
 
 	return nil
 }
@@ -1265,7 +1271,7 @@ func (n *dropUserNode) Start(params runParams) error {
 func (*dropUserNode) Next(runParams) (bool, error)   { return false, nil }
 func (*dropUserNode) Close(context.Context)          {}
 func (*dropUserNode) Values() tree.Datums            { return tree.Datums{} }
-func (n *dropUserNode) FastPathResults() (int, bool) { return n.numDeleted, true }
+func (n *dropUserNode) FastPathResults() (int, bool) { return n.run.numDeleted, true }
 
 // DropUser drops a list of users.
 // Privileges: DELETE on system.users.

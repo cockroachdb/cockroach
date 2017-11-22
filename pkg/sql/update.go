@@ -122,10 +122,13 @@ type updateNode struct {
 	checkHelper   checkHelper
 	sourceSlots   []sourceSlot
 
-	run struct {
-		// The following fields are populated during Start().
-		editNodeRun
-	}
+	run updateRun
+}
+
+// updateRun contains the run-time state of updateNode during local execution.
+type updateRun struct {
+	// The following fields are populated during Start().
+	editNodeRun
 }
 
 // sourceSlot abstracts the idea that our update sources can either be tuples

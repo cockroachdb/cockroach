@@ -73,6 +73,12 @@ type showFingerprintsNode struct {
 	tableDesc *sqlbase.TableDescriptor
 	indexes   []sqlbase.IndexDescriptor
 
+	run showFingerprintsRun
+}
+
+// showFingerprintsRun contains the run-time state of
+// showFingerprintsNode during local execution.
+type showFingerprintsRun struct {
 	rowIdx int
 	// values stores the current row, updated by Next().
 	values []tree.Datum
@@ -84,16 +90,16 @@ var showFingerprintsColumns = sqlbase.ResultColumns{
 }
 
 func (n *showFingerprintsNode) Start(params runParams) error {
-	n.values = []tree.Datum{tree.DNull, tree.DNull}
+	n.run.values = []tree.Datum{tree.DNull, tree.DNull}
 	return nil
 }
-func (n *showFingerprintsNode) Values() tree.Datums     { return n.values }
+func (n *showFingerprintsNode) Values() tree.Datums     { return n.run.values }
 func (n *showFingerprintsNode) Close(_ context.Context) {}
 func (n *showFingerprintsNode) Next(params runParams) (bool, error) {
-	if n.rowIdx >= len(n.indexes) {
+	if n.run.rowIdx >= len(n.indexes) {
 		return false, nil
 	}
-	index := n.indexes[n.rowIdx]
+	index := n.indexes[n.run.rowIdx]
 
 	cols := make([]string, 0, len(n.tableDesc.Columns))
 	addColumn := func(col sqlbase.ColumnDescriptor) {
@@ -153,8 +159,8 @@ func (n *showFingerprintsNode) Next(params runParams) (bool, error) {
 	}
 	fingerprint := fingerprintCols[0]
 
-	n.values[0] = tree.NewDString(index.Name)
-	n.values[1] = fingerprint
-	n.rowIdx++
+	n.run.values[0] = tree.NewDString(index.Name)
+	n.run.values[1] = fingerprint
+	n.run.rowIdx++
 	return true, nil
 }

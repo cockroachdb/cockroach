@@ -99,9 +99,14 @@ func (p *planner) Split(ctx context.Context, n *tree.Split) (planNode, error) {
 type splitNode struct {
 	optColumnsSlot
 
-	tableDesc    *sqlbase.TableDescriptor
-	index        *sqlbase.IndexDescriptor
-	rows         planNode
+	tableDesc *sqlbase.TableDescriptor
+	index     *sqlbase.IndexDescriptor
+	rows      planNode
+	run       splitRun
+}
+
+// splitRun contains the run-time state of splitNode during local execution.
+type splitRun struct {
 	lastSplitKey []byte
 }
 
@@ -127,15 +132,15 @@ func (n *splitNode) Next(params runParams) (bool, error) {
 		return false, err
 	}
 
-	n.lastSplitKey = rowKey
+	n.run.lastSplitKey = rowKey
 
 	return true, nil
 }
 
 func (n *splitNode) Values() tree.Datums {
 	return tree.Datums{
-		tree.NewDBytes(tree.DBytes(n.lastSplitKey)),
-		tree.NewDString(keys.PrettyPrint(n.lastSplitKey)),
+		tree.NewDBytes(tree.DBytes(n.run.lastSplitKey)),
+		tree.NewDString(keys.PrettyPrint(n.run.lastSplitKey)),
 	}
 }
 
@@ -207,16 +212,25 @@ func (p *planner) TestingRelocate(ctx context.Context, n *tree.TestingRelocate) 
 		tableDesc: tableDesc,
 		index:     index,
 		rows:      rows,
-		storeMap:  make(map[roachpb.StoreID]roachpb.NodeID),
+		run: testingRelocateRun{
+			storeMap: make(map[roachpb.StoreID]roachpb.NodeID),
+		},
 	}, nil
 }
 
 type testingRelocateNode struct {
 	optColumnsSlot
 
-	tableDesc         *sqlbase.TableDescriptor
-	index             *sqlbase.IndexDescriptor
-	rows              planNode
+	tableDesc *sqlbase.TableDescriptor
+	index     *sqlbase.IndexDescriptor
+	rows      planNode
+
+	run testingRelocateRun
+}
+
+// testingRelocateRun contains the run-time state of
+// testingRelocateNode during local execution.
+type testingRelocateRun struct {
 	lastRangeStartKey []byte
 
 	// storeMap caches information about stores seen in relocation strings (to
@@ -277,7 +291,7 @@ func (n *testingRelocateNode) Next(params runParams) (bool, error) {
 	targets := make([]roachpb.ReplicationTarget, len(relocation.Array))
 	for i, d := range relocation.Array {
 		storeID := roachpb.StoreID(*d.(*tree.DInt))
-		nodeID, ok := n.storeMap[storeID]
+		nodeID, ok := n.run.storeMap[storeID]
 		if !ok {
 			// Lookup the store in gossip.
 			var storeDesc roachpb.StoreDescriptor
@@ -286,7 +300,7 @@ func (n *testingRelocateNode) Next(params runParams) (bool, error) {
 				return false, errors.Wrapf(err, "error looking up store %d", storeID)
 			}
 			nodeID = storeDesc.Node.NodeID
-			n.storeMap[storeID] = nodeID
+			n.run.storeMap[storeID] = nodeID
 		}
 		targets[i] = roachpb.ReplicationTarget{NodeID: nodeID, StoreID: storeID}
 	}
@@ -304,7 +318,7 @@ func (n *testingRelocateNode) Next(params runParams) (bool, error) {
 	if err != nil {
 		return false, errors.Wrap(err, "error looking up range descriptor")
 	}
-	n.lastRangeStartKey = rangeDesc.StartKey.AsRawKey()
+	n.run.lastRangeStartKey = rangeDesc.StartKey.AsRawKey()
 
 	if err := storage.TestingRelocateRange(params.ctx, params.p.ExecCfg().DB, rangeDesc, targets); err != nil {
 		return false, err
@@ -315,8 +329,8 @@ func (n *testingRelocateNode) Next(params runParams) (bool, error) {
 
 func (n *testingRelocateNode) Values() tree.Datums {
 	return tree.Datums{
-		tree.NewDBytes(tree.DBytes(n.lastRangeStartKey)),
-		tree.NewDString(keys.PrettyPrint(n.lastRangeStartKey)),
+		tree.NewDBytes(tree.DBytes(n.run.lastRangeStartKey)),
+		tree.NewDString(keys.PrettyPrint(n.run.lastRangeStartKey)),
 	}
 }
 
@@ -414,13 +428,20 @@ func (p *planner) Scatter(ctx context.Context, n *tree.Scatter) (planNode, error
 	}
 
 	return &scatterNode{
-		span: span,
+		run: scatterRun{
+			span: span,
+		},
 	}, nil
 }
 
 type scatterNode struct {
 	optColumnsSlot
 
+	run scatterRun
+}
+
+// scatterRun contains the run-time state of scatterNode during local execution.
+type scatterRun struct {
 	span roachpb.Span
 
 	rangeIdx int
@@ -430,20 +451,20 @@ type scatterNode struct {
 func (n *scatterNode) Start(params runParams) error {
 	db := params.p.ExecCfg().DB
 	req := &roachpb.AdminScatterRequest{
-		Span: roachpb.Span{Key: n.span.Key, EndKey: n.span.EndKey},
+		Span: roachpb.Span{Key: n.run.span.Key, EndKey: n.run.span.EndKey},
 	}
 	res, pErr := client.SendWrapped(params.ctx, db.GetSender(), req)
 	if pErr != nil {
 		return pErr.GoError()
 	}
-	n.rangeIdx = -1
-	n.ranges = res.(*roachpb.AdminScatterResponse).Ranges
+	n.run.rangeIdx = -1
+	n.run.ranges = res.(*roachpb.AdminScatterResponse).Ranges
 	return nil
 }
 
 func (n *scatterNode) Next(params runParams) (bool, error) {
-	n.rangeIdx++
-	hasNext := n.rangeIdx < len(n.ranges)
+	n.run.rangeIdx++
+	hasNext := n.run.rangeIdx < len(n.run.ranges)
 	return hasNext, nil
 }
 
@@ -459,7 +480,7 @@ var scatterNodeColumns = sqlbase.ResultColumns{
 }
 
 func (n *scatterNode) Values() tree.Datums {
-	r := n.ranges[n.rangeIdx]
+	r := n.run.ranges[n.run.rangeIdx]
 	return tree.Datums{
 		tree.NewDBytes(tree.DBytes(r.Span.Key)),
 		tree.NewDString(keys.PrettyPrint(r.Span.Key)),

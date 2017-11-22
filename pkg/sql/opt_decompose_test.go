@@ -68,7 +68,7 @@ func makeSelectNode(t *testing.T, p *planner) *renderNode {
 	numColumns := len(sel.sourceInfo[0].sourceColumns)
 	sel.ivarHelper = tree.MakeIndexedVarHelper(sel, numColumns)
 	p.evalCtx.IVarHelper = &sel.ivarHelper
-	sel.curSourceRow = make(tree.Datums, numColumns)
+	sel.run.curSourceRow = make(tree.Datums, numColumns)
 	return sel
 }
 
@@ -105,8 +105,8 @@ func checkEquivExpr(evalCtx *tree.EvalContext, a, b tree.TypedExpr, sel *renderN
 		tree.NewDInt(3),
 		tree.DNull,
 	} {
-		for i := range sel.curSourceRow {
-			sel.curSourceRow[i] = v
+		for i := range sel.run.curSourceRow {
+			sel.run.curSourceRow[i] = v
 		}
 		da, err := a.Eval(evalCtx)
 		if err != nil {

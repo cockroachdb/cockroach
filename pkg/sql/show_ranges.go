@@ -44,8 +44,10 @@ func (p *planner) ShowRanges(ctx context.Context, n *tree.ShowRanges) (planNode,
 	// Note: for interleaved tables, the ranges we report will include rows from
 	// interleaving.
 	return &showRangesNode{
-		span:   tableDesc.IndexSpan(index.ID),
-		values: make([]tree.Datum, len(showRangesColumns)),
+		span: tableDesc.IndexSpan(index.ID),
+		run: showRangesRun{
+			values: make([]tree.Datum, len(showRangesColumns)),
+		},
 	}, nil
 }
 
@@ -54,6 +56,12 @@ type showRangesNode struct {
 
 	span roachpb.Span
 
+	run showRangesRun
+}
+
+// showRangesRun contains the run-time state for showRangesNode during
+// local execution.
+type showRangesRun struct {
 	// descriptorKVs are KeyValues returned from scanning the
 	// relevant meta keys.
 	descriptorKVs []client.KeyValue
@@ -90,32 +98,32 @@ var showRangesColumns = sqlbase.ResultColumns{
 
 func (n *showRangesNode) Start(params runParams) error {
 	var err error
-	n.descriptorKVs, err = scanMetaKVs(params.ctx, params.p.txn, n.span)
+	n.run.descriptorKVs, err = scanMetaKVs(params.ctx, params.p.txn, n.span)
 	return err
 }
 
 func (n *showRangesNode) Next(params runParams) (bool, error) {
-	if n.rowIdx >= len(n.descriptorKVs) {
+	if n.run.rowIdx >= len(n.run.descriptorKVs) {
 		return false, nil
 	}
 
 	var desc roachpb.RangeDescriptor
-	if err := n.descriptorKVs[n.rowIdx].ValueProto(&desc); err != nil {
+	if err := n.run.descriptorKVs[n.run.rowIdx].ValueProto(&desc); err != nil {
 		return false, err
 	}
-	for i := range n.values {
-		n.values[i] = tree.DNull
+	for i := range n.run.values {
+		n.run.values[i] = tree.DNull
 	}
 
-	if n.rowIdx > 0 {
-		n.values[0] = tree.NewDString(sqlbase.PrettyKey(desc.StartKey.AsRawKey(), 2))
+	if n.run.rowIdx > 0 {
+		n.run.values[0] = tree.NewDString(sqlbase.PrettyKey(desc.StartKey.AsRawKey(), 2))
 	}
 
-	if n.rowIdx < len(n.descriptorKVs)-1 {
-		n.values[1] = tree.NewDString(sqlbase.PrettyKey(desc.EndKey.AsRawKey(), 2))
+	if n.run.rowIdx < len(n.run.descriptorKVs)-1 {
+		n.run.values[1] = tree.NewDString(sqlbase.PrettyKey(desc.EndKey.AsRawKey(), 2))
 	}
 
-	n.values[2] = tree.NewDInt(tree.DInt(desc.RangeID))
+	n.run.values[2] = tree.NewDInt(tree.DInt(desc.RangeID))
 
 	var replicas []int
 	for _, rd := range desc.Replicas {
@@ -128,7 +136,7 @@ func (n *showRangesNode) Next(params runParams) (bool, error) {
 	for i, r := range replicas {
 		replicaArr.Array[i] = tree.NewDInt(tree.DInt(r))
 	}
-	n.values[3] = replicaArr
+	n.run.values[3] = replicaArr
 
 	// Get the lease holder.
 	// TODO(radu): this will be slow if we have a lot of ranges; find a way to
@@ -143,18 +151,18 @@ func (n *showRangesNode) Next(params runParams) (bool, error) {
 		return false, errors.Wrap(err, "error getting lease info")
 	}
 	resp := b.RawResponse().Responses[0].GetInner().(*roachpb.LeaseInfoResponse)
-	n.values[4] = tree.NewDInt(tree.DInt(resp.Lease.Replica.StoreID))
+	n.run.values[4] = tree.NewDInt(tree.DInt(resp.Lease.Replica.StoreID))
 
-	n.rowIdx++
+	n.run.rowIdx++
 	return true, nil
 }
 
 func (n *showRangesNode) Values() tree.Datums {
-	return n.values
+	return n.run.values
 }
 
 func (n *showRangesNode) Close(_ context.Context) {
-	n.descriptorKVs = nil
+	n.run.descriptorKVs = nil
 }
 
 // scanMetaKVs returns the meta KVs for the ranges that touch the given span.
