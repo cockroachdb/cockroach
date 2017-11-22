@@ -51,9 +51,7 @@ type scanNode struct {
 	cols []sqlbase.ColumnDescriptor
 	// There is a 1-1 correspondence between cols and resultColumns.
 	resultColumns sqlbase.ResultColumns
-	// Contains values for the current row. There is a 1-1 correspondence
-	// between resultColumns and values in row.
-	row tree.Datums
+
 	// For each column in resultColumns, indicates if the value is
 	// needed (used as an optimization when the upper layer doesn't need
 	// all values).
@@ -68,12 +66,9 @@ type scanNode struct {
 	// Map used to get the index for columns in cols.
 	colIdxMap map[sqlbase.ColumnID]int
 
-	spans            []roachpb.Span
-	isSecondaryIndex bool
-	reverse          bool
-	props            physicalProps
-
-	rowIndex int64 // the index of the current row
+	spans   []roachpb.Span
+	reverse bool
+	props   physicalProps
 
 	// filter that can be evaluated using only this table/index; it contains
 	// tree.IndexedVar leaves generated using filterVars.
@@ -85,9 +80,6 @@ type scanNode struct {
 	// span and the filter is nil. But we still want to deduce not-null columns
 	// from the original filter.
 	origFilter tree.TypedExpr
-
-	scanInitialized bool
-	fetcher         sqlbase.MultiRowFetcher
 
 	// if non-zero, hardLimit indicates that the scanNode only needs to provide
 	// this many rows (after applying any filter). It is a "hard" guarantee that
@@ -101,6 +93,9 @@ type scanNode struct {
 	disableBatchLimits bool
 
 	scanVisibility scanVisibility
+
+	run scanRun
+
 	// This struct must be allocated on the heap and its location stay
 	// stable after construction because it implements
 	// IndexedVarContainer and the IndexedVar objects in sub-expressions
@@ -111,13 +106,28 @@ type scanNode struct {
 	noCopy util.NoCopy
 }
 
+// scanRun contains the run-time state of scanNode during local execution.
+type scanRun struct {
+	// Contains values for the current row. There is a 1-1 correspondence
+	// between resultColumns and values in row.
+	row tree.Datums
+
+	// the index of the current row.
+	rowIndex int64
+
+	scanInitialized  bool
+	isSecondaryIndex bool
+
+	fetcher sqlbase.MultiRowFetcher
+}
+
 func (p *planner) Scan() *scanNode {
 	n := scanNodePool.Get().(*scanNode)
 	return n
 }
 
 func (n *scanNode) Values() tree.Datums {
-	return n.row
+	return n.run.row
 }
 
 // disableBatchLimit disables the kvfetcher batch limits. Used for index-join,
@@ -133,11 +143,11 @@ func (n *scanNode) Start(params runParams) error {
 		Desc:             n.desc,
 		Index:            n.index,
 		ColIdxMap:        n.colIdxMap,
-		IsSecondaryIndex: n.isSecondaryIndex,
+		IsSecondaryIndex: n.run.isSecondaryIndex,
 		Cols:             n.cols,
 		ValNeededForCol:  n.valNeededForCol.Copy(),
 	}
-	return n.fetcher.Init(n.reverse, false /* returnRangeInfo */, &params.p.alloc, tableArgs)
+	return n.run.fetcher.Init(n.reverse, false /* returnRangeInfo */, &params.p.alloc, tableArgs)
 }
 
 func (n *scanNode) Close(context.Context) {
@@ -148,7 +158,7 @@ func (n *scanNode) Close(context.Context) {
 // initScan sets up the rowFetcher and starts a scan.
 func (n *scanNode) initScan(params runParams) error {
 	limitHint := n.limitHint()
-	if err := n.fetcher.StartScan(
+	if err := n.run.fetcher.StartScan(
 		params.ctx,
 		params.p.txn,
 		n.spans,
@@ -158,7 +168,7 @@ func (n *scanNode) initScan(params runParams) error {
 	); err != nil {
 		return err
 	}
-	n.scanInitialized = true
+	n.run.scanInitialized = true
 	return nil
 }
 
@@ -182,17 +192,17 @@ func (n *scanNode) limitHint() int64 {
 
 func (n *scanNode) Next(params runParams) (bool, error) {
 	tracing.AnnotateTrace()
-	if !n.scanInitialized {
+	if !n.run.scanInitialized {
 		if err := n.initScan(params); err != nil {
 			return false, err
 		}
 	}
 
 	// We fetch one row at a time until we find one that passes the filter.
-	for n.hardLimit == 0 || n.rowIndex < n.hardLimit {
+	for n.hardLimit == 0 || n.run.rowIndex < n.hardLimit {
 		var err error
-		n.row, _, _, err = n.fetcher.NextRowDecoded(params.ctx)
-		if err != nil || n.row == nil {
+		n.run.row, _, _, err = n.run.fetcher.NextRowDecoded(params.ctx)
+		if err != nil || n.run.row == nil {
 			return false, err
 		}
 		params.evalCtx.IVarHelper = &n.filterVars
@@ -201,7 +211,7 @@ func (n *scanNode) Next(params runParams) (bool, error) {
 			return false, err
 		}
 		if passesFilter {
-			n.rowIndex++
+			n.run.rowIndex++
 			return true, nil
 		}
 	}
@@ -381,7 +391,7 @@ func (n *scanNode) initDescDefaults(
 	}
 	n.valNeededForCol = util.FastIntSet{}
 	n.valNeededForCol.AddRange(0, len(n.cols)-1)
-	n.row = make([]tree.Datum, len(n.cols))
+	n.run.row = make([]tree.Datum, len(n.cols))
 	n.filterVars = tree.MakeIndexedVarHelper(n, len(n.cols))
 	return nil
 }
@@ -439,7 +449,7 @@ func (n *scanNode) computePhysicalProps(
 var _ tree.IndexedVarContainer = &scanNode{}
 
 func (n *scanNode) IndexedVarEval(idx int, ctx *tree.EvalContext) (tree.Datum, error) {
-	return n.row[idx].Eval(ctx)
+	return n.run.row[idx].Eval(ctx)
 }
 
 func (n *scanNode) IndexedVarResolvedType(idx int) types.T {

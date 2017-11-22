@@ -743,7 +743,7 @@ func (td *tableDeleter) fastDelete(
 				continue
 			}
 
-			after, ok, err := scan.fetcher.ReadIndexKey(i)
+			after, ok, err := scan.run.fetcher.ReadIndexKey(i)
 			if err != nil {
 				return 0, err
 			}

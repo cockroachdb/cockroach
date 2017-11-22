@@ -77,13 +77,7 @@ type renderNode struct {
 	// modified by index selection.
 	props physicalProps
 
-	// The current source row, with one value per source column.
-	// populated by Next(), used by renderRow().
-	curSourceRow tree.Datums
-
-	// The rendered row, with one value for each render expression.
-	// populated by Next().
-	row tree.Datums
+	run renderRun
 
 	// This struct must be allocated on the heap and its location stay
 	// stable after construction because it implements
@@ -95,8 +89,19 @@ type renderNode struct {
 	noCopy util.NoCopy
 }
 
+// renderRun contains the run-time state of renderNode during local execution.
+type renderRun struct {
+	// The current source row, with one value per source column.
+	// populated by Next(), used by renderRow().
+	curSourceRow tree.Datums
+
+	// The rendered row, with one value for each render expression.
+	// populated by Next().
+	row tree.Datums
+}
+
 func (r *renderNode) Values() tree.Datums {
-	return r.row
+	return r.run.row
 }
 
 func (r *renderNode) Start(params runParams) error {
@@ -108,7 +113,7 @@ func (r *renderNode) Next(params runParams) (bool, error) {
 		return false, err
 	}
 
-	r.curSourceRow = r.source.plan.Values()
+	r.run.curSourceRow = r.source.plan.Values()
 
 	err := r.renderRow(params.evalCtx)
 	return err == nil, err
@@ -120,7 +125,7 @@ func (r *renderNode) Close(ctx context.Context) {
 
 // IndexedVarEval implements the tree.IndexedVarContainer interface.
 func (r *renderNode) IndexedVarEval(idx int, ctx *tree.EvalContext) (tree.Datum, error) {
-	return r.curSourceRow[idx].Eval(ctx)
+	return r.run.curSourceRow[idx].Eval(ctx)
 }
 
 // IndexedVarResolvedType implements the tree.IndexedVarContainer interface.
@@ -605,13 +610,13 @@ func (r *renderNode) resetRenderColumns(exprs []tree.TypedExpr, cols sqlbase.Res
 
 // renderRow renders the row by evaluating the render expressions.
 func (r *renderNode) renderRow(evalCtx *tree.EvalContext) error {
-	if r.row == nil {
-		r.row = make([]tree.Datum, len(r.render))
+	if r.run.row == nil {
+		r.run.row = make([]tree.Datum, len(r.render))
 	}
 	for i, e := range r.render {
 		var err error
 		evalCtx.IVarHelper = &r.ivarHelper
-		r.row[i], err = e.Eval(evalCtx)
+		r.run.row[i], err = e.Eval(evalCtx)
 		if err != nil {
 			return err
 		}

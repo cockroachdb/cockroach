@@ -53,22 +53,25 @@ type insertNode struct {
 	n            *tree.Insert
 	checkHelper  checkHelper
 
-	insertCols            []sqlbase.ColumnDescriptor
+	insertCols []sqlbase.ColumnDescriptor
+	tw         tableWriter
+
+	run insertRun
+}
+
+// insertRun contains the run-time state of insertNode during local execution.
+type insertRun struct {
+	// The following fields are populated during Start().
+	editNodeRun
+
+	isUpsertReturning     bool
 	insertColIDtoRowIndex map[sqlbase.ColumnID]int
-	tw                    tableWriter
 
-	isUpsertReturning bool
+	rowIdxToRetIdx []int
+	rowTemplate    tree.Datums
 
-	run struct {
-		// The following fields are populated during Start().
-		editNodeRun
-
-		rowIdxToRetIdx []int
-		rowTemplate    tree.Datums
-
-		doneUpserting bool
-		rowsUpserted  *sqlbase.RowContainer
-	}
+	doneUpserting bool
+	rowsUpserted  *sqlbase.RowContainer
 }
 
 // Insert inserts rows into the database.
@@ -253,13 +256,15 @@ func (p *planner) Insert(
 
 	in := insertNodePool.Get().(*insertNode)
 	*in = insertNode{
-		n:                     n,
-		editNodeBase:          en,
-		defaultExprs:          defaultExprs,
-		insertCols:            ri.InsertCols,
-		insertColIDtoRowIndex: ri.InsertColIDtoRowIndex,
-		isUpsertReturning:     isUpsertReturning,
-		tw:                    tw,
+		n:            n,
+		editNodeBase: en,
+		defaultExprs: defaultExprs,
+		insertCols:   ri.InsertCols,
+		tw:           tw,
+		run: insertRun{
+			insertColIDtoRowIndex: ri.InsertColIDtoRowIndex,
+			isUpsertReturning:     isUpsertReturning,
+		},
 	}
 
 	if err := in.checkHelper.init(ctx, p, tn, en.tableDesc); err != nil {
@@ -327,7 +332,7 @@ func (n *insertNode) Close(ctx context.Context) {
 }
 
 func (n *insertNode) Next(params runParams) (bool, error) {
-	if n.isUpsertReturning {
+	if n.run.isUpsertReturning {
 		return n.drain(params)
 	}
 
@@ -360,7 +365,7 @@ func (n *insertNode) internalNext(params runParams) (bool, error) {
 				return false, err
 			}
 
-			if n.isUpsertReturning {
+			if n.run.isUpsertReturning {
 				n.run.rowsUpserted = sqlbase.NewRowContainer(
 					params.p.session.TxnState.makeBoundAccount(),
 					sqlbase.ColTypeInfoFromResCols(n.rh.columns),
@@ -382,12 +387,19 @@ func (n *insertNode) internalNext(params runParams) (bool, error) {
 		return false, err
 	}
 
-	rowVals, err := GenerateInsertRow(n.defaultExprs, n.insertColIDtoRowIndex, n.insertCols, *params.evalCtx, n.tableDesc, n.run.rows.Values())
+	rowVals, err := GenerateInsertRow(
+		n.defaultExprs,
+		n.run.insertColIDtoRowIndex,
+		n.insertCols,
+		*params.evalCtx,
+		n.tableDesc,
+		n.run.rows.Values(),
+	)
 	if err != nil {
 		return false, err
 	}
 
-	if err := n.checkHelper.loadRow(n.insertColIDtoRowIndex, rowVals, false); err != nil {
+	if err := n.checkHelper.loadRow(n.run.insertColIDtoRowIndex, rowVals, false); err != nil {
 		return false, err
 	}
 	if err := n.checkHelper.check(params.evalCtx); err != nil {
@@ -400,7 +412,7 @@ func (n *insertNode) internalNext(params runParams) (bool, error) {
 	}
 
 	// Handle regular INSERT ... RETURNING without ON CONFLICT clause
-	if !n.isUpsertReturning {
+	if !n.run.isUpsertReturning {
 		for i, val := range rowVals {
 			if n.run.rowTemplate != nil {
 				n.run.rowTemplate[n.run.rowIdxToRetIdx[i]] = val
@@ -636,7 +648,7 @@ func checkNumExprs(numExprs, numCols int, specifiedTargets bool) error {
 }
 
 func (n *insertNode) Values() tree.Datums {
-	if !n.isUpsertReturning {
+	if !n.run.isUpsertReturning {
 		return n.run.resultRow
 	}
 

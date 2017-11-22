@@ -2020,7 +2020,7 @@ func (e *Executor) execClassic(
 		}
 	case tree.DDL:
 		if n, ok := plan.(*createTableNode); ok && n.n.As() {
-			rowResultWriter.IncrementRowsAffected(n.count)
+			rowResultWriter.IncrementRowsAffected(n.run.count)
 		}
 	}
 	return nil

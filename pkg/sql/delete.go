@@ -39,12 +39,15 @@ type deleteNode struct {
 
 	tw tableDeleter
 
-	run struct {
-		// The following fields are populated during Start().
-		editNodeRun
+	run deleteRun
+}
 
-		fastPath bool
-	}
+// deleteRun contains the run-time state of deleteNode during local execution.
+type deleteRun struct {
+	// The following fields are populated during Start().
+	editNodeRun
+
+	fastPath bool
 }
 
 // Delete removes rows from a table.
