@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
@@ -50,17 +51,31 @@ const MinRetentionWindow = 10 * time.Second
 // instead to determine read-write conflicts. The low water mark is initialized
 // to the current system time plus the maximum clock offset.
 type Cache interface {
+	// ThreadSafe returns whether the Cache implementation is thread-safe and
+	// therefore does not need external locking.
+	//
+	// TODO(nvanbenschoten): We expose this while the treeImpl is still being
+	// used because finer grained locking internally in each method would hurt
+	// performance. Once we switch to the sklImpl by default, we can give
+	// treeImpl its own lock and let it do its own locking.
+	ThreadSafe() bool
+
 	// AddRequest adds the specified request to the cache in an unexpanded state.
+	//
+	// TODO(nvanbenschoten): once we switch to using the sklImpl by default, we
+	// should trim this interface. We can remove AddRequest and  ExpandRequests,
+	// and export Add directly, because we no longer need to group operations
+	// into a single synchronized access. Doing so will hurt the performance of
+	// treeImpl but improve performance of sklImpl. Because of this tradeoff, we
+	// don't want to do this until we switch from using treeImpl by default to
+	// using sklImpl by default.
 	AddRequest(req *Request)
 	// ExpandRequests expands any request that overlaps the specified span and
 	// which is newer than the specified timestamp.
 	ExpandRequests(span roachpb.RSpan, timestamp hlc.Timestamp)
-
 	// SetLowWater sets the low water mark of the cache for the specified span
 	// to the provided timestamp.
 	SetLowWater(start, end roachpb.Key, timestamp hlc.Timestamp)
-	// GlobalLowWater returns the low water mark for the entire cache.
-	GlobalLowWater() hlc.Timestamp
 
 	// GetMaxRead returns the maximum read timestamp which overlaps the interval
 	// spanning from start to end. If that maximum timestamp belongs to a single
@@ -78,13 +93,18 @@ type Cache interface {
 	//
 	// add the specified timestamp to the cache covering the range of keys from
 	// start to end.
-	add(start, end roachpb.Key, timestamp hlc.Timestamp, txnID uuid.UUID, readTSCache bool)
+	add(start, end roachpb.Key, ts hlc.Timestamp, txnID uuid.UUID, readCache bool)
 	// clear clears the cache and resets the low-water mark.
 	clear(lowWater hlc.Timestamp)
+	// getLowWater return the low water mark for the specified cache.
+	getLowWater(readCache bool) hlc.Timestamp
 }
 
 // New returns a new timestamp cache with the supplied hybrid clock.
 func New(clock *hlc.Clock) Cache {
+	if envutil.EnvOrDefaultBool("COCKROACH_USE_SKL_TSCACHE", false) {
+		return newSklImpl(clock)
+	}
 	return newTreeImpl(clock)
 }
 
