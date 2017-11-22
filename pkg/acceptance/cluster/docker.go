@@ -159,6 +159,39 @@ func splitBindSpec(bind string) (hostPath string, containerPath string) {
 	return s[0], s[1]
 }
 
+// getNonRootContainerUser determines a non-root UID and GID to use in the
+// container to minimize file ownership problems in bind mounts. It returns a
+// UID:GID string suitable for use as the User field container.Config.
+func getNonRootContainerUser() (string, error) {
+	// This number is Debian-specific, but for now all of our acceptance test
+	// containers are based on Debian.
+	// See: https://www.debian.org/doc/debian-policy/#uid-and-gid-classes
+	const minUnreservedID = 101
+	user, err := user.Current()
+	if err != nil {
+		return "", err
+	}
+	uid, err := strconv.Atoi(user.Uid)
+	if err != nil {
+		return "", errors.Wrap(err, "looking up host UID")
+	}
+	if uid < minUnreservedID {
+		return "", fmt.Errorf("host UID %d in container's reserved UID space", uid)
+	}
+	gid, err := strconv.Atoi(user.Gid)
+	if err != nil {
+		return "", errors.Wrap(err, "looking up host GID")
+	}
+	if gid < minUnreservedID {
+		// If the GID is in the reserved space, silently upconvert to the known-good
+		// UID. We don't want to return an error because users on a macOS host
+		// typically have a GID in the reserved space, and this upconversion has
+		// been empirically verified to not cause ownership issues.
+		gid = uid
+	}
+	return fmt.Sprintf("%d:%d", uid, gid), nil
+}
+
 // createContainer creates a new container using the specified
 // options. Per the docker API, the created container is not running
 // and must be started explicitly. Note that the passed-in hostConfig
@@ -178,11 +211,11 @@ func createContainer(
 
 	// Run the container as the current user to avoid creating root-owned files
 	// and directories from within the container.
-	user, err := user.Current()
+	user, err := getNonRootContainerUser()
 	if err != nil {
-		maybePanic(err)
+		return nil, err
 	}
-	containerConfig.User = fmt.Sprintf("%s:%s", user.Uid, user.Gid)
+	containerConfig.User = user
 
 	// Additionally ensure that the host side of every bind exists. Otherwise, the
 	// Docker daemon will create the host directory as root before running the
