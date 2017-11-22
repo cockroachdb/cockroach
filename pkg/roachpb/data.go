@@ -1373,11 +1373,6 @@ func (rs RSpan) AsRawSpanWithNoLocals() Span {
 	}
 }
 
-// Overlaps returns whether the two spans overlap.
-func (rs RSpan) Overlaps(other RSpan) bool {
-	return rs.AsRawSpanWithNoLocals().Overlaps(other.AsRawSpanWithNoLocals())
-}
-
 // KeyValueByKey implements sorting of a slice of KeyValues by key.
 type KeyValueByKey []KeyValue
 
