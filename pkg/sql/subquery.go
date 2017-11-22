@@ -33,7 +33,6 @@ import (
 // in the expression tree from the point type checking occurs to
 // the point the query starts execution / evaluation.
 type subquery struct {
-	planner  *planner
 	typ      types.T
 	subquery *tree.Subquery
 	execMode subqueryExecMode
@@ -108,14 +107,14 @@ func (s *subquery) Eval(_ *tree.EvalContext) (tree.Datum, error) {
 	return s.result, nil
 }
 
-func (s *subquery) doEval(ctx context.Context) (result tree.Datum, err error) {
+func (s *subquery) doEval(ctx context.Context, p *planner) (result tree.Datum, err error) {
 	// After evaluation, there is no plan remaining.
 	defer func() { s.plan.Close(ctx); s.plan = nil }()
 
 	params := runParams{
 		ctx:     ctx,
-		evalCtx: &s.planner.evalCtx,
-		p:       s.planner,
+		evalCtx: &p.evalCtx,
+		p:       p,
 	}
 	switch s.execMode {
 	case execModeExists:
@@ -163,7 +162,7 @@ func (s *subquery) doEval(ctx context.Context) (result tree.Datum, err error) {
 			rows.SetSorted()
 		}
 		if s.execMode == execModeAllRowsNormalized {
-			rows.Normalize(&s.planner.evalCtx)
+			rows.Normalize(&p.evalCtx)
 		}
 		result = &rows
 
@@ -252,7 +251,7 @@ func (v *subqueryPlanVisitor) subqueryNode(ctx context.Context, sq *subquery) er
 			return err
 		}
 		sq.started = true
-		res, err := sq.doEval(ctx)
+		res, err := sq.doEval(ctx, v.p)
 		if err != nil {
 			return err
 		}
@@ -362,7 +361,7 @@ func (v *subqueryVisitor) VisitPre(expr tree.Expr) (recurse bool, newExpr tree.E
 		return false, expr
 	}
 
-	result := &subquery{planner: v.planner, subquery: sq, plan: plan}
+	result := &subquery{subquery: sq, plan: plan}
 
 	if exists != nil {
 		result.execMode = execModeExists
