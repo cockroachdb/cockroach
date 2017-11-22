@@ -352,6 +352,7 @@ type Store struct {
 	cfg                StoreConfig
 	db                 *client.DB
 	engine             engine.Engine               // The underlying key-value store
+	tsCache            tscache.Cache               // Most recent timestamps for keys / key ranges
 	allocator          Allocator                   // Makes allocation decisions
 	rangeIDAlloc       *idAllocator                // Range ID allocator
 	gcQueue            *gcQueue                    // Garbage collection queue
@@ -520,13 +521,6 @@ type Store struct {
 	// Replica.raftMu to be held while a replica is being inserted into
 	// Store.mu.replicas.
 	replicaQueues syncutil.IntMap // map[roachpb.RangeID]*raftRequestQueue
-
-	tsCacheMu struct {
-		// Protects all fields in the tsCacheMu struct.
-		syncutil.Mutex
-		// Most recent timestamps for keys / key ranges.
-		cache tscache.Cache
-	}
 
 	scheduler *raftScheduler
 
@@ -836,6 +830,7 @@ func NewStore(cfg StoreConfig, eng engine.Engine, nodeDesc *roachpb.NodeDescript
 		cfg:      cfg,
 		db:       cfg.DB, // TODO(tschottdorf): remove redundancy.
 		engine:   eng,
+		tsCache:  tscache.New(cfg.Clock),
 		nodeDesc: nodeDesc,
 		metrics:  newStoreMetrics(cfg.HistogramWindowInterval),
 	}
@@ -861,10 +856,6 @@ func NewStore(cfg StoreConfig, eng engine.Engine, nodeDesc *roachpb.NodeDescript
 	s.mu.replicasByKey = btree.New(64 /* degree */)
 	s.mu.uninitReplicas = map[roachpb.RangeID]*Replica{}
 	s.mu.Unlock()
-
-	s.tsCacheMu.Lock()
-	s.tsCacheMu.cache = tscache.New(s.cfg.Clock)
-	s.tsCacheMu.Unlock()
 
 	s.snapshotApplySem = make(chan struct{}, cfg.concurrentSnapshotApplyLimit)
 

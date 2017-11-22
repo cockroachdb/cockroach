@@ -73,8 +73,6 @@ func cacheEntrySize(start, end interval.Comparable) uint64 {
 // recently read or written. If a timestamp was read or written by a
 // transaction, the txn ID is stored with the timestamp to avoid advancing
 // timestamps on successive requests from the same transaction.
-//
-// sklImpl is safe for concurrent use by multiple goroutines.
 type treeImpl struct {
 	syncutil.RWMutex
 
@@ -110,9 +108,6 @@ func newTreeImpl(clock *hlc.Clock) *treeImpl {
 	tc.wCache.Config.OnEvicted = tc.onEvicted
 	return tc
 }
-
-// ThreadSafe implements the Cache interface.
-func (*treeImpl) ThreadSafe() bool { return true }
 
 // clear clears the cache and resets the low-water mark.
 func (tc *treeImpl) clear(lowWater hlc.Timestamp) {

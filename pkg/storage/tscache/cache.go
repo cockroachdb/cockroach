@@ -50,16 +50,9 @@ const MinRetentionWindow = 10 * time.Second
 // writes to a key not present in the cache, the “low water mark” is consulted
 // instead to determine read-write conflicts. The low water mark is initialized
 // to the current system time plus the maximum clock offset.
+//
+// All Cache implementations are safe for concurrent use by multiple goroutines.
 type Cache interface {
-	// ThreadSafe returns whether the Cache implementation is thread-safe and
-	// therefore does not need external locking.
-	//
-	// TODO(nvanbenschoten): We expose this while the treeImpl is still being
-	// used because finer grained locking internally in each method would hurt
-	// performance. Once we switch to the sklImpl by default, we can give
-	// treeImpl its own lock and let it do its own locking.
-	ThreadSafe() bool
-
 	// AddRequest adds the specified request to the cache in an unexpanded state.
 	//
 	// TODO(nvanbenschoten): once we switch to using the sklImpl by default, we
