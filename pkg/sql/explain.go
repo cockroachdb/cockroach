@@ -155,6 +155,11 @@ type explainDistSQLNode struct {
 
 	plan planNode
 
+	run explainDistSQLRun
+}
+
+// explainDistSQLRun contains the run-time state of explainDistSQLNode during local execution.
+type explainDistSQLRun struct {
 	// The single row returned by the node.
 	values tree.Datums
 
@@ -195,7 +200,7 @@ func (n *explainDistSQLNode) Start(params runParams) error {
 		return err
 	}
 
-	n.values = tree.Datums{
+	n.run.values = tree.Datums{
 		tree.MakeDBool(tree.DBool(auto)),
 		tree.NewDString(planURL.String()),
 		tree.NewDString(planJSON),
@@ -204,13 +209,11 @@ func (n *explainDistSQLNode) Start(params runParams) error {
 }
 
 func (n *explainDistSQLNode) Next(runParams) (bool, error) {
-	if n.done {
+	if n.run.done {
 		return false, nil
 	}
-	n.done = true
+	n.run.done = true
 	return true, nil
 }
 
-func (n *explainDistSQLNode) Values() tree.Datums {
-	return n.values
-}
+func (n *explainDistSQLNode) Values() tree.Datums { return n.run.values }

@@ -77,8 +77,10 @@ func (p *planner) window(
 	}
 
 	window := &windowNode{
-		values:       valuesNode{columns: s.columns},
 		windowRender: make([]tree.TypedExpr, len(s.render)),
+		run: windowRun{
+			values: valuesNode{columns: s.columns},
+		},
 	}
 
 	if err := window.extractWindowFunctions(s); err != nil {
@@ -93,11 +95,9 @@ func (p *planner) window(
 	window.replaceIndexVarsAndAggFuncs(s)
 
 	acc := p.session.TxnState.makeBoundAccount()
-	window.wrappedRenderVals = sqlbase.NewRowContainer(
+	window.run.wrappedRenderVals = sqlbase.NewRowContainer(
 		acc, sqlbase.ColTypeInfoFromResCols(s.columns), 0,
 	)
-	// TODO(knz): this account should probably not be opened before Start() is called.
-	window.windowsAcc = p.session.TxnState.makeBoundAccount()
 
 	return window, nil
 }
@@ -327,14 +327,14 @@ func constructWindowDef(
 //
 func (n *windowNode) replaceIndexVarsAndAggFuncs(s *renderNode) {
 	n.colContainer = windowNodeColContainer{
-		windowNodeIvarContainer: makeWindowNodeIvarContainer(n),
+		windowNodeIvarContainer: makeWindowNodeIvarContainer(&n.run),
 		sourceInfo:              s.sourceInfo[0],
 	}
 	ivarHelper := tree.MakeIndexedVarHelper(&n.colContainer, s.ivarHelper.NumVars())
 	n.ivarHelper = &ivarHelper
 
 	n.aggContainer = windowNodeAggContainer{
-		windowNodeIvarContainer: makeWindowNodeIvarContainer(n),
+		windowNodeIvarContainer: makeWindowNodeIvarContainer(&n.run),
 		aggFuncs:                make(map[int]*tree.FuncExpr),
 	}
 	// The number of aggregation functions that need to be replaced with IndexedVars
@@ -419,6 +419,28 @@ type windowNode struct {
 	// The "wrapped" node (which returns un-windowed results).
 	plan planNode
 
+	sourceCols int
+
+	// A sparse array holding renders specific to this windowNode. This will contain
+	// nil entries for renders that do not contain window functions, and which therefore
+	// can be propagated directly from the "wrapped" node.
+	windowRender []tree.TypedExpr
+
+	// The window functions handled by this windowNode. computeWindows will populate
+	// an entire column in windowValues for each windowFuncHolder, in order.
+	funcs []*windowFuncHolder
+
+	// colContainer and aggContainer are IndexedVarContainers that provide indirection
+	// to migrate IndexedVars and aggregate functions below the windowing level.
+	colContainer windowNodeColContainer
+	aggContainer windowNodeAggContainer
+	ivarHelper   *tree.IndexedVarHelper
+
+	run windowRun
+}
+
+// windowRun contains the run-time state of windowNode during local execution.
+type windowRun struct {
 	// The values returned by the wrapped nodes are logically split into three
 	// groups of columns, although they may overlap if renders were merged:
 	// - sourceVals: these values are either passed directly as rendered values of the
@@ -436,40 +458,29 @@ type windowNode struct {
 	//     then index into these values in colContainer.IndexedVarEval and
 	//     aggContainer.IndexedVarEval. (see replaceIndexVarsAndAggFuncs)
 	wrappedRenderVals *sqlbase.RowContainer
-	sourceCols        int
-
-	// A sparse array holding renders specific to this windowNode. This will contain
-	// nil entries for renders that do not contain window functions, and which therefore
-	// can be propagated directly from the "wrapped" node.
-	windowRender []tree.TypedExpr
 
 	// The populated values for this windowNode.
 	values    valuesNode
 	populated bool
 
-	// The window functions handled by this windowNode. computeWindows will populate
-	// an entire column in windowValues for each windowFuncHolder, in order.
-	funcs        []*windowFuncHolder
 	windowValues [][]tree.Datum
 	curRowIdx    int
-
-	// colContainer and aggContainer are IndexedVarContainers that provide indirection
-	// to migrate IndexedVars and aggregate functions below the windowing level.
-	colContainer windowNodeColContainer
-	aggContainer windowNodeAggContainer
-	ivarHelper   *tree.IndexedVarHelper
 
 	windowsAcc mon.BoundAccount
 }
 
 func (n *windowNode) Values() tree.Datums {
-	return n.values.Values()
+	return n.run.values.Values()
 }
 
-func (n *windowNode) Start(params runParams) error { return n.plan.Start(params) }
+func (n *windowNode) Start(params runParams) error {
+	n.run.windowsAcc = params.p.session.TxnState.makeBoundAccount()
+
+	return n.plan.Start(params)
+}
 
 func (n *windowNode) Next(params runParams) (bool, error) {
-	for !n.populated {
+	for !n.run.populated {
 		if err := params.p.cancelChecker.Check(); err != nil {
 			return false, err
 		}
@@ -479,14 +490,14 @@ func (n *windowNode) Next(params runParams) (bool, error) {
 			return false, err
 		}
 		if !next {
-			n.populated = true
+			n.run.populated = true
 			if err := n.computeWindows(params.ctx, params.evalCtx); err != nil {
 				return false, err
 			}
-			n.values.rows = sqlbase.NewRowContainer(
+			n.run.values.rows = sqlbase.NewRowContainer(
 				params.p.session.TxnState.makeBoundAccount(),
-				sqlbase.ColTypeInfoFromResCols(n.values.columns),
-				n.wrappedRenderVals.Len(),
+				sqlbase.ColTypeInfoFromResCols(n.run.values.columns),
+				n.run.wrappedRenderVals.Len(),
 			)
 			if err := n.populateValues(params.ctx, params.evalCtx); err != nil {
 				return false, err
@@ -495,12 +506,12 @@ func (n *windowNode) Next(params runParams) (bool, error) {
 		}
 
 		values := n.plan.Values()
-		if _, err := n.wrappedRenderVals.AddRow(params.ctx, values); err != nil {
+		if _, err := n.run.wrappedRenderVals.AddRow(params.ctx, values); err != nil {
 			return false, err
 		}
 	}
 
-	return n.values.Next(params)
+	return n.run.values.Next(params)
 }
 
 type partitionSorter struct {
@@ -545,7 +556,7 @@ type peerGroupChecker interface {
 	InSameGroup(i, j int) bool
 }
 
-// computeWindows populates n.windowValues, adding a column of values to the
+// computeWindows populates n.run.windowValues, adding a column of values to the
 // 2D-slice for each window function in n.funcs. This needs to be performed
 // all at once because in order to compute the result of a window function
 // for any single row, we need to have access to all rows at the same time.
@@ -562,7 +573,7 @@ type peerGroupChecker interface {
 //       sort partition
 //       evaluate window frame over partition per cell, keeping track of peer groups
 func (n *windowNode) computeWindows(ctx context.Context, evalCtx *tree.EvalContext) error {
-	rowCount := n.wrappedRenderVals.Len()
+	rowCount := n.run.wrappedRenderVals.Len()
 	if rowCount == 0 {
 		return nil
 	}
@@ -571,14 +582,14 @@ func (n *windowNode) computeWindows(ctx context.Context, evalCtx *tree.EvalConte
 
 	winValSz := uintptr(rowCount) * unsafe.Sizeof([]tree.Datum{})
 	winAllocSz := uintptr(rowCount*windowCount) * unsafe.Sizeof(tree.Datum(nil))
-	if err := n.windowsAcc.Grow(ctx, int64(winValSz+winAllocSz)); err != nil {
+	if err := n.run.windowsAcc.Grow(ctx, int64(winValSz+winAllocSz)); err != nil {
 		return err
 	}
 
-	n.windowValues = make([][]tree.Datum, rowCount)
+	n.run.windowValues = make([][]tree.Datum, rowCount)
 	windowAlloc := make([]tree.Datum, rowCount*windowCount)
-	for i := range n.windowValues {
-		n.windowValues[i] = windowAlloc[i*windowCount : (i+1)*windowCount]
+	for i := range n.run.windowValues {
+		n.run.windowValues[i] = windowAlloc[i*windowCount : (i+1)*windowCount]
 	}
 
 	var scratchBytes []byte
@@ -590,7 +601,7 @@ func (n *windowNode) computeWindows(ctx context.Context, evalCtx *tree.EvalConte
 			// If no partition indexes are included for the window function, all
 			// rows are added to the same partition, which need to be pre-allocated.
 			sz := int64(uintptr(rowCount) * unsafe.Sizeof(tree.IndexedRow{}))
-			if err := n.windowsAcc.Grow(ctx, sz); err != nil {
+			if err := n.run.windowsAcc.Grow(ctx, sz); err != nil {
 				return err
 			}
 			partitions[""] = make([]tree.IndexedRow, rowCount)
@@ -598,7 +609,7 @@ func (n *windowNode) computeWindows(ctx context.Context, evalCtx *tree.EvalConte
 
 		if num := len(windowFn.partitionIdxs); num > cap(scratchDatum) {
 			sz := int64(uintptr(num) * unsafe.Sizeof(tree.Datum(nil)))
-			if err := n.windowsAcc.Grow(ctx, sz); err != nil {
+			if err := n.run.windowsAcc.Grow(ctx, sz); err != nil {
 				return err
 			}
 			scratchDatum = make([]tree.Datum, num)
@@ -613,7 +624,7 @@ func (n *windowNode) computeWindows(ctx context.Context, evalCtx *tree.EvalConte
 		// can share partition and sorting work.
 		// See Cao et al. [http://vldb.org/pvldb/vol5/p1244_yucao_vldb2012.pdf]
 		for rowI := 0; rowI < rowCount; rowI++ {
-			row := n.wrappedRenderVals.At(rowI)
+			row := n.run.wrappedRenderVals.At(rowI)
 			sourceVals := row[:n.sourceCols]
 			entry := tree.IndexedRow{Idx: rowI, Row: sourceVals}
 			if len(windowFn.partitionIdxs) == 0 {
@@ -633,7 +644,7 @@ func (n *windowNode) computeWindows(ctx context.Context, evalCtx *tree.EvalConte
 				}
 
 				sz := int64(uintptr(len(encoded)) + unsafe.Sizeof(entry))
-				if err := n.windowsAcc.Grow(ctx, sz); err != nil {
+				if err := n.run.windowsAcc.Grow(ctx, sz); err != nil {
 					return err
 				}
 				partitions[string(encoded)] = append(partitions[string(encoded)], entry)
@@ -643,7 +654,7 @@ func (n *windowNode) computeWindows(ctx context.Context, evalCtx *tree.EvalConte
 
 		// For each partition, perform necessary sorting based on the window function's
 		// ORDER BY attribute. After this, perform the window function computation for
-		// each tuple and save the result in n.windowValues.
+		// each tuple and save the result in n.run.windowValues.
 		//
 		// TODO(nvanbenschoten)
 		// - Investigate inter- and intra-partition parallelism
@@ -671,7 +682,7 @@ func (n *windowNode) computeWindows(ctx context.Context, evalCtx *tree.EvalConte
 				sorter := &partitionSorter{
 					evalCtx:       evalCtx,
 					rows:          partition,
-					windowDefVals: n.wrappedRenderVals,
+					windowDefVals: n.run.wrappedRenderVals,
 					ordering:      windowFn.columnOrdering,
 				}
 				// The sort needs to be deterministic because multiple window functions with
@@ -714,13 +725,13 @@ func (n *windowNode) computeWindows(ctx context.Context, evalCtx *tree.EvalConte
 
 					// This may overestimate, because WindowFuncs may perform internal caching.
 					sz := res.Size()
-					if err := n.windowsAcc.Grow(ctx, int64(sz)); err != nil {
+					if err := n.run.windowsAcc.Grow(ctx, int64(sz)); err != nil {
 						return err
 					}
 
-					// Save result into n.windowValues, indexed by original row index.
+					// Save result into n.run.windowValues, indexed by original row index.
 					valRowIdx := partition[frame.RowIdx].Idx
-					n.windowValues[valRowIdx][windowIdx] = res
+					n.run.windowValues[valRowIdx][windowIdx] = res
 				}
 			}
 		}
@@ -728,15 +739,15 @@ func (n *windowNode) computeWindows(ctx context.Context, evalCtx *tree.EvalConte
 	return nil
 }
 
-// populateValues populates n.values with final datum values after computing
-// window result values in n.windowValues.
+// populateValues populates n.run.values with final datum values after computing
+// window result values in n.run.windowValues.
 func (n *windowNode) populateValues(ctx context.Context, evalCtx *tree.EvalContext) error {
-	rowCount := n.wrappedRenderVals.Len()
+	rowCount := n.run.wrappedRenderVals.Len()
 	row := make(tree.Datums, len(n.windowRender))
 	for i := 0; i < rowCount; i++ {
-		wrappedRow := n.wrappedRenderVals.At(i)
+		wrappedRow := n.run.wrappedRenderVals.At(i)
 
-		n.curRowIdx = i // Point all windowFuncHolders to the correct row values.
+		n.run.curRowIdx = i // Point all windowFuncHolders to the correct row values.
 		curColIdx := 0
 		curFnIdx := 0
 		for j := range row {
@@ -771,32 +782,32 @@ func (n *windowNode) populateValues(ctx context.Context, evalCtx *tree.EvalConte
 			}
 		}
 
-		if _, err := n.values.rows.AddRow(ctx, row); err != nil {
+		if _, err := n.run.values.rows.AddRow(ctx, row); err != nil {
 			return err
 		}
 	}
 
 	// Done using the output of computeWindows, release memory and clear
 	// accounts.
-	n.wrappedRenderVals.Close(ctx)
-	n.wrappedRenderVals = nil
-	n.windowValues = nil
-	n.windowsAcc.Close(ctx)
+	n.run.wrappedRenderVals.Close(ctx)
+	n.run.wrappedRenderVals = nil
+	n.run.windowValues = nil
+	n.run.windowsAcc.Close(ctx)
 
 	return nil
 }
 
 func (n *windowNode) Close(ctx context.Context) {
 	n.plan.Close(ctx)
-	if n.wrappedRenderVals != nil {
-		n.wrappedRenderVals.Close(ctx)
-		n.wrappedRenderVals = nil
+	if n.run.wrappedRenderVals != nil {
+		n.run.wrappedRenderVals.Close(ctx)
+		n.run.wrappedRenderVals = nil
 	}
-	if n.windowValues != nil {
-		n.windowValues = nil
-		n.windowsAcc.Close(ctx)
+	if n.run.windowValues != nil {
+		n.run.windowValues = nil
+		n.run.windowsAcc.Close(ctx)
 	}
-	n.values.Close(ctx)
+	n.run.values.Close(ctx)
 }
 
 type extractWindowFuncsVisitor struct {
@@ -925,7 +936,7 @@ func (w *windowFuncHolder) Eval(ctx *tree.EvalContext) (tree.Datum, error) {
 	// Index into the windowValues computed in windowNode.computeWindows
 	// to determine the Datum value to return. Evaluating this datum
 	// is almost certainly the identity.
-	return w.window.windowValues[w.window.curRowIdx][w.funcIdx].Eval(ctx)
+	return w.window.run.windowValues[w.window.run.curRowIdx][w.funcIdx].Eval(ctx)
 }
 
 func (w *windowFuncHolder) ResolvedType() types.T {
@@ -937,7 +948,7 @@ func (w *windowFuncHolder) ResolvedType() types.T {
 // but needs to be extended to handle formatting and type introspection
 // for its IndexedVars.
 type windowNodeIvarContainer struct {
-	n *windowNode
+	n *windowRun
 
 	// idxMap maps the index of IndexedVars created in replaceIndexVarsAndAggFuncs
 	// to the index their corresponding results in this container. It permits us to
@@ -945,7 +956,7 @@ type windowNodeIvarContainer struct {
 	idxMap map[int]int
 }
 
-func makeWindowNodeIvarContainer(n *windowNode) windowNodeIvarContainer {
+func makeWindowNodeIvarContainer(n *windowRun) windowNodeIvarContainer {
 	return windowNodeIvarContainer{
 		n:      n,
 		idxMap: make(map[int]int),

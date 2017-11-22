@@ -157,6 +157,11 @@ type setZoneConfigNode struct {
 	zoneSpecifier tree.ZoneSpecifier
 	yamlConfig    tree.TypedExpr
 
+	run setZoneConfigRun
+}
+
+// setZoneConfigRun contains the run-time state of setZoneConfigNode during local execution.
+type setZoneConfigRun struct {
 	numAffected int
 }
 
@@ -276,7 +281,7 @@ func (n *setZoneConfigNode) Start(params runParams) error {
 	internalExecutor := InternalExecutor{LeaseManager: params.p.LeaseMgr()}
 
 	if zone.IsSubzonePlaceholder() && len(zone.Subzones) == 0 {
-		n.numAffected, err = internalExecutor.ExecuteStatementInTransaction(
+		n.run.numAffected, err = internalExecutor.ExecuteStatementInTransaction(
 			params.ctx, "set zone", params.p.txn,
 			"DELETE FROM system.zones WHERE id = $1", targetID)
 		return err
@@ -286,7 +291,7 @@ func (n *setZoneConfigNode) Start(params runParams) error {
 	if err != nil {
 		return fmt.Errorf("could not marshal zone config: %s", err)
 	}
-	n.numAffected, err = internalExecutor.ExecuteStatementInTransaction(
+	n.run.numAffected, err = internalExecutor.ExecuteStatementInTransaction(
 		params.ctx, "set zone", params.p.txn,
 		"UPSERT INTO system.zones (id, config) VALUES ($1, $2)", targetID, buf)
 	return err
@@ -295,12 +300,18 @@ func (n *setZoneConfigNode) Start(params runParams) error {
 func (n *setZoneConfigNode) Next(runParams) (bool, error) { return false, nil }
 func (*setZoneConfigNode) Close(context.Context)          {}
 func (n *setZoneConfigNode) Values() tree.Datums          { return nil }
-func (n *setZoneConfigNode) FastPathResults() (int, bool) { return n.numAffected, true }
+func (n *setZoneConfigNode) FastPathResults() (int, bool) { return n.run.numAffected, true }
 
 type showZoneConfigNode struct {
 	optColumnsSlot
 	zoneSpecifier tree.ZoneSpecifier
 
+	run showZoneConfigRun
+}
+
+// showZoneConfigRun contains the run-time state of showZoneConfigNode
+// during local execution.
+type showZoneConfigRun struct {
 	zoneID       uint32
 	cliSpecifier string
 	protoConfig  []byte
@@ -368,7 +379,7 @@ func (n *showZoneConfigNode) Start(params runParams) error {
 	} else if subzone != nil {
 		zone = subzone.Config
 	}
-	n.zoneID = zoneID
+	n.run.zoneID = zoneID
 
 	// Determine the CLI specifier for the zone config that actually applies
 	// without performing another KV lookup.
@@ -376,31 +387,31 @@ func (n *showZoneConfigNode) Start(params runParams) error {
 	if err != nil {
 		return err
 	}
-	n.cliSpecifier = config.CLIZoneSpecifier(zs)
+	n.run.cliSpecifier = config.CLIZoneSpecifier(zs)
 
 	// Ensure subzone configs don't infect the output of config_bytes.
 	zone.Subzones = nil
 	zone.SubzoneSpans = nil
-	n.protoConfig, err = protoutil.Marshal(&zone)
+	n.run.protoConfig, err = protoutil.Marshal(&zone)
 	if err != nil {
 		return err
 	}
-	n.yamlConfig, err = yaml.Marshal(zone)
+	n.run.yamlConfig, err = yaml.Marshal(zone)
 	return err
 }
 
 func (n *showZoneConfigNode) Values() tree.Datums {
 	return tree.Datums{
-		tree.NewDInt(tree.DInt(n.zoneID)),
-		tree.NewDString(n.cliSpecifier),
-		tree.NewDBytes(tree.DBytes(n.yamlConfig)),
-		tree.NewDBytes(tree.DBytes(n.protoConfig)),
+		tree.NewDInt(tree.DInt(n.run.zoneID)),
+		tree.NewDString(n.run.cliSpecifier),
+		tree.NewDBytes(tree.DBytes(n.run.yamlConfig)),
+		tree.NewDBytes(tree.DBytes(n.run.protoConfig)),
 	}
 }
 
 func (n *showZoneConfigNode) Next(runParams) (bool, error) {
-	defer func() { n.done = true }()
-	return !n.done, nil
+	defer func() { n.run.done = true }()
+	return !n.run.done, nil
 }
 
 func (*showZoneConfigNode) Close(context.Context) {}

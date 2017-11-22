@@ -284,12 +284,10 @@ func (p *planner) groupBy(
 	postRender.source.info = newSourceInfoForSingleTable(anonymousTable, group.columns)
 	postRender.sourceInfo = multiSourceInfo{postRender.source.info}
 
-	group.preRender = r
-
 	// Queries like `SELECT MAX(n) FROM t` expect a row of NULLs if nothing was aggregated.
-	group.addNullBucketIfEmpty = len(groupByExprs) == 0
+	group.run.addNullBucketIfEmpty = len(groupByExprs) == 0
 
-	group.buckets = make(map[string]struct{})
+	group.run.buckets = make(map[string]struct{})
 
 	if log.V(2) {
 		strs := make([]string, 0, len(group.funcs))
@@ -307,10 +305,20 @@ func (p *planner) groupBy(
 // A groupNode implements the planNode interface and handles the grouping logic.
 // It "wraps" a planNode which is used to retrieve the ungrouped results.
 type groupNode struct {
+	// The schema for this groupNode.
+	columns sqlbase.ResultColumns
+
+	// desiredOrdering is set only if we are aggregating around a single MIN/MAX
+	// function and we can compute the final result using a single row, assuming
+	// a specific ordering of the underlying plan.
+	desiredOrdering sqlbase.ColumnOrdering
+
+	// needOnlyOneRow determines whether aggregation should stop as soon
+	// as one result row can be computed.
+	needOnlyOneRow bool
+
 	// The source node (which returns values that feed into the aggregation).
 	plan planNode
-
-	preRender *renderNode
 
 	// The group-by columns are the first numGroupCols columns of
 	// the source plan.
@@ -318,6 +326,12 @@ type groupNode struct {
 
 	// funcs are the aggregation functions that the renders use.
 	funcs []*aggregateFuncHolder
+
+	run groupRun
+}
+
+// groupRun contains the run-time state for groupNode during local execution.
+type groupRun struct {
 	// The set of bucket keys. We add buckets as we are processing input rows, and
 	// we remove them as we are outputting results.
 	buckets   map[string]struct{}
@@ -325,19 +339,16 @@ type groupNode struct {
 
 	addNullBucketIfEmpty bool
 
-	columns sqlbase.ResultColumns
-	values  tree.Datums
+	// The current result row.
+	values tree.Datums
 
-	// desiredOrdering is set only if we are aggregating around a single MIN/MAX
-	// function and we can compute the final result using a single row, assuming
-	// a specific ordering of the underlying plan.
-	desiredOrdering sqlbase.ColumnOrdering
-	needOnlyOneRow  bool
-	gotOneRow       bool
+	// gotOneRow becomes true after one result row has been produced.
+	// Used in conjunction with needOnlyOneRow.
+	gotOneRow bool
 }
 
 func (n *groupNode) Values() tree.Datums {
-	return n.values
+	return n.run.values
 }
 
 func (n *groupNode) Start(params runParams) error {
@@ -349,12 +360,12 @@ func (n *groupNode) Next(params runParams) (bool, error) {
 	// We're going to consume n.plan until it's exhausted (feeding all the rows to
 	// n.funcs), and then call n.setupOutput.
 	// Subsequent calls to next will skip the first part and just return a result.
-	for !n.populated {
+	for !n.run.populated {
 		next := false
 		if err := params.p.cancelChecker.Check(); err != nil {
 			return false, err
 		}
-		if !(n.needOnlyOneRow && n.gotOneRow) {
+		if !(n.needOnlyOneRow && n.run.gotOneRow) {
 			var err error
 			next, err = n.plan.Next(params)
 			if err != nil {
@@ -362,7 +373,7 @@ func (n *groupNode) Next(params runParams) (bool, error) {
 			}
 		}
 		if !next {
-			n.populated = true
+			n.run.populated = true
 			n.setupOutput()
 			break
 		}
@@ -382,7 +393,7 @@ func (n *groupNode) Next(params runParams) (bool, error) {
 			}
 		}
 
-		n.buckets[string(bucket)] = struct{}{}
+		n.run.buckets[string(bucket)] = struct{}{}
 
 		// Feed the aggregateFuncHolders for this bucket the non-grouped values.
 		for _, f := range n.funcs {
@@ -401,20 +412,20 @@ func (n *groupNode) Next(params runParams) (bool, error) {
 		}
 		scratch = bucket[:0]
 
-		n.gotOneRow = true
+		n.run.gotOneRow = true
 	}
 
-	if len(n.buckets) == 0 {
+	if len(n.run.buckets) == 0 {
 		return false, nil
 	}
 	var bucket string
 	// Pick an arbitrary bucket.
-	for bucket = range n.buckets {
+	for bucket = range n.run.buckets {
 		break
 	}
-	delete(n.buckets, bucket)
+	delete(n.run.buckets, bucket)
 	for i, f := range n.funcs {
-		aggregateFunc, ok := f.buckets[bucket]
+		aggregateFunc, ok := f.run.buckets[bucket]
 		if !ok {
 			// No input for this bucket (possible if f has a FILTER).
 			// In most cases the result is NULL but there are exceptions
@@ -422,7 +433,7 @@ func (n *groupNode) Next(params runParams) (bool, error) {
 			aggregateFunc = f.create(params.evalCtx)
 		}
 		var err error
-		n.values[i], err = aggregateFunc.Result()
+		n.run.values[i], err = aggregateFunc.Result()
 		if err != nil {
 			return false, err
 		}
@@ -433,10 +444,10 @@ func (n *groupNode) Next(params runParams) (bool, error) {
 // setupOutput runs once after all the input rows have been processed. It sets
 // up the necessary state to start iterating through the buckets in Next().
 func (n *groupNode) setupOutput() {
-	if len(n.buckets) < 1 && n.addNullBucketIfEmpty {
-		n.buckets[""] = struct{}{}
+	if len(n.run.buckets) < 1 && n.run.addNullBucketIfEmpty {
+		n.run.buckets[""] = struct{}{}
 	}
-	n.values = make(tree.Datums, len(n.funcs))
+	n.run.values = make(tree.Datums, len(n.funcs))
 }
 
 func (n *groupNode) Close(ctx context.Context) {
@@ -444,7 +455,7 @@ func (n *groupNode) Close(ctx context.Context) {
 	for _, f := range n.funcs {
 		f.close(ctx)
 	}
-	n.buckets = nil
+	n.run.buckets = nil
 }
 
 // requiresIsNotNullFilter returns whether a "col IS NOT NULL" constraint must
@@ -691,15 +702,28 @@ type aggregateFuncHolder struct {
 	// The argument of the function is a single value produced by the renderNode
 	// underneath.
 	argRenderIdx int
-	hasFilter    bool
+	// hasFilter indicates whether this aggregate function has a FILTER
+	// clause.  If true, then the filter is in the source column indexed
+	// by filterRenderIdx below.
+	hasFilter bool
 	// If there is a filter, the result is a single value produced by the
 	// renderNode underneath.
 	filterRenderIdx int
 
+	// identAggregate is true if this column reproduces the bucket key
+	// unchanged.
 	identAggregate bool
 
-	create        func(*tree.EvalContext) tree.AggregateFunc
-	group         *groupNode
+	// create instantiates the built-in execution context for the
+	// aggregation function.
+	create func(*tree.EvalContext) tree.AggregateFunc
+
+	run aggregateFuncRun
+}
+
+// aggregateFuncRun contains the run-time state for one aggregation function
+// during local execution.
+type aggregateFuncRun struct {
 	buckets       map[string]tree.AggregateFunc
 	bucketsMemAcc mon.BoundAccount
 	seen          map[string]struct{}
@@ -718,10 +742,11 @@ func (n *groupNode) newAggregateFuncHolder(
 		expr:           expr,
 		argRenderIdx:   argRenderIdx,
 		create:         create,
-		group:          n,
 		identAggregate: identAggregate,
-		buckets:        make(map[string]tree.AggregateFunc),
-		bucketsMemAcc:  acc,
+		run: aggregateFuncRun{
+			buckets:       make(map[string]tree.AggregateFunc),
+			bucketsMemAcc: acc,
+		},
 	}
 	return res
 }
@@ -733,19 +758,18 @@ func (a *aggregateFuncHolder) setFilter(filterRenderIdx int) {
 
 // setDistinct causes a to ignore duplicate values of the argument.
 func (a *aggregateFuncHolder) setDistinct() {
-	a.seen = make(map[string]struct{})
+	a.run.seen = make(map[string]struct{})
 }
 
 func (a *aggregateFuncHolder) close(ctx context.Context) {
-	for _, aggFunc := range a.buckets {
+	for _, aggFunc := range a.run.buckets {
 		aggFunc.Close(ctx)
 	}
 
-	a.buckets = nil
-	a.seen = nil
-	a.group = nil
+	a.run.buckets = nil
+	a.run.seen = nil
 
-	a.bucketsMemAcc.Close(ctx)
+	a.run.bucketsMemAcc.Close(ctx)
 }
 
 // add accumulates one more value for a particular bucket into an aggregation
@@ -756,25 +780,25 @@ func (a *aggregateFuncHolder) add(
 	// NB: the compiler *should* optimize `myMap[string(myBytes)]`. See:
 	// https://github.com/golang/go/commit/f5f5a8b6209f84961687d993b93ea0d397f5d5bf
 
-	if a.seen != nil {
+	if a.run.seen != nil {
 		encoded, err := sqlbase.EncodeDatum(bucket, d)
 		if err != nil {
 			return err
 		}
-		if _, ok := a.seen[string(encoded)]; ok {
+		if _, ok := a.run.seen[string(encoded)]; ok {
 			// skip
 			return nil
 		}
-		if err := a.bucketsMemAcc.Grow(ctx, int64(len(encoded))); err != nil {
+		if err := a.run.bucketsMemAcc.Grow(ctx, int64(len(encoded))); err != nil {
 			return err
 		}
-		a.seen[string(encoded)] = struct{}{}
+		a.run.seen[string(encoded)] = struct{}{}
 	}
 
-	impl, ok := a.buckets[string(bucket)]
+	impl, ok := a.run.buckets[string(bucket)]
 	if !ok {
 		impl = a.create(evalCtx)
-		a.buckets[string(bucket)] = impl
+		a.run.buckets[string(bucket)] = impl
 	}
 
 	return impl.Add(ctx, d)

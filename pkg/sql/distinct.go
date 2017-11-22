@@ -30,6 +30,12 @@ type distinctNode struct {
 	// All the columns that are part of the Sort. Set to nil if no-sort, or
 	// sort used an expression that was not part of the requested column set.
 	columnsInOrder []bool
+
+	run distinctRun
+}
+
+// distinctRun contains the run-time state of distinctNode during local execution.
+type distinctRun struct {
 	// Encoding of the columnsInOrder columns for the previous row.
 	prefixSeen   []byte
 	prefixMemAcc mon.BoundAccount
@@ -45,15 +51,13 @@ func (p *planner) Distinct(n *tree.SelectClause) *distinctNode {
 	if !n.Distinct {
 		return nil
 	}
-	d := &distinctNode{
-		prefixMemAcc: p.session.TxnState.mon.MakeBoundAccount(),
-		suffixMemAcc: p.session.TxnState.mon.MakeBoundAccount(),
-	}
-	return d
+	return &distinctNode{}
 }
 
 func (n *distinctNode) Start(params runParams) error {
-	n.suffixSeen = make(map[string]struct{})
+	n.run.prefixMemAcc = params.p.session.TxnState.mon.MakeBoundAccount()
+	n.run.suffixMemAcc = params.p.session.TxnState.mon.MakeBoundAccount()
+	n.run.suffixSeen = make(map[string]struct{})
 	return n.plan.Start(params)
 }
 
@@ -66,7 +70,7 @@ func (n *distinctNode) addSuffixSeen(
 	if err := acc.Grow(ctx, sz); err != nil {
 		return err
 	}
-	n.suffixSeen[sKey] = struct{}{}
+	n.run.suffixSeen[sKey] = struct{}{}
 	return nil
 }
 
@@ -89,19 +93,20 @@ func (n *distinctNode) Next(params runParams) (bool, error) {
 			return false, err
 		}
 
-		if !bytes.Equal(prefix, n.prefixSeen) {
+		if !bytes.Equal(prefix, n.run.prefixSeen) {
 			// The prefix of the row which is ordered differs from the last row;
 			// reset our seen set.
-			if len(n.suffixSeen) > 0 {
-				n.suffixMemAcc.Clear(ctx)
-				n.suffixSeen = make(map[string]struct{})
+			if len(n.run.suffixSeen) > 0 {
+				n.run.suffixMemAcc.Clear(ctx)
+				n.run.suffixSeen = make(map[string]struct{})
 			}
-			if err := n.prefixMemAcc.ResizeItem(ctx, int64(len(n.prefixSeen)), int64(len(prefix))); err != nil {
+			if err := n.run.prefixMemAcc.ResizeItem(
+				ctx, int64(len(n.run.prefixSeen)), int64(len(prefix))); err != nil {
 				return false, err
 			}
-			n.prefixSeen = prefix
+			n.run.prefixSeen = prefix
 			if suffix != nil {
-				if err := n.addSuffixSeen(ctx, &n.suffixMemAcc, string(suffix)); err != nil {
+				if err := n.addSuffixSeen(ctx, &n.run.suffixMemAcc, string(suffix)); err != nil {
 					return false, err
 				}
 			}
@@ -112,8 +117,8 @@ func (n *distinctNode) Next(params runParams) (bool, error) {
 		// to see if the suffix which is not ordered has been seen.
 		if suffix != nil {
 			sKey := string(suffix)
-			if _, ok := n.suffixSeen[sKey]; !ok {
-				if err := n.addSuffixSeen(ctx, &n.suffixMemAcc, sKey); err != nil {
+			if _, ok := n.run.suffixSeen[sKey]; !ok {
+				if err := n.addSuffixSeen(ctx, &n.run.suffixMemAcc, sKey); err != nil {
 					return false, err
 				}
 				return true, nil
@@ -148,8 +153,8 @@ func (n *distinctNode) encodeValues(values tree.Datums) ([]byte, []byte, error) 
 
 func (n *distinctNode) Close(ctx context.Context) {
 	n.plan.Close(ctx)
-	n.prefixSeen = nil
-	n.prefixMemAcc.Close(ctx)
-	n.suffixSeen = nil
-	n.suffixMemAcc.Close(ctx)
+	n.run.prefixSeen = nil
+	n.run.prefixMemAcc.Close(ctx)
+	n.run.suffixSeen = nil
+	n.run.suffixMemAcc.Close(ctx)
 }
