@@ -17,6 +17,7 @@ package tscache
 import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
@@ -55,8 +56,16 @@ func (*sklImpl) ThreadSafe() bool { return true }
 
 // clear clears the cache and resets the low-water mark.
 func (tc *sklImpl) clear(lowWater hlc.Timestamp) {
-	tc.rCache = newIntervalSkl(tc.clock, MinRetentionWindow, sklPageSize)
-	tc.wCache = newIntervalSkl(tc.clock, MinRetentionWindow, sklPageSize)
+	pageSize := uint32(sklPageSize)
+	if util.RaceEnabled {
+		// Race testing consumes significantly more memory that normal testing.
+		// In addition, while running a group of tests in parallel, each will
+		// create a timestamp cache for every Store needed. Reduce the page size
+		// during race testing to accommodate these two factors.
+		pageSize /= 4
+	}
+	tc.rCache = newIntervalSkl(tc.clock, MinRetentionWindow, pageSize)
+	tc.wCache = newIntervalSkl(tc.clock, MinRetentionWindow, pageSize)
 	tc.rCache.floorTS = lowWater
 	tc.wCache.floorTS = lowWater
 }
@@ -100,6 +109,7 @@ func (tc *sklImpl) AddRequest(req *Request) {
 		key := keys.TransactionKey(req.Txn.Key, req.TxnID)
 		tc.add(key, nil, req.Timestamp, req.TxnID, false /* readCache */)
 	}
+	req.release()
 }
 
 // ExpandRequests implements the Cache interface.
