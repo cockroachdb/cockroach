@@ -32,7 +32,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
-	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
@@ -457,55 +456,6 @@ func TestTimestampCacheEqualTimestamps(t *testing.T) {
 	})
 }
 
-// lockedCache wraps non-thread safe Cache implementations in Mutex to make them
-// thread safe.
-//
-// TODO(nvanbenschoten): remove when we remove Cache.ThreadSafe.
-type lockedCache struct {
-	syncutil.Mutex
-	c Cache
-}
-
-func makeThreadSafe(c Cache) Cache {
-	if !c.ThreadSafe() {
-		return &lockedCache{c: c}
-	}
-	return c
-}
-
-func unwrapCache(c Cache) Cache {
-	if lc, ok := c.(*lockedCache); ok {
-		return unwrapCache(lc.c)
-	}
-	return c
-}
-
-func (lc *lockedCache) ThreadSafe() bool { return true }
-func (lc *lockedCache) GetMaxRead(start, end roachpb.Key) (hlc.Timestamp, uuid.UUID) {
-	lc.Lock()
-	defer lc.Unlock()
-	return lc.c.GetMaxRead(start, end)
-}
-func (lc *lockedCache) add(
-	start, end roachpb.Key, ts hlc.Timestamp, txnID uuid.UUID, readCache bool,
-) {
-	lc.Lock()
-	lc.c.add(start, end, ts, txnID, readCache)
-	lc.Unlock()
-}
-func (lc *lockedCache) clear(lowWater hlc.Timestamp) {
-	lc.Lock()
-	lc.c.clear(lowWater)
-	lc.Unlock()
-}
-
-// Implement if needed.
-func (*lockedCache) AddRequest(_ *Request)                                   { panic("unimplemented") }
-func (*lockedCache) ExpandRequests(_ roachpb.RSpan, _ hlc.Timestamp)         { panic("unimplemented") }
-func (*lockedCache) SetLowWater(_, _ roachpb.Key, _ hlc.Timestamp)           { panic("unimplemented") }
-func (*lockedCache) GetMaxWrite(_, _ roachpb.Key) (hlc.Timestamp, uuid.UUID) { panic("unimplemented") }
-func (*lockedCache) getLowWater(_ bool) hlc.Timestamp                        { panic("unimplemented") }
-
 // TestTimestampCacheImplsIdentical verifies that all timestamp cache
 // implementations return the same results for the same inputs, even under
 // concurrent load.
@@ -522,7 +472,7 @@ func TestTimestampCacheImplsIdentical(t *testing.T) {
 		caches := make([]Cache, len(cacheImplConstrs))
 		start := clock.Now()
 		for i, constr := range cacheImplConstrs {
-			c := makeThreadSafe(constr(clock))
+			c := constr(clock)
 			c.clear(start) // set low water mark
 			caches[i] = c
 		}
@@ -608,7 +558,7 @@ func TestTimestampCacheImplsIdentical(t *testing.T) {
 
 					newVal := cacheValue{ts: ts, txnID: txnID}
 					for _, c := range caches {
-						t.Logf("adding (%T) [%s,%s) = %s", unwrapCache(c), string(from), string(to), newVal)
+						t.Logf("adding (%T) [%s,%s) = %s", c, string(from), string(to), newVal)
 						c.add(from, to, ts, txnID, true /* readCache */)
 					}
 
@@ -688,11 +638,11 @@ func identicalAndRatcheted(
 
 	// Assert same values for each cache.
 	firstVal := vals[0]
-	firstCache := unwrapCache(caches[0])
+	firstCache := caches[0]
 	for i := 1; i < len(caches); i++ {
 		if !reflect.DeepEqual(firstVal, vals[i]) {
 			return firstVal, errors.Errorf("expected %s (%T) and %s (%T) to be equal",
-				firstVal, firstCache, vals[i], unwrapCache(caches[i]))
+				firstVal, firstCache, vals[i], caches[i])
 		}
 	}
 

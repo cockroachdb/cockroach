@@ -32,8 +32,6 @@ const sklPageSize = 32 << 20 // 32 MB
 // transaction, the txn ID is stored with the timestamp to avoid advancing
 // timestamps on successive requests from the same transaction.
 //
-// sklImpl is safe for concurrent use by multiple goroutines.
-//
 // TODO(nvanbenschoten): We should export some metrics from here, including:
 // - page rotations/min (rCache & wCache)
 // - page count         (rCache & wCache)
@@ -50,9 +48,6 @@ func newSklImpl(clock *hlc.Clock) *sklImpl {
 	tc.clear(clock.Now())
 	return &tc
 }
-
-// ThreadSafe implements the Cache interface.
-func (*sklImpl) ThreadSafe() bool { return true }
 
 // clear clears the cache and resets the low-water mark.
 func (tc *sklImpl) clear(lowWater hlc.Timestamp) {

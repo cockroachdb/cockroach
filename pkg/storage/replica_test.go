@@ -1142,10 +1142,8 @@ func TestReplicaTSCacheLowWaterOnLease(t *testing.T) {
 			t.Fatalf("%d: unexpected error %v", i, err)
 		}
 		// Verify expected low water mark.
-		tc.repl.store.tsCacheMu.Lock()
-		rTS, _ := tc.repl.store.tsCacheMu.cache.GetMaxRead(roachpb.Key("a"), nil)
-		wTS, _ := tc.repl.store.tsCacheMu.cache.GetMaxWrite(roachpb.Key("a"), nil)
-		tc.repl.store.tsCacheMu.Unlock()
+		rTS, _ := tc.repl.store.tsCache.GetMaxRead(roachpb.Key("a"), nil)
+		wTS, _ := tc.repl.store.tsCache.GetMaxWrite(roachpb.Key("a"), nil)
 
 		if test.expLowWater == 0 {
 			continue
@@ -1963,26 +1961,22 @@ func TestReplicaUpdateTSCache(t *testing.T) {
 		t.Error(pErr)
 	}
 	// Verify the timestamp cache has rTS=1s and wTS=0s for "a".
-	if !tc.repl.store.tsCacheMu.cache.ThreadSafe() {
-		tc.repl.store.tsCacheMu.Lock()
-		defer tc.repl.store.tsCacheMu.Unlock()
-	}
-	tc.repl.store.tsCacheMu.cache.ExpandRequests(tc.repl.Desc().RSpan(), hlc.Timestamp{})
+	tc.repl.store.tsCache.ExpandRequests(tc.repl.Desc().RSpan(), hlc.Timestamp{})
 	noID := uuid.UUID{}
-	rTS, rTxnID := tc.repl.store.tsCacheMu.cache.GetMaxRead(roachpb.Key("a"), nil)
-	wTS, wTxnID := tc.repl.store.tsCacheMu.cache.GetMaxWrite(roachpb.Key("a"), nil)
+	rTS, rTxnID := tc.repl.store.tsCache.GetMaxRead(roachpb.Key("a"), nil)
+	wTS, wTxnID := tc.repl.store.tsCache.GetMaxWrite(roachpb.Key("a"), nil)
 	if rTS.WallTime != t0.Nanoseconds() || wTS.WallTime != startNanos || rTxnID != noID || wTxnID != noID {
 		t.Errorf("expected rTS=1s and wTS=0s, but got %s, %s; rTxnID=%s, wTxnID=%s", rTS, wTS, rTxnID, wTxnID)
 	}
 	// Verify the timestamp cache has rTS=0s and wTS=2s for "b".
-	rTS, rTxnID = tc.repl.store.tsCacheMu.cache.GetMaxRead(roachpb.Key("b"), nil)
-	wTS, wTxnID = tc.repl.store.tsCacheMu.cache.GetMaxWrite(roachpb.Key("b"), nil)
+	rTS, rTxnID = tc.repl.store.tsCache.GetMaxRead(roachpb.Key("b"), nil)
+	wTS, wTxnID = tc.repl.store.tsCache.GetMaxWrite(roachpb.Key("b"), nil)
 	if rTS.WallTime != startNanos || wTS.WallTime != t1.Nanoseconds() || rTxnID != noID || wTxnID != noID {
 		t.Errorf("expected rTS=0s and wTS=2s, but got %s, %s; rTxnID=%s, wTxnID=%s", rTS, wTS, rTxnID, wTxnID)
 	}
 	// Verify another key ("c") has 0sec in timestamp cache.
-	rTS, rTxnID = tc.repl.store.tsCacheMu.cache.GetMaxRead(roachpb.Key("c"), nil)
-	wTS, wTxnID = tc.repl.store.tsCacheMu.cache.GetMaxWrite(roachpb.Key("c"), nil)
+	rTS, rTxnID = tc.repl.store.tsCache.GetMaxRead(roachpb.Key("c"), nil)
+	wTS, wTxnID = tc.repl.store.tsCache.GetMaxWrite(roachpb.Key("c"), nil)
 	if rTS.WallTime != startNanos || wTS.WallTime != startNanos || rTxnID != noID || wTxnID != noID {
 		t.Errorf("expected rTS=0s and wTS=0s, but got %s %s; rTxnID=%s, wTxnID=%s", rTS, wTS, rTxnID, wTxnID)
 	}
