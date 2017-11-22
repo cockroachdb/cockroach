@@ -667,6 +667,16 @@ Gossiping role memberships:
 
 The [Virtual tables](#virtual-tables) section has a few TODOs to clarify PostgreSQL behavior.
 
+### Existence of an `admin` user before migrations
+
+One of the migrations needed for role-based access control is the addition of the `admin` role to the
+`system.users` table.
+
+We should decide what to do if a user with that name exists. Some possibilities:
+* just overwrite it (clear the password hash and set the `isRole` field) and document the upgrade breakage.
+* rename it: this would involve renaming all privileges as well. Surfacing this to the user would be tricky.
+* fail the migration with a message clearly saying the user must be removed/renamed.
+
 ## Future improvements
 
 ### Role attributes
