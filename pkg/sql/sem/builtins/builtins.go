@@ -2305,7 +2305,7 @@ var jsonTypeOfImpl = tree.Builtin{
 	ReturnType: tree.FixedReturnType(types.String),
 	Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 		json := tree.MustBeDJSON(args[0])
-		return tree.NewDString(json.TypeAsText()), nil
+		return tree.NewDString(json.Type().String()), nil
 	},
 	Info: "Returns the type of the outermost JSON value as a text string.",
 }

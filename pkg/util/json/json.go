@@ -45,6 +45,24 @@ const (
 	ObjectJSONType
 )
 
+func (t Type) String() string {
+	switch t {
+	case NullJSONType:
+		return "null"
+	case StringJSONType:
+		return "string"
+	case NumberJSONType:
+		return "number"
+	case FalseJSONType, TrueJSONType:
+		return "boolean"
+	case ArrayJSONType:
+		return "array"
+	case ObjectJSONType:
+		return "object"
+	}
+	panic(fmt.Sprintf("Type %d needs to be taken into accout", int(t)))
+}
+
 // JSON represents a JSON value.
 type JSON interface {
 	fmt.Stringer
@@ -79,9 +97,6 @@ type JSON interface {
 
 	// RemoveIndex implements the `-` operator for ints.
 	RemoveIndex(idx int) (JSON, error)
-
-	// TypeAsText returns the type of JSON document as a string.
-	TypeAsText() string
 
 	// AsText returns the JSON document as a string, with quotes around strings removed, and null as nil.
 	AsText() *string
@@ -649,14 +664,6 @@ func (jsonTrue) RemoveIndex(int) (JSON, error)   { return nil, errCannotDeleteFr
 func (jsonFalse) RemoveIndex(int) (JSON, error)  { return nil, errCannotDeleteFromScalar }
 func (jsonString) RemoveIndex(int) (JSON, error) { return nil, errCannotDeleteFromScalar }
 func (jsonNumber) RemoveIndex(int) (JSON, error) { return nil, errCannotDeleteFromScalar }
-
-func (j jsonString) TypeAsText() string { return "string" }
-func (j jsonNull) TypeAsText() string   { return "null" }
-func (j jsonTrue) TypeAsText() string   { return "true" }
-func (j jsonFalse) TypeAsText() string  { return "false" }
-func (j jsonNumber) TypeAsText() string { return "number" }
-func (j jsonArray) TypeAsText() string  { return "array" }
-func (j jsonObject) TypeAsText() string { return "object" }
 
 func (j jsonString) AsText() *string {
 	s := string(j)
