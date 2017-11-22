@@ -17,11 +17,8 @@ package tscache
 import (
 	"sync"
 
-	"github.com/google/btree"
-
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
-	"github.com/cockroachdb/cockroach/pkg/util/interval"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
@@ -36,49 +33,6 @@ type Request struct {
 	Txn       roachpb.Span
 	TxnID     uuid.UUID
 	Timestamp hlc.Timestamp
-	// Used to distinguish requests with identical timestamps. For actual
-	// requests, the uniqueID value is >0. When probing the btree for requests
-	// later than a particular timestamp a value of 0 is used.
-	uniqueID int64
-}
-
-// Less implements the btree.Item interface.
-func (cr *Request) Less(other btree.Item) bool {
-	otherReq := other.(*Request)
-	if cr.Timestamp.Less(otherReq.Timestamp) {
-		return true
-	}
-	if otherReq.Timestamp.Less(cr.Timestamp) {
-		return false
-	}
-	// Fallback to comparison of the uniqueID as a tie-breaker. This allows
-	// multiple requests with the same timestamp to exist in the requests btree.
-	return cr.uniqueID < otherReq.uniqueID
-}
-
-// numSpans returns the number of spans the request will expand into.
-func (cr *Request) numSpans() int {
-	n := len(cr.Reads) + len(cr.Writes)
-	if cr.Txn.Key != nil {
-		n++
-	}
-	return n
-}
-
-func (cr *Request) size() uint64 {
-	var n uint64
-	for i := range cr.Reads {
-		s := &cr.Reads[i]
-		n += cacheEntrySize(interval.Comparable(s.Key), interval.Comparable(s.EndKey))
-	}
-	for i := range cr.Writes {
-		s := &cr.Writes[i]
-		n += cacheEntrySize(interval.Comparable(s.Key), interval.Comparable(s.EndKey))
-	}
-	if cr.Txn.Key != nil {
-		n += cacheEntrySize(interval.Comparable(cr.Txn.Key), nil)
-	}
-	return n
 }
 
 func (cr *Request) release() {

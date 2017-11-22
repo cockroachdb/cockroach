@@ -18,8 +18,6 @@ import (
 	"fmt"
 	"unsafe"
 
-	"github.com/google/btree"
-
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/cache"
@@ -35,9 +33,6 @@ const (
 	// because it holds on to all entries that are younger than
 	// MinRetentionWindow.
 	defaultTreeImplSize = 64 << 20 // 64 MB
-
-	// Max entries in each btree node.
-	treeImplBtreeDegree = 64
 )
 
 func makeCacheEntry(key cache.IntervalKey, value cacheValue) *cache.Entry {
@@ -79,15 +74,6 @@ type treeImpl struct {
 	rCache, wCache   *cache.IntervalCache
 	lowWater, latest hlc.Timestamp
 
-	// The requests tree contains Request entries keyed by timestamp. A
-	// request is "expanded" (i.e. the read/write spans are added to the
-	// read/write interval caches) when the timestamp cache is accessed
-	// on behalf of an earlier request.
-	requests   *btree.BTree
-	tmpReq     Request
-	reqIDAlloc int64
-	reqSpans   int
-
 	bytes    uint64
 	maxBytes uint64
 }
@@ -113,7 +99,6 @@ func newTreeImpl(clock *hlc.Clock) *treeImpl {
 func (tc *treeImpl) clear(lowWater hlc.Timestamp) {
 	tc.Lock()
 	defer tc.Unlock()
-	tc.requests = btree.New(treeImplBtreeDegree)
 	tc.rCache.Clear()
 	tc.wCache.Clear()
 	tc.lowWater = lowWater
@@ -124,7 +109,7 @@ func (tc *treeImpl) clear(lowWater hlc.Timestamp) {
 func (tc *treeImpl) len() int {
 	tc.RLock()
 	defer tc.RUnlock()
-	return tc.rCache.Len() + tc.wCache.Len() + tc.reqSpans
+	return tc.rCache.Len() + tc.wCache.Len()
 }
 
 // add the specified timestamp to the cache covering the range of keys from
@@ -500,100 +485,30 @@ func (tc *treeImpl) AddRequest(req *Request) {
 		return
 	}
 
-	tc.reqIDAlloc++
-	req.uniqueID = tc.reqIDAlloc
-	tc.requests.ReplaceOrInsert(req)
-	tc.reqSpans += req.numSpans()
-	tc.bytes += req.size()
-
-	// Bump the latest timestamp and evict any requests that are now too old.
 	tc.latest.Forward(req.Timestamp)
-	edge := tc.latest
-	edge.WallTime -= MinRetentionWindow.Nanoseconds()
-
-	// Evict requests as long as the number of cached spans (both in the requests
-	// queue and the interval caches) is larger than the eviction threshold.
-	for tc.bytes > tc.maxBytes {
-		// TODO(peter): It might be more efficient to gather up the requests to
-		// delete using BTree.AscendLessThan rather than calling Min
-		// repeatedly. Maybe.
-		minItem := tc.requests.Min()
-		if minItem == nil {
-			break
-		}
-		minReq := minItem.(*Request)
-		if edge.Less(minReq.Timestamp) {
-			break
-		}
-		tc.lowWater = minReq.Timestamp
-		tc.requests.DeleteMin()
-		if tc.reqSpans < minReq.numSpans() {
-			panic(fmt.Sprintf("bad reqSpans: %d < %d", tc.reqSpans, minReq.numSpans()))
-		}
-		tc.reqSpans -= minReq.numSpans()
-		minReqSize := minReq.size()
-		if tc.bytes < minReqSize {
-			panic(fmt.Sprintf("bad reqSize: %d < %d", tc.bytes, minReqSize))
-		}
-		tc.bytes -= minReqSize
-		minReq.release()
+	for _, sp := range req.Reads {
+		tc.addLocked(sp.Key, sp.EndKey, req.Timestamp, req.TxnID, true /* readCache */)
 	}
+	for _, sp := range req.Writes {
+		tc.addLocked(sp.Key, sp.EndKey, req.Timestamp, req.TxnID, false /* readCache */)
+	}
+	if req.Txn.Key != nil {
+		// Make the transaction key from the request key. We're guaranteed
+		// req.TxnID != nil because we only hit this code path for
+		// EndTransactionRequests.
+		key := keys.TransactionKey(req.Txn.Key, req.TxnID)
+		tc.addLocked(key, nil, req.Timestamp, req.TxnID, false /* readCache */)
+	}
+	req.release()
 }
 
 // ExpandRequests implements the Cache interface.
-func (tc *treeImpl) ExpandRequests(span roachpb.RSpan, timestamp hlc.Timestamp) {
-	tc.Lock()
-	defer tc.Unlock()
-
-	// Find all of the requests that have a timestamp greater than or equal to
-	// the specified timestamp. Note that we can't delete the requests during the
-	// btree iteration.
-	var reqs []*Request
-	tc.tmpReq.Timestamp = timestamp
-	tc.requests.AscendGreaterOrEqual(&tc.tmpReq, func(i btree.Item) bool {
-		cr := i.(*Request)
-		if cr.Span.Overlaps(span) {
-			reqs = append(reqs, cr)
-		}
-		return true
-	})
-
-	// Expand the requests, inserting the spans into either the read or write
-	// interval caches.
-	for _, req := range reqs {
-		tc.requests.Delete(req)
-		if tc.reqSpans < req.numSpans() {
-			panic(fmt.Sprintf("bad reqSpans: %d < %d", tc.reqSpans, req.numSpans()))
-		}
-		tc.reqSpans -= req.numSpans()
-		reqSize := req.size()
-		if tc.bytes < reqSize {
-			panic(fmt.Sprintf("bad reqSize: %d < %d", tc.bytes, reqSize))
-		}
-		tc.bytes -= reqSize
-		for i := range req.Reads {
-			sp := &req.Reads[i]
-			tc.addLocked(sp.Key, sp.EndKey, req.Timestamp, req.TxnID, true /* readCache */)
-		}
-		for i := range req.Writes {
-			sp := &req.Writes[i]
-			tc.addLocked(sp.Key, sp.EndKey, req.Timestamp, req.TxnID, false /* readCache */)
-		}
-		if req.Txn.Key != nil {
-			// Make the transaction key from the request key. We're guaranteed
-			// req.TxnID != nil because we only hit this code path for
-			// EndTransactionRequests.
-			key := keys.TransactionKey(req.Txn.Key, req.TxnID)
-			tc.addLocked(key, nil, req.Timestamp, req.TxnID, false /* readCache */)
-		}
-		req.release()
-	}
-}
+func (tc *treeImpl) ExpandRequests(span roachpb.RSpan, ts hlc.Timestamp) { /* no-op */ }
 
 // SetLowWater implements the Cache interface.
-func (tc *treeImpl) SetLowWater(start, end roachpb.Key, timestamp hlc.Timestamp) {
-	tc.add(start, end, timestamp, noTxnID, false)
-	tc.add(start, end, timestamp, noTxnID, true)
+func (tc *treeImpl) SetLowWater(start, end roachpb.Key, ts hlc.Timestamp) {
+	tc.add(start, end, ts, noTxnID, false)
+	tc.add(start, end, ts, noTxnID, true)
 }
 
 // getLowWater implements the Cache interface.
