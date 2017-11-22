@@ -1062,14 +1062,15 @@ func importPlanHook(
 				walltime, p.ExecCfg(),
 			)
 		}
+		// Always attempt to cleanup the checkpoint even if the import failed.
+		if err := tempStorage.Delete(ctx, BackupDescriptorCheckpointName); err != nil {
+			log.Warningf(ctx, "unable to delete checkpointed backup descriptor: %+v", err)
+		}
 		if err := job.FinishedWith(ctx, importErr); err != nil {
 			return err
 		}
 		if importErr != nil {
 			return importErr
-		}
-		if err := tempStorage.Delete(ctx, BackupDescriptorCheckpointName); err != nil {
-			log.Warningf(ctx, "unable to delete checkpointed backup descriptor: %+v", err)
 		}
 
 		if transformOnly {
