@@ -448,7 +448,7 @@ func (u *updateNode) Next(params runParams) (bool, error) {
 	if err := u.checkHelper.loadRow(u.updateColsIdx, updateValues, true); err != nil {
 		return false, err
 	}
-	if err := u.checkHelper.check(&params.p.evalCtx); err != nil {
+	if err := u.checkHelper.check(params.evalCtx); err != nil {
 		return false, err
 	}
 

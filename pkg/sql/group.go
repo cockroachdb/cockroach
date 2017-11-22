@@ -395,7 +395,7 @@ func (n *groupNode) Next(params runParams) (bool, error) {
 				value = values[f.argRenderIdx]
 			}
 
-			if err := f.add(params.ctx, &params.p.evalCtx, bucket, value); err != nil {
+			if err := f.add(params.ctx, params.evalCtx, bucket, value); err != nil {
 				return false, err
 			}
 		}
@@ -419,7 +419,7 @@ func (n *groupNode) Next(params runParams) (bool, error) {
 			// No input for this bucket (possible if f has a FILTER).
 			// In most cases the result is NULL but there are exceptions
 			// (like COUNT).
-			aggregateFunc = f.create(&params.p.evalCtx)
+			aggregateFunc = f.create(params.evalCtx)
 		}
 		var err error
 		n.values[i], err = aggregateFunc.Result()

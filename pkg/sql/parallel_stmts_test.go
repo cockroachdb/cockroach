@@ -456,7 +456,11 @@ func TestSpanBasedDependencyAnalyzer(t *testing.T) {
 
 				planAndAnalyze := func(q string) (planNode, func()) {
 					p, plan, finish := planQuery(t, s, q)
-					params := runParams{ctx: context.TODO(), p: p}
+					params := runParams{
+						ctx:     context.TODO(),
+						evalCtx: &p.evalCtx,
+						p:       p,
+					}
 
 					if err := da.Analyze(params, plan); err != nil {
 						t.Fatalf("plan analysis failed: %v", err)

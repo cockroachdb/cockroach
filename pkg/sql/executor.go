@@ -1993,8 +1993,9 @@ func (e *Executor) execClassic(
 	}
 
 	params := runParams{
-		ctx: ctx,
-		p:   planner,
+		ctx:     ctx,
+		evalCtx: &planner.evalCtx,
+		p:       planner,
 	}
 
 	switch rowResultWriter.StatementType() {
@@ -2032,8 +2033,8 @@ func forEachRow(params runParams, p planNode, f func(tree.Datums) error) error {
 	next, err := p.Next(params)
 	for ; next; next, err = p.Next(params) {
 		// If we're tracking memory, clear the previous row's memory account.
-		if params.p.evalCtx.ActiveMemAcc != nil {
-			params.p.evalCtx.ActiveMemAcc.Clear(params.ctx)
+		if params.evalCtx.ActiveMemAcc != nil {
+			params.evalCtx.ActiveMemAcc.Clear(params.ctx)
 		}
 
 		if err := f(p.Values()); err != nil {
@@ -2190,8 +2191,9 @@ func (e *Executor) execStmtInParallel(
 	session := planner.session
 	ctx := session.Ctx()
 	params := runParams{
-		ctx: ctx,
-		p:   planner,
+		ctx:     ctx,
+		evalCtx: &planner.evalCtx,
+		p:       planner,
 	}
 
 	plan, err := planner.makePlan(ctx, stmt)

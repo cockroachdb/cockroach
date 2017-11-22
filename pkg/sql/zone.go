@@ -174,7 +174,7 @@ func (p *planner) SetZoneConfig(ctx context.Context, n *tree.SetZoneConfig) (pla
 
 func (n *setZoneConfigNode) Start(params runParams) error {
 	var yamlConfig *string
-	datum, err := n.yamlConfig.Eval(&params.p.evalCtx)
+	datum, err := n.yamlConfig.Eval(params.evalCtx)
 	if err != nil {
 		return err
 	}

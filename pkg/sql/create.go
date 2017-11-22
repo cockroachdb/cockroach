@@ -104,7 +104,7 @@ func (n *createDatabaseNode) Start(params runParams) error {
 			params.p.txn,
 			EventLogCreateDatabase,
 			int32(desc.ID),
-			int32(params.p.evalCtx.NodeID),
+			int32(params.evalCtx.NodeID),
 			struct {
 				DatabaseName string
 				Statement    string
@@ -171,7 +171,7 @@ func (n *createIndexNode) Start(params runParams) error {
 	}
 	if n.n.PartitionBy != nil {
 		if err := addPartitionedBy(
-			params.ctx, &params.p.evalCtx, n.tableDesc, &indexDesc, &indexDesc.Partitioning,
+			params.ctx, params.evalCtx, n.tableDesc, &indexDesc, &indexDesc.Partitioning,
 			n.n.PartitionBy, 0, /* colOffset */
 		); err != nil {
 			return err
@@ -213,7 +213,7 @@ func (n *createIndexNode) Start(params runParams) error {
 		params.p.txn,
 		EventLogCreateIndex,
 		int32(n.tableDesc.ID),
-		int32(params.p.evalCtx.NodeID),
+		int32(params.evalCtx.NodeID),
 		struct {
 			TableName  string
 			IndexName  string
@@ -608,7 +608,7 @@ func (n *createViewNode) Start(params runParams) error {
 		params.p.txn,
 		EventLogCreateView,
 		int32(desc.ID),
-		int32(params.p.evalCtx.NodeID),
+		int32(params.evalCtx.NodeID),
 		struct {
 			ViewName  string
 			Statement string
@@ -744,7 +744,7 @@ func (n *createTableNode) Start(params runParams) error {
 	var affected map[sqlbase.ID]*sqlbase.TableDescriptor
 	creationTime := params.p.txn.OrigTimestamp()
 	if n.n.As() {
-		desc, err = makeTableDescIfAs(n.n, n.dbDesc.ID, id, creationTime, planColumns(n.sourcePlan), privs, &params.p.semaCtx, &params.p.evalCtx)
+		desc, err = makeTableDescIfAs(n.n, n.dbDesc.ID, id, creationTime, planColumns(n.sourcePlan), privs, &params.p.semaCtx, params.evalCtx)
 	} else {
 		affected = make(map[sqlbase.ID]*sqlbase.TableDescriptor)
 		desc, err = params.p.makeTableDesc(params.ctx, n.n, n.dbDesc.ID, id, creationTime, privs, affected)
@@ -793,7 +793,7 @@ func (n *createTableNode) Start(params runParams) error {
 		params.p.txn,
 		EventLogCreateTable,
 		int32(desc.ID),
-		int32(params.p.evalCtx.NodeID),
+		int32(params.evalCtx.NodeID),
 		struct {
 			TableName string
 			Statement string
@@ -1436,7 +1436,7 @@ func (n *createViewNode) makeViewTableDesc(
 		if len(columnNames) > i {
 			columnTableDef.Name = columnNames[i]
 		}
-		col, _, err := sqlbase.MakeColumnDefDescs(&columnTableDef, &params.p.semaCtx, &params.p.evalCtx)
+		col, _, err := sqlbase.MakeColumnDefDescs(&columnTableDef, &params.p.semaCtx, params.evalCtx)
 		if err != nil {
 			return desc, err
 		}
@@ -1949,7 +1949,7 @@ func (n *createSequenceNode) Start(params runParams) error {
 		params.p.txn,
 		EventLogCreateSequence,
 		int32(desc.ID),
-		int32(params.p.evalCtx.NodeID),
+		int32(params.evalCtx.NodeID),
 		struct {
 			SequenceName string
 			Statement    string

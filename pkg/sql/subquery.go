@@ -113,8 +113,9 @@ func (s *subquery) doEval(ctx context.Context) (result tree.Datum, err error) {
 	defer func() { s.plan.Close(ctx); s.plan = nil }()
 
 	params := runParams{
-		ctx: ctx,
-		p:   s.planner,
+		ctx:     ctx,
+		evalCtx: &s.planner.evalCtx,
+		p:       s.planner,
 	}
 	switch s.execMode {
 	case execModeExists:
