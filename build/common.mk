@@ -12,26 +12,22 @@
 # implied. See the License for the specific language governing
 # permissions and limitations under the License.
 
-# This file defines variables and targets that are used by all Makefiles in the
-# project. The including Makefile must define REPO_ROOT to the relative path to
-# the root of the repository before including this file.
-
 GO      ?= go
 GOFLAGS ?=
 XGO     ?= xgo
 TAR     ?= tar
 
 # Convenience variables for important paths.
-ORG_ROOT       := $(REPO_ROOT)/..
-PKG_ROOT       := $(REPO_ROOT)/pkg
+PKG_ROOT       := ./pkg
 UI_ROOT        := $(PKG_ROOT)/ui
 SQLPARSER_ROOT := $(PKG_ROOT)/sql/parser
 
 # Ensure we have an unambiguous GOPATH.
-export GOPATH := $(realpath $(ORG_ROOT)/../../..)
-#                                       ^  ^  ^~ GOPATH
-#                                       |  |~ GOPATH/src
-#                                       |~ GOPATH/src/github.com
+export GOPATH := $(realpath ../../../..)
+#                           ^  ^  ^  ^~ GOPATH
+#                           |  |  |~ GOPATH/src
+#                           |  |~ GOPATH/src/github.com
+#                           |~ GOPATH/src/github.com/cockroachdb
 
 # Avoid printing twice if Make restarts (because a Makefile was changed) or is
 # called recursively from another Makefile.
@@ -41,7 +37,7 @@ endif
 
 # We install our vendored tools to a directory within this repository to avoid
 # overwriting any user-installed binaries of the same name in the default GOBIN.
-LOCAL_BIN := $(abspath $(REPO_ROOT)/bin)
+LOCAL_BIN := $(abspath bin)
 GO_INSTALL := GOBIN='$(LOCAL_BIN)' $(GO) install
 
 # Prefer tools we've installed with go install and Yarn to those elsewhere on
@@ -64,7 +60,7 @@ GIT_DIR := $(shell git rev-parse --git-dir 2> /dev/null)
 
 # Invocation of any NodeJS script should be prefixed by NODE_RUN. See the
 # comments within node-run.sh for rationale.
-NODE_RUN := $(REPO_ROOT)/build/node-run.sh
+NODE_RUN := build/node-run.sh
 
 # make-lazy converts a recursive variable, which is evaluated every time it's
 # referenced, to a lazy variable, which is evaluated only the first time it's
@@ -103,7 +99,7 @@ $(call make-lazy,term-reset)
 #
 # Note that word boundary markers (\b, \<, [[:<:]]) are not portable, but `grep
 # -w`, though not required by POSIX, exists on all tested platforms.
-include $(REPO_ROOT)/.go-version
+include .go-version
 ifeq ($(shell $(GO) version | grep -qwE '$(GOVERS)' && echo y),)
 $(error "$(GOVERS) required (see CONTRIBUTING.md): $(shell $(GO) version); use `make GOVERS=.*` for experiments")
 endif
@@ -111,10 +107,10 @@ endif
 # Print an error if the user specified any variables on the command line that
 # don't appear in this Makefile. The list of valid variables is automatically
 # rebuilt on the first successful `make` invocation after the Makefile changes.
-include $(REPO_ROOT)/build/variables.mk
+include build/variables.mk
 $(foreach v,$(filter-out $(strip $(VALID_VARS)),$(.VARIABLES)),\
 	$(if $(findstring command line,$(origin $v)),$(error Variable '$v' is not recognized by this Makefile)))
--include $(REPO_ROOT)/customenv.mk
+-include customenv.mk
 
 # Tell Make to delete the target if its recipe fails. Otherwise, if a recipe
 # modifies its target before failing, the target's timestamp will make it appear
@@ -134,7 +130,7 @@ ifneq ($(GIT_DIR),)
 # so we ask git for the location.
 #
 # Note that `git rev-parse --git-path hooks` requires git 2.5+.
-GITHOOKSDIR := $(shell test -d $(REPO_ROOT)/.git && echo '$(REPO_ROOT)/.git/hooks' || git rev-parse --git-path hooks)
+GITHOOKSDIR := $(shell test -d .git && echo '.git/hooks' || git rev-parse --git-path hooks)
 GITHOOKS := $(subst githooks/,$(GITHOOKSDIR)/,$(wildcard githooks/*))
 $(GITHOOKSDIR)/%: githooks/%
 	@echo installing $<
@@ -174,24 +170,24 @@ SUBMODULES_TARGET := $(LOCAL_BIN)/.submodules-initialized
 
 # Update the git hooks and install commands from dependencies whenever they
 # change.
-$(BOOTSTRAP_TARGET): $(GITHOOKS) $(REPO_ROOT)/Gopkg.lock $(LOCAL_BIN)/returncheck | $(SUBMODULES_TARGET)
+$(BOOTSTRAP_TARGET): $(GITHOOKS) Gopkg.lock $(LOCAL_BIN)/returncheck | $(SUBMODULES_TARGET)
 	@$(GO_INSTALL) -v \
-		$(REPO_ROOT)/vendor/github.com/golang/dep/cmd/dep \
-		$(REPO_ROOT)/vendor/github.com/client9/misspell/cmd/misspell \
-		$(REPO_ROOT)/vendor/github.com/cockroachdb/crlfmt \
-		$(REPO_ROOT)/vendor/github.com/cockroachdb/stress \
-		$(REPO_ROOT)/vendor/github.com/golang/lint/golint \
-		$(REPO_ROOT)/vendor/github.com/google/pprof \
-		$(REPO_ROOT)/vendor/github.com/grpc-ecosystem/grpc-gateway/protoc-gen-grpc-gateway \
-		$(REPO_ROOT)/vendor/github.com/jteeuwen/go-bindata/go-bindata \
-		$(REPO_ROOT)/vendor/github.com/kisielk/errcheck \
-		$(REPO_ROOT)/vendor/github.com/mattn/goveralls \
-		$(REPO_ROOT)/vendor/github.com/mibk/dupl \
-		$(REPO_ROOT)/vendor/github.com/wadey/gocovmerge \
-		$(REPO_ROOT)/vendor/golang.org/x/perf/cmd/benchstat \
-		$(REPO_ROOT)/vendor/golang.org/x/tools/cmd/goimports \
-		$(REPO_ROOT)/vendor/golang.org/x/tools/cmd/goyacc \
-		$(REPO_ROOT)/vendor/golang.org/x/tools/cmd/stringer
+		./vendor/github.com/golang/dep/cmd/dep \
+		./vendor/github.com/client9/misspell/cmd/misspell \
+		./vendor/github.com/cockroachdb/crlfmt \
+		./vendor/github.com/cockroachdb/stress \
+		./vendor/github.com/golang/lint/golint \
+		./vendor/github.com/google/pprof \
+		./vendor/github.com/grpc-ecosystem/grpc-gateway/protoc-gen-grpc-gateway \
+		./vendor/github.com/jteeuwen/go-bindata/go-bindata \
+		./vendor/github.com/kisielk/errcheck \
+		./vendor/github.com/mattn/goveralls \
+		./vendor/github.com/mibk/dupl \
+		./vendor/github.com/wadey/gocovmerge \
+		./vendor/golang.org/x/perf/cmd/benchstat \
+		./vendor/golang.org/x/tools/cmd/goimports \
+		./vendor/golang.org/x/tools/cmd/goyacc \
+		./vendor/golang.org/x/tools/cmd/stringer
 	touch $@
 
 $(SUBMODULES_TARGET):
@@ -213,12 +209,12 @@ endif
 # https://github.com/golang/go/issues/13560#issuecomment-277804473
 # https://github.com/Reviewable/Reviewable/wiki/FAQ#how-do-i-tell-reviewable-that-a-file-is-generated-and-should-not-be-reviewed
 VARIABLES_MAKEFILES := \
-  $(REPO_ROOT)/Makefile \
-	$(REPO_ROOT)/build/common.mk \
-	$(REPO_ROOT)/build/archive/contents/Makefile \
+  Makefile \
+	build/common.mk \
+	build/archive/contents/Makefile \
 	$(UI_ROOT)/Makefile
 
-$(REPO_ROOT)/build/variables.mk: $(REPO_ROOT)/.go-version $(VARIABLES_MAKEFILES)
+build/variables.mk: .go-version $(VARIABLES_MAKEFILES)
 	@echo '# Code generated by Make. DO NOT EDIT.' > $@
 	@echo '# GENERATED FILE DO NOT EDIT' >> $@
 	@echo 'define VALID_VARS' >> $@
@@ -230,7 +226,7 @@ $(REPO_ROOT)/build/variables.mk: $(REPO_ROOT)/.go-version $(VARIABLES_MAKEFILES)
 # The following section handles building our C/C++ dependencies. These are
 # common because both the root Makefile and protobuf.mk have C dependencies.
 
-C_DEPS_DIR := $(abspath $(REPO_ROOT)/c-deps)
+C_DEPS_DIR := $(abspath c-deps)
 JEMALLOC_SRC_DIR := $(C_DEPS_DIR)/jemalloc
 PROTOBUF_SRC_DIR := $(C_DEPS_DIR)/protobuf
 ROCKSDB_SRC_DIR  := $(C_DEPS_DIR)/rocksdb
@@ -343,7 +339,7 @@ CGO_FLAGS_FILES := $(CGO_UNSUFFIXED_FLAGS_FILES) $(CGO_SUFFIXED_FLAGS_FILES)
 
 $(CGO_UNSUFFIXED_FLAGS_FILES): .ALWAYS_REBUILD
 
-$(CGO_FLAGS_FILES): $(REPO_ROOT)/build/common.mk
+$(CGO_FLAGS_FILES): build/common.mk
 	@echo 'GEN $@'
 	@echo '// GENERATED FILE DO NOT EDIT' > $@
 	@echo >> $@
