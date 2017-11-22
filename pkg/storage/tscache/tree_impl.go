@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/cache"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/interval"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
@@ -73,8 +74,10 @@ func cacheEntrySize(start, end interval.Comparable) uint64 {
 // transaction, the txn ID is stored with the timestamp to avoid advancing
 // timestamps on successive requests from the same transaction.
 //
-// treeImpl is NOT safe for concurrent use by multiple goroutines.
+// sklImpl is safe for concurrent use by multiple goroutines.
 type treeImpl struct {
+	syncutil.RWMutex
+
 	rCache, wCache   *cache.IntervalCache
 	lowWater, latest hlc.Timestamp
 
@@ -109,10 +112,12 @@ func newTreeImpl(clock *hlc.Clock) *treeImpl {
 }
 
 // ThreadSafe implements the Cache interface.
-func (*treeImpl) ThreadSafe() bool { return false }
+func (*treeImpl) ThreadSafe() bool { return true }
 
 // clear clears the cache and resets the low-water mark.
 func (tc *treeImpl) clear(lowWater hlc.Timestamp) {
+	tc.Lock()
+	defer tc.Unlock()
 	tc.requests = btree.New(treeImplBtreeDegree)
 	tc.rCache.Clear()
 	tc.wCache.Clear()
@@ -122,6 +127,8 @@ func (tc *treeImpl) clear(lowWater hlc.Timestamp) {
 
 // len returns the total number of read and write intervals in the cache.
 func (tc *treeImpl) len() int {
+	tc.RLock()
+	defer tc.RUnlock()
 	return tc.rCache.Len() + tc.wCache.Len() + tc.reqSpans
 }
 
@@ -131,6 +138,17 @@ func (tc *treeImpl) len() int {
 // timestamp should update the read timestamp; false to update the write
 // timestamp cache.
 func (tc *treeImpl) add(
+	start, end roachpb.Key, timestamp hlc.Timestamp, txnID uuid.UUID, readCache bool,
+) {
+	tc.Lock()
+	tc.addLocked(start, end, timestamp, txnID, readCache)
+	tc.Unlock()
+}
+
+// addLocked is like add, but requires the treeImpl's write lock to be held.
+//
+// TODO(nvanbenschoten): remove when add is exported.
+func (tc *treeImpl) addLocked(
 	start, end roachpb.Key, timestamp hlc.Timestamp, txnID uuid.UUID, readCache bool,
 ) {
 	// This gives us a memory-efficient end key if end is empty.
@@ -474,6 +492,9 @@ func (tc *treeImpl) add(
 
 // AddRequest implements the Cache interface.
 func (tc *treeImpl) AddRequest(req *Request) {
+	tc.Lock()
+	defer tc.Unlock()
+
 	if len(req.Reads) == 0 && len(req.Writes) == 0 && req.Txn.Key == nil {
 		// The request didn't contain any spans for the timestamp cache.
 		return
@@ -526,6 +547,9 @@ func (tc *treeImpl) AddRequest(req *Request) {
 
 // ExpandRequests implements the Cache interface.
 func (tc *treeImpl) ExpandRequests(span roachpb.RSpan, timestamp hlc.Timestamp) {
+	tc.Lock()
+	defer tc.Unlock()
+
 	// Find all of the requests that have a timestamp greater than or equal to
 	// the specified timestamp. Note that we can't delete the requests during the
 	// btree iteration.
@@ -554,18 +578,18 @@ func (tc *treeImpl) ExpandRequests(span roachpb.RSpan, timestamp hlc.Timestamp) 
 		tc.bytes -= reqSize
 		for i := range req.Reads {
 			sp := &req.Reads[i]
-			tc.add(sp.Key, sp.EndKey, req.Timestamp, req.TxnID, true /* readCache */)
+			tc.addLocked(sp.Key, sp.EndKey, req.Timestamp, req.TxnID, true /* readCache */)
 		}
 		for i := range req.Writes {
 			sp := &req.Writes[i]
-			tc.add(sp.Key, sp.EndKey, req.Timestamp, req.TxnID, false /* readCache */)
+			tc.addLocked(sp.Key, sp.EndKey, req.Timestamp, req.TxnID, false /* readCache */)
 		}
 		if req.Txn.Key != nil {
 			// Make the transaction key from the request key. We're guaranteed
 			// req.TxnID != nil because we only hit this code path for
 			// EndTransactionRequests.
 			key := keys.TransactionKey(req.Txn.Key, req.TxnID)
-			tc.add(key, nil, req.Timestamp, req.TxnID, false /* readCache */)
+			tc.addLocked(key, nil, req.Timestamp, req.TxnID, false /* readCache */)
 		}
 		req.release()
 	}
@@ -579,8 +603,10 @@ func (tc *treeImpl) SetLowWater(start, end roachpb.Key, timestamp hlc.Timestamp)
 
 // getLowWater implements the Cache interface.
 func (tc *treeImpl) getLowWater(readCache bool) hlc.Timestamp {
-	// The lowWater timestamp is shared between the read and write caches, so
-	// ignore the readCache argument.
+	// The lowWater timestamp is shared between the read
+	// and write caches, so ignore the readCache argument.
+	tc.RLock()
+	defer tc.RUnlock()
 	return tc.lowWater
 }
 
@@ -595,6 +621,8 @@ func (tc *treeImpl) GetMaxWrite(start, end roachpb.Key) (hlc.Timestamp, uuid.UUI
 }
 
 func (tc *treeImpl) getMax(start, end roachpb.Key, readCache bool) (hlc.Timestamp, uuid.UUID) {
+	tc.Lock()
+	defer tc.Unlock()
 	if len(end) == 0 {
 		end = start.Next()
 	}
