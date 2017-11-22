@@ -50,10 +50,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/spanset"
 	"github.com/cockroachdb/cockroach/pkg/storage/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
-	"github.com/cockroachdb/cockroach/pkg/storage/tscache"
 	"github.com/cockroachdb/cockroach/pkg/storage/txnwait"
 	"github.com/cockroachdb/cockroach/pkg/util"
-	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
@@ -1980,13 +1978,7 @@ func (ec *endCmds) done(br *roachpb.BatchResponse, pErr *roachpb.Error, retry pr
 	// marked as affecting the cache are processed. Inconsistent reads
 	// are excluded.
 	if pErr == nil && retry == proposalNoRetry && ec.ba.ReadConsistency != roachpb.INCONSISTENT {
-		creq := makeTSCacheRequest(&ec.ba, br)
-
-		if ec.repl.store.Clock().MaxOffset() == timeutil.ClocklessMaxOffset {
-			// Clockless mode: all reads count as writes.
-			creq.Writes, creq.Reads = append(creq.Writes, creq.Reads...), nil
-		}
-		ec.repl.store.tsCache.AddRequest(creq)
+		ec.repl.updateTimestampCache(&ec.ba, br)
 	}
 
 	if fn := ec.repl.store.cfg.TestingKnobs.OnCommandQueueAction; fn != nil {
@@ -1995,106 +1987,38 @@ func (ec *endCmds) done(br *roachpb.BatchResponse, pErr *roachpb.Error, retry pr
 	ec.repl.removeCmdsFromCommandQueue(ec.cmds)
 }
 
-func makeTSCacheRequest(ba *roachpb.BatchRequest, br *roachpb.BatchResponse) *tscache.Request {
-	cr := tscache.NewRequest()
-	cr.Timestamp = ba.Timestamp
+// updateTimestampCache updates the timestamp cache in order to set a low water
+// mark for the timestamp at which mutations to keys overlapping the provided
+// request can write, such that they don't re-write history.
+func (r *Replica) updateTimestampCache(ba *roachpb.BatchRequest, br *roachpb.BatchResponse) {
+	readOnlyUseReadCache := true
+	if r.store.Clock().MaxOffset() == timeutil.ClocklessMaxOffset {
+		// Clockless mode: all reads count as writes.
+		readOnlyUseReadCache = false
+	}
+
+	tc := r.store.tsCache
+	ts := ba.Timestamp
+	var txnID uuid.UUID
 	if ba.Txn != nil {
-		cr.TxnID = ba.Txn.ID
+		txnID = ba.Txn.ID
 	}
-
-	span, err := keys.RangeMatchingPred(*ba, roachpb.UpdatesTimestampCache)
-	if err != nil {
-		// This can't happen because we've already called keys.Range before
-		// evaluating the request.
-		log.Fatal(context.Background(), err)
-	}
-
-	// Copy all keys necessary for the TimestampCache Request into a single byte
-	// slice. This has been shown to dramatically reduce the GC time spent
-	// scanning TimestampCache-related memory. Before doing so, add up the
-	// length of all keys we'll need to copy so we can allocate exactly the
-	// buffer size we'll need. While doing so, we can also count how large the
-	// read and write span slices need to be.
-	var readCount, writeCount int
-	keysSize := bufalloc.RSpanSize(span)
 	for i, union := range ba.Requests {
 		args := union.GetInner()
 		if roachpb.UpdatesTimestampCache(args) {
 			header := args.Header()
-
-			// Count key sizes and read or write requests. This should be kept
-			// in-sync with the type switch below.
-			switch args.(type) {
-			case *roachpb.DeleteRangeRequest:
-				writeCount++
-				keysSize += bufalloc.SpanSize(header)
-			case *roachpb.EndTransactionRequest:
-				keysSize += bufalloc.SpanSize(header)
-			case *roachpb.ScanRequest:
-				readCount++
-				keysSize += len(header.Key)
-				resp := br.Responses[i].GetInner().(*roachpb.ScanResponse)
-				if ba.Header.MaxSpanRequestKeys != 0 &&
-					ba.Header.MaxSpanRequestKeys == int64(len(resp.Rows)) {
-					// See below. +1 because we call Next on this key.
-					keysSize += len(resp.Rows[len(resp.Rows)-1].Key) + 1
-				} else {
-					keysSize += len(header.EndKey)
-				}
-			case *roachpb.ReverseScanRequest:
-				readCount++
-				keysSize += len(header.EndKey)
-				resp := br.Responses[i].GetInner().(*roachpb.ReverseScanResponse)
-				if ba.Header.MaxSpanRequestKeys != 0 &&
-					ba.Header.MaxSpanRequestKeys == int64(len(resp.Rows)) {
-					// See below.
-					keysSize += len(resp.Rows[len(resp.Rows)-1].Key)
-				} else {
-					keysSize += len(header.Key)
-				}
-			default:
-				readCount++
-				keysSize += bufalloc.SpanSize(header)
-			}
-		}
-	}
-
-	// Allocate slices for the read and write spans. NewRequest will return a
-	// Read slice with some space already allocated, so we try to use this
-	// wherever possible.
-	if cap(cr.Reads) < readCount {
-		// Maybe we can use the pre-allocated span slice for Writes?
-		cr.Writes = cr.Reads
-		cr.Reads = make([]roachpb.Span, 0, readCount)
-	}
-	if cap(cr.Writes) < writeCount {
-		cr.Writes = make([]roachpb.Span, 0, writeCount)
-	}
-
-	// Create a ByteAllocator with exactly the number of bytes we'll need for
-	// all keys in the CacheRequest. It should never need to re-alloc.
-	alloc := bufalloc.ByteAllocator(make([]byte, 0, keysSize))
-	alloc, cr.Span = alloc.CopyRSpan(span)
-
-	for i, union := range ba.Requests {
-		args := union.GetInner()
-		if roachpb.UpdatesTimestampCache(args) {
-			header := args.Header()
-			var headerCopy roachpb.Span
+			start, end := header.Key, header.EndKey
 			switch args.(type) {
 			case *roachpb.DeleteRangeRequest:
 				// DeleteRange adds to the write timestamp cache to prevent
 				// subsequent writes from rewriting history.
-				alloc, headerCopy = alloc.CopySpan(header)
-				cr.Writes = append(cr.Writes, headerCopy)
+				tc.Add(start, end, ts, txnID, false /* readCache */)
 			case *roachpb.EndTransactionRequest:
-				// EndTransaction adds to the write timestamp cache to ensure replays
-				// create a transaction record with WriteTooOld set.
-				//
-				// Note that TimestampCache.ExpandRequests lazily creates the
-				// transaction key from the request key.
-				alloc, headerCopy = alloc.CopySpan(header)
-				cr.Txn = headerCopy
+				// EndTransaction adds the transaction key to the write
+				// timestamp cache to ensure replays create a transaction
+				// record with WriteTooOld set.
+				key := keys.TransactionKey(start, txnID)
+				tc.Add(key, nil, ts, txnID, false /* readCache */)
 			case *roachpb.ScanRequest:
 				resp := br.Responses[i].GetInner().(*roachpb.ScanResponse)
 				if ba.Header.MaxSpanRequestKeys != 0 &&
@@ -2108,10 +2032,9 @@ func makeTSCacheRequest(ba *roachpb.BatchRequest, br *roachpb.BatchResponse) *ts
 					// to prevent phantom read anomalies. That means we can only
 					// perform this truncate if the scan requested a limited number of
 					// results and we hit that limit.
-					header.EndKey = resp.Rows[len(resp.Rows)-1].Key.Next()
+					end = resp.Rows[len(resp.Rows)-1].Key.Next()
 				}
-				alloc, headerCopy = alloc.CopySpan(header)
-				cr.Reads = append(cr.Reads, headerCopy)
+				tc.Add(start, end, ts, txnID, readOnlyUseReadCache)
 			case *roachpb.ReverseScanRequest:
 				resp := br.Responses[i].GetInner().(*roachpb.ReverseScanResponse)
 				if ba.Header.MaxSpanRequestKeys != 0 &&
@@ -2119,18 +2042,14 @@ func makeTSCacheRequest(ba *roachpb.BatchRequest, br *roachpb.BatchResponse) *ts
 					// See comment in the ScanRequest case. For revert scans, results
 					// are returned in reverse order and we truncate the start key of
 					// the span.
-					header.Key = resp.Rows[len(resp.Rows)-1].Key
+					start = resp.Rows[len(resp.Rows)-1].Key
 				}
-				alloc, headerCopy = alloc.CopySpan(header)
-				cr.Reads = append(cr.Reads, headerCopy)
+				tc.Add(start, end, ts, txnID, readOnlyUseReadCache)
 			default:
-				alloc, headerCopy = alloc.CopySpan(header)
-				cr.Reads = append(cr.Reads, headerCopy)
+				tc.Add(start, end, ts, txnID, readOnlyUseReadCache)
 			}
 		}
 	}
-
-	return cr
 }
 
 func collectSpans(
@@ -2359,17 +2278,6 @@ func (r *Replica) removeCmdsFromCommandQueue(cmds batchCmdSet) {
 func (r *Replica) applyTimestampCache(
 	ctx context.Context, ba *roachpb.BatchRequest,
 ) (bool, *roachpb.Error) {
-	span, err := keys.RangeMatchingPred(*ba, roachpb.ConsultsTimestampCache)
-	if err != nil {
-		return false, roachpb.NewError(err)
-	}
-
-	if ba.Txn != nil {
-		r.store.tsCache.ExpandRequests(span, ba.Txn.Timestamp)
-	} else {
-		r.store.tsCache.ExpandRequests(span, ba.Timestamp)
-	}
-
 	var bumped bool
 	for _, union := range ba.Requests {
 		args := union.GetInner()
@@ -2398,7 +2306,7 @@ func (r *Replica) applyTimestampCache(
 						// retry. If it's really a replay, it won't retry.
 						txn := ba.Txn.Clone()
 						bumped = txn.Timestamp.Forward(wTS.Next()) || bumped
-						err = roachpb.NewTransactionRetryError(roachpb.RETRY_POSSIBLE_REPLAY)
+						err := roachpb.NewTransactionRetryError(roachpb.RETRY_POSSIBLE_REPLAY)
 						return bumped, roachpb.NewErrorWithTxn(err, &txn)
 					}
 				default:
