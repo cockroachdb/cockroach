@@ -30,6 +30,9 @@ CREATE VIEW v5 AS select a, b from dne
 statement ok
 CREATE VIEW v6 (x, y) AS select a, b from v1
 
+statement ok
+CREATE VIEW v7 (x, y) AS select a, b from v1 order by a desc limit 2
+
 query II colnames,rowsort
 SELECT * FROM v1
 ----
@@ -54,6 +57,19 @@ x y
 2 98
 3 97
 
+query II colnames
+SELECT * FROM v7
+----
+x y
+3 97
+2 98
+
+query II colnames
+SELECT * FROM v7 ORDER BY x LIMIT 1
+----
+x y
+2 98
+
 query II
 SELECT * FROM v2 ORDER BY x DESC LIMIT 1
 ----
@@ -72,6 +88,28 @@ SELECT y FROM v2
 99
 98
 97
+
+query I
+SELECT x FROM v7
+----
+3
+2
+
+query I
+SELECT x FROM v7 ORDER BY x LIMIT 1
+----
+2
+
+query I
+SELECT y FROM v7
+----
+97
+98
+
+query I
+SELECT y FROM v7 ORDER BY x LIMIT 1
+----
+98
 
 query IIII rowsort
 SELECT * FROM v1 AS v1 INNER JOIN v2 AS v2 ON v1.a = v2.x
@@ -110,6 +148,19 @@ x y
 2 98
 3 97
 
+query II colnames
+SELECT * FROM test.v7
+----
+x y
+3 97
+2 98
+
+query II colnames
+SELECT * FROM test.v7 ORDER BY x LIMIT 1
+----
+x y
+2 98
+
 statement ok
 CREATE VIEW v1 AS SELECT x, y FROM test.v2
 
@@ -138,6 +189,11 @@ query TT
 SHOW CREATE VIEW v6
 ----
 v6 CREATE VIEW v6 (x, y) AS SELECT a, b FROM test.v1
+
+query TT
+SHOW CREATE VIEW v7
+----
+v7 CREATE VIEW v7 (x, y) AS SELECT a, b FROM test.v1 ORDER BY a DESC LIMIT 2
 
 query TT
 SHOW CREATE VIEW test2.v1
@@ -232,6 +288,9 @@ DROP VIEW v2
 
 statement ok
 DROP VIEW test2.v1
+
+statement ok
+DROP VIEW v7
 
 statement ok
 DROP VIEW v6

@@ -671,10 +671,15 @@ func (p *planner) getViewPlan(
 		p.planDeps = nil
 	}
 
-	// TODO(a-robinson): Support ORDER BY and LIMIT in views. Is it as simple as
-	// just passing the entire select here or will inserting an ORDER BY in the
-	// middle of a query plan break things?
-	return p.getSubqueryPlan(ctx, *tn, sel.Select, sqlbase.ResultColumnsFromColDescs(desc.Columns))
+	plan, err := p.newPlan(ctx, sel, nil)
+	if err != nil {
+		return planDataSource{}, err
+	}
+	return planDataSource{
+		info: newSourceInfoForSingleTable(*tn,
+			sqlbase.ResultColumnsFromColDescs(desc.Columns)),
+		plan: plan,
+	}, nil
 }
 
 // getSubqueryPlan builds a planDataSource for a select statement, including
