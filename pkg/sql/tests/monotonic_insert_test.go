@@ -79,6 +79,8 @@ type mtClient struct {
 //   https://github.com/jepsen-io/jepsen/blob/master/cockroachdb/src/jepsen/cockroach/monotonic.clj
 func TestMonotonicInserts(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	s := log.Scope(t)
+	defer s.Close(t)
 
 	for _, distSQLMode := range []sql.DistSQLExecMode{sql.DistSQLOff, sql.DistSQLOn} {
 		t.Run(fmt.Sprintf("distsql=%s", distSQLMode), func(t *testing.T) {
