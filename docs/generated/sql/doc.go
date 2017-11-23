@@ -13,8 +13,8 @@
 // permissions and limitations under the License.
 
 /*
-This dummy package contains documentation generated from sources in
-`pkg/sql/parser` using `docgen`.
+Package sql is a dummy package that contains documentation generated from
+sources in `pkg/sql/parser` using `docgen`.
 
 These files are copied to the `docs` repository where they are included in pages
 that document SQL. This happens periodically to ensure they stay up-to-date, for
@@ -23,7 +23,6 @@ open a docs PR with the updated generated files following any PR that changes
 them, so that the relevant context is still fresh in everyone's mind in case any
 questions come up.
 */
-
 package sql
 
 //go:generate go run ../../../pkg/cmd/docgen/main.go ../../../pkg/cmd/docgen/funcs.go ../../../pkg/cmd/docgen/diagrams.go functions .
