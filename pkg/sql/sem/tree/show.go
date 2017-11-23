@@ -240,6 +240,15 @@ func (node *ShowUsers) Format(buf *bytes.Buffer, f FmtFlags) {
 	buf.WriteString("SHOW USERS")
 }
 
+// ShowRoles represents a SHOW ROLES statement.
+type ShowRoles struct {
+}
+
+// Format implements the NodeFormatter interface.
+func (node *ShowRoles) Format(buf *bytes.Buffer, f FmtFlags) {
+	buf.WriteString("SHOW ROLES")
+}
+
 // ShowRanges represents a SHOW TESTING_RANGES statement.
 // Only one of Table and Index can be set.
 type ShowRanges struct {

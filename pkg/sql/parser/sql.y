@@ -647,6 +647,7 @@ func (u *sqlSymUnion) scrubOption() tree.ScrubOption {
 %type <tree.Statement> show_indexes_stmt
 %type <tree.Statement> show_jobs_stmt
 %type <tree.Statement> show_queries_stmt
+%type <tree.Statement> show_roles_stmt
 %type <tree.Statement> show_session_stmt
 %type <tree.Statement> show_sessions_stmt
 %type <tree.Statement> show_tables_stmt
@@ -2394,7 +2395,7 @@ non_reserved_word_or_sconst:
 // %Text:
 // SHOW SESSION, SHOW CLUSTER SETTING, SHOW DATABASES, SHOW TABLES, SHOW COLUMNS, SHOW INDEXES,
 // SHOW CONSTRAINTS, SHOW CREATE TABLE, SHOW CREATE VIEW, SHOW USERS, SHOW TRANSACTION, SHOW BACKUP,
-// SHOW JOBS, SHOW QUERIES, SHOW SESSIONS, SHOW TRACE
+// SHOW JOBS, SHOW QUERIES, SHOW ROLES, SHOW SESSIONS, SHOW TRACE
 show_stmt:
   show_backup_stmt       // EXTEND WITH HELP: SHOW BACKUP
 | show_columns_stmt      // EXTEND WITH HELP: SHOW COLUMNS
@@ -2414,6 +2415,7 @@ show_stmt:
 | show_trace_stmt        // EXTEND WITH HELP: SHOW TRACE
 | show_transaction_stmt  // EXTEND WITH HELP: SHOW TRANSACTION
 | show_users_stmt        // EXTEND WITH HELP: SHOW USERS
+| show_roles_stmt        // EXTEND WITH HELP: SHOW ROLES
 | show_zone_stmt
 | SHOW error             // SHOW HELP: SHOW
 
@@ -2687,6 +2689,17 @@ show_users_stmt:
     $$.val = &tree.ShowUsers{}
   }
 | SHOW USERS error // SHOW HELP: SHOW USERS
+
+// %Help: SHOW ROLES - list defined roles
+// %Category: Priv
+// %Text: SHOW ROLES
+// %SeeAlso: CREATE ROLE, DROP ROLE, WEBDOCS/show-roles.html
+show_roles_stmt:
+  SHOW ROLES
+  {
+    $$.val = &tree.ShowRoles{}
+  }
+| SHOW ROLES error // SHOW HELP: SHOW ROLES
 
 show_zone_stmt:
   EXPERIMENTAL SHOW ZONE CONFIGURATION FOR RANGE unrestricted_name
@@ -6924,6 +6937,7 @@ unreserved_keyword:
 | RESTRICT
 | RESUME
 | REVOKE
+| ROLES
 | ROLLBACK
 | ROLLUP
 | ROWS

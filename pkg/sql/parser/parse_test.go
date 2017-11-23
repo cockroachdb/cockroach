@@ -323,6 +323,7 @@ func TestParse(t *testing.T) {
 		{`SHOW INDEXES FROM a.b.c`},
 		{`SHOW CONSTRAINTS FROM a`},
 		{`SHOW CONSTRAINTS FROM a.b.c`},
+		{`SHOW ROLES`},
 		{`SHOW TABLES FROM a; SHOW COLUMNS FROM b`},
 		{`SHOW USERS`},
 		{`SHOW JOBS`},

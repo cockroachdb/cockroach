@@ -627,6 +627,15 @@ func (*ShowUsers) hiddenFromStats()                   {}
 func (*ShowUsers) independentFromParallelizedPriors() {}
 
 // StatementType implements the Statement interface.
+func (*ShowRoles) StatementType() StatementType { return Rows }
+
+// StatementTag returns a short string identifying the type of statement.
+func (*ShowRoles) StatementTag() string { return "SHOW ROLES" }
+
+func (*ShowRoles) hiddenFromStats()                   {}
+func (*ShowRoles) independentFromParallelizedPriors() {}
+
+// StatementType implements the Statement interface.
 func (*ShowZoneConfig) StatementType() StatementType { return Rows }
 
 // StatementTag returns a short string identifying the type of statement.
@@ -768,6 +777,7 @@ func (n *ShowIndex) String() string                { return AsString(n) }
 func (n *ShowJobs) String() string                 { return AsString(n) }
 func (n *ShowQueries) String() string              { return AsString(n) }
 func (n *ShowRanges) String() string               { return AsString(n) }
+func (n *ShowRoles) String() string                { return AsString(n) }
 func (n *ShowSessions) String() string             { return AsString(n) }
 func (n *ShowTables) String() string               { return AsString(n) }
 func (n *ShowTrace) String() string                { return AsString(n) }
