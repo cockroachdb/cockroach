@@ -274,7 +274,7 @@ testrace: TESTTIMEOUT := $(RACETIMEOUT)
 # Directory scans in the builder image are excruciatingly slow when running
 # Docker for Mac, so we filter out the 20k+ UI dependencies that are
 # guaranteed to be irrelevant to save nearly 10s on every Make invocation.
-FIND_RELEVANT := find pkg -name node_modules -prune -o
+FIND_RELEVANT := find $(PKG_ROOT) -name node_modules -prune -o
 
 bin/logictest.test: PKG := ./pkg/sql/logictest
 bin/logictest.test: main.go $(shell $(FIND_RELEVANT) ! -name 'zcgo_flags.go' -name '*.go')
@@ -388,15 +388,20 @@ archive: $(ARCHIVE)
 $(ARCHIVE): $(ARCHIVE).tmp
 	gzip -c $< > $@
 
+# ARCHIVE_EXTRAS are hard-to-generate files and their prerequisites that are
+# pre-generated and distributed in source archives to minimize the number of
+# dependencies required for end-users to build from source.
+ARCHIVE_EXTRAS = \
+	$(BUILDINFO) \
+	$(SQLPARSER_TARGETS) \
+	pkg/ui/distccl/bindata.go pkg/ui/distoss/bindata.go
+
 # TODO(benesch): Make this recipe use `git ls-files --recurse-submodules`
 # instead of scripts/ls-files.sh once Git v2.11 is widely deployed.
 .INTERMEDIATE: $(ARCHIVE).tmp
 $(ARCHIVE).tmp: ARCHIVE_BASE = cockroach-$(shell cat .buildinfo/tag)
-$(ARCHIVE).tmp: $(UI_ROOT)/distoss/bindata.go $(UI_ROOT)/distccl/bindata.go $(SQLPARSER_TARGETS) $(BUILDINFO)
+$(ARCHIVE).tmp: $(ARCHIVE_EXTRAS)
 	scripts/ls-files.sh | $(TAR) -cf $@ -T - $(TAR_XFORM_FLAG),^,$(ARCHIVE_BASE)/src/github.com/cockroachdb/cockroach/, $^
-	$(TAR) -rf $@ $(TAR_XFORM_FLAG),^,$(ARCHIVE_BASE)/src/github.com/cockroachdb/cockroach/, pkg/ui/distccl/bindata.go pkg/ui/distoss/bindata.go
-	$(TAR) -rf $@ $(TAR_XFORM_FLAG),^,$(ARCHIVE_BASE)/src/github.com/cockroachdb/cockroach/, pkg/sql/lex/keywords.go pkg/sql/lex/reserved_keywords.go pkg/sql/lex/tokens.go
-	$(TAR) -rf $@ $(TAR_XFORM_FLAG),^,$(ARCHIVE_BASE)/src/github.com/cockroachdb/cockroach/, pkg/sql/parser/sql.go pkg/sql/parser/help_messages.go pkg/sql/parser/helpmap_test.go
 	(cd build/archive/contents && $(TAR) -rf ../../../$@ $(TAR_XFORM_FLAG),^,$(ARCHIVE_BASE)/, *)
 
 .buildinfo:
@@ -436,7 +441,7 @@ PROTOC_PLUGIN   := $(LOCAL_BIN)/protoc-gen-gogoroach
 GOGOPROTO_PROTO := $(GOGO_PROTOBUF_PATH)/gogoproto/gogo.proto
 
 COREOS_PATH := ./vendor/github.com/coreos
-COREOS_RAFT_PROTOS := $(addprefix $(COREOS_PATH)/etcd/raft/, $(sort $(shell git -C $(COREOS_PATH)/etcd/raft ls-files --exclude-standard --cached --others -- '*.proto')))
+COREOS_RAFT_PROTOS := $(sort $(shell find $(COREOS_PATH)/etcd/raft -type f -name '*.proto'))
 
 GRPC_GATEWAY_GOOGLEAPIS_PACKAGE := github.com/grpc-ecosystem/grpc-gateway/third_party/googleapis
 GRPC_GATEWAY_GOOGLEAPIS_PATH := ./vendor/$(GRPC_GATEWAY_GOOGLEAPIS_PACKAGE)
@@ -452,7 +457,7 @@ GW_TS_PROTOS := $(PKG_ROOT)/ts/tspb/timeseries.proto
 GW_PROTOS  := $(GW_SERVER_PROTOS) $(GW_TS_PROTOS)
 GW_SOURCES := $(GW_PROTOS:%.proto=%.pb.gw.go)
 
-GO_PROTOS := $(addprefix ./,$(sort $(shell git ls-files --exclude-standard --cached --others -- '*.proto')))
+GO_PROTOS := $(sort $(shell $(FIND_RELEVANT) -type f -name '*.proto' -print))
 GO_SOURCES := $(GO_PROTOS:%.proto=%.pb.go)
 
 PBJS := $(NODE_RUN) $(UI_ROOT)/node_modules/.bin/pbjs
@@ -469,7 +474,7 @@ CPP_SOURCES := $(subst $(PKG_ROOT),$(CPP_PROTO_ROOT),$(CPP_PROTOS:%.proto=%.pb.c
 UI_PROTOS := $(UI_JS) $(UI_TS)
 
 $(GO_PROTOS_TARGET): $(PROTOC) $(PROTOC_PLUGIN) $(GO_PROTOS) $(GOGOPROTO_PROTO)
-	git ls-files --exclude-standard --cached --others -- '*.pb.go' | xargs rm -f
+	$(FIND_RELEVANT) -type f -name '*.pb.go' -exec rm {} +
 	for dir in $(sort $(dir $(GO_PROTOS))); do \
 	  $(PROTOC) -I$(PKG_ROOT):$(GOGO_PROTOBUF_PATH):$(PROTOBUF_PATH):$(COREOS_PATH):$(GRPC_GATEWAY_GOOGLEAPIS_PATH) --plugin=$(PROTOC_PLUGIN) --gogoroach_out=$(PROTO_MAPPINGS),plugins=grpc,import_prefix=github.com/cockroachdb/cockroach/pkg/:$(PKG_ROOT) $$dir/*.proto; \
 	done
@@ -481,23 +486,25 @@ $(GO_PROTOS_TARGET): $(PROTOC) $(PROTOC_PLUGIN) $(GO_PROTOS) $(GOGOPROTO_PROTO)
 	touch $@
 
 $(GW_PROTOS_TARGET): $(PROTOC) $(GW_SERVER_PROTOS) $(GW_TS_PROTOS) $(GO_PROTOS) $(GOGOPROTO_PROTO)
-	git ls-files --exclude-standard --cached --others -- '*.pb.gw.go' | xargs rm -f
+	$(FIND_RELEVANT) -type f -name '*.pb.gw.go' -exec rm {} +
 	$(PROTOC) -I$(PKG_ROOT):$(GOGO_PROTOBUF_PATH):$(PROTOBUF_PATH):$(COREOS_PATH):$(GRPC_GATEWAY_GOOGLEAPIS_PATH) --grpc-gateway_out=logtostderr=true,request_context=true:$(PKG_ROOT) $(GW_SERVER_PROTOS)
 	$(PROTOC) -I$(PKG_ROOT):$(GOGO_PROTOBUF_PATH):$(PROTOBUF_PATH):$(COREOS_PATH):$(GRPC_GATEWAY_GOOGLEAPIS_PATH) --grpc-gateway_out=logtostderr=true,request_context=true:$(PKG_ROOT) $(GW_TS_PROTOS)
 	touch $@
 
 $(CPP_PROTOS_TARGET): $(PROTOC) $(CPP_PROTOS)
-	git ls-files --exclude-standard --cached --others -- '*.pb.h' '*.pb.cc' | xargs rm -f
+	$(FIND_RELEVANT) -type f \( -name '*.pb.h' -o -name '*.pb.cc' \) -exec rm {} +
 	mkdir -p $(CPP_PROTO_ROOT)
 	$(PROTOC) -I$(PKG_ROOT):$(GOGO_PROTOBUF_PATH):$(PROTOBUF_PATH) --cpp_out=lite:$(CPP_PROTO_ROOT) $(CPP_PROTOS)
 	$(SED_INPLACE) -E '/gogoproto/d' $(CPP_HEADERS) $(CPP_SOURCES)
 	touch $@
 
+.SECONDARY: $(UI_JS)
 $(UI_JS): $(GO_PROTOS) $(COREOS_RAFT_PROTOS) $(YARN_INSTALLED_TARGET)
 	# Add comment recognized by reviewable.
 	echo '// GENERATED FILE DO NOT EDIT' > $@
 	$(PBJS) -t static-module -w es6 --strict-long --keep-case --path $(PKG_ROOT) --path $(GOGO_PROTOBUF_PATH) --path $(COREOS_PATH) --path $(GRPC_GATEWAY_GOOGLEAPIS_PATH) $(GW_PROTOS) >> $@
 
+.SECONDARY: $(UI_TS)
 $(UI_TS): $(UI_JS) $(YARN_INSTALLED_TARGET)
 	# Add comment recognized by reviewable.
 	echo '// GENERATED FILE DO NOT EDIT' > $@
@@ -539,6 +546,7 @@ UI_MANIFESTS := $(UI_ROOT)/protos-manifest.json $(UI_ROOT)/vendor-manifest.json
 #
 # [0]: https://stackoverflow.com/a/3077254/1122351
 # [1]: http://savannah.gnu.org/bugs/?19108
+.SECONDARY: $(UI_DLLS) $(UI_MANIFESTS)
 $(UI_ROOT)/dist/%.dll.js $(UI_ROOT)/%-manifest.json: $(UI_ROOT)/webpack.%.js $(YARN_INSTALLED_TARGET) $(UI_PROTOS)
 	$(NODE_RUN) -C $(UI_ROOT) $(WEBPACK) -p --config webpack.$*.js
 
@@ -550,7 +558,7 @@ ui-test: $(UI_DLLS) $(UI_MANIFESTS)
 ui-test-watch: $(UI_DLLS) $(UI_MANIFESTS)
 	$(NODE_RUN) -C $(UI_ROOT) $(KARMA) start --no-single-run --auto-watch
 
-$(UI_ROOT)/dist%/bindata.go: $(UI_ROOT)/webpack.%.js $(UI_DLLS) $(UI_MANIFESTS) $(shell find $(UI_ROOT)/src $(UI_ROOT)/styl)
+$(UI_ROOT)/dist%/bindata.go: $(UI_ROOT)/webpack.%.js $(UI_DLLS) $(UI_JS) $(UI_MANIFESTS) $(shell find $(UI_ROOT)/src $(UI_ROOT)/styl -type f)
 	@# TODO(benesch): remove references to embedded.go once sufficient time has passed.
 	rm -f $(UI_ROOT)/embedded.go
 	find $(UI_ROOT)/dist$* -mindepth 1 -not -name dist$*.go -delete
@@ -570,6 +578,7 @@ ui-watch: PORT := 3000
 ui-watch: $(UI_DLLS) $(UI_ROOT)/yarn.opt.installed
 	cd $(UI_ROOT) && $(WEBPACK_DASHBOARD) -- $(WEBPACK_DEV_SERVER) --config webpack.ccl.js --port $(PORT)
 
+.SECONDARY: $(SQLPARSER_ROOT)/gen/sql.go.tmp
 $(SQLPARSER_ROOT)/gen/sql.go.tmp: $(SQLPARSER_ROOT)/gen/sql.y $(BOOTSTRAP_TARGET)
 	set -euo pipefail; \
 	  ret=$$(cd $(SQLPARSER_ROOT)/gen && goyacc -p sql -o sql.go.tmp sql.y); \
@@ -613,6 +622,7 @@ $(SQLPARSER_ROOT)/sql.go: $(SQLPARSER_ROOT)/gen/sql.go.tmp
 # is stripped from the string.
 # Then translate the original syntax file, with the types determined
 # above being replaced with the union type in their type declarations.
+.SECONDARY: $(SQLPARSER_ROOT)/gen/sql.y
 $(SQLPARSER_ROOT)/gen/sql.y: $(SQLPARSER_ROOT)/sql.y $(SQLPARSER_ROOT)/replace_help_rules.awk
 	mkdir -p $(SQLPARSER_ROOT)/gen
 	set -euo pipefail; \
