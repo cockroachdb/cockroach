@@ -146,6 +146,7 @@ endif
 # to a target.
 YARN_INSTALLED_TARGET := $(UI_ROOT)/yarn.installed
 
+.SECONDARY: $(YARN_INSTALLED_TARGET)
 $(YARN_INSTALLED_TARGET): $(BOOTSTRAP_TARGET) $(UI_ROOT)/package.json $(UI_ROOT)/yarn.lock
 	$(NODE_RUN) -C $(UI_ROOT) yarn install
 	# Prevent ProtobufJS from trying to install its own packages because a) the
@@ -194,7 +195,8 @@ $(SUBMODULES_TARGET):
 ifneq ($(GIT_DIR),)
 	git submodule update --init
 endif
-	mkdir -p $(@D) touch $@
+	mkdir -p $(@D)
+	touch $@
 
 # Make doesn't expose a list of the variables declared in a given file, so we
 # resort to sed magic. Roughly, this sed command prints VARIABLE in lines of the
