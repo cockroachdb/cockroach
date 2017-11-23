@@ -117,6 +117,43 @@ SELECT 'NaN'::decimal, '-NaN'::decimal, 'sNaN'::decimal, '-sNaN'::decimal
 ----
 NaN NaN NaN NaN
 
+query ITTT
+EXPLAIN SELECT * FROM t2 WHERE d IS NaN and v IS NaN
+----
+0  scan  ·      ·
+0  ·     table  t2@primary
+0  ·     spans  /NaN/NaN-/NaN/-Infinity
+
+query RR
+SELECT * FROM t2 WHERE d IS NaN and v IS NaN
+----
+NaN NaN
+
+# The NaN suffix is decimalNaNDesc, not decimalNaN(Asc).
+query ITTT
+EXPLAIN SELECT * FROM t2 WHERE d = 'Infinity' and v = 'Infinity'
+----
+0  scan  ·      ·
+0  ·     table  t2@primary
+0  ·     spans  /Infinity/Infinity-/Infinity/NaN
+
+query RR
+SELECT * FROM t2 WHERE d = 'Infinity' and v = 'Infinity'
+----
+Infinity Infinity
+
+query ITTT
+EXPLAIN SELECT * FROM t2 WHERE d = '-Infinity' and v = '-Infinity'
+----
+0  scan  ·      ·
+0  ·     table  t2@primary
+0  ·     spans  /-Infinity/-Infinity-/-Infinity/-Infinity/PrefixEnd
+
+query RR
+SELECT * FROM t2 WHERE d = '-Infinity' and v = '-Infinity'
+----
+-Infinity -Infinity
+
 # Ensure special values are handled correctly.
 
 statement ok

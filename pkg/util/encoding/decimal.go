@@ -264,11 +264,11 @@ func decodeDecimal(buf []byte, tmp []byte, invert bool) ([]byte, apd.Decimal, er
 	// Handle the simplistic cases first.
 	switch buf[0] {
 	case decimalNaN, decimalNaNDesc:
-		return nil, apd.Decimal{Form: apd.NaN}, nil
+		return buf[1:], apd.Decimal{Form: apd.NaN}, nil
 	case decimalInfinity:
-		return nil, apd.Decimal{Form: apd.Infinite, Negative: invert}, nil
+		return buf[1:], apd.Decimal{Form: apd.Infinite, Negative: invert}, nil
 	case decimalNegativeInfinity:
-		return nil, apd.Decimal{Form: apd.Infinite, Negative: !invert}, nil
+		return buf[1:], apd.Decimal{Form: apd.Infinite, Negative: !invert}, nil
 	case decimalZero:
 		return buf[1:], apd.Decimal{}, nil
 	}
