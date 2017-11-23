@@ -208,6 +208,14 @@ func (*CreateUser) StatementTag() string { return "CREATE USER" }
 func (*CreateUser) hiddenFromShowQueries() {}
 
 // StatementType implements the Statement interface.
+func (*CreateRole) StatementType() StatementType { return RowsAffected }
+
+// StatementTag returns a short string identifying the type of statement.
+func (*CreateRole) StatementTag() string { return "CREATE ROLE" }
+
+func (*CreateRole) hiddenFromShowQueries() {}
+
+// StatementType implements the Statement interface.
 func (*CreateView) StatementType() StatementType { return DDL }
 
 // StatementTag returns a short string identifying the type of statement.
@@ -706,6 +714,7 @@ func (n *CommitTransaction) String() string        { return AsString(n) }
 func (n *CopyFrom) String() string                 { return AsString(n) }
 func (n *CreateDatabase) String() string           { return AsString(n) }
 func (n *CreateIndex) String() string              { return AsString(n) }
+func (n *CreateRole) String() string               { return AsString(n) }
 func (n *CreateTable) String() string              { return AsString(n) }
 func (n *CreateSequence) String() string           { return AsString(n) }
 func (n *CreateUser) String() string               { return AsString(n) }

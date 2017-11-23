@@ -95,6 +95,16 @@ var backwardCompatibleMigrations = []migrationDescriptor{
 		newDescriptors: 1,
 		newRanges:      1,
 	},
+	{
+		name:           "create system.role_members table",
+		workFn:         createRoleMembersTable,
+		newDescriptors: 1,
+		newRanges:      1,
+	},
+	{
+		name:   "add isRole flag to system.users table",
+		workFn: addUserRoleFlag,
+	},
 }
 
 // migrationDescriptor describes a single migration hook that's used to modify
@@ -376,6 +386,10 @@ func createTableStatisticsTable(ctx context.Context, r runner) error {
 	return createSystemTable(ctx, r, sqlbase.TableStatisticsTable)
 }
 
+func createRoleMembersTable(ctx context.Context, r runner) error {
+	return createSystemTable(ctx, r, sqlbase.RoleMembersTable)
+}
+
 func createSystemTable(ctx context.Context, r runner, desc sqlbase.TableDescriptor) error {
 	// We install the table at the KV layer so that we can choose a known ID in
 	// the reserved ID space. (The SQL layer doesn't allow this.)
@@ -490,4 +504,62 @@ func repopulateViewDeps(ctx context.Context, r runner) error {
 	return r.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
 		return sql.RecomputeViewDependencies(ctx, txn, r.sqlExecutor)
 	})
+}
+
+// initializeRoles sets up roles. This does the following:
+// 1) add `isRole` column and its index on `system.users`
+// 2) add `admin` role to the `system.users` table (overwrites any existing entries)
+// 3) add `root` as a member of the `admin` role
+// TODO(mberhault): this will overwrite any existing user named `admin`. We may want to detect this
+// and either fail or rename the user and its privileges.
+func addUserRoleFlag(ctx context.Context, r runner) error {
+	// System tables can only be modified by a privileged internal user.
+	session := r.newRootSession(ctx)
+	defer session.Finish(r.sqlExecutor)
+
+	// 1) Add the roles column and its index to the system.users table.
+	const alterStmt = `
+	ALTER TABLE system.users ADD COLUMN IF NOT EXISTS "isRole" BOOL DEFAULT false;
+	CREATE INDEX IF NOT EXISTS "isRoleIdx" ON system.users ("isRole");
+	 `
+
+	if res, err := r.sqlExecutor.ExecuteStatementsBuffered(
+		session, alterStmt, nil /* pinfo */, 2 /* expectedNumResults */); err == nil {
+		res.Close(ctx)
+	} else {
+		return err
+	}
+
+	// 2) Create the `admin` role.
+	const upsertAdminStmt = `
+	UPSERT INTO system.users (username, "hashedPassword", "isRole")
+	  VALUES ($1, '', true);
+		`
+
+	pl := tree.MakePlaceholderInfo()
+	pl.SetValue("1", tree.NewDString(security.AdminRole))
+	if res, err := r.sqlExecutor.ExecuteStatementsBuffered(
+		session, upsertAdminStmt, &pl, 1 /* expectedNumResults */); err == nil {
+		res.Close(ctx)
+	} else {
+		return err
+	}
+
+	// 3) Add `root` to the `admin` role.
+	const upsertRootStmt = `
+	UPSERT INTO system.role_members (role, member, isAdmin)
+	  VALUES ($1, $2, true);
+		`
+
+	pl = tree.MakePlaceholderInfo()
+	pl.SetValue("1", tree.NewDString(security.AdminRole))
+	pl.SetValue("2", tree.NewDString(security.RootUser))
+	if res, err := r.sqlExecutor.ExecuteStatementsBuffered(
+		session, upsertRootStmt, &pl, 1 /* expectedNumResults */); err == nil {
+		res.Close(ctx)
+	} else {
+		return err
+	}
+
+	return nil
 }

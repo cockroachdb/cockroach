@@ -986,3 +986,18 @@ func (node *CreateView) Format(buf *bytes.Buffer, f FmtFlags) {
 	buf.WriteString(" AS ")
 	FormatNode(buf, f, node.AsSource)
 }
+
+// CreateRole represents a CREATE ROLE statement.
+type CreateRole struct {
+	Name        Expr
+	IfNotExists bool
+}
+
+// Format implements the NodeFormatter interface.
+func (node *CreateRole) Format(buf *bytes.Buffer, f FmtFlags) {
+	buf.WriteString("CREATE ROLE ")
+	if node.IfNotExists {
+		buf.WriteString("IF NOT EXISTS ")
+	}
+	FormatNode(buf, f, node.Name)
+}

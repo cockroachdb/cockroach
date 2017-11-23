@@ -102,6 +102,8 @@ func TestContextualHelp(t *testing.T) {
 		{`CREATE USER blih ??`, `CREATE USER`},
 		{`CREATE USER blih WITH ??`, `CREATE USER`},
 
+		{`CREATE ROLE bleh ??`, `CREATE ROLE`},
+
 		{`CREATE VIEW blah (??`, `CREATE VIEW`},
 		{`CREATE VIEW blah AS (SELECT c FROM x) ??`, `CREATE VIEW`},
 		{`CREATE VIEW blah AS SELECT c FROM x ??`, `SELECT`},

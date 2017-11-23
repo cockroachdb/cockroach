@@ -240,6 +240,7 @@ type userAuthInfo struct {
 
 type createUserNode struct {
 	ifNotExists  bool
+	isRole       bool
 	rowsAffected int
 	userAuthInfo
 }
@@ -314,10 +315,35 @@ func (p *planner) CreateUser(ctx context.Context, n *tree.CreateUser) (planNode,
 	return &createUserNode{
 		userAuthInfo: ua,
 		ifNotExists:  n.IfNotExists,
+		isRole:       false,
 	}, nil
 }
 
-const usernameHelp = "usernames are case insensitive, must start with a letter " +
+// CreateRole creates a role.
+// Privileges: INSERT on system.users.
+func (p *planner) CreateRole(ctx context.Context, n *tree.CreateRole) (planNode, error) {
+	tDesc, err := getTableDesc(ctx, p.txn, p.getVirtualTabler(), &tree.TableName{DatabaseName: "system", TableName: "users"})
+	if err != nil {
+		return nil, err
+	}
+
+	if err := p.CheckPrivilege(tDesc, privilege.INSERT); err != nil {
+		return nil, err
+	}
+
+	ua, err := p.getUserAuthInfo(n.Name, nil /* roles do not have passwords */, "CREATE ROLE")
+	if err != nil {
+		return nil, err
+	}
+
+	return &createUserNode{
+		userAuthInfo: ua,
+		ifNotExists:  n.IfNotExists,
+		isRole:       true,
+	}, nil
+}
+
+const usernameHelp = "user/role names are case insensitive, must start with a letter " +
 	"or underscore, may contain letters, digits or underscores, and must not exceed 63 characters"
 
 var usernameRE = regexp.MustCompile(`^[\p{Ll}_][\p{Ll}0-9_]{0,62}$`)
@@ -331,15 +357,15 @@ var blacklistedUsernames = map[string]struct{}{
 func NormalizeAndValidateUsername(username string) (string, error) {
 	username = tree.Name(username).Normalize()
 	if !usernameRE.MatchString(username) {
-		return "", errors.Errorf("username %q invalid; %s", username, usernameHelp)
+		return "", errors.Errorf("user/role name %q invalid; %s", username, usernameHelp)
 	}
 	if _, ok := blacklistedUsernames[username]; ok {
-		return "", errors.Errorf("username %q reserved", username)
+		return "", errors.Errorf("user/role name %q reserved", username)
 	}
 	return username, nil
 }
 
-var errNoUserNameSpecified = errors.New("no username specified")
+var errNoUserNameSpecified = errors.New("no user/role name specified")
 
 func (n *createUserNode) Start(params runParams) error {
 	normalizedUsername, hashedPassword, err := n.userAuthInfo.resolve()
@@ -352,9 +378,10 @@ func (n *createUserNode) Start(params runParams) error {
 		params.ctx,
 		"create-user",
 		params.p.txn,
-		"INSERT INTO system.users VALUES ($1, $2);",
+		"INSERT INTO system.users VALUES ($1, $2, $3);",
 		normalizedUsername,
 		hashedPassword,
+		n.isRole,
 	)
 	if err != nil {
 		if sqlbase.IsUniquenessConstraintViolationError(err) {
@@ -366,10 +393,12 @@ func (n *createUserNode) Start(params runParams) error {
 				// are not actually inserting anything but are canceling the
 				// error, so clear the row count so that the client can learn
 				// what's going on.
+				// TODO(mberhault): we should return an error if attempting to create a user,
+				// but a role by the same name exists and vice-versa..
 				n.rowsAffected = 0
 				return nil
 			}
-			err = errors.Errorf("user %s already exists", normalizedUsername)
+			err = errors.Errorf("user or role %s already exists", normalizedUsername)
 		}
 		return err
 	} else if n.rowsAffected != 1 {

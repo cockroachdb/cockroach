@@ -354,6 +354,8 @@ func (p *planner) newPlan(
 		return p.CreateDatabase(n)
 	case *tree.CreateIndex:
 		return p.CreateIndex(ctx, n)
+	case *tree.CreateRole:
+		return p.CreateRole(ctx, n)
 	case *tree.CreateTable:
 		return p.CreateTable(ctx, n)
 	case *tree.CreateUser:

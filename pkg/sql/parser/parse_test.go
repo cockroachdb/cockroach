@@ -1231,6 +1231,11 @@ func TestParse2(t *testing.T) {
 		{`ALTER USER foo WITH PASSWORD bar`,
 			`ALTER USER 'foo' WITH PASSWORD 'bar'`},
 
+		{`CREATE ROLE foo`,
+			`CREATE ROLE 'foo'`},
+		{`CREATE ROLE IF NOT EXISTS foo`,
+			`CREATE ROLE IF NOT EXISTS 'foo'`},
+
 		{
 			`CREATE TABLE a (b INT, FOREIGN KEY (b) REFERENCES other ON UPDATE NO ACTION ON DELETE NO ACTION)`,
 			`CREATE TABLE a (b INT, FOREIGN KEY (b) REFERENCES other)`,

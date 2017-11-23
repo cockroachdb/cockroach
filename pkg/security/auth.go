@@ -25,8 +25,10 @@ import (
 const (
 	// NodeUser is used by nodes for intra-cluster traffic.
 	NodeUser = "node"
-	// RootUser is the default cluster administrator.
+	// RootUser is the default cluster administrator user.
 	RootUser = "root"
+	// AdminRole is the default cluster administrator role.
+	AdminRole = "admin"
 )
 
 // UserAuthHook authenticates a user based on their username and whether their

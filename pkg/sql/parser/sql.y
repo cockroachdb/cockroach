@@ -481,7 +481,7 @@ func (u *sqlSymUnion) scrubOption() tree.ScrubOption {
 %token <str>   REGCLASS REGPROC REGPROCEDURE REGNAMESPACE REGTYPE
 %token <str>   REMOVE_PATH RENAME REPEATABLE
 %token <str>   RELEASE RESET RESTORE RESTRICT RESUME RETURNING REVOKE RIGHT
-%token <str>   ROLLBACK ROLLUP ROW ROWS RSHIFT
+%token <str>   ROLE ROLES ROLLBACK ROLLUP ROW ROWS RSHIFT
 
 %token <str>   SAVEPOINT SCATTER SCRUB SEARCH SECOND SELECT SEQUENCE SEQUENCES
 %token <str>   SERIAL SERIALIZABLE SESSION SESSIONS SESSION_USER SET SETTING SETTINGS
@@ -589,6 +589,7 @@ func (u *sqlSymUnion) scrubOption() tree.ScrubOption {
 %type <tree.Statement> create_ddl_stmt
 %type <tree.Statement> create_database_stmt
 %type <tree.Statement> create_index_stmt
+%type <tree.Statement> create_role_stmt
 %type <tree.Statement> create_table_stmt
 %type <tree.Statement> create_table_as_stmt
 %type <tree.Statement> create_user_stmt
@@ -1601,9 +1602,10 @@ cancel_query_stmt:
 // %Category: Group
 // %Text:
 // CREATE DATABASE, CREATE TABLE, CREATE INDEX, CREATE TABLE AS,
-// CREATE USER, CREATE VIEW, CREATE SEQUENCE
+// CREATE USER, CREATE VIEW, CREATE SEQUENCE, CREATE ROLE
 create_stmt:
   create_user_stmt     // EXTEND WITH HELP: CREATE USER
+| create_role_stmt     // EXTEND WITH HELP: CREATE ROLE
 | create_ddl_stmt      // help texts in sub-rule
 | CREATE error         // SHOW HELP: CREATE
 
@@ -1837,6 +1839,7 @@ preparable_stmt:
 | backup_stmt       // EXTEND WITH HELP: BACKUP
 | cancel_stmt       // help texts in sub-rule
 | create_user_stmt  // EXTEND WITH HELP: CREATE USER
+| create_role_stmt  // EXTEND WITH HELP: CREATE ROLE
 | delete_stmt       // EXTEND WITH HELP: DELETE
 | drop_user_stmt    // EXTEND WITH HELP: DROP USER
 | import_stmt       // EXTEND WITH HELP: IMPORT
@@ -3362,6 +3365,22 @@ opt_password:
   {
     $$.val = nil
   }
+
+// %Help: CREATE ROLE - define a new role
+// %Category: Priv
+// %Text: CREATE ROLE [IF NOT EXISTS] <name>
+// %SeeAlso: DROP ROLE, SHOW ROLES, WEBDOCS/create-role.html
+create_role_stmt:
+  CREATE ROLE string_or_placeholder
+  {
+    $$.val = &tree.CreateRole{Name: $3.expr()}
+  }
+| CREATE ROLE IF NOT EXISTS string_or_placeholder
+  {
+    $$.val = &tree.CreateRole{Name: $6.expr(), IfNotExists: true}
+  }
+| CREATE ROLE error // SHOW HELP: CREATE ROLE
+
 
 // %Help: CREATE VIEW - create a new view
 // %Category: DDL
@@ -7128,6 +7147,7 @@ reserved_keyword:
 | PRIMARY
 | REFERENCES
 | RETURNING
+| ROLE
 | SELECT
 | SESSION_USER
 | SOME

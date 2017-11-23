@@ -161,6 +161,18 @@ CREATE TABLE system.table_statistics (
 	PRIMARY KEY ("tableID", "statisticID"),
 	FAMILY ("tableID", "statisticID", name, "columnIDs", "createdAt", "rowCount", "distinctCount", "nullCount", histogram)
 );`
+
+	// role_members contains direct (non-expanded) role membership information as well as
+	// role admin settings for members.
+	//
+	// Design outlined in /docs/RFCS/20171118_role_based_access_control.md#roles-system-table
+	RoleMembersTableSchema = `
+CREATE TABLE system.role_members (
+  role          STRING       NOT NULL PRIMARY KEY,
+  member        STRING       NOT NULL,
+  isAdmin       BOOL         NOT NULL DEFAULT false,
+  INDEX (member)
+);`
 )
 
 func pk(name string) IndexDescriptor {
@@ -215,6 +227,7 @@ var SystemAllowedPrivileges = map[ID]privilege.Lists{
 	keys.JobsTableID:            {privilege.ReadWriteData},
 	keys.WebSessionsTableID:     {privilege.ReadWriteData},
 	keys.TableStatisticsTableID: {privilege.ReadWriteData},
+	keys.RoleMembersTableID:     {privilege.ReadWriteData},
 }
 
 // SystemDesiredPrivileges returns the desired privilege list (i.e., the
@@ -228,6 +241,7 @@ func SystemDesiredPrivileges(id ID) privilege.List {
 
 // Helpers used to make some of the TableDescriptor literals below more concise.
 var (
+	colTypeBool      = ColumnType{SemanticType: ColumnType_BOOL}
 	colTypeInt       = ColumnType{SemanticType: ColumnType_INT}
 	colTypeString    = ColumnType{SemanticType: ColumnType_STRING}
 	colTypeBytes     = ColumnType{SemanticType: ColumnType_BYTES}
@@ -685,6 +699,44 @@ var (
 		},
 		NextIndexID:    2,
 		Privileges:     NewPrivilegeDescriptor(security.RootUser, SystemDesiredPrivileges(keys.TableStatisticsTableID)),
+		FormatVersion:  InterleavedFormatVersion,
+		NextMutationID: 1,
+	}
+
+	falseString = "false"
+
+	// RoleMembers table to store role memberships.
+	RoleMembersTable = TableDescriptor{
+		Name:     "role_members",
+		ID:       keys.RoleMembersTableID,
+		ParentID: 1,
+		Version:  1,
+		Columns: []ColumnDescriptor{
+			{Name: "role", ID: 1, Type: colTypeString},
+			{Name: "member", ID: 2, Type: colTypeString},
+			{Name: "isadmin", ID: 3, Type: colTypeBool, DefaultExpr: &falseString},
+		},
+		NextColumnID: 4,
+		Families: []ColumnFamilyDescriptor{
+			{Name: "primary", ID: 0, ColumnNames: []string{"role"}, ColumnIDs: singleID1},
+			{Name: "fam_2_member", ID: 2, ColumnNames: []string{"member"}, ColumnIDs: []ColumnID{2}, DefaultColumnID: 2},
+			{Name: "fam_3_isadmin", ID: 3, ColumnNames: []string{"isadmin"}, ColumnIDs: []ColumnID{3}, DefaultColumnID: 3},
+		},
+		NextFamilyID: 4,
+		PrimaryIndex: pk("role"),
+		Indexes: []IndexDescriptor{
+			{
+				Name:             "role_members_member_idx",
+				ID:               2,
+				Unique:           false,
+				ColumnNames:      []string{"member"},
+				ColumnDirections: []IndexDescriptor_Direction{IndexDescriptor_ASC},
+				ColumnIDs:        []ColumnID{2},
+				ExtraColumnIDs:   []ColumnID{1},
+			},
+		},
+		NextIndexID:    3,
+		Privileges:     NewPrivilegeDescriptor(security.RootUser, SystemDesiredPrivileges(keys.RoleMembersTableID)),
 		FormatVersion:  InterleavedFormatVersion,
 		NextMutationID: 1,
 	}
