@@ -5,12 +5,9 @@
 - RFC PR: [#19785](https://github.com/cockroachdb/cockroach/pull/19785)
 - Cockroach Issue: [#19783](https://github.com/cockroachdb/cockroach/issues/19783)
 
-
-
 Table of Contents
 =================
 
-   * [Table of Contents](#table-of-contents)
    * [Summary](#summary)
    * [Motivation](#motivation)
    * [Related resources](#related-resources)
@@ -44,10 +41,6 @@ Table of Contents
          * [Other uses of local disk](#other-uses-of-local-disk)
          * [Enterprise enforcement](#enterprise-enforcement)
       * [Drawbacks](#drawbacks)
-         * [Directs us towards rocksdb-level encryption](#directs-us-towards-rocksdb-level-encryption)
-         * [Cannot migrate to/from preamble data format](#cannot-migrate-tofrom-preamble-data-format)
-         * [Lack of correctness testing of rocksdb encryption layer](#lack-of-correctness-testing-of-rocksdb-encryption-layer)
-         * [Complexity of configuration and monitoring](#complexity-of-configuration-and-monitoring)
       * [Rationale and Alternatives](#rationale-and-alternatives)
       * [Unresolved questions](#unresolved-questions)
          * [Non-live rocksdb files](#non-live-rocksdb-files)
@@ -56,6 +49,7 @@ Table of Contents
       * [Future improvements](#future-improvements)
          * [v1.0: a.k.a. MVP](#v10-aka-mvp)
          * [Possible future additions](#possible-future-additions)
+
 
 # Summary
 
@@ -91,6 +85,7 @@ access to filesystem encryption utilities).
 * [Crypto++](https://www.cryptopp.com/)
 * [overview of block cipher modes](https://en.wikipedia.org/wiki/Block_cipher_mode_of_operation#Common_modes)
 * [rocksdb PR adding env_encryption](https://github.com/facebook/rocksdb/pull/2424)
+* [SEI Cert C coding standard](https://wiki.sei.cmu.edu/confluence/display/c/SEI+CERT+C+Coding+Standard)
 
 # Out of scope
 
@@ -149,7 +144,7 @@ We assume attackers do not have privileged access on a running system. Specifica
 A big assumption in this document is that attackers do not have write access to the raw files while
 we are operating: we trust the integrity of the store and data key files as well as all data written on disk.
 
-This includes the case of an attacked removing a disk, modifying it, and re-inserting it into the cluster.
+This includes the case of an attacker removing a disk, modifying it, and re-inserting it into the cluster.
 
 We can partially relax this assumption by adding integrity checking to all files on disk (eg: using GCM).
 This would add complexity and cost to filesystem-level operations in rocksdb as we would need to read entire
@@ -201,9 +196,9 @@ methods be found, this is still not the key itself.
 ### Memory safety
 
 We need to provide safety for the keys while held in memory.
-On the C++ side, this done using mlock (`man mlock(2)`) on memory holding unencrypted keys.
-This prevents the corresponding memory pages from being paged out to disk. This does not prevent
-memory access for users with sufficient privileges.
+At the C++ level, we can control two aspects:
+* don't swap to disk: using `mlock` (`man mlock(2)`) on memory holding keys, preventing paging out to disk
+* don't code dump: using `madvise` with `MADV_DONTDUMP` (see `man madvise(2)` on Linux) to exclude pages from code dumps.
 
 There is no equivalent in Go so the current approach is to avoid loading keys in Go.
 This can become problematic if we want to reuse the keys to encrypt log files written in Go.
@@ -214,8 +209,8 @@ No good answer presents itself.
 ## Terminology
 
 Terminology used in this RFC:
-* **data key**: used to encrypt the actual on-disk data. These are generated automatically.
-* **store key**: used the encrypt the set of data keys. Provided by the user.
+* **data key**: used to encrypt the actual on-disk data. These are generated automatically. a.k.a Data-Encryption-Key.
+* **store key**: used to encrypt the set of data keys. Provided by the user. a.k.a Key-Encryption-Key.
 * **active key**: the key being used to encrypt new data.
 * **key rotation**: encrypting data with a new key. Rotation starts when the new key is provided and ends when no data encrypted with the old key remains.
 * **plaintext**: unencrypted data.
@@ -232,10 +227,10 @@ In order to enable encryption on a given store, the user needs two things:
 * one or more store key(s)
 
 Support for encryption requires the new preamble file format in rocksdb. This can be enabled
-before turning on encryption, or concurrently. However, an existing rocksdb node without the preamble data
+before turning on encryption, or concurrently. However, an existing rocksdb store without the preamble data
 format **CANNOT** use encryption.
 
-An existing node cannot be converted from classic file format to preamble file format or vice versa.
+An existing store cannot be converted from classic file format to preamble file format or vice versa.
 
 ### Configuration recommendations
 
@@ -247,6 +242,7 @@ We identify a few configuration requirements for users to safely use encryption 
 * store keys and cockroach data must not be on the same filesystem/disk (including temporary working directories)
 * restricted access to all cockroach data
 * disable swap
+* don't enable code dumps
 * reasonable key generation/rotation
 * monitoring
 * ideally, the store keys are not stored on the machine (use something like `keywhiz`)
@@ -288,7 +284,7 @@ The size of each data key will depend on the choice of cipher.
 #### Recommended production configuration
 
 The need for encryption entails a few recommended changes in production configuration:
-* disable swap: we want to avoid any data hitting disk unencrypted, this includes memory being swapped out.
+* disable swap/core dumps: we want to avoid any data hitting disk unencrypted, this includes memory being swapped out.
 * run on architectures that support the [AES-NI instruction set](https://en.wikipedia.org/wiki/AES_instruction_set).
 * have a separate area (encrypted or in-memory partition, fuse-filesystem, etc...) to store the store-level keys.
 
@@ -302,11 +298,11 @@ The encryption flags can specify different encryption states for different store
 different rotation periods).
 
 The first step in allowing at-rest encryption is using the preamble data format.
-This must be done at node-creation time with the `format=preamble` spec of the `--store` flag.
+This must be done at store-creation time with the `format=preamble` spec of the `--store` flag.
 
-#### Attempting to convert an existing node
+#### Attempting to convert an existing store
 
-Given an existing node created without `format=preamble` or with a version of cockroach
+Given an existing store created without `format=preamble` or with a version of cockroach
 unaware of the preamble format:
 ```
 cockroach start <regular options> --store=path=/mnt/data,format=preamble
@@ -321,21 +317,21 @@ cockroach start <regular options> --store=path=/mnt/data --enterprise-encryption
 ERROR: cockroach data directory using classic format, cannot use encryption.
 ```
 
-#### Initializing a new node with preamble format
+#### Initializing a new store with preamble format
 
-Creating a new cockroach node with preamble format, but no encryption:
+Creating a new cockroach store with preamble format, but no encryption:
 ```
 cockroach start <regular options> --store=path=/mnt/data,format=preamble
 SUCCESS
 ```
 
-#### Enabling encryption on a node with preamble format
+#### Enabling encryption on a store with preamble format
 
-Turning on encryption for a node with preamble format. This can be done when initializing the node
-(start with encryption on), or on a non-encrypted node with preamble format (turning on encryption).
+Turning on encryption for a store with preamble format. This can be done when initializing the store
+(start with encryption on), or on a non-encrypted store with preamble format (turning on encryption).
 
 ```
-# Ensure your key file exists and have valid key data (correct size)
+# Ensure your key file exists and has valid key data (correct size)
 # For example, to generate a key for AES-128:
 $ openssl rand 16 > /path/to/cockroach.key
 # Tell cockroach to use the preamble format and specity the encryption flags.
@@ -367,7 +363,7 @@ It is now safe to delete the old key file.
 
 #### Disabling encryption
 
-To disable encryption on a currently-encrypted node, we need to rewrite the list of data keys in plaintext.
+To disable encryption on a currently-encrypted store, we need to rewrite the list of data keys in plaintext.
 We tell cockroach to switch to plaintext by passing `plain` as the value of the `key` field.
 We still need to specify the old key to decrypt the data keys file.
 
@@ -379,18 +375,18 @@ $ cockroach start <regular options> \
     --enterprise-encryption=path=/mnt/data,key=plain,old_key=/path/to/cockroach.new.keys
 ```
 
-Examine the logs or node debug pages to see that the node encryption status is now plaintext. It is now safe to delete the old key file.
+Examine the logs or node debug pages to see that the store encryption status is now plaintext. It is now safe to delete the old key file.
 
 Examine logs and debug pages to see progress of data encryption. This may take some time.
 
 ## Contributor impact
 
-The biggest impact of this change on contributors is the fact that all data on a given node must be encrypted.
+The biggest impact of this change on contributors is the fact that all data on a given store must be encrypted.
 
 There are three main categories:
 * using the store rocksdb instance: encryption is done automatically
 * using a separate rocksdb instance: encryption settings **must** be given to the new instance. Care must be taken to ensure that users know not to place store keys on the same disks as the rocksdb directory
-* using anything other than rocksdb: logs (written at the Go level) are marked out of scope for this document. However, any raw data written to disk should use the same encryption settings as the node
+* using anything other than rocksdb: logs (written at the Go level) are marked out of scope for this document. However, any raw data written to disk should use the same encryption settings as the store
 
 # Reference-level explanation
 
@@ -525,7 +521,7 @@ This means that we need two things:
 * detect the format of existing rocksdb instances
 
 We propose:
-* a new field `format=preamble` in the `--store` flag to start a new node with preamble format enabled. Will fail if the store exists in classical format.
+* a new field `format=preamble` in the `--store` flag to start a new store with preamble format enabled. Will fail if the store exists in classical format.
 * a marker created at rocksdb-creation time indicating the use of the preamble format. This can be stored in the existing `COCKROACHDB_VERSION` file.
 * the preamble format can be enabled on none, some, or all the stores on a node.
 
@@ -590,7 +586,7 @@ The data keys file is an encoded protocol buffer:
 message DataKeysRegistry {
   // Ordering does not matter.
   repeated DataKey data_keys = 1;
-  repeated MasterKey master_keys = 2;
+  repeated StoreKey store_keys = 2;
 }
 
 // EncryptionType is shared with the Preamble EncryptionType.
@@ -601,8 +597,8 @@ enum EncryptionType {
   AES_CTR = 1;
 }
 
-// Information about the master key, but not the key itself.
-message MasterKey {
+// Information about the store key, but not the key itself.
+message StoreKey {
   // The ID (hash) of this key.
   optional bytes key_id = 1;
   // Whether this is the active (latest key).
@@ -630,11 +626,11 @@ message DataKey {
 }
 ```
 
-The `master_keys` field is needed to keep track of master key ages and statuses. We only need to keep the
+The `store_keys` field is needed to keep track of store key ages and statuses. We only need to keep the
 active key but may keep previous keys for history.
 
 The `data_keys` field contains all in-use (data encrypted with those keys is still live) keys and all information
-needed to determine ciphers, ages, related master keys, etc...
+needed to determine ciphers, ages, related store keys, etc...
 
 `was_exposed` indicates whether the key was even written to disk as plaintext (encryption was disabled at the
 store level). This will be surfaced in encryption status reports. Data encrypted by an exposed key is securely
@@ -807,6 +803,16 @@ Proper use of encryption-at-rest requires a reasonable amount of user education,
 A lot of this falls onto proper documentation and admin UI components, but some are choices made here
 (flag specification, logged information, surfaced encryption status).
 
+### No strong license enforcement
+
+The current proposal takes a reactive approach to license enforcement: we show warnings in multiple places
+if encryption was enabled without an enterprise license.
+
+This is unlike our other enterprise features which simply cannot be used without a license.
+
+There is some discussion of possible ways to solve this in
+[Enterprise feature gating](#enterprise-feature-gating), but this is left as future improvements.
+
 ## Rationale and Alternatives
 
 There are a few alternatives available in the major aspects of this design as well as in
@@ -965,7 +971,7 @@ Some possible solutions to investigate:
 * level of indirection in the encryption layer while a file is being rewritten (not supposed to be done for "write-once" files, and probably too dangerous for logs)
 
 Part of forcing re-encryption includes:
-* when do to do automatically (eg: age-based. maybe after half the active key lifetime)
+* when to do it automatically (eg: age-based. maybe after half the active key lifetime)
 * how to do it manually (user requests quick re-encryption)
 * specifying what to re-encrypt (eg: all data keys up to ID 5)
 
@@ -1054,9 +1060,9 @@ The current proposal does not gate encryption on a valid license due to the fact
 when initialising the node.
 
 A possible solution to explore is detection when the node joins a cluster. eg:
-* always allow node encryption
+* always allow store encryption
 * when a node joins, communicate its encryption status and refuse the join if no enterprise license exists
-* on bootstrap, an encrypted node will only allow SQL operations on the system tables (to set the license)
+* on bootstrap, an encrypted store will only allow SQL operations on the system tables (to set the license)
 * the license can be passed through `init`
 
 This would still cause issues when removing the license (or errors loading/validating the license).
