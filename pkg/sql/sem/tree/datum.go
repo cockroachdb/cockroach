@@ -71,6 +71,7 @@ var (
 // Datum represents a SQL value.
 type Datum interface {
 	TypedExpr
+	json.JSONizable
 
 	// AmbiguousFormat indicates whether the result of formatting this Datum can
 	// be interpreted into more than one type. Used with
@@ -273,6 +274,11 @@ func (*DBool) ResolvedType() types.T {
 	return types.Bool
 }
 
+// AsJSON implements transformation to JSON
+func (d *DBool) AsJSON() (json.JSON, error) {
+	return json.MakeJSONFromBool(bool(*d)), nil
+}
+
 // Compare implements the Datum interface.
 func (d *DBool) Compare(ctx *EvalContext, other Datum) int {
 	if other == DNull {
@@ -382,6 +388,11 @@ func (*DInt) ResolvedType() types.T {
 	return types.Int
 }
 
+// AsJSON implements transformation to JSON
+func (d *DInt) AsJSON() (json.JSON, error) {
+	return json.MakeJSONFromInt(int(*d)), nil
+}
+
 // Compare implements the Datum interface.
 func (d *DInt) Compare(ctx *EvalContext, other Datum) int {
 	if other == DNull {
@@ -483,6 +494,11 @@ func ParseDFloat(s string) (*DFloat, error) {
 // ResolvedType implements the TypedExpr interface.
 func (*DFloat) ResolvedType() types.T {
 	return types.Float
+}
+
+// AsJSON implements transformation to JSON
+func (d *DFloat) AsJSON() (json.JSON, error) {
+	return json.MakeJSONFromFloat64(float64(*d))
 }
 
 // Compare implements the Datum interface.
@@ -638,6 +654,11 @@ func (*DDecimal) ResolvedType() types.T {
 	return types.Decimal
 }
 
+// AsJSON implements transformation to JSON
+func (d *DDecimal) AsJSON() (json.JSON, error) {
+	return json.MakeJSONFromDecimal(d.Decimal), nil
+}
+
 // Compare implements the Datum interface.
 func (d *DDecimal) Compare(ctx *EvalContext, other Datum) int {
 	if other == DNull {
@@ -779,6 +800,11 @@ func (*DString) ResolvedType() types.T {
 	return types.String
 }
 
+// AsJSON implements transformation to JSON
+func (d *DString) AsJSON() (json.JSON, error) {
+	return json.MakeJSONFromString(string(*d)), nil
+}
+
 // Compare implements the Datum interface.
 func (d *DString) Compare(ctx *EvalContext, other Datum) int {
 	if other == DNull {
@@ -901,6 +927,11 @@ func NewDCollatedString(
 // AmbiguousFormat implements the Datum interface.
 func (*DCollatedString) AmbiguousFormat() bool { return false }
 
+// AsJSON implements transformation to JSON
+func (d *DCollatedString) AsJSON() (json.JSON, error) {
+	return json.MakeJSONFromString(""), nil
+}
+
 // Format implements the NodeFormatter interface.
 func (d *DCollatedString) Format(buf *bytes.Buffer, f FmtFlags) {
 	if f.withinArray {
@@ -983,6 +1014,11 @@ func NewDBytes(d DBytes) *DBytes {
 // ResolvedType implements the TypedExpr interface.
 func (*DBytes) ResolvedType() types.T {
 	return types.Bytes
+}
+
+// AsJSON implements transformation to JSON
+func (d *DBytes) AsJSON() (json.JSON, error) {
+	return json.MakeJSONFromString(string(*d)), nil
 }
 
 // Compare implements the Datum interface.
@@ -1081,6 +1117,11 @@ func (d *DUuid) Compare(ctx *EvalContext, other Datum) int {
 		panic(makeUnsupportedComparisonMessage(d, other))
 	}
 	return bytes.Compare(d.GetBytes(), v.GetBytes())
+}
+
+// AsJSON implements transformation to JSON
+func (d *DUuid) AsJSON() (json.JSON, error) {
+	return json.MakeJSONFromString(""), nil
 }
 
 func (d DUuid) equal(other *DUuid) bool {
@@ -1182,6 +1223,11 @@ func MustBeDIPAddr(e Expr) DIPAddr {
 // ResolvedType implements the TypedExpr interface.
 func (*DIPAddr) ResolvedType() types.T {
 	return types.INet
+}
+
+// AsJSON implements transformation to JSON
+func (d *DIPAddr) AsJSON() (json.JSON, error) {
+	return json.MakeJSONFromString(d.IPAddr.String()), nil
 }
 
 // Compare implements the Datum interface.
@@ -1336,6 +1382,11 @@ func (*DDate) ResolvedType() types.T {
 	return types.Date
 }
 
+// AsJSON implements transformation to JSON
+func (d *DDate) AsJSON() (json.JSON, error) {
+	return json.MakeJSONFromString(timeutil.Unix(int64(*d)*SecondsInDay, 0).Format(dateFormat)), nil
+}
+
 // Compare implements the Datum interface.
 func (d *DDate) Compare(ctx *EvalContext, other Datum) int {
 	if other == DNull {
@@ -1436,6 +1487,11 @@ func (*DTime) ResolvedType() types.T {
 	return types.Time
 }
 
+// AsJSON implements transformation to JSON
+func (d *DTime) AsJSON() (json.JSON, error) {
+	return json.MakeJSONFromString(""), nil
+}
+
 // Compare implements the Datum interface.
 func (d *DTime) Compare(ctx *EvalContext, other Datum) int {
 	if other == DNull {
@@ -1532,6 +1588,7 @@ const (
 	timestampWithOffsetSecondsZoneFormat = timestampWithOffsetMinutesZoneFormat + ":00"
 	timestampWithNamedZoneFormat         = timestampFormat + " MST"
 	timestampRFC3339WithoutZoneFormat    = dateFormat + "T15:04:05"
+	timestampPostgresFormat              = dateFormat + "T15:04:05.999999"
 	timestampSequelizeFormat             = timestampFormat + ".000 -07:00"
 
 	timestampJdbcFormat = timestampFormat + ".999999 -070000"
@@ -1678,6 +1735,11 @@ func compareTimestamps(ctx *EvalContext, l Datum, r Datum) int {
 	return 0
 }
 
+// AsJSON implements transformation to JSON
+func (d *DTimestamp) AsJSON() (json.JSON, error) {
+	return json.MakeJSONFromString(d.UTC().Format(timestampPostgresFormat)), nil
+}
+
 // Compare implements the Datum interface.
 func (d *DTimestamp) Compare(ctx *EvalContext, other Datum) int {
 	if other == DNull {
@@ -1773,6 +1835,11 @@ func ParseDTimestampTZ(
 // ResolvedType implements the TypedExpr interface.
 func (*DTimestampTZ) ResolvedType() types.T {
 	return types.TimestampTZ
+}
+
+// AsJSON implements transformation to JSON
+func (d *DTimestampTZ) AsJSON() (json.JSON, error) {
+	return json.MakeJSONFromString(d.Time.Format(TimestampOutputFormat)), nil
 }
 
 // Compare implements the Datum interface.
@@ -1966,6 +2033,11 @@ func (*DInterval) ResolvedType() types.T {
 	return types.Interval
 }
 
+// AsJSON implements transformation to JSON
+func (d *DInterval) AsJSON() (json.JSON, error) {
+	return json.MakeJSONFromString(d.Duration.String()), nil
+}
+
 // Compare implements the Datum interface.
 func (d *DInterval) Compare(ctx *EvalContext, other Datum) int {
 	if other == DNull {
@@ -2049,13 +2121,18 @@ func (d *DInterval) Size() uintptr {
 // DJSON is the JSON Datum.
 type DJSON struct{ json.JSON }
 
+// NewDJSON is a helper routine to create a DJSON initialized from its argument.
+func NewDJSON(j json.JSON) *DJSON {
+	return &DJSON{j}
+}
+
 // ParseDJSON takes a string of JSON and returns a DJSON value.
 func ParseDJSON(s string) (Datum, error) {
 	j, err := json.ParseJSON(s)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not parse JSON")
 	}
-	return &DJSON{j}, nil
+	return NewDJSON(j), nil
 }
 
 // MakeDJSON returns a JSON value given a Go-style representation of JSON.
@@ -2101,6 +2178,11 @@ func MustBeDJSON(e Expr) DJSON {
 // ResolvedType implements the TypedExpr interface.
 func (*DJSON) ResolvedType() types.T {
 	return types.JSON
+}
+
+// AsJSON implements transformation to JSON
+func (d *DJSON) AsJSON() (json.JSON, error) {
+	return d.JSON, nil
 }
 
 // Compare implements the Datum interface.
@@ -2208,6 +2290,11 @@ func (d *DTuple) ResolvedType() types.T {
 		typ[i] = v.ResolvedType()
 	}
 	return typ
+}
+
+// AsJSON implements transformation to JSON
+func (d *DTuple) AsJSON() (json.JSON, error) {
+	return json.MakeJSONFromString(""), nil
 }
 
 // Compare implements the Datum interface.
@@ -2453,6 +2540,11 @@ func (d dNull) Compare(ctx *EvalContext, other Datum) int {
 	return -1
 }
 
+// AsJSON implements transformation to JSON
+func (d dNull) AsJSON() (json.JSON, error) {
+	return json.MakeJSON(nil)
+}
+
 // Prev implements the Datum interface.
 func (d dNull) Prev(_ *EvalContext) (Datum, bool) {
 	return nil, false
@@ -2538,6 +2630,19 @@ func MustBeDArray(e Expr) *DArray {
 // ResolvedType implements the TypedExpr interface.
 func (d *DArray) ResolvedType() types.T {
 	return types.TArray{Typ: d.ParamTyp}
+}
+
+// AsJSON implements transformation to JSON
+func (d *DArray) AsJSON() (json.JSON, error) {
+	var err error
+	jsons := make([]json.JSON, d.Len())
+	for i, e := range d.Array {
+		jsons[i], err = e.AsJSON()
+		if err != nil {
+			return nil, err
+		}
+	}
+	return json.MakeJSONFromArrayOfJSON(jsons), nil
 }
 
 // Compare implements the Datum interface.
@@ -2699,6 +2804,38 @@ func (t *DTable) Format(buf *bytes.Buffer, _ FmtFlags) {
 // ResolvedType implements the TypedExpr interface.
 func (t *DTable) ResolvedType() types.T {
 	return t.ValueGenerator.ResolvedType()
+}
+
+// AsJSON implements transformation to JSON
+func (t *DTable) AsJSON() (json.JSON, error) {
+	var err error
+	gen := t.ValueGenerator
+	err = gen.Start()
+	if err != nil {
+		return nil, err
+	}
+	defer gen.Close()
+	tableJSONs := []json.JSON{}
+	for {
+		var hasNext bool
+		hasNext, err = gen.Next()
+		if err != nil {
+			return nil, err
+		}
+		if !hasNext {
+			break
+		}
+		ds := gen.Values()
+		rowJSONs := make([]json.JSON, ds.Len())
+		for i, e := range ds {
+			rowJSONs[i], err = e.AsJSON()
+			if err != nil {
+				return nil, err
+			}
+		}
+		tableJSONs = append(tableJSONs, json.MakeJSONFromArrayOfJSON(rowJSONs))
+	}
+	return json.MakeJSONFromArrayOfJSON(tableJSONs), nil
 }
 
 // Compare implements the Datum interface.
@@ -2904,6 +3041,11 @@ func UnwrapDatum(evalCtx *EvalContext, d Datum) Datum {
 // ResolvedType implements the TypedExpr interface.
 func (d *DOidWrapper) ResolvedType() types.T {
 	return types.WrapTypeWithOid(d.Wrapped.ResolvedType(), d.Oid)
+}
+
+// AsJSON implements transformation to JSON
+func (d *DOidWrapper) AsJSON() (json.JSON, error) {
+	return d.Wrapped.AsJSON()
 }
 
 // Compare implements the Datum interface.

@@ -72,6 +72,89 @@ SELECT jsonb_typeof('null'::JSON)
 ----
 null
 
+## to_json
+
+query T
+SELECT to_json(123)
+----
+123
+
+query T
+SELECT to_json('a'::TEXT)
+----
+"a"
+
+query T
+SELECT to_json(true)
+----
+true
+
+query T
+SELECT to_json(false)
+----
+false
+
+query T
+SELECT to_json('"a"'::JSON)
+----
+"a"
+
+query T
+SELECT to_json(TIMESTAMP '2014-05-28 12:22:35.614298')
+----
+"2014-05-28T12:22:35.614298"
+
+query T
+SELECT to_json(TIMESTAMPTZ '2014-05-28 12:22:35.614298-04')
+----
+"2014-05-28 12:22:35.614298-04:00"
+
+query T
+select to_json(date '2014-05-28');
+----
+"2014-05-28"
+
+## to_jsonb
+
+query T
+SELECT to_jsonb(123)
+----
+123
+
+query T
+SELECT to_jsonb('a'::TEXT)
+----
+"a"
+
+query T
+SELECT to_jsonb(true)
+----
+true
+
+query T
+SELECT to_jsonb(false)
+----
+false
+
+query T
+SELECT to_jsonb('"a"'::JSON)
+----
+"a"
+
+query T
+SELECT to_jsonb(TIMESTAMP '2014-05-28 12:22:35.614298')
+----
+"2014-05-28T12:22:35.614298"
+
+query T
+SELECT to_jsonb(TIMESTAMPTZ '2014-05-28 12:22:35.614298-04')
+----
+"2014-05-28 12:22:35.614298-04:00"
+
+query T
+select to_jsonb(date '2014-05-28');
+----
+"2014-05-28"
 
 ## json_array_elements and jsonb_array_elements
 

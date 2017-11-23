@@ -104,6 +104,11 @@ type JSON interface {
 	encode(appendTo []byte) (jEntry uint32, b []byte, err error)
 }
 
+// JSONizable provides an interface to transform to JSON
+type JSONizable interface {
+	AsJSON() (JSON, error)
+}
+
 type jsonTrue struct{}
 
 // TrueJSONValue is JSON `true`
@@ -442,6 +447,99 @@ func (j jsonObject) EncodeInvertedIndexKeys(b []byte) [][]byte {
 	return outKeys
 }
 
+// MakeJSONFromDecimal returns a JSON value given a apd.Decimal.
+func MakeJSONFromDecimal(v apd.Decimal) JSON {
+	return jsonNumber(v)
+}
+
+// MakeJSONFromArrayOfJSON returns a JSON value given a []JSON.
+func MakeJSONFromArrayOfJSON(v []JSON) JSON {
+	return jsonArray(v)
+}
+
+// MakeJSONFromNumber returns a JSON value given a json.Number.
+func MakeJSONFromNumber(v json.Number) (JSON, error) {
+	// The JSON decoder has already verified that the string `v` represents a
+	// valid JSON number, and the set of valid JSON numbers is a [proper] subset
+	// of the set of valid apd.Decimal values.
+	dec := apd.Decimal{}
+	_, _, err := dec.SetString(string(v))
+	return jsonNumber(dec), err
+}
+
+// MakeJSONFromString returns a JSON value given a string.
+func MakeJSONFromString(v string) JSON {
+	return jsonString(v)
+}
+
+// MakeJSONFromBool returns a JSON value given a bool.
+func MakeJSONFromBool(v bool) JSON {
+	if v {
+		return TrueJSONValue
+	}
+	return FalseJSONValue
+}
+
+// makeJSONFromArrayOfInterface returns a JSON value given a []interface{}.
+func makeJSONFromArrayOfInterface(v []interface{}) (JSON, error) {
+	elems := make([]JSON, len(v))
+	for i := range v {
+		var err error
+		elems[i], err = MakeJSON(v[i])
+		if err != nil {
+			return nil, err
+		}
+	}
+	return jsonArray(elems), nil
+}
+
+// makeJSONFromArrayOfInterface returns a JSON value given a map[string]interface{}.
+func makeJSONFromMapOfInterface(v map[string]interface{}) (JSON, error) {
+	keys := make([]string, len(v))
+	i := 0
+	for k := range v {
+		keys[i] = k
+		i++
+	}
+	sort.Strings(keys)
+	result := make([]jsonKeyValuePair, len(v))
+	for i := range keys {
+		v, err := MakeJSON(v[keys[i]])
+		if err != nil {
+			return nil, err
+		}
+		result[i] = jsonKeyValuePair{
+			k: jsonString(keys[i]),
+			v: v,
+		}
+	}
+	return jsonObject(result), nil
+}
+
+// MakeJSONFromInt returns a JSON value given a int.
+func MakeJSONFromInt(v int) JSON {
+	dec := apd.Decimal{}
+	dec.SetCoefficient(int64(v))
+	return jsonNumber(dec)
+}
+
+// MakeJSONFromInt64 returns a JSON value given a int64.
+func MakeJSONFromInt64(v int64) JSON {
+	dec := apd.Decimal{}
+	dec.SetCoefficient(v)
+	return jsonNumber(dec)
+}
+
+// MakeJSONFromFloat64 returns a JSON value given a float64.
+func MakeJSONFromFloat64(v float64) (JSON, error) {
+	dec := apd.Decimal{}
+	_, err := dec.SetFloat64(v)
+	if err != nil {
+		return nil, err
+	}
+	return jsonNumber(dec), nil
+}
+
 // MakeJSON returns a JSON value given a Go-style representation of JSON.
 // * JSON null is Go `nil`,
 // * JSON true is Go `true`,
@@ -453,68 +551,25 @@ func (j jsonObject) EncodeInvertedIndexKeys(b []byte) [][]byte {
 func MakeJSON(d interface{}) (JSON, error) {
 	switch v := d.(type) {
 	case json.Number:
-		// The JSON decoder has already verified that the string `v` represents a
-		// valid JSON number, and the set of valid JSON numbers is a [proper] subset
-		// of the set of valid apd.Decimal values.
-		dec := apd.Decimal{}
-		_, _, err := dec.SetString(string(v))
-		return jsonNumber(dec), err
+		return MakeJSONFromNumber(v)
 	case string:
-		return jsonString(v), nil
+		return MakeJSONFromString(v), nil
 	case bool:
-		if v {
-			return TrueJSONValue, nil
-		}
-		return FalseJSONValue, nil
+		return MakeJSONFromBool(v), nil
 	case nil:
 		return NullJSONValue, nil
 	case []interface{}:
-		elems := make([]JSON, len(v))
-		for i := range v {
-			var err error
-			elems[i], err = MakeJSON(v[i])
-			if err != nil {
-				return nil, err
-			}
-		}
-		return jsonArray(elems), nil
+		return makeJSONFromArrayOfInterface(v)
 	case map[string]interface{}:
-		keys := make([]string, len(v))
-		i := 0
-		for k := range v {
-			keys[i] = k
-			i++
-		}
-		sort.Strings(keys)
-		result := make([]jsonKeyValuePair, len(v))
-		for i := range keys {
-			v, err := MakeJSON(v[keys[i]])
-			if err != nil {
-				return nil, err
-			}
-			result[i] = jsonKeyValuePair{
-				k: jsonString(keys[i]),
-				v: v,
-			}
-		}
-		return jsonObject(result), nil
+		return makeJSONFromMapOfInterface(v)
 		// The below are not used by ParseJSON, but are provided for ease-of-use when
 		// constructing Datums.
 	case int:
-		dec := apd.Decimal{}
-		dec.SetCoefficient(int64(v))
-		return jsonNumber(dec), nil
+		return MakeJSONFromInt(v), nil
 	case int64:
-		dec := apd.Decimal{}
-		dec.SetCoefficient(v)
-		return jsonNumber(dec), nil
+		return MakeJSONFromInt64(v), nil
 	case float64:
-		dec := apd.Decimal{}
-		_, err := dec.SetFloat64(v)
-		if err != nil {
-			return nil, err
-		}
-		return jsonNumber(dec), nil
+		return MakeJSONFromFloat64(v)
 	}
 	return nil, pgerror.NewError("invalid value %s passed to MakeJSON", d.(fmt.Stringer).String())
 }

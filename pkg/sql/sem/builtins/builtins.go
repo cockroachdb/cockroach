@@ -1499,6 +1499,10 @@ CockroachDB supports the following flags:
 
 	"jsonb_typeof": {jsonTypeOfImpl},
 
+	"to_json": {toJSONImpl},
+
+	"to_jsonb": {toJSONImpl},
+
 	"ln": {
 		floatBuiltin1(func(x float64) (tree.Datum, error) {
 			return tree.NewDFloat(tree.DFloat(math.Log(x))), nil
@@ -2308,6 +2312,19 @@ var jsonTypeOfImpl = tree.Builtin{
 		return tree.NewDString(json.TypeAsText()), nil
 	},
 	Info: "Returns the type of the outermost JSON value as a text string.",
+}
+
+var toJSONImpl = tree.Builtin{
+	Types:      tree.ArgTypes{{"val", types.Any}},
+	ReturnType: tree.FixedReturnType(types.JSON),
+	Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+		j, err := args[0].AsJSON()
+		if err != nil {
+			return nil, err
+		}
+		return tree.NewDJSON(j), nil
+	},
+	Info: "Returns the value as json or jsonb.",
 }
 
 func arrayBuiltin(impl func(types.T) tree.Builtin) []tree.Builtin {

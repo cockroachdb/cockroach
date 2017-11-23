@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
+	"github.com/cockroachdb/cockroach/pkg/util/json"
 )
 
 // Expr represents an expression.
@@ -664,6 +665,11 @@ func (node *Placeholder) ResolvedType() types.T {
 		node.typ = &types.TPlaceholder{Name: node.Name}
 	}
 	return node.typ
+}
+
+// AsJSON implements transformation to JSON
+func (node *Placeholder) AsJSON() (json.JSON, error) {
+	return json.MakeJSONFromString(""), nil
 }
 
 // Tuple represents a parenthesized list of expressions.
