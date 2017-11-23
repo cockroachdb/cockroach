@@ -1212,6 +1212,7 @@ func (desc *TableDescriptor) validateTableIndexes(
 			return fmt.Errorf("index %q must contain at least 1 column", index.Name)
 		}
 
+		validateIndexDup := make(map[ColumnID]struct{})
 		for i, name := range index.ColumnNames {
 			colID, ok := columnNames[name]
 			if !ok {
@@ -1221,6 +1222,10 @@ func (desc *TableDescriptor) validateTableIndexes(
 				return fmt.Errorf("index %q column %q should have ID %d, but found ID %d",
 					index.Name, name, colID, index.ColumnIDs[i])
 			}
+			if _, ok := validateIndexDup[colID]; ok {
+				return fmt.Errorf("index %q contains duplicate column %q", index.Name, name)
+			}
+			validateIndexDup[colID] = struct{}{}
 		}
 	}
 
