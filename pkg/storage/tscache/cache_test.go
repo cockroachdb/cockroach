@@ -511,6 +511,7 @@ func (*lockedCache) getLowWater(_ bool) hlc.Timestamp                        { p
 // concurrent load.
 func TestTimestampCacheImplsIdentical(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer util.EnableRacePreemptionPoints()()
 
 	// Run one subtest using a real clock to generate timestamps and one subtest
 	// using a fake clock to generate timestamps. The former is good for
