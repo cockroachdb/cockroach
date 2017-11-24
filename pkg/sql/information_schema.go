@@ -612,7 +612,7 @@ func forEachDatabaseDesc(
 
 	sort.Sort(sortedDBDescs(dbDescs))
 	for _, db := range dbDescs {
-		if userCanSeeDatabase(db, p.session.User) {
+		if userCanSeeDatabase(p, db) {
 			if err := fn(db); err != nil {
 				return err
 			}
@@ -807,7 +807,7 @@ func forEachTableDescWithTableLookupInternal(
 		sort.Strings(dbTableNames)
 		for _, tableName := range dbTableNames {
 			tableDesc := db.tables[tableName]
-			if userCanSeeTable(tableDesc, p.session.User, allowAdding) {
+			if userCanSeeTable(p, tableDesc, allowAdding) {
 				if err := fn(db.desc, tableDesc, tableLookup); err != nil {
 					return err
 				}
@@ -890,14 +890,14 @@ func forEachUser(ctx context.Context, origPlanner *planner, fn func(username str
 	return nil
 }
 
-func userCanSeeDatabase(db *sqlbase.DatabaseDescriptor, user string) bool {
-	return userCanSeeDescriptor(db, user)
+func userCanSeeDatabase(p *planner, db *sqlbase.DatabaseDescriptor) bool {
+	return p.CheckAnyPrivilege(db) == nil
 }
 
-func userCanSeeTable(table *sqlbase.TableDescriptor, user string, allowAdding bool) bool {
+func userCanSeeTable(p *planner, table *sqlbase.TableDescriptor, allowAdding bool) bool {
 	if !(table.State == sqlbase.TableDescriptor_PUBLIC ||
 		(allowAdding && table.State == sqlbase.TableDescriptor_ADD)) {
 		return false
 	}
-	return userCanSeeDescriptor(table, user)
+	return p.CheckAnyPrivilege(table) == nil
 }
