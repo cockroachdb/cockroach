@@ -26,7 +26,7 @@ import (
 )
 
 // RenameDatabase renames the database.
-// Privileges: security.RootUser user, DROP on source database.
+// Privileges: superuser, DROP on source database.
 //   Notes: postgres requires superuser, db owner, or "CREATEDB".
 //          mysql >= 5.1.23 does not allow database renames.
 func (p *planner) RenameDatabase(ctx context.Context, n *tree.RenameDatabase) (planNode, error) {

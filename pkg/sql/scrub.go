@@ -73,7 +73,7 @@ type checkOperation interface {
 }
 
 // Scrub checks the database.
-// Privileges: security.RootUser user.
+// Privileges: superuser.
 func (p *planner) Scrub(ctx context.Context, n *tree.Scrub) (planNode, error) {
 	if err := p.RequireSuperUser("SCRUB"); err != nil {
 		return nil, err

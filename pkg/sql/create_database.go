@@ -28,7 +28,7 @@ type createDatabaseNode struct {
 }
 
 // CreateDatabase creates a database.
-// Privileges: security.RootUser user.
+// Privileges: superuser.
 //   Notes: postgres requires superuser or "CREATEDB".
 //          mysql uses the mysqladmin command.
 func (p *planner) CreateDatabase(n *tree.CreateDatabase) (planNode, error) {

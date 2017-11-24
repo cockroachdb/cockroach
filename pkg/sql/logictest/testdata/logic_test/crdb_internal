@@ -237,7 +237,7 @@ select crdb_internal.force_log_fatal('foo')
 query error pq: insufficient privilege
 select crdb_internal.set_vmodule('')
 
-query error pq: only root can access the node runtime information
+query error pq: only root is allowed to access the node runtime information
 select * from crdb_internal.node_runtime_info
 
 query error pq: only root is allowed to read crdb_internal.ranges

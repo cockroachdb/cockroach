@@ -78,6 +78,12 @@ func (p *PrivilegeDescriptor) removeUser(user string) {
 	p.Users = append(p.Users[:idx], p.Users[idx+1:]...)
 }
 
+// NewCustomRootPrivilegeDescriptor returns a privilege descriptor for the root user
+// and specified privileges.
+func NewCustomRootPrivilegeDescriptor(priv privilege.List) *PrivilegeDescriptor {
+	return NewPrivilegeDescriptor(security.RootUser, priv)
+}
+
 // NewPrivilegeDescriptor returns a privilege descriptor for the given
 // user with the specified list of privileges.
 func NewPrivilegeDescriptor(user string, priv privilege.List) *PrivilegeDescriptor {
