@@ -125,13 +125,14 @@ func collect(tid int64, byID map[int64]tableMetadata, seen map[int64]bool, colle
 	if seen[tid] {
 		return
 	}
-	// no: add it
+	// no: mark it as seen.
+	seen[tid] = true
 	for _, dep := range byID[tid].dependsOn {
 		// depth-first collection of dependencies
 		collect(dep, byID, seen, collected)
 	}
+	// Only add it after its dependencies.
 	*collected = append(*collected, tid)
-	seen[tid] = true
 }
 
 // tableMetadata describes one table to dump.

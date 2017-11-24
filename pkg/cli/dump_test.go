@@ -896,3 +896,52 @@ INSERT INTO t (i) VALUES
 		t.Fatalf("expected: %s\ngot: %s", expect, out)
 	}
 }
+
+// TestDumpReferenceCycle tests dumping in the presence of cycles.
+// This used to crash before with stack overflow due to an infinite loop before:
+// https://github.com/cockroachdb/cockroach/pull/20255
+func TestDumpReferenceCycle(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	c := newCLITest(cliTestParams{t: t})
+	defer c.cleanup()
+
+	const create = `
+	CREATE DATABASE d;
+	CREATE TABLE d.t (
+		PRIMARY KEY (id),
+		FOREIGN KEY (next_id) REFERENCES d.t(id),
+		id INT,
+		next_id INT
+	);
+	INSERT INTO d.t VALUES (
+		1,
+		NULL
+	);
+`
+
+	c.RunWithArgs([]string{"sql", "-e", create})
+
+	out, err := c.RunWithCapture("dump d t")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	const expect = `dump d t
+CREATE TABLE t (
+	id INT NOT NULL,
+	next_id INT NULL,
+	CONSTRAINT "primary" PRIMARY KEY (id ASC),
+	CONSTRAINT fk_next_id_ref_t FOREIGN KEY (next_id) REFERENCES t (id),
+	INDEX t_auto_index_fk_next_id_ref_t (next_id ASC),
+	FAMILY "primary" (id, next_id)
+);
+
+INSERT INTO t (id, next_id) VALUES
+	(1, NULL);
+`
+
+	if out != expect {
+		t.Fatalf("expected: %s\ngot: %s", expect, out)
+	}
+}
