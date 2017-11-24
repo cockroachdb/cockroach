@@ -234,8 +234,8 @@ Before this RFC, there is a single administrative user in a cockroach cluster: t
 We propose to add a default role: `admin` with a single user: `root`.
 `root` will have admin privileges on the `admin` role, allowing addition/removal of other users.
 
-The `admin` role cannot be deleted, and cannot be empty. The specicial `root` user cannot be removed as a member
-of the `admin` role.
+The `admin` role cannot be deleted, and cannot be empty. The special `root` user cannot be dropped or removed
+from the `admin` role.
 
 All operations that previously checked for the `root` user will now check for membership in the `admin` role.
 
@@ -306,9 +306,10 @@ The `role_members` stores the list of all role memberships. This only stores dir
 
 ```
 CREATE TABLE system.role_members (
-  role          STRING PRIMARY KEY,
+  role          STRING,
   member        STRING,
   isAdmin       BOOL,
+  PRIMARY KEY (role, member),
   INDEX (member)
 );
 ```
@@ -325,7 +326,7 @@ The new statements all operate on the `system.users` and `system.role_members` t
 #### CREATE ROLE
 
 ```
-CREATE ROLE rolename
+CREATE ROLE [ IF NOT EXISTS ] rolename
 ```
 
 * **Behavior**: creates a new role named `rolename`. Fails if a role or user by that name exists.
@@ -459,6 +460,7 @@ Migrations from older versions will perform the following tasks:
 * add the `isRole` column to the `system.users` table
 * add the `admin` role to the `system.users` table
 * create the `system.role_members` table
+* create the `root` user
 * add `root` as a member of `admin` with `isAdmin = true`
 * give admin the same privileges as the `root` user
 
