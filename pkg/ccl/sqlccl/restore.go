@@ -736,7 +736,8 @@ func restoreTableDescs(
 				if err != nil {
 					return errors.Wrapf(err, "failed to lookup parent DB %d", table.ParentID)
 				}
-				if err := sql.CheckPrivilege(user, parentDB, privilege.CREATE); err != nil {
+				// TODO(mberhault): CheckPrivilege wants a planner.
+				if err := sql.CheckPrivilegeForUser(user, parentDB, privilege.CREATE); err != nil {
 					return err
 				}
 				// Default is to copy privs from restoring parent db, like CREATE TABLE.

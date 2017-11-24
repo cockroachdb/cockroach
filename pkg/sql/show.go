@@ -226,7 +226,7 @@ func (p *planner) showTableDetails(
 		if err != nil {
 			return err
 		}
-		return p.anyPrivilege(desc)
+		return p.CheckAnyPrivilege(desc)
 	}
 
 	return p.delegateQuery(ctx, showType,
@@ -542,7 +542,7 @@ func (p *planner) ShowConstraints(ctx context.Context, n *tree.ShowConstraints) 
 	if err != nil {
 		return nil, sqlbase.NewUndefinedRelationError(tn)
 	}
-	if err := p.anyPrivilege(desc); err != nil {
+	if err := p.CheckAnyPrivilege(desc); err != nil {
 		return nil, err
 	}
 
