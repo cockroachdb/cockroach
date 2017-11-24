@@ -20,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 )
 
@@ -248,15 +247,14 @@ var (
 		Name: "system",
 		ID:   keys.SystemDatabaseID,
 		// Assign max privileges to root user.
-		Privileges: NewPrivilegeDescriptor(security.RootUser,
-			SystemDesiredPrivileges(keys.SystemDatabaseID)),
+		Privileges: NewCustomRootPrivilegeDescriptor(SystemDesiredPrivileges(keys.SystemDatabaseID)),
 	}
 
 	// NamespaceTable is the descriptor for the namespace table.
 	NamespaceTable = TableDescriptor{
 		Name:     "namespace",
 		ID:       keys.NamespaceTableID,
-		ParentID: 1,
+		ParentID: keys.SystemDatabaseID,
 		Version:  1,
 		Columns: []ColumnDescriptor{
 			{Name: "parentID", ID: 1, Type: colTypeInt},
@@ -278,7 +276,7 @@ var (
 			ColumnIDs:        []ColumnID{1, 2},
 		},
 		NextIndexID:    2,
-		Privileges:     NewPrivilegeDescriptor(security.RootUser, SystemDesiredPrivileges(keys.NamespaceTableID)),
+		Privileges:     NewCustomRootPrivilegeDescriptor(SystemDesiredPrivileges(keys.NamespaceTableID)),
 		FormatVersion:  InterleavedFormatVersion,
 		NextMutationID: 1,
 	}
@@ -287,8 +285,8 @@ var (
 	DescriptorTable = TableDescriptor{
 		Name:       "descriptor",
 		ID:         keys.DescriptorTableID,
-		Privileges: NewPrivilegeDescriptor(security.RootUser, SystemDesiredPrivileges(keys.DescriptorTableID)),
-		ParentID:   1,
+		Privileges: NewCustomRootPrivilegeDescriptor(SystemDesiredPrivileges(keys.DescriptorTableID)),
+		ParentID:   keys.SystemDatabaseID,
 		Version:    1,
 		Columns: []ColumnDescriptor{
 			{Name: "id", ID: 1, Type: colTypeInt},
@@ -310,7 +308,7 @@ var (
 	UsersTable = TableDescriptor{
 		Name:     "users",
 		ID:       keys.UsersTableID,
-		ParentID: 1,
+		ParentID: keys.SystemDatabaseID,
 		Version:  1,
 		Columns: []ColumnDescriptor{
 			{Name: "username", ID: 1, Type: colTypeString},
@@ -324,7 +322,7 @@ var (
 		PrimaryIndex:   pk("username"),
 		NextFamilyID:   3,
 		NextIndexID:    2,
-		Privileges:     NewPrivilegeDescriptor(security.RootUser, SystemDesiredPrivileges(keys.UsersTableID)),
+		Privileges:     NewCustomRootPrivilegeDescriptor(SystemDesiredPrivileges(keys.UsersTableID)),
 		FormatVersion:  InterleavedFormatVersion,
 		NextMutationID: 1,
 	}
@@ -333,7 +331,7 @@ var (
 	ZonesTable = TableDescriptor{
 		Name:     "zones",
 		ID:       keys.ZonesTableID,
-		ParentID: 1,
+		ParentID: keys.SystemDatabaseID,
 		Version:  1,
 		Columns: []ColumnDescriptor{
 			{Name: "id", ID: 1, Type: colTypeInt},
@@ -354,7 +352,7 @@ var (
 		},
 		NextFamilyID:   3,
 		NextIndexID:    2,
-		Privileges:     NewPrivilegeDescriptor(security.RootUser, SystemDesiredPrivileges(keys.ZonesTableID)),
+		Privileges:     NewCustomRootPrivilegeDescriptor(SystemDesiredPrivileges(keys.ZonesTableID)),
 		FormatVersion:  InterleavedFormatVersion,
 		NextMutationID: 1,
 	}
@@ -362,7 +360,7 @@ var (
 	SettingsTable = TableDescriptor{
 		Name:     "settings",
 		ID:       keys.SettingsTableID,
-		ParentID: 1,
+		ParentID: keys.SystemDatabaseID,
 		Version:  1,
 		Columns: []ColumnDescriptor{
 			{Name: "name", ID: 1, Type: colTypeString},
@@ -382,7 +380,7 @@ var (
 		NextFamilyID:   1,
 		PrimaryIndex:   pk("name"),
 		NextIndexID:    2,
-		Privileges:     NewPrivilegeDescriptor(security.RootUser, SystemDesiredPrivileges(keys.SettingsTableID)),
+		Privileges:     NewCustomRootPrivilegeDescriptor(SystemDesiredPrivileges(keys.SettingsTableID)),
 		FormatVersion:  InterleavedFormatVersion,
 		NextMutationID: 1,
 	}
@@ -398,7 +396,7 @@ var (
 	LeaseTable = TableDescriptor{
 		Name:     "lease",
 		ID:       keys.LeaseTableID,
-		ParentID: 1,
+		ParentID: keys.SystemDatabaseID,
 		Version:  1,
 		Columns: []ColumnDescriptor{
 			{Name: "descID", ID: 1, Type: colTypeInt},
@@ -420,7 +418,7 @@ var (
 		},
 		NextFamilyID:   1,
 		NextIndexID:    2,
-		Privileges:     NewPrivilegeDescriptor(security.RootUser, SystemDesiredPrivileges(keys.LeaseTableID)),
+		Privileges:     NewCustomRootPrivilegeDescriptor(SystemDesiredPrivileges(keys.LeaseTableID)),
 		FormatVersion:  InterleavedFormatVersion,
 		NextMutationID: 1,
 	}
@@ -431,7 +429,7 @@ var (
 	EventLogTable = TableDescriptor{
 		Name:     "eventlog",
 		ID:       keys.EventLogTableID,
-		ParentID: 1,
+		ParentID: keys.SystemDatabaseID,
 		Version:  1,
 		Columns: []ColumnDescriptor{
 			{Name: "timestamp", ID: 1, Type: colTypeTimestamp},
@@ -459,7 +457,7 @@ var (
 		},
 		NextFamilyID:   6,
 		NextIndexID:    2,
-		Privileges:     NewPrivilegeDescriptor(security.RootUser, SystemDesiredPrivileges(keys.EventLogTableID)),
+		Privileges:     NewCustomRootPrivilegeDescriptor(SystemDesiredPrivileges(keys.EventLogTableID)),
 		FormatVersion:  InterleavedFormatVersion,
 		NextMutationID: 1,
 	}
@@ -470,7 +468,7 @@ var (
 	RangeEventTable = TableDescriptor{
 		Name:     "rangelog",
 		ID:       keys.RangeEventTableID,
-		ParentID: 1,
+		ParentID: keys.SystemDatabaseID,
 		Version:  1,
 		Columns: []ColumnDescriptor{
 			{Name: "timestamp", ID: 1, Type: colTypeTimestamp},
@@ -500,7 +498,7 @@ var (
 		},
 		NextFamilyID:   7,
 		NextIndexID:    2,
-		Privileges:     NewPrivilegeDescriptor(security.RootUser, SystemDesiredPrivileges(keys.RangeEventTableID)),
+		Privileges:     NewCustomRootPrivilegeDescriptor(SystemDesiredPrivileges(keys.RangeEventTableID)),
 		FormatVersion:  InterleavedFormatVersion,
 		NextMutationID: 1,
 	}
@@ -509,7 +507,7 @@ var (
 	UITable = TableDescriptor{
 		Name:     "ui",
 		ID:       keys.UITableID,
-		ParentID: 1,
+		ParentID: keys.SystemDatabaseID,
 		Version:  1,
 		Columns: []ColumnDescriptor{
 			{Name: "key", ID: 1, Type: colTypeString},
@@ -525,7 +523,7 @@ var (
 		NextFamilyID:   4,
 		PrimaryIndex:   pk("key"),
 		NextIndexID:    2,
-		Privileges:     NewPrivilegeDescriptor(security.RootUser, SystemDesiredPrivileges(keys.UITableID)),
+		Privileges:     NewCustomRootPrivilegeDescriptor(SystemDesiredPrivileges(keys.UITableID)),
 		FormatVersion:  InterleavedFormatVersion,
 		NextMutationID: 1,
 	}
@@ -536,7 +534,7 @@ var (
 	JobsTable = TableDescriptor{
 		Name:     "jobs",
 		ID:       keys.JobsTableID,
-		ParentID: 1,
+		ParentID: keys.SystemDatabaseID,
 		Version:  1,
 		Columns: []ColumnDescriptor{
 			{Name: "id", ID: 1, Type: colTypeInt, DefaultExpr: &uniqueRowIDString},
@@ -567,7 +565,7 @@ var (
 			},
 		},
 		NextIndexID:    3,
-		Privileges:     NewPrivilegeDescriptor(security.RootUser, SystemDesiredPrivileges(keys.JobsTableID)),
+		Privileges:     NewCustomRootPrivilegeDescriptor(SystemDesiredPrivileges(keys.JobsTableID)),
 		FormatVersion:  InterleavedFormatVersion,
 		NextMutationID: 1,
 	}
@@ -575,8 +573,8 @@ var (
 	// WebSessions table to authenticate sessions over stateless connections.
 	WebSessionsTable = TableDescriptor{
 		Name:     "web_sessions",
-		ID:       19,
-		ParentID: 1,
+		ID:       keys.WebSessionsTableID,
+		ParentID: keys.SystemDatabaseID,
 		Version:  1,
 		Columns: []ColumnDescriptor{
 			{Name: "id", ID: 1, Type: colTypeInt, DefaultExpr: &uniqueRowIDString},
@@ -628,12 +626,8 @@ var (
 				ExtraColumnIDs:   []ColumnID{1},
 			},
 		},
-		NextIndexID: 4,
-		Privileges: &PrivilegeDescriptor{
-			Users: []UserPrivileges{
-				{User: "root", Privileges: 0x1f0},
-			},
-		},
+		NextIndexID:    4,
+		Privileges:     NewCustomRootPrivilegeDescriptor(SystemDesiredPrivileges(keys.WebSessionsTableID)),
 		NextMutationID: 1,
 		FormatVersion:  3,
 	}
@@ -642,7 +636,7 @@ var (
 	TableStatisticsTable = TableDescriptor{
 		Name:     "table_statistics",
 		ID:       keys.TableStatisticsTableID,
-		ParentID: 1,
+		ParentID: keys.SystemDatabaseID,
 		Version:  1,
 		Columns: []ColumnDescriptor{
 			{Name: "tableID", ID: 1, Type: colTypeInt},
@@ -684,7 +678,7 @@ var (
 			ColumnIDs:        []ColumnID{1, 2},
 		},
 		NextIndexID:    2,
-		Privileges:     NewPrivilegeDescriptor(security.RootUser, SystemDesiredPrivileges(keys.TableStatisticsTableID)),
+		Privileges:     NewCustomRootPrivilegeDescriptor(SystemDesiredPrivileges(keys.TableStatisticsTableID)),
 		FormatVersion:  InterleavedFormatVersion,
 		NextMutationID: 1,
 	}
