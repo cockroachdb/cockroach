@@ -679,6 +679,26 @@ We should decide what to do if a user with that name exists. Some possibilities:
 * rename it: this would involve renaming all privileges as well. Surfacing this to the user would be tricky.
 * fail the migration with a message clearly saying the user must be removed/renamed.
 
+### Enterprise enforcement workarounds
+
+Even though we disable manipulation (create, drop, add/remove members, grant/revoke privileges) or roles
+for non-enterprise users, admin users can still manipulate the system tables storing roles and role
+memberships.
+
+This would let non-enterprise users create new roles and modify their memberships.
+Granting privileges to roles would be trickier as they are embedded in database/table descriptors.
+
+We should see if we want additional safeguards to prevent non-enterprise use of roles.
+
+### Code location
+
+The role manipulation code is very similar to user manipulation (it's just a field inside `system.users`), making
+it preferable to reuse most of the code. We also need the role logic (expand roles, check privileges, etc..) to
+keep working in non-enterprise mode.
+
+These make it tricky to place all the role-related code in `pkg/ccl`. We need to figure out exactly which code
+can be kept separate.
+
 ## Future improvements
 
 ### Role attributes
