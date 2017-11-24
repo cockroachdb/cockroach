@@ -117,9 +117,9 @@ CREATE TABLE crdb_internal.node_runtime_info (
   value     STRING NOT NULL
 );
 `,
-	populate: func(_ context.Context, p *planner, _ string, addRow func(...tree.Datum) error) error {
-		if p.session.User != security.RootUser {
-			return errors.New("only root can access the node runtime information")
+	populate: func(ctx context.Context, p *planner, _ string, addRow func(...tree.Datum) error) error {
+		if err := p.RequireSuperUser(ctx, "access the node runtime information"); err != nil {
+			return err
 		}
 
 		node := p.ExecCfg().NodeInfo
@@ -200,7 +200,7 @@ CREATE TABLE crdb_internal.tables (
 		// include added and dropped descriptors.
 		for _, desc := range descs {
 			table, ok := desc.(*sqlbase.TableDescriptor)
-			if !ok || !userCanSeeDescriptor(table, p.session.User) {
+			if !ok || p.anyPrivilege(ctx, table) != nil {
 				continue
 			}
 			dbName := dbNames[table.GetParentID()]
@@ -261,7 +261,7 @@ CREATE TABLE crdb_internal.schema_changes (
 		// include added and dropped descriptors.
 		for _, desc := range descs {
 			table, ok := desc.(*sqlbase.TableDescriptor)
-			if !ok || !userCanSeeDescriptor(table, p.session.User) {
+			if !ok || p.anyPrivilege(ctx, table) != nil {
 				continue
 			}
 			tableID := tree.NewDInt(tree.DInt(int64(table.ID)))
@@ -310,7 +310,7 @@ CREATE TABLE crdb_internal.leases (
   deleted     BOOL NOT NULL
 );
 `,
-	populate: func(_ context.Context, p *planner, _ string, addRow func(...tree.Datum) error) error {
+	populate: func(ctx context.Context, p *planner, _ string, addRow func(...tree.Datum) error) error {
 		leaseMgr := p.LeaseMgr()
 		nodeID := tree.NewDInt(tree.DInt(int64(leaseMgr.nodeID.Get())))
 
@@ -327,7 +327,7 @@ CREATE TABLE crdb_internal.leases (
 				dropped := tree.MakeDBool(tree.DBool(ts.mu.dropped))
 
 				for _, state := range ts.mu.active.data {
-					if !userCanSeeDescriptor(&state.TableDescriptor, p.session.User) {
+					if p.anyPrivilege(ctx, &state.TableDescriptor) != nil {
 						continue
 					}
 
@@ -467,9 +467,9 @@ CREATE TABLE crdb_internal.node_statement_statistics (
   overhead_lat_var    FLOAT NOT NULL
 );
 `,
-	populate: func(_ context.Context, p *planner, _ string, addRow func(...tree.Datum) error) error {
-		if p.session.User != security.RootUser {
-			return errors.New("only root can access application statistics")
+	populate: func(ctx context.Context, p *planner, _ string, addRow func(...tree.Datum) error) error {
+		if err := p.RequireSuperUser(ctx, "access application statistics"); err != nil {
+			return err
 		}
 
 		sqlStats := p.session.sqlStats
@@ -598,7 +598,7 @@ CREATE TABLE crdb_internal.cluster_settings (
 );
 `,
 	populate: func(ctx context.Context, p *planner, _ string, addRow func(...tree.Datum) error) error {
-		if err := p.RequireSuperUser("read crdb_internal.cluster_settings"); err != nil {
+		if err := p.RequireSuperUser(ctx, "read crdb_internal.cluster_settings"); err != nil {
 			return err
 		}
 		for _, k := range settings.Keys() {
@@ -1333,7 +1333,7 @@ CREATE TABLE crdb_internal.ranges (
 )
 `,
 	populate: func(ctx context.Context, p *planner, prefix string, addRow func(...tree.Datum) error) error {
-		if err := p.RequireSuperUser("read crdb_internal.ranges"); err != nil {
+		if err := p.RequireSuperUser(ctx, "read crdb_internal.ranges"); err != nil {
 			return err
 		}
 		descs, err := getAllDescriptors(ctx, p.txn)

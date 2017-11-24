@@ -19,22 +19,24 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"golang.org/x/net/context"
 )
 
 // AuthorizationAccessor for checking authorization (e.g. desc privileges).
 type AuthorizationAccessor interface {
 	// CheckPrivilege verifies that the user has `privilege` on `descriptor`.
 	CheckPrivilege(
-		descriptor sqlbase.DescriptorProto, privilege privilege.Kind,
+		ctx context.Context, descriptor sqlbase.DescriptorProto, privilege privilege.Kind,
 	) error
 
 	// anyPrivilege verifies that the user has any privilege on `descriptor`.
-	anyPrivilege(descriptor sqlbase.DescriptorProto) error
+	anyPrivilege(ctx context.Context, descriptor sqlbase.DescriptorProto) error
 
 	// RequiresSuperUser errors if the session user isn't a super-user (i.e. root
 	// or node). Includes the named action in the error message.
-	RequireSuperUser(action string) error
+	RequireSuperUser(ctx context.Context, action string) error
 }
 
 var _ AuthorizationAccessor = &planner{}
@@ -52,28 +54,122 @@ func CheckPrivilege(
 
 // CheckPrivilege implements the AuthorizationAccessor interface.
 func (p *planner) CheckPrivilege(
-	descriptor sqlbase.DescriptorProto, privilege privilege.Kind,
+	ctx context.Context, descriptor sqlbase.DescriptorProto, privilege privilege.Kind,
 ) error {
-	return CheckPrivilege(p.session.User, descriptor, privilege)
+	userErr := CheckPrivilege(p.session.User, descriptor, privilege)
+	if userErr == nil {
+		// Fast path: the user has direct grants on the object.
+		return nil
+	}
+
+	// Slow path: lookup role memberships for user.
+	roles, err := p.GetRolesForUser(ctx, p.session.User)
+	if err != nil {
+		return err
+	}
+
+	for _, r := range roles {
+		if err := CheckPrivilege(r, descriptor, privilege); err != nil {
+			continue
+		}
+		// Success! role has privileges.
+		return nil
+	}
+
+	// No roles with privileges. Return the user error, it's clearer than
+	// "some random role you belong to" doesn't have privileges.
+	return userErr
 }
 
 // anyPrivilege implements the AuthorizationAccessor interface.
-func (p *planner) anyPrivilege(descriptor sqlbase.DescriptorProto) error {
+func (p *planner) anyPrivilege(ctx context.Context, descriptor sqlbase.DescriptorProto) error {
 	if userCanSeeDescriptor(descriptor, p.session.User) {
 		return nil
 	}
+
+	// Slow path: lookup role memberships for user.
+	roles, err := p.GetRolesForUser(ctx, p.session.User)
+	if err != nil {
+		return err
+	}
+
+	for _, r := range roles {
+		if !userCanSeeDescriptor(descriptor, r) {
+			continue
+		}
+		// Success! role has privileges.
+		return nil
+	}
+
 	return fmt.Errorf("user %s has no privileges on %s %s",
 		p.session.User, descriptor.TypeName(), descriptor.GetName())
 }
 
 // RequireSuperUser implements the AuthorizationAccessor interface.
-func (p *planner) RequireSuperUser(action string) error {
-	if p.session.User != security.RootUser && p.session.User != security.NodeUser {
-		return fmt.Errorf("only %s is allowed to %s", security.RootUser, action)
+func (p *planner) RequireSuperUser(ctx context.Context, action string) error {
+	if p.session.User == security.RootUser || p.session.User == security.NodeUser {
+		return nil
 	}
-	return nil
+
+	// Slow path: lookup role memberships for user.
+	roles, err := p.GetRolesForUser(ctx, p.session.User)
+	if err != nil {
+		return err
+	}
+
+	for _, r := range roles {
+		if r == security.AdminRole {
+			return nil
+		}
+	}
+
+	return fmt.Errorf("only admin users are allowed to %s", action)
 }
 
 func userCanSeeDescriptor(descriptor sqlbase.DescriptorProto, user string) bool {
 	return descriptor.GetPrivileges().AnyPrivilege(user) || isVirtualDescriptor(descriptor)
+}
+
+// GetRolesForUser finds all the roles this user belongs to, recursively.
+// `username` is not included in the result.
+// This assumes no cycles is in the membership graph.
+func (p *planner) GetRolesForUser(ctx context.Context, username string) ([]string, error) {
+	remaining := map[string]struct{}{username: struct{}{}}
+	expandedRoles := make(map[string]struct{})
+
+	query := `SELECT "role" FROM system.role_members WHERE member = $1`
+	p = makeInternalPlanner("expand-roles", p.txn, security.RootUser, p.session.memMetrics)
+	defer finishInternalPlanner(p)
+
+	for len(remaining) > 0 {
+		// Pick an element from the remaining list. Order doesn't matter.
+		var nextElement string
+		for k := range remaining {
+			nextElement = k
+			break
+		}
+		delete(remaining, nextElement)
+
+		rows, err := p.queryRows(ctx, query, nextElement)
+		if err != nil {
+			return nil, err
+		}
+
+		for _, row := range rows {
+			roleName := string(tree.MustBeDString(row[0]))
+			if _, ok := expandedRoles[roleName]; !ok {
+				// We have not seen this role before, add it to the roles still to lookup.
+				remaining[roleName] = struct{}{}
+				// And to the list of expanded roles.
+				expandedRoles[roleName] = struct{}{}
+			}
+		}
+	}
+
+	result := make([]string, len(expandedRoles))
+	i := 0
+	for r := range expandedRoles {
+		result[i] = r
+	}
+	return result, nil
 }

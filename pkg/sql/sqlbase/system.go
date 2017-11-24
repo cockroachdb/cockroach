@@ -20,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 )
 
@@ -168,9 +167,10 @@ CREATE TABLE system.table_statistics (
 	// Design outlined in /docs/RFCS/20171118_role_based_access_control.md#roles-system-table
 	RoleMembersTableSchema = `
 CREATE TABLE system.role_members (
-  role          STRING       NOT NULL PRIMARY KEY,
+  role          STRING       NOT NULL,
   member        STRING       NOT NULL,
   isAdmin       BOOL         NOT NULL DEFAULT false,
+  PRIMARY KEY ("parentID", name),
   INDEX (member)
 );`
 )
@@ -262,8 +262,7 @@ var (
 		Name: "system",
 		ID:   keys.SystemDatabaseID,
 		// Assign max privileges to root user.
-		Privileges: NewPrivilegeDescriptor(security.RootUser,
-			SystemDesiredPrivileges(keys.SystemDatabaseID)),
+		Privileges: NewAdminPrivilegeDescriptor(SystemDesiredPrivileges(keys.SystemDatabaseID)),
 	}
 
 	// NamespaceTable is the descriptor for the namespace table.
@@ -292,7 +291,7 @@ var (
 			ColumnIDs:        []ColumnID{1, 2},
 		},
 		NextIndexID:    2,
-		Privileges:     NewPrivilegeDescriptor(security.RootUser, SystemDesiredPrivileges(keys.NamespaceTableID)),
+		Privileges:     NewAdminPrivilegeDescriptor(SystemDesiredPrivileges(keys.NamespaceTableID)),
 		FormatVersion:  InterleavedFormatVersion,
 		NextMutationID: 1,
 	}
@@ -301,7 +300,7 @@ var (
 	DescriptorTable = TableDescriptor{
 		Name:       "descriptor",
 		ID:         keys.DescriptorTableID,
-		Privileges: NewPrivilegeDescriptor(security.RootUser, SystemDesiredPrivileges(keys.DescriptorTableID)),
+		Privileges: NewAdminPrivilegeDescriptor(SystemDesiredPrivileges(keys.DescriptorTableID)),
 		ParentID:   1,
 		Version:    1,
 		Columns: []ColumnDescriptor{
@@ -338,7 +337,7 @@ var (
 		PrimaryIndex:   pk("username"),
 		NextFamilyID:   3,
 		NextIndexID:    2,
-		Privileges:     NewPrivilegeDescriptor(security.RootUser, SystemDesiredPrivileges(keys.UsersTableID)),
+		Privileges:     NewAdminPrivilegeDescriptor(SystemDesiredPrivileges(keys.UsersTableID)),
 		FormatVersion:  InterleavedFormatVersion,
 		NextMutationID: 1,
 	}
@@ -368,7 +367,7 @@ var (
 		},
 		NextFamilyID:   3,
 		NextIndexID:    2,
-		Privileges:     NewPrivilegeDescriptor(security.RootUser, SystemDesiredPrivileges(keys.ZonesTableID)),
+		Privileges:     NewAdminPrivilegeDescriptor(SystemDesiredPrivileges(keys.ZonesTableID)),
 		FormatVersion:  InterleavedFormatVersion,
 		NextMutationID: 1,
 	}
@@ -396,7 +395,7 @@ var (
 		NextFamilyID:   1,
 		PrimaryIndex:   pk("name"),
 		NextIndexID:    2,
-		Privileges:     NewPrivilegeDescriptor(security.RootUser, SystemDesiredPrivileges(keys.SettingsTableID)),
+		Privileges:     NewAdminPrivilegeDescriptor(SystemDesiredPrivileges(keys.SettingsTableID)),
 		FormatVersion:  InterleavedFormatVersion,
 		NextMutationID: 1,
 	}
@@ -434,7 +433,7 @@ var (
 		},
 		NextFamilyID:   1,
 		NextIndexID:    2,
-		Privileges:     NewPrivilegeDescriptor(security.RootUser, SystemDesiredPrivileges(keys.LeaseTableID)),
+		Privileges:     NewAdminPrivilegeDescriptor(SystemDesiredPrivileges(keys.LeaseTableID)),
 		FormatVersion:  InterleavedFormatVersion,
 		NextMutationID: 1,
 	}
@@ -473,7 +472,7 @@ var (
 		},
 		NextFamilyID:   6,
 		NextIndexID:    2,
-		Privileges:     NewPrivilegeDescriptor(security.RootUser, SystemDesiredPrivileges(keys.EventLogTableID)),
+		Privileges:     NewAdminPrivilegeDescriptor(SystemDesiredPrivileges(keys.EventLogTableID)),
 		FormatVersion:  InterleavedFormatVersion,
 		NextMutationID: 1,
 	}
@@ -514,7 +513,7 @@ var (
 		},
 		NextFamilyID:   7,
 		NextIndexID:    2,
-		Privileges:     NewPrivilegeDescriptor(security.RootUser, SystemDesiredPrivileges(keys.RangeEventTableID)),
+		Privileges:     NewAdminPrivilegeDescriptor(SystemDesiredPrivileges(keys.RangeEventTableID)),
 		FormatVersion:  InterleavedFormatVersion,
 		NextMutationID: 1,
 	}
@@ -539,7 +538,7 @@ var (
 		NextFamilyID:   4,
 		PrimaryIndex:   pk("key"),
 		NextIndexID:    2,
-		Privileges:     NewPrivilegeDescriptor(security.RootUser, SystemDesiredPrivileges(keys.UITableID)),
+		Privileges:     NewAdminPrivilegeDescriptor(SystemDesiredPrivileges(keys.UITableID)),
 		FormatVersion:  InterleavedFormatVersion,
 		NextMutationID: 1,
 	}
@@ -581,7 +580,7 @@ var (
 			},
 		},
 		NextIndexID:    3,
-		Privileges:     NewPrivilegeDescriptor(security.RootUser, SystemDesiredPrivileges(keys.JobsTableID)),
+		Privileges:     NewAdminPrivilegeDescriptor(SystemDesiredPrivileges(keys.JobsTableID)),
 		FormatVersion:  InterleavedFormatVersion,
 		NextMutationID: 1,
 	}
@@ -589,7 +588,7 @@ var (
 	// WebSessions table to authenticate sessions over stateless connections.
 	WebSessionsTable = TableDescriptor{
 		Name:     "web_sessions",
-		ID:       19,
+		ID:       keys.WebSessionsTableID,
 		ParentID: 1,
 		Version:  1,
 		Columns: []ColumnDescriptor{
@@ -642,12 +641,8 @@ var (
 				ExtraColumnIDs:   []ColumnID{1},
 			},
 		},
-		NextIndexID: 4,
-		Privileges: &PrivilegeDescriptor{
-			Users: []UserPrivileges{
-				{User: "root", Privileges: 0x1f0},
-			},
-		},
+		NextIndexID:    4,
+		Privileges:     NewAdminPrivilegeDescriptor(SystemDesiredPrivileges(keys.WebSessionsTableID)),
 		NextMutationID: 1,
 		FormatVersion:  3,
 	}
@@ -698,7 +693,7 @@ var (
 			ColumnIDs:        []ColumnID{1, 2},
 		},
 		NextIndexID:    2,
-		Privileges:     NewPrivilegeDescriptor(security.RootUser, SystemDesiredPrivileges(keys.TableStatisticsTableID)),
+		Privileges:     NewAdminPrivilegeDescriptor(SystemDesiredPrivileges(keys.TableStatisticsTableID)),
 		FormatVersion:  InterleavedFormatVersion,
 		NextMutationID: 1,
 	}
@@ -718,12 +713,19 @@ var (
 		},
 		NextColumnID: 4,
 		Families: []ColumnFamilyDescriptor{
-			{Name: "primary", ID: 0, ColumnNames: []string{"role"}, ColumnIDs: singleID1},
-			{Name: "fam_2_member", ID: 2, ColumnNames: []string{"member"}, ColumnIDs: []ColumnID{2}, DefaultColumnID: 2},
+			{Name: "primary", ID: 0, ColumnNames: []string{"role", "member"}, ColumnIDs: []ColumnID{1, 2}},
 			{Name: "fam_3_isadmin", ID: 3, ColumnNames: []string{"isadmin"}, ColumnIDs: []ColumnID{3}, DefaultColumnID: 3},
 		},
 		NextFamilyID: 4,
-		PrimaryIndex: pk("role"),
+		PrimaryIndex: IndexDescriptor{
+			Name:             "primary",
+			ID:               1,
+			Unique:           true,
+			ColumnNames:      []string{"role", "member"},
+			ColumnDirections: []IndexDescriptor_Direction{IndexDescriptor_ASC, IndexDescriptor_ASC},
+			ColumnIDs:        []ColumnID{1, 2},
+		},
+
 		Indexes: []IndexDescriptor{
 			{
 				Name:             "role_members_member_idx",
@@ -736,7 +738,7 @@ var (
 			},
 		},
 		NextIndexID:    3,
-		Privileges:     NewPrivilegeDescriptor(security.RootUser, SystemDesiredPrivileges(keys.RoleMembersTableID)),
+		Privileges:     NewAdminPrivilegeDescriptor(SystemDesiredPrivileges(keys.RoleMembersTableID)),
 		FormatVersion:  InterleavedFormatVersion,
 		NextMutationID: 1,
 	}

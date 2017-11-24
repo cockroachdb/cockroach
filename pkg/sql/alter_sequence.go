@@ -48,7 +48,7 @@ func (p *planner) AlterSequence(ctx context.Context, n *tree.AlterSequence) (pla
 		return nil, sqlbase.NewUndefinedRelationError(tn)
 	}
 
-	if err := p.CheckPrivilege(seqDesc, privilege.CREATE); err != nil {
+	if err := p.CheckPrivilege(ctx, seqDesc, privilege.CREATE); err != nil {
 		return nil, err
 	}
 

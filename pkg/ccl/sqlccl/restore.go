@@ -236,7 +236,7 @@ func allocateTableRewrites(
 						return errors.Wrapf(err, "failed to lookup parent DB %d", parentID)
 					}
 
-					if err := p.CheckPrivilege(parentDB, privilege.CREATE); err != nil {
+					if err := p.CheckPrivilege(ctx, parentDB, privilege.CREATE); err != nil {
 						return err
 					}
 				}
@@ -1046,10 +1046,6 @@ func restorePlanHook(
 		return nil, nil, err
 	}
 
-	if err := p.RequireSuperUser("RESTORE"); err != nil {
-		return nil, nil, err
-	}
-
 	fromFn, err := p.TypeAsStringArray(restoreStmt.From, "RESTORE")
 	if err != nil {
 		return nil, nil, err
@@ -1064,6 +1060,10 @@ func restorePlanHook(
 		// TODO(dan): Move this span into sql.
 		ctx, span := tracing.ChildSpan(ctx, stmt.StatementTag())
 		defer tracing.FinishSpan(span)
+
+		if err := p.RequireSuperUser(ctx, "RESTORE"); err != nil {
+			return err
+		}
 
 		from, err := fromFn()
 		if err != nil {

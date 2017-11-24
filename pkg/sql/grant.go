@@ -34,7 +34,7 @@ func (p *planner) changePrivileges(
 	}
 
 	for _, descriptor := range descriptors {
-		if err := p.CheckPrivilege(descriptor, privilege.GRANT); err != nil {
+		if err := p.CheckPrivilege(ctx, descriptor, privilege.GRANT); err != nil {
 			return nil, err
 		}
 		privileges := descriptor.GetPrivileges()

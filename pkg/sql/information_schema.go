@@ -457,10 +457,19 @@ CREATE TABLE information_schema.user_privileges (
 	IS_GRANTABLE BOOL NOT NULL DEFAULT FALSE
 );`,
 	populate: func(ctx context.Context, p *planner, _ string, addRow func(...tree.Datum) error) error {
-		grantee := tree.NewDString(security.RootUser)
+		rootGrantee := tree.NewDString(security.RootUser)
+		adminGrantee := tree.NewDString(security.AdminRole)
 		for _, p := range privilege.List(privilege.ByValue[:]).SortedNames() {
 			if err := addRow(
-				grantee,            // grantee
+				rootGrantee,        // grantee
+				defString,          // table_catalog
+				tree.NewDString(p), // privilege_type
+				tree.DNull,         // is_grantable
+			); err != nil {
+				return err
+			}
+			if err := addRow(
+				adminGrantee,       // grantee
 				defString,          // table_catalog
 				tree.NewDString(p), // privilege_type
 				tree.DNull,         // is_grantable
@@ -873,12 +882,6 @@ func forEachUser(ctx context.Context, origPlanner *planner, fn func(username str
 	rows, err := p.queryRows(ctx, query)
 	if err != nil {
 		return nil
-	}
-
-	// TODO(cuongdo/asubiotto): Get rid of root user special-casing if/when a row
-	// for "root" exists in system.user.
-	if err := fn(security.RootUser); err != nil {
-		return err
 	}
 
 	for _, row := range rows {

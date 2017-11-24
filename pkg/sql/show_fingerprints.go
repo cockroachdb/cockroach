@@ -57,7 +57,7 @@ func (p *planner) ShowFingerprints(
 		return nil, err
 	}
 
-	if err := p.CheckPrivilege(tableDesc, privilege.SELECT); err != nil {
+	if err := p.CheckPrivilege(ctx, tableDesc, privilege.SELECT); err != nil {
 		return nil, err
 	}
 

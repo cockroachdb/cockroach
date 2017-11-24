@@ -44,10 +44,10 @@ type createDatabaseNode struct {
 }
 
 // CreateDatabase creates a database.
-// Privileges: security.RootUser user.
+// Privileges: superuser.
 //   Notes: postgres requires superuser or "CREATEDB".
 //          mysql uses the mysqladmin command.
-func (p *planner) CreateDatabase(n *tree.CreateDatabase) (planNode, error) {
+func (p *planner) CreateDatabase(ctx context.Context, n *tree.CreateDatabase) (planNode, error) {
 	if n.Name == "" {
 		return nil, errEmptyDatabaseName
 	}
@@ -82,7 +82,7 @@ func (p *planner) CreateDatabase(n *tree.CreateDatabase) (planNode, error) {
 		}
 	}
 
-	if err := p.RequireSuperUser("CREATE DATABASE"); err != nil {
+	if err := p.RequireSuperUser(ctx, "CREATE DATABASE"); err != nil {
 		return nil, err
 	}
 
@@ -143,7 +143,7 @@ func (p *planner) CreateIndex(ctx context.Context, n *tree.CreateIndex) (planNod
 		return nil, err
 	}
 
-	if err := p.CheckPrivilege(tableDesc, privilege.CREATE); err != nil {
+	if err := p.CheckPrivilege(ctx, tableDesc, privilege.CREATE); err != nil {
 		return nil, err
 	}
 
@@ -303,7 +303,7 @@ func (p *planner) CreateUser(ctx context.Context, n *tree.CreateUser) (planNode,
 		return nil, err
 	}
 
-	if err := p.CheckPrivilege(tDesc, privilege.INSERT); err != nil {
+	if err := p.CheckPrivilege(ctx, tDesc, privilege.INSERT); err != nil {
 		return nil, err
 	}
 
@@ -327,7 +327,7 @@ func (p *planner) CreateRole(ctx context.Context, n *tree.CreateRole) (planNode,
 		return nil, err
 	}
 
-	if err := p.CheckPrivilege(tDesc, privilege.INSERT); err != nil {
+	if err := p.CheckPrivilege(ctx, tDesc, privilege.INSERT); err != nil {
 		return nil, err
 	}
 
@@ -430,7 +430,7 @@ func (p *planner) AlterUserSetPassword(
 		return nil, err
 	}
 
-	if err := p.CheckPrivilege(tDesc, privilege.UPDATE); err != nil {
+	if err := p.CheckPrivilege(ctx, tDesc, privilege.UPDATE); err != nil {
 		return nil, err
 	}
 
@@ -453,6 +453,10 @@ func (n *alterUserSetPasswordNode) Start(params runParams) error {
 	normalizedUsername, hashedPassword, err := n.userAuthInfo.resolve()
 	if err != nil {
 		return err
+	}
+
+	if normalizedUsername == security.RootUser && len(hashedPassword) > 0 {
+		return errors.Errorf("cannot set password for %s, certificate authentication is required", security.RootUser)
 	}
 
 	internalExecutor := InternalExecutor{LeaseManager: params.p.LeaseMgr()}
@@ -505,7 +509,7 @@ func (p *planner) CreateView(ctx context.Context, n *tree.CreateView) (planNode,
 		return nil, err
 	}
 
-	if err := p.CheckPrivilege(dbDesc, privilege.CREATE); err != nil {
+	if err := p.CheckPrivilege(ctx, dbDesc, privilege.CREATE); err != nil {
 		return nil, err
 	}
 
@@ -675,7 +679,7 @@ func (p *planner) CreateTable(ctx context.Context, n *tree.CreateTable) (planNod
 		return nil, err
 	}
 
-	if err := p.CheckPrivilege(dbDesc, privilege.CREATE); err != nil {
+	if err := p.CheckPrivilege(ctx, dbDesc, privilege.CREATE); err != nil {
 		return nil, err
 	}
 
@@ -1916,7 +1920,7 @@ func (p *planner) CreateSequence(ctx context.Context, n *tree.CreateSequence) (p
 		return nil, err
 	}
 
-	if err := p.CheckPrivilege(dbDesc, privilege.CREATE); err != nil {
+	if err := p.CheckPrivilege(ctx, dbDesc, privilege.CREATE); err != nil {
 		return nil, err
 	}
 

@@ -416,6 +416,7 @@ func (r *SessionRegistry) CancelQuery(queryIDStr string, username string) (bool,
 	defer r.Unlock()
 
 	for session := range r.store {
+		// TODO(mberhault): we don't have a context here.
 		if !(username == security.RootUser || username == session.User) {
 			// Skip this session.
 			continue
@@ -628,6 +629,7 @@ func (s *Session) resetPlanner(p *planner, e *Executor, txn *client.Txn) {
 	p.stmt = nil
 	p.cancelChecker = sqlbase.NewCancelChecker(s.Ctx())
 
+	// TODO(mberhault): we don't have a context here.
 	p.semaCtx = tree.MakeSemaContext(s.User == security.RootUser)
 	p.semaCtx.Location = &s.Location
 	p.semaCtx.SearchPath = s.SearchPath

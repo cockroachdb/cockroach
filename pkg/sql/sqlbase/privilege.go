@@ -91,11 +91,32 @@ func NewPrivilegeDescriptor(user string, priv privilege.List) *PrivilegeDescript
 	}
 }
 
+// NewAdminPrivilegeDescriptor returns a privilege descriptor with passed-in
+// privileges for the root user and admin role.
+func NewAdminPrivilegeDescriptor(priv privilege.List) *PrivilegeDescriptor {
+	return &PrivilegeDescriptor{
+		Users: []UserPrivileges{
+			{
+				User:       security.AdminRole,
+				Privileges: priv.ToBitField(),
+			},
+			{
+				User:       security.RootUser,
+				Privileges: priv.ToBitField(),
+			},
+		},
+	}
+}
+
 // NewDefaultPrivilegeDescriptor returns a privilege descriptor
 // with ALL privileges for the root user.
 func NewDefaultPrivilegeDescriptor() *PrivilegeDescriptor {
 	return &PrivilegeDescriptor{
 		Users: []UserPrivileges{
+			{
+				User:       security.AdminRole,
+				Privileges: privilege.ALL.Mask(),
+			},
 			{
 				User:       security.RootUser,
 				Privileges: privilege.ALL.Mask(),

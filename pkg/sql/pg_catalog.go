@@ -29,7 +29,6 @@ import (
 	"golang.org/x/net/context"
 	"golang.org/x/text/collate"
 
-	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
@@ -1227,14 +1226,14 @@ CREATE TABLE pg_catalog.pg_roles (
 		h := makeOidHasher()
 		return forEachUser(ctx, p,
 			func(username string) error {
-				isRoot := tree.DBool(username == security.RootUser)
+				isSuperUser := tree.DBool(p.RequireSuperUser(ctx, "") == nil)
 				return addRow(
 					h.UserOid(username),         // oid
 					tree.NewDName(username),     // rolname
-					tree.MakeDBool(isRoot),      // rolsuper
+					tree.MakeDBool(isSuperUser), // rolsuper
 					tree.MakeDBool(false),       // rolinherit
-					tree.MakeDBool(isRoot),      // rolcreaterole
-					tree.MakeDBool(isRoot),      // rolcreatedb
+					tree.MakeDBool(isSuperUser), // rolcreaterole
+					tree.MakeDBool(isSuperUser), // rolcreatedb
 					tree.MakeDBool(false),       // rolcatupdate
 					tree.MakeDBool(true),        // rolcanlogin
 					negOneVal,                   // rolconnlimit

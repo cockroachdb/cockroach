@@ -1492,7 +1492,7 @@ func (m *LeaseManager) RefreshLeases(s *stop.Stopper, db *client.DB, gossip *gos
 						table := union.Table
 						table.MaybeUpgradeFormatVersion()
 						if err := table.ValidateTable(); err != nil {
-							log.Errorf(ctx, "%s: received invalid table descriptor: %v", kv.Key, table)
+							log.Errorf(ctx, "%s: received invalid table descriptor: %v, err: %v", kv.Key, table, err)
 							continue
 						}
 						if log.V(2) {

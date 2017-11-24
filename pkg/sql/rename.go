@@ -36,7 +36,7 @@ var (
 )
 
 // RenameDatabase renames the database.
-// Privileges: security.RootUser user, DROP on source database.
+// Privileges: superuser, DROP on source database.
 //   Notes: postgres requires superuser, db owner, or "CREATEDB".
 //          mysql >= 5.1.23 does not allow database renames.
 func (p *planner) RenameDatabase(ctx context.Context, n *tree.RenameDatabase) (planNode, error) {
@@ -44,7 +44,7 @@ func (p *planner) RenameDatabase(ctx context.Context, n *tree.RenameDatabase) (p
 		return nil, errEmptyDatabaseName
 	}
 
-	if err := p.RequireSuperUser("ALTER DATABASE ... RENAME"); err != nil {
+	if err := p.RequireSuperUser(ctx, "ALTER DATABASE ... RENAME"); err != nil {
 		return nil, err
 	}
 
@@ -53,7 +53,7 @@ func (p *planner) RenameDatabase(ctx context.Context, n *tree.RenameDatabase) (p
 		return nil, err
 	}
 
-	if err := p.CheckPrivilege(dbDesc, privilege.DROP); err != nil {
+	if err := p.CheckPrivilege(ctx, dbDesc, privilege.DROP); err != nil {
 		return nil, err
 	}
 
@@ -161,7 +161,7 @@ func (p *planner) RenameTable(ctx context.Context, n *tree.RenameTable) (planNod
 		return nil, sqlbase.NewUndefinedRelationError(oldTn)
 	}
 
-	if err := p.CheckPrivilege(tableDesc, privilege.DROP); err != nil {
+	if err := p.CheckPrivilege(ctx, tableDesc, privilege.DROP); err != nil {
 		return nil, err
 	}
 
@@ -180,7 +180,7 @@ func (p *planner) RenameTable(ctx context.Context, n *tree.RenameTable) (planNod
 		return nil, err
 	}
 
-	if err := p.CheckPrivilege(targetDbDesc, privilege.CREATE); err != nil {
+	if err := p.CheckPrivilege(ctx, targetDbDesc, privilege.CREATE); err != nil {
 		return nil, err
 	}
 
@@ -268,7 +268,7 @@ func (p *planner) RenameIndex(ctx context.Context, n *tree.RenameIndex) (planNod
 		return nil, err
 	}
 
-	if err := p.CheckPrivilege(tableDesc, privilege.CREATE); err != nil {
+	if err := p.CheckPrivilege(ctx, tableDesc, privilege.CREATE); err != nil {
 		return nil, err
 	}
 
@@ -332,7 +332,7 @@ func (p *planner) RenameColumn(ctx context.Context, n *tree.RenameColumn) (planN
 		return nil, fmt.Errorf("table %q does not exist", tn.Table())
 	}
 
-	if err := p.CheckPrivilege(tableDesc, privilege.CREATE); err != nil {
+	if err := p.CheckPrivilege(ctx, tableDesc, privilege.CREATE); err != nil {
 		return nil, err
 	}
 

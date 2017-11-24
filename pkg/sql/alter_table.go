@@ -53,7 +53,7 @@ func (p *planner) AlterTable(ctx context.Context, n *tree.AlterTable) (planNode,
 		return nil, sqlbase.NewUndefinedRelationError(tn)
 	}
 
-	if err := p.CheckPrivilege(tableDesc, privilege.CREATE); err != nil {
+	if err := p.CheckPrivilege(ctx, tableDesc, privilege.CREATE); err != nil {
 		return nil, err
 	}
 	return &alterTableNode{n: n, tableDesc: tableDesc}, nil

@@ -86,7 +86,7 @@ type Builtin struct {
 	NeedsRepeatedEvaluation bool
 
 	// Privileged is set to true when the built-in can only be used by
-	// security.RootUser.
+	// admin users.
 	Privileged bool
 
 	// Class is the kind of built-in function (normal/aggregate/window/etc.)

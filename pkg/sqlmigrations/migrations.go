@@ -509,7 +509,8 @@ func repopulateViewDeps(ctx context.Context, r runner) error {
 // initializeRoles sets up roles. This does the following:
 // 1) add `isRole` column and its index on `system.users`
 // 2) add `admin` role to the `system.users` table (overwrites any existing entries)
-// 3) add `root` as a member of the `admin` role
+// 3) add `root` user to the `system.users` table (overwrites any existing entries)
+// 4) add `root` as a member of the `admin` role
 // TODO(mberhault): this will overwrite any existing user named `admin`. We may want to detect this
 // and either fail or rename the user and its privileges.
 func addUserRoleFlag(ctx context.Context, r runner) error {
@@ -545,9 +546,24 @@ func addUserRoleFlag(ctx context.Context, r runner) error {
 		return err
 	}
 
-	// 3) Add `root` to the `admin` role.
+	// 3) Create a `root` user, about time we had one.
 	const upsertRootStmt = `
-	UPSERT INTO system.role_members (role, member, isAdmin)
+	UPSERT INTO system.users (username, "hashedPassword", "isRole")
+	  VALUES ($1, '', false);
+		`
+
+	pl = tree.MakePlaceholderInfo()
+	pl.SetValue("1", tree.NewDString(security.RootUser))
+	if res, err := r.sqlExecutor.ExecuteStatementsBuffered(
+		session, upsertRootStmt, &pl, 1 /* expectedNumResults */); err == nil {
+		res.Close(ctx)
+	} else {
+		return err
+	}
+
+	// 4) Add `root` to the `admin` role.
+	const upsertRootMemberStmt = `
+	UPSERT INTO system.role_members ("role", member, isAdmin)
 	  VALUES ($1, $2, true);
 		`
 
@@ -555,11 +571,13 @@ func addUserRoleFlag(ctx context.Context, r runner) error {
 	pl.SetValue("1", tree.NewDString(security.AdminRole))
 	pl.SetValue("2", tree.NewDString(security.RootUser))
 	if res, err := r.sqlExecutor.ExecuteStatementsBuffered(
-		session, upsertRootStmt, &pl, 1 /* expectedNumResults */); err == nil {
+		session, upsertRootMemberStmt, &pl, 1 /* expectedNumResults */); err == nil {
 		res.Close(ctx)
 	} else {
 		return err
 	}
+
+	// 5) add privileges for the `admin` role to all tables.
 
 	return nil
 }

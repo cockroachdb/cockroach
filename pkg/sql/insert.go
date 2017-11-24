@@ -90,7 +90,7 @@ func (p *planner) Insert(
 	isUpsertReturning := false
 	if n.OnConflict != nil {
 		if !n.OnConflict.DoNothing {
-			if err := p.CheckPrivilege(en.tableDesc, privilege.UPDATE); err != nil {
+			if err := p.CheckPrivilege(ctx, en.tableDesc, privilege.UPDATE); err != nil {
 				return nil, err
 			}
 		}

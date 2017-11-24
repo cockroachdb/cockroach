@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -64,7 +65,7 @@ func (p *planner) DropDatabase(ctx context.Context, n *tree.DropDatabase) (planN
 		return nil, sqlbase.NewUndefinedDatabaseError(string(n.Name))
 	}
 
-	if err := p.CheckPrivilege(dbDesc, privilege.DROP); err != nil {
+	if err := p.CheckPrivilege(ctx, dbDesc, privilege.DROP); err != nil {
 		return nil, err
 	}
 
@@ -268,7 +269,7 @@ func (p *planner) DropIndex(ctx context.Context, n *tree.DropIndex) (planNode, e
 			return nil, err
 		}
 
-		if err := p.CheckPrivilege(tableDesc, privilege.CREATE); err != nil {
+		if err := p.CheckPrivilege(ctx, tableDesc, privilege.CREATE); err != nil {
 			return nil, err
 		}
 
@@ -713,7 +714,7 @@ func (p *planner) canRemoveFK(
 	if behavior != tree.DropCascade {
 		return nil, fmt.Errorf("%q is referenced by foreign key from table %q", from, table.Name)
 	}
-	if err := p.CheckPrivilege(table, privilege.CREATE); err != nil {
+	if err := p.CheckPrivilege(ctx, table, privilege.CREATE); err != nil {
 		return nil, err
 	}
 	return table, nil
@@ -736,7 +737,7 @@ func (p *planner) canRemoveInterleave(
 		return pgerror.UnimplementedWithIssueErrorf(
 			8036, "%q is interleaved by table %q", from, table.Name)
 	}
-	return p.CheckPrivilege(table, privilege.CREATE)
+	return p.CheckPrivilege(ctx, table, privilege.CREATE)
 }
 
 func (p *planner) canRemoveDependentView(
@@ -760,7 +761,7 @@ func (p *planner) canRemoveDependentViewGeneric(
 	if err != nil {
 		return err
 	}
-	if err := p.CheckPrivilege(viewDesc, privilege.DROP); err != nil {
+	if err := p.CheckPrivilege(ctx, viewDesc, privilege.DROP); err != nil {
 		return err
 	}
 	// If this view is depended on by other views, we have to check them as well.
@@ -883,7 +884,7 @@ func (p *planner) dropTableOrViewPrepare(
 		return nil, err
 	}
 
-	if err := p.CheckPrivilege(tableDesc, privilege.DROP); err != nil {
+	if err := p.CheckPrivilege(ctx, tableDesc, privilege.DROP); err != nil {
 		return nil, err
 	}
 	return tableDesc, nil
@@ -1232,8 +1233,10 @@ func (n *dropUserNode) Start(params runParams) error {
 
 	numDeleted := 0
 	for normalizedUsername := range userNames {
-		// Note: protected users like security.RootUser are not included in system.users,
-		// so there is no need to filter them out.
+		// Filter out the root user.
+		if normalizedUsername == security.RootUser {
+			return errors.Errorf("user %s cannot be dropped", security.RootUser)
+		}
 
 		// TODO: Remove the privileges granted to the user.
 		// Note: The current remove user from CLI just deletes the entry from system.users,
@@ -1275,7 +1278,7 @@ func (p *planner) DropUser(ctx context.Context, n *tree.DropUser) (planNode, err
 		return nil, err
 	}
 
-	if err := p.CheckPrivilege(tDesc, privilege.DELETE); err != nil {
+	if err := p.CheckPrivilege(ctx, tDesc, privilege.DELETE); err != nil {
 		return nil, err
 	}
 

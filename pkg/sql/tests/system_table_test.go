@@ -24,7 +24,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -126,7 +125,7 @@ func TestSystemTableLiterals(t *testing.T) {
 			keys.SystemDatabaseID,
 			test.id,
 			test.schema,
-			sqlbase.NewPrivilegeDescriptor(security.RootUser, sqlbase.SystemDesiredPrivileges(test.id)),
+			sqlbase.NewAdminPrivilegeDescriptor(sqlbase.SystemDesiredPrivileges(test.id)),
 		)
 		if err != nil {
 			t.Fatal(err)

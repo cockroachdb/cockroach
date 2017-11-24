@@ -52,7 +52,7 @@ func (p *planner) ShowClusterSetting(
 	ctx context.Context, n *tree.ShowClusterSetting,
 ) (planNode, error) {
 
-	if err := p.RequireSuperUser("SHOW CLUSTER SETTINGS"); err != nil {
+	if err := p.RequireSuperUser(ctx, "SHOW CLUSTER SETTINGS"); err != nil {
 		return nil, err
 	}
 
@@ -226,7 +226,7 @@ func (p *planner) showTableDetails(
 		if err != nil {
 			return err
 		}
-		return p.anyPrivilege(desc)
+		return p.anyPrivilege(ctx, desc)
 	}
 
 	return p.delegateQuery(ctx, showType,
@@ -542,7 +542,7 @@ func (p *planner) ShowConstraints(ctx context.Context, n *tree.ShowConstraints) 
 	if err != nil {
 		return nil, sqlbase.NewUndefinedRelationError(tn)
 	}
-	if err := p.anyPrivilege(desc); err != nil {
+	if err := p.anyPrivilege(ctx, desc); err != nil {
 		return nil, err
 	}
 

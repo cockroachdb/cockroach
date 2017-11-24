@@ -643,10 +643,6 @@ func backupPlanHook(
 		return nil, nil, err
 	}
 
-	if err := p.RequireSuperUser("BACKUP"); err != nil {
-		return nil, nil, err
-	}
-
 	toFn, err := p.TypeAsString(backupStmt.To, "BACKUP")
 	if err != nil {
 		return nil, nil, err
@@ -674,6 +670,10 @@ func backupPlanHook(
 		// TODO(dan): Move this span into sql.
 		ctx, span := tracing.ChildSpan(ctx, stmt.StatementTag())
 		defer tracing.FinishSpan(span)
+
+		if err := p.RequireSuperUser(ctx, "BACKUP"); err != nil {
+			return err
+		}
 
 		if err := backupStmt.Targets.NormalizeTablesWithDatabase(p.EvalContext().Database); err != nil {
 			return err
@@ -715,12 +715,12 @@ func backupPlanHook(
 		var tables []*sqlbase.TableDescriptor
 		for _, desc := range targetDescs {
 			if dbDesc := desc.GetDatabase(); dbDesc != nil {
-				if err := p.CheckPrivilege(dbDesc, privilege.SELECT); err != nil {
+				if err := p.CheckPrivilege(ctx, dbDesc, privilege.SELECT); err != nil {
 					return err
 				}
 			}
 			if tableDesc := desc.GetTable(); tableDesc != nil {
-				if err := p.CheckPrivilege(tableDesc, privilege.SELECT); err != nil {
+				if err := p.CheckPrivilege(ctx, tableDesc, privilege.SELECT); err != nil {
 					return err
 				}
 				tables = append(tables, tableDesc)
@@ -903,7 +903,7 @@ func showBackupPlanHook(
 		return nil, nil, err
 	}
 
-	if err := p.RequireSuperUser("SHOW BACKUP"); err != nil {
+	if err := p.RequireSuperUser(nil, "SHOW BACKUP"); err != nil {
 		return nil, nil, err
 	}
 

@@ -29,10 +29,6 @@ func GetUserHashedPassword(
 	ctx context.Context, executor *Executor, metrics *MemoryMetrics, username string,
 ) (bool, []byte, error) {
 	normalizedUsername := tree.Name(username).Normalize()
-	// The root user is not in system.users.
-	if normalizedUsername == security.RootUser {
-		return true, nil, nil
-	}
 
 	var hashedPassword []byte
 	var exists bool

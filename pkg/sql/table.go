@@ -882,7 +882,7 @@ func (p *planner) getTableAndIndex(
 	if tableDesc == nil {
 		return nil, nil, sqlbase.NewUndefinedRelationError(tn)
 	}
-	if err := p.CheckPrivilege(tableDesc, privilege); err != nil {
+	if err := p.CheckPrivilege(ctx, tableDesc, privilege); err != nil {
 		return nil, nil, err
 	}
 

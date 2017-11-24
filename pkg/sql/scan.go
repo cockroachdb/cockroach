@@ -206,6 +206,7 @@ func (n *scanNode) Next(params runParams) (bool, error) {
 // Initializes a scanNode with a table descriptor.
 func (n *scanNode) initTable(
 	p *planner,
+	ctx context.Context,
 	desc *sqlbase.TableDescriptor,
 	indexHints *tree.IndexHints,
 	scanVisibility scanVisibility,
@@ -214,7 +215,7 @@ func (n *scanNode) initTable(
 	n.desc = desc
 
 	if !p.skipSelectPrivilegeChecks {
-		if err := p.CheckPrivilege(n.desc, privilege.SELECT); err != nil {
+		if err := p.CheckPrivilege(ctx, n.desc, privilege.SELECT); err != nil {
 			return err
 		}
 	}
