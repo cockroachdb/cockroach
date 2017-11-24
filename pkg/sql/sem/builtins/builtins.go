@@ -1498,6 +1498,30 @@ CockroachDB supports the following flags:
 	"json_typeof": {jsonTypeOfImpl},
 
 	"jsonb_typeof": {jsonTypeOfImpl},
+	
+	"json_array_length": {
+		tree.Builtin{
+			Types: tree.ArgTypes{{"input", types.JSON}},
+			ReturnType: tree.FixedReturnType(types.Int),
+			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				json := tree.MustBeDJSON(args[0])
+				return jsonArrayLength(&json)
+			},
+			Info: "Returns the number of elements in the outermost JSON array.",
+		},
+	},
+	
+	"jsonb_array_length": {
+		tree.Builtin{
+			Types: tree.ArgTypes{{"input", types.JSON}},
+			ReturnType: tree.FixedReturnType(types.Int),
+			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				json := tree.MustBeDJSON(args[0])
+				return jsonArrayLength(&json)
+			},
+			Info: "Returns the number of elements in the outermost JSONB array.",
+		},
+	},
 
 	"ln": {
 		floatBuiltin1(func(x float64) (tree.Datum, error) {
@@ -2863,6 +2887,15 @@ func GenerateUniqueInt(nodeID roachpb.NodeID) tree.DInt {
 	// timestamp portion of the final value instead of always setting them.
 	id = (id << nodeIDBits) ^ uint64(nodeID)
 	return tree.DInt(id)
+}
+
+func jsonArrayLength(json *tree.DJSON) (tree.Datum, error) {
+	if !json.IsArray() {
+		return nil, pgerror.NewError(
+			pgerror.CodeInvalidParameterValueError, "cannot get array length of a non-array")
+	}
+	
+	return tree.NewDInt(tree.DInt(json.Length())), nil
 }
 
 func arrayLength(arr *tree.DArray, dim int64) tree.Datum {

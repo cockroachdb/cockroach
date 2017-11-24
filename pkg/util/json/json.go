@@ -57,6 +57,11 @@ type JSON interface {
 	// Size returns the size of the JSON document in bytes.
 	Size() uintptr
 
+	// Return the length of the JSON if it's an array or string, nil otherwise.
+	Length() int
+
+	IsArray() bool
+
 	// EncodeInvertedIndexKeys takes in a key prefix and returns a slice of inverted index keys,
 	// one per path through the receiver.
 	EncodeInvertedIndexKeys(b []byte) [][]byte
@@ -150,6 +155,15 @@ func cmpJSONTypes(a Type, b Type) int {
 	}
 	return 0
 }
+
+func (jsonNull) IsArray() bool   { return false }
+func (jsonFalse) IsArray() bool  { return false }
+func (jsonTrue) IsArray() bool   { return false }
+func (jsonNumber) IsArray() bool { return false }
+func (jsonString) IsArray() bool { return false }
+func (jsonObject) IsArray() bool { return false }
+
+func (jsonArray) IsArray() bool  { return true }
 
 func (j jsonNull) Compare(other JSON) int  { return cmpJSONTypes(j.Type(), other.Type()) }
 func (j jsonFalse) Compare(other JSON) int { return cmpJSONTypes(j.Type(), other.Type()) }
@@ -374,6 +388,20 @@ func (j jsonObject) Size() uintptr {
 		valSize += j[i].v.Size()
 	}
 	return valSize
+}
+
+func (j jsonNull) Length() int   { return -1 }
+func (j jsonTrue) Length() int   { return -1 }
+func (j jsonFalse) Length() int  { return -1 }
+func (j jsonNumber) Length() int { return -1 }
+func (j jsonObject) Length() int { return -1 }
+
+func (j jsonArray) Length() int  {
+	return len(j)
+}
+
+func (j jsonString) Length() int {
+	return len(j)
 }
 
 // ParseJSON takes a string of JSON and returns a JSON value.

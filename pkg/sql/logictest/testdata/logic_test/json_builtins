@@ -148,3 +148,20 @@ SELECT json_array_elements_text('{"1": 2}'::JSON)
 
 query error pq: jsonb_array_elements_text\(\): cannot be called on a non-array
 SELECT jsonb_array_elements_text('{"1": 2}'::JSON)
+
+## json_array_length and jsonb_array_length
+
+query T
+SELECT json_array_length('[1, 2, 3]'::JSON)
+----
+3
+
+query T
+SELECT json_array_length('[1, true, null, "text", -1.234, {"2": 3, "4": "5"}, [1, 2, 3]]'::JSON)
+----
+7
+
+query T
+SELECT json_array_elements('[]'::JSON)
+----
+0
