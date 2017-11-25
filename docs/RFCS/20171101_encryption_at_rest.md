@@ -937,6 +937,22 @@ Some alternatives include:
 * use fields in the `--store` flag
 * include preamble setting in the `--enterprise-encryption` field
 
+### CCL code location
+
+The enterprise-related functionality should live in CCL directories as much as possible (`pkg/ccl` for go code,
+`c-deps/libroach/ccl` for C++ code).
+
+However, a lot of integration is needed. Some (but far from all) examples include:
+* new flag on the `start` command
+* additional fields on the `StoreSpec`
+* changes to store version logic
+* different objects (`Env`) for `DBImpl` construction
+* encryption status reporting in node debug pages
+
+This makes hook-based integration of CCL functionality tricky.
+
+Making less code CCL would simplify this. But enterprise enforcement must be taken into account.
+
 ### Instruction set support
 
 Crypto++ can determine support for SSE2 and AES-NI at runtime. We should ensure that our builds properly
