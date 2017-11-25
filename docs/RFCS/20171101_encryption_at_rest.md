@@ -5,6 +5,8 @@
 - RFC PR: [#19785](https://github.com/cockroachdb/cockroach/pull/19785)
 - Cockroach Issue: [#19783](https://github.com/cockroachdb/cockroach/issues/19783)
 
+
+
 Table of Contents
 =================
 
@@ -41,15 +43,25 @@ Table of Contents
          * [Other uses of local disk](#other-uses-of-local-disk)
          * [Enterprise enforcement](#enterprise-enforcement)
       * [Drawbacks](#drawbacks)
+         * [Directs us towards rocksdb-level encryption](#directs-us-towards-rocksdb-level-encryption)
+         * [Cannot migrate to/from preamble data format](#cannot-migrate-tofrom-preamble-data-format)
+         * [Lack of correctness testing of rocksdb encryption layer](#lack-of-correctness-testing-of-rocksdb-encryption-layer)
+         * [Complexity of configuration and monitoring](#complexity-of-configuration-and-monitoring)
+         * [No strong license enforcement](#no-strong-license-enforcement)
       * [Rationale and Alternatives](#rationale-and-alternatives)
+         * [Filesystem encryption](#filesystem-encryption)
+         * [Fine-grained encryption](#fine-grained-encryption)
+         * [Single level of keys](#single-level-of-keys)
+         * [Relationship between store and data keys](#relationship-between-store-and-data-keys)
+         * [Custom env for encryption state](#custom-env-for-encryption-state)
       * [Unresolved questions](#unresolved-questions)
          * [Non-live rocksdb files](#non-live-rocksdb-files)
          * [Encryption flags](#encryption-flags)
+         * [CCL code location](#ccl-code-location)
          * [Instruction set support](#instruction-set-support)
       * [Future improvements](#future-improvements)
          * [v1.0: a.k.a. MVP](#v10-aka-mvp)
          * [Possible future additions](#possible-future-additions)
-
 
 # Summary
 
@@ -198,7 +210,7 @@ methods be found, this is still not the key itself.
 We need to provide safety for the keys while held in memory.
 At the C++ level, we can control two aspects:
 * don't swap to disk: using `mlock` (`man mlock(2)`) on memory holding keys, preventing paging out to disk
-* don't code dump: using `madvise` with `MADV_DONTDUMP` (see `man madvise(2)` on Linux) to exclude pages from code dumps.
+* don't core dump: using `madvise` with `MADV_DONTDUMP` (see `man madvise(2)` on Linux) to exclude pages from core dumps.
 
 There is no equivalent in Go so the current approach is to avoid loading keys in Go.
 This can become problematic if we want to reuse the keys to encrypt log files written in Go.
@@ -242,7 +254,7 @@ We identify a few configuration requirements for users to safely use encryption 
 * store keys and cockroach data must not be on the same filesystem/disk (including temporary working directories)
 * restricted access to all cockroach data
 * disable swap
-* don't enable code dumps
+* don't enable core dumps
 * reasonable key generation/rotation
 * monitoring
 * ideally, the store keys are not stored on the machine (use something like `keywhiz`)
@@ -936,6 +948,22 @@ We introduce a new field in the `--store` flag (`format=preamble`) and a new fla
 Some alternatives include:
 * use fields in the `--store` flag
 * include preamble setting in the `--enterprise-encryption` field
+
+### CCL code location
+
+The enterprise-related functionality should live in CCL directories as much as possible (`pkg/ccl` for go code,
+`c-deps/libroach/ccl` for C++ code).
+
+However, a lot of integration is needed. Some (but far from all) examples include:
+* new flag on the `start` command
+* additional fields on the `StoreSpec`
+* changes to store version logic
+* different objects (`Env`) for `DBImpl` construction
+* encryption status reporting in node debug pages
+
+This makes hook-based integration of CCL functionality tricky.
+
+Making less code CCL would simplify this. But enterprise enforcement must be taken into account.
 
 ### Instruction set support
 
