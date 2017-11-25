@@ -24,6 +24,8 @@ import (
 	"fmt"
 	"os"
 
+	"golang.org/x/net/context"
+
 	lightstep "github.com/lightstep/lightstep-tracer-go"
 	opentracing "github.com/opentracing/opentracing-go"
 	zipkin "github.com/openzipkin/zipkin-go-opentracing"
@@ -41,13 +43,7 @@ func (lightStepManager) Name() string {
 }
 
 func (lightStepManager) Close(tr opentracing.Tracer) {
-	// TODO(radu): these calls are not reliable. FlushLightstepTracer exits
-	// immediately if a flush is in progress (see
-	// github.com/lightstep/lightstep-tracer-go/issues/89), and CloseTracer always
-	// exits immediately (see
-	// https://github.com/lightstep/lightstep-tracer-go/pull/85#discussion_r123800322).
-	_ = lightstep.FlushLightStepTracer(tr)
-	_ = lightstep.CloseTracer(tr)
+	lightstep.Close(context.TODO(), tr)
 }
 
 type zipkinManager struct {
