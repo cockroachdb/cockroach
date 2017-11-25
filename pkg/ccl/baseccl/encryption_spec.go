@@ -1,0 +1,193 @@
+// Copyright 2017 The Cockroach Authors.
+//
+// Licensed as a CockroachDB Enterprise file under the Cockroach Community
+// License (the "License"); you may not use this file except in compliance with
+// the License. You may obtain a copy of the License at
+//
+//     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
+
+package baseccl
+
+import (
+	"bytes"
+	"fmt"
+	"strconv"
+	"strings"
+	"time"
+
+	"github.com/pkg/errors"
+	"github.com/spf13/pflag"
+
+	"github.com/cockroachdb/cockroach/pkg/base"
+)
+
+// DefaultRotationPeriod is the rotation period used if not specified.
+const DefaultRotationPeriod = time.Hour * 24 * 7 // 1 week, give or take time changes.
+
+// StoreEncryptionSpec contains the details that can be specified in the cli via
+// the --enterprise-encryption flag.
+type StoreEncryptionSpec struct {
+	Path           string
+	KeyPath        string
+	OldKeyPath     string
+	RotationPeriod time.Duration
+}
+
+// String returns a fully parsable version of the encryption spec.
+func (es StoreEncryptionSpec) String() string {
+	// All fields are set.
+	return fmt.Sprintf("path=%s,key=%s,old-key=%s,rotation-period=%s",
+		es.Path, es.KeyPath, es.OldKeyPath, es.RotationPeriod)
+}
+
+// NewStoreEncryptionSpec parses the string passed in and returns a new
+// StoreEncryptionSpec if parsing succeeds.
+func NewStoreEncryptionSpec(value string) (StoreEncryptionSpec, error) {
+	var es StoreEncryptionSpec
+	es.RotationPeriod = DefaultRotationPeriod
+
+	used := make(map[string]struct{})
+	for _, split := range strings.Split(value, ",") {
+		if len(split) == 0 {
+			continue
+		}
+		subSplits := strings.SplitN(split, "=", 2)
+		if len(subSplits) == 1 {
+			return StoreEncryptionSpec{}, fmt.Errorf("field not in the form <key>=<value>: %s", split)
+		}
+		field := strings.ToLower(subSplits[0])
+		value := subSplits[1]
+		if _, ok := used[field]; ok {
+			return StoreEncryptionSpec{}, fmt.Errorf("%s field was used twice in encryption definition", field)
+		}
+		used[field] = struct{}{}
+
+		if len(field) == 0 {
+			return StoreEncryptionSpec{}, fmt.Errorf("empty field")
+		}
+		if len(value) == 0 {
+			return StoreEncryptionSpec{}, fmt.Errorf("no value specified for %s", field)
+		}
+
+		switch field {
+		case "path":
+			var err error
+			es.Path, err = base.GetAbsoluteStorePath("path", value)
+			if err != nil {
+				return StoreEncryptionSpec{}, err
+			}
+		case "key":
+			var err error
+			es.KeyPath, err = base.GetAbsoluteStorePath("key", value)
+			if err != nil {
+				return StoreEncryptionSpec{}, err
+			}
+		case "old-key":
+			var err error
+			es.OldKeyPath, err = base.GetAbsoluteStorePath("old-key", value)
+			if err != nil {
+				return StoreEncryptionSpec{}, err
+			}
+		case "rotation-period":
+			var err error
+			es.RotationPeriod, err = time.ParseDuration(value)
+			if err != nil {
+				return StoreEncryptionSpec{}, errors.Wrapf(err, "could not parse rotation-duration value: %s", value)
+			}
+		default:
+			return StoreEncryptionSpec{}, fmt.Errorf("%s is not a valid enterprise-encryption field", field)
+		}
+	}
+
+	// Check that all fields are set.
+	if es.Path == "" {
+		return StoreEncryptionSpec{}, fmt.Errorf("no path specified")
+	}
+	if es.KeyPath == "" {
+		return StoreEncryptionSpec{}, fmt.Errorf("no key specified")
+	}
+	if es.OldKeyPath == "" {
+		return StoreEncryptionSpec{}, fmt.Errorf("no old-key specified")
+	}
+
+	return es, nil
+}
+
+// StoreEncryptionSpecList contains a slice of StoreEncryptionSpecs that implements pflag's value
+// interface.
+type StoreEncryptionSpecList struct {
+	Specs []StoreEncryptionSpec
+}
+
+var _ pflag.Value = &StoreEncryptionSpecList{}
+
+// String returns a string representation of all the StoreEncryptionSpecs. This is part
+// of pflag's value interface.
+func (encl StoreEncryptionSpecList) String() string {
+	var buffer bytes.Buffer
+	for _, ss := range encl.Specs {
+		fmt.Fprintf(&buffer, "--enterprise-encryption=%s ", ss)
+	}
+	// Trim the extra space from the end if it exists.
+	if l := buffer.Len(); l > 0 {
+		buffer.Truncate(l - 1)
+	}
+	return buffer.String()
+}
+
+// Type returns the underlying type in string form. This is part of pflag's
+// value interface.
+func (encl *StoreEncryptionSpecList) Type() string {
+	return "StoreEncryptionSpec"
+}
+
+// Set adds a new value to the StoreEncryptionSpecValue. It is the important part of
+// pflag's value interface.
+func (encl *StoreEncryptionSpecList) Set(value string) error {
+	spec, err := NewStoreEncryptionSpec(value)
+	if err != nil {
+		return err
+	}
+	if encl.Specs == nil {
+		encl.Specs = []StoreEncryptionSpec{spec}
+	} else {
+		encl.Specs = append(encl.Specs, spec)
+	}
+	return nil
+}
+
+// MatchStoreAndEncryptionSpecs iterates through the StoreEncryptionSpecList and looks
+// for matching paths in the StoreSpecList.
+// Any unmatched StoreEncryptionSpec causes an error.
+func MatchStoreAndEncryptionSpecs(
+	storeSpecs base.StoreSpecList, encryptionSpecs StoreEncryptionSpecList,
+) error {
+	for _, es := range encryptionSpecs.Specs {
+		var found bool
+		for i := range storeSpecs.Specs {
+			if storeSpecs.Specs[i].Path != es.Path {
+				continue
+			}
+
+			// Found a matching path.
+			if storeSpecs.Specs[i].ExtraFields == nil {
+				storeSpecs.Specs[i].ExtraFields = make(map[string]string)
+			}
+			if k, ok := storeSpecs.Specs[i].ExtraFields["key"]; ok {
+				return fmt.Errorf("store with path %s already has an encryption setting: key=%s",
+					storeSpecs.Specs[i].Path, k)
+			}
+
+			storeSpecs.Specs[i].ExtraFields["key"] = es.KeyPath
+			storeSpecs.Specs[i].ExtraFields["old-key"] = es.OldKeyPath
+			intSeconds := int(es.RotationPeriod.Seconds())
+			storeSpecs.Specs[i].ExtraFields["rotation-duration"] = strconv.Itoa(intSeconds)
+			found = true
+			break
+		}
+		if !found {
+			return fmt.Errorf("no store with path %s found for encryption setting: %v", es.Path, es)
+		}
+	}
+	return nil
+}
