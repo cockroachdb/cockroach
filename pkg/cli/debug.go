@@ -78,7 +78,7 @@ func openStore(cmd *cobra.Command, dir string, stopper *stop.Stopper) (*engine.R
 	}
 	db, err := engine.NewRocksDB(
 		engine.RocksDBConfig{
-			Settings:     serverCfg.Settings,
+			Settings:     ServerCfg.Settings,
 			Dir:          dir,
 			MaxOpenFiles: maxOpenFiles,
 		},

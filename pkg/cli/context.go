@@ -58,14 +58,15 @@ type cliContext struct {
 	showTimes bool
 }
 
-var serverCfg = func() server.Config {
+// ServerCfg is the config for the `start` command.
+var ServerCfg = func() server.Config {
 	st := cluster.MakeClusterSettings(cluster.BinaryMinimumSupportedVersion, cluster.BinaryServerVersion)
 	settings.SetCanonicalValuesContainer(&st.SV)
 
 	return server.MakeConfig(context.Background(), st)
 }()
 
-var baseCfg = serverCfg.Config
+var baseCfg = ServerCfg.Config
 var cliCtx = cliContext{Config: baseCfg}
 
 type tableDisplayFormat int
