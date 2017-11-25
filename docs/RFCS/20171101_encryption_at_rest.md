@@ -5,6 +5,8 @@
 - RFC PR: [#19785](https://github.com/cockroachdb/cockroach/pull/19785)
 - Cockroach Issue: [#19783](https://github.com/cockroachdb/cockroach/issues/19783)
 
+
+
 Table of Contents
 =================
 
@@ -41,15 +43,25 @@ Table of Contents
          * [Other uses of local disk](#other-uses-of-local-disk)
          * [Enterprise enforcement](#enterprise-enforcement)
       * [Drawbacks](#drawbacks)
+         * [Directs us towards rocksdb-level encryption](#directs-us-towards-rocksdb-level-encryption)
+         * [Cannot migrate to/from preamble data format](#cannot-migrate-tofrom-preamble-data-format)
+         * [Lack of correctness testing of rocksdb encryption layer](#lack-of-correctness-testing-of-rocksdb-encryption-layer)
+         * [Complexity of configuration and monitoring](#complexity-of-configuration-and-monitoring)
+         * [No strong license enforcement](#no-strong-license-enforcement)
       * [Rationale and Alternatives](#rationale-and-alternatives)
+         * [Filesystem encryption](#filesystem-encryption)
+         * [Fine-grained encryption](#fine-grained-encryption)
+         * [Single level of keys](#single-level-of-keys)
+         * [Relationship between store and data keys](#relationship-between-store-and-data-keys)
+         * [Custom env for encryption state](#custom-env-for-encryption-state)
       * [Unresolved questions](#unresolved-questions)
          * [Non-live rocksdb files](#non-live-rocksdb-files)
          * [Encryption flags](#encryption-flags)
+         * [CCL code location](#ccl-code-location)
          * [Instruction set support](#instruction-set-support)
       * [Future improvements](#future-improvements)
          * [v1.0: a.k.a. MVP](#v10-aka-mvp)
          * [Possible future additions](#possible-future-additions)
-
 
 # Summary
 
