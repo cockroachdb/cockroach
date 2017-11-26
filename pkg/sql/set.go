@@ -104,7 +104,7 @@ func (p *planner) SetVar(ctx context.Context, n *tree.SetVar) (planNode, error) 
 func (n *setNode) Start(params runParams) error {
 	if n.typedValues != nil {
 		for i, v := range n.typedValues {
-			d, err := v.Eval(&params.p.evalCtx)
+			d, err := v.Eval(params.evalCtx)
 			if err != nil {
 				return err
 			}
@@ -220,7 +220,7 @@ func (n *setClusterSettingNode) Start(params runParams) error {
 		params.p.txn,
 		EventLogSetClusterSetting,
 		0, /* no target */
-		int32(params.p.evalCtx.NodeID),
+		int32(params.evalCtx.NodeID),
 		struct {
 			SettingName string
 			Value       string

@@ -79,7 +79,7 @@ func (n *alterTableNode) Start(params runParams) error {
 				return pgerror.Unimplemented(
 					"alter add fk", "adding a REFERENCES constraint via ALTER not supported")
 			}
-			col, idx, err := sqlbase.MakeColumnDefDescs(d, &params.p.semaCtx, &params.p.evalCtx)
+			col, idx, err := sqlbase.MakeColumnDefDescs(d, &params.p.semaCtx, params.evalCtx)
 			if err != nil {
 				return err
 			}
@@ -143,7 +143,7 @@ func (n *alterTableNode) Start(params runParams) error {
 				}
 				if d.PartitionBy != nil {
 					if err := addPartitionedBy(
-						params.ctx, &params.p.evalCtx, n.tableDesc, &idx, &idx.Partitioning,
+						params.ctx, params.evalCtx, n.tableDesc, &idx, &idx.Partitioning,
 						d.PartitionBy, 0, /* colOffset */
 					); err != nil {
 						return err
@@ -160,7 +160,7 @@ func (n *alterTableNode) Start(params runParams) error {
 				}
 
 			case *tree.CheckConstraintTableDef:
-				ck, err := makeCheckConstraint(*n.tableDesc, d, inuseNames, &params.p.semaCtx, &params.p.evalCtx)
+				ck, err := makeCheckConstraint(*n.tableDesc, d, inuseNames, &params.p.semaCtx, params.evalCtx)
 				if err != nil {
 					return err
 				}
@@ -429,7 +429,7 @@ func (n *alterTableNode) Start(params runParams) error {
 				return fmt.Errorf("column %q in the middle of being dropped", t.GetColumn())
 			}
 			if err := applyColumnMutation(
-				&col, t, &params.p.semaCtx, &params.p.evalCtx,
+				&col, t, &params.p.semaCtx, params.evalCtx,
 			); err != nil {
 				return err
 			}
@@ -480,7 +480,7 @@ func (n *alterTableNode) Start(params runParams) error {
 		params.p.txn,
 		EventLogAlterTable,
 		int32(n.tableDesc.ID),
-		int32(params.p.evalCtx.NodeID),
+		int32(params.evalCtx.NodeID),
 		struct {
 			TableName           string
 			Statement           string

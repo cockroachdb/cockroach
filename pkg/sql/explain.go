@@ -20,7 +20,6 @@ import (
 
 	"golang.org/x/net/context"
 
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
@@ -135,9 +134,7 @@ func (p *planner) Explain(ctx context.Context, n *tree.Explain) (planNode, error
 	switch mode {
 	case explainDistSQL:
 		return &explainDistSQLNode{
-			plan:           plan,
-			distSQLPlanner: p.session.distSQLPlanner,
-			txn:            p.txn,
+			plan: plan,
 		}, nil
 
 	case explainPlan:
@@ -156,11 +153,7 @@ func (p *planner) Explain(ctx context.Context, n *tree.Explain) (planNode, error
 type explainDistSQLNode struct {
 	optColumnsSlot
 
-	plan           planNode
-	distSQLPlanner *DistSQLPlanner
-
-	// txn is the current transaction (used for the fake span resolver).
-	txn *client.Txn
+	plan planNode
 
 	// The single row returned by the node.
 	values tree.Datums
@@ -181,20 +174,22 @@ var explainDistSQLColumns = sqlbase.ResultColumns{
 
 func (n *explainDistSQLNode) Start(params runParams) error {
 	// Trigger limit propagation.
-	setUnlimited(n.plan)
+	params.p.setUnlimited(n.plan)
 
-	auto, err := n.distSQLPlanner.CheckSupport(n.plan)
+	distSQLPlanner := params.p.session.distSQLPlanner
+
+	auto, err := distSQLPlanner.CheckSupport(n.plan)
 	if err != nil {
 		return err
 	}
 
-	planCtx := n.distSQLPlanner.newPlanningCtx(params.ctx, &params.p.evalCtx, n.txn)
-	plan, err := n.distSQLPlanner.createPlanForNode(&planCtx, n.plan)
+	planCtx := distSQLPlanner.newPlanningCtx(params.ctx, &params.p.evalCtx, params.p.txn)
+	plan, err := distSQLPlanner.createPlanForNode(&planCtx, n.plan)
 	if err != nil {
 		return err
 	}
-	n.distSQLPlanner.FinalizePlan(&planCtx, &plan)
-	flows := plan.GenerateFlowSpecs(params.p.evalCtx.NodeID)
+	distSQLPlanner.FinalizePlan(&planCtx, &plan)
+	flows := plan.GenerateFlowSpecs(params.evalCtx.NodeID)
 	planJSON, planURL, err := distsqlrun.GeneratePlanDiagramWithURL(flows)
 	if err != nil {
 		return err

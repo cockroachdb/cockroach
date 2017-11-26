@@ -76,7 +76,12 @@ type runParams struct {
 	// context.Context for this method call.
 	ctx context.Context
 
-	// planner associated with this planNode.
+	// evalCtx is the tree.EvalContext associated with this execution.
+	// Used during local execution and distsql physical planning.
+	evalCtx *tree.EvalContext
+
+	// planner associated with this execution. Only used during local
+	// execution.
 	p *planner
 }
 
@@ -227,14 +232,15 @@ func (p *planner) startPlan(ctx context.Context, plan planNode) error {
 		return err
 	}
 	params := runParams{
-		ctx: ctx,
-		p:   p,
+		ctx:     ctx,
+		evalCtx: &p.evalCtx,
+		p:       p,
 	}
 	if err := plan.Start(params); err != nil {
 		return err
 	}
 	// Trigger limit propagation through the plan and sub-queries.
-	setUnlimited(plan)
+	p.setUnlimited(plan)
 	return nil
 }
 

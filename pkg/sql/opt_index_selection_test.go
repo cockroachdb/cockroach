@@ -165,21 +165,21 @@ func makeTestIndexFromStr(
 
 func makeConstraints(
 	t *testing.T,
-	evalCtx *tree.EvalContext,
+	p *planner,
 	sql string,
 	desc *sqlbase.TableDescriptor,
 	index *sqlbase.IndexDescriptor,
 	sel *renderNode,
 ) (orIndexConstraints, tree.TypedExpr) {
-	expr := parseAndNormalizeExpr(t, evalCtx, sql, sel)
-	exprs, equiv := decomposeExpr(evalCtx, expr)
+	expr := parseAndNormalizeExpr(t, p, sql, sel)
+	exprs, equiv := decomposeExpr(&p.evalCtx, expr)
 
 	c := &indexInfo{
 		desc:     desc,
 		index:    index,
 		covering: true,
 	}
-	c.analyzeExprs(evalCtx, exprs)
+	c.analyzeExprs(&p.evalCtx, exprs)
 	if equiv && len(exprs) == 1 {
 		expr = joinAndExprs(exprs[0])
 	}
@@ -322,13 +322,14 @@ func TestMakeConstraints(t *testing.T) {
 		{`(a, b) >= (1, 4)`, `b`, ``},
 		{`(b, a) >= (1, 4)`, `a,b`, ``},
 	}
+	p := makeTestPlanner()
 	for _, d := range testData {
 		t.Run(d.expr+"~"+d.expected, func(t *testing.T) {
-			evalCtx := tree.NewTestingEvalContext()
-			defer evalCtx.Stop(context.Background())
-			sel := makeSelectNode(t, evalCtx)
+			p.evalCtx = tree.MakeTestingEvalContext()
+			defer p.evalCtx.Stop(context.Background())
+			sel := makeSelectNode(t, p)
 			desc, index := makeTestIndexFromStr(t, d.columns)
-			constraints, _ := makeConstraints(t, evalCtx, d.expr, desc, index, sel)
+			constraints, _ := makeConstraints(t, p, d.expr, desc, index, sel)
 			if s := constraints.String(); d.expected != s {
 				t.Errorf("%s, columns: %s: expected %s, but found %s", d.expr, d.columns, d.expected, s)
 			}
@@ -520,6 +521,7 @@ func TestMakeSpans(t *testing.T) {
 		{`(a, b) = (1, 4)`, `a,b`, `/1/4-/1/5`, `/1/4-/1/3`},
 		{`(a, b) != (1, 4)`, `a,b`, `/#-`, `-/#`},
 	}
+	p := makeTestPlanner()
 	for _, d := range testData {
 		for _, dir := range []encoding.Direction{encoding.Ascending, encoding.Descending} {
 			var expected string
@@ -529,17 +531,17 @@ func TestMakeSpans(t *testing.T) {
 				expected = d.expectedDesc
 			}
 			t.Run(d.expr+"~"+expected, func(t *testing.T) {
-				evalCtx := tree.NewTestingEvalContext()
-				defer evalCtx.Stop(context.Background())
-				sel := makeSelectNode(t, evalCtx)
+				p.evalCtx = tree.MakeTestingEvalContext()
+				defer p.evalCtx.Stop(context.Background())
+				sel := makeSelectNode(t, p)
 				columns := strings.Split(d.columns, ",")
 				dirs := make([]encoding.Direction, 0, len(columns))
 				for range columns {
 					dirs = append(dirs, dir)
 				}
 				desc, index := makeTestIndex(t, columns, dirs)
-				constraints, _ := makeConstraints(t, evalCtx, d.expr, desc, index, sel)
-				spans, err := makeSpans(evalCtx, constraints, desc, index)
+				constraints, _ := makeConstraints(t, p, d.expr, desc, index, sel)
+				spans, err := makeSpans(&p.evalCtx, constraints, desc, index)
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -576,14 +578,15 @@ func TestMakeSpans(t *testing.T) {
 		{`(a, b) >= (1, 4)`, `a-,b`, `-`},
 		{`(a, b) >= (1, 4)`, `a,b-`, `-`},
 	}
+
 	for _, d := range testData2 {
 		t.Run(d.expr+"~"+d.expected, func(t *testing.T) {
-			evalCtx := tree.NewTestingEvalContext()
-			defer evalCtx.Stop(context.Background())
-			sel := makeSelectNode(t, evalCtx)
+			p.evalCtx = tree.MakeTestingEvalContext()
+			defer p.evalCtx.Stop(context.Background())
+			sel := makeSelectNode(t, p)
 			desc, index := makeTestIndexFromStr(t, d.columns)
-			constraints, _ := makeConstraints(t, evalCtx, d.expr, desc, index, sel)
-			spans, err := makeSpans(evalCtx, constraints, desc, index)
+			constraints, _ := makeConstraints(t, p, d.expr, desc, index, sel)
+			spans, err := makeSpans(&p.evalCtx, constraints, desc, index)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -667,14 +670,15 @@ func TestExactPrefix(t *testing.T) {
 		{`(a = 1 AND b > 4) OR (a = 1 AND b < 1)`, `b`, 0},
 		{`(a = 1 AND b > 4) OR (a = 1 AND b < 1)`, `a,b`, 1},
 	}
+	p := makeTestPlanner()
 	for _, d := range testData {
 		t.Run(fmt.Sprintf("%s~%d", d.expr, d.expected), func(t *testing.T) {
-			evalCtx := tree.NewTestingEvalContext()
-			defer evalCtx.Stop(context.Background())
-			sel := makeSelectNode(t, evalCtx)
+			p.evalCtx = tree.MakeTestingEvalContext()
+			defer p.evalCtx.Stop(context.Background())
+			sel := makeSelectNode(t, p)
 			desc, index := makeTestIndexFromStr(t, d.columns)
-			constraints, _ := makeConstraints(t, evalCtx, d.expr, desc, index, sel)
-			prefix := constraints.exactPrefix(evalCtx)
+			constraints, _ := makeConstraints(t, p, d.expr, desc, index, sel)
+			prefix := constraints.exactPrefix(&p.evalCtx)
 			if d.expected != prefix {
 				t.Errorf("%s: expected %d, but found %d", d.expr, d.expected, prefix)
 			}
@@ -744,14 +748,15 @@ func TestApplyConstraints(t *testing.T) {
 		{`a IN (0, 2, 3) AND (b < 2 OR a <= 4)`, `a`, `(b < 2) OR (a <= 4)`},
 		{`a IN (0, 2, 3) AND (b < 2 OR a = 2)`, `a`, `(b < 2) OR (a = 2)`},
 	}
+	p := makeTestPlanner()
 	for _, d := range testData {
 		t.Run(d.expr+"~"+d.expected, func(t *testing.T) {
-			evalCtx := tree.NewTestingEvalContext()
-			defer evalCtx.Stop(context.Background())
-			sel := makeSelectNode(t, evalCtx)
+			p.evalCtx = tree.MakeTestingEvalContext()
+			defer p.evalCtx.Stop(context.Background())
+			sel := makeSelectNode(t, p)
 			desc, index := makeTestIndexFromStr(t, d.columns)
-			constraints, expr := makeConstraints(t, evalCtx, d.expr, desc, index, sel)
-			expr2 := applyIndexConstraints(evalCtx, expr, constraints)
+			constraints, expr := makeConstraints(t, p, d.expr, desc, index, sel)
+			expr2 := applyIndexConstraints(&p.evalCtx, expr, constraints)
 			if s := fmt.Sprint(expr2); d.expected != s {
 				t.Errorf("%s: expected %s, but found %s (constraints %s)", d.expr, d.expected, s, constraints)
 			}

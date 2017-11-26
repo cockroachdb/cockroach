@@ -382,7 +382,7 @@ func (n *insertNode) internalNext(params runParams) (bool, error) {
 		return false, err
 	}
 
-	rowVals, err := GenerateInsertRow(n.defaultExprs, n.insertColIDtoRowIndex, n.insertCols, params.p.evalCtx, n.tableDesc, n.run.rows.Values())
+	rowVals, err := GenerateInsertRow(n.defaultExprs, n.insertColIDtoRowIndex, n.insertCols, *params.evalCtx, n.tableDesc, n.run.rows.Values())
 	if err != nil {
 		return false, err
 	}
@@ -390,7 +390,7 @@ func (n *insertNode) internalNext(params runParams) (bool, error) {
 	if err := n.checkHelper.loadRow(n.insertColIDtoRowIndex, rowVals, false); err != nil {
 		return false, err
 	}
-	if err := n.checkHelper.check(&params.p.evalCtx); err != nil {
+	if err := n.checkHelper.check(params.evalCtx); err != nil {
 		return false, err
 	}
 

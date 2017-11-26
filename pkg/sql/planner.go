@@ -306,8 +306,9 @@ func (p *planner) queryRows(
 		return nil, err
 	}
 	params := runParams{
-		ctx: ctx,
-		p:   p,
+		ctx:     ctx,
+		evalCtx: &p.evalCtx,
+		p:       p,
 	}
 	var rows []tree.Datums
 	if err = forEachRow(params, plan, func(values tree.Datums) error {
@@ -336,8 +337,9 @@ func (p *planner) exec(ctx context.Context, sql string, args ...interface{}) (in
 		return 0, err
 	}
 	params := runParams{
-		ctx: ctx,
-		p:   p,
+		ctx:     ctx,
+		evalCtx: &p.evalCtx,
+		p:       p,
 	}
 	return countRowsAffected(params, plan)
 }
