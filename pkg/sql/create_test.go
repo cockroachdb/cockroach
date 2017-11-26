@@ -26,7 +26,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server"
+	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/sqlmigrations"
@@ -34,6 +37,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
 
 func TestDatabaseDescriptor(t *testing.T) {
@@ -431,5 +436,60 @@ SELECT * FROM t.kv%d
 		if err := tx.Rollback(); err != nil {
 			t.Fatal(err)
 		}
+	}
+}
+
+func TestCreateStatementType(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(context.TODO())
+
+	ac := log.AmbientContext{Tracer: tracing.NewTracer()}
+	ctx, span := ac.AnnotateCtxWithSpan(context.Background(), "test")
+	defer span.Finish()
+
+	e := s.Executor().(*sql.Executor)
+	session := sql.NewSession(
+		ctx, sql.SessionArgs{User: security.RootUser}, e, nil, &sql.MemoryMetrics{})
+	session.StartUnlimitedMonitor()
+	defer session.Finish(e)
+
+	query := "CREATE DATABASE t; CREATE TABLE t.foo(x INT); CREATE TABLE t.bar AS SELECT * FROM generate_series(1,10)"
+	res, err := e.ExecuteStatementsBuffered(session, query, nil, 3)
+	if err != nil {
+		t.Fatal("expected no error, got", err)
+	}
+	defer res.Close(session.Ctx())
+	if res.Empty {
+		t.Fatal("expected non-empty results")
+	}
+
+	result := res.ResultList[1]
+	if result.Err != nil {
+		t.Fatal("expected no error, got", err)
+	}
+	if result.PGTag != "CREATE TABLE" {
+		t.Fatal("expected CREATE TABLE, got", result.PGTag)
+	}
+	if result.Type != tree.DDL {
+		t.Fatal("expected result type tree.DDL, got", result.Type)
+	}
+	if result.RowsAffected != 0 {
+		t.Fatal("expected 0 rows affected, got", result.RowsAffected)
+	}
+
+	result = res.ResultList[2]
+	if result.Err != nil {
+		t.Fatal("expected no error, got", err)
+	}
+	if result.PGTag != "SELECT" {
+		t.Fatal("expected SELECT, got", result.PGTag)
+	}
+	if result.Type != tree.RowsAffected {
+		t.Fatal("expected result type tree.RowsAffected, got", result.Type)
+	}
+	if result.RowsAffected != 10 {
+		t.Fatal("expected 10 rows affected, got", result.RowsAffected)
 	}
 }

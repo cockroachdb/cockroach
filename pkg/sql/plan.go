@@ -193,6 +193,7 @@ var _ planNode = &createUserNode{}
 var _ planNode = &dropUserNode{}
 
 var _ planNodeFastPath = &alterUserSetPasswordNode{}
+var _ planNodeFastPath = &createTableNode{}
 var _ planNodeFastPath = &createUserNode{}
 var _ planNodeFastPath = &deleteNode{}
 var _ planNodeFastPath = &dropUserNode{}

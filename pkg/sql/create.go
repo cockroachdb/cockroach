@@ -626,7 +626,8 @@ type createTableNode struct {
 	n          *tree.CreateTable
 	dbDesc     *sqlbase.DatabaseDescriptor
 	sourcePlan planNode
-	count      int
+
+	rowsAffected int
 }
 
 // CreateTable creates a table.
@@ -839,10 +840,17 @@ func (n *createTableNode) Start(params runParams) error {
 		if err != nil {
 			return err
 		}
-		// Passing the affected rows num back
-		n.count = count
+		// Return the number of rows affected as result.
+		n.rowsAffected = count
 	}
 	return nil
+}
+
+func (n *createTableNode) FastPathResults() (int, bool) {
+	if n.n.As() {
+		return n.rowsAffected, true
+	}
+	return 0, false
 }
 
 func (n *createTableNode) Close(ctx context.Context) {

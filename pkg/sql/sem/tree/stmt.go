@@ -212,7 +212,12 @@ func (*CreateIndex) StatementType() StatementType { return DDL }
 func (*CreateIndex) StatementTag() string { return "CREATE INDEX" }
 
 // StatementType implements the Statement interface.
-func (*CreateTable) StatementType() StatementType { return DDL }
+func (n *CreateTable) StatementType() StatementType {
+	if n.As() {
+		return RowsAffected
+	}
+	return DDL
+}
 
 // StatementTag returns a short string identifying the type of statement.
 func (n *CreateTable) StatementTag() string {
