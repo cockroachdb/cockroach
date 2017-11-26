@@ -66,10 +66,10 @@ var nopVar = sessionVar{
 // varGen is the main definition array for all session variables.
 // Note to maintainers: try to keep this sorted in the source code.
 var varGen = map[string]sessionVar{
+	// Set by clients to improve query logging.
+	// See https://www.postgresql.org/docs/10/static/runtime-config-logging.html#GUC-APPLICATION-NAME
 	`application_name`: {
 		Set: func(_ context.Context, session *Session, values []tree.TypedExpr) error {
-			// Set by clients to improve query logging.
-			// See https://www.postgresql.org/docs/9.6/static/runtime-config-logging.html#GUC-APPLICATION-NAME
 			s, err := getStringVal(session, `application_name`, values)
 			if err != nil {
 				return err
@@ -115,6 +115,9 @@ var varGen = map[string]sessionVar{
 		Reset: func(*Session) error { return nil },
 	},
 
+	// CockroachDB extension.
+	// TODO(knz): may need to be replaced by 1st element of search_path for
+	// pg compatibility.
 	`database`: {
 		Set: func(ctx context.Context, session *Session, values []tree.TypedExpr) error {
 			dbName, err := getStringVal(session, `database`, values)
@@ -141,8 +144,9 @@ var varGen = map[string]sessionVar{
 		},
 	},
 
+	// Supported for PG compatibility only.
+	// See https://www.postgresql.org/docs/10/static/runtime-config-client.html#GUC-DATESTYLE
 	`datestyle`: {
-		// Supported for PG compatibility only.
 		Get: func(*Session) string {
 			return "ISO"
 		},
@@ -159,6 +163,7 @@ var varGen = map[string]sessionVar{
 		Reset: func(*Session) error { return nil },
 	},
 
+	// See https://www.postgresql.org/docs/10/static/runtime-config-client.html#GUC-DEFAULT-TRANSACTION-ISOLATION
 	`default_transaction_isolation`: {
 		Set: func(_ context.Context, session *Session, values []tree.TypedExpr) error {
 			// It's unfortunate that clients want us to support both SET
@@ -189,6 +194,7 @@ var varGen = map[string]sessionVar{
 		},
 	},
 
+	// CockroachDB extension.
 	`distsql`: {
 		Set: func(_ context.Context, session *Session, values []tree.TypedExpr) error {
 			s, err := getStringVal(session, `distsql`, values)
@@ -223,15 +229,19 @@ var varGen = map[string]sessionVar{
 	// See https://www.postgresql.org/docs/9.6/static/runtime-config-client.html
 	`extra_float_digits`: nopVar,
 
+	// Supported for PG compatibility only.
+	// See https://www.postgresql.org/docs/10/static/runtime-config-preset.html#GUC-MAX-INDEX-KEYS
 	`max_index_keys`: {
-		// Supported for PG compatibility only.
 		Get: func(*Session) string { return "32" },
 	},
 
+	// CockroachDB extension.
 	`node_id`: {
 		Get: func(session *Session) string { return fmt.Sprintf("%d", session.tables.leaseMgr.nodeID.Get()) },
 	},
 
+	// CockroachDB extension (inspired from MySQL).
+	// See https://dev.mysql.com/doc/refman/5.7/en/server-system-variables.html#sysvar_sql_safe_updates
 	`sql_safe_updates`: {
 		Get: func(session *Session) string { return strconv.FormatBool(session.SafeUpdates) },
 		Set: func(_ context.Context, session *Session, values []tree.TypedExpr) error {
@@ -244,6 +254,7 @@ var varGen = map[string]sessionVar{
 		},
 	},
 
+	// See https://www.postgresql.org/docs/10/static/ddl-schemas.html#DDL-SCHEMAS-PATH
 	`search_path`: {
 		Set: func(_ context.Context, session *Session, values []tree.TypedExpr) error {
 			// https://www.postgresql.org/docs/9.6/static/runtime-config-client.html
@@ -265,24 +276,31 @@ var varGen = map[string]sessionVar{
 		},
 	},
 
+	// Supported for PG compatibility only.
+	// See https://www.postgresql.org/docs/10/static/runtime-config-preset.html#GUC-SERVER-VERSION
 	`server_version`: {
 		Get: func(*Session) string { return PgServerVersion },
 	},
 
+	// Supported for PG compatibility only.
+	// See https://www.postgresql.org/docs/10/static/runtime-config-preset.html#GUC-SERVER-VERSION-NUM
 	`server_version_num`: {
 		Get: func(*Session) string { return PgServerVersionNum },
 	},
 
+	// CockroachDB extension.
+	// In PG this is a pseudo-function used with SELECT, not SHOW.
+	// See https://www.postgresql.org/docs/10/static/functions-info.html
 	`session_user`: {
 		Get: func(session *Session) string { return session.User },
 	},
 
+	// Supported for PG compatibility only.
+	// See https://www.postgresql.org/docs/10/static/runtime-config-compatible.html#GUC-STANDARD-CONFORMING-STRINGS
 	`standard_conforming_strings`: {
-		// Supported for PG compatibility only.
 		Set: func(_ context.Context, session *Session, values []tree.TypedExpr) error {
 			// If true, escape backslash literals in strings. We do this by default,
 			// and we do not support the opposite behavior.
-			// See https://www.postgresql.org/docs/9.1/static/runtime-config-compatible.html#GUC-STANDARD-CONFORMING-STRINGS
 			s, err := getStringVal(session, `standard_conforming_strings`, values)
 			if err != nil {
 				return err
@@ -297,6 +315,7 @@ var varGen = map[string]sessionVar{
 		Reset: func(*Session) error { return nil },
 	},
 
+	// See https://www.postgresql.org/docs/10/static/runtime-config-client.html#GUC-TIMEZONE
 	`timezone`: {
 		Get: func(session *Session) string {
 			// If the time zone is a "fixed offset" one, initialized from an offset
@@ -316,6 +335,8 @@ var varGen = map[string]sessionVar{
 		},
 	},
 
+	// CockroachDB extension.
+	// TODO(knz): this ought to be compatible with pg.
 	`transaction isolation level`: {
 		Get: func(session *Session) string {
 			session.TxnState.mu.RLock()
@@ -324,6 +345,7 @@ var varGen = map[string]sessionVar{
 		},
 	},
 
+	// CockroachDB extension.
 	`transaction priority`: {
 		Get: func(session *Session) string {
 			session.TxnState.mu.RLock()
@@ -332,16 +354,19 @@ var varGen = map[string]sessionVar{
 		},
 	},
 
+	// CockroachDB extension.
 	`transaction status`: {
 		Get: func(session *Session) string { return getTransactionState(&session.TxnState) },
 	},
 
+	// Supported for PG driver compatibility only.
+	// See https://www.postgresql.org/docs/10/static/hot-standby.html#HOT-STANDBY-USERS
 	`transaction_read_only`: {
-		// Supported for PG driver compatibility only. We don't support setting it
-		// in any way.
+		// We don't support setting this in any way.
 		Get: func(*Session) string { return "off" },
 	},
 
+	// CockroachDB extension.
 	`tracing`: {
 		Get: func(session *Session) string {
 			if session.Tracing.Enabled() {
