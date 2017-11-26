@@ -53,6 +53,8 @@ import Debug from "src/views/reports/containers/debug";
 
 import { alertDataSync } from "src/redux/alerts";
 
+import visualizationRoutes from "src/routes/visualization";
+
 // NOTE: If you are adding a new path to the router, and that path contains any
 // components that are personally identifying information, you MUST update the
 // redactions list in src/redux/analytics.ts.
@@ -107,6 +109,7 @@ ReactDOM.render(
           <Route path={`range/:${rangeIDAttr}`} component={ Range } />
           <Route path={`range/:${rangeIDAttr}/cmdqueue`} component={ CommandQueue } />
         </Route>
+        { visualizationRoutes() }
       </Route>
     </Router>
   </Provider>,
