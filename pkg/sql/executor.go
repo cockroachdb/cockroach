@@ -2031,10 +2031,6 @@ func (e *Executor) execClassic(
 		if err != nil {
 			return err
 		}
-	case tree.DDL:
-		if n, ok := plan.(*createTableNode); ok && n.n.As() {
-			rowResultWriter.IncrementRowsAffected(n.run.count)
-		}
 	}
 	return nil
 }

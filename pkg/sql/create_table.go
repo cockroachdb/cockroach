@@ -99,7 +99,7 @@ func (p *planner) CreateTable(ctx context.Context, n *tree.CreateTable) (planNod
 // createTableRun contains the run-time state of createTableNode
 // during local execution.
 type createTableRun struct {
-	count int
+	rowsAffected int
 }
 
 func (n *createTableNode) Start(params runParams) error {
@@ -225,8 +225,8 @@ func (n *createTableNode) Start(params runParams) error {
 		if err != nil {
 			return err
 		}
-		// Passing the affected rows num back.
-		n.run.count = count
+		// Return the number of rows affected as result.
+		n.run.rowsAffected = count
 	}
 	return nil
 }
@@ -239,6 +239,13 @@ func (n *createTableNode) Close(ctx context.Context) {
 		n.sourcePlan.Close(ctx)
 		n.sourcePlan = nil
 	}
+}
+
+func (n *createTableNode) FastPathResults() (int, bool) {
+	if n.n.As() {
+		return n.run.rowsAffected, true
+	}
+	return 0, false
 }
 
 // HoistConstraints finds column constraints defined inline with the columns

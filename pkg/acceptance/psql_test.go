@@ -97,5 +97,8 @@ echo "\." >> import.sql
 psql -d testdb < import.sql
 psql -d testdb -c "SELECT COUNT(*) FROM ints" | grep "1000"
 
+# Test that CREATE TABLE AS returns tag SELECT, not CREATE (#20227).
+psql -d testdb -c "CREATE TABLE ctas AS SELECT 1" | grep "SELECT"
+
 exit 0
 `
