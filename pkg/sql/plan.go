@@ -192,8 +192,11 @@ var _ planNode = &windowNode{}
 var _ planNode = &createUserNode{}
 var _ planNode = &dropUserNode{}
 
+var _ planNodeFastPath = &alterUserSetPasswordNode{}
+var _ planNodeFastPath = &createUserNode{}
 var _ planNodeFastPath = &deleteNode{}
 var _ planNodeFastPath = &dropUserNode{}
+var _ planNodeFastPath = &setZoneConfigNode{}
 
 // makePlan implements the Planner interface.
 func (p *planner) makePlan(ctx context.Context, stmt Statement) (planNode, error) {
