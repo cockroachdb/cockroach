@@ -19,7 +19,6 @@ import (
 	"crypto/tls"
 	"errors"
 	"fmt"
-	"io"
 	"log"
 	"net"
 	"net/http"
@@ -154,13 +153,6 @@ func checkURLWithRetries(client *http.Client, url string) error {
 		return err
 	}
 	return fmt.Errorf("timed out on %d separate tries, giving up", timeoutRetries)
-}
-
-// Check verifies the URLs provided by the given io.Reader.
-func Check(r io.Reader) error {
-	cmd := exec.Command("grep", "-nE", URLRE)
-	cmd.Stdin = r
-	return CheckURLsFromGrepOutput(cmd)
 }
 
 // CheckURLsFromGrepOutput runs the specified cmd, which should be

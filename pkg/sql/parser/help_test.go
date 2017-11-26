@@ -15,24 +15,11 @@
 package parser
 
 import (
-	"bytes"
 	"strings"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/cmd/urlcheck/lib/urlcheck"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 )
-
-func TestHelpURLs(t *testing.T) {
-	var buf bytes.Buffer
-	for key, body := range HelpMessages {
-		msg := HelpMessage{Command: key, HelpMessageBody: body}
-		buf.WriteString(msg.String())
-	}
-	if err := urlcheck.Check(&buf); err != nil {
-		t.Fatal(err)
-	}
-}
 
 func TestHelpMessagesDefined(t *testing.T) {
 	var emptyBody HelpMessageBody
