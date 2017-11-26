@@ -30,6 +30,12 @@ CREATE TABLE b (id INT PRIMARY KEY, id INT)
 statement error multiple primary keys for table "b" are not allowed
 CREATE TABLE b (id INT PRIMARY KEY, id2 INT PRIMARY KEY)
 
+statement error index \"primary\" contains duplicate column \"a\"
+CREATE TABLE dup_primary (a int, primary key (a,a))
+
+statement error index \"dup_unique_a_a_key\" contains duplicate column \"a\"
+CREATE TABLE dup_unique (a int, unique (a,a))
+
 statement ok
 CREATE TABLE IF NOT EXISTS a (id INT PRIMARY KEY)
 
