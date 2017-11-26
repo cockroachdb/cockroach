@@ -14,6 +14,8 @@
 
 package enginepb
 
+import proto "github.com/gogo/protobuf/proto"
+
 // Short returns a prefix of the transaction's ID.
 func (t TxnMeta) Short() string {
 	return t.ID.Short()
@@ -122,4 +124,16 @@ func (ms *MVCCStats) Subtract(oms MVCCStats) {
 // IsInline returns true if the value is inlined in the metadata.
 func (meta MVCCMetadata) IsInline() bool {
 	return meta.RawBytes != nil
+}
+
+var isolationTypeLowerCase = map[int32]string{
+	0: "serializable",
+	1: "snapshot",
+}
+
+// ToLowerCaseString returns the lower case version of String().
+// Asking for lowercase is common enough (pg_setting / SHOW in SQL)
+// that we don't want to call strings.ToLower(x.String()) all the time.
+func (x IsolationType) ToLowerCaseString() string {
+	return proto.EnumName(isolationTypeLowerCase, int32(x))
 }

@@ -184,7 +184,7 @@ var varGen = map[string]sessionVar{
 
 			return nil
 		},
-		Get: func(session *Session) string { return session.DefaultIsolationLevel.String() },
+		Get: func(session *Session) string { return session.DefaultIsolationLevel.ToLowerCaseString() },
 		Reset: func(session *Session) error {
 			session.DefaultIsolationLevel = enginepb.IsolationType(0)
 			return nil
@@ -338,18 +338,19 @@ var varGen = map[string]sessionVar{
 		},
 	},
 
-	// CockroachDB extension.
-	// TODO(knz): this ought to be compatible with pg.
-	`transaction isolation level`: {
+	// This is not directly documented in PG's docs but does indeed behave this way.
+	// See https://github.com/postgres/postgres/blob/REL_10_STABLE/src/backend/utils/misc/guc.c#L3401-L3409
+	`transaction_isolation`: {
 		Get: func(session *Session) string {
 			session.TxnState.mu.RLock()
 			defer session.TxnState.mu.RUnlock()
-			return session.TxnState.mu.txn.Isolation().String()
+			return session.TxnState.mu.txn.Isolation().ToLowerCaseString()
 		},
 	},
 
 	// CockroachDB extension.
-	`transaction priority`: {
+	// Modeled after transaction_isolation.
+	`transaction_priority`: {
 		Get: func(session *Session) string {
 			session.TxnState.mu.RLock()
 			defer session.TxnState.mu.RUnlock()
@@ -358,7 +359,8 @@ var varGen = map[string]sessionVar{
 	},
 
 	// CockroachDB extension.
-	`transaction status`: {
+	// Modeled after transaction_isolation.
+	`transaction_status`: {
 		Get: func(session *Session) string { return getTransactionState(&session.TxnState) },
 	},
 

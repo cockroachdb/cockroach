@@ -10008,14 +10008,14 @@ sqldefault:
 		//line sql.y:2336
 		{
 			/* SKIP DOC */
-			sqlVAL.union.val = &ShowVar{Name: "TRANSACTION ISOLATION LEVEL"}
+			sqlVAL.union.val = &ShowVar{Name: "transaction_isolation"}
 		}
 	case 428:
 		sqlDollar = sqlS[sqlpt-3 : sqlpt+1]
 		//line sql.y:2340
 		{
 			/* SKIP DOC */
-			sqlVAL.union.val = &ShowVar{Name: "TRANSACTION PRIORITY"}
+			sqlVAL.union.val = &ShowVar{Name: "transaction_priority"}
 		}
 	case 429:
 		sqlDollar = sqlS[sqlpt-3 : sqlpt+1]
