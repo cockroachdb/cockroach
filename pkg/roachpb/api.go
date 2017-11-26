@@ -30,11 +30,11 @@ type UserPriority float64
 func (up UserPriority) String() string {
 	switch up {
 	case MinUserPriority:
-		return "LOW"
+		return "low"
 	case UnspecifiedUserPriority, NormalUserPriority:
-		return "NORMAL"
+		return "normal"
 	case MaxUserPriority:
-		return "HIGH"
+		return "high"
 	default:
 		return fmt.Sprintf("%g", float64(up))
 	}
