@@ -528,8 +528,8 @@
 [[projects]]
   name = "github.com/lightstep/lightstep-tracer-go"
   packages = [".","collectorpb","lightstep_thrift","lightsteppb","thrift_0_9_2/lib/go/thrift"]
-  revision = "8ea6e2a40aeb49f0a846212f919d156082f58e16"
-  version = "v0.14.0"
+  revision = "ba38bae1f0ec1ece9092d35bbecbb497ee344cbc"
+  version = "v0.15.0"
 
 [[projects]]
   name = "github.com/mattn/go-isatty"
@@ -840,7 +840,7 @@
   branch = "v2"
   name = "gopkg.in/yaml.v2"
   packages = ["."]
-  revision = "eb3733d160e74a9c7e442f435eb3bea458e1d19f"
+  revision = "287cf08546ab5e7e37d55a84f7ed3fd1db036de5"
 
 [[projects]]
   branch = "master"
