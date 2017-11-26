@@ -184,8 +184,19 @@ func TestAsOfTime(t *testing.T) {
 	// Subqueries shouldn't work.
 	_, err := db.Query(
 		fmt.Sprintf("SELECT (SELECT a FROM d.t AS OF SYSTEM TIME %s)", tsVal1))
-	if !testutils.IsError(err, "pq: AS OF SYSTEM TIME not supported in this context") {
+	if !testutils.IsError(err, "pq: AS OF SYSTEM TIME must be provided on a top level SELECT statement") {
 		t.Fatalf("expected not supported, got: %v", err)
+	}
+
+	// Subqueries do work of the timestamps are consistent.
+	_, err = db.Query(
+		fmt.Sprintf("SELECT (SELECT a FROM d.t AS OF SYSTEM TIME %s) FROM (SELECT 1) AS OF SYSTEM TIME '1980-01-01'", tsVal1))
+	if !testutils.IsError(err, "pq: cannot specify AS OF SYSTEM TIME with different timestamps") {
+		t.Fatalf("expected inconsistent statements, got: %v", err)
+	}
+	if err := db.QueryRow(
+		fmt.Sprintf("SELECT (SELECT 1 FROM d.t AS OF SYSTEM TIME %s) FROM (SELECT 1) AS OF SYSTEM TIME %s", tsVal1, tsVal1)).Scan(&i); err != nil {
+		t.Fatal(err)
 	}
 
 	// Verify that we can read columns in the past that are dropped in the future.
@@ -201,7 +212,7 @@ func TestAsOfTime(t *testing.T) {
 	// Can't use in a transaction.
 	_, err = db.Query(
 		fmt.Sprintf("BEGIN; SELECT a FROM d.t AS OF SYSTEM TIME %s; COMMIT;", tsVal1))
-	if !testutils.IsError(err, "pq: AS OF SYSTEM TIME not supported in this context") {
+	if !testutils.IsError(err, "pq: AS OF SYSTEM TIME must be provided on a top level SELECT statement") {
 		t.Fatalf("expected not supported, got: %v", err)
 	}
 }

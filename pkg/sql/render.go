@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
 
 // renderNode encapsulates the render logic of a select statement:
@@ -296,11 +297,36 @@ func (p *planner) SelectClause(
 func (p *planner) initFrom(
 	ctx context.Context, r *renderNode, parsed *tree.SelectClause, scanVisibility scanVisibility,
 ) error {
-	// AS OF expressions are either not supported in this context (e.g. in a view
-	// definition), or they should have been handled by the executor.
-	if parsed.From.AsOf.Expr != nil && !p.avoidCachedDescriptors {
-		return fmt.Errorf("AS OF SYSTEM TIME not supported in this context")
+	if parsed.From.AsOf.Expr != nil {
+		// If AS OF SYSTEM TIME is specified in any part of the query,
+		// then it must be consistent with what is known to the
+		// Executor.
+
+		// At this point, the executor only knows how to recognize AS OF
+		// SYSTEM TIME at the top level. When it finds it there,
+		// p.asOfSystemTime is set. If AS OF SYSTEM TIME wasn't found
+		// there, we cannot accept it anywhere else either.
+		// TODO(anyone): this restriction might be lifted if we support
+		// table readers at arbitrary timestamps, and each FROM clause
+		// can have its own timestamp. In that case, the timestamp
+		// would not be set globally for the entire txn.
+		if !p.asOfSystemTime {
+			return fmt.Errorf("AS OF SYSTEM TIME must be provided on a top level SELECT statement")
+		}
+
+		// The Executor found an AS OF SYSTEM TIME clause at the top
+		// level. We accept AS OF SYSTEM TIME in multiple places (e.g. in
+		// subqueries or view queries) but they must all point to the same
+		// timestamp.
+		ts, err := EvalAsOfTimestamp(&p.evalCtx, parsed.From.AsOf, hlc.MaxTimestamp)
+		if err != nil {
+			return err
+		}
+		if ts != p.txn.OrigTimestamp() {
+			return fmt.Errorf("cannot specify AS OF SYSTEM TIME with different timestamps")
+		}
 	}
+
 	src, err := p.getSources(ctx, parsed.From.Tables, scanVisibility)
 	if err != nil {
 		return err

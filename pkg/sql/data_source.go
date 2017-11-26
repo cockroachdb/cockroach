@@ -582,10 +582,6 @@ func (p *planner) getTableDesc(
 	ctx context.Context, tn *tree.TableName,
 ) (*sqlbase.TableDescriptor, error) {
 	if p.avoidCachedDescriptors {
-		// AS OF SYSTEM TIME queries need to fetch the table descriptor at the
-		// specified time, and never lease anything. The proto transaction already
-		// has its timestamps set correctly so getTableOrViewDesc will fetch with
-		// the correct timestamp.
 		return MustGetTableOrViewDesc(
 			ctx, p.txn, p.getVirtualTabler(), tn, false /*allowAdding*/)
 	}
