@@ -139,7 +139,7 @@ func testDecommissionInner(
 	decommissionFooter := []string{"All target nodes report that they hold no more data. Please verify cluster health before removing the nodes."}
 	decommissionFooterLive := []string{"Decommissioning finished. Please verify cluster health before removing the nodes."}
 
-	statusHeader := []string{"id", "address", "build", "updated_at", "started_at"}
+	statusHeader := []string{"id", "address", "build", "updated_at", "started_at", "is_live"}
 
 	log.Info(ctx, "decommissioning first node from the second, polling the status manually")
 	retryOpts := retry.Options{
@@ -194,10 +194,10 @@ func testDecommissionInner(
 		}
 		exp := [][]string{
 			statusHeader,
-			{`1`, `.*`, `.*`, `.*`, `.*`},
-			{`2`, `.*`, `.*`, `.*`, `.*`},
-			{`3`, `.*`, `.*`, `.*`, `.*`},
-			{`4`, `.*`, `.*`, `.*`, `.*`},
+			{`1`, `.*`, `.*`, `.*`, `.*`, `.*`},
+			{`2`, `.*`, `.*`, `.*`, `.*`, `.*`},
+			{`3`, `.*`, `.*`, `.*`, `.*`, `.*`},
+			{`4`, `.*`, `.*`, `.*`, `.*`, `.*`},
 			{"# 4 rows"},
 		}
 		if err := matchCSV(o, exp); err != nil {
@@ -421,9 +421,9 @@ func testDecommissionInner(
 
 		exp := [][]string{
 			statusHeader,
-			{`2`, `.*`, `.*`, `.*`, `.*`},
-			{`3`, `.*`, `.*`, `.*`, `.*`},
-			{`4`, `.*`, `.*`, `.*`, `.*`},
+			{`2`, `.*`, `.*`, `.*`, `.*`, `.*`},
+			{`3`, `.*`, `.*`, `.*`, `.*`, `.*`},
+			{`4`, `.*`, `.*`, `.*`, `.*`, `.*`},
 			{"# 3 rows"},
 		}
 		if err := matchCSV(o, exp); err != nil {
