@@ -66,12 +66,12 @@ class CurrentNodes extends React.Component<CurrentNodesProps & CurrentNodesOwnPr
 
   // accumulateHistory parses incoming nodeStatus properties and accumulates
   // a history for each node.
-  accumulateHistory() {
-    if (!this.props.nodesSummary.nodeStatuses) {
+  accumulateHistory(props = this.props) {
+    if (!props.nodesSummary.nodeStatuses) {
       return;
     }
 
-    this.props.nodesSummary.nodeStatuses.map((status) => {
+    props.nodesSummary.nodeStatuses.map((status) => {
       const id = status.desc.node_id;
       if (!this.nodeHistories.hasOwnProperty(id)) {
         this.nodeHistories[id] = new NodeStatusHistory(status);
@@ -82,18 +82,18 @@ class CurrentNodes extends React.Component<CurrentNodesProps & CurrentNodesOwnPr
   }
 
   componentWillMount() {
+    this.accumulateHistory();
     this.props.refreshNodes();
     this.props.refreshLiveness();
   }
 
   componentWillReceiveProps(props: CurrentNodesProps & CurrentNodesOwnProps) {
+    this.accumulateHistory(props);
     props.refreshNodes();
     props.refreshLiveness();
   }
 
   render() {
-    // TODO(mrtracy): Move this to lifecycle methods.
-    this.accumulateHistory();
     const { projection } = this.props;
     if (_.isEmpty(this.nodeHistories)) {
       return null;
