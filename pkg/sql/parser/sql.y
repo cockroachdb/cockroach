@@ -2638,12 +2638,12 @@ show_transaction_stmt:
   SHOW TRANSACTION ISOLATION LEVEL
   {
     /* SKIP DOC */
-    $$.val = &tree.ShowVar{Name: "TRANSACTION ISOLATION LEVEL"}
+    $$.val = &tree.ShowVar{Name: "transaction_isolation"}
   }
 | SHOW TRANSACTION PRIORITY
   {
     /* SKIP DOC */
-    $$.val = &tree.ShowVar{Name: "TRANSACTION PRIORITY"}
+    $$.val = &tree.ShowVar{Name: "transaction_priority"}
   }
 | SHOW TRANSACTION STATUS
   {
