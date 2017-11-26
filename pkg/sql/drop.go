@@ -532,7 +532,7 @@ func (n *dropViewNode) Start(params runParams) error {
 			params.p.txn,
 			EventLogDropView,
 			int32(droppedDesc.ID),
-			int32(params.p.evalCtx.NodeID),
+			int32(params.evalCtx.NodeID),
 			struct {
 				ViewName            string
 				Statement           string
@@ -612,7 +612,7 @@ func (n *dropSequenceNode) Start(params runParams) error {
 			params.p.txn,
 			EventLogDropSequence,
 			int32(droppedDesc.ID),
-			int32(params.p.evalCtx.NodeID),
+			int32(params.evalCtx.NodeID),
 			struct {
 				SequenceName string
 				Statement    string
@@ -842,7 +842,7 @@ func (n *dropTableNode) Start(params runParams) error {
 			params.p.txn,
 			EventLogDropTable,
 			int32(droppedDesc.ID),
-			int32(params.p.evalCtx.NodeID),
+			int32(params.evalCtx.NodeID),
 			struct {
 				TableName           string
 				Statement           string

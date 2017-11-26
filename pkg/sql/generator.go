@@ -73,7 +73,7 @@ func (p *planner) makeGenerator(ctx context.Context, t *tree.FuncExpr) (planNode
 }
 
 func (n *valueGenerator) Start(params runParams) error {
-	expr, err := n.expr.Eval(&params.p.evalCtx)
+	expr, err := n.expr.Eval(params.evalCtx)
 	if err != nil {
 		return err
 	}

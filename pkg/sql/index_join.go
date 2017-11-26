@@ -122,9 +122,9 @@ func (p *planner) makeIndexJoin(
 	// Create a new scanNode that will be used with the primary index.
 	table := p.Scan()
 	table.desc = origScan.desc
-	// Note: initDescDefaults can only error out if its 2nd argument is not nil.
-	_ = table.initDescDefaults(origScan.scanVisibility, nil)
-	table.initOrdering(0)
+	// Note: initDescDefaults can only error out if its 3rd argument is not nil.
+	_ = table.initDescDefaults(p.planDeps, origScan.scanVisibility, nil)
+	table.initOrdering(0, &p.evalCtx)
 	table.disableBatchLimit()
 
 	colIDtoRowIndex := map[sqlbase.ColumnID]int{}
@@ -190,7 +190,7 @@ func (p *planner) makeIndexJoin(
 	// table scanNode fully.
 	table.filter = table.filterVars.Rebind(table.filter, true, false)
 
-	indexScan.initOrdering(exactPrefix)
+	indexScan.initOrdering(exactPrefix, &p.evalCtx)
 
 	primaryKeyPrefix := roachpb.Key(sqlbase.MakeIndexKeyPrefix(table.desc, table.index.ID))
 

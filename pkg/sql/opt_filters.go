@@ -538,7 +538,7 @@ func (p *planner) addRenderFilter(
 // function will add `b.x > 10`.
 //
 // The expanded expression can then be split as necessary.
-func expandOnCond(n *joinNode, cond tree.TypedExpr) tree.TypedExpr {
+func expandOnCond(n *joinNode, cond tree.TypedExpr, evalCtx *tree.EvalContext) tree.TypedExpr {
 	if isFilterTrue(cond) || len(n.pred.leftEqualityIndices) == 0 {
 		return cond
 	}
@@ -587,7 +587,7 @@ func expandOnCond(n *joinNode, cond tree.TypedExpr) tree.TypedExpr {
 
 	var result tree.TypedExpr = tree.DBoolTrue
 
-	andExprs := splitAndExpr(&n.planner.evalCtx, cond, nil)
+	andExprs := splitAndExpr(evalCtx, cond, nil)
 	for _, e := range andExprs {
 		convLeft := func(expr tree.VariableExpr) (bool, tree.Expr) {
 			iv, ok := expr.(*tree.IndexedVar)
@@ -713,7 +713,7 @@ func (p *planner) addJoinFilter(
 	// constraints can be pushed down. This is not useful for FULL OUTER
 	// joins, where nothing can be pushed down.
 	if n.joinType != joinTypeFullOuter {
-		onCond = expandOnCond(n, onCond)
+		onCond = expandOnCond(n, onCond, &p.evalCtx)
 	}
 
 	// Step 4: propagate the filter and ON conditions as allowed by the join type.

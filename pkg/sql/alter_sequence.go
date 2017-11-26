@@ -75,7 +75,7 @@ func (n *alterSequenceNode) Start(params runParams) error {
 		params.p.txn,
 		EventLogAlterSequence,
 		int32(n.seqDesc.ID),
-		int32(params.p.evalCtx.NodeID),
+		int32(params.evalCtx.NodeID),
 		struct {
 			SequenceName string
 			Statement    string

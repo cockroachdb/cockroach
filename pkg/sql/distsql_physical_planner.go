@@ -652,7 +652,7 @@ func (dsp *DistSQLPlanner) nodeVersionIsCompatible(
 // initTableReaderSpec initializes a TableReaderSpec/PostProcessSpec that
 // corresponds to a scanNode, except for the Spans and OutputColumns.
 func initTableReaderSpec(
-	n *scanNode,
+	n *scanNode, evalCtx *tree.EvalContext,
 ) (distsqlrun.TableReaderSpec, distsqlrun.PostProcessSpec, error) {
 	s := distsqlrun.TableReaderSpec{
 		Table:   *n.desc,
@@ -673,7 +673,7 @@ func initTableReaderSpec(
 	}
 
 	post := distsqlrun.PostProcessSpec{
-		Filter: distsqlplan.MakeExpression(n.filter, &n.p.evalCtx, nil),
+		Filter: distsqlplan.MakeExpression(n.filter, evalCtx, nil),
 	}
 
 	if n.hardLimit != 0 {
@@ -740,7 +740,7 @@ func (dsp *DistSQLPlanner) convertOrdering(
 func (dsp *DistSQLPlanner) createTableReaders(
 	planCtx *planningCtx, n *scanNode, overrideResultColumns []uint32,
 ) (physicalPlan, error) {
-	spec, post, err := initTableReaderSpec(n)
+	spec, post, err := initTableReaderSpec(n, planCtx.evalCtx)
 	if err != nil {
 		return physicalPlan{}, err
 	}
@@ -1198,7 +1198,9 @@ func (l *DistLoader) LoadCSV(
 // the select data source (a n.source) and updates it to produce results
 // corresponding to the render node itself. An evaluator stage is added if the
 // render node has any expressions which are not just simple column references.
-func (dsp *DistSQLPlanner) selectRenders(p *physicalPlan, n *renderNode) {
+func (dsp *DistSQLPlanner) selectRenders(
+	p *physicalPlan, n *renderNode, evalCtx *tree.EvalContext,
+) {
 	// We want to skip any unused renders.
 	planToStreamColMap := makePlanToStreamColMap(len(n.render))
 	renders := make([]tree.TypedExpr, 0, len(n.render))
@@ -1209,7 +1211,7 @@ func (dsp *DistSQLPlanner) selectRenders(p *physicalPlan, n *renderNode) {
 		}
 	}
 
-	p.AddRendering(renders, &n.planner.evalCtx, p.planToStreamColMap, getTypesForPlanResult(n, planToStreamColMap))
+	p.AddRendering(renders, evalCtx, p.planToStreamColMap, getTypesForPlanResult(n, planToStreamColMap))
 	p.planToStreamColMap = planToStreamColMap
 }
 
@@ -2170,7 +2172,7 @@ func (dsp *DistSQLPlanner) createPlanForNode(
 		if err != nil {
 			return physicalPlan{}, err
 		}
-		dsp.selectRenders(&plan, n)
+		dsp.selectRenders(&plan, n, planCtx.evalCtx)
 		return plan, nil
 
 	case *groupNode:
@@ -2210,7 +2212,7 @@ func (dsp *DistSQLPlanner) createPlanForNode(
 		if err != nil {
 			return physicalPlan{}, err
 		}
-		if err := n.evalLimit(); err != nil {
+		if err := n.evalLimit(planCtx.evalCtx); err != nil {
 			return physicalPlan{}, err
 		}
 		if err := plan.AddLimit(n.count, n.offset, dsp.nodeDesc.NodeID); err != nil {
@@ -2251,16 +2253,17 @@ func (dsp *DistSQLPlanner) createPlanForValues(
 
 	var a sqlbase.DatumAlloc
 	params := runParams{
-		ctx: planCtx.ctx,
-		p:   nil,
+		ctx:     planCtx.ctx,
+		evalCtx: planCtx.evalCtx,
+		p:       nil,
 	}
 	if err := n.Start(params); err != nil {
 		return physicalPlan{}, err
 	}
 	defer n.Close(planCtx.ctx)
 
-	s.RawBytes = make([][]byte, n.Len())
-	for i := 0; i < n.Len(); i++ {
+	s.RawBytes = make([][]byte, n.rows.Len())
+	for i := 0; i < n.rows.Len(); i++ {
 		if next, err := n.Next(runParams{ctx: planCtx.ctx}); !next {
 			return physicalPlan{}, err
 		}

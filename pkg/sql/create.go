@@ -104,7 +104,7 @@ func (n *createDatabaseNode) Start(params runParams) error {
 			params.p.txn,
 			EventLogCreateDatabase,
 			int32(desc.ID),
-			int32(params.p.evalCtx.NodeID),
+			int32(params.evalCtx.NodeID),
 			struct {
 				DatabaseName string
 				Statement    string
@@ -171,7 +171,7 @@ func (n *createIndexNode) Start(params runParams) error {
 	}
 	if n.n.PartitionBy != nil {
 		if err := addPartitionedBy(
-			params.ctx, &params.p.evalCtx, n.tableDesc, &indexDesc, &indexDesc.Partitioning,
+			params.ctx, params.evalCtx, n.tableDesc, &indexDesc, &indexDesc.Partitioning,
 			n.n.PartitionBy, 0, /* colOffset */
 		); err != nil {
 			return err
@@ -213,7 +213,7 @@ func (n *createIndexNode) Start(params runParams) error {
 		params.p.txn,
 		EventLogCreateIndex,
 		int32(n.tableDesc.ID),
-		int32(params.p.evalCtx.NodeID),
+		int32(params.evalCtx.NodeID),
 		struct {
 			TableName  string
 			IndexName  string
@@ -450,7 +450,6 @@ func (*alterUserSetPasswordNode) Values() tree.Datums          { return tree.Dat
 
 // createViewNode represents a CREATE VIEW statement.
 type createViewNode struct {
-	p             *planner
 	n             *tree.CreateView
 	dbDesc        *sqlbase.DatabaseDescriptor
 	sourceColumns sqlbase.ResultColumns
@@ -526,7 +525,6 @@ func (p *planner) CreateView(ctx context.Context, n *tree.CreateView) (planNode,
 	log.VEventf(ctx, 2, "collected view dependencies:\n%s", planDeps.String())
 
 	return &createViewNode{
-		p:             p,
 		n:             n,
 		dbDesc:        dbDesc,
 		sourceColumns: sourceColumns,
@@ -538,14 +536,14 @@ func (n *createViewNode) Start(params runParams) error {
 	viewName := n.n.Name.TableName().Table()
 	tKey := tableKey{parentID: n.dbDesc.ID, name: viewName}
 	key := tKey.Key()
-	if exists, err := descExists(params.ctx, n.p.txn, key); err == nil && exists {
+	if exists, err := descExists(params.ctx, params.p.txn, key); err == nil && exists {
 		// TODO(a-robinson): Support CREATE OR REPLACE commands.
 		return sqlbase.NewRelationAlreadyExistsError(tKey.Name())
 	} else if err != nil {
 		return err
 	}
 
-	id, err := GenerateUniqueDescID(params.ctx, n.p.session.execCfg.DB)
+	id, err := GenerateUniqueDescID(params.ctx, params.p.session.execCfg.DB)
 	if err != nil {
 		return nil
 	}
@@ -554,14 +552,13 @@ func (n *createViewNode) Start(params runParams) error {
 	privs := n.dbDesc.GetPrivileges()
 
 	desc, err := n.makeViewTableDesc(
-		params.ctx,
+		params,
 		viewName,
 		n.n.ColumnNames,
 		n.dbDesc.ID,
 		id,
 		n.sourceColumns,
 		privs,
-		&n.p.evalCtx,
 	)
 	if err != nil {
 		return err
@@ -576,7 +573,7 @@ func (n *createViewNode) Start(params runParams) error {
 		desc.DependsOn = append(desc.DependsOn, backrefID)
 	}
 
-	if err = n.p.createDescriptorWithID(params.ctx, key, id, &desc); err != nil {
+	if err = params.p.createDescriptorWithID(params.ctx, key, id, &desc); err != nil {
 		return err
 	}
 
@@ -592,31 +589,31 @@ func (n *createViewNode) Start(params runParams) error {
 			dep.ID = desc.ID
 			backrefDesc.DependedOnBy = append(backrefDesc.DependedOnBy, dep)
 		}
-		if err := n.p.saveNonmutationAndNotify(params.ctx, &backrefDesc); err != nil {
+		if err := params.p.saveNonmutationAndNotify(params.ctx, &backrefDesc); err != nil {
 			return err
 		}
 	}
 
 	if desc.Adding() {
-		n.p.notifySchemaChange(&desc, sqlbase.InvalidMutationID)
+		params.p.notifySchemaChange(&desc, sqlbase.InvalidMutationID)
 	}
-	if err := desc.Validate(params.ctx, n.p.txn); err != nil {
+	if err := desc.Validate(params.ctx, params.p.txn); err != nil {
 		return err
 	}
 
 	// Log Create View event. This is an auditable log event and is
 	// recorded in the same transaction as the table descriptor update.
-	return MakeEventLogger(n.p.LeaseMgr()).InsertEventRecord(
+	return MakeEventLogger(params.p.LeaseMgr()).InsertEventRecord(
 		params.ctx,
-		n.p.txn,
+		params.p.txn,
 		EventLogCreateView,
 		int32(desc.ID),
-		int32(n.p.evalCtx.NodeID),
+		int32(params.evalCtx.NodeID),
 		struct {
 			ViewName  string
 			Statement string
 			User      string
-		}{n.n.Name.String(), n.n.String(), n.p.session.User},
+		}{n.n.Name.String(), n.n.String(), params.p.session.User},
 	)
 }
 
@@ -747,7 +744,7 @@ func (n *createTableNode) Start(params runParams) error {
 	var affected map[sqlbase.ID]*sqlbase.TableDescriptor
 	creationTime := params.p.txn.OrigTimestamp()
 	if n.n.As() {
-		desc, err = makeTableDescIfAs(n.n, n.dbDesc.ID, id, creationTime, planColumns(n.sourcePlan), privs, &params.p.semaCtx, &params.p.evalCtx)
+		desc, err = makeTableDescIfAs(n.n, n.dbDesc.ID, id, creationTime, planColumns(n.sourcePlan), privs, &params.p.semaCtx, params.evalCtx)
 	} else {
 		affected = make(map[sqlbase.ID]*sqlbase.TableDescriptor)
 		desc, err = params.p.makeTableDesc(params.ctx, n.n, n.dbDesc.ID, id, creationTime, privs, affected)
@@ -796,7 +793,7 @@ func (n *createTableNode) Start(params runParams) error {
 		params.p.txn,
 		EventLogCreateTable,
 		int32(desc.ID),
-		int32(params.p.evalCtx.NodeID),
+		int32(params.evalCtx.NodeID),
 		struct {
 			TableName string
 			Statement string
@@ -1420,16 +1417,15 @@ func initTableDescriptor(
 // doesn't matter if reads/writes use a cached descriptor that doesn't
 // include the back-references.
 func (n *createViewNode) makeViewTableDesc(
-	ctx context.Context,
+	params runParams,
 	viewName string,
 	columnNames tree.NameList,
 	parentID sqlbase.ID,
 	id sqlbase.ID,
 	resultColumns []sqlbase.ResultColumn,
 	privileges *sqlbase.PrivilegeDescriptor,
-	evalCtx *tree.EvalContext,
 ) (sqlbase.TableDescriptor, error) {
-	desc := initTableDescriptor(id, parentID, viewName, n.p.txn.OrigTimestamp(), privileges)
+	desc := initTableDescriptor(id, parentID, viewName, params.p.txn.OrigTimestamp(), privileges)
 	desc.ViewQuery = tree.AsStringWithFlags(n.n.AsSource, tree.FmtParsable)
 	for i, colRes := range resultColumns {
 		colType, err := coltypes.DatumTypeToColumnType(colRes.Typ)
@@ -1440,7 +1436,7 @@ func (n *createViewNode) makeViewTableDesc(
 		if len(columnNames) > i {
 			columnTableDef.Name = columnNames[i]
 		}
-		col, _, err := sqlbase.MakeColumnDefDescs(&columnTableDef, &n.p.semaCtx, evalCtx)
+		col, _, err := sqlbase.MakeColumnDefDescs(&columnTableDef, &params.p.semaCtx, params.evalCtx)
 		if err != nil {
 			return desc, err
 		}
@@ -1451,13 +1447,13 @@ func (n *createViewNode) makeViewTableDesc(
 }
 
 func (n *createSequenceNode) makeSequenceTableDesc(
-	ctx context.Context,
+	params runParams,
 	sequenceName string,
 	parentID sqlbase.ID,
 	id sqlbase.ID,
 	privileges *sqlbase.PrivilegeDescriptor,
 ) (sqlbase.TableDescriptor, error) {
-	desc := initTableDescriptor(id, parentID, sequenceName, n.p.txn.OrigTimestamp(), privileges)
+	desc := initTableDescriptor(id, parentID, sequenceName, params.p.txn.OrigTimestamp(), privileges)
 
 	// Fill in options, starting with defaults then overriding.
 
@@ -1871,7 +1867,6 @@ func makeCheckConstraint(
 }
 
 type createSequenceNode struct {
-	p      *planner
 	n      *tree.CreateSequence
 	dbDesc *sqlbase.DatabaseDescriptor
 }
@@ -1892,7 +1887,6 @@ func (p *planner) CreateSequence(ctx context.Context, n *tree.CreateSequence) (p
 	}
 
 	return &createSequenceNode{
-		p:      p,
 		n:      n,
 		dbDesc: dbDesc,
 	}, nil
@@ -1902,7 +1896,7 @@ func (n *createSequenceNode) Start(params runParams) error {
 	seqName := n.n.Name.TableName().Table()
 	tKey := tableKey{parentID: n.dbDesc.ID, name: seqName}
 	key := tKey.Key()
-	if exists, err := descExists(params.ctx, n.p.txn, key); err == nil && exists {
+	if exists, err := descExists(params.ctx, params.p.txn, key); err == nil && exists {
 		if n.n.IfNotExists {
 			// If the sequence exists but the user specified IF NOT EXISTS, return without doing anything.
 			return nil
@@ -1912,7 +1906,7 @@ func (n *createSequenceNode) Start(params runParams) error {
 		return err
 	}
 
-	id, err := GenerateUniqueDescID(params.ctx, n.p.session.execCfg.DB)
+	id, err := GenerateUniqueDescID(params.ctx, params.p.session.execCfg.DB)
 	if err != nil {
 		return nil
 	}
@@ -1920,7 +1914,7 @@ func (n *createSequenceNode) Start(params runParams) error {
 	// Inherit permissions from the database descriptor.
 	privs := n.dbDesc.GetPrivileges()
 
-	desc, err := n.makeSequenceTableDesc(params.ctx, seqName, n.dbDesc.ID, id, privs)
+	desc, err := n.makeSequenceTableDesc(params, seqName, n.dbDesc.ID, id, privs)
 	if err != nil {
 		return err
 	}
@@ -1929,7 +1923,7 @@ func (n *createSequenceNode) Start(params runParams) error {
 		return err
 	}
 
-	if err = n.p.createDescriptorWithID(params.ctx, key, id, &desc); err != nil {
+	if err = params.p.createDescriptorWithID(params.ctx, key, id, &desc); err != nil {
 		return err
 	}
 
@@ -1937,30 +1931,30 @@ func (n *createSequenceNode) Start(params runParams) error {
 	seqValueKey := keys.MakeSequenceKey(uint32(id))
 	b := &client.Batch{}
 	b.Inc(seqValueKey, desc.SequenceOpts.Start-desc.SequenceOpts.Increment)
-	if err := n.p.txn.Run(params.ctx, b); err != nil {
+	if err := params.p.txn.Run(params.ctx, b); err != nil {
 		return err
 	}
 
 	if desc.Adding() {
-		n.p.notifySchemaChange(&desc, sqlbase.InvalidMutationID)
+		params.p.notifySchemaChange(&desc, sqlbase.InvalidMutationID)
 	}
-	if err := desc.Validate(params.ctx, n.p.txn); err != nil {
+	if err := desc.Validate(params.ctx, params.p.txn); err != nil {
 		return err
 	}
 
 	// Log Create Sequence event. This is an auditable log event and is
 	// recorded in the same transaction as the table descriptor update.
-	return MakeEventLogger(n.p.LeaseMgr()).InsertEventRecord(
+	return MakeEventLogger(params.p.LeaseMgr()).InsertEventRecord(
 		params.ctx,
-		n.p.txn,
+		params.p.txn,
 		EventLogCreateSequence,
 		int32(desc.ID),
-		int32(n.p.evalCtx.NodeID),
+		int32(params.evalCtx.NodeID),
 		struct {
 			SequenceName string
 			Statement    string
 			User         string
-		}{n.n.Name.String(), n.n.String(), n.p.session.User},
+		}{n.n.Name.String(), n.n.String(), params.p.session.User},
 	)
 }
 

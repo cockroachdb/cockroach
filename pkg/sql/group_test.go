@@ -48,33 +48,35 @@ func TestDesiredAggregateOrder(t *testing.T) {
 	}
 	p := makeTestPlanner()
 	for _, d := range testData {
-		evalCtx := tree.NewTestingEvalContext()
-		defer evalCtx.Stop(context.Background())
-		sel := makeSelectNode(t, evalCtx)
-		expr := parseAndNormalizeExpr(t, evalCtx, d.expr, sel)
-		group := &groupNode{planner: p}
-		render := &renderNode{planner: p}
-		postRender := &renderNode{planner: p}
-		postRender.ivarHelper = tree.MakeIndexedVarHelper(postRender, len(group.funcs))
-		v := extractAggregatesVisitor{
-			ctx:        context.TODO(),
-			groupNode:  group,
-			preRender:  render,
-			ivarHelper: &postRender.ivarHelper,
-			planner:    p,
-		}
-		if _, err := v.extract(expr); err != nil {
-			t.Fatal(err)
-		}
-		ordering := group.desiredAggregateOrdering()
-		if !reflect.DeepEqual(d.ordering, ordering) {
-			t.Fatalf("%s: expected %v, but found %v", d.expr, d.ordering, ordering)
-		}
-		// Verify we never have a desired ordering if there is a GROUP BY.
-		group.numGroupCols = 1
-		ordering = group.desiredAggregateOrdering()
-		if len(ordering) > 0 {
-			t.Fatalf("%s: expected no ordering when there is a GROUP BY, found %v", d.expr, ordering)
-		}
+		t.Run(d.expr, func(t *testing.T) {
+			p.evalCtx = tree.MakeTestingEvalContext()
+			defer p.evalCtx.Stop(context.Background())
+			sel := makeSelectNode(t, p)
+			expr := parseAndNormalizeExpr(t, p, d.expr, sel)
+			group := &groupNode{}
+			render := &renderNode{}
+			postRender := &renderNode{}
+			postRender.ivarHelper = tree.MakeIndexedVarHelper(postRender, len(group.funcs))
+			v := extractAggregatesVisitor{
+				ctx:        context.TODO(),
+				groupNode:  group,
+				preRender:  render,
+				ivarHelper: &postRender.ivarHelper,
+				planner:    p,
+			}
+			if _, err := v.extract(expr); err != nil {
+				t.Fatal(err)
+			}
+			ordering := group.desiredAggregateOrdering(&p.evalCtx)
+			if !reflect.DeepEqual(d.ordering, ordering) {
+				t.Fatalf("%s: expected %v, but found %v", d.expr, d.ordering, ordering)
+			}
+			// Verify we never have a desired ordering if there is a GROUP BY.
+			group.numGroupCols = 1
+			ordering = group.desiredAggregateOrdering(&p.evalCtx)
+			if len(ordering) > 0 {
+				t.Fatalf("%s: expected no ordering when there is a GROUP BY, found %v", d.expr, ordering)
+			}
+		})
 	}
 }

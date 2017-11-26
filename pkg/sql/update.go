@@ -182,7 +182,7 @@ func (ss scalarSlot) checkColumnTypes(row []tree.TypedExpr, pmap *tree.Placehold
 // addOrMergeExpr inserts an Expr into a renderNode, attempting to reuse
 // previous renders if possible by using render.addOrMergeRender, returning the
 // column index at which the rendered value can be accessed.
-func addOrMergeExpr(
+func (p *planner) addOrMergeExpr(
 	ctx context.Context,
 	e tree.Expr,
 	currentUpdateIdx int,
@@ -193,7 +193,7 @@ func addOrMergeExpr(
 	e = fillDefault(e, currentUpdateIdx, defaultExprs)
 	selectExpr := tree.SelectExpr{Expr: e}
 	typ := updateCols[currentUpdateIdx].Type.ToDatumType()
-	col, expr, err := render.planner.computeRender(ctx, selectExpr, typ,
+	col, expr, err := p.computeRender(ctx, selectExpr, typ,
 		render.sourceInfo, render.ivarHelper, autoGenerateRenderOutputName)
 	if err != nil {
 		return -1, err
@@ -313,7 +313,7 @@ func (p *planner) Update(
 				// the tuple) because when assigning a literal tuple like this it's valid
 				// to assign DEFAULT to some of the columns, which is not valid generally.
 				for _, e := range t.Exprs {
-					colIdx, err := addOrMergeExpr(ctx, e, currentUpdateIdx, updateCols, defaultExprs, render)
+					colIdx, err := p.addOrMergeExpr(ctx, e, currentUpdateIdx, updateCols, defaultExprs, render)
 					if err != nil {
 						return nil, err
 					}
@@ -331,7 +331,7 @@ func (p *planner) Update(
 				for i := range setExpr.Names {
 					desiredTupleType[i] = updateCols[currentUpdateIdx+i].Type.ToDatumType()
 				}
-				col, expr, err := render.planner.computeRender(ctx, selectExpr, desiredTupleType,
+				col, expr, err := p.computeRender(ctx, selectExpr, desiredTupleType,
 					render.sourceInfo, render.ivarHelper, autoGenerateRenderOutputName)
 				if err != nil {
 					return nil, err
@@ -349,7 +349,7 @@ func (p *planner) Update(
 			}
 
 		} else {
-			colIdx, err := addOrMergeExpr(ctx, setExpr.Expr, currentUpdateIdx, updateCols, defaultExprs, render)
+			colIdx, err := p.addOrMergeExpr(ctx, setExpr.Expr, currentUpdateIdx, updateCols, defaultExprs, render)
 			if err != nil {
 				return nil, err
 			}
@@ -448,7 +448,7 @@ func (u *updateNode) Next(params runParams) (bool, error) {
 	if err := u.checkHelper.loadRow(u.updateColsIdx, updateValues, true); err != nil {
 		return false, err
 	}
-	if err := u.checkHelper.check(&params.p.evalCtx); err != nil {
+	if err := u.checkHelper.check(params.evalCtx); err != nil {
 		return false, err
 	}
 

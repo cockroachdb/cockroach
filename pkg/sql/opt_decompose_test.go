@@ -59,22 +59,20 @@ func testTableDesc() *sqlbase.TableDescriptor {
 	}
 }
 
-func makeSelectNode(t *testing.T, evalCtx *tree.EvalContext) *renderNode {
+func makeSelectNode(t *testing.T, p *planner) *renderNode {
 	desc := testTableDesc()
-	sel := testInitDummySelectNode(desc)
+	sel := testInitDummySelectNode(p, desc)
 	if err := desc.AllocateIDs(); err != nil {
 		t.Fatal(err)
 	}
 	numColumns := len(sel.sourceInfo[0].sourceColumns)
 	sel.ivarHelper = tree.MakeIndexedVarHelper(sel, numColumns)
-	evalCtx.IVarHelper = &sel.ivarHelper
+	p.evalCtx.IVarHelper = &sel.ivarHelper
 	sel.curSourceRow = make(tree.Datums, numColumns)
 	return sel
 }
 
-func parseAndNormalizeExpr(
-	t *testing.T, evalCtx *tree.EvalContext, sql string, sel *renderNode,
-) tree.TypedExpr {
+func parseAndNormalizeExpr(t *testing.T, p *planner, sql string, sel *renderNode) tree.TypedExpr {
 	expr, err := parser.ParseExpr(sql)
 	if err != nil {
 		t.Fatalf("%s: %v", sql, err)
@@ -82,15 +80,15 @@ func parseAndNormalizeExpr(
 
 	// Perform name resolution because {decompose,simplify}Expr want
 	// expressions containing IndexedVars.
-	if expr, _, _, err = sel.resolveNames(expr); err != nil {
+	if expr, _, _, err = p.resolveNamesForRender(expr, sel); err != nil {
 		t.Fatalf("%s: %v", sql, err)
 	}
-	semaCtx := tree.SemaContext{IVarHelper: evalCtx.IVarHelper}
-	typedExpr, err := tree.TypeCheck(expr, &semaCtx, types.Any)
+	p.semaCtx.IVarHelper = p.evalCtx.IVarHelper
+	typedExpr, err := tree.TypeCheck(expr, &p.semaCtx, types.Any)
 	if err != nil {
 		t.Fatalf("%s: %v", sql, err)
 	}
-	if typedExpr, err = evalCtx.NormalizeExpr(typedExpr); err != nil {
+	if typedExpr, err = p.evalCtx.NormalizeExpr(typedExpr); err != nil {
 		t.Fatalf("%s: %v", sql, err)
 	}
 	return typedExpr
@@ -140,13 +138,14 @@ func TestSplitOrExpr(t *testing.T) {
 		{`f OR g`, `f, g`},
 		{`(f OR g) OR (c OR (d OR e))`, `f, g, c, d, e`},
 	}
+	p := makeTestPlanner()
 	for _, d := range testData {
 		t.Run(d.expr+"~"+d.expected, func(t *testing.T) {
-			evalCtx := tree.NewTestingEvalContext()
-			defer evalCtx.Stop(context.Background())
-			sel := makeSelectNode(t, evalCtx)
-			expr := parseAndNormalizeExpr(t, evalCtx, d.expr, sel)
-			exprs := splitOrExpr(evalCtx, expr, nil)
+			p.evalCtx = tree.MakeTestingEvalContext()
+			defer p.evalCtx.Stop(context.Background())
+			sel := makeSelectNode(t, p)
+			expr := parseAndNormalizeExpr(t, p, d.expr, sel)
+			exprs := splitOrExpr(&p.evalCtx, expr, nil)
 			if s := exprs.String(); d.expected != s {
 				t.Errorf("%s: expected %s, but found %s", d.expr, d.expected, s)
 			}
@@ -166,13 +165,14 @@ func TestSplitAndExpr(t *testing.T) {
 		{`f OR g`, `f OR g`},
 		{`(f AND g) AND (c AND (d AND e))`, `f, g, c, d, e`},
 	}
+	p := makeTestPlanner()
 	for _, d := range testData {
 		t.Run(d.expr+"~"+d.expected, func(t *testing.T) {
-			evalCtx := tree.NewTestingEvalContext()
-			defer evalCtx.Stop(context.Background())
-			sel := makeSelectNode(t, evalCtx)
-			expr := parseAndNormalizeExpr(t, evalCtx, d.expr, sel)
-			exprs := splitAndExpr(evalCtx, expr, nil)
+			p.evalCtx = tree.MakeTestingEvalContext()
+			defer p.evalCtx.Stop(context.Background())
+			sel := makeSelectNode(t, p)
+			expr := parseAndNormalizeExpr(t, p, d.expr, sel)
+			exprs := splitAndExpr(&p.evalCtx, expr, nil)
 			if s := exprs.String(); d.expected != s {
 				t.Errorf("%s: expected %s, but found %s", d.expr, d.expected, s)
 			}
@@ -293,17 +293,18 @@ func TestSimplifyExpr(t *testing.T) {
 		{`p >= DATE '1997-01-01' AND p < (DATE '1997-01-01' + INTERVAL '1' year)`,
 			`(p >= '1997-01-01') AND (p < '1998-01-01 00:00:00+00:00')`, true},
 	}
+	p := makeTestPlanner()
 	for _, d := range testData {
 		t.Run(d.expr+"~"+d.expected, func(t *testing.T) {
-			evalCtx := tree.NewTestingEvalContext()
-			defer evalCtx.Stop(context.Background())
-			sel := makeSelectNode(t, evalCtx)
+			p.evalCtx = tree.MakeTestingEvalContext()
+			defer p.evalCtx.Stop(context.Background())
+			sel := makeSelectNode(t, p)
 			// We need to manually close this memory account because we're doing the
 			// evals ourselves here.
-			defer evalCtx.ActiveMemAcc.Close(context.Background())
-			evalCtx.IVarHelper = &sel.ivarHelper
-			expr := parseAndNormalizeExpr(t, evalCtx, d.expr, sel)
-			expr, equiv := simplifyExpr(evalCtx, expr)
+			defer p.evalCtx.ActiveMemAcc.Close(context.Background())
+			p.evalCtx.IVarHelper = &sel.ivarHelper
+			expr := parseAndNormalizeExpr(t, p, d.expr, sel)
+			expr, equiv := simplifyExpr(&p.evalCtx, expr)
 			if s := expr.String(); d.expected != s {
 				t.Errorf("%s: structure: expected %s, but found %s", d.expr, d.expected, s)
 			}
@@ -350,13 +351,14 @@ func TestSimplifyNotExpr(t *testing.T) {
 		{`NOT NOT NOT a = 1`, `a != 1`, true, true},
 		{`NOT NOT NOT NOT a = 1`, `a = 1`, true, true},
 	}
+	p := makeTestPlanner()
 	for _, d := range testData {
 		t.Run(d.expr+"~"+d.expected, func(t *testing.T) {
-			evalCtx := tree.NewTestingEvalContext()
-			defer evalCtx.Stop(context.Background())
-			sel := makeSelectNode(t, evalCtx)
-			expr1 := parseAndNormalizeExpr(t, evalCtx, d.expr, sel)
-			expr2, equiv := simplifyExpr(evalCtx, expr1)
+			p.evalCtx = tree.MakeTestingEvalContext()
+			defer p.evalCtx.Stop(context.Background())
+			sel := makeSelectNode(t, p)
+			expr1 := parseAndNormalizeExpr(t, p, d.expr, sel)
+			expr2, equiv := simplifyExpr(&p.evalCtx, expr1)
 			if s := expr2.String(); d.expected != s {
 				t.Errorf("%s: expected %s, but found %s", d.expr, d.expected, s)
 			}
@@ -364,7 +366,7 @@ func TestSimplifyNotExpr(t *testing.T) {
 				t.Errorf("%s: expected %v, but found %v", d.expr, d.isEquiv, equiv)
 			}
 			if d.checkEquiv {
-				if err := checkEquivExpr(evalCtx, expr1, expr2, sel); err != nil {
+				if err := checkEquivExpr(&p.evalCtx, expr1, expr2, sel); err != nil {
 					t.Error(err)
 				}
 			}
@@ -387,13 +389,14 @@ func TestSimplifyAndExpr(t *testing.T) {
 		{`a = 1 AND a != NULL`, `false`},
 		{`a = 1 AND b = 1`, `(a = 1) AND (b = 1)`},
 	}
+	p := makeTestPlanner()
 	for _, d := range testData {
 		t.Run(d.expr+"~"+d.expected, func(t *testing.T) {
-			evalCtx := tree.NewTestingEvalContext()
-			defer evalCtx.Stop(context.Background())
-			sel := makeSelectNode(t, evalCtx)
-			expr1 := parseAndNormalizeExpr(t, evalCtx, d.expr, sel)
-			expr2, equiv := simplifyExpr(evalCtx, expr1)
+			p.evalCtx = tree.MakeTestingEvalContext()
+			defer p.evalCtx.Stop(context.Background())
+			sel := makeSelectNode(t, p)
+			expr1 := parseAndNormalizeExpr(t, p, d.expr, sel)
+			expr2, equiv := simplifyExpr(&p.evalCtx, expr1)
 			if s := expr2.String(); d.expected != s {
 				t.Errorf("%s: expected %s, but found %s", d.expr, d.expected, s)
 			}
@@ -592,20 +595,21 @@ func TestSimplifyAndExprCheck(t *testing.T) {
 		{`a IS NOT NULL AND a IS NOT NULL`, `a IS NOT NULL`, true},
 		{`a IS NULL AND a IS NOT NULL`, `false`, true},
 	}
+	p := makeTestPlanner()
 	for _, d := range testData {
 		t.Run(d.expr+"~"+d.expected, func(t *testing.T) {
-			evalCtx := tree.NewTestingEvalContext()
-			defer evalCtx.Stop(context.Background())
-			sel := makeSelectNode(t, evalCtx)
-			expr1 := parseAndNormalizeExpr(t, evalCtx, d.expr, sel)
-			expr2, equiv := simplifyExpr(evalCtx, expr1)
+			p.evalCtx = tree.MakeTestingEvalContext()
+			defer p.evalCtx.Stop(context.Background())
+			sel := makeSelectNode(t, p)
+			expr1 := parseAndNormalizeExpr(t, p, d.expr, sel)
+			expr2, equiv := simplifyExpr(&p.evalCtx, expr1)
 			if s := expr2.String(); d.expected != s {
 				t.Errorf("%s: expected %s, but found %s", d.expr, d.expected, s)
 			}
 			if d.checkEquiv != equiv {
 				t.Errorf("%s: expected %v, but found %v", d.expr, d.checkEquiv, equiv)
 			}
-			err := checkEquivExpr(evalCtx, expr1, expr2, sel)
+			err := checkEquivExpr(&p.evalCtx, expr1, expr2, sel)
 			if d.checkEquiv && err != nil {
 				t.Error(err)
 				return
@@ -617,10 +621,10 @@ func TestSimplifyAndExprCheck(t *testing.T) {
 			if _, ok := expr2.(*tree.AndExpr); !ok {
 				// The result was not an AND expression. Re-parse to re-resolve names
 				// and verify that the analysis is commutative.
-				expr1 = parseAndNormalizeExpr(t, evalCtx, d.expr, sel)
+				expr1 = parseAndNormalizeExpr(t, p, d.expr, sel)
 				andExpr := expr1.(*tree.AndExpr)
 				andExpr.Left, andExpr.Right = andExpr.Right, andExpr.Left
-				expr3, equiv := simplifyExpr(evalCtx, andExpr)
+				expr3, equiv := simplifyExpr(&p.evalCtx, andExpr)
 				if s := expr3.String(); d.expected != s {
 					t.Errorf("%s: expected %s, but found %s", expr1, d.expected, s)
 				}
@@ -644,13 +648,14 @@ func TestSimplifyOrExpr(t *testing.T) {
 		{`a = 1 OR a != NULL`, `a = 1`},
 		{`a = 1 OR b = 1`, `(a = 1) OR (b = 1)`},
 	}
+	p := makeTestPlanner()
 	for _, d := range testData {
 		t.Run(d.expr+"~"+d.expected, func(t *testing.T) {
-			evalCtx := tree.NewTestingEvalContext()
-			defer evalCtx.Stop(context.Background())
-			sel := makeSelectNode(t, evalCtx)
-			expr1 := parseAndNormalizeExpr(t, evalCtx, d.expr, sel)
-			expr2, _ := simplifyExpr(evalCtx, expr1)
+			p.evalCtx = tree.MakeTestingEvalContext()
+			defer p.evalCtx.Stop(context.Background())
+			sel := makeSelectNode(t, p)
+			expr1 := parseAndNormalizeExpr(t, p, d.expr, sel)
+			expr2, _ := simplifyExpr(&p.evalCtx, expr1)
 			if s := expr2.String(); d.expected != s {
 				t.Errorf("%s: expected %s, but found %s", d.expr, d.expected, s)
 			}
@@ -819,13 +824,14 @@ func TestSimplifyOrExprCheck(t *testing.T) {
 		{`a IS NOT NULL OR a IS NOT NULL`, `a IS NOT NULL`},
 		{`a IS NULL OR a IS NOT NULL`, `true`},
 	}
+	p := makeTestPlanner()
 	for _, d := range testData {
 		t.Run(d.expr+"~"+d.expected, func(t *testing.T) {
-			evalCtx := tree.NewTestingEvalContext()
-			defer evalCtx.Stop(context.Background())
-			sel := makeSelectNode(t, evalCtx)
-			expr1 := parseAndNormalizeExpr(t, evalCtx, d.expr, sel)
-			expr2, equiv := simplifyExpr(evalCtx, expr1)
+			p.evalCtx = tree.MakeTestingEvalContext()
+			defer p.evalCtx.Stop(context.Background())
+			sel := makeSelectNode(t, p)
+			expr1 := parseAndNormalizeExpr(t, p, d.expr, sel)
+			expr2, equiv := simplifyExpr(&p.evalCtx, expr1)
 			if s := expr2.String(); d.expected != s {
 				t.Errorf("%s: expected %s, but found %s", d.expr, d.expected, s)
 			}
@@ -833,7 +839,7 @@ func TestSimplifyOrExprCheck(t *testing.T) {
 				t.Errorf("%s: expected equivalent, but found %v", d.expr, equiv)
 			}
 
-			if err := checkEquivExpr(evalCtx, expr1, expr2, sel); err != nil {
+			if err := checkEquivExpr(&p.evalCtx, expr1, expr2, sel); err != nil {
 				t.Error(err)
 				return
 			}
@@ -841,10 +847,10 @@ func TestSimplifyOrExprCheck(t *testing.T) {
 			if _, ok := expr2.(*tree.OrExpr); !ok {
 				// The result was not an OR expression. Re-parse to re-resolve names
 				// and verify that the analysis is commutative.
-				expr1 = parseAndNormalizeExpr(t, evalCtx, d.expr, sel)
+				expr1 = parseAndNormalizeExpr(t, p, d.expr, sel)
 				orExpr := expr1.(*tree.OrExpr)
 				orExpr.Left, orExpr.Right = orExpr.Right, orExpr.Left
-				expr3, equiv := simplifyExpr(evalCtx, orExpr)
+				expr3, equiv := simplifyExpr(&p.evalCtx, orExpr)
 				if s := expr3.String(); d.expected != s {
 					t.Errorf("%s: expected %s, but found %s", expr1, d.expected, s)
 				}
