@@ -286,7 +286,7 @@ var (
 		Name:       "descriptor",
 		ID:         keys.DescriptorTableID,
 		Privileges: NewCustomRootPrivilegeDescriptor(SystemDesiredPrivileges(keys.DescriptorTableID)),
-		ParentID:   1,
+		ParentID:   keys.SystemDatabaseID,
 		Version:    1,
 		Columns: []ColumnDescriptor{
 			{Name: "id", ID: 1, Type: colTypeInt},
