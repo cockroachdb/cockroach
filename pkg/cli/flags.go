@@ -253,6 +253,9 @@ func init() {
 		// the stores flag has been parsed and the storage device that a percentage
 		// refers to becomes known.
 		varFlag(f, diskTempStorageSizeValue, cliflags.SQLTempStorage)
+
+		boolFlag(
+			f, &serverCfg.Extra1_0Compatibility, cliflags.Extra1_0Compatibility, false /* defaultVal */)
 	}
 
 	for _, cmd := range certCmds {

@@ -67,7 +67,7 @@ func lookupStreamInfo(fr *flowRegistry, fid FlowID, sid StreamID) (inboundStream
 
 func TestFlowRegistry(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	reg := makeFlowRegistry(roachpb.NodeID(0))
+	reg := makeFlowRegistry(roachpb.NodeID(0), defaultCompatibility)
 
 	id1 := FlowID{uuid.MakeV4()}
 	f1 := &Flow{}
@@ -204,7 +204,7 @@ func TestFlowRegistry(t *testing.T) {
 // are propagated to their consumers and future attempts to connect them fail.
 func TestStreamConnectionTimeout(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	reg := makeFlowRegistry(roachpb.NodeID(0))
+	reg := makeFlowRegistry(roachpb.NodeID(0), defaultCompatibility)
 
 	jiffy := time.Nanosecond
 
@@ -269,7 +269,7 @@ func TestStreamConnectionTimeout(t *testing.T) {
 func TestHandshake(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	reg := makeFlowRegistry(roachpb.NodeID(0))
+	reg := makeFlowRegistry(roachpb.NodeID(0), defaultCompatibility)
 
 	tests := []struct {
 		name                   string

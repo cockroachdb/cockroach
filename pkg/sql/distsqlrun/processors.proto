@@ -357,7 +357,12 @@ message AggregatorSpec {
     //   SELECT SUM(x) FILTER (WHERE y > 1), SUM(x) FILTER (WHERE y < 1) FROM t
     optional uint32 filter_col_idx = 4;
 
-    reserved 3;
+    // CRDB version 1.0 nodes were sending this field instead of the newer
+    // col_idx. Generally, queries coming from these nodes are rejected through
+    // the MinAcceptedVersion mechanism and so we shouldn't have to care about
+    // this field, except when the --extra-1.0-compatibility flag is set; in
+    // that case, this field is supported too.
+    optional uint32 col_idx_1_0 = 3;
   }
 
   // The group key is a subset of the columns in the input stream schema on the
