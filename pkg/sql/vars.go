@@ -223,6 +223,24 @@ var varGen = map[string]sessionVar{
 	// See https://www.postgresql.org/docs/9.6/static/runtime-config-client.html
 	`extra_float_digits`: nopVar,
 
+	`intervalstyle`: {
+		// Supported for PG compatibility only.
+		Get: func(*Session) string {
+			return "postgres"
+		},
+		Set: func(_ context.Context, session *Session, values []tree.TypedExpr) error {
+			s, err := getStringVal(session, `intervalstyle`, values)
+			if err != nil {
+				return err
+			}
+			if strings.ToLower(s) != "postgres" {
+				return fmt.Errorf("non-postgres interval style %s not supported", s)
+			}
+			return nil
+		},
+		Reset: func(*Session) error { return nil },
+	},
+
 	`max_index_keys`: {
 		// Supported for PG compatibility only.
 		Get: func(*Session) string { return "32" },

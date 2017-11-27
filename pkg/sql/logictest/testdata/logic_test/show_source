@@ -30,6 +30,7 @@ datestyle                      ISO
 default_transaction_isolation  SERIALIZABLE
 distsql                        off
 extra_float_digits             ·
+intervalstyle                  postgres
 max_index_keys                 32
 node_id                        1
 search_path                    ·
