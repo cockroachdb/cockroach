@@ -50,6 +50,16 @@ type planner struct {
 	semaCtx parser.SemaContext
 	evalCtx parser.EvalContext
 
+	// asOfSystemTime indicates whether the transaction timestamp was
+	// forced to a specific value (in which case that value is stored in
+	// txn.mu.Proto.OrigTimestamp). If set, avoidCachedDescriptors below
+	// must also be set.
+	// TODO(anyone): we may want to support table readers at arbitrary
+	// timestamps, so that each FROM clause can have its own
+	// timestamp. In that case, the timestamp would not be set
+	// globally for the entire txn and this field would not be needed.
+	asOfSystemTime bool
+
 	// avoidCachedDescriptors, when true, instructs all code that
 	// accesses table/view descriptors to force reading the descriptors
 	// within the transaction. This is necessary to:

@@ -675,10 +675,6 @@ func (p *planner) searchAndQualifyDatabase(ctx context.Context, tn *parser.Table
 
 	descFunc := p.session.tables.getTableVersion
 	if p.avoidCachedDescriptors {
-		// AS OF SYSTEM TIME queries need to fetch the table descriptor at the
-		// specified time, and never lease anything. The proto transaction already
-		// has its timestamps set correctly so getTableOrViewDesc will fetch with
-		// the correct timestamp.
 		descFunc = getTableOrViewDesc
 	}
 
