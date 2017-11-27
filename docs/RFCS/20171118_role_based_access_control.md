@@ -578,7 +578,7 @@ Expanding role membership into the roles table (each role contains the list of a
 
 Expanding role membership into database/table descriptors (descriptor contains all users with privileges):
 * **Pros**: regular SQL operations only require the user and descriptor
-* **Cons**: more complex manipulation of roles, increased cost for every large roles
+* **Cons**: more complex manipulation of roles, increased cost for very large roles
 
 Dual tables: one for direct role membership information, one for expanded membership information:
 * the direct membership table would include the `ADMIN OPTION` field and would be queried for role manipulation
