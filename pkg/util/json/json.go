@@ -25,6 +25,8 @@ import (
 	"unicode/utf8"
 	"unsafe"
 
+	"github.com/pkg/errors"
+
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -89,9 +91,9 @@ type JSON interface {
 	// Exists implements the `?` operator.
 	Exists(string) bool
 
-	// IterObjectKey returns an ObjectKeyIterator, and it returns nil if the obj
+	// IterObjectKey returns an ObjectKeyIterator, and it returns error if the obj
 	// is not an object.
-	IterObjectKey() *ObjectKeyIterator
+	IterObjectKey() (*ObjectKeyIterator, error)
 
 	// isScalar returns whether the JSON document is null, true, false, a string,
 	// or a number.
@@ -705,17 +707,31 @@ func (j jsonObject) Exists(s string) bool {
 	return j.FetchValKey(s) != nil
 }
 
-func (jsonNull) IterObjectKey() *ObjectKeyIterator   { return nil }
-func (jsonTrue) IterObjectKey() *ObjectKeyIterator   { return nil }
-func (jsonFalse) IterObjectKey() *ObjectKeyIterator  { return nil }
-func (jsonNumber) IterObjectKey() *ObjectKeyIterator { return nil }
-func (jsonString) IterObjectKey() *ObjectKeyIterator { return nil }
-func (jsonArray) IterObjectKey() *ObjectKeyIterator  { return nil }
-func (j jsonObject) IterObjectKey() *ObjectKeyIterator {
+var errCreatedForNonObject = errors.New("cannot be created for non-object")
+
+func (jsonNull) IterObjectKey() (*ObjectKeyIterator, error) {
+	return &ObjectKeyIterator{}, errCreatedForNonObject
+}
+func (jsonTrue) IterObjectKey() (*ObjectKeyIterator, error) {
+	return &ObjectKeyIterator{}, errCreatedForNonObject
+}
+func (jsonFalse) IterObjectKey() (*ObjectKeyIterator, error) {
+	return &ObjectKeyIterator{}, errCreatedForNonObject
+}
+func (jsonNumber) IterObjectKey() (*ObjectKeyIterator, error) {
+	return &ObjectKeyIterator{}, errCreatedForNonObject
+}
+func (jsonString) IterObjectKey() (*ObjectKeyIterator, error) {
+	return &ObjectKeyIterator{}, errCreatedForNonObject
+}
+func (jsonArray) IterObjectKey() (*ObjectKeyIterator, error) {
+	return &ObjectKeyIterator{}, errCreatedForNonObject
+}
+func (j jsonObject) IterObjectKey() (*ObjectKeyIterator, error) {
 	return &ObjectKeyIterator{
 		src: j,
 		idx: -1,
-	}
+	}, nil
 }
 
 func (jsonNull) isScalar() bool   { return true }

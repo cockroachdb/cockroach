@@ -471,8 +471,12 @@ func makeJSONObjectKeysGenerator(
 	if target.Type() != json.ObjectJSONType {
 		return nil, errJSONCallOnNonObject
 	}
+	iter, err := target.IterObjectKey()
+	if err != nil {
+		return nil, err
+	}
 	return &jsonObjectKeysGenerator{
-		iter: target.IterObjectKey(),
+		iter: iter,
 	}, nil
 }
 

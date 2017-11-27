@@ -27,5 +27,5 @@ func (it *ObjectKeyIterator) Next() (bool, string) {
 	if it.idx >= len(it.src) {
 		return false, ""
 	}
-	return true, *it.src[it.idx].k.AsText()
+	return true, string(it.src[it.idx].k)
 }
