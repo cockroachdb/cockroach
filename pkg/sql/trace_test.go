@@ -326,46 +326,92 @@ func TestTraceFieldDecomposition(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	rows, err := sqlDB.Query(`SELECT message, tag, loc FROM [SHOW TRACE FOR SESSION];`)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer rows.Close()
-
-	ok := false
-	for rows.Next() {
-		var msg, ct, loc []byte
-		if err := rows.Scan(&msg, &ct, &loc); err != nil {
+	t.Run("SHOW TRACE", func(t *testing.T) {
+		rows, err := sqlDB.Query(`SELECT message, tag, loc FROM [SHOW TRACE FOR SESSION];`)
+		if err != nil {
 			t.Fatal(err)
 		}
-		t.Logf("received trace: %q // %q // %q", msg, ct, loc)
-		// Check that brackets are properly balanced.
-		if len(ct) > 0 && ct[0] == '[' {
-			if ct[len(ct)-1] != ']' {
-				t.Errorf("tag starts with open bracket but does not close it: %q", ct)
+		defer rows.Close()
+
+		ok := false
+		for rows.Next() {
+			var msg, ct, loc []byte
+			if err := rows.Scan(&msg, &ct, &loc); err != nil {
+				t.Fatal(err)
+			}
+			t.Logf("received trace: %q // %q // %q", msg, ct, loc)
+			// Check that brackets are properly balanced.
+			if len(ct) > 0 && ct[0] == '[' {
+				if ct[len(ct)-1] != ']' {
+					t.Errorf("tag starts with open bracket but does not close it: %q", ct)
+				}
+			}
+			c1 := strings.Count(string(ct), "[")
+			c2 := strings.Count(string(ct), "]")
+			if c1 != c2 {
+				t.Errorf("mismatched brackets: %q", ct)
+			}
+			// Check that the expected message was received.
+			if string(msg) == "world" &&
+				strings.Contains(string(ct), "hello=[::666]") &&
+				strings.Contains(string(loc), ".go") {
+				ok = true
+			}
+			// Check that the fields don't have heading or trailing whitespaces.
+			for _, b := range [][]byte{msg, ct, loc} {
+				if len(b) > 0 && (b[0] == ' ' || b[len(b)-1] == ' ') {
+					t.Errorf("unexpected whitespace: %q", b)
+				}
 			}
 		}
-		c1 := strings.Count(string(ct), "[")
-		c2 := strings.Count(string(ct), "]")
-		if c1 != c2 {
-			t.Errorf("mismatched brackets: %q", ct)
+		if !ok {
+			t.Fatal("expected message not found in trace")
 		}
-		// Check that the expected message was received.
-		if string(msg) == "world" &&
-			strings.Contains(string(ct), "hello=[::666]") &&
-			strings.Contains(string(loc), ".go") {
-			ok = true
+	})
+
+	t.Run("SHOW COMPACT TRACE", func(t *testing.T) {
+		rows, err := sqlDB.Query(`SELECT message, tag FROM [SHOW COMPACT TRACE FOR SESSION];`)
+		if err != nil {
+			t.Fatal(err)
 		}
-		// Check that the fields don't have heading or trailing whitespaces.
-		for _, b := range [][]byte{msg, ct, loc} {
-			if len(b) > 0 && (b[0] == ' ' || b[len(b)-1] == ' ') {
-				t.Errorf("unexpected whitespace: %q", b)
+		defer rows.Close()
+
+		ok := false
+		for rows.Next() {
+			var msg, ct []byte
+			if err := rows.Scan(&msg, &ct); err != nil {
+				t.Fatal(err)
+			}
+			t.Logf("received trace: %q // %q", msg, ct)
+			// Check that brackets are properly balanced.
+			if len(ct) > 0 && ct[0] == '[' {
+				if ct[len(ct)-1] != ']' {
+					t.Errorf("tag starts with open bracket but does not close it: %q", ct)
+				}
+			}
+			c1 := strings.Count(string(ct), "[")
+			c2 := strings.Count(string(ct), "]")
+			if c1 != c2 {
+				t.Errorf("mismatched brackets: %q", ct)
+			}
+			// Check that the expected message was received.
+			if strings.HasSuffix(string(msg), " world") &&
+				strings.Contains(string(ct), "hello=[::666]") &&
+				strings.Contains(string(msg), ".go") {
+				ok = true
+			}
+			// Check that the fields don't have heading or trailing whitespaces.
+			for _, b := range [][]byte{msg, ct} {
+				if len(b) > 0 && (b[0] == ' ' || b[len(b)-1] == ' ') {
+					t.Errorf("unexpected whitespace: %q", b)
+				}
 			}
 		}
-	}
-	if !ok {
-		t.Fatal("expected message not found in trace")
-	}
+		if !ok {
+			t.Fatal("expected message not found in trace")
+		}
+	})
+
 }
 
 func TestKVTraceWithCountStar(t *testing.T) {

@@ -86,15 +86,19 @@ type ShowTrace struct {
 	// If statement is nil, this is asking for the session trace.
 	Statement   Statement
 	OnlyKVTrace bool
+	Compact     bool
 }
 
 // Format implements the NodeFormatter interface.
 func (node *ShowTrace) Format(buf *bytes.Buffer, f FmtFlags) {
-	onlyKV := ""
-	if node.OnlyKVTrace {
-		onlyKV = " KV"
+	buf.WriteString("SHOW")
+	if node.Compact {
+		buf.WriteString(" COMPACT")
 	}
-	fmt.Fprintf(buf, "SHOW%s TRACE FOR ", onlyKV)
+	if node.OnlyKVTrace {
+		buf.WriteString(" KV")
+	}
+	fmt.Fprintf(buf, " TRACE FOR ")
 	if node.Statement == nil {
 		buf.WriteString("SESSION")
 	} else {

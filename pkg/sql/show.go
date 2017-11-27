@@ -281,14 +281,17 @@ func (p *planner) ShowCreateView(ctx context.Context, n *tree.ShowCreateView) (p
 // ShowTrace shows the current stored session trace.
 // Privileges: None.
 func (p *planner) ShowTrace(ctx context.Context, n *tree.ShowTrace) (planNode, error) {
-	const traceClause = `
-SELECT timestamp,
+	const fullSelection = `
+       timestamp,
        timestamp-first_value(timestamp) OVER (ORDER BY timestamp) AS age,
-       message,
-       tag,
-       loc,
-       operation,
-       span
+       message, tag, loc, operation, span`
+	const compactSelection = `
+       timestamp-first_value(timestamp) OVER (ORDER BY timestamp) AS age,
+       IF(length(loc)=0,message,loc || ' ' || message) AS message,
+       tag, operation`
+
+	const traceClause = `
+SELECT %s
   FROM (SELECT timestamp,
                message,
                tag,
@@ -299,6 +302,12 @@ SELECT timestamp,
  %s
  ORDER BY timestamp
 `
+
+	renderClause := fullSelection
+	if n.Compact {
+		renderClause = compactSelection
+	}
+
 	whereClause := ""
 	if n.OnlyKVTrace {
 		whereClause = `
@@ -320,7 +329,7 @@ WHERE message LIKE 'fetched: %'
 	}
 
 	plan, err := p.delegateQuery(ctx, "SHOW TRACE",
-		fmt.Sprintf(traceClause, whereClause), nil, nil)
+		fmt.Sprintf(traceClause, renderClause, whereClause), nil, nil)
 	if err != nil {
 		return nil, err
 	}

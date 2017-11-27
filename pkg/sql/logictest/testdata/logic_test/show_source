@@ -255,14 +255,24 @@ Start Key  End Key  Range ID  Replicas  Lease Holder
 NULL       NULL     1         {1}       1
 
 query TTTTTTT colnames
-SELECT * FROM [SHOW TRACE FOR SESSION]
+SELECT * FROM [SHOW TRACE FOR SESSION] LIMIT 0
 ----
 timestamp age message tag loc operation span
 
 query TTTTTTT colnames
 SELECT * FROM [SHOW TRACE FOR SELECT 1] LIMIT 0
 ----
-timestamp age message tag loc operation span
+timestamp  age  message  tag  loc  operation  span
+
+query TTTT colnames
+SELECT * FROM [SHOW COMPACT TRACE FOR SESSION] LIMIT 0
+----
+age  message  tag  operation
+
+query TTTT colnames
+SELECT * FROM [SHOW COMPACT TRACE FOR SELECT 1] LIMIT 0
+----
+age  message  tag  operation
 
 query ITTTTTTTTRTI colnames
 SELECT * FROM [SHOW JOBS] LIMIT 0
