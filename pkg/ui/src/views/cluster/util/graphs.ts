@@ -229,13 +229,6 @@ function ComputeTimeAxisDomain(extent: Extent): AxisDomain {
   return axisDomain;
 }
 
-type formattedDatum = {
-  values: protos.cockroach.ts.tspb.TimeSeriesDatapoint$Properties[],
-  key: string,
-  area: boolean,
-  fillOpacity: number,
-};
-
 function calculateYAxisDomain(axisUnits: AxisUnits, data: TSResponse): AxisDomain {
   const resultDatapoints = _.flatMap(data.results, (result) => _.map(result.datapoints, (dp) => dp.value));
   // TODO(couchand): Remove these random datapoints when NVD3 is gone.
@@ -256,6 +249,13 @@ function calculateXAxisDomain(timeInfo: QueryTimeInfo): AxisDomain {
   const xExtent: Extent = [NanoToMilli(timeInfo.start.toNumber()), NanoToMilli(timeInfo.end.toNumber())];
   return ComputeTimeAxisDomain(xExtent);
 }
+
+type formattedDatum = {
+  values: protos.cockroach.ts.tspb.TimeSeriesDatapoint$Properties[],
+  key: string,
+  area: boolean,
+  fillOpacity: number,
+};
 
 function formatMetricData(
   metrics: React.ReactElement<MetricProps>[],
