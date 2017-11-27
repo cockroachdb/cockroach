@@ -107,19 +107,31 @@ function computeNormalizedIncrement(
   return incrementTbl[normalizedIncrementIdx] * Math.pow(10, x);
 }
 
-function ComputeCountAxisDomain(extent: Extent): AxisDomain {
+function computeAxisDomain(extent: Extent, factor: number = 1): AxisDomain {
   const range = extent[1] - extent[0];
-  const increment = computeNormalizedIncrement(range);
-  const axisDomain = new AxisDomain(extent, increment);
+
+  // Compute increment on min/max after conversion to the appropriate prefix unit.
+  const increment = computeNormalizedIncrement(range / factor);
+
+  // Create axis domain by multiplying computed increment by prefix factor.
+  const axisDomain = new AxisDomain(extent, increment * factor);
 
   // If the tick increment is fractional (e.g. 0.2), we display a decimal
   // point. For non-fractional increments, we display with no decimal points
   // but with a metric prefix for large numbers (i.e. 1000 will display as "1k")
+  let unitFormat: (v: number) => string;
   if (Math.floor(increment) !== increment) {
-      axisDomain.tickFormat = d3.format(".1f");
+    unitFormat = d3.format(".1f");
   } else {
-      axisDomain.tickFormat = d3.format("s");
+    unitFormat = d3.format("s");
   }
+  axisDomain.tickFormat = (v: number) => unitFormat(v / factor);
+
+  return axisDomain;
+}
+
+function ComputeCountAxisDomain(extent: Extent): AxisDomain {
+  const axisDomain = computeAxisDomain(extent);
 
   // For numbers larger than 1, the tooltip displays fractional values with
   // metric multiplicative prefixes (e.g. Kilo, Mega, Giga). For numbers smaller
@@ -134,7 +146,9 @@ function ComputeCountAxisDomain(extent: Extent): AxisDomain {
     }
     return metricFormat(n);
   };
+
   axisDomain.label = "count";
+
   return axisDomain;
 }
 
@@ -143,25 +157,9 @@ function ComputeByteAxisDomain(extent: Extent): AxisDomain {
   const scale = ComputeByteScale(extent[1]);
   const prefixFactor = scale.value;
 
-  // Compute increment on min/max after conversion to the appropriate prefix unit.
-  const increment = computeNormalizedIncrement(extent[1] / prefixFactor - extent[0] / prefixFactor);
+  const axisDomain = computeAxisDomain(extent, prefixFactor);
 
-  // Create axis domain by multiplying computed increment by prefix factor.
-  const axisDomain = new AxisDomain(extent, increment * prefixFactor);
-
-  // Apply the correct label to the axis.
   axisDomain.label = scale.units;
-
-  // Format ticks to display as the correct prefix unit.
-  let unitFormat: (v: number) => string;
-  if (Math.floor(increment) !== increment) {
-      unitFormat = d3.format(".1f");
-  } else {
-      unitFormat = d3.format("s");
-  }
-  axisDomain.tickFormat = (v: number) => {
-    return unitFormat(v / prefixFactor);
-  };
 
   axisDomain.guideFormat = Bytes;
   return axisDomain;
@@ -173,25 +171,9 @@ function ComputeDurationAxisDomain(extent: Extent): AxisDomain {
   const prefixExponent = ComputePrefixExponent(extent[1], 1000, durationLabels);
   const prefixFactor = Math.pow(1000, prefixExponent);
 
-  // Compute increment on min/max after conversion to the appropriate prefix unit.
-  const increment = computeNormalizedIncrement(extent[1] / prefixFactor - extent[0] / prefixFactor);
+  const axisDomain = computeAxisDomain(extent, prefixFactor);
 
-  // Create axis domain by multiplying computed increment by prefix factor.
-  const axisDomain = new AxisDomain(extent, increment * prefixFactor);
-
-  // Apply the correct label to the axis.
   axisDomain.label = durationLabels[prefixExponent];
-
-  // Format ticks to display as the correct prefix unit.
-  let unitFormat: (v: number) => string;
-  if (Math.floor(increment) !== increment) {
-      unitFormat = d3.format(".1f");
-  } else {
-      unitFormat = d3.format("s");
-  }
-  axisDomain.tickFormat = (v: number) => {
-    return unitFormat(v / prefixFactor);
-  };
 
   axisDomain.guideFormat = Duration;
   return axisDomain;
