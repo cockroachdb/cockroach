@@ -14,6 +14,8 @@
 
 package enginepb
 
+import proto "github.com/gogo/protobuf/proto"
+
 // ToStats converts the receiver to an MVCCStats.
 func (ms *MVCCNetworkStats) ToStats() MVCCStats {
 	return MVCCStats(*ms)
@@ -22,4 +24,16 @@ func (ms *MVCCNetworkStats) ToStats() MVCCStats {
 // ToNetworkStats converts the receiver to an MVCCNetworkStats.
 func (ms *MVCCStats) ToNetworkStats() MVCCNetworkStats {
 	return MVCCNetworkStats(*ms)
+}
+
+var isolationTypeLowerCase = map[int32]string{
+	0: "serializable",
+	1: "snapshot",
+}
+
+// ToLowerCaseString returns the lower case version of String().
+// Asking for lowercase is common enough (pg_setting / SHOW in SQL)
+// that we don't want to call strings.ToLower(x.String()) all the time.
+func (x IsolationType) ToLowerCaseString() string {
+	return proto.EnumName(isolationTypeLowerCase, int32(x))
 }
