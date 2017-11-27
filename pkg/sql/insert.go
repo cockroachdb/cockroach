@@ -66,6 +66,13 @@ type insertNode struct {
 func (p *planner) Insert(
 	ctx context.Context, n *tree.Insert, desiredTypes []types.T,
 ) (planNode, error) {
+	resetter, err := p.initWith(ctx, n.With)
+	if err != nil {
+		return nil, err
+	}
+	if resetter != nil {
+		defer resetter()
+	}
 	tn, err := p.getAliasedTableName(n.Table)
 	if err != nil {
 		return nil, err

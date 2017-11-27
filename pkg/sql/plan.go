@@ -420,7 +420,7 @@ func (p *planner) newPlan(
 	case *tree.Select:
 		return p.Select(ctx, n, desiredTypes)
 	case *tree.SelectClause:
-		return p.SelectClause(ctx, n, nil /* orderBy */, nil, /* limit */
+		return p.SelectClause(ctx, n, nil /* orderBy */, nil /* limit */, nil, /* with */
 			desiredTypes, publicColumns)
 	case *tree.SetClusterSetting:
 		return p.SetClusterSetting(ctx, n)
@@ -522,7 +522,7 @@ func (p *planner) prepare(ctx context.Context, stmt tree.Statement) (planNode, e
 	case *tree.Select:
 		return p.Select(ctx, n, nil)
 	case *tree.SelectClause:
-		return p.SelectClause(ctx, n, nil /* orderBy */, nil, /* limit */
+		return p.SelectClause(ctx, n, nil /* orderBy */, nil /* limit */, nil, /* with */
 			nil /* desiredTypes */, publicColumns)
 	case *tree.SetClusterSetting:
 		return p.SetClusterSetting(ctx, n)

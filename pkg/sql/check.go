@@ -152,7 +152,7 @@ func (p *planner) validateCheckExpr(
 	// use the tableDesc we have, but this is a rare operation and be benefit
 	// would be marginal compared to the work of the actual query, so the added
 	// complexity seems unjustified.
-	rows, err := p.SelectClause(ctx, sel, nil, lim, nil, publicColumns)
+	rows, err := p.SelectClause(ctx, sel, nil, lim, nil, nil, publicColumns)
 	if err != nil {
 		return err
 	}

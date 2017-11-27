@@ -176,6 +176,21 @@ func (u *sqlSymUnion) stmt() tree.Statement {
 func (u *sqlSymUnion) stmts() []tree.Statement {
     return u.val.([]tree.Statement)
 }
+func (u *sqlSymUnion) cte() *tree.CTE {
+    if cte, ok := u.val.(*tree.CTE); ok {
+        return cte
+    }
+    return nil
+}
+func (u *sqlSymUnion) ctes() []*tree.CTE {
+    return u.val.([]*tree.CTE)
+}
+func (u *sqlSymUnion) with() *tree.With {
+    if with, ok := u.val.(*tree.With); ok {
+        return with
+    }
+    return nil
+}
 func (u *sqlSymUnion) slct() *tree.Select {
     return u.val.(*tree.Select)
 }
@@ -732,7 +747,7 @@ func (u *sqlSymUnion) scrubOption() tree.ScrubOption {
 %type <tree.OrderBy> sort_clause opt_sort_clause
 %type <[]*tree.Order> sortby_list
 %type <tree.IndexElemList> index_params
-%type <tree.NameList> name_list opt_name_list
+%type <tree.NameList> name_list
 %type <[]int32> opt_array_bounds
 %type <*tree.From> from_clause update_from_clause
 %type <tree.TableExprs> from_list
@@ -868,9 +883,10 @@ func (u *sqlSymUnion) scrubOption() tree.ScrubOption {
 
 %type <tree.Expr>  func_application func_expr_common_subexpr
 %type <tree.Expr>  func_expr func_expr_windowless
-%type <empty> common_table_expr
-%type <empty> with_clause opt_with opt_with_clause
-%type <empty> cte_list
+%type <empty> opt_with
+%type <*tree.With> with_clause opt_with_clause
+%type <[]*tree.CTE> cte_list
+%type <*tree.CTE> common_table_expr
 
 %type <empty> within_group_clause
 %type <tree.Expr> filter_clause
@@ -1652,6 +1668,7 @@ delete_stmt:
   opt_with_clause DELETE FROM relation_expr_opt_alias where_clause opt_sort_clause opt_limit_clause returning_clause
   {
     $$.val = &tree.Delete{
+      With: $1.with(),
       Table: $4.tblExpr(),
       Where: tree.NewWhere(tree.AstWhere, $5.expr()),
       OrderBy: $6.orderBy(),
@@ -3873,12 +3890,14 @@ insert_stmt:
   opt_with_clause INSERT INTO insert_target insert_rest returning_clause
   {
     $$.val = $5.stmt()
+    $$.val.(*tree.Insert).With = $1.with()
     $$.val.(*tree.Insert).Table = $4.tblExpr()
     $$.val.(*tree.Insert).Returning = $6.retClause()
   }
 | opt_with_clause INSERT INTO insert_target insert_rest on_conflict returning_clause
   {
     $$.val = $5.stmt()
+    $$.val.(*tree.Insert).With = $1.with()
     $$.val.(*tree.Insert).Table = $4.tblExpr()
     $$.val.(*tree.Insert).OnConflict = $6.onConflict()
     $$.val.(*tree.Insert).Returning = $7.retClause()
@@ -3896,6 +3915,7 @@ upsert_stmt:
   opt_with_clause UPSERT INTO insert_target insert_rest returning_clause
   {
     $$.val = $5.stmt()
+    $$.val.(*tree.Insert).With = $1.with()
     $$.val.(*tree.Insert).Table = $4.tblExpr()
     $$.val.(*tree.Insert).OnConflict = &tree.OnConflict{}
     $$.val.(*tree.Insert).Returning = $6.retClause()
@@ -3982,6 +4002,7 @@ update_stmt:
     SET set_clause_list update_from_clause where_clause opt_sort_clause opt_limit_clause returning_clause
   {
     $$.val = &tree.Update{
+      With: $1.with(),
       Table: $3.tblExpr(),
       Exprs: $5.updateExprs(),
       Where: tree.NewWhere(tree.AstWhere, $7.expr()),
@@ -4100,15 +4121,15 @@ select_no_parens:
   }
 | with_clause select_clause
   {
-    $$.val = &tree.Select{Select: $2.selectStmt()}
+    $$.val = &tree.Select{With: $1.with(), Select: $2.selectStmt()}
   }
 | with_clause select_clause sort_clause
   {
-    $$.val = &tree.Select{Select: $2.selectStmt(), OrderBy: $3.orderBy()}
+    $$.val = &tree.Select{With: $1.with(), Select: $2.selectStmt(), OrderBy: $3.orderBy()}
   }
 | with_clause select_clause opt_sort_clause select_limit
   {
-    $$.val = &tree.Select{Select: $2.selectStmt(), OrderBy: $3.orderBy(), Limit: $4.limit()}
+    $$.val = &tree.Select{With: $1.with(), Select: $2.selectStmt(), OrderBy: $3.orderBy(), Limit: $4.limit()}
   }
 
 select_clause:
@@ -4252,23 +4273,48 @@ table_clause:
 //
 // Recognizing WITH_LA here allows a CTE to be named TIME or ORDINALITY.
 with_clause:
-  WITH cte_list { return unimplemented(sqllex, "with cte_list") }
+  WITH cte_list
+  {
+    $$.val = &tree.With{CTEList: $2.ctes()}
+  }
 | WITH_LA cte_list { return unimplemented(sqllex, "with cte_list") }
-| WITH RECURSIVE cte_list { return unimplemented(sqllex, "with cte_list") }
+| WITH RECURSIVE cte_list { return unimplemented(sqllex, "with recursive") }
 
 cte_list:
-  common_table_expr { return unimplemented(sqllex, "cte_list") }
-| cte_list ',' common_table_expr { return unimplemented(sqllex, "cte_list") }
+  common_table_expr
+  {
+    $$.val = []*tree.CTE{$1.cte()}
+  }
+| cte_list ',' common_table_expr
+  {
+    $$.val = append($1.ctes(), $3.cte())
+  }
 
 common_table_expr:
-  name opt_name_list AS '(' preparable_stmt ')' { return unimplemented(sqllex, "cte") }
+  name AS '(' preparable_stmt ')'
+  {
+    $$.val = &tree.CTE{
+      Name: tree.AliasClause{Alias: tree.Name($1)},
+      Stmt: $4.stmt(),
+    }
+  }
+| name '(' name_list ')' AS '(' preparable_stmt ')'
+  {
+    $$.val = &tree.CTE{
+      Name: tree.AliasClause{Alias: tree.Name($1), Cols: $3.nameList()},
+      Stmt: $7.stmt(),
+    }
+  }
 
 opt_with:
   WITH {}
 | /* EMPTY */ {}
 
 opt_with_clause:
-  with_clause { return unimplemented(sqllex, "with_clause") }
+  with_clause
+  {
+    $$.val = $1.with()
+  }
 | /* EMPTY */ {}
 
 opt_table:
@@ -6649,13 +6695,6 @@ name_list:
   {
     $$.val = append($1.nameList(), tree.Name($3))
   }
-
-opt_name_list:
-  '(' name_list ')'
-  {
-    $$.val = $2.nameList()
-  }
-| /* EMPTY */ {}
 
 // The production for a qualified func_name has to exactly match the production
 // for a qualified name, because we cannot tell which we are parsing until
