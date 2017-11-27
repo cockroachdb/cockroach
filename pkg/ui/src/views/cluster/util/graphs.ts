@@ -26,6 +26,12 @@ export const CHART_MARGINS: nvd3.Margin = {top: 30, right: 20, bottom: 20, left:
 // Maximum number of series we will show in the legend. If there are more we hide the legend.
 const MAX_LEGEND_SERIES: number = 4;
 
+// The number of ticks to display on a Y axis.
+const Y_AXIS_TICK_COUNT: number = 3;
+
+// The number of ticks to display on an X axis.
+const X_AXIS_TICK_COUNT: number = 10;
+
 /**
  * AxisDomain is a class that describes the domain of a graph axis; this
  * includes the minimum/maximum extend, tick values, and formatting information
@@ -85,13 +91,13 @@ const countIncrementTable = [0.1, 0.2, 0.25, 0.3, 0.4, 0.5, 0.6, 0.7, 0.75, 0.8,
 // "Human-friendly" increments are taken from the supplied countIncrementTable,
 // which should include decimal values between 0 and 1.
 function computeNormalizedIncrement(
-  range: number, tickCount: number, incrementTbl: number[] = countIncrementTable,
+  range: number, incrementTbl: number[] = countIncrementTable,
 ) {
   if (range === 0) {
     throw new Error("cannot compute tick increment with zero range");
   }
 
-  let rawIncrement = range / (tickCount + 1);
+  let rawIncrement = range / (Y_AXIS_TICK_COUNT + 1);
   // Compute X such that 0 <= rawIncrement/10^x <= 1
   let x = 0;
   while (rawIncrement > 1) {
@@ -103,10 +109,10 @@ function computeNormalizedIncrement(
 }
 
 function ComputeCountAxisDomain(
-  min: number, max: number, tickCount: number,
+  min: number, max: number,
 ): AxisDomain {
   const range = max - min;
-  const increment = computeNormalizedIncrement(range, tickCount);
+  const increment = computeNormalizedIncrement(range);
   const axisDomain = new AxisDomain(min, max, increment);
 
   // If the tick increment is fractional (e.g. 0.2), we display a decimal
@@ -136,14 +142,14 @@ function ComputeCountAxisDomain(
 }
 
 function ComputeByteAxisDomain(
-  min: number, max: number, tickCount: number,
+  min: number, max: number,
 ): AxisDomain {
   // Compute an appropriate unit for the maximum value to be displayed.
   const scale = ComputeByteScale(max);
   const prefixFactor = scale.value;
 
   // Compute increment on min/max after conversion to the appropriate prefix unit.
-  const increment = computeNormalizedIncrement(max / prefixFactor - min / prefixFactor, tickCount);
+  const increment = computeNormalizedIncrement(max / prefixFactor - min / prefixFactor);
 
   // Create axis domain by multiplying computed increment by prefix factor.
   const axisDomain = new AxisDomain(min, max, increment * prefixFactor);
@@ -169,13 +175,13 @@ function ComputeByteAxisDomain(
 const durationLabels = ["nanoseconds", "microseconds", "milliseconds", "seconds"];
 
 function ComputeDurationAxisDomain(
-  min: number, max: number, tickCount: number,
+  min: number, max: number,
 ): AxisDomain {
   const prefixExponent = ComputePrefixExponent(max, 1000, durationLabels);
   const prefixFactor = Math.pow(1000, prefixExponent);
 
   // Compute increment on min/max after conversion to the appropriate prefix unit.
-  const increment = computeNormalizedIncrement(max / prefixFactor - min / prefixFactor, tickCount);
+  const increment = computeNormalizedIncrement(max / prefixFactor - min / prefixFactor);
 
   // Create axis domain by multiplying computed increment by prefix factor.
   const axisDomain = new AxisDomain(min, max, increment * prefixFactor);
@@ -201,10 +207,10 @@ function ComputeDurationAxisDomain(
 const percentIncrementTable = [0.25, 0.5, 0.75, 1.0];
 
 function ComputePercentageAxisDomain(
-  min: number, max: number, tickCount: number,
+  min: number, max: number,
 ) {
   const range = max - min;
-  const increment = computeNormalizedIncrement(range, tickCount, percentIncrementTable);
+  const increment = computeNormalizedIncrement(range, percentIncrementTable);
   const axisDomain = new AxisDomain(min, max, increment);
   axisDomain.label = "percentage";
   axisDomain.tickFormat = d3.format(".0%");
@@ -229,13 +235,13 @@ const timeIncrementDurations = [
 const timeIncrements = _.map(timeIncrementDurations, (inc) => inc.asMilliseconds());
 
 function ComputeTimeAxisDomain(
-  min: number, max: number, tickCount: number,
+  min: number, max: number,
 ): AxisDomain {
   // Compute increment; for time scales, this is taken from a table of allowed
   // values.
   let increment = 0;
   {
-    const rawIncrement = (max - min) / (tickCount + 1);
+    const rawIncrement = (max - min) / (X_AXIS_TICK_COUNT + 1);
     // Compute X such that 0 <= rawIncrement/10^x <= 1
     const tbl = timeIncrements;
     let normalizedIncrementIdx = _.sortedIndex(tbl, rawIncrement);
@@ -316,18 +322,18 @@ function ProcessDataPoints(
   let yAxisDomain: AxisDomain;
   switch (axisUnits) {
     case AxisUnits.Bytes:
-      yAxisDomain = ComputeByteAxisDomain(yExtent[0], yExtent[1], 3);
+      yAxisDomain = ComputeByteAxisDomain(yExtent[0], yExtent[1]);
       break;
     case AxisUnits.Duration:
-      yAxisDomain = ComputeDurationAxisDomain(yExtent[0], yExtent[1], 3);
+      yAxisDomain = ComputeDurationAxisDomain(yExtent[0], yExtent[1]);
       break;
     case AxisUnits.Percentage:
-      yAxisDomain = ComputePercentageAxisDomain(yExtent[0], yExtent[1], 3);
+      yAxisDomain = ComputePercentageAxisDomain(yExtent[0], yExtent[1]);
       break;
     default:
-      yAxisDomain = ComputeCountAxisDomain(yExtent[0], yExtent[1], 3);
+      yAxisDomain = ComputeCountAxisDomain(yExtent[0], yExtent[1]);
   }
-  const xAxisDomain = ComputeTimeAxisDomain(xExtent[0], xExtent[1], 10);
+  const xAxisDomain = ComputeTimeAxisDomain(xExtent[0], xExtent[1]);
 
   return {
     formattedData,
