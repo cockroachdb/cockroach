@@ -322,11 +322,11 @@ func (p *planner) newPlan(
 	tracing.AnnotateTrace()
 
 	// This will set the system DB trigger for transactions containing
-	// DDL statements that have no effect, such as
+	// schema-modifying statements that have no effect, such as
 	// `BEGIN; INSERT INTO ...; CREATE TABLE IF NOT EXISTS ...; COMMIT;`
 	// where the table already exists. This will generate some false
 	// refreshes, but that's expected to be quite rare in practice.
-	if stmt.StatementType() == tree.DDL {
+	if tree.CanModifySchema(stmt) {
 		if err := p.txn.SetSystemConfigTrigger(); err != nil {
 			return nil, errors.Wrap(err,
 				"schema change statement cannot follow a statement that has written in the same transaction")
