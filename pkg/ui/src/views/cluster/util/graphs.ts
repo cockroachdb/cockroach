@@ -304,7 +304,7 @@ function ProcessDataPoints(
   timeInfo: QueryTimeInfo,
 ) {
   const yAxisRange = new AxisRange();
-  const xAxisRange = new AxisRange();
+  const xExtent = [NanoToMilli(timeInfo.start.toNumber()), NanoToMilli(timeInfo.end.toNumber())];
 
   const formattedData: formattedDatum[] = [];
 
@@ -312,14 +312,13 @@ function ProcessDataPoints(
     const result = data.results[idx];
     if (result) {
       yAxisRange.addPoints(_.map(result.datapoints, (dp) => dp.value));
-      xAxisRange.addPoints(_.map([timeInfo.start.toNumber(), timeInfo.end.toNumber()], NanoToMilli));
 
       // Drop any returned points at the beginning that have a lower timestamp
       // than the explicitly queried domain. This works around a bug in NVD3
       // which causes the interactive guideline to highlight the wrong points.
       // https://github.com/novus/nvd3/issues/1913
       const datapoints = _.dropWhile(result.datapoints, (dp) => {
-        return NanoToMilli(dp.timestamp_nanos.toNumber()) < xAxisRange.min;
+        return NanoToMilli(dp.timestamp_nanos.toNumber()) < xExtent[0];
       });
 
       formattedData.push({
@@ -348,7 +347,7 @@ function ProcessDataPoints(
     default:
       yAxisDomain = ComputeCountAxisDomain(yAxisRange.min, yAxisRange.max, 3);
   }
-  const xAxisDomain = ComputeTimeAxisDomain(xAxisRange.min, xAxisRange.max, 10);
+  const xAxisDomain = ComputeTimeAxisDomain(xExtent[0], xExtent[1], 10);
 
   return {
     formattedData,
