@@ -27,25 +27,6 @@ export const CHART_MARGINS: nvd3.Margin = {top: 30, right: 20, bottom: 20, left:
 const MAX_LEGEND_SERIES: number = 4;
 
 /**
- * AxisRange implements functionality to compute the range of points being
- * displayed on an axis.
- */
-class AxisRange {
-  public min: number = Infinity;
-  public max: number = -Infinity;
-
-  // addPoints adds values. It will extend the max/min of the domain if any
-  // values are lower/higher than the current max/min respectively.
-  addPoints(values: number[]) {
-    // Discard infinity values created by #12349
-    // TODO(mrtracy): remove when this issue is fixed.
-    _.pull(values, Infinity);
-    this.min = Math.min(this.min, ...values);
-    this.max = Math.max(this.max, ...values);
-  }
-}
-
-/**
  * AxisDomain is a class that describes the domain of a graph axis; this
  * includes the minimum/maximum extend, tick values, and formatting information
  * for axis values as displayed in various contexts.
@@ -303,16 +284,18 @@ function ProcessDataPoints(
   data: TSResponse,
   timeInfo: QueryTimeInfo,
 ) {
-  const yAxisRange = new AxisRange();
   const xExtent = [NanoToMilli(timeInfo.start.toNumber()), NanoToMilli(timeInfo.end.toNumber())];
+
+  const resultDatapoints = _.flatMap(data.results, (result) => _.map(result.datapoints, (dp) => dp.value));
+  // TODO(couchand): Remove these random datapoints when NVD3 is gone.
+  const allDatapoints = resultDatapoints.concat([0, 1]);
+  const yExtent = d3.extent(allDatapoints);
 
   const formattedData: formattedDatum[] = [];
 
   _.each(metrics, (s, idx) => {
     const result = data.results[idx];
     if (result) {
-      yAxisRange.addPoints(_.map(result.datapoints, (dp) => dp.value));
-
       // Drop any returned points at the beginning that have a lower timestamp
       // than the explicitly queried domain. This works around a bug in NVD3
       // which causes the interactive guideline to highlight the wrong points.
@@ -330,22 +313,19 @@ function ProcessDataPoints(
     }
   });
 
-  // TODO(couchand): remove when NVD3 is gone.
-  yAxisRange.addPoints([0, 1]);
-
   let yAxisDomain: AxisDomain;
   switch (axisUnits) {
     case AxisUnits.Bytes:
-      yAxisDomain = ComputeByteAxisDomain(yAxisRange.min, yAxisRange.max, 3);
+      yAxisDomain = ComputeByteAxisDomain(yExtent[0], yExtent[1], 3);
       break;
     case AxisUnits.Duration:
-      yAxisDomain = ComputeDurationAxisDomain(yAxisRange.min, yAxisRange.max, 3);
+      yAxisDomain = ComputeDurationAxisDomain(yExtent[0], yExtent[1], 3);
       break;
     case AxisUnits.Percentage:
-      yAxisDomain = ComputePercentageAxisDomain(yAxisRange.min, yAxisRange.max, 3);
+      yAxisDomain = ComputePercentageAxisDomain(yExtent[0], yExtent[1], 3);
       break;
     default:
-      yAxisDomain = ComputeCountAxisDomain(yAxisRange.min, yAxisRange.max, 3);
+      yAxisDomain = ComputeCountAxisDomain(yExtent[0], yExtent[1], 3);
   }
   const xAxisDomain = ComputeTimeAxisDomain(xExtent[0], xExtent[1], 10);
 
