@@ -419,7 +419,7 @@ func (u *sqlSymUnion) scrubOption() tree.ScrubOption {
 // below; search this file for "Keyword category lists".
 
 // Ordinary key words in alphabetical order.
-%token <str>   ACTION ADD
+%token <str>   ABORT ACTION ADD
 %token <str>   ALL ALL_EXISTENCE ALTER ANALYSE ANALYZE AND ANY ANNOTATE_TYPE ARRAY AS ASC
 %token <str>   ASYMMETRIC AT
 
@@ -498,7 +498,7 @@ func (u *sqlSymUnion) scrubOption() tree.ScrubOption {
 
 %token <str>   VALID VALIDATE VALUE VALUES VARCHAR VARIADIC VIEW VARYING
 
-%token <str>   WHEN WHERE WINDOW WITH WITHIN WITHOUT WRITE
+%token <str>   WHEN WHERE WINDOW WITH WITHIN WITHOUT WORK WRITE
 
 %token <str>   YEAR
 
@@ -622,6 +622,7 @@ func (u *sqlSymUnion) scrubOption() tree.ScrubOption {
 %type <tree.Statement> restore_stmt
 %type <tree.Statement> revoke_stmt
 %type <*tree.Select> select_stmt
+%type <tree.Statement> abort_stmt
 %type <tree.Statement> rollback_stmt
 %type <tree.Statement> savepoint_stmt
 
@@ -3590,6 +3591,7 @@ transaction_stmt:
   begin_stmt    // EXTEND WITH HELP: BEGIN
 | commit_stmt   // EXTEND WITH HELP: COMMIT
 | rollback_stmt // EXTEND WITH HELP: ROLLBACK
+| abort_stmt    // EXTEND WITH HELP: ABORT
 
 // %Help: BEGIN - start a transaction
 // %Category: Txn
@@ -3631,6 +3633,17 @@ commit_stmt:
     $$.val = &tree.CommitTransaction{}
   }
 | END error // SHOW HELP: COMMIT
+
+abort_stmt:
+  ABORT opt_abort_mod
+  {
+    $$.val = &tree.RollbackTransaction{}
+  }
+
+opt_abort_mod:
+  TRANSACTION {}
+| WORK        {}
+| /* EMPTY */ {}
 
 // %Help: ROLLBACK - abort the current transaction
 // %Category: Txn
@@ -6791,7 +6804,8 @@ unrestricted_name:
 //
 // "Unreserved" keywords --- available for use as any kind of name.
 unreserved_keyword:
-  ACTION
+  ABORT
+| ACTION
 | ADD
 | ALTER
 | AT
@@ -7147,5 +7161,6 @@ reserved_keyword:
 | WHERE
 | WINDOW
 | WITH
+| WORK
 
 %%
