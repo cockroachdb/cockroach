@@ -204,20 +204,6 @@ function ComputeDurationAxisDomain(
   return axisDomain;
 }
 
-const percentIncrementTable = [0.25, 0.5, 0.75, 1.0];
-
-function ComputePercentageAxisDomain(
-  min: number, max: number,
-) {
-  const range = max - min;
-  const increment = computeNormalizedIncrement(range, percentIncrementTable);
-  const axisDomain = new AxisDomain(min, max, increment);
-  axisDomain.label = "percentage";
-  axisDomain.tickFormat = d3.format(".0%");
-  axisDomain.guideFormat = d3.format(".2%");
-  return axisDomain;
-}
-
 const timeIncrementDurations = [
   moment.duration(1, "m"),
   moment.duration(5, "m"),
@@ -326,9 +312,6 @@ function ProcessDataPoints(
       break;
     case AxisUnits.Duration:
       yAxisDomain = ComputeDurationAxisDomain(yExtent[0], yExtent[1]);
-      break;
-    case AxisUnits.Percentage:
-      yAxisDomain = ComputePercentageAxisDomain(yExtent[0], yExtent[1]);
       break;
     default:
       yAxisDomain = ComputeCountAxisDomain(yExtent[0], yExtent[1]);
