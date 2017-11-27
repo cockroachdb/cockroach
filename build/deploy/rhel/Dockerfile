@@ -16,7 +16,7 @@ LABEL name="cockroachdb/cockroach" \
 COPY help.1 /help.1
 
 # Licenses
-COPY LICENSE APL.txt /licenses/
+COPY licenses/* /licenses/
 
 # Start script and CockroachDB binary
 RUN mkdir -p /cockroach
