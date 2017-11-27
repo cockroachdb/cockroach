@@ -55,8 +55,6 @@ export interface AxisProps {
   label?: string;
   format?: (n: number) => string;
   range?: number[];
-  yLow?: number;
-  yHigh?: number;
   units?: AxisUnits;
 }
 
@@ -69,8 +67,6 @@ export interface AxisProps {
  */
 export class Axis extends React.Component<AxisProps, {}> {
   static defaultProps: AxisProps = {
-    yLow: 0,
-    yHigh: 1,
     units: AxisUnits.Count,
   };
 

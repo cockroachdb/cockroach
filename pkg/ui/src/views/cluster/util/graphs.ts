@@ -331,12 +331,8 @@ function ProcessDataPoints(
     }
   });
 
-  if (_.isNumber(axis.props.yLow)) {
-    yAxisRange.addPoints([axis.props.yLow]);
-  }
-  if (_.isNumber(axis.props.yHigh)) {
-    yAxisRange.addPoints([axis.props.yHigh]);
-  }
+  // TODO(couchand): remove when NVD3 is gone.
+  yAxisRange.addPoints([0, 1]);
 
   let yAxisDomain: AxisDomain;
   switch (axis.props.units) {
