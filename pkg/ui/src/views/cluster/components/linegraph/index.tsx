@@ -149,7 +149,7 @@ export class LineGraph extends React.Component<LineGraphProps, {}> {
       }
 
       ConfigureLineChart(
-        this.chart, this.graphEl, metrics, axis, this.props.data, this.props.timeInfo, false, hoverTime,
+        this.chart, this.graphEl, metrics, axis, this.props.data, this.props.timeInfo, hoverTime,
       );
     }
   }

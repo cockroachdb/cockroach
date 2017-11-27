@@ -2,7 +2,6 @@ import React from "react";
 import _ from "lodash";
 import * as nvd3 from "nvd3";
 import * as d3 from "d3";
-import Long from "long";
 import moment from "moment";
 
 import * as protos from "src/js/protos";
@@ -34,7 +33,6 @@ const MAX_LEGEND_SERIES: number = 4;
 class AxisRange {
   public min: number = Infinity;
   public max: number = -Infinity;
-  stackedSum: { [key: number]: number } = {};
 
   // addPoints adds values. It will extend the max/min of the domain if any
   // values are lower/higher than the current max/min respectively.
@@ -44,23 +42,6 @@ class AxisRange {
     _.pull(values, Infinity);
     this.min = Math.min(this.min, ...values);
     this.max = Math.max(this.max, ...values);
-  }
-
-  // addStacked adds keyed values. It sums the values by key and then extends
-  // the max/min of the domain if any sum is higher/lower than the current
-  // max/min respectively.
-  addStackedPoints(keyedValues: {key: number, value: number}[]) {
-    _.each(keyedValues, (v) => {
-      // Discard infinity values created by #12349
-      // TODO(mrtracy): remove when this issue is fixed.
-      if (v.value === Infinity) {
-        return;
-      }
-      this.stackedSum[v.key] = (this.stackedSum[v.key] || 0) + v.value;
-    });
-
-    this.min = _.min(_.values<number>(this.stackedSum));
-    this.max = _.max(_.values<number>(this.stackedSum));
   }
 }
 
@@ -304,29 +285,6 @@ function ComputeTimeAxisDomain(
   return axisDomain;
 }
 
-// SeenTimestamps is used to track which timestamps have been included in the
-// current dataset and which are missing
-interface SeenTimestamps {
-  [key: number]: boolean;
-}
-
-/**
- * getTimestamps is a helper function that takes graph data from the server and
- * returns a SeenTimestamps object with all the values set to false. This object
- * is used to track missing timestamps for each individual dataset.
- */
-function getTimestamps(metrics: React.ReactElement<MetricProps>[], data: TSResponse): SeenTimestamps {
-  return _(metrics)
-     // Get all the datapoints from all series in a single array.
-    .flatMap((_s, idx) => data.results[idx].datapoints)
-    // Create a map keyed by the datapoint timestamps.
-    .keyBy((d) => d.timestamp_nanos.toNumber())
-    // Set all values to false, since we only want the keys.
-    .mapValues(() => false)
-    // Unwrap the lodash object.
-    .value();
-}
-
 type formattedDatum = {
   values: protos.cockroach.ts.tspb.TimeSeriesDatapoint$Properties,
   key: string,
@@ -344,24 +302,16 @@ function ProcessDataPoints(
   axis: React.ReactElement<AxisProps>,
   data: TSResponse,
   timeInfo: QueryTimeInfo,
-  stacked = false,
 ) {
   const yAxisRange = new AxisRange();
   const xAxisRange = new AxisRange();
 
   const formattedData: formattedDatum[] = [];
 
-  // timestamps has a key for all the timestamps present across all datasets
-  const timestamps = getTimestamps(metrics, data);
-
   _.each(metrics, (s, idx) => {
     const result = data.results[idx];
     if (result) {
-      if (!stacked) {
-        yAxisRange.addPoints(_.map(result.datapoints, (dp) => dp.value));
-      } else {
-        yAxisRange.addStackedPoints(_.map(result.datapoints, (dp) => { return { key: dp.timestamp_nanos.toNumber(), value: dp.value }; }));
-      }
+      yAxisRange.addPoints(_.map(result.datapoints, (dp) => dp.value));
       xAxisRange.addPoints(_.map([timeInfo.start.toNumber(), timeInfo.end.toNumber()], NanoToMilli));
 
       // Drop any returned points at the beginning that have a lower timestamp
@@ -370,19 +320,6 @@ function ProcessDataPoints(
       // https://github.com/novus/nvd3/issues/1913
       const datapoints = _.dropWhile(result.datapoints, (dp) => {
         return NanoToMilli(dp.timestamp_nanos.toNumber()) < xAxisRange.min;
-      });
-
-      // Fill in null values for series where a value is missing. This
-      // correction is needed for stackedAreaCharts to to display correctly.
-      const seenTimestamps: SeenTimestamps = _.clone(timestamps);
-      _.each(datapoints, (d) => seenTimestamps[d.timestamp_nanos.toNumber()] = true);
-      _.each(seenTimestamps, (seen, ts) => {
-        if (!seen) {
-          datapoints.push({
-            timestamp_nanos: Long.fromString(ts),
-            value: null,
-          });
-        }
       });
 
       formattedData.push({
@@ -424,7 +361,7 @@ function ProcessDataPoints(
   };
 }
 
-export function InitLineChart(chart: nvd3.LineChart | nvd3.StackedAreaChart) {
+export function InitLineChart(chart: nvd3.LineChart) {
     chart
       .x((d: protos.cockroach.ts.tspb.TimeSeriesDatapoint) => new Date(NanoToMilli(d && d.timestamp_nanos.toNumber())))
       .y((d: protos.cockroach.ts.tspb.TimeSeriesDatapoint) => d && d.value)
@@ -445,13 +382,12 @@ export function InitLineChart(chart: nvd3.LineChart | nvd3.StackedAreaChart) {
  * computation of domains and ticks for all axes.
  */
 export function ConfigureLineChart(
-  chart: nvd3.LineChart | nvd3.StackedAreaChart,
+  chart: nvd3.LineChart,
   svgEl: SVGElement,
   metrics: React.ReactElement<MetricProps>[],
   axis: React.ReactElement<AxisProps>,
   data: TSResponse,
   timeInfo: QueryTimeInfo,
-  stacked = false,
   hoverTime?: moment.Moment,
 ) {
   chart.showLegend(metrics.length > 1 && metrics.length <= MAX_LEGEND_SERIES);
@@ -459,7 +395,7 @@ export function ConfigureLineChart(
   let xAxisDomain, yAxisDomain: AxisDomain;
 
   if (data) {
-    const processed = ProcessDataPoints(metrics, axis, data, timeInfo, stacked);
+    const processed = ProcessDataPoints(metrics, axis, data, timeInfo);
     formattedData = processed.formattedData;
     xAxisDomain = processed.xAxisDomain;
     yAxisDomain = processed.yAxisDomain;
