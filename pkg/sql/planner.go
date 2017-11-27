@@ -296,8 +296,31 @@ func (p *planner) IncrementSequence(ctx context.Context, seqName *tree.TableName
 		return 0, err
 	}
 	seqValueKey := keys.MakeSequenceKey(uint32(descriptor.ID))
-	return client.IncrementValRetryable(
+	val, err := client.IncrementValRetryable(
 		ctx, p.txn.DB(), seqValueKey, descriptor.SequenceOpts.Increment)
+	if err != nil {
+		return 0, err
+	}
+
+	p.session.mu.Lock()
+	defer p.session.mu.Unlock()
+	p.session.mu.LastSequenceValue = val
+	p.session.mu.NextValEverCalled = true
+
+	return val, nil
+}
+
+// GetLastSequenceValue implements the parser.EvalPlanner interface.
+func (p *planner) GetLastSequenceValue(ctx context.Context) (int64, error) {
+	p.session.mu.RLock()
+	defer p.session.mu.RUnlock()
+
+	if !p.session.mu.NextValEverCalled {
+		// TODO(vilterp): get this the right pg error code
+		return 0, errors.Errorf("lastval() called before nextval() has been called in this session")
+	}
+
+	return p.session.mu.LastSequenceValue, nil
 }
 
 // GetSequenceValue implements the parser.EvalPlanner interface.

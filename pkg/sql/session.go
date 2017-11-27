@@ -332,6 +332,15 @@ type Session struct {
 		// LastActiveQuery contains a reference to the AST of the last
 		// query that ran on this session.
 		LastActiveQuery tree.Statement
+
+		// NextValEverCalled is set to true the first time nextval() is called
+		// in a session. It is an error to call lastval() when this is false.
+		NextValEverCalled bool
+
+		// LastSequenceValue contains the last value to be obtained by a
+		// SQL sequence using the `nextval()` builtin. Its value is retrieved
+		// with the `lastval()` builtin.
+		LastSequenceValue int64
 	}
 
 	//

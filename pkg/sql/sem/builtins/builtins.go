@@ -1021,6 +1021,23 @@ CockroachDB supports the following flags:
 		},
 	},
 
+	"lastval": {
+		tree.Builtin{
+			Types:      tree.ArgTypes{},
+			ReturnType: tree.FixedReturnType(types.Int),
+			Category:   categoryIDGeneration,
+			Impure:     true,
+			Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				val, err := evalCtx.Planner.GetLastSequenceValue(evalCtx.Ctx())
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDInt(tree.DInt(val)), nil
+			},
+			Info: "Return value most recently obtained with nextval in this session.",
+		},
+	},
+
 	"experimental_uuid_v4": {uuidV4Impl},
 	"uuid_v4":              {uuidV4Impl},
 

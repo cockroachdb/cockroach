@@ -2141,6 +2141,10 @@ type EvalPlanner interface {
 
 	// GetSequence value returns the current value of a sequence.
 	GetSequenceValue(ctx context.Context, seqName *TableName) (int64, error)
+
+	// GetLastSequenceValue returns the last sequence value obtained with nextval()
+	// in the current session.
+	GetLastSequenceValue(ctx context.Context) (int64, error)
 }
 
 // CtxProvider is anything that can return a Context.

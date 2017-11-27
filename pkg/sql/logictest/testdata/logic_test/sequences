@@ -2,6 +2,61 @@
 
 # see also files `drop_sequence`, `alter_sequence`, `rename_sequence`
 
+# USING THE `lastval` FUNCTION
+# (at the top because it requires a session in which `lastval` has never been called)
+
+statement ok
+SET DATABASE = test
+
+statement ok
+CREATE SEQUENCE lastval_test
+
+statement ok
+CREATE SEQUENCE lastval_test_2 START WITH 10
+
+statement error pq: lastval\(\): lastval\(\) called before nextval\(\) has been called in this session
+SELECT lastval()
+
+query I
+SELECT nextval('lastval_test')
+----
+1
+
+query I
+SELECT lastval()
+----
+1
+
+query I
+SELECT nextval('lastval_test_2')
+----
+10
+
+query I
+SELECT lastval()
+----
+10
+
+query I
+SELECT nextval('lastval_test')
+----
+2
+
+query I
+SELECT lastval()
+----
+2
+
+query I
+SELECT nextval('lastval_test_2')
+----
+11
+
+query I
+SELECT lastval()
+----
+11
+
 # SEQUENCE CREATION
 
 statement ok
