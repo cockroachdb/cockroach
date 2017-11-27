@@ -299,7 +299,7 @@ type formattedDatum = {
  */
 function ProcessDataPoints(
   metrics: React.ReactElement<MetricProps>[],
-  axis: React.ReactElement<AxisProps>,
+  axisUnits: AxisUnits,
   data: TSResponse,
   timeInfo: QueryTimeInfo,
 ) {
@@ -335,7 +335,7 @@ function ProcessDataPoints(
   yAxisRange.addPoints([0, 1]);
 
   let yAxisDomain: AxisDomain;
-  switch (axis.props.units) {
+  switch (axisUnits) {
     case AxisUnits.Bytes:
       yAxisDomain = ComputeByteAxisDomain(yAxisRange.min, yAxisRange.max, 3);
       break;
@@ -391,7 +391,7 @@ export function ConfigureLineChart(
   let xAxisDomain, yAxisDomain: AxisDomain;
 
   if (data) {
-    const processed = ProcessDataPoints(metrics, axis, data, timeInfo);
+    const processed = ProcessDataPoints(metrics, axis.props.units, data, timeInfo);
     formattedData = processed.formattedData;
     xAxisDomain = processed.xAxisDomain;
     yAxisDomain = processed.yAxisDomain;
