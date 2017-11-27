@@ -406,6 +406,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		AmbientContext: s.cfg.AmbientCtx,
 		Settings:       st,
 		DB:             s.db,
+		Executor:       sqlExecutor,
 		// DistSQL also uses a DB that bypasses the TxnCoordSender.
 		FlowDB:     client.NewDB(s.distSender, s.clock),
 		RPCContext: s.rpcContext,
