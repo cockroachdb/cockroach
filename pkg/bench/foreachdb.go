@@ -141,7 +141,7 @@ func ForEachDB(b *testing.B, fn func(*testing.B, *gosql.DB)) {
 		benchmarkMySQL,
 	} {
 		dbName := runtime.FuncForPC(reflect.ValueOf(dbFn).Pointer()).Name()
-		dbName = strings.TrimPrefix(dbName, "github.com/cockroachdb/cockroach/pkg/sql_test.benchmark")
+		dbName = strings.TrimPrefix(dbName, "github.com/cockroachdb/cockroach/pkg/bench.benchmark")
 		b.Run(dbName, func(b *testing.B) {
 			dbFn(b, fn)
 		})
