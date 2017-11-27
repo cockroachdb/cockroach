@@ -257,38 +257,45 @@ function calculateXAxisDomain(timeInfo: QueryTimeInfo): AxisDomain {
   return ComputeTimeAxisDomain(xExtent);
 }
 
-/**
- * ProcessDataPoints is a helper function to process graph data from the server
- * into a format appropriate for display on an NVD3 graph.
- */
-function ProcessDataPoints(
+function formatMetricData(
   metrics: React.ReactElement<MetricProps>[],
   data: TSResponse,
-  timeInfo: QueryTimeInfo,
-) {
+): formattedDatum[] {
   const formattedData: formattedDatum[] = [];
 
   _.each(metrics, (s, idx) => {
     const result = data.results[idx];
     if (result) {
-      // Drop any returned points at the beginning that have a lower timestamp
-      // than the explicitly queried domain. This works around a bug in NVD3
-      // which causes the interactive guideline to highlight the wrong points.
-      // https://github.com/novus/nvd3/issues/1913
-      const datapoints = _.dropWhile(result.datapoints, (dp) => {
-        return dp.timestamp_nanos.toNumber() < timeInfo.start.toNumber();
-      });
-
       formattedData.push({
-        values: datapoints,
+        values: result.datapoints,
         key: s.props.title || s.props.name,
         area: true,
-        fillOpacity: .1,
+        fillOpacity: 0.1,
       });
     }
   });
 
   return formattedData;
+}
+
+function filterInvalidDatapoints(
+  formattedData: formattedDatum[],
+  timeInfo: QueryTimeInfo,
+): formattedDatum[] {
+  return _.map(formattedData, (datum) => {
+    // Drop any returned points at the beginning that have a lower timestamp
+    // than the explicitly queried domain. This works around a bug in NVD3
+    // which causes the interactive guideline to highlight the wrong points.
+    // https://github.com/novus/nvd3/issues/1913
+    const filteredValues = _.dropWhile(datum.values, (dp) => {
+      return dp.timestamp_nanos.toNumber() < timeInfo.start.toNumber();
+    });
+
+    return {
+      ...datum,
+      values: filteredValues,
+    };
+  });
 }
 
 export function InitLineChart(chart: nvd3.LineChart) {
@@ -323,7 +330,8 @@ export function ConfigureLineChart(
   let xAxisDomain, yAxisDomain: AxisDomain;
 
   if (data) {
-    formattedData = ProcessDataPoints(metrics, data, timeInfo);
+    const formattedRaw = formatMetricData(metrics, data);
+    formattedData = filterInvalidDatapoints(formattedRaw, timeInfo);
 
     xAxisDomain = calculateXAxisDomain(timeInfo);
     yAxisDomain = calculateYAxisDomain(axis.props.units, data);
