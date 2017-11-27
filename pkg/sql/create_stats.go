@@ -25,6 +25,7 @@ import (
 type createStatsNode struct {
 	tree.CreateStats
 	tableDesc *sqlbase.TableDescriptor
+	columns   []sqlbase.ColumnID
 }
 
 func (p *planner) CreateStatistics(ctx context.Context, n *tree.CreateStats) (planNode, error) {
@@ -49,9 +50,28 @@ func (p *planner) CreateStatistics(ctx context.Context, n *tree.CreateStats) (pl
 		return nil, err
 	}
 
+	if len(n.ColumnNames) == 0 {
+		return nil, errors.Errorf("no columns given for statistics")
+	}
+	columns := make([]sqlbase.ColumnID, len(n.ColumnNames))
+	for i, colName := range n.ColumnNames {
+		found := false
+		for _, colDesc := range tableDesc.Columns {
+			if colDesc.Name == string(colName) {
+				columns[i] = colDesc.ID
+				found = true
+				break
+			}
+		}
+		if !found {
+			return nil, errors.Errorf("unknown column %s", colName)
+		}
+	}
+
 	return &createStatsNode{
 		CreateStats: *n,
 		tableDesc:   tableDesc,
+		columns:     columns,
 	}, nil
 }
 

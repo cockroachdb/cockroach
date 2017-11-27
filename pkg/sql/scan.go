@@ -242,6 +242,7 @@ func (n *scanNode) limitHint() int64 {
 }
 
 // Initializes a scanNode with a table descriptor.
+// wantedColumns is optional.
 func (n *scanNode) initTable(
 	p *planner,
 	desc *sqlbase.TableDescriptor,
@@ -352,6 +353,7 @@ func appendUnselectedColumns(
 }
 
 // Initializes the column structures.
+// wantedColumns is optional.
 // An error may be returned only if wantedColumns is set.
 func (n *scanNode) initDescDefaults(
 	planDeps planDependencies, scanVisibility scanVisibility, wantedColumns []tree.ColumnID,
