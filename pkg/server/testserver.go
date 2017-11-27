@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire"
 	migrations "github.com/cockroachdb/cockroach/pkg/sqlmigrations"
@@ -540,6 +541,11 @@ func (ts *TestServer) LeaseManager() interface{} {
 // Executor is part of TestServerInterface.
 func (ts *TestServer) Executor() interface{} {
 	return ts.sqlExecutor
+}
+
+// InternalExecutor is part of TestServerInterface.
+func (ts *TestServer) InternalExecutor() interface{} {
+	return sql.InternalExecutor{LeaseManager: ts.leaseMgr}
 }
 
 // GetNode exposes the Server's Node.
