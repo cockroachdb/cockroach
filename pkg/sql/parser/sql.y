@@ -490,7 +490,7 @@ func (u *sqlSymUnion) scrubOption() tree.ScrubOption {
 %token <str>   SAVEPOINT SCATTER SCRUB SEARCH SECOND SELECT SEQUENCE SEQUENCES
 %token <str>   SERIAL SERIALIZABLE SESSION SESSIONS SESSION_USER SET SETTING SETTINGS
 %token <str>   SHOW SIMILAR SIMPLE SMALLINT SMALLSERIAL SNAPSHOT SOME SOME_EXISTENCE SPLIT SQL
-%token <str>   START STATUS STDIN STRICT STRING STORE STORING SUBSTRING
+%token <str>   START STATISTICS STATUS STDIN STRICT STRING STORE STORING SUBSTRING
 %token <str>   SYMMETRIC SYSTEM
 
 %token <str>   TABLE TABLES TEMP TEMPLATE TEMPORARY TESTING_RANGES TESTING_RELOCATE TEXT THAN THEN
@@ -598,6 +598,7 @@ func (u *sqlSymUnion) scrubOption() tree.ScrubOption {
 %type <tree.Statement> create_user_stmt
 %type <tree.Statement> create_view_stmt
 %type <tree.Statement> create_sequence_stmt
+%type <tree.Statement> create_stat_stmt
 %type <tree.Statement> delete_stmt
 %type <tree.Statement> discard_stmt
 
@@ -1606,10 +1607,11 @@ cancel_query_stmt:
 // %Category: Group
 // %Text:
 // CREATE DATABASE, CREATE TABLE, CREATE INDEX, CREATE TABLE AS,
-// CREATE USER, CREATE VIEW, CREATE SEQUENCE
+// CREATE USER, CREATE VIEW, CREATE SEQUENCE, CREATE STATISTICS
 create_stmt:
   create_user_stmt     // EXTEND WITH HELP: CREATE USER
 | create_ddl_stmt      // help texts in sub-rule
+| create_stat_stmt     // EXTEND WITH HELP: CREATE STATISTICS
 | CREATE error         // SHOW HELP: CREATE
 
 create_ddl_stmt:
@@ -1621,6 +1623,23 @@ create_ddl_stmt:
 | CREATE TABLE error   // SHOW HELP: CREATE TABLE
 | create_view_stmt     // EXTEND WITH HELP: CREATE VIEW
 | create_sequence_stmt // EXTEND WITH HELP: CREATE SEQUENCE
+
+// %Help: CREATE STATISTICS - create a new table statistic
+// %Category: Misc
+// %Text:
+// CREATE STATISTICS <statisticname>
+//   ON <colname> [, ...]
+//   FROM <tablename>
+create_stat_stmt:
+  CREATE STATISTICS name ON name_list FROM qualified_name
+  {
+    $$.val = &tree.CreateStats{
+      Name: tree.Name($3),
+      ColumnNames: $5.nameList(),
+      Table: $7.normalizableTableName(),
+    }
+  }
+| CREATE STATISTICS error // SHOW HELP: CREATE STATISTICS
 
 // %Help: DELETE - delete rows from a table
 // %Category: DML
@@ -1864,6 +1883,7 @@ explainable_stmt:
   preparable_stmt
 | alter_ddl_stmt   // help texts in sub-rule
 | create_ddl_stmt  // help texts in sub-rule
+| create_stat_stmt // help texts in sub-rule
 | drop_ddl_stmt    // help texts in sub-rule
 | execute_stmt     // EXTEND WITH HELP: EXECUTE
 | explain_stmt { /* SKIP DOC */ }
@@ -6950,6 +6970,7 @@ unreserved_keyword:
 | SNAPSHOT
 | SQL
 | START
+| STATISTICS
 | STDIN
 | STORE
 | STORING
