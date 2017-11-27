@@ -269,7 +269,7 @@ func BenchmarkSQL(b *testing.B) {
 			runBenchmarkUpsert,
 		} {
 			fnName := runtime.FuncForPC(reflect.ValueOf(runFn).Pointer()).Name()
-			fnName = strings.TrimPrefix(fnName, "github.com/cockroachdb/cockroach/pkg/sql_test.runBenchmark")
+			fnName = strings.TrimPrefix(fnName, "github.com/cockroachdb/cockroach/pkg/bench.runBenchmark")
 			b.Run(fnName, func(b *testing.B) {
 				for _, count := range []int{1, 10, 100, 1000} {
 					b.Run(fmt.Sprintf("count=%d", count), func(b *testing.B) {
