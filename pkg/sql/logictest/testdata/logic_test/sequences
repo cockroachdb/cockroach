@@ -2,6 +2,61 @@
 
 # see also files `drop_sequence`, `alter_sequence`, `rename_sequence`
 
+# USING THE `lastval` FUNCTION
+# (at the top because it requires a session in which `lastval` has never been called)
+
+statement ok
+SET DATABASE = test
+
+statement ok
+CREATE SEQUENCE lastval_test
+
+statement ok
+CREATE SEQUENCE lastval_test_2 START WITH 10
+
+statement error pgcode 55000 pq: lastval\(\): lastval is not yet defined in this session
+SELECT lastval()
+
+query I
+SELECT nextval('lastval_test')
+----
+1
+
+query I
+SELECT lastval()
+----
+1
+
+query I
+SELECT nextval('lastval_test_2')
+----
+10
+
+query I
+SELECT lastval()
+----
+10
+
+query I
+SELECT nextval('lastval_test')
+----
+2
+
+query I
+SELECT lastval()
+----
+2
+
+query I
+SELECT nextval('lastval_test_2')
+----
+11
+
+query I
+SELECT lastval()
+----
+11
+
 # SEQUENCE CREATION
 
 statement ok
@@ -50,10 +105,14 @@ TRUNCATE foo
 statement error pgcode 42809 "foo" is not a table
 DROP TABLE foo
 
-# USING THE nextval() FUNCTION
+# TODO(vilterp): match PG (returns a single row with the sequence settings and value)
+statement error pgcode 42809 pq: cannot SELECT from a sequence
+SELECT * FROM foo
 
-# `select * from foo` currently returns 0 columns & 0 rows;
-# testing against that is a Test-Script syntax error.
+# USING THE `nextval` AND `currval` FUNCTIONS
+
+statement error pgcode 55000 pq: currval\(\): currval of sequence "foo" is not yet defined in this session
+SELECT currval('foo')
 
 query I
 SELECT nextval('foo')
@@ -62,6 +121,11 @@ SELECT nextval('foo')
 
 query I
 SELECT nextval('foo')
+----
+2
+
+query I
+SELECT currval('foo')
 ----
 2
 
@@ -174,6 +238,60 @@ SELECT nextval('other_db.other_db_test')
 ----
 1
 
+# USING THE `setval` FUNCTION
+
+statement ok
+SET DATABASE = test
+
+statement ok
+CREATE SEQUENCE setval_test
+
+query I
+SELECT nextval('setval_test')
+----
+1
+
+query I
+SELECT nextval('setval_test')
+----
+2
+
+query I
+SELECT setval('setval_test', 10)
+----
+10
+
+# Setval doesn't affect currval or lastval; they return the last value obtained with nextval.
+query I
+SELECT currval('setval_test')
+----
+2
+
+query I
+SELECT lastval()
+----
+2
+
+query I
+SELECT nextval('setval_test')
+----
+11
+
+query I
+SELECT currval('setval_test')
+----
+11
+
+query I
+SELECT lastval()
+----
+11
+
+# nextval fails with nonexistent sequences.
+
+statement error pgcode 42P01 relation "nonexistent_seq" does not exist
+SELECT nextval('nonexistent_seq')
+
 # USE WITH TABLES
 
 # You can use a sequence in a DEFAULT expression to create an auto-incrementing primary key.
@@ -195,3 +313,28 @@ SELECT id FROM blog_posts ORDER BY id
 ----
 1
 2
+
+# USE WITH PARALLEL STATEMENTS
+
+# Both accesses to the sequence value in the KV layer and the sequenceState struct in
+# the Session are serialized, so after the last parallel statement you'll get the last value.
+
+statement ok
+BEGIN
+
+statement ok
+INSERT INTO blog_posts (title) VALUES ('par_test_1') RETURNING NOTHING
+
+statement ok
+INSERT INTO blog_posts (title) VALUES ('par_test_2') RETURNING NOTHING
+
+statement ok
+INSERT INTO blog_posts (title) VALUES ('par_test_3') RETURNING NOTHING
+
+query I
+SELECT lastval()
+----
+5
+
+statement ok
+COMMIT

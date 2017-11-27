@@ -1844,8 +1844,12 @@ type EvalPlanner interface {
 	// normalized table name that is qualified by database.
 	QualifyWithDatabase(ctx context.Context, t *NormalizableTableName) (*TableName, error)
 
-	// ParseTableNameWithIndex parses a table name.
-	ParseTableNameWithIndex(sql string) (TableNameWithIndex, error)
+	// ParseQualifiedTableName parses a SQL string of the form
+	// `[ database_name . ] table_name [ @ index_name ]`.
+	// If the table name is not given, it uses the search path to find it, and sets it
+	// on the returned TableName.
+	// It returns an error if the table deson't exist.
+	ParseQualifiedTableName(ctx context.Context, sql string) (*TableName, error)
 
 	// ParseType parses a column type.
 	ParseType(sql string) (coltypes.CastTargetType, error)
@@ -1853,7 +1857,18 @@ type EvalPlanner interface {
 	// IncrementSequence increments the given sequence and returns the result.
 	// It returns an error if the given name is not a sequence.
 	// The caller must ensure that seqName is fully qualified already.
-	IncrementSequence(context context.Context, seqName *TableName) (int64, error)
+	IncrementSequence(ctx context.Context, seqName *TableName) (int64, error)
+
+	// GetLatestValueInSessionForSequence returns the value most recently obtained by
+	// nextval() for the given sequence in this session.
+	GetLatestValueInSessionForSequence(ctx context.Context, seqName *TableName) (int64, error)
+
+	// GetLastSequenceValue returns the last sequence value obtained with nextval()
+	// in the current session.
+	GetLastSequenceValue(ctx context.Context) (int64, error)
+
+	// SetSequenceValue sets the sequence's value.
+	SetSequenceValue(ctx context.Context, seqName *TableName, newVal int64) error
 }
 
 // CtxProvider is anything that can return a Context.
