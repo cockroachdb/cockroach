@@ -88,9 +88,11 @@ const (
 	splitTxnName         = "split"
 	mergeTxnName         = "merge"
 
-	// MinQuotaReplicaLivenessDuration is the minimum duration that we could make sure
-	// the follower of this replica is active.
-	MinQuotaReplicaLivenessDuration   = 10 * time.Second
+	// MaxQuotaReplicaLivenessDuration is the maximum duration that a replica
+	// can remain inactive while still being counting against the range's
+	// available proposal quota.
+	MaxQuotaReplicaLivenessDuration = 10 * time.Second
+
 	defaultReplicaRaftMuWarnThreshold = 500 * time.Millisecond
 )
 
@@ -1078,11 +1080,8 @@ func (r *Replica) updateProposalQuotaRaftMuLocked(
 
 	// Find the minimum index that active followers have acknowledged.
 	minIndex := status.Commit
-
-	now := timeutil.Unix(0, r.store.Clock().PhysicalNow())
 	for _, rep := range r.mu.state.Desc.Replicas {
-		// Only consider followers that that have "healthy" RPC connections and
-		// have made communication with leader in the last MinQuotaReplicaLivenessDuration.
+		// Only consider followers that that have "healthy" RPC connections.
 		if r.store.cfg.Transport.resolver != nil {
 			addr, err := r.store.cfg.Transport.resolver(rep.NodeID)
 			if err != nil {
@@ -1091,10 +1090,10 @@ func (r *Replica) updateProposalQuotaRaftMuLocked(
 			if err := r.store.cfg.Transport.rpcContext.ConnHealth(addr.String()); err != nil {
 				continue
 			}
-			if lastUpdateTime, ok := r.mu.lastUpdateTimes[rep.ReplicaID]; !ok ||
-				now.Sub(lastUpdateTime) > MinQuotaReplicaLivenessDuration {
-				continue
-			}
+		}
+		// Only consider followers that are active.
+		if !r.isFollowerActiveLocked(ctx, rep.ReplicaID) {
+			continue
 		}
 		if progress, ok := status.Progress[uint64(rep.ReplicaID)]; ok {
 			// Only consider followers who are in advance of the quota base
@@ -1724,21 +1723,35 @@ func (r *Replica) setQueueLastProcessed(
 	return r.store.DB().PutInline(ctx, key, &timestamp)
 }
 
-func (r *Replica) setLastUpdateTimeForReplicaLocked(replicaID roachpb.ReplicaID) {
+func (r *Replica) refreshLastUpdateTimeForReplicaLocked(replicaID roachpb.ReplicaID) {
 	if r.mu.replicaID == r.mu.leaderID {
 		r.mu.lastUpdateTimes[replicaID] = r.store.Clock().PhysicalTime()
 	}
 }
 
-func (r *Replica) setLastUpdateTimesLocked() {
+func (r *Replica) refreshLastUpdateTimeForAllReplicasLocked() {
 	if r.mu.replicaID == r.mu.leaderID {
+		now := r.store.Clock().PhysicalTime()
 		for _, rep := range r.mu.state.Desc.Replicas {
-			if rep.ReplicaID == r.mu.replicaID {
-				continue
-			}
-			r.mu.lastUpdateTimes[rep.ReplicaID] = r.store.Clock().PhysicalTime()
+			r.mu.lastUpdateTimes[rep.ReplicaID] = now
 		}
 	}
+}
+
+// isFollowerActiveLocked returns whether the specified follower has made
+// communication with the leader in the last MaxQuotaReplicaLivenessDuration.
+func (r *Replica) isFollowerActiveLocked(ctx context.Context, followerID roachpb.ReplicaID) bool {
+	if r.mu.replicaID != r.mu.leaderID {
+		log.Fatalf(ctx, "replica %d is not the leader", r.mu.replicaID)
+	}
+	lastUpdateTime, ok := r.mu.lastUpdateTimes[followerID]
+	if !ok {
+		// If the follower has no entry in lastUpdateTimes, it has not been
+		// updated since r became the leader.
+		return false
+	}
+	now := r.store.Clock().PhysicalTime()
+	return now.Sub(lastUpdateTime) <= MaxQuotaReplicaLivenessDuration
 }
 
 // RaftStatus returns the current raft status of the replica. It returns nil
@@ -3324,7 +3337,7 @@ func (r *Replica) unquiesceLocked() {
 			log.Infof(ctx, "unquiescing")
 		}
 		r.mu.quiescent = false
-		r.setLastUpdateTimesLocked()
+		r.refreshLastUpdateTimeForAllReplicasLocked()
 	}
 }
 
@@ -3351,7 +3364,7 @@ func (r *Replica) stepRaftGroup(req *RaftMessageRequest) error {
 		if req.Message.Type == raftpb.MsgApp {
 			r.setEstimatedCommitIndexLocked(req.Message.Commit)
 		}
-		r.setLastUpdateTimeForReplicaLocked(req.FromReplica.ReplicaID)
+		r.refreshLastUpdateTimeForReplicaLocked(req.FromReplica.ReplicaID)
 		return false, /* unquiesceAndWakeLeader */
 			raftGroup.Step(req.Message)
 	})

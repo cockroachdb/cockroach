@@ -250,12 +250,6 @@ func (r *Replica) ReplicaIDLocked() roachpb.ReplicaID {
 	return r.mu.replicaID
 }
 
-func (r *Replica) GetLastUpdateTimeForReplica(replicaID roachpb.ReplicaID) time.Time {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-	return r.mu.lastUpdateTimes[replicaID]
-}
-
 func (r *Replica) DescLocked() *roachpb.RangeDescriptor {
 	return r.mu.state.Desc
 }
@@ -313,6 +307,12 @@ func (r *Replica) QuotaReleaseQueueLen() int {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	return len(r.mu.quotaReleaseQueue)
+}
+
+func (r *Replica) IsFollowerActive(ctx context.Context, followerID roachpb.ReplicaID) bool {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.isFollowerActiveLocked(ctx, followerID)
 }
 
 func (r *Replica) CommandSizesLen() int {
