@@ -70,7 +70,7 @@ deallocate_stmt ::=
 	| 'DEALLOCATE' 'PREPARE' 'ALL'
 
 delete_stmt ::=
-	'DELETE' 'FROM' relation_expr_opt_alias where_clause opt_sort_clause opt_limit_clause returning_clause
+	opt_with_clause 'DELETE' 'FROM' relation_expr_opt_alias where_clause opt_sort_clause opt_limit_clause returning_clause
 
 discard_stmt ::=
 	'DISCARD' 'ALL'
@@ -90,8 +90,8 @@ grant_stmt ::=
 	'GRANT' privileges 'ON' targets 'TO' grantee_list
 
 insert_stmt ::=
-	'INSERT' 'INTO' insert_target insert_rest returning_clause
-	| 'INSERT' 'INTO' insert_target insert_rest on_conflict returning_clause
+	opt_with_clause 'INSERT' 'INTO' insert_target insert_rest returning_clause
+	| opt_with_clause 'INSERT' 'INTO' insert_target insert_rest on_conflict returning_clause
 
 import_stmt ::=
 	'IMPORT' 'TABLE' any_name 'CREATE' 'USING' string_or_placeholder import_data_format 'DATA' '(' string_or_placeholder_list ')' opt_with_options
@@ -163,10 +163,10 @@ truncate_stmt ::=
 	'TRUNCATE' opt_table relation_expr_list opt_drop_behavior
 
 update_stmt ::=
-	'UPDATE' relation_expr_opt_alias 'SET' set_clause_list where_clause opt_sort_clause opt_limit_clause returning_clause
+	opt_with_clause 'UPDATE' relation_expr_opt_alias 'SET' set_clause_list where_clause opt_sort_clause opt_limit_clause returning_clause
 
 upsert_stmt ::=
-	'UPSERT' 'INTO' insert_target insert_rest returning_clause
+	opt_with_clause 'UPSERT' 'INTO' insert_target insert_rest returning_clause
 
 alter_ddl_stmt ::=
 	alter_table_stmt
@@ -238,6 +238,10 @@ name ::=
 	'identifier'
 	| unreserved_keyword
 	| col_name_keyword
+
+opt_with_clause ::=
+	with_clause
+	| 
 
 relation_expr_opt_alias ::=
 	relation_expr
@@ -354,6 +358,9 @@ select_no_parens ::=
 	simple_select
 	| select_clause sort_clause
 	| select_clause opt_sort_clause select_limit
+	| with_clause select_clause
+	| with_clause select_clause sort_clause
+	| with_clause select_clause opt_sort_clause select_limit
 
 select_with_parens ::=
 	'(' select_no_parens ')'
@@ -800,6 +807,9 @@ col_name_keyword ::=
 	| 'VALUES'
 	| 'VARCHAR'
 
+with_clause ::=
+	'WITH' cte_list
+
 relation_expr ::=
 	qualified_name
 	| qualified_name '*'
@@ -1114,6 +1124,9 @@ opt_column_list ::=
 opt_sequence_option_list ::=
 	sequence_option_list
 	| 
+
+cte_list ::=
+	( common_table_expr ) ( ( ',' common_table_expr ) )*
 
 sortby_list ::=
 	( sortby ) ( ( ',' sortby ) )*
@@ -1436,6 +1449,10 @@ partition_by ::=
 	'PARTITION' 'BY' 'LIST' '(' name_list ')' '(' list_partitions ')'
 	| 'PARTITION' 'BY' 'RANGE' '(' name_list ')' '(' range_partitions ')'
 	| 'PARTITION' 'BY' 'NOTHING'
+
+common_table_expr ::=
+	name 'AS' '(' preparable_stmt ')'
+	| name '(' name_list ')' 'AS' '(' preparable_stmt ')'
 
 sortby ::=
 	a_expr opt_asc_desc

@@ -93,7 +93,7 @@ func (o *sqlCheckConstraintCheckOperation) Start(params runParams) error {
 	// would be marginal compared to the work of the actual query, so the added
 	// complexity seems unjustified.
 	rows, err := params.p.SelectClause(ctx, sel, nil /* orderBy */, nil, /* limit */
-		nil /* desiredTypes */, publicColumns)
+		nil /* with */, nil /* desiredTypes */, publicColumns)
 	if err != nil {
 		return err
 	}

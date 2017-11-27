@@ -368,6 +368,14 @@ func (p *planner) getDataSource(
 ) (planDataSource, error) {
 	switch t := src.(type) {
 	case *tree.NormalizableTableName:
+		// If there's a CTE with this name, it takes priority over the normal flow.
+		ds, foundCTE, err := p.getCTEDataSource(t)
+		if err != nil {
+			return planDataSource{}, err
+		}
+		if foundCTE {
+			return ds, nil
+		}
 		// Usual case: a table.
 		tn, err := p.QualifyWithDatabase(ctx, t)
 		if err != nil {
