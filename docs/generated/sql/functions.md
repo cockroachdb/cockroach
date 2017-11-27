@@ -310,6 +310,8 @@ Compatible elements: hour, minute, second, millisecond, microsecond.</p>
 <table>
 <thead><tr><th>Function &rarr; Returns</th><th>Description</th></tr></thead>
 <tbody>
+<tr><td><code>currval(sequence_name: <a href="string.html">string</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Returns the current value of the given sequence.</p>
+</span></td></tr>
 <tr><td><code>experimental_uuid_v4() &rarr; <a href="bytes.html">bytes</a></code></td><td><span class="funcdesc"><p>Returns a UUID.</p>
 </span></td></tr>
 <tr><td><code>gen_random_uuid() &rarr; <a href="uuid.html">uuid</a></code></td><td><span class="funcdesc"><p>Generates a random UUID and returns it as a value of UUID type.</p>

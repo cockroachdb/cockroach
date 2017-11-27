@@ -2137,7 +2137,10 @@ type EvalPlanner interface {
 	// IncrementSequence increments the given sequence and returns the result.
 	// It returns an error if the given name is not a sequence.
 	// The caller must ensure that seqName is fully qualified already.
-	IncrementSequence(context context.Context, seqName *TableName) (int64, error)
+	IncrementSequence(ctx context.Context, seqName *TableName) (int64, error)
+
+	// GetSequence value returns the current value of a sequence.
+	GetSequenceValue(ctx context.Context, seqName *TableName) (int64, error)
 }
 
 // CtxProvider is anything that can return a Context.

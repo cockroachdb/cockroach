@@ -965,6 +965,8 @@ CockroachDB supports the following flags:
 		},
 	},
 
+	// Sequence functions.
+
 	"nextval": {
 		tree.Builtin{
 			Types:      tree.ArgTypes{{"sequence_name", types.String}},
@@ -989,6 +991,33 @@ CockroachDB supports the following flags:
 				return tree.NewDInt(tree.DInt(res)), nil
 			},
 			Info: "Advances the given sequence and returns its new value.",
+		},
+	},
+
+	"currval": {
+		tree.Builtin{
+			Types:      tree.ArgTypes{{"sequence_name", types.String}},
+			ReturnType: tree.FixedReturnType(types.Int),
+			Category:   categoryIDGeneration,
+			Impure:     true,
+			Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				name := tree.MustBeDString(args[0])
+				parsedNameWithIndex, err := evalCtx.Planner.ParseTableNameWithIndex(string(name))
+				if err != nil {
+					return nil, err
+				}
+				parsedName := parsedNameWithIndex.Table
+				qualifiedName, err := evalCtx.Planner.QualifyWithDatabase(evalCtx.Ctx(), &parsedName)
+				if err != nil {
+					return nil, err
+				}
+				res, err := evalCtx.Planner.GetSequenceValue(evalCtx.Ctx(), qualifiedName)
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDInt(tree.DInt(res)), nil
+			},
+			Info: "Returns the current value of the given sequence.",
 		},
 	},
 

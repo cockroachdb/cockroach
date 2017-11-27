@@ -50,7 +50,7 @@ TRUNCATE foo
 statement error pgcode 42809 "foo" is not a table
 DROP TABLE foo
 
-# USING THE nextval() FUNCTION
+# USING THE `nextval` AND `currval` FUNCTIONS
 
 # `select * from foo` currently returns 0 columns & 0 rows;
 # testing against that is a Test-Script syntax error.
@@ -62,6 +62,11 @@ SELECT nextval('foo')
 
 query I
 SELECT nextval('foo')
+----
+2
+
+query I
+SELECT currval('foo')
 ----
 2
 

@@ -300,6 +300,20 @@ func (p *planner) IncrementSequence(ctx context.Context, seqName *tree.TableName
 		ctx, p.txn.DB(), seqValueKey, descriptor.SequenceOpts.Increment)
 }
 
+// GetSequenceValue implements the parser.EvalPlanner interface.
+func (p *planner) GetSequenceValue(ctx context.Context, seqName *tree.TableName) (int64, error) {
+	descriptor, err := getSequenceDesc(ctx, p.txn, p.getVirtualTabler(), seqName)
+	if err != nil {
+		return 0, err
+	}
+	seqValueKey := keys.MakeSequenceKey(uint32(descriptor.ID))
+	val, err := p.txn.Get(ctx, seqValueKey)
+	if err != nil {
+		return 0, err
+	}
+	return val.ValueInt(), nil
+}
+
 // queryRows executes a SQL query string where multiple result rows are returned.
 func (p *planner) queryRows(
 	ctx context.Context, sql string, args ...interface{},
