@@ -34,6 +34,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/cmd/urlcheck/lib/urlcheck"
+	sqlparser "github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/ghemawat/stream"
 	"github.com/kisielk/gotool"
 	"github.com/pkg/errors"
@@ -1085,6 +1087,21 @@ func TestLint(t *testing.T) {
 			if out := stderr.String(); len(out) > 0 {
 				t.Fatalf("err=%s, stderr=%s", err, out)
 			}
+		}
+	})
+
+	// TestHelpURLs checks that all help texts have a valid documentation URL.
+	t.Run("TestHelpURLs", func(t *testing.T) {
+		t.Parallel()
+		var buf bytes.Buffer
+		for key, body := range sqlparser.HelpMessages {
+			msg := sqlparser.HelpMessage{Command: key, HelpMessageBody: body}
+			buf.WriteString(msg.String())
+		}
+		cmd := exec.Command("grep", "-nE", urlcheck.URLRE)
+		cmd.Stdin = &buf
+		if err := urlcheck.CheckURLsFromGrepOutput(cmd); err != nil {
+			t.Fatal(err)
 		}
 	})
 }
