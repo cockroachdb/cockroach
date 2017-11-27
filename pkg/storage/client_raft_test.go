@@ -1894,37 +1894,25 @@ func TestQuotaPool(t *testing.T) {
 	}
 }
 
-// TestWedgedReplicaDetection verifies that a leader replica is able to correctly detect a wedged follower replica.
+// TestWedgedReplicaDetection verifies that a leader replica is able to
+// correctly detect a wedged follower replica and no longer consider it
+// as active for the purpose of proposal throttling.
 func TestWedgedReplicaDetection(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	const numReplicas = 3
 	const rangeID = 1
 
-	var manuals []*hlc.ManualClock
-	var clocks []*hlc.Clock
-	for i := 0; i < numReplicas; i++ {
-		manuals = append(manuals, hlc.NewManualClock(123))
-		clocks = append(clocks, hlc.NewClock(manuals[i].UnixNano, time.Nanosecond))
-	}
-
 	sc := storage.TestStoreConfig(nil)
 	// Suppress timeout-based elections to avoid leadership changes in ways
 	// this test doesn't expect.
 	sc.RaftElectionTimeoutTicks = 100000
-	mtc := &multiTestContext{storeConfig: &sc, clocks: clocks}
+	mtc := &multiTestContext{storeConfig: &sc}
 	mtc.Start(t, numReplicas)
 	defer mtc.Stop()
-
 	mtc.replicateRange(rangeID, 1, 2)
 
 	leaderRepl := mtc.getRaftLeader(rangeID)
-	// We need four steps in this test:
-	// 1. Wedged the specified follower replica.
-	// 2. Increment leader's clock past MinQuotaReplicaLivenessDuration+1.
-	// 3. Send An request to the leader replica.
-	// 4. Check whether leader replica's last update time for the follower replica exceeds
-	// MinQuotaReplicaLivenessDuration.
 	followerRepl := func() *storage.Replica {
 		for _, store := range mtc.stores {
 			repl, err := store.GetReplica(rangeID)
@@ -1942,7 +1930,8 @@ func TestWedgedReplicaDetection(t *testing.T) {
 		t.Fatal("could not get a handle on a follower replica")
 	}
 
-	// NB: See TestRaftBlockedReplica/#9914 for why we use a separate
+	// Lock the follower replica to prevent it from making progress from now
+	// on. NB: See TestRaftBlockedReplica/#9914 for why we use a separate
 	// goroutine.
 	var wg sync.WaitGroup
 	wg.Add(1)
@@ -1951,25 +1940,39 @@ func TestWedgedReplicaDetection(t *testing.T) {
 		wg.Done()
 	}()
 	wg.Wait()
-	leaderReplicaID := leaderRepl.ReplicaID()
-	manuals[leaderReplicaID].Increment(int64(storage.MinQuotaReplicaLivenessDuration) + int64(1))
+	defer followerRepl.RaftUnlock()
 
+	// Increment leader's clock close to MaxQuotaReplicaLivenessDuration, but
+	// not past it.
+	mtc.manualClock.Increment(storage.MaxQuotaReplicaLivenessDuration.Nanoseconds() - 1)
+
+	// Send a request to the leader replica to update the quota pool status.
+	ctx := context.Background()
 	key := roachpb.Key("k")
 	value := []byte("value")
-	_, pErr := client.SendWrapped(context.Background(), leaderRepl, putArgs(key, value))
-	if pErr != nil {
+	req := putArgs(key, value)
+	if _, pErr := client.SendWrapped(ctx, leaderRepl, req); pErr != nil {
 		t.Fatal(pErr)
 	}
 
-	now := timeutil.Unix(0, clocks[leaderReplicaID].PhysicalNow())
-	followerIsNotWedged := func(lastUpdateTime time.Time) bool {
-		return !lastUpdateTime.IsZero() && now.Sub(lastUpdateTime) <= storage.MinQuotaReplicaLivenessDuration
+	// The follower should still be active.
+	followerID := followerRepl.ReplicaID()
+	if !leaderRepl.IsFollowerActive(ctx, followerID) {
+		t.Fatalf("expected follower to still be considered active")
 	}
-	lastUpdateTime := leaderRepl.GetLastUpdateTimeForReplica(followerRepl.ReplicaID())
-	if followerIsNotWedged(lastUpdateTime) {
-		t.Fatalf("expected time duration for replica %d exceed %d, but got %d.", followerRepl.ReplicaIDLocked(), storage.MinQuotaReplicaLivenessDuration, now.Sub(lastUpdateTime))
+
+	// Increment leader's clock past MaxQuotaReplicaLivenessDuration
+	mtc.manualClock.Increment(storage.MaxQuotaReplicaLivenessDuration.Nanoseconds() + 1)
+
+	// Send another request to the leader replica to update the quota pool status.
+	if _, pErr := client.SendWrapped(ctx, leaderRepl, req); pErr != nil {
+		t.Fatal(pErr)
 	}
-	followerRepl.RaftUnlock()
+
+	// The follower should no longer be considered active.
+	if leaderRepl.IsFollowerActive(ctx, followerID) {
+		t.Fatalf("expected follower to be considered inactive")
+	}
 }
 
 // TestRaftHeartbeats verifies that coalesced heartbeats are correctly
