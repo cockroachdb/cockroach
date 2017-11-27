@@ -236,6 +236,25 @@ type formattedDatum = {
   fillOpacity: number,
 };
 
+function calculateYAxisDomain(
+  axisUnits: AxisUnits,
+  data: TSResponse,
+) {
+  const resultDatapoints = _.flatMap(data.results, (result) => _.map(result.datapoints, (dp) => dp.value));
+  // TODO(couchand): Remove these random datapoints when NVD3 is gone.
+  const allDatapoints = resultDatapoints.concat([0, 1]);
+  const yExtent = d3.extent(allDatapoints);
+
+  switch (axisUnits) {
+    case AxisUnits.Bytes:
+      return ComputeByteAxisDomain(yExtent);
+    case AxisUnits.Duration:
+      return ComputeDurationAxisDomain(yExtent);
+    default:
+      return ComputeCountAxisDomain(yExtent);
+  }
+}
+
 /**
  * ProcessDataPoints is a helper function to process graph data from the server
  * into a format appropriate for display on an NVD3 graph. This includes the
@@ -243,16 +262,10 @@ type formattedDatum = {
  */
 function ProcessDataPoints(
   metrics: React.ReactElement<MetricProps>[],
-  axisUnits: AxisUnits,
   data: TSResponse,
   timeInfo: QueryTimeInfo,
 ) {
   const xExtent: Extent = [NanoToMilli(timeInfo.start.toNumber()), NanoToMilli(timeInfo.end.toNumber())];
-
-  const resultDatapoints = _.flatMap(data.results, (result) => _.map(result.datapoints, (dp) => dp.value));
-  // TODO(couchand): Remove these random datapoints when NVD3 is gone.
-  const allDatapoints = resultDatapoints.concat([0, 1]);
-  const yExtent = d3.extent(allDatapoints);
 
   const formattedData: formattedDatum[] = [];
 
@@ -275,23 +288,10 @@ function ProcessDataPoints(
       });
     }
   });
-
-  let yAxisDomain: AxisDomain;
-  switch (axisUnits) {
-    case AxisUnits.Bytes:
-      yAxisDomain = ComputeByteAxisDomain(yExtent);
-      break;
-    case AxisUnits.Duration:
-      yAxisDomain = ComputeDurationAxisDomain(yExtent);
-      break;
-    default:
-      yAxisDomain = ComputeCountAxisDomain(yExtent);
-  }
   const xAxisDomain = ComputeTimeAxisDomain(xExtent);
 
   return {
     formattedData,
-    yAxisDomain,
     xAxisDomain,
   };
 }
@@ -328,10 +328,10 @@ export function ConfigureLineChart(
   let xAxisDomain, yAxisDomain: AxisDomain;
 
   if (data) {
-    const processed = ProcessDataPoints(metrics, axis.props.units, data, timeInfo);
+    const processed = ProcessDataPoints(metrics, data, timeInfo);
     formattedData = processed.formattedData;
     xAxisDomain = processed.xAxisDomain;
-    yAxisDomain = processed.yAxisDomain;
+    yAxisDomain = calculateYAxisDomain(axis.props.units, data);
 
     chart.yDomain(yAxisDomain.extent);
     if (axis.props.label) {
