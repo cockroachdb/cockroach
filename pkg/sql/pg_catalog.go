@@ -221,9 +221,10 @@ CREATE TABLE pg_catalog.pg_attribute (
 }
 
 var (
-	relKindTable = tree.NewDString("r")
-	relKindIndex = tree.NewDString("i")
-	relKindView  = tree.NewDString("v")
+	relKindTable    = tree.NewDString("r")
+	relKindIndex    = tree.NewDString("i")
+	relKindView     = tree.NewDString("v")
+	relKindSequence = tree.NewDString("S")
 
 	relPersistencePermanent = tree.NewDString("p")
 )
@@ -264,11 +265,12 @@ CREATE TABLE pg_catalog.pg_class (
 	populate: func(ctx context.Context, p *planner, prefix string, addRow func(...tree.Datum) error) error {
 		h := makeOidHasher()
 		return forEachTableDesc(ctx, p, prefix, func(db *sqlbase.DatabaseDescriptor, table *sqlbase.TableDescriptor) error {
-			// Table.
+			// The only difference between tables, views and sequences is the relkind column.
 			relKind := relKindTable
 			if table.IsView() {
-				// The only difference between tables and views is the relkind column.
 				relKind = relKindView
+			} else if table.IsSequence() {
+				relKind = relKindSequence
 			}
 			if err := addRow(
 				h.TableOid(db, table),       // oid
