@@ -18,9 +18,11 @@
 # The CXX_STANDARD property was introduced in version 3.1.
 cmake_minimum_required(VERSION 3.1 FATAL_ERROR)
 
-project(roachlib)
+project(roachlib LANGUAGES C CXX ASM)
 
 add_library(roach
+  crc32.c
+  crc32_amd64.S
   db.cc
   encoding.cc
   eventlistener.cc
@@ -47,7 +49,31 @@ target_include_directories(roachccl
 )
 target_link_libraries(roachccl roach)
 
-set_target_properties(roach roachccl PROPERTIES
+add_executable(crc32_bench crc32_bench.c testutil.c)
+target_link_libraries(crc32_bench roach)
+
+include(CTest)
+enable_testing()
+
+add_executable(encoding_test encoding_test.cc)
+target_include_directories(encoding_test PRIVATE ../rocksdb/include)
+target_link_libraries(encoding_test roach)
+add_test(encoding_test encoding_test)
+
+add_executable(crc32_test
+  crc32_test.c
+  crc32_amd64.S
+  testutil.c
+)
+target_link_libraries(crc32_test z)
+add_test(crc32_test crc32_test)
+
+add_custom_target(check
+  COMMAND ${CMAKE_CTEST_COMMAND} -V
+  DEPENDS encoding_test crc32_test
+)
+
+set_target_properties(roach roachccl encoding_test PROPERTIES
   CXX_STANDARD 11
   CXX_STANDARD_REQUIRED YES
   CXX_EXTENSIONS NO

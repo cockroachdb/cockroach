@@ -39,6 +39,7 @@ RUN curl -fsSL https://deb.nodesource.com/gpgkey/nodesource.gpg.key | apt-key ad
 # unzip - terraform
 # xz-utils - msan: libcxx / CRDB build system
 # yarn - ui: all
+# zlib1g-dev - libroach: crc32_test
 RUN apt-get update && apt-get install -y --no-install-recommends \
     autoconf \
     bison \
@@ -64,7 +65,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     texinfo \
     unzip \
     xz-utils \
-    yarn
+    yarn \
+    zlib1g-dev
 
 RUN mkdir crosstool-ng \
  && curl -fsSL http://crosstool-ng.org/download/crosstool-ng/crosstool-ng-1.23.0.tar.xz | tar --strip-components=1 -C crosstool-ng -xJ \

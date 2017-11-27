@@ -12,10 +12,7 @@
 // implied.  See the License for the specific language governing
 // permissions and limitations under the License.
 
-#include "rocksdb/slice.h"
 #include "encoding.h"
-
-// TODO(benesch): Set up a CI pipeline to test these functions.
 
 void EncodeUint32(std::string* buf, uint32_t v) {
   const uint8_t tmp[sizeof(v)] = {

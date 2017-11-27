@@ -464,6 +464,10 @@ libroach: $(LIBROACH_DIR)/Makefile $(CPP_PROTOS_TARGET)
 libroachccl: $(LIBROACH_DIR)/Makefile libroach
 	@$(MAKE) --no-print-directory -C $(LIBROACH_DIR) roachccl
 
+.PHONY: check-libroach
+check-libroach:
+	@$(MAKE) --no-print-directory -C $(LIBROACH_DIR) check
+
 .PHONY: clean-c-deps
 clean-c-deps:
 	rm -rf $(JEMALLOC_DIR)
