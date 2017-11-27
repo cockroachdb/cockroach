@@ -46,6 +46,12 @@ const (
 	// return. Examples include SET, BEGIN, COMMIT.
 	Ack StatementType = iota
 	// DDL indicates that the statement mutates the database schema.
+	//
+	// Note: this is the type indicated back to the client; it is not a
+	// sufficient test for schema mutation for planning purposes. There
+	// are schema-modifying statements (e.g. CREATE TABLE AS) which
+	// report RowsAffected to the client, not DDL.
+	// Use CanModifySchema() below instead.
 	DDL
 	// RowsAffected indicates that the statement returns the count of
 	// affected rows.
@@ -76,6 +82,23 @@ type Statement interface {
 	// TODO(dt): Currently tags are always pg-compatible in the future it
 	// might make sense to pass a tag format specifier.
 	StatementTag() string
+}
+
+// canModifySchema is to be implemented by statements that can modify
+// the database schema but may have StatementType() != DDL.
+// See CanModifySchema() below.
+type canModifySchema interface {
+	modifiesSchema() bool
+}
+
+// CanModifySchema returns true if the statement can modify
+// the database schema.
+func CanModifySchema(stmt Statement) bool {
+	if stmt.StatementType() == DDL {
+		return true
+	}
+	scm, ok := stmt.(canModifySchema)
+	return ok && scm.modifiesSchema()
 }
 
 // HiddenFromStats is a pseudo-interface to be implemented
@@ -198,6 +221,9 @@ func (n *CreateTable) StatementTag() string {
 	}
 	return "CREATE TABLE"
 }
+
+// modifiesSchema implements the canModifySchema interface.
+func (*CreateTable) modifiesSchema() bool { return true }
 
 // StatementType implements the Statement interface.
 func (*CreateUser) StatementType() StatementType { return RowsAffected }
