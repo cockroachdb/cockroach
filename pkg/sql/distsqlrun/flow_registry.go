@@ -91,16 +91,31 @@ type flowRegistry struct {
 	// All fields in the flowEntry's are protected by the flowRegistry mutex,
 	// except flow, whose methods can be called freely.
 	flows map[FlowID]*flowEntry
+
+	// If true, the registry sends handshake messages whenever an inbound stream
+	// is connected. This can be turned off for compatibility with older node
+	// versions.
+	sendHandshakeMsg bool
 }
+
+type registryCompatibilityMode bool
+
+const (
+	defaultCompatibility  registryCompatibilityMode = false
+	extra1_0Compatibility registryCompatibilityMode = true
+)
 
 // makeFlowRegistry creates a new flowRegistry.
 //
 // nodeID is the ID of the current node. Used for debugging; pass 0 if you don't
 // care.
-func makeFlowRegistry(nodeID roachpb.NodeID) *flowRegistry {
+func makeFlowRegistry(
+	nodeID roachpb.NodeID, compatibility registryCompatibilityMode,
+) *flowRegistry {
 	fr := &flowRegistry{
-		nodeID: nodeID,
-		flows:  make(map[FlowID]*flowEntry),
+		nodeID:           nodeID,
+		flows:            make(map[FlowID]*flowEntry),
+		sendHandshakeMsg: compatibility != extra1_0Compatibility,
 	}
 	return fr
 }
@@ -297,26 +312,28 @@ func (fr *flowRegistry) ConnectInboundStream(
 
 	entry := fr.getEntryLocked(flowID)
 	if entry.flow == nil {
-		// Send the handshake message informing the producer that the consumer has
-		// not been scheduled yet. Another handshake will be sent below once the
-		// consumer has been connected.
-		deadline := timeutil.Now().Add(timeout)
-		if err := stream.Send(&ConsumerSignal{
-			Handshake: &ConsumerHandshake{
-				ConsumerScheduled:        false,
-				ConsumerScheduleDeadline: &deadline,
-				Version:                  Version,
-				MinAcceptedVersion:       MinAcceptedVersion,
-			},
-		}); err != nil {
-			// TODO(andrei): We failed to send a message to the producer; we'll return
-			// an error and leave this stream with connected == false so it times out
-			// later. We could call finishInboundStreamLocked() now so that the flow
-			// doesn't wait for the timeout and we could remember the error for the
-			// consumer if the consumer comes later, but I'm not sure what the best
-			// way to do that is. Similarly for the 2nd handshake message below,
-			// except there we already have the consumer and we can push the error.
-			return nil, nil, nil, err
+		if fr.sendHandshakeMsg {
+			// Send the handshake message informing the producer that the consumer has
+			// not been scheduled yet. Another handshake will be sent below once the
+			// consumer has been connected.
+			deadline := timeutil.Now().Add(timeout)
+			if err := stream.Send(&ConsumerSignal{
+				Handshake: &ConsumerHandshake{
+					ConsumerScheduled:        false,
+					ConsumerScheduleDeadline: &deadline,
+					Version:                  Version,
+					MinAcceptedVersion:       MinAcceptedVersion,
+				},
+			}); err != nil {
+				// TODO(andrei): We failed to send a message to the producer; we'll return
+				// an error and leave this stream with connected == false so it times out
+				// later. We could call finishInboundStreamLocked() now so that the flow
+				// doesn't wait for the timeout and we could remember the error for the
+				// consumer if the consumer comes later, but I'm not sure what the best
+				// way to do that is. Similarly for the 2nd handshake message below,
+				// except there we already have the consumer and we can push the error.
+				return nil, nil, nil, err
+			}
 		}
 		entry = fr.waitForFlowLocked(ctx, flowID, timeout)
 		if entry == nil {
@@ -346,14 +363,16 @@ func (fr *flowRegistry) ConnectInboundStream(
 		}
 	}()
 
-	if err := stream.Send(&ConsumerSignal{
-		Handshake: &ConsumerHandshake{
-			ConsumerScheduled:  true,
-			Version:            Version,
-			MinAcceptedVersion: MinAcceptedVersion,
-		},
-	}); err != nil {
-		return nil, nil, nil, err
+	if fr.sendHandshakeMsg {
+		if err := stream.Send(&ConsumerSignal{
+			Handshake: &ConsumerHandshake{
+				ConsumerScheduled:  true,
+				Version:            Version,
+				MinAcceptedVersion: MinAcceptedVersion,
+			},
+		}); err != nil {
+			return nil, nil, nil, err
+		}
 	}
 
 	cleanup := func() {

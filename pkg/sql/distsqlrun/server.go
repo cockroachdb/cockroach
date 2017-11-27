@@ -74,7 +74,7 @@ const Version DistSQLVersion = 6
 
 // MinAcceptedVersion is the oldest version that the server is
 // compatible with; see above.
-const MinAcceptedVersion DistSQLVersion = 6
+var MinAcceptedVersion DistSQLVersion = 6
 
 var settingUseTempStorageSorts = settings.RegisterBoolSetting(
 	"sql.distsql.temp_storage.sorts",
@@ -132,6 +132,10 @@ type ServerConfig struct {
 
 	// A handle to gossip used to broadcast the node's DistSQL version.
 	Gossip *gossip.Gossip
+
+	// Extra1_0Compatibility enables compatibility with planned on 1.0.x gateways.
+	// See server.Config.Extra1_0Compatibility.
+	Extra1_0Compatibility bool
 }
 
 // ServerImpl implements the server for the distributed SQL APIs.
@@ -154,10 +158,17 @@ var _ DistSQLServer = &ServerImpl{}
 
 // NewServer instantiates a DistSQLServer.
 func NewServer(ctx context.Context, cfg ServerConfig) *ServerImpl {
+	var registryCompatibility registryCompatibilityMode
+	if cfg.Extra1_0Compatibility {
+		MinAcceptedVersion = 3 // 1.0.x's DistSQLVersion
+		registryCompatibility = extra1_0Compatibility
+	} else {
+		registryCompatibility = defaultCompatibility
+	}
 	ds := &ServerImpl{
 		ServerConfig:  cfg,
 		regexpCache:   parser.NewRegexpCache(512),
-		flowRegistry:  makeFlowRegistry(cfg.NodeID.Get()),
+		flowRegistry:  makeFlowRegistry(cfg.NodeID.Get(), registryCompatibility),
 		flowScheduler: newFlowScheduler(cfg.AmbientContext, cfg.Stopper, cfg.Metrics),
 		memMonitor: mon.MakeMonitor(
 			"distsql",

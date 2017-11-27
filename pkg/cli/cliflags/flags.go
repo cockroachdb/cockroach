@@ -569,4 +569,13 @@ Takes any of the following values:
 		Description: `
 		 Show node decomissioning details.`,
 	}
+
+	Extra1_0Compatibility = FlagInfo{
+		Name: "extra-1.0-compatibility",
+		Description: `
+If set, the CRDB node will ensure it supports DistSQL queries originating on
+1.0.x nodes. This flag is generally not recommended; if used, all 1.1.x nodes in
+the cluster must have it set, and behavior that may be needed for compatibility
+with future versions is disabled. Additionally, this flag will go away in 1.2.`,
+	}
 )
