@@ -532,6 +532,10 @@ func (e *Executor) Prepare(
 	planner.evalCtx.ActiveMemAcc = &prepared.constantAcc
 
 	if protoTS != nil {
+		planner.asOfSystemTime = true
+		// We can't use cached descriptors anywhere in this query, because
+		// we want the descriptors at the timestamp given, not the latest
+		// known to the cache.
 		planner.avoidCachedDescriptors = true
 		txn.SetFixedTimestamp(session.Ctx(), *protoTS)
 	}
@@ -766,6 +770,7 @@ func (e *Executor) execParsed(
 	session *Session, stmts StatementList, pinfo *tree.PlaceholderInfo, copymsg copyMsg,
 ) error {
 	var avoidCachedDescriptors bool
+	var asOfSystemTime bool
 	txnState := &session.TxnState
 	resultWriter := session.ResultsWriter
 
@@ -807,6 +812,7 @@ func (e *Executor) execParsed(
 					return err
 				}
 				if protoTS != nil {
+					asOfSystemTime = true
 					// When running AS OF SYSTEM TIME queries, we want to use the
 					// table descriptors from the specified time, and never lease
 					// anything. To do this, we pass down the avoidCachedDescriptors
@@ -833,7 +839,7 @@ func (e *Executor) execParsed(
 		var transitionToOpen bool
 		remainingStmts, transitionToOpen, err = runWithAutoRetry(
 			e, session, stmtsToExec, !inTxn /* txnPrefix */, autoCommit,
-			protoTS, pinfo, avoidCachedDescriptors,
+			protoTS, pinfo, asOfSystemTime, avoidCachedDescriptors,
 		)
 		if autoCommit && txnState.State() != NoTxn {
 			log.Fatalf(session.Ctx(), "after an implicit txn, state should always be NoTxn, but found: %s",
@@ -972,6 +978,7 @@ func runWithAutoRetry(
 	autoCommit bool,
 	protoTS *hlc.Timestamp,
 	pinfo *tree.PlaceholderInfo,
+	asOfSystemTime bool,
 	avoidCachedDescriptors bool,
 ) (remainingStmts StatementList, transitionToOpen bool, _ error) {
 
@@ -1016,7 +1023,7 @@ func runWithAutoRetry(
 		// Run some statements.
 		remainingStmts, transitionToOpen, err = runTxnAttempt(
 			e, session, stmtsToExec, pinfo, origState,
-			txnPrefix, avoidCachedDescriptors, automaticRetryCount, txnState.txnResults)
+			txnPrefix, asOfSystemTime, avoidCachedDescriptors, automaticRetryCount, txnState.txnResults)
 
 		// Sanity checks.
 		if err != nil && txnState.TxnIsOpen() {
@@ -1152,6 +1159,7 @@ func runTxnAttempt(
 	pinfo *tree.PlaceholderInfo,
 	origState TxnStateEnum,
 	txnPrefix bool,
+	asOfSystemTime bool,
 	avoidCachedDescriptors bool,
 	automaticRetryCount int,
 	txnResults ResultsGroup,
@@ -1191,7 +1199,7 @@ func runTxnAttempt(
 		if err := e.execSingleStatement(
 			session, stmt, pinfo,
 			txnPrefix && i == 0, /* firstInTxn */
-			avoidCachedDescriptors, automaticRetryCount, stmtResult,
+			asOfSystemTime, avoidCachedDescriptors, automaticRetryCount, stmtResult,
 		); err != nil {
 			return nil, false, err
 		}
@@ -1244,6 +1252,7 @@ func runTxnAttempt(
 // pinfo:      The placeholders to use in the statements.
 // firstInTxn: Set if the statements represents the first statement in a txn.
 //   Used to trap nested BEGINs.
+// asOfSystemTime: Set if the statement is using AS OF SYSTEM TIME.
 // avoidCachedDescriptors: Set if the statement execution should avoid
 //   using cached descriptors.
 // automaticRetryCount: Increases with each retry; 0 for the first attempt.
@@ -1255,6 +1264,7 @@ func (e *Executor) execSingleStatement(
 	stmt Statement,
 	pinfo *tree.PlaceholderInfo,
 	firstInTxn bool,
+	asOfSystemTime bool,
 	avoidCachedDescriptors bool,
 	automaticRetryCount int,
 	res StatementResult,
@@ -1320,7 +1330,7 @@ func (e *Executor) execSingleStatement(
 		case Open, AutoRetry:
 			err = e.execStmtInOpenTxn(
 				session, stmt, pinfo, firstInTxn,
-				avoidCachedDescriptors, automaticRetryCount, res)
+				asOfSystemTime, avoidCachedDescriptors, automaticRetryCount, res)
 		case Aborted, RestartWait:
 			err = e.execStmtInAbortedTxn(session, stmt, res)
 		case CommitWait:
@@ -1534,6 +1544,7 @@ func sessionEventf(session *Session, format string, args ...interface{}) {
 // pinfo: the placeholders to use in the statement.
 // firstInTxn: set for the first statement in a transaction. Used
 //  so that nested BEGIN statements are caught.
+// asOfSystemTime: set if the statement is using AS OF SYSTEM TIME.
 // avoidCachedDescriptors: set if the statement execution should avoid
 //  using cached descriptors.
 // automaticRetryCount: increases with each retry; 0 for the first attempt.
@@ -1543,6 +1554,7 @@ func (e *Executor) execStmtInOpenTxn(
 	stmt Statement,
 	pinfo *tree.PlaceholderInfo,
 	firstInTxn bool,
+	asOfSystemTime bool,
 	avoidCachedDescriptors bool,
 	automaticRetryCount int,
 	res StatementResult,
@@ -1779,6 +1791,7 @@ func (e *Executor) execStmtInOpenTxn(
 	p.evalCtx.SetStmtTimestamp(e.cfg.Clock.PhysicalTime())
 	p.semaCtx.Placeholders.Assign(pinfo)
 	p.evalCtx.Placeholders = &p.semaCtx.Placeholders
+	p.asOfSystemTime = asOfSystemTime
 	p.avoidCachedDescriptors = avoidCachedDescriptors
 	p.phaseTimes[plannerStartExecStmt] = timeutil.Now()
 	p.stmt = &stmt
