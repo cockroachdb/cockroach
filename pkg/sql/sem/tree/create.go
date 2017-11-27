@@ -986,3 +986,22 @@ func (node *CreateView) Format(buf *bytes.Buffer, f FmtFlags) {
 	buf.WriteString(" AS ")
 	FormatNode(buf, f, node.AsSource)
 }
+
+// CreateStats represents a CREATE STATISTICS statement.
+type CreateStats struct {
+	Name        Name
+	ColumnNames NameList
+	Table       NormalizableTableName
+}
+
+// Format implements the NodeFormatter interface.
+func (node *CreateStats) Format(buf *bytes.Buffer, f FmtFlags) {
+	buf.WriteString("CREATE STATISTICS ")
+	FormatNode(buf, f, &node.Name)
+
+	buf.WriteString(" ON ")
+	FormatNode(buf, f, node.ColumnNames)
+
+	buf.WriteString(" FROM ")
+	FormatNode(buf, f, &node.Table)
+}
