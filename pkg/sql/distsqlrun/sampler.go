@@ -110,8 +110,8 @@ func newSamplerProcessor(
 	s.numRowsCol = len(outTypes)
 	outTypes = append(outTypes, sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_INT})
 
-	// An INT column indicating the number of NULL values on the first column
-	// of the sketch.
+	// An INT column indicating the number of rows that have a NULL in any sketch
+	// column.
 	s.numNullsCol = len(outTypes)
 	outTypes = append(outTypes, sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_INT})
 
@@ -162,6 +162,8 @@ func (s *samplerProcessor) mainLoop(ctx context.Context) (earlyExit bool, _ erro
 		}
 
 		for i := range s.sketches {
+			// TODO(radu): for multi-column sketches, we will need to do this for all
+			// columns.
 			col := s.sketches[i].spec.Columns[0]
 			s.sketches[i].numRows++
 			if row[col].IsNull() {
