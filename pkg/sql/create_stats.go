@@ -25,6 +25,7 @@ import (
 type createStatsNode struct {
 	tree.CreateStats
 	tableDesc *sqlbase.TableDescriptor
+	columns   []sqlbase.ColumnID
 }
 
 func (p *planner) CreateStatistics(ctx context.Context, n *tree.CreateStats) (planNode, error) {
@@ -33,25 +34,36 @@ func (p *planner) CreateStatistics(ctx context.Context, n *tree.CreateStats) (pl
 		return nil, err
 	}
 
-	// Is this perhaps a name for a virtual table?
-	if _, foundVirtual, err := p.getVirtualDataSource(ctx, tn); err != nil {
-		return nil, err
-	} else if foundVirtual {
-		return nil, errors.Errorf("cannot create statistics on virtual tables")
-	}
-
 	tableDesc, err := MustGetTableDesc(ctx, p.txn, p.getVirtualTabler(), tn, false /* allowAdding */)
 	if err != nil {
 		return nil, err
+	}
+
+	if tableDesc.IsVirtualTable() {
+		return nil, errors.Errorf("cannot create statistics on virtual tables")
 	}
 
 	if err := p.CheckPrivilege(tableDesc, privilege.SELECT); err != nil {
 		return nil, err
 	}
 
+	if len(n.ColumnNames) == 0 {
+		return nil, errors.Errorf("no columns given for statistics")
+	}
+
+	columns, err := tableDesc.FindActiveColumnsByNames(n.ColumnNames)
+	if err != nil {
+		return nil, err
+	}
+	columnIDs := make([]sqlbase.ColumnID, len(columns))
+	for i := range columns {
+		columnIDs[i] = columns[i].ID
+	}
+
 	return &createStatsNode{
 		CreateStats: *n,
 		tableDesc:   tableDesc,
+		columns:     columnIDs,
 	}, nil
 }
 

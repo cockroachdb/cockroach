@@ -181,6 +181,30 @@ func (d *DistinctSpec) summary() (string, []string) {
 	return "Distinct", details
 }
 
+func (s *SamplerSpec) summary() (string, []string) {
+	details := []string{fmt.Sprintf("SampleSize: %d", s.SampleSize)}
+	for _, sk := range s.Sketches {
+		details = append(details, fmt.Sprintf("Stat: %s", colListStr(sk.Columns)))
+	}
+
+	return "Sampler", details
+}
+
+func (s *SampleAggregatorSpec) summary() (string, []string) {
+	details := []string{
+		fmt.Sprintf("SampleSize: %d", s.SampleSize),
+	}
+	for _, sk := range s.Sketches {
+		s := fmt.Sprintf("Stat: %s", colListStr(sk.Columns))
+		if sk.GenerateHistogram {
+			s = fmt.Sprintf("%s (%d buckets)", s, sk.HistogramMaxBuckets)
+		}
+		details = append(details, s)
+	}
+
+	return "SampleAggregator", details
+}
+
 func (is *InputSyncSpec) summary() (string, []string) {
 	switch is.Type {
 	case InputSyncSpec_UNORDERED:
