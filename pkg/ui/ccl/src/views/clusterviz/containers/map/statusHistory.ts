@@ -11,6 +11,28 @@ import { NanoToMilli } from "src/util/convert";
 
 type NodeStatus = protos.cockroach.server.status.NodeStatus$Properties;
 
+// List of fake location data in order to place nodes on the map for visual
+// effect.
+const locations: [number, number][] = [
+    [-74.00597, 40.71427],
+    [-80.19366, 25.77427],
+    [-93.60911, 41.60054],
+    [-118.24368, 34.05223],
+    [-122.33207, 47.60621],
+    [-0.12574, 51.50853],
+    [13.41053, 52.52437],
+    [18.0649, 59.33258],
+    [151.20732, -33.86785],
+    [144.96332, -37.814],
+    [153.02809, -27.46794],
+    [116.39723, 39.9075],
+    [121.45806, 31.22222],
+    [114.0683, 22.54554],
+    [72.88261, 19.07283],
+    [77.59369, 12.97194],
+    [77.22445, 28.63576],
+  ];
+
 export default class NodeStatusHistory {
     // "Client Activity" is a generic measurement present on each locality in
     // the current prototype design.
@@ -42,6 +64,10 @@ export default class NodeStatusHistory {
 
     latest() {
         return this.statusHistory[0];
+    }
+
+    location() {
+        return locations[this.id() % locations.length];
     }
 
     private computeClientActivityRate() {
