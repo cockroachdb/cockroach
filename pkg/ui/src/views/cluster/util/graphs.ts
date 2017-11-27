@@ -32,16 +32,17 @@ const Y_AXIS_TICK_COUNT: number = 3;
 // The number of ticks to display on an X axis.
 const X_AXIS_TICK_COUNT: number = 10;
 
+// A tuple of numbers for the minimum and maximum values of an axis.
+type Extent = [number, number];
+
 /**
  * AxisDomain is a class that describes the domain of a graph axis; this
  * includes the minimum/maximum extend, tick values, and formatting information
  * for axis values as displayed in various contexts.
  */
 class AxisDomain {
-  // the minimum value representing the bottom of the axis.
-  min: number = 0;
-  // the maximum value representing the top of the axis.
-  max: number = 1;
+  // the values at the ends of the axis.
+  extent: Extent;
   // numbers at which an intermediate tick should be displayed on the axis.
   ticks: number[] = [0, 1];
   // label returns the label for the axis.
@@ -57,25 +58,23 @@ class AxisDomain {
   // max. Ticks are always "aligned" to values that are even multiples of
   // increment. Min and max are also aligned by default - the aligned min will
   // be <= the provided min, while the aligned max will be >= the provided max.
-  constructor(min: number, max: number, increment: number, alignMinMax: boolean = true) {
+  constructor(extent: Extent, increment: number, alignMinMax: boolean = true) {
+    const min = extent[0];
+    const max = extent[1];
     if (alignMinMax) {
-      this.min = min - min % increment;
-      this.max = max - max % increment + increment;
+      const alignedMin = min - min % increment;
+      const alignedMax = max - max % increment + increment;
+      this.extent = [alignedMin, alignedMax];
     } else {
-      this.min = min;
-      this.max = max;
+      this.extent = extent;
     }
 
     this.ticks = [];
     for (let nextTick = min - min % increment + increment;
-         nextTick < this.max;
+         nextTick < this.extent[1];
          nextTick += increment) {
       this.ticks.push(nextTick);
     }
-  }
-
-  domain() {
-    return [this.min, this.max];
   }
 }
 
@@ -108,12 +107,10 @@ function computeNormalizedIncrement(
   return incrementTbl[normalizedIncrementIdx] * Math.pow(10, x);
 }
 
-function ComputeCountAxisDomain(
-  min: number, max: number,
-): AxisDomain {
-  const range = max - min;
+function ComputeCountAxisDomain(extent: Extent): AxisDomain {
+  const range = extent[1] - extent[0];
   const increment = computeNormalizedIncrement(range);
-  const axisDomain = new AxisDomain(min, max, increment);
+  const axisDomain = new AxisDomain(extent, increment);
 
   // If the tick increment is fractional (e.g. 0.2), we display a decimal
   // point. For non-fractional increments, we display with no decimal points
@@ -141,18 +138,16 @@ function ComputeCountAxisDomain(
   return axisDomain;
 }
 
-function ComputeByteAxisDomain(
-  min: number, max: number,
-): AxisDomain {
+function ComputeByteAxisDomain(extent: Extent): AxisDomain {
   // Compute an appropriate unit for the maximum value to be displayed.
-  const scale = ComputeByteScale(max);
+  const scale = ComputeByteScale(extent[1]);
   const prefixFactor = scale.value;
 
   // Compute increment on min/max after conversion to the appropriate prefix unit.
-  const increment = computeNormalizedIncrement(max / prefixFactor - min / prefixFactor);
+  const increment = computeNormalizedIncrement(extent[1] / prefixFactor - extent[0] / prefixFactor);
 
   // Create axis domain by multiplying computed increment by prefix factor.
-  const axisDomain = new AxisDomain(min, max, increment * prefixFactor);
+  const axisDomain = new AxisDomain(extent, increment * prefixFactor);
 
   // Apply the correct label to the axis.
   axisDomain.label = scale.units;
@@ -174,17 +169,15 @@ function ComputeByteAxisDomain(
 
 const durationLabels = ["nanoseconds", "microseconds", "milliseconds", "seconds"];
 
-function ComputeDurationAxisDomain(
-  min: number, max: number,
-): AxisDomain {
-  const prefixExponent = ComputePrefixExponent(max, 1000, durationLabels);
+function ComputeDurationAxisDomain(extent: Extent): AxisDomain {
+  const prefixExponent = ComputePrefixExponent(extent[1], 1000, durationLabels);
   const prefixFactor = Math.pow(1000, prefixExponent);
 
   // Compute increment on min/max after conversion to the appropriate prefix unit.
-  const increment = computeNormalizedIncrement(max / prefixFactor - min / prefixFactor);
+  const increment = computeNormalizedIncrement(extent[1] / prefixFactor - extent[0] / prefixFactor);
 
   // Create axis domain by multiplying computed increment by prefix factor.
-  const axisDomain = new AxisDomain(min, max, increment * prefixFactor);
+  const axisDomain = new AxisDomain(extent, increment * prefixFactor);
 
   // Apply the correct label to the axis.
   axisDomain.label = durationLabels[prefixExponent];
@@ -220,14 +213,12 @@ const timeIncrementDurations = [
 ];
 const timeIncrements = _.map(timeIncrementDurations, (inc) => inc.asMilliseconds());
 
-function ComputeTimeAxisDomain(
-  min: number, max: number,
-): AxisDomain {
+function ComputeTimeAxisDomain(extent: Extent): AxisDomain {
   // Compute increment; for time scales, this is taken from a table of allowed
   // values.
   let increment = 0;
   {
-    const rawIncrement = (max - min) / (X_AXIS_TICK_COUNT + 1);
+    const rawIncrement = (extent[1] - extent[0]) / (X_AXIS_TICK_COUNT + 1);
     // Compute X such that 0 <= rawIncrement/10^x <= 1
     const tbl = timeIncrements;
     let normalizedIncrementIdx = _.sortedIndex(tbl, rawIncrement);
@@ -238,7 +229,7 @@ function ComputeTimeAxisDomain(
   }
 
   // Do not normalize min/max for time axis.
-  const axisDomain = new AxisDomain(min, max, increment, false);
+  const axisDomain = new AxisDomain(extent, increment, false);
 
   axisDomain.label = "time";
 
@@ -276,7 +267,7 @@ function ProcessDataPoints(
   data: TSResponse,
   timeInfo: QueryTimeInfo,
 ) {
-  const xExtent = [NanoToMilli(timeInfo.start.toNumber()), NanoToMilli(timeInfo.end.toNumber())];
+  const xExtent: Extent = [NanoToMilli(timeInfo.start.toNumber()), NanoToMilli(timeInfo.end.toNumber())];
 
   const resultDatapoints = _.flatMap(data.results, (result) => _.map(result.datapoints, (dp) => dp.value));
   // TODO(couchand): Remove these random datapoints when NVD3 is gone.
@@ -308,15 +299,15 @@ function ProcessDataPoints(
   let yAxisDomain: AxisDomain;
   switch (axisUnits) {
     case AxisUnits.Bytes:
-      yAxisDomain = ComputeByteAxisDomain(yExtent[0], yExtent[1]);
+      yAxisDomain = ComputeByteAxisDomain(yExtent);
       break;
     case AxisUnits.Duration:
-      yAxisDomain = ComputeDurationAxisDomain(yExtent[0], yExtent[1]);
+      yAxisDomain = ComputeDurationAxisDomain(yExtent);
       break;
     default:
-      yAxisDomain = ComputeCountAxisDomain(yExtent[0], yExtent[1]);
+      yAxisDomain = ComputeCountAxisDomain(yExtent);
   }
-  const xAxisDomain = ComputeTimeAxisDomain(xExtent[0], xExtent[1]);
+  const xAxisDomain = ComputeTimeAxisDomain(xExtent);
 
   return {
     formattedData,
@@ -362,13 +353,13 @@ export function ConfigureLineChart(
     xAxisDomain = processed.xAxisDomain;
     yAxisDomain = processed.yAxisDomain;
 
-    chart.yDomain(yAxisDomain.domain());
+    chart.yDomain(yAxisDomain.extent);
     if (axis.props.label) {
       chart.yAxis.axisLabel(`${axis.props.label} (${yAxisDomain.label})`);
     } else {
       chart.yAxis.axisLabel(yAxisDomain.label);
     }
-    chart.xDomain(xAxisDomain.domain());
+    chart.xDomain(xAxisDomain.extent);
 
     // This is ridiculous, but this NVD3 setting appears to be a relative
     // adjustment to a constant pixel distance.
@@ -399,12 +390,9 @@ export function ConfigureLineChart(
 
   const xScale = chart.xAxis.scale();
   const yScale = chart.yAxis.scale();
-  const yExtent: Extent = data ? [yScale(yAxisDomain.min), yScale(yAxisDomain.max)] : [0, 1];
+  const yExtent: Extent = data ? [yScale(yAxisDomain.extent[0]), yScale(yAxisDomain.extent[1])] : [0, 1];
   updateLinkedGuideline(svgEl, xScale, yExtent, hoverTime);
 }
-
-// A tuple of numbers for the minimum and maximum values of an axis.
-type Extent = [number, number];
 
 // updateLinkedGuideline is responsible for maintaining "linked" guidelines on
 // all other graphs on the page; a "linked" guideline highlights the same X-axis
