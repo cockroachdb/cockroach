@@ -332,6 +332,10 @@ type Session struct {
 		// LastActiveQuery contains a reference to the AST of the last
 		// query that ran on this session.
 		LastActiveQuery tree.Statement
+
+		// sequenceState stores state related to calls to sequence
+		// builtins currval(), nextval(), and lastval().
+		SequenceState sequenceState
 	}
 
 	//
@@ -484,6 +488,7 @@ func NewSession(
 	s.PreparedPortals = makePreparedPortals(s)
 	s.Tracing.session = s
 	s.mu.ActiveQueries = make(map[uint128.Uint128]*queryMeta)
+	s.mu.SequenceState = newSequenceState()
 	s.ActiveSyncQueries = make([]uint128.Uint128, 0)
 
 	remoteStr := "<admin>"
