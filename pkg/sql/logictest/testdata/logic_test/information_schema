@@ -259,6 +259,7 @@ pg_catalog          pg_namespace
 pg_catalog          pg_proc
 pg_catalog          pg_range
 pg_catalog          pg_roles
+pg_catalog          pg_sequence
 pg_catalog          pg_settings
 pg_catalog          pg_tables
 pg_catalog          pg_tablespace
@@ -421,6 +422,7 @@ def            pg_catalog          pg_namespace               SYSTEM VIEW  1
 def            pg_catalog          pg_proc                    SYSTEM VIEW  1
 def            pg_catalog          pg_range                   SYSTEM VIEW  1
 def            pg_catalog          pg_roles                   SYSTEM VIEW  1
+def            pg_catalog          pg_sequence                SYSTEM VIEW  1
 def            pg_catalog          pg_settings                SYSTEM VIEW  1
 def            pg_catalog          pg_tables                  SYSTEM VIEW  1
 def            pg_catalog          pg_tablespace              SYSTEM VIEW  1

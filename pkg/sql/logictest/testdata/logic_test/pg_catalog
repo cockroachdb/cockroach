@@ -66,6 +66,7 @@ pg_namespace
 pg_proc
 pg_range
 pg_roles
+pg_sequence
 pg_settings
 pg_tables
 pg_tablespace
@@ -1162,6 +1163,39 @@ transaction_isolation          NULL    NULL     NULL     NULL        NULL
 transaction_priority           NULL    NULL     NULL     NULL        NULL
 transaction_read_only          NULL    NULL     NULL     NULL        NULL
 transaction_status             NULL    NULL     NULL     NULL        NULL
+
+# pg_catalog.pg_sequence
+
+statement ok
+CREATE DATABASE seq
+
+query OOIIIIIB
+SELECT * FROM pg_catalog.pg_sequence
+----
+
+statement ok
+CREATE SEQUENCE foo
+
+statement ok
+CREATE SEQUENCE bar MAXVALUE 10 MINVALUE 5 START 6 INCREMENT 2 CYCLE
+
+query OOIIIIIB colnames
+SELECT * FROM pg_catalog.pg_sequence
+----
+seqrelid    seqtypid  seqstart  seqincrement  seqmax               seqmin  seqcache  seqcycle
+1671363588  20        6         2             10                   5       1         true
+3781872120  20        1         1             9223372036854775807  1       1         false
+
+statement ok
+DROP DATABASE seq
+
+statement ok
+SET database = constraint_db
+
+# Verify sequences can't be seen from another database.
+query OOIIIIIB
+SELECT * FROM pg_catalog.pg_sequence
+----
 
 # Verify proper functionality of system information functions.
 

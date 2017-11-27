@@ -73,6 +73,7 @@ var pgCatalog = virtualSchema{
 		pgCatalogProcTable,
 		pgCatalogRangeTable,
 		pgCatalogRolesTable,
+		pgCatalogSequencesTable,
 		pgCatalogSettingsTable,
 		pgCatalogTablesTable,
 		pgCatalogTablespaceTable,
@@ -1245,6 +1246,41 @@ CREATE TABLE pg_catalog.pg_roles (
 					tree.NewDString("{}"),       // rolconfig
 				)
 			})
+	},
+}
+
+// See: https://www.postgresql.org/docs/10/static/catalog-pg-sequence.html
+var pgCatalogSequencesTable = virtualSchemaTable{
+	schema: `
+CREATE TABLE pg_catalog.pg_sequence (
+	seqrelid OID,
+	seqtypid OID,
+	seqstart INT8,
+	seqincrement INT8,
+	seqmax INT8,
+	seqmin INT8,
+	seqcache INT8,
+	seqcycle BOOL
+);
+`,
+	populate: func(ctx context.Context, p *planner, prefix string, addRow func(...tree.Datum) error) error {
+		h := makeOidHasher()
+		return forEachTableDesc(ctx, p, prefix, func(db *sqlbase.DatabaseDescriptor, table *sqlbase.TableDescriptor) error {
+			if !table.IsSequence() {
+				return nil
+			}
+			opts := table.SequenceOpts
+			return addRow(
+				h.TableOid(db, table),                   // seqrelid
+				tree.NewDOid(tree.DInt(oid.T_int8)),     // seqtypid
+				tree.NewDInt(tree.DInt(opts.Start)),     // seqstart
+				tree.NewDInt(tree.DInt(opts.Increment)), // seqincrement
+				tree.NewDInt(tree.DInt(opts.MaxValue)),  // seqmax
+				tree.NewDInt(tree.DInt(opts.MinValue)),  // seqmin
+				tree.NewDInt(1),                         // seqcache
+				tree.MakeDBool(tree.DBool(opts.Cycle)),  // seqcycle
+			)
+		})
 	},
 }
 
