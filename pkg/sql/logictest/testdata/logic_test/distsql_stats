@@ -1,0 +1,49 @@
+# LogicTest: 5node-distsql
+
+statement ok
+CREATE TABLE data (a INT, b INT, c FLOAT, d DECIMAL, PRIMARY KEY (a, b, c, d))
+
+# Split into ten parts.
+statement ok
+ALTER TABLE data SPLIT AT SELECT i FROM GENERATE_SERIES(1, 9) AS g(i)
+
+# Relocate the ten parts to the five nodes.
+statement ok
+ALTER TABLE data TESTING_RELOCATE
+  SELECT ARRAY[i%5+1], i FROM GENERATE_SERIES(0, 9) AS g(i)
+
+# Generate all combinations of values 1 to 10.
+statement ok
+INSERT INTO data SELECT a, b, c::FLOAT, d::DECIMAL FROM
+   GENERATE_SERIES(1, 10) AS A(a),
+   GENERATE_SERIES(1, 10) AS B(b),
+   GENERATE_SERIES(1, 10) AS C(c),
+   GENERATE_SERIES(1, 10) AS D(d)
+
+# Verify data placement.
+query TTTI colnames
+SELECT "Start Key", "End Key", "Replicas", "Lease Holder" FROM [SHOW TESTING_RANGES FROM TABLE data]
+----
+Start Key  End Key  Replicas  Lease Holder
+NULL       /1       {1}       1
+/1         /2       {2}       2
+/2         /3       {3}       3
+/3         /4       {4}       4
+/4         /5       {5}       5
+/5         /6       {1}       1
+/6         /7       {2}       2
+/7         /8       {3}       3
+/8         /9       {4}       4
+/9         NULL     {5}       5
+
+# We hardcode the plan for the testcase that follows to make it easier to debug
+# errors caused by changing planning logic.
+query T
+SELECT "URL" FROM [EXPLAIN (DISTSQL) CREATE STATISTICS s1 ON a FROM data]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html?eJzElLGOozAQhvt7CvRXd5ILG0guR5Ur01xOyXUnCgePEFqCkW2k3Y149xVQZIMSs6soS8mYz98_GmtOqLSiP_JIFsl_CDCEYIjAEINhgZShNjoja7XpfhmAjXpGwhmKqm5cV04ZMm0IyQmucCUhwT95KGlHUpEBgyIni7KX1KY4SvOyVtJJMGwblwRrgbRl0I07X2idzAmJaNnHpXt5rMuxcCjui1dKAsE552DYO-nXhje1Z1tTaaPIkLrwpe3NYL_z3FAunf5EwuB7yHlwaLIncvbHzbzRRV4xx2wmpI-aTThHrxPSR_UazdHrhPRRvcZz9Doh_Yr9ckW7I1vrytJoz1y_mXf7h1ROw7KyujEZ_TU66zXD57bn-oIi64ZTMXxsquGoC_geFl44vIDFGA795gl15KVjPxzfk3vhhZd-8_Ie808vvPKbV_eYf_lnxSeeif-Rjd1p--0tAAD__0dOyfM=
+
+statement ok
+CREATE STATISTICS s1 ON a FROM data
+
+# TODO(radu): look at the stats when we have statements (#20323)

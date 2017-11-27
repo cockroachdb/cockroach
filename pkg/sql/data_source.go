@@ -374,7 +374,7 @@ func (p *planner) getDataSource(
 			return planDataSource{}, err
 		}
 
-		// Is this perhaps a name for a virtual table?
+		// Check if this is a virtual table.
 		ds, foundVirtual, err := p.getVirtualDataSource(ctx, tn)
 		if err != nil {
 			return planDataSource{}, err
