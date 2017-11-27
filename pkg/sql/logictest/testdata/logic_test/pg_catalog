@@ -383,6 +383,43 @@ v1            a        false         true        0            NULL    NULL      
 v1            b        false         true        0            NULL    NULL        NULL
 v1            c        false         true        0            NULL    NULL        NULL
 
+# Check relkind codes.
+statement ok
+CREATE DATABASE relkinds
+
+statement ok
+SET DATABASE = relkinds
+
+statement ok
+CREATE TABLE tbl_test (k int primary key, v int)
+
+statement ok
+CREATE INDEX tbl_test_v_idx ON tbl_test (v)
+
+statement ok
+CREATE VIEW view_test AS SELECT k, v FROM tbl_test ORDER BY v
+
+statement ok
+CREATE SEQUENCE seq_test
+
+query TT
+SELECT relname, relkind
+FROM pg_catalog.pg_class c
+JOIN pg_catalog.pg_namespace n ON c.relnamespace = n.oid
+WHERE n.nspname = 'relkinds'
+ORDER BY relname
+----
+primary         i
+seq_test        S
+tbl_test        r
+tbl_test_v_idx  i
+view_test       v
+
+statement ok
+DROP DATABASE relkinds
+
+statement ok
+SET DATABASE = constraint_db
 
 # Select all columns with collations.
 query TTTOT colnames
