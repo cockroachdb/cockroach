@@ -970,11 +970,12 @@ func (r *Replica) maybeAcquireProposalQuota(ctx context.Context, quota int64) er
 
 	// Quota acquisition only takes place on the leader replica,
 	// r.mu.proposalQuota is set to nil if a node is a follower (see
-	// updateProposalQuotaRaftMuLocked). For the cases where the range lease
-	// holder is not the same as the range leader, i.e. the lease holder is a
-	// follower, r.mu.proposalQuota == nil. This means all quota acquisitions
-	// go through without any throttling whatsoever but given how short lived
-	// these scenarios are we don't try to remedy any further.
+	// updateProposalQuotaRaftMuLocked) or if r is a leader in a Range that does
+	// not use a quota pool (see quotaPoolEnabledLocked). For the cases where
+	// the range lease holder is not the same as the range leader, i.e. the
+	// lease holder is a follower, r.mu.proposalQuota == nil. This means all
+	// quota acquisitions go through without any throttling whatsoever but given
+	// how short lived these scenarios are we don't try to remedy any further.
 	//
 	// NB: It is necessary to allow proposals with a nil quota pool to go
 	// through, for otherwise a follower could never request the lease.
@@ -992,15 +993,29 @@ func (r *Replica) maybeAcquireProposalQuota(ctx context.Context, quota int64) er
 	return quotaPool.acquire(ctx, quota)
 }
 
+func (r *Replica) quotaPoolEnabledLocked() bool {
+	if r.mu.replicaID == 0 {
+		// The replica was created from preemptive snapshot and has not been
+		// added to the Raft group.
+		return false
+	}
+	if bytes.Equal(r.mu.state.Desc.StartKey, keys.NodeLivenessPrefix) {
+		// The replica is part of the NodeLiveness range, which does not use
+		// a quota pool. We don't want to throttle updates to the NodeLiveness
+		// range even if a follower is falling behind because this could result
+		// in cascading failures.
+		return false
+	}
+	return true
+}
+
 func (r *Replica) updateProposalQuotaRaftMuLocked(
 	ctx context.Context, lastLeaderID roachpb.ReplicaID,
 ) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	if r.mu.replicaID == 0 {
-		// The replica was created from preemptive snapshot and has not been
-		// added to the Raft group.
+	if !r.quotaPoolEnabledLocked() {
 		return
 	}
 
@@ -1724,13 +1739,13 @@ func (r *Replica) setQueueLastProcessed(
 }
 
 func (r *Replica) refreshLastUpdateTimeForReplicaLocked(replicaID roachpb.ReplicaID) {
-	if r.mu.replicaID == r.mu.leaderID {
+	if r.mu.lastUpdateTimes != nil {
 		r.mu.lastUpdateTimes[replicaID] = r.store.Clock().PhysicalTime()
 	}
 }
 
 func (r *Replica) refreshLastUpdateTimeForAllReplicasLocked() {
-	if r.mu.replicaID == r.mu.leaderID {
+	if r.mu.lastUpdateTimes != nil {
 		now := r.store.Clock().PhysicalTime()
 		for _, rep := range r.mu.state.Desc.Replicas {
 			r.mu.lastUpdateTimes[rep.ReplicaID] = now
@@ -1741,8 +1756,8 @@ func (r *Replica) refreshLastUpdateTimeForAllReplicasLocked() {
 // isFollowerActiveLocked returns whether the specified follower has made
 // communication with the leader in the last MaxQuotaReplicaLivenessDuration.
 func (r *Replica) isFollowerActiveLocked(ctx context.Context, followerID roachpb.ReplicaID) bool {
-	if r.mu.replicaID != r.mu.leaderID {
-		log.Fatalf(ctx, "replica %d is not the leader", r.mu.replicaID)
+	if r.mu.lastUpdateTimes == nil {
+		log.Fatalf(ctx, "replica %d has uninitialized lastUpdateTimes map", r.mu.replicaID)
 	}
 	lastUpdateTime, ok := r.mu.lastUpdateTimes[followerID]
 	if !ok {
