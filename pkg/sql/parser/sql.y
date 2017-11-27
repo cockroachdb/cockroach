@@ -429,7 +429,7 @@ func (u *sqlSymUnion) scrubOption() tree.ScrubOption {
 %token <str>   CACHE CANCEL CASCADE CASE CAST CHAR
 %token <str>   CHARACTER CHARACTERISTICS CHECK
 %token <str>   CLUSTER COALESCE COLLATE COLLATION COLUMN COLUMNS COMMIT
-%token <str>   COMMITTED CONCAT CONFIGURATION CONFIGURATIONS CONFIGURE
+%token <str>   COMMITTED COMPACT CONCAT CONFIGURATION CONFIGURATIONS CONFIGURE
 %token <str>   CONFLICT CONSTRAINT CONSTRAINTS CONTAINS COPY COVERING CREATE
 %token <str>   CROSS CSV CUBE CURRENT CURRENT_CATALOG CURRENT_DATE CURRENT_SCHEMA
 %token <str>   CURRENT_ROLE CURRENT_TIME CURRENT_TIMESTAMP
@@ -807,7 +807,7 @@ func (u *sqlSymUnion) scrubOption() tree.ScrubOption {
 %type <tree.ComparisonOperator> sub_type
 %type <tree.Expr> numeric_only
 %type <tree.AliasClause> alias_clause opt_alias_clause
-%type <bool> opt_ordinality
+%type <bool> opt_ordinality opt_compact
 %type <*tree.Order> sortby
 %type <tree.IndexElem> index_elem
 %type <tree.TableExpr> table_ref
@@ -2574,28 +2574,32 @@ show_jobs_stmt:
 // %Help: SHOW TRACE - display an execution trace
 // %Category: Misc
 // %Text:
-// SHOW [KV] TRACE FOR SESSION
-// SHOW [KV] TRACE FOR <statement>
+// SHOW [COMPACT] [KV] TRACE FOR SESSION
+// SHOW [COMPACT] [KV] TRACE FOR <statement>
 // %SeeAlso: EXPLAIN
 show_trace_stmt:
-  SHOW TRACE FOR SESSION
+  SHOW opt_compact TRACE FOR SESSION
   {
-    $$.val = &tree.ShowTrace{Statement: nil}
+    $$.val = &tree.ShowTrace{Statement: nil, Compact: $2.bool() }
   }
-| SHOW TRACE error // SHOW HELP: SHOW TRACE
-| SHOW KV TRACE FOR SESSION
+| SHOW opt_compact TRACE error // SHOW HELP: SHOW TRACE
+| SHOW opt_compact KV TRACE FOR SESSION
   {
-    $$.val = &tree.ShowTrace{Statement: nil, OnlyKVTrace: true}
+    $$.val = &tree.ShowTrace{Statement: nil, OnlyKVTrace: true, Compact: $2.bool() }
   }
-| SHOW KV error // SHOW HELP: SHOW TRACE
-| SHOW TRACE FOR explainable_stmt
+| SHOW opt_compact KV error // SHOW HELP: SHOW TRACE
+| SHOW opt_compact TRACE FOR explainable_stmt
   {
-    $$.val = &tree.ShowTrace{Statement: $4.stmt()}
+    $$.val = &tree.ShowTrace{Statement: $5.stmt(), Compact: $2.bool() }
   }
-| SHOW KV TRACE FOR explainable_stmt
+| SHOW opt_compact KV TRACE FOR explainable_stmt
   {
-    $$.val = &tree.ShowTrace{Statement: $5.stmt(), OnlyKVTrace: true }
+    $$.val = &tree.ShowTrace{Statement: $6.stmt(), OnlyKVTrace: true, Compact: $2.bool() }
   }
+
+opt_compact:
+  COMPACT { $$.val = true }
+| /* EMPTY */ { $$.val = false }	
 
 // %Help: SHOW SESSIONS - list open client sessions
 // %Category: Misc
@@ -6806,6 +6810,7 @@ unreserved_keyword:
 | COLUMNS
 | COMMIT
 | COMMITTED
+| COMPACT
 | CONFLICT
 | CONFIGURATION
 | CONFIGURATIONS
