@@ -399,12 +399,12 @@ export function ConfigureLineChart(
 
   const xScale = chart.xAxis.scale();
   const yScale = chart.yAxis.scale();
-  const yExtent = data ? [yScale(yAxisDomain.min), yScale(yAxisDomain.max)] : [0, 1];
+  const yExtent: Extent = data ? [yScale(yAxisDomain.min), yScale(yAxisDomain.max)] : [0, 1];
   updateLinkedGuideline(svgEl, xScale, yExtent, hoverTime);
 }
 
 // A tuple of numbers for the minimum and maximum values of an axis.
-type Extent = number[];
+type Extent = [number, number];
 
 // updateLinkedGuideline is responsible for maintaining "linked" guidelines on
 // all other graphs on the page; a "linked" guideline highlights the same X-axis
