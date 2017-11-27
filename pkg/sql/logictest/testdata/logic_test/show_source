@@ -254,15 +254,25 @@ CREATE INDEX ix ON foo(x); SELECT * FROM [SHOW TESTING_RANGES FROM INDEX foo@ix]
 Start Key  End Key  Range ID  Replicas  Lease Holder
 NULL       NULL     1         {1}       1
 
-query TTTTTT colnames
-SELECT * FROM [SHOW TRACE FOR SESSION]
+query TTTTTTT colnames
+SELECT * FROM [SHOW TRACE FOR SESSION] LIMIT 0
 ----
-timestamp age message context operation span
+timestamp age message tag loc operation span
 
-query TTTTTT colnames
+query TTTTTTT colnames
 SELECT * FROM [SHOW TRACE FOR SELECT 1] LIMIT 0
 ----
-timestamp age message context operation span
+timestamp  age  message  tag  loc  operation  span
+
+query TTTT colnames
+SELECT * FROM [SHOW COMPACT TRACE FOR SESSION] LIMIT 0
+----
+age  message  tag  operation
+
+query TTTT colnames
+SELECT * FROM [SHOW COMPACT TRACE FOR SELECT 1] LIMIT 0
+----
+age  message  tag  operation
 
 query ITTTTTTTTRTI colnames
 SELECT * FROM [SHOW JOBS] LIMIT 0

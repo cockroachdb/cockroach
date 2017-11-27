@@ -36,7 +36,7 @@ import (
 
 func verifyScansOnNode(db *gosql.DB, query string, node string) error {
 	rows, err := db.Query(
-		fmt.Sprintf(`SELECT context, message FROM [SHOW TRACE FOR %s]`, query),
+		fmt.Sprintf(`SELECT tag, message FROM [SHOW TRACE FOR %s]`, query),
 	)
 	if err != nil {
 		return err
