@@ -578,6 +578,11 @@ ui-watch: PORT := 3000
 ui-watch: $(UI_DLLS) $(UI_ROOT)/yarn.opt.installed
 	cd $(UI_ROOT) && $(WEBPACK_DASHBOARD) -- $(WEBPACK_DEV_SERVER) --config webpack.ccl.js --port $(PORT)
 
+.PHONY: ui-maintainer-clean
+ui-maintainer-clean: ## Like clean, but also remove some auto-generated source code.
+	find $(UI_ROOT)/dist* -mindepth 1 -not -name dist*.go -delete
+	rm -rf $(UI_ROOT)/node_modules $(UI_DLLS) $(YARN_INSTALLED_TARGET)
+
 .SECONDARY: $(SQLPARSER_ROOT)/gen/sql.go.tmp
 $(SQLPARSER_ROOT)/gen/sql.go.tmp: $(SQLPARSER_ROOT)/gen/sql.y $(BOOTSTRAP_TARGET)
 	set -euo pipefail; \
@@ -674,9 +679,7 @@ clean: clean-c-deps
 
 .PHONY: maintainer-clean
 maintainer-clean: ## Like clean, but also remove some auto-generated source code.
-maintainer-clean: clean
-	find $(UI_ROOT)/dist* -mindepth 1 -not -name dist*.go -delete
-	rm -rf $(UI_ROOT)/node_modules $(UI_DLLS) $(YARN_INSTALLED_TARGET)
+maintainer-clean: clean ui-maintainer-clean
 	rm -f $(SQLPARSER_TARGETS) $(UI_PROTOS)
 
 .PHONY: unsafe-clean
