@@ -46,7 +46,7 @@ class AxisDomain {
   // chart's interactive guideline.
   guideFormat: (n: number) => string = _.identity;
 
-  // constructs a new AxisRange with the given minimum and maximum value, with
+  // constructs a new AxisDomain with the given minimum and maximum value, with
   // ticks placed at intervals of the given increment in between the min and
   // max. Ticks are always "aligned" to values that are even multiples of
   // increment. Min and max are also aligned by default - the aligned min will
