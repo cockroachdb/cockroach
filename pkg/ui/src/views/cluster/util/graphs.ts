@@ -89,9 +89,7 @@ const countIncrementTable = [0.1, 0.2, 0.25, 0.3, 0.4, 0.5, 0.6, 0.7, 0.75, 0.8,
 //
 // "Human-friendly" increments are taken from the supplied countIncrementTable,
 // which should include decimal values between 0 and 1.
-function computeNormalizedIncrement(
-  range: number, incrementTbl: number[] = countIncrementTable,
-) {
+function computeNormalizedIncrement(range: number) {
   if (range === 0) {
     throw new Error("cannot compute tick increment with zero range");
   }
@@ -103,8 +101,8 @@ function computeNormalizedIncrement(
     x++;
     rawIncrement = rawIncrement / 10;
   }
-  const normalizedIncrementIdx = _.sortedIndex(incrementTbl, rawIncrement);
-  return incrementTbl[normalizedIncrementIdx] * Math.pow(10, x);
+  const normalizedIncrementIdx = _.sortedIndex(countIncrementTable, rawIncrement);
+  return countIncrementTable[normalizedIncrementIdx] * Math.pow(10, x);
 }
 
 function computeAxisDomain(extent: Extent, factor: number = 1): AxisDomain {
