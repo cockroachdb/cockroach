@@ -135,7 +135,7 @@ func PushTxn(
 		// Setting OrigTimestamp bumps LastActive(); see #9265.
 		reply.PusheeTxn.OrigTimestamp = args.Now
 		result := result.Result{}
-		result.Local.UpdatedTxn = &reply.PusheeTxn
+		result.Local.UpdatedTxns = &[]*roachpb.Transaction{&reply.PusheeTxn}
 		return result, engine.MVCCPutProto(ctx, batch, cArgs.Stats, key, hlc.Timestamp{}, nil, &reply.PusheeTxn)
 	}
 	// Start with the persisted transaction record as final transaction.
@@ -226,6 +226,6 @@ func PushTxn(
 		return result.Result{}, err
 	}
 	result := result.Result{}
-	result.Local.UpdatedTxn = &reply.PusheeTxn
+	result.Local.UpdatedTxns = &[]*roachpb.Transaction{&reply.PusheeTxn}
 	return result, nil
 }
