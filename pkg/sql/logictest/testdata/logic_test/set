@@ -82,7 +82,7 @@ client_encoding                UTF8
 client_min_messages            ·
 database                       foo
 datestyle                      ISO
-default_transaction_isolation  SERIALIZABLE
+default_transaction_isolation  serializable
 distsql                        off
 extra_float_digits             ·
 max_index_keys                 32
@@ -95,10 +95,10 @@ sql_safe_updates               false
 standard_conforming_strings    on
 timezone                       UTC
 tracing                        off
-transaction isolation level    SERIALIZABLE
-transaction priority           NORMAL
-transaction status             NoTxn
+transaction_isolation          serializable
+transaction_priority           normal
 transaction_read_only          off
+transaction_status             NoTxn
 
 # SESSION_USER is a special keyword, check that SHOW knows about it.
 query T
