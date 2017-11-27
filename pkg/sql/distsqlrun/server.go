@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/jobs"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
@@ -104,7 +105,9 @@ type ServerConfig struct {
 	Settings *cluster.Settings
 
 	// DB is a handle to the cluster.
-	DB *client.DB
+	DB       *client.DB
+	Executor sqlutil.InternalExecutor
+
 	// FlowDB is the DB that flows should use for interacting with the database.
 	// This DB has to be set such that it bypasses the local TxnCoordSender. We
 	// want only the TxnCoordSender on the gateway to be involved with requests
@@ -285,6 +288,7 @@ func (ds *ServerImpl) setupFlow(
 		rpcCtx:         ds.RPCContext,
 		txn:            txn,
 		clientDB:       ds.DB,
+		executor:       ds.Executor,
 		testingKnobs:   ds.TestingKnobs,
 		nodeID:         nodeID,
 		TempStorage:    ds.TempStorage,

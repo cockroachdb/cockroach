@@ -567,4 +567,10 @@ message SampleAggregatorSpec {
     (gogoproto.customname) = "SampledColumnIDs",
     (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sqlbase.ColumnID"
   ];
+
+  optional uint32 table_id = 4 [
+    (gogoproto.nullable) = false,
+    (gogoproto.customname) = "TableID",
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sqlbase.ID"
+  ];
 }
