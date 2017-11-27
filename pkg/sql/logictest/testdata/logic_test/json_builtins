@@ -45,22 +45,22 @@ array
 query T
 SELECT json_typeof('true'::JSON)
 ----
-true
+boolean
 
 query T
 SELECT jsonb_typeof('true'::JSON)
 ----
-true
+boolean
 
 query T
 SELECT json_typeof('false'::JSON)
 ----
-false
+boolean
 
 query T
 SELECT jsonb_typeof('false'::JSON)
 ----
-false
+boolean
 
 query T
 SELECT json_typeof('null'::JSON)
