@@ -134,7 +134,7 @@ function ComputeCountAxisDomain(extent: Extent): AxisDomain {
   const axisDomain = computeAxisDomain(extent);
 
   // For numbers larger than 1, the tooltip displays fractional values with
-  // metric multiplicative prefixes (e.g. Kilo, Mega, Giga). For numbers smaller
+  // metric multiplicative prefixes (e.g. kilo, mega, giga). For numbers smaller
   // than 1, we simply display the fractional value without converting to a
   // fractional metric prefix; this is because the use of fractional metric
   // prefixes (i.e. milli, micro, nano) have proved confusing to users.
