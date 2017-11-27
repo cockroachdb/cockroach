@@ -15,7 +15,6 @@
 package distsqlrun
 
 import (
-	"fmt"
 	"sync"
 
 	"golang.org/x/net/context"
@@ -23,9 +22,12 @@ import (
 	"github.com/axiomhq/hyperloglog"
 	"github.com/pkg/errors"
 
+	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
 
@@ -39,6 +41,7 @@ type sampleAggregator struct {
 	inTypes []sqlbase.ColumnType
 	sr      stats.SampleReservoir
 
+	tableID     sqlbase.ID
 	sampledCols []sqlbase.ColumnID
 	sketches    []sketchInfo
 
@@ -60,11 +63,17 @@ func newSampleAggregator(
 	output RowReceiver,
 ) (*sampleAggregator, error) {
 	for _, s := range spec.Sketches {
+		if len(s.Columns) == 0 {
+			return nil, errors.Errorf("no columns")
+		}
 		if _, ok := supportedSketchTypes[s.SketchType]; !ok {
 			return nil, errors.Errorf("unsupported sketch type %s", s.SketchType)
 		}
 		if s.GenerateHistogram && s.HistogramMaxBuckets == 0 {
 			return nil, errors.Errorf("histogram max buckets not specified")
+		}
+		if s.GenerateHistogram && len(s.Columns) != 1 {
+			return nil, errors.Errorf("histograms require one column")
 		}
 	}
 
@@ -73,6 +82,7 @@ func newSampleAggregator(
 		flowCtx:      flowCtx,
 		input:        input,
 		inTypes:      input.Types(),
+		tableID:      spec.TableID,
 		sampledCols:  spec.SampledColumnIDs,
 		sketches:     make([]sketchInfo, len(spec.Sketches)),
 		rankCol:      rankCol,
@@ -182,45 +192,86 @@ func (s *sampleAggregator) mainLoop(ctx context.Context) (earlyExit bool, _ erro
 			return false, errors.Wrapf(err, "merging sketch data")
 		}
 	}
-	return false, s.writeResults()
+	return false, s.writeResults(ctx)
 }
 
 // writeResults inserts the new statistics into system.table_statistics.
-// TODO(radu): for now there is no system table to write to, just dump the
-// results for inspection.
-func (s *sampleAggregator) writeResults() error {
-	for _, si := range s.sketches {
-		fmt.Printf(
-			"colIDs: %v  numRows: %d  numNulls: %d  cardinality: %d\n",
-			si.spec.Columns, si.numRows, si.numNulls,
-			si.sketch.Estimate(),
+func (s *sampleAggregator) writeResults(ctx context.Context) error {
+	return s.flowCtx.clientDB.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+		// Find the maximum statistic ID.
+		// TODO(radu): if we delete a statistic, we probably don't want to reuse
+		// that ID. Maybe we should keep track of an ID somewhere, or use
+		// unique_rowid().
+		datums, err := s.flowCtx.executor.QueryRowInTransaction(
+			ctx, "get-statistic-id", txn,
+			`SELECT IFNULL(MAX("statisticID"), 0) FROM system.table_statistics WHERE "tableID" = $1`,
+			s.tableID,
 		)
-		if si.spec.GenerateHistogram {
-			colIdx := int(si.spec.Columns[0])
-			typ := s.inTypes[colIdx]
+		if err != nil {
+			return err
+		}
 
-			h, err := generateHistogram(
-				&s.flowCtx.EvalCtx,
-				s.sr.Get(),
-				colIdx,
-				typ,
-				si.numRows,
-				int(si.spec.HistogramMaxBuckets),
-			)
-			if err != nil {
-				return err
-			}
-			fmt.Printf("histogram:\n")
-			for _, b := range h.Buckets {
-				ed, _, err := sqlbase.EncDatumFromBuffer(&typ, sqlbase.DatumEncoding_ASCENDING_KEY, b.UpperBound)
+		statID := int64(*datums[0].(*tree.DInt))
+
+		for _, si := range s.sketches {
+			var histogram []byte
+
+			if si.spec.GenerateHistogram {
+				colIdx := int(si.spec.Columns[0])
+				typ := s.inTypes[colIdx]
+
+				h, err := generateHistogram(
+					&s.flowCtx.EvalCtx,
+					s.sr.Get(),
+					colIdx,
+					typ,
+					si.numRows,
+					int(si.spec.HistogramMaxBuckets),
+				)
 				if err != nil {
 					return err
 				}
-				fmt.Printf("  %s: less=%d eq=%d\n", ed.String(&typ), b.NumRange, b.NumEq)
+				histogram, err = protoutil.Marshal(&h)
+				if err != nil {
+					return err
+				}
 			}
+
+			statID++
+
+			columnIDs := tree.NewDArray(types.Int)
+			for _, c := range si.spec.Columns {
+				if err := columnIDs.Append(tree.NewDInt(tree.DInt(int(s.sampledCols[c])))); err != nil {
+					return err
+				}
+			}
+
+			if _, err := s.flowCtx.executor.ExecuteStatementInTransaction(
+				ctx, "insert-statistic", txn,
+				`INSERT INTO system.table_statistics (
+					"tableID",
+					"statisticID",
+					"columnIDs",
+					"rowCount",
+					"distinctCount",
+					"nullCount",
+					histogram
+				) VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+				s.tableID,
+				statID,
+				columnIDs,
+				si.numRows,
+				si.sketch.Estimate(),
+				si.numNulls,
+				histogram,
+			); err != nil {
+				return err
+			}
+
+			// TODO(radu): we need to clear out old stats that are superseded.
 		}
-	}
-	return nil
+		return nil
+	})
 }
 
 // generateHistogram returns a histogram (on a given column) from a set of
