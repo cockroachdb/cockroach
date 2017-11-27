@@ -255,18 +255,22 @@ function calculateYAxisDomain(
   }
 }
 
+function calculateXAxisDomain(
+  timeInfo: QueryTimeInfo,
+) {
+  const xExtent: Extent = [NanoToMilli(timeInfo.start.toNumber()), NanoToMilli(timeInfo.end.toNumber())];
+  return ComputeTimeAxisDomain(xExtent);
+}
+
 /**
  * ProcessDataPoints is a helper function to process graph data from the server
- * into a format appropriate for display on an NVD3 graph. This includes the
- * computation of domains and ticks for all axes.
+ * into a format appropriate for display on an NVD3 graph.
  */
 function ProcessDataPoints(
   metrics: React.ReactElement<MetricProps>[],
   data: TSResponse,
   timeInfo: QueryTimeInfo,
 ) {
-  const xExtent: Extent = [NanoToMilli(timeInfo.start.toNumber()), NanoToMilli(timeInfo.end.toNumber())];
-
   const formattedData: formattedDatum[] = [];
 
   _.each(metrics, (s, idx) => {
@@ -277,7 +281,7 @@ function ProcessDataPoints(
       // which causes the interactive guideline to highlight the wrong points.
       // https://github.com/novus/nvd3/issues/1913
       const datapoints = _.dropWhile(result.datapoints, (dp) => {
-        return NanoToMilli(dp.timestamp_nanos.toNumber()) < xExtent[0];
+        return dp.timestamp_nanos.toNumber() < timeInfo.start.toNumber();
       });
 
       formattedData.push({
@@ -288,12 +292,8 @@ function ProcessDataPoints(
       });
     }
   });
-  const xAxisDomain = ComputeTimeAxisDomain(xExtent);
 
-  return {
-    formattedData,
-    xAxisDomain,
-  };
+  return formattedData;
 }
 
 export function InitLineChart(chart: nvd3.LineChart) {
@@ -328,9 +328,9 @@ export function ConfigureLineChart(
   let xAxisDomain, yAxisDomain: AxisDomain;
 
   if (data) {
-    const processed = ProcessDataPoints(metrics, data, timeInfo);
-    formattedData = processed.formattedData;
-    xAxisDomain = processed.xAxisDomain;
+    formattedData = ProcessDataPoints(metrics, data, timeInfo);
+
+    xAxisDomain = calculateXAxisDomain(timeInfo);
     yAxisDomain = calculateYAxisDomain(axis.props.units, data);
 
     chart.yDomain(yAxisDomain.extent);
