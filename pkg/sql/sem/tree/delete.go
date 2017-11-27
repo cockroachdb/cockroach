@@ -27,6 +27,7 @@ import "bytes"
 
 // Delete represents a DELETE statement.
 type Delete struct {
+	With      *With
 	Table     TableExpr
 	Where     *Where
 	OrderBy   OrderBy
@@ -36,6 +37,7 @@ type Delete struct {
 
 // Format implements the NodeFormatter interface.
 func (node *Delete) Format(buf *bytes.Buffer, f FmtFlags) {
+	FormatNode(buf, f, node.With)
 	buf.WriteString("DELETE FROM ")
 	FormatNode(buf, f, node.Table)
 	FormatNode(buf, f, node.Where)
