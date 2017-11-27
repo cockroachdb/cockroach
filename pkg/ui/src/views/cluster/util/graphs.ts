@@ -310,7 +310,8 @@ export function InitLineChart(chart: nvd3.LineChart) {
     chart.xAxis
       .showMaxMin(false);
     chart.yAxis
-      .showMaxMin(true);
+      .showMaxMin(true)
+      .axisLabelDistance(-10);
 }
 
 /**
@@ -343,10 +344,6 @@ export function ConfigureLineChart(
       chart.yAxis.axisLabel(yAxisDomain.label);
     }
     chart.xDomain(xAxisDomain.extent);
-
-    // This is ridiculous, but this NVD3 setting appears to be a relative
-    // adjustment to a constant pixel distance.
-    chart.yAxis.axisLabelDistance(-10);
 
     chart.yAxis.tickFormat(yAxisDomain.tickFormat);
     chart.interactiveLayer.tooltip.valueFormatter(yAxisDomain.guideFormat);
