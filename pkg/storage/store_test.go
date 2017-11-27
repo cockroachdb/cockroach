@@ -1905,6 +1905,51 @@ func TestStoreScanInconsistentResolvesIntents(t *testing.T) {
 	})
 }
 
+// TestStoreScanIntentsFromTwoTxns lays down two intents from two
+// different transactions, each of which is committed without
+// resolving the intents. The intents are then scanned consistently,
+// which triggers a push of both transactions and then resolution
+// of the intents, allowing the scan to complete.
+func TestStoreScanIntentsFromTwoTxns(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(context.TODO())
+	store, manualClock := createTestStore(t, stopper)
+
+	// Lay down two intents from two txns to scan over.
+	key1 := roachpb.Key("bar")
+	txn1 := newTransaction("test1", key1, 1, enginepb.SERIALIZABLE, store.cfg.Clock)
+	args := putArgs(key1, []byte("value1"))
+	txn1.Sequence++
+	if _, pErr := maybeWrapWithBeginTransaction(context.Background(), store.testSender(), roachpb.Header{Txn: txn1}, &args); pErr != nil {
+		t.Fatal(pErr)
+	}
+	txn1.Writing = true
+
+	key2 := roachpb.Key("foo")
+	txn2 := newTransaction("test2", key2, 1, enginepb.SERIALIZABLE, store.cfg.Clock)
+	args = putArgs(key2, []byte("value2"))
+	txn2.Sequence++
+	if _, pErr := maybeWrapWithBeginTransaction(context.Background(), store.testSender(), roachpb.Header{Txn: txn2}, &args); pErr != nil {
+		t.Fatal(pErr)
+	}
+	txn2.Writing = true
+
+	// Now, expire the transactions by moving the clock forward. This will
+	// result in the subsequent scan operation pushing both transactions
+	// in a single batch.
+	manualClock.Increment(2*base.DefaultHeartbeatInterval.Nanoseconds() + 1)
+
+	// Scan the range and verify empty result (expired txn is aborted,
+	// cleaning up intents).
+	sArgs := scanArgs(key1, key2.Next())
+	if reply, pErr := client.SendWrappedWith(context.Background(), store.testSender(), roachpb.Header{}, &sArgs); pErr != nil {
+		t.Fatal(pErr)
+	} else if sReply := reply.(*roachpb.ScanResponse); len(sReply.Rows) != 0 {
+		t.Errorf("expected empty result; got %+v", sReply.Rows)
+	}
+}
+
 // TestStoreBadRequests verifies that Send returns errors for
 // bad requests that do not pass key verification.
 //
