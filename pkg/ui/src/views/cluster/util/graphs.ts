@@ -236,10 +236,7 @@ type formattedDatum = {
   fillOpacity: number,
 };
 
-function calculateYAxisDomain(
-  axisUnits: AxisUnits,
-  data: TSResponse,
-) {
+function calculateYAxisDomain(axisUnits: AxisUnits, data: TSResponse): AxisDomain {
   const resultDatapoints = _.flatMap(data.results, (result) => _.map(result.datapoints, (dp) => dp.value));
   // TODO(couchand): Remove these random datapoints when NVD3 is gone.
   const allDatapoints = resultDatapoints.concat([0, 1]);
@@ -255,9 +252,7 @@ function calculateYAxisDomain(
   }
 }
 
-function calculateXAxisDomain(
-  timeInfo: QueryTimeInfo,
-) {
+function calculateXAxisDomain(timeInfo: QueryTimeInfo): AxisDomain {
   const xExtent: Extent = [NanoToMilli(timeInfo.start.toNumber()), NanoToMilli(timeInfo.end.toNumber())];
   return ComputeTimeAxisDomain(xExtent);
 }
