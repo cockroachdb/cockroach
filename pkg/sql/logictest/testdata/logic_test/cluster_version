@@ -51,7 +51,7 @@ statement error cannot upgrade directly from 1.0-500 to 1.2
 SET CLUSTER SETTING version = '1.2'
 
 statement ok
-SET CLUSTER SETTING version = '1.1'
+SET CLUSTER SETTING version = 'from-binary'
 
 statement error cannot downgrade from 1.1 to 1.0-2
 SET CLUSTER SETTING version = '1.0-2'
@@ -60,3 +60,9 @@ query T
 SHOW CLUSTER SETTING version
 ----
 1.1
+
+statement ok
+SET CLUSTER SETTING version = '1.1'
+
+statement error cannot upgrade to 1.1-999: node running 1.1
+SET CLUSTER SETTING version = '1.1-999'

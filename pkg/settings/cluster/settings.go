@@ -316,9 +316,15 @@ func versionTransformer(
 	}
 
 	// We have a new proposed update to the value, validate it.
-	minVersion, err := roachpb.ParseVersion(*versionBump)
-	if err != nil {
-		return nil, nil, err
+	var minVersion roachpb.Version
+	if *versionBump == "from-binary" {
+		minVersion = serverVersion
+	} else {
+		var err error
+		minVersion, err = roachpb.ParseVersion(*versionBump)
+		if err != nil {
+			return nil, nil, err
+		}
 	}
 	newV := oldV
 	newV.UseVersion = minVersion
