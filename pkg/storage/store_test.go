@@ -1905,6 +1905,76 @@ func TestStoreScanInconsistentResolvesIntents(t *testing.T) {
 	})
 }
 
+// TestStoreScanIntentsFromTwoTxns lays down two intents from two
+// different transactions, each of which is committed without
+// resolving the intents. The intents are then scanned consistently,
+// which triggers a push of both transactions and then resolution
+// of the intents, allowing the scan to complete.
+func TestStoreScanIntentsFromTwoTxns(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	// This test relies on having a committed Txn record and open intents on
+	// the same Range. This only works with auto-gc turned off; alternatively
+	// the test could move to splitting its underlying Range.
+	defer setTxnAutoGC(false)()
+	var intercept atomic.Value
+	intercept.Store(true)
+	cfg := TestStoreConfig(nil)
+	cfg.TestingKnobs.EvalKnobs.TestingEvalFilter =
+		func(filterArgs storagebase.FilterArgs) *roachpb.Error {
+			_, ok := filterArgs.Req.(*roachpb.ResolveIntentRequest)
+			if ok && intercept.Load().(bool) {
+				return roachpb.NewErrorWithTxn(errors.Errorf("boom"), filterArgs.Hdr.Txn)
+			}
+			return nil
+		}
+	stopper := stop.NewStopper()
+	defer stopper.Stop(context.TODO())
+	store := createTestStoreWithConfig(t, stopper, &cfg)
+
+	// Lay down two intents from two txns to scan over.
+	key1 := roachpb.Key("bar")
+	txn1 := newTransaction("test1", key1, 1, enginepb.SERIALIZABLE, store.cfg.Clock)
+	args := putArgs(key1, []byte("value1"))
+	txn1.Sequence++
+	if _, pErr := maybeWrapWithBeginTransaction(context.Background(), store.testSender(), roachpb.Header{Txn: txn1}, &args); pErr != nil {
+		t.Fatal(pErr)
+	}
+	txn1.Writing = true
+
+	key2 := roachpb.Key("foo")
+	txn2 := newTransaction("test2", key2, 1, enginepb.SERIALIZABLE, store.cfg.Clock)
+	args = putArgs(key2, []byte("value2"))
+	txn2.Sequence++
+	if _, pErr := maybeWrapWithBeginTransaction(context.Background(), store.testSender(), roachpb.Header{Txn: txn2}, &args); pErr != nil {
+		t.Fatal(pErr)
+	}
+	txn2.Writing = true
+
+	// Now, commit txn without resolving intents. If we hadn't disabled auto-gc
+	// of Txn entries in this test, the Txn entry would be removed and later
+	// attempts to resolve the intents would fail.
+	etArgs, h := endTxnArgs(txn1, true)
+	txn1.Sequence++
+	if _, pErr := client.SendWrappedWith(context.Background(), store.testSender(), h, &etArgs); pErr != nil {
+		t.Fatal(pErr)
+	}
+	etArgs, h = endTxnArgs(txn2, true)
+	txn2.Sequence++
+	if _, pErr := client.SendWrappedWith(context.Background(), store.testSender(), h, &etArgs); pErr != nil {
+		t.Fatal(pErr)
+	}
+
+	intercept.Store(false) // allow async intent resolution
+
+	// Scan the range and verify the results.
+	sArgs := scanArgs(key1, key2.Next())
+	if reply, pErr := client.SendWrappedWith(context.Background(), store.testSender(), roachpb.Header{}, &sArgs); pErr != nil {
+		t.Fatal(pErr)
+	} else if sReply := reply.(*roachpb.ScanResponse); len(sReply.Rows) != 2 {
+		t.Errorf("expected two rows; got %+v", sReply.Rows)
+	}
+}
+
 // TestStoreBadRequests verifies that Send returns errors for
 // bad requests that do not pass key verification.
 //
