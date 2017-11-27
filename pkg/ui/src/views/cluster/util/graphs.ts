@@ -341,9 +341,7 @@ export function InitLineChart(chart: nvd3.LineChart) {
 }
 
 /**
- * ProcessDataPoints is a helper function to process graph data from the server
- * into a format appropriate for display on an NVD3 graph. This includes the
- * computation of domains and ticks for all axes.
+ * ConfigureLineChart renders the given NVD3 chart with the updated data.
  */
 export function ConfigureLineChart(
   chart: nvd3.LineChart,
