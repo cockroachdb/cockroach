@@ -230,6 +230,17 @@ type Config struct {
 	EnableWebSessionAuthentication bool
 
 	enginesCreated bool
+
+	// Extra1_0Compatibility, if set, makes this node do whatever it needs to do
+	// to accept DistSQL flows that have been planned on a 1.0.x gateway.
+	// In particular:
+	//   - Sending the ConsumerHandshake signal is disabled, since it confuses 1.0
+	//   nodes.
+	//   - Flows using an older version of AggregatorSpec are handled correctly.
+	//   - The DistSQL MinAcceptedVersion is set to 1.0's version.
+	//
+	// This flag goes away in version 1.2.
+	Extra1_0Compatibility bool
 }
 
 // HistogramWindowInterval is used to determine the approximate length of time

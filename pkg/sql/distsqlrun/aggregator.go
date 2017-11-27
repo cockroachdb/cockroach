@@ -143,6 +143,14 @@ func newAggregator(
 				)
 			}
 		}
+
+		if aggInfo.ColIdx_1_0 != nil {
+			if len(aggInfo.ColIdx) != 0 {
+				return nil, errors.Errorf("both col_idx and col_idx_1_0 filled in")
+			}
+			aggInfo.ColIdx = append(aggInfo.ColIdx, *aggInfo.ColIdx_1_0)
+		}
+
 		argTypes := make([]sqlbase.ColumnType, len(aggInfo.ColIdx))
 		for i, c := range aggInfo.ColIdx {
 			if c >= uint32(len(inputTypes)) {
