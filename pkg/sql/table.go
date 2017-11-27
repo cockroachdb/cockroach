@@ -918,3 +918,15 @@ func resolveTableNameFromID(
 	}
 	return tree.ErrString(&tn)
 }
+
+// ParseQualifiedTableName implements the tree.EvalPlanner interface.
+func (p *planner) ParseQualifiedTableName(
+	ctx context.Context, sql string,
+) (*tree.TableName, error) {
+	parsedNameWithIndex, err := p.ParseTableNameWithIndex(sql)
+	if err != nil {
+		return nil, err
+	}
+	parsedName := parsedNameWithIndex.Table
+	return p.QualifyWithDatabase(ctx, &parsedName)
+}
