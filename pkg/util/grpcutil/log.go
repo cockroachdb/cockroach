@@ -16,6 +16,7 @@
 package grpcutil
 
 import (
+	"io/ioutil"
 	"regexp"
 	"strings"
 	"time"
@@ -29,7 +30,15 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
+var discardLogger = grpclog.NewLoggerV2(ioutil.Discard, ioutil.Discard, ioutil.Discard)
+
 func init() {
+	grpclog.SetLoggerV2(discardLogger)
+}
+
+// EnableLogging turns on relay of GRPC log messages to pkg/util/log.
+// It must be called before GRPC is used.
+func EnableLogging() {
 	grpclog.SetLoggerV2(&logger{})
 }
 
