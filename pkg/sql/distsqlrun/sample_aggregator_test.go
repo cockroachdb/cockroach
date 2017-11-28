@@ -15,12 +15,19 @@
 package distsqlrun
 
 import (
+	"reflect"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
+	"github.com/cockroachdb/cockroach/pkg/sql/stats"
+	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"golang.org/x/net/context"
 )
@@ -28,11 +35,16 @@ import (
 func TestSampleAggregator(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
+	server, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	defer server.Stopper().Stop(context.TODO())
+
 	evalCtx := tree.MakeTestingEvalContext()
 	defer evalCtx.Stop(context.Background())
 	flowCtx := FlowCtx{
 		Settings: cluster.MakeTestingClusterSettings(),
 		EvalCtx:  evalCtx,
+		clientDB: kvDB,
+		executor: server.InternalExecutor().(sqlutil.InternalExecutor),
 	}
 
 	inputRows := [][]int{
@@ -48,8 +60,6 @@ func TestSampleAggregator(t *testing.T) {
 		{-1, 3},
 		{1, -1},
 	}
-	//cardinalities := []int{2, 8}
-	//numNulls := []int{2, 1}
 
 	// We randomly distribute the input rows between multiple Samplers and
 	// aggregate the results.
@@ -117,6 +127,7 @@ func TestSampleAggregator(t *testing.T) {
 		SampleSize:       100,
 		Sketches:         sketchSpecs,
 		SampledColumnIDs: []sqlbase.ColumnID{100, 101},
+		TableID:          13,
 	}
 
 	agg, err := newSampleAggregator(&flowCtx, spec, samplerResults, &PostProcessSpec{}, finalOut)
@@ -126,4 +137,100 @@ func TestSampleAggregator(t *testing.T) {
 	agg.Run(context.Background(), nil /* wg */)
 	// Make sure there was no error.
 	finalOut.GetRowsNoMeta(t)
+	r := sqlutils.MakeSQLRunner(sqlDB)
+
+	rows := r.Query(t, `
+	  SELECT "tableID",
+					 "statisticID",
+					 "columnIDs",
+					 "rowCount",
+					 "distinctCount",
+					 "nullCount",
+					 histogram
+	  FROM system.table_statistics
+  `)
+	defer rows.Close()
+
+	type resultBucket struct {
+		numEq, numRange, upper int
+	}
+
+	type result struct {
+		tableID, statID                    int
+		colIDs                             string
+		rowCount, distinctCount, nullCount int
+		buckets                            []resultBucket
+	}
+
+	expected := []result{
+		{
+			tableID:       13,
+			statID:        1,
+			colIDs:        "{100}",
+			rowCount:      11,
+			distinctCount: 2,
+			nullCount:     2,
+		},
+		{
+			tableID:       13,
+			statID:        2,
+			colIDs:        "{101}",
+			rowCount:      11,
+			distinctCount: 8,
+			nullCount:     1,
+			buckets: []resultBucket{
+				{numEq: 2, numRange: 0, upper: 1},
+				{numEq: 2, numRange: 1, upper: 3},
+				{numEq: 1, numRange: 1, upper: 5},
+				{numEq: 1, numRange: 2, upper: 8},
+			},
+		},
+	}
+
+	for _, exp := range expected {
+		if !rows.Next() {
+			t.Fatal("fewer rows than expected")
+		}
+
+		var histData []byte
+		var r result
+		if err := rows.Scan(
+			&r.tableID, &r.statID, &r.colIDs, &r.rowCount, &r.distinctCount, &r.nullCount, &histData,
+		); err != nil {
+			t.Fatal(err)
+		}
+		if len(histData) > 0 {
+			var h stats.HistogramData
+			if err := protoutil.Unmarshal(histData, &h); err != nil {
+				t.Fatal(err)
+			}
+
+			for _, b := range h.Buckets {
+				ed, _, err := sqlbase.EncDatumFromBuffer(
+					&intType, sqlbase.DatumEncoding_ASCENDING_KEY, b.UpperBound,
+				)
+				if err != nil {
+					t.Fatal(err)
+				}
+				var d sqlbase.DatumAlloc
+				if err := ed.EnsureDecoded(&intType, &d); err != nil {
+					t.Fatal(err)
+				}
+				r.buckets = append(r.buckets, resultBucket{
+					numEq:    int(b.NumEq),
+					numRange: int(b.NumRange),
+					upper:    int(*ed.Datum.(*tree.DInt)),
+				})
+			}
+		} else if len(exp.buckets) > 0 {
+			t.Error("no histogram")
+		}
+
+		if !reflect.DeepEqual(exp, r) {
+			t.Errorf("Expected:\n  %v\ngot:\n  %v", exp, r)
+		}
+	}
+	if rows.Next() {
+		t.Fatal("more rows than expected")
+	}
 }

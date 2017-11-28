@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/jobs"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -71,6 +72,9 @@ type FlowCtx struct {
 	// clientDB is a handle to the cluster. Used for performing requests outside
 	// of the transaction in which the flow's query is running.
 	clientDB *client.DB
+	// executor provides access to the SQL executor.
+	executor sqlutil.InternalExecutor
+
 	// nodeID is the ID of the node on which the processors using this FlowCtx
 	// run.
 	nodeID       roachpb.NodeID
