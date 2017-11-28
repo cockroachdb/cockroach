@@ -34,7 +34,7 @@ func setNeededColumns(plan planNode, needed []bool) {
 	case *explainDistSQLNode:
 		setNeededColumns(n.plan, allColumns(n.plan))
 
-	case *traceNode:
+	case *showTraceNode:
 		setNeededColumns(n.plan, allColumns(n.plan))
 
 	case *explainPlanNode:
@@ -209,7 +209,7 @@ func setNeededColumns(plan planNode, needed []bool) {
 	case *unaryNode:
 	case *hookFnNode:
 	case *valueGenerator:
-	case *setNode:
+	case *setVarNode:
 	case *setClusterSettingNode:
 	case *setZoneConfigNode:
 	case *showZoneConfigNode:

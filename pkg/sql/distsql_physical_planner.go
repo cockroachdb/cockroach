@@ -378,7 +378,7 @@ func (dsp *DistSQLPlanner) checkSupportForNode(node planNode) (distRecommendatio
 		// This is a potential hot path.
 		return 0, mutationsNotSupportedError
 
-	case *setNode, *setClusterSettingNode:
+	case *setVarNode, *setClusterSettingNode:
 		// SET statements are never distributed.
 		return 0, setNotSupportedError
 
