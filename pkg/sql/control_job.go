@@ -29,42 +29,6 @@ type controlJobNode struct {
 	desiredStatus jobs.Status
 }
 
-func (*controlJobNode) Values() tree.Datums { return nil }
-
-func (n *controlJobNode) Start(params runParams) error {
-	jobIDDatum, err := n.jobID.Eval(params.evalCtx)
-	if err != nil {
-		return err
-	}
-
-	jobID, ok := tree.AsDInt(jobIDDatum)
-	if !ok {
-		return fmt.Errorf("%s is not a valid job ID", jobIDDatum)
-	}
-
-	job, err := params.p.ExecCfg().JobRegistry.LoadJob(params.ctx, int64(jobID))
-	if err != nil {
-		return err
-	}
-
-	switch n.desiredStatus {
-	case jobs.StatusPaused:
-		return job.Paused(params.ctx)
-	case jobs.StatusRunning:
-		return job.Resumed(params.ctx)
-	case jobs.StatusCanceled:
-		return job.Canceled(params.ctx)
-	default:
-		panic("unreachable")
-	}
-}
-
-func (*controlJobNode) Close(context.Context) {}
-
-func (n *controlJobNode) Next(runParams) (bool, error) {
-	return false, nil
-}
-
 func (p *planner) PauseJob(ctx context.Context, n *tree.PauseJob) (planNode, error) {
 	typedJobID, err := p.analyzeExpr(
 		ctx,
@@ -124,3 +88,35 @@ func (p *planner) CancelJob(ctx context.Context, n *tree.CancelJob) (planNode, e
 		desiredStatus: jobs.StatusCanceled,
 	}, nil
 }
+
+func (n *controlJobNode) Start(params runParams) error {
+	jobIDDatum, err := n.jobID.Eval(params.evalCtx)
+	if err != nil {
+		return err
+	}
+
+	jobID, ok := tree.AsDInt(jobIDDatum)
+	if !ok {
+		return fmt.Errorf("%s is not a valid job ID", jobIDDatum)
+	}
+
+	job, err := params.p.ExecCfg().JobRegistry.LoadJob(params.ctx, int64(jobID))
+	if err != nil {
+		return err
+	}
+
+	switch n.desiredStatus {
+	case jobs.StatusPaused:
+		return job.Paused(params.ctx)
+	case jobs.StatusRunning:
+		return job.Resumed(params.ctx)
+	case jobs.StatusCanceled:
+		return job.Canceled(params.ctx)
+	default:
+		panic("unreachable")
+	}
+}
+
+func (n *controlJobNode) Next(runParams) (bool, error) { return false, nil }
+func (*controlJobNode) Values() tree.Datums            { return nil }
+func (*controlJobNode) Close(context.Context)          {}

@@ -34,6 +34,14 @@ type distinctNode struct {
 	run distinctRun
 }
 
+// distinct constructs a distinctNode.
+func (p *planner) Distinct(n *tree.SelectClause) *distinctNode {
+	if !n.Distinct {
+		return nil
+	}
+	return &distinctNode{}
+}
+
 // distinctRun contains the run-time state of distinctNode during local execution.
 type distinctRun struct {
 	// Encoding of the columnsInOrder columns for the previous row.
@@ -46,32 +54,11 @@ type distinctRun struct {
 	suffixMemAcc mon.BoundAccount
 }
 
-// distinct constructs a distinctNode.
-func (p *planner) Distinct(n *tree.SelectClause) *distinctNode {
-	if !n.Distinct {
-		return nil
-	}
-	return &distinctNode{}
-}
-
 func (n *distinctNode) Start(params runParams) error {
 	n.run.prefixMemAcc = params.p.session.TxnState.mon.MakeBoundAccount()
 	n.run.suffixMemAcc = params.p.session.TxnState.mon.MakeBoundAccount()
 	n.run.suffixSeen = make(map[string]struct{})
 	return n.plan.Start(params)
-}
-
-func (n *distinctNode) Values() tree.Datums { return n.plan.Values() }
-
-func (n *distinctNode) addSuffixSeen(
-	ctx context.Context, acc *mon.BoundAccount, sKey string,
-) error {
-	sz := int64(len(sKey))
-	if err := acc.Grow(ctx, sz); err != nil {
-		return err
-	}
-	n.run.suffixSeen[sKey] = struct{}{}
-	return nil
 }
 
 func (n *distinctNode) Next(params runParams) (bool, error) {
@@ -127,6 +114,27 @@ func (n *distinctNode) Next(params runParams) (bool, error) {
 	}
 }
 
+func (n *distinctNode) Values() tree.Datums { return n.plan.Values() }
+
+func (n *distinctNode) Close(ctx context.Context) {
+	n.plan.Close(ctx)
+	n.run.prefixSeen = nil
+	n.run.prefixMemAcc.Close(ctx)
+	n.run.suffixSeen = nil
+	n.run.suffixMemAcc.Close(ctx)
+}
+
+func (n *distinctNode) addSuffixSeen(
+	ctx context.Context, acc *mon.BoundAccount, sKey string,
+) error {
+	sz := int64(len(sKey))
+	if err := acc.Grow(ctx, sz); err != nil {
+		return err
+	}
+	n.run.suffixSeen[sKey] = struct{}{}
+	return nil
+}
+
 // TODO(irfansharif): This can be refactored away to use
 // sqlbase.EncodeDatums([]byte, tree.Datums)
 func (n *distinctNode) encodeValues(values tree.Datums) ([]byte, []byte, error) {
@@ -149,12 +157,4 @@ func (n *distinctNode) encodeValues(values tree.Datums) ([]byte, []byte, error) 
 		}
 	}
 	return prefix, suffix, err
-}
-
-func (n *distinctNode) Close(ctx context.Context) {
-	n.plan.Close(ctx)
-	n.run.prefixSeen = nil
-	n.run.prefixMemAcc.Close(ctx)
-	n.run.suffixSeen = nil
-	n.run.suffixMemAcc.Close(ctx)
 }

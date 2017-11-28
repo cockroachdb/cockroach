@@ -79,13 +79,6 @@ type unionNode struct {
 	run unionRun
 }
 
-// unionRun contains the run-time state of unionNode during local execution.
-type unionRun struct {
-	// scratch is a preallocated buffer for formatting the key of the
-	// current row on the right.
-	scratch []byte
-}
-
 // UnionClause constructs a planNode from a UNION/INTERSECT/EXCEPT expression.
 func (p *planner) UnionClause(
 	ctx context.Context, n *tree.UnionClause, desiredTypes []types.T,
@@ -168,6 +161,33 @@ func (p *planner) UnionClause(
 	return node, nil
 }
 
+// unionRun contains the run-time state of unionNode during local execution.
+type unionRun struct {
+	// scratch is a preallocated buffer for formatting the key of the
+	// current row on the right.
+	scratch []byte
+}
+
+func (n *unionNode) Start(params runParams) error {
+	if err := n.right.Start(params); err != nil {
+		return err
+	}
+	return n.left.Start(params)
+}
+
+func (n *unionNode) Next(params runParams) (bool, error) {
+	if err := params.p.cancelChecker.Check(); err != nil {
+		return false, err
+	}
+	if n.right != nil {
+		return n.readRight(params)
+	}
+	if n.left != nil {
+		return n.readLeft(params)
+	}
+	return false, nil
+}
+
 func (n *unionNode) Values() tree.Datums {
 	if n.right != nil {
 		return n.right.Values()
@@ -176,6 +196,17 @@ func (n *unionNode) Values() tree.Datums {
 		return n.left.Values()
 	}
 	return nil
+}
+
+func (n *unionNode) Close(ctx context.Context) {
+	if n.right != nil {
+		n.right.Close(ctx)
+		n.right = nil
+	}
+	if n.left != nil {
+		n.left.Close(ctx)
+		n.left = nil
+	}
 }
 
 func (n *unionNode) readRight(params runParams) (bool, error) {
@@ -224,37 +255,6 @@ func (n *unionNode) readLeft(params runParams) (bool, error) {
 	n.left.Close(params.ctx)
 	n.left = nil
 	return false, nil
-}
-
-func (n *unionNode) Start(params runParams) error {
-	if err := n.right.Start(params); err != nil {
-		return err
-	}
-	return n.left.Start(params)
-}
-
-func (n *unionNode) Next(params runParams) (bool, error) {
-	if err := params.p.cancelChecker.Check(); err != nil {
-		return false, err
-	}
-	if n.right != nil {
-		return n.readRight(params)
-	}
-	if n.left != nil {
-		return n.readLeft(params)
-	}
-	return false, nil
-}
-
-func (n *unionNode) Close(ctx context.Context) {
-	if n.right != nil {
-		n.right.Close(ctx)
-		n.right = nil
-	}
-	if n.left != nil {
-		n.left.Close(ctx)
-		n.left = nil
-	}
 }
 
 // unionNodeEmit represents the emitter logic for one of the six combinations of
