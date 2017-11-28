@@ -1258,6 +1258,11 @@ func (s Span) Contains(o Span) bool {
 	return bytes.Compare(s.Key, o.Key) <= 0 && bytes.Compare(s.EndKey, o.EndKey) >= 0
 }
 
+// ContainsKey returns whether the span contains the given key.
+func (s Span) ContainsKey(key Key) bool {
+	return bytes.Compare(key, s.Key) >= 0 && bytes.Compare(key, s.EndKey) < 0
+}
+
 // AsRange returns the Span as an interval.Range.
 func (s Span) AsRange() interval.Range {
 	startKey := s.Key
@@ -1284,6 +1289,18 @@ type Spans []Span
 func (a Spans) Len() int           { return len(a) }
 func (a Spans) Swap(i, j int)      { a[i], a[j] = a[j], a[i] }
 func (a Spans) Less(i, j int) bool { return a[i].Key.Compare(a[j].Key) < 0 }
+
+// ContainsKey returns whether any of the spans in the set of spans contains
+// the given key.
+func (a Spans) ContainsKey(key Key) bool {
+	for _, span := range a {
+		if span.ContainsKey(key) {
+			return true
+		}
+	}
+
+	return false
+}
 
 // RSpan is a key range with an inclusive start RKey and an exclusive end RKey.
 type RSpan struct {

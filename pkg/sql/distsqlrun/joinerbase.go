@@ -24,8 +24,6 @@ import (
 type joinerBase struct {
 	processorBase
 
-	leftSource, rightSource RowSource
-
 	joinType    joinType
 	onCond      exprHelper
 	emptyLeft   sqlbase.EncDatumRow
@@ -45,8 +43,8 @@ type joinerBase struct {
 
 func (jb *joinerBase) init(
 	flowCtx *FlowCtx,
-	leftSource RowSource,
-	rightSource RowSource,
+	leftTypes []sqlbase.ColumnType,
+	rightTypes []sqlbase.ColumnType,
 	jType JoinType,
 	onExpr Expression,
 	leftEqColumns []uint32,
@@ -55,16 +53,12 @@ func (jb *joinerBase) init(
 	post *PostProcessSpec,
 	output RowReceiver,
 ) error {
-	jb.leftSource = leftSource
-	jb.rightSource = rightSource
 	jb.joinType = joinType(jType)
 
-	leftTypes := leftSource.Types()
 	jb.emptyLeft = make(sqlbase.EncDatumRow, len(leftTypes))
 	for i := range jb.emptyLeft {
 		jb.emptyLeft[i] = sqlbase.DatumToEncDatum(leftTypes[i], tree.DNull)
 	}
-	rightTypes := rightSource.Types()
 	jb.emptyRight = make(sqlbase.EncDatumRow, len(rightTypes))
 	for i := range jb.emptyRight {
 		jb.emptyRight[i] = sqlbase.DatumToEncDatum(rightTypes[i], tree.DNull)

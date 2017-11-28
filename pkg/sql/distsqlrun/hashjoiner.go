@@ -79,6 +79,8 @@ func (p hashJoinPhase) String() string {
 type hashJoiner struct {
 	joinerBase
 
+	leftSource, rightSource RowSource
+
 	flowCtx *FlowCtx
 
 	// initialBufferSize is the maximum amount of data we buffer from each stream
@@ -121,6 +123,8 @@ func newHashJoiner(
 	h := &hashJoiner{
 		flowCtx:           flowCtx,
 		initialBufferSize: hashJoinerInitialBufferSize,
+		leftSource:        leftSource,
+		rightSource:       rightSource,
 	}
 
 	numMergedColumns := 0
@@ -129,8 +133,8 @@ func newHashJoiner(
 	}
 	if err := h.joinerBase.init(
 		flowCtx,
-		leftSource,
-		rightSource,
+		leftSource.Types(),
+		rightSource.Types(),
 		spec.Type,
 		spec.OnExpr,
 		spec.LeftEqColumns,

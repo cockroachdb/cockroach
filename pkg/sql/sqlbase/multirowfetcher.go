@@ -43,6 +43,9 @@ type kvFetcher interface {
 type tableInfo struct {
 	// -- Fields initialized once --
 
+	// Used to determine whether a key retrieved belongs to the span we
+	// want to scan.
+	spans            roachpb.Spans
 	desc             *TableDescriptor
 	index            *IndexDescriptor
 	isSecondaryIndex bool
@@ -79,6 +82,11 @@ type tableInfo struct {
 // MultiRowFetcherTableArgs are the arguments passed to MultiRowFetcher.Init
 // for a given table that includes descriptors and row information.
 type MultiRowFetcherTableArgs struct {
+	// The spans of keys to return for the given table. MultiRowFetcher
+	// ignores keys outside these spans.
+	// This is irrelevant if MultiRowFetcher is initialize with only one
+	// table.
+	Spans            roachpb.Spans
 	Desc             *TableDescriptor
 	Index            *IndexDescriptor
 	ColIdxMap        map[ColumnID]int
@@ -189,6 +197,7 @@ func (mrf *MultiRowFetcher) Init(
 	mrf.tables = make([]tableInfo, 0, len(tables))
 	for tableIdx, tableArgs := range tables {
 		table := tableInfo{
+			spans:            tableArgs.Spans,
 			desc:             tableArgs.Desc,
 			colIdxMap:        tableArgs.ColIdxMap,
 			index:            tableArgs.Index,
@@ -453,6 +462,10 @@ func (mrf *MultiRowFetcher) ReadIndexKey(key roachpb.Key) (remaining []byte, ok 
 		)
 	}
 
+	// Make a copy of the initial key for validating whether it's within
+	// the table's specified spans.
+	initialKey := key
+
 	// key now contains the bytes in the key (if match) that are not part
 	// of the signature in order.
 	tableIdx, key, match, err := IndexKeyEquivSignature(key, mrf.allEquivSignatures, mrf.keySigBuf, mrf.keyRestBuf)
@@ -464,6 +477,17 @@ func (mrf *MultiRowFetcher) ReadIndexKey(key roachpb.Key) (remaining []byte, ok 
 	//		    mrf.allEquivSignatures.
 	// tableIdx == -1:  index key belongs to an ancestor.
 	if !match || tableIdx == -1 {
+		return nil, false, nil
+	}
+
+	// The index key is not within our specified span of keys for the
+	// particular table.
+	// TODO(richardwu): ContainsKey checks every span within spans. We
+	// can check that spans is ordered (or sort it) and memoize
+	// the last span we've checked for each table. We can pass in this
+	// information to ContainsKey as a hint for which span to start
+	// checking first.
+	if !mrf.tables[tableIdx].spans.ContainsKey(initialKey) {
 		return nil, false, nil
 	}
 

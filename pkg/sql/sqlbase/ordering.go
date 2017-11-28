@@ -27,7 +27,7 @@ type ColumnOrderInfo struct {
 }
 
 // ColumnOrdering is used to describe a desired column ordering. For example,
-//     []ColumnOrderInfo{ {3, true}, {1, false} }
+//     []ColumnOrderInfo{ {3, encoding.Descending}, {1, encoding.Ascending} }
 // represents an ordering first by column 3 (descending), then by column 1 (ascending).
 type ColumnOrdering []ColumnOrderInfo
 
