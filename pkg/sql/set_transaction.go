@@ -1,4 +1,4 @@
-// Copyright 2015 The Cockroach Authors.
+// Copyright 2017 The Cockroach Authors.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -20,19 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/pkg/errors"
 )
-
-// BeginTransaction starts a new transaction.
-func (p *planner) BeginTransaction(n *tree.BeginTransaction) (planNode, error) {
-	if p.session.TxnState.State() != AutoRetry || p.txn == nil {
-		return nil, errors.Errorf("the server should have already created a transaction. "+
-			"state: %s", p.session.TxnState.State())
-	}
-	if err := p.setTransactionModes(n.Modes); err != nil {
-		return nil, err
-	}
-
-	return &zeroNode{}, nil
-}
 
 // SetTransaction sets a transaction's isolation level
 func (p *planner) SetTransaction(n *tree.SetTransaction) (planNode, error) {
