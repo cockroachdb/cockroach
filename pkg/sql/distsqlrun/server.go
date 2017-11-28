@@ -16,6 +16,7 @@ package distsqlrun
 
 import (
 	"io"
+	time "time"
 
 	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
@@ -187,6 +188,18 @@ func (ds *ServerImpl) Start() {
 	}
 
 	ds.flowScheduler.Start()
+}
+
+// Drain drains the server's flowRegistry. See flowRegistry.Drain for more
+// details.
+func (ds *ServerImpl) Drain(flowDrainWait time.Duration) {
+	// There is a possibility that there are flows not yet registered that we
+	// do not wait for, since even though the flowRegistry keeps on accepting
+	// new flows when draining, it could return from `Drain` before some flows
+	// are registered. This is fine as draining is best effort. Not scheduling
+	// flows on draining nodes reduces the likelihood of this scenario.
+	// TODO(asubiotto): Errors like this should be handled on the gateway.
+	ds.flowRegistry.Drain(flowDrainWait)
 }
 
 // FlowVerIsCompatible checks a flow's version is compatible with this node's

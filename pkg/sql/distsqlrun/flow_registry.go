@@ -91,6 +91,9 @@ type flowRegistry struct {
 	// All fields in the flowEntry's are protected by the flowRegistry mutex,
 	// except flow, whose methods can be called freely.
 	flows map[FlowID]*flowEntry
+
+	// drainCond is signaled whenever the size of flows decreases.
+	drainCond *sync.Cond
 }
 
 // makeFlowRegistry creates a new flowRegistry.
@@ -102,6 +105,7 @@ func makeFlowRegistry(nodeID roachpb.NodeID) *flowRegistry {
 		nodeID: nodeID,
 		flows:  make(map[FlowID]*flowEntry),
 	}
+	fr.drainCond = sync.NewCond(fr)
 	return fr
 }
 
@@ -129,6 +133,7 @@ func (fr *flowRegistry) releaseEntryLocked(id FlowID) {
 			panic(fmt.Sprintf("invalid refCount: %d", entry.refCount))
 		}
 		delete(fr.flows, id)
+		fr.drainCond.Signal()
 	}
 }
 
@@ -268,6 +273,29 @@ func (fr *flowRegistry) waitForFlowLocked(
 	}
 
 	return entry
+}
+
+// Drain waits for currently running flows to finish up to flowDrainWait. Note
+// that the flowRegistry keeps on accepting flows.
+func (fr *flowRegistry) Drain(flowDrainWait time.Duration) {
+	allFlowsDone := make(chan struct{}, 1)
+	stopWaiting := false
+
+	go func() {
+		select {
+		case <-time.After(flowDrainWait):
+			stopWaiting = true
+			fr.drainCond.Signal()
+		case <-allFlowsDone:
+		}
+	}()
+
+	fr.Lock()
+	for !(stopWaiting || len(fr.flows) == 0) {
+		fr.drainCond.Wait()
+	}
+	fr.Unlock()
+	allFlowsDone <- struct{}{}
 }
 
 // ConnectInboundStream finds the inboundStreamInfo for the given

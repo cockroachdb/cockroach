@@ -15,6 +15,7 @@
 package distsqlrun
 
 import (
+	math "math"
 	"sync"
 	"testing"
 	"time"
@@ -360,4 +361,70 @@ func TestHandshake(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestFlowRegistryDrain drains a flowRegistry and verifies that currently
+// running flows are allowed to finish up to a timeout and new flows are still
+// accepted while draining.
+func TestFlowRegistryDrain(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.TODO()
+	reg := makeFlowRegistry(roachpb.NodeID(0))
+
+	flow := &Flow{ctx: ctx}
+	id := FlowID{uuid.MakeV4()}
+	registerFlow := func(id FlowID) {
+		t.Helper()
+		if err := reg.RegisterFlow(
+			ctx, id, flow, nil /* inboundStreams */, 0, /* timeout */
+		); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// WaitForFlow verifies that Drain waits for a flow to finish within the
+	// timeout.
+	t.Run("WaitForFlow", func(t *testing.T) {
+		registerFlow(id)
+		drainDone := make(chan struct{})
+		go func() {
+			reg.Drain(math.MaxInt64 /* flowDrainWait */)
+			drainDone <- struct{}{}
+		}()
+		// Be relatively sure that the flowRegistry is draining.
+		time.Sleep(time.Microsecond)
+		reg.UnregisterFlow(id)
+		<-drainDone
+	})
+
+	// DrainTimeout verifies that Drain returns once the timeout expires.
+	t.Run("DrainTimeout", func(t *testing.T) {
+		registerFlow(id)
+		reg.Drain(0 /* flowDrainWait */)
+		reg.UnregisterFlow(id)
+	})
+
+	// AcceptNewFlow verifies that a flowRegistry continues accepting flows
+	// while draining.
+	t.Run("AcceptNewFlow", func(t *testing.T) {
+		registerFlow(id)
+		drainDone := make(chan struct{})
+		go func() {
+			reg.Drain(math.MaxInt64 /* flowDrainWait */)
+			drainDone <- struct{}{}
+		}()
+		// Be relatively sure that the flowRegistry is draining.
+		time.Sleep(time.Microsecond)
+		newFlowID := FlowID{uuid.MakeV4()}
+		registerFlow(newFlowID)
+		reg.UnregisterFlow(id)
+		select {
+		case <-drainDone:
+			t.Fatal("finished draining before unregistering new flow")
+		default:
+		}
+		reg.UnregisterFlow(newFlowID)
+		<-drainDone
+	})
 }
