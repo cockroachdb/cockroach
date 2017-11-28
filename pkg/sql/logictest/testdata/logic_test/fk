@@ -872,6 +872,25 @@ pkref_b  CREATE TABLE pkref_b (
         FAMILY "primary" (b)
 )
 
+statement ok
+CREATE TABLE test20042 (
+  x STRING PRIMARY KEY
+ ,y STRING UNIQUE
+ ,z STRING REFERENCES test20042(y)
+);
+
+statement ok
+INSERT INTO test20042 (x, y, z) VALUES ('pk1', 'k1', null);
+
+statement ok
+INSERT INTO test20042 (x, y, z) VALUES ('pk2', 'k2 ', 'k1');
+
+statement ok
+DELETE FROM test20042 WHERE x = 'pk2';
+
+statement ok
+DELETE FROM test20042 WHERE x = 'pk1';
+
 # See https://github.com/cockroachdb/cockroach/issues/20045
 statement ok
 CREATE TABLE self_x2 (
@@ -880,9 +899,9 @@ CREATE TABLE self_x2 (
  ,z STRING REFERENCES self_x2(y)
  ,INDEX(z)
 );
-
+ 
 statement ok
 INSERT INTO self_x2 (x, y, z) VALUES ('pk1', NULL, NULL);
-
+ 
 statement ok
 DELETE FROM self_x2 WHERE x = 'pk1';
