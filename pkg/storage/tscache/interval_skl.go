@@ -166,18 +166,24 @@ type intervalSkl struct {
 	// maximum timestamp becomes the new floor timestamp for the overall
 	// intervalSkl.
 	floorTS hlc.Timestamp
+
+	metrics sklMetrics
 }
 
 // newIntervalSkl creates a new interval skiplist with the given minimum
 // retention duration and the maximum size.
-func newIntervalSkl(clock *hlc.Clock, minRet time.Duration, pageSize uint32) *intervalSkl {
+func newIntervalSkl(
+	clock *hlc.Clock, minRet time.Duration, pageSize uint32, metrics sklMetrics,
+) *intervalSkl {
 	s := intervalSkl{
 		clock:    clock,
 		minRet:   minRet,
 		pageSize: pageSize,
 		minPages: defaultMinSklPages,
+		metrics:  metrics,
 	}
 	s.pushNewPage(0 /* maxWallTime */, nil /* arena */)
+	s.metrics.Pages.Update(1)
 	return &s
 }
 
@@ -414,6 +420,10 @@ func (s *intervalSkl) rotatePages(filledPage *sklPage) {
 	// the maximum timestamp for all values it contains, but also for all values
 	// any earlier pages contain.
 	s.pushNewPage(fp.maxWallTime, oldArena)
+
+	// Update metrics.
+	s.metrics.Pages.Update(int64(s.pages.Len()))
+	s.metrics.PageRotations.Inc(1)
 }
 
 // LookupTimestamp returns the latest timestamp value at which the given key was

@@ -830,7 +830,6 @@ func NewStore(cfg StoreConfig, eng engine.Engine, nodeDesc *roachpb.NodeDescript
 		cfg:      cfg,
 		db:       cfg.DB, // TODO(tschottdorf): remove redundancy.
 		engine:   eng,
-		tsCache:  tscache.New(cfg.Clock),
 		nodeDesc: nodeDesc,
 		metrics:  newStoreMetrics(cfg.HistogramWindowInterval),
 	}
@@ -856,6 +855,10 @@ func NewStore(cfg StoreConfig, eng engine.Engine, nodeDesc *roachpb.NodeDescript
 	s.mu.replicasByKey = btree.New(64 /* degree */)
 	s.mu.uninitReplicas = map[roachpb.RangeID]*Replica{}
 	s.mu.Unlock()
+
+	tsCacheMetrics := tscache.MakeMetrics()
+	s.tsCache = tscache.New(cfg.Clock, tsCacheMetrics)
+	s.metrics.registry.AddMetricStruct(tsCacheMetrics)
 
 	s.snapshotApplySem = make(chan struct{}, cfg.concurrentSnapshotApplyLimit)
 
