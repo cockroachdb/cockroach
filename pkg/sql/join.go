@@ -147,6 +147,11 @@ type joinNode struct {
 	// columns contains the metadata for the results of this node.
 	columns sqlbase.ResultColumns
 
+	run joinRun
+}
+
+// joinRun contains the run-time state of joinNode during local execution.
+type joinRun struct {
 	// output contains the last generated row of results from this node.
 	output tree.Datums
 
@@ -268,14 +273,14 @@ func (p *planner) makeJoin(
 		columns:  info.sourceColumns,
 	}
 
-	n.buffer = &RowBuffer{
+	n.run.buffer = &RowBuffer{
 		RowContainer: sqlbase.NewRowContainer(
 			p.session.TxnState.makeBoundAccount(), sqlbase.ColTypeInfoFromResCols(planColumns(n)), 0,
 		),
 	}
 
-	n.bucketsMemAcc = p.session.TxnState.mon.MakeBoundAccount()
-	n.buckets = buckets{
+	n.run.bucketsMemAcc = p.session.TxnState.mon.MakeBoundAccount()
+	n.run.buckets = buckets{
 		buckets: make(map[string]*bucket),
 		rowContainer: sqlbase.NewRowContainer(
 			p.session.TxnState.makeBoundAccount(),
@@ -476,20 +481,20 @@ func (n *joinNode) Start(params runParams) error {
 	}
 
 	// Pre-allocate the space for output rows.
-	n.output = make(tree.Datums, len(n.columns))
+	n.run.output = make(tree.Datums, len(n.columns))
 
 	// If needed, pre-allocate left and right rows of NULL tuples for when the
 	// join predicate fails to match.
 	if n.joinType == joinTypeLeftOuter || n.joinType == joinTypeFullOuter {
-		n.emptyRight = make(tree.Datums, len(planColumns(n.right.plan)))
-		for i := range n.emptyRight {
-			n.emptyRight[i] = tree.DNull
+		n.run.emptyRight = make(tree.Datums, len(planColumns(n.right.plan)))
+		for i := range n.run.emptyRight {
+			n.run.emptyRight[i] = tree.DNull
 		}
 	}
 	if n.joinType == joinTypeRightOuter || n.joinType == joinTypeFullOuter {
-		n.emptyLeft = make(tree.Datums, len(planColumns(n.left.plan)))
-		for i := range n.emptyLeft {
-			n.emptyLeft[i] = tree.DNull
+		n.run.emptyLeft = make(tree.Datums, len(planColumns(n.left.plan)))
+		for i := range n.run.emptyLeft {
+			n.run.emptyLeft[i] = tree.DNull
 		}
 	}
 
@@ -514,14 +519,14 @@ func (n *joinNode) hashJoinStart(params runParams) error {
 			return err
 		}
 
-		if err := n.buckets.AddRow(ctx, &n.bucketsMemAcc, encoding, row); err != nil {
+		if err := n.run.buckets.AddRow(ctx, &n.run.bucketsMemAcc, encoding, row); err != nil {
 			return err
 		}
 
 		scratch = encoding[:0]
 	}
 	if n.joinType == joinTypeFullOuter || n.joinType == joinTypeRightOuter {
-		return n.buckets.InitSeen(ctx, &n.bucketsMemAcc)
+		return n.run.buckets.InitSeen(ctx, &n.run.bucketsMemAcc)
 	}
 	return nil
 }
@@ -530,19 +535,19 @@ func (n *joinNode) hashJoinStart(params runParams) error {
 func (n *joinNode) Next(params runParams) (res bool, err error) {
 	// If results available from from previously computed results, we just
 	// return true.
-	if n.buffer.Next() {
+	if n.run.buffer.Next() {
 		return true, nil
 	}
 
 	// If the buffer is empty and we've finished outputting, we're done.
-	if n.finishedOutput {
+	if n.run.finishedOutput {
 		return false, nil
 	}
 
 	wantUnmatchedLeft := n.joinType == joinTypeLeftOuter || n.joinType == joinTypeFullOuter
 	wantUnmatchedRight := n.joinType == joinTypeRightOuter || n.joinType == joinTypeFullOuter
 
-	if len(n.buckets.Buckets()) == 0 {
+	if len(n.run.buckets.Buckets()) == 0 {
 		if !wantUnmatchedLeft {
 			// No rows on right; don't even try.
 			return false, nil
@@ -621,14 +626,14 @@ func (n *joinNode) Next(params runParams) (res bool, err error) {
 			}
 			// We append an empty right row to the left row, adding the result
 			// to our buffer for the subsequent call to Next().
-			n.pred.prepareRow(n.output, lrow, n.emptyRight)
-			if _, err := n.buffer.AddRow(params.ctx, n.output); err != nil {
+			n.pred.prepareRow(n.run.output, lrow, n.run.emptyRight)
+			if _, err := n.run.buffer.AddRow(params.ctx, n.run.output); err != nil {
 				return false, err
 			}
-			return n.buffer.Next(), nil
+			return n.run.buffer.Next(), nil
 		}
 
-		b, ok := n.buckets.Fetch(encoding)
+		b, ok := n.run.buckets.Fetch(encoding)
 		if !ok {
 			if !wantUnmatchedLeft {
 				scratch = encoding[:0]
@@ -638,18 +643,18 @@ func (n *joinNode) Next(params runParams) (res bool, err error) {
 			// Given that we did not find a matching right row we append an
 			// empty right row to the left row, adding the result to our buffer
 			// for the subsequent call to Next().
-			n.pred.prepareRow(n.output, lrow, n.emptyRight)
-			if _, err := n.buffer.AddRow(params.ctx, n.output); err != nil {
+			n.pred.prepareRow(n.run.output, lrow, n.run.emptyRight)
+			if _, err := n.run.buffer.AddRow(params.ctx, n.run.output); err != nil {
 				return false, err
 			}
-			return n.buffer.Next(), nil
+			return n.run.buffer.Next(), nil
 		}
 
 		// We iterate through all the rows in the bucket attempting to match the
 		// on condition, if the on condition passes we add it to the buffer.
 		foundMatch := false
 		for idx, rrow := range b.Rows() {
-			passesOnCond, err := n.pred.eval(params.evalCtx, n.output, lrow, rrow)
+			passesOnCond, err := n.pred.eval(params.evalCtx, n.run.output, lrow, rrow)
 			if err != nil {
 				return false, err
 			}
@@ -659,13 +664,13 @@ func (n *joinNode) Next(params runParams) (res bool, err error) {
 			}
 			foundMatch = true
 
-			n.pred.prepareRow(n.output, lrow, rrow)
+			n.pred.prepareRow(n.run.output, lrow, rrow)
 			if wantUnmatchedRight {
 				// Mark the row as seen if we need to retrieve the rows
 				// without matches for right or full joins later.
 				b.MarkSeen(idx)
 			}
-			if _, err := n.buffer.AddRow(params.ctx, n.output); err != nil {
+			if _, err := n.run.buffer.AddRow(params.ctx, n.run.output); err != nil {
 				return false, err
 			}
 		}
@@ -673,12 +678,12 @@ func (n *joinNode) Next(params runParams) (res bool, err error) {
 			// If none of the rows matched the on condition and we are computing a
 			// left or full outer join, we need to add a row with an empty
 			// right side.
-			n.pred.prepareRow(n.output, lrow, n.emptyRight)
-			if _, err := n.buffer.AddRow(params.ctx, n.output); err != nil {
+			n.pred.prepareRow(n.run.output, lrow, n.run.emptyRight)
+			if _, err := n.run.buffer.AddRow(params.ctx, n.run.output); err != nil {
 				return false, err
 			}
 		}
-		if n.buffer.Next() {
+		if n.run.buffer.Next() {
 			return true, nil
 		}
 		scratch = encoding[:0]
@@ -689,35 +694,35 @@ func (n *joinNode) Next(params runParams) (res bool, err error) {
 		return false, nil
 	}
 
-	for _, b := range n.buckets.Buckets() {
+	for _, b := range n.run.buckets.Buckets() {
 		for idx, rrow := range b.Rows() {
 			if err := params.p.cancelChecker.Check(); err != nil {
 				return false, err
 			}
 			if !b.Seen(idx) {
-				n.pred.prepareRow(n.output, n.emptyLeft, rrow)
-				if _, err := n.buffer.AddRow(params.ctx, n.output); err != nil {
+				n.pred.prepareRow(n.run.output, n.run.emptyLeft, rrow)
+				if _, err := n.run.buffer.AddRow(params.ctx, n.run.output); err != nil {
 					return false, err
 				}
 			}
 		}
 	}
-	n.finishedOutput = true
+	n.run.finishedOutput = true
 
-	return n.buffer.Next(), nil
+	return n.run.buffer.Next(), nil
 }
 
 // Values implements the planNode interface.
 func (n *joinNode) Values() tree.Datums {
-	return n.buffer.Values()
+	return n.run.buffer.Values()
 }
 
 // Close implements the planNode interface.
 func (n *joinNode) Close(ctx context.Context) {
-	n.buffer.Close(ctx)
-	n.buffer = nil
-	n.buckets.Close(ctx)
-	n.bucketsMemAcc.Close(ctx)
+	n.run.buffer.Close(ctx)
+	n.run.buffer = nil
+	n.run.buckets.Close(ctx)
+	n.run.bucketsMemAcc.Close(ctx)
 
 	n.right.plan.Close(ctx)
 	n.left.plan.Close(ctx)

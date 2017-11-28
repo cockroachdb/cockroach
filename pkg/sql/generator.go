@@ -33,12 +33,18 @@ type valueGenerator struct {
 	// generator object.
 	expr tree.TypedExpr
 
+	// columns is the signature of this generator.
+	columns sqlbase.ResultColumns
+
+	run valueGeneratorRun
+}
+
+// valueGeneratorRun contains the run-time state of valueGenerator
+// during local execution.
+type valueGeneratorRun struct {
 	// gen is a reference to the generator object that produces the row
 	// for this planNode.
 	gen tree.ValueGenerator
-
-	// columns is the signature of this generator.
-	columns sqlbase.ResultColumns
 }
 
 // makeGenerator creates a valueGenerator instance that wraps a call to a
@@ -89,7 +95,7 @@ func (n *valueGenerator) Start(params runParams) error {
 		return err
 	}
 
-	n.gen = gen
+	n.run.gen = gen
 	return nil
 }
 
@@ -97,12 +103,12 @@ func (n *valueGenerator) Next(params runParams) (bool, error) {
 	if err := params.p.cancelChecker.Check(); err != nil {
 		return false, err
 	}
-	return n.gen.Next()
+	return n.run.gen.Next()
 }
-func (n *valueGenerator) Values() tree.Datums { return n.gen.Values() }
+func (n *valueGenerator) Values() tree.Datums { return n.run.gen.Values() }
 
 func (n *valueGenerator) Close(context.Context) {
-	if n.gen != nil {
-		n.gen.Close()
+	if n.run.gen != nil {
+		n.run.gen.Close()
 	}
 }

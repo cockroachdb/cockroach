@@ -70,6 +70,11 @@ type hookFnNode struct {
 	f      func(context.Context, chan<- tree.Datums) error
 	header sqlbase.ResultColumns
 
+	run hookFnRun
+}
+
+// hookFnRun contains the run-time state of hookFnNode during local execution.
+type hookFnRun struct {
 	resultsCh chan tree.Datums
 	errCh     chan error
 
@@ -80,12 +85,12 @@ func (*hookFnNode) Close(context.Context) {}
 
 func (f *hookFnNode) Start(params runParams) error {
 	// TODO(dan): Make sure the resultCollector is set to flush after every row.
-	f.resultsCh = make(chan tree.Datums)
-	f.errCh = make(chan error)
+	f.run.resultsCh = make(chan tree.Datums)
+	f.run.errCh = make(chan error)
 	go func() {
-		f.errCh <- f.f(params.ctx, f.resultsCh)
-		close(f.errCh)
-		close(f.resultsCh)
+		f.run.errCh <- f.f(params.ctx, f.run.resultsCh)
+		close(f.run.errCh)
+		close(f.run.resultsCh)
 	}()
 	return nil
 }
@@ -94,10 +99,10 @@ func (f *hookFnNode) Next(params runParams) (bool, error) {
 	select {
 	case <-params.ctx.Done():
 		return false, params.ctx.Err()
-	case err := <-f.errCh:
+	case err := <-f.run.errCh:
 		return false, err
-	case f.row = <-f.resultsCh:
+	case f.run.row = <-f.run.resultsCh:
 		return true, nil
 	}
 }
-func (f *hookFnNode) Values() tree.Datums { return f.row }
+func (f *hookFnNode) Values() tree.Datums { return f.run.row }

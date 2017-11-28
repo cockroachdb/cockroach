@@ -239,9 +239,14 @@ type userAuthInfo struct {
 }
 
 type createUserNode struct {
-	ifNotExists  bool
-	rowsAffected int
+	ifNotExists bool
 	userAuthInfo
+
+	run createUserRun
+}
+
+type createUserRun struct {
+	rowsAffected int
 }
 
 func (p *planner) getUserAuthInfo(nameE, passwordE tree.Expr, ctx string) (userAuthInfo, error) {
@@ -348,7 +353,7 @@ func (n *createUserNode) Start(params runParams) error {
 	}
 
 	internalExecutor := InternalExecutor{LeaseManager: params.p.LeaseMgr()}
-	n.rowsAffected, err = internalExecutor.ExecuteStatementInTransaction(
+	n.run.rowsAffected, err = internalExecutor.ExecuteStatementInTransaction(
 		params.ctx,
 		"create-user",
 		params.p.txn,
@@ -366,22 +371,22 @@ func (n *createUserNode) Start(params runParams) error {
 				// are not actually inserting anything but are canceling the
 				// error, so clear the row count so that the client can learn
 				// what's going on.
-				n.rowsAffected = 0
+				n.run.rowsAffected = 0
 				return nil
 			}
 			err = errors.Errorf("user %s already exists", normalizedUsername)
 		}
 		return err
-	} else if n.rowsAffected != 1 {
+	} else if n.run.rowsAffected != 1 {
 		return errors.Errorf(
-			"%d rows affected by user creation; expected exactly one row affected", n.rowsAffected,
+			"%d rows affected by user creation; expected exactly one row affected", n.run.rowsAffected,
 		)
 	}
 
 	return nil
 }
 
-func (n *createUserNode) FastPathResults() (int, bool) { return n.rowsAffected, true }
+func (n *createUserNode) FastPathResults() (int, bool) { return n.run.rowsAffected, true }
 func (*createUserNode) Next(runParams) (bool, error)   { return false, nil }
 func (*createUserNode) Close(context.Context)          {}
 func (*createUserNode) Values() tree.Datums            { return tree.Datums{} }
@@ -389,7 +394,14 @@ func (*createUserNode) Values() tree.Datums            { return tree.Datums{} }
 // alterUserSetPasswordNode represents an ALTER USER ... WITH PASSWORD statement.
 type alterUserSetPasswordNode struct {
 	userAuthInfo
-	ifExists     bool
+	ifExists bool
+
+	run alterUserSetPasswordRun
+}
+
+// alterUserSetPasswordRun is the run-time state of
+// alterUserSetPasswordNode for local execution.
+type alterUserSetPasswordRun struct {
 	rowsAffected int
 }
 
@@ -417,7 +429,7 @@ func (p *planner) AlterUserSetPassword(
 }
 
 func (n *alterUserSetPasswordNode) FastPathResults() (int, bool) {
-	return n.rowsAffected, true
+	return n.run.rowsAffected, true
 }
 
 func (n *alterUserSetPasswordNode) Start(params runParams) error {
@@ -427,7 +439,7 @@ func (n *alterUserSetPasswordNode) Start(params runParams) error {
 	}
 
 	internalExecutor := InternalExecutor{LeaseManager: params.p.LeaseMgr()}
-	n.rowsAffected, err = internalExecutor.ExecuteStatementInTransaction(
+	n.run.rowsAffected, err = internalExecutor.ExecuteStatementInTransaction(
 		params.ctx,
 		"create-user",
 		params.p.txn,
@@ -438,7 +450,7 @@ func (n *alterUserSetPasswordNode) Start(params runParams) error {
 	if err != nil {
 		return err
 	}
-	if n.rowsAffected == 0 && !n.ifExists {
+	if n.run.rowsAffected == 0 && !n.ifExists {
 		return errors.Errorf("user %s does not exist", normalizedUsername)
 	}
 	return err
@@ -626,7 +638,14 @@ type createTableNode struct {
 	n          *tree.CreateTable
 	dbDesc     *sqlbase.DatabaseDescriptor
 	sourcePlan planNode
-	count      int
+
+	run createTableRun
+}
+
+// createTableRun contains the run-time state of createTableNode
+// during local execution.
+type createTableRun struct {
+	count int
 }
 
 // CreateTable creates a table.
@@ -839,8 +858,8 @@ func (n *createTableNode) Start(params runParams) error {
 		if err != nil {
 			return err
 		}
-		// Passing the affected rows num back
-		n.count = count
+		// Passing the affected rows num back.
+		n.run.count = count
 	}
 	return nil
 }

@@ -213,7 +213,7 @@ func (p *planner) selectIndex(
 	c := candidates[0]
 	s.index = c.index
 	s.specifiedIndex = nil
-	s.isSecondaryIndex = (c.index != &s.desc.PrimaryIndex)
+	s.run.isSecondaryIndex = (c.index != &s.desc.PrimaryIndex)
 	var err error
 	s.spans, err = makeSpans(&p.evalCtx, c.constraints, c.desc, c.index)
 	if err != nil {

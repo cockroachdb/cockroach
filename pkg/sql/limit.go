@@ -33,7 +33,13 @@ type limitNode struct {
 	evaluated  bool
 	count      int64
 	offset     int64
-	rowIndex   int64
+
+	run limitRun
+}
+
+// limitRun contains the state of limitNode during local execution.
+type limitRun struct {
+	rowIndex int64
 }
 
 // limit constructs a limitNode based on the LIMIT and OFFSET clauses.
@@ -148,7 +154,7 @@ func (n *limitNode) Values() tree.Datums { return n.plan.Values() }
 func (n *limitNode) Next(params runParams) (bool, error) {
 	// n.rowIndex is the 0-based index of the next row.
 	// We don't do (n.rowIndex >= n.offset + n.count) to avoid overflow (count can be MaxInt64).
-	if n.rowIndex-n.offset >= n.count {
+	if n.run.rowIndex-n.offset >= n.count {
 		return false, nil
 	}
 
@@ -157,8 +163,8 @@ func (n *limitNode) Next(params runParams) (bool, error) {
 			return false, err
 		}
 
-		n.rowIndex++
-		if n.rowIndex > n.offset {
+		n.run.rowIndex++
+		if n.run.rowIndex > n.offset {
 			// Row within limits, return it.
 			break
 		}
