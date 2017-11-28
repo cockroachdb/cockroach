@@ -976,12 +976,7 @@ CockroachDB supports the following flags:
 			Impure:     true,
 			Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				name := tree.MustBeDString(args[0])
-				parsedNameWithIndex, err := evalCtx.Planner.ParseTableNameWithIndex(string(name))
-				if err != nil {
-					return nil, err
-				}
-				parsedName := parsedNameWithIndex.Table
-				qualifiedName, err := evalCtx.Planner.QualifyWithDatabase(evalCtx.Ctx(), &parsedName)
+				qualifiedName, err := parseQualifiedTableName(evalCtx, string(name))
 				if err != nil {
 					return nil, err
 				}
@@ -1003,12 +998,7 @@ CockroachDB supports the following flags:
 			Impure:     true,
 			Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				name := tree.MustBeDString(args[0])
-				parsedNameWithIndex, err := evalCtx.Planner.ParseTableNameWithIndex(string(name))
-				if err != nil {
-					return nil, err
-				}
-				parsedName := parsedNameWithIndex.Table
-				qualifiedName, err := evalCtx.Planner.QualifyWithDatabase(evalCtx.Ctx(), &parsedName)
+				qualifiedName, err := parseQualifiedTableName(evalCtx, string(name))
 				if err != nil {
 					return nil, err
 				}
@@ -1046,14 +1036,8 @@ CockroachDB supports the following flags:
 			Category:   categorySequences,
 			Impure:     true,
 			Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
-				// TODO(vilterp): dedupe all this stuff
 				name := tree.MustBeDString(args[0])
-				parsedNameWithIndex, err := evalCtx.Planner.ParseTableNameWithIndex(string(name))
-				if err != nil {
-					return nil, err
-				}
-				parsedName := parsedNameWithIndex.Table
-				qualifiedName, err := evalCtx.Planner.QualifyWithDatabase(evalCtx.Ctx(), &parsedName)
+				qualifiedName, err := parseQualifiedTableName(evalCtx, string(name))
 				if err != nil {
 					return nil, err
 				}
@@ -3162,4 +3146,13 @@ func truncateTimestamp(
 
 	toTime := time.Date(year, month, day, hour, min, sec, nsec, loc)
 	return tree.MakeDTimestampTZ(toTime, time.Microsecond), nil
+}
+
+func parseQualifiedTableName(evalCtx *tree.EvalContext, sql string) (*tree.TableName, error) {
+	parsedNameWithIndex, err := evalCtx.Planner.ParseTableNameWithIndex(sql)
+	if err != nil {
+		return nil, err
+	}
+	parsedName := parsedNameWithIndex.Table
+	return evalCtx.Planner.QualifyWithDatabase(evalCtx.Ctx(), &parsedName)
 }
