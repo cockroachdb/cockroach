@@ -15,6 +15,7 @@
 package distsqlrun
 
 import (
+	math "math"
 	"sync"
 	"testing"
 	"time"
@@ -360,4 +361,66 @@ func TestHandshake(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestFlowRegistryDrain drains a flowRegistry and verifies that currently
+// running flows are allowed to finish up to a timeout and no new flows are
+// accepted.
+func TestFlowRegistryDrain(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.TODO()
+	reg := makeFlowRegistry(roachpb.NodeID(0))
+
+	flow := &Flow{ctx: ctx}
+	if err := reg.RegisterFlow(
+		ctx, FlowID{uuid.MakeV4()}, flow, nil /* inboundStreams */, 0, /* timeout */
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	setDraining := func(drain bool) {
+		reg.SetDraining(drain, 0 /* flowDrainWait */)
+	}
+
+	// WaitForFlow verifies that SetDraining waits for a flow to finish within
+	// the timeout.
+	t.Run("WaitForFlow", func(t *testing.T) {
+		// Artificially add to the flow's waitgroup (as if a processor was
+		// running).
+		flow.waitGroup.Add(1)
+		drainDone := make(chan struct{})
+		go func() {
+			reg.SetDraining(true, math.MaxInt64 /* flowDrainWait */)
+			drainDone <- struct{}{}
+		}()
+		flow.waitGroup.Done()
+		<-drainDone
+		setDraining(false)
+	})
+
+	// DrainTimeout verifies that SetDraining returns once the timeout expires.
+	t.Run("DrainTimeout", func(t *testing.T) {
+		flow.waitGroup.Add(1)
+		setDraining(true)
+		flow.waitGroup.Done()
+		setDraining(false)
+	})
+
+	// RejectNewFlow verifies that a flowRegistry rejects new flows when
+	// draining and accepts them again when undrained.
+	t.Run("RejectNewFlow", func(t *testing.T) {
+		setDraining(true)
+		if err := reg.RegisterFlow(
+			ctx, FlowID{uuid.MakeV4()}, flow, nil /* inboundStreams */, 0, /* timeout */
+		); !testutils.IsError(err, "draining") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		setDraining(false)
+		if err := reg.RegisterFlow(
+			ctx, FlowID{uuid.MakeV4()}, flow, nil /* inboundStreams */, 0, /* timeout */
+		); err != nil {
+			t.Fatal(err)
+		}
+	})
 }

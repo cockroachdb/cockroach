@@ -91,6 +91,10 @@ type flowRegistry struct {
 	// All fields in the flowEntry's are protected by the flowRegistry mutex,
 	// except flow, whose methods can be called freely.
 	flows map[FlowID]*flowEntry
+
+	// draining specifies whether the flowRegistry is draining. If it is, the
+	// flowRegistry will not accept new flows.
+	draining bool
 }
 
 // makeFlowRegistry creates a new flowRegistry.
@@ -154,6 +158,13 @@ func (fr *flowRegistry) RegisterFlow(
 ) (retErr error) {
 	fr.Lock()
 	defer fr.Unlock()
+	if fr.draining {
+		return errors.Errorf(
+			"could not register flowID %d on node %d because the registry is draining",
+			id,
+			fr.nodeID,
+		)
+	}
 	defer func() {
 		if retErr != nil {
 			for _, stream := range inboundStreams {
@@ -268,6 +279,61 @@ func (fr *flowRegistry) waitForFlowLocked(
 	}
 
 	return entry
+}
+
+// SetDraining (when called with 'true'), waits for currently running flows to
+// finish up to flowDrainWait and causes the flowRegistry to stop accepting any
+// new flows. When called with false, new flows will once again be accepted.
+func (fr *flowRegistry) SetDraining(drain bool, flowDrainWait time.Duration) {
+	// This helper function sets the flowRegistry draining state and returns
+	// any flows to wait on.
+	flows := func() []*flowEntry {
+		fr.Lock()
+		defer fr.Unlock()
+		if fr.draining == drain {
+			return nil
+		}
+		fr.draining = drain
+		if !drain {
+			return nil
+		}
+		flows := make([]*flowEntry, 0, len(fr.flows))
+		for _, entry := range fr.flows {
+			flows = append(flows, entry)
+		}
+		return flows
+	}()
+
+	if len(flows) == 0 {
+		return
+	}
+
+	allFlowsDone := make(chan struct{}, 1)
+	doneWaiting := make(chan struct{}, 1)
+	quitWaiting := make(chan struct{})
+	defer close(quitWaiting)
+	go func() {
+		for _, entry := range flows {
+			go func() {
+				entry.flow.Wait()
+				doneWaiting <- struct{}{}
+			}()
+			select {
+			// Wait for current flow to finish.
+			case <-doneWaiting:
+			// Case in which timeout expires before we are done waiting for all
+			// flows to finish.
+			case <-quitWaiting:
+				return
+			}
+		}
+		allFlowsDone <- struct{}{}
+	}()
+
+	select {
+	case <-time.After(flowDrainWait):
+	case <-allFlowsDone:
+	}
 }
 
 // ConnectInboundStream finds the inboundStreamInfo for the given
