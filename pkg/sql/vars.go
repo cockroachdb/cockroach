@@ -226,8 +226,27 @@ var varGen = map[string]sessionVar{
 	},
 
 	// Supported for PG compatibility only.
-	// See https://www.postgresql.org/docs/9.6/static/runtime-config-client.html
+	// See https://www.postgresql.org/docs/10/static/runtime-config-client.html
 	`extra_float_digits`: nopVar,
+
+	// Supported for PG compatibility only.
+	// See https://www.postgresql.org/docs/10/static/runtime-config-client.html
+	`intervalstyle`: {
+		Get: func(*Session) string {
+			return "postgres"
+		},
+		Set: func(_ context.Context, session *Session, values []tree.TypedExpr) error {
+			s, err := getStringVal(session, `intervalstyle`, values)
+			if err != nil {
+				return err
+			}
+			if strings.ToLower(s) != "postgres" {
+				return fmt.Errorf("non-postgres interval style %s not supported", s)
+			}
+			return nil
+		},
+		Reset: func(*Session) error { return nil },
+	},
 
 	// Supported for PG compatibility only.
 	// See https://www.postgresql.org/docs/10/static/runtime-config-preset.html#GUC-MAX-INDEX-KEYS
@@ -240,7 +259,7 @@ var varGen = map[string]sessionVar{
 		Get: func(session *Session) string { return fmt.Sprintf("%d", session.tables.leaseMgr.nodeID.Get()) },
 	},
 
-	// CockroachDB extension (inspired from MySQL).
+	// CockroachDB extension (inspired by MySQL).
 	// See https://dev.mysql.com/doc/refman/5.7/en/server-system-variables.html#sysvar_sql_safe_updates
 	`sql_safe_updates`: {
 		Get: func(session *Session) string { return strconv.FormatBool(session.SafeUpdates) },
