@@ -1,3 +1,4 @@
+import classNames from "classnames";
 import Select from "react-select";
 import React from "react";
 import _ from "lodash";
@@ -34,20 +35,19 @@ interface DropdownOwnProps {
 export default class Dropdown extends React.Component<DropdownOwnProps, {}> {
   render() {
     const {selected, options, onChange, onArrowClick, disabledArrows} = this.props;
-    let className = "dropdown";
-    if (onArrowClick) {
-      className += " dropdown--side-arrows";
-    }
 
-    let leftClassName = "dropdown__side-arrow";
-    if (_.includes(disabledArrows, ArrowDirection.LEFT)) {
-      leftClassName += " dropdown__side-arrow--disabled";
-    }
-
-    let rightClassName = "dropdown__side-arrow";
-    if (_.includes(disabledArrows, ArrowDirection.RIGHT)) {
-      rightClassName += " dropdown__side-arrow--disabled";
-    }
+    const className = classNames(
+      "dropdown",
+      { "dropdown--side-arrows": !_.isNil(onArrowClick) },
+    );
+    const leftClassName = classNames(
+      "dropdown__side-arrow",
+      { "dropdown__side-arrow--disabled": _.includes(disabledArrows, ArrowDirection.LEFT) },
+    );
+    const rightClassName = classNames(
+      "dropdown__side-arrow",
+      { "dropdown__side-arrow--disabled": _.includes(disabledArrows, ArrowDirection.RIGHT) },
+    );
 
     return <div className={className}>
       {/* TODO (maxlang): consider moving arrows outside the dropdown component */}
