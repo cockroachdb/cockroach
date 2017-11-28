@@ -27,6 +27,15 @@ import (
 	"github.com/pkg/errors"
 )
 
+type showFingerprintsNode struct {
+	optColumnsSlot
+
+	tableDesc *sqlbase.TableDescriptor
+	indexes   []sqlbase.IndexDescriptor
+
+	run showFingerprintsRun
+}
+
 // ShowFingerprints statement fingerprints the data in each index of a table.
 // For each index, a full index scan is run to hash every row with the fnv64
 // hash. For the primary index, all table columns are included in the hash,
@@ -67,13 +76,9 @@ func (p *planner) ShowFingerprints(
 	}, nil
 }
 
-type showFingerprintsNode struct {
-	optColumnsSlot
-
-	tableDesc *sqlbase.TableDescriptor
-	indexes   []sqlbase.IndexDescriptor
-
-	run showFingerprintsRun
+var showFingerprintsColumns = sqlbase.ResultColumns{
+	{Name: "index", Typ: types.String},
+	{Name: "fingerprint", Typ: types.String},
 }
 
 // showFingerprintsRun contains the run-time state of
@@ -84,17 +89,11 @@ type showFingerprintsRun struct {
 	values []tree.Datum
 }
 
-var showFingerprintsColumns = sqlbase.ResultColumns{
-	{Name: "index", Typ: types.String},
-	{Name: "fingerprint", Typ: types.String},
-}
-
 func (n *showFingerprintsNode) Start(params runParams) error {
 	n.run.values = []tree.Datum{tree.DNull, tree.DNull}
 	return nil
 }
-func (n *showFingerprintsNode) Values() tree.Datums     { return n.run.values }
-func (n *showFingerprintsNode) Close(_ context.Context) {}
+
 func (n *showFingerprintsNode) Next(params runParams) (bool, error) {
 	if n.run.rowIdx >= len(n.indexes) {
 		return false, nil
@@ -164,3 +163,6 @@ func (n *showFingerprintsNode) Next(params runParams) (bool, error) {
 	n.run.rowIdx++
 	return true, nil
 }
+
+func (n *showFingerprintsNode) Values() tree.Datums     { return n.run.values }
+func (n *showFingerprintsNode) Close(_ context.Context) {}

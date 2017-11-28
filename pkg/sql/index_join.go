@@ -25,9 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
-const indexJoinBatchSize = 100
-
-// An indexJoinNode implements joining of results from an index with the rows
+// indexJoinNode implements joining of results from an index with the rows
 // of a table.
 //
 // There are three parameters to an index join:
@@ -80,7 +78,6 @@ const indexJoinBatchSize = 100
 // values, but really this could be optimized further to re-use the
 // column data from the index scanNode instead. See the comment
 // for valNeededForCol in scanNode.
-
 type indexJoinNode struct {
 	index *scanNode
 	table *scanNode
@@ -93,22 +90,6 @@ type indexJoinNode struct {
 	primaryKeyColumns []bool
 
 	run indexJoinRun
-}
-
-// indexJoinRun stores the run-time state of indexJoinNode during local execution.
-type indexJoinRun struct {
-	// primaryKeyPrefix is the KV key prefix of the rows
-	// retrieved from the table scanNode.
-	primaryKeyPrefix roachpb.Key
-
-	// colIDtoRowIndex maps column IDs in the table scanNode into column
-	// IDs in the index scanNode's results. The presence of a column ID
-	// in this mapping is not sufficient to cause a column's values to
-	// be produced; which columns are effectively loaded are decided by
-	// the scanNodes' own valNeededForCol, which is updated by
-	// setNeededColumns(). So there may be more columns in
-	// colIDtoRowIndex than effectively accessed.
-	colIDtoRowIndex map[sqlbase.ColumnID]int
 }
 
 // makeIndexJoin build an index join node.
@@ -212,8 +193,20 @@ func (p *planner) makeIndexJoin(
 	return node, indexScan
 }
 
-func (n *indexJoinNode) Values() tree.Datums {
-	return n.table.Values()
+// indexJoinRun stores the run-time state of indexJoinNode during local execution.
+type indexJoinRun struct {
+	// primaryKeyPrefix is the KV key prefix of the rows
+	// retrieved from the table scanNode.
+	primaryKeyPrefix roachpb.Key
+
+	// colIDtoRowIndex maps column IDs in the table scanNode into column
+	// IDs in the index scanNode's results. The presence of a column ID
+	// in this mapping is not sufficient to cause a column's values to
+	// be produced; which columns are effectively loaded are decided by
+	// the scanNodes' own valNeededForCol, which is updated by
+	// setNeededColumns(). So there may be more columns in
+	// colIDtoRowIndex than effectively accessed.
+	colIDtoRowIndex map[sqlbase.ColumnID]int
 }
 
 func (n *indexJoinNode) Start(params runParams) error {
@@ -222,6 +215,8 @@ func (n *indexJoinNode) Start(params runParams) error {
 	}
 	return n.index.Start(params)
 }
+
+const indexJoinBatchSize = 100
 
 func (n *indexJoinNode) Next(params runParams) (bool, error) {
 	// Loop looking up the next row. We either are going to pull a row from the
@@ -276,6 +271,10 @@ func (n *indexJoinNode) Next(params runParams) (bool, error) {
 		}
 	}
 	return false, nil
+}
+
+func (n *indexJoinNode) Values() tree.Datums {
+	return n.table.Values()
 }
 
 func (n *indexJoinNode) Close(ctx context.Context) {

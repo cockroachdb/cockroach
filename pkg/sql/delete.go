@@ -42,14 +42,6 @@ type deleteNode struct {
 	run deleteRun
 }
 
-// deleteRun contains the run-time state of deleteNode during local execution.
-type deleteRun struct {
-	// The following fields are populated during Start().
-	editNodeRun
-
-	fastPath bool
-}
-
 // Delete removes rows from a table.
 // Privileges: DELETE and SELECT on table. We currently always use a SELECT statement.
 //   Notes: postgres requires DELETE. Also requires SELECT for "USING" and "WHERE" with tables.
@@ -118,6 +110,14 @@ func (p *planner) Delete(
 	return dn, nil
 }
 
+// deleteRun contains the run-time state of deleteNode during local execution.
+type deleteRun struct {
+	// The following fields are populated during Start().
+	editNodeRun
+
+	fastPath bool
+}
+
 func (d *deleteNode) Start(params runParams) error {
 	if err := d.run.startEditNode(params, &d.editNodeBase); err != nil {
 		return err
@@ -137,20 +137,6 @@ func (d *deleteNode) Start(params runParams) error {
 	}
 
 	return d.run.tw.init(d.p.txn)
-}
-
-func (d *deleteNode) Close(ctx context.Context) {
-	d.run.rows.Close(ctx)
-	d.tw.close(ctx)
-	*d = deleteNode{}
-	deleteNodePool.Put(d)
-}
-
-func (d *deleteNode) FastPathResults() (int, bool) {
-	if d.run.fastPath {
-		return d.rh.rowCount, true
-	}
-	return 0, false
 }
 
 func (d *deleteNode) Next(params runParams) (bool, error) {
@@ -186,6 +172,24 @@ func (d *deleteNode) Next(params runParams) (bool, error) {
 	d.run.resultRow = resultRow
 
 	return true, nil
+}
+
+func (d *deleteNode) Values() tree.Datums {
+	return d.run.resultRow
+}
+
+func (d *deleteNode) Close(ctx context.Context) {
+	d.run.rows.Close(ctx)
+	d.tw.close(ctx)
+	*d = deleteNode{}
+	deleteNodePool.Put(d)
+}
+
+func (d *deleteNode) FastPathResults() (int, bool) {
+	if d.run.fastPath {
+		return d.rh.rowCount, true
+	}
+	return 0, false
 }
 
 // Determine if the deletion of `rows` can be done without actually scanning them,
@@ -232,8 +236,4 @@ func (d *deleteNode) fastDelete(params runParams, scan *scanNode) error {
 	}
 	d.rh.rowCount += rowCount
 	return nil
-}
-
-func (d *deleteNode) Values() tree.Datums {
-	return d.run.resultRow
 }

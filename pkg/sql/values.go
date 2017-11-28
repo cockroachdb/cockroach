@@ -27,11 +27,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
-func newValuesListLenErr(exp, got int) error {
-	return errors.Errorf("VALUES lists must all be the same length, expected %d columns, found %d",
-		exp, got)
-}
-
 type valuesNode struct {
 	n       *tree.ValuesClause
 	columns sqlbase.ResultColumns
@@ -45,25 +40,8 @@ type valuesNode struct {
 	valuesRun
 }
 
-// valuesRun is the run-time state of a valuesNode during local execution.
-type valuesRun struct {
-	rows    *sqlbase.RowContainer
-	nextRow int // The index of the next row.
-}
-
-func (p *planner) newContainerValuesNode(columns sqlbase.ResultColumns, capacity int) *valuesNode {
-	return &valuesNode{
-		columns: columns,
-		isConst: true,
-		valuesRun: valuesRun{
-			rows: sqlbase.NewRowContainer(
-				p.session.TxnState.makeBoundAccount(), sqlbase.ColTypeInfoFromResCols(columns), capacity,
-			),
-		},
-	}
-}
-
-func (p *planner) ValuesClause(
+// Values implements the VALUES clause.
+func (p *planner) Values(
 	ctx context.Context, n *tree.ValuesClause, desiredTypes []types.T,
 ) (planNode, error) {
 	v := &valuesNode{
@@ -132,6 +110,24 @@ func (p *planner) ValuesClause(
 	return v, nil
 }
 
+func (p *planner) newContainerValuesNode(columns sqlbase.ResultColumns, capacity int) *valuesNode {
+	return &valuesNode{
+		columns: columns,
+		isConst: true,
+		valuesRun: valuesRun{
+			rows: sqlbase.NewRowContainer(
+				p.session.TxnState.makeBoundAccount(), sqlbase.ColTypeInfoFromResCols(columns), capacity,
+			),
+		},
+	}
+}
+
+// valuesRun is the run-time state of a valuesNode during local execution.
+type valuesRun struct {
+	rows    *sqlbase.RowContainer
+	nextRow int // The index of the next row.
+}
+
 // Start implements the planNode interface.
 func (n *valuesNode) Start(params runParams) error {
 	if n.rows != nil {
@@ -172,18 +168,6 @@ func (n *valuesNode) Start(params runParams) error {
 	return nil
 }
 
-func (n *valuesNode) Values() tree.Datums {
-	return n.rows.At(n.nextRow - 1)
-}
-
-func (n *valuesNode) Next(runParams) (bool, error) {
-	if n.nextRow >= n.rows.Len() {
-		return false, nil
-	}
-	n.nextRow++
-	return true, nil
-}
-
 // Reset resets the valuesNode processing state without requiring recomputation
 // of the values tuples if the valuesNode is processed again. Reset can only
 // be called if valuesNode.isConst.
@@ -194,9 +178,26 @@ func (n *valuesNode) Reset(ctx context.Context) {
 	n.nextRow = 0
 }
 
+func (n *valuesNode) Next(runParams) (bool, error) {
+	if n.nextRow >= n.rows.Len() {
+		return false, nil
+	}
+	n.nextRow++
+	return true, nil
+}
+
+func (n *valuesNode) Values() tree.Datums {
+	return n.rows.At(n.nextRow - 1)
+}
+
 func (n *valuesNode) Close(ctx context.Context) {
 	if n.rows != nil {
 		n.rows.Close(ctx)
 		n.rows = nil
 	}
+}
+
+func newValuesListLenErr(exp, got int) error {
+	return errors.Errorf("VALUES lists must all be the same length, expected %d columns, found %d",
+		exp, got)
 }

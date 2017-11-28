@@ -167,7 +167,7 @@ var _ planNode = &zeroNode{}
 var _ planNode = &unaryNode{}
 var _ planNode = &explainDistSQLNode{}
 var _ planNode = &explainPlanNode{}
-var _ planNode = &traceNode{}
+var _ planNode = &showTraceNode{}
 var _ planNode = &filterNode{}
 var _ planNode = &groupNode{}
 var _ planNode = &hookFnNode{}
@@ -355,7 +355,7 @@ func (p *planner) newPlan(
 	case CopyDataBlock:
 		return p.CopyData(ctx, n)
 	case *tree.CopyFrom:
-		return p.CopyFrom(ctx, n)
+		return p.Copy(ctx, n)
 	case *tree.CreateDatabase:
 		return p.CreateDatabase(n)
 	case *tree.CreateIndex:
@@ -475,11 +475,11 @@ func (p *planner) newPlan(
 		}
 		return p.Truncate(ctx, n)
 	case *tree.UnionClause:
-		return p.UnionClause(ctx, n, desiredTypes)
+		return p.Union(ctx, n, desiredTypes)
 	case *tree.Update:
 		return p.Update(ctx, n, desiredTypes)
 	case *tree.ValuesClause:
-		return p.ValuesClause(ctx, n, desiredTypes)
+		return p.Values(ctx, n, desiredTypes)
 	default:
 		return nil, errors.Errorf("unknown statement type: %T", stmt)
 	}

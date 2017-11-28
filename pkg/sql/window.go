@@ -31,6 +31,32 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 )
 
+// A windowNode implements the planNode interface and handles windowing logic.
+// It "wraps" a planNode which is used to retrieve the un-windowed results.
+type windowNode struct {
+	// The "wrapped" node (which returns un-windowed results).
+	plan planNode
+
+	sourceCols int
+
+	// A sparse array holding renders specific to this windowNode. This will contain
+	// nil entries for renders that do not contain window functions, and which therefore
+	// can be propagated directly from the "wrapped" node.
+	windowRender []tree.TypedExpr
+
+	// The window functions handled by this windowNode. computeWindows will populate
+	// an entire column in windowValues for each windowFuncHolder, in order.
+	funcs []*windowFuncHolder
+
+	// colContainer and aggContainer are IndexedVarContainers that provide indirection
+	// to migrate IndexedVars and aggregate functions below the windowing level.
+	colContainer windowNodeColContainer
+	aggContainer windowNodeAggContainer
+	ivarHelper   *tree.IndexedVarHelper
+
+	run windowRun
+}
+
 // window constructs a windowNode according to window function applications. This may
 // adjust the render targets in the renderNode as necessary. The use of window functions
 // will run with a space complexity of O(NW) (N = number of rows, W = number of windows)
@@ -100,6 +126,94 @@ func (p *planner) window(
 	)
 
 	return window, nil
+}
+
+// windowRun contains the run-time state of windowNode during local execution.
+type windowRun struct {
+	// The values returned by the wrapped nodes are logically split into three
+	// groups of columns, although they may overlap if renders were merged:
+	// - sourceVals: these values are either passed directly as rendered values of the
+	//     windowNode if their corresponding expressions were not wrapped in window functions,
+	//     or used as arguments to window functions to eventually create rendered values for
+	//     the windowNode if their corresponding expressions were wrapped in window functions.
+	//     These will always be located in wrappedRenderVals[:sourceCols].
+	//     (see extractWindowFunctions)
+	// - windowDefVals: these values are used to partition and order window function
+	//     applications, and were added to the wrapped node from window definitions.
+	//     (see constructWindowDefinitions)
+	// - indexedVarVals: these values are used to buffer the IndexedVar values
+	//     for each row. Unlike the renderNode, which can stream values for each IndexedVar,
+	//     we need to buffer all values here while we compute window function results. We
+	//     then index into these values in colContainer.IndexedVarEval and
+	//     aggContainer.IndexedVarEval. (see replaceIndexVarsAndAggFuncs)
+	wrappedRenderVals *sqlbase.RowContainer
+
+	// The populated values for this windowNode.
+	values    valuesNode
+	populated bool
+
+	windowValues [][]tree.Datum
+	curRowIdx    int
+
+	windowsAcc mon.BoundAccount
+}
+
+func (n *windowNode) Start(params runParams) error {
+	n.run.windowsAcc = params.p.session.TxnState.makeBoundAccount()
+
+	return n.plan.Start(params)
+}
+
+func (n *windowNode) Next(params runParams) (bool, error) {
+	for !n.run.populated {
+		if err := params.p.cancelChecker.Check(); err != nil {
+			return false, err
+		}
+
+		next, err := n.plan.Next(params)
+		if err != nil {
+			return false, err
+		}
+		if !next {
+			n.run.populated = true
+			if err := n.computeWindows(params.ctx, params.evalCtx); err != nil {
+				return false, err
+			}
+			n.run.values.rows = sqlbase.NewRowContainer(
+				params.p.session.TxnState.makeBoundAccount(),
+				sqlbase.ColTypeInfoFromResCols(n.run.values.columns),
+				n.run.wrappedRenderVals.Len(),
+			)
+			if err := n.populateValues(params.ctx, params.evalCtx); err != nil {
+				return false, err
+			}
+			break
+		}
+
+		values := n.plan.Values()
+		if _, err := n.run.wrappedRenderVals.AddRow(params.ctx, values); err != nil {
+			return false, err
+		}
+	}
+
+	return n.run.values.Next(params)
+}
+
+func (n *windowNode) Values() tree.Datums {
+	return n.run.values.Values()
+}
+
+func (n *windowNode) Close(ctx context.Context) {
+	n.plan.Close(ctx)
+	if n.run.wrappedRenderVals != nil {
+		n.run.wrappedRenderVals.Close(ctx)
+		n.run.wrappedRenderVals = nil
+	}
+	if n.run.windowValues != nil {
+		n.run.windowValues = nil
+		n.run.windowsAcc.Close(ctx)
+	}
+	n.run.values.Close(ctx)
 }
 
 // extractWindowFunctions loops over the render expressions and extracts any window functions.
@@ -413,107 +527,6 @@ func (n *windowNode) replaceIndexVarsAndAggFuncs(s *renderNode) {
 	}
 }
 
-// A windowNode implements the planNode interface and handles windowing logic.
-// It "wraps" a planNode which is used to retrieve the un-windowed results.
-type windowNode struct {
-	// The "wrapped" node (which returns un-windowed results).
-	plan planNode
-
-	sourceCols int
-
-	// A sparse array holding renders specific to this windowNode. This will contain
-	// nil entries for renders that do not contain window functions, and which therefore
-	// can be propagated directly from the "wrapped" node.
-	windowRender []tree.TypedExpr
-
-	// The window functions handled by this windowNode. computeWindows will populate
-	// an entire column in windowValues for each windowFuncHolder, in order.
-	funcs []*windowFuncHolder
-
-	// colContainer and aggContainer are IndexedVarContainers that provide indirection
-	// to migrate IndexedVars and aggregate functions below the windowing level.
-	colContainer windowNodeColContainer
-	aggContainer windowNodeAggContainer
-	ivarHelper   *tree.IndexedVarHelper
-
-	run windowRun
-}
-
-// windowRun contains the run-time state of windowNode during local execution.
-type windowRun struct {
-	// The values returned by the wrapped nodes are logically split into three
-	// groups of columns, although they may overlap if renders were merged:
-	// - sourceVals: these values are either passed directly as rendered values of the
-	//     windowNode if their corresponding expressions were not wrapped in window functions,
-	//     or used as arguments to window functions to eventually create rendered values for
-	//     the windowNode if their corresponding expressions were wrapped in window functions.
-	//     These will always be located in wrappedRenderVals[:sourceCols].
-	//     (see extractWindowFunctions)
-	// - windowDefVals: these values are used to partition and order window function
-	//     applications, and were added to the wrapped node from window definitions.
-	//     (see constructWindowDefinitions)
-	// - indexedVarVals: these values are used to buffer the IndexedVar values
-	//     for each row. Unlike the renderNode, which can stream values for each IndexedVar,
-	//     we need to buffer all values here while we compute window function results. We
-	//     then index into these values in colContainer.IndexedVarEval and
-	//     aggContainer.IndexedVarEval. (see replaceIndexVarsAndAggFuncs)
-	wrappedRenderVals *sqlbase.RowContainer
-
-	// The populated values for this windowNode.
-	values    valuesNode
-	populated bool
-
-	windowValues [][]tree.Datum
-	curRowIdx    int
-
-	windowsAcc mon.BoundAccount
-}
-
-func (n *windowNode) Values() tree.Datums {
-	return n.run.values.Values()
-}
-
-func (n *windowNode) Start(params runParams) error {
-	n.run.windowsAcc = params.p.session.TxnState.makeBoundAccount()
-
-	return n.plan.Start(params)
-}
-
-func (n *windowNode) Next(params runParams) (bool, error) {
-	for !n.run.populated {
-		if err := params.p.cancelChecker.Check(); err != nil {
-			return false, err
-		}
-
-		next, err := n.plan.Next(params)
-		if err != nil {
-			return false, err
-		}
-		if !next {
-			n.run.populated = true
-			if err := n.computeWindows(params.ctx, params.evalCtx); err != nil {
-				return false, err
-			}
-			n.run.values.rows = sqlbase.NewRowContainer(
-				params.p.session.TxnState.makeBoundAccount(),
-				sqlbase.ColTypeInfoFromResCols(n.run.values.columns),
-				n.run.wrappedRenderVals.Len(),
-			)
-			if err := n.populateValues(params.ctx, params.evalCtx); err != nil {
-				return false, err
-			}
-			break
-		}
-
-		values := n.plan.Values()
-		if _, err := n.run.wrappedRenderVals.AddRow(params.ctx, values); err != nil {
-			return false, err
-		}
-	}
-
-	return n.run.values.Next(params)
-}
-
 type partitionSorter struct {
 	evalCtx       *tree.EvalContext
 	rows          []tree.IndexedRow
@@ -795,19 +808,6 @@ func (n *windowNode) populateValues(ctx context.Context, evalCtx *tree.EvalConte
 	n.run.windowsAcc.Close(ctx)
 
 	return nil
-}
-
-func (n *windowNode) Close(ctx context.Context) {
-	n.plan.Close(ctx)
-	if n.run.wrappedRenderVals != nil {
-		n.run.wrappedRenderVals.Close(ctx)
-		n.run.wrappedRenderVals = nil
-	}
-	if n.run.windowValues != nil {
-		n.run.windowValues = nil
-		n.run.windowsAcc.Close(ctx)
-	}
-	n.run.values.Close(ctx)
 }
 
 type extractWindowFuncsVisitor struct {
