@@ -508,7 +508,12 @@ func runStart(cmd *cobra.Command, args []string) error {
 	if len(args) > 0 {
 		return usageAndError(cmd)
 	}
+
 	tBegin := timeutil.Now()
+
+	// We don't care about GRPCs fairly verbose logs in most client commands,
+	// but when actually starting a server, we enable it.
+	grpcutil.EnableLogging()
 
 	if ok, err := maybeRerunBackground(); ok {
 		return err
