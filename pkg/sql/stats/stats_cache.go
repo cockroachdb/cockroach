@@ -69,8 +69,23 @@ func (s TableStatistic) String() string {
 	return awsutil.Prettify(s)
 }
 
+// HistogramCacheKey is used as the key type for entries in the TableStatisticsCache
+// which contain a histogram.
+type HistogramCacheKey struct {
+	TableID     sqlbase.ID
+	StatisticID uint32
+}
+
 // A TableStatisticsCache is a cache of TableStatistic objects, keyed by
-// table ID.
+// table ID or HistogramCacheKey{table ID, statistic ID}. The entries keyed
+// by table ID contain all the statistics for different columns and column
+// groups for the given table, and do not include histograms.  The entries
+// keyed by HistogramCacheKey{table ID, statistic ID} contain a single
+// TableStatistic object, including the histogram.
+//
+// Users should probably create two different caches for these different
+// entry types using two calls to NewTableStatisticsCache(), but they may
+// also keep them in the same cache for simplicity.
 type TableStatisticsCache struct {
 	// NB: This can't be a RWMutex for lookup because UnorderedCache.Get
 	// manipulates an internal LRU list.
@@ -98,7 +113,8 @@ func NewTableStatisticsCache(
 	return tableStatsCache
 }
 
-// LookupTableStats returns the cached statistics of the given table ID.
+// LookupTableStats returns the cached statistics of the given table ID,
+// excluding the histograms.
 // The second return value is true if the stats were found in the
 // cache, and false otherwise.
 func (sc *TableStatisticsCache) LookupTableStats(
@@ -108,19 +124,41 @@ func (sc *TableStatisticsCache) LookupTableStats(
 	defer sc.mu.Unlock()
 	if v, ok := sc.mu.cache.Get(tableID); ok {
 		if log.V(2) {
-			log.Infof(ctx, "r%d: lookup statistics for table: %s", tableID, v)
+			log.Infof(ctx, "lookup statistics for table %d: %s", tableID, v)
 		}
 		return v.([]*TableStatistic), true
 	}
 	if log.V(2) {
-		log.Infof(ctx, "r%d: lookup statistics for table: not found", tableID)
+		log.Infof(ctx, "lookup statistics for table %d: not found", tableID)
 	}
 	return nil, false
 }
 
-// Refresh updates the cached statistics for the given table ID
+// LookupHistogram returns the cached statistics and histogram of
+// the given table ID and statistic ID.
+// The second return value is true if the stats were found in the
+// cache, and false otherwise.
+func (sc *TableStatisticsCache) LookupHistogram(
+	ctx context.Context, tableID sqlbase.ID, statisticID uint32,
+) (*TableStatistic, bool) {
+	sc.mu.Lock()
+	defer sc.mu.Unlock()
+	if v, ok := sc.mu.cache.Get(HistogramCacheKey{tableID, statisticID}); ok {
+		if log.V(2) {
+			log.Infof(ctx, "lookup histogram for table %d, statistic %d: %s", tableID, statisticID, v)
+		}
+		return v.(*TableStatistic), true
+	}
+	if log.V(2) {
+		log.Infof(ctx, "lookup histogram for table %d, statistic %d: not found", tableID, statisticID)
+	}
+	return nil, false
+}
+
+// RefreshTableStats updates the cached statistics for the given table ID
 // by issuing a query to system.table_statistics, and returns the statistics.
-func (sc *TableStatisticsCache) Refresh(
+// It excludes the histograms.
+func (sc *TableStatisticsCache) RefreshTableStats(
 	ctx context.Context, tableID sqlbase.ID,
 ) ([]*TableStatistic, error) {
 	tableStatistics, err := sc.getTableStatistics(ctx, tableID)
@@ -129,7 +167,7 @@ func (sc *TableStatisticsCache) Refresh(
 	}
 
 	if log.V(2) {
-		log.Infof(ctx, "r%d: updating statistics for table: %s", tableID, tableStatistics)
+		log.Infof(ctx, "updating statistics for table %d: %s", tableID, tableStatistics)
 	}
 	sc.mu.Lock()
 	defer sc.mu.Unlock()
@@ -137,27 +175,73 @@ func (sc *TableStatisticsCache) Refresh(
 	return tableStatistics, nil
 }
 
+// RefreshHistogram updates the cached statistics and histogram for the given
+// table ID and statistic ID by issuing a query to system.table_statistics, and
+// returns the statistics.
+func (sc *TableStatisticsCache) RefreshHistogram(
+	ctx context.Context, tableID sqlbase.ID, statisticID uint32,
+) (*TableStatistic, error) {
+	tableStatistic, err := sc.getHistogram(ctx, tableID, statisticID)
+	if err != nil {
+		return nil, err
+	}
+
+	if log.V(2) {
+		log.Infof(ctx, "updating histogram for table %d, statistic %d: %s", tableID, statisticID, tableStatistic)
+	}
+	sc.mu.Lock()
+	defer sc.mu.Unlock()
+	sc.mu.cache.Add(HistogramCacheKey{tableID, statisticID}, tableStatistic)
+	return tableStatistic, nil
+}
+
 // GetTableStats is a convenience function to look up statistics for the
 // requested table ID in the cache using LookupTableStats, and if the stats
 // are not present in the cache, it looks them up in system.table_statistics
-// using Refresh.
+// using RefreshTableStats.
 func (sc *TableStatisticsCache) GetTableStats(
 	ctx context.Context, tableID sqlbase.ID,
 ) ([]*TableStatistic, error) {
 	if stats, ok := sc.LookupTableStats(ctx, tableID); ok {
 		return stats, nil
 	}
-	return sc.Refresh(ctx, tableID)
+	return sc.RefreshTableStats(ctx, tableID)
 }
 
-// Invalidate invalidates the cached statistics for the given table ID.
-func (sc *TableStatisticsCache) Invalidate(ctx context.Context, tableID sqlbase.ID) {
+// GetHistogram is a convenience function to look up the statistic and
+// histogram for the requested table ID and statistic ID in the cache using
+// LookupHistogram, and if the histogram is not present in the cache, it looks
+// it up in system.table_statistics using RefreshHistogram.
+func (sc *TableStatisticsCache) GetHistogram(
+	ctx context.Context, tableID sqlbase.ID, statisticID uint32,
+) (*TableStatistic, error) {
+	if stats, ok := sc.LookupHistogram(ctx, tableID, statisticID); ok {
+		return stats, nil
+	}
+	return sc.RefreshHistogram(ctx, tableID, statisticID)
+}
+
+// InvalidateTableStats invalidates the cached statistics for the given table ID.
+func (sc *TableStatisticsCache) InvalidateTableStats(ctx context.Context, tableID sqlbase.ID) {
 	if log.V(2) {
-		log.Infof(ctx, "r%d: evicting statistics for table", tableID)
+		log.Infof(ctx, "evicting statistics for table %d", tableID)
 	}
 	sc.mu.Lock()
 	defer sc.mu.Unlock()
 	sc.mu.cache.Del(tableID)
+}
+
+// InvalidateHistogram invalidates the cached statistic for the given table ID
+// and statistic ID.
+func (sc *TableStatisticsCache) InvalidateHistogram(
+	ctx context.Context, tableID sqlbase.ID, statisticID uint32,
+) {
+	if log.V(2) {
+		log.Infof(ctx, "evicting histogram for table %d, statistic %d", tableID, statisticID)
+	}
+	sc.mu.Lock()
+	defer sc.mu.Unlock()
+	sc.mu.cache.Del(HistogramCacheKey{tableID, statisticID})
 }
 
 const (
@@ -239,12 +323,12 @@ func parseStats(datums tree.Datums, includeHistogram bool) (*TableStatistic, err
 }
 
 // getTableStatistics retrieves the statistics in system.table_statistics
-// for the given table ID.
+// for the given table ID, excluding the histograms.
 func (sc *TableStatisticsCache) getTableStatistics(
 	ctx context.Context, tableID sqlbase.ID,
 ) ([]*TableStatistic, error) {
 	const getTableStatisticsStmt = `
-SELECT "tableID", "statisticID", name, "columnIDs", "createdAt", "rowCount", "distinctCount", "nullCount", histogram
+SELECT "tableID", "statisticID", name, "columnIDs", "createdAt", "rowCount", "distinctCount", "nullCount", NULL AS histogram
 FROM system.table_statistics
 WHERE "tableID" = $1
 `
@@ -259,7 +343,7 @@ WHERE "tableID" = $1
 
 	var statsList []*TableStatistic
 	for _, row := range rows {
-		stats, err := parseStats(row, true /* includeHistogram */)
+		stats, err := parseStats(row, false /* includeHistogram */)
 		if err != nil {
 			return nil, err
 		}
@@ -267,4 +351,32 @@ WHERE "tableID" = $1
 	}
 
 	return statsList, nil
+}
+
+// getHistogram retrieves the statistic and histogram in system.table_statistics
+// for the given table ID and statistic ID.
+func (sc *TableStatisticsCache) getHistogram(
+	ctx context.Context, tableID sqlbase.ID, statisticID uint32,
+) (*TableStatistic, error) {
+	const getHistogramStmt = `
+SELECT "tableID", "statisticID", name, "columnIDs", "createdAt", "rowCount", "distinctCount", "nullCount", histogram
+FROM system.table_statistics
+WHERE "tableID" = $1 AND "statisticID" = $2
+`
+	var row tree.Datums
+	if err := sc.ClientDB.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+		var err error
+		row, err = sc.SQLExecutor.QueryRowInTransaction(ctx, "get-histogram", txn,
+			getHistogramStmt, tableID, statisticID)
+		return err
+	}); err != nil {
+		return nil, err
+	}
+
+	stats, err := parseStats(row, true /* includeHistogram */)
+	if err != nil {
+		return nil, err
+	}
+
+	return stats, nil
 }

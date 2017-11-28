@@ -98,7 +98,6 @@ VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 
 func checkStatsForTable(
 	ctx context.Context,
-	db *client.DB,
 	sc *stats.TableStatisticsCache,
 	expected []*stats.TableStatistic,
 	tableID sqlbase.ID,
@@ -127,6 +126,36 @@ func checkStatsForTable(
 	return nil
 }
 
+func checkHistForTable(
+	ctx context.Context,
+	sc *stats.TableStatisticsCache,
+	expected *stats.TableStatistic,
+	tableID sqlbase.ID,
+	statisticID uint32,
+) error {
+	// Initially the statistic and histogram won't be in the cache.
+	if stat, ok := sc.LookupHistogram(ctx, tableID, statisticID); ok {
+		return errors.Errorf("lookup of missing key {table %d, statistic %d} returned: %s", tableID, statisticID, stat)
+	}
+
+	// Perform the lookup and refresh, and confirm the
+	// returned statistic and histogram match the expected values.
+	stat, err := sc.GetHistogram(ctx, tableID, statisticID)
+	if err != nil {
+		return errors.Errorf(err.Error())
+	} else {
+		if !reflect.DeepEqual(stat, expected) {
+			return errors.Errorf("for lookup of table %d and statistic %d, expected stat %s, got %s", tableID, statisticID, expected, stat)
+		}
+	}
+
+	// Now the statistic and histogram should be in the cache.
+	if _, ok := sc.LookupHistogram(ctx, tableID, statisticID); !ok {
+		return errors.Errorf("for lookup of table %d and statistic %d, expected stats %s", tableID, statisticID, expected)
+	}
+	return nil
+}
+
 func TestTableStatisticsCache(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
@@ -140,7 +169,7 @@ func TestTableStatisticsCache(t *testing.T) {
 			TableID:       sqlbase.ID(0),
 			StatisticID:   0,
 			Name:          "table0",
-			ColumnIDs:     []sqlbase.ColumnID{1, 2},
+			ColumnIDs:     []sqlbase.ColumnID{1},
 			CreatedAt:     time.Date(2010, 11, 20, 11, 35, 23, 0, time.UTC),
 			RowCount:      32,
 			DistinctCount: 30,
@@ -152,7 +181,7 @@ func TestTableStatisticsCache(t *testing.T) {
 		{
 			TableID:       sqlbase.ID(0),
 			StatisticID:   1,
-			ColumnIDs:     []sqlbase.ColumnID{3},
+			ColumnIDs:     []sqlbase.ColumnID{2, 3},
 			CreatedAt:     time.Date(2010, 11, 20, 11, 35, 23, 0, time.UTC),
 			RowCount:      32,
 			DistinctCount: 5,
@@ -184,22 +213,44 @@ func TestTableStatisticsCache(t *testing.T) {
 	testutils.SortStructs(expStatsList, "TableID", "StatisticID")
 
 	// Insert the stats into system.table_statistics
-	// and store them in a map keyed by table ID for fast retrieval.
-	expected := make(map[sqlbase.ID][]*stats.TableStatistic)
+	// and store them in maps for fast retrieval.
+	expectedStats := make(map[sqlbase.ID][]*stats.TableStatistic)
+	expectedHist := make(map[stats.HistogramCacheKey]*stats.TableStatistic)
 	for i := range expStatsList {
-		stats := &expStatsList[i]
-		if err := insertTableStats(ctx, db, ex, stats); err != nil {
+		stat := &expStatsList[i]
+		if err := insertTableStats(ctx, db, ex, stat); err != nil {
 			t.Fatal(err)
 		}
-		expected[stats.TableID] = append(expected[stats.TableID], stats)
+		if stat.Histogram != nil {
+			histCacheKey := stats.HistogramCacheKey{TableID: stat.TableID, StatisticID: stat.StatisticID}
+			expectedHist[histCacheKey] = stat
+			// TableStats will be retrieved without the histogram.
+			statNoHist := *stat
+			statNoHist.Histogram = nil
+			expectedStats[stat.TableID] = append(expectedStats[stat.TableID], &statNoHist)
+		} else {
+			expectedStats[stat.TableID] = append(expectedStats[stat.TableID], stat)
+		}
 	}
 	// Add another TableID for which we don't have stats.
-	expected[sqlbase.ID(3)] = nil
+	expectedStats[sqlbase.ID(3)] = nil
+	expectedHist[stats.HistogramCacheKey{TableID: sqlbase.ID(3), StatisticID: 0}] = nil
 
+	testStatsCache(t, ctx, db, ex, expectedStats)
+	testHistogramCache(t, ctx, db, ex, expectedHist)
+}
+
+func testStatsCache(
+	t *testing.T,
+	ctx context.Context,
+	db *client.DB,
+	ex sqlutil.InternalExecutor,
+	expectedStats map[sqlbase.ID][]*stats.TableStatistic,
+) {
 	// Collect the tableIDs and sort them so we can iterate over them in a
 	// consistent order (Go randomizes the order of iteration over maps).
 	var tableIDs sqlbase.IDs
-	for tableID := range expected {
+	for tableID := range expectedStats {
 		tableIDs = append(tableIDs, tableID)
 	}
 	sort.Sort(tableIDs)
@@ -210,7 +261,7 @@ func TestTableStatisticsCache(t *testing.T) {
 	cacheSize := 2
 	sc := stats.NewTableStatisticsCache(cacheSize, db, ex)
 	for _, tableID := range tableIDs {
-		if err := checkStatsForTable(ctx, db, sc, expected[tableID], tableID); err != nil {
+		if err := checkStatsForTable(ctx, sc, expectedStats[tableID], tableID); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -227,14 +278,44 @@ func TestTableStatisticsCache(t *testing.T) {
 	tableIDs = []sqlbase.ID{sqlbase.ID(2), sqlbase.ID(3)}
 	for _, tableID := range tableIDs {
 		if _, ok := sc.LookupTableStats(ctx, tableID); !ok {
-			t.Fatalf("for lookup of key %d, expected stats %s", tableID, expected[tableID])
+			t.Fatalf("for lookup of key %d, expected stats %s", tableID, expectedStats[tableID])
 		}
 	}
 
 	// After invalidation Table ID 2 should be gone.
 	tableID := sqlbase.ID(2)
-	sc.Invalidate(ctx, tableID)
+	sc.InvalidateTableStats(ctx, tableID)
 	if statsList, ok := sc.LookupTableStats(ctx, tableID); ok {
 		t.Fatalf("lookup of invalidated key %d returned: %s", tableID, statsList)
+	}
+}
+
+func testHistogramCache(
+	t *testing.T,
+	ctx context.Context,
+	db *client.DB,
+	ex sqlutil.InternalExecutor,
+	expectedHist map[stats.HistogramCacheKey]*stats.TableStatistic,
+) {
+	// Create a cache and iteratively query the cache for each key. This
+	// will result in the cache getting populated.
+	cacheSize := 2
+	sc := stats.NewTableStatisticsCache(cacheSize, db, ex)
+	for key, hist := range expectedHist {
+		if err := checkHistForTable(ctx, sc, hist, key.TableID, key.StatisticID); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// Key {0, 0} should still be in the cache.
+	key := stats.HistogramCacheKey{TableID: 0, StatisticID: 0}
+	if _, ok := sc.LookupHistogram(ctx, key.TableID, key.StatisticID); !ok {
+		t.Fatalf("for lookup of table %d and statistic %d, expected stats %s", key.TableID, key.StatisticID, expectedHist[key])
+	}
+
+	// After invalidation key {0, 0} should be gone.
+	sc.InvalidateHistogram(ctx, key.TableID, key.StatisticID)
+	if stat, ok := sc.LookupHistogram(ctx, key.TableID, key.StatisticID); ok {
+		t.Fatalf("lookup of invalidated key {table %d, statistic %d} returned: %s", key.TableID, key.StatisticID, stat)
 	}
 }
