@@ -22,6 +22,36 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
+// Grant adds privileges to users.
+// Current status:
+// - Target: single database, table, or view.
+// TODO(marc): open questions:
+// - should we have root always allowed and not present in the permissions list?
+// - should we make users case-insensitive?
+// Privileges: GRANT on database/table/view.
+//   Notes: postgres requires the object owner.
+//          mysql requires the "grant option" and the same privileges, and sometimes superuser.
+func (p *planner) Grant(ctx context.Context, n *tree.Grant) (planNode, error) {
+	return p.changePrivileges(ctx, n.Targets, n.Grantees, func(privDesc *sqlbase.PrivilegeDescriptor, grantee string) {
+		privDesc.Grant(grantee, n.Privileges)
+	})
+}
+
+// Revoke removes privileges from users.
+// Current status:
+// - Target: single database, table, or view.
+// TODO(marc): open questions:
+// - should we have root always allowed and not present in the permissions list?
+// - should we make users case-insensitive?
+// Privileges: GRANT on database/table/view.
+//   Notes: postgres requires the object owner.
+//          mysql requires the "grant option" and the same privileges, and sometimes superuser.
+func (p *planner) Revoke(ctx context.Context, n *tree.Revoke) (planNode, error) {
+	return p.changePrivileges(ctx, n.Targets, n.Grantees, func(privDesc *sqlbase.PrivilegeDescriptor, grantee string) {
+		privDesc.Revoke(grantee, n.Privileges)
+	})
+}
+
 func (p *planner) changePrivileges(
 	ctx context.Context,
 	targets tree.TargetList,
@@ -68,34 +98,4 @@ func (p *planner) changePrivileges(
 		return nil, err
 	}
 	return &zeroNode{}, nil
-}
-
-// Grant adds privileges to users.
-// Current status:
-// - Target: single database, table, or view.
-// TODO(marc): open questions:
-// - should we have root always allowed and not present in the permissions list?
-// - should we make users case-insensitive?
-// Privileges: GRANT on database/table/view.
-//   Notes: postgres requires the object owner.
-//          mysql requires the "grant option" and the same privileges, and sometimes superuser.
-func (p *planner) Grant(ctx context.Context, n *tree.Grant) (planNode, error) {
-	return p.changePrivileges(ctx, n.Targets, n.Grantees, func(privDesc *sqlbase.PrivilegeDescriptor, grantee string) {
-		privDesc.Grant(grantee, n.Privileges)
-	})
-}
-
-// Revoke removes privileges from users.
-// Current status:
-// - Target: single database, table, or view.
-// TODO(marc): open questions:
-// - should we have root always allowed and not present in the permissions list?
-// - should we make users case-insensitive?
-// Privileges: GRANT on database/table/view.
-//   Notes: postgres requires the object owner.
-//          mysql requires the "grant option" and the same privileges, and sometimes superuser.
-func (p *planner) Revoke(ctx context.Context, n *tree.Revoke) (planNode, error) {
-	return p.changePrivileges(ctx, n.Targets, n.Grantees, func(privDesc *sqlbase.PrivilegeDescriptor, grantee string) {
-		privDesc.Revoke(grantee, n.Privileges)
-	})
 }

@@ -16,9 +16,11 @@ package sql
 
 import (
 	"errors"
+	"fmt"
 
 	"golang.org/x/net/context"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -39,6 +41,127 @@ type traceNode struct {
 	kvTracingEnabled bool
 
 	run traceRun
+}
+
+// ShowTrace shows the current stored session trace.
+// Privileges: None.
+func (p *planner) ShowTrace(ctx context.Context, n *tree.ShowTrace) (planNode, error) {
+	const fullSelection = `
+       timestamp,
+       timestamp-first_value(timestamp) OVER (ORDER BY timestamp) AS age,
+       message, tag, loc, operation, span`
+	const compactSelection = `
+       timestamp-first_value(timestamp) OVER (ORDER BY timestamp) AS age,
+       IF(length(loc)=0,message,loc || ' ' || message) AS message,
+       tag, operation`
+
+	const traceClause = `
+SELECT %s
+  FROM (SELECT timestamp,
+               message,
+               tag,
+               loc,
+               first_value(operation) OVER (PARTITION BY txn_idx, span_idx ORDER BY message_idx) as operation,
+               (txn_idx, span_idx) AS span
+          FROM crdb_internal.session_trace)
+ %s
+ ORDER BY timestamp
+`
+
+	renderClause := fullSelection
+	if n.Compact {
+		renderClause = compactSelection
+	}
+
+	whereClause := ""
+	if n.OnlyKVTrace {
+		whereClause = `
+WHERE message LIKE 'fetched: %'
+   OR message LIKE 'CPut %'
+   OR message LIKE 'Put %'
+   OR message LIKE 'DelRange %'
+   OR message LIKE 'Del %'
+   OR message LIKE 'Get %'
+   OR message LIKE 'Scan %'
+   OR message = 'consuming rows'
+   OR message = 'starting plan'
+   OR message LIKE 'fast path - %'
+   OR message LIKE 'querying next range at %'
+   OR message LIKE 'output row: %'
+   OR message LIKE 'execution failed: %'
+   OR message LIKE 'r%: sending batch %'
+`
+	}
+
+	plan, err := p.delegateQuery(ctx, "SHOW TRACE",
+		fmt.Sprintf(traceClause, renderClause, whereClause), nil, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	if n.Statement == nil {
+		// SHOW TRACE FOR SESSION ...
+		return plan, nil
+	}
+
+	// SHOW TRACE FOR SELECT ...
+	stmtPlan, err := p.newPlan(ctx, n.Statement, nil)
+	if err != nil {
+		plan.Close(ctx)
+		return nil, err
+	}
+	tracePlan, err := p.makeTraceNode(stmtPlan, n.OnlyKVTrace /* kvTracingEnabled */)
+	if err != nil {
+		plan.Close(ctx)
+		stmtPlan.Close(ctx)
+		return nil, err
+	}
+
+	// inject the tracePlan inside the SHOW query plan.
+
+	// Suggestion from Radu:
+	// This is not very elegant and would be cleaner if the traceNode
+	// could process the statement source node first, let it emit its
+	// trace messages, and only then query the session_trace vtable.
+	// Alternatively, the outer SHOW could use a UNION between the
+	// traceNode and the query on session_trace.
+
+	// Unfortunately, neither is currently possible because the plan for
+	// the query on session_trace cannot be constructed until the trace
+	// is complete. If we want to enable EXPLAIN [SHOW TRACE FOR ...],
+	// this limitation of the vtable session_trace must be lifted first.
+	// TODO(andrei): make this code more elegant.
+	if s, ok := plan.(*sortNode); ok {
+		if w, ok := s.plan.(*windowNode); ok {
+			if r, ok := w.plan.(*renderNode); ok {
+				subPlan := r.source.plan
+				if f, ok := subPlan.(*filterNode); ok {
+					// The filter layer is only present when the KV modifier is
+					// specified.
+					subPlan = f.source.plan
+				}
+				if w, ok := subPlan.(*windowNode); ok {
+					if r, ok := w.plan.(*renderNode); ok {
+						if _, ok := r.source.plan.(*delayedNode); ok {
+							r.source.plan.Close(ctx)
+							r.source.plan = tracePlan
+							return plan, nil
+						}
+					}
+				}
+			}
+		}
+	}
+
+	// We failed to substitute; this is an internal error.
+	err = pgerror.NewErrorf(pgerror.CodeInternalError,
+		"invalid logical plan structure:\n%s", planToString(ctx, plan),
+	).SetDetailf(
+		"while inserting:\n%s", planToString(ctx, tracePlan))
+	plan.Close(ctx)
+	stmtPlan.Close(ctx)
+	tracePlan.Close(ctx)
+	return nil, err
 }
 
 // makeTraceNode creates a new traceNode.
