@@ -647,7 +647,7 @@ func (p *planner) ShowTables(ctx context.Context, n *parser.ShowTables) (planNod
 // This statement is usually handled as a special case in Executor,
 // but for FROM [SHOW TRANSACTION STATUS] we will arrive here too.
 func (p *planner) ShowTransactionStatus(ctx context.Context) (planNode, error) {
-	return p.ShowVar(ctx, &parser.ShowVar{Name: "transaction status"})
+	return p.ShowVar(ctx, &parser.ShowVar{Name: "transaction_status"})
 }
 
 // ShowUsers returns all the users.

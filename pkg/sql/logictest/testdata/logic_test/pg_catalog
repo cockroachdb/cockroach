@@ -1017,7 +1017,7 @@ client_encoding                UTF8          NULL      NULL        NULL        s
 client_min_messages            ·             NULL      NULL        NULL        string
 database                       test          NULL      NULL        NULL        string
 datestyle                      ISO           NULL      NULL        NULL        string
-default_transaction_isolation  SERIALIZABLE  NULL      NULL        NULL        string
+default_transaction_isolation  serializable  NULL      NULL        NULL        string
 distsql                        off           NULL      NULL        NULL        string
 extra_float_digits             ·             NULL      NULL        NULL        string
 max_index_keys                 32            NULL      NULL        NULL        string
@@ -1029,9 +1029,9 @@ sql_safe_updates               false         NULL      NULL        NULL        s
 standard_conforming_strings    on            NULL      NULL        NULL        string
 time zone                      UTC           NULL      NULL        NULL        string
 tracing                        off           NULL      NULL        NULL        string
-transaction isolation level    SERIALIZABLE  NULL      NULL        NULL        string
-transaction priority           NORMAL        NULL      NULL        NULL        string
-transaction status             NoTxn         NULL      NULL        NULL        string
+transaction_isolation          serializable  NULL      NULL        NULL        string
+transaction_priority           normal        NULL      NULL        NULL        string
+transaction_status             NoTxn         NULL      NULL        NULL        string
 
 query TTTTTTT colnames
 SELECT name, setting, unit, context, enumvals, boot_val, reset_val FROM pg_catalog.pg_settings
@@ -1042,7 +1042,7 @@ client_encoding                UTF8          NULL  user     NULL      UTF8      
 client_min_messages            ·             NULL  user     NULL      ·             ·
 database                       test          NULL  user     NULL      test          test
 datestyle                      ISO           NULL  user     NULL      ISO           ISO
-default_transaction_isolation  SERIALIZABLE  NULL  user     NULL      SERIALIZABLE  SERIALIZABLE
+default_transaction_isolation  serializable  NULL  user     NULL      serializable  serializable
 distsql                        off           NULL  user     NULL      off           off
 extra_float_digits             ·             NULL  user     NULL      ·             ·
 max_index_keys                 32            NULL  user     NULL      32            32
@@ -1054,9 +1054,9 @@ sql_safe_updates               false         NULL  user     NULL      false     
 standard_conforming_strings    on            NULL  user     NULL      on            on
 time zone                      UTC           NULL  user     NULL      UTC           UTC
 tracing                        off           NULL  user     NULL      off           off
-transaction isolation level    SERIALIZABLE  NULL  user     NULL      SERIALIZABLE  SERIALIZABLE
-transaction priority           NORMAL        NULL  user     NULL      NORMAL        NORMAL
-transaction status             NoTxn         NULL  user     NULL      NoTxn         NoTxn
+transaction_isolation          serializable  NULL  user     NULL      serializable  serializable
+transaction_priority           normal        NULL  user     NULL      normal        normal
+transaction_status             NoTxn         NULL  user     NULL      NoTxn         NoTxn
 
 query TTTTTT colnames
 SELECT name, source, min_val, max_val, sourcefile, sourceline FROM pg_catalog.pg_settings
@@ -1079,10 +1079,9 @@ sql_safe_updates               NULL    NULL     NULL     NULL        NULL
 standard_conforming_strings    NULL    NULL     NULL     NULL        NULL
 time zone                      NULL    NULL     NULL     NULL        NULL
 tracing                        NULL    NULL     NULL     NULL        NULL
-transaction isolation level    NULL    NULL     NULL     NULL        NULL
-transaction priority           NULL    NULL     NULL     NULL        NULL
-transaction status             NULL    NULL     NULL     NULL        NULL
-
+transaction_isolation          NULL    NULL     NULL     NULL        NULL
+transaction_priority           NULL    NULL     NULL     NULL        NULL
+transaction_status             NULL    NULL     NULL     NULL        NULL
 
 # Verify proper functionality of system information functions.
 

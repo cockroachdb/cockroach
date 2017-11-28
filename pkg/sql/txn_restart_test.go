@@ -1573,16 +1573,16 @@ func TestRollbackToSavepointFromUnusualStates(t *testing.T) {
 		if err := r.Scan(&iso); err != nil {
 			t.Fatal(err)
 		} else {
-			if iso != "SNAPSHOT" {
-				t.Errorf("Expected SNAPSHOT, got: %s", iso)
+			if iso != "snapshot" {
+				t.Errorf("Expected snapshot, got: %s", iso)
 			}
 		}
 		r = tx.QueryRow("SHOW TRANSACTION PRIORITY")
 		if err := r.Scan(&pri); err != nil {
 			t.Fatal(err)
 		} else {
-			if pri != "HIGH" {
-				t.Errorf("Expected HIGH, got: %s", pri)
+			if pri != "high" {
+				t.Errorf("Expected high, got: %s", pri)
 			}
 		}
 	}

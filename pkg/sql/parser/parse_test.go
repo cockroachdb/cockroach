@@ -270,9 +270,6 @@ func TestParse(t *testing.T) {
 		{`SHOW GRANTS ON DATABASE foo FOR bar`},
 		{`SHOW GRANTS FOR bar, baz`},
 
-		{`SHOW TRANSACTION ISOLATION LEVEL`},
-		{`SHOW TRANSACTION PRIORITY`},
-
 		{`PREPARE a AS SELECT 1`},
 		{`PREPARE a (INT) AS SELECT $1`},
 		{`PREPARE a (STRING, STRING) AS SELECT $1, $2`},
@@ -1050,6 +1047,9 @@ func TestParse2(t *testing.T) {
 		{`SET NAMES`, `SET client_encoding = DEFAULT`},
 
 		{`SHOW NAMES`, `SHOW client_encoding`},
+
+		{`SHOW TRANSACTION ISOLATION LEVEL`, `SHOW transaction_isolation`},
+		{`SHOW TRANSACTION PRIORITY`, `SHOW transaction_priority`},
 
 		{`RESET a`, `SET a = DEFAULT`},
 		{`RESET CLUSTER SETTING a`, `SET CLUSTER SETTING a = DEFAULT`},
