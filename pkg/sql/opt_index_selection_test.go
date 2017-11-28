@@ -22,7 +22,6 @@ import (
 
 	"golang.org/x/net/context"
 
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -337,18 +336,6 @@ func TestMakeConstraints(t *testing.T) {
 	}
 }
 
-func indexToDirs(index *sqlbase.IndexDescriptor) []encoding.Direction {
-	var dirs []encoding.Direction
-	for _, dir := range index.ColumnDirections {
-		d, err := dir.ToEncodingDirection()
-		if err != nil {
-			panic(err)
-		}
-		dirs = append(dirs, d)
-	}
-	return dirs
-}
-
 func TestMakeSpans(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
@@ -545,8 +532,7 @@ func TestMakeSpans(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				s := sqlbase.PrettySpans(spans, 2)
-				s = keys.MassagePrettyPrintedSpanForTest(s, indexToDirs(index))
+				s := sqlbase.PrettySpans(index, spans, 2)
 				if expected != s {
 					t.Errorf("[index direction: %d] %s: expected %s, but found %s", dir, d.expr, expected, s)
 				}
@@ -601,8 +587,7 @@ func TestMakeSpans(t *testing.T) {
 				got = strings.TrimPrefix(string(span.Key), prefix) + "-" +
 					strings.TrimPrefix(string(span.EndKey), prefix)
 			} else {
-				got = keys.MassagePrettyPrintedSpanForTest(sqlbase.PrettySpans(spans, 2),
-					indexToDirs(index))
+				got = sqlbase.PrettySpans(index, spans, 2)
 			}
 			if d.expected != got {
 				if !raw {

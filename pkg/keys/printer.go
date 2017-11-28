@@ -35,7 +35,7 @@ type dictEntry struct {
 	name   string
 	prefix roachpb.Key
 	// print the key's pretty value, key has been removed prefix data
-	ppFunc func(key roachpb.Key) string
+	ppFunc func(colDirs []encoding.Direction, key roachpb.Key) string
 	// Parses the relevant prefix of the input into a roachpb.Key, returning
 	// the remainder and the key corresponding to the consumed prefix of
 	// 'input'. Allowed to panic on errors.
@@ -182,7 +182,7 @@ var constSubKeyDict = []struct {
 	{"/clusterVersion", localStoreClusterVersionSuffix},
 }
 
-func localStoreKeyPrint(key roachpb.Key) string {
+func localStoreKeyPrint(_ []encoding.Direction, key roachpb.Key) string {
 	for _, v := range constSubKeyDict {
 		if bytes.HasPrefix(key, v.key) {
 			return v.name
@@ -309,7 +309,7 @@ func localRangeIDKeyParse(input string) (remainder string, key roachpb.Key) {
 	panic(&errUglifyUnsupported{errors.New("unhandled general range key")})
 }
 
-func localRangeIDKeyPrint(key roachpb.Key) string {
+func localRangeIDKeyPrint(colDirs []encoding.Direction, key roachpb.Key) string {
 	var buf bytes.Buffer
 	if encoding.PeekType(key) != encoding.Int {
 		return fmt.Sprintf("/err<%q>", []byte(key))
@@ -346,7 +346,7 @@ func localRangeIDKeyPrint(key roachpb.Key) string {
 
 	// Get the encode values.
 	if hasSuffix {
-		fmt.Fprintf(&buf, "%s", decodeKeyPrint(key))
+		fmt.Fprintf(&buf, "%s", decodeKeyPrint(colDirs, key))
 	} else {
 		fmt.Fprintf(&buf, "%q", []byte(key))
 	}
@@ -354,7 +354,7 @@ func localRangeIDKeyPrint(key roachpb.Key) string {
 	return buf.String()
 }
 
-func localRangeKeyPrint(key roachpb.Key) string {
+func localRangeKeyPrint(colDirs []encoding.Direction, key roachpb.Key) string {
 	var buf bytes.Buffer
 
 	for _, s := range rangeSuffixDict {
@@ -363,7 +363,7 @@ func localRangeKeyPrint(key roachpb.Key) string {
 				key = key[:len(key)-len(s.suffix)]
 				_, decodedKey, err := encoding.DecodeBytesAscending([]byte(key), nil)
 				if err != nil {
-					fmt.Fprintf(&buf, "%s/%s", decodeKeyPrint(key), s.name)
+					fmt.Fprintf(&buf, "%s/%s", decodeKeyPrint(colDirs, key), s.name)
 				} else {
 					fmt.Fprintf(&buf, "%s/%s", roachpb.Key(decodedKey), s.name)
 				}
@@ -375,7 +375,7 @@ func localRangeKeyPrint(key roachpb.Key) string {
 				addrKey := key[:begin]
 				_, decodedAddrKey, err := encoding.DecodeBytesAscending([]byte(addrKey), nil)
 				if err != nil {
-					fmt.Fprintf(&buf, "%s/%s", decodeKeyPrint(addrKey), s.name)
+					fmt.Fprintf(&buf, "%s/%s", decodeKeyPrint(colDirs, addrKey), s.name)
 				} else {
 					fmt.Fprintf(&buf, "%s/%s", roachpb.Key(decodedAddrKey), s.name)
 				}
@@ -396,7 +396,7 @@ func localRangeKeyPrint(key roachpb.Key) string {
 
 	_, decodedKey, err := encoding.DecodeBytesAscending([]byte(key), nil)
 	if err != nil {
-		fmt.Fprintf(&buf, "%s", decodeKeyPrint(key))
+		fmt.Fprintf(&buf, "%s", decodeKeyPrint(colDirs, key))
 	} else {
 		fmt.Fprintf(&buf, "%s", roachpb.Key(decodedKey))
 	}
@@ -440,25 +440,27 @@ func abortSpanKeyPrint(key roachpb.Key) string {
 	return fmt.Sprintf("/%q", txnID)
 }
 
-func print(key roachpb.Key) string {
+func print(_ []encoding.Direction, key roachpb.Key) string {
 	return fmt.Sprintf("/%q", []byte(key))
 }
 
-func decodeKeyPrint(key roachpb.Key) string {
+func decodeKeyPrint(colDirs []encoding.Direction, key roachpb.Key) string {
 	if key.Equal(SystemConfigSpan.Key) {
 		return "/SystemConfigSpan/Start"
 	}
-	return encoding.PrettyPrintValue(key, "/")
+	return encoding.PrettyPrintValue(colDirs, key, "/")
 }
 
-func decodeTimeseriesKey(key roachpb.Key) string {
+func decodeTimeseriesKey(_ []encoding.Direction, key roachpb.Key) string {
 	return PrettyPrintTimeseriesKey(key)
 }
 
-// prettyPrintInternal parse key with prefix in keyDict,
-// if the key don't march any prefix in keyDict, return its byte value with quotation and false,
-// or else return its human readable value and true.
-func prettyPrintInternal(key roachpb.Key, quoteRawKeys bool) string {
+// prettyPrintInternal parse key with prefix in keyDict.
+// For table keys, the column directions corresponding to each value may be
+// passed in.
+// If the key don't march any prefix in keyDict, return its byte value with
+// quotation and false, or else return its human readable value and true.
+func prettyPrintInternal(colDirs []encoding.Direction, key roachpb.Key, quoteRawKeys bool) string {
 	for _, k := range constKeyDict {
 		if key.Equal(k.value) {
 			return k.name
@@ -480,7 +482,7 @@ func prettyPrintInternal(key roachpb.Key, quoteRawKeys bool) string {
 					if bytes.HasPrefix(key, e.prefix) {
 						hasPrefix = true
 						key = key[len(e.prefix):]
-						fmt.Fprintf(&buf, "%s%s", e.name, e.ppFunc(key))
+						fmt.Fprintf(&buf, "%s%s", e.name, e.ppFunc(colDirs, key))
 						break
 					}
 				}
@@ -552,7 +554,12 @@ func prettyPrintInternal(key roachpb.Key, quoteRawKeys bool) string {
 // /Min                                              ""
 // /Max                                              "\xff\xff"
 func PrettyPrint(key roachpb.Key) string {
-	return prettyPrintInternal(key, true)
+	return prettyPrintInternal(nil, key, true)
+}
+
+// PrettyPrintWithDirs is the column direction-aware version of PrettyPrint.
+func PrettyPrintWithDirs(colDirs []encoding.Direction, key roachpb.Key) string {
+	return prettyPrintInternal(colDirs, key, true)
 }
 
 var errIllegalInput = errors.New("illegal input")
@@ -627,6 +634,7 @@ outer:
 
 func init() {
 	roachpb.PrettyPrintKey = PrettyPrint
+	roachpb.PrettyPrintKeyWithDirs = PrettyPrintWithDirs
 	roachpb.PrettyPrintRange = PrettyPrintRange
 }
 
@@ -674,8 +682,8 @@ func PrettyPrintRange(start, end roachpb.Key, maxChars int) string {
 	if maxChars < 8 {
 		maxChars = 8
 	}
-	prettyStart := prettyPrintInternal(start, false)
-	prettyEnd := prettyPrintInternal(end, false)
+	prettyStart := prettyPrintInternal(nil, start, false)
+	prettyEnd := prettyPrintInternal(nil, end, false)
 	i := 0
 	// Find the common prefix.
 	for ; i < len(prettyStart) && i < len(prettyEnd) && prettyStart[i] == prettyEnd[i]; i++ {

@@ -260,7 +260,7 @@ func (p *planner) selectIndex(
 	if log.V(3) {
 		log.Infof(ctx, "%s: filter=%v", c.index.Name, s.filter)
 		for i, span := range s.spans {
-			log.Infof(ctx, "%s/%d: %s", c.index.Name, i, sqlbase.PrettySpan(span, 2))
+			log.Infof(ctx, "%s/%d: %s", c.index.Name, i, sqlbase.PrettySpan(sqlbase.IndexColDirs(c.index), span, 2))
 		}
 	}
 

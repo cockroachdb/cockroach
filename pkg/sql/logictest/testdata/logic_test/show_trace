@@ -295,11 +295,11 @@ SELECT span, operation, message FROM [SHOW KV TRACE FOR DELETE FROM t.kv]
 (0,0)  sql txn implicit  r1: sending batch 1 Scan to (n1,s1):1
 (0,0)  sql txn implicit  fetched: /kv/primary/1/v -> /2
 (0,0)  sql txn implicit  Del /Table/52/2/2/0
-(0,0)  sql txn implicit  DelRange /Table/52/1/1 - /Table/52/1/1/#
+(0,0)  sql txn implicit  DelRange /Table/52/1/1 - /Table/52/1/1/!NULL
 (0,2)  consuming rows    output row: [1 2]
 (0,0)  sql txn implicit  fetched: /kv/primary/2/v -> /3
 (0,0)  sql txn implicit  Del /Table/52/2/3/0
-(0,0)  sql txn implicit  DelRange /Table/52/1/2 - /Table/52/1/2/#
+(0,0)  sql txn implicit  DelRange /Table/52/1/2 - /Table/52/1/2/!NULL
 (0,2)  consuming rows    output row: [2 3]
 (0,0)  sql txn implicit  querying next range at /Table/52/1/1
 (0,0)  sql txn implicit  r1: sending batch 2 Del, 2 DelRng, 1 BeginTxn, 1 EndTxn to (n1,s1):1

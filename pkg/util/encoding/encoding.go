@@ -1024,24 +1024,34 @@ func PeekLength(b []byte) (int, error) {
 	return 0, errors.Errorf("unknown tag %d", m)
 }
 
-// PrettyPrintValue returns the string representation of all contiguous decodable
-// values in the provided byte slice, separated by a provided separator.
-func PrettyPrintValue(b []byte, sep string) string {
-	s1, allDecoded := prettyPrintValueImpl(b, sep)
+// PrettyPrintValue returns the string representation of all contiguous
+// decodable values in the provided byte slice, separated by a provided
+// separator.
+// The directions each value is encoded may be provided. If dirs is nil,
+// all values are decoded and printed with the default direction (ascending).
+func PrettyPrintValue(dirs []Direction, b []byte, sep string) string {
+	s1, allDecoded := prettyPrintValueImpl(dirs, b, sep)
 	if allDecoded {
 		return s1
 	}
-	if s2, allDecoded := prettyPrintValueImpl(UndoPrefixEnd(b), sep); allDecoded {
+	if s2, allDecoded := prettyPrintValueImpl(dirs, UndoPrefixEnd(b), sep); allDecoded {
 		return s2 + sep + "PrefixEnd"
 	}
 	return s1
 }
 
-func prettyPrintValueImpl(b []byte, sep string) (string, bool) {
+func prettyPrintValueImpl(dirs []Direction, b []byte, sep string) (string, bool) {
 	allDecoded := true
 	var buf bytes.Buffer
 	for len(b) > 0 {
-		bb, s, err := prettyPrintFirstValue(b)
+		// Defaults to ascending.
+		var valDir Direction
+		if len(dirs) > 0 {
+			valDir = dirs[0]
+			dirs = dirs[1:]
+		}
+
+		bb, s, err := prettyPrintFirstValue(valDir, b)
 		if err != nil {
 			allDecoded = false
 			fmt.Fprintf(&buf, "%s???", sep)
@@ -1056,7 +1066,7 @@ func prettyPrintValueImpl(b []byte, sep string) (string, bool) {
 // prettyPrintFirstValue returns a string representation of the first decodable
 // value in the provided byte slice, along with the remaining byte slice
 // after decoding.
-func prettyPrintFirstValue(b []byte) ([]byte, string, error) {
+func prettyPrintFirstValue(dir Direction, b []byte) ([]byte, string, error) {
 	var err error
 	switch PeekType(b) {
 	case Null:
@@ -1064,29 +1074,48 @@ func prettyPrintFirstValue(b []byte) ([]byte, string, error) {
 		return b, "NULL", nil
 	case NotNull:
 		b, _ = DecodeIfNotNull(b)
-		return b, "#", nil
+		if dir == Descending {
+			return b, "#", nil
+		}
+		return b, "!NULL", nil
 	case Int:
 		var i int64
-		b, i, err = DecodeVarintAscending(b)
+		if dir == Descending {
+			b, i, err = DecodeVarintDescending(b)
+		} else {
+			b, i, err = DecodeVarintAscending(b)
+		}
 		if err != nil {
 			return b, "", err
 		}
 		return b, strconv.FormatInt(i, 10), nil
 	case Float:
 		var f float64
-		b, f, err = DecodeFloatAscending(b)
+		if dir == Descending {
+			b, f, err = DecodeFloatDescending(b)
+		} else {
+			b, f, err = DecodeFloatAscending(b)
+		}
 		if err != nil {
 			return b, "", err
 		}
 		return b, strconv.FormatFloat(f, 'g', -1, 64), nil
 	case Decimal:
 		var d apd.Decimal
-		b, d, err = DecodeDecimalAscending(b, nil)
+		if dir == Descending {
+			b, d, err = DecodeDecimalDescending(b, nil)
+		} else {
+			b, d, err = DecodeDecimalAscending(b, nil)
+		}
 		if err != nil {
 			return b, "", err
 		}
 		return b, d.String(), nil
 	case Bytes:
+		if dir == Descending {
+			return b, "", errors.Errorf("descending bytes column dir but ascending bytes encoding")
+		}
+
 		var s string
 		b, s, err = DecodeUnsafeStringAscending(b, nil)
 		if err != nil {
@@ -1094,6 +1123,10 @@ func prettyPrintFirstValue(b []byte) ([]byte, string, error) {
 		}
 		return b, strconv.Quote(s), nil
 	case BytesDesc:
+		if dir == Ascending {
+			return b, "", errors.Errorf("ascending bytes column dir but descending bytes encoding")
+		}
+
 		var s string
 		b, s, err = DecodeUnsafeStringDescending(b, nil)
 		if err != nil {
@@ -1102,14 +1135,22 @@ func prettyPrintFirstValue(b []byte) ([]byte, string, error) {
 		return b, strconv.Quote(s), nil
 	case Time:
 		var t time.Time
-		b, t, err = DecodeTimeAscending(b)
+		if dir == Descending {
+			b, t, err = DecodeTimeDescending(b)
+		} else {
+			b, t, err = DecodeTimeAscending(b)
+		}
 		if err != nil {
 			return b, "", err
 		}
 		return b, t.UTC().Format(time.RFC3339Nano), nil
 	case Duration:
 		var d duration.Duration
-		b, d, err = DecodeDurationAscending(b)
+		if dir == Descending {
+			b, d, err = DecodeDurationDescending(b)
+		} else {
+			b, d, err = DecodeDurationAscending(b)
+		}
 		if err != nil {
 			return b, "", err
 		}

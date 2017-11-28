@@ -59,6 +59,11 @@ var (
 	// package circle import.
 	PrettyPrintKey func(key Key) string
 
+	// PrettyPrintKeyWithDirs is the column direction-aware version of
+	// PrettyPrintKey.
+	// It is also implemented in the keys package.
+	PrettyPrintKeyWithDirs func(colDirs []encoding.Direction, key Key) string
+
 	// PrettyPrintRange prints a key range in human readable format. It's
 	// implemented in package git.com/cockroachdb/cockroach/keys to avoid
 	// package circle import.
@@ -183,6 +188,15 @@ func (k Key) Compare(b Key) int {
 func (k Key) String() string {
 	if PrettyPrintKey != nil {
 		return PrettyPrintKey(k)
+	}
+
+	return fmt.Sprintf("%q", []byte(k))
+}
+
+// StringWithDirs is the column direction-aware version of String.
+func (k Key) StringWithDirs(colDirs []encoding.Direction) string {
+	if PrettyPrintKeyWithDirs != nil {
+		return PrettyPrintKeyWithDirs(colDirs, k)
 	}
 
 	return fmt.Sprintf("%q", []byte(k))

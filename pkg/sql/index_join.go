@@ -267,7 +267,7 @@ func (n *indexJoinNode) Next(params runParams) (bool, error) {
 		}
 
 		if log.V(3) {
-			log.Infof(params.ctx, "table scan: %s", sqlbase.PrettySpans(n.table.spans, 0))
+			log.Infof(params.ctx, "table scan: %s", sqlbase.PrettySpans(n.table.index, n.table.spans, 0))
 		}
 	}
 	return false, nil

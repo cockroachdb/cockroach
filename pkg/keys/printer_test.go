@@ -126,7 +126,7 @@ func TestPrettyPrint(t *testing.T) {
 		{makeKey(MakeTablePrefix(42),
 			roachpb.RKey(encoding.EncodeNullAscending(nil))), "/Table/42/NULL"},
 		{makeKey(MakeTablePrefix(42),
-			roachpb.RKey(encoding.EncodeNotNullAscending(nil))), "/Table/42/#"},
+			roachpb.RKey(encoding.EncodeNotNullAscending(nil))), "/Table/42/!NULL"},
 		{makeKey(MakeTablePrefix(42),
 			roachpb.RKey(encoding.EncodeTimeAscending(nil, tm))),
 			"/Table/42/2016-03-30T13:40:35.053725008Z"},
