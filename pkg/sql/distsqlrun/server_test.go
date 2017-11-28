@@ -17,6 +17,7 @@ package distsqlrun
 import (
 	"fmt"
 	"io"
+	math "math"
 	"testing"
 
 	"golang.org/x/net/context"
@@ -29,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
 func TestServer(t *testing.T) {
@@ -167,4 +169,50 @@ func TestDistSQLServerGossipsVersion(t *testing.T) {
 		t.Fatalf("node is gossipping the wrong version. Expected: [%d-%d], got [%d-%d",
 			Version, MinAcceptedVersion, v.Version, v.MinAcceptedVersion)
 	}
+}
+
+// TestDistSQLServerDrain verifies that a node that is part of a distsql query
+// for which it is not the gateway node waits for this query to complete before
+// stopping.
+func TestDistSQLServerDrain(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.TODO()
+
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+	ds := s.DistSQLServer().(*ServerImpl)
+
+	flow := &Flow{ctx: ctx}
+	if err := ds.flowRegistry.RegisterFlow(
+		ctx,
+		FlowID{uuid.MakeV4()},
+		flow,
+		nil, /* inboundStreams */
+		0,   /* timeout */
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	// WaitForFlow verifies that SetDraining waits for a flow to finish within
+	// the timeout.
+	t.Run("WaitForFlow", func(t *testing.T) {
+		// Artificially add to the flow's waitgroup (as if a processor was
+		// running).
+		flow.waitGroup.Add(1)
+		drainDone := make(chan struct{})
+		go func() {
+			ds.setDrainingImpl(true, math.MaxInt64 /* flowDrainWait */)
+			drainDone <- struct{}{}
+		}()
+		flow.waitGroup.Done()
+		<-drainDone
+	})
+
+	// DrainTimeout verifies that SetDraining returns once the timeout expires.
+	t.Run("DrainTimeout", func(t *testing.T) {
+		flow.waitGroup.Add(1)
+		ds.setDrainingImpl(true, 0 /* flowDrainWait */)
+		flow.waitGroup.Done()
+	})
 }

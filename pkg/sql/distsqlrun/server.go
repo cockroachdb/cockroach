@@ -16,6 +16,7 @@ package distsqlrun
 
 import (
 	"io"
+	time "time"
 
 	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
@@ -76,6 +77,10 @@ const Version DistSQLVersion = 8
 // MinAcceptedVersion is the oldest version that the server is
 // compatible with; see above.
 const MinAcceptedVersion DistSQLVersion = 6
+
+// flowDrainMaxWait is the amount of time a draining server gives to flows to
+// finish work before proceeding.
+const flowDrainMaxWait = 10 * time.Second
 
 var settingUseTempStorageSorts = settings.RegisterBoolSetting(
 	"sql.distsql.temp_storage.sorts",
@@ -187,6 +192,62 @@ func (ds *ServerImpl) Start() {
 	}
 
 	ds.flowScheduler.Start()
+}
+
+// SetDraining (when called with 'true'), waits for currently running flows to
+// finish up to flowDrainMaxWait. It is a noop if called with false.
+func (ds *ServerImpl) SetDraining(drain bool) {
+	ds.setDrainingImpl(drain, flowDrainMaxWait)
+}
+
+func (ds *ServerImpl) setDrainingImpl(drain bool, flowDrainWait time.Duration) {
+	if !drain {
+		return
+	}
+	// There is a possibility that there are flows not yet registered that we
+	// do not wait for. This is fine as draining is best effort. Not scheduling
+	// flows on draining nodes reduces the likelihood of this scenario.
+	// TODO(asubiotto): Errors like this should be handled on the gateway.
+	ds.flowRegistry.Lock()
+	flows := make([]*flowEntry, 0, len(ds.flowRegistry.flows))
+	for _, entry := range ds.flowRegistry.flows {
+		flows = append(flows, entry)
+	}
+	ds.flowRegistry.Unlock()
+
+	if len(flows) == 0 {
+		return
+	}
+
+	allFlowsDone := make(chan struct{})
+	doneWaiting := make(chan struct{})
+	quitWaiting := make(chan struct{})
+	defer close(quitWaiting)
+	go func() {
+		for _, entry := range flows {
+			go func() {
+				entry.flow.Wait()
+				select {
+				case doneWaiting <- struct{}{}:
+				default:
+				}
+			}()
+			select {
+			// Wait for current flow to finish.
+			case <-doneWaiting:
+			// Case in which timeout expires before we are done waiting for all
+			// flows to finish.
+			case <-quitWaiting:
+				return
+			}
+		}
+		allFlowsDone <- struct{}{}
+	}()
+
+	select {
+	case <-time.After(flowDrainWait):
+	case <-allFlowsDone:
+	}
 }
 
 // FlowVerIsCompatible checks a flow's version is compatible with this node's

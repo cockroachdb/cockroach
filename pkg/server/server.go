@@ -1274,7 +1274,12 @@ func (s *Server) doDrain(modes []serverpb.DrainMode, setTo bool) ([]serverpb.Dra
 				// the pgServer has given sessions a chance to finish ongoing
 				// work.
 				defer s.leaseMgr.SetDraining(setTo)
-				return s.pgServer.SetDraining(setTo)
+
+				if err := s.pgServer.SetDraining(setTo); err != nil {
+					return err
+				}
+				s.distSQLServer.SetDraining(setTo)
+				return nil
 			}(); err != nil {
 				return nil, err
 			}
