@@ -24,6 +24,7 @@ import (
 
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
+	"golang.org/x/sync/syncmap"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -509,31 +510,38 @@ func TestGCQueueProcess(t *testing.T) {
 		{key11, ts3},
 		{key11, ts1},
 	}
+
 	// Read data directly from engine to avoid intent errors from MVCC.
-	kvs, err := engine.Scan(tc.store.Engine(), engine.MakeMVCCMetadataKey(key1),
-		engine.MakeMVCCMetadataKey(keys.MaxKey), 0)
-	if err != nil {
-		t.Fatal(err)
-	}
-	for i, kv := range kvs {
-		if log.V(1) {
-			log.Infof(context.Background(), "%d: %s", i, kv.Key)
+	// However, because the GC processing pushes transactions and
+	// resolves intents asynchronously, we use a SucceedsSoon loop.
+	testutils.SucceedsSoon(t, func() error {
+		kvs, err := engine.Scan(tc.store.Engine(), engine.MakeMVCCMetadataKey(key1),
+			engine.MakeMVCCMetadataKey(keys.MaxKey), 0)
+		if err != nil {
+			return err
 		}
-	}
-	if len(kvs) != len(expKVs) {
-		t.Fatalf("expected length %d; got %d", len(expKVs), len(kvs))
-	}
-	for i, kv := range kvs {
-		if !kv.Key.Key.Equal(expKVs[i].key) {
-			t.Errorf("%d: expected key %q; got %q", i, expKVs[i].key, kv.Key.Key)
+		for i, kv := range kvs {
+			if log.V(1) {
+				log.Infof(context.Background(), "%d: %s", i, kv.Key)
+			}
 		}
-		if kv.Key.Timestamp != expKVs[i].ts {
-			t.Errorf("%d: expected ts=%s; got %s", i, expKVs[i].ts, kv.Key.Timestamp)
+		if len(kvs) != len(expKVs) {
+			return fmt.Errorf("expected length %d; got %d", len(expKVs), len(kvs))
 		}
-		if log.V(1) {
-			log.Infof(context.Background(), "%d: %s", i, kv.Key)
+		for i, kv := range kvs {
+			if !kv.Key.Key.Equal(expKVs[i].key) {
+				return fmt.Errorf("%d: expected key %q; got %q", i, expKVs[i].key, kv.Key.Key)
+			}
+			if kv.Key.Timestamp != expKVs[i].ts {
+				return fmt.Errorf("%d: expected ts=%s; got %s", i, expKVs[i].ts, kv.Key.Timestamp)
+			}
+			if log.V(1) {
+				log.Infof(context.Background(), "%d: %s", i, kv.Key)
+			}
 		}
-	}
+
+		return nil
+	})
 }
 
 func TestGCQueueTransactionTable(t *testing.T) {
@@ -593,13 +601,14 @@ func TestGCQueueTransactionTable(t *testing.T) {
 			newStatus:  roachpb.ABORTED,
 			expAbortGC: true,
 		},
-		// Old, pending and abandoned. Should push and abort it successfully,
-		// but not GC it just yet (this is an artifact of the implementation).
-		// The AbortSpan gets cleaned up though.
+		// Old, pending and abandoned. Should push and abort it
+		// successfully, and GC it, along with resolving the intent. The
+		// AbortSpan is also cleaned up.
 		"c": {
 			status:     roachpb.PENDING,
 			orig:       gcTxnAndAC - 1,
-			newStatus:  roachpb.ABORTED,
+			newStatus:  -1,
+			expResolve: true,
 			expAbortGC: true,
 		},
 		// Old and aborted, should delete.
@@ -639,16 +648,22 @@ func TestGCQueueTransactionTable(t *testing.T) {
 		},
 	}
 
-	resolved := map[string][]roachpb.Span{}
+	var resolved syncmap.Map
 
 	tsc.TestingKnobs.EvalKnobs.TestingEvalFilter =
 		func(filterArgs storagebase.FilterArgs) *roachpb.Error {
 			if resArgs, ok := filterArgs.Req.(*roachpb.ResolveIntentRequest); ok {
 				id := string(resArgs.IntentTxn.Key)
-				resolved[id] = append(resolved[id], roachpb.Span{
+				var spans []roachpb.Span
+				val, ok := resolved.Load(id)
+				if ok {
+					spans = val.([]roachpb.Span)
+				}
+				spans = append(spans, roachpb.Span{
 					Key:    resArgs.Key,
 					EndKey: resArgs.EndKey,
 				})
+				resolved.Store(id, spans)
 				// We've special cased one test case. Note that the intent is still
 				// counted in `resolved`.
 				if testCases[id].failResolve {
@@ -721,9 +736,13 @@ func TestGCQueueTransactionTable(t *testing.T) {
 			if sp.expResolve {
 				expIntents = testIntents
 			}
-			if !reflect.DeepEqual(resolved[strKey], expIntents) {
-				return fmt.Errorf("%s: unexpected intent resolutions:\nexpected: %s\nobserved: %s",
-					strKey, expIntents, resolved[strKey])
+			var spans []roachpb.Span
+			val, ok := resolved.Load(strKey)
+			if ok {
+				spans = val.([]roachpb.Span)
+			}
+			if !reflect.DeepEqual(spans, expIntents) {
+				return fmt.Errorf("%s: unexpected intent resolutions:\nexpected: %s\nobserved: %s", strKey, expIntents, spans)
 			}
 			entry := &roachpb.AbortSpanEntry{}
 			abortExists, err := tc.repl.abortSpan.Get(context.Background(), tc.store.Engine(), txns[strKey].ID, entry)
@@ -784,8 +803,8 @@ func TestGCQueueIntentResolution(t *testing.T) {
 	now := tc.Clock().Now().WallTime
 
 	txns := []*roachpb.Transaction{
-		newTransaction("txn1", roachpb.Key("0-00000"), 1, enginepb.SERIALIZABLE, tc.Clock()),
-		newTransaction("txn2", roachpb.Key("1-00000"), 1, enginepb.SERIALIZABLE, tc.Clock()),
+		newTransaction("txn1", roachpb.Key("0-0"), 1, enginepb.SERIALIZABLE, tc.Clock()),
+		newTransaction("txn2", roachpb.Key("1-0"), 1, enginepb.SERIALIZABLE, tc.Clock()),
 	}
 	intentResolveTS := makeTS(now-intentAgeThreshold.Nanoseconds(), 0)
 	txns[0].OrigTimestamp = intentResolveTS
@@ -796,9 +815,8 @@ func TestGCQueueIntentResolution(t *testing.T) {
 	// Two transactions.
 	for i := 0; i < 2; i++ {
 		// 5 puts per transaction.
-		// TODO(spencerkimball): benchmark with ~50k.
 		for j := 0; j < 5; j++ {
-			pArgs := putArgs(roachpb.Key(fmt.Sprintf("%d-%05d", i, j)), []byte("value"))
+			pArgs := putArgs(roachpb.Key(fmt.Sprintf("%d-%d", i, j)), []byte("value"))
 			if _, err := tc.SendWrappedWith(roachpb.Header{
 				Txn: txns[i],
 			}, &pArgs); err != nil {
@@ -808,34 +826,34 @@ func TestGCQueueIntentResolution(t *testing.T) {
 		}
 	}
 
+	// Process through GC queue.
 	cfg, ok := tc.gossip.GetSystemConfig()
 	if !ok {
 		t.Fatal("config not set")
 	}
-
-	// Process through a scan queue.
 	gcQ := newGCQueue(tc.store, tc.gossip)
 	if err := gcQ.processImpl(context.Background(), tc.repl, cfg, tc.Clock().Now()); err != nil {
 		t.Fatal(err)
 	}
 
 	// Iterate through all values to ensure intents have been fully resolved.
-	meta := &enginepb.MVCCMetadata{}
-	err := tc.store.Engine().Iterate(engine.MakeMVCCMetadataKey(roachpb.KeyMin),
-		engine.MakeMVCCMetadataKey(roachpb.KeyMax), func(kv engine.MVCCKeyValue) (bool, error) {
-			if !kv.Key.IsValue() {
-				if err := protoutil.Unmarshal(kv.Value, meta); err != nil {
-					return false, err
+	// This must be done in a SucceedsSoon loop because intent resolution
+	// is initiated asynchronously from the GC queue.
+	testutils.SucceedsSoon(t, func() error {
+		meta := &enginepb.MVCCMetadata{}
+		return tc.store.Engine().Iterate(engine.MakeMVCCMetadataKey(roachpb.KeyMin),
+			engine.MakeMVCCMetadataKey(roachpb.KeyMax), func(kv engine.MVCCKeyValue) (bool, error) {
+				if !kv.Key.IsValue() {
+					if err := protoutil.Unmarshal(kv.Value, meta); err != nil {
+						return false, err
+					}
+					if meta.Txn != nil {
+						return false, errors.Errorf("non-nil Txn after GC for key %s", kv.Key)
+					}
 				}
-				if meta.Txn != nil {
-					return false, errors.Errorf("non-nil Txn after GC for key %s", kv.Key)
-				}
-			}
-			return false, nil
-		})
-	if err != nil {
-		t.Fatal(err)
-	}
+				return false, nil
+			})
+	})
 }
 
 func TestGCQueueLastProcessedTimestamps(t *testing.T) {

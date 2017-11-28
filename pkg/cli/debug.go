@@ -32,7 +32,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
-	"github.com/cockroachdb/cockroach/pkg/storage/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
@@ -576,9 +575,8 @@ func runDebugGCCmd(cmd *cobra.Command, args []string) error {
 			hlc.Timestamp{WallTime: timeutil.Now().UnixNano()},
 			config.GCPolicy{TTLSeconds: 24 * 60 * 60 /* 1 day */},
 			func([]roachpb.GCRequest_GCKey, *storage.GCInfo) error { return nil },
-			func(_ hlc.Timestamp, _ *roachpb.Transaction, _ roachpb.PushTxnType) {},
-			func(_ []roachpb.Intent, _ storage.ResolveOptions) error { return nil },
-			func(_ []result.IntentsWithArg) error { return nil },
+			func(_ []roachpb.Intent) error { return nil },
+			func(_ *roachpb.Transaction, _ []roachpb.Intent) error { return nil },
 		)
 		if err != nil {
 			return err
