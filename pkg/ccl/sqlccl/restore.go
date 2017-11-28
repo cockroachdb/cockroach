@@ -34,12 +34,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
-	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/interval"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
 
@@ -711,53 +709,51 @@ func splitAndScatter(
 // function is called.
 func restoreTableDescs(
 	ctx context.Context,
-	db *client.DB,
+	txn *client.Txn,
 	databases []*sqlbase.DatabaseDescriptor,
 	tables []*sqlbase.TableDescriptor,
 	user string,
 ) error {
 	ctx, span := tracing.ChildSpan(ctx, "restoreTableDescs")
 	defer tracing.FinishSpan(span)
-	err := db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
-		b := txn.NewBatch()
-		wroteDBs := make(map[sqlbase.ID]*sqlbase.DatabaseDescriptor)
-		for _, desc := range databases {
-			// TODO(dt): support restoring privs.
-			desc.Privileges = sqlbase.NewDefaultPrivilegeDescriptor()
-			wroteDBs[desc.ID] = desc
-			b.CPut(sqlbase.MakeDescMetadataKey(desc.ID), sqlbase.WrapDescriptor(desc), nil)
-			b.CPut(sqlbase.MakeNameMetadataKey(keys.RootNamespaceID, desc.Name), desc.ID, nil)
-		}
-		for _, table := range tables {
-			if wrote, ok := wroteDBs[table.ParentID]; ok {
-				table.Privileges = wrote.GetPrivileges()
-			} else {
-				parentDB, err := sqlbase.GetDatabaseDescFromID(ctx, txn, table.ParentID)
-				if err != nil {
-					return errors.Wrapf(err, "failed to lookup parent DB %d", table.ParentID)
-				}
-				if err := sql.CheckPrivilege(user, parentDB, privilege.CREATE); err != nil {
-					return err
-				}
-				// Default is to copy privs from restoring parent db, like CREATE TABLE.
-				// TODO(dt): Make this more configurable.
-				table.Privileges = parentDB.GetPrivileges()
-			}
-			b.CPut(table.GetDescMetadataKey(), sqlbase.WrapDescriptor(table), nil)
-			b.CPut(table.GetNameMetadataKey(), table.ID, nil)
-		}
-		if err := txn.Run(ctx, b); err != nil {
-			return err
-		}
 
-		for _, table := range tables {
-			if err := table.Validate(ctx, txn); err != nil {
+	b := txn.NewBatch()
+	wroteDBs := make(map[sqlbase.ID]*sqlbase.DatabaseDescriptor)
+	for _, desc := range databases {
+		// TODO(dt): support restoring privs.
+		desc.Privileges = sqlbase.NewDefaultPrivilegeDescriptor()
+		wroteDBs[desc.ID] = desc
+		b.CPut(sqlbase.MakeDescMetadataKey(desc.ID), sqlbase.WrapDescriptor(desc), nil)
+		b.CPut(sqlbase.MakeNameMetadataKey(keys.RootNamespaceID, desc.Name), desc.ID, nil)
+	}
+	for _, table := range tables {
+		if wrote, ok := wroteDBs[table.ParentID]; ok {
+			table.Privileges = wrote.GetPrivileges()
+		} else {
+			parentDB, err := sqlbase.GetDatabaseDescFromID(ctx, txn, table.ParentID)
+			if err != nil {
+				return errors.Wrapf(err, "failed to lookup parent DB %d", table.ParentID)
+			}
+			if err := sql.CheckPrivilege(user, parentDB, privilege.CREATE); err != nil {
 				return err
 			}
+			// Default is to copy privs from restoring parent db, like CREATE TABLE.
+			// TODO(dt): Make this more configurable.
+			table.Privileges = parentDB.GetPrivileges()
 		}
-		return nil
-	})
-	return errors.Wrap(err, "restoring table desc and namespace entries")
+		b.CPut(table.GetDescMetadataKey(), sqlbase.WrapDescriptor(table), nil)
+		b.CPut(table.GetNameMetadataKey(), table.ID, nil)
+	}
+	if err := txn.Run(ctx, b); err != nil {
+		return err
+	}
+
+	for _, table := range tables {
+		if err := table.Validate(ctx, txn); err != nil {
+			return errors.Wrapf(err, "validate table %d", table.ID)
+		}
+	}
+	return nil
 }
 
 func restoreJobDescription(restore *tree.Restore, from []string) (string, error) {
@@ -790,17 +786,25 @@ func restore(
 	sqlDescs []sqlbase.Descriptor,
 	tableRewrites tableRewriteMap,
 	job *jobs.Job,
-) (roachpb.BulkOpSummary, error) {
+	resultsCh chan<- tree.Datums,
+) (roachpb.BulkOpSummary, []*sqlbase.DatabaseDescriptor, []*sqlbase.TableDescriptor, error) {
 	// A note about contexts and spans in this method: the top-level context
 	// `restoreCtx` is used for orchestration logging. All operations that carry
 	// out work get their individual contexts.
 
-	failed := roachpb.BulkOpSummary{}
+	mu := struct {
+		syncutil.Mutex
+		res               roachpb.BulkOpSummary
+		requestsCompleted []bool
+		lowWaterMark      int
+	}{
+		lowWaterMark: -1,
+	}
 
 	if endTime != (hlc.Timestamp{}) {
 		for _, b := range backupDescs {
 			if b.StartTime.Less(endTime) && endTime.Less(b.EndTime) && b.MVCCFilter != MVCCFilter_All {
-				return failed, errors.Errorf(
+				return mu.res, nil, nil, errors.Errorf(
 					"incompatible RESTORE timestamp (BACKUP needs option '%s')", backupOptRevisionHistory)
 			}
 		}
@@ -831,7 +835,7 @@ func restore(
 	// Assign new IDs and privileges to the tables, and update all references to
 	// use the new IDs.
 	if err := rewriteTableDescs(tables, tableRewrites); err != nil {
-		return failed, err
+		return mu.res, nil, nil, err
 	}
 
 	// Get TableRekeys to use when importing raw data.
@@ -839,7 +843,7 @@ func restore(
 	for i := range tables {
 		newDescBytes, err := protoutil.Marshal(sqlbase.WrapDescriptor(tables[i]))
 		if err != nil {
-			return failed, errors.Wrap(err, "marshalling descriptor")
+			return mu.res, nil, nil, errors.Wrap(err, "marshalling descriptor")
 		}
 		rekeys = append(rekeys, roachpb.ImportRequest_TableRekey{
 			OldID:   uint32(oldTableIDs[i]),
@@ -848,7 +852,7 @@ func restore(
 	}
 	kr, err := storageccl.MakeKeyRewriter(rekeys)
 	if err != nil {
-		return failed, err
+		return mu.res, nil, nil, err
 	}
 
 	// Pivot the backups, which are grouped by time, into requests for import,
@@ -856,28 +860,10 @@ func restore(
 	lowWaterMark := job.Record.Details.(jobs.RestoreDetails).LowWaterMark
 	importSpans, _, err := makeImportSpans(spans, backupDescs, lowWaterMark)
 	if err != nil {
-		return failed, errors.Wrapf(err, "making import requests for %d backups", len(backupDescs))
+		return mu.res, nil, nil, errors.Wrapf(err, "making import requests for %d backups", len(backupDescs))
 	}
 
-	var cancel func()
-	restoreCtx, cancel = context.WithCancel(restoreCtx)
-	defer cancel()
-	if err := job.Created(restoreCtx, cancel); err != nil {
-		return failed, err
-	}
-	if err := job.Started(restoreCtx); err != nil {
-		return failed, err
-	}
-
-	mu := struct {
-		syncutil.Mutex
-		res               roachpb.BulkOpSummary
-		requestsCompleted []bool
-		lowWaterMark      int
-	}{
-		requestsCompleted: make([]bool, len(importSpans)),
-		lowWaterMark:      -1,
-	}
+	mu.requestsCompleted = make([]bool, len(importSpans))
 
 	progressLogger := jobProgressLogger{
 		job:           job,
@@ -941,12 +927,11 @@ func restore(
 	})
 
 	log.Eventf(restoreCtx, "commencing import of data with concurrency %d", maxConcurrentImports)
-	tBegin := timeutil.Now()
 	var importIdx int
 	for readyForImportSpan := range readyForImportCh {
 		newSpan, err := kr.RewriteSpan(readyForImportSpan.Span)
 		if err != nil {
-			return failed, err
+			return mu.res, nil, nil, err
 		}
 
 		importRequest := &roachpb.ImportRequest{
@@ -968,7 +953,7 @@ func restore(
 		select {
 		case importsSem <- struct{}{}:
 		case <-gCtx.Done():
-			return failed, errors.Wrapf(g.Wait(), "importing %d ranges", len(importSpans))
+			return mu.res, nil, nil, errors.Wrapf(g.Wait(), "importing %d ranges", len(importSpans))
 		}
 		log.Event(importCtx, "acquired semaphore")
 
@@ -999,28 +984,10 @@ func restore(
 		// This leaves the data that did get imported in case the user wants to
 		// retry.
 		// TODO(dan): Build tooling to allow a user to restart a failed restore.
-		return failed, errors.Wrapf(err, "importing %d ranges", len(importSpans))
+		return mu.res, nil, nil, errors.Wrapf(err, "importing %d ranges", len(importSpans))
 	}
 
-	log.Event(restoreCtx, "making tables live")
-
-	// Write the new TableDescriptors and flip the namespace entries over to
-	// them. After this call, any queries on a table will be served by the newly
-	// restored data.
-	if err := restoreTableDescs(restoreCtx, db, databases, tables, job.Record.Username); err != nil {
-		return failed, errors.Wrapf(err, "restoring %d TableDescriptors", len(tables))
-	}
-
-	// TODO(dan): Delete any old table data here. The first version of restore
-	// assumes that it's operating on a new cluster. If it's not empty,
-	// everything works but the table data is left abandoned.
-
-	// Don't need the lock any more; we're the only moving part at this stage.
-	log.Eventf(restoreCtx, "restore completed: ingested %s of data (before replication) at %s/sec",
-		humanizeutil.IBytes(mu.res.DataSize),
-		humanizeutil.IBytes(mu.res.DataSize/int64(1+timeutil.Since(tBegin).Seconds())),
-	)
-	return mu.res, nil
+	return mu.res, databases, tables, nil
 }
 
 var restoreHeader = sqlbase.ResultColumns{
@@ -1118,7 +1085,8 @@ func doRestorePlan(
 	if err != nil {
 		return err
 	}
-	job := p.ExecCfg().JobRegistry.NewJob(jobs.Record{
+
+	_, errCh, err := p.ExecCfg().JobRegistry.StartJob(ctx, resultsCh, jobs.Record{
 		Description: description,
 		Username:    p.User(),
 		DescriptorIDs: func() (sqlDescIDs []sqlbase.ID) {
@@ -1133,33 +1101,10 @@ func doRestorePlan(
 			URIs:          from,
 		},
 	})
-	res, restoreErr := restore(
-		ctx,
-		p.ExecCfg().DB,
-		p.ExecCfg().Gossip,
-		backupDescs,
-		endTime,
-		sqlDescs,
-		tableRewrites,
-		job,
-	)
-	if err := job.FinishedWith(ctx, restoreErr); err != nil {
+	if err != nil {
 		return err
 	}
-	if restoreErr != nil {
-		return restoreErr
-	}
-	// TODO(benesch): emit periodic progress updates.
-	resultsCh <- tree.Datums{
-		tree.NewDInt(tree.DInt(*job.ID())),
-		tree.NewDString(string(jobs.StatusSucceeded)),
-		tree.NewDFloat(tree.DFloat(1.0)),
-		tree.NewDInt(tree.DInt(res.Rows)),
-		tree.NewDInt(tree.DInt(res.IndexEntries)),
-		tree.NewDInt(tree.DInt(res.SystemRecords)),
-		tree.NewDInt(tree.DInt(res.DataSize)),
-	}
-	return nil
+	return <-errCh
 }
 
 func loadBackupSQLDescs(
@@ -1180,18 +1125,52 @@ func loadBackupSQLDescs(
 	return backupDescs, sqlDescs, nil
 }
 
-// restoreFailHook removes KV data that has been committed from a restore that
+type restoreResumer struct {
+	settings  *cluster.Settings
+	res       roachpb.BulkOpSummary
+	databases []*sqlbase.DatabaseDescriptor
+	tables    []*sqlbase.TableDescriptor
+}
+
+func (r *restoreResumer) Resume(
+	ctx context.Context, job *jobs.Job, resultsCh chan<- tree.Datums,
+) error {
+	details := job.Record.Details.(jobs.RestoreDetails)
+
+	backupDescs, sqlDescs, err := loadBackupSQLDescs(ctx, details, r.settings)
+	if err != nil {
+		return err
+	}
+
+	res, databases, tables, err := restore(
+		ctx,
+		job.DB(),
+		job.Gossip(),
+		backupDescs,
+		details.EndTime,
+		sqlDescs,
+		details.TableRewrites,
+		job,
+		resultsCh,
+	)
+	r.res = res
+	r.databases = databases
+	r.tables = tables
+	return err
+}
+
+// OnFailOrCancel removes KV data that has been committed from a restore that
 // has failed or been canceled. It does this by adding the table descriptors
 // in DROP state, which causes the schema change stuff to delete the keys
 // in the background.
-func restoreFailHook(
-	ctx context.Context, txn *client.Txn, settings *cluster.Settings, details *jobs.RestoreDetails,
-) error {
+func (r *restoreResumer) OnFailOrCancel(ctx context.Context, txn *client.Txn, job *jobs.Job) error {
+	details := job.Record.Details.(jobs.RestoreDetails)
+
 	// Needed to trigger the schema change manager.
 	if err := txn.SetSystemConfigTrigger(); err != nil {
 		return err
 	}
-	_, sqlDescs, err := loadBackupSQLDescs(ctx, *details, settings)
+	_, sqlDescs, err := loadBackupSQLDescs(ctx, details, r.settings)
 	if err != nil {
 		return err
 	}
@@ -1212,37 +1191,53 @@ func restoreFailHook(
 	return txn.Run(ctx, b)
 }
 
-func restoreResumeHook(
-	typ jobs.Type, settings *cluster.Settings,
-) func(ctx context.Context, job *jobs.Job) error {
+func (r *restoreResumer) OnSuccess(ctx context.Context, txn *client.Txn, job *jobs.Job) error {
+	log.Event(ctx, "making tables live")
+
+	// Write the new TableDescriptors and flip the namespace entries over to
+	// them. After this call, any queries on a table will be served by the newly
+	// restored data.
+	if err := restoreTableDescs(ctx, txn, r.databases, r.tables, job.Record.Username); err != nil {
+		return errors.Wrapf(err, "restoring %d TableDescriptors", len(r.tables))
+	}
+
+	return nil
+}
+
+func (r *restoreResumer) OnTerminal(
+	ctx context.Context, job *jobs.Job, status jobs.Status, resultsCh chan<- tree.Datums,
+) {
+	if status == jobs.StatusSucceeded {
+		// TODO(benesch): emit periodic progress updates.
+
+		// TODO(mjibson): if a restore was resumed, then these counts will only have
+		// the current coordinator's counts.
+
+		resultsCh <- tree.Datums{
+			tree.NewDInt(tree.DInt(*job.ID())),
+			tree.NewDString(string(jobs.StatusSucceeded)),
+			tree.NewDFloat(tree.DFloat(1.0)),
+			tree.NewDInt(tree.DInt(r.res.Rows)),
+			tree.NewDInt(tree.DInt(r.res.IndexEntries)),
+			tree.NewDInt(tree.DInt(r.res.SystemRecords)),
+			tree.NewDInt(tree.DInt(r.res.DataSize)),
+		}
+	}
+}
+
+var _ jobs.Resumer = &restoreResumer{}
+
+func restoreResumeHook(typ jobs.Type, settings *cluster.Settings) jobs.Resumer {
 	if typ != jobs.TypeRestore {
 		return nil
 	}
 
-	return func(ctx context.Context, job *jobs.Job) error {
-		details := job.Record.Details.(jobs.RestoreDetails)
-
-		backupDescs, sqlDescs, err := loadBackupSQLDescs(ctx, details, settings)
-		if err != nil {
-			return err
-		}
-
-		_, err = restore(
-			ctx,
-			job.DB(),
-			job.Gossip(),
-			backupDescs,
-			details.EndTime,
-			sqlDescs,
-			details.TableRewrites,
-			job,
-		)
-		return err
+	return &restoreResumer{
+		settings: settings,
 	}
 }
 
 func init() {
 	sql.AddPlanHook(restorePlanHook)
 	jobs.AddResumeHook(restoreResumeHook)
-	jobs.RestoreFailHook = restoreFailHook
 }

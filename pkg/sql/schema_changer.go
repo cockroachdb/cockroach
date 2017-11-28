@@ -465,7 +465,11 @@ func (sc *SchemaChanger) rollbackSchemaChange(
 	evalCtx tree.EvalContext,
 ) error {
 	log.Warningf(ctx, "reversing schema change %d due to irrecoverable error: %s", *sc.job.ID(), err)
-	sc.job.Failed(ctx, err)
+	if err := sc.job.Failed(ctx, err, jobs.NoopFn); err != nil {
+		log.Warningf(ctx, "schema change ignoring error while marking job %d as failed: %+v",
+			*sc.job.ID(), err)
+	}
+
 	if errReverse := sc.reverseMutations(ctx, err); errReverse != nil {
 		// Although the backfill did hit an integrity constraint violation
 		// and made a decision to reverse the mutations,
@@ -608,7 +612,7 @@ func (sc *SchemaChanger) done(ctx context.Context, isRollback bool) (*sqlbase.De
 		}
 		return nil
 	}, func(txn *client.Txn) error {
-		if err := sc.job.WithTxn(txn).Succeeded(ctx); err != nil {
+		if err := sc.job.WithTxn(txn).Succeeded(ctx, jobs.NoopFn); err != nil {
 			log.Warningf(ctx, "schema change ignoring error while marking job %d as successful: %+v",
 				*sc.job.ID(), err)
 		}
@@ -744,7 +748,7 @@ func (sc *SchemaChanger) reverseMutations(ctx context.Context, causingError erro
 				record := sc.job.Record
 				record.Description = "ROLL BACK " + record.Description
 				job := sc.jobRegistry.NewJob(record)
-				if err := job.Created(ctx, jobs.WithoutCancel); err != nil {
+				if err := job.Created(ctx); err != nil {
 					return err
 				}
 				if err := job.Started(ctx); err != nil {

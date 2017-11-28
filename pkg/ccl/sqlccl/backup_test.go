@@ -719,8 +719,9 @@ func TestBackupRestoreResume(t *testing.T) {
 			t.Fatal(err)
 		}
 		if err := createAndWaitForJob(sqlDB.DB, []sqlbase.ID{backupTableDesc.ID}, jobs.BackupDetails{
-			EndTime: tc.Servers[0].Clock().Now(),
-			URI:     "nodelocal:///backup",
+			EndTime:          tc.Servers[0].Clock().Now(),
+			URI:              "nodelocal:///backup",
+			BackupDescriptor: backupDesc,
 		}); err != nil {
 			t.Fatal(err)
 		}
