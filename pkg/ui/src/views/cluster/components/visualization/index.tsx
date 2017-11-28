@@ -35,6 +35,10 @@ export default class extends React.Component<VisualizationProps, {}> {
       "visualization": true,
       "visualization--faded": stale || false,
     });
+    const contentClasses = classNames({
+      "visualization__content": true,
+      "visualization--loading": this.props.loading,
+    });
 
     let tooltipNode: React.ReactNode = "";
     if (tooltip) {
@@ -64,7 +68,7 @@ export default class extends React.Component<VisualizationProps, {}> {
             tooltipNode
           }
         </div>
-        <div className={"visualization__content" + (this.props.loading ? " visualization--loading" : "")}>
+        <div className={contentClasses}>
           {this.props.loading ? <img className="visualization__spinner" src={spinner} /> :  this.props.children }
         </div>
       </div>

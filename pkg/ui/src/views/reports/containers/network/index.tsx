@@ -1,3 +1,4 @@
+import classNames from "classnames";
 import { deviation as d3Deviation, mean as d3Mean } from "d3";
 import _ from "lodash";
 import moment from "moment";
@@ -145,10 +146,11 @@ function noConnectionTable(noConnections: NoConnection[]) {
 function createHeaderCell(staleIDs: Set<number>, id: Identity, key: string) {
   const node = `n${id.nodeID.toString()}`;
   const title = _.join([node, id.address, id.locality], "\n");
-  let className = "network-table__cell network-table__cell--header";
-  if (staleIDs.has(id.nodeID)) {
-    className = className + " network-table__cell--header-warning";
-  }
+  const className = classNames({
+    "network-table__cell": true,
+    "network-table__cell--header": true,
+    "network-table__cell--header-warning": staleIDs.has(id.nodeID),
+  });
   return <td key={key} className={className} title={title}>
     {node}
   </td>;
@@ -215,19 +217,15 @@ class Network extends React.Component<NetworkProps, {}> {
         </td>;
       }
       const latency = NanoToMilli(a[nodeIDb].latency.toNumber());
-      let heat: string;
-      if (latency > stddevPlus2) {
-        heat = "stddev-plus-2";
-      } else if (latency > stddevPlus1) {
-        heat = "stddev-plus-1";
-      } else if (latency < stddevMinus2) {
-        heat = "stddev-minus-2";
-      } else if (latency < stddevMinus1) {
-        heat = "stddev-minus-1";
-      } else {
-        heat = "stddev-even";
-      }
-      const className = `network-table__cell network-table__cell--${heat}`;
+      const className = classNames({
+        "network-table__cell": true,
+        "network-table__cell--stddev-minus-2": latency < stddevMinus2,
+        "network-table__cell--stddev-minus-1": latency < stddevMinus1 && latency >= stddevMinus2,
+        "network-table__cell--stddev-even": latency >= stddevMinus1 && latency <= stddevPlus1,
+        "network-table__cell--stddev-plus-1": latency > stddevPlus1 && latency <= stddevPlus2,
+        "network-table__cell--stddev-plus-2": latency > stddevPlus2,
+      });
+
       const title = `n${nodeIDa} -> n${nodeIDb}\n${latency.toString()}ms`;
       return <td key={key} className={className} title={title}>
         {latency.toFixed(2)}ms

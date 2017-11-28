@@ -1,3 +1,4 @@
+import classNames from "classnames";
 import _ from "lodash";
 import Long from "long";
 import moment from "moment";
@@ -260,15 +261,17 @@ class Nodes extends React.Component<NodesProps, {}> {
     equality?: (ns: protos.cockroach.server.status.NodeStatus$Properties) => string,
     cellTitle?: (ns: protos.cockroach.server.status.NodeStatus$Properties) => string,
   ) {
-    let headerClassName: string = "nodes-table__cell nodes-table__cell--header";
-    if (!_.isNil(equality) && _.chain(orderedNodeIDs)
+    const inconsistent = !_.isNil(equality) && _.chain(orderedNodeIDs)
       .map(nodeID => this.props.nodesSummary.nodeStatusByID[nodeID])
       .map(status => equality(status))
       .uniq()
       .value()
-      .length > 1) {
-      headerClassName += " nodes-table__cell--header-warning";
-    }
+      .length > 1;
+    const headerClassName = classNames({
+      "nodes-table__cell": true,
+      "nodes-table__cell--header": true,
+      "nodes-table__cell--header-warning": inconsistent,
+    });
 
     return (
       <tr className="nodes-table__row" key={key}>
