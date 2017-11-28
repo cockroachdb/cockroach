@@ -29,7 +29,6 @@
     "redux-thunk": "^2.2.0",
     "regenerator-runtime": "^0.11.0",
     "reselect": "^3.0.0",
-    "webcola": "3.3.5",
     "whatwg-fetch": "^2.0.3"
   },
   "devDependencies": {
@@ -61,7 +60,6 @@
     "@types/react-sticky": "^5.0.1",
     "@types/redux-thunk": "^2.1.0",
     "@types/sinon": "2.1.0",
-    "@types/webcola": "^3.2.0",
     "babel-core": "^6.24.0",
     "babel-loader": "^7.1.2",
     "babel-preset-env": "^1.2.2",
