@@ -922,7 +922,10 @@ func addrWithDefaultHost(addr string) (string, error) {
 	return net.JoinHostPort(host, port), nil
 }
 
-func getClientGRPCConn() (*grpc.ClientConn, *hlc.Clock, *stop.Stopper, error) {
+func getClientGRPCConn(ctx context.Context) (*grpc.ClientConn, *hlc.Clock, error) {
+	if ctx.Done() == nil {
+		return nil, nil, errors.New("context must be cancellable")
+	}
 	// 0 to disable max offset checks; this RPC context is not a member of the
 	// cluster, so there's no need to enforce that its max offset is the same
 	// as that of nodes in the cluster.
@@ -936,21 +939,31 @@ func getClientGRPCConn() (*grpc.ClientConn, *hlc.Clock, *stop.Stopper, error) {
 	)
 	addr, err := addrWithDefaultHost(serverCfg.AdvertiseAddr)
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, err
 	}
 	conn, err := rpcContext.GRPCDial(addr)
 	if err != nil {
-		return nil, nil, nil, err
-	}
-	return conn, clock, stopper, nil
-}
-
-func getAdminClient() (serverpb.AdminClient, *stop.Stopper, error) {
-	conn, _, stopper, err := getClientGRPCConn()
-	if err != nil {
 		return nil, nil, err
 	}
-	return serverpb.NewAdminClient(conn), stopper, nil
+	stopper.AddCloser(stop.CloserFn(func() {
+		_ = conn.Close()
+	}))
+
+	// Tie the lifetime of the stopper to that of the context.
+	go func() {
+		<-ctx.Done()
+		// Don't use the `ctx` as it's already cancelled.
+		stopper.Stop(context.Background())
+	}()
+	return conn, clock, nil
+}
+
+func getAdminClient(ctx context.Context) (serverpb.AdminClient, error) {
+	conn, _, err := getClientGRPCConn(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return serverpb.NewAdminClient(conn), nil
 }
 
 func stopperContext(stopper *stop.Stopper) context.Context {
@@ -1043,6 +1056,10 @@ func runQuit(cmd *cobra.Command, args []string) (err error) {
 	if len(args) != 0 {
 		return usageAndError(cmd)
 	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
 	defer func() {
 		if err == nil {
 			fmt.Println("ok")
@@ -1053,12 +1070,10 @@ func runQuit(cmd *cobra.Command, args []string) (err error) {
 		onModes[i] = int32(m)
 	}
 
-	c, stopper, err := getAdminClient()
+	c, err := getAdminClient(ctx)
 	if err != nil {
 		return err
 	}
-	ctx := stopperContext(stopper)
-	defer stopper.Stop(ctx)
 
 	if quitCtx.serverDecommission {
 		var myself []string // will remain empty, which means target yourself

@@ -794,6 +794,8 @@ a JSON file captured from a node's /_status/gossip/ debug endpoint.
 }
 
 func runDebugGossipValues(cmd *cobra.Command, args []string) error {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 	// If a file is provided, use it. Otherwise, try talking to the running node.
 	var gossipInfo *gossip.InfoStatus
 	if debugCtx.inputFile != "" {
@@ -807,12 +809,10 @@ func runDebugGossipValues(cmd *cobra.Command, args []string) error {
 			return errors.Wrap(err, "failed to parse provided file as gossip.InfoStatus")
 		}
 	} else {
-		conn, _, stopper, err := getClientGRPCConn()
+		conn, _, err := getClientGRPCConn(ctx)
 		if err != nil {
 			return err
 		}
-		ctx := stopperContext(stopper)
-		defer stopper.Stop(ctx)
 
 		status := serverpb.NewStatusClient(conn)
 		gossipInfo, err = status.Gossip(ctx, &serverpb.GossipRequest{})
