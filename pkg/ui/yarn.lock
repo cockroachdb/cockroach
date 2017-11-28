@@ -57,14 +57,14 @@
   resolved "https://registry.yarnpkg.com/@types/analytics-node/-/analytics-node-0.0.30.tgz#8d9dfc7f7c2fe2344e825d2acc5061c442067229"
 
 "@types/bytebuffer@^5.0.33":
-  version "5.0.33"
-  resolved "https://registry.yarnpkg.com/@types/bytebuffer/-/bytebuffer-5.0.33.tgz#b4da156e2b58c936661ecb6d4ecd43f443b60ed6"
+  version "5.0.34"
+  resolved "https://registry.yarnpkg.com/@types/bytebuffer/-/bytebuffer-5.0.34.tgz#43f7140503a593acc700f818fe23343ae911bcdf"
   dependencies:
     "@types/long" "*"
 
 "@types/chai@^3.4.35":
-  version "3.5.0"
-  resolved "https://registry.yarnpkg.com/@types/chai/-/chai-3.5.0.tgz#45e2dc2af9a5727be846af6e61d08ffc45d5b2ca"
+  version "3.5.2"
+  resolved "https://registry.yarnpkg.com/@types/chai/-/chai-3.5.2.tgz#c11cd2817d3a401b7ba0f5a420f35c56139b1c1e"
 
 "@types/cheerio@*":
   version "0.22.1"
@@ -83,12 +83,12 @@
   resolved "https://registry.yarnpkg.com/@types/combokeys/-/combokeys-2.4.5.tgz#98f794f4baf72a6219cf255516386252c95ac53d"
 
 "@types/d3-dispatch@^1.0.4":
-  version "1.0.4"
-  resolved "https://registry.yarnpkg.com/@types/d3-dispatch/-/d3-dispatch-1.0.4.tgz#91b8de6198053efc46788ad5f27182bcc42335b5"
+  version "1.0.5"
+  resolved "https://registry.yarnpkg.com/@types/d3-dispatch/-/d3-dispatch-1.0.5.tgz#f1f9187b538ecb05157569d8dc2f70dfb04f1b52"
 
 "@types/d3-drag@^1.1.0":
-  version "1.1.0"
-  resolved "https://registry.yarnpkg.com/@types/d3-drag/-/d3-drag-1.1.0.tgz#9105e35ca58aa0c4783f3ce83082bcb24ccb6960"
+  version "1.2.0"
+  resolved "https://registry.yarnpkg.com/@types/d3-drag/-/d3-drag-1.2.0.tgz#5ee6279432c894f85cb72fcda911a959bae11952"
   dependencies:
     "@types/d3-selection" "*"
 
@@ -97,10 +97,14 @@
   resolved "https://registry.yarnpkg.com/@types/d3-selection/-/d3-selection-1.0.15.tgz#2cd305e72f1ebe3eebc9a9263bd3e34cc0321456"
 
 "@types/d3-timer@^1.0.5":
-  version "1.0.5"
-  resolved "https://registry.yarnpkg.com/@types/d3-timer/-/d3-timer-1.0.5.tgz#aad31e6aa185a6440f544d9167ef3194667d7f1e"
+  version "1.0.6"
+  resolved "https://registry.yarnpkg.com/@types/d3-timer/-/d3-timer-1.0.6.tgz#786d4e20731adf03af2c5df6c86fe29667fe429b"
 
-"@types/d3@<4.0.0", "@types/d3@^3":
+"@types/d3@<4.0.0":
+  version "3.5.39"
+  resolved "https://registry.yarnpkg.com/@types/d3/-/d3-3.5.39.tgz#e91ca01859624222fc23b46fe8789fb1e62937a5"
+
+"@types/d3@^3":
   version "3.5.38"
   resolved "https://registry.yarnpkg.com/@types/d3/-/d3-3.5.38.tgz#76f8f2e9159ae562965b2fa0e6fbee1aa643a1bc"
 
@@ -109,53 +113,53 @@
   resolved "https://registry.yarnpkg.com/@types/dagre-layout/-/dagre-layout-0.8.0.tgz#79fb118253b84ee908f7666b41f1e4d342c4db91"
 
 "@types/enzyme@^2.7.6":
-  version "2.7.7"
-  resolved "https://registry.yarnpkg.com/@types/enzyme/-/enzyme-2.7.7.tgz#52688e130fe55185f14844919ec559961488f53d"
+  version "2.8.12"
+  resolved "https://registry.yarnpkg.com/@types/enzyme/-/enzyme-2.8.12.tgz#a669d79ce1760d7241bc4b6fb7535d68669d78ad"
   dependencies:
     "@types/cheerio" "*"
     "@types/react" "*"
 
 "@types/fetch-mock@^5.8.1":
-  version "5.8.2"
-  resolved "https://registry.yarnpkg.com/@types/fetch-mock/-/fetch-mock-5.8.2.tgz#9bd8af033a9df824a242e65e248dda0040915a2c"
+  version "5.12.2"
+  resolved "https://registry.yarnpkg.com/@types/fetch-mock/-/fetch-mock-5.12.2.tgz#8c96517ff74303031c65c5da2d99858e34c844d2"
 
 "@types/highlight.js@^9.1.9":
-  version "9.1.9"
-  resolved "https://registry.yarnpkg.com/@types/highlight.js/-/highlight.js-9.1.9.tgz#ed6336955eaf233b75eb7923b9b1f373d045ef01"
+  version "9.12.2"
+  resolved "https://registry.yarnpkg.com/@types/highlight.js/-/highlight.js-9.12.2.tgz#6ee7cd395effe5ec80b515d3ff1699068cd0cd1d"
 
 "@types/history@^3":
-  version "3.2.1"
-  resolved "https://registry.yarnpkg.com/@types/history/-/history-3.2.1.tgz#0039ab0e0be2a0cc22bac171d27a44588103d123"
+  version "3.2.2"
+  resolved "https://registry.yarnpkg.com/@types/history/-/history-3.2.2.tgz#b6affa240cb10b5f841c6443d8a24d7f3fc8bb0c"
 
 "@types/lodash@^4.14.56":
-  version "4.14.62"
-  resolved "https://registry.yarnpkg.com/@types/lodash/-/lodash-4.14.62.tgz#8674f9861582148a60b7a89cb260f11378d11683"
+  version "4.14.85"
+  resolved "https://registry.yarnpkg.com/@types/lodash/-/lodash-4.14.85.tgz#a16fbf942422f6eca5622b6910492c496c35069b"
 
 "@types/long@*", "@types/long@^3.0.31":
   version "3.0.31"
   resolved "https://registry.yarnpkg.com/@types/long/-/long-3.0.31.tgz#08635b0d0d322676940c1a88a7a9cef661c6f34a"
 
 "@types/mocha@^2.2.40":
-  version "2.2.40"
-  resolved "https://registry.yarnpkg.com/@types/mocha/-/mocha-2.2.40.tgz#9811dd800ece544cd84b5b859917bf584a150c4c"
+  version "2.2.44"
+  resolved "https://registry.yarnpkg.com/@types/mocha/-/mocha-2.2.44.tgz#1d4a798e53f35212fd5ad4d04050620171cd5b5e"
 
 "@types/node@7.0.12":
   version "7.0.12"
   resolved "https://registry.yarnpkg.com/@types/node/-/node-7.0.12.tgz#ae5f67a19c15f752148004db07cbbb372e69efc9"
 
 "@types/nvd3@^1.8.36":
-  version "1.8.36"
-  resolved "https://registry.yarnpkg.com/@types/nvd3/-/nvd3-1.8.36.tgz#703479bbc77318bc82d6a485ffe4549f09a1869e"
+  version "1.8.38"
+  resolved "https://registry.yarnpkg.com/@types/nvd3/-/nvd3-1.8.38.tgz#fed58ccd5e804fbbcd0c8216c08ef254bfc89f13"
   dependencies:
     "@types/d3" "^3"
 
 "@types/prop-types@^15.5.1":
-  version "15.5.1"
-  resolved "https://registry.yarnpkg.com/@types/prop-types/-/prop-types-15.5.1.tgz#1ecf52621299e65b855374337fb11fd2d1066fc1"
+  version "15.5.2"
+  resolved "https://registry.yarnpkg.com/@types/prop-types/-/prop-types-15.5.2.tgz#3c6b8dceb2906cc87fe4358e809f9d20c8d59be1"
 
 "@types/react-codemirror@^0.2.6":
-  version "0.2.6"
-  resolved "https://registry.yarnpkg.com/@types/react-codemirror/-/react-codemirror-0.2.6.tgz#a746df52bc07e15d66f9afff186e28922ef01d7a"
+  version "0.2.7"
+  resolved "https://registry.yarnpkg.com/@types/react-codemirror/-/react-codemirror-0.2.7.tgz#4fb8c9a4aa6c300f062a0571ab5959fb46e3b15b"
   dependencies:
     "@types/codemirror" "*"
     "@types/react" "*"
@@ -173,41 +177,41 @@
     "@types/react" "*"
 
 "@types/react-redux@^4.4.38":
-  version "4.4.38"
-  resolved "https://registry.yarnpkg.com/@types/react-redux/-/react-redux-4.4.38.tgz#771c9293fa835107eb5ac2e4ef8d52e54f2ed4ff"
+  version "4.4.47"
+  resolved "https://registry.yarnpkg.com/@types/react-redux/-/react-redux-4.4.47.tgz#12af1677116e08d413fe2620d0a85560c8a0536e"
   dependencies:
     "@types/react" "*"
     redux "^3.6.0"
 
 "@types/react-router-redux@<5.0.0":
-  version "4.0.45"
-  resolved "https://registry.yarnpkg.com/@types/react-router-redux/-/react-router-redux-4.0.45.tgz#c9dbad35cbb450848be615331c6eeadd7e93964d"
+  version "4.0.51"
+  resolved "https://registry.yarnpkg.com/@types/react-router-redux/-/react-router-redux-4.0.51.tgz#047e8c206892790bc2462f30d8b346d5b4f24fa0"
   dependencies:
     "@types/history" "^3"
     redux "^3.6.0"
 
 "@types/react-router@<4.0.0":
-  version "3.0.10"
-  resolved "https://registry.yarnpkg.com/@types/react-router/-/react-router-3.0.10.tgz#81c4b1b000a53e69056cd559acdd1c5b57dbb649"
+  version "3.0.13"
+  resolved "https://registry.yarnpkg.com/@types/react-router/-/react-router-3.0.13.tgz#493c2f0794313a37e4698deed9b816b2ad239716"
   dependencies:
     "@types/history" "^3"
     "@types/react" "*"
 
 "@types/react-select@^1.0.45":
-  version "1.0.45"
-  resolved "https://registry.yarnpkg.com/@types/react-select/-/react-select-1.0.45.tgz#9985dafe96e43e3586b5cb9e86a6e1eac6684ddd"
+  version "1.0.59"
+  resolved "https://registry.yarnpkg.com/@types/react-select/-/react-select-1.0.59.tgz#791022e5b2c7cd5c86301949ea5e4cc94a55bc66"
   dependencies:
     "@types/react" "*"
 
 "@types/react-sticky@^5.0.1":
-  version "5.0.3"
-  resolved "https://registry.yarnpkg.com/@types/react-sticky/-/react-sticky-5.0.3.tgz#394d000674abeb6d8a3ffb093ee1c0c6bef9c249"
+  version "5.0.5"
+  resolved "https://registry.yarnpkg.com/@types/react-sticky/-/react-sticky-5.0.5.tgz#b921119af1b8056c14e5e83a231a02a397b7ee33"
   dependencies:
     "@types/react" "*"
 
 "@types/react@*", "@types/react@^15.0.18":
-  version "15.0.21"
-  resolved "https://registry.yarnpkg.com/@types/react/-/react-15.0.21.tgz#29d849427237c1463abfb7b370755ee3e5b5b375"
+  version "15.6.7"
+  resolved "https://registry.yarnpkg.com/@types/react/-/react-15.6.7.tgz#e910b6aace59d8d0b48dd679c2c03cffedafeec6"
 
 "@types/redux-thunk@^2.1.0":
   version "2.1.32"
@@ -5040,13 +5044,13 @@ redux-thunk@^2.2.0:
   resolved "https://registry.yarnpkg.com/redux-thunk/-/redux-thunk-2.2.0.tgz#e615a16e16b47a19a515766133d1e3e99b7852e5"
 
 redux@^3.6.0:
-  version "3.6.0"
-  resolved "https://registry.yarnpkg.com/redux/-/redux-3.6.0.tgz#887c2b3d0b9bd86eca2be70571c27654c19e188d"
+  version "3.7.2"
+  resolved "https://registry.yarnpkg.com/redux/-/redux-3.7.2.tgz#06b73123215901d25d065be342eb026bc1c8537b"
   dependencies:
     lodash "^4.2.1"
     lodash-es "^4.2.1"
     loose-envify "^1.1.0"
-    symbol-observable "^1.0.2"
+    symbol-observable "^1.0.3"
 
 regenerate@^1.2.1:
   version "1.3.2"
@@ -5704,9 +5708,9 @@ svgo@^0.7.0:
     sax "~1.2.1"
     whet.extend "~0.9.9"
 
-symbol-observable@^1.0.2:
-  version "1.0.4"
-  resolved "https://registry.yarnpkg.com/symbol-observable/-/symbol-observable-1.0.4.tgz#29bf615d4aa7121bdd898b22d4b3f9bc4e2aa03d"
+symbol-observable@^1.0.3:
+  version "1.1.0"
+  resolved "https://registry.yarnpkg.com/symbol-observable/-/symbol-observable-1.1.0.tgz#5c68fd8d54115d9dfb72a84720549222e8db9b32"
 
 symbol-tree@^3.2.1:
   version "3.2.2"
@@ -5874,8 +5878,8 @@ type-is@~1.6.14:
     mime-types "~2.1.15"
 
 typescript@^2.2.1:
-  version "2.3.0"
-  resolved "https://registry.yarnpkg.com/typescript/-/typescript-2.3.0.tgz#2e63e09284392bc8158a2444c33e2093795c0418"
+  version "2.6.2"
+  resolved "https://registry.yarnpkg.com/typescript/-/typescript-2.6.2.tgz#3c5b6fd7f6de0914269027f03c0946758f7673a4"
 
 ua-parser-js@^0.7.9:
   version "0.7.12"
