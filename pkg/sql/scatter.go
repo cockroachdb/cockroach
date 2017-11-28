@@ -161,7 +161,7 @@ func (n *scatterNode) Values() tree.Datums {
 	r := n.run.ranges[n.run.rangeIdx]
 	return tree.Datums{
 		tree.NewDBytes(tree.DBytes(r.Span.Key)),
-		tree.NewDString(keys.PrettyPrint(r.Span.Key)),
+		tree.NewDString(keys.PrettyPrint(nil /* valDirs */, r.Span.Key)),
 	}
 }
 

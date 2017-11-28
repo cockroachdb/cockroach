@@ -190,7 +190,7 @@ func (n *testingRelocateNode) Next(params runParams) (bool, error) {
 func (n *testingRelocateNode) Values() tree.Datums {
 	return tree.Datums{
 		tree.NewDBytes(tree.DBytes(n.run.lastRangeStartKey)),
-		tree.NewDString(keys.PrettyPrint(n.run.lastRangeStartKey)),
+		tree.NewDString(keys.PrettyPrint(sqlbase.IndexKeyValDirs(n.index), n.run.lastRangeStartKey)),
 	}
 }
 
@@ -215,7 +215,7 @@ func lookupRangeDescriptor(
 		return roachpb.RangeDescriptor{}, err
 	}
 	if desc.EndKey.Equal(rowKey) {
-		log.Fatalf(ctx, "row key should not be valid range split point: %s", keys.PrettyPrint(rowKey))
+		log.Fatalf(ctx, "row key should not be valid range split point: %s", keys.PrettyPrint(nil /* valDirs */, rowKey))
 	}
 	return desc, nil
 }

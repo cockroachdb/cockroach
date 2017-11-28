@@ -577,7 +577,7 @@ EXPLAIN (EXPRS) SELECT MIN(a) FROM abc
 1  ·       render 0     a
 2  scan    ·            ·
 2  ·       table        abc@primary
-2  ·       spans        /#-
+2  ·       spans        /!NULL-
 2  ·       limit        1
 
 query TRBR
@@ -657,7 +657,7 @@ EXPLAIN (EXPRS) SELECT MIN(x) FROM xyz
 1  ·       render 0     x
 2  scan    ·            ·
 2  ·       table        xyz@xy
-2  ·       spans        /#-
+2  ·       spans        /!NULL-
 2  ·       limit        1
 
 query I
@@ -691,7 +691,7 @@ EXPLAIN (EXPRS) SELECT MAX(x) FROM xyz
 1  ·        render 0     x
 2  revscan  ·            ·
 2  ·        table        xyz@xy
-2  ·        spans        /#-
+2  ·        spans        /!NULL-
 2  ·        limit        1
 
 query I
@@ -708,7 +708,7 @@ EXPLAIN (EXPRS) SELECT MIN(y) FROM xyz WHERE x = 1
 1  ·       render 0     y
 2  scan    ·            ·
 2  ·       table        xyz@xy
-2  ·       spans        /1/#-/2
+2  ·       spans        /1/!NULL-/2
 2  ·       limit        1
 
 query I
@@ -725,7 +725,7 @@ EXPLAIN (EXPRS) SELECT MAX(y) FROM xyz WHERE x = 1
 1  ·        render 0     y
 2  revscan  ·            ·
 2  ·        table        xyz@xy
-2  ·        spans        /1/#-/2
+2  ·        spans        /1/!NULL-/2
 2  ·        limit        1
 
 query I
@@ -742,7 +742,7 @@ EXPLAIN (EXPRS) SELECT MIN(y) FROM xyz WHERE x = 7
 1  ·       render 0     y
 2  scan    ·            ·
 2  ·       table        xyz@xy
-2  ·       spans        /7/#-/8
+2  ·       spans        /7/!NULL-/8
 2  ·       limit        1
 
 query I
@@ -759,7 +759,7 @@ EXPLAIN (EXPRS) SELECT MAX(y) FROM xyz WHERE x = 7
 1  ·        render 0     y
 2  revscan  ·            ·
 2  ·        table        xyz@xy
-2  ·        spans        /7/#-/8
+2  ·        spans        /7/!NULL-/8
 2  ·        limit        1
 
 query I
@@ -776,7 +776,7 @@ EXPLAIN (EXPRS) SELECT MIN(x) FROM xyz WHERE (y, z) = (2, 3.0)
 1  ·       render 0     x
 2  scan    ·            ·
 2  ·       table        xyz@zyx
-2  ·       spans        /3/2/#-/3/3
+2  ·       spans        /3/2/!NULL-/3/3
 2  ·       limit        1
 
 query T
@@ -800,7 +800,7 @@ EXPLAIN (EXPRS) SELECT MAX(x) FROM xyz WHERE (z, y) = (3.0, 2)
 1  ·        render 0     x
 2  revscan  ·            ·
 2  ·        table        xyz@zyx
-2  ·        spans        /3/2/#-/3/3
+2  ·        spans        /3/2/!NULL-/3/3
 2  ·        limit        1
 
 # VARIANCE/STDDEV
@@ -988,7 +988,7 @@ EXPLAIN (EXPRS) SELECT MIN(a) FROM abc
 1  ·       render 0     a
 2  scan    ·            ·
 2  ·       table        abc@primary
-2  ·       spans        /#-
+2  ·       spans        /!NULL-
 2  ·       limit        1
 
 # Verify we only buffer one row.
@@ -1009,7 +1009,7 @@ EXPLAIN (EXPRS) SELECT MAX(a) FROM abc
 1  ·        render 0     a
 2  revscan  ·            ·
 2  ·        table        abc@primary
-2  ·        spans        /#-
+2  ·        spans        /!NULL-
 2  ·        limit        1
 
 # Verify we only buffer one row.
@@ -1227,7 +1227,7 @@ EXPLAIN (VERBOSE) SELECT MIN(v) FROM opt_test
 1  ·       render 0     test.opt_test.v       ·                ·
 2  scan    ·            ·                     (k[omitted], v)  k!=NULL; v!=NULL; key(k,v); +v
 2  ·       table        opt_test@v            ·                ·
-2  ·       spans        /#-                   ·                ·
+2  ·       spans        /!NULL-               ·                ·
 2  ·       limit        1                     ·                ·
 
 # Without the "v IS NOT NULL" constraint, this result would incorrectly be NULL.
@@ -1252,7 +1252,7 @@ EXPLAIN (VERBOSE) SELECT MIN(v) FROM opt_test WHERE k <> 4
 1  ·       render 0     test.opt_test.v       ·           ·
 2  scan    ·            ·                     (k, v)      k!=NULL; v!=NULL; key(k,v); +v
 2  ·       table        opt_test@v            ·           ·
-2  ·       spans        /#-                   ·           ·
+2  ·       spans        /!NULL-               ·           ·
 2  ·       filter       k != 4                ·           ·
 
 query I
@@ -1272,7 +1272,7 @@ EXPLAIN (VERBOSE) SELECT MIN(v+1) FROM opt_test WHERE k <> 4
 1  ·       render 0     test.opt_test.v + 1                 ·               ·
 2  scan    ·            ·                                   (k, v)          k!=NULL; v!=NULL; key(k)
 2  ·       table        opt_test@primary                    ·               ·
-2  ·       spans        /#-                                 ·               ·
+2  ·       spans        /!NULL-                             ·               ·
 2  ·       filter       (k != 4) AND ((v + 1) IS NOT NULL)  ·               ·
 
 # Verify that we don't use the optimization if there is a GROUP BY.
