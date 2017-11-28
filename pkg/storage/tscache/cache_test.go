@@ -38,7 +38,7 @@ import (
 
 var cacheImplConstrs = []func(clock *hlc.Clock) Cache{
 	func(clock *hlc.Clock) Cache { return newTreeImpl(clock) },
-	func(clock *hlc.Clock) Cache { return newSklImpl(clock) },
+	func(clock *hlc.Clock) Cache { return newSklImpl(clock, MakeMetrics()) },
 }
 
 func forEachCacheImpl(
@@ -658,7 +658,7 @@ func identicalAndRatcheted(
 func BenchmarkTimestampCacheInsertion(b *testing.B) {
 	manual := hlc.NewManualClock(123)
 	clock := hlc.NewClock(manual.UnixNano, time.Nanosecond)
-	tc := New(clock)
+	tc := New(clock, MakeMetrics())
 
 	for i := 0; i < b.N; i++ {
 		cdTS := clock.Now()
