@@ -1,3 +1,4 @@
+import classNames from "classnames";
 import _ from "lodash";
 import Long from "long";
 import moment from "moment";
@@ -217,18 +218,15 @@ export default class RangeTable extends React.Component<RangeTableProps, {}> {
     leaderCell?: RangeTableCellContent,
   ) {
     const title = _.join(_.isNil(cell.title) ? cell.value : cell.title, "\n");
-    const classNames = ["range-table__cell"];
-    if (dormant) {
-      classNames.push("range-table__cell--dormant");
-    } else {
-      if (!_.isNil(cell.className)) {
-        classNames.push(...cell.className);
-      }
-      if (!_.isNil(leaderCell) && row.compareToLeader && !_.isEqual(cell.value, leaderCell.value)) {
-        classNames.push("range-table__cell--different-from-leader-warning");
-      }
-    }
-    const className = _.join(classNames, " ");
+    const differentFromLeader = !dormant && !_.isNil(leaderCell) && row.compareToLeader && !_.isEqual(cell.value, leaderCell.value);
+    const className = classNames(
+      "range-table__cell",
+      {
+        "range-table__cell--dormant": dormant,
+        "range-table__cell--different-from-leader-warning": differentFromLeader,
+      },
+      (!dormant && !_.isNil(cell.className) ? cell.className : []),
+    );
     return (
       <td key={key} className={className} title={title}>
         <ul className="range-entries-list">
@@ -252,19 +250,20 @@ export default class RangeTable extends React.Component<RangeTableProps, {}> {
     sortedStoreIDs: number[],
     key: number,
   ) {
-    let headerClassName = "range-table__cell range-table__cell--header";
     const leaderDetail = detailsByStoreID.get(leaderStoreID);
+    const values: Set<string> = new Set();
     if (row.compareToLeader) {
-      const values: Set<string> = new Set();
       detailsByStoreID.forEach((detail, storeID) => {
         if (!dormantStoreIDs.has(storeID)) {
           values.add(_.join(detail[row.variable].value, " "));
         }
       });
-      if (values.size > 1) {
-        headerClassName += " range-table__cell--header-warning";
-      }
     }
+    const headerClassName = classNames(
+      "range-table__cell",
+      "range-table__cell--header",
+      { "range-table__cell--header-warning": values.size > 1 },
+    );
     return (
       <tr key={key} className="range-table__row">
         <th className={headerClassName}>
@@ -297,25 +296,20 @@ export default class RangeTable extends React.Component<RangeTableProps, {}> {
     localStoreID: number,
     dormant: boolean,
   ) {
-    let className = "range-table__cell";
+    const differentFromLeader = !dormant && (_.isNil(replica) ? leaderReplicaIDs.has(replicaID) : !leaderReplicaIDs.has(replica.replica_id));
+    const localReplica = !dormant && !differentFromLeader && replica && replica.store_id === localStoreID;
+    const className = classNames({
+      "range-table__cell": true,
+      "range-table__cell--dormant": dormant,
+      "range-table__cell--different-from-leader-warning": differentFromLeader,
+      "range-table__cell--local-replica": localReplica,
+    });
     if (_.isNil(replica)) {
-      if (dormant) {
-        className += " range-table__cell--dormant";
-      } else if (leaderReplicaIDs.has(replicaID)) {
-        className += " range-table__cell--different-from-leader-warning";
-      }
       return (
         <td key={localStoreID} className={className}>
           -
         </td>
       );
-    }
-    if (dormant) {
-      className += " range-table__cell--dormant";
-    } else if (!leaderReplicaIDs.has(replica.replica_id)) {
-      className += " range-table__cell--different-from-leader-warning";
-    } else if (replica.store_id === localStoreID) {
-      className += " range-table__cell--local-replica";
     }
     const value = Print.ReplicaID(rangeID, replica);
     return (

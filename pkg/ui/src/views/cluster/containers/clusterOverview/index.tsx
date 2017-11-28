@@ -1,3 +1,4 @@
+import classNames from "classnames";
 import d3 from "d3";
 import React from "react";
 import { connect } from "react-redux";
@@ -68,13 +69,25 @@ interface NodeLivenessProps {
 
 function renderNodeLiveness(props: NodeLivenessProps) {
   const { liveNodes, suspectNodes, deadNodes } = props;
+  const suspectClasses = classNames(
+    "node-liveness",
+    "cluster-summary__metric",
+    "suspect-nodes",
+    {"warning": suspectNodes > 0 },
+  );
+  const deadClasses = classNames(
+    "node-liveness",
+    "cluster-summary__metric",
+    "dead-nodes",
+    { "alert": deadNodes > 0 },
+  );
   return [
     <h3 className="node-liveness cluster-summary__title">Node Liveness</h3>,
     <div className="node-liveness cluster-summary__metric live-nodes">{ liveNodes }</div>,
     <div className="node-liveness cluster-summary__label live-nodes">Live<br />Nodes</div>,
-    <div className={ "node-liveness cluster-summary__metric suspect-nodes" + (suspectNodes ? " warning" : "") }>{ suspectNodes }</div>,
+    <div className={suspectClasses}>{ suspectNodes }</div>,
     <div className="node-liveness cluster-summary__label suspect-nodes">Suspect<br />Nodes</div>,
-    <div className={ "node-liveness cluster-summary__metric dead-nodes" + (deadNodes ? " alert" : "") }>{ deadNodes }</div>,
+    <div className={deadClasses}>{ deadNodes }</div>,
     <div className="node-liveness cluster-summary__label dead-nodes">Dead<br />Nodes</div>,
   ];
 }
@@ -99,13 +112,25 @@ interface ReplicationStatusProps {
 
 function renderReplicationStatus(props: ReplicationStatusProps) {
   const { totalRanges, underReplicatedRanges, unavailableRanges } = props;
+  const underReplicatedClasses = classNames(
+    "replication-status",
+    "cluster-summary__metric",
+    "under-replicated-ranges",
+    { "warning": underReplicatedRanges > 0 },
+  );
+  const unavailableClasses = classNames(
+    "replication-status",
+    "cluster-summary__metric",
+    "unavailable-ranges",
+    { "alert": unavailableRanges > 0 },
+  );
   return [
     <h3 className="replication-status cluster-summary__title">Replication Status</h3>,
     <div className="replication-status cluster-summary__metric total-ranges">{ totalRanges }</div>,
     <div className="replication-status cluster-summary__label total-ranges">Total<br />Ranges</div>,
-    <div className={ "replication-status cluster-summary__metric under-replicated-ranges" + (underReplicatedRanges ? " warning" : "") }>{ underReplicatedRanges }</div>,
+    <div className={underReplicatedClasses}>{ underReplicatedRanges }</div>,
     <div className="replication-status cluster-summary__label under-replicated-ranges">Under-replicated<br />Ranges</div>,
-    <div className={ "replication-status cluster-summary__metric unavailable-ranges" + (unavailableRanges ? " alert" : "") }>{ unavailableRanges }</div>,
+    <div className={unavailableClasses}>{ unavailableRanges }</div>,
     <div className="replication-status cluster-summary__label unavailable-ranges">Unavailable<br />Ranges</div>,
   ];
 }
