@@ -79,8 +79,8 @@ type unionNode struct {
 	run unionRun
 }
 
-// UnionClause constructs a planNode from a UNION/INTERSECT/EXCEPT expression.
-func (p *planner) UnionClause(
+// Union constructs a planNode from a UNION/INTERSECT/EXCEPT expression.
+func (p *planner) Union(
 	ctx context.Context, n *tree.UnionClause, desiredTypes []types.T,
 ) (planNode, error) {
 	var emitAll = false
