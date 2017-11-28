@@ -5,8 +5,6 @@
 - RFC PR: [#19785](https://github.com/cockroachdb/cockroach/pull/19785)
 - Cockroach Issue: [#19783](https://github.com/cockroachdb/cockroach/issues/19783)
 
-
-
 Table of Contents
 =================
 
@@ -16,8 +14,16 @@ Table of Contents
    * [Out of scope](#out-of-scope)
    * [Security analysis](#security-analysis)
       * [Attack profiles](#attack-profiles)
+         * [Access to raw disk offline](#access-to-raw-disk-offline)
+         * [Access to a running system by unprivileged user](#access-to-a-running-system-by-unprivileged-user)
       * [Assumptions](#assumptions)
+         * [No privileged access](#no-privileged-access)
+         * [No write access by attackers](#no-write-access-by-attackers)
       * [Considerations](#considerations)
+         * [Random number generator](#random-number-generator)
+         * [IV makeup and reuse prevention](#iv-makeup-and-reuse-prevention)
+         * [Safety of symmetric key hashes](#safety-of-symmetric-key-hashes)
+         * [Memory safety](#memory-safety)
    * [Guide-level explanation](#guide-level-explanation)
       * [Terminology](#terminology)
       * [User-level explanation](#user-level-explanation)
@@ -25,18 +31,24 @@ Table of Contents
          * [Store keys](#store-keys)
          * [Data keys](#data-keys)
          * [User control of encryption](#user-control-of-encryption)
+            * [Recommended production configuration](#recommended-production-configuration)
+            * [Flag changes for the cockroach binary](#flag-changes-for-the-cockroach-binary)
+            * [Enabling encryption on a store](#enabling-encryption-on-a-store)
+            * [Rotating the store key](#rotating-the-store-key)
+            * [Disabling encryption](#disabling-encryption)
       * [Contributor impact](#contributor-impact)
    * [Reference-level explanation](#reference-level-explanation)
       * [Detailed design](#detailed-design)
-         * [Encryption layer for rocksdb](#encryption-layer-for-rocksdb)
-         * [Preamble format](#preamble-format)
-         * [Enabling the preamble format](#enabling-the-preamble-format)
+         * [Store version](#store-version)
+         * [Switching Env](#switching-env)
+         * [COCKROACHDB_REGISTRY](#cockroachdb_registry)
+         * [Encrypted Env](#encrypted-env)
          * [Key levels](#key-levels)
          * [Key status](#key-status)
          * [Store keys files](#store-keys-files)
+         * [Key Manager](#key-manager)
          * [Rotating store keys](#rotating-store-keys)
          * [Data keys file format](#data-keys-file-format)
-         * [Loading data keys](#loading-data-keys)
          * [Generating data keys](#generating-data-keys)
          * [Rotating data keys](#rotating-data-keys)
          * [Reporting encryption status](#reporting-encryption-status)
@@ -44,7 +56,6 @@ Table of Contents
          * [Enterprise enforcement](#enterprise-enforcement)
       * [Drawbacks](#drawbacks)
          * [Directs us towards rocksdb-level encryption](#directs-us-towards-rocksdb-level-encryption)
-         * [Cannot migrate to/from preamble data format](#cannot-migrate-tofrom-preamble-data-format)
          * [Lack of correctness testing of rocksdb encryption layer](#lack-of-correctness-testing-of-rocksdb-encryption-layer)
          * [Complexity of configuration and monitoring](#complexity-of-configuration-and-monitoring)
          * [No strong license enforcement](#no-strong-license-enforcement)
@@ -53,10 +64,9 @@ Table of Contents
          * [Fine-grained encryption](#fine-grained-encryption)
          * [Single level of keys](#single-level-of-keys)
          * [Relationship between store and data keys](#relationship-between-store-and-data-keys)
-         * [Custom env for encryption state](#custom-env-for-encryption-state)
+         * [Directly using the data prefix format](#directly-using-the-data-prefix-format)
       * [Unresolved questions](#unresolved-questions)
          * [Non-live rocksdb files](#non-live-rocksdb-files)
-         * [Encryption flags](#encryption-flags)
          * [CCL code location](#ccl-code-location)
          * [Instruction set support](#instruction-set-support)
       * [Future improvements](#future-improvements)
@@ -71,16 +81,17 @@ We propose to add support for encryption at rest on cockroach nodes, with
 encryption being done at the rocksdb layer for each file.
 
 We provide CTR-mode AES encryption for all files written through rocksdb.
-Encryption-related information is stored in a 4KiB preamble for each file.
 
-Keys are split into user-provided store keys, and dynamically-generated data keys.
+Keys are split into user-provided store keys and dynamically-generated data keys.
 Store keys are used to encrypt the data keys. Data keys are used to encrypt the actual data.
 Store keys can be rotated at the user's discretion. Data keys can be rotated automatically
 on a regular schedule, relying on rocksdb churn to re-encrypt data.
 
-Data can be transitioned from plaintext to encrypted and back. However, the preamble
-file format cannot be enabled on stores written using previous versions of cockroach,
-requiring new stores to be added to the cluster.
+Plaintext files go through the regular rocksdb interface to the filesystem. Encrypted files
+go through an intermediate layer responsible for all encryption tasks.
+
+Data can be transitioned from plaintext to encrypted and back with status being reported
+continuously.
 
 # Motivation
 
@@ -129,7 +140,7 @@ The goal of this feature is to block two attack vectors:
 An attacker can gain access to the disk after it has been removed from the system (eg: node decommission).
 At-rest encryption should make all data on the disk useless if the following are true:
 * none of the store keys are available or previously compromised
-* none of the data went through a phase where either store or data encryption was `PLAIN`
+* none of the data went through a phase where either store or data encryption was `plaintext`
 
 ### Access to a running system by unprivileged user
 
@@ -137,7 +148,7 @@ Unprivileged users (eg: non root) should not be able to extract cockroach data e
 raw rocksdb files.
 This will still not guard against:
 * privileged users (with access to store keys or memory)
-* data that was at some point stored as `PLAIN`
+* data that was at some point stored as `plaintext`
 
 ## Assumptions
 
@@ -158,7 +169,7 @@ we are operating: we trust the integrity of the store and data key files as well
 
 This includes the case of an attacker removing a disk, modifying it, and re-inserting it into the cluster.
 
-We can partially relax this assumption by adding integrity checking to all files on disk (eg: using GCM).
+A potential future improvement is to use authenticated encryption to verify the integrity of files on disk.
 This would add complexity and cost to filesystem-level operations in rocksdb as we would need to read entire
 files to compute authentication tags.
 
@@ -221,14 +232,13 @@ No good answer presents itself.
 ## Terminology
 
 Terminology used in this RFC:
-* **data key**: used to encrypt the actual on-disk data. These are generated automatically. a.k.a Data-Encryption-Key.
-* **store key**: used to encrypt the set of data keys. Provided by the user. a.k.a Key-Encryption-Key.
+* **data key**: a.k.a Data-encryption-key. Used to encrypt the actual on-disk data. These are generated automatically.
+* **store key**: a.k.a. Key-encryption-key. Used to encrypt the set of data keys. Provided by the user.
 * **active key**: the key being used to encrypt new data.
 * **key rotation**: encrypting data with a new key. Rotation starts when the new key is provided and ends when no data encrypted with the old key remains.
 * **plaintext**: unencrypted data.
-* **preamble**: the first 4KiB of a file containing encryption-related information.
-* **preamble file format**: the new file format using a preamble.
-* **classic file format**: the "normal" rocksdb file format, without a preamble.
+* **Env**: rocksdb terminology for the layer between rocksdb and the filesystem.
+* **Switching Env**: our new Env that can switch between plaintext and encrypted envs.
 
 ## User-level explanation
 
@@ -238,11 +248,7 @@ In order to enable encryption on a given store, the user needs two things:
 * an enterprise license
 * one or more store key(s)
 
-Support for encryption requires the new preamble file format in rocksdb. This can be enabled
-before turning on encryption, or concurrently. However, an existing rocksdb store without the preamble data
-format **CANNOT** use encryption.
-
-An existing store cannot be converted from classic file format to preamble file format or vice versa.
+Enabling encryption increases the store version, making downgrade to a binary before encryption impossible.
 
 ### Configuration recommendations
 
@@ -267,9 +273,9 @@ The store key is a symmetric key provided by the user. It has the following prop
 * not stored on the same disk as the cockroach data
 
 Store keys are stored in raw format in files (one file per key).
-eg: to generate a 128-bit key: `openssl rand 16`
+eg: to generate a 128-bit key: `openssl rand 16 > store.key`
 
-Specifying store keys is done through the `--enterprise-encryption` flag. There are two fields in this flag:
+Specifying store keys is done through the `--enterprise-encryption` flag. There are two key fields in this flag:
 * `key`: path to the active store key, or `plain` for plaintext (default).
 * `old_key`: path to the previous store key, or `plain` for plaintext (default).
 
@@ -281,15 +287,15 @@ Data keys are automatically generated by cockroach. They are stored in the data 
 encrypted with the active store key. Data keys are used to encrypt the actual files inside the data
 directory.
 
-This two-level approach is used to allow easy rotation of store keys. To rotate the store key, all we need
-to do is re-encrypt the file containing the data keys, leaving the bulk of the data as is.
+This two-level approach allows easy rotation of store keys and provides safer encryption of large amounts of
+data. To rotate the store key, all we need to do is re-encrypt the file containing the data keys, leaving
+the bulk of the data as is.
 
 Data keys are generated and rotated by cockroach.
 There are two parameters controlling how data keys behave:
-* encryption cipher: the cipher in use for data encryption. Possible values: `PLAIN`, `AES128`, `AES192`, `AES256`. Default value: `PLAIN`. This is the same as the active store key.
+* encryption cipher: the cipher in use for data encryption. The cipher is currently `AES CTR` with the same key
+size as the store key.
 * rotation period: the time before a new key is generated and used. Default value: 1 week. This can be set through a flag.
-
-The size of each data key will depend on the choice of cipher.
 
 ### User control of encryption
 
@@ -302,53 +308,33 @@ The need for encryption entails a few recommended changes in production configur
 
 #### Flag changes for the cockroach binary
 
-* `format=preamble`: field in the `--store` flag. Enable the preamble format on a specific store. This cannot be changed once the store has been created. Cannot be applied to in-memory stores. Default value: `classic`.
-* `--enterprise-encryption=path=<path to store>,key=<path to key file>,old_key=<path to old key file>,rotation_period=<duration>`: enables encryption a given store, specifies the store keys files, and data keys rotation period (optional, default one week).
+We add a new flag for CCL binaries. It must be specified for each store we wish encrypted:
+```
+--enterprise-encryption=path=<path to store>,key=<path to key file>,old_key=<path to old key>,rotation_period=<duration>
+```
+
+The individual fields are:
+* `path`: the path to the data directory of the corresponding store. This must match the path specified in `--store`
+* `key`: the path to the current encryption key, or `plaintext` if we wish to use plaintext. default: `plaintext`
+* `old_key`: the path to the previous encryption key. Only needed if data was already encrypted.
+* `rotation_period`: how often data keys should be rotated. default: `1 week`
+
 The flag can be specified multiple times, once for each store.
 
 The encryption flags can specify different encryption states for different stores (eg: one encrypted one plain,
 different rotation periods).
 
-The first step in allowing at-rest encryption is using the preamble data format.
-This must be done at store-creation time with the `format=preamble` spec of the `--store` flag.
+#### Enabling encryption on a store
 
-#### Attempting to convert an existing store
-
-Given an existing store created without `format=preamble` or with a version of cockroach
-unaware of the preamble format:
-```
-cockroach start <regular options> --store=path=/mnt/data,format=preamble
-ERROR: cockroach data directory using classic format, cannot be converted to preamble format.
-```
-
-#### Attempting to use encryption without preamble format
-
-Attempting to use encryption without the preamble format also fails:
-```
-cockroach start <regular options> --store=path=/mnt/data --enterprise-encryption=path=/mnt/data,key=/path/to/cockroach.key
-ERROR: cockroach data directory using classic format, cannot use encryption.
-```
-
-#### Initializing a new store with preamble format
-
-Creating a new cockroach store with preamble format, but no encryption:
-```
-cockroach start <regular options> --store=path=/mnt/data,format=preamble
-SUCCESS
-```
-
-#### Enabling encryption on a store with preamble format
-
-Turning on encryption for a store with preamble format. This can be done when initializing the store
-(start with encryption on), or on a non-encrypted store with preamble format (turning on encryption).
+Turning on encryption for a new store or a store currently in plaintext involves the following:
 
 ```
 # Ensure your key file exists and has valid key data (correct size)
 # For example, to generate a key for AES-128:
 $ openssl rand 16 > /path/to/cockroach.key
-# Tell cockroach to use the preamble format and specity the encryption flags.
+# Specify the enterprise-encryption:
 $ cockroach start <regular options> \
-    --store=path=/mnt/data,format=preamble \
+    --store=/mnt/data \
     --enterprise-encryption=path=/mnt/data,key=/path/to/cockroach.key
 ```
 
@@ -357,16 +343,16 @@ encryption for all new files.
 
 Examine the logs or node debug pages to see that encryption is now enabled and see its progress.
 
-#### Rotating the store key.
+#### Rotating the store key
 
-Given the previous configuration, we can add a new key to the file and restart the node to change the store key.
+Given the previous configuration, we can generate a new store key. We must pass the previous key.
 
 ```
 # Create a new 128 bit key.
 $ openssl rand 16 > /path/to/cockroach.new.key
 # Tell cockroach about the new key, and pass the old key (/path/to/cockroach.key)
 $ cockroach start <regular options> \
-    --store=path=/mnt/data,format=preamble \
+    --store=/mnt/data \
     --enterprise-encryption=path=/mnt/data,key=/path/to/cockroach.new.key,old_key=/path/to/cockroach.key
 ```
 
@@ -375,15 +361,14 @@ It is now safe to delete the old key file.
 
 #### Disabling encryption
 
-To disable encryption on a currently-encrypted store, we need to rewrite the list of data keys in plaintext.
-We tell cockroach to switch to plaintext by passing `plain` as the value of the `key` field.
-We still need to specify the old key to decrypt the data keys file.
+We can switch an encrypted store back plaintext. This is done by using the special value `plaintext` in the
+`key` field of the encryption flag. We need to specify the previous encryption key.
 
 ```
-# Instead of a key file, use "plain" as the argument.
+# Instead of a key file, use "plaintext" as the argument.
 # Pass the old key to allow decrypting existing data.
 $ cockroach start <regular options> \
-    --store=path=/mnt/data,format=preamble \
+    --store=/mnt/data \
     --enterprise-encryption=path=/mnt/data,key=plain,old_key=/path/to/cockroach.new.keys
 ```
 
@@ -404,141 +389,138 @@ There are three main categories:
 
 ## Detailed design
 
-### Encryption layer for rocksdb
+### Store version
 
-We use the new `rocksdb::EncryptedEnv` introduced in [PR 2424](https://github.com/facebook/rocksdb/pull/2424).
+We introduce a new [store version](https://github.com/cockroachdb/cockroach/blob/master/pkg/storage/engine/version.go#L27) to mark switching to stores supporting encryption.
 
-The `Env` in rocksdb is the interface to filesystem operations with the default env being used to interface
-with Posix file systems.
-A wrapper env (such as the encrypted env) implements the `Env` interface but can perform its own logic and
-make use of another env.
+Stores are currently using `versionBeta20160331`. If no encryption flags are specified, we remain at this
+version until a "reasonable" time (one or two minor stable releases) has passed.
 
-The `EncryptedEnv` takes an `EncryptionProvider` with the following spec:
+Specifying the `--enterprise-encryption` flag increases the version to `versionSwitchingEnv`. Downgrades to
+binaries that do not support this version is not possible.
+
+### Switching Env
+
+Rocksdb performs filesystem-level operations through an [`Env`](https://github.com/facebook/rocksdb/blob/master/include/rocksdb/env.h).
+
+This layer can be used to provide different behavior for a number of reasons. For example:
+* posix support: the default `Env`
+* in-memory support: for testing or in-memory databases
+* hdfs: for HDFS-backed rocksdb instances
+* encryption: for file-level encryption with encryption settings stored in a 4KB data prefix
+* wrapper: can override specific methods, the rest are passed through to a `base env`
+
+We leverage the `Env` layer to implement the following behavior:
+* stores at `versionBeta20160331` continue to use the default `Env`
+* stores at `versionSwitchingEnv` use the switching env
+* plaintext files under version `versionSwitchingEnv` use a default `Env`
+* encrypted files under version `versionSwitchingEnv` use an `EncryptedEnv`
+
 ```
-// The encryption provider is used to create a cipher stream for a specific file.
-// The returned cipher stream will be used for actual encryption/decryption
-// actions.
-class EncryptionProvider {
- public:
-    virtual ~EncryptionProvider() {};
+versionBeta20160331:    DefaultEnv
 
-    // GetPrefixLength returns the length of the prefix that is added to every file
-    // and used for storing encryption options.
-    // For optimal performance, the prefix length should be a multiple of
-    // the a page size.
-    virtual size_t GetPrefixLength() = 0;
-
-    // CreateNewPrefix initialized an allocated block of prefix memory
-    // for a new file.
-    virtual Status CreateNewPrefix(const std::string& fname, char *prefix, size_t prefixLength) = 0;
-
-    // CreateCipherStream creates a block access cipher stream for a file given
-    // given name and options.
-    virtual Status CreateCipherStream(const std::string& fname, const EnvOptions& options,
-      Slice& prefix, unique_ptr<BlockAccessCipherStream>* result) = 0;
-};
+versionSwitchingEnv:    SwitchingEnv: Encrypted? no  -----> DefaultEnv
+                                                 yes -----> EncryptedEnv
 ```
 
-This allows for the injection of a data prefix (called preamble in this document) at the beginning of every file.
+The state of a file (plaintext or encrypted) is stored in a file registry. This records the list of all
+encrypted files by filename and is persisted to disk in a file named `COCKROACHDB_REGISTRY`.
 
-This prefix can be used to store encryption-related information specific to the file such as cipher in use,
-key ID, nonce, and counter.
+For every file being operated on, the switching env must lookup its existing encryption state in the registry or the
+desired encryption state for new files. If the file is plaintext, pass the operation down to the `DefaultEnv`.
+If the file is encrypted, pass the operation down to the `EncryptedEnv`. For a new file, we must successfully
+persist its state in the registry before proceeding with the operation.
 
-We propose a custom implementation of the `EncryptionProvider` using a 4KiB preamble (matching the page size).
-This preamble will be written to every file written through rocksdb. The contents are generated at the time a
-file is first written, and are available on subsequent file operations.
-
-The encryption provider has access to the list of data keys and knows which is the active data key.
-There are two instances of the encryption provider:
-* store encryption provider: holds the store keys, used on the file storing the data keys
-* data encryption provider: holds the data keys, used on all other data written through rocksdb
-
-Some specific details of the encryption provider:
+Most `SwitchingEnv` methods will perform something like the following:
 ```
-CreateNewPrefix()
-  if encryptionDisabled
-    set prefix flag to 0 (no encryption)
+OpOnFile(filename)
+  // Determine whether the file uses encryption (existing files) or encryption is desired (new files)
+  if !registry.HasFile(filename)
+    useEncryption = lookup desired encryption (from --enterprise-encryption flag)
+    add filename to registry
+    persiste registry to disk. Error out on failure.
   else
-    set prefix flag to 1 (AES)
-    set key ID to current active key ID
-    set pseudo-random nonce and counter
+    useEncryption = get file encryption state from registry
 
-CreateCipherStream()
-  if prefix.flag == 0 (no encryption)
-    return PassThroughStream
+  // Perform the operation through the appropriate Env.
+  if useEncryption
+    EncryptedEnv->OpOnFile(filename)
   else
-    return CTRCipherStream(prefix.keyID, prefix.nonce, prefix.Counter)
+    DefaultEnv->OpOnFile(filename)
 ```
 
-The two lower-level block access streams are:
-* `PassThroughStream`: `Encrypt` and `Decrypt` return without modifying the data
-* `CTRCipherStream`: CTR stream cipher already present in rocksdb. Is provided an AES block cipher.
+### COCKROACHDB_REGISTRY
 
-### Preamble format
+The registry is a new file containing encryption status information for files written through rocksdb.
+This is similar to rocksdb's `MANIFEST`. We intentionally do not call it manifest to avoid confusion.
 
-The preamble is a 4KiB block of data containing encryption context about a specific file.
+It is stored in the base rocksdb directory for the store and written using a `write/close/rename` method.
+It is always operated on through the `DefaultEnv`.
 
-The preamble is made of three parts:
-* length of serialized protobuf: `uint16_t`
-* serialized protobuf
-* zero-filled padding for the rest of the preamble
+Encrypted files are always present in the registry. Plaintext files are not registered as we cannot guarantee
+their presence when operating on an existing store.
 
-The protocol buffer consists of:
+`Env` operations on files will use the registry in different ways:
+* existing file: lookup its encryption state in the registry, assume plaintext if missing
+* existing file if it exists, otherwise new file: lookup its encryption state in the registry. If missing, stat the file through the `DefaultEnv`. If it does not exist, see "create a new file"
+* create a new file: lookup the desired encryption state. If encrypted, persist it in the registry
+
+The registry is a serialized protocol buffer:
 ```
-message Preamble {
-  optional EncryptionDescriptor encryption = 1;
+enum EncryptionRegistryVersion {
+  // The only version so far.
+  Base = 0;
+}
+
+message EncryptionRegistry {
+  // version is currently always Base.
+  int version = 1;
+  repeated EncryptedFile files = 2;
 }
 
 enum EncryptionType {
-  // No encryption applied.
+  // No encryption applied, not used for the registry.
   Plaintext = 0;
   // AES in counter mode.
   AES_CTR = 1;
 }
 
-message EncryptionDescriptor {
+message EncryptedFile {
+  Filename string = 1;
   // The type of encryption applied.
-  EncryptionType type = 1;
+  EncryptionType type = 2;
+
+  // Encryption fields. This may move to a separate AES-CTR message.
   // ID (hash) of the key in use, if any.
-  optional bytes key_id = 2;
+  optional bytes key_id = 3;
   // Initialization vector, of size 96 bits (12 bytes) for AES.
-  optional bytes nonce = 3;
+  optional bytes nonce = 4;
   // Counter, allowing 2^32 blocks per file, so 64GiB.
-  optional uint32 counter = 4;
+  optional uint32 counter = 5;
 }
 ```
 
-Other possible contents of the preamble:
-* it may make sense to move the encryption fields to a specific `AES_CTR` message.
-* we can include the key size. Not required but useful for better usage/error reporting.
+The registry contains all information needed to find the encryption key used for a given file and encrypt/decrypt it.
 
-The encryption type acts as a switch to determine the remainder of the contents. For example:
-* `type = Plaintext`: no encryption: encryption fields are not set, do not encrypt data.
-* `type = AES_CTR`: read the fields described above and perform AES encryption/decryption.
+### Encrypted Env
 
-Possible extensions of the encryption type include:
-* other modes (eg: GCM)
-* other ciphers
+Rocksdb has an `EncryptedEnv` introduced in [PR 2424](https://github.com/facebook/rocksdb/pull/2424).
+It adds a 4KiB data block at the beginning of each file with a nonce and possible encrypted extra information.
 
-Any changes to the preamble must keep the 4KiB limit in mind. Size will be checked after serializing
-the message. If the size exceed the 4KiB limit, cockroach will panic.
+We opt to use a slightly modified (mostly simplified) version of this encrypted env because:
+* `EncryptedEnv` does not support multiple keys
+* the data prefix is not needed, all encryption fields can be stored in the registry
 
-### Enabling the preamble format
+We will use a modified version of the existing `EncryptedEnv` without data prefix.
 
-Using a preamble as part of encryption means that data written by older versions of cockroach (unaware of preambles)
-cannot be read when using the preamble format, and vice versa.
+The encrypted env uses a `CipherStream` for each file, with the cipher stream containing the necessary
+information to perform encryption and decryption (cipher algorithm, key, nonce, and counter).
 
-This means that we need two things:
-* control the format of new rocksdb instances
-* detect the format of existing rocksdb instances
+It also holds a reference to a key manager which can provide the active key and any older keys held.
 
-We propose:
-* a new field `format=preamble` in the `--store` flag to start a new store with preamble format enabled. Will fail if the store exists in classical format.
-* a marker created at rocksdb-creation time indicating the use of the preamble format. This can be stored in the existing `COCKROACHDB_VERSION` file.
-* the preamble format can be enabled on none, some, or all the stores on a node.
-
-Once the preamble format has been sufficiently tested, we can make it the default format and remove the flag.
-Stores with the classic data format would not support encryption but would still function properly.
+Two instances of the encrypted env are in use:
+* store encryption env: uses store keys, used to manipulate the data keys file
+* data encryption env: uses data keys, used to manipulate all other files
 
 ### Key levels
 
@@ -546,7 +528,7 @@ We introduce two levels of encryption with their corresponding keys:
 * data keys:
 	* used to encrypt the data itself
 	* automatically generated and rotated
-	* stored in the `DATA_KEYS-<sequence>` file
+	* stored in the `COCKROACHDB_DATA_KEYS` file
 	* encrypted using the store keys, or plaintext when encryption is disabled
 * store keys:
 	* used to encrypt the list of data keys
@@ -568,18 +550,46 @@ Store keys consist of exactly two keys: the active key, and the previous key.
 They are stored in separate files containing the raw key data (no encoding).
 
 Specifying the keys in use is done through the encryption flag fields:
-* `key`: path to the active key, or `plain` for plaintext. If not specified, `plain` is the default.
-* `old_key`: path to the previous key, or `plain` for plaintext. If not specified, `plain` is the default.
+* `key`: path to the active key, or `plaintext` for plaintext. If not specified, `plaintext` is the default.
+* `old_key`: path to the previous key, or `plaintext` for plaintext. If not specified, `plaintext` is the default.
 
 The size of the raw key in the file dictates the cipher variant to use. Keys can be 16, 24, or 32 bytes long
 corresponding to AES-128, AES-192, AES-256 respectively.
 
 Key files are opened in read-only mode by cockroach.
 
+### Key Manager
+
+The key manager is responsible for holding all keys used in encryption.
+It is used by the encrypted env and provides the following interfaces:
+* `GetActiveKey`: returns the currently active key
+* `GetKey(key hash)`: returns the key matching the key hash, if any
+
+We identify two types of key managers:
+
+#### Store Key Manager
+
+The store key manager holds the current and previous store keys as specified through the `--enterprise-encryption`
+flag.
+
+Since the keys are externally provided, there is no concept of key rotation.
+
+#### Data Key Manager
+
+The data key manager holds the dynamically-generated data keys.
+
+Keys are persisted to the `COCKROACHDB_DATA_KEYS` file using the `write/close/rename` method and encrypted
+through an encrypted env using the store key manager.
+
+The manager periodically generates a new data key (see [Rotating data keys](#rotating-data-keys)), keeps
+the previously-active key in the list of existing keys, and marks the new key as active.
+
+Keys must be successfully persisted to the `COCKROACHDB_DATA_KEYS` file before use.
+
 ### Rotating store keys
 
 Rotating the store keys consists of specifying:
-* `key` points to a new key file, or `plain` to switch to plaintext.
+* `key` points to a new key file, or `plaintext` to switch to plaintext.
 * `old_key` points to the key file previously used.
 
 Upon starting (or other signal), cockroach decrypts the data keys file and re-encrypts it with the new key.
@@ -601,7 +611,7 @@ message DataKeysRegistry {
   repeated StoreKey store_keys = 2;
 }
 
-// EncryptionType is shared with the Preamble EncryptionType.
+// EncryptionType is shared with the registry EncryptionType.
 enum EncryptionType {
   // No encryption applied.
   Plaintext = 0;
@@ -639,25 +649,18 @@ message DataKey {
 ```
 
 The `store_keys` field is needed to keep track of store key ages and statuses. We only need to keep the
-active key but may keep previous keys for history.
+active key but may keep previous keys for history. It does **not** store the actual key, only key hash.
 
 The `data_keys` field contains all in-use (data encrypted with those keys is still live) keys and all information
 needed to determine ciphers, ages, related store keys, etc...
 
 `was_exposed` indicates whether the key was even written to disk as plaintext (encryption was disabled at the
 store level). This will be surfaced in encryption status reports. Data encrypted by an exposed key is securely
-as bad as `PLAIN`.
+as bad as `plaintext`.
 
 `creator_store_key_id` is the ID of the active store key when this key was created. This enables two things:
 * check the active data key's `create_store_key_id` against the active store key. Mismatch triggers rotation
 * force re-encryption of all files encrypted up to some store key
-
-### Loading data keys
-
-Data keys are stored in `<data dir>/DATA_KEYS-<sequence>` where `sequence` is a monotonically increasing number.
-Upon startup, we look for the highest sequence file.
-
-The file is encrypted using the currently-active store key. It has a preamble containing the encryption context.
 
 ### Generating data keys
 
@@ -667,7 +670,7 @@ To generate a new data key, we look up the following:
 * desired cipher (eg: `AES128`)
 * current store key ID
 
-If the cipher is other than `PLAIN`, we generate a key of the desired length using the pseudorandom `CryptoPP::OS_GenerateRandomBlock(blocking=false`) (see [Random number generator](#random-number-generator) for alternatives).
+If the cipher is other than `plaintext`, we generate a key of the desired length using the pseudorandom `CryptoPP::OS_GenerateRandomBlock(blocking=false`) (see [Random number generator](#random-number-generator) for alternatives).
 
 We then generate the following new key entry:
 * **key_id**: the hash (`sha256`) of the raw key
@@ -675,7 +678,7 @@ We then generate the following new key entry:
 * **encryption_type**: as specified
 * **key**: raw key data
 * **create_store_key_id**: the ID of the active store key
-* **was_exposed**: true if the current store encryption type is `PLAIN`
+* **was_exposed**: true if the current store encryption type is `plaintext`
 
 ### Rotating data keys
 
@@ -687,13 +690,11 @@ Rotation is the act of using a new key as the active encryption key. This can be
 
 When a new key has been generated (see above), we build a temporary list of data keys (using the existing
 data keys and the new key).
-If the current store key encryption type is `PLAIN`, set `was_exposed = true` for all data keys.
+If the current store key encryption type is `plaintext`, set `was_exposed = true` for all data keys.
 
-We write the file with encryption to `DATA_KEYS-<sequence>` where `sequence` is a
-monotonically increasing number. Upon successful write, we trigger a data key file reload.
+We write the file with encryption to `COCKROACHDB_DATA_KEYS`. Upon successful write, we trigger a data key file reload.
 
-The actual process of creating the new file should match the rocksdb method (write to temporary file and rename).
-We need to guarantee that the latest file is correct.
+We use a `write/close/rename` method to ensure correct file contents.
 
 Key generation is done inline at startup (we may as well wait for the new key before proceeding), but in the
 background for automated changes while the system is already running.
@@ -707,33 +708,29 @@ At the very least, we should have:
 * debug page entries per store
 
 With the following information:
-* preamble format support
+* user-requested encryption settings
 * active store key ID and cipher
 * active data key ID and cipher
 * fraction of live data per key ID and cipher
 
 We can report the following encryption status:
-* `PLAIN`: plaintext data
+* `plaintext`: plaintext data
 * `AES-<size>`: encrypted with AES (one entry for each key size)
 * `AES-<size> EXPOSED`: encrypted, but data key was exposed at some point
 
-Preamble format support and active key IDs and ciphers are known at all times. We need to log them when they change
+Active key IDs and ciphers are known at all times. We need to log them when they change
 (indicating successful key rotation) and propagate the information to the Go layer.
 
 Fraction of data encoded is a bit trickier. We need to:
 1. find all files in use
-1. read file preambles for encryption status (key ID and cipher)
-1. determine file sizes (without the preamble)
+1. lookup their encryption status in the registry (key ID and cipher)
+1. determine file sizes
 1. log a summary
 1. report back to the go layer
 
 We can find the list of all in-use files the same way rocksdb's backup does, by calling:
 * `rocksdb::GetLiveFiles`: retrieve the list of all files in the database
 * `rocksdb::GetSortedWalFiles`: retrieve the sorted list of all wal files
-
-Reading each file preamble means reading the first 4KiB of each file. To avoid performing this too
-frequently, we can cache results. We must take particular care with files being overwritten (eg: `CURRENT`) and
-using a new key/cipher.
 
 ### Other uses of local disk
 
@@ -773,8 +770,8 @@ The overall idea is that the cluster is not negatively impacted by the lack of a
 See [Enterprise feature gating](#enterprise-feature-gating) for possible alternatives.
 
 Actual code for changes proposed here will be broken into CCL and non-CCL code:
-* non-CCL: preamble file support
-* CCL: encryption support (keys, rotation logic, ciphers)
+* non-CCL: switching env, modified encrypted env
+* CCL: key manager(s), ciphers
 
 ## Drawbacks
 
@@ -787,16 +784,6 @@ it strongly discourages us from implementing it elsewhere.
 
 This means that more fine-grained encryption (eg: per column) will need to fit within this
 model or will require encryption in a completely different part of the system.
-
-### Cannot migrate to/from preamble data format
-
-This is already discussed elsewhere in this document with the conclusion that we will not
-migrate from old data versions to new data versions supporting encryption. Instead, new stores
-must be created with the preamble data format.
-
-Alternatively, we could design a system to keep track of encryption status outside the contents
-of the files (eg: a list of files and their encryption status, absence of the file denoting
-it was written by an older version) but this seems overly complex and fragile.
 
 ### Lack of correctness testing of rocksdb encryption layer
 
@@ -892,40 +879,15 @@ Pros:
 Cons:
 * it's not possible to specify a different cipher for store keys
 
-### Custom env for encryption state
+### Directly using the data prefix format
 
-Use of the preamble format through the existing `rocksdb::EncryptedEnv` has a few issues:
-* no possible migration from/to preamble format
-* `EncryptedEnv` introduces some overhead for plaintext (small block processing, still using preamble)
+The previous version of this RFC proposed using the `rocksdb::EncryptedEnv` for all files, with encryption state
+(plaintext or encrypted) and encryption fields stored in the 4KiB data prefix.
 
-An alternative would be to introduce our own wrapper `rocksdb::Env` that would contain two envs:
-* `EncryptedEnv` for encrypted files
-* `Env::Default` for plaintext files
-
-This new env could keep track of the state of each file and redirect file operations to the appropriate underlying
-env.
-All stores created with old binaries would be considered plaintext. A binary aware of the new env could enable
-encryption on an existing store by writing new files with the `EncryptedEnv` when encryption is desired.
-
-The "file registry" that keeps track of encryption status could also contain the data currently stored in the
-preamble (key ID, nonce, counter).
-Care would need to be taken when writing this file, returning success for file creation only after the registry
-has been persisted to disk (otherwise we would not be able to read the file again). This is similar to rockdb's
-`MANIFEST`.
-
-The most glaring pros and cons of this approach are:
-Pros:
-* migration from "old" stores to encrypted stores (and back) is possible
-* plaintext option has no extra overhead
-* more user friendly: no need for a separate format
-Cons:
-* additional code complexity
-* much less leverage of existing code, this adds a fair amount of work
-
-Some variations on the theme:
-* use a suffix (eg: `.encrypted`) for encrypted file and switch between envs based on that. The encryption settings
-would remain in the preamble.
-* use either a zero-length preamble, or copy-and-modify `env_encryption` (some other optimizations may be possible. eg: use cryptopp's `ProcessAndXORBlocks` which performed the AES encryption **and** the XOR.
+The main issues of that solution are:
+* cannot switch existing stores to the data prefix format, requiring new stores for encryption support
+* overhead of the encrypted env for plaintext files
+* lack of support for multiple keys in the existing data prefix format requiring heaving modification
 
 ## Unresolved questions
 
@@ -940,14 +902,6 @@ meaning the backup will not count towards key usage and will become unreadable w
 While we do not currently make use of backups, we have in the past and may again.
 
 **We currently propose to ignore files not reported as live by rocksdb**
-
-### Encryption flags
-
-We introduce a new field in the `--store` flag (`format=preamble`) and a new flag `--enterprise-encryption`.
-
-Some alternatives include:
-* use fields in the `--store` flag
-* include preamble setting in the `--enterprise-encryption` field
 
 ### CCL code location
 
@@ -996,7 +950,7 @@ Some possible solutions to investigate:
 * there is rumor of being able to mark sstables as "dirty"
 * patches to rocksdb to force rotation even if nothing has changed (may be the safest)
 * "poking" at the files to add changes (may be impossible to do properly)
-* level of indirection in the encryption layer while a file is being rewritten (not supposed to be done for "write-once" files, and probably too dangerous for logs)
+* level of indirection in the encryption layer while a file is being rewritten
 
 Part of forcing re-encryption includes:
 * when to do it automatically (eg: age-based. maybe after half the active key lifetime)
@@ -1010,15 +964,20 @@ before deleting it. How feasible this is depends on the accuracy of our encrypti
 
 If we choose to ignore non-live files, garbage collection should be reasonably safe.
 
+#### Garbage collection of registry entries
+
+All encrypted files are store in the registry. Live rocksdb files will automatically be removed as they are
+deleted, but any other files will remain forever if not deleted through rocksdb.
+
+We may want to periodically stats all files in our registry and deleted the entries for nonexistent files.
+
 #### Performance impact
 
 The performance impact needs to be measured for a variety of workloads and for all supported ciphers.
 This is needed to provide some guidance to users.
 
 Guidance on key rotation period would also be helpful. This is dependent on the rocksdb churn, so will depend
-on the specific workload. We may want to add metrics about data churn to our encryption status reporting. These
-metrics should also be available when using the preamble file format but encryption is disabled. This would allow
-users to understand how much more write activity is expected once encryption is enabled.
+on the specific workload. We may want to add metrics about data churn to our encryption status reporting.
 
 #### Propagating encrypted status
 
@@ -1047,9 +1006,7 @@ conditions (periodic refresh, admin UI endpoint, filesystem polling, etc...)
 
 #### Tooling
 
-At the very least, we want `cockroach debug` tools to continue working correctly with preamble/encrypted files.
-We may also need to add tools to convert an existing data directory from/to preample format or encryption, or
-to report the current encryption status of a store (without cockroach running).
+At the very least, we want `cockroach debug` tools to continue working correctly with encrypted files.
 
 We should examine which rocksdb-provided tools may need modification as well, possibly involving patches
 to rocksdb.
@@ -1067,13 +1024,13 @@ on hard drives.
 Crypto++ supports multiple block ciphers. It should be reasonably easy to add support for
 other ciphers.
 
-#### GCM for data integrity
+#### Authenticated encryption for data integrity
 
-GCM (Galois Counter Mode) is similar to CTR mode but provides data integrity as well, meaning
-we can verify that the encrypted data has not been tampered with.
+We can switch to authenticated encryption (eg: Galois Counter Mode, or others) to allow integrity
+verification of files on disk.
 
-Implementing GCM would require additional changes to the raw storage format to store the final
-authentication tag.
+Implementing authenticated encryption would require additional changes to the raw storage format
+to store the final authentication tag.
 
 #### Add sanity checks
 
