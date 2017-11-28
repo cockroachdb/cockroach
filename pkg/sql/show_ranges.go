@@ -36,6 +36,14 @@ import (
 	"github.com/pkg/errors"
 )
 
+type showRangesNode struct {
+	optColumnsSlot
+
+	span roachpb.Span
+
+	run showRangesRun
+}
+
 func (p *planner) ShowRanges(ctx context.Context, n *tree.ShowRanges) (planNode, error) {
 	tableDesc, index, err := p.getTableAndIndex(ctx, n.Table, n.Index, privilege.SELECT)
 	if err != nil {
@@ -49,26 +57,6 @@ func (p *planner) ShowRanges(ctx context.Context, n *tree.ShowRanges) (planNode,
 			values: make([]tree.Datum, len(showRangesColumns)),
 		},
 	}, nil
-}
-
-type showRangesNode struct {
-	optColumnsSlot
-
-	span roachpb.Span
-
-	run showRangesRun
-}
-
-// showRangesRun contains the run-time state for showRangesNode during
-// local execution.
-type showRangesRun struct {
-	// descriptorKVs are KeyValues returned from scanning the
-	// relevant meta keys.
-	descriptorKVs []client.KeyValue
-
-	rowIdx int
-	// values stores the current row, updated by Next().
-	values []tree.Datum
 }
 
 var showRangesColumns = sqlbase.ResultColumns{
@@ -94,6 +82,18 @@ var showRangesColumns = sqlbase.ResultColumns{
 		// The store ID for the lease holder.
 		Typ: types.Int,
 	},
+}
+
+// showRangesRun contains the run-time state for showRangesNode during
+// local execution.
+type showRangesRun struct {
+	// descriptorKVs are KeyValues returned from scanning the
+	// relevant meta keys.
+	descriptorKVs []client.KeyValue
+
+	rowIdx int
+	// values stores the current row, updated by Next().
+	values []tree.Datum
 }
 
 func (n *showRangesNode) Start(params runParams) error {

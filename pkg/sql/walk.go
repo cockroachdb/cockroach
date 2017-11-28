@@ -372,7 +372,7 @@ func (v *planVisitor) visit(plan planNode) {
 			v.observer.attr(name, "query", tree.AsStringWithFlags(n.n.AsSource, tree.FmtParsable))
 		}
 
-	case *setNode:
+	case *setVarNode:
 		var subplans []planNode
 		for i, texpr := range n.typedValues {
 			subplans = v.expr(name, "value", i, texpr, subplans)
@@ -399,7 +399,7 @@ func (v *planVisitor) visit(plan planNode) {
 	case *ordinalityNode:
 		v.visit(n.source)
 
-	case *traceNode:
+	case *showTraceNode:
 		v.visit(n.plan)
 
 	case *explainPlanNode:
@@ -541,7 +541,7 @@ var planNodeNames = map[reflect.Type]string{
 	reflect.TypeOf(&dropUserNode{}):             "drop user",
 	reflect.TypeOf(&explainDistSQLNode{}):       "explain dist_sql",
 	reflect.TypeOf(&explainPlanNode{}):          "explain plan",
-	reflect.TypeOf(&traceNode{}):                "show trace for",
+	reflect.TypeOf(&showTraceNode{}):            "show trace for",
 	reflect.TypeOf(&filterNode{}):               "filter",
 	reflect.TypeOf(&groupNode{}):                "group",
 	reflect.TypeOf(&unaryNode{}):                "emptyrow",
@@ -556,7 +556,7 @@ var planNodeNames = map[reflect.Type]string{
 	reflect.TypeOf(&scanNode{}):                 "scan",
 	reflect.TypeOf(&scatterNode{}):              "scatter",
 	reflect.TypeOf(&scrubNode{}):                "scrub",
-	reflect.TypeOf(&setNode{}):                  "set",
+	reflect.TypeOf(&setVarNode{}):               "set",
 	reflect.TypeOf(&setClusterSettingNode{}):    "set cluster setting",
 	reflect.TypeOf(&setZoneConfigNode{}):        "configure zone",
 	reflect.TypeOf(&showZoneConfigNode{}):       "show zone configuration",

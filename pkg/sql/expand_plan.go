@@ -71,7 +71,7 @@ func doExpandPlan(
 			return plan, err
 		}
 
-	case *traceNode:
+	case *showTraceNode:
 		n.plan, err = doExpandPlan(ctx, p, noParams, n.plan)
 		if err != nil {
 			return plan, err
@@ -274,7 +274,7 @@ func doExpandPlan(
 	case *unaryNode:
 	case *hookFnNode:
 	case *valueGenerator:
-	case *setNode:
+	case *setVarNode:
 	case *setClusterSettingNode:
 	case *setZoneConfigNode:
 	case *showZoneConfigNode:
@@ -454,7 +454,7 @@ func (p *planner) simplifyOrderings(plan planNode, usefulOrdering sqlbase.Column
 	case *explainDistSQLNode:
 		n.plan = p.simplifyOrderings(n.plan, nil)
 
-	case *traceNode:
+	case *showTraceNode:
 		n.plan = p.simplifyOrderings(n.plan, nil)
 
 	case *explainPlanNode:
@@ -604,7 +604,7 @@ func (p *planner) simplifyOrderings(plan planNode, usefulOrdering sqlbase.Column
 	case *unaryNode:
 	case *hookFnNode:
 	case *valueGenerator:
-	case *setNode:
+	case *setVarNode:
 	case *setClusterSettingNode:
 	case *setZoneConfigNode:
 	case *showZoneConfigNode:

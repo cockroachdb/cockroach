@@ -32,10 +32,8 @@ type filterNode struct {
 	props      physicalProps
 }
 
-func (f *filterNode) computePhysicalProps(evalCtx *tree.EvalContext) {
-	f.props = planPhysicalProps(f.source.plan)
-	f.props.applyExpr(evalCtx, f.filter)
-}
+// filterNode implements tree.IndexedVarContainer
+var _ tree.IndexedVarContainer = &filterNode{}
 
 // IndexedVarEval implements the tree.IndexedVarContainer interface.
 func (f *filterNode) IndexedVarEval(idx int, ctx *tree.EvalContext) (tree.Datum, error) {
@@ -78,7 +76,10 @@ func (f *filterNode) Next(params runParams) (bool, error) {
 	}
 }
 
-func (f *filterNode) Close(ctx context.Context) {
-	f.source.plan.Close(ctx)
+func (f *filterNode) Values() tree.Datums       { return f.source.plan.Values() }
+func (f *filterNode) Close(ctx context.Context) { f.source.plan.Close(ctx) }
+
+func (f *filterNode) computePhysicalProps(evalCtx *tree.EvalContext) {
+	f.props = planPhysicalProps(f.source.plan)
+	f.props.applyExpr(evalCtx, f.filter)
 }
-func (f *filterNode) Values() tree.Datums { return f.source.plan.Values() }

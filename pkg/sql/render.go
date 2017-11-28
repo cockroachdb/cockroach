@@ -90,55 +90,6 @@ type renderNode struct {
 	noCopy util.NoCopy
 }
 
-// renderRun contains the run-time state of renderNode during local execution.
-type renderRun struct {
-	// The current source row, with one value per source column.
-	// populated by Next(), used by renderRow().
-	curSourceRow tree.Datums
-
-	// The rendered row, with one value for each render expression.
-	// populated by Next().
-	row tree.Datums
-}
-
-func (r *renderNode) Values() tree.Datums {
-	return r.run.row
-}
-
-func (r *renderNode) Start(params runParams) error {
-	return r.source.plan.Start(params)
-}
-
-func (r *renderNode) Next(params runParams) (bool, error) {
-	if next, err := r.source.plan.Next(params); !next {
-		return false, err
-	}
-
-	r.run.curSourceRow = r.source.plan.Values()
-
-	err := r.renderRow(params.evalCtx)
-	return err == nil, err
-}
-
-func (r *renderNode) Close(ctx context.Context) {
-	r.source.plan.Close(ctx)
-}
-
-// IndexedVarEval implements the tree.IndexedVarContainer interface.
-func (r *renderNode) IndexedVarEval(idx int, ctx *tree.EvalContext) (tree.Datum, error) {
-	return r.run.curSourceRow[idx].Eval(ctx)
-}
-
-// IndexedVarResolvedType implements the tree.IndexedVarContainer interface.
-func (r *renderNode) IndexedVarResolvedType(idx int) types.T {
-	return r.sourceInfo[0].sourceColumns[idx].Typ
-}
-
-// IndexedVarNodeFormatter implements the tree.IndexedVarContainer interface.
-func (r *renderNode) IndexedVarNodeFormatter(idx int) tree.NodeFormatter {
-	return r.sourceInfo[0].NodeFormatter(idx)
-}
-
 // Select selects rows from a SELECT/UNION/VALUES, ordering and/or limiting them.
 func (p *planner) Select(
 	ctx context.Context, n *tree.Select, desiredTypes []types.T,
@@ -297,6 +248,48 @@ func (p *planner) SelectClause(
 	}
 	return result, nil
 }
+
+// IndexedVarEval implements the tree.IndexedVarContainer interface.
+func (r *renderNode) IndexedVarEval(idx int, ctx *tree.EvalContext) (tree.Datum, error) {
+	return r.run.curSourceRow[idx].Eval(ctx)
+}
+
+// IndexedVarResolvedType implements the tree.IndexedVarContainer interface.
+func (r *renderNode) IndexedVarResolvedType(idx int) types.T {
+	return r.sourceInfo[0].sourceColumns[idx].Typ
+}
+
+// IndexedVarNodeFormatter implements the tree.IndexedVarContainer interface.
+func (r *renderNode) IndexedVarNodeFormatter(idx int) tree.NodeFormatter {
+	return r.sourceInfo[0].NodeFormatter(idx)
+}
+
+// renderRun contains the run-time state of renderNode during local execution.
+type renderRun struct {
+	// The current source row, with one value per source column.
+	// populated by Next(), used by renderRow().
+	curSourceRow tree.Datums
+
+	// The rendered row, with one value for each render expression.
+	// populated by Next().
+	row tree.Datums
+}
+
+func (r *renderNode) Start(params runParams) error { return r.source.plan.Start(params) }
+
+func (r *renderNode) Next(params runParams) (bool, error) {
+	if next, err := r.source.plan.Next(params); !next {
+		return false, err
+	}
+
+	r.run.curSourceRow = r.source.plan.Values()
+
+	err := r.renderRow(params.evalCtx)
+	return err == nil, err
+}
+
+func (r *renderNode) Values() tree.Datums       { return r.run.row }
+func (r *renderNode) Close(ctx context.Context) { r.source.plan.Close(ctx) }
 
 // initFrom initializes the table node, given the parsed select expression
 func (p *planner) initFrom(

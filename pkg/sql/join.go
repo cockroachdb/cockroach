@@ -28,99 +28,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 )
 
-type joinType int
-
-const (
-	joinTypeInner joinType = iota
-	joinTypeLeftOuter
-	joinTypeRightOuter
-	joinTypeFullOuter
-)
-
-// bucket here is the set of rows for a given group key (comprised of
-// columns specified by the join constraints), 'seen' is used to determine if
-// there was a matching row in the opposite stream.
-type bucket struct {
-	rows []tree.Datums
-	seen []bool
-}
-
-func (b *bucket) Seen(i int) bool {
-	return b.seen[i]
-}
-
-func (b *bucket) Rows() []tree.Datums {
-	return b.rows
-}
-
-func (b *bucket) MarkSeen(i int) {
-	b.seen[i] = true
-}
-
-func (b *bucket) AddRow(row tree.Datums) {
-	b.rows = append(b.rows, row)
-}
-
-type buckets struct {
-	buckets      map[string]*bucket
-	rowContainer *sqlbase.RowContainer
-}
-
-func (b *buckets) Buckets() map[string]*bucket {
-	return b.buckets
-}
-
-func (b *buckets) AddRow(
-	ctx context.Context, acc *mon.BoundAccount, encoding []byte, row tree.Datums,
-) error {
-	bk, ok := b.buckets[string(encoding)]
-	if !ok {
-		bk = &bucket{}
-	}
-
-	rowCopy, err := b.rowContainer.AddRow(ctx, row)
-	if err != nil {
-		return err
-	}
-	if err := acc.Grow(ctx, sqlbase.SizeOfDatums); err != nil {
-		return err
-	}
-	bk.AddRow(rowCopy)
-
-	if !ok {
-		b.buckets[string(encoding)] = bk
-	}
-	return nil
-}
-
-const sizeOfBoolSlice = unsafe.Sizeof([]bool{})
-const sizeOfBool = unsafe.Sizeof(true)
-
-// InitSeen initializes the seen array for each of the buckets. It must be run
-// before the buckets' seen state is used.
-func (b *buckets) InitSeen(ctx context.Context, acc *mon.BoundAccount) error {
-	for _, bucket := range b.buckets {
-		if err := acc.Grow(
-			ctx, int64(sizeOfBoolSlice+uintptr(len(bucket.rows))*sizeOfBool),
-		); err != nil {
-			return err
-		}
-		bucket.seen = make([]bool, len(bucket.rows))
-	}
-	return nil
-}
-
-func (b *buckets) Close(ctx context.Context) {
-	b.rowContainer.Close(ctx)
-	b.rowContainer = nil
-	b.buckets = nil
-}
-
-func (b *buckets) Fetch(encoding []byte) (*bucket, bool) {
-	bk, ok := b.buckets[string(encoding)]
-	return bk, ok
-}
-
 // joinNode is a planNode whose rows are the result of an inner or
 // left/right outer join.
 type joinNode struct {
@@ -150,52 +57,14 @@ type joinNode struct {
 	run joinRun
 }
 
-// joinRun contains the run-time state of joinNode during local execution.
-type joinRun struct {
-	// output contains the last generated row of results from this node.
-	output tree.Datums
+type joinType int
 
-	// buffer is our intermediate row store where we effectively 'stash' a batch
-	// of results at once, this is then used for subsequent calls to Next() and
-	// Values().
-	buffer *RowBuffer
-
-	buckets       buckets
-	bucketsMemAcc mon.BoundAccount
-
-	// emptyRight contain tuples of NULL values to use on the right for left and
-	// full outer joins when the on condition fails.
-	emptyRight tree.Datums
-
-	// emptyLeft contains tuples of NULL values to use on the left for right and
-	// full outer joins when the on condition fails.
-	emptyLeft tree.Datums
-
-	// finishedOutput indicates that we've finished writing all of the rows for
-	// this join and that we can quit as soon as our buffer is empty.
-	finishedOutput bool
-}
-
-// commonColumns returns the names of columns common on the
-// right and left sides, for use by NATURAL JOIN.
-func commonColumns(left, right *dataSourceInfo) tree.NameList {
-	var res tree.NameList
-	for _, cLeft := range left.sourceColumns {
-		if cLeft.Hidden {
-			continue
-		}
-		for _, cRight := range right.sourceColumns {
-			if cRight.Hidden {
-				continue
-			}
-
-			if cLeft.Name == cRight.Name {
-				res = append(res, tree.Name(cLeft.Name))
-			}
-		}
-	}
-	return res
-}
+const (
+	joinTypeInner joinType = iota
+	joinTypeLeftOuter
+	joinTypeRightOuter
+	joinTypeFullOuter
+)
 
 // makeJoin constructs a planDataSource for a JOIN.
 // The source might be a joinNode, or it could be a renderNode on top of a
@@ -467,6 +336,32 @@ func (p *planner) makeJoin(
 	return planDataSource{info: rInfo, plan: r}, nil
 }
 
+// joinRun contains the run-time state of joinNode during local execution.
+type joinRun struct {
+	// output contains the last generated row of results from this node.
+	output tree.Datums
+
+	// buffer is our intermediate row store where we effectively 'stash' a batch
+	// of results at once, this is then used for subsequent calls to Next() and
+	// Values().
+	buffer *RowBuffer
+
+	buckets       buckets
+	bucketsMemAcc mon.BoundAccount
+
+	// emptyRight contain tuples of NULL values to use on the right for left and
+	// full outer joins when the on condition fails.
+	emptyRight tree.Datums
+
+	// emptyLeft contains tuples of NULL values to use on the left for right and
+	// full outer joins when the on condition fails.
+	emptyLeft tree.Datums
+
+	// finishedOutput indicates that we've finished writing all of the rows for
+	// this join and that we can quit as soon as our buffer is empty.
+	finishedOutput bool
+}
+
 // Start implements the planNode interface.
 func (n *joinNode) Start(params runParams) error {
 	if err := n.left.plan.Start(params); err != nil {
@@ -726,6 +621,111 @@ func (n *joinNode) Close(ctx context.Context) {
 
 	n.right.plan.Close(ctx)
 	n.left.plan.Close(ctx)
+}
+
+// bucket here is the set of rows for a given group key (comprised of
+// columns specified by the join constraints), 'seen' is used to determine if
+// there was a matching row in the opposite stream.
+type bucket struct {
+	rows []tree.Datums
+	seen []bool
+}
+
+func (b *bucket) Seen(i int) bool {
+	return b.seen[i]
+}
+
+func (b *bucket) Rows() []tree.Datums {
+	return b.rows
+}
+
+func (b *bucket) MarkSeen(i int) {
+	b.seen[i] = true
+}
+
+func (b *bucket) AddRow(row tree.Datums) {
+	b.rows = append(b.rows, row)
+}
+
+type buckets struct {
+	buckets      map[string]*bucket
+	rowContainer *sqlbase.RowContainer
+}
+
+func (b *buckets) Buckets() map[string]*bucket {
+	return b.buckets
+}
+
+func (b *buckets) AddRow(
+	ctx context.Context, acc *mon.BoundAccount, encoding []byte, row tree.Datums,
+) error {
+	bk, ok := b.buckets[string(encoding)]
+	if !ok {
+		bk = &bucket{}
+	}
+
+	rowCopy, err := b.rowContainer.AddRow(ctx, row)
+	if err != nil {
+		return err
+	}
+	if err := acc.Grow(ctx, sqlbase.SizeOfDatums); err != nil {
+		return err
+	}
+	bk.AddRow(rowCopy)
+
+	if !ok {
+		b.buckets[string(encoding)] = bk
+	}
+	return nil
+}
+
+const sizeOfBoolSlice = unsafe.Sizeof([]bool{})
+const sizeOfBool = unsafe.Sizeof(true)
+
+// InitSeen initializes the seen array for each of the buckets. It must be run
+// before the buckets' seen state is used.
+func (b *buckets) InitSeen(ctx context.Context, acc *mon.BoundAccount) error {
+	for _, bucket := range b.buckets {
+		if err := acc.Grow(
+			ctx, int64(sizeOfBoolSlice+uintptr(len(bucket.rows))*sizeOfBool),
+		); err != nil {
+			return err
+		}
+		bucket.seen = make([]bool, len(bucket.rows))
+	}
+	return nil
+}
+
+func (b *buckets) Close(ctx context.Context) {
+	b.rowContainer.Close(ctx)
+	b.rowContainer = nil
+	b.buckets = nil
+}
+
+func (b *buckets) Fetch(encoding []byte) (*bucket, bool) {
+	bk, ok := b.buckets[string(encoding)]
+	return bk, ok
+}
+
+// commonColumns returns the names of columns common on the
+// right and left sides, for use by NATURAL JOIN.
+func commonColumns(left, right *dataSourceInfo) tree.NameList {
+	var res tree.NameList
+	for _, cLeft := range left.sourceColumns {
+		if cLeft.Hidden {
+			continue
+		}
+		for _, cRight := range right.sourceColumns {
+			if cRight.Hidden {
+				continue
+			}
+
+			if cLeft.Name == cRight.Name {
+				res = append(res, tree.Name(cLeft.Name))
+			}
+		}
+	}
+	return res
 }
 
 func (n *joinNode) joinOrdering() physicalProps {

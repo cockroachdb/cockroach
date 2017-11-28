@@ -106,6 +106,34 @@ type scanNode struct {
 	noCopy util.NoCopy
 }
 
+// scanVisibility represents which table columns should be included in a scan.
+type scanVisibility int
+
+const (
+	publicColumns             scanVisibility = 0
+	publicAndNonPublicColumns scanVisibility = 1
+)
+
+func (p *planner) Scan() *scanNode {
+	n := scanNodePool.Get().(*scanNode)
+	return n
+}
+
+// scanNode implements tree.IndexedVarContainer.
+var _ tree.IndexedVarContainer = &scanNode{}
+
+func (n *scanNode) IndexedVarEval(idx int, ctx *tree.EvalContext) (tree.Datum, error) {
+	return n.run.row[idx].Eval(ctx)
+}
+
+func (n *scanNode) IndexedVarResolvedType(idx int) types.T {
+	return n.resultColumns[idx].Typ
+}
+
+func (n *scanNode) IndexedVarNodeFormatter(idx int) tree.NodeFormatter {
+	return tree.Name(n.resultColumns[idx].Name)
+}
+
 // scanRun contains the run-time state of scanNode during local execution.
 type scanRun struct {
 	// Contains values for the current row. There is a 1-1 correspondence
@@ -119,23 +147,6 @@ type scanRun struct {
 	isSecondaryIndex bool
 
 	fetcher sqlbase.MultiRowFetcher
-}
-
-func (p *planner) Scan() *scanNode {
-	n := scanNodePool.Get().(*scanNode)
-	return n
-}
-
-func (n *scanNode) Values() tree.Datums {
-	return n.run.row
-}
-
-// disableBatchLimit disables the kvfetcher batch limits. Used for index-join,
-// where we scan batches of unordered spans.
-func (n *scanNode) disableBatchLimit() {
-	n.disableBatchLimits = true
-	n.hardLimit = 0
-	n.softLimit = 0
 }
 
 func (n *scanNode) Start(params runParams) error {
@@ -153,6 +164,46 @@ func (n *scanNode) Start(params runParams) error {
 func (n *scanNode) Close(context.Context) {
 	*n = scanNode{}
 	scanNodePool.Put(n)
+}
+
+func (n *scanNode) Next(params runParams) (bool, error) {
+	tracing.AnnotateTrace()
+	if !n.run.scanInitialized {
+		if err := n.initScan(params); err != nil {
+			return false, err
+		}
+	}
+
+	// We fetch one row at a time until we find one that passes the filter.
+	for n.hardLimit == 0 || n.run.rowIndex < n.hardLimit {
+		var err error
+		n.run.row, _, _, err = n.run.fetcher.NextRowDecoded(params.ctx)
+		if err != nil || n.run.row == nil {
+			return false, err
+		}
+		params.evalCtx.IVarHelper = &n.filterVars
+		passesFilter, err := sqlbase.RunFilter(n.filter, params.evalCtx)
+		if err != nil {
+			return false, err
+		}
+		if passesFilter {
+			n.run.rowIndex++
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+func (n *scanNode) Values() tree.Datums {
+	return n.run.row
+}
+
+// disableBatchLimit disables the kvfetcher batch limits. Used for index-join,
+// where we scan batches of unordered spans.
+func (n *scanNode) disableBatchLimit() {
+	n.disableBatchLimits = true
+	n.hardLimit = 0
+	n.softLimit = 0
 }
 
 // initScan sets up the rowFetcher and starts a scan.
@@ -188,34 +239,6 @@ func (n *scanNode) limitHint() int64 {
 		limitHint = n.softLimit * 2
 	}
 	return limitHint
-}
-
-func (n *scanNode) Next(params runParams) (bool, error) {
-	tracing.AnnotateTrace()
-	if !n.run.scanInitialized {
-		if err := n.initScan(params); err != nil {
-			return false, err
-		}
-	}
-
-	// We fetch one row at a time until we find one that passes the filter.
-	for n.hardLimit == 0 || n.run.rowIndex < n.hardLimit {
-		var err error
-		n.run.row, _, _, err = n.run.fetcher.NextRowDecoded(params.ctx)
-		if err != nil || n.run.row == nil {
-			return false, err
-		}
-		params.evalCtx.IVarHelper = &n.filterVars
-		passesFilter, err := sqlbase.RunFilter(n.filter, params.evalCtx)
-		if err != nil {
-			return false, err
-		}
-		if passesFilter {
-			n.run.rowIndex++
-			return true, nil
-		}
-	}
-	return false, nil
 }
 
 // Initializes a scanNode with a table descriptor.
@@ -444,26 +467,3 @@ func (n *scanNode) computePhysicalProps(
 	pp.applyExpr(evalCtx, n.origFilter)
 	return pp
 }
-
-// scanNode implements tree.IndexedVarContainer.
-var _ tree.IndexedVarContainer = &scanNode{}
-
-func (n *scanNode) IndexedVarEval(idx int, ctx *tree.EvalContext) (tree.Datum, error) {
-	return n.run.row[idx].Eval(ctx)
-}
-
-func (n *scanNode) IndexedVarResolvedType(idx int) types.T {
-	return n.resultColumns[idx].Typ
-}
-
-func (n *scanNode) IndexedVarNodeFormatter(idx int) tree.NodeFormatter {
-	return tree.Name(n.resultColumns[idx].Name)
-}
-
-// scanVisibility represents which table columns should be included in a scan.
-type scanVisibility int
-
-const (
-	publicColumns             scanVisibility = 0
-	publicAndNonPublicColumns scanVisibility = 1
-)

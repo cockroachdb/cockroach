@@ -59,21 +59,6 @@ type insertNode struct {
 	run insertRun
 }
 
-// insertRun contains the run-time state of insertNode during local execution.
-type insertRun struct {
-	// The following fields are populated during Start().
-	editNodeRun
-
-	isUpsertReturning     bool
-	insertColIDtoRowIndex map[sqlbase.ColumnID]int
-
-	rowIdxToRetIdx []int
-	rowTemplate    tree.Datums
-
-	doneUpserting bool
-	rowsUpserted  *sqlbase.RowContainer
-}
-
 // Insert inserts rows into the database.
 // Privileges: INSERT on table. Also requires UPDATE on "ON DUPLICATE KEY UPDATE".
 //   Notes: postgres requires INSERT. No "on duplicate key update" option.
@@ -279,6 +264,21 @@ func (p *planner) Insert(
 	return in, nil
 }
 
+// insertRun contains the run-time state of insertNode during local execution.
+type insertRun struct {
+	// The following fields are populated during Start().
+	editNodeRun
+
+	isUpsertReturning     bool
+	insertColIDtoRowIndex map[sqlbase.ColumnID]int
+
+	rowIdxToRetIdx []int
+	rowTemplate    tree.Datums
+
+	doneUpserting bool
+	rowsUpserted  *sqlbase.RowContainer
+}
+
 func (n *insertNode) Start(params runParams) error {
 	// Prepare structures for building values to pass to rh.
 	// TODO(couchand): Delete this, use tablewriter interface.
@@ -311,6 +311,14 @@ func (n *insertNode) Start(params runParams) error {
 	return n.run.tw.init(params.p.txn)
 }
 
+func (n *insertNode) Next(params runParams) (bool, error) {
+	if n.run.isUpsertReturning {
+		return n.drain(params)
+	}
+
+	return n.internalNext(params)
+}
+
 func (n *insertNode) Close(ctx context.Context) {
 	n.tw.close(ctx)
 	n.run.rows.Close(ctx)
@@ -331,12 +339,14 @@ func (n *insertNode) Close(ctx context.Context) {
 	insertNodePool.Put(n)
 }
 
-func (n *insertNode) Next(params runParams) (bool, error) {
-	if n.run.isUpsertReturning {
-		return n.drain(params)
+func (n *insertNode) Values() tree.Datums {
+	if !n.run.isUpsertReturning {
+		return n.run.resultRow
 	}
 
-	return n.internalNext(params)
+	row := n.run.rowsUpserted.At(0)
+	n.run.rowsUpserted.PopFirst()
+	return row
 }
 
 // Because TableUpserter batches the upserts, we need to completely drain the
@@ -645,16 +655,6 @@ func checkNumExprs(numExprs, numCols int, specifiedTargets bool) error {
 			more, less, numExprs, numCols)
 	}
 	return nil
-}
-
-func (n *insertNode) Values() tree.Datums {
-	if !n.run.isUpsertReturning {
-		return n.run.resultRow
-	}
-
-	row := n.run.rowsUpserted.At(0)
-	n.run.rowsUpserted.PopFirst()
-	return row
 }
 
 func (n *insertNode) isUpsert() bool {

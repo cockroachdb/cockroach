@@ -21,6 +21,16 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
+// hookFnNode is a planNode implemented in terms of a function. It begins the
+// provided function during Start and serves the results it returns over the
+// channel.
+type hookFnNode struct {
+	f      func(context.Context, chan<- tree.Datums) error
+	header sqlbase.ResultColumns
+
+	run hookFnRun
+}
+
 // planHookFn is a function that can intercept a statement being planned and
 // provide an alternate implementation. It's primarily intended to allow
 // implementation of certain sql statements to live outside of the sql package.
@@ -63,16 +73,6 @@ func AddPlanHook(f planHookFn) {
 	planHooks = append(planHooks, f)
 }
 
-// hookFnNode is a planNode implemented in terms of a function. It begins the
-// provided function during Start and serves the results it returns over the
-// channel.
-type hookFnNode struct {
-	f      func(context.Context, chan<- tree.Datums) error
-	header sqlbase.ResultColumns
-
-	run hookFnRun
-}
-
 // hookFnRun contains the run-time state of hookFnNode during local execution.
 type hookFnRun struct {
 	resultsCh chan tree.Datums
@@ -80,8 +80,6 @@ type hookFnRun struct {
 
 	row tree.Datums
 }
-
-func (*hookFnNode) Close(context.Context) {}
 
 func (f *hookFnNode) Start(params runParams) error {
 	// TODO(dan): Make sure the resultCollector is set to flush after every row.
@@ -106,3 +104,4 @@ func (f *hookFnNode) Next(params runParams) (bool, error) {
 	}
 }
 func (f *hookFnNode) Values() tree.Datums { return f.run.row }
+func (*hookFnNode) Close(context.Context) {}

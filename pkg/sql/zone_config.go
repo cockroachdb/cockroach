@@ -23,6 +23,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/pkg/errors"
 )
@@ -159,4 +161,69 @@ var GenerateSubzoneSpans = func(
 	*sqlbase.TableDescriptor, []config.Subzone,
 ) ([]config.SubzoneSpan, error) {
 	return nil, fmt.Errorf("setting zone configs on indexes or partitions requires a CCL binary")
+}
+
+func zoneSpecifierNotFoundError(zs tree.ZoneSpecifier) error {
+	if zs.NamedZone != "" {
+		return pgerror.NewErrorf(
+			pgerror.CodeInvalidCatalogNameError, "zone %q does not exist", zs.NamedZone)
+	} else if zs.Database != "" {
+		return sqlbase.NewUndefinedDatabaseError(string(zs.Database))
+	} else {
+		return sqlbase.NewUndefinedRelationError(&zs.TableOrIndex)
+	}
+}
+
+func resolveZone(ctx context.Context, txn *client.Txn, zs *tree.ZoneSpecifier) (sqlbase.ID, error) {
+	errMissingKey := errors.New("missing key")
+	id, err := config.ResolveZoneSpecifier(zs,
+		func(parentID uint32, name string) (uint32, error) {
+			kv, err := txn.Get(ctx, sqlbase.MakeNameMetadataKey(sqlbase.ID(parentID), name))
+			if err != nil {
+				return 0, err
+			}
+			if kv.Value == nil {
+				return 0, errMissingKey
+			}
+			id, err := kv.Value.GetInt()
+			if err != nil {
+				return 0, err
+			}
+			return uint32(id), nil
+		},
+	)
+	if err != nil {
+		if err == errMissingKey {
+			return 0, zoneSpecifierNotFoundError(*zs)
+		}
+		return 0, err
+	}
+	return sqlbase.ID(id), nil
+}
+
+func resolveSubzone(
+	ctx context.Context, txn *client.Txn, zs *tree.ZoneSpecifier, targetID sqlbase.ID,
+) (*sqlbase.TableDescriptor, *sqlbase.IndexDescriptor, string, error) {
+	if !zs.TargetsTable() {
+		return nil, nil, "", nil
+	}
+	table, err := sqlbase.GetTableDescFromID(ctx, txn, targetID)
+	if err != nil {
+		return nil, nil, "", err
+	}
+	if indexName := string(zs.TableOrIndex.Index); indexName != "" {
+		index, _, err := table.FindIndexByName(indexName)
+		if err != nil {
+			return nil, nil, "", err
+		}
+		return table, &index, "", nil
+	} else if partitionName := string(zs.Partition); partitionName != "" {
+		_, index, err := table.FindNonDropPartitionByName(partitionName)
+		if err != nil {
+			return nil, nil, "", err
+		}
+		zs.TableOrIndex.Index = tree.UnrestrictedName(index.Name)
+		return table, index, partitionName, nil
+	}
+	return table, nil, "", nil
 }

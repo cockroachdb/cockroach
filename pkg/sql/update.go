@@ -35,83 +35,6 @@ var updateNodePool = sync.Pool{
 	},
 }
 
-// editNode (Base, Run) is shared between all row updating
-// statements (DELETE, UPDATE, INSERT).
-
-// editNodeBase holds the common (prepare+execute) state needed to run
-// row-modifying statements.
-type editNodeBase struct {
-	p         *planner
-	rh        *returningHelper
-	tableDesc *sqlbase.TableDescriptor
-}
-
-func (p *planner) makeEditNode(
-	ctx context.Context, tn *tree.TableName, priv privilege.Kind,
-) (editNodeBase, error) {
-	tableDesc, err := p.session.tables.getTableVersion(ctx, p.txn, p.getVirtualTabler(), tn)
-	if err != nil {
-		return editNodeBase{}, err
-	}
-	// We don't support update on views or sequences, only real tables.
-	if !tableDesc.IsTable() {
-		return editNodeBase{},
-			pgerror.NewErrorf(
-				pgerror.CodeWrongObjectTypeError,
-				"cannot run %s on %s %q - %ss are not updateable",
-				priv, tableDesc.Kind(), tn, tableDesc.Kind())
-	}
-
-	if err := p.CheckPrivilege(tableDesc, priv); err != nil {
-		return editNodeBase{}, err
-	}
-
-	return editNodeBase{
-		p:         p,
-		tableDesc: tableDesc,
-	}, nil
-}
-
-// editNodeRun holds the runtime (execute) state needed to run
-// row-modifying statements.
-type editNodeRun struct {
-	rows      planNode
-	tw        tableWriter
-	resultRow tree.Datums
-}
-
-func (r *editNodeRun) initEditNode(
-	ctx context.Context,
-	en *editNodeBase,
-	rows planNode,
-	tw tableWriter,
-	tn *tree.TableName,
-	re tree.ReturningClause,
-	desiredTypes []types.T,
-) error {
-	r.rows = rows
-	r.tw = tw
-
-	rh, err := en.p.newReturningHelper(ctx, re, desiredTypes, tn, en.tableDesc.Columns)
-	if err != nil {
-		return err
-	}
-	en.rh = rh
-
-	return nil
-}
-
-func (r *editNodeRun) startEditNode(params runParams, en *editNodeBase) error {
-	if sqlbase.IsSystemConfigID(en.tableDesc.GetID()) {
-		// Mark transaction as operating on the system DB.
-		if err := en.p.txn.SetSystemConfigTrigger(); err != nil {
-			return err
-		}
-	}
-
-	return r.rows.Start(params)
-}
-
 type updateNode struct {
 	// The following fields are populated during makePlan.
 	editNodeBase
@@ -123,86 +46,6 @@ type updateNode struct {
 	sourceSlots   []sourceSlot
 
 	run updateRun
-}
-
-// updateRun contains the run-time state of updateNode during local execution.
-type updateRun struct {
-	// The following fields are populated during Start().
-	editNodeRun
-}
-
-// sourceSlot abstracts the idea that our update sources can either be tuples
-// or scalars. Tuples are for cases such as SET (a, b) = (1, 2) or SET (a, b) =
-// (SELECT 1, 2), and scalars are for situations like SET a = b. A sourceSlot
-// represents how to extract and type-check the results of the right-hand side
-// of a single SET statement. We could treat everything as tuples, including
-// scalars as tuples of size 1, and eliminate this indirection, but that makes
-// the query plan more complex.
-type sourceSlot interface {
-	// extractValues returns a slice of the values this slot is responsible for,
-	// as extracted from the row of results.
-	extractValues(resultRow tree.Datums) tree.Datums
-	// checkColumnTypes compares the types of the results that this slot refers to to the types of
-	// the columns those values will be assigned to. It returns an error if those types don't match up.
-	// It also populates the types of any placeholders by way of calling into sqlbase.CheckColumnType.
-	checkColumnTypes(row []tree.TypedExpr, pmap *tree.PlaceholderInfo) error
-}
-
-type tupleSlot struct {
-	columns     []sqlbase.ColumnDescriptor
-	sourceIndex int
-}
-
-func (ts tupleSlot) extractValues(row tree.Datums) tree.Datums {
-	return row[ts.sourceIndex].(*tree.DTuple).D
-}
-
-func (ts tupleSlot) checkColumnTypes(row []tree.TypedExpr, pmap *tree.PlaceholderInfo) error {
-	renderedResult := row[ts.sourceIndex]
-	for i, typ := range renderedResult.ResolvedType().(types.TTuple) {
-		if err := sqlbase.CheckColumnType(ts.columns[i], typ, pmap); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-type scalarSlot struct {
-	column      sqlbase.ColumnDescriptor
-	sourceIndex int
-}
-
-func (ss scalarSlot) extractValues(row tree.Datums) tree.Datums {
-	return row[ss.sourceIndex : ss.sourceIndex+1]
-}
-
-func (ss scalarSlot) checkColumnTypes(row []tree.TypedExpr, pmap *tree.PlaceholderInfo) error {
-	renderedResult := row[ss.sourceIndex]
-	typ := renderedResult.ResolvedType()
-	return sqlbase.CheckColumnType(ss.column, typ, pmap)
-}
-
-// addOrMergeExpr inserts an Expr into a renderNode, attempting to reuse
-// previous renders if possible by using render.addOrMergeRender, returning the
-// column index at which the rendered value can be accessed.
-func (p *planner) addOrMergeExpr(
-	ctx context.Context,
-	e tree.Expr,
-	currentUpdateIdx int,
-	updateCols []sqlbase.ColumnDescriptor,
-	defaultExprs []tree.TypedExpr,
-	render *renderNode,
-) (colIdx int, err error) {
-	e = fillDefault(e, currentUpdateIdx, defaultExprs)
-	selectExpr := tree.SelectExpr{Expr: e}
-	typ := updateCols[currentUpdateIdx].Type.ToDatumType()
-	col, expr, err := p.computeRender(ctx, selectExpr, typ,
-		render.sourceInfo, render.ivarHelper, autoGenerateRenderOutputName)
-	if err != nil {
-		return -1, err
-	}
-
-	return render.addOrReuseRender(col, expr, true), nil
 }
 
 // Update updates columns for a selection of rows from a table.
@@ -400,18 +243,17 @@ func (p *planner) Update(
 	return un, nil
 }
 
+// updateRun contains the run-time state of updateNode during local execution.
+type updateRun struct {
+	// The following fields are populated during Start().
+	editNodeRun
+}
+
 func (u *updateNode) Start(params runParams) error {
 	if err := u.run.startEditNode(params, &u.editNodeBase); err != nil {
 		return err
 	}
 	return u.run.tw.init(params.p.txn)
-}
-
-func (u *updateNode) Close(ctx context.Context) {
-	u.run.rows.Close(ctx)
-	u.tw.close(ctx)
-	*u = updateNode{}
-	updateNodePool.Put(u)
 }
 
 func (u *updateNode) Next(params runParams) (bool, error) {
@@ -486,6 +328,168 @@ func (u *updateNode) Next(params runParams) (bool, error) {
 	return true, nil
 }
 
+func (u *updateNode) Values() tree.Datums {
+	return u.run.resultRow
+}
+
+func (u *updateNode) Close(ctx context.Context) {
+	u.run.rows.Close(ctx)
+	u.tw.close(ctx)
+	*u = updateNode{}
+	updateNodePool.Put(u)
+}
+
+// editNode (Base, Run) is shared between all row updating
+// statements (DELETE, UPDATE, INSERT).
+
+// editNodeBase holds the common (prepare+execute) state needed to run
+// row-modifying statements.
+type editNodeBase struct {
+	p         *planner
+	rh        *returningHelper
+	tableDesc *sqlbase.TableDescriptor
+}
+
+func (p *planner) makeEditNode(
+	ctx context.Context, tn *tree.TableName, priv privilege.Kind,
+) (editNodeBase, error) {
+	tableDesc, err := p.session.tables.getTableVersion(ctx, p.txn, p.getVirtualTabler(), tn)
+	if err != nil {
+		return editNodeBase{}, err
+	}
+	// We don't support update on views or sequences, only real tables.
+	if !tableDesc.IsTable() {
+		return editNodeBase{},
+			pgerror.NewErrorf(
+				pgerror.CodeWrongObjectTypeError,
+				"cannot run %s on %s %q - %ss are not updateable",
+				priv, tableDesc.Kind(), tn, tableDesc.Kind())
+	}
+
+	if err := p.CheckPrivilege(tableDesc, priv); err != nil {
+		return editNodeBase{}, err
+	}
+
+	return editNodeBase{
+		p:         p,
+		tableDesc: tableDesc,
+	}, nil
+}
+
+// editNodeRun holds the runtime (execute) state needed to run
+// row-modifying statements.
+type editNodeRun struct {
+	rows      planNode
+	tw        tableWriter
+	resultRow tree.Datums
+}
+
+func (r *editNodeRun) initEditNode(
+	ctx context.Context,
+	en *editNodeBase,
+	rows planNode,
+	tw tableWriter,
+	tn *tree.TableName,
+	re tree.ReturningClause,
+	desiredTypes []types.T,
+) error {
+	r.rows = rows
+	r.tw = tw
+
+	rh, err := en.p.newReturningHelper(ctx, re, desiredTypes, tn, en.tableDesc.Columns)
+	if err != nil {
+		return err
+	}
+	en.rh = rh
+
+	return nil
+}
+
+func (r *editNodeRun) startEditNode(params runParams, en *editNodeBase) error {
+	if sqlbase.IsSystemConfigID(en.tableDesc.GetID()) {
+		// Mark transaction as operating on the system DB.
+		if err := en.p.txn.SetSystemConfigTrigger(); err != nil {
+			return err
+		}
+	}
+
+	return r.rows.Start(params)
+}
+
+// sourceSlot abstracts the idea that our update sources can either be tuples
+// or scalars. Tuples are for cases such as SET (a, b) = (1, 2) or SET (a, b) =
+// (SELECT 1, 2), and scalars are for situations like SET a = b. A sourceSlot
+// represents how to extract and type-check the results of the right-hand side
+// of a single SET statement. We could treat everything as tuples, including
+// scalars as tuples of size 1, and eliminate this indirection, but that makes
+// the query plan more complex.
+type sourceSlot interface {
+	// extractValues returns a slice of the values this slot is responsible for,
+	// as extracted from the row of results.
+	extractValues(resultRow tree.Datums) tree.Datums
+	// checkColumnTypes compares the types of the results that this slot refers to to the types of
+	// the columns those values will be assigned to. It returns an error if those types don't match up.
+	// It also populates the types of any placeholders by way of calling into sqlbase.CheckColumnType.
+	checkColumnTypes(row []tree.TypedExpr, pmap *tree.PlaceholderInfo) error
+}
+
+type tupleSlot struct {
+	columns     []sqlbase.ColumnDescriptor
+	sourceIndex int
+}
+
+func (ts tupleSlot) extractValues(row tree.Datums) tree.Datums {
+	return row[ts.sourceIndex].(*tree.DTuple).D
+}
+
+func (ts tupleSlot) checkColumnTypes(row []tree.TypedExpr, pmap *tree.PlaceholderInfo) error {
+	renderedResult := row[ts.sourceIndex]
+	for i, typ := range renderedResult.ResolvedType().(types.TTuple) {
+		if err := sqlbase.CheckColumnType(ts.columns[i], typ, pmap); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+type scalarSlot struct {
+	column      sqlbase.ColumnDescriptor
+	sourceIndex int
+}
+
+func (ss scalarSlot) extractValues(row tree.Datums) tree.Datums {
+	return row[ss.sourceIndex : ss.sourceIndex+1]
+}
+
+func (ss scalarSlot) checkColumnTypes(row []tree.TypedExpr, pmap *tree.PlaceholderInfo) error {
+	renderedResult := row[ss.sourceIndex]
+	typ := renderedResult.ResolvedType()
+	return sqlbase.CheckColumnType(ss.column, typ, pmap)
+}
+
+// addOrMergeExpr inserts an Expr into a renderNode, attempting to reuse
+// previous renders if possible by using render.addOrMergeRender, returning the
+// column index at which the rendered value can be accessed.
+func (p *planner) addOrMergeExpr(
+	ctx context.Context,
+	e tree.Expr,
+	currentUpdateIdx int,
+	updateCols []sqlbase.ColumnDescriptor,
+	defaultExprs []tree.TypedExpr,
+	render *renderNode,
+) (colIdx int, err error) {
+	e = fillDefault(e, currentUpdateIdx, defaultExprs)
+	selectExpr := tree.SelectExpr{Expr: e}
+	typ := updateCols[currentUpdateIdx].Type.ToDatumType()
+	col, expr, err := p.computeRender(ctx, selectExpr, typ,
+		render.sourceInfo, render.ivarHelper, autoGenerateRenderOutputName)
+	if err != nil {
+		return -1, err
+	}
+
+	return render.addOrReuseRender(col, expr, true), nil
+}
+
 // namesForExprs expands names in the tuples and subqueries in exprs.
 func (p *planner) namesForExprs(exprs tree.UpdateExprs) (tree.UnresolvedNames, error) {
 	var names tree.UnresolvedNames
@@ -524,8 +528,4 @@ func fillDefault(expr tree.Expr, index int, defaultExprs []tree.TypedExpr) tree.
 		return defaultExprs[index]
 	}
 	return expr
-}
-
-func (u *updateNode) Values() tree.Datums {
-	return u.run.resultRow
 }

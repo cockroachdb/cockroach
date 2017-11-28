@@ -148,7 +148,7 @@ func (p *planner) applyLimit(plan planNode, numRows int64, soft bool) {
 		}
 	case *explainDistSQLNode:
 		p.setUnlimited(n.plan)
-	case *traceNode:
+	case *showTraceNode:
 		p.setUnlimited(n.plan)
 	case *explainPlanNode:
 		if n.expanded {
@@ -184,7 +184,7 @@ func (p *planner) applyLimit(plan planNode, numRows int64, soft bool) {
 	case *unaryNode:
 	case *hookFnNode:
 	case *valueGenerator:
-	case *setNode:
+	case *setVarNode:
 	case *setClusterSettingNode:
 	case *setZoneConfigNode:
 	case *showZoneConfigNode:
