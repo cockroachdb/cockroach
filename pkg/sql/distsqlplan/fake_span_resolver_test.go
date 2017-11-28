@@ -57,9 +57,10 @@ func TestFakeSpanResolver(t *testing.T) {
 	txn := client.NewTxn(db, tc.Server(0).NodeID())
 	it := resolver.NewSpanResolverIterator(txn)
 
-	desc := sqlbase.GetTableDescriptor(db, "test", "t")
+	tableDesc := sqlbase.GetTableDescriptor(db, "test", "t")
+	primIdxValDirs := sqlbase.IndexKeyValDirs(&tableDesc.PrimaryIndex)
 
-	span := desc.PrimaryIndexSpan()
+	span := tableDesc.PrimaryIndexSpan()
 
 	// Make sure we see all the nodes. It will not always happen (due to
 	// randomness) but it should happen most of the time.
@@ -77,12 +78,12 @@ func TestFakeSpanResolver(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			prettyStart := keys.PrettyPrint(desc.StartKey.AsRawKey())
-			prettyEnd := keys.PrettyPrint(desc.EndKey.AsRawKey())
+			prettyStart := keys.PrettyPrint(primIdxValDirs, desc.StartKey.AsRawKey())
+			prettyEnd := keys.PrettyPrint(primIdxValDirs, desc.EndKey.AsRawKey())
 			t.Logf("%d %s %s", rinfo.NodeID, prettyStart, prettyEnd)
 
 			if !lastKey.Equal(desc.StartKey.AsRawKey()) {
-				t.Errorf("unexpected start key %s, should be %s", prettyStart, keys.PrettyPrint(span.Key))
+				t.Errorf("unexpected start key %s, should be %s", prettyStart, keys.PrettyPrint(primIdxValDirs, span.Key))
 			}
 			if !desc.StartKey.Less(desc.EndKey) {
 				t.Errorf("invalid range %s to %s", prettyStart, prettyEnd)
@@ -97,7 +98,7 @@ func TestFakeSpanResolver(t *testing.T) {
 		}
 
 		if !lastKey.Equal(span.EndKey) {
-			t.Errorf("last key %s, should be %s", keys.PrettyPrint(lastKey), keys.PrettyPrint(span.EndKey))
+			t.Errorf("last key %s, should be %s", keys.PrettyPrint(primIdxValDirs, lastKey), keys.PrettyPrint(primIdxValDirs, span.EndKey))
 		}
 
 		if len(nodesSeen) == tc.NumServers() {

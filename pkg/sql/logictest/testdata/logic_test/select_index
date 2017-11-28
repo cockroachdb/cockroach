@@ -154,13 +154,13 @@ EXPLAIN SELECT * FROM t x JOIN t y USING(b) WHERE x.b < '3'
 3  index-join  ·               ·
 4  scan        ·               ·
 4  ·           table           t@bc
-4  ·           spans           /#-/"3"
+4  ·           spans           /!NULL-/"3"
 4  scan        ·               ·
 4  ·           table           t@primary
 3  index-join  ·               ·
 4  scan        ·               ·
 4  ·           table           t@bc
-4  ·           spans           /#-/"3"
+4  ·           spans           /!NULL-/"3"
 4  scan        ·               ·
 4  ·           table           t@primary
 
@@ -361,7 +361,7 @@ EXPLAIN SELECT a FROM t WHERE c < 1 AND b < 5
 0  render  ·      ·
 1  scan    ·      ·
 1  ·       table  t@bc
-1  ·       spans  /#-/4/1
+1  ·       spans  /!NULL-/4/1
 
 query ITTT
 EXPLAIN SELECT a FROM t WHERE c > 1.0
@@ -385,7 +385,7 @@ EXPLAIN SELECT a FROM t WHERE c > 1.0 AND b < 5
 0  render  ·      ·
 1  scan    ·      ·
 1  ·       table  t@bc
-1  ·       spans  /#-/5
+1  ·       spans  /!NULL-/5
 
 query ITTT
 EXPLAIN SELECT a FROM t WHERE b < 5.0 AND c < 1
@@ -393,7 +393,7 @@ EXPLAIN SELECT a FROM t WHERE b < 5.0 AND c < 1
 0  render  ·      ·
 1  scan    ·      ·
 1  ·       table  t@bc
-1  ·       spans  /#-/4/1
+1  ·       spans  /!NULL-/4/1
 
 query ITTT
 EXPLAIN SELECT a FROM t WHERE (b, c) = (5, 1)
@@ -425,7 +425,7 @@ EXPLAIN SELECT a FROM t WHERE b IN (5.0, 1)
 0  render  ·      ·
 1  scan    ·      ·
 1  ·       table  t@b_desc
-1  ·       spans  /-6-/-5 /-2-/-1
+1  ·       spans  /5-/4 /1-/0
 
 statement ok
 CREATE TABLE abcd (
@@ -482,7 +482,7 @@ EXPLAIN SELECT i, s FROM ab@baz WHERE (i, s) < (1, 'c')
 0  render  ·      ·
 1  scan    ·      ·
 1  ·       table  ab@baz
-1  ·       spans  /#-/1/"c"
+1  ·       spans  /!NULL-/1/"c"
 
 # Check that primary key definitions can indicate index ordering,
 # and this information is subsequently used during index selection
@@ -619,7 +619,7 @@ EXPLAIN SELECT * FROM test2 WHERE k <= '100' ORDER BY k DESC LIMIT 20
 1  index-join  ·      ·
 2  revscan     ·      ·
 2  ·           table  test2@test2_k_key
-2  ·           spans  /#-/"100"/PrefixEnd
+2  ·           spans  /!NULL-/"100"/PrefixEnd
 2  ·           limit  20
 2  scan        ·      ·
 2  ·           table  test2@primary

@@ -140,7 +140,7 @@ func (v *planVisitor) visit(plan planNode) {
 			if n.specifiedIndex != nil {
 				v.observer.attr(name, "hint", fmt.Sprintf("force index @%s", n.specifiedIndex.Name))
 			}
-			spans := sqlbase.PrettySpans(n.spans, 2)
+			spans := sqlbase.PrettySpans(n.index, n.spans, 2)
 			if spans != "" {
 				if spans == "-" {
 					spans = "ALL"
