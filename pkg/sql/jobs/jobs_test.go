@@ -27,12 +27,16 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/jobs"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/kr/pretty"
 )
@@ -123,12 +127,12 @@ func (expected *expectation) verify(id *int64, expectedStatus jobs.Status) error
 	if !started.Equal(timeutil.UnixEpoch) && created.After(started) {
 		return errors.Errorf("created time %v is after started time %v", created, started)
 	}
-	if status == jobs.StatusRunning {
+	if status == jobs.StatusRunning || status == jobs.StatusPaused {
 		return verifyModifiedAgainst("started", started)
 	}
 
 	if started.After(finished) {
-		return errors.Errorf("started time %v is after finished time %v", started, finished)
+		return errors.Errorf("started time %v is after finished time %v (status: %s)", started, finished, status)
 	}
 	if e, a := expected.Error, payload.Error; e != a {
 		return errors.Errorf("expected error %v, got %v", e, a)
@@ -136,8 +140,386 @@ func (expected *expectation) verify(id *int64, expectedStatus jobs.Status) error
 	return verifyModifiedAgainst("finished", finished)
 }
 
+func TestRegistryLifecycle(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer jobs.ResetResumeHooks()()
+
+	defer func(oldInterval time.Duration) {
+		jobs.DefaultAdoptInterval = oldInterval
+	}(jobs.DefaultAdoptInterval)
+	jobs.DefaultAdoptInterval = 100 * time.Millisecond
+
+	ctx := context.TODO()
+
+	s, outerDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+	sqlDB := sqlutils.MakeSQLRunner(outerDB)
+
+	registry := s.JobRegistry().(*jobs.Registry)
+
+	done := make(chan struct{})
+	defer close(done)
+
+	type Counters struct {
+		resume, resumeExit, terminal int
+		// These sometimes retry, so just use bools.
+		fail, success bool
+	}
+
+	var lock syncutil.Mutex
+	var e, a Counters
+
+	check := func(t *testing.T) {
+		t.Helper()
+		if err := retry.ForDuration(time.Second*2, func() error {
+			lock.Lock()
+			defer lock.Unlock()
+			if e != a {
+				return errors.Errorf("expected %v, got %v", e, a)
+			}
+			return nil
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	clear := func() {
+		a = Counters{}
+		e = Counters{}
+	}
+
+	resumeCh := make(chan error)
+	progressCh := make(chan struct{})
+	// resumeCheckCh is used to wait for the resume check loop to start. This is
+	// useful to prevent race conditions where progressCh checking jobs.Progressed
+	// can race with a PAUSE or CANCEL transaction.
+	resumeCheckCh := make(chan struct{})
+	termCh := make(chan struct{})
+
+	// Instead of a ch for success and fail, use a variable because they can
+	// retry since they are in a transaction.
+	var successErr, failErr error
+
+	dummy := jobs.FakeResumer{
+		OnResume: func(job *jobs.Job) error {
+			lock.Lock()
+			a.resume++
+			lock.Unlock()
+			defer func() {
+				lock.Lock()
+				a.resumeExit++
+				lock.Unlock()
+			}()
+			for {
+				<-resumeCheckCh
+				select {
+				case err := <-resumeCh:
+					return err
+				case <-progressCh:
+					err := job.Progressed(ctx, 0, jobs.Noop)
+					if err != nil {
+						return err
+					}
+					// continue
+				}
+			}
+		},
+		Fail: func(*jobs.Job) error {
+			lock.Lock()
+			defer lock.Unlock()
+			a.fail = true
+			return failErr
+		},
+		Success: func(*jobs.Job) error {
+			lock.Lock()
+			defer lock.Unlock()
+			a.success = true
+			return successErr
+		},
+		Terminal: func(*jobs.Job) {
+			lock.Lock()
+			a.terminal++
+			lock.Unlock()
+			termCh <- struct{}{}
+		},
+	}
+
+	jobs.AddResumeHook(func(typ jobs.Type, _ *cluster.Settings) jobs.Resumer {
+		return dummy
+	})
+
+	var jobErr = errors.New("error")
+
+	t.Run("normal success", func(t *testing.T) {
+		clear()
+		_, _, err := registry.StartJob(ctx, nil, jobs.Record{Details: jobs.ImportDetails{}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		e.resume++
+		check(t)
+		resumeCheckCh <- struct{}{}
+		resumeCh <- nil
+		e.resumeExit++
+		e.success = true
+		e.terminal++
+		<-termCh
+		check(t)
+	})
+
+	t.Run("pause", func(t *testing.T) {
+		clear()
+		job, _, err := registry.StartJob(ctx, nil, jobs.Record{Details: jobs.ImportDetails{}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		e.resume++
+		check(t)
+		sqlDB.Exec(t, "PAUSE JOB $1", *job.ID())
+		resumeCheckCh <- struct{}{}
+		progressCh <- struct{}{}
+		e.resumeExit++
+		check(t)
+		sqlDB.Exec(t, "PAUSE JOB $1", *job.ID())
+		check(t)
+		sqlDB.Exec(t, "RESUME JOB $1", *job.ID())
+		resumeCheckCh <- struct{}{}
+		resumeCh <- nil
+		e.resume++
+		e.resumeExit++
+		e.success = true
+		e.terminal++
+		<-termCh
+		check(t)
+	})
+
+	t.Run("cancel", func(t *testing.T) {
+		clear()
+		job, _, err := registry.StartJob(ctx, nil, jobs.Record{Details: jobs.ImportDetails{}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		e.resume++
+		check(t)
+		sqlDB.Exec(t, "CANCEL JOB $1", *job.ID())
+		// Test for a canceled error message.
+		if err := job.Progressed(ctx, 0, jobs.Noop); !testutils.IsError(err, "cannot update progress on canceled job") {
+			t.Fatalf("unexpected %v", err)
+		}
+		resumeCheckCh <- struct{}{}
+		progressCh <- struct{}{}
+		e.resumeExit++
+		e.fail = true
+		e.terminal++
+		<-termCh
+		check(t)
+	})
+
+	// Verify that pause and cancel in a rollback do nothing.
+	t.Run("rollback", func(t *testing.T) {
+		clear()
+		job, _, err := registry.StartJob(ctx, nil, jobs.Record{Details: jobs.ImportDetails{}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		e.resume++
+		resumeCheckCh <- struct{}{}
+		check(t)
+		// Rollback a CANCEL.
+		{
+			txn, err := sqlDB.DB.Begin()
+			if err != nil {
+				t.Fatal(err)
+			}
+			// OnFailOrCancel is called before the txn fails, so this should be set.
+			e.fail = true
+			if _, err := txn.Exec("CANCEL JOB $1", *job.ID()); err != nil {
+				t.Fatal(err)
+			}
+			if err := txn.Rollback(); err != nil {
+				t.Fatal(err)
+			}
+			progressCh <- struct{}{}
+			resumeCheckCh <- struct{}{}
+			check(t)
+		}
+		// Rollback a PAUSE.
+		{
+			txn, err := sqlDB.DB.Begin()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err := txn.Exec("PAUSE JOB $1", *job.ID()); err != nil {
+				t.Fatal(err)
+			}
+			if err := txn.Rollback(); err != nil {
+				t.Fatal(err)
+			}
+			progressCh <- struct{}{}
+			resumeCheckCh <- struct{}{}
+			check(t)
+		}
+		// Now pause it for reals.
+		{
+			txn, err := sqlDB.DB.Begin()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err := txn.Exec("PAUSE JOB $1", *job.ID()); err != nil {
+				t.Fatal(err)
+			}
+			// Not committed yet, so state shouldn't have changed.
+			check(t)
+			if err := txn.Commit(); err != nil {
+				t.Fatal(err)
+			}
+			// Test for a paused error message.
+			if err := job.Progressed(ctx, 0, jobs.Noop); !testutils.IsError(err, "cannot update progress on paused job") {
+				t.Fatalf("unexpected %v", err)
+			}
+		}
+		progressCh <- struct{}{}
+		e.resumeExit++
+		check(t)
+		// Rollback a RESUME.
+		{
+			txn, err := sqlDB.DB.Begin()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err := txn.Exec("RESUME JOB $1", *job.ID()); err != nil {
+				t.Fatal(err)
+			}
+			if err := txn.Rollback(); err != nil {
+				t.Fatal(err)
+			}
+			check(t)
+		}
+		// Commit a RESUME.
+		{
+			txn, err := sqlDB.DB.Begin()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err := txn.Exec("RESUME JOB $1", *job.ID()); err != nil {
+				t.Fatal(err)
+			}
+			// Not committed yet, so state shouldn't have changed.
+			check(t)
+			if err := txn.Commit(); err != nil {
+				t.Fatal(err)
+			}
+		}
+		e.resume++
+		check(t)
+		resumeCheckCh <- struct{}{}
+		resumeCh <- nil
+		e.resumeExit++
+		e.success = true
+		e.terminal++
+		<-termCh
+		check(t)
+	})
+
+	t.Run("failed running", func(t *testing.T) {
+		clear()
+		_, _, err := registry.StartJob(ctx, nil, jobs.Record{Details: jobs.ImportDetails{}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		e.resume++
+		check(t)
+		resumeCheckCh <- struct{}{}
+		resumeCh <- jobErr
+		e.resumeExit++
+		e.fail = true
+		e.terminal++
+		<-termCh
+		check(t)
+	})
+
+	// Attempt to mark success, but fail.
+	t.Run("fail marking success", func(t *testing.T) {
+		clear()
+		successErr = jobErr
+		defer func() { successErr = nil }()
+		_, _, err := registry.StartJob(ctx, nil, jobs.Record{Details: jobs.ImportDetails{}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		e.resume++
+		check(t)
+		resumeCheckCh <- struct{}{}
+		resumeCh <- nil
+		e.resumeExit++
+		e.success = true
+		e.fail = true
+		e.terminal++
+		<-termCh
+		check(t)
+	})
+
+	// Fail the job, so expected it to attempt to mark failed, but fail that
+	// also. Thus it should not trigger OnTerminal.
+	t.Run("fail marking success and failed", func(t *testing.T) {
+		clear()
+		successErr = jobErr
+		failErr = jobErr
+		defer func() { failErr = nil }()
+		_, _, err := registry.StartJob(ctx, nil, jobs.Record{Details: jobs.ImportDetails{}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		e.resume++
+		check(t)
+		resumeCheckCh <- struct{}{}
+		resumeCh <- nil
+		e.resumeExit++
+		e.success = true
+		e.fail = true
+		// It should restart.
+		e.resume++
+		check(t)
+		// But let it succeed.
+		successErr = nil
+		resumeCheckCh <- struct{}{}
+		resumeCh <- nil
+		e.resumeExit++
+		e.terminal++
+		<-termCh
+		check(t)
+	})
+
+	// Fail the job, but also fail to mark it failed. No OnTerminal.
+	t.Run("fail marking failed", func(t *testing.T) {
+		clear()
+		failErr = jobErr
+		_, _, err := registry.StartJob(ctx, nil, jobs.Record{Details: jobs.ImportDetails{}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		e.resume++
+		check(t)
+		resumeCheckCh <- struct{}{}
+		resumeCh <- jobErr
+		e.resumeExit++
+		e.fail = true
+		// It should restart.
+		e.resume++
+		check(t)
+		// But let it fail.
+		failErr = nil
+		resumeCheckCh <- struct{}{}
+		resumeCh <- jobErr
+		e.resumeExit++
+		e.terminal++
+		<-termCh
+		check(t)
+	})
+}
+
 func TestJobLifecycle(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer jobs.ResetResumeHooks()()
 
 	ctx := context.TODO()
 
@@ -146,38 +528,72 @@ func TestJobLifecycle(t *testing.T) {
 
 	registry := s.JobRegistry().(*jobs.Registry)
 
-	createJob := func(typ jobs.Type, cancelFn func(), record jobs.Record) (*jobs.Job, expectation) {
+	createJob := func(record jobs.Record) (*jobs.Job, expectation) {
 		beforeTime := timeutil.Now()
 		job := registry.NewJob(record)
-		if err := job.Created(ctx, cancelFn); err != nil {
+		if err := job.Created(ctx); err != nil {
 			t.Fatal(err)
 		}
+		payload := job.Payload()
 		return job, expectation{
 			DB:     sqlDB,
 			Record: record,
-			Type:   typ,
+			Type:   payload.Type(),
 			Before: beforeTime,
 		}
 	}
 
-	createDefaultJob := func(cancelFn func()) (*jobs.Job, expectation) {
-		return createJob(jobs.TypeBackup, cancelFn, jobs.Record{
-			// Job does not accept an empty Details field, so arbitrarily provide
-			// BackupDetails.
-			Details: jobs.BackupDetails{},
-		})
+	defaultRecord := jobs.Record{
+		// Job does not accept an empty Details field, so arbitrarily provide
+		// ImportDetails.
+		Details: jobs.ImportDetails{},
+	}
+
+	createDefaultJob := func() (*jobs.Job, expectation) {
+		return createJob(defaultRecord)
+	}
+
+	done := make(chan struct{})
+	defer close(done)
+
+	dummy := jobs.FakeResumer{OnResume: func(*jobs.Job) error {
+		<-done
+		return nil
+	}}
+
+	jobs.AddResumeHook(func(typ jobs.Type, _ *cluster.Settings) jobs.Resumer {
+		switch typ {
+		case jobs.TypeImport:
+			return dummy
+		}
+		return nil
+	})
+
+	startLeasedJob := func(t *testing.T, record jobs.Record) (*jobs.Job, expectation) {
+		beforeTime := timeutil.Now()
+		job, _, err := registry.StartJob(ctx, nil, record)
+		if err != nil {
+			t.Fatal(err)
+		}
+		payload := job.Payload()
+		return job, expectation{
+			DB:     sqlDB,
+			Record: record,
+			Type:   payload.Type(),
+			Before: beforeTime,
+		}
 	}
 
 	t.Run("valid job lifecycles succeed", func(t *testing.T) {
 		// Woody is a successful job.
-		woodyJob, woodyExp := createJob(jobs.TypeRestore, jobs.WithoutCancel, jobs.Record{
+		woodyJob, woodyExp := createJob(jobs.Record{
 			Description:   "There's a snake in my boot!",
 			Username:      "Woody Pride",
 			DescriptorIDs: []sqlbase.ID{1, 2, 3},
 			Details:       jobs.RestoreDetails{},
 		})
 
-		if err := woodyJob.Created(ctx, jobs.WithoutCancel); err != nil {
+		if err := woodyJob.Created(ctx); err != nil {
 			t.Fatal(err)
 		}
 		if err := woodyExp.verify(woodyJob.ID(), jobs.StatusPending); err != nil {
@@ -221,7 +637,7 @@ func TestJobLifecycle(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		if err := woodyJob.Succeeded(ctx); err != nil {
+		if err := woodyJob.Succeeded(ctx, jobs.NoopFn); err != nil {
 			t.Fatal(err)
 		}
 		if err := woodyExp.verify(woodyJob.ID(), jobs.StatusSucceeded); err != nil {
@@ -246,7 +662,7 @@ func TestJobLifecycle(t *testing.T) {
 		// Test modifying the job details before calling `Created`.
 		buzzJob.Record.Details = jobs.BackupDetails{}
 		buzzExp.Record.Details = jobs.BackupDetails{}
-		if err := buzzJob.Created(ctx, jobs.WithoutCancel); err != nil {
+		if err := buzzJob.Created(ctx); err != nil {
 			t.Fatal(err)
 		}
 		if err := buzzExp.verify(buzzJob.ID(), jobs.StatusPending); err != nil {
@@ -268,7 +684,9 @@ func TestJobLifecycle(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		buzzJob.Failed(ctx, errors.New("Buzz Lightyear can't fly"))
+		if err := buzzJob.Failed(ctx, errors.New("Buzz Lightyear can't fly"), jobs.NoopFn); err != nil {
+			t.Fatal(err)
+		}
 		if err := buzzExp.verify(buzzJob.ID(), jobs.StatusFailed); err != nil {
 			t.Fatal(err)
 		}
@@ -279,21 +697,23 @@ func TestJobLifecycle(t *testing.T) {
 		}
 
 		// Sid fails before it starts running.
-		sidJob, sidExp := createJob(jobs.TypeRestore, jobs.WithoutCancel, jobs.Record{
+		sidJob, sidExp := createJob(jobs.Record{
 			Description:   "The toys! The toys are alive!",
 			Username:      "Sid Phillips",
 			DescriptorIDs: []sqlbase.ID{6, 6, 6},
 			Details:       jobs.RestoreDetails{},
 		})
 
-		if err := sidJob.Created(ctx, jobs.WithoutCancel); err != nil {
+		if err := sidJob.Created(ctx); err != nil {
 			t.Fatal(err)
 		}
 		if err := sidExp.verify(sidJob.ID(), jobs.StatusPending); err != nil {
 			t.Fatal(err)
 		}
 
-		sidJob.Failed(ctx, errors.New("Sid is a total failure"))
+		if err := sidJob.Failed(ctx, errors.New("Sid is a total failure"), jobs.NoopFn); err != nil {
+			t.Fatal(err)
+		}
 		sidExp.Error = "Sid is a total failure"
 		if err := sidExp.verify(sidJob.ID(), jobs.StatusFailed); err != nil {
 			t.Fatal(err)
@@ -310,12 +730,12 @@ func TestJobLifecycle(t *testing.T) {
 
 	t.Run("FinishedWith", func(t *testing.T) {
 		t.Run("nil error marks job as successful", func(t *testing.T) {
-			job, exp := createDefaultJob(jobs.WithoutCancel)
+			job, exp := createDefaultJob()
 			exp.FractionCompleted = 1.0
 			if err := job.Started(ctx); err != nil {
 				t.Fatal(err)
 			}
-			if err := job.FinishedWith(ctx, nil); err != nil {
+			if err := job.Succeeded(ctx, jobs.NoopFn); err != nil {
 				t.Fatal(err)
 			}
 			if err := exp.verify(job.ID(), jobs.StatusSucceeded); err != nil {
@@ -324,9 +744,9 @@ func TestJobLifecycle(t *testing.T) {
 		})
 
 		t.Run("non-nil error marks job as failed", func(t *testing.T) {
-			job, exp := createDefaultJob(jobs.WithoutCancel)
+			job, exp := createDefaultJob()
 			exp.Error = "boom"
-			if err := job.FinishedWith(ctx, errors.New(exp.Error)); err != nil {
+			if err := job.Failed(ctx, errors.New(exp.Error), jobs.NoopFn); err != nil {
 				t.Fatal(err)
 			}
 			if err := exp.verify(job.ID(), jobs.StatusFailed); err != nil {
@@ -334,127 +754,47 @@ func TestJobLifecycle(t *testing.T) {
 			}
 		})
 
-		t.Run("internal errors are swallowed if marking job as successful", func(t *testing.T) {
-			job, _ := createDefaultJob(jobs.WithoutCancel)
+		t.Run("internal errors are not swallowed if marking job as successful", func(t *testing.T) {
+			job, _ := createDefaultJob()
 			if _, err := sqlDB.Exec(
 				`UPDATE system.jobs SET payload = 'garbage' WHERE id = $1`, *job.ID(),
 			); err != nil {
 				t.Fatal(err)
 			}
-			if err := job.FinishedWith(ctx, nil); err != nil {
-				t.Fatal(err)
+			if err := job.Succeeded(ctx, jobs.NoopFn); !testutils.IsError(err, "wrong wireType") {
+				t.Fatalf("unexpected: %v", err)
 			}
 		})
 
-		t.Run("internal errors are swallowed if marking job as failed", func(t *testing.T) {
-			job, _ := createDefaultJob(jobs.WithoutCancel)
+		t.Run("internal errors are not swallowed if marking job as failed", func(t *testing.T) {
+			job, _ := createDefaultJob()
 			if _, err := sqlDB.Exec(
 				`UPDATE system.jobs SET payload = 'garbage' WHERE id = $1`, *job.ID(),
 			); err != nil {
 				t.Fatal(err)
 			}
-			if err := job.FinishedWith(ctx, errors.New("boom")); err != nil {
-				t.Fatal(err)
+			if err := job.Failed(ctx, errors.New("boom"), jobs.NoopFn); !testutils.IsError(err, "wrong wireType") {
+				t.Fatalf("unexpected: %v", err)
 			}
 		})
-
-		t.Run("progress on paused job errors yields user-friendly message", func(t *testing.T) {
-			job, _ := createDefaultJob(func() {})
-			if err := job.Paused(ctx); err != nil {
-				t.Fatal(err)
-			}
-			err := job.Progressed(ctx, 0.42, jobs.Noop)
-			if err := job.FinishedWith(ctx, err); !testutils.IsError(err, "job paused") {
-				t.Fatalf("expected 'job paused' error, but got %v", err)
-			}
-		})
-
-		t.Run("progress on canceled job errors yields user-friendly message", func(t *testing.T) {
-			job, _ := createDefaultJob(func() {})
-			if err := job.Canceled(ctx); err != nil {
-				t.Fatal(err)
-			}
-			err := job.Progressed(ctx, 0.42, jobs.Noop)
-			if err := job.FinishedWith(ctx, err); !testutils.IsError(err, "job canceled") {
-				t.Fatalf("expected 'job paused' error, but got %v", err)
-			}
-		})
-	})
-
-	t.Run("uncancelable jobs cannot be paused or canceled", func(t *testing.T) {
-		{
-			job, _ := createDefaultJob(jobs.WithoutCancel)
-			if err := job.Paused(ctx); !testutils.IsError(
-				err, `job created by node without PAUSE support`,
-			) {
-				t.Fatalf("expected 'job created by node without PAUSE support' error, but got %s", err)
-			}
-			if err := job.Canceled(ctx); !testutils.IsError(
-				err, `job created by node without CANCEL support`,
-			) {
-				t.Fatalf("expected 'job created by node without CANCEL support' error, but got %s", err)
-			}
-		}
-
-		testCases := []struct {
-			typ     jobs.Type
-			details jobs.Details
-			name    string
-		}{
-			{jobs.TypeSchemaChange, jobs.SchemaChangeDetails{}, "schema change"},
-			{jobs.TypeImport, jobs.ImportDetails{}, "import"},
-		}
-		for _, tc := range testCases {
-			job, _ := createJob(tc.typ, jobs.WithoutCancel, jobs.Record{
-				Details: tc.details,
-			})
-			pauseErr := fmt.Sprintf("%s jobs do not support PAUSE", tc.name)
-			if err := job.Paused(ctx); !testutils.IsError(err, pauseErr) {
-				t.Fatalf("expected '%s' error, but got %s", pauseErr, err)
-			}
-			cancelErr := fmt.Sprintf("%s jobs do not support CANCEL", tc.name)
-			if err := job.Canceled(ctx); !testutils.IsError(err, cancelErr) {
-				t.Fatalf("expected '%s' error, but got %s", cancelErr, err)
-			}
-		}
 	})
 
 	t.Run("cancelable jobs can be paused until finished", func(t *testing.T) {
-		job, exp := createDefaultJob(func() {})
+		job, exp := startLeasedJob(t, defaultRecord)
 
-		// Pause and resume succeeds while job is pending. Additionally verify that
-		// the status is updated as expected.
-		if err := job.Paused(ctx); err != nil {
+		if err := registry.Pause(ctx, nil, *job.ID()); err != nil {
+			t.Fatal(err)
+		}
+		if err := registry.Pause(ctx, nil, *job.ID()); err != nil {
 			t.Fatal(err)
 		}
 		if err := exp.verify(job.ID(), jobs.StatusPaused); err != nil {
 			t.Fatal(err)
 		}
-		if err := job.Resumed(ctx); err != nil {
+		if err := registry.Resume(ctx, nil, *job.ID()); err != nil {
 			t.Fatal(err)
 		}
-		if err := exp.verify(job.ID(), jobs.StatusRunning); err != nil {
-			t.Fatal(err)
-		}
-
-		// Pause and resume succeeds while job is running. Additionally verify that
-		// pausing a paused job and resuming a resumed job silently succeeds.
-		if err := job.Started(ctx); err != nil {
-			t.Fatal(err)
-		}
-		if err := job.Paused(ctx); err != nil {
-			t.Fatal(err)
-		}
-		if err := job.Paused(ctx); err != nil {
-			t.Fatal(err)
-		}
-		if err := exp.verify(job.ID(), jobs.StatusPaused); err != nil {
-			t.Fatal(err)
-		}
-		if err := job.Resumed(ctx); err != nil {
-			t.Fatal(err)
-		}
-		if err := job.Resumed(ctx); err != nil {
+		if err := registry.Resume(ctx, nil, *job.ID()); err != nil {
 			t.Fatal(err)
 		}
 		if err := exp.verify(job.ID(), jobs.StatusRunning); err != nil {
@@ -462,18 +802,18 @@ func TestJobLifecycle(t *testing.T) {
 		}
 
 		// Pause fails after job is successful.
-		if err := job.Succeeded(ctx); err != nil {
+		if err := job.Succeeded(ctx, jobs.NoopFn); err != nil {
 			t.Fatal(err)
 		}
-		if err := job.Paused(ctx); !testutils.IsError(err, "cannot pause succeeded job") {
+		if err := registry.Pause(ctx, nil, *job.ID()); !testutils.IsError(err, "cannot pause succeeded job") {
 			t.Fatalf("expected 'cannot pause succeeded job', but got '%s'", err)
 		}
 	})
 
 	t.Run("cancelable jobs can be canceled until finished", func(t *testing.T) {
 		{
-			job, exp := createDefaultJob(func() {})
-			if err := job.Canceled(ctx); err != nil {
+			job, exp := startLeasedJob(t, defaultRecord)
+			if err := registry.Cancel(ctx, nil, *job.ID()); err != nil {
 				t.Fatal(err)
 			}
 			if err := exp.verify(job.ID(), jobs.StatusCanceled); err != nil {
@@ -482,11 +822,11 @@ func TestJobLifecycle(t *testing.T) {
 		}
 
 		{
-			job, exp := createDefaultJob(func() {})
+			job, exp := startLeasedJob(t, defaultRecord)
 			if err := job.Started(ctx); err != nil {
 				t.Fatal(err)
 			}
-			if err := job.Canceled(ctx); err != nil {
+			if err := registry.Cancel(ctx, nil, *job.ID()); err != nil {
 				t.Fatal(err)
 			}
 			if err := exp.verify(job.ID(), jobs.StatusCanceled); err != nil {
@@ -495,11 +835,11 @@ func TestJobLifecycle(t *testing.T) {
 		}
 
 		{
-			job, exp := createDefaultJob(func() {})
-			if err := job.Paused(ctx); err != nil {
+			job, exp := startLeasedJob(t, defaultRecord)
+			if err := registry.Pause(ctx, nil, *job.ID()); err != nil {
 				t.Fatal(err)
 			}
-			if err := job.Canceled(ctx); err != nil {
+			if err := registry.Cancel(ctx, nil, *job.ID()); err != nil {
 				t.Fatal(err)
 			}
 			if err := exp.verify(job.ID(), jobs.StatusCanceled); err != nil {
@@ -508,12 +848,12 @@ func TestJobLifecycle(t *testing.T) {
 		}
 
 		{
-			job, _ := createDefaultJob(func() {})
-			if err := job.Succeeded(ctx); err != nil {
+			job, _ := startLeasedJob(t, defaultRecord)
+			if err := job.Succeeded(ctx, jobs.NoopFn); err != nil {
 				t.Fatal(err)
 			}
 			expectedErr := "job with status succeeded cannot be canceled"
-			if err := job.Canceled(ctx); !testutils.IsError(err, expectedErr) {
+			if err := registry.Cancel(ctx, nil, *job.ID()); !testutils.IsError(err, expectedErr) {
 				t.Fatalf("expected '%s', but got '%s'", expectedErr, err)
 			}
 		}
@@ -522,27 +862,27 @@ func TestJobLifecycle(t *testing.T) {
 	t.Run("unpaused jobs cannot be resumed", func(t *testing.T) {
 		checkResumeFails := func(job *jobs.Job, status jobs.Status) {
 			expectedErr := fmt.Sprintf("job with status %s cannot be resumed", status)
-			if err := job.Resumed(ctx); !testutils.IsError(err, expectedErr) {
+			if err := registry.Resume(ctx, nil, *job.ID()); !testutils.IsError(err, expectedErr) {
 				t.Errorf("expected '%s', but got '%v'", expectedErr, err)
 			}
 		}
 
 		{
-			job, _ := createDefaultJob(func() {})
+			job, _ := createDefaultJob()
 			checkResumeFails(job, jobs.StatusPending)
 		}
 
 		{
-			job, _ := createDefaultJob(func() {})
-			if err := job.Canceled(ctx); err != nil {
+			job, _ := startLeasedJob(t, defaultRecord)
+			if err := registry.Cancel(ctx, nil, *job.ID()); err != nil {
 				t.Fatal(err)
 			}
 			checkResumeFails(job, jobs.StatusCanceled)
 		}
 
 		{
-			job, _ := createDefaultJob(func() {})
-			if err := job.Succeeded(ctx); err != nil {
+			job, _ := startLeasedJob(t, defaultRecord)
+			if err := job.Succeeded(ctx, jobs.NoopFn); err != nil {
 				t.Fatal(err)
 			}
 			checkResumeFails(job, jobs.StatusSucceeded)
@@ -559,7 +899,7 @@ func TestJobLifecycle(t *testing.T) {
 		job := registry.NewJob(jobs.Record{
 			Details: 42,
 		})
-		_ = job.Created(ctx, jobs.WithoutCancel)
+		_ = job.Created(ctx)
 	})
 
 	t.Run("update before create fails", func(t *testing.T) {
@@ -570,8 +910,8 @@ func TestJobLifecycle(t *testing.T) {
 	})
 
 	t.Run("same state transition twice succeeds silently", func(t *testing.T) {
-		job, _ := createDefaultJob(jobs.WithoutCancel)
-		if err := job.Created(ctx, jobs.WithoutCancel); err != nil {
+		job, _ := createDefaultJob()
+		if err := job.Created(ctx); err != nil {
 			t.Fatal(err)
 		}
 		if err := job.Started(ctx); err != nil {
@@ -580,16 +920,16 @@ func TestJobLifecycle(t *testing.T) {
 		if err := job.Started(ctx); err != nil {
 			t.Fatal(err)
 		}
-		if err := job.Succeeded(ctx); err != nil {
+		if err := job.Succeeded(ctx, jobs.NoopFn); err != nil {
 			t.Fatal(err)
 		}
-		if err := job.Succeeded(ctx); err != nil {
+		if err := job.Succeeded(ctx, jobs.NoopFn); err != nil {
 			t.Fatal(err)
 		}
 	})
 
 	t.Run("out of bounds progress fails", func(t *testing.T) {
-		job, _ := createDefaultJob(jobs.WithoutCancel)
+		job, _ := createDefaultJob()
 		if err := job.Started(ctx); err != nil {
 			t.Fatal(err)
 		}
@@ -602,7 +942,7 @@ func TestJobLifecycle(t *testing.T) {
 	})
 
 	t.Run("progress on non-started job fails", func(t *testing.T) {
-		job, _ := createDefaultJob(jobs.WithoutCancel)
+		job, _ := createDefaultJob()
 		if err := job.Progressed(ctx, 0.5, jobs.Noop); !testutils.IsError(
 			err, `cannot update progress on pending job \(id \d+\)`,
 		) {
@@ -611,11 +951,11 @@ func TestJobLifecycle(t *testing.T) {
 	})
 
 	t.Run("progress on finished job fails", func(t *testing.T) {
-		job, _ := createDefaultJob(jobs.WithoutCancel)
+		job, _ := createDefaultJob()
 		if err := job.Started(ctx); err != nil {
 			t.Fatal(err)
 		}
-		if err := job.Succeeded(ctx); err != nil {
+		if err := job.Succeeded(ctx, jobs.NoopFn); err != nil {
 			t.Fatal(err)
 		}
 		if err := job.Progressed(ctx, 0.5, jobs.Noop); !testutils.IsError(
@@ -626,8 +966,8 @@ func TestJobLifecycle(t *testing.T) {
 	})
 
 	t.Run("progress on paused job fails", func(t *testing.T) {
-		job, _ := createDefaultJob(func() {})
-		if err := job.Paused(ctx); err != nil {
+		job, _ := startLeasedJob(t, defaultRecord)
+		if err := registry.Pause(ctx, nil, *job.ID()); err != nil {
 			t.Fatal(err)
 		}
 		if err := job.Progressed(ctx, 0.5, jobs.Noop); !testutils.IsError(
@@ -638,8 +978,8 @@ func TestJobLifecycle(t *testing.T) {
 	})
 
 	t.Run("progress on canceled job fails", func(t *testing.T) {
-		job, _ := createDefaultJob(func() {})
-		if err := job.Canceled(ctx); err != nil {
+		job, _ := startLeasedJob(t, defaultRecord)
+		if err := registry.Cancel(ctx, nil, *job.ID()); err != nil {
 			t.Fatal(err)
 		}
 		if err := job.Progressed(ctx, 0.5, jobs.Noop); !testutils.IsError(
@@ -650,14 +990,14 @@ func TestJobLifecycle(t *testing.T) {
 	})
 
 	t.Run("succeeded forces fraction completed to 1.0", func(t *testing.T) {
-		job, exp := createDefaultJob(jobs.WithoutCancel)
+		job, exp := createDefaultJob()
 		if err := job.Started(ctx); err != nil {
 			t.Fatal(err)
 		}
 		if err := job.Progressed(ctx, 0.2, jobs.Noop); err != nil {
 			t.Fatal(err)
 		}
-		if err := job.Succeeded(ctx); err != nil {
+		if err := job.Succeeded(ctx, jobs.NoopFn); err != nil {
 			t.Fatal(err)
 		}
 		exp.FractionCompleted = 1.0
@@ -667,7 +1007,7 @@ func TestJobLifecycle(t *testing.T) {
 	})
 
 	t.Run("set details works", func(t *testing.T) {
-		job, exp := createJob(jobs.TypeRestore, jobs.WithoutCancel, jobs.Record{
+		job, exp := createJob(jobs.Record{
 			Details: jobs.RestoreDetails{},
 		})
 		if err := exp.verify(job.ID(), jobs.StatusPending); err != nil {
@@ -715,10 +1055,10 @@ func TestRunAndWaitForTerminalState(t *testing.T) {
 			func(_ context.Context) error {
 				registry := s.JobRegistry().(*jobs.Registry)
 				job := registry.NewJob(jobs.Record{Details: jobs.BackupDetails{}})
-				if err := job.Created(ctx, jobs.WithoutCancel); err != nil {
+				if err := job.Created(ctx); err != nil {
 					return err
 				}
-				return job.Succeeded(ctx)
+				return job.Succeeded(ctx, jobs.NoopFn)
 			},
 		},
 		{
@@ -727,11 +1067,13 @@ func TestRunAndWaitForTerminalState(t *testing.T) {
 			func(_ context.Context) error {
 				registry := s.JobRegistry().(*jobs.Registry)
 				job := registry.NewJob(jobs.Record{Details: jobs.BackupDetails{}})
-				if err := job.Created(ctx, jobs.WithoutCancel); err != nil {
+				if err := job.Created(ctx); err != nil {
 					return err
 				}
 				err := errors.New("in-job error")
-				job.Failed(ctx, err)
+				if err := job.Failed(ctx, err, jobs.NoopFn); err != nil {
+					return err
+				}
 				return err
 			},
 		},
@@ -739,15 +1081,12 @@ func TestRunAndWaitForTerminalState(t *testing.T) {
 			"job lease transfer then succeeded",
 			jobs.StatusSucceeded, "",
 			func(ctx context.Context) error {
-				var cancel func()
-				ctx, cancel = context.WithCancel(ctx)
-
 				registry := s.JobRegistry().(*jobs.Registry)
 				job := registry.NewJob(jobs.Record{Details: jobs.BackupDetails{}})
-				if err := job.Created(ctx, cancel); err != nil {
+				if err := job.Created(ctx); err != nil {
 					return err
 				}
-				if err := job.Succeeded(ctx); err != nil {
+				if err := job.Succeeded(ctx, jobs.NoopFn); err != nil {
 					return err
 				}
 				return errors.New("lease transferred")
@@ -757,15 +1096,14 @@ func TestRunAndWaitForTerminalState(t *testing.T) {
 			"job lease transfer then failed",
 			jobs.StatusFailed, "in-job error",
 			func(ctx context.Context) error {
-				var cancel func()
-				ctx, cancel = context.WithCancel(ctx)
-
 				registry := s.JobRegistry().(*jobs.Registry)
 				job := registry.NewJob(jobs.Record{Details: jobs.BackupDetails{}})
-				if err := job.Created(ctx, cancel); err != nil {
+				if err := job.Created(ctx); err != nil {
 					return err
 				}
-				job.Failed(ctx, errors.New("in-job error"))
+				if err := job.Failed(ctx, errors.New("in-job error"), jobs.NoopFn); err != nil {
+					return err
+				}
 				return errors.New("lease transferred")
 			},
 		},

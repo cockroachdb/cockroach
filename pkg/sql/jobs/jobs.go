@@ -24,9 +24,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -49,15 +46,13 @@ type Job struct {
 	// Started, etc., have Registry call a setupFn and a workFn as appropriate.
 	registry *Registry
 
-	id       *int64
-	Record   Record
-	txn      *client.Txn
-	cancelFn func()
+	id     *int64
+	Record Record
+	txn    *client.Txn
 
 	mu struct {
 		syncutil.Mutex
-		payload  Payload
-		canceled bool
+		payload Payload
 	}
 }
 
@@ -121,36 +116,22 @@ func (j *Job) ID() *int64 {
 	return j.id
 }
 
-// WithoutCancel indicates that the job should not have its leasing and
-// cancelation managed by Registry. This is only a temporary measure; eventually
-// all jobs will use the Registry's leasing and cancelation.
-var WithoutCancel func()
-
 // Created records the creation of a new job in the system.jobs table and
 // remembers the assigned ID of the job in the Job. The job information is read
-// from the Record field at the time Created is called. If cancelFn is not nil,
-// the Registry will automatically acquire a lease for this job and invoke
-// cancelFn if the lease expires.
-func (j *Job) Created(ctx context.Context, cancelFn func()) error {
+// from the Record field at the time Created is called.
+func (j *Job) Created(ctx context.Context) error {
+	return j.created(ctx, j.registry.makeJobID(), nil)
+}
+
+func (j *Job) created(ctx context.Context, id int64, lease *Lease) error {
 	payload := &Payload{
 		Description:   j.Record.Description,
 		Username:      j.Record.Username,
 		DescriptorIDs: j.Record.DescriptorIDs,
 		Details:       WrapPayloadDetails(j.Record.Details),
+		Lease:         lease,
 	}
-	if cancelFn != nil {
-		payload.Lease = j.registry.newLease()
-	}
-	if err := j.insert(ctx, payload); err != nil {
-		return err
-	}
-	if cancelFn != nil {
-		j.cancelFn = cancelFn
-		if err := j.registry.register(*j.id, j); err != nil {
-			return err
-		}
-	}
-	return nil
+	return j.insert(ctx, id, payload)
 }
 
 // Started marks the tracked job as started.
@@ -202,33 +183,11 @@ func (j *Job) Progressed(
 	})
 }
 
-func isControllable(p *Payload, op string) error {
-	switch typ := p.Type(); typ {
-	case TypeSchemaChange:
-		return pgerror.UnimplementedWithIssueErrorf(
-			16018, "schema change jobs do not support %s", op)
-	case TypeImport:
-		return pgerror.UnimplementedWithIssueErrorf(
-			18139, "import jobs do not support %s", op)
-	case TypeBackup:
-	case TypeRestore:
-	default:
-		return fmt.Errorf("%s jobs do not support %s", strings.ToLower(typ.String()), op)
-	}
-	if p.Lease == nil {
-		return fmt.Errorf("job created by node without %s support", op)
-	}
-	return nil
-}
-
 // Paused sets the status of the tracked job to paused. It does not directly
 // pause the job; instead, it expects the job to call job.Progressed soon,
 // observe a "job is paused" error, and abort further work.
-func (j *Job) Paused(ctx context.Context) error {
+func (j *Job) paused(ctx context.Context) error {
 	return j.update(ctx, func(_ *client.Txn, status *Status, payload *Payload) (bool, error) {
-		if err := isControllable(payload, "PAUSE"); err != nil {
-			return false, err
-		}
 		if *status == StatusPaused {
 			// Already paused - do nothing.
 			return false, nil
@@ -244,7 +203,7 @@ func (j *Job) Paused(ctx context.Context) error {
 // Resumed sets the status of the tracked job to running iff the job is
 // currently paused. It does not directly resume the job; rather, it expires the
 // job's lease so that a Registry adoption loop detects it and resumes it.
-func (j *Job) Resumed(ctx context.Context) error {
+func (j *Job) resumed(ctx context.Context) error {
 	return j.update(ctx, func(_ *client.Txn, status *Status, payload *Payload) (bool, error) {
 		if *status == StatusRunning {
 			// Already resumed - do nothing.
@@ -264,11 +223,10 @@ func (j *Job) Resumed(ctx context.Context) error {
 // Canceled sets the status of the tracked job to canceled. It does not directly
 // cancel the job; like job.Paused, it expects the job to call job.Progressed
 // soon, observe a "job is canceled" error, and abort further work.
-func (j *Job) Canceled(ctx context.Context) error {
+func (j *Job) canceled(
+	ctx context.Context, fn func(context.Context, *client.Txn, *Job) error,
+) error {
 	return j.update(ctx, func(txn *client.Txn, status *Status, payload *Payload) (bool, error) {
-		if err := isControllable(payload, "CANCEL"); err != nil {
-			return false, err
-		}
 		if *status == StatusCanceled {
 			// Already canceled - do nothing.
 			return false, nil
@@ -277,8 +235,8 @@ func (j *Job) Canceled(ctx context.Context) error {
 			return false, fmt.Errorf("job with status %s cannot be canceled", *status)
 		}
 		*status = StatusCanceled
-		if onfail, ok := payload.Details.(onFailer); ok {
-			if err := onfail.onFail(ctx, txn, j); err != nil {
+		if fn != nil {
+			if err := fn(ctx, txn, j); err != nil {
 				return false, err
 			}
 		}
@@ -287,24 +245,22 @@ func (j *Job) Canceled(ctx context.Context) error {
 	})
 }
 
-// Failed marks the tracked job as having failed with the given error. Any
-// errors encountered while updating the jobs table are logged but not returned,
-// under the assumption that the the caller is already handling a more important
-// error and doesn't care about this one.
-func (j *Job) Failed(ctx context.Context, err error) {
-	// To simplify cleanup routines, it is not an error to call Failed on a job
-	// that was never Created.
-	if j.id == nil {
-		return
-	}
-	internalErr := j.update(ctx, func(txn *client.Txn, status *Status, payload *Payload) (bool, error) {
+// NoopFn is used in place of a nil for Failed and Succeeded. It indicates
+// no transactional callback should be made during these operations.
+var NoopFn func(context.Context, *client.Txn, *Job) error
+
+// Failed marks the tracked job as having failed with the given error.
+func (j *Job) Failed(
+	ctx context.Context, err error, fn func(context.Context, *client.Txn, *Job) error,
+) error {
+	return j.update(ctx, func(txn *client.Txn, status *Status, payload *Payload) (bool, error) {
 		if status.Terminal() {
 			// Already done - do nothing.
 			return false, nil
 		}
 		*status = StatusFailed
-		if onfail, ok := payload.Details.(onFailer); ok {
-			if err := onfail.onFail(ctx, txn, j); err != nil {
+		if fn != nil {
+			if err := fn(ctx, txn, j); err != nil {
 				return false, err
 			}
 		}
@@ -312,108 +268,28 @@ func (j *Job) Failed(ctx context.Context, err error) {
 		payload.FinishedMicros = timeutil.ToUnixMicros(timeutil.Now())
 		return true, nil
 	})
-	if internalErr != nil {
-		log.Errorf(ctx, "Job: ignoring error %v while logging failure for job %d: %+v",
-			err, *j.id, internalErr)
-	}
-	j.registry.unregister(*j.id)
-}
-
-type onFailer interface {
-	onFail(context.Context, *client.Txn, *Job) error
-}
-
-var _ onFailer = &Payload_Restore{}
-
-// RestoreFailHook is the func that is run when a RESTORE job has failed.
-var RestoreFailHook func(context.Context, *client.Txn, *cluster.Settings, *RestoreDetails) error
-
-func (r *Payload_Restore) onFail(ctx context.Context, txn *client.Txn, job *Job) error {
-	// This is set in the CCL package if RESTOREs are enabled, and so should
-	// always be non-nil. However the jobs tests exercise this without importing
-	// the CCL package, so we do need the test.
-	if RestoreFailHook != nil {
-		return RestoreFailHook(ctx, txn, job.registry.settings, r.Restore)
-	}
-	return nil
 }
 
 // Succeeded marks the tracked job as having succeeded and sets its fraction
 // completed to 1.0.
-func (j *Job) Succeeded(ctx context.Context) error {
-	defer j.registry.unregister(*j.id)
-	return j.update(ctx, func(_ *client.Txn, status *Status, payload *Payload) (bool, error) {
+func (j *Job) Succeeded(
+	ctx context.Context, fn func(context.Context, *client.Txn, *Job) error,
+) error {
+	return j.update(ctx, func(txn *client.Txn, status *Status, payload *Payload) (bool, error) {
 		if status.Terminal() {
 			// Already done - do nothing.
 			return false, nil
 		}
 		*status = StatusSucceeded
+		if fn != nil {
+			if err := fn(ctx, txn, j); err != nil {
+				return false, err
+			}
+		}
 		payload.FinishedMicros = timeutil.ToUnixMicros(timeutil.Now())
 		payload.FractionCompleted = 1.0
 		return true, nil
 	})
-}
-
-// FinishedWith is a shortcut for automatically calling Succeeded or Failed
-// based on the presence of err. Any non-nil error is taken to mean that the job
-// has failed. The error returned, if any, is serious enough that it should not
-// be logged and ignored.
-//
-// TODO(benesch): Fix this wonky API. Once schema change leases are managed by
-// this package, replace Succeeded, Failed, and FinishedWith with an API like
-//
-//      func (r *Registry) RunJob(setupFn func() Details, workFn func() error) (result, error)
-//
-// where RunJob handles writing to system.jobs automatically.
-func (j *Job) FinishedWith(ctx context.Context, err error) error {
-	j.mu.Lock()
-	canceled := j.mu.canceled
-	j.mu.Unlock()
-	if canceled {
-		// The registry canceled the job because its lease expired. This job will be
-		// retried, potentially on another node, so we must report an ambiguous
-		// result to the client because we don't know its fate.
-		//
-		// NB: Canceled jobs are automatically unregistered, so no need to call
-		// j.registry.unregistered.
-		//
-		// TODO(benesch): In rare cases, this can return an ambiguous result error
-		// when the result was not, in fact, ambigious. Specifically, if the job
-		// succeeds or fails with a non-lease-related error immediately before it
-		// loses its lease, we'll have knowledge of its true status but will blindly
-		// report an ambiguous result. Ideally, we'd additionally check for
-		// `errors.Cause(err) == context.Canceled`, but that yields false negatives
-		// when using errors.Wrapf, and we'd much rather have false positives (too
-		// many ambiguous results) than false negatives (too few ambiguous results).
-		return roachpb.NewAmbiguousResultError("job lease expired")
-	}
-	if err, ok := errors.Cause(err).(*InvalidStatusError); ok &&
-		(err.status == StatusPaused || err.status == StatusCanceled) {
-		// If we couldn't operate on the job because it was paused or canceled, send
-		// the more understandable "job paused" or "job canceled" error message to
-		// the user.
-		//
-		// NB: Since we're not calling Succeeded or Failed, we need to manually
-		// unregister the job.
-		j.registry.unregister(*j.id)
-		return fmt.Errorf("job %s", err.status)
-	}
-	if err != nil {
-		j.Failed(ctx, err)
-	} else if err := j.Succeeded(ctx); err != nil {
-		// No callers of Succeeded do anything but log the error, so that behavior
-		// is baked into the API of FinishedWith.
-		log.Errorf(ctx, "ignoring error while marking job %d as successful: %+v", *j.id, err)
-	}
-	return nil
-}
-
-// IsCancellation returns true if the passed error is a job cancellation.
-func IsCancellation(err error) bool {
-	if err, ok := errors.Cause(err).(*InvalidStatusError); ok {
-		return err.status == StatusCanceled
-	}
-	return false
 }
 
 // SetDetails sets the details field of the currently running tracked job.
@@ -448,11 +324,6 @@ func (j *Job) DB() *client.DB {
 // Gossip returns the *gossip.Gossip associated with this job.
 func (j *Job) Gossip() *gossip.Gossip {
 	return j.registry.gossip
-}
-
-// NodeID returns the roachpb.NodeID associated with this job.
-func (j *Job) NodeID() roachpb.NodeID {
-	return j.registry.nodeID.Get()
 }
 
 // ClusterID returns the uuid.UUID cluster ID associated with this job.
@@ -505,13 +376,12 @@ func (j *Job) load(ctx context.Context) error {
 	return j.initialize(payload)
 }
 
-func (j *Job) insert(ctx context.Context, payload *Payload) error {
+func (j *Job) insert(ctx context.Context, id int64, payload *Payload) error {
 	if j.id != nil {
 		// Already created - do nothing.
 		return nil
 	}
 
-	var row tree.Datums
 	if err := j.runInTxn(ctx, func(ctx context.Context, txn *client.Txn) error {
 		payload.ModifiedMicros = timeutil.ToUnixMicros(txn.Proto().OrigTimestamp.GoTime())
 		payloadBytes, err := protoutil.Marshal(payload)
@@ -519,15 +389,14 @@ func (j *Job) insert(ctx context.Context, payload *Payload) error {
 			return err
 		}
 
-		const stmt = "INSERT INTO system.jobs (status, payload) VALUES ($1, $2) RETURNING id"
-		row, err = j.registry.ex.QueryRowInTransaction(ctx, "job-insert", txn, stmt, StatusPending, payloadBytes)
+		const stmt = "INSERT INTO system.jobs (id, status, payload) VALUES ($1, $2, $3)"
+		_, err = j.registry.ex.ExecuteStatementInTransaction(ctx, "job-insert", txn, stmt, id, StatusPending, payloadBytes)
 		return err
 	}); err != nil {
 		return err
 	}
 	j.mu.payload = *payload
-	j.id = (*int64)(row[0].(*tree.DInt))
-
+	j.id = &id
 	return nil
 }
 
@@ -608,16 +477,13 @@ func (j *Job) adopt(ctx context.Context, oldLease *Lease) error {
 	})
 }
 
-func (j *Job) cancel() {
-	j.cancelFn()
-	j.mu.Lock()
-	defer j.mu.Unlock()
-	j.mu.canceled = true
-}
-
 // Type returns the payload's job type.
 func (p *Payload) Type() Type {
-	switch p.Details.(type) {
+	return detailsType(p.Details)
+}
+
+func detailsType(d isPayload_Details) Type {
+	switch d.(type) {
 	case *Payload_Backup:
 		return TypeBackup
 	case *Payload_Restore:
@@ -627,7 +493,7 @@ func (p *Payload) Type() Type {
 	case *Payload_Import:
 		return TypeImport
 	default:
-		panic("Payload.Type called on a payload with an unknown details type")
+		panic(fmt.Sprintf("Payload.Type called on a payload with an unknown details type: %T", d))
 	}
 }
 
