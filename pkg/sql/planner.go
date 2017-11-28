@@ -337,6 +337,17 @@ func (p *planner) GetSequenceValue(ctx context.Context, seqName *tree.TableName)
 	return val.ValueInt(), nil
 }
 
+func (p *planner) SetSequenceValue(
+	ctx context.Context, seqName *tree.TableName, newVal int64,
+) error {
+	descriptor, err := getSequenceDesc(ctx, p.txn, p.getVirtualTabler(), seqName)
+	if err != nil {
+		return err
+	}
+	seqValueKey := keys.MakeSequenceKey(uint32(descriptor.ID))
+	return p.txn.Put(ctx, seqValueKey, newVal)
+}
+
 // queryRows executes a SQL query string where multiple result rows are returned.
 func (p *planner) queryRows(
 	ctx context.Context, sql string, args ...interface{},

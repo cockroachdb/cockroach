@@ -234,6 +234,34 @@ SELECT nextval('other_db.other_db_test')
 ----
 1
 
+# USING THE `setval` FUNCTION
+
+statement ok
+SET DATABASE = test
+
+statement ok
+CREATE SEQUENCE setval_test
+
+query I
+SELECT nextval('setval_test')
+----
+1
+
+query I
+SELECT nextval('setval_test')
+----
+2
+
+query I
+SELECT setval('setval_test', 10)
+----
+10
+
+query I
+SELECT nextval('setval_test')
+----
+11
+
 # USE WITH TABLES
 
 # You can use a sequence in a DEFAULT expression to create an auto-incrementing primary key.

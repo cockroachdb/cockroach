@@ -1038,6 +1038,36 @@ CockroachDB supports the following flags:
 		},
 	},
 
+	"setval": {
+		tree.Builtin{
+			Types:      tree.ArgTypes{{"sequence_name", types.String}, {"value", types.Int}},
+			ReturnType: tree.FixedReturnType(types.Int),
+			Category:   categoryIDGeneration,
+			Impure:     true,
+			Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				// TODO(vilterp): dedupe all this stuff
+				name := tree.MustBeDString(args[0])
+				parsedNameWithIndex, err := evalCtx.Planner.ParseTableNameWithIndex(string(name))
+				if err != nil {
+					return nil, err
+				}
+				parsedName := parsedNameWithIndex.Table
+				qualifiedName, err := evalCtx.Planner.QualifyWithDatabase(evalCtx.Ctx(), &parsedName)
+				if err != nil {
+					return nil, err
+				}
+
+				// TODO(vilterp): test that this works with expressions like len('foo') or something...
+				newVal := tree.MustBeDInt(args[1])
+				if err := evalCtx.Planner.SetSequenceValue(evalCtx.Ctx(), qualifiedName, int64(newVal)); err != nil {
+					return nil, err
+				}
+				return args[1], nil
+			},
+			Info: "Set the given sequence's current value.",
+		},
+	},
+
 	"experimental_uuid_v4": {uuidV4Impl},
 	"uuid_v4":              {uuidV4Impl},
 
