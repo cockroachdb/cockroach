@@ -64,7 +64,7 @@ func collectSpans(params runParams, plan planNode) (reads, writes roachpb.Spans,
 		return collectSpans(params, n.plan)
 	case *explainPlanNode:
 		return collectSpans(params, n.plan)
-	case *traceNode:
+	case *showTraceNode:
 		return collectSpans(params, n.plan)
 	case *limitNode:
 		return collectSpans(params, n.plan)

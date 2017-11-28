@@ -27,11 +27,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
 
-// traceNode is a planNode that wraps another node and uses session
+// showTraceNode is a planNode that wraps another node and uses session
 // tracing to report all the database events that occur during its
 // execution.
 // It is used as the top-level node for SHOW TRACE FOR statements.
-type traceNode struct {
+type showTraceNode struct {
 	// plan is the wrapped execution plan that will be traced.
 	plan    planNode
 	columns sqlbase.ResultColumns
@@ -110,7 +110,7 @@ WHERE message LIKE 'fetched: %'
 		plan.Close(ctx)
 		return nil, err
 	}
-	tracePlan, err := p.makeTraceNode(stmtPlan, n.OnlyKVTrace /* kvTracingEnabled */)
+	tracePlan, err := p.makeShowTraceNode(stmtPlan, n.OnlyKVTrace /* kvTracingEnabled */)
 	if err != nil {
 		plan.Close(ctx)
 		stmtPlan.Close(ctx)
@@ -120,11 +120,11 @@ WHERE message LIKE 'fetched: %'
 	// inject the tracePlan inside the SHOW query plan.
 
 	// Suggestion from Radu:
-	// This is not very elegant and would be cleaner if the traceNode
+	// This is not very elegant and would be cleaner if the showTraceNode
 	// could process the statement source node first, let it emit its
 	// trace messages, and only then query the session_trace vtable.
 	// Alternatively, the outer SHOW could use a UNION between the
-	// traceNode and the query on session_trace.
+	// showTraceNode and the query on session_trace.
 
 	// Unfortunately, neither is currently possible because the plan for
 	// the query on session_trace cannot be constructed until the trace
@@ -164,26 +164,26 @@ WHERE message LIKE 'fetched: %'
 	return nil, err
 }
 
-// makeTraceNode creates a new traceNode.
+// makeShowTraceNode creates a new showTraceNode.
 //
 // Args:
 // plan: The wrapped execution plan to be traced.
 // kvTrancingEnabled: If set, the trace will also include "KV trace" messages -
 //   verbose messages around the interaction of SQL with KV. Some of the
 //   messages are per-row.
-func (p *planner) makeTraceNode(plan planNode, kvTracingEnabled bool) (planNode, error) {
+func (p *planner) makeShowTraceNode(plan planNode, kvTracingEnabled bool) (planNode, error) {
 	desc, err := p.getVirtualTabler().getVirtualTableDesc(&sessionTraceTableName)
 	if err != nil {
 		return nil, err
 	}
-	return &traceNode{
+	return &showTraceNode{
 		plan:             plan,
 		columns:          sqlbase.ResultColumnsFromColDescs(desc.Columns),
 		kvTracingEnabled: kvTracingEnabled,
 	}, nil
 }
 
-// traceRun contains the run-time state of traceNode during local execution.
+// traceRun contains the run-time state of showTraceNode during local execution.
 type traceRun struct {
 	execDone bool
 
@@ -195,7 +195,7 @@ type traceRun struct {
 	stopTracing func() error
 }
 
-func (n *traceNode) Start(params runParams) error {
+func (n *showTraceNode) Start(params runParams) error {
 	if params.p.session.Tracing.Enabled() {
 		return errTracingAlreadyEnabled
 	}
@@ -213,7 +213,7 @@ func (n *traceNode) Start(params runParams) error {
 	return n.plan.Start(params)
 }
 
-func (n *traceNode) Next(params runParams) (bool, error) {
+func (n *showTraceNode) Next(params runParams) (bool, error) {
 	if !n.run.execDone {
 		// We need to run the entire statement upfront. Subsequent
 		// invocations of Next() will merely return the trace.
@@ -275,11 +275,11 @@ func (n *traceNode) Next(params runParams) (bool, error) {
 	return true, nil
 }
 
-func (n *traceNode) Values() tree.Datums {
+func (n *showTraceNode) Values() tree.Datums {
 	return n.run.traceRows[n.run.curRow-1][:]
 }
 
-func (n *traceNode) Close(ctx context.Context) {
+func (n *showTraceNode) Close(ctx context.Context) {
 	if n.plan != nil {
 		n.plan.Close(ctx)
 	}
