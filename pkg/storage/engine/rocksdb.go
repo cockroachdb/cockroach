@@ -21,6 +21,7 @@ import (
 	"math"
 	"os"
 	"path/filepath"
+	"reflect"
 	"runtime"
 	"runtime/debug"
 	"sort"
@@ -307,6 +308,9 @@ type RocksDBConfig struct {
 	WarnLargeBatchThreshold time.Duration
 	// Settings instance for cluster-wide knobs.
 	Settings *cluster.Settings
+	// PreambleFormat is true if we want to use the "preamble" rocksdb file format.
+	// This cannot be changed once the store has been created.
+	PreambleFormat bool
 }
 
 // RocksDB is a wrapper around a RocksDB database instance.
@@ -401,20 +405,49 @@ func (r *RocksDB) String() string {
 }
 
 func (r *RocksDB) open() error {
-	var ver storageVersion
+	var originalVer, newVer Version
 	if len(r.cfg.Dir) != 0 {
 		log.Infof(context.TODO(), "opening rocksdb instance at %q", r.cfg.Dir)
 
 		// Check the version number.
 		var err error
-		if ver, err = getVersion(r.cfg.Dir); err != nil {
+		if originalVer, err = getVersion(r.cfg.Dir); err != nil {
 			return err
 		}
-		if ver < versionMinimum || ver > versionCurrent {
+
+		// Check for compatible version.
+		if originalVer.Version < versionMinimum || originalVer.Version > versionCurrent {
 			// Instead of an error, we should call a migration if possible when
 			// one is needed immediately following the DBOpen call.
 			return fmt.Errorf("incompatible rocksdb data version, current:%d, on disk:%d, minimum:%d",
-				versionCurrent, ver, versionMinimum)
+				versionCurrent, originalVer.Version, versionMinimum)
+		}
+
+		if originalVer.Version != versionNoFile {
+			// We have a version file, check data format.
+			existingPreambleFormat := (originalVer.Format == formatPreamble)
+			if existingPreambleFormat != r.cfg.PreambleFormat {
+				return fmt.Errorf("incompatible rocksdb data format, requested preamble:%t, on disk preamble:%t",
+					r.cfg.PreambleFormat, existingPreambleFormat)
+			}
+		}
+
+		// Setup the new version.
+		if r.cfg.PreambleFormat {
+			// Preamble format sets the current version and the format string.
+			newVer.Version = versionCurrent
+			newVer.Format = formatPreamble
+		} else {
+			// In classic format, we set the storage version to versionBeta20160331 to allow
+			// downgrades from classic formats created with new binaries to classic formats
+			// read by old binaries.
+			// TODO(marc): once enough release versions have been released,
+			// set the version to versionCurrent and drop this whole 'else' branch.
+			if versionCurrent > versionPreambleFormat {
+				log.Fatalf(context.TODO(), "current version is beyond PreambleFormat, this transition isn't handled")
+			}
+			newVer.Version = versionPreambleFormat - 1
+			newVer.Format = formatClassic
 		}
 	} else {
 		if log.V(2) {
@@ -422,7 +455,7 @@ func (r *RocksDB) open() error {
 		}
 
 		// In memory dbs are always current.
-		ver = versionCurrent
+		originalVer.Version = versionCurrent
 	}
 
 	blockSize := envutil.EnvOrDefaultBytes("COCKROACH_ROCKSDB_BLOCK_SIZE", defaultBlockSize)
@@ -440,14 +473,15 @@ func (r *RocksDB) open() error {
 			logging_enabled: C.bool(log.V(3)),
 			num_cpu:         C.int(runtime.NumCPU()),
 			max_open_files:  C.int(maxOpenFiles),
+			use_preamble:    C.bool(r.cfg.PreambleFormat),
 		})
 	if err := statusToError(status); err != nil {
 		return errors.Wrap(err, "could not open rocksdb instance")
 	}
 
-	// Update or add the version file if needed.
-	if ver < versionCurrent {
-		if err := writeVersionFile(r.cfg.Dir); err != nil {
+	// Write the version file if it changed and we're a disk-based store.
+	if len(r.cfg.Dir) != 0 && !reflect.DeepEqual(originalVer, newVer) {
+		if err := writeVersionFile(r.cfg.Dir, newVer); err != nil {
 			return err
 		}
 	}

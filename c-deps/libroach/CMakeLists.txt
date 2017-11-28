@@ -24,9 +24,11 @@ add_library(roach
   db.cc
   encoding.cc
   eventlistener.cc
+  preamble.cc
   protos/roachpb/data.pb.cc
   protos/roachpb/internal.pb.cc
   protos/roachpb/metadata.pb.cc
+  protos/storage/preamble.pb.cc
   protos/storage/engine/enginepb/mvcc.pb.cc
   protos/storage/engine/enginepb/mvcc3.pb.cc
   protos/storage/engine/enginepb/rocksdb.pb.cc

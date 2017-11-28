@@ -23,23 +23,34 @@ import (
 )
 
 type storageVersion int
+type formatVersion int
 
 const (
 	versionNoFile storageVersion = iota
 	versionBeta20160331
+	versionPreambleFormat
+)
+
+const (
+	// It's important to keep formatClassic at zero, meaning an omitted
+	// json field means "classic".
+	formatClassic formatVersion = iota
+	formatPreamble
 )
 
 const (
 	versionFilename     = "COCKROACHDB_VERSION"
 	versionFilenameTemp = "COCKROACHDB_VERSION_TEMP"
 	versionMinimum      = versionNoFile
-	versionCurrent      = versionBeta20160331
+	versionCurrent      = versionPreambleFormat
 )
 
 // Version stores all the version information for all stores and is used as
 // the format for the version file.
 type Version struct {
 	Version storageVersion
+	// Format is unknown prior to versionPreambleFormat and defaults to formatClassic.
+	Format formatVersion
 }
 
 // getVersionFilename returns the filename for the version file stored in the
@@ -50,28 +61,32 @@ func getVersionFilename(dir string) string {
 
 // getVersion returns the current on disk cockroach version from the version
 // file in the passed in directory. If there is no version file yet, it
-// returns 0.
-func getVersion(dir string) (storageVersion, error) {
+// returns a version with a zero (NoFile) storage version.
+func getVersion(dir string) (Version, error) {
 	filename := getVersionFilename(dir)
 	b, err := ioutil.ReadFile(filename)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return versionNoFile, nil
+			return Version{Version: versionNoFile}, nil
 		}
-		return 0, err
+		return Version{Version: versionNoFile}, err
 	}
 	var ver Version
 	if err := json.Unmarshal(b, &ver); err != nil {
-		return 0, fmt.Errorf("version file %s is not formatted correctly; %s", filename, err)
+		return Version{Version: versionNoFile}, fmt.Errorf("version file %s is not formatted correctly; %s", filename, err)
 	}
-	return ver.Version, nil
+	return ver, nil
 }
 
 // writeVersionFile overwrites the version file to contain the latest version.
-func writeVersionFile(dir string) error {
+func writeVersionFile(dir string, ver Version) error {
+	if ver.Version == versionNoFile {
+		return fmt.Errorf("writing version %d is not allowed", ver.Version)
+	}
+
 	tempFilename := filepath.Join(dir, versionFilenameTemp)
 	filename := getVersionFilename(dir)
-	b, err := json.Marshal(Version{versionCurrent})
+	b, err := json.Marshal(ver)
 	if err != nil {
 		return err
 	}

@@ -407,13 +407,13 @@ each storage device, for example:
   --store=/mnt/ssd01 --store=/mnt/ssd02 --store=/mnt/hda1
 
 </PRE>
-For each store, the "attrs" and "size" fields can be used to specify device
-attributes and a maximum store size (see below). When one or both of these
+For each store, the "attrs", "size", and "format" fields can be used to specify device
+attributes, a maximum store size, and a format. When one or more of these
 fields are set, the "path" field label must be used for the path to the storage
 device, for example:
 <PRE>
 
-  --store=path=/mnt/ssd01,attrs=ssd,size=20GiB
+  --store=path=/mnt/ssd01,attrs=ssd,size=20GiB,format=preamble
 
 </PRE>
 In most cases, node-level attributes are preferable to store-level attributes.
@@ -444,10 +444,26 @@ for example:
   --store=path=/mnt/ssd01,size=.2              -> 20% of available space
 
 </PRE>
-For an in-memory store, the "type" and "size" fields are required, and the
-"path" field is forbidden. The "type" field must be set to "mem", and the
-"size" field must be set to the true maximum bytes or percentage of available
-memory that the store may consume, for example:
+The "format" field specifies the underlying file format for the store.
+Allowed values are "classic" (default if omitted), or "preamble". Preamble
+enables the use of encryption on the affected store.
+The format specified at store creation time must remain the same throughout the
+lifetime of the store.
+Examples:
+<PRE>
+
+  --store=/mnt/ssd01                           -> "classic" file format
+  --store=path=/mnt/ssd01                      -> "classic" file format
+  --store=path=/mnt/ssd01,format=classic       -> "classic" file format
+  --store=path=/mnt/ssd01,format=preamble      -> "preamble" file format
+
+</PRE>
+
+For an in-memory store, the "type" and "size" fields are required, the format
+field must be "classic", and the "path" field is forbidden.
+The "type" field must be set to "mem", and the "size" field must be set to
+the true maximum bytes or percentage of available memory that the store may consume,
+for example:
 <PRE>
 
   --store=type=mem,size=20GiB

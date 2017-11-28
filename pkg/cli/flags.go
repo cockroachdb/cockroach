@@ -197,8 +197,6 @@ func init() {
 	// special severity value DEFAULT instead.
 	pf.Lookup(logflags.LogToStderrName).NoOptDefVal = log.Severity_DEFAULT.String()
 
-	// Security flags.
-
 	{
 		f := startCmd.Flags()
 
