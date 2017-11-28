@@ -5,7 +5,6 @@
 - RFC PR: [#20149](https://github.com/cockroachdb/cockroach/pull/20149)
 - Cockroach Issue: (one or more # from the issue tracker)
 
-
 Table of Contents
 =================
 
@@ -30,15 +29,24 @@ Table of Contents
       * [Detailed design](#detailed-design)
          * [Roles system table](#roles-system-table)
          * [New SQL statements](#new-sql-statements)
-         * [Checking permissions](#checking-permissions)
          * [Determining role memberships](#determining-role-memberships)
+         * [Checking permissions](#checking-permissions)
          * [Admin role](#admin-role)
          * [Migrations and backwards compatibility](#migrations-and-backwards-compatibility)
          * [Non-enterprise functionality](#non-enterprise-functionality)
          * [Virtual tables](#virtual-tables)
       * [Drawbacks](#drawbacks)
+         * [Use of leases to signal role changes](#use-of-leases-to-signal-role-changes)
       * [Rationale and Alternatives](#rationale-and-alternatives)
+         * [Internal representation of memberships](#internal-representation-of-memberships)
       * [Unresolved questions](#unresolved-questions)
+         * [Inheritance of role admin](#inheritance-of-role-admin)
+         * [Adding and removing admin setting](#adding-and-removing-admin-setting)
+         * [Listing expanded role memberships](#listing-expanded-role-memberships)
+         * [Virtual table details](#virtual-table-details)
+         * [Existence of an admin user before migrations](#existence-of-an-admin-user-before-migrations)
+         * [Enterprise enforcement workarounds](#enterprise-enforcement-workarounds)
+         * [Code location](#code-location)
       * [Future improvements](#future-improvements)
 
 # Summary
@@ -57,8 +65,9 @@ A new `admin` role will replace the current `root` user, with `root` being a mem
 Non-enterprise users will not be able to manipulate roles (create/delete/change membership), but
 will retain all roles created using an enterprise license.
 
-This will be implemented through the addition of a new `roles` system table containing role-role and
-user-role relationships.
+This will be implemented through the addition of a new `role_members` system table containing role-role and
+user-role relationships. Role memberships are synchronized through descriptor versions, a new versions indicating
+that a node should refresh role information.
 
 # Motivation
 
@@ -247,7 +256,7 @@ to older versions.
 
 Manipulation of roles is an enterprise feature.
 
-Without a valid enterprise license, the following are not allowed:
+Without a valid enterprise license, the following are **not** allowed:
 * creating a role (`CREATE ROLE ...`)
 * dropping a role (`DROP ROLE ...`)
 * adding a member of a role (`GRANT myrole TO ...`)
@@ -259,7 +268,7 @@ The following will function without an enterprise license:
 * granting privileges to a role
 * revoking privileges from a role
 
-This restriction leaves non-enterprise users with a fully-functioning product, but without the
+This restriction leaves non-enterprise users with a fully-functioning product but without the
 ease of management provided by roles.
 
 ## Contributor impact
@@ -401,6 +410,27 @@ Where `rolename` can be one or more role, or `*` and `name` can be one of more u
 
 See [Listing expanded role memberships](#listing-expanded-role-memberships) for possible variations.
 
+### Determining role memberships
+
+TODO(mberhault): flesh out this section a bit more, including code samples.
+
+Expanding role memberships is necessary to perform the permission checks listed above.
+
+A naive approach (looking up memberships for every permission check) would be prohibitively expensive.
+
+Instead, we propose the following:
+* per-node cache of already resolved memberships
+* if the user's expanded roles is not cached, look it up
+* the cache holds a lease on the `role_members` table
+* when the `role_members` table descriptor version changes, expire the cached data or refresh it
+* any time a transaction is committed with modification to the `role_members` table: increase the descriptor version
+
+This insures that we can keep role membership information reasonably current, with refreshes being forced
+only when changes occur. Given the small size of membership information, applicable cache expiration will most
+likely be time based (although size maximum should apply).
+
+Role membership expansion can be pre-computed (see [Internal representation of memberships](#internal-representation-of-memberships)) to allow for cheaper lookup at the time of permission checks.
+
 ### Checking permissions
 
 Permission checks currently consist of calls to one of:
@@ -410,7 +440,7 @@ func (p *planner) RequireSuperUser(action string) error
 func (p *planner) anyPrivilege(descriptor sqlbase.DescriptorProto) error
 ```
 
-All methods have operate on `p.session.User`.
+All methods operate on `p.session.User`.
 
 These functions check a number of things for the specified user:
 * has the required privileges in the descriptor
@@ -423,25 +453,6 @@ In a world with roles, permission checks are performed against the set of names 
 
 Checking permissions becomes checking that any of the names in the set have the required permissions.
 For `root` checks, this is hard-coded to checking that the expanded list includes the `admin` role.
-
-### Determining role memberships
-
-Expanding role memberships is necessary to perform the permission checks listed above.
-
-This is the expensive part of this proposal. Further discussion in [Cost of lookup](#cost-of-lookup).
-
-A naive way is to recursively expand role memberships.
-Each iteration consists of:
-```
-SELECT * FROM system.roles WHERE member == 'name'
-```
-
-The resulting roles are added to the list, and the call is performed again for each of these roles.
-The lookup ends when no more results are found.
-
-This is a simple solution to implement but will become prohibitively expensive if multiple roles are
-involved. We can exit early if we already know the list of allowed roles, but this may still be too much
-to perform for every sql operation.
 
 ### Admin role
 
@@ -548,18 +559,16 @@ There are multiple relevant tables in `information_schema` that must be changed 
 
 ## Drawbacks
 
-### Cost of lookup
+Roles themselves follow the PostgreSQL behavior and any drawbacks there are intended for compatibility.
 
-The cost of lookup is currently the biggest issue.
+There are some minor drawbacks to this implementation.
 
-The naive solution must expand the full (or nearly) set of memberships for the incoming user,
-and must do so for every SQL operation.
+### Use of leases to signal role changes
 
-The [Caching memberships](#caching-memberships) options would make this much more efficient but would
-sacrifice correctness when roles/privileges are changed within a transaction.
+While allowing for cheaper role expansions, the use of leases to signal role membership changes
+subverts the original purpose.
 
-The alternate [Internal representation of memberships](#internal-representation-of-memberships)
-may help but at an increased cost in storage and complexity.
+If a more appropriate solution is found, it can replace the current mechanism at a later date.
 
 ## Rationale and Alternatives
 
@@ -633,38 +642,6 @@ Some options:
 * include a `DIRECT` field which returns `YES` is we are a direct member
 * add an option to `SHOW GRANTS` to show all/direct/indirect memberships
 
-### Caching memberships
-
-Role memberships may change at any time and yet are required for all SQL operations.
-
-Performing full lookups (discovering all roles a user is a member of) for every statement is most
-likely prohibitively expensive.
-Even if the expanded role memberships are stored in a more accessible way (see the alternate
-[Internal representation of memberships](internal-representation-of-memberships)), this would add at least
-one lookup per operation.
-
-Caching can be used to reduce the number role lookups but run into multiple problems:
-* caching and transactions generally don't play well together.
-* table privileges are currently propagated through the descriptor lease mechanism.
-
-**TODO(mberhault)**: this section is still very vague. Some points to clarify:
-* do we care about those within transactions? Do current privileges/user deletion work properly with transactions?
-* how do descriptor leases work? Can we piggy-back onto those?
-
-Some possible options include:
-
-Looking up user membership at session initiation
-* **Pros**: long-lived. We already check user validity.
-* **Cons**: without refresh, we may have long-lived sessions when privileges are no longer valid
-
-Similar as above but with periodic refresh:
-* **Pros**: faster reaction to changes in role memberships
-* **Cons**: more complex, I don't think we currently have periodic refreshes
-
-Gossiping role memberships:
-* **Pros**: near-instantaneous responsiveness to membership changes
-* **Cons**: massive increase in complexity
-
 ### Virtual table details
 
 The [Virtual tables](#virtual-tables) section has a few TODOs to clarify PostgreSQL behavior.
@@ -701,29 +678,25 @@ can be kept separate.
 
 ## Future improvements
 
+### Move privileges to their own table
+
+Privileges are currently stored in database/table descriptors. To properly integrate with the
+role change control, they need to be moved to their own table.
+
+[Existing issue](https://github.com/cockroachdb/cockroach/issues/2939).
+
 ### Role attributes
 
-In PostgreSQL, users and roles have attributes such as:
+We do not currently have attributes on users or roles.
+
+While we do not propose to implement all of them, some of them would be useful. For instance:
 * `SUPERUSER`: database superuser
 * `CREATEDB`: can create databases
 * `CREATEROLE`: can manipulate all roles (except the superuser roles)
+* `INHERIT|NOINHERIT`: roles privileges are inherited (or not) 
 
 Implementing additional attributes is out of scope for this RFC. If added, this can be done for
 both users and roles by adding the corresponding columns to the `system.users` table.
-
-### Superuser attribute
-
-The superuser is now fixed to the `admin` role. We can make this more flexible by adding
-a `SUPERUSER` attribute, settable on both roles and users.
-
-### Inheritance
-
-PostgreSQL allows roles with and without the `INHERIT` attribute.
-
-If `A ∈ B` and `B` has `NOINHERIT`, then `A` must first switch to `B` to access its privileges:
-```
-SET ROLE B
-```
 
 ### Convenience statements
 
