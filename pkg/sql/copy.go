@@ -52,9 +52,9 @@ type copyNode struct {
 	rowsMemAcc    mon.BoundAccount
 }
 
-// CopyFrom begins a COPY.
+// Copy begins a COPY.
 // Privileges: INSERT on table.
-func (p *planner) CopyFrom(ctx context.Context, n *tree.CopyFrom) (planNode, error) {
+func (p *planner) Copy(ctx context.Context, n *tree.CopyFrom) (planNode, error) {
 	cn := &copyNode{
 		table:   &n.Table,
 		columns: n.Columns,

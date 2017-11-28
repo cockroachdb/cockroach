@@ -40,7 +40,8 @@ type valuesNode struct {
 	valuesRun
 }
 
-func (p *planner) ValuesClause(
+// Values implements the VALUES clause.
+func (p *planner) Values(
 	ctx context.Context, n *tree.ValuesClause, desiredTypes []types.T,
 ) (planNode, error) {
 	v := &valuesNode{

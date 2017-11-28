@@ -120,7 +120,7 @@ func TestValues(t *testing.T) {
 					err = errors.Errorf("%v", r)
 				}
 			}()
-			return p.ValuesClause(context.TODO(), tc.stmt, nil)
+			return p.Values(context.TODO(), tc.stmt, nil)
 		}()
 		if err == nil != tc.ok {
 			t.Errorf("%d: error_expected=%t, but got error %v", i, tc.ok, err)
