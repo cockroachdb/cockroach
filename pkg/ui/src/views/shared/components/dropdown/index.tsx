@@ -38,19 +38,28 @@ export default class Dropdown extends React.Component<DropdownOwnProps, {}> {
     if (onArrowClick) {
       className += " dropdown--side-arrows";
     }
+
+    let leftClassName = "dropdown__side-arrow";
+    if (_.includes(disabledArrows, ArrowDirection.LEFT)) {
+      leftClassName += " dropdown__side-arrow--disabled";
+    }
+
+    let rightClassName = "dropdown__side-arrow";
+    if (_.includes(disabledArrows, ArrowDirection.RIGHT)) {
+      rightClassName += " dropdown__side-arrow--disabled";
+    }
+
     return <div className={className}>
       {/* TODO (maxlang): consider moving arrows outside the dropdown component */}
       <span
-        className="dropdown__side-arrow"
-        disabled={_.includes(disabledArrows, ArrowDirection.LEFT)}
+        className={leftClassName}
         dangerouslySetInnerHTML={trustIcon(leftArrow)}
         onClick={() => this.props.onArrowClick(ArrowDirection.LEFT)}>
       </span>
       <span className="dropdown__title">{this.props.title}{this.props.title ? ":" : ""}</span>
       <Select className="dropdown__select" clearable={false} searchable={false} options={options} value={selected} onChange={onChange} />
       <span
-        className="dropdown__side-arrow"
-        disabled={_.includes(disabledArrows, ArrowDirection.RIGHT)}
+        className={rightClassName}
         dangerouslySetInnerHTML={trustIcon(rightArrow)}
         onClick={() => this.props.onArrowClick(ArrowDirection.RIGHT)}>
       </span>

@@ -81,7 +81,7 @@ class LiveNodeList extends React.Component<NodeCategoryListProps, {}> {
             {
               title: "Address",
               cell: (ns) => {
-                const status = nodesSummary.livenessStatusByNodeID[ns.desc.node_id] || 0;
+                const status = nodesSummary.livenessStatusByNodeID[ns.desc.node_id] || LivenessStatus.HEALTHY;
                 const s = LivenessStatus[status].toLowerCase();
                 const tooltip = (status === LivenessStatus.HEALTHY) ?
                   "This node is currently healthy." :
