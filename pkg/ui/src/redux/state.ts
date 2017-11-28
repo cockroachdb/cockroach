@@ -1,7 +1,7 @@
 import _ from "lodash";
 import { hashHistory } from "react-router";
 import { syncHistoryWithStore, routerReducer, RouterState } from "react-router-redux";
-import { createStore, combineReducers, applyMiddleware, compose, GenericStoreEnhancer } from "redux";
+import { createStore, combineReducers, applyMiddleware, compose, GenericStoreEnhancer, Store } from "redux";
 import createSagaMiddleware from "redux-saga";
 import thunk from "redux-thunk";
 
@@ -29,7 +29,7 @@ export interface AdminUIState {
 export function createAdminUIStore() {
   const sagaMiddleware = createSagaMiddleware();
 
-  const store = createStore(
+  const store: Store<AdminUIState> = createStore(
     combineReducers<AdminUIState>({
       cachedData: apiReducersReducer,
       hover: hoverReducer,

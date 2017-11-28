@@ -86,10 +86,13 @@ export let availableTimeScales: TimeScaleCollection = _.mapValues(
       sampleSize: moment.duration(1, "hour"),
     },
   },
-  (v: TimeScale, k) => {
+  (v, k) => {
+    // This weirdness is to work around an apparent issue in TypeScript:
+    // https://github.com/Microsoft/TypeScript/issues/20305
+    const result: TimeScale = v;
     // Set the "key" attribute.
-    v.key = k;
-    return v;
+    result.key = k;
+    return result;
   },
 );
 

@@ -53,14 +53,10 @@ export const tableEvents = [
 export const settingsEvents = [SET_CLUSTER_SETTING];
 export const allEvents = [...nodeEvents, ...databaseEvents, ...tableEvents, ...settingsEvents];
 
-interface EventSet {
-  [key: string]: number;
-}
-
-const nodeEventSet = _.invert<EventSet>(nodeEvents);
-const databaseEventSet = _.invert<EventSet>(databaseEvents);
-const tableEventSet = _.invert<EventSet>(tableEvents);
-const settingsEventSet = _.invert<EventSet>(settingsEvents);
+const nodeEventSet = _.invert(nodeEvents);
+const databaseEventSet = _.invert(databaseEvents);
+const tableEventSet = _.invert(tableEvents);
+const settingsEventSet = _.invert(settingsEvents);
 
 export function isNodeEvent(e: Event): boolean {
   return !_.isUndefined(nodeEventSet[e.event_type]);
