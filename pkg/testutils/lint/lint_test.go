@@ -1092,6 +1092,10 @@ func TestLint(t *testing.T) {
 
 	// TestHelpURLs checks that all help texts have a valid documentation URL.
 	t.Run("TestHelpURLs", func(t *testing.T) {
+		if testing.Short() {
+			t.Skip("short flag")
+		}
+
 		t.Parallel()
 		var buf bytes.Buffer
 		for key, body := range sqlparser.HelpMessages {
