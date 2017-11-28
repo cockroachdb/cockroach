@@ -84,7 +84,7 @@
   branch = "master"
   name = "github.com/andy-kimball/arenaskl"
   packages = ["."]
-  revision = "1b13f9a73da39445e8106e6cdc1af59f06ea6c20"
+  revision = "ba9004a07e17a74381b3cf56ef32216464d26172"
 
 [[projects]]
   branch = "master"

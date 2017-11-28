@@ -177,7 +177,7 @@ func newIntervalSkl(clock *hlc.Clock, minRet time.Duration, pageSize uint32) *in
 		pageSize: pageSize,
 		minPages: defaultMinSklPages,
 	}
-	s.pushNewPage(0)
+	s.pushNewPage(0 /* maxWallTime */, nil /* arena */)
 	return &s
 }
 
@@ -341,9 +341,16 @@ func (s *intervalSkl) frontPage() *sklPage {
 	return s.pages.Front().Value.(*sklPage)
 }
 
-// pushNewPage prepends a new empty page to the front of the pages list.
-func (s *intervalSkl) pushNewPage(maxWallTime int64) {
-	p := newSklPage(s.pageSize)
+// pushNewPage prepends a new empty page to the front of the pages list. It
+// accepts an optional arena argument to facilitate re-use.
+func (s *intervalSkl) pushNewPage(maxWallTime int64, arena *arenaskl.Arena) {
+	if arena != nil && arena.Size() == s.pageSize {
+		// Re-use the provided arena, if possible.
+		arena.Reset()
+	} else {
+		arena = arenaskl.NewArena(s.pageSize)
+	}
+	p := newSklPage(arena)
 	p.maxWallTime = maxWallTime
 	s.pages.PushFront(p)
 }
@@ -363,14 +370,6 @@ func (s *intervalSkl) rotatePages(filledPage *sklPage) {
 		return
 	}
 
-	// Push a new empty page on the front of the pages list. We give this page
-	// the maxWallTime of the old front page. This assures that the maxWallTime
-	// for a page is always equal to or greater than that for all earlier pages.
-	// In other words, it assures that the maxWallTime for a page is not only
-	// the maximum timestamp for all values it contains, but also for all values
-	// any earlier pages contain.
-	s.pushNewPage(atomic.LoadInt64(&fp.maxWallTime))
-
 	// Determine the minimum timestamp a page must contain to be within the
 	// minimum retention window. If clock is nil, we have no minimum retention
 	// window.
@@ -382,8 +381,14 @@ func (s *intervalSkl) rotatePages(filledPage *sklPage) {
 
 	// Iterate over the pages in reverse, evicting pages that are no longer
 	// needed and ratcheting up the floor timestamp in the process.
+	//
+	// If possible, keep a reference to an evicted page's arena so that we can
+	// re-use it. This is safe because we're holding the rotation mutex write
+	// lock, so there cannot be concurrent readers and no reader will ever
+	// access evicted pages once we unlock.
 	back := s.pages.Back()
-	for s.pages.Len() > s.minPages {
+	var oldArena *arenaskl.Arena
+	for s.pages.Len() >= s.minPages {
 		bp := back.Value.(*sklPage)
 		bpMaxTS := hlc.Timestamp{WallTime: atomic.LoadInt64(&bp.maxWallTime)}
 		if !bpMaxTS.Less(minTSToRetain) {
@@ -396,10 +401,19 @@ func (s *intervalSkl) rotatePages(filledPage *sklPage) {
 		s.floorTS.Forward(bpMaxTS)
 
 		// Evict the page.
+		oldArena = bp.list.Arena()
 		evict := back
 		back = back.Prev()
 		s.pages.Remove(evict)
 	}
+
+	// Push a new empty page on the front of the pages list. We give this page
+	// the maxWallTime of the old front page. This assures that the maxWallTime
+	// for a page is always equal to or greater than that for all earlier pages.
+	// In other words, it assures that the maxWallTime for a page is not only
+	// the maximum timestamp for all values it contains, but also for all values
+	// any earlier pages contain.
+	s.pushNewPage(atomic.LoadInt64(&fp.maxWallTime), oldArena)
 }
 
 // LookupTimestamp returns the latest timestamp value at which the given key was
@@ -476,8 +490,8 @@ type sklPage struct {
 	isFull      int32 // accessed atomically
 }
 
-func newSklPage(size uint32) *sklPage {
-	return &sklPage{list: arenaskl.NewSkiplist(arenaskl.NewArena(size))}
+func newSklPage(arena *arenaskl.Arena) *sklPage {
+	return &sklPage{list: arenaskl.NewSkiplist(arena)}
 }
 
 func (p *sklPage) lookupTimestampRange(from, to []byte, opt rangeOptions) cacheValue {
