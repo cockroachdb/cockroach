@@ -17,6 +17,7 @@ package distsqlrun
 import (
 	"context"
 	"io"
+	time "time"
 
 	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
@@ -77,6 +78,12 @@ const Version DistSQLVersion = 8
 // MinAcceptedVersion is the oldest version that the server is
 // compatible with; see above.
 const MinAcceptedVersion DistSQLVersion = 6
+
+// minFlowDrainWait is the minimum amount of time a draining server allows for
+// any incoming flows to be registered. It acts as a grace period in which the
+// draining server waits for its gossiped draining state to be received by other
+// nodes.
+const minFlowDrainWait = 1 * time.Second
 
 var settingUseTempStorageSorts = settings.RegisterBoolSetting(
 	"sql.distsql.temp_storage.sorts",
@@ -188,6 +195,18 @@ func (ds *ServerImpl) Start() {
 	}
 
 	ds.flowScheduler.Start()
+}
+
+// Drain drains the server's flowRegistry. See flowRegistry.Drain for more
+// details.
+func (ds *ServerImpl) Drain(flowDrainWait time.Duration) {
+	ds.flowRegistry.Drain(flowDrainWait, minFlowDrainWait)
+}
+
+// Undrain undrains the server's flowRegistry. See flowRegistry.Undrain for more
+// details.
+func (ds *ServerImpl) Undrain() {
+	ds.flowRegistry.Undrain()
 }
 
 // FlowVerIsCompatible checks a flow's version is compatible with this node's
