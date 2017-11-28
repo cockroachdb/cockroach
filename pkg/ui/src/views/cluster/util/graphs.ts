@@ -286,7 +286,7 @@ function ComputeTimeAxisDomain(
 }
 
 type formattedDatum = {
-  values: protos.cockroach.ts.tspb.TimeSeriesDatapoint$Properties,
+  values: protos.cockroach.ts.tspb.TimeSeriesDatapoint$Properties[],
   key: string,
   area: boolean,
   fillOpacity: number,
