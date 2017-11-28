@@ -39,14 +39,6 @@ type valueGenerator struct {
 	run valueGeneratorRun
 }
 
-// valueGeneratorRun contains the run-time state of valueGenerator
-// during local execution.
-type valueGeneratorRun struct {
-	// gen is a reference to the generator object that produces the row
-	// for this planNode.
-	gen tree.ValueGenerator
-}
-
 // makeGenerator creates a valueGenerator instance that wraps a call to a
 // generator function.
 func (p *planner) makeGenerator(ctx context.Context, t *tree.FuncExpr) (planNode, error) {
@@ -76,6 +68,14 @@ func (p *planner) makeGenerator(ctx context.Context, t *tree.FuncExpr) (planNode
 		expr:    normalized,
 		columns: columns,
 	}, nil
+}
+
+// valueGeneratorRun contains the run-time state of valueGenerator
+// during local execution.
+type valueGeneratorRun struct {
+	// gen is a reference to the generator object that produces the row
+	// for this planNode.
+	gen tree.ValueGenerator
 }
 
 func (n *valueGenerator) Start(params runParams) error {

@@ -131,5 +131,5 @@ func (n *createIndexNode) Start(params runParams) error {
 }
 
 func (*createIndexNode) Next(runParams) (bool, error) { return false, nil }
-func (*createIndexNode) Close(context.Context)        {}
 func (*createIndexNode) Values() tree.Datums          { return tree.Datums{} }
+func (*createIndexNode) Close(context.Context)        {}

@@ -41,20 +41,6 @@ type sortNode struct {
 	run sortRun
 }
 
-// sortRun contains the run-time state of sortNode during local
-// execution.
-type sortRun struct {
-	sortStrategy sortingStrategy
-	valueIter    valueIterator
-}
-
-func ensureColumnOrderable(c sqlbase.ResultColumn) error {
-	if _, ok := c.Typ.(types.TArray); ok || c.Typ == types.JSON {
-		return pgerror.NewErrorf(pgerror.CodeFeatureNotSupportedError, "can't order by column type %s", c.Typ)
-	}
-	return nil
-}
-
 // orderBy constructs a sortNode based on the ORDER BY clause.
 //
 // In the general case (SELECT/UNION/VALUES), we can sort by a column index or a
@@ -249,6 +235,101 @@ func (p *planner) orderBy(
 	return &sortNode{columns: columns, ordering: ordering}, nil
 }
 
+// sortRun contains the run-time state of sortNode during local
+// execution.
+type sortRun struct {
+	sortStrategy sortingStrategy
+	valueIter    valueIterator
+}
+
+func (n *sortNode) Start(params runParams) error {
+	return n.plan.Start(params)
+}
+
+func (n *sortNode) Next(params runParams) (bool, error) {
+	cancelChecker := params.p.cancelChecker
+
+	for n.needSort {
+		if vn, ok := n.plan.(*valuesNode); ok {
+			// The plan we wrap is already a values node. Just sort it.
+			v := &sortValues{
+				ordering: n.ordering,
+				rows:     vn.rows,
+				evalCtx:  params.evalCtx,
+			}
+			n.run.sortStrategy = newSortAllStrategy(v)
+			n.run.sortStrategy.Finish(params.ctx, cancelChecker)
+			// Sorting is done. Relinquish the reference on the row container,
+			// so as to avoid closing it twice.
+			n.run.sortStrategy = nil
+			// Fall through -- the remainder of the work is done by the
+			// valuesNode itself.
+			n.needSort = false
+			break
+		} else if n.run.sortStrategy == nil {
+			v := params.p.newSortValues(n.ordering, planColumns(n.plan), 0 /*capacity*/)
+			n.run.sortStrategy = newSortAllStrategy(v)
+		}
+
+		if err := cancelChecker.Check(); err != nil {
+			return false, err
+		}
+
+		// TODO(andrei): If we're scanning an index with a prefix matching an
+		// ordering prefix, we should only accumulate values for equal fields
+		// in this prefix, then sort the accumulated chunk and output.
+		// TODO(irfansharif): matching column ordering speed-ups from distsql,
+		// when implemented, could be repurposed and used here.
+		next, err := n.plan.Next(params)
+		if err != nil {
+			return false, err
+		}
+		if !next {
+			n.run.sortStrategy.Finish(params.ctx, cancelChecker)
+			n.run.valueIter = n.run.sortStrategy
+			n.needSort = false
+			break
+		}
+
+		values := n.plan.Values()
+		if err := n.run.sortStrategy.Add(params.ctx, values); err != nil {
+			return false, err
+		}
+	}
+
+	// Check again, in case sort returned early due to a cancellation.
+	if err := cancelChecker.Check(); err != nil {
+		return false, err
+	}
+
+	if n.run.valueIter == nil {
+		n.run.valueIter = n.plan
+	}
+	return n.run.valueIter.Next(params)
+}
+
+func (n *sortNode) Values() tree.Datums {
+	// If an ordering expression was used the number of columns in each row might
+	// differ from the number of columns requested, so trim the result.
+	return n.run.valueIter.Values()[:len(n.columns)]
+}
+
+func (n *sortNode) Close(ctx context.Context) {
+	n.plan.Close(ctx)
+	if n.run.sortStrategy != nil {
+		n.run.sortStrategy.Close(ctx)
+	}
+	// n.run.valueIter points to either n.plan or n.run.sortStrategy and thus has already
+	// been closed.
+}
+
+func ensureColumnOrderable(c sqlbase.ResultColumn) error {
+	if _, ok := c.Typ.(types.TArray); ok || c.Typ == types.JSON {
+		return pgerror.NewErrorf(pgerror.CodeFeatureNotSupportedError, "can't order by column type %s", c.Typ)
+	}
+	return nil
+}
+
 // flattenTuples extracts the members of tuples into a list of columns.
 func flattenTuples(
 	cols sqlbase.ResultColumns, exprs []tree.TypedExpr, ivarHelper *tree.IndexedVarHelper,
@@ -424,87 +505,6 @@ func (p *planner) colIndex(numOriginalCols int, expr tree.Expr, context string) 
 		ord--
 	}
 	return int(ord), nil
-}
-
-func (n *sortNode) Values() tree.Datums {
-	// If an ordering expression was used the number of columns in each row might
-	// differ from the number of columns requested, so trim the result.
-	return n.run.valueIter.Values()[:len(n.columns)]
-}
-
-func (n *sortNode) Start(params runParams) error {
-	return n.plan.Start(params)
-}
-
-func (n *sortNode) Next(params runParams) (bool, error) {
-	cancelChecker := params.p.cancelChecker
-
-	for n.needSort {
-		if vn, ok := n.plan.(*valuesNode); ok {
-			// The plan we wrap is already a values node. Just sort it.
-			v := &sortValues{
-				ordering: n.ordering,
-				rows:     vn.rows,
-				evalCtx:  params.evalCtx,
-			}
-			n.run.sortStrategy = newSortAllStrategy(v)
-			n.run.sortStrategy.Finish(params.ctx, cancelChecker)
-			// Sorting is done. Relinquish the reference on the row container,
-			// so as to avoid closing it twice.
-			n.run.sortStrategy = nil
-			// Fall through -- the remainder of the work is done by the
-			// valuesNode itself.
-			n.needSort = false
-			break
-		} else if n.run.sortStrategy == nil {
-			v := params.p.newSortValues(n.ordering, planColumns(n.plan), 0 /*capacity*/)
-			n.run.sortStrategy = newSortAllStrategy(v)
-		}
-
-		if err := cancelChecker.Check(); err != nil {
-			return false, err
-		}
-
-		// TODO(andrei): If we're scanning an index with a prefix matching an
-		// ordering prefix, we should only accumulate values for equal fields
-		// in this prefix, then sort the accumulated chunk and output.
-		// TODO(irfansharif): matching column ordering speed-ups from distsql,
-		// when implemented, could be repurposed and used here.
-		next, err := n.plan.Next(params)
-		if err != nil {
-			return false, err
-		}
-		if !next {
-			n.run.sortStrategy.Finish(params.ctx, cancelChecker)
-			n.run.valueIter = n.run.sortStrategy
-			n.needSort = false
-			break
-		}
-
-		values := n.plan.Values()
-		if err := n.run.sortStrategy.Add(params.ctx, values); err != nil {
-			return false, err
-		}
-	}
-
-	// Check again, in case sort returned early due to a cancellation.
-	if err := cancelChecker.Check(); err != nil {
-		return false, err
-	}
-
-	if n.run.valueIter == nil {
-		n.run.valueIter = n.plan
-	}
-	return n.run.valueIter.Next(params)
-}
-
-func (n *sortNode) Close(ctx context.Context) {
-	n.plan.Close(ctx)
-	if n.run.sortStrategy != nil {
-		n.run.sortStrategy.Close(ctx)
-	}
-	// n.run.valueIter points to either n.plan or n.run.sortStrategy and thus has already
-	// been closed.
 }
 
 // valueIterator provides iterative access to a value source's values and

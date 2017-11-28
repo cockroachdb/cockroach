@@ -43,12 +43,6 @@ type createTableNode struct {
 	run createTableRun
 }
 
-// createTableRun contains the run-time state of createTableNode
-// during local execution.
-type createTableRun struct {
-	count int
-}
-
 // CreateTable creates a table.
 // Privileges: CREATE on database.
 //   Notes: postgres/mysql require CREATE on database.
@@ -101,39 +95,10 @@ func (p *planner) CreateTable(ctx context.Context, n *tree.CreateTable) (planNod
 	return &createTableNode{n: n, dbDesc: dbDesc, sourcePlan: sourcePlan}, nil
 }
 
-// HoistConstraints finds column constraints defined inline with the columns
-// and moves them into n.Defs as constraints. For example, the foreign key
-// constraint in `CREATE TABLE foo (a INT REFERENCES bar(a))` gets pulled into
-// a top level fk constraint like
-// `CREATE TABLE foo (a int CONSTRAINT .. FOREIGN KEY(a) REFERENCES bar(a)`.
-func HoistConstraints(n *tree.CreateTable) {
-	for _, d := range n.Defs {
-		if col, ok := d.(*tree.ColumnTableDef); ok {
-			for _, checkExpr := range col.CheckExprs {
-				n.Defs = append(n.Defs,
-					&tree.CheckConstraintTableDef{
-						Expr: checkExpr.Expr,
-						Name: checkExpr.ConstraintName,
-					},
-				)
-			}
-			col.CheckExprs = nil
-			if col.HasFKConstraint() {
-				var targetCol tree.NameList
-				if col.References.Col != "" {
-					targetCol = append(targetCol, col.References.Col)
-				}
-				n.Defs = append(n.Defs, &tree.ForeignKeyConstraintTableDef{
-					Table:    col.References.Table,
-					FromCols: tree.NameList{col.Name},
-					ToCols:   targetCol,
-					Name:     col.References.ConstraintName,
-					Actions:  col.References.Actions,
-				})
-				col.References.Table = tree.NormalizableTableName{}
-			}
-		}
-	}
+// createTableRun contains the run-time state of createTableNode
+// during local execution.
+type createTableRun struct {
+	count int
 }
 
 func (n *createTableNode) Start(params runParams) error {
@@ -265,6 +230,9 @@ func (n *createTableNode) Start(params runParams) error {
 	return nil
 }
 
+func (*createTableNode) Next(runParams) (bool, error) { return false, nil }
+func (*createTableNode) Values() tree.Datums          { return tree.Datums{} }
+
 func (n *createTableNode) Close(ctx context.Context) {
 	if n.sourcePlan != nil {
 		n.sourcePlan.Close(ctx)
@@ -272,8 +240,40 @@ func (n *createTableNode) Close(ctx context.Context) {
 	}
 }
 
-func (*createTableNode) Next(runParams) (bool, error) { return false, nil }
-func (*createTableNode) Values() tree.Datums          { return tree.Datums{} }
+// HoistConstraints finds column constraints defined inline with the columns
+// and moves them into n.Defs as constraints. For example, the foreign key
+// constraint in `CREATE TABLE foo (a INT REFERENCES bar(a))` gets pulled into
+// a top level fk constraint like
+// `CREATE TABLE foo (a int CONSTRAINT .. FOREIGN KEY(a) REFERENCES bar(a)`.
+func HoistConstraints(n *tree.CreateTable) {
+	for _, d := range n.Defs {
+		if col, ok := d.(*tree.ColumnTableDef); ok {
+			for _, checkExpr := range col.CheckExprs {
+				n.Defs = append(n.Defs,
+					&tree.CheckConstraintTableDef{
+						Expr: checkExpr.Expr,
+						Name: checkExpr.ConstraintName,
+					},
+				)
+			}
+			col.CheckExprs = nil
+			if col.HasFKConstraint() {
+				var targetCol tree.NameList
+				if col.References.Col != "" {
+					targetCol = append(targetCol, col.References.Col)
+				}
+				n.Defs = append(n.Defs, &tree.ForeignKeyConstraintTableDef{
+					Table:    col.References.Table,
+					FromCols: tree.NameList{col.Name},
+					ToCols:   targetCol,
+					Name:     col.References.ConstraintName,
+					Actions:  col.References.Actions,
+				})
+				col.References.Table = tree.NormalizableTableName{}
+			}
+		}
+	}
+}
 
 type indexMatch bool
 

@@ -33,14 +33,13 @@ type showZoneConfigNode struct {
 	run showZoneConfigRun
 }
 
-// showZoneConfigRun contains the run-time state of showZoneConfigNode
-// during local execution.
-type showZoneConfigRun struct {
-	zoneID       uint32
-	cliSpecifier string
-	protoConfig  []byte
-	yamlConfig   []byte
-	done         bool
+func (p *planner) ShowZoneConfig(ctx context.Context, n *tree.ShowZoneConfig) (planNode, error) {
+	if n.ZoneSpecifier == (tree.ZoneSpecifier{}) {
+		return p.delegateQuery(ctx, "SHOW ZONE CONFIGURATIONS", "TABLE crdb_internal.zones", nil, nil)
+	}
+	return &showZoneConfigNode{
+		zoneSpecifier: n.ZoneSpecifier,
+	}, nil
 }
 
 // These should match crdb_internal.zones.
@@ -63,13 +62,14 @@ var showZoneConfigNodeColumns = sqlbase.ResultColumns{
 	},
 }
 
-func (p *planner) ShowZoneConfig(ctx context.Context, n *tree.ShowZoneConfig) (planNode, error) {
-	if n.ZoneSpecifier == (tree.ZoneSpecifier{}) {
-		return p.delegateQuery(ctx, "SHOW ZONE CONFIGURATIONS", "TABLE crdb_internal.zones", nil, nil)
-	}
-	return &showZoneConfigNode{
-		zoneSpecifier: n.ZoneSpecifier,
-	}, nil
+// showZoneConfigRun contains the run-time state of showZoneConfigNode
+// during local execution.
+type showZoneConfigRun struct {
+	zoneID       uint32
+	cliSpecifier string
+	protoConfig  []byte
+	yamlConfig   []byte
+	done         bool
 }
 
 func (n *showZoneConfigNode) Start(params runParams) error {
@@ -124,6 +124,14 @@ func (n *showZoneConfigNode) Start(params runParams) error {
 	return err
 }
 
+func (n *showZoneConfigNode) Next(runParams) (bool, error) {
+	if !n.run.done {
+		n.run.done = true
+		return true, nil
+	}
+	return false, nil
+}
+
 func (n *showZoneConfigNode) Values() tree.Datums {
 	return tree.Datums{
 		tree.NewDInt(tree.DInt(n.run.zoneID)),
@@ -131,11 +139,6 @@ func (n *showZoneConfigNode) Values() tree.Datums {
 		tree.NewDBytes(tree.DBytes(n.run.yamlConfig)),
 		tree.NewDBytes(tree.DBytes(n.run.protoConfig)),
 	}
-}
-
-func (n *showZoneConfigNode) Next(runParams) (bool, error) {
-	defer func() { n.run.done = true }()
-	return !n.run.done, nil
 }
 
 func (*showZoneConfigNode) Close(context.Context) {}

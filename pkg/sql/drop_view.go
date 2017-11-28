@@ -87,15 +87,6 @@ func (p *planner) DropView(ctx context.Context, n *tree.DropView) (planNode, err
 	return &dropViewNode{n: n, td: td}, nil
 }
 
-func descInSlice(descID sqlbase.ID, td []*sqlbase.TableDescriptor) bool {
-	for _, desc := range td {
-		if descID == desc.ID {
-			return true
-		}
-	}
-	return false
-}
-
 func (n *dropViewNode) Start(params runParams) error {
 	ctx := params.ctx
 	for _, droppedDesc := range n.td {
@@ -129,8 +120,17 @@ func (n *dropViewNode) Start(params runParams) error {
 }
 
 func (*dropViewNode) Next(runParams) (bool, error) { return false, nil }
-func (*dropViewNode) Close(context.Context)        {}
 func (*dropViewNode) Values() tree.Datums          { return tree.Datums{} }
+func (*dropViewNode) Close(context.Context)        {}
+
+func descInSlice(descID sqlbase.ID, td []*sqlbase.TableDescriptor) bool {
+	for _, desc := range td {
+		if descID == desc.ID {
+			return true
+		}
+	}
+	return false
+}
 
 func (p *planner) canRemoveDependentView(
 	ctx context.Context,

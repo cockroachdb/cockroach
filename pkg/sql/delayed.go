@@ -33,13 +33,13 @@ type delayedNode struct {
 
 type nodeConstructor func(context.Context, *planner) (planNode, error)
 
+func (d *delayedNode) Start(params runParams) error        { return d.plan.Start(params) }
+func (d *delayedNode) Next(params runParams) (bool, error) { return d.plan.Next(params) }
+func (d *delayedNode) Values() tree.Datums                 { return d.plan.Values() }
+
 func (d *delayedNode) Close(ctx context.Context) {
 	if d.plan != nil {
 		d.plan.Close(ctx)
 		d.plan = nil
 	}
 }
-
-func (d *delayedNode) Start(params runParams) error        { return d.plan.Start(params) }
-func (d *delayedNode) Next(params runParams) (bool, error) { return d.plan.Next(params) }
-func (d *delayedNode) Values() tree.Datums                 { return d.plan.Values() }

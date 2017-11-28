@@ -25,44 +25,20 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
-// explainer represents the run-time state of the EXPLAIN logic.
-type explainer struct {
-	// showMetadata indicates whether the output has separate columns for the
-	// schema signature and ordering information of the intermediate
-	// nodes.
-	showMetadata bool
+// explainPlanNode wraps the logic for EXPLAIN as a planNode.
+type explainPlanNode struct {
+	explainer explainer
 
-	// showExprs indicates whether the plan prints expressions
-	// embedded inside the node.
-	showExprs bool
+	// plan is the sub-node being explained.
+	plan planNode
 
-	// qualifyNames determines whether column names in expressions
-	// should be fully qualified during pretty-printing.
-	qualifyNames bool
+	// expanded indicates whether to invoke expandPlan() on the sub-node.
+	expanded bool
 
-	// symbolicVars determines whether ordinal column references
-	// should be printed numerically.
-	symbolicVars bool
+	// optimized indicates whether to invoke setNeededColumns() on the sub-node.
+	optimized bool
 
-	// fmtFlags is the formatter to use for pretty-printing expressions.
-	fmtFlags tree.FmtFlags
-
-	// showTypes indicates whether to print the type of embedded
-	// expressions and result columns.
-	showTypes bool
-
-	// level is the current depth in the tree of planNodes.
-	level int
-
-	// doIndent indicates whether the output should be clarified
-	// with leading white spaces.
-	doIndent bool
-
-	// makeRow produces one row of EXPLAIN output.
-	makeRow func(level int, typ, field, desc string, plan planNode)
-
-	// err remembers whether any error was encountered by makeRow.
-	err error
+	run explainPlanRun
 }
 
 // newExplainPlanNode instantiates a planNode that runs an EXPLAIN query.
@@ -109,6 +85,67 @@ func (p *planner) makeExplainPlanNode(
 		},
 	}
 	return node
+}
+
+// explainPlanRun is the run-time state of explainPlanNode during local execution.
+type explainPlanRun struct {
+	// results is the container for EXPLAIN's output.
+	results *valuesNode
+}
+
+func (e *explainPlanNode) Start(params runParams) error {
+	// Note that we don't call start on e.plan. That's on purpose, Start() can
+	// have side effects. And it's supposed to not be needed for the way in which
+	// we're going to use e.plan.
+	return params.p.populateExplain(params.ctx, &e.explainer, e.run.results, e.plan)
+}
+
+func (e *explainPlanNode) Next(params runParams) (bool, error) { return e.run.results.Next(params) }
+func (e *explainPlanNode) Values() tree.Datums                 { return e.run.results.Values() }
+
+func (e *explainPlanNode) Close(ctx context.Context) {
+	e.plan.Close(ctx)
+	e.run.results.Close(ctx)
+}
+
+// explainer represents the run-time state of the EXPLAIN logic.
+type explainer struct {
+	// showMetadata indicates whether the output has separate columns for the
+	// schema signature and ordering information of the intermediate
+	// nodes.
+	showMetadata bool
+
+	// showExprs indicates whether the plan prints expressions
+	// embedded inside the node.
+	showExprs bool
+
+	// qualifyNames determines whether column names in expressions
+	// should be fully qualified during pretty-printing.
+	qualifyNames bool
+
+	// symbolicVars determines whether ordinal column references
+	// should be printed numerically.
+	symbolicVars bool
+
+	// fmtFlags is the formatter to use for pretty-printing expressions.
+	fmtFlags tree.FmtFlags
+
+	// showTypes indicates whether to print the type of embedded
+	// expressions and result columns.
+	showTypes bool
+
+	// level is the current depth in the tree of planNodes.
+	level int
+
+	// doIndent indicates whether the output should be clarified
+	// with leading white spaces.
+	doIndent bool
+
+	// makeRow produces one row of EXPLAIN output.
+	makeRow func(level int, typ, field, desc string, plan planNode)
+
+	// err remembers whether any error was encountered by makeRow.
+	err error
 }
 
 var emptyString = tree.NewDString("")
@@ -264,41 +301,4 @@ func formatColumns(cols sqlbase.ResultColumns, printTypes bool) string {
 	}
 	buf.WriteByte(')')
 	return buf.String()
-}
-
-// explainPlanNode wraps the logic for EXPLAIN as a planNode.
-type explainPlanNode struct {
-	explainer explainer
-
-	// plan is the sub-node being explained.
-	plan planNode
-
-	// expanded indicates whether to invoke expandPlan() on the sub-node.
-	expanded bool
-
-	// optimized indicates whether to invoke setNeededColumns() on the sub-node.
-	optimized bool
-
-	run explainPlanRun
-}
-
-// explainPlanRun is the run-time state of explainPlanNode during local execution.
-type explainPlanRun struct {
-	// results is the container for EXPLAIN's output.
-	results *valuesNode
-}
-
-func (e *explainPlanNode) Next(params runParams) (bool, error) { return e.run.results.Next(params) }
-func (e *explainPlanNode) Values() tree.Datums                 { return e.run.results.Values() }
-
-func (e *explainPlanNode) Start(params runParams) error {
-	// Note that we don't call start on e.plan. That's on purpose, Start() can
-	// have side effects. And it's supposed to not be needed for the way in which
-	// we're going to use e.plan.
-	return params.p.populateExplain(params.ctx, &e.explainer, e.run.results, e.plan)
-}
-
-func (e *explainPlanNode) Close(ctx context.Context) {
-	e.plan.Close(ctx)
-	e.run.results.Close(ctx)
 }
