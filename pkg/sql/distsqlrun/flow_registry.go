@@ -32,6 +32,10 @@ import (
 // be set up before erroring out.
 const flowStreamDefaultTimeout time.Duration = 10 * time.Second
 
+// expectedConnectionTime is the expected time taken by a flow to connect to its
+// consumers.
+const expectedConnectionTime time.Duration = 500 * time.Millisecond
+
 // inboundStreamInfo represents the endpoint where a data stream from another
 // node connects to a flow. The external node initiates this process through a
 // FlowStream RPC, which uses (*Flow).connectInboundStream() to associate the
@@ -90,6 +94,13 @@ type flowRegistry struct {
 	// All fields in the flowEntry's are protected by the flowRegistry mutex,
 	// except flow, whose methods can be called freely.
 	flows map[FlowID]*flowEntry
+
+	// draining specifies whether the flowRegistry is in drain mode. If it is,
+	// the flowRegistry will not accept new flows.
+	draining bool
+
+	// flowDone is signaled whenever the size of flows decreases.
+	flowDone *sync.Cond
 }
 
 // makeFlowRegistry creates a new flowRegistry.
@@ -101,6 +112,7 @@ func makeFlowRegistry(nodeID roachpb.NodeID) *flowRegistry {
 		nodeID: nodeID,
 		flows:  make(map[FlowID]*flowEntry),
 	}
+	fr.flowDone = sync.NewCond(fr)
 	return fr
 }
 
@@ -128,6 +140,7 @@ func (fr *flowRegistry) releaseEntryLocked(id FlowID) {
 			panic(fmt.Sprintf("invalid refCount: %d", entry.refCount))
 		}
 		delete(fr.flows, id)
+		fr.flowDone.Signal()
 	}
 }
 
@@ -153,6 +166,13 @@ func (fr *flowRegistry) RegisterFlow(
 ) (retErr error) {
 	fr.Lock()
 	defer fr.Unlock()
+	if fr.draining {
+		return errors.Errorf(
+			"could not register flowID %d on node %d because the registry is draining",
+			id,
+			fr.nodeID,
+		)
+	}
 	defer func() {
 		if retErr != nil {
 			for _, stream := range inboundStreams {
@@ -267,6 +287,84 @@ func (fr *flowRegistry) waitForFlowLocked(
 	}
 
 	return entry
+}
+
+// Drain waits at most flowDrainWait for currently running flows to finish and
+// at least minFlowDrainWait for any incoming flows to be registered. If there
+// are still flows active after flowDrainWait, Drain waits an extra
+// expectedConnectionTime so that any flows that were registered at the end of
+// the time window have a reasonable amount of time to connect to their
+// consumers, thus unblocking them.
+// The flowRegistry rejects any new flows once it has finished draining.
+func (fr *flowRegistry) Drain(flowDrainWait time.Duration, minFlowDrainWait time.Duration) {
+	allFlowsDone := make(chan struct{}, 1)
+	start := timeutil.Now()
+	stopWaiting := false
+
+	// If the flow registry is empty, wait minFlowDrainWait for any incoming
+	// flows to register.
+	fr.Lock()
+	if len(fr.flows) == 0 {
+		fr.Unlock()
+		time.Sleep(minFlowDrainWait)
+		fr.Lock()
+		// No flows were registered, return.
+		if len(fr.flows) == 0 {
+			fr.Unlock()
+			return
+		}
+	}
+
+	go func() {
+		select {
+		case <-time.After(flowDrainWait):
+			stopWaiting = true
+			fr.flowDone.Signal()
+		case <-allFlowsDone:
+		}
+	}()
+
+	for !(stopWaiting || len(fr.flows) == 0) {
+		fr.flowDone.Wait()
+	}
+	fr.Unlock()
+
+	// If we spent less time waiting for all registered flows to finish, wait
+	// for the minimum time for any new incoming flows and wait for these to
+	// finish.
+	waitTime := time.Since(start)
+	if waitTime < minFlowDrainWait {
+		time.Sleep(minFlowDrainWait - waitTime)
+		fr.Lock()
+		for !(stopWaiting || len(fr.flows) == 0) {
+			fr.flowDone.Wait()
+		}
+		fr.Unlock()
+	}
+
+	// At this stage, we have either hit the flowDrainWait timeout or we have
+	// no flows left. We wait for an expectedConnectionTime longer so that we
+	// give any flows that were registered in the
+	// flowDrainWait - expectedConnectionTime window enough time to establish
+	// connections to their consumers so that these do not block for a long time
+	// waiting for a connection to be established.
+	fr.Lock()
+	fr.draining = true
+	if len(fr.flows) > 0 {
+		fr.Unlock()
+		time.Sleep(expectedConnectionTime)
+		fr.Lock()
+	}
+	fr.Unlock()
+
+	allFlowsDone <- struct{}{}
+}
+
+// Undrain causes the flowRegistry to start accepting flows again.
+func (fr *flowRegistry) Undrain() {
+	fr.Lock()
+	fr.draining = false
+	fr.Unlock()
 }
 
 // ConnectInboundStream finds the inboundStreamInfo for the given
