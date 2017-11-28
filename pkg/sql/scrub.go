@@ -78,6 +78,11 @@ type scrubNode struct {
 
 	n *tree.Scrub
 
+	run scrubRun
+}
+
+// scrubRun contains the run-time state of scrubNode during local execution.
+type scrubRun struct {
 	checkQueue []checkOperation
 	row        tree.Datums
 }
@@ -187,7 +192,7 @@ func (n *scrubNode) startScrubTable(
 			if err != nil {
 				return err
 			}
-			n.checkQueue = append(n.checkQueue, indexesToCheck...)
+			n.run.checkQueue = append(n.run.checkQueue, indexesToCheck...)
 		case *tree.ScrubOptionPhysical:
 			if physicalCheckSet {
 				return pgerror.NewErrorf(pgerror.CodeSyntaxError,
@@ -207,7 +212,7 @@ func (n *scrubNode) startScrubTable(
 		if err != nil {
 			return err
 		}
-		n.checkQueue = append(n.checkQueue, indexesToCheck...)
+		n.run.checkQueue = append(n.run.checkQueue, indexesToCheck...)
 		// TODO(joey): Initialize physical index to check.
 	}
 
@@ -215,8 +220,8 @@ func (n *scrubNode) startScrubTable(
 }
 
 func (n *scrubNode) Next(params runParams) (bool, error) {
-	for len(n.checkQueue) > 0 {
-		nextCheck := n.checkQueue[0]
+	for len(n.run.checkQueue) > 0 {
+		nextCheck := n.run.checkQueue[0]
 		if !nextCheck.Started() {
 			if err := nextCheck.Start(params.ctx, params.p); err != nil {
 				return false, err
@@ -227,7 +232,7 @@ func (n *scrubNode) Next(params runParams) (bool, error) {
 		// happens if there are no more results to report.
 		if !nextCheck.Done(params.ctx) {
 			var err error
-			n.row, err = nextCheck.Next(params.ctx, params.p)
+			n.run.row, err = nextCheck.Next(params.ctx, params.p)
 			if err != nil {
 				return false, err
 			}
@@ -237,21 +242,21 @@ func (n *scrubNode) Next(params runParams) (bool, error) {
 		nextCheck.Close(params.ctx)
 		// Prepare the next iterator. If we happen to finish this iterator,
 		// we want to begin the next one so we still return a result.
-		n.checkQueue = n.checkQueue[1:]
+		n.run.checkQueue = n.run.checkQueue[1:]
 	}
 	return false, nil
 }
 
 func (n *scrubNode) Close(ctx context.Context) {
 	// Close any iterators which have not been completed.
-	for len(n.checkQueue) > 0 {
-		n.checkQueue[0].Close(ctx)
-		n.checkQueue = n.checkQueue[1:]
+	for len(n.run.checkQueue) > 0 {
+		n.run.checkQueue[0].Close(ctx)
+		n.run.checkQueue = n.run.checkQueue[1:]
 	}
 }
 
 func (n *scrubNode) Values() tree.Datums {
-	return n.row
+	return n.run.row
 }
 
 // getColumns returns the columns that are stored in an index k/v. The
@@ -311,14 +316,9 @@ func getPrimaryColIdxs(
 
 // indexCheckOperation is a check on a secondary index's integrity.
 type indexCheckOperation struct {
-	started   bool
 	tableName *tree.TableName
 	tableDesc *sqlbase.TableDescriptor
 	indexDesc *sqlbase.IndexDescriptor
-
-	// Intermediate values.
-	rows     *sqlbase.RowContainer
-	rowIndex int
 
 	// columns is a list of the columns returned by one side of the
 	// queries join. The actual resulting rows from the RowContainer is
@@ -327,6 +327,17 @@ type indexCheckOperation struct {
 	// primaryColIdxs maps PrimaryIndex.Columns to the row
 	// indexes in the query result tree.Datums.
 	primaryColIdxs []int
+
+	run indexCheckRun
+}
+
+// indexCheckRun contains the run-time state for indexCheckOperation
+// during local execution.
+type indexCheckRun struct {
+	started bool
+	// Intermediate values.
+	rows     *sqlbase.RowContainer
+	rowIndex int
 }
 
 func newIndexCheckOperation(
@@ -385,8 +396,8 @@ func (o *indexCheckOperation) Start(ctx context.Context, p *planner) error {
 		return err
 	}
 
-	o.started = true
-	o.rows = rows
+	o.run.started = true
+	o.run.rows = rows
 	o.primaryColIdxs = primaryColIdxs
 	o.columns = columns
 	return nil
@@ -394,8 +405,8 @@ func (o *indexCheckOperation) Start(ctx context.Context, p *planner) error {
 
 // Next implements the checkOperation interface.
 func (o *indexCheckOperation) Next(ctx context.Context, p *planner) (tree.Datums, error) {
-	row := o.rows.At(o.rowIndex)
-	o.rowIndex++
+	row := o.run.rows.At(o.run.rowIndex)
+	o.run.rowIndex++
 
 	// Check if this row has results from the left. See the comment above
 	// createIndexCheckQuery indicating why this is true.
@@ -468,18 +479,18 @@ func (o *indexCheckOperation) Next(ctx context.Context, p *planner) (tree.Datums
 
 // Started implements the checkOperation interface.
 func (o *indexCheckOperation) Started() bool {
-	return o.started
+	return o.run.started
 }
 
 // Done implements the checkOperation interface.
 func (o *indexCheckOperation) Done(ctx context.Context) bool {
-	return o.rows == nil || o.rowIndex >= o.rows.Len()
+	return o.run.rows == nil || o.run.rowIndex >= o.run.rows.Len()
 }
 
 // Close4 implements the checkOperation interface.
 func (o *indexCheckOperation) Close(ctx context.Context) {
-	if o.rows != nil {
-		o.rows.Close(ctx)
+	if o.run.rows != nil {
+		o.run.rows.Close(ctx)
 	}
 }
 

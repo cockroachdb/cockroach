@@ -75,6 +75,12 @@ type unionNode struct {
 	// emit contains the rows seen on the right so far and performs the
 	// selection/filtering logic.
 	emit unionNodeEmit
+
+	run unionRun
+}
+
+// unionRun contains the run-time state of unionNode during local execution.
+type unionRun struct {
 	// scratch is a preallocated buffer for formatting the key of the
 	// current row on the right.
 	scratch []byte
@@ -155,7 +161,9 @@ func (p *planner) UnionClause(
 		inverted: inverted,
 		emitAll:  emitAll,
 		emit:     emit,
-		scratch:  make([]byte, 0),
+		run: unionRun{
+			scratch: make([]byte, 0),
+		},
 	}
 	return node, nil
 }
@@ -176,14 +184,14 @@ func (n *unionNode) readRight(params runParams) (bool, error) {
 		if n.emitAll {
 			return true, nil
 		}
-		n.scratch = n.scratch[:0]
-		if n.scratch, err = sqlbase.EncodeDatums(n.scratch, n.right.Values()); err != nil {
+		n.run.scratch = n.run.scratch[:0]
+		if n.run.scratch, err = sqlbase.EncodeDatums(n.run.scratch, n.right.Values()); err != nil {
 			return false, err
 		}
 		// TODO(dan): Sending the entire encodeDTuple to be stored in the map would
 		// use a lot of memory for big rows or big resultsets. Consider using a hash
 		// of the bytes instead.
-		if n.emit.emitRight(n.scratch) {
+		if n.emit.emitRight(n.run.scratch) {
 			return true, nil
 		}
 	}
@@ -202,11 +210,11 @@ func (n *unionNode) readLeft(params runParams) (bool, error) {
 		if n.emitAll {
 			return true, nil
 		}
-		n.scratch = n.scratch[:0]
-		if n.scratch, err = sqlbase.EncodeDatums(n.scratch, n.left.Values()); err != nil {
+		n.run.scratch = n.run.scratch[:0]
+		if n.run.scratch, err = sqlbase.EncodeDatums(n.run.scratch, n.left.Values()); err != nil {
 			return false, err
 		}
-		if n.emit.emitLeft(n.scratch) {
+		if n.emit.emitLeft(n.run.scratch) {
 			return true, nil
 		}
 	}

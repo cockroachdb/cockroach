@@ -23,6 +23,11 @@ import (
 // which is used by select statements that have no table. It is used for its
 // property as the join identity.
 type unaryNode struct {
+	run unaryRun
+}
+
+// unaryRun contains the run-time state of unaryNode during local execution.
+type unaryRun struct {
 	consumed bool
 }
 
@@ -31,7 +36,7 @@ func (*unaryNode) Start(runParams) error { return nil }
 func (*unaryNode) Close(context.Context) {}
 
 func (u *unaryNode) Next(runParams) (bool, error) {
-	r := !u.consumed
-	u.consumed = true
+	r := !u.run.consumed
+	u.run.consumed = true
 	return r, nil
 }

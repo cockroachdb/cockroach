@@ -27,7 +27,7 @@ import "github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 func planPhysicalProps(plan planNode) physicalProps {
 	switch n := plan.(type) {
 	case *explainPlanNode:
-		return planPhysicalProps(n.results)
+		return planPhysicalProps(n.run.results)
 	case *distinctNode:
 		return planPhysicalProps(n.plan)
 	case *limitNode:

@@ -85,6 +85,18 @@ type indexJoinNode struct {
 	index *scanNode
 	table *scanNode
 
+	// primaryKeyColumns is the set of PK columns for which the
+	// indexJoinNode requires a value from the index scanNode, to use as
+	// lookup keys in the table scanNode. Note that the index scanNode
+	// may produce more values than this, e.g. when its filter expression
+	// uses more columns than the PK.
+	primaryKeyColumns []bool
+
+	run indexJoinRun
+}
+
+// indexJoinRun stores the run-time state of indexJoinNode during local execution.
+type indexJoinRun struct {
 	// primaryKeyPrefix is the KV key prefix of the rows
 	// retrieved from the table scanNode.
 	primaryKeyPrefix roachpb.Key
@@ -97,13 +109,6 @@ type indexJoinNode struct {
 	// setNeededColumns(). So there may be more columns in
 	// colIDtoRowIndex than effectively accessed.
 	colIDtoRowIndex map[sqlbase.ColumnID]int
-
-	// primaryKeyColumns is the set of PK columns for which the
-	// indexJoinNode requires a value from the index scanNode, to use as
-	// lookup keys in the table scanNode. Note that the index scanNode
-	// may produce more values than this, e.g. when its filter expression
-	// uses more columns than the PK.
-	primaryKeyColumns []bool
 }
 
 // makeIndexJoin build an index join node.
@@ -197,9 +202,11 @@ func (p *planner) makeIndexJoin(
 	node := &indexJoinNode{
 		index:             indexScan,
 		table:             table,
-		primaryKeyPrefix:  primaryKeyPrefix,
-		colIDtoRowIndex:   colIDtoRowIndex,
 		primaryKeyColumns: primaryKeyColumns,
+		run: indexJoinRun{
+			primaryKeyPrefix: primaryKeyPrefix,
+			colIDtoRowIndex:  colIDtoRowIndex,
+		},
 	}
 
 	return node, indexScan
@@ -235,7 +242,7 @@ func (n *indexJoinNode) Next(params runParams) (bool, error) {
 		}
 
 		// The table is out of rows. Pull primary keys from the index.
-		n.table.scanInitialized = false
+		n.table.run.scanInitialized = false
 		n.table.spans = n.table.spans[:0]
 
 		for len(n.table.spans) < indexJoinBatchSize {
@@ -253,7 +260,7 @@ func (n *indexJoinNode) Next(params runParams) (bool, error) {
 
 			vals := n.index.Values()
 			primaryIndexKey, _, err := sqlbase.EncodeIndexKey(
-				n.table.desc, n.table.index, n.colIDtoRowIndex, vals, n.primaryKeyPrefix)
+				n.table.desc, n.table.index, n.run.colIDtoRowIndex, vals, n.run.primaryKeyPrefix)
 			if err != nil {
 				return false, err
 			}

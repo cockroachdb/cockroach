@@ -43,8 +43,14 @@ type ordinalityNode struct {
 	source  planNode
 	props   physicalProps
 	columns sqlbase.ResultColumns
-	row     tree.Datums
-	curCnt  int64
+
+	run ordinalityRun
+}
+
+// ordinalityRun contains the run-time state of ordinalityNode during local execution.
+type ordinalityRun struct {
+	row    tree.Datums
+	curCnt int64
 }
 
 func (p *planner) wrapOrdinality(ds planDataSource) planDataSource {
@@ -54,8 +60,10 @@ func (p *planner) wrapOrdinality(ds planDataSource) planDataSource {
 	res := &ordinalityNode{
 		source: src,
 		props:  planPhysicalProps(src),
-		row:    make(tree.Datums, len(srcColumns)+1),
-		curCnt: 1,
+		run: ordinalityRun{
+			row:    make(tree.Datums, len(srcColumns)+1),
+			curCnt: 1,
+		},
 	}
 
 	// Allocate an extra column for the ordinality values.
@@ -90,15 +98,15 @@ func (o *ordinalityNode) Next(params runParams) (bool, error) {
 	if !hasNext || err != nil {
 		return hasNext, err
 	}
-	copy(o.row, o.source.Values())
-	// o.row was allocated one spot larger than o.source.Values().
+	copy(o.run.row, o.source.Values())
+	// o.run.row was allocated one spot larger than o.source.Values().
 	// Store the ordinality value there.
-	o.row[len(o.row)-1] = tree.NewDInt(tree.DInt(o.curCnt))
-	o.curCnt++
+	o.run.row[len(o.run.row)-1] = tree.NewDInt(tree.DInt(o.run.curCnt))
+	o.run.curCnt++
 	return true, nil
 }
 
-func (o *ordinalityNode) Values() tree.Datums          { return o.row }
+func (o *ordinalityNode) Values() tree.Datums          { return o.run.row }
 func (o *ordinalityNode) Start(params runParams) error { return o.source.Start(params) }
 func (o *ordinalityNode) Close(ctx context.Context)    { o.source.Close(ctx) }
 

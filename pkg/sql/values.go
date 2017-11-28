@@ -36,24 +36,30 @@ type valuesNode struct {
 	n       *tree.ValuesClause
 	columns sqlbase.ResultColumns
 	tuples  [][]tree.TypedExpr
-	rows    *sqlbase.RowContainer
-
 	// isConst is set if the valuesNode only contains constant expressions (no
 	// subqueries). In this case, rows will be evaluated during the first call
 	// to planNode.Start and memoized for future consumption. A valuesNode with
 	// isConst = true can serve its values multiple times. See valuesNode.Reset.
 	isConst bool
 
+	valuesRun
+}
+
+// valuesRun is the run-time state of a valuesNode during local execution.
+type valuesRun struct {
+	rows    *sqlbase.RowContainer
 	nextRow int // The index of the next row.
 }
 
 func (p *planner) newContainerValuesNode(columns sqlbase.ResultColumns, capacity int) *valuesNode {
 	return &valuesNode{
 		columns: columns,
-		rows: sqlbase.NewRowContainer(
-			p.session.TxnState.makeBoundAccount(), sqlbase.ColTypeInfoFromResCols(columns), capacity,
-		),
 		isConst: true,
+		valuesRun: valuesRun{
+			rows: sqlbase.NewRowContainer(
+				p.session.TxnState.makeBoundAccount(), sqlbase.ColTypeInfoFromResCols(columns), capacity,
+			),
+		},
 	}
 }
 

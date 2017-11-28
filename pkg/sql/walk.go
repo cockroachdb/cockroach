@@ -252,7 +252,7 @@ func (v *planVisitor) visit(plan planNode) {
 				order.addOrderColumn(o.ColIdx, o.Direction)
 			}
 			v.observer.attr(name, "order", order.AsString(columns))
-			switch ss := n.sortStrategy.(type) {
+			switch ss := n.run.sortStrategy.(type) {
 			case *iterativeSortStrategy:
 				v.observer.attr(name, "strategy", "iterative")
 			case *sortTopKStrategy:

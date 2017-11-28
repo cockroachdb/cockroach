@@ -34,13 +34,19 @@ type traceNode struct {
 	plan    planNode
 	columns sqlbase.ResultColumns
 
+	// If set, the trace will also include "KV trace" messages - verbose messages
+	// around the interaction of SQL with KV. Some of the messages are per-row.
+	kvTracingEnabled bool
+
+	run traceRun
+}
+
+// traceRun contains the run-time state of traceNode during local execution.
+type traceRun struct {
 	execDone bool
 
 	traceRows []traceRow
 	curRow    int
-	// If set, the trace will also include "KV trace" messages - verbose messages
-	// around the interaction of SQL with KV. Some of the messages are per-row.
-	kvTracingEnabled bool
 
 	// stopTracing is set if this node started tracing on the
 	// session. If it is set, then Close() must call it.
@@ -85,7 +91,7 @@ func (n *traceNode) Start(params runParams) error {
 		return err
 	}
 	session := params.p.session
-	n.stopTracing = func() error { return stopTracing(session) }
+	n.run.stopTracing = func() error { return stopTracing(session) }
 
 	startCtx, sp := tracing.ChildSpan(params.ctx, "starting plan")
 	defer sp.Finish()
@@ -97,16 +103,16 @@ func (n *traceNode) Close(ctx context.Context) {
 	if n.plan != nil {
 		n.plan.Close(ctx)
 	}
-	n.traceRows = nil
-	if n.stopTracing != nil {
-		if err := n.stopTracing(); err != nil {
+	n.run.traceRows = nil
+	if n.run.stopTracing != nil {
+		if err := n.run.stopTracing(); err != nil {
 			log.Errorf(ctx, "error stopping tracing at end of SHOW TRACE FOR: %v", err)
 		}
 	}
 }
 
 func (n *traceNode) Next(params runParams) (bool, error) {
-	if !n.execDone {
+	if !n.run.execDone {
 		// We need to run the entire statement upfront. Subsequent
 		// invocations of Next() will merely return the trace.
 
@@ -150,23 +156,23 @@ func (n *traceNode) Next(params runParams) (bool, error) {
 		if err := stopTracing(params.p.session); err != nil {
 			return false, err
 		}
-		n.stopTracing = nil
+		n.run.stopTracing = nil
 
 		var err error
-		n.traceRows, err = params.p.session.Tracing.generateSessionTraceVTable()
+		n.run.traceRows, err = params.p.session.Tracing.generateSessionTraceVTable()
 		if err != nil {
 			return false, err
 		}
-		n.execDone = true
+		n.run.execDone = true
 	}
 
-	if n.curRow >= len(n.traceRows) {
+	if n.run.curRow >= len(n.run.traceRows) {
 		return false, nil
 	}
-	n.curRow++
+	n.run.curRow++
 	return true, nil
 }
 
 func (n *traceNode) Values() tree.Datums {
-	return n.traceRows[n.curRow-1][:]
+	return n.run.traceRows[n.run.curRow-1][:]
 }

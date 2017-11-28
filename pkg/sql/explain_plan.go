@@ -104,7 +104,9 @@ func (p *planner) makeExplainPlanNode(
 		expanded:  expanded,
 		optimized: optimized,
 		plan:      plan,
-		results:   p.newContainerValuesNode(columns, 0),
+		run: explainPlanRun{
+			results: p.newContainerValuesNode(columns, 0),
+		},
 	}
 	return node
 }
@@ -271,27 +273,32 @@ type explainPlanNode struct {
 	// plan is the sub-node being explained.
 	plan planNode
 
-	// results is the container for EXPLAIN's output.
-	results *valuesNode
-
 	// expanded indicates whether to invoke expandPlan() on the sub-node.
 	expanded bool
 
 	// optimized indicates whether to invoke setNeededColumns() on the sub-node.
 	optimized bool
+
+	run explainPlanRun
 }
 
-func (e *explainPlanNode) Next(params runParams) (bool, error) { return e.results.Next(params) }
-func (e *explainPlanNode) Values() tree.Datums                 { return e.results.Values() }
+// explainPlanRun is the run-time state of explainPlanNode during local execution.
+type explainPlanRun struct {
+	// results is the container for EXPLAIN's output.
+	results *valuesNode
+}
+
+func (e *explainPlanNode) Next(params runParams) (bool, error) { return e.run.results.Next(params) }
+func (e *explainPlanNode) Values() tree.Datums                 { return e.run.results.Values() }
 
 func (e *explainPlanNode) Start(params runParams) error {
 	// Note that we don't call start on e.plan. That's on purpose, Start() can
 	// have side effects. And it's supposed to not be needed for the way in which
 	// we're going to use e.plan.
-	return params.p.populateExplain(params.ctx, &e.explainer, e.results, e.plan)
+	return params.p.populateExplain(params.ctx, &e.explainer, e.run.results, e.plan)
 }
 
 func (e *explainPlanNode) Close(ctx context.Context) {
 	e.plan.Close(ctx)
-	e.results.Close(ctx)
+	e.run.results.Close(ctx)
 }
