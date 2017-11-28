@@ -41,10 +41,6 @@ export enum AxisUnits {
    * Units are durations expressed in nanoseconds.
    */
   Duration,
-  /**
-   * Units are percentages expressed as fractional values of 1 (1.0 = 100%).
-   */
-  Percentage,
 }
 
 /**
@@ -55,8 +51,6 @@ export interface AxisProps {
   label?: string;
   format?: (n: number) => string;
   range?: number[];
-  yLow?: number;
-  yHigh?: number;
   units?: AxisUnits;
 }
 
@@ -69,8 +63,6 @@ export interface AxisProps {
  */
 export class Axis extends React.Component<AxisProps, {}> {
   static defaultProps: AxisProps = {
-    yLow: 0,
-    yHigh: 1,
     units: AxisUnits.Count,
   };
 
