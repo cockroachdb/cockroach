@@ -28,8 +28,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
-// setNode represents a SET SESSION statement.
-type setNode struct {
+// setVarNode represents a SET SESSION statement.
+type setVarNode struct {
 	v sessionVar
 	// typedValues == nil means RESET.
 	typedValues []tree.TypedExpr
@@ -94,10 +94,10 @@ func (p *planner) SetVar(ctx context.Context, n *tree.SetVar) (planNode, error) 
 		}
 	}
 
-	return &setNode{v: v, typedValues: typedValues}, nil
+	return &setVarNode{v: v, typedValues: typedValues}, nil
 }
 
-func (n *setNode) Start(params runParams) error {
+func (n *setVarNode) Start(params runParams) error {
 	if n.typedValues != nil {
 		for i, v := range n.typedValues {
 			d, err := v.Eval(params.evalCtx)
@@ -111,9 +111,9 @@ func (n *setNode) Start(params runParams) error {
 	return n.v.Reset(params.p.session)
 }
 
-func (n *setNode) Next(_ runParams) (bool, error) { return false, nil }
-func (n *setNode) Values() tree.Datums            { return nil }
-func (n *setNode) Close(_ context.Context)        {}
+func (n *setVarNode) Next(_ runParams) (bool, error) { return false, nil }
+func (n *setVarNode) Values() tree.Datums            { return nil }
+func (n *setVarNode) Close(_ context.Context)        {}
 
 func datumAsString(session *Session, name string, value tree.TypedExpr) (string, error) {
 	evalCtx := session.evalCtx()

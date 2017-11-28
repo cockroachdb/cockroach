@@ -287,7 +287,7 @@ func (p *planner) propagateFilters(
 			}
 		}
 
-	case *traceNode:
+	case *showTraceNode:
 		if n.plan, err = p.triggerFilterPropagation(ctx, n.plan); err != nil {
 			return plan, extraFilter, err
 		}
@@ -330,7 +330,7 @@ func (p *planner) propagateFilters(
 	case *hookFnNode:
 	case *valueGenerator:
 	case *valuesNode:
-	case *setNode:
+	case *setVarNode:
 	case *setClusterSettingNode:
 	case *setZoneConfigNode:
 	case *showZoneConfigNode:
