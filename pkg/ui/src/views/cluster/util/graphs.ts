@@ -250,7 +250,7 @@ function calculateXAxisDomain(timeInfo: QueryTimeInfo): AxisDomain {
   return ComputeTimeAxisDomain(xExtent);
 }
 
-type formattedDatum = {
+type formattedSeries = {
   values: protos.cockroach.ts.tspb.TimeSeriesDatapoint$Properties[],
   key: string,
   area: boolean,
@@ -260,8 +260,8 @@ type formattedDatum = {
 function formatMetricData(
   metrics: React.ReactElement<MetricProps>[],
   data: TSResponse,
-): formattedDatum[] {
-  const formattedData: formattedDatum[] = [];
+): formattedSeries[] {
+  const formattedData: formattedSeries[] = [];
 
   _.each(metrics, (s, idx) => {
     const result = data.results[idx];
@@ -279,9 +279,9 @@ function formatMetricData(
 }
 
 function filterInvalidDatapoints(
-  formattedData: formattedDatum[],
+  formattedData: formattedSeries[],
   timeInfo: QueryTimeInfo,
-): formattedDatum[] {
+): formattedSeries[] {
   return _.map(formattedData, (datum) => {
     // Drop any returned points at the beginning that have a lower timestamp
     // than the explicitly queried domain. This works around a bug in NVD3
@@ -327,7 +327,7 @@ export function ConfigureLineChart(
   hoverTime?: moment.Moment,
 ) {
   chart.showLegend(metrics.length > 1 && metrics.length <= MAX_LEGEND_SERIES);
-  let formattedData: formattedDatum[];
+  let formattedData: formattedSeries[];
   let xAxisDomain, yAxisDomain: AxisDomain;
 
   if (data) {
