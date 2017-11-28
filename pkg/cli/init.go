@@ -18,10 +18,11 @@ import (
 	"fmt"
 	"os"
 
+	"golang.org/x/net/context"
+
 	"github.com/spf13/cobra"
 
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
-	"github.com/cockroachdb/cockroach/pkg/util/stop"
 )
 
 var initCmd = &cobra.Command{
@@ -42,12 +43,14 @@ single-node cluster, so the init command is not used in that case.
 }
 
 func runInit(cmd *cobra.Command, args []string) error {
-	c, stopper, err := getInitClient()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	conn, _, err := getClientGRPCConn(ctx)
 	if err != nil {
 		return err
 	}
-	ctx := stopperContext(stopper)
-	defer stopper.Stop(ctx)
+	c := serverpb.NewInitClient(conn)
 
 	if _, err = c.Bootstrap(ctx, &serverpb.BootstrapRequest{}); err != nil {
 		return err
@@ -55,13 +58,4 @@ func runInit(cmd *cobra.Command, args []string) error {
 
 	fmt.Fprintln(os.Stdout, "Cluster successfully initialized")
 	return nil
-}
-
-func getInitClient() (serverpb.InitClient, *stop.Stopper, error) {
-	// TODO(adam): This depends on servercfg which is a bit weird..
-	conn, _, stopper, err := getClientGRPCConn()
-	if err != nil {
-		return nil, nil, err
-	}
-	return serverpb.NewInitClient(conn), stopper, nil
 }

@@ -19,6 +19,8 @@ import (
 	"io"
 	"os"
 
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/spf13/cobra"
 )
@@ -44,18 +46,21 @@ func runGenHAProxyCmd(cmd *cobra.Command, args []string) error {
 		return usageAndError(cmd)
 	}
 
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
 	configTemplate, err := template.New("haproxy template").Parse(haProxyTemplate)
 	if err != nil {
 		return err
 	}
 
-	c, stopper, err := getStatusClient()
+	conn, _, err := getClientGRPCConn(ctx)
 	if err != nil {
 		return err
 	}
-	defer stopper.Stop(stopperContext(stopper))
+	c := serverpb.NewStatusClient(conn)
 
-	nodeStatuses, err := c.Nodes(stopperContext(stopper), &serverpb.NodesRequest{})
+	nodeStatuses, err := c.Nodes(ctx, &serverpb.NodesRequest{})
 	if err != nil {
 		return err
 	}
