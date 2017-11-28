@@ -70,6 +70,7 @@ const (
 	categoryCompatibility = "Compatibility"
 	categoryDateAndTime   = "Date and Time"
 	categoryIDGeneration  = "ID Generation"
+	categorySequences     = "Sequence"
 	categoryMath          = "Math and Numeric"
 	categoryString        = "String and Byte"
 	categoryArray         = "Array"
@@ -971,7 +972,7 @@ CockroachDB supports the following flags:
 		tree.Builtin{
 			Types:      tree.ArgTypes{{"sequence_name", types.String}},
 			ReturnType: tree.FixedReturnType(types.Int),
-			Category:   categoryIDGeneration,
+			Category:   categorySequences,
 			Impure:     true,
 			Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				name := tree.MustBeDString(args[0])
@@ -998,7 +999,7 @@ CockroachDB supports the following flags:
 		tree.Builtin{
 			Types:      tree.ArgTypes{{"sequence_name", types.String}},
 			ReturnType: tree.FixedReturnType(types.Int),
-			Category:   categoryIDGeneration,
+			Category:   categorySequences,
 			Impure:     true,
 			Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				name := tree.MustBeDString(args[0])
@@ -1025,7 +1026,7 @@ CockroachDB supports the following flags:
 		tree.Builtin{
 			Types:      tree.ArgTypes{},
 			ReturnType: tree.FixedReturnType(types.Int),
-			Category:   categoryIDGeneration,
+			Category:   categorySequences,
 			Impure:     true,
 			Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				val, err := evalCtx.Planner.GetLastSequenceValue(evalCtx.Ctx())
@@ -1042,7 +1043,7 @@ CockroachDB supports the following flags:
 		tree.Builtin{
 			Types:      tree.ArgTypes{{"sequence_name", types.String}, {"value", types.Int}},
 			ReturnType: tree.FixedReturnType(types.Int),
-			Category:   categoryIDGeneration,
+			Category:   categorySequences,
 			Impure:     true,
 			Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				// TODO(vilterp): dedupe all this stuff
