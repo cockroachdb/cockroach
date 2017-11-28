@@ -41,23 +41,6 @@ type traceNode struct {
 	run traceRun
 }
 
-// traceRun contains the run-time state of traceNode during local execution.
-type traceRun struct {
-	execDone bool
-
-	traceRows []traceRow
-	curRow    int
-
-	// stopTracing is set if this node started tracing on the
-	// session. If it is set, then Close() must call it.
-	stopTracing func() error
-}
-
-var sessionTraceTableName = tree.TableName{
-	DatabaseName: tree.Name("crdb_internal"),
-	TableName:    tree.Name("session_trace"),
-}
-
 // makeTraceNode creates a new traceNode.
 //
 // Args:
@@ -77,9 +60,17 @@ func (p *planner) makeTraceNode(plan planNode, kvTracingEnabled bool) (planNode,
 	}, nil
 }
 
-var errTracingAlreadyEnabled = errors.New(
-	"cannot run SHOW TRACE FOR on statement while session tracing is enabled" +
-		" - did you mean SHOW TRACE FOR SESSION?")
+// traceRun contains the run-time state of traceNode during local execution.
+type traceRun struct {
+	execDone bool
+
+	traceRows []traceRow
+	curRow    int
+
+	// stopTracing is set if this node started tracing on the
+	// session. If it is set, then Close() must call it.
+	stopTracing func() error
+}
 
 func (n *traceNode) Start(params runParams) error {
 	if params.p.session.Tracing.Enabled() {
@@ -97,18 +88,6 @@ func (n *traceNode) Start(params runParams) error {
 	defer sp.Finish()
 	params.ctx = startCtx
 	return n.plan.Start(params)
-}
-
-func (n *traceNode) Close(ctx context.Context) {
-	if n.plan != nil {
-		n.plan.Close(ctx)
-	}
-	n.run.traceRows = nil
-	if n.run.stopTracing != nil {
-		if err := n.run.stopTracing(); err != nil {
-			log.Errorf(ctx, "error stopping tracing at end of SHOW TRACE FOR: %v", err)
-		}
-	}
 }
 
 func (n *traceNode) Next(params runParams) (bool, error) {
@@ -176,3 +155,24 @@ func (n *traceNode) Next(params runParams) (bool, error) {
 func (n *traceNode) Values() tree.Datums {
 	return n.run.traceRows[n.run.curRow-1][:]
 }
+
+func (n *traceNode) Close(ctx context.Context) {
+	if n.plan != nil {
+		n.plan.Close(ctx)
+	}
+	n.run.traceRows = nil
+	if n.run.stopTracing != nil {
+		if err := n.run.stopTracing(); err != nil {
+			log.Errorf(ctx, "error stopping tracing at end of SHOW TRACE FOR: %v", err)
+		}
+	}
+}
+
+var sessionTraceTableName = tree.TableName{
+	DatabaseName: tree.Name("crdb_internal"),
+	TableName:    tree.Name("session_trace"),
+}
+
+var errTracingAlreadyEnabled = errors.New(
+	"cannot run SHOW TRACE FOR on statement while session tracing is enabled" +
+		" - did you mean SHOW TRACE FOR SESSION?")

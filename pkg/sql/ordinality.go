@@ -47,12 +47,6 @@ type ordinalityNode struct {
 	run ordinalityRun
 }
 
-// ordinalityRun contains the run-time state of ordinalityNode during local execution.
-type ordinalityRun struct {
-	row    tree.Datums
-	curCnt int64
-}
-
 func (p *planner) wrapOrdinality(ds planDataSource) planDataSource {
 	src := ds.plan
 	srcColumns := planColumns(src)
@@ -93,6 +87,14 @@ func (p *planner) wrapOrdinality(ds planDataSource) planDataSource {
 	return ds
 }
 
+// ordinalityRun contains the run-time state of ordinalityNode during local execution.
+type ordinalityRun struct {
+	row    tree.Datums
+	curCnt int64
+}
+
+func (o *ordinalityNode) Start(params runParams) error { return o.source.Start(params) }
+
 func (o *ordinalityNode) Next(params runParams) (bool, error) {
 	hasNext, err := o.source.Next(params)
 	if !hasNext || err != nil {
@@ -106,9 +108,8 @@ func (o *ordinalityNode) Next(params runParams) (bool, error) {
 	return true, nil
 }
 
-func (o *ordinalityNode) Values() tree.Datums          { return o.run.row }
-func (o *ordinalityNode) Start(params runParams) error { return o.source.Start(params) }
-func (o *ordinalityNode) Close(ctx context.Context)    { o.source.Close(ctx) }
+func (o *ordinalityNode) Values() tree.Datums       { return o.run.row }
+func (o *ordinalityNode) Close(ctx context.Context) { o.source.Close(ctx) }
 
 // restrictOrdering transforms an ordering requirement on the output
 // of an ordinalityNode into an ordering requirement on its input.

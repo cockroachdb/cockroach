@@ -30,12 +30,8 @@ type alterUserSetPasswordNode struct {
 	run alterUserSetPasswordRun
 }
 
-// alterUserSetPasswordRun is the run-time state of
-// alterUserSetPasswordNode for local execution.
-type alterUserSetPasswordRun struct {
-	rowsAffected int
-}
-
+// AlterUserSetPassword changes a user's password.
+// Privileges: UPDATE on the users table.
 func (p *planner) AlterUserSetPassword(
 	ctx context.Context, n *tree.AlterUserSetPassword,
 ) (planNode, error) {
@@ -59,8 +55,10 @@ func (p *planner) AlterUserSetPassword(
 	}, nil
 }
 
-func (n *alterUserSetPasswordNode) FastPathResults() (int, bool) {
-	return n.run.rowsAffected, true
+// alterUserSetPasswordRun is the run-time state of
+// alterUserSetPasswordNode for local execution.
+type alterUserSetPasswordRun struct {
+	rowsAffected int
 }
 
 func (n *alterUserSetPasswordNode) Start(params runParams) error {
@@ -88,5 +86,9 @@ func (n *alterUserSetPasswordNode) Start(params runParams) error {
 }
 
 func (*alterUserSetPasswordNode) Next(runParams) (bool, error) { return false, nil }
-func (*alterUserSetPasswordNode) Close(context.Context)        {}
 func (*alterUserSetPasswordNode) Values() tree.Datums          { return tree.Datums{} }
+func (*alterUserSetPasswordNode) Close(context.Context)        {}
+
+func (n *alterUserSetPasswordNode) FastPathResults() (int, bool) {
+	return n.run.rowsAffected, true
+}

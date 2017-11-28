@@ -30,6 +30,16 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
+type testingRelocateNode struct {
+	optColumnsSlot
+
+	tableDesc *sqlbase.TableDescriptor
+	index     *sqlbase.IndexDescriptor
+	rows      planNode
+
+	run testingRelocateRun
+}
+
 // TestingRelocate moves ranges to specific stores
 // (`ALTER TABLE/INDEX ... TESTING_RELOCATE ...` statement)
 // Privileges: INSERT on table.
@@ -89,14 +99,15 @@ func (p *planner) TestingRelocate(ctx context.Context, n *tree.TestingRelocate) 
 	}, nil
 }
 
-type testingRelocateNode struct {
-	optColumnsSlot
-
-	tableDesc *sqlbase.TableDescriptor
-	index     *sqlbase.IndexDescriptor
-	rows      planNode
-
-	run testingRelocateRun
+var relocateNodeColumns = sqlbase.ResultColumns{
+	{
+		Name: "key",
+		Typ:  types.Bytes,
+	},
+	{
+		Name: "pretty",
+		Typ:  types.String,
+	},
 }
 
 // testingRelocateRun contains the run-time state of
@@ -111,28 +122,6 @@ type testingRelocateRun struct {
 
 func (n *testingRelocateNode) Start(params runParams) error {
 	return n.rows.Start(params)
-}
-
-func lookupRangeDescriptor(
-	ctx context.Context, db *client.DB, rowKey []byte,
-) (roachpb.RangeDescriptor, error) {
-	startKey := keys.RangeMetaKey(keys.MustAddr(rowKey))
-	endKey := keys.Meta2Prefix.PrefixEnd()
-	kvs, err := db.Scan(ctx, startKey, endKey, 1)
-	if err != nil {
-		return roachpb.RangeDescriptor{}, err
-	}
-	if len(kvs) != 1 {
-		log.Fatalf(ctx, "expected 1 KV, got %v", kvs)
-	}
-	var desc roachpb.RangeDescriptor
-	if err := kvs[0].ValueProto(&desc); err != nil {
-		return roachpb.RangeDescriptor{}, err
-	}
-	if desc.EndKey.Equal(rowKey) {
-		log.Fatalf(ctx, "row key should not be valid range split point: %s", keys.PrettyPrint(rowKey))
-	}
-	return desc, nil
 }
 
 func (n *testingRelocateNode) Next(params runParams) (bool, error) {
@@ -209,13 +198,24 @@ func (n *testingRelocateNode) Close(ctx context.Context) {
 	n.rows.Close(ctx)
 }
 
-var relocateNodeColumns = sqlbase.ResultColumns{
-	{
-		Name: "key",
-		Typ:  types.Bytes,
-	},
-	{
-		Name: "pretty",
-		Typ:  types.String,
-	},
+func lookupRangeDescriptor(
+	ctx context.Context, db *client.DB, rowKey []byte,
+) (roachpb.RangeDescriptor, error) {
+	startKey := keys.RangeMetaKey(keys.MustAddr(rowKey))
+	endKey := keys.Meta2Prefix.PrefixEnd()
+	kvs, err := db.Scan(ctx, startKey, endKey, 1)
+	if err != nil {
+		return roachpb.RangeDescriptor{}, err
+	}
+	if len(kvs) != 1 {
+		log.Fatalf(ctx, "expected 1 KV, got %v", kvs)
+	}
+	var desc roachpb.RangeDescriptor
+	if err := kvs[0].ValueProto(&desc); err != nil {
+		return roachpb.RangeDescriptor{}, err
+	}
+	if desc.EndKey.Equal(rowKey) {
+		log.Fatalf(ctx, "row key should not be valid range split point: %s", keys.PrettyPrint(rowKey))
+	}
+	return desc, nil
 }

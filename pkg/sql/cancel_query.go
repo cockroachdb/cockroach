@@ -30,7 +30,24 @@ type cancelQueryNode struct {
 	queryID tree.TypedExpr
 }
 
-func (*cancelQueryNode) Values() tree.Datums { return nil }
+func (p *planner) CancelQuery(ctx context.Context, n *tree.CancelQuery) (planNode, error) {
+	typedQueryID, err := p.analyzeExpr(
+		ctx,
+		n.ID,
+		nil,
+		tree.IndexedVarHelper{},
+		types.String,
+		true, /* requireType */
+		"CANCEL QUERY",
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	return &cancelQueryNode{
+		queryID: typedQueryID,
+	}, nil
+}
 
 func (n *cancelQueryNode) Start(params runParams) error {
 	statusServer := params.p.session.execCfg.StatusServer
@@ -67,27 +84,6 @@ func (n *cancelQueryNode) Start(params runParams) error {
 	return nil
 }
 
-func (*cancelQueryNode) Close(context.Context) {}
-
-func (n *cancelQueryNode) Next(runParams) (bool, error) {
-	return false, nil
-}
-
-func (p *planner) CancelQuery(ctx context.Context, n *tree.CancelQuery) (planNode, error) {
-	typedQueryID, err := p.analyzeExpr(
-		ctx,
-		n.ID,
-		nil,
-		tree.IndexedVarHelper{},
-		types.String,
-		true, /* requireType */
-		"CANCEL QUERY",
-	)
-	if err != nil {
-		return nil, err
-	}
-
-	return &cancelQueryNode{
-		queryID: typedQueryID,
-	}, nil
-}
+func (n *cancelQueryNode) Next(runParams) (bool, error) { return false, nil }
+func (*cancelQueryNode) Values() tree.Datums            { return nil }
+func (*cancelQueryNode) Close(context.Context)          {}

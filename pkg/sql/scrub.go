@@ -30,14 +30,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
 
-const (
-	// ScrubErrorMissingIndexEntry occurs when a primary k/v is missing a
-	// corresponding secondary index k/v.
-	ScrubErrorMissingIndexEntry = "missing_index_entry"
-	// ScrubErrorDanglingIndexReference occurs when a secondary index k/v
-	// points to a non-existing primary k/v.
-	ScrubErrorDanglingIndexReference = "dangling_index_reference"
-)
+type scrubNode struct {
+	optColumnsSlot
+
+	n *tree.Scrub
+
+	run scrubRun
+}
 
 // checkOperation is an interface for scrub check execution. The
 // different types of checks implement the interface. The checks are
@@ -73,20 +72,6 @@ type checkOperation interface {
 	Close(context.Context)
 }
 
-type scrubNode struct {
-	optColumnsSlot
-
-	n *tree.Scrub
-
-	run scrubRun
-}
-
-// scrubRun contains the run-time state of scrubNode during local execution.
-type scrubRun struct {
-	checkQueue []checkOperation
-	row        tree.Datums
-}
-
 // Scrub checks the database.
 // Privileges: security.RootUser user.
 func (p *planner) Scrub(ctx context.Context, n *tree.Scrub) (planNode, error) {
@@ -105,6 +90,12 @@ var scrubColumns = sqlbase.ResultColumns{
 	{Name: "timestamp", Typ: types.Timestamp},
 	{Name: "repaired", Typ: types.Bool},
 	{Name: "details", Typ: types.JSON},
+}
+
+// scrubRun contains the run-time state of scrubNode during local execution.
+type scrubRun struct {
+	checkQueue []checkOperation
+	row        tree.Datums
 }
 
 func (n *scrubNode) Start(params runParams) error {
@@ -137,6 +128,55 @@ func (n *scrubNode) Start(params runParams) error {
 	}
 	return nil
 }
+
+func (n *scrubNode) Next(params runParams) (bool, error) {
+	for len(n.run.checkQueue) > 0 {
+		nextCheck := n.run.checkQueue[0]
+		if !nextCheck.Started() {
+			if err := nextCheck.Start(params.ctx, params.p); err != nil {
+				return false, err
+			}
+		}
+
+		// Check if the iterator is finished before calling Next. This
+		// happens if there are no more results to report.
+		if !nextCheck.Done(params.ctx) {
+			var err error
+			n.run.row, err = nextCheck.Next(params.ctx, params.p)
+			if err != nil {
+				return false, err
+			}
+			return true, nil
+		}
+
+		nextCheck.Close(params.ctx)
+		// Prepare the next iterator. If we happen to finish this iterator,
+		// we want to begin the next one so we still return a result.
+		n.run.checkQueue = n.run.checkQueue[1:]
+	}
+	return false, nil
+}
+
+func (n *scrubNode) Values() tree.Datums {
+	return n.run.row
+}
+
+func (n *scrubNode) Close(ctx context.Context) {
+	// Close any iterators which have not been completed.
+	for len(n.run.checkQueue) > 0 {
+		n.run.checkQueue[0].Close(ctx)
+		n.run.checkQueue = n.run.checkQueue[1:]
+	}
+}
+
+const (
+	// ScrubErrorMissingIndexEntry occurs when a primary k/v is missing a
+	// corresponding secondary index k/v.
+	ScrubErrorMissingIndexEntry = "missing_index_entry"
+	// ScrubErrorDanglingIndexReference occurs when a secondary index k/v
+	// points to a non-existing primary k/v.
+	ScrubErrorDanglingIndexReference = "dangling_index_reference"
+)
 
 // startScrubDatabase prepares a scrub check for each of the tables in
 // the database. Views are skipped without errors.
@@ -217,46 +257,6 @@ func (n *scrubNode) startScrubTable(
 	}
 
 	return nil
-}
-
-func (n *scrubNode) Next(params runParams) (bool, error) {
-	for len(n.run.checkQueue) > 0 {
-		nextCheck := n.run.checkQueue[0]
-		if !nextCheck.Started() {
-			if err := nextCheck.Start(params.ctx, params.p); err != nil {
-				return false, err
-			}
-		}
-
-		// Check if the iterator is finished before calling Next. This
-		// happens if there are no more results to report.
-		if !nextCheck.Done(params.ctx) {
-			var err error
-			n.run.row, err = nextCheck.Next(params.ctx, params.p)
-			if err != nil {
-				return false, err
-			}
-			return true, nil
-		}
-
-		nextCheck.Close(params.ctx)
-		// Prepare the next iterator. If we happen to finish this iterator,
-		// we want to begin the next one so we still return a result.
-		n.run.checkQueue = n.run.checkQueue[1:]
-	}
-	return false, nil
-}
-
-func (n *scrubNode) Close(ctx context.Context) {
-	// Close any iterators which have not been completed.
-	for len(n.run.checkQueue) > 0 {
-		n.run.checkQueue[0].Close(ctx)
-		n.run.checkQueue = n.run.checkQueue[1:]
-	}
-}
-
-func (n *scrubNode) Values() tree.Datums {
-	return n.run.row
 }
 
 // getColumns returns the columns that are stored in an index k/v. The

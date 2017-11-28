@@ -24,30 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
-func (n *createSequenceNode) makeSequenceTableDesc(
-	params runParams,
-	sequenceName string,
-	parentID sqlbase.ID,
-	id sqlbase.ID,
-	privileges *sqlbase.PrivilegeDescriptor,
-) (sqlbase.TableDescriptor, error) {
-	desc := initTableDescriptor(id, parentID, sequenceName, params.p.txn.OrigTimestamp(), privileges)
-
-	// Fill in options, starting with defaults then overriding.
-
-	opts := &sqlbase.TableDescriptor_SequenceOpts{
-		Cycle:     false,
-		Increment: 1,
-	}
-	err := assignSequenceOptions(opts, n.n.Options, true /* setDefaults */)
-	if err != nil {
-		return desc, err
-	}
-	desc.SequenceOpts = opts
-
-	return desc, desc.AllocateIDs()
-}
-
 type createSequenceNode struct {
 	n      *tree.CreateSequence
 	dbDesc *sqlbase.DatabaseDescriptor
@@ -141,5 +117,29 @@ func (n *createSequenceNode) Start(params runParams) error {
 }
 
 func (*createSequenceNode) Next(runParams) (bool, error) { return false, nil }
-func (*createSequenceNode) Close(context.Context)        {}
 func (*createSequenceNode) Values() tree.Datums          { return tree.Datums{} }
+func (*createSequenceNode) Close(context.Context)        {}
+
+func (n *createSequenceNode) makeSequenceTableDesc(
+	params runParams,
+	sequenceName string,
+	parentID sqlbase.ID,
+	id sqlbase.ID,
+	privileges *sqlbase.PrivilegeDescriptor,
+) (sqlbase.TableDescriptor, error) {
+	desc := initTableDescriptor(id, parentID, sequenceName, params.p.txn.OrigTimestamp(), privileges)
+
+	// Fill in options, starting with defaults then overriding.
+
+	opts := &sqlbase.TableDescriptor_SequenceOpts{
+		Cycle:     false,
+		Increment: 1,
+	}
+	err := assignSequenceOptions(opts, n.n.Options, true /* setDefaults */)
+	if err != nil {
+		return desc, err
+	}
+	desc.SequenceOpts = opts
+
+	return desc, desc.AllocateIDs()
+}

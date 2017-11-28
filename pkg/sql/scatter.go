@@ -27,6 +27,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
+type scatterNode struct {
+	optColumnsSlot
+
+	run scatterRun
+}
+
 // Scatter moves ranges to random stores
 // (`ALTER TABLE/INDEX ... SCATTER ...` statement)
 // Privileges: INSERT on table.
@@ -110,12 +116,6 @@ func (p *planner) Scatter(ctx context.Context, n *tree.Scatter) (planNode, error
 			span: span,
 		},
 	}, nil
-}
-
-type scatterNode struct {
-	optColumnsSlot
-
-	run scatterRun
 }
 
 // scatterRun contains the run-time state of scatterNode during local execution.

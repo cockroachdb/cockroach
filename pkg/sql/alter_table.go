@@ -498,8 +498,8 @@ func (n *alterTableNode) Start(params runParams) error {
 }
 
 func (n *alterTableNode) Next(runParams) (bool, error) { return false, nil }
-func (n *alterTableNode) Close(context.Context)        {}
 func (n *alterTableNode) Values() tree.Datums          { return tree.Datums{} }
+func (n *alterTableNode) Close(context.Context)        {}
 
 func applyColumnMutation(
 	col *sqlbase.ColumnDescriptor,

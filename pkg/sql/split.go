@@ -25,6 +25,15 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
+type splitNode struct {
+	optColumnsSlot
+
+	tableDesc *sqlbase.TableDescriptor
+	index     *sqlbase.IndexDescriptor
+	rows      planNode
+	run       splitRun
+}
+
 // Split executes a KV split.
 // Privileges: INSERT on table.
 func (p *planner) Split(ctx context.Context, n *tree.Split) (planNode, error) {
@@ -72,13 +81,15 @@ func (p *planner) Split(ctx context.Context, n *tree.Split) (planNode, error) {
 	}, nil
 }
 
-type splitNode struct {
-	optColumnsSlot
-
-	tableDesc *sqlbase.TableDescriptor
-	index     *sqlbase.IndexDescriptor
-	rows      planNode
-	run       splitRun
+var splitNodeColumns = sqlbase.ResultColumns{
+	{
+		Name: "key",
+		Typ:  types.Bytes,
+	},
+	{
+		Name: "pretty",
+		Typ:  types.String,
+	},
 }
 
 // splitRun contains the run-time state of splitNode during local execution.
@@ -122,17 +133,6 @@ func (n *splitNode) Values() tree.Datums {
 
 func (n *splitNode) Close(ctx context.Context) {
 	n.rows.Close(ctx)
-}
-
-var splitNodeColumns = sqlbase.ResultColumns{
-	{
-		Name: "key",
-		Typ:  types.Bytes,
-	},
-	{
-		Name: "pretty",
-		Typ:  types.String,
-	},
 }
 
 // getRowKey generates a key that corresponds to a row (or prefix of a row) in a table or index.

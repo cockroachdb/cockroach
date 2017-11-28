@@ -52,13 +52,6 @@ type copyNode struct {
 	rowsMemAcc    mon.BoundAccount
 }
 
-func (*copyNode) Values() tree.Datums          { return nil }
-func (*copyNode) Next(runParams) (bool, error) { return false, nil }
-
-func (n *copyNode) Close(ctx context.Context) {
-	n.rowsMemAcc.Close(ctx)
-}
-
 // CopyFrom begins a COPY.
 // Privileges: INSERT on table.
 func (p *planner) CopyFrom(ctx context.Context, n *tree.CopyFrom) (planNode, error) {
@@ -96,6 +89,13 @@ func (n *copyNode) Start(params runParams) error {
 	}
 	params.p.session.copyFrom = n
 	return nil
+}
+
+func (*copyNode) Next(runParams) (bool, error) { return false, nil }
+func (*copyNode) Values() tree.Datums          { return nil }
+
+func (n *copyNode) Close(ctx context.Context) {
+	n.rowsMemAcc.Close(ctx)
 }
 
 // CopyDataBlock represents a data block of a COPY FROM statement.

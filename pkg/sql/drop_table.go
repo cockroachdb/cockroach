@@ -101,6 +101,42 @@ func (p *planner) DropTable(ctx context.Context, n *tree.DropTable) (planNode, e
 	return &dropTableNode{n: n, td: td}, nil
 }
 
+func (n *dropTableNode) Start(params runParams) error {
+	ctx := params.ctx
+	for _, droppedDesc := range n.td {
+		if droppedDesc == nil {
+			continue
+		}
+		droppedViews, err := params.p.dropTableImpl(ctx, droppedDesc)
+		if err != nil {
+			return err
+		}
+		// Log a Drop Table event for this table. This is an auditable log event
+		// and is recorded in the same transaction as the table descriptor
+		// update.
+		if err := MakeEventLogger(params.p.LeaseMgr()).InsertEventRecord(
+			ctx,
+			params.p.txn,
+			EventLogDropTable,
+			int32(droppedDesc.ID),
+			int32(params.evalCtx.NodeID),
+			struct {
+				TableName           string
+				Statement           string
+				User                string
+				CascadeDroppedViews []string
+			}{droppedDesc.Name, n.n.String(), params.p.session.User, droppedViews},
+		); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (*dropTableNode) Next(runParams) (bool, error) { return false, nil }
+func (*dropTableNode) Values() tree.Datums          { return tree.Datums{} }
+func (*dropTableNode) Close(context.Context)        {}
+
 // dropTableOrViewPrepare/dropTableImpl is used to drop a single table by
 // name, which can result from a DROP TABLE, DROP VIEW, DROP SEQUENCE,
 // or DROP DATABASE statement. This method returns the dropped table
@@ -204,42 +240,6 @@ func (p *planner) removeInterleave(ctx context.Context, ref sqlbase.ForeignKeyRe
 	idx.Interleave.Ancestors = nil
 	return p.saveNonmutationAndNotify(ctx, table)
 }
-
-func (n *dropTableNode) Start(params runParams) error {
-	ctx := params.ctx
-	for _, droppedDesc := range n.td {
-		if droppedDesc == nil {
-			continue
-		}
-		droppedViews, err := params.p.dropTableImpl(ctx, droppedDesc)
-		if err != nil {
-			return err
-		}
-		// Log a Drop Table event for this table. This is an auditable log event
-		// and is recorded in the same transaction as the table descriptor
-		// update.
-		if err := MakeEventLogger(params.p.LeaseMgr()).InsertEventRecord(
-			ctx,
-			params.p.txn,
-			EventLogDropTable,
-			int32(droppedDesc.ID),
-			int32(params.evalCtx.NodeID),
-			struct {
-				TableName           string
-				Statement           string
-				User                string
-				CascadeDroppedViews []string
-			}{droppedDesc.Name, n.n.String(), params.p.session.User, droppedViews},
-		); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func (*dropTableNode) Next(runParams) (bool, error) { return false, nil }
-func (*dropTableNode) Close(context.Context)        {}
-func (*dropTableNode) Values() tree.Datums          { return tree.Datums{} }
 
 // dropTableImpl does the work of dropping a table (and everything that depends
 // on it if `cascade` is enabled). It returns a list of view names that were

@@ -29,11 +29,6 @@ type dropIndexNode struct {
 	idxNames []fullIndexName
 }
 
-type fullIndexName struct {
-	tn      *tree.TableName
-	idxName tree.UnrestrictedName
-}
-
 // DropIndex drops an index.
 // Privileges: CREATE on table.
 //   Notes: postgres allows only the index owner to DROP an index.
@@ -95,6 +90,15 @@ func (n *dropIndexNode) Start(params runParams) error {
 		}
 	}
 	return nil
+}
+
+func (*dropIndexNode) Next(runParams) (bool, error) { return false, nil }
+func (*dropIndexNode) Values() tree.Datums          { return tree.Datums{} }
+func (*dropIndexNode) Close(context.Context)        {}
+
+type fullIndexName struct {
+	tn      *tree.TableName
+	idxName tree.UnrestrictedName
 }
 
 // dropIdxFKCheck is used when dropping an index to signal whether it is okay to
@@ -235,7 +239,3 @@ func (p *planner) dropIndexByName(
 
 	return nil
 }
-
-func (*dropIndexNode) Next(runParams) (bool, error) { return false, nil }
-func (*dropIndexNode) Close(context.Context)        {}
-func (*dropIndexNode) Values() tree.Datums          { return tree.Datums{} }

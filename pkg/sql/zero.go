@@ -31,10 +31,7 @@ type zeroNode struct {
 	_ interface{}
 }
 
-func (*zeroNode) Values() tree.Datums   { return nil }
-func (*zeroNode) Start(runParams) error { return nil }
-func (*zeroNode) Close(context.Context) {}
-
-func (z *zeroNode) Next(runParams) (bool, error) {
-	return false, nil
-}
+func (*zeroNode) Start(runParams) error          { return nil }
+func (z *zeroNode) Next(runParams) (bool, error) { return false, nil }
+func (*zeroNode) Values() tree.Datums            { return nil }
+func (*zeroNode) Close(context.Context)          {}

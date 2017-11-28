@@ -31,12 +31,13 @@ type unaryRun struct {
 	consumed bool
 }
 
-func (*unaryNode) Values() tree.Datums   { return nil }
 func (*unaryNode) Start(runParams) error { return nil }
-func (*unaryNode) Close(context.Context) {}
+func (*unaryNode) Values() tree.Datums   { return nil }
 
 func (u *unaryNode) Next(runParams) (bool, error) {
 	r := !u.run.consumed
 	u.run.consumed = true
 	return r, nil
 }
+
+func (*unaryNode) Close(context.Context) {}

@@ -34,12 +34,6 @@ type dropUserNode struct {
 	run dropUserRun
 }
 
-// dropUserRun contains the run-time state of dropUserNode during local execution.
-type dropUserRun struct {
-	// The number of users deleted.
-	numDeleted int
-}
-
 // DropUser drops a list of users.
 // Privileges: DELETE on system.users.
 func (p *planner) DropUser(ctx context.Context, n *tree.DropUser) (planNode, error) {
@@ -61,6 +55,12 @@ func (p *planner) DropUser(ctx context.Context, n *tree.DropUser) (planNode, err
 		ifExists: n.IfExists,
 		names:    names,
 	}, nil
+}
+
+// dropUserRun contains the run-time state of dropUserNode during local execution.
+type dropUserRun struct {
+	// The number of users deleted.
+	numDeleted int
 }
 
 func (n *dropUserNode) Start(params runParams) error {
@@ -157,7 +157,8 @@ func (n *dropUserNode) Start(params runParams) error {
 	return nil
 }
 
-func (*dropUserNode) Next(runParams) (bool, error)   { return false, nil }
-func (*dropUserNode) Close(context.Context)          {}
-func (*dropUserNode) Values() tree.Datums            { return tree.Datums{} }
+func (*dropUserNode) Next(runParams) (bool, error) { return false, nil }
+func (*dropUserNode) Values() tree.Datums          { return tree.Datums{} }
+func (*dropUserNode) Close(context.Context)        {}
+
 func (n *dropUserNode) FastPathResults() (int, bool) { return n.run.numDeleted, true }

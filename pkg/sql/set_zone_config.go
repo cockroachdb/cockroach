@@ -37,11 +37,6 @@ type setZoneConfigNode struct {
 	run setZoneConfigRun
 }
 
-// setZoneConfigRun contains the run-time state of setZoneConfigNode during local execution.
-type setZoneConfigRun struct {
-	numAffected int
-}
-
 func (p *planner) SetZoneConfig(ctx context.Context, n *tree.SetZoneConfig) (planNode, error) {
 	yamlConfig, err := p.analyzeExpr(
 		ctx, n.YAMLConfig, nil, tree.IndexedVarHelper{}, types.String, false, "configure zone")
@@ -52,6 +47,11 @@ func (p *planner) SetZoneConfig(ctx context.Context, n *tree.SetZoneConfig) (pla
 		zoneSpecifier: n.ZoneSpecifier,
 		yamlConfig:    yamlConfig,
 	}, nil
+}
+
+// setZoneConfigRun contains the run-time state of setZoneConfigNode during local execution.
+type setZoneConfigRun struct {
+	numAffected int
 }
 
 func (n *setZoneConfigNode) Start(params runParams) error {
@@ -175,8 +175,9 @@ func (n *setZoneConfigNode) Start(params runParams) error {
 }
 
 func (n *setZoneConfigNode) Next(runParams) (bool, error) { return false, nil }
-func (*setZoneConfigNode) Close(context.Context)          {}
 func (n *setZoneConfigNode) Values() tree.Datums          { return nil }
+func (*setZoneConfigNode) Close(context.Context)          {}
+
 func (n *setZoneConfigNode) FastPathResults() (int, bool) { return n.run.numAffected, true }
 
 // getZoneConfigRaw looks up the zone config with the given ID. Unlike

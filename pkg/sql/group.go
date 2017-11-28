@@ -31,10 +31,33 @@ import (
 	"github.com/pkg/errors"
 )
 
-// groupByStrMap maps each GROUP BY expression string to the index of the column
-// in the underlying renderNode that renders this expression.
-// For stars (GROUP BY k.*) the special value -1 is used.
-type groupByStrMap map[string]int
+// A groupNode implements the planNode interface and handles the grouping logic.
+// It "wraps" a planNode which is used to retrieve the ungrouped results.
+type groupNode struct {
+	// The schema for this groupNode.
+	columns sqlbase.ResultColumns
+
+	// desiredOrdering is set only if we are aggregating around a single MIN/MAX
+	// function and we can compute the final result using a single row, assuming
+	// a specific ordering of the underlying plan.
+	desiredOrdering sqlbase.ColumnOrdering
+
+	// needOnlyOneRow determines whether aggregation should stop as soon
+	// as one result row can be computed.
+	needOnlyOneRow bool
+
+	// The source node (which returns values that feed into the aggregation).
+	plan planNode
+
+	// The group-by columns are the first numGroupCols columns of
+	// the source plan.
+	numGroupCols int
+
+	// funcs are the aggregation functions that the renders use.
+	funcs []*aggregateFuncHolder
+
+	run groupRun
+}
 
 // groupBy constructs a planNode "complex" consisting of a groupNode and other
 // post-processing nodes according to grouping functions or clauses.
@@ -302,34 +325,6 @@ func (p *planner) groupBy(
 	return plan, group, nil
 }
 
-// A groupNode implements the planNode interface and handles the grouping logic.
-// It "wraps" a planNode which is used to retrieve the ungrouped results.
-type groupNode struct {
-	// The schema for this groupNode.
-	columns sqlbase.ResultColumns
-
-	// desiredOrdering is set only if we are aggregating around a single MIN/MAX
-	// function and we can compute the final result using a single row, assuming
-	// a specific ordering of the underlying plan.
-	desiredOrdering sqlbase.ColumnOrdering
-
-	// needOnlyOneRow determines whether aggregation should stop as soon
-	// as one result row can be computed.
-	needOnlyOneRow bool
-
-	// The source node (which returns values that feed into the aggregation).
-	plan planNode
-
-	// The group-by columns are the first numGroupCols columns of
-	// the source plan.
-	numGroupCols int
-
-	// funcs are the aggregation functions that the renders use.
-	funcs []*aggregateFuncHolder
-
-	run groupRun
-}
-
 // groupRun contains the run-time state for groupNode during local execution.
 type groupRun struct {
 	// The set of bucket keys. We add buckets as we are processing input rows, and
@@ -345,10 +340,6 @@ type groupRun struct {
 	// gotOneRow becomes true after one result row has been produced.
 	// Used in conjunction with needOnlyOneRow.
 	gotOneRow bool
-}
-
-func (n *groupNode) Values() tree.Datums {
-	return n.run.values
 }
 
 func (n *groupNode) Start(params runParams) error {
@@ -441,13 +432,8 @@ func (n *groupNode) Next(params runParams) (bool, error) {
 	return true, nil
 }
 
-// setupOutput runs once after all the input rows have been processed. It sets
-// up the necessary state to start iterating through the buckets in Next().
-func (n *groupNode) setupOutput() {
-	if len(n.run.buckets) < 1 && n.run.addNullBucketIfEmpty {
-		n.run.buckets[""] = struct{}{}
-	}
-	n.run.values = make(tree.Datums, len(n.funcs))
+func (n *groupNode) Values() tree.Datums {
+	return n.run.values
 }
 
 func (n *groupNode) Close(ctx context.Context) {
@@ -456,6 +442,15 @@ func (n *groupNode) Close(ctx context.Context) {
 		f.close(ctx)
 	}
 	n.run.buckets = nil
+}
+
+// setupOutput runs once after all the input rows have been processed. It sets
+// up the necessary state to start iterating through the buckets in Next().
+func (n *groupNode) setupOutput() {
+	if len(n.run.buckets) < 1 && n.run.addNullBucketIfEmpty {
+		n.run.buckets[""] = struct{}{}
+	}
+	n.run.values = make(tree.Datums, len(n.funcs))
 }
 
 // requiresIsNotNullFilter returns whether a "col IS NOT NULL" constraint must
@@ -533,6 +528,11 @@ type extractAggregatesVisitor struct {
 	groupStrs  groupByStrMap
 	err        error
 }
+
+// groupByStrMap maps each GROUP BY expression string to the index of the column
+// in the underlying renderNode that renders this expression.
+// For stars (GROUP BY k.*) the special value -1 is used.
+type groupByStrMap map[string]int
 
 var _ tree.Visitor = &extractAggregatesVisitor{}
 

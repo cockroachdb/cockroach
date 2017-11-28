@@ -42,16 +42,6 @@ type explainDistSQLRun struct {
 	done bool
 }
 
-func (n *explainDistSQLNode) Close(ctx context.Context) {
-	n.plan.Close(ctx)
-}
-
-var explainDistSQLColumns = sqlbase.ResultColumns{
-	{Name: "Automatic", Typ: types.Bool},
-	{Name: "URL", Typ: types.String},
-	{Name: "JSON", Typ: types.String, Hidden: true},
-}
-
 func (n *explainDistSQLNode) Start(params runParams) error {
 	// Trigger limit propagation.
 	params.p.setUnlimited(n.plan)
@@ -91,4 +81,11 @@ func (n *explainDistSQLNode) Next(runParams) (bool, error) {
 	return true, nil
 }
 
-func (n *explainDistSQLNode) Values() tree.Datums { return n.run.values }
+func (n *explainDistSQLNode) Values() tree.Datums       { return n.run.values }
+func (n *explainDistSQLNode) Close(ctx context.Context) { n.plan.Close(ctx) }
+
+var explainDistSQLColumns = sqlbase.ResultColumns{
+	{Name: "Automatic", Typ: types.Bool},
+	{Name: "URL", Typ: types.String},
+	{Name: "JSON", Typ: types.String, Hidden: true},
+}
