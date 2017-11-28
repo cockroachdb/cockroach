@@ -20,6 +20,8 @@ import (
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
+	"fmt"
+
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -305,10 +307,25 @@ CREATE TABLE information_schema.sequences (
     CYCLE_OPTION STRING NOT NULL DEFAULT 'NO'
 );`,
 	populate: func(ctx context.Context, p *planner, prefix string, addRow func(...tree.Datum) error) error {
-		// Sequences are not yet supported: #5811
-		// However, we support an empty information_schema table to enable
-		// clients to observe that there are no sequences.
-		return nil
+		return forEachTableDesc(ctx, p, prefix, func(db *sqlbase.DatabaseDescriptor, table *sqlbase.TableDescriptor) error {
+			if !table.IsSequence() {
+				return nil
+			}
+			return addRow(
+				defString,                        // catalog
+				tree.NewDString(db.GetName()),    // schema
+				tree.NewDString(table.GetName()), // name
+				tree.NewDString("INT"),           // type
+				tree.NewDInt(64),                 // numeric precision
+				tree.NewDInt(2),                  // numeric precision radix
+				tree.NewDInt(0),                  // numeric scale
+				tree.NewDString(fmt.Sprintf("%d", table.SequenceOpts.Start)),     // start value
+				tree.NewDString(fmt.Sprintf("%d", table.SequenceOpts.MinValue)),  // min value
+				tree.NewDString(fmt.Sprintf("%d", table.SequenceOpts.MaxValue)),  // max value
+				tree.NewDString(fmt.Sprintf("%d", table.SequenceOpts.Increment)), // increment
+				yesOrNoDatum(table.SequenceOpts.Cycle),                           // cycle
+			)
+		})
 	},
 }
 
@@ -525,6 +542,9 @@ CREATE TABLE information_schema.tables (
 );`,
 	populate: func(ctx context.Context, p *planner, prefix string, addRow func(...tree.Datum) error) error {
 		return forEachTableDesc(ctx, p, prefix, func(db *sqlbase.DatabaseDescriptor, table *sqlbase.TableDescriptor) error {
+			if table.IsSequence() {
+				return nil
+			}
 			tableType := tableTypeBaseTable
 			if isVirtualDescriptor(table) {
 				tableType = tableTypeSystemView
