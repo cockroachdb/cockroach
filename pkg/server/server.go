@@ -40,8 +40,6 @@ import (
 	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/codes"
-	grpcstatus "google.golang.org/grpc/status"
 
 	"github.com/cockroachdb/cmux"
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -123,6 +121,7 @@ type Server struct {
 	admin              *adminServer
 	status             *statusServer
 	authentication     *authenticationServer
+	initServer         *initServer
 	tsDB               *ts.DB
 	tsServer           ts.Server
 	raftTransport      *storage.RaftTransport
@@ -134,8 +133,7 @@ type Server struct {
 	engines            Engines
 	internalMemMetrics sql.MemoryMetrics
 	adminMemMetrics    sql.MemoryMetrics
-
-	serveNonGossip int32 // atomically updated
+	serveMode
 }
 
 // NewServer creates a Server from a server.Context.
@@ -158,6 +156,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		cfg:      cfg,
 		registry: metric.NewRegistry(),
 	}
+	s.serveMode.set(modeInitializing)
 
 	// If the tracer has a Close function, call it after the server stops.
 	if tr, ok := cfg.AmbientCtx.Tracer.(stop.Closer); ok {
@@ -195,23 +194,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		}
 	}
 
-	{
-		var earlyRPCWhiteList = map[string]struct{}{
-			"/cockroach.rpc.Heartbeat/Ping":   {},
-			"/cockroach.gossip.Gossip/Gossip": {},
-		}
-		s.grpc = rpc.NewServerWithInterceptor(s.rpcContext, func(fullName string) error {
-			if atomic.LoadInt32(&s.serveNonGossip) != 0 {
-				return nil
-			}
-			if _, allowed := earlyRPCWhiteList[fullName]; !allowed {
-				return grpcstatus.Errorf(
-					codes.Unavailable, "node waiting for gossip network; %s not available", fullName,
-				)
-			}
-			return nil
-		})
-	}
+	s.grpc = rpc.NewServerWithInterceptor(s.rpcContext, s.Intercept())
 
 	s.gossip = gossip.New(
 		s.cfg.AmbientCtx,
@@ -392,7 +375,6 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	s.node = NewNode(storeCfg, s.recorder, s.registry, s.stopper, txnMetrics, sql.MakeEventLogger(s.leaseMgr))
 	roachpb.RegisterInternalServer(s.grpc, s.node)
 	storage.RegisterConsistencyServer(s.grpc, s.node.storesServer)
-	serverpb.RegisterInitServer(s.grpc, &noopInitServer{clusterID: s.ClusterID})
 
 	s.sessionRegistry = sql.MakeSessionRegistry()
 	s.jobRegistry = jobs.MakeRegistry(
@@ -447,6 +429,11 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	for _, gw := range []grpcGatewayServer{s.admin, s.status, s.authentication, &s.tsServer} {
 		gw.RegisterService(s.grpc)
 	}
+
+	s.initServer = newInitServer(s)
+	s.initServer.semaphore.acquire()
+
+	serverpb.RegisterInitServer(s.grpc, s.initServer)
 
 	nodeInfo := sql.NodeInfo{
 		AdminURL:  cfg.AdminURL,
@@ -698,14 +685,18 @@ func (s *Server) Start(ctx context.Context) error {
 	var serveOnMux sync.Once
 	m := cmux.New(ln)
 
-	// Inject an initialization listener that will intercept all
-	// connections while the cluster is initializing.
-	initLActive := int32(0)
-	initL := m.Match(func(_ io.Reader) bool {
-		return atomic.LoadInt32(&initLActive) != 0
+	pgL := m.Match(func(r io.Reader) bool {
+		// We must check operational() to force all requests into anyL before the
+		// server is operational. This is because we don't start accepting from pgL
+		// until after the init server, but we don't want SQL connections to hang
+		// against a cluster that is awaiting initialization.
+		//
+		// TODO(tschottdorf): rearrange the code so that we accept on pgL early,
+		// but return "nice" PG errors to clients when `!operational()`. This
+		// incurs some code shuffling in this file.
+		return s.serveMode.operational() && pgwire.Match(r)
 	})
 
-	pgL := m.Match(pgwire.Match)
 	anyL := m.Match(cmux.Any())
 
 	httpLn, err := net.Listen("tcp", s.cfg.HTTPAddr)
@@ -908,9 +899,9 @@ func (s *Server) Start(ctx context.Context) error {
 	} else {
 		log.Info(ctx, "no stores bootstrapped and --join flag specified, awaiting init command.")
 
-		initServer := newInitServer(s)
-		initServer.serve(ctx, initL)
-		atomic.StoreInt32(&initLActive, 1)
+		// Note that when we created the init server, we acquired its semaphore
+		// (to stop anyone from rushing in).
+		s.initServer.semaphore.release()
 
 		s.stopper.RunWorker(workersCtx, func(context.Context) {
 			serveOnMux.Do(func() {
@@ -918,12 +909,19 @@ func (s *Server) Start(ctx context.Context) error {
 			})
 		})
 
-		if err := initServer.awaitBootstrap(); err != nil {
+		if err := s.initServer.awaitBootstrap(); err != nil {
 			return err
 		}
 
-		atomic.StoreInt32(&initLActive, 0)
+		// Reacquire the semaphore, allowing the code below to be oblivious to
+		// the fact that this branch was taken.
+		s.initServer.semaphore.acquire()
 	}
+
+	// Release the semaphore of the init server. Anyone still managing to talk
+	// to it may do so, but will be greeted with an error telling them that the
+	// cluster is already initialized.
+	s.initServer.semaphore.release()
 
 	// This opens the main listener.
 	s.stopper.RunWorker(workersCtx, func(context.Context) {
@@ -1106,7 +1104,7 @@ If problems persist, please see ` + base.DocsURL("cluster-setup-troubleshooting.
 	s.sqlExecutor.Start(ctx, &s.adminMemMetrics, distSQLPlanner)
 	s.distSQLServer.Start()
 
-	atomic.StoreInt32(&s.serveNonGossip, 1)
+	s.serveMode.set(modeOperational)
 
 	s.mux.Handle(adminPrefix, authHandler)
 	s.mux.Handle(ts.URLPrefix, authHandler)
