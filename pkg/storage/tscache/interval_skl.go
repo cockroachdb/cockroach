@@ -390,7 +390,7 @@ func (s *intervalSkl) rotatePages(filledPage *sklPage) {
 	var oldArena *arenaskl.Arena
 	for s.pages.Len() >= s.minPages {
 		bp := back.Value.(*sklPage)
-		bpMaxTS := hlc.Timestamp{WallTime: atomic.LoadInt64(&bp.maxWallTime)}
+		bpMaxTS := hlc.Timestamp{WallTime: bp.maxWallTime}
 		if !bpMaxTS.Less(minTSToRetain) {
 			// The back page's maximum timestamp is within the time
 			// window we've promised to retain, so we can't evict it.
@@ -413,7 +413,7 @@ func (s *intervalSkl) rotatePages(filledPage *sklPage) {
 	// In other words, it assures that the maxWallTime for a page is not only
 	// the maximum timestamp for all values it contains, but also for all values
 	// any earlier pages contain.
-	s.pushNewPage(atomic.LoadInt64(&fp.maxWallTime), oldArena)
+	s.pushNewPage(fp.maxWallTime, oldArena)
 }
 
 // LookupTimestamp returns the latest timestamp value at which the given key was
