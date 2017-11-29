@@ -30,6 +30,7 @@ add_library(roach
   protos/roachpb/metadata.pb.cc
   protos/storage/engine/enginepb/mvcc.pb.cc
   protos/storage/engine/enginepb/mvcc3.pb.cc
+  protos/storage/engine/enginepb/registry.pb.cc
   protos/storage/engine/enginepb/rocksdb.pb.cc
   protos/util/hlc/legacy_timestamp.pb.cc
   protos/util/hlc/timestamp.pb.cc
