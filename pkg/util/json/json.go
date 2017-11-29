@@ -168,7 +168,7 @@ func (j jsonNumber) Compare(other JSON) (int, error) {
 	if cmp != 0 {
 		return cmp, nil
 	}
-	if enc, ok := other.(jsonEncoded); ok {
+	if enc, ok := other.(*jsonEncoded); ok {
 		var err error
 		other, err = enc.decode()
 		if err != nil {
@@ -186,7 +186,7 @@ func (j jsonString) Compare(other JSON) (int, error) {
 		return cmp, nil
 	}
 	// TODO(justin): we should optimize this, we don't have to decode the whole thing.
-	if enc, ok := other.(jsonEncoded); ok {
+	if enc, ok := other.(*jsonEncoded); ok {
 		var err error
 		other, err = enc.decode()
 		if err != nil {
@@ -209,7 +209,7 @@ func (j jsonArray) Compare(other JSON) (int, error) {
 		return cmp, nil
 	}
 	// TODO(justin): we should optimize this, we don't have to decode the whole thing.
-	if enc, ok := other.(jsonEncoded); ok {
+	if enc, ok := other.(*jsonEncoded); ok {
 		var err error
 		other, err = enc.decode()
 		if err != nil {
@@ -241,7 +241,7 @@ func (j jsonObject) Compare(other JSON) (int, error) {
 		return cmp, nil
 	}
 	// TODO(justin): we should optimize this, we don't have to decode the whole thing.
-	if enc, ok := other.(jsonEncoded); ok {
+	if enc, ok := other.(*jsonEncoded); ok {
 		var err error
 		other, err = enc.decode()
 		if err != nil {

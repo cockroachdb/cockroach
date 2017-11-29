@@ -21,6 +21,7 @@ import (
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
 
 type jsonEncoded struct {
@@ -31,28 +32,45 @@ type jsonEncoded struct {
 	// arrays and objects, value contains the container header, but it never
 	// contains a scalar container header.
 	value []byte
+
+	// TODO(justin): for simplicity right now we use a mutex, we could be using
+	// an atomic CAS though.
+	mu struct {
+		syncutil.RWMutex
+
+		cachedDecoded JSON
+	}
 }
 
-func (j jsonEncoded) Type() Type {
+func (j *jsonEncoded) alreadyDecoded() JSON {
+	j.mu.RLock()
+	defer j.mu.RUnlock()
+	if j.mu.cachedDecoded != nil {
+		return j.mu.cachedDecoded
+	}
+	return nil
+}
+
+func (j *jsonEncoded) Type() Type {
 	return j.typ
 }
 
-func newEncodedFromRoot(v []byte) (jsonEncoded, error) {
+func newEncodedFromRoot(v []byte) (*jsonEncoded, error) {
 	v, typ, err := jsonTypeFromRootBuffer(v)
 	if err != nil {
-		return jsonEncoded{}, err
+		return nil, err
 	}
 
 	containerLen := -1
 	if typ == ArrayJSONType || typ == ObjectJSONType {
 		containerHeader, err := getUint32At(v, 0)
 		if err != nil {
-			return jsonEncoded{}, err
+			return nil, err
 		}
 		containerLen = int(containerHeader & containerHeaderLenMask)
 	}
 
-	return jsonEncoded{
+	return &jsonEncoded{
 		typ:          typ,
 		containerLen: containerLen,
 		value:        v,
@@ -120,7 +138,7 @@ func newEncoded(jEntry uint32, v []byte) (JSON, error) {
 		containerLen = int(containerHeader & containerHeaderLenMask)
 	}
 
-	return jsonEncoded{
+	return &jsonEncoded{
 		typ:          typ,
 		containerLen: containerLen,
 		value:        v,
@@ -163,7 +181,7 @@ func (e *encodedArrayIterator) nextEncoded() (nextJEntry uint32, next []byte, ok
 
 // iterArrayValues iterates through all the values of an encoded array without
 // requiring decoding of all of them.
-func (j jsonEncoded) iterArrayValues() encodedArrayIterator {
+func (j *jsonEncoded) iterArrayValues() encodedArrayIterator {
 	if j.typ != ArrayJSONType {
 		panic("can only iterate through the array values of an array")
 	}
@@ -211,7 +229,7 @@ func (e *encodedObjectIterator) nextEncoded() (nextKey []byte, nextJEntry uint32
 
 // iterObject iterates through all the keys and values of an encoded object
 // without requiring decoding of all of them.
-func (j jsonEncoded) iterObject() (encodedObjectIterator, error) {
+func (j *jsonEncoded) iterObject() (encodedObjectIterator, error) {
 	if j.typ != ObjectJSONType {
 		panic("can only iterate through the object values of an object")
 	}
@@ -238,7 +256,11 @@ func (j jsonEncoded) iterObject() (encodedObjectIterator, error) {
 	}, nil
 }
 
-func (j jsonEncoded) FetchValIdx(idx int) (JSON, error) {
+func (j *jsonEncoded) FetchValIdx(idx int) (JSON, error) {
+	if dec := j.alreadyDecoded(); dec != nil {
+		return dec.FetchValIdx(idx)
+	}
+
 	if j.Type() == ArrayJSONType {
 		if idx < 0 {
 			idx = j.containerLen + idx
@@ -264,7 +286,11 @@ func (j jsonEncoded) FetchValIdx(idx int) (JSON, error) {
 
 // TODO(justin): this is quite slow as it requires a linear scan - implement
 // the length/offset distinction in order to make this fast.
-func (j jsonEncoded) FetchValKey(key string) (JSON, error) {
+func (j *jsonEncoded) FetchValKey(key string) (JSON, error) {
+	if dec := j.alreadyDecoded(); dec != nil {
+		return dec.FetchValKey(key)
+	}
+
 	if j.Type() == ObjectJSONType {
 		iter, err := j.iterObject()
 		if err != nil {
@@ -279,7 +305,11 @@ func (j jsonEncoded) FetchValKey(key string) (JSON, error) {
 				return nil, nil
 			}
 			if string(nextKey) == key {
-				return newEncoded(jEntry, nextValue)
+				next, err := newEncoded(jEntry, nextValue)
+				if err != nil {
+					return nil, err
+				}
+				return next, nil
 			}
 		}
 	}
@@ -289,7 +319,11 @@ func (j jsonEncoded) FetchValKey(key string) (JSON, error) {
 // shallowDecode decodes only the keys of an object, and doesn't decode any
 // elements of an array. It can be used to save a decode-encode cycle for
 // certain operations (say, key deletion).
-func (j jsonEncoded) shallowDecode() (JSON, error) {
+func (j *jsonEncoded) shallowDecode() (JSON, error) {
+	if dec := j.alreadyDecoded(); dec != nil {
+		return dec, nil
+	}
+
 	switch j.typ {
 	case NumberJSONType, StringJSONType, TrueJSONType, FalseJSONType, NullJSONType:
 		return j.decode()
@@ -327,13 +361,18 @@ func (j jsonEncoded) shallowDecode() (JSON, error) {
 				v: v,
 			}
 		}
+		j.mu.Lock()
+		defer j.mu.Unlock()
+		if j.mu.cachedDecoded == nil {
+			j.mu.cachedDecoded = result
+		}
 		return result, nil
 	default:
 		return nil, pgerror.NewErrorf(pgerror.CodeInternalError, "unknown type %v", j.typ)
 	}
 }
 
-func (j jsonEncoded) mustDecode() JSON {
+func (j *jsonEncoded) mustDecode() JSON {
 	decoded, err := j.decode()
 	if err != nil {
 		panic(fmt.Sprintf("invalid JSON data: %s, %v", err.Error(), j.value))
@@ -343,7 +382,7 @@ func (j jsonEncoded) mustDecode() JSON {
 
 // decode should be used in cases where you will definitely have to use the
 // entire decoded JSON structure, like printing it out to a string.
-func (j jsonEncoded) decode() (JSON, error) {
+func (j *jsonEncoded) decode() (JSON, error) {
 	switch j.typ {
 	case NumberJSONType:
 		_, j, err := decodeJSONNumber(j.value)
@@ -358,10 +397,19 @@ func (j jsonEncoded) decode() (JSON, error) {
 		return NullJSONValue, nil
 	}
 	_, decoded, err := DecodeJSON(j.value)
+
+	j.mu.Lock()
+	defer j.mu.Unlock()
+	j.mu.cachedDecoded = decoded
+
 	return decoded, err
 }
 
-func (j jsonEncoded) AsText() (*string, error) {
+func (j *jsonEncoded) AsText() (*string, error) {
+	if dec := j.alreadyDecoded(); dec != nil {
+		return dec.AsText()
+	}
+
 	decoded, err := j.decode()
 	if err != nil {
 		return nil, err
@@ -369,7 +417,7 @@ func (j jsonEncoded) AsText() (*string, error) {
 	return decoded.AsText()
 }
 
-func (j jsonEncoded) Compare(other JSON) (int, error) {
+func (j *jsonEncoded) Compare(other JSON) (int, error) {
 	// TODO(justin): this can be optimized in some cases. We don't necessarily
 	// need to decode all of an array or every object key.
 	dec, err := j.shallowDecode()
@@ -379,7 +427,11 @@ func (j jsonEncoded) Compare(other JSON) (int, error) {
 	return dec.Compare(other)
 }
 
-func (j jsonEncoded) Exists(key string) (bool, error) {
+func (j *jsonEncoded) Exists(key string) (bool, error) {
+	if dec := j.alreadyDecoded(); dec != nil {
+		return dec.Exists(key)
+	}
+
 	switch j.typ {
 	case ObjectJSONType:
 		v, err := j.FetchValKey(key)
@@ -410,7 +462,7 @@ func (j jsonEncoded) Exists(key string) (bool, error) {
 			// 2. the `value` field on such a jsonEncoded directly corresponds to the string.
 			// This is tested sufficiently that if either of those assumptions is
 			// broken it will be caught.
-			if next.Type() == StringJSONType && string(next.(jsonEncoded).value) == key {
+			if next.Type() == StringJSONType && string(next.(*jsonEncoded).value) == key {
 				return true, nil
 			}
 		}
@@ -418,7 +470,7 @@ func (j jsonEncoded) Exists(key string) (bool, error) {
 	return false, nil
 }
 
-func (j jsonEncoded) FetchValKeyOrIdx(key string) (JSON, error) {
+func (j *jsonEncoded) FetchValKeyOrIdx(key string) (JSON, error) {
 	switch j.typ {
 	case ObjectJSONType:
 		return j.FetchValKey(key)
@@ -435,7 +487,7 @@ func (j jsonEncoded) FetchValKeyOrIdx(key string) (JSON, error) {
 	return nil, nil
 }
 
-func (j jsonEncoded) Format(buf *bytes.Buffer) {
+func (j *jsonEncoded) Format(buf *bytes.Buffer) {
 	decoded, err := j.decode()
 	if err != nil {
 		fmt.Fprintf(buf, `<corrupt JSON data: %s>`, err.Error())
@@ -445,7 +497,7 @@ func (j jsonEncoded) Format(buf *bytes.Buffer) {
 }
 
 // RemoveIndex implements the JSON interface.
-func (j jsonEncoded) RemoveIndex(idx int) (JSON, error) {
+func (j *jsonEncoded) RemoveIndex(idx int) (JSON, error) {
 	decoded, err := j.shallowDecode()
 	if err != nil {
 		return nil, err
@@ -454,7 +506,7 @@ func (j jsonEncoded) RemoveIndex(idx int) (JSON, error) {
 }
 
 // RemoveKey implements the JSON interface.
-func (j jsonEncoded) RemoveKey(key string) (JSON, error) {
+func (j *jsonEncoded) RemoveKey(key string) (JSON, error) {
 	decoded, err := j.shallowDecode()
 	if err != nil {
 		return nil, err
@@ -463,23 +515,23 @@ func (j jsonEncoded) RemoveKey(key string) (JSON, error) {
 }
 
 // Size implements the JSON interface.
-func (j jsonEncoded) Size() uintptr {
+func (j *jsonEncoded) Size() uintptr {
 	return unsafe.Sizeof(j) + uintptr(len(j.value))
 }
 
-func (j jsonEncoded) String() string {
+func (j *jsonEncoded) String() string {
 	var buf bytes.Buffer
 	j.Format(&buf)
 	return buf.String()
 }
 
 // isScalar implements the JSON interface.
-func (j jsonEncoded) isScalar() bool {
+func (j *jsonEncoded) isScalar() bool {
 	return j.typ != ArrayJSONType && j.typ != ObjectJSONType
 }
 
 // EncodeInvertedIndexKeys implements the JSON interface.
-func (j jsonEncoded) EncodeInvertedIndexKeys(b []byte) ([][]byte, error) {
+func (j *jsonEncoded) EncodeInvertedIndexKeys(b []byte) ([][]byte, error) {
 	// TODO(justin): this could possibly be optimized.
 	decoded, err := j.decode()
 	if err != nil {
@@ -489,7 +541,11 @@ func (j jsonEncoded) EncodeInvertedIndexKeys(b []byte) ([][]byte, error) {
 }
 
 // preprocessForContains implements the JSON interface.
-func (j jsonEncoded) preprocessForContains() (containsable, error) {
+func (j *jsonEncoded) preprocessForContains() (containsable, error) {
+	if dec := j.alreadyDecoded(); dec != nil {
+		return dec.preprocessForContains()
+	}
+
 	decoded, err := j.decode()
 	if err != nil {
 		return nil, err
@@ -498,7 +554,7 @@ func (j jsonEncoded) preprocessForContains() (containsable, error) {
 }
 
 // jEntry implements the JSON interface.
-func (j jsonEncoded) jEntry() uint32 {
+func (j *jsonEncoded) jEntry() uint32 {
 	var typeTag uint32
 	switch j.typ {
 	case NullJSONType:
@@ -519,11 +575,11 @@ func (j jsonEncoded) jEntry() uint32 {
 }
 
 // encode implements the JSON interface.
-func (j jsonEncoded) encode(appendTo []byte) (jEntry uint32, b []byte, err error) {
+func (j *jsonEncoded) encode(appendTo []byte) (jEntry uint32, b []byte, err error) {
 	return j.jEntry(), append(appendTo, j.value...), nil
 }
 
 // MaybeDecode implements the JSON interface.
-func (j jsonEncoded) MaybeDecode() JSON {
+func (j *jsonEncoded) MaybeDecode() JSON {
 	return j.mustDecode()
 }

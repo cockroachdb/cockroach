@@ -1134,12 +1134,26 @@ func BenchmarkFetchKey(b *testing.B) {
 
 			b.Run("fetch key encoded", func(b *testing.B) {
 				for i := 0; i < b.N; i++ {
+					b.StopTimer()
+					encoded, err := newEncodedFromRoot(encoding)
+					if err != nil {
+						b.Fatal(err)
+					}
+					b.StartTimer()
+
 					_, _ = encoded.FetchValKey(keys[rand.Intn(len(keys))])
 				}
 			})
 
 			b.Run("repeated fetch key encoded", func(b *testing.B) {
 				for i := 0; i < b.N; i++ {
+					b.StopTimer()
+					encoded, err := newEncodedFromRoot(encoding)
+					if err != nil {
+						b.Fatal(err)
+					}
+					b.StartTimer()
+
 					key := keys[rand.Intn(len(keys))]
 					_, _ = encoded.FetchValKey(key)
 					_, _ = encoded.FetchValKey(key)
