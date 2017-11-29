@@ -11,10 +11,14 @@ package engineccl
 import (
 	"unsafe"
 
+	"github.com/pkg/errors"
+	"golang.org/x/net/context"
+
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 )
 
 // TODO(tamird): why does rocksdb not link jemalloc,snappy statically?
@@ -148,4 +152,52 @@ func cStatsToGoStats(stats C.MVCCStatsResult, nowNanos int64) (enginepb.MVCCStat
 	ms.SysCount = int64(stats.sys_count)
 	ms.LastUpdateNanos = nowNanos
 	return ms, nil
+}
+
+// ExportSST exports changes to the keyrange [startKey,endKey) over the interval
+// (startTime, endTime]. Passing allRevisions exports every revision of a key
+// for the interval, otherwise only the latest value within the interval is
+// exported. Deletions are included if all revisions are requested or if the
+// startTime is non-zero.
+// Returns the bytes of an SSTable containing the exported keys, the number of
+// keys exported and size of exported data, or an error.
+func ExportSST(
+	ctx context.Context,
+	e engine.Reader,
+	startKey, endKey roachpb.Key,
+	startTime, endTime hlc.Timestamp,
+	allRevisions bool,
+) (sst []byte, kvCount int64, kvSize int64, _ error) {
+	start := engine.MVCCKey{Key: startKey, Timestamp: startTime}
+	end := engine.MVCCKey{Key: endKey, Timestamp: endTime}
+
+	timeBoundIter := e.NewTimeBoundIterator(startTime, endTime)
+	dbiter := (*C.DBIterator)(engine.GetRawIter(timeBoundIter))
+
+	var contents C.DBString
+	var entries C.int64_t
+	var dataSize C.int64_t
+	var intentErr C.DBString
+
+	err := statusToError(C.DBIncIterToSst(dbiter, goToCKey(start), goToCKey(end), C.bool(allRevisions), &contents, &entries, &dataSize, &intentErr))
+	if err != nil {
+		if err.Error() == "write intent error" {
+			var e roachpb.WriteIntentError
+			if err := protoutil.Unmarshal(cStringToGoBytes(intentErr), &e); err != nil {
+				return nil, 0, 0, errors.Wrap(err, "failed to decode write intent error")
+			}
+			return nil, 0, 0, &e
+		}
+		return nil, 0, 0, err
+	}
+	return cStringToGoBytes(contents), int64(entries), int64(dataSize), nil
+}
+
+func cStringToGoBytes(s C.DBString) []byte {
+	if s.data == nil {
+		return nil
+	}
+	result := C.GoBytes(unsafe.Pointer(s.data), s.len)
+	C.free(unsafe.Pointer(s.data))
+	return result
 }

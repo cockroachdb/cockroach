@@ -20,6 +20,17 @@ extern "C" {
 DBStatus DBBatchReprVerify(
   DBSlice repr, DBKey start, DBKey end, int64_t now_nanos, MVCCStatsResult* stats);
 
+DBStatus DBIncIterToSst(
+  DBIterator* iter,
+  DBKey start,
+  DBKey end,
+  bool revisions,
+  DBString* data,
+  int64_t* entries,
+  int64_t* data_size,
+  DBString* intentErr
+);
+
 #ifdef __cplusplus
 }  // extern "C"
 #endif

@@ -44,3 +44,16 @@ const ::rocksdb::Comparator* CockroachComparator();
 // Stats are only computed for keys between the given range.
 MVCCStatsResult MVCCComputeStatsInternal(
     ::rocksdb::Iterator* const iter_rep, DBKey start, DBKey end, int64_t now_nanos);
+
+// Adds a kv entry to the sstable being built. An error is returned if it is
+// not greater than any previously added entry (according to the comparator
+// configured during writer creation). `Open` must have been called. `Close`
+// cannot have been called.
+DBStatus DBSstFileWriterAddRaw(DBSstFileWriter* fw, const std::string& key, DBSlice val);
+
+const DBStatus kSuccess = { NULL, 0 };
+DBString ToDBString(const rocksdb::Slice& s);
+
+extern "C" {
+  char* __attribute__((weak)) prettyPrintKey(DBKey);
+}  // extern "C"

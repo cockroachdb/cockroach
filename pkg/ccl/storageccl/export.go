@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl/engineccl"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/batcheval"
@@ -41,6 +42,12 @@ import (
 const ExportRequestLimit = 5
 
 var exportRequestLimiter = makeConcurrentRequestLimiter(ExportRequestLimit)
+
+var exportCpp = settings.RegisterBoolSetting(
+	"experimental.export.cpp",
+	"use pure c++ mvcc export implementation to export key ranges in BACKUP",
+	true,
+)
 
 func init() {
 	storage.SetExportCmd(storage.Command{
@@ -140,67 +147,86 @@ func evalExport(
 	}
 	defer sst.Close()
 
-	var skipTombstones bool
-	var iterFn func(*engineccl.MVCCIncrementalIterator)
+	var allRevisions bool
 	switch args.MVCCFilter {
 	case roachpb.MVCCFilter_Latest:
-		skipTombstones = true
-		iterFn = (*engineccl.MVCCIncrementalIterator).NextKey
+		allRevisions = false
 	case roachpb.MVCCFilter_All:
-		skipTombstones = false
-		iterFn = (*engineccl.MVCCIncrementalIterator).Next
+		allRevisions = true
 	default:
 		return result.Result{}, errors.Errorf("unknown MVCC filter: %s", args.MVCCFilter)
 	}
 
 	var rows rowCounter
-	// TODO(dan): Move all this iteration into cpp to avoid the cgo calls.
-	// TODO(dan): Consider checking ctx periodically during the MVCCIterate call.
-	iter := engineccl.NewMVCCIncrementalIterator(batch, args.StartTime, h.Timestamp)
-	defer iter.Close()
-	for iter.Seek(engine.MakeMVCCMetadataKey(args.Key)); ; iterFn(iter) {
-		ok, err := iter.Valid()
+	var sstContents []byte
+	if exportCpp.Get(&cArgs.EvalCtx.ClusterSettings().SV) {
+		// TODO(dan): Consider checking ctx periodically during the MVCCIterate call.
+		data, entries, size, err := engineccl.ExportSST(
+			ctx, batch, args.Key, args.EndKey, args.StartTime, h.Timestamp, allRevisions,
+		)
 		if err != nil {
-			// The error may be a WriteIntentError. In which case, returning it will
-			// cause this command to be retried.
 			return result.Result{}, err
 		}
-		if !ok || iter.UnsafeKey().Key.Compare(args.EndKey) >= 0 {
-			break
+		if size == 0 {
+			reply.Files = []roachpb.ExportResponse_File{}
+			return result.Result{}, nil
+		}
+		sstContents = data
+		rows.BulkOpSummary.DataSize = size
+		rows.BulkOpSummary.Rows = entries
+	} else {
+		// TODO(dan): Move all this iteration into cpp to avoid the cgo calls.
+		// TODO(dan): Consider checking ctx periodically during the MVCCIterate call.
+		iter := engineccl.NewMVCCIncrementalIterator(batch, args.StartTime, h.Timestamp)
+		defer iter.Close()
+		for iter.Seek(engine.MakeMVCCMetadataKey(args.Key)); ; {
+			ok, err := iter.Valid()
+			if err != nil {
+				// The error may be a WriteIntentError. In which case, returning it will
+				// cause this command to be retried.
+				return result.Result{}, err
+			}
+			if !ok || iter.UnsafeKey().Key.Compare(args.EndKey) >= 0 {
+				break
+			}
+
+			// Skip tombstone (len=0) records when startTime is zero
+			// (non-incremental) and we're not exporting all versions.
+			if !allRevisions && (args.StartTime == hlc.Timestamp{}) && len(iter.UnsafeValue()) == 0 {
+				iter.NextKey()
+				continue
+			}
+
+			if log.V(3) {
+				v := roachpb.Value{RawBytes: iter.UnsafeValue()}
+				log.Infof(ctx, "Export %s %s", iter.UnsafeKey(), v.PrettyPrint())
+			}
+
+			if err := rows.count(iter.UnsafeKey().Key); err != nil {
+				return result.Result{}, errors.Wrapf(err, "decoding %s", iter.UnsafeKey())
+			}
+			if err := sst.Add(engine.MVCCKeyValue{Key: iter.UnsafeKey(), Value: iter.UnsafeValue()}); err != nil {
+				return result.Result{}, errors.Wrapf(err, "adding key %s", iter.UnsafeKey())
+			}
+			if allRevisions {
+				iter.Next()
+			} else {
+				iter.NextKey()
+			}
 		}
 
-		// Skip tombstone (len=0) records when startTime is zero
-		// (non-incremental) and we're not exporting all versions.
-		if skipTombstones && (args.StartTime == hlc.Timestamp{}) && len(iter.UnsafeValue()) == 0 {
-			iter.NextKey()
-			continue
+		if sst.DataSize == 0 {
+			// Let the defer Close the sstable.
+			reply.Files = []roachpb.ExportResponse_File{}
+			return result.Result{}, nil
 		}
+		rows.BulkOpSummary.DataSize = sst.DataSize
 
-		if log.V(3) {
-			v := roachpb.Value{RawBytes: iter.UnsafeValue()}
-			log.Infof(ctx, "Export %s %s", iter.UnsafeKey(), v.PrettyPrint())
-		}
-
-		if err := rows.count(iter.UnsafeKey().Key); err != nil {
-			return result.Result{}, errors.Wrapf(err, "decoding %s", iter.UnsafeKey())
-		}
-		if err := sst.Add(engine.MVCCKeyValue{Key: iter.UnsafeKey(), Value: iter.UnsafeValue()}); err != nil {
-			return result.Result{}, errors.Wrapf(err, "adding key %s", iter.UnsafeKey())
+		sstContents, err = sst.Finish()
+		if err != nil {
+			return result.Result{}, err
 		}
 	}
-
-	if sst.DataSize == 0 {
-		// Let the defer Close the sstable.
-		reply.Files = []roachpb.ExportResponse_File{}
-		return result.Result{}, nil
-	}
-	rows.BulkOpSummary.DataSize = sst.DataSize
-
-	sstContents, err := sst.Finish()
-	if err != nil {
-		return result.Result{}, err
-	}
-
 	// Compute the checksum before we upload and remove the local file.
 	checksum, err := SHA512ChecksumData(sstContents)
 	if err != nil {

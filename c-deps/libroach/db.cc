@@ -199,8 +199,6 @@ struct DBIterator {
   std::unique_ptr<rocksdb::Iterator> rep;
 };
 
-const DBStatus kSuccess = { NULL, 0 };
-
 std::string ToString(DBSlice s) {
   return std::string(s.data, s.len);
 }
@@ -2573,7 +2571,11 @@ DBStatus DBSstFileWriterOpen(DBSstFileWriter* fw) {
 }
 
 DBStatus DBSstFileWriterAdd(DBSstFileWriter* fw, DBKey key, DBSlice val) {
-  rocksdb::Status status = fw->rep.Put(EncodeKey(key), ToSlice(val));
+  return DBSstFileWriterAddRaw(fw, EncodeKey(key), val);
+  }
+
+DBStatus DBSstFileWriterAddRaw(DBSstFileWriter* fw, std::string const& key, DBSlice val) {
+  rocksdb::Status status = fw->rep.Put(key, ToSlice(val));
   if (!status.ok()) {
     return ToDBStatus(status);
   }
