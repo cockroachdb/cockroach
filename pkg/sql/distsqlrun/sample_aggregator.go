@@ -228,17 +228,24 @@ func (s *sampleAggregator) writeResults(ctx context.Context) error {
 				}
 			}
 
+			var name interface{}
+			if si.spec.StatName != "" {
+				name = si.spec.StatName
+			}
+
 			if _, err := s.flowCtx.executor.ExecuteStatementInTransaction(
 				ctx, "insert-statistic", txn,
 				`INSERT INTO system.table_statistics (
 					"tableID",
+					"name",
 					"columnIDs",
 					"rowCount",
 					"distinctCount",
 					"nullCount",
 					histogram
-				) VALUES ($1, $2, $3, $4, $5, $6)`,
+				) VALUES ($1, $2, $3, $4, $5, $6, $7)`,
 				s.tableID,
+				name,
 				columnIDs,
 				si.numRows,
 				si.sketch.Estimate(),
