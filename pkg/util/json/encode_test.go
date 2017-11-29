@@ -182,14 +182,12 @@ func TestJSONEncodeRoundTrip(t *testing.T) {
 	}
 
 	for _, tc := range cases {
-		t.Run(tc, func(t *testing.T) {
-			j, err := ParseJSON(tc)
-			if err != nil {
-				t.Fatal(err)
-			}
+		j, err := ParseJSON(tc)
+		if err != nil {
+			t.Fatal(err)
+		}
 
-			assertEncodeRoundTrip(t, j)
-		})
+		assertEncodeRoundTrip(t, j)
 	}
 }
 
@@ -210,26 +208,24 @@ func TestJSONEncodeStrictRoundTrip(t *testing.T) {
 	}
 
 	for _, tc := range cases {
-		t.Run(tc, func(t *testing.T) {
-			j, err := ParseJSON(tc)
-			if err != nil {
-				t.Fatal(err)
-			}
+		j, err := ParseJSON(tc)
+		if err != nil {
+			t.Fatal(err)
+		}
 
-			encoded, err := EncodeJSON(nil, j)
-			if err != nil {
-				t.Fatal(err)
-			}
-			_, decoded, err := DecodeJSON(encoded)
-			if err != nil {
-				t.Fatal(err)
-			}
+		encoded, err := EncodeJSON(nil, j)
+		if err != nil {
+			t.Fatal(err)
+		}
+		_, decoded, err := DecodeJSON(encoded)
+		if err != nil {
+			t.Fatal(err)
+		}
 
-			newStr := decoded.String()
-			if newStr != tc {
-				t.Fatalf("expected %s, got %s", tc, newStr)
-			}
-		})
+		newStr := decoded.String()
+		if newStr != tc {
+			t.Fatalf("expected %s, got %s", tc, newStr)
+		}
 	}
 }
 
