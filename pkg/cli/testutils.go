@@ -29,4 +29,5 @@ func TestingReset() {
 	sqlCtx.execStmts = nil
 	zoneCtx.zoneConfig = ""
 	zoneCtx.zoneDisableReplication = false
+	cmdTimeout = defaultCmdTimeout
 }
