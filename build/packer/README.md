@@ -9,11 +9,10 @@ $ packer build VM-TEMPLATE.json
 
 The location of the created VM image will be printed when the build completes.
 
-At present, the only VM template available builds TeamCity agents. You'll need
-`DIGITALOCEAN_API_TOKEN` set in your environment. Employees can find the token
-in customenv.mk. You'll also need to use [Nikhil's fork of
-Packer][benesch-packer] until [packer#5527] lands.
+At present, the only VM template available builds TeamCity agent images for
+Google Compute Engine. You'll need to be either authenticated with the `gcloud`
+tool or provide your Google Cloud JSON credentials in a [known location][gauth].
+
 
 [Packer]: https://www.packer.io
-[benesch-packer]: https://github.com/benesch/packer/tree/digitalocean
-[packer#5527]: https://github.com/hashicorp/packer/pull/5527
+[gauth]: https://www.packer.io/docs/builders/googlecompute.html#running-without-a-compute-engine-service-account
