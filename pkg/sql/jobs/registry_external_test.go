@@ -30,12 +30,16 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/jobs"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/kr/pretty"
+	"github.com/pkg/errors"
 )
 
 func TestRoundtripJob(t *testing.T) {
@@ -52,7 +56,7 @@ func TestRoundtripJob(t *testing.T) {
 		DescriptorIDs: sqlbase.IDs{42},
 		Details:       jobs.RestoreDetails{},
 	})
-	if err := storedJob.Created(ctx, jobs.WithoutCancel); err != nil {
+	if err := storedJob.Created(ctx); err != nil {
 		t.Fatal(err)
 	}
 	retrievedJob, err := registry.LoadJob(ctx, *storedJob.ID())
@@ -77,17 +81,18 @@ func TestRegistryResumeExpiredLease(t *testing.T) {
 	ex := sql.InternalExecutor{LeaseManager: s.LeaseManager().(*sql.LeaseManager)}
 	gossip := s.Gossip()
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
-	nodeID := &base.NodeIDContainer{}
-
-	registry := jobs.MakeRegistry(clock, db, ex, gossip, nodeID, jobs.FakeClusterID, s.ClusterSettings())
 	nodeLiveness := jobs.NewFakeNodeLiveness(clock, 4)
+	newRegistry := func(id roachpb.NodeID) *jobs.Registry {
+		const cancelInterval = time.Duration(math.MaxInt64)
+		const adoptInterval = time.Nanosecond
 
-	const cancelInterval = time.Duration(math.MaxInt64)
-	const adoptInterval = time.Nanosecond
-	if err := registry.Start(
-		ctx, s.Stopper(), nodeLiveness, cancelInterval, adoptInterval,
-	); err != nil {
-		t.Fatal(err)
+		nodeID := &base.NodeIDContainer{}
+		nodeID.Reset(id)
+		r := jobs.MakeRegistry(log.AmbientContext{}, clock, db, ex, gossip, nodeID, jobs.FakeClusterID, s.ClusterSettings())
+		if err := r.Start(ctx, s.Stopper(), nodeLiveness, cancelInterval, adoptInterval); err != nil {
+			t.Fatal(err)
+		}
+		return r
 	}
 
 	const jobCount = 3
@@ -106,72 +111,97 @@ func TestRegistryResumeExpiredLease(t *testing.T) {
 		}
 	}
 
-	jobMap := make(map[int64]roachpb.NodeID)
-	for i := 0; i < jobCount; i++ {
-		nodeID.Reset(roachpb.NodeID(i + 1))
-		job := registry.NewJob(jobs.Record{Details: jobs.BackupDetails{}})
-		if err := job.Created(ctx, func() {}); err != nil {
-			t.Fatal(err)
-		}
-		if err := job.Started(ctx); err != nil {
-			t.Fatal(err)
-		}
-		jobMap[*job.ID()] = nodeID.Get()
-	}
-
-	nodeID.Reset(jobCount + 1)
-
+	// jobMap maps node IDs to job IDs.
+	jobMap := make(map[roachpb.NodeID]int64)
 	hookCallCount := 0
-	resumeCounts := make(map[roachpb.NodeID]int)
+	// resumeCounts maps jobs IDs to number of start/resumes.
+	resumeCounts := make(map[int64]int)
+	// done prevents jobs from finishing.
+	done := make(chan struct{})
+	defer close(done)
+	// resumeCalled does a locked, blocking send when a job is started/resumed. A
+	// receive on it will block until a job is running.
 	resumeCalled := make(chan struct{})
-	var newJobs []*jobs.Job
-	jobs.AddResumeHook(func(_ jobs.Type, _ *cluster.Settings) func(context.Context, *jobs.Job) error {
+	var lock syncutil.Mutex
+	jobs.AddResumeHook(func(_ jobs.Type, _ *cluster.Settings) jobs.Resumer {
+		lock.Lock()
 		hookCallCount++
-		return func(_ context.Context, job *jobs.Job) error {
-			resumeCounts[jobMap[*job.ID()]]++
-			newJobs = append(newJobs, job)
-			resumeCalled <- struct{}{}
+		lock.Unlock()
+		return jobs.FakeResumer{OnResume: func(job *jobs.Job) error {
+			lock.Lock()
+			select {
+			case resumeCalled <- struct{}{}:
+			case <-done:
+			}
+			resumeCounts[*job.ID()]++
+			lock.Unlock()
+			<-done
 			return nil
-		}
+		}}
 	})
 
+	for i := 0; i < jobCount; i++ {
+		nodeid := roachpb.NodeID(i + 1)
+		job, _, err := newRegistry(nodeid).StartJob(ctx, nil, jobs.Record{Details: jobs.BackupDetails{}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		// Wait until the job is running.
+		<-resumeCalled
+		lock.Lock()
+		jobMap[nodeid] = *job.ID()
+		lock.Unlock()
+	}
+
 	drainAdoptionLoop()
-	if e, a := 0, hookCallCount; e != a {
+	if e, a := jobCount, hookCallCount; e != a {
 		t.Fatalf("expected hookCallCount to be %d, but got %d", e, a)
 	}
 
 	drainAdoptionLoop()
-	if e, a := 0, hookCallCount; e != a {
+	if e, a := jobCount, hookCallCount; e != a {
 		t.Fatalf("expected hookCallCount to be %d, but got %d", e, a)
 	}
 
 	nodeLiveness.FakeSetExpiration(1, hlc.MinTimestamp)
 	drainAdoptionLoop()
-	if hookCallCount == 0 {
-		t.Fatalf("expected hookCallCount to be non-zero, but got %d", hookCallCount)
-	}
-
 	<-resumeCalled
-	if e, a := 1, resumeCounts[1]; e != a {
+	testutils.SucceedsSoon(t, func() error {
+		lock.Lock()
+		defer lock.Unlock()
+		if hookCallCount <= jobCount {
+			return errors.Errorf("expected hookCallCount to be > %d, but got %d", jobCount, hookCallCount)
+		}
+		return nil
+	})
+
+	lock.Lock()
+	if e, a := 2, resumeCounts[jobMap[1]]; e != a {
 		t.Fatalf("expected resumeCount to be %d, but got %d", e, a)
 	}
+	lock.Unlock()
 
 	nodeLiveness.FakeIncrementEpoch(3)
 	<-resumeCalled
-	if e, a := 1, resumeCounts[3]; e != a {
-		t.Fatalf("expected resumeCount to be %d, but got %d", e, a)
-	}
-
-	if e, a := 0, resumeCounts[2]; e != a {
-		t.Fatalf("expected resumeCount to be %d, but got %d", e, a)
-	}
-
-	for _, newJob := range newJobs {
-		if e, a := roachpb.NodeID(4), newJob.Payload().Lease.NodeID; e != a {
-			t.Errorf("expected job %d to have been adopted by node %d, but was adopted by node %d",
-				*newJob.ID(), e, a)
+	testutils.SucceedsSoon(t, func() error {
+		lock.Lock()
+		if e, a := 2, resumeCounts[jobMap[3]]; e != a {
+			return errors.Errorf("expected resumeCount to be %d, but got %d", e, a)
 		}
-	}
+		if e, a := 1, resumeCounts[jobMap[2]]; e != a {
+			return errors.Errorf("expected resumeCount to be %d, but got %d", e, a)
+		}
+		count := 0
+		for _, ct := range resumeCounts {
+			count += ct
+		}
+
+		if e, a := 5, count; e != a {
+			return errors.Errorf("expected total jobs to be %d, but got %d", e, a)
+		}
+		lock.Unlock()
+		return nil
+	})
 }
 
 func TestRegistryResumeActiveLease(t *testing.T) {
@@ -184,11 +214,11 @@ func TestRegistryResumeActiveLease(t *testing.T) {
 
 	resumeCh := make(chan int64)
 	defer jobs.ResetResumeHooks()()
-	jobs.AddResumeHook(func(_ jobs.Type, _ *cluster.Settings) func(context.Context, *jobs.Job) error {
-		return func(ctx context.Context, job *jobs.Job) error {
+	jobs.AddResumeHook(func(_ jobs.Type, _ *cluster.Settings) jobs.Resumer {
+		return jobs.FakeResumer{OnResume: func(job *jobs.Job) error {
 			resumeCh <- *job.ID()
 			return nil
-		}
+		}}
 	})
 
 	ctx := context.Background()
