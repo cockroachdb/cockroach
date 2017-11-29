@@ -29,8 +29,8 @@ type AuthorizationAccessor interface {
 		descriptor sqlbase.DescriptorProto, privilege privilege.Kind,
 	) error
 
-	// anyPrivilege verifies that the user has any privilege on `descriptor`.
-	anyPrivilege(descriptor sqlbase.DescriptorProto) error
+	// CheckAnyPrivilege returns nil if user has any privileges at all.
+	CheckAnyPrivilege(descriptor sqlbase.DescriptorProto) error
 
 	// RequiresSuperUser errors if the session user isn't a super-user (i.e. root
 	// or node). Includes the named action in the error message.
@@ -39,8 +39,8 @@ type AuthorizationAccessor interface {
 
 var _ AuthorizationAccessor = &planner{}
 
-// CheckPrivilege verifies that `user`` has `privilege` on `descriptor`.
-func CheckPrivilege(
+// CheckPrivilegeForUser verifies that `user`` has `privilege` on `descriptor`.
+func CheckPrivilegeForUser(
 	user string, descriptor sqlbase.DescriptorProto, privilege privilege.Kind,
 ) error {
 	if descriptor.GetPrivileges().CheckPrivilege(user, privilege) {
@@ -54,14 +54,18 @@ func CheckPrivilege(
 func (p *planner) CheckPrivilege(
 	descriptor sqlbase.DescriptorProto, privilege privilege.Kind,
 ) error {
-	return CheckPrivilege(p.session.User, descriptor, privilege)
+	return CheckPrivilegeForUser(p.session.User, descriptor, privilege)
 }
 
-// anyPrivilege implements the AuthorizationAccessor interface.
-func (p *planner) anyPrivilege(descriptor sqlbase.DescriptorProto) error {
-	if userCanSeeDescriptor(descriptor, p.session.User) {
+// CheckAnyPrivilege implements the AuthorizationAccessor interface.
+func (p *planner) CheckAnyPrivilege(descriptor sqlbase.DescriptorProto) error {
+	if isVirtualDescriptor(descriptor) {
 		return nil
 	}
+	if descriptor.GetPrivileges().AnyPrivilege(p.session.User) {
+		return nil
+	}
+
 	return fmt.Errorf("user %s has no privileges on %s %s",
 		p.session.User, descriptor.TypeName(), descriptor.GetName())
 }
@@ -72,8 +76,4 @@ func (p *planner) RequireSuperUser(action string) error {
 		return fmt.Errorf("only %s is allowed to %s", security.RootUser, action)
 	}
 	return nil
-}
-
-func userCanSeeDescriptor(descriptor sqlbase.DescriptorProto, user string) bool {
-	return descriptor.GetPrivileges().AnyPrivilege(user) || isVirtualDescriptor(descriptor)
 }
