@@ -7,31 +7,31 @@ statement ok
 INSERT INTO t VALUES (1, 99), (2, 98), (3, 97)
 
 statement ok
-CREATE VIEW v1 AS select a, b from t
+CREATE VIEW v1 AS SELECT a, b FROM t
 
 statement error pgcode 42P07 relation \"v1\" already exists
-CREATE VIEW v1 AS select a, b from t
+CREATE VIEW v1 AS SELECT a, b FROM t
 
 statement error pgcode 42P07 relation \"t\" already exists
-CREATE VIEW t AS select a, b from t
+CREATE VIEW t AS SELECT a, b FROM t
 
 statement ok
-CREATE VIEW v2 (x, y) AS select a, b from t
+CREATE VIEW v2 (x, y) AS SELECT a, b FROM t
 
 statement error pgcode 42601 CREATE VIEW specifies 1 column name, but data source has 2 columns
-CREATE VIEW v3 (x) AS select a, b from t
+CREATE VIEW v3 (x) AS SELECT a, b FROM t
 
 statement error pgcode 42601 CREATE VIEW specifies 3 column names, but data source has 2 columns
-CREATE VIEW v4 (x, y, z) AS select a, b from t
+CREATE VIEW v4 (x, y, z) AS SELECT a, b FROM t
 
 statement error pgcode 42P01 relation "dne" does not exist
-CREATE VIEW v5 AS select a, b from dne
+CREATE VIEW v5 AS SELECT a, b FROM dne
 
 statement ok
-CREATE VIEW v6 (x, y) AS select a, b from v1
+CREATE VIEW v6 (x, y) AS SELECT a, b FROM v1
 
 statement ok
-CREATE VIEW v7 (x, y) AS select a, b from v1 order by a desc limit 2
+CREATE VIEW v7 (x, y) AS SELECT a, b FROM v1 ORDER BY a DESC LIMIT 2
 
 query II colnames,rowsort
 SELECT * FROM v1
