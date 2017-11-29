@@ -367,8 +367,7 @@ func (o *indexCheckOperation) Start(ctx context.Context, p *planner) error {
 		return err
 	}
 
-	checkQuery := createIndexCheckQuery(columnNames,
-		o.tableDesc.PrimaryIndex.ColumnNames, o.tableName, o.indexDesc.ID)
+	checkQuery := createIndexCheckQuery(columnNames, o.tableDesc, o.tableName, o.indexDesc)
 	plan, err := p.delegateQuery(ctx, "SCRUB TABLE ... WITH OPTIONS INDEX", checkQuery, nil, nil)
 	if err != nil {
 		return err
@@ -625,29 +624,32 @@ func tableColumnsProjection(tableName string, columns []string) string {
 // simplified, as the the WHERE clause can be completely dropped.
 func createIndexCheckQuery(
 	columnNames []string,
-	primaryKeyColumnNames []string,
+	tableDesc *sqlbase.TableDescriptor,
 	tableName *tree.TableName,
-	indexID sqlbase.IndexID,
+	indexDesc *sqlbase.IndexDescriptor,
 ) string {
+	// We need to make sure we can handle the non-public column `rowid`
+	// that is created for implicit primary keys. In order to do so, the
+	// rendered columns need to explicit in the inner selects.
 	const checkIndexQuery = `
 				SELECT %[1]s, %[2]s
 				FROM
-					(SELECT * FROM %[3]s@{NO_INDEX_JOIN} ORDER BY %[5]s) AS leftside
+					(SELECT %[9]s FROM %[3]s@{FORCE_INDEX=[1],NO_INDEX_JOIN} ORDER BY %[5]s) AS leftside
 				FULL OUTER JOIN
-					(SELECT * FROM %[3]s@{FORCE_INDEX=[%[4]d],NO_INDEX_JOIN} ORDER BY %[5]s) AS rightside
+					(SELECT %[9]s FROM %[3]s@{FORCE_INDEX=[%[4]d],NO_INDEX_JOIN} ORDER BY %[5]s) AS rightside
 					ON %[6]s
-        WHERE (%[7]s) OR
-              (%[8]s)`
-
+				WHERE (%[7]s) OR
+							(%[8]s)`
 	return fmt.Sprintf(checkIndexQuery,
-		tableColumnsProjection("leftside", columnNames),
-		tableColumnsProjection("rightside", columnNames),
-		tableName.String(),
-		indexID,
-		strings.Join(columnNames, ","),
-		tableColumnsEQ("leftside", "rightside", columnNames),
-		tableColumnsIsNullPredicate("leftside", primaryKeyColumnNames, true /* isNull */),
-		tableColumnsIsNullPredicate("rightside", primaryKeyColumnNames, true /* isNull */),
+		tableColumnsProjection("leftside", columnNames),                                                 // 1
+		tableColumnsProjection("rightside", columnNames),                                                // 2
+		tableName.String(),                                                                              // 3
+		indexDesc.ID,                                                                                    // 4
+		strings.Join(columnNames, ","),                                                                  // 5
+		tableColumnsEQ("leftside", "rightside", columnNames),                                            // 6
+		tableColumnsIsNullPredicate("leftside", tableDesc.PrimaryIndex.ColumnNames, true /* isNull */),  // 7
+		tableColumnsIsNullPredicate("rightside", tableDesc.PrimaryIndex.ColumnNames, true /* isNull */), // 8
+		strings.Join(columnNames, ","),                                                                  // 9
 	)
 }
 
