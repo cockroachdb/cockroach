@@ -18,13 +18,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl/engineccl"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/storage/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/spanset"
-	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -42,6 +42,12 @@ const ExportRequestLimit = 5
 
 var exportRequestLimiter = makeConcurrentRequestLimiter(ExportRequestLimit)
 
+var exportCpp = settings.RegisterBoolSetting(
+	"experimental.export.cpp",
+	"use pure c++ mvcc export implementation to export key ranges in BACKUP",
+	false,
+)
+
 func init() {
 	storage.SetExportCmd(storage.Command{
 		DeclareKeys: declareKeysExport,
@@ -54,48 +60,6 @@ func declareKeysExport(
 ) {
 	batcheval.DefaultDeclareKeys(desc, header, req, spans)
 	spans.Add(spanset.SpanReadOnly, roachpb.Span{Key: keys.RangeLastGCKey(header.RangeID)})
-}
-
-type rowCounter struct {
-	prev roachpb.Key
-	roachpb.BulkOpSummary
-}
-
-func (r *rowCounter) count(key roachpb.Key) error {
-	// EnsureSafeSplitKey is usually used to avoid splitting a row across ranges,
-	// by returning the row's key prefix.
-	// We reuse it here to count "rows" by counting when it changes.
-	// Non-SQL keys are returned unchanged or may error -- we ignore them, since
-	// non-SQL keys are obviously thus not SQL rows.
-	row, err := keys.EnsureSafeSplitKey(key)
-	if err != nil || len(key) == len(row) {
-		return nil
-	}
-
-	// no change key prefix => no new row.
-	if bytes.Equal(row, r.prev) {
-		return nil
-	}
-	r.prev = append(r.prev[:0], row...)
-
-	rest, tbl, err := keys.DecodeTablePrefix(row)
-	if err != nil {
-		return err
-	}
-
-	if tbl < keys.MaxReservedDescID {
-		r.SystemRecords++
-	} else {
-		if _, indexID, err := encoding.DecodeUvarintAscending(rest); err != nil {
-			return err
-		} else if indexID == 1 {
-			r.Rows++
-		} else {
-			r.IndexEntries++
-		}
-	}
-
-	return nil
 }
 
 // evalExport dumps the requested keys into files of non-overlapping key ranges
@@ -134,71 +98,39 @@ func evalExport(
 	}
 	defer exportStore.Close()
 
-	sst, err := engine.MakeRocksDBSstFileWriter()
-	if err != nil {
-		return result.Result{}, err
-	}
-	defer sst.Close()
-
-	var skipTombstones bool
-	var iterFn func(*engineccl.MVCCIncrementalIterator)
+	var allRevisions bool
 	switch args.MVCCFilter {
 	case roachpb.MVCCFilter_Latest:
-		skipTombstones = true
-		iterFn = (*engineccl.MVCCIncrementalIterator).NextKey
+		allRevisions = false
 	case roachpb.MVCCFilter_All:
-		skipTombstones = false
-		iterFn = (*engineccl.MVCCIncrementalIterator).Next
+		allRevisions = true
 	default:
 		return result.Result{}, errors.Errorf("unknown MVCC filter: %s", args.MVCCFilter)
 	}
 
-	var rows rowCounter
-	// TODO(dan): Move all this iteration into cpp to avoid the cgo calls.
-	// TODO(dan): Consider checking ctx periodically during the MVCCIterate call.
-	iter := engineccl.NewMVCCIncrementalIterator(batch, args.StartTime, h.Timestamp)
-	defer iter.Close()
-	for iter.Seek(engine.MakeMVCCMetadataKey(args.Key)); ; iterFn(iter) {
-		ok, err := iter.Valid()
+	var summary roachpb.BulkOpSummary
+	var sstContents []byte
+	if exportCpp.Get(&cArgs.EvalCtx.ClusterSettings().SV) {
+		// TODO(dan): Consider checking ctx periodically during the MVCCIterate call.
+		sstContents, summary, err = engineccl.ExportSST(
+			ctx, batch, args.Key, args.EndKey, args.StartTime, h.Timestamp, allRevisions,
+		)
 		if err != nil {
-			// The error may be a WriteIntentError. In which case, returning it will
-			// cause this command to be retried.
 			return result.Result{}, err
 		}
-		if !ok || iter.UnsafeKey().Key.Compare(args.EndKey) >= 0 {
-			break
-		}
-
-		// Skip tombstone (len=0) records when startTime is zero
-		// (non-incremental) and we're not exporting all versions.
-		if skipTombstones && (args.StartTime == hlc.Timestamp{}) && len(iter.UnsafeValue()) == 0 {
-			iter.NextKey()
-			continue
-		}
-
-		if log.V(3) {
-			v := roachpb.Value{RawBytes: iter.UnsafeValue()}
-			log.Infof(ctx, "Export %s %s", iter.UnsafeKey(), v.PrettyPrint())
-		}
-
-		if err := rows.count(iter.UnsafeKey().Key); err != nil {
-			return result.Result{}, errors.Wrapf(err, "decoding %s", iter.UnsafeKey())
-		}
-		if err := sst.Add(engine.MVCCKeyValue{Key: iter.UnsafeKey(), Value: iter.UnsafeValue()}); err != nil {
-			return result.Result{}, errors.Wrapf(err, "adding key %s", iter.UnsafeKey())
+	} else {
+		sstContents, summary, err = engineccl.MVCCIncIterExport(
+			ctx, batch, args.Key, args.EndKey, args.StartTime, h.Timestamp, allRevisions,
+		)
+		if err != nil {
+			return result.Result{}, err
 		}
 	}
 
-	if sst.DataSize == 0 {
+	if summary.DataSize == 0 {
 		// Let the defer Close the sstable.
 		reply.Files = []roachpb.ExportResponse_File{}
 		return result.Result{}, nil
-	}
-	rows.BulkOpSummary.DataSize = sst.DataSize
-
-	sstContents, err := sst.Finish()
-	if err != nil {
-		return result.Result{}, err
 	}
 
 	// Compute the checksum before we upload and remove the local file.
@@ -215,7 +147,7 @@ func evalExport(
 	reply.Files = []roachpb.ExportResponse_File{{
 		Span:     args.Span,
 		Path:     filename,
-		Exported: rows.BulkOpSummary,
+		Exported: summary,
 		Sha512:   checksum,
 	}}
 

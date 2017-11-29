@@ -18,8 +18,15 @@
 #include <rocksdb/write_batch_base.h>
 #include <libroach.h>
 
+const DBStatus kSuccess = { NULL, 0 };
+
 // ToString returns a c++ string with the contents of a DBSlice.
 std::string ToString(DBSlice s);
+
+rocksdb::Slice ToSlice(DBSlice s);
+
+// ToDBString converts a slice to a data+len DBString.
+DBString ToDBString(const rocksdb::Slice& s);
 
 // MVCC keys are encoded as <key>[<wall_time>[<logical>]]<#timestamp-bytes>. A
 // custom RocksDB comparator (DBComparator) is used to maintain the desired
@@ -44,3 +51,12 @@ const ::rocksdb::Comparator* CockroachComparator();
 // Stats are only computed for keys between the given range.
 MVCCStatsResult MVCCComputeStatsInternal(
     ::rocksdb::Iterator* const iter_rep, DBKey start, DBKey end, int64_t now_nanos);
+
+// DBSstFileWriterAddRaw is used internally and in ccl -- DBSstFileWriterAdd is
+// the preferred function for Go callers.
+DBStatus DBSstFileWriterAddRaw(DBSstFileWriter* fw, const std::string& key, DBSlice val);
+
+
+extern "C" {
+  char* __attribute__((weak)) prettyPrintKey(DBKey);
+}  // extern "C"
