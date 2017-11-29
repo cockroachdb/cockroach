@@ -581,6 +581,13 @@ Takes any of the following values:
 </PRE>`,
 	}
 
+	Timeout = FlagInfo{
+		Name: "timeout",
+		Description: `
+		If nonzero, return with an error if the operation does not conclude within the specified timeout.
+		The timeout is specified with a suffix of 's' for seconds, 'm' for minutes, and 'h' for hours.`,
+	}
+
 	NodeRanges = FlagInfo{
 		Name:        "ranges",
 		Description: `Show node details for ranges and replicas.`,

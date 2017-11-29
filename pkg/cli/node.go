@@ -129,7 +129,7 @@ func runStatusNode(cmd *cobra.Command, args []string) error {
 func runStatusNodeInner(
 	showDecommissioned bool, args []string,
 ) ([]status.NodeStatus, *serverpb.DecommissionStatusResponse, error) {
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := cmdTimeoutContext(context.Background())
 	defer cancel()
 
 	var nodeStatuses []status.NodeStatus
