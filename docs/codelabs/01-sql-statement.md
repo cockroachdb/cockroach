@@ -33,7 +33,7 @@ Adding a new SQL statement starts with adding the necessary syntax to the SQL
 parser.  The parser is produced from a grammar file by `goyacc`, a Go flavor of
 the popular `yacc` compiler compiler.  The source grammar is located at
 `pkg/sql/parser/sql.y`.  The output of the parser is an abstract syntax tree,
-with node types defined in various files under `pkg/sql/parser`.
+with node types defined in various files under `pkg/sql/sem/tree`.
 
 There are three main components to adding a new statement to the SQL parser:
 adding any new keywords, adding clauses to the statement parser, and adding a
@@ -75,11 +75,11 @@ Now that the lexical analyzer knows about all our keywords, we need to teach the
 parser how to handle our new statement.  There are three places that we need to
 add references: the type list, the statement cases list, and the parsing clause.
 
-Search in the grammar file for `<Statement>`, and you'll find the type list.
+Search in the grammar file for `<tree.Statement>`, and you'll find the type list.
 Add a line for our new statement type, something like:
 
 ```text
-%type <Statement> frobnicate_stmt
+%type <tree.Statement> frobnicate_stmt
 ```
 
 Now search for `stmt:` to find the list of productions for the `stmt` rule.  Add
@@ -176,14 +176,14 @@ Failed running "sql"
 Now that we've handled the syntax, we need to give our new statement the
 appropriate semantics.  We'll need an AST node to communicate the structure of
 the statement from the parser to the runtime.  Remember when we said our
-statement is of `%type <Statement>`?  That means it needs to implement the
-`Statement` interface, which can be found in `pkg/sql/parser/stmt.go`.  There
-are four functions we need to write: two for the `Statement` interface itself
-(`StatementType` and `StatementTag`), one for `NodeFormatter` (`Format`), and
-the standard `fmt.Stringer`.
+statement is of `%type <tree.Statement>`?  That means it needs to implement the
+`tree.Statement` interface, which can be found in `pkg/sql/sem/tree/stmt.go`.
+There are four functions we need to write: two for the `Statement` interface
+itself (`StatementType` and `StatementTag`), one for
+`NodeFormatter` (`Format`), and the standard `fmt.Stringer`.
 
-Make a new file for our statement type: `pkg/sql/parser/frobnicate.go`.  In it,
-put the implementation of our AST node.
+Make a new file for our statement type: `pkg/sql/sem/tree/frobnicate.go`.  In
+it, put the implementation of our AST node.
 
 ```go
 package parser
@@ -283,7 +283,7 @@ try out the statement again:
 
 ```text
 $ ./cockroach sql --insecure -e "frobnicate cluster"
-Error: pq: unknown statement type: *parser.Frobnicate
+Error: pq: unknown statement type: *tree.Frobnicate
 Failed running "sql"
 ```
 
@@ -298,7 +298,7 @@ Look for the source of the error we're seeing.  You'll find that it's at the end
 of a long type switch statement.  Let's add a case to that:
 
 ```go
-case *parser.Frobnicate:
+case *tree.Frobnicate:
     return p.Frobnicate(ctx, n)
 ```
 
@@ -313,10 +313,10 @@ import (
 
     "golang.org/x/net/context"
 
-    "github.com/cockroachdb/cockroach/pkg/sql/parser"
+    "github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
-func (p *planner) Frobnicate(ctx context.Context, stmt *parser.Frobnicate) (planNode, error) {
+func (p *planner) Frobnicate(ctx context.Context, stmt *tree.Frobnicate) (planNode, error) {
     return nil, fmt.Errorf("We're not quite frobnicating yet...")
 }
 ```
@@ -438,8 +438,8 @@ Now we just need to iterate through the various settings that we can frobnicate.
 
 ```go
 func (p *planner) setSessionSettingString(ctx context.Context, name, value string) error {
-    typedValues := make([]parser.TypedExpr, 1)
-    typedValues[0] = parser.NewDString(value)
+    typedValues := make([]tree.TypedExpr, 1)
+    typedValues[0] = tree.NewDString(value)
 
     setting, ok := varGen[name]
     if !ok {
@@ -479,9 +479,9 @@ func (p *planner) randomizeSessionSettings(ctx context.Context) error {
 Now let's wire it up with into our statement.
 
 ```go
-func (p *planner) Frobnicate(ctx context.Context, stmt *parser.Frobnicate) (planNode, error) {
+func (p *planner) Frobnicate(ctx context.Context, stmt *tree.Frobnicate) (planNode, error) {
     switch stmt.Mode {
-    case parser.FrobnicateModeSession:
+    case tree.FrobnicateModeSession:
         p.randomizeSessionSettings(ctx)
     default:
         return nil, fmt.Errorf("Unhandled FROBNICATE mode %v!", stmt.Mode)

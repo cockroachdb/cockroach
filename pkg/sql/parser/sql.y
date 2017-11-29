@@ -16,6 +16,10 @@
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
+// Going to add a new statement?
+// Consider taking a look at our codelab guide to learn what is needed to add a statement.
+// https://github.com/cockroachdb/cockroach/blob/master/docs/codelabs/01-sql-statement.md
+
 %{
 package parser
 
@@ -2600,7 +2604,7 @@ show_trace_stmt:
 
 opt_compact:
   COMPACT { $$.val = true }
-| /* EMPTY */ { $$.val = false }	
+| /* EMPTY */ { $$.val = false }
 
 // %Help: SHOW SESSIONS - list open client sessions
 // %Category: Misc
