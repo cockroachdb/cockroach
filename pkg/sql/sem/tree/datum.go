@@ -1531,7 +1531,7 @@ const (
 	timestampWithOffsetMinutesZoneFormat = timestampWithOffsetZoneFormat + ":00"
 	timestampWithOffsetSecondsZoneFormat = timestampWithOffsetMinutesZoneFormat + ":00"
 	timestampWithNamedZoneFormat         = timestampFormat + " MST"
-	timestampRFC3339WithoutZoneFormat    = dateFormat + "T15:04:05"
+	timestampRFC3339WithoutZoneFormat    = dateFormat + "T15:04:05.999999"
 	timestampSequelizeFormat             = timestampFormat + ".000 -07:00"
 
 	timestampJdbcFormat = timestampFormat + ".999999 -070000"
@@ -2049,13 +2049,18 @@ func (d *DInterval) Size() uintptr {
 // DJSON is the JSON Datum.
 type DJSON struct{ json.JSON }
 
+// NewDJSON is a helper routine to create a DJSON initialized from its argument.
+func NewDJSON(j json.JSON) *DJSON {
+	return &DJSON{j}
+}
+
 // ParseDJSON takes a string of JSON and returns a DJSON value.
 func ParseDJSON(s string) (Datum, error) {
 	j, err := json.ParseJSON(s)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not parse JSON")
 	}
-	return &DJSON{j}, nil
+	return NewDJSON(j), nil
 }
 
 // MakeDJSON returns a JSON value given a Go-style representation of JSON.

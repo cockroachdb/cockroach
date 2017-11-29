@@ -72,6 +72,167 @@ SELECT jsonb_typeof('null'::JSON)
 ----
 null
 
+## to_json and to_jsonb
+
+query T
+SELECT to_json(123::INT)
+----
+123
+
+query T
+SELECT to_json('a'::TEXT)
+----
+"a"
+
+query T
+SELECT to_json(true::BOOL)
+----
+true
+
+query T
+SELECT to_json(false::BOOL)
+----
+false
+
+query T
+SELECT to_json('"a"'::JSON)
+----
+"a"
+
+query T
+SELECT to_json(1.234::FLOAT)
+----
+1.234
+
+query T
+SELECT to_json(1.234::DECIMAL)
+----
+1.234
+
+query T
+SELECT to_json('10.1.0.0/16'::INET)
+----
+"10.1.0.0/16"
+
+query T
+SELECT to_json(ARRAY[[1, 2], [3, 4]])
+----
+[[1,2],[3,4]]
+
+query T
+SELECT to_json('2014-05-28 12:22:35.614298'::TIMESTAMP)
+----
+"2014-05-28T12:22:35.614298"
+
+query T
+SELECT to_json('2014-05-28 12:22:35.614298-04'::TIMESTAMPTZ)
+----
+"2014-05-28 12:22:35.614298-04:00"
+
+query T
+SELECT to_json('2014-05-28'::DATE)
+----
+"2014-05-28"
+
+query T
+SELECT to_json('00:00:00'::TIME)
+----
+"00:00:00"
+
+query T
+SELECT to_jsonb(123::INT)
+----
+123
+
+query T
+SELECT to_jsonb('a'::TEXT)
+----
+"a"
+
+query T
+SELECT to_json('a'::TEXT COLLATE "fr_FR")
+----
+"a"
+
+query T
+SELECT to_jsonb(123::INT)
+----
+123
+
+query T
+SELECT to_jsonb('a'::TEXT)
+----
+"a"
+
+query T
+SELECT to_jsonb(true::BOOL)
+----
+true
+
+query T
+SELECT to_jsonb(false::BOOL)
+----
+false
+
+query T
+SELECT to_jsonb('"a"'::JSON)
+----
+"a"
+
+query T
+SELECT to_jsonb(1.234::FLOAT)
+----
+1.234
+
+query T
+SELECT to_jsonb(1.234::DECIMAL)
+----
+1.234
+
+query T
+SELECT to_jsonb('10.1.0.0/16'::INET)
+----
+"10.1.0.0/16"
+
+query T
+SELECT to_jsonb(ARRAY[[1, 2], [3, 4]])
+----
+[[1,2],[3,4]]
+
+query T
+SELECT to_jsonb('2014-05-28 12:22:35.614298'::TIMESTAMP)
+----
+"2014-05-28T12:22:35.614298"
+
+query T
+SELECT to_jsonb('2014-05-28 12:22:35.614298-04'::TIMESTAMPTZ)
+----
+"2014-05-28 12:22:35.614298-04:00"
+
+query T
+SELECT to_jsonb('2014-05-28'::DATE)
+----
+"2014-05-28"
+
+query T
+SELECT to_jsonb('00:00:00'::TIME)
+----
+"00:00:00"
+
+query T
+SELECT to_jsonb(123::INT)
+----
+123
+
+query T
+SELECT to_jsonb('a'::TEXT)
+----
+"a"
+
+query T
+SELECT to_jsonb('a'::TEXT COLLATE "fr_FR")
+----
+"a"
 
 ## json_array_elements and jsonb_array_elements
 
