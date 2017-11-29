@@ -160,9 +160,17 @@ func init() {
 	}
 
 	// The following only runs for `start`.
-	startCmd.PersistentPreRunE = func(cmd *cobra.Command, _ []string) error {
+	StartCmd.PersistentPreRunE = func(cmd *cobra.Command, _ []string) error {
 		extraServerFlagInit()
-		return setDefaultStderrVerbosity(cmd, log.Severity_INFO)
+		if err := setDefaultStderrVerbosity(cmd, log.Severity_INFO); err != nil {
+			return err
+		}
+		// TODO(mberhault): we may want to generalize this for all commands.
+		// ie: a map[command.name.tree]func()
+		if ExtraStartPreRunHook != nil {
+			return ExtraStartPreRunHook()
+		}
+		return nil
 	}
 
 	// Map any flags registered in the standard "flag" package into the
@@ -200,7 +208,7 @@ func init() {
 	// Security flags.
 
 	{
-		f := startCmd.Flags()
+		f := StartCmd.Flags()
 
 		// Server flags.
 		stringFlag(f, &serverConnHost, cliflags.ServerHost, "")
@@ -211,22 +219,22 @@ func init() {
 		_ = f.MarkHidden(cliflags.AdvertisePort.Name)
 		stringFlag(f, &serverHTTPHost, cliflags.ServerHTTPHost, "")
 		stringFlag(f, &serverHTTPPort, cliflags.ServerHTTPPort, base.DefaultHTTPPort)
-		stringFlag(f, &serverCfg.Attrs, cliflags.Attrs, serverCfg.Attrs)
-		varFlag(f, &serverCfg.Locality, cliflags.Locality)
+		stringFlag(f, &ServerCfg.Attrs, cliflags.Attrs, ServerCfg.Attrs)
+		varFlag(f, &ServerCfg.Locality, cliflags.Locality)
 
-		varFlag(f, &serverCfg.Stores, cliflags.Store)
-		varFlag(f, &serverCfg.MaxOffset, cliflags.MaxOffset)
+		varFlag(f, &ServerCfg.Stores, cliflags.Store)
+		varFlag(f, &ServerCfg.MaxOffset, cliflags.MaxOffset)
 
 		// Usage for the unix socket is odd as we use a real file, whereas
 		// postgresql and clients consider it a directory and build a filename
 		// inside it using the port.
 		// Thus, we keep it hidden and use it for testing only.
-		stringFlag(f, &serverCfg.SocketFile, cliflags.Socket, "")
+		stringFlag(f, &ServerCfg.SocketFile, cliflags.Socket, "")
 		_ = f.MarkHidden(cliflags.Socket.Name)
 
-		stringFlag(f, &serverCfg.ListeningURLFile, cliflags.ListeningURLFile, "")
+		stringFlag(f, &ServerCfg.ListeningURLFile, cliflags.ListeningURLFile, "")
 
-		stringFlag(f, &serverCfg.PIDFile, cliflags.PIDFile, "")
+		stringFlag(f, &ServerCfg.PIDFile, cliflags.PIDFile, "")
 
 		// Use a separate variable to store the value of ServerInsecure.
 		// We share the default with the ClientInsecure flag.
@@ -237,7 +245,7 @@ func init() {
 		stringFlag(f, &startCtx.serverSSLCertsDir, cliflags.ServerCertsDir, base.DefaultCertsDirectory)
 
 		// Cluster joining flags.
-		varFlag(f, &serverCfg.JoinList, cliflags.Join)
+		varFlag(f, &ServerCfg.JoinList, cliflags.Join)
 
 		// Engine flags.
 		varFlag(f, cacheSizeValue, cliflags.Cache)
@@ -286,7 +294,7 @@ func init() {
 		genHAProxyCmd,
 		quitCmd,
 		sqlShellCmd,
-		/* startCmd is covered above */
+		/* StartCmd is covered above */
 	}
 	clientCmds = append(clientCmds, rangeCmds...)
 	clientCmds = append(clientCmds, userCmds...)
@@ -387,27 +395,27 @@ func init() {
 }
 
 func extraServerFlagInit() {
-	serverCfg.Addr = net.JoinHostPort(serverConnHost, serverConnPort)
+	ServerCfg.Addr = net.JoinHostPort(serverConnHost, serverConnPort)
 	if serverAdvertiseHost == "" {
 		serverAdvertiseHost = serverConnHost
 	}
 	if serverAdvertisePort == "" {
 		serverAdvertisePort = serverConnPort
 	}
-	serverCfg.AdvertiseAddr = net.JoinHostPort(serverAdvertiseHost, serverAdvertisePort)
+	ServerCfg.AdvertiseAddr = net.JoinHostPort(serverAdvertiseHost, serverAdvertisePort)
 	if serverHTTPHost == "" {
 		serverHTTPHost = serverConnHost
 	}
-	serverCfg.HTTPAddr = net.JoinHostPort(serverHTTPHost, serverHTTPPort)
+	ServerCfg.HTTPAddr = net.JoinHostPort(serverHTTPHost, serverHTTPPort)
 }
 
 func extraClientFlagInit() {
-	serverCfg.Addr = net.JoinHostPort(clientConnHost, clientConnPort)
-	serverCfg.AdvertiseAddr = serverCfg.Addr
+	ServerCfg.Addr = net.JoinHostPort(clientConnHost, clientConnPort)
+	ServerCfg.AdvertiseAddr = ServerCfg.Addr
 	if serverHTTPHost == "" {
 		serverHTTPHost = serverConnHost
 	}
-	serverCfg.HTTPAddr = net.JoinHostPort(serverHTTPHost, serverHTTPPort)
+	ServerCfg.HTTPAddr = net.JoinHostPort(serverHTTPHost, serverHTTPPort)
 }
 
 func setDefaultStderrVerbosity(cmd *cobra.Command, defaultSeverity log.Severity) error {
