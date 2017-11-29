@@ -966,12 +966,6 @@ func getAdminClient(ctx context.Context) (serverpb.AdminClient, error) {
 	return serverpb.NewAdminClient(conn), nil
 }
 
-func stopperContext(stopper *stop.Stopper) context.Context {
-	ctx, cancel := context.WithCancel(context.Background())
-	stopper.AddCloser(stop.CloserFn(cancel))
-	return ctx
-}
-
 // quitCmd command shuts down the node server.
 var quitCmd = &cobra.Command{
 	Use:   "quit",
