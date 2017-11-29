@@ -62,10 +62,11 @@ type StoreSpec struct {
 	// SizeInBytes is used for calculating free space and making rebalancing
 	// decisions. Zero indicates that there is no maximum size. This value is not
 	// actually used by the engine and thus not enforced.
-	SizeInBytes int64
-	SizePercent float64
-	InMemory    bool
-	Attributes  roachpb.Attributes
+	SizeInBytes     int64
+	SizePercent     float64
+	InMemory        bool
+	Attributes      roachpb.Attributes
+	UseSwitchingEnv bool
 	// EncryptionSpec is non-nil after MatchStoreAndEncryptionSpecs if there is an encryption
 	// spec with matching path.
 	//	EncryptionSpec *StoreEncryptionSpec

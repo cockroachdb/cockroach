@@ -68,10 +68,6 @@ var minWALSyncInterval = settings.RegisterDurationSetting(
 	0*time.Millisecond,
 )
 
-// TODO(mberhault): enterprise encryption flags will dictate the need for the
-// switching env format. Until then, use an env variable.
-var useSwitchingEnv = envutil.EnvOrDefaultBool("COCKROACH_USE_SWITCHING_ENV", false)
-
 //export rocksDBLog
 func rocksDBLog(s *C.char, n C.int) {
 	// Note that rocksdb logging is only enabled if log.V(3) is true
@@ -311,6 +307,9 @@ type RocksDBConfig struct {
 	WarnLargeBatchThreshold time.Duration
 	// Settings instance for cluster-wide knobs.
 	Settings *cluster.Settings
+	// UseSwitchingEnv is true if the switching env is needed (eg: encryption-at-rest).
+	// This may force the store version to versionSwitchingEnv if currently lower.
+	UseSwitchingEnv bool
 }
 
 // RocksDB is a wrapper around a RocksDB database instance.
@@ -421,16 +420,18 @@ func (r *RocksDB) open() error {
 				versionCurrent, existingVersion, versionMinimum)
 		}
 
-		if existingVersion != versionCurrent {
-			if useSwitchingEnv {
-				newVersion = versionCurrent
-			} else {
-				// If the switching env is not needed, use the older version. This allows downgrade to binaries unaware
-				// of versionSwitchingEnv.
-				// TODO(mberhault): once enough releases supporting versionSwitchingEnv have passed, we can upgrade
-				// to it without worry.
-				newVersion = versionBeta20160331
-			}
+		newVersion = existingVersion
+		if newVersion == versionNoFile {
+			// We currently set the default store version one before the switching env
+			// to allow downgrades to older binaries as long as encryption is not in use.
+			// TODO(mberhault): once enough releases supporting versionSwitchingEnv have passed, we can upgrade
+			// to it without worry.
+			newVersion = versionBeta20160331
+		}
+
+		// Using the switching environment forces the latest version. We can't downgrade!
+		if r.cfg.UseSwitchingEnv {
+			newVersion = versionCurrent
 		}
 	} else {
 		if log.V(2) {
@@ -456,14 +457,14 @@ func (r *RocksDB) open() error {
 			logging_enabled:   C.bool(log.V(3)),
 			num_cpu:           C.int(runtime.NumCPU()),
 			max_open_files:    C.int(maxOpenFiles),
-			use_switching_env: C.bool(useSwitchingEnv),
+			use_switching_env: C.bool(newVersion == versionCurrent),
 		})
 	if err := statusToError(status); err != nil {
 		return errors.Wrap(err, "could not open rocksdb instance")
 	}
 
 	// Update or add the version file if needed and if on-disk.
-	if len(r.cfg.Dir) != 0 && existingVersion != newVersion {
+	if len(r.cfg.Dir) != 0 && existingVersion < newVersion {
 		if err := writeVersionFile(r.cfg.Dir, newVersion); err != nil {
 			return err
 		}

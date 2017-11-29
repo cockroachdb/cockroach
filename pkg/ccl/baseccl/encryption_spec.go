@@ -182,6 +182,8 @@ func MatchStoreAndEncryptionSpecs(
 			storeSpecs.Specs[i].ExtraFields["old-key"] = es.OldKeyPath
 			intSeconds := int(es.RotationPeriod.Seconds())
 			storeSpecs.Specs[i].ExtraFields["rotation-duration"] = strconv.Itoa(intSeconds)
+			// Tell the store we absolutely need the switching env.
+			storeSpecs.Specs[i].UseSwitchingEnv = true
 			found = true
 			break
 		}
