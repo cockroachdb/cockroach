@@ -49,7 +49,7 @@ func TestSpanSetBatch(t *testing.T) {
 		t.Fatalf("direct write failed: %s", err)
 	}
 
-	batch := makeSpanSetBatch(eng.NewBatch(), &ss)
+	batch := spanset.MakeBatch(eng.NewBatch(), &ss)
 	defer batch.Close()
 
 	// Writes inside the range work. Write twice for later read testing.
@@ -153,7 +153,7 @@ func TestSpanSetBatch(t *testing.T) {
 	if err := batch.Commit(true); err != nil {
 		t.Fatal(err)
 	}
-	iter := &SpanSetIterator{eng.NewIterator(false), &ss, nil, false}
+	iter := spanset.NewIterator(eng.NewIterator(false), &ss)
 	defer iter.Close()
 	iter.SeekReverse(outsideKey)
 	if _, err := iter.Valid(); !isReadSpanErr(err) {

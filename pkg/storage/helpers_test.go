@@ -451,7 +451,7 @@ func ProposeAddSSTable(ctx context.Context, key, val string, ts hlc.Timestamp, s
 }
 
 func SetMockAddSSTable() (undo func()) {
-	prev := commands[roachpb.AddSSTable]
+	prev, _ := batcheval.LookupCommand(roachpb.AddSSTable)
 
 	// TODO(tschottdorf): this already does nontrivial work. Worth open-sourcing the relevant
 	// subparts of the real evalAddSSTable to make this test less likely to rot.
@@ -471,12 +471,11 @@ func SetMockAddSSTable() (undo func()) {
 		}, nil
 	}
 
-	SetAddSSTableCmd(Command{
-		DeclareKeys: batcheval.DefaultDeclareKeys,
-		Eval:        evalAddSSTable,
-	})
+	batcheval.RegisterCommand(roachpb.AddSSTable, nil, nil)
+	batcheval.RegisterCommand(roachpb.AddSSTable, batcheval.DefaultDeclareKeys, evalAddSSTable)
 	return func() {
-		SetAddSSTableCmd(prev)
+		batcheval.RegisterCommand(roachpb.AddSSTable, nil, nil)
+		batcheval.RegisterCommand(roachpb.AddSSTable, prev.DeclareKeys, prev.Eval)
 	}
 }
 

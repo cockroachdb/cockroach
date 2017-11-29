@@ -25,6 +25,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
+func init() {
+	RegisterCommand(roachpb.ComputeChecksum, DefaultDeclareKeys, ComputeChecksum)
+}
+
 // Version numbers for Replica checksum computation. Requests fail unless the
 // versions are compatible.
 const (

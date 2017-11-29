@@ -60,55 +60,6 @@ const (
 	collectChecksumTimeout = 5 * time.Second
 )
 
-// A Command is the implementation of a single request within a BatchRequest.
-type Command struct {
-	// DeclareKeys adds all keys this command touches to the given spanSet.
-	DeclareKeys func(roachpb.RangeDescriptor, roachpb.Header, roachpb.Request, *spanset.SpanSet)
-
-	// Eval evaluates a command on the given engine. It should populate
-	// the supplied response (always a non-nil pointer to the correct
-	// type) and return special side effects (if any) in the Result.
-	// If it writes to the engine it should also update
-	// *CommandArgs.Stats.
-	Eval func(context.Context, engine.ReadWriter, batcheval.CommandArgs, roachpb.Response) (result.Result, error)
-}
-
-var commands = map[roachpb.Method]Command{
-	roachpb.Get:                {DeclareKeys: batcheval.DefaultDeclareKeys, Eval: batcheval.Get},
-	roachpb.Put:                {DeclareKeys: batcheval.DefaultDeclareKeys, Eval: batcheval.Put},
-	roachpb.ConditionalPut:     {DeclareKeys: batcheval.DefaultDeclareKeys, Eval: batcheval.ConditionalPut},
-	roachpb.InitPut:            {DeclareKeys: batcheval.DefaultDeclareKeys, Eval: batcheval.InitPut},
-	roachpb.Increment:          {DeclareKeys: batcheval.DefaultDeclareKeys, Eval: batcheval.Increment},
-	roachpb.Delete:             {DeclareKeys: batcheval.DefaultDeclareKeys, Eval: batcheval.Delete},
-	roachpb.DeleteRange:        {DeclareKeys: batcheval.DefaultDeclareKeys, Eval: batcheval.DeleteRange},
-	roachpb.Scan:               {DeclareKeys: batcheval.DefaultDeclareKeys, Eval: batcheval.Scan},
-	roachpb.ReverseScan:        {DeclareKeys: batcheval.DefaultDeclareKeys, Eval: batcheval.ReverseScan},
-	roachpb.BeginTransaction:   {DeclareKeys: declareKeysBeginTransaction, Eval: batcheval.BeginTransaction},
-	roachpb.EndTransaction:     {DeclareKeys: declareKeysEndTransaction, Eval: evalEndTransaction},
-	roachpb.RangeLookup:        {DeclareKeys: declareKeysRangeLookup, Eval: batcheval.RangeLookup},
-	roachpb.HeartbeatTxn:       {DeclareKeys: declareKeysHeartbeatTransaction, Eval: batcheval.HeartbeatTxn},
-	roachpb.GC:                 {DeclareKeys: declareKeysGC, Eval: batcheval.GC},
-	roachpb.PushTxn:            {DeclareKeys: declareKeysPushTransaction, Eval: batcheval.PushTxn},
-	roachpb.QueryTxn:           {DeclareKeys: batcheval.DefaultDeclareKeys, Eval: batcheval.QueryTxn},
-	roachpb.ResolveIntent:      {DeclareKeys: declareKeysResolveIntent, Eval: batcheval.ResolveIntent},
-	roachpb.ResolveIntentRange: {DeclareKeys: declareKeysResolveIntentRange, Eval: batcheval.ResolveIntentRange},
-	roachpb.Merge:              {DeclareKeys: batcheval.DefaultDeclareKeys, Eval: batcheval.Merge},
-	roachpb.TruncateLog:        {DeclareKeys: declareKeysTruncateLog, Eval: batcheval.TruncateLog},
-	roachpb.RequestLease:       {DeclareKeys: declareKeysRequestLease, Eval: batcheval.RequestLease},
-	roachpb.TransferLease:      {DeclareKeys: declareKeysRequestLease, Eval: batcheval.TransferLease},
-	roachpb.LeaseInfo:          {DeclareKeys: declareKeysLeaseInfo, Eval: batcheval.LeaseInfo},
-	roachpb.ComputeChecksum:    {DeclareKeys: batcheval.DefaultDeclareKeys, Eval: batcheval.ComputeChecksum},
-	roachpb.WriteBatch:         writeBatchCmd,
-	roachpb.Export:             exportCmd,
-	roachpb.AddSSTable:         addSSTableCmd,
-
-	roachpb.DeprecatedVerifyChecksum: {
-		DeclareKeys: batcheval.DefaultDeclareKeys,
-		Eval: func(context.Context, engine.ReadWriter, batcheval.CommandArgs, roachpb.Response) (result.Result, error) {
-			return result.Result{}, nil
-		}},
-}
-
 // evaluateCommand delegates to the eval method for the given
 // roachpb.Request. The returned Result may be partially valid
 // even if an error is returned. maxKeys is the number of scan results
@@ -149,7 +100,7 @@ func evaluateCommand(
 	var err error
 	var pd result.Result
 
-	if cmd, ok := commands[args.Method()]; ok {
+	if cmd, ok := batcheval.LookupCommand(args.Method()); ok {
 		cArgs := batcheval.CommandArgs{
 			EvalCtx: rec,
 			Header:  h,
@@ -205,30 +156,14 @@ func evaluateCommand(
 	return pd, pErr
 }
 
-// declareKeysWriteTransaction is the shared portion of
-// declareKeys{Begin,End,Heartbeat}Transaction
-func declareKeysWriteTransaction(
-	_ roachpb.RangeDescriptor, header roachpb.Header, req roachpb.Request, spans *spanset.SpanSet,
-) {
-	if header.Txn != nil {
-		header.Txn.AssertInitialized(context.TODO())
-		spans.Add(spanset.SpanReadWrite, roachpb.Span{
-			Key: keys.TransactionKey(req.Header().Key, header.Txn.ID),
-		})
-	}
-}
-
-func declareKeysBeginTransaction(
-	desc roachpb.RangeDescriptor, header roachpb.Header, req roachpb.Request, spans *spanset.SpanSet,
-) {
-	declareKeysWriteTransaction(desc, header, req, spans)
-	spans.Add(spanset.SpanReadOnly, roachpb.Span{Key: keys.RangeTxnSpanGCThresholdKey(header.RangeID)})
+func init() {
+	batcheval.RegisterCommand(roachpb.EndTransaction, declareKeysEndTransaction, evalEndTransaction)
 }
 
 func declareKeysEndTransaction(
 	desc roachpb.RangeDescriptor, header roachpb.Header, req roachpb.Request, spans *spanset.SpanSet,
 ) {
-	declareKeysWriteTransaction(desc, header, req, spans)
+	batcheval.DeclareKeysWriteTransaction(desc, header, req, spans)
 	et := req.(*roachpb.EndTransactionRequest)
 	// The spans may extend beyond this Range, but it's ok for the
 	// purpose of the command queue. The parts in our Range will
@@ -759,107 +694,6 @@ func runCommitTrigger(
 	}
 	log.Fatalf(ctx, "unknown commit trigger: %+v", ct)
 	return result.Result{}, nil
-}
-
-func declareKeysRangeLookup(
-	desc roachpb.RangeDescriptor, header roachpb.Header, req roachpb.Request, spans *spanset.SpanSet,
-) {
-	batcheval.DefaultDeclareKeys(desc, header, req, spans)
-	spans.Add(spanset.SpanReadOnly, roachpb.Span{Key: keys.RangeDescriptorKey(desc.StartKey)})
-}
-
-func declareKeysHeartbeatTransaction(
-	desc roachpb.RangeDescriptor, header roachpb.Header, req roachpb.Request, spans *spanset.SpanSet,
-) {
-	declareKeysWriteTransaction(desc, header, req, spans)
-	if header.Txn != nil {
-		header.Txn.AssertInitialized(context.TODO())
-		spans.Add(spanset.SpanReadOnly, roachpb.Span{
-			Key: keys.AbortSpanKey(header.RangeID, header.Txn.ID),
-		})
-	}
-}
-
-func declareKeysGC(
-	desc roachpb.RangeDescriptor, header roachpb.Header, req roachpb.Request, spans *spanset.SpanSet,
-) {
-	// Intentionally don't call  batcheval.DefaultDeclareKeys: the key range in the header
-	// is usually the whole range (pending resolution of #7880).
-	gcr := req.(*roachpb.GCRequest)
-	for _, key := range gcr.Keys {
-		spans.Add(spanset.SpanReadWrite, roachpb.Span{Key: key.Key})
-	}
-	// Be smart here about blocking on the threshold keys. The GC queue can send an empty
-	// request first to bump the thresholds, and then another one that actually does work
-	// but can avoid declaring these keys below.
-	if gcr.Threshold != (hlc.Timestamp{}) {
-		spans.Add(spanset.SpanReadWrite, roachpb.Span{Key: keys.RangeLastGCKey(header.RangeID)})
-	}
-	if gcr.TxnSpanGCThreshold != (hlc.Timestamp{}) {
-		spans.Add(spanset.SpanReadWrite, roachpb.Span{
-			// TODO(bdarnell): since this must be checked by all
-			// reads, this should be factored out into a separate
-			// waiter which blocks only those reads far enough in the
-			// past to be affected by the in-flight GCRequest (i.e.
-			// normally none). This means this key would be special
-			// cased and not tracked by the command queue.
-			Key: keys.RangeTxnSpanGCThresholdKey(header.RangeID),
-		})
-	}
-	spans.Add(spanset.SpanReadOnly, roachpb.Span{Key: keys.RangeDescriptorKey(desc.StartKey)})
-}
-
-func declareKeysPushTransaction(
-	_ roachpb.RangeDescriptor, header roachpb.Header, req roachpb.Request, spans *spanset.SpanSet,
-) {
-	pr := req.(*roachpb.PushTxnRequest)
-	spans.Add(spanset.SpanReadWrite, roachpb.Span{Key: keys.TransactionKey(pr.PusheeTxn.Key, pr.PusheeTxn.ID)})
-	spans.Add(spanset.SpanReadWrite, roachpb.Span{Key: keys.AbortSpanKey(header.RangeID, pr.PusheeTxn.ID)})
-}
-
-func declareKeysResolveIntentCombined(
-	desc roachpb.RangeDescriptor, header roachpb.Header, req roachpb.Request, spans *spanset.SpanSet,
-) {
-	batcheval.DefaultDeclareKeys(desc, header, req, spans)
-	var args *roachpb.ResolveIntentRequest
-	switch t := req.(type) {
-	case *roachpb.ResolveIntentRequest:
-		args = t
-	case *roachpb.ResolveIntentRangeRequest:
-		// Ranged and point requests only differ in whether the header's EndKey
-		// is used, so we can convert them.
-		args = (*roachpb.ResolveIntentRequest)(t)
-	}
-	if batcheval.WriteAbortSpanOnResolve(args.Status) {
-		spans.Add(spanset.SpanReadWrite, roachpb.Span{Key: keys.AbortSpanKey(header.RangeID, args.IntentTxn.ID)})
-	}
-}
-
-func declareKeysResolveIntent(
-	desc roachpb.RangeDescriptor, header roachpb.Header, req roachpb.Request, spans *spanset.SpanSet,
-) {
-	declareKeysResolveIntentCombined(desc, header, req, spans)
-}
-
-func declareKeysResolveIntentRange(
-	desc roachpb.RangeDescriptor, header roachpb.Header, req roachpb.Request, spans *spanset.SpanSet,
-) {
-	declareKeysResolveIntentCombined(desc, header, req, spans)
-}
-
-func declareKeysTruncateLog(
-	_ roachpb.RangeDescriptor, header roachpb.Header, req roachpb.Request, spans *spanset.SpanSet,
-) {
-	spans.Add(spanset.SpanReadWrite, roachpb.Span{Key: keys.RaftTruncatedStateKey(header.RangeID)})
-	prefix := keys.RaftLogPrefix(header.RangeID)
-	spans.Add(spanset.SpanReadWrite, roachpb.Span{Key: prefix, EndKey: prefix.PrefixEnd()})
-}
-
-func declareKeysRequestLease(
-	desc roachpb.RangeDescriptor, header roachpb.Header, req roachpb.Request, spans *spanset.SpanSet,
-) {
-	spans.Add(spanset.SpanReadWrite, roachpb.Span{Key: keys.RangeLeaseKey(header.RangeID)})
-	spans.Add(spanset.SpanReadOnly, roachpb.Span{Key: keys.RangeDescriptorKey(desc.StartKey)})
 }
 
 // CheckConsistency runs a consistency check on the range. It first applies a
@@ -2514,12 +2348,6 @@ func updateRangeDescriptor(
 	}
 	b.CPut(descKey, newValue, oldValue)
 	return nil
-}
-
-func declareKeysLeaseInfo(
-	_ roachpb.RangeDescriptor, header roachpb.Header, req roachpb.Request, spans *spanset.SpanSet,
-) {
-	spans.Add(spanset.SpanReadOnly, roachpb.Span{Key: keys.RangeLeaseKey(header.RangeID)})
 }
 
 // TestingRelocateRange relocates a given range to a given set of stores. The first

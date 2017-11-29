@@ -17,18 +17,53 @@ package batcheval
 import (
 	"golang.org/x/net/context"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/storage/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
+	"github.com/cockroachdb/cockroach/pkg/storage/spanset"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
+
+func init() {
+	RegisterCommand(roachpb.GC, declareKeysGC, GC)
+}
 
 var gcBatchSize = settings.RegisterIntSetting("kv.gc.batch_size",
 	"maximum number of keys in a batch for MVCC garbage collection",
 	100000,
 )
+
+func declareKeysGC(
+	desc roachpb.RangeDescriptor, header roachpb.Header, req roachpb.Request, spans *spanset.SpanSet,
+) {
+	// Intentionally don't call DefaultDeclareKeys: the key range in the header
+	// is usually the whole range (pending resolution of #7880).
+	gcr := req.(*roachpb.GCRequest)
+	for _, key := range gcr.Keys {
+		spans.Add(spanset.SpanReadWrite, roachpb.Span{Key: key.Key})
+	}
+	// Be smart here about blocking on the threshold keys. The GC queue can send an empty
+	// request first to bump the thresholds, and then another one that actually does work
+	// but can avoid declaring these keys below.
+	if gcr.Threshold != (hlc.Timestamp{}) {
+		spans.Add(spanset.SpanReadWrite, roachpb.Span{Key: keys.RangeLastGCKey(header.RangeID)})
+	}
+	if gcr.TxnSpanGCThreshold != (hlc.Timestamp{}) {
+		spans.Add(spanset.SpanReadWrite, roachpb.Span{
+			// TODO(bdarnell): since this must be checked by all
+			// reads, this should be factored out into a separate
+			// waiter which blocks only those reads far enough in the
+			// past to be affected by the in-flight GCRequest (i.e.
+			// normally none). This means this key would be special
+			// cased and not tracked by the command queue.
+			Key: keys.RangeTxnSpanGCThresholdKey(header.RangeID),
+		})
+	}
+	spans.Add(spanset.SpanReadOnly, roachpb.Span{Key: keys.RangeDescriptorKey(desc.StartKey)})
+}
 
 // GC iterates through the list of keys to garbage collect
 // specified in the arguments. MVCCGarbageCollect is invoked on each

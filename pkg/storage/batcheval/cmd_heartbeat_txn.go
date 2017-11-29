@@ -21,9 +21,26 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
+	"github.com/cockroachdb/cockroach/pkg/storage/spanset"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/pkg/errors"
 )
+
+func init() {
+	RegisterCommand(roachpb.HeartbeatTxn, declareKeysHeartbeatTransaction, HeartbeatTxn)
+}
+
+func declareKeysHeartbeatTransaction(
+	desc roachpb.RangeDescriptor, header roachpb.Header, req roachpb.Request, spans *spanset.SpanSet,
+) {
+	DeclareKeysWriteTransaction(desc, header, req, spans)
+	if header.Txn != nil {
+		header.Txn.AssertInitialized(context.TODO())
+		spans.Add(spanset.SpanReadOnly, roachpb.Span{
+			Key: keys.AbortSpanKey(header.RangeID, header.Txn.ID),
+		})
+	}
+}
 
 // HeartbeatTxn updates the transaction status and heartbeat
 // timestamp after receiving transaction heartbeat messages from
