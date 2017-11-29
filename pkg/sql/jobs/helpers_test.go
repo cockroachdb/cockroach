@@ -16,12 +16,15 @@ package jobs
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uint128"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"golang.org/x/net/context"
 )
 
 func ResetResumeHooks() func() {
@@ -119,3 +122,40 @@ func (nl *FakeNodeLiveness) FakeSetExpiration(id roachpb.NodeID, ts hlc.Timestam
 	defer nl.mu.Unlock()
 	nl.mu.livenessMap[id].Expiration = hlc.LegacyTimestamp(ts)
 }
+
+// FakeResumer calls optional callbacks during the job lifecycle.
+type FakeResumer struct {
+	OnResume func(job *Job) error
+	Fail     func(job *Job) error
+	Success  func(job *Job) error
+	Terminal func(job *Job)
+}
+
+func (d FakeResumer) Resume(_ context.Context, job *Job, _ chan<- tree.Datums) error {
+	if d.OnResume != nil {
+		return d.OnResume(job)
+	}
+	return nil
+}
+
+func (d FakeResumer) OnFailOrCancel(_ context.Context, _ *client.Txn, job *Job) error {
+	if d.Fail != nil {
+		return d.Fail(job)
+	}
+	return nil
+}
+
+func (d FakeResumer) OnSuccess(_ context.Context, _ *client.Txn, job *Job) error {
+	if d.Success != nil {
+		return d.Success(job)
+	}
+	return nil
+}
+
+func (d FakeResumer) OnTerminal(_ context.Context, job *Job, _ Status, _ chan<- tree.Datums) {
+	if d.Terminal != nil {
+		d.Terminal(job)
+	}
+}
+
+var _ Resumer = FakeResumer{}

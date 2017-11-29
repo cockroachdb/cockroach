@@ -428,7 +428,8 @@ func backup(
 	job *jobs.Job,
 	backupDesc *BackupDescriptor,
 	checkpointDesc *BackupDescriptor,
-) error {
+	resultsCh chan<- tree.Datums,
+) (roachpb.BulkOpSummary, error) {
 	// TODO(dan): Figure out how permissions should work. #6713 is tracking this
 	// for grpc.
 
@@ -450,7 +451,7 @@ func backup(
 		ranges, err = allRangeDescriptors(ctx, txn)
 		return err
 	}); err != nil {
-		return errors.Wrap(err, "fetching range descriptors")
+		return mu.exported, errors.Wrap(err, "fetching range descriptors")
 	}
 
 	var completedSpans []roachpb.Span
@@ -465,12 +466,6 @@ func backup(
 		}
 	}
 
-	cleanupCheckpoint := func() {
-		if err := exportStore.Delete(ctx, BackupDescriptorCheckpointName); err != nil {
-			log.Warningf(ctx, "unable to delete checkpointed backup descriptor: %+v", err)
-		}
-	}
-
 	// Subtract out any completed spans and split the remaining spans into
 	// range-sized pieces so that we can use the number of completed requests as a
 	// rough measure of progress.
@@ -480,19 +475,6 @@ func backup(
 		job:           job,
 		totalChunks:   len(spans),
 		startFraction: job.Payload().FractionCompleted,
-	}
-
-	ctx, cancel := context.WithCancel(ctx)
-	cancelFn := func() {
-		cancel()
-		// this fn closes over the non-cancelled ctx above for its call to Delete.
-		cleanupCheckpoint()
-	}
-	if err := job.Created(ctx, cancelFn); err != nil {
-		return err
-	}
-	if err := job.Started(ctx); err != nil {
-		return err
 	}
 
 	// We're already limiting these on the server-side, but sending all the
@@ -518,15 +500,21 @@ func backup(
 	g, gCtx := errgroup.WithContext(ctx)
 
 	requestFinishedCh := make(chan struct{}, len(spans)) // enough buffer to never block
-	g.Go(func() error {
-		return progressLogger.loop(gCtx, requestFinishedCh)
-	})
+
+	// Only start the progress logger if there are spans, otherwise this will
+	// block forever. This is needed for TestBackupRestoreResume which doesn't
+	// have any spans. Users should never hit this.
+	if len(spans) > 0 {
+		g.Go(func() error {
+			return progressLogger.loop(gCtx, requestFinishedCh)
+		})
+	}
 
 	for i := range spans {
 		select {
 		case exportsSem <- struct{}{}:
 		case <-ctx.Done():
-			return ctx.Err()
+			return mu.exported, ctx.Err()
 		}
 
 		span := spans[i]
@@ -581,10 +569,7 @@ func backup(
 	}
 
 	if err := g.Wait(); err != nil {
-		if jobs.IsCancellation(err) {
-			cleanupCheckpoint()
-		}
-		return errors.Wrapf(err, "exporting %d ranges", len(spans))
+		return mu.exported, errors.Wrapf(err, "exporting %d ranges", len(spans))
 	}
 
 	// No more concurrency, so no need to acquire locks below.
@@ -593,11 +578,10 @@ func backup(
 	backupDesc.EntryCounts = mu.exported
 
 	if err := writeBackupDescriptor(ctx, exportStore, BackupDescriptorName, backupDesc); err != nil {
-		return err
+		return mu.exported, err
 	}
-	cleanupCheckpoint()
 
-	return nil
+	return mu.exported, nil
 }
 
 // verifyUsableExportTarget ensures that the target location does not already
@@ -760,6 +744,11 @@ func backupPlanHook(
 			ClusterID:     p.ExecCfg().ClusterID(),
 		}
 
+		descBytes, err := protoutil.Marshal(&backupDesc)
+		if err != nil {
+			return err
+		}
+
 		description, err := backupJobDescription(backupStmt, to, incrementalFrom)
 		if err != nil {
 			return err
@@ -769,7 +758,7 @@ func backupPlanHook(
 			return err
 		}
 
-		job := p.ExecCfg().JobRegistry.NewJob(jobs.Record{
+		_, errCh, err := p.ExecCfg().JobRegistry.StartJob(ctx, resultsCh, jobs.Record{
 			Description: description,
 			Username:    p.User(),
 			DescriptorIDs: func() (sqlDescIDs []sqlbase.ID) {
@@ -779,113 +768,115 @@ func backupPlanHook(
 				return sqlDescIDs
 			}(),
 			Details: jobs.BackupDetails{
-				StartTime: startTime,
-				EndTime:   endTime,
-				URI:       to,
+				StartTime:        startTime,
+				EndTime:          endTime,
+				URI:              to,
+				BackupDescriptor: descBytes,
 			},
 		})
-		var checkpointDesc *BackupDescriptor
-		backupErr := backup(ctx,
-			p.ExecCfg().DB,
-			p.ExecCfg().Gossip,
-			exportStore,
-			job,
-			&backupDesc,
-			checkpointDesc,
-		)
-		if err := job.FinishedWith(ctx, backupErr); err != nil {
+		if err != nil {
 			return err
 		}
-		if backupErr != nil {
-			return backupErr
-		}
-		// TODO(benesch): emit periodic progress updates.
-		resultsCh <- tree.Datums{
-			tree.NewDInt(tree.DInt(*job.ID())),
-			tree.NewDString(string(jobs.StatusSucceeded)),
-			tree.NewDFloat(tree.DFloat(1.0)),
-			tree.NewDInt(tree.DInt(backupDesc.EntryCounts.Rows)),
-			tree.NewDInt(tree.DInt(backupDesc.EntryCounts.IndexEntries)),
-			tree.NewDInt(tree.DInt(backupDesc.EntryCounts.SystemRecords)),
-			tree.NewDInt(tree.DInt(backupDesc.EntryCounts.DataSize)),
-		}
-		return nil
+		return <-errCh
 	}
 	return fn, header, nil
 }
 
-func backupResumeHook(
-	typ jobs.Type, settings *cluster.Settings,
-) func(context.Context, *jobs.Job) error {
-	if typ != jobs.TypeBackup {
-		return nil
+type backupResumer struct {
+	settings *cluster.Settings
+	res      roachpb.BulkOpSummary
+}
+
+func (b *backupResumer) Resume(
+	ctx context.Context, job *jobs.Job, resultsCh chan<- tree.Datums,
+) error {
+	details := job.Record.Details.(jobs.BackupDetails)
+
+	if len(details.BackupDescriptor) == 0 {
+		return errors.New("missing backup descriptor; cannot resume a backup from an older version")
 	}
 
-	return func(ctx context.Context, job *jobs.Job) error {
+	var backupDesc BackupDescriptor
+	if err := protoutil.Unmarshal(details.BackupDescriptor, &backupDesc); err != nil {
+		return errors.Wrap(err, "unmarshal backup descriptor")
+	}
+	conf, err := storageccl.ExportStorageConfFromURI(details.URI)
+	if err != nil {
+		return err
+	}
+	exportStore, err := storageccl.MakeExportStorage(ctx, conf, b.settings)
+	if err != nil {
+		return err
+	}
+	var checkpointDesc *BackupDescriptor
+	if desc, err := readBackupDescriptor(ctx, exportStore, BackupDescriptorCheckpointName); err == nil {
+		// If the checkpoint is from a different cluster, it's meaningless to us.
+		// More likely though are dummy/lock-out checkpoints with no ClusterID.
+		if desc.ClusterID.Equal(job.ClusterID()) {
+			checkpointDesc = &desc
+		}
+	} else {
+		// TODO(benesch): distinguish between a missing checkpoint, which simply
+		// indicates the prior backup attempt made no progress, and a corrupted
+		// checkpoint, which is more troubling. Sadly, storageccl doesn't provide a
+		// "not found" error that's consistent across all ExportStorage
+		// implementations.
+		log.Warningf(ctx, "unable to load backup checkpoint while resuming job %d: %v", *job.ID(), err)
+	}
+	res, err := backup(ctx, job.DB(), job.Gossip(), exportStore, job, &backupDesc, checkpointDesc, resultsCh)
+	b.res = res
+	return err
+}
+
+func (b *backupResumer) OnFailOrCancel(context.Context, *client.Txn, *jobs.Job) error { return nil }
+func (b *backupResumer) OnSuccess(context.Context, *client.Txn, *jobs.Job) error      { return nil }
+
+func (b *backupResumer) OnTerminal(
+	ctx context.Context, job *jobs.Job, status jobs.Status, resultsCh chan<- tree.Datums,
+) {
+	// Attempt to delete BACKUP-CHECKPOINT.
+	if err := func() error {
 		details := job.Record.Details.(jobs.BackupDetails)
-
-		var sqlDescs []sqlbase.Descriptor
-		var tables []*sqlbase.TableDescriptor
-
-		{
-			// TODO(andrei): Plumb a gatewayNodeID in here and also find a way to
-			// express that whatever this txn does should not count towards lease
-			// placement stats.
-			txn := client.NewTxn(job.DB(), 0 /* gatewayNodeID */)
-			opt := client.TxnExecOptions{AutoRetry: true, AutoCommit: true}
-			if err := txn.Exec(ctx, opt, func(ctx context.Context, txn *client.Txn, opt *client.TxnExecOptions) error {
-				txn.SetFixedTimestamp(ctx, details.EndTime)
-				for _, sqlDescID := range job.Payload().DescriptorIDs {
-					desc := &sqlbase.Descriptor{}
-					descKey := sqlbase.MakeDescMetadataKey(sqlDescID)
-					if err := txn.GetProto(ctx, descKey, desc); err != nil {
-						return err
-					}
-					sqlDescs = append(sqlDescs, *desc)
-					if tableDesc := desc.GetTable(); tableDesc != nil {
-						tables = append(tables, tableDesc)
-					}
-				}
-				return nil
-			}); err != nil {
-				return err
-			}
-		}
-
-		backupDesc := BackupDescriptor{
-			StartTime:     details.StartTime,
-			EndTime:       details.EndTime,
-			Descriptors:   sqlDescs,
-			Spans:         spansForAllTableIndexes(tables),
-			FormatVersion: BackupFormatInitialVersion,
-			BuildInfo:     build.GetInfo(),
-			NodeID:        job.NodeID(),
-			ClusterID:     job.ClusterID(),
-		}
 		conf, err := storageccl.ExportStorageConfFromURI(details.URI)
 		if err != nil {
 			return err
 		}
-		exportStore, err := storageccl.MakeExportStorage(ctx, conf, settings)
+		exportStore, err := storageccl.MakeExportStorage(ctx, conf, b.settings)
 		if err != nil {
-			return nil
+			return err
 		}
-		var checkpointDesc *BackupDescriptor
-		if desc, err := readBackupDescriptor(ctx, exportStore, BackupDescriptorCheckpointName); err == nil {
-			// If the checkpoint is from a different cluster, it's meaningless to us.
-			// More likely though are dummy/lock-out checkpoints with no ClusterID.
-			if desc.ClusterID.Equal(job.ClusterID()) {
-				checkpointDesc = &desc
-			}
-		} else {
-			// TODO(benesch): distinguish between a missing checkpoint, which simply
-			// indicates the prior backup attempt made no progress, and a corrupted
-			// checkpoint, which is more troubling. Sadly, storageccl doesn't provide a
-			// "not found" error that's consistent across all ExportStorage
-			// implementations.
-			log.Warningf(ctx, "unable to load backup checkpoint while resuming job %d: %v", *job.ID(), err)
+		return exportStore.Delete(ctx, BackupDescriptorCheckpointName)
+	}(); err != nil {
+		log.Warningf(ctx, "unable to delete checkpointed backup descriptor: %+v", err)
+	}
+
+	if status == jobs.StatusSucceeded {
+		// TODO(benesch): emit periodic progress updates.
+
+		// TODO(mjibson): if a restore was resumed, then these counts will only have
+		// the current coordinator's counts.
+
+		resultsCh <- tree.Datums{
+			tree.NewDInt(tree.DInt(*job.ID())),
+			tree.NewDString(string(jobs.StatusSucceeded)),
+			tree.NewDFloat(tree.DFloat(1.0)),
+			tree.NewDInt(tree.DInt(b.res.Rows)),
+			tree.NewDInt(tree.DInt(b.res.IndexEntries)),
+			tree.NewDInt(tree.DInt(b.res.SystemRecords)),
+			tree.NewDInt(tree.DInt(b.res.DataSize)),
 		}
-		return backup(ctx, job.DB(), job.Gossip(), exportStore, job, &backupDesc, checkpointDesc)
+	}
+}
+
+var _ jobs.Resumer = &backupResumer{}
+
+func backupResumeHook(typ jobs.Type, settings *cluster.Settings) jobs.Resumer {
+	if typ != jobs.TypeBackup {
+		return nil
+	}
+
+	return &backupResumer{
+		settings: settings,
 	}
 }
 

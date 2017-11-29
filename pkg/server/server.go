@@ -378,7 +378,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 
 	s.sessionRegistry = sql.MakeSessionRegistry()
 	s.jobRegistry = jobs.MakeRegistry(
-		s.clock, s.db, sqlExecutor, s.gossip, &s.nodeIDContainer, s.ClusterID, st)
+		s.cfg.AmbientCtx, s.clock, s.db, sqlExecutor, s.gossip, &s.nodeIDContainer, s.ClusterID, st)
 
 	distSQLMetrics := distsqlrun.MakeDistSQLMetrics(cfg.HistogramWindowInterval())
 	s.registry.AddMetricStruct(distSQLMetrics)
