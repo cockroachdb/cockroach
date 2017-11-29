@@ -17,6 +17,9 @@ package cli
 import (
 	"net"
 
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -34,27 +37,56 @@ func MaybeDecorateGRPCError(
 	return func(cmd *cobra.Command, args []string) error {
 		err := wrapped(cmd, args)
 
-		{
-			unwrappedErr := errors.Cause(err)
-			if unwrappedErr == nil {
-				return err
-			}
-			_, isSendError := unwrappedErr.(*roachpb.SendError)
-			isGRPCError := grpcutil.IsClosedConnection(unwrappedErr)
-			_, isNetError := unwrappedErr.(*net.OpError)
-			if !(isSendError || isGRPCError || isNetError) {
-				return err // intentionally return original to keep wrapping
-			}
+		if err == nil {
+			return nil
 		}
 
-		format := `unable to connect or connection lost.
+		connDropped := func() error {
+			const format = `unable to connect or connection lost.
 
 Please check the address and credentials such as certificates (if attempting to
 communicate with a secure cluster).
 
 %s`
+			return errors.Errorf(format, err)
+		}
+		opTimeout := func() error {
+			const format = `operation timed out.
 
-		return errors.Errorf(format, err)
+%s`
+			return errors.Errorf(format, err)
+		}
+
+		// Is this an "unable to connect" type of error?
+		unwrappedErr := errors.Cause(err)
+		switch unwrappedErr.(type) {
+		case *roachpb.SendError:
+			return connDropped()
+		case *net.OpError:
+			return connDropped()
+		default:
+		}
+
+		// No, it's not. Is it a plain context cancellation (i.e. timeout)?
+		switch unwrappedErr {
+		case context.DeadlineExceeded:
+			return opTimeout()
+		case context.Canceled:
+			return opTimeout()
+		default:
+		}
+
+		// Is it a GRPC-observed context cancellation (i.e. timeout) or a GRPC
+		// connection error?
+		switch {
+		case grpc.Code(err) == codes.DeadlineExceeded:
+			return opTimeout()
+		case grpcutil.IsClosedConnection(unwrappedErr):
+			return connDropped()
+		default:
+			// No, just return what we have.
+			return err
+		}
 	}
 }
 
