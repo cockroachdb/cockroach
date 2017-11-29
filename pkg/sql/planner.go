@@ -19,7 +19,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/transform"
@@ -287,65 +286,6 @@ func (p *planner) QueryRow(
 	default:
 		return nil, &tree.MultipleResultsError{SQL: sql}
 	}
-}
-
-// IncrementSequence implements the parser.EvalPlanner interface.
-func (p *planner) IncrementSequence(ctx context.Context, seqName *tree.TableName) (int64, error) {
-	descriptor, err := getSequenceDesc(ctx, p.txn, p.getVirtualTabler(), seqName)
-	if err != nil {
-		return 0, err
-	}
-	seqValueKey := keys.MakeSequenceKey(uint32(descriptor.ID))
-	val, err := client.IncrementValRetryable(
-		ctx, p.txn.DB(), seqValueKey, descriptor.SequenceOpts.Increment)
-	if err != nil {
-		return 0, err
-	}
-
-	p.session.mu.Lock()
-	defer p.session.mu.Unlock()
-	p.session.mu.LastSequenceValue = val
-	p.session.mu.NextValEverCalled = true
-
-	return val, nil
-}
-
-// GetLastSequenceValue implements the parser.EvalPlanner interface.
-func (p *planner) GetLastSequenceValue(ctx context.Context) (int64, error) {
-	p.session.mu.RLock()
-	defer p.session.mu.RUnlock()
-
-	if !p.session.mu.NextValEverCalled {
-		// TODO(vilterp): get this the right pg error code
-		return 0, errors.Errorf("lastval() called before nextval() has been called in this session")
-	}
-
-	return p.session.mu.LastSequenceValue, nil
-}
-
-// GetSequenceValue implements the parser.EvalPlanner interface.
-func (p *planner) GetSequenceValue(ctx context.Context, seqName *tree.TableName) (int64, error) {
-	descriptor, err := getSequenceDesc(ctx, p.txn, p.getVirtualTabler(), seqName)
-	if err != nil {
-		return 0, err
-	}
-	seqValueKey := keys.MakeSequenceKey(uint32(descriptor.ID))
-	val, err := p.txn.Get(ctx, seqValueKey)
-	if err != nil {
-		return 0, err
-	}
-	return val.ValueInt(), nil
-}
-
-func (p *planner) SetSequenceValue(
-	ctx context.Context, seqName *tree.TableName, newVal int64,
-) error {
-	descriptor, err := getSequenceDesc(ctx, p.txn, p.getVirtualTabler(), seqName)
-	if err != nil {
-		return err
-	}
-	seqValueKey := keys.MakeSequenceKey(uint32(descriptor.ID))
-	return p.txn.Put(ctx, seqValueKey, newVal)
 }
 
 // queryRows executes a SQL query string where multiple result rows are returned.
