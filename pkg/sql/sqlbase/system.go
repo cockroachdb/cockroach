@@ -149,7 +149,7 @@ CREATE TABLE system.web_sessions (
 	TableStatisticsTableSchema = `
 CREATE TABLE system.table_statistics (
 	"tableID"       INT        NOT NULL,
-	"statisticID"   INT        NOT NULL,
+	"statisticID"   INT        NOT NULL DEFAULT unique_rowid(),
 	name            STRING,
 	"columnIDs"     INT[]      NOT NULL,
 	"createdAt"     TIMESTAMP  NOT NULL DEFAULT now(),
@@ -640,7 +640,7 @@ var (
 		Version:  1,
 		Columns: []ColumnDescriptor{
 			{Name: "tableID", ID: 1, Type: colTypeInt},
-			{Name: "statisticID", ID: 2, Type: colTypeInt},
+			{Name: "statisticID", ID: 2, Type: colTypeInt, DefaultExpr: &uniqueRowIDString},
 			{Name: "name", ID: 3, Type: colTypeString, Nullable: true},
 			{Name: "columnIDs", ID: 4, Type: colTypeIntArray},
 			{Name: "createdAt", ID: 5, Type: colTypeTimestamp, DefaultExpr: &nowString},

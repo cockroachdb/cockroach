@@ -141,7 +141,6 @@ func TestSampleAggregator(t *testing.T) {
 
 	rows := r.Query(t, `
 	  SELECT "tableID",
-					 "statisticID",
 					 "columnIDs",
 					 "rowCount",
 					 "distinctCount",
@@ -156,7 +155,7 @@ func TestSampleAggregator(t *testing.T) {
 	}
 
 	type result struct {
-		tableID, statID                    int
+		tableID                            int
 		colIDs                             string
 		rowCount, distinctCount, nullCount int
 		buckets                            []resultBucket
@@ -165,7 +164,6 @@ func TestSampleAggregator(t *testing.T) {
 	expected := []result{
 		{
 			tableID:       13,
-			statID:        1,
 			colIDs:        "{100}",
 			rowCount:      11,
 			distinctCount: 2,
@@ -173,7 +171,6 @@ func TestSampleAggregator(t *testing.T) {
 		},
 		{
 			tableID:       13,
-			statID:        2,
 			colIDs:        "{101}",
 			rowCount:      11,
 			distinctCount: 8,
@@ -195,7 +192,7 @@ func TestSampleAggregator(t *testing.T) {
 		var histData []byte
 		var r result
 		if err := rows.Scan(
-			&r.tableID, &r.statID, &r.colIDs, &r.rowCount, &r.distinctCount, &r.nullCount, &histData,
+			&r.tableID, &r.colIDs, &r.rowCount, &r.distinctCount, &r.nullCount, &histData,
 		); err != nil {
 			t.Fatal(err)
 		}
