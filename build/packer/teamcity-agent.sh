@@ -9,20 +9,11 @@ name=
 workDir=../work
 tempDir=../temp
 systemDir=../system
-digitalocean-cloud.image.id=$DIGITAL_OCEAN_IMAGE_ID
 EOF
 }
 
 # Avoid saving any Bash history.
 HISTSIZE=0
-
-# High CPU instances only have 20GiB of local SSD, so mount a block storage
-# volume to hold Docker's data.
-[[ -e /dev/sda ]] || { echo "no volume attached, exiting" >&2; exit 1; }
-mkfs.ext4 /dev/sda
-mkdir -p /var/lib/docker
-echo '/dev/sda /var/lib/docker ext4 discard 0 2' >> /etc/fstab
-mount -a
 
 # Add third-party APT repositories.
 apt-key adv --keyserver hkp://keyserver.ubuntu.com:80 --recv-keys 0EBFCD88

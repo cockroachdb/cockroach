@@ -4,21 +4,20 @@
   },
 
   "builders": [{
-      "type": "digitalocean",
-      "image": "ubuntu-16-04-x64",
-      "region": "nyc3",
-      "size": "c-16",
-      "snapshot_name": "{{user `image_id`}}",
-      "ssh_username": "root",
-      "volumes": [{
-        "size": 25,
-        "snapshot_name": "{{user `image_id`}}-vol"
-      }]
+      "type": "googlecompute",
+      "project_id": "cockroach-ephemeral",
+      "source_image_family": "ubuntu-1604-lts",
+      "zone": "us-east1-b",
+      "machine_type": "n1-highcpu-32",
+      "image_name": "{{user `image_id`}}",
+      "ssh_username": "packer",
+      "disk_size": 50,
+      "disk_type": "pd-ssd"
   }],
 
   "provisioners": [{
     "type": "shell",
-    "environment_vars": ["DIGITAL_OCEAN_IMAGE_ID={{user `image_id`}}"],
-    "script": "teamcity-agent.sh"
+    "script": "teamcity-agent.sh",
+    "execute_command": "sudo sh -c '{{ .Vars }} {{ .Path }}'"
   }]
 }
