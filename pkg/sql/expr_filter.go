@@ -152,6 +152,17 @@ func makeNot(expr tree.TypedExpr) tree.TypedExpr {
 	return tree.NewTypedNotExpr(expr)
 }
 
+// addNotNullExpr add not null constraints to the variables.
+// Returns the "expr IS NOT NULL"
+func addNotNullExpr(expr tree.TypedExpr) tree.TypedExpr {
+	_, ok := expr.(*tree.IndexedVar)
+	if !ok {
+		return tree.DBoolTrue
+	}
+	notNullExpr := tree.NewTypedComparisonExpr(tree.IsNot, expr, tree.DNull)
+	return notNullExpr
+}
+
 // splitBoolExpr splits a boolean expression E into two boolean expressions RES and REM such that:
 //
 //  - RES only has variables known to the conversion function (it is "restricted" to a particular
@@ -220,7 +231,20 @@ func splitBoolExpr(
 	case *tree.NotExpr:
 		exprRes, exprRem := splitBoolExpr(t.TypedInnerExpr(), conv, !weaker)
 		return makeNot(exprRes), makeNot(exprRem)
-
+	case *tree.ComparisonExpr:
+		if !weaker {
+			// In the stronger (inverted) case, we donot add "IS NOT NULL" constraint.
+			return tree.MakeDBool(tree.DBool(weaker)), expr
+		}
+		if (t.Operator == tree.Is || t.Operator == tree.IsNot) && t.Right == tree.DNull {
+			// This is "IS [NOT] NULL", ignore replace.
+			return tree.MakeDBool(tree.DBool(weaker)), expr
+		}
+		leftRes, _ := splitBoolExpr(t.TypedLeft(), conv, weaker)
+		rightRes, _ := splitBoolExpr(t.TypedRight(), conv, weaker)
+		leftRes = addNotNullExpr(leftRes)
+		rightRes = addNotNullExpr(rightRes)
+		return makeAnd(leftRes, rightRes), expr
 	default:
 		// We can't split off anything (we already handled the case when expr contains only
 		// restricted vars above).

@@ -1196,10 +1196,11 @@ EXPLAIN (EXPRS) SELECT SUM(abc.d) FROM kv JOIN abc ON kv.k >= abc.d GROUP BY kv.
 2  ·       pred         test.kv.k >= test.abc.d
 3  scan    ·            ·
 3  ·       table        kv@primary
-3  ·       spans        ALL
+3  ·       spans        /#-
 3  scan    ·            ·
 3  ·       table        abc@primary
 3  ·       spans        ALL
+3  ·       filter       d IS NOT NULL
 
 query R rowsort
 SELECT SUM(abc.d) FROM kv JOIN abc ON kv.k >= abc.d GROUP BY kv.*;

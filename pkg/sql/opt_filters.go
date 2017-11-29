@@ -539,8 +539,13 @@ func (p *planner) addRenderFilter(
 //
 // The expanded expression can then be split as necessary.
 func expandOnCond(n *joinNode, cond tree.TypedExpr, evalCtx *tree.EvalContext) tree.TypedExpr {
-	if isFilterTrue(cond) || len(n.pred.leftEqualityIndices) == 0 {
+	if len(n.pred.leftEqualityIndices) == 0 {
 		return cond
+	}
+	// Add constrains on left/rightEqualityIndices
+	notNullConj := addEqualNotNullConj(n)
+	if isFilterTrue(cond) {
+		return notNullConj
 	}
 	numLeft := len(n.left.info.sourceColumns)
 
@@ -633,6 +638,38 @@ func expandOnCond(n *joinNode, cond tree.TypedExpr, evalCtx *tree.EvalContext) t
 		// calls consumed it completely.
 		if !isFilterTrue(leftRemainder) && !isFilterTrue(rightRemainder) {
 			result = mergeConj(result, e)
+		}
+	}
+	result = mergeConj(result, notNullConj)
+
+	return result
+}
+
+// addEqualNotNullConj loops all the left/rightEqualityIndices to construct
+// sqls which indicates fetching none-null values(columns).
+// For Inner Join, both left and right column should fetch none-null values.
+// For Left Join, right column should fetch none-null values.
+// For Right Join, left column should fetch none-null values.
+// Examples: SELECT * FROM t1 AS l INNER JOIN t1 AS r ON l.id = r.id
+// result: SELECT * FROM t1 AS l INNER JOIN t1 AS r ON l.id = r.id
+// AND l.id IS NOT NULL AND r.id IS NOT NULL
+func addEqualNotNullConj(n *joinNode) tree.TypedExpr {
+	// left equality non null conj
+	var result tree.TypedExpr = tree.DBoolTrue
+	if n.joinType == joinTypeInner || n.joinType == joinTypeRightOuter {
+		for _, c := range n.pred.leftEqualityIndices {
+			leftIndexedVar := n.pred.iVarHelper.IndexedVar(c)
+			leftNotNull := tree.NewTypedComparisonExpr(tree.IsNot, leftIndexedVar, tree.DNull)
+			result = mergeConj(result, leftNotNull)
+		}
+	}
+	// right equality non null conj
+	if n.joinType == joinTypeInner || n.joinType == joinTypeLeftOuter {
+		for _, c := range n.pred.rightEqualityIndices {
+			c = c + len(n.left.info.sourceColumns)
+			rightIndexedVar := n.pred.iVarHelper.IndexedVar(c)
+			rightNotNull := tree.NewTypedComparisonExpr(tree.IsNot, rightIndexedVar, tree.DNull)
+			result = mergeConj(result, rightNotNull)
 		}
 	}
 	return result

@@ -140,11 +140,11 @@ Level  Type  Field           Description   Columns                Ordering
 0      ·     mergeJoinOrder  +"(a=e)"      ·                      ·
 1      scan  ·               ·             (a, b, c, d)           b=CONST; a!=NULL; key(a); +a
 1      ·     table           abcd@primary  ·                      ·
-1      ·     spans           ALL           ·                      ·
+1      ·     spans           /#-           ·                      ·
 1      ·     filter          b = 1         ·                      ·
 1      scan  ·               ·             (e, f, g)              f=g; e!=NULL; f!=NULL; g!=NULL; key(e); +e
 1      ·     table           efg@primary   ·                      ·
-1      ·     spans           ALL           ·                      ·
+1      ·     spans           /#-           ·                      ·
 1      ·     filter          f = g         ·                      ·
 
 query ITTTTT colnames
@@ -157,39 +157,41 @@ Level  Type  Field           Description   Columns                Ordering
 0      ·     mergeJoinOrder  +"(a=e)"      ·                      ·
 1      scan  ·               ·             (a, b, c, d)           a!=NULL; key(a); +a
 1      ·     table           abcd@primary  ·                      ·
-1      ·     spans           ALL           ·                      ·
+1      ·     spans           /#-           ·                      ·
 1      scan  ·               ·             (e, f, g)              e!=NULL; key(e); +e
 1      ·     table           efg@primary   ·                      ·
-1      ·     spans           ALL           ·                      ·
+1      ·     spans           /#-           ·                      ·
 
 # Verify keys don't get propagated when not appropriate.
 query ITTTTT colnames
 EXPLAIN (VERBOSE) SELECT * FROM abcd JOIN efg ON a=f
 ----
-Level  Type  Field     Description   Columns                Ordering
-0      join  ·         ·             (a, b, c, d, e, f, g)  ·
-0      ·     type      inner         ·                      ·
-0      ·     equality  (a) = (f)     ·                      ·
-1      scan  ·         ·             (a, b, c, d)           a!=NULL; key(a)
-1      ·     table     abcd@primary  ·                      ·
-1      ·     spans     ALL           ·                      ·
-1      scan  ·         ·             (e, f, g)              e!=NULL; key(e)
-1      ·     table     efg@primary   ·                      ·
-1      ·     spans     ALL           ·                      ·
+Level  Type  Field     Description    Columns                Ordering
+0      join  ·         ·              (a, b, c, d, e, f, g)  ·
+0      ·     type      inner          ·                      ·
+0      ·     equality  (a) = (f)      ·                      ·
+1      scan  ·         ·              (a, b, c, d)           a!=NULL; key(a)
+1      ·     table     abcd@primary   ·                      ·
+1      ·     spans     /#-            ·                      ·
+1      scan  ·         ·              (e, f, g)              e!=NULL; f!=NULL; key(e)
+1      ·     table     efg@primary    ·                      ·
+1      ·     spans     ALL            ·                      ·
+1      ·     filter    f IS NOT NULL  ·                      ·
 
 # Verify we retain all keys when appropriate.
 query ITTTTT colnames
 EXPLAIN (VERBOSE) SELECT * FROM abcd JOIN (SELECT * FROM efg WITH ORDINALITY) ON a=e
 ----
-Level  Type        Field           Description   Columns                              Ordering
-0      join        ·               ·             (a, b, c, d, e, f, g, "ordinality")  a=e; a!=NULL; key(a); weak-key("ordinality")
-0      ·           type            inner         ·                                    ·
-0      ·           equality        (a) = (e)     ·                                    ·
-0      ·           mergeJoinOrder  +"(a=e)"      ·                                    ·
-1      scan        ·               ·             (a, b, c, d)                         a!=NULL; key(a); +a
-1      ·           table           abcd@primary  ·                                    ·
-1      ·           spans           ALL           ·                                    ·
-1      ordinality  ·               ·             (e, f, g, "ordinality")              e!=NULL; key(e); weak-key("ordinality"); +e
-2      scan        ·               ·             (e, f, g)                            e!=NULL; key(e); +e
-2      ·           table           efg@primary   ·                                    ·
-2      ·           spans           ALL           ·                                    ·
+Level  Type        Field     Description             Columns                              Ordering
+0      join        ·         ·                       (a, b, c, d, e, f, g, "ordinality")  ·
+0      ·           type      inner                   ·                                    ·
+0      ·           equality  (a) = (e)               ·                                    ·
+1      scan        ·         ·                       (a, b, c, d)                         a!=NULL; key(a)
+1      ·           table     abcd@primary            ·                                    ·
+1      ·           spans     /#-                     ·                                    ·
+1      filter      ·         ·                       (e, f, g, "ordinality")              e!=NULL; key(e); weak-key("ordinality")
+1      ·           filter    test.efg.e IS NOT NULL  ·                                    ·
+2      ordinality  ·         ·                       (e, f, g, "ordinality")              e!=NULL; key(e); weak-key("ordinality")
+3      scan        ·         ·                       (e, f, g)                            e!=NULL; key(e)
+3      ·           table     efg@primary             ·                                    ·
+3      ·           spans     ALL                     ·                                    ·

@@ -421,9 +421,11 @@ EXPLAIN (EXPRS) SELECT * FROM onecolumn JOIN twocolumn USING(x)
 2  scan    ·         ·
 2  ·       table     onecolumn@primary
 2  ·       spans     ALL
+2  ·       filter    x IS NOT NULL
 2  scan    ·         ·
 2  ·       table     twocolumn@primary
 2  ·       spans     ALL
+2  ·       filter    x IS NOT NULL
 
 # Check EXPLAIN.
 query ITTT
@@ -440,9 +442,11 @@ EXPLAIN (EXPRS) SELECT * FROM twocolumn AS a JOIN twocolumn AS b ON a.x = b.y
 2  scan    ·         ·
 2  ·       table     twocolumn@primary
 2  ·       spans     ALL
+2  ·       filter    x IS NOT NULL
 2  scan    ·         ·
 2  ·       table     twocolumn@primary
 2  ·       spans     ALL
+2  ·       filter    y IS NOT NULL
 
 # Check EXPLAIN.
 query ITTT
@@ -477,9 +481,11 @@ EXPLAIN (EXPRS) SELECT * FROM onecolumn AS a JOIN twocolumn AS b ON ((a.x)) = ((
 2  scan    ·         ·
 2  ·       table     onecolumn@primary
 2  ·       spans     ALL
+2  ·       filter    x IS NOT NULL
 2  scan    ·         ·
 2  ·       table     twocolumn@primary
 2  ·       spans     ALL
+2  ·       filter    y IS NOT NULL
 
 # Check EXPLAIN.
 query ITTT
@@ -495,9 +501,11 @@ EXPLAIN (EXPRS) SELECT * FROM onecolumn JOIN twocolumn ON onecolumn.x = twocolum
 2  scan    ·         ·
 2  ·       table     onecolumn@primary
 2  ·       spans     ALL
+2  ·       filter    x IS NOT NULL
 2  scan    ·         ·
 2  ·       table     twocolumn@primary
 2  ·       spans     ALL
+2  ·       filter    y IS NOT NULL
 
 
 query ITTT
@@ -523,15 +531,19 @@ EXPLAIN (EXPRS) SELECT * FROM (onecolumn CROSS JOIN twocolumn JOIN onecolumn AS 
 5  scan    ·         ·
 5  ·       table     onecolumn@primary
 5  ·       spans     ALL
+5  ·       filter    x IS NOT NULL
 5  scan    ·         ·
 5  ·       table     twocolumn@primary
 5  ·       spans     ALL
+5  ·       filter    x IS NOT NULL
 4  scan    ·         ·
 4  ·       table     onecolumn@primary
 4  ·       spans     ALL
+4  ·       filter    x IS NOT NULL
 3  scan    ·         ·
 3  ·       table     twocolumn@primary
 3  ·       spans     ALL
+3  ·       filter    x IS NOT NULL
 
 # Check sub-queries in ON conditions.
 query III colnames
@@ -640,10 +652,10 @@ EXPLAIN (METADATA) SELECT b.y FROM (twocolumn AS a JOIN twocolumn AS b USING(x))
 1  join    ·         ·                  (x[omitted], y[omitted], rowid[hidden,omitted], x[omitted], y, rowid[hidden,omitted])  ·
 1  ·       type      inner              ·                                                                                      ·
 1  ·       equality  (x) = (x)          ·                                                                                      ·
-2  scan    ·         ·                  (x, y[omitted], rowid[hidden,omitted])                                                 rowid!=NULL; key(rowid)
+2  scan    ·         ·                  (x, y[omitted], rowid[hidden,omitted])                                                 x!=NULL; rowid!=NULL; key(rowid)
 2  ·       table     twocolumn@primary  ·                                                                                      ·
 2  ·       spans     ALL                ·                                                                                      ·
-2  scan    ·         ·                  (x, y, rowid[hidden,omitted])                                                          rowid!=NULL; key(rowid)
+2  scan    ·         ·                  (x, y, rowid[hidden,omitted])                                                          x!=NULL; rowid!=NULL; key(rowid)
 2  ·       table     twocolumn@primary  ·                                                                                      ·
 2  ·       spans     ALL                ·                                                                                      ·
 
@@ -654,10 +666,10 @@ EXPLAIN (METADATA) SELECT b.y FROM (twocolumn AS a JOIN twocolumn AS b ON a.x = 
 1  join    ·         ·                  (x[omitted], y[omitted], rowid[hidden,omitted], x[omitted], y, rowid[hidden,omitted])  ·
 1  ·       type      inner              ·                                                                                      ·
 1  ·       equality  (x) = (x)          ·                                                                                      ·
-2  scan    ·         ·                  (x, y[omitted], rowid[hidden,omitted])                                                 rowid!=NULL; key(rowid)
+2  scan    ·         ·                  (x, y[omitted], rowid[hidden,omitted])                                                 x!=NULL; rowid!=NULL; key(rowid)
 2  ·       table     twocolumn@primary  ·                                                                                      ·
 2  ·       spans     ALL                ·                                                                                      ·
-2  scan    ·         ·                  (x, y, rowid[hidden,omitted])                                                          rowid!=NULL; key(rowid)
+2  scan    ·         ·                  (x, y, rowid[hidden,omitted])                                                          x!=NULL; rowid!=NULL; key(rowid)
 2  ·       table     twocolumn@primary  ·                                                                                      ·
 2  ·       spans     ALL                ·                                                                                      ·
 
@@ -667,10 +679,10 @@ EXPLAIN (METADATA) SELECT a.x FROM (twocolumn AS a JOIN twocolumn AS b ON a.x < 
 0  render  ·      ·                  (x)                                                                                    ·
 1  join    ·      ·                  (x, y[omitted], rowid[hidden,omitted], x[omitted], y[omitted], rowid[hidden,omitted])  ·
 1  ·       type   inner              ·                                                                                      ·
-2  scan    ·      ·                  (x, y[omitted], rowid[hidden,omitted])                                                 rowid!=NULL; key(rowid)
+2  scan    ·      ·                  (x, y[omitted], rowid[hidden,omitted])                                                 x!=NULL; rowid!=NULL; key(rowid)
 2  ·       table  twocolumn@primary  ·                                                                                      ·
 2  ·       spans  ALL                ·                                                                                      ·
-2  scan    ·      ·                  (x[omitted], y, rowid[hidden,omitted])                                                 rowid!=NULL; key(rowid)
+2  scan    ·      ·                  (x[omitted], y, rowid[hidden,omitted])                                                 y!=NULL; rowid!=NULL; key(rowid)
 2  ·       table  twocolumn@primary  ·                                                                                      ·
 2  ·       spans  ALL                ·                                                                                      ·
 
@@ -686,12 +698,14 @@ EXPLAIN (METADATA) SELECT * FROM (SELECT * FROM (VALUES (9, 1), (8, 2)) AS a (u,
 3  join    ·         ·                  (u, k, k[omitted], w)         ·
 3  ·       type      inner              ·                             ·
 3  ·       equality  (k) = (k)          ·                             ·
-4  sort    ·         ·                  (u, k)                        +k
+4  sort    ·         ·                  (u, k)                        k!=NULL; +k
 4  ·       order     +k                 ·                             ·
-5  values  ·         ·                  (u, k)                        ·
+5  filter  ·         ·                  (u, k)                        k!=NULL
+6  values  ·         ·                  (u, k)                        ·
+6  ·       size      2 columns, 2 rows  ·                             ·
+4  filter  ·         ·                  (column1, column2)            column1!=NULL
+5  values  ·         ·                  (column1, column2)            ·
 5  ·       size      2 columns, 2 rows  ·                             ·
-4  values  ·         ·                  (column1, column2)            ·
-4  ·       size      2 columns, 2 rows  ·                             ·
 
 # Ensure that large cross-joins are optimized somehow (#10633)
 statement ok
@@ -770,11 +784,14 @@ SELECT * FROM [EXPLAIN SELECT
 2   join       ·         ·
 2   ·          type      inner
 2   ·          equality  (oid) = (relnamespace)
+3   filter     ·         ·
 3   join       ·         ·
 3   ·          type      inner
 3   ·          equality  (oid, oid) = (attrelid, confrelid)
+4   filter     ·         ·
 4   join       ·         ·
 4   ·          type      inner
+5   filter     ·         ·
 5   join       ·         ·
 5   ·          type      inner
 5   ·          equality  (oid) = (relnamespace)
@@ -785,6 +802,7 @@ SELECT * FROM [EXPLAIN SELECT
 7   filter     ·         ·
 7   join       ·         ·
 7   ·          type      inner
+8   filter     ·         ·
 8   join       ·         ·
 8   ·          type      inner
 8   ·          equality  (oid) = (objid)
@@ -893,7 +911,7 @@ EXPLAIN SELECT * FROM pairs, square WHERE pairs.b = square.n
 2  ·       spans     ALL
 2  scan    ·         ·
 2  ·       table     square@primary
-2  ·       spans     ALL
+2  ·       spans     /#-
 
 query IIII rowsort
 SELECT * FROM pairs, square WHERE pairs.b = square.n
@@ -929,9 +947,10 @@ EXPLAIN (VERBOSE) SELECT * FROM pairs, square WHERE pairs.a + pairs.b = square.s
 2  scan    ·         ·                                               (a, b, rowid[hidden,omitted])         rowid!=NULL; key(rowid)
 2  ·       table     pairs@primary                                   ·                                     ·
 2  ·       spans     ALL                                             ·                                     ·
-2  scan    ·         ·                                               (n, sq)                               n!=NULL; key(n)
+2  scan    ·         ·                                               (n, sq)                               n!=NULL; sq!=NULL; key(n)
 2  ·       table     square@primary                                  ·                                     ·
 2  ·       spans     ALL                                             ·                                     ·
+2  ·       filter    sq IS NOT NULL                                  ·                                     ·
 
 query IIII rowsort
 SELECT * FROM pairs, square WHERE pairs.a + pairs.b = square.sq
@@ -964,9 +983,10 @@ EXPLAIN (VERBOSE) SELECT a, b, n, sq FROM (SELECT a, b, a + b AS sum, n, sq FROM
 4  scan    ·         ·                            (a, b, rowid[hidden,omitted])         rowid!=NULL; key(rowid)
 4  ·       table     pairs@primary                ·                                     ·
 4  ·       spans     ALL                          ·                                     ·
-4  scan    ·         ·                            (n, sq)                               n!=NULL; key(n)
+4  scan    ·         ·                            (n, sq)                               n!=NULL; sq!=NULL; key(n)
 4  ·       table     square@primary               ·                                     ·
 4  ·       spans     ALL                          ·                                     ·
+4  ·       filter    sq IS NOT NULL               ·                                     ·
 
 query IIII rowsort
 SELECT a, b, n, sq FROM (SELECT a, b, a + b AS sum, n, sq FROM pairs, square) WHERE sum = sq
@@ -1089,6 +1109,7 @@ SELECT *
 3  scan    ·         ·
 3  ·       table     square@primary
 3  ·       spans     /#-/6
+3  ·       filter    sq IS NOT NULL
 
 query IIII rowsort
 SELECT *
@@ -1121,7 +1142,7 @@ SELECT *
 3  scan    ·         ·
 3  ·       table     pairs@primary
 3  ·       spans     ALL
-3  ·       filter    a > 1
+3  ·       filter    (a > 1) AND (b IS NOT NULL)
 3  scan    ·         ·
 3  ·       table     square@primary
 3  ·       spans     /2-
@@ -1144,10 +1165,11 @@ SELECT *
 2  scan    ·         ·
 2  ·       table     pairs@primary
 2  ·       spans     ALL
-2  ·       filter    ((a > 1) AND ((a IS NULL) OR (a > 2))) AND ((a IS NULL) OR (a < b))
+2  ·       filter    (((a > 1) AND ((a IS NULL) OR (a > 2))) AND ((a IS NULL) OR (a < b))) AND (b IS NOT NULL)
 2  scan    ·         ·
 2  ·       table     square@primary
 2  ·       spans     /2-/6
+2  ·       filter    sq IS NOT NULL
 
 
 statement ok
@@ -1227,32 +1249,34 @@ SELECT x FROM t1 NATURAL JOIN (SELECT * FROM t2)
 query ITTTTT
 EXPLAIN (VERBOSE) SELECT x FROM t1 NATURAL JOIN (SELECT * FROM t2)
 ----
-0  render  ·         ·                (x)                                                                                                                                       ·
-0  ·       render 0  test.t1.x        ·                                                                                                                                         ·
-1  render  ·         ·                (x, y[omitted], col1[omitted], col2[omitted], rowid[hidden,omitted], col3[omitted], y[hidden,omitted], x[hidden,omitted], col4[omitted])  ·
-1  ·       render 0  test.t1.x        ·                                                                                                                                         ·
-1  ·       render 1  NULL             ·                                                                                                                                         ·
-1  ·       render 2  NULL             ·                                                                                                                                         ·
-1  ·       render 3  NULL             ·                                                                                                                                         ·
-1  ·       render 4  NULL             ·                                                                                                                                         ·
-1  ·       render 5  NULL             ·                                                                                                                                         ·
-1  ·       render 6  NULL             ·                                                                                                                                         ·
-1  ·       render 7  NULL             ·                                                                                                                                         ·
-1  ·       render 8  NULL             ·                                                                                                                                         ·
-2  join    ·         ·                (col1[omitted], x, col2[omitted], y[omitted], rowid[hidden,omitted], col3[omitted], y[omitted], x[omitted], col4[omitted])                ·
-2  ·       type      inner            ·                                                                                                                                         ·
-2  ·       equality  (x, y) = (x, y)  ·                                                                                                                                         ·
-3  scan    ·         ·                (col1[omitted], x, col2[omitted], y, rowid[hidden,omitted])                                                                               rowid!=NULL; key(rowid)
-3  ·       table     t1@primary       ·                                                                                                                                         ·
-3  ·       spans     ALL              ·                                                                                                                                         ·
-3  render  ·         ·                (col3[omitted], y, x, col4[omitted])                                                                                                      ·
-3  ·       render 0  NULL             ·                                                                                                                                         ·
-3  ·       render 1  test.t2.y        ·                                                                                                                                         ·
-3  ·       render 2  test.t2.x        ·                                                                                                                                         ·
-3  ·       render 3  NULL             ·                                                                                                                                         ·
-4  scan    ·         ·                (col3[omitted], y, x, col4[omitted], rowid[hidden,omitted])                                                                               rowid!=NULL; key(rowid)
-4  ·       table     t2@primary       ·                                                                                                                                         ·
-4  ·       spans     ALL              ·                                                                                                                                         ·
+0  render  ·         ·                                    (x)                                                                                                                                       ·
+0  ·       render 0  test.t1.x                            ·                                                                                                                                         ·
+1  render  ·         ·                                    (x, y[omitted], col1[omitted], col2[omitted], rowid[hidden,omitted], col3[omitted], y[hidden,omitted], x[hidden,omitted], col4[omitted])  ·
+1  ·       render 0  test.t1.x                            ·                                                                                                                                         ·
+1  ·       render 1  NULL                                 ·                                                                                                                                         ·
+1  ·       render 2  NULL                                 ·                                                                                                                                         ·
+1  ·       render 3  NULL                                 ·                                                                                                                                         ·
+1  ·       render 4  NULL                                 ·                                                                                                                                         ·
+1  ·       render 5  NULL                                 ·                                                                                                                                         ·
+1  ·       render 6  NULL                                 ·                                                                                                                                         ·
+1  ·       render 7  NULL                                 ·                                                                                                                                         ·
+1  ·       render 8  NULL                                 ·                                                                                                                                         ·
+2  join    ·         ·                                    (col1[omitted], x, col2[omitted], y[omitted], rowid[hidden,omitted], col3[omitted], y[omitted], x[omitted], col4[omitted])                ·
+2  ·       type      inner                                ·                                                                                                                                         ·
+2  ·       equality  (x, y) = (x, y)                      ·                                                                                                                                         ·
+3  scan    ·         ·                                    (col1[omitted], x, col2[omitted], y, rowid[hidden,omitted])                                                                               x!=NULL; y!=NULL; rowid!=NULL; key(rowid)
+3  ·       table     t1@primary                           ·                                                                                                                                         ·
+3  ·       spans     ALL                                  ·                                                                                                                                         ·
+3  ·       filter    (x IS NOT NULL) AND (y IS NOT NULL)  ·                                                                                                                                         ·
+3  render  ·         ·                                    (col3[omitted], y, x, col4[omitted])                                                                                                      y!=NULL; x!=NULL
+3  ·       render 0  NULL                                 ·                                                                                                                                         ·
+3  ·       render 1  test.t2.y                            ·                                                                                                                                         ·
+3  ·       render 2  test.t2.x                            ·                                                                                                                                         ·
+3  ·       render 3  NULL                                 ·                                                                                                                                         ·
+4  scan    ·         ·                                    (col3[omitted], y, x, col4[omitted], rowid[hidden,omitted])                                                                               y!=NULL; x!=NULL; rowid!=NULL; key(rowid)
+4  ·       table     t2@primary                           ·                                                                                                                                         ·
+4  ·       spans     ALL                                  ·                                                                                                                                         ·
+4  ·       filter    (x IS NOT NULL) AND (y IS NOT NULL)  ·                                                                                                                                         ·
 
 # Tests for merge join ordering information.
 statement ok
@@ -1270,69 +1294,77 @@ CREATE TABLE pkBAD (a INT, b INT, c INT, d INT, PRIMARY KEY(b,a,d))
 query ITTTTT
 EXPLAIN (VERBOSE) SELECT * FROM pkBA AS l JOIN pkBC AS r ON l.a = r.a AND l.b = r.b AND l.c = r.c
 ----
-0  join  ·               ·                      (a, b, c, d, a, b, c, d)  a=a; b=b; c=c; a!=NULL; b!=NULL; c!=NULL; key(a,b); key(b,c)
-0  ·     type            inner                  ·                         ·
-0  ·     equality        (a, b, c) = (a, b, c)  ·                         ·
-0  ·     mergeJoinOrder  +"(b=b)"               ·                         ·
-1  scan  ·               ·                      (a, b, c, d)              a!=NULL; b!=NULL; key(a,b); +b
-1  ·     table           pkba@primary           ·                         ·
-1  ·     spans           ALL                    ·                         ·
-1  scan  ·               ·                      (a, b, c, d)              b!=NULL; c!=NULL; key(b,c); +b
-1  ·     table           pkbc@primary           ·                         ·
-1  ·     spans           ALL                    ·                         ·
+0  join  ·               ·                                    (a, b, c, d, a, b, c, d)  a=a; b=b; c=c; a!=NULL; b!=NULL; c!=NULL; key(a,b); key(b,c)
+0  ·     type            inner                                ·                         ·
+0  ·     equality        (a, b, c) = (a, b, c)                ·                         ·
+0  ·     mergeJoinOrder  +"(b=b)"                             ·                         ·
+1  scan  ·               ·                                    (a, b, c, d)              a!=NULL; b!=NULL; c!=NULL; key(a,b); +b
+1  ·     table           pkba@primary                         ·                         ·
+1  ·     spans           /#-                                  ·                         ·
+1  ·     filter          (a IS NOT NULL) AND (c IS NOT NULL)  ·                         ·
+1  scan  ·               ·                                    (a, b, c, d)              a!=NULL; b!=NULL; c!=NULL; key(b,c); +b
+1  ·     table           pkbc@primary                         ·                         ·
+1  ·     spans           /#-                                  ·                         ·
+1  ·     filter          (a IS NOT NULL) AND (c IS NOT NULL)  ·                         ·
 
 query ITTTTT
 EXPLAIN (VERBOSE) SELECT * FROM pkBA NATURAL JOIN pkBAD
 ----
-0  render  ·               ·                            (a, b, c, d)                                                  a!=NULL; b!=NULL; c!=NULL; d!=NULL; key(a,b)
-0  ·       render 0        test.pkba.a                  ·                                                             ·
-0  ·       render 1        test.pkba.b                  ·                                                             ·
-0  ·       render 2        test.pkba.c                  ·                                                             ·
-0  ·       render 3        test.pkba.d                  ·                                                             ·
-1  join    ·               ·                            (a, b, c, d, a[omitted], b[omitted], c[omitted], d[omitted])  a=a; b=b; c=c; d=d; a!=NULL; b!=NULL; c!=NULL; d!=NULL; key(a,b)
-1  ·       type            inner                        ·                                                             ·
-1  ·       equality        (a, b, c, d) = (a, b, c, d)  ·                                                             ·
-1  ·       mergeJoinOrder  +"(b=b)",+"(a=a)",+"(d=d)"   ·                                                             ·
-2  scan    ·               ·                            (a, b, c, d)                                                  a!=NULL; b!=NULL; key(a,b); +b,+a
-2  ·       table           pkba@primary                 ·                                                             ·
-2  ·       spans           ALL                          ·                                                             ·
-2  scan    ·               ·                            (a, b, c, d)                                                  a!=NULL; b!=NULL; d!=NULL; key(a,b,d); +b,+a,+d
-2  ·       table           pkbad@primary                ·                                                             ·
-2  ·       spans           ALL                          ·                                                             ·
+0  render  ·               ·                                                          (a, b, c, d)                                                  a!=NULL; b!=NULL; c!=NULL; d!=NULL; key(a,b)
+0  ·       render 0        test.pkba.a                                                ·                                                             ·
+0  ·       render 1        test.pkba.b                                                ·                                                             ·
+0  ·       render 2        test.pkba.c                                                ·                                                             ·
+0  ·       render 3        test.pkba.d                                                ·                                                             ·
+1  join    ·               ·                                                          (a, b, c, d, a[omitted], b[omitted], c[omitted], d[omitted])  a=a; b=b; c=c; d=d; a!=NULL; b!=NULL; c!=NULL; d!=NULL; key(a,b)
+1  ·       type            inner                                                      ·                                                             ·
+1  ·       equality        (a, b, c, d) = (a, b, c, d)                                ·                                                             ·
+1  ·       mergeJoinOrder  +"(b=b)",+"(a=a)",+"(d=d)"                                 ·                                                             ·
+2  scan    ·               ·                                                          (a, b, c, d)                                                  a!=NULL; b!=NULL; c!=NULL; d!=NULL; key(a,b); +b,+a
+2  ·       table           pkba@primary                                               ·                                                             ·
+2  ·       spans           /#-                                                        ·                                                             ·
+2  ·       filter          (a IS NOT NULL) AND ((c IS NOT NULL) AND (d IS NOT NULL))  ·                                                             ·
+2  scan    ·               ·                                                          (a, b, c, d)                                                  a!=NULL; b!=NULL; c!=NULL; d!=NULL; key(a,b,d); +b,+a,+d
+2  ·       table           pkbad@primary                                              ·                                                             ·
+2  ·       spans           /#-                                                        ·                                                             ·
+2  ·       filter          (a IS NOT NULL) AND ((c IS NOT NULL) AND (d IS NOT NULL))  ·                                                             ·
 
 query ITTTTT
 EXPLAIN (VERBOSE) SELECT * FROM pkBAC AS l JOIN pkBAC AS r USING(a, b, c)
 ----
-0  render  ·               ·                           (a, b, c, d, d)                                      a!=NULL; b!=NULL; c!=NULL; key(a,b,c)
-0  ·       render 0        l.a                         ·                                                    ·
-0  ·       render 1        l.b                         ·                                                    ·
-0  ·       render 2        l.c                         ·                                                    ·
-0  ·       render 3        l.d                         ·                                                    ·
-0  ·       render 4        r.d                         ·                                                    ·
-1  join    ·               ·                           (a, b, c, d, a[omitted], b[omitted], c[omitted], d)  a=a; b=b; c=c; a!=NULL; b!=NULL; c!=NULL; key(a,b,c)
-1  ·       type            inner                       ·                                                    ·
-1  ·       equality        (a, b, c) = (a, b, c)       ·                                                    ·
-1  ·       mergeJoinOrder  +"(b=b)",+"(a=a)",+"(c=c)"  ·                                                    ·
-2  scan    ·               ·                           (a, b, c, d)                                         a!=NULL; b!=NULL; c!=NULL; key(a,b,c); +b,+a,+c
-2  ·       table           pkbac@primary               ·                                                    ·
-2  ·       spans           ALL                         ·                                                    ·
-2  scan    ·               ·                           (a, b, c, d)                                         a!=NULL; b!=NULL; c!=NULL; key(a,b,c); +b,+a,+c
-2  ·       table           pkbac@primary               ·                                                    ·
-2  ·       spans           ALL                         ·                                                    ·
+0  render  ·               ·                                    (a, b, c, d, d)                                      a!=NULL; b!=NULL; c!=NULL; key(a,b,c)
+0  ·       render 0        l.a                                  ·                                                    ·
+0  ·       render 1        l.b                                  ·                                                    ·
+0  ·       render 2        l.c                                  ·                                                    ·
+0  ·       render 3        l.d                                  ·                                                    ·
+0  ·       render 4        r.d                                  ·                                                    ·
+1  join    ·               ·                                    (a, b, c, d, a[omitted], b[omitted], c[omitted], d)  a=a; b=b; c=c; a!=NULL; b!=NULL; c!=NULL; key(a,b,c)
+1  ·       type            inner                                ·                                                    ·
+1  ·       equality        (a, b, c) = (a, b, c)                ·                                                    ·
+1  ·       mergeJoinOrder  +"(b=b)",+"(a=a)",+"(c=c)"           ·                                                    ·
+2  scan    ·               ·                                    (a, b, c, d)                                         a!=NULL; b!=NULL; c!=NULL; key(a,b,c); +b,+a,+c
+2  ·       table           pkbac@primary                        ·                                                    ·
+2  ·       spans           /#-                                  ·                                                    ·
+2  ·       filter          (a IS NOT NULL) AND (c IS NOT NULL)  ·                                                    ·
+2  scan    ·               ·                                    (a, b, c, d)                                         a!=NULL; b!=NULL; c!=NULL; key(a,b,c); +b,+a,+c
+2  ·       table           pkbac@primary                        ·                                                    ·
+2  ·       spans           /#-                                  ·                                                    ·
+2  ·       filter          (a IS NOT NULL) AND (c IS NOT NULL)  ·                                                    ·
 
 query ITTTTT
 EXPLAIN (VERBOSE) SELECT * FROM pkBAC AS l JOIN pkBAD AS r ON l.c = r.d AND l.a = r.a AND l.b = r.b
 ----
-0  join  ·               ·                           (a, b, c, d, a, b, c, d)  a=a; b=b; c=d; a!=NULL; b!=NULL; c!=NULL; key(a,b,c)
-0  ·     type            inner                       ·                         ·
-0  ·     equality        (c, a, b) = (d, a, b)       ·                         ·
-0  ·     mergeJoinOrder  +"(b=b)",+"(a=a)",+"(c=d)"  ·                         ·
-1  scan  ·               ·                           (a, b, c, d)              a!=NULL; b!=NULL; c!=NULL; key(a,b,c); +b,+a,+c
-1  ·     table           pkbac@primary               ·                         ·
-1  ·     spans           ALL                         ·                         ·
-1  scan  ·               ·                           (a, b, c, d)              a!=NULL; b!=NULL; d!=NULL; key(a,b,d); +b,+a,+d
-1  ·     table           pkbad@primary               ·                         ·
-1  ·     spans           ALL                         ·                         ·
+0  join  ·               ·                                    (a, b, c, d, a, b, c, d)  a=a; b=b; c=d; a!=NULL; b!=NULL; c!=NULL; key(a,b,c)
+0  ·     type            inner                                ·                         ·
+0  ·     equality        (c, a, b) = (d, a, b)                ·                         ·
+0  ·     mergeJoinOrder  +"(b=b)",+"(a=a)",+"(c=d)"           ·                         ·
+1  scan  ·               ·                                    (a, b, c, d)              a!=NULL; b!=NULL; c!=NULL; key(a,b,c); +b,+a,+c
+1  ·     table           pkbac@primary                        ·                         ·
+1  ·     spans           /#-                                  ·                         ·
+1  ·     filter          (c IS NOT NULL) AND (a IS NOT NULL)  ·                         ·
+1  scan  ·               ·                                    (a, b, c, d)              a!=NULL; b!=NULL; d!=NULL; key(a,b,d); +b,+a,+d
+1  ·     table           pkbad@primary                        ·                         ·
+1  ·     spans           /#-                                  ·                         ·
+1  ·     filter          (d IS NOT NULL) AND (a IS NOT NULL)  ·                         ·
 
 # Tests with joins with merged columns of collated string type.
 statement ok
@@ -1350,24 +1382,26 @@ INSERT INTO str2 VALUES (1, 'A' COLLATE en_u_ks_level1), (2, 'B' COLLATE en_u_ks
 query ITTTTT
 EXPLAIN (VERBOSE) SELECT s, str1.s, str2.s FROM str1 INNER JOIN str2 USING(s)
 ----
-0  render  ·         ·             (s, s, s)                               s=s
-0  ·       render 0  test.str1.s   ·                                       ·
-0  ·       render 1  test.str1.s   ·                                       ·
-0  ·       render 2  test.str2.s   ·                                       ·
-1  render  ·         ·             (s, a[omitted], a[omitted], s[hidden])  ·
-1  ·       render 0  test.str1.s   ·                                       ·
-1  ·       render 1  NULL          ·                                       ·
-1  ·       render 2  NULL          ·                                       ·
-1  ·       render 3  test.str2.s   ·                                       ·
-2  join    ·         ·             (a[omitted], s, a[omitted], s)          ·
-2  ·       type      inner         ·                                       ·
-2  ·       equality  (s) = (s)     ·                                       ·
-3  scan    ·         ·             (a[omitted], s)                         a!=NULL; key(a)
-3  ·       table     str1@primary  ·                                       ·
-3  ·       spans     ALL           ·                                       ·
-3  scan    ·         ·             (a[omitted], s)                         a!=NULL; key(a)
-3  ·       table     str2@primary  ·                                       ·
-3  ·       spans     ALL           ·                                       ·
+0  render  ·         ·              (s, s, s)                               s=s
+0  ·       render 0  test.str1.s    ·                                       ·
+0  ·       render 1  test.str1.s    ·                                       ·
+0  ·       render 2  test.str2.s    ·                                       ·
+1  render  ·         ·              (s, a[omitted], a[omitted], s[hidden])  ·
+1  ·       render 0  test.str1.s    ·                                       ·
+1  ·       render 1  NULL           ·                                       ·
+1  ·       render 2  NULL           ·                                       ·
+1  ·       render 3  test.str2.s    ·                                       ·
+2  join    ·         ·              (a[omitted], s, a[omitted], s)          ·
+2  ·       type      inner          ·                                       ·
+2  ·       equality  (s) = (s)      ·                                       ·
+3  scan    ·         ·              (a[omitted], s)                         a!=NULL; s!=NULL; key(a)
+3  ·       table     str1@primary   ·                                       ·
+3  ·       spans     ALL            ·                                       ·
+3  ·       filter    s IS NOT NULL  ·                                       ·
+3  scan    ·         ·              (a[omitted], s)                         a!=NULL; s!=NULL; key(a)
+3  ·       table     str2@primary   ·                                       ·
+3  ·       spans     ALL            ·                                       ·
+3  ·       filter    s IS NOT NULL  ·                                       ·
 
 query TTT rowsort
 SELECT s, str1.s, str2.s FROM str1 INNER JOIN str2 USING(s)
@@ -1379,24 +1413,25 @@ c  c  C
 query ITTTTT
 EXPLAIN (VERBOSE) SELECT s, str1.s, str2.s FROM str1 LEFT OUTER JOIN str2 USING(s)
 ----
-0  render  ·         ·             (s, s, s)                               s=s
-0  ·       render 0  test.str1.s   ·                                       ·
-0  ·       render 1  test.str1.s   ·                                       ·
-0  ·       render 2  test.str2.s   ·                                       ·
-1  render  ·         ·             (s, a[omitted], a[omitted], s[hidden])  ·
-1  ·       render 0  test.str1.s   ·                                       ·
-1  ·       render 1  NULL          ·                                       ·
-1  ·       render 2  NULL          ·                                       ·
-1  ·       render 3  test.str2.s   ·                                       ·
-2  join    ·         ·             (a[omitted], s, a[omitted], s)          ·
-2  ·       type      left outer    ·                                       ·
-2  ·       equality  (s) = (s)     ·                                       ·
-3  scan    ·         ·             (a[omitted], s)                         a!=NULL; key(a)
-3  ·       table     str1@primary  ·                                       ·
-3  ·       spans     ALL           ·                                       ·
-3  scan    ·         ·             (a[omitted], s)                         a!=NULL; key(a)
-3  ·       table     str2@primary  ·                                       ·
-3  ·       spans     ALL           ·                                       ·
+0  render  ·         ·              (s, s, s)                               s=s
+0  ·       render 0  test.str1.s    ·                                       ·
+0  ·       render 1  test.str1.s    ·                                       ·
+0  ·       render 2  test.str2.s    ·                                       ·
+1  render  ·         ·              (s, a[omitted], a[omitted], s[hidden])  ·
+1  ·       render 0  test.str1.s    ·                                       ·
+1  ·       render 1  NULL           ·                                       ·
+1  ·       render 2  NULL           ·                                       ·
+1  ·       render 3  test.str2.s    ·                                       ·
+2  join    ·         ·              (a[omitted], s, a[omitted], s)          ·
+2  ·       type      left outer     ·                                       ·
+2  ·       equality  (s) = (s)      ·                                       ·
+3  scan    ·         ·              (a[omitted], s)                         a!=NULL; key(a)
+3  ·       table     str1@primary   ·                                       ·
+3  ·       spans     ALL            ·                                       ·
+3  scan    ·         ·              (a[omitted], s)                         a!=NULL; s!=NULL; key(a)
+3  ·       table     str2@primary   ·                                       ·
+3  ·       spans     ALL            ·                                       ·
+3  ·       filter    s IS NOT NULL  ·                                       ·
 
 query TTT rowsort
 SELECT s, str1.s, str2.s FROM str1 LEFT OUTER JOIN str2 USING(s)
@@ -1422,9 +1457,10 @@ EXPLAIN (VERBOSE) SELECT s, str1.s, str2.s FROM str1 RIGHT OUTER JOIN str2 USING
 2  join    ·         ·                                 (a[omitted], s, a[omitted], s)                     ·
 2  ·       type      right outer                       ·                                                  ·
 2  ·       equality  (s) = (s)                         ·                                                  ·
-3  scan    ·         ·                                 (a[omitted], s)                                    a!=NULL; key(a)
+3  scan    ·         ·                                 (a[omitted], s)                                    a!=NULL; s!=NULL; key(a)
 3  ·       table     str1@primary                      ·                                                  ·
 3  ·       spans     ALL                               ·                                                  ·
+3  ·       filter    s IS NOT NULL                     ·                                                  ·
 3  scan    ·         ·                                 (a[omitted], s)                                    a!=NULL; key(a)
 3  ·       table     str2@primary                      ·                                                  ·
 3  ·       spans     ALL                               ·                                                  ·
@@ -1490,9 +1526,10 @@ EXPLAIN (VERBOSE) SELECT * FROM str1 RIGHT OUTER JOIN str2 USING(a, s)
 2  ·       type            right outer                       ·                                                                ·
 2  ·       equality        (a, s) = (a, s)                   ·                                                                ·
 2  ·       mergeJoinOrder  +"(a=a)"                          ·                                                                ·
-3  scan    ·               ·                                 (a, s)                                                           a!=NULL; key(a); +a
+3  scan    ·               ·                                 (a, s)                                                           a!=NULL; s!=NULL; key(a); +a
 3  ·       table           str1@primary                      ·                                                                ·
-3  ·       spans           ALL                               ·                                                                ·
+3  ·       spans           /#-                               ·                                                                ·
+3  ·       filter          s IS NOT NULL                     ·                                                                ·
 3  scan    ·               ·                                 (a, s)                                                           a!=NULL; key(a); +a
 3  ·       table           str2@primary                      ·                                                                ·
 3  ·       spans           ALL                               ·                                                                ·
@@ -1524,10 +1561,12 @@ EXPLAIN (VERBOSE) SELECT * FROM xyu INNER JOIN xyv USING(x, y) WHERE x > 2
 1  ·       mergeJoinOrder  +"(x=x)",+"(y=y)"  ·                                     ·
 2  scan    ·               ·                  (x, y, u)                             x!=NULL; y!=NULL; u!=NULL; key(x,y,u); +x,+y
 2  ·       table           xyu@primary        ·                                     ·
-2  ·       spans           /3-                ·                                     ·
+2  ·       spans           /3/#-              ·                                     ·
+2  ·       filter          y IS NOT NULL      ·                                     ·
 2  scan    ·               ·                  (x, y, v)                             x!=NULL; y!=NULL; v!=NULL; key(x,y,v); +x,+y
 2  ·       table           xyv@primary        ·                                     ·
-2  ·       spans           /3-                ·                                     ·
+2  ·       spans           /3/#-              ·                                     ·
+2  ·       filter          y IS NOT NULL      ·                                     ·
 
 query IIII
 SELECT * FROM xyu INNER JOIN xyv USING(x, y) WHERE x > 2
@@ -1551,7 +1590,8 @@ EXPLAIN (VERBOSE) SELECT * FROM xyu LEFT OUTER JOIN xyv USING(x, y) WHERE x > 2
 2  ·       spans           /3-                ·                                     ·
 2  scan    ·               ·                  (x, y, v)                             x!=NULL; y!=NULL; v!=NULL; key(x,y,v); +x,+y
 2  ·       table           xyv@primary        ·                                     ·
-2  ·       spans           ALL                ·                                     ·
+2  ·       spans           /#-                ·                                     ·
+2  ·       filter          y IS NOT NULL      ·                                     ·
 
 query IIII rowsort
 SELECT * FROM xyu LEFT OUTER JOIN xyv USING(x, y) WHERE x > 2
@@ -1581,7 +1621,8 @@ EXPLAIN (VERBOSE) SELECT * FROM xyu RIGHT OUTER JOIN xyv USING(x, y) WHERE x > 2
 2  ·       mergeJoinOrder  +"(x=x)",+"(y=y)"  ·                                                   ·
 3  scan    ·               ·                  (x, y, u)                                           x!=NULL; y!=NULL; u!=NULL; key(x,y,u); +x,+y
 3  ·       table           xyu@primary        ·                                                   ·
-3  ·       spans           ALL                ·                                                   ·
+3  ·       spans           /#-                ·                                                   ·
+3  ·       filter          y IS NOT NULL      ·                                                   ·
 3  scan    ·               ·                  (x, y, v)                                           x!=NULL; y!=NULL; v!=NULL; key(x,y,v); +x,+y
 3  ·       table           xyv@primary        ·                                                   ·
 3  ·       spans           /3-                ·                                                   ·

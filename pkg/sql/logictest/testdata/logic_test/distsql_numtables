@@ -129,7 +129,7 @@ nine-zero-zero-zero
 query T
 SELECT "URL" FROM [EXPLAIN (DISTSQL) SELECT x, str FROM NumToSquare JOIN NumToStr ON y = xsquared]
 ----
-https://cockroachdb.github.io/distsqlplan/decode.html?eJzUlVFr2zAQgN_3K8o9taBBJDvLYhj4cd1DO8rehh_U6JYYEsuTZFgp-e_D9iC1k93FqA_Joy19p7vv4O4VKmvwQe_QQ_YTJAhQICABASkImEMhoHZ2hd5b117pgXvzB7KZgLKqm9D-LgSsrEPIXiGUYYuQwQ_9vMUn1AYdCDAYdLntHqldudPuJa-aXbD-d6MdgoDHJmQ3uRS5gmIvwDbhX-hDxOeXm432m2G07n4hwAe9RsjkXrx7isHF5CcH-an_5neI01TWGXRoBpGKluSunCjyq_abb7asxjVu8Ve4zdXdF1euN-E2l3dvq0xHVR4qSCIqOJHeg_1o63GhJx9OBw_LC2-tvPrWqgs3rK7ecHLhhpOrN5xeuOH06g0zK_YJfW0rj2dN-FmbPpo19jq8bdwKvzu76p7pPx87rpuvBn3oT1X_cV_1R22C58PzGHgRAy9jYClpWk4wpqbB8xh4EQMvY-CRsSNajenZWzqhdSckLIe-Z2M6jWkWDTPNomGmWTTMNIuGuWbNY5r1KUY3DTO6aZjRTcOMbhrmdC9idH-O0U3DjG4aZnTTMKObhjndyxjdcsqyPJ6hU7blVJob_lP25VSacy6Ptgcpvdh_-BsAAP__m1K8ow==
+https://cockroachdb.github.io/distsqlplan/decode.html?eJzUlcGK2zAQhu99CjOnXVAhkp2mMRR8Kk1ZkrLdnooP2niaGBzLlWTosuTdi-1C1k6qWaM9xEfb-jwz3w-aZyhVhmt5QAPxT-DAQACDEBhEwGAOKYNKqy0ao3RzpANW2R-IZwzysqpt8zplsFUaIX4Gm9sCIYYH-VjgPcoMNTDI0Mq8aItUOj9I_ZSU9cEq87uWGoHB57ywqOMgEcHqe7DePATrH3d3wGBT2zhIOEsEpEcGqrb_ap5KPT4Fe2n2_TLt-ZSBsXKHEPMje_Perfbpj_f6E__t7_SfulQ6Q41Z709pQ1JHLgz5RZr9V5WXwxkL_GVvEnH7See7vb1J-O3LKaPBlKcJQo8JLrS3Vu9VNRz0YuGoV5hfebR88tGKKzcsJm84vHLD4eQNR1duOJq8YWLF3qOpVGnwVTf8rGkfsx12Ooyq9Ra_abVty3SPm5Zr79cMje2-iu5hVXafmgZfD8994IUPvPSBOXfTfIQxMQ6e-8ALH3jpAw-MndFiSM9e0qFbd-iEed_3bEhHPmG5YSIsN0yE5YaJsNwwFdbcJ6wPPrrdMKHbDRO63TCh2w1Tuhc-uj_66HbDhG43TOh2w4RuN0zpXvro5mOW5fkdOmZbjqWpy3_MvhxLU8752fZwSk-P7_4GAAD__7ckw20=
 
 # Save the result of the following statement to a label.
 query IT rowsort label-sq-str
@@ -152,11 +152,11 @@ EXPLAIN (VERBOSE) SELECT x, str FROM NumToSquare JOIN NumToStr ON x = y WHERE x 
 1  ·       mergeJoinOrder  +"(x=y)"             ·                                        ·
 2  scan    ·               ·                    (x, xsquared[omitted])                   x!=NULL; key(x); +x
 2  ·       table           numtosquare@primary  ·                                        ·
-2  ·       spans           ALL                  ·                                        ·
+2  ·       spans           /#-                  ·                                        ·
 2  ·       filter          (x % 2) = 0          ·                                        ·
 2  scan    ·               ·                    (y, str)                                 y!=NULL; key(y); +y
 2  ·       table           numtostr@primary     ·                                        ·
-2  ·       spans           ALL                  ·                                        ·
+2  ·       spans           /#-                  ·                                        ·
 2  ·       filter          (y % 2) = 0          ·                                        ·
 
 query T

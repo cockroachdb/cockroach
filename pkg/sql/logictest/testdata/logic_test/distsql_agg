@@ -599,7 +599,7 @@ SELECT * FROM (VALUES (1, '222'), (2, '444')) t1(a,b) JOIN (VALUES (1, 100.0), (
 query T
 SELECT "URL" FROM [EXPLAIN (DISTSQL) SELECT * FROM (VALUES (1, '222'), (2, '444')) t1(a,b) JOIN (VALUES (1, 100.0), (3, 32.0)) t2(a,b) ON t1.a = t2.a]
 ----
-https://cockroachdb.github.io/distsqlplan/decode.html?eJykkDFrwzAQhff-CnNTAjfYTuggKJhOTYemdOhSNBjrapu6OqOToBD834ulIXVoWkI26e6-e-_eASwbeqo_SUC9QQEaYXTckAi7uZQGduYLVI7Q2zH4uawRGnYE6gC-9wOBgtd6CCSAYMjX_ZD2bbP7bFVmTRfsh6xBTwgc_HGJ-LolUPmEVwrdXit03B8sO0OOzEJCz-R_I7-4faile-Tekls6Hujdr6pifef6tosvQNgHr7KqwKrEaoPV9uwdxSWBvZCMbIVO7zmTkEYg01IKRTi4hp4dN1EmffeRiwVD4lO3TJ-dja1o8CdcXACXp3D5J7xZwPmkp5vvAAAA__-HZe5E
+https://cockroachdb.github.io/distsqlplan/decode.html?eJy0kMtq8zAQhff_U4hZJTCL2An_QlAwXZSmBLv0tilaGGtqi7qS0QUKwe9eLC1Sh6YllO6kmflmzjl70EZSWb-RA_4MGQiEwZqGnDN2KqWBrXwHvkJQegh-KguExlgCvgevfE_A4anuAzlAkORr1ad9G3bJFjlruqBf3RIQrlTvyXJWZGx7z8rqgZWPux2IEcEEf9jufN0S8NWIv1Tw_88UHA4HbawkS3J2W0zkTyNf2LiuXXdjlCY7t9LTi18U2fLCqraLL0Cogp-sYJFjscZic9JHdk6Sd-QGox0d-zmRkEAg2VIKxZlgG7q1poln0reKXCxIcj518_TZ6tiKAj_D2Rlwfgzn38LrGbwaxfjvIwAA__8FdPvW
 
 statement ok
 CREATE TABLE nullables (a INT, b INT, c INT, PRIMARY KEY (a))
