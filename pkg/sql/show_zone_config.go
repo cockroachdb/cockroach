@@ -125,8 +125,11 @@ func (n *showZoneConfigNode) Start(params runParams) error {
 }
 
 func (n *showZoneConfigNode) Next(runParams) (bool, error) {
-	defer func() { n.run.done = true }()
-	return !n.run.done, nil
+	if !n.run.done {
+		n.run.done = true
+		return true, nil
+	}
+	return false, nil
 }
 
 func (n *showZoneConfigNode) Values() tree.Datums {
