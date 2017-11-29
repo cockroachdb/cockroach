@@ -37,8 +37,6 @@
 #include "protos/storage/engine/enginepb/mvcc.pb.h"
 #include "protos/storage/engine/enginepb/rocksdb.pb.h"
 
-const DBStatus kSuccess = {NULL, 0};
-
 extern "C" {
 static void __attribute__((noreturn)) die_missing_symbol(const char* name) {
   fprintf(stderr, "%s symbol missing; expected to be supplied by Go\n", name);
@@ -192,10 +190,6 @@ struct DBSnapshot : public DBEngine {
   virtual DBStatus GetStats(DBStatsResult* stats);
   virtual DBString GetCompactionStats();
   virtual DBStatus EnvWriteFile(DBSlice path, DBSlice contents);
-};
-
-struct DBIterator {
-  std::unique_ptr<rocksdb::Iterator> rep;
 };
 
 std::string ToString(DBSlice s) { return std::string(s.data, s.len); }
@@ -2105,7 +2099,7 @@ DBIterState DBIterSeekToLast(DBIterator* iter) {
   return DBIterGetState(iter);
 }
 
-DBIterState DBIterNext(DBIterator* iter, bool skip_current_key_versions) {
+const char* DBIterAdvance(DBIterator* iter, bool skip_current_key_versions) {
   // If we're skipping the current key versions, remember the key the
   // iterator was pointing out.
   std::string old_key;
@@ -2113,10 +2107,7 @@ DBIterState DBIterNext(DBIterator* iter, bool skip_current_key_versions) {
     rocksdb::Slice key;
     rocksdb::Slice ts;
     if (!SplitKey(iter->rep->key(), &key, &ts)) {
-      DBIterState state = {0};
-      state.valid = false;
-      state.status = FmtStatus("failed to split mvcc key");
-      return state;
+      return "failed to split mvcc key";
     }
     old_key = key.ToString();
   }
@@ -2127,10 +2118,7 @@ DBIterState DBIterNext(DBIterator* iter, bool skip_current_key_versions) {
     rocksdb::Slice key;
     rocksdb::Slice ts;
     if (!SplitKey(iter->rep->key(), &key, &ts)) {
-      DBIterState state = {0};
-      state.valid = false;
-      state.status = FmtStatus("failed to split mvcc key");
-      return state;
+      return "failed to split mvcc key";
     }
     if (old_key == key) {
       // We're pointed at a different version of the same key. Fall
@@ -2143,7 +2131,17 @@ DBIterState DBIterNext(DBIterator* iter, bool skip_current_key_versions) {
       iter->rep->Seek(EncodeKey(db_key));
     }
   }
+  return NULL;
+}
 
+DBIterState DBIterNext(DBIterator* iter, bool skip_current_key_versions) {
+  const char* err = DBIterAdvance(iter, skip_current_key_versions);
+  if (err != NULL) {
+    DBIterState state = {0};
+    state.valid = false;
+    state.status = FmtStatus(err);
+    return state;
+  }
   return DBIterGetState(iter);
 }
 
@@ -2478,7 +2476,11 @@ DBStatus DBSstFileWriterOpen(DBSstFileWriter* fw) {
 }
 
 DBStatus DBSstFileWriterAdd(DBSstFileWriter* fw, DBKey key, DBSlice val) {
-  rocksdb::Status status = fw->rep.Put(EncodeKey(key), ToSlice(val));
+  return DBSstFileWriterAddRaw(fw, EncodeKey(key), ToSlice(val));
+}
+
+DBStatus DBSstFileWriterAddRaw(DBSstFileWriter* fw, rocksdb::Slice key, rocksdb::Slice val) {
+  rocksdb::Status status = fw->rep.Put(key, val);
   if (!status.ok()) {
     return ToDBStatus(status);
   }

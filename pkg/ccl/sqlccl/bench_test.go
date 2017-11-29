@@ -49,7 +49,7 @@ func BenchmarkClusterBackup(b *testing.B) {
 	if _, err := sampledataccl.ToBackup(b, bankData, loadDir); err != nil {
 		b.Fatalf("%+v", err)
 	}
-	sqlDB.Exec(b, fmt.Sprintf(`RESTORE data.* FROM '%s'`, loadDir))
+	sqlDB.Exec(b, `RESTORE data.* FROM $1`, "nodelocal:///load")
 
 	// TODO(dan): Ideally, this would split and rebalance the ranges in a more
 	// controlled way. A previous version of this code did it manually with
@@ -61,7 +61,7 @@ func BenchmarkClusterBackup(b *testing.B) {
 	b.ResetTimer()
 	var unused string
 	var dataSize int64
-	sqlDB.QueryRow(b, fmt.Sprintf(`BACKUP DATABASE data TO '%s'`, dir)).Scan(
+	sqlDB.QueryRow(b, `BACKUP DATABASE data TO $1`, localFoo).Scan(
 		&unused, &unused, &unused, &unused, &unused, &unused, &dataSize,
 	)
 	b.StopTimer()

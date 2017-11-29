@@ -147,7 +147,7 @@ func evalImport(ctx context.Context, cArgs batcheval.CommandArgs) (*roachpb.Impo
 	}
 	defer importRequestLimiter.endLimitedRequest()
 
-	var rows rowCounter
+	var rows engineccl.RowCounter
 	var iters []engine.SimpleIterator
 	for _, file := range args.Files {
 		log.VEventf(ctx, 2, "import file %s %s", file.Path, args.Span.Key)
@@ -276,7 +276,7 @@ func evalImport(ctx context.Context, cArgs batcheval.CommandArgs) (*roachpb.Impo
 			log.Infof(ctx, "Put %s -> %s", key.Key, value.PrettyPrint())
 		}
 
-		if err := rows.count(key.Key); err != nil {
+		if err := rows.Count(key.Key); err != nil {
 			return nil, errors.Wrapf(err, "decoding %s", key.Key)
 		}
 

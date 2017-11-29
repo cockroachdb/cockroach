@@ -22,8 +22,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 )
 
@@ -42,7 +42,7 @@ import (
 // The creation of the database is time consuming, so the caller can choose
 // whether to use a temporary or permanent location.
 func loadTestData(
-	dir string, numKeys, numBatches, batchTimeSpan, valueBytes int,
+	tb testing.TB, dir string, numKeys, numBatches, batchTimeSpan, revisions int, valueBytes int,
 ) (engine.Engine, error) {
 	ctx := context.Background()
 
@@ -63,11 +63,12 @@ func loadTestData(
 	}
 
 	if exists {
+		tb.Logf("using existing data in %q", dir)
 		testutils.ReadAllFiles(filepath.Join(dir, "*"))
 		return eng, nil
 	}
 
-	log.Infof(context.Background(), "creating test data: %s", dir)
+	tb.Logf("creating test data: %s", dir)
 
 	// Generate the same data every time.
 	rng := rand.New(rand.NewSource(1449168817))
@@ -84,37 +85,93 @@ func loadTestData(
 
 	var batch engine.Batch
 	var minWallTime int64
-	for i, key := range keys {
-		if scaled := len(keys) / numBatches; (i % scaled) == 0 {
-			if i > 0 {
-				log.Infof(ctx, "committing (%d/~%d)", i/scaled, numBatches)
-				if err := batch.Commit(false /* sync */); err != nil {
-					return nil, err
+	for rev := 1; rev <= revisions; rev++ {
+		for i, key := range keys {
+			if scaled := len(keys) / numBatches; (i % scaled) == 0 {
+				if i > 0 {
+					tb.Logf("committing (%d/~%d)", i/scaled, numBatches)
+					if err := batch.Commit(false /* sync */); err != nil {
+						return nil, err
+					}
+					batch.Close()
+					if err := eng.Flush(); err != nil {
+						return nil, err
+					}
 				}
-				batch.Close()
-				if err := eng.Flush(); err != nil {
-					return nil, err
-				}
+				batch = eng.NewBatch()
+				minWallTime = sstTimestamps[i/scaled]
 			}
-			batch = eng.NewBatch()
-			minWallTime = sstTimestamps[i/scaled]
+			timestamp := hlc.Timestamp{WallTime: minWallTime*int64(rev) + rand.Int63n(int64(batchTimeSpan))}
+			value := roachpb.MakeValueFromBytes(randutil.RandBytes(rng, valueBytes))
+			value.InitChecksum(key)
+			if err := engine.MVCCPut(ctx, batch, nil, key, timestamp, value, nil); err != nil {
+				return nil, err
+			}
 		}
-		timestamp := hlc.Timestamp{WallTime: minWallTime + rand.Int63n(int64(batchTimeSpan))}
-		value := roachpb.MakeValueFromBytes(randutil.RandBytes(rng, valueBytes))
-		value.InitChecksum(key)
-		if err := engine.MVCCPut(ctx, batch, nil, key, timestamp, value, nil); err != nil {
+		if err := batch.Commit(false /* sync */); err != nil {
+			return nil, err
+		}
+		batch.Close()
+		if err := eng.Flush(); err != nil {
 			return nil, err
 		}
 	}
-	if err := batch.Commit(false /* sync */); err != nil {
-		return nil, err
-	}
-	batch.Close()
-	if err := eng.Flush(); err != nil {
-		return nil, err
-	}
 
 	return eng, nil
+}
+
+func BenchmarkExport(b *testing.B) {
+	const numBatches = 10
+	const batchTimeSpan = 100
+	const valueBytes = 64
+	const revisions = 5
+
+	// we need lots of rows to work with for our various batches and offsts and do
+	// not want small initial b.N values to cause problems.
+	rows := b.N * 100
+	dir := filepath.Join("testdata", fmt.Sprintf("export-%d-%d", rows, revisions))
+	eng, err := loadTestData(
+		b, dir, rows, numBatches, batchTimeSpan, revisions, valueBytes,
+	)
+	if err != nil {
+		b.Fatal(err)
+	}
+	defer eng.Close()
+
+	// this is a rough (i.e. doesn't include timestamp) average size.
+	keyLen := len(encoding.EncodeUvarintAscending([]byte("key-"), uint64(rows/2)))
+	b.SetBytes(int64(rows * (valueBytes + keyLen)))
+
+	// swap via var rather than separate subbenchmarks to allow benchstat compare.
+	var f = MVCCIncIterExport
+
+	if envutil.EnvOrDefaultBool("COCKROACH_BENCH_CPP_SST", false) {
+		f = ExportSST
+	}
+
+	// Aim to get roughly 1/2 of the key range at neither the start or end, and
+	// pick start and end times to ensure both new and old ignored revisions.
+	startKey := encoding.EncodeUvarintAscending([]byte("key-"), uint64(rows/4))
+	endKey := encoding.EncodeUvarintAscending([]byte("key-"), uint64((rows/4)*3))
+
+	// batchTimeSpan * numBatches should be after loadTestData's first revisions.
+	startTime := hlc.Timestamp{WallTime: int64(batchTimeSpan * numBatches)}
+	endTime := hlc.Timestamp{WallTime: int64(batchTimeSpan * numBatches * (revisions - 2))}
+
+	b.ResetTimer()
+
+	if data, _, err := f(
+		context.TODO(),
+		eng,
+		startKey, endKey,
+		startTime, endTime,
+		false,
+	); err != nil {
+		b.Fatal(err)
+	} else if len(data) < (rows/2)*64 {
+		// it's easy to mess up the setup and end up not actually exporting anything
+		b.Fatalf("expected at least 64b/key in %d row export, got %d", rows, len(data))
+	}
 }
 
 // runIterate benchmarks iteration over the entire keyspace within time bounds
@@ -129,10 +186,11 @@ func runIterate(
 	const numBatches = 100
 	const batchTimeSpan = 10
 	const valueBytes = 512
+	const revisions = 1
 
 	// Store the database in this directory so we don't have to regenerate it on
 	// each benchmark run.
-	eng, err := loadTestData("mvcc_data", numKeys, numBatches, batchTimeSpan, valueBytes)
+	eng, err := loadTestData(b, "mvcc_data", numKeys, numBatches, batchTimeSpan, revisions, valueBytes)
 	if err != nil {
 		b.Fatal(err)
 	}

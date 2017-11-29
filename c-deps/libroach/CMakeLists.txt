@@ -26,6 +26,7 @@ add_library(roach
   env_switching.cc
   eventlistener.cc
   protos/roachpb/data.pb.cc
+  protos/roachpb/errors.pb.cc
   protos/roachpb/internal.pb.cc
   protos/roachpb/metadata.pb.cc
   protos/storage/engine/enginepb/mvcc.pb.cc
@@ -47,7 +48,7 @@ add_library(roachccl
 )
 target_include_directories(roachccl
   PRIVATE ../rocksdb/include
-  PRIVATE ../protobuf/src protosccl
+  PRIVATE ../protobuf/src protos protosccl
 )
 target_link_libraries(roachccl roach)
 
