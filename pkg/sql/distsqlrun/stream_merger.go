@@ -115,10 +115,11 @@ func CompareEncDatumRowForMerge(
 		// they are not equal. This differs from our datum semantics where
 		// they are equal. In the case where we want to consider NULLs to be
 		// equal, we continue and skip to the next datums in the row.
-		if !nullEquality && lhs[lIdx].IsNull() && rhs[rIdx].IsNull() {
-			// We can return either -1 or 1, it does not change the behavior.
-			return -1, nil
-		} else if nullEquality && lhs[lIdx].IsNull() && rhs[rIdx].IsNull() {
+		if lhs[lIdx].IsNull() && rhs[rIdx].IsNull() {
+			if !nullEquality {
+				// We can return either -1 or 1, it does not change the behavior.
+				return -1, nil
+			}
 			continue
 		}
 		cmp, err := lhs[lIdx].Compare(&lhsTypes[lIdx], da, evalCtx, &rhs[rIdx])
