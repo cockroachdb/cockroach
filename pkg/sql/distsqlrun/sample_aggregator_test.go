@@ -15,6 +15,7 @@
 package distsqlrun
 
 import (
+	gosql "database/sql"
 	"reflect"
 	"testing"
 
@@ -80,6 +81,7 @@ func TestSampleAggregator(t *testing.T) {
 			SketchType:        SketchType_HLL_PLUS_PLUS_V1,
 			Columns:           []uint32{0},
 			GenerateHistogram: false,
+			StatName:          "a",
 		},
 		{
 			SketchType:          SketchType_HLL_PLUS_PLUS_V1,
@@ -141,6 +143,7 @@ func TestSampleAggregator(t *testing.T) {
 
 	rows := r.Query(t, `
 	  SELECT "tableID",
+					 "name",
 					 "columnIDs",
 					 "rowCount",
 					 "distinctCount",
@@ -156,7 +159,7 @@ func TestSampleAggregator(t *testing.T) {
 
 	type result struct {
 		tableID                            int
-		colIDs                             string
+		name, colIDs                       string
 		rowCount, distinctCount, nullCount int
 		buckets                            []resultBucket
 	}
@@ -164,6 +167,7 @@ func TestSampleAggregator(t *testing.T) {
 	expected := []result{
 		{
 			tableID:       13,
+			name:          "a",
 			colIDs:        "{100}",
 			rowCount:      11,
 			distinctCount: 2,
@@ -171,6 +175,7 @@ func TestSampleAggregator(t *testing.T) {
 		},
 		{
 			tableID:       13,
+			name:          "<NULL>",
 			colIDs:        "{101}",
 			rowCount:      11,
 			distinctCount: 8,
@@ -190,12 +195,19 @@ func TestSampleAggregator(t *testing.T) {
 		}
 
 		var histData []byte
+		var name gosql.NullString
 		var r result
 		if err := rows.Scan(
-			&r.tableID, &r.colIDs, &r.rowCount, &r.distinctCount, &r.nullCount, &histData,
+			&r.tableID, &name, &r.colIDs, &r.rowCount, &r.distinctCount, &r.nullCount, &histData,
 		); err != nil {
 			t.Fatal(err)
 		}
+		if name.Valid {
+			r.name = name.String
+		} else {
+			r.name = "<NULL>"
+		}
+
 		if len(histData) > 0 {
 			var h stats.HistogramData
 			if err := protoutil.Unmarshal(histData, &h); err != nil {
