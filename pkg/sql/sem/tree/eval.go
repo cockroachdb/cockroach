@@ -1328,6 +1328,7 @@ func (CmpOp) preferred() bool {
 }
 
 func init() {
+	// Array equality comparisons.
 	for _, t := range types.AnyNonArray {
 		CmpOps[EQ] = append(CmpOps[EQ], CmpOp{
 			LeftType:  types.TArray{Typ: t},
@@ -1360,149 +1361,73 @@ func (o cmpOpOverload) lookupImpl(left, right types.T) (CmpOp, bool) {
 	return CmpOp{}, false
 }
 
+func makeCmpOpOverload(
+	fn func(ctx *EvalContext, left, right Datum) (Datum, error), t ...types.T,
+) CmpOp {
+	var a, b types.T
+	switch len(t) {
+	case 1:
+		a = t[0]
+		b = t[0]
+	case 2:
+		a = t[0]
+		b = t[1]
+	default:
+		panic(fmt.Sprintf("invalid # of args to makeScalarEqFn %d", len(t)))
+	}
+	return CmpOp{
+		LeftType:  a,
+		RightType: b,
+		fn:        fn,
+	}
+}
+
+func makeEqFn(t ...types.T) CmpOp {
+	return makeCmpOpOverload(cmpOpScalarEQFn, t...)
+}
+func makeLtFn(t ...types.T) CmpOp {
+	return makeCmpOpOverload(cmpOpScalarLTFn, t...)
+}
+func makeLeFn(t ...types.T) CmpOp {
+	return makeCmpOpOverload(cmpOpScalarLEFn, t...)
+}
+
 // CmpOps contains the comparison operations indexed by operation type.
 var CmpOps = map[ComparisonOperator]cmpOpOverload{
 	EQ: {
-		CmpOp{
-			LeftType:  types.String,
-			RightType: types.String,
-			fn:        cmpOpScalarEQFn,
-		},
-		CmpOp{
-			LeftType:  types.FamCollatedString,
-			RightType: types.FamCollatedString,
-			fn:        cmpOpScalarEQFn,
-		},
-		CmpOp{
-			LeftType:  types.Bytes,
-			RightType: types.Bytes,
-			fn:        cmpOpScalarEQFn,
-		},
-		CmpOp{
-			LeftType:  types.Bool,
-			RightType: types.Bool,
-			fn:        cmpOpScalarEQFn,
-		},
-		CmpOp{
-			LeftType:  types.Int,
-			RightType: types.Int,
-			fn:        cmpOpScalarEQFn,
-		},
-		CmpOp{
-			LeftType:  types.Float,
-			RightType: types.Float,
-			fn:        cmpOpScalarEQFn,
-		},
-		CmpOp{
-			LeftType:  types.Decimal,
-			RightType: types.Decimal,
-			fn:        cmpOpScalarEQFn,
-		},
-		CmpOp{
-			LeftType:  types.Float,
-			RightType: types.Int,
-			fn:        cmpOpScalarEQFn,
-		},
-		CmpOp{
-			LeftType:  types.Int,
-			RightType: types.Float,
-			fn:        cmpOpScalarEQFn,
-		},
-		CmpOp{
-			LeftType:  types.Decimal,
-			RightType: types.Int,
-			fn:        cmpOpScalarEQFn,
-		},
-		CmpOp{
-			LeftType:  types.Int,
-			RightType: types.Decimal,
-			fn:        cmpOpScalarEQFn,
-		},
-		CmpOp{
-			LeftType:  types.Decimal,
-			RightType: types.Float,
-			fn:        cmpOpScalarEQFn,
-		},
-		CmpOp{
-			LeftType:  types.Float,
-			RightType: types.Decimal,
-			fn:        cmpOpScalarEQFn,
-		},
-		CmpOp{
-			LeftType:  types.Date,
-			RightType: types.Date,
-			fn:        cmpOpScalarEQFn,
-		},
-		CmpOp{
-			LeftType:  types.Time,
-			RightType: types.Time,
-			fn:        cmpOpScalarEQFn,
-		},
-		CmpOp{
-			LeftType:  types.Timestamp,
-			RightType: types.Timestamp,
-			fn:        cmpOpScalarEQFn,
-		},
-		CmpOp{
-			LeftType:  types.TimestampTZ,
-			RightType: types.TimestampTZ,
-			fn:        cmpOpScalarEQFn,
-		},
-		CmpOp{
-			LeftType:  types.Timestamp,
-			RightType: types.TimestampTZ,
-			fn:        cmpOpScalarEQFn,
-		},
-		CmpOp{
-			LeftType:  types.TimestampTZ,
-			RightType: types.Timestamp,
-			fn:        cmpOpScalarEQFn,
-		},
-		CmpOp{
-			LeftType:  types.Date,
-			RightType: types.TimestampTZ,
-			fn:        cmpOpScalarEQFn,
-		},
-		CmpOp{
-			LeftType:  types.Date,
-			RightType: types.Timestamp,
-			fn:        cmpOpScalarEQFn,
-		},
-		CmpOp{
-			LeftType:  types.TimestampTZ,
-			RightType: types.Date,
-			fn:        cmpOpScalarEQFn,
-		},
-		CmpOp{
-			LeftType:  types.Timestamp,
-			RightType: types.Date,
-			fn:        cmpOpScalarEQFn,
-		},
-		CmpOp{
-			LeftType:  types.Interval,
-			RightType: types.Interval,
-			fn:        cmpOpScalarEQFn,
-		},
-		CmpOp{
-			LeftType:  types.JSON,
-			RightType: types.JSON,
-			fn:        cmpOpScalarEQFn,
-		},
-		CmpOp{
-			LeftType:  types.UUID,
-			RightType: types.UUID,
-			fn:        cmpOpScalarEQFn,
-		},
-		CmpOp{
-			LeftType:  types.INet,
-			RightType: types.INet,
-			fn:        cmpOpScalarEQFn,
-		},
-		CmpOp{
-			LeftType:  types.Oid,
-			RightType: types.Oid,
-			fn:        cmpOpScalarEQFn,
-		},
+		// Single-type comparisons.
+		makeEqFn(types.Bool),
+		makeEqFn(types.Bytes),
+		makeEqFn(types.Date),
+		makeEqFn(types.Decimal),
+		makeEqFn(types.FamCollatedString),
+		makeEqFn(types.Float),
+		makeEqFn(types.INet),
+		makeEqFn(types.Int),
+		makeEqFn(types.Interval),
+		makeEqFn(types.JSON),
+		makeEqFn(types.Oid),
+		makeEqFn(types.String),
+		makeEqFn(types.Time),
+		makeEqFn(types.Timestamp),
+		makeEqFn(types.TimestampTZ),
+		makeEqFn(types.UUID),
+
+		// Mixed-type comparisons.
+		makeEqFn(types.Date, types.Timestamp),
+		makeEqFn(types.Date, types.TimestampTZ),
+		makeEqFn(types.Decimal, types.Float),
+		makeEqFn(types.Decimal, types.Int),
+		makeEqFn(types.Float, types.Decimal),
+		makeEqFn(types.Float, types.Int),
+		makeEqFn(types.Int, types.Decimal),
+		makeEqFn(types.Int, types.Float),
+		makeEqFn(types.Timestamp, types.Date),
+		makeEqFn(types.Timestamp, types.TimestampTZ),
+		makeEqFn(types.TimestampTZ, types.Date),
+		makeEqFn(types.TimestampTZ, types.Timestamp),
+
+		// Tuple comparison.
 		CmpOp{
 			LeftType:  types.FamTuple,
 			RightType: types.FamTuple,
@@ -1513,136 +1438,37 @@ var CmpOps = map[ComparisonOperator]cmpOpOverload{
 	},
 
 	LT: {
-		CmpOp{
-			LeftType:  types.String,
-			RightType: types.String,
-			fn:        cmpOpScalarLTFn,
-		},
-		CmpOp{
-			LeftType:  types.FamCollatedString,
-			RightType: types.FamCollatedString,
-			fn:        cmpOpScalarLTFn,
-		},
-		CmpOp{
-			LeftType:  types.Bytes,
-			RightType: types.Bytes,
-			fn:        cmpOpScalarLTFn,
-		},
-		CmpOp{
-			LeftType:  types.Bool,
-			RightType: types.Bool,
-			fn:        cmpOpScalarLTFn,
-		},
-		CmpOp{
-			LeftType:  types.Int,
-			RightType: types.Int,
-			fn:        cmpOpScalarLTFn,
-		},
-		CmpOp{
-			LeftType:  types.Float,
-			RightType: types.Float,
-			fn:        cmpOpScalarLTFn,
-		},
-		CmpOp{
-			LeftType:  types.Decimal,
-			RightType: types.Decimal,
-			fn:        cmpOpScalarLTFn,
-		},
-		CmpOp{
-			LeftType:  types.Float,
-			RightType: types.Int,
-			fn:        cmpOpScalarLTFn,
-		},
-		CmpOp{
-			LeftType:  types.Int,
-			RightType: types.Float,
-			fn:        cmpOpScalarLTFn,
-		},
-		CmpOp{
-			LeftType:  types.Decimal,
-			RightType: types.Int,
-			fn:        cmpOpScalarLTFn,
-		},
-		CmpOp{
-			LeftType:  types.Int,
-			RightType: types.Decimal,
-			fn:        cmpOpScalarLTFn,
-		},
-		CmpOp{
-			LeftType:  types.Decimal,
-			RightType: types.Float,
-			fn:        cmpOpScalarLTFn,
-		},
-		CmpOp{
-			LeftType:  types.Float,
-			RightType: types.Decimal,
-			fn:        cmpOpScalarLTFn,
-		},
-		CmpOp{
-			LeftType:  types.Date,
-			RightType: types.Date,
-			fn:        cmpOpScalarLTFn,
-		},
-		CmpOp{
-			LeftType:  types.Time,
-			RightType: types.Time,
-			fn:        cmpOpScalarLTFn,
-		},
-		CmpOp{
-			LeftType:  types.Timestamp,
-			RightType: types.Timestamp,
-			fn:        cmpOpScalarLTFn,
-		},
-		CmpOp{
-			LeftType:  types.TimestampTZ,
-			RightType: types.TimestampTZ,
-			fn:        cmpOpScalarLTFn,
-		},
-		CmpOp{
-			LeftType:  types.Timestamp,
-			RightType: types.TimestampTZ,
-			fn:        cmpOpScalarLTFn,
-		},
-		CmpOp{
-			LeftType:  types.TimestampTZ,
-			RightType: types.Timestamp,
-			fn:        cmpOpScalarLTFn,
-		},
-		CmpOp{
-			LeftType:  types.Date,
-			RightType: types.TimestampTZ,
-			fn:        cmpOpScalarLTFn,
-		},
-		CmpOp{
-			LeftType:  types.Date,
-			RightType: types.Timestamp,
-			fn:        cmpOpScalarLTFn,
-		},
-		CmpOp{
-			LeftType:  types.TimestampTZ,
-			RightType: types.Date,
-			fn:        cmpOpScalarLTFn,
-		},
-		CmpOp{
-			LeftType:  types.Timestamp,
-			RightType: types.Date,
-			fn:        cmpOpScalarLTFn,
-		},
-		CmpOp{
-			LeftType:  types.Interval,
-			RightType: types.Interval,
-			fn:        cmpOpScalarLTFn,
-		},
-		CmpOp{
-			LeftType:  types.UUID,
-			RightType: types.UUID,
-			fn:        cmpOpScalarLTFn,
-		},
-		CmpOp{
-			LeftType:  types.INet,
-			RightType: types.INet,
-			fn:        cmpOpScalarLTFn,
-		},
+		// Single-type comparisons.
+		makeLtFn(types.Bool),
+		makeLtFn(types.Bytes),
+		makeLtFn(types.Date),
+		makeLtFn(types.Decimal),
+		makeLtFn(types.FamCollatedString),
+		makeLtFn(types.Float),
+		makeLtFn(types.INet),
+		makeLtFn(types.Int),
+		makeLtFn(types.Interval),
+		makeLtFn(types.String),
+		makeLtFn(types.Time),
+		makeLtFn(types.Timestamp),
+		makeLtFn(types.TimestampTZ),
+		makeLtFn(types.UUID),
+
+		// Mixed-type comparisons.
+		makeLtFn(types.Date, types.Timestamp),
+		makeLtFn(types.Date, types.TimestampTZ),
+		makeLtFn(types.Decimal, types.Float),
+		makeLtFn(types.Decimal, types.Int),
+		makeLtFn(types.Float, types.Decimal),
+		makeLtFn(types.Float, types.Int),
+		makeLtFn(types.Int, types.Decimal),
+		makeLtFn(types.Int, types.Float),
+		makeLtFn(types.Timestamp, types.Date),
+		makeLtFn(types.Timestamp, types.TimestampTZ),
+		makeLtFn(types.TimestampTZ, types.Date),
+		makeLtFn(types.TimestampTZ, types.Timestamp),
+
+		// Tuple comparison.
 		CmpOp{
 			LeftType:  types.FamTuple,
 			RightType: types.FamTuple,
@@ -1653,136 +1479,37 @@ var CmpOps = map[ComparisonOperator]cmpOpOverload{
 	},
 
 	LE: {
-		CmpOp{
-			LeftType:  types.String,
-			RightType: types.String,
-			fn:        cmpOpScalarLEFn,
-		},
-		CmpOp{
-			LeftType:  types.FamCollatedString,
-			RightType: types.FamCollatedString,
-			fn:        cmpOpScalarLEFn,
-		},
-		CmpOp{
-			LeftType:  types.Bytes,
-			RightType: types.Bytes,
-			fn:        cmpOpScalarLEFn,
-		},
-		CmpOp{
-			LeftType:  types.Bool,
-			RightType: types.Bool,
-			fn:        cmpOpScalarLEFn,
-		},
-		CmpOp{
-			LeftType:  types.Int,
-			RightType: types.Int,
-			fn:        cmpOpScalarLEFn,
-		},
-		CmpOp{
-			LeftType:  types.Float,
-			RightType: types.Float,
-			fn:        cmpOpScalarLEFn,
-		},
-		CmpOp{
-			LeftType:  types.Decimal,
-			RightType: types.Decimal,
-			fn:        cmpOpScalarLEFn,
-		},
-		CmpOp{
-			LeftType:  types.Float,
-			RightType: types.Int,
-			fn:        cmpOpScalarLEFn,
-		},
-		CmpOp{
-			LeftType:  types.Int,
-			RightType: types.Float,
-			fn:        cmpOpScalarLEFn,
-		},
-		CmpOp{
-			LeftType:  types.Decimal,
-			RightType: types.Int,
-			fn:        cmpOpScalarLEFn,
-		},
-		CmpOp{
-			LeftType:  types.Int,
-			RightType: types.Decimal,
-			fn:        cmpOpScalarLEFn,
-		},
-		CmpOp{
-			LeftType:  types.Decimal,
-			RightType: types.Float,
-			fn:        cmpOpScalarLEFn,
-		},
-		CmpOp{
-			LeftType:  types.Float,
-			RightType: types.Decimal,
-			fn:        cmpOpScalarLEFn,
-		},
-		CmpOp{
-			LeftType:  types.Date,
-			RightType: types.Date,
-			fn:        cmpOpScalarLEFn,
-		},
-		CmpOp{
-			LeftType:  types.Time,
-			RightType: types.Time,
-			fn:        cmpOpScalarLEFn,
-		},
-		CmpOp{
-			LeftType:  types.Timestamp,
-			RightType: types.Timestamp,
-			fn:        cmpOpScalarLEFn,
-		},
-		CmpOp{
-			LeftType:  types.TimestampTZ,
-			RightType: types.TimestampTZ,
-			fn:        cmpOpScalarLEFn,
-		},
-		CmpOp{
-			LeftType:  types.TimestampTZ,
-			RightType: types.Timestamp,
-			fn:        cmpOpScalarLEFn,
-		},
-		CmpOp{
-			LeftType:  types.Timestamp,
-			RightType: types.TimestampTZ,
-			fn:        cmpOpScalarLEFn,
-		},
-		CmpOp{
-			LeftType:  types.Date,
-			RightType: types.TimestampTZ,
-			fn:        cmpOpScalarLEFn,
-		},
-		CmpOp{
-			LeftType:  types.Date,
-			RightType: types.Timestamp,
-			fn:        cmpOpScalarLEFn,
-		},
-		CmpOp{
-			LeftType:  types.TimestampTZ,
-			RightType: types.Date,
-			fn:        cmpOpScalarLEFn,
-		},
-		CmpOp{
-			LeftType:  types.Timestamp,
-			RightType: types.Date,
-			fn:        cmpOpScalarLEFn,
-		},
-		CmpOp{
-			LeftType:  types.Interval,
-			RightType: types.Interval,
-			fn:        cmpOpScalarLEFn,
-		},
-		CmpOp{
-			LeftType:  types.UUID,
-			RightType: types.UUID,
-			fn:        cmpOpScalarLEFn,
-		},
-		CmpOp{
-			LeftType:  types.INet,
-			RightType: types.INet,
-			fn:        cmpOpScalarLEFn,
-		},
+		// Single-type comparisons.
+		makeLeFn(types.Bool),
+		makeLeFn(types.Bytes),
+		makeLeFn(types.Date),
+		makeLeFn(types.Decimal),
+		makeLeFn(types.FamCollatedString),
+		makeLeFn(types.Float),
+		makeLeFn(types.INet),
+		makeLeFn(types.Int),
+		makeLeFn(types.Interval),
+		makeLeFn(types.String),
+		makeLeFn(types.Time),
+		makeLeFn(types.Timestamp),
+		makeLeFn(types.TimestampTZ),
+		makeLeFn(types.UUID),
+
+		// Mixed-type comparisons.
+		makeLeFn(types.Date, types.Timestamp),
+		makeLeFn(types.Date, types.TimestampTZ),
+		makeLeFn(types.Decimal, types.Float),
+		makeLeFn(types.Decimal, types.Int),
+		makeLeFn(types.Float, types.Decimal),
+		makeLeFn(types.Float, types.Int),
+		makeLeFn(types.Int, types.Decimal),
+		makeLeFn(types.Int, types.Float),
+		makeLeFn(types.Timestamp, types.Date),
+		makeLeFn(types.Timestamp, types.TimestampTZ),
+		makeLeFn(types.TimestampTZ, types.Date),
+		makeLeFn(types.TimestampTZ, types.Timestamp),
+
+		// Tuple comparison.
 		CmpOp{
 			LeftType:  types.FamTuple,
 			RightType: types.FamTuple,
@@ -1794,22 +1521,22 @@ var CmpOps = map[ComparisonOperator]cmpOpOverload{
 
 	In: {
 		makeEvalTupleIn(types.Bool),
-		makeEvalTupleIn(types.Int),
-		makeEvalTupleIn(types.Float),
-		makeEvalTupleIn(types.Decimal),
-		makeEvalTupleIn(types.String),
-		makeEvalTupleIn(types.FamCollatedString),
 		makeEvalTupleIn(types.Bytes),
 		makeEvalTupleIn(types.Date),
+		makeEvalTupleIn(types.Decimal),
+		makeEvalTupleIn(types.FamCollatedString),
+		makeEvalTupleIn(types.FamTuple),
+		makeEvalTupleIn(types.Float),
+		makeEvalTupleIn(types.INet),
+		makeEvalTupleIn(types.Int),
+		makeEvalTupleIn(types.Interval),
+		makeEvalTupleIn(types.JSON),
+		makeEvalTupleIn(types.Oid),
+		makeEvalTupleIn(types.String),
 		makeEvalTupleIn(types.Time),
 		makeEvalTupleIn(types.Timestamp),
 		makeEvalTupleIn(types.TimestampTZ),
-		makeEvalTupleIn(types.Interval),
-		makeEvalTupleIn(types.JSON),
 		makeEvalTupleIn(types.UUID),
-		makeEvalTupleIn(types.INet),
-		makeEvalTupleIn(types.FamTuple),
-		makeEvalTupleIn(types.Oid),
 	},
 
 	Like: {
