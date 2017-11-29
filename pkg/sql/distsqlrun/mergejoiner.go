@@ -69,6 +69,7 @@ func newMergeJoiner(
 		rightSource,
 		convertToColumnOrdering(spec.RightOrdering),
 		output, /*metadataSync*/
+		spec.NullEquality,
 	)
 	if err != nil {
 		return nil, err

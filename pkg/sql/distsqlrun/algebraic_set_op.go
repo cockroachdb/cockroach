@@ -158,6 +158,7 @@ func (e *algebraicSetOp) exceptAll(ctx context.Context) error {
 			e.types,
 			leftRows[0], rightRows[0],
 			convertToColumnOrdering(e.ordering), convertToColumnOrdering(e.ordering),
+			false, /* nullEquality */
 			e.datumAlloc,
 		)
 		if err != nil {

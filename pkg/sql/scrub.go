@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 type scrubNode struct {
@@ -366,8 +367,7 @@ func (o *indexCheckOperation) Start(ctx context.Context, p *planner) error {
 		return err
 	}
 
-	checkQuery := createIndexCheckQuery(columnNames,
-		o.tableDesc.PrimaryIndex.ColumnNames, o.tableName, o.indexDesc.ID)
+	checkQuery := createIndexCheckQuery(columnNames, o.tableDesc, o.tableName, o.indexDesc)
 	plan, err := p.delegateQuery(ctx, "SCRUB TABLE ... WITH OPTIONS INDEX", checkQuery, nil, nil)
 	if err != nil {
 		return err
@@ -390,10 +390,35 @@ func (o *indexCheckOperation) Start(ctx context.Context, p *planner) error {
 	}
 	defer plan.Close(ctx)
 
-	rows, err := scrubPlanAndRunDistSQL(ctx, p, plan, columnTypes)
+	planCtx := p.session.distSQLPlanner.newPlanningCtx(ctx, &p.evalCtx, p.txn)
+	physPlan, err := scrubPlanDistSQL(ctx, &planCtx, p, plan)
+	if err != nil {
+		return err
+	}
+
+	// Set NullEquality to true on all MergeJoinerSpecs. This changes the
+	// behavior of the query's equality semantics in the ON predicate. The
+	// equalities will now evaluate NULL = NULL to true, which is what we
+	// desire when testing the equivilance of two index entries. There
+	// might be multiple merge joiners (with hash-routing).
+	var foundMergeJoiner bool
+	for i := range physPlan.Processors {
+		if physPlan.Processors[i].Spec.Core.MergeJoiner != nil {
+			physPlan.Processors[i].Spec.Core.MergeJoiner.NullEquality = true
+			foundMergeJoiner = true
+		}
+	}
+	if !foundMergeJoiner {
+		return errors.Errorf("could not find MergeJoinerSpec in plan")
+	}
+
+	rows, err := scrubRunDistSQL(ctx, &planCtx, p, physPlan, columnTypes)
 	if err != nil {
 		rows.Close(ctx)
 		return err
+	} else if rows.Len() == 0 {
+		rows.Close(ctx)
+		rows = nil
 	}
 
 	o.run.started = true
@@ -517,15 +542,10 @@ func tableColumnsIsNullPredicate(tableName string, columns []string, isNull bool
 }
 
 // tableColumnsEQ creates a predicate that checks if all of the
-// specified columns for two tables are equal. This predicate also needs
-// NULL checks to work around the equivilancy of NULL = NULL. For
-// example, given tables t1, t2 and the columns id, name, then the
-// returned string is:
+// specified columns for two tables are equal. For example, given tables
+// t1, t2 and the columns id, name, then the returned string is:
 //
-//   ((t1.id IS NOT NULL AND t2.id IS NOT NULL AND t1.id = t2.id) OR
-//    (t1.id IS NULL AND t2.id IS NULL)) AND
-//   ((t1.name IS NOT NULL AND t2.name IS NOT NULL AND t1.name = t2.name) OR
-//    (t1.name IS NULL AND t2.name IS NULL))
+//   t1.id = t2.id AND t1.name = t2.name
 //
 func tableColumnsEQ(tableName string, otherTableName string, columns []string) string {
 	var buf bytes.Buffer
@@ -533,10 +553,7 @@ func tableColumnsEQ(tableName string, otherTableName string, columns []string) s
 		if i > 0 {
 			buf.WriteString(" AND ")
 		}
-		fmt.Fprintf(&buf, `
-			((%[1]s.%[3]s IS NOT NULL AND %[2]s.%[3]s IS NOT NULL AND %[1]s.%[3]s = %[2]s.%[3]s) OR
-			 (%[1]s.%[3]s IS NULL AND %[2]s.%[3]s IS NULL))`,
-			tableName, otherTableName, col)
+		fmt.Fprintf(&buf, `%[1]s.%[3]s = %[2]s.%[3]s`, tableName, otherTableName, col)
 	}
 	return buf.String()
 }
@@ -570,29 +587,32 @@ func tableColumnsProjection(tableName string, columns []string) string {
 //
 // The generated query to check the `v_idx` will be:
 //
-//   SELECT left.k, left.s, left.v, right.k, right.s. right.v
+//   SELECT left.k, left.s, left.v, right.k, right.s, right.v
 //   FROM
-//     test@{NO_INDEX_JOIN} as left
+//     (SELECT * FROM test@{NO_INDEX_JOIN} AS left ORDER BY k, s, v)
 //   FULL OUTER JOIN
-//     test@{FORCE_INDEX=v_idx,NO_INDEX_JOIN} as right
+//     (SELECT * FROM test@{FORCE_INDEX=v_idx,NO_INDEX_JOIN} AS right ORDER BY k, s, v)
 //   ON
-//      ((left.k IS NOT NULL AND right.k IS NOT NULL AND left.k = right.k) OR
-//       (left.k IS NULL AND right.k IS NULL)) AND
-//      ((left.s IS NOT NULL AND right.s IS NOT NULL AND left.s = right.s) OR
-//       (left.s IS NULL AND right.s IS NULL)) AND
-//      ((left.v IS NOT NULL AND right.v IS NOT NULL AND left.v = right.v) OR
-//       (left.v IS NULL AND right.v IS NULL))
+//      left.k = right.k AND
+//      left.s = right.s AND
+//      left.v = right.v AND
 //   WHERE (left.k  IS NULL AND left.s  IS NULL) OR
 //         (right.k IS NULL AND right.s IS NULL)
 //
 // In short, this query is:
 // 1) Scanning the primary index and the secondary index.
-// 2) Joining them on all of the secondary index columns and extra
-//    columns that are equivalent. This is a fairly verbose check due to
-//    equivilancy properties when involving NULLs.
-// 3) Filtering to achieve an anti-join. The first line of the predicate
-//    takes rows on the right for the anti-join. The second line of the
-//    predicate takes rows on the left for the anti-join.
+// 2) Ordering both of them by the primary then secondary index columns.
+//    This is done to force a distSQL merge join.
+// 3) Joining both sides on all of the columns contained by the secondary
+//    index key-value pairs. NB: The distSQL plan generated from this
+//    query is toggled to make NULL = NULL evaluate to true using the
+//    MergeJoinerSpec.NullEquality flag. Otherwise, we would need an ON
+//    predicate which uses hash join and is extremely slow.
+// 4) Filtering to achieve an anti-join. It looks for when the primary
+//    index values are null, as they are non-nullable columns. The first
+//    line of the predicate takes rows on the right for the anti-join.
+//    The second line of the predicate takes rows on the left for the
+//    anti-join.
 //
 // Because this is an anti-join, the results are as follows:
 // - If any primary index column on the left is NULL, that means the
@@ -604,28 +624,32 @@ func tableColumnsProjection(tableName string, columns []string) string {
 // simplified, as the the WHERE clause can be completely dropped.
 func createIndexCheckQuery(
 	columnNames []string,
-	primaryKeyColumnNames []string,
+	tableDesc *sqlbase.TableDescriptor,
 	tableName *tree.TableName,
-	indexID sqlbase.IndexID,
+	indexDesc *sqlbase.IndexDescriptor,
 ) string {
+	// We need to make sure we can handle the non-public column `rowid`
+	// that is created for implicit primary keys. In order to do so, the
+	// rendered columns need to explicit in the inner selects.
 	const checkIndexQuery = `
 				SELECT %[1]s, %[2]s
 				FROM
-					%[3]s@{NO_INDEX_JOIN} as leftside
+					(SELECT %[9]s FROM %[3]s@{FORCE_INDEX=[1],NO_INDEX_JOIN} ORDER BY %[5]s) AS leftside
 				FULL OUTER JOIN
-					%[3]s@{FORCE_INDEX=[%[4]d],NO_INDEX_JOIN} as rightside
-					ON %[5]s
-        WHERE (%[6]s) OR
-              (%[7]s)`
-
+					(SELECT %[9]s FROM %[3]s@{FORCE_INDEX=[%[4]d],NO_INDEX_JOIN} ORDER BY %[5]s) AS rightside
+					ON %[6]s
+				WHERE (%[7]s) OR
+							(%[8]s)`
 	return fmt.Sprintf(checkIndexQuery,
-		tableColumnsProjection("leftside", columnNames),
-		tableColumnsProjection("rightside", columnNames),
-		tableName.String(),
-		indexID,
-		tableColumnsEQ("leftside", "rightside", columnNames),
-		tableColumnsIsNullPredicate("leftside", primaryKeyColumnNames, true /* isNull */),
-		tableColumnsIsNullPredicate("rightside", primaryKeyColumnNames, true /* isNull */),
+		tableColumnsProjection("leftside", columnNames),                                                 // 1
+		tableColumnsProjection("rightside", columnNames),                                                // 2
+		tableName.String(),                                                                              // 3
+		indexDesc.ID,                                                                                    // 4
+		strings.Join(columnNames, ","),                                                                  // 5
+		tableColumnsEQ("leftside", "rightside", columnNames),                                            // 6
+		tableColumnsIsNullPredicate("leftside", tableDesc.PrimaryIndex.ColumnNames, true /* isNull */),  // 7
+		tableColumnsIsNullPredicate("rightside", tableDesc.PrimaryIndex.ColumnNames, true /* isNull */), // 8
+		strings.Join(columnNames, ","),                                                                  // 9
 	)
 }
 
@@ -680,10 +704,28 @@ func createIndexCheckOperations(
 	return results, nil
 }
 
-// scrubPlanAndRunDistSQL will prepare and run the plan in distSQL. If a
+// scrubPlanDistSQL will prepare and run the plan in distSQL.
+func scrubPlanDistSQL(
+	ctx context.Context, planCtx *planningCtx, p *planner, plan planNode,
+) (*physicalPlan, error) {
+	log.VEvent(ctx, 1, "creating DistSQL plan")
+	physPlan, err := p.session.distSQLPlanner.createPlanForNode(planCtx, plan)
+	if err != nil {
+		return nil, err
+	}
+	p.session.distSQLPlanner.FinalizePlan(planCtx, &physPlan)
+
+	return &physPlan, err
+}
+
+// scrubRunDistSQL run a distSQLPhysicalPlan plan in distSQL. If a
 // RowContainer is returned the caller must close it.
-func scrubPlanAndRunDistSQL(
-	ctx context.Context, p *planner, plan planNode, columnTypes []sqlbase.ColumnType,
+func scrubRunDistSQL(
+	ctx context.Context,
+	planCtx *planningCtx,
+	p *planner,
+	plan *physicalPlan,
+	columnTypes []sqlbase.ColumnType,
 ) (*sqlbase.RowContainer, error) {
 	ci := sqlbase.ColTypeInfoFromColTypes(columnTypes)
 	rows := sqlbase.NewRowContainer(*p.evalCtx.ActiveMemAcc, ci, 0)
@@ -702,16 +744,10 @@ func scrubPlanAndRunDistSQL(
 		return rows, err
 	}
 
-	err = p.session.distSQLPlanner.PlanAndRun(ctx, p.txn, plan, &recv, p.evalCtx)
-	if err != nil {
+	if err := p.session.distSQLPlanner.Run(planCtx, p.txn, plan, &recv, p.evalCtx); err != nil {
 		return rows, err
 	} else if recv.err != nil {
 		return rows, recv.err
-	}
-
-	if rows.Len() == 0 {
-		rows.Close(ctx)
-		return nil, nil
 	}
 
 	return rows, nil

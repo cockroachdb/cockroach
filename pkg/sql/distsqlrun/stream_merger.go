@@ -26,9 +26,13 @@ import (
 // batches of rows that are the cross-product of matching groups from each
 // stream.
 type streamMerger struct {
-	left       streamGroupAccumulator
-	right      streamGroupAccumulator
-	datumAlloc sqlbase.DatumAlloc
+	left  streamGroupAccumulator
+	right streamGroupAccumulator
+	// nulLEquality indicates when NULL = NULL is truth-y. This is helpful
+	// when we want NULL to be meaningful during equality, for example
+	// during SCRUB secondary index checks.
+	nullEquality bool
+	datumAlloc   sqlbase.DatumAlloc
 }
 
 // NextBatch returns a set of rows from the left stream and a set of rows from
@@ -48,7 +52,7 @@ func (sm *streamMerger) NextBatch() ([]sqlbase.EncDatumRow, []sqlbase.EncDatumRo
 	}
 
 	cmp, err := CompareEncDatumRowForMerge(
-		sm.left.types, lrow, rrow, sm.left.ordering, sm.right.ordering, &sm.datumAlloc,
+		sm.left.types, lrow, rrow, sm.left.ordering, sm.right.ordering, sm.nullEquality, &sm.datumAlloc,
 	)
 	if err != nil {
 		return nil, nil, err
@@ -83,6 +87,7 @@ func CompareEncDatumRowForMerge(
 	lhsTypes []sqlbase.ColumnType,
 	lhs, rhs sqlbase.EncDatumRow,
 	leftOrdering, rightOrdering sqlbase.ColumnOrdering,
+	nullEquality bool,
 	da *sqlbase.DatumAlloc,
 ) (int, error) {
 	if lhs == nil && rhs == nil {
@@ -108,10 +113,14 @@ func CompareEncDatumRowForMerge(
 		rIdx := rightOrdering[i].ColIdx
 		// If both datums are NULL, we need to follow SQL semantics where
 		// they are not equal. This differs from our datum semantics where
-		// they are equal.
+		// they are equal. In the case where we want to consider NULLs to be
+		// equal, we continue and skip to the next datums in the row.
 		if lhs[lIdx].IsNull() && rhs[rIdx].IsNull() {
-			// We can return either -1 or 1, it does not change the behavior.
-			return -1, nil
+			if !nullEquality {
+				// We can return either -1 or 1, it does not change the behavior.
+				return -1, nil
+			}
+			continue
 		}
 		cmp, err := lhs[lIdx].Compare(&lhsTypes[lIdx], da, evalCtx, &rhs[rIdx])
 		if err != nil {
@@ -137,6 +146,7 @@ func makeStreamMerger(
 	rightSource RowSource,
 	rightOrdering sqlbase.ColumnOrdering,
 	metadataSink RowReceiver,
+	nullEquality bool,
 ) (streamMerger, error) {
 	if len(leftOrdering) != len(rightOrdering) {
 		return streamMerger{}, errors.Errorf(
@@ -155,5 +165,6 @@ func makeStreamMerger(
 		right: makeStreamGroupAccumulator(
 			MakeNoMetadataRowSource(rightSource, metadataSink),
 			rightOrdering),
+		nullEquality: nullEquality,
 	}, nil
 }

@@ -1575,8 +1575,7 @@ func (dsp *DistSQLPlanner) createPlanForJoin(
 		for i, rightPlanCol := range n.pred.rightEqualityIndices {
 			rightEqCols[i] = uint32(rightPlan.planToStreamColMap[rightPlanCol])
 		}
-		if planMergeJoins.Get(&dsp.st.SV) && len(n.mergeJoinOrdering) > 0 &&
-			joinType == distsqlrun.JoinType_INNER {
+		if planMergeJoins.Get(&dsp.st.SV) && len(n.mergeJoinOrdering) > 0 {
 			// TODO(radu): we currently only use merge joins when we have an ordering on
 			// all equality columns. We should relax this by either:
 			//  - implementing a hybrid hash/merge processor which implements merge
