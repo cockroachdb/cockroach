@@ -114,7 +114,7 @@
   branch = "master"
   name = "github.com/axiomhq/hyperloglog"
   packages = ["."]
-  revision = "730eea1500d5c665305c6717138f62f269c2bf79"
+  revision = "8300947202c9fbce15a5a299b27c8b0f5092a520"
 
 [[projects]]
   branch = "master"
@@ -851,6 +851,6 @@
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "5f57e78f95e9fa88c5f4069ebdc6abba51e480d57b8b0808ad283378c8d845e1"
+  inputs-digest = "8ea144c4623e41d6a1c397f5c65dec44bd7e13fbe42134469d90eac4b318d383"
   solver-name = "gps-cdcl"
   solver-version = 1
