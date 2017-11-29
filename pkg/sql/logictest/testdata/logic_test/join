@@ -1718,3 +1718,152 @@ NULL  NULL  NULL  3  1  31
 NULL  NULL  NULL  3  3  33
 NULL  NULL  NULL  5  5  55
 NULL  NULL  NULL  2  2  2
+
+
+# Test OUTER joins that are run in the distSQL merge joiner
+
+query ITTTTT
+EXPLAIN (VERBOSE) SELECT * FROM (SELECT * FROM xyu ORDER BY x, y) AS xyu LEFT OUTER JOIN (SELECT * FROM xyv ORDER BY x, y) AS xyv USING(x, y) WHERE x > 2
+----
+0  render  ·               ·                  (x, y, u, v)                          ·
+0  ·       render 0        xyu.x              ·                                     ·
+0  ·       render 1        xyu.y              ·                                     ·
+0  ·       render 2        xyu.u              ·                                     ·
+0  ·       render 3        xyv.v              ·                                     ·
+1  join    ·               ·                  (x, y, u, x[omitted], y[omitted], v)  ·
+1  ·       type            left outer         ·                                     ·
+1  ·       equality        (x, y) = (x, y)    ·                                     ·
+1  ·       mergeJoinOrder  +"(x=x)",+"(y=y)"  ·                                     ·
+2  scan    ·               ·                  (x, y, u)                             x!=NULL; y!=NULL; u!=NULL; key(x,y,u); +x,+y
+2  ·       table           xyu@primary        ·                                     ·
+2  ·       spans           /3-                ·                                     ·
+2  scan    ·               ·                  (x, y, v)                             x!=NULL; y!=NULL; v!=NULL; key(x,y,v); +x,+y
+2  ·       table           xyv@primary        ·                                     ·
+2  ·       spans           ALL                ·                                     ·
+
+query IIII rowsort
+SELECT * FROM (SELECT * FROM xyu ORDER BY x, y) AS xyu LEFT OUTER JOIN (SELECT * FROM xyv ORDER BY x, y) AS xyv USING(x, y) WHERE x > 2
+----
+3  1  31  31
+3  2  32  NULL
+4  4  44  NULL
+
+query ITTTTT
+EXPLAIN (VERBOSE) SELECT * FROM (SELECT * FROM xyu ORDER BY x, y) AS xyu RIGHT OUTER JOIN (SELECT * FROM xyv ORDER BY x, y) AS xyv USING(x, y) WHERE x > 2
+----
+0  render  ·               ·                  (x, y, u, v)                                        ·
+0  ·       render 0        xyv.x              ·                                                   ·
+0  ·       render 1        xyv.y              ·                                                   ·
+0  ·       render 2        xyu.u              ·                                                   ·
+0  ·       render 3        xyv.v              ·                                                   ·
+1  render  ·               ·                  (x, y, x[hidden,omitted], y[hidden,omitted], u, v)  ·
+1  ·       render 0        xyv.x              ·                                                   ·
+1  ·       render 1        xyv.y              ·                                                   ·
+1  ·       render 2        NULL               ·                                                   ·
+1  ·       render 3        NULL               ·                                                   ·
+1  ·       render 4        xyu.u              ·                                                   ·
+1  ·       render 5        xyv.v              ·                                                   ·
+2  join    ·               ·                  (x[omitted], y[omitted], u, x, y, v)                ·
+2  ·       type            right outer        ·                                                   ·
+2  ·       equality        (x, y) = (x, y)    ·                                                   ·
+2  ·       mergeJoinOrder  +"(x=x)",+"(y=y)"  ·                                                   ·
+3  scan    ·               ·                  (x, y, u)                                           x!=NULL; y!=NULL; u!=NULL; key(x,y,u); +x,+y
+3  ·       table           xyu@primary        ·                                                   ·
+3  ·       spans           ALL                ·                                                   ·
+3  scan    ·               ·                  (x, y, v)                                           x!=NULL; y!=NULL; v!=NULL; key(x,y,v); +x,+y
+3  ·       table           xyv@primary        ·                                                   ·
+3  ·       spans           /3-                ·                                                   ·
+
+query IIII rowsort
+SELECT * FROM (SELECT * FROM xyu ORDER BY x, y) AS xyu RIGHT OUTER JOIN (SELECT * FROM xyv ORDER BY x, y) AS xyv USING(x, y) WHERE x > 2
+----
+3  1  31    31
+3  3  NULL  33
+5  5  NULL  55
+
+query ITTTTT
+EXPLAIN (VERBOSE) SELECT * FROM (SELECT * FROM xyu ORDER BY x, y) AS xyu FULL OUTER JOIN (SELECT * FROM xyv ORDER BY x, y) AS xyv USING(x, y) WHERE x > 2
+----
+0  render  ·               ·                     (x, y, u, v)                                                                              x!=NULL
+0  ·       render 0        x                     ·                                                                                         ·
+0  ·       render 1        y                     ·                                                                                         ·
+0  ·       render 2        xyu.u                 ·                                                                                         ·
+0  ·       render 3        xyv.v                 ·                                                                                         ·
+1  filter  ·               ·                     (x, y, x[hidden,omitted], y[hidden,omitted], u, x[hidden,omitted], y[hidden,omitted], v)  x!=NULL
+1  ·       filter          x > 2                 ·                                                                                         ·
+2  render  ·               ·                     (x, y, x[hidden,omitted], y[hidden,omitted], u, x[hidden,omitted], y[hidden,omitted], v)  ·
+2  ·       render 0        IFNULL(xyu.x, xyv.x)  ·                                                                                         ·
+2  ·       render 1        IFNULL(xyu.y, xyv.y)  ·                                                                                         ·
+2  ·       render 2        NULL                  ·                                                                                         ·
+2  ·       render 3        NULL                  ·                                                                                         ·
+2  ·       render 4        xyu.u                 ·                                                                                         ·
+2  ·       render 5        NULL                  ·                                                                                         ·
+2  ·       render 6        NULL                  ·                                                                                         ·
+2  ·       render 7        xyv.v                 ·                                                                                         ·
+3  join    ·               ·                     (x, y, u, x, y, v)                                                                        ·
+3  ·       type            full outer            ·                                                                                         ·
+3  ·       equality        (x, y) = (x, y)       ·                                                                                         ·
+3  ·       mergeJoinOrder  +"(x=x)",+"(y=y)"     ·                                                                                         ·
+4  scan    ·               ·                     (x, y, u)                                                                                 x!=NULL; y!=NULL; u!=NULL; key(x,y,u); +x,+y
+4  ·       table           xyu@primary           ·                                                                                         ·
+4  ·       spans           ALL                   ·                                                                                         ·
+4  scan    ·               ·                     (x, y, v)                                                                                 x!=NULL; y!=NULL; v!=NULL; key(x,y,v); +x,+y
+4  ·       table           xyv@primary           ·                                                                                         ·
+4  ·       spans           ALL                   ·                                                                                         ·
+
+query IIII rowsort
+SELECT * FROM (SELECT * FROM xyu ORDER BY x, y) AS xyu FULL OUTER JOIN (SELECT * FROM xyv ORDER BY x, y) AS xyv USING(x, y) WHERE x > 2
+----
+3  1  31    31
+3  2  32    NULL
+4  4  44    NULL
+3  3  NULL  33
+5  5  NULL  55
+
+query ITTTTT
+EXPLAIN (VERBOSE) SELECT * FROM (SELECT * FROM xyu ORDER BY x, y) AS xyu LEFT OUTER JOIN (SELECT * FROM xyv ORDER BY x, y) AS xyv ON xyu.x = xyv.x AND xyu.y = xyv.y AND xyu.x = 1 AND xyu.y < 10
+----
+0  join  ·               ·                             (x, y, u, x, y, v)  ·
+0  ·     type            left outer                    ·                   ·
+0  ·     equality        (x, y) = (x, y)               ·                   ·
+0  ·     mergeJoinOrder  +"(x=x)",+"(y=y)"             ·                   ·
+0  ·     pred            (xyu.x = 1) AND (xyu.y < 10)  ·                   ·
+1  scan  ·               ·                             (x, y, u)           x!=NULL; y!=NULL; u!=NULL; key(x,y,u); +x,+y
+1  ·     table           xyu@primary                   ·                   ·
+1  ·     spans           ALL                           ·                   ·
+1  scan  ·               ·                             (x, y, v)           x=CONST; y!=NULL; v!=NULL; key(y,v); +y
+1  ·     table           xyv@primary                   ·                   ·
+1  ·     spans           /1/#-/1/10                    ·                   ·
+
+query IIIIII rowsort
+SELECT * FROM (SELECT * FROM xyu ORDER BY x, y) AS xyu LEFT OUTER JOIN (SELECT * FROM xyv ORDER BY x, y) AS xyv ON xyu.x = xyv.x AND xyu.y = xyv.y AND xyu.x = 1 AND xyu.y < 10
+----
+0  0  0   NULL  NULL  NULL
+1  1  1   1     1     1
+3  1  31  NULL  NULL  NULL
+3  2  32  NULL  NULL  NULL
+4  4  44  NULL  NULL  NULL
+
+query ITTTTT
+EXPLAIN (VERBOSE) SELECT * FROM xyu RIGHT OUTER JOIN (SELECT * FROM xyv ORDER BY x, y) AS xyv ON xyu.x = xyv.x AND xyu.y = xyv.y AND xyu.x = 1 AND xyu.y < 10
+----
+0  join  ·               ·                             (x, y, u, x, y, v)  ·
+0  ·     type            right outer                   ·                   ·
+0  ·     equality        (x, y) = (x, y)               ·                   ·
+0  ·     mergeJoinOrder  +"(x=x)",+"(y=y)"             ·                   ·
+0  ·     pred            (xyv.x = 1) AND (xyv.y < 10)  ·                   ·
+1  scan  ·               ·                             (x, y, u)           x=CONST; y!=NULL; u!=NULL; key(y,u); +y
+1  ·     table           xyu@primary                   ·                   ·
+1  ·     spans           /1/#-/1/10                    ·                   ·
+1  scan  ·               ·                             (x, y, v)           x!=NULL; y!=NULL; v!=NULL; key(x,y,v); +x,+y
+1  ·     table           xyv@primary                   ·                   ·
+1  ·     spans           ALL                           ·                   ·
+
+query IIIIII rowsort
+SELECT * FROM xyu RIGHT OUTER JOIN (SELECT * FROM xyv ORDER BY x, y) AS xyv ON xyu.x = xyv.x AND xyu.y = xyv.y AND xyu.x = 1 AND xyu.y < 10
+----
+1     1     1     1  1  1
+NULL  NULL  NULL  3  1  31
+NULL  NULL  NULL  3  3  33
+NULL  NULL  NULL  5  5  55
+NULL  NULL  NULL  2  2  2

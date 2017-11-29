@@ -1,0 +1,19 @@
+# LogicTest: 5node-distsql 5node-distsql-disk
+
+statement ok
+CREATE TABLE test (k INT PRIMARY KEY, v INT, data INT, INDEX secondary (v) STORING (data))
+
+# Verify the index check execution plan
+query T
+SELECT "URL" FROM [EXPLAIN (DISTSQL)
+    SELECT leftside.v, leftside.k, leftside.data, rightside.v, rightside.k, rightside.data
+    FROM
+      (SELECT v,k,data FROM test@{FORCE_INDEX=[1],NO_INDEX_JOIN} ORDER BY v,k,data) AS leftside
+    FULL OUTER JOIN
+      (SELECT v,k,data FROM test@{FORCE_INDEX=[2],NO_INDEX_JOIN} ORDER BY v,k,data) AS rightside
+      ON leftside.v = rightside.v AND leftside.k = rightside.k AND leftside.data = rightside.data
+    WHERE (leftside.k IS NULL) OR
+          (rightside.k IS NULL)
+]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html?eJyskE1r4zAQhu_7K8ScEjKHyB97ECzotJAlmyzJ9lR8cK2pY3AkI8nQEvLfi23Ih4ndGnqckZ55Zt4TaKNokx7JgXgGDglCZU1GzhnbtLoPK_UGYolQ6Kr2TTtByIwlECfwhS8JBPxPX0raUarIAoIinxZlO7SyxTG179KT84Cwrb1gMkDJUYaQnBFM7a9jnU9zAsHP-HX13ljft0q-QBksUIaLQUkwRTJ4n6PMaDX5wvA7L0Q4pj47sJK0YMGgMxp0XlW1NlaRJXVnSxrysy8PFv9LNqc_ptD97Ut69bObE-a_bJEf7luA8LsoPVnBZjJgqz3bPK3Xc7bdsZmML_Ulco5N6iHKCGWM8udgDvGU7HfkKqMd9fN4OHnZhEAqpy5UZ2qb0T9rslbTlduWaxuKnO9eeVesdPfULHgL81E4uoN5Hw5G4XDcHE4wB304GoXjnjk5__gIAAD__3Zdd7U=
