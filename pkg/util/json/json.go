@@ -163,17 +163,25 @@ func (j jsonNull) Compare(other JSON) (int, error)  { return cmpJSONTypes(j.Type
 func (j jsonFalse) Compare(other JSON) (int, error) { return cmpJSONTypes(j.Type(), other.Type()), nil }
 func (j jsonTrue) Compare(other JSON) (int, error)  { return cmpJSONTypes(j.Type(), other.Type()), nil }
 
+func decodeIfNeeded(j JSON) (JSON, error) {
+	if enc, ok := j.(*jsonEncoded); ok {
+		var err error
+		j, err = enc.decode()
+		if err != nil {
+			return nil, err
+		}
+	}
+	return j, nil
+}
+
 func (j jsonNumber) Compare(other JSON) (int, error) {
 	cmp := cmpJSONTypes(j.Type(), other.Type())
 	if cmp != 0 {
 		return cmp, nil
 	}
-	if enc, ok := other.(jsonEncoded); ok {
-		var err error
-		other, err = enc.decode()
-		if err != nil {
-			return 0, err
-		}
+	var err error
+	if other, err = decodeIfNeeded(other); err != nil {
+		return 0, err
 	}
 	dec := apd.Decimal(j)
 	o := apd.Decimal(other.(jsonNumber))
@@ -186,12 +194,9 @@ func (j jsonString) Compare(other JSON) (int, error) {
 		return cmp, nil
 	}
 	// TODO(justin): we should optimize this, we don't have to decode the whole thing.
-	if enc, ok := other.(jsonEncoded); ok {
-		var err error
-		other, err = enc.decode()
-		if err != nil {
-			return 0, err
-		}
+	var err error
+	if other, err = decodeIfNeeded(other); err != nil {
+		return 0, err
 	}
 	o := other.(jsonString)
 	if o > j {
@@ -209,12 +214,9 @@ func (j jsonArray) Compare(other JSON) (int, error) {
 		return cmp, nil
 	}
 	// TODO(justin): we should optimize this, we don't have to decode the whole thing.
-	if enc, ok := other.(jsonEncoded); ok {
-		var err error
-		other, err = enc.decode()
-		if err != nil {
-			return 0, err
-		}
+	var err error
+	if other, err = decodeIfNeeded(other); err != nil {
+		return 0, err
 	}
 	o := other.(jsonArray)
 	if len(j) < len(o) {
@@ -241,12 +243,9 @@ func (j jsonObject) Compare(other JSON) (int, error) {
 		return cmp, nil
 	}
 	// TODO(justin): we should optimize this, we don't have to decode the whole thing.
-	if enc, ok := other.(jsonEncoded); ok {
-		var err error
-		other, err = enc.decode()
-		if err != nil {
-			return 0, err
-		}
+	var err error
+	if other, err = decodeIfNeeded(other); err != nil {
+		return 0, err
 	}
 	o := other.(jsonObject)
 	if len(j) < len(o) {
