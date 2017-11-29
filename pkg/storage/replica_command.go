@@ -496,7 +496,7 @@ func evalEndTransaction(
 	// don't want the intents to be up for resolution. That should happen only
 	// if the commit actually happens; otherwise, we risk losing writes.
 	intentsResult := result.FromIntents(externalIntents, args, false /* alwaysReturn */)
-	intentsResult.Local.UpdatedTxn = reply.Txn
+	intentsResult.Local.UpdatedTxns = &[]*roachpb.Transaction{reply.Txn}
 	if err := pd.MergeAndDestroy(intentsResult); err != nil {
 		return result.Result{}, err
 	}
