@@ -725,9 +725,11 @@ func (r *Replica) handleLocalEvalResult(ctx context.Context, lResult result.Loca
 		lResult.LeaseMetricsResult = nil
 	}
 
-	if lResult.UpdatedTxn != nil {
-		r.txnWaitQueue.UpdateTxn(ctx, lResult.UpdatedTxn)
-		lResult.UpdatedTxn = nil
+	if lResult.UpdatedTxns != nil {
+		for _, txn := range *lResult.UpdatedTxns {
+			r.txnWaitQueue.UpdateTxn(ctx, txn)
+			lResult.UpdatedTxns = nil
+		}
 	}
 
 	if (lResult != result.LocalResult{}) {

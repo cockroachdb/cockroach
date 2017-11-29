@@ -72,9 +72,10 @@ type LocalResult struct {
 	// Call MaybeGossipNodeLiveness with the specified Span, if set.
 	MaybeGossipNodeLiveness *roachpb.Span
 
-	// Set when a transaction record is updated, after a call to
-	// EndTransaction or PushTxn.
-	UpdatedTxn *roachpb.Transaction
+	// Set when transaction record(s) are updated, after calls to
+	// EndTransaction or PushTxn. This is a pointer to allow the zero
+	// (and as an unwelcome side effect, all) values to be compared.
+	UpdatedTxns *[]*roachpb.Transaction
 }
 
 // DetachIntents returns (and removes) those intents from the LocalEvalResult
@@ -281,12 +282,14 @@ func (p *Result) MergeAndDestroy(q Result) error {
 	coalesceBool(&p.Local.MaybeGossipSystemConfig, &q.Local.MaybeGossipSystemConfig)
 	coalesceBool(&p.Local.MaybeAddToSplitQueue, &q.Local.MaybeAddToSplitQueue)
 
-	if p.Local.UpdatedTxn == nil {
-		p.Local.UpdatedTxn = q.Local.UpdatedTxn
-	} else if q.Local.UpdatedTxn != nil {
-		return errors.New("conflicting updatedTxn")
+	if q.Local.UpdatedTxns != nil {
+		if p.Local.UpdatedTxns == nil {
+			p.Local.UpdatedTxns = q.Local.UpdatedTxns
+		} else {
+			*p.Local.UpdatedTxns = append(*p.Local.UpdatedTxns, *q.Local.UpdatedTxns...)
+		}
 	}
-	q.Local.UpdatedTxn = nil
+	q.Local.UpdatedTxns = nil
 
 	if !q.IsZero() {
 		log.Fatalf(context.TODO(), "unhandled EvalResult: %s", pretty.Diff(q, Result{}))
