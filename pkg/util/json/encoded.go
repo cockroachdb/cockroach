@@ -18,6 +18,7 @@ import (
 	"bytes"
 	"fmt"
 	"strconv"
+	"sync"
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -31,6 +32,8 @@ type jsonEncoded struct {
 	// arrays and objects, value contains the container header, but it never
 	// contains a scalar container header.
 	value []byte
+
+	keyCache *sync.Map
 }
 
 func (j jsonEncoded) Type() Type {
@@ -56,6 +59,7 @@ func newEncodedFromRoot(v []byte) (jsonEncoded, error) {
 		typ:          typ,
 		containerLen: containerLen,
 		value:        v,
+		keyCache:     &sync.Map{},
 	}, nil
 }
 
@@ -124,6 +128,7 @@ func newEncoded(jEntry uint32, v []byte) (JSON, error) {
 		typ:          typ,
 		containerLen: containerLen,
 		value:        v,
+		keyCache:     &sync.Map{},
 	}, nil
 }
 
@@ -266,6 +271,9 @@ func (j jsonEncoded) FetchValIdx(idx int) (JSON, error) {
 // the length/offset distinction in order to make this fast.
 func (j jsonEncoded) FetchValKey(key string) (JSON, error) {
 	if j.Type() == ObjectJSONType {
+		if v, ok := j.keyCache.Load(key); ok {
+			return v.(JSON), nil
+		}
 		iter, err := j.iterObject()
 		if err != nil {
 			return nil, err
@@ -279,7 +287,12 @@ func (j jsonEncoded) FetchValKey(key string) (JSON, error) {
 				return nil, nil
 			}
 			if string(nextKey) == key {
-				return newEncoded(jEntry, nextValue)
+				next, err := newEncoded(jEntry, nextValue)
+				if err != nil {
+					return nil, err
+				}
+				j.keyCache.Store(key, next)
+				return next, nil
 			}
 		}
 	}
