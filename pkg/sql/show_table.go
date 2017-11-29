@@ -48,7 +48,7 @@ func (p *planner) showTableDetails(
 		if err != nil {
 			return err
 		}
-		return p.anyPrivilege(desc)
+		return p.CheckAnyPrivilege(desc)
 	}
 
 	return p.delegateQuery(ctx, showType,

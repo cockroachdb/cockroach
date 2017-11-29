@@ -21,7 +21,6 @@ import (
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
-	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -299,7 +298,7 @@ func (p *planner) getVirtualDataSource(
 		prefix := string(tn.PrefixName)
 		if !tn.PrefixOriginallySpecified {
 			prefix = p.session.Database
-			if prefix == "" && p.session.User != security.RootUser {
+			if prefix == "" && p.RequireSuperUser("access virtual tables across all databases") != nil {
 				prefix = sqlbase.SystemDB.Name
 			}
 		}
