@@ -28,14 +28,16 @@ import (
 )
 
 // MakeDBClient creates a kv client for use in cli tools.
-func MakeDBClient(ctx context.Context) (*client.DB, error) {
+// Invoking the returned closure closes the underlying connection and waits
+// until the associated goroutines have terminated.
+func MakeDBClient(ctx context.Context) (*client.DB, func(), error) {
 	// The KV endpoints require the node user.
 	baseCfg.User = security.NodeUser
-	conn, clock, err := getClientGRPCConn(ctx)
+	conn, clock, finish, err := getClientGRPCConn(ctx)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	return client.NewDB(client.NewSender(conn), clock), nil
+	return client.NewDB(client.NewSender(conn), clock), finish, nil
 }
 
 // A lsRangesCmd command lists the ranges in a cluster.
@@ -70,10 +72,11 @@ func runLsRanges(cmd *cobra.Command, args []string) error {
 	}
 	endKey := keys.Meta2Prefix.PrefixEnd()
 
-	kvDB, err := MakeDBClient(ctx)
+	kvDB, finish, err := MakeDBClient(ctx)
 	if err != nil {
 		return err
 	}
+	defer finish()
 
 	rows, err := kvDB.Scan(ctx, startKey, endKey, maxResults)
 	if err != nil {
@@ -115,10 +118,11 @@ func runSplitRange(cmd *cobra.Command, args []string) error {
 
 	key := roachpb.Key(args[0])
 
-	kvDB, err := MakeDBClient(ctx)
+	kvDB, finish, err := MakeDBClient(ctx)
 	if err != nil {
 		return err
 	}
+	defer finish()
 	return errors.Wrap(kvDB.AdminSplit(ctx, key, key), "split failed")
 }
 

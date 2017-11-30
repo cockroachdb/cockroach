@@ -134,10 +134,12 @@ func runStatusNodeInner(
 
 	var nodeStatuses []status.NodeStatus
 
-	conn, _, err := getClientGRPCConn(ctx)
+	conn, _, finish, err := getClientGRPCConn(ctx)
 	if err != nil {
 		return nil, nil, err
 	}
+	defer finish()
+
 	c := serverpb.NewStatusClient(conn)
 
 	var decommissionStatusRequest *serverpb.DecommissionStatusRequest
@@ -180,10 +182,11 @@ func runStatusNodeInner(
 		return nil, nil, errors.Errorf("expected no arguments or a single node ID")
 	}
 
-	cAdmin, err := getAdminClient(ctx)
+	cAdmin, finish, err := getAdminClient(ctx)
 	if err != nil {
 		return nil, nil, err
 	}
+	defer finish()
 
 	decommissionStatusResp, err := cAdmin.DecommissionStatus(ctx, decommissionStatusRequest)
 	if err != nil {
@@ -320,10 +323,11 @@ func runDecommissionNode(cmd *cobra.Command, args []string) error {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	c, err := getAdminClient(ctx)
+	c, finish, err := getAdminClient(ctx)
 	if err != nil {
 		return err
 	}
+	defer finish()
 
 	return runDecommissionNodeImpl(ctx, c, nodeCtx.nodeDecommissionWait, args)
 }
@@ -440,10 +444,11 @@ func runRecommissionNode(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	c, err := getAdminClient(ctx)
+	c, finish, err := getAdminClient(ctx)
 	if err != nil {
 		return err
 	}
+	defer finish()
 
 	req := &serverpb.DecommissionRequest{
 		NodeIDs:         nodeIDs,
