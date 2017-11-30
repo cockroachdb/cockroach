@@ -176,7 +176,7 @@ func FatalfDepth(ctx context.Context, depth int, format string, args ...interfac
 //
 // TODO(andrei): Audit uses of V() and see which ones should actually use the
 // newer ExpensiveLogEnabled().
-func V(level level) bool {
+func V(level int32) bool {
 	return VDepth(level, 1)
 }
 
@@ -200,7 +200,7 @@ func V(level level) bool {
 //   log.VEventf(ctx, 2, msg)
 // }
 //
-func ExpensiveLogEnabled(ctx context.Context, level level) bool {
+func ExpensiveLogEnabled(ctx context.Context, level int32) bool {
 	if sp := opentracing.SpanFromContext(ctx); sp != nil {
 		if tracing.IsRecording(sp) {
 			return true
