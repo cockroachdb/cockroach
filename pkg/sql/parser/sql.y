@@ -598,7 +598,7 @@ func (u *sqlSymUnion) scrubOption() tree.ScrubOption {
 %type <tree.Statement> create_user_stmt
 %type <tree.Statement> create_view_stmt
 %type <tree.Statement> create_sequence_stmt
-%type <tree.Statement> create_stat_stmt
+%type <tree.Statement> create_stats_stmt
 %type <tree.Statement> delete_stmt
 %type <tree.Statement> discard_stmt
 
@@ -1611,7 +1611,7 @@ cancel_query_stmt:
 create_stmt:
   create_user_stmt     // EXTEND WITH HELP: CREATE USER
 | create_ddl_stmt      // help texts in sub-rule
-| create_stat_stmt     // EXTEND WITH HELP: CREATE STATISTICS
+| create_stats_stmt    // EXTEND WITH HELP: CREATE STATISTICS
 | CREATE error         // SHOW HELP: CREATE
 
 create_ddl_stmt:
@@ -1630,7 +1630,7 @@ create_ddl_stmt:
 // CREATE STATISTICS <statisticname>
 //   ON <colname> [, ...]
 //   FROM <tablename>
-create_stat_stmt:
+create_stats_stmt:
   CREATE STATISTICS name ON name_list FROM qualified_name
   {
     $$.val = &tree.CreateStats{
@@ -1881,11 +1881,11 @@ preparable_stmt:
 
 explainable_stmt:
   preparable_stmt
-| alter_ddl_stmt   // help texts in sub-rule
-| create_ddl_stmt  // help texts in sub-rule
-| create_stat_stmt // help texts in sub-rule
-| drop_ddl_stmt    // help texts in sub-rule
-| execute_stmt     // EXTEND WITH HELP: EXECUTE
+| alter_ddl_stmt    // help texts in sub-rule
+| create_ddl_stmt   // help texts in sub-rule
+| create_stats_stmt // help texts in sub-rule
+| drop_ddl_stmt     // help texts in sub-rule
+| execute_stmt      // EXTEND WITH HELP: EXECUTE
 | explain_stmt { /* SKIP DOC */ }
 
 explain_option_list:
