@@ -119,14 +119,12 @@ import time "time"
 import github_com_cockroachdb_cockroach_pkg_roachpb "github.com/cockroachdb/cockroach/pkg/roachpb"
 import github_com_cockroachdb_cockroach_pkg_sql_sqlbase "github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 
-import (
-	context "golang.org/x/net/context"
-	grpc "google.golang.org/grpc"
-)
+import context "golang.org/x/net/context"
+import grpc "google.golang.org/grpc"
 
-import github_com_gogo_protobuf_sortkeys "github.com/gogo/protobuf/sortkeys"
-import encoding_binary "encoding/binary"
-import github_com_gogo_protobuf_types "github.com/gogo/protobuf/types"
+import sortkeys "github.com/gogo/protobuf/sortkeys"
+import binary "encoding/binary"
+import types "github.com/gogo/protobuf/types"
 
 import io "io"
 
@@ -2389,8 +2387,8 @@ func (m *EventsResponse_Event) MarshalTo(dAtA []byte) (int, error) {
 	_ = l
 	dAtA[i] = 0xa
 	i++
-	i = encodeVarintAdmin(dAtA, i, uint64(github_com_gogo_protobuf_types.SizeOfStdTime(m.Timestamp)))
-	n4, err := github_com_gogo_protobuf_types.StdTimeMarshalTo(m.Timestamp, dAtA[i:])
+	i = encodeVarintAdmin(dAtA, i, uint64(types.SizeOfStdTime(m.Timestamp)))
+	n4, err := types.StdTimeMarshalTo(m.Timestamp, dAtA[i:])
 	if err != nil {
 		return 0, err
 	}
@@ -2446,7 +2444,7 @@ func (m *SetUIDataRequest) MarshalTo(dAtA []byte) (int, error) {
 		for k := range m.KeyValues {
 			keysForKeyValues = append(keysForKeyValues, string(k))
 		}
-		github_com_gogo_protobuf_sortkeys.Strings(keysForKeyValues)
+		sortkeys.Strings(keysForKeyValues)
 		for _, k := range keysForKeyValues {
 			dAtA[i] = 0xa
 			i++
@@ -2543,7 +2541,7 @@ func (m *GetUIDataResponse) MarshalTo(dAtA []byte) (int, error) {
 		for k := range m.KeyValues {
 			keysForKeyValues = append(keysForKeyValues, string(k))
 		}
-		github_com_gogo_protobuf_sortkeys.Strings(keysForKeyValues)
+		sortkeys.Strings(keysForKeyValues)
 		for _, k := range keysForKeyValues {
 			dAtA[i] = 0xa
 			i++
@@ -2595,8 +2593,8 @@ func (m *GetUIDataResponse_Value) MarshalTo(dAtA []byte) (int, error) {
 	}
 	dAtA[i] = 0x12
 	i++
-	i = encodeVarintAdmin(dAtA, i, uint64(github_com_gogo_protobuf_types.SizeOfStdTime(m.LastUpdated)))
-	n6, err := github_com_gogo_protobuf_types.StdTimeMarshalTo(m.LastUpdated, dAtA[i:])
+	i = encodeVarintAdmin(dAtA, i, uint64(types.SizeOfStdTime(m.LastUpdated)))
+	n6, err := types.StdTimeMarshalTo(m.LastUpdated, dAtA[i:])
 	if err != nil {
 		return 0, err
 	}
@@ -2989,7 +2987,7 @@ func (m *SettingsResponse) MarshalTo(dAtA []byte) (int, error) {
 		for k := range m.KeyValues {
 			keysForKeyValues = append(keysForKeyValues, string(k))
 		}
-		github_com_gogo_protobuf_sortkeys.Strings(keysForKeyValues)
+		sortkeys.Strings(keysForKeyValues)
 		for _, k := range keysForKeyValues {
 			dAtA[i] = 0xa
 			i++
@@ -3266,8 +3264,8 @@ func (m *JobsResponse_Job) MarshalTo(dAtA []byte) (int, error) {
 	if m.Created != nil {
 		dAtA[i] = 0x3a
 		i++
-		i = encodeVarintAdmin(dAtA, i, uint64(github_com_gogo_protobuf_types.SizeOfStdTime(*m.Created)))
-		n20, err := github_com_gogo_protobuf_types.StdTimeMarshalTo(*m.Created, dAtA[i:])
+		i = encodeVarintAdmin(dAtA, i, uint64(types.SizeOfStdTime(*m.Created)))
+		n20, err := types.StdTimeMarshalTo(*m.Created, dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
@@ -3276,8 +3274,8 @@ func (m *JobsResponse_Job) MarshalTo(dAtA []byte) (int, error) {
 	if m.Started != nil {
 		dAtA[i] = 0x42
 		i++
-		i = encodeVarintAdmin(dAtA, i, uint64(github_com_gogo_protobuf_types.SizeOfStdTime(*m.Started)))
-		n21, err := github_com_gogo_protobuf_types.StdTimeMarshalTo(*m.Started, dAtA[i:])
+		i = encodeVarintAdmin(dAtA, i, uint64(types.SizeOfStdTime(*m.Started)))
+		n21, err := types.StdTimeMarshalTo(*m.Started, dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
@@ -3286,8 +3284,8 @@ func (m *JobsResponse_Job) MarshalTo(dAtA []byte) (int, error) {
 	if m.Finished != nil {
 		dAtA[i] = 0x4a
 		i++
-		i = encodeVarintAdmin(dAtA, i, uint64(github_com_gogo_protobuf_types.SizeOfStdTime(*m.Finished)))
-		n22, err := github_com_gogo_protobuf_types.StdTimeMarshalTo(*m.Finished, dAtA[i:])
+		i = encodeVarintAdmin(dAtA, i, uint64(types.SizeOfStdTime(*m.Finished)))
+		n22, err := types.StdTimeMarshalTo(*m.Finished, dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
@@ -3296,8 +3294,8 @@ func (m *JobsResponse_Job) MarshalTo(dAtA []byte) (int, error) {
 	if m.Modified != nil {
 		dAtA[i] = 0x52
 		i++
-		i = encodeVarintAdmin(dAtA, i, uint64(github_com_gogo_protobuf_types.SizeOfStdTime(*m.Modified)))
-		n23, err := github_com_gogo_protobuf_types.StdTimeMarshalTo(*m.Modified, dAtA[i:])
+		i = encodeVarintAdmin(dAtA, i, uint64(types.SizeOfStdTime(*m.Modified)))
+		n23, err := types.StdTimeMarshalTo(*m.Modified, dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
@@ -3306,7 +3304,7 @@ func (m *JobsResponse_Job) MarshalTo(dAtA []byte) (int, error) {
 	if m.FractionCompleted != 0 {
 		dAtA[i] = 0x5d
 		i++
-		encoding_binary.LittleEndian.PutUint32(dAtA[i:], uint32(math.Float32bits(float32(m.FractionCompleted))))
+		binary.LittleEndian.PutUint32(dAtA[i:], uint32(math.Float32bits(float32(m.FractionCompleted))))
 		i += 4
 	}
 	if len(m.Error) > 0 {
@@ -3821,7 +3819,7 @@ func (m *EventsResponse) Size() (n int) {
 func (m *EventsResponse_Event) Size() (n int) {
 	var l int
 	_ = l
-	l = github_com_gogo_protobuf_types.SizeOfStdTime(m.Timestamp)
+	l = types.SizeOfStdTime(m.Timestamp)
 	n += 1 + l + sovAdmin(uint64(l))
 	l = len(m.EventType)
 	if l > 0 {
@@ -3902,7 +3900,7 @@ func (m *GetUIDataResponse_Value) Size() (n int) {
 	if l > 0 {
 		n += 1 + l + sovAdmin(uint64(l))
 	}
-	l = github_com_gogo_protobuf_types.SizeOfStdTime(m.LastUpdated)
+	l = types.SizeOfStdTime(m.LastUpdated)
 	n += 1 + l + sovAdmin(uint64(l))
 	return n
 }
@@ -4160,19 +4158,19 @@ func (m *JobsResponse_Job) Size() (n int) {
 		n += 1 + l + sovAdmin(uint64(l))
 	}
 	if m.Created != nil {
-		l = github_com_gogo_protobuf_types.SizeOfStdTime(*m.Created)
+		l = types.SizeOfStdTime(*m.Created)
 		n += 1 + l + sovAdmin(uint64(l))
 	}
 	if m.Started != nil {
-		l = github_com_gogo_protobuf_types.SizeOfStdTime(*m.Started)
+		l = types.SizeOfStdTime(*m.Started)
 		n += 1 + l + sovAdmin(uint64(l))
 	}
 	if m.Finished != nil {
-		l = github_com_gogo_protobuf_types.SizeOfStdTime(*m.Finished)
+		l = types.SizeOfStdTime(*m.Finished)
 		n += 1 + l + sovAdmin(uint64(l))
 	}
 	if m.Modified != nil {
-		l = github_com_gogo_protobuf_types.SizeOfStdTime(*m.Modified)
+		l = types.SizeOfStdTime(*m.Modified)
 		n += 1 + l + sovAdmin(uint64(l))
 	}
 	if m.FractionCompleted != 0 {
@@ -6471,7 +6469,7 @@ func (m *EventsResponse_Event) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			if err := github_com_gogo_protobuf_types.StdTimeUnmarshal(&m.Timestamp, dAtA[iNdEx:postIndex]); err != nil {
+			if err := types.StdTimeUnmarshal(&m.Timestamp, dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
@@ -7180,7 +7178,7 @@ func (m *GetUIDataResponse_Value) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			if err := github_com_gogo_protobuf_types.StdTimeUnmarshal(&m.LastUpdated, dAtA[iNdEx:postIndex]); err != nil {
+			if err := types.StdTimeUnmarshal(&m.LastUpdated, dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
@@ -9226,7 +9224,7 @@ func (m *JobsResponse_Job) Unmarshal(dAtA []byte) error {
 			if m.Created == nil {
 				m.Created = new(time.Time)
 			}
-			if err := github_com_gogo_protobuf_types.StdTimeUnmarshal(m.Created, dAtA[iNdEx:postIndex]); err != nil {
+			if err := types.StdTimeUnmarshal(m.Created, dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
@@ -9259,7 +9257,7 @@ func (m *JobsResponse_Job) Unmarshal(dAtA []byte) error {
 			if m.Started == nil {
 				m.Started = new(time.Time)
 			}
-			if err := github_com_gogo_protobuf_types.StdTimeUnmarshal(m.Started, dAtA[iNdEx:postIndex]); err != nil {
+			if err := types.StdTimeUnmarshal(m.Started, dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
@@ -9292,7 +9290,7 @@ func (m *JobsResponse_Job) Unmarshal(dAtA []byte) error {
 			if m.Finished == nil {
 				m.Finished = new(time.Time)
 			}
-			if err := github_com_gogo_protobuf_types.StdTimeUnmarshal(m.Finished, dAtA[iNdEx:postIndex]); err != nil {
+			if err := types.StdTimeUnmarshal(m.Finished, dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
@@ -9325,7 +9323,7 @@ func (m *JobsResponse_Job) Unmarshal(dAtA []byte) error {
 			if m.Modified == nil {
 				m.Modified = new(time.Time)
 			}
-			if err := github_com_gogo_protobuf_types.StdTimeUnmarshal(m.Modified, dAtA[iNdEx:postIndex]); err != nil {
+			if err := types.StdTimeUnmarshal(m.Modified, dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
@@ -9337,7 +9335,7 @@ func (m *JobsResponse_Job) Unmarshal(dAtA []byte) error {
 			if (iNdEx + 4) > l {
 				return io.ErrUnexpectedEOF
 			}
-			v = uint32(encoding_binary.LittleEndian.Uint32(dAtA[iNdEx:]))
+			v = uint32(binary.LittleEndian.Uint32(dAtA[iNdEx:]))
 			iNdEx += 4
 			m.FractionCompleted = float32(math.Float32frombits(v))
 		case 12:
