@@ -15,21 +15,18 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl/engineccl"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/storage/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/spanset"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/pkg/errors"
 )
 
 func init() {
-	storage.SetWriteBatchCmd(storage.Command{
-		DeclareKeys: batcheval.DefaultDeclareKeys,
-		Eval:        evalWriteBatch,
-	})
+	batcheval.RegisterCommand(roachpb.WriteBatch, batcheval.DefaultDeclareKeys, evalWriteBatch)
 }
 
 // evalWriteBatch applies the operations encoded in a BatchRepr. Any existing
@@ -115,10 +112,10 @@ func clearExistingData(
 	}
 
 	log.Eventf(ctx, "target key range not empty, will clear existing data: %+v", existingStats)
-	// If this is a SpanSetIterator, we have to unwrap it because
+	// If this is a Iterator, we have to unwrap it because
 	// ClearIterRange needs a plain rocksdb iterator (and can't unwrap
 	// it itself because of import cycles).
-	if ssi, ok := iter.(*storage.SpanSetIterator); ok {
+	if ssi, ok := iter.(*spanset.Iterator); ok {
 		iter = ssi.Iterator()
 	}
 	// TODO(dan): Ideally, this would use `batch.ClearRange` but it doesn't
