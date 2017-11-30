@@ -514,7 +514,7 @@ func (n *Node) Client() *client.DB {
 		return existingClient
 	}
 
-	conn, err := n.rpcCtx.GRPCDial(n.RPCAddr())
+	conn, err := n.rpcCtx.GRPCDial(n.RPCAddr()).Connect()
 	if err != nil {
 		log.Fatalf(context.Background(), "failed to initialize KV client: %s", err)
 	}
@@ -531,7 +531,7 @@ func (n *Node) StatusClient() serverpb.StatusClient {
 		return existingClient
 	}
 
-	conn, err := n.rpcCtx.GRPCDial(n.RPCAddr())
+	conn, err := n.rpcCtx.GRPCDial(n.RPCAddr()).Connect()
 	if err != nil {
 		log.Fatalf(context.Background(), "failed to initialize status client: %s", err)
 	}

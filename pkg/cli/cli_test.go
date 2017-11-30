@@ -340,7 +340,8 @@ communicate with a secure cluster\).
 		// up the stack as a roachpb.NewError(roachpb.NewSendError(.)).
 		// Error returned directly from GRPC.
 		{`quit`, styled(
-			`Failed to connect to the node: error sending drain request: rpc error: code = Unavailable desc = grpc: the connection is unavailable`),
+			`Failed to connect to the node: initial connection heartbeat failed: rpc error: ` +
+				`code = Unavailable desc = grpc: the connection is unavailable`),
 		},
 		// Going through the SQL client libraries gives a *net.OpError which
 		// we also handle.

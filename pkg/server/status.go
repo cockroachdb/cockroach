@@ -168,7 +168,7 @@ func (s *statusServer) dialNode(nodeID roachpb.NodeID) (serverpb.StatusClient, e
 	if err != nil {
 		return nil, err
 	}
-	conn, err := s.rpcCtx.GRPCDial(addr.String())
+	conn, err := s.rpcCtx.GRPCDial(addr.String()).Connect()
 	if err != nil {
 		return nil, err
 	}

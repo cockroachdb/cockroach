@@ -349,7 +349,7 @@ func TestGossipNoForwardSelf(t *testing.T) {
 		c := newClient(log.AmbientContext{Tracer: tracing.NewTracer()}, local.GetNodeAddr(), makeMetrics())
 
 		testutils.SucceedsSoon(t, func() error {
-			conn, err := peer.rpcContext.GRPCDial(c.addr.String(), grpc.WithBlock())
+			conn, err := peer.rpcContext.GRPCDial(c.addr.String(), grpc.WithBlock()).Connect()
 			if err != nil {
 				return err
 			}
@@ -563,7 +563,7 @@ func TestGossipJoinTwoClusters(t *testing.T) {
 		g = append(g, gnode)
 		gnode.SetStallInterval(interval)
 		gnode.SetBootstrapInterval(interval)
-		gnode.SetClusterID(clusterIDs[i])
+		gnode.clusterID.Set(context.TODO(), clusterIDs[i])
 
 		ln, err := netutil.ListenAndServeGRPC(stopper, server, util.IsolatedTestAddr)
 		if err != nil {

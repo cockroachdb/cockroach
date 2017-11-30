@@ -58,7 +58,7 @@ type runnerResult struct {
 func (req runnerRequest) run() {
 	res := runnerResult{nodeID: req.nodeID}
 
-	conn, err := req.rpcContext.GRPCDial(req.nodeAddress)
+	conn, err := req.rpcContext.GRPCDial(req.nodeAddress).Connect()
 	if err != nil {
 		res.err = err
 	} else {

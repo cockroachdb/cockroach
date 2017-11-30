@@ -984,7 +984,7 @@ func (s *adminServer) Settings(
 func (s *adminServer) Cluster(
 	_ context.Context, req *serverpb.ClusterRequest,
 ) (*serverpb.ClusterResponse, error) {
-	clusterID := s.server.node.ClusterID
+	clusterID := s.server.ClusterID()
 	if clusterID == (uuid.UUID{}) {
 		return nil, grpc.Errorf(codes.Unavailable, "cluster ID not yet available")
 	}

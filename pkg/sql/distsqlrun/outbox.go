@@ -181,7 +181,7 @@ func (m *outbox) flush(ctx context.Context) error {
 // set to nil.
 func (m *outbox) mainLoop(ctx context.Context) error {
 	if m.syncFlowStream == nil {
-		conn, err := m.flowCtx.rpcCtx.GRPCDial(m.addr)
+		conn, err := m.flowCtx.rpcCtx.GRPCDial(m.addr).Connect()
 		if err != nil {
 			return err
 		}

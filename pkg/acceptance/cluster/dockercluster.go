@@ -812,7 +812,7 @@ func (l *DockerCluster) NewClient(ctx context.Context, i int) (*roachClient.DB, 
 		User:        security.NodeUser,
 		SSLCertsDir: l.CertsDir,
 	}, clock, l.stopper)
-	conn, err := rpcContext.GRPCDial(l.Nodes[i].Addr(ctx, DefaultTCP).String())
+	conn, err := rpcContext.GRPCDial(l.Nodes[i].Addr(ctx, DefaultTCP).String()).Connect()
 	if err != nil {
 		return nil, err
 	}

@@ -36,7 +36,7 @@ func TestServer(t *testing.T) {
 
 	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.TODO())
-	conn, err := s.RPCContext().GRPCDial(s.ServingAddr())
+	conn, err := s.RPCContext().GRPCDial(s.ServingAddr()).Connect()
 	if err != nil {
 		t.Fatal(err)
 	}

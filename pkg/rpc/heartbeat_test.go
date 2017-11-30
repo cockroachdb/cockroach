@@ -22,9 +22,11 @@ import (
 
 	"golang.org/x/net/context"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
 func TestRemoteOffsetString(t *testing.T) {
@@ -47,6 +49,7 @@ func TestHeartbeatReply(t *testing.T) {
 	heartbeat := &HeartbeatService{
 		clock:              clock,
 		remoteClockMonitor: newRemoteClockMonitor(clock, time.Hour, 0),
+		clusterID:          &base.ClusterIDContainer{},
 	}
 
 	request := &PingRequest{
@@ -91,6 +94,7 @@ func (mhs *ManualHeartbeatService) Ping(
 	hs := HeartbeatService{
 		clock:              mhs.clock,
 		remoteClockMonitor: mhs.remoteClockMonitor,
+		clusterID:          &base.ClusterIDContainer{},
 	}
 	return hs.Ping(ctx, args)
 }
@@ -107,6 +111,7 @@ func TestManualHeartbeat(t *testing.T) {
 	regularHeartbeat := &HeartbeatService{
 		clock:              clock,
 		remoteClockMonitor: newRemoteClockMonitor(clock, time.Hour, 0),
+		clusterID:          &base.ClusterIDContainer{},
 	}
 
 	request := &PingRequest{
@@ -158,4 +163,46 @@ func TestClockOffsetMismatch(t *testing.T) {
 	}
 	response, err := hs.Ping(context.Background(), request)
 	t.Fatalf("should not have reached but got response=%v err=%v", response, err)
+}
+
+func TestClusterIDCompare(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	uuid1, uuid2 := uuid.MakeV4(), uuid.MakeV4()
+	testData := []struct {
+		name            string
+		serverClusterID uuid.UUID
+		clientClusterID uuid.UUID
+		expectError     bool
+	}{
+		{"cluster IDs match", uuid1, uuid1, false},
+		{"their cluster ID missing", uuid1, uuid.Nil, false},
+		{"our cluster ID missing", uuid.Nil, uuid1, false},
+		{"both cluster IDs missing", uuid.Nil, uuid.Nil, false},
+		{"cluster ID mismatch", uuid1, uuid2, true},
+	}
+
+	manual := hlc.NewManualClock(5)
+	clock := hlc.NewClock(manual.UnixNano, time.Nanosecond)
+	heartbeat := &HeartbeatService{
+		clock:              clock,
+		remoteClockMonitor: newRemoteClockMonitor(clock, time.Hour, 0),
+		clusterID:          &base.ClusterIDContainer{},
+	}
+
+	for _, td := range testData {
+		t.Run(td.name, func(t *testing.T) {
+			heartbeat.clusterID.Reset(td.serverClusterID)
+			request := &PingRequest{
+				Ping:      "testPing",
+				ClusterID: td.clientClusterID,
+			}
+			_, err := heartbeat.Ping(context.Background(), request)
+			if td.expectError && err == nil {
+				t.Error("expected cluster ID mismatch error")
+			}
+			if !td.expectError && err != nil {
+				t.Errorf("unexpected error: %s", err)
+			}
+		})
+	}
 }

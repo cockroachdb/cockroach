@@ -336,7 +336,7 @@ func (f *Farmer) Exec(i int, cmd string) error {
 
 // NewClient implements the Cluster interface.
 func (f *Farmer) NewClient(ctx context.Context, i int) (*client.DB, error) {
-	conn, err := f.RPCContext.GRPCDial(f.Addr(ctx, i, base.DefaultPort))
+	conn, err := f.RPCContext.GRPCDial(f.Addr(ctx, i, base.DefaultPort)).Connect()
 	if err != nil {
 		return nil, err
 	}

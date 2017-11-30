@@ -926,7 +926,7 @@ func (r *Replica) CheckConsistency(
 					log.Error(ctx, errors.Wrapf(err, "could not resolve node ID %d", replica.NodeID))
 					return
 				}
-				conn, err := r.store.cfg.Transport.rpcContext.GRPCDial(addr.String())
+				conn, err := r.store.cfg.Transport.rpcContext.GRPCDial(addr.String()).Connect()
 				if err != nil {
 					log.Error(ctx,
 						errors.Wrapf(err, "could not dial node ID %d address %s", replica.NodeID, addr))

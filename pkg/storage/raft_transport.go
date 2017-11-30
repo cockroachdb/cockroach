@@ -440,7 +440,7 @@ func (t *RaftTransport) connectAndProcess(
 		if err != nil {
 			return err
 		}
-		conn, err := t.rpcContext.GRPCDial(addr.String(), grpc.WithBlock())
+		conn, err := t.rpcContext.GRPCDial(addr.String(), grpc.WithBlock()).Connect()
 		if err != nil {
 			return err
 		}
@@ -624,7 +624,7 @@ func (t *RaftTransport) SendSnapshot(
 		if err != nil {
 			return err
 		}
-		conn, err := t.rpcContext.GRPCDial(addr.String(), grpc.WithBlock())
+		conn, err := t.rpcContext.GRPCDial(addr.String(), grpc.WithBlock()).Connect()
 		if err != nil {
 			return err
 		}
