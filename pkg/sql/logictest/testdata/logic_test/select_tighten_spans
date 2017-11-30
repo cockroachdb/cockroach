@@ -1,0 +1,488 @@
+# LogicTest: 5node-distsql
+
+# This test verifies that we correctly tighten spans during index selection as
+# well as after partitioning spans in distsql.
+
+################
+# Schema setup #
+################
+
+statement ok
+CREATE TABLE p1 (
+  a INT,
+  b INT,
+  PRIMARY KEY (a, b),
+  INDEX b (b)
+)
+
+statement ok
+CREATE TABLE c1 (
+  a INT,
+  b INT,
+  PRIMARY KEY (a,b)
+) INTERLEAVE IN PARENT p1 (a, b)
+
+statement ok
+CREATE TABLE p2 (
+  i INT PRIMARY KEY,
+  d INT
+)
+
+statement ok
+CREATE INDEX p2_id ON p2 (i, d) INTERLEAVE IN PARENT p2 (i)
+
+statement ok
+CREATE TABLE bytes_t (a BYTES PRIMARY KEY)
+
+statement ok
+CREATE TABLE decimal_t (a DECIMAL PRIMARY KEY)
+
+#######################
+# Insert dummy values #
+#######################
+
+statement ok
+INSERT INTO p1 VALUES
+  (1,10),
+  (2,1),
+  (2,2),
+  (2,8),
+  (3,5),
+  (3,10),
+  (4,1),
+  (4,2),
+  (4,4)
+
+statement ok
+INSERT INTO c1 VALUES
+  (1,10),
+  (2,1),
+  (2,4),
+  (2,8),
+  (2,10),
+  (4,2)
+
+statement ok
+INSERT INTO p2 VALUES
+  (1, NULL),
+  (2, 2),
+  (3, 1),
+  (4, NULL),
+  (5, NULL),
+  (6, 10),
+  (7, 2),
+  (8, 3)
+
+statement ok
+INSERT INTO bytes_t VALUES
+  ('a'),
+  ('aa'),
+  ('b'),
+  ('c'),
+  ('ca')
+
+statement ok
+INSERT INTO decimal_t VALUES
+  (1),
+  (1.000001),
+  (1.5),
+  (2),
+  (2.001)
+
+############################
+# Split ranges for distsql #
+############################
+
+# Perform some splits to exercise distsql partitioning as well.
+
+# Create split points at X = 2.
+# Also split at the beginning of each index (0 for ASC, 100 for DESC) to
+# prevent interfering with previous indexes/tables.
+
+# p1 table (interleaved index)
+statement ok
+ALTER TABLE p1 SPLIT AT VALUES(2)
+
+# Create a split at /2/#
+statement ok
+ALTER TABLE c1 SPLIT AT VALUES(2,1)
+
+# Split index
+statement ok
+ALTER INDEX b SPLIT AT VALUES(0)
+
+statement ok
+ALTER INDEX b SPLIT AT VALUES(2)
+
+# p2 table (interleaved index)
+statement ok
+ALTER TABLE p2 SPLIT AT VALUES(0)
+
+statement ok
+ALTER TABLE p2 SPLIT AT VALUES(2)
+
+# Create a split at /2/#
+statement ok
+ALTER INDEX p2_id SPLIT AT VALUES(2)
+
+#####################
+# Distribute ranges #
+#####################
+
+# Distribute our ranges across the first 3 (for primary index) and last 2
+# (for seconary indexes) nodes.
+
+statement ok
+ALTER TABLE p1 TESTING_RELOCATE SELECT ARRAY[i], i FROM generate_series(1,3) AS g(i)
+
+statement ok
+ALTER INDEX b TESTING_RELOCATE SELECT ARRAY[i+3], i FROM generate_series(1,2) AS g(i)
+
+# Interleaved index table
+statement ok
+ALTER TABLE p2 TESTING_RELOCATE SELECT ARRAY[i], i FROM generate_series(1,3) as g(i)
+
+#############################
+# Verify range distribution #
+#############################
+
+# p1 table (interleaved table)
+
+query TTITI colnames
+SHOW TESTING_RANGES FROM TABLE p1
+----
+Start Key    End Key      Range ID  Replicas  Lease Holder
+NULL         /2           1         {1}       1
+/2           /2/1/#/52/1  2         {2}       2
+/2/1/#/52/1  NULL         3         {3}       3
+
+# Indexes
+
+query TTITI colnames
+SHOW TESTING_RANGES FROM INDEX b
+----
+Start Key  End Key  Range ID  Replicas  Lease Holder
+NULL       /0       3         {3}       3
+/0         /2       4         {4}       4
+/2         NULL     5         {5}       5
+
+# p2 table (interleaved index)
+
+query TTITI colnames
+SHOW TESTING_RANGES FROM TABLE p2
+----
+Start Key  End Key    Range ID  Replicas  Lease Holder
+NULL       /0         5         {5}       5
+/0         /2         6         {1}       1
+/2         /2/#/53/2  7         {2}       2
+/2/#/53/2  NULL       8         {3}       3
+
+###############
+# Query tests #
+###############
+
+# p1 table
+
+# Secondary index should not be tightened.
+query ITTT
+EXPLAIN SELECT * FROM p1 WHERE b <= 3
+----
+0  scan  ·      ·
+0  ·     table  p1@b
+0  ·     spans  /!NULL-/4
+
+query II rowsort
+SELECT * FROM p1 WHERE b <= 3
+----
+2 1
+2 2
+4 1
+4 2
+
+# Partial predicate on primary key should not be tightened.
+query ITTT
+EXPLAIN SELECT * FROM p1 WHERE a <= 3
+----
+0  scan  ·      ·
+0  ·     table  p1@primary
+0  ·     spans  /!NULL-/4
+
+query II rowsort
+SELECT * FROM p1 WHERE a <= 3
+----
+1 10
+2 1
+2 2
+2 8
+3 5
+3 10
+
+# Tighten end key if span contains full primary key.
+query ITTT
+EXPLAIN SELECT * FROM p1 WHERE a <= 3 AND b <= 3
+----
+0  scan  ·      ·
+0  ·     table  p1@primary
+0  ·     spans  /!NULL-/3/3/#
+
+query ITTT
+EXPLAIN SELECT * FROM p1 WHERE a <= 3 AND b < 4
+----
+0  scan  ·      ·
+0  ·     table  p1@primary
+0  ·     spans  /!NULL-/3/3/#
+
+query II rowsort
+SELECT * FROM p1 WHERE a <= 3 AND b <= 3
+----
+2 1
+2 2
+
+# Mixed bounds.
+query ITTT
+EXPLAIN SELECT * FROM p1 WHERE a >= 2 AND b <= 3
+----
+0  scan  ·      ·
+0  ·     table  p1@b
+0  ·     spans  /!NULL-/4
+
+query II rowsort
+SELECT * FROM p1 WHERE a >= 2 AND b <= 3
+----
+2 1
+2 2
+4 1
+4 2
+
+# Edge cases.
+
+query ITTT
+EXPLAIN SELECT * FROM p1 WHERE a <= 0 AND b <= 0
+----
+0  scan  ·      ·
+0  ·     table  p1@primary
+0  ·     spans  /!NULL-/0/0/#
+
+query ITTT
+EXPLAIN SELECT * FROM p1 WHERE a <= -1 AND b <= -1
+----
+0  scan  ·      ·
+0  ·     table  p1@primary
+0  ·     spans  /!NULL-/-1/-1/#
+
+query ITTT
+EXPLAIN SELECT * FROM p1 WHERE a = 1 AND b <= -9223372036854775808
+----
+0  scan  ·      ·
+0  ·     table  p1@primary
+0  ·     spans  /1/!NULL-/1/-9223372036854775808/#
+
+query ITTT
+EXPLAIN SELECT * FROM p1 WHERE a = 1 AND b <= 9223372036854775807
+----
+0  scan  ·      ·
+0  ·     table  p1@primary
+0  ·     spans  /1/!NULL-/1/9223372036854775807/#
+
+# Table c1 (interleaved table)
+
+# Partial primary key does not tighten.
+
+query ITTT
+EXPLAIN SELECT * FROM c1 WHERE a <= 3
+----
+0  scan  ·      ·
+0  ·     table  c1@primary
+0  ·     spans  /!NULL-/4
+
+query II rowsort
+SELECT * FROM c1 WHERE a <= 3
+----
+1 10
+2 1
+2 4
+2 8
+2 10
+
+# Tighten span on fully primary key.
+query ITTT
+EXPLAIN SELECT * FROM c1 WHERE a <= 3 AND b <= 3
+----
+0  scan  ·      ·
+0  ·     table  c1@primary
+0  ·     spans  /!NULL-/3/3/#/52/1/#
+
+query II rowsort
+SELECT * FROM c1 WHERE a <= 3 AND b <= 3
+----
+2 1
+
+# Table p2 with interleaved index.
+
+# From the primary index.
+
+# Lower bound (i >= 2)
+query ITTT
+EXPLAIN SELECT * FROM p2 WHERE i >= 2
+----
+0  scan  ·      ·
+0  ·     table  p2@primary
+0  ·     spans  /2-
+
+query II rowsort
+SELECT * FROM p2 WHERE i>= 2
+----
+2 2
+3 1
+4 NULL
+5 NULL
+6 10
+7 2
+8 3
+
+# Upper bound (i <= 5)
+
+query ITTT
+EXPLAIN SELECT * FROM p2 WHERE i <= 5
+----
+0  scan  ·      ·
+0  ·     table  p2@primary
+0  ·     spans  /!NULL-/5/#
+
+query II rowsort
+SELECT * FROM p2 WHERE i <= 5
+----
+1 NULL
+2 2
+3 1
+4 NULL
+5 NULL
+
+# From the interleaved index: no tightening at all.
+
+# Lower bound (i >= 1 AND d >= 2)
+
+# Note 53/2 refers to the 2nd index (after primary index) of table p2.
+query ITTT
+EXPLAIN SELECT * FROM p2@p2_id WHERE i >= 1 AND d >= 2
+----
+0  scan  ·      ·
+0  ·     table  p2@p2_id
+0  ·     spans  /1/#/53/2/2-
+
+query II rowsort
+SELECT * FROM p2@p2_id WHERE i>= 1 AND d >= 2
+----
+2 2
+6 10
+7 2
+8 3
+
+# Upper bound (i <= 6 AND d <= 5)
+
+query ITTT
+EXPLAIN SELECT * FROM p2@p2_id WHERE i <= 6 AND d <= 5
+----
+0  scan  ·      ·
+0  ·     table  p2@p2_id
+0  ·     spans  /!NULL-/6/#/53/2/6
+
+query II rowsort
+SELECT * FROM p2@p2_id WHERE i <= 6 AND d <= 5
+----
+2 2
+3 1
+
+# IS NULL
+
+query ITTT
+EXPLAIN SELECT * FROM p2@p2_id WHERE i >= 1 AND d IS NULL
+----
+0  scan  ·      ·
+0  ·     table  p2@p2_id
+0  ·     spans  /1/#/53/2-
+
+query II rowsort
+SELECT * FROM p2@p2_id WHERE i>= 1 AND d IS NULL
+----
+1 NULL
+4 NULL
+5 NULL
+
+# IS NOT NULL
+
+query ITTT
+EXPLAIN SELECT * FROM p2@p2_id WHERE i >= 1 AND d IS NOT NULL
+----
+0  scan  ·      ·
+0  ·     table  p2@p2_id
+0  ·     spans  /1/#/53/2/!NULL-
+
+query II rowsort
+SELECT * FROM p2@p2_id WHERE i>= 1 AND d IS NOT NULL
+----
+2 2
+3 1
+6 10
+7 2
+8 3
+
+# String table
+
+query ITTT colnames
+EXPLAIN SELECT * FROM bytes_t WHERE a = 'a'
+----
+Level  Type  Field  Description
+0      scan  ·      ·
+0      ·     table  bytes_t@primary
+0      ·     spans  /"a"-/"a"/#
+
+query T
+SELECT * FROM bytes_t WHERE a = 'a'
+----
+a
+
+# No tightening.
+
+query ITTT colnames
+EXPLAIN SELECT * FROM bytes_t WHERE a < 'aa'
+----
+Level  Type  Field  Description
+0      scan  ·      ·
+0      ·     table  bytes_t@primary
+0      ·     spans  /!NULL-/"aa"
+
+query T
+SELECT * FROM bytes_t WHERE a < 'aa'
+----
+a
+
+query ITTT colnames
+EXPLAIN SELECT * FROM decimal_t WHERE a = 1.00
+----
+Level  Type  Field  Description
+0      scan  ·      ·
+0      ·     table  decimal_t@primary
+0      ·     spans  /1-/1/#
+
+query R
+SELECT * FROM decimal_t WHERE a = 1.00
+----
+1
+
+# No tightening.
+
+query ITTT colnames
+EXPLAIN SELECT * FROM decimal_t WHERE a < 2
+----
+Level  Type  Field  Description
+0      scan  ·      ·
+0      ·     table  decimal_t@primary
+0      ·     spans  /!NULL-/2
+
+query R rowsort
+SELECT * FROM decimal_t WHERE a < 2
+----
+1
+1.000001
+1.5

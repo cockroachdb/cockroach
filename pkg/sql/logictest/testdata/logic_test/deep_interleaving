@@ -145,7 +145,7 @@ EXPLAIN SELECT * FROM level4 WHERE k1 = 2 AND k2 = 20 AND k3 > 100 AND k3 < 300
 ----
 0  scan  ·      ·
 0  ·     table  level4@primary
-0  ·     spans  /2/#/52/1/#/53/1/20/101/#/54/1-/2/#/52/1/#/53/1/20/299/#/54/2
+0  ·     spans  /2/#/52/1/#/53/1/20/101/#/54/1-/2/#/52/1/#/53/1/20/299/#/54/1/#
 
 query III
 SELECT * FROM level4 WHERE k1 = 2 AND k2 = 20 AND k3 > 100 AND k3 < 300
@@ -157,7 +157,7 @@ EXPLAIN SELECT * FROM level4 WHERE k1 = 2 AND k2 = 20 AND k3 = 200
 ----
 0  scan  ·      ·
 0  ·     table  level4@primary
-0  ·     spans  /2/#/52/1/#/53/1/20/200/#/54/1-/2/#/52/1/#/53/1/20/200/#/54/2
+0  ·     spans  /2/#/52/1/#/53/1/20/200/#/54/1-/2/#/52/1/#/53/1/20/200/#/54/1/#
 
 query III
 SELECT * FROM level4 WHERE k1 = 2 AND k2 = 20 AND k3 = 200

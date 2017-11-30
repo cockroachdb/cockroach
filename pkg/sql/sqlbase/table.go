@@ -2451,3 +2451,185 @@ func TableEquivSignatures(
 
 	return signatures, nil
 }
+
+// maxKeyTokens returns the maximum number of key tokens in an index's key,
+// including the table ID, index ID, and index column values.
+//
+// In general, a key belonging to an interleaved index grandchild is encoded as:
+//
+//    /table/index/<parent-pk1>/.../<parent-pkX>/#/table/index/<child-pk1>/.../<child-pkY>/#/table/index/<grandchild-pk1>/.../<grandchild-pkZ>
+//
+// The part of the key with respect to the grandchild index would be
+// the entire key since there are no grand-grandchild table/index IDs or
+// <grandgrandchild-pk>. The maximal prefix of the key that belongs to child is
+//
+//    /table/index/<parent-pk1>/.../<parent-pkX>/#/table/index/<child-pk1>/.../<child-pkY>
+//
+// and the maximal prefix of the key that belongs to parent is
+//
+//    /table/index/<parent-pk1>/.../<parent-pkX>
+//
+// We return the maximum number of <tokens> in this prefix.
+func maxKeyTokens(index *IndexDescriptor) int {
+	nTables := len(index.Interleave.Ancestors) + 1
+	nKeys := len(index.ColumnIDs)
+
+	// To illustrate how we compute max # of key tokens, take the
+	// key in the example above and let the respective index be child.
+	// We'd like to return the number of bytes in
+	//
+	//    /table/index/<parent-pk1>/.../<parent-pkX>/#/table/index/<child-pk1>/.../<child-pkY>
+	// For each table-index, there is
+	//    1. table ID
+	//    2. index ID
+	//    3. interleave sentinel
+	// or 3 * nTables.
+	// Each <parent-pkX> must be a part of the index's columns (nKeys).
+	// Finally, we do not want to include the interleave sentinel for the
+	// current index (-1).
+	return 3*nTables + nKeys - 1
+}
+
+// TightenStartKey pushes forward the start key to the first key belonging to
+// the index (whether it exists or not) in the span.
+// This is relevant for parent spans that have an interleaved child's index key
+// as a start key.
+// For example, if child is interleaved into parent, a typical parent
+// span might look like
+//    /1 - /3
+// and a typical child span might look like
+//    /1/#/2 - /2/#/5
+// Suppose the parent span is
+//    /1/#/2 - /3
+// where the start key is a child's index key. Notice that the first parent
+// key read actually starts at /2 since all the parent keys with the prefix
+// /1 come before the child key /1/#/2 (and is not read in the span).
+// We can thus push forward the start key from /1/#/2 to /2. If the start key
+// was /1, we cannot push this forwards since that is the first key we want
+// to read.
+func TightenStartKey(index *IndexDescriptor, start roachpb.Key) (roachpb.Key, error) {
+	nIndexTokens := maxKeyTokens(index)
+	keyTokens, err := encoding.DecomposeKeyTokens(start)
+	if err != nil {
+		return roachpb.Key{}, err
+	}
+
+	// This is either the index's own key or one of its ancestor's key.
+	// Nothing to do.
+	if len(keyTokens) <= nIndexTokens {
+		return start, nil
+	}
+
+	// len(keyTokens) > nIndexTokens, so this must be a child key.
+	// Transform /1/#/2 --> /2.
+	return start[:nIndexTokens].PrefixEnd(), nil
+}
+
+// TightenEndKey pushes back the end key to the last key of the last row
+// belonging to the index (whether it exists or not) in the span.
+// This is relevant for parent spans that have interleaved children.
+// For example, the parent span composed from the filter PK >= 1 and PK < 3 is
+//    /1 - /3
+// This reads all keys up to the first parent key for PK = 3. If parent had
+// interleaved tables and keys, it would unncessarily scan over interleaved
+// rows under PK2 (e.g. /2/#/5).
+// We can instead "tighten" the end key from /3 to /2/#.
+// TightenEndKey is idempotent upon successive invocation(s).
+func TightenEndKey(
+	table *TableDescriptor, index *IndexDescriptor, end roachpb.Key, inclusive bool,
+) (roachpb.Key, error) {
+	// To illustrate, suppose we have the interleaved hierarchy
+	//    parent
+	//	child
+	//	  grandchild
+	// Suppose our target index is child.
+	nIndexTokens := maxKeyTokens(index)
+	keyTokens, err := encoding.DecomposeKeyTokens(end)
+	if err != nil {
+		return roachpb.Key{}, err
+	}
+
+	if index.ID != table.PrimaryIndex.ID || len(keyTokens) < nIndexTokens {
+		// Case 1: secondary index, parent key or partial child key:
+		// Secondary indexes cannot have interleaved rows.
+		// We cannot tighten parent keys with respect to a child index.
+		// Partial child keys e.g. /1/#/1 vs /1/#/1/2 cannot have
+		// interleaved rows.
+		// Nothing to do besides making the end key exclusive if it was
+		// initially inclusive.
+		if inclusive {
+			end = end.PrefixEnd()
+		}
+		return end, nil
+	}
+
+	if len(keyTokens) == nIndexTokens {
+		// Case 2: child key
+
+		lastToken := keyTokens[len(keyTokens)-1]
+		_, isNotNullDesc := encoding.DecodeIfNotNullDescending(lastToken)
+		// If this is the child's key and the last value in the key is
+		// NotNullDesc, then it does not need (read: shouldn't) to be
+		// tightened.
+		// For example, the query with IS NOT NULL may generate
+		// the end key
+		//    /1/#/NOTNULLDESC
+		if isNotNullDesc {
+			if inclusive {
+				end = end.PrefixEnd()
+			}
+			return end, nil
+		}
+
+		// We only want to UndoPrefixEnd if the end key passed is not
+		// inclusive initially.
+		if !inclusive {
+			lastType := encoding.PeekType(lastToken)
+			if lastType == encoding.Bytes || lastType == encoding.BytesDesc || lastType == encoding.Decimal {
+				// If the last value is of type Decimals or
+				// Bytes then this is more difficult since the
+				// escape term is the last value.
+				// TODO(richardwu): Figure out how to go back 1
+				// logical bytes/decimal value.
+				return end, nil
+			}
+
+			// We first iterate back to the previous key value
+			//    /1/#/1 --> /1/#/0
+			end = encoding.UndoPrefixEnd(end)
+		}
+
+		// /1/#/0 --> /1/#/0/#
+		return encoding.EncodeInterleavedSentinel(end), nil
+	}
+
+	// len(keyTokens) > nIndexTokens
+	// Case 3: tightened child key or grandchild key
+
+	// Since there are more key tokens than the index token, we should
+	// expected an interleaved sentinel next, or else this index key
+	// cannot possibly be generated.
+	if _, isSentinel := encoding.DecodeIfInterleavedSentinel(keyTokens[nIndexTokens]); !isSentinel {
+		panic("expected interleaved sentinel as the next key token")
+	}
+
+	// Case 3a: tightened child key
+	// This could from a previous invocation of TightenEndKey. For
+	// example, if during index selection the key for child was
+	// tightened
+	//	/1/#/2 --> /1/#/1/#
+	// We don't really want to tighten on '#' again.
+	if len(keyTokens) == nIndexTokens+1 {
+		if inclusive {
+			end = end.PrefixEnd()
+		}
+		return end, nil
+	}
+
+	// Case 3b: grandchild key
+	// Ideally, we want to form
+	//    /1/#/2/#/3 --> /1/#/2/#
+	// We truncate up to the interleave sentinel after the last index
+	// key token.
+	return end[:nIndexTokens+1], nil
+}

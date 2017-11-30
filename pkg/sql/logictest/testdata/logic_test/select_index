@@ -419,6 +419,7 @@ EXPLAIN SELECT a FROM t WHERE (b, c) = (5.1, 1)
 1  ·       table  t@bc
 1  ·       spans  ALL
 
+# Note the span is reversed because of #20203.
 query ITTT
 EXPLAIN SELECT a FROM t WHERE b IN (5.0, 1)
 ----
