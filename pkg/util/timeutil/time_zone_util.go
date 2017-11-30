@@ -24,7 +24,7 @@ import (
 const fixedOffsetPrefix string = "fixed offset:"
 
 // FixedOffsetTimeZoneToLocation creates a time.Location with a set offset and
-// with a name that can be marshalled by crdb between nodes.
+// with a name that can be marshaled by crdb between nodes.
 func FixedOffsetTimeZoneToLocation(offset int, origRepr string) *time.Location {
 	return time.FixedZone(
 		fmt.Sprintf("%s%d (%s)", fixedOffsetPrefix, offset, origRepr),

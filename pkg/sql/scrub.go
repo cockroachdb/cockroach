@@ -246,7 +246,7 @@ func (n *scrubNode) startScrubTable(
 		}
 	}
 
-	// When no options are provided the default behaviour is to run
+	// When no options are provided the default behavior is to run
 	// exhaustive checks.
 	if len(n.n.Options) == 0 {
 		indexesToCheck, err := createIndexCheckOperations(nil /* indexNames */, tableDesc, tableName)

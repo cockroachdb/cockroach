@@ -55,7 +55,7 @@ func MaybeFuzz(pb Message) Message {
 	return pb
 }
 
-// Interceptor will be called with every proto before it is marshalled.
+// Interceptor will be called with every proto before it is marshaled.
 // Interceptor is not safe to modify concurrently with calls to Marshal.
 var Interceptor = func(_ Message) {}
 

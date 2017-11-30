@@ -2277,7 +2277,7 @@ func TestReplicaCommandQueueInconsistent(t *testing.T) {
 
 // TestReplicaCommandQueueCancellation verifies that commands which are
 // waiting on the command queue do not execute or deadlock if their context
-// is cancelled, and that commands dependent on cancelled commands execute
+// is canceled, and that commands dependent on canceled commands execute
 // correctly.
 func TestReplicaCommandQueueCancellation(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -2405,8 +2405,8 @@ func TestReplicaCommandQueueCancellation(t *testing.T) {
 
 // TestReplicaCommandQueueCancellationRandom verifies that commands in a
 // random dependency graph which are waiting on the command queue do not
-// execute or deadlock if their context is cancelled, and that commands
-// dependent on cancelled commands execute correctly.
+// execute or deadlock if their context is canceled, and that commands
+// dependent on canceled commands execute correctly.
 func TestReplicaCommandQueueCancellationRandom(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
@@ -2668,7 +2668,7 @@ type cmdQCancelTest struct {
 	// the following channels intercept requests and block them.
 	blockCmdBegin, blockCmdFinish chan struct{}
 	// the following channels track CommandQueueActions.
-	enteredCmdQ, cancelledCmd, startingCmd chan struct{}
+	enteredCmdQ, canceledCmd, startingCmd chan struct{}
 
 	cmds map[int]*testCmd
 }
@@ -2689,7 +2689,7 @@ func newCmdQCancelTest(t *testing.T) *cmdQCancelTest {
 		tsc:           TestStoreConfig(nil),
 		blockCmdBegin: make(chan struct{}),
 		enteredCmdQ:   make(chan struct{}),
-		cancelledCmd:  make(chan struct{}),
+		canceledCmd:   make(chan struct{}),
 		startingCmd:   make(chan struct{}),
 		cmds:          make(map[int]*testCmd),
 	}
@@ -2743,7 +2743,7 @@ func (ct *cmdQCancelTest) onCmdQAction(
 			}
 		case storagebase.CommandQueueCancellation:
 			select {
-			case ct.cancelledCmd <- struct{}{}:
+			case ct.canceledCmd <- struct{}{}:
 			case <-quiesce:
 			}
 		case storagebase.CommandQueueBeginExecuting:
@@ -2849,12 +2849,12 @@ func (ct *cmdQCancelTest) insertCmds(instrs []cancelInstr) {
 	}
 }
 
-// cancelCmds cancels all testCmds that need to be cancelled, in the provided
+// cancelCmds cancels all testCmds that need to be canceled, in the provided
 // order.
 func (ct *cmdQCancelTest) cancelCmds(cancelOrder []int) {
 	for _, cancelID := range cancelOrder {
 		if cancelID == 0 {
-			ct.Fatalf("the first cancelInstr cannot be cancelled")
+			ct.Fatalf("the first cancelInstr cannot be canceled")
 		}
 
 		cmd, ok := ct.cmds[cancelID]
@@ -2862,14 +2862,14 @@ func (ct *cmdQCancelTest) cancelCmds(cancelOrder []int) {
 			ct.Fatalf("command %d not found", cancelID)
 		}
 
-		// Cancel the context on each cmd that should be cancelled.
+		// Cancel the context on each cmd that should be canceled.
 		cmd.cancel()
 
-		// If either of these deadlocks, the command was never cancelled and may have
+		// If either of these deadlocks, the command was never canceled and may have
 		// unexpectedly begun executing. Indeed, the absence of such a deadlock is
 		// what's being tested here.
 		select {
-		case <-ct.cancelledCmd:
+		case <-ct.canceledCmd:
 		case <-time.After(cmdQCancelTestDeadlockTimeout):
 			ct.Fatalf("command %d never left CommandQueue after cancellation", cancelID)
 		}
@@ -2891,7 +2891,7 @@ func (ct *cmdQCancelTest) cancelCmds(cancelOrder []int) {
 	}
 }
 
-// runCmds runs all testCmds that were not cancelled.
+// runCmds runs all testCmds that were not canceled.
 func (ct *cmdQCancelTest) runCmds() {
 	for len(ct.cmds) > 0 {
 		// Determine the commands we expect to be ready to run. Remove these
@@ -2954,10 +2954,10 @@ func (ct *cmdQCancelTest) runCmds() {
 }
 
 // Run runs the cmdQCancelTest with the provided cancelInstrs. Commands will be
-// cancelled in the order provided.
+// canceled in the order provided.
 func (ct *cmdQCancelTest) Run(instrs []cancelInstr, cancelOrder []int) {
 	// Create an initial span that will block all others until we're ready to
-	// begin monitoring. This initial span cannot be cancelled before exiting
+	// begin monitoring. This initial span cannot be canceled before exiting
 	// the prereq wait period.
 	initial := cancelInstr{
 		span: roachpb.Span{Key: keys.SystemMax, EndKey: keys.TableDataMin},
@@ -2973,8 +2973,8 @@ func (ct *cmdQCancelTest) Run(instrs []cancelInstr, cancelOrder []int) {
 }
 
 // RunWithoutInitialSpan runs the cmdQCancelTest with the provided cancelInstrs.
-// Commands will be cancelled in the order provided. The first cancelInstrs
-// should be a prereq of all other instructions and cannot be cancelled. Use
+// Commands will be canceled in the order provided. The first cancelInstrs
+// should be a prereq of all other instructions and cannot be canceled. Use
 // ct.Run to assure this.
 func (ct *cmdQCancelTest) RunWithoutInitialSpan(instrs []cancelInstr, cancelOrder []int) {
 	defer ct.s.Stop(context.Background())
@@ -4950,7 +4950,7 @@ func TestAbortSpanPoisonOnResolve(t *testing.T) {
 
 	// Isolation of the pushee and whether we're going to abort it.
 	// Run the actual meat of the test, which pushes the pushee and
-	// checks whether we get the correct behaviour as it touches the
+	// checks whether we get the correct behavior as it touches the
 	// Range again.
 	run := func(abort bool, iso enginepb.IsolationType) {
 		tc := testContext{}
@@ -7155,7 +7155,7 @@ func TestReplicaCancelRaft(t *testing.T) {
 				}
 			} else {
 				if pErr == nil {
-					// We cancelled the context while the command was already
+					// We canceled the context while the command was already
 					// being processed, so the client had to wait for successful
 					// execution.
 					return
@@ -7169,7 +7169,7 @@ func TestReplicaCancelRaft(t *testing.T) {
 	}
 }
 
-// TestReplicaTryAbandon checks that cancelling a request that has been
+// TestReplicaTryAbandon checks that canceling a request that has been
 // proposed to Raft but before it has been executed correctly cleans up the
 // command queue. See #11986.
 func TestReplicaTryAbandon(t *testing.T) {
@@ -7238,7 +7238,7 @@ func TestReplicaTryAbandon(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Even though we cancelled the command it will still get executed and the
+	// Even though we canceled the command it will still get executed and the
 	// command queue cleaned up.
 	testutils.SucceedsSoon(t, func() error {
 		tc.repl.cmdQMu.Lock()

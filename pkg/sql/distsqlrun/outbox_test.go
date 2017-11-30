@@ -316,9 +316,9 @@ func TestOutboxClosesWhenConsumerCloses(t *testing.T) {
 					if err != nil {
 						t.Error(err)
 					}
-					// Check that Recv() receives an error once the context is cancelled.
+					// Check that Recv() receives an error once the context is canceled.
 					// Perhaps this is not terribly important to test; one can argue that
-					// the client should either not be Recv()ing after it cancelled the
+					// the client should either not be Recv()ing after it canceled the
 					// ctx or that it otherwise should otherwise be aware of the
 					// cancellation when processing the results, but I've put it here
 					// because bidi streams are confusing and this provides some
@@ -402,9 +402,9 @@ func TestOutboxCancelsFlowOnError(t *testing.T) {
 
 	// We could test this on ctx.cancel(), but this mock
 	// cancellation method is simpler.
-	ctxCancelled := false
+	ctxCanceled := false
 	mockCancel := func() {
-		ctxCancelled = true
+		ctxCanceled = true
 	}
 
 	outbox = newOutbox(&flowCtx, addr.String(), flowID, streamID)
@@ -420,7 +420,7 @@ func TestOutboxCancelsFlowOnError(t *testing.T) {
 	streamNotification.donec <- sqlbase.NewQueryCanceledError()
 
 	wg.Wait()
-	if !ctxCancelled {
-		t.Fatal("flow ctx was not cancelled")
+	if !ctxCanceled {
+		t.Fatal("flow ctx was not canceled")
 	}
 }

@@ -63,7 +63,7 @@ func main() {
 		vanity.TurnOnUnmarshalerAll,
 		vanity.TurnOnSizerAll,
 
-		// We want marshalled protobufs to be deterministic so that they can be
+		// We want marshaled protobufs to be deterministic so that they can be
 		// compared byte-for-byte. At the time of writing, this is depended upon by
 		// the consistency checker.
 		vanity.TurnOnStable_MarshalerAll,

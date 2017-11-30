@@ -158,7 +158,7 @@ func (c *cmd) ResolvePendingPrereq() {
 		panic("ResolvePendingPrereq with no pending prereq")
 	}
 
-	// Either the prerequisite command finished executing or it was cancelled.
+	// Either the prerequisite command finished executing or it was canceled.
 	// If the command finished cleanly, there's nothing for us to do except
 	// remove it from our list and wait for the next prerequisite to finish.
 	// Here, len(prereq.prereqs) == 0 so the append below will be a no-op.
@@ -166,10 +166,10 @@ func (c *cmd) ResolvePendingPrereq() {
 	// transferred to our dependents when we finish pending (either from
 	// completion or cancellation).
 	//
-	// If the prerequisite command was cancelled, we have to handle the
+	// If the prerequisite command was canceled, we have to handle the
 	// cancellation here. We do this by migrating transitive dependencies from
-	// cancelled prerequisite to the current command. All prerequisites of the
-	// prerequisite that was just cancelled that were still pending at the time
+	// canceled prerequisite to the current command. All prerequisites of the
+	// prerequisite that was just canceled that were still pending at the time
 	// of cancellation are now this command's direct prerequisites. The append
 	// does not need to be synchronized, because prereq.prereqs will only ever
 	// be mutated on the other side of the prereq.pending closing, which the Go
@@ -181,7 +181,7 @@ func (c *cmd) ResolvePendingPrereq() {
 	// and prerequisite command.
 	//
 	// For instance, take the following dependency graph, where command 3 was
-	// cancelled. We need to set command 2 as a prerequisite of command 4 even
+	// canceled. We need to set command 2 as a prerequisite of command 4 even
 	// though they do not overlap because command 2 has a dependency on command
 	// 1, which does overlap command 4. We could try to catch this situation and
 	// set command 1 as a prerequisite of command 4 directly, but this approach
@@ -199,7 +199,7 @@ func (c *cmd) ResolvePendingPrereq() {
 	// It is also be possible that some of the transitive dependencies are
 	// unnecessary and that we're being pessimistic here. An example case for
 	// this is shown in the following dependency graph, where a write separating
-	// two reads is cancelled. During the cancellation, command 3 will take
+	// two reads is canceled. During the cancellation, command 3 will take
 	// command 1 as it's prerequisite even though reads do not need to wait on
 	// other reads. We could be smarter here and detect these cases, but the
 	// pessimism does not affect correctness.

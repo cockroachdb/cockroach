@@ -213,7 +213,7 @@ type Gossip struct {
 	cullInterval      time.Duration
 
 	// The system config is treated unlike other info objects.
-	// It is used so often that we keep an unmarshalled version of it
+	// It is used so often that we keep an unmarshaled version of it
 	// here and its own set of callbacks.
 	// We do not use the infostore to avoid unmarshalling under the
 	// main gossip lock.
@@ -417,7 +417,7 @@ func (g *Gossip) SetStorage(storage Storage) error {
 	// If a new resolver was found, immediately signal bootstrap.
 	if newResolverFound {
 		if log.V(1) {
-			log.Infof(ctx, "found new resolvers from storage; signalling bootstrap")
+			log.Infof(ctx, "found new resolvers from storage; signaling bootstrap")
 		}
 		g.signalStalledLocked()
 	}
@@ -933,7 +933,7 @@ func (g *Gossip) RegisterCallback(pattern string, method Callback) func() {
 	}
 }
 
-// GetSystemConfig returns the local unmarshalled version of the system config.
+// GetSystemConfig returns the local unmarshaled version of the system config.
 // The second return value indicates whether the system config has been set yet.
 func (g *Gossip) GetSystemConfig() (config.SystemConfig, bool) {
 	g.systemConfigMu.RLock()
@@ -943,7 +943,7 @@ func (g *Gossip) GetSystemConfig() (config.SystemConfig, bool) {
 
 // RegisterSystemConfigChannel registers a channel to signify updates for the
 // system config. It is notified after registration, and whenever a new
-// system config is successfully unmarshalled.
+// system config is successfully unmarshaled.
 func (g *Gossip) RegisterSystemConfigChannel() <-chan struct{} {
 	g.systemConfigMu.Lock()
 	defer g.systemConfigMu.Unlock()

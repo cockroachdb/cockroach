@@ -173,7 +173,7 @@ type Config struct {
 	// The following values can only be set via environment variables and are
 	// for testing only. They are not meant to be set by the end user.
 
-	// Enables linearizable behaviour of operations on this node by making sure
+	// Enables linearizable behavior of operations on this node by making sure
 	// that no commit timestamp is reported back to the client until all other
 	// node clocks have necessarily passed it.
 	// Environment Variable: COCKROACH_LINEARIZABLE

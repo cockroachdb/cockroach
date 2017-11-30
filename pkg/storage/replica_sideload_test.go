@@ -271,7 +271,7 @@ func testSideloadingSideloadedStorage(
 
 	if !isInMem {
 		// First add a file that shouldn't be in the sideloaded storage to ensure
-		// sane behaviour when directory can't be removed after full truncate.
+		// sane behavior when directory can't be removed after full truncate.
 		nonRemovableFile := filepath.Join(ss.(*diskSideloadStorage).dir, "cantremove.xx")
 		_, err := os.Create(nonRemovableFile)
 		if err != nil {

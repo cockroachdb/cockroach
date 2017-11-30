@@ -592,7 +592,7 @@ func (*AggregatorSpec) Descriptor() ([]byte, []int) { return fileDescriptorProce
 type AggregatorSpec_Aggregation struct {
 	Func AggregatorSpec_Func `protobuf:"varint,1,opt,name=func,enum=cockroach.sql.distsqlrun.AggregatorSpec_Func" json:"func"`
 	// Aggregation functions with distinct = true functions like you would
-	// expect '<FUNC> DISTINCT' to operate, the default behaviour would be
+	// expect '<FUNC> DISTINCT' to operate, the default behavior would be
 	// the '<FUNC> ALL' operation.
 	Distinct bool `protobuf:"varint,2,opt,name=distinct" json:"distinct"`
 	// The column index specifies the argument(s) to the aggregator function.

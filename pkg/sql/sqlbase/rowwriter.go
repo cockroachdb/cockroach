@@ -145,11 +145,11 @@ type RowInserter struct {
 	Fks                   fkInsertHelper
 
 	// For allocation avoidance.
-	marshalled []roachpb.Value
-	key        roachpb.Key
-	valueBuf   []byte
-	scratch    []byte
-	value      roachpb.Value
+	marshaled []roachpb.Value
+	key       roachpb.Key
+	valueBuf  []byte
+	scratch   []byte
+	value     roachpb.Value
 }
 
 // MakeRowInserter creates a RowInserter for the given table.
@@ -178,7 +178,7 @@ func MakeRowInserter(
 		Helper:                rowHelper{TableDesc: tableDesc, Indexes: indexes},
 		InsertCols:            insertCols,
 		InsertColIDtoRowIndex: ColIDtoRowIndexFromCols(insertCols),
-		marshalled:            make([]roachpb.Value, len(insertCols)),
+		marshaled:             make([]roachpb.Value, len(insertCols)),
 	}
 
 	for i, col := range tableDesc.PrimaryIndex.ColumnIDs {
@@ -245,7 +245,7 @@ func (ri *RowInserter) InsertRow(
 	for i, val := range values {
 		// Make sure the value can be written to the column before proceeding.
 		var err error
-		if ri.marshalled[i], err = MarshalColumnValue(ri.InsertCols[i], val); err != nil {
+		if ri.marshaled[i], err = MarshalColumnValue(ri.InsertCols[i], val); err != nil {
 			return err
 		}
 	}
@@ -280,13 +280,13 @@ func (ri *RowInserter) InsertRow(
 				continue
 			}
 
-			if ri.marshalled[idx].RawBytes != nil {
+			if ri.marshaled[idx].RawBytes != nil {
 				// We only output non-NULL values. Non-existent column keys are
 				// considered NULL during scanning and the row sentinel ensures we know
 				// the row exists.
 
 				ri.key = keys.MakeFamilyKey(primaryIndexKey, uint32(family.ID))
-				putFn(ctx, b, &ri.key, &ri.marshalled[idx], traceKV)
+				putFn(ctx, b, &ri.key, &ri.marshaled[idx], traceKV)
 				ri.key = nil
 			}
 
@@ -371,7 +371,7 @@ type RowUpdater struct {
 	Fks fkUpdateHelper
 
 	// For allocation avoidance.
-	marshalled      []roachpb.Value
+	marshaled       []roachpb.Value
 	newValues       []tree.Datum
 	key             roachpb.Key
 	indexEntriesBuf []IndexEntry
@@ -483,7 +483,7 @@ func MakeRowUpdater(
 		updateColIDtoRowIndex: updateColIDtoRowIndex,
 		deleteOnlyIndex:       deleteOnlyIndex,
 		primaryKeyColChange:   primaryKeyColChange,
-		marshalled:            make([]roachpb.Value, len(updateCols)),
+		marshaled:             make([]roachpb.Value, len(updateCols)),
 		newValues:             make([]tree.Datum, len(tableCols)),
 	}
 
@@ -589,7 +589,7 @@ func (ru *RowUpdater) UpdateRow(
 	// happen before index encoding because certain datum types (i.e. tuple)
 	// cannot be used as index values.
 	for i, val := range updateValues {
-		if ru.marshalled[i], err = MarshalColumnValue(ru.UpdateCols[i], val); err != nil {
+		if ru.marshaled[i], err = MarshalColumnValue(ru.UpdateCols[i], val); err != nil {
 			return nil, err
 		}
 	}
@@ -680,9 +680,9 @@ func (ru *RowUpdater) UpdateRow(
 
 			ru.key = keys.MakeFamilyKey(primaryIndexKey, uint32(family.ID))
 			if traceKV {
-				log.VEventf(ctx, 2, "Put %s -> %v", ru.key, ru.marshalled[idx].PrettyPrint())
+				log.VEventf(ctx, 2, "Put %s -> %v", ru.key, ru.marshaled[idx].PrettyPrint())
 			}
-			b.Put(&ru.key, &ru.marshalled[idx])
+			b.Put(&ru.key, &ru.marshaled[idx])
 			ru.key = nil
 
 			continue

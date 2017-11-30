@@ -118,7 +118,7 @@ plumbing will have to be added to important local work done on nodes so that
 this context cancellation leads to the interruption of this work.
 
 `pgwire.Server` will listen for the completion of the remaining sessions up to
-a timeout of 1s. Some sessions might keep going indefinitely despite a cancelled
+a timeout of 1s. Some sessions might keep going indefinitely despite a canceled
 context.
 
 The final stage is to delete table descriptor leases from the `system.lease`

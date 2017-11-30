@@ -10,7 +10,7 @@ KEY_NAME="${KEY_NAME-google_compute_engine}"
 
 SSH_OPTIONS=(-o "ServerAliveInterval=60" -o "StrictHostKeyChecking no" -i "$HOME/.ssh/${KEY_NAME}")
 
-# Ensure that the terraform config is cancelled if one of the run scripts fails
+# Ensure that the terraform config is canceled if one of the run scripts fails
 # or the entire thing is interrupted externally.
 function destroy {
   set +e

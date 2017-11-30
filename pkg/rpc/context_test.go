@@ -784,7 +784,7 @@ func TestGRPCKeepaliveFailureFailsInflightRPCs(t *testing.T) {
 	// connection). We could further test that the status reported by
 	// Context.ConnHealth() for the remote node moves to UNAVAILABLE because of
 	// the (application-level) heartbeats performed by rpc.Context, but the
-	// behaviour of our heartbeats in the face of transport failures is
+	// behavior of our heartbeats in the face of transport failures is
 	// sufficiently tested in TestHeartbeatHealthTransport.
 }
 

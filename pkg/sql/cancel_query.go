@@ -77,7 +77,7 @@ func (n *cancelQueryNode) Start(params runParams) error {
 		return err
 	}
 
-	if !response.Cancelled {
+	if !response.Canceled {
 		return fmt.Errorf("could not cancel query %s: %s", queryID, response.Error)
 	}
 

@@ -20,7 +20,7 @@ import (
 // [startKey,endKey) and time range (startTime,endTime]. If a key was added or
 // modified between startTime and endTime, the iterator will position at the
 // most recent version (before or at endTime) of that key. If the key was most
-// recently deleted, this is signalled with an empty value.
+// recently deleted, this is signaled with an empty value.
 //
 // Note: The endTime is inclusive to be consistent with the non-incremental
 // iterator, where reads at a given timestamp return writes at that

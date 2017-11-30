@@ -202,7 +202,7 @@ func (p *planner) setUnlimited(plan planNode) {
 }
 
 // getLimit computes the actual number of rows to request from the
-// data source to honour both the required count and offset together.
+// data source to honor both the required count and offset together.
 // This also ensures that the resulting number of rows does not
 // overflow.
 func getLimit(count, offset int64) int64 {

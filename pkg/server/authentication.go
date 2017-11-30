@@ -369,7 +369,7 @@ func decodeSessionCookie(encodedCookie *http.Cookie) (*serverpb.SessionCookie, e
 	}
 	var sessionCookieValue serverpb.SessionCookie
 	if err := protoutil.Unmarshal(cookieBytes, &sessionCookieValue); err != nil {
-		return nil, errors.Wrap(err, "session cookie could not be unmarshalled")
+		return nil, errors.Wrap(err, "session cookie could not be unmarshaled")
 	}
 	return &sessionCookieValue, nil
 }

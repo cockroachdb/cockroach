@@ -137,7 +137,7 @@ func (b *buf) Write(data []byte) (int, error) {
 }
 
 // errEAgain is returned by buf.readLocked() when the read was blocked at the
-// time when buf.readerWait was signalled (in particular, after the
+// time when buf.readerWait was signaled (in particular, after the
 // PartitionableConn interrupted the read because of a partition). The caller is
 // expected to try the read again after the partition is gone.
 var errEAgain = errors.New("try read again")

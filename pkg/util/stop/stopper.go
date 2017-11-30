@@ -477,7 +477,7 @@ func (s *Stopper) Quiesce(ctx context.Context) {
 	}
 }
 
-// WithCancel returns a child context which is cancelled when the Stopper
+// WithCancel returns a child context which is canceled when the Stopper
 // begins to quiesce.
 func (s *Stopper) WithCancel(ctx context.Context) context.Context {
 	var cancel func()

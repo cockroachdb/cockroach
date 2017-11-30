@@ -22,7 +22,7 @@ import (
 	"golang.org/x/net/context"
 )
 
-// TestQuotaPoolBasic tests the minimal expected behaviour of the quota pool
+// TestQuotaPoolBasic tests the minimal expected behavior of the quota pool
 // with different sized quota pool and a varying number of goroutines, each
 // acquiring a unit quota and releasing it immediately after.
 func TestQuotaPoolBasic(t *testing.T) {
@@ -66,9 +66,9 @@ func TestQuotaPoolBasic(t *testing.T) {
 	}
 }
 
-// TestQuotaPoolContextCancellation tests the behaviour that for an ongoing
-// blocked acquisition, if the context passed in gets cancelled the acquisition
-// gets cancelled too with an error indicating so. This should not affect the
+// TestQuotaPoolContextCancellation tests the behavior that for an ongoing
+// blocked acquisition, if the context passed in gets canceled the acquisition
+// gets canceled too with an error indicating so. This should not affect the
 // available quota in the pool.
 func TestQuotaPoolContextCancellation(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -102,7 +102,7 @@ func TestQuotaPoolContextCancellation(t *testing.T) {
 	}
 }
 
-// TestQuotaPoolClose tests the behaviour that for an ongoing blocked
+// TestQuotaPoolClose tests the behavior that for an ongoing blocked
 // acquisition if the quota pool gets closed, all ongoing and subsequent
 // acquisitions go through.
 func TestQuotaPoolClose(t *testing.T) {
@@ -152,10 +152,10 @@ func TestQuotaPoolClose(t *testing.T) {
 	}
 }
 
-// TestQuotaPoolCancelledAcquisitions tests the behaviour where we enqueue
-// multiple acquisitions with cancelled contexts and expect any subsequent
+// TestQuotaPoolCanceledAcquisitions tests the behavior where we enqueue
+// multiple acquisitions with canceled contexts and expect any subsequent
 // acquisition with a valid context to proceed without error.
-func TestQuotaPoolCancelledAcquisitions(t *testing.T) {
+func TestQuotaPoolCanceledAcquisitions(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	ctx, cancel := context.WithCancel(context.Background())

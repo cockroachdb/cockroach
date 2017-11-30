@@ -267,9 +267,9 @@ type Session struct {
 	// release resources associated with the context above.
 	// TODO(andrei): We need to either get rid of this cancel field, or
 	// it needs to move to the TxnState and become a per-txn
-	// cancel. Right now, we're cancelling all the txns that have ever
+	// cancel. Right now, we're canceling all the txns that have ever
 	// run on this session when the session is closed, as opposed to
-	// cancelling the individual transactions as soon as they
+	// canceling the individual transactions as soon as they
 	// COMMIT/ROLLBACK.
 	cancel context.CancelFunc
 	// parallelizeQueue is a queue managing all parallelized SQL statements
@@ -531,7 +531,7 @@ func (s *Session) Finish(e *Executor) {
 	// that the Session was abandoned in the middle of a transaction, in which
 	// case the error doesn't matter.
 	//
-	// TODO(nvanbenschoten): Once we have better support for cancelling ongoing
+	// TODO(nvanbenschoten): Once we have better support for canceling ongoing
 	// statement execution by the infrastructure added to support CancelRequest,
 	// we should try to actively drain this queue instead of passively waiting
 	// for it to drain. (andrei, 2017/09) - We now have support for statement
