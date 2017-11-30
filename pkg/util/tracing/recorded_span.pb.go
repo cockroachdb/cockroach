@@ -18,8 +18,8 @@ import math "math"
 
 import time "time"
 
-import github_com_gogo_protobuf_sortkeys "github.com/gogo/protobuf/sortkeys"
-import github_com_gogo_protobuf_types "github.com/gogo/protobuf/types"
+import sortkeys "github.com/gogo/protobuf/sortkeys"
+import types "github.com/gogo/protobuf/types"
 
 import io "io"
 
@@ -137,7 +137,7 @@ func (m *RecordedSpan) MarshalTo(dAtA []byte) (int, error) {
 		for k := range m.Baggage {
 			keysForBaggage = append(keysForBaggage, string(k))
 		}
-		github_com_gogo_protobuf_sortkeys.Strings(keysForBaggage)
+		sortkeys.Strings(keysForBaggage)
 		for _, k := range keysForBaggage {
 			dAtA[i] = 0x2a
 			i++
@@ -159,7 +159,7 @@ func (m *RecordedSpan) MarshalTo(dAtA []byte) (int, error) {
 		for k := range m.Tags {
 			keysForTags = append(keysForTags, string(k))
 		}
-		github_com_gogo_protobuf_sortkeys.Strings(keysForTags)
+		sortkeys.Strings(keysForTags)
 		for _, k := range keysForTags {
 			dAtA[i] = 0x32
 			i++
@@ -178,16 +178,16 @@ func (m *RecordedSpan) MarshalTo(dAtA []byte) (int, error) {
 	}
 	dAtA[i] = 0x3a
 	i++
-	i = encodeVarintRecordedSpan(dAtA, i, uint64(github_com_gogo_protobuf_types.SizeOfStdTime(m.StartTime)))
-	n1, err := github_com_gogo_protobuf_types.StdTimeMarshalTo(m.StartTime, dAtA[i:])
+	i = encodeVarintRecordedSpan(dAtA, i, uint64(types.SizeOfStdTime(m.StartTime)))
+	n1, err := types.StdTimeMarshalTo(m.StartTime, dAtA[i:])
 	if err != nil {
 		return 0, err
 	}
 	i += n1
 	dAtA[i] = 0x42
 	i++
-	i = encodeVarintRecordedSpan(dAtA, i, uint64(github_com_gogo_protobuf_types.SizeOfStdDuration(m.Duration)))
-	n2, err := github_com_gogo_protobuf_types.StdDurationMarshalTo(m.Duration, dAtA[i:])
+	i = encodeVarintRecordedSpan(dAtA, i, uint64(types.SizeOfStdDuration(m.Duration)))
+	n2, err := types.StdDurationMarshalTo(m.Duration, dAtA[i:])
 	if err != nil {
 		return 0, err
 	}
@@ -224,8 +224,8 @@ func (m *RecordedSpan_LogRecord) MarshalTo(dAtA []byte) (int, error) {
 	_ = l
 	dAtA[i] = 0xa
 	i++
-	i = encodeVarintRecordedSpan(dAtA, i, uint64(github_com_gogo_protobuf_types.SizeOfStdTime(m.Time)))
-	n3, err := github_com_gogo_protobuf_types.StdTimeMarshalTo(m.Time, dAtA[i:])
+	i = encodeVarintRecordedSpan(dAtA, i, uint64(types.SizeOfStdTime(m.Time)))
+	n3, err := types.StdTimeMarshalTo(m.Time, dAtA[i:])
 	if err != nil {
 		return 0, err
 	}
@@ -316,9 +316,9 @@ func (m *RecordedSpan) Size() (n int) {
 			n += mapEntrySize + 1 + sovRecordedSpan(uint64(mapEntrySize))
 		}
 	}
-	l = github_com_gogo_protobuf_types.SizeOfStdTime(m.StartTime)
+	l = types.SizeOfStdTime(m.StartTime)
 	n += 1 + l + sovRecordedSpan(uint64(l))
-	l = github_com_gogo_protobuf_types.SizeOfStdDuration(m.Duration)
+	l = types.SizeOfStdDuration(m.Duration)
 	n += 1 + l + sovRecordedSpan(uint64(l))
 	if len(m.Logs) > 0 {
 		for _, e := range m.Logs {
@@ -332,7 +332,7 @@ func (m *RecordedSpan) Size() (n int) {
 func (m *RecordedSpan_LogRecord) Size() (n int) {
 	var l int
 	_ = l
-	l = github_com_gogo_protobuf_types.SizeOfStdTime(m.Time)
+	l = types.SizeOfStdTime(m.Time)
 	n += 1 + l + sovRecordedSpan(uint64(l))
 	if len(m.Fields) > 0 {
 		for _, e := range m.Fields {
@@ -747,7 +747,7 @@ func (m *RecordedSpan) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			if err := github_com_gogo_protobuf_types.StdTimeUnmarshal(&m.StartTime, dAtA[iNdEx:postIndex]); err != nil {
+			if err := types.StdTimeUnmarshal(&m.StartTime, dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
@@ -777,7 +777,7 @@ func (m *RecordedSpan) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			if err := github_com_gogo_protobuf_types.StdDurationUnmarshal(&m.Duration, dAtA[iNdEx:postIndex]); err != nil {
+			if err := types.StdDurationUnmarshal(&m.Duration, dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
@@ -888,7 +888,7 @@ func (m *RecordedSpan_LogRecord) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			if err := github_com_gogo_protobuf_types.StdTimeUnmarshal(&m.Time, dAtA[iNdEx:postIndex]); err != nil {
+			if err := types.StdTimeUnmarshal(&m.Time, dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex

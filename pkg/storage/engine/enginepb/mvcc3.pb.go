@@ -12,7 +12,7 @@ import github_com_cockroachdb_cockroach_pkg_util_uuid "github.com/cockroachdb/co
 
 import bytes "bytes"
 
-import encoding_binary "encoding/binary"
+import binary "encoding/binary"
 
 import io "io"
 
@@ -317,19 +317,19 @@ func (m *MVCCNetworkStats) MarshalTo(dAtA []byte) (int, error) {
 	if m.LastUpdateNanos != 0 {
 		dAtA[i] = 0x9
 		i++
-		encoding_binary.LittleEndian.PutUint64(dAtA[i:], uint64(m.LastUpdateNanos))
+		binary.LittleEndian.PutUint64(dAtA[i:], uint64(m.LastUpdateNanos))
 		i += 8
 	}
 	if m.IntentAge != 0 {
 		dAtA[i] = 0x11
 		i++
-		encoding_binary.LittleEndian.PutUint64(dAtA[i:], uint64(m.IntentAge))
+		binary.LittleEndian.PutUint64(dAtA[i:], uint64(m.IntentAge))
 		i += 8
 	}
 	if m.GCBytesAge != 0 {
 		dAtA[i] = 0x19
 		i++
-		encoding_binary.LittleEndian.PutUint64(dAtA[i:], uint64(m.GCBytesAge))
+		binary.LittleEndian.PutUint64(dAtA[i:], uint64(m.GCBytesAge))
 		i += 8
 	}
 	if m.LiveBytes != 0 {
@@ -869,7 +869,7 @@ func (m *MVCCNetworkStats) Unmarshal(dAtA []byte) error {
 			if (iNdEx + 8) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.LastUpdateNanos = int64(encoding_binary.LittleEndian.Uint64(dAtA[iNdEx:]))
+			m.LastUpdateNanos = int64(binary.LittleEndian.Uint64(dAtA[iNdEx:]))
 			iNdEx += 8
 		case 2:
 			if wireType != 1 {
@@ -879,7 +879,7 @@ func (m *MVCCNetworkStats) Unmarshal(dAtA []byte) error {
 			if (iNdEx + 8) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.IntentAge = int64(encoding_binary.LittleEndian.Uint64(dAtA[iNdEx:]))
+			m.IntentAge = int64(binary.LittleEndian.Uint64(dAtA[iNdEx:]))
 			iNdEx += 8
 		case 3:
 			if wireType != 1 {
@@ -889,7 +889,7 @@ func (m *MVCCNetworkStats) Unmarshal(dAtA []byte) error {
 			if (iNdEx + 8) > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.GCBytesAge = int64(encoding_binary.LittleEndian.Uint64(dAtA[iNdEx:]))
+			m.GCBytesAge = int64(binary.LittleEndian.Uint64(dAtA[iNdEx:]))
 			iNdEx += 8
 		case 4:
 			if wireType != 0 {

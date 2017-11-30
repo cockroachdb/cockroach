@@ -26,12 +26,10 @@ import cockroach_util "github.com/cockroachdb/cockroach/pkg/util"
 import github_com_cockroachdb_cockroach_pkg_roachpb "github.com/cockroachdb/cockroach/pkg/roachpb"
 import github_com_cockroachdb_cockroach_pkg_util_uuid "github.com/cockroachdb/cockroach/pkg/util/uuid"
 
-import (
-	context "golang.org/x/net/context"
-	grpc "google.golang.org/grpc"
-)
+import context "golang.org/x/net/context"
+import grpc "google.golang.org/grpc"
 
-import github_com_gogo_protobuf_sortkeys "github.com/gogo/protobuf/sortkeys"
+import sortkeys "github.com/gogo/protobuf/sortkeys"
 
 import io "io"
 
@@ -318,7 +316,7 @@ func (m *Request) MarshalTo(dAtA []byte) (int, error) {
 		for k := range m.HighWaterStamps {
 			keysForHighWaterStamps = append(keysForHighWaterStamps, int32(k))
 		}
-		github_com_gogo_protobuf_sortkeys.Int32s(keysForHighWaterStamps)
+		sortkeys.Int32s(keysForHighWaterStamps)
 		for _, k := range keysForHighWaterStamps {
 			dAtA[i] = 0x1a
 			i++
@@ -338,7 +336,7 @@ func (m *Request) MarshalTo(dAtA []byte) (int, error) {
 		for k := range m.Delta {
 			keysForDelta = append(keysForDelta, string(k))
 		}
-		github_com_gogo_protobuf_sortkeys.Strings(keysForDelta)
+		sortkeys.Strings(keysForDelta)
 		for _, k := range keysForDelta {
 			dAtA[i] = 0x22
 			i++
@@ -425,7 +423,7 @@ func (m *Response) MarshalTo(dAtA []byte) (int, error) {
 		for k := range m.Delta {
 			keysForDelta = append(keysForDelta, string(k))
 		}
-		github_com_gogo_protobuf_sortkeys.Strings(keysForDelta)
+		sortkeys.Strings(keysForDelta)
 		for _, k := range keysForDelta {
 			dAtA[i] = 0x2a
 			i++
@@ -458,7 +456,7 @@ func (m *Response) MarshalTo(dAtA []byte) (int, error) {
 		for k := range m.HighWaterStamps {
 			keysForHighWaterStamps = append(keysForHighWaterStamps, int32(k))
 		}
-		github_com_gogo_protobuf_sortkeys.Int32s(keysForHighWaterStamps)
+		sortkeys.Int32s(keysForHighWaterStamps)
 		for _, k := range keysForHighWaterStamps {
 			dAtA[i] = 0x32
 			i++
@@ -496,7 +494,7 @@ func (m *InfoStatus) MarshalTo(dAtA []byte) (int, error) {
 		for k := range m.Infos {
 			keysForInfos = append(keysForInfos, string(k))
 		}
-		github_com_gogo_protobuf_sortkeys.Strings(keysForInfos)
+		sortkeys.Strings(keysForInfos)
 		for _, k := range keysForInfos {
 			dAtA[i] = 0xa
 			i++

@@ -21,14 +21,12 @@ import github_com_cockroachdb_cockroach_pkg_roachpb "github.com/cockroachdb/cock
 import time "time"
 import github_com_cockroachdb_cockroach_pkg_util_uuid "github.com/cockroachdb/cockroach/pkg/util/uuid"
 
-import (
-	context "golang.org/x/net/context"
-	grpc "google.golang.org/grpc"
-)
+import context "golang.org/x/net/context"
+import grpc "google.golang.org/grpc"
 
-import github_com_gogo_protobuf_sortkeys "github.com/gogo/protobuf/sortkeys"
-import encoding_binary "encoding/binary"
-import github_com_gogo_protobuf_types "github.com/gogo/protobuf/types"
+import sortkeys "github.com/gogo/protobuf/sortkeys"
+import binary "encoding/binary"
+import types "github.com/gogo/protobuf/types"
 
 import io "io"
 
@@ -1996,7 +1994,7 @@ func (m *RaftState) MarshalTo(dAtA []byte) (int, error) {
 		for k := range m.Progress {
 			keysForProgress = append(keysForProgress, uint64(k))
 		}
-		github_com_gogo_protobuf_sortkeys.Uint64s(keysForProgress)
+		sortkeys.Uint64s(keysForProgress)
 		for _, k := range keysForProgress {
 			dAtA[i] = 0x32
 			i++
@@ -2159,13 +2157,13 @@ func (m *RangeStatistics) MarshalTo(dAtA []byte) (int, error) {
 	if m.QueriesPerSecond != 0 {
 		dAtA[i] = 0x9
 		i++
-		encoding_binary.LittleEndian.PutUint64(dAtA[i:], uint64(math.Float64bits(float64(m.QueriesPerSecond))))
+		binary.LittleEndian.PutUint64(dAtA[i:], uint64(math.Float64bits(float64(m.QueriesPerSecond))))
 		i += 8
 	}
 	if m.WritesPerSecond != 0 {
 		dAtA[i] = 0x11
 		i++
-		encoding_binary.LittleEndian.PutUint64(dAtA[i:], uint64(math.Float64bits(float64(m.WritesPerSecond))))
+		binary.LittleEndian.PutUint64(dAtA[i:], uint64(math.Float64bits(float64(m.WritesPerSecond))))
 		i += 8
 	}
 	return i, nil
@@ -2507,8 +2505,8 @@ func (m *AllocatorDryRun_Event) MarshalTo(dAtA []byte) (int, error) {
 	_ = l
 	dAtA[i] = 0xa
 	i++
-	i = encodeVarintStatus(dAtA, i, uint64(github_com_gogo_protobuf_types.SizeOfStdTime(m.Time)))
-	n15, err := github_com_gogo_protobuf_types.StdTimeMarshalTo(m.Time, dAtA[i:])
+	i = encodeVarintStatus(dAtA, i, uint64(types.SizeOfStdTime(m.Time)))
+	n15, err := types.StdTimeMarshalTo(m.Time, dAtA[i:])
 	if err != nil {
 		return 0, err
 	}
@@ -3048,7 +3046,7 @@ func (m *RaftDebugResponse) MarshalTo(dAtA []byte) (int, error) {
 		for k := range m.Ranges {
 			keysForRanges = append(keysForRanges, int64(k))
 		}
-		github_com_gogo_protobuf_sortkeys.Int64s(keysForRanges)
+		sortkeys.Int64s(keysForRanges)
 		for _, k := range keysForRanges {
 			dAtA[i] = 0xa
 			i++
@@ -3117,8 +3115,8 @@ func (m *ActiveQuery) MarshalTo(dAtA []byte) (int, error) {
 	}
 	dAtA[i] = 0x1a
 	i++
-	i = encodeVarintStatus(dAtA, i, uint64(github_com_gogo_protobuf_types.SizeOfStdTime(m.Start)))
-	n23, err := github_com_gogo_protobuf_types.StdTimeMarshalTo(m.Start, dAtA[i:])
+	i = encodeVarintStatus(dAtA, i, uint64(types.SizeOfStdTime(m.Start)))
+	n23, err := types.StdTimeMarshalTo(m.Start, dAtA[i:])
 	if err != nil {
 		return 0, err
 	}
@@ -3217,8 +3215,8 @@ func (m *Session) MarshalTo(dAtA []byte) (int, error) {
 	}
 	dAtA[i] = 0x32
 	i++
-	i = encodeVarintStatus(dAtA, i, uint64(github_com_gogo_protobuf_types.SizeOfStdTime(m.Start)))
-	n24, err := github_com_gogo_protobuf_types.StdTimeMarshalTo(m.Start, dAtA[i:])
+	i = encodeVarintStatus(dAtA, i, uint64(types.SizeOfStdTime(m.Start)))
+	n24, err := types.StdTimeMarshalTo(m.Start, dAtA[i:])
 	if err != nil {
 		return 0, err
 	}
@@ -3499,7 +3497,7 @@ func (m *ProblemRangesResponse) MarshalTo(dAtA []byte) (int, error) {
 		for k := range m.ProblemsByNodeID {
 			keysForProblemsByNodeID = append(keysForProblemsByNodeID, int32(k))
 		}
-		github_com_gogo_protobuf_sortkeys.Int32s(keysForProblemsByNodeID)
+		sortkeys.Int32s(keysForProblemsByNodeID)
 		for _, k := range keysForProblemsByNodeID {
 			dAtA[i] = 0x4a
 			i++
@@ -3694,7 +3692,7 @@ func (m *RangeResponse) MarshalTo(dAtA []byte) (int, error) {
 		for k := range m.ResponsesByNodeID {
 			keysForResponsesByNodeID = append(keysForResponsesByNodeID, int32(k))
 		}
-		github_com_gogo_protobuf_sortkeys.Int32s(keysForResponsesByNodeID)
+		sortkeys.Int32s(keysForResponsesByNodeID)
 		for _, k := range keysForResponsesByNodeID {
 			dAtA[i] = 0x1a
 			i++
@@ -4183,7 +4181,7 @@ func (m *AllocatorDryRun) Size() (n int) {
 func (m *AllocatorDryRun_Event) Size() (n int) {
 	var l int
 	_ = l
-	l = github_com_gogo_protobuf_types.SizeOfStdTime(m.Time)
+	l = types.SizeOfStdTime(m.Time)
 	n += 1 + l + sovStatus(uint64(l))
 	l = len(m.Message)
 	if l > 0 {
@@ -4438,7 +4436,7 @@ func (m *ActiveQuery) Size() (n int) {
 	if l > 0 {
 		n += 1 + l + sovStatus(uint64(l))
 	}
-	l = github_com_gogo_protobuf_types.SizeOfStdTime(m.Start)
+	l = types.SizeOfStdTime(m.Start)
 	n += 1 + l + sovStatus(uint64(l))
 	if m.IsDistributed {
 		n += 2
@@ -4483,7 +4481,7 @@ func (m *Session) Size() (n int) {
 			n += 1 + l + sovStatus(uint64(l))
 		}
 	}
-	l = github_com_gogo_protobuf_types.SizeOfStdTime(m.Start)
+	l = types.SizeOfStdTime(m.Start)
 	n += 1 + l + sovStatus(uint64(l))
 	if m.KvTxnID != nil {
 		l = m.KvTxnID.Size()
@@ -6389,7 +6387,7 @@ func (m *RangeStatistics) Unmarshal(dAtA []byte) error {
 			if (iNdEx + 8) > l {
 				return io.ErrUnexpectedEOF
 			}
-			v = uint64(encoding_binary.LittleEndian.Uint64(dAtA[iNdEx:]))
+			v = uint64(binary.LittleEndian.Uint64(dAtA[iNdEx:]))
 			iNdEx += 8
 			m.QueriesPerSecond = float64(math.Float64frombits(v))
 		case 2:
@@ -6400,7 +6398,7 @@ func (m *RangeStatistics) Unmarshal(dAtA []byte) error {
 			if (iNdEx + 8) > l {
 				return io.ErrUnexpectedEOF
 			}
-			v = uint64(encoding_binary.LittleEndian.Uint64(dAtA[iNdEx:]))
+			v = uint64(binary.LittleEndian.Uint64(dAtA[iNdEx:]))
 			iNdEx += 8
 			m.WritesPerSecond = float64(math.Float64frombits(v))
 		default:
@@ -7522,7 +7520,7 @@ func (m *AllocatorDryRun_Event) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			if err := github_com_gogo_protobuf_types.StdTimeUnmarshal(&m.Time, dAtA[iNdEx:postIndex]); err != nil {
+			if err := types.StdTimeUnmarshal(&m.Time, dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
@@ -9508,7 +9506,7 @@ func (m *ActiveQuery) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			if err := github_com_gogo_protobuf_types.StdTimeUnmarshal(&m.Start, dAtA[iNdEx:postIndex]); err != nil {
+			if err := types.StdTimeUnmarshal(&m.Start, dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
@@ -9843,7 +9841,7 @@ func (m *Session) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			if err := github_com_gogo_protobuf_types.StdTimeUnmarshal(&m.Start, dAtA[iNdEx:postIndex]); err != nil {
+			if err := types.StdTimeUnmarshal(&m.Start, dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex

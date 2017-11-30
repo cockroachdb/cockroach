@@ -12,7 +12,7 @@ import cockroach_roachpb "github.com/cockroachdb/cockroach/pkg/roachpb"
 import cockroach_roachpb1 "github.com/cockroachdb/cockroach/pkg/roachpb"
 import cockroach_util_hlc "github.com/cockroachdb/cockroach/pkg/util/hlc"
 
-import github_com_gogo_protobuf_sortkeys "github.com/gogo/protobuf/sortkeys"
+import sortkeys "github.com/gogo/protobuf/sortkeys"
 
 import io "io"
 
@@ -389,7 +389,7 @@ func (m *CommandQueuesSnapshot) MarshalTo(dAtA []byte) (int, error) {
 		for k := range m.LocalScope {
 			keysForLocalScope = append(keysForLocalScope, int64(k))
 		}
-		github_com_gogo_protobuf_sortkeys.Int64s(keysForLocalScope)
+		sortkeys.Int64s(keysForLocalScope)
 		for _, k := range keysForLocalScope {
 			dAtA[i] = 0x12
 			i++
@@ -419,7 +419,7 @@ func (m *CommandQueuesSnapshot) MarshalTo(dAtA []byte) (int, error) {
 		for k := range m.GlobalScope {
 			keysForGlobalScope = append(keysForGlobalScope, int64(k))
 		}
-		github_com_gogo_protobuf_sortkeys.Int64s(keysForGlobalScope)
+		sortkeys.Int64s(keysForGlobalScope)
 		for _, k := range keysForGlobalScope {
 			dAtA[i] = 0x1a
 			i++

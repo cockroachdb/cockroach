@@ -29,8 +29,8 @@ import cockroach_util_hlc "github.com/cockroachdb/cockroach/pkg/util/hlc"
 import github_com_cockroachdb_cockroach_pkg_roachpb "github.com/cockroachdb/cockroach/pkg/roachpb"
 import github_com_cockroachdb_cockroach_pkg_sql_sqlbase "github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 
-import github_com_gogo_protobuf_sortkeys "github.com/gogo/protobuf/sortkeys"
-import encoding_binary "encoding/binary"
+import sortkeys "github.com/gogo/protobuf/sortkeys"
+import binary "encoding/binary"
 
 import io "io"
 
@@ -509,7 +509,7 @@ func (m *RestoreDetails) MarshalTo(dAtA []byte) (int, error) {
 		for k := range m.TableRewrites {
 			keysForTableRewrites = append(keysForTableRewrites, uint32(k))
 		}
-		github_com_gogo_protobuf_sortkeys.Uint32s(keysForTableRewrites)
+		sortkeys.Uint32s(keysForTableRewrites)
 		for _, k := range keysForTableRewrites {
 			dAtA[i] = 0x12
 			i++
@@ -809,7 +809,7 @@ func (m *Payload) MarshalTo(dAtA []byte) (int, error) {
 	if m.FractionCompleted != 0 {
 		dAtA[i] = 0x3d
 		i++
-		encoding_binary.LittleEndian.PutUint32(dAtA[i:], uint32(math.Float32bits(float32(m.FractionCompleted))))
+		binary.LittleEndian.PutUint32(dAtA[i:], uint32(math.Float32bits(float32(m.FractionCompleted))))
 		i += 4
 	}
 	if len(m.Error) > 0 {
@@ -2391,7 +2391,7 @@ func (m *Payload) Unmarshal(dAtA []byte) error {
 			if (iNdEx + 4) > l {
 				return io.ErrUnexpectedEOF
 			}
-			v = uint32(encoding_binary.LittleEndian.Uint32(dAtA[iNdEx:]))
+			v = uint32(binary.LittleEndian.Uint32(dAtA[iNdEx:]))
 			iNdEx += 4
 			m.FractionCompleted = float32(math.Float32frombits(v))
 		case 8:

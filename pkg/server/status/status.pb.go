@@ -21,8 +21,8 @@ import cockroach_build "github.com/cockroachdb/cockroach/pkg/build"
 
 import github_com_cockroachdb_cockroach_pkg_roachpb "github.com/cockroachdb/cockroach/pkg/roachpb"
 
-import github_com_gogo_protobuf_sortkeys "github.com/gogo/protobuf/sortkeys"
-import encoding_binary "encoding/binary"
+import sortkeys "github.com/gogo/protobuf/sortkeys"
+import binary "encoding/binary"
 
 import io "io"
 
@@ -120,7 +120,7 @@ func (m *StoreStatus) MarshalTo(dAtA []byte) (int, error) {
 		for k := range m.Metrics {
 			keysForMetrics = append(keysForMetrics, string(k))
 		}
-		github_com_gogo_protobuf_sortkeys.Strings(keysForMetrics)
+		sortkeys.Strings(keysForMetrics)
 		for _, k := range keysForMetrics {
 			dAtA[i] = 0x12
 			i++
@@ -133,7 +133,7 @@ func (m *StoreStatus) MarshalTo(dAtA []byte) (int, error) {
 			i += copy(dAtA[i:], k)
 			dAtA[i] = 0x11
 			i++
-			encoding_binary.LittleEndian.PutUint64(dAtA[i:], uint64(math.Float64bits(float64(v))))
+			binary.LittleEndian.PutUint64(dAtA[i:], uint64(math.Float64bits(float64(v))))
 			i += 8
 		}
 	}
@@ -186,7 +186,7 @@ func (m *NodeStatus) MarshalTo(dAtA []byte) (int, error) {
 		for k := range m.Metrics {
 			keysForMetrics = append(keysForMetrics, string(k))
 		}
-		github_com_gogo_protobuf_sortkeys.Strings(keysForMetrics)
+		sortkeys.Strings(keysForMetrics)
 		for _, k := range keysForMetrics {
 			dAtA[i] = 0x2a
 			i++
@@ -199,7 +199,7 @@ func (m *NodeStatus) MarshalTo(dAtA []byte) (int, error) {
 			i += copy(dAtA[i:], k)
 			dAtA[i] = 0x11
 			i++
-			encoding_binary.LittleEndian.PutUint64(dAtA[i:], uint64(math.Float64bits(float64(v))))
+			binary.LittleEndian.PutUint64(dAtA[i:], uint64(math.Float64bits(float64(v))))
 			i += 8
 		}
 	}
@@ -250,7 +250,7 @@ func (m *NodeStatus) MarshalTo(dAtA []byte) (int, error) {
 		for k := range m.Latencies {
 			keysForLatencies = append(keysForLatencies, int32(k))
 		}
-		github_com_gogo_protobuf_sortkeys.Int32s(keysForLatencies)
+		sortkeys.Int32s(keysForLatencies)
 		for _, k := range keysForLatencies {
 			dAtA[i] = 0x4a
 			i++
@@ -270,7 +270,7 @@ func (m *NodeStatus) MarshalTo(dAtA []byte) (int, error) {
 		for k := range m.Activity {
 			keysForActivity = append(keysForActivity, int32(k))
 		}
-		github_com_gogo_protobuf_sortkeys.Int32s(keysForActivity)
+		sortkeys.Int32s(keysForActivity)
 		for _, k := range keysForActivity {
 			dAtA[i] = 0x52
 			i++
@@ -582,7 +582,7 @@ func (m *StoreStatus) Unmarshal(dAtA []byte) error {
 					if (iNdEx + 8) > l {
 						return io.ErrUnexpectedEOF
 					}
-					mapvaluetemp = uint64(encoding_binary.LittleEndian.Uint64(dAtA[iNdEx:]))
+					mapvaluetemp = uint64(binary.LittleEndian.Uint64(dAtA[iNdEx:]))
 					iNdEx += 8
 					mapvalue = math.Float64frombits(mapvaluetemp)
 				} else {
@@ -830,7 +830,7 @@ func (m *NodeStatus) Unmarshal(dAtA []byte) error {
 					if (iNdEx + 8) > l {
 						return io.ErrUnexpectedEOF
 					}
-					mapvaluetemp = uint64(encoding_binary.LittleEndian.Uint64(dAtA[iNdEx:]))
+					mapvaluetemp = uint64(binary.LittleEndian.Uint64(dAtA[iNdEx:]))
 					iNdEx += 8
 					mapvalue = math.Float64frombits(mapvaluetemp)
 				} else {
