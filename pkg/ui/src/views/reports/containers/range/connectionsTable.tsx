@@ -1,3 +1,4 @@
+import classNames from "classnames";
 import _ from "lodash";
 import React from "react";
 
@@ -30,10 +31,10 @@ export default function ConnectionsTable(props: ConnectionsTableProps) {
           {
             _.map(ids, id => {
               const resp = rangeResponse.responses_by_node_id[id];
-              let rowClassName = "connections-table__row";
-              if (!resp.response || !_.isEmpty(resp.error_message)) {
-                rowClassName += " connections-table__row--warning";
-              }
+              const rowClassName = classNames(
+                "connections-table__row",
+                { "connections-table__row--warning": !resp.response || !_.isEmpty(resp.error_message) },
+              );
               return (
                 <tr key={id} className={rowClassName}>
                   <td className="connections-table__cell">n{id}</td>
