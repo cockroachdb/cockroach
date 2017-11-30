@@ -17,6 +17,7 @@ package sql
 import (
 	"bytes"
 	"fmt"
+	"strings"
 
 	"golang.org/x/net/context"
 
@@ -589,12 +590,32 @@ func addInterleave(
 	}
 	parentIndex := parentTable.PrimaryIndex
 
+	// typeOfIndex is used to give more informative error messages.
+	var typeOfIndex string
+	if index.ID == desc.PrimaryIndex.ID {
+		typeOfIndex = "primary key"
+	} else {
+		typeOfIndex = "index"
+	}
+
 	if len(interleave.Fields) != len(parentIndex.ColumnIDs) {
-		return fmt.Errorf("interleaved columns must match parent")
+		return pgerror.NewErrorf(
+			pgerror.CodeInvalidSchemaDefinitionError,
+			"declared interleaved columns (%s) must match the parent's primary index (%s)",
+			interleave.Fields,
+			strings.Join(parentIndex.ColumnNames, ", "),
+		)
 	}
 	if len(interleave.Fields) > len(index.ColumnIDs) {
-		return fmt.Errorf("declared columns must match index being interleaved")
+		return pgerror.NewErrorf(
+			pgerror.CodeInvalidSchemaDefinitionError,
+			"declared interleaved columns (%s) must be a prefix of the %s columns being interleaved (%s)",
+			interleave.Fields,
+			typeOfIndex,
+			strings.Join(index.ColumnNames, ", "),
+		)
 	}
+
 	for i, targetColID := range parentIndex.ColumnIDs {
 		targetCol, err := parentTable.FindColumnByID(targetColID)
 		if err != nil {
@@ -605,10 +626,21 @@ func addInterleave(
 			return err
 		}
 		if string(interleave.Fields[i]) != col.Name {
-			return fmt.Errorf("declared columns must match index being interleaved")
+			return pgerror.NewErrorf(
+				pgerror.CodeInvalidSchemaDefinitionError,
+				"declared interleaved columns (%s) must refer to a prefix of the %s column names being interleaved (%s)",
+				interleave.Fields,
+				typeOfIndex,
+				strings.Join(index.ColumnNames, ", "),
+			)
 		}
 		if !col.Type.Equal(targetCol.Type) || index.ColumnDirections[i] != parentIndex.ColumnDirections[i] {
-			return fmt.Errorf("interleaved columns must match parent")
+			return pgerror.NewErrorf(
+				pgerror.CodeInvalidSchemaDefinitionError,
+				"declared interleaved columns (%s) must match type and sort direction of the parent's primary index (%s)",
+				interleave.Fields,
+				strings.Join(parentIndex.ColumnNames, ", "),
+			)
 		}
 	}
 
