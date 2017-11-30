@@ -30,20 +30,17 @@ const sklPageSize = 32 << 20 // 32 MB
 // recently read or written. If a timestamp was read or written by a
 // transaction, the txn ID is stored with the timestamp to avoid advancing
 // timestamps on successive requests from the same transaction.
-//
-// TODO(nvanbenschoten): We should export some metrics from here, including:
-// - page rotations/min (rCache & wCache)
-// - page count         (rCache & wCache)
 type sklImpl struct {
 	rCache, wCache *intervalSkl
 	clock          *hlc.Clock
+	metrics        Metrics
 }
 
 var _ Cache = &sklImpl{}
 
 // newSklImpl returns a new treeImpl with the supplied hybrid clock.
-func newSklImpl(clock *hlc.Clock) *sklImpl {
-	tc := sklImpl{clock: clock}
+func newSklImpl(clock *hlc.Clock, metrics Metrics) *sklImpl {
+	tc := sklImpl{clock: clock, metrics: metrics}
 	tc.clear(clock.Now())
 	return &tc
 }
@@ -58,8 +55,8 @@ func (tc *sklImpl) clear(lowWater hlc.Timestamp) {
 		// during race testing to accommodate these two factors.
 		pageSize /= 4
 	}
-	tc.rCache = newIntervalSkl(tc.clock, MinRetentionWindow, pageSize)
-	tc.wCache = newIntervalSkl(tc.clock, MinRetentionWindow, pageSize)
+	tc.rCache = newIntervalSkl(tc.clock, MinRetentionWindow, pageSize, tc.metrics.Skl.Read)
+	tc.wCache = newIntervalSkl(tc.clock, MinRetentionWindow, pageSize, tc.metrics.Skl.Write)
 	tc.rCache.floorTS = lowWater
 	tc.wCache.floorTS = lowWater
 }

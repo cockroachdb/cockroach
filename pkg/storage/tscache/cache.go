@@ -84,11 +84,11 @@ type Cache interface {
 }
 
 // New returns a new timestamp cache with the supplied hybrid clock.
-func New(clock *hlc.Clock) Cache {
+func New(clock *hlc.Clock, metrics Metrics) Cache {
 	if envutil.EnvOrDefaultBool("COCKROACH_USE_TREE_TSCACHE", false) {
 		return newTreeImpl(clock)
 	}
-	return newSklImpl(clock)
+	return newSklImpl(clock, metrics)
 }
 
 // cacheValue combines a timestamp with an optional txnID. It is shared between
