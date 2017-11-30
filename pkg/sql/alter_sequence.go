@@ -96,31 +96,31 @@ func (n *alterSequenceNode) Close(context.Context)        {}
 
 // assignSequenceOptions moves options from the AST node to the sequence options descriptor.
 func assignSequenceOptions(
-	optsDesc *sqlbase.TableDescriptor_SequenceOpts, optsNode tree.SequenceOptions, setDefaults bool,
+	opts *sqlbase.TableDescriptor_SequenceOpts, optsNode tree.SequenceOptions, setDefaults bool,
 ) error {
 	// All other defaults are dependent on the value of increment,
 	// i.e. whether the sequence is ascending or descending.
 	for _, option := range optsNode {
 		if option.Name == tree.SeqOptIncrement {
-			optsDesc.Increment = *option.IntVal
+			opts.Increment = *option.IntVal
 		}
 	}
-	if optsDesc.Increment == 0 {
+	if opts.Increment == 0 {
 		return pgerror.NewError(
 			pgerror.CodeInvalidParameterValueError, "INCREMENT must not be zero")
 	}
-	isAscending := optsDesc.Increment > 0
+	isAscending := opts.Increment > 0
 
 	// Set increment-dependent defaults.
 	if setDefaults {
 		if isAscending {
-			optsDesc.MinValue = 1
-			optsDesc.MaxValue = math.MaxInt64
-			optsDesc.Start = optsDesc.MinValue
+			opts.MinValue = 1
+			opts.MaxValue = math.MaxInt64
+			opts.Start = opts.MinValue
 		} else {
-			optsDesc.MinValue = math.MinInt64
-			optsDesc.MaxValue = -1
-			optsDesc.Start = optsDesc.MaxValue
+			opts.MinValue = math.MinInt64
+			opts.MaxValue = -1
+			opts.Start = opts.MaxValue
 		}
 	}
 
@@ -140,18 +140,29 @@ func assignSequenceOptions(
 		case tree.SeqOptMinValue:
 			// A value of nil represents the user explicitly saying `NO MINVALUE`.
 			if option.IntVal != nil {
-				optsDesc.MinValue = *option.IntVal
+				opts.MinValue = *option.IntVal
 			}
 		case tree.SeqOptMaxValue:
 			// A value of nil represents the user explicitly saying `NO MAXVALUE`.
 			if option.IntVal != nil {
-				optsDesc.MaxValue = *option.IntVal
+				opts.MaxValue = *option.IntVal
 			}
 		case tree.SeqOptStart:
-			optsDesc.Start = *option.IntVal
+			opts.Start = *option.IntVal
 		case tree.SeqOptCycle:
-			optsDesc.Cycle = option.BoolVal
+			opts.Cycle = option.BoolVal
 		}
+	}
+
+	if opts.Start > opts.MaxValue {
+		return pgerror.NewErrorf(
+			pgerror.CodeInvalidParameterValueError,
+			"START value (%d) cannot be greater than MAXVALUE (%d)", opts.Start, opts.MaxValue)
+	}
+	if opts.Start < opts.MinValue {
+		return pgerror.NewErrorf(
+			pgerror.CodeInvalidParameterValueError,
+			"START value (%d) cannot be less than MINVALUE (%d)", opts.Start, opts.MinValue)
 	}
 
 	return nil
