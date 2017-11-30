@@ -292,6 +292,41 @@ SELECT lastval()
 statement error pgcode 42P01 relation "nonexistent_seq" does not exist
 SELECT nextval('nonexistent_seq')
 
+# BEHAVIOR UPON HITTING LIMITS (minvalue, maxvalue)
+
+statement error pgcode 22023 START value \(11\) cannot be greater than MAXVALUE \(10\)
+CREATE SEQUENCE limit_test MAXVALUE 10 START WITH 11
+
+statement error pgcode 22023 START value \(5\) cannot be less than MINVALUE \(10\)
+CREATE SEQUENCE limit_test MINVALUE 10 START WITH 5
+
+statement ok
+CREATE SEQUENCE limit_test MAXVALUE 10 START WITH 9
+
+query I
+SELECT nextval('limit_test')
+----
+9
+
+query I
+SELECT nextval('limit_test')
+----
+10
+
+statement error pgcode 2200H pq: nextval\(\): reached maximum value of sequence "limit_test" \(10\)
+SELECT nextval('limit_test')
+
+statement ok
+CREATE SEQUENCE downward_limit_test INCREMENT BY -1 MINVALUE -10 START WITH -10
+
+query I
+SELECT nextval('downward_limit_test')
+----
+-10
+
+statement error pgcode 2200H pq: nextval\(\): reached minimum value of sequence "downward_limit_test" \(-10\)
+SELECT nextval('downward_limit_test')
+
 # USE WITH TABLES
 
 # You can use a sequence in a DEFAULT expression to create an auto-incrementing primary key.
