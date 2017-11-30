@@ -82,7 +82,7 @@ func TestDataKeys(t *testing.T) {
 		if !reflect.DeepEqual(d, tc) {
 			t.Errorf("%d: decoded values %v did not match expected %v", i, d, tc)
 		}
-		if pretty := keys.PrettyPrint(encoded); tc.expectedPretty != pretty {
+		if pretty := keys.PrettyPrint(nil /* valDirs */, encoded); tc.expectedPretty != pretty {
 			t.Errorf("%d: expected %s, but got %s", i, tc.expectedPretty, pretty)
 		}
 	}
