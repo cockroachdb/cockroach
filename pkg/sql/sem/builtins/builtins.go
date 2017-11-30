@@ -70,6 +70,7 @@ const (
 	categoryCompatibility = "Compatibility"
 	categoryDateAndTime   = "Date and Time"
 	categoryIDGeneration  = "ID Generation"
+	categorySequences     = "Sequence"
 	categoryMath          = "Math and Numeric"
 	categoryString        = "String and Byte"
 	categoryArray         = "Array"
@@ -965,20 +966,17 @@ CockroachDB supports the following flags:
 		},
 	},
 
+	// Sequence functions.
+
 	"nextval": {
 		tree.Builtin{
 			Types:      tree.ArgTypes{{"sequence_name", types.String}},
 			ReturnType: tree.FixedReturnType(types.Int),
-			Category:   categoryIDGeneration,
+			Category:   categorySequences,
 			Impure:     true,
 			Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				name := tree.MustBeDString(args[0])
-				parsedNameWithIndex, err := evalCtx.Planner.ParseTableNameWithIndex(string(name))
-				if err != nil {
-					return nil, err
-				}
-				parsedName := parsedNameWithIndex.Table
-				qualifiedName, err := evalCtx.Planner.QualifyWithDatabase(evalCtx.Ctx(), &parsedName)
+				qualifiedName, err := evalCtx.Planner.ParseQualifiedTableName(evalCtx.Ctx(), string(name))
 				if err != nil {
 					return nil, err
 				}
@@ -989,6 +987,69 @@ CockroachDB supports the following flags:
 				return tree.NewDInt(tree.DInt(res)), nil
 			},
 			Info: "Advances the given sequence and returns its new value.",
+		},
+	},
+
+	"currval": {
+		tree.Builtin{
+			Types:      tree.ArgTypes{{"sequence_name", types.String}},
+			ReturnType: tree.FixedReturnType(types.Int),
+			Category:   categorySequences,
+			Impure:     true,
+			Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				name := tree.MustBeDString(args[0])
+				qualifiedName, err := evalCtx.Planner.ParseQualifiedTableName(evalCtx.Ctx(), string(name))
+				if err != nil {
+					return nil, err
+				}
+				res, err := evalCtx.Planner.GetLatestValueInSessionForSequence(evalCtx.Ctx(), qualifiedName)
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDInt(tree.DInt(res)), nil
+			},
+			Info: "Returns the latest value obtained with nextval for this sequence in this session.",
+		},
+	},
+
+	"lastval": {
+		tree.Builtin{
+			Types:      tree.ArgTypes{},
+			ReturnType: tree.FixedReturnType(types.Int),
+			Category:   categorySequences,
+			Impure:     true,
+			Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				val, err := evalCtx.Planner.GetLastSequenceValue(evalCtx.Ctx())
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDInt(tree.DInt(val)), nil
+			},
+			Info: "Return value most recently obtained with nextval in this session.",
+		},
+	},
+
+	"setval": {
+		tree.Builtin{
+			Types:      tree.ArgTypes{{"sequence_name", types.String}, {"value", types.Int}},
+			ReturnType: tree.FixedReturnType(types.Int),
+			Category:   categorySequences,
+			Impure:     true,
+			Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				name := tree.MustBeDString(args[0])
+				qualifiedName, err := evalCtx.Planner.ParseQualifiedTableName(evalCtx.Ctx(), string(name))
+				if err != nil {
+					return nil, err
+				}
+
+				// TODO(vilterp): test that this works with expressions like len('foo') or something...
+				newVal := tree.MustBeDInt(args[1])
+				if err := evalCtx.Planner.SetSequenceValue(evalCtx.Ctx(), qualifiedName, int64(newVal)); err != nil {
+					return nil, err
+				}
+				return args[1], nil
+			},
+			Info: "Set the given sequence's current value.",
 		},
 	},
 
