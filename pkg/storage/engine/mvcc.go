@@ -1214,7 +1214,11 @@ func MVCCIncrement(
 
 		// Check for overflow and underflow.
 		if willOverflow(int64Val, inc) {
-			return nil, errors.Errorf("key %s with value %d incremented by %d results in overflow", key, int64Val, inc)
+			return nil, &roachpb.IntegerOverflowError{
+				Key:            key,
+				CurrentValue:   int64Val,
+				IncrementValue: inc,
+			}
 		}
 
 		int64Val = int64Val + inc

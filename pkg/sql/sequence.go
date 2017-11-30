@@ -17,6 +17,7 @@ package sql
 import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -29,24 +30,34 @@ func (p *planner) IncrementSequence(ctx context.Context, seqName *tree.TableName
 	if err != nil {
 		return 0, err
 	}
+
 	seqValueKey := keys.MakeSequenceKey(uint32(descriptor.ID))
 	val, err := client.IncrementValRetryable(
 		ctx, p.txn.DB(), seqValueKey, descriptor.SequenceOpts.Increment)
 	if err != nil {
-		return 0, err
+		switch err.(type) {
+		case *roachpb.IntegerOverflowError:
+			isAscending := descriptor.SequenceOpts.Increment > 0
+			cycledVal, err := p.handleSequenceBoundsExceeded(ctx, seqValueKey, descriptor, isAscending)
+			if err != nil {
+				return 0, err
+			}
+			val = cycledVal
+		default:
+			return 0, err
+		}
 	}
 
 	seqOpts := descriptor.SequenceOpts
-	if val > seqOpts.MaxValue {
-		return 0, pgerror.NewErrorf(
-			pgerror.CodeSequenceGeneratorLimitExceeded,
-			`reached maximum value of sequence "%s" (%d)`, descriptor.Name, seqOpts.MaxValue)
+	if val > seqOpts.MaxValue || val < seqOpts.MinValue {
+		isAscending := seqOpts.Increment > 0
+		cycledVal, err := p.handleSequenceBoundsExceeded(ctx, seqValueKey, descriptor, isAscending)
+		if err != nil {
+			return 0, err
+		}
+		val = cycledVal
 	}
-	if val < seqOpts.MinValue {
-		return 0, pgerror.NewErrorf(
-			pgerror.CodeSequenceGeneratorLimitExceeded,
-			`reached minimum value of sequence "%s" (%d)`, descriptor.Name, seqOpts.MinValue)
-	}
+
 	p.session.mu.Lock()
 	defer p.session.mu.Unlock()
 	p.session.mu.SequenceState.lastSequenceIncremented = descriptor.ID
@@ -55,7 +66,39 @@ func (p *planner) IncrementSequence(ctx context.Context, seqName *tree.TableName
 	return val, nil
 }
 
-// GetLastSequenceValue implements the tree.SequenceAccessor interface.
+// handleSequenceBoundsExceeded returns an error if the sequence's CYCLE option is false,
+// or resets the sequence to its start value if it is true.
+func (p *planner) handleSequenceBoundsExceeded(
+	ctx context.Context,
+	seqValueKey roachpb.Key,
+	descriptor *sqlbase.TableDescriptor,
+	isAscending bool,
+) (int64, error) {
+	seqOpts := descriptor.SequenceOpts
+	if seqOpts.Cycle {
+		err := p.txn.DB().Put(ctx, seqValueKey, seqOpts.Start)
+		if err != nil {
+			return 0, err
+		}
+		return seqOpts.Start, nil
+	}
+
+	type stuffT struct {
+		word  string
+		value int64
+	}
+	var stuff stuffT
+	if isAscending {
+		stuff = stuffT{word: "maximum", value: seqOpts.MaxValue}
+	} else {
+		stuff = stuffT{word: "minimum", value: seqOpts.MinValue}
+	}
+	return 0, pgerror.NewErrorf(
+		pgerror.CodeSequenceGeneratorLimitExceeded,
+		`reached %s value of sequence "%s" (%d)`, stuff.word, descriptor.Name, stuff.value)
+}
+
+// GetLastSequenceValue implements the tree.EvalPlanner interface.
 func (p *planner) GetLastSequenceValue(ctx context.Context) (int64, error) {
 	p.session.mu.RLock()
 	defer p.session.mu.RUnlock()
