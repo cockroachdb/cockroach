@@ -1273,7 +1273,7 @@ EXPLAIN (VERBOSE) SELECT MIN(v+1) FROM opt_test WHERE k <> 4
 2  scan    ·            ·                                   (k, v)          k!=NULL; v!=NULL; key(k)
 2  ·       table        opt_test@primary                    ·               ·
 2  ·       spans        /#-                                 ·               ·
-2  ·       filter       (k != 4) AND ((v + 1) IS NOT NULL)  ·               ·
+2  ·       filter       (k != 4) AND ((v + 1) IS DISTINCT FROM NULL)  ·               ·
 
 # Verify that we don't use the optimization if there is a GROUP BY.
 query ITTTTT

@@ -647,15 +647,15 @@ func (v *indexInfo) makeIndexConstraints(
 						*endExpr = c
 					}
 				case tree.NE:
-					// We rewrite "a != x" to "a IS NOT NULL", since this is all that
+					// We rewrite "a != x" to "a IS DISTINCT FROM NULL", since this is all that
 					// makeSpans() cares about.
-					// We don't simplify "a != x" to "a IS NOT NULL" in
+					// We don't simplify "a != x" to "a IS DISTINCT FROM NULL" in
 					// simplifyExpr because doing so affects other simplifications.
 					if *startDone || *startExpr != nil {
 						continue
 					}
 					*startExpr = tree.NewTypedComparisonExpr(
-						tree.IsNot,
+						tree.IsDistinctFrom,
 						c.TypedLeft(),
 						tree.DNull,
 					)
@@ -726,11 +726,11 @@ func (v *indexInfo) makeIndexConstraints(
 					if !*endDone && *endExpr == nil {
 						*endExpr = c
 					}
-				case tree.Is:
+				case tree.IsNotDistinctFrom:
 					if c.Right == tree.DNull && !*endDone {
 						*endExpr = c
 					}
-				case tree.IsNot:
+				case tree.IsDistinctFrom:
 					if c.Right == tree.DNull && !*startDone && (*startExpr == nil) {
 						*startExpr = c
 					}
@@ -757,11 +757,11 @@ func (v *indexInfo) makeIndexConstraints(
 		}
 
 		if !*startDone && *startExpr == nil {
-			// Add an IS NOT NULL constraint if there's an end constraint.
+			// Add an IS DISTINCT FROM NULL constraint if there's an end constraint.
 			if (*endExpr != nil) &&
-				!((*endExpr).Operator == tree.Is && (*endExpr).Right == tree.DNull) {
+				!((*endExpr).Operator == tree.IsNotDistinctFrom && (*endExpr).Right == tree.DNull) {
 				*startExpr = tree.NewTypedComparisonExpr(
-					tree.IsNot,
+					tree.IsDistinctFrom,
 					(*endExpr).TypedLeft(),
 					tree.DNull,
 				)
@@ -769,7 +769,7 @@ func (v *indexInfo) makeIndexConstraints(
 		}
 
 		if (*startExpr == nil) ||
-			(((*startExpr).Operator == tree.IsNot) && ((*startExpr).Right == tree.DNull)) {
+			(((*startExpr).Operator == tree.IsDistinctFrom) && ((*startExpr).Right == tree.DNull)) {
 			// There's no point in allowing future start constraints after an IS NOT NULL
 			// one; since NOT NULL is not actually a value present in an index,
 			// values encoded after an NOT NULL don't matter.
@@ -836,8 +836,8 @@ func (v indexInfoByCost) Sort() {
 
 func encodeStartConstraintAscending(c *tree.ComparisonExpr) logicalKeyPart {
 	switch c.Operator {
-	case tree.IsNot:
-		// A IS NOT NULL expression allows us to constrain the start of
+	case tree.IsDistinctFrom:
+		// A IS DISTINCT FROM NULL expression allows us to constrain the start of
 		// the range to not include NULL.
 		if c.Right != tree.DNull {
 			panic(fmt.Sprintf("expected NULL operand for IS NOT operator, found %v", c.Right))
@@ -862,8 +862,8 @@ func encodeStartConstraintAscending(c *tree.ComparisonExpr) logicalKeyPart {
 
 func encodeStartConstraintDescending(c *tree.ComparisonExpr) logicalKeyPart {
 	switch c.Operator {
-	case tree.Is:
-		// An IS NULL expressions allows us to constrain the start of the range
+	case tree.IsNotDistinctFrom:
+		// An IS NOT DISTINCT FROM NULL expressions allows us to constrain the start of the range
 		// to begin at NULL.
 		if c.Right != tree.DNull {
 			panic(fmt.Sprintf("expected NULL operand for IS operator, found %v", c.Right))
@@ -888,8 +888,8 @@ func encodeStartConstraintDescending(c *tree.ComparisonExpr) logicalKeyPart {
 
 func encodeEndConstraintAscending(c *tree.ComparisonExpr) logicalKeyPart {
 	switch c.Operator {
-	case tree.Is:
-		// An IS NULL expressions allows us to constrain the end of the range
+	case tree.IsNotDistinctFrom:
+		// An IS NOT DISTINCT FROM NULL expressions allows us to constrain the end of the range
 		// to stop at NULL.
 		if c.Right != tree.DNull {
 			panic(fmt.Sprintf("expected NULL operand for IS operator, found %v", c.Right))
@@ -914,8 +914,8 @@ func encodeEndConstraintAscending(c *tree.ComparisonExpr) logicalKeyPart {
 
 func encodeEndConstraintDescending(c *tree.ComparisonExpr) logicalKeyPart {
 	switch c.Operator {
-	case tree.IsNot:
-		// An IS NOT NULL expressions allows us to constrain the end of the range
+	case tree.IsDistinctFrom:
+		// An IS DISTINCT FROM NULL expressions allows us to constrain the end of the range
 		// to stop at NULL.
 		if c.Right != tree.DNull {
 			panic(fmt.Sprintf("expected NULL operand for IS NOT operator, found %v", c.Right))
@@ -1476,8 +1476,8 @@ func expandConstraint(
 		return a
 	}
 	if vars, ok := c.Left.(*tree.Tuple); ok {
-		if c.Operator == tree.Is || c.Operator == tree.IsNot {
-			// The syntax <tuple> IS <val> or <tuple> IS NOT <val> is
+		if c.Operator == tree.IsNotDistinctFrom || c.Operator == tree.IsDistinctFrom {
+			// The syntax <tuple> IS DISTINCT FROM <val> or <tuple> IS NOT DISTINCT FROM <val> is
 			// always false.
 			return a
 		}
@@ -1593,23 +1593,23 @@ func applyConstraint(
 	cdatum := c.Right.(tree.Datum)
 
 	switch c.Operator {
-	case tree.IsNot:
+	case tree.IsDistinctFrom:
 		if cdatum == tree.DNull {
 			switch t.Operator {
-			case tree.Is:
+			case tree.IsNotDistinctFrom:
 				return tree.MakeDBool(datum != tree.DNull)
-			case tree.IsNot:
+			case tree.IsDistinctFrom:
 				return tree.MakeDBool(datum == tree.DNull)
 			}
 		} else {
 			return applyConstraintFlat(evalCtx, t, datum, tree.NE, cdatum)
 		}
-	case tree.Is:
+	case tree.IsNotDistinctFrom:
 		if cdatum == tree.DNull {
 			switch t.Operator {
-			case tree.Is:
+			case tree.IsNotDistinctFrom:
 				return tree.MakeDBool(datum == tree.DNull)
-			case tree.IsNot:
+			case tree.IsDistinctFrom:
 				return tree.MakeDBool(datum != tree.DNull)
 			default:
 				// A NULL var compared to anything is always false.
@@ -1635,8 +1635,8 @@ func applyConstraintFlat(
 	cOp tree.ComparisonOperator,
 	cdatum tree.Datum,
 ) tree.Expr {
-	// Special casing: expression queries IS NULL or IS NOT NULL.
-	if (t.Operator == tree.Is || t.Operator == tree.IsNot) && datum == tree.DNull {
+	// Special casing: expression queries IS NOT DISTINCT FROM NULL or IS DISTINCT FROM NULL.
+	if (t.Operator == tree.IsNotDistinctFrom || t.Operator == tree.IsDistinctFrom) && datum == tree.DNull {
 		switch cOp {
 		case tree.EQ, tree.GE, tree.GT, parser.IN:
 			// If the constraint says the value is equal to something, it
@@ -1650,7 +1650,7 @@ func applyConstraintFlat(
 			// above.
 			// This may need to be revisited once NULL
 			// ordering becomes configurable.
-			return tree.MakeDBool(t.Operator == tree.IsNot)
+			return tree.MakeDBool(t.Operator == tree.IsDistinctFrom)
 		}
 		return t
 	}
@@ -1658,7 +1658,7 @@ func applyConstraintFlat(
 	// Additional special casing.
 	switch t.Operator {
 	case tree.LE, tree.LT, tree.GE,
-		tree.GT, tree.NE, tree.IsNot:
+		tree.GT, tree.NE, tree.IsDistinctFrom:
 		if cOp == tree.In {
 			// The general case only handles range constraints.
 			// Stop here.
@@ -1671,8 +1671,8 @@ func applyConstraintFlat(
 		// Otherwise, the general case below knows about all these
 		// cases. Go forward.
 
-	case tree.Is, tree.EQ:
-		// (Expr IS ...) / (Expr = ...)
+	case tree.IsNotDistinctFrom, tree.EQ:
+		// (Expr IS NOT DISTINCT FROM ...) / (Expr = ...)
 
 		if cOp == tree.In {
 			// constraint says "a IN (x, y, z...)"
@@ -1812,10 +1812,10 @@ func applyConstraintFlat(
 	}
 	// BOOM: just handled 5*5 combinations of operators!
 	//
-	// If the constraint is an interval and the expression is NE/IsNot,
+	// If the constraint is an interval and the expression is NE/IsDistinctFrom,
 	// we can till use the intervals (hence the NE case in
 	// makeInterval).
-	if cOk && (t.Operator == tree.NE || t.Operator == tree.IsNot) && disjoint {
+	if cOk && (t.Operator == tree.NE || t.Operator == tree.IsDistinctFrom) && disjoint {
 		return tree.DBoolTrue
 	}
 	return t
@@ -1832,7 +1832,7 @@ func makeComparisonInterval(op tree.ComparisonOperator, largerDatum bool) (int, 
 	}
 
 	switch op {
-	case tree.EQ, tree.Is:
+	case tree.EQ, tree.IsNotDistinctFrom:
 		return x, x, true
 	case tree.LE:
 		return -100, x, true
@@ -1842,7 +1842,7 @@ func makeComparisonInterval(op tree.ComparisonOperator, largerDatum bool) (int, 
 		return x, 100, true
 	case tree.GT:
 		return x + 1, 100, true
-	case tree.NE, tree.IsNot:
+	case tree.NE, tree.IsDistinctFrom:
 		return x, x, false
 	default:
 		return 0, 0, false

@@ -1077,7 +1077,7 @@ SELECT *
 0  ·       render 2  n
 0  ·       render 3  sq
 1  filter  ·         ·
-1  ·       filter    ((n IS NULL) OR (n > 1)) AND ((n IS NULL) OR (a < sq))
+1  ·       filter    ((n IS NOT DISTINCT FROM NULL) OR (n > 1)) AND ((n IS NOT DISTINCT FROM NULL) OR (a < sq))
 2  join    ·         ·
 2  ·       type      left outer
 2  ·       equality  (b) = (sq)
@@ -1113,7 +1113,7 @@ SELECT *
 0  ·       render 2  n
 0  ·       render 3  sq
 1  filter  ·         ·
-1  ·       filter    ((a IS NULL) OR (a > 2)) AND ((a IS NULL) OR (a < sq))
+1  ·       filter    ((a IS NOT DISTINCT FROM NULL) OR (a > 2)) AND ((a IS NOT DISTINCT FROM NULL) OR (a < sq))
 2  join    ·         ·
 2  ·       type      right outer
 2  ·       equality  (b) = (sq)
@@ -1144,7 +1144,7 @@ SELECT *
 2  scan    ·         ·
 2  ·       table     pairs@primary
 2  ·       spans     ALL
-2  ·       filter    ((a > 1) AND ((a IS NULL) OR (a > 2))) AND ((a IS NULL) OR (a < b))
+2  ·       filter    ((a > 1) AND ((a IS NOT DISTINCT FROM NULL) OR (a > 2))) AND ((a IS NOT DISTINCT FROM NULL) OR (a < b))
 2  scan    ·         ·
 2  ·       table     square@primary
 2  ·       spans     /2-/6

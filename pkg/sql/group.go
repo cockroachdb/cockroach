@@ -460,14 +460,14 @@ func (n *groupNode) requiresIsNotNullFilter() bool {
 	return len(n.desiredOrdering) == 1
 }
 
-// isNotNullFilter adds as a "col IS NOT NULL" constraint to the filterNode
+// isNotNullFilter adds as a "col IS DISTINCT FROM NULL" constraint to the filterNode
 // (which is under the renderNode).
 func (n *groupNode) addIsNotNullFilter(where *filterNode, render *renderNode) {
 	if !n.requiresIsNotNullFilter() {
 		panic("IS NOT NULL filter not required")
 	}
 	isNotNull := tree.NewTypedComparisonExpr(
-		tree.IsNot,
+		tree.IsDistinctFrom,
 		where.ivarHelper.Rebind(
 			render.render[n.desiredOrdering[0].ColIdx],
 			false, // alsoReset
