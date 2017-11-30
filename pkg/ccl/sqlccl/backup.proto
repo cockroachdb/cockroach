@@ -53,7 +53,7 @@ message BackupDescriptor {
   repeated File files = 4 [(gogoproto.nullable) = false];
   repeated sql.sqlbase.Descriptor descriptors = 5 [(gogoproto.nullable) = false];
   // databases in descriptors that have all tables also in descriptors.
-  repeated uint32 complete_dbs = 14 [(gogoproto.nullable) = false,
+  repeated uint32 complete_dbs = 14 [
     (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sqlbase.ID"];
   reserved 6;
   roachpb.BulkOpSummary entry_counts = 12 [(gogoproto.nullable) = false];
