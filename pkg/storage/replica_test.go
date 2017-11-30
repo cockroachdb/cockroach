@@ -3141,7 +3141,8 @@ func TestReplicaCommandQueueSplitDeclaresWrites(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	var spans spanset.SpanSet
-	commands[roachpb.EndTransaction].DeclareKeys(
+	cmd, _ := batcheval.LookupCommand(roachpb.EndTransaction)
+	cmd.DeclareKeys(
 		roachpb.RangeDescriptor{StartKey: roachpb.RKey("a"), EndKey: roachpb.RKey("d")},
 		roachpb.Header{},
 		&roachpb.EndTransactionRequest{
@@ -8106,7 +8107,8 @@ func TestGCWithoutThreshold(t *testing.T) {
 
 				gc.Threshold = keyThresh
 				gc.TxnSpanGCThreshold = txnThresh
-				declareKeysGC(desc, roachpb.Header{RangeID: tc.repl.RangeID}, &gc, &spans)
+				cmd, _ := batcheval.LookupCommand(roachpb.GC)
+				cmd.DeclareKeys(desc, roachpb.Header{RangeID: tc.repl.RangeID}, &gc, &spans)
 
 				if num, exp := spans.Len(), i+j+1; num != exp {
 					t.Fatalf("(%s,%s): expected %d declared keys, found %d",
@@ -8118,7 +8120,7 @@ func TestGCWithoutThreshold(t *testing.T) {
 
 				batch := eng.NewBatch()
 				defer batch.Close()
-				rw := makeSpanSetBatch(batch, &spans)
+				rw := spanset.NewBatch(batch, &spans)
 
 				var resp roachpb.GCResponse
 

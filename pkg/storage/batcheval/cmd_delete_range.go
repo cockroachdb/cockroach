@@ -23,6 +23,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
 
+func init() {
+	RegisterCommand(roachpb.DeleteRange, DefaultDeclareKeys, DeleteRange)
+}
+
 // DeleteRange deletes the range of key/value pairs specified by
 // start and end keys.
 func DeleteRange(

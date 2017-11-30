@@ -17,10 +17,40 @@ package batcheval
 import (
 	"golang.org/x/net/context"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
+	"github.com/cockroachdb/cockroach/pkg/storage/spanset"
 )
+
+func init() {
+	RegisterCommand(roachpb.ResolveIntent, declareKeysResolveIntent, ResolveIntent)
+}
+
+func declareKeysResolveIntentCombined(
+	desc roachpb.RangeDescriptor, header roachpb.Header, req roachpb.Request, spans *spanset.SpanSet,
+) {
+	DefaultDeclareKeys(desc, header, req, spans)
+	var args *roachpb.ResolveIntentRequest
+	switch t := req.(type) {
+	case *roachpb.ResolveIntentRequest:
+		args = t
+	case *roachpb.ResolveIntentRangeRequest:
+		// Ranged and point requests only differ in whether the header's EndKey
+		// is used, so we can convert them.
+		args = (*roachpb.ResolveIntentRequest)(t)
+	}
+	if WriteAbortSpanOnResolve(args.Status) {
+		spans.Add(spanset.SpanReadWrite, roachpb.Span{Key: keys.AbortSpanKey(header.RangeID, args.IntentTxn.ID)})
+	}
+}
+
+func declareKeysResolveIntent(
+	desc roachpb.RangeDescriptor, header roachpb.Header, req roachpb.Request, spans *spanset.SpanSet,
+) {
+	declareKeysResolveIntentCombined(desc, header, req, spans)
+}
 
 // ResolveIntent resolves a write intent from the specified key
 // according to the status of the transaction which created it.

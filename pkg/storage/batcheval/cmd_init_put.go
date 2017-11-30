@@ -22,6 +22,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 )
 
+func init() {
+	RegisterCommand(roachpb.InitPut, DefaultDeclareKeys, InitPut)
+}
+
 // InitPut sets the value for a specified key only if it doesn't exist. It
 // returns a ConditionFailedError if the key exists with an existing value that
 // is different from the value provided. If FailOnTombstone is set to true,

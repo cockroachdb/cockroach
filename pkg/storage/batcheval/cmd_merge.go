@@ -22,6 +22,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 )
 
+func init() {
+	RegisterCommand(roachpb.Merge, DefaultDeclareKeys, Merge)
+}
+
 // Merge is used to merge a value into an existing key. Merge is an
 // efficient accumulation operation which is exposed by RocksDB, used
 // by CockroachDB for the efficient accumulation of certain
