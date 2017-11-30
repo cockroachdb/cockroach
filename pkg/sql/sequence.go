@@ -23,12 +23,7 @@ import (
 	"golang.org/x/net/context"
 )
 
-func readOnlyError(s string) error {
-	return pgerror.NewErrorf(pgerror.CodeReadOnlySQLTransactionError,
-		"cannot execute %s in a read-only transaction", s)
-}
-
-// IncrementSequence implements the tree.SequenceAccessor interface.
+// IncrementSequence implements the tree.EvalPlanner interface.
 func (p *planner) IncrementSequence(ctx context.Context, seqName *tree.TableName) (int64, error) {
 	if p.session.TxnState.readOnly {
 		return 0, readOnlyError("nextval()")
@@ -67,7 +62,7 @@ func (p *planner) GetLastSequenceValue(ctx context.Context) (int64, error) {
 	return seqState.latestValues[seqState.lastSequenceIncremented], nil
 }
 
-// GetLatestValueInSessionForSequence implements the tree.SequenceAccessor interface.
+// GetLatestValueInSessionForSequence implements the tree.EvalPlanner interface.
 func (p *planner) GetLatestValueInSessionForSequence(
 	ctx context.Context, seqName *tree.TableName,
 ) (int64, error) {
@@ -89,7 +84,7 @@ func (p *planner) GetLatestValueInSessionForSequence(
 	return val, nil
 }
 
-// SetSequenceValue implements the tree.SequenceAccessor interface.
+// SetSequenceValue implements the tree.EvalPlanner interface.
 func (p *planner) SetSequenceValue(
 	ctx context.Context, seqName *tree.TableName, newVal int64,
 ) error {
@@ -122,4 +117,9 @@ func newSequenceState() sequenceState {
 
 func (ss *sequenceState) nextvalEverCalled() bool {
 	return len(ss.latestValues) > 0
+}
+
+func readOnlyError(s string) error {
+	return pgerror.NewErrorf(pgerror.CodeReadOnlySQLTransactionError,
+		"cannot execute %s in a read-only transaction", s)
 }
