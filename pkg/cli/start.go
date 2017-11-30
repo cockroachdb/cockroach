@@ -508,7 +508,12 @@ func runStart(cmd *cobra.Command, args []string) error {
 	if len(args) > 0 {
 		return usageAndError(cmd)
 	}
+
 	tBegin := timeutil.Now()
+
+	// We don't care about GRPCs fairly verbose logs in most client commands,
+	// but when actually starting a server, we enable them.
+	grpcutil.SetSeverity(log.Severity_WARNING)
 
 	if ok, err := maybeRerunBackground(); ok {
 		return err
@@ -917,7 +922,12 @@ func addrWithDefaultHost(addr string) (string, error) {
 	return net.JoinHostPort(host, port), nil
 }
 
-func getClientGRPCConn() (*grpc.ClientConn, *hlc.Clock, *stop.Stopper, error) {
+// getClientGRPCConn returns a ClientConn, a Clock and a method that blocks
+// until the connection (and its associated goroutines) have terminated.
+func getClientGRPCConn(ctx context.Context) (*grpc.ClientConn, *hlc.Clock, func(), error) {
+	if ctx.Done() == nil {
+		return nil, nil, nil, errors.New("context must be cancellable")
+	}
 	// 0 to disable max offset checks; this RPC context is not a member of the
 	// cluster, so there's no need to enforce that its max offset is the same
 	// as that of nodes in the cluster.
@@ -937,21 +947,25 @@ func getClientGRPCConn() (*grpc.ClientConn, *hlc.Clock, *stop.Stopper, error) {
 	if err != nil {
 		return nil, nil, nil, err
 	}
-	return conn, clock, stopper, nil
+	stopper.AddCloser(stop.CloserFn(func() {
+		_ = conn.Close()
+	}))
+
+	// Tie the lifetime of the stopper to that of the context.
+	closer := func() {
+		stopper.Stop(ctx)
+	}
+	return conn, clock, closer, nil
 }
 
-func getAdminClient() (serverpb.AdminClient, *stop.Stopper, error) {
-	conn, _, stopper, err := getClientGRPCConn()
+// getAdminClient returns an AdminClient and a closure that must be invoked
+// to free associated resources.
+func getAdminClient(ctx context.Context) (serverpb.AdminClient, func(), error) {
+	conn, _, finish, err := getClientGRPCConn(ctx)
 	if err != nil {
 		return nil, nil, err
 	}
-	return serverpb.NewAdminClient(conn), stopper, nil
-}
-
-func stopperContext(stopper *stop.Stopper) context.Context {
-	ctx, cancel := context.WithCancel(context.Background())
-	stopper.AddCloser(stop.CloserFn(cancel))
-	return ctx
+	return serverpb.NewAdminClient(conn), finish, nil
 }
 
 // quitCmd command shuts down the node server.
@@ -1038,6 +1052,10 @@ func runQuit(cmd *cobra.Command, args []string) (err error) {
 	if len(args) != 0 {
 		return usageAndError(cmd)
 	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
 	defer func() {
 		if err == nil {
 			fmt.Println("ok")
@@ -1048,12 +1066,11 @@ func runQuit(cmd *cobra.Command, args []string) (err error) {
 		onModes[i] = int32(m)
 	}
 
-	c, stopper, err := getAdminClient()
+	c, finish, err := getAdminClient(ctx)
 	if err != nil {
 		return err
 	}
-	ctx := stopperContext(stopper)
-	defer stopper.Stop(ctx)
+	defer finish()
 
 	if quitCtx.serverDecommission {
 		var myself []string // will remain empty, which means target yourself

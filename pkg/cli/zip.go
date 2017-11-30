@@ -23,6 +23,8 @@ import (
 	"os"
 	"sort"
 
+	"golang.org/x/net/context"
+
 	"github.com/spf13/cobra"
 
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
@@ -107,12 +109,14 @@ func runDebugZip(cmd *cobra.Command, args []string) error {
 		return usageAndError(cmd)
 	}
 
-	conn, _, stopper, err := getClientGRPCConn()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	conn, _, finish, err := getClientGRPCConn(ctx)
 	if err != nil {
 		return err
 	}
-	ctx := stopperContext(stopper)
-	defer stopper.Stop(ctx)
+	defer finish()
 
 	status := serverpb.NewStatusClient(conn)
 	admin := serverpb.NewAdminClient(conn)

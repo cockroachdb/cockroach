@@ -32,7 +32,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/status"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
-	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
@@ -130,14 +129,18 @@ func runStatusNode(cmd *cobra.Command, args []string) error {
 func runStatusNodeInner(
 	showDecommissioned bool, args []string,
 ) ([]status.NodeStatus, *serverpb.DecommissionStatusResponse, error) {
+	ctx, cancel := cmdTimeoutContext(context.Background())
+	defer cancel()
+
 	var nodeStatuses []status.NodeStatus
 
-	c, stopper, err := getStatusClient()
+	conn, _, finish, err := getClientGRPCConn(ctx)
 	if err != nil {
 		return nil, nil, err
 	}
-	ctx := stopperContext(stopper)
-	defer stopper.Stop(ctx)
+	defer finish()
+
+	c := serverpb.NewStatusClient(conn)
 
 	var decommissionStatusRequest *serverpb.DecommissionStatusRequest
 
@@ -179,14 +182,13 @@ func runStatusNodeInner(
 		return nil, nil, errors.Errorf("expected no arguments or a single node ID")
 	}
 
-	cAdmin, stopperAdmin, err := getAdminClient()
+	cAdmin, finish, err := getAdminClient(ctx)
 	if err != nil {
 		return nil, nil, err
 	}
-	ctxAdmin := stopperContext(stopperAdmin)
-	defer stopperAdmin.Stop(ctxAdmin)
+	defer finish()
 
-	decommissionStatusResp, err := cAdmin.DecommissionStatus(ctxAdmin, decommissionStatusRequest)
+	decommissionStatusResp, err := cAdmin.DecommissionStatus(ctx, decommissionStatusRequest)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -317,12 +319,15 @@ func runDecommissionNode(cmd *cobra.Command, args []string) error {
 	if len(args) == 0 {
 		return usageAndError(cmd)
 	}
-	c, stopper, err := getAdminClient()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	c, finish, err := getAdminClient(ctx)
 	if err != nil {
 		return err
 	}
-	ctx := stopperContext(stopper)
-	defer stopper.Stop(ctx)
+	defer finish()
 
 	return runDecommissionNodeImpl(ctx, c, nodeCtx.nodeDecommissionWait, args)
 }
@@ -430,17 +435,20 @@ func runRecommissionNode(cmd *cobra.Command, args []string) error {
 	if len(args) == 0 {
 		return usageAndError(cmd)
 	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
 	nodeIDs, err := parseNodeIDs(args)
 	if err != nil {
 		return err
 	}
 
-	c, stopper, err := getAdminClient()
+	c, finish, err := getAdminClient(ctx)
 	if err != nil {
 		return err
 	}
-	ctx := stopperContext(stopper)
-	defer stopper.Stop(ctx)
+	defer finish()
 
 	req := &serverpb.DecommissionRequest{
 		NodeIDs:         nodeIDs,
@@ -476,12 +484,4 @@ var nodeCmd = &cobra.Command{
 
 func init() {
 	nodeCmd.AddCommand(nodeCmds...)
-}
-
-func getStatusClient() (serverpb.StatusClient, *stop.Stopper, error) {
-	conn, _, stopper, err := getClientGRPCConn()
-	if err != nil {
-		return nil, nil, err
-	}
-	return serverpb.NewStatusClient(conn), stopper, nil
 }

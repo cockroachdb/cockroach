@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/security/securitytest"
 	"github.com/cockroachdb/cockroach/pkg/server"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -1474,6 +1475,35 @@ func Example_node() {
 	// (1 row)
 	// node status 10000
 	// Error: node 10000 doesn't exist
+}
+
+func TestCLITimeout(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	c := newCLITest(cliTestParams{})
+	defer c.cleanup()
+
+	// Wrap the meat of the test in a retry loop. Setting a timeout like this is
+	// racy as the operation may have succeeded by the time the scheduler gives
+	// the timeout a chance to have an effect.
+	testutils.SucceedsSoon(t, func() error {
+		out, err := c.RunWithCapture("node status 1 --timeout 1ns")
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		const exp = `node status 1 --timeout 1ns
+operation timed out.
+
+rpc error: code = DeadlineExceeded desc = context deadline exceeded
+`
+		if out != exp {
+			err := errors.Errorf("unexpected output:\n%q\nwanted:\n%q", out, exp)
+			t.Log(err)
+			return err
+		}
+		return nil
+	})
 }
 
 func TestNodeStatus(t *testing.T) {

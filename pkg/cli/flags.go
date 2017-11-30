@@ -22,6 +22,8 @@ import (
 	"strings"
 	"time"
 
+	"golang.org/x/net/context"
+
 	"github.com/kr/text"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
@@ -42,6 +44,16 @@ var serverHTTPHost, serverHTTPPort string
 var clientConnHost, clientConnPort string
 var tempDir string
 var externalIODir string
+
+const defaultCmdTimeout = 0 // no timeout
+var cmdTimeout time.Duration
+
+func cmdTimeoutContext(ctx context.Context) (context.Context, func()) {
+	if cmdTimeout != 0 {
+		return context.WithTimeout(ctx, cmdTimeout)
+	}
+	return context.WithCancel(ctx)
+}
 
 const usageIndentation = 8
 const wrapWidth = 79 - usageIndentation
@@ -302,6 +314,18 @@ func init() {
 
 		// Certificate flags.
 		stringFlag(f, &baseCfg.SSLCertsDir, cliflags.CertsDir, base.DefaultCertsDirectory)
+	}
+
+	timeoutCmds := []*cobra.Command{
+		statusNodeCmd,
+		lsNodesCmd,
+		// If you add something here, make sure the actual implementation
+		// of the command uses `cmdTimeoutContext(.)` or it will ignore
+		// the timeout.
+	}
+
+	for _, cmd := range timeoutCmds {
+		durationFlag(cmd.Flags(), &cmdTimeout, cliflags.Timeout, defaultCmdTimeout)
 	}
 
 	// Node Status command.
