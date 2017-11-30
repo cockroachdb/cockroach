@@ -16,6 +16,7 @@ import (
 
 	"golang.org/x/net/context"
 
+	"github.com/cockroachdb/cockroach/pkg/ccl/cliccl/cliflagsccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/sqlccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/cli"
@@ -66,14 +67,14 @@ Then the file could be converted and saved to /data/backup with:
 `,
 		RunE: cli.MaybeDecorateGRPCError(runLoadCSV),
 	}
-	flags := loadCSVCmd.PersistentFlags()
-	flags.StringVar(&csvTableName, "table", "", "location of a file containing a single CREATE TABLE statement")
-	flags.StringSliceVar(&csvDataNames, "data", nil, "filenames of CSV data; uses <table>.dat if empty")
-	flags.StringVar(&csvDest, "dest", "", "destination directory for backup files")
-	flags.StringVar(&csvNullIf, "nullif", "", "if specified, the value of NULL; can specify the empty string")
-	flags.StringVar(&csvComma, "delimiter", "", "if specified, the CSV delimiter instead of a comma")
-	flags.StringVar(&csvComment, "comment", "", "if specified, allows comment lines starting with this character")
-	flags.StringVar(&csvTempDir, "tempdir", os.TempDir(), "directory to store intermediate temp files")
+	f := loadCSVCmd.PersistentFlags()
+	cli.StringFlag(f, &csvTableName, cliflagsccl.CSVTable, "")
+	cli.StringSliceFlag(f, &csvDataNames, cliflagsccl.CSVDataNames, nil)
+	cli.StringFlag(f, &csvDest, cliflagsccl.CSVDest, "")
+	cli.StringFlag(f, &csvNullIf, cliflagsccl.CSVNullIf, "")
+	cli.StringFlag(f, &csvComma, cliflagsccl.CSVComma, "")
+	cli.StringFlag(f, &csvComment, cliflagsccl.CSVComment, "")
+	cli.StringFlag(f, &csvTempDir, cliflagsccl.CSVTempDir, os.TempDir())
 
 	loadShowCmd := &cobra.Command{
 		Use:   "show <basepath>",
