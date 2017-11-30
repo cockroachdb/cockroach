@@ -22,6 +22,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 )
 
+func init() {
+	RegisterCommand(roachpb.Increment, DefaultDeclareKeys, Increment)
+}
+
 // Increment increments the value (interpreted as varint64 encoded) and
 // returns the newly incremented value (encoded as varint64). If no value
 // exists for the key, zero is incremented.

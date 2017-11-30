@@ -2164,7 +2164,7 @@ func collectSpans(
 		if _, ok := inner.(*roachpb.NoopRequest); ok {
 			continue
 		}
-		if cmd, ok := commands[inner.Method()]; ok {
+		if cmd, ok := batcheval.LookupCommand(inner.Method()); ok {
 			cmd.DeclareKeys(desc, ba.Header, inner, spans)
 		} else {
 			return nil, errors.Errorf("unrecognized command %s", inner.Method())
@@ -5070,7 +5070,7 @@ func (r *Replica) evaluateTxnWriteBatch(
 		// If all writes occurred at the intended timestamp, we've succeeded on the fast path.
 		batch := r.store.Engine().NewBatch()
 		if util.RaceEnabled && spans != nil {
-			batch = makeSpanSetBatch(batch, spans)
+			batch = spanset.NewBatch(batch, spans)
 		}
 		rec := NewReplicaEvalContext(r, spans)
 		br, res, pErr := evaluateBatch(ctx, idKey, batch, rec, &ms, strippedBa)
@@ -5122,7 +5122,7 @@ func (r *Replica) evaluateTxnWriteBatch(
 
 	batch := r.store.Engine().NewBatch()
 	if util.RaceEnabled && spans != nil {
-		batch = makeSpanSetBatch(batch, spans)
+		batch = spanset.NewBatch(batch, spans)
 	}
 	rec := NewReplicaEvalContext(r, spans)
 	br, result, pErr := evaluateBatch(ctx, idKey, batch, rec, &ms, ba)

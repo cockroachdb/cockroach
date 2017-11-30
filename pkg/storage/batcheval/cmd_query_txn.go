@@ -27,6 +27,10 @@ import (
 	"github.com/pkg/errors"
 )
 
+func init() {
+	RegisterCommand(roachpb.QueryTxn, DefaultDeclareKeys, QueryTxn)
+}
+
 // QueryTxn fetches the current state of a transaction.
 // This method is used to continually update the state of a txn
 // which is blocked waiting to resolve a conflicting intent. It

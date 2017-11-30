@@ -19,7 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
-	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/storage/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
@@ -43,10 +42,7 @@ const ExportRequestLimit = 5
 var exportRequestLimiter = makeConcurrentRequestLimiter(ExportRequestLimit)
 
 func init() {
-	storage.SetExportCmd(storage.Command{
-		DeclareKeys: declareKeysExport,
-		Eval:        evalExport,
-	})
+	batcheval.RegisterCommand(roachpb.Export, declareKeysExport, evalExport)
 }
 
 func declareKeysExport(

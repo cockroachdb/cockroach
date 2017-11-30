@@ -23,6 +23,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
+func init() {
+	RegisterCommand(roachpb.TransferLease, declareKeysRequestLease, TransferLease)
+}
+
 // TransferLease sets the lease holder for the range.
 // Unlike with RequestLease(), the new lease is allowed to overlap the old one,
 // the contract being that the transfer must have been initiated by the (soon

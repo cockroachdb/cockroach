@@ -22,7 +22,18 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
+	"github.com/cockroachdb/cockroach/pkg/storage/spanset"
 )
+
+func init() {
+	RegisterCommand(roachpb.ResolveIntentRange, declareKeysResolveIntentRange, ResolveIntentRange)
+}
+
+func declareKeysResolveIntentRange(
+	desc roachpb.RangeDescriptor, header roachpb.Header, req roachpb.Request, spans *spanset.SpanSet,
+) {
+	declareKeysResolveIntentCombined(desc, header, req, spans)
+}
 
 // ResolveIntentRange resolves write intents in the specified
 // key range according to the status of the transaction which created it.
