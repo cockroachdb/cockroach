@@ -57,7 +57,11 @@ var (
 	// PrettyPrintKey prints a key in human readable format. It's
 	// implemented in package git.com/cockroachdb/cockroach/keys to avoid
 	// package circle import.
-	PrettyPrintKey func(key Key) string
+	// valDirs correspond to the encoding direction of each encoded value
+	// in the key (if known). If left unspecified, the default encoding
+	// direction for each value type is used (see
+	// encoding.go:prettyPrintFirstValue).
+	PrettyPrintKey func(valDirs []encoding.Direction, key Key) string
 
 	// PrettyPrintRange prints a key range in human readable format. It's
 	// implemented in package git.com/cockroachdb/cockroach/keys to avoid
@@ -181,8 +185,15 @@ func (k Key) Compare(b Key) int {
 
 // String returns a string-formatted version of the key.
 func (k Key) String() string {
+	// Leave valDirs unspecified such that values are pretty-printed
+	// with default encoding direction.
+	return k.StringWithDirs(nil /* valDirs */)
+}
+
+// StringWithDirs is the value encoding direction-aware version of String.
+func (k Key) StringWithDirs(valDirs []encoding.Direction) string {
 	if PrettyPrintKey != nil {
-		return PrettyPrintKey(k)
+		return PrettyPrintKey(valDirs, k)
 	}
 
 	return fmt.Sprintf("%q", []byte(k))
@@ -195,7 +206,7 @@ func (k Key) Format(f fmt.State, verb rune) {
 	if verb == 'x' {
 		fmt.Fprintf(f, "%x", []byte(k))
 	} else if PrettyPrintKey != nil {
-		fmt.Fprint(f, PrettyPrintKey(k))
+		fmt.Fprint(f, PrettyPrintKey(nil /* valDirs */, k))
 	} else {
 		fmt.Fprint(f, strconv.Quote(string(k)))
 	}

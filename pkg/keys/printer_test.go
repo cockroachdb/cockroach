@@ -159,7 +159,7 @@ func TestPrettyPrint(t *testing.T) {
 		{makeKey(MakeTablePrefix(42), roachpb.RKey([]byte{0x12, 'a', 0x00, 0x03})), `/Table/42/???`},
 	}
 	for i, test := range testCases {
-		keyInfo := MassagePrettyPrintedSpanForTest(PrettyPrint(test.key), nil)
+		keyInfo := MassagePrettyPrintedSpanForTest(PrettyPrint(nil /* valDirs */, test.key), nil)
 		exp := MassagePrettyPrintedSpanForTest(test.exp, nil)
 		if exp != keyInfo {
 			t.Errorf("%d: expected %s, got %s", i, exp, keyInfo)

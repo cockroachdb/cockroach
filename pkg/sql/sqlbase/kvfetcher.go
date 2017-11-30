@@ -24,8 +24,59 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
+
+// IndexKeyValDirs returns the corresponding encoding.Directions for all the
+// encoded values in index's "fullest" possible index key, including directions
+// for table/index IDs, the interleaved sentinel and the index column values.
+// For example, given
+//    CREATE INDEX foo ON bar (a, b DESC) INTERLEAVED IN PARENT bar (a)
+// a typical index key with all values specified could be
+//    /51/1/42/#/51/2/1337
+// which would return the slice
+//    {ASC, ASC, ASC, 0, ASC, ASC, DESC}
+func IndexKeyValDirs(index *IndexDescriptor) []encoding.Direction {
+	if index == nil {
+		return nil
+	}
+
+	dirs := make([]encoding.Direction, 0, (len(index.Interleave.Ancestors)+1)*2+len(index.ColumnDirections))
+
+	colIdx := 0
+	for _, ancs := range index.Interleave.Ancestors {
+		// Table/Index IDs are always encoded ascending.
+		dirs = append(dirs, encoding.Ascending, encoding.Ascending)
+		for i := 0; i < int(ancs.SharedPrefixLen); i++ {
+			d, err := index.ColumnDirections[colIdx].ToEncodingDirection()
+			if err != nil {
+				panic(err)
+			}
+			dirs = append(dirs, d)
+			colIdx++
+		}
+
+		// The interleaved sentinel uses the 0 value for
+		// encoding.Direction when pretty-printing (see
+		// encoding.go:prettyPrintFirstValue).
+		dirs = append(dirs, 0)
+	}
+
+	// The index's table/index ID.
+	dirs = append(dirs, encoding.Ascending, encoding.Ascending)
+
+	for colIdx < len(index.ColumnDirections) {
+		d, err := index.ColumnDirections[colIdx].ToEncodingDirection()
+		if err != nil {
+			panic(err)
+		}
+		dirs = append(dirs, d)
+		colIdx++
+	}
+
+	return dirs
+}
 
 // PrettyKey pretty-prints the specified key, skipping over the first `skip`
 // fields. The pretty printed key looks like:
@@ -36,8 +87,8 @@ import (
 // this assumes that the fields themselves do not contain '/', but that is
 // currently true for the fields we care about stripping (the table and index
 // ID).
-func PrettyKey(key roachpb.Key, skip int) string {
-	p := key.String()
+func PrettyKey(valDirs []encoding.Direction, key roachpb.Key, skip int) string {
+	p := key.StringWithDirs(valDirs)
 	for i := 0; i <= skip; i++ {
 		n := strings.IndexByte(p[1:], '/')
 		if n == -1 {
@@ -49,20 +100,28 @@ func PrettyKey(key roachpb.Key, skip int) string {
 }
 
 // PrettySpan returns a human-readable representation of a span.
-func PrettySpan(span roachpb.Span, skip int) string {
+func PrettySpan(valDirs []encoding.Direction, span roachpb.Span, skip int) string {
 	var buf bytes.Buffer
-	fmt.Fprintf(&buf, "%s-%s", PrettyKey(span.Key, skip), PrettyKey(span.EndKey, skip))
+	fmt.Fprintf(&buf, "%s-%s", PrettyKey(valDirs, span.Key, skip), PrettyKey(valDirs, span.EndKey, skip))
 	return buf.String()
 }
 
 // PrettySpans returns a human-readable description of the spans.
-func PrettySpans(spans []roachpb.Span, skip int) string {
+// If index is nil, then pretty print subroutines will use their default
+// settings.
+func PrettySpans(index *IndexDescriptor, spans []roachpb.Span, skip int) string {
+	if len(spans) == 0 {
+		return ""
+	}
+
+	valDirs := IndexKeyValDirs(index)
+
 	var buf bytes.Buffer
 	for i, span := range spans {
 		if i > 0 {
 			buf.WriteString(" ")
 		}
-		buf.WriteString(PrettySpan(span, skip))
+		buf.WriteString(PrettySpan(valDirs, span, skip))
 	}
 	return buf.String()
 }
@@ -255,7 +314,7 @@ func (f *txnKVFetcher) fetch(ctx context.Context) error {
 			return errors.Errorf(
 				"span with results after resume span; it shouldn't happen given that "+
 					"we're only scanning non-overlapping spans. New spans: %s",
-				PrettySpans(f.spans, 0 /* skip */))
+				PrettySpans(nil, f.spans, 0 /* skip */))
 		}
 
 		if resumeSpan := header.ResumeSpan; resumeSpan != nil {

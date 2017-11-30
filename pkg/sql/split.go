@@ -127,7 +127,7 @@ func (n *splitNode) Next(params runParams) (bool, error) {
 func (n *splitNode) Values() tree.Datums {
 	return tree.Datums{
 		tree.NewDBytes(tree.DBytes(n.run.lastSplitKey)),
-		tree.NewDString(keys.PrettyPrint(n.run.lastSplitKey)),
+		tree.NewDString(keys.PrettyPrint(nil /* valDirs */, n.run.lastSplitKey)),
 	}
 }
 

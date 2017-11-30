@@ -39,14 +39,34 @@ const (
 
 // rowHelper has the common methods for table row manipulations.
 type rowHelper struct {
-	TableDesc    *TableDescriptor
+	TableDesc *TableDescriptor
+	// Secondary indexes.
 	Indexes      []IndexDescriptor
 	indexEntries []IndexEntry
+
+	// Computed during initialization for pretty-printing.
+	primIndexValDirs []encoding.Direction
+	secIndexValDirs  [][]encoding.Direction
 
 	// Computed and cached.
 	primaryIndexKeyPrefix []byte
 	primaryIndexCols      map[ColumnID]struct{}
 	sortedColumnFamilies  map[FamilyID][]ColumnID
+}
+
+func newRowHelper(desc *TableDescriptor, indexes []IndexDescriptor) rowHelper {
+	rh := rowHelper{TableDesc: desc, Indexes: indexes}
+
+	// Pre-compute the encoding directions of the index key values for
+	// pretty-printing in traces.
+	rh.primIndexValDirs = IndexKeyValDirs(&rh.TableDesc.PrimaryIndex)
+
+	rh.secIndexValDirs = make([][]encoding.Direction, len(rh.Indexes))
+	for i, index := range rh.Indexes {
+		rh.secIndexValDirs[i] = IndexKeyValDirs(&index)
+	}
+
+	return rh
 }
 
 // encodeIndexes encodes the primary and secondary index keys. The
@@ -175,7 +195,7 @@ func MakeRowInserter(
 	}
 
 	ri := RowInserter{
-		Helper:                rowHelper{TableDesc: tableDesc, Indexes: indexes},
+		Helper:                newRowHelper(tableDesc, indexes),
 		InsertCols:            insertCols,
 		InsertColIDtoRowIndex: ColIDtoRowIndexFromCols(insertCols),
 		marshaled:             make([]roachpb.Value, len(insertCols)),
@@ -478,7 +498,7 @@ func MakeRowUpdater(
 	}
 
 	ru := RowUpdater{
-		Helper:                rowHelper{TableDesc: tableDesc, Indexes: indexes},
+		Helper:                newRowHelper(tableDesc, indexes),
 		UpdateCols:            updateCols,
 		updateColIDtoRowIndex: updateColIDtoRowIndex,
 		deleteOnlyIndex:       deleteOnlyIndex,
@@ -680,7 +700,7 @@ func (ru *RowUpdater) UpdateRow(
 
 			ru.key = keys.MakeFamilyKey(primaryIndexKey, uint32(family.ID))
 			if traceKV {
-				log.VEventf(ctx, 2, "Put %s -> %v", ru.key, ru.marshaled[idx].PrettyPrint())
+				log.VEventf(ctx, 2, "Put %s -> %v", keys.PrettyPrint(ru.Helper.primIndexValDirs, ru.key), ru.marshaled[idx].PrettyPrint())
 			}
 			b.Put(&ru.key, &ru.marshaled[idx])
 			ru.key = nil
@@ -728,14 +748,14 @@ func (ru *RowUpdater) UpdateRow(
 			// The family might have already existed but every column in it is being
 			// set to NULL, so delete it.
 			if traceKV {
-				log.VEventf(ctx, 2, "Del %s", ru.key)
+				log.VEventf(ctx, 2, "Del %s", keys.PrettyPrint(ru.Helper.primIndexValDirs, ru.key))
 			}
 
 			b.Del(&ru.key)
 		} else {
 			ru.value.SetTuple(ru.valueBuf)
 			if traceKV {
-				log.VEventf(ctx, 2, "Put %s -> %v", ru.key, ru.value.PrettyPrint())
+				log.VEventf(ctx, 2, "Put %s -> %v", keys.PrettyPrint(ru.Helper.primIndexValDirs, ru.key), ru.value.PrettyPrint())
 			}
 			b.Put(&ru.key, &ru.value)
 		}
@@ -753,7 +773,7 @@ func (ru *RowUpdater) UpdateRow(
 			}
 
 			if traceKV {
-				log.VEventf(ctx, 2, "Del %s", secondaryIndexEntry.Key)
+				log.VEventf(ctx, 2, "Del %s", keys.PrettyPrint(ru.Helper.secIndexValDirs[i], secondaryIndexEntry.Key))
 			}
 			b.Del(secondaryIndexEntry.Key)
 		} else if !bytes.Equal(newSecondaryIndexEntry.Value.RawBytes, secondaryIndexEntry.Value.RawBytes) {
@@ -764,7 +784,7 @@ func (ru *RowUpdater) UpdateRow(
 		// Do not update Indexes in the DELETE_ONLY state.
 		if _, ok := ru.deleteOnlyIndex[i]; !ok {
 			if traceKV {
-				log.VEventf(ctx, 2, "CPut %s -> %v", newSecondaryIndexEntry.Key, newSecondaryIndexEntry.Value.PrettyPrint())
+				log.VEventf(ctx, 2, "CPut %s -> %v", keys.PrettyPrint(ru.Helper.secIndexValDirs[i], newSecondaryIndexEntry.Key), newSecondaryIndexEntry.Value.PrettyPrint())
 			}
 			b.CPut(newSecondaryIndexEntry.Key, &newSecondaryIndexEntry.Value, expValue)
 		}
@@ -853,7 +873,7 @@ func MakeRowDeleter(
 	}
 
 	rd := RowDeleter{
-		Helper:               rowHelper{TableDesc: tableDesc, Indexes: indexes},
+		Helper:               newRowHelper(tableDesc, indexes),
 		FetchCols:            fetchCols,
 		FetchColIDtoRowIndex: fetchColIDtoRowIndex,
 	}
@@ -882,18 +902,24 @@ func (rd *RowDeleter) DeleteRow(
 		return err
 	}
 
-	for _, secondaryIndexEntry := range secondaryIndexEntries {
+	for i, secondaryIndexEntry := range secondaryIndexEntries {
 		if traceKV {
-			log.VEventf(ctx, 2, "Del %s", secondaryIndexEntry.Key)
+			log.VEventf(ctx, 2, "Del %s", keys.PrettyPrint(rd.Helper.secIndexValDirs[i], secondaryIndexEntry.Key))
 		}
 		b.Del(secondaryIndexEntry.Key)
 	}
 
 	// Delete the row.
 	rd.startKey = roachpb.Key(primaryIndexKey)
-	rd.endKey = roachpb.Key(encoding.EncodeNotNullDescending(primaryIndexKey))
+	rd.endKey = roachpb.Key(encoding.EncodeInterleavedSentinel(primaryIndexKey))
 	if traceKV {
-		log.VEventf(ctx, 2, "DelRange %s - %s", rd.startKey, rd.endKey)
+		log.VEventf(ctx, 2, "DelRange %s - %s",
+			keys.PrettyPrint(rd.Helper.primIndexValDirs, rd.startKey),
+			// Although not strictly necessary, we explicitly
+			// specify that we want to print out the interleaved
+			// sentinel.
+			keys.PrettyPrint(append(rd.Helper.primIndexValDirs, 0), rd.endKey),
+		)
 	}
 	b.DelRange(&rd.startKey, &rd.endKey, false /* returnKeys */)
 	rd.startKey, rd.endKey = nil, nil
@@ -915,7 +941,7 @@ func (rd *RowDeleter) DeleteIndexRow(
 		return err
 	}
 	if traceKV {
-		log.VEventf(ctx, 2, "Del %s", secondaryIndexEntry.Key)
+		log.VEventf(ctx, 2, "Del %s", keys.PrettyPrint(IndexKeyValDirs(idx), secondaryIndexEntry.Key))
 	}
 	b.Del(secondaryIndexEntry.Key)
 	return nil

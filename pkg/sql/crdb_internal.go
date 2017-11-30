@@ -1409,9 +1409,9 @@ CREATE TABLE crdb_internal.ranges (
 			if err := addRow(
 				tree.NewDInt(tree.DInt(desc.RangeID)),
 				tree.NewDBytes(tree.DBytes(desc.StartKey)),
-				tree.NewDString(keys.PrettyPrint(desc.StartKey.AsRawKey())),
+				tree.NewDString(keys.PrettyPrint(nil /* valDirs */, desc.StartKey.AsRawKey())),
 				tree.NewDBytes(tree.DBytes(desc.EndKey)),
-				tree.NewDString(keys.PrettyPrint(desc.EndKey.AsRawKey())),
+				tree.NewDString(keys.PrettyPrint(nil /* valDirs */, desc.EndKey.AsRawKey())),
 				tree.NewDString(dbName),
 				tree.NewDString(tableName),
 				tree.NewDString(indexName),

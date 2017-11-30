@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/pkg/errors"
 )
 
@@ -42,10 +43,16 @@ type showRangesNode struct {
 	span roachpb.Span
 
 	run showRangesRun
+
+	index *sqlbase.IndexDescriptor
+	// valDirs is computed during Start and is necessary to correctly
+	// pretty-print out the range keys.
+	valDirs []encoding.Direction
 }
 
 func (p *planner) ShowRanges(ctx context.Context, n *tree.ShowRanges) (planNode, error) {
 	tableDesc, index, err := p.getTableAndIndex(ctx, n.Table, n.Index, privilege.SELECT)
+
 	if err != nil {
 		return nil, err
 	}
@@ -56,6 +63,7 @@ func (p *planner) ShowRanges(ctx context.Context, n *tree.ShowRanges) (planNode,
 		run: showRangesRun{
 			values: make([]tree.Datum, len(showRangesColumns)),
 		},
+		index: index,
 	}, nil
 }
 
@@ -98,6 +106,7 @@ type showRangesRun struct {
 
 func (n *showRangesNode) Start(params runParams) error {
 	var err error
+	n.valDirs = sqlbase.IndexKeyValDirs(n.index)
 	n.run.descriptorKVs, err = scanMetaKVs(params.ctx, params.p.txn, n.span)
 	return err
 }
@@ -116,11 +125,11 @@ func (n *showRangesNode) Next(params runParams) (bool, error) {
 	}
 
 	if n.run.rowIdx > 0 {
-		n.run.values[0] = tree.NewDString(sqlbase.PrettyKey(desc.StartKey.AsRawKey(), 2))
+		n.run.values[0] = tree.NewDString(sqlbase.PrettyKey(n.valDirs, desc.StartKey.AsRawKey(), 2))
 	}
 
 	if n.run.rowIdx < len(n.run.descriptorKVs)-1 {
-		n.run.values[1] = tree.NewDString(sqlbase.PrettyKey(desc.EndKey.AsRawKey(), 2))
+		n.run.values[1] = tree.NewDString(sqlbase.PrettyKey(n.valDirs, desc.EndKey.AsRawKey(), 2))
 	}
 
 	n.run.values[2] = tree.NewDInt(tree.DInt(desc.RangeID))
