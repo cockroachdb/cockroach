@@ -1088,7 +1088,7 @@ SELECT *
 3  ·       filter    b > 1
 3  scan    ·         ·
 3  ·       table     square@primary
-3  ·       spans     /!NULL-/6
+3  ·       spans     /!NULL-/5/#
 
 query IIII rowsort
 SELECT *
@@ -1147,7 +1147,7 @@ SELECT *
 2  ·       filter    ((a > 1) AND ((a IS NULL) OR (a > 2))) AND ((a IS NULL) OR (a < b))
 2  scan    ·         ·
 2  ·       table     square@primary
-2  ·       spans     /2-/6
+2  ·       spans     /2-/5/#
 
 
 statement ok
