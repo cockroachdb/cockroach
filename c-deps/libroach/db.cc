@@ -1537,10 +1537,9 @@ rocksdb::Options DBMakeOptions(DBOptions db_opts) {
   // Use the rocksdb options builder to configure the base options
   // using our memtable budget.
   rocksdb::Options options;
-  // Increase parallelism for compactions based on the number of
-  // cpus. This will use 1 high priority thread for flushes and
-  // num_cpu-1 low priority threads for compactions. Always use at
-  // least 2 threads, otherwise compactions won't happen.
+  // Increase parallelism for compactions and flushes based on the
+  // number of cpus. Always use at least 2 threads, otherwise
+  // compactions and flushes may fight with each other.
   options.IncreaseParallelism(std::max(db_opts.num_cpu, 2));
   // Enable subcompactions which will use multiple threads to speed up
   // a single compaction. The value of num_cpu/2 has not been tuned.
@@ -1554,14 +1553,11 @@ rocksdb::Options DBMakeOptions(DBOptions db_opts) {
   options.statistics = rocksdb::CreateDBStatistics();
   options.max_open_files = db_opts.max_open_files;
   options.compaction_pri = rocksdb::kMinOverlappingRatio;
-  // Periodically sync the WAL to smooth out writes. Not performing
-  // such syncs can be faster but can cause performance blips when the
-  // OS decides it needs to flush data.
-  options.wal_bytes_per_sync = 256 << 10;   // 256 KB
-
-  // Periodically sync sstables during compaction to smooth out
-  // writes. Experimentally this has had no effect.
-  // options.bytes_per_sync = 4 << 20;
+  // Periodically sync both the WAL and SST writes to smooth out disk
+  // usage. Not performing such syncs can be faster but can cause
+  // performance blips when the OS decides it needs to flush data.
+  options.wal_bytes_per_sync = 512 << 10;   // 512 KB
+  options.bytes_per_sync = 512 << 10;       // 512 KB
 
   // The size reads should be performed in for compaction. The
   // internets claim this can speed up compactions, though RocksDB
