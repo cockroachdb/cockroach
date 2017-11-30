@@ -11,26 +11,26 @@ import React from "react";
 import { MetricConstants } from "src/util/proto";
 import { Bytes } from "src/util/format";
 
-import NodeStatusHistory from "./statusHistory";
+import { SimulatedNodeStatus } from "./nodeSimulator";
 import * as PathMath from "./pathmath";
 
-export interface LocalityProps {
-  nodeHistory: NodeStatusHistory;
+interface NodeViewProps {
+  nodeHistory: SimulatedNodeStatus;
   maxClientActivityRate: number;
 }
 
-export class Locality extends React.Component<LocalityProps, any> {
+export class NodeView extends React.Component<NodeViewProps, any> {
   static radius = 42;
-  static arcWidth = Locality.radius * 0.11111;
-  static outerRadius = Locality.radius + Locality.arcWidth;
-  static maxRadius = Locality.outerRadius + Locality.arcWidth;
+  static arcWidth = NodeView.radius * 0.11111;
+  static outerRadius = NodeView.radius + NodeView.arcWidth;
+  static maxRadius = NodeView.outerRadius + NodeView.arcWidth;
 
   renderBackground() {
     return (
       <path
         className="capacity-background"
         d={PathMath.createArcPath(
-          Locality.radius, Locality.outerRadius, PathMath.arcAngleFromPct(0), PathMath.arcAngleFromPct(1),
+          NodeView.radius, NodeView.outerRadius, PathMath.arcAngleFromPct(0), PathMath.arcAngleFromPct(1),
         )}
       />
     );
@@ -50,29 +50,29 @@ export class Locality extends React.Component<LocalityProps, any> {
       <g>
         <text
           className="capacity-label"
-          x={(Locality.outerRadius + Locality.arcWidth) * Math.cos(0)}
+          x={(NodeView.outerRadius + NodeView.arcWidth) * Math.cos(0)}
         >
           {Bytes(capacity)}
         </text>
         <path
           className="capacity-used"
           d={PathMath.createArcPath(
-            Locality.radius,
-            Locality.outerRadius,
+            NodeView.radius,
+            NodeView.outerRadius,
             PathMath.arcAngleFromPct(0),
             PathMath.arcAngleFromPct(capacityUsedPct),
           )}
         />
         <text
           className="capacity-used-label"
-          transform={`translate(${usedX * Locality.maxRadius}, ${usedY * Locality.maxRadius})`}
+          transform={`translate(${usedX * NodeView.maxRadius}, ${usedY * NodeView.maxRadius})`}
           textAnchor={capacityUsedPct < 0.75 ? "end" : "start"}
         >
           {Bytes(used)}
         </text>
 
-        <g transform={`translate(${-Locality.outerRadius}, ${-Locality.outerRadius})`}>
-          <svg width={Locality.outerRadius * 2} height={Locality.outerRadius * 2}>
+        <g transform={`translate(${-NodeView.outerRadius}, ${-NodeView.outerRadius})`}>
+          <svg width={NodeView.outerRadius * 2} height={NodeView.outerRadius * 2}>
             <text className="capacity-used-pct-label" x="50%" y="40%">
               {Math.round(100 * capacityUsedPct) + "%"}
             </text>
@@ -86,22 +86,22 @@ export class Locality extends React.Component<LocalityProps, any> {
   }
 
   renderNetworkActivity() {
-    const barsX = Locality.radius * Math.cos(PathMath.angleFromPct(0));
-    const barsWidth = Locality.outerRadius - barsX - 4;
+    const barsX = NodeView.radius * Math.cos(PathMath.angleFromPct(0));
+    const barsWidth = NodeView.outerRadius - barsX - 4;
     const labelH = 8;
 
     const { nodeHistory, maxClientActivityRate } = this.props;
 
     return (
-      <g transform={`translate(0,${Locality.radius * Math.sin(PathMath.angleFromPct(0))})`} >
+      <g transform={`translate(0,${NodeView.radius * Math.sin(PathMath.angleFromPct(0))})`} >
         <line
           className="client-activity"
-          x1={Locality.outerRadius - 2}
+          x1={NodeView.outerRadius - 2}
           y1={-labelH}
-          x2={Math.round(Locality.outerRadius - barsWidth * nodeHistory.clientActivityRate / maxClientActivityRate)}
+          x2={Math.round(NodeView.outerRadius - barsWidth * nodeHistory.clientActivityRate / maxClientActivityRate)}
           y2={-labelH}
         />
-        <text className="client-activity-label" x={Locality.outerRadius + Locality.arcWidth} y={-labelH}>
+        <text className="client-activity-label" x={NodeView.outerRadius + NodeView.arcWidth} y={-labelH}>
           {Math.round(nodeHistory.clientActivityRate)} qps
           </text>
       </g>
@@ -110,12 +110,12 @@ export class Locality extends React.Component<LocalityProps, any> {
 
   renderLabel() {
     return (
-      <g transform={`translate(${-Locality.outerRadius}, ${Locality.outerRadius * 0.9})`}>
+      <g transform={`translate(${-NodeView.outerRadius}, ${NodeView.outerRadius * 0.9})`}>
         <path
           className="locality-label-background"
-          d={PathMath.drawBox(Locality.outerRadius * 2, 20, 0.05)}
+          d={PathMath.drawBox(NodeView.outerRadius * 2, 20, 0.05)}
         />
-        <svg width={Locality.outerRadius * 2} height="20">
+        <svg width={NodeView.outerRadius * 2} height="20">
           <text className="locality-label" x="50%" y="55%">
             {this.props.nodeHistory.latest().desc.address.address_field}
           </text>

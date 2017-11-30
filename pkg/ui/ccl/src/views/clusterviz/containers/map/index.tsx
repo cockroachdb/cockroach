@@ -12,7 +12,7 @@ import * as d3 from "d3";
 
 import "./sim.css";
 
-import CurrentNodes from "./currentNodes";
+import NodeSimulator from "./nodeSimulator";
 import * as Vector from "./vector";
 import { WorldMap } from "./worldmap";
 import { Box, ZoomTransformer } from "./zoom";
@@ -107,7 +107,7 @@ export default class ClusterVisualization extends React.Component<{}, ClusterVis
     return (
       <g>
         <WorldMap projection={projection} />
-        <CurrentNodes projection={projection} />
+        <NodeSimulator projection={projection} zoom={this.state.zoomTransform} />
       </g>
     );
   }
