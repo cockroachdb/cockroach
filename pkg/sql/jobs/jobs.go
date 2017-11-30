@@ -110,6 +110,10 @@ func (e *InvalidStatusError) Error() string {
 	return fmt.Sprintf("cannot %s %s job (id %d)", e.op, e.status, e.id)
 }
 
+func (e InvalidStatusError) Status() Status {
+	return e.status
+}
+
 // ID returns the ID of the job that this Job is currently tracking. This will
 // be nil if Created has not yet been called.
 func (j *Job) ID() *int64 {
