@@ -584,7 +584,7 @@ func (s *adminServer) TableStats(
 			nodeCtx, "server.adminServer: requesting remote stats",
 			func(ctx context.Context) {
 				var spanResponse *serverpb.SpanStatsResponse
-				client, err := s.server.status.dialNode(nodeID)
+				client, err := s.server.status.dialNode(ctx, nodeID)
 				if err == nil {
 					req := serverpb.SpanStatsRequest{
 						StartKey: startKey,
@@ -984,7 +984,7 @@ func (s *adminServer) Settings(
 func (s *adminServer) Cluster(
 	_ context.Context, req *serverpb.ClusterRequest,
 ) (*serverpb.ClusterResponse, error) {
-	clusterID := s.server.node.ClusterID
+	clusterID := s.server.ClusterID()
 	if clusterID == (uuid.UUID{}) {
 		return nil, grpc.Errorf(codes.Unavailable, "cluster ID not yet available")
 	}
