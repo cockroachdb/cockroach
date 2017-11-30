@@ -5,6 +5,7 @@
 - RFC PR: [#20149](https://github.com/cockroachdb/cockroach/pull/20149)
 - Cockroach Issue: (one or more # from the issue tracker)
 
+
 Table of Contents
 =================
 
@@ -29,7 +30,8 @@ Table of Contents
       * [Detailed design](#detailed-design)
          * [Roles system table](#roles-system-table)
          * [New SQL statements](#new-sql-statements)
-         * [Determining role memberships](#determining-role-memberships)
+         * [Modifying role memberships](#modifying-role-memberships)
+         * [Expanding role memberships](#expanding-role-memberships)
          * [Checking permissions](#checking-permissions)
          * [Admin role](#admin-role)
          * [Migrations and backwards compatibility](#migrations-and-backwards-compatibility)
@@ -40,6 +42,7 @@ Table of Contents
       * [Rationale and Alternatives](#rationale-and-alternatives)
          * [Internal representation of memberships](#internal-representation-of-memberships)
       * [Unresolved questions](#unresolved-questions)
+         * [Leases on system tables](#leases-on-system-tables)
          * [Inheritance of role admin](#inheritance-of-role-admin)
          * [Adding and removing admin setting](#adding-and-removing-admin-setting)
          * [Listing expanded role memberships](#listing-expanded-role-memberships)
@@ -295,7 +298,6 @@ Since roles and users share the same namespace, it is simplest to alter the `sys
 include roles.
 
 The schema for the users table becomes:
-The `role` table stores the list of all existing roles.
 ```
 CREATE TABLE system.users (
   username         STRING PRIMARY KEY,
@@ -305,7 +307,8 @@ CREATE TABLE system.users (
 );`
 ```
 
-Depending on the complexity of migration, we may be able to rename the `username` field and even the table.
+Depending on the complexity of migration, we may be able to rename the `username` field and even the table
+to `rolename` and `system.roles` to reflect the fact that users are really just roles.
 
 `isRole` denotes whether the corresponding name is a user or a role. Roles cannot log in or have passwords.
 
@@ -410,24 +413,31 @@ Where `rolename` can be one or more role, or `*` and `name` can be one of more u
 
 See [Listing expanded role memberships](#listing-expanded-role-memberships) for possible variations.
 
-### Determining role memberships
+### Modifying role memberships
 
-TODO(mberhault): flesh out this section a bit more, including code samples.
+Modifying role memberships is done through normal operations on the system tables.
 
-Expanding role memberships is necessary to perform the permission checks listed above.
+However, we set `UpVersion` on the `role_members` table to trigger a descriptor version upgrade,
+notifying lease holders that a refresh is needed.
 
-A naive approach (looking up memberships for every permission check) would be prohibitively expensive.
+### Expanding role memberships
 
-Instead, we propose the following:
-* per-node cache of already resolved memberships
-* if the user's expanded roles is not cached, look it up
+Expanding role memberships is necessary to perform permission checks. Given how frequently these need to be
+done, we propose a per-node cache of role memberships with refreshes triggered by increases of the
+`role_members` table descriptor version.
+
+The process for a permission check is:
+* if the user's expanded roles is not cached, expand roles using the `role_members` table.
+* reads of the `role_members` table is performed at the table descriptor's `ModificationTime`
 * the cache holds a lease on the `role_members` table
-* when the `role_members` table descriptor version changes, expire the cached data or refresh it
-* any time a transaction is committed with modification to the `role_members` table: increase the descriptor version
+* when the `role_members` table descriptor version changes (indicating a change to role memberships), refresh the roles from the table
 
-This insures that we can keep role membership information reasonably current, with refreshes being forced
-only when changes occur. Given the small size of membership information, applicable cache expiration will most
-likely be time based (although size maximum should apply).
+This insures that we can keep role membership information reasonably current with refreshes being forced
+only when changes occur.
+
+The role cache can be a simple LRU cache with a maximum size of a few MB, but this limit should be configurable.
+Given the likely small size of the cached entries, we can expire them after some amount of inactivity rather than
+constantly refreshing them.
 
 Role membership expansion can be pre-computed (see [Internal representation of memberships](#internal-representation-of-memberships)) to allow for cheaper lookup at the time of permission checks.
 
@@ -599,6 +609,13 @@ Dual tables: one for direct role membership information, one for expanded member
 ## Unresolved questions
 
 These must be resolved before moving into the final comment period.
+
+### Leases on system tables
+
+We need to check whether leases can be acquired on system tables (specifically, the `role_members` table).
+
+If not, an alternative would be to make the `role_members` table a non-system table, or to use an separate
+empty table to acquire leases on.
 
 ### Inheritance of role admin
 
