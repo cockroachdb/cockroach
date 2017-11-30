@@ -737,11 +737,14 @@ func (n *Node) waitUntilLive() {
 		Multiplier:     2,
 	}
 	for r := retry.Start(opts); r.Next(); {
+		var pid int
 		n.Lock()
-		exited := n.cmd == nil
+		if n.cmd != nil {
+			pid = n.cmd.Process.Pid
+		}
 		n.Unlock()
-		if exited {
-			return
+		if pid == 0 {
+			return // process already quit
 		}
 
 		urlBytes, err := ioutil.ReadFile(n.listeningURLFile())
@@ -765,7 +768,6 @@ func (n *Node) waitUntilLive() {
 		pgURL.Path = n.Cfg.DB
 		n.Lock()
 		n.pgURL = pgURL.String()
-		pid := n.cmd.Process.Pid
 		n.Unlock()
 
 		var uiURL *url.URL
