@@ -155,6 +155,7 @@ var _ planNode = &createIndexNode{}
 var _ planNode = &createTableNode{}
 var _ planNode = &createViewNode{}
 var _ planNode = &createSequenceNode{}
+var _ planNode = &createStatsNode{}
 var _ planNode = &delayedNode{}
 var _ planNode = &deleteNode{}
 var _ planNode = &distinctNode{}
@@ -368,6 +369,8 @@ func (p *planner) newPlan(
 		return p.CreateView(ctx, n)
 	case *tree.CreateSequence:
 		return p.CreateSequence(ctx, n)
+	case *tree.CreateStats:
+		return p.CreateStatistics(ctx, n)
 	case *tree.Deallocate:
 		return p.Deallocate(ctx, n)
 	case *tree.Delete:

@@ -96,6 +96,8 @@ func TestContextualHelp(t *testing.T) {
 
 		{`CREATE SEQUENCE ??`, `CREATE SEQUENCE`},
 
+		{`CREATE STATISTICS ??`, `CREATE STATISTICS`},
+
 		{`CREATE TABLE blah (??`, `CREATE TABLE`},
 		{`CREATE TABLE IF NOT ??`, `CREATE TABLE`},
 		{`CREATE TABLE blah (x, y) AS ??`, `CREATE TABLE`},
