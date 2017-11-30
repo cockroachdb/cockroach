@@ -23,8 +23,33 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
+	"github.com/cockroachdb/cockroach/pkg/storage/spanset"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
+
+func init() {
+	RegisterCommand(roachpb.BeginTransaction, declareKeysBeginTransaction, BeginTransaction)
+}
+
+// DeclareKeysWriteTransaction is the shared portion of
+// declareKeys{Begin,End,Heartbeat}Transaction
+func DeclareKeysWriteTransaction(
+	_ roachpb.RangeDescriptor, header roachpb.Header, req roachpb.Request, spans *spanset.SpanSet,
+) {
+	if header.Txn != nil {
+		header.Txn.AssertInitialized(context.TODO())
+		spans.Add(spanset.SpanReadWrite, roachpb.Span{
+			Key: keys.TransactionKey(req.Header().Key, header.Txn.ID),
+		})
+	}
+}
+
+func declareKeysBeginTransaction(
+	desc roachpb.RangeDescriptor, header roachpb.Header, req roachpb.Request, spans *spanset.SpanSet,
+) {
+	DeclareKeysWriteTransaction(desc, header, req, spans)
+	spans.Add(spanset.SpanReadOnly, roachpb.Span{Key: keys.RangeTxnSpanGCThresholdKey(header.RangeID)})
+}
 
 // BeginTransaction writes the initial transaction record. Fails in
 // the event that a transaction record is already written. This may
