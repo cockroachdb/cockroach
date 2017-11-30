@@ -17,7 +17,7 @@ testing and don't care about data persistence, you can do so with just a single
 command instead of following this guide (which sets up a more reliable cluster):
 
 ```shell
-kubectl run cockroachdb --image=cockroachdb/cockroach --restart=Never -- start
+kubectl run cockroachdb --image=cockroachdb/cockroach --restart=Never -- start --insecure
 ```
 
 ## Limitations
@@ -199,7 +199,7 @@ In insecure mode, start up a client pod and open up an interactive, (mostly) Pos
 SQL shell:
 
 ```shell
-$ kubectl run cockroachdb -it --image=cockroachdb/cockroach --rm --restart=Never \
+kubectl run cockroachdb -it --image=cockroachdb/cockroach --rm --restart=Never \
     -- sql --insecure --host=cockroachdb-public
 ```
 
