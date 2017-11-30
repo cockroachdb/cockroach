@@ -27,7 +27,7 @@ import (
 	"github.com/pkg/errors"
 )
 
-// ShowCreateTable returns a CREATE TABLE statement for the specified table.
+// ShowCreateTable returns a SHOW CREATE TABLE statement for the specified table.
 // Privileges: Any privilege on table.
 func (p *planner) ShowCreateTable(ctx context.Context, n *tree.ShowCreateTable) (planNode, error) {
 	// We make the check whether the name points to a table or not in
