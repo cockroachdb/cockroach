@@ -46,4 +46,8 @@ https://cockroachdb.github.io/distsqlplan/decode.html?eJzElLGOozAQhvt7CvRXd5ILG0
 statement ok
 CREATE STATISTICS s1 ON a FROM data
 
-# TODO(radu): look at the stats when we have statements (#20323)
+query TTIII colnames
+SELECT "Name", "Columns", "Row Count", "Distinct Count", "Null Count" FROM [SHOW STATISTICS FOR TABLE data]
+----
+Name  Columns  Row Count  Distinct Count  Null Count
+s1    a        10000      10              0
