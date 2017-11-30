@@ -46,7 +46,7 @@ func Main() {
 		os.Args[1],
 	)
 
-	defer log.RecoverAndReportPanic(context.Background(), &ServerCfg.Settings.SV)
+	defer log.RecoverAndReportPanic(context.Background(), &serverCfg.Settings.SV)
 
 	errCode := 0
 	if err := Run(os.Args[1:]); err != nil {

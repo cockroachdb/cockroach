@@ -66,10 +66,6 @@ import (
 // The function takes a filename to write the profile to.
 var jemallocHeapDump func(string) error
 
-// ExtraStartPreRunHook is an optional function that is run in the start
-// PreRun hook.
-var ExtraStartPreRunHook func() error
-
 // StartCmd starts a node by initializing the stores and joining
 // the cluster.
 var StartCmd = &cobra.Command{
@@ -207,7 +203,7 @@ func initCPUProfile(ctx context.Context, dir string) {
 	}
 
 	go func() {
-		defer log.RecoverAndReportPanic(ctx, &ServerCfg.Settings.SV)
+		defer log.RecoverAndReportPanic(ctx, &serverCfg.Settings.SV)
 
 		ctx := context.Background()
 
@@ -401,8 +397,8 @@ func (b *bytesOrPercentageValue) IsSet() bool {
 	return b.bval.IsSet()
 }
 
-var cacheSizeValue = newBytesOrPercentageValue(&ServerCfg.CacheSize, memoryPercentResolver)
-var sqlSizeValue = newBytesOrPercentageValue(&ServerCfg.SQLMemoryPoolSize, memoryPercentResolver)
+var cacheSizeValue = newBytesOrPercentageValue(&serverCfg.CacheSize, memoryPercentResolver)
+var sqlSizeValue = newBytesOrPercentageValue(&serverCfg.SQLMemoryPoolSize, memoryPercentResolver)
 var diskTempStorageSizeValue = newBytesOrPercentageValue(nil /* v */, nil /* percentResolver */)
 
 func initExternalIODir(ctx context.Context, firstStore base.StoreSpec) (string, error) {
@@ -525,22 +521,22 @@ func runStart(cmd *cobra.Command, args []string) error {
 
 	// Deal with flags that may depend on other flags.
 
-	tracer := ServerCfg.Settings.Tracer
+	tracer := serverCfg.Settings.Tracer
 	sp := tracer.StartSpan("server start")
 	ctx := opentracing.ContextWithSpan(context.Background(), sp)
 
 	var err error
-	if ServerCfg.TempStorageConfig, err = initTempStorageConfig(ctx, ServerCfg.Stores.Specs[0]); err != nil {
+	if serverCfg.TempStorageConfig, err = initTempStorageConfig(ctx, serverCfg.Stores.Specs[0]); err != nil {
 		return err
 	}
-	if ServerCfg.Settings.ExternalIODir, err = initExternalIODir(ctx, ServerCfg.Stores.Specs[0]); err != nil {
+	if serverCfg.Settings.ExternalIODir, err = initExternalIODir(ctx, serverCfg.Stores.Specs[0]); err != nil {
 		return err
 	}
 
 	// Use the server-specific values for some flags and settings.
-	ServerCfg.Insecure = startCtx.serverInsecure
-	ServerCfg.SSLCertsDir = startCtx.serverSSLCertsDir
-	ServerCfg.User = security.NodeUser
+	serverCfg.Insecure = startCtx.serverInsecure
+	serverCfg.SSLCertsDir = startCtx.serverSSLCertsDir
+	serverCfg.User = security.NodeUser
 
 	signalCh := make(chan os.Signal, 1)
 	signal.Notify(signalCh, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
@@ -553,7 +549,7 @@ func runStart(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	ServerCfg.Report(ctx)
+	serverCfg.Report(ctx)
 
 	// Run the rest of the startup process in the background to avoid preventing
 	// proper handling of signals if we get stuck on something during
@@ -578,7 +574,7 @@ func runStart(cmd *cobra.Command, args []string) error {
 		}()
 		defer sp.Finish()
 		if err := func() error {
-			if err := ServerCfg.InitNode(); err != nil {
+			if err := serverCfg.InitNode(); err != nil {
 				return errors.Wrap(err, "failed to initialize node")
 			}
 
@@ -588,7 +584,7 @@ func runStart(cmd *cobra.Command, args []string) error {
 			}
 
 			var err error
-			s, err = server.NewServer(ServerCfg, stopper)
+			s, err = server.NewServer(serverCfg, stopper)
 			if err != nil {
 				return errors.Wrap(err, "failed to start server")
 			}
@@ -603,9 +599,9 @@ func runStart(cmd *cobra.Command, args []string) error {
 			if err := s.Start(ctx); err != nil {
 				if le, ok := err.(server.ListenError); ok {
 					const errorPrefix = "consider changing the port via --"
-					if le.Addr == ServerCfg.Addr {
+					if le.Addr == serverCfg.Addr {
 						err = errors.Wrap(err, errorPrefix+cliflags.ServerPort.Name)
-					} else if le.Addr == ServerCfg.HTTPAddr {
+					} else if le.Addr == serverCfg.HTTPAddr {
 						err = errors.Wrap(err, errorPrefix+cliflags.ServerHTTPPort.Name)
 					}
 				}
@@ -623,7 +619,7 @@ func runStart(cmd *cobra.Command, args []string) error {
 				s.PeriodicallyCheckForUpdates()
 			}
 
-			pgURL, err := ServerCfg.PGURL(url.User(sqlConnUser))
+			pgURL, err := serverCfg.PGURL(url.User(sqlConnUser))
 			if err != nil {
 				return err
 			}
@@ -632,17 +628,17 @@ func runStart(cmd *cobra.Command, args []string) error {
 			tw := tabwriter.NewWriter(&buf, 2, 1, 2, ' ', 0)
 			fmt.Fprintf(tw, "CockroachDB node starting at %s (took %0.1fs)\n", timeutil.Now(), timeutil.Since(tBegin).Seconds())
 			fmt.Fprintf(tw, "build:\t%s %s @ %s (%s)\n", info.Distribution, info.Tag, info.Time, info.GoVersion)
-			fmt.Fprintf(tw, "admin:\t%s\n", ServerCfg.AdminURL())
+			fmt.Fprintf(tw, "admin:\t%s\n", serverCfg.AdminURL())
 			fmt.Fprintf(tw, "sql:\t%s\n", pgURL)
-			if len(ServerCfg.SocketFile) != 0 {
-				fmt.Fprintf(tw, "socket:\t%s\n", ServerCfg.SocketFile)
+			if len(serverCfg.SocketFile) != 0 {
+				fmt.Fprintf(tw, "socket:\t%s\n", serverCfg.SocketFile)
 			}
 			fmt.Fprintf(tw, "logs:\t%s\n", flag.Lookup("log-dir").Value)
-			if ServerCfg.Attrs != "" {
-				fmt.Fprintf(tw, "attrs:\t%s\n", ServerCfg.Attrs)
+			if serverCfg.Attrs != "" {
+				fmt.Fprintf(tw, "attrs:\t%s\n", serverCfg.Attrs)
 			}
-			if len(ServerCfg.Locality.Tiers) > 0 {
-				fmt.Fprintf(tw, "locality:\t%s\n", ServerCfg.Locality)
+			if len(serverCfg.Locality.Tiers) > 0 {
+				fmt.Fprintf(tw, "locality:\t%s\n", serverCfg.Locality)
 			}
 			if s.TempDir() != "" {
 				fmt.Fprintf(tw, "temp dir:\t%s\n", s.TempDir())
@@ -652,7 +648,7 @@ func runStart(cmd *cobra.Command, args []string) error {
 			} else {
 				fmt.Fprintf(tw, "external I/O path: \t<disabled>\n")
 			}
-			for i, spec := range ServerCfg.Stores.Specs {
+			for i, spec := range serverCfg.Stores.Specs {
 				fmt.Fprintf(tw, "store[%d]:\t%s\n", i, spec)
 				if spec.ExtraFields != nil {
 					for k, v := range spec.ExtraFields {
@@ -836,7 +832,7 @@ func setupAndInitializeLoggingAndProfiling(ctx context.Context) (*stop.Stopper, 
 		// We only override the log directory if the user has not explicitly
 		// disabled file logging using --log-dir="".
 		newDir := ""
-		for _, spec := range ServerCfg.Stores.Specs {
+		for _, spec := range serverCfg.Stores.Specs {
 			if spec.InMemory {
 				continue
 			}
@@ -943,12 +939,12 @@ func getClientGRPCConn(ctx context.Context) (*grpc.ClientConn, *hlc.Clock, func(
 	clock := hlc.NewClock(hlc.UnixNano, 0)
 	stopper := stop.NewStopper()
 	rpcContext := rpc.NewContext(
-		log.AmbientContext{Tracer: ServerCfg.Settings.Tracer},
-		ServerCfg.Config,
+		log.AmbientContext{Tracer: serverCfg.Settings.Tracer},
+		serverCfg.Config,
 		clock,
 		stopper,
 	)
-	addr, err := addrWithDefaultHost(ServerCfg.AdvertiseAddr)
+	addr, err := addrWithDefaultHost(serverCfg.AdvertiseAddr)
 	if err != nil {
 		return nil, nil, nil, err
 	}

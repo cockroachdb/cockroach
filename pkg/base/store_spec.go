@@ -62,14 +62,15 @@ type StoreSpec struct {
 	// SizeInBytes is used for calculating free space and making rebalancing
 	// decisions. Zero indicates that there is no maximum size. This value is not
 	// actually used by the engine and thus not enforced.
-	SizeInBytes     int64
-	SizePercent     float64
-	InMemory        bool
-	Attributes      roachpb.Attributes
+	SizeInBytes int64
+	SizePercent float64
+	InMemory    bool
+	Attributes  roachpb.Attributes
+	// UseSwitchingEnv is true if the "switching env" store version is desired.
+	// This is set by CCL code when encryption-at-rest is in use.
 	UseSwitchingEnv bool
-	// EncryptionSpec is non-nil after MatchStoreAndEncryptionSpecs if there is an encryption
-	// spec with matching path.
-	//	EncryptionSpec *StoreEncryptionSpec
+	// ExtraFields are arbitrary fields that may set by CCL code.
+	// TODO(mberhault): this is probably too fragile to pass through.
 	ExtraFields map[string]string
 }
 
@@ -137,6 +138,7 @@ var fractionRegex = regexp.MustCompile(`^([0-9]+\.[0-9]*|[0-9]*\.[0-9]+|[0-9]+(\
 // - attrs=xxx:yyy:zzz A colon separated list of optional attributes.
 // Note that commas are forbidden within any field name or value.
 func NewStoreSpec(value string) (StoreSpec, error) {
+	const pathField = "path"
 	if len(value) == 0 {
 		return StoreSpec{}, fmt.Errorf("no value specified")
 	}
@@ -150,7 +152,7 @@ func NewStoreSpec(value string) (StoreSpec, error) {
 		var field string
 		var value string
 		if len(subSplits) == 1 {
-			field = "path"
+			field = pathField
 			value = subSplits[0]
 		} else {
 			field = strings.ToLower(subSplits[0])
@@ -169,9 +171,9 @@ func NewStoreSpec(value string) (StoreSpec, error) {
 		}
 
 		switch field {
-		case "path":
+		case pathField:
 			var err error
-			ss.Path, err = GetAbsoluteStorePath("path", value)
+			ss.Path, err = GetAbsoluteStorePath(pathField, value)
 			if err != nil {
 				return StoreSpec{}, err
 			}

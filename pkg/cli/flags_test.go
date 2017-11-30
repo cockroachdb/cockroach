@@ -65,8 +65,8 @@ func TestCacheFlagValue(t *testing.T) {
 	}
 
 	const expectedCacheSize = 100 * 1000 * 1000
-	if expectedCacheSize != ServerCfg.CacheSize {
-		t.Errorf("expected %d, but got %d", expectedCacheSize, ServerCfg.CacheSize)
+	if expectedCacheSize != serverCfg.CacheSize {
+		t.Errorf("expected %d, but got %d", expectedCacheSize, serverCfg.CacheSize)
 	}
 }
 
@@ -80,8 +80,8 @@ func TestSQLMemoryPoolFlagValue(t *testing.T) {
 	}
 
 	const expectedSQLMemSize = 100 * 1000 * 1000
-	if expectedSQLMemSize != ServerCfg.SQLMemoryPoolSize {
-		t.Errorf("expected %d, but got %d", expectedSQLMemSize, ServerCfg.SQLMemoryPoolSize)
+	if expectedSQLMemSize != serverCfg.SQLMemoryPoolSize {
+		t.Errorf("expected %d, but got %d", expectedSQLMemSize, serverCfg.SQLMemoryPoolSize)
 	}
 }
 
@@ -101,8 +101,8 @@ func TestClockOffsetFlagValue(t *testing.T) {
 		if err := f.Parse(td.args); err != nil {
 			t.Fatal(err)
 		}
-		if td.expected != time.Duration(ServerCfg.MaxOffset) {
-			t.Errorf("%d. MaxOffset expected %v, but got %v", i, td.expected, ServerCfg.MaxOffset)
+		if td.expected != time.Duration(serverCfg.MaxOffset) {
+			t.Errorf("%d. MaxOffset expected %v, but got %v", i, td.expected, serverCfg.MaxOffset)
 		}
 	}
 }
@@ -158,13 +158,13 @@ func TestServerConnSettings(t *testing.T) {
 		}
 
 		extraServerFlagInit()
-		if td.expectedAddr != ServerCfg.Addr {
-			t.Errorf("%d. ServerCfg.Addr expected '%s', but got '%s'. td.args was '%#v'.",
-				i, td.expectedAddr, ServerCfg.Addr, td.args)
+		if td.expectedAddr != serverCfg.Addr {
+			t.Errorf("%d. serverCfg.Addr expected '%s', but got '%s'. td.args was '%#v'.",
+				i, td.expectedAddr, serverCfg.Addr, td.args)
 		}
-		if td.expectedAdvertiseAddr != ServerCfg.AdvertiseAddr {
-			t.Errorf("%d. ServerCfg.AdvertiseAddr expected '%s', but got '%s'. td.args was '%#v'.",
-				i, td.expectedAdvertiseAddr, ServerCfg.AdvertiseAddr, td.args)
+		if td.expectedAdvertiseAddr != serverCfg.AdvertiseAddr {
+			t.Errorf("%d. serverCfg.AdvertiseAddr expected '%s', but got '%s'. td.args was '%#v'.",
+				i, td.expectedAdvertiseAddr, serverCfg.AdvertiseAddr, td.args)
 		}
 	}
 }
@@ -209,9 +209,9 @@ func TestClientConnSettings(t *testing.T) {
 		}
 
 		extraClientFlagInit()
-		if td.expectedAddr != ServerCfg.Addr {
-			t.Errorf("%d. ServerCfg.Addr expected '%s', but got '%s'. td.args was '%#v'.",
-				i, td.expectedAddr, ServerCfg.Addr, td.args)
+		if td.expectedAddr != serverCfg.Addr {
+			t.Errorf("%d. serverCfg.Addr expected '%s', but got '%s'. td.args was '%#v'.",
+				i, td.expectedAddr, serverCfg.Addr, td.args)
 		}
 	}
 }
@@ -243,8 +243,8 @@ func TestHttpHostFlagValue(t *testing.T) {
 		}
 
 		extraServerFlagInit()
-		if td.expected != ServerCfg.HTTPAddr {
-			t.Errorf("%d. ServerCfg.HTTPAddr expected '%s', but got '%s'. td.args was '%#v'.", i, td.expected, ServerCfg.HTTPAddr, td.args)
+		if td.expected != serverCfg.HTTPAddr {
+			t.Errorf("%d. serverCfg.HTTPAddr expected '%s', but got '%s'. td.args was '%#v'.", i, td.expected, serverCfg.HTTPAddr, td.args)
 		}
 	}
 }

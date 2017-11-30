@@ -14,14 +14,26 @@
 
 #include "env_switching.h"
 
-// SwitchingEnv switches between a base_env (usually a Env::Default or MemEnv) and an encrypted env.
-//             SwitchingEnv (EnvWrapper)
-//               PLAIN   ENCRYPTED
-//                 |        |
-//                 |   encrypted_env (EnvWrapper)
-//                 |        |
-//               base_env (Env)
-// Any unimplemented methods are called on the base_env.
+/*
+ *
+ * SwitchingEnv switches between a base_env (usually a Env::Default or MemEnv) and an encrypted env.
+ *
+ *         -----------------------------
+ *         | SwitchingEnv (EnvWrapper) |
+ *         --- PLAIN - ENCRYPTED -------
+ *               |        \
+ *               |         \
+ *               |    ------------------------------
+ *               |    | encrypted_env (EnvWrapper) |
+ *               |    ------------------------------
+ *               |         /
+ *               |        /
+ *           ------------------
+ *           | base_env (Env) |
+ *           ------------------
+ *
+ * Any unimplemented methods are called on the base_env.
+ */
 class SwitchingEnv : public rocksdb::EnvWrapper {
   public:
    SwitchingEnv(rocksdb::Env* base_env) : rocksdb::EnvWrapper(base_env) { }

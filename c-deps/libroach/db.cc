@@ -96,9 +96,9 @@ struct DBImpl : public DBEngine {
   std::shared_ptr<rocksdb::Cache> block_cache;
   std::shared_ptr<DBEventListener> event_listener;
 
-  // Construct a new DBImpl from the specified DB and Env. Both the DB
-  // and Env will be deleted when the DBImpl is deleted. It is ok to
-  // pass NULL for the Env.
+  // Construct a new DBImpl from the specified DB.
+  // The DB and passed Envs will be deleted when the DBImpl is deleted.
+  // Either env can be NULL.
   DBImpl(rocksdb::DB* r, rocksdb::Env* m, std::shared_ptr<rocksdb::Cache> bc,
     std::shared_ptr<DBEventListener> event_listener, rocksdb::Env* s_env)
       : DBEngine(r),
