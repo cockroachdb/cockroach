@@ -16,9 +16,7 @@ package sql
 
 import (
 	"context"
-	"math"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -92,66 +90,3 @@ func (n *alterSequenceNode) startExec(params runParams) error {
 func (n *alterSequenceNode) Next(runParams) (bool, error) { return false, nil }
 func (n *alterSequenceNode) Values() tree.Datums          { return tree.Datums{} }
 func (n *alterSequenceNode) Close(context.Context)        {}
-
-// assignSequenceOptions moves options from the AST node to the sequence options descriptor.
-func assignSequenceOptions(
-	optsDesc *sqlbase.TableDescriptor_SequenceOpts, optsNode tree.SequenceOptions, setDefaults bool,
-) error {
-	// All other defaults are dependent on the value of increment,
-	// i.e. whether the sequence is ascending or descending.
-	for _, option := range optsNode {
-		if option.Name == tree.SeqOptIncrement {
-			optsDesc.Increment = *option.IntVal
-		}
-	}
-	if optsDesc.Increment == 0 {
-		return pgerror.NewError(
-			pgerror.CodeInvalidParameterValueError, "INCREMENT must not be zero")
-	}
-	isAscending := optsDesc.Increment > 0
-
-	// Set increment-dependent defaults.
-	if setDefaults {
-		if isAscending {
-			optsDesc.MinValue = 1
-			optsDesc.MaxValue = math.MaxInt64
-			optsDesc.Start = optsDesc.MinValue
-		} else {
-			optsDesc.MinValue = math.MinInt64
-			optsDesc.MaxValue = -1
-			optsDesc.Start = optsDesc.MaxValue
-		}
-	}
-
-	// Fill in all other options.
-	optionsSeen := map[string]bool{}
-	for _, option := range optsNode {
-		// Error on duplicate options.
-		_, seenBefore := optionsSeen[option.Name]
-		if seenBefore {
-			return pgerror.NewError(pgerror.CodeSyntaxError, "conflicting or redundant options")
-		}
-		optionsSeen[option.Name] = true
-
-		switch option.Name {
-		case tree.SeqOptIncrement:
-			// Do nothing; this has already been set.
-		case tree.SeqOptMinValue:
-			// A value of nil represents the user explicitly saying `NO MINVALUE`.
-			if option.IntVal != nil {
-				optsDesc.MinValue = *option.IntVal
-			}
-		case tree.SeqOptMaxValue:
-			// A value of nil represents the user explicitly saying `NO MAXVALUE`.
-			if option.IntVal != nil {
-				optsDesc.MaxValue = *option.IntVal
-			}
-		case tree.SeqOptStart:
-			optsDesc.Start = *option.IntVal
-		case tree.SeqOptCycle:
-			optsDesc.Cycle = option.BoolVal
-		}
-	}
-
-	return nil
-}
