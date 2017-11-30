@@ -162,17 +162,17 @@ SELECT nextval('baz')
 # You can create a sequence that goes down.
 
 statement ok
-CREATE SEQUENCE down_test INCREMENT BY -1 START 10
+CREATE SEQUENCE down_test INCREMENT BY -1
 
 query I
 SELECT nextval('down_test')
 ----
-10
+-1
 
 query I
 SELECT nextval('down_test')
 ----
-9
+-2
 
 
 # You can create and use a sequence with special characters.
