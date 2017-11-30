@@ -22,6 +22,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 )
 
+func init() {
+	RegisterCommand(roachpb.ReverseScan, DefaultDeclareKeys, ReverseScan)
+}
+
 // ReverseScan scans the key range specified by start key through
 // end key in descending order up to some maximum number of results.
 // maxKeys stores the number of scan results remaining for this batch

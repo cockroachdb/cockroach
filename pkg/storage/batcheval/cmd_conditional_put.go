@@ -22,6 +22,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 )
 
+func init() {
+	RegisterCommand(roachpb.ConditionalPut, DefaultDeclareKeys, ConditionalPut)
+}
+
 // ConditionalPut sets the value for a specified key only if
 // the expected value matches. If not, the return value contains
 // the actual value.
