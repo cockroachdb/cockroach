@@ -964,6 +964,7 @@ func (r *Replica) setEstimatedCommitIndexLocked(commit uint64) {
 func (r *Replica) maybeAcquireProposalQuota(ctx context.Context, quota int64) error {
 	r.mu.RLock()
 	quotaPool := r.mu.proposalQuota
+	desc := *r.mu.state.Desc
 	r.mu.RUnlock()
 
 	// Quota acquisition only takes place on the leader replica,
@@ -981,6 +982,10 @@ func (r *Replica) maybeAcquireProposalQuota(ctx context.Context, quota int64) er
 		return nil
 	}
 
+	if !quotaPoolEnabledForRange(desc) {
+		return nil
+	}
+
 	// Trace if we're running low on available proposal quota; it might explain
 	// why we're taking so long.
 	if q := quotaPool.approximateQuota(); q < quotaPool.maxQuota()/10 && log.HasSpanOrEvent(ctx) {
@@ -988,6 +993,13 @@ func (r *Replica) maybeAcquireProposalQuota(ctx context.Context, quota int64) er
 	}
 
 	return quotaPool.acquire(ctx, quota)
+}
+
+func quotaPoolEnabledForRange(desc roachpb.RangeDescriptor) bool {
+	// The NodeLiveness range does not use a quota pool. We don't want to
+	// throttle updates to the NodeLiveness range even if a follower is falling
+	// behind because this could result in cascading failures.
+	return !bytes.HasPrefix(desc.StartKey, keys.NodeLivenessPrefix)
 }
 
 func (r *Replica) updateProposalQuotaRaftMuLocked(
