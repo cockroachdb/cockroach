@@ -198,6 +198,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 
 	s.gossip = gossip.New(
 		s.cfg.AmbientCtx,
+		&s.rpcContext.ClusterID,
 		&s.nodeIDContainer,
 		s.rpcContext,
 		s.grpc,
@@ -372,7 +373,9 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	s.runtime = status.MakeRuntimeStatSampler(s.clock)
 	s.registry.AddMetricStruct(s.runtime)
 
-	s.node = NewNode(storeCfg, s.recorder, s.registry, s.stopper, txnMetrics, sql.MakeEventLogger(s.leaseMgr))
+	s.node = NewNode(
+		storeCfg, s.recorder, s.registry, s.stopper, txnMetrics, sql.MakeEventLogger(s.leaseMgr),
+		&s.rpcContext.ClusterID)
 	roachpb.RegisterInternalServer(s.grpc, s.node)
 	storage.RegisterConsistencyServer(s.grpc, s.node.storesServer)
 
@@ -507,7 +510,7 @@ func (s *Server) AnnotateCtxWithSpan(
 
 // ClusterID returns the ID of the cluster this server is a part of.
 func (s *Server) ClusterID() uuid.UUID {
-	return s.node.ClusterID
+	return s.rpcContext.ClusterID.Get()
 }
 
 // NodeID returns the ID of this node within its cluster.
@@ -545,25 +548,34 @@ func inspectEngines(
 ) (
 	bootstrappedEngines []engine.Engine,
 	emptyEngines []engine.Engine,
+	clusterID uuid.UUID,
 	_ cluster.ClusterVersion,
 	_ error,
 ) {
 	for _, engine := range engines {
-		_, err := storage.ReadStoreIdent(ctx, engine)
+		storeIdent, err := storage.ReadStoreIdent(ctx, engine)
+		if storeIdent.ClusterID != uuid.Nil {
+			if clusterID == uuid.Nil {
+				clusterID = storeIdent.ClusterID
+			} else if storeIdent.ClusterID != clusterID {
+				return nil, nil, uuid.Nil, cluster.ClusterVersion{},
+					errors.Errorf("conflicting store cluster IDs: %s, %s", storeIdent.ClusterID, clusterID)
+			}
+		}
 		if _, notBootstrapped := err.(*storage.NotBootstrappedError); notBootstrapped {
 			emptyEngines = append(emptyEngines, engine)
 			continue
 		} else if err != nil {
-			return nil, nil, cluster.ClusterVersion{}, err
+			return nil, nil, uuid.Nil, cluster.ClusterVersion{}, err
 		}
 		bootstrappedEngines = append(bootstrappedEngines, engine)
 	}
 
 	cv, err := storage.SynthesizeClusterVersionFromEngines(ctx, bootstrappedEngines, minVersion, serverVersion)
 	if err != nil {
-		return nil, nil, cluster.ClusterVersion{}, err
+		return nil, nil, uuid.Nil, cluster.ClusterVersion{}, err
 	}
-	return bootstrappedEngines, emptyEngines, cv, nil
+	return bootstrappedEngines, emptyEngines, clusterID, cv, nil
 }
 
 // listenerInfo is a helper used to write files containing various listener
@@ -825,12 +837,6 @@ func (s *Server) Start(ctx context.Context) error {
 		AssetInfo: ui.AssetInfo,
 	}))
 
-	// Filter the gossip bootstrap resolvers based on the listen and
-	// advertise addresses.
-	filtered := s.cfg.FilterGossipBootstrapResolvers(ctx, unresolvedListenAddr, unresolvedAdvertAddr)
-	s.gossip.Start(unresolvedAdvertAddr, filtered)
-	log.Event(ctx, "started gossip")
-
 	s.engines, err = s.cfg.CreateEngines(ctx)
 	if err != nil {
 		return errors.Wrap(err, "failed to create engines")
@@ -856,9 +862,20 @@ func (s *Server) Start(ctx context.Context) error {
 		}
 	}
 
-	if bootstrappedEngines, _, _, err := inspectEngines(ctx, s.engines, s.cfg.Settings.Version.MinSupportedVersion, s.cfg.Settings.Version.ServerVersion); err != nil {
+	bootstrappedEngines, _, clusterID, _, err := inspectEngines(
+		ctx, s.engines, s.cfg.Settings.Version.MinSupportedVersion, s.cfg.Settings.Version.ServerVersion)
+	if err != nil {
 		return errors.Wrap(err, "inspecting engines")
-	} else if len(bootstrappedEngines) > 0 {
+	}
+	s.rpcContext.ClusterID.Set(ctx, clusterID)
+
+	// Filter the gossip bootstrap resolvers based on the listen and
+	// advertise addresses.
+	filtered := s.cfg.FilterGossipBootstrapResolvers(ctx, unresolvedListenAddr, unresolvedAdvertAddr)
+	s.gossip.Start(unresolvedAdvertAddr, filtered)
+	log.Event(ctx, "started gossip")
+
+	if len(bootstrappedEngines) > 0 {
 		// We might have to sleep a bit to protect against this node producing non-
 		// monotonic timestamps. Before restarting, its clock might have been driven
 		// by other nodes' fast clocks, but when we restarted, we lost all this
@@ -933,7 +950,8 @@ func (s *Server) Start(ctx context.Context) error {
 
 	// We ran this before, but might've bootstrapped in the meantime. This time
 	// we'll get the actual list of bootstrapped and empty engines.
-	bootstrappedEngines, emptyEngines, cv, err := inspectEngines(ctx, s.engines, s.cfg.Settings.Version.MinSupportedVersion, s.cfg.Settings.Version.ServerVersion)
+	bootstrappedEngines, emptyEngines, _, cv, err := inspectEngines(
+		ctx, s.engines, s.cfg.Settings.Version.MinSupportedVersion, s.cfg.Settings.Version.ServerVersion)
 	if err != nil {
 		return errors.Wrap(err, "inspecting engines")
 	}

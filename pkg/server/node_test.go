@@ -116,7 +116,8 @@ func createTestNode(
 	)
 	metricsRecorder := status.NewMetricsRecorder(cfg.Clock, cfg.NodeLiveness, nodeRPCContext, cfg.Gossip, st)
 	node := NewNode(cfg, metricsRecorder, metric.NewRegistry(), stopper,
-		kv.MakeTxnMetrics(metric.TestSampleInterval), sql.MakeEventLogger(nil))
+		kv.MakeTxnMetrics(metric.TestSampleInterval), sql.MakeEventLogger(nil),
+		&nodeRPCContext.ClusterID)
 	roachpb.RegisterInternalServer(grpcServer, node)
 	ln, err := netutil.ListenAndServeGRPC(stopper, grpcServer, addr)
 	if err != nil {
@@ -150,7 +151,7 @@ func createAndStartTestNode(
 	t *testing.T,
 ) (*grpc.Server, net.Addr, *Node, *stop.Stopper) {
 	grpcServer, addr, cfg, node, stopper := createTestNode(addr, engines, gossipBS, t)
-	bootstrappedEngines, newEngines, cv, err := inspectEngines(context.TODO(), engines, cfg.Settings.Version.MinSupportedVersion, cfg.Settings.Version.ServerVersion)
+	bootstrappedEngines, newEngines, _, cv, err := inspectEngines(context.TODO(), engines, cfg.Settings.Version.MinSupportedVersion, cfg.Settings.Version.ServerVersion)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -388,7 +389,7 @@ func TestCorruptedClusterID(t *testing.T) {
 	engines := []engine.Engine{e}
 	_, serverAddr, cfg, node, stopper := createTestNode(util.TestAddr, engines, nil, t)
 	stopper.Stop(context.TODO())
-	bootstrappedEngines, newEngines, cv, err := inspectEngines(context.TODO(), engines, cfg.Settings.Version.MinSupportedVersion, cfg.Settings.Version.ServerVersion)
+	bootstrappedEngines, newEngines, _, cv, err := inspectEngines(context.TODO(), engines, cfg.Settings.Version.MinSupportedVersion, cfg.Settings.Version.ServerVersion)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -172,7 +172,7 @@ func TestServerQuery(t *testing.T) {
 		},
 	}
 
-	conn, err := tsrv.RPCContext().GRPCDial(tsrv.Cfg.Addr)
+	conn, err := tsrv.RPCContext().GRPCDial(tsrv.Cfg.Addr).Connect(context.TODO())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -267,7 +267,7 @@ func TestServerQueryStarvation(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	conn, err := tsrv.RPCContext().GRPCDial(tsrv.Cfg.Addr)
+	conn, err := tsrv.RPCContext().GRPCDial(tsrv.Cfg.Addr).Connect(context.TODO())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -301,7 +301,7 @@ func BenchmarkServerQuery(b *testing.B) {
 		b.Fatal(err)
 	}
 
-	conn, err := tsrv.RPCContext().GRPCDial(tsrv.Cfg.Addr)
+	conn, err := tsrv.RPCContext().GRPCDial(tsrv.Cfg.Addr).Connect(context.TODO())
 	if err != nil {
 		b.Fatal(err)
 	}

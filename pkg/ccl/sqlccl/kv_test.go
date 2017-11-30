@@ -47,7 +47,7 @@ func newKVWriteBatch(b *testing.B) kvInterface {
 	// sent over the network.
 	rpcContext := s.RPCContext()
 
-	conn, err := rpcContext.GRPCDial(s.ServingAddr())
+	conn, err := rpcContext.GRPCDial(s.ServingAddr()).Connect(context.TODO())
 	if err != nil {
 		b.Fatal(err)
 	}

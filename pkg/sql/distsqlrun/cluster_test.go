@@ -205,7 +205,7 @@ func TestClusterFlow(t *testing.T) {
 	var clients []DistSQLClient
 	for i := 0; i < 3; i++ {
 		s := tc.Server(i)
-		conn, err := s.RPCContext().GRPCDial(s.ServingAddr())
+		conn, err := s.RPCContext().GRPCDial(s.ServingAddr()).Connect(ctx)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -461,7 +461,7 @@ func TestLimitedBufferingDeadlock(t *testing.T) {
 		},
 	}
 	s := tc.Server(0)
-	conn, err := s.RPCContext().GRPCDial(s.ServingAddr())
+	conn, err := s.RPCContext().GRPCDial(s.ServingAddr()).Connect(context.TODO())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -687,7 +687,7 @@ func BenchmarkInfrastructure(b *testing.B) {
 					var clients []DistSQLClient
 					for i := 0; i < numNodes; i++ {
 						s := tc.Server(i)
-						conn, err := s.RPCContext().GRPCDial(s.ServingAddr())
+						conn, err := s.RPCContext().GRPCDial(s.ServingAddr()).Connect(context.TODO())
 						if err != nil {
 							b.Fatal(err)
 						}

@@ -122,12 +122,12 @@ func TestStatsHandlerWithHeartbeats(t *testing.T) {
 	clientCtx := NewContext(log.AmbientContext{Tracer: tracing.NewTracer()}, testutils.NewNodeTestBaseContext(), clock, stopper)
 	// Make the interval shorter to speed up the test.
 	clientCtx.heartbeatInterval = 1 * time.Millisecond
-	if _, err := clientCtx.GRPCDial(remoteAddr); err != nil {
+	go func() { heartbeat.ready <- nil }()
+	if _, err := clientCtx.GRPCDial(remoteAddr).Connect(context.TODO()); err != nil {
 		t.Fatal(err)
 	}
 
 	// Wait for the connection & successful heartbeat.
-	heartbeat.ready <- nil
 	testutils.SucceedsSoon(t, func() error {
 		err := clientCtx.ConnHealth(remoteAddr)
 		if err != nil && err != ErrNotHeartbeated {

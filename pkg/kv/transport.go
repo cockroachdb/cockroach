@@ -21,7 +21,6 @@ import (
 	"time"
 
 	"golang.org/x/net/context"
-	"google.golang.org/grpc"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -44,8 +43,7 @@ type SendOptions struct {
 
 type batchClient struct {
 	remoteAddr string
-	conn       *grpc.ClientConn
-	client     roachpb.InternalClient
+	conn       *rpc.Connection
 	args       roachpb.BatchRequest
 	healthy    bool
 	pending    bool
@@ -118,17 +116,13 @@ func grpcTransportFactoryImpl(
 ) (Transport, error) {
 	clients := make([]batchClient, 0, len(replicas))
 	for _, replica := range replicas {
-		conn, err := rpcContext.GRPCDial(replica.NodeDesc.Address.String())
-		if err != nil {
-			return nil, err
-		}
+		conn := rpcContext.GRPCDial(replica.NodeDesc.Address.String())
 		argsCopy := args
 		argsCopy.Replica = replica.ReplicaDescriptor
 		remoteAddr := replica.NodeDesc.Address.String()
 		clients = append(clients, batchClient{
 			remoteAddr: remoteAddr,
 			conn:       conn,
-			client:     roachpb.NewInternalClient(conn),
 			args:       argsCopy,
 			healthy:    rpcContext.ConnHealth(remoteAddr) == nil,
 		})
@@ -235,7 +229,11 @@ func (gt *grpcTransport) send(
 		}
 
 		log.VEventf(ctx, 2, "sending request to %s", client.remoteAddr)
-		reply, err := client.client.Batch(ctx, &client.args)
+		conn, err := client.conn.Connect(ctx)
+		if err != nil {
+			return nil, err
+		}
+		reply, err := roachpb.NewInternalClient(conn).Batch(ctx, &client.args)
 		if reply != nil {
 			for i := range reply.Responses {
 				if err := reply.Responses[i].GetInner().Verify(client.args.Requests[i].GetInner()); err != nil {
