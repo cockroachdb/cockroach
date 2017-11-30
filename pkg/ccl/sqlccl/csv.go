@@ -193,7 +193,7 @@ func doLocalCSVTransform(
 	}
 	defer es.Close()
 
-	var readProgressFn, writeProgressFn func(float32)
+	var readProgressFn, writeProgressFn func(float32) error
 	if job != nil {
 		// These consts determine how much of the total progress the read csv and
 		// write sst groups take overall. 50% each is an approximation but kind of
@@ -203,15 +203,11 @@ func doLocalCSVTransform(
 			writePct = 1.0 - readPct
 		)
 		// Both read and write progress funcs register their progress as 50% of total progress.
-		readProgressFn = func(pct float32) {
-			if err := job.Progressed(ctx, pct*readPct, jobs.Noop); err != nil {
-				log.Warningf(ctx, "failed to update job progress: %s", err)
-			}
+		readProgressFn = func(pct float32) error {
+			return job.Progressed(ctx, pct*readPct, jobs.Noop)
 		}
-		writeProgressFn = func(pct float32) {
-			if err := job.Progressed(ctx, readPct+pct*writePct, jobs.Noop); err != nil {
-				log.Warningf(ctx, "failed to update job progress: %s", err)
-			}
+		writeProgressFn = func(pct float32) error {
+			return job.Progressed(ctx, readPct+pct*writePct, jobs.Noop)
 		}
 	}
 
@@ -381,7 +377,7 @@ func readCSV(
 	expectedCols int,
 	dataFiles []string,
 	recordCh chan<- csvRecord,
-	progressFn func(float32),
+	progressFn func(float32) error,
 	settings *cluster.Settings,
 ) (int64, error) {
 	const batchSize = 500
@@ -466,7 +462,9 @@ func readCSV(
 					if updateFromBytes && (err == io.EOF || bc.n > fiftyMiB) {
 						readBytes += bc.n
 						bc.n = 0
-						progressFn(float32(readBytes) / float32(totalBytes))
+						if err := progressFn(float32(readBytes) / float32(totalBytes)); err != nil {
+							return err
+						}
 					}
 					if err == io.EOF {
 						break
@@ -493,7 +491,9 @@ func readCSV(
 			return 0, errors.Wrap(err, dataFile)
 		}
 		if updateFromFiles {
-			progressFn(float32(dataFileI+1) / float32(len(dataFiles)))
+			if err := progressFn(float32(dataFileI+1) / float32(len(dataFiles))); err != nil {
+				return 0, err
+			}
 		}
 	}
 	return count, nil
@@ -643,7 +643,7 @@ func makeSSTs(
 	contentCh chan<- sstContent,
 	walltime int64,
 	totalKVs int64,
-	progressFn func(float32),
+	progressFn func(float32) error,
 ) error {
 	defer it.Close()
 
@@ -678,7 +678,9 @@ func makeSSTs(
 		}
 		sst.Close()
 		if progressFn != nil {
-			progressFn(float32(writtenKVs) / float32(totalKVs))
+			if err := progressFn(float32(writtenKVs) / float32(totalKVs)); err != nil {
+				return err
+			}
 		}
 		return nil
 	}
@@ -1069,6 +1071,9 @@ func importPlanHook(
 		if importErr != nil {
 			if err := job.Failed(ctx, importErr, jobs.NoopFn); err != nil {
 				return err
+			}
+			if err, ok := errors.Cause(importErr).(*jobs.InvalidStatusError); ok && err.Status() == jobs.StatusCanceled {
+				importErr = errors.Errorf("job %s", err.Status())
 			}
 		} else {
 			if err := job.Succeeded(ctx, jobs.NoopFn); err != nil {
