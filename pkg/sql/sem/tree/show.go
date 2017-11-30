@@ -273,3 +273,14 @@ func (node *ShowFingerprints) Format(buf *bytes.Buffer, f FmtFlags) {
 	buf.WriteString("SHOW EXPERIMENTAL_FINGERPRINTS FROM TABLE ")
 	FormatNode(buf, f, node.Table)
 }
+
+// ShowTableStats represents a SHOW STATISTICS FOR TABLE statement.
+type ShowTableStats struct {
+	Table NormalizableTableName
+}
+
+// Format implements the NodeFormatter interface.
+func (node *ShowTableStats) Format(buf *bytes.Buffer, f FmtFlags) {
+	buf.WriteString("SHOW STATISTICS FOR TABLE ")
+	FormatNode(buf, f, &node.Table)
+}
