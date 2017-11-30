@@ -224,17 +224,40 @@ all_interleaves   CREATE TABLE all_interleaves (
 statement error relation "missing" does not exist
 CREATE TABLE err (f FLOAT PRIMARY KEY) INTERLEAVE IN PARENT missing (f)
 
-statement error interleaved columns must match parent
+# Check that interleaved columns match in length to parent's primary columns.
+
+statement error pq: declared interleaved columns \(s1, d\) must match the parent's primary index \(i\)
+CREATE INDEX ON p1_0 (s1, d) INTERLEAVE IN PARENT p1_1 (s1, d)
+
+# Check that interleaved columns are prefix of index's columns.
+
+statement error pq: declared interleaved columns \(i, s1\) must be a prefix of the primary key columns being interleaved \(i\)
+CREATE TABLE err (i INT PRIMARY KEY) INTERLEAVE IN PARENT p1_0 (i, s1)
+
+statement error pq: declared interleaved columns \(i, s1\) must be a prefix of the index columns being interleaved \(i\)
+CREATE INDEX ON p1_1 (i) INTERLEAVE IN PARENT p1_0 (i, s1)
+
+# Check that interleaved columns are referencing a valid prefix of names
+# of the index's columns.
+
+statement error pq: declared interleaved columns \(j\) must refer to a prefix of the primary key column names being interleaved \(i, j\)
+CREATE TABLE err (i INT, j INT, PRIMARY KEY (i, j)) INTERLEAVE IN PARENT p1_1 (j)
+
+statement error pq: declared interleaved columns \(i\) must refer to a prefix of the index column names being interleaved \(d\)
+CREATE INDEX ON p1_0 (d) INTERLEAVE IN PARENT p1_1 (i)
+
+# Check that interleaved columns are of the same type AND direction as parent's
+# primary columns.
+
+statement error pq: declared interleaved columns \(f\) must match type and sort direction of the parent's primary index \(i\)
 CREATE TABLE err (f FLOAT PRIMARY KEY) INTERLEAVE IN PARENT p1_1 (f)
 
-statement error interleaved columns must match parent
-CREATE INDEX ON p1_0 (i DESC) INTERLEAVE IN PARENT p1_1 (i)
-
-statement error interleaved columns must match parent
+statement error pq: declared interleaved columns \(d\) must match type and sort direction of the parent's primary index \(i\)
 CREATE INDEX ON p1_0 (d) INTERLEAVE IN PARENT p1_1 (d)
 
-statement error declared columns must match index being interleaved
-CREATE TABLE err (i INT, j INT, PRIMARY KEY (i, j)) INTERLEAVE IN PARENT p1_1 (j)
+statement error pq: declared interleaved columns \(i\) must match type and sort direction of the parent's primary index \(i\)
+CREATE INDEX ON p1_0 (i DESC) INTERLEAVE IN PARENT p1_1 (i)
+
 
 statement error unimplemented
 CREATE TABLE err (i INT PRIMARY KEY, INDEX (i) INTERLEAVE IN PARENT p1_1 (i))
@@ -289,7 +312,7 @@ EXPLAIN SELECT * FROM orders WHERE customer = 1 AND id = 1000
 ----
 0  scan  ·      ·
 0  ·     table  orders@primary
-0  ·     spans  /1/#/65/1/1000-/1/#/65/1/1001
+0  ·     spans  /1/#/66/1/1000-/1/#/66/1/1001
 
 # Check that interleaving can occur across databases
 statement ok
