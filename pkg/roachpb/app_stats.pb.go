@@ -7,7 +7,7 @@ import proto "github.com/gogo/protobuf/proto"
 import fmt "fmt"
 import math "math"
 
-import encoding_binary "encoding/binary"
+import binary "encoding/binary"
 
 import io "io"
 
@@ -198,11 +198,11 @@ func (m *NumericStat) MarshalTo(dAtA []byte) (int, error) {
 	_ = l
 	dAtA[i] = 0x9
 	i++
-	encoding_binary.LittleEndian.PutUint64(dAtA[i:], uint64(math.Float64bits(float64(m.Mean))))
+	binary.LittleEndian.PutUint64(dAtA[i:], uint64(math.Float64bits(float64(m.Mean))))
 	i += 8
 	dAtA[i] = 0x11
 	i++
-	encoding_binary.LittleEndian.PutUint64(dAtA[i:], uint64(math.Float64bits(float64(m.SquaredDiffs))))
+	binary.LittleEndian.PutUint64(dAtA[i:], uint64(math.Float64bits(float64(m.SquaredDiffs))))
 	i += 8
 	return i, nil
 }
@@ -711,7 +711,7 @@ func (m *NumericStat) Unmarshal(dAtA []byte) error {
 			if (iNdEx + 8) > l {
 				return io.ErrUnexpectedEOF
 			}
-			v = uint64(encoding_binary.LittleEndian.Uint64(dAtA[iNdEx:]))
+			v = uint64(binary.LittleEndian.Uint64(dAtA[iNdEx:]))
 			iNdEx += 8
 			m.Mean = float64(math.Float64frombits(v))
 		case 2:
@@ -722,7 +722,7 @@ func (m *NumericStat) Unmarshal(dAtA []byte) error {
 			if (iNdEx + 8) > l {
 				return io.ErrUnexpectedEOF
 			}
-			v = uint64(encoding_binary.LittleEndian.Uint64(dAtA[iNdEx:]))
+			v = uint64(binary.LittleEndian.Uint64(dAtA[iNdEx:]))
 			iNdEx += 8
 			m.SquaredDiffs = float64(math.Float64frombits(v))
 		default:

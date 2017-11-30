@@ -52,7 +52,6 @@ void TableStruct::InitDefaultsImpl() {
   ::google::protobuf::internal::InitProtobufDefaults();
   ::cockroach::storage::engine::enginepb::protobuf_storage_2fengine_2fenginepb_2fmvcc3_2eproto::InitDefaults();
   ::cockroach::util::hlc::protobuf_util_2fhlc_2flegacy_5ftimestamp_2eproto::InitDefaults();
-  ::cockroach::util::hlc::protobuf_util_2fhlc_2ftimestamp_2eproto::InitDefaults();
   _MVCCMetadata_default_instance_._instance.DefaultConstruct();
   ::google::protobuf::internal::OnShutdownDestroyMessage(
       &_MVCCMetadata_default_instance_);_MVCCStats_default_instance_._instance.DefaultConstruct();
@@ -74,7 +73,6 @@ void AddDescriptorsImpl() {
   InitDefaults();
   ::cockroach::storage::engine::enginepb::protobuf_storage_2fengine_2fenginepb_2fmvcc3_2eproto::AddDescriptors();
   ::cockroach::util::hlc::protobuf_util_2fhlc_2flegacy_5ftimestamp_2eproto::AddDescriptors();
-  ::cockroach::util::hlc::protobuf_util_2fhlc_2ftimestamp_2eproto::AddDescriptors();
 }
 } // anonymous namespace
 

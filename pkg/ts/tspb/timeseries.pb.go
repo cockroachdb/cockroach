@@ -20,12 +20,10 @@ import proto "github.com/gogo/protobuf/proto"
 import fmt "fmt"
 import math "math"
 
-import (
-	context "golang.org/x/net/context"
-	grpc "google.golang.org/grpc"
-)
+import context "golang.org/x/net/context"
+import grpc "google.golang.org/grpc"
 
-import encoding_binary "encoding/binary"
+import binary "encoding/binary"
 
 import io "io"
 
@@ -393,7 +391,7 @@ func (m *TimeSeriesDatapoint) MarshalTo(dAtA []byte) (int, error) {
 	i = encodeVarintTimeseries(dAtA, i, uint64(m.TimestampNanos))
 	dAtA[i] = 0x11
 	i++
-	encoding_binary.LittleEndian.PutUint64(dAtA[i:], uint64(math.Float64bits(float64(m.Value))))
+	binary.LittleEndian.PutUint64(dAtA[i:], uint64(math.Float64bits(float64(m.Value))))
 	i += 8
 	return i, nil
 }
@@ -761,7 +759,7 @@ func (m *TimeSeriesDatapoint) Unmarshal(dAtA []byte) error {
 			if (iNdEx + 8) > l {
 				return io.ErrUnexpectedEOF
 			}
-			v = uint64(encoding_binary.LittleEndian.Uint64(dAtA[iNdEx:]))
+			v = uint64(binary.LittleEndian.Uint64(dAtA[iNdEx:]))
 			iNdEx += 8
 			m.Value = float64(math.Float64frombits(v))
 		default:
