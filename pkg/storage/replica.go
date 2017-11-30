@@ -1481,6 +1481,7 @@ func (r *Replica) redirectOnOrAcquireLease(ctx context.Context) (LeaseStatus, *r
 							}
 
 							// Getting a LeaseRejectedError back means someone else got there
+
 							// first, or the lease request was somehow invalid due to a concurrent
 							// change. That concurrent change could have been that this replica was
 							// removed (see processRaftCommand), so check for that case before
@@ -1494,6 +1495,12 @@ func (r *Replica) redirectOnOrAcquireLease(ctx context.Context) (LeaseStatus, *r
 								err = newNotLeaseHolderError(&lease, r.store.StoreID(), r.Desc())
 							}
 							pErr = roachpb.NewError(err)
+						case *roachpb.ContextCanceledError:
+							if ctx.Err() == nil {
+								// We joined up with another lease request, but that request
+								// was cancelled (our context wasn't). Loop and try again.
+								return nil
+							}
 						}
 						return pErr
 					}

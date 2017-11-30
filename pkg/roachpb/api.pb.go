@@ -140,6 +140,7 @@
 		HandledRetryableTxnError
 		UntrackedTxnError
 		TxnPrevAttemptError
+		ContextCanceledError
 		ErrorDetail
 		ErrPosition
 		Error

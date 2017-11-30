@@ -334,6 +334,10 @@ message TxnPrevAttemptError {
   option (gogoproto.equal) = true;
 }
 
+message ContextCanceledError {
+  option (gogoproto.equal) = true;
+}
+
 // ErrorDetail is a union type containing all available errors.
 message ErrorDetail {
   option (gogoproto.equal) = true;
@@ -369,6 +373,7 @@ message ErrorDetail {
   optional HandledRetryableTxnError handled_retryable_txn_error = 28;
   optional UntrackedTxnError untracked_txn_error = 29;
   optional TxnPrevAttemptError txn_aborted_async_err = 30;
+  optional ContextCanceledError context_canceled = 31;
 }
 
 // TransactionRestart indicates how an error should be handled in a
