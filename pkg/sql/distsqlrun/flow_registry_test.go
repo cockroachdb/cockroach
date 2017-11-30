@@ -230,7 +230,7 @@ func TestStreamConnectionTimeout(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if !si.cancelled {
+		if !si.canceled {
 			return errors.Errorf("not timed out yet")
 		}
 		return nil

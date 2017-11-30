@@ -32,8 +32,8 @@ func funcName(f interface{}) string {
 	return runtime.FuncForPC(reflect.ValueOf(f).Pointer()).Name()
 }
 
-// TrackRaftProtos instruments proto marshalling to track protos which are
-// marshalled downstream of raft. It returns a function that removes the
+// TrackRaftProtos instruments proto marshaling to track protos which are
+// marshaled downstream of raft. It returns a function that removes the
 // instrumentation and returns the list of downstream-of-raft protos.
 func TrackRaftProtos() func() []reflect.Type {
 	// Grab the name of the function that roots all raft operations.
@@ -68,7 +68,7 @@ func TrackRaftProtos() func() []reflect.Type {
 		t := reflect.TypeOf(pb)
 
 		// Special handling for MVCCMetadata: we expect MVCCMetadata to be
-		// marshalled below raft, but MVCCMetadata.Txn should always be nil in such
+		// marshaled below raft, but MVCCMetadata.Txn should always be nil in such
 		// cases.
 		if meta, ok := pb.(*enginepb.MVCCMetadata); ok && meta.Txn != nil {
 			protoutil.Interceptor(meta.Txn)

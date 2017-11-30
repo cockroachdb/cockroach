@@ -1216,7 +1216,7 @@ func (s *statusServer) ListSessions(
 		case err := <-errorsChan:
 			resp.Errors = append(resp.Errors, err)
 		case <-ctx.Done():
-			err := serverpb.ListSessionsError{Message: "ListSessions cancelled before completion"}
+			err := serverpb.ListSessionsError{Message: "ListSessions canceled before completion"}
 			resp.Errors = append(resp.Errors, err)
 		}
 		numNodes--
@@ -1245,13 +1245,13 @@ func (s *statusServer) CancelQuery(
 	}
 
 	output := &serverpb.CancelQueryResponse{}
-	cancelled, err := s.sessionRegistry.CancelQuery(req.QueryID, req.Username)
+	canceled, err := s.sessionRegistry.CancelQuery(req.QueryID, req.Username)
 
 	if err != nil {
 		output.Error = err.Error()
 	}
 
-	output.Cancelled = cancelled
+	output.Canceled = canceled
 	return output, nil
 }
 
@@ -1300,7 +1300,7 @@ type jsonWrapper struct {
 }
 
 // marshalToJSON marshals the given value into nicely indented JSON. If the
-// value is an array or slice it is wrapped in jsonWrapper and then marshalled.
+// value is an array or slice it is wrapped in jsonWrapper and then marshaled.
 func marshalToJSON(value interface{}) ([]byte, error) {
 	switch reflect.ValueOf(value).Kind() {
 	case reflect.Array, reflect.Slice:

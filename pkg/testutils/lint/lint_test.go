@@ -567,12 +567,18 @@ func TestLint(t *testing.T) {
 			t.Fatal(err)
 		}
 
+		ignoredRules := []string{
+			"licence",
+			"analyse", // required by SQL grammar
+		}
+
 		if err := stream.ForEach(stream.Sequence(
 			filter,
+			stream.GrepNot(`.*\.lock`),
 			stream.Map(func(s string) string {
 				return filepath.Join(pkg.Dir, s)
 			}),
-			stream.Xargs("misspell"),
+			stream.Xargs("misspell", "-locale", "US", "-i", strings.Join(ignoredRules, ",")),
 		), func(s string) {
 			t.Errorf(s)
 		}); err != nil {

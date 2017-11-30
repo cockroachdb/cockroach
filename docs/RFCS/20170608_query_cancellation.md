@@ -114,8 +114,8 @@ for that context closure and short-circuit execution at that point, returning an
 propagate to the SQL executor which would then mark the SQL transaction as aborted. The client would
 be expected to issue a `ROLLBACK` upon seeing the errored-out query. The client's connection will _not_ be closed.
 
-The executor would re-throw a more user-friendly "Execution cancelled upon user request" error instead of
-the "Context cancelled" one.
+The executor would re-throw a more user-friendly "Execution canceled upon user request" error instead of
+the "Context canceled" one.
 
 ## New CANCEL QUERY statement
 
@@ -132,7 +132,7 @@ context related to that query.
 
 The `CANCEL QUERY` would return an error if no query was found for that ID. However, if the
 `CANCEL QUERY` statement succeeds, there is no guarantee that the query in question was actually
-cancelled - and did not commit any changes (if applicable).
+canceled - and did not commit any changes (if applicable).
 
 Example use case: Assume there are two concurrently running sessions, session 1 and 2.
 
@@ -170,7 +170,7 @@ Going back to session 1:
 
 ```sql
 root@:26257/> SELECT * FROM students WHERE long_bio LIKE '%ips%or';
-pq: query cancelled by user 'root'
+pq: query canceled by user 'root'
 
 root%:26257/>
 ```
@@ -190,7 +190,7 @@ Each outbox would be marked as closed as it picks up the context cancellation er
 Any processor pushing rows to that outbox will get a `ConsumerClosed` consumer signal and error out. However,
 some processors (eg. hash joiner, sorter) do a lot of processing before they emit any rows, so these
 processors will manually check for context cancellation after every 1000 or so iterations, and error out
-if it is cancelled.
+if it is canceled.
 
 The final row receiver, a `distSQLReceiver` which is the `syncFlowConsumer` on the gateway
 node's flow, does not have any `FlowStream` calls associated with it. So to ensure processors
@@ -203,11 +203,11 @@ In short, cancellation will flow in these directions:
 producer's outbox, causing it to close.
 - Consumer to producer processor: When producer processor tries to push a row to its consumer and gets
 a ConsumerClosed status, it will stop processing and mark itself as closed to its producers.
-- Producer node to remote consumer node: Once a flow's context is cancelled, all RPCs from that node
-to any other nodes are also cancelled (by grpc).
+- Producer node to remote consumer node: Once a flow's context is canceled, all RPCs from that node
+to any other nodes are also canceled (by grpc).
 - Producer processor to consumer: This is a special case only for those processors that
 do a lot of processing before emitting any rows (such as the sorter). These processors will check the
-local flow context for cancellation, and return an error to their consumer if it gets cancelled.
+local flow context for cancellation, and return an error to their consumer if it gets canceled.
 - syncFlowConsumer special case: Since `syncFlowConsumer` on the gateway node does not have any streams that
 cross node boundaries or call `FlowStream`, an error will be manually pushed to it
 upon a cancellation request on the gateway node, marking it as closed to all of its producers.

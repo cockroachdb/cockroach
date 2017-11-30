@@ -427,7 +427,7 @@ func (c *v3Conn) serve(ctx context.Context, draining func() bool, reserved mon.B
 	}()
 
 	// Once a session has been set up, the underlying net.Conn is switched to
-	// a conn that exits if the session's context is cancelled or if the server
+	// a conn that exits if the session's context is canceled or if the server
 	// is draining and the session does not have an ongoing transaction.
 	c.conn = newReadTimeoutConn(c.conn, func() error {
 		if err := func() error {

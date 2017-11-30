@@ -242,10 +242,10 @@ type distSQLReceiver struct {
 	// Once set, no more rows are accepted.
 	err error
 
-	// cancelled is atomically set to 1 when this distSQL receiver has been marked
-	// as cancelled. Upon the next Push(), err is set to a non-nil
+	// canceled is atomically set to 1 when this distSQL receiver has been marked
+	// as canceled. Upon the next Push(), err is set to a non-nil
 	// value, and ConsumerClosed is the ConsumerStatus.
-	cancelled int32
+	canceled int32
 
 	row    tree.Datums
 	status distsqlrun.ConsumerStatus
@@ -349,7 +349,7 @@ func (r *distSQLReceiver) Push(
 		}
 		return r.status
 	}
-	if r.err == nil && atomic.LoadInt32(&r.cancelled) == 1 {
+	if r.err == nil && atomic.LoadInt32(&r.canceled) == 1 {
 		// Set the error to reflect query cancellation.
 		r.err = sqlbase.NewQueryCanceledError()
 	}
@@ -398,9 +398,9 @@ func (r *distSQLReceiver) ProducerDone() {
 	r.closed = true
 }
 
-// SetCancelled is part of the CancellableRowReceiver interface.
-func (r *distSQLReceiver) SetCancelled() {
-	atomic.StoreInt32(&r.cancelled, 1)
+// SetCanceled is part of the CancellableRowReceiver interface.
+func (r *distSQLReceiver) SetCanceled() {
+	atomic.StoreInt32(&r.canceled, 1)
 }
 
 // updateCaches takes information about some ranges that were mis-planned and

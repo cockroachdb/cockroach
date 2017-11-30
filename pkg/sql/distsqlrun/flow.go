@@ -148,7 +148,7 @@ type Flow struct {
 	status flowStatus
 
 	// Context used for all execution within the flow.
-	// Created in Start(), cancelled in Cleanup().
+	// Created in Start(), canceled in Cleanup().
 	ctx context.Context
 
 	// Cancel function for ctx. Call this to cancel the flow (safe to be called
@@ -422,7 +422,7 @@ func (f *Flow) Start(ctx context.Context, doneFn func()) error {
 }
 
 // Wait waits for all the goroutines for this flow to exit. If the context gets
-// cancelled before all goroutines exit, it calls f.cancel().
+// canceled before all goroutines exit, it calls f.cancel().
 func (f *Flow) Wait() {
 	waitChan := make(chan struct{})
 
@@ -472,9 +472,9 @@ func (f *Flow) RunSync(ctx context.Context) {
 	f.Cleanup(ctx)
 }
 
-// cancel iterates through all unconnected streams of this flow and marks them cancelled.
-// If the syncFlowConsumer is of type CancellableRowReceiver, mark it as cancelled.
-// This function is called in Wait() after the associated context has been cancelled.
+// cancel iterates through all unconnected streams of this flow and marks them canceled.
+// If the syncFlowConsumer is of type CancellableRowReceiver, mark it as canceled.
+// This function is called in Wait() after the associated context has been canceled.
 // In order to cancel a flow, call f.ctxCancel() instead of this function.
 //
 // For a detailed description of the distsql query cancellation mechanism,
@@ -489,7 +489,7 @@ func (f *Flow) cancel() {
 		// returned in ProcessInboundStream(). Non-connected streams
 		// are handled below.
 		if !is.connected && !is.finished {
-			is.cancelled = true
+			is.canceled = true
 			// Stream has yet to be started; send an error to its
 			// receiver and prevent it from being connected.
 			is.receiver.Push(
@@ -502,7 +502,7 @@ func (f *Flow) cancel() {
 
 	if f.syncFlowConsumer != nil {
 		if recv, ok := f.syncFlowConsumer.(CancellableRowReceiver); ok {
-			recv.SetCancelled()
+			recv.SetCanceled()
 		}
 	}
 }

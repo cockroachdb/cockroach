@@ -47,7 +47,7 @@ type inboundStreamInfo struct {
 	connected bool
 	// if set, indicates that we waited too long for an inbound connection, or
 	// we don't want this stream to connect anymore due to flow cancellation.
-	cancelled bool
+	canceled bool
 	// finished is set if we have signaled that the stream is done transferring
 	// rows (to the flow's wait group).
 	finished bool
@@ -184,8 +184,8 @@ func (fr *flowRegistry) RegisterFlow(
 			defer fr.Unlock()
 			numTimedOut := 0
 			for streamID, is := range entry.inboundStreams {
-				if !is.connected && !is.cancelled {
-					is.cancelled = true
+				if !is.connected && !is.canceled {
+					is.canceled = true
 					numTimedOut++
 					// We're giving up waiting for this inbound stream. Send an error to
 					// its consumer; the error will propagate and eventually drain all the
@@ -331,7 +331,7 @@ func (fr *flowRegistry) ConnectInboundStream(
 	if s.connected {
 		return nil, nil, nil, errors.Errorf("flow %s: inbound stream %d already connected", flowID, streamID)
 	}
-	if s.cancelled {
+	if s.canceled {
 		return nil, nil, nil, errors.Errorf("flow %s: inbound stream %d came too late", flowID, streamID)
 	}
 
@@ -368,7 +368,7 @@ func (fr *flowRegistry) finishInboundStreamLocked(fid FlowID, sid StreamID) {
 	flowEntry := fr.getEntryLocked(fid)
 	streamEntry := flowEntry.inboundStreams[sid]
 
-	if !streamEntry.connected && !streamEntry.cancelled {
+	if !streamEntry.connected && !streamEntry.canceled {
 		panic("finising inbound stream that didn't connect or time out")
 	}
 	if streamEntry.finished {

@@ -22,7 +22,7 @@ import (
 const cancelCheckInterval int64 = 1000
 
 // CancelChecker is a helper object for repeatedly checking whether the associated context
-// has been cancelled or not. Encapsulates all logic for waiting for cancelCheckInterval
+// has been canceled or not. Encapsulates all logic for waiting for cancelCheckInterval
 // rows before actually checking for cancellation. The cancellation check
 // has a significant time overhead, so it's not checked in every iteration.
 type CancelChecker struct {
@@ -33,7 +33,7 @@ type CancelChecker struct {
 	callsSinceLastCheck int64
 
 	// Last returned cancellation value.
-	isCancelled bool
+	isCanceled bool
 }
 
 // NewCancelChecker returns a new CancelChecker.
@@ -43,20 +43,20 @@ func NewCancelChecker(ctx context.Context) *CancelChecker {
 	}
 }
 
-// Check returns an error if the associated query has been cancelled.
+// Check returns an error if the associated query has been canceled.
 func (c *CancelChecker) Check() error {
-	if !c.isCancelled && c.callsSinceLastCheck%cancelCheckInterval == 0 {
+	if !c.isCanceled && c.callsSinceLastCheck%cancelCheckInterval == 0 {
 		select {
 		case <-c.ctx.Done():
-			c.isCancelled = true
+			c.isCanceled = true
 		default:
-			c.isCancelled = false
+			c.isCanceled = false
 		}
 	}
 
 	c.callsSinceLastCheck++
 
-	if c.isCancelled {
+	if c.isCanceled {
 		return NewQueryCanceledError()
 	}
 	return nil

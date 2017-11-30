@@ -27,7 +27,7 @@
 # which prevents the actual stdout and stderr streams from being infected with
 # non-blocking I/O.
 #
-# TODO(benesch): see if we can propogate isatty from the true stdout and stderr
+# TODO(benesch): see if we can propagate isatty from the true stdout and stderr
 # so that colors, etc. are supported.
 
 # [0]: https://nodejs.org/docs/latest-v8.x/api/process.html#process_a_note_on_process_i_o

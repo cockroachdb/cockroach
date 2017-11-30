@@ -780,7 +780,7 @@ SELECT 1 || ARRAY[2,3,4]
 ----
 {1,2,3,4}
 
-# This is a departure from Postgres' behaviour.
+# This is a departure from Postgres' behavior.
 # In Postgres, ARRAY[1,2,3] || NULL = ARRAY[1,2,3].
 
 query T
@@ -887,7 +887,7 @@ SELECT ARRAY[1,2,4] = NULL
 ----
 NULL
 
-# This behaviour is surprising (one might expect that the result would be
+# This behavior is surprising (one might expect that the result would be
 # NULL), but it's how Postgres behaves.
 query B
 SELECT ARRAY[1,2,NULL] = ARRAY[1,2,3]

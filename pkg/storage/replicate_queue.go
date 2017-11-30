@@ -216,7 +216,7 @@ func (rq *replicateQueue) process(
 	}
 
 	// Use a retry loop in order to backoff in the case of preemptive
-	// snapshot errors, usually signalling that a rebalancing
+	// snapshot errors, usually signaling that a rebalancing
 	// reservation could not be made with the selected target.
 	for r := retry.StartWithCtx(ctx, retryOpts); r.Next(); {
 		if requeue, err := rq.processOneChange(ctx, repl, sysCfg, rq.canTransferLease, false /* dryRun */, false /* disableStatsBasedRebalancing */); err != nil {

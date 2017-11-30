@@ -22,7 +22,7 @@ The following concerns are out of scope for this RFC:
 - Assigning unique identifiers to sessions and queries
 - Identifying and listing SQL transactions
 - Outlining a mechanism for cancelling sessions or queries 
-- The return values/errors returned by cancelled queries/sessions/closed connections.
+- The return values/errors returned by canceled queries/sessions/closed connections.
 - Whether cancellation should be supported at SQL transaction level, or query/statement level.
 
 # Motivation
