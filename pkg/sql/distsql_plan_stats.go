@@ -139,6 +139,7 @@ func (dsp *DistSQLPlanner) createStatsPlan(
 		Sketches:         sketchSpecs,
 		SampleSize:       sampler.SampleSize,
 		SampledColumnIDs: sampledColumnIDs,
+		TableID:          desc.ID,
 	}
 	// Plan the SampleAggregator on the gateway, unless we have a single Sampler.
 	node := dsp.nodeDesc.NodeID
