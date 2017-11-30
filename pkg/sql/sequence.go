@@ -24,7 +24,7 @@ import (
 	"golang.org/x/net/context"
 )
 
-// IncrementSequence implements the tree.SequenceAccessor interface.
+// IncrementSequence implements the tree.EvalPlanner interface.
 func (p *planner) IncrementSequence(ctx context.Context, seqName *tree.TableName) (int64, error) {
 	descriptor, err := getSequenceDesc(ctx, p.txn, p.getVirtualTabler(), seqName)
 	if err != nil {
@@ -113,7 +113,7 @@ func (p *planner) GetLastSequenceValue(ctx context.Context) (int64, error) {
 	return seqState.latestValues[seqState.lastSequenceIncremented], nil
 }
 
-// GetLatestValueInSessionForSequence implements the tree.SequenceAccessor interface.
+// GetLatestValueInSessionForSequence implements the tree.EvalPlanner interface.
 func (p *planner) GetLatestValueInSessionForSequence(
 	ctx context.Context, seqName *tree.TableName,
 ) (int64, error) {
@@ -135,7 +135,7 @@ func (p *planner) GetLatestValueInSessionForSequence(
 	return val, nil
 }
 
-// SetSequenceValue implements the tree.SequenceAccessor interface.
+// SetSequenceValue implements the tree.EvalPlanner interface.
 func (p *planner) SetSequenceValue(
 	ctx context.Context, seqName *tree.TableName, newVal int64,
 ) error {
