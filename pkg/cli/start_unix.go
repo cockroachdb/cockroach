@@ -28,7 +28,7 @@ import (
 var startBackground bool
 
 func init() {
-	boolFlag(startCmd.Flags(), &startBackground, cliflags.Background, false)
+	boolFlag(StartCmd.Flags(), &startBackground, cliflags.Background, false)
 }
 
 func maybeRerunBackground() (bool, error) {
