@@ -25,6 +25,7 @@ type requestedStat struct {
 	columns             []sqlbase.ColumnID
 	histogram           bool
 	histogramMaxBuckets int
+	name                string
 }
 
 const histogramSamples = 10000
@@ -73,6 +74,7 @@ func (dsp *DistSQLPlanner) createStatsPlan(
 			GenerateHistogram:   s.histogram,
 			HistogramMaxBuckets: uint32(s.histogramMaxBuckets),
 			Columns:             make([]uint32, len(s.columns)),
+			StatName:            s.name,
 		}
 		for i, colID := range s.columns {
 			colIdx, ok := scan.colIdxMap[colID]
@@ -161,6 +163,7 @@ func (dsp *DistSQLPlanner) createPlanForCreateStats(
 			columns:             n.columns,
 			histogram:           len(n.ColumnNames) == 1,
 			histogramMaxBuckets: histogramBuckets,
+			name:                string(n.Name),
 		},
 	}
 
