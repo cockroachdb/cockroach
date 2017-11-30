@@ -11,7 +11,7 @@ import cockroach_roachpb "github.com/cockroachdb/cockroach/pkg/roachpb"
 import time "time"
 import github_com_cockroachdb_cockroach_pkg_roachpb "github.com/cockroachdb/cockroach/pkg/roachpb"
 
-import github_com_gogo_protobuf_types "github.com/gogo/protobuf/types"
+import types "github.com/gogo/protobuf/types"
 
 import io "io"
 
@@ -100,8 +100,8 @@ func (m *RangeLogEvent) MarshalTo(dAtA []byte) (int, error) {
 	_ = l
 	dAtA[i] = 0xa
 	i++
-	i = encodeVarintLog(dAtA, i, uint64(github_com_gogo_protobuf_types.SizeOfStdTime(m.Timestamp)))
-	n1, err := github_com_gogo_protobuf_types.StdTimeMarshalTo(m.Timestamp, dAtA[i:])
+	i = encodeVarintLog(dAtA, i, uint64(types.SizeOfStdTime(m.Timestamp)))
+	n1, err := types.StdTimeMarshalTo(m.Timestamp, dAtA[i:])
 	if err != nil {
 		return 0, err
 	}
@@ -221,7 +221,7 @@ func encodeVarintLog(dAtA []byte, offset int, v uint64) int {
 func (m *RangeLogEvent) Size() (n int) {
 	var l int
 	_ = l
-	l = github_com_gogo_protobuf_types.SizeOfStdTime(m.Timestamp)
+	l = types.SizeOfStdTime(m.Timestamp)
 	n += 1 + l + sovLog(uint64(l))
 	if m.RangeID != 0 {
 		n += 1 + sovLog(uint64(m.RangeID))
@@ -340,7 +340,7 @@ func (m *RangeLogEvent) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			if err := github_com_gogo_protobuf_types.StdTimeUnmarshal(&m.Timestamp, dAtA[iNdEx:postIndex]); err != nil {
+			if err := types.StdTimeUnmarshal(&m.Timestamp, dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex

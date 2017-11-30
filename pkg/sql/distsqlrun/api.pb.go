@@ -61,12 +61,10 @@ import cockroach_util_hlc "github.com/cockroachdb/cockroach/pkg/util/hlc"
 
 import time "time"
 
-import (
-	context "golang.org/x/net/context"
-	grpc "google.golang.org/grpc"
-)
+import context "golang.org/x/net/context"
+import grpc "google.golang.org/grpc"
 
-import github_com_gogo_protobuf_types "github.com/gogo/protobuf/types"
+import types "github.com/gogo/protobuf/types"
 
 import io "io"
 
@@ -643,8 +641,8 @@ func (m *ConsumerHandshake) MarshalTo(dAtA []byte) (int, error) {
 	if m.ConsumerScheduleDeadline != nil {
 		dAtA[i] = 0x12
 		i++
-		i = encodeVarintApi(dAtA, i, uint64(github_com_gogo_protobuf_types.SizeOfStdTime(*m.ConsumerScheduleDeadline)))
-		n9, err := github_com_gogo_protobuf_types.StdTimeMarshalTo(*m.ConsumerScheduleDeadline, dAtA[i:])
+		i = encodeVarintApi(dAtA, i, uint64(types.SizeOfStdTime(*m.ConsumerScheduleDeadline)))
+		n9, err := types.StdTimeMarshalTo(*m.ConsumerScheduleDeadline, dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
@@ -742,7 +740,7 @@ func (m *ConsumerHandshake) Size() (n int) {
 	_ = l
 	n += 2
 	if m.ConsumerScheduleDeadline != nil {
-		l = github_com_gogo_protobuf_types.SizeOfStdTime(*m.ConsumerScheduleDeadline)
+		l = types.SizeOfStdTime(*m.ConsumerScheduleDeadline)
 		n += 1 + l + sovApi(uint64(l))
 	}
 	n += 1 + sovApi(uint64(m.Version))
@@ -1542,7 +1540,7 @@ func (m *ConsumerHandshake) Unmarshal(dAtA []byte) error {
 			if m.ConsumerScheduleDeadline == nil {
 				m.ConsumerScheduleDeadline = new(time.Time)
 			}
-			if err := github_com_gogo_protobuf_types.StdTimeUnmarshal(m.ConsumerScheduleDeadline, dAtA[iNdEx:postIndex]); err != nil {
+			if err := types.StdTimeUnmarshal(m.ConsumerScheduleDeadline, dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex

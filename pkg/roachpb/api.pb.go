@@ -175,12 +175,10 @@ import github_com_cockroachdb_cockroach_pkg_util_uuid "github.com/cockroachdb/co
 
 import bytes "bytes"
 
-import (
-	context "golang.org/x/net/context"
-	grpc "google.golang.org/grpc"
-)
+import context "golang.org/x/net/context"
+import grpc "google.golang.org/grpc"
 
-import encoding_binary "encoding/binary"
+import binary "encoding/binary"
 
 import io "io"
 
@@ -7759,7 +7757,7 @@ func (m *Header) MarshalTo(dAtA []byte) (int, error) {
 	if m.UserPriority != 0 {
 		dAtA[i] = 0x21
 		i++
-		encoding_binary.LittleEndian.PutUint64(dAtA[i:], uint64(math.Float64bits(float64(m.UserPriority))))
+		binary.LittleEndian.PutUint64(dAtA[i:], uint64(math.Float64bits(float64(m.UserPriority))))
 		i += 8
 	}
 	if m.Txn != nil {
@@ -22238,7 +22236,7 @@ func (m *Header) Unmarshal(dAtA []byte) error {
 			if (iNdEx + 8) > l {
 				return io.ErrUnexpectedEOF
 			}
-			v = uint64(encoding_binary.LittleEndian.Uint64(dAtA[iNdEx:]))
+			v = uint64(binary.LittleEndian.Uint64(dAtA[iNdEx:]))
 			iNdEx += 8
 			m.UserPriority = UserPriority(math.Float64frombits(v))
 		case 5:

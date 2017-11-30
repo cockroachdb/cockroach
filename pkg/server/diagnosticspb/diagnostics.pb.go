@@ -22,7 +22,7 @@ import cockroach_sql_sqlbase1 "github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 
 import github_com_cockroachdb_cockroach_pkg_roachpb "github.com/cockroachdb/cockroach/pkg/roachpb"
 
-import github_com_gogo_protobuf_sortkeys "github.com/gogo/protobuf/sortkeys"
+import sortkeys "github.com/gogo/protobuf/sortkeys"
 
 import io "io"
 
@@ -144,7 +144,7 @@ func (m *DiagnosticReport) MarshalTo(dAtA []byte) (int, error) {
 		for k := range m.UnimplementedErrors {
 			keysForUnimplementedErrors = append(keysForUnimplementedErrors, string(k))
 		}
-		github_com_gogo_protobuf_sortkeys.Strings(keysForUnimplementedErrors)
+		sortkeys.Strings(keysForUnimplementedErrors)
 		for _, k := range keysForUnimplementedErrors {
 			dAtA[i] = 0x2a
 			i++

@@ -88,6 +88,11 @@ ignored = [
   name = "honnef.co/go/tools"
   branch = "master"
 
+# https://github.com/gogo/protobuf/commit/620da83
+[[constraint]]
+name = "github.com/gogo/protobuf"
+branch = "master"
+
 # https://github.com/apache/thrift/commit/5b4c6bf
 [[override]]
   name = "github.com/apache/thrift"

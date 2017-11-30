@@ -30,7 +30,6 @@
 #include <google/protobuf/extension_set.h>  // IWYU pragma: export
 #include "storage/engine/enginepb/mvcc3.pb.h"
 #include "util/hlc/legacy_timestamp.pb.h"
-#include "util/hlc/timestamp.pb.h"
 // @@protoc_insertion_point(includes)
 namespace cockroach {
 namespace storage {
