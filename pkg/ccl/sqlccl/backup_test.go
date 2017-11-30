@@ -17,6 +17,8 @@ import (
 	"io"
 	"io/ioutil"
 	"math/rand"
+	"net/http"
+	"net/http/httptest"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -836,9 +838,10 @@ func TestBackupRestoreControlJob(t *testing.T) {
 	_, _, outerDB, _, cleanup := backupRestoreTestSetupWithParams(t, multiNode, numAccounts, initNone, params)
 	defer cleanup()
 
-	run := func(t *testing.T, op, query string, args ...interface{}) (int64, error) {
-		sqlDB := sqlutils.MakeSQLRunner(outerDB.DB)
+	sqlDB := sqlutils.MakeSQLRunner(outerDB.DB)
+	sqlDB.Exec(t, `SET CLUSTER SETTING experimental.importcsv.enabled = true`)
 
+	run := func(t *testing.T, op, query string, args ...interface{}) (int64, error) {
 		allowResponse = make(chan struct{})
 		errCh := make(chan error)
 		go func() {
@@ -858,7 +861,6 @@ func TestBackupRestoreControlJob(t *testing.T) {
 	}
 
 	t.Run("foreign", func(t *testing.T) {
-		sqlDB := sqlutils.MakeSQLRunner(outerDB.DB)
 		foreignDir := "nodelocal:///foreign"
 		sqlDB.Exec(t, `CREATE DATABASE orig_fkdb`)
 		sqlDB.Exec(t, `CREATE DATABASE restore_fkdb`)
@@ -890,7 +892,6 @@ func TestBackupRestoreControlJob(t *testing.T) {
 	})
 
 	t.Run("pause", func(t *testing.T) {
-		sqlDB := sqlutils.MakeSQLRunner(outerDB.DB)
 		pauseDir := "nodelocal:///pause"
 		sqlDB.Exec(t, `CREATE DATABASE pause`)
 
@@ -915,7 +916,6 @@ func TestBackupRestoreControlJob(t *testing.T) {
 	})
 
 	t.Run("cancel", func(t *testing.T) {
-		sqlDB := sqlutils.MakeSQLRunner(outerDB.DB)
 		cancelDir := "nodelocal:///cancel"
 		sqlDB.Exec(t, `CREATE DATABASE cancel`)
 
@@ -935,6 +935,33 @@ func TestBackupRestoreControlJob(t *testing.T) {
 			`SELECT name FROM crdb_internal.tables WHERE database_name = 'cancel' AND state = 'DROP'`,
 			[][]string{{"bank"}},
 		)
+	})
+
+	t.Run("cancel import", func(t *testing.T) {
+		cancelDir := "nodelocal:///cancel-import"
+		sqlDB.Exec(t, `CREATE DATABASE cancelimport`)
+
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.Method == "GET" {
+				<-allowResponse
+				w.Write([]byte("1"))
+			}
+		}))
+		defer srv.Close()
+
+		var urls []string
+		for i := 0; i < 10; i++ {
+			urls = append(urls, fmt.Sprintf("'%s/%d.csv'", srv.URL, i))
+		}
+		csvURLs := strings.Join(urls, ", ")
+		query := fmt.Sprintf(`IMPORT TABLE t (i INT) CSV DATA (%s) WITH temp = $1, into_db = 'cancelimport'`, csvURLs)
+
+		if _, err := run(t, "cancel", query, cancelDir); !testutils.IsError(err, "job canceled") {
+			t.Fatalf("expected 'job canceled' error, but got %+v", err)
+		}
+		// Check that executing again succeeds. This won't work if the first import
+		// was not successfully canceled.
+		sqlDB.Exec(t, query, cancelDir)
 	})
 }
 
