@@ -309,7 +309,7 @@ SELECT setval('setval_test', 10)
 ----
 10
 
-# Setval doesn't affect currval or lastval; they return the last value obtained with nextval.
+# Calling setval doesn't affect currval or lastval; they return the last value obtained with nextval.
 query I
 SELECT currval('setval_test')
 ----
@@ -335,7 +335,7 @@ SELECT lastval()
 ----
 11
 
-# Setval doesn't let you set values outside the bounds.
+# setval doesn't let you set values outside the bounds.
 
 statement ok
 CREATE SEQUENCE setval_bounds_test MINVALUE 5 MAXVALUE 10
@@ -355,6 +355,46 @@ SELECT setval('setval_bounds_test', 0)
 
 statement error pgcode 42P01 relation "nonexistent_seq" does not exist
 SELECT nextval('nonexistent_seq')
+
+# BEHAVIOR UPON HITTING LIMITS (minvalue, maxvalue)
+
+statement error pgcode 22023 START value \(11\) cannot be greater than MAXVALUE \(10\)
+CREATE SEQUENCE limit_test MAXVALUE 10 START WITH 11
+
+statement error pgcode 22023 START value \(5\) cannot be less than MINVALUE \(10\)
+CREATE SEQUENCE limit_test MINVALUE 10 START WITH 5
+
+statement ok
+CREATE SEQUENCE limit_test MAXVALUE 10 START WITH 9
+
+query I
+SELECT nextval('limit_test')
+----
+9
+
+query I
+SELECT nextval('limit_test')
+----
+10
+
+statement error pgcode 2200H pq: nextval\(\): reached maximum value of sequence "limit_test" \(10\)
+SELECT nextval('limit_test')
+
+query I
+SELECT currval('limit_test')
+----
+10
+
+statement ok
+CREATE SEQUENCE downward_limit_test INCREMENT BY -1 MINVALUE -10 START WITH -10
+
+query I
+SELECT nextval('downward_limit_test')
+----
+-10
+
+statement error pgcode 2200H pq: nextval\(\): reached minimum value of sequence "downward_limit_test" \(-10\)
+SELECT nextval('downward_limit_test')
 
 # USE WITH TABLES
 
