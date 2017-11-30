@@ -15,8 +15,8 @@
 package tscache
 
 import (
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
@@ -30,8 +30,6 @@ const sklPageSize = 32 << 20 // 32 MB
 // recently read or written. If a timestamp was read or written by a
 // transaction, the txn ID is stored with the timestamp to avoid advancing
 // timestamps on successive requests from the same transaction.
-//
-// sklImpl is safe for concurrent use by multiple goroutines.
 //
 // TODO(nvanbenschoten): We should export some metrics from here, including:
 // - page rotations/min (rCache & wCache)
@@ -50,13 +48,18 @@ func newSklImpl(clock *hlc.Clock) *sklImpl {
 	return &tc
 }
 
-// ThreadSafe implements the Cache interface.
-func (*sklImpl) ThreadSafe() bool { return true }
-
 // clear clears the cache and resets the low-water mark.
 func (tc *sklImpl) clear(lowWater hlc.Timestamp) {
-	tc.rCache = newIntervalSkl(tc.clock, MinRetentionWindow, sklPageSize)
-	tc.wCache = newIntervalSkl(tc.clock, MinRetentionWindow, sklPageSize)
+	pageSize := uint32(sklPageSize)
+	if util.RaceEnabled {
+		// Race testing consumes significantly more memory that normal testing.
+		// In addition, while running a group of tests in parallel, each will
+		// create a timestamp cache for every Store needed. Reduce the page size
+		// during race testing to accommodate these two factors.
+		pageSize /= 4
+	}
+	tc.rCache = newIntervalSkl(tc.clock, MinRetentionWindow, pageSize)
+	tc.wCache = newIntervalSkl(tc.clock, MinRetentionWindow, pageSize)
 	tc.rCache.floorTS = lowWater
 	tc.wCache.floorTS = lowWater
 }
@@ -69,12 +72,8 @@ func (tc *sklImpl) getSkl(readCache bool) *intervalSkl {
 	return tc.wCache
 }
 
-// add the specified timestamp to the cache covering the range of keys from
-// start to end. If end is nil, the range covers the start key only. txnID is
-// nil for no transaction. readCache specifies whether the command adding this
-// timestamp should update the read timestamp; false to update the write
-// timestamp cache.
-func (tc *sklImpl) add(start, end roachpb.Key, ts hlc.Timestamp, txnID uuid.UUID, readCache bool) {
+// Add implements the Cache interface.
+func (tc *sklImpl) Add(start, end roachpb.Key, ts hlc.Timestamp, txnID uuid.UUID, readCache bool) {
 	skl := tc.getSkl(readCache)
 
 	val := cacheValue{ts: ts, txnID: txnID}
@@ -85,30 +84,10 @@ func (tc *sklImpl) add(start, end roachpb.Key, ts hlc.Timestamp, txnID uuid.UUID
 	}
 }
 
-// AddRequest implements the Cache interface.
-func (tc *sklImpl) AddRequest(req *Request) {
-	for _, sp := range req.Reads {
-		tc.add(sp.Key, sp.EndKey, req.Timestamp, req.TxnID, true /* readCache */)
-	}
-	for _, sp := range req.Writes {
-		tc.add(sp.Key, sp.EndKey, req.Timestamp, req.TxnID, false /* readCache */)
-	}
-	if req.Txn.Key != nil {
-		// Make the transaction key from the request key. We're guaranteed
-		// req.TxnID != nil because we only hit this code path for
-		// EndTransactionRequests.
-		key := keys.TransactionKey(req.Txn.Key, req.TxnID)
-		tc.add(key, nil, req.Timestamp, req.TxnID, false /* readCache */)
-	}
-}
-
-// ExpandRequests implements the Cache interface.
-func (tc *sklImpl) ExpandRequests(span roachpb.RSpan, ts hlc.Timestamp) { /* no-op */ }
-
 // SetLowWater implements the Cache interface.
 func (tc *sklImpl) SetLowWater(start, end roachpb.Key, ts hlc.Timestamp) {
-	tc.add(start, end, ts, noTxnID, false /* readCache */)
-	tc.add(start, end, ts, noTxnID, true /* readCache */)
+	tc.Add(start, end, ts, noTxnID, false /* readCache */)
+	tc.Add(start, end, ts, noTxnID, true /* readCache */)
 }
 
 // getLowWater implements the Cache interface.

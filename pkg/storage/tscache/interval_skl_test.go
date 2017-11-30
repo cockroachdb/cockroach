@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
@@ -892,6 +893,9 @@ func TestIntervalSklMinRetentionWindow(t *testing.T) {
 }
 
 func TestIntervalSklConcurrency(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer util.EnableRacePreemptionPoints()()
+
 	testCases := []struct {
 		name     string
 		pageSize uint32
@@ -998,6 +1002,9 @@ func TestIntervalSklConcurrency(t *testing.T) {
 }
 
 func TestIntervalSklConcurrentVsSequential(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer util.EnableRacePreemptionPoints()()
+
 	// Run one subtest using a real clock to generate timestamps and one subtest
 	// using a fake clock to generate timestamps. The former is good for
 	// simulating real conditions while the latter is good for testing timestamp

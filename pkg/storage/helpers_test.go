@@ -324,15 +324,10 @@ func (r *Replica) CommandSizesLen() int {
 // GetTSCacheHighWater returns the high water mark of the replica's timestamp
 // cache.
 func (r *Replica) GetTSCacheHighWater() hlc.Timestamp {
-	if !r.store.tsCacheMu.cache.ThreadSafe() {
-		r.store.tsCacheMu.Lock()
-		defer r.store.tsCacheMu.Unlock()
-	}
-
 	start := roachpb.Key(r.Desc().StartKey)
 	end := roachpb.Key(r.Desc().EndKey)
-	t, _ := r.store.tsCacheMu.cache.GetMaxRead(start, end)
-	if w, _ := r.store.tsCacheMu.cache.GetMaxWrite(start, end); t.Less(w) {
+	t, _ := r.store.tsCache.GetMaxRead(start, end)
+	if w, _ := r.store.tsCache.GetMaxWrite(start, end); t.Less(w) {
 		t = w
 	}
 	return t

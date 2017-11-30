@@ -32,7 +32,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
-	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
@@ -65,7 +64,7 @@ func TestTimestampCache(t *testing.T) {
 		baseTS := manual.UnixNano()
 
 		// First simulate a read of just "a" at time 50.
-		tc.add(roachpb.Key("a"), nil, hlc.Timestamp{WallTime: 50}, noTxnID, true)
+		tc.Add(roachpb.Key("a"), nil, hlc.Timestamp{WallTime: 50}, noTxnID, true)
 		// Verify GetMax returns the lowWater mark.
 		if rTS, rTxnID := tc.GetMaxRead(roachpb.Key("a"), nil); rTS.WallTime != baseTS || rTxnID != noTxnID {
 			t.Errorf("expected baseTS for key \"a\"; txnID=%s", rTxnID)
@@ -85,7 +84,7 @@ func TestTimestampCache(t *testing.T) {
 
 		// Sim a read of "b"-"c" at a time above the low-water mark.
 		ts := clock.Now()
-		tc.add(roachpb.Key("b"), roachpb.Key("c"), ts, noTxnID, true)
+		tc.Add(roachpb.Key("b"), roachpb.Key("c"), ts, noTxnID, true)
 
 		// Verify all permutations of direct and range access.
 		if rTS, rTxnID := tc.GetMaxRead(roachpb.Key("b"), nil); rTS != ts || rTxnID != noTxnID {
@@ -352,11 +351,11 @@ func TestTimestampCacheLayeredIntervals(t *testing.T) {
 
 							if reverse {
 								for i := len(testCase.spans) - 1; i >= 0; i-- {
-									tc.add(testCase.spans[i].Key, testCase.spans[i].EndKey, txns[i].ts, txns[i].id, true)
+									tc.Add(testCase.spans[i].Key, testCase.spans[i].EndKey, txns[i].ts, txns[i].id, true)
 								}
 							} else {
 								for i := range testCase.spans {
-									tc.add(testCase.spans[i].Key, testCase.spans[i].EndKey, txns[i].ts, txns[i].id, true)
+									tc.Add(testCase.spans[i].Key, testCase.spans[i].EndKey, txns[i].ts, txns[i].id, true)
 								}
 							}
 							testCase.validator(t, tc, txns)
@@ -375,7 +374,7 @@ func TestTimestampCacheClear(t *testing.T) {
 		key := roachpb.Key("a")
 
 		ts := clock.Now()
-		tc.add(key, nil, ts, noTxnID, true)
+		tc.Add(key, nil, ts, noTxnID, true)
 
 		manual.Increment(5000000)
 
@@ -401,15 +400,15 @@ func TestTimestampCacheReadVsWrite(t *testing.T) {
 	forEachCacheImpl(t, func(t *testing.T, tc Cache, clock *hlc.Clock, manual *hlc.ManualClock) {
 		// Add read-only non-txn entry at current time.
 		ts1 := clock.Now()
-		tc.add(roachpb.Key("a"), roachpb.Key("b"), ts1, noTxnID, true)
+		tc.Add(roachpb.Key("a"), roachpb.Key("b"), ts1, noTxnID, true)
 
 		// Add two successive txn entries; one read-only and one read-write.
 		txn1ID := uuid.MakeV4()
 		txn2ID := uuid.MakeV4()
 		ts2 := clock.Now()
-		tc.add(roachpb.Key("a"), nil, ts2, txn1ID, true)
+		tc.Add(roachpb.Key("a"), nil, ts2, txn1ID, true)
 		ts3 := clock.Now()
-		tc.add(roachpb.Key("a"), nil, ts3, txn2ID, false)
+		tc.Add(roachpb.Key("a"), nil, ts3, txn2ID, false)
 
 		rTS, rTxnID := tc.GetMaxRead(roachpb.Key("a"), nil)
 		wTS, wTxnID := tc.GetMaxWrite(roachpb.Key("a"), nil)
@@ -432,8 +431,8 @@ func TestTimestampCacheEqualTimestamps(t *testing.T) {
 
 		// Add two non-overlapping transactions at the same timestamp.
 		ts1 := clock.Now()
-		tc.add(roachpb.Key("a"), roachpb.Key("b"), ts1, txn1, true)
-		tc.add(roachpb.Key("b"), roachpb.Key("c"), ts1, txn2, true)
+		tc.Add(roachpb.Key("a"), roachpb.Key("b"), ts1, txn1, true)
+		tc.Add(roachpb.Key("b"), roachpb.Key("c"), ts1, txn2, true)
 
 		// When querying either side separately, the transaction ID is returned.
 		if ts, txn := tc.GetMaxRead(roachpb.Key("a"), roachpb.Key("b")); ts != ts1 {
@@ -457,60 +456,12 @@ func TestTimestampCacheEqualTimestamps(t *testing.T) {
 	})
 }
 
-// lockedCache wraps non-thread safe Cache implementations in Mutex to make them
-// thread safe.
-//
-// TODO(nvanbenschoten): remove when we remove Cache.ThreadSafe.
-type lockedCache struct {
-	syncutil.Mutex
-	c Cache
-}
-
-func makeThreadSafe(c Cache) Cache {
-	if !c.ThreadSafe() {
-		return &lockedCache{c: c}
-	}
-	return c
-}
-
-func unwrapCache(c Cache) Cache {
-	if lc, ok := c.(*lockedCache); ok {
-		return unwrapCache(lc.c)
-	}
-	return c
-}
-
-func (lc *lockedCache) ThreadSafe() bool { return true }
-func (lc *lockedCache) GetMaxRead(start, end roachpb.Key) (hlc.Timestamp, uuid.UUID) {
-	lc.Lock()
-	defer lc.Unlock()
-	return lc.c.GetMaxRead(start, end)
-}
-func (lc *lockedCache) add(
-	start, end roachpb.Key, ts hlc.Timestamp, txnID uuid.UUID, readCache bool,
-) {
-	lc.Lock()
-	lc.c.add(start, end, ts, txnID, readCache)
-	lc.Unlock()
-}
-func (lc *lockedCache) clear(lowWater hlc.Timestamp) {
-	lc.Lock()
-	lc.c.clear(lowWater)
-	lc.Unlock()
-}
-
-// Implement if needed.
-func (*lockedCache) AddRequest(_ *Request)                                   { panic("unimplemented") }
-func (*lockedCache) ExpandRequests(_ roachpb.RSpan, _ hlc.Timestamp)         { panic("unimplemented") }
-func (*lockedCache) SetLowWater(_, _ roachpb.Key, _ hlc.Timestamp)           { panic("unimplemented") }
-func (*lockedCache) GetMaxWrite(_, _ roachpb.Key) (hlc.Timestamp, uuid.UUID) { panic("unimplemented") }
-func (*lockedCache) getLowWater(_ bool) hlc.Timestamp                        { panic("unimplemented") }
-
 // TestTimestampCacheImplsIdentical verifies that all timestamp cache
 // implementations return the same results for the same inputs, even under
 // concurrent load.
 func TestTimestampCacheImplsIdentical(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer util.EnableRacePreemptionPoints()()
 
 	// Run one subtest using a real clock to generate timestamps and one subtest
 	// using a fake clock to generate timestamps. The former is good for
@@ -521,9 +472,9 @@ func TestTimestampCacheImplsIdentical(t *testing.T) {
 		caches := make([]Cache, len(cacheImplConstrs))
 		start := clock.Now()
 		for i, constr := range cacheImplConstrs {
-			c := makeThreadSafe(constr(clock))
-			c.clear(start) // set low water mark
-			caches[i] = c
+			tc := constr(clock)
+			tc.clear(start) // set low water mark
+			caches[i] = tc
 		}
 
 		// Context cancellations are used to shutdown goroutines and prevent
@@ -606,9 +557,9 @@ func TestTimestampCacheImplsIdentical(t *testing.T) {
 					}
 
 					newVal := cacheValue{ts: ts, txnID: txnID}
-					for _, c := range caches {
-						t.Logf("adding (%T) [%s,%s) = %s", unwrapCache(c), string(from), string(to), newVal)
-						c.add(from, to, ts, txnID, true /* readCache */)
+					for _, tc := range caches {
+						t.Logf("adding (%T) [%s,%s) = %s", tc, string(from), string(to), newVal)
+						tc.Add(from, to, ts, txnID, true /* readCache */)
 					}
 
 					// Return semaphore.
@@ -680,18 +631,18 @@ func identicalAndRatcheted(
 	caches []Cache, from, to roachpb.Key, prevVal cacheValue,
 ) (cacheValue, error) {
 	var vals []cacheValue
-	for _, c := range caches {
-		keyTS, keyTxnID := c.GetMaxRead(from, to)
+	for _, tc := range caches {
+		keyTS, keyTxnID := tc.GetMaxRead(from, to)
 		vals = append(vals, cacheValue{ts: keyTS, txnID: keyTxnID})
 	}
 
 	// Assert same values for each cache.
 	firstVal := vals[0]
-	firstCache := unwrapCache(caches[0])
+	firstCache := caches[0]
 	for i := 1; i < len(caches); i++ {
 		if !reflect.DeepEqual(firstVal, vals[i]) {
 			return firstVal, errors.Errorf("expected %s (%T) and %s (%T) to be equal",
-				firstVal, firstCache, vals[i], unwrapCache(caches[i]))
+				firstVal, firstCache, vals[i], caches[i])
 		}
 	}
 
@@ -711,15 +662,15 @@ func BenchmarkTimestampCacheInsertion(b *testing.B) {
 
 	for i := 0; i < b.N; i++ {
 		cdTS := clock.Now()
-		tc.add(roachpb.Key("c"), roachpb.Key("d"), cdTS, noTxnID, true)
+		tc.Add(roachpb.Key("c"), roachpb.Key("d"), cdTS, noTxnID, true)
 
 		beTS := clock.Now()
-		tc.add(roachpb.Key("b"), roachpb.Key("e"), beTS, noTxnID, true)
+		tc.Add(roachpb.Key("b"), roachpb.Key("e"), beTS, noTxnID, true)
 
 		adTS := clock.Now()
-		tc.add(roachpb.Key("a"), roachpb.Key("d"), adTS, noTxnID, true)
+		tc.Add(roachpb.Key("a"), roachpb.Key("d"), adTS, noTxnID, true)
 
 		cfTS := clock.Now()
-		tc.add(roachpb.Key("c"), roachpb.Key("f"), cfTS, noTxnID, true)
+		tc.Add(roachpb.Key("c"), roachpb.Key("f"), cfTS, noTxnID, true)
 	}
 }
