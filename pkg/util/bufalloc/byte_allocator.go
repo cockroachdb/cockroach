@@ -14,10 +14,6 @@
 
 package bufalloc
 
-import (
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
-)
-
 // ByteAllocator provides chunk allocation of []byte, amortizing the overhead
 // of each allocation. Because the underlying storage for the slices is shared,
 // they should share a similar lifetime in order to avoid pinning large amounts
@@ -64,53 +60,4 @@ func (a ByteAllocator) Copy(src []byte, extraCap int) (ByteAllocator, []byte) {
 	a, alloc = a.Alloc(len(src), extraCap)
 	copy(alloc, src)
 	return a, alloc
-}
-
-// CopySpan performs a deep copy of the provided Span. The returned Span
-// should be treated as immutable.
-func (a ByteAllocator) CopySpan(src roachpb.Span) (ByteAllocator, roachpb.Span) {
-	if len(src.Key) == 0 {
-		return a, roachpb.Span{}
-	}
-	var dst roachpb.Span
-	extraCap := 0
-	if len(src.EndKey) > 0 {
-		a, dst.EndKey = a.Copy(src.EndKey, 0)
-	} else {
-		// In a few places including in the TimestampCache we translate
-		// [Key, nil) -> [Key, Key.Next()). If the start key has enough
-		// extra capacity, the Next call does not need to allocate and
-		// can instead share the same memory with the start key.
-		extraCap = 1
-	}
-	a, dst.Key = a.Copy(src.Key, extraCap)
-	return a, dst
-}
-
-// CopyRSpan performs a deep copy of the provided RSpan. The returned RSpan
-// should be treated as immutable.
-func (a ByteAllocator) CopyRSpan(src roachpb.RSpan) (ByteAllocator, roachpb.RSpan) {
-	var dst roachpb.Span
-	a, dst = a.CopySpan(src.AsRawSpanWithNoLocals())
-	return a, roachpb.RSpan{
-		Key:    roachpb.RKey(dst.Key),
-		EndKey: roachpb.RKey(dst.EndKey),
-	}
-}
-
-// SpanSize returns the amount of memory required to copy the provided Span.
-func SpanSize(src roachpb.Span) int {
-	if len(src.Key) == 0 {
-		return 0
-	}
-	endSize := 1
-	if len(src.EndKey) > 0 {
-		endSize = len(src.EndKey)
-	}
-	return len(src.Key) + endSize
-}
-
-// RSpanSize returns the amount of memory required to copy the provided RSpan.
-func RSpanSize(src roachpb.RSpan) int {
-	return SpanSize(src.AsRawSpanWithNoLocals())
 }

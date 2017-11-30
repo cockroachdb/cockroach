@@ -47,7 +47,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/spanset"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
-	"github.com/cockroachdb/cockroach/pkg/storage/tscache"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -1142,10 +1141,8 @@ func TestReplicaTSCacheLowWaterOnLease(t *testing.T) {
 			t.Fatalf("%d: unexpected error %v", i, err)
 		}
 		// Verify expected low water mark.
-		tc.repl.store.tsCacheMu.Lock()
-		rTS, _ := tc.repl.store.tsCacheMu.cache.GetMaxRead(roachpb.Key("a"), nil)
-		wTS, _ := tc.repl.store.tsCacheMu.cache.GetMaxWrite(roachpb.Key("a"), nil)
-		tc.repl.store.tsCacheMu.Unlock()
+		rTS, _ := tc.repl.store.tsCache.GetMaxRead(roachpb.Key("a"), nil)
+		wTS, _ := tc.repl.store.tsCache.GetMaxWrite(roachpb.Key("a"), nil)
 
 		if test.expLowWater == 0 {
 			continue
@@ -1963,26 +1960,21 @@ func TestReplicaUpdateTSCache(t *testing.T) {
 		t.Error(pErr)
 	}
 	// Verify the timestamp cache has rTS=1s and wTS=0s for "a".
-	if !tc.repl.store.tsCacheMu.cache.ThreadSafe() {
-		tc.repl.store.tsCacheMu.Lock()
-		defer tc.repl.store.tsCacheMu.Unlock()
-	}
-	tc.repl.store.tsCacheMu.cache.ExpandRequests(tc.repl.Desc().RSpan(), hlc.Timestamp{})
 	noID := uuid.UUID{}
-	rTS, rTxnID := tc.repl.store.tsCacheMu.cache.GetMaxRead(roachpb.Key("a"), nil)
-	wTS, wTxnID := tc.repl.store.tsCacheMu.cache.GetMaxWrite(roachpb.Key("a"), nil)
+	rTS, rTxnID := tc.repl.store.tsCache.GetMaxRead(roachpb.Key("a"), nil)
+	wTS, wTxnID := tc.repl.store.tsCache.GetMaxWrite(roachpb.Key("a"), nil)
 	if rTS.WallTime != t0.Nanoseconds() || wTS.WallTime != startNanos || rTxnID != noID || wTxnID != noID {
 		t.Errorf("expected rTS=1s and wTS=0s, but got %s, %s; rTxnID=%s, wTxnID=%s", rTS, wTS, rTxnID, wTxnID)
 	}
 	// Verify the timestamp cache has rTS=0s and wTS=2s for "b".
-	rTS, rTxnID = tc.repl.store.tsCacheMu.cache.GetMaxRead(roachpb.Key("b"), nil)
-	wTS, wTxnID = tc.repl.store.tsCacheMu.cache.GetMaxWrite(roachpb.Key("b"), nil)
+	rTS, rTxnID = tc.repl.store.tsCache.GetMaxRead(roachpb.Key("b"), nil)
+	wTS, wTxnID = tc.repl.store.tsCache.GetMaxWrite(roachpb.Key("b"), nil)
 	if rTS.WallTime != startNanos || wTS.WallTime != t1.Nanoseconds() || rTxnID != noID || wTxnID != noID {
 		t.Errorf("expected rTS=0s and wTS=2s, but got %s, %s; rTxnID=%s, wTxnID=%s", rTS, wTS, rTxnID, wTxnID)
 	}
 	// Verify another key ("c") has 0sec in timestamp cache.
-	rTS, rTxnID = tc.repl.store.tsCacheMu.cache.GetMaxRead(roachpb.Key("c"), nil)
-	wTS, wTxnID = tc.repl.store.tsCacheMu.cache.GetMaxWrite(roachpb.Key("c"), nil)
+	rTS, rTxnID = tc.repl.store.tsCache.GetMaxRead(roachpb.Key("c"), nil)
+	wTS, wTxnID = tc.repl.store.tsCache.GetMaxWrite(roachpb.Key("c"), nil)
 	if rTS.WallTime != startNanos || wTS.WallTime != startNanos || rTxnID != noID || wTxnID != noID {
 		t.Errorf("expected rTS=0s and wTS=0s, but got %s %s; rTxnID=%s, wTxnID=%s", rTS, wTS, rTxnID, wTxnID)
 	}
@@ -8605,96 +8597,6 @@ func TestCancelPendingCommands(t *testing.T) {
 	pErr := <-errChan
 	if _, ok := pErr.GetDetail().(*roachpb.AmbiguousResultError); !ok {
 		t.Errorf("expected AmbiguousResultError, got %v", pErr)
-	}
-}
-
-func TestMakeTimestampCacheRequest(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-
-	a := roachpb.Key("a")
-	b := roachpb.Key("b")
-	c := roachpb.Key("c")
-	ac := roachpb.Span{Key: a, EndKey: c}
-	acR := roachpb.RSpan{Key: roachpb.RKey(a), EndKey: roachpb.RKey(c)}
-	testCases := []struct {
-		maxKeys  int64
-		req      roachpb.Request
-		resp     roachpb.Response
-		expected *tscache.Request
-	}{
-		{
-			0,
-			&roachpb.ScanRequest{Span: ac},
-			&roachpb.ScanResponse{},
-			&tscache.Request{Span: acR, Reads: []roachpb.Span{ac}},
-		},
-		{
-			0,
-			&roachpb.ScanRequest{Span: ac},
-			&roachpb.ScanResponse{Rows: []roachpb.KeyValue{{Key: a}}},
-			&tscache.Request{Span: acR, Reads: []roachpb.Span{ac}},
-		},
-		{
-			2,
-			&roachpb.ScanRequest{Span: ac},
-			&roachpb.ScanResponse{},
-			&tscache.Request{Span: acR, Reads: []roachpb.Span{ac}},
-		},
-		{
-			2,
-			&roachpb.ScanRequest{Span: ac},
-			&roachpb.ScanResponse{Rows: []roachpb.KeyValue{{Key: a}}},
-			&tscache.Request{Span: acR, Reads: []roachpb.Span{ac}},
-		},
-		{
-			2,
-			&roachpb.ScanRequest{Span: ac},
-			&roachpb.ScanResponse{Rows: []roachpb.KeyValue{{Key: a}, {Key: b}}},
-			&tscache.Request{Span: acR, Reads: []roachpb.Span{{Key: a, EndKey: b.Next()}}},
-		},
-		{
-			0,
-			&roachpb.ReverseScanRequest{Span: ac},
-			&roachpb.ReverseScanResponse{},
-			&tscache.Request{Span: acR, Reads: []roachpb.Span{ac}},
-		},
-		{
-			0,
-			&roachpb.ReverseScanRequest{Span: ac},
-			&roachpb.ReverseScanResponse{Rows: []roachpb.KeyValue{{Key: a}}},
-			&tscache.Request{Span: acR, Reads: []roachpb.Span{ac}},
-		},
-		{
-			2,
-			&roachpb.ReverseScanRequest{Span: ac},
-			&roachpb.ReverseScanResponse{},
-			&tscache.Request{Span: acR, Reads: []roachpb.Span{ac}},
-		},
-		{
-			2,
-			&roachpb.ReverseScanRequest{Span: ac},
-			&roachpb.ReverseScanResponse{Rows: []roachpb.KeyValue{{Key: a}}},
-			&tscache.Request{Span: acR, Reads: []roachpb.Span{ac}},
-		},
-		{
-			2,
-			&roachpb.ReverseScanRequest{Span: ac},
-			&roachpb.ReverseScanResponse{Rows: []roachpb.KeyValue{{Key: c}, {Key: b}}},
-			&tscache.Request{Span: acR, Reads: []roachpb.Span{{Key: b, EndKey: c}}},
-		},
-	}
-	for _, c := range testCases {
-		t.Run("", func(t *testing.T) {
-			var ba roachpb.BatchRequest
-			var br roachpb.BatchResponse
-			ba.Header.MaxSpanRequestKeys = c.maxKeys
-			ba.Add(c.req)
-			br.Add(c.resp)
-			cr := makeTSCacheRequest(&ba, &br)
-			if !reflect.DeepEqual(c.expected, cr) {
-				t.Fatalf("%s", pretty.Diff(c.expected, cr))
-			}
-		})
 	}
 }
 

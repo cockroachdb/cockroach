@@ -37,11 +37,11 @@ func TestTreeImplEviction(t *testing.T) {
 	// Increment time to the low water mark + 1.
 	manual.Increment(1)
 	aTS := clock.Now()
-	tc.add(roachpb.Key("a"), nil, aTS, noTxnID, true)
+	tc.Add(roachpb.Key("a"), nil, aTS, noTxnID, true)
 
 	// Increment time by the MinRetentionWindow and add another key.
 	manual.Increment(MinRetentionWindow.Nanoseconds())
-	tc.add(roachpb.Key("b"), nil, clock.Now(), noTxnID, true)
+	tc.Add(roachpb.Key("b"), nil, clock.Now(), noTxnID, true)
 
 	// Verify looking up key "c" returns the new low water mark ("a"'s timestamp).
 	if rTS, rTxnID := tc.GetMaxRead(roachpb.Key("c"), nil); rTS != aTS || rTxnID != noTxnID {
@@ -62,52 +62,14 @@ func TestTreeImplNoEviction(t *testing.T) {
 	// Increment time to the low water mark + 1.
 	manual.Increment(1)
 	aTS := clock.Now()
-	tc.add(roachpb.Key("a"), nil, aTS, noTxnID, true)
-	tc.AddRequest(&Request{
-		Reads:     []roachpb.Span{{Key: roachpb.Key("c")}},
-		Timestamp: aTS,
-	})
+	tc.Add(roachpb.Key("a"), nil, aTS, noTxnID, true)
 
 	// Increment time by the MinRetentionWindow and add another key.
 	manual.Increment(MinRetentionWindow.Nanoseconds())
-	tc.add(roachpb.Key("b"), nil, clock.Now(), noTxnID, true)
-	tc.AddRequest(&Request{
-		Reads:     []roachpb.Span{{Key: roachpb.Key("d")}},
-		Timestamp: clock.Now(),
-	})
+	tc.Add(roachpb.Key("b"), nil, clock.Now(), noTxnID, true)
 
-	// Verify that the cache still has 4 entries in it
-	if l, want := tc.len(), 4; l != want {
+	// Verify that the cache still has 2 entries in it
+	if l, want := tc.len(), 2; l != want {
 		t.Errorf("expected %d entries to remain, got %d", want, l)
-	}
-}
-
-func TestTreeImplExpandRequests(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	manual := hlc.NewManualClock(123)
-	clock := hlc.NewClock(manual.UnixNano, time.Nanosecond)
-	tc := newTreeImpl(clock)
-	defer tc.clear(clock.Now())
-
-	ab := roachpb.RSpan{Key: roachpb.RKey("a"), EndKey: roachpb.RKey("b")}
-	bc := roachpb.RSpan{Key: roachpb.RKey("b"), EndKey: roachpb.RKey("c")}
-
-	// Increment time to the low water mark + 1.
-	start := clock.Now()
-	manual.Increment(1)
-	tc.AddRequest(&Request{
-		Span:      ab,
-		Reads:     []roachpb.Span{{Key: roachpb.Key("a")}},
-		Timestamp: clock.Now(),
-	})
-
-	tc.ExpandRequests(bc, start)
-	if tc.requests.Len() != 1 {
-		t.Fatalf("expected 1 cached request, but found %d", tc.requests.Len())
-	}
-
-	tc.ExpandRequests(ab, start)
-	if tc.requests.Len() != 0 {
-		t.Fatalf("expected 0 cached requests, but found %d", tc.requests.Len())
 	}
 }
