@@ -160,7 +160,7 @@ func addInfoToURL(url *url.URL, s *Server, runningTime time.Duration) {
 	b := build.GetInfo()
 	q.Set("version", b.Tag)
 	q.Set("platform", b.Platform)
-	q.Set("uuid", s.node.ClusterID.String())
+	q.Set("uuid", s.ClusterID().String())
 	q.Set("nodeid", s.NodeID().String())
 	q.Set("uptime", strconv.Itoa(int(runningTime.Seconds())))
 	q.Set("insecure", strconv.FormatBool(s.cfg.Insecure))
