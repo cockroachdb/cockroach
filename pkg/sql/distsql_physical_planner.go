@@ -374,6 +374,9 @@ func (dsp *DistSQLPlanner) checkSupportForNode(node planNode) (distRecommendatio
 		}
 		return shouldDistribute, nil
 
+	case *createStatsNode:
+		return shouldDistribute, nil
+
 	case *insertNode, *updateNode, *deleteNode:
 		// This is a potential hot path.
 		return 0, mutationsNotSupportedError
@@ -1831,6 +1834,9 @@ func (dsp *DistSQLPlanner) createPlanForNode(
 
 	case *valuesNode:
 		return dsp.createPlanForValues(planCtx, n)
+
+	case *createStatsNode:
+		return dsp.createPlanForCreateStats(planCtx, n)
 
 	default:
 		panic(fmt.Sprintf("unsupported node type %T", n))

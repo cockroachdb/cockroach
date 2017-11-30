@@ -198,24 +198,7 @@ func (s *sampleAggregator) mainLoop(ctx context.Context) (earlyExit bool, _ erro
 // writeResults inserts the new statistics into system.table_statistics.
 func (s *sampleAggregator) writeResults(ctx context.Context) error {
 	return s.flowCtx.clientDB.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
-		// Find the maximum statistic ID.
-		// TODO(radu): if we delete a statistic, we probably don't want to reuse
-		// that ID. Maybe we should keep track of an ID somewhere, or use
-		// unique_rowid().
-		datums, err := s.flowCtx.executor.QueryRowInTransaction(
-			ctx, "get-statistic-id", txn,
-			`SELECT IFNULL(MAX("statisticID"), 0) FROM system.table_statistics WHERE "tableID" = $1`,
-			s.tableID,
-		)
-		if err != nil {
-			return err
-		}
-
-		statID := int64(*datums[0].(*tree.DInt))
-
 		for _, si := range s.sketches {
-			statID++
-
 			var histogram []byte
 			if si.spec.GenerateHistogram {
 				colIdx := int(si.spec.Columns[0])
@@ -249,15 +232,13 @@ func (s *sampleAggregator) writeResults(ctx context.Context) error {
 				ctx, "insert-statistic", txn,
 				`INSERT INTO system.table_statistics (
 					"tableID",
-					"statisticID",
 					"columnIDs",
 					"rowCount",
 					"distinctCount",
 					"nullCount",
 					histogram
-				) VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+				) VALUES ($1, $2, $3, $4, $5, $6)`,
 				s.tableID,
-				statID,
 				columnIDs,
 				si.numRows,
 				si.sketch.Estimate(),
