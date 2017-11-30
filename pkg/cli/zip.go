@@ -112,10 +112,11 @@ func runDebugZip(cmd *cobra.Command, args []string) error {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	conn, _, err := getClientGRPCConn(ctx)
+	conn, _, finish, err := getClientGRPCConn(ctx)
 	if err != nil {
 		return err
 	}
+	defer finish()
 
 	status := serverpb.NewStatusClient(conn)
 	admin := serverpb.NewAdminClient(conn)

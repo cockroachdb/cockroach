@@ -922,9 +922,11 @@ func addrWithDefaultHost(addr string) (string, error) {
 	return net.JoinHostPort(host, port), nil
 }
 
-func getClientGRPCConn(ctx context.Context) (*grpc.ClientConn, *hlc.Clock, error) {
+// getClientGRPCConn returns a ClientConn, a Clock and a method that blocks
+// until the connection (and its associated goroutines) have terminated.
+func getClientGRPCConn(ctx context.Context) (*grpc.ClientConn, *hlc.Clock, func(), error) {
 	if ctx.Done() == nil {
-		return nil, nil, errors.New("context must be cancellable")
+		return nil, nil, nil, errors.New("context must be cancellable")
 	}
 	// 0 to disable max offset checks; this RPC context is not a member of the
 	// cluster, so there's no need to enforce that its max offset is the same
@@ -939,31 +941,31 @@ func getClientGRPCConn(ctx context.Context) (*grpc.ClientConn, *hlc.Clock, error
 	)
 	addr, err := addrWithDefaultHost(serverCfg.AdvertiseAddr)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	conn, err := rpcContext.GRPCDial(addr)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	stopper.AddCloser(stop.CloserFn(func() {
 		_ = conn.Close()
 	}))
 
 	// Tie the lifetime of the stopper to that of the context.
-	go func() {
-		<-ctx.Done()
-		// Don't use the `ctx` as it's already cancelled.
-		stopper.Stop(context.Background())
-	}()
-	return conn, clock, nil
+	closer := func() {
+		stopper.Stop(ctx)
+	}
+	return conn, clock, closer, nil
 }
 
-func getAdminClient(ctx context.Context) (serverpb.AdminClient, error) {
-	conn, _, err := getClientGRPCConn(ctx)
+// getAdminClient returns an AdminClient and a closure that must be invoked
+// to free associated resources.
+func getAdminClient(ctx context.Context) (serverpb.AdminClient, func(), error) {
+	conn, _, finish, err := getClientGRPCConn(ctx)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	return serverpb.NewAdminClient(conn), nil
+	return serverpb.NewAdminClient(conn), finish, nil
 }
 
 // quitCmd command shuts down the node server.
@@ -1064,10 +1066,11 @@ func runQuit(cmd *cobra.Command, args []string) (err error) {
 		onModes[i] = int32(m)
 	}
 
-	c, err := getAdminClient(ctx)
+	c, finish, err := getAdminClient(ctx)
 	if err != nil {
 		return err
 	}
+	defer finish()
 
 	if quitCtx.serverDecommission {
 		var myself []string // will remain empty, which means target yourself

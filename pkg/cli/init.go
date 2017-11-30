@@ -46,10 +46,12 @@ func runInit(cmd *cobra.Command, args []string) error {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	conn, _, err := getClientGRPCConn(ctx)
+	conn, _, finish, err := getClientGRPCConn(ctx)
 	if err != nil {
 		return err
 	}
+	defer finish()
+
 	c := serverpb.NewInitClient(conn)
 
 	if _, err = c.Bootstrap(ctx, &serverpb.BootstrapRequest{}); err != nil {
