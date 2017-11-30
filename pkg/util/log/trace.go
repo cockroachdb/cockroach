@@ -182,7 +182,7 @@ func ErrEventf(ctx context.Context, format string, args ...interface{}) {
 // VEvent either logs a message to the log files (which also outputs to the
 // active trace or event log) or to the trace/event log alone, depending on
 // whether the specified verbosity level is active.
-func VEvent(ctx context.Context, level level, msg string) {
+func VEvent(ctx context.Context, level int32, msg string) {
 	if VDepth(level, 1) {
 		// Log to INFO (which also logs an event).
 		logDepth(ctx, 1, Severity_INFO, "", []interface{}{msg})
@@ -194,7 +194,7 @@ func VEvent(ctx context.Context, level level, msg string) {
 // VEventf either logs a message to the log files (which also outputs to the
 // active trace or event log) or to the trace/event log alone, depending on
 // whether the specified verbosity level is active.
-func VEventf(ctx context.Context, level level, format string, args ...interface{}) {
+func VEventf(ctx context.Context, level int32, format string, args ...interface{}) {
 	if VDepth(level, 1) {
 		// Log to INFO (which also logs an event).
 		logDepth(ctx, 1, Severity_INFO, format, args)
@@ -205,7 +205,7 @@ func VEventf(ctx context.Context, level level, format string, args ...interface{
 
 // VEventfDepth performs the same as VEventf but checks the verbosity level
 // at the given depth in the call stack.
-func VEventfDepth(ctx context.Context, depth int, level level, format string, args ...interface{}) {
+func VEventfDepth(ctx context.Context, depth int, level int32, format string, args ...interface{}) {
 	if VDepth(level, 1+depth) {
 		// Log to INFO (which also logs an event).
 		logDepth(ctx, 1+depth, Severity_INFO, format, args)

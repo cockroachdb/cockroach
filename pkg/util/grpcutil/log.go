@@ -16,6 +16,7 @@
 package grpcutil
 
 import (
+	"math"
 	"regexp"
 	"strings"
 	"time"
@@ -30,7 +31,15 @@ import (
 )
 
 func init() {
-	grpclog.SetLoggerV2(&logger{})
+	SetSeverity(log.Severity_ERROR)
+}
+
+// SetSeverity sets the severity level below which GRPC log messages are
+// suppressed.
+//
+// Must be called before GRPC is used.
+func SetSeverity(s log.Severity) {
+	grpclog.SetLoggerV2((*logger)(&s))
 }
 
 // NB: This interface is implemented by a pointer because using a value causes
@@ -43,62 +52,102 @@ func init() {
 // from the actual logging site.
 var _ grpclog.LoggerV2 = (*logger)(nil)
 
-type logger struct{}
+type logger log.Severity
 
-func (*logger) Info(args ...interface{}) {
+func (severity *logger) Info(args ...interface{}) {
+	if log.Severity(*severity) > log.Severity_INFO {
+		return
+	}
 	log.InfofDepth(context.TODO(), 2, "", args...)
 }
 
-func (*logger) Infoln(args ...interface{}) {
+func (severity *logger) Infoln(args ...interface{}) {
+	if log.Severity(*severity) > log.Severity_INFO {
+		return
+	}
 	log.InfofDepth(context.TODO(), 2, "", args...)
 }
 
-func (*logger) Infof(format string, args ...interface{}) {
+func (severity *logger) Infof(format string, args ...interface{}) {
+	if log.Severity(*severity) > log.Severity_INFO {
+		return
+	}
 	log.InfofDepth(context.TODO(), 2, format, args...)
 }
 
-func (*logger) Warning(args ...interface{}) {
+func (severity *logger) Warning(args ...interface{}) {
+	if log.Severity(*severity) > log.Severity_WARNING {
+		return
+	}
 	log.WarningfDepth(context.TODO(), 2, "", args...)
 }
 
-func (*logger) Warningln(args ...interface{}) {
+func (severity *logger) Warningln(args ...interface{}) {
+	if log.Severity(*severity) > log.Severity_WARNING {
+		return
+	}
 	log.WarningfDepth(context.TODO(), 2, "", args...)
 }
 
-func (*logger) Warningf(format string, args ...interface{}) {
+func (severity *logger) Warningf(format string, args ...interface{}) {
+	if log.Severity(*severity) > log.Severity_WARNING {
+		return
+	}
 	if shouldPrint(transportFailedRe, connectionRefusedRe, time.Minute, format, args...) {
 		log.WarningfDepth(context.TODO(), 2, format, args...)
 	}
 }
 
-func (*logger) Error(args ...interface{}) {
+func (severity *logger) Error(args ...interface{}) {
+	if log.Severity(*severity) > log.Severity_ERROR {
+		return
+	}
 	log.ErrorfDepth(context.TODO(), 2, "", args...)
 }
 
-func (*logger) Errorln(args ...interface{}) {
+func (severity *logger) Errorln(args ...interface{}) {
+	if log.Severity(*severity) > log.Severity_ERROR {
+		return
+	}
 	log.ErrorfDepth(context.TODO(), 2, "", args...)
 }
 
-func (*logger) Errorf(format string, args ...interface{}) {
+func (severity *logger) Errorf(format string, args ...interface{}) {
+	if log.Severity(*severity) > log.Severity_ERROR {
+		return
+	}
 	log.ErrorfDepth(context.TODO(), 2, format, args...)
 }
 
-func (*logger) Fatal(args ...interface{}) {
+func (severity *logger) Fatal(args ...interface{}) {
+	if log.Severity(*severity) > log.Severity_NONE {
+		return
+	}
 	log.FatalfDepth(context.TODO(), 2, "", args...)
 }
 
-func (*logger) Fatalln(args ...interface{}) {
+func (severity *logger) Fatalln(args ...interface{}) {
+	if log.Severity(*severity) > log.Severity_NONE {
+		return
+	}
 	log.FatalfDepth(context.TODO(), 2, "", args...)
 }
 
-func (*logger) Fatalf(format string, args ...interface{}) {
+func (severity *logger) Fatalf(format string, args ...interface{}) {
+	if log.Severity(*severity) > log.Severity_NONE {
+		return
+	}
 	log.FatalfDepth(context.TODO(), 2, format, args...)
 }
 
-func (*logger) V(int) bool {
-	// Proxying this to log.VDepth doesn't work because the argument type
-	// to that function is unexported.
-	return true
+func (severity *logger) V(i int) bool {
+	if i < 0 {
+		i = 0
+	}
+	if i > math.MaxInt32 {
+		i = math.MaxInt32
+	}
+	return log.VDepth(int32(i) /* level */, 1 /* depth */)
 }
 
 // https://github.com/grpc/grpc-go/blob/v1.7.0/clientconn.go#L937

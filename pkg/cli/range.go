@@ -23,20 +23,21 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
-	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 )
 
 // MakeDBClient creates a kv client for use in cli tools.
-func MakeDBClient() (*client.DB, *stop.Stopper, error) {
+// Invoking the returned closure closes the underlying connection and waits
+// until the associated goroutines have terminated.
+func MakeDBClient(ctx context.Context) (*client.DB, func(), error) {
 	// The KV endpoints require the node user.
 	baseCfg.User = security.NodeUser
-	conn, clock, stopper, err := getClientGRPCConn()
+	conn, clock, finish, err := getClientGRPCConn(ctx)
 	if err != nil {
 		return nil, nil, err
 	}
-	return client.NewDB(client.NewSender(conn), clock), stopper, nil
+	return client.NewDB(client.NewSender(conn), clock), finish, nil
 }
 
 // A lsRangesCmd command lists the ranges in a cluster.
@@ -54,6 +55,9 @@ func runLsRanges(cmd *cobra.Command, args []string) error {
 		return usageAndError(cmd)
 	}
 
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
 	var startKey roachpb.Key
 	{
 		k := roachpb.KeyMin.Next()
@@ -68,13 +72,13 @@ func runLsRanges(cmd *cobra.Command, args []string) error {
 	}
 	endKey := keys.Meta2Prefix.PrefixEnd()
 
-	kvDB, stopper, err := MakeDBClient()
+	kvDB, finish, err := MakeDBClient(ctx)
 	if err != nil {
 		return err
 	}
-	defer stopper.Stop(stopperContext(stopper))
+	defer finish()
 
-	rows, err := kvDB.Scan(context.Background(), startKey, endKey, maxResults)
+	rows, err := kvDB.Scan(ctx, startKey, endKey, maxResults)
 	if err != nil {
 		return err
 	}
@@ -109,14 +113,17 @@ func runSplitRange(cmd *cobra.Command, args []string) error {
 		return usageAndError(cmd)
 	}
 
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
 	key := roachpb.Key(args[0])
 
-	kvDB, stopper, err := MakeDBClient()
+	kvDB, finish, err := MakeDBClient(ctx)
 	if err != nil {
 		return err
 	}
-	defer stopper.Stop(stopperContext(stopper))
-	return errors.Wrap(kvDB.AdminSplit(context.Background(), key, key), "split failed")
+	defer finish()
+	return errors.Wrap(kvDB.AdminSplit(ctx, key, key), "split failed")
 }
 
 var rangeCmds = []*cobra.Command{
