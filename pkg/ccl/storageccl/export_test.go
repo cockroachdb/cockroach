@@ -105,13 +105,13 @@ func TestExportCmd(t *testing.T) {
 			t.Errorf("expected %d files in latest export got %d", mvccLatestFilesLen, len(res.mvccLatestFiles))
 		}
 		if len(res.mvccLatestKVs) != mvccLatestKVsLen {
-			t.Errorf("expected %d kvs in latest export got %d", mvccLatestKVsLen, len(res.mvccLatestKVs))
+			t.Errorf("expected %d kvs in latest export got %d: %+v", mvccLatestKVsLen, len(res.mvccLatestKVs), res.mvccLatestKVs)
 		}
 		if len(res.mvccAllFiles) != mvccAllFilesLen {
 			t.Errorf("expected %d files in all export got %d", mvccAllFilesLen, len(res.mvccAllFiles))
 		}
 		if len(res.mvccAllKVs) != mvccAllKVsLen {
-			t.Errorf("expected %d kvs in all export got %d", mvccAllKVsLen, len(res.mvccAllKVs))
+			t.Errorf("expected %d kvs in all export got %d: %+v", mvccAllKVsLen, len(res.mvccAllKVs), res.mvccAllKVs)
 		}
 	}
 

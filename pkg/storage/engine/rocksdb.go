@@ -1757,6 +1757,14 @@ func (r *rocksDBIterator) FindSplitKey(
 	return MVCCKey{Key: cStringToGoBytes(splitKey)}, nil
 }
 
+// GetRawIter returns the underlying rocksdb iterator (for use in engineccl).
+func GetRawIter(iter Iterator) *C.DBIterator {
+	if iter, ok := iter.(dbIteratorGetter); ok {
+		return iter.getIter()
+	}
+	panic(fmt.Sprintf("cannot get iter from %T", iter))
+}
+
 func cStatsToGoStats(stats C.MVCCStatsResult, nowNanos int64) (enginepb.MVCCStats, error) {
 	ms := enginepb.MVCCStats{}
 	if err := statusToError(stats.status); err != nil {
@@ -1902,6 +1910,7 @@ func statusToError(s C.DBStatus) error {
 	if s.data == nil {
 		return nil
 	}
+
 	return &RocksDBError{msg: cStringToGoString(s)}
 }
 

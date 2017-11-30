@@ -25,6 +25,7 @@ add_library(roach
   encoding.cc
   eventlistener.cc
   protos/roachpb/data.pb.cc
+  protos/roachpb/errors.pb.cc
   protos/roachpb/internal.pb.cc
   protos/roachpb/metadata.pb.cc
   protos/storage/engine/enginepb/mvcc.pb.cc
@@ -43,7 +44,7 @@ add_library(roachccl
   ccl/db.cc
 )
 target_include_directories(roachccl
-  PRIVATE ../rocksdb/include
+  PRIVATE ../protobuf/src ../rocksdb/include protos
 )
 target_link_libraries(roachccl roach)
 
