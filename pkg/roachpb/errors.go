@@ -618,3 +618,13 @@ func (*TxnPrevAttemptError) message(_ *Error) string {
 }
 
 var _ ErrorDetailInterface = &TxnPrevAttemptError{}
+
+func (e *IntegerOverflowError) Error() string {
+	return e.message(nil)
+}
+
+func (e *IntegerOverflowError) message(_ *Error) string {
+	return fmt.Sprintf(
+		"key %s with value %d incremented by %d results in overflow",
+		e.Key, e.CurrentValue, e.IncrementValue)
+}
