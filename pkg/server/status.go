@@ -163,12 +163,14 @@ func (s *statusServer) parseNodeID(nodeIDParam string) (roachpb.NodeID, bool, er
 	return nodeID, nodeID == s.gossip.NodeID.Get(), nil
 }
 
-func (s *statusServer) dialNode(nodeID roachpb.NodeID) (serverpb.StatusClient, error) {
+func (s *statusServer) dialNode(
+	ctx context.Context, nodeID roachpb.NodeID,
+) (serverpb.StatusClient, error) {
 	addr, err := s.gossip.GetNodeIDAddress(nodeID)
 	if err != nil {
 		return nil, err
 	}
-	conn, err := s.rpcCtx.GRPCDial(addr.String())
+	conn, err := s.rpcCtx.GRPCDial(addr.String()).Connect(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -189,7 +191,7 @@ func (s *statusServer) Gossip(
 		infoStatus := s.gossip.GetInfoStatus()
 		return &infoStatus, nil
 	}
-	status, err := s.dialNode(nodeID)
+	status, err := s.dialNode(ctx, nodeID)
 	if err != nil {
 		return nil, err
 	}
@@ -207,7 +209,7 @@ func (s *statusServer) Allocator(
 	}
 
 	if !local {
-		status, err := s.dialNode(nodeID)
+		status, err := s.dialNode(ctx, nodeID)
 		if err != nil {
 			return nil, err
 		}
@@ -320,7 +322,7 @@ func (s *statusServer) AllocatorRange(
 			nodeCtx,
 			"server.statusServer: requesting remote Allocator simulation",
 			func(ctx context.Context) {
-				status, err := s.dialNode(nodeID)
+				status, err := s.dialNode(ctx, nodeID)
 				var allocatorResponse *serverpb.AllocatorResponse
 				if err == nil {
 					allocatorRequest := &serverpb.AllocatorRequest{
@@ -395,7 +397,7 @@ func (s *statusServer) Certificates(
 	}
 
 	if !local {
-		status, err := s.dialNode(nodeID)
+		status, err := s.dialNode(ctx, nodeID)
 		if err != nil {
 			return nil, err
 		}
@@ -508,7 +510,7 @@ func (s *statusServer) Details(
 		}
 		return resp, nil
 	}
-	status, err := s.dialNode(nodeID)
+	status, err := s.dialNode(ctx, nodeID)
 	if err != nil {
 		return nil, err
 	}
@@ -525,7 +527,7 @@ func (s *statusServer) LogFilesList(
 		return nil, grpc.Errorf(codes.InvalidArgument, err.Error())
 	}
 	if !local {
-		status, err := s.dialNode(nodeID)
+		status, err := s.dialNode(ctx, nodeID)
 		if err != nil {
 			return nil, err
 		}
@@ -549,7 +551,7 @@ func (s *statusServer) LogFile(
 		return nil, grpc.Errorf(codes.InvalidArgument, err.Error())
 	}
 	if !local {
-		status, err := s.dialNode(nodeID)
+		status, err := s.dialNode(ctx, nodeID)
 		if err != nil {
 			return nil, err
 		}
@@ -619,7 +621,7 @@ func (s *statusServer) Logs(
 		return nil, grpc.Errorf(codes.InvalidArgument, err.Error())
 	}
 	if !local {
-		status, err := s.dialNode(nodeID)
+		status, err := s.dialNode(ctx, nodeID)
 		if err != nil {
 			return nil, err
 		}
@@ -681,7 +683,7 @@ func (s *statusServer) Stacks(
 	}
 
 	if !local {
-		status, err := s.dialNode(nodeID)
+		status, err := s.dialNode(ctx, nodeID)
 		if err != nil {
 			return nil, err
 		}
@@ -768,7 +770,7 @@ func (s *statusServer) Metrics(
 	}
 
 	if !local {
-		status, err := s.dialNode(nodeID)
+		status, err := s.dialNode(ctx, nodeID)
 		if err != nil {
 			return nil, err
 		}
@@ -894,7 +896,7 @@ func (s *statusServer) Ranges(
 	}
 
 	if !local {
-		status, err := s.dialNode(nodeID)
+		status, err := s.dialNode(ctx, nodeID)
 		if err != nil {
 			return nil, err
 		}
@@ -1058,7 +1060,7 @@ func (s *statusServer) Range(
 			nodeCtx,
 			"server.statusServer: requesting remote ranges",
 			func(ctx context.Context) {
-				status, err := s.dialNode(nodeID)
+				status, err := s.dialNode(ctx, nodeID)
 				var rangesResponse *serverpb.RangesResponse
 				if err == nil {
 					rangesRequest := &serverpb.RangesRequest{
@@ -1172,7 +1174,7 @@ func (s *statusServer) ListSessions(
 		rpcCtx, cancel := context.WithTimeout(ctx, base.NetworkTimeout)
 		defer cancel()
 
-		status, err := s.dialNode(nodeID)
+		status, err := s.dialNode(ctx, nodeID)
 
 		if err != nil {
 			err = errors.Wrapf(err, "failed to dial into node %d", nodeID)
@@ -1237,7 +1239,7 @@ func (s *statusServer) CancelQuery(
 	}
 
 	if !local {
-		status, err := s.dialNode(nodeID)
+		status, err := s.dialNode(ctx, nodeID)
 		if err != nil {
 			return nil, err
 		}
@@ -1267,7 +1269,7 @@ func (s *statusServer) SpanStats(
 	}
 
 	if !local {
-		status, err := s.dialNode(nodeID)
+		status, err := s.dialNode(ctx, nodeID)
 		if err != nil {
 			return nil, err
 		}

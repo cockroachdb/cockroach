@@ -1053,7 +1053,7 @@ func TestClusterAPI(t *testing.T) {
 				if err := getAdminJSONProto(s, "cluster", &resp); err != nil {
 					return err
 				}
-				if a, e := resp.ClusterID, s.(*TestServer).node.ClusterID.String(); a != e {
+				if a, e := resp.ClusterID, s.RPCContext().ClusterID.String(); a != e {
 					return errors.Errorf("cluster ID %s != expected %s", a, e)
 				}
 				if a, e := resp.ReportingEnabled, reportingOn; a != e {

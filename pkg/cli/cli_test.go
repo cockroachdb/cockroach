@@ -341,7 +341,8 @@ communicate with a secure cluster\).
 		// up the stack as a roachpb.NewError(roachpb.NewSendError(.)).
 		// Error returned directly from GRPC.
 		{`quit`, styled(
-			`Failed to connect to the node: error sending drain request: rpc error: code = Unavailable desc = grpc: the connection is unavailable`),
+			`Failed to connect to the node: initial connection heartbeat failed: rpc error: ` +
+				`code = Unavailable desc = grpc: the connection is unavailable`),
 		},
 		// Going through the SQL client libraries gives a *net.OpError which
 		// we also handle.
@@ -1508,7 +1509,7 @@ func TestCLITimeout(t *testing.T) {
 		const exp = `node status 1 --timeout 1ns
 operation timed out.
 
-rpc error: code = DeadlineExceeded desc = context deadline exceeded
+context deadline exceeded
 `
 		if out != exp {
 			err := errors.Errorf("unexpected output:\n%q\nwanted:\n%q", out, exp)

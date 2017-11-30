@@ -110,7 +110,7 @@ func (c *client) startLocked(
 			// asynchronous from the caller's perspective, so the only effect of
 			// `WithBlock` here is blocking shutdown - at the time of this writing,
 			// that ends ups up making `kv` tests take twice as long.
-			conn, err := rpcCtx.GRPCDial(c.addr.String())
+			conn, err := rpcCtx.GRPCDial(c.addr.String()).Connect(ctx)
 			if err != nil {
 				return err
 			}
@@ -159,7 +159,7 @@ func (c *client) requestGossip(g *Gossip, stream Gossip_GossipClient) error {
 		NodeID:          g.NodeID.Get(),
 		Addr:            g.mu.is.NodeAddr,
 		HighWaterStamps: g.mu.is.getHighWaterStamps(),
-		ClusterID:       g.mu.clusterID,
+		ClusterID:       g.clusterID.Get(),
 	}
 	g.mu.Unlock()
 
@@ -180,7 +180,7 @@ func (c *client) sendGossip(g *Gossip, stream Gossip_GossipClient) error {
 			Addr:            g.mu.is.NodeAddr,
 			Delta:           delta,
 			HighWaterStamps: g.mu.is.getHighWaterStamps(),
-			ClusterID:       g.mu.clusterID,
+			ClusterID:       g.clusterID.Get(),
 		}
 
 		bytesSent := int64(args.Size())

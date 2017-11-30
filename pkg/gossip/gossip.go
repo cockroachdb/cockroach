@@ -239,9 +239,9 @@ type Gossip struct {
 }
 
 // New creates an instance of a gossip node.
-// The higher level manages the NodeIDContainer instance (which can be shared by
-// various server components). The ambient context is expected to already
-// contain the node ID.
+// The higher level manages the ClusterIDContainer and NodeIDContainer instances
+// (which can be shared by various server components). The ambient context is
+// expected to already contain the node ID.
 //
 // grpcServer: The server on which the new Gossip instance will register its RPC
 //   service. Can be nil, in which case the Gossip will not register the
@@ -251,6 +251,7 @@ type Gossip struct {
 //   restricted way by populating it with data manually.
 func New(
 	ambient log.AmbientContext,
+	clusterID *base.ClusterIDContainer,
 	nodeID *base.NodeIDContainer,
 	rpcContext *rpc.Context,
 	grpcServer *grpc.Server,
@@ -259,7 +260,7 @@ func New(
 ) *Gossip {
 	ambient.SetEventLog("gossip", "gossip")
 	g := &Gossip{
-		server:            newServer(ambient, nodeID, stopper, registry),
+		server:            newServer(ambient, clusterID, nodeID, stopper, registry),
 		Connected:         make(chan struct{}),
 		rpcContext:        rpcContext,
 		outgoing:          makeNodeSet(minPeers, metric.NewGauge(MetaConnectionsOutgoingGauge)),
@@ -294,8 +295,8 @@ func New(
 	return g
 }
 
-// NewTest is a simplified wrapper around New that creates the NodeIDContainer
-// internally. Used for testing.
+// NewTest is a simplified wrapper around New that creates the
+// ClusterIDContainer and NodeIDContainer internally. Used for testing.
 //
 // grpcServer: The server on which the new Gossip instance will register its RPC
 //   service. Can be nil, in which case the Gossip will not register the
@@ -310,10 +311,11 @@ func NewTest(
 	stopper *stop.Stopper,
 	registry *metric.Registry,
 ) *Gossip {
+	c := &base.ClusterIDContainer{}
 	n := &base.NodeIDContainer{}
 	var ac log.AmbientContext
 	ac.AddLogTag("n", n)
-	gossip := New(ac, n, rpcContext, grpcServer, stopper, registry)
+	gossip := New(ac, c, n, rpcContext, grpcServer, stopper, registry)
 	if nodeID != 0 {
 		n.Set(context.TODO(), nodeID)
 	}

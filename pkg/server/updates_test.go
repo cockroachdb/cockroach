@@ -70,7 +70,7 @@ func TestCheckVersion(t *testing.T) {
 		t.Fatalf("expected %v update checks, got %v", expected, actual)
 	}
 
-	if expected, actual := s.(*TestServer).node.ClusterID.String(), r.last.uuid; expected != actual {
+	if expected, actual := s.(*TestServer).ClusterID().String(), r.last.uuid; expected != actual {
 		t.Errorf("expected uuid %v, got %v", expected, actual)
 	}
 
@@ -205,7 +205,7 @@ func TestReportUsage(t *testing.T) {
 		if expected, actual := expectedUsageReports, r.requests; expected != actual {
 			t.Fatalf("expected %v reports, got %v", expected, actual)
 		}
-		if expected, actual := ts.node.ClusterID.String(), r.last.uuid; expected != actual {
+		if expected, actual := ts.ClusterID().String(), r.last.uuid; expected != actual {
 			return errors.Errorf("expected cluster id %v got %v", expected, actual)
 		}
 		if expected, actual := ts.node.Descriptor.NodeID, r.last.Node.NodeID; expected != actual {
