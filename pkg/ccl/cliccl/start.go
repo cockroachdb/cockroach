@@ -10,6 +10,7 @@ package cliccl
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/baseccl"
+	"github.com/cockroachdb/cockroach/pkg/ccl/cliccl/cliflagsccl"
 	"github.com/cockroachdb/cockroach/pkg/cli"
 	"github.com/spf13/cobra"
 )
@@ -19,23 +20,8 @@ import (
 
 var storeEncryptionSpecs baseccl.StoreEncryptionSpecList
 
-const (
-	// TODO(mberhault): use pkg/cli helpers to format flag descriptions.
-	encryptionFlagDesc = `
-        *** Valid enterprise licenses only ***
-
-        TODO(mberhault): fill this.
-
-        Valid fields:
-        * path: must match the path of one of the stores
-        * key: path to the current key file
-        * old-key: path to the previous key file
-        * rotation-period: amount of time after which data keys should be rotated
-`
-)
-
 func init() {
-	cli.StartCmd.Flags().VarP(&storeEncryptionSpecs, "enterprise-encryption", "", encryptionFlagDesc)
+	cli.VarFlag(cli.StartCmd.Flags(), &storeEncryptionSpecs, cliflagsccl.EnterpriseEncryption)
 
 	// Add a new pre-run command to match encryption specs to store specs.
 	cli.AddPersistentPreRunE(cli.StartCmd, func(cmd *cobra.Command, _ []string) error {

@@ -14,7 +14,16 @@
 
 package cliflags
 
-// FlagInfo contains the static information for a CLI flag.
+import (
+	"bytes"
+	"fmt"
+	"strings"
+
+	"github.com/kr/text"
+)
+
+// FlagInfo contains the static information for a CLI flag and helper
+// to format the description.
 type FlagInfo struct {
 	// Name of the flag as used on the command line.
 	Name string
@@ -33,6 +42,62 @@ type FlagInfo struct {
 	// signals that everything that follows should not be re-wrapped. To start
 	// wrapping again, use "</PRE>".
 	Description string
+}
+
+const usageIndentation = 8
+const wrapWidth = 79 - usageIndentation
+
+// wrapDescription wraps the text in a FlagInfo.Description.
+func wrapDescription(s string) string {
+	var result bytes.Buffer
+
+	// split returns the parts of the string before and after the first occurrence
+	// of the tag.
+	split := func(str, tag string) (before, after string) {
+		pieces := strings.SplitN(str, tag, 2)
+		switch len(pieces) {
+		case 0:
+			return "", ""
+		case 1:
+			return pieces[0], ""
+		default:
+			return pieces[0], pieces[1]
+		}
+	}
+
+	for len(s) > 0 {
+		var toWrap, dontWrap string
+		// Wrap everything up to the next stop wrap tag.
+		toWrap, s = split(s, "<PRE>")
+		result.WriteString(text.Wrap(toWrap, wrapWidth))
+		// Copy everything up to the next start wrap tag.
+		dontWrap, s = split(s, "</PRE>")
+		result.WriteString(dontWrap)
+	}
+	return result.String()
+}
+
+// Usage returns a formatted usage string for the flag, including:
+// * line wrapping
+// * indentation
+// * env variable name (if set)
+func (f FlagInfo) Usage() string {
+	s := "\n" + wrapDescription(f.Description) + "\n"
+	if f.EnvVar != "" {
+		// Check that the environment variable name matches the flag name. Note: we
+		// don't want to automatically generate the name so that grepping for a flag
+		// name in the code yields the flag definition.
+		correctName := "COCKROACH_" + strings.ToUpper(strings.Replace(f.Name, "-", "_", -1))
+		if f.EnvVar != correctName {
+			panic(fmt.Sprintf("incorrect EnvVar %s for flag %s (should be %s)",
+				f.EnvVar, f.Name, correctName))
+		}
+		s = s + "Environment variable: " + f.EnvVar + "\n"
+	}
+	// github.com/spf13/pflag appends the default value after the usage text. Add
+	// the correct indentation (7 spaces) here. This is admittedly fragile.
+	return text.Indent(s, strings.Repeat(" ", usageIndentation)) +
+		strings.Repeat(" ", usageIndentation-1)
 }
 
 // Attrs and others store the static information for CLI flags.

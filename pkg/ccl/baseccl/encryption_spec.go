@@ -18,6 +18,7 @@ import (
 	"github.com/spf13/pflag"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/ccl/cliccl/cliflagsccl"
 )
 
 // DefaultRotationPeriod is the rotation period used if not specified.
@@ -127,8 +128,7 @@ var _ pflag.Value = &StoreEncryptionSpecList{}
 func (encl StoreEncryptionSpecList) String() string {
 	var buffer bytes.Buffer
 	for _, ss := range encl.Specs {
-		// TODO(mberhault): use the FlagInfo once refactored.
-		fmt.Fprintf(&buffer, "--enterprise-encryption=%s ", ss)
+		fmt.Fprintf(&buffer, "--%s=%s ", cliflagsccl.EnterpriseEncryption.Name, ss)
 	}
 	// Trim the extra space from the end if it exists.
 	if l := buffer.Len(); l > 0 {
