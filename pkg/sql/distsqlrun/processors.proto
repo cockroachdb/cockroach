@@ -506,6 +506,9 @@ message SketchSpec {
   // Controls the maximum number of buckets in the histogram.
   // Only used by the SampleAggregator.
   optional uint32 histogram_max_buckets = 4 [(gogoproto.nullable) = false];
+
+  // Only used by the SampleAggregator.
+  optional string stat_name = 5 [(gogoproto.nullable) = false];
 }
 
 // SamplerSpec is the specification of a "sampler" processor which
