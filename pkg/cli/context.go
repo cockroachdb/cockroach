@@ -58,15 +58,21 @@ type cliContext struct {
 	showTimes bool
 }
 
-// ServerCfg is the config for the `start` command.
-var ServerCfg = func() server.Config {
+var serverCfg = func() server.Config {
 	st := cluster.MakeClusterSettings(cluster.BinaryMinimumSupportedVersion, cluster.BinaryServerVersion)
 	settings.SetCanonicalValuesContainer(&st.SV)
 
 	return server.MakeConfig(context.Background(), st)
 }()
 
-var baseCfg = ServerCfg.Config
+// GetServerCfgStores provides direct public access to the StoreSpecList inside
+// serverCfg. This is used by CCL code to populate some fields.
+// WARNING: consider very carefully whether should should be using this.
+func GetServerCfgStores() base.StoreSpecList {
+	return serverCfg.Stores
+}
+
+var baseCfg = serverCfg.Config
 var cliCtx = cliContext{Config: baseCfg}
 
 type tableDisplayFormat int

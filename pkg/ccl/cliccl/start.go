@@ -11,6 +11,7 @@ package cliccl
 import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/baseccl"
 	"github.com/cockroachdb/cockroach/pkg/cli"
+	"github.com/spf13/cobra"
 )
 
 // This does not define a `start` command, only modifications to the existing command
@@ -34,14 +35,22 @@ const (
 )
 
 func init() {
-	// Add additional flags to the existing start command.
-	// This relies upon init-order between packages.
 	cli.StartCmd.Flags().VarP(&storeEncryptionSpecs, "enterprise-encryption", "", encryptionFlagDesc)
-	cli.ExtraStartPreRunHook = matchStoreEncryptionSpecs
+
+	// Wrap any existing persistent hook to run inside our override function.
+	wrapped := cli.StartCmd.PersistentPreRunE
+	cli.StartCmd.PersistentPreRunE = func(cmd *cobra.Command, args []string) error {
+		if wrapped != nil {
+			if err := wrapped(cmd, args); err != nil {
+				return err
+			}
+		}
+		return populateStoreSpecsEncryption()
+	}
 }
 
-// matchStoreEncryptionSpecs is a PreRun hook that matches store encryption specs with the
-// parsed stores.
-func matchStoreEncryptionSpecs() error {
-	return baseccl.MatchStoreAndEncryptionSpecs(cli.ServerCfg.Stores, storeEncryptionSpecs)
+// populateStoreSpecsEncryption is a PreRun hook that matches store encryption specs with the
+// parsed stores and populates some fields in the StoreSpec.
+func populateStoreSpecsEncryption() error {
+	return baseccl.PopulateStoreSpecWithEncryption(cli.GetServerCfgStores(), storeEncryptionSpecs)
 }

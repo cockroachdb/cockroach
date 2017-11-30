@@ -43,6 +43,7 @@ func (es StoreEncryptionSpec) String() string {
 // NewStoreEncryptionSpec parses the string passed in and returns a new
 // StoreEncryptionSpec if parsing succeeds.
 func NewStoreEncryptionSpec(value string) (StoreEncryptionSpec, error) {
+	const pathField = "path"
 	var es StoreEncryptionSpec
 	es.RotationPeriod = DefaultRotationPeriod
 
@@ -70,9 +71,9 @@ func NewStoreEncryptionSpec(value string) (StoreEncryptionSpec, error) {
 		}
 
 		switch field {
-		case "path":
+		case pathField:
 			var err error
-			es.Path, err = base.GetAbsoluteStorePath("path", value)
+			es.Path, err = base.GetAbsoluteStorePath(pathField, value)
 			if err != nil {
 				return StoreEncryptionSpec{}, err
 			}
@@ -156,10 +157,11 @@ func (encl *StoreEncryptionSpecList) Set(value string) error {
 	return nil
 }
 
-// MatchStoreAndEncryptionSpecs iterates through the StoreEncryptionSpecList and looks
+// PopulateStoreSpecWithEncryption iterates through the StoreEncryptionSpecList and looks
 // for matching paths in the StoreSpecList.
 // Any unmatched StoreEncryptionSpec causes an error.
-func MatchStoreAndEncryptionSpecs(
+// Matching stores have a few encryption-related fields set.
+func PopulateStoreSpecWithEncryption(
 	storeSpecs base.StoreSpecList, encryptionSpecs StoreEncryptionSpecList,
 ) error {
 	for _, es := range encryptionSpecs.Specs {

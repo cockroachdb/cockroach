@@ -160,17 +160,17 @@ func init() {
 	}
 
 	// The following only runs for `start`.
-	StartCmd.PersistentPreRunE = func(cmd *cobra.Command, _ []string) error {
+	// Make sure we save and call any existing PreRun hook as well.
+	wrapped := StartCmd.PersistentPreRunE
+	StartCmd.PersistentPreRunE = func(cmd *cobra.Command, args []string) error {
+		if wrapped != nil {
+			if err := wrapped(cmd, args); err != nil {
+				return err
+			}
+		}
+
 		extraServerFlagInit()
-		if err := setDefaultStderrVerbosity(cmd, log.Severity_INFO); err != nil {
-			return err
-		}
-		// TODO(mberhault): we may want to generalize this for all commands.
-		// ie: a map[command.name.tree]func()
-		if ExtraStartPreRunHook != nil {
-			return ExtraStartPreRunHook()
-		}
-		return nil
+		return setDefaultStderrVerbosity(cmd, log.Severity_INFO)
 	}
 
 	// Map any flags registered in the standard "flag" package into the
@@ -219,22 +219,22 @@ func init() {
 		_ = f.MarkHidden(cliflags.AdvertisePort.Name)
 		stringFlag(f, &serverHTTPHost, cliflags.ServerHTTPHost, "")
 		stringFlag(f, &serverHTTPPort, cliflags.ServerHTTPPort, base.DefaultHTTPPort)
-		stringFlag(f, &ServerCfg.Attrs, cliflags.Attrs, ServerCfg.Attrs)
-		varFlag(f, &ServerCfg.Locality, cliflags.Locality)
+		stringFlag(f, &serverCfg.Attrs, cliflags.Attrs, serverCfg.Attrs)
+		varFlag(f, &serverCfg.Locality, cliflags.Locality)
 
-		varFlag(f, &ServerCfg.Stores, cliflags.Store)
-		varFlag(f, &ServerCfg.MaxOffset, cliflags.MaxOffset)
+		varFlag(f, &serverCfg.Stores, cliflags.Store)
+		varFlag(f, &serverCfg.MaxOffset, cliflags.MaxOffset)
 
 		// Usage for the unix socket is odd as we use a real file, whereas
 		// postgresql and clients consider it a directory and build a filename
 		// inside it using the port.
 		// Thus, we keep it hidden and use it for testing only.
-		stringFlag(f, &ServerCfg.SocketFile, cliflags.Socket, "")
+		stringFlag(f, &serverCfg.SocketFile, cliflags.Socket, "")
 		_ = f.MarkHidden(cliflags.Socket.Name)
 
-		stringFlag(f, &ServerCfg.ListeningURLFile, cliflags.ListeningURLFile, "")
+		stringFlag(f, &serverCfg.ListeningURLFile, cliflags.ListeningURLFile, "")
 
-		stringFlag(f, &ServerCfg.PIDFile, cliflags.PIDFile, "")
+		stringFlag(f, &serverCfg.PIDFile, cliflags.PIDFile, "")
 
 		// Use a separate variable to store the value of ServerInsecure.
 		// We share the default with the ClientInsecure flag.
@@ -245,7 +245,7 @@ func init() {
 		stringFlag(f, &startCtx.serverSSLCertsDir, cliflags.ServerCertsDir, base.DefaultCertsDirectory)
 
 		// Cluster joining flags.
-		varFlag(f, &ServerCfg.JoinList, cliflags.Join)
+		varFlag(f, &serverCfg.JoinList, cliflags.Join)
 
 		// Engine flags.
 		varFlag(f, cacheSizeValue, cliflags.Cache)
@@ -395,27 +395,27 @@ func init() {
 }
 
 func extraServerFlagInit() {
-	ServerCfg.Addr = net.JoinHostPort(serverConnHost, serverConnPort)
+	serverCfg.Addr = net.JoinHostPort(serverConnHost, serverConnPort)
 	if serverAdvertiseHost == "" {
 		serverAdvertiseHost = serverConnHost
 	}
 	if serverAdvertisePort == "" {
 		serverAdvertisePort = serverConnPort
 	}
-	ServerCfg.AdvertiseAddr = net.JoinHostPort(serverAdvertiseHost, serverAdvertisePort)
+	serverCfg.AdvertiseAddr = net.JoinHostPort(serverAdvertiseHost, serverAdvertisePort)
 	if serverHTTPHost == "" {
 		serverHTTPHost = serverConnHost
 	}
-	ServerCfg.HTTPAddr = net.JoinHostPort(serverHTTPHost, serverHTTPPort)
+	serverCfg.HTTPAddr = net.JoinHostPort(serverHTTPHost, serverHTTPPort)
 }
 
 func extraClientFlagInit() {
-	ServerCfg.Addr = net.JoinHostPort(clientConnHost, clientConnPort)
-	ServerCfg.AdvertiseAddr = ServerCfg.Addr
+	serverCfg.Addr = net.JoinHostPort(clientConnHost, clientConnPort)
+	serverCfg.AdvertiseAddr = serverCfg.Addr
 	if serverHTTPHost == "" {
 		serverHTTPHost = serverConnHost
 	}
-	ServerCfg.HTTPAddr = net.JoinHostPort(serverHTTPHost, serverHTTPPort)
+	serverCfg.HTTPAddr = net.JoinHostPort(serverHTTPHost, serverHTTPPort)
 }
 
 func setDefaultStderrVerbosity(cmd *cobra.Command, defaultSeverity log.Severity) error {
