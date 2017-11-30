@@ -11,7 +11,6 @@ package baseccl
 import (
 	"bytes"
 	"fmt"
-	"strconv"
 	"strings"
 	"time"
 
@@ -42,6 +41,7 @@ func (es StoreEncryptionSpec) String() string {
 
 // NewStoreEncryptionSpec parses the string passed in and returns a new
 // StoreEncryptionSpec if parsing succeeds.
+// TODO(mberhault): we should share the parsing code with the StoreSpec.
 func NewStoreEncryptionSpec(value string) (StoreEncryptionSpec, error) {
 	const pathField = "path"
 	var es StoreEncryptionSpec
@@ -127,6 +127,7 @@ var _ pflag.Value = &StoreEncryptionSpecList{}
 func (encl StoreEncryptionSpecList) String() string {
 	var buffer bytes.Buffer
 	for _, ss := range encl.Specs {
+		// TODO(mberhault): use the FlagInfo once refactored.
 		fmt.Fprintf(&buffer, "--enterprise-encryption=%s ", ss)
 	}
 	// Trim the extra space from the end if it exists.
@@ -172,18 +173,12 @@ func PopulateStoreSpecWithEncryption(
 			}
 
 			// Found a matching path.
-			if storeSpecs.Specs[i].ExtraFields == nil {
-				storeSpecs.Specs[i].ExtraFields = make(map[string]string)
-			}
-			if k, ok := storeSpecs.Specs[i].ExtraFields["key"]; ok {
-				return fmt.Errorf("store with path %s already has an encryption setting: key=%s",
-					storeSpecs.Specs[i].Path, k)
+			if storeSpecs.Specs[i].UseSwitchingEnv {
+				return fmt.Errorf("store with path %s already has an encryption setting",
+					storeSpecs.Specs[i].Path)
 			}
 
-			storeSpecs.Specs[i].ExtraFields["key"] = es.KeyPath
-			storeSpecs.Specs[i].ExtraFields["old-key"] = es.OldKeyPath
-			intSeconds := int(es.RotationPeriod.Seconds())
-			storeSpecs.Specs[i].ExtraFields["rotation-duration"] = strconv.Itoa(intSeconds)
+			// TODO(mberhault): figure out how to pass encryption settings through to C++-CCL.
 			// Tell the store we absolutely need the switching env.
 			storeSpecs.Specs[i].UseSwitchingEnv = true
 			found = true

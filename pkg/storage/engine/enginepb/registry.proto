@@ -37,6 +37,8 @@ enum EncryptionType {
 }
 
 message FileEntry {
+  // File path relative to the DB directory.
+  // TODO(mberhault): figure out if we need an alternate representation for Windows.
   string Filename = 1;
   // The type of encryption applied.
   EncryptionType type = 2;

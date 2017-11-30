@@ -37,16 +37,10 @@ const (
 func init() {
 	cli.StartCmd.Flags().VarP(&storeEncryptionSpecs, "enterprise-encryption", "", encryptionFlagDesc)
 
-	// Wrap any existing persistent hook to run inside our override function.
-	wrapped := cli.StartCmd.PersistentPreRunE
-	cli.StartCmd.PersistentPreRunE = func(cmd *cobra.Command, args []string) error {
-		if wrapped != nil {
-			if err := wrapped(cmd, args); err != nil {
-				return err
-			}
-		}
+	// Add a new pre-run command to match encryption specs to store specs.
+	cli.AddPersistentPreRunE(cli.StartCmd, func(cmd *cobra.Command, _ []string) error {
 		return populateStoreSpecsEncryption()
-	}
+	})
 }
 
 // populateStoreSpecsEncryption is a PreRun hook that matches store encryption specs with the

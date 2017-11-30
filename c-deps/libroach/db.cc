@@ -1694,6 +1694,9 @@ DBStatus DBOpen(DBEngine **db, DBSlice dir, DBOptions db_opts) {
   std::shared_ptr<DBEventListener> event_listener(new DBEventListener);
   options.listeners.emplace_back(event_listener);
 
+  // TODO(mberhault): we shouldn't need two separate env objects,
+  // options.env should be sufficient with SwitchingEnv owning any
+  // underlying Env.
   std::unique_ptr<rocksdb::Env> memenv;
   if (dir.len == 0) {
     memenv.reset(rocksdb::NewMemEnv(rocksdb::Env::Default()));
@@ -1702,7 +1705,7 @@ DBStatus DBOpen(DBEngine **db, DBSlice dir, DBOptions db_opts) {
 
   std::unique_ptr<rocksdb::Env> switching_env;
   if (db_opts.use_switching_env) {
-    switching_env.reset(NewSwitchingEnv(options.env));
+    switching_env.reset(NewSwitchingEnv(options.env, options.info_log));
     options.env = switching_env.get();
   }
 

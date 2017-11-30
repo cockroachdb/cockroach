@@ -68,6 +68,8 @@ func (*Registry) ProtoMessage()               {}
 func (*Registry) Descriptor() ([]byte, []int) { return fileDescriptorRegistry, []int{0} }
 
 type FileEntry struct {
+	// File path relative to the DB directory.
+	// TODO(mberhault): figure out if we need an alternate representation for Windows.
 	Filename string `protobuf:"bytes,1,opt,name=Filename,proto3" json:"Filename,omitempty"`
 	// The type of encryption applied.
 	Type EncryptionType `protobuf:"varint,2,opt,name=type,proto3,enum=cockroach.storage.engine.enginepb.EncryptionType" json:"type,omitempty"`

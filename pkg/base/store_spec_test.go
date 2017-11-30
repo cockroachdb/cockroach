@@ -34,49 +34,49 @@ func TestNewStoreSpec(t *testing.T) {
 		expected    StoreSpec
 	}{
 		// path
-		{"path=/mnt/hda1", "", StoreSpec{"/mnt/hda1", 0, 0, false, roachpb.Attributes{}, false, nil}},
-		{",path=/mnt/hda1", "", StoreSpec{"/mnt/hda1", 0, 0, false, roachpb.Attributes{}, false, nil}},
-		{"path=/mnt/hda1,", "", StoreSpec{"/mnt/hda1", 0, 0, false, roachpb.Attributes{}, false, nil}},
-		{",,,path=/mnt/hda1,,,", "", StoreSpec{"/mnt/hda1", 0, 0, false, roachpb.Attributes{}, false, nil}},
-		{"/mnt/hda1", "", StoreSpec{"/mnt/hda1", 0, 0, false, roachpb.Attributes{}, false, nil}},
+		{"path=/mnt/hda1", "", StoreSpec{"/mnt/hda1", 0, 0, false, roachpb.Attributes{}, false}},
+		{",path=/mnt/hda1", "", StoreSpec{"/mnt/hda1", 0, 0, false, roachpb.Attributes{}, false}},
+		{"path=/mnt/hda1,", "", StoreSpec{"/mnt/hda1", 0, 0, false, roachpb.Attributes{}, false}},
+		{",,,path=/mnt/hda1,,,", "", StoreSpec{"/mnt/hda1", 0, 0, false, roachpb.Attributes{}, false}},
+		{"/mnt/hda1", "", StoreSpec{"/mnt/hda1", 0, 0, false, roachpb.Attributes{}, false}},
 		{"path=", "no value specified for path", StoreSpec{}},
 		{"path=/mnt/hda1,path=/mnt/hda2", "path field was used twice in store definition", StoreSpec{}},
 		{"/mnt/hda1,path=/mnt/hda2", "path field was used twice in store definition", StoreSpec{}},
 
 		// attributes
-		{"path=/mnt/hda1,attrs=ssd", "", StoreSpec{"/mnt/hda1", 0, 0, false, roachpb.Attributes{Attrs: []string{"ssd"}}, false, nil}},
-		{"path=/mnt/hda1,attrs=ssd:hdd", "", StoreSpec{"/mnt/hda1", 0, 0, false, roachpb.Attributes{Attrs: []string{"hdd", "ssd"}}, false, nil}},
-		{"path=/mnt/hda1,attrs=hdd:ssd", "", StoreSpec{"/mnt/hda1", 0, 0, false, roachpb.Attributes{Attrs: []string{"hdd", "ssd"}}, false, nil}},
-		{"attrs=ssd:hdd,path=/mnt/hda1", "", StoreSpec{"/mnt/hda1", 0, 0, false, roachpb.Attributes{Attrs: []string{"hdd", "ssd"}}, false, nil}},
-		{"attrs=hdd:ssd,path=/mnt/hda1,", "", StoreSpec{"/mnt/hda1", 0, 0, false, roachpb.Attributes{Attrs: []string{"hdd", "ssd"}}, false, nil}},
+		{"path=/mnt/hda1,attrs=ssd", "", StoreSpec{"/mnt/hda1", 0, 0, false, roachpb.Attributes{Attrs: []string{"ssd"}}, false}},
+		{"path=/mnt/hda1,attrs=ssd:hdd", "", StoreSpec{"/mnt/hda1", 0, 0, false, roachpb.Attributes{Attrs: []string{"hdd", "ssd"}}, false}},
+		{"path=/mnt/hda1,attrs=hdd:ssd", "", StoreSpec{"/mnt/hda1", 0, 0, false, roachpb.Attributes{Attrs: []string{"hdd", "ssd"}}, false}},
+		{"attrs=ssd:hdd,path=/mnt/hda1", "", StoreSpec{"/mnt/hda1", 0, 0, false, roachpb.Attributes{Attrs: []string{"hdd", "ssd"}}, false}},
+		{"attrs=hdd:ssd,path=/mnt/hda1,", "", StoreSpec{"/mnt/hda1", 0, 0, false, roachpb.Attributes{Attrs: []string{"hdd", "ssd"}}, false}},
 		{"attrs=hdd:ssd", "no path specified", StoreSpec{}},
 		{"path=/mnt/hda1,attrs=", "no value specified for attrs", StoreSpec{}},
 		{"path=/mnt/hda1,attrs=hdd:hdd", "duplicate attribute given for store: hdd", StoreSpec{}},
 		{"path=/mnt/hda1,attrs=hdd,attrs=ssd", "attrs field was used twice in store definition", StoreSpec{}},
 
 		// size
-		{"path=/mnt/hda1,size=671088640", "", StoreSpec{"/mnt/hda1", 671088640, 0, false, roachpb.Attributes{}, false, nil}},
-		{"path=/mnt/hda1,size=20GB", "", StoreSpec{"/mnt/hda1", 20000000000, 0, false, roachpb.Attributes{}, false, nil}},
-		{"size=20GiB,path=/mnt/hda1", "", StoreSpec{"/mnt/hda1", 21474836480, 0, false, roachpb.Attributes{}, false, nil}},
-		{"size=0.1TiB,path=/mnt/hda1", "", StoreSpec{"/mnt/hda1", 109951162777, 0, false, roachpb.Attributes{}, false, nil}},
-		{"path=/mnt/hda1,size=.1TiB", "", StoreSpec{"/mnt/hda1", 109951162777, 0, false, roachpb.Attributes{}, false, nil}},
-		{"path=/mnt/hda1,size=123TB", "", StoreSpec{"/mnt/hda1", 123000000000000, 0, false, roachpb.Attributes{}, false, nil}},
-		{"path=/mnt/hda1,size=123TiB", "", StoreSpec{"/mnt/hda1", 135239930216448, 0, false, roachpb.Attributes{}, false, nil}},
+		{"path=/mnt/hda1,size=671088640", "", StoreSpec{"/mnt/hda1", 671088640, 0, false, roachpb.Attributes{}, false}},
+		{"path=/mnt/hda1,size=20GB", "", StoreSpec{"/mnt/hda1", 20000000000, 0, false, roachpb.Attributes{}, false}},
+		{"size=20GiB,path=/mnt/hda1", "", StoreSpec{"/mnt/hda1", 21474836480, 0, false, roachpb.Attributes{}, false}},
+		{"size=0.1TiB,path=/mnt/hda1", "", StoreSpec{"/mnt/hda1", 109951162777, 0, false, roachpb.Attributes{}, false}},
+		{"path=/mnt/hda1,size=.1TiB", "", StoreSpec{"/mnt/hda1", 109951162777, 0, false, roachpb.Attributes{}, false}},
+		{"path=/mnt/hda1,size=123TB", "", StoreSpec{"/mnt/hda1", 123000000000000, 0, false, roachpb.Attributes{}, false}},
+		{"path=/mnt/hda1,size=123TiB", "", StoreSpec{"/mnt/hda1", 135239930216448, 0, false, roachpb.Attributes{}, false}},
 		// %
-		{"path=/mnt/hda1,size=50.5%", "", StoreSpec{"/mnt/hda1", 0, 50.5, false, roachpb.Attributes{}, false, nil}},
-		{"path=/mnt/hda1,size=100%", "", StoreSpec{"/mnt/hda1", 0, 100, false, roachpb.Attributes{}, false, nil}},
-		{"path=/mnt/hda1,size=1%", "", StoreSpec{"/mnt/hda1", 0, 1, false, roachpb.Attributes{}, false, nil}},
+		{"path=/mnt/hda1,size=50.5%", "", StoreSpec{"/mnt/hda1", 0, 50.5, false, roachpb.Attributes{}, false}},
+		{"path=/mnt/hda1,size=100%", "", StoreSpec{"/mnt/hda1", 0, 100, false, roachpb.Attributes{}, false}},
+		{"path=/mnt/hda1,size=1%", "", StoreSpec{"/mnt/hda1", 0, 1, false, roachpb.Attributes{}, false}},
 		{"path=/mnt/hda1,size=0.999999%", "store size (0.999999%) must be between 1% and 100%", StoreSpec{}},
 		{"path=/mnt/hda1,size=100.0001%", "store size (100.0001%) must be between 1% and 100%", StoreSpec{}},
 		// 0.xxx
-		{"path=/mnt/hda1,size=0.99", "", StoreSpec{"/mnt/hda1", 0, 99, false, roachpb.Attributes{}, false, nil}},
-		{"path=/mnt/hda1,size=0.5000000", "", StoreSpec{"/mnt/hda1", 0, 50, false, roachpb.Attributes{}, false, nil}},
-		{"path=/mnt/hda1,size=0.01", "", StoreSpec{"/mnt/hda1", 0, 1, false, roachpb.Attributes{}, false, nil}},
+		{"path=/mnt/hda1,size=0.99", "", StoreSpec{"/mnt/hda1", 0, 99, false, roachpb.Attributes{}, false}},
+		{"path=/mnt/hda1,size=0.5000000", "", StoreSpec{"/mnt/hda1", 0, 50, false, roachpb.Attributes{}, false}},
+		{"path=/mnt/hda1,size=0.01", "", StoreSpec{"/mnt/hda1", 0, 1, false, roachpb.Attributes{}, false}},
 		{"path=/mnt/hda1,size=0.009999", "store size (0.009999) must be between 1% and 100%", StoreSpec{}},
 		// .xxx
-		{"path=/mnt/hda1,size=.999", "", StoreSpec{"/mnt/hda1", 0, 99.9, false, roachpb.Attributes{}, false, nil}},
-		{"path=/mnt/hda1,size=.5000000", "", StoreSpec{"/mnt/hda1", 0, 50, false, roachpb.Attributes{}, false, nil}},
-		{"path=/mnt/hda1,size=.01", "", StoreSpec{"/mnt/hda1", 0, 1, false, roachpb.Attributes{}, false, nil}},
+		{"path=/mnt/hda1,size=.999", "", StoreSpec{"/mnt/hda1", 0, 99.9, false, roachpb.Attributes{}, false}},
+		{"path=/mnt/hda1,size=.5000000", "", StoreSpec{"/mnt/hda1", 0, 50, false, roachpb.Attributes{}, false}},
+		{"path=/mnt/hda1,size=.01", "", StoreSpec{"/mnt/hda1", 0, 1, false, roachpb.Attributes{}, false}},
 		{"path=/mnt/hda1,size=.009999", "store size (.009999) must be between 1% and 100%", StoreSpec{}},
 		// errors
 		{"path=/mnt/hda1,size=0", "store size (0) must be larger than 640 MiB", StoreSpec{}},
@@ -86,10 +86,10 @@ func TestNewStoreSpec(t *testing.T) {
 		{"size=123TB", "no path specified", StoreSpec{}},
 
 		// type
-		{"type=mem,size=20GiB", "", StoreSpec{"", 21474836480, 0, true, roachpb.Attributes{}, false, nil}},
-		{"size=20GiB,type=mem", "", StoreSpec{"", 21474836480, 0, true, roachpb.Attributes{}, false, nil}},
-		{"size=20.5GiB,type=mem", "", StoreSpec{"", 22011707392, 0, true, roachpb.Attributes{}, false, nil}},
-		{"size=20GiB,type=mem,attrs=mem", "", StoreSpec{"", 21474836480, 0, true, roachpb.Attributes{Attrs: []string{"mem"}}, false, nil}},
+		{"type=mem,size=20GiB", "", StoreSpec{"", 21474836480, 0, true, roachpb.Attributes{}, false}},
+		{"size=20GiB,type=mem", "", StoreSpec{"", 21474836480, 0, true, roachpb.Attributes{}, false}},
+		{"size=20.5GiB,type=mem", "", StoreSpec{"", 22011707392, 0, true, roachpb.Attributes{}, false}},
+		{"size=20GiB,type=mem,attrs=mem", "", StoreSpec{"", 21474836480, 0, true, roachpb.Attributes{Attrs: []string{"mem"}}, false}},
 		{"type=mem,size=20", "store size (20) must be larger than 640 MiB", StoreSpec{}},
 		{"type=mem,size=", "no value specified for size", StoreSpec{}},
 		{"type=mem,attrs=ssd", "size must be specified for an in memory store", StoreSpec{}},
@@ -98,8 +98,8 @@ func TestNewStoreSpec(t *testing.T) {
 		{"path=/mnt/hda1,type=mem,size=20GiB", "path specified for in memory store", StoreSpec{}},
 
 		// all together
-		{"path=/mnt/hda1,attrs=hdd:ssd,size=20GiB", "", StoreSpec{"/mnt/hda1", 21474836480, 0, false, roachpb.Attributes{Attrs: []string{"hdd", "ssd"}}, false, nil}},
-		{"type=mem,attrs=hdd:ssd,size=20GiB", "", StoreSpec{"", 21474836480, 0, true, roachpb.Attributes{Attrs: []string{"hdd", "ssd"}}, false, nil}},
+		{"path=/mnt/hda1,attrs=hdd:ssd,size=20GiB", "", StoreSpec{"/mnt/hda1", 21474836480, 0, false, roachpb.Attributes{Attrs: []string{"hdd", "ssd"}}, false}},
+		{"type=mem,attrs=hdd:ssd,size=20GiB", "", StoreSpec{"", 21474836480, 0, true, roachpb.Attributes{Attrs: []string{"hdd", "ssd"}}, false}},
 
 		// other error cases
 		{"", "no value specified", StoreSpec{}},

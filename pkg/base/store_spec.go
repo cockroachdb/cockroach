@@ -24,6 +24,7 @@ import (
 	"strings"
 
 	"github.com/dustin/go-humanize"
+	"github.com/mberhault/cockroach/pkg/cli/cliflags"
 	"github.com/pkg/errors"
 	"github.com/spf13/pflag"
 
@@ -69,9 +70,6 @@ type StoreSpec struct {
 	// UseSwitchingEnv is true if the "switching env" store version is desired.
 	// This is set by CCL code when encryption-at-rest is in use.
 	UseSwitchingEnv bool
-	// ExtraFields are arbitrary fields that may set by CCL code.
-	// TODO(mberhault): this is probably too fragile to pass through.
-	ExtraFields map[string]string
 }
 
 // String returns a fully parsable version of the store spec.
@@ -256,7 +254,7 @@ var _ pflag.Value = &StoreSpecList{}
 func (ssl StoreSpecList) String() string {
 	var buffer bytes.Buffer
 	for _, ss := range ssl.Specs {
-		fmt.Fprintf(&buffer, "--store=%s ", ss)
+		fmt.Fprintf(&buffer, "--%s=%s ", cliflags.Store.Name, ss)
 	}
 	// Trim the extra space from the end if it exists.
 	if l := buffer.Len(); l > 0 {

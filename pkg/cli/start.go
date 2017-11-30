@@ -650,11 +650,6 @@ func runStart(cmd *cobra.Command, args []string) error {
 			}
 			for i, spec := range serverCfg.Stores.Specs {
 				fmt.Fprintf(tw, "store[%d]:\t%s\n", i, spec)
-				if spec.ExtraFields != nil {
-					for k, v := range spec.ExtraFields {
-						fmt.Fprintf(tw, "  %s:\t%s\n", k, v)
-					}
-				}
 			}
 			initialBoot := s.InitialBoot()
 			nodeID := s.NodeID()

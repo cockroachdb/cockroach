@@ -36,9 +36,15 @@
  */
 class SwitchingEnv : public rocksdb::EnvWrapper {
   public:
-   SwitchingEnv(rocksdb::Env* base_env) : rocksdb::EnvWrapper(base_env) { }
+   SwitchingEnv(rocksdb::Env* base_env, std::shared_ptr<rocksdb::Logger> logger)
+     : rocksdb::EnvWrapper(base_env),
+       logger(logger) {
+     rocksdb::Info(logger, "initialized switching env");
+   }
+  private:
+    std::shared_ptr<rocksdb::Logger> logger;
 };
 
-rocksdb::Env* NewSwitchingEnv(rocksdb::Env* base_env) {
-  return new SwitchingEnv(base_env ? base_env : rocksdb::Env::Default());
+rocksdb::Env* NewSwitchingEnv(rocksdb::Env* base_env, std::shared_ptr<rocksdb::Logger> logger) {
+  return new SwitchingEnv(base_env ? base_env : rocksdb::Env::Default(), logger);
 }
