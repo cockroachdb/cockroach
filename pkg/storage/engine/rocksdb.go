@@ -1381,7 +1381,7 @@ func (r *rocksDBBatch) Commit(syncCommit bool) error {
 	r.syncCommit = syncCommit
 
 	// The leader for the commit is the first batch to be added to the pending
-	// slice. Every batch has an associated wait group which is signalled when
+	// slice. Every batch has an associated wait group which is signaled when
 	// the commit is complete.
 	c.Lock()
 	leader := len(c.pending) == 0
@@ -1906,8 +1906,8 @@ func statusToError(s C.DBStatus) error {
 }
 
 // goMerge takes existing and update byte slices that are expected to
-// be marshalled roachpb.Values and merges the two values returning a
-// marshalled roachpb.Value or an error.
+// be marshaled roachpb.Values and merges the two values returning a
+// marshaled roachpb.Value or an error.
 func goMerge(existing, update []byte) ([]byte, error) {
 	var result C.DBString
 	status := C.DBMergeOne(goToCSlice(existing), goToCSlice(update), &result)

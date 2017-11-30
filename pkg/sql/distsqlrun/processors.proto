@@ -357,7 +357,7 @@ message AggregatorSpec {
     optional Func func = 1 [(gogoproto.nullable) = false];
 
     // Aggregation functions with distinct = true functions like you would
-    // expect '<FUNC> DISTINCT' to operate, the default behaviour would be
+    // expect '<FUNC> DISTINCT' to operate, the default behavior would be
     // the '<FUNC> ALL' operation.
     optional bool distinct = 2 [(gogoproto.nullable) = false];
 

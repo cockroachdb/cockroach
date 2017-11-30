@@ -62,7 +62,7 @@ func appender(s string) []byte {
 
 // timeSeries generates a simple InternalTimeSeriesData object which starts
 // at the given timestamp and has samples of the given duration. The object is
-// stored in an MVCCMetadata object and marshalled to bytes.
+// stored in an MVCCMetadata object and marshaled to bytes.
 func timeSeries(start int64, duration int64, samples ...tsSample) []byte {
 	tsv := timeSeriesAsValue(start, duration, samples...)
 	return mustMarshal(&enginepb.MVCCMetadata{RawBytes: tsv.RawBytes})
@@ -260,7 +260,7 @@ func TestGoMerge(t *testing.T) {
 		updateTS := unmarshalTimeSeries(t, c.update)
 
 		// Directly test the C++ implementation of merging using goMerge.  goMerge
-		// operates directly on marshalled bytes.
+		// operates directly on marshaled bytes.
 		result, err := goMerge(c.existing, c.update)
 		if err != nil {
 			t.Errorf("goMerge error on case %d: %s", i, err.Error())
@@ -290,7 +290,7 @@ func TestGoMerge(t *testing.T) {
 }
 
 // unmarshalTimeSeries unmarshals the time series value stored in the given byte
-// array. It is assumed that the time series value was originally marshalled as
+// array. It is assumed that the time series value was originally marshaled as
 // a MVCCMetadata with an inline value.
 func unmarshalTimeSeries(t testing.TB, b []byte) roachpb.InternalTimeSeriesData {
 	var meta enginepb.MVCCMetadata

@@ -211,7 +211,7 @@ func (s *Server) Metrics() *ServerMetrics {
 // SetDraining (when called with 'true') prevents new connections from being
 // served and waits a reasonable amount of time for open connections to
 // terminate before canceling them.
-// An error will be returned when connections that have been cancelled have not
+// An error will be returned when connections that have been canceled have not
 // responded to this cancellation and closed themselves in time. The server
 // will remain in draining state, though open connections may continue to
 // exist.
@@ -232,7 +232,7 @@ func (s *Server) setDrainingImpl(
 	// connections that were active at the moment the draining switch happened.
 	// It is enough to do this because:
 	// 1) If no new connections are added to the original map all connections
-	// will be cancelled.
+	// will be canceled.
 	// 2) If new connections are added to the original map, it follows that they
 	// were added when s.mu.draining = false, thus not requiring cancellation.
 	// These connections are not our responsibility and will be handled when the

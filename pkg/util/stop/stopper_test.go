@@ -503,7 +503,7 @@ func TestStopperRunLimitedAsyncTaskCancelContext(t *testing.T) {
 	workerStarted := make(chan struct{})
 
 	var workersRun int32
-	var workersCancelled int32
+	var workersCanceled int32
 
 	ctx, cancel := context.WithCancel(context.Background())
 	f := func(ctx context.Context) {
@@ -519,7 +519,7 @@ func TestStopperRunLimitedAsyncTaskCancelContext(t *testing.T) {
 				if err != context.Canceled {
 					t.Fatal(err)
 				}
-				atomic.AddInt32(&workersCancelled, 1)
+				atomic.AddInt32(&workersCanceled, 1)
 			}
 		}
 		close(workersDone)
@@ -541,8 +541,8 @@ func TestStopperRunLimitedAsyncTaskCancelContext(t *testing.T) {
 	if a, e := atomic.LoadInt32(&workersRun), int32(maxConcurrency); a != e {
 		t.Fatalf("%d workers ran before context close, expected exactly %d", a, e)
 	}
-	if a, e := atomic.LoadInt32(&workersCancelled), int32(maxConcurrency); a != e {
-		t.Fatalf("%d workers cancelled after context close, expected exactly %d", a, e)
+	if a, e := atomic.LoadInt32(&workersCanceled), int32(maxConcurrency); a != e {
+		t.Fatalf("%d workers canceled after context close, expected exactly %d", a, e)
 	}
 }
 

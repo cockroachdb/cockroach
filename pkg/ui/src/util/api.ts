@@ -110,7 +110,7 @@ export function toArrayBuffer(encodedRequest: Uint8Array): ArrayBuffer {
 }
 
 // timeoutFetch is a wrapper around fetch that provides timeout and protocol
-// buffer marshalling and unmarshalling.
+// buffer marshaling and unmarshalling.
 //
 // This function is intended for use with generated protocol buffers. In
 // particular, TResponse$Properties is a generated interface that describes the JSON

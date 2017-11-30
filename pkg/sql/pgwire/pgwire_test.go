@@ -245,7 +245,7 @@ func TestPGWireDrainClient(t *testing.T) {
 }
 
 // TestPGWireDrainOngoingTxns tests that connections with open transactions are
-// cancelled when they go on for too long.
+// canceled when they go on for too long.
 func TestPGWireDrainOngoingTxns(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	params := base.TestServerArgs{Insecure: true}
@@ -285,7 +285,7 @@ func TestPGWireDrainOngoingTxns(t *testing.T) {
 		realCancels := pgServer.OverwriteCancelMap()
 
 		// Set draining with no drainWait or cancelWait timeout. The expected
-		// behavior is that the ongoing session is immediately cancelled but
+		// behavior is that the ongoing session is immediately canceled but
 		// since we overwrote the context.CancelFunc, this cancellation will
 		// not have any effect. The pgServer will not bother to wait for the
 		// connection to close properly and should notify the caller that a
@@ -320,7 +320,7 @@ func TestPGWireDrainOngoingTxns(t *testing.T) {
 		}
 	})
 
-	// Make sure that a connection gets cancelled and correctly responds to this
+	// Make sure that a connection gets canceled and correctly responds to this
 	// cancellation by closing itself.
 	t.Run("CancelResponseSuccess", func(t *testing.T) {
 		txn, err := db.Begin()

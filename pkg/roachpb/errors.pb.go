@@ -421,7 +421,7 @@ func (*StoreNotFoundError) Descriptor() ([]byte, []int) { return fileDescriptorE
 // non-transactional requests, this error will be observed by layers above the
 // TxnCoordSender.
 type UnhandledRetryableError struct {
-	// The underlying storage error that is being marshalled.
+	// The underlying storage error that is being marshaled.
 	// pErr.TransactionRestart is exected to be set, and the error detail is one
 	// of the retryable ones.
 	PErr Error `protobuf:"bytes,1,opt,name=pErr" json:"pErr"`

@@ -331,7 +331,7 @@ func TestJSONFetch(t *testing.T) {
 func TestJSONRandomFetch(t *testing.T) {
 	rng := rand.New(rand.NewSource(timeutil.Now().Unix()))
 	for i := 0; i < 1000; i++ {
-		// We want a big object to trigger the binary search behaviour in FetchValKey.
+		// We want a big object to trigger the binary search behavior in FetchValKey.
 		j, err := Random(1000, rng)
 		if err != nil {
 			t.Fatal(err)

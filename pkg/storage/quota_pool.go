@@ -44,7 +44,7 @@ type quotaPool struct {
 	// for a notification that indicates they're now first in line. This is
 	// done by appending to the queue the channel they will then wait
 	// on. If a goroutine no longer needs to be notified, i.e. their
-	// acquisition context has been cancelled, the goroutine is responsible for
+	// acquisition context has been canceled, the goroutine is responsible for
 	// blocking subsequent notifications to the channel by filling up the
 	// channel buffer.
 	queue []chan struct{}
@@ -152,7 +152,7 @@ func (qp *quotaPool) acquire(ctx context.Context, v int64) error {
 			return ctx.Err()
 		case <-qp.done:
 			// We don't need to 'unregister' ourselves as in the case when the
-			// context is cancelled. In fact, we want others waiters to only
+			// context is canceled. In fact, we want others waiters to only
 			// receive on qp.done and signaling them would work against that.
 			return nil
 		case <-notifyCh:
@@ -162,7 +162,7 @@ func (qp *quotaPool) acquire(ctx context.Context, v int64) error {
 
 	// We're first in line to receive quota, we keep accumulating quota until
 	// we've acquired enough or determine we no longer need the acquisition.
-	// If we have acquired the quota needed or our context gets cancelled,
+	// If we have acquired the quota needed or our context gets canceled,
 	// we're sure to remove ourselves from the queue and notify the goroutine
 	// next in line (if any).
 
@@ -208,7 +208,7 @@ func (qp *quotaPool) notifyNextLocked() {
 	// waiting to be notified, notify the goroutine and truncate our queue so
 	// to ensure the said goroutine is at the head of the queue. Normally the
 	// next lined up waiter is the one waiting for notification, but if others
-	// behind us have also gotten their context cancelled, they
+	// behind us have also gotten their context canceled, they
 	// will leave behind waiters that we would skip below.
 	//
 	// If we determine there are no goroutines waiting, we simply truncate the

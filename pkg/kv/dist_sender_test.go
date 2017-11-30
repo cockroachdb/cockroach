@@ -870,7 +870,7 @@ func TestEvictCacheOnError(t *testing.T) {
 		if cachedDesc, err := ds.rangeCache.GetCachedRangeDescriptor(roachpb.RKey(key), false /* inverted */); err != nil {
 			t.Error(err)
 		} else if cachedDesc == nil != tc.shouldClearReplica {
-			t.Errorf("%d: unexpected second replica lookup behaviour: wanted=%t", i, tc.shouldClearReplica)
+			t.Errorf("%d: unexpected second replica lookup behavior: wanted=%t", i, tc.shouldClearReplica)
 		}
 	}
 }

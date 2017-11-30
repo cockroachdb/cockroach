@@ -1093,7 +1093,7 @@ func (ds *DistSender) deduceRetryEarlyExitError(ctx context.Context) *roachpb.Er
 		// Typically happens during shutdown.
 		return roachpb.NewError(&roachpb.NodeUnavailableError{})
 	case <-ctx.Done():
-		// Happens when the client request is cancelled.
+		// Happens when the client request is canceled.
 		return roachpb.NewError(ctx.Err())
 	default:
 	}

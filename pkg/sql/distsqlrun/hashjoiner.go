@@ -572,7 +572,7 @@ func (h *hashJoiner) probeRow(
 
 // probePhase uses our constructed hash map of rows seen from the right stream,
 // we probe the map for each row retrieved from the left stream outputting the
-// merging of the two rows if matched. Behaviour for outer joins is as expected,
+// merging of the two rows if matched. Behavior for outer joins is as expected,
 // i.e. for RIGHT OUTER joins if no corresponding left row is seen an empty
 // DNull row is emitted instead.
 //

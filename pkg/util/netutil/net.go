@@ -34,7 +34,7 @@ import (
 )
 
 // ListenAndServeGRPC creates a listener and serves the specified grpc Server
-// on it, closing the listener when signalled by the stopper.
+// on it, closing the listener when signaled by the stopper.
 func ListenAndServeGRPC(
 	stopper *stop.Stopper, server *grpc.Server, addr net.Addr,
 ) (net.Listener, error) {
@@ -66,7 +66,7 @@ type Server struct {
 }
 
 // MakeServer constructs a Server that tracks active connections, closing them
-// when signalled by stopper.
+// when signaled by stopper.
 func MakeServer(stopper *stop.Stopper, tlsConfig *tls.Config, handler http.Handler) Server {
 	var mu syncutil.Mutex
 	activeConns := make(map[net.Conn]struct{})

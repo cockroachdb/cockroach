@@ -2262,7 +2262,7 @@ func (r *Replica) beginCmds(
 				if newCmd == nil {
 					continue
 				}
-				// Loop until the command has no more pending prerequisites. Resolving cancelled
+				// Loop until the command has no more pending prerequisites. Resolving canceled
 				// prerequisites can add new transitive dependencies to a command, so newCmd.prereqs
 				// should not be accessed directly (see ResolvePendingPrereq).
 				for {
@@ -2825,7 +2825,7 @@ func (r *Replica) tryExecuteWriteBatch(
 				// outstanding asynchronous resolution tasks allowed after which
 				// further calls will block.
 				//
-				// TODO(peter): Re-proposed and cancelled (but executed) commands can
+				// TODO(peter): Re-proposed and canceled (but executed) commands can
 				// both leave intents to GC that don't hit this code path. No good
 				// solution presents itself at the moment and such intents will be
 				// resolved on reads.
@@ -2840,7 +2840,7 @@ func (r *Replica) tryExecuteWriteBatch(
 			defer r.store.metrics.SlowRaftRequests.Dec(1)
 
 		case <-ctxDone:
-			// If our context was cancelled, return an AmbiguousResultError
+			// If our context was canceled, return an AmbiguousResultError
 			// if the command isn't already being executed and using our
 			// context, in which case we expect it to finish soon. The
 			// AmbiguousResultError indicates to caller that the command may

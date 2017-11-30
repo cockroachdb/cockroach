@@ -209,7 +209,7 @@ func (s *sqlStats) resetStats(ctx context.Context) {
 	// any ongoing open client session at the time of the reset has
 	// cached a pointer to its appStats struct and would thus continue
 	// to report its stats in an object now invisible to the other tools
-	// (virtual table, marshalling, etc.). It's a judgement call, but
+	// (virtual table, marshaling, etc.). It's a judgement call, but
 	// for now we prefer to see more data and thus not clear the map, at
 	// the risk of seeing the map grow unboundedly with the number of
 	// different application_names seen so far.

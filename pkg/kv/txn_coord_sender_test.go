@@ -684,7 +684,7 @@ func TestTxnCoordSenderGCTimeout(t *testing.T) {
 }
 
 // TestTxnCoordSenderGCWithCancel verifies that the coordinator cleans up extant
-// transactions and intents after transaction context is cancelled.
+// transactions and intents after transaction context is canceled.
 func TestTxnCoordSenderGCWithCancel(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s, sender := createTestDB(t)
@@ -733,7 +733,7 @@ func TestTxnCoordSenderGCWithCancel(t *testing.T) {
 		t.Fatalf("expected transaction to be active, got: %v", err)
 	}
 
-	// After the context is cancelled, the transaction should be cleaned up.
+	// After the context is canceled, the transaction should be cleaned up.
 	cancel()
 	testutils.SucceedsSoon(t, func() error {
 		// Locking the TxnCoordSender to prevent a data race.

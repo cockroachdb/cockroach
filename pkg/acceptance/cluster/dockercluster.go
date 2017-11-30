@@ -636,7 +636,7 @@ func (l *DockerCluster) monitor(ctx context.Context) {
 		defer log.Infof(ctx, "events monitor exits")
 	}
 	longPoll := func() bool {
-		// If our context was cancelled, it's time to go home.
+		// If our context was canceled, it's time to go home.
 		if l.monitorCtx.Err() != nil {
 			return false
 		}

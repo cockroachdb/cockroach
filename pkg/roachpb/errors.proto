@@ -283,7 +283,7 @@ message StoreNotFoundError {
 // non-transactional requests, this error will be observed by layers above the
 // TxnCoordSender.
 message UnhandledRetryableError {
-  // The underlying storage error that is being marshalled.
+  // The underlying storage error that is being marshaled.
   // pErr.TransactionRestart is exected to be set, and the error detail is one
   // of the retryable ones.
   optional Error pErr = 1 [(gogoproto.nullable) = false];

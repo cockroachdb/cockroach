@@ -494,7 +494,7 @@ func (n *joinNode) Next(params runParams) (res bool, err error) {
 		//    | NULL |
 		//    | NULL |
 		//
-		// The following examples illustrates the behaviour when joining on two
+		// The following examples illustrates the behavior when joining on two
 		// or more columns, and only one of them contains NULL.
 		// If we have have the following:
 		// CREATE TABLE t(x INT, y INT);

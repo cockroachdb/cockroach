@@ -42,7 +42,7 @@ func TestMain(m *testing.M) {
 	serverutils.InitTestServerFactory(server.TestServerFactory)
 	serverutils.InitTestClusterFactory(testcluster.TestClusterFactory)
 
-	// Create a set of all protos we believe to be marshalled downstream of raft.
+	// Create a set of all protos we believe to be marshaled downstream of raft.
 	// After the tests are run, we'll subtract the encountered protos from this
 	// set.
 	notBelowRaftProtos := make(map[reflect.Type]struct{}, len(belowRaftGoldenProtos))
@@ -51,7 +51,7 @@ func TestMain(m *testing.M) {
 	}
 
 	// Before running the tests, enable instrumentation that tracks protos which
-	// are marshalled downstream of raft.
+	// are marshaled downstream of raft.
 	stopTrackingAndGetTypes := storage.TrackRaftProtos()
 
 	code := m.Run()

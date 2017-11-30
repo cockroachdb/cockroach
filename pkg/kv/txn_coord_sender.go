@@ -197,7 +197,7 @@ type TxnCoordSender struct {
 		syncutil.Mutex
 		txns map[uuid.UUID]*txnMetadata // txn key to metadata
 	}
-	linearizable bool // enables linearizable behaviour
+	linearizable bool // enables linearizable behavior
 	stopper      *stop.Stopper
 	metrics      TxnMetrics
 }
@@ -696,7 +696,7 @@ func (tc *TxnCoordSender) tryAsyncAbort(txnID uuid.UUID) {
 	}
 
 	// NB: use context.Background() here because we may be called when the
-	// caller's context has been cancelled.
+	// caller's context has been canceled.
 	ctx := tc.AnnotateCtx(context.Background())
 	if err := tc.stopper.RunAsyncTask(ctx, "kv.TxnCoordSender: aborting txn", func(ctx context.Context) {
 		ba := roachpb.BatchRequest{}
