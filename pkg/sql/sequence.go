@@ -40,6 +40,17 @@ func (p *planner) IncrementSequence(ctx context.Context, seqName *tree.TableName
 		return 0, err
 	}
 
+	seqOpts := descriptor.SequenceOpts
+	if val > seqOpts.MaxValue {
+		return 0, pgerror.NewErrorf(
+			pgerror.CodeSequenceGeneratorLimitExceeded,
+			`reached maximum value of sequence "%s" (%d)`, descriptor.Name, seqOpts.MaxValue)
+	}
+	if val < seqOpts.MinValue {
+		return 0, pgerror.NewErrorf(
+			pgerror.CodeSequenceGeneratorLimitExceeded,
+			`reached minimum value of sequence "%s" (%d)`, descriptor.Name, seqOpts.MinValue)
+	}
 	p.session.mu.Lock()
 	defer p.session.mu.Unlock()
 	p.session.mu.SequenceState.lastSequenceIncremented = descriptor.ID
