@@ -106,7 +106,7 @@ export default function (props: GraphDashboardProps) {
       )}
     >
       <Axis units={AxisUnits.Bytes} label="capacity">
-        <Metric name="cr.store.capacity" title="capacity" />
+        <Metric name="cr.store.capacity" title="Capacity" />
         <Metric name="cr.store.capacity.available" title="Available" />
         <Metric name="cr.store.capacity.used" title="Used" />
       </Axis>
