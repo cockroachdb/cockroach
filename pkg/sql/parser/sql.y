@@ -654,6 +654,7 @@ func (u *sqlSymUnion) scrubOption() tree.ScrubOption {
 %type <tree.Statement> show_queries_stmt
 %type <tree.Statement> show_session_stmt
 %type <tree.Statement> show_sessions_stmt
+%type <tree.Statement> show_stats_stmt
 %type <tree.Statement> show_tables_stmt
 %type <tree.Statement> show_testing_stmt
 %type <tree.Statement> show_trace_stmt
@@ -2431,6 +2432,7 @@ show_stmt:
 | show_queries_stmt      // EXTEND WITH HELP: SHOW QUERIES
 | show_session_stmt      // EXTEND WITH HELP: SHOW SESSION
 | show_sessions_stmt     // EXTEND WITH HELP: SHOW SESSIONS
+| show_stats_stmt        // EXTEND WITH HELP: SHOW STATISTICS
 | show_tables_stmt       // EXTEND WITH HELP: SHOW TABLES
 | show_testing_stmt
 | show_trace_stmt        // EXTEND WITH HELP: SHOW TRACE
@@ -2462,6 +2464,16 @@ session_var:
 // TIME ZONE is special: it is two tokens, but is really the identifier "TIME ZONE".
 | TIME ZONE { $$ = "timezone" }
 | TIME error // SHOW HELP: SHOW SESSION
+
+// %Help: SHOW STATISTICS - display table statistics
+// %Category: Misc
+// %Text: SHOW STATISTICS FOR TABLE <tablename>
+show_stats_stmt:
+  SHOW STATISTICS FOR TABLE qualified_name
+  {
+    $$.val = &tree.ShowTableStats{Table: $5.normalizableTableName()}
+  }
+| SHOW STATISTICS error // SHOW HELP: SHOW STATISTICS
 
 // %Help: SHOW BACKUP - list backup contents
 // %Category: CCL

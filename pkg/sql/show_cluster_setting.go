@@ -78,9 +78,8 @@ func (p *planner) ShowClusterSetting(
 			case *settings.StateMachineSetting:
 				// Show consistent values for statemachine settings. This isn't necessary
 				// for correctness, but helpful for testability.
-				ie := InternalExecutor{LeaseManager: p.LeaseMgr()}
-				datums, err := ie.QueryRowInTransaction(
-					ctx, "retrieve-prev-setting", p.txn,
+				datums, err := p.QueryRow(
+					ctx, "retrieve-prev-setting",
 					"SELECT value FROM system.settings WHERE name = $1",
 					name,
 				)
