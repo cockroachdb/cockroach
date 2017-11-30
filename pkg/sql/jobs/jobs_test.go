@@ -1022,6 +1022,21 @@ func TestJobLifecycle(t *testing.T) {
 			t.Fatal(err)
 		}
 	})
+
+	t.Run("cannot pause or cancel uncontrollable jobs", func(t *testing.T) {
+		job, _ := createJob(jobs.Record{
+			Details: jobs.SchemaChangeDetails{},
+		})
+		if err := registry.Pause(ctx, nil, *job.ID()); !testutils.IsError(err, "is not controllable") {
+			t.Fatalf("unexpected %v", err)
+		}
+		if err := registry.Cancel(ctx, nil, *job.ID()); !testutils.IsError(err, "is not controllable") {
+			t.Fatalf("unexpected %v", err)
+		}
+		if err := registry.Resume(ctx, nil, *job.ID()); !testutils.IsError(err, "is not controllable") {
+			t.Fatalf("unexpected %v", err)
+		}
+	})
 }
 
 func TestRunAndWaitForTerminalState(t *testing.T) {
