@@ -243,6 +243,8 @@ func (r *Registry) maybeCancelJobs(ctx context.Context, nl nodeLiveness) {
 	}
 }
 
+// getJobFn attempts to get a resumer from the given job id. If the job id
+// does not have a resumer then it returns an error message suitable for users.
 func (r *Registry) getJobFn(ctx context.Context, txn *client.Txn, id int64) (*Job, Resumer, error) {
 	job, err := r.LoadJobWithTxn(ctx, id, txn)
 	if err != nil {
@@ -251,7 +253,7 @@ func (r *Registry) getJobFn(ctx context.Context, txn *client.Txn, id int64) (*Jo
 	payload := job.Payload()
 	resumer, err := getResumeHook(payload.Type(), r.settings)
 	if err != nil {
-		return nil, nil, err
+		return job, nil, errors.Errorf("job %d is not controllable", id)
 	}
 	return job, resumer, nil
 }
@@ -260,6 +262,13 @@ func (r *Registry) getJobFn(ctx context.Context, txn *client.Txn, id int64) (*Jo
 func (r *Registry) Cancel(ctx context.Context, txn *client.Txn, id int64) error {
 	job, resumer, err := r.getJobFn(ctx, txn, id)
 	if err != nil {
+		// Special case IMPORT jobs to mark the job as canceled.
+		if job != nil {
+			payload := job.Payload()
+			if payload.Type() == TypeImport {
+				return job.WithTxn(txn).canceled(ctx, NoopFn)
+			}
+		}
 		return err
 	}
 	return job.WithTxn(txn).canceled(ctx, resumer.OnFailOrCancel)
