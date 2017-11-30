@@ -1285,7 +1285,7 @@ func (e *Executor) execSingleStatement(
 	stmt.queryID = queryID
 	stmt.queryMeta = queryMeta
 
-	// Cancelling a query cancels its transaction's context. Copy reference to
+	// Canceling a query cancels its transaction's context. Copy reference to
 	// txn context and its cancellation function here.
 	//
 	// TODO(itsbilal): Ideally we'd like to fork off a context for each individual
@@ -1354,7 +1354,7 @@ func (e *Executor) execSingleStatement(
 	}
 	if err != nil {
 		// If error contains a context cancellation error, wrap it with a
-		// user-friendly query execution cancelled one.
+		// user-friendly query execution canceled one.
 		if strings.Contains(err.Error(), "context canceled") {
 			err = errors.Wrapf(err, "query execution canceled")
 		}

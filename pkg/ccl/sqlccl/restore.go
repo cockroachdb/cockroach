@@ -846,7 +846,7 @@ func restore(
 	for i := range tables {
 		newDescBytes, err := protoutil.Marshal(sqlbase.WrapDescriptor(tables[i]))
 		if err != nil {
-			return mu.res, nil, nil, errors.Wrap(err, "marshalling descriptor")
+			return mu.res, nil, nil, errors.Wrap(err, "marshaling descriptor")
 		}
 		rekeys = append(rekeys, roachpb.ImportRequest_TableRekey{
 			OldID:   uint32(oldTableIDs[i]),
@@ -914,7 +914,7 @@ func restore(
 	// much slower, we buffer the channel to keep the split/scatter work from
 	// getting too far ahead. This both naturally rate limits the split/scatters
 	// and bounds the number of empty ranges crated if the RESTORE fails (or is
-	// cancelled).
+	// canceled).
 	const presplitLeadLimit = 10
 	readyForImportCh := make(chan importEntry, presplitLeadLimit)
 	g.Go(func() error {

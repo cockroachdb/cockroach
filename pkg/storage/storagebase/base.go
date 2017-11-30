@@ -83,7 +83,7 @@ const (
 	// for prereqs to finish execution.
 	CommandQueueWaitForPrereqs CommandQueueAction = iota
 	// CommandQueueCancellation represents the state of a batchCmdSet when it
-	// is cancelled while waiting for prerequisites to finish and is forced to
+	// is canceled while waiting for prerequisites to finish and is forced to
 	// remove itself from the CommandQueue without executing.
 	CommandQueueCancellation
 	// CommandQueueBeginExecuting represents the state of a batchCmdSet when it

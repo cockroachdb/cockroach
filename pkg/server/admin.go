@@ -321,7 +321,7 @@ func (s *adminServer) TableDetails(
 	//
 	// TODO(cdo): protobuf v3's default behavior for fields with zero values (e.g. empty strings)
 	// is to suppress them. So, if protobuf field "foo" is an empty string, "foo" won't show
-	// up in the marshalled JSON. I feel that this is counterintuitive, and this should be fixed
+	// up in the marshaled JSON. I feel that this is counterintuitive, and this should be fixed
 	// for our API.
 	{
 		const (

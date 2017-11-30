@@ -493,7 +493,7 @@ func typeCheckOverloadedExprs(
 
 	// In a binary expression, in the case of one of the arguments being untyped NULL,
 	// we prefer overloads where we infer the type of the NULL to be the same as the
-	// other argument. This is used to differentiate the behaviour of
+	// other argument. This is used to differentiate the behavior of
 	// STRING[] || NULL and STRING || NULL.
 	if inBinOp && len(s.exprs) == 2 {
 		if ok, fns, err := filterAttempt(ctx, &s, func() {

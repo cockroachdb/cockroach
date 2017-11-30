@@ -837,7 +837,7 @@ func (r *Replica) applySnapshot(
 	// We set the persisted last index to the last applied index. This is
 	// not a correctness issue, but means that we may have just transferred
 	// some entries we're about to re-request from the leader and overwrite.
-	// However, raft.MultiNode currently expects this behaviour, and the
+	// However, raft.MultiNode currently expects this behavior, and the
 	// performance implications are not likely to be drastic. If our
 	// feelings about this ever change, we can add a LastIndex field to
 	// raftpb.SnapshotMetadata.

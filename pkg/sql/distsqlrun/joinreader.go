@@ -146,7 +146,7 @@ func (jr *joinReader) mainLoop(ctx context.Context) error {
 			if row == nil {
 				if len(spans) == 0 {
 					// No fetching needed since we have collected no spans and
-					// the input has signalled that no more records are coming.
+					// the input has signaled that no more records are coming.
 					jr.out.Close()
 					return nil
 				}

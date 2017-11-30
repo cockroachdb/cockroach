@@ -125,9 +125,9 @@ func TestIPAddrBinaryMarshalling(t *testing.T) {
 		if remaining, err := actual.FromBuffer(data); err != nil {
 			t.Errorf("%d: UnmarshalBinary(%s) caused an unexpected error:%s", i, testCase.input, err)
 		} else if !actual.Equal(testCase.input) {
-			t.Errorf("%d: Binary marshalling round trip failed. actual:%v does not match expected:%v", i, actual, testCase.input)
+			t.Errorf("%d: Binary marshaling round trip failed. actual:%v does not match expected:%v", i, actual, testCase.input)
 		} else if len(remaining) != 0 {
-			t.Errorf("%d: Binary marshalling left extraneous bytes in buffer. Leftover len: %d bytes: %s", i, len(remaining), remaining)
+			t.Errorf("%d: Binary marshaling left extraneous bytes in buffer. Leftover len: %d bytes: %s", i, len(remaining), remaining)
 		}
 	}
 }

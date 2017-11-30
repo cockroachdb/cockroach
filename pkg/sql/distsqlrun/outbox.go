@@ -255,7 +255,7 @@ func (m *outbox) mainLoop(ctx context.Context) error {
 				m.flowCtxCancel()
 				// The consumer either doesn't care any more (it returned from the
 				// FlowStream RPC with an error if the outbox established the stream or
-				// it cancelled the client context if the consumer established the
+				// it canceled the client context if the consumer established the
 				// stream through a RunSyncFlow RPC), or there was a communication error
 				// and the stream is dead. In any case, the stream has been closed and
 				// the consumer will not consume more rows from this outbox. Make sure
@@ -317,10 +317,10 @@ func (m *outbox) listenForDrainSignalFromConsumer(ctx context.Context) (<-chan d
 			case ch <- drainSignal{drainRequested: drainRequested, err: err}:
 				return true
 			case <-ctx.Done():
-				// Listening for consumer signals has been cancelled. This generally
+				// Listening for consumer signals has been canceled. This generally
 				// means that the main outbox routine is no longer listening to these
 				// signals but, in the RunSyncFlow case, it may also mean that the
-				// client (the consumer) has cancelled the RPC. In that case, the main
+				// client (the consumer) has canceled the RPC. In that case, the main
 				// routine is still listening (and this branch of the select has been
 				// randomly selected; the other was also available), so we have to
 				// notify it. Thus, we attempt sending again.

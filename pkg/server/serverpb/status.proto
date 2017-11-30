@@ -398,7 +398,7 @@ message ListSessionsResponse {
 
 // Request object for issing a query cancel request.
 message CancelQueryRequest {
-  // ID of gateway node for the query to be cancelled.
+  // ID of gateway node for the query to be canceled.
   //
   // TODO(itsbilal): use [(gogoproto.customname) = "NodeID"] below. Need to
   // figure out how to teach grpc-gateway about custom names.
@@ -406,7 +406,7 @@ message CancelQueryRequest {
   // node_id is a string so that "local" can be used to specify that no
   // forwarding is necessary.
   string node_id = 1;
-  // ID of query to be cancelled (converted to string).
+  // ID of query to be canceled (converted to string).
   string query_id = 2 [(gogoproto.customname) = "QueryID"];
   // Username of the user making this cancellation request.
   string username = 3;
@@ -414,9 +414,9 @@ message CancelQueryRequest {
 
 // Response returned by target query's gateway node.
 message CancelQueryResponse {
-  // Whether the cancellation request succeeded and the query was cancelled.
-  bool cancelled = 1;
-  // Error message (accompanied with cancelled = false).
+  // Whether the cancellation request succeeded and the query was canceled.
+  bool canceled = 1;
+  // Error message (accompanied with canceled = false).
   string error = 2;
 }
 

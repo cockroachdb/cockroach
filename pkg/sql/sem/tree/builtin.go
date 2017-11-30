@@ -61,7 +61,7 @@ type Builtin struct {
 	Impure bool
 
 	// DistsqlBlacklist is set to true when a function depends on
-	// members of the EvalContext that are not marshalled by DistSQL
+	// members of the EvalContext that are not marshaled by DistSQL
 	// (e.g. planner). Currently used for DistSQL to determine if
 	// expressions can be evaluated on a different node without sending
 	// over the EvalContext.

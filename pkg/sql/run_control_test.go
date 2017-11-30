@@ -80,7 +80,7 @@ func TestCancelSelectQuery(t *testing.T) {
 			t.Fatal(err)
 		}
 	case <-time.After(time.Second * 5):
-		t.Fatal("no error received from query supposed to be cancelled")
+		t.Fatal("no error received from query supposed to be canceled")
 	}
 
 }
@@ -111,7 +111,7 @@ func TestCancelParallelQuery(t *testing.T) {
 						BeforeExecute: func(ctx context.Context, stmt string, _ /* isParallel */ bool) {
 							// if queryToBlock
 							if strings.Contains(stmt, "(1)") {
-								// Block start of execution until queryToCancel has been cancelled
+								// Block start of execution until queryToCancel has been canceled
 								<-sem
 							}
 						},
@@ -120,7 +120,7 @@ func TestCancelParallelQuery(t *testing.T) {
 							if strings.Contains(stmt, "(1)") {
 								// Ensure queryToBlock errored out with the cancellation error.
 								if err == nil {
-									errChan <- errors.New("didn't get an error from query that should have been indirectly cancelled")
+									errChan <- errors.New("didn't get an error from query that should have been indirectly canceled")
 								} else if !sqlbase.IsQueryCanceledError(err) {
 									errChan <- err
 								}
@@ -163,7 +163,7 @@ func TestCancelParallelQuery(t *testing.T) {
 	if err != nil && !sqlbase.IsQueryCanceledError(err) {
 		t.Fatal(err)
 	} else if err == nil {
-		t.Fatal("didn't get an error from txn that should have been cancelled")
+		t.Fatal("didn't get an error from txn that should have been canceled")
 	}
 
 	// Ensure both channels are closed.
@@ -220,6 +220,6 @@ func TestCancelDistSQLQuery(t *testing.T) {
 	if err != nil && !sqlbase.IsQueryCanceledError(err) {
 		t.Fatal(err)
 	} else if err == nil {
-		t.Fatal("didn't get an error from query that should have been cancelled")
+		t.Fatal("didn't get an error from query that should have been canceled")
 	}
 }

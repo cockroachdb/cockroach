@@ -94,7 +94,7 @@ type ProposalData struct {
 //
 // It first invokes the endCmds function and then sends the specified
 // proposalResult on the proposal's done channel. endCmds is invoked here in
-// order to allow the original client to be cancelled and possibly no longer
+// order to allow the original client to be canceled and possibly no longer
 // listening to this done channel, and so can't be counted on to invoke endCmds
 // itself.
 //

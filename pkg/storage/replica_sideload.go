@@ -177,7 +177,7 @@ func maybeSideloadEntriesImpl(
 				var err error
 				data, err = protoutil.Marshal(&strippedCmd)
 				if err != nil {
-					return nil, 0, errors.Wrap(err, "while marshalling stripped sideloaded command")
+					return nil, 0, errors.Wrap(err, "while marshaling stripped sideloaded command")
 				}
 			}
 

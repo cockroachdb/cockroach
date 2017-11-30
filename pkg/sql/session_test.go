@@ -250,7 +250,7 @@ func TestErrorOnRollback(t *testing.T) {
 					// the test there's two EndTransactions being sent - one is the direct
 					// result of the test's call to tx.Rollback(), the second is sent by
 					// the TxnCoordSender - indirectly triggered by the fact that, on the
-					// server side, the transaction's context gets cancelled at the SQL
+					// server side, the transaction's context gets canceled at the SQL
 					// layer.
 					if ok &&
 						etReq.Header().Key.String() == targetKeyString &&

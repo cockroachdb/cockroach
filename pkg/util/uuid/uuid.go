@@ -66,7 +66,7 @@ func (u UUID) ToUint128() uint128.Uint128 {
 	return uint128.FromBytes(u.GetBytes())
 }
 
-// Size returns the marshalled size of u, in bytes.
+// Size returns the marshaled size of u, in bytes.
 func (u UUID) Size() int {
 	return len(u.UUID)
 }

@@ -20,7 +20,7 @@ import (
 	"testing"
 )
 
-// TestCombinable tests the correct behaviour of some types that implement
+// TestCombinable tests the correct behavior of some types that implement
 // the combinable interface, notably {Scan,DeleteRange}Response and
 // ResponseHeader.
 func TestCombinable(t *testing.T) {
