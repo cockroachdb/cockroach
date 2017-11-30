@@ -16,6 +16,7 @@ package sql
 
 import (
 	"context"
+	"math"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -123,4 +124,94 @@ func newSequenceState() sequenceState {
 
 func (ss *sequenceState) nextvalEverCalled() bool {
 	return len(ss.latestValues) > 0
+}
+
+func readOnlyError(s string) error {
+	return pgerror.NewErrorf(pgerror.CodeReadOnlySQLTransactionError,
+		"cannot execute %s in a read-only transaction", s)
+}
+
+// assignSequenceOptions moves options from the AST node to the sequence options descriptor,
+// starting with defaults and overriding them with user-provided options.
+func assignSequenceOptions(
+	opts *sqlbase.TableDescriptor_SequenceOpts, optsNode tree.SequenceOptions, setDefaults bool,
+) error {
+	// All other defaults are dependent on the value of increment,
+	// i.e. whether the sequence is ascending or descending.
+	for _, option := range optsNode {
+		if option.Name == tree.SeqOptIncrement {
+			opts.Increment = *option.IntVal
+		}
+	}
+	if opts.Increment == 0 {
+		return pgerror.NewError(
+			pgerror.CodeInvalidParameterValueError, "INCREMENT must not be zero")
+	}
+	isAscending := opts.Increment > 0
+
+	// Set increment-dependent defaults.
+	if setDefaults {
+		if isAscending {
+			opts.MinValue = 1
+			opts.MaxValue = math.MaxInt64
+			opts.Start = opts.MinValue
+		} else {
+			opts.MinValue = math.MinInt64
+			opts.MaxValue = -1
+			opts.Start = opts.MaxValue
+		}
+	}
+
+	// Fill in all other options.
+	optionsSeen := map[string]bool{}
+	for _, option := range optsNode {
+		// Error on duplicate options.
+		_, seenBefore := optionsSeen[option.Name]
+		if seenBefore {
+			return pgerror.NewError(pgerror.CodeSyntaxError, "conflicting or redundant options")
+		}
+		optionsSeen[option.Name] = true
+
+		switch option.Name {
+		case tree.SeqOptIncrement:
+			// Do nothing; this has already been set.
+		case tree.SeqOptMinValue:
+			// A value of nil represents the user explicitly saying `NO MINVALUE`.
+			if option.IntVal != nil {
+				opts.MinValue = *option.IntVal
+			}
+		case tree.SeqOptMaxValue:
+			// A value of nil represents the user explicitly saying `NO MAXVALUE`.
+			if option.IntVal != nil {
+				opts.MaxValue = *option.IntVal
+			}
+		case tree.SeqOptStart:
+			opts.Start = *option.IntVal
+		case tree.SeqOptCycle:
+			opts.Cycle = option.BoolVal
+		}
+	}
+
+	// If start option not specified, set it to MinValue (for ascending sequences)
+	// or MaxValue (for descending sequences).
+	if _, startSeen := optionsSeen[tree.SeqOptStart]; !startSeen {
+		if opts.Increment > 0 {
+			opts.Start = opts.MinValue
+		} else {
+			opts.Start = opts.MaxValue
+		}
+	}
+
+	if opts.Start > opts.MaxValue {
+		return pgerror.NewErrorf(
+			pgerror.CodeInvalidParameterValueError,
+			"START value (%d) cannot be greater than MAXVALUE (%d)", opts.Start, opts.MaxValue)
+	}
+	if opts.Start < opts.MinValue {
+		return pgerror.NewErrorf(
+			pgerror.CodeInvalidParameterValueError,
+			"START value (%d) cannot be less than MINVALUE (%d)", opts.Start, opts.MinValue)
+	}
+
+	return nil
 }
