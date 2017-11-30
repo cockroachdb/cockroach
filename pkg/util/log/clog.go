@@ -1155,7 +1155,7 @@ func (l *loggingT) setV(pc uintptr) level {
 }
 
 func v(level level) bool {
-	return VDepth(level, 1)
+	return VDepth(int32(level), 1)
 }
 
 // InterceptorFn is the type of function accepted by Intercept().
@@ -1187,12 +1187,12 @@ func (l *loggingT) Intercept(ctx context.Context, f InterceptorFn) {
 
 // VDepth reports whether verbosity at the call site is at least the requested
 // level.
-func VDepth(level level, depth int) bool {
+func VDepth(l int32, depth int) bool {
 	// This function tries hard to be cheap unless there's work to do.
 	// The fast path is three atomic loads and compares.
 
 	// Here is a cheap but safe test to see if V logging is enabled globally.
-	if logging.verbosity.get() >= level {
+	if logging.verbosity.get() >= level(l) {
 		return true
 	}
 
@@ -1215,7 +1215,7 @@ func VDepth(level level, depth int) bool {
 		if !ok {
 			v = logging.setV(logging.pcs[0])
 		}
-		return v >= level
+		return v >= level(l)
 	}
 	return false
 }
