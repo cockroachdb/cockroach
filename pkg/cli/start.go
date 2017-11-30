@@ -66,9 +66,9 @@ import (
 // The function takes a filename to write the profile to.
 var jemallocHeapDump func(string) error
 
-// startCmd starts a node by initializing the stores and joining
+// StartCmd starts a node by initializing the stores and joining
 // the cluster.
-var startCmd = &cobra.Command{
+var StartCmd = &cobra.Command{
 	Use:   "start",
 	Short: "start a node",
 	Long: `

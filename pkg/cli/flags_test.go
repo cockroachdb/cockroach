@@ -58,7 +58,7 @@ func TestNoLinkForbidden(t *testing.T) {
 func TestCacheFlagValue(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	f := startCmd.Flags()
+	f := StartCmd.Flags()
 	args := []string{"--cache", "100MB"}
 	if err := f.Parse(args); err != nil {
 		t.Fatal(err)
@@ -73,7 +73,7 @@ func TestCacheFlagValue(t *testing.T) {
 func TestSQLMemoryPoolFlagValue(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	f := startCmd.Flags()
+	f := StartCmd.Flags()
 	args := []string{"--max-sql-memory", "100MB"}
 	if err := f.Parse(args); err != nil {
 		t.Fatal(err)
@@ -88,7 +88,7 @@ func TestSQLMemoryPoolFlagValue(t *testing.T) {
 func TestClockOffsetFlagValue(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	f := startCmd.Flags()
+	f := StartCmd.Flags()
 	testData := []struct {
 		args     []string
 		expected time.Duration
@@ -123,7 +123,7 @@ func TestServerConnSettings(t *testing.T) {
 	}
 	defer resetGlobals()
 
-	f := startCmd.Flags()
+	f := StartCmd.Flags()
 	testData := []struct {
 		args                  []string
 		expectedAddr          string
@@ -219,7 +219,7 @@ func TestClientConnSettings(t *testing.T) {
 func TestHttpHostFlagValue(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	f := startCmd.Flags()
+	f := StartCmd.Flags()
 	testData := []struct {
 		args     []string
 		expected string

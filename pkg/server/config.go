@@ -499,6 +499,7 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 				MaxOpenFiles:            openFileLimitPerStore,
 				WarnLargeBatchThreshold: 500 * time.Millisecond,
 				Settings:                cfg.Settings,
+				UseSwitchingEnv:         spec.UseSwitchingEnv,
 			}
 
 			eng, err := engine.NewRocksDB(rocksDBConfig, cache)
