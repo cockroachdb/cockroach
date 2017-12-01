@@ -240,6 +240,7 @@ query T colnames
 SELECT * FROM [SHOW USERS]
 ----
 username
+root
 testuser
 
 

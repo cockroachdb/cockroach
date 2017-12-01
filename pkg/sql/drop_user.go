@@ -20,6 +20,7 @@ import (
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -127,8 +128,9 @@ func (n *dropUserNode) Start(params runParams) error {
 
 	numDeleted := 0
 	for normalizedUsername := range userNames {
-		// Note: protected users like security.RootUser are not included in system.users,
-		// so there is no need to filter them out.
+		if normalizedUsername == security.RootUser {
+			return errors.Errorf("user %s cannot be dropped", security.RootUser)
+		}
 
 		// TODO: Remove the privileges granted to the user.
 		// Note: The current remove user from CLI just deletes the entry from system.users,
