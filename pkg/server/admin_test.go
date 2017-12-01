@@ -698,6 +698,7 @@ VALUES ('admin', 'abc'), ('bob', 'xyz')`
 		Users: []serverpb.UsersResponse_User{
 			{Username: "admin"},
 			{Username: "bob"},
+			{Username: "root"},
 		},
 	}
 

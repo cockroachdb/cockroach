@@ -4,6 +4,7 @@ query T colnames
 SHOW USERS
 ----
 username
+root
 testuser
 
 statement ok
@@ -13,6 +14,7 @@ query T colnames
 SHOW USERS
 ----
 username
+root
 testuser
 user1
 
@@ -62,6 +64,7 @@ SHOW USERS
 ----
 username
 foo
+root
 testuser
 user1
 user2
@@ -91,3 +94,8 @@ query TTT
 SELECT current_user, session_user, user
 ----
 testuser  testuser  testuser
+
+user root
+
+statement error pq: user root cannot use password authentication
+ALTER USER root WITH PASSWORD 'foo'

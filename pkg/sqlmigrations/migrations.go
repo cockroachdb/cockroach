@@ -95,6 +95,10 @@ var backwardCompatibleMigrations = []migrationDescriptor{
 		newDescriptors: 1,
 		newRanges:      1,
 	},
+	{
+		name:   "add root user",
+		workFn: addRootUser,
+	},
 }
 
 // migrationDescriptor describes a single migration hook that's used to modify
@@ -490,4 +494,21 @@ func repopulateViewDeps(ctx context.Context, r runner) error {
 	return r.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
 		return sql.RecomputeViewDependencies(ctx, txn, r.sqlExecutor)
 	})
+}
+
+func addRootUser(ctx context.Context, r runner) error {
+	// System tables can only be modified by a privileged internal user.
+	session := r.newRootSession(ctx)
+	defer session.Finish(r.sqlExecutor)
+
+	// Upsert the root user into the table. We intentionally override any existing entry.
+	const upsertRootStmt = `UPSERT INTO system.users (username, "hashedPassword") VALUES ($1, '');`
+
+	pl := tree.MakePlaceholderInfo()
+	pl.SetValue("1", tree.NewDString(security.RootUser))
+	res, err := r.sqlExecutor.ExecuteStatementsBuffered(session, upsertRootStmt, &pl, 1)
+	if err == nil {
+		res.Close(ctx)
+	}
+	return err
 }

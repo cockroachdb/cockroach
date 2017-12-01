@@ -17,6 +17,7 @@ package sql
 import (
 	"golang.org/x/net/context"
 
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/pkg/errors"
@@ -65,6 +66,11 @@ func (n *alterUserSetPasswordNode) Start(params runParams) error {
 	normalizedUsername, hashedPassword, err := n.userAuthInfo.resolve()
 	if err != nil {
 		return err
+	}
+
+	// The root user is not allowed a password.
+	if normalizedUsername == security.RootUser {
+		return errors.Errorf("user %s cannot use password authentication", security.RootUser)
 	}
 
 	internalExecutor := InternalExecutor{LeaseManager: params.p.LeaseMgr()}
