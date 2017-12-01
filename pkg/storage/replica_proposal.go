@@ -17,7 +17,6 @@ package storage
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"time"
@@ -35,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/rditer"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/fileutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -364,7 +364,7 @@ func addSSTablePreApply(
 			}
 		}
 
-		if err := ioutil.WriteFile(path, sst.Data, 0600); err != nil {
+		if err := fileutil.WriteFileSyncing(path, sst.Data, 0600, sstWriteSyncRate.Get(&st.SV)); err != nil {
 			log.Fatalf(ctx, "while ingesting %s: %s", path, err)
 		}
 	}
