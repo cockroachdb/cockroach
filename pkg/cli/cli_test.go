@@ -679,6 +679,9 @@ func Example_sql() {
 	c.RunWithArgs([]string{"sql", "--execute=show databases"})
 	c.RunWithArgs([]string{"sql", "-e", "select 1; select 2"})
 	c.RunWithArgs([]string{"sql", "-e", "select 1; select 2 where false"})
+	// CREATE TABLE AS returns a SELECT tag with a row count, check this.
+	c.RunWithArgs([]string{"sql", "-e", "create table t.g1 (x int)"})
+	c.RunWithArgs([]string{"sql", "-e", "create table t.g2 as select * from generate_series(1,10)"})
 	// It must be possible to access pre-defined/virtual tables even if the current database
 	// does not exist yet.
 	c.RunWithArgs([]string{"sql", "-d", "nonexistent", "-e", "select count(*) from pg_class limit 0"})
@@ -737,6 +740,10 @@ func Example_sql() {
 	// # 1 row
 	// 2
 	// # 0 rows
+	// sql -e create table t.g1 (x int)
+	// CREATE TABLE
+	// sql -e create table t.g2 as select * from generate_series(1,10)
+	// SELECT 10
 	// sql -d nonexistent -e select count(*) from pg_class limit 0
 	// count(*)
 	// # 0 rows

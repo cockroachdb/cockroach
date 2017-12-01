@@ -240,6 +240,7 @@ SELECT span, operation, regexp_replace(regexp_replace(message, 'wall_time:\d+', 
 (0,1)  starting plan  CPut /Table/53/1/...PK.../0 -> /TUPLE/1:1:Int/2/1:2:Int/3
 (0,1)  starting plan  querying next range at /Table/SystemConfigSpan/Start
 (0,1)  starting plan  r1: sending batch 2 CPut, 1 EndTxn to (n1,s1):1
+(0,15) consuming rows fast path - rows affected: 2
 
 query TTT
 SELECT span, operation, regexp_replace(message, '\d\d\d\d\d+', '...PK...') as message

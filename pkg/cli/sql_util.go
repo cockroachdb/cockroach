@@ -474,6 +474,9 @@ var tagsWithRowsAffected = map[string]struct{}{
 	"UPDATE":    {},
 	"DELETE":    {},
 	"DROP USER": {},
+	// This one is used with e.g. CREATE TABLE AS (other SELECT
+	// statements have type Rows, not RowsAffected).
+	"SELECT": {},
 }
 
 // runQueryAndFormatResults takes a 'query' with optional 'parameters'.
@@ -501,15 +504,34 @@ func runQueryAndFormatResults(conn *sqlConn, w io.Writer, fn queryFunc) error {
 		noRowsHook := func() (bool, error) {
 			res := rows.Result()
 			if ra, ok := res.(driver.RowsAffected); ok {
+				nRows, err := ra.RowsAffected()
+				if err != nil {
+					return false, err
+				}
+
 				// This may be either something like INSERT with a valid
 				// RowsAffected value, or a statement like SET. The pq driver
 				// uses both driver.RowsAffected for both.  So we need to be a
 				// little more manual.
 				tag := rows.Tag()
-				if tag == "SELECT" {
-					// The driver unhelpfully "optimizes" a SELECT returning no rows
-					// into a driver.RowsAffected instance with value 0. In that
-					// case, we still want the reporter to do its job properly.
+				if tag == "SELECT" && nRows == 0 {
+					// As explained above, the pq driver unhelpfully does not
+					// distinguish between a statement returning zero rows and a
+					// statement returning an affected row count of zero.
+					// noRowsHook is called non-discriminatingly for both
+					// situations.
+					//
+					// TODO(knz): meanwhile, there are rare, non-SELECT
+					// statements that have tag "SELECT" but are legitimately of
+					// type RowsAffected. CREATE TABLE AS is one. pq's inability
+					// to distinguish those two cases means that any non-SELECT
+					// statement that legitimately returns 0 rows affected, and
+					// for which the user would expect to see "SELECT 0", will
+					// be incorrectly displayed as an empty row result set
+					// instead. This needs to be addressed by ensuring pq can
+					// distinguish the two cases, or switching to an entirely
+					// different driver altogether.
+					//
 					return false, nil
 				} else if _, ok := tagsWithRowsAffected[tag]; ok {
 					// INSERT, DELETE, etc.: print the row count.

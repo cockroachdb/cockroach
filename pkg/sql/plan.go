@@ -193,8 +193,12 @@ var _ planNode = &windowNode{}
 var _ planNode = &createUserNode{}
 var _ planNode = &dropUserNode{}
 
+var _ planNodeFastPath = &alterUserSetPasswordNode{}
+var _ planNodeFastPath = &createTableNode{}
+var _ planNodeFastPath = &createUserNode{}
 var _ planNodeFastPath = &deleteNode{}
 var _ planNodeFastPath = &dropUserNode{}
+var _ planNodeFastPath = &setZoneConfigNode{}
 
 // makePlan implements the Planner interface.
 func (p *planner) makePlan(ctx context.Context, stmt Statement) (planNode, error) {
@@ -323,11 +327,11 @@ func (p *planner) newPlan(
 	tracing.AnnotateTrace()
 
 	// This will set the system DB trigger for transactions containing
-	// DDL statements that have no effect, such as
+	// schema-modifying statements that have no effect, such as
 	// `BEGIN; INSERT INTO ...; CREATE TABLE IF NOT EXISTS ...; COMMIT;`
 	// where the table already exists. This will generate some false
 	// refreshes, but that's expected to be quite rare in practice.
-	if stmt.StatementType() == tree.DDL {
+	if tree.CanModifySchema(stmt) {
 		if err := p.txn.SetSystemConfigTrigger(); err != nil {
 			return nil, errors.Wrap(err,
 				"schema change statement cannot follow a statement that has written in the same transaction")
