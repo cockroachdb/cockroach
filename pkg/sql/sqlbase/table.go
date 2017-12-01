@@ -2596,7 +2596,11 @@ func TightenEndKey(
 
 			// We first iterate back to the previous key value
 			//    /1/#/1 --> /1/#/0
-			end = encoding.UndoPrefixEnd(end)
+			undoPrefixEnd, ok := encoding.UndoPrefixEnd(end)
+			if !ok {
+				return end, nil
+			}
+			end = undoPrefixEnd
 		}
 
 		// /1/#/0 --> /1/#/0/#

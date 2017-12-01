@@ -347,13 +347,13 @@ func TestMakeSpans(t *testing.T) {
 	}{
 		{`c`, `c`, `/1-/2`, `/1-/0`},
 		{`c = true`, `c`, `/1-/2`, `/1-/0`},
-		{`c = false`, `c`, `/0-/1`, `/0-/-1/NULL`},
+		{`c = false`, `c`, `/0-/1`, `/0-/-1`},
 		{`c != true`, `c`, `/!NULL-/1`, `/0-/!NULL`},
 		{`c != false`, `c`, `/1-`, `-/0`},
 		{`NOT c`, `c`, `/!NULL-/1`, `/0-/!NULL`},
 		{`c IS TRUE`, `c`, `/1-/2`, `/1-/0`},
 		{`c IS NOT TRUE`, `c`, `-/1`, `/0-/!NULL /NULL-`},
-		{`c IS FALSE`, `c`, `/0-/1`, `/0-/-1/NULL`},
+		{`c IS FALSE`, `c`, `/0-/1`, `/0-/-1`},
 		{`c IS NOT FALSE`, `c`, `-/!NULL /1-`, `-/0 /NULL-`},
 
 		{`a = 1`, `a`, `/1-/2`, `/1-/0`},
@@ -535,6 +535,9 @@ func TestMakeSpans(t *testing.T) {
 				s := sqlbase.PrettySpans(index, spans, 2)
 				if expected != s {
 					t.Errorf("[index direction: %d] %s: expected %s, but found %s", dir, d.expr, expected, s)
+					for _, sp := range spans {
+						t.Errorf("Start: %x   End: %x", sp.Key, sp.EndKey)
+					}
 				}
 			})
 		}
