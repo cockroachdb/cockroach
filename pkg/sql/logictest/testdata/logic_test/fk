@@ -872,17 +872,46 @@ pkref_b  CREATE TABLE pkref_b (
         FAMILY "primary" (b)
 )
 
-# See https://github.com/cockroachdb/cockroach/issues/20045
 statement ok
-CREATE TABLE self_x2 (
+CREATE TABLE test20042 (
   x STRING PRIMARY KEY
- ,y STRING UNIQUE REFERENCES self_x2(x)
- ,z STRING REFERENCES self_x2(y)
- ,INDEX(z)
+ ,y STRING UNIQUE
+ ,z STRING REFERENCES test20042(y)
 );
 
 statement ok
-INSERT INTO self_x2 (x, y, z) VALUES ('pk1', NULL, NULL);
+INSERT INTO test20042 (x, y, z) VALUES ('pk1', 'k1', null);
 
 statement ok
-DELETE FROM self_x2 WHERE x = 'pk1';
+INSERT INTO test20042 (x, y, z) VALUES ('pk2', 'k2 ', 'k1');
+
+statement ok
+DELETE FROM test20042 WHERE x = 'pk2';
+
+statement ok
+DELETE FROM test20042 WHERE x = 'pk1';
+
+statement ok
+CREATE TABLE test20045 (
+  x STRING PRIMARY KEY
+ ,y STRING UNIQUE REFERENCES test20045(x)
+ ,z STRING REFERENCES test20045(y)
+);
+
+statement ok
+INSERT INTO test20045 (x, y, z) VALUES ('pk1', NULL, NULL);
+
+statement ok
+INSERT INTO test20045 (x, y, z) VALUES ('pk2', 'pk1', NULL);
+
+statement ok
+INSERT INTO test20045 (x, y, z) VALUES ('pk3', 'pk2', 'pk1');
+
+statement ok
+DELETE FROM test20045 WHERE x = 'pk3';
+
+statement ok
+DELETE FROM test20045 WHERE x = 'pk2';
+
+statement ok
+DELETE FROM test20045 WHERE x = 'pk1';
