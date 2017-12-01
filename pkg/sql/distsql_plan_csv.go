@@ -205,6 +205,26 @@ func (l *DistLoader) LoadCSV(
 	encFn := func(b []byte) []byte {
 		return encoding.EncodeBytesAscending(nil, b)
 	}
+	sstSpecs := make([]distsqlrun.SSTWriterSpec, len(nodes))
+	for i := range nodes {
+		sstSpecs[i] = distsqlrun.SSTWriterSpec{
+			Destination:   to,
+			WalltimeNanos: walltime,
+		}
+	}
+	addSpan := func(start, end []byte) {
+		stream := int32(len(spans) % len(nodes))
+		spans = append(spans, distsqlrun.OutputRouterSpec_RangeRouterSpec_Span{
+			Start:  encFn(start),
+			End:    encFn(end),
+			Stream: stream,
+		})
+		sstSpecs[stream].Spans = append(sstSpecs[stream].Spans, distsqlrun.SSTWriterSpec_SpanWriter{
+			Name: fmt.Sprintf("%d.sst", len(spans)),
+			End:  end,
+		})
+	}
+	// Assign each span to a node.
 	for i := oversample - 1; i < n; i += oversample {
 		row := rowContainer.At(i)
 		b := row[0].(*tree.DBytes)
@@ -212,17 +232,12 @@ func (l *DistLoader) LoadCSV(
 		if err != nil {
 			return err
 		}
-		spans = append(spans, distsqlrun.OutputRouterSpec_RangeRouterSpec_Span{
-			Start: encFn(prevKey),
-			End:   encFn(k),
-		})
+		addSpan(prevKey, k)
 		prevKey = k
 	}
 	rowContainer.Close(ctx)
-	spans = append(spans, distsqlrun.OutputRouterSpec_RangeRouterSpec_Span{
-		Start: encFn(prevKey),
-		End:   encFn(tableSpan.EndKey),
-	})
+	addSpan(prevKey, tableSpan.EndKey)
+
 	routerSpec := distsqlrun.OutputRouterSpec_RangeRouterSpec{
 		Spans: spans,
 		Encodings: []distsqlrun.OutputRouterSpec_RangeRouterSpec_ColumnEncoding{
@@ -288,13 +303,11 @@ func (l *DistLoader) LoadCSV(
 	}
 
 	stageID = p.NewStageID()
-	p.ResultRouters = make([]distsqlplan.ProcessorIdx, len(spans))
-	for i := range spans {
-		node := nodes[i%len(nodes)]
-		swSpec := distsqlrun.SSTWriterSpec{
-			Destination:   to,
-			Name:          fmt.Sprintf("%d.sst", i),
-			WalltimeNanos: walltime,
+	p.ResultRouters = make([]distsqlplan.ProcessorIdx, 0, len(nodes))
+	for i, node := range nodes {
+		swSpec := sstSpecs[i]
+		if len(swSpec.Spans) == 0 {
+			continue
 		}
 		proc := distsqlplan.Processor{
 			Node: node.NodeID,
@@ -317,7 +330,7 @@ func (l *DistLoader) LoadCSV(
 				DestInput:        0,
 			})
 		}
-		p.ResultRouters[i] = pIdx
+		p.ResultRouters = append(p.ResultRouters, pIdx)
 	}
 
 	l.distSQLPlanner.FinalizePlan(&planCtx, &p)
