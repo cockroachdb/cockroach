@@ -895,12 +895,6 @@ func forEachUser(ctx context.Context, origPlanner *planner, fn func(username str
 		return nil
 	}
 
-	// TODO(cuongdo/asubiotto): Get rid of root user special-casing if/when a row
-	// for "root" exists in system.user.
-	if err := fn(security.RootUser); err != nil {
-		return err
-	}
-
 	for _, row := range rows {
 		username := tree.MustBeDString(row[0])
 		if err := fn(string(username)); err != nil {

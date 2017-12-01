@@ -698,7 +698,7 @@ func TestPGPreparedQuery(t *testing.T) {
 			baseTest.Results("UTC"),
 		},
 		"SHOW USERS": {
-			baseTest,
+			baseTest.Results("root"),
 		},
 		"SELECT (SELECT 1+$1)": {
 			baseTest.SetArgs(1).Results(2),
