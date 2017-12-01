@@ -15,8 +15,8 @@
 package tscache
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
@@ -48,7 +48,7 @@ func newSklImpl(clock *hlc.Clock, metrics Metrics) *sklImpl {
 // clear clears the cache and resets the low-water mark.
 func (tc *sklImpl) clear(lowWater hlc.Timestamp) {
 	pageSize := uint32(sklPageSize)
-	if util.RaceEnabled {
+	if build.RaceEnabled {
 		// Race testing consumes significantly more memory that normal testing.
 		// In addition, while running a group of tests in parallel, each will
 		// create a timestamp cache for every Store needed. Reduce the page size

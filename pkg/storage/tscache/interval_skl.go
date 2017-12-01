@@ -26,7 +26,7 @@ import (
 
 	"github.com/andy-kimball/arenaskl"
 
-	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/interval"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -691,7 +691,7 @@ func (p *sklPage) ensureInitialized(it *arenaskl.Iterator, key []byte) error {
 	prevGapVal := p.incomingGapVal(it, key)
 
 	// Make sure we're on the right key again.
-	if util.RaceEnabled && !bytes.Equal(it.Key(), key) {
+	if build.RaceEnabled && !bytes.Equal(it.Key(), key) {
 		panic("no node found")
 	}
 
@@ -705,7 +705,7 @@ func (p *sklPage) ensureInitialized(it *arenaskl.Iterator, key []byte) error {
 // successful (true) or whether it saw an ErrArenaFull while ratcheting (false).
 func (p *sklPage) ensureFloorValue(it *arenaskl.Iterator, to []byte, val cacheValue) bool {
 	for it.Valid() {
-		util.RacePreempt()
+		build.RacePreempt()
 
 		// If "to" is not nil (open range) then it is treated as an exclusive
 		// bound.
@@ -803,7 +803,7 @@ func (p *sklPage) ratchetValueSet(
 	var arr [encodedValSize * 2]byte
 
 	for {
-		util.RacePreempt()
+		build.RacePreempt()
 
 		meta := it.Meta()
 		inited := (meta & initialized) != 0
@@ -987,7 +987,7 @@ func (p *sklPage) scanTo(
 	prevGapVal, maxVal = initGapVal, initGapVal
 	first := true
 	for {
-		util.RacePreempt()
+		build.RacePreempt()
 
 		if !it.Valid() {
 			// No more nodes, which can happen for open ranges.
@@ -1045,7 +1045,7 @@ func (p *sklPage) scanTo(
 // is a no-op.
 func prevInitNode(it *arenaskl.Iterator) {
 	for {
-		util.RacePreempt()
+		build.RacePreempt()
 
 		if !it.Valid() {
 			// No more previous nodes, so use the zero value.
