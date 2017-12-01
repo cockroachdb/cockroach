@@ -1366,6 +1366,7 @@ func (dsp *DistSQLPlanner) addAggregators(
 			p.ResultRouters[i] = pIdxStart + distsqlplan.ProcessorIdx(i)
 		}
 		p.ResultTypes = finalOutTypes
+
 		p.SetMergeOrdering(orderingTerminated)
 	}
 

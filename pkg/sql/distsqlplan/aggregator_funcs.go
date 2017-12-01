@@ -275,6 +275,22 @@ var DistAggregationTable = map[distsqlrun.AggregatorSpec_Func]DistAggregationInf
 			},
 		},
 	},
+
+	// TODO(richardwu): we can't do local-final aggregation naively on
+	// FIRST since between the local-final stages, any merge ordering from
+	// before the local stage is not preserved, which is fundamental to the
+	// semantics of FIRST.
+	// For example, the query
+	//    SELECT FIRST(a) FROM (SELECT * FROM bar ORDER BY b)
+	// would return column a's value for the row with the smallest b.
+	// However, this ordering information (and the rendering of b) is not
+	// propagated to the final aggregation stage after local aggregation.
+	// This will cause FIRST(a) to not only deviate from a serial (i.e.
+	// local) execution but also return incorrect values.
+	// To fix this, we can introduce pass-through renders in the aggregator
+	// spec for any MergeOrdering columns.
+	// For now, any MergeOrdering set (e.g. by a sort node) before the
+	// aggregator should be preserved when constructing the plan.
 }
 
 // typeContainer is a helper type that implements tree.IndexedVarContainer; it
