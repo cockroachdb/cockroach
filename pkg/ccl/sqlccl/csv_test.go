@@ -456,6 +456,9 @@ func TestImportStmt(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	// Get the number of existing jobs.
+	baseNumJobs := jobutils.GetSystemJobsCount(t, sqlDB)
+
 	if err := ioutil.WriteFile(filepath.Join(dir, "empty.csv"), nil, 0666); err != nil {
 		t.Fatal(err)
 	}
@@ -657,7 +660,7 @@ func TestImportStmt(t *testing.T) {
 			}
 
 			const jobPrefix = `IMPORT TABLE t (a INT PRIMARY KEY, b STRING, INDEX (b), INDEX (a, b)) CSV DATA (%s) `
-			if err := jobutils.VerifySystemJob(t, sqlDB, i*2, jobs.TypeImport, jobs.Record{
+			if err := jobutils.VerifySystemJob(t, sqlDB, baseNumJobs+i*2, jobs.TypeImport, jobs.Record{
 				Username:    security.RootUser,
 				Description: fmt.Sprintf(jobPrefix+tc.jobOpts, strings.Join(tc.files, ", "), `'`+backupPath+`'`),
 			}); err != nil {

@@ -40,7 +40,7 @@ func GetUserHashedPassword(
 		p := makeInternalPlanner("get-pwd", txn, security.RootUser, metrics)
 		defer finishInternalPlanner(p)
 		const getHashedPassword = `SELECT "hashedPassword" FROM system.users ` +
-			`WHERE username=$1`
+			`WHERE username=$1 AND "isRole" = false`
 		values, err := p.QueryRow(ctx, getHashedPassword, normalizedUsername)
 		if err != nil {
 			return errors.Errorf("error looking up user %s", normalizedUsername)

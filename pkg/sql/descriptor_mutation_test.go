@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
+	"github.com/cockroachdb/cockroach/pkg/sqlmigrations"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -701,9 +702,14 @@ func TestSchemaChangeCommandsWithPendingMutations(t *testing.T) {
 	defer sql.TestDisableTableLeases()()
 	// Disable external processing of mutations.
 	params, _ := tests.CreateTestServerParams()
-	params.Knobs.SQLSchemaChanger = &sql.SchemaChangerTestingKnobs{
-		SyncFilter:            sql.TestingSchemaChangerCollection.ClearSchemaChangers,
-		AsyncExecNotification: asyncSchemaChangerDisabled,
+	params.Knobs = base.TestingKnobs{
+		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
+			SyncFilter:            sql.TestingSchemaChangerCollection.ClearSchemaChangers,
+			AsyncExecNotification: asyncSchemaChangerDisabled,
+		},
+		SQLMigrationManager: &sqlmigrations.MigrationManagerTestingKnobs{
+			DisableMigrations: true,
+		},
 	}
 	server, sqlDB, kvDB := serverutils.StartServer(t, params)
 	defer server.Stopper().Stop(context.TODO())
@@ -911,6 +917,9 @@ func TestTableMutationQueue(t *testing.T) {
 				tscc.ClearSchemaChangers()
 			},
 			AsyncExecNotification: asyncSchemaChangerDisabled,
+		},
+		SQLMigrationManager: &sqlmigrations.MigrationManagerTestingKnobs{
+			DisableMigrations: true,
 		},
 	}
 	server, sqlDB, kvDB := serverutils.StartServer(t, params)

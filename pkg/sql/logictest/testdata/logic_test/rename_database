@@ -12,7 +12,8 @@ test
 query TTT
 SHOW GRANTS ON DATABASE test
 ----
-test        root      ALL
+test  admin  ALL
+test  root   ALL
 
 statement ok
 CREATE TABLE kv (
@@ -53,7 +54,8 @@ u
 query TTT
 SHOW GRANTS ON DATABASE u
 ----
-u        root      ALL
+u  admin  ALL
+u  root   ALL
 
 statement ok
 SET DATABASE = u

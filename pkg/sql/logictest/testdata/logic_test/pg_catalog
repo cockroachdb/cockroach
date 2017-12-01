@@ -503,6 +503,7 @@ indexrelid  indrelid    indnatts  indisunique  indisprimary  indisexclusion
 2751284469  3570422629  2         true         true          false
 3505585425  2199392917  2         true         true          false
 3491800018  3270885600  2         true         true          false
+1784645715  4240908941  2         true         true          false
 3501101122  3640657984  2         true         true          false
 
 query OBBBBB colnames
@@ -518,6 +519,7 @@ indexrelid  indimmediate  indisclustered  indisvalid  indcheckxmin  indisready
 2751284469  true          false           true        false         false
 3505585425  true          false           true        false         false
 3491800018  true          false           true        false         false
+1784645715  true          false           true        false         false
 3501101122  true          false           true        false         false
 
 query OOBBTIIITT colnames
@@ -533,6 +535,7 @@ indexrelid  indrelid    indislive  indisreplident  indkey  indcollation  indclas
 2751284469  3570422629  true       false           1 2     0             0         0          NULL      NULL
 3505585425  2199392917  true       false           1 2     0             0         0          NULL      NULL
 3491800018  3270885600  true       false           1 7     0             0         0          NULL      NULL
+1784645715  4240908941  true       false           1 2     0             0         0          NULL      NULL
 3501101122  3640657984  true       false           1 2     0             0         0          NULL      NULL
 
 ## pg_catalog.pg_collation
@@ -1051,23 +1054,25 @@ rngtypid  rngsubtype  rngcollation  rngsubopc  rngcanonical  rngsubdiff
 
 ## pg_catalog.pg_roles
 
-query OTBBBBBBI colnames
-SELECT oid, rolname, rolsuper, rolinherit, rolcreaterole, rolcreatedb, rolcatupdate, rolcanlogin, rolconnlimit
+query OTBBBBBBB colnames
+SELECT oid, rolname, rolsuper, rolinherit, rolcreaterole, rolcreatedb, rolcatupdate, rolcanlogin, rolreplication
 FROM pg_catalog.pg_roles
 ORDER BY rolname
 ----
-oid         rolname   rolsuper  rolinherit  rolcreaterole  rolcreatedb  rolcatupdate  rolcanlogin  rolconnlimit
-2901009604  root      true      false       true           true         false         true         -1
-2499926009  testuser  false     false       false          false        false         true         -1
+oid         rolname   rolsuper  rolinherit  rolcreaterole  rolcreatedb  rolcatupdate  rolcanlogin  rolreplication
+823966177   admin     true      true        true           true         false         false        false
+2901009604  root      true      false       true           true         false         true         false
+2499926009  testuser  false     false       false          false        false         true         false
 
-query OTTTT colnames
-SELECT oid, rolname, rolpassword, rolvaliduntil, rolconfig
+query OTITTBT colnames
+SELECT oid, rolname, rolconnlimit, rolpassword, rolvaliduntil, rolbypassrls, rolconfig
 FROM pg_catalog.pg_roles
 ORDER BY rolname
 ----
-oid         rolname   rolpassword  rolvaliduntil  rolconfig
-2901009604  root      ********     NULL           {}
-2499926009  testuser  ********     NULL           {}
+oid         rolname   rolconnlimit  rolpassword  rolvaliduntil  rolbypassrls  rolconfig
+823966177   admin     -1            ********     NULL           false         {}
+2901009604  root      -1            ********     NULL           false         {}
+2499926009  testuser  -1            ********     NULL           false         {}
 
 ## pg_catalog.pg_description
 

@@ -85,7 +85,7 @@ statement error pq: user testuser does not have INSERT privilege on relation use
 CREATE USER user4
 
 statement error pq: user testuser does not have INSERT privilege on relation users
-UPSERT INTO system.users VALUES (user1, 'newpassword')
+UPSERT INTO system.users VALUES (user1, 'newpassword', false)
 
 statement error pq: user testuser does not have SELECT privilege on relation users
 SHOW USERS

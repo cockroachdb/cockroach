@@ -47,7 +47,8 @@ new_kv
 query TTTT
 SHOW GRANTS ON TABLE new_kv
 ----
-test  new_kv  root  ALL
+test  new_kv  admin  ALL
+test  new_kv  root   ALL
 
 statement error empty table name
 ALTER TABLE "" RENAME TO foo
