@@ -192,7 +192,10 @@ func (ir *intentResolver) maybePushTransactions(
 			cleanupPushIntentsLocked()
 			ir.mu.Unlock()
 			return nil, roachpb.NewErrorf("unexpected %s intent: %+v", intent.Status, intent)
-		} else if _, ok := ir.mu.inFlight[intent.Txn.ID]; ok && skipIfInFlight {
+		}
+		_, alreadyPushing := pushTxns[intent.Txn.ID]
+		_, pushTxnInFlight := ir.mu.inFlight[intent.Txn.ID]
+		if !alreadyPushing && pushTxnInFlight && skipIfInFlight {
 			// Another goroutine is working on this transaction so we can
 			// skip it.
 			if log.V(1) {
