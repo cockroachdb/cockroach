@@ -3,6 +3,9 @@ set -euxo pipefail
 
 export BUILDER_HIDE_GOPATH_SRC=1
 
+source "$(dirname "${0}")/teamcity-support.sh"
+maybe_ccache
+
 mkdir -p artifacts
 
 exit_status=0
