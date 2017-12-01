@@ -748,7 +748,8 @@ func Example_sql() {
 	// user ls --echo-sql
 	// > SHOW USERS
 	// username
-	// # 0 rows
+	// root
+	// # 1 row
 }
 
 func Example_sql_format() {
@@ -1252,16 +1253,19 @@ func Example_user() {
 	// Output:
 	// user ls
 	// username
-	// # 0 rows
+	// root
+	// # 1 row
 	// user ls --format=pretty
 	// +----------+
 	// | username |
 	// +----------+
+	// | root     |
 	// +----------+
-	// (0 rows)
+	// (1 row)
 	// user ls --format=tsv
 	// username
-	// # 0 rows
+	// root
+	// # 1 row
 	// user set FOO
 	// CREATE USER 1
 	// sql -e create user if not exists 'FOO'
@@ -1314,10 +1318,11 @@ func Example_user() {
 	// | foo0                                                            |
 	// | foo_                                                            |
 	// | foofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoo |
+	// | root                                                            |
 	// | table                                                           |
 	// | ομηρος                                                          |
 	// +-----------------------------------------------------------------+
-	// (10 rows)
+	// (11 rows)
 	// user rm foo
 	// DROP USER 1
 	// user ls --format=pretty
@@ -1331,10 +1336,11 @@ func Example_user() {
 	// | foo0                                                            |
 	// | foo_                                                            |
 	// | foofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoo |
+	// | root                                                            |
 	// | table                                                           |
 	// | ομηρος                                                          |
 	// +-----------------------------------------------------------------+
-	// (9 rows)
+	// (10 rows)
 }
 
 func Example_cert() {
