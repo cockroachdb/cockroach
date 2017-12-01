@@ -58,6 +58,8 @@
 		CertificatesResponse
 		DetailsRequest
 		DetailsResponse
+		PeersRequest
+		PeersResponse
 		NodesRequest
 		NodesResponse
 		NodeRequest
