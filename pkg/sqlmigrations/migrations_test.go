@@ -453,10 +453,19 @@ func TestCreateSystemTable(t *testing.T) {
 
 	// Start up a test server without running the system.jobs migration.
 	newMigrations := append([]migrationDescriptor(nil), backwardCompatibleMigrations...)
+	seenBackfill := false
 	for i := range newMigrations {
+		disable := false
 		if strings.HasPrefix(newMigrations[i].name, "create system.jobs") {
-			// Disable.
-			//
+			// Disable system.jobs migration, we'll do it manually.
+			disable = true
+		}
+		if strings.HasPrefix(newMigrations[i].name, "add system.users isRole column") {
+			// Disable all migrations after (and including) a backfill, the backfill
+			// needs the jobs table and following migrations may depend on these.
+			seenBackfill = true
+		}
+		if disable || seenBackfill {
 			// We merely replace the workFn and newDescriptors here instead
 			// of completely removing the migration step, because
 			// AdditionalInitialDescriptors needs to see the newRanges
@@ -470,8 +479,7 @@ func TestCreateSystemTable(t *testing.T) {
 			newMigrations[i].workFn = func(context.Context, runner) error { return nil }
 			// Change the name so that mgr.EnsureMigrations below finds
 			// something to do.
-			newMigrations[i].name = "disabled"
-			break
+			newMigrations[i].name = fmt.Sprintf("disabled-%d", i)
 		}
 	}
 	defer func(prev []migrationDescriptor) { backwardCompatibleMigrations = prev }(backwardCompatibleMigrations)
@@ -526,7 +534,7 @@ func TestCreateSystemTable(t *testing.T) {
 	// Finally, try running both migrations and make sure they still succeed.
 	// This verifies the idempotency of the migration, since the system.jobs
 	// migration will get rerun here.
-	mgr := NewManager(s.Stopper(), kvDB, nil, s.Clock(), nil, "clientID")
+	mgr := NewManager(s.Stopper(), kvDB, nil, s.Clock(), MigrationManagerTestingKnobs{}, nil, "clientID")
 	backwardCompatibleMigrations = append(backwardCompatibleMigrations, migrationDescriptor{
 		name:           "create system.jobs table",
 		workFn:         createJobsTable,
@@ -723,7 +731,7 @@ CREATE INDEX y ON test.x(x);
 	// This verifies the idempotency of the migration.
 	t.Log("run migration")
 
-	mgr := NewManager(s.Stopper(), kvDB, e, s.Clock(), memMetrics, "clientID")
+	mgr := NewManager(s.Stopper(), kvDB, e, s.Clock(), MigrationManagerTestingKnobs{}, memMetrics, "clientID")
 	backwardCompatibleMigrations = append(backwardCompatibleMigrations, migrationDescriptor{
 		name:   "repopulate view dependencies",
 		workFn: repopulateViewDeps,

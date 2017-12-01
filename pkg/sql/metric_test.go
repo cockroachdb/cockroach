@@ -78,7 +78,7 @@ func TestQueryCounts(t *testing.T) {
 	// DDL statements.
 	accum := queryCounter{
 		selectCount: 2, // non-zero due to migrations
-		insertCount: 4, // non-zero due to migrations
+		insertCount: 5, // non-zero due to migrations
 		ddlCount:    s.MustGetSQLCounter(sql.MetaDdl.Name),
 		miscCount:   s.MustGetSQLCounter(sql.MetaMisc.Name),
 	}
@@ -189,7 +189,7 @@ func TestAbortCountConflictingWrites(t *testing.T) {
 	if err := checkCounterEQ(s, sql.MetaTxnCommit, 0); err != nil {
 		t.Error(err)
 	}
-	if err := checkCounterEQ(s, sql.MetaInsert, 5); err != nil {
+	if err := checkCounterEQ(s, sql.MetaInsert, 6); err != nil {
 		t.Error(err)
 	}
 }

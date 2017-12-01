@@ -124,6 +124,7 @@ SHOW COLUMNS FROM system.users
 ----
 username        STRING  false  NULL  {"primary"}
 hashedPassword  BYTES   true   NULL  {}
+isRole          BOOL    false  false {}
 
 query TTBTT
 SHOW COLUMNS FROM system.zones
