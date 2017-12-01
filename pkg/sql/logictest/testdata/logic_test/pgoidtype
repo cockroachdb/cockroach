@@ -262,3 +262,20 @@ SET DATABASE = thirddb
 
 query error relation "a" does not exist
 SELECT relname, relnatts FROM pg_class WHERE oid='a'::regclass
+
+statement ok
+CREATE TABLE o (a OID PRIMARY KEY)
+
+statement ok
+INSERT INTO o VALUES (1), (4)
+
+query O
+SELECT * FROM o WHERE a < 3
+----
+1
+
+query O rowsort
+SELECT * FROM o WHERE a <= 4
+----
+1
+4
