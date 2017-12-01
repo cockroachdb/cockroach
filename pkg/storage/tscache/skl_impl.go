@@ -23,7 +23,8 @@ import (
 
 // sklPageSize is the size of each page in the sklImpl's read and write
 // intervalSkl.
-const sklPageSize = 32 << 20 // 32 MB
+// TODO(nvanbenschoten): Bump back up to 32 MB when not testing.
+const sklPageSize = 8 << 20 // 8 MB
 
 // sklImpl implements the Cache interface. It maintains a pair of skiplists
 // containing keys or key ranges and the timestamps at which they were most
