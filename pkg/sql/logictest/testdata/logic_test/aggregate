@@ -9,10 +9,10 @@ CREATE TABLE kv (
 )
 
 # Aggregate functions return NULL if there are no rows.
-query IIIIRRRRBBT
-SELECT MIN(1), MAX(1), COUNT(1), SUM_INT(1), AVG(1), SUM(1), STDDEV(1), VARIANCE(1), BOOL_AND(true), BOOL_AND(false), XOR_AGG(b'\x01') FROM kv
+query IIIIIRRRRBBT
+SELECT FIRST(1), MIN(1), MAX(1), COUNT(1), SUM_INT(1), AVG(1), SUM(1), STDDEV(1), VARIANCE(1), BOOL_AND(true), BOOL_AND(false), XOR_AGG(b'\x01') FROM kv
 ----
-NULL NULL 0 NULL NULL NULL NULL NULL NULL NULL NULL
+NULL NULL NULL 0 NULL NULL NULL NULL NULL NULL NULL NULL
 
 # Aggregate functions return NULL if there are no rows.
 query T
@@ -20,10 +20,10 @@ SELECT ARRAY_AGG(1) FROM kv
 ----
 NULL
 
-query IIIIRRRRBBT
-SELECT MIN(v), MAX(v), COUNT(v), SUM_INT(1), AVG(v), SUM(v), STDDEV(v), VARIANCE(v), BOOL_AND(v = 1), BOOL_AND(v = 1), XOR_AGG(s::bytes) FROM kv
+query IIIIIRRRRBBT
+SELECT FIRST(v), MIN(v), MAX(v), COUNT(v), SUM_INT(1), AVG(v), SUM(v), STDDEV(v), VARIANCE(v), BOOL_AND(v = 1), BOOL_AND(v = 1), XOR_AGG(s::bytes) FROM kv
 ----
-NULL NULL 0 NULL NULL NULL NULL NULL NULL NULL NULL
+NULL NULL NULL 0 NULL NULL NULL NULL NULL NULL NULL NULL
 
 query T
 SELECT ARRAY_AGG(v) FROM kv
@@ -31,10 +31,10 @@ SELECT ARRAY_AGG(v) FROM kv
 NULL
 
 # Aggregate functions triggers aggregation and computation when there is no source.
-query IIIIRRRRBBT
-SELECT MIN(1), COUNT(1), MAX(1), SUM_INT(1), AVG(1)::float, SUM(1), STDDEV(1), VARIANCE(1), BOOL_AND(true), BOOL_OR(true), TO_HEX(XOR_AGG(b'\x01'))
+query IIIIIRRRRBBT
+SELECT FIRST(1), MIN(1), COUNT(1), MAX(1), SUM_INT(1), AVG(1)::float, SUM(1), STDDEV(1), VARIANCE(1), BOOL_AND(true), BOOL_OR(true), TO_HEX(XOR_AGG(b'\x01'))
 ----
-1 1 1 1 1 1 NULL NULL true true 01
+1 1 1 1 1 1 1 NULL NULL true true 01
 
 # Aggregate functions triggers aggregation and computation when there is no source.
 query T
@@ -85,10 +85,10 @@ INSERT INTO kv VALUES
 
 # Aggregate functions triggers aggregation and computation for every row even when applied to a constant.
 # NB: The XOR result is 00 because \x01 is XOR'd an even number of times.
-query IIIIRRRRBBT
-SELECT MIN(1), COUNT(1), MAX(1), SUM_INT(1), AVG(1)::float, SUM(1), STDDEV(1), VARIANCE(1)::float, BOOL_AND(true), BOOL_OR(true), TO_HEX(XOR_AGG(b'\x01')) FROM kv
+query IIIIIRRRRBBT
+SELECT FIRST(1), MIN(1), COUNT(1), MAX(1), SUM_INT(1), AVG(1)::float, SUM(1), STDDEV(1), VARIANCE(1)::float, BOOL_AND(true), BOOL_OR(true), TO_HEX(XOR_AGG(b'\x01')) FROM kv
 ----
-1 6 1 6 1 6 0 0 true true 00
+1 1 6 1 6 1 6 0 0 true true 00
 
 # Aggregate functions triggers aggregation and computation for every row even when applied to a constant.
 query T
@@ -484,6 +484,63 @@ query II
 SELECT COUNT(NULL::int), COUNT((NULL, NULL))
 ----
 0 1
+
+query I
+SELECT FIRST(k) FROM kv WHERE k = 1
+----
+1
+
+query I
+SELECT FIRST(v) FROM kv WHERE k = 1
+----
+2
+
+query IIIT
+SELECT FIRST(k), FIRST(v), FIRST(w), FIRST(s) FROM kv WHERE k = 1
+----
+1 2 3 a
+
+query IIIT rowsort
+SELECT FIRST(k), FIRST(v), FIRST(w), FIRST(s) FROM kv GROUP BY k
+----
+1 2 3 a
+3 4 5 a
+5 NULL 5 NULL
+6 2 3 b
+7 2 2 b
+8 4 2 A
+
+query ITTTTT
+EXPLAIN (VERBOSE) SELECT FIRST(k), k+v FROM kv GROUP BY k, v
+----
+0  render  ·            ·                 ("first(k)", "k + v")           ·
+0  ·       render 0     "first(k)"        ·                               ·
+0  ·       render 1     k + v             ·                               ·
+1  group   ·            ·                 ("first(k)", k, v)              ·
+1  ·       aggregate 0  first(test.kv.k)  ·                               ·
+1  ·       aggregate 1  test.kv.k         ·                               ·
+1  ·       aggregate 2  test.kv.v         ·                               ·
+1  ·       group by     @1-@2             ·                               ·
+2  render  ·            ·                 (k, v)                          k!=NULL; key(k)
+2  ·       render 0     test.kv.k         ·                               ·
+2  ·       render 1     test.kv.v         ·                               ·
+3  scan    ·            ·                 (k, v, w[omitted], s[omitted])  k!=NULL; key(k)
+3  ·       table        kv@primary        ·                               ·
+3  ·       spans        ALL               ·                               ·
+
+query ITTTTT
+EXPLAIN (VERBOSE) SELECT FIRST(k), k+v FROM kv GROUP BY k+v
+----
+0  group   ·            ·                      ("first(k)", "k + v")           ·
+0  ·       aggregate 0  first(test.kv.k)       ·                               ·
+0  ·       aggregate 1  test.kv.k + test.kv.v  ·                               ·
+0  ·       group by     @1-@1                  ·                               ·
+1  render  ·            ·                      ("k + v", k)                    k!=NULL; key(k)
+1  ·       render 0     test.kv.k + test.kv.v  ·                               ·
+1  ·       render 1     test.kv.k              ·                               ·
+2  scan    ·            ·                      (k, v, w[omitted], s[omitted])  k!=NULL; key(k)
+2  ·       table        kv@primary             ·                               ·
+2  ·       spans        ALL                    ·                               ·
 
 query IIII
 SELECT MIN(k), MAX(k), MIN(v), MAX(v) FROM kv
