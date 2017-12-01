@@ -2539,7 +2539,9 @@ func (r *Replica) executeReadOnlyBatch(
 		// RangeLookup request which prohibits any concurrent requests for the same
 		// range. See #17760.
 		_, hasRangeLookup := ba.GetArg(roachpb.RangeLookup)
-		r.store.intentResolver.processIntentsAsync(ctx, r, intents, !hasRangeLookup)
+		if err := r.store.intentResolver.processIntentsAsync(ctx, r, intents, !hasRangeLookup); err != nil {
+			log.Warning(ctx, err)
+		}
 	}
 	if pErr != nil {
 		log.ErrEvent(ctx, pErr.String())
@@ -2749,7 +2751,9 @@ func (r *Replica) tryExecuteWriteBatch(
 				// both leave intents to GC that don't hit this code path. No good
 				// solution presents itself at the moment and such intents will be
 				// resolved on reads.
-				r.store.intentResolver.processIntentsAsync(ctx, r, propResult.Intents, true /* allowSync*/)
+				if err := r.store.intentResolver.processIntentsAsync(ctx, r, propResult.Intents, true /* allowSync*/); err != nil {
+					log.Warning(ctx, err)
+				}
 			}
 			return propResult.Reply, propResult.Err, propResult.ProposalRetry
 		case <-slowTimer.C:
@@ -5591,7 +5595,9 @@ func (r *Replica) loadSystemConfig(ctx context.Context) (config.SystemConfig, er
 		// There were intents, so what we read may not be consistent. Attempt
 		// to nudge the intents in case they're expired; next time around we'll
 		// hopefully have more luck.
-		r.store.intentResolver.processIntentsAsync(ctx, r, intents, true /* allowSync */)
+		if err := r.store.intentResolver.processIntentsAsync(ctx, r, intents, true /* allowSync */); err != nil {
+			log.Warning(ctx, err)
+		}
 		return config.SystemConfig{}, errSystemConfigIntent
 	}
 	kvs := br.Responses[0].GetInner().(*roachpb.ScanResponse).Rows

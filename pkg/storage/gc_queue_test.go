@@ -24,6 +24,7 @@ import (
 
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
+	"golang.org/x/sync/syncmap"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -639,16 +640,22 @@ func TestGCQueueTransactionTable(t *testing.T) {
 		},
 	}
 
-	resolved := map[string][]roachpb.Span{}
+	var resolved syncmap.Map
 
 	tsc.TestingKnobs.EvalKnobs.TestingEvalFilter =
 		func(filterArgs storagebase.FilterArgs) *roachpb.Error {
 			if resArgs, ok := filterArgs.Req.(*roachpb.ResolveIntentRequest); ok {
 				id := string(resArgs.IntentTxn.Key)
-				resolved[id] = append(resolved[id], roachpb.Span{
+				var spans []roachpb.Span
+				val, ok := resolved.Load(id)
+				if ok {
+					spans = val.([]roachpb.Span)
+				}
+				spans = append(spans, roachpb.Span{
 					Key:    resArgs.Key,
 					EndKey: resArgs.EndKey,
 				})
+				resolved.Store(id, spans)
 				// We've special cased one test case. Note that the intent is still
 				// counted in `resolved`.
 				if testCases[id].failResolve {
@@ -721,9 +728,13 @@ func TestGCQueueTransactionTable(t *testing.T) {
 			if sp.expResolve {
 				expIntents = testIntents
 			}
-			if !reflect.DeepEqual(resolved[strKey], expIntents) {
-				return fmt.Errorf("%s: unexpected intent resolutions:\nexpected: %s\nobserved: %s",
-					strKey, expIntents, resolved[strKey])
+			var spans []roachpb.Span
+			val, ok := resolved.Load(strKey)
+			if ok {
+				spans = val.([]roachpb.Span)
+			}
+			if !reflect.DeepEqual(spans, expIntents) {
+				return fmt.Errorf("%s: unexpected intent resolutions:\nexpected: %s\nobserved: %s", strKey, expIntents, spans)
 			}
 			entry := &roachpb.AbortSpanEntry{}
 			abortExists, err := tc.repl.abortSpan.Get(context.Background(), tc.store.Engine(), txns[strKey].ID, entry)
