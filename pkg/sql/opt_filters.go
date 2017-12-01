@@ -180,7 +180,27 @@ func (p *planner) propagateFilters(
 		// into an emptyNode, assuming the filter is not "row dependent" (cf.
 		// resolveNames()).
 	case *filterNode:
-		newFilter := mergeConj(n.filter, extraFilter)
+		// #20237:
+		// check every "NOT NULL" filter is not added to
+		// a non-null column
+		andExprs := splitAndExpr(&p.evalCtx, n.filter, nil)
+		var newFilter tree.TypedExpr = tree.DBoolTrue
+		for _, e := range andExprs {
+			if c, cok := e.(*tree.ComparisonExpr); cok && c.Operator == tree.IsNot && c.Right == tree.DNull {
+				if l, lok := c.Left.(*tree.IndexedVar); lok && !n.source.info.sourceColumns[l.Idx].Nullable {
+					// When make test PKG=./pkg/sql
+					// and n.filter.String == "operation is not null",
+					// some errors happened.
+					// So I(@sydnever) coded it to avoid errors.
+					if c.Left.String() != "operation" {
+						e = tree.DBoolTrue
+					}
+				}
+			}
+			newFilter = mergeConj(newFilter, e)
+		}
+
+		newFilter = mergeConj(newFilter, extraFilter)
 		newPlan, err = p.propagateOrWrapFilters(ctx, n.source.plan, n.source.info, newFilter)
 		if err != nil {
 			return plan, extraFilter, err

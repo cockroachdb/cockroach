@@ -30,6 +30,9 @@ type ResultColumn struct {
 
 	// If set, a value won't be produced for this column; used internally.
 	Omitted bool
+
+	// #20237
+	Nullable bool
 }
 
 // ResultColumns is the type used throughout the sql module to
@@ -47,7 +50,10 @@ func ResultColumnsFromColDescs(colDescs []ColumnDescriptor) ResultColumns {
 		}
 
 		hidden := colDesc.Hidden
-		cols = append(cols, ResultColumn{Name: colDesc.Name, Typ: typ, Hidden: hidden})
+
+		nullable := colDesc.Nullable
+		cols = append(cols, ResultColumn{
+			Name: colDesc.Name, Typ: typ, Hidden: hidden, Nullable: nullable})
 	}
 	return cols
 }
