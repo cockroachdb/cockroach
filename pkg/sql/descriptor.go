@@ -226,8 +226,8 @@ func getDescriptorByID(
 	return nil
 }
 
-// getAllDescriptors looks up and returns all available descriptors.
-func getAllDescriptors(ctx context.Context, txn *client.Txn) ([]sqlbase.DescriptorProto, error) {
+// GetAllDescriptors looks up and returns all available descriptors.
+func GetAllDescriptors(ctx context.Context, txn *client.Txn) ([]sqlbase.DescriptorProto, error) {
 	descsKey := sqlbase.MakeAllDescsMetadataKey()
 	kvs, err := txn.Scan(ctx, descsKey, descsKey.PrefixEnd(), 0)
 	if err != nil {

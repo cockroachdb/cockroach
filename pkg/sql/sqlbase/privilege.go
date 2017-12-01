@@ -84,6 +84,23 @@ func NewCustomRootPrivilegeDescriptor(priv privilege.List) *PrivilegeDescriptor 
 	return NewPrivilegeDescriptor(security.RootUser, priv)
 }
 
+// NewCustomSuperuserPrivilegeDescriptor returns a privilege descriptor for the root user
+// and the admin role with specified privileges.
+func NewCustomSuperuserPrivilegeDescriptor(priv privilege.List) *PrivilegeDescriptor {
+	return &PrivilegeDescriptor{
+		Users: []UserPrivileges{
+			{
+				User:       AdminRole,
+				Privileges: priv.ToBitField(),
+			},
+			{
+				User:       security.RootUser,
+				Privileges: priv.ToBitField(),
+			},
+		},
+	}
+}
+
 // NewPrivilegeDescriptor returns a privilege descriptor for the given
 // user with the specified list of privileges.
 func NewPrivilegeDescriptor(user string, priv privilege.List) *PrivilegeDescriptor {
@@ -97,17 +114,14 @@ func NewPrivilegeDescriptor(user string, priv privilege.List) *PrivilegeDescript
 	}
 }
 
+// DefaultSuperuserPrivileges is the list of privileges for super users
+// on non-system objects.
+var DefaultSuperuserPrivileges = privilege.List{privilege.ALL}
+
 // NewDefaultPrivilegeDescriptor returns a privilege descriptor
-// with ALL privileges for the root user.
+// with ALL privileges for the root user and admin role.
 func NewDefaultPrivilegeDescriptor() *PrivilegeDescriptor {
-	return &PrivilegeDescriptor{
-		Users: []UserPrivileges{
-			{
-				User:       security.RootUser,
-				Privileges: privilege.ALL.Mask(),
-			},
-		},
-	}
+	return NewCustomSuperuserPrivilegeDescriptor(DefaultSuperuserPrivileges)
 }
 
 // Grant adds new privileges to this descriptor for a given list of users.
@@ -171,6 +185,8 @@ func (p *PrivilegeDescriptor) Revoke(user string, privList privilege.List) {
 // It takes the descriptor ID which is used to determine if
 // it belongs to a system descriptor, in which case the maximum
 // set of allowed privileges is looked up and applied.
+// TODO(mberhault): we'll need to enforce minimum privileges
+// for the admin role as well, but we can't until migrations are done.
 func (p PrivilegeDescriptor) Validate(id ID) error {
 	rootPriv, ok := p.findUser(security.RootUser)
 	if !ok {

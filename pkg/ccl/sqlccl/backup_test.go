@@ -368,6 +368,9 @@ func TestBackupRestoreSystemJobs(t *testing.T) {
 	_, _, sqlDB, _, cleanupFn := backupRestoreTestSetup(t, multiNode, numAccounts, initNone)
 	defer cleanupFn()
 
+	// Get the number of existing jobs.
+	baseNumJobs := jobutils.GetSystemJobsCount(t, sqlDB)
+
 	sanitizedIncDir := localFoo + "/inc"
 	incDir := sanitizedIncDir + "?secretCredentialsHere"
 
@@ -402,7 +405,7 @@ func TestBackupRestoreSystemJobs(t *testing.T) {
 	sqlDB.Exec(t, `SET DATABASE = data`)
 
 	sqlDB.Exec(t, `BACKUP bank TO $1 INCREMENTAL FROM $2`, incDir, fullDir)
-	if err := jobutils.VerifySystemJob(t, sqlDB, 1, jobs.TypeBackup, jobs.Record{
+	if err := jobutils.VerifySystemJob(t, sqlDB, baseNumJobs+1, jobs.TypeBackup, jobs.Record{
 		Username: security.RootUser,
 		Description: fmt.Sprintf(
 			`BACKUP data.bank TO '%s' INCREMENTAL FROM '%s'`,
@@ -417,7 +420,7 @@ func TestBackupRestoreSystemJobs(t *testing.T) {
 	}
 
 	sqlDB.Exec(t, `RESTORE bank FROM $1, $2 WITH OPTIONS ('into_db'='restoredb')`, fullDir, incDir)
-	if err := jobutils.VerifySystemJob(t, sqlDB, 2, jobs.TypeRestore, jobs.Record{
+	if err := jobutils.VerifySystemJob(t, sqlDB, baseNumJobs+2, jobs.TypeRestore, jobs.Record{
 		Username: security.RootUser,
 		Description: fmt.Sprintf(
 			`RESTORE data.bank FROM '%s', '%s' WITH into_db = 'restoredb'`,
