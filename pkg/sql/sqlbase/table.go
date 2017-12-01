@@ -2596,7 +2596,13 @@ func TightenEndKey(
 
 			// We first iterate back to the previous key value
 			//    /1/#/1 --> /1/#/0
-			end = encoding.UndoPrefixEnd(end)
+			// TODO(radu): is this correct? If we have:
+			// key:               01 02 FF FF
+			// Prefix End is:     01 03
+			// UndoPrefiEnd is:   01 02
+			if undoPrefixEnd, ok := encoding.UndoPrefixEnd(end); ok {
+				end = undoPrefixEnd
+			}
 		}
 
 		// /1/#/0 --> /1/#/0/#
