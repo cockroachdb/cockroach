@@ -598,7 +598,7 @@ func (u *sqlSymUnion) scrubOption() tree.ScrubOption {
 %type <tree.Statement> create_user_stmt
 %type <tree.Statement> create_view_stmt
 %type <tree.Statement> create_sequence_stmt
-%type <tree.Statement> create_stat_stmt
+%type <tree.Statement> create_stats_stmt
 %type <tree.Statement> delete_stmt
 %type <tree.Statement> discard_stmt
 
@@ -654,6 +654,7 @@ func (u *sqlSymUnion) scrubOption() tree.ScrubOption {
 %type <tree.Statement> show_queries_stmt
 %type <tree.Statement> show_session_stmt
 %type <tree.Statement> show_sessions_stmt
+%type <tree.Statement> show_stats_stmt
 %type <tree.Statement> show_tables_stmt
 %type <tree.Statement> show_testing_stmt
 %type <tree.Statement> show_trace_stmt
@@ -1611,7 +1612,7 @@ cancel_query_stmt:
 create_stmt:
   create_user_stmt     // EXTEND WITH HELP: CREATE USER
 | create_ddl_stmt      // help texts in sub-rule
-| create_stat_stmt     // EXTEND WITH HELP: CREATE STATISTICS
+| create_stats_stmt    // EXTEND WITH HELP: CREATE STATISTICS
 | CREATE error         // SHOW HELP: CREATE
 
 create_ddl_stmt:
@@ -1630,7 +1631,7 @@ create_ddl_stmt:
 // CREATE STATISTICS <statisticname>
 //   ON <colname> [, ...]
 //   FROM <tablename>
-create_stat_stmt:
+create_stats_stmt:
   CREATE STATISTICS name ON name_list FROM qualified_name
   {
     $$.val = &tree.CreateStats{
@@ -1881,11 +1882,11 @@ preparable_stmt:
 
 explainable_stmt:
   preparable_stmt
-| alter_ddl_stmt   // help texts in sub-rule
-| create_ddl_stmt  // help texts in sub-rule
-| create_stat_stmt // help texts in sub-rule
-| drop_ddl_stmt    // help texts in sub-rule
-| execute_stmt     // EXTEND WITH HELP: EXECUTE
+| alter_ddl_stmt    // help texts in sub-rule
+| create_ddl_stmt   // help texts in sub-rule
+| create_stats_stmt // help texts in sub-rule
+| drop_ddl_stmt     // help texts in sub-rule
+| execute_stmt      // EXTEND WITH HELP: EXECUTE
 | explain_stmt { /* SKIP DOC */ }
 
 explain_option_list:
@@ -2431,6 +2432,7 @@ show_stmt:
 | show_queries_stmt      // EXTEND WITH HELP: SHOW QUERIES
 | show_session_stmt      // EXTEND WITH HELP: SHOW SESSION
 | show_sessions_stmt     // EXTEND WITH HELP: SHOW SESSIONS
+| show_stats_stmt        // EXTEND WITH HELP: SHOW STATISTICS
 | show_tables_stmt       // EXTEND WITH HELP: SHOW TABLES
 | show_testing_stmt
 | show_trace_stmt        // EXTEND WITH HELP: SHOW TRACE
@@ -2462,6 +2464,16 @@ session_var:
 // TIME ZONE is special: it is two tokens, but is really the identifier "TIME ZONE".
 | TIME ZONE { $$ = "timezone" }
 | TIME error // SHOW HELP: SHOW SESSION
+
+// %Help: SHOW STATISTICS - display table statistics
+// %Category: Misc
+// %Text: SHOW STATISTICS FOR TABLE <tablename>
+show_stats_stmt:
+  SHOW STATISTICS FOR TABLE qualified_name
+  {
+    $$.val = &tree.ShowTableStats{Table: $5.normalizableTableName()}
+  }
+| SHOW STATISTICS error // SHOW HELP: SHOW STATISTICS
 
 // %Help: SHOW BACKUP - list backup contents
 // %Category: CCL

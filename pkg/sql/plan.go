@@ -460,6 +460,8 @@ func (p *planner) newPlan(
 		return p.ShowJobs(ctx, n)
 	case *tree.ShowSessions:
 		return p.ShowSessions(ctx, n)
+	case *tree.ShowTableStats:
+		return p.ShowTableStats(ctx, n)
 	case *tree.ShowTables:
 		return p.ShowTables(ctx, n)
 	case *tree.ShowTrace:
