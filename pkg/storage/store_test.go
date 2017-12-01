@@ -1906,10 +1906,10 @@ func TestStoreScanInconsistentResolvesIntents(t *testing.T) {
 }
 
 // TestStoreScanIntentsFromTwoTxns lays down two intents from two
-// different transactions, each of which is committed without
-// resolving the intents. The intents are then scanned consistently,
-// which triggers a push of both transactions and then resolution
-// of the intents, allowing the scan to complete.
+// different transactions. The clock is next moved forward, causing
+// the transaction to expire. The intents are then scanned
+// consistently, which triggers a push of both transactions and then
+// resolution of the intents, allowing the scan to complete.
 func TestStoreScanIntentsFromTwoTxns(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()
@@ -1948,6 +1948,65 @@ func TestStoreScanIntentsFromTwoTxns(t *testing.T) {
 	} else if sReply := reply.(*roachpb.ScanResponse); len(sReply.Rows) != 0 {
 		t.Errorf("expected empty result; got %+v", sReply.Rows)
 	}
+}
+
+// TestStoreScanMultipleIntents lays down ten intents from a single
+// transaction. The clock is then moved forward such that the txn is
+// expired and the intents are scanned INCONSISTENTly. Verify that all
+// ten intents are resolved from a single INCONSISTENT scan.
+func TestStoreScanMultipleIntents(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	var resolveCount int32
+	manual := hlc.NewManualClock(123)
+	cfg := TestStoreConfig(hlc.NewClock(manual.UnixNano, time.Nanosecond))
+	cfg.TestingKnobs.EvalKnobs.TestingEvalFilter =
+		func(filterArgs storagebase.FilterArgs) *roachpb.Error {
+			if _, ok := filterArgs.Req.(*roachpb.ResolveIntentRequest); ok {
+				atomic.AddInt32(&resolveCount, 1)
+			}
+			return nil
+		}
+	stopper := stop.NewStopper()
+	defer stopper.Stop(context.TODO())
+	store := createTestStoreWithConfig(t, stopper, &cfg)
+
+	// Lay down ten intents from a single txn.
+	key1 := roachpb.Key("key00")
+	key10 := roachpb.Key("key09")
+	txn := newTransaction("test", key1, 1, enginepb.SERIALIZABLE, store.cfg.Clock)
+	txn.Writing = true
+	ba := roachpb.BatchRequest{}
+	for i := 0; i < 10; i++ {
+		pArgs := putArgs(roachpb.Key(fmt.Sprintf("key%02d", i)), []byte("value"))
+		ba.Add(&pArgs)
+	}
+	ba.Header = roachpb.Header{Txn: txn}
+	if _, pErr := store.testSender().Send(context.Background(), ba); pErr != nil {
+		t.Fatal(pErr)
+	}
+
+	// Now, expire the transactions by moving the clock forward. This will
+	// result in the subsequent scan operation pushing both transactions
+	// in a single batch.
+	manual.Increment(2*base.DefaultHeartbeatInterval.Nanoseconds() + 1)
+
+	// Query the range with a single INCONSISTENT scan, which should
+	// cause all intents to be resolved.
+	sArgs := scanArgs(key1, key10.Next())
+	if _, pErr := client.SendWrappedWith(context.Background(), store.testSender(), roachpb.Header{
+		ReadConsistency: roachpb.INCONSISTENT,
+	}, &sArgs); pErr != nil {
+		t.Fatal(pErr)
+	}
+
+	// Verify all ten intents are resolved from the single inconsistent scan.
+	testutils.SucceedsSoon(t, func() error {
+		if a, e := atomic.LoadInt32(&resolveCount), int32(10); a != e {
+			return fmt.Errorf("expected %d; got %d resolves", e, a)
+		}
+		return nil
+	})
 }
 
 // TestStoreBadRequests verifies that Send returns errors for
