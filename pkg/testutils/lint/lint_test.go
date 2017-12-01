@@ -1114,6 +1114,43 @@ func TestLint(t *testing.T) {
 			t.Fatal(err)
 		}
 	})
+
+	t.Run("TestReleaseNote", func(t *testing.T) {
+		baseSHAArgs := []string{"git", "rev-list", "--min-parents=2", "--max-count=1", "HEAD"}
+		grepMsgArgs := func(rev string) []string {
+			return []string{"git", "log", "--grep=Release [nN]ote", "--max-count=1", "--oneline", "^" + rev, "HEAD"}
+		}
+		var rev string
+		{
+			cmd := exec.Command(baseSHAArgs[0], baseSHAArgs[1:]...)
+			out, err := cmd.CombinedOutput()
+			if err != nil {
+				t.Fatalf("%v: %s\n%s", baseSHAArgs, err, out)
+			}
+			rev = strings.TrimSpace(string(out))
+		}
+
+		args := grepMsgArgs(rev)
+		cmd := exec.Command(args[0], args[1:]...)
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("%v: %s\n%s\n%s", args, err, out)
+		}
+
+		if out := string(out); len(strings.TrimSpace(out)) == 0 {
+			t.Errorf(`The new commits in this PR appear to be missing a release note.
+Please consult CONTRIBUTING.md.
+%s
+You can re-run this check manually via
+
+%v
+
+followed by
+
+%v`, out, baseSHAArgs, grepMsgArgs("<sha_from_above>"))
+
+		}
+	})
 }
 
 type miscChecker struct{}
