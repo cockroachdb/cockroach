@@ -59,7 +59,7 @@ and Transformations are modules that power Prep, Rewrite and Search.
      +-------+     +-----v-----+  - constant folding, type checking, name resolution
      | Stats +----->   Prep    |  - computes initial properties
      +-------+     +-----+-----+  - retrieves and attaches stats
-                         |        - done once per PREPARE
+                         |        - done once per PREPARE [TODO: is this correct?]
                       (expr)
                          |
                    +-----v-----+  - capture placeholder values / timestamps
@@ -150,9 +150,9 @@ type operator int16
 type expr struct {
   op              operator
   children        []*expr{}
-  relationalProps *relationalProps
-  scalarProps     *scalarProps
-  physicalProps   *physicalProps
+  relationalProps *relationalProps // See [relational properties](#tracked_properties)
+  scalarProps     *scalarProps     // See [scalar properties](#tracked_properties)
+  physicalProps   *physicalProps   // See [physical properties](#tracked_properties)
   private         interface{}
 }
 ```
@@ -311,7 +311,7 @@ stats based on how fast a table is being modified. Or the system may
 notice when stat estimations are inaccurate during query execution.
 
 [A separate RFC covers statistics collection in
-CockroachDB.](https:////github.com/cockroachdb/cockroach/blob/master/docs/RFCS/20170908_sql_optimizer_statistics.md)
+CockroachDB.](https://github.com/cockroachdb/cockroach/blob/master/docs/RFCS/20170908_sql_optimizer_statistics.md)
 
 ### Memo
 
@@ -351,7 +351,7 @@ Transformations are *not* performed directly on the memo because
 transformations operate on trees while the memo models a forest of
 trees. Instead, expression fragments are extracted from the memo,
 transformed, and re-inserted into the memo. At first glance, this
-seems onerous and ineffcient, but it allows transformations to be
+seems onerous and inefficient, but it allows transformations to be
 rewritten more naturally and the extraction of expression fragments
 can be performed efficiently.
 
@@ -566,14 +566,16 @@ property.
 A tracked property is one which is maintained in a data structure
 (e.g. `relationalProps`, `scalarProps`, `physicalProps`). A computed
 property is one which is computed from an expression or an expression
-fragment as needed. The decision for whether to track or compute a
-property is pragmatic. Tracking a property requires overhead whether
-the property is used or not, but makes accessing the property in a
-transformation fast. Computing a property can be done only when the
-property is used, but is not feasible if the computation requires an
-entire sub-expression tree (as opposed to a fragment). Computed
-properties primarly occur for scalar properties for which
-transformations often have the entire scalar expression.
+fragment as needed. For intermediate nodes, all properties can be
+computed which makes tracked properties akin to a cache. The decision
+for whether to track or compute a property is pragmatic. Tracking a
+property requires overhead whether the property is used or not, but
+makes accessing the property in a transformation fast. Computing a
+property can be done only when the property is used, but is not
+feasible if the computation requires an entire sub-expression tree (as
+opposed to a fragment). Computed properties primarly occur for scalar
+properties for which transformations often have the entire scalar
+expression.
 
 #### Tracked properties
 
@@ -587,9 +589,9 @@ Relational properties:
 
 * Output columns. The set of columns output by an expression. Used to
   determine if a predicate is compatible with an expression.
-* Outer columns. The set of columns that are not defined in the
-  underlying expression tree (i.e. not supplied by the inputs to the
-  current expression). Synonym: *free vars*.
+* Outer columns. The set of columns that are used by the operator but
+  not defined in the underlying expression tree (i.e. not supplied by
+  the inputs to the current expression). Synonym: *free vars*.
 * Not-NULL columns. Column nullability is associated with keys which
   are a factor in many transformations such as join elimination,
   group-by simplification
@@ -603,7 +605,11 @@ Relational properties:
   not-NULL. Weak keys are tracked because they can become keys at
   higher levels of a query due to null-intolerant predicates.
 * Foreign keys. A set of columns in the source table that uniquely
-  identify a single row in the destination table.
+  identify a single row in the destination table. [TODO(peter):
+  perhaps rename to functional dependencies, though keys are also
+  functional dependencies. While the definition here mentions table,
+  in practice the foreign keys are a map from one set of columns to
+  another.]
 * Equivalent columns. A set of columns that are equivalent.
 
 Scalar properties:
@@ -684,6 +690,8 @@ right inputs an this specifies pattern leaf for all 3 children.
 The actual join commutativity transform is straightforward:
 
 ```go
+// This is demonstration code, the real implementation will be mildly
+// more complex in order to reduce heap allocations.
 func (joinCommutativity) apply(e *expr) *expr {
   return &expr{
     op: innerJoinOp,
@@ -712,7 +720,9 @@ transformations. The downside is the need to write a compiler for the
 DSL. The current decision is to eschew a DSL for transformations as
 the work involved seems strictly greater than writing transformations
 in Go. This decision should be revisited as the transformation set
-grows.
+grows. [TODO(peter): address the counter argument that a DSL will
+reduce the burden on reviewers and the burden of writing new
+transformations.]
 
 ### Cost model
 
@@ -774,10 +784,12 @@ Rewrite. Search is modelled as a series of tasks that optimize an
 expression. Conceptually, the tasks form a dependency tree very much
 like the dependency tree formed by tools like make. Each task has a
 count of its unfinished dependencies and a pointer to its parent
-task. After a task is run, it decrements its parent tasks and
-schedules it for execution if it was the last dependency. The initial
-task is to optimize the "root" group. The tasks described are the
-standard Cascades-style search tasks:
+task. When a task is run it is passed its parent task and as part of
+running it can add additional dependencies to its parent, thus making
+the tree of dependencies dynamic. After a task is run, it decrements
+its parent tasks and schedules it for execution if it was the last
+dependency. The initial task is to optimize the "root" group. The
+tasks described are the standard Cascades-style search tasks:
 
 1. `OptimizeGroup(reqProps)`. Implements the group (via
    `ImplementGroup`) which generates implementations for the
@@ -813,9 +825,12 @@ A search *stage* is configured by a set of exploration and
 implementation transforms, and a *budget*. The budget is used to prune
 branches of the search tree which appear undesirable. The initial
 search stage has a limited set of exploration and implementation
-transforms (perhaps 0 exploration transforms) and aims to quickly find
-a workable, though possibly slow, plan. Each subsequent stage uses the
-cost from the best plan of the previous stage for pruning.
+transforms (perhaps 0 exploration transforms), an unlimited budget,
+and aims to quickly find a workable, though possibly slow, plan. Each
+subsequent stage uses the cost from the best plan of the previous
+stage for pruning. [TODO(peter): my understanding of how this will
+work is slightly fuzzy. My usage of the term budget might be
+off. Perhaps better to describe it as "max cost".]
 
 Full featured optimizers can contain hundreds of
 transformations. Checking whether each transformation is applicable at
