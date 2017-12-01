@@ -2827,6 +2827,43 @@ func (r *Replica) requestToProposal(
 	return proposal, pErr
 }
 
+// RawEngineSender .
+type RawEngineSender struct {
+	Apply bool
+	Repl  *Replica
+}
+
+// Send .
+func (s *RawEngineSender) Send(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+	r := s.Repl
+	r.raftMu.Lock()
+	defer r.raftMu.Unlock()
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	ss := &spanset.SpanSet{}
+	evalResult := r.evaluateProposalInner(ctx, "", ba, ss)
+	if pErr := evalResult.Local.Err; pErr != nil {
+		return nil, pErr
+	}
+	if s.Apply {
+		// fmt.Println("apply", ba.Summary(), ba.Header.Txn)
+		if err := r.store.Engine().ApplyBatchRepr(evalResult.WriteBatch.Data, true); err != nil {
+			return nil, roachpb.NewError(err)
+		}
+		stats := r.mu.state.Stats
+		stats.Add(evalResult.Replicated.Delta.ToStats())
+		err := r.raftMu.stateLoader.SetMVCCStats(ctx, r.store.Engine(), stats)
+		r.store.metrics.addMVCCStats(evalResult.Replicated.Delta.ToStats())
+		if err != nil {
+			return nil, roachpb.NewError(err)
+		}
+		r.mu.state.Stats = stats
+		r.assertStateLocked(ctx, r.store.Engine())
+	}
+	return evalResult.Local.Reply, nil
+}
+
 // evaluateProposal generates a Result from the given request by
 // evaluating it, returning both state which is held only on the
 // proposer and that which is to be replicated through Raft. The

@@ -33,6 +33,8 @@ import (
 	"text/tabwriter"
 	"time"
 
+	"google.golang.org/grpc"
+
 	"github.com/pkg/errors"
 	// Import postgres driver.
 	_ "github.com/lib/pq"
@@ -503,6 +505,11 @@ func (n *Node) Alive() bool {
 	n.Lock()
 	defer n.Unlock()
 	return n.cmd != nil
+}
+
+// Conn returns a gRPC connection to the node.
+func (n *Node) Conn() (*grpc.ClientConn, error) {
+	return n.rpcCtx.GRPCDial(n.RPCAddr())
 }
 
 // Client returns a *client.DB set up to talk to this node.

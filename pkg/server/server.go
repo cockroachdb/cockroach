@@ -108,6 +108,7 @@ type Server struct {
 	rpcContext         *rpc.Context
 	grpc               *grpc.Server
 	gossip             *gossip.Gossip
+	kvDebug            *kvDebugServer
 	nodeLiveness       *storage.NodeLiveness
 	storePool          *storage.StorePool
 	txnCoordSender     *kv.TxnCoordSender
@@ -272,7 +273,9 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	)
 
 	s.kvDB = kv.NewDBServer(s.cfg.Config, s.txnCoordSender, s.stopper)
+	s.kvDebug = &kvDebugServer{s: s}
 	roachpb.RegisterExternalServer(s.grpc, s.kvDB)
+	roachpb.RegisterKVDebugServer(s.grpc, s.kvDebug)
 
 	// Set up internal memory metrics for use by internal SQL executors.
 	s.internalMemMetrics = sql.MakeMemMetrics("internal", cfg.HistogramWindowInterval())
