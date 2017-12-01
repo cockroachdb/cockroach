@@ -351,6 +351,7 @@ message AggregatorSpec {
     SQRDIFF = 15;
     FINAL_VARIANCE = 16;
     FINAL_STDDEV = 17;
+    FIRST = 18;
   }
 
   message Aggregation {

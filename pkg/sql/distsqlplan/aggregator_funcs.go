@@ -275,6 +275,16 @@ var DistAggregationTable = map[distsqlrun.AggregatorSpec_Func]DistAggregationInf
 			},
 		},
 	},
+
+	distsqlrun.AggregatorSpec_FIRST: {
+		LocalStage: []distsqlrun.AggregatorSpec_Func{distsqlrun.AggregatorSpec_FIRST},
+		FinalStage: []FinalStageInfo{
+			{
+				Fn:        distsqlrun.AggregatorSpec_FIRST,
+				LocalIdxs: passThroughLocalIdxs,
+			},
+		},
+	},
 }
 
 // typeContainer is a helper type that implements tree.IndexedVarContainer; it

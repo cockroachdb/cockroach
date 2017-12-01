@@ -89,9 +89,9 @@ SELECT SUM((a-1)*1000) + SUM((b-1)*100) + SUM((c::INT-1)*10) + SUM(d-1) FROM dat
 49995000
 
 query T
-SELECT "URL" FROM [EXPLAIN (DISTSQL) SELECT SUM(a), MIN(b), MAX(c), COUNT(d) FROM data]
+SELECT "URL" FROM [EXPLAIN (DISTSQL) SELECT FIRST(a), SUM(a), MIN(b), MAX(c), COUNT(d) FROM data]
 ----
-https://cockroachdb.github.io/distsqlplan/decode.html?eJzElM-rozAQx-_7VyxzsjCHRm236yllTx7aLv0BC4ssWTOI0BpJIuxS_N8f6qGv0sYHfejNJH7y-TIT5gqFkrQVFzIQ_QYGCD4gBIAQAsICEoRSq5SMUbr5pQNi-Q-iOUJelJVtthOEVGmC6Ao2t2eCCI7i75n2JCRpQJBkRX5uJaXOL0L_51JYAQi7ykZfOUPuIw-Qh5DUCKqyt5uNFRlBxGr8uH2dZZoyYVVPfjhtPM5mgLCJtx7326_1L48HzdeP3Wl79Hg4exrCfxri5q4KpSVpknfqpP60mIfT5k88EDS4C8om7dWAfZxe-ZOWYMA-TgmCSUswYB-nBOGkJRiwjz-0HoTYkylVYag3vB7fPG-GGsmMugloVKVT-qlV2mq65a7l2g1JxnanrFvERXfUBHwPMyfs38GsD_tu84A6cNKhGw5fyb1wwku3efmK-ZsTXrnNq1fM3929mg88E_cj67uT-stbAAAA__-dk9aZ
+https://cockroachdb.github.io/distsqlplan/decode.html?eJzElN-rmzAUx9_3V4zzZCEPTbRd51PKYOBD29EfMBgyMnMQoTWSRNil-L9f1NLeShsvCPUtJn7z-XBOOGfIlcS1OKGB8A9QIMCAgA8EAiAwg5hAoVWCxihd_9IGIvkfwimBLC9KW2_HBBKlEcIz2MweEULYi39H3KKQqIGARCuyYwMpdHYS-o1LYQUQ2JQ2_Mop4Yxwn_AA4oqAKu3tZmNFihDSinyevkxTjamwqgP_GW13e4_TCRDYHVaX1Spae5w1q-Vvj_v16sfmsN57PJg8FWJPhW4eZa60RI3yTiOuhiizq7J_VQ4up3-jWnr2XNq_k6aj9rCH_voeslHL0UN_fTn8UcvRQ399OYJRy9FDH3fgPRDaoilUbrAz-B7fPK0HIsoU2-lpVKkT_KVV0mDaz02TazYkGtue0vYjytujWvBjmDrD7C5Mu2HmJvegfWc6cIeDId4zZ3juJs-HkL85wws3eTGE_N3dq2nPM3E_si47rr68BwAA__9Lm-b5
 
 query RIRI
 SELECT SUM(a), MIN(b), MAX(c), COUNT(d) FROM data
@@ -614,3 +614,30 @@ query II
 SELECT c, COUNT(*) FROM nullables GROUP BY c;
 ----
 1 2
+
+# Verify the FIRST execution plan
+query T
+SELECT "URL" FROM [EXPLAIN (DISTSQL) SELECT FIRST(a) FROM data]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html?eJzElDFr8zAQhvfvV3y8UwsaIttJU0_pUsjSlDRb8aBahzEklpFkaAn-78XWkMYkUiEuHiXluedeRb4jKiXpRRzIIH0HB0MEhhgMCRjmyBhqrXIyRunuJw5Yy0-kM4ayqhvbbWcMudKE9Ahb2j0hxU587GlLQpIGgyQryn0vqXV5EPprJYUVYNg0Nv2_4shaBtXYU0FjRUFIect-L30qCk2FsGrgfF5v33Z3K35_VRNd1ZyqN5XSkjTJs-JZO2oj8VkjfIpLDkjHuuRoimwB6VjZ4imyBaRjZUumyBaQ_sWHf0GzJVOrytBgAFyuPOsGA8mC3BQxqtE5vWqV9xq33PRcvyHJWHfK3WJduaOuwZ8w98LRGcyHcOQ3B9Sxl078cHJL33MvvPCbF7eYH7zw0m9e3mJ-9P9Xs8Az8T-yoTtr_30HAAD__xQ8pmo=
+
+# Since FIRST is non-deterministic by definition, we need to add a filter.
+query T
+SELECT "URL" FROM [EXPLAIN (DISTSQL) SELECT FIRST(a) FROM data WHERE a >= 10]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html?eJyUkT1rwzAQhvf-ivJOLahgOXTR5C4FL0lxsxUPqnUYg-MT0hlagv97sTU0CcRtxvt43kecjhjY0dYeKMJ8QEPhGbWCD9xQjBzmdloq3RdMptANfpS5XSs0HAjmCOmkJxhs-Yk9FByJ7fplaVLgUX6RKLYlmM2kTmL1euzefvZUkXUUzsLhQ3ew4btwViwUdqOY-0LjmlTfIn1p20CtFb5wvpbV-_6h0I9XNfmZ5o-TVRQ9D5H-dbVsqhXItZS-JfIYGnoL3CyaVO4Wbmk4ipKmm1SUQxrNDzyF9Sqcr8P5KpxdwPV09xMAAP__IqXPcg==
+
+query I
+SELECT FIRST(a) FROM data WHERE a >= 10
+----
+10
+
+query T
+SELECT "URL" FROM [EXPLAIN (DISTSQL) SELECT FIRST(b) FROM data WHERE b <= 1]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html?eJzMlDHr2zAQxfd-ivCmFjRYtpOmgkK6BLwkJc3WelCtwxgcy0gytAR_92J7SGMS-Q_xHzxKp3e_9zhxV1Ra0UFeyEL8BAdDCIYIDDEY1kgZaqMzslab7skgSNQfiIChqOrGddcpQ6YNQVzhClcSBM7yd0knkooMGBQ5WZQ9pDbFRZq_OyWdBMO-KB0ZsdqFq19NEETZ1xUXQiSHMxiOjesqSFsG3bgbzTqZEwRv2dsdfctzQ7l0emRon5x-nD_u-KenmPAp5ta9qbRRZEjdNU_bWY1Ed0b44iYw4WiuCYSLCz7haK7g0eKCTziaK3i8uOATjt5j2TzAnMjWurI0WjqPOwfdMiKV07C5rG5MRt-NznrMcDz2uv5CkXVDlQ-HpBpKncH_xdwrDu_EfCwO_eQJdORVx35x_IrvtVe88ZM3r5A_e8VbP3n7CvmLf1bBxDfxf7IxO20__AsAAP__djfM3w==
+
+query I
+SELECT FIRST(b) FROM data WHERE b <= 1
+----
+1
