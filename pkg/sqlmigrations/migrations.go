@@ -44,6 +44,21 @@ var (
 	leaseRefreshInterval = leaseDuration / 5
 )
 
+// MigrationManagerTestingKnobs contains testing knobs.
+type MigrationManagerTestingKnobs struct {
+	// DisableMigrations skips all migrations.
+	DisableMigrations bool
+	// DisableBackfillMigrations stops applying migrations once
+	// a migration with 'doesBackfill == true' is encountered.
+	// TODO: we could skip it if we had some concept of migration dependencies.
+	DisableBackfillMigrations bool
+}
+
+// ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.
+func (*MigrationManagerTestingKnobs) ModuleTestingKnobs() {}
+
+var _ base.ModuleTestingKnobs = &MigrationManagerTestingKnobs{}
+
 // backwardCompatibleMigrations is a hard-coded list of migrations to be run on
 // startup. They will always be run from top-to-bottom, and because they are
 // assumed to be backward-compatible, they will be run regardless of what other
@@ -99,6 +114,11 @@ var backwardCompatibleMigrations = []migrationDescriptor{
 		name:   "add root user",
 		workFn: addRootUser,
 	},
+	{
+		name:         "add system.users isRole column and create admin role",
+		workFn:       addRoles,
+		doesBackfill: true,
+	},
 }
 
 // migrationDescriptor describes a single migration hook that's used to modify
@@ -115,6 +135,8 @@ type migrationDescriptor struct {
 	// automate certain tests, which check the number of ranges/descriptors
 	// present on server bootup.
 	newRanges, newDescriptors int
+	// doesBackfill should be set to true if the migration triggers a backfill.
+	doesBackfill bool
 }
 
 type runner struct {
@@ -155,6 +177,7 @@ type Manager struct {
 	db           db
 	sqlExecutor  *sql.Executor
 	memMetrics   *sql.MemoryMetrics
+	testingKnobs MigrationManagerTestingKnobs
 }
 
 // NewManager initializes and returns a new Manager object.
@@ -163,6 +186,7 @@ func NewManager(
 	db *client.DB,
 	executor *sql.Executor,
 	clock *hlc.Clock,
+	testingKnobs MigrationManagerTestingKnobs,
 	memMetrics *sql.MemoryMetrics,
 	clientID string,
 ) *Manager {
@@ -176,6 +200,7 @@ func NewManager(
 		db:           db,
 		sqlExecutor:  executor,
 		memMetrics:   memMetrics,
+		testingKnobs: testingKnobs,
 	}
 }
 
@@ -207,6 +232,11 @@ func AdditionalInitialDescriptors(
 // required migrations have been run (and running all those that are definitely
 // safe to run).
 func (m *Manager) EnsureMigrations(ctx context.Context) error {
+	if m.testingKnobs.DisableMigrations {
+		log.Info(ctx, "skipping all migrations due to testing knob")
+		return nil
+	}
+
 	// First, check whether there are any migrations that need to be run.
 	completedMigrations, err := getCompletedMigrations(ctx, m.db)
 	if err != nil {
@@ -214,6 +244,11 @@ func (m *Manager) EnsureMigrations(ctx context.Context) error {
 	}
 	allMigrationsCompleted := true
 	for _, migration := range backwardCompatibleMigrations {
+		if m.testingKnobs.DisableBackfillMigrations && migration.doesBackfill {
+			log.Infof(ctx, "ignoring migrations after (and including) %s due to testing knob",
+				migration.name)
+			break
+		}
 		key := migrationKey(migration)
 		if _, ok := completedMigrations[string(key)]; !ok {
 			allMigrationsCompleted = false
@@ -301,6 +336,12 @@ func (m *Manager) EnsureMigrations(ctx context.Context) error {
 		key := migrationKey(migration)
 		if _, ok := completedMigrations[string(key)]; ok {
 			continue
+		}
+
+		if m.testingKnobs.DisableBackfillMigrations && migration.doesBackfill {
+			log.Infof(ctx, "ignoring migrations after (and including) %s due to testing knob",
+				migration.name)
+			break
 		}
 
 		if log.V(1) {
@@ -509,6 +550,45 @@ func addRootUser(ctx context.Context, r runner) error {
 	res, err := r.sqlExecutor.ExecuteStatementsBuffered(session, upsertRootStmt, &pl, 1)
 	if err == nil {
 		res.Close(ctx)
+	}
+	return err
+}
+
+func addRoles(ctx context.Context, r runner) error {
+	// System tables can only be modified by a privileged internal user.
+	session := r.newRootSession(ctx)
+	defer session.Finish(r.sqlExecutor)
+
+	// Add the roles column to the system.users table.
+	const alterStmt = `
+		ALTER TABLE system.users ADD COLUMN IF NOT EXISTS "isRole" BOOL NOT NULL DEFAULT false;
+		 `
+
+	if res, err := r.sqlExecutor.ExecuteStatementsBuffered(
+		session, alterStmt, nil, 1); err == nil {
+		res.Close(ctx)
+	} else {
+		return err
+	}
+
+	// Create the `admin` role. We overwrite any existing user named "admin".
+	const upsertAdminStmt = `
+		UPSERT INTO system.users (username, "hashedPassword", "isRole")
+		  VALUES ($1, '', true);
+						`
+
+	// Add the `admin` role. We retry a few times as the schema change may still be backfilling.
+	pl := tree.MakePlaceholderInfo()
+	pl.SetValue("1", tree.NewDString(sqlbase.AdminRole))
+	var err error
+	for retry := retry.Start(retry.Options{MaxRetries: 5}); retry.Next(); {
+		var res sql.StatementResults
+		res, err = r.sqlExecutor.ExecuteStatementsBuffered(session, upsertAdminStmt, &pl, 1)
+		if err == nil {
+			res.Close(ctx)
+			break
+		}
+		log.Warningf(ctx, "failed to insert %s role into the system.users table: %s", sqlbase.AdminRole, err)
 	}
 	return err
 }

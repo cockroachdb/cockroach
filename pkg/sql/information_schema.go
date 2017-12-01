@@ -474,15 +474,17 @@ CREATE TABLE information_schema.user_privileges (
 	IS_GRANTABLE BOOL NOT NULL DEFAULT FALSE
 );`,
 	populate: func(ctx context.Context, p *planner, _ string, addRow func(...tree.Datum) error) error {
-		grantee := tree.NewDString(security.RootUser)
-		for _, p := range privilege.List(privilege.ByValue[:]).SortedNames() {
-			if err := addRow(
-				grantee,            // grantee
-				defString,          // table_catalog
-				tree.NewDString(p), // privilege_type
-				tree.DNull,         // is_grantable
-			); err != nil {
-				return err
+		for _, u := range []string{security.RootUser, sqlbase.AdminRole} {
+			grantee := tree.NewDString(u)
+			for _, p := range privilege.List(privilege.ByValue[:]).SortedNames() {
+				if err := addRow(
+					grantee,            // grantee
+					defString,          // table_catalog
+					tree.NewDString(p), // privilege_type
+					tree.DNull,         // is_grantable
+				); err != nil {
+					return err
+				}
 			}
 		}
 		return nil
@@ -886,9 +888,11 @@ func forEachColumnInIndex(
 	return nil
 }
 
-func forEachUser(ctx context.Context, origPlanner *planner, fn func(username string) error) error {
-	query := `SELECT username FROM system.users`
-	p := makeInternalPlanner("for-each-user", origPlanner.txn, security.RootUser, origPlanner.session.memMetrics)
+func forEachRole(
+	ctx context.Context, origPlanner *planner, fn func(username string, isRole tree.DBool) error,
+) error {
+	query := `SELECT username, "isRole" FROM system.users`
+	p := makeInternalPlanner("for-each-role", origPlanner.txn, security.RootUser, origPlanner.session.memMetrics)
 	defer finishInternalPlanner(p)
 	rows, err := p.queryRows(ctx, query)
 	if err != nil {
@@ -897,7 +901,12 @@ func forEachUser(ctx context.Context, origPlanner *planner, fn func(username str
 
 	for _, row := range rows {
 		username := tree.MustBeDString(row[0])
-		if err := fn(string(username)); err != nil {
+		isRole, ok := row[1].(*tree.DBool)
+		if !ok {
+			return errors.Errorf("isRole should be a boolean value, found %s instead", row[1].ResolvedType())
+		}
+
+		if err := fn(string(username), *isRole); err != nil {
 			return err
 		}
 	}

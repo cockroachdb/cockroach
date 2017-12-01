@@ -641,7 +641,7 @@ func (s *adminServer) Users(
 	args := sql.SessionArgs{User: s.getUser(req)}
 	ctx, session := s.NewContextAndSessionForRPC(ctx, args)
 	defer session.Finish(s.server.sqlExecutor)
-	query := "SELECT username FROM system.users"
+	query := `SELECT username FROM system.users WHERE "isRole" = false`
 	r, err := s.server.sqlExecutor.ExecuteStatementsBuffered(session, query, nil, 1)
 	if err != nil {
 		return nil, s.serverError(err)
