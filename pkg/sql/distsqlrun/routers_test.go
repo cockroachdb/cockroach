@@ -246,12 +246,14 @@ var (
 	testRangeRouterSpec = OutputRouterSpec_RangeRouterSpec{
 		Spans: []OutputRouterSpec_RangeRouterSpec_Span{
 			{
-				Start: []byte{0x00},
-				End:   []byte{testRangeRouterSpanBreak},
+				Start:  []byte{0x00},
+				End:    []byte{testRangeRouterSpanBreak},
+				Stream: 0,
 			},
 			{
-				Start: []byte{testRangeRouterSpanBreak},
-				End:   []byte(keys.MaxKey),
+				Start:  []byte{testRangeRouterSpanBreak},
+				End:    []byte(keys.MaxKey),
+				Stream: 1,
 			},
 		},
 		Encodings: []OutputRouterSpec_RangeRouterSpec_ColumnEncoding{
@@ -652,12 +654,14 @@ func TestRangeRouterInit(t *testing.T) {
 			spec: OutputRouterSpec_RangeRouterSpec{
 				Spans: []OutputRouterSpec_RangeRouterSpec_Span{
 					{
-						Start: []byte{testRangeRouterSpanBreak},
-						End:   []byte{0xff},
+						Start:  []byte{testRangeRouterSpanBreak},
+						End:    []byte{0xff},
+						Stream: 0,
 					},
 					{
-						Start: []byte{0x00},
-						End:   []byte{testRangeRouterSpanBreak},
+						Start:  []byte{0x00},
+						End:    []byte{testRangeRouterSpanBreak},
+						Stream: 1,
 					},
 				},
 				Encodings: testRangeRouterSpec.Encodings,

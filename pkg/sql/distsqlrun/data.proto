@@ -153,10 +153,11 @@ message OutputRouterSpec {
     message Span {
       optional bytes start = 1;
       optional bytes end = 2;
+      optional int32 stream = 3 [(gogoproto.nullable) = false];
     }
 
-    // spans is a slice of Span. Input matching the Nth span will be routed to the
-    // Nth stream (and thus the number of spans must match the number of streams).
+    // spans is a slice of Span. Input matching a span will be routed to its
+    // specified stream.
     repeated Span spans = 1 [(gogoproto.nullable) = false];
     // default_dest, if not nil, is the index of the stream to send rows that do
     // not match any span. If nil, a row that does not match a span will produce

@@ -471,19 +471,27 @@ message ReadCSVSpec {
   optional string uri = 4 [(gogoproto.nullable) = false];
 }
 
-// SSTWriterSpec is the specification for a processor that consumes rows,
-// uses tempStorage to sort them, then writes them all to a single SST file
-// at uri/name. walltime is used as the MVCC timestamp. It outputs a single
-// row containing the file name, size, checksum, observed start and end keys.
-// See ccs/sqlccl/csv.go for implementation.
+// SSTWriterSpec is the specification for a processor that consumes rows, uses
+// tempStorage to sort them, then writes them to SST files at uri. walltime is
+// used as the MVCC timestamp. It outputs one row per span containing the file
+// name, size, checksum, observed start and end keys. See ccs/sqlccl/csv.go
+// for implementation.
 message SSTWriterSpec {
+  message SpanWriter {
+    // name is the file name that will be written by the export store.
+    optional string name = 1 [(gogoproto.nullable) = false];
+    // end is the end key of a span.
+    optional bytes end = 2;
+  }
+
   // destination as a storageccl.ExportStorage URI pointing to an export store
   // location (directory).
   optional string destination = 1 [(gogoproto.nullable) = false];
-  // name is the file name that will be written by the export store.
-  optional string name = 2 [(gogoproto.nullable) = false];
   // walltimeNanos is the MVCC time at which the created KVs will be written.
   optional int64 walltimeNanos = 3 [(gogoproto.nullable) = false];
+  repeated SpanWriter spans = 4 [(gogoproto.nullable) = false];
+
+  reserved 2;
 }
 
 enum SketchType {
