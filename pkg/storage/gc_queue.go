@@ -74,8 +74,9 @@ const (
 	// that will be created by GC.
 	gcTaskLimit = 25
 
-	// gcChunkKeySize is the default size for GCRequest's batch key size.
-	gcChunkKeySize = 256 * 1000
+	// gcKeyVersionChunkBytes is the threshold size for splitting
+	// GCRequests into multiple batches.
+	gcKeyVersionChunkBytes = 1024 * 1000
 )
 
 // gcQueue manages a queue of replicas slated to be scanned in their
@@ -563,7 +564,7 @@ func (gcq *gcQueue) process(ctx context.Context, repl *Replica, sysCfg config.Sy
 // chunkGCRequest chunks the supplied gcKeys (which are consumed by this method) into
 // multiple batches which must be executed in order by the caller.
 func chunkGCRequest(
-	desc *roachpb.RangeDescriptor, info *GCInfo, gcKeys []roachpb.GCRequest_GCKey,
+	desc *roachpb.RangeDescriptor, info *GCInfo, gcKeys [][]roachpb.GCRequest_GCKey,
 ) []roachpb.GCRequest {
 	var template roachpb.GCRequest
 	var ret []roachpb.GCRequest
@@ -573,26 +574,18 @@ func chunkGCRequest(
 	gc1 := template
 	gc1.Threshold = info.Threshold
 	gc1.TxnSpanGCThreshold = info.TxnSpanGCThreshold
+	// The first request is intentionally kept very small since it
+	// updates the Range-wide GCThresholds, and thus must block all
+	// reads and writes while it is being applied.
 
 	ret = append(ret, gc1)
 
-	size := 0
-	idx := 0
-	for i, key := range gcKeys {
-		size += len(key.Key)
-		if size >= gcChunkKeySize {
-			gc2 := template
-			gc2.Keys = gcKeys[idx : i+1]
-			ret = append(ret, gc2)
-			idx = i + 1
-			size = 0
-		}
+	for _, keys := range gcKeys {
+		gc := template
+		gc.Keys = keys
+		ret = append(ret, gc)
 	}
-	if idx < len(gcKeys) {
-		gc2 := template
-		gc2.Keys = gcKeys[idx:]
-		ret = append(ret, gc2)
-	}
+
 	return ret
 }
 
@@ -628,6 +621,7 @@ func (gcq *gcQueue) processImpl(
 	}()
 
 	batches := chunkGCRequest(desc, &info, gcKeys)
+	log.Eventf(ctx, "running GC on %d batches", len(batches))
 
 	for i, gcArgs := range batches {
 		var ba roachpb.BatchRequest
@@ -711,11 +705,12 @@ type lockableGCInfo struct {
 	GCInfo
 }
 
-// RunGC runs garbage collection for the specified descriptor on the provided
-// Engine (which is not mutated). It uses the provided functions pushTxnFn and
-// resolveIntentsFn to clarify the true status of and clean up after encountered
-// transactions. It returns a slice of gc'able keys from the data, transaction,
-// and abort spans.
+// RunGC runs garbage collection for the specified descriptor on the
+// provided Engine (which is not mutated). It uses the provided
+// functions pushTxnFn and resolveIntentsFn to clarify the true status
+// of and clean up after encountered transactions. It returns a slice
+// of slices of gc'able keys from the data, transaction, and abort
+// spans.
 func RunGC(
 	ctx context.Context,
 	desc *roachpb.RangeDescriptor,
@@ -724,7 +719,7 @@ func RunGC(
 	policy config.GCPolicy,
 	pushTxnFn pushFunc,
 	resolveIntentsFn resolveFunc,
-) ([]roachpb.GCRequest_GCKey, GCInfo, error) {
+) ([][]roachpb.GCRequest_GCKey, GCInfo, error) {
 
 	iter := NewReplicaDataIterator(desc, snap, true /* replicatedOnly */)
 	defer iter.Close()
@@ -766,7 +761,9 @@ func RunGC(
 	infoMu.Threshold = gc.Threshold
 	infoMu.TxnSpanGCThreshold = txnExp
 
-	var gcKeys []roachpb.GCRequest_GCKey
+	var gcKeys [][]roachpb.GCRequest_GCKey
+	var batchGCKeys []roachpb.GCRequest_GCKey
+	var batchGCKeysBytes int64
 	var expBaseKey roachpb.Key
 	var keys []engine.MVCCKey
 	var vals [][]byte
@@ -797,7 +794,10 @@ func RunGC(
 						txn := &roachpb.Transaction{
 							TxnMeta: *meta.Txn,
 						}
-						txnMap[txnID] = txn
+						if _, ok := txnMap[txnID]; !ok {
+							txnMap[txnID] = txn
+							infoMu.IntentTxns++
+						}
 						infoMu.IntentsConsidered++
 						intentSpanMap[txnID] = append(intentSpanMap[txnID], roachpb.Span{Key: expBaseKey})
 					}
@@ -805,11 +805,29 @@ func RunGC(
 					startIdx = 2
 				}
 				// See if any values may be GC'd.
-				if gcTS := gc.Filter(keys[startIdx:], vals[startIdx:]); gcTS != (hlc.Timestamp{}) {
-					// TODO(spencer): need to split the requests up into
-					// multiple requests in the event that more than X keys
-					// are added to the request.
-					gcKeys = append(gcKeys, roachpb.GCRequest_GCKey{Key: expBaseKey, Timestamp: gcTS})
+				if idx, gcTS := gc.Filter(keys[startIdx:], vals[startIdx:]); gcTS != (hlc.Timestamp{}) {
+					// Batch keys after the total size of version keys exceeds
+					// the threshold limit. This avoids sending potentially large
+					// GC requests through Raft. Iterate through the keys in reverse
+					// order so that GC requests can be made multiple times even on
+					// a single key, with successively newer timestamps to prevent
+					// any single request from exploding during GC evaluation.
+					for i := len(keys) - 1; i >= startIdx+idx; i-- {
+						batchGCKeysBytes += int64(len(keys[i].Key))
+						// If the current key brings the batch over the target
+						// size, flush and start a new chunk.
+						if batchGCKeysBytes >= gcKeyVersionChunkBytes {
+							batchGCKeys = append(batchGCKeys, roachpb.GCRequest_GCKey{Key: expBaseKey, Timestamp: keys[i].Timestamp})
+							gcKeys = append(gcKeys, batchGCKeys)
+							batchGCKeys = []roachpb.GCRequest_GCKey{}
+							batchGCKeysBytes = 0
+						}
+					}
+					// Add the key to the batch at the GC timestamp, unless it was already added.
+					if batchGCKeysBytes != 0 {
+						batchGCKeys = append(batchGCKeys, roachpb.GCRequest_GCKey{Key: expBaseKey, Timestamp: gcTS})
+					}
+					infoMu.NumKeysAffected++
 				}
 			}
 		}
@@ -845,9 +863,9 @@ func RunGC(
 	}
 	// Handle last collected set of keys/vals.
 	processKeysAndValues()
-
-	infoMu.IntentTxns = len(txnMap)
-	infoMu.NumKeysAffected = len(gcKeys)
+	if len(batchGCKeys) > 0 {
+		gcKeys = append(gcKeys, batchGCKeys)
+	}
 
 	// Process local range key entries (txn records, queue last processed times).
 	localRangeKeys, err := processLocalKeyRange(ctx, snap, desc, txnMap, txnExp, &infoMu, resolveIntentsFn)
@@ -860,7 +878,9 @@ func RunGC(
 	// hard-coded the full non-local key range in the header, but that does
 	// not take into account the range-local keys. It will be OK as long as
 	// we send directly to the Replica, though.
-	gcKeys = append(gcKeys, localRangeKeys...)
+	if len(localRangeKeys) > 0 {
+		gcKeys = append(gcKeys, localRangeKeys)
+	}
 
 	// Process push transactions in parallel.
 	//
@@ -917,8 +937,10 @@ func RunGC(
 
 	// Clean up the AbortSpan.
 	log.Event(ctx, "processing AbortSpan")
-	gcKeys = append(gcKeys, processAbortSpan(
-		ctx, snap, desc.RangeID, abortSpanGCThreshold, &infoMu, pushTxnFn)...)
+	abortKeys := processAbortSpan(ctx, snap, desc.RangeID, abortSpanGCThreshold, &infoMu, pushTxnFn)
+	if len(abortKeys) > 0 {
+		gcKeys = append(gcKeys, abortKeys)
+	}
 	return gcKeys, infoMu.GCInfo, nil
 }
 
