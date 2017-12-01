@@ -2031,10 +2031,6 @@ func (e *Executor) execClassic(
 		if err != nil {
 			return err
 		}
-	case tree.DDL:
-		if n, ok := plan.(*createTableNode); ok && n.n.As() {
-			rowResultWriter.IncrementRowsAffected(n.run.count)
-		}
 	}
 	return nil
 }
@@ -2275,7 +2271,7 @@ func (e *Executor) updateStmtCounts(stmt Statement) {
 	case *tree.RollbackTransaction:
 		e.TxnRollbackCount.Inc(1)
 	default:
-		if stmt.AST.StatementType() == tree.DDL {
+		if tree.CanModifySchema(stmt.AST) {
 			e.DdlCount.Inc(1)
 		} else {
 			e.MiscCount.Inc(1)
