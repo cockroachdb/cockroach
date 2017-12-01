@@ -112,10 +112,12 @@ following guidelines:
   to indicate their reach.
 
 - We publish detailed [release notes](https://www.cockroachlabs.com/docs/releases/)
-  describing most non-test changes. To facilitate this, at least one commit in every
-  PR (preferably the PR message/merge commit) should contain a brief description of
-  the change in terms that a user would recognize. This description should be prefixed
-  with "Release note (category):", where the "category" is one of the following:
+  describing most non-test changes. To facilitate this, in every PR, at least one commit
+  should contain a brief description of the change in terms that a user would recognize.
+  Be sure to put these descriptions in commits and not in PR descriptions.
+
+  Each release note description should be prefixed with "Release note (category):",
+  where the "category" is one of the following:
   - cli change
   - sql change
   - admin ui change
