@@ -99,6 +99,10 @@ var backwardCompatibleMigrations = []migrationDescriptor{
 		name:   "add root user",
 		workFn: addRootUser,
 	},
+	{
+		name:   "add system.users isRole and create admin role",
+		workFn: addRoles,
+	},
 }
 
 // migrationDescriptor describes a single migration hook that's used to modify
@@ -511,4 +515,39 @@ func addRootUser(ctx context.Context, r runner) error {
 		res.Close(ctx)
 	}
 	return err
+}
+
+func addRoles(ctx context.Context, r runner) error {
+	// System tables can only be modified by a privileged internal user.
+	session := r.newRootSession(ctx)
+	defer session.Finish(r.sqlExecutor)
+
+	// Add the roles column to the system.users table.
+	const alterStmt = `
+		ALTER TABLE system.users ADD COLUMN IF NOT EXISTS "isRole" BOOL DEFAULT false;
+		 `
+
+	if res, err := r.sqlExecutor.ExecuteStatementsBuffered(
+		session, alterStmt, nil /* pinfo */, 1 /* expectedNumResults */); err == nil {
+		res.Close(ctx)
+	} else {
+		return err
+	}
+
+	// Create the `admin` role. We overwrite any existing user named "admin".
+	const upsertAdminStmt = `
+		UPSERT INTO system.users (username, "hashedPassword", "isRole")
+		  VALUES ($1, '', true);
+						`
+
+	pl := tree.MakePlaceholderInfo()
+	pl.SetValue("1", tree.NewDString(sqlbase.AdminRole))
+	if res, err := r.sqlExecutor.ExecuteStatementsBuffered(
+		session, upsertAdminStmt, &pl, 1 /* expectedNumResults */); err == nil {
+		res.Close(ctx)
+	} else {
+		return err
+	}
+
+	return nil
 }

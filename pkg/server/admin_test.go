@@ -682,7 +682,7 @@ func TestAdminAPIUsers(t *testing.T) {
 	defer session.Finish(ts.sqlExecutor)
 	query := `
 INSERT INTO system.users (username, "hashedPassword")
-VALUES ('admin', 'abc'), ('bob', 'xyz')`
+VALUES ('adminUser', 'abc'), ('bob', 'xyz')`
 	res, err := ts.sqlExecutor.ExecuteStatementsBuffered(session, query, nil, 1)
 	if err != nil {
 		t.Fatal(err)
@@ -696,7 +696,7 @@ VALUES ('admin', 'abc'), ('bob', 'xyz')`
 	}
 	expResult := serverpb.UsersResponse{
 		Users: []serverpb.UsersResponse_User{
-			{Username: "admin"},
+			{Username: "adminUser"},
 			{Username: "bob"},
 			{Username: "root"},
 		},

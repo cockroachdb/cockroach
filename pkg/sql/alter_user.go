@@ -78,7 +78,7 @@ func (n *alterUserSetPasswordNode) Start(params runParams) error {
 		params.ctx,
 		"create-user",
 		params.p.txn,
-		`UPDATE system.users SET "hashedPassword" = $2 WHERE username = $1`,
+		`UPDATE system.users SET "hashedPassword" = $2 WHERE username = $1 AND "isRole" = false`,
 		normalizedUsername,
 		hashedPassword,
 	)
