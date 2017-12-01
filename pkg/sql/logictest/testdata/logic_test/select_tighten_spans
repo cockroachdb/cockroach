@@ -400,7 +400,7 @@ EXPLAIN SELECT * FROM p2@p2_id WHERE i >= 1 AND d IS NULL
 ----
 0  scan  ·      ·
 0  ·     table  p2@p2_id
-0  ·     spans  /1/#/53/2-
+0  ·     spans  /1/#/53/2/NULL-
 
 query II rowsort
 SELECT * FROM p2@p2_id WHERE i>= 1 AND d IS NULL
