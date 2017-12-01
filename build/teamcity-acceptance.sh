@@ -4,6 +4,9 @@ set -euxo pipefail
 
 export BUILDER_HIDE_GOPATH_SRC=1
 
+source "$(dirname "${0}")/teamcity-support.sh"
+maybe_ccache
+
 "$(dirname "${0}")"/../pkg/acceptance/prepare.sh
 
 # The log files that should be created by -l below can only

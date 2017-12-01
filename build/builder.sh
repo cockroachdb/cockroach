@@ -3,7 +3,7 @@
 set -euo pipefail
 
 image=cockroachdb/builder
-version=20171004-085709
+version=20171013-231158
 
 function init() {
   docker build --tag="${image}" "$(dirname "${0}")"
@@ -48,6 +48,14 @@ gocache=${GOCACHEPATH-$gopath0}
 
 if [ -t 0 ]; then
   tty=--tty
+fi
+
+ccache=
+if [ -n "${COCKROACH_BUILDER_CCACHE-}" ]; then
+  ccache+="--env=CC=/usr/lib/ccache/clang "
+  ccache+="--env=CXX=/usr/lib/ccache/clang++ "
+  ccache+="--env=CCACHE_DIR=/go/native/ccache "
+  ccache+="--env=CCACHE_MAXSIZE=${COCKROACH_BUILDER_CCACHE_MAXSIZE-10G} "
 fi
 
 # Absolute path to the toplevel cockroach directory.
@@ -174,7 +182,7 @@ done
 # a pager, so we override $PAGER to disable.
 
 # shellcheck disable=SC2086
-docker run --privileged -i ${tty-} --rm \
+docker run --privileged -i ${tty-} ${ccache} --rm \
   -u "${uid_gid}" \
   ${vols} \
   --workdir="/go/src/github.com/cockroachdb/cockroach" \
