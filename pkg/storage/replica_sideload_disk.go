@@ -26,6 +26,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/util/fileutil"
 	"github.com/pkg/errors"
 )
 
@@ -79,7 +80,8 @@ func (ss *diskSideloadStorage) PutIfNotExists(
 	for {
 		// Use 0644 since that's what RocksDB uses:
 		// https://github.com/facebook/rocksdb/blob/56656e12d67d8a63f1e4c4214da9feeec2bd442b/env/env_posix.cc#L171
-		if err := ioutil.WriteFile(filename, contents, 0644); err == nil {
+		// Sync every 512kb to match RocksDB config (#20352).
+		if err := fileutil.WriteFileSyncing(filename, contents, 0644, 512<<10); err == nil {
 			return nil
 		} else if !os.IsNotExist(err) {
 			return err
