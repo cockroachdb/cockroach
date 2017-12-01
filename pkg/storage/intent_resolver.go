@@ -21,6 +21,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
@@ -280,9 +281,9 @@ func (ir *intentResolver) maybePushTransactions(
 // but combining them simplifies the plumbing necessary in Replica.
 func (ir *intentResolver) processIntentsAsync(
 	ctx context.Context, r *Replica, intents []result.IntentsWithArg, allowSyncProcessing bool,
-) {
+) error {
 	if r.store.TestingKnobs().DisableAsyncIntentResolution {
-		return
+		return errors.New("intents not processed as async resolution is disabled")
 	}
 	now := r.store.Clock().Now()
 	stopper := r.store.Stopper()
@@ -298,17 +299,16 @@ func (ir *intentResolver) processIntentsAsync(
 				ir.processIntents(ctx, r, item, now)
 			},
 		)
-		if err != nil {
-			if err == stop.ErrThrottled && allowSyncProcessing {
-				// A limited task was not available. Rather than waiting for one, we
-				// reuse the current goroutine.
-				ir.processIntents(ctx, r, item, now)
-			} else {
-				log.Warningf(ctx, "failed to resolve intents: %s", err)
-				return
-			}
+		if err == stop.ErrThrottled && allowSyncProcessing {
+			// A limited task was not available. Rather than waiting for one, we
+			// reuse the current goroutine.
+			ir.processIntents(ctx, r, item, now)
+		} else if err != nil {
+			return errors.Wrap(err, "failed to resolve intents")
 		}
 	}
+
+	return nil
 }
 
 func (ir *intentResolver) processIntents(
