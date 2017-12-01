@@ -28,15 +28,22 @@ func TestUndoPrefixEnd(t *testing.T) {
 		in  []byte
 		out []byte
 	}{
-		{[]byte{0x00}, []byte{0x00}},
-		{[]byte{0x00, 0x00}, []byte{0x00, 0x00}},
 		{[]byte{0x00, 0x01}, []byte{0x00, 0x00}},
-		{[]byte{0x01, 0x00, 0x00, 0x00}, []byte{0x00, 0xff, 0xff, 0xff}},
+		{[]byte{0x01, 0x02, 0x03, 0x05}, []byte{0x01, 0x02, 0x03, 0x04}},
 		{[]byte{0xff, 0xff}, []byte{0xff, 0xfe}},
+		{[]byte{0xff}, []byte{0xfe}},
+
+		// Invalid keys
+		{[]byte{0x00}, nil},
+		{[]byte{0x01, 0x00}, nil},
 	} {
 		t.Run(fmt.Sprintf("undo-prefix/key=%q", tc.in), func(t *testing.T) {
-			if e, a := tc.out, encoding.UndoPrefixEnd(tc.in); !bytes.Equal(e, a) {
-				t.Errorf("expected %q but got %q", e, a)
+			result, ok := encoding.UndoPrefixEnd(tc.in)
+			if !ok {
+				result = nil
+			}
+			if !bytes.Equal(tc.out, result) {
+				t.Errorf("expected %q but got %q", tc.out, result)
 			}
 		})
 	}
@@ -45,12 +52,13 @@ func TestUndoPrefixEnd(t *testing.T) {
 		{0x00},
 		{0x00, 0x00},
 		{0x00, 0x01},
-		{0x00, 0xff, 0xff, 0xff},
-		{0x01, 0x00, 0x00, 0x00},
-		// Maximal byte sequences (repeated 0xff bytes) do not roundtrip.
+		{0x01, 0x00, 0xff, 0x00},
+		{0x00, 0x00, 0x00, 0x00},
+		{0x01, 0x02, 0x03, 0x04},
+		// Keys that end in 0xff do not roundtrip.
 	} {
 		t.Run(fmt.Sprintf("roundtrip/key=%q", k), func(t *testing.T) {
-			if r := encoding.UndoPrefixEnd(roachpb.Key(k).PrefixEnd()); !bytes.Equal(k, r) {
+			if r, ok := encoding.UndoPrefixEnd(roachpb.Key(k).PrefixEnd()); !ok || !bytes.Equal(k, r) {
 				t.Errorf("roundtripping resulted in %q", r)
 			}
 		})

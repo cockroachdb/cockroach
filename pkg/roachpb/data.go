@@ -141,7 +141,7 @@ func bytesPrefixEnd(b []byte) []byte {
 	for i := len(end) - 1; i >= 0; i-- {
 		end[i] = end[i] + 1
 		if end[i] != 0 {
-			return end
+			return end[:i+1]
 		}
 	}
 	// This statement will only be reached if the key is already a

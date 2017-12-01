@@ -409,7 +409,7 @@ type errUglifyUnsupported struct {
 }
 
 func (euu *errUglifyUnsupported) Error() string {
-	return fmt.Sprintf("unsupported pretty key: %s", euu.wrapped)
+	return fmt.Sprintf("unsupported pretty key: %v", euu.wrapped)
 }
 
 func abortSpanKeyParse(rangeID roachpb.RangeID, input string) (string, roachpb.Key) {
