@@ -49,7 +49,7 @@ func TestPushTransactionsWithNonPendingIntent(t *testing.T) {
 			t.Errorf("expected error on aborted/resolved intent, but got %s", pErr)
 		}
 		if cnt := len(tc.store.intentResolver.mu.inFlight); cnt != 0 {
-			t.Errorf("expected no inflight refcount map entries, found %d", cnt)
+			t.Errorf("expected no inflight push refcount map entries, found %d", cnt)
 		}
 	}
 }
