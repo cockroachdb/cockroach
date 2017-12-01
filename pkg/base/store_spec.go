@@ -32,7 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 )
 
-// This file implements method receivers for members of server.Context struct
+// This file implements method receivers for members of server.Config struct
 // -- 'Stores' and 'JoinList', which satisfies pflag's value interface
 
 // MinimumStoreSize is the smallest size in bytes that a store can have. This
