@@ -746,3 +746,129 @@ ORDER BY total DESC
 ts 1
 ts2 1
 ts3 1
+
+# Regression tests for #20362 (IS NULL handling).
+statement ok
+INSERT INTO abcd VALUES
+(NULL, NULL, NULL),
+(NULL, NULL, 1),
+(NULL, NULL, 5),
+(NULL, NULL, 10),
+(NULL, 1,    NULL),
+(NULL, 1,    1),
+(NULL, 1,    5),
+(NULL, 1,    10),
+(NULL, 5,    NULL),
+(NULL, 5,    1),
+(NULL, 5,    5),
+(NULL, 5,    10),
+(NULL, 10,   NULL),
+(NULL, 10,   1),
+(NULL, 10,   5),
+(NULL, 10,   10),
+(1,    NULL, NULL),
+(1,    NULL, 1),
+(1,    NULL, 5),
+(1,    NULL, 10),
+(1,    1,    NULL),
+(1,    1,    1),
+(1,    1,    5),
+(1,    1,    10),
+(1,    5,    NULL),
+(1,    5,    1),
+(1,    5,    5),
+(1,    5,    10),
+(1,    10,   NULL),
+(1,    10,   1),
+(1,    10,   5),
+(1,    10,   10)
+
+query ITTTTT
+EXPLAIN (VERBOSE) SELECT * FROM abcd@abcd WHERE a IS NULL AND b > 5
+----
+0  render  ·         ·               (a, b, c, d)                         a=CONST; b!=NULL
+0  ·       render 0  test.abcd.a     ·                                    ·
+0  ·       render 1  test.abcd.b     ·                                    ·
+0  ·       render 2  test.abcd.c     ·                                    ·
+0  ·       render 3  test.abcd.d     ·                                    ·
+1  scan    ·         ·               (a, b, c, d, rowid[hidden,omitted])  a=CONST; b!=NULL; rowid!=NULL; weak-key(b,c,d,rowid)
+1  ·       table     abcd@abcd       ·                                    ·
+1  ·       spans     /NULL/6-/!NULL  ·                                    ·
+
+query IIII rowsort
+SELECT * FROM abcd@abcd WHERE a IS NULL AND b > 5
+----
+NULL  10  NULL  NULL
+NULL  10  1     NULL
+NULL  10  5     NULL
+NULL  10  10    NULL
+
+query ITTTTT
+EXPLAIN (VERBOSE) SELECT * FROM abcd@abcd WHERE a IS NULL AND b < 5
+----
+0  render  ·         ·                    (a, b, c, d)                         a=CONST; b!=NULL
+0  ·       render 0  test.abcd.a          ·                                    ·
+0  ·       render 1  test.abcd.b          ·                                    ·
+0  ·       render 2  test.abcd.c          ·                                    ·
+0  ·       render 3  test.abcd.d          ·                                    ·
+1  scan    ·         ·                    (a, b, c, d, rowid[hidden,omitted])  a=CONST; b!=NULL; rowid!=NULL; weak-key(b,c,d,rowid)
+1  ·       table     abcd@abcd            ·                                    ·
+1  ·       spans     /NULL/!NULL-/NULL/5  ·                                    ·
+
+query IIII rowsort
+SELECT * FROM abcd@abcd WHERE a IS NULL AND b < 5
+----
+NULL  1  NULL  NULL
+NULL  1  1     NULL
+NULL  1  5     NULL
+NULL  1  10    NULL
+
+query ITTTTT
+EXPLAIN (VERBOSE) SELECT * FROM abcd@abcd WHERE a IS NULL ORDER BY b
+----
+0  render  ·         ·             (a, b, c, d)                         a=CONST; +b
+0  ·       render 0  test.abcd.a   ·                                    ·
+0  ·       render 1  test.abcd.b   ·                                    ·
+0  ·       render 2  test.abcd.c   ·                                    ·
+0  ·       render 3  test.abcd.d   ·                                    ·
+1  scan    ·         ·             (a, b, c, d, rowid[hidden,omitted])  a=CONST; rowid!=NULL; weak-key(b,c,d,rowid); +b
+1  ·       table     abcd@abcd     ·                                    ·
+1  ·       spans     /NULL-/!NULL  ·                                    ·
+
+query IIII partialsort(1,2)
+SELECT * FROM abcd@abcd WHERE a IS NULL ORDER BY b
+----
+NULL  NULL  NULL  NULL
+NULL  NULL  1     NULL
+NULL  NULL  5     NULL
+NULL  NULL  10    NULL
+NULL  1     NULL  NULL
+NULL  1     1     NULL
+NULL  1     5     NULL
+NULL  1     10    NULL
+NULL  5     NULL  NULL
+NULL  5     1     NULL
+NULL  5     5     NULL
+NULL  5     10    NULL
+NULL  10    NULL  NULL
+NULL  10    1     NULL
+NULL  10    5     NULL
+NULL  10    10    NULL
+
+query ITTTTT
+EXPLAIN (VERBOSE) SELECT * FROM abcd@abcd WHERE a = 1 AND b IS NULL AND c > 0 AND c < 10 ORDER BY c
+----
+0  render  ·         ·                     (a, b, c, d)                         a=CONST; b=CONST; c!=NULL; +c
+0  ·       render 0  test.abcd.a           ·                                    ·
+0  ·       render 1  test.abcd.b           ·                                    ·
+0  ·       render 2  test.abcd.c           ·                                    ·
+0  ·       render 3  test.abcd.d           ·                                    ·
+1  scan    ·         ·                     (a, b, c, d, rowid[hidden,omitted])  a=CONST; b=CONST; c!=NULL; rowid!=NULL; weak-key(c,d,rowid); +c
+1  ·       table     abcd@abcd             ·                                    ·
+1  ·       spans     /1/NULL/1-/1/NULL/10  ·                                    ·
+
+query IIII 
+SELECT * FROM abcd@abcd WHERE a = 1 AND b IS NULL AND c > 0 AND c < 10 ORDER BY c
+----
+1  NULL  1  NULL
+1  NULL  5  NULL

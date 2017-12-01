@@ -727,8 +727,13 @@ func (v *indexInfo) makeIndexConstraints(
 						*endExpr = c
 					}
 				case tree.Is:
-					if c.Right == tree.DNull && !*endDone {
-						*endExpr = c
+					if c.Right == tree.DNull {
+						if !*startDone {
+							*startExpr = c
+						}
+						if !*endDone {
+							*endExpr = c
+						}
 					}
 				case tree.IsNot:
 					if c.Right == tree.DNull && !*startDone && (*startExpr == nil) {
@@ -836,6 +841,17 @@ func (v indexInfoByCost) Sort() {
 
 func encodeStartConstraintAscending(c *tree.ComparisonExpr) logicalKeyPart {
 	switch c.Operator {
+	case tree.Is:
+		// An IS NULL expression allows us to constrain the start of the range
+		// to begin at NULL.
+		if c.Right != tree.DNull {
+			panic(fmt.Sprintf("expected NULL operand for IS operator, found %v", c.Right))
+		}
+		return logicalKeyPart{
+			val:       tree.DNull,
+			dir:       encoding.Ascending,
+			inclusive: true,
+		}
 	case tree.IsNot:
 		// A IS NOT NULL expression allows us to constrain the start of
 		// the range to not include NULL.
@@ -899,14 +915,16 @@ func encodeEndConstraintAscending(c *tree.ComparisonExpr) logicalKeyPart {
 			dir:       encoding.Ascending,
 			inclusive: true,
 		}
-	case tree.NE:
-		panic("'!=' operators should have been transformed to 'IS NOT NULL'")
+
 	case tree.LE, tree.EQ, tree.LT:
 		return logicalKeyPart{
 			val:       c.Right.(tree.Datum),
 			dir:       encoding.Ascending,
 			inclusive: c.Operator != tree.LT,
 		}
+
+	case tree.NE:
+		panic("'!=' operators should have been transformed to 'IS NOT NULL'")
 	default:
 		panic(fmt.Sprintf("unexpected operator: %s", c))
 	}
@@ -914,6 +932,18 @@ func encodeEndConstraintAscending(c *tree.ComparisonExpr) logicalKeyPart {
 
 func encodeEndConstraintDescending(c *tree.ComparisonExpr) logicalKeyPart {
 	switch c.Operator {
+	case tree.Is:
+		// An IS NULL expressions allows us to constrain the end of the range
+		// to stop after NULL.
+		if c.Right != tree.DNull {
+			panic(fmt.Sprintf("expected NULL operand for IS operator, found %v", c.Right))
+		}
+		return logicalKeyPart{
+			val:       tree.DNull,
+			dir:       encoding.Descending,
+			inclusive: true,
+		}
+
 	case tree.IsNot:
 		// An IS NOT NULL expressions allows us to constrain the end of the range
 		// to stop at NULL.
@@ -925,14 +955,16 @@ func encodeEndConstraintDescending(c *tree.ComparisonExpr) logicalKeyPart {
 			dir:       encoding.Descending,
 			inclusive: false,
 		}
-	case tree.NE:
-		panic("'!=' operators should have been transformed to 'IS NOT NULL'")
+
 	case tree.GE, tree.EQ, tree.GT:
 		return logicalKeyPart{
 			val:       c.Right.(tree.Datum),
 			dir:       encoding.Descending,
 			inclusive: c.Operator != tree.GT,
 		}
+
+	case tree.NE:
+		panic("'!=' operators should have been transformed to 'IS NOT NULL'")
 	default:
 		panic(fmt.Sprintf("unexpected operator: %s", c))
 	}
@@ -1304,7 +1336,7 @@ func (ic indexConstraints) exactPrefix() int {
 			return prefix
 		}
 		switch c.start.Operator {
-		case tree.EQ:
+		case tree.EQ, tree.Is:
 			prefix++
 		case tree.In:
 			if tuple, ok := c.start.Right.(*tree.DTuple); !ok || len(tuple.D) != 1 {
@@ -1355,6 +1387,12 @@ func (ic indexConstraints) exactPrefixDatums(num int) []tree.Datum {
 				// We have something like `a IN (1)`.
 				datums = append(datums, right)
 			}
+		case tree.Is:
+			if c.start.Right != tree.DNull {
+				panic(fmt.Sprintf("expected NULL operand for IS operator, found %v", c.start.Right))
+			}
+			datums = append(datums, tree.DNull)
+
 		default:
 			panic("asking for too many datums")
 		}
@@ -1452,7 +1490,7 @@ func applyIndexConstraints(
 		if c.start == c.end {
 			// The first is that both the start and end constraints are
 			// equality.
-			if c.start.Operator == tree.EQ {
+			if c.start.Operator == tree.EQ || c.start.Operator == tree.Is {
 				continue
 			}
 			// The second case is that both the start and end constraint are an IN
