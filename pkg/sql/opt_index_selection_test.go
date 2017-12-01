@@ -348,22 +348,22 @@ func TestMakeSpans(t *testing.T) {
 		{`c`, `c`, `/1-/2`, `/1-/0`},
 		{`c = true`, `c`, `/1-/2`, `/1-/0`},
 		{`c = false`, `c`, `/0-/1`, `/0-/-1`},
-		{`c != true`, `c`, `/!NULL-/1`, `/0-/!NULL`},
+		{`c != true`, `c`, `/!NULL-/1`, `/0-/NULL`},
 		{`c != false`, `c`, `/1-`, `-/0`},
-		{`NOT c`, `c`, `/!NULL-/1`, `/0-/!NULL`},
+		{`NOT c`, `c`, `/!NULL-/1`, `/0-/NULL`},
 		{`c IS TRUE`, `c`, `/1-/2`, `/1-/0`},
-		{`c IS NOT TRUE`, `c`, `-/1`, `/0-/!NULL /NULL-`},
+		{`c IS NOT TRUE`, `c`, `-/1`, `/0-`},
 		{`c IS FALSE`, `c`, `/0-/1`, `/0-/-1`},
 		{`c IS NOT FALSE`, `c`, `-/!NULL /1-`, `-/0 /NULL-`},
 
 		{`a = 1`, `a`, `/1-/2`, `/1-/0`},
-		{`a != 1`, `a`, `/!NULL-`, `-/!NULL`},
+		{`a != 1`, `a`, `/!NULL-`, `-/NULL`},
 		{`a > 1`, `a`, `/2-`, `-/1`},
 		{`a >= 1`, `a`, `/1-`, `-/0`},
-		{`a < 1`, `a`, `/!NULL-/1`, `/0-/!NULL`},
-		{`a <= 1`, `a`, `/!NULL-/2`, `/1-/!NULL`},
+		{`a < 1`, `a`, `/!NULL-/1`, `/0-/NULL`},
+		{`a <= 1`, `a`, `/!NULL-/2`, `/1-/NULL`},
 		{`a IS NULL`, `a`, `-/!NULL`, `/NULL-`},
-		{`a IS NOT NULL`, `a`, `/!NULL-`, `-/!NULL`},
+		{`a IS NOT NULL`, `a`, `/!NULL-`, `-/NULL`},
 
 		{`a IN (1,2,3)`, `a`, `/1-/4`, `/3-/0`},
 		{`a IN (1,3,5)`, `a`, `/1-/2 /3-/4 /5-/6`, `/5-/4 /3-/2 /1-/0`},
@@ -374,7 +374,7 @@ func TestMakeSpans(t *testing.T) {
 		{`a = 1 AND b IN (1,3,5)`, `a,b`,
 			`/1/1-/1/2 /1/3-/1/4 /1/5-/1/6`, `/1/5-/1/4 /1/3-/1/2 /1/1-/1/0`},
 		{`a >= 1 AND b IN (1,2,3)`, `a,b`, `/1-`, `-/0`},
-		{`a <= 1 AND b IN (1,2,3)`, `a,b`, `/!NULL-/2`, `/1-/!NULL`},
+		{`a <= 1 AND b IN (1,2,3)`, `a,b`, `/!NULL-/2`, `/1-/NULL`},
 		{`(a, b) IN ((1, 2), (3, 4))`, `a,b`,
 			`/1/2-/1/3 /3/4-/3/5`, `/3/4-/3/3 /1/2-/1/1`},
 		{`(b, a) IN ((1, 2), (3, 4))`, `a,b`,
@@ -382,78 +382,78 @@ func TestMakeSpans(t *testing.T) {
 		{`(a, b) IN ((1, 2), (3, 4))`, `b`, `/2-/3 /4-/5`, `/4-/3 /2-/1`},
 
 		{`a = 1 AND b = 1`, `a,b`, `/1/1-/1/2`, `/1/1-/1/0`},
-		{`a = 1 AND b != 1`, `a,b`, `/1/!NULL-/2`, `/1-/1/!NULL`},
+		{`a = 1 AND b != 1`, `a,b`, `/1/!NULL-/2`, `/1-/1/NULL`},
 		{`a = 1 AND b > 1`, `a,b`, `/1/2-/2`, `/1-/1/1`},
 		{`a = 1 AND b >= 1`, `a,b`, `/1/1-/2`, `/1-/1/0`},
-		{`a = 1 AND b < 1`, `a,b`, `/1/!NULL-/1/1`, `/1/0-/1/!NULL`},
-		{`a = 1 AND b <= 1`, `a,b`, `/1/!NULL-/1/2`, `/1/1-/1/!NULL`},
+		{`a = 1 AND b < 1`, `a,b`, `/1/!NULL-/1/1`, `/1/0-/1/NULL`},
+		{`a = 1 AND b <= 1`, `a,b`, `/1/!NULL-/1/2`, `/1/1-/1/NULL`},
 		{`a = 1 AND b IS NULL`, `a,b`, `/1-/1/!NULL`, `/1/NULL-/0`},
-		{`a = 1 AND b IS NOT NULL`, `a,b`, `/1/!NULL-/2`, `/1-/1/!NULL`},
+		{`a = 1 AND b IS NOT NULL`, `a,b`, `/1/!NULL-/2`, `/1-/1/NULL`},
 
-		{`a != 1 AND b = 1`, `a,b`, `/!NULL-`, `-/!NULL`},
-		{`a != 1 AND b != 1`, `a,b`, `/!NULL-`, `-/!NULL`},
-		{`a != 1 AND b > 1`, `a,b`, `/!NULL-`, `-/!NULL`},
-		{`a != 1 AND b >= 1`, `a,b`, `/!NULL-`, `-/!NULL`},
-		{`a != 1 AND b < 1`, `a,b`, `/!NULL-`, `-/!NULL`},
-		{`a != 1 AND b <= 1`, `a,b`, `/!NULL-`, `-/!NULL`},
-		{`a != 1 AND b IS NULL`, `a,b`, `/!NULL-`, `-/!NULL`},
-		{`a != 1 AND b IS NOT NULL`, `a,b`, `/!NULL-`, `-/!NULL`},
+		{`a != 1 AND b = 1`, `a,b`, `/!NULL-`, `-/NULL`},
+		{`a != 1 AND b != 1`, `a,b`, `/!NULL-`, `-/NULL`},
+		{`a != 1 AND b > 1`, `a,b`, `/!NULL-`, `-/NULL`},
+		{`a != 1 AND b >= 1`, `a,b`, `/!NULL-`, `-/NULL`},
+		{`a != 1 AND b < 1`, `a,b`, `/!NULL-`, `-/NULL`},
+		{`a != 1 AND b <= 1`, `a,b`, `/!NULL-`, `-/NULL`},
+		{`a != 1 AND b IS NULL`, `a,b`, `/!NULL-`, `-/NULL`},
+		{`a != 1 AND b IS NOT NULL`, `a,b`, `/!NULL-`, `-/NULL`},
 
 		{`a > 1 AND b = 1`, `a,b`, `/2/1-`, `-/2/0`},
-		{`a > 1 AND b != 1`, `a,b`, `/2/!NULL-`, `-/2/!NULL`},
+		{`a > 1 AND b != 1`, `a,b`, `/2/!NULL-`, `-/2/NULL`},
 		{`a > 1 AND b > 1`, `a,b`, `/2/2-`, `-/2/1`},
 		{`a > 1 AND b >= 1`, `a,b`, `/2/1-`, `-/2/0`},
 		{`a > 1 AND b < 1`, `a,b`, `/2-`, `-/1`},
 		{`a > 1 AND b <= 1`, `a,b`, `/2-`, `-/1`},
 		{`a > 1 AND b IS NULL`, `a,b`, `/2-`, `-/1`},
-		{`a > 1 AND b IS NOT NULL`, `a,b`, `/2/!NULL-`, `-/2/!NULL`},
+		{`a > 1 AND b IS NOT NULL`, `a,b`, `/2/!NULL-`, `-/2/NULL`},
 
 		{`a >= 1 AND b = 1`, `a,b`, `/1/1-`, `-/1/0`},
-		{`a >= 1 AND b != 1`, `a,b`, `/1/!NULL-`, `-/1/!NULL`},
+		{`a >= 1 AND b != 1`, `a,b`, `/1/!NULL-`, `-/1/NULL`},
 		{`a >= 1 AND b > 1`, `a,b`, `/1/2-`, `-/1/1`},
 		{`a >= 1 AND b >= 1`, `a,b`, `/1/1-`, `-/1/0`},
 		{`a >= 1 AND b < 1`, `a,b`, `/1-`, `-/0`},
 		{`a >= 1 AND b <= 1`, `a,b`, `/1-`, `-/0`},
 		{`a >= 1 AND b IS NULL`, `a,b`, `/1-`, `-/0`},
-		{`a >= 1 AND b IS NOT NULL`, `a,b`, `/1/!NULL-`, `-/1/!NULL`},
+		{`a >= 1 AND b IS NOT NULL`, `a,b`, `/1/!NULL-`, `-/1/NULL`},
 
-		{`a < 1 AND b = 1`, `a,b`, `/!NULL-/0/2`, `/0/1-/!NULL`},
-		{`a < 1 AND b != 1`, `a,b`, `/!NULL-/1`, `/0-/!NULL`},
-		{`a < 1 AND b > 1`, `a,b`, `/!NULL-/1`, `/0-/!NULL`},
-		{`a < 1 AND b >= 1`, `a,b`, `/!NULL-/1`, `/0-/!NULL`},
-		{`a < 1 AND b < 1`, `a,b`, `/!NULL-/0/1`, `/0/0-/!NULL`},
-		{`a < 1 AND b <= 1`, `a,b`, `/!NULL-/0/2`, `/0/1-/!NULL`},
-		{`a < 1 AND b IS NULL`, `a,b`, `/!NULL-/0/!NULL`, `/0/NULL-/!NULL`},
-		{`a < 1 AND b IS NOT NULL`, `a,b`, `/!NULL-/1`, `/0-/!NULL`},
+		{`a < 1 AND b = 1`, `a,b`, `/!NULL-/0/2`, `/0/1-/NULL`},
+		{`a < 1 AND b != 1`, `a,b`, `/!NULL-/1`, `/0-/NULL`},
+		{`a < 1 AND b > 1`, `a,b`, `/!NULL-/1`, `/0-/NULL`},
+		{`a < 1 AND b >= 1`, `a,b`, `/!NULL-/1`, `/0-/NULL`},
+		{`a < 1 AND b < 1`, `a,b`, `/!NULL-/0/1`, `/0/0-/NULL`},
+		{`a < 1 AND b <= 1`, `a,b`, `/!NULL-/0/2`, `/0/1-/NULL`},
+		{`a < 1 AND b IS NULL`, `a,b`, `/!NULL-/0/!NULL`, `/0/NULL-/NULL`},
+		{`a < 1 AND b IS NOT NULL`, `a,b`, `/!NULL-/1`, `/0-/NULL`},
 
-		{`a <= 1 AND b = 1`, `a,b`, `/!NULL-/1/2`, `/1/1-/!NULL`},
-		{`a <= 1 AND b != 1`, `a,b`, `/!NULL-/2`, `/1-/!NULL`},
-		{`a <= 1 AND b > 1`, `a,b`, `/!NULL-/2`, `/1-/!NULL`},
-		{`a <= 1 AND b >= 1`, `a,b`, `/!NULL-/2`, `/1-/!NULL`},
-		{`a <= 1 AND b < 1`, `a,b`, `/!NULL-/1/1`, `/1/0-/!NULL`},
-		{`a <= 1 AND b <= 1`, `a,b`, `/!NULL-/1/2`, `/1/1-/!NULL`},
-		{`a <= 1 AND b IS NULL`, `a,b`, `/!NULL-/1/!NULL`, `/1/NULL-/!NULL`},
-		{`a <= 1 AND b IS NOT NULL`, `a,b`, `/!NULL-/2`, `/1-/!NULL`},
+		{`a <= 1 AND b = 1`, `a,b`, `/!NULL-/1/2`, `/1/1-/NULL`},
+		{`a <= 1 AND b != 1`, `a,b`, `/!NULL-/2`, `/1-/NULL`},
+		{`a <= 1 AND b > 1`, `a,b`, `/!NULL-/2`, `/1-/NULL`},
+		{`a <= 1 AND b >= 1`, `a,b`, `/!NULL-/2`, `/1-/NULL`},
+		{`a <= 1 AND b < 1`, `a,b`, `/!NULL-/1/1`, `/1/0-/NULL`},
+		{`a <= 1 AND b <= 1`, `a,b`, `/!NULL-/1/2`, `/1/1-/NULL`},
+		{`a <= 1 AND b IS NULL`, `a,b`, `/!NULL-/1/!NULL`, `/1/NULL-/NULL`},
+		{`a <= 1 AND b IS NOT NULL`, `a,b`, `/!NULL-/2`, `/1-/NULL`},
 
 		{`a IN (1) AND b = 1`, `a,b`, `/1/1-/1/2`, `/1/1-/1/0`},
-		{`a IN (1) AND b != 1`, `a,b`, `/1/!NULL-/2`, `/1-/1/!NULL`},
+		{`a IN (1) AND b != 1`, `a,b`, `/1/!NULL-/2`, `/1-/1/NULL`},
 		{`a IN (1) AND b > 1`, `a,b`, `/1/2-/2`, `/1-/1/1`},
 		{`a IN (1) AND b >= 1`, `a,b`, `/1/1-/2`, `/1-/1/0`},
-		{`a IN (1) AND b < 1`, `a,b`, `/1/!NULL-/1/1`, `/1/0-/1/!NULL`},
-		{`a IN (1) AND b <= 1`, `a,b`, `/1/!NULL-/1/2`, `/1/1-/1/!NULL`},
+		{`a IN (1) AND b < 1`, `a,b`, `/1/!NULL-/1/1`, `/1/0-/1/NULL`},
+		{`a IN (1) AND b <= 1`, `a,b`, `/1/!NULL-/1/2`, `/1/1-/1/NULL`},
 		{`a IN (1) AND b IS NULL`, `a,b`, `/1-/1/!NULL`, `/1/NULL-/0`},
-		{`a IN (1) AND b IS NOT NULL`, `a,b`, `/1/!NULL-/2`, `/1-/1/!NULL`},
+		{`a IN (1) AND b IS NOT NULL`, `a,b`, `/1/!NULL-/2`, `/1-/1/NULL`},
 
 		{`(a, b) = (1, 2)`, `a`, `/1-/2`, `/1-/0`},
 		{`(a, b) = (1, 2)`, `a,b`, `/1/2-/1/3`, `/1/2-/1/1`},
 
 		{`a > 1 OR a >= 5`, `a`, `/2-`, `-/1`},
-		{`a < 5 OR a >= 1`, `a`, `/!NULL-`, `-/!NULL`},
-		{`a < 1 OR a >= 5`, `a`, `/!NULL-/1 /5-`, `-/4 /0-/!NULL`},
+		{`a < 5 OR a >= 1`, `a`, `/!NULL-`, `-/NULL`},
+		{`a < 1 OR a >= 5`, `a`, `/!NULL-/1 /5-`, `-/4 /0-/NULL`},
 		{`a = 1 OR a > 8`, `a`, `/1-/2 /9-`, `-/8 /1-/0`},
 		{`a = 8 OR a > 1`, `a`, `/2-`, `-/1`},
-		{`a < 1 OR a = 5 OR a > 8`, `a`, `/!NULL-/1 /5-/6 /9-`, `-/8 /5-/4 /0-/!NULL`},
-		{`a < 8 OR a = 8 OR a > 8`, `a`, `/!NULL-`, `-/!NULL`},
+		{`a < 1 OR a = 5 OR a > 8`, `a`, `/!NULL-/1 /5-/6 /9-`, `-/8 /5-/4 /0-/NULL`},
+		{`a < 8 OR a = 8 OR a > 8`, `a`, `/!NULL-`, `-/NULL`},
 
 		{`(a = 1 AND b = 5) OR (a = 3 AND b = 7)`, `a`, `/1-/2 /3-/4`, `/3-/2 /1-/0`},
 		{`(a = 1 AND b = 5) OR (a = 3 AND b = 7)`, `b`, `/5-/6 /7-/8`, `/7-/6 /5-/4`},
@@ -461,9 +461,9 @@ func TestMakeSpans(t *testing.T) {
 			`/1/5-/1/6 /3/7-/3/8`, `/3/7-/3/6 /1/5-/1/4`},
 
 		{`(a = 1 AND b < 5) OR (a = 3 AND b > 7)`, `a`, `/1-/2 /3-/4`, `/3-/2 /1-/0`},
-		{`(a = 1 AND b < 5) OR (a = 3 AND b > 7)`, `b`, `/!NULL-/5 /8-`, `-/7 /4-/!NULL`},
+		{`(a = 1 AND b < 5) OR (a = 3 AND b > 7)`, `b`, `/!NULL-/5 /8-`, `-/7 /4-/NULL`},
 		{`(a = 1 AND b < 5) OR (a = 3 AND b > 7)`, `a,b`,
-			`/1/!NULL-/1/5 /3/8-/4`, `/3-/3/7 /1/4-/1/!NULL`},
+			`/1/!NULL-/1/5 /3/8-/4`, `/3-/3/7 /1/4-/1/NULL`},
 
 		{`(a = 1 AND b > 5) OR (a = 3 AND b > 7)`, `a`, `/1-/2 /3-/4`, `/3-/2 /1-/0`},
 		{`(a = 1 AND b > 5) OR (a = 3 AND b > 7)`, `b`, `/6-`, `-/5`},
@@ -471,23 +471,23 @@ func TestMakeSpans(t *testing.T) {
 			`/1/6-/2 /3/8-/4`, `/3-/3/7 /1-/1/5`},
 
 		{`(a = 1 AND b > 5) OR (a = 3 AND b < 7)`, `a`, `/1-/2 /3-/4`, `/3-/2 /1-/0`},
-		{`(a = 1 AND b > 5) OR (a = 3 AND b < 7)`, `b`, `/!NULL-`, `-/!NULL`},
+		{`(a = 1 AND b > 5) OR (a = 3 AND b < 7)`, `b`, `/!NULL-`, `-/NULL`},
 		{`(a = 1 AND b > 5) OR (a = 3 AND b < 7)`, `a,b`,
-			`/1/6-/2 /3/!NULL-/3/7`, `/3/6-/3/!NULL /1-/1/5`},
+			`/1/6-/2 /3/!NULL-/3/7`, `/3/6-/3/NULL /1-/1/5`},
 
-		{`(a < 1 AND b < 5) OR (a > 3 AND b > 7)`, `a`, `/!NULL-/1 /4-`, `-/3 /0-/!NULL`},
-		{`(a < 1 AND b < 5) OR (a > 3 AND b > 7)`, `b`, `/!NULL-/5 /8-`, `-/7 /4-/!NULL`},
+		{`(a < 1 AND b < 5) OR (a > 3 AND b > 7)`, `a`, `/!NULL-/1 /4-`, `-/3 /0-/NULL`},
+		{`(a < 1 AND b < 5) OR (a > 3 AND b > 7)`, `b`, `/!NULL-/5 /8-`, `-/7 /4-/NULL`},
 		{`(a < 1 AND b < 5) OR (a > 3 AND b > 7)`, `a,b`,
-			`/!NULL-/0/5 /4/8-`, `-/4/7 /0/4-/!NULL`},
+			`/!NULL-/0/5 /4/8-`, `-/4/7 /0/4-/NULL`},
 
-		{`(a > 3 AND b < 5) OR (a < 1 AND b > 7)`, `a`, `/!NULL-/1 /4-`, `-/3 /0-/!NULL`},
-		{`(a > 3 AND b < 5) OR (a < 1 AND b > 7)`, `b`, `/!NULL-/5 /8-`, `-/7 /4-/!NULL`},
+		{`(a > 3 AND b < 5) OR (a < 1 AND b > 7)`, `a`, `/!NULL-/1 /4-`, `-/3 /0-/NULL`},
+		{`(a > 3 AND b < 5) OR (a < 1 AND b > 7)`, `b`, `/!NULL-/5 /8-`, `-/7 /4-/NULL`},
 		{`(a > 3 AND b < 5) OR (a < 1 AND b > 7)`, `a,b`,
-			`/!NULL-/1 /4-`, `-/3 /0-/!NULL`},
+			`/!NULL-/1 /4-`, `-/3 /0-/NULL`},
 
-		{`(a > 1 AND b < 5) OR (a < 3 AND b > 7)`, `a`, `/!NULL-`, `-/!NULL`},
-		{`(a > 1 AND b < 5) OR (a < 3 AND b > 7)`, `b`, `/!NULL-/5 /8-`, `-/7 /4-/!NULL`},
-		{`(a > 1 AND b < 5) OR (a < 3 AND b > 7)`, `a,b`, `/!NULL-`, `-/!NULL`},
+		{`(a > 1 AND b < 5) OR (a < 3 AND b > 7)`, `a`, `/!NULL-`, `-/NULL`},
+		{`(a > 1 AND b < 5) OR (a < 3 AND b > 7)`, `b`, `/!NULL-/5 /8-`, `-/7 /4-/NULL`},
+		{`(a > 1 AND b < 5) OR (a < 3 AND b > 7)`, `a,b`, `/!NULL-`, `-/NULL`},
 
 		{`(a = 5) OR (a, b) IN ((1, 1), (3, 3))`, `a`, `/1-/2 /3-/4 /5-/6`, `/5-/4 /3-/2 /1-/0`},
 		{`(a = 5) OR (a, b) IN ((1, 1), (3, 3))`, `b`, `-`, `-`},
@@ -503,21 +503,21 @@ func TestMakeSpans(t *testing.T) {
 
 		{`(a, b) >= (1, 4)`, `a,b`, `/1/4-`, `-/1/3`},
 		{`(a, b) > (1, 4)`, `a,b`, `/1/5-`, `-/1/4`},
-		{`(a, b) < (1, 4)`, `a,b`, `/!NULL-/1/4`, `/1/3-/!NULL`},
-		{`(a, b) <= (1, 4)`, `a,b`, `/!NULL-/1/5`, `/1/4-/!NULL`},
+		{`(a, b) < (1, 4)`, `a,b`, `/!NULL-/1/4`, `/1/3-/NULL`},
+		{`(a, b) <= (1, 4)`, `a,b`, `/!NULL-/1/5`, `/1/4-/NULL`},
 		{`(a, b) = (1, 4)`, `a,b`, `/1/4-/1/5`, `/1/4-/1/3`},
-		{`(a, b) != (1, 4)`, `a,b`, `/!NULL-`, `-/!NULL`},
+		{`(a, b) != (1, 4)`, `a,b`, `/!NULL-`, `-/NULL`},
 	}
 	p := makeTestPlanner()
 	for _, d := range testData {
-		for _, dir := range []encoding.Direction{encoding.Ascending, encoding.Descending} {
-			var expected string
-			if dir == encoding.Ascending {
-				expected = d.expectedAsc
-			} else {
-				expected = d.expectedDesc
-			}
-			t.Run(d.expr+"~"+expected, func(t *testing.T) {
+		t.Run(d.expr, func(t *testing.T) {
+			for _, dir := range []encoding.Direction{encoding.Ascending, encoding.Descending} {
+				var expected string
+				if dir == encoding.Ascending {
+					expected = d.expectedAsc
+				} else {
+					expected = d.expectedDesc
+				}
 				p.evalCtx = tree.MakeTestingEvalContext()
 				defer p.evalCtx.Stop(context.Background())
 				sel := makeSelectNode(t, p)
@@ -539,8 +539,8 @@ func TestMakeSpans(t *testing.T) {
 						t.Errorf("Start: %x   End: %x", sp.Key, sp.EndKey)
 					}
 				}
-			})
-		}
+			}
+		})
 	}
 
 	// Test indexes with mixed-directions (some cols Asc, some cols Desc) and other edge cases.
