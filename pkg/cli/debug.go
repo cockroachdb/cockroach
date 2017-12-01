@@ -568,9 +568,17 @@ func runDebugGCCmd(cmd *cobra.Command, args []string) error {
 	for _, desc := range descs {
 		snap := db.NewSnapshot()
 		defer snap.Close()
-		_, info, err := storage.RunGC(context.Background(), &desc, snap, hlc.Timestamp{WallTime: timeutil.Now().UnixNano()},
-			config.GCPolicy{TTLSeconds: 24 * 60 * 60 /* 1 day */}, func(_ hlc.Timestamp, _ *roachpb.Transaction, _ roachpb.PushTxnType) {
-			}, func(_ []roachpb.Intent, _ storage.ResolveOptions) error { return nil })
+		info, err := storage.RunGC(
+			context.Background(),
+			&desc,
+			snap,
+			hlc.Timestamp{WallTime: timeutil.Now().UnixNano()},
+			config.GCPolicy{TTLSeconds: 24 * 60 * 60 /* 1 day */},
+			func([]roachpb.GCRequest_GCKey, *storage.GCInfo) error { return nil },
+			func(_ hlc.Timestamp, _ *roachpb.Transaction, _ roachpb.PushTxnType) {},
+			func(_ []roachpb.Intent, _ storage.ResolveOptions) error { return nil },
+			func(_ *roachpb.Transaction, _ []roachpb.Intent) error { return nil },
+		)
 		if err != nil {
 			return err
 		}
