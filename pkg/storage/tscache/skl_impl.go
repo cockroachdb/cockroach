@@ -48,11 +48,12 @@ func newSklImpl(clock *hlc.Clock, metrics Metrics) *sklImpl {
 // clear clears the cache and resets the low-water mark.
 func (tc *sklImpl) clear(lowWater hlc.Timestamp) {
 	pageSize := uint32(sklPageSize)
-	if build.RaceEnabled {
-		// Race testing consumes significantly more memory that normal testing.
-		// In addition, while running a group of tests in parallel, each will
-		// create a timestamp cache for every Store needed. Reduce the page size
-		// during race testing to accommodate these two factors.
+	if build.RaceEnabled || build.DeadlockEnabled {
+		// Both race testing and deadlock testing consumes significantly more
+		// memory than normal testing. In addition, while running a group of
+		// tests in parallel, each will create a timestamp cache for every Store
+		// needed. Reduce the page size during these kinds of testing to
+		// accommodate these two factors.
 		pageSize /= 4
 	}
 	tc.rCache = newIntervalSkl(tc.clock, MinRetentionWindow, pageSize, tc.metrics.Skl.Read)
