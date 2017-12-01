@@ -3,7 +3,7 @@
 - Start Date: 2017-11-18
 - Authors: Marc Berhault
 - RFC PR: [#20149](https://github.com/cockroachdb/cockroach/pull/20149)
-- Cockroach Issue: (one or more # from the issue tracker)
+- Cockroach Issue: [#20371](https://github.com/cockroachdb/cockroach/issues/20371)
 
 
 Table of Contents
