@@ -437,7 +437,7 @@ def            system              rangelog                   BASE TABLE   1
 def            system              settings                   BASE TABLE   1
 def            system              table_statistics           BASE TABLE   1
 def            system              ui                         BASE TABLE   1
-def            system              users                      BASE TABLE   1
+def            system              users                      BASE TABLE   4
 def            system              web_sessions               BASE TABLE   1
 def            system              zones                      BASE TABLE   1
 
@@ -450,6 +450,7 @@ SELECT TABLE_SCHEMA, TABLE_NAME, VERSION FROM information_schema.tables WHERE ve
 table_schema  table_name  version
 other_db      xyz         6
 system        eventlog    2
+system        users       4
 
 user testuser
 
@@ -593,6 +594,7 @@ def            system        ui                value           2
 def            system        ui                lastUpdated     3
 def            system        users             username        1
 def            system        users             hashedPassword  2
+def            system        users             isRole          3
 def            system        web_sessions      id              1
 def            system        web_sessions      hashedSecret    2
 def            system        web_sessions      username        3
@@ -923,10 +925,18 @@ DROP DATABASE other_db CASCADE
 
 #Verify  information_schema.user_privileges
 
-query TTTT colnames
-SELECT * FROM information_schema.user_privileges ORDER BY privilege_type
+query TTTT colnames rowsort
+SELECT * FROM information_schema.user_privileges ORDER BY grantee,privilege_type
 ----
 grantee  table_catalog  privilege_type  is_grantable
+admin    def            ALL             NULL
+admin    def            CREATE          NULL
+admin    def            DELETE          NULL
+admin    def            DROP            NULL
+admin    def            GRANT           NULL
+admin    def            INSERT          NULL
+admin    def            SELECT          NULL
+admin    def            UPDATE          NULL
 root     def            ALL             NULL
 root     def            CREATE          NULL
 root     def            DELETE          NULL

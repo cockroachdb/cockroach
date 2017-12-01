@@ -1046,6 +1046,7 @@ FROM pg_catalog.pg_roles
 ORDER BY rolname
 ----
 oid         rolname   rolsuper  rolinherit  rolcreaterole  rolcreatedb  rolcatupdate  rolcanlogin  rolconnlimit
+823966177   admin     true      true        true           true         false         false         -1
 2901009604  root      true      false       true           true         false         true         -1
 2499926009  testuser  false     false       false          false        false         true         -1
 
@@ -1055,6 +1056,7 @@ FROM pg_catalog.pg_roles
 ORDER BY rolname
 ----
 oid         rolname   rolpassword  rolvaliduntil  rolconfig
+823966177   admin     ·            NULL           {}
 2901009604  root      ********     NULL           {}
 2499926009  testuser  ********     NULL           {}
 

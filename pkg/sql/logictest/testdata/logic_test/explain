@@ -87,12 +87,13 @@ EXPLAIN DROP DATABASE foo
 
 # explain SHOW JOBS - beware to test this before the CREATE INDEX
 # below, otherwise the result becomes non-deterministic.
+# Migrations with backfill will affect the number of rows.
 query ITTT
 EXPLAIN SHOW JOBS
 ----
 0  render  ·     ·
 1  values  ·     ·
-1  ·       size  13 columns, 0 rows
+1  ·       size  13 columns, 1 row
 
 statement ok
 CREATE INDEX a ON foo(x)
@@ -194,7 +195,7 @@ EXPLAIN SHOW COLUMNS FROM foo
 5  render  ·         ·
 6  filter  ·         ·
 7  values  ·         ·
-7  ·       size      13 columns, 617 rows
+7  ·       size      13 columns, 618 rows
 5  render  ·         ·
 6  filter  ·         ·
 7  values  ·         ·

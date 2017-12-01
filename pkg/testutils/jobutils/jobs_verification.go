@@ -28,6 +28,13 @@ import (
 	"github.com/pkg/errors"
 )
 
+// GetSystemJobsCount queries the number of entries in the jobs table.
+func GetSystemJobsCount(t testing.TB, db *sqlutils.SQLRunner) int {
+	var jobCount int
+	db.QueryRow(t, `SELECT COUNT(*) FROM crdb_internal.jobs;`).Scan(&jobCount)
+	return jobCount
+}
+
 // VerifySystemJob checks that that job records are created as expected.
 func VerifySystemJob(
 	t testing.TB, db *sqlutils.SQLRunner, offset int, expectedType jobs.Type, expected jobs.Record,
