@@ -630,6 +630,7 @@ func newReplica(rangeID roachpb.RangeID, store *Store) *Replica {
 		abortSpan:      abortspan.New(rangeID),
 		txnWaitQueue:   txnwait.NewQueue(store),
 	}
+	r.mu.pendingLeaseRequest = makePendingLeaseRequest(r)
 	r.mu.stateLoader = stateloader.Make(r.store.cfg.Settings, rangeID)
 	if leaseHistoryMaxEntries > 0 {
 		r.leaseHistory = newLeaseHistory()

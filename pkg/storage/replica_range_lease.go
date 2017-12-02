@@ -43,9 +43,12 @@ import (
 // liveness table must use expiration-based leases to avoid any
 // circular dependencies.
 //
-// Methods are not thread-safe; a pendingLeaseRequest is logically part of
-// a replica, so replica.mu should be used to synchronize all calls.
+// Methods are not thread-safe; a pendingLeaseRequest is logically part
+// of the replica it references, so replica.mu should be used to
+// synchronize all calls.
 type pendingLeaseRequest struct {
+	// The replica that the pendingLeaseRequest is a part of.
+	repl *Replica
 	// Slice of channels to send on after lease acquisition.
 	// If empty, then no request is in progress.
 	llChans []chan *roachpb.Error
@@ -55,8 +58,14 @@ type pendingLeaseRequest struct {
 	nextLease roachpb.Lease
 }
 
+func makePendingLeaseRequest(repl *Replica) pendingLeaseRequest {
+	return pendingLeaseRequest{repl: repl}
+}
+
 // RequestPending returns the pending Lease, if one is in progress.
 // The second return val is true if a lease request is pending.
+//
+// Requires repl.mu is read locked.
 func (p *pendingLeaseRequest) RequestPending() (roachpb.Lease, bool) {
 	pending := len(p.llChans) > 0
 	if pending {
@@ -82,7 +91,6 @@ func (p *pendingLeaseRequest) RequestPending() (roachpb.Lease, bool) {
 // Requires repl.mu is exclusively locked.
 func (p *pendingLeaseRequest) InitOrJoinRequest(
 	ctx context.Context,
-	repl *Replica,
 	nextLeaseHolder roachpb.ReplicaDescriptor,
 	status LeaseStatus,
 	startKey roachpb.Key,
@@ -107,19 +115,19 @@ func (p *pendingLeaseRequest) InitOrJoinRequest(
 		Key: startKey,
 	}
 	var leaseReq roachpb.Request
-	now := repl.store.Clock().Now()
+	now := p.repl.store.Clock().Now()
 	reqLease := roachpb.Lease{
 		Start:      status.Timestamp,
 		Replica:    nextLeaseHolder,
 		ProposedTS: &now,
 	}
 
-	if repl.requiresExpiringLeaseRLocked() {
+	if p.repl.requiresExpiringLeaseRLocked() {
 		reqLease.Expiration = &hlc.Timestamp{}
-		*reqLease.Expiration = status.Timestamp.Add(int64(repl.store.cfg.RangeLeaseActiveDuration()), 0)
+		*reqLease.Expiration = status.Timestamp.Add(int64(p.repl.store.cfg.RangeLeaseActiveDuration()), 0)
 	} else {
 		// Get the liveness for the next lease holder and set the epoch in the lease request.
-		liveness, err := repl.store.cfg.NodeLiveness.GetLiveness(nextLeaseHolder.NodeID)
+		liveness, err := p.repl.store.cfg.NodeLiveness.GetLiveness(nextLeaseHolder.NodeID)
 		if err != nil {
 			llChan <- roachpb.NewError(&roachpb.LeaseRejectedError{
 				Existing:  status.Lease,
@@ -145,12 +153,12 @@ func (p *pendingLeaseRequest) InitOrJoinRequest(
 		}
 	}
 
-	if err := p.requestLeaseAsync(ctx, repl, nextLeaseHolder, reqLease, status, leaseReq); err != nil {
+	if err := p.requestLeaseAsync(ctx, nextLeaseHolder, reqLease, status, leaseReq); err != nil {
 		// We failed to start the asynchronous task. Send a blank NotLeaseHolderError
 		// back to indicate that we have no idea who the range lease holder might
 		// be; we've withdrawn from active duty.
 		llChan <- roachpb.NewError(
-			newNotLeaseHolderError(nil, repl.store.StoreID(), repl.mu.state.Desc))
+			newNotLeaseHolderError(nil, p.repl.store.StoreID(), p.repl.mu.state.Desc))
 		return llChan
 	}
 	// InitOrJoinRequest requires that repl.mu is exclusively locked. requestLeaseAsync
@@ -167,13 +175,12 @@ func (p *pendingLeaseRequest) InitOrJoinRequest(
 // specified replica. The request is sent in an async task.
 func (p *pendingLeaseRequest) requestLeaseAsync(
 	ctx context.Context,
-	repl *Replica,
 	nextLeaseHolder roachpb.ReplicaDescriptor,
 	reqLease roachpb.Lease,
 	status LeaseStatus,
 	leaseReq roachpb.Request,
 ) error {
-	return repl.store.Stopper().RunAsyncTask(
+	return p.repl.store.Stopper().RunAsyncTask(
 		ctx, "storage.pendingLeaseRequest: requesting lease",
 		func(ctx context.Context) {
 			var pErr *roachpb.Error
@@ -187,19 +194,19 @@ func (p *pendingLeaseRequest) requestLeaseAsync(
 				var err error
 				// If this replica is previous & next lease holder, manually heartbeat to become live.
 				if status.Lease.OwnedBy(nextLeaseHolder.StoreID) &&
-					repl.store.StoreID() == nextLeaseHolder.StoreID {
-					if err = repl.store.cfg.NodeLiveness.Heartbeat(ctx, status.Liveness); err != nil {
+					p.repl.store.StoreID() == nextLeaseHolder.StoreID {
+					if err = p.repl.store.cfg.NodeLiveness.Heartbeat(ctx, status.Liveness); err != nil {
 						log.Error(ctx, err)
 					}
 				} else if status.Liveness.Epoch == status.Lease.Epoch {
 					// If not owner, increment epoch if necessary to invalidate lease.
-					if err = repl.store.cfg.NodeLiveness.IncrementEpoch(ctx, status.Liveness); err != nil {
+					if err = p.repl.store.cfg.NodeLiveness.IncrementEpoch(ctx, status.Liveness); err != nil {
 						log.Error(ctx, err)
 					}
 				}
 				// Set error for propagation to all waiters below.
 				if err != nil {
-					pErr = roachpb.NewError(newNotLeaseHolderError(&status.Lease, repl.store.StoreID(), repl.Desc()))
+					pErr = roachpb.NewError(newNotLeaseHolderError(&status.Lease, p.repl.store.StoreID(), p.repl.Desc()))
 				}
 			}
 
@@ -207,10 +214,10 @@ func (p *pendingLeaseRequest) requestLeaseAsync(
 			// lease to be applied.
 			if pErr == nil {
 				ba := roachpb.BatchRequest{}
-				ba.Timestamp = repl.store.Clock().Now()
-				ba.RangeID = repl.RangeID
+				ba.Timestamp = p.repl.store.Clock().Now()
+				ba.RangeID = p.repl.RangeID
 				ba.Add(leaseReq)
-				_, pErr = repl.Send(ctx, ba)
+				_, pErr = p.repl.Send(ctx, ba)
 			}
 			// We reset our state below regardless of whether we've gotten an error or
 			// not, but note that an error is ambiguous - there's no guarantee that the
@@ -221,8 +228,8 @@ func (p *pendingLeaseRequest) requestLeaseAsync(
 			// extend the existing lease in the future.
 
 			// Send result of lease to all waiter channels.
-			repl.mu.Lock()
-			defer repl.mu.Unlock()
+			p.repl.mu.Lock()
+			defer p.repl.mu.Unlock()
 			for _, llChan := range p.llChans {
 				// Don't send the same transaction object twice; this can lead to races.
 				if pErr != nil {
@@ -243,6 +250,8 @@ func (p *pendingLeaseRequest) requestLeaseAsync(
 // and that the request is compatible with whatever the caller is currently
 // wanting to do (i.e. the request is naming the intended node as the next
 // lease holder).
+//
+// Requires repl.mu is exclusively locked.
 func (p *pendingLeaseRequest) JoinRequest() <-chan *roachpb.Error {
 	llChan := make(chan *roachpb.Error, 1)
 	if len(p.llChans) == 0 {
@@ -265,6 +274,8 @@ func (p *pendingLeaseRequest) JoinRequest() <-chan *roachpb.Error {
 // LeaderLease.
 //
 // replicaID is the ID of the parent replica.
+//
+// Requires repl.mu is read locked.
 func (p *pendingLeaseRequest) TransferInProgress(
 	replicaID roachpb.ReplicaID,
 ) (roachpb.Lease, bool) {
@@ -406,7 +417,7 @@ func (r *Replica) requestLeaseLocked(
 		return llChan
 	}
 	return r.mu.pendingLeaseRequest.InitOrJoinRequest(
-		ctx, r, repDesc, status, r.mu.state.Desc.StartKey.AsRawKey(), false /* transfer */)
+		ctx, repDesc, status, r.mu.state.Desc.StartKey.AsRawKey(), false /* transfer */)
 }
 
 // AdminTransferLease transfers the LeaderLease to another replica. A
@@ -469,7 +480,7 @@ func (r *Replica) AdminTransferLease(ctx context.Context, target roachpb.StoreID
 		// Stop using the current lease.
 		r.mu.minLeaseProposedTS = status.Timestamp
 		transfer := r.mu.pendingLeaseRequest.InitOrJoinRequest(
-			ctx, r, nextLeaseHolder, status, desc.StartKey.AsRawKey(), true, /* transfer */
+			ctx, nextLeaseHolder, status, desc.StartKey.AsRawKey(), true, /* transfer */
 		)
 		return nil, transfer, nil
 	}
