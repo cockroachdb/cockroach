@@ -1122,13 +1122,16 @@ func prettyPrintFirstValue(dir Direction, b []byte) ([]byte, string, error) {
 		b, _ = DecodeIfNull(b)
 		return b, "NULL", nil
 	case NotNull:
+		// The tag can be either encodedNotNull or encodedNotNullDesc. The
+		// latter can be an interleaved sentinel.
+		isNotNullDesc := (b[0] == encodedNotNullDesc)
 		b, _ = DecodeIfNotNull(b)
-		if dir == Ascending || dir == Descending {
-			return b, "!NULL", nil
+		if dir != Ascending && dir != Descending && isNotNullDesc {
+			// Unspecified direction (0 value) will default to '#' for the
+			// interleaved sentinel.
+			return b, "#", nil
 		}
-		// Unspecified direction (0 value) will default to '#' for the
-		// interleaved sentinel.
-		return b, "#", nil
+		return b, "!NULL", nil
 	case Int:
 		var i int64
 		if dir == Descending {
