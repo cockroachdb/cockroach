@@ -17,9 +17,11 @@ package sql
 import (
 	"golang.org/x/net/context"
 
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/pkg/errors"
 )
 
 // Grant adds privileges to users.
@@ -58,6 +60,27 @@ func (p *planner) changePrivileges(
 	grantees tree.NameList,
 	changePrivilege func(*sqlbase.PrivilegeDescriptor, string),
 ) (planNode, error) {
+	//check whether grantees exists
+	users, err := GetAllUsers(ctx, p)
+
+	if err != nil {
+		return nil, err
+	}
+	users = append(users, security.RootUser)
+	users = append(users, security.NodeUser)
+	for _, grantee := range grantees {
+		findUser := false
+		for _, user := range users {
+			if user == string(grantee) {
+				findUser = true
+				break
+			}
+		}
+		if !findUser {
+			return nil, errors.Errorf("user %s does not exist", grantee)
+		}
+	}
+
 	descriptors, err := getDescriptorsFromTargetList(ctx, p.txn, p.getVirtualTabler(), p.session.Database, targets)
 	if err != nil {
 		return nil, err

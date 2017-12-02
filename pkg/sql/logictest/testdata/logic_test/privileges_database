@@ -27,6 +27,9 @@ statement ok
 SHOW GRANTS ON DATABASE a
 
 statement ok
+CREATE USER bar
+
+statement ok
 GRANT ALL ON DATABASE a TO bar
 
 statement ok
