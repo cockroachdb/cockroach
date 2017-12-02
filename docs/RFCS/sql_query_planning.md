@@ -59,7 +59,7 @@ and Transformations are modules that power Prep, Rewrite and Search.
      +-------+     +-----v-----+  - constant folding, type checking, name resolution
      | Stats +----->   Prep    |  - computes initial properties
      +-------+     +-----+-----+  - retrieves and attaches stats
-                         |        - done once per PREPARE [TODO: is this correct?]
+                         |        - done once per PREPARE
                       (expr)
                          |
                    +-----v-----+  - capture placeholder values / timestamps
@@ -986,3 +986,26 @@ becomes.
   outer joins.
 
 * Execution. Stream-group-by.
+
+
+## Unresolved questions
+
+* Flesh out understanding of where physical properties such as
+  ordering can be imposed by the query itself. For example, a
+  top-level `ORDER BY` clause definitely imposes ordering. But so does
+  an `ORDER BY` clause that is the immediate sub-expression of
+  `DISTINCT ON`, `WITH ORDINALITY` and
+  `{INSERT,UPSERT,DELETE,UPDATE}`. Are there other places? Are there
+  other physical properties to capture at intermediate nodes?
+
+* Which parts of query planning can be performed during PREPARE vs
+  EXECUTE? Most (all?) of the transformations that are part of Rewrite
+  can be performed during PREPARE. For example, predicate push-down
+  and decorrelation do not require placeholder values. And some parts
+  of Search, such as join enumeration, can be performed during
+  PREPARE. The part that is restricted to EXECUTE are certain parts of
+  index selection and thus costing of query plans.
+
+* The performance of the query planner itself is important because
+  query planning occurs for every query executed. What sorts of fast
+  paths are possible for simple queries?
