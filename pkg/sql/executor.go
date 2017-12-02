@@ -2001,14 +2001,14 @@ func (e *Executor) execClassic(
 	planner.evalCtx.ActiveMemAcc = &rowAcc
 	defer rowAcc.Close(ctx)
 
-	if err := planner.startPlan(ctx, plan); err != nil {
-		return err
-	}
-
 	params := runParams{
 		ctx:     ctx,
 		evalCtx: &planner.evalCtx,
 		p:       planner,
+	}
+
+	if err := startPlan(params, plan); err != nil {
+		return err
 	}
 
 	switch rowResultWriter.StatementType() {

@@ -66,12 +66,13 @@ func newSQLForeignKeyCheckOperation(
 // Start implements the checkOperation interface.
 // It creates a query string and generates a plan from it, which then
 // runs in the distSQL execution engine.
-func (o *sqlForeignKeyCheckOperation) Start(ctx context.Context, p *planner) error {
+func (o *sqlForeignKeyCheckOperation) Start(params runParams) error {
+	ctx := params.ctx
 	checkQuery, err := createFKCheckQuery(o.tableName.Database(), o.tableDesc, o.constraint)
 	if err != nil {
 		return err
 	}
-	plan, err := p.delegateQuery(ctx, "SCRUB TABLE ... WITH OPTIONS CONSTRAINT", checkQuery, nil, nil)
+	plan, err := params.p.delegateQuery(ctx, "SCRUB TABLE ... WITH OPTIONS CONSTRAINT", checkQuery, nil, nil)
 	if err != nil {
 		return err
 	}
@@ -86,7 +87,7 @@ func (o *sqlForeignKeyCheckOperation) Start(ctx context.Context, p *planner) err
 
 	// Optimize the plan. This is required in order to populate scanNode
 	// spans.
-	plan, err = p.optimizePlan(ctx, plan, needed)
+	plan, err = params.p.optimizePlan(ctx, plan, needed)
 	if err != nil {
 		plan.Close(ctx)
 		return err
@@ -110,8 +111,8 @@ func (o *sqlForeignKeyCheckOperation) Start(ctx context.Context, p *planner) err
 		o.colIDToRowIdx[id] = i
 	}
 
-	planCtx := p.session.distSQLPlanner.newPlanningCtx(ctx, &p.evalCtx, p.txn)
-	physPlan, err := scrubPlanDistSQL(ctx, &planCtx, p, plan)
+	planCtx := params.p.session.distSQLPlanner.newPlanningCtx(ctx, params.evalCtx, params.p.txn)
+	physPlan, err := scrubPlanDistSQL(ctx, &planCtx, params.p, plan)
 	if err != nil {
 		return err
 	}
@@ -132,7 +133,7 @@ func (o *sqlForeignKeyCheckOperation) Start(ctx context.Context, p *planner) err
 		return errors.Errorf("could not find MergeJoinerSpec in plan")
 	}
 
-	rows, err := scrubRunDistSQL(ctx, &planCtx, p, physPlan, columnTypes)
+	rows, err := scrubRunDistSQL(ctx, &planCtx, params.p, physPlan, columnTypes)
 	if err != nil {
 		rows.Close(ctx)
 		return err
@@ -147,7 +148,7 @@ func (o *sqlForeignKeyCheckOperation) Start(ctx context.Context, p *planner) err
 }
 
 // Next implements the checkOperation interface.
-func (o *sqlForeignKeyCheckOperation) Next(ctx context.Context, p *planner) (tree.Datums, error) {
+func (o *sqlForeignKeyCheckOperation) Next(params runParams) (tree.Datums, error) {
 	row := o.run.rows.At(o.run.rowIndex)
 	o.run.rowIndex++
 
@@ -192,7 +193,7 @@ func (o *sqlForeignKeyCheckOperation) Next(ctx context.Context, p *planner) (tre
 		tree.NewDString(o.tableName.Database()),
 		tree.NewDString(o.tableName.Table()),
 		tree.NewDString(primaryKeyDatums.String()),
-		tree.MakeDTimestamp(p.evalCtx.GetStmtTimestamp(), time.Nanosecond),
+		tree.MakeDTimestamp(params.evalCtx.GetStmtTimestamp(), time.Nanosecond),
 		tree.DBoolFalse,
 		detailsJSON,
 	}, nil

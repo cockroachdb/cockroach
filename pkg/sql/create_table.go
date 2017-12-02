@@ -215,7 +215,7 @@ func (n *createTableNode) startExec(params runParams) error {
 		if err != nil {
 			return err
 		}
-		if err = params.p.startPlan(params.ctx, insertPlan); err != nil {
+		if err = startPlan(params, insertPlan); err != nil {
 			return err
 		}
 		// This driver function call is done here instead of in the Next

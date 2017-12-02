@@ -223,17 +223,12 @@ func (p *planner) makePlan(ctx context.Context, stmt Statement) (planNode, error
 }
 
 // startPlan starts the plan and all its sub-query nodes.
-func (p *planner) startPlan(ctx context.Context, plan planNode) error {
-	params := runParams{
-		ctx:     ctx,
-		evalCtx: &p.evalCtx,
-		p:       p,
-	}
+func startPlan(params runParams, plan planNode) error {
 	if err := startExec(params, plan); err != nil {
 		return err
 	}
 	// Trigger limit propagation through the plan and sub-queries.
-	p.setUnlimited(plan)
+	params.p.setUnlimited(plan)
 	return nil
 }
 
