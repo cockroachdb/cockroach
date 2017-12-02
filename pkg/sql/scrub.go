@@ -99,7 +99,7 @@ type scrubRun struct {
 	row        tree.Datums
 }
 
-func (n *scrubNode) Start(params runParams) error {
+func (n *scrubNode) startExec(params runParams) error {
 	switch n.n.Typ {
 	case tree.ScrubTable:
 		tableName, err := n.n.Table.NormalizeWithDatabaseName(params.p.session.Database)

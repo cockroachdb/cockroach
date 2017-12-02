@@ -59,7 +59,7 @@ func (p *planner) AlterTable(ctx context.Context, n *tree.AlterTable) (planNode,
 	return &alterTableNode{n: n, tableDesc: tableDesc}, nil
 }
 
-func (n *alterTableNode) Start(params runParams) error {
+func (n *alterTableNode) startExec(params runParams) error {
 	// Commands can either change the descriptor directly (for
 	// alterations that don't require a backfill) or add a mutation to
 	// the list.

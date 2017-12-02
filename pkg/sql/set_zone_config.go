@@ -54,7 +54,7 @@ type setZoneConfigRun struct {
 	numAffected int
 }
 
-func (n *setZoneConfigNode) Start(params runParams) error {
+func (n *setZoneConfigNode) startExec(params runParams) error {
 	var yamlConfig *string
 	datum, err := n.yamlConfig.Eval(params.evalCtx)
 	if err != nil {

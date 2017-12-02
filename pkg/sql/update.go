@@ -249,7 +249,7 @@ type updateRun struct {
 	editNodeRun
 }
 
-func (u *updateNode) Start(params runParams) error {
+func (u *updateNode) startExec(params runParams) error {
 	if err := u.run.startEditNode(params, &u.editNodeBase); err != nil {
 		return err
 	}
@@ -408,12 +408,9 @@ func (r *editNodeRun) initEditNode(
 func (r *editNodeRun) startEditNode(params runParams, en *editNodeBase) error {
 	if sqlbase.IsSystemConfigID(en.tableDesc.GetID()) {
 		// Mark transaction as operating on the system DB.
-		if err := en.p.txn.SetSystemConfigTrigger(); err != nil {
-			return err
-		}
+		return en.p.txn.SetSystemConfigTrigger()
 	}
-
-	return r.rows.Start(params)
+	return nil
 }
 
 // sourceSlot abstracts the idea that our update sources can either be tuples

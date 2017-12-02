@@ -97,10 +97,6 @@ type splitRun struct {
 	lastSplitKey []byte
 }
 
-func (n *splitNode) Start(params runParams) error {
-	return n.rows.Start(params)
-}
-
 func (n *splitNode) Next(params runParams) (bool, error) {
 	// TODO(radu): instead of performing the splits sequentially, accumulate all
 	// the split keys and then perform the splits in parallel (e.g. split at the

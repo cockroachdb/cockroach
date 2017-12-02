@@ -96,7 +96,7 @@ func (p *planner) SetClusterSetting(
 	return &setClusterSettingNode{name: name, st: st, setting: setting, value: value}, nil
 }
 
-func (n *setClusterSettingNode) Start(params runParams) error {
+func (n *setClusterSettingNode) startExec(params runParams) error {
 	ie := InternalExecutor{LeaseManager: params.p.LeaseMgr()}
 
 	var reportedValue string

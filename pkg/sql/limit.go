@@ -78,11 +78,7 @@ type limitRun struct {
 	rowIndex int64
 }
 
-func (n *limitNode) Start(params runParams) error {
-	if err := n.plan.Start(params); err != nil {
-		return err
-	}
-
+func (n *limitNode) startExec(params runParams) error {
 	return n.evalLimit(params.evalCtx)
 }
 

@@ -158,10 +158,9 @@ type windowRun struct {
 	windowsAcc mon.BoundAccount
 }
 
-func (n *windowNode) Start(params runParams) error {
+func (n *windowNode) startExec(params runParams) error {
 	n.run.windowsAcc = params.p.session.TxnState.makeBoundAccount()
-
-	return n.plan.Start(params)
+	return nil
 }
 
 func (n *windowNode) Next(params runParams) (bool, error) {

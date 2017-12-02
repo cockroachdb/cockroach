@@ -93,10 +93,7 @@ type explainPlanRun struct {
 	results *valuesNode
 }
 
-func (e *explainPlanNode) Start(params runParams) error {
-	// Note that we don't call start on e.plan. That's on purpose, Start() can
-	// have side effects. And it's supposed to not be needed for the way in which
-	// we're going to use e.plan.
+func (e *explainPlanNode) startExec(params runParams) error {
 	return params.p.populateExplain(params.ctx, &e.explainer, e.run.results, e.plan)
 }
 

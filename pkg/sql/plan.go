@@ -103,22 +103,13 @@ type runParams struct {
 // - planColumns()                 (plan_columns.go)
 //
 type planNode interface {
-	// Start begins the processing of the query/statement and starts
-	// performing side effects for data-modifying statements. Returns an
-	// error if initial processing fails.
-	//
-	// Note: Don't use directly. Use startPlan() instead.
-	//
-	// Available after optimizePlan() (or makePlan).
-	Start(params runParams) error
-
 	// Next performs one unit of work, returning false if an error is
 	// encountered or if there is no more work to do. For statements
 	// that return a result set, the Values() method will return one row
 	// of results each time that Next() returns true.
 	// See executor.go: forEachRow() for an example.
 	//
-	// Available after Start(). It is illegal to call Next() after it returns
+	// Available after startPlan(). It is illegal to call Next() after it returns
 	// false. It is legal to call Next() even if the node implements
 	// planNodeFastPath and the FastPathResults() method returns true.
 	Next(params runParams) (bool, error)
@@ -132,16 +123,16 @@ type planNode interface {
 	// Close terminates the planNode execution and releases its resources.
 	// This method should be called if the node has been used in any way (any
 	// methods on it have been called) after it was constructed. Note that this
-	// doesn't imply that Start() has been necessarily called.
+	// doesn't imply that startPlan() has been necessarily called.
 	Close(ctx context.Context)
 }
 
 // planNodeFastPath is implemented by nodes that can perform all their
-// work during Start(), possibly affecting even multiple rows. For
+// work during startPlan(), possibly affecting even multiple rows. For
 // example, DELETE can do this.
 type planNodeFastPath interface {
 	// FastPathResults returns the affected row count and true if the
-	// node has no result set and has already executed when Start() completes.
+	// node has no result set and has already executed when startPlan() completes.
 	// Note that Next() must still be valid even if this method returns
 	// true, although it may have nothing left to do.
 	FastPathResults() (int, bool)
@@ -241,12 +232,45 @@ func (p *planner) startPlan(ctx context.Context, plan planNode) error {
 		evalCtx: &p.evalCtx,
 		p:       p,
 	}
-	if err := plan.Start(params); err != nil {
+	if err := startExec(params, plan); err != nil {
 		return err
 	}
 	// Trigger limit propagation through the plan and sub-queries.
 	p.setUnlimited(plan)
 	return nil
+}
+
+// execStartable is implemented by planNodes that have an initial
+// execution step.
+type execStartable interface {
+	startExec(params runParams) error
+}
+
+// startExec calls startExec() on each planNode that supports
+// execStartable using a depth-first, post-order traversal.
+func startExec(params runParams, plan planNode) error {
+	o := planObserver{
+		enterNode: func(ctx context.Context, _ string, p planNode) (bool, error) {
+			switch p.(type) {
+			case *explainPlanNode, *explainDistSQLNode:
+				// Do not recurse: we're not starting the plan if we just show its structure with EXPLAIN.
+				return false, nil
+			case *showTraceNode:
+				// showTrace needs to override the params struct, and does so in its startExec() method.
+				return false, nil
+			case *createStatsNode:
+				return false, errors.Errorf("statistics can only be created via DistSQL")
+			}
+			return true, nil
+		},
+		leaveNode: func(_ string, n planNode) error {
+			if s, ok := n.(execStartable); ok {
+				return s.startExec(params)
+			}
+			return nil
+		},
+	}
+	return walkPlan(params.ctx, plan, o)
 }
 
 func (p *planner) maybePlanHook(ctx context.Context, stmt tree.Statement) (planNode, error) {
