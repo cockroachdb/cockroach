@@ -103,6 +103,6 @@ func (i *subqueryInitializer) subqueryNode(ctx context.Context, sq *subquery) er
 	return nil
 }
 
-func (i *subqueryInitializer) enterNode(_ context.Context, _ string, _ planNode) bool {
-	return true
+func (i *subqueryInitializer) enterNode(_ context.Context, _ string, _ planNode) (bool, error) {
+	return true, nil
 }

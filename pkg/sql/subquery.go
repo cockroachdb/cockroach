@@ -260,12 +260,12 @@ func (v *subqueryPlanVisitor) subqueryNode(ctx context.Context, sq *subquery) er
 	return nil
 }
 
-func (v *subqueryPlanVisitor) enterNode(_ context.Context, _ string, n planNode) bool {
+func (v *subqueryPlanVisitor) enterNode(_ context.Context, _ string, n planNode) (bool, error) {
 	if _, ok := n.(*explainPlanNode); ok {
 		// EXPLAIN doesn't start/substitute sub-queries.
-		return false
+		return false, nil
 	}
-	return true
+	return true, nil
 }
 
 func (p *planner) startSubqueryPlans(ctx context.Context, plan planNode) error {

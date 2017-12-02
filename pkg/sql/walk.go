@@ -34,7 +34,7 @@ import (
 type planObserver struct {
 	// enterNode is invoked upon entering a tree node. It can return false to
 	// stop the recursion at this node.
-	enterNode func(ctx context.Context, nodeName string, plan planNode) bool
+	enterNode func(ctx context.Context, nodeName string, plan planNode) (bool, error)
 
 	// expr is invoked for each expression field in each node.
 	expr func(nodeName, fieldName string, n int, expr tree.Expr)
@@ -43,7 +43,7 @@ type planObserver struct {
 	attr func(nodeName, fieldName, attr string)
 
 	// leaveNode is invoked upon leaving a tree node.
-	leaveNode func(nodeName string)
+	leaveNode func(nodeName string, plan planNode) error
 
 	// subqueryNode is invoked for each sub-query node. It can return
 	// an error to stop the recursion entirely.
@@ -86,10 +86,18 @@ func (v *planVisitor) visit(plan planNode) {
 	name := nodeName(plan)
 	recurse := true
 	if v.observer.enterNode != nil {
-		recurse = v.observer.enterNode(v.ctx, name, plan)
+		recurse, v.err = v.observer.enterNode(v.ctx, name, plan)
+		if v.err != nil {
+			return
+		}
 	}
 	if v.observer.leaveNode != nil {
-		defer v.observer.leaveNode(name)
+		defer func() {
+			if v.err != nil {
+				return
+			}
+			v.err = v.observer.leaveNode(name, plan)
+		}()
 	}
 
 	if !recurse {
