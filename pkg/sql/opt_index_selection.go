@@ -1142,10 +1142,7 @@ func spanFromLogicalSpan(
 			if i != len(ls.start)-1 {
 				return roachpb.Span{}, errors.New("exclusive start constraint must be last")
 			}
-			// NotNull is already exclusive.
-			if part.val != tree.DNull {
-				s.Key = s.Key.PrefixEnd()
-			}
+			s.Key = s.Key.PrefixEnd()
 			break
 		}
 	}
@@ -1176,7 +1173,6 @@ func spanFromLogicalSpan(
 			lastPartInclusive = false
 		}
 	}
-
 	// We tighten the end key to prevent reading interleaved children
 	// after the last parent key.
 	s.EndKey, err = sqlbase.TightenEndKey(tableDesc, index, s.EndKey, lastPartInclusive)
@@ -1187,12 +1183,6 @@ func spanFromLogicalSpan(
 func encodeLogicalKeyPart(
 	evalCtx *tree.EvalContext, b []byte, part logicalKeyPart,
 ) ([]byte, error) {
-	if part.val == tree.DNull && !part.inclusive {
-		if part.dir == encoding.Ascending {
-			return encoding.EncodeNotNullAscending(b), nil
-		}
-		return encoding.EncodeNotNullDescending(b), nil
-	}
 	d, err := part.val.Eval(evalCtx)
 	if err != nil {
 		return nil, err
