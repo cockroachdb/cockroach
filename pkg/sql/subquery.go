@@ -234,51 +234,6 @@ func (s *subquery) subqueryTupleOrdering() (bool, encoding.Direction) {
 	return false, 0
 }
 
-// subqueryPlanVisitor is responsible for acting on the query plan
-// that implements the sub-query, after it has been populated by
-// subqueryVisitor. This visitor supports both starting
-// and evaluating the sub-plans in one recursion.
-type subqueryPlanVisitor struct {
-	p *planner
-}
-
-func (v *subqueryPlanVisitor) subqueryNode(ctx context.Context, sq *subquery) error {
-	if !sq.expanded {
-		panic("subquery was not expanded properly")
-	}
-	if !sq.started {
-		if err := v.p.startPlan(ctx, sq.plan); err != nil {
-			return err
-		}
-		sq.started = true
-		res, err := sq.doEval(ctx, v.p)
-		if err != nil {
-			return err
-		}
-		sq.result = res
-	}
-	return nil
-}
-
-func (v *subqueryPlanVisitor) enterNode(_ context.Context, _ string, n planNode) (bool, error) {
-	if _, ok := n.(*explainPlanNode); ok {
-		// EXPLAIN doesn't start/substitute sub-queries.
-		return false, nil
-	}
-	return true, nil
-}
-
-func (p *planner) startSubqueryPlans(ctx context.Context, plan planNode) error {
-	// We also run and pre-evaluate the subqueries during start,
-	// so as to avoid re-running the sub-query for every row
-	// in the results of the surrounding planNode.
-	p.subqueryPlanVisitor = subqueryPlanVisitor{p: p}
-	return walkPlan(ctx, plan, planObserver{
-		subqueryNode: p.subqueryPlanVisitor.subqueryNode,
-		enterNode:    p.subqueryPlanVisitor.enterNode,
-	})
-}
-
 // subquerySpanCollector is responsible for collecting all read spans that
 // subqueries in a query plan may touch. Subqueries should never be performing
 // any write operations, so only the read spans are collected.

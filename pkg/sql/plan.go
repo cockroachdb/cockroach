@@ -224,9 +224,6 @@ func (p *planner) makePlan(ctx context.Context, stmt Statement) (planNode, error
 
 // startPlan starts the plan and all its sub-query nodes.
 func (p *planner) startPlan(ctx context.Context, plan planNode) error {
-	if err := p.startSubqueryPlans(ctx, plan); err != nil {
-		return err
-	}
 	params := runParams{
 		ctx:     ctx,
 		evalCtx: &p.evalCtx,
@@ -248,6 +245,10 @@ type execStartable interface {
 
 // startExec calls startExec() on each planNode that supports
 // execStartable using a depth-first, post-order traversal.
+// The subqueries, if any, are also started.
+//
+// Reminder: walkPlan() ensures that subqueries and sub-plans are
+// started before startExec() is called.
 func startExec(params runParams, plan planNode) error {
 	o := planObserver{
 		enterNode: func(ctx context.Context, _ string, p planNode) (bool, error) {
@@ -266,6 +267,23 @@ func startExec(params runParams, plan planNode) error {
 		leaveNode: func(_ string, n planNode) error {
 			if s, ok := n.(execStartable); ok {
 				return s.startExec(params)
+			}
+			return nil
+		},
+		subqueryNode: func(ctx context.Context, sq *subquery) error {
+			if !sq.expanded {
+				panic("subquery was not expanded properly")
+			}
+			if !sq.started {
+				if err := startExec(params, sq.plan); err != nil {
+					return err
+				}
+				sq.started = true
+				res, err := sq.doEval(ctx, params.p)
+				if err != nil {
+					return err
+				}
+				sq.result = res
 			}
 			return nil
 		},
