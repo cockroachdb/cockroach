@@ -342,10 +342,6 @@ type groupRun struct {
 	gotOneRow bool
 }
 
-func (n *groupNode) Start(params runParams) error {
-	return n.plan.Start(params)
-}
-
 func (n *groupNode) Next(params runParams) (bool, error) {
 	var scratch []byte
 	// We're going to consume n.plan until it's exhausted (feeding all the rows to

@@ -149,7 +149,7 @@ type scanRun struct {
 	fetcher sqlbase.MultiRowFetcher
 }
 
-func (n *scanNode) Start(params runParams) error {
+func (n *scanNode) startExec(params runParams) error {
 	tableArgs := sqlbase.MultiRowFetcherTableArgs{
 		Desc:             n.desc,
 		Index:            n.index,

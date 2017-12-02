@@ -101,7 +101,7 @@ func (p *planner) DropTable(ctx context.Context, n *tree.DropTable) (planNode, e
 	return &dropTableNode{n: n, td: td}, nil
 }
 
-func (n *dropTableNode) Start(params runParams) error {
+func (n *dropTableNode) startExec(params runParams) error {
 	ctx := params.ctx
 	for _, droppedDesc := range n.td {
 		if droppedDesc == nil {

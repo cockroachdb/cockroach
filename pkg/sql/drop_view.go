@@ -87,7 +87,7 @@ func (p *planner) DropView(ctx context.Context, n *tree.DropView) (planNode, err
 	return &dropViewNode{n: n, td: td}, nil
 }
 
-func (n *dropViewNode) Start(params runParams) error {
+func (n *dropViewNode) startExec(params runParams) error {
 	ctx := params.ctx
 	for _, droppedDesc := range n.td {
 		if droppedDesc == nil {

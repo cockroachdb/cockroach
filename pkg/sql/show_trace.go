@@ -195,7 +195,7 @@ type traceRun struct {
 	stopTracing func() error
 }
 
-func (n *showTraceNode) Start(params runParams) error {
+func (n *showTraceNode) startExec(params runParams) error {
 	if params.p.session.Tracing.Enabled() {
 		return errTracingAlreadyEnabled
 	}
@@ -210,7 +210,7 @@ func (n *showTraceNode) Start(params runParams) error {
 	startCtx, sp := tracing.ChildSpan(params.ctx, "starting plan")
 	defer sp.Finish()
 	params.ctx = startCtx
-	return n.plan.Start(params)
+	return startExec(params, n.plan)
 }
 
 func (n *showTraceNode) Next(params runParams) (bool, error) {

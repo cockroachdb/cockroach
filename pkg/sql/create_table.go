@@ -102,7 +102,7 @@ type createTableRun struct {
 	rowsAffected int
 }
 
-func (n *createTableNode) Start(params runParams) error {
+func (n *createTableNode) startExec(params runParams) error {
 	tKey := tableKey{parentID: n.dbDesc.ID, name: n.n.Table.TableName().Table()}
 	key := tKey.Key()
 	if exists, err := descExists(params.ctx, params.p.txn, key); err == nil && exists {

@@ -72,7 +72,7 @@ type showZoneConfigRun struct {
 	done         bool
 }
 
-func (n *showZoneConfigNode) Start(params runParams) error {
+func (n *showZoneConfigNode) startExec(params runParams) error {
 	if n.zoneSpecifier.TargetsIndex() {
 		_, err := params.p.expandIndexName(params.ctx, &n.zoneSpecifier.TableOrIndex, true /* requireTable */)
 		if err != nil {

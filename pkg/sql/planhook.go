@@ -81,7 +81,7 @@ type hookFnRun struct {
 	row tree.Datums
 }
 
-func (f *hookFnNode) Start(params runParams) error {
+func (f *hookFnNode) startExec(params runParams) error {
 	// TODO(dan): Make sure the resultCollector is set to flush after every row.
 	f.run.resultsCh = make(chan tree.Datums)
 	f.run.errCh = make(chan error)

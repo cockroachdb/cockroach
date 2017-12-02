@@ -42,7 +42,7 @@ type explainDistSQLRun struct {
 	done bool
 }
 
-func (n *explainDistSQLNode) Start(params runParams) error {
+func (n *explainDistSQLNode) startExec(params runParams) error {
 	// Trigger limit propagation.
 	params.p.setUnlimited(n.plan)
 

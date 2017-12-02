@@ -154,7 +154,7 @@ func insertNodeWithValuesSpans(
 	defer rowAcc.Close(params.ctx)
 
 	defer v.Reset(params.ctx)
-	if err = v.Start(params); err != nil {
+	if err = v.startExec(params); err != nil {
 		return nil, nil, err
 	}
 

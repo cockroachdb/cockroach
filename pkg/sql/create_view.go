@@ -112,7 +112,7 @@ func (p *planner) CreateView(ctx context.Context, n *tree.CreateView) (planNode,
 	}, nil
 }
 
-func (n *createViewNode) Start(params runParams) error {
+func (n *createViewNode) startExec(params runParams) error {
 	viewName := n.n.Name.TableName().Table()
 	tKey := tableKey{parentID: n.dbDesc.ID, name: viewName}
 	key := tKey.Key()

@@ -58,7 +58,7 @@ func (p *planner) CreateUser(ctx context.Context, n *tree.CreateUser) (planNode,
 	}, nil
 }
 
-func (n *createUserNode) Start(params runParams) error {
+func (n *createUserNode) startExec(params runParams) error {
 	normalizedUsername, hashedPassword, err := n.userAuthInfo.resolve()
 	if err != nil {
 		return err

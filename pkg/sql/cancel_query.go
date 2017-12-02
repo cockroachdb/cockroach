@@ -49,7 +49,7 @@ func (p *planner) CancelQuery(ctx context.Context, n *tree.CancelQuery) (planNod
 	}, nil
 }
 
-func (n *cancelQueryNode) Start(params runParams) error {
+func (n *cancelQueryNode) startExec(params runParams) error {
 	statusServer := params.p.session.execCfg.StatusServer
 
 	queryIDDatum, err := n.queryID.Eval(params.evalCtx)
