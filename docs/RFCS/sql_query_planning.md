@@ -374,7 +374,11 @@ and "pattern-tree" placeholders that act as wildcards:
   expression is required by the transformation. Note that a pattern
   tree results in all possible subtrees being enumerated, however
   scalar expressions typically don't have many subtrees (if there are
-  no subqueries, there is only one subtree).
+  no subqueries, there is only one subtree). [TODO(peter): what to do
+  about subqueries in a scalar context? Iterating over all of the
+  subquery expressions doesn't seem right. There is a TODO in `opttoy`
+  to cache scalar expressions in `memoGroup`. Need to investigate this
+  further.]
 
 To better understand the structure of the memo, consider the query:
 
@@ -407,7 +411,8 @@ Inserting the expression tree into the memo results in:
 ```
 
 Memo groups are numbered by when they were created and the groups are
-topologically sorted for display. In the above example, each group
+topologically sorted for display (this is an implementation detail and
+not intended to be prescriptive). In the above example, each group
 contains only a single memo-expression. After performing the join
 commutativity transformation, the memo would expand:
 
@@ -604,13 +609,11 @@ Relational properties:
   table is a weak key and possibly a key if all of the columns are
   not-NULL. Weak keys are tracked because they can become keys at
   higher levels of a query due to null-intolerant predicates.
-* Foreign keys. A set of columns in the source table that uniquely
-  identify a single row in the destination table. [TODO(peter):
-  perhaps rename to functional dependencies, though keys are also
-  functional dependencies. While the definition here mentions table,
-  in practice the foreign keys are a map from one set of columns to
-  another.]
-* Equivalent columns. A set of columns that are equivalent.
+* Foreign keys. A set of columns that uniquely identify a single row
+  in another relation. In practice, this is a map from one set of
+  columns to another set of columns.
+* Equivalency group. A set of column groups (sets) where all columns
+  in a group are equal with each other.
 
 Scalar properties:
 
@@ -633,6 +636,15 @@ example, null-tolerance (does a predicate ever return true for a NULL
 value) can be computed from a scalar expression when needed. It is an
 open question as to whether it is utilized frequently enough that it
 should be tracked.
+
+Tracking is a bit more than caching of computed properties: we can't
+compute certain relational properties without the entire
+sub-expression. Keys are an example: if you have a deeply nested join,
+in order to compute the keys after performing a join associativity
+transform, you would need to have the entire expression tree. By
+tracking the keys property and maintaining it at each relational
+expression, we only need the fragment of the expression needed by the
+transform.
 
 ### Transformations
 
@@ -676,11 +688,11 @@ commutativity is an inner-join:
 ```
 inner-join
  |
- +-- pattern leaf
+ +-- pattern leaf  // left input
  |
- +-- pattern leaf
+ +-- pattern leaf  // right input
  |
- +-- pattern leaf
+ +-- pattern leaf  // join condition
 ```
 
 An inner-join always has 3 children: the left and right inputs and the
@@ -719,10 +731,16 @@ of such a language is the potential for more compact and expressive
 transformations. The downside is the need to write a compiler for the
 DSL. The current decision is to eschew a DSL for transformations as
 the work involved seems strictly greater than writing transformations
-in Go. This decision should be revisited as the transformation set
-grows. [TODO(peter): address the counter argument that a DSL will
-reduce the burden on reviewers and the burden of writing new
-transformations.]
+in Go. In particular, a DSL would require both the author and reviewer
+to learn the DSL. And a DSL doesn't necessarily ease writing a
+transformation. Complex transformations may require extensions to the
+DSL and the DSL compiler and thus not simplify writing the
+transformation at all. In the short and medium term, the set of
+transformations is expected to remain small as energies go into
+fleshing out other query planning modules. The decision about a DSL
+for transformations should be revisited as the transformation set
+grows or in the light of experimentation with a DSL that proves its
+worth.
 
 ### Cost model
 
@@ -761,6 +779,11 @@ model is making an estimation for the execution time of an operation
 such as a network RTT. This estimate can also be wildly inaccurate due
 to bursts of activity.
 
+Search finds the lowest cost plan using dynamic programming. That
+imposes a restriction on the cost model: it must exhibit optimal
+substructure. An optimal solution can be constructed from optimal
+solutions of its subproblems.
+
 ### Search (a.k.a. Enumeration)
 
 Search is the final phase of optimization where many alternative
@@ -794,24 +817,31 @@ tasks described are the standard Cascades-style search tasks:
 1. `OptimizeGroup(reqProps)`. Implements the group (via
    `ImplementGroup`) which generates implementations for the
    expressions in the group, then selects the plan with the least
-   estimated cost.
+   estimated cost. Enforcers (e.g. sort) are added as needed.
    
 2. `ImplementGroup`. Explores the group (via `ExploreGroup`) which
-   generates more logical which generates more logical expressions in
-   the group and in child groups, then generates implementations for
-   all of the logical expressions.
+   generates more logical expressions in the group and in child
+   groups, then generates implementations for all of the logical
+   expressions (via `ImplementGroupExpr`). `ImplementGroup` itself
+   does not perform any transformations, but acts as a synchronization
+   point for dependent tasks.
 
 3. `ImplementGroupExpr`. Implements all of the child groups (via
    `ImplementGroup`), then applies any applicable implementation
-   transformations to the forest of expressions rooted at the
-   specified memo-expression.
+   transformations (via `Transform`) to the forest of expressions
+   rooted at the specified memo-expression. Example transformation:
+   inner-join to merge-join and hash-join.
 
-4. `ExploreGroup`. Explores each expression in the group.
+4. `ExploreGroup`. Explores each expression in the group (via
+   `ExploreGroupExpr`). `ExploreGroup` itself does not perform any
+   transformations, but acts as a synchronization point for dependent
+   tasks.
 
 5. `ExploreGroupExpr`. Explores all of the child groups (via
    `ExploreGroup`), then applies any applicable exploration
-   transformations to the forest of expressions rooted at the
-   specified memo-expression.
+   transformations (via `Transform`) to the forest of expressions
+   rooted at the specified memo-expression. Example transformations:
+   join commutativity and join associativity.
 
 6. `Transform`. Applies a transform to the forest of expressions
    rooted at a particular memo-expression. There are two flavors of
@@ -887,7 +917,8 @@ becomes.
 ### 2.0
 
 * Stats. Stats are not dependent on other planning modules but are a
-  prerequisite to cost-based transformations.
+  prerequisite to cost-based transformations. Stats are only generated
+  explicitly via `CREATE STATISTICS`.
 
 * Prep. Introduce the expression tree. Construct the expression tree
   from the existing AST output by the parser. Use the AST-based type
@@ -900,7 +931,14 @@ becomes.
 
 * Memo. Introduce the memo structure.
 
+* Testing. Use ugly hacks to hook up a hobbled version of something as
+  an alternate query planner. Perhaps a flag to pass queries through
+  the expression format and memo and then translate them back into the
+  AST in order to use the legacy planner.
+
 ### 2.1
+
+* Stats. Automatically gather stats on PKs and index columns.
 
 * Prep. Perform name resolution and type checking on the expression
   tree. Support non-recursive CTEs. Fall-back to legacy planning code
@@ -930,6 +968,8 @@ becomes.
   selection using injected stats.
 
 ### 2.2
+
+* Stats. Support more advanced statistics (e.g. filtered statistics).
 
 * Prep. Support 100% of queries, enabling the deletion of the legacy
   planning code.
