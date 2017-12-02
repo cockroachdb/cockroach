@@ -120,7 +120,6 @@ type planner struct {
 	parser                parser.Parser
 	txCtx                 transform.ExprTransformContext
 	subqueryVisitor       subqueryVisitor
-	subqueryPlanVisitor   subqueryPlanVisitor
 	nameResolutionVisitor nameResolutionVisitor
 	srfExtractionVisitor  srfExtractionVisitor
 

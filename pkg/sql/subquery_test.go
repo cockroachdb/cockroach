@@ -41,7 +41,7 @@ func TestStartSubqueriesReturnsError(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := p.startSubqueryPlans(context.TODO(), plan); !testutils.IsError(err, `forced`) {
+	if err := p.startPlan(context.TODO(), plan); !testutils.IsError(err, `forced`) {
 		t.Fatalf("expected error from force_error(), got: %v", err)
 	}
 }
