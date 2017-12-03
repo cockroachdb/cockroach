@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/txnwait"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -68,7 +69,7 @@ type intentResolver struct {
 	mu struct {
 		syncutil.Mutex
 		// Map from txn ID being pushed to a refcount of intents waiting on the push.
-		inFlight map[uuid.UUID]int
+		inFlightPushes map[uuid.UUID]int
 		// Set of txn IDs whose list of intent spans are being resolved. Note that
 		// this pertains only to EndTransaction-style intent cleanups, whether called
 		// directly after EndTransaction evaluation or during GC of txn spans.
@@ -81,7 +82,7 @@ func newIntentResolver(store *Store, taskLimit int) *intentResolver {
 		store: store,
 		sem:   make(chan struct{}, taskLimit),
 	}
-	ir.mu.inFlight = map[uuid.UUID]int{}
+	ir.mu.inFlightPushes = map[uuid.UUID]int{}
 	ir.mu.inFlightTxnCleanups = map[uuid.UUID]struct{}{}
 	return ir
 }
@@ -106,7 +107,9 @@ func (ir *intentResolver) processWriteIntentError(
 		log.Infof(ctx, "resolving write intent %s", wiErr)
 	}
 
-	resolveIntents, pErr := ir.maybePushTransactions(ctx, wiErr.Intents, h, pushType, false)
+	resolveIntents, pErr := ir.maybePushTransactions(
+		ctx, wiErr.Intents, h, pushType, false, /* skipIfInFlight */
+	)
 	if pErr != nil {
 		return pErr
 	}
@@ -180,9 +183,9 @@ func (ir *intentResolver) maybePushTransactions(
 	var pushIntents []roachpb.Intent
 	cleanupPushIntentsLocked := func() {
 		for _, intent := range pushIntents {
-			ir.mu.inFlight[intent.Txn.ID]--
-			if ir.mu.inFlight[intent.Txn.ID] == 0 {
-				delete(ir.mu.inFlight, intent.Txn.ID)
+			ir.mu.inFlightPushes[intent.Txn.ID]--
+			if ir.mu.inFlightPushes[intent.Txn.ID] == 0 {
+				delete(ir.mu.inFlightPushes, intent.Txn.ID)
 			}
 		}
 	}
@@ -198,7 +201,7 @@ func (ir *intentResolver) maybePushTransactions(
 			return nil, roachpb.NewErrorf("unexpected %s intent: %+v", intent.Status, intent)
 		}
 		_, alreadyPushing := pushTxns[intent.Txn.ID]
-		_, pushTxnInFlight := ir.mu.inFlight[intent.Txn.ID]
+		_, pushTxnInFlight := ir.mu.inFlightPushes[intent.Txn.ID]
 		if !alreadyPushing && pushTxnInFlight && skipIfInFlight {
 			// Another goroutine is working on this transaction so we can
 			// skip it.
@@ -209,7 +212,7 @@ func (ir *intentResolver) maybePushTransactions(
 		} else {
 			pushTxns[intent.Txn.ID] = intent.Txn
 			pushIntents = append(pushIntents, intent)
-			ir.mu.inFlight[intent.Txn.ID]++
+			ir.mu.inFlightPushes[intent.Txn.ID]++
 		}
 	}
 	ir.mu.Unlock()
@@ -318,116 +321,190 @@ func (ir *intentResolver) processIntents(
 	ctx context.Context, r *Replica, item result.IntentsWithArg, now hlc.Timestamp,
 ) {
 	if item.Arg.Method() != roachpb.EndTransaction {
-		h := roachpb.Header{Timestamp: now}
-		resolveIntents, pushErr := ir.maybePushTransactions(
-			ctx, item.Intents, h, roachpb.PUSH_TOUCH, true, /* skipInFlight */
-		)
-
-		// resolveIntents with poison=true because we're resolving
-		// intents outside of the context of an EndTransaction.
-		//
-		// Naively, it doesn't seem like we need to poison the abort
-		// cache since we're pushing with PUSH_TOUCH - meaning that
-		// the primary way our Push leads to aborting intents is that
-		// of the transaction having timed out (and thus presumably no
-		// client being around any more, though at the time of writing
-		// we don't guarantee that). But there are other paths in which
-		// the Push comes back successful while the coordinating client
-		// may still be active. Examples of this are when:
-		//
-		// - the transaction was aborted by someone else, but the
-		//   coordinating client may still be running.
-		// - the transaction entry wasn't written yet, which at the
-		//   time of writing has our push abort it, leading to the
-		//   same situation as above.
-		//
-		// Thus, we must poison.
-		if err := ir.resolveIntents(ctx, resolveIntents,
-			ResolveOptions{Wait: true, Poison: true}); err != nil {
-			log.Warningf(ctx, "%s: failed to resolve intents: %s", r, err)
-			return
-		}
-		if pushErr != nil {
-			log.Warningf(ctx, "%s: failed to push during intent resolution: %s", r, pushErr)
-			return
+		if _, err := ir.cleanupIntents(ctx, item.Intents, now, roachpb.PUSH_TOUCH); err != nil {
+			log.Warning(ctx, err)
 		}
 	} else { // EndTransaction
-
-		// Skip processing if we're already in the middle of resolving
-		// this transaction's intents.
-		txn := item.Intents[0].Txn
-		txnKey := keys.TransactionKey(txn.Key, txn.ID)
-		ir.mu.Lock()
-		_, inFlight := ir.mu.inFlightTxnCleanups[txn.ID]
-		if !inFlight {
-			ir.mu.inFlightTxnCleanups[txn.ID] = struct{}{}
+		partialTxn := &roachpb.Transaction{
+			TxnMeta: item.Intents[0].Txn,
+			Status:  item.Intents[0].Status,
 		}
-		ir.mu.Unlock()
-		if inFlight {
-			log.Eventf(ctx, "skipping txn resolved; already in flight")
-			return
-		}
-		defer func() {
-			ir.mu.Lock()
-			delete(ir.mu.inFlightTxnCleanups, txn.ID)
-			ir.mu.Unlock()
-		}()
-
-		// For EndTransaction, we know the transaction is finalized so
-		// we can skip the push and go straight to the resolve.
-		//
-		// This mechanism assumes that when an EndTransaction fails,
-		// the client makes no assumptions about the result. For
-		// example, an attempt to explicitly rollback the transaction
-		// may succeed (triggering this code path), but the result may
-		// not make it back to the client.
-		if err := ir.resolveIntents(ctx, item.Intents,
-			ResolveOptions{Wait: true, Poison: false}); err != nil {
-			log.Warningf(ctx, "%s: failed to resolve intents: %s", r, err)
-			return
-		}
-
-		// We successfully resolved the intents, so we're able to GC from
-		// the txn span directly.
-		b := &client.Batch{}
-
-		// This is pretty tricky. Transaction keys are range-local and
-		// so they are encoded specially. The key range addressed by
-		// (txnKey, txnKey.Next()) might be empty (since Next() does
-		// not imply monotonicity on the address side). Instead, we
-		// send this request to a range determined using the resolved
-		// transaction anchor, i.e. if the txn is anchored on
-		// /Local/RangeDescriptor/"a"/uuid, the key range below would
-		// be ["a", "a\x00"). However, the first range is special again
-		// because the above procedure results in KeyMin, but we need
-		// at least KeyLocalMax.
-		//
-		// #7880 will address this by making GCRequest less special and
-		// thus obviating the need to cook up an artificial range here.
-		var gcArgs roachpb.GCRequest
-		{
-			key := keys.MustAddr(txn.Key)
-			if localMax := keys.MustAddr(keys.LocalMax); key.Less(localMax) {
-				key = localMax
-			}
-			endKey := key.Next()
-
-			gcArgs.Span = roachpb.Span{
-				Key:    key.AsRawKey(),
-				EndKey: endKey.AsRawKey(),
-			}
-		}
-
-		gcArgs.Keys = append(gcArgs.Keys, roachpb.GCRequest_GCKey{
-			Key: txnKey,
-		})
-		b.AddRawRequest(&gcArgs)
-		if err := ir.store.db.Run(ctx, b); err != nil {
-			log.Warningf(ctx, "could not GC completed transaction anchored at %s: %s",
-				roachpb.Key(txn.Key), err)
-			return
+		if err := ir.cleanupTxnIntents(ctx, partialTxn, item.Intents, now); err != nil {
+			log.Warning(ctx, err)
 		}
 	}
+}
+
+// cleanupIntents processes a collection of intents by pushing each
+// implicated transaction using the specified pushType. Intents
+// belonging to non-pending transactions after the push are resolved.
+// Returns the number of resolved intents.
+func (ir *intentResolver) cleanupIntents(
+	ctx context.Context, intents []roachpb.Intent, now hlc.Timestamp, pushType roachpb.PushTxnType,
+) (int, error) {
+	h := roachpb.Header{Timestamp: now}
+	resolveIntents, pushErr := ir.maybePushTransactions(
+		ctx, intents, h, pushType, true, /* skipIfInFlight */
+	)
+
+	// resolveIntents with poison=true because we're resolving
+	// intents outside of the context of an EndTransaction.
+	//
+	// Naively, it doesn't seem like we need to poison the abort
+	// cache since we're pushing with PUSH_TOUCH - meaning that
+	// the primary way our Push leads to aborting intents is that
+	// of the transaction having timed out (and thus presumably no
+	// client being around any more, though at the time of writing
+	// we don't guarantee that). But there are other paths in which
+	// the Push comes back successful while the coordinating client
+	// may still be active. Examples of this are when:
+	//
+	// - the transaction was aborted by someone else, but the
+	//   coordinating client may still be running.
+	// - the transaction entry wasn't written yet, which at the
+	//   time of writing has our push abort it, leading to the
+	//   same situation as above.
+	//
+	// Thus, we must poison.
+	if err := ir.resolveIntents(
+		ctx, resolveIntents, ResolveOptions{Wait: true, Poison: true},
+	); err != nil {
+		return 0, errors.Wrapf(err, "failed to resolve intents")
+	}
+	if pushErr != nil {
+		return len(resolveIntents), errors.Wrapf(pushErr.GoError(), "failed to push during intent resolution")
+	}
+	return len(resolveIntents), nil
+}
+
+// cleanupTxnIntentsOnGCAsync cleans up extant intents owned by a
+// single transaction, asynchronously. This method updates the metrics
+// for intents resolved on GC on success.
+func (ir *intentResolver) cleanupTxnIntentsOnGCAsync(
+	ctx context.Context, txn *roachpb.Transaction, intents []roachpb.Intent, now hlc.Timestamp,
+) error {
+	return ir.store.Stopper().RunLimitedAsyncTask(
+		// If we've successfully launched a background task,
+		// dissociate this work from our caller's context and
+		// timeout.
+		context.Background(),
+		"processing txn intents",
+		ir.sem,
+		// We really do not want to hang up the GC queue on this kind of
+		// processing, so it's better to just skip txns which we can't
+		// pass to the async processor (wait=false). Their intents will
+		// get cleaned up on demand, and we'll eventually get back to
+		// them. Not much harm in having old txn records lying around in
+		// the meantime.
+		false, /* wait */
+		func(ctx context.Context) {
+			if err := ir.cleanupTxnIntents(ctx, txn, intents, now); err != nil {
+				log.Warningf(ctx, "failed to cleanup transaction intents: %s", err)
+			} else {
+				ir.store.metrics.GCResolveSuccess.Inc(int64(len(intents)))
+			}
+		},
+	)
+}
+
+// cleanupTxnIntents cleans up extant intents owned by a single
+// transaction and when all intents have been successfully
+// resolved, the transaction record is GC'ed.
+func (ir *intentResolver) cleanupTxnIntents(
+	ctx context.Context, txn *roachpb.Transaction, intents []roachpb.Intent, now hlc.Timestamp,
+) error {
+	// Skip processing if we're already in the middle of resolving
+	// this transaction's intents.
+	ir.mu.Lock()
+	_, inFlight := ir.mu.inFlightTxnCleanups[txn.ID]
+	if !inFlight {
+		ir.mu.inFlightTxnCleanups[txn.ID] = struct{}{}
+	}
+	ir.mu.Unlock()
+	if inFlight {
+		log.Eventf(ctx, "skipping txn resolved; already in flight")
+		return nil
+	}
+	defer func() {
+		ir.mu.Lock()
+		delete(ir.mu.inFlightTxnCleanups, txn.ID)
+		ir.mu.Unlock()
+	}()
+
+	// If the transaction is still pending, but expired, push it
+	// before resolving the intents.
+	if txn.Status == roachpb.PENDING {
+		if !txnwait.IsExpired(now, txn) {
+			return fmt.Errorf("cannot push a PENDING transaction which is not expired: %s", txn)
+		}
+		b := &client.Batch{}
+		b.AddRawRequest(&roachpb.PushTxnRequest{
+			Span: roachpb.Span{Key: txn.Key},
+			PusherTxn: roachpb.Transaction{
+				TxnMeta: enginepb.TxnMeta{Priority: roachpb.MaxTxnPriority},
+			},
+			PusheeTxn: txn.TxnMeta,
+			Now:       now,
+			PushType:  roachpb.PUSH_ABORT,
+		})
+		if err := ir.store.DB().Run(ctx, b); err != nil {
+			return err
+		}
+		// Get the pushed txn and update the intents slice.
+		txn = &b.RawResponse().Responses[0].GetInner().(*roachpb.PushTxnResponse).PusheeTxn
+		for _, intent := range intents {
+			intent.Txn = txn.TxnMeta
+			intent.Status = txn.Status
+		}
+	}
+
+	// Resolve intents.
+	if err := ir.resolveIntents(ctx, intents, ResolveOptions{Wait: true, Poison: false}); err != nil {
+		return errors.Wrapf(err, "failed to resolve intents")
+	}
+
+	// We successfully resolved the intents, so we're able to GC from
+	// the txn span directly.
+	b := &client.Batch{}
+	txnKey := keys.TransactionKey(txn.Key, txn.ID)
+
+	// This is pretty tricky. Transaction keys are range-local and
+	// so they are encoded specially. The key range addressed by
+	// (txnKey, txnKey.Next()) might be empty (since Next() does
+	// not imply monotonicity on the address side). Instead, we
+	// send this request to a range determined using the resolved
+	// transaction anchor, i.e. if the txn is anchored on
+	// /Local/RangeDescriptor/"a"/uuid, the key range below would
+	// be ["a", "a\x00"). However, the first range is special again
+	// because the above procedure results in KeyMin, but we need
+	// at least KeyLocalMax.
+	//
+	// #7880 will address this by making GCRequest less special and
+	// thus obviating the need to cook up an artificial range here.
+	var gcArgs roachpb.GCRequest
+	{
+		key := keys.MustAddr(txn.Key)
+		if localMax := keys.MustAddr(keys.LocalMax); key.Less(localMax) {
+			key = localMax
+		}
+		endKey := key.Next()
+
+		gcArgs.Span = roachpb.Span{
+			Key:    key.AsRawKey(),
+			EndKey: endKey.AsRawKey(),
+		}
+	}
+
+	gcArgs.Keys = append(gcArgs.Keys, roachpb.GCRequest_GCKey{
+		Key: txnKey,
+	})
+	b.AddRawRequest(&gcArgs)
+	if err := ir.store.db.Run(ctx, b); err != nil {
+		return errors.Wrapf(err, "could not GC completed transaction anchored at %s",
+			roachpb.Key(txn.Key))
+	}
+
+	return nil
 }
 
 // ResolveOptions is used during intent resolution. It specifies whether the
