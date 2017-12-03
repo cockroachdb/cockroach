@@ -177,7 +177,10 @@ func getDescriptor(
 		return false, nil
 	}
 
-	return getDescriptorByID(ctx, txn, sqlbase.ID(gr.ValueInt()), descriptor)
+	if err := getDescriptorByID(ctx, txn, sqlbase.ID(gr.ValueInt()), descriptor); err != nil {
+		return false, err
+	}
+	return true, nil
 }
 
 // getDescriptorByID looks up the descriptor for `id`, validates it,
@@ -187,18 +190,18 @@ func getDescriptor(
 // `getTableDescByID`.
 func getDescriptorByID(
 	ctx context.Context, txn *client.Txn, id sqlbase.ID, descriptor sqlbase.DescriptorProto,
-) (bool, error) {
+) error {
 	descKey := sqlbase.MakeDescMetadataKey(id)
 	desc := &sqlbase.Descriptor{}
 	if err := txn.GetProto(ctx, descKey, desc); err != nil {
-		return false, err
+		return err
 	}
 
 	switch t := descriptor.(type) {
 	case *sqlbase.TableDescriptor:
 		table := desc.GetTable()
 		if table == nil {
-			return false, errors.Errorf("%q is not a table", desc.String())
+			return errors.Errorf("%q is not a table", desc.String())
 		}
 		table.MaybeUpgradeFormatVersion()
 		// TODO(dan): Write the upgraded TableDescriptor back to kv. This will break
@@ -207,20 +210,20 @@ func getDescriptorByID(
 		// descriptor is fetched. Our current test for this enforces compatibility
 		// backward and forward, so that'll have to be extended before this is done.
 		if err := table.Validate(ctx, txn); err != nil {
-			return false, err
+			return err
 		}
 		*t = *table
 	case *sqlbase.DatabaseDescriptor:
 		database := desc.GetDatabase()
 		if database == nil {
-			return false, errors.Errorf("%q is not a database", desc.String())
+			return errors.Errorf("%q is not a database", desc.String())
 		}
 		if err := database.Validate(); err != nil {
-			return false, err
+			return err
 		}
 		*t = *database
 	}
-	return true, nil
+	return nil
 }
 
 // getAllDescriptors looks up and returns all available descriptors.
