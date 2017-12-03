@@ -164,14 +164,14 @@ func (gt *grpcTransport) IsExhausted() bool {
 	if gt.clientIndex < len(gt.orderedClients) {
 		return false
 	}
-	return !gt.maybeResurrectRetryables()
+	return !gt.maybeResurrectRetryablesLocked()
 }
 
-// maybeResurrectRetryables moves already-tried replicas which
+// maybeResurrectRetryablesLocked moves already-tried replicas which
 // experienced a retryable error (currently this means a
 // NotLeaseHolderError) into a newly-active state so that they can be
 // retried. Returns true if any replicas were moved to active.
-func (gt *grpcTransport) maybeResurrectRetryables() bool {
+func (gt *grpcTransport) maybeResurrectRetryablesLocked() bool {
 	var resurrect []batchClient
 	for i := 0; i < gt.clientIndex; i++ {
 		if c := gt.orderedClients[i]; !c.pending && c.retryable && timeutil.Since(c.deadline) >= 0 {
