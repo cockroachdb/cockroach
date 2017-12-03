@@ -124,7 +124,7 @@ func (c *cmd) String() string {
 	if c.readOnly {
 		readOnly = " readonly"
 	}
-	fmt.Fprintf(&buf, "%d%s [%s", c.id, readOnly, roachpb.Key(c.key.Start))
+	fmt.Fprintf(&buf, "%d %v%s [%s", c.id, c.timestamp, readOnly, roachpb.Key(c.key.Start))
 	if !roachpb.Key(c.key.End).Equal(roachpb.Key(c.key.Start).Next()) {
 		fmt.Fprintf(&buf, ",%s", roachpb.Key(c.key.End))
 	}
