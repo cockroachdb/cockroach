@@ -16,12 +16,15 @@ package sql
 
 import (
 	"bytes"
+	"fmt"
 
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/stats"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/pkg/errors"
 )
 
@@ -89,7 +92,6 @@ func (p *planner) ShowTableStats(ctx context.Context, n *tree.ShowTableStats) (p
 				hasHistogramIdx
 				numCols
 			)
-
 			v := p.newContainerValuesNode(columns, 0)
 			for _, r := range rows {
 				if len(r) != numCols {
@@ -104,7 +106,7 @@ func (p *planner) ShowTableStats(ctx context.Context, n *tree.ShowTableStats) (p
 						buf.WriteString(",")
 					}
 					id := sqlbase.ColumnID(*d.(*tree.DInt))
-					colDesc, err := desc.FindActiveColumnByID(id)
+					colDesc, err := desc.FindColumnByID(id)
 					if err != nil {
 						buf.WriteString("<unknown>") // This can happen if a column was removed.
 					} else {
@@ -128,6 +130,102 @@ func (p *planner) ShowTableStats(ctx context.Context, n *tree.ShowTableStats) (p
 					histogramID,
 				}
 				if _, err := v.rows.AddRow(ctx, res); err != nil {
+					v.Close(ctx)
+					return nil, err
+				}
+			}
+			return v, nil
+		},
+	}, nil
+}
+
+// ShowHistogram returns a SHOW HISTOGRAM statement.
+// Privileges: Any privilege on the respective table.
+func (p *planner) ShowHistogram(ctx context.Context, n *tree.ShowHistogram) (planNode, error) {
+	// Ideally, we would want upper_bound to have the type of the column the
+	// histogram is on. However, we don't want to have a SHOW statement for which
+	// the schema depends on its parameters.
+	columns := sqlbase.ResultColumns{
+		{Name: "upper_bound", Typ: types.String},
+		{Name: "num_range", Typ: types.Int},
+		{Name: "num_eq", Typ: types.Int},
+	}
+
+	return &delayedNode{
+		name:    fmt.Sprintf("SHOW HISTOGRAM %d", n.HistogramID),
+		columns: columns,
+
+		constructor: func(ctx context.Context, p *planner) (planNode, error) {
+			rows, err := p.queryRows(
+				ctx,
+				`SELECT "tableID", "columnIDs", histogram
+	 	 FROM system.table_statistics
+		 WHERE "statisticID" = $1`,
+				n.HistogramID,
+			)
+			if err != nil {
+				return nil, err
+			}
+			if len(rows) == 0 {
+				return nil, errors.Errorf("histogram %d not found", n.HistogramID)
+			}
+			if len(rows) == 2 {
+				// This should never happen, because we use unique_rowid() to generate
+				// statisticIDs.
+				return nil, errors.Errorf("multiple histograms with id %d", n.HistogramID)
+			}
+			row := rows[0]
+			const (
+				tableColIdx = iota
+				colIDsColIdx
+				histoColIdx
+				numCols
+			)
+			if len(row) != numCols {
+				return nil, errors.Errorf("expected %d columns from internal query", numCols)
+			}
+			if row[histoColIdx] == tree.DNull {
+				// We found a statistic, but it has no histogram.
+				return nil, errors.Errorf("histogram %d not found", n.HistogramID)
+			}
+			tableID := sqlbase.ID(*row[tableColIdx].(*tree.DInt))
+			var desc sqlbase.TableDescriptor
+			if err := getDescriptorByID(ctx, p.txn, tableID, &desc); err != nil {
+				return nil, errors.Wrap(err, "unknown table for histogram")
+			}
+			colIDs := row[colIDsColIdx].(*tree.DArray).Array
+			if len(colIDs) == 0 {
+				return nil, errors.Errorf("statistic with no column IDs")
+			}
+			// Get information about the histogram column (the first one).
+			id := sqlbase.ColumnID(*colIDs[0].(*tree.DInt))
+			colDesc, err := desc.FindColumnByID(sqlbase.ColumnID(id))
+			if err != nil {
+				// The only error here is that the column ID is unknown. We tolerate
+				// unknown columns except for the first one.
+				return nil, err
+			}
+
+			histogram := &stats.HistogramData{}
+			if err := protoutil.Unmarshal(*row[histoColIdx].(*tree.DBytes), histogram); err != nil {
+				return nil, err
+			}
+
+			v := p.newContainerValuesNode(columns, 0)
+			for _, b := range histogram.Buckets {
+				ed, _, err := sqlbase.EncDatumFromBuffer(
+					&colDesc.Type, sqlbase.DatumEncoding_ASCENDING_KEY, b.UpperBound,
+				)
+				if err != nil {
+					v.Close(ctx)
+					return nil, err
+				}
+				row := tree.Datums{
+					tree.NewDString(ed.String(&colDesc.Type)),
+					tree.NewDInt(tree.DInt(b.NumRange)),
+					tree.NewDInt(tree.DInt(b.NumEq)),
+				}
+				if _, err := v.rows.AddRow(ctx, row); err != nil {
 					v.Close(ctx)
 					return nil, err
 				}
