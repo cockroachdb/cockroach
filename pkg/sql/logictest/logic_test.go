@@ -90,11 +90,6 @@ import (
 // test files; its input files are hosted at
 // https://github.com/cockroachdb/sqllogictest )
 //
-// The Test-Script language is extended here for use with CockroachDB,
-// for example it introduces the "traceon" and "traceoff"
-// directives. See readTestFileConfigs() and processTestFile() for all
-// supported test directives.
-//
 // Test-Script is line-oriented. It supports both statements which
 // generate no result rows, and queries that produce result rows. The
 // result of queries can be checked either using an explicit reference
@@ -102,8 +97,117 @@ import (
 // of the expected output. A test can also check for expected column
 // names for query results, or expected errors.
 //
+// Logic tests can start with a directive as follows:
+//
+//   # LogicTest: default parallel-stmts distsql
+//
+// This directive lists configurations; the test is run once in each
+// configuration (in separate subtests). The configurations are defined by
+// logicTestConfigs. If the directive is missing, the test is run in the
+// default configuration.
+//
+// The Test-Script language is extended here for use with CockroachDB. The
+// supported directives are:
+//
+//  - statement ok
+//    Runs the statement that follows and expects success. For
+//    example:
+//      statement ok
+//      CREATE TABLE kv (k INT PRIMARY KEY, v INT)
+//
+//  - statement error <regexp>
+//    Runs the statement that follows and expects an
+//    error that matches the given regexp.
+//
+//  - query <typestring> <options> <label>
+//    Runs the query that follows and verifies the results (specified after the
+//    query and a ---- separator). Example:
+//      query I
+//      SELECT 1, 2
+//      ----
+//      1 2
+//
+//    The type string specifies the number of columns and their types:
+//      - T for text; also used for various types which get converted
+//        to string (arrays, timestamps, etc.).
+//      - I for integer
+//      - R for floating point or decimal
+//      - B for boolean
+//      - O for oid
+//
+//    Options are comma separated strings from the following:
+//      - nosort (default)
+//      - rowsort: sorts both the returned and the expected rows assuming one
+//            white-space separated word per column.
+//      - valuesort: sorts all values on all rows as one big set of
+//            strings (for both the returned and the expected rows).
+//      - partialsort(x,y,..): performs a partial sort on both the
+//            returned and the expected results, preserving the relative
+//            order of rows that differ on the specified columns
+//            (1-indexed); for results that are expected to be already
+//            ordered according to these columns. See partialSort() for
+//            more information.
+//      - colnames: column names are verified (the expected column names
+//            are the first line in the expected results).
+//
+//    The label is optional. If specified, the test runner stores a hash
+//    of the results of the query under the given label. If the label is
+//    reused, the test runner verifies that the results are the
+//    same. This can be used to verify that two or more queries in the
+//    same test script that are logically equivalent always generate the
+//    same output. If a label is provided, expected results don't need to
+//    be provided (in which case there should be no ---- separator).
+//
+//  - query error <regexp>
+//    Runs the query that follows and expects an error
+//    that matches the given regexp.
+//
+//  - repeat <number>
+//    It causes the following `statement` or `query` to be repeated the given
+//    number of times. For example:
+//      repeat 50
+//      statement ok
+//      INSERT INTO T VALUES ((SELECT MAX(k+1) FROM T))
+//
+//  - let $varname
+//    Executes the query that follows (expecting a single result) and remembers
+//    the result (as a string) for later use. Any `$varname` occurrences in
+//    subsequent statements or queries are replaced with the result. The
+//    variable name must start with a letter, and subsequent characters must be
+//    letters, digits, or underscores. Example:
+//      let $foo
+//      SELECT MAX(v) FROM kv
+//
+//      statement ok
+//      SELECT * FROM kv WHERE v = $foo
+//
+//  - sleep <duration>
+//    Introduces a sleep period. Example: sleep 2s
+//
+//  - user <username>
+//    Changes the user for subsequent statements or queries.
+//
+//  - skipif <mysql/mssql/postgresql/cockroachdb>
+//    Skips the following `statement` or `query` if the argument is postgresql
+//    or cockroachdb.
+//
+//  - onlyif <mysql/mssql/postgresql/cockroachdb>
+//    Skips the following `statement` or query if the argument is not postgresql
+//    or cockroachdb.
+//
+//  - traceon <file>
+//    Enables tracing to the given file.
+//
+//  - traceoff
+//    Stops tracing.
+//
+//  - kv-batch-size <num>
+//    Limits the kvfetcher batch size; it can be used to trigger certain error
+//    conditions or corner cases around limited batches.
+//
+//
 // The overall architecture of TestLogic is as follows:
-
+//
 // - TestLogic() selects the input files and instantiates
 //   a `logicTest` object for each input file.
 //
@@ -195,6 +299,7 @@ import (
 var (
 	resultsRE = regexp.MustCompile(`^(\d+)\s+values?\s+hashing\s+to\s+([0-9A-Fa-f]+)$`)
 	errorRE   = regexp.MustCompile(`^(?:statement|query)\s+error\s+(?:pgcode\s+([[:alnum:]]+)\s+)?(.*)$`)
+	varRE     = regexp.MustCompile(`\$[a-zA-Z][a-zA-Z_0-9]*`)
 
 	// Input selection
 	logictestdata = flag.String("d", "testdata/logic_test/[^.]*", "test data glob")
@@ -297,12 +402,16 @@ type lineScanner struct {
 	*bufio.Scanner
 	line int
 	skip bool
+
+	// map of variables that we replace in the query.
+	varMap map[string]string
 }
 
-func newLineScanner(r io.Reader) *lineScanner {
+func newLineScanner(r io.Reader, varMap map[string]string) *lineScanner {
 	return &lineScanner{
 		Scanner: bufio.NewScanner(r),
 		line:    0,
+		varMap:  varMap,
 	}
 }
 
@@ -312,6 +421,21 @@ func (l *lineScanner) Scan() bool {
 		l.line++
 	}
 	return ok
+}
+
+func (l *lineScanner) Text() string {
+	text := l.Scanner.Text()
+	if len(l.varMap) == 0 {
+		return text
+	}
+
+	// See if there are any $vars to replace.
+	return varRE.ReplaceAllStringFunc(text, func(varName string) string {
+		if replace, ok := l.varMap[varName]; ok {
+			return replace
+		}
+		return varName
+	})
 }
 
 // logicStatement represents a single statement test in Test-Script.
@@ -563,6 +687,9 @@ type logicTest struct {
 	// explanation for labels in processInputFiles().
 	labelMap map[string]string
 
+	// varMap remembers the variables set with "let".
+	varMap map[string]string
+
 	rewriteResTestBuf bytes.Buffer
 }
 
@@ -751,6 +878,7 @@ SET DATABASE = test;
 	}
 
 	t.labelMap = make(map[string]string)
+	t.varMap = make(map[string]string)
 
 	t.progress = 0
 	t.failures = 0
@@ -773,7 +901,7 @@ func readTestFileConfigs(t *testing.T, path string) []logicTestConfigIdx {
 	}
 	defer file.Close()
 
-	s := newLineScanner(file)
+	s := newLineScanner(file, nil /* varMap */)
 	for s.Scan() {
 		fields := strings.Fields(s.Text())
 		if len(fields) == 0 {
@@ -825,7 +953,7 @@ func (t *logicTest) processTestFile(path string, config testClusterConfig) error
 	t.lastProgress = timeutil.Now()
 
 	repeat := 1
-	s := newLineScanner(file)
+	s := newLineScanner(file, t.varMap)
 	for s.Scan() {
 		if *maxErrs > 0 && t.failures >= *maxErrs {
 			t.Fatalf("%s:%d: too many errors encountered, skipping the rest of the input",
@@ -916,37 +1044,6 @@ func (t *logicTest) processTestFile(path string, config testClusterConfig) error
 				return fmt.Errorf("%s: invalid test statement: %s", query.pos, s.Text())
 			} else {
 				// Parse "query <type-string> <options> <label>"
-				//
-				// The type string specifies the number of columns and their types:
-				//   - T for text; also used for various types which get converted
-				//     to string (arrays, timestamps, etc.).
-				//   - I for integer
-				//   - R for floating point or decimal
-				//   - B for boolean
-				//   - O for oid
-				//
-				// Options are a comma separated strings from the following:
-				//   - "nosort" (default)
-				//   - "rowsort": sorts both the returned and the expected rows assuming
-				//         one white-space separated word per column.
-				//   - "valuesort": sorts all values on all rows as one big set of
-				//         strings (for both the returned and the expected rows).
-				//   - "partialsort(x,y,..)": performs a partial sort on both the
-				//         returned and the expected results, preserving the relative
-				//         order of rows that differ on the specified columns
-				//         (1-indexed); for results that are expected to be already
-				//         ordered according to these columns. See partialSort() for
-				//         more information.
-				//   - "colnames": column names are verified (the expected column names
-				//         are the first line in the expected results).
-				//
-				// The label is optional. If specified, the test runner stores a hash
-				// of the results of the query under the given label. If the label is
-				// reused, the test runner verifies that the results are the
-				// same. This can be used to verify that two or more queries in the
-				// same test script that are logically equivalent always generate the
-				// same output. If a label is provided, expected results don't need to
-				// be provided (in which case there should be no ---- separator).
 				query.colTypes = fields[1]
 				if len(fields) >= 3 {
 					query.rawOpts = fields[2]
@@ -1067,6 +1164,44 @@ func (t *logicTest) processTestFile(path string, config testClusterConfig) error
 			}
 			repeat = 1
 			t.success(path)
+
+		case "let":
+			// let $<name>
+			// <query>
+			if len(fields) != 2 {
+				return fmt.Errorf("let command requires one argument, found: %v", fields)
+			}
+			varName := fields[1]
+			if !varRE.MatchString(varName) {
+				return fmt.Errorf("invalid target name for let: %s", varName)
+			}
+
+			pos := fmt.Sprintf("\n%s:%d", path, s.line)
+			var buf bytes.Buffer
+			for s.Scan() {
+				line := s.Text()
+				t.emit(line)
+				if line == "" {
+					break
+				}
+				fmt.Fprintln(&buf, line)
+			}
+			sql := strings.TrimSpace(buf.String())
+			rows, err := t.db.Query(sql)
+			if err != nil {
+				return errors.Wrapf(err, "%s: error running query %s", pos, sql)
+			}
+			if !rows.Next() {
+				return fmt.Errorf("%s: no rows returned by query %s", pos, sql)
+			}
+			var val string
+			if err := rows.Scan(&val); err != nil {
+				return errors.Wrapf(err, "%s: error getting result from query %s", pos, sql)
+			}
+			if rows.Next() {
+				return fmt.Errorf("%s: more than one row returned by query  %s", pos, sql)
+			}
+			t.varMap[varName] = val
 
 		case "halt", "hash-threshold":
 
