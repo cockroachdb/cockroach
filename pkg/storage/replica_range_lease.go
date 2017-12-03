@@ -19,6 +19,7 @@ package storage
 import (
 	"fmt"
 
+	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -26,8 +27,44 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/pkg/errors"
 )
+
+// leaseRequestHandle is a handle to an asynchronous lease request.
+type leaseRequestHandle struct {
+	p *pendingLeaseRequest
+	c chan *roachpb.Error
+}
+
+// C returns the channel where the lease request's result will be sent on.
+func (h *leaseRequestHandle) C() <-chan *roachpb.Error {
+	if h.c == nil {
+		panic("handle already canceled")
+	}
+	return h.c
+}
+
+// Cancel cancels the request handle. It also cancels the asynchronous
+// lease request task if its reference count drops to zero.
+func (h *leaseRequestHandle) Cancel() {
+	h.p.repl.mu.Lock()
+	defer h.p.repl.mu.Unlock()
+	if len(h.c) == 0 {
+		// Our lease request is ongoing...
+		// Unregister handle.
+		delete(h.p.llHandles, h)
+		// Cancel request, if necessary.
+		if len(h.p.llHandles) == 0 {
+			h.p.cancel()
+		}
+	}
+	// Mark handle as canceled.
+	h.c = nil
+}
+
+// resolve notifies the handle of the request's result.
+//
+// Requires repl.mu is exclusively locked.
+func (h *leaseRequestHandle) resolve(pErr *roachpb.Error) { h.c <- pErr }
 
 // pendingLeaseRequest coalesces RequestLease requests and lets
 // callers join an in-progress lease request and wait for the result.
@@ -49,9 +86,12 @@ import (
 type pendingLeaseRequest struct {
 	// The replica that the pendingLeaseRequest is a part of.
 	repl *Replica
-	// Slice of channels to send on after lease acquisition.
-	// If empty, then no request is in progress.
-	llChans []chan *roachpb.Error
+	// Set of request handles attached to the lease acquisition.
+	// All accesses require repl.mu to be exclusively locked.
+	llHandles map[*leaseRequestHandle]struct{}
+	// cancel is the context cancellation function for the async lease
+	// request, if one exists. If nil, then no request is in progress.
+	cancel func()
 	// nextLease is the pending RequestLease request, if any. It can be used to
 	// figure out if we're in the process of extending our own lease, or
 	// transferring it to another replica.
@@ -59,7 +99,10 @@ type pendingLeaseRequest struct {
 }
 
 func makePendingLeaseRequest(repl *Replica) pendingLeaseRequest {
-	return pendingLeaseRequest{repl: repl}
+	return pendingLeaseRequest{
+		repl:      repl,
+		llHandles: make(map[*leaseRequestHandle]struct{}),
+	}
 }
 
 // RequestPending returns the pending Lease, if one is in progress.
@@ -67,7 +110,7 @@ func makePendingLeaseRequest(repl *Replica) pendingLeaseRequest {
 //
 // Requires repl.mu is read locked.
 func (p *pendingLeaseRequest) RequestPending() (roachpb.Lease, bool) {
-	pending := len(p.llChans) > 0
+	pending := p.cancel != nil
 	if pending {
 		return p.nextLease, true
 	}
@@ -75,7 +118,7 @@ func (p *pendingLeaseRequest) RequestPending() (roachpb.Lease, bool) {
 }
 
 // InitOrJoinRequest executes a RequestLease command asynchronously and returns a
-// channel on which the result will be posted. If there's already a request in
+// handle on which the result will be posted. If there's already a request in
 // progress, we join in waiting for the results of that request.
 // It is an error to call InitOrJoinRequest() while a request is in progress
 // naming another replica as lease holder.
@@ -90,27 +133,30 @@ func (p *pendingLeaseRequest) RequestPending() (roachpb.Lease, bool) {
 //
 // Requires repl.mu is exclusively locked.
 func (p *pendingLeaseRequest) InitOrJoinRequest(
-	ctx context.Context,
 	nextLeaseHolder roachpb.ReplicaDescriptor,
 	status LeaseStatus,
 	startKey roachpb.Key,
 	transfer bool,
-) <-chan *roachpb.Error {
+) *leaseRequestHandle {
 	if nextLease, ok := p.RequestPending(); ok {
 		if nextLease.Replica.ReplicaID == nextLeaseHolder.ReplicaID {
 			// Join a pending request asking for the same replica to become lease
 			// holder.
 			return p.JoinRequest()
 		}
-		llChan := make(chan *roachpb.Error, 1)
+
 		// We can't join the request in progress.
-		llChan <- roachpb.NewErrorf("request for different replica in progress "+
+		// TODO(nvanbenschoten): should this return a LeaseRejectedError? Should
+		// it cancel and replace the request in progress? Reconsider.
+		llHandle := p.newHandle()
+		llHandle.resolve(roachpb.NewErrorf("request for different replica in progress "+
 			"(requesting: %+v, in progress: %+v)",
-			nextLeaseHolder.ReplicaID, nextLease.Replica.ReplicaID)
-		return llChan
+			nextLeaseHolder.ReplicaID, nextLease.Replica.ReplicaID))
+		return llHandle
 	}
-	llChan := make(chan *roachpb.Error, 1)
+
 	// No request in progress. Let's propose a Lease command asynchronously.
+	llHandle := p.newHandle()
 	reqSpan := roachpb.Span{
 		Key: startKey,
 	}
@@ -129,12 +175,12 @@ func (p *pendingLeaseRequest) InitOrJoinRequest(
 		// Get the liveness for the next lease holder and set the epoch in the lease request.
 		liveness, err := p.repl.store.cfg.NodeLiveness.GetLiveness(nextLeaseHolder.NodeID)
 		if err != nil {
-			llChan <- roachpb.NewError(&roachpb.LeaseRejectedError{
+			llHandle.resolve(roachpb.NewError(&roachpb.LeaseRejectedError{
 				Existing:  status.Lease,
 				Requested: reqLease,
 				Message:   fmt.Sprintf("couldn't request lease for %+v: %v", nextLeaseHolder, err),
-			})
-			return llChan
+			}))
+			return llHandle
 		}
 		reqLease.Epoch = liveness.Epoch
 	}
@@ -153,42 +199,50 @@ func (p *pendingLeaseRequest) InitOrJoinRequest(
 		}
 	}
 
-	if err := p.requestLeaseAsync(ctx, nextLeaseHolder, reqLease, status, leaseReq); err != nil {
+	if err := p.requestLeaseAsync(nextLeaseHolder, reqLease, status, leaseReq); err != nil {
 		// We failed to start the asynchronous task. Send a blank NotLeaseHolderError
 		// back to indicate that we have no idea who the range lease holder might
 		// be; we've withdrawn from active duty.
-		llChan <- roachpb.NewError(
-			newNotLeaseHolderError(nil, p.repl.store.StoreID(), p.repl.mu.state.Desc))
-		return llChan
+		llHandle.resolve(roachpb.NewError(
+			newNotLeaseHolderError(nil, p.repl.store.StoreID(), p.repl.mu.state.Desc)))
+		return llHandle
 	}
 	// InitOrJoinRequest requires that repl.mu is exclusively locked. requestLeaseAsync
 	// also requires this lock to send results on all waiter channels. This means that
 	// no results will be sent until we've release the lock, so there's no race between
-	// adding our new channel to p.llChans below and requestLeaseAsync sending results
-	// on all channels in p.llChans. The same logic applies to p.nextLease.
-	p.llChans = append(p.llChans, llChan)
+	// adding our new channel to p.llHandles below and requestLeaseAsync sending results
+	// on all channels in p.llHandles. The same logic applies to p.nextLease.
+	p.llHandles[llHandle] = struct{}{}
 	p.nextLease = reqLease
-	return llChan
+	return llHandle
 }
 
 // requestLeaseAsync sends a transfer lease or lease request to the
 // specified replica. The request is sent in an async task.
 func (p *pendingLeaseRequest) requestLeaseAsync(
-	ctx context.Context,
 	nextLeaseHolder roachpb.ReplicaDescriptor,
 	reqLease roachpb.Lease,
 	status LeaseStatus,
 	leaseReq roachpb.Request,
 ) error {
+	// Create a new context *without* a timeout. Instead, we multiplex the
+	// cancellation of all contexts onto this new one, only canceling it if all
+	// coalesced requests timeout/cancel. p.cancel (defined below) is the cancel
+	// function that must be called; calling just cancel is insufficient.
+	ctx := p.repl.AnnotateCtx(context.Background())
+	ctx, cancel := context.WithCancel(ctx)
+	p.cancel = func() {
+		cancel()
+		p.cleanupAfterReq()
+	}
 	return p.repl.store.Stopper().RunAsyncTask(
 		ctx, "storage.pendingLeaseRequest: requesting lease",
 		func(ctx context.Context) {
-			var pErr *roachpb.Error
-
 			// If requesting an epoch-based lease & current state is expired,
 			// potentially heartbeat our own liveness or increment epoch of
 			// prior owner. Note we only do this if the previous lease was
 			// epoch-based.
+			var pErr *roachpb.Error
 			if reqLease.Type() == roachpb.LeaseEpoch && status.State == LeaseState_EXPIRED &&
 				status.Lease.Type() == roachpb.LeaseEpoch {
 				var err error
@@ -227,22 +281,33 @@ func (p *pendingLeaseRequest) requestLeaseAsync(
 			// is beneficial as it'll allow the replica to attempt to transfer again or
 			// extend the existing lease in the future.
 
-			// Send result of lease to all waiter channels.
 			p.repl.mu.Lock()
 			defer p.repl.mu.Unlock()
-			for _, llChan := range p.llChans {
+			if ctx.Err() != nil {
+				// We were canceled. At this point, another async request could
+				// be active so we don't want to do anything else.
+				return
+			}
+			// Send result of lease to all waiter channels.
+			for llHandle := range p.llHandles {
 				// Don't send the same transaction object twice; this can lead to races.
 				if pErr != nil {
 					pErrClone := *pErr
 					pErrClone.SetTxn(pErr.GetTxn())
-					llChan <- &pErrClone
+					llHandle.resolve(&pErrClone)
 				} else {
-					llChan <- nil
+					llHandle.resolve(nil)
 				}
+				delete(p.llHandles, llHandle)
 			}
-			p.llChans = p.llChans[:0]
-			p.nextLease = roachpb.Lease{}
+			p.cleanupAfterReq()
 		})
+}
+
+// Requires repl.mu is exclusively locked.
+func (p *pendingLeaseRequest) cleanupAfterReq() {
+	p.cancel = nil
+	p.nextLease = roachpb.Lease{}
 }
 
 // JoinRequest adds one more waiter to the currently pending request.
@@ -252,14 +317,14 @@ func (p *pendingLeaseRequest) requestLeaseAsync(
 // lease holder).
 //
 // Requires repl.mu is exclusively locked.
-func (p *pendingLeaseRequest) JoinRequest() <-chan *roachpb.Error {
-	llChan := make(chan *roachpb.Error, 1)
-	if len(p.llChans) == 0 {
-		llChan <- roachpb.NewErrorf("no request in progress")
-		return llChan
+func (p *pendingLeaseRequest) JoinRequest() *leaseRequestHandle {
+	llHandle := p.newHandle()
+	if len(p.llHandles) == 0 {
+		llHandle.resolve(roachpb.NewErrorf("no request in progress"))
+		return llHandle
 	}
-	p.llChans = append(p.llChans, llChan)
-	return llChan
+	p.llHandles[llHandle] = struct{}{}
+	return llHandle
 }
 
 // TransferInProgress returns the next lease, if the replica is in the process
@@ -286,6 +351,15 @@ func (p *pendingLeaseRequest) TransferInProgress(
 		}
 	}
 	return roachpb.Lease{}, false
+}
+
+// newHandle creates a new leaseRequestHandle referencing the pending lease
+// request.
+func (p *pendingLeaseRequest) newHandle() *leaseRequestHandle {
+	return &leaseRequestHandle{
+		p: p,
+		c: make(chan *roachpb.Error, 1),
+	}
 }
 
 // leaseStatus returns lease status. If the lease is epoch-based,
@@ -391,33 +465,32 @@ func (r *Replica) requiresExpiringLeaseRLocked() bool {
 // for a time interval containing the requested timestamp.
 // If a transfer is in progress, a NotLeaseHolderError directing to the recipient is
 // sent on the returned chan.
-func (r *Replica) requestLeaseLocked(
-	ctx context.Context, status LeaseStatus,
-) <-chan *roachpb.Error {
+func (r *Replica) requestLeaseLocked(status LeaseStatus) *leaseRequestHandle {
 	if r.store.TestingKnobs().LeaseRequestEvent != nil {
 		r.store.TestingKnobs().LeaseRequestEvent(status.Timestamp)
 	}
 	// Propose a Raft command to get a lease for this replica.
 	repDesc, err := r.getReplicaDescriptorRLocked()
 	if err != nil {
-		llChan := make(chan *roachpb.Error, 1)
-		llChan <- roachpb.NewError(err)
-		return llChan
+		llHandle := r.mu.pendingLeaseRequest.newHandle()
+		llHandle.resolve(roachpb.NewError(err))
+		return llHandle
 	}
 	if transferLease, ok := r.mu.pendingLeaseRequest.TransferInProgress(repDesc.ReplicaID); ok {
-		llChan := make(chan *roachpb.Error, 1)
-		llChan <- roachpb.NewError(
-			newNotLeaseHolderError(&transferLease, r.store.StoreID(), r.mu.state.Desc))
-		return llChan
+		llHandle := r.mu.pendingLeaseRequest.newHandle()
+		llHandle.resolve(roachpb.NewError(
+			newNotLeaseHolderError(&transferLease, r.store.StoreID(), r.mu.state.Desc)))
+		return llHandle
 	}
 	if r.store.IsDraining() {
 		// We've retired from active duty.
-		llChan := make(chan *roachpb.Error, 1)
-		llChan <- roachpb.NewError(newNotLeaseHolderError(nil, r.store.StoreID(), r.mu.state.Desc))
-		return llChan
+		llHandle := r.mu.pendingLeaseRequest.newHandle()
+		llHandle.resolve(roachpb.NewError(
+			newNotLeaseHolderError(nil, r.store.StoreID(), r.mu.state.Desc)))
+		return llHandle
 	}
 	return r.mu.pendingLeaseRequest.InitOrJoinRequest(
-		ctx, repDesc, status, r.mu.state.Desc.StartKey.AsRawKey(), false /* transfer */)
+		repDesc, status, r.mu.state.Desc.StartKey.AsRawKey(), false /* transfer */)
 }
 
 // AdminTransferLease transfers the LeaderLease to another replica. A
@@ -443,7 +516,7 @@ func (r *Replica) AdminTransferLease(ctx context.Context, target roachpb.StoreID
 	// extension (if any is in progress) and a channel for waiting for the
 	// transfer (if it was successfully initiated).
 	var nextLeaseHolder roachpb.ReplicaDescriptor
-	initTransferHelper := func() (<-chan *roachpb.Error, <-chan *roachpb.Error, error) {
+	initTransferHelper := func() (extension, transfer *leaseRequestHandle, err error) {
 		r.mu.Lock()
 		defer r.mu.Unlock()
 
@@ -479,8 +552,8 @@ func (r *Replica) AdminTransferLease(ctx context.Context, target roachpb.StoreID
 		}
 		// Stop using the current lease.
 		r.mu.minLeaseProposedTS = status.Timestamp
-		transfer := r.mu.pendingLeaseRequest.InitOrJoinRequest(
-			ctx, nextLeaseHolder, status, desc.StartKey.AsRawKey(), true, /* transfer */
+		transfer = r.mu.pendingLeaseRequest.InitOrJoinRequest(
+			nextLeaseHolder, status, desc.StartKey.AsRawKey(), true, /* transfer */
 		)
 		return nil, transfer, nil
 	}
@@ -498,12 +571,24 @@ func (r *Replica) AdminTransferLease(ctx context.Context, target roachpb.StoreID
 				// The target is us and we're the lease holder.
 				return nil
 			}
-			return (<-transfer).GoError()
+			select {
+			case pErr := <-transfer.C():
+				return pErr.GoError()
+			case <-ctx.Done():
+				transfer.Cancel()
+				return ctx.Err()
+			}
 		}
 		// Wait for the in-progress extension without holding the mutex.
 		if r.store.TestingKnobs().LeaseTransferBlockedOnExtensionEvent != nil {
 			r.store.TestingKnobs().LeaseTransferBlockedOnExtensionEvent(nextLeaseHolder)
 		}
-		<-extension
+		select {
+		case <-extension.C():
+			continue
+		case <-ctx.Done():
+			extension.Cancel()
+			return ctx.Err()
+		}
 	}
 }
