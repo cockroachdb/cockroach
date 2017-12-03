@@ -136,11 +136,10 @@ func getDatabaseDescByID(
 	ctx context.Context, txn *client.Txn, id sqlbase.ID,
 ) (*sqlbase.DatabaseDescriptor, error) {
 	desc := &sqlbase.DatabaseDescriptor{}
-	found, err := getDescriptorByID(ctx, txn, id, desc)
-	if !found {
+	if err := getDescriptorByID(ctx, txn, id, desc); err != nil {
 		return nil, err
 	}
-	return desc, err
+	return desc, nil
 }
 
 // MustGetDatabaseDesc looks up the database descriptor given its name,

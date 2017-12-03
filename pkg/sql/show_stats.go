@@ -25,6 +25,16 @@ import (
 	"github.com/pkg/errors"
 )
 
+var showTableStatsColumns = sqlbase.ResultColumns{
+	{Name: "name", Typ: types.String},
+	{Name: "columns", Typ: types.String},
+	{Name: "created_at", Typ: types.Timestamp},
+	{Name: "row_count", Typ: types.Int},
+	{Name: "distinct_count", Typ: types.Int},
+	{Name: "null_count", Typ: types.Int},
+	{Name: "histogram_id", Typ: types.Int},
+}
+
 // ShowTableStats returns a SHOW STATISTICS statement for the specified table.
 // Privileges: Any privilege on table.
 func (p *planner) ShowTableStats(ctx context.Context, n *tree.ShowTableStats) (planNode, error) {
@@ -41,19 +51,9 @@ func (p *planner) ShowTableStats(ctx context.Context, n *tree.ShowTableStats) (p
 		return nil, err
 	}
 
-	columns := sqlbase.ResultColumns{
-		{Name: "name", Typ: types.String},
-		{Name: "columns", Typ: types.String},
-		{Name: "created_at", Typ: types.Timestamp},
-		{Name: "row_count", Typ: types.Int},
-		{Name: "distinct_count", Typ: types.Int},
-		{Name: "null_count", Typ: types.Int},
-		{Name: "histogram_id", Typ: types.Int},
-	}
-
 	return &delayedNode{
 		name:    "SHOW STATISTICS FOR TABLE " + n.Table.String(),
-		columns: columns,
+		columns: showTableStatsColumns,
 		constructor: func(ctx context.Context, p *planner) (planNode, error) {
 			// We need to query the table_statistics and then do some post-processing:
 			//  - convert column IDs to a list of column names
@@ -89,8 +89,7 @@ func (p *planner) ShowTableStats(ctx context.Context, n *tree.ShowTableStats) (p
 				hasHistogramIdx
 				numCols
 			)
-
-			v := p.newContainerValuesNode(columns, 0)
+			v := p.newContainerValuesNode(showTableStatsColumns, 0)
 			for _, r := range rows {
 				if len(r) != numCols {
 					v.Close(ctx)
@@ -104,7 +103,7 @@ func (p *planner) ShowTableStats(ctx context.Context, n *tree.ShowTableStats) (p
 						buf.WriteString(",")
 					}
 					id := sqlbase.ColumnID(*d.(*tree.DInt))
-					colDesc, err := desc.FindActiveColumnByID(id)
+					colDesc, err := desc.FindColumnByID(id)
 					if err != nil {
 						buf.WriteString("<unknown>") // This can happen if a column was removed.
 					} else {
