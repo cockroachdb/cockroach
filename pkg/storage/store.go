@@ -948,16 +948,16 @@ func (s *Store) SetDraining(drain bool) {
 				defer wg.Done()
 				var drainingLease roachpb.Lease
 				for {
-					var leaseCh <-chan *roachpb.Error
+					var llHandle *leaseRequestHandle
 					r.mu.Lock()
 					lease, nextLease := r.getLeaseRLocked()
 					if nextLease != nil && nextLease.OwnedBy(s.StoreID()) {
-						leaseCh = r.mu.pendingLeaseRequest.JoinRequest()
+						llHandle = r.mu.pendingLeaseRequest.JoinRequest()
 					}
 					r.mu.Unlock()
 
-					if leaseCh != nil {
-						<-leaseCh
+					if llHandle != nil {
+						<-llHandle.C()
 						continue
 					}
 					drainingLease = lease
