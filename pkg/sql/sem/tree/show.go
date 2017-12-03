@@ -284,3 +284,13 @@ func (node *ShowTableStats) Format(buf *bytes.Buffer, f FmtFlags) {
 	buf.WriteString("SHOW STATISTICS FOR TABLE ")
 	FormatNode(buf, f, &node.Table)
 }
+
+// ShowHistogram represents a SHOW HISTOGRAM statement.
+type ShowHistogram struct {
+	HistogramID int64
+}
+
+// Format implements the NodeFormatter interface.
+func (node *ShowHistogram) Format(buf *bytes.Buffer, f FmtFlags) {
+	fmt.Fprintf(buf, "SHOW HISTOGRAM %d", node.HistogramID)
+}

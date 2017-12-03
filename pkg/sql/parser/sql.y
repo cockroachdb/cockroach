@@ -452,7 +452,7 @@ func (u *sqlSymUnion) scrubOption() tree.ScrubOption {
 
 %token <str>   GRANT GRANTS GREATEST GROUP GROUPING
 
-%token <str>   HAVING HELP HIGH HOUR
+%token <str>   HAVING HELP HIGH HISTOGRAM HOUR
 
 %token <str>   IMPORT INCREMENT INCREMENTAL IF IFNULL ILIKE IN INET INTERLEAVE
 %token <str>   INDEX INDEXES INITIALLY
@@ -649,6 +649,7 @@ func (u *sqlSymUnion) scrubOption() tree.ScrubOption {
 %type <tree.Statement> show_csettings_stmt
 %type <tree.Statement> show_databases_stmt
 %type <tree.Statement> show_grants_stmt
+%type <tree.Statement> show_histogram_stmt
 %type <tree.Statement> show_indexes_stmt
 %type <tree.Statement> show_jobs_stmt
 %type <tree.Statement> show_queries_stmt
@@ -2427,6 +2428,7 @@ show_stmt:
 | show_csettings_stmt    // EXTEND WITH HELP: SHOW CLUSTER SETTING
 | show_databases_stmt    // EXTEND WITH HELP: SHOW DATABASES
 | show_grants_stmt       // EXTEND WITH HELP: SHOW GRANTS
+| show_histogram_stmt    // EXTEND WITH HELP: SHOW HISTOGRAM
 | show_indexes_stmt      // EXTEND WITH HELP: SHOW INDEXES
 | show_jobs_stmt         // EXTEND WITH HELP: SHOW JOBS
 | show_queries_stmt      // EXTEND WITH HELP: SHOW QUERIES
@@ -2467,13 +2469,37 @@ session_var:
 
 // %Help: SHOW STATISTICS - display table statistics
 // %Category: Misc
-// %Text: SHOW STATISTICS FOR TABLE <tablename>
+// %Text: SHOW STATISTICS FOR TABLE <table_name>
+// 
+// Returns the available statistics for a table.
+// The statistics can include a histogram ID, which can
+// be used with SHOW HISTOGRAM.
+// %SeeAlso: SHOW HISTOGRAM
 show_stats_stmt:
   SHOW STATISTICS FOR TABLE qualified_name
   {
     $$.val = &tree.ShowTableStats{Table: $5.normalizableTableName()}
   }
 | SHOW STATISTICS error // SHOW HELP: SHOW STATISTICS
+
+// %Help: SHOW HISTOGRAM - display histogram
+// %Category: Misc
+// %Text: SHOW HISTOGRAM <histogram_id>
+// 
+// Returns the data in the histogram with the
+// given ID (as returned by SHOW STATISTICS).
+// %SeeAlso: SHOW STATISTICS
+show_histogram_stmt:
+  SHOW HISTOGRAM ICONST
+  {
+    id, err := $3.numVal().AsInt64()
+    if err != nil {
+      sqllex.Error(err.Error())
+      return 1
+    }
+    $$.val = &tree.ShowHistogram{HistogramID: id}
+  }
+| SHOW HISTOGRAM error // SHOW HELP: SHOW HISTOGRAM
 
 // %Help: SHOW BACKUP - list backup contents
 // %Category: CCL
@@ -6892,6 +6918,7 @@ unreserved_keyword:
 | FORCE_INDEX
 | GRANTS
 | HIGH
+| HISTOGRAM
 | HOUR
 | IMPORT
 | INCREMENT
