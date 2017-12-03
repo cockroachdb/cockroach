@@ -445,6 +445,10 @@ func (t *multiTestContextKVTransport) IsExhausted() bool {
 	return t.idx == len(t.replicas)
 }
 
+func (t *multiTestContextKVTransport) GetPending() []roachpb.ReplicaDescriptor {
+	return nil
+}
+
 func (t *multiTestContextKVTransport) SendNext(ctx context.Context, done chan<- kv.BatchCall) {
 	rep := t.replicas[t.idx]
 	t.idx++
