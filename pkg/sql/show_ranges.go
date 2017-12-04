@@ -104,7 +104,7 @@ type showRangesRun struct {
 	values []tree.Datum
 }
 
-func (n *showRangesNode) Start(params runParams) error {
+func (n *showRangesNode) startExec(params runParams) error {
 	var err error
 	n.valDirs = sqlbase.IndexKeyValDirs(n.index)
 	n.run.descriptorKVs, err = scanMetaKVs(params.ctx, params.p.txn, n.span)

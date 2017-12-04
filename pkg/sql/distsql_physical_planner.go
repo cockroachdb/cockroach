@@ -1869,7 +1869,7 @@ func (dsp *DistSQLPlanner) createPlanForValues(
 		evalCtx: planCtx.evalCtx,
 		p:       nil,
 	}
-	if err := n.Start(params); err != nil {
+	if err := n.startExec(params); err != nil {
 		return physicalPlan{}, err
 	}
 	defer n.Close(planCtx.ctx)

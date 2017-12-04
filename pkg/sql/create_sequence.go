@@ -50,7 +50,7 @@ func (p *planner) CreateSequence(ctx context.Context, n *tree.CreateSequence) (p
 	}, nil
 }
 
-func (n *createSequenceNode) Start(params runParams) error {
+func (n *createSequenceNode) startExec(params runParams) error {
 	seqName := n.n.Name.TableName().Table()
 	tKey := tableKey{parentID: n.dbDesc.ID, name: seqName}
 	key := tKey.Key()

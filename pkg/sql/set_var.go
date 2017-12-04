@@ -97,7 +97,7 @@ func (p *planner) SetVar(ctx context.Context, n *tree.SetVar) (planNode, error) 
 	return &setVarNode{v: v, typedValues: typedValues}, nil
 }
 
-func (n *setVarNode) Start(params runParams) error {
+func (n *setVarNode) startExec(params runParams) error {
 	if n.typedValues != nil {
 		for i, v := range n.typedValues {
 			d, err := v.Eval(params.evalCtx)

@@ -54,11 +54,11 @@ type distinctRun struct {
 	suffixMemAcc mon.BoundAccount
 }
 
-func (n *distinctNode) Start(params runParams) error {
+func (n *distinctNode) startExec(params runParams) error {
 	n.run.prefixMemAcc = params.p.session.TxnState.mon.MakeBoundAccount()
 	n.run.suffixMemAcc = params.p.session.TxnState.mon.MakeBoundAccount()
 	n.run.suffixSeen = make(map[string]struct{})
-	return n.plan.Start(params)
+	return nil
 }
 
 func (n *distinctNode) Next(params runParams) (bool, error) {

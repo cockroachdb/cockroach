@@ -362,15 +362,7 @@ type joinRun struct {
 	finishedOutput bool
 }
 
-// Start implements the planNode interface.
-func (n *joinNode) Start(params runParams) error {
-	if err := n.left.plan.Start(params); err != nil {
-		return err
-	}
-	if err := n.right.plan.Start(params); err != nil {
-		return err
-	}
-
+func (n *joinNode) startExec(params runParams) error {
 	if err := n.hashJoinStart(params); err != nil {
 		return err
 	}

@@ -128,8 +128,7 @@ type valuesRun struct {
 	nextRow int // The index of the next row.
 }
 
-// Start implements the planNode interface.
-func (n *valuesNode) Start(params runParams) error {
+func (n *valuesNode) startExec(params runParams) error {
 	if n.rows != nil {
 		if !n.isConst {
 			log.Fatalf(params.ctx, "valuesNode evaluted twice")

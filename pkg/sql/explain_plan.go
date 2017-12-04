@@ -93,10 +93,7 @@ type explainPlanRun struct {
 	results *valuesNode
 }
 
-func (e *explainPlanNode) Start(params runParams) error {
-	// Note that we don't call start on e.plan. That's on purpose, Start() can
-	// have side effects. And it's supposed to not be needed for the way in which
-	// we're going to use e.plan.
+func (e *explainPlanNode) startExec(params runParams) error {
 	return params.p.populateExplain(params.ctx, &e.explainer, e.run.results, e.plan)
 }
 
@@ -238,7 +235,7 @@ func (e *explainer) expr(nodeName, fieldName string, n int, expr tree.Expr) {
 }
 
 // enterNode implements the planObserver interface.
-func (e *explainer) enterNode(_ context.Context, name string, plan planNode) bool {
+func (e *explainer) enterNode(_ context.Context, name string, plan planNode) (bool, error) {
 	desc := ""
 	if e.doIndent {
 		desc = fmt.Sprintf("%*s-> %s", e.level*3, " ", name)
@@ -246,7 +243,7 @@ func (e *explainer) enterNode(_ context.Context, name string, plan planNode) boo
 	e.makeRow(e.level, name, "", desc, plan)
 
 	e.level++
-	return true
+	return true, nil
 }
 
 // attr implements the planObserver interface.
@@ -258,8 +255,9 @@ func (e *explainer) attr(nodeName, fieldName, attr string) {
 }
 
 // leaveNode implements the planObserver interface.
-func (e *explainer) leaveNode(name string) {
+func (e *explainer) leaveNode(name string, _ planNode) error {
 	e.level--
+	return nil
 }
 
 // formatColumns converts a column signature for a data source /

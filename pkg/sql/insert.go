@@ -279,7 +279,7 @@ type insertRun struct {
 	rowsUpserted  *sqlbase.RowContainer
 }
 
-func (n *insertNode) Start(params runParams) error {
+func (n *insertNode) startExec(params runParams) error {
 	// Prepare structures for building values to pass to rh.
 	// TODO(couchand): Delete this, use tablewriter interface.
 	if n.rh.exprs != nil {

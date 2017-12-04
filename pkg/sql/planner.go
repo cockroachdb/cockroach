@@ -120,7 +120,6 @@ type planner struct {
 	parser                parser.Parser
 	txCtx                 transform.ExprTransformContext
 	subqueryVisitor       subqueryVisitor
-	subqueryPlanVisitor   subqueryPlanVisitor
 	nameResolutionVisitor nameResolutionVisitor
 	srfExtractionVisitor  srfExtractionVisitor
 
@@ -300,13 +299,14 @@ func (p *planner) queryRows(
 		return nil, err
 	}
 	defer plan.Close(ctx)
-	if err := p.startPlan(ctx, plan); err != nil {
-		return nil, err
-	}
+
 	params := runParams{
 		ctx:     ctx,
 		evalCtx: &p.evalCtx,
 		p:       p,
+	}
+	if err := startPlan(params, plan); err != nil {
+		return nil, err
 	}
 	var rows []tree.Datums
 	if err = forEachRow(params, plan, func(values tree.Datums) error {
@@ -331,13 +331,14 @@ func (p *planner) exec(ctx context.Context, sql string, args ...interface{}) (in
 		return 0, err
 	}
 	defer plan.Close(ctx)
-	if err := p.startPlan(ctx, plan); err != nil {
-		return 0, err
-	}
+
 	params := runParams{
 		ctx:     ctx,
 		evalCtx: &p.evalCtx,
 		p:       p,
+	}
+	if err := startPlan(params, plan); err != nil {
+		return 0, err
 	}
 	return countRowsAffected(params, plan)
 }

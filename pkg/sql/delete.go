@@ -118,11 +118,10 @@ type deleteRun struct {
 	fastPath bool
 }
 
-func (d *deleteNode) Start(params runParams) error {
+func (d *deleteNode) startExec(params runParams) error {
 	if err := d.run.startEditNode(params, &d.editNodeBase); err != nil {
 		return err
 	}
-
 	// Check if we can avoid doing a round-trip to read the values and just
 	// "fast-path" skip to deleting the key ranges without reading them first.
 	// TODO(dt): We could probably be smarter when presented with an index-join,

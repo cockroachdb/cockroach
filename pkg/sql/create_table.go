@@ -102,7 +102,7 @@ type createTableRun struct {
 	rowsAffected int
 }
 
-func (n *createTableNode) Start(params runParams) error {
+func (n *createTableNode) startExec(params runParams) error {
 	tKey := tableKey{parentID: n.dbDesc.ID, name: n.n.Table.TableName().Table()}
 	key := tKey.Key()
 	if exists, err := descExists(params.ctx, params.p.txn, key); err == nil && exists {
@@ -215,7 +215,7 @@ func (n *createTableNode) Start(params runParams) error {
 		if err != nil {
 			return err
 		}
-		if err = params.p.startPlan(params.ctx, insertPlan); err != nil {
+		if err = startPlan(params, insertPlan); err != nil {
 			return err
 		}
 		// This driver function call is done here instead of in the Next

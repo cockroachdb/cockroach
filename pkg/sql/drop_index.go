@@ -67,7 +67,7 @@ func (p *planner) DropIndex(ctx context.Context, n *tree.DropIndex) (planNode, e
 	return &dropIndexNode{n: n, idxNames: idxNames}, nil
 }
 
-func (n *dropIndexNode) Start(params runParams) error {
+func (n *dropIndexNode) startExec(params runParams) error {
 	ctx := params.ctx
 	for _, index := range n.idxNames {
 		// Need to retrieve the descriptor again for each index name in

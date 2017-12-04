@@ -80,8 +80,7 @@ func (p *planner) Copy(ctx context.Context, n *tree.CopyFrom) (planNode, error) 
 	return cn, nil
 }
 
-// Start implements the planNode interface.
-func (n *copyNode) Start(params runParams) error {
+func (n *copyNode) startExec(params runParams) error {
 	// Should never happen because the executor prevents non-COPY messages during
 	// a COPY.
 	if params.p.session.copyFrom != nil {

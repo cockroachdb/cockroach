@@ -242,10 +242,6 @@ type sortRun struct {
 	valueIter    valueIterator
 }
 
-func (n *sortNode) Start(params runParams) error {
-	return n.plan.Start(params)
-}
-
 func (n *sortNode) Next(params runParams) (bool, error) {
 	cancelChecker := params.p.cancelChecker
 

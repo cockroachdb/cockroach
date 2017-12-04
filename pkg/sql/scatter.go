@@ -126,7 +126,7 @@ type scatterRun struct {
 	ranges   []roachpb.AdminScatterResponse_Range
 }
 
-func (n *scatterNode) Start(params runParams) error {
+func (n *scatterNode) startExec(params runParams) error {
 	db := params.p.ExecCfg().DB
 	req := &roachpb.AdminScatterRequest{
 		Span: roachpb.Span{Key: n.run.span.Key, EndKey: n.run.span.EndKey},
