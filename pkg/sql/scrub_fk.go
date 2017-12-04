@@ -21,16 +21,11 @@ import (
 
 	"golang.org/x/net/context"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/scrub"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/pkg/errors"
-)
-
-const (
-	// ScrubErrorForeignKeyConstraintViolation occurs when a row in a
-	// table is violating a foreign key constraint.
-	ScrubErrorForeignKeyConstraintViolation = "foreign_key_violation"
 )
 
 // sqlForeignKeyCheckOperation is a check on an indexes physical data.
@@ -193,7 +188,7 @@ func (o *sqlForeignKeyCheckOperation) Next(params runParams) (tree.Datums, error
 	return tree.Datums{
 		// TODO(joey): Add the job UUID once the SCRUB command uses jobs.
 		tree.DNull, /* job_uuid */
-		tree.NewDString(ScrubErrorForeignKeyConstraintViolation),
+		tree.NewDString(scrub.ForeignKeyConstraintViolation),
 		tree.NewDString(o.tableName.Database()),
 		tree.NewDString(o.tableName.Table()),
 		tree.NewDString(primaryKeyDatums.String()),
