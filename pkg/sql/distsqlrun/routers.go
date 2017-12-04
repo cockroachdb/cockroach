@@ -494,9 +494,6 @@ func (hr *hashRouter) computeDestination(row sqlbase.EncDatumRow) (int, error) {
 func makeRangeRouter(
 	streams []RowReceiver, spec OutputRouterSpec_RangeRouterSpec,
 ) (*rangeRouter, error) {
-	if len(streams) != len(spec.Spans) {
-		return nil, errors.Errorf("number of streams (%d) must match spans (%d)", len(streams), len(spec.Spans))
-	}
 	if len(spec.Encodings) == 0 {
 		return nil, errors.New("missing encodings")
 	}
@@ -589,5 +586,5 @@ func (rr *rangeRouter) spanForData(data []byte) int {
 	if bytes.Compare(rr.spans[i].Start, data) > 0 {
 		return -1
 	}
-	return i
+	return int(rr.spans[i].Stream)
 }
