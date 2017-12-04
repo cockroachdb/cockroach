@@ -1369,3 +1369,53 @@ func TestAdminAPIFullRangeLog(t *testing.T) {
 		})
 	}
 }
+
+func TestAdminAPIReplicaMatrix(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	clusterRef := serverutils.StartTestCluster(t, 3, base.TestClusterArgs{})
+	defer clusterRef.Stopper().Stop(context.Background())
+
+	s := clusterRef.Server(0)
+
+	conn := clusterRef.ServerConn(0)
+	if _, err := conn.Exec(`
+		CREATE DATABASE roachblog;
+		USE roachblog;
+		CREATE TABLE posts (id INT PRIMARY KEY, title text, body text);
+		CREATE TABLE comments (id INT PRIMARY KEY, post_id INT REFERENCES posts, body text);
+	`); err != nil {
+		t.Fatal(err)
+	}
+
+	var resp serverpb.ReplicaMatrixResponse
+	if err := getAdminJSONProto(s, "replica_matrix", &resp); err != nil {
+		t.Fatal(err)
+	}
+
+	expectedCells := []serverpb.ReplicaMatrixCell{
+		{DatabaseName: "roachblog", TableName: "posts", Count: 1, NodeId: 1},
+		{DatabaseName: "roachblog", TableName: "posts", Count: 1, NodeId: 2},
+		{DatabaseName: "roachblog", TableName: "posts", Count: 1, NodeId: 3},
+		{DatabaseName: "roachblog", TableName: "comments", Count: 1, NodeId: 1},
+		{DatabaseName: "roachblog", TableName: "comments", Count: 1, NodeId: 2},
+		{DatabaseName: "roachblog", TableName: "comments", Count: 1, NodeId: 3},
+	}
+
+	seenCells := make(map[int]bool)
+	for _, cell := range resp.Cells {
+		for expIdx, expectedCell := range expectedCells {
+			if cell == expectedCell {
+				seenCells[expIdx] = true
+			}
+		}
+	}
+
+	if len(seenCells) < len(expectedCells) {
+		t.Fatalf("expected %d cells, only saw %v. Response: %v", len(expectedCells), seenCells, resp)
+	}
+
+	// Don't test anything about the zone configs for now; just verify that something is there.
+	if len(resp.ZoneConfigs) == 0 {
+		t.Fatal("no zone configs returned")
+	}
+}
