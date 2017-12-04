@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/scrub"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -77,6 +78,18 @@ type tableInfo struct {
 	extraVals   []EncDatum
 	row         EncDatumRow
 	decodedRow  tree.Datums
+
+	// hasLast indicates whether there was a previously scanned k/v.
+	hasLast bool
+	// lastDatums is a buffer for the current key. It is only present when
+	// doing a physical check in order to verify round-trip encoding.
+	// It is required because MultiRowFetcher.kv is overwritten before NextRow
+	// returns.
+	lastKV roachpb.KeyValue
+	// lastDatums is a buffer for the previously scanned k/v datums. It is
+	// only present when doing a physical check in order to verify
+	// ordering.
+	lastDatums tree.Datums
 }
 
 // MultiRowFetcherTableArgs are the arguments passed to MultiRowFetcher.Init
@@ -576,12 +589,12 @@ func (mrf *MultiRowFetcher) processKV(
 	if !table.isSecondaryIndex && len(mrf.keyRemainingBytes) > 0 {
 		_, familyID, err := encoding.DecodeUvarintAscending(mrf.keyRemainingBytes)
 		if err != nil {
-			return "", "", err
+			return "", "", scrub.WrapError(scrub.IndexKeyDecodingError, err)
 		}
 
 		family, err := table.desc.FindFamilyByID(FamilyID(familyID))
 		if err != nil {
-			return "", "", err
+			return "", "", scrub.WrapError(scrub.IndexKeyDecodingError, err)
 		}
 
 		// If familyID is 0, kv.Value contains values for composite key columns.
@@ -601,12 +614,12 @@ func (mrf *MultiRowFetcher) processKV(
 			prettyKey, prettyValue, err = mrf.processValueSingle(ctx, table, family, kv, prettyKey)
 		}
 		if err != nil {
-			return "", "", err
+			return "", "", scrub.WrapError(scrub.IndexValueDecodingError, err)
 		}
 	} else {
 		valueBytes, err := kv.Value.GetBytes()
 		if err != nil {
-			return "", "", err
+			return "", "", scrub.WrapError(scrub.IndexValueDecodingError, err)
 		}
 
 		if hasExtraCols(table) {
@@ -620,7 +633,7 @@ func (mrf *MultiRowFetcher) processKV(
 				valueBytes,
 			)
 			if err != nil {
-				return "", "", err
+				return "", "", scrub.WrapError(scrub.SecondaryIndexKeyExtraValueDecodingError, err)
 			}
 			for i, id := range table.index.ExtraColumnIDs {
 				if table.neededCols.Contains(int(id)) {
@@ -645,7 +658,7 @@ func (mrf *MultiRowFetcher) processKV(
 				ctx, table, kv, valueBytes, prettyKey,
 			)
 			if err != nil {
-				return "", "", err
+				return "", "", scrub.WrapError(scrub.IndexValueDecodingError, err)
 			}
 		}
 	}
@@ -796,7 +809,8 @@ func (mrf *MultiRowFetcher) processValueTuple(
 // EncDatumRow. The row contains one value per table column, regardless of the
 // index used; values that are not needed (as per neededCols) are nil. The
 // EncDatumRow should not be modified and is only valid until the next call.
-// When there are no more rows, the EncDatumRow is nil.
+// When there are no more rows, the EncDatumRow is nil. The error returned may
+// be a scrub.ScrubError, which the caller is responsible for unwrapping.
 // It also returns the table and index descriptor associated with the row
 // (relevant when more than one table is specified during initialization).
 func (mrf *MultiRowFetcher) NextRow(
@@ -820,13 +834,17 @@ func (mrf *MultiRowFetcher) NextRow(
 		if mrf.traceKV {
 			log.VEventf(ctx, 2, "fetched: %s -> %s", prettyKey, prettyVal)
 		}
+
+		if mrf.isCheck {
+			mrf.rowReadyTable.lastKV = mrf.kv
+		}
 		rowDone, err := mrf.NextKey(ctx)
 		if err != nil {
 			return nil, nil, nil, err
 		}
 		if rowDone {
-			mrf.finalizeRow()
-			return mrf.rowReadyTable.row, mrf.rowReadyTable.desc, mrf.rowReadyTable.index, nil
+			err := mrf.finalizeRow()
+			return mrf.rowReadyTable.row, mrf.rowReadyTable.desc, mrf.rowReadyTable.index, err
 		}
 	}
 }
@@ -841,6 +859,9 @@ func (mrf *MultiRowFetcher) NextRowDecoded(
 ) (datums tree.Datums, table *TableDescriptor, index *IndexDescriptor, err error) {
 	row, table, index, err := mrf.NextRow(ctx)
 	if err != nil {
+		if scrub.IsScrubError(err) {
+			err = scrub.UnwrapScrubError(err)
+		}
 		return nil, nil, nil, err
 	}
 	if row == nil {
@@ -861,7 +882,177 @@ func (mrf *MultiRowFetcher) NextRowDecoded(
 	return mrf.rowReadyTable.decodedRow, table, index, nil
 }
 
-func (mrf *MultiRowFetcher) finalizeRow() {
+// NextRowWithErrors calls NextRow to fetch the next row and also run
+// additional additional logic for physical checks. The Datums should
+// not be modified and are only valid until the next call. When there
+// are no more rows, the Datums is nil. The checks executed include:
+//  - k/v data round-trips, i.e. it decodes and re-encodes to the same
+//    value.
+//  - There is no extra unexpected or incorrect data encoded in the k/v
+//    pair.
+//  - Decoded keys follow the same ordering as their encoding.
+func (mrf *MultiRowFetcher) NextRowWithErrors(ctx context.Context) (EncDatumRow, error) {
+	row, table, index, err := mrf.NextRow(ctx)
+	if row == nil {
+		return nil, nil
+	} else if err != nil {
+		// If this is not already a wrapped error, we will consider it to be
+		// a generic physical error.
+		// FIXME(joey): This may not be needed if we capture all the errors
+		// encountered. This is a TBD when this change is polished.
+		if !scrub.IsScrubError(err) {
+			err = scrub.WrapError(scrub.PhysicalError, err)
+		}
+		return row, err
+	}
+
+	// Decode the row in-place. The following check datum encoding
+	// functions require that the table.row datums are decoded.
+	for i := range row {
+		if row[i].IsUnset() {
+			mrf.rowReadyTable.decodedRow[i] = tree.DNull
+			continue
+		}
+		if err := row[i].EnsureDecoded(&mrf.rowReadyTable.cols[i].Type, mrf.alloc); err != nil {
+			return nil, err
+		}
+		mrf.rowReadyTable.decodedRow[i] = row[i].Datum
+	}
+
+	if index.ID == table.PrimaryIndex.ID {
+		err = mrf.checkPrimaryIndexDatumEncodings(ctx)
+	} else {
+		err = mrf.checkSecondaryIndexDatumEncodings(ctx)
+	}
+	if err != nil {
+		return row, err
+	}
+
+	err = mrf.checkKeyOrdering(ctx)
+
+	return row, err
+}
+
+// checkPrimaryIndexDatumEncodings will run a round-trip encoding check
+// on all values in the buffered row. This check is specific to primary
+// index datums.
+func (mrf *MultiRowFetcher) checkPrimaryIndexDatumEncodings(ctx context.Context) error {
+	table := mrf.rowReadyTable
+	scratch := make([]byte, 1024)
+	colIDToColumn := make(map[ColumnID]ColumnDescriptor)
+	for _, col := range table.desc.Columns {
+		colIDToColumn[col.ID] = col
+	}
+
+	rh := rowHelper{TableDesc: table.desc, Indexes: table.desc.Indexes}
+
+	for _, family := range table.desc.Families {
+		var lastColID ColumnID
+		familySortedColumnIDs, ok := rh.sortedColumnFamily(family.ID)
+		if !ok {
+			panic("invalid family sorted column id map")
+		}
+
+		for _, colID := range familySortedColumnIDs {
+			rowVal := table.row[table.colIdxMap[colID]]
+			if rowVal.IsNull() {
+				// Column is not present.
+				continue
+			}
+
+			if skip, err := rh.skipColumnInPK(colID, family.ID, rowVal.Datum); err != nil {
+				log.Errorf(ctx, "unexpected error: %s", err)
+				continue
+			} else if skip {
+				continue
+			}
+
+			col := colIDToColumn[colID]
+
+			if lastColID > col.ID {
+				panic(fmt.Errorf("cannot write column id %d after %d", col.ID, lastColID))
+			}
+			colIDDiff := col.ID - lastColID
+			lastColID = col.ID
+
+			if result, err := EncodeTableValue([]byte(nil), colIDDiff, rowVal.Datum,
+				scratch); err != nil {
+				log.Errorf(ctx, "Could not re-encode column %s, value was %#v. Got error %s",
+					col.Name, rowVal.Datum, err)
+			} else if !bytes.Equal(result, rowVal.encoded) {
+				return scrub.WrapError(scrub.IndexValueDecodingError, errors.Errorf(
+					"value failed to round-trip encode. Column=%s colIDDiff=%d Key=%s expected %#v, got: %#v",
+					col.Name, colIDDiff, mrf.kv.Key, rowVal.encoded, result))
+			}
+		}
+	}
+	return nil
+}
+
+// checkSecondaryIndexDatumEncodings will run a round-trip encoding
+// check on all values in the buffered row. This check is specific to
+// secondary index datums.
+func (mrf *MultiRowFetcher) checkSecondaryIndexDatumEncodings(ctx context.Context) error {
+	table := mrf.rowReadyTable
+	colToEncDatum := make(map[ColumnID]EncDatum, len(table.row))
+	values := make(tree.Datums, len(table.row))
+	for i, col := range table.cols {
+		colToEncDatum[col.ID] = table.row[i]
+		values[i] = table.row[i].Datum
+	}
+
+	indexEntry, err := EncodeSecondaryIndex(table.desc, table.index, table.colIdxMap, values)
+	if err != nil {
+		return err
+	}
+
+	// We ignore the first 4 bytes of the values. These bytes are a
+	// checksum which are not set by EncodeSecondaryIndex.
+	if !indexEntry.Key.Equal(mrf.rowReadyTable.lastKV.Key) {
+		return scrub.WrapError(scrub.IndexKeyDecodingError, errors.Errorf(
+			"secondary index key failed to round-trip encode. expected %#v, got: %#v",
+			mrf.rowReadyTable.lastKV.Key, indexEntry.Key))
+	} else if !bytes.Equal(indexEntry.Value.RawBytes[4:], table.lastKV.Value.RawBytes[4:]) {
+		return scrub.WrapError(scrub.IndexValueDecodingError, errors.Errorf(
+			"secondary index value failed to round-trip encode. expected %#v, got: %#v",
+			mrf.rowReadyTable.lastKV.Value.RawBytes[4:], indexEntry.Value.RawBytes[4:]))
+	}
+	return nil
+}
+
+// checkKeyOrdering verifies that the datums decoded for the current key
+// have the same ordering as the encoded key.
+func (mrf *MultiRowFetcher) checkKeyOrdering(ctx context.Context) error {
+	defer func() {
+		mrf.rowReadyTable.lastDatums = append(tree.Datums(nil), mrf.rowReadyTable.decodedRow...)
+	}()
+
+	if !mrf.rowReadyTable.hasLast {
+		mrf.rowReadyTable.hasLast = true
+		return nil
+	}
+
+	evalCtx := tree.EvalContext{}
+	for i := range mrf.rowReadyTable.index.ColumnIDs {
+		result := mrf.rowReadyTable.decodedRow[i].Compare(&evalCtx, mrf.rowReadyTable.lastDatums[i])
+		expectedDirection := mrf.rowReadyTable.index.ColumnDirections[i]
+		if mrf.reverse && expectedDirection == IndexDescriptor_ASC {
+			expectedDirection = IndexDescriptor_DESC
+		} else if mrf.reverse && expectedDirection == IndexDescriptor_DESC {
+			expectedDirection = IndexDescriptor_ASC
+		}
+
+		if expectedDirection == IndexDescriptor_ASC && result < 0 ||
+			expectedDirection == IndexDescriptor_DESC && result > 0 {
+			return scrub.WrapError(scrub.IndexKeyDecodingError,
+				errors.Errorf("key ordering did not match datum ordering. IndexDescriptor=%s",
+					expectedDirection))
+		}
+	}
+	return nil
+}
+
+func (mrf *MultiRowFetcher) finalizeRow() error {
 	table := mrf.rowReadyTable
 	// Fill in any missing values with NULLs
 	for i := range table.cols {
@@ -870,6 +1061,12 @@ func (mrf *MultiRowFetcher) finalizeRow() {
 				var indexColValues []string
 				for i := range table.indexColIdx {
 					indexColValues = append(indexColValues, table.row[i].String(&table.cols[i].Type))
+				}
+				if mrf.isCheck {
+					return scrub.WrapError(scrub.UnexpectedNullValueError, errors.Errorf(
+						"Non-nullable column \"%s:%s\" with no value! Index scanned was %q with the index key columns (%s) and the values (%s)",
+						table.desc.Name, table.cols[i].Name, table.index.Name,
+						strings.Join(table.index.ColumnNames, ","), strings.Join(indexColValues, ",")))
 				}
 				panic(fmt.Sprintf(
 					"Non-nullable column \"%s:%s\" with no value! Index scanned was %q with the index key columns (%s) and the values (%s)",
@@ -881,6 +1078,7 @@ func (mrf *MultiRowFetcher) finalizeRow() {
 			}
 		}
 	}
+	return nil
 }
 
 // Key returns the next key (the key that follows the last returned row).

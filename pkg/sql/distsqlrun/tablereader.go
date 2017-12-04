@@ -21,6 +21,7 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/scrub"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -168,6 +169,9 @@ func (tr *tableReader) Run(ctx context.Context, wg *sync.WaitGroup) {
 		row, _, _, err := tr.fetcher.NextRow(ctx)
 		if err != nil || row == nil {
 			if err != nil {
+				if scrub.IsScrubError(err) {
+					err = scrub.UnwrapScrubError(err)
+				}
 				tr.out.output.Push(nil /* row */, ProducerMetadata{Err: err})
 			}
 			break

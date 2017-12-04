@@ -21,6 +21,7 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/scrub"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -235,6 +236,9 @@ func (irj *interleavedReaderJoiner) Run(ctx context.Context, wg *sync.WaitGroup)
 		row, desc, index, err := irj.fetcher.NextRow(ctx)
 		if err != nil || row == nil {
 			if err != nil {
+				if scrub.IsScrubError(err) {
+					err = scrub.UnwrapScrubError(err)
+				}
 				irj.out.output.Push(nil /* row */, ProducerMetadata{Err: err})
 			}
 			break
