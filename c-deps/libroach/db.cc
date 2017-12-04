@@ -1761,6 +1761,46 @@ DBStatus DBCompact(DBEngine* db) {
   // settings like bloom filter configurations (which is the biggest
   // reason we currently have to use this function).
   options.bottommost_level_compaction = rocksdb::BottommostLevelCompaction::kForce;
+
+  // Compacting the entire database in a single-shot can use a
+  // significant amount of additional (temporary) disk space. Instead,
+  // we loop over the sstables in the lowest level and initiate
+  // compactions on each key range. The resulting compacted database
+  // is the same size, but the temporary disk space needed for the
+  // compaction is dramatically reduced
+  std::vector<rocksdb::LiveFileMetaData> metadata;
+  db->rep->GetLiveFilesMetaData(&metadata);
+
+  int max_level = 0;
+  for (int i = 0; i < metadata.size(); i++) {
+    if (max_level < metadata[i].level) {
+      max_level = metadata[i].level;
+    }
+  }
+
+  if (max_level == db->rep->NumberLevels() - 1) {
+    // TODO(peter): Rather than issuing compactions for every sstable
+    // at the bottom-most level, we could issue compactions for every
+    // Nth. This would require sorting the metadata by
+    // smallestkey. Not difficult. Probably worth exploring before
+    // merging.
+    for (int i = 0; i < metadata.size(); i++) {
+      if (metadata[i].level != max_level) {
+        continue;
+      }
+      rocksdb::Slice start(metadata[i].smallestkey);
+      rocksdb::Slice end(metadata[i].largestkey);
+      rocksdb::Status status = db->rep->CompactRange(options, &start, &end);
+      if (!status.ok()) {
+        return ToDBStatus(status);
+      }
+    }
+    return kSuccess;
+  }
+
+  // There are no sstables at the lowest level, so just compact the
+  // entire database. Due to the level_compaction_dynamic_level_bytes
+  // setting, this will only happen on very small databases.
   return ToDBStatus(db->rep->CompactRange(options, NULL, NULL));
 }
 
