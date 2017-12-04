@@ -128,6 +128,10 @@ func (p *planner) selectIndex(
 	if s.filter != nil {
 		// Analyze the filter expression, simplifying it and splitting it up into
 		// possibly overlapping ranges.
+
+		// issue#20237
+		s.filter = trimUselessNotNullFilter(s, p)
+
 		exprs, equivalent := decomposeExpr(&p.evalCtx, s.filter)
 		if log.V(2) {
 			log.Infof(ctx, "analyzeExpr: %s -> %s [equivalent=%v]", s.filter, exprs, equivalent)
@@ -265,6 +269,33 @@ func (p *planner) selectIndex(
 	}
 
 	return plan, nil
+}
+
+// #20237
+// any "not-null" filters should be trimmed according to non-nullable columns
+func trimUselessNotNullFilter(sn *scanNode, p *planner) tree.TypedExpr {
+	var newFilter tree.TypedExpr = tree.DBoolTrue
+	andExprs := splitAndExpr(&p.evalCtx, sn.filter, nil)
+	for _, e := range andExprs {
+		if c, cok := e.(*tree.ComparisonExpr); cok &&
+			c.Operator == tree.IsNot && c.Right == tree.DNull {
+			if ok, idx := getColVarIdx(c.Left); ok {
+				// The reason I(@sydnever) don't use s.props.notNullCols here
+				// is that `computePhysicalProps()` is called later. It means
+				// `notNullCols` is an empty set here. And the behavior of
+				// `computePhysicalProps()` that it only puts `NOT NULL` index
+				// columns and the columns defined `NOT NULL` by filters into
+				// `notNullCols`is not expected by me. I have no idea how to
+				// change `computePhysicalProps()` without side-effects. So I
+				// choose another way.
+				if !sn.desc.Columns[idx].Nullable {
+					e = tree.DBoolTrue
+				}
+			}
+		}
+		newFilter = mergeConj(newFilter, e)
+	}
+	return newFilter
 }
 
 type indexConstraint struct {
