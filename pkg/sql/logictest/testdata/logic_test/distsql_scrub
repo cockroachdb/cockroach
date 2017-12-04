@@ -1,9 +1,10 @@
 # LogicTest: 5node-distsql 5node-distsql-disk
 
+# Verify the index check execution plan uses a merge join.
+
 statement ok
 CREATE TABLE test (k INT PRIMARY KEY, v INT, data INT, INDEX secondary (v) STORING (data))
 
-# Verify the index check execution plan
 query T
 SELECT "URL" FROM [EXPLAIN (DISTSQL)
     SELECT leftside.v, leftside.k, leftside.data, rightside.v, rightside.k, rightside.data
@@ -17,3 +18,34 @@ SELECT "URL" FROM [EXPLAIN (DISTSQL)
 ]
 ----
 https://cockroachdb.github.io/distsqlplan/decode.html?eJyskE1r4zAQhu_7K8ScEjKHyB97ECzotJAlmyzJ9lR8cK2pY3AkI8nQEvLfi23Ih4ndGnqckZ55Zt4TaKNokx7JgXgGDglCZU1GzhnbtLoPK_UGYolQ6Kr2TTtByIwlECfwhS8JBPxPX0raUarIAoIinxZlO7SyxTG179KT84Cwrb1gMkDJUYaQnBFM7a9jnU9zAsHP-HX13ljft0q-QBksUIaLQUkwRTJ4n6PMaDX5wvA7L0Q4pj47sJK0YMGgMxp0XlW1NlaRJXVnSxrysy8PFv9LNqc_ptD97Ut69bObE-a_bJEf7luA8LsoPVnBZjJgqz3bPK3Xc7bdsZmML_Ulco5N6iHKCGWM8udgDvGU7HfkKqMd9fN4OHnZhEAqpy5UZ2qb0T9rslbTlduWaxuKnO9eeVesdPfULHgL81E4uoN5Hw5G4XDcHE4wB304GoXjnjk5__gIAAD__3Zdd7U=
+
+# Verify the foreign key check execution plan uses a merge join.
+
+statement ok
+CREATE TABLE parent (
+  id INT PRIMARY KEY,
+  id2 INT,
+  UNIQUE INDEX (id, id2)
+)
+
+statement ok
+CREATE TABLE child (
+  child_id INT PRIMARY KEY,
+  id INT,
+  id2 INT,
+  FOREIGN KEY (id, id2) REFERENCES parent (id, id2)
+)
+
+query T
+SELECT "URL" FROM [EXPLAIN (DISTSQL)
+    SELECT p.child_id, p.id, p.id2
+    FROM
+      (SELECT child_id, id, id2 FROM child@{NO_INDEX_JOIN} ORDER BY id, id2) AS p
+    FULL OUTER JOIN
+      (SELECT id, id2 FROM parent@{FORCE_INDEX=[2],NO_INDEX_JOIN} ORDER BY id, id2) AS c
+      ON p.id = c.id AND p.id2 = c.id2
+    WHERE (p.id IS NOT NULL OR p.id2 IS NOT NULL) AND
+          c.id IS NULL AND c.id2 IS NULL
+]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html?eJyskkGL2zAQhe_9FWJONtYhltuLoaBCKaSkdknT02KM15o4Il7JSDJkCf7vi2XYxCHZ3cAe9Wme3psZHUFpgVn1hBbSB4ihoNAZXaO12oxoKliKA6QLClJ1vRtxQaHWBiE9gpOuRUhhUz22uMZKoAEKAl0lW_9ovZOtKKve6VIqgYdyuy-lKA1uy64yqBz3FUAh711KeEw5ozyBYqCge3dytK5qENJ4oJ-QarIeg0jByj0-84nMYtzMwG5mOFn3ShuBBsXMuBiV75VcaeQPmgZ_a6kuG2lx6wLOIsqTKPxuZLNzAY8jylkUAoVfsnVoUhIEAWdk-Y9k-YZk_1erkORrEvBkxkLyI_tJAv7V03Py7ZV8eFHJPYtao-20sng5rKsvL8YJoWhwmrjVvanxr9G1t5mOudd5INC66ZZNh6XyV_4nnYvjO8TsUszeFCcz8WIohi8vAQAA__8S_R_e
