@@ -97,6 +97,7 @@ We follow the postgresql use of roles:
 
 The following are not in scope but should not be hindered by implementation of this RFC:
 * role attributes (see [PostgreSQL CREATE ROLE](https://www.postgresql.org/docs/10/static/sql-createrole.html) for full list)
+* `ALTER` command (modify role attributes, rename role)
 * role auditing
 * multiple "admin" (or superuser) roles
 * admin UI manipulation of roles
@@ -128,7 +129,7 @@ inherit the privileges held by the role. This is done recursively.
 
 For example:
 * role `employees` has `ALL` privileges on table `mydb.employee_data`
-* user `marc` is a member of `employees` (also written: `marc ∈ employees`
+* user `marc` is a member of `employees` (also written: `marc ∈ employees`)
 * without any extra privileges, `marc` can now perform any operations on table `mydb.employee_data`
 
 Roles and users follow a small set of rules:
@@ -198,7 +199,8 @@ This fails if `myrole` does not exist. We can instead use:
 DROP ROLE IF EXISTS myrole
 ```
 
-Dropping a role will fail if it still has privileges on database objects.
+Dropping a role will fail if it still has direct privileges on database objects (privileges through membership
+in other roles does not trigger an error).
 
 Any role relationships involving this role will be removed automatically.
 
@@ -330,7 +332,7 @@ For alternate representations [Internal representation of memberships](#internal
 
 ### New SQL statements
 
-We propose the some new and some modified SQL statements, all mimicking the corresponding statements
+We propose some new and some modified SQL statements, all mimicking the corresponding statements
 in PostgreSQL (see [Related resources](#related-resources)).
 
 The new statements all operate on the `system.users` and `system.role_members` tables.
