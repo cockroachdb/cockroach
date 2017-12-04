@@ -136,9 +136,6 @@ func (o *sqlForeignKeyCheckOperation) Start(params runParams) error {
 	if err != nil {
 		rows.Close(ctx)
 		return err
-	} else if rows.Len() == 0 {
-		rows.Close(ctx)
-		rows = nil
 	}
 
 	o.run.started = true
