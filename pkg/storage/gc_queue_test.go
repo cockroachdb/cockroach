@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"math/rand"
 	"reflect"
+	"sync/atomic"
 	"testing"
 	"testing/quick"
 	"time"
@@ -902,97 +903,98 @@ func TestGCQueueLastProcessedTimestamps(t *testing.T) {
 	})
 }
 
-func TestChunkGCRequest(t *testing.T) {
+// TestGCQueueChunkRequests verifies that many intents are chunked
+// into separate batches. This is verified both for many different
+// keys and also for many different versions of keys.
+func TestGCQueueChunkRequests(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	desc := &roachpb.RangeDescriptor{}
-	info := &GCInfo{}
-	var gcKeys1 []roachpb.GCRequest_GCKey
-	for i := 0; i < gcChunkKeySize/1000; i++ {
-		var gcKey roachpb.GCRequest_GCKey
-		gcKey.Key = roachpb.Key(fmt.Sprintf("%0100d", i))
-		gcKeys1 = append(gcKeys1, gcKey)
-	}
-	batches := chunkGCRequest(desc, info, gcKeys1)
-
-	// We expect two batches: The initial state-adjusting batch that is always emitted, and an unbroken batch of our keys.
-	if act, exp := len(batches), 2; act != exp {
-		t.Fatalf("expected %d batches, but got %d", exp, act)
-	}
-
-	var size int
-	for _, key := range batches[1].Keys {
-		size += len(key.Key)
-	}
-	if size > gcChunkKeySize {
-		t.Fatalf("expected GC Request's batch size smaller than %v, but got %v", gcChunkKeySize, size)
-	}
-
-	var gcKeys2 []roachpb.GCRequest_GCKey
-	for i := 0; i < gcChunkKeySize; i++ {
-		var gcKey roachpb.GCRequest_GCKey
-		gcKey.Key = roachpb.Key(fmt.Sprintf("%0100d", i))
-		gcKeys2 = append(gcKeys2, gcKey)
-	}
-	batches = chunkGCRequest(desc, info, gcKeys2)
-
-	// Now we expect there to be at least three batches since our key batch should have split.
-	if act, exp := len(batches), 3; act < 3 {
-		t.Fatalf("expected at least %d batches, but got %v", exp, act)
-	}
-
-	size = 0
-	var base int
-	var sum int
-	for i, batch := range batches[1:] {
-		for _, key := range batch.Keys {
-			size += len(key.Key)
-		}
-		sum += len(batch.Keys)
-		if i == 0 {
-			base = size
-		}
-		if i > 0 && i < len(batches[1:])-1 {
-			if size != base {
-				t.Fatalf("expected GC Request's batch size equal to base : %d, but got : %d", base, size)
+	var gcRequests int32
+	manual := hlc.NewManualClock(123)
+	tsc := TestStoreConfig(hlc.NewClock(manual.UnixNano, time.Nanosecond))
+	tsc.TestingKnobs.EvalKnobs.TestingEvalFilter =
+		func(filterArgs storagebase.FilterArgs) *roachpb.Error {
+			if _, ok := filterArgs.Req.(*roachpb.GCRequest); ok {
+				atomic.AddInt32(&gcRequests, 1)
+				return nil
 			}
+			return nil
 		}
-		if size > gcChunkKeySize {
-			t.Fatalf("expected GC Request's batch size smaller than %v, but got %v", gcChunkKeySize, size)
+	tc := testContext{manualClock: manual}
+	stopper := stop.NewStopper()
+	defer stopper.Stop(context.TODO())
+	tc.StartWithStoreConfig(t, stopper, tsc)
+
+	const keyCount = 1000
+	if gcKeyVersionChunkBytes%keyCount != 0 {
+		t.Fatalf("expected gcKeyVersionChunkBytes to be a multiple of %d", keyCount)
+	}
+	const keySize = gcKeyVersionChunkBytes / keyCount
+	// Create a format string for creating version keys of exactly
+	// length keySize.
+	fmtStr := fmt.Sprintf("%%0%dd", keySize)
+
+	// First write 2 * gcKeyVersionChunkBytes different keys (each with two versions).
+	ba1, ba2 := roachpb.BatchRequest{}, roachpb.BatchRequest{}
+	for i := 0; i < 2*keyCount; i++ {
+		// Create keys which are
+		key := roachpb.Key(fmt.Sprintf(fmtStr, i))
+		pArgs := putArgs(key, []byte("value1"))
+		ba1.Add(&pArgs)
+		pArgs = putArgs(key, []byte("value2"))
+		ba2.Add(&pArgs)
+	}
+	ba1.Header = roachpb.Header{Timestamp: tc.Clock().Now()}
+	if _, pErr := tc.Sender().Send(context.Background(), ba1); pErr != nil {
+		t.Fatal(pErr)
+	}
+	ba2.Header = roachpb.Header{Timestamp: tc.Clock().Now()}
+	if _, pErr := tc.Sender().Send(context.Background(), ba2); pErr != nil {
+		t.Fatal(pErr)
+	}
+
+	// Next write 2 keys, the first with keyCount different GC'able
+	// versions, and the second with 2*keyCount GC'able versions.
+	key1 := roachpb.Key(fmt.Sprintf(fmtStr, 2*keyCount))
+	key2 := roachpb.Key(fmt.Sprintf(fmtStr, 2*keyCount+1))
+	for i := 0; i < 2*keyCount+1; i++ {
+		ba := roachpb.BatchRequest{}
+		// Only write keyCount+1 versions of key1.
+		if i < keyCount+1 {
+			pArgs1 := putArgs(key1, []byte(fmt.Sprintf("value%04d", i)))
+			ba.Add(&pArgs1)
 		}
-		size = 0
-	}
-	if exp := len(gcKeys2); sum != exp {
-		t.Fatalf("expected total GC Request's key size is %d, but got %d", exp, sum)
-	}
-
-	var gcKeys3 []roachpb.GCRequest_GCKey
-	for i := 0; i < gcChunkKeySize/100*2-1; i++ {
-		var gcKey roachpb.GCRequest_GCKey
-		gcKey.Key = roachpb.Key(fmt.Sprintf("%0100d", i))
-		gcKeys3 = append(gcKeys3, gcKey)
-	}
-	batches = chunkGCRequest(desc, info, gcKeys3)
-
-	// Now we expect there to be three batches.
-	if act, exp := len(batches), 3; act != 3 {
-		t.Fatalf("expected %d batches, but got %v", exp, act)
-	}
-	size = 0
-	batch1 := batches[1]
-	for _, key := range batch1.Keys {
-		size += len(key.Key)
-	}
-	if size != gcChunkKeySize {
-		t.Fatalf("expected GC Request's batch size equal to %v, but got %v", gcChunkKeySize, size)
+		// Write all 2*keyCount+1 versions of key2 to verify we'll
+		// tackle key2 in two separate batches.
+		pArgs2 := putArgs(key2, []byte(fmt.Sprintf("value%04d", i)))
+		ba.Add(&pArgs2)
+		ba.Header = roachpb.Header{Timestamp: tc.Clock().Now()}
+		if _, pErr := tc.Sender().Send(context.Background(), ba); pErr != nil {
+			t.Fatal(pErr)
+		}
 	}
 
-	size = 0
-	batch2 := batches[2]
-	for _, key := range batch2.Keys {
-		size += len(key.Key)
+	// Forward the clock past the default GC time.
+	cfg, ok := tc.gossip.GetSystemConfig()
+	if !ok {
+		t.Fatal("config not set")
 	}
-	if size >= gcChunkKeySize {
-		t.Fatalf("expected GC Request's batch size smaller than %v, but got %v", gcChunkKeySize, size)
+	zone, err := cfg.GetZoneConfigForKey(roachpb.RKey("key"))
+	if err != nil {
+		t.Fatalf("could not find zone config for range %s", err)
+	}
+	tc.manualClock.Increment(int64(zone.GC.TTLSeconds)*1E9 + 1)
+	gcQ := newGCQueue(tc.store, tc.gossip)
+	if err := gcQ.processImpl(context.Background(), tc.repl, cfg, tc.Clock().Now()); err != nil {
+		t.Fatal(err)
+	}
+
+	// We wrote two batches worth of keys spread out, and two keys that
+	// each have enough old versions to fill a whole batch each in the
+	// first case, and two whole batches in the second, adding up to
+	// five batches. There is also a first batch which sets the GC
+	// thresholds, making six total batches.
+	if a, e := atomic.LoadInt32(&gcRequests), int32(6); a != e {
+		t.Errorf("expected %d gc requests; got %d", e, a)
 	}
 }
