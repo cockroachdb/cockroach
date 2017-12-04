@@ -62,8 +62,12 @@ export default function Debug() {
             note="#/reports/nodes?locality=[regex]"
           />
         </DebugTableRow>
-        <DebugTableRow title="Localities">
+        <DebugTableRow title="Localities & Distribution">
           <DebugTableLink name="Locality Tree" url="#/reports/localities" />
+          <DebugTableLink
+            name="Data distribution matrix & zone configs"
+            url="#/reports/datadistribution"
+          />
         </DebugTableRow>
         <DebugTableRow title="Network">
           <DebugTableLink name="Latency (on all nodes)" url="#/reports/network" />

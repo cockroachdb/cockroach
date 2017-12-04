@@ -39,6 +39,7 @@ import NodeOverview from "src/views/cluster/containers/nodeOverview";
 import NodeGraphs from "src/views/cluster/containers/nodeGraphs";
 import NodeLogs from "src/views/cluster/containers/nodeLogs";
 import { EventPage } from "src/views/cluster/containers/events";
+import DataDistributionPage from "src/views/cluster/containers/dataDistribution";
 
 import Raft from "src/views/devtools/containers/raft";
 import RaftRanges from "src/views/devtools/containers/raftRanges";
@@ -108,6 +109,7 @@ ReactDOM.render(
           <Route path="localities" component={ Localities } />
           <Route path="network" component={ Network } />
           <Route path="nodes" component={ Nodes } />
+          <Route path="datadistribution" component={ DataDistributionPage } />
           <Route path={`certificates/:${nodeIDAttr}`} component={ Certificates } />
           <Route path={`range/:${rangeIDAttr}`} component={ Range } />
           <Route path={`range/:${rangeIDAttr}/cmdqueue`} component={ CommandQueue } />
