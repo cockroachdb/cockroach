@@ -580,6 +580,25 @@ func (dsp *DistSQLPlanner) partitionSpans(
 							log.VEventf(ctx, 1, "marking n%d as unhealthy for this plan: %v", nodeID, err)
 							return err
 						}
+
+						// Check that the node is not draining.
+						drainingInfo := &distsqlrun.DistSQLDrainingInfo{}
+						if err := dsp.gossip.GetInfoProto(gossip.MakeDistSQLDrainingKey(nodeID), drainingInfo); err != nil {
+							// Because draining info has no expiration, an error
+							// implies that we have not yet received a node's
+							// draining information. Since this information is
+							// written on startup, the most likely scenario is
+							// that the node is ready. We therefore return no
+							// error.
+							return nil
+						}
+
+						if drainingInfo.Draining {
+							errMsg := fmt.Sprintf("not using n%d because it is draining", nodeID)
+							log.VEvent(ctx, 1, errMsg)
+							return errors.New(errMsg)
+						}
+
 						return nil
 					}
 					if err := checkNodeHealth(); err != nil {

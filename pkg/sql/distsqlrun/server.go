@@ -187,12 +187,19 @@ func (ds *ServerImpl) Start() {
 		panic(err)
 	}
 
+	if err := ds.setDraining(false); err != nil {
+		panic(err)
+	}
+
 	ds.flowScheduler.Start()
 }
 
-// Drain drains the server's flowRegistry. See flowRegistry.Drain for more
-// details.
-func (ds *ServerImpl) Drain(flowDrainWait time.Duration) {
+// Drain changes the node's draining state through gossip and drains the
+// server's flowRegistry. See flowRegistry.Drain for more details.
+func (ds *ServerImpl) Drain(ctx context.Context, flowDrainWait time.Duration) {
+	if err := ds.setDraining(true); err != nil {
+		log.Warningf(ctx, "unable to gossip distsql draining state: %s", err)
+	}
 	// There is a possibility that there are flows not yet registered that we
 	// do not wait for, since even though the flowRegistry keeps on accepting
 	// new flows when draining, it could return from `Drain` before some flows
@@ -200,6 +207,25 @@ func (ds *ServerImpl) Drain(flowDrainWait time.Duration) {
 	// flows on draining nodes reduces the likelihood of this scenario.
 	// TODO(asubiotto): Errors like this should be handled on the gateway.
 	ds.flowRegistry.Drain(flowDrainWait)
+}
+
+// Undrain changes the node's draining state through gossip.
+func (ds *ServerImpl) Undrain(ctx context.Context) {
+	if err := ds.setDraining(false); err != nil {
+		log.Warningf(ctx, "unable to gossip distsql draining state: %s", err)
+	}
+}
+
+// setDraining changes the node's draining state through gossip to the provided
+// state.
+func (ds *ServerImpl) setDraining(drain bool) error {
+	return ds.ServerConfig.Gossip.AddInfoProto(
+		gossip.MakeDistSQLDrainingKey(ds.ServerConfig.NodeID.Get()),
+		&DistSQLDrainingInfo{
+			Draining: drain,
+		},
+		0, // ttl - no expiration
+	)
 }
 
 // FlowVerIsCompatible checks a flow's version is compatible with this node's

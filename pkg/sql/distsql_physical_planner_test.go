@@ -47,6 +47,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/pkg/errors"
 )
 
 // SplitTable splits a range in the table, creates a replica for the right
@@ -453,6 +454,77 @@ func TestDistSQLDeadHosts(t *testing.T) {
 		"SELECT URL FROM [EXPLAIN (DISTSQL) SELECT SUM(xsquared) FROM t]",
 		[][]string{{"https://cockroachdb.github.io/distsqlplan/decode.html?eJy8kkFLwzAUx-9-CvmfFHIwXZ3QUz3uoJOpJ8khNo9S6JrykoIy-t2lDaItkk02dkxe_r_fe-Ht0FhDj3pLDtkbJAQWEEihBFq2BTlneSiFhyvzgexGoGrazg_XSqCwTMh28JWvCRle9HtNG9KGGAKGvK7qEd5ytdX8mXsIrDufXeYJVC9gO_9N68XhnvuyZCq1tzPN8-vDVS6vD0b_ELvGsiEmMwGq_sRyeab_2-M5ZoTkTCPs8ZxqBf5Ab8i1tnE0W4UpTwmQKSlskbMdF_TEthjh4bgeX48XhpwPVRkOqyaUhrZ-h2U0nEzCch5OouG7uHkRDafxcHpM27fR8DJuXv7LrPqLrwAAAP__vMyldA=="}},
 	)
+}
+
+func TestDistSQLDrainingHosts(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	const numNodes = 2
+	tc := serverutils.StartTestCluster(
+		t,
+		numNodes,
+		base.TestClusterArgs{
+			ReplicationMode: base.ReplicationManual,
+			ServerArgs:      base.TestServerArgs{UseDatabase: "test"},
+		},
+	)
+	ctx := context.TODO()
+	defer tc.Stopper().Stop(ctx)
+
+	conn := tc.ServerConn(0)
+	sqlutils.CreateTable(
+		t,
+		conn,
+		"nums",
+		"num INT",
+		numNodes, /* numRows */
+		sqlutils.ToRowFn(sqlutils.RowIdxFn),
+	)
+
+	r := sqlutils.MakeSQLRunner(tc.ServerConn(0))
+	r.DB.SetMaxOpenConns(1)
+
+	r.Exec(t, "SET DISTSQL = ON")
+	// Force the query to be distributed.
+	r.Exec(
+		t,
+		fmt.Sprintf(`
+			ALTER TABLE nums SPLIT AT VALUES (1);
+			ALTER TABLE nums TESTING_RELOCATE VALUES (ARRAY[%d], 1);
+		`,
+			tc.Server(1).GetFirstStoreID(),
+		),
+	)
+
+	const query = "SELECT COUNT(*) FROM NUMS"
+	expectPlan := func(expectedPlan [][]string) {
+		planQuery := fmt.Sprintf(`SELECT "URL" FROM [EXPLAIN (DISTSQL) %s]`, query)
+		testutils.SucceedsSoon(t, func() error {
+			resultPlan := r.QueryStr(t, planQuery)
+			if !reflect.DeepEqual(resultPlan, expectedPlan) {
+				return errors.Errorf("\nexpected:%v\ngot:%v", expectedPlan, resultPlan)
+			}
+			return nil
+		})
+	}
+
+	// Verify distribution.
+	expectPlan([][]string{{"https://cockroachdb.github.io/distsqlplan/decode.html?eJy8kTFr8zAQhvfvV3zclIKGyEkXTSmdMtQujkOHYoJqHcZgS-YkQUvwfy-2htQmdpuhHXXS8z4vpzNoozCWDVoQr8CBQQQ5g5ZMgdYa6sfh0V69g1gzqHTrXT_OGRSGEMQZXOVqBAGZfKsxRamQgIFCJ6t6CG6paiR97LRvLDBIvBP_Ie8YGO8ucdbJEkHwjv1c-VCWhKV0ZmJ8TI5xdkqTl8PqbtYUzZouAq8NKSRUo_y8u6HL4fh02sfZasfnq2xGVfjf7_kb5S_t-YopRdsabXGy7-vJ6_4fUJUYPs0aTwU-kykGTTgmAzcMFFoXbnk47HW46gt-hfkiHI1gPoWjRfh-2bxZhLfL8Pam2nn37zMAAP__HutTsw=="}})
+
+	// Drain the second node and expect the query to be planned on only the
+	// first node.
+	tc.Server(1).DistSQLServer().(*distsqlrun.ServerImpl).Drain(ctx, 0 /* flowDrainWait */)
+
+	expectPlan([][]string{{"https://cockroachdb.github.io/distsqlplan/decode.html?eJyUkEFLxDAQhe_-CnknhRy2e8xJ8bSXrdQVD1IkNkMotEmZmYCy9L9Lm4O6sOIe502-94U5IiZPezeSwL6iQmswcepIJPESlQc7_wG7MejjlHWJW4MuMcEeob0OBIuDex-oIeeJYeBJXT-spRP3o-PPu5hHgUGd1V6jnQ1S1u86URcItprN_5X3ITAFp-nE-FA_7w9vTf3ydHN71rS9xNSQTCkK_fKca97MrQH5QOWAkjJ39MipWzVlrFduDTyJlm1Vhl0sq-WDP-HqT3h7Arfz1VcAAAD__yAGnrU="}})
+
+	// Verify correctness.
+	var res int
+	if err := r.DB.QueryRow(query).Scan(&res); err != nil {
+		t.Fatal(err)
+	}
+	if res != numNodes {
+		t.Fatalf("expected %d rows but got %d", numNodes, res)
+	}
 }
 
 // testSpanResolverRange describes a range in a test. The ranges are specified

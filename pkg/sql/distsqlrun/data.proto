@@ -249,3 +249,10 @@ message DistSQLVersionGossipInfo {
   optional uint32 min_accepted_version = 2 [(gogoproto.nullable) = false,
                                             (gogoproto.casttype) = "DistSQLVersion"];
 }
+
+// DistSQLDrainingInfo represents the DistSQL draining state that gets gossiped
+// for each node. This is used by planners to avoid planning on nodes that are
+// known to be draining.
+message DistSQLDrainingInfo {
+  optional bool draining = 1 [(gogoproto.nullable) = false];
+}
