@@ -19,6 +19,7 @@ import (
 
 	"golang.org/x/net/context"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -95,6 +96,25 @@ func (n *createIndexNode) Start(params runParams) error {
 		if err := params.p.finalizeInterleave(params.ctx, n.tableDesc, *index); err != nil {
 			return err
 		}
+	}
+
+	if n.n.Inverted {
+		if n.n.Interleave != nil {
+			return pgerror.NewError(pgerror.CodeInvalidSQLStatementNameError, "inverted indexes don't support interleaved columns")
+		}
+
+		if n.n.PartitionBy != nil {
+			return pgerror.NewError(pgerror.CodeInvalidSQLStatementNameError, "inverted indexes don't support partitioning")
+		}
+
+		if len(indexDesc.StoreColumnNames) > 0 {
+			return pgerror.NewError(pgerror.CodeInvalidSQLStatementNameError, "inverted indexes don't support stored columns.")
+		}
+
+		if n.n.Unique {
+			return pgerror.NewError(pgerror.CodeInvalidSQLStatementNameError, "inverted indexes can't be unique")
+		}
+		return pgerror.NewError(pgerror.CodeFeatureNotSupportedError, "inverted indexes are not supported yet")
 	}
 
 	mutationID, err := params.p.createSchemaChangeJob(params.ctx, n.tableDesc,
