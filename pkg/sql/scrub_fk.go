@@ -131,9 +131,6 @@ func (o *sqlForeignKeyCheckOperation) Start(ctx context.Context, p *planner) err
 	if err != nil {
 		rows.Close(ctx)
 		return err
-	} else if rows.Len() == 0 {
-		rows.Close(ctx)
-		rows = nil
 	}
 
 	o.run.started = true
