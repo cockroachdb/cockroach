@@ -1376,6 +1376,12 @@ alter_table_cmd:
       DropBehavior: $4.dropBehavior(),
     }
   }
+| partition_by
+  {
+    $$.val = &tree.AlterTablePartitionBy{
+      PartitionBy: $1.partitionBy(),
+    }
+  }
 
 alter_column_default:
   SET DEFAULT a_expr
@@ -3056,6 +3062,10 @@ partition_by:
       Fields: $5.nameList(),
       Range: $8.rangePartitions(),
     }
+  }
+| PARTITION BY NOTHING
+  {
+    $$.val = (*tree.PartitionBy)(nil)
   }
 
 list_partitions:

@@ -802,6 +802,10 @@ func addPartitionedBy(
 	partBy *tree.PartitionBy,
 	colOffset int,
 ) error {
+	*partDesc = sqlbase.PartitioningDescriptor{}
+	if partBy == nil {
+		return nil
+	}
 	partDesc.NumColumns = uint32(len(partBy.Fields))
 
 	var cols []sqlbase.ColumnDescriptor
@@ -860,6 +864,23 @@ func addPartitionedBy(
 	}
 
 	return nil
+}
+
+// RepartitioningFastPathAvailable returns true when the schema change to
+// validate existing data can be skipped.
+//
+// Each partitioned index guarantees that all rows in that index belong to one
+// of its partitions. Certain repartitionings (removing partitioning entirely, a
+// LIST partitioning that is a superset of the previous partitioning, etc) can
+// assume the the existing data meets this guarantee without checking it via a
+// sort of "inductive proof".
+var RepartitioningFastPathAvailable = func(
+	oldTableDesc, newTableDesc *sqlbase.TableDescriptor,
+) (bool, error) {
+	// TODO(dan): non-ccl binaries should be able to removing partitionings. The
+	// logic for this is simple, but I'm intentionally leaving it unimplemented
+	// until there is a test for it.
+	return false, errors.New("repartitioning in a non-ccl binary is currently unimplimented")
 }
 
 func initTableDescriptor(
