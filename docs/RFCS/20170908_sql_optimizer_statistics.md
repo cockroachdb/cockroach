@@ -1,5 +1,5 @@
 - Feature Name: SQL Optimizer Statistics
-- Status: draft
+- Status: in-progress
 - Start Date: 2017-09-08
 - Authors: Peter Mattis, Radu Berinde
 - RFC PR: [#18399](https:////github.com/cockroachdb/cockroach/pull/18399)
