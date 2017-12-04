@@ -15,6 +15,9 @@ statement ok
 SHOW GRANTS ON t
 
 statement ok
+CREATE USER bar
+
+statement ok
 GRANT ALL ON t TO bar
 
 statement ok
