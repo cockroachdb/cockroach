@@ -6,7 +6,10 @@ export CLOUDSDK_CORE_PROJECT=${CLOUDSDK_CORE_PROJECT-${GCEWORKER_PROJECT-cockroa
 export CLOUDSDK_COMPUTE_ZONE=${GCEWORKER_ZONE-${CLOUDSDK_COMPUTE_ZONE-us-east1-b}}
 NAME=${GCEWORKER_NAME-gceworker-$(id -un)}
 
-case ${1-} in
+command=${1-}
+shift
+
+case ${command} in
     create)
     gcloud compute instances \
            create "${NAME}" \
@@ -32,20 +35,19 @@ case ${1-} in
 
     ;;
     start)
-    gcloud compute instances start "${NAME}"
+    gcloud compute instances start "${NAME}" "$@"
     ;;
     stop)
-    gcloud compute instances stop "${NAME}"
+    gcloud compute instances stop "${NAME}" "$@"
     ;;
     delete)
-    gcloud compute instances delete "${NAME}"
+    gcloud compute instances delete "${NAME}" "$@"
     ;;
     ssh)
-    shift
     gcloud compute ssh "${NAME}" --ssh-flag="-A" "$@"
     ;;
     *)
-    echo "$0: unknown command: ${1-}, use one of create, start, stop, delete, or ssh"
+    echo "$0: unknown command: ${command}, use one of create, start, stop, delete, or ssh"
     exit 1
     ;;
 esac
