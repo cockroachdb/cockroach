@@ -76,6 +76,10 @@ const (
 	// KeyDistSQLNodeVersionKeyPrefix is key prefix for each node's DistSQL
 	// version.
 	KeyDistSQLNodeVersionKeyPrefix = "distsql-version"
+
+	// KeyDistSQLDrainingPrefix is the key prefix for each node's DistSQL
+	// draining state.
+	KeyDistSQLDrainingPrefix = "distsql-draining"
 )
 
 // MakeKey creates a canonical key under which to gossip a piece of
@@ -136,4 +140,10 @@ func MakeDeadReplicasKey(storeID roachpb.StoreID) string {
 // MakeDistSQLNodeVersionKey returns the gossip key for the given store.
 func MakeDistSQLNodeVersionKey(nodeID roachpb.NodeID) string {
 	return MakeKey(KeyDistSQLNodeVersionKeyPrefix, nodeID.String())
+}
+
+// MakeDistSQLDrainingKey returns the gossip key for the given node's distsql
+// draining state.
+func MakeDistSQLDrainingKey(nodeID roachpb.NodeID) string {
+	return MakeKey(KeyDistSQLDrainingPrefix, nodeID.String())
 }
