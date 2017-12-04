@@ -149,6 +149,10 @@ func (l *legacyTransportAdapter) IsExhausted() bool {
 	return l.called
 }
 
+func (l *legacyTransportAdapter) GetPending() []roachpb.ReplicaDescriptor {
+	return nil
+}
+
 func (l *legacyTransportAdapter) SendNext(ctx context.Context, done chan<- BatchCall) {
 	l.called = true
 	br, err := l.fn(ctx, l.opts, l.replicas, l.args, l.rpcContext)

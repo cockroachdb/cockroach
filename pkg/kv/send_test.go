@@ -89,6 +89,10 @@ func (f *firstNErrorTransport) IsExhausted() bool {
 	return f.numSent >= len(f.replicas)
 }
 
+func (f *firstNErrorTransport) GetPending() []roachpb.ReplicaDescriptor {
+	return nil
+}
+
 func (f *firstNErrorTransport) SendNext(_ context.Context, done chan<- BatchCall) {
 	call := BatchCall{
 		Reply: &roachpb.BatchResponse{},
