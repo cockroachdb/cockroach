@@ -128,6 +128,10 @@ func (p *planner) selectIndex(
 	if s.filter != nil {
 		// Analyze the filter expression, simplifying it and splitting it up into
 		// possibly overlapping ranges.
+
+		// Removes any unnecessary IS NOT NULL filters on non-nullable columns.
+		s.filter = trimUselessNotNullFilter(s, p)
+
 		exprs, equivalent := decomposeExpr(&p.evalCtx, s.filter)
 		if log.V(2) {
 			log.Infof(ctx, "analyzeExpr: %s -> %s [equivalent=%v]", s.filter, exprs, equivalent)
@@ -265,6 +269,27 @@ func (p *planner) selectIndex(
 	}
 
 	return plan, nil
+}
+
+// Removes any unnecessary IS NOT NULL filters on non-nullable columns.
+func trimUselessNotNullFilter(sn *scanNode, p *planner) tree.TypedExpr {
+	var newFilter tree.TypedExpr = tree.DBoolTrue
+	andExprs := splitAndExpr(&p.evalCtx, sn.filter, nil)
+	for _, e := range andExprs {
+		if c, cok := e.(*tree.ComparisonExpr); cok &&
+			c.Operator == tree.IsNot && c.Right == tree.DNull {
+			if ok, idx := getColVarIdx(c.Left); ok {
+				// TODO(radu): we don't use props.notNullCols because those
+				// get initialized later.We should compute them earlier and
+				// generalize this optimization to work on any filterNode.
+				if !sn.desc.Columns[idx].Nullable {
+					e = tree.DBoolTrue
+				}
+			}
+		}
+		newFilter = mergeConj(newFilter, e)
+	}
+	return newFilter
 }
 
 type indexConstraint struct {
