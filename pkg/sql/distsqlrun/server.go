@@ -144,7 +144,8 @@ type ServerConfig struct {
 	// JobRegistry manages jobs being used by this Server.
 	JobRegistry *jobs.Registry
 
-	// A handle to gossip used to broadcast the node's DistSQL version.
+	// A handle to gossip used to broadcast the node's DistSQL version and
+	// draining state.
 	Gossip *gossip.Gossip
 }
 
@@ -194,19 +195,52 @@ func (ds *ServerImpl) Start() {
 		panic(err)
 	}
 
+	if err := ds.setDraining(false); err != nil {
+		panic(err)
+	}
+
 	ds.flowScheduler.Start()
 }
 
-// Drain drains the server's flowRegistry. See flowRegistry.Drain for more
-// details.
-func (ds *ServerImpl) Drain(flowDrainWait time.Duration) {
-	ds.flowRegistry.Drain(flowDrainWait, minFlowDrainWait)
+// Drain changes the node's draining state through gossip and drains the
+// server's flowRegistry. See flowRegistry.Drain for more details.
+func (ds *ServerImpl) Drain(ctx context.Context, flowDrainWait time.Duration) {
+	if err := ds.setDraining(true); err != nil {
+		log.Warningf(ctx, "unable to gossip distsql draining state: %s", err)
+	}
+
+	flowWait := flowDrainWait
+	minWait := minFlowDrainWait
+	if ds.ServerConfig.TestingKnobs.DrainFast {
+		flowWait = 0
+		minWait = 0
+	} else if len(ds.Gossip.Outgoing()) == 0 {
+		// If there is only one node in the cluster (us), there's no need to
+		// wait a minimum time for the draining state to be gossiped.
+		minWait = 0
+	}
+	ds.flowRegistry.Drain(flowWait, minWait)
 }
 
-// Undrain undrains the server's flowRegistry. See flowRegistry.Undrain for more
-// details.
-func (ds *ServerImpl) Undrain() {
+// Undrain changes the node's draining state through gossip and undrains the
+// server's flowRegistry. See flowRegistry.Undrain for more details.
+func (ds *ServerImpl) Undrain(ctx context.Context) {
 	ds.flowRegistry.Undrain()
+	if err := ds.setDraining(false); err != nil {
+		log.Warningf(ctx, "unable to gossip distsql draining state: %s", err)
+	}
+}
+
+// setDraining changes the node's draining state through gossip to the provided
+// state.
+func (ds *ServerImpl) setDraining(drain bool) error {
+	return ds.ServerConfig.Gossip.AddInfoProto(
+		gossip.MakeDistSQLDrainingKey(ds.ServerConfig.NodeID.Get()),
+		&DistSQLDrainingInfo{
+			Draining: drain,
+		},
+		0, // ttl - no expiration
+	)
 }
 
 // FlowVerIsCompatible checks a flow's version is compatible with this node's
@@ -458,6 +492,11 @@ type TestingKnobs struct {
 	// enable. Once this limit is hit, processors employ their on-disk
 	// implementation regardless of applicable cluster settings.
 	MemoryLimitBytes int64
+
+	// DrainFast, if enabled, causes the server to not wait for any currently
+	// running flows to complete or give a grace period of minFlowDrainWait
+	// to incoming flows to register.
+	DrainFast bool
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.
