@@ -1352,7 +1352,7 @@ func (s *Server) doDrain(
 				defer s.leaseMgr.SetDraining(setTo)
 
 				if !setTo {
-					s.distSQLServer.Undrain()
+					s.distSQLServer.Undrain(ctx)
 					s.pgServer.Undrain()
 					return nil
 				}
@@ -1361,7 +1361,7 @@ func (s *Server) doDrain(
 				if err := s.pgServer.Drain(drainMaxWait); err != nil {
 					return err
 				}
-				s.distSQLServer.Drain(drainMaxWait)
+				s.distSQLServer.Drain(ctx, drainMaxWait)
 				return nil
 			}(); err != nil {
 				return nil, err
