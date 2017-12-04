@@ -352,9 +352,9 @@ func TestMakeSpans(t *testing.T) {
 		{`c != false`, `c`, `/1-`, `-/0`},
 		{`NOT c`, `c`, `/!NULL-/1`, `/0-/NULL`},
 		{`c IS TRUE`, `c`, `/1-/2`, `/1-/0`},
-		{`c IS NOT TRUE`, `c`, `-/1`, `/0-`},
+		{`c IS NOT TRUE`, `c`, `/NULL-/1`, `/0-`},
 		{`c IS FALSE`, `c`, `/0-/1`, `/0-/-1`},
-		{`c IS NOT FALSE`, `c`, `-/!NULL /1-`, `-/0 /NULL-`},
+		{`c IS NOT FALSE`, `c`, `/NULL-/!NULL /1-`, `-/0 /NULL-`},
 
 		{`a = 1`, `a`, `/1-/2`, `/1-/0`},
 		{`a != 1`, `a`, `/!NULL-`, `-/NULL`},
@@ -362,7 +362,7 @@ func TestMakeSpans(t *testing.T) {
 		{`a >= 1`, `a`, `/1-`, `-/0`},
 		{`a < 1`, `a`, `/!NULL-/1`, `/0-/NULL`},
 		{`a <= 1`, `a`, `/!NULL-/2`, `/1-/NULL`},
-		{`a IS NULL`, `a`, `-/!NULL`, `/NULL-`},
+		{`a IS NULL`, `a`, `/NULL-/!NULL`, `/NULL-`},
 		{`a IS NOT NULL`, `a`, `/!NULL-`, `-/NULL`},
 
 		{`a IN (1,2,3)`, `a`, `/1-/4`, `/3-/0`},
@@ -387,7 +387,7 @@ func TestMakeSpans(t *testing.T) {
 		{`a = 1 AND b >= 1`, `a,b`, `/1/1-/2`, `/1-/1/0`},
 		{`a = 1 AND b < 1`, `a,b`, `/1/!NULL-/1/1`, `/1/0-/1/NULL`},
 		{`a = 1 AND b <= 1`, `a,b`, `/1/!NULL-/1/2`, `/1/1-/1/NULL`},
-		{`a = 1 AND b IS NULL`, `a,b`, `/1-/1/!NULL`, `/1/NULL-/0`},
+		{`a = 1 AND b IS NULL`, `a,b`, `/1/NULL-/1/!NULL`, `/1/NULL-/0`},
 		{`a = 1 AND b IS NOT NULL`, `a,b`, `/1/!NULL-/2`, `/1-/1/NULL`},
 
 		{`a != 1 AND b = 1`, `a,b`, `/!NULL-`, `-/NULL`},
@@ -405,7 +405,7 @@ func TestMakeSpans(t *testing.T) {
 		{`a > 1 AND b >= 1`, `a,b`, `/2/1-`, `-/2/0`},
 		{`a > 1 AND b < 1`, `a,b`, `/2-`, `-/1`},
 		{`a > 1 AND b <= 1`, `a,b`, `/2-`, `-/1`},
-		{`a > 1 AND b IS NULL`, `a,b`, `/2-`, `-/1`},
+		{`a > 1 AND b IS NULL`, `a,b`, `/2/NULL-`, `-/1`},
 		{`a > 1 AND b IS NOT NULL`, `a,b`, `/2/!NULL-`, `-/2/NULL`},
 
 		{`a >= 1 AND b = 1`, `a,b`, `/1/1-`, `-/1/0`},
@@ -414,7 +414,7 @@ func TestMakeSpans(t *testing.T) {
 		{`a >= 1 AND b >= 1`, `a,b`, `/1/1-`, `-/1/0`},
 		{`a >= 1 AND b < 1`, `a,b`, `/1-`, `-/0`},
 		{`a >= 1 AND b <= 1`, `a,b`, `/1-`, `-/0`},
-		{`a >= 1 AND b IS NULL`, `a,b`, `/1-`, `-/0`},
+		{`a >= 1 AND b IS NULL`, `a,b`, `/1/NULL-`, `-/0`},
 		{`a >= 1 AND b IS NOT NULL`, `a,b`, `/1/!NULL-`, `-/1/NULL`},
 
 		{`a < 1 AND b = 1`, `a,b`, `/!NULL-/0/2`, `/0/1-/NULL`},
@@ -441,7 +441,7 @@ func TestMakeSpans(t *testing.T) {
 		{`a IN (1) AND b >= 1`, `a,b`, `/1/1-/2`, `/1-/1/0`},
 		{`a IN (1) AND b < 1`, `a,b`, `/1/!NULL-/1/1`, `/1/0-/1/NULL`},
 		{`a IN (1) AND b <= 1`, `a,b`, `/1/!NULL-/1/2`, `/1/1-/1/NULL`},
-		{`a IN (1) AND b IS NULL`, `a,b`, `/1-/1/!NULL`, `/1/NULL-/0`},
+		{`a IN (1) AND b IS NULL`, `a,b`, `/1/NULL-/1/!NULL`, `/1/NULL-/0`},
 		{`a IN (1) AND b IS NOT NULL`, `a,b`, `/1/!NULL-/2`, `/1-/1/NULL`},
 
 		{`(a, b) = (1, 2)`, `a`, `/1-/2`, `/1-/0`},

@@ -950,8 +950,24 @@ func (t *logicTest) processTestFile(path string, config testClusterConfig) error
 				query.colTypes = fields[1]
 				if len(fields) >= 3 {
 					query.rawOpts = fields[2]
-					for _, opt := range strings.Split(query.rawOpts, ",") {
 
+					tokens := strings.Split(query.rawOpts, ",")
+
+					// One of the options can be partialSort(1,2,3); we want this to be
+					// a single token.
+					for i := 0; i < len(tokens)-1; i++ {
+						if strings.HasPrefix(tokens[i], "partialsort(") && !strings.HasSuffix(tokens[i], ")") {
+							// Merge this token with the next.
+							tokens[i] = tokens[i] + "," + tokens[i+1]
+							// Delete tokens[i+1].
+							copy(tokens[i+1:], tokens[i+2:])
+							tokens = tokens[:len(tokens)-1]
+							// Look at the new token again.
+							i--
+						}
+					}
+
+					for _, opt := range tokens {
 						if strings.HasPrefix(opt, "partialsort(") && strings.HasSuffix(opt, ")") {
 							s := opt
 							s = strings.TrimPrefix(s, "partialsort(")
