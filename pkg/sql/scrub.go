@@ -24,6 +24,7 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/scrub"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -169,15 +170,6 @@ func (n *scrubNode) Close(ctx context.Context) {
 		n.run.checkQueue = n.run.checkQueue[1:]
 	}
 }
-
-const (
-	// ScrubErrorMissingIndexEntry occurs when a primary k/v is missing a
-	// corresponding secondary index k/v.
-	ScrubErrorMissingIndexEntry = "missing_index_entry"
-	// ScrubErrorDanglingIndexReference occurs when a secondary index k/v
-	// points to a non-existing primary k/v.
-	ScrubErrorDanglingIndexReference = "dangling_index_reference"
-)
 
 // startScrubDatabase prepares a scrub check for each of the tables in
 // the database. Views are skipped without errors.
@@ -465,13 +457,13 @@ func (o *indexCheckOperation) Next(ctx context.Context, p *planner) (tree.Datums
 	var errorType tree.Datum
 	var primaryKeyDatums tree.Datums
 	if isMissingIndexReferenceError {
-		errorType = tree.NewDString(ScrubErrorMissingIndexEntry)
+		errorType = tree.NewDString(scrub.MissingIndexEntryError)
 		// Fetch the primary index values from the primary index row data.
 		for _, rowIdx := range o.primaryColIdxs {
 			primaryKeyDatums = append(primaryKeyDatums, row[rowIdx])
 		}
 	} else {
-		errorType = tree.NewDString(ScrubErrorDanglingIndexReference)
+		errorType = tree.NewDString(scrub.DanglingIndexReferenceError)
 		// Fetch the primary index values from the secondary index row
 		// data, because no primary index was found. The secondary index columns
 		// are offset by the length of the distinct columns, as the first

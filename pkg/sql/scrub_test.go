@@ -25,7 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/scrub"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -129,9 +129,9 @@ INSERT INTO t.test VALUES (10, 20);
 	if len(results) != 1 {
 		t.Fatalf("expected 1 result, got %d. got %#v", len(results), results)
 	}
-	if result := results[0]; result.errorType != sql.ScrubErrorMissingIndexEntry {
+	if result := results[0]; result.errorType != scrub.MissingIndexEntryError {
 		t.Fatalf("expected %q error, instead got: %s",
-			sql.ScrubErrorMissingIndexEntry, result.errorType)
+			scrub.MissingIndexEntryError, result.errorType)
 	} else if result.database != "t" {
 		t.Fatalf("expected database %q, got %q", "t", result.database)
 	} else if result.table != "test" {
@@ -199,9 +199,9 @@ CREATE INDEX secondary ON t.test (v);
 	if len(results) != 1 {
 		t.Fatalf("expected 1 result, got %d. got %#v", len(results), results)
 	}
-	if result := results[0]; result.errorType != sql.ScrubErrorDanglingIndexReference {
+	if result := results[0]; result.errorType != scrub.DanglingIndexReferenceError {
 		t.Fatalf("expected %q error, instead got: %s",
-			sql.ScrubErrorDanglingIndexReference, result.errorType)
+			scrub.DanglingIndexReferenceError, result.errorType)
 	} else if result.database != "t" {
 		t.Fatalf("expected database %q, got %q", "t", result.database)
 	} else if result.table != "test" {
@@ -307,14 +307,14 @@ INSERT INTO t.test VALUES (10, 20, 1337);
 	// Assert the missing index error is correct.
 	var missingIndexError *scrubResult
 	for _, result := range results {
-		if result.errorType == sql.ScrubErrorMissingIndexEntry {
+		if result.errorType == scrub.MissingIndexEntryError {
 			missingIndexError = &result
 			break
 		}
 	}
 	if result := missingIndexError; result == nil {
 		t.Fatalf("expected errors to include %q error, but got errors: %#v",
-			sql.ScrubErrorMissingIndexEntry, results)
+			scrub.MissingIndexEntryError, results)
 	} else if result.database != "t" {
 		t.Fatalf("expected database %q, got %q", "t", result.database)
 	} else if result.table != "test" {
@@ -330,14 +330,14 @@ INSERT INTO t.test VALUES (10, 20, 1337);
 	// Assert the dangling index error is correct.
 	var danglingIndexResult *scrubResult
 	for _, result := range results {
-		if result.errorType == sql.ScrubErrorDanglingIndexReference {
+		if result.errorType == scrub.DanglingIndexReferenceError {
 			danglingIndexResult = &result
 			break
 		}
 	}
 	if result := danglingIndexResult; result == nil {
 		t.Fatalf("expected errors to include %q error, but got errors: %#v",
-			sql.ScrubErrorDanglingIndexReference, results)
+			scrub.DanglingIndexReferenceError, results)
 	} else if result.database != "t" {
 		t.Fatalf("expected database %q, got %q", "t", result.database)
 	} else if result.table != "test" {
@@ -422,9 +422,9 @@ INSERT INTO t.test VALUES (10, 2);
 		t.Fatalf("expected 1 result, got %d. got %#v", len(results), results)
 	}
 
-	if result := results[0]; result.errorType != string(sql.ScrubErrorCheckConstraintViolation) {
+	if result := results[0]; result.errorType != string(scrub.CheckConstraintViolation) {
 		t.Fatalf("expected %q error, instead got: %s",
-			sql.ScrubErrorCheckConstraintViolation, result.errorType)
+			scrub.CheckConstraintViolation, result.errorType)
 	} else if result.database != "t" {
 		t.Fatalf("expected database %q, got %q", "t", result.database)
 	} else if result.table != "test" {
@@ -525,9 +525,9 @@ INSERT INTO t.child VALUES (10, 314);
 		t.Fatalf("expected 1 result, got %d. got %#v", len(results), results)
 	}
 
-	if result := results[0]; result.errorType != string(sql.ScrubErrorForeignKeyConstraintViolation) {
+	if result := results[0]; result.errorType != string(scrub.ForeignKeyConstraintViolation) {
 		t.Fatalf("expected %q error, instead got: %s",
-			sql.ScrubErrorForeignKeyConstraintViolation, result.errorType)
+			scrub.ForeignKeyConstraintViolation, result.errorType)
 	} else if result.database != "t" {
 		t.Fatalf("expected database %q, got %q", "t", result.database)
 	} else if result.table != "child" {
@@ -630,9 +630,9 @@ INSERT INTO t.child VALUES (11, 1337, 300);
 		t.Fatalf("expected 1 result, got %d. got %#v", len(results), results)
 	}
 
-	if result := results[0]; result.errorType != string(sql.ScrubErrorForeignKeyConstraintViolation) {
+	if result := results[0]; result.errorType != string(scrub.ForeignKeyConstraintViolation) {
 		t.Fatalf("expected %q error, instead got: %s",
-			sql.ScrubErrorForeignKeyConstraintViolation, result.errorType)
+			scrub.ForeignKeyConstraintViolation, result.errorType)
 	} else if result.database != "t" {
 		t.Fatalf("expected database %q, got %q", "t", result.database)
 	} else if result.table != "child" {

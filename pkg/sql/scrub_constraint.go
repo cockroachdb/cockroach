@@ -20,14 +20,9 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/scrub"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
-)
-
-const (
-	// ScrubErrorCheckConstraintViolation occurs when a row in a table is
-	// violating a check constraint.
-	ScrubErrorCheckConstraintViolation = "check_constraint_violation"
 )
 
 // sqlCheckConstraintCheckOperation is a check which validates a SQL
@@ -155,7 +150,7 @@ func (o *sqlCheckConstraintCheckOperation) Next(
 	return tree.Datums{
 		// TODO(joey): Add the job UUID once the SCRUB command uses jobs.
 		tree.DNull, /* job_uuid */
-		tree.NewDString(ScrubErrorCheckConstraintViolation),
+		tree.NewDString(scrub.CheckConstraintViolation),
 		tree.NewDString(o.tableName.Database()),
 		tree.NewDString(o.tableName.Table()),
 		tree.NewDString(primaryKeyDatums.String()),
