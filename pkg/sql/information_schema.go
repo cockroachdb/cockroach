@@ -892,7 +892,7 @@ func forEachUser(ctx context.Context, origPlanner *planner, fn func(username str
 	defer finishInternalPlanner(p)
 	rows, err := p.queryRows(ctx, query)
 	if err != nil {
-		return nil
+		return err
 	}
 
 	for _, row := range rows {
