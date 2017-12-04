@@ -1,5 +1,5 @@
 - Feature Name: Deprecate the distinction between "traditional and modern syntax"
-- Status: draft
+- Status: completed
 - Start Date: 2017-04-16
 - Authors: Matt Jibson, knz
 - RFC PR: [#14968](https://github.com/cockroachdb/cockroach/pull/14968)

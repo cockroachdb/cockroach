@@ -1,8 +1,9 @@
 - Feature Name: SQL Table Partitioning
-- Status: draft
+- Status: in-progress
 - Start Date: 2017-01-25
 - Authors: Daniel Harrison, David Taylor
-- RFC PR: (PR # after acceptance of initial draft)
+- RFC PR: [#13497](https://github.com/cockroachdb/cockroach/pull/13497)
+- Cockroach Issue: [#16978](https://github.com/cockroachdb/cockroach/issues/16978)
 
 # Summary
 
