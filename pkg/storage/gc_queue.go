@@ -31,12 +31,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/abortspan"
+	"github.com/cockroachdb/cockroach/pkg/storage/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
@@ -86,8 +88,8 @@ const (
 //    as implemented going forward).
 //  - Resolve extant write intents (pushing their transactions).
 //  - GC of old transaction and AbortSpan entries. This should include
-//    most committed entries almost immediately and, after a threshold on
-//    inactivity, all others.
+//    most committed and aborted entries almost immediately and, after a
+//    threshold on inactivity, all others.
 //
 // The shouldQueue function combines the need for the above tasks into a
 // single priority. If any task is overdue, shouldQueue returns true.
@@ -114,8 +116,10 @@ func newGCQueue(store *Store, gossip *gossip.Gossip) *gcQueue {
 	return gcq
 }
 
+type gcFunc func([]roachpb.GCRequest_GCKey, *GCInfo) error
 type pushFunc func(hlc.Timestamp, *roachpb.Transaction, roachpb.PushTxnType)
 type resolveFunc func([]roachpb.Intent, ResolveOptions) error
+type processAsyncFunc func(*roachpb.Transaction, []roachpb.Intent) error
 
 // gcQueueScore holds details about the score returned by makeGCQueueScoreImpl for
 // testing and logging. The fields in this struct are documented in
@@ -351,13 +355,15 @@ func makeGCQueueScoreImpl(
 // processLocalKeyRange scans the local range key entries, consisting of
 // transaction records, queue last processed timestamps, and range descriptors.
 //
-// - Transaction entries: updates txnMap with those transactions which
-//   are old and either PENDING or with intents registered. In the
-//   first case we want to push the transaction so that it is aborted,
-//   and in the second case we may have to resolve the intents
-//   success- fully before GCing the entry. The transaction records
-//   which can be gc'ed are returned separately and are not added to
-//   txnMap nor intentSpanMap.
+// - Transaction entries:
+//   - Update txnMap with transactions which are old and in state
+//     PENDING for subsequent PushTxn.
+//   - For transactions in state ABORTED or COMMITTED, schedule the
+//     intents for asynchronous resolution. The actual transaction spans
+//     are not returned for GC in this pass, but are separately GC'ed
+//     after successful resolution of all intents. The exception is if
+//     there are no intents on the txn record, in which case it's returned
+//     for immediate GC.
 //
 // - Queue last processed times: cleanup any entries which don't match
 //   this range's start key. This can happen on range merges.
@@ -368,14 +374,20 @@ func processLocalKeyRange(
 	txnMap map[uuid.UUID]*roachpb.Transaction,
 	cutoff hlc.Timestamp,
 	infoMu *lockableGCInfo,
-	resolveIntentsFn resolveFunc,
+	processAsyncFn processAsyncFunc,
 ) ([]roachpb.GCRequest_GCKey, error) {
 	infoMu.Lock()
 	defer infoMu.Unlock()
 
 	var gcKeys []roachpb.GCRequest_GCKey
 
-	const maxIntentHack = 800
+	handleTxnIntents := func(key roachpb.Key, txn *roachpb.Transaction) error {
+		if len(txn.Intents) > 0 {
+			return processAsyncFn(txn, roachpb.AsIntents(txn.Intents, txn))
+		}
+		gcKeys = append(gcKeys, roachpb.GCRequest_GCKey{Key: key}) // zero timestamp
+		return nil
+	}
 
 	handleOneTransaction := func(kv roachpb.KeyValue) error {
 		var txn roachpb.Transaction
@@ -400,62 +412,18 @@ func processLocalKeyRange(
 			infoMu.TransactionSpanGCPending++
 			txnMap[txnID] = &txn
 			return nil
-		case roachpb.ABORTED:
-			// If we remove this transaction, it effectively still counts as
-			// ABORTED (by design). So this can be GC'ed even if we can't
-			// resolve the intents.
-			// Note: Most aborted transaction weren't aborted by their client,
-			// but instead by the coordinator - those will not have any intents
-			// persisted, though they still might exist in the system.
-			infoMu.TransactionSpanGCAborted++
-			if err := func() error {
-				// Simply don't resolve these intents. We don't have to and don't want to get bogged down
-				// trying to do so.
-				if len(txn.Intents) > maxIntentHack {
-					return nil
-				}
-				infoMu.Unlock() // intentional
-				defer infoMu.Lock()
-				return resolveIntentsFn(roachpb.AsIntents(txn.Intents, &txn),
-					ResolveOptions{Wait: true, Poison: false})
-			}(); err != nil {
-				// Ignore above error, but if context is expired, no point in keeping going.
-				if ctx.Err() != nil {
-					return errors.Wrap(err, "context timed out during local key range processing after")
-				}
-				log.Warningf(ctx, "failed to resolve intents of aborted txn on gc (removing anyway): %s", err)
-				// Keep going.
-			}
-		case roachpb.COMMITTED:
-			// It's committed, so it doesn't need a push but we can only
-			// GC it after its intents are resolved.
-			if err := func() error {
-				infoMu.Unlock() // intentional
-				defer infoMu.Lock()
 
-				if len(txn.Intents) > maxIntentHack {
-					// Return an error so that we leave this transaction alone. Don't try to resolve its intents.
-					return errors.Errorf("cannot GC transaction with %d intents", len(txn.Intents))
-				}
-				return resolveIntentsFn(roachpb.AsIntents(txn.Intents, &txn), ResolveOptions{Wait: true, Poison: false})
-			}(); err != nil {
-				// Returning the error here would abort the whole GC run, and
-				// we don't want that. Instead, we simply don't GC this entry.
-				if ctx.Err() != nil {
-					// ... but if our context is expired, no need to keep going.
-					return errors.Wrap(err, "context timed out during local key range processing after")
-				}
-				log.Warningf(ctx, "unable to resolve intents of committed txn on gc; skipping: %s", err)
-				// Do not keep going, or we'll still remove this transaction, and we're not
-				// allowed to unless the intents are certifiably removed.
-				return nil
-			}
+		case roachpb.ABORTED:
+			infoMu.TransactionSpanGCAborted++
+			return handleTxnIntents(kv.Key, &txn)
+
+		case roachpb.COMMITTED:
 			infoMu.TransactionSpanGCCommitted++
+			return handleTxnIntents(kv.Key, &txn)
+
 		default:
 			panic(fmt.Sprintf("invalid transaction state: %s", txn))
 		}
-		gcKeys = append(gcKeys, roachpb.GCRequest_GCKey{Key: kv.Key}) // zero timestamp
-		return nil
 	}
 
 	handleOneQueueLastProcessed := func(kv roachpb.KeyValue, rangeKey roachpb.RKey) error {
@@ -544,7 +512,7 @@ func processAbortSpan(
 // 3) scan the transaction table, collecting abandoned or completed txns
 // 4) push all of these transactions (possibly recreating entries)
 // 5) resolve all intents (unless the txn is still PENDING), which will recreate
-//    AbortSpan entries (but with the txn timestamp; i.e. likely gc'able)
+//    AbortSpan entries (but with the txn timestamp; i.e. likely GC'able)
 // 6) scan the AbortSpan table for old entries
 // 7) push these transactions (again, recreating txn entries).
 // 8) send a GCRequest.
@@ -609,46 +577,70 @@ func (gcq *gcQueue) processImpl(
 		return errors.Errorf("could not find zone config for range %s: %s", repl, err)
 	}
 
-	gcKeys, info, err := RunGC(ctx, desc, snap, now, zone.GC,
+	info, err := RunGC(ctx, desc, snap, now, zone.GC,
+		func(gcKeys []roachpb.GCRequest_GCKey, info *GCInfo) error {
+			// Chunk the keys into multiple GC requests to interleave more
+			// gracefully with other Raft traffic.
+			batches := chunkGCRequest(desc, info, gcKeys)
+
+			for i, gcArgs := range batches {
+				var ba roachpb.BatchRequest
+
+				// Technically not needed since we're talking directly to the Range.
+				ba.RangeID = desc.RangeID
+				ba.Timestamp = now
+
+				// TODO(tschottdorf): This is one of these instances in which we want
+				// to be more careful that the request ends up on the correct Replica,
+				// and we might have to worry about mixing range-local and global keys
+				// in a batch which might end up spanning Ranges by the time it executes.
+				ba.Add(&gcArgs)
+				log.Eventf(ctx, "sending batch %d of %d", i+1, len(batches))
+				if _, pErr := repl.Send(ctx, ba); pErr != nil {
+					log.ErrEvent(ctx, pErr.String())
+					return pErr.GoError()
+				}
+			}
+			return nil
+		},
 		func(now hlc.Timestamp, txn *roachpb.Transaction, typ roachpb.PushTxnType) {
 			pushTxn(ctx, gcq.store.DB(), now, txn, typ)
 		},
 		func(intents []roachpb.Intent, opts ResolveOptions) error {
 			return repl.store.intentResolver.resolveIntents(ctx, intents, opts)
+		},
+		func(txn *roachpb.Transaction, intents []roachpb.Intent) error {
+			// Synthesize an EndTransaction request in order to send IntentsWithArgs.
+			iwa := result.IntentsWithArg{
+				Arg: &roachpb.EndTransactionRequest{
+					Span:   roachpb.Span{Key: txn.Key},
+					Commit: txn.Status == roachpb.COMMITTED,
+				},
+				Intents: intents,
+			}
+			// We really do not want to hang up the queue on this kind of
+			// processing, so it's better to just skip txns which we can't
+			// pass to the async processor (allowSyncProcessing=false).
+			// Their intents will get cleaned up on demand, and we'll
+			// eventually get back to them. Not much harm in having old txn
+			// records lying around in the meantime.
+			err := repl.store.intentResolver.processIntentsAsync(
+				ctx, repl, []result.IntentsWithArg{iwa}, false, /* allowSyncProcessing */
+			)
+			if errors.Cause(err) == stop.ErrThrottled {
+				log.Eventf(ctx, "processing txn %s: %s; skipping for future GC", txn.ID.Short(), err)
+				return nil
+			}
+			return err
 		})
-
 	if err != nil {
 		return err
 	}
 
-	log.Eventf(ctx, "MVCC stats: %+v", repl.GetMVCCStats())
-	log.Eventf(ctx, "assembled GC keys, now proceeding to GC; stats so far %+v", info)
-	defer func() {
-		info.updateMetrics(gcq.store.metrics)
-	}()
+	log.Eventf(ctx, "MVCC stats after GC: %+v", repl.GetMVCCStats())
+	log.Eventf(ctx, "GC score after GC: %s", makeGCQueueScore(ctx, repl, repl.store.Clock().Now(), sysCfg))
+	info.updateMetrics(gcq.store.metrics)
 
-	batches := chunkGCRequest(desc, &info, gcKeys)
-
-	for i, gcArgs := range batches {
-		var ba roachpb.BatchRequest
-
-		// Technically not needed since we're talking directly to the Range.
-		ba.RangeID = desc.RangeID
-		ba.Timestamp = now
-
-		// TODO(tschottdorf): This is one of these instances in which we want
-		// to be more careful that the request ends up on the correct Replica,
-		// and we might have to worry about mixing range-local and global keys
-		// in a batch which might end up spanning Ranges by the time it executes.
-		ba.Add(&gcArgs)
-		log.Eventf(ctx, "sending batch %d of %d", i+1, len(batches))
-		if _, pErr := repl.Send(ctx, ba); pErr != nil {
-			log.ErrEvent(ctx, pErr.String())
-			return pErr.GoError()
-		}
-	}
-
-	log.Eventf(ctx, "done GC'ing, new score is %s", makeGCQueueScore(ctx, repl, repl.store.Clock().Now(), sysCfg))
 	return nil
 }
 
@@ -711,20 +703,23 @@ type lockableGCInfo struct {
 	GCInfo
 }
 
-// RunGC runs garbage collection for the specified descriptor on the provided
-// Engine (which is not mutated). It uses the provided functions pushTxnFn and
-// resolveIntentsFn to clarify the true status of and clean up after encountered
-// transactions. It returns a slice of gc'able keys from the data, transaction,
-// and abort spans.
+// RunGC runs garbage collection for the specified descriptor on the
+// provided Engine (which is not mutated). It uses the provided
+// pushTxnFn to clarify the true status of a transaction,
+// resolveIntentsFn to resolve intents synchronously, and
+// processAsyncFn to asynchronously cleanup after encountered
+// transactions.
 func RunGC(
 	ctx context.Context,
 	desc *roachpb.RangeDescriptor,
 	snap engine.Reader,
 	now hlc.Timestamp,
 	policy config.GCPolicy,
+	gcFn gcFunc,
 	pushTxnFn pushFunc,
 	resolveIntentsFn resolveFunc,
-) ([]roachpb.GCRequest_GCKey, GCInfo, error) {
+	processAsyncFn processAsyncFunc,
+) (GCInfo, error) {
 
 	iter := NewReplicaDataIterator(desc, snap, true /* replicatedOnly */)
 	defer iter.Close()
@@ -745,6 +740,23 @@ func RunGC(
 				infoMu.Unlock()
 			}()
 			return realResolveIntentsFn(intents, opts)
+		}
+		realProcessAsyncFn := processAsyncFn
+		processAsyncFn = func(txn *roachpb.Transaction, intents []roachpb.Intent) (err error) {
+			defer func() {
+				// Note: infoMu lock is already held.
+				infoMu.ResolveTotal += len(intents)
+				if err == nil {
+					// TODO(spencer): this is only partially correct; what it
+					// provides is a count of the intents for which async
+					// resolution was undertaken, not the count of intents which
+					// were successfully resolved. We need to keep a separate
+					// count of successes / failures for intent resolution in the
+					// intent resolver instead.
+					infoMu.ResolveSuccess += len(intents)
+				}
+			}()
+			return realProcessAsyncFn(txn, intents)
 		}
 		realPushTxnFn := pushTxnFn
 		pushTxnFn = func(ts hlc.Timestamp, txn *roachpb.Transaction, typ roachpb.PushTxnType) {
@@ -819,7 +831,7 @@ func RunGC(
 	log.Event(ctx, "iterating through range")
 	for ; ; iter.Next() {
 		if ok, err := iter.Valid(); err != nil {
-			return nil, GCInfo{}, err
+			return GCInfo{}, err
 		} else if !ok {
 			break
 		}
@@ -850,9 +862,9 @@ func RunGC(
 	infoMu.NumKeysAffected = len(gcKeys)
 
 	// Process local range key entries (txn records, queue last processed times).
-	localRangeKeys, err := processLocalKeyRange(ctx, snap, desc, txnMap, txnExp, &infoMu, resolveIntentsFn)
+	localRangeKeys, err := processLocalKeyRange(ctx, snap, desc, txnMap, txnExp, &infoMu, processAsyncFn)
 	if err != nil {
-		return nil, GCInfo{}, err
+		return GCInfo{}, err
 	}
 
 	// From now on, all newly added keys are range-local.
@@ -862,15 +874,29 @@ func RunGC(
 	// we send directly to the Replica, though.
 	gcKeys = append(gcKeys, localRangeKeys...)
 
-	// Process push transactions in parallel.
-	//
-	// TODO(tschottdorf): we first push all transactions before resolving intents.
-	// If we have too many transactions, that can lead to the case in which our context
-	// expires and we can't actually clean up any of the intents. Since we have hopefully
-	// succeeded in pushing a lot of transactions, the next time around we should have
-	// less work here and manage to get to the intents, but it would be better to let
-	// another goroutine resolve intents for transactions we've handled so that work that
-	// is prepared is executed right away.
+	// Clean up the AbortSpan.
+	log.Event(ctx, "processing AbortSpan")
+	gcKeys = append(gcKeys, processAbortSpan(
+		ctx, snap, desc.RangeID, abortSpanGCThreshold, &infoMu, pushTxnFn)...)
+
+	infoMu.Lock()
+	log.Eventf(ctx, "assembled GC keys, now proceeding to GC; stats so far %+v", infoMu.GCInfo)
+	infoMu.Unlock()
+
+	// Process the keys before beginning to push transactions and
+	// resolve intents so that we don't lose all of the work we've done
+	// thus far gathering GC'able keys.
+	if err := gcFn(gcKeys, &infoMu.GCInfo); err != nil {
+		return GCInfo{}, err
+	}
+
+	// Process push transactions in parallel. We first push all
+	// transactions before resolving intents. If we have too many
+	// transactions, that can lead to the case in which our context
+	// expires and we can't actually clean up any of the intents. Since
+	// we have hopefully succeeded in pushing a lot of transactions, the
+	// next time around we should have less work here and manage to get
+	// to the intents.
 	log.Eventf(ctx, "pushing up to %d transactions (concurrency %d)", len(txnMap), gcTaskLimit)
 	var wg sync.WaitGroup
 	sem := make(chan struct{}, gcTaskLimit)
@@ -897,29 +923,28 @@ func RunGC(
 
 	if err := ctx.Err(); err != nil {
 		// Don't bother if already expired.
-		return nil, GCInfo{}, err
+		return GCInfo{}, err
 	}
 
-	// Resolve all intents.
-	log.Eventf(ctx, "resolving up to %d intents", len(txnMap))
+	// Resolve all intents. If we have too many intents, that can lead to
+	// the case in which our context expires and we can't finish. However,
+	// because all of these intents fall within a single range, this is
+	// likely to be less problematic than cleaning up a highly distributed
+	// transaction's intents. Because the intent resolution is done in batches
+	// of 100 intents, even if this times out, the next pass will be easier.
 	var intents []roachpb.Intent
 	for txnID, txn := range txnMap {
 		if txn.Status != roachpb.PENDING {
-			for _, intent := range intentSpanMap[txnID] {
-				intents = append(intents, roachpb.Intent{Span: intent, Status: txn.Status, Txn: txn.TxnMeta})
-			}
+			intents = append(intents, roachpb.AsIntents(intentSpanMap[txnID], txn)...)
 		}
 	}
+	log.Eventf(ctx, "resolving %d intents", len(intents))
 
 	if err := resolveIntentsFn(intents, ResolveOptions{Wait: true, Poison: false}); err != nil {
-		return nil, GCInfo{}, err
+		return GCInfo{}, err
 	}
 
-	// Clean up the AbortSpan.
-	log.Event(ctx, "processing AbortSpan")
-	gcKeys = append(gcKeys, processAbortSpan(
-		ctx, snap, desc.RangeID, abortSpanGCThreshold, &infoMu, pushTxnFn)...)
-	return gcKeys, infoMu.GCInfo, nil
+	return infoMu.GCInfo, nil
 }
 
 // timer returns a constant duration to space out GC processing
