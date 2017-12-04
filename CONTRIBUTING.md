@@ -128,6 +128,9 @@ following guidelines:
   - enterprise change (e.g., change to backup/restore)
   - backwards-incompatible change
 
+  This list is also documented in the commit message template, which lives in
+  githooks/prepare-commit-msg.
+
   For example, a commit like ["distsql: pre-reserve memory needed
   to mark rows in HashJoiner build phase"](https://github.com/cockroachdb/cockroach/pull/18975)
   might say, "Release note (bug fix): Fixed a panic in queries with `JOIN` using the
