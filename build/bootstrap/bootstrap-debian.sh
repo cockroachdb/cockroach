@@ -15,6 +15,7 @@ sudo apt-get update
 sudo apt-get dist-upgrade -y
 sudo apt-get install -y --no-install-recommends \
   autoconf \
+  build-essential \
   cmake \
   docker.io \
   libtinfo-dev \
@@ -22,16 +23,9 @@ sudo apt-get install -y --no-install-recommends \
   nodejs \
   yarn
 
+curl -fsSL https://storage.googleapis.com/golang/go1.9.2.linux-amd64.tar.gz | sudo tar -C /usr/local -xz
+sudo ln -s /usr/local/go/bin/* /usr/local/bin
+
 sudo adduser "${USER}" docker
 
-# Configure environment variables
-echo 'export GOPATH=${HOME}/go' >> ~/.bashrc_go
-echo '. ~/.bashrc_go' >> ~/.bashrc
-
-. ~/.bashrc_go
-
-mkdir -p "$GOPATH/src/github.com/cockroachdb"
-
-git clone https://github.com/cockroachdb/cockroach.git "$GOPATH/src/github.com/cockroachdb/cockroach"
-
-. bootstrap/bootstrap-go.sh
+go get -d github.com/cockroachdb/cockroach
