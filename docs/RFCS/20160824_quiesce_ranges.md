@@ -1,5 +1,5 @@
 - Feature Name: Quiesce Ranges
-- Status: postponed
+- Status: obsolete
 - Start Date: 2016-06-24
 - Authors: David Taylor, Daniel Harrison, Tobias Schottdorf
 - RFC PR: #8811
