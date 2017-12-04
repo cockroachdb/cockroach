@@ -1946,7 +1946,8 @@ func TestWedgedReplicaDetection(t *testing.T) {
 	// not past it.
 	mtc.manualClock.Increment(storage.MaxQuotaReplicaLivenessDuration.Nanoseconds() - 1)
 
-	// Send a request to the leader replica to update the quota pool status.
+	// Send a request to the leader replica. followerRepl is locked so it will
+	// not respond.
 	ctx := context.Background()
 	key := roachpb.Key("k")
 	value := []byte("value")
@@ -1961,18 +1962,26 @@ func TestWedgedReplicaDetection(t *testing.T) {
 		t.Fatalf("expected follower to still be considered active")
 	}
 
-	// Increment leader's clock past MaxQuotaReplicaLivenessDuration
-	mtc.manualClock.Increment(storage.MaxQuotaReplicaLivenessDuration.Nanoseconds() + 1)
+	// It is possible that there are in-flight heartbeat responses from
+	// followerRepl from before it was locked. The receipt of one of these
+	// would bump the last active timestamp on the leader. Because of this,
+	// we check whether the follower is eventually considered inactive.
+	testutils.SucceedsSoon(t, func() error {
+		// Increment leader's clock past MaxQuotaReplicaLivenessDuration
+		mtc.manualClock.Increment(storage.MaxQuotaReplicaLivenessDuration.Nanoseconds() + 1)
 
-	// Send another request to the leader replica to update the quota pool status.
-	if _, pErr := client.SendWrapped(ctx, leaderRepl, req); pErr != nil {
-		t.Fatal(pErr)
-	}
+		// Send another request to the leader replica. followerRepl is locked
+		// so it will not respond.
+		if _, pErr := client.SendWrapped(ctx, leaderRepl, req); pErr != nil {
+			t.Fatal(pErr)
+		}
 
-	// The follower should no longer be considered active.
-	if leaderRepl.IsFollowerActive(ctx, followerID) {
-		t.Fatalf("expected follower to be considered inactive")
-	}
+		// The follower should no longer be considered active.
+		if leaderRepl.IsFollowerActive(ctx, followerID) {
+			return errors.New("expected follower to be considered inactive")
+		}
+		return nil
+	})
 }
 
 // TestRaftHeartbeats verifies that coalesced heartbeats are correctly
