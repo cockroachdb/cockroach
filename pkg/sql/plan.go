@@ -489,6 +489,8 @@ func (p *planner) newPlan(
 		return p.ShowDatabases(ctx, n)
 	case *tree.ShowGrants:
 		return p.ShowGrants(ctx, n)
+	case *tree.ShowHistogram:
+		return p.ShowHistogram(ctx, n)
 	case *tree.ShowIndex:
 		return p.ShowIndex(ctx, n)
 	case *tree.ShowQueries:
