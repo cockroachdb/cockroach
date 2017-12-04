@@ -55,7 +55,7 @@ func (p *planner) AlterSequence(ctx context.Context, n *tree.AlterSequence) (pla
 	return &alterSequenceNode{n: n, seqDesc: seqDesc}, nil
 }
 
-func (n *alterSequenceNode) Start(params runParams) error {
+func (n *alterSequenceNode) startExec(params runParams) error {
 	desc := n.seqDesc
 
 	err := assignSequenceOptions(desc.SequenceOpts, n.n.Options, false /* setDefaults */)

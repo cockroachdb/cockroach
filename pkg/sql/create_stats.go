@@ -67,10 +67,6 @@ func (p *planner) CreateStatistics(ctx context.Context, n *tree.CreateStats) (pl
 	}, nil
 }
 
-func (*createStatsNode) Start(runParams) error {
-	return errors.Errorf("statistics can only be created via DistSQL")
-}
-
 func (*createStatsNode) Next(runParams) (bool, error) { panic("not implemented") }
 func (*createStatsNode) Close(context.Context)        {}
 func (*createStatsNode) Values() tree.Datums          { panic("not implemented") }

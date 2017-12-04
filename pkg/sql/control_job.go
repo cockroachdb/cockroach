@@ -89,7 +89,7 @@ func (p *planner) CancelJob(ctx context.Context, n *tree.CancelJob) (planNode, e
 	}, nil
 }
 
-func (n *controlJobNode) Start(params runParams) error {
+func (n *controlJobNode) startExec(params runParams) error {
 	jobIDDatum, err := n.jobID.Eval(params.evalCtx)
 	if err != nil {
 		return err

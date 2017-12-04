@@ -154,9 +154,6 @@ func (p *planner) Union(
 		inverted: inverted,
 		emitAll:  emitAll,
 		emit:     emit,
-		run: unionRun{
-			scratch: make([]byte, 0),
-		},
 	}
 	return node, nil
 }
@@ -168,11 +165,9 @@ type unionRun struct {
 	scratch []byte
 }
 
-func (n *unionNode) Start(params runParams) error {
-	if err := n.right.Start(params); err != nil {
-		return err
-	}
-	return n.left.Start(params)
+func (n *unionNode) startExec(params runParams) error {
+	n.run.scratch = make([]byte, 0)
+	return nil
 }
 
 func (n *unionNode) Next(params runParams) (bool, error) {

@@ -114,7 +114,7 @@ func (p *planner) DropDatabase(ctx context.Context, n *tree.DropDatabase) (planN
 	return &dropDatabaseNode{n: n, dbDesc: dbDesc, td: td}, nil
 }
 
-func (n *dropDatabaseNode) Start(params runParams) error {
+func (n *dropDatabaseNode) startExec(params runParams) error {
 	ctx := params.ctx
 	p := params.p
 	tbNameStrings := make([]string, 0, len(n.td))

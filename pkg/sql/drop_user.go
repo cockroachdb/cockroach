@@ -64,7 +64,7 @@ type dropUserRun struct {
 	numDeleted int
 }
 
-func (n *dropUserNode) Start(params runParams) error {
+func (n *dropUserNode) startExec(params runParams) error {
 	names, err := n.names()
 	if err != nil {
 		return err

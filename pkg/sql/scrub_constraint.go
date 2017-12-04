@@ -70,7 +70,8 @@ func newSQLCheckConstraintCheckOperation(
 // Start implements the checkOperation interface.
 // It creates a SELECT expression and generates a plan from it, which
 // then runs in the distSQL execution engine.
-func (o *sqlCheckConstraintCheckOperation) Start(ctx context.Context, p *planner) error {
+func (o *sqlCheckConstraintCheckOperation) Start(params runParams) error {
+	ctx := params.ctx
 	expr, err := parser.ParseExpr(o.checkDesc.Expr)
 	if err != nil {
 		return err
@@ -85,16 +86,16 @@ func (o *sqlCheckConstraintCheckOperation) Start(ctx context.Context, p *planner
 	// use the tableDesc we have, but this is a rare operation and the benefit
 	// would be marginal compared to the work of the actual query, so the added
 	// complexity seems unjustified.
-	rows, err := p.SelectClause(ctx, sel, nil /* orderBy */, nil, /* limit */
+	rows, err := params.p.SelectClause(ctx, sel, nil /* orderBy */, nil, /* limit */
 		nil /* desiredTypes */, publicColumns)
 	if err != nil {
 		return err
 	}
-	rows, err = p.optimizePlan(ctx, rows, allColumns(rows))
+	rows, err = params.p.optimizePlan(ctx, rows, allColumns(rows))
 	if err != nil {
 		return err
 	}
-	if err := p.startPlan(ctx, rows); err != nil {
+	if err := startPlan(params, rows); err != nil {
 		return err
 	}
 
@@ -111,26 +112,20 @@ func (o *sqlCheckConstraintCheckOperation) Start(ctx context.Context, p *planner
 	o.run.rows = rows
 	// Begin the first unit of work. This prepares the hasRowsLeft flag
 	// for the first iteration.
-	o.run.hasRowsLeft, err = o.run.rows.Next(runParams{ctx: ctx, evalCtx: &p.evalCtx, p: p})
+	o.run.hasRowsLeft, err = o.run.rows.Next(params)
 	return err
 }
 
 // Next implements the checkOperation interface.
-func (o *sqlCheckConstraintCheckOperation) Next(
-	ctx context.Context, p *planner,
-) (tree.Datums, error) {
+func (o *sqlCheckConstraintCheckOperation) Next(params runParams) (tree.Datums, error) {
 	row := o.run.rows.Values()
 	timestamp := tree.MakeDTimestamp(
-		p.evalCtx.GetStmtTimestamp(), time.Nanosecond)
+		params.evalCtx.GetStmtTimestamp(), time.Nanosecond)
 
 	// Start the next unit of work. This is required so during the next
 	// call to Done() it is known whether there are any rows left.
 	var err error
-	if o.run.hasRowsLeft, err = o.run.rows.Next(runParams{
-		ctx:     ctx,
-		evalCtx: &p.evalCtx,
-		p:       p,
-	}); err != nil {
+	if o.run.hasRowsLeft, err = o.run.rows.Next(params); err != nil {
 		return nil, err
 	}
 

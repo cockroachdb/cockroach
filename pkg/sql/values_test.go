@@ -15,6 +15,7 @@
 package sql
 
 import (
+	"fmt"
 	"go/constant"
 	"reflect"
 	"testing"
@@ -112,43 +113,46 @@ func TestValues(t *testing.T) {
 		},
 	}
 
+	ctx := context.TODO()
 	for i, tc := range testCases {
-		ctx := context.TODO()
-		plan, err := func() (_ planNode, err error) {
-			defer func() {
-				if r := recover(); r != nil {
-					err = errors.Errorf("%v", r)
-				}
+		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
+			plan, err := func() (_ planNode, err error) {
+				defer func() {
+					if r := recover(); r != nil {
+						err = errors.Errorf("%v", r)
+					}
+				}()
+				return p.Values(context.TODO(), tc.stmt, nil)
 			}()
-			return p.Values(context.TODO(), tc.stmt, nil)
-		}()
-		if err == nil != tc.ok {
-			t.Errorf("%d: error_expected=%t, but got error %v", i, tc.ok, err)
-		}
-		if plan != nil {
-			defer plan.Close(ctx)
+			if plan != nil {
+				defer plan.Close(ctx)
+			}
+			if err == nil != tc.ok {
+				t.Errorf("%d: error_expected=%t, but got error %v", i, tc.ok, err)
+			}
+			if plan == nil {
+				return
+			}
 			plan, err = p.optimizePlan(ctx, plan, allColumns(plan))
 			if err != nil {
-				t.Errorf("%d: unexpected error in optimizePlan: %v", i, err)
-				continue
+				t.Fatalf("%d: unexpected error in optimizePlan: %v", i, err)
 			}
-			if err := p.startPlan(ctx, plan); err != nil {
-				t.Errorf("%d: unexpected error in Start: %v", i, err)
-				continue
+			params := runParams{ctx: ctx, p: p, evalCtx: &p.evalCtx}
+			if err := startPlan(params, plan); err != nil {
+				t.Fatalf("%d: unexpected error in Start: %v", i, err)
 			}
 			var rows []tree.Datums
-			next, err := plan.Next(runParams{ctx: ctx})
-			for ; next; next, err = plan.Next(runParams{ctx: ctx}) {
+			next, err := plan.Next(params)
+			for ; next; next, err = plan.Next(params) {
 				rows = append(rows, plan.Values())
 			}
 			if err != nil {
-				t.Error(err)
-				continue
+				t.Fatal(err)
 			}
 			if !reflect.DeepEqual(rows, tc.rows) {
 				t.Errorf("%d: expected rows:\n%+v\nactual rows:\n%+v", i, tc.rows, rows)
 			}
-		}
+		})
 	}
 }
 

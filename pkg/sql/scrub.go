@@ -57,14 +57,14 @@ type checkOperation interface {
 
 	// Start initializes the check. In many cases, this does the bulk of
 	// the work behind a check.
-	Start(context.Context, *planner) error
+	Start(params runParams) error
 
 	// Next will return the next check result. The datums returned have
 	// the column types specified by scrubTypes, which are the valeus
 	// returned to the user.
 	//
 	// Next is not called if Done() is false.
-	Next(context.Context, *planner) (tree.Datums, error)
+	Next(params runParams) (tree.Datums, error)
 
 	// Done indicates when there are no more results to iterate through.
 	Done(context.Context) bool
@@ -99,7 +99,7 @@ type scrubRun struct {
 	row        tree.Datums
 }
 
-func (n *scrubNode) Start(params runParams) error {
+func (n *scrubNode) startExec(params runParams) error {
 	switch n.n.Typ {
 	case tree.ScrubTable:
 		tableName, err := n.n.Table.NormalizeWithDatabaseName(params.p.session.Database)
@@ -134,7 +134,7 @@ func (n *scrubNode) Next(params runParams) (bool, error) {
 	for len(n.run.checkQueue) > 0 {
 		nextCheck := n.run.checkQueue[0]
 		if !nextCheck.Started() {
-			if err := nextCheck.Start(params.ctx, params.p); err != nil {
+			if err := nextCheck.Start(params); err != nil {
 				return false, err
 			}
 		}
@@ -143,7 +143,7 @@ func (n *scrubNode) Next(params runParams) (bool, error) {
 		// happens if there are no more results to report.
 		if !nextCheck.Done(params.ctx) {
 			var err error
-			n.run.row, err = nextCheck.Next(params.ctx, params.p)
+			n.run.row, err = nextCheck.Next(params)
 			if err != nil {
 				return false, err
 			}
@@ -374,7 +374,9 @@ func newIndexCheckOperation(
 
 // Start will plan and run an index check using the distSQL execution
 // engine.
-func (o *indexCheckOperation) Start(ctx context.Context, p *planner) error {
+func (o *indexCheckOperation) Start(params runParams) error {
+	ctx := params.ctx
+
 	columns, columnNames, columnTypes := getColumns(o.tableDesc, o.indexDesc)
 
 	// Because the row results include both primary key data and secondary
@@ -389,7 +391,7 @@ func (o *indexCheckOperation) Start(ctx context.Context, p *planner) error {
 	}
 
 	checkQuery := createIndexCheckQuery(columnNames, o.tableDesc, o.tableName, o.indexDesc)
-	plan, err := p.delegateQuery(ctx, "SCRUB TABLE ... WITH OPTIONS INDEX", checkQuery, nil, nil)
+	plan, err := params.p.delegateQuery(ctx, "SCRUB TABLE ... WITH OPTIONS INDEX", checkQuery, nil, nil)
 	if err != nil {
 		return err
 	}
@@ -404,15 +406,15 @@ func (o *indexCheckOperation) Start(ctx context.Context, p *planner) error {
 
 	// Optimize the plan. This is required in order to populate scanNode
 	// spans.
-	plan, err = p.optimizePlan(ctx, plan, needed)
+	plan, err = params.p.optimizePlan(ctx, plan, needed)
 	if err != nil {
 		plan.Close(ctx)
 		return err
 	}
 	defer plan.Close(ctx)
 
-	planCtx := p.session.distSQLPlanner.newPlanningCtx(ctx, &p.evalCtx, p.txn)
-	physPlan, err := scrubPlanDistSQL(ctx, &planCtx, p, plan)
+	planCtx := params.p.session.distSQLPlanner.newPlanningCtx(ctx, params.evalCtx, params.p.txn)
+	physPlan, err := scrubPlanDistSQL(ctx, &planCtx, params.p, plan)
 	if err != nil {
 		return err
 	}
@@ -433,7 +435,7 @@ func (o *indexCheckOperation) Start(ctx context.Context, p *planner) error {
 		return errors.Errorf("could not find MergeJoinerSpec in plan")
 	}
 
-	rows, err := scrubRunDistSQL(ctx, &planCtx, p, physPlan, columnTypes)
+	rows, err := scrubRunDistSQL(ctx, &planCtx, params.p, physPlan, columnTypes)
 	if err != nil {
 		rows.Close(ctx)
 		return err
@@ -450,7 +452,7 @@ func (o *indexCheckOperation) Start(ctx context.Context, p *planner) error {
 }
 
 // Next implements the checkOperation interface.
-func (o *indexCheckOperation) Next(ctx context.Context, p *planner) (tree.Datums, error) {
+func (o *indexCheckOperation) Next(params runParams) (tree.Datums, error) {
 	row := o.run.rows.At(o.run.rowIndex)
 	o.run.rowIndex++
 
@@ -482,7 +484,7 @@ func (o *indexCheckOperation) Next(ctx context.Context, p *planner) (tree.Datums
 	}
 	primaryKey := tree.NewDString(primaryKeyDatums.String())
 	timestamp := tree.MakeDTimestamp(
-		p.evalCtx.GetStmtTimestamp(), time.Nanosecond)
+		params.p.evalCtx.GetStmtTimestamp(), time.Nanosecond)
 
 	details := make(map[string]interface{})
 	rowDetails := make(map[string]interface{})

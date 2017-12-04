@@ -73,7 +73,7 @@ func (p *planner) CreateDatabase(n *tree.CreateDatabase) (planNode, error) {
 	return &createDatabaseNode{n: n}, nil
 }
 
-func (n *createDatabaseNode) Start(params runParams) error {
+func (n *createDatabaseNode) startExec(params runParams) error {
 	desc := makeDatabaseDesc(n.n)
 
 	created, err := params.p.createDatabase(params.ctx, &desc, n.n.IfNotExists)

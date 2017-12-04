@@ -78,7 +78,7 @@ type valueGeneratorRun struct {
 	gen tree.ValueGenerator
 }
 
-func (n *valueGenerator) Start(params runParams) error {
+func (n *valueGenerator) startExec(params runParams) error {
 	expr, err := n.expr.Eval(params.evalCtx)
 	if err != nil {
 		return err

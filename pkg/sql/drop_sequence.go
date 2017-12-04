@@ -66,7 +66,7 @@ func (p *planner) DropSequence(ctx context.Context, n *tree.DropSequence) (planN
 	}, nil
 }
 
-func (n *dropSequenceNode) Start(params runParams) error {
+func (n *dropSequenceNode) startExec(params runParams) error {
 	ctx := params.ctx
 	for _, droppedDesc := range n.td {
 		if droppedDesc == nil {
