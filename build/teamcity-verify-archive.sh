@@ -13,8 +13,8 @@ fi
 
 build/builder.sh make archive ARCHIVE=build/cockroach.src.tgz
 
-# We use test the source archive in a minimal image; the builder image bundles
-# too much developer configuration to simulate a build on a fresh user machine.
+# We test the source archive in a minimal image; the builder image bundles too
+# much developer configuration to simulate a build on a fresh user machine.
 #
 # NB: This docker container runs as root. Be sure to mount any bind volumes as
 # read-only to avoid creating root-owned directories and files on the host
