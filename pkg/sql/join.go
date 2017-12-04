@@ -458,7 +458,7 @@ func (n *joinNode) Next(params runParams) (res bool, err error) {
 
 		leftHasRow, err := n.left.plan.Next(params)
 		if err != nil {
-			return false, nil
+			return false, err
 		}
 		if !leftHasRow {
 			break
