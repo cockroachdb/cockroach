@@ -352,7 +352,7 @@ func DecodeKey(encodedKey []byte) (MVCCKey, error) {
 // 	 }
 // }
 // if err != nil {
-//   return nil
+//   return err
 // }
 type RocksDBBatchReader struct {
 	repr []byte
