@@ -21,6 +21,7 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/scrub"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -177,6 +178,7 @@ func (jr *joinReader) mainLoop(ctx context.Context) error {
 		for {
 			row, _, _, err := jr.fetcher.NextRow(ctx)
 			if err != nil {
+				err = scrub.UnwrapScrubError(err)
 				return err
 			}
 			if row == nil {
