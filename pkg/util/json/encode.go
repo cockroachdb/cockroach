@@ -96,7 +96,7 @@ func (j jsonArray) encode(appendTo []byte) (jEntry uint32, b []byte, err error) 
 		var nextJEntry uint32
 		nextJEntry, appendTo, err = j[i].encode(appendTo)
 		if err != nil {
-			return 0, appendTo, nil
+			return 0, appendTo, err
 		}
 		appendTo = encoding.PutUint32Ascending(appendTo, nextJEntry, jEntryIdx+i*4)
 	}

@@ -824,7 +824,7 @@ func (l *DockerCluster) InternalIP(ctx context.Context, i int) net.IP {
 	c := l.Nodes[i]
 	containerInfo, err := c.Inspect(ctx)
 	if err != nil {
-		return nil
+		return err
 	}
 	return net.ParseIP(containerInfo.NetworkSettings.Networks[l.networkName].IPAddress)
 }

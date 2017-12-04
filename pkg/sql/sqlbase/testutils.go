@@ -106,7 +106,7 @@ func RandDatum(rng *rand.Rand, typ ColumnType, nullOk bool) tree.Datum {
 	case ColumnType_JSON:
 		j, err := json.Random(20, rng)
 		if err != nil {
-			return nil
+			return err
 		}
 		return &tree.DJSON{JSON: j}
 	case ColumnType_STRING:

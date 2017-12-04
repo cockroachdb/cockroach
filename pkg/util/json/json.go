@@ -586,7 +586,7 @@ func (j jsonObject) FetchValKeyOrIdx(key string) JSON {
 func (j jsonArray) FetchValKeyOrIdx(key string) JSON {
 	idx, err := strconv.Atoi(key)
 	if err != nil {
-		return nil
+		return err
 	}
 	return j.FetchValIdx(idx)
 }
