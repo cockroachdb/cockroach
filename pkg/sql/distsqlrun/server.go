@@ -78,6 +78,10 @@ const Version DistSQLVersion = 8
 // compatible with; see above.
 const MinAcceptedVersion DistSQLVersion = 6
 
+// gossipDrainWait is the amount of time a draining server waits for its
+// draining state to be gossiped before rejecting new flows.
+const gossipDrainWait = 1 * time.Second
+
 var settingUseTempStorageSorts = settings.RegisterBoolSetting(
 	"sql.distsql.temp_storage.sorts",
 	"set to true to enable use of disk for distributed sql sorts",
@@ -187,17 +191,47 @@ func (ds *ServerImpl) Start() {
 		panic(err)
 	}
 
+	if err := ds.ServerConfig.Gossip.AddInfoProto(
+		gossip.MakeDistSQLDrainingKey(ds.ServerConfig.NodeID.Get()),
+		&DistSQLDrainingInfo{
+			Draining: false,
+		},
+		0, // ttl - no expiration
+	); err != nil {
+		panic(err)
+	}
+
 	ds.flowScheduler.Start()
 }
 
-// SetDraining drains/undrains the server's flowRegistry. See
-// flowRegistry.SetDraining for more details.
+// SetDraining changes the node's draining state through gossip and
+// drains/undrains the server's flowRegistry. See flowRegistry.SetDraining for
+// more details.
 func (ds *ServerImpl) SetDraining(drain bool, flowDrainWait time.Duration) {
+	if err := ds.ServerConfig.Gossip.AddInfoProto(
+		gossip.MakeDistSQLDrainingKey(ds.ServerConfig.NodeID.Get()),
+		&DistSQLDrainingInfo{
+			Draining: drain,
+		},
+		0, // ttl - no expiration
+	); err != nil {
+		log.Warningf(context.TODO(), "unable to gossip distsql draining state: %s", err)
+		return
+	}
+	// Only wait for the draining state to propagate if we are draining,
+	// otherwise we can do useful work while we are announced as operational to
+	// other nodes.
+	if drain && !ds.ServerConfig.TestingKnobs.DrainFast {
+		time.Sleep(gossipDrainWait)
+	}
 	// There is a possibility that there are flows not yet registered that we
 	// do not wait for. These will not be accepted by the flow registry so will
 	// error out. This is fine as draining is best effort. Not scheduling
 	// flows on draining nodes reduces the likelihood of this scenario.
 	// TODO(asubiotto): Errors like this should be handled on the gateway.
+	if !ds.ServerConfig.TestingKnobs.DrainFast {
+		flowDrainWait = 0
+	}
 	ds.flowRegistry.SetDraining(drain, flowDrainWait)
 }
 
@@ -449,6 +483,10 @@ type TestingKnobs struct {
 	// enable. Once this limit is hit, processors employ their on-disk
 	// implementation regardless of applicable cluster settings.
 	MemoryLimitBytes int64
+
+	// DrainFast, if enabled, causes the server to not wait for its draining
+	// state to be gossiped or for any currently running flows to complete.
+	DrainFast bool
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.
