@@ -246,13 +246,9 @@ func (n *scrubNode) startScrubTable(
 				return pgerror.NewErrorf(pgerror.CodeSyntaxError,
 					"cannot specify CONSTRAINT option more than once")
 			}
-			if timestamp != nil {
-				return pgerror.NewErrorf(pgerror.CodeSyntaxError,
-					"cannot use AS OF SYSTEM TIME with CONSTRAINT option")
-			}
 			constraintsSet = true
 			constraintsToCheck, err := createConstraintCheckOperations(
-				ctx, p, v.ConstraintNames, tableDesc, tableName)
+				ctx, p, v.ConstraintNames, tableDesc, tableName, timestamp)
 			if err != nil {
 				return err
 			}
@@ -272,8 +268,8 @@ func (n *scrubNode) startScrubTable(
 		}
 		n.run.checkQueue = append(n.run.checkQueue, indexesToCheck...)
 
-		constraintsToCheck, err := createConstraintCheckOperations(
-			ctx, p, nil /* constraintNames */, tableDesc, tableName)
+		constraintsToCheck, err := createConstraintCheckOperations(ctx, p, nil, /* constraintNames */
+			tableDesc, tableName, timestamp)
 		if err != nil {
 			return err
 		}
@@ -477,6 +473,7 @@ func createConstraintCheckOperations(
 	constraintNames tree.NameList,
 	tableDesc *sqlbase.TableDescriptor,
 	tableName *tree.TableName,
+	asOf *hlc.Timestamp,
 ) (results []checkOperation, err error) {
 	constraints, err := tableDesc.GetConstraintInfo(ctx, p.txn)
 	if err != nil {
@@ -506,12 +503,14 @@ func createConstraintCheckOperations(
 				tableName,
 				tableDesc,
 				constraint.CheckConstraint,
+				asOf,
 			))
 		case sqlbase.ConstraintTypeFK:
 			results = append(results, newSQLForeignKeyCheckOperation(
 				tableName,
 				tableDesc,
 				constraint,
+				asOf,
 			))
 		}
 	}

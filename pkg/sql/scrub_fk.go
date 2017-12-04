@@ -23,6 +23,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/pkg/errors"
 )
 
@@ -37,6 +38,7 @@ type sqlForeignKeyCheckOperation struct {
 	tableName  *tree.TableName
 	tableDesc  *sqlbase.TableDescriptor
 	constraint *sqlbase.ConstraintDetail
+	asOf       *hlc.Timestamp
 
 	colIDToRowIdx map[sqlbase.ColumnID]int
 
@@ -55,11 +57,13 @@ func newSQLForeignKeyCheckOperation(
 	tableName *tree.TableName,
 	tableDesc *sqlbase.TableDescriptor,
 	constraint sqlbase.ConstraintDetail,
+	asOf *hlc.Timestamp,
 ) *sqlForeignKeyCheckOperation {
 	return &sqlForeignKeyCheckOperation{
 		tableName:  tableName,
 		tableDesc:  tableDesc,
 		constraint: &constraint,
+		asOf:       asOf,
 	}
 }
 
@@ -67,7 +71,7 @@ func newSQLForeignKeyCheckOperation(
 // It creates a query string and generates a plan from it, which then
 // runs in the distSQL execution engine.
 func (o *sqlForeignKeyCheckOperation) Start(ctx context.Context, p *planner) error {
-	checkQuery, err := createFKCheckQuery(o.tableName.Database(), o.tableDesc, o.constraint)
+	checkQuery, err := createFKCheckQuery(o.tableName.Database(), o.tableDesc, o.constraint, o.asOf)
 	if err != nil {
 		return err
 	}
@@ -260,14 +264,24 @@ func (o *sqlForeignKeyCheckOperation) Close(ctx context.Context) {
 //    matches.
 //
 func createFKCheckQuery(
-	database string, tableDesc *sqlbase.TableDescriptor, constraint *sqlbase.ConstraintDetail,
+	database string,
+	tableDesc *sqlbase.TableDescriptor,
+	constraint *sqlbase.ConstraintDetail,
+	asOf *hlc.Timestamp,
 ) (string, error) {
+	var asOfClauseStr string
+	// If SCRUB is called with AS OF SYSTEM TIME <expr> the
+	// checkIndexQuery will also include the as of clause.
+	if asOf != nil {
+		asOfClauseStr = fmt.Sprintf("AS OF SYSTEM TIME %d", asOf.WallTime)
+	}
+
 	const checkIndexQuery = `
 				SELECT %[1]s
 				FROM
-					(SELECT %[9]s FROM %[2]s.%[3]s@{NO_INDEX_JOIN} ORDER BY %[10]s) AS p
+					(SELECT %[9]s FROM %[2]s.%[3]s@{NO_INDEX_JOIN} %[12]s ORDER BY %[10]s) AS p
 				FULL OUTER JOIN
-					(SELECT %[11]s FROM %[2]s.%[4]s@{FORCE_INDEX=[%[5]d],NO_INDEX_JOIN} ORDER BY %[11]s) AS c
+					(SELECT %[11]s FROM %[2]s.%[4]s@{FORCE_INDEX=[%[5]d],NO_INDEX_JOIN} %[12]s ORDER BY %[11]s) AS c
 					ON %[6]s
         WHERE (%[7]s) AND %[8]s`
 
@@ -293,5 +307,6 @@ func createFKCheckQuery(
 		strings.Join(columnNames, ","),                                                                     // 9
 		strings.Join(constraint.Columns, ","),                                                              // 10
 		strings.Join(constraint.ReferencedIndex.ColumnNames, ","),                                          // 11
+		asOfClauseStr, //12
 	), nil
 }
