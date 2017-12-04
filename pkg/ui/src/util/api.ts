@@ -86,6 +86,9 @@ export type CommandQueueResponseMessage = protos.cockroach.server.serverpb.Comma
 export type SettingsRequestMessage = protos.cockroach.server.serverpb.SettingsRequest;
 export type SettingsResponseMessage = protos.cockroach.server.serverpb.SettingsResponse;
 
+export type ReplicaMatrixRequestMessage = protos.cockroach.server.serverpb.ReplicaMatrixRequest;
+export type ReplicaMatrixResponseMessage = protos.cockroach.server.serverpb.ReplicaMatrixResponse;
+
 // API constants
 
 export const API_PREFIX = "_admin/v1";
@@ -308,4 +311,10 @@ export function getCommandQueue(req: CommandQueueRequestMessage, timeout?: momen
 // getSettings gets all cluster settings
 export function getSettings(_req: SettingsRequestMessage, timeout?: moment.Duration): Promise<SettingsResponseMessage> {
   return timeoutFetch(serverpb.SettingsResponse, `${API_PREFIX}/settings`, null, timeout);
+}
+
+// getReplicaMatrix returns data distribution information
+// TODO(vilterp): rename to DataDistribution?
+export function getReplicaMatrix(timeout?: moment.Duration): Promise<ReplicaMatrixResponseMessage> {
+  return timeoutFetch(serverpb.ReplicaMatrixResponse, `${API_PREFIX}/replica_matrix`, null, timeout);
 }

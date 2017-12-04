@@ -228,6 +228,9 @@ export const settingsReducerObj = new CachedDataReducer(
 );
 export const refreshSettings = settingsReducerObj.refresh;
 
+const replicaMatrixReducerObj = new CachedDataReducer(api.getReplicaMatrix, "replicaMatrix", moment.duration(1, "m"));
+export const refreshReplicaMatrix = replicaMatrixReducerObj.refresh;
+
 export interface APIReducersState {
   cluster: CachedDataReducerState<api.ClusterResponseMessage>;
   events: CachedDataReducerState<api.EventsResponseMessage>;
@@ -252,6 +255,7 @@ export interface APIReducersState {
   rangeLog: KeyedCachedDataReducerState<api.RangeLogResponseMessage>;
   commandQueue: KeyedCachedDataReducerState<api.CommandQueueResponseMessage>;
   settings: CachedDataReducerState<api.SettingsResponseMessage>;
+  replicaMatrix: CachedDataReducerState<api.ReplicaMatrixResponseMessage>;
 }
 
 export const apiReducersReducer = combineReducers<APIReducersState>({
@@ -278,6 +282,7 @@ export const apiReducersReducer = combineReducers<APIReducersState>({
   [rangeLogReducerObj.actionNamespace]: rangeLogReducerObj.reducer,
   [commandQueueReducerObj.actionNamespace]: commandQueueReducerObj.reducer,
   [settingsReducerObj.actionNamespace]: settingsReducerObj.reducer,
+  [replicaMatrixReducerObj.actionNamespace]: replicaMatrixReducerObj.reducer,
 });
 
 export { CachedDataReducerState, KeyedCachedDataReducerState };
