@@ -1342,6 +1342,156 @@ func (s *adminServer) Decommission(
 	return s.DecommissionStatus(ctx, &serverpb.DecommissionStatusRequest{NodeIDs: nodeIDs})
 }
 
+// ReplicaMatrix returns a count of replicas on each node for each table.
+func (s *adminServer) ReplicaMatrix(
+	ctx context.Context, req *serverpb.ReplicaMatrixRequest,
+) (*serverpb.ReplicaMatrixResponse, error) {
+	args := sql.SessionArgs{User: s.getUser(req)}
+	ctx, session := s.NewContextAndSessionForRPC(ctx, args)
+	defer session.Finish(s.server.sqlExecutor)
+
+	resp := &serverpb.ReplicaMatrixResponse{
+		DatabaseInfo: make(map[uint64]serverpb.ReplicaMatrixResponse_DatabaseInfo),
+		ZoneConfigs:  make(map[int64]serverpb.ReplicaMatrixResponse_ZoneConfig),
+	}
+
+	// Get ids and names for databases and tables.
+	// Set up this structure in the response.
+
+	// Allocate table => DB mapping.
+	databaseIDForTableID := map[uint64]uint64{}
+
+	tablesQuery := `SELECT name, table_id, database_name, parent_id FROM crdb_internal.tables`
+	r1, err := s.server.sqlExecutor.ExecuteStatementsBuffered(session, tablesQuery, nil, 1)
+	if err != nil {
+		return nil, s.serverError(err)
+	}
+	defer r1.Close(ctx)
+
+	rows1 := r1.ResultList[0].Rows
+	for idx := 0; idx < rows1.Len(); idx++ {
+		row := rows1.At(idx)
+
+		tableName := string(tree.MustBeDString(row[0]))
+		tableID := uint64(tree.MustBeDInt(row[1]))
+		dbName := string(tree.MustBeDString(row[2]))
+		dbID := uint64(tree.MustBeDInt(row[3]))
+
+		// Update table => DB mapping.
+		databaseIDForTableID[tableID] = dbID
+
+		// Insert database if it doesn't exist.
+		dbInfo, ok := resp.DatabaseInfo[dbID]
+		if !ok {
+			dbInfo = serverpb.ReplicaMatrixResponse_DatabaseInfo{
+				Name:      dbName,
+				TableInfo: make(map[uint64]serverpb.ReplicaMatrixResponse_TableInfo),
+			}
+			resp.DatabaseInfo[dbID] = dbInfo
+		}
+
+		// Get zone config for table.
+		zoneConfigQuery := fmt.Sprintf(
+			`SELECT id, cli_specifier FROM [EXPERIMENTAL SHOW ZONE CONFIGURATION FOR TABLE %s.%s]`, dbName, tableName,
+		)
+		r, err := s.server.sqlExecutor.ExecuteStatementsBuffered(session, zoneConfigQuery, nil, 1)
+		if err != nil {
+			return nil, s.serverError(err)
+		}
+		defer r.Close(ctx) // TODO(vilterp): intellij linter complaining; is this bad?
+
+		rows := r.ResultList[0].Rows
+		if rows.Len() != 1 {
+			return nil, s.serverError(fmt.Errorf(
+				"could not get zone config for table %s; %d rows returned", tableName, rows.Len(),
+			))
+		}
+
+		zcRow := rows.At(0)
+		zcID := int64(tree.MustBeDInt(zcRow[0]))
+
+		// Insert table.
+		tableInfo, ok := dbInfo.TableInfo[tableID]
+		if !ok {
+			tableInfo = serverpb.ReplicaMatrixResponse_TableInfo{
+				Name:                 tableName,
+				ReplicaCountByNodeId: make(map[roachpb.NodeID]int64),
+				ZoneConfigId:         zcID,
+			}
+			dbInfo.TableInfo[tableID] = tableInfo
+		}
+	}
+
+	// Get replica counts.
+	if err := s.server.db.Txn(ctx, func(txnCtx context.Context, txn *client.Txn) error {
+		kvs, err := sql.ScanMetaKVs(ctx, txn, roachpb.Span{
+			Key:    keys.UserTableDataMin,
+			EndKey: keys.MaxKey,
+		})
+		if err != nil {
+			return err
+		}
+
+		// Group replicas by table and node, accumulate counts.
+		var rangeDesc roachpb.RangeDescriptor
+		for _, kv := range kvs {
+			if err := kv.ValueProto(&rangeDesc); err != nil {
+				return err
+			}
+
+			_, tableID, err := keys.DecodeTablePrefix(rangeDesc.StartKey.AsRawKey())
+			if err != nil {
+				return err
+			}
+
+			dbID, ok := databaseIDForTableID[tableID]
+			if !ok {
+				// This is a database; skip.
+				continue
+			}
+			tableInfo := resp.DatabaseInfo[dbID].TableInfo[tableID]
+
+			for _, replicaDesc := range rangeDesc.Replicas {
+				tableInfo.ReplicaCountByNodeId[replicaDesc.NodeID]++
+			}
+		}
+		return nil
+	}); err != nil {
+		return nil, s.serverError(err)
+	}
+
+	// Get zone configs.
+	// TODO(vilterp): this can be done in parallel with getting table/db names and replica counts.
+	zoneConfigsQuery := `EXPERIMENTAL SHOW ALL ZONE CONFIGURATIONS`
+	r2, err := s.server.sqlExecutor.ExecuteStatementsBuffered(session, zoneConfigsQuery, nil, 1)
+	if err != nil {
+		return nil, s.serverError(err)
+	}
+	defer r2.Close(ctx)
+
+	rows2 := r2.ResultList[0].Rows
+	for idx := 0; idx < rows2.Len(); idx++ {
+		row := rows2.At(idx)
+
+		zcID := int64(tree.MustBeDInt(row[0]))
+		zcCliSpecifier := string(tree.MustBeDString(row[1]))
+		zcYaml := tree.MustBeDBytes(row[2])
+		zcBytes := tree.MustBeDBytes(row[3])
+		var zcProto config.ZoneConfig
+		if err := protoutil.Unmarshal([]byte(zcBytes), &zcProto); err != nil {
+			return nil, s.serverError(err)
+		}
+
+		resp.ZoneConfigs[zcID] = serverpb.ReplicaMatrixResponse_ZoneConfig{
+			CliSpecifier: zcCliSpecifier,
+			Config:       zcProto,
+			ConfigYaml:   string(zcYaml),
+		}
+	}
+
+	return resp, nil
+}
+
 // sqlQuery allows you to incrementally build a SQL query that uses
 // placeholders. Instead of specific placeholders like $1, you instead use the
 // temporary placeholder $.

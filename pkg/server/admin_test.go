@@ -1348,3 +1348,123 @@ func TestAdminAPIFullRangeLog(t *testing.T) {
 		})
 	}
 }
+
+func TestAdminAPIReplicaMatrix(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	testCluster := serverutils.StartTestCluster(t, 3, base.TestClusterArgs{})
+	defer testCluster.Stopper().Stop(context.Background())
+
+	firstServer := testCluster.Server(0)
+	sqlDB := sqlutils.MakeSQLRunner(testCluster.ServerConn(0))
+
+	// Create some tables.
+	sqlDB.Exec(t, `CREATE DATABASE roachblog`)
+	sqlDB.Exec(t, `CREATE TABLE roachblog.posts (id INT PRIMARY KEY, title text, body text)`)
+	sqlDB.Exec(t, `CREATE TABLE roachblog.comments (
+		id INT PRIMARY KEY,
+		post_id INT REFERENCES roachblog.posts,
+		body text
+	)`)
+
+	sqlDB.CheckQueryResults(
+		t,
+		`SELECT table_id, name, parent_id
+		FROM crdb_internal.tables WHERE database_name = 'roachblog'
+		ORDER BY table_id`,
+		[][]string{
+			{"51", "posts", "50"},
+			{"52", "comments", "50"},
+		},
+	)
+
+	// Verify that we see their replicas in the ReplicaMatrix response, evenly spread
+	// across the test cluster's three nodes.
+
+	expectedResp := map[uint64]serverpb.ReplicaMatrixResponse_DatabaseInfo{
+		50: {
+			Name: "roachblog",
+			TableInfo: map[uint64]serverpb.ReplicaMatrixResponse_TableInfo{
+				51: {
+					Name: "posts",
+					ReplicaCountByNodeId: map[roachpb.NodeID]int64{
+						1: 1,
+						2: 1,
+						3: 1,
+					},
+				},
+				52: {
+					Name: "comments",
+					ReplicaCountByNodeId: map[roachpb.NodeID]int64{
+						1: 1,
+						2: 1,
+						3: 1,
+					},
+				},
+			},
+		},
+	}
+
+	// Wait for the new tables' ranges to be created and replicated.
+	testutils.SucceedsSoon(t, func() error {
+		var resp serverpb.ReplicaMatrixResponse
+		if err := getAdminJSONProto(firstServer, "replica_matrix", &resp); err != nil {
+			t.Fatal(err)
+		}
+
+		delete(resp.DatabaseInfo, 1) // delete results for system database.
+		if !reflect.DeepEqual(resp.DatabaseInfo, expectedResp) {
+			return fmt.Errorf("expected %v; got %v", expectedResp, resp.DatabaseInfo)
+		}
+
+		// Don't test anything about the zone configs for now; just verify that something is there.
+		if len(resp.ZoneConfigs) == 0 {
+			return fmt.Errorf("no zone configs returned")
+		}
+
+		return nil
+	})
+
+	// Add a zone config.
+	sqlDB.Exec(t, `ALTER TABLE roachblog.posts EXPERIMENTAL CONFIGURE ZONE 'num_replicas: 1'`)
+
+	expectedNewZoneConfigID := int64(51)
+	sqlDB.CheckQueryResults(
+		t,
+		`SELECT id
+		FROM [EXPERIMENTAL SHOW ALL ZONE CONFIGURATIONS]
+		WHERE cli_specifier = 'roachblog.posts'`,
+		[][]string{
+			{fmt.Sprintf("%d", expectedNewZoneConfigID)},
+		},
+	)
+
+	// Verify that we see the zone config and its effects.
+	testutils.SucceedsSoon(t, func() error {
+		var resp serverpb.ReplicaMatrixResponse
+		if err := getAdminJSONProto(firstServer, "replica_matrix", &resp); err != nil {
+			t.Fatal(err)
+		}
+
+		postsTableInfo := resp.DatabaseInfo[50].TableInfo[51]
+
+		// Verify that the TableInfo for roachblog.posts points at the new zone config.
+		if postsTableInfo.ZoneConfigId != expectedNewZoneConfigID {
+			t.Fatalf(
+				"expected roachblog.posts to have zone config id %d; had %d",
+				expectedNewZoneConfigID, postsTableInfo.ZoneConfigId,
+			)
+		}
+
+		// Verify that the num_replicas setting has taken effect.
+		numPostsReplicas := int64(0)
+		for _, count := range postsTableInfo.ReplicaCountByNodeId {
+			numPostsReplicas += count
+		}
+
+		if numPostsReplicas != 1 {
+			return fmt.Errorf("expected 1 replica; got %d", numPostsReplicas)
+		}
+
+		return nil
+	})
+}
