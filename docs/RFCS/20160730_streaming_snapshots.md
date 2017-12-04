@@ -1,5 +1,5 @@
 - Feature Name: streaming_snapshots
-- Status: in-progress
+- Status: completed
 - Start Date: 2016-07-30
 - Authors: bdarnell
 - RFC PR: [#8151](https://github.com/cockroachdb/cockroach/pull/8151)

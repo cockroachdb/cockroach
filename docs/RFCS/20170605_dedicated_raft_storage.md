@@ -1,5 +1,5 @@
 - Feature Name: Dedicated storage engine for Raft
-- Status: draft
+- Status: in-progress
 - Start Date: 2017-05-25
 - Authors: Irfan Sharif
 - RFC PR: [#16361](https://github.com/cockroachdb/cockroach/pull/16361)
