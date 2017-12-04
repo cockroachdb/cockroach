@@ -514,6 +514,40 @@ message QueryPlanResponse {
   string distsql_physical_query_plan = 1 [(gogoproto.customname) = "DistSQLPhysicalQueryPlan"];
 }
 
+message ReplicaMatrixRequest {
+}
+
+message ReplicaMatrixResponse {
+  message ZoneConfig {
+    // cli_specifier is ".default" for the default zone config.
+    // Otherwise, it's of the form [database.]table[@index[.partition]]
+    string cli_specifier = 1;
+
+    config.ZoneConfig config = 2 [(gogoproto.nullable) = false];
+
+    // config_yaml is the YAML representation of config.
+    string config_yaml = 3;
+  }
+
+  message TableInfo {
+    map<int32, int64> replica_count_by_node_id = 1
+      [(gogoproto.castkey) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"];
+
+    int64 zone_config_id = 2;
+  }
+
+  message DatabaseInfo {
+    // By table name.
+    map<string, TableInfo> table_info = 1 [(gogoproto.nullable) = false];
+  }
+
+  // By database name.
+  map<string, DatabaseInfo> database_info = 1 [(gogoproto.nullable) = false];
+
+  // By zone config id.
+  map<int64, ZoneConfig> zone_configs = 2 [(gogoproto.nullable) = false];
+}
+
 // Admin is the gRPC API for the admin UI. Through grpc-gateway, we offer
 // REST-style HTTP endpoints that locally proxy to the gRPC endpoints.
 service Admin {
@@ -685,6 +719,12 @@ service Admin {
       additional_bindings {
         get: "/_admin/v1/rangelog/{range_id}"
      }
+    };
+  }
+
+  rpc ReplicaMatrix(ReplicaMatrixRequest) returns (ReplicaMatrixResponse) {
+    option (google.api.http) = {
+      get: "/_admin/v1/replica_matrix"
     };
   }
 }
