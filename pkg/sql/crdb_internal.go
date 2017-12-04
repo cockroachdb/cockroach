@@ -1430,7 +1430,7 @@ CREATE TABLE crdb_internal.ranges (
 				dbNames[id] = desc.GetName()
 			}
 		}
-		ranges, err := scanMetaKVs(ctx, p.txn, roachpb.Span{
+		ranges, err := ScanMetaKVs(ctx, p.txn, roachpb.Span{
 			Key:    keys.MinKey,
 			EndKey: keys.MaxKey,
 		})
