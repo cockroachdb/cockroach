@@ -83,6 +83,9 @@ type Transport interface {
 	// IsExhausted returns true if there are no more replicas to try.
 	IsExhausted() bool
 
+	// GetPending returns the replica(s) to which requests are still pending.
+	GetPending() []roachpb.ReplicaDescriptor
+
 	// SendNext sends the rpc (captured at creation time) to the next
 	// replica. May panic if the transport is exhausted. Should not
 	// block; the transport is responsible for starting other goroutines
@@ -164,14 +167,27 @@ func (gt *grpcTransport) IsExhausted() bool {
 	if gt.clientIndex < len(gt.orderedClients) {
 		return false
 	}
-	return !gt.maybeResurrectRetryables()
+	return !gt.maybeResurrectRetryablesLocked()
 }
 
-// maybeResurrectRetryables moves already-tried replicas which
+// GetPending returns the replica(s) to which requests are still pending.
+func (gt *grpcTransport) GetPending() []roachpb.ReplicaDescriptor {
+	gt.clientPendingMu.Lock()
+	defer gt.clientPendingMu.Unlock()
+	var pending []roachpb.ReplicaDescriptor
+	for i := range gt.orderedClients {
+		if gt.orderedClients[i].pending {
+			pending = append(pending, gt.orderedClients[i].args.Replica)
+		}
+	}
+	return pending
+}
+
+// maybeResurrectRetryablesLocked moves already-tried replicas which
 // experienced a retryable error (currently this means a
 // NotLeaseHolderError) into a newly-active state so that they can be
 // retried. Returns true if any replicas were moved to active.
-func (gt *grpcTransport) maybeResurrectRetryables() bool {
+func (gt *grpcTransport) maybeResurrectRetryablesLocked() bool {
 	var resurrect []batchClient
 	for i := 0; i < gt.clientIndex; i++ {
 		if c := gt.orderedClients[i]; !c.pending && c.retryable && timeutil.Since(c.deadline) >= 0 {
@@ -378,6 +394,10 @@ type senderTransport struct {
 
 func (s *senderTransport) IsExhausted() bool {
 	return s.called
+}
+
+func (s *senderTransport) GetPending() []roachpb.ReplicaDescriptor {
+	return []roachpb.ReplicaDescriptor{s.args.Replica}
 }
 
 func (s *senderTransport) SendNext(ctx context.Context, done chan<- BatchCall) {
