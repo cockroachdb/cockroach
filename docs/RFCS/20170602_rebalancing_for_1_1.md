@@ -6,6 +6,7 @@
 - Cockroach Issue:
   - [#12996](https://github.com/cockroachdb/cockroach/issues/12996)
   - [#15988](https://github.com/cockroachdb/cockroach/issues/15988)
+  - [#17979](https://github.com/cockroachdb/cockroach/issues/17979)
 
 # Summary
 

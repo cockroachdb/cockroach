@@ -1,5 +1,5 @@
 - Feature Name: Configs for structured data
-- Status: in-progress
+- Status: completed
 - Start Date: 2015-08-19
 - RFC PR: [#2183](https://github.com/cockroachdb/cockroach/pull/2183)
 - Cockroach Issue: [#2090](https://github.com/cockroachdb/cockroach/issues/2090)

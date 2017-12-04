@@ -1,5 +1,5 @@
 - Feature Name: Information Schema
-- Status: in-progress
+- Status: completed
 - Start Date: 2016-07-19
 - Authors: Nathan VanBenschoten
 - RFC PR: [#7965](https://github.com/cockroachdb/cockroach/pull/7965)
