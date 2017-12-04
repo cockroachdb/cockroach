@@ -57,16 +57,16 @@ func GetUserHashedPassword(
 }
 
 // GetAllUsers returns all the usernames in system.users.
-func GetAllUsers(ctx context.Context, plan *planner) ([]string, error) {
+func GetAllUsers(ctx context.Context, plan *planner) (map[string]bool, error) {
 	query := `SELECT username FROM system.users`
 	p := makeInternalPlanner("get-all-user", plan.txn, security.RootUser, plan.session.memMetrics)
 	defer finishInternalPlanner(p)
 	rows, err := p.queryRows(ctx, query)
 
-	users := make([]string, 0)
+	users := make(map[string]bool, 0)
 	if err == nil {
 		for _, row := range rows {
-			users = append(users, string(tree.MustBeDString(row[0])))
+			users[string(tree.MustBeDString(row[0]))] = true
 		}
 	}
 	return users, err

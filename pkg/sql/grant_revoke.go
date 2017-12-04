@@ -17,7 +17,6 @@ package sql
 import (
 	"golang.org/x/net/context"
 
-	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -66,17 +65,8 @@ func (p *planner) changePrivileges(
 	if err != nil {
 		return nil, err
 	}
-	users = append(users, security.RootUser)
-	users = append(users, security.NodeUser)
 	for _, grantee := range grantees {
-		findUser := false
-		for _, user := range users {
-			if user == string(grantee) {
-				findUser = true
-				break
-			}
-		}
-		if !findUser {
+		if _, ok := users[string(grantee)]; !ok {
 			return nil, errors.Errorf("user %s does not exist", grantee)
 		}
 	}

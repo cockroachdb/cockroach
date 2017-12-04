@@ -360,6 +360,9 @@ statement ok
 SET DATABASE = "b"
 
 statement ok
+GRANT ALL ON * TO Vanilli
+
+statement ok
 CREATE USER Vanilli
 
 statement ok
