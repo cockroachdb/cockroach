@@ -1065,6 +1065,25 @@ func NewDBytes(d DBytes) *DBytes {
 	return &d
 }
 
+// MustBeDBytes attempts to convert an Expr into a DBytes, panicking if unsuccessful.
+func MustBeDBytes(e Expr) DBytes {
+	i, ok := AsDBytes(e)
+	if !ok {
+		panic(pgerror.NewErrorf(pgerror.CodeInternalError, "expected *DBytes, found %T", e))
+	}
+	return i
+}
+
+// AsDBytes attempts to convert an Expr into a DBytes, returning a flag indicating
+// whether it was successful.
+func AsDBytes(e Expr) (DBytes, bool) {
+	switch t := e.(type) {
+	case *DBytes:
+		return *t, true
+	}
+	return "", false
+}
+
 // ResolvedType implements the TypedExpr interface.
 func (*DBytes) ResolvedType() types.T {
 	return types.Bytes
