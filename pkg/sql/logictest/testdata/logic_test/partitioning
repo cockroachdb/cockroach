@@ -314,7 +314,7 @@ ok4  CREATE TABLE ok4 (
      c INT NULL,
      CONSTRAINT "primary" PRIMARY KEY (a ASC, b ASC),
      FAMILY "primary" (a, b, c)
-) PARTITION BY LIST (ab) (
+) PARTITION BY LIST (a, b) (
    PARTITION p1 VALUES IN ((1, 1)),
    PARTITION p2 VALUES IN ((1, DEFAULT)),
    PARTITION p3 VALUES IN ((2, 3)),
@@ -455,7 +455,7 @@ ok10  CREATE TABLE ok10 (
       c INT NULL,
       CONSTRAINT "primary" PRIMARY KEY (a ASC, b ASC),
       FAMILY "primary" (a, b, c)
-) PARTITION BY RANGE (ab) (
+) PARTITION BY RANGE (a, b) (
    PARTITION p1 VALUES < (1, 1),
    PARTITION p2 VALUES < (1, MAXVALUE),
    PARTITION p3 VALUES < (2, MAXVALUE),

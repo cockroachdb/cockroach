@@ -33,7 +33,6 @@ func (node *AlterTable) Format(buf *bytes.Buffer, f FmtFlags) {
 		buf.WriteString("IF EXISTS ")
 	}
 	FormatNode(buf, f, &node.Table)
-	buf.WriteByte(' ')
 	FormatNode(buf, f, node.Cmds)
 }
 
@@ -44,7 +43,7 @@ type AlterTableCmds []AlterTableCmd
 func (node AlterTableCmds) Format(buf *bytes.Buffer, f FmtFlags) {
 	for i, n := range node {
 		if i > 0 {
-			buf.WriteString(", ")
+			buf.WriteString(",")
 		}
 		FormatNode(buf, f, n)
 	}
@@ -65,6 +64,7 @@ func (*AlterTableDropConstraint) alterTableCmd()     {}
 func (*AlterTableDropNotNull) alterTableCmd()        {}
 func (*AlterTableSetDefault) alterTableCmd()         {}
 func (*AlterTableValidateConstraint) alterTableCmd() {}
+func (*AlterTablePartitionBy) alterTableCmd()        {}
 
 var _ AlterTableCmd = &AlterTableAddColumn{}
 var _ AlterTableCmd = &AlterTableAddConstraint{}
@@ -73,6 +73,7 @@ var _ AlterTableCmd = &AlterTableDropConstraint{}
 var _ AlterTableCmd = &AlterTableDropNotNull{}
 var _ AlterTableCmd = &AlterTableSetDefault{}
 var _ AlterTableCmd = &AlterTableValidateConstraint{}
+var _ AlterTableCmd = &AlterTablePartitionBy{}
 
 // ColumnMutationCmd is the subset of AlterTableCmds that modify an
 // existing column.
@@ -90,7 +91,7 @@ type AlterTableAddColumn struct {
 
 // Format implements the NodeFormatter interface.
 func (node *AlterTableAddColumn) Format(buf *bytes.Buffer, f FmtFlags) {
-	buf.WriteString("ADD ")
+	buf.WriteString(" ADD ")
 	if node.ColumnKeyword {
 		buf.WriteString("COLUMN ")
 	}
@@ -118,7 +119,7 @@ type AlterTableAddConstraint struct {
 
 // Format implements the NodeFormatter interface.
 func (node *AlterTableAddConstraint) Format(buf *bytes.Buffer, f FmtFlags) {
-	buf.WriteString("ADD ")
+	buf.WriteString(" ADD ")
 	FormatNode(buf, f, node.ConstraintDef)
 	if node.ValidationBehavior == ValidationSkip {
 		buf.WriteString(" NOT VALID")
@@ -135,7 +136,7 @@ type AlterTableDropColumn struct {
 
 // Format implements the NodeFormatter interface.
 func (node *AlterTableDropColumn) Format(buf *bytes.Buffer, f FmtFlags) {
-	buf.WriteString("DROP ")
+	buf.WriteString(" DROP ")
 	if node.ColumnKeyword {
 		buf.WriteString("COLUMN ")
 	}
@@ -157,7 +158,7 @@ type AlterTableDropConstraint struct {
 
 // Format implements the NodeFormatter interface.
 func (node *AlterTableDropConstraint) Format(buf *bytes.Buffer, f FmtFlags) {
-	buf.WriteString("DROP CONSTRAINT ")
+	buf.WriteString(" DROP CONSTRAINT ")
 	if node.IfExists {
 		buf.WriteString("IF EXISTS ")
 	}
@@ -174,7 +175,7 @@ type AlterTableValidateConstraint struct {
 
 // Format implements the NodeFormatter interface.
 func (node *AlterTableValidateConstraint) Format(buf *bytes.Buffer, f FmtFlags) {
-	buf.WriteString("VALIDATE CONSTRAINT ")
+	buf.WriteString(" VALIDATE CONSTRAINT ")
 	FormatNode(buf, f, node.Constraint)
 }
 
@@ -193,7 +194,7 @@ func (node *AlterTableSetDefault) GetColumn() Name {
 
 // Format implements the NodeFormatter interface.
 func (node *AlterTableSetDefault) Format(buf *bytes.Buffer, f FmtFlags) {
-	buf.WriteString("ALTER ")
+	buf.WriteString(" ALTER ")
 	if node.ColumnKeyword {
 		buf.WriteString("COLUMN ")
 	}
@@ -220,10 +221,21 @@ func (node *AlterTableDropNotNull) GetColumn() Name {
 
 // Format implements the NodeFormatter interface.
 func (node *AlterTableDropNotNull) Format(buf *bytes.Buffer, f FmtFlags) {
-	buf.WriteString("ALTER ")
+	buf.WriteString(" ALTER ")
 	if node.ColumnKeyword {
 		buf.WriteString("COLUMN ")
 	}
 	FormatNode(buf, f, node.Column)
 	buf.WriteString(" DROP NOT NULL")
+}
+
+// AlterTablePartitionBy represents an ALTER TABLE PARTITION BY
+// command.
+type AlterTablePartitionBy struct {
+	*PartitionBy
+}
+
+// Format implements the NodeFormatter interface.
+func (node *AlterTablePartitionBy) Format(buf *bytes.Buffer, f FmtFlags) {
+	FormatNode(buf, f, node.PartitionBy)
 }

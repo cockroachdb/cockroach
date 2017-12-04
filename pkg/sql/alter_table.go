@@ -18,6 +18,7 @@ import (
 	"bytes"
 	"fmt"
 
+	"github.com/gogo/protobuf/proto"
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
@@ -436,6 +437,32 @@ func (n *alterTableNode) startExec(params runParams) error {
 			n.tableDesc.UpdateColumnDescriptor(col)
 			descriptorChanged = true
 
+		case *tree.AlterTablePartitionBy:
+			previousTableDesc := *n.tableDesc
+			if err := addPartitionedBy(
+				params.ctx, &params.p.evalCtx, n.tableDesc, &n.tableDesc.PrimaryIndex,
+				&n.tableDesc.PrimaryIndex.Partitioning, t.PartitionBy, 0, /* colOffset */
+			); err != nil {
+				return err
+			}
+			descriptorChanged = !proto.Equal(
+				&previousTableDesc.PrimaryIndex.Partitioning,
+				&n.tableDesc.PrimaryIndex.Partitioning,
+			)
+			if descriptorChanged {
+				// TODO(dan): Consider the case of a table that is repartitioned
+				// when it has not finished the schema change for adding the
+				// partitioning CHECK constraint from the last partitioning.
+				fastPath, err := RepartitioningFastPathAvailable(&previousTableDesc, n.tableDesc)
+				if err != nil {
+					return err
+				}
+				if !fastPath {
+					return fmt.Errorf("data validation is required for this repartitioning, but is currently unimplemented")
+				}
+				// TODO(dan): Remove zone configs which no longer point at a
+				// partition. This also needs to be done for indexes.
+			}
 		default:
 			return fmt.Errorf("unsupported alter cmd: %T", cmd)
 		}
