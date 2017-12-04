@@ -1371,13 +1371,11 @@ func newSSTWriterProcessor(
 	output distsqlrun.RowReceiver,
 ) (distsqlrun.Processor, error) {
 	sp := &sstWriter{
-		uri:           spec.Destination,
-		name:          spec.Name,
-		walltimeNanos: spec.WalltimeNanos,
-		input:         input,
-		output:        output,
-		tempStorage:   flowCtx.TempStorage,
-		settings:      flowCtx.Settings,
+		spec:        spec,
+		input:       input,
+		output:      output,
+		tempStorage: flowCtx.TempStorage,
+		settings:    flowCtx.Settings,
 	}
 	if err := sp.out.Init(&distsqlrun.PostProcessSpec{}, sstOutputTypes, flowCtx.NewEvalCtx(), output); err != nil {
 		return nil, err
@@ -1386,14 +1384,12 @@ func newSSTWriterProcessor(
 }
 
 type sstWriter struct {
-	uri           string
-	name          string
-	walltimeNanos int64
-	input         distsqlrun.RowSource
-	out           distsqlrun.ProcOutputHelper
-	output        distsqlrun.RowReceiver
-	tempStorage   engine.Engine
-	settings      *cluster.Settings
+	spec        distsqlrun.SSTWriterSpec
+	input       distsqlrun.RowSource
+	out         distsqlrun.ProcOutputHelper
+	output      distsqlrun.RowReceiver
+	tempStorage engine.Engine
+	settings    *cluster.Settings
 }
 
 var _ distsqlrun.Processor = &sstWriter{}
@@ -1412,10 +1408,8 @@ func (sp *sstWriter) Run(ctx context.Context, wg *sync.WaitGroup) {
 
 	defer distsqlrun.DrainAndForwardMetadata(ctx, sp.input, sp.output)
 	err := func() error {
-		// We need to produce a single SST file. engine.MakeRocksDBSstFileWriter is
-		// able to do this in memory, but requires that rows added to it be done
-		// in order. Thus, we first need to fetch all rows and sort them. We use
-		// NewRocksDBMap to write the rows, then fetch them in order using an iterator.
+		// Sort incoming KVs, which will be from multiple spans, into a single
+		// RocksDB instance.
 		types := sp.input.Types()
 		input := distsqlrun.MakeNoMetadataRowSource(sp.input, sp.output)
 		alloc := &sqlbase.DatumAlloc{}
@@ -1454,81 +1448,62 @@ func (sp *sstWriter) Run(ctx context.Context, wg *sync.WaitGroup) {
 		if err := batch.Close(ctx); err != nil {
 			return err
 		}
-		iter := store.NewIterator()
-		var kv engine.MVCCKeyValue
-		kv.Key.Timestamp.WallTime = sp.walltimeNanos
-		var firstKey roachpb.Key
-		sst, err := engine.MakeRocksDBSstFileWriter()
-		if err != nil {
-			return err
-		}
-		defer sst.Close()
-		var lastKey []byte
-		for iter.Rewind(); ; iter.Next() {
-			if ok, err := iter.Valid(); err != nil {
-				return err
-			} else if !ok {
-				break
-			}
-			kv.Key.Key = iter.UnsafeKey()
-			kv.Value = iter.UnsafeValue()
-			if firstKey == nil {
-				firstKey = iter.Key()
-			}
-			if err := sst.Add(kv); err != nil {
-				return errors.Wrapf(err, errSSTCreationMaybeDuplicateTemplate, kv.Key.Key)
-			}
-			lastKey = append(lastKey[:0], kv.Key.Key.Next()...)
-		}
-		data, err := sst.Finish()
-		if err != nil {
-			return err
-		}
-		checksum, err := storageccl.SHA512ChecksumData(data)
-		if err != nil {
-			return err
-		}
-		conf, err := storageccl.ExportStorageConfFromURI(sp.uri)
-		if err != nil {
-			return err
-		}
-		es, err := storageccl.MakeExportStorage(ctx, conf, sp.settings)
-		if err != nil {
-			return err
-		}
-		defer es.Close()
-		if err := es.WriteFile(ctx, sp.name, bytes.NewReader(data)); err != nil {
-			return err
-		}
 
-		row := sqlbase.EncDatumRow{
-			sqlbase.DatumToEncDatum(
-				sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_STRING},
-				tree.NewDString(sp.name),
-			),
-			sqlbase.DatumToEncDatum(
-				sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_INT},
-				tree.NewDInt(tree.DInt(len(data))),
-			),
-			sqlbase.DatumToEncDatum(
-				sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_BYTES},
-				tree.NewDBytes(tree.DBytes(checksum)),
-			),
-			sqlbase.DatumToEncDatum(
-				sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_BYTES},
-				tree.NewDBytes(tree.DBytes(firstKey)),
-			),
-			sqlbase.DatumToEncDatum(
-				sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_BYTES},
-				tree.NewDBytes(tree.DBytes(lastKey)),
-			),
-		}
-		cs, err := sp.out.EmitRow(ctx, row)
-		if err != nil {
-			return err
-		}
-		if cs != distsqlrun.NeedMoreRows {
-			return errors.New("unexpected closure of consumer")
+		// Fetch all the keys in each span and write them to storage.
+		iter := store.NewIterator()
+		iter.Rewind()
+		for _, span := range sp.spec.Spans {
+			data, firstKey, lastKey, err := extractSSTSpan(iter, span.End, sp.spec.WalltimeNanos)
+			if err != nil {
+				return err
+			}
+
+			checksum, err := storageccl.SHA512ChecksumData(data)
+			if err != nil {
+				return err
+			}
+			conf, err := storageccl.ExportStorageConfFromURI(sp.spec.Destination)
+			if err != nil {
+				return err
+			}
+			es, err := storageccl.MakeExportStorage(ctx, conf, sp.settings)
+			if err != nil {
+				return err
+			}
+			defer es.Close()
+			if err := es.WriteFile(ctx, span.Name, bytes.NewReader(data)); err != nil {
+				return err
+			}
+
+			row := sqlbase.EncDatumRow{
+				sqlbase.DatumToEncDatum(
+					sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_STRING},
+					tree.NewDString(span.Name),
+				),
+				sqlbase.DatumToEncDatum(
+					sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_INT},
+					tree.NewDInt(tree.DInt(len(data))),
+				),
+				sqlbase.DatumToEncDatum(
+					sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_BYTES},
+					tree.NewDBytes(tree.DBytes(checksum)),
+				),
+				sqlbase.DatumToEncDatum(
+					sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_BYTES},
+					tree.NewDBytes(tree.DBytes(firstKey)),
+				),
+				sqlbase.DatumToEncDatum(
+					sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_BYTES},
+					tree.NewDBytes(tree.DBytes(lastKey)),
+				),
+			}
+			cs, err := sp.out.EmitRow(ctx, row)
+			if err != nil {
+				return err
+			}
+			if cs != distsqlrun.NeedMoreRows {
+				return errors.New("unexpected closure of consumer")
+			}
 		}
 		return nil
 	}()
@@ -1538,6 +1513,46 @@ func (sp *sstWriter) Run(ctx context.Context, wg *sync.WaitGroup) {
 	}
 
 	sp.out.Close()
+}
+
+// extractSSTSpan creates an SST from the iterator, excluding keys >= end.
+func extractSSTSpan(
+	iter engine.SortedDiskMapIterator, end []byte, walltimeNanos int64,
+) (data, firstKey, lastKey []byte, err error) {
+	sst, err := engine.MakeRocksDBSstFileWriter()
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	defer sst.Close()
+	var kv engine.MVCCKeyValue
+	kv.Key.Timestamp.WallTime = walltimeNanos
+	for {
+		if ok, err := iter.Valid(); err != nil {
+			return nil, nil, nil, err
+		} else if !ok {
+			break
+		}
+		kv.Key.Key = iter.UnsafeKey()
+		if kv.Key.Key.Compare(end) >= 0 {
+			// If we are at the end, break the loop and return the data. There is no
+			// need to back up one key, because the iterator is pointing at the start
+			// of the next block already, and Next won't be called until after the key
+			// has been extracted again during the next call to this function.
+			break
+		}
+		kv.Value = iter.UnsafeValue()
+		if firstKey == nil {
+			firstKey = iter.Key()
+		}
+		if err := sst.Add(kv); err != nil {
+			return nil, nil, nil, errors.Wrapf(err, errSSTCreationMaybeDuplicateTemplate, kv.Key.Key)
+		}
+		lastKey = append(lastKey[:0], kv.Key.Key.Next()...)
+
+		iter.Next()
+	}
+	data, err = sst.Finish()
+	return data, firstKey, lastKey, err
 }
 
 func init() {

@@ -464,7 +464,9 @@ func TestImportStmt(t *testing.T) {
 	files, filesWithOpts, dups := makeCSVData(t, dir, numFiles, rowsPerFile)
 	expectedRows := numFiles * rowsPerFile
 
-	for i, tc := range []struct {
+	// Support subtests by keeping track of the number of jobs that are executed.
+	i := -1
+	for _, tc := range []struct {
 		name    string
 		query   string        // must have one `%s` for the files list.
 		args    []interface{} // will have backupPath appended
@@ -510,6 +512,15 @@ func TestImportStmt(t *testing.T) {
 			schema,
 			files,
 			`WITH distributed, temp = %s, transform_only`,
+			"",
+		},
+		{
+			// Force some SST splits.
+			"schema-in-file-sstsize-dist",
+			`IMPORT TABLE t CREATE USING $1 CSV DATA (%s) WITH temp = $2, distributed, sstsize = '10K'`,
+			schema,
+			files,
+			`WITH distributed, sstsize = '10K', temp = %s, transform_only`,
 			"",
 		},
 		{
@@ -603,6 +614,7 @@ func TestImportStmt(t *testing.T) {
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			i++
 			sqlDB.Exec(t, fmt.Sprintf(`CREATE DATABASE csv%d`, i))
 			sqlDB.Exec(t, fmt.Sprintf(`SET DATABASE = csv%d`, i))
 
