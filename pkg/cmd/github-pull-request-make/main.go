@@ -128,6 +128,15 @@ func pkgsFromDiff(r io.Reader) (map[string]pkg, error) {
 	}
 }
 
+func hasChanged(diff string, paths ...string) bool {
+	for _, path := range paths {
+		if strings.Contains(diff, fmt.Sprintf("\n--- a/%[1]s", path)) {
+			return true
+		}
+	}
+	return false
+}
+
 func findPullRequest(
 	ctx context.Context, client *github.Client, org, repo, sha string,
 ) *github.PullRequest {
@@ -202,39 +211,47 @@ func main() {
 	}
 
 	if target == "checkdeps" {
-		var vendorChanged bool
-		for _, path := range []string{"Gopkg.lock", "vendor"} {
-			if strings.Contains(diff, fmt.Sprintf("\n--- a/%[1]s\n+++ b/%[1]s\n", path)) {
-				vendorChanged = true
-				break
+		if !hasChanged(diff, "Gopkg.lock", "vendor") {
+			log.Println("no Go dependency changes detected; assuming vendor is up to date")
+			return
+		}
+		cmd := exec.Command("dep", "ensure", "-v")
+		cmd.Dir = crdb.Dir
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+		log.Println(cmd.Args)
+		if err := cmd.Run(); err != nil {
+			log.Fatal(err)
+		}
+
+		// Check for diffs.
+		var foundDiff bool
+		for _, dir := range []string{filepath.Join(crdb.Dir, "vendor"), crdb.Dir} {
+			cmd := exec.Command("git", "diff")
+			cmd.Dir = dir
+			log.Println(cmd.Dir, cmd.Args)
+			if output, err := cmd.CombinedOutput(); err != nil {
+				log.Fatalf("%s: %s", err, string(output))
+			} else if len(output) > 0 {
+				foundDiff = true
+				log.Printf("unexpected diff:\n%s", output)
 			}
 		}
-		if vendorChanged {
-			cmd := exec.Command("dep", "ensure", "-v")
-			cmd.Dir = crdb.Dir
-			cmd.Stdout = os.Stdout
-			cmd.Stderr = os.Stderr
-			log.Println(cmd.Args)
-			if err := cmd.Run(); err != nil {
-				log.Fatal(err)
-			}
-
-			// Check for diffs.
-			var foundDiff bool
-			for _, dir := range []string{filepath.Join(crdb.Dir, "vendor"), crdb.Dir} {
-				cmd := exec.Command("git", "diff")
-				cmd.Dir = dir
-				log.Println(cmd.Dir, cmd.Args)
-				if output, err := cmd.CombinedOutput(); err != nil {
-					log.Fatalf("%s: %s", err, string(output))
-				} else if len(output) > 0 {
-					foundDiff = true
-					log.Printf("unexpected diff:\n%s", output)
-				}
-			}
-			if foundDiff {
-				os.Exit(1)
-			}
+		if foundDiff {
+			os.Exit(1)
+		}
+	} else if target == "test-gceworker" {
+		if !hasChanged(diff, "Makefile", "Gopkg.lock", "vendor", "c-deps", "scripts/gceworker.sh") {
+			log.Println("no Makefile, dependency, or GCE worker changes detected; skipping GCE worker tests")
+			return
+		}
+		cmd := exec.Command("build/test-gceworker.sh")
+		cmd.Dir = crdb.Dir
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+		log.Println(cmd.Args)
+		if err := cmd.Run(); err != nil {
+			log.Fatal(err)
 		}
 	} else {
 		pkgs, err := pkgsFromDiff(strings.NewReader(diff))
