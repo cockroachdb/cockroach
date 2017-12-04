@@ -1,5 +1,5 @@
 - Feature Name: proposer_evaluated_kv
-- Status: in-progress
+- Status: completed
 - Start Date: 2016-04-19
 - Authors: Tobias Schottdorf
 - RFC PR: [#6166](https://github.com/cockroachdb/cockroach/pull/6166)

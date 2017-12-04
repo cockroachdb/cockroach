@@ -2,7 +2,7 @@
 - Status: in-progress
 - Start Date: 2017-09-04
 - Authors: knz, jordan
-- RFC PR: #18204
+- RFC PR: [#18204](https://github.com/cockroachdb/cockroach/pull/18204)
 - Cockroach Issue: (one or more # from the issue tracker)
 
 # Summary

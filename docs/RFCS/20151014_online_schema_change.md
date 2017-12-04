@@ -1,5 +1,5 @@
 - Feature Name: online_schema_change
-- Status: in-progress
+- Status: completed
 - Start Date: 2015-10-14
 - RFC PR: [#2842](https://github.com/cockroachdb/cockroach/pull/2842)
 - Cockroach Issue: [#2036](https://github.com/cockroachdb/cockroach/issues/2036)

@@ -1,9 +1,9 @@
 - Feature Name: Array Column Type Encoding
-- Status: in-progress
+- Status: completed
 - Start Date: 2017-05-19
 - Authors: Justin Jaffray, Jordan Lewis
-- RFC PR: #16172
-- Cockroach Issue: #15818
+- RFC PR: [#16172](https://github.com/cockroachdb/cockroach/pull/16172)
+- Cockroach Issue: [#15818](https://github.com/cockroachdb/cockroach/issues/15818)
 
 # Summary
 

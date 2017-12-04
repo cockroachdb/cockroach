@@ -1,5 +1,5 @@
 - Feature Name: Distributing SQL queries
-- Status: in-progress
+- Status: completed
 - Start Date: 2015/02/12
 - Authors: andreimatei, knz, RaduBerinde
 - RFC PR: [#6067](https://github.com/cockroachdb/cockroach/pull/6067)
