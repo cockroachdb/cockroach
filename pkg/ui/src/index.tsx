@@ -33,6 +33,7 @@ import Layout from "src/views/app/containers/layout";
 import { DatabaseTablesList, DatabaseGrantsList } from "src/views/databases/containers/databases";
 import TableDetails from "src/views/databases/containers/tableDetails";
 import { EventPage } from "src/views/cluster/containers/events";
+import DataDistributionPage from "src/views/cluster/containers/dataDistribution";
 import Raft from "src/views/devtools/containers/raft";
 import RaftRanges from "src/views/devtools/containers/raftRanges";
 import RaftMessages from "src/views/devtools/containers/raftMessages";
@@ -121,6 +122,9 @@ ReactDOM.render(
             </Route>
           </Route>
         </Route>
+
+        { /* data distribution */ }
+        <Route path="data-distribution" component={ DataDistributionPage } />
 
         { /* debug pages */ }
         <Route path="debug">
