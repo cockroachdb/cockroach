@@ -18,6 +18,7 @@ package storage
 
 import (
 	"fmt"
+	"sync/atomic"
 
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
@@ -31,40 +32,42 @@ import (
 
 // leaseRequestHandle is a handle to an asynchronous lease request.
 type leaseRequestHandle struct {
-	p *pendingLeaseRequest
-	c chan *roachpb.Error
+	p        *pendingLeaseRequest
+	c        chan *roachpb.Error
+	resolved int32 // accessed atomically
 }
 
 // C returns the channel where the lease request's result will be sent on.
 func (h *leaseRequestHandle) C() <-chan *roachpb.Error {
-	if h.c == nil {
-		panic("handle already canceled")
-	}
 	return h.c
 }
 
-// Cancel cancels the request handle. It also cancels the asynchronous
+// Close closes the request handle. It also cancels the asynchronous
 // lease request task if its reference count drops to zero.
-func (h *leaseRequestHandle) Cancel() {
-	h.p.repl.mu.Lock()
-	defer h.p.repl.mu.Unlock()
-	if len(h.c) == 0 {
-		// Our lease request is ongoing...
-		// Unregister handle.
-		delete(h.p.llHandles, h)
-		// Cancel request, if necessary.
-		if len(h.p.llHandles) == 0 {
-			h.p.cancel()
+func (h *leaseRequestHandle) Close() {
+	// Double-checked locking to avoid replica lock in common case.
+	if atomic.LoadInt32(&h.resolved) == 0 {
+		h.p.repl.mu.Lock()
+		defer h.p.repl.mu.Unlock()
+		if h.resolved == 0 {
+			// Our lease request is ongoing...
+			// Unregister handle.
+			delete(h.p.llHandles, h)
+			// Cancel request, if necessary.
+			if len(h.p.llHandles) == 0 {
+				h.p.cancel()
+			}
 		}
 	}
-	// Mark handle as canceled.
-	h.c = nil
 }
 
 // resolve notifies the handle of the request's result.
 //
 // Requires repl.mu is exclusively locked.
-func (h *leaseRequestHandle) resolve(pErr *roachpb.Error) { h.c <- pErr }
+func (h *leaseRequestHandle) resolve(pErr *roachpb.Error) {
+	atomic.StoreInt32(&h.resolved, 1)
+	h.c <- pErr
+}
 
 // pendingLeaseRequest coalesces RequestLease requests and lets
 // callers join an in-progress lease request and wait for the result.
@@ -568,11 +571,11 @@ func (r *Replica) AdminTransferLease(ctx context.Context, target roachpb.StoreID
 				// The target is us and we're the lease holder.
 				return nil
 			}
+			defer transfer.Close()
 			select {
 			case pErr := <-transfer.C():
 				return pErr.GoError()
 			case <-ctx.Done():
-				transfer.Cancel()
 				return ctx.Err()
 			}
 		}
@@ -584,7 +587,7 @@ func (r *Replica) AdminTransferLease(ctx context.Context, target roachpb.StoreID
 		case <-extension.C():
 			continue
 		case <-ctx.Done():
-			extension.Cancel()
+			extension.Close()
 			return ctx.Err()
 		}
 	}

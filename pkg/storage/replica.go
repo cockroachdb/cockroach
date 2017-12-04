@@ -1463,6 +1463,7 @@ func (r *Replica) redirectOnOrAcquireLease(ctx context.Context) (LeaseStatus, *r
 
 		// Wait for the range lease to finish, or the context to expire.
 		pErr = func() *roachpb.Error {
+			defer llHandle.Close()
 			slowTimer := timeutil.NewTimer()
 			defer slowTimer.Stop()
 			slowTimer.Reset(base.SlowRequestThreshold)
@@ -1512,11 +1513,9 @@ func (r *Replica) redirectOnOrAcquireLease(ctx context.Context) (LeaseStatus, *r
 					r.store.metrics.SlowLeaseRequests.Inc(1)
 					defer r.store.metrics.SlowLeaseRequests.Dec(1)
 				case <-ctx.Done():
-					llHandle.Cancel()
 					log.ErrEventf(ctx, "lease acquisition failed: %s", ctx.Err())
 					return roachpb.NewError(newNotLeaseHolderError(nil, r.store.StoreID(), r.Desc()))
 				case <-r.store.Stopper().ShouldStop():
-					llHandle.Cancel()
 					return roachpb.NewError(newNotLeaseHolderError(nil, r.store.StoreID(), r.Desc()))
 				}
 			}
