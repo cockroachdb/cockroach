@@ -302,6 +302,10 @@ $(GITHOOKSDIR)/%: githooks/%
 	@ln -s ../../$(basename $<) $(dir $@)
 endif
 
+.PHONY: commit_template
+commit_template:
+	@git config --local commit.template build/commit-template
+
 # Make does textual matching on target names, so e.g. yarn.installed and
 # ../../pkg/ui/yarn.installed are considered different targets even when the CWD
 # is pkg/ui. Introducing a variable for targets that are used across Makefiles
