@@ -98,7 +98,7 @@ type showRangesRun struct {
 
 func (n *showRangesNode) startExec(params runParams) error {
 	var err error
-	n.run.descriptorKVs, err = scanMetaKVs(params.ctx, params.p.txn, n.span)
+	n.run.descriptorKVs, err = ScanMetaKVs(params.ctx, params.p.txn, n.span)
 	return err
 }
 
@@ -185,8 +185,8 @@ func (n *showRangesNode) Close(_ context.Context) {
 	n.run.descriptorKVs = nil
 }
 
-// scanMetaKVs returns the meta KVs for the ranges that touch the given span.
-func scanMetaKVs(
+// ScanMetaKVs returns the meta KVs for the ranges that touch the given span.
+func ScanMetaKVs(
 	ctx context.Context, txn *client.Txn, span roachpb.Span,
 ) ([]client.KeyValue, error) {
 	metaStart := keys.RangeMetaKey(keys.MustAddr(span.Key).Next())
