@@ -478,6 +478,21 @@ message QueryPlanResponse {
   string distsql_physical_query_plan = 1 [(gogoproto.customname) = "DistSQLPhysicalQueryPlan"];
 }
 
+message ReplicaMatrixRequest {
+  int64 foo = 1;
+}
+
+message ReplicaMatrixResponse {
+  repeated ReplicaMatrixCell cells = 1;
+}
+
+message ReplicaMatrixCell {
+  int32 node_id = 1;
+  string database_name = 2;
+  string table_name = 3;
+  int64 count = 4;
+}
+
 // Admin is the gRPC API for the admin UI. Through grpc-gateway, we offer
 // REST-style HTTP endpoints that locally proxy to the gRPC endpoints.
 service Admin {
@@ -635,6 +650,12 @@ service Admin {
       additional_bindings {
         get: "/_admin/v1/rangelog/{range_id}"
      }
+    };
+  }
+
+  rpc ReplicaMatrix(ReplicaMatrixRequest) returns (ReplicaMatrixResponse) {
+    option (google.api.http) = {
+      get: "/_admin/v1/replica_matrix"
     };
   }
 }

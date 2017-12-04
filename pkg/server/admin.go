@@ -1262,6 +1262,45 @@ func (s *adminServer) Decommission(
 	return s.DecommissionStatus(ctx, &serverpb.DecommissionStatusRequest{NodeIDs: nodeIDs})
 }
 
+func (s *adminServer) ReplicaMatrix(
+	ctx context.Context, req *serverpb.ReplicaMatrixRequest,
+) (*serverpb.ReplicaMatrixResponse, error) {
+	args := sql.SessionArgs{User: s.getUser(req)}
+	ctx, session := s.NewContextAndSessionForRPC(ctx, args)
+	defer session.Finish(s.server.sqlExecutor)
+
+	query := `
+SELECT ra.database, ra.table, re.node_id, count(*)
+FROM crdb_internal.replicas re
+JOIN crdb_internal.ranges ra
+ON re.range_id = ra.range_id
+WHERE ra.table != ''
+GROUP BY ra.database, ra.table, re.node_id
+ORDER BY ra.database, ra.table;
+`
+	r, err := s.server.sqlExecutor.ExecuteStatementsBuffered(session, query, nil, 1)
+	if err != nil {
+		return nil, s.serverError(err)
+	}
+	defer r.Close(ctx)
+
+	rows := r.ResultList[0].Rows
+	cells := make([]*serverpb.ReplicaMatrixCell, rows.Len())
+	for idx := 0; idx < rows.Len(); idx++ {
+		row := rows.At(idx)
+		cells[idx] = &serverpb.ReplicaMatrixCell{
+			DatabaseName: string(tree.MustBeDString(row[0])),
+			TableName:    string(tree.MustBeDString(row[1])),
+			NodeId:       int32(tree.MustBeDInt(row[2])),
+			Count:        int64(tree.MustBeDInt(row[2])),
+		}
+	}
+
+	return &serverpb.ReplicaMatrixResponse{
+		Cells: cells,
+	}, nil
+}
+
 // sqlQuery allows you to incrementally build a SQL query that uses
 // placeholders. Instead of specific placeholders like $1, you instead use the
 // temporary placeholder $.
