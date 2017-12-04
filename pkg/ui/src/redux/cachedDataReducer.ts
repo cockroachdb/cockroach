@@ -137,6 +137,7 @@ export class CachedDataReducer<TRequest, TResponseMessage> {
 
   // errorData is the ERROR action creator.
   errorData = (error: Error, request?: TRequest): PayloadAction<WithRequest<Error, TRequest>> => {
+    console.error(error);
     return {
       type: this.ERROR,
       payload: { request, data: error },

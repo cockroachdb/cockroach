@@ -39,6 +39,7 @@ import NodeOverview from "src/views/cluster/containers/nodeOverview";
 import NodeGraphs from "src/views/cluster/containers/nodeGraphs";
 import NodeLogs from "src/views/cluster/containers/nodeLogs";
 import { EventPage } from "src/views/cluster/containers/events";
+import ReplicaMatrixPage from "src/views/cluster/containers/replicaMatrix";
 
 import Raft from "src/views/devtools/containers/raft";
 import RaftRanges from "src/views/devtools/containers/raftRanges";
@@ -92,6 +93,7 @@ ReactDOM.render(
           <Route path={ `database/:${databaseNameAttr}/table/:${tableNameAttr}` } component={ TableDetails } />
         </Route>
         <Route path="jobs" component={ JobsPage } />
+        <Route path="replicamatrix" component={ ReplicaMatrixPage } />
         <Route path="raft" component={ Raft }>
           <IndexRedirect to="ranges" />
           <Route path="ranges" component={ RaftRanges } />

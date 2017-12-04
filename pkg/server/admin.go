@@ -1292,7 +1292,7 @@ ORDER BY ra.database, ra.table;
 			DatabaseName: string(tree.MustBeDString(row[0])),
 			TableName:    string(tree.MustBeDString(row[1])),
 			NodeId:       int32(tree.MustBeDInt(row[2])),
-			Count:        int64(tree.MustBeDInt(row[2])),
+			Count:        int64(tree.MustBeDInt(row[3])),
 		}
 	}
 
