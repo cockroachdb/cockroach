@@ -272,6 +272,13 @@ func TestAdminAPIDatabases(t *testing.T) {
 	// Test database details endpoint.
 	privileges := []string{"SELECT", "UPDATE"}
 	testuser := "testuser"
+	createUserQuery := "CREATE USER " + testuser
+	createUserRes, err := s.(*TestServer).sqlExecutor.ExecuteStatementsBuffered(session, createUserQuery, nil, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer createUserRes.Close(ctx)
+
 	grantQuery := "GRANT " + strings.Join(privileges, ", ") + " ON DATABASE " + testdb + " TO " + testuser
 	grantRes, err := s.(*TestServer).sqlExecutor.ExecuteStatementsBuffered(session, grantQuery, nil, 1)
 	if err != nil {
@@ -437,6 +444,8 @@ func TestAdminAPITableDetails(t *testing.T) {
 							default2 INT DEFAULT 2,
 							string_default STRING DEFAULT 'default_string'
 						)`, escDBName, escTblName),
+				fmt.Sprintf("CREATE USER readonly"),
+				fmt.Sprintf("CREATE USER app"),
 				fmt.Sprintf("GRANT SELECT ON %s.%s TO readonly", escDBName, escTblName),
 				fmt.Sprintf("GRANT SELECT,UPDATE,DELETE ON %s.%s TO app", escDBName, escTblName),
 				fmt.Sprintf("CREATE INDEX descidx ON %s.%s (default2 DESC)", escDBName, escTblName),

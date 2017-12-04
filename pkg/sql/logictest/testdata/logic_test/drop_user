@@ -105,6 +105,9 @@ user3
 user4
 
 statement ok
+CREATE USER user1
+
+statement ok
 CREATE TABLE foo(x INT);
  GRANT SELECT ON foo TO user3;
  GRANT SELECT ON DATABASE test TO user1

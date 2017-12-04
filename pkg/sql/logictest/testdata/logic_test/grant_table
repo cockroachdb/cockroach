@@ -4,6 +4,9 @@ statement ok
 CREATE DATABASE a
 
 statement ok
+CREATE USER readwrite
+
+statement ok
 GRANT ALL ON DATABASE a TO readwrite
 
 query TTT colnames
@@ -108,6 +111,9 @@ SHOW GRANTS ON a.t
 Database  Table  User       Privileges
 a         t      readwrite  ALL
 a         t      root       ALL
+
+statement ok
+INSERT INTO system.users VALUES('test-user','');
 
 statement ok
 GRANT ALL ON t TO readwrite, "test-user"
@@ -353,6 +359,12 @@ CREATE TABLE c.t (id INT PRIMARY KEY)
 statement ok
 SET DATABASE = "b"
 
+statement error pq: user vanilli does not exist
+GRANT ALL ON * TO Vanilli
+
+statement ok
+CREATE USER Vanilli
+
 statement ok
 GRANT ALL ON * TO Vanilli
 
@@ -367,6 +379,8 @@ b         t2     vanilli  ALL
 
 
 # Multiple targets.
+statement ok
+CREATE USER Millie
 
 statement ok
 GRANT ALL ON c.*, b.t TO Millie

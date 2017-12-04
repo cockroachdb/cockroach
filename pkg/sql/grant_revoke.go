@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/pkg/errors"
 )
 
 // Grant adds privileges to users.
@@ -58,6 +59,17 @@ func (p *planner) changePrivileges(
 	grantees tree.NameList,
 	changePrivilege func(*sqlbase.PrivilegeDescriptor, string),
 ) (planNode, error) {
+	// Check whether grantees exists
+	users, err := GetAllUsers(ctx, p)
+	if err != nil {
+		return nil, err
+	}
+	for _, grantee := range grantees {
+		if _, ok := users[string(grantee)]; !ok {
+			return nil, errors.Errorf("user %s does not exist", grantee)
+		}
+	}
+
 	descriptors, err := getDescriptorsFromTargetList(ctx, p.txn, p.getVirtualTabler(), p.session.Database, targets)
 	if err != nil {
 		return nil, err
