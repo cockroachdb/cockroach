@@ -125,7 +125,7 @@ func (n *createViewNode) Start(params runParams) error {
 
 	id, err := GenerateUniqueDescID(params.ctx, params.p.session.execCfg.DB)
 	if err != nil {
-		return nil
+		return err
 	}
 
 	// Inherit permissions from the database descriptor.

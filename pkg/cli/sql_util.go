@@ -558,7 +558,7 @@ func runQueryAndFormatResults(conn *sqlConn, w io.Writer, fn queryFunc) error {
 		cols := getColumnStrings(rows)
 		reporter, err := makeReporter()
 		if err != nil {
-			return nil
+			return err
 		}
 		if err := render(reporter, w, cols, newRowIter(rows, true), noRowsHook); err != nil {
 			return err

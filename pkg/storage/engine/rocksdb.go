@@ -661,7 +661,7 @@ func (r *RocksDB) Capacity() (roachpb.StoreCapacity, error) {
 	var totalUsedBytes int64
 	if errOuter := filepath.Walk(r.cfg.Dir, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
-			return nil
+			return err
 		}
 		if info.Mode().IsRegular() {
 			totalUsedBytes += info.Size()
