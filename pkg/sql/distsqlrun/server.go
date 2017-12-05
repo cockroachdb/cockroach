@@ -343,12 +343,14 @@ func (ds *ServerImpl) RunSyncFlow(stream DistSQL_RunSyncFlowServer) error {
 		ctx, ctxCancel := contextutil.WithCancel(ctx)
 		defer ctxCancel()
 		mbox.start(ctx, &f.waitGroup, ctxCancel)
+		ds.Metrics.FlowStart()
 		if err := f.Start(ctx, func() {}); err != nil {
 			log.Fatalf(ctx, "unexpected error from syncFlow.Start(): %s "+
 				"The error should have gone to the consumer.", err)
 		}
 		f.Wait()
 		f.Cleanup(ctx)
+		ds.Metrics.FlowStop()
 	}); err != nil {
 		return err
 	}
