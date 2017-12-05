@@ -844,8 +844,15 @@ task. When a task is run it is passed its parent task and as part of
 running it can add additional dependencies to its parent, thus making
 the tree of dependencies dynamic. After a task is run, it decrements
 its parent tasks and schedules it for execution if it was the last
-dependency. The initial task is to optimize the "root" group. The
-tasks described are the standard Cascades-style search tasks:
+dependency. Note that new tasks are only created if new expressions
+were added to the memo. Search will not terminate if we continually
+created new expressions via transformations, but that would also
+indicate that we have an unbounded growth in expressions. In practice,
+Search will have some limits on the number of steps it performs or
+time it can take.
+
+The initial task for Search is to optimize the "root" group. The tasks
+described are the standard Cascades-style search tasks:
 
 1. `OptimizeGroup(reqProps)`. Implements the group (via
    `ImplementGroup`) which generates implementations for the
@@ -1020,17 +1027,28 @@ becomes.
 
 * Execution. Stream-group-by.
 
-
 ## Unresolved questions
 
 * Flesh out understanding of where physical properties such as
   ordering can be imposed by the query itself. For example, a
   top-level `ORDER BY` clause definitely imposes ordering. But so does
   an `ORDER BY` clause that is the immediate sub-expression of
-  `LIMIT`, `DISTINCT ON`, `WITH ORDINALITY` and
-  `{INSERT,UPSERT,DELETE,UPDATE}`. Are there other places? Are there
-  other physical properties to capture at intermediate nodes?
-
+  `LIMIT/OFFSET`, `DISTINCT ON`, `WITH ORDINALITY`,
+  `{INSERT,UPSERT,DELETE,UPDATE}` and `CREATE TABLE ... AS ...`. We
+  also need to pay attention to `ORDER BY INDEX` and `ORDER BY PRIMARY
+  KEY`, though those clauses likely degenerate into `ORDER
+  BY`. Are there other places we need to pay attention to physical
+  properties?  Are there other physical properties to capture at
+  intermediate nodes?
+  
+  Another physical property to pay attention to is
+  "rewindability". This arises in the context of CTEs where we need to
+  materialize the view because it is being accessed multiple
+  times. "Rewindability" indicates that an expression can be run
+  multiple times. A scan operator supports rewindability, while most
+  intermediate operators do not. If an operator does not support
+  rewindability, a "spool" operator needs to be added as an enforcer.
+  
 * Which parts of query planning can be performed during PREPARE vs
   EXECUTE? Most (all?) of the transformations that are part of Rewrite
   can be performed during PREPARE. For example, predicate push-down
@@ -1042,6 +1060,10 @@ becomes.
 * The performance of the query planner itself is important because
   query planning occurs for every query executed. What sorts of fast
   paths are possible for simple queries?
+
+* Window functions.
+
+* Describe max1row operator and why it is necessary.
 
 ## Appendix
 
