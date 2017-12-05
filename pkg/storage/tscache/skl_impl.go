@@ -16,15 +16,20 @@ package tscache
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
-// sklPageSize is the size of each page in the sklImpl's read and write
-// intervalSkl.
-// TODO(nvanbenschoten): Bump back up to 32 MB when not testing.
-const sklPageSize = 8 << 20 // 8 MB
+const (
+	// defaultSklPageSize is the default size of each page in the sklImpl's
+	// read and write intervalSkl.
+	defaultSklPageSize = 32 << 20 // 32 MB
+	// TestSklPageSize is passed to tests as the size of each page in the
+	// sklImpl to limit its memory footprint. Reducing this size can hurt
+	// performance but it decreases the risk of OOM failures when many tests
+	// are running concurrently.
+	TestSklPageSize = 32 << 10 // 32 KB
+)
 
 // sklImpl implements the Cache interface. It maintains a pair of skiplists
 // containing keys or key ranges and the timestamps at which they were most
@@ -34,30 +39,26 @@ const sklPageSize = 8 << 20 // 8 MB
 type sklImpl struct {
 	rCache, wCache *intervalSkl
 	clock          *hlc.Clock
+	pageSize       uint32
 	metrics        Metrics
 }
 
 var _ Cache = &sklImpl{}
 
 // newSklImpl returns a new treeImpl with the supplied hybrid clock.
-func newSklImpl(clock *hlc.Clock, metrics Metrics) *sklImpl {
-	tc := sklImpl{clock: clock, metrics: metrics}
+func newSklImpl(clock *hlc.Clock, pageSize uint32, metrics Metrics) *sklImpl {
+	if pageSize == 0 {
+		pageSize = defaultSklPageSize
+	}
+	tc := sklImpl{clock: clock, pageSize: pageSize, metrics: metrics}
 	tc.clear(clock.Now())
 	return &tc
 }
 
 // clear clears the cache and resets the low-water mark.
 func (tc *sklImpl) clear(lowWater hlc.Timestamp) {
-	pageSize := uint32(sklPageSize)
-	if util.RaceEnabled {
-		// Race testing consumes significantly more memory that normal testing.
-		// In addition, while running a group of tests in parallel, each will
-		// create a timestamp cache for every Store needed. Reduce the page size
-		// during race testing to accommodate these two factors.
-		pageSize /= 4
-	}
-	tc.rCache = newIntervalSkl(tc.clock, MinRetentionWindow, pageSize, tc.metrics.Skl.Read)
-	tc.wCache = newIntervalSkl(tc.clock, MinRetentionWindow, pageSize, tc.metrics.Skl.Write)
+	tc.rCache = newIntervalSkl(tc.clock, MinRetentionWindow, tc.pageSize, tc.metrics.Skl.Read)
+	tc.wCache = newIntervalSkl(tc.clock, MinRetentionWindow, tc.pageSize, tc.metrics.Skl.Write)
 	tc.rCache.floorTS = lowWater
 	tc.wCache.floorTS = lowWater
 }

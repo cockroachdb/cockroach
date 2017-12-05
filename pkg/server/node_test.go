@@ -94,8 +94,6 @@ func createTestNode(
 	)
 	cfg.DB = client.NewDB(sender, cfg.Clock)
 	cfg.Transport = storage.NewDummyRaftTransport(st)
-	cfg.MetricsSampleInterval = metric.TestSampleInterval
-	cfg.HistogramWindowInterval = metric.TestSampleInterval
 	active, renewal := cfg.NodeLivenessDurations()
 	cfg.NodeLiveness = storage.NewNodeLiveness(
 		cfg.AmbientCtx,

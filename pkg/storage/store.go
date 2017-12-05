@@ -136,6 +136,7 @@ func TestStoreConfig(clock *hlc.Clock) StoreConfig {
 		CoalescedHeartbeatsInterval: 50 * time.Millisecond,
 		RaftHeartbeatIntervalTicks:  1,
 		ScanInterval:                10 * time.Minute,
+		TimestampCachePageSize:      tscache.TestSklPageSize,
 		MetricsSampleInterval:       metric.TestSampleInterval,
 		HistogramWindowInterval:     metric.TestSampleInterval,
 		EnableEpochRangeLeases:      true,
@@ -619,10 +620,13 @@ type StoreConfig struct {
 	// to be applied concurrently.
 	concurrentSnapshotApplyLimit int
 
-	// MetricsSampleInterval is (server.Context).MetricsSampleInterval
+	// TimestampCachePageSize is (server.Config).TimestampCachePageSize
+	TimestampCachePageSize uint32
+
+	// MetricsSampleInterval is (server.Config).MetricsSampleInterval
 	MetricsSampleInterval time.Duration
 
-	// HistogramWindowInterval is (server.Context).HistogramWindowInterval
+	// HistogramWindowInterval is (server.Config).HistogramWindowInterval
 	HistogramWindowInterval time.Duration
 
 	// EnableEpochRangeLeases controls whether epoch-based range leases are used.
@@ -857,7 +861,7 @@ func NewStore(cfg StoreConfig, eng engine.Engine, nodeDesc *roachpb.NodeDescript
 	s.mu.Unlock()
 
 	tsCacheMetrics := tscache.MakeMetrics()
-	s.tsCache = tscache.New(cfg.Clock, tsCacheMetrics)
+	s.tsCache = tscache.New(cfg.Clock, cfg.TimestampCachePageSize, tsCacheMetrics)
 	s.metrics.registry.AddMetricStruct(tsCacheMetrics)
 
 	s.snapshotApplySem = make(chan struct{}, cfg.concurrentSnapshotApplyLimit)

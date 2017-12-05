@@ -83,12 +83,13 @@ type Cache interface {
 	getLowWater(readCache bool) hlc.Timestamp
 }
 
-// New returns a new timestamp cache with the supplied hybrid clock.
-func New(clock *hlc.Clock, metrics Metrics) Cache {
+// New returns a new timestamp cache with the supplied hybrid clock. If the
+// pageSize is provided, it will override the default page size.
+func New(clock *hlc.Clock, pageSize uint32, metrics Metrics) Cache {
 	if envutil.EnvOrDefaultBool("COCKROACH_USE_TREE_TSCACHE", false) {
 		return newTreeImpl(clock)
 	}
-	return newSklImpl(clock, metrics)
+	return newSklImpl(clock, pageSize, metrics)
 }
 
 // cacheValue combines a timestamp with an optional txnID. It is shared between

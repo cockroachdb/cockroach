@@ -281,7 +281,7 @@ type ExecutorConfig struct {
 
 	TestingKnobs              *ExecutorTestingKnobs
 	SchemaChangerTestingKnobs *SchemaChangerTestingKnobs
-	// HistogramWindowInterval is (server.Context).HistogramWindowInterval.
+	// HistogramWindowInterval is (server.Config).HistogramWindowInterval.
 	HistogramWindowInterval time.Duration
 
 	// Caches updated by DistSQL.

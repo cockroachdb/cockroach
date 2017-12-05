@@ -42,6 +42,7 @@ import (
 	migrations "github.com/cockroachdb/cockroach/pkg/sqlmigrations"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
+	"github.com/cockroachdb/cockroach/pkg/storage/tscache"
 	"github.com/cockroachdb/cockroach/pkg/ts"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -89,6 +90,7 @@ func makeTestConfig(st *cluster.Settings) Config {
 	cfg.HTTPAddr = util.TestAddr.String()
 	// Set standard user for intra-cluster traffic.
 	cfg.User = security.NodeUser
+	cfg.TimestampCachePageSize = tscache.TestSklPageSize
 	cfg.MetricsSampleInterval = metric.TestSampleInterval
 
 	// Enable web session authentication.
