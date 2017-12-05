@@ -405,6 +405,10 @@ func (pp *physicalProps) addEquivalency(colA, colB int) {
 	pp.ordering = pp.reduce(pp.ordering)
 }
 
+// addWeakKey adds the set columns specified by cols as a weak key.
+// If it is a subset of another existing weak key, it will remove the
+// existing weak key.
+// cols is not mutated and safe for re-use.
 func (pp *physicalProps) addWeakKey(cols util.FastIntSet) {
 	// Remap column indices to equivalency group representatives.
 	var k util.FastIntSet
