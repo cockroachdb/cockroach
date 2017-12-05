@@ -189,4 +189,5 @@ docker run --privileged -i ${tty-} ${ccache} --rm \
   --env="TMPDIR=/go/src/github.com/cockroachdb/cockroach/artifacts" \
   --env="PAGER=cat" \
   --env="GOTRACEBACK=${GOTRACEBACK-all}" \
+  --env="TSAN_OPTIONS=${TSAN_OPTIONS-abort_on_error}" \
   "${image}:${version}" "${@-bash}"
