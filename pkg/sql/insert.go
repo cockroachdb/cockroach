@@ -195,7 +195,6 @@ func (p *planner) Insert(
 				autoCommit:    p.autoCommit,
 				conflictIndex: *conflictIndex,
 				alloc:         &p.alloc,
-				mon:           &p.session.TxnState.mon,
 				collectRows:   isUpsertReturning,
 			}
 			tw = tu
@@ -238,7 +237,6 @@ func (p *planner) Insert(
 				ri:            ri,
 				autoCommit:    p.autoCommit,
 				alloc:         &p.alloc,
-				mon:           &p.session.TxnState.mon,
 				collectRows:   isUpsertReturning,
 				fkTables:      fkTables,
 				updateCols:    updateCols,
@@ -319,7 +317,7 @@ func (n *insertNode) startExec(params runParams) error {
 		return err
 	}
 
-	return n.run.tw.init(params.p.txn)
+	return n.run.tw.init(params.p.txn, &params.p.session.TxnState.mon)
 }
 
 func (n *insertNode) Next(params runParams) (bool, error) {

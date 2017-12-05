@@ -54,9 +54,9 @@ type expressionCarrier interface {
 type tableWriter interface {
 	expressionCarrier
 
-	// init provides the tableWriter with a Txn to write to and returns an error
-	// if it was misconfigured.
-	init(txn *client.Txn) error
+	// init provides the tableWriter with a Txn and optional monitor to write to
+	// and returns an error if it was misconfigured.
+	init(*client.Txn, *mon.BytesMonitor) error
 
 	// row performs a sql row modification (tableInserter performs an insert,
 	// etc). It batches up writes to the init'd txn and periodically sends them.
@@ -67,14 +67,14 @@ type tableWriter interface {
 	// of a Value field on the context because Value access in context.Context
 	// is rather expensive and the tableWriter interface is used on the
 	// inner loop of table accesses.
-	row(ctx context.Context, values tree.Datums, traceKV bool) (tree.Datums, error)
+	row(context.Context, tree.Datums, bool /* traceKV */) (tree.Datums, error)
 
 	// finalize flushes out any remaining writes. It is called after all calls to
 	// row.  It returns a slice of all Datums not yet returned by calls to `row`.
 	// The traceKV parameter determines whether the individual K/V operations
 	// should be logged to the context. See the comment above for why
 	// this a separate parameter as opposed to a Value field on the context.
-	finalize(ctx context.Context, traceKV bool) (*sqlbase.RowContainer, error)
+	finalize(context.Context, bool /* traceKV */) (*sqlbase.RowContainer, error)
 
 	// tableDesc returns the TableDescriptor for the table that the tableWriter
 	// will modify.
@@ -84,7 +84,7 @@ type tableWriter interface {
 	fkSpanCollector() sqlbase.FkSpanCollector
 
 	// close frees all resources held by the tableWriter.
-	close(ctx context.Context)
+	close(context.Context)
 }
 
 var _ tableWriter = (*tableInserter)(nil)
@@ -104,7 +104,7 @@ type tableInserter struct {
 
 func (ti *tableInserter) walkExprs(_ func(desc string, index int, expr tree.TypedExpr)) {}
 
-func (ti *tableInserter) init(txn *client.Txn) error {
+func (ti *tableInserter) init(txn *client.Txn, _ *mon.BytesMonitor) error {
 	ti.txn = txn
 	ti.b = txn.NewBatch()
 	return nil
@@ -145,6 +145,7 @@ func (ti *tableInserter) fkSpanCollector() sqlbase.FkSpanCollector {
 type tableUpdater struct {
 	ru         sqlbase.RowUpdater
 	autoCommit bool
+	mon        *mon.BytesMonitor
 
 	// Set by init.
 	txn *client.Txn
@@ -155,8 +156,9 @@ func (ti *tableInserter) close(_ context.Context) {}
 
 func (tu *tableUpdater) walkExprs(_ func(desc string, index int, expr tree.TypedExpr)) {}
 
-func (tu *tableUpdater) init(txn *client.Txn) error {
+func (tu *tableUpdater) init(txn *client.Txn, mon *mon.BytesMonitor) error {
 	tu.txn = txn
+	tu.mon = mon
 	tu.b = txn.NewBatch()
 	return nil
 }
@@ -166,7 +168,7 @@ func (tu *tableUpdater) row(
 ) (tree.Datums, error) {
 	oldValues := values[:len(tu.ru.FetchCols)]
 	updateValues := values[len(tu.ru.FetchCols):]
-	return tu.ru.UpdateRow(ctx, tu.b, oldValues, updateValues, traceKV)
+	return tu.ru.UpdateRow(ctx, tu.b, oldValues, updateValues, tu.mon, traceKV)
 }
 
 func (tu *tableUpdater) finalize(ctx context.Context, _ bool) (*sqlbase.RowContainer, error) {
@@ -272,10 +274,11 @@ func (tu *tableUpserter) walkExprs(walk func(desc string, index int, expr tree.T
 	}
 }
 
-func (tu *tableUpserter) init(txn *client.Txn) error {
+func (tu *tableUpserter) init(txn *client.Txn, mon *mon.BytesMonitor) error {
 	tableDesc := tu.tableDesc()
 
 	tu.txn = txn
+	tu.mon = mon
 	tu.indexKeyPrefix = sqlbase.MakeIndexKeyPrefix(tableDesc, tableDesc.PrimaryIndex.ID)
 
 	tu.insertRows.Init(
@@ -463,7 +466,7 @@ func (tu *tableUpserter) flush(
 				if err != nil {
 					return nil, err
 				}
-				updatedRow, err := tu.ru.UpdateRow(ctx, b, existingValues, updateValues, traceKV)
+				updatedRow, err := tu.ru.UpdateRow(ctx, b, existingValues, updateValues, tu.mon, traceKV)
 				if err != nil {
 					return nil, err
 				}
@@ -662,6 +665,7 @@ type tableDeleter struct {
 	rd         sqlbase.RowDeleter
 	autoCommit bool
 	alloc      *sqlbase.DatumAlloc
+	mon        *mon.BytesMonitor
 
 	// Set by init.
 	txn *client.Txn
@@ -670,8 +674,9 @@ type tableDeleter struct {
 
 func (td *tableDeleter) walkExprs(_ func(desc string, index int, expr tree.TypedExpr)) {}
 
-func (td *tableDeleter) init(txn *client.Txn) error {
+func (td *tableDeleter) init(txn *client.Txn, mon *mon.BytesMonitor) error {
 	td.txn = txn
+	td.mon = mon
 	td.b = txn.NewBatch()
 	return nil
 }
@@ -679,7 +684,7 @@ func (td *tableDeleter) init(txn *client.Txn) error {
 func (td *tableDeleter) row(
 	ctx context.Context, values tree.Datums, traceKV bool,
 ) (tree.Datums, error) {
-	return nil, td.rd.DeleteRow(ctx, td.b, values, traceKV)
+	return nil, td.rd.DeleteRow(ctx, td.b, values, td.mon, traceKV)
 }
 
 // finalize is part of the tableWriter interface.
