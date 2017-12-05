@@ -65,3 +65,21 @@ describe('arrays', () => {
     });
   });
 });
+
+describe('regression tests', () => {
+  it('allows you to switch between format modes for arrays', () => {
+    return client.query({
+            text: 'SELECT $1:::int[] as b',
+            values: [[1, 2, 8]],
+            binary: false,
+          }).then(r => {
+            return client.query({
+              text: 'SELECT $1:::int[] a',
+              values: [[4, 5, 6]],
+              binary: true,
+            });
+          }).then(results => {
+            assert.deepEqual([4, 5, 6], results.rows[0].a);
+          });
+  });
+})

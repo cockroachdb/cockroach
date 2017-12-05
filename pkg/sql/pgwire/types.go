@@ -389,7 +389,7 @@ func (b *writeBuffer) writeBinaryDatum(
 			b.setError(errors.New("unsupported binary serialization of multidimensional arrays"))
 			return
 		}
-		subWriter := &writeBuffer{wrapped: b.variablePutbuf}
+		subWriter := &writeBuffer{}
 		// Put the number of dimensions. We currently support 1d arrays only.
 		subWriter.putInt32(1)
 		hasNulls := 0
@@ -403,8 +403,7 @@ func (b *writeBuffer) writeBinaryDatum(
 		for _, elem := range v.Array {
 			subWriter.writeBinaryDatum(ctx, elem, sessionLoc)
 		}
-		b.variablePutbuf = subWriter.wrapped
-		b.writeLengthPrefixedVariablePutbuf()
+		b.writeLengthPrefixedBuffer(&subWriter.wrapped)
 	case *tree.DOid:
 		b.putInt32(4)
 		b.putInt32(int32(v.DInt))
