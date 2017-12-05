@@ -603,39 +603,39 @@ query IBT
 SELECT k, date_trunc(element, input::date) = date_trunc_result::date, date_trunc(element, input::date)::string
 FROM ex WHERE date_trunc_result IS NOT NULL ORDER BY k
 ----
-1  true 2001-01-01 00:00:00+00:00
-2  true 2016-01-01 00:00:00+00:00
-3  true 2016-01-01 00:00:00+00:00
-4  true 2001-04-01 00:00:00+00:00
-5  true 2016-01-01 00:00:00+00:00
-6  true 2016-04-01 00:00:00+00:00
-7  true 2016-07-01 00:00:00+00:00
-8  true 2016-10-01 00:00:00+00:00
-9  true 2001-04-01 00:00:00+00:00
-10 true 2016-02-01 00:00:00+00:00
-11 true 2016-02-01 00:00:00+00:00
-12 true 2001-04-08 00:00:00+00:00
-13 true 2000-12-31 00:00:00+00:00
-14 true 2001-04-10 00:00:00+00:00
-15 true 2016-02-10 00:00:00+00:00
-16 true 2016-02-10 00:00:00+00:00
-24 true 2001-04-10 00:00:00+00:00
-25 true 2016-02-10 00:00:00+00:00
-26 true 2016-02-10 00:00:00+00:00
-27 true 2016-02-10 00:00:00+00:00
-28 true 2016-02-10 00:00:00+00:00
-29 true 2001-04-10 00:00:00+00:00
-30 true 2016-02-10 00:00:00+00:00
-31 true 2016-02-10 00:00:00+00:00
-32 true 2001-04-10 00:00:00+00:00
-33 true 2016-02-10 00:00:00+00:00
-34 true 2016-02-10 00:00:00+00:00
-35 true 2001-04-10 00:00:00+00:00
-36 true 2016-02-10 00:00:00+00:00
-37 true 2016-02-10 00:00:00+00:00
-38 true 2001-04-10 00:00:00+00:00
-39 true 2016-02-10 00:00:00+00:00
-40 true 2016-02-10 00:00:00+00:00
+1   true  2001-01-01
+2   true  2016-01-01
+3   true  2016-01-01
+4   true  2001-04-01
+5   true  2016-01-01
+6   true  2016-04-01
+7   true  2016-07-01
+8   true  2016-10-01
+9   true  2001-04-01
+10  true  2016-02-01
+11  true  2016-02-01
+12  true  2001-04-08
+13  true  2000-12-31
+14  true  2001-04-10
+15  true  2016-02-10
+16  true  2016-02-10
+24  true  2001-04-10
+25  true  2016-02-10
+26  true  2016-02-10
+27  true  2016-02-10
+28  true  2016-02-10
+29  true  2001-04-10
+30  true  2016-02-10
+31  true  2016-02-10
+32  true  2001-04-10
+33  true  2016-02-10
+34  true  2016-02-10
+35  true  2001-04-10
+36  true  2016-02-10
+37  true  2016-02-10
+38  true  2001-04-10
+39  true  2016-02-10
+40  true  2016-02-10
 
 query T
 SELECT (timestamp '2016-02-10 19:46:33.306157519')::string
@@ -1174,3 +1174,36 @@ query T
 SELECT INTERVAL '1-2 3 4:5:6' YEAR
 ----
 1y
+
+
+# Test regression, #20464. When a built-in returns a datum that does not
+# match the function signature, distSQL will panic on table scans.
+
+statement ok
+CREATE TABLE topics (
+  ts TIMESTAMP,
+  tstz TIMESTAMPTZ,
+  "date" DATE
+);
+
+statement ok
+INSERT INTO topics VALUES (
+  '2017-12-05 04:04:04.913231+00:00',
+  '2017-12-05 04:04:04.913231+00:00',
+  '2017-12-05 04:04:04.913231+00:00'
+);
+
+query T
+SELECT date_trunc('month', ts) AS date_trunc_month_created_at FROM "topics";
+----
+2017-12-01 00:00:00 +0000 +0000
+
+query T
+SELECT date_trunc('month', tstz) AS date_trunc_month_created_at FROM "topics";
+----
+2017-12-01 00:00:00 +0000 +0000
+
+query T
+SELECT date_trunc('month', "date") AS date_trunc_month_created_at FROM "topics";
+----
+2017-12-01 00:00:00 +0000 +0000
