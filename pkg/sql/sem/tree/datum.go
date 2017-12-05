@@ -1041,12 +1041,18 @@ func (*DBytes) AmbiguousFormat() bool { return true }
 
 // Format implements the NodeFormatter interface.
 func (d *DBytes) Format(buf *bytes.Buffer, f FmtFlags) {
-	buf.WriteString("'\\x")
+	withQuotes := f.withinArray || !f.encodeFlags.BareStrings
+	if withQuotes {
+		buf.WriteByte('\'')
+	}
+	buf.WriteString("\\x")
 	b := string(*d)
 	for i := 0; i < len(b); i++ {
 		buf.Write(stringencoding.RawHexMap[b[i]])
 	}
-	buf.WriteByte('\'')
+	if withQuotes {
+		buf.WriteByte('\'')
+	}
 }
 
 // Size implements the Datum interface.
@@ -2049,13 +2055,18 @@ func (d *DInterval) Size() uintptr {
 // DJSON is the JSON Datum.
 type DJSON struct{ json.JSON }
 
+// NewDJSON is a helper routine to create a DJSON initialized from its argument.
+func NewDJSON(j json.JSON) *DJSON {
+	return &DJSON{j}
+}
+
 // ParseDJSON takes a string of JSON and returns a DJSON value.
 func ParseDJSON(s string) (Datum, error) {
 	j, err := json.ParseJSON(s)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not parse JSON")
 	}
-	return &DJSON{j}, nil
+	return NewDJSON(j), nil
 }
 
 // MakeDJSON returns a JSON value given a Go-style representation of JSON.
@@ -3041,6 +3052,41 @@ func NewDName(d string) Datum {
 // (implemented as a *DOidWrapper) initialized from an existing *DArray.
 func NewDIntVectorFromDArray(d *DArray) Datum {
 	return wrapWithOid(d, oid.T_int2vector)
+}
+
+// AsJSON implements conversion from Datum to json.JSON
+func AsJSON(d Datum) (json.JSON, error) {
+	switch t := d.(type) {
+	case *DBool:
+		return json.MakeJSONFromBool(bool(*t)), nil
+	case *DInt:
+		return json.MakeJSONFromInt(int(*t)), nil
+	case *DFloat:
+		return json.MakeJSONFromFloat64(float64(*t))
+	case *DDecimal:
+		return json.MakeJSONFromDecimal(t.Decimal), nil
+	case *DString:
+		return json.MakeJSONFromString(string(*t)), nil
+	case *DCollatedString:
+		return json.MakeJSONFromString(t.Contents), nil
+	case *DJSON:
+		return t.JSON, nil
+	case dNull:
+		return json.MakeJSON(nil)
+	case *DArray:
+		var err error
+		jsons := make([]json.JSON, t.Len())
+		for i, e := range t.Array {
+			jsons[i], err = AsJSON(e)
+			if err != nil {
+				return nil, err
+			}
+		}
+		return json.MakeJSONFromArrayOfJSON(jsons), nil
+	case *DTimestamp, *DTimestampTZ, *DDate, *DUuid, *DOid, *DInterval, *DBytes, *DIPAddr, *DTime:
+		return json.MakeJSONFromString(AsStringWithFlags(t, FmtBareStrings)), nil
+	}
+	return nil, pgerror.NewErrorf(pgerror.CodeInternalError, "unexpected type %T for AsJSON", d)
 }
 
 // DatumTypeSize returns a lower bound on the total size of a Datum
