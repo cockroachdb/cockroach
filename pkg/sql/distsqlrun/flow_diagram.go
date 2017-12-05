@@ -25,6 +25,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	humanize "github.com/dustin/go-humanize"
 	"github.com/pkg/errors"
@@ -273,7 +274,11 @@ func (c *ReadCSVSpec) summary() (string, []string) {
 }
 
 func (s *SSTWriterSpec) summary() (string, []string) {
-	return "SSTWriter", []string{fmt.Sprintf("%s/%s", s.Destination, s.Name)}
+	var res []string
+	for _, span := range s.Spans {
+		res = append(res, fmt.Sprintf("%s: %s", span.Name, keys.PrettyPrint(nil, span.End)))
+	}
+	return "SSTWriter", res
 }
 
 type diagramCell struct {
