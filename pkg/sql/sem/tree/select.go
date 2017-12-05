@@ -68,6 +68,7 @@ func (node *ParenSelect) Format(buf *bytes.Buffer, f FmtFlags) {
 // SelectClause represents a SELECT statement.
 type SelectClause struct {
 	Distinct    bool
+	DistinctOn  DistinctOn
 	Exprs       SelectExprs
 	From        *From
 	Where       *Where
@@ -424,6 +425,19 @@ type GroupBy []Expr
 // Format implements the NodeFormatter interface.
 func (node GroupBy) Format(buf *bytes.Buffer, f FmtFlags) {
 	prefix := " GROUP BY "
+	for _, n := range node {
+		buf.WriteString(prefix)
+		FormatNode(buf, f, n)
+		prefix = ", "
+	}
+}
+
+// DistinctOn represents a DISTINCT ON clause.
+type DistinctOn []Expr
+
+// Format implements the NodeFormatter interface.
+func (node DistinctOn) Format(buf *bytes.Buffer, f FmtFlags) {
+	prefix := " DISTINCT ON "
 	for _, n := range node {
 		buf.WriteString(prefix)
 		FormatNode(buf, f, n)

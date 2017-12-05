@@ -223,10 +223,27 @@ func (v *planVisitor) visit(plan planNode) {
 		v.visit(n.plan)
 
 	case *distinctNode:
-		if n.columnsInOrder != nil && v.observer.attr != nil {
+		if v.observer.attr == nil {
+			v.visit(n.plan)
+			break
+		}
+
+		if !n.distinctOnColIdxs.Empty() {
 			var buf bytes.Buffer
 			prefix := ""
-			columns := planColumns(n)
+			columns := planColumns(n.plan)
+			n.distinctOnColIdxs.ForEach(func(col int) {
+				buf.WriteString(prefix)
+				buf.WriteString(columns[col].Name)
+				prefix = ", "
+			})
+			v.observer.attr(name, "distinct on", buf.String())
+		}
+
+		if n.columnsInOrder != nil {
+			var buf bytes.Buffer
+			prefix := ""
+			columns := planColumns(n.plan)
 			for i, key := range n.columnsInOrder {
 				if key {
 					buf.WriteString(prefix)
@@ -234,8 +251,9 @@ func (v *planVisitor) visit(plan planNode) {
 					prefix = ", "
 				}
 			}
-			v.observer.attr(name, "key", buf.String())
+			v.observer.attr(name, "order key", buf.String())
 		}
+
 		v.visit(n.plan)
 
 	case *sortNode:

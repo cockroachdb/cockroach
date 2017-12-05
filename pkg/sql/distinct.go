@@ -20,7 +20,9 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 )
 
@@ -31,15 +33,51 @@ type distinctNode struct {
 	// sort used an expression that was not part of the requested column set.
 	columnsInOrder []bool
 
+	// Requested columns in the child planNode (excludes any DISTINCT ON
+	// expressions).
+	columns sqlbase.ResultColumns
+
+	// distinctOnColIdxs columns of the source planNode are what
+	// defines the distinct keys. For a normal DISTINCT, numDistinctOnCols
+	// is the same as the number of expressions in the select clause.
+	// For DISTINCT ON (<exprs>) this is equivalent to the number of unique
+	// expressions in <exprs>.
+	distinctOnColIdxs util.FastIntSet
+
 	run distinctRun
 }
 
 // distinct constructs a distinctNode.
-func (p *planner) Distinct(n *tree.SelectClause) *distinctNode {
+func (p *planner) distinct(ctx context.Context, n *tree.SelectClause, r *renderNode) (*distinctNode, error) {
 	if !n.Distinct {
-		return nil
+		return nil, nil
 	}
-	return &distinctNode{}
+
+	if n.DistinctOn == nil {
+		return &distinctNode{columns: r.columns}, nil
+	}
+
+	// We keep a copy of the original requested columns since we may be
+	// adding additional expressions for DISTINCT ON that may not be
+	// returned.
+	// For example, we want to only return 'b' in the query
+	//	SELECT DISTINCT ON (a) b FROM bar
+	// but we need to addRender a for computing DISTINCT ON.
+	columns := r.columns
+
+	var colIdxs util.FastIntSet
+	for _, expr := range n.DistinctOn {
+		col, typedExpr, err := p.computeRender(ctx, tree.SelectExpr{Expr: expr}, types.Any, r.sourceInfo, r.ivarHelper, autoGenerateRenderOutputName)
+		if err != nil {
+			return nil, err
+		}
+
+		colIdx := r.addOrReuseRender(col, typedExpr, true /* reuseExistingRender */)
+
+		colIdxs.Add(colIdx)
+	}
+
+	return &distinctNode{columns: columns, distinctOnColIdxs: colIdxs}, nil
 }
 
 // distinctRun contains the run-time state of distinctNode during local execution.
@@ -75,7 +113,7 @@ func (n *distinctNode) Next(params runParams) (bool, error) {
 		}
 
 		// Detect duplicates
-		prefix, suffix, err := n.encodeValues(n.Values())
+		prefix, suffix, err := n.encodeValues(n.plan.Values())
 		if err != nil {
 			return false, err
 		}
@@ -114,7 +152,10 @@ func (n *distinctNode) Next(params runParams) (bool, error) {
 	}
 }
 
-func (n *distinctNode) Values() tree.Datums { return n.plan.Values() }
+func (n *distinctNode) Values() tree.Datums {
+	// We return only the required columns set during planning.
+	return n.plan.Values()[:len(n.columns)]
+}
 
 func (n *distinctNode) Close(ctx context.Context) {
 	n.plan.Close(ctx)
@@ -141,6 +182,11 @@ func (n *distinctNode) encodeValues(values tree.Datums) ([]byte, []byte, error) 
 	var prefix, suffix []byte
 	var err error
 	for i, val := range values {
+		// Only encode DISTINCT ON expressions/columns (if applicable).
+		if !n.distinctOnColIdxs.Empty() && !n.distinctOnColIdxs.Contains(i) {
+			continue
+		}
+
 		if n.columnsInOrder != nil && n.columnsInOrder[i] {
 			if prefix == nil {
 				prefix = make([]byte, 0, 100)

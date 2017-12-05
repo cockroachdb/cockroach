@@ -860,23 +860,22 @@ func (dsp *DistSQLPlanner) addSorters(p *physicalPlan, n *sortNode) {
 		)
 	}
 
+	// In cases like:
+	//   SELECT a FROM t ORDER BY b
+	// we have columns (b) that are only used for sorting. These columns
+	// are not in the output columns of the sortNode; we set a projection
+	// such that the plan results map 1-to-1 to sortNode columns.
 	if len(n.columns) != len(p.planToStreamColMap) {
-		// In cases like:
-		//   SELECT a FROM t ORDER BY b
-		// we have columns (b) that are only used for sorting. These columns are not
-		// in the output columns of the sortNode; we set a projection such that the
-		// plan results map 1-to-1 to sortNode columns.
-		//
 		// Note that internally, AddProjection might retain more columns as
 		// necessary so we can preserve the p.Ordering between parallel streams when
 		// they merge later.
 		p.planToStreamColMap = p.planToStreamColMap[:len(n.columns)]
-		columns := make([]uint32, len(n.columns))
+		outputCols := make([]uint32, len(n.columns))
 		for i, col := range p.planToStreamColMap {
-			columns[i] = uint32(col)
+			outputCols[i] = uint32(col)
 			p.planToStreamColMap[i] = i
 		}
-		p.AddProjection(columns)
+		p.AddProjection(outputCols)
 	}
 }
 
@@ -1928,9 +1927,18 @@ func (dsp *DistSQLPlanner) createPlanForDistinct(
 	}
 
 	var distinctColumns []uint32
-	for i := range planColumns(n) {
-		if plan.planToStreamColMap[i] != -1 {
-			distinctColumns = append(distinctColumns, uint32(plan.planToStreamColMap[i]))
+	if !n.distinctOnColIdxs.Empty() {
+		for planCol, streamCol := range plan.planToStreamColMap {
+			if streamCol != -1 && n.distinctOnColIdxs.Contains(planCol) {
+				distinctColumns = append(distinctColumns, uint32(streamCol))
+			}
+		}
+	} else {
+		// If no distinct columns were specified, run distinct on the entire row.
+		for planCol := range planColumns(n) {
+			if streamCol := plan.planToStreamColMap[planCol]; streamCol != -1 {
+				distinctColumns = append(distinctColumns, uint32(streamCol))
+			}
 		}
 	}
 
@@ -1953,6 +1961,25 @@ func (dsp *DistSQLPlanner) createPlanForDistinct(
 
 	// TODO(arjun): We could distribute this final stage by hash.
 	plan.AddSingleGroupStage(dsp.nodeDesc.NodeID, distinctSpec, distsqlrun.PostProcessSpec{}, plan.ResultTypes)
+
+	// In cases like:
+	//   SELECT a FROM t ORDER BY b
+	// we have columns (b) that are only used for sorting. These columns
+	// are not in the output columns of the sortNode; we set a projection
+	// such that the plan results map 1-to-1 to sortNode columns.
+	if len(n.columns) != len(plan.planToStreamColMap) {
+		// Note that internally, AddProjection might retain more columns as
+		// necessary so we can preserve the p.Ordering between parallel streams when
+		// they merge later.
+		plan.planToStreamColMap = plan.planToStreamColMap[:len(n.columns)]
+		outputCols := make([]uint32, len(n.columns))
+		for i, col := range plan.planToStreamColMap {
+			outputCols[i] = uint32(col)
+			plan.planToStreamColMap[i] = i
+		}
+		plan.AddProjection(outputCols)
+	}
+
 	return plan, nil
 }
 

@@ -213,6 +213,17 @@ func doExpandPlan(
 			// on S).
 			n.columnsInOrder = make([]bool, len(planColumns(n.plan)))
 			for i := range n.columnsInOrder {
+				// We only want to do order group matching if
+				// the ordering is part of the DISTINCT ON
+				// expression.  For example
+				//    SELECT DISTINCT ON (x) FROM t ORDER BY x, y
+				// Previous group matching with (x, y) may
+				// return false (i.e.  distinct rows) even if
+				// the (x) value is the same (not distinct).
+				if !n.distinctOnColIdxs.Empty() && !n.distinctOnColIdxs.Contains(i) {
+					continue
+				}
+
 				group := pp.eqGroups.Find(i)
 				if pp.constantCols.Contains(group) {
 					n.columnsInOrder[i] = true

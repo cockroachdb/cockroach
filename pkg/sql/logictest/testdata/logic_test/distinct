@@ -9,7 +9,14 @@ CREATE TABLE xyz (
 )
 
 statement ok
-INSERT INTO xyz VALUES (1, 2, 3), (2, 5, 6), (3, 2, 3), (4, 5, 6), (5, 2, 6), (6, 3, 5), (7, 2, 9)
+INSERT INTO xyz VALUES
+  (1, 2, 3),
+  (2, 5, 6),
+  (3, 2, 3),
+  (4, 5, 6),
+  (5, 2, 6),
+  (6, 3, 5),
+  (7, 2, 9)
 
 query II rowsort
 SELECT y, z FROM xyz

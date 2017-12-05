@@ -311,6 +311,9 @@ func (u *sqlSymUnion) orders() []*tree.Order {
 func (u *sqlSymUnion) groupBy() tree.GroupBy {
     return u.val.(tree.GroupBy)
 }
+func (u *sqlSymUnion) distinctOn() tree.DistinctOn {
+    return u.val.(tree.DistinctOn)
+}
 func (u *sqlSymUnion) dir() tree.Direction {
     return u.val.(tree.Direction)
 }
@@ -729,6 +732,7 @@ func (u *sqlSymUnion) scrubOption() tree.ScrubOption {
 %type <[]tree.RangePartition> range_partitions
 %type <empty> opt_all_clause
 %type <bool> distinct_clause
+%type <tree.DistinctOn> distinct_on_clause
 %type <tree.NameList> opt_column_list
 %type <tree.OrderBy> sort_clause opt_sort_clause
 %type <[]*tree.Order> sortby_list
@@ -4169,7 +4173,7 @@ simple_select:
 // %Help: SELECT - retrieve rows from a data source and compute a result
 // %Category: DML
 // %Text:
-// SELECT [DISTINCT]
+// SELECT [DISTINCT [ ON ( <expr> [ , ... ] ) ] ]
 //        { <expr> [[AS] <name>] | [ [<dbname>.] <tablename>. ] * } [, ...]
 //        [ FROM <source> ]
 //        [ WHERE <expr> ]
@@ -4207,6 +4211,21 @@ simple_select_clause:
       GroupBy:  $6.groupBy(),
       Having:   tree.NewWhere(tree.AstHaving, $7.expr()),
       Window:   $8.window(),
+    }
+  }
+| SELECT distinct_on_clause target_list
+    from_clause where_clause
+    group_clause having_clause window_clause
+  {
+    $$.val = &tree.SelectClause{
+      Distinct:   true,
+      DistinctOn: $2.distinctOn(),
+      Exprs:      $3.selExprs(),
+      From:       $4.from(),
+      Where:      tree.NewWhere(tree.AstWhere, $5.expr()),
+      GroupBy:    $6.groupBy(),
+      Having:     tree.NewWhere(tree.AstHaving, $7.expr()),
+      Window:     $8.window(),
     }
   }
 | SELECT error // SHOW HELP: SELECT
@@ -4305,6 +4324,12 @@ distinct_clause:
   DISTINCT
   {
     $$.val = true
+  }
+
+distinct_on_clause:
+  DISTINCT ON '(' expr_list ')'
+  {
+    $$.val = tree.DistinctOn($4.exprs())
   }
 
 opt_all_clause:

@@ -1,0 +1,50 @@
+# LogicTest: 5node-distsql 5node-distsql-disk
+
+statement ok
+CREATE TABLE xyz (
+  id INT PRIMARY KEY,
+  x INT,
+  y INT,
+  z INT
+)
+
+statement ok
+INSERT INTO xyz VALUES
+  (1, 1, 1, NULL),
+  (2, 1, 1, 2),
+  (3, 1, 1, 2),
+  (4, 1, 2, 1),
+  (5, 2, 2, 3),
+  (6, 4, 5, 6),
+  (7, 4, 1, 6)
+
+statement ok
+ALTER TABLE xyz SPLIT AT VALUES (2), (4), (6), (7)
+
+statement ok
+ALTER TABLE xyz TESTING_RELOCATE VALUES
+  (ARRAY[1], 0),
+  (ARRAY[2], 2),
+  (ARRAY[3], 4),
+  (ARRAY[4], 6),
+  (ARRAY[5], 7)
+
+query TTITI colnames
+SELECT * FROM [SHOW TESTING_RANGES FROM TABLE xyz]
+----
+Start Key  End Key  Range ID  Replicas  Lease Holder
+NULL       /2       1         {1}       1
+/2         /4       2         {2}       2
+/4         /6       3         {3}       3
+/6         /7       4         {4}       4
+/7         NULL     5         {5}       5
+
+query T
+SELECT "URL" FROM [EXPLAIN (DISTSQL) SELECT DISTINCT ON (x,y,z) x, y, z FROM xyz]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html?eJzElLFugzAQhvc-RfXPN8RA0pSJoUuWpoq6VQwUnyKkBCPbSEkj3r0ChpQosSuBxGg73333O-YuKJXk9-zIBvEXBAgBCCEIEQhLpIRKq5yNUbr9SQ9s5AnxglCUVW3b7ZSQK82IL7CFPTBifGbfB95xJlmDINlmxaGTVLo4ZvqcnM4_IGxrGz8nASUhJRHShqBqe61qbLZnxKKh_5vfCmOLMrdDbSKo0zx0BA8d19J1qbRkzXJQO22m6yIcdCFmu2OPeZI7DmZL5zFPki6cLZ3HPEm6aLZ0HvPkX_8dx45NpUrDN1PgfuVFOx1Y7rkfJUbVOucPrfJO0y-3HddtSDa2PxX9YlP2R22Df2HhhIMBLG7hwG32qEMnHbnhaEzfSye8cptXY8wvTnjtNq_HmF_d_9XC80zcj-zWnTZPvwEAAP__B_KjkQ==
+
+query T
+SELECT "URL" FROM [EXPLAIN (DISTSQL) SELECT DISTINCT ON (x,y,z) x, y, z FROM xyz ORDER BY x]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html?eJzElUGPokAQhe_7K0xdtw82oKucOOzFy7px5jbhwNAVQ6I06W4SHeN_nwDJOBKpmkmH4Ujje1_V6xe8QKkV_suOaCF-AQkCAhAQgoAIBCwgFVAZnaO12jQ_6QQbdYJ4LqAoq9o1x6mAXBuE-AKucAeEGJ6z1wPuMFNoQIBClxWHFlKZ4piZc3I6v4GAbe3iWRKIJBRJBOlVgK7dzdW6bI8Qy6v4OvlJG9eHJvL3oHnwHfO_hXVFmbu-vWh3aBYyCg2qePZxNsQNB7k3nO7cHi0z7nDR3XBysrtmyH53zZiPdtfBZHEyZL84GfPR4gwni5Mh-8XJmI8WZzRZnAzZL07G_Ec-7A-4O7SVLi3ecYec581XH9Ueu38Jq2uT43-j8xbTPW5bXXug0LrureweNmX3qhnws1iS4oAWB6Q4vBPLvjikx17S6IhUL2jxghQz5KXP0n9I8Yomr0jxmhavfcaWTMe4ktEtk0zNpFfPJFO0iIHTTZNM1STdtf7s6fXXewAAAP__2QzB0Q==

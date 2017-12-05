@@ -20,6 +20,7 @@ import (
 
 	"golang.org/x/net/context"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
@@ -193,12 +194,61 @@ func (p *planner) SelectClause(
 		return nil, err
 	}
 
-	// NB: orderBy, window, and groupBy are passed and can modify the renderNode,
-	// but must do so in that order.
+	// NB: orderBy, window, and groupBy are passed and can modify the
+	// renderNode, but must do so in that order.
+	// Note this order is exactly the reverse of the order of how the plan
+	// is constructed i.e. a logical plan tree might look like (renderNodes
+	// omitted)
+	//  distinctNode
+	//	 |
+	//	 |
+	//	 v
+	//    sortNode
+	//	 |
+	//	 |
+	//	 v
+	//   windowNode
+	//	 |
+	//	 |
+	//	 v
+	//   groupNode
+	//	 |
+	//	 |
+	//	 v
+	distinct, err := p.distinct(ctx, parsed, r)
+	if err != nil {
+		return nil, err
+	}
 	sort, err := p.orderBy(ctx, orderBy, r)
 	if err != nil {
 		return nil, err
 	}
+
+	// For DISTINCT ON expressions either one of the following must be
+	// satisfied:
+	//    - DISTINCT ON expressions is a subset of a prefix of the ORDER BY
+	//	expressions.
+	//	    e.g.  SELECT DISTINCT ON (b, a) ... ORDER BY a, b, c
+	//    - DISTINCT ON expressions includes all ORDER BY expressions.
+	//	    e.g.  SELECT DISTINCT ON (b, a) ... ORDER BY a
+	if distinct != nil && sort != nil && !distinct.distinctOnColIdxs.Empty() {
+		numDistinctExprs := distinct.distinctOnColIdxs.Len()
+		for i, order := range sort.ordering {
+			// DISTINCT ON contains all ORDER BY expressions.
+			// Continue.
+			if i >= numDistinctExprs {
+				break
+			}
+
+			if !distinct.distinctOnColIdxs.Contains(order.ColIdx) {
+				return nil, pgerror.NewErrorf(
+					pgerror.CodeSyntaxError,
+					"SELECT DISTINCT ON expressions must be a prefix of or include all ORDER BY expressions",
+				)
+			}
+		}
+	}
+
 	window, err := p.window(ctx, parsed, r)
 	if err != nil {
 		return nil, err
@@ -223,7 +273,6 @@ func (p *planner) SelectClause(
 	if err != nil {
 		return nil, err
 	}
-	distinctPlan := p.Distinct(parsed)
 
 	result := planNode(r)
 	if groupComplex != nil {
@@ -238,9 +287,9 @@ func (p *planner) SelectClause(
 		sort.plan = result
 		result = sort
 	}
-	if distinctPlan != nil {
-		distinctPlan.plan = result
-		result = distinctPlan
+	if distinct != nil {
+		distinct.plan = result
+		result = distinct
 	}
 	if limitPlan != nil {
 		limitPlan.plan = result

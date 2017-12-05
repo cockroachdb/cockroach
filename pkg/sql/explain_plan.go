@@ -169,7 +169,20 @@ func (p *planner) populateExplain(
 		if e.showMetadata {
 			if plan != nil {
 				cols := planColumns(plan)
+				// Columns metadata.
 				row = append(row, tree.NewDString(formatColumns(cols, e.showTypes)))
+				// Ordering metadata.
+				// Distinct's ordering columns should be
+				// referenced from its child plan since it's
+				// possible that DISTINCT ON may not output the
+				// ordering columns.
+				// For example
+				//    SELECT DISTINCT ON (a) b FROM t ORDER BY a
+				// a would not be resolved since
+				// planColumns(distinct) only contains b.
+				if distinct, ok := plan.(*distinctNode); ok {
+					cols = planColumns(distinct.plan)
+				}
 				row = append(row, tree.NewDString(planPhysicalProps(plan).AsString(cols)))
 			} else {
 				row = append(row, emptyString, emptyString)
