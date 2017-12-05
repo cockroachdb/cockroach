@@ -691,6 +691,18 @@ func (node *Tuple) ResolvedType() types.T {
 	return node.types
 }
 
+// Truncate returns a new Tuple that contains only a prefix of the original
+// expressions. E.g.
+//   Tuple:       (1, 2, 3)
+//   Truncate(2): (1, 2)
+func (node *Tuple) Truncate(prefix int) *Tuple {
+	return &Tuple{
+		Exprs: append(Exprs(nil), node.Exprs[:prefix]...),
+		Row:   node.Row,
+		types: append(types.TTuple(nil), node.types[:prefix]...),
+	}
+}
+
 // Array represents an array constructor.
 type Array struct {
 	Exprs Exprs

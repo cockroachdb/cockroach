@@ -152,6 +152,100 @@ func makeNot(expr tree.TypedExpr) tree.TypedExpr {
 	return tree.NewTypedNotExpr(expr)
 }
 
+// If the given expression is a tuple inequality, extract the longest prefix of
+// a tuple comparison that contains only variables known to the conversion
+// function.
+//
+// If weaker is true (the "normal" case), we want a weaker inequality (i.e. an
+// inequality that is implied by `t`). For example:
+//   (a, b, x) > (1, 2, 3)
+// and only a, b are convertible. The result is:
+//   (a, b) >= (1, 2)
+//
+// If weaker is false, we want a STRONGER condition (i.e. one that implies `t`;
+// this is used when this condition is under a NOT node); in this case
+//   (a, b, x) >= (1, 2, 3)
+// becomes
+//   (a, b) > (1, 2)
+// because (a, b) > (1, 2) implies (a, b, x) >= (1, 2, 3) for any x.
+//
+// See splitBoolExpr for more information on weaker.
+//
+// Note that equality is not handled; instead of special handling here, we
+// should normalize tuple equalities to conjunctions (#20473).
+//
+// The function returns the new, converted ComparisonExpr, or nil if
+// this is not such an expression or we don't have a useful prefix.
+func tryTruncateTupleComparison(
+	t *tree.ComparisonExpr, conv varConvertFunc, weaker bool,
+) tree.TypedExpr {
+	switch t.Operator {
+	case tree.LT, tree.GT, tree.LE, tree.GE:
+	default:
+		return nil
+	}
+	left, leftOk := t.Left.(*tree.Tuple)
+	right, rightOk := t.Right.(*tree.DTuple)
+	// TODO(radu): we should also support Tuple on both sides.
+	if !leftOk || !rightOk {
+		return nil
+	}
+	if len(left.Exprs) != len(right.D) {
+		panic(fmt.Sprintf("invalid tuple comparison %s", t))
+	}
+	// Find the longest prefix for which both sides are convertible.
+	prefix := 0
+	for ; prefix < len(left.Exprs); prefix++ {
+		if !exprCheckVars(left.Exprs[prefix], conv) {
+			break
+		}
+	}
+
+	newOp := &tree.ComparisonExpr{}
+	*newOp = *t
+
+	switch prefix {
+	case 0:
+		// Not even the first tuple members are useful.
+		return nil
+
+	case 1:
+		// Simplify to a non-tuple comparison.
+		newOp.Left = left.Exprs[0]
+		newOp.Right = right.D[0]
+
+	case 2:
+		// Preserve a prefix of the tuples.
+		newOp.Left = left.Truncate(prefix)
+		newOp.Right = &tree.DTuple{
+			D:      right.D[:prefix],
+			Sorted: right.Sorted,
+		}
+	}
+	// Adjust the operator as necessary.
+	if weaker {
+		switch newOp.Operator {
+		case tree.LT:
+			// (a, b, c) < (1, 2, 3) becomes (a, b) <= (1, 2).
+			newOp.Operator = tree.LE
+		case tree.GT:
+			// (a, b, c) > (1, 2, 3) becomes (a, b) >= (1, 2).
+			newOp.Operator = tree.GE
+		}
+	} else {
+		// We are under a NOT and have to return a stronger condition.
+		switch newOp.Operator {
+		case tree.LE:
+			// (a, b, c) <= (1, 2, 3) becomes (a, b) < (1, 2).
+			newOp.Operator = tree.LT
+		case tree.GE:
+			// (a, b, c) > (1, 2, 3) becomes (a, b) >= (1, 2).
+			newOp.Operator = tree.GT
+		}
+	}
+	return exprConvertVars(newOp, conv)
+}
+
 // splitBoolExpr splits a boolean expression E into two boolean expressions RES and REM such that:
 //
 //  - RES only has variables known to the conversion function (it is "restricted" to a particular
@@ -221,12 +315,18 @@ func splitBoolExpr(
 		exprRes, exprRem := splitBoolExpr(t.TypedInnerExpr(), conv, !weaker)
 		return makeNot(exprRes), makeNot(exprRem)
 
+	case *tree.ComparisonExpr:
+		if truncated := tryTruncateTupleComparison(t, conv, weaker); truncated != nil {
+			return truncated, expr
+		}
+
 	default:
-		// We can't split off anything (we already handled the case when expr contains only
-		// restricted vars above).
-		// For why we return DBool(weaker), see the comment above on "empty" filters.
-		return tree.MakeDBool(tree.DBool(weaker)), expr
 	}
+
+	// We can't split off anything (we already handled the case when expr contains only
+	// restricted vars above).
+	// For why we return DBool(weaker), see the comment above on "empty" filters.
+	return tree.MakeDBool(tree.DBool(weaker)), expr
 }
 
 // splitFilter splits a boolean expression E into two boolean expressions RES and REM such that:
