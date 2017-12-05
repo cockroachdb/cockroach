@@ -661,6 +661,11 @@ func (r *RocksDB) Capacity() (roachpb.StoreCapacity, error) {
 	var totalUsedBytes int64
 	if errOuter := filepath.Walk(r.cfg.Dir, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
+			// This can happen if rocksdb removes files out from under us - just keep
+			// going to get the best estimate we can.
+			if os.IsNotExist(err) {
+				return nil
+			}
 			return err
 		}
 		if info.Mode().IsRegular() {
