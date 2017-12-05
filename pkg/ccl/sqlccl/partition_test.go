@@ -81,14 +81,14 @@ type partitioningTest struct {
 		// tableName is `name` but escaped for use in SQL.
 		tableName string
 
-		// createStmt is `schema` with a table name of `escapedName`
+		// createStmt is `schema` with a table name of `tableName`
 		createStmt string
 
 		// tableDesc is the TableDescriptor created by `createStmt`.
 		tableDesc *sqlbase.TableDescriptor
 
-		// zoneConfigStmt constains SQL that effects the zone configs described by
-		// `configs`.
+		// zoneConfigStmt contains SQL that effects the zone configs described
+		// by `configs`.
 		zoneConfigStmts string
 
 		// subzones are the `configs` shorthand parsed into Subzones.
@@ -112,6 +112,8 @@ func (t *partitioningTest) parse() error {
 			return errors.Errorf("expected *tree.CreateTable got %T", stmt)
 		}
 		const parentID, tableID = keys.MaxReservedDescID + 1, keys.MaxReservedDescID + 2
+		// TODO(dan): makeCSVTableDescriptor happens to be exactly the code we
+		// want. Rename it to something more general.
 		t.parsed.tableDesc, err = makeCSVTableDescriptor(
 			ctx, createTable, parentID, tableID, hlc.UnixNano())
 		if err != nil {
@@ -714,6 +716,173 @@ func verifyScansOnNode(db *gosql.DB, query string, node string) error {
 		return errors.New(err.String())
 	}
 	return nil
+}
+
+func TestRepartitioningFastPathAvailable(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	rng, _ := randutil.NewPseudoRand()
+
+	partitioningTestsByName := make(map[string]partitioningTest)
+	for _, t := range allPartitioningTests(rng) {
+		partitioningTestsByName[t.name] = t
+	}
+
+	testCases := []struct {
+		old, new   string
+		isFastPath bool
+	}{
+		{
+			old:        `unpartitioned`,
+			new:        `unpartitioned`,
+			isFastPath: true,
+		},
+		{
+			old:        `unpartitioned`,
+			new:        `single col list partitioning`,
+			isFastPath: false,
+		},
+		{
+			old:        `unpartitioned`,
+			new:        `single col list partitioning - DEFAULT`,
+			isFastPath: true,
+		},
+		{
+			old:        `unpartitioned`,
+			new:        `single col range partitioning`,
+			isFastPath: false,
+		},
+		{
+			old:        `unpartitioned`,
+			new:        `single col range partitioning - MAXVALUE`,
+			isFastPath: true,
+		},
+
+		{
+			old:        `single col list partitioning`,
+			new:        `single col list partitioning - DEFAULT`,
+			isFastPath: true,
+		},
+		{
+			old:        `single col list partitioning - DEFAULT`,
+			new:        `single col list partitioning`,
+			isFastPath: false,
+		},
+		{
+			old:        `multi col list partitioning`,
+			new:        `multi col list partitioning - DEFAULT`,
+			isFastPath: true,
+		},
+		{
+			old:        `multi col list partitioning - DEFAULT`,
+			new:        `multi col list partitioning`,
+			isFastPath: false,
+		},
+		{
+			old:        `multi col list partitioning - DEFAULT`,
+			new:        `multi col list partitioning - DEFAULT DEFAULT`,
+			isFastPath: true,
+		},
+		{
+			old:        `multi col list partitioning - DEFAULT DEFAULT`,
+			new:        `multi col list partitioning - DEFAULT`,
+			isFastPath: false,
+		},
+
+		{
+			old:        `single col range partitioning`,
+			new:        `single col range partitioning - MAXVALUE`,
+			isFastPath: true,
+		},
+		{
+			old:        `single col range partitioning - MAXVALUE`,
+			new:        `single col range partitioning`,
+			isFastPath: false,
+		},
+		{
+			old:        `multi col range partitioning`,
+			new:        `multi col range partitioning - MAXVALUE`,
+			isFastPath: true,
+		},
+		{
+			old:        `multi col range partitioning - MAXVALUE`,
+			new:        `multi col range partitioning`,
+			isFastPath: true, // NB: The MAXVALUE one is constructed to cover the same range
+		},
+		{
+			old:        `multi col range partitioning - MAXVALUE`,
+			new:        `multi col range partitioning - MAXVALUE MAXVALUE`,
+			isFastPath: true,
+		},
+		{
+			old:        `multi col range partitioning - MAXVALUE MAXVALUE`,
+			new:        `multi col range partitioning - MAXVALUE`,
+			isFastPath: false,
+		},
+
+		{
+			old:        `single col list partitioning`,
+			new:        `single col range partitioning`,
+			isFastPath: false,
+		},
+		{
+			old:        `single col range partitioning`,
+			new:        `single col list partitioning`,
+			isFastPath: false,
+		},
+
+		// TODO(dan): One repartitioning is fully implemented, these tests also
+		// need to pass with no ccl code.
+		{
+			old:        `single col list partitioning`,
+			new:        `unpartitioned`,
+			isFastPath: true,
+		},
+		{
+			old:        `single col list partitioning - DEFAULT`,
+			new:        `unpartitioned`,
+			isFastPath: true,
+		},
+		{
+			old:        `single col range partitioning`,
+			new:        `unpartitioned`,
+			isFastPath: true,
+		},
+		{
+			old:        `single col range partitioning - MAXVALUE`,
+			new:        `unpartitioned`,
+			isFastPath: true,
+		},
+	}
+
+	for _, test := range testCases {
+		t.Run(fmt.Sprintf("%s/%s", test.old, test.new), func(t *testing.T) {
+			var old, new *sqlbase.TableDescriptor
+			if pt, ok := partitioningTestsByName[test.old]; !ok {
+				t.Fatalf("unknown partitioning test: %s", test.old)
+			} else {
+				if err := pt.parse(); err != nil {
+					t.Fatalf("%+v", err)
+				}
+				old = pt.parsed.tableDesc
+			}
+			if pt, ok := partitioningTestsByName[test.new]; !ok {
+				t.Fatalf("unknown partitioning test: %s", test.new)
+			} else {
+				if err := pt.parse(); err != nil {
+					t.Fatalf("%+v", err)
+				}
+				new = pt.parsed.tableDesc
+			}
+
+			isFastPath, err := RepartitioningFastPathAvailable(old, new)
+			if err != nil {
+				t.Fatalf("%+v", err)
+			}
+			if isFastPath != test.isFastPath {
+				t.Errorf("got %v expected %v", isFastPath, test.isFastPath)
+			}
+		})
+	}
 }
 
 func TestInitialPartitioning(t *testing.T) {
