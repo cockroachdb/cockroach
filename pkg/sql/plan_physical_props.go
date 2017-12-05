@@ -28,8 +28,6 @@ func planPhysicalProps(plan planNode) physicalProps {
 	switch n := plan.(type) {
 	case *explainPlanNode:
 		return planPhysicalProps(n.run.results)
-	case *distinctNode:
-		return planPhysicalProps(n.plan)
 	case *limitNode:
 		return planPhysicalProps(n.plan)
 	case *indexJoinNode:
@@ -61,8 +59,11 @@ func planPhysicalProps(plan planNode) physicalProps {
 		return n.props
 	case *renderNode:
 		return n.props
+	// TODO(richardwu): memoize the props for sort and distinct nodes.
 	case *sortNode:
 		return sortPhysicalProps(n)
+	case *distinctNode:
+		return distinctPhysicalProps(n)
 	}
 
 	// Every other node simply has no guarantees on its output rows.
@@ -78,7 +79,8 @@ func sortPhysicalProps(n *sortNode) physicalProps {
 	// than the sortNode's ordering, so we want to use that. E.g:
 	//   CREATE INDEX foo ON t (a, b);
 	//   SELECT a, b, c FROM t@foo ORDER BY a;
-	// We want to use (a, b) instead of just (a).
+	// We want to use (a, b) instead of just (a) (we return below).
+	// If we do need sorting, we must use the sortNode's ordering.
 	if n.needSort {
 		// We will sort and can guarantee the desired ordering.
 		props.ordering = make(sqlbase.ColumnOrdering, 0, len(n.ordering))
@@ -100,5 +102,26 @@ func sortPhysicalProps(n *sortNode) physicalProps {
 		}
 		return props.project(colMap)
 	}
+	return props
+}
+
+func distinctPhysicalProps(n *distinctNode) physicalProps {
+	underlying := planPhysicalProps(n.plan)
+	props := underlying.copy()
+
+	// addWeakKey will replace an existing superset weak key with the
+	// specified weak key.
+	// Since distinct does not eliminate keys (it can only produce an
+	// additional weak key) we have to check that the key from DISTINCT ON
+	// is not already part of some bigger key.
+	for _, existingKey := range props.weakKeys {
+		if n.distinctOnColIdxs.SubsetOf(existingKey) {
+			return props
+		}
+	}
+
+	props.addWeakKey(n.distinctOnColIdxs)
+	props.ordering = props.reduce(props.ordering)
+
 	return props
 }

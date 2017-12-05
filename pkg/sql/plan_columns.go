@@ -96,7 +96,7 @@ func getPlanColumns(plan planNode, mut bool) sqlbase.ResultColumns {
 	case *splitNode:
 		return n.getColumns(mut, splitNodeColumns)
 
-		// Nodes using the RETURNING helper.
+	// Nodes using the RETURNING helper.
 	case *deleteNode:
 		return n.rh.columns
 	case *insertNode:
@@ -104,8 +104,8 @@ func getPlanColumns(plan planNode, mut bool) sqlbase.ResultColumns {
 	case *updateNode:
 		return n.rh.columns
 
-		// Nodes that have the same schema as their source or their
-		// valueNode helper.
+	// Nodes that have the same schema as their source or their
+	// valueNode helper.
 	case *distinctNode:
 		return getPlanColumns(n.plan, mut)
 	case *filterNode:

@@ -214,7 +214,7 @@ func (s *FastIntSet) UnionWith(rhs FastIntSet) {
 	s.large.UnionWith(rhs.toLarge())
 }
 
-// Union returns the intersection of s and rhs as a new set.
+// Union returns the union of s and rhs as a new set.
 func (s FastIntSet) Union(rhs FastIntSet) FastIntSet {
 	r := s.Copy()
 	r.UnionWith(rhs)

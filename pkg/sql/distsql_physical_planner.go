@@ -1940,9 +1940,18 @@ func (dsp *DistSQLPlanner) createPlanForDistinct(
 	}
 
 	var distinctColumns []uint32
-	for i := range planColumns(n) {
-		if plan.planToStreamColMap[i] != -1 {
-			distinctColumns = append(distinctColumns, uint32(plan.planToStreamColMap[i]))
+	if !n.distinctOnColIdxs.Empty() {
+		for planCol, streamCol := range plan.planToStreamColMap {
+			if streamCol != -1 && n.distinctOnColIdxs.Contains(planCol) {
+				distinctColumns = append(distinctColumns, uint32(streamCol))
+			}
+		}
+	} else {
+		// If no distinct columns were specified, run distinct on the entire row.
+		for planCol := range planColumns(n) {
+			if streamCol := plan.planToStreamColMap[planCol]; streamCol != -1 {
+				distinctColumns = append(distinctColumns, uint32(streamCol))
+			}
 		}
 	}
 
@@ -1965,6 +1974,7 @@ func (dsp *DistSQLPlanner) createPlanForDistinct(
 
 	// TODO(arjun): We could distribute this final stage by hash.
 	plan.AddSingleGroupStage(dsp.nodeDesc.NodeID, distinctSpec, distsqlrun.PostProcessSpec{}, plan.ResultTypes)
+
 	return plan, nil
 }
 

@@ -179,7 +179,7 @@ func (p *planner) groupBy(
 		}
 		var err error
 		typedHaving, err = p.analyzeExpr(ctx, n.Having.Expr, r.sourceInfo, r.ivarHelper,
-			types.Bool, true, "HAVING")
+			types.Bool, true /* requireType */, "HAVING")
 		if err != nil {
 			return nil, nil, err
 		}
