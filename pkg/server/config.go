@@ -187,6 +187,10 @@ type Config struct {
 	// ReadWithinUncertaintyIntervalError.
 	MaxOffset MaxOffsetType
 
+	// TimestampCachePageSize is the size in bytes of the pages in the
+	// timestamp cache held by each store.
+	TimestampCachePageSize uint32
+
 	// MetricsSampleInterval determines the time between records of
 	// server internal metrics.
 	// Environment Variable: COCKROACH_METRICS_SAMPLE_INTERVAL

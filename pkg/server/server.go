@@ -136,7 +136,7 @@ type Server struct {
 	serveMode
 }
 
-// NewServer creates a Server from a server.Context.
+// NewServer creates a Server from a server.Config.
 func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	if _, err := net.ResolveTCPAddr("tcp", cfg.AdvertiseAddr); err != nil {
 		return nil, errors.Errorf("unable to resolve RPC address %q: %v", cfg.AdvertiseAddr, err)
@@ -353,6 +353,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		RPCContext:              s.rpcContext,
 		ScanInterval:            s.cfg.ScanInterval,
 		ScanMaxIdleTime:         s.cfg.ScanMaxIdleTime,
+		TimestampCachePageSize:  s.cfg.TimestampCachePageSize,
 		MetricsSampleInterval:   s.cfg.MetricsSampleInterval,
 		HistogramWindowInterval: s.cfg.HistogramWindowInterval(),
 		StorePool:               s.storePool,
