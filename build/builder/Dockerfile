@@ -101,7 +101,7 @@ RUN mkdir ncurses \
  && cd .. \
  && rm -rf ncurses ncurses.conf ncurses.patch
 
-RUN apt-get autoremove -y gcc g++
+RUN apt-get purge -y gcc g++ && apt-get autoremove -y
 
 # clang - msan
 # cmake - msan / c-deps: libroach, protobuf, et al.
@@ -117,7 +117,8 @@ RUN mkdir llvm                    && curl -sfSL http://releases.llvm.org/3.9.1/l
  && mkdir llvm/projects/libcxx    && curl -sfSL http://releases.llvm.org/3.9.1/libcxx-3.9.1.src.tar.xz    | tar --strip-components=1 -C llvm/projects/libcxx -xJ \
  && mkdir llvm/projects/libcxxabi && curl -sfSL http://releases.llvm.org/3.9.1/libcxxabi-3.9.1.src.tar.xz | tar --strip-components=1 -C llvm/projects/libcxxabi -xJ \
  && curl -fsSL https://github.com/llvm-mirror/libcxx/commit/b640da0b315ead39690d4d65c76938ab8aeb5449.patch | git -C llvm/projects/libcxx apply \
- && mkdir libcxx_msan && (cd libcxx_msan && cmake ../llvm -DCMAKE_BUILD_TYPE=Release -DLLVM_USE_SANITIZER=Memory && make cxx -j$(nproc))
+ && mkdir libcxx_msan && (cd libcxx_msan && cmake ../llvm -DCMAKE_BUILD_TYPE=Release -DLLVM_USE_SANITIZER=Memory && make cxx -j$(nproc)) \
+ && rm -rf llvm
 
 RUN git clone --depth 1 https://github.com/tpoechtrager/osxcross.git \
  && (cd osxcross/tarballs && curl -sfSL https://s3.amazonaws.com/andrew-osx-sdks/MacOSX10.9.sdk.tar.xz -O) \
@@ -132,8 +133,7 @@ RUN apt-get install -y --no-install-recommends golang \
  && tar -C /usr/local -xzf golang.tar.gz \
  && rm golang.tar.gz \
  && cd /usr/local/go/src \
- && GOROOT_BOOTSTRAP=$(go env GOROOT) CC=clang CXX=clang++ ./make.bash \
- && apt-get autoremove -y golang
+ && GOROOT_BOOTSTRAP=$(go env GOROOT) CC=clang CXX=clang++ ./make.bash
 
 ENV GOPATH /go
 ENV PATH $GOPATH/bin:/usr/local/go/bin:$PATH
@@ -168,3 +168,19 @@ RUN apt-get install -y --no-install-recommends \
 ENV CCACHE_CPP2=1
 
 ENV PATH /opt/backtrace/bin:$PATH
+
+RUN apt-get purge -y \
+    apt-transport-https \
+    bison \
+    bzip2 \
+    file \
+    flex \
+    gawk \
+    golang \
+    gperf \
+    help2man \
+    python \
+    texinfo \
+ && apt-get autoremove -y
+
+RUN rm -rf /tmp/* /var/lib/apt/lists/*
