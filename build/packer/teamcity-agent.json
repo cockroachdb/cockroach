@@ -5,7 +5,7 @@
 
   "builders": [{
       "type": "googlecompute",
-      "project_id": "cockroach-ephemeral",
+      "project_id": "cockroach-teamcity",
       "source_image_family": "ubuntu-1604-lts",
       "zone": "us-east1-b",
       "machine_type": "n1-highcpu-32",
