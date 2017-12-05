@@ -211,6 +211,17 @@ func (b *writeBuffer) writeLengthPrefixedVariablePutbuf() {
 	}
 }
 
+// writeLengthPrefixedBuffer writes the contents of a bytes.Buffer with a
+// length prefix.
+func (b *writeBuffer) writeLengthPrefixedBuffer(buf *bytes.Buffer) {
+	if b.err == nil {
+		b.putInt32(int32(buf.Len()))
+
+		// bytes.Buffer.WriteTo resets the Buffer.
+		_, b.err = buf.WriteTo(&b.wrapped)
+	}
+}
+
 // writeLengthPrefixedString writes a length-prefixed string. The
 // length is encoded as an int32.
 func (b *writeBuffer) writeLengthPrefixedString(s string) {
