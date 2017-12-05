@@ -20,10 +20,8 @@ import (
 	"golang.org/x/net/context"
 )
 
-func (s *Server) SetDrainingImpl(
-	drain bool, drainWait time.Duration, cancelWait time.Duration,
-) error {
-	return s.setDrainingImpl(drain, drainWait, cancelWait)
+func (s *Server) DrainImpl(drainWait time.Duration, cancelWait time.Duration) error {
+	return s.drainImpl(drainWait, cancelWait)
 }
 
 // OverwriteCancelMap overwrites all active connections' context.CancelFuncs so

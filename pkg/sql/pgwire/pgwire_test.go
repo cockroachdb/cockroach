@@ -320,8 +320,8 @@ func TestPGWireDrainOngoingTxns(t *testing.T) {
 		// not have any effect. The pgServer will not bother to wait for the
 		// connection to close properly and should notify the caller that a
 		// session did not respond to cancellation.
-		if err := pgServer.SetDrainingImpl(
-			true, 0 /* drainWait */, 0, /* cancelWait */
+		if err := pgServer.DrainImpl(
+			0 /* drainWait */, 0, /* cancelWait */
 		); !testutils.IsError(err, "some sessions did not respond to cancellation") {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -345,9 +345,7 @@ func TestPGWireDrainOngoingTxns(t *testing.T) {
 			t.Fatalf("unexpected error: %v", err)
 		}
 
-		if err := pgServer.SetDraining(false); err != nil {
-			t.Fatal(err)
-		}
+		pgServer.Undrain()
 	})
 
 	// Make sure that a connection gets canceled and correctly responds to this
@@ -361,8 +359,8 @@ func TestPGWireDrainOngoingTxns(t *testing.T) {
 		// Set draining with no drainWait timeout and a 1s cancelWait timeout.
 		// The expected behavior is for the pgServer to immediately cancel any
 		// ongoing sessions and wait for 1s for the cancellation to take effect.
-		if err := pgServer.SetDrainingImpl(
-			true, 0 /* drainWait */, 1*time.Second, /* cancelWait */
+		if err := pgServer.DrainImpl(
+			0 /* drainWait */, 1*time.Second, /* cancelWait */
 		); err != nil {
 			t.Fatal(err)
 		}
@@ -371,9 +369,7 @@ func TestPGWireDrainOngoingTxns(t *testing.T) {
 			t.Fatalf("unexpected error: %v", err)
 		}
 
-		if err := pgServer.SetDraining(false); err != nil {
-			t.Fatal(err)
-		}
+		pgServer.Undrain()
 	})
 }
 

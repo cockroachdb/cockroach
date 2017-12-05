@@ -63,14 +63,9 @@ const (
 	versionSSL = 80877103
 )
 
-const (
-	// drainMaxWait is the amount of time a draining server gives to sessions
-	// with ongoing transactions to finish work before cancellation.
-	drainMaxWait = 10 * time.Second
-	// cancelMaxWait is the amount of time a draining server gives to sessions
-	// to react to cancellation and return before a forceful shutdown.
-	cancelMaxWait = 1 * time.Second
-)
+// cancelMaxWait is the amount of time a draining server gives to sessions to
+// react to cancellation and return before a forceful shutdown.
+const cancelMaxWait = 1 * time.Second
 
 // baseSQLMemoryBudget is the amount of memory pre-allocated in each connection.
 var baseSQLMemoryBudget = envutil.EnvOrDefaultInt64("COCKROACH_BASE_SQL_MEMORY_BUDGET",
@@ -208,25 +203,38 @@ func (s *Server) Metrics() *ServerMetrics {
 	return &s.metrics
 }
 
-// SetDraining (when called with 'true') prevents new connections from being
-// served and waits a reasonable amount of time for open connections to
-// terminate before canceling them.
+// Drain prevents new connections from being served and waits for drainWait for
+// open connections to terminate before canceling them.
 // An error will be returned when connections that have been canceled have not
 // responded to this cancellation and closed themselves in time. The server
 // will remain in draining state, though open connections may continue to
 // exist.
-// When called with 'false', switches back to the normal mode of operation in
-// which connections are accepted.
 // The RFC on drain modes has more information regarding the specifics of
 // what will happen to connections in different states:
 // https://github.com/cockroachdb/cockroach/blob/master/docs/RFCS/20160425_drain_modes.md
-func (s *Server) SetDraining(drain bool) error {
-	return s.setDrainingImpl(drain, drainMaxWait, cancelMaxWait)
+func (s *Server) Drain(drainWait time.Duration) error {
+	return s.drainImpl(drainWait, cancelMaxWait)
 }
 
-func (s *Server) setDrainingImpl(
-	drain bool, drainWait time.Duration, cancelWait time.Duration,
-) error {
+// Undrain switches the server back to the normal mode of operation in which
+// connections are accepted.
+func (s *Server) Undrain() {
+	s.mu.Lock()
+	s.setDrainingLocked(false)
+	s.mu.Unlock()
+}
+
+// setDrainingLocked sets the server's draining state and returns whether the
+// state changed (i.e. drain != s.mu.draining). s.mu must be locked.
+func (s *Server) setDrainingLocked(drain bool) bool {
+	if s.mu.draining == drain {
+		return false
+	}
+	s.mu.draining = drain
+	return true
+}
+
+func (s *Server) drainImpl(drainWait time.Duration, cancelWait time.Duration) error {
 	// This anonymous function returns a copy of s.mu.connCancelMap if there are
 	// any active connections to cancel. We will only attempt to cancel
 	// connections that were active at the moment the draining switch happened.
@@ -240,14 +248,10 @@ func (s *Server) setDrainingImpl(
 	connCancelMap := func() cancelChanMap {
 		s.mu.Lock()
 		defer s.mu.Unlock()
-		if s.mu.draining == drain {
+		if !s.setDrainingLocked(true) {
+			// We are already draining.
 			return nil
 		}
-		s.mu.draining = drain
-		if !drain {
-			return nil
-		}
-
 		connCancelMap := make(cancelChanMap)
 		for done, cancel := range s.mu.connCancelMap {
 			connCancelMap[done] = cancel
