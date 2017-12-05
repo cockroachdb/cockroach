@@ -1,8 +1,15 @@
 import React, { Component } from "react";
-import { TreeNode, layoutTree, getLeaves, flatten } from "./tree";
-// import './Matrix.css';
+import {TreeNode, TreePath, layoutTree, getLeaves, flatten} from "./tree";
+import classNames from "classnames";
+import "./Matrix.styl";
 
 const DOWN_ARROW = "▼";
+const SIDE_ARROW = "▶";
+
+interface MatrixState {
+  collapsedRows: TreePath[];
+  collapsedCols: TreePath[];
+}
 
 interface MatrixProps<R, C> {
   label?: JSX.Element;
@@ -15,7 +22,27 @@ interface MatrixProps<R, C> {
   colNodeLabel?: (col: C) => string;
 }
 
-class Matrix<R, C> extends Component<MatrixProps<R, C>, {}> {
+class Matrix<R, C> extends Component<MatrixProps<R, C>, MatrixState> {
+
+  constructor() {
+    super();
+    this.state = {
+      collapsedRows: [],
+      collapsedCols: [],
+    };
+  }
+
+  _handleUnCollapseRow(path: TreePath) {
+    this.setState({
+      collapsedRows: this.state.collapsedRows.filter((tp) => !_.isEqual(tp, path)),
+    });
+  }
+
+  _handleCollapseRow(path: TreePath) {
+    this.setState({
+      collapsedRows: [...this.state.collapsedRows, path],
+    });
+  }
 
   render() {
     const {
@@ -24,13 +51,19 @@ class Matrix<R, C> extends Component<MatrixProps<R, C>, {}> {
       rows,
       renderCell,
     } = this.props;
+    const {
+      collapsedRows,
+    } = this.state;
 
     const colNodeLabel = this.props.colNodeLabel || ((col: C) => (<span>{JSON.stringify(col)}</span>));
     const colLeafLabel = this.props.colLeafLabel || ((col: C) => (<span>{JSON.stringify(col)}</span>));
     const rowNodeLabel = this.props.rowNodeLabel || ((row: R) => (<span>{JSON.stringify(row)}</span>));
     const rowLeafLabel = this.props.rowLeafLabel || ((row: R) => (<span>{JSON.stringify(row)}</span>));
 
-    const flattenedRows = flatten(rows);
+    const handleCollapseRow = this._handleCollapseRow.bind(this);
+    const handleUnCollapseRow = this._handleUnCollapseRow.bind(this);
+
+    const flattenedRows = flatten(rows, collapsedRows);
     const headerRows = layoutTree(cols);
     const flattenedCols = getLeaves(cols);
 
@@ -55,28 +88,40 @@ class Matrix<R, C> extends Component<MatrixProps<R, C>, {}> {
         ))}
         </thead>
         <tbody>
-        {flattenedRows.filter((n) => n.depth > 0).map((row) => (
-          <tr key={JSON.stringify(row)}>
-            <th
-              style={{
-                paddingLeft: (row.depth - 1) * 30,
-                textAlign: "left",
-                fontWeight: row.isLeaf ? "normal" : "bold",
-              }}
+        {flattenedRows.filter((n) => n.depth > 0).map((row) => {
+          const rowIsCollapsed = collapsedRows.filter((p) => _.isEqual(p, row.path)).length > 0;
+          const arrow = rowIsCollapsed ? SIDE_ARROW : DOWN_ARROW;
+          return (
+            <tr
+              key={JSON.stringify(row)}
+              className={classNames("matrix-row", { node: !row.isLeaf })}
+              onClick={() => (
+                rowIsCollapsed
+                  ? handleUnCollapseRow(row.path)
+                  : handleCollapseRow(row.path)
+              )}
             >
-              {row.isLeaf
-                ? rowLeafLabel(row.data)
-                : `${DOWN_ARROW} ${rowNodeLabel(row.data)}`}
-            </th>
-            {flattenedCols.map((col, idx) => {
-              return (
-                <td key={idx} style={{textAlign: "right"}}>
-                  {renderCell(row.data, col.data)}
-                </td>
-              );
-            })}
-          </tr>
-        ))}
+              <th
+                style={{
+                  paddingLeft: (row.depth - 1) * 30 + 5,
+                  textAlign: "left",
+                  fontWeight: row.isLeaf ? "normal" : "bold",
+                }}
+              >
+                {row.isLeaf
+                  ? rowLeafLabel(row.data)
+                  : `${arrow} ${rowNodeLabel(row.data)}`}
+              </th>
+              {flattenedCols.map((col, idx) => {
+                return (
+                  <td key={idx} style={{textAlign: "right"}}>
+                    {renderCell(row.data, col.data)}
+                  </td>
+                );
+              })}
+            </tr>
+          );
+        })}
         </tbody>
       </table>
     );

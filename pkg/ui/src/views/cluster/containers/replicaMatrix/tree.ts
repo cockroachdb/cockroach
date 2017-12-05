@@ -1,13 +1,12 @@
 import _ from "lodash";
-import Layout from "oss/src/views/devtools/containers/raft";
 
 export interface TreeNode<T> {
-  name: string,
+  name: string;
   children?: TreeNode<T>[];
   data: T;
 }
 
-type TreePath = string[];
+export type TreePath = string[];
 
 export function isLeaf<T>(t: TreeNode<T>): boolean {
   return !_.has(t, "children");
@@ -88,22 +87,26 @@ export interface FlattenedNode<T> {
   depth: number;
   isLeaf: boolean;
   data: T;
+  path: TreePath;
 }
 
-export function flatten<T>(tree: TreeNode<T>): FlattenedNode<T>[] {
+export function flatten<T>(tree: TreeNode<T>, collapsedPaths: TreePath[]): FlattenedNode<T>[] {
   const output: FlattenedNode<T>[] = [];
-  function recur(node: TreeNode<T>, depth: number) {
+  function recur(node: TreeNode<T>, depth: number, pathSoFar: TreePath) {
+    const pathToThis = [...pathSoFar, node.name];
     output.push({
       depth,
       isLeaf: isLeaf(node),
       data: node.data,
+      path: pathToThis,
     });
-    if (!isLeaf(node)) {
+    const isExpanded = _.filter(collapsedPaths, (p) => _.isEqual(p, pathToThis)).length === 0;
+    if (!isLeaf(node) && isExpanded) {
       node.children.forEach((child) => {
-        recur(child, depth + 1);
+        recur(child, depth + 1, pathToThis);
       });
     }
   }
-  recur(tree, 0);
+  recur(tree, 0, []);
   return output;
 }
