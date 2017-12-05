@@ -69,7 +69,7 @@ func parseRangeID(arg string) (roachpb.RangeID, error) {
 	return roachpb.RangeID(rangeIDInt), nil
 }
 
-func openStore(cmd *cobra.Command, dir string, stopper *stop.Stopper) (*engine.RocksDB, error) {
+func openExistingStore(dir string, stopper *stop.Stopper) (*engine.RocksDB, error) {
 	cache := engine.NewRocksDBCache(server.DefaultCacheSize)
 	defer cache.Release()
 	maxOpenFiles, err := server.SetOpenFileLimitForOneStore()
@@ -81,6 +81,7 @@ func openStore(cmd *cobra.Command, dir string, stopper *stop.Stopper) (*engine.R
 			Settings:     serverCfg.Settings,
 			Dir:          dir,
 			MaxOpenFiles: maxOpenFiles,
+			MustExist:    true,
 		},
 		cache,
 	)
@@ -137,7 +138,7 @@ func runDebugKeys(cmd *cobra.Command, args []string) error {
 		return errors.New("one argument required: dir")
 	}
 
-	db, err := openStore(cmd, args[0], stopper)
+	db, err := openExistingStore(args[0], stopper)
 	if err != nil {
 		return err
 	}
@@ -169,7 +170,7 @@ func runDebugRangeData(cmd *cobra.Command, args []string) error {
 		return errors.New("two arguments required: dir range_id")
 	}
 
-	db, err := openStore(cmd, args[0], stopper)
+	db, err := openExistingStore(args[0], stopper)
 	if err != nil {
 		return err
 	}
@@ -407,7 +408,7 @@ func runDebugRangeDescriptors(cmd *cobra.Command, args []string) error {
 		return errors.New("one argument required: dir")
 	}
 
-	db, err := openStore(cmd, args[0], stopper)
+	db, err := openExistingStore(args[0], stopper)
 	if err != nil {
 		return err
 	}
@@ -479,7 +480,7 @@ func runDebugRaftLog(cmd *cobra.Command, args []string) error {
 		return errors.New("two arguments required: dir range_id")
 	}
 
-	db, err := openStore(cmd, args[0], stopper)
+	db, err := openExistingStore(args[0], stopper)
 	if err != nil {
 		return err
 	}
@@ -529,7 +530,7 @@ func runDebugGCCmd(cmd *cobra.Command, args []string) error {
 		return errors.New("arguments: dir [range_id]")
 	}
 
-	db, err := openStore(cmd, args[0], stopper)
+	db, err := openExistingStore(args[0], stopper)
 	if err != nil {
 		return err
 	}
@@ -615,7 +616,7 @@ func runDebugCheckStoreCmd(cmd *cobra.Command, args []string) error {
 		return errors.New("one required argument: dir")
 	}
 
-	db, err := openStore(cmd, args[0], stopper)
+	db, err := openExistingStore(args[0], stopper)
 	if err != nil {
 		return err
 	}
@@ -737,7 +738,7 @@ func runDebugCompact(cmd *cobra.Command, args []string) error {
 		return errors.New("one argument is required")
 	}
 
-	db, err := openStore(cmd, args[0], stopper)
+	db, err := openExistingStore(args[0], stopper)
 	if err != nil {
 		return err
 	}
@@ -780,7 +781,7 @@ func runDebugSSTables(cmd *cobra.Command, args []string) error {
 		return errors.New("one argument is required")
 	}
 
-	db, err := openStore(cmd, args[0], stopper)
+	db, err := openExistingStore(args[0], stopper)
 	if err != nil {
 		return err
 	}
