@@ -449,21 +449,21 @@ func (n *groupNode) setupOutput() {
 	n.run.values = make(tree.Datums, len(n.funcs))
 }
 
-// requiresIsNotNullFilter returns whether a "col IS NOT NULL" constraint must
+// requiresIsDisinctFromNullFilter returns whether a "col IS DISTINCT FROM NULL" constraint must
 // be added. This is the case when we have a single MIN/MAX aggregation
 // function.
-func (n *groupNode) requiresIsNotNullFilter() bool {
+func (n *groupNode) requiresIsDistinctFromNullFilter() bool {
 	return len(n.desiredOrdering) == 1
 }
 
-// isNotNullFilter adds as a "col IS NOT NULL" constraint to the filterNode
+// isNotNullFilter adds as a "col IS DISTINCT FROM NULL" constraint to the filterNode
 // (which is under the renderNode).
-func (n *groupNode) addIsNotNullFilter(where *filterNode, render *renderNode) {
-	if !n.requiresIsNotNullFilter() {
-		panic("IS NOT NULL filter not required")
+func (n *groupNode) addIsDistinctFromNullFilter(where *filterNode, render *renderNode) {
+	if !n.requiresIsDistinctFromNullFilter() {
+		panic("IS DISTINCT FROM NULL filter not required")
 	}
-	isNotNull := tree.NewTypedComparisonExpr(
-		tree.IsNot,
+	isDistinctFromNull := tree.NewTypedComparisonExpr(
+		tree.IsDistinctFrom,
 		where.ivarHelper.Rebind(
 			render.render[n.desiredOrdering[0].ColIdx],
 			false, // alsoReset
@@ -472,9 +472,9 @@ func (n *groupNode) addIsNotNullFilter(where *filterNode, render *renderNode) {
 		tree.DNull,
 	)
 	if where.filter == nil {
-		where.filter = isNotNull
+		where.filter = isDistinctFromNull
 	} else {
-		where.filter = tree.NewTypedAndExpr(where.filter, isNotNull)
+		where.filter = tree.NewTypedAndExpr(where.filter, isDistinctFromNull)
 	}
 }
 

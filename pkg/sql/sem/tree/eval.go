@@ -2840,11 +2840,6 @@ func (expr *ComparisonExpr) Eval(ctx *EvalContext) (Datum, error) {
 			return MakeDBool(!DBool(left == DNull && right == DNull)), nil
 		case IsNotDistinctFrom:
 			return MakeDBool(left == DNull && right == DNull), nil
-		case Is:
-			// IS and IS NOT can compare against NULL.
-			return MakeDBool(left == right), nil
-		case IsNot:
-			return MakeDBool(left != right), nil
 		default:
 			return DNull, nil
 		}
