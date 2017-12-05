@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/caller"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"golang.org/x/net/context"
 )
 
 func (e *UnhandledRetryableError) Error() string {
@@ -158,6 +159,9 @@ func (e *Error) setGoError(err error) {
 		e.Detail = detail
 	} else if _, isInternalError := err.(*internalError); !isInternalError && isTxnError {
 		panic(fmt.Sprintf("transactionRestartError %T must be an ErrorDetail", err))
+	} else if err == context.Canceled {
+		detail.ContextCanceled = &ContextCanceledError{}
+		e.Detail = detail
 	}
 }
 
@@ -618,3 +622,13 @@ func (*TxnPrevAttemptError) message(_ *Error) string {
 }
 
 var _ ErrorDetailInterface = &TxnPrevAttemptError{}
+
+func (e *ContextCanceledError) Error() string {
+	return e.message(nil)
+}
+
+func (*ContextCanceledError) message(_ *Error) string {
+	return "context canceled"
+}
+
+var _ ErrorDetailInterface = &ContextCanceledError{}
