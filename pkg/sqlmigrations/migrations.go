@@ -48,6 +48,10 @@ var (
 type MigrationManagerTestingKnobs struct {
 	// DisableMigrations skips all migrations.
 	DisableMigrations bool
+	// DisableBackfillMigrations stops applying migrations once
+	// a migration with 'doesBackfill == true' is encountered.
+	// TODO: we could skip it if we had some concept of migration dependencies.
+	DisableBackfillMigrations bool
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.
@@ -111,8 +115,9 @@ var backwardCompatibleMigrations = []migrationDescriptor{
 		workFn: addRootUser,
 	},
 	{
-		name:   "add system.users isRole column and create admin role",
-		workFn: addRoles,
+		name:         "add system.users isRole column and create admin role",
+		workFn:       addRoles,
+		doesBackfill: true,
 	},
 }
 
@@ -130,6 +135,8 @@ type migrationDescriptor struct {
 	// automate certain tests, which check the number of ranges/descriptors
 	// present on server bootup.
 	newRanges, newDescriptors int
+	// doesBackfill should be set to true if the migration triggers a backfill.
+	doesBackfill bool
 }
 
 type runner struct {
@@ -237,6 +244,11 @@ func (m *Manager) EnsureMigrations(ctx context.Context) error {
 	}
 	allMigrationsCompleted := true
 	for _, migration := range backwardCompatibleMigrations {
+		if m.testingKnobs.DisableBackfillMigrations && migration.doesBackfill {
+			log.Info(ctx, "ignoring migrations after (and including) %s due to testing knob",
+				migration.name)
+			break
+		}
 		key := migrationKey(migration)
 		if _, ok := completedMigrations[string(key)]; !ok {
 			allMigrationsCompleted = false
@@ -324,6 +336,12 @@ func (m *Manager) EnsureMigrations(ctx context.Context) error {
 		key := migrationKey(migration)
 		if _, ok := completedMigrations[string(key)]; ok {
 			continue
+		}
+
+		if m.testingKnobs.DisableBackfillMigrations && migration.doesBackfill {
+			log.Info(ctx, "ignoring migrations after (and including) %s due to testing knob",
+				migration.name)
+			break
 		}
 
 		if log.V(1) {

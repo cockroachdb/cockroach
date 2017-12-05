@@ -26,14 +26,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/jobs"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sqlmigrations"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
 func TestWriteResumeSpan(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-
-	t.Skip("fails in the presence of migrations requiring backfill, but needs migrations for systen.jobs")
 
 	ctx := context.TODO()
 
@@ -47,6 +46,10 @@ func TestWriteResumeSpan(t *testing.T) {
 				AsyncExecNotification: func() error {
 					return errors.New("async schema changer disabled")
 				},
+			},
+			// Disable backfill migrations, we still need the jobs table migration.
+			SQLMigrationManager: &sqlmigrations.MigrationManagerTestingKnobs{
+				DisableBackfillMigrations: true,
 			},
 		},
 	})

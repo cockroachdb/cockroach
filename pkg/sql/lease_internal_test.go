@@ -584,7 +584,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 func TestLeaseAcquireAndReleaseConcurrently(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	t.Skip("fails in the presence of migrations requiring backfill")
+	t.Skip("fails in the presence of migrations requiring backfill, but cannot import sqlmigrations")
 
 	// Result is a struct for moving results to the main result routine.
 	type Result struct {

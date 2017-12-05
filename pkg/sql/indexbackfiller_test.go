@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
+	"github.com/cockroachdb/cockroach/pkg/sqlmigrations"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
@@ -31,8 +32,6 @@ import (
 // TestIndexBackfiller tests the scenarios described in docs/tech-notes/index-backfill.md
 func TestIndexBackfiller(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-
-	t.Skip("fails in the presence of migrations requiring backfill, but needs migrations for systen.jobs")
 
 	params, _ := tests.CreateTestServerParams()
 
@@ -58,6 +57,10 @@ func TestIndexBackfiller(t *testing.T) {
 				// Wait until we get a signal to begin backfill.
 				<-moveToBackfill
 			},
+		},
+		// Disable backfill migrations, we still need the jobs table migration.
+		SQLMigrationManager: &sqlmigrations.MigrationManagerTestingKnobs{
+			DisableBackfillMigrations: true,
 		},
 	}
 

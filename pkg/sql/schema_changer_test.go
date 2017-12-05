@@ -705,8 +705,6 @@ CREATE UNIQUE INDEX vidx ON t.test (v);
 func TestDropWhileBackfill(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	t.Skip("fails in the presence of migrations requiring backfill, but needs migrations for systen.jobs")
-
 	// protects backfillNotification
 	var mu syncutil.Mutex
 	backfillNotification := make(chan struct{})
@@ -742,6 +740,10 @@ func TestDropWhileBackfill(t *testing.T) {
 				partialBackfillDone.Store(true)
 				return nil
 			},
+		},
+		// Disable backfill migrations, we still need the jobs table migration.
+		SQLMigrationManager: &sqlmigrations.MigrationManagerTestingKnobs{
+			DisableBackfillMigrations: true,
 		},
 	}
 
@@ -931,8 +933,6 @@ CREATE UNIQUE INDEX vidx ON t.test (v);
 func TestAbortSchemaChangeBackfill(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	t.Skip("fails in the presence of migrations requiring backfill, but needs migrations for systen.jobs")
-
 	var backfillNotification, commandsDone chan struct{}
 	var dontAbortBackfill uint32
 	params, _ := tests.CreateTestServerParams()
@@ -1005,6 +1005,10 @@ func TestAbortSchemaChangeBackfill(t *testing.T) {
 				// to commit and will abort.
 				<-commandsDone
 			},
+		},
+		// Disable backfill migrations, we still need the jobs table migration.
+		SQLMigrationManager: &sqlmigrations.MigrationManagerTestingKnobs{
+			DisableBackfillMigrations: true,
 		},
 	}
 	server, sqlDB, kvDB := serverutils.StartServer(t, params)
@@ -1208,8 +1212,6 @@ func dropColumnSchemaChange(
 func TestSchemaChangeRetry(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	t.Skip("fails in the presence of migrations requiring backfill, but needs migrations for systen.jobs")
-
 	params, _ := tests.CreateTestServerParams()
 	currChunk := 0
 	seenSpan := roachpb.Span{}
@@ -1258,6 +1260,10 @@ func TestSchemaChangeRetry(t *testing.T) {
 				return nil
 			},
 		},
+		// Disable backfill migrations, we still need the jobs table migration.
+		SQLMigrationManager: &sqlmigrations.MigrationManagerTestingKnobs{
+			DisableBackfillMigrations: true,
+		},
 	}
 	s, sqlDB, kvDB := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.TODO())
@@ -1291,8 +1297,6 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 // the number of chunks operated on during a retry.
 func TestSchemaChangeRetryOnVersionChange(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-
-	t.Skip("fails in the presence of migrations requiring backfill, but needs migrations for systen.jobs")
 
 	params, _ := tests.CreateTestServerParams()
 	var upTableVersion func()
@@ -1341,6 +1345,10 @@ func TestSchemaChangeRetryOnVersionChange(t *testing.T) {
 				seenSpan = sp
 				return nil
 			},
+		},
+		// Disable backfill migrations, we still need the jobs table migration.
+		SQLMigrationManager: &sqlmigrations.MigrationManagerTestingKnobs{
+			DisableBackfillMigrations: true,
 		},
 	}
 	s, sqlDB, kvDB := serverutils.StartServer(t, params)
@@ -1408,8 +1416,6 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 func TestSchemaChangePurgeFailure(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	t.Skip("fails in the presence of migrations requiring backfill, but needs migrations for systen.jobs")
-
 	params, _ := tests.CreateTestServerParams()
 	const chunkSize = 200
 	// Disable the async schema changer.
@@ -1452,6 +1458,10 @@ func TestSchemaChangePurgeFailure(t *testing.T) {
 				}
 				return nil
 			},
+		},
+		// Disable backfill migrations, we still need the jobs table migration.
+		SQLMigrationManager: &sqlmigrations.MigrationManagerTestingKnobs{
+			DisableBackfillMigrations: true,
 		},
 	}
 	server, sqlDB, kvDB := serverutils.StartServer(t, params)
@@ -1548,8 +1558,6 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 func TestSchemaChangeReverseMutations(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	t.Skip("fails in the presence of migrations requiring backfill, but needs migrations for systen.jobs")
-
 	params, _ := tests.CreateTestServerParams()
 	const chunkSize = 200
 	// Disable synchronous schema change processing so that the mutations get
@@ -1568,6 +1576,10 @@ func TestSchemaChangeReverseMutations(t *testing.T) {
 			},
 			AsyncExecQuickly:  true,
 			BackfillChunkSize: chunkSize,
+		},
+		// Disable backfill migrations, we still need the jobs table migration.
+		SQLMigrationManager: &sqlmigrations.MigrationManagerTestingKnobs{
+			DisableBackfillMigrations: true,
 		},
 	}
 	s, sqlDB, kvDB := serverutils.StartServer(t, params)
@@ -1843,8 +1855,6 @@ CREATE TABLE t.test (
 func TestAddColumnDuringColumnDrop(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	t.Skip("fails in the presence of migrations requiring backfill, but needs migrations for systen.jobs")
-
 	params, _ := tests.CreateTestServerParams()
 	backfillNotification := make(chan struct{})
 	continueBackfillNotification := make(chan struct{})
@@ -1860,6 +1870,10 @@ func TestAddColumnDuringColumnDrop(t *testing.T) {
 				}
 				return nil
 			},
+		},
+		// Disable backfill migrations, we still need the jobs table migration.
+		SQLMigrationManager: &sqlmigrations.MigrationManagerTestingKnobs{
+			DisableBackfillMigrations: true,
 		},
 	}
 	server, sqlDB, _ := serverutils.StartServer(t, params)
@@ -1903,8 +1917,6 @@ CREATE TABLE t.test (
 func TestUpdateDuringColumnBackfill(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	t.Skip("fails in the presence of migrations requiring backfill, but needs migrations for systen.jobs")
-
 	backfillNotification := make(chan bool)
 	continueBackfillNotification := make(chan bool)
 	params, _ := tests.CreateTestServerParams()
@@ -1920,6 +1932,10 @@ func TestUpdateDuringColumnBackfill(t *testing.T) {
 				}
 				return nil
 			},
+		},
+		// Disable backfill migrations, we still need the jobs table migration.
+		SQLMigrationManager: &sqlmigrations.MigrationManagerTestingKnobs{
+			DisableBackfillMigrations: true,
 		},
 	}
 	server, sqlDB, _ := serverutils.StartServer(t, params)
