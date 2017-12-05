@@ -67,7 +67,7 @@ class ReplicaMatrix extends React.Component<ReplicaMatrixProps, {}> {
       }
 
       const val = byDbByTableByNode[tableDesc.dbName][tableDesc.tableName][nodeDesc.node_id.toString()];
-      return (<span>{val.toString()}</span>);
+      return (<span>{val ? val.toString() : ""}</span>);
     }
 
     return (
