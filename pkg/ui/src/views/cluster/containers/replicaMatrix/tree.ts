@@ -110,3 +110,22 @@ export function flatten<T>(tree: TreeNode<T>, collapsedPaths: TreePath[]): Flatt
   recur(tree, 0, []);
   return output;
 }
+
+// mutates `tree`.
+export function setAtPath<T>(tree: TreeNode<T>, path: TreePath, node: TreeNode<T>) {
+  if (path.length === 0) {
+    tree.children.push(node);
+    return;
+  }
+  const nextPathSegment = path[0];
+  let nextChild = _.find(tree.children, (child) => _.isEqual(child.name, nextPathSegment));
+  if (!nextChild) {
+    nextChild = {
+      name: nextPathSegment,
+      children: [],
+      data: null,
+    };
+    tree.children.push(nextChild);
+  }
+  setAtPath(nextChild, path.slice(1), node);
+}

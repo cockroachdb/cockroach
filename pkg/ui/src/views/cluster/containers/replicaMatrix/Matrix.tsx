@@ -1,3 +1,4 @@
+import _ from "lodash";
 import React, { Component } from "react";
 import {TreeNode, TreePath, layoutTree, getLeaves, flatten} from "./tree";
 import classNames from "classnames";
@@ -16,10 +17,10 @@ interface MatrixProps<R, C> {
   cols: TreeNode<C>;
   rows: TreeNode<R>;
   renderCell: (row: R, col: C) => JSX.Element | null;
-  rowLeafLabel?: (row: R) => string;
-  rowNodeLabel?: (row: R) => string;
-  colLeafLabel?: (col: C) => string;
-  colNodeLabel?: (col: C) => string;
+  rowLeafLabel?: ((row: R, path: TreePath) => string) | ((row: R) => string);
+  rowNodeLabel?: ((row: R, path: TreePath) => string) | ((row: R) => string);
+  colLeafLabel?: ((col: C, path: TreePath) => string) | ((col: C) => string);
+  colNodeLabel?: ((col: C, path: TreePath) => string) | ((col: C) => string);
 }
 
 class Matrix<R, C> extends Component<MatrixProps<R, C>, MatrixState> {
@@ -70,7 +71,7 @@ class Matrix<R, C> extends Component<MatrixProps<R, C>, MatrixState> {
     return (
       <table className="replica-matrix">
         <thead>
-        {headerRows.map((row, idx) => (
+        {headerRows.slice(1).map((row, idx) => (
           <tr key={idx}>
             {idx === 0
               ? <th>{label}</th>
@@ -81,7 +82,9 @@ class Matrix<R, C> extends Component<MatrixProps<R, C>, MatrixState> {
                 colSpan={col.width}
                 style={{fontWeight: "bold"}}
               >
-                {col.depth === 1 ? colLeafLabel(col.data) : colNodeLabel(col.data)}
+                {col.depth === 1
+                  ? colLeafLabel(col.data, col.path)
+                  : colNodeLabel(col.data, col.path)}
               </th>
             ))}
           </tr>
@@ -109,8 +112,8 @@ class Matrix<R, C> extends Component<MatrixProps<R, C>, MatrixState> {
                 }}
               >
                 {row.isLeaf
-                  ? rowLeafLabel(row.data)
-                  : `${arrow} ${rowNodeLabel(row.data)}`}
+                  ? rowLeafLabel(row.data, row.path)
+                  : `${arrow} ${rowNodeLabel(row.data, row.path)}`}
               </th>
               {flattenedCols.map((col, idx) => {
                 return (

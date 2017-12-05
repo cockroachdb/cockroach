@@ -2,12 +2,12 @@ import _ from "lodash";
 import React from "react";
 import Link from "react-router/lib/Link";
 import {connect} from "react-redux";
-import {AdminUIState} from "oss/src/redux/state";
+import { AdminUIState } from "oss/src/redux/state";
 import { refreshReplicaMatrix, refreshNodes } from "src/redux/apiReducers";
-import {cockroach} from "oss/src/js/protos";
+import { cockroach } from "oss/src/js/protos";
 import { NodeStatus$Properties } from "src/util/proto";
 import Matrix from "./Matrix";
-import { TreeNode } from "./tree";
+import {TreeNode, setAtPath, TreePath} from "./tree";
 import "./index.styl";
 import ReplicaMatrixResponse = cockroach.server.serverpb.ReplicaMatrixResponse;
 import NodeDescriptor = cockroach.roachpb.NodeDescriptor$Properties;
@@ -24,6 +24,24 @@ interface TableDesc {
   tableName?: string;
 }
 
+function makeNodeTree(nodes: NodeDescriptor[]): TreeNode<NodeDescriptor> {
+  const root: TreeNode<NodeDescriptor> = {
+    name: "Cluster",
+    data: {},
+    children: [],
+  };
+
+  nodes.forEach((node) => {
+    const path = node.locality.tiers.map((tier) => `${tier.key}=${tier.value}`);
+    console.log('SAP', path);
+    setAtPath(root, path, {
+      name: `n${node.node_id.toString()}`,
+      data: node,
+    });
+  });
+  return root;
+}
+
 class ReplicaMatrix extends React.Component<ReplicaMatrixProps, {}> {
   render() {
     if (!this.props.replicaMatrix || !this.props.nodes) {
@@ -35,14 +53,7 @@ class ReplicaMatrix extends React.Component<ReplicaMatrixProps, {}> {
       _.set(byDbByTableByNode, [cell.database_name, cell.table_name, cell.node_id], cell.count);
     });
 
-    const nodeTree: TreeNode<NodeDescriptor> = {
-      name: "Cluster",
-      data: {},
-      children: this.props.nodes.map((node) => ({
-        name: node.desc.node_id.toString(),
-        data: node.desc,
-      })),
-    };
+    const nodeTree = makeNodeTree(this.props.nodes.map((n) => n.desc));
 
     const dbTree: TreeNode<TableDesc> = {
       name: "Cluster",
@@ -75,9 +86,9 @@ class ReplicaMatrix extends React.Component<ReplicaMatrixProps, {}> {
         label={<em># Replicas</em>}
         cols={nodeTree}
         rows={dbTree}
-        colNodeLabel={() => "Cluster"}
-        colLeafLabel={(node) => `n${node.node_id.toString()}`}
-        rowNodeLabel={(row: TableDesc) => (`DB: ${row.dbName}`)}
+        colNodeLabel={(_, path: TreePath) => (path.length === 0 ? "Cluster" : path[path.length - 1])}
+        colLeafLabel={(node: NodeDescriptor) => `n${node.node_id.toString()}`}
+        rowNodeLabel={(row: TableDesc) => (row === null ? "Cluster" : `DB: ${row.dbName}`)}
         rowLeafLabel={(row: TableDesc) => (row.tableName)}
         renderCell={renderCell} />
     );
