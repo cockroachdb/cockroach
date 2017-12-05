@@ -28,8 +28,6 @@ func planPhysicalProps(plan planNode) physicalProps {
 	switch n := plan.(type) {
 	case *explainPlanNode:
 		return planPhysicalProps(n.run.results)
-	case *distinctNode:
-		return planPhysicalProps(n.plan)
 	case *limitNode:
 		return planPhysicalProps(n.plan)
 	case *indexJoinNode:
@@ -63,6 +61,8 @@ func planPhysicalProps(plan planNode) physicalProps {
 		return n.props
 	case *sortNode:
 		return sortPhysicalProps(n)
+	case *distinctNode:
+		return planPhysicalProps(n.plan)
 	}
 
 	// Every other node simply has no guarantees on its output rows.
@@ -78,7 +78,8 @@ func sortPhysicalProps(n *sortNode) physicalProps {
 	// than the sortNode's ordering, so we want to use that. E.g:
 	//   CREATE INDEX foo ON t (a, b);
 	//   SELECT a, b, c FROM t@foo ORDER BY a;
-	// We want to use (a, b) instead of just (a).
+	// We want to use (a, b) instead of just (a) (we return below).
+	// If we do need sorting, we must use the sortNode's ordering.
 	if n.needSort {
 		// We will sort and can guarantee the desired ordering.
 		props.ordering = make(sqlbase.ColumnOrdering, 0, len(n.ordering))

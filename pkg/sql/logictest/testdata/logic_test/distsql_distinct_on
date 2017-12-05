@@ -1,0 +1,156 @@
+# LogicTest: 5node-distsql 5node-distsql-disk
+
+statement ok
+CREATE TABLE xyz (
+  id INT PRIMARY KEY,
+  x INT,
+  y INT,
+  z INT
+)
+
+statement ok
+INSERT INTO xyz VALUES
+  (1, 1, 1, NULL),
+  (2, 1, 1, 2),
+  (3, 1, 1, 2),
+  (4, 1, 2, 1),
+  (5, 2, 2, 3),
+  (6, 4, 5, 6),
+  (7, 4, 1, 6)
+
+statement ok
+CREATE TABLE abc (
+  a STRING,
+  b STRING,
+  c STRING,
+  PRIMARY KEY (a, b, c)
+)
+
+statement ok
+INSERT INTO abc VALUES
+  ('1', '1', '1'),
+  ('1', '1', '2'),
+  ('1', '2', '2'),
+  ('2', '3', '4'),
+  ('3', '4', '5')
+
+statement ok
+ALTER TABLE xyz SPLIT AT VALUES (2), (4), (6), (7)
+
+statement ok
+ALTER TABLE xyz TESTING_RELOCATE VALUES
+  (ARRAY[1], 0),
+  (ARRAY[2], 2),
+  (ARRAY[3], 4),
+  (ARRAY[4], 6),
+  (ARRAY[5], 7)
+
+statement ok
+ALTER TABLE abc SPLIT AT VALUES
+  (NULL, NULL, NULL),
+  ('1', '1', '2'),
+  ('1', '2', '2'),
+  ('2', '3', '4'),
+  ('3', '4', '5')
+
+statement ok
+ALTER TABLE abc TESTING_RELOCATE VALUES
+  (ARRAY[1], NULL, NULL, NULL),
+  (ARRAY[2], '1', '1', '2'),
+  (ARRAY[3], '1', '2', '2'),
+  (ARRAY[4], '2', '3', '4'),
+  (ARRAY[5], '3', '4', '5')
+
+query TTITI colnames
+SELECT * FROM [SHOW TESTING_RANGES FROM TABLE xyz]
+----
+Start Key  End Key  Range ID  Replicas  Lease Holder
+NULL       /2       1         {1}       1
+/2         /4       2         {2}       2
+/4         /6       3         {3}       3
+/6         /7       4         {4}       4
+/7         NULL     5         {5}       5
+
+query TTITI colnames
+SELECT * FROM [SHOW TESTING_RANGES FROM TABLE abc]
+----
+Start Key  End Key  Range ID      Replicas  Lease Holder
+NULL             /NULL/NULL/NULL  5         {5}       5
+/NULL/NULL/NULL  /"1"/"1"/"2"     21        {1}       1
+/"1"/"1"/"2"     /"1"/"2"/"2"     22        {2}       2
+/"1"/"2"/"2"     /"2"/"3"/"4"     23        {3}       3
+/"2"/"3"/"4"     /"3"/"4"/"5"     24        {4}       4
+/"3"/"4"/"5"     NULL             25        {5}       5
+
+query T
+SELECT "URL" FROM [EXPLAIN (DISTSQL) SELECT DISTINCT ON (x,y,z) x, y, z FROM xyz]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html?eJzElLFugzAQhvc-RfXPN8RA0pSJoUuWpoq6VQwUnyKkBCPbSEkj3r0ChpQosSuBxGg73333O-YuKJXk9-zIBvEXBAgBCCEIEQhLpIRKq5yNUbr9SQ9s5AnxglCUVW3b7ZSQK82IL7CFPTBifGbfB95xJlmDINlmxaGTVLo4ZvqcnM4_IGxrGz8nASUhJRHShqBqe61qbLZnxKKh_5vfCmOLMrdDbSKo0zx0BA8d19J1qbRkzXJQO22m6yIcdCFmu2OPeZI7DmZL5zFPki6cLZ3HPEm6aLZ0HvPkX_8dx45NpUrDN1PgfuVFOx1Y7rkfJUbVOucPrfJO0y-3HddtSDa2PxX9YlP2R22Df2HhhIMBLG7hwG32qEMnHbnhaEzfSye8cptXY8wvTnjtNq_HmF_d_9XC80zcj-zWnTZPvwEAAP__B_KjkQ==
+
+query III rowsort
+SELECT DISTINCT ON (x,y,z) x, y, z FROM xyz
+----
+1 1 NULL
+1 1 2
+1 2 1
+2 2 3
+4 5 6
+4 1 6
+
+# Ensure that ordering propagates past local DISTINCT processors.
+query T
+SELECT "URL" FROM [EXPLAIN (DISTSQL) SELECT DISTINCT ON (x,y,z) x, y, z FROM xyz ORDER BY x]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html?eJzElUGPokAQhe_7K0xdtw82oKucOOzFy7px5jbhwNAVQ6I06W4SHeN_nwDJOBKpmkmH4Ujje1_V6xe8QKkV_suOaCF-AQkCAhAQgoAIBCwgFVAZnaO12jQ_6QQbdYJ4LqAoq9o1x6mAXBuE-AKucAeEGJ6z1wPuMFNoQIBClxWHFlKZ4piZc3I6v4GAbe3iWRKIJBRJBOlVgK7dzdW6bI8Qy6v4OvlJG9eHJvL3oHnwHfO_hXVFmbu-vWh3aBYyCg2qePZxNsQNB7k3nO7cHi0z7nDR3XBysrtmyH53zZiPdtfBZHEyZL84GfPR4gwni5Mh-8XJmI8WZzRZnAzZL07G_Ec-7A-4O7SVLi3ecYec581XH9Ueu38Jq2uT43-j8xbTPW5bXXug0LrureweNmX3qhnws1iS4oAWB6Q4vBPLvjikx17S6IhUL2jxghQz5KXP0n9I8Yomr0jxmhavfcaWTMe4ktEtk0zNpFfPJFO0iIHTTZNM1STdtf7s6fXXewAAAP__2QzB0Q==
+
+query III
+SELECT DISTINCT ON (x,y,z) x, y, z FROM xyz ORDER BY x
+----
+1 1 NULL
+1 1 2
+1 2 1
+2 2 3
+4 5 6
+4 1 6
+
+# Ensure that even with more ordering columns, ordering propagates past local
+# DISTINCT processors.
+query T
+SELECT "URL" FROM [EXPLAIN (DISTSQL) SELECT DISTINCT ON (y) x, y FROM xyz ORDER BY y, x]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html?eJzElD9vszAQxvf3U7y6NR5iIGnCxNAlS1Ol3SoGik8RUoKRbaSkUb57BQxpULlrZSpG_vz8Oz9-5AuUWuFTdkQL8RtIEBCAgBAERCBgAamAyugcrdWm-aUDNuoE8VxAUVa1a16nAnJtEOILuMIdEGJ4zd4PuMNMoQEBCl1WHFpJZYpjZs7J6fwBAra1i_8ngUhCSK8CdO1uS1qX7RFieRU_175o4_rGJJiJRM4GBcFvBI-FdUWZu76i2YtRaFA1-xl0hYOum0J36wxtYvyhoruh5DQHy2j9D5YRjHqwwTQZMlr_DBnBqBmG02TIaP0zZASjZhhNkyGj9c-QEfzZJf2Na4e20qXFO9fQyvPm9ka1x-7Gt7o2OT4bnbea7nHbcu0LhdZ1X2X3sCm7T82AX2FJwgENByQc3sGyD4f02EtaHZH0goYXJMyYlz6bfiDhFW1ekfCahtc-Y0umY1zJ6JZJpmbSq2eSKVrEyOmmSaZqku5af_b0-u8zAAD__6QwtJc=
+
+query II
+SELECT DISTINCT ON (y) x, y FROM xyz ORDER BY y, x
+----
+1 1
+1 2
+4 5
+
+# Distinct processors elided becaue of strong key.
+query T
+SELECT "URL" FROM [EXPLAIN (DISTSQL) SELECT DISTINCT ON (a,b,c) a, b, c FROM abc]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html?eJzMkj1rwzAQhvf-ivLOV4hsp4Mmr1mSEroVD4p1BIPjM5IMLcH_vVgeUge3tHhwx_t49JzgvaIRy3tzYQ_9BgVCAkIKQgbCFgWhdVKy9-KGlRHY2XfoDaFq2i4M7YJQimPoK0IVaobGqznVfGRj2YFgOZiqjpLWVRfjPnJzKkE4dEE_5oryhPIURU-QLtxe9cGcGVr19I35JuwacZYd24mu6Gdu28uTtHdr8-JkIlarfTlZzZyuZs7-RcBmzEf2rTSef5WgzRBAtmce0-qlcyW_OCmjZiwPkYsNyz6MUzUWuyaO4oFfYfUj_DyBN_dwssScLoGzJfD2T3DRP3wGAAD___j6l7o=
+
+query TTT rowsort
+SELECT DISTINCT ON (a,b,c) a, b, c FROM abc
+----
+1  1  1
+1  1  2
+1  2  2
+2  3  4
+3  4  5
+
+query T
+SELECT "URL" FROM [EXPLAIN (DISTSQL) SELECT DISTINCT ON (a, b) a, b FROM abc ORDER BY a, b, c]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html?eJzE1DFr6zAQB_D9fYrHf80Nsezk5Xny0CVLU0K34kGxjmBILCPJ0BL83YutQurQyIVgPFryX787JO6CSit-lme2SN8QgSBAiEFIQFghJ9RGF2ytNt0vPrBV70iXhLKqG9ct54RCG0Z6gSvdiZHiVR5OvGep2ICg2Mny1CO1Kc_SfGTyUICwa1z6N4soE5TFyFuCbtz1VOvkkZFGLf1efiqtK6vCDdne6ECj2LD6Qu-K4q54hbQ_6tZZUCYWlMUL5O1U5cWD8qLZrmJEnuAqxGy9jsgT9BrP1uuIPEGvyWy9jsgTj5MfxD3bWleWB-K9k5fdjGF1ZD-brG5MwS9GFz3jP3d9rl9QbJ3fjfzHtvJbXYHfw1EwLAbh6DYswvIIHQfTSTicPFL3Khheh-X1I_K_YHgTljePyP_Dd7UceSbhR3Zr5-2fzwAAAP__kaS7sw==
+
+query TT
+SELECT DISTINCT ON (a, b) a, b FROM abc ORDER BY a, b, c
+----
+1 1
+1 2
+2 3
+3 4

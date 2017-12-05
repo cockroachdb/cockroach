@@ -20,6 +20,7 @@ import (
 
 	"golang.org/x/net/context"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
@@ -193,12 +194,61 @@ func (p *planner) SelectClause(
 		return nil, err
 	}
 
-	// NB: orderBy, window, and groupBy are passed and can modify the renderNode,
-	// but must do so in that order.
+	// NB: orderBy, window, and groupBy are passed and can modify the
+	// renderNode, but must do so in that order.
+	// Note that this order is exactly the reverse of the order of how the
+	// plan is constructed i.e. a logical plan tree might look like
+	// (renderNodes omitted)
+	//  distinctNode
+	//       |
+	//       |
+	//       v
+	//    sortNode
+	//       |
+	//       |
+	//       v
+	//   windowNode
+	//       |
+	//       |
+	//       v
+	//   groupNode
+	//       |
+	//       |
+	//       v
+	distinctComplex, distinct, err := p.distinct(ctx, parsed, r)
+	if err != nil {
+		return nil, err
+	}
 	sort, err := p.orderBy(ctx, orderBy, r)
 	if err != nil {
 		return nil, err
 	}
+
+	// For DISTINCT ON expressions either one of the following must be
+	// satisfied:
+	//    - DISTINCT ON expressions is a subset of a prefix of the ORDER BY
+	//	expressions.
+	//	    e.g.  SELECT DISTINCT ON (b, a) ... ORDER BY a, b, c
+	//    - DISTINCT ON expressions includes all ORDER BY expressions.
+	//	    e.g.  SELECT DISTINCT ON (b, a) ... ORDER BY a
+	if distinct != nil && sort != nil && !distinct.distinctOnColIdxs.Empty() {
+		numDistinctExprs := distinct.distinctOnColIdxs.Len()
+		for i, order := range sort.ordering {
+			// DISTINCT ON contains all ORDER BY expressions.
+			// Continue.
+			if i >= numDistinctExprs {
+				break
+			}
+
+			if !distinct.distinctOnColIdxs.Contains(order.ColIdx) {
+				return nil, pgerror.NewErrorf(
+					pgerror.CodeSyntaxError,
+					"SELECT DISTINCT ON expressions must be a prefix of or include all ORDER BY expressions",
+				)
+			}
+		}
+	}
+
 	window, err := p.window(ctx, parsed, r)
 	if err != nil {
 		return nil, err
@@ -223,7 +273,6 @@ func (p *planner) SelectClause(
 	if err != nil {
 		return nil, err
 	}
-	distinctPlan := p.Distinct(parsed)
 
 	result := planNode(r)
 	if groupComplex != nil {
@@ -238,9 +287,9 @@ func (p *planner) SelectClause(
 		sort.plan = result
 		result = sort
 	}
-	if distinctPlan != nil {
-		distinctPlan.plan = result
-		result = distinctPlan
+	if distinctComplex != nil && distinct != nil {
+		distinct.plan = result
+		result = distinctComplex
 	}
 	if limitPlan != nil {
 		limitPlan.plan = result
@@ -705,4 +754,70 @@ func (p *planner) computePhysicalPropsForRender(r *renderNode, fromOrder physica
 			r.props.addConstantColumn(col)
 		}
 	}
+}
+
+// colIdxByRenderAlias returns the corresponding index in columns of an expression
+// that may refer to a column alias.
+// If there are no aliases in columns that expr refers to, then -1 is returned.
+// This method is pertinent to ORDER BY and DISTINCT ON clauses that may refer
+// to a column alias.
+func (r *renderNode) colIdxByRenderAlias(
+	expr tree.Expr, columns sqlbase.ResultColumns, op string,
+) (int, error) {
+	index := -1
+
+	if vBase, ok := expr.(tree.VarName); ok {
+		v, err := vBase.NormalizeVarName()
+		if err != nil {
+			return 0, err
+		}
+
+		if c, ok := v.(*tree.ColumnItem); ok && c.TableName.Table() == "" {
+			// Look for an output column that matches the name. This
+			// handles cases like:
+			//
+			//   SELECT a AS b FROM t ORDER BY b
+			//   SELECT DISTINCT ON (b) a AS b FROM t
+			target := string(c.ColumnName)
+			for j, col := range columns {
+				if col.Name == target {
+					if index != -1 {
+						// There is more than one
+						// render alias that matches
+						// the clause. Here, SQL92 is
+						// specific as to what should
+						// be done: if the underlying
+						// expression is known (we're
+						// on a renderNode) and it is
+						// equivalent, then just accept
+						// that and ignore the
+						// ambiguity.  This plays nice
+						// with `SELECT b, * FROM t
+						// ORDER BY b`. Otherwise,
+						// reject with an ambiguity
+						// error.
+						if r == nil || !r.equivalentRenders(j, index) {
+							return 0, pgerror.NewErrorf(
+								pgerror.CodeAmbiguousAliasError,
+								"%s \"%s\" is ambiguous", op, target,
+							)
+						}
+						// Note that in this case we
+						// want to use the index of the
+						// first matching column. This
+						// is because
+						// renderNode.computePhysicalProps
+						// also prefers the first
+						// column, and we want the
+						// orderings to match as much
+						// as possible.
+						continue
+					}
+					index = j
+				}
+			}
+		}
+	}
+
+	return index, nil
 }

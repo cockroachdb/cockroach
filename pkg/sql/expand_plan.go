@@ -190,42 +190,7 @@ func doExpandPlan(
 		n.needSort = (match < len(n.ordering))
 
 	case *distinctNode:
-		// TODO(radu/knz): perhaps we can propagate the DISTINCT
-		// clause as desired ordering for the source node.
-		n.plan, err = doExpandPlan(ctx, p, params, n.plan)
-		if err != nil {
-			return plan, err
-		}
-
-		pp := planPhysicalProps(n.plan)
-		if !pp.isEmpty() {
-			// If any of the columns form a key, we already know that all rows are
-			// unique. Elide the distinctNode.
-			for _, k := range pp.weakKeys {
-				if k.SubsetOf(pp.notNullCols) {
-					return n.plan, nil
-				}
-			}
-
-			// The distinctNode can take advantage of any ordering. It only needs to
-			// know the set of columns S that contribute to the ordering (it keeps
-			// track of distinct elements within each group of rows with equal values
-			// on S).
-			n.columnsInOrder = make([]bool, len(planColumns(n.plan)))
-			for i := range n.columnsInOrder {
-				group := pp.eqGroups.Find(i)
-				if pp.constantCols.Contains(group) {
-					n.columnsInOrder[i] = true
-					continue
-				}
-				for _, g := range pp.ordering {
-					if g.ColIdx == group {
-						n.columnsInOrder[i] = true
-						break
-					}
-				}
-			}
-		}
+		plan, err = expandDistinctNode(ctx, p, params, n)
 
 	case *scanNode:
 		plan, err = expandScanNode(ctx, p, params, n)
@@ -301,6 +266,66 @@ func elideDoubleSort(parent, source *sortNode) {
 	}
 }
 
+func expandDistinctNode(
+	ctx context.Context, p *planner, params expandParameters, d *distinctNode,
+) (planNode, error) {
+	// TODO(radu/knz): perhaps we can propagate the DISTINCT
+	// clause as desired ordering for the source node.
+	var err error
+	d.plan, err = doExpandPlan(ctx, p, params, d.plan)
+	if err != nil {
+		return d, err
+	}
+
+	// We explicitly compute physical props since DISTINCT ON may have
+	// introduced additional columns and thus additional physicalProps that
+	// will not be rendered.
+	distinctPp := d.computePhysicalProps()
+
+	if !distinctPp.isEmpty() {
+		for _, k := range distinctPp.weakKeys {
+			// If we have a key on the DISTINCT ON columns,
+			// then we can elide the distinct node.
+			// Since distinctNode does not perform projection,
+			// this is fine (it has a parent renderNode).
+			if k.SubsetOf(distinctPp.notNullCols) {
+				return d.plan, nil
+			}
+		}
+
+		// The distinctNode can take advantage of any ordering.
+		// It only needs to know the set of columns S that
+		// contribute to the ordering (it keeps track of
+		// distinct elements within each group of rows with
+		// equal values on S).
+		// This needs to be planColumns(n.plan) and not
+		// planColumns(n) since we are processing on the
+		// child node's row.
+		d.columnsInOrder = make([]bool, len(planColumns(d.plan)))
+		for i := range d.columnsInOrder {
+			// During distinct, we use ordering as a way
+			// to do distinct more efficiently.
+			// If we know the columns are sorted in a certain
+			// direction, then we know that if the columns
+			// 'change' then we are at a new 'group'.
+
+			group := distinctPp.eqGroups.Find(i)
+			if distinctPp.constantCols.Contains(group) {
+				d.columnsInOrder[i] = true
+				continue
+			}
+			for _, g := range distinctPp.ordering {
+				if g.ColIdx == group {
+					d.columnsInOrder[i] = true
+					break
+				}
+			}
+		}
+	}
+
+	return d, nil
+}
+
 func expandScanNode(
 	ctx context.Context, p *planner, params expandParameters, s *scanNode,
 ) (planNode, error) {
@@ -338,7 +363,6 @@ func expandRenderNode(
 	}
 
 	// Elide the render node if it renders its source as-is.
-
 	sourceCols := planColumns(r.source.plan)
 	if len(r.columns) == len(sourceCols) {
 		// We don't drop renderNodes which have a different number of
@@ -557,9 +581,15 @@ func (p *planner) simplifyOrderings(plan planNode, usefulOrdering sqlbase.Column
 		}
 
 	case *distinctNode:
-		// distinctNode uses whatever order the underlying node presents (regardless
-		// of any ordering requirement on distinctNode itself).
-		sourceOrdering := planPhysicalProps(n.plan)
+		// distinctNode uses the ordering computed from its source but
+		// trimmed to the prefix of its DISTINCT ON columns (if
+		// applicable).
+		// It is not necessary to maintain ordering of other columns
+		// unless explicitly required by the child node (i.e.
+		// sortNode).
+		// This improves performance since ordering incurs an overhead
+		// when merging streams in distsql.
+		sourceOrdering := n.computePhysicalProps()
 		n.plan = p.simplifyOrderings(n.plan, sourceOrdering.ordering)
 
 	case *scanNode:

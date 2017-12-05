@@ -9,7 +9,14 @@ CREATE TABLE xyz (
 )
 
 statement ok
-INSERT INTO xyz VALUES (1, 2, 3), (2, 5, 6), (3, 2, 3), (4, 5, 6), (5, 2, 6), (6, 3, 5), (7, 2, 9)
+INSERT INTO xyz VALUES
+  (1, 2, 3),
+  (2, 5, 6),
+  (3, 2, 3),
+  (4, 5, 6),
+  (5, 2, 6),
+  (6, 3, 5),
+  (7, 2, 9)
 
 query II rowsort
 SELECT y, z FROM xyz
@@ -63,7 +70,7 @@ query ITTT
 EXPLAIN SELECT DISTINCT y, z FROM xyz ORDER BY z
 ----
 0  distinct  ·      ·
-0  ·         key    y, z
+0  ·         order key    y, z
 1  render    ·      ·
 2  scan      ·      ·
 2  ·         table  xyz@foo
@@ -82,7 +89,7 @@ query ITTT
 EXPLAIN SELECT DISTINCT y, z FROM xyz ORDER BY y
 ----
 0  distinct  ·      ·
-0  ·         key    y
+0  ·         order key    y
 1  sort      ·      ·
 1  ·         order  +y
 2  render    ·      ·
@@ -103,7 +110,7 @@ query ITTT
 EXPLAIN SELECT DISTINCT y, z FROM xyz ORDER BY y, z
 ----
 0  distinct  ·      ·
-0  ·         key    y, z
+0  ·         order key    y, z
 1  sort      ·      ·
 1  ·         order  +y,+z
 2  render    ·      ·
@@ -122,7 +129,7 @@ query ITTT
 EXPLAIN SELECT DISTINCT y + z FROM xyz ORDER BY y + z
 ----
 0  distinct  ·      ·
-0  ·         key    y + z
+0  ·         order key    y + z
 1  sort      ·      ·
 1  ·         order  +"y + z"
 2  render    ·      ·
@@ -159,7 +166,7 @@ query ITTT
 EXPLAIN SELECT DISTINCT y AS w FROM xyz ORDER BY y
 ----
 0  distinct  ·      ·
-0  ·         key    w
+0  ·         order key    w
 1  sort      ·      ·
 1  ·         order  +w
 2  render    ·      ·
@@ -234,7 +241,7 @@ query ITTTTT
 EXPLAIN (METADATA) SELECT DISTINCT a, b FROM abcd
 ----
 0  distinct  ·      ·             (a, b)                          a!=NULL; b!=NULL; +a,+b
-0  ·         key    a, b          ·                               ·
+0  ·         order key    a, b          ·                               ·
 1  render    ·      ·             (a, b)                          a!=NULL; b!=NULL; +a,+b
 2  scan      ·      ·             (a, b, c[omitted], d[omitted])  a!=NULL; b!=NULL; c!=NULL; key(a,b,c); +a,+b
 2  ·         table  abcd@primary  ·                               ·
@@ -286,7 +293,7 @@ EXPLAIN (VERBOSE) SELECT DISTINCT v FROM kv@idx
 ----
 Level  Type      Field     Description  Columns          Ordering
 0      distinct  ·         ·            (v)              weak-key(v); +v
-0      ·         key       v            ·                ·
+0      ·         order key       v            ·                ·
 1      render    ·         ·            (v)              weak-key(v); +v
 1      ·         render 0  test.kv.v    ·                ·
 2      scan      ·         ·            (k[omitted], v)  weak-key(v); +v

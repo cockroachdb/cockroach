@@ -19,8 +19,11 @@ import (
 
 	"golang.org/x/net/context"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 )
 
@@ -31,15 +34,154 @@ type distinctNode struct {
 	// sort used an expression that was not part of the requested column set.
 	columnsInOrder []bool
 
+	// distinctOnColIdxs columns of the source planNode are what
+	// defines the distinct keys. For a normal DISTINCT, numDistinctOnCols
+	// is the same as the number of expressions in the select clause.
+	// For DISTINCT ON (<exprs>) this is equivalent to the number of unique
+	// expressions in <exprs>.
+	distinctOnColIdxs util.FastIntSet
+
 	run distinctRun
 }
 
 // distinct constructs a distinctNode.
-func (p *planner) Distinct(n *tree.SelectClause) *distinctNode {
+func (p *planner) distinct(
+	ctx context.Context, n *tree.SelectClause, r *renderNode,
+) (planNode, *distinctNode, error) {
 	if !n.Distinct {
-		return nil
+		return nil, nil, nil
 	}
-	return &distinctNode{}
+
+	d := &distinctNode{}
+	plan := planNode(d)
+
+	if n.DistinctOn == nil {
+		return plan, d, nil
+	}
+
+	// We grab a copy of columns here because we might add new render targets
+	// below. This is the set of columns requested by the query.
+	// For example, we want to only return 'b' in the query
+	//	SELECT DISTINCT ON (a) b FROM bar
+	// but we need to addRender 'a' for computing DISTINCT ON.
+	origColumns := r.columns
+	origRender := r.render
+	numOriginalCols := r.numOriginalCols
+
+	for _, expr := range n.DistinctOn {
+		// The expression in DISTINCT ON follow similar rules as
+		// the expressions in ORDER BY (see sort.go:sortBy).
+
+		// The logical data source for DISTINCT ON is the list of render
+		// expressions for a SELECT, as specified in the input SQL text
+		// (or an entire UNION or VALUES clause).
+		// There are some special cases:
+		//
+		// 1) if the expression is the aliased (AS) name of a render
+		//    expression in a SELECT clause, then use that
+		//    render as distinct on key.
+		//    e.g. SELECT DISTINCT ON (b) a AS b, b AS c
+		//    this "distinctifies" on the first render.
+		//
+		// 2) column ordinals. If a simple integer literal is used,
+		//    optionally enclosed within parentheses but *not subject to
+		//    any arithmetic*, then this refers to one of the columns of
+		//    the data source. Then use the render expression at that
+		//    ordinal position as distinct on key.
+		//
+		// 3) otherwise, if the expression is already in the render list,
+		//    then use that render as distinct on key.
+		//    e.g. SELECT DISTINCT ON (b) b AS c
+		//    this distincts on on the first render.
+		//    (this is an optimization)
+		//
+		// 4) if the distinct on key is not dependent on the data
+		//    source (no IndexedVar) then simply do not distinct on.
+		//    (this is an optimization)
+		//
+		// 5) otherwise, add a new render with the DISTINCT ON expression
+		//    and use that as distinct on key.
+		//    e.g. SELECT DISTINCT ON(b) a FROM t
+		//    e.g. SELECT DISTINCT ON(a+b) a, b FROM t
+
+		// Unwrap parentheses like "((a))" to "a".
+		expr = tree.StripParens(expr)
+
+		// First, deal with render aliases.
+		index, err := r.colIdxByRenderAlias(expr, origColumns, "DISTINCT ON")
+		if err != nil {
+			return nil, nil, err
+		}
+
+		// If the expression does not refer to an alias, deal with
+		// column ordinals.
+		if index == -1 {
+			col, err := p.colIndex(numOriginalCols, expr, "DISTINCT ON")
+			if err != nil {
+				return nil, nil, err
+			}
+			if col != -1 {
+				index = col
+			}
+		}
+
+		// Finally, if we haven't found anything so far, we really
+		// need a new render.
+		// TODO(richardwu): currently this is only possible for renderNode.
+		// If we are dealing with a UNION or something else we would need
+		// to fabricate an intermediate renderNode to add the new render.
+		if index == -1 && r != nil {
+			cols, exprs, hasStar, err := p.computeRenderAllowingStars(
+				ctx, tree.SelectExpr{Expr: expr}, types.Any,
+				r.sourceInfo, r.ivarHelper, autoGenerateRenderOutputName)
+			if err != nil {
+				return nil, nil, err
+			}
+			p.hasStar = p.hasStar || hasStar
+
+			if len(cols) == 0 {
+				// Nothing was expanded! No distinct on here.
+				continue
+			}
+
+			// DISTINCT ON (a, b) -> DISTINCT ON a, b
+			cols, exprs = flattenTuples(cols, exprs, &r.ivarHelper)
+
+			colIdxs := r.addOrReuseRenders(cols, exprs, true)
+			for i := 0; i < len(colIdxs)-1; i++ {
+				// If more than 1 column were expanded, turn them into distinct on columns too.
+				// Except the last one, which will be added below.
+				d.distinctOnColIdxs.Add(colIdxs[i])
+			}
+			index = colIdxs[len(colIdxs)-1]
+		}
+
+		if index == -1 {
+			return nil, nil, pgerror.NewErrorf(
+				pgerror.CodeUndefinedColumnError,
+				"column %s does not exist", expr,
+			)
+		}
+
+		d.distinctOnColIdxs.Add(index)
+	}
+
+	// We add a post renderNode if DISTINCT ON introduced additional render
+	// expressions.
+	if len(origRender) < len(r.render) {
+		src := planDataSource{info: newSourceInfoForSingleTable(anonymousTable, origColumns), plan: d}
+		postRender := &renderNode{
+			source:     src,
+			sourceInfo: multiSourceInfo{src.info},
+		}
+		postRender.ivarHelper = tree.MakeIndexedVarHelper(postRender, len(src.info.sourceColumns))
+		if err := p.initTargets(ctx, postRender, tree.SelectExprs{tree.SelectExpr{Expr: &tree.AllColumnsSelector{}}}, nil /* desiredTypes */); err != nil {
+			return nil, nil, err
+		}
+		plan = postRender
+	}
+
+	return plan, d, nil
 }
 
 // distinctRun contains the run-time state of distinctNode during local execution.
@@ -75,7 +217,7 @@ func (n *distinctNode) Next(params runParams) (bool, error) {
 		}
 
 		// Detect duplicates
-		prefix, suffix, err := n.encodeValues(n.Values())
+		prefix, suffix, err := n.encodeDistinctOnVals(n.plan.Values())
 		if err != nil {
 			return false, err
 		}
@@ -114,7 +256,13 @@ func (n *distinctNode) Next(params runParams) (bool, error) {
 	}
 }
 
-func (n *distinctNode) Values() tree.Datums { return n.plan.Values() }
+func (n *distinctNode) Values() tree.Datums {
+	// We return only the required columns set during planning.
+	// These columns are always at the beginning of the child row since
+	// we _append_ additional DISTINCT ON columns.
+	// See planner.distinct.
+	return n.plan.Values()
+}
 
 func (n *distinctNode) Close(ctx context.Context) {
 	n.plan.Close(ctx)
@@ -137,10 +285,15 @@ func (n *distinctNode) addSuffixSeen(
 
 // TODO(irfansharif): This can be refactored away to use
 // sqlbase.EncodeDatums([]byte, tree.Datums)
-func (n *distinctNode) encodeValues(values tree.Datums) ([]byte, []byte, error) {
+func (n *distinctNode) encodeDistinctOnVals(values tree.Datums) ([]byte, []byte, error) {
 	var prefix, suffix []byte
 	var err error
 	for i, val := range values {
+		// Only encode DISTINCT ON expressions/columns (if applicable).
+		if !n.distinctOnColIdxs.Empty() && !n.distinctOnColIdxs.Contains(i) {
+			continue
+		}
+
 		if n.columnsInOrder != nil && n.columnsInOrder[i] {
 			if prefix == nil {
 				prefix = make([]byte, 0, 100)
@@ -157,4 +310,27 @@ func (n *distinctNode) encodeValues(values tree.Datums) ([]byte, []byte, error) 
 		}
 	}
 	return prefix, suffix, err
+}
+
+func (n *distinctNode) computePhysicalProps() physicalProps {
+	underlying := planPhysicalProps(n.plan)
+	props := underlying.copy()
+
+	if numPlanColumns := len(planColumns(n.plan)); !n.distinctOnColIdxs.Empty() && n.distinctOnColIdxs.Len() < numPlanColumns {
+		// The distinctNode has the DISTINCT ON columns defined on a subset of columns
+		//   SELECT DISTINCT ON (k) v FROM kv.
+		// n.distinctOnCols: k
+		// planColumns(n.plan): v, k
+		colMap := make([]int, numPlanColumns)
+		for i := range colMap {
+			if n.distinctOnColIdxs.Contains(i) {
+				colMap[i] = i
+			} else {
+				colMap[i] = -1
+			}
+		}
+		return props.project(colMap)
+	}
+
+	return props
 }

@@ -1,0 +1,738 @@
+# LogicTest: default parallel-stmts distsql distsql-disk
+
+statement ok
+CREATE TABLE xyz (
+  x INT,
+  y INT,
+  z INT,
+  pk1 INT,
+  pk2 INT,
+  PRIMARY KEY (pk1, pk2)
+)
+
+statement ok
+INSERT INTO xyz VALUES
+  (1, 1, NULL, 1, 1),
+  (1, 1, 2, 2, 2),
+  (1, 1, 2, 3, 3),
+  (1, 2, 1, 4, 4),
+  (2, 2, 3, 5, 5),
+  (4, 5, 6, 6, 6),
+  (4, 1, 6, 7, 7)
+
+statement ok
+CREATE TABLE abc (
+  a STRING,
+  b STRING,
+  c STRING,
+  PRIMARY KEY (a, b, c)
+)
+
+statement ok
+INSERT INTO abc VALUES
+  ('1', '1', '1'),
+  ('1', '1', '2'),
+  ('1', '2', '2')
+
+##################
+# Simple queries #
+##################
+
+# 3/3 columns
+
+query ITTTTT
+EXPLAIN (VERBOSE) SELECT DISTINCT ON (x, y, z) x, y, z FROM xyz
+----
+0  distinct  ·            ·            (x, y, z)                              ·
+0  ·         distinct on  x, y, z      ·                                      ·
+1  render    ·            ·            (x, y, z)                              ·
+1  ·         render 0     test.xyz.x   ·                                      ·
+1  ·         render 1     test.xyz.y   ·                                      ·
+1  ·         render 2     test.xyz.z   ·                                      ·
+2  scan      ·            ·            (x, y, z, pk1[omitted], pk2[omitted])  pk1!=NULL; pk2!=NULL; key(pk1,pk2)
+2  ·         table        xyz@primary  ·                                      ·
+2  ·         spans        ALL          ·                                      ·
+
+query III rowsort
+SELECT DISTINCT ON (x, y, z) x, y, z FROM xyz
+----
+1 1 NULL
+1 1 2
+1 2 1
+2 2 3
+4 5 6
+4 1 6
+
+query ITTTTT
+EXPLAIN (VERBOSE) SELECT DISTINCT ON (z, x, y) x FROM xyz
+----
+0  render    ·            ·            (x)                                    ·
+0  ·         render 0     x            ·                                      ·
+1  distinct  ·            ·            (x, z, y)                              ·
+1  ·         distinct on  x, z, y      ·                                      ·
+2  render    ·            ·            (x, z, y)                              ·
+2  ·         render 0     test.xyz.x   ·                                      ·
+2  ·         render 1     test.xyz.z   ·                                      ·
+2  ·         render 2     test.xyz.y   ·                                      ·
+3  scan      ·            ·            (x, y, z, pk1[omitted], pk2[omitted])  pk1!=NULL; pk2!=NULL; key(pk1,pk2)
+3  ·         table        xyz@primary  ·                                      ·
+3  ·         spans        ALL          ·                                      ·
+
+query I rowsort
+SELECT DISTINCT ON (y, x, z) x FROM xyz
+----
+1
+1
+1
+2
+4
+4
+
+query I rowsort
+SELECT DISTINCT ON (z, y, x) z FROM xyz
+----
+NULL
+2
+1
+3
+6
+6
+
+query ITTTTT
+EXPLAIN (VERBOSE) SELECT DISTINCT ON (b, c, a) a, c, b FROM abc
+----
+0  render  ·         ·            (a, c, b)  a!=NULL; c!=NULL; b!=NULL; key(a,c,b)
+0  ·       render 0  test.abc.a   ·          ·
+0  ·       render 1  test.abc.c   ·          ·
+0  ·       render 2  test.abc.b   ·          ·
+1  scan    ·         ·            (a, b, c)  a!=NULL; b!=NULL; c!=NULL; key(a,b,c)
+1  ·       table     abc@primary  ·          ·
+1  ·       spans     ALL          ·          ·
+
+query TTT rowsort
+SELECT DISTINCT ON (b, c, a) a, c, b FROM abc
+----
+1 1 1
+1 2 1
+1 2 2
+
+# Distinct node should be elided since we have a strong key.
+query ITTTTT
+EXPLAIN (VERBOSE) SELECT DISTINCT ON (b, c, a) a FROM abc
+----
+0  render  ·         ·            (a)        a!=NULL
+0  ·       render 0  a            ·          ·
+1  scan    ·         ·            (a, b, c)  a!=NULL; b!=NULL; c!=NULL; key(a,b,c)
+1  ·       table     abc@primary  ·          ·
+1  ·       spans     ALL          ·          ·
+
+
+query T rowsort
+SELECT DISTINCT ON (b, c, a) a FROM abc
+----
+1
+1
+1
+
+
+# Distinct node should be elided since we have a strong key.
+query ITTTTT
+EXPLAIN (VERBOSE) SELECT DISTINCT ON (c, a, b) b FROM abc ORDER BY b
+----
+0  render  ·         ·            (b)                          b!=NULL; +b
+0  ·       render 0  b            ·                            ·
+1  sort    ·         ·            (b, c[omitted], a[omitted])  b!=NULL; c!=NULL; a!=NULL; key(b,c,a); +b
+1  ·       order     +b           ·                            ·
+2  render  ·         ·            (b, c[omitted], a[omitted])  b!=NULL; c!=NULL; a!=NULL; key(b,c,a)
+2  ·       render 0  test.abc.b   ·                            ·
+2  ·       render 1  NULL         ·                            ·
+2  ·       render 2  NULL         ·                            ·
+3  scan    ·         ·            (a[omitted], b, c[omitted])  a!=NULL; b!=NULL; c!=NULL; key(a,b,c)
+3  ·       table     abc@primary  ·                            ·
+3  ·       spans     ALL          ·                            ·
+
+
+query T rowsort
+SELECT DISTINCT ON (c, a, b) b FROM abc ORDER BY b
+----
+1
+1
+2
+
+
+# 2/3 columns
+
+query ITTTTT
+EXPLAIN (VERBOSE) SELECT DISTINCT ON (x, y) y, x FROM xyz
+----
+0  distinct  ·            ·            (y, x)                                          ·
+0  ·         distinct on  y, x         ·                                               ·
+1  render    ·            ·            (y, x)                                          ·
+1  ·         render 0     test.xyz.y   ·                                               ·
+1  ·         render 1     test.xyz.x   ·                                               ·
+2  scan      ·            ·            (x, y, z[omitted], pk1[omitted], pk2[omitted])  pk1!=NULL; pk2!=NULL; key(pk1,pk2)
+2  ·         table        xyz@primary  ·                                               ·
+2  ·         spans        ALL          ·                                               ·
+
+query II rowsort
+SELECT DISTINCT ON (x, y) y, x FROM xyz
+----
+1 1
+2 1
+2 2
+5 4
+1 4
+
+query ITTTTT
+EXPLAIN (VERBOSE) SELECT DISTINCT ON (y, x) x FROM xyz
+----
+0  render    ·            ·            (x)                                             ·
+0  ·         render 0     x            ·                                               ·
+1  distinct  ·            ·            (x, y)                                          ·
+1  ·         distinct on  x, y         ·                                               ·
+2  render    ·            ·            (x, y)                                          ·
+2  ·         render 0     test.xyz.x   ·                                               ·
+2  ·         render 1     test.xyz.y   ·                                               ·
+3  scan      ·            ·            (x, y, z[omitted], pk1[omitted], pk2[omitted])  pk1!=NULL; pk2!=NULL; key(pk1,pk2)
+3  ·         table        xyz@primary  ·                                               ·
+3  ·         spans        ALL          ·                                               ·
+
+query I rowsort
+SELECT DISTINCT ON (y, x) x FROM xyz
+----
+1
+1
+2
+4
+4
+
+query I rowsort
+SELECT DISTINCT ON (x, y) y FROM xyz
+----
+1
+2
+2
+5
+1
+
+query ITTTTT
+EXPLAIN (VERBOSE) SELECT DISTINCT ON (y, x, x, y, x) x, y FROM xyz
+----
+0  distinct  ·            ·            (x, y)                                          ·
+0  ·         distinct on  x, y         ·                                               ·
+1  render    ·            ·            (x, y)                                          ·
+1  ·         render 0     test.xyz.x   ·                                               ·
+1  ·         render 1     test.xyz.y   ·                                               ·
+2  scan      ·            ·            (x, y, z[omitted], pk1[omitted], pk2[omitted])  pk1!=NULL; pk2!=NULL; key(pk1,pk2)
+2  ·         table        xyz@primary  ·                                               ·
+2  ·         spans        ALL          ·                                               ·
+
+query ITTTTT
+EXPLAIN (VERBOSE) SELECT DISTINCT ON (a, c) a, b FROM abc
+----
+0  render    ·            ·            (a, b)     a!=NULL; b!=NULL; +a
+0  ·         render 0     a            ·          ·
+0  ·         render 1     b            ·          ·
+1  distinct  ·            ·            (a, b, c)  a!=NULL; b!=NULL; c!=NULL; key(a,b,c); +a
+1  ·         distinct on  a, c         ·          ·
+1  ·         order key    a            ·          ·
+2  scan      ·            ·            (a, b, c)  a!=NULL; b!=NULL; c!=NULL; key(a,b,c); +a
+2  ·         table        abc@primary  ·          ·
+2  ·         spans        ALL          ·          ·
+
+query TT rowsort
+SELECT DISTINCT ON (a, c) a, b FROM abc ORDER BY a, c, b
+----
+1 1
+1 1
+
+query ITTTTT
+EXPLAIN (VERBOSE) SELECT DISTINCT ON (c, a) b, c, a FROM abc
+----
+0  distinct  ·            ·            (b, c, a)  b!=NULL; c!=NULL; a!=NULL; key(b,c,a); +a
+0  ·         distinct on  c, a         ·          ·
+0  ·         order key    a            ·          ·
+1  render    ·            ·            (b, c, a)  b!=NULL; c!=NULL; a!=NULL; key(b,c,a); +a
+1  ·         render 0     test.abc.b   ·          ·
+1  ·         render 1     test.abc.c   ·          ·
+1  ·         render 2     test.abc.a   ·          ·
+2  scan      ·            ·            (a, b, c)  a!=NULL; b!=NULL; c!=NULL; key(a,b,c); +a
+2  ·         table        abc@primary  ·          ·
+2  ·         spans        ALL          ·          ·
+
+# We wrap this with an ORDER BY otherwise this would be non-deterministic.
+query TTT rowsort
+SELECT DISTINCT ON (c, a) b, c, a FROM abc ORDER BY c, a, b DESC
+----
+1 1 1
+2 2 1
+
+
+# 1/3 columns
+
+query I rowsort
+SELECT DISTINCT ON (y) y FROM xyz
+----
+1
+2
+5
+
+query T rowsort
+SELECT DISTINCT ON (c) a FROM abc
+----
+1
+1
+
+query T rowsort
+SELECT DISTINCT ON (b) b FROM abc
+----
+1
+2
+
+# We wrap this with an ORDER BY otherwise this would be non-deterministic.
+query TTT rowsort
+SELECT DISTINCT ON (a) a, b, c FROM abc ORDER BY a, b, c
+----
+1 1 1
+
+# Ensure order simplification on DISTINCT ON columns does not simplifying out
+# an explicit order from ORDER BY
+query ITTTTT
+EXPLAIN (VERBOSE) SELECT DISTINCT ON (a) a, c FROM abc ORDER BY a, c DESC, b
+----
+0  distinct  ·            ·            (a, c)     a!=NULL; c!=NULL; +a,-c
+0  ·         distinct on  a            ·          ·
+0  ·         order key    a            ·          ·
+1  sort      ·            ·            (a, c)     a!=NULL; c!=NULL; +a,-c
+1  ·         order        +a,-c,+b     ·          ·
+2  render    ·            ·            (a, c, b)  a!=NULL; c!=NULL; b!=NULL; key(a,c,b); +a
+2  ·         render 0     test.abc.a   ·          ·
+2  ·         render 1     test.abc.c   ·          ·
+2  ·         render 2     test.abc.b   ·          ·
+3  scan      ·            ·            (a, b, c)  a!=NULL; b!=NULL; c!=NULL; key(a,b,c); +a
+3  ·         table        abc@primary  ·          ·
+3  ·         spans        ALL          ·          ·
+
+query TT
+SELECT DISTINCT ON (a) a, c FROM abc ORDER BY a, c DESC, b
+----
+1 2
+
+#################
+# With ORDER BY #
+#################
+
+statement error SELECT DISTINCT ON expressions must be a prefix of or include all ORDER BY expressions
+SELECT DISTINCT ON (x) x, y, z FROM xyz ORDER BY y
+
+statement error SELECT DISTINCT ON expressions must be a prefix of or include all ORDER BY expressions
+SELECT DISTINCT ON (y) x, y, z FROM xyz ORDER BY x, y
+
+statement error SELECT DISTINCT ON expressions must be a prefix of or include all ORDER BY expressions
+SELECT DISTINCT ON (y, z) x, y, z FROM xyz ORDER BY x
+
+query ITTTTT
+EXPLAIN (VERBOSE) SELECT DISTINCT ON (x) x FROM xyz ORDER BY x DESC
+----
+0  distinct  ·            ·            (x)                                                      -x
+0  ·         distinct on  x            ·                                                        ·
+0  ·         order key    x            ·                                                        ·
+1  sort      ·            ·            (x)                                                      -x
+1  ·         order        -x           ·                                                        ·
+2  render    ·            ·            (x)                                                      ·
+2  ·         render 0     test.xyz.x   ·                                                        ·
+3  scan      ·            ·            (x, y[omitted], z[omitted], pk1[omitted], pk2[omitted])  pk1!=NULL; pk2!=NULL; key(pk1,pk2)
+3  ·         table        xyz@primary  ·                                                        ·
+3  ·         spans        ALL          ·                                                        ·
+
+query I
+SELECT DISTINCT ON (x) x FROM xyz ORDER BY x DESC
+----
+4
+2
+1
+
+query ITTTTT
+EXPLAIN (VERBOSE) SELECT DISTINCT ON (x, z) y, z, x FROM xyz ORDER BY z
+----
+0  distinct  ·            ·            (y, z, x)                              +z
+0  ·         distinct on  z, x         ·                                      ·
+0  ·         order key    z            ·                                      ·
+1  sort      ·            ·            (y, z, x)                              +z
+1  ·         order        +z           ·                                      ·
+2  render    ·            ·            (y, z, x)                              ·
+2  ·         render 0     test.xyz.y   ·                                      ·
+2  ·         render 1     test.xyz.z   ·                                      ·
+2  ·         render 2     test.xyz.x   ·                                      ·
+3  scan      ·            ·            (x, y, z, pk1[omitted], pk2[omitted])  pk1!=NULL; pk2!=NULL; key(pk1,pk2)
+3  ·         table        xyz@primary  ·                                      ·
+3  ·         spans        ALL          ·                                      ·
+
+# We add a filter to eliminate one of the rows that may be flakily returned
+# depending on parallel execution of DISTINCT ON.
+query III
+SELECT DISTINCT ON (x, z) y, z, x FROM xyz WHERE (x,y,z) != (4, 1, 6) ORDER BY z
+----
+1 NULL 1
+2 1 1
+1 2 1
+2 3 2
+5 6 4
+
+query ITTTTT
+EXPLAIN (VERBOSE) SELECT DISTINCT ON (x) y, z, x FROM xyz ORDER BY x ASC, z DESC, y DESC
+----
+0  distinct  ·            ·            (y, z, x)                         +x,-z,-y
+0  ·         distinct on  x            ·                                 ·
+0  ·         order key    x            ·                                 ·
+1  sort      ·            ·            (y, z, x)                         +x,-z,-y
+1  ·         order        +x,-z,-y     ·                                 ·
+2  render    ·            ·            (y, z, x)                         ·
+2  ·         render 0     test.xyz.y   ·                                 ·
+2  ·         render 1     test.xyz.z   ·                                 ·
+2  ·         render 2     test.xyz.x   ·                                 ·
+3  scan      ·            ·            (x, y, z, pk1[omitted], pk2[omitted])  pk1!=NULL; pk2!=NULL; key(pk1,pk2)
+3  ·         table        xyz@primary  ·                                 ·
+3  ·         spans        ALL          ·                                 ·
+
+query III
+SELECT DISTINCT ON (x) y, z, x FROM xyz ORDER BY x ASC, z DESC, y DESC
+----
+1 2 1
+2 3 2
+5 6 4
+
+#####################
+# With aggregations #
+#####################
+
+statement error column "y" must appear in the GROUP BY clause or be used in an aggregate function
+SELECT DISTINCT ON(MAX(x)) y FROM xyz
+
+statement error column "z" must appear in the GROUP BY clause or be used in an aggregate function
+SELECT DISTINCT ON(MAX(x), z) MIN(y) FROM xyz
+
+query ITTTTT
+EXPLAIN (VERBOSE) SELECT DISTINCT ON (MAX(y)) MAX(x) FROM xyz
+----
+0  render    ·            ·                ("max(x)")                                 ·
+0  ·         render 0     "max(x)"         ·                                          ·
+1  distinct  ·            ·                ("max(x)", "max(y)")                       ·
+1  ·         distinct on  max(y)           ·                                          ·
+2  group     ·            ·                ("max(x)", "max(y)")                       ·
+2  ·         aggregate 0  max(test.xyz.x)  ·                                          ·
+2  ·         aggregate 1  max(test.xyz.y)  ·                                          ·
+3  render    ·            ·                (x, y)                                     ·
+3  ·         render 0     test.xyz.x       ·                                          ·
+3  ·         render 1     test.xyz.y       ·                                          ·
+4  scan      ·            ·                (x, y, z[omitted], pk1[omitted], pk2[omitted])  pk1!=NULL; pk2!=NULL; key(pk1,pk2)
+4  ·         table        xyz@primary      ·                                          ·
+4  ·         spans        ALL              ·                                          ·
+
+query I
+SELECT DISTINCT ON (MAX(x)) MIN(y) FROM xyz
+----
+1
+
+query I
+SELECT DISTINCT ON (MIN(x)) MAX(y) FROM xyz
+----
+5
+
+query ITTTTT
+EXPLAIN (VERBOSE) SELECT DISTINCT ON(MIN(a), MAX(b), MIN(c)) MAX(a) FROM abc
+----
+0  render    ·            ·                       ("max(a)")                                ·
+0  ·         render 0     "max(a)"                ·                                         ·
+1  distinct  ·            ·                       ("max(a)", "min(a)", "max(b)", "min(c)")  ·
+1  ·         distinct on  min(a), max(b), min(c)  ·                                         ·
+2  group     ·            ·                       ("max(a)", "min(a)", "max(b)", "min(c)")  ·
+2  ·         aggregate 0  max(test.abc.a)         ·                                         ·
+2  ·         aggregate 1  min(test.abc.a)         ·                                         ·
+2  ·         aggregate 2  max(test.abc.b)         ·                                         ·
+2  ·         aggregate 3  min(test.abc.c)         ·                                         ·
+3  scan      ·            ·                       (a, b, c)                                 a!=NULL; b!=NULL; c!=NULL; key(a,b,c)
+3  ·         table        abc@primary             ·                                         ·
+3  ·         spans        ALL                     ·                                         ·
+
+query T
+SELECT DISTINCT ON(MIN(a), MAX(b), MIN(c)) MAX(c) FROM abc
+----
+2
+
+#################
+# With GROUP BY #
+#################
+
+statement error column "x" must appear in the GROUP BY clause or be used in an aggregate function
+SELECT DISTINCT ON (x) MIN(x) FROM xyz GROUP BY y
+
+# TODO(richardwu): we can elide the DISTINCT ON since its key is equivalent
+# to the group key.
+query ITTTTT
+EXPLAIN (VERBOSE) SELECT DISTINCT ON(y) MIN(x) FROM xyz GROUP BY y
+----
+0  render    ·            ·                ("min(x)")                                 ·
+0  ·         render 0     "min(x)"         ·                                          ·
+1  distinct  ·            ·                ("min(x)", y)                              ·
+1  ·         distinct on  y                ·                                          ·
+2  group     ·            ·                ("min(x)", y)                              ·
+2  ·         aggregate 0  min(test.xyz.x)  ·                                          ·
+2  ·         aggregate 1  test.xyz.y       ·                                          ·
+2  ·         group by     @1-@1            ·                                          ·
+3  render    ·            ·                (y, x)                                     ·
+3  ·         render 0     test.xyz.y       ·                                          ·
+3  ·         render 1     test.xyz.x       ·                                          ·
+4  scan      ·            ·                (x, y, z[omitted], pk1[omitted], pk2[omitted])  pk1!=NULL; pk2!=NULL; key(pk1,pk2)
+4  ·         table        xyz@primary      ·                                          ·
+4  ·         spans        ALL              ·                                          ·
+
+query I rowsort
+SELECT DISTINCT ON(y) MIN(x) FROM xyz GROUP BY y
+----
+1
+1
+4
+
+query ITTTTT
+EXPLAIN (VERBOSE) SELECT DISTINCT ON(MIN(x)) MIN(x) FROM xyz GROUP BY y HAVING MIN(x) = 1
+----
+0  distinct  ·            ·                ("min(x)")                                 ·
+0  ·         distinct on  min(x)           ·                                          ·
+1  render    ·            ·                ("min(x)")                                 ·
+1  ·         render 0     "min(x)"         ·                                          ·
+2  filter    ·            ·                ("min(x)", "min(x)")                       "min(x)"=CONST
+2  ·         filter       "min(x)" = 1     ·                                          ·
+3  group     ·            ·                ("min(x)", "min(x)")                       ·
+3  ·         aggregate 0  min(test.xyz.x)  ·                                          ·
+3  ·         aggregate 1  min(test.xyz.x)  ·                                          ·
+3  ·         group by     @1-@1            ·                                          ·
+4  render    ·            ·                (y, x)                                     ·
+4  ·         render 0     test.xyz.y       ·                                          ·
+4  ·         render 1     test.xyz.x       ·                                          ·
+5  scan      ·            ·                (x, y, z[omitted], pk1[omitted], pk2[omitted])  pk1!=NULL; pk2!=NULL; key(pk1,pk2)
+5  ·         table        xyz@primary      ·                                          ·
+5  ·         spans        ALL              ·                                          ·
+
+query I
+SELECT DISTINCT ON(MIN(x)) MIN(x) FROM xyz GROUP BY y HAVING MIN(x) = 1
+----
+1
+
+#########################
+# With window functions #
+#########################
+
+query ITTTTT
+EXPLAIN (VERBOSE) SELECT DISTINCT ON(row_number() OVER()) y FROM xyz
+----
+0  render    ·            ·                     (y)                                                 ·
+0  ·         render 0     y                     ·                                                   ·
+1  distinct  ·            ·                     (y, "row_number() OVER ()")                         ·
+1  ·         distinct on  row_number() OVER ()  ·                                                   ·
+2  window    ·            ·                     (y, "row_number() OVER ()")                         ·
+2  ·         window 0     row_number() OVER ()  ·                                                   ·
+2  ·         render 1     row_number() OVER ()  ·                                                   ·
+3  render    ·            ·                     (y)                                                 ·
+3  ·         render 0     test.xyz.y            ·                                                   ·
+4  scan      ·            ·                     (x[omitted], y, z[omitted], pk1[omitted], pk2[omitted])  pk1!=NULL; pk2!=NULL; key(pk1,pk2)
+4  ·         table        xyz@primary           ·                                                   ·
+4  ·         spans        ALL                   ·                                                   ·
+
+query I rowsort
+SELECT DISTINCT ON(row_number() OVER()) y FROM xyz
+----
+1
+1
+1
+2
+2
+5
+1
+
+query I
+SELECT DISTINCT ON(row_number() OVER()) y FROM xyz ORDER BY row_number() OVER() DESC
+----
+1
+5
+2
+2
+1
+1
+1
+
+###########################
+# With ordinal references #
+###########################
+
+statement error DISTINCT ON position 2 is not in select list
+SELECT DISTINCT ON (2) x FROM xyz
+----
+
+query ITTTTT
+EXPLAIN (VERBOSE) SELECT DISTINCT ON (1) x, y, z FROM xyz
+----
+0  distinct  ·            ·            (x, y, z)                         ·
+0  ·         distinct on  x            ·                                 ·
+1  render    ·            ·            (x, y, z)                         ·
+1  ·         render 0     test.xyz.x   ·                                 ·
+1  ·         render 1     test.xyz.y   ·                                 ·
+1  ·         render 2     test.xyz.z   ·                                 ·
+2  scan      ·            ·            (x, y, z, pk1[omitted], pk2[omitted])  pk1!=NULL; pk2!=NULL; key(pk1,pk2)
+2  ·         table        xyz@primary  ·                                 ·
+2  ·         spans        ALL          ·                                 ·
+
+query I rowsort
+SELECT DISTINCT ON (1) x FROM xyz
+----
+1
+2
+4
+
+# Distinct node elided because of strong key.
+query ITTTTT
+EXPLAIN (VERBOSE) SELECT DISTINCT ON (1,2,3) a, b, c FROM abc
+----
+0  scan  ·      ·            (a, b, c)  a!=NULL; b!=NULL; c!=NULL; key(a,b,c)
+0  ·     table  abc@primary  ·          ·
+0  ·     spans  ALL          ·          ·
+
+query III rowsort
+SELECT DISTINCT ON (1,2,3) x, y, z FROM xyz
+----
+1  1  NULL
+1  1  2
+1  2  1
+2  2  3
+4  5  6
+4  1  6
+
+#########################
+# With alias references #
+#########################
+
+# This should priortize alias (use 'x' as the key).
+query ITTTTT
+EXPLAIN (VERBOSE) SELECT DISTINCT ON(y) x AS y, y AS x FROM xyz
+----
+0  distinct  ·            ·            (y, x)                                     ·
+0  ·         distinct on  y            ·                                          ·
+1  render    ·            ·            (y, x)                                     ·
+1  ·         render 0     test.xyz.x   ·                                          ·
+1  ·         render 1     test.xyz.y   ·                                          ·
+2  scan      ·            ·            (x, y, z[omitted], pk1[omitted], pk2[omitted])  pk1!=NULL; pk2!=NULL; key(pk1,pk2)
+2  ·         table        xyz@primary  ·                                          ·
+2  ·         spans        ALL          ·                                          ·
+
+# This would be non-deterministic if we don't select y (actually x) from the
+# subquery.
+query I rowsort
+SELECT y FROM (SELECT DISTINCT ON(y) x AS y, y AS x FROM xyz)
+----
+1
+2
+4
+
+# Ignores the alias.
+query ITTTTT
+EXPLAIN (VERBOSE) SELECT DISTINCT ON(x) x AS y FROM xyz
+----
+0  distinct  ·            ·            (y)                                                 ·
+0  ·         distinct on  y            ·                                                   ·
+1  render    ·            ·            (y)                                                 · 1  ·         render 0     test.xyz.x   ·                                                   ·
+2  scan      ·            ·            (x, y[omitted], z[omitted], pk1[omitted], pk2[omitted])  pk1!=NULL; pk2!=NULL; key(pk1,pk2)
+2  ·         table        xyz@primary  ·                                                   ·
+2  ·         spans        ALL          ·                                                   ·
+
+query I rowsort
+SELECT DISTINCT ON(x) x AS y FROM xyz
+----
+1
+2
+4
+
+##################################
+# With nested parentheses/tuples #
+##################################
+
+query ITTTTT
+EXPLAIN (VERBOSE) SELECT DISTINCT ON(((x)), (x, y)) x, y FROM xyz
+----
+0  distinct  ·            ·            (x, y)                                     ·
+0  ·         distinct on  x, y         ·                                          ·
+1  render    ·            ·            (x, y)                                     ·
+1  ·         render 0     test.xyz.x   ·                                          ·
+1  ·         render 1     test.xyz.y   ·                                          ·
+2  scan      ·            ·            (x, y, z[omitted], pk1[omitted], pk2[omitted])  pk1!=NULL; pk2!=NULL; key(pk1,pk2)
+2  ·         table        xyz@primary  ·                                          ·
+2  ·         spans        ALL          ·                                          ·
+
+
+query II rowsort
+SELECT DISTINCT ON(((x)), (x, y)) x, y FROM xyz
+----
+1  1
+1  2
+2  2
+4  5
+4  1
+
+################################
+# Hybrid PK and non-PK queries #
+################################
+
+# Distinct elided because of strong key presence.
+query ITTTTT
+EXPLAIN (VERBOSE) SELECT DISTINCT ON(pk1, pk2, x, y) x, y, z FROM xyz ORDER BY x, y
+----
+0  render  ·         ·            (x, y, z)                              +x,+y
+0  ·       render 0  x            ·                                      ·
+0  ·       render 1  y            ·                                      ·
+0  ·       render 2  z            ·                                      ·
+1  sort    ·         ·            (x, y, z, pk1[omitted], pk2[omitted])  pk1!=NULL; pk2!=NULL; key(pk1,pk2); +x,+y
+1  ·       order     +x,+y        ·                                      ·
+2  scan    ·         ·            (x, y, z, pk1[omitted], pk2[omitted])  pk1!=NULL; pk2!=NULL; key(pk1,pk2)
+2  ·       table     xyz@primary  ·                                      ·
+2  ·       spans     ALL          ·                                      ·
+
+# We need to rowsort this since the ORDER BY isn't on the entire SELECT columns.
+query III rowsort
+SELECT DISTINCT ON(pk1, pk2, x, y) x, y, z FROM xyz ORDER BY x, y
+----
+1  1  NULL
+1  1  2
+1  1  2
+1  2  1
+2  2  3
+4  1  6
+4  5  6
+
+# Ordering only propagates up until distinctNode.
+# pk1 ordering does not propagate at all since it's not explicitly needed.
+query ITTTTT
+EXPLAIN (VERBOSE) SELECT DISTINCT ON (x, y, z) pk1 FROM xyz ORDER BY x
+----
+0  render    ·            ·             (pk1)                         pk1!=NULL
+0  ·         render 0     pk1           ·                             ·
+1  distinct  ·            ·             (pk1, x, y, z)                pk1!=NULL; +x
+1  ·         distinct on  x, y, z       ·                             ·
+1  ·         order key    x             ·                             ·
+2  sort      ·            ·             (pk1, x, y, z)                pk1!=NULL; +x
+2  ·         order        +x            ·                             ·
+3  render    ·            ·             (pk1, x, y, z)                pk1!=NULL
+3  ·         render 0     test.xyz.pk1  ·                             ·
+3  ·         render 1     test.xyz.x    ·                             ·
+3  ·         render 2     test.xyz.y    ·                             ·
+3  ·         render 3     test.xyz.z    ·                             ·
+4  scan      ·            ·             (x, y, z, pk1, pk2[omitted])  pk1!=NULL; pk2!=NULL; key(pk1,pk2)
+4  ·         table        xyz@primary   ·                             ·
+4  ·         spans        ALL           ·                             ·
+
+# We add a filter since there could be multiple valid pk1s otherwise for distinct
+# rows.
+query I rowsort
+SELECT DISTINCT ON (x, y, z) pk1 FROM (SELECT * FROM xyz WHERE x >= 2) ORDER BY x
+----
+5
+6
+7

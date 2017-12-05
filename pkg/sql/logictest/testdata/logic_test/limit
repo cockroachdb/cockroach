@@ -81,7 +81,7 @@ Level  Type      Field     Description  Columns                      Ordering
 0      limit     ·         ·            (w)                          +w
 0      ·         count     25           ·                            ·
 1      distinct  ·         ·            (w)                          +w
-1      ·         key       w            ·                            ·
+1      ·         order key  w            ·                            ·
 2      limit     ·         ·            (w)                          +w
 2      ·         count     100          ·                            ·
 3      sort      ·         ·            (w)                          +w
