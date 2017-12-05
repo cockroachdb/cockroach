@@ -529,7 +529,7 @@ func TestCreateSystemTable(t *testing.T) {
 	// Finally, try running both migrations and make sure they still succeed.
 	// This verifies the idempotency of the migration, since the system.jobs
 	// migration will get rerun here.
-	mgr := NewManager(s.Stopper(), kvDB, nil, s.Clock(), nil, "clientID")
+	mgr := NewManager(s.Stopper(), kvDB, nil, s.Clock(), MigrationManagerTestingKnobs{}, nil, "clientID")
 	backwardCompatibleMigrations = append(backwardCompatibleMigrations, migrationDescriptor{
 		name:           "create system.jobs table",
 		workFn:         createJobsTable,
@@ -726,7 +726,7 @@ CREATE INDEX y ON test.x(x);
 	// This verifies the idempotency of the migration.
 	t.Log("run migration")
 
-	mgr := NewManager(s.Stopper(), kvDB, e, s.Clock(), memMetrics, "clientID")
+	mgr := NewManager(s.Stopper(), kvDB, e, s.Clock(), MigrationManagerTestingKnobs{}, memMetrics, "clientID")
 	backwardCompatibleMigrations = append(backwardCompatibleMigrations, migrationDescriptor{
 		name:   "repopulate view dependencies",
 		workFn: repopulateViewDeps,
