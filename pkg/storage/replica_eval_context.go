@@ -17,9 +17,9 @@ package storage
 import (
 	"golang.org/x/net/context"
 
+	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/storage/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/storage/spanset"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
@@ -40,7 +40,7 @@ func NewReplicaEvalContext(r *Replica, ss *spanset.SpanSet) batcheval.EvalContex
 	if ss == nil {
 		log.Fatalf(r.AnnotateCtx(context.Background()), "can't create a ReplicaEvalContext with assertions but no SpanSet")
 	}
-	if util.RaceEnabled {
+	if build.RaceEnabled {
 		return &SpanSetReplicaEvalContext{
 			i:  r,
 			ss: *ss,

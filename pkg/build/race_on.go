@@ -15,7 +15,7 @@
 
 // +build race
 
-package util
+package build
 
 import "runtime"
 

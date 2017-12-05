@@ -35,6 +35,7 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
@@ -51,7 +52,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/storage/txnwait"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
@@ -4822,7 +4822,7 @@ func (r *Replica) applyRaftCommand(
 	start := timeutil.Now()
 
 	var assertHS *raftpb.HardState
-	if util.RaceEnabled && rResult.Split != nil && r.store.cfg.Settings.Version.IsActive(cluster.VersionSplitHardStateBelowRaft) {
+	if build.RaceEnabled && rResult.Split != nil && r.store.cfg.Settings.Version.IsActive(cluster.VersionSplitHardStateBelowRaft) {
 		rsl := stateloader.Make(r.store.cfg.Settings, rResult.Split.RightDesc.RangeID)
 		oldHS, err := rsl.LoadHardState(ctx, r.store.Engine())
 		if err != nil {
@@ -4993,7 +4993,7 @@ func (r *Replica) evaluateTxnWriteBatch(
 
 		// If all writes occurred at the intended timestamp, we've succeeded on the fast path.
 		batch := r.store.Engine().NewBatch()
-		if util.RaceEnabled && spans != nil {
+		if build.RaceEnabled && spans != nil {
 			batch = spanset.NewBatch(batch, spans)
 		}
 		rec := NewReplicaEvalContext(r, spans)
@@ -5045,7 +5045,7 @@ func (r *Replica) evaluateTxnWriteBatch(
 	}
 
 	batch := r.store.Engine().NewBatch()
-	if util.RaceEnabled && spans != nil {
+	if build.RaceEnabled && spans != nil {
 		batch = spanset.NewBatch(batch, spans)
 	}
 	rec := NewReplicaEvalContext(r, spans)

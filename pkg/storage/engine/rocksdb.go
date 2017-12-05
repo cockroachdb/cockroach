@@ -34,11 +34,11 @@ import (
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
+	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
@@ -1743,7 +1743,7 @@ func (r *rocksDBIterator) ComputeStats(
 ) (enginepb.MVCCStats, error) {
 	result := C.MVCCComputeStats(r.iter, goToCKey(start), goToCKey(end), C.int64_t(nowNanos))
 	stats, err := cStatsToGoStats(result, nowNanos)
-	if util.RaceEnabled {
+	if build.RaceEnabled {
 		// If we've come here via rocksDBBatchIterator, then flushMutations
 		// (which forces reseek) was called just before C.MVCCComputeStats. Set
 		// it here as well to match.

@@ -27,9 +27,9 @@ import (
 	"golang.org/x/net/context"
 	"golang.org/x/sync/errgroup"
 
+	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -461,7 +461,7 @@ func TestTimestampCacheEqualTimestamps(t *testing.T) {
 // concurrent load.
 func TestTimestampCacheImplsIdentical(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	defer util.EnableRacePreemptionPoints()()
+	defer build.EnableRacePreemptionPoints()()
 
 	// Run one subtest using a real clock to generate timestamps and one subtest
 	// using a fake clock to generate timestamps. The former is good for
@@ -487,7 +487,7 @@ func TestTimestampCacheImplsIdentical(t *testing.T) {
 		// random intervals, but verify that the value in their slot always
 		// ratchets.
 		slots := 4 * runtime.NumCPU()
-		if util.RaceEnabled {
+		if build.RaceEnabled {
 			// We add in a lot of preemption points when race detection
 			// is enabled, so things will already be very slow. Reduce
 			// the concurrency to that we don't time out.
