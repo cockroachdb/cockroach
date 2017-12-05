@@ -1867,3 +1867,25 @@ NULL  NULL  NULL  3  1  31
 NULL  NULL  NULL  3  3  33
 NULL  NULL  NULL  5  5  55
 NULL  NULL  NULL  2  2  2
+
+# Regression test for #20472: break up tuple inequalities.
+query ITTTTT
+EXPLAIN (VERBOSE) SELECT * FROM xyu JOIN xyv USING(x, y) WHERE (x, y, u) > (1, 2, 3)
+----
+0  render  ·               ·                      (x, y, u, v)                          x!=NULL; y!=NULL
+0  ·       render 0        test.xyu.x             ·                                     ·
+0  ·       render 1        test.xyu.y             ·                                     ·
+0  ·       render 2        test.xyu.u             ·                                     ·
+0  ·       render 3        test.xyv.v             ·                                     ·
+1  join    ·               ·                      (x, y, u, x[omitted], y[omitted], v)  x=x; y=y; x!=NULL; y!=NULL
+1  ·       type            inner                  ·                                     ·
+1  ·       equality        (x, y) = (x, y)        ·                                     ·
+1  ·       mergeJoinOrder  +"(x=x)",+"(y=y)"      ·                                     ·
+2  scan    ·               ·                      (x, y, u)                             x!=NULL; y!=NULL; u!=NULL; key(x,y,u); +x,+y
+2  ·       table           xyu@primary            ·                                     ·
+2  ·       spans           /1/2/4-                ·                                     ·
+2  ·       filter          (x, y, u) > (1, 2, 3)  ·                                     ·
+2  scan    ·               ·                      (x, y, v)                             x!=NULL; y!=NULL; v!=NULL; key(x,y,v); +x,+y
+2  ·       table           xyv@primary            ·                                     ·
+2  ·       spans           /1/2-                  ·                                     ·
+2  ·       filter          (x, y) >= (1, 2)       ·                                     ·
