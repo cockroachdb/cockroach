@@ -382,7 +382,9 @@ and "pattern-tree" placeholders that act as wildcards:
 
 To better understand the structure of the memo, consider the query:
 
-  `SELECT * FROM a, b WHERE a.x = b.x`
+```sql
+SELECT * FROM a, b WHERE a.x = b.x
+```
 
 Converted to the expression structure which models the extended
 relational algebra the query looks like:
@@ -568,19 +570,19 @@ property.
 
 #### Tracked vs computed properties
 
-A tracked property is one which is maintained in a data structure
-(e.g. `relationalProps`, `scalarProps`, `physicalProps`). A computed
-property is one which is computed from an expression or an expression
-fragment as needed. For intermediate nodes, all properties can be
-computed which makes tracked properties akin to a cache. The decision
-for whether to track or compute a property is pragmatic. Tracking a
-property requires overhead whether the property is used or not, but
-makes accessing the property in a transformation fast. Computing a
-property can be done only when the property is used, but is not
-feasible if the computation requires an entire sub-expression tree (as
-opposed to a fragment). Computed properties primarly occur for scalar
-properties for which transformations often have the entire scalar
-expression.
+A [tracked property](#tracked_properties) is one which is maintained
+in a data structure (e.g. `relationalProps`, `scalarProps`,
+`physicalProps`). A computed property is one which is computed from an
+expression or an expression fragment as needed. For intermediate
+nodes, all properties can be computed which makes tracked properties
+akin to a cache. The decision for whether to track or compute a
+property is pragmatic. Tracking a property requires overhead whether
+the property is used or not, but makes accessing the property in a
+transformation fast. Computing a property can be done only when the
+property is used, but is not feasible if the computation requires an
+entire sub-expression tree (as opposed to a fragment). [Computed
+properties](#computed_properties) primarly occur for scalar properties
+for which transformations often have the entire scalar expression.
 
 #### Tracked properties
 
@@ -592,35 +594,40 @@ difficult.
 
 Relational properties:
 
-* Output columns. The set of columns output by an expression. Used to
-  determine if a predicate is compatible with an expression.
-* Outer columns. The set of columns that are used by the operator but
-  not defined in the underlying expression tree (i.e. not supplied by
-  the inputs to the current expression). Synonym: *free vars*.
-* Not-NULL columns. Column nullability is associated with keys which
-  are a factor in many transformations such as join elimination,
-  group-by simplification
-* Keys. A set of columns for which no two rows are equal after
-  projection onto that set. The simplest example of a key is the
+* Output columns [`intset`]. The set of columns output by an
+  expression. Used to determine if a predicate is compatible with an
+  expression.
+* Outer columns [`intset`]. The set of columns that are used by the
+  operator but not defined in the underlying expression tree (i.e. not
+  supplied by the inputs to the current expression). Synonym: *free
+  vars*.
+* Not-NULL columns [`intset`]. Column nullability is associated with
+  keys which are a factor in many transformations such as join
+  elimination, group-by simplification
+* Keys [`[]intset`]. A set of columns for which no two rows are equal
+  after projection onto that set. The simplest example of a key is the
   primary key for a table. Note that a key requires all of the columns
   in the key to be not-NULL.
-* Weak keys. A set of columns where no two rows containing non-NULL
-  values are equal after projection onto that set. A UNIQUE index on a
-  table is a weak key and possibly a key if all of the columns are
-  not-NULL. Weak keys are tracked because they can become keys at
-  higher levels of a query due to null-intolerant predicates.
-* Foreign keys. A set of columns that uniquely identify a single row
-  in another relation. In practice, this is a map from one set of
-  columns to another set of columns.
-* Equivalency group. A set of column groups (sets) where all columns
+* Weak keys [`[]intset`]. A set of columns where no two rows
+  containing non-NULL values are equal after projection onto that
+  set. A UNIQUE index on a table is a weak key and possibly a key if
+  all of the columns are not-NULL. Weak keys are tracked because they
+  can become keys at higher levels of a query due to null-intolerant
+  predicates.
+* Foreign keys [`map[intset]intset`]. A set of columns that uniquely
+  identify a single row in another relation. In practice, this is a
+  map from one set of columns to another set of columns.
+* Equivalency groups [`[]intset`]. A set of column groups (sets) where all columns
   in a group are equal with each other.
+* Constant columns [`intset`]. Columns for which we know we have a
+  single value.
 
 Scalar properties:
 
-* Input columns. The set of columns used by the scalar
+* Input columns [`intset`]. The set of columns used by the scalar
   expression. Used to determine if a scalar expression is compatible
   with the output columns of a relational expression.
-* Defined columns. The set of columns defined by the scalar
+* Defined columns [`intset`]. The set of columns defined by the scalar
   expression.
 
 Physical properties:
@@ -645,6 +652,32 @@ transform, you would need to have the entire expression tree. By
 tracking the keys property and maintaining it at each relational
 expression, we only need the fragment of the expression needed by the
 transform.
+
+### Computed properties
+
+Computed properties are used primarily in conjunction with scalar
+expressions. The properties are computed rather than tracked because
+we usually have the full scalar expression vs just a fragment for
+relational expressions. 
+
+Computed scalar properties:
+
+* Injectivity. An injective expression preserves distinctness: it
+  never maps distinct elements of its domain to the same element of
+  its codomain. `exp(x) = e^x` is injective.
+* Monotonicity. An monotonic expression preserves ordering. The
+  preservation may be positive or negative (maintains order or inverts
+  order) and strict or weak (maintains uniqueness or invalidates it).
+  `floor(x)` is a positive-weak monotonic expression. `-x` is a
+  negative-strict monotonic expression.
+* Null-intolerance. A null-intolerant expression is a predicate which
+  never returns `true` for a `NULL` input column. Null-intolerance is
+  used to infer nullability of columns. `x = y` (where `x` and `y` are
+  columns) is a null-intolerant expression.
+* Contains-aggregate. Does the scalar expression contain any aggregate
+  functions?
+* Contains-subquery. Does the scalar expression contain any
+  subqueries?
 
 ### Transformations
 
@@ -1009,3 +1042,82 @@ becomes.
 * The performance of the query planner itself is important because
   query planning occurs for every query executed. What sorts of fast
   paths are possible for simple queries?
+
+## Appendix
+
+### Expr/Memo examples
+
+Consider the query:
+
+```sql
+SELECT v, k FROM kv WHERE k < 3
+```
+
+Building the expression tree results in:
+
+```
+project [out=(0,1)]
+  columns: kv.v:1 kv.k:0
+  projections:
+    variable (kv.v) [in=(1)]
+    variable (kv.k) [in=(0)]
+  inputs:
+    select [out=(0,1)]
+      columns: kv.k:0* kv.v:1
+      filters:
+        lt [in=(0)]
+          inputs:
+            variable (kv.k) [in=(0)]
+            const (3)
+      inputs:
+        scan [out=(0,1)]
+          columns: kv.k:0 kv.v:1
+```
+
+Some points to notice above. The relational operators (`project`,
+`select` and `scan`) track their output column set as a bitmap
+(i.e. `out=(0,1)`). Scalar expressions such as `variable` and `lt`
+track their required input columns. Relational operators have a slice
+of children where the interpretation of the children is operator
+specific. The `project` operator has 2 children: a relational input
+and a list of projections. The `select` operator also has 2 children:
+a relational input and a list of filters.
+
+Inserting the expression tree into the memo results in:
+
+```
+8: [project [5 7]]
+7: [ordered-list [6 2]]
+6: [variable kv.v]
+5: [select [1 4]]
+4: [lt [2 3]]
+3: [const 3]
+2: [variable kv.k]
+1: [scan kv]
+```
+
+Here we can see more clearly the child structure of the various
+relational operators. The `select` expression in group 5 has 2
+children: groups 1 and 4. Group 1 is a `scan` and group 4 is the
+filter.
+
+As another example, consider the query:
+
+```sql
+SELECT k, v FROM (SELECT v, k FROM kv)
+```
+
+Inserting into the memo we get:
+
+```
+7: [project [5 6]]
+6: [ordered-list [3 2]]
+5: [project [1 4]]
+4: [ordered-list [2 3]]
+3: [variable kv.k]
+2: [variable kv.v]
+1: [scan kv]
+```
+
+Notice that the variables (`kv.k` and `kv.v`) are only present once in
+the memo and their groups are shared by both projection lists.
