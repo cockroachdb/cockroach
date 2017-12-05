@@ -30,12 +30,22 @@ const (
 	BatchTypeDeletion BatchType = 0x0
 	BatchTypeValue              = 0x1
 	BatchTypeMerge              = 0x2
-	// BatchTypeLogData                    = 0x3
-	// BatchTypeColumnFamilyDeletion       = 0x4
-	// BatchTypeColumnFamilyValue          = 0x5
-	// BatchTypeColumnFamilyMerge          = 0x6
-	// BatchTypeSingleDeletion             = 0x7
-	// BatchTypeColumnFamilySingleDeletion = 0x8
+	// BatchTypeLogData                              = 0x3
+	// BatchTypeColumnFamilyDeletion                 = 0x4
+	// BatchTypeColumnFamilyValue                    = 0x5
+	// BatchTypeColumnFamilyMerge                    = 0x6
+	// BatchTypeSingleDeletion                       = 0x7
+	// BatchTypeColumnFamilySingleDeletion           = 0x8
+	// BatchTypeBeginPrepareXID                      = 0x9
+	// BatchTypeEndPrepareXID                        = 0xA
+	// BatchTypeCommitXID                            = 0xB
+	// BatchTypeRollbackXID                          = 0xC
+	// BatchTypeNoop                                 = 0xD
+	// BatchTypeColumnFamilyRangeDeletion            = 0xE
+	// BatchTypeRangeDeletion                        = 0xF
+	// BatchTypeColumnFamilyBlobIndex                = 0x10
+	// BatchTypeBlobIndex                            = 0x11
+	// BatchMaxValue                                 = 0x7F
 )
 
 const (
@@ -57,12 +67,7 @@ const (
 //   record :=
 //      kTypeValue varstring varstring
 //      kTypeDeletion varstring
-//      kTypeSingleDeletion varstring
-//      kTypeMerge varstring varstring
-//      kTypeColumnFamilyValue varint32 varstring varstring
-//      kTypeColumnFamilyDeletion varint32 varstring varstring
-//      kTypeColumnFamilySingleDeletion varint32 varstring varstring
-//      kTypeColumnFamilyMerge varint32 varstring varstring
+//      [...] (see BatchType)
 //   varstring :=
 //      len: varint32
 //      data: uint8[len]
