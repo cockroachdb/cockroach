@@ -867,14 +867,18 @@ func (dsp *DistSQLPlanner) addSorters(p *physicalPlan, n *sortNode) {
 		// in the output columns of the sortNode; we set a projection such that the
 		// plan results map 1-to-1 to sortNode columns.
 		//
-		// Note that internally, AddProjection might retain more columns as
-		// necessary so we can preserve the p.Ordering between parallel streams when
-		// they merge later.
+		// Note that internally, AddProjection might retain more columns than
+		// necessary so we can preserve the p.Ordering between parallel streams
+		// when they merge later.
 		p.planToStreamColMap = p.planToStreamColMap[:len(n.columns)]
-		columns := make([]uint32, len(n.columns))
+		columns := make([]uint32, 0, len(n.columns))
 		for i, col := range p.planToStreamColMap {
-			columns[i] = uint32(col)
-			p.planToStreamColMap[i] = i
+			if col < 0 {
+				// This column isn't needed; ignore it.
+				continue
+			}
+			p.planToStreamColMap[i] = len(columns)
+			columns = append(columns, uint32(col))
 		}
 		p.AddProjection(columns)
 	}
