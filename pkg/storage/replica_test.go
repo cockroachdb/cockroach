@@ -1208,7 +1208,7 @@ func TestReplicaDrainLease(t *testing.T) {
 
 	tc.store.SetDraining(true)
 	tc.repl.mu.Lock()
-	pErr = <-tc.repl.requestLeaseLocked(context.Background(), status)
+	pErr = <-tc.repl.requestLeaseLocked(status).C()
 	tc.repl.mu.Unlock()
 	_, ok := pErr.GetDetail().(*roachpb.NotLeaseHolderError)
 	if !ok {
@@ -1892,10 +1892,10 @@ func TestLeaseConcurrent(t *testing.T) {
 			if err := stopper.RunAsyncTask(context.Background(), "test", func(ctx context.Context) {
 				tc.repl.mu.Lock()
 				status := tc.repl.leaseStatus(*tc.repl.mu.state.Lease, ts, hlc.Timestamp{})
-				leaseCh := tc.repl.requestLeaseLocked(ctx, status)
+				llHandle := tc.repl.requestLeaseLocked(status)
 				tc.repl.mu.Unlock()
 				wg.Done()
-				pErr := <-leaseCh
+				pErr := <-llHandle.C()
 				// Mutate the errors as we receive them to expose races.
 				if pErr != nil {
 					pErr.OriginNode = 0

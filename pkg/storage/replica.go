@@ -630,6 +630,7 @@ func newReplica(rangeID roachpb.RangeID, store *Store) *Replica {
 		abortSpan:      abortspan.New(rangeID),
 		txnWaitQueue:   txnwait.NewQueue(store),
 	}
+	r.mu.pendingLeaseRequest = makePendingLeaseRequest(r)
 	r.mu.stateLoader = stateloader.Make(r.store.cfg.Settings, rangeID)
 	if leaseHistoryMaxEntries > 0 {
 		r.leaseHistory = newLeaseHistory()
@@ -1337,7 +1338,7 @@ func (r *Replica) redirectOnOrAcquireLease(ctx context.Context) (LeaseStatus, *r
 	var status LeaseStatus
 	for attempt := 1; ; attempt++ {
 		timestamp := r.store.Clock().Now()
-		llChan, pErr := func() (<-chan *roachpb.Error, *roachpb.Error) {
+		llHandle, pErr := func() (*leaseRequestHandle, *roachpb.Error) {
 			r.mu.Lock()
 			defer r.mu.Unlock()
 
@@ -1407,11 +1408,11 @@ func (r *Replica) redirectOnOrAcquireLease(ctx context.Context) (LeaseStatus, *r
 				}
 
 				// If the lease is in stasis, we can't serve requests until we've
-				// renewed the lease, so we return the channel to block on renewal.
+				// renewed the lease, so we return the handle to block on renewal.
 				// Otherwise, we don't need to wait for the extension and simply
-				// ignore the returned channel (which is buffered) and continue.
+				// ignore the returned handle (whose channel is buffered) and continue.
 				if status.State == LeaseState_STASIS {
-					return r.requestLeaseLocked(ctx, status), nil
+					return r.requestLeaseLocked(status), nil
 				}
 
 				// Extend the lease if this range uses expiration-based
@@ -1425,20 +1426,16 @@ func (r *Replica) redirectOnOrAcquireLease(ctx context.Context) (LeaseStatus, *r
 							log.Infof(ctx, "extending lease %s at %s", status.Lease, timestamp)
 						}
 						// We had an active lease to begin with, but we want to trigger
-						// a lease extension. We explicitly ignore the returned channel
+						// a lease extension. We explicitly ignore the returned handle
 						// as we won't block on it.
-						//
-						// Since we return and don't wait, our context will likely cancel
-						// soon, perhaps before the request is even in flight. Use a new
-						// context instead.
-						_ = r.requestLeaseLocked(r.AnnotateCtx(context.Background()), status)
+						_ = r.requestLeaseLocked(status)
 					}
 				}
 
 			case LeaseState_EXPIRED:
 				// No active lease: Request renewal if a renewal is not already pending.
 				log.VEventf(ctx, 2, "request range lease (attempt #%d)", attempt)
-				return r.requestLeaseLocked(ctx, status), nil
+				return r.requestLeaseLocked(status), nil
 
 			case LeaseState_PROSCRIBED:
 				// Lease proposed timestamp is earlier than the min proposed
@@ -1446,20 +1443,20 @@ func (r *Replica) redirectOnOrAcquireLease(ctx context.Context) (LeaseStatus, *r
 				// owns the lease, re-request. Otherwise, redirect.
 				if status.Lease.OwnedBy(r.store.StoreID()) {
 					log.VEventf(ctx, 2, "request range lease (attempt #%d)", attempt)
-					return r.requestLeaseLocked(ctx, status), nil
+					return r.requestLeaseLocked(status), nil
 				}
 				// If lease is currently held by another, redirect to holder.
 				return nil, roachpb.NewError(
 					newNotLeaseHolderError(&status.Lease, r.store.StoreID(), r.mu.state.Desc))
 			}
 
-			// Return a nil chan to signal that we have a valid lease.
+			// Return a nil handle to signal that we have a valid lease.
 			return nil, nil
 		}()
 		if pErr != nil {
 			return LeaseStatus{}, pErr
 		}
-		if llChan == nil {
+		if llHandle == nil {
 			// We own a valid lease.
 			return status, nil
 		}
@@ -1471,7 +1468,7 @@ func (r *Replica) redirectOnOrAcquireLease(ctx context.Context) (LeaseStatus, *r
 			slowTimer.Reset(base.SlowRequestThreshold)
 			for {
 				select {
-				case pErr = <-llChan:
+				case pErr = <-llHandle.C():
 					if pErr != nil {
 						switch tErr := pErr.GetDetail().(type) {
 						case *roachpb.AmbiguousResultError:
@@ -1515,9 +1512,11 @@ func (r *Replica) redirectOnOrAcquireLease(ctx context.Context) (LeaseStatus, *r
 					r.store.metrics.SlowLeaseRequests.Inc(1)
 					defer r.store.metrics.SlowLeaseRequests.Dec(1)
 				case <-ctx.Done():
+					llHandle.Cancel()
 					log.ErrEventf(ctx, "lease acquisition failed: %s", ctx.Err())
 					return roachpb.NewError(newNotLeaseHolderError(nil, r.store.StoreID(), r.Desc()))
 				case <-r.store.Stopper().ShouldStop():
+					llHandle.Cancel()
 					return roachpb.NewError(newNotLeaseHolderError(nil, r.store.StoreID(), r.Desc()))
 				}
 			}
