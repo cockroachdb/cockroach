@@ -115,7 +115,11 @@ func (p *planner) Update(
 	if err != nil {
 		return nil, err
 	}
-	tw := tableUpdater{ru: ru, autoCommit: p.autoCommit}
+	tw := tableUpdater{
+		ru:         ru,
+		autoCommit: p.autoCommit,
+		mon:        &p.session.TxnState.mon,
+	}
 
 	tracing.AnnotateTrace()
 
