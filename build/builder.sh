@@ -6,7 +6,7 @@ image=cockroachdb/builder
 version=20171013-231158
 
 function init() {
-  docker build --tag="${image}" "$(dirname "${0}")"
+  docker build --tag="${image}" "$(dirname "${0}")/builder"
 }
 
 if [ "${1-}" = "pull" ]; then
