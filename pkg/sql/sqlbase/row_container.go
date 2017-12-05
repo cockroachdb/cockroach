@@ -122,6 +122,22 @@ func (ti ColTypeInfo) Type(idx int) types.T {
 	return ti.colTypes[idx].ToDatumType()
 }
 
+func makeColTypeInfo(
+	tableDesc *TableDescriptor, colIDToRowIndex map[ColumnID]int,
+) (ColTypeInfo, error) {
+	colTypeInfo := ColTypeInfo{
+		colTypes: make([]ColumnType, len(colIDToRowIndex)),
+	}
+	for colID, rowIndex := range colIDToRowIndex {
+		col, err := tableDesc.FindColumnByID(colID)
+		if err != nil {
+			return ColTypeInfo{}, err
+		}
+		colTypeInfo.colTypes[rowIndex] = col.Type
+	}
+	return colTypeInfo, nil
+}
+
 // NewRowContainer allocates a new row container.
 //
 // The acc argument indicates where to register memory allocations by

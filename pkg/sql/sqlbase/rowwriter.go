@@ -19,6 +19,8 @@ import (
 	"fmt"
 	"sort"
 
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
+
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 
@@ -282,7 +284,7 @@ func (ri *RowInserter) InsertRow(
 	// Add the new values.
 	// TODO(dan): This has gotten very similar to the loop in UpdateRow, see if
 	// they can be DRY'd. Ideally, this would also work for
-	// truncateAndBackfillColumnsChunk, which is currently abusing rowUdpdater.
+	// truncateAndBackfillColumnsChunk, which is currently abusing rowUpdater.
 	for i, family := range ri.Helper.TableDesc.Families {
 		if i > 0 {
 			// HACK: MakeFamilyKey appends to its argument, so on every loop iteration
@@ -585,6 +587,7 @@ func (ru *RowUpdater) UpdateRow(
 	b *client.Batch,
 	oldValues []tree.Datum,
 	updateValues []tree.Datum,
+	mon *mon.BytesMonitor,
 	traceKV bool,
 ) ([]tree.Datum, error) {
 	if len(oldValues) != len(ru.FetchCols) {
@@ -655,7 +658,7 @@ func (ru *RowUpdater) UpdateRow(
 			return nil, err
 		}
 
-		if err := ru.rd.DeleteRow(ctx, b, oldValues, traceKV); err != nil {
+		if err := ru.rd.DeleteRow(ctx, b, oldValues, mon, traceKV); err != nil {
 			return nil, err
 		}
 		if err := ru.ri.InsertRow(
@@ -839,7 +842,9 @@ func MakeRowDeleter(
 	if err != nil {
 		return RowDeleter{}, err
 	}
-	rowDeleter.cascader = makeCascader(txn, fkTables, alloc)
+	if checkFKs {
+		rowDeleter.cascader = makeCascader(txn, fkTables, alloc)
+	}
 	return rowDeleter, nil
 }
 
@@ -911,17 +916,23 @@ func makeRowDeleterWithoutCascader(
 
 // DeleteRow adds to the batch the kv operations necessary to delete a table row
 // with the given values. It also will cascade as required and check for
-// orphaned rows.
+// orphaned rows. The bytesMonitor is only used if cascading/fk checking and can
+// be nil if not.
 func (rd *RowDeleter) DeleteRow(
-	ctx context.Context, b *client.Batch, values []tree.Datum, traceKV bool,
+	ctx context.Context, b *client.Batch, values []tree.Datum, mon *mon.BytesMonitor, traceKV bool,
 ) error {
 	if err := rd.deleteRowNoCascade(ctx, b, values, traceKV); err != nil {
 		return err
 	}
-	if err := rd.cascader.cascadeAll(
-		ctx, rd.Helper.TableDesc, tree.Datums(values), rd.FetchColIDtoRowIndex, traceKV,
-	); err != nil {
-		return err
+	if rd.cascader != nil {
+		if mon == nil {
+			return errors.New("programming error: bytes monitor is nil")
+		}
+		if err := rd.cascader.cascadeAll(
+			ctx, rd.Helper.TableDesc, tree.Datums(values), rd.FetchColIDtoRowIndex, mon, traceKV,
+		); err != nil {
+			return err
+		}
 	}
 	return rd.Fks.checkAll(ctx, values)
 }

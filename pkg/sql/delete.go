@@ -76,12 +76,17 @@ func (p *planner) Delete(
 	if err != nil {
 		return nil, err
 	}
-	rd, err := sqlbase.MakeRowDeleter(p.txn, en.tableDesc, fkTables, requestedCols,
-		sqlbase.CheckFKs, &p.alloc)
+	rd, err := sqlbase.MakeRowDeleter(
+		p.txn, en.tableDesc, fkTables, requestedCols, sqlbase.CheckFKs, &p.alloc)
 	if err != nil {
 		return nil, err
 	}
-	tw := tableDeleter{rd: rd, autoCommit: p.autoCommit, alloc: &p.alloc}
+	tw := tableDeleter{
+		rd:         rd,
+		autoCommit: p.autoCommit,
+		alloc:      &p.alloc,
+		mon:        &p.session.TxnState.mon,
+	}
 
 	// TODO(knz): Until we split the creation of the node from Start()
 	// for the SelectClause too, we cannot cache this. This is because
