@@ -86,6 +86,10 @@ type JSON interface {
 	// Exists implements the `?` operator.
 	Exists(string) bool
 
+	// IterObjectKey returns an ObjectKeyIterator, and it returns error if the obj
+	// is not an object.
+	IterObjectKey() (*ObjectKeyIterator, error)
+
 	// isScalar returns whether the JSON document is null, true, false, a string,
 	// or a number.
 	isScalar() bool
@@ -688,6 +692,34 @@ func (j jsonArray) Exists(s string) bool {
 }
 func (j jsonObject) Exists(s string) bool {
 	return j.FetchValKey(s) != nil
+}
+
+var errIterateKeysNonObject = pgerror.NewError(pgerror.CodeInvalidParameterValueError,
+	"cannot iterate keys of non-object")
+
+func (jsonNull) IterObjectKey() (*ObjectKeyIterator, error) {
+	return nil, errIterateKeysNonObject
+}
+func (jsonTrue) IterObjectKey() (*ObjectKeyIterator, error) {
+	return nil, errIterateKeysNonObject
+}
+func (jsonFalse) IterObjectKey() (*ObjectKeyIterator, error) {
+	return nil, errIterateKeysNonObject
+}
+func (jsonNumber) IterObjectKey() (*ObjectKeyIterator, error) {
+	return nil, errIterateKeysNonObject
+}
+func (jsonString) IterObjectKey() (*ObjectKeyIterator, error) {
+	return nil, errIterateKeysNonObject
+}
+func (jsonArray) IterObjectKey() (*ObjectKeyIterator, error) {
+	return nil, errIterateKeysNonObject
+}
+func (j jsonObject) IterObjectKey() (*ObjectKeyIterator, error) {
+	return &ObjectKeyIterator{
+		src: j,
+		idx: -1,
+	}, nil
 }
 
 func (jsonNull) isScalar() bool   { return true }

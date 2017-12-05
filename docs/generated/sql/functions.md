@@ -765,9 +765,13 @@ Compatible elements: hour, minute, second, millisecond, microsecond.</p>
 </span></td></tr>
 <tr><td><code>json_array_elements_text(input: jsonb) &rarr; setof tuple{string}</code></td><td><span class="funcdesc"><p>Expands a JSON array to a set of text values.</p>
 </span></td></tr>
+<tr><td><code>json_object_keys(input: jsonb) &rarr; setof tuple{string}</code></td><td><span class="funcdesc"><p>Returns sorted set of keys in the outermost JSON object.</p>
+</span></td></tr>
 <tr><td><code>jsonb_array_elements(input: jsonb) &rarr; setof tuple{jsonb}</code></td><td><span class="funcdesc"><p>Expands a JSON array to a set of JSON values.</p>
 </span></td></tr>
 <tr><td><code>jsonb_array_elements_text(input: jsonb) &rarr; setof tuple{string}</code></td><td><span class="funcdesc"><p>Expands a JSON array to a set of text values.</p>
+</span></td></tr>
+<tr><td><code>jsonb_object_keys(input: jsonb) &rarr; setof tuple{string}</code></td><td><span class="funcdesc"><p>Returns sorted set of keys in the outermost JSON object.</p>
 </span></td></tr>
 <tr><td><code>oid(int: <a href="int.html">int</a>) &rarr; oid</code></td><td><span class="funcdesc"><p>Converts an integer to an OID.</p>
 </span></td></tr>
