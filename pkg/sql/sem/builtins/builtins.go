@@ -1344,10 +1344,13 @@ CockroachDB supports the following flags:
 			ReturnType: tree.FixedReturnType(types.Timestamp),
 			Category:   categoryDateAndTime,
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
-				// extract timeSpan fromTime.
-				fromTS := args[1].(*tree.DTimestamp)
 				timeSpan := strings.ToLower(string(tree.MustBeDString(args[0])))
-				return truncateTimestamp(ctx, fromTS.Time, timeSpan)
+				fromTS := args[1].(*tree.DTimestamp)
+				tsTZ, err := truncateTimestamp(ctx, fromTS.Time, timeSpan)
+				if err != nil {
+					return nil, err
+				}
+				return tree.MakeDTimestamp(tsTZ.Time.In(ctx.GetLocation()), time.Microsecond), nil
 			},
 			Info: "Truncates `input` to precision `element`.  Sets all fields that are less\n" +
 				"significant than `element` to zero (or one, for day and month)\n\n" +
@@ -1356,7 +1359,7 @@ CockroachDB supports the following flags:
 		},
 		tree.Builtin{
 			Types:      tree.ArgTypes{{"element", types.String}, {"input", types.Date}},
-			ReturnType: tree.FixedReturnType(types.Date),
+			ReturnType: tree.FixedReturnType(types.TimestampTZ),
 			Category:   categoryDateAndTime,
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				timeSpan := strings.ToLower(string(tree.MustBeDString(args[0])))
@@ -1371,12 +1374,16 @@ CockroachDB supports the following flags:
 		},
 		tree.Builtin{
 			Types:      tree.ArgTypes{{"element", types.String}, {"input", types.Time}},
-			ReturnType: tree.FixedReturnType(types.Time),
+			ReturnType: tree.FixedReturnType(types.Interval),
 			Category:   categoryDateAndTime,
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				timeSpan := strings.ToLower(string(tree.MustBeDString(args[0])))
 				fromTime := args[1].(*tree.DTime)
-				return truncateTime(fromTime, timeSpan)
+				time, err := truncateTime(fromTime, timeSpan)
+				if err != nil {
+					return nil, err
+				}
+				return &tree.DInterval{Duration: duration.Duration{Nanos: int64(*time) * 1000}}, nil
 			},
 			Info: "Truncates `input` to precision `element`.  Sets all fields that are less\n" +
 				"significant than `element` to zero.\n\n" +
@@ -3054,7 +3061,7 @@ func extractStringFromTimestamp(
 	}
 }
 
-func truncateTime(fromTime *tree.DTime, timeSpan string) (tree.Datum, error) {
+func truncateTime(fromTime *tree.DTime, timeSpan string) (*tree.DTime, error) {
 	t := timeofday.TimeOfDay(*fromTime)
 	hour := t.Hour()
 	min := t.Minute()
@@ -3085,7 +3092,7 @@ func truncateTime(fromTime *tree.DTime, timeSpan string) (tree.Datum, error) {
 
 func truncateTimestamp(
 	_ *tree.EvalContext, fromTime time.Time, timeSpan string,
-) (tree.Datum, error) {
+) (*tree.DTimestampTZ, error) {
 	year := fromTime.Year()
 	month := fromTime.Month()
 	day := fromTime.Day()
