@@ -704,7 +704,6 @@ CREATE UNIQUE INDEX vidx ON t.test (v);
 // successfully complete without deleting the data.
 func TestDropWhileBackfill(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-
 	// protects backfillNotification
 	var mu syncutil.Mutex
 	backfillNotification := make(chan struct{})
@@ -830,7 +829,6 @@ CREATE UNIQUE INDEX vidx ON t.test (v);
 // proper state.
 func TestBackfillErrors(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-
 	const numNodes, chunkSize, maxValue = 5, 100, 4000
 	params, _ := tests.CreateTestServerParams()
 
@@ -932,7 +930,6 @@ CREATE UNIQUE INDEX vidx ON t.test (v);
 // of data.
 func TestAbortSchemaChangeBackfill(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-
 	var backfillNotification, commandsDone chan struct{}
 	var dontAbortBackfill uint32
 	params, _ := tests.CreateTestServerParams()
@@ -1211,7 +1208,6 @@ func dropColumnSchemaChange(
 // a retry.
 func TestSchemaChangeRetry(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-
 	params, _ := tests.CreateTestServerParams()
 	currChunk := 0
 	seenSpan := roachpb.Span{}
@@ -1297,7 +1293,6 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 // the number of chunks operated on during a retry.
 func TestSchemaChangeRetryOnVersionChange(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-
 	params, _ := tests.CreateTestServerParams()
 	var upTableVersion func()
 	currChunk := 0
@@ -1415,7 +1410,6 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 // Test schema change purge failure doesn't leave DB in a bad state.
 func TestSchemaChangePurgeFailure(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-
 	params, _ := tests.CreateTestServerParams()
 	const chunkSize = 200
 	// Disable the async schema changer.
@@ -1557,7 +1551,6 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 // correctly when one of them violates a constraint.
 func TestSchemaChangeReverseMutations(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-
 	params, _ := tests.CreateTestServerParams()
 	const chunkSize = 200
 	// Disable synchronous schema change processing so that the mutations get
@@ -1854,7 +1847,6 @@ CREATE TABLE t.test (
 // This test checks whether a column can be added using the name of a column that has just been dropped.
 func TestAddColumnDuringColumnDrop(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-
 	params, _ := tests.CreateTestServerParams()
 	backfillNotification := make(chan struct{})
 	continueBackfillNotification := make(chan struct{})
@@ -1916,7 +1908,6 @@ CREATE TABLE t.test (
 // of a column backfill.
 func TestUpdateDuringColumnBackfill(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-
 	backfillNotification := make(chan bool)
 	continueBackfillNotification := make(chan bool)
 	params, _ := tests.CreateTestServerParams()
