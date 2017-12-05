@@ -315,7 +315,7 @@ func TestPGWireDrainOngoingTxns(t *testing.T) {
 			t.Fatalf("unexpected error: %v", err)
 		}
 
-		if err := pgServer.SetDraining(false); err != nil {
+		if err := pgServer.SetDraining(false, 0 /* drainWait */); err != nil {
 			t.Fatal(err)
 		}
 	})
@@ -341,7 +341,7 @@ func TestPGWireDrainOngoingTxns(t *testing.T) {
 			t.Fatalf("unexpected error: %v", err)
 		}
 
-		if err := pgServer.SetDraining(false); err != nil {
+		if err := pgServer.SetDraining(false, 0 /* drainWait */); err != nil {
 			t.Fatal(err)
 		}
 	})

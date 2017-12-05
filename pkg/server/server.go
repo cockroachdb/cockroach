@@ -51,6 +51,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/status"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
@@ -84,6 +85,12 @@ var (
 	// GracefulDrainModes is the standard succession of drain modes entered
 	// for a graceful shutdown.
 	GracefulDrainModes = []serverpb.DrainMode{serverpb.DrainMode_CLIENT, serverpb.DrainMode_LEASES}
+
+	settingDrainMaxWait = settings.RegisterDurationSetting(
+		"server.drain_max_wait",
+		"the amount of time subsystems wait for work to finish before shutting down",
+		10*time.Second,
+	)
 
 	// LicenseCheckFn is used to check if the current cluster has any enterprise
 	// features enabled. This function is overridden by an init hook in CCL
@@ -1303,7 +1310,7 @@ func (s *Server) doDrain(modes []serverpb.DrainMode, setTo bool) ([]serverpb.Dra
 				// the pgServer has given sessions a chance to finish ongoing
 				// work.
 				defer s.leaseMgr.SetDraining(setTo)
-				return s.pgServer.SetDraining(setTo)
+				return s.pgServer.SetDraining(setTo, settingDrainMaxWait.Get(&s.st.SV))
 			}(); err != nil {
 				return nil, err
 			}

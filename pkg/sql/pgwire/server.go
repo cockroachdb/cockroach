@@ -63,14 +63,9 @@ const (
 	versionSSL = 80877103
 )
 
-const (
-	// drainMaxWait is the amount of time a draining server gives to sessions
-	// with ongoing transactions to finish work before cancellation.
-	drainMaxWait = 10 * time.Second
-	// cancelMaxWait is the amount of time a draining server gives to sessions
-	// to react to cancellation and return before a forceful shutdown.
-	cancelMaxWait = 1 * time.Second
-)
+// cancelMaxWait is the amount of time a draining server gives to sessions to
+// react to cancellation and return before a forceful shutdown.
+const cancelMaxWait = 1 * time.Second
 
 // baseSQLMemoryBudget is the amount of memory pre-allocated in each connection.
 var baseSQLMemoryBudget = envutil.EnvOrDefaultInt64("COCKROACH_BASE_SQL_MEMORY_BUDGET",
@@ -209,8 +204,8 @@ func (s *Server) Metrics() *ServerMetrics {
 }
 
 // SetDraining (when called with 'true') prevents new connections from being
-// served and waits a reasonable amount of time for open connections to
-// terminate before canceling them.
+// served and waits for drainWait for open connections to terminate before
+// canceling them.
 // An error will be returned when connections that have been canceled have not
 // responded to this cancellation and closed themselves in time. The server
 // will remain in draining state, though open connections may continue to
@@ -220,8 +215,8 @@ func (s *Server) Metrics() *ServerMetrics {
 // The RFC on drain modes has more information regarding the specifics of
 // what will happen to connections in different states:
 // https://github.com/cockroachdb/cockroach/blob/master/docs/RFCS/20160425_drain_modes.md
-func (s *Server) SetDraining(drain bool) error {
-	return s.setDrainingImpl(drain, drainMaxWait, cancelMaxWait)
+func (s *Server) SetDraining(drain bool, drainWait time.Duration) error {
+	return s.setDrainingImpl(drain, drainWait, cancelMaxWait)
 }
 
 func (s *Server) setDrainingImpl(

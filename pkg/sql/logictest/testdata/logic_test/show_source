@@ -76,6 +76,7 @@ kv.transaction.max_intents                         100000         i     maximum 
 rocksdb.min_wal_sync_interval                      0s             d     minimum duration between syncs of the RocksDB WAL
 server.consistency_check.interval                  24h0m0s        d     the time between range consistency checks; set to 0 to disable consistency checking
 server.declined_reservation_timeout                1s             d     the amount of time to consider the store throttled for up-replication after a reservation was declined
+server.drain_max_wait                              10s            d     the amount of time subsystems wait for work to finish before shutting down
 server.failed_reservation_timeout                  5s             d     the amount of time to consider the store throttled for up-replication after a failed reservation call
 server.remote_debugging.mode                       local          s     set to enable remote debugging, localhost-only or disable (any, local, off)
 server.time_until_store_dead                       5m0s           d     the time after which if there is no new gossiped information about a store, it is considered dead
