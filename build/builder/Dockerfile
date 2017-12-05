@@ -32,11 +32,9 @@ RUN curl -fsSL https://deb.nodesource.com/gpgkey/nodesource.gpg.key | apt-key ad
 # libncurses-dev - crosstool-ng/configure
 # make - crosstool-ng boostrap / CRDB build system
 # nodejs - ui: all
-# openssh-client - terraform / jepsen
 # patch - crosstool-ng/configure
 # python - msan: libcxx
 # texinfo - crosstool-ng/configure
-# unzip - terraform
 # xz-utils - msan: libcxx / CRDB build system
 # yarn - ui: all
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -58,11 +56,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     make \
     nodejs \
     openjdk-8-jre \
-    openssh-client \
     patch \
     python \
     texinfo \
-    unzip \
     xz-utils \
     yarn
 
@@ -163,10 +159,6 @@ RUN chmod -R a+w $(go env GOTOOLDIR)
 
 # Allow Go support files in gdb.
 RUN echo "add-auto-load-safe-path $(go env GOROOT)/src/runtime/runtime-gdb.py" > ~/.gdbinit
-
-RUN curl -fsSL https://releases.hashicorp.com/terraform/0.8.7/terraform_0.8.7_linux_amd64.zip -o terraform.zip \
- && unzip -d /usr/local/bin terraform.zip \
- && rm terraform.zip
 
 ENV PATH /opt/backtrace/bin:$PATH
 
